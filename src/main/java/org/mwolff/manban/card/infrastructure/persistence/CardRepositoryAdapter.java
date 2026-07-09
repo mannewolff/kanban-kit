@@ -43,6 +43,11 @@ class CardRepositoryAdapter implements CardRepository {
     }
 
     @Override
+    public List<Card> findArchivableDoneCards(java.time.Instant threshold) {
+        return jpa.findArchivableDoneCards(threshold).stream().map(CardRepositoryAdapter::toDomain).toList();
+    }
+
+    @Override
     public int maxNumberInBoard(long boardId) {
         return jpa.maxNumberInBoard(boardId);
     }

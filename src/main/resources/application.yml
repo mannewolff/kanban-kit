@@ -51,3 +51,7 @@ manban:
     secret-key: ${MANBAN_MINIO_SECRET_KEY:manban-minio}
     bucket: ${MANBAN_MINIO_BUCKET:manban}
     max-per-card: 20
+  cleanup:
+    enabled: ${MANBAN_CLEANUP_ENABLED:true}
+    done-retention-days: ${MANBAN_DONE_RETENTION_DAYS:30}
+    cron: "0 0 * * * *"

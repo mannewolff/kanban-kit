@@ -1,5 +1,6 @@
 package org.mwolff.manban.card.application;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import org.mwolff.manban.card.domain.Card;
@@ -12,6 +13,9 @@ public interface CardRepository {
     Optional<Card> findById(long id);
 
     List<Card> findByBoardId(long boardId);
+
+    /** Nicht-archivierte Karten, die vor {@code threshold} nach Done verschoben wurden. */
+    List<Card> findArchivableDoneCards(Instant threshold);
 
     /** Höchste vergebene board-scoped Nummer (0, wenn keine Karten). */
     int maxNumberInBoard(long boardId);
