@@ -185,6 +185,31 @@ class EpicIT {
     }
 
     @Test
+    void updateAssignsAndUnassignsEpicInOnePut() throws Exception {
+        Cookie alice = loginAs("epic-upd@example.com");
+        long projectId = createProject(alice, "P");
+        JsonNode board = createBoard(alice, projectId);
+        long boardId = board.get("id").asLong();
+        long backlog = board.get("columns").get(0).get("id").asLong();
+
+        long epic = createEpic(alice, boardId, "E", "E");
+        long child = createCard(alice, boardId, backlog, "A");
+
+        // Zuordnung im selben PUT wie Titel/Beschreibung
+        mvc.perform(patch("/api/cards/" + child).cookie(alice).contentType("application/json")
+                        .content("{\"title\":\"A2\",\"parentId\":%d}".formatted(epic)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.title").value("A2"))
+                .andExpect(jsonPath("$.parentId").value((int) epic));
+
+        // parentId=null löst die Zuordnung
+        mvc.perform(patch("/api/cards/" + child).cookie(alice).contentType("application/json")
+                        .content("{\"title\":\"A2\",\"parentId\":null}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.parentId").value(org.hamcrest.Matchers.nullValue()));
+    }
+
+    @Test
     void epicsAreNotMovableOnTheBoard() throws Exception {
         Cookie alice = loginAs("epic-move@example.com");
         long projectId = createProject(alice, "P");

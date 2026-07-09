@@ -49,11 +49,6 @@ export function BoardPage() {
     }
   }, [id])
 
-  const assignParent = async (cardId: number, parentId: number | null) => {
-    await epicsApi.assign(cardId, parentId)
-    reloadCards()
-    reloadEpics()
-  }
 
   // Rolle bevorzugt synchron aus den Memberships (kein Race). Ist das Projekt dort noch nicht
   // bekannt (z. B. frisch in dieser Session angelegt), einmal frisch nachladen.
@@ -113,7 +108,7 @@ export function BoardPage() {
           card={selectedCard}
           canEdit={canEdit}
           epics={epics}
-          onAssignParent={assignParent}
+          columnName={board.columns.find((c) => c.id === selectedCard.columnId)?.name}
           onClose={() => setSelectedCard(null)}
           onChanged={() => {
             reloadCards()

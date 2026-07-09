@@ -60,7 +60,7 @@ class CardController {
     CardView update(@AuthenticationPrincipal Long userId, @PathVariable long cardId,
                     @Valid @RequestBody UpdateCardRequest request) {
         return cards.update(userId, cardId, request.title(), request.description(),
-                request.dependencies(), request.shortcode());
+                request.dependencies(), request.shortcode(), request.parentId());
     }
 
     /** Ordnet eine Karte einem Epic zu ({@code parentId}) oder löst die Zuordnung ({@code parentId: null}). */
@@ -106,7 +106,8 @@ class CardController {
             @NotBlank @Size(max = 300) String title,
             String description,
             List<Integer> dependencies,
-            @Size(max = 16) String shortcode) {
+            @Size(max = 16) String shortcode,
+            Long parentId) {
     }
 
     record AssignParentRequest(Long parentId) {

@@ -118,11 +118,16 @@ public class CardService {
 
     @Transactional
     public CardView update(long userId, long cardId, String title, String description,
-                           List<Integer> dependsOn, String shortcode) {
+                           List<Integer> dependsOn, String shortcode, Long parentId) {
         Card card = requireCardWithPermission(userId, cardId, Permission.CARD_CREATE);
         Card updated = card.withContent(title.trim(), normalize(description));
         if (card.type() == CardType.EPIC) {
+            // Epics tragen ein Kürzel, aber keinen Parent.
             updated = updated.withShortcode(trimToNull(shortcode));
+        } else {
+            // Karten: Epic-Zuordnung im selben PUT setzen/lösen (parentId == null -> lösen).
+            Long effectiveParent = parentId == null ? null : requireEpicInBoard(parentId, card.boardId()).id();
+            updated = updated.withParent(effectiveParent);
         }
         Card saved = cards.save(updated);
         if (dependsOn != null) {

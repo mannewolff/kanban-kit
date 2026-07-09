@@ -33,10 +33,11 @@ export const cardsApi = {
     description: string | null,
     dependencies?: number[],
     shortcode?: string | null,
+    parentId?: number | null,
   ) =>
     apiFetch<Card>(`/api/cards/${cardId}`, {
       method: 'PATCH',
-      body: JSON.stringify({ title, description, dependencies, shortcode }),
+      body: JSON.stringify({ title, description, dependencies, shortcode, parentId }),
     }),
 }
 
