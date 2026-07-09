@@ -1,1 +1,15 @@
 .claude/
+
+# Maven / Java
+target/
+*.class
+
+# Umgebung (Secrets)
+.env
+
+# Node (Frontend hat zusätzlich eine eigene .gitignore)
+frontend/node_modules/
+frontend/dist/
+
+# OS / Editor
+.DS_Store

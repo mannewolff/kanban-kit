@@ -1,0 +1,68 @@
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-manban}
+      POSTGRES_USER: ${POSTGRES_USER:-manban}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-manban}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-manban} -d ${POSTGRES_DB:-manban}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  minio:
+    image: minio/minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-manban}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-manban-minio}
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  manban-api:
+    build: .
+    environment:
+      MANBAN_DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-manban}
+      MANBAN_DB_USER: ${POSTGRES_USER:-manban}
+      MANBAN_DB_PASSWORD: ${POSTGRES_PASSWORD:-manban}
+      MANBAN_SMTP_HOST: ${MANBAN_SMTP_HOST:-}
+      MANBAN_SMTP_PORT: ${MANBAN_SMTP_PORT:-1025}
+      MANBAN_SMTP_USER: ${MANBAN_SMTP_USER:-}
+      MANBAN_SMTP_PASSWORD: ${MANBAN_SMTP_PASSWORD:-}
+      MANBAN_MINIO_ENDPOINT: http://minio:9000
+      MANBAN_MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-manban}
+      MANBAN_MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-manban-minio}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+
+  caddy:
+    image: caddy:2
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      MANBAN_DOMAIN: ${MANBAN_DOMAIN:-localhost}
+      MANBAN_ACME_EMAIL: ${MANBAN_ACME_EMAIL:-admin@localhost}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - manban-api
+
+volumes:
+  postgres_data:
+  minio_data:
+  caddy_data:
+  caddy_config:

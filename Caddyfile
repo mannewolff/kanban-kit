@@ -1,0 +1,12 @@
+# Caddy stellt manban öffentlich bereit und terminiert TLS.
+# Automatisches HTTPS mit HTTP->HTTPS-Redirect:
+#   - Domain "localhost" (Default) -> lokale interne CA (self-signed)
+#   - echte Domain (MANBAN_DOMAIN gesetzt) -> automatisch Let's-Encrypt-Zertifikat
+{
+	email {$MANBAN_ACME_EMAIL:admin@localhost}
+}
+
+{$MANBAN_DOMAIN:localhost} {
+	encode gzip
+	reverse_proxy manban-api:8080
+}

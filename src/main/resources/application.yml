@@ -1,0 +1,33 @@
+spring:
+  application:
+    name: manban
+
+  datasource:
+    url: ${MANBAN_DB_URL:jdbc:postgresql://localhost:5432/manban}
+    username: ${MANBAN_DB_USER:manban}
+    password: ${MANBAN_DB_PASSWORD:manban}
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: false
+
+  # SMTP wird mit Issue A1 konkret konfiguriert; hier nur konfigurierbare Platzhalter.
+  mail:
+    host: ${MANBAN_SMTP_HOST:localhost}
+    port: ${MANBAN_SMTP_PORT:1025}
+    username: ${MANBAN_SMTP_USER:}
+    password: ${MANBAN_SMTP_PASSWORD:}
+
+server:
+  port: 8080
+  forward-headers-strategy: framework  # hinter Caddy (Reverse-Proxy) korrekte Scheme/Host-Auflösung

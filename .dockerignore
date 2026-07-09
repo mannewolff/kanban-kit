@@ -1,0 +1,10 @@
+.git
+.github
+.claude
+target
+frontend/node_modules
+frontend/dist
+issues
+install.mjs
+*.md
+.env
