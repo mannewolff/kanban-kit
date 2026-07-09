@@ -47,6 +47,12 @@ class CardController {
         return cards.update(userId, cardId, request.title(), request.description(), request.dependencies());
     }
 
+    @PostMapping("/api/cards/{cardId}/move")
+    CardView move(@AuthenticationPrincipal Long userId, @PathVariable long cardId,
+                  @Valid @RequestBody MoveCardRequest request) {
+        return cards.move(userId, cardId, request.columnId(), request.position());
+    }
+
     @PostMapping("/api/cards/{cardId}/archive")
     CardView archive(@AuthenticationPrincipal Long userId, @PathVariable long cardId) {
         return cards.archive(userId, cardId);
@@ -74,5 +80,10 @@ class CardController {
             @NotBlank @Size(max = 300) String title,
             String description,
             List<Integer> dependencies) {
+    }
+
+    record MoveCardRequest(
+            @NotNull Long columnId,
+            @jakarta.validation.constraints.PositiveOrZero int position) {
     }
 }

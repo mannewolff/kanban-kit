@@ -48,4 +48,9 @@ public record Card(
         return new Card(id, boardId, columnId, number, title, description, newPositionInColumn,
                 false, movedToDoneAt, createdBy, createdAt, updatedAt);
     }
+
+    public Card withMovedToDoneAt(Instant when) {
+        return new Card(id, boardId, columnId, number, title, description, positionInColumn,
+                archived, when, createdBy, createdAt, updatedAt);
+    }
 }

@@ -19,5 +19,12 @@ public interface CardRepository {
     /** Höchste Position unter nicht-archivierten Karten der Spalte (-1, wenn keine). */
     int maxActivePositionInColumn(long columnId);
 
+    /**
+     * Verschiebt eine Karte in eine Spalte an eine Zielposition und reindiziert die
+     * betroffenen Spalten kollisionsfrei (Zwei-Phasen). Archivierte Karten bleiben
+     * unberührt (außerhalb des aktiven Positions-Namespace).
+     */
+    void move(long cardId, long newColumnId, int newPosition);
+
     void deleteById(long id);
 }

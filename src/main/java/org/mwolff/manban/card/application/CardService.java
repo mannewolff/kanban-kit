@@ -72,6 +72,32 @@ public class CardService {
     }
 
     @Transactional
+    public CardView move(long userId, long cardId, long targetColumnId, int targetPosition) {
+        Card card = cards.findById(cardId).orElseThrow(CardNotFoundException::new);
+        Board board = boards.findById(card.boardId()).orElseThrow(BoardNotFoundException::new);
+        permissions.require(userId, board.projectId(), Permission.CARD_MOVE);
+
+        BoardColumn target = columns.findById(targetColumnId).orElseThrow(ColumnNotFoundException::new);
+        if (target.boardId() != card.boardId()) {
+            throw new ColumnNotFoundException();
+        }
+
+        cards.move(cardId, targetColumnId, targetPosition);
+
+        // moved_to_done_at: beim Eintritt in eine "Done"-Spalte setzen, beim Verlassen löschen.
+        boolean targetIsDone = target.name().equalsIgnoreCase("Done");
+        Instant done = card.movedToDoneAt();
+        if (targetIsDone && done == null) {
+            done = Instant.now();
+        } else if (!targetIsDone) {
+            done = null;
+        }
+
+        Card moved = cards.findById(cardId).orElseThrow(CardNotFoundException::new);
+        return view(cards.save(moved.withMovedToDoneAt(done)));
+    }
+
+    @Transactional
     public CardView archive(long userId, long cardId) {
         Card card = requireCardWithPermission(userId, cardId, Permission.CARD_DELETE);
         return view(cards.save(card.asArchived()));
