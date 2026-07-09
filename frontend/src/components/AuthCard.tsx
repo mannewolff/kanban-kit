@@ -8,7 +8,7 @@ export function AuthCard({ title, children }: { title: string; children: React.R
     <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh', p: 2 }}>
       <Paper elevation={2} sx={{ p: 4, width: '100%', maxWidth: 420 }}>
         <Typography variant="h4" component="h1" gutterBottom>
-          manban
+          kanban-kit
         </Typography>
         <Typography variant="h6" component="h2" sx={{ mb: 2 }} color="text.secondary">
           {title}

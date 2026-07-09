@@ -39,7 +39,7 @@ describe('AppShell', () => {
 
   it('rendert Marke, Projekte-Navigation und den angemeldeten Nutzer', () => {
     renderShell()
-    expect(screen.getByText('manban')).toBeInTheDocument()
+    expect(screen.getByText('kanban-kit')).toBeInTheDocument()
     expect(screen.getByText('Projekte')).toBeInTheDocument()
     expect(screen.getByText('Manne')).toBeInTheDocument()
     expect(screen.getByLabelText('Abmelden')).toBeInTheDocument()

@@ -247,7 +247,7 @@ export function AppShell() {
       <AppBar position="fixed" sx={{ zIndex: (t) => t.zIndex.drawer + 1 }}>
         <Toolbar>
           <Typography variant="h6" noWrap component="div" sx={{ flexGrow: 1, fontWeight: 700 }}>
-            manban
+            kanban-kit
           </Typography>
           {user && (
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
