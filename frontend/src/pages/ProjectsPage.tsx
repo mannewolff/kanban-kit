@@ -66,57 +66,48 @@ export function ProjectsPage() {
       {projects.length === 0 ? (
         <Typography color="text.secondary">Noch keine Projekte. Lege oben eines an.</Typography>
       ) : (
-        <Box
-          sx={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
-            gap: 2,
-          }}
-        >
+        <Stack spacing={1}>
           {projects.map((project) => (
             <Paper
               key={project.id}
               variant="outlined"
               onClick={() => navigate(`/projects/${project.id}`)}
               sx={{
-                p: 2,
+                px: 2,
+                py: 1.5,
+                width: '100%',
                 cursor: 'pointer',
                 display: 'flex',
-                flexDirection: 'column',
-                gap: 1,
+                alignItems: 'center',
+                gap: 1.5,
                 transition: 'box-shadow 150ms, border-color 150ms',
                 '&:hover': { boxShadow: 3, borderColor: 'primary.main' },
               }}
             >
-              <Stack direction="row" alignItems="flex-start" spacing={1}>
-                <Typography variant="subtitle1" sx={{ fontWeight: 600, flexGrow: 1, minWidth: 0 }}>
-                  {project.name}
+              <Typography variant="subtitle1" sx={{ fontWeight: 600, flexGrow: 1, minWidth: 0 }}>
+                {project.name}
+              </Typography>
+              <Chip label={project.role} size="small" color={ROLE_CHIP[project.role] ?? 'default'} />
+              {formatDate(project.createdAt) && (
+                <Typography variant="caption" color="text.secondary" sx={{ minWidth: 72, textAlign: 'right' }}>
+                  {formatDate(project.createdAt)}
                 </Typography>
-                {canManageProject(project.role) && (
-                  <IconButton
-                    size="small"
-                    aria-label={`Projekt ${project.name} löschen`}
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      void handleDelete(project.id)
-                    }}
-                    sx={{ mt: -0.5, mr: -0.5 }}
-                  >
-                    <DeleteOutlineIcon fontSize="small" />
-                  </IconButton>
-                )}
-              </Stack>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <Chip label={project.role} size="small" color={ROLE_CHIP[project.role] ?? 'default'} />
-                {formatDate(project.createdAt) && (
-                  <Typography variant="caption" color="text.secondary">
-                    {formatDate(project.createdAt)}
-                  </Typography>
-                )}
-              </Box>
+              )}
+              {canManageProject(project.role) && (
+                <IconButton
+                  size="small"
+                  aria-label={`Projekt ${project.name} löschen`}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    void handleDelete(project.id)
+                  }}
+                >
+                  <DeleteOutlineIcon fontSize="small" />
+                </IconButton>
+              )}
             </Paper>
           ))}
-        </Box>
+        </Stack>
       )}
     </Box>
   )

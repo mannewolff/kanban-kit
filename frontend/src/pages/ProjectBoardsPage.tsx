@@ -1,9 +1,7 @@
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import Link from '@mui/material/Link'
-import List from '@mui/material/List'
-import ListItemButton from '@mui/material/ListItemButton'
-import ListItemText from '@mui/material/ListItemText'
+import Paper from '@mui/material/Paper'
 import Stack from '@mui/material/Stack'
 import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
@@ -68,14 +66,37 @@ export function ProjectBoardsPage() {
         </Box>
       )}
 
-      <List>
-        {boards.map((board) => (
-          <ListItemButton key={board.id} onClick={() => navigate(`/boards/${board.id}`)}>
-            <ListItemText primary={board.name} secondary={`${board.columns.length} Spalten`} />
-          </ListItemButton>
-        ))}
-        {boards.length === 0 && <Typography color="text.secondary">Noch keine Boards.</Typography>}
-      </List>
+      {boards.length === 0 ? (
+        <Typography color="text.secondary">Noch keine Boards.</Typography>
+      ) : (
+        <Stack spacing={1}>
+          {boards.map((board) => (
+            <Paper
+              key={board.id}
+              variant="outlined"
+              onClick={() => navigate(`/boards/${board.id}`)}
+              sx={{
+                px: 2,
+                py: 1.5,
+                width: '100%',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 1.5,
+                transition: 'box-shadow 150ms, border-color 150ms',
+                '&:hover': { boxShadow: 3, borderColor: 'primary.main' },
+              }}
+            >
+              <Typography variant="subtitle1" sx={{ fontWeight: 600, flexGrow: 1, minWidth: 0 }}>
+                {board.name}
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                {board.columns.length} Spalten
+              </Typography>
+            </Paper>
+          ))}
+        </Stack>
+      )}
     </Box>
   )
 }
