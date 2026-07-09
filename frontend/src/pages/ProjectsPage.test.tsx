@@ -1,5 +1,5 @@
 import { render, screen } from '@testing-library/react'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { projectsApi } from '../api/projects'
 import { ProjectsPage } from './ProjectsPage'
@@ -28,5 +28,18 @@ describe('ProjectsPage', () => {
     // Löschen nur beim OWNER-Projekt:
     expect(screen.getByLabelText('Projekt Meins löschen')).toBeInTheDocument()
     expect(screen.queryByLabelText('Projekt Fremd löschen')).not.toBeInTheDocument()
+  })
+
+  it('routet beim Erst-Aufruf mit genau einem Projekt direkt zur Boardauswahl', async () => {
+    mocked.list.mockResolvedValue([{ id: 5, name: 'Solo', role: 'OWNER', createdAt: '' }])
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <Routes>
+          <Route path="/" element={<ProjectsPage />} />
+          <Route path="/projects/:id" element={<div>Boardauswahl</div>} />
+        </Routes>
+      </MemoryRouter>,
+    )
+    expect(await screen.findByText('Boardauswahl')).toBeInTheDocument()
   })
 })

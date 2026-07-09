@@ -8,7 +8,7 @@ import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline'
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { projectsApi, type Project } from '../api/projects'
 import { canManageProject } from '../lib/roles'
 
@@ -24,13 +24,23 @@ function formatDate(iso: string): string {
 
 export function ProjectsPage() {
   const navigate = useNavigate()
+  const location = useLocation()
   const [projects, setProjects] = useState<Project[]>([])
   const [name, setName] = useState('')
 
   const reload = () => projectsApi.list().then(setProjects)
 
   useEffect(() => {
-    void reload()
+    void projectsApi.list().then((ps) => {
+      setProjects(ps)
+      // Bei genau einem Projekt direkt zur Boardauswahl — aber nur beim Erst-Aufruf (key 'default')
+      // oder in der Auto-Routing-Kette. Bewusste Navigation (Sidebar/Zurück = Push) zeigt die Liste.
+      const auto = location.key === 'default' || (location.state as { autoRoute?: boolean } | null)?.autoRoute
+      if (ps.length === 1 && auto) {
+        navigate(`/projects/${ps[0].id}`, { replace: true, state: { autoRoute: true } })
+      }
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const handleCreate = async (event: React.FormEvent) => {

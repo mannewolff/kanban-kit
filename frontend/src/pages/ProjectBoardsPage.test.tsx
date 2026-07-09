@@ -37,4 +37,18 @@ describe('ProjectBoardsPage RBAC', () => {
     expect(await screen.findByText('Team')).toBeInTheDocument()
     expect(screen.queryByLabelText(/Neues Board/)).not.toBeInTheDocument()
   })
+
+  it('routet beim Erst-Aufruf mit genau einem Board direkt aufs Board', async () => {
+    mockedProjects.list.mockResolvedValue([{ id: 5, name: 'Team', role: 'OWNER', createdAt: '' }])
+    mockedBoards.list.mockResolvedValue([{ id: 9, name: 'Solo', projectId: 5, createdAt: '', columns: [] }])
+    render(
+      <MemoryRouter initialEntries={['/projects/5']}>
+        <Routes>
+          <Route path="/projects/:projectId" element={<ProjectBoardsPage />} />
+          <Route path="/boards/:boardId" element={<div>Board-Ansicht</div>} />
+        </Routes>
+      </MemoryRouter>,
+    )
+    expect(await screen.findByText('Board-Ansicht')).toBeInTheDocument()
+  })
 })

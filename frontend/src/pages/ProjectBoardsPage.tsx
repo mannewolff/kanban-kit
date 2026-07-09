@@ -6,7 +6,7 @@ import Stack from '@mui/material/Stack'
 import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
 import { useEffect, useState } from 'react'
-import { Link as RouterLink, useNavigate, useParams } from 'react-router-dom'
+import { Link as RouterLink, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { boardsApi, type Board } from '../api/boards'
 import { projectsApi } from '../api/projects'
 import { canManageBoards, canManageMembers } from '../lib/roles'
@@ -15,6 +15,7 @@ export function ProjectBoardsPage() {
   const { projectId } = useParams()
   const id = Number(projectId)
   const navigate = useNavigate()
+  const location = useLocation()
   const [boards, setBoards] = useState<Board[]>([])
   const [role, setRole] = useState<string>('VIEWER')
   const [projectName, setProjectName] = useState<string>('')
@@ -23,7 +24,14 @@ export function ProjectBoardsPage() {
   const reload = () => boardsApi.list(id).then(setBoards)
 
   useEffect(() => {
-    void reload()
+    void boardsApi.list(id).then((bs) => {
+      setBoards(bs)
+      // Bei genau einem Board direkt aufs Board — nur beim Erst-Aufruf oder in der Auto-Routing-Kette.
+      const auto = location.key === 'default' || (location.state as { autoRoute?: boolean } | null)?.autoRoute
+      if (bs.length === 1 && auto) {
+        navigate(`/boards/${bs[0].id}`, { replace: true })
+      }
+    })
     void projectsApi.list().then((projects) => {
       const project = projects.find((p) => p.id === id)
       if (project) {
@@ -31,6 +39,7 @@ export function ProjectBoardsPage() {
         setProjectName(project.name)
       }
     })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
 
   const handleCreate = async (event: React.FormEvent) => {
