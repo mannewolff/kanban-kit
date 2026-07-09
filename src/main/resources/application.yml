@@ -45,3 +45,9 @@ manban:
     from: ${MANBAN_MAIL_FROM:no-reply@manban.local}
   project:
     invitation-ttl: P7D
+  storage:
+    endpoint: ${MANBAN_MINIO_ENDPOINT:http://localhost:9000}
+    access-key: ${MANBAN_MINIO_ACCESS_KEY:manban}
+    secret-key: ${MANBAN_MINIO_SECRET_KEY:manban-minio}
+    bucket: ${MANBAN_MINIO_BUCKET:manban}
+    max-per-card: 20
