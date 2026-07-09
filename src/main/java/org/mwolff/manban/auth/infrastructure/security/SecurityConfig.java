@@ -1,6 +1,7 @@
 package org.mwolff.manban.auth.infrastructure.security;
 
 import jakarta.servlet.http.HttpServletResponse;
+import org.mwolff.manban.accesstoken.infrastructure.security.PatAuthenticationFilter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -30,7 +31,8 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 class SecurityConfig {
 
     @Bean
-    SecurityFilterChain filterChain(HttpSecurity http, SessionAuthenticationFilter sessionFilter) throws Exception {
+    SecurityFilterChain filterChain(HttpSecurity http, SessionAuthenticationFilter sessionFilter,
+                                    PatAuthenticationFilter patFilter) throws Exception {
         http
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
@@ -38,11 +40,14 @@ class SecurityConfig {
                         .requestMatchers("/api/auth/register", "/api/auth/verify",
                                 "/api/auth/login", "/api/auth/logout",
                                 "/api/auth/forgot", "/api/auth/reset").permitAll()
+                        // Token-Verwaltung nur per Cookie-Login, nicht per PAT (Least Privilege).
+                        .requestMatchers("/api/access-tokens/**").hasAuthority(SessionAuthenticationFilter.AUTHORITY)
                         .requestMatchers("/api/**").authenticated()
                         .anyRequest().permitAll())
                 .exceptionHandling(e -> e.authenticationEntryPoint(
                         (request, response, ex) -> response.sendError(HttpServletResponse.SC_UNAUTHORIZED)))
-                .addFilterBefore(sessionFilter, UsernamePasswordAuthenticationFilter.class);
+                .addFilterBefore(sessionFilter, UsernamePasswordAuthenticationFilter.class)
+                .addFilterBefore(patFilter, UsernamePasswordAuthenticationFilter.class);
         return http.build();
     }
 }

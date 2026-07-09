@@ -8,17 +8,21 @@ import java.io.IOException;
 import java.util.List;
 import java.util.OptionalLong;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 /**
  * Liest das Session-Cookie, verifiziert das signierte Token und setzt bei Gültigkeit
- * die Authentifizierung (Principal = userId). Ungültige/fehlende Tokens lassen den
- * Kontext leer — die Autorisierung entscheidet dann über 401/403.
+ * die Authentifizierung (Principal = userId, Authority {@code AUTH_SESSION}). Die Authority
+ * unterscheidet Cookie- von PAT-Auth, damit sensible Endpunkte (Token-Verwaltung) nur per
+ * Cookie erreichbar sind. Ungültige/fehlende Tokens lassen den Kontext leer.
  */
 @Component
 public class SessionAuthenticationFilter extends OncePerRequestFilter {
+
+    public static final String AUTHORITY = "AUTH_SESSION";
 
     private final SessionCookieManager cookies;
     private final SignedSessionTokens tokens;
@@ -36,7 +40,7 @@ public class SessionAuthenticationFilter extends OncePerRequestFilter {
                 OptionalLong userId = tokens.verify(token);
                 if (userId.isPresent()) {
                     var authentication = new UsernamePasswordAuthenticationToken(
-                            userId.getAsLong(), null, List.of());
+                            userId.getAsLong(), null, List.of(new SimpleGrantedAuthority(AUTHORITY)));
                     SecurityContextHolder.getContext().setAuthentication(authentication);
                 }
             });
