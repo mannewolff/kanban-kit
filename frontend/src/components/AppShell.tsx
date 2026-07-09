@@ -26,6 +26,7 @@ import { Outlet, useLocation, useMatch, useNavigate } from 'react-router-dom'
 import { boardsApi } from '../api/boards'
 import { useAuth } from '../auth/AuthContext'
 import { buildNavItems, type BoardContext, type NavGroup, type NavLink, type NavNode } from '../layout/navItems'
+import { isPlatformAdmin } from '../lib/roles'
 
 const DRAWER_WIDTH = 240
 const DRAWER_COLLAPSED_WIDTH = 56
@@ -87,7 +88,10 @@ export function AppShell() {
     }
   }, [boardId])
 
-  const navItems = useMemo(() => buildNavItems(board), [board])
+  // An den abgeleiteten Boolean binden, nicht an die user-Objektidentität (sonst rechnet
+  // useMemo bei jeder neuen user-Referenz neu und die openGroups-Effect-Schleife läuft endlos).
+  const admin = isPlatformAdmin(user)
+  const navItems = useMemo(() => buildNavItems(board, admin), [board, admin])
 
   const [openGroups, setOpenGroups] = useState<Set<string>>(new Set())
   // Gruppe der aktiven Route automatisch aufklappen.

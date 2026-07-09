@@ -15,7 +15,7 @@ import { useAuth } from '../auth/AuthContext'
 import { CardDetailModal } from '../components/CardDetailModal'
 import { EpicBadge } from '../components/EpicBadge'
 import { clampExcerptWidth, EXCERPT_DEFAULT_PCT, stripMarkdown } from '../lib/listExcerpt'
-import { canEditCards } from '../lib/roles'
+import { canEditCards, isPlatformAdmin } from '../lib/roles'
 import { ARCHIVED_STATUS_COLOR, statusColors } from '../lib/statusColors'
 
 const ARCHIVED = 'archived'
@@ -158,7 +158,7 @@ export function BoardListPage() {
     }
     void projectsApi.list().then((ps) => setFetchedRole(ps.find((p) => p.id === board.projectId)?.role ?? 'VIEWER'))
   }, [board, membershipRole])
-  const canEdit = canEditCards(membershipRole ?? fetchedRole ?? 'VIEWER')
+  const canEdit = canEditCards(membershipRole ?? fetchedRole ?? 'VIEWER', isPlatformAdmin(user))
 
   const columns = useMemo(() => [...(board?.columns ?? [])].sort((a, b) => a.position - b.position), [board])
   const columnById = useMemo(() => new Map(columns.map((c) => [c.id, c])), [columns])

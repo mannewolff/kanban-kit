@@ -1,8 +1,10 @@
 import { Route, Routes } from 'react-router-dom'
 import { AppShell } from './components/AppShell'
 import { AcceptInvitationPage } from './pages/AcceptInvitationPage'
+import { AdminPage } from './pages/AdminPage'
 import { BoardListPage } from './pages/BoardListPage'
 import { BoardPage } from './pages/BoardPage'
+import { BootstrapAdminPage } from './pages/BootstrapAdminPage'
 import { EpicsPage } from './pages/EpicsPage'
 import { ForgotPasswordPage } from './pages/ForgotPasswordPage'
 import { LoginPage } from './pages/LoginPage'
@@ -30,6 +32,8 @@ export function App() {
           <Route path="/boards/:boardId" element={<BoardPage />} />
           <Route path="/boards/:boardId/list" element={<BoardListPage />} />
           <Route path="/boards/:boardId/epics" element={<EpicsPage />} />
+          <Route path="/admin" element={<AdminPage />} />
+          <Route path="/admin/bootstrap" element={<BootstrapAdminPage />} />
           <Route path="/invitations/accept" element={<AcceptInvitationPage />} />
         </Route>
       </Route>

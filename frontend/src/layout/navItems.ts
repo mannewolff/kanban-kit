@@ -1,6 +1,7 @@
 import type { ComponentType } from 'react'
 import type { SvgIconProps } from '@mui/material'
 import AccountTreeIcon from '@mui/icons-material/AccountTree'
+import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings'
 import FolderIcon from '@mui/icons-material/Folder'
 import ViewColumnIcon from '@mui/icons-material/ViewColumn'
 import ViewListIcon from '@mui/icons-material/ViewList'
@@ -33,7 +34,7 @@ export interface BoardContext {
  * Baut die Navigationsbäume: „Projekte" ist immer da; ist ein Board offen,
  * kommt eine nach dem Board benannte Gruppe hinzu (Kind „Board"; „Epics" ergänzt E2).
  */
-export function buildNavItems(board: BoardContext | null): NavNode[] {
+export function buildNavItems(board: BoardContext | null, isAdmin = false): NavNode[] {
   const items: NavNode[] = [{ kind: 'link', label: 'Projekte', path: '/', icon: FolderIcon }]
   if (board) {
     items.push({
@@ -46,6 +47,9 @@ export function buildNavItems(board: BoardContext | null): NavNode[] {
         { kind: 'link', label: 'Epics', path: `/boards/${board.id}/epics`, icon: AccountTreeIcon },
       ],
     })
+  }
+  if (isAdmin) {
+    items.push({ kind: 'link', label: 'Admin', path: '/admin', icon: AdminPanelSettingsIcon })
   }
   return items
 }

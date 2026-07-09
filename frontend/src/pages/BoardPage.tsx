@@ -12,7 +12,7 @@ import { projectsApi } from '../api/projects'
 import { useAuth } from '../auth/AuthContext'
 import { BoardView } from '../components/BoardView'
 import { CardDetailModal } from '../components/CardDetailModal'
-import { canEditCards } from '../lib/roles'
+import { canEditCards, isPlatformAdmin } from '../lib/roles'
 
 export function BoardPage() {
   const { boardId } = useParams()
@@ -81,7 +81,7 @@ export function BoardPage() {
     }
   }, [board, membershipRole])
 
-  const canEdit = canEditCards(membershipRole ?? fetchedRole ?? 'VIEWER')
+  const canEdit = canEditCards(membershipRole ?? fetchedRole ?? 'VIEWER', isPlatformAdmin(user))
 
   if (loading) {
     return (

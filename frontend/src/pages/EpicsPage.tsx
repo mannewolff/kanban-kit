@@ -13,7 +13,7 @@ import { projectsApi } from '../api/projects'
 import { useAuth } from '../auth/AuthContext'
 import { CardDetailModal } from '../components/CardDetailModal'
 import { EpicBadge } from '../components/EpicBadge'
-import { canEditCards } from '../lib/roles'
+import { canEditCards, isPlatformAdmin } from '../lib/roles'
 
 function epicToCard(epic: Epic, boardId: number): Card {
   return {
@@ -54,7 +54,7 @@ export function EpicsPage() {
     }
     void projectsApi.list().then((ps) => setFetchedRole(ps.find((p) => p.id === board.projectId)?.role ?? 'VIEWER'))
   }, [board, membershipRole])
-  const canEdit = canEditCards(membershipRole ?? fetchedRole ?? 'VIEWER')
+  const canEdit = canEditCards(membershipRole ?? fetchedRole ?? 'VIEWER', isPlatformAdmin(user))
 
   return (
     <Box>
