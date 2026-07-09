@@ -120,4 +120,18 @@ describe('BoardView', () => {
     render(<BoardView board={board} initialCards={[doneCard]} canEdit retentionDays={5} api={mkApi()} />)
     expect(screen.getByText(/wird in 5 Tagen archiviert/)).toBeInTheDocument()
   })
+
+  it('filtert das Board nach Epic', () => {
+    const epics = [{ id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 0, total: 1 }]
+    const inEpic: Card = { ...card, id: 100, parentId: 9 }
+    const other: Card = { ...card, id: 200, number: 2, parentId: null }
+    render(<BoardView board={board} initialCards={[inEpic, other]} canEdit epics={epics} api={mkApi()} />)
+
+    expect(screen.getByTestId('card-100')).toBeInTheDocument()
+    expect(screen.getByTestId('card-200')).toBeInTheDocument()
+
+    fireEvent.change(screen.getByLabelText('Epic-Filter'), { target: { value: '9' } })
+    expect(screen.getByTestId('card-100')).toBeInTheDocument()
+    expect(screen.queryByTestId('card-200')).not.toBeInTheDocument()
+  })
 })

@@ -7,6 +7,7 @@ import Menu from '@mui/material/Menu'
 import MenuItem from '@mui/material/MenuItem'
 import Paper from '@mui/material/Paper'
 import Stack from '@mui/material/Stack'
+import TextField from '@mui/material/TextField'
 import Tooltip from '@mui/material/Tooltip'
 import Typography from '@mui/material/Typography'
 import { useEffect, useState } from 'react'
@@ -15,7 +16,7 @@ import { cardsApi, type Card, type CardsApi } from '../api/cards'
 import { epicsApi as defaultEpicsApi, type Epic, type EpicsApi } from '../api/epics'
 import { activeCardsInColumn, applyMove } from '../lib/boardOps'
 import { cleanupCountdownLabel, cleanupDaysRemaining } from '../lib/cleanupCountdown'
-import { epicColor } from '../lib/epicMeta'
+import { epicColor, epicShortcode } from '../lib/epicMeta'
 import { COLUMN_SURFACE_BG, statusColors } from '../lib/statusColors'
 import { EpicBadge } from './EpicBadge'
 import { NewCardModal, type NewItemInput } from './NewCardModal'
@@ -58,11 +59,31 @@ export function BoardView({
   const [cards, setCards] = useState<Card[]>(initialCards)
   const [modalColumn, setModalColumn] = useState<{ id: number; name: string } | null>(null)
   const [menu, setMenu] = useState<{ card: Card; anchor: HTMLElement } | null>(null)
+  const [epicFilter, setEpicFilter] = useState<number | null>(() => {
+    try {
+      const raw = localStorage.getItem(`manban.boardEpicFilter.${board.id}`)
+      return raw ? Number(raw) : null
+    } catch {
+      return null
+    }
+  })
 
   useEffect(() => setCards(initialCards), [initialCards])
 
   const epicById = new Map(epics.map((e) => [e.id, e]))
   const columns = [...board.columns].sort((a, b) => a.position - b.position)
+  // Anzeige-Filter nach Epic (nur Darstellung; Move/Anlegen arbeiten auf dem vollen Bestand).
+  const filteredCards = epicFilter == null ? cards : cards.filter((c) => c.parentId === epicFilter)
+
+  const changeEpicFilter = (value: number | null) => {
+    setEpicFilter(value)
+    try {
+      if (value == null) localStorage.removeItem(`manban.boardEpicFilter.${board.id}`)
+      else localStorage.setItem(`manban.boardEpicFilter.${board.id}`, String(value))
+    } catch {
+      // localStorage nicht verfügbar
+    }
+  }
 
   const moveCard = async (cardId: number, toColumnId: number) => {
     const card = cards.find((c) => c.id === cardId)
@@ -98,16 +119,39 @@ export function BoardView({
 
   return (
     <Box>
-      {canEdit && columns.length > 0 && (
-        <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 1 }}>
-          <Button
-            variant="contained"
-            size="small"
-            startIcon={<AddIcon />}
-            onClick={() => setModalColumn({ id: columns[0].id, name: columns[0].name })}
-          >
-            Neues Item
-          </Button>
+      {(epics.length > 0 || (canEdit && columns.length > 0)) && (
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+          {epics.length > 0 && (
+            <TextField
+              select
+              SelectProps={{ native: true }}
+              size="small"
+              label="Epic-Filter"
+              value={epicFilter ?? ''}
+              onChange={(e) => changeEpicFilter(e.target.value === '' ? null : Number(e.target.value))}
+              inputProps={{ 'aria-label': 'Epic-Filter' }}
+              InputLabelProps={{ shrink: true }}
+              sx={{ minWidth: 200 }}
+            >
+              <option value="">Alle Epics</option>
+              {epics.map((epic) => (
+                <option key={epic.id} value={epic.id}>
+                  {epicShortcode(epic.title, epic.shortcode)} – {epic.title}
+                </option>
+              ))}
+            </TextField>
+          )}
+          <Box sx={{ flexGrow: 1 }} />
+          {canEdit && columns.length > 0 && (
+            <Button
+              variant="contained"
+              size="small"
+              startIcon={<AddIcon />}
+              onClick={() => setModalColumn({ id: columns[0].id, name: columns[0].name })}
+            >
+              Neues Item
+            </Button>
+          )}
         </Box>
       )}
 
@@ -125,7 +169,7 @@ export function BoardView({
       >
         {columns.map((column) => {
           const colors = statusColors(column.name)
-          const count = activeCardsInColumn(cards, column.id).length
+          const count = activeCardsInColumn(filteredCards, column.id).length
           const done = isDoneColumn(column.name)
           return (
             <Paper
@@ -169,7 +213,7 @@ export function BoardView({
               </Box>
 
               <Stack spacing={1} sx={{ p: 1, flex: 1 }}>
-                {activeCardsInColumn(cards, column.id).map((card) => {
+                {activeCardsInColumn(filteredCards, column.id).map((card) => {
                   const epic = card.parentId != null ? epicById.get(card.parentId) : undefined
                   const showDone = done && card.movedToDoneAt != null
                   return (
