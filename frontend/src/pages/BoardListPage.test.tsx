@@ -100,4 +100,24 @@ describe('BoardListPage', () => {
       ['excerpt', 'number', 'status', 'epic', 'title'],
     )
   })
+
+  it('verbreitert die Beschreibungs-Spalte per Resize-Drag und merkt die Breite', async () => {
+    const rectSpy = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({
+      width: 1000, height: 0, top: 0, left: 0, right: 1000, bottom: 0, x: 0, y: 0, toJSON: () => ({}),
+    } as DOMRect)
+    try {
+      renderPage()
+      await screen.findByText('Aufgabe')
+
+      const handle = screen.getByLabelText('Beschreibung-Spalte breiter ziehen')
+      fireEvent.mouseDown(handle, { clientX: 500 })
+      fireEvent.mouseMove(document, { clientX: 400 }) // 100px nach links → +10 %
+      fireEvent.mouseUp(document)
+
+      // Default 30 % + 10 % = 40 %, in localStorage persistiert.
+      expect(localStorage.getItem('manban.listExcerptWidth.1')).toBe('40')
+    } finally {
+      rectSpy.mockRestore()
+    }
+  })
 })

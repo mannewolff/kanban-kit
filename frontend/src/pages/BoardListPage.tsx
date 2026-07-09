@@ -5,7 +5,7 @@ import Stack from '@mui/material/Stack'
 import Typography from '@mui/material/Typography'
 import type { SxProps, Theme } from '@mui/material/styles'
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link as RouterLink, useParams } from 'react-router-dom'
 import { boardsApi, type Board } from '../api/boards'
 import { cardsApi, type Card } from '../api/cards'
@@ -14,7 +14,7 @@ import { projectsApi } from '../api/projects'
 import { useAuth } from '../auth/AuthContext'
 import { CardDetailModal } from '../components/CardDetailModal'
 import { EpicBadge } from '../components/EpicBadge'
-import { stripMarkdown } from '../lib/listExcerpt'
+import { clampExcerptWidth, EXCERPT_DEFAULT_PCT, stripMarkdown } from '../lib/listExcerpt'
 import { canEditCards } from '../lib/roles'
 import { ARCHIVED_STATUS_COLOR, statusColors } from '../lib/statusColors'
 
@@ -37,6 +37,18 @@ function filterKey(boardId: number): string {
 }
 function columnKey(boardId: number): string {
   return `manban.listColumns.${boardId}`
+}
+function excerptKey(boardId: number): string {
+  return `manban.listExcerptWidth.${boardId}`
+}
+
+function readExcerptWidth(boardId: number): number {
+  try {
+    const raw = localStorage.getItem(excerptKey(boardId))
+    return raw == null ? EXCERPT_DEFAULT_PCT : clampExcerptWidth(Number.parseFloat(raw))
+  } catch {
+    return EXCERPT_DEFAULT_PCT
+  }
 }
 
 /** Liest die gespeicherte Spaltenreihenfolge; unbekannte Keys raus, fehlende hinten anfügen. */
@@ -67,6 +79,10 @@ export function BoardListPage() {
   const [rowOver, setRowOver] = useState<number | null>(null)
   const [colDrag, setColDrag] = useState<ColumnKey | null>(null)
   const [colOver, setColOver] = useState<ColumnKey | null>(null)
+  const [excerptWidth, setExcerptWidth] = useState<number>(() => readExcerptWidth(id))
+  const viewRef = useRef<HTMLDivElement>(null)
+  const resizingRef = useRef(false)
+  const resizeCleanupRef = useRef<(() => void) | null>(null)
 
   const reloadCards = () => {
     void cardsApi.list(id).then(setCards)
@@ -87,8 +103,50 @@ export function BoardListPage() {
     reloadCards()
     void epicsApi.list(id).then(setEpics)
     setOrder(readColumnOrder(id))
+    setExcerptWidth(readExcerptWidth(id))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
+
+  // Laufenden Resize-Drag bei Unmount abräumen.
+  useEffect(() => () => resizeCleanupRef.current?.(), [])
+
+  const startResize = (e: React.MouseEvent) => {
+    const width = viewRef.current?.getBoundingClientRect().width ?? 0
+    const startX = e.clientX
+    const startPct = excerptWidth
+    resizingRef.current = true
+    const onMove = (ev: MouseEvent) => {
+      if (!width) return
+      // Nach links ziehen verbreitert die Beschreibungs-Spalte.
+      setExcerptWidth(clampExcerptWidth(startPct + ((startX - ev.clientX) / width) * 100))
+    }
+    const detach = () => {
+      document.removeEventListener('mousemove', onMove)
+      document.removeEventListener('mouseup', onUp)
+      resizeCleanupRef.current = null
+    }
+    const onUp = () => {
+      detach()
+      setExcerptWidth((w) => {
+        try {
+          localStorage.setItem(excerptKey(id), String(w))
+        } catch {
+          // localStorage nicht verfügbar
+        }
+        return w
+      })
+      // Flag erst nach dem Click-Event zurücksetzen, damit kein Detail-Modal aufgeht.
+      setTimeout(() => {
+        resizingRef.current = false
+      }, 0)
+    }
+    document.addEventListener('mousemove', onMove)
+    document.addEventListener('mouseup', onUp)
+    resizeCleanupRef.current = detach
+  }
+
+  const cellSx = (key: ColumnKey): SxProps<Theme> =>
+    key === 'excerpt' ? { ...COLUMN_META.excerpt.sx, flex: `0 0 ${excerptWidth}%` } : COLUMN_META[key].sx
 
   const membershipRole = board
     ? user?.memberships.find((m) => m.projectId === board.projectId)?.role
@@ -179,7 +237,7 @@ export function BoardListPage() {
   }
 
   return (
-    <Box>
+    <Box ref={viewRef}>
       <Link component={RouterLink} to={`/boards/${id}`}>← Board</Link>
       <Typography variant="h5" sx={{ mt: 1, mb: 2 }}>
         {board?.name ?? 'Liste'}
@@ -218,13 +276,34 @@ export function BoardListPage() {
                 onDrop={(e) => { e.preventDefault(); if (colDrag) reorderColumns(colDrag, key); setColDrag(null); setColOver(null) }}
                 onDragEnd={() => { setColDrag(null); setColOver(null) }}
                 sx={{
-                  ...COLUMN_META[key].sx,
+                  ...cellSx(key),
+                  display: 'flex',
+                  alignItems: 'center',
                   cursor: 'grab',
                   userSelect: 'none',
                   borderBottom: '2px solid',
                   borderColor: colOver === key ? 'primary.main' : 'transparent',
                 }}
               >
+                {key === 'excerpt' && (
+                  <Box
+                    role="separator"
+                    aria-label="Beschreibung-Spalte breiter ziehen"
+                    onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); startResize(e) }}
+                    onDragStart={(e) => e.preventDefault()}
+                    onClick={(e) => e.stopPropagation()}
+                    sx={{
+                      alignSelf: 'stretch',
+                      width: '6px',
+                      flexShrink: 0,
+                      mr: 0.5,
+                      cursor: 'col-resize',
+                      borderRight: '2px solid',
+                      borderColor: 'divider',
+                      '&:hover': { borderColor: 'primary.main' },
+                    }}
+                  />
+                )}
                 <Typography variant="caption" sx={{ fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.03em', color: 'text.secondary' }}>
                   {COLUMN_META[key].label}
                 </Typography>
@@ -244,7 +323,7 @@ export function BoardListPage() {
                 onDragOver={(e) => { if (validRowDrop(card)) { e.preventDefault(); setRowOver(card.id) } }}
                 onDrop={(e) => { e.preventDefault(); void onRowDrop(card) }}
                 onDragEnd={() => { setRowDrag(null); setRowOver(null) }}
-                onClick={() => setDetailCard(card)}
+                onClick={() => { if (!resizingRef.current) setDetailCard(card) }}
                 onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setDetailCard(card) } }}
                 sx={{
                   display: 'flex',
@@ -267,7 +346,7 @@ export function BoardListPage() {
                 <DragIndicatorIcon fontSize="small" aria-label="Reihenfolge ändern"
                   sx={{ flexShrink: 0, color: 'action.disabled', visibility: card.archived ? 'hidden' : 'visible' }} />
                 {order.map((key) => (
-                  <Box key={key} sx={{ ...COLUMN_META[key].sx, overflow: 'hidden' }}>
+                  <Box key={key} sx={{ ...cellSx(key), overflow: 'hidden' }}>
                     {renderCell(key, card)}
                   </Box>
                 ))}
