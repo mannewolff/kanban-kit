@@ -3,6 +3,7 @@ import type { SvgIconProps } from '@mui/material'
 import AccountTreeIcon from '@mui/icons-material/AccountTree'
 import FolderIcon from '@mui/icons-material/Folder'
 import ViewColumnIcon from '@mui/icons-material/ViewColumn'
+import ViewListIcon from '@mui/icons-material/ViewList'
 
 type NavIcon = ComponentType<SvgIconProps>
 
@@ -41,6 +42,7 @@ export function buildNavItems(board: BoardContext | null): NavNode[] {
       icon: ViewColumnIcon,
       children: [
         { kind: 'link', label: 'Board', path: `/boards/${board.id}`, icon: ViewColumnIcon },
+        { kind: 'link', label: 'Liste', path: `/boards/${board.id}/list`, icon: ViewListIcon },
         { kind: 'link', label: 'Epics', path: `/boards/${board.id}/epics`, icon: AccountTreeIcon },
       ],
     })
