@@ -32,11 +32,20 @@ public class PermissionChecker {
      */
     @Transactional(readOnly = true)
     public ProjectMembership require(long userId, long projectId, Permission permission) {
-        ProjectMembership membership = memberships.findByProjectIdAndUserId(projectId, userId)
-                .orElseThrow(ProjectNotFoundException::new);
+        ProjectMembership membership = requireMembership(userId, projectId);
         if (!rolePermissions.isGranted(membership.role(), permission)) {
             throw new ProjectAccessDeniedException();
         }
         return membership;
+    }
+
+    /**
+     * Stellt nur die Projekt-Mitgliedschaft sicher (für Lesezugriffe, die keiner
+     * speziellen Berechtigung bedürfen). Nichtmitglied → 404 (kein Existenz-Leak).
+     */
+    @Transactional(readOnly = true)
+    public ProjectMembership requireMembership(long userId, long projectId) {
+        return memberships.findByProjectIdAndUserId(projectId, userId)
+                .orElseThrow(ProjectNotFoundException::new);
     }
 }
