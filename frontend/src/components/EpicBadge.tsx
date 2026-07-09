@@ -1,32 +1,33 @@
 import Box from '@mui/material/Box'
+import Stack from '@mui/material/Stack'
+import Typography from '@mui/material/Typography'
+import type { SxProps, Theme } from '@mui/material/styles'
 import { epicColor, epicShortcode } from '../lib/epicMeta'
 
 interface Props {
   epicId: number
   title: string
   shortcode: string | null
+  sx?: SxProps<Theme>
 }
 
-/** Kleines farbiges Kürzel-Badge eines Epics, angezeigt auf zugeordneten Karten. */
-export function EpicBadge({ epicId, title, shortcode }: Props) {
+/** Kürzel-Badge eines Epics: farbiger Punkt + Kürzel auf zartem Grund in der Epic-Farbe (Toolbox-Stil). */
+export function EpicBadge({ epicId, title, shortcode, sx }: Props) {
+  const hue = epicColor(epicId)
   const label = epicShortcode(title, shortcode)
   return (
-    <Box
-      component="span"
+    <Stack
+      direction="row"
+      alignItems="center"
+      spacing={0.5}
       title={title}
-      sx={{
-        display: 'inline-block',
-        bgcolor: epicColor(epicId),
-        color: '#fff',
-        fontSize: 10,
-        fontWeight: 700,
-        letterSpacing: '.03em',
-        px: 0.75,
-        py: 0.125,
-        borderRadius: 0.75,
-      }}
+      aria-label={`Epic ${label}`}
+      sx={{ width: 'fit-content', px: 0.75, py: 0.25, borderRadius: 1, bgcolor: `${hue}22`, flexShrink: 0, ...sx }}
     >
-      {label}
-    </Box>
+      <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: hue, flexShrink: 0 }} />
+      <Typography variant="caption" sx={{ fontWeight: 700, color: hue, lineHeight: 1 }}>
+        {label}
+      </Typography>
+    </Stack>
   )
 }

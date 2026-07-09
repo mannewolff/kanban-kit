@@ -36,6 +36,9 @@ export function statusColors(name: string): StatusColorSet {
 /** Neutrale Spaltenfläche (Kit: #ebecf0). */
 export const COLUMN_SURFACE_BG = '#ebecf0'
 
+/** Farbe für archivierte Items (Badges/Listen). */
+export const ARCHIVED_STATUS_COLOR: StatusColorSet = { bg: '#f0f0f0', text: '#666666', dot: '#9e9e9e' }
+
 /** Chrome-Farben des Detail-Modals (aus der Toolbox), bewusst außerhalb des Themes. */
 export const MODAL_BORDER = '#e8e8e8'
 export const MODAL_HEADER_BG = '#f7f8fa'

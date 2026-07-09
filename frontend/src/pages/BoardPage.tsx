@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react'
 import { Link as RouterLink, useParams } from 'react-router-dom'
 import { boardsApi, type Board } from '../api/boards'
 import { cardsApi, type Card } from '../api/cards'
+import { configApi } from '../api/config'
 import { epicsApi, type Epic } from '../api/epics'
 import { projectsApi } from '../api/projects'
 import { useAuth } from '../auth/AuthContext'
@@ -23,6 +24,8 @@ export function BoardPage() {
   const [fetchedRole, setFetchedRole] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [selectedCard, setSelectedCard] = useState<Card | null>(null)
+  const [openEditing, setOpenEditing] = useState(false)
+  const [retentionDays, setRetentionDays] = useState(30)
 
   const reloadCards = () => {
     void cardsApi.list(id).then(setCards)
@@ -49,6 +52,9 @@ export function BoardPage() {
     }
   }, [id])
 
+  useEffect(() => {
+    void configApi.get().then((c) => setRetentionDays(c.doneRetentionDays)).catch(() => {})
+  }, [])
 
   // Rolle bevorzugt synchron aus den Memberships (kein Race). Ist das Projekt dort noch nicht
   // bekannt (z. B. frisch in dieser Session angelegt), einmal frisch nachladen.
@@ -100,14 +106,19 @@ export function BoardPage() {
         initialCards={cards}
         canEdit={canEdit}
         epics={epics}
-        onCardClick={setSelectedCard}
+        retentionDays={retentionDays}
+        onCardClick={(card) => { setOpenEditing(false); setSelectedCard(card) }}
+        onEditCard={(card) => { setOpenEditing(true); setSelectedCard(card) }}
         onEpicsChanged={reloadEpics}
+        onCardsChanged={reloadCards}
       />
       {selectedCard && (
         <CardDetailModal
+          key={selectedCard.id}
           card={selectedCard}
           canEdit={canEdit}
           epics={epics}
+          initialEditing={openEditing}
           columnName={board.columns.find((c) => c.id === selectedCard.columnId)?.name}
           onClose={() => setSelectedCard(null)}
           onChanged={() => {

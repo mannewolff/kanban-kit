@@ -59,6 +59,8 @@ interface Props {
   canEdit: boolean
   onClose: () => void
   onChanged?: () => void
+  /** Direkt im Edit-Modus öffnen (z. B. aus dem Karten-⋮-Menü). */
+  initialEditing?: boolean
   /** Spaltenname für den Status-Chip (bei Karten). */
   columnName?: string
   /** Board-Epics für das Epic-Dropdown. */
@@ -75,6 +77,7 @@ export function CardDetailModal({
   canEdit,
   onClose,
   onChanged,
+  initialEditing = false,
   columnName,
   epics = [],
   children = [],
@@ -85,7 +88,7 @@ export function CardDetailModal({
   const { user } = useAuth()
   const isEpic = card.type === 'EPIC'
 
-  const [editing, setEditing] = useState(false)
+  const [editing, setEditing] = useState(initialEditing)
   const [title, setTitle] = useState(card.title)
   const [body, setBody] = useState(card.description ?? '')
   const [parentId, setParentId] = useState<number | null>(card.parentId)

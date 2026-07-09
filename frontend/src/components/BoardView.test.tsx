@@ -21,15 +21,19 @@ const card: Card = {
   type: 'CARD', parentId: null, shortcode: null,
 }
 
+function mkApi(over: Record<string, unknown> = {}) {
+  return { create: vi.fn(), move: vi.fn(), archive: vi.fn(), restore: vi.fn(), remove: vi.fn(), ...over }
+}
+
 function dropOnColumn(columnId: number, cardId: number) {
   fireEvent.drop(screen.getByTestId(`column-${columnId}`), {
     dataTransfer: { getData: () => String(cardId) },
   })
 }
 
-describe('BoardView Drag & Drop', () => {
+describe('BoardView', () => {
   it('verschiebt die Karte optimistisch in die Zielspalte', async () => {
-    const api = { create: vi.fn(), move: vi.fn().mockResolvedValue(undefined) }
+    const api = mkApi({ move: vi.fn().mockResolvedValue(undefined) })
     render(<BoardView board={board} initialCards={[card]} canEdit api={api} />)
 
     dropOnColumn(20, 100)
@@ -39,19 +43,18 @@ describe('BoardView Drag & Drop', () => {
   })
 
   it('rollt bei einem API-Fehler auf den vorigen Stand zurück', async () => {
-    const api = { create: vi.fn(), move: vi.fn().mockRejectedValue(new Error('fail')) }
+    const api = mkApi({ move: vi.fn().mockRejectedValue(new Error('fail')) })
     render(<BoardView board={board} initialCards={[card]} canEdit api={api} />)
 
     dropOnColumn(20, 100)
 
-    // Nach dem fehlgeschlagenen Move liegt die Karte wieder in der Ausgangsspalte.
     await waitFor(() => expect(within(screen.getByTestId('column-10')).getByTestId('card-100')).toBeInTheDocument())
     expect(within(screen.getByTestId('column-20')).queryByTestId('card-100')).not.toBeInTheDocument()
   })
 
   it('legt über den +Dialog eine Karte mit Beschreibung an', async () => {
     const created: Card = { ...card, id: 200, number: 2, title: 'Neu', columnId: 20 }
-    const api = { create: vi.fn().mockResolvedValue(created), move: vi.fn() }
+    const api = mkApi({ create: vi.fn().mockResolvedValue(created) })
     render(<BoardView board={board} initialCards={[card]} canEdit api={api} />)
 
     fireEvent.click(screen.getByLabelText('Karte in Done anlegen'))
@@ -64,14 +67,14 @@ describe('BoardView Drag & Drop', () => {
     expect(within(screen.getByTestId('column-20')).getByTestId('card-200')).toBeInTheDocument()
   })
 
-  it('blendet den +Button für Nicht-Editoren aus', () => {
-    const api = { create: vi.fn(), move: vi.fn() }
-    render(<BoardView board={board} initialCards={[card]} canEdit={false} api={api} />)
+  it('blendet Anlege-Buttons für Nicht-Editoren aus', () => {
+    render(<BoardView board={board} initialCards={[card]} canEdit={false} api={mkApi()} />)
     expect(screen.queryByLabelText('Karte in Done anlegen')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Neues Item' })).not.toBeInTheDocument()
   })
 
   it('legt über Typ=Epic ein Epic an statt einer Karte', async () => {
-    const api = { create: vi.fn(), move: vi.fn() }
+    const api = mkApi()
     const epicsApi = { create: vi.fn().mockResolvedValue({ id: 5 }) }
     const onEpicsChanged = vi.fn()
     render(
@@ -93,7 +96,28 @@ describe('BoardView Drag & Drop', () => {
   it('zeigt ein Epic-Badge auf zugeordneten Karten', () => {
     const assigned: Card = { ...card, parentId: 9 }
     const epics = [{ id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 0, total: 1 }]
-    render(<BoardView board={board} initialCards={[assigned]} canEdit epics={epics} api={{ create: vi.fn(), move: vi.fn() }} />)
+    render(<BoardView board={board} initialCards={[assigned]} canEdit epics={epics} api={mkApi()} />)
     expect(screen.getByText('AUT')).toBeInTheDocument()
+  })
+
+  it('archiviert und verschiebt über das ⋮-Menü', async () => {
+    const api = mkApi({ archive: vi.fn().mockResolvedValue({}), move: vi.fn().mockResolvedValue({}) })
+    const onCardsChanged = vi.fn()
+    render(<BoardView board={board} initialCards={[card]} canEdit api={api} onCardsChanged={onCardsChanged} />)
+
+    fireEvent.click(screen.getByLabelText('Menü Aufgabe'))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Archivieren' }))
+    await waitFor(() => expect(api.archive).toHaveBeenCalledWith(100))
+    expect(onCardsChanged).toHaveBeenCalled()
+
+    fireEvent.click(screen.getByLabelText('Menü Aufgabe'))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Nach Done' }))
+    await waitFor(() => expect(api.move).toHaveBeenCalledWith(100, 20, 0))
+  })
+
+  it('zeigt den Archiv-Countdown auf Done-Karten', () => {
+    const doneCard: Card = { ...card, columnId: 20, movedToDoneAt: new Date().toISOString() }
+    render(<BoardView board={board} initialCards={[doneCard]} canEdit retentionDays={5} api={mkApi()} />)
+    expect(screen.getByText(/wird in 5 Tagen archiviert/)).toBeInTheDocument()
   })
 })
