@@ -1,15 +1,11 @@
 import CssBaseline from '@mui/material/CssBaseline'
-import { ThemeProvider, createTheme } from '@mui/material/styles'
+import { ThemeProvider } from '@mui/material/styles'
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
+import { BrowserRouter } from 'react-router-dom'
 import { App } from './App'
-
-const theme = createTheme({
-  palette: {
-    mode: 'light',
-    primary: { main: '#2f6f4f' },
-  },
-})
+import { AuthProvider } from './auth/AuthContext'
+import { theme } from './theme'
 
 const container = document.getElementById('root')
 if (!container) {
@@ -20,7 +16,11 @@ createRoot(container).render(
   <StrictMode>
     <ThemeProvider theme={theme}>
       <CssBaseline />
-      <App />
+      <BrowserRouter>
+        <AuthProvider>
+          <App />
+        </AuthProvider>
+      </BrowserRouter>
     </ThemeProvider>
   </StrictMode>,
 )

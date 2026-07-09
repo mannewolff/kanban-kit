@@ -1,18 +1,24 @@
-import Box from '@mui/material/Box'
-import Container from '@mui/material/Container'
-import Typography from '@mui/material/Typography'
+import { Route, Routes } from 'react-router-dom'
+import { AppShell } from './components/AppShell'
+import { ForgotPasswordPage } from './pages/ForgotPasswordPage'
+import { HomePage } from './pages/HomePage'
+import { LoginPage } from './pages/LoginPage'
+import { ResetPasswordPage } from './pages/ResetPasswordPage'
+import { SignupPage } from './pages/SignupPage'
+import { VerifyNoticePage } from './pages/VerifyNoticePage'
+import { ProtectedRoute } from './routes/ProtectedRoute'
 
 export function App() {
   return (
-    <Container maxWidth="sm">
-      <Box sx={{ mt: 8, textAlign: 'center' }}>
-        <Typography variant="h3" component="h1" gutterBottom>
-          manban
-        </Typography>
-        <Typography variant="body1" color="text.secondary">
-          Das Gerüst steht. Die Fachfunktionen folgen mit den nächsten Issues.
-        </Typography>
-      </Box>
-    </Container>
+    <Routes>
+      <Route path="/login" element={<LoginPage />} />
+      <Route path="/signup" element={<SignupPage />} />
+      <Route path="/verify" element={<VerifyNoticePage />} />
+      <Route path="/forgot" element={<ForgotPasswordPage />} />
+      <Route path="/reset" element={<ResetPasswordPage />} />
+      <Route element={<ProtectedRoute />}>
+        <Route path="/" element={<AppShell><HomePage /></AppShell>} />
+      </Route>
+    </Routes>
   )
 }
