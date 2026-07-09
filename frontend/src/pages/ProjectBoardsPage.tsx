@@ -11,7 +11,7 @@ import { useEffect, useState } from 'react'
 import { Link as RouterLink, useNavigate, useParams } from 'react-router-dom'
 import { boardsApi, type Board } from '../api/boards'
 import { projectsApi } from '../api/projects'
-import { canManageBoards } from '../lib/roles'
+import { canManageBoards, canManageMembers } from '../lib/roles'
 
 export function ProjectBoardsPage() {
   const { projectId } = useParams()
@@ -48,9 +48,14 @@ export function ProjectBoardsPage() {
   return (
     <Box>
       <Link component={RouterLink} to="/">← Projekte</Link>
-      <Typography variant="h5" sx={{ mt: 1, mb: 2 }}>
-        {projectName || 'Projekt'}
-      </Typography>
+      <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mt: 1, mb: 2 }}>
+        <Typography variant="h5">
+          {projectName || 'Projekt'}
+        </Typography>
+        {canManageMembers(role) && (
+          <Link component={RouterLink} to={`/projects/${id}/members`}>Mitglieder</Link>
+        )}
+      </Stack>
 
       {canManageBoards(role) && (
         <Box component="form" onSubmit={handleCreate} sx={{ mb: 3 }}>

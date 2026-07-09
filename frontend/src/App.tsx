@@ -1,9 +1,11 @@
 import { Outlet, Route, Routes } from 'react-router-dom'
 import { AppShell } from './components/AppShell'
+import { AcceptInvitationPage } from './pages/AcceptInvitationPage'
 import { BoardPage } from './pages/BoardPage'
 import { ForgotPasswordPage } from './pages/ForgotPasswordPage'
 import { LoginPage } from './pages/LoginPage'
 import { ProjectBoardsPage } from './pages/ProjectBoardsPage'
+import { ProjectMembersPage } from './pages/ProjectMembersPage'
 import { ProjectsPage } from './pages/ProjectsPage'
 import { ResetPasswordPage } from './pages/ResetPasswordPage'
 import { SignupPage } from './pages/SignupPage'
@@ -22,7 +24,9 @@ export function App() {
         <Route element={<AppShell><Outlet /></AppShell>}>
           <Route path="/" element={<ProjectsPage />} />
           <Route path="/projects/:projectId" element={<ProjectBoardsPage />} />
+          <Route path="/projects/:projectId/members" element={<ProjectMembersPage />} />
           <Route path="/boards/:boardId" element={<BoardPage />} />
+          <Route path="/invitations/accept" element={<AcceptInvitationPage />} />
         </Route>
       </Route>
     </Routes>
