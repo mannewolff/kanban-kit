@@ -23,6 +23,11 @@ import type { Epic } from '../api/epics'
 import { epicShortcode } from '../lib/epicMeta'
 import { MODAL_BORDER, MODAL_TEXT_PRIMARY, statusColors } from '../lib/statusColors'
 import { useAuth } from '../auth/AuthContext'
+import { AttachmentPreview } from './AttachmentPreview'
+
+/** Bilder und PDF werden in der Lightbox angezeigt; andere Typen nur heruntergeladen. */
+const isPreviewable = (contentType: string) =>
+  contentType.startsWith('image/') || contentType === 'application/pdf'
 
 /**
  * Parst die kommagetrennte Abhängigkeits-Eingabe in Nummern. Nur positive Ganzzahlen sind gültig;
@@ -102,6 +107,7 @@ export function CardDetailModal({
   const [attachments, setAttachments] = useState<Attachment[]>([])
   const [previews, setPreviews] = useState<Record<number, string>>({})
   const [uploadError, setUploadError] = useState<string | null>(null)
+  const [preview, setPreview] = useState<{ attachment: Attachment; url: string } | null>(null)
 
   useEffect(() => {
     void commentsApi.list(card.id).then(setComments)
@@ -180,6 +186,18 @@ export function CardDetailModal({
   const deleteAttachment = async (id: number) => {
     await attachmentsApi.remove(id)
     setAttachments((a) => a.filter((x) => x.id !== id))
+  }
+
+  const openPreview = async (attachment: Attachment) => {
+    const blob = await attachmentsApi.fetchBlob(attachment.id)
+    setPreview({ attachment, url: URL.createObjectURL(blob) })
+  }
+
+  const closePreview = () => {
+    setPreview((p) => {
+      if (p) URL.revokeObjectURL(p.url)
+      return null
+    })
   }
 
   const colors = columnName ? statusColors(columnName) : null
@@ -329,7 +347,14 @@ export function CardDetailModal({
                   {attachments.map((a) => (
                     <Box key={a.id}>
                       <Stack direction="row" spacing={1} alignItems="center">
-                        <Link href={`/api/attachments/${a.id}`}>{a.filename}</Link>
+                        {isPreviewable(a.contentType) ? (
+                          <Link component="button" type="button" onClick={() => void openPreview(a)}
+                            sx={{ textAlign: 'left' }}>
+                            {a.filename}
+                          </Link>
+                        ) : (
+                          <Link href={`/api/attachments/${a.id}`}>{a.filename}</Link>
+                        )}
                         <Typography variant="caption" color="text.secondary">
                           {Math.round(a.size / 1024)} KB
                         </Typography>
@@ -405,6 +430,16 @@ export function CardDetailModal({
           <Button onClick={onClose}>Schließen</Button>
         )}
       </DialogActions>
+
+      {preview && (
+        <AttachmentPreview
+          filename={preview.attachment.filename}
+          contentType={preview.attachment.contentType}
+          url={preview.url}
+          downloadHref={`/api/attachments/${preview.attachment.id}`}
+          onClose={closePreview}
+        />
+      )}
     </Dialog>
   )
 }

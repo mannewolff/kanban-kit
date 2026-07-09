@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AttachmentsApi } from '../api/attachments'
 import type { Card } from '../api/cards'
 import type { CommentsApi } from '../api/comments'
@@ -47,6 +47,12 @@ describe('parseDependencyInput', () => {
 })
 
 describe('CardDetailModal', () => {
+  beforeEach(() => {
+    // jsdom kennt createObjectURL nicht.
+    URL.createObjectURL = vi.fn(() => 'blob:preview')
+    URL.revokeObjectURL = vi.fn()
+  })
+
   it('rendert im Lesemodus Markdown, Abhängigkeiten und Kommentare', async () => {
     const apis = makeApis()
     render(<CardDetailModal card={card} canEdit columnName="In Progress" onClose={vi.fn()} {...apis} />)
@@ -80,5 +86,17 @@ describe('CardDetailModal', () => {
       expect(apis.cardsApi.update).toHaveBeenCalledWith(100, 'Aufgabe', 'Neuer Text', [3, 4], undefined, null),
     )
     expect(onChanged).toHaveBeenCalled()
+  })
+
+  it('öffnet eine Lightbox-Vorschau beim Klick auf einen PDF-Anhang', async () => {
+    const apis = makeApis()
+    apis.attachmentsApi.list = vi.fn().mockResolvedValue([
+      { id: 5, cardId: 100, filename: 'doc.pdf', contentType: 'application/pdf', size: 2048, createdAt: '' },
+    ])
+    apis.attachmentsApi.fetchBlob = vi.fn().mockResolvedValue(new Blob(['x'], { type: 'application/pdf' }))
+    render(<CardDetailModal card={card} canEdit columnName="In Progress" onClose={vi.fn()} {...apis} />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'doc.pdf' }))
+    await waitFor(() => expect(screen.getByLabelText('Vorschau doc.pdf')).toBeInTheDocument())
   })
 })
