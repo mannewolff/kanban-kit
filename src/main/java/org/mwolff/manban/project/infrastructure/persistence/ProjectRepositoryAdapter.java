@@ -1,5 +1,6 @@
 package org.mwolff.manban.project.infrastructure.persistence;
 
+import java.util.List;
 import java.util.Optional;
 import org.mwolff.manban.project.application.ProjectRepository;
 import org.mwolff.manban.project.domain.Project;
@@ -23,6 +24,11 @@ class ProjectRepositoryAdapter implements ProjectRepository {
     @Override
     public Optional<Project> findById(long id) {
         return jpa.findById(id).map(ProjectRepositoryAdapter::toDomain);
+    }
+
+    @Override
+    public List<Project> findAll() {
+        return jpa.findAll().stream().map(ProjectRepositoryAdapter::toDomain).toList();
     }
 
     @Override

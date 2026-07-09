@@ -39,6 +39,15 @@ public class ProjectService {
 
     @Transactional(readOnly = true)
     public List<ProjectView> list(long userId) {
+        // Plattform-Admin: alle Projekte. Rolle = eigene Mitgliedschaft, sonst OWNER (Vollzugriff).
+        if (permissions.isPlatformAdmin(userId)) {
+            java.util.Map<Long, ProjectRole> ownRoles = memberships.findByUserId(userId).stream()
+                    .collect(java.util.stream.Collectors.toMap(ProjectMembership::projectId, ProjectMembership::role));
+            return projects.findAll().stream()
+                    .map(p -> new ProjectView(p.id(), p.name(),
+                            ownRoles.getOrDefault(p.id(), ProjectRole.OWNER), p.createdAt()))
+                    .toList();
+        }
         return memberships.findByUserId(userId).stream()
                 .map(m -> projects.findById(m.projectId())
                         .map(p -> new ProjectView(p.id(), p.name(), m.role(), p.createdAt()))
