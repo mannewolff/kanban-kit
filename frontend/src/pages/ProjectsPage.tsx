@@ -1,17 +1,26 @@
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
+import Chip from '@mui/material/Chip'
 import IconButton from '@mui/material/IconButton'
-import List from '@mui/material/List'
-import ListItem from '@mui/material/ListItem'
-import ListItemButton from '@mui/material/ListItemButton'
-import ListItemText from '@mui/material/ListItemText'
+import Paper from '@mui/material/Paper'
 import Stack from '@mui/material/Stack'
 import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline'
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { projectsApi, type Project } from '../api/projects'
 import { canManageProject } from '../lib/roles'
+
+const ROLE_CHIP: Record<string, 'primary' | 'info' | 'default'> = {
+  OWNER: 'primary',
+  ADMIN: 'info',
+}
+
+function formatDate(iso: string): string {
+  const d = new Date(iso)
+  return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString('de-DE')
+}
 
 export function ProjectsPage() {
   const navigate = useNavigate()
@@ -54,29 +63,61 @@ export function ProjectsPage() {
         </Stack>
       </Box>
 
-      <List>
-        {projects.map((project) => (
-          <ListItem
-            key={project.id}
-            disablePadding
-            secondaryAction={
-              canManageProject(project.role) ? (
-                <IconButton edge="end" aria-label={`Projekt ${project.name} löschen`}
-                  onClick={() => handleDelete(project.id)}>
-                  ✕
-                </IconButton>
-              ) : null
-            }
-          >
-            <ListItemButton onClick={() => navigate(`/projects/${project.id}`)}>
-              <ListItemText primary={project.name} secondary={`Rolle: ${project.role}`} />
-            </ListItemButton>
-          </ListItem>
-        ))}
-        {projects.length === 0 && (
-          <Typography color="text.secondary">Noch keine Projekte. Lege oben eines an.</Typography>
-        )}
-      </List>
+      {projects.length === 0 ? (
+        <Typography color="text.secondary">Noch keine Projekte. Lege oben eines an.</Typography>
+      ) : (
+        <Box
+          sx={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
+            gap: 2,
+          }}
+        >
+          {projects.map((project) => (
+            <Paper
+              key={project.id}
+              variant="outlined"
+              onClick={() => navigate(`/projects/${project.id}`)}
+              sx={{
+                p: 2,
+                cursor: 'pointer',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 1,
+                transition: 'box-shadow 150ms, border-color 150ms',
+                '&:hover': { boxShadow: 3, borderColor: 'primary.main' },
+              }}
+            >
+              <Stack direction="row" alignItems="flex-start" spacing={1}>
+                <Typography variant="subtitle1" sx={{ fontWeight: 600, flexGrow: 1, minWidth: 0 }}>
+                  {project.name}
+                </Typography>
+                {canManageProject(project.role) && (
+                  <IconButton
+                    size="small"
+                    aria-label={`Projekt ${project.name} löschen`}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      void handleDelete(project.id)
+                    }}
+                    sx={{ mt: -0.5, mr: -0.5 }}
+                  >
+                    <DeleteOutlineIcon fontSize="small" />
+                  </IconButton>
+                )}
+              </Stack>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Chip label={project.role} size="small" color={ROLE_CHIP[project.role] ?? 'default'} />
+                {formatDate(project.createdAt) && (
+                  <Typography variant="caption" color="text.secondary">
+                    {formatDate(project.createdAt)}
+                  </Typography>
+                )}
+              </Box>
+            </Paper>
+          ))}
+        </Box>
+      )}
     </Box>
   )
 }
