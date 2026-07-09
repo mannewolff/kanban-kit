@@ -189,8 +189,13 @@ export function CardDetailModal({
   }
 
   const openPreview = async (attachment: Attachment) => {
-    const blob = await attachmentsApi.fetchBlob(attachment.id)
-    setPreview({ attachment, url: URL.createObjectURL(blob) })
+    setUploadError(null)
+    try {
+      const blob = await attachmentsApi.fetchBlob(attachment.id)
+      setPreview({ attachment, url: URL.createObjectURL(blob) })
+    } catch {
+      setUploadError('Vorschau konnte nicht geladen werden.')
+    }
   }
 
   const closePreview = () => {
@@ -203,6 +208,7 @@ export function CardDetailModal({
   const colors = columnName ? statusColors(columnName) : null
 
   return (
+    <>
     <Dialog open onClose={editing ? () => setEditing(false) : onClose} maxWidth="md" fullWidth scroll="paper">
       <DialogTitle sx={{ borderBottom: `1px solid ${MODAL_BORDER}` }}>
         <Stack direction="row" alignItems="center" spacing={1} sx={{ flexWrap: 'wrap' }}>
@@ -367,7 +373,8 @@ export function CardDetailModal({
                       </Stack>
                       {previews[a.id] && (
                         <Box component="img" src={previews[a.id]} alt={a.filename}
-                          sx={{ maxWidth: 240, maxHeight: 160, mt: 0.5, borderRadius: 1 }} />
+                          onClick={() => void openPreview(a)}
+                          sx={{ maxWidth: 240, maxHeight: 160, mt: 0.5, borderRadius: 1, cursor: 'pointer', display: 'block' }} />
                       )}
                     </Box>
                   ))}
@@ -430,16 +437,17 @@ export function CardDetailModal({
           <Button onClick={onClose}>Schließen</Button>
         )}
       </DialogActions>
-
-      {preview && (
-        <AttachmentPreview
-          filename={preview.attachment.filename}
-          contentType={preview.attachment.contentType}
-          url={preview.url}
-          downloadHref={`/api/attachments/${preview.attachment.id}`}
-          onClose={closePreview}
-        />
-      )}
     </Dialog>
+
+    {preview && (
+      <AttachmentPreview
+        filename={preview.attachment.filename}
+        contentType={preview.attachment.contentType}
+        url={preview.url}
+        downloadHref={`/api/attachments/${preview.attachment.id}`}
+        onClose={closePreview}
+      />
+    )}
+    </>
   )
 }
