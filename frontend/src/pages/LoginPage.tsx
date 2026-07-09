@@ -24,7 +24,9 @@ export function LoginPage() {
     setBusy(true)
     try {
       await login(email, password)
-      navigate('/')
+      // autoRoute-Signal, damit bei genau einem Projekt/Board direkt durchgeroutet wird
+      // (nach dem Login ist die Navigation ein Push, also nicht location.key === 'default').
+      navigate('/', { replace: true, state: { autoRoute: true } })
     } catch (e) {
       if (e instanceof ApiError && e.status === 403) {
         setError('Bitte bestätige zuerst deine E-Mail-Adresse.')
