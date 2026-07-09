@@ -42,6 +42,9 @@ class SecurityConfig {
                                 "/api/auth/forgot", "/api/auth/reset").permitAll()
                         // Token-Verwaltung nur per Cookie-Login, nicht per PAT (Least Privilege).
                         .requestMatchers("/api/access-tokens/**").hasAuthority(SessionAuthenticationFilter.AUTHORITY)
+                        // Admin-Bereich (inkl. Bootstrap) nur per Session-Login, nicht per PAT.
+                        // Die Admin-Autorisierung selbst erledigt der AdminService pro Endpunkt.
+                        .requestMatchers("/api/admin/**").hasAuthority(SessionAuthenticationFilter.AUTHORITY)
                         .requestMatchers("/api/**").authenticated()
                         .anyRequest().permitAll())
                 .exceptionHandling(e -> e.authenticationEntryPoint(

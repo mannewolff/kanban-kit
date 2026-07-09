@@ -1,5 +1,6 @@
 package org.mwolff.manban.auth.infrastructure.persistence;
 
+import java.util.List;
 import java.util.Optional;
 import org.mwolff.manban.auth.application.AppUserRepository;
 import org.mwolff.manban.auth.domain.AppUser;
@@ -34,6 +35,11 @@ class AppUserRepositoryAdapter implements AppUserRepository {
     @Override
     public boolean existsByEmail(String email) {
         return jpa.existsByEmail(email);
+    }
+
+    @Override
+    public List<AppUser> findAll() {
+        return jpa.findAll().stream().map(AppUserRepositoryAdapter::toDomain).toList();
     }
 
     private static AppUserEntity toEntity(AppUser u) {

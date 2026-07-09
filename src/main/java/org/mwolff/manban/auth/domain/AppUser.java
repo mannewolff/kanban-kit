@@ -27,4 +27,9 @@ public record AppUser(
     public AppUser withPasswordHash(String newPasswordHash) {
         return new AppUser(id, email, newPasswordHash, displayName, emailVerified, platformRole);
     }
+
+    /** Kopie mit neuer Plattform-Rolle. */
+    public AppUser withPlatformRole(PlatformRole newPlatformRole) {
+        return new AppUser(id, email, passwordHash, displayName, emailVerified, newPlatformRole);
+    }
 }
