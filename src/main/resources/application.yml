@@ -31,3 +31,11 @@ spring:
 server:
   port: 8080
   forward-headers-strategy: framework  # hinter Caddy (Reverse-Proxy) korrekte Scheme/Host-Auflösung
+
+manban:
+  auth:
+    base-url: ${MANBAN_BASE_URL:http://localhost:8080}
+    verification-ttl: PT24H
+  mail:
+    enabled: ${MANBAN_MAIL_ENABLED:false}
+    from: ${MANBAN_MAIL_FROM:no-reply@manban.local}

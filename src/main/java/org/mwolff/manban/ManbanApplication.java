@@ -2,6 +2,7 @@ package org.mwolff.manban;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.context.properties.ConfigurationPropertiesScan;
 
 /**
  * Einstiegspunkt der manban-Anwendung.
@@ -11,6 +12,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
  * siehe {@code package-info.java} im Basispaket.
  */
 @SpringBootApplication
+@ConfigurationPropertiesScan
 public class ManbanApplication {
 
     public static void main(String[] args) {

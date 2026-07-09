@@ -22,6 +22,11 @@ class AppUserRepositoryAdapter implements AppUserRepository {
     }
 
     @Override
+    public Optional<AppUser> findById(Long id) {
+        return jpa.findById(id).map(AppUserRepositoryAdapter::toDomain);
+    }
+
+    @Override
     public Optional<AppUser> findByEmail(String email) {
         return jpa.findByEmail(email).map(AppUserRepositoryAdapter::toDomain);
     }

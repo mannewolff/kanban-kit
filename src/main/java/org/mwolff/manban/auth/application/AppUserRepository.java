@@ -11,6 +11,8 @@ public interface AppUserRepository {
 
     AppUser save(AppUser user);
 
+    Optional<AppUser> findById(Long id);
+
     Optional<AppUser> findByEmail(String email);
 
     boolean existsByEmail(String email);

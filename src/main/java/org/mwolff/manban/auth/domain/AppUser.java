@@ -17,4 +17,9 @@ public record AppUser(
         String displayName,
         boolean emailVerified,
         PlatformRole platformRole) {
+
+    /** Kopie mit gesetztem E-Mail-Verifikations-Status. */
+    public AppUser withEmailVerified(boolean verified) {
+        return new AppUser(id, email, passwordHash, displayName, verified, platformRole);
+    }
 }
