@@ -9,5 +9,7 @@ interface ProjectMembershipJpaRepository extends JpaRepository<ProjectMembership
 
     List<ProjectMembershipEntity> findByUserId(Long userId);
 
+    List<ProjectMembershipEntity> findByProjectId(Long projectId);
+
     Optional<ProjectMembershipEntity> findByProjectIdAndUserId(Long projectId, Long userId);
 }

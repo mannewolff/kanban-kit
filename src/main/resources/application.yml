@@ -43,3 +43,5 @@ manban:
   mail:
     enabled: ${MANBAN_MAIL_ENABLED:false}
     from: ${MANBAN_MAIL_FROM:no-reply@manban.local}
+  project:
+    invitation-ttl: P7D

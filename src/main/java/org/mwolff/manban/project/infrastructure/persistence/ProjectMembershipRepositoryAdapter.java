@@ -27,8 +27,18 @@ class ProjectMembershipRepositoryAdapter implements ProjectMembershipRepository 
     }
 
     @Override
+    public List<ProjectMembership> findByProjectId(long projectId) {
+        return jpa.findByProjectId(projectId).stream().map(ProjectMembershipRepositoryAdapter::toDomain).toList();
+    }
+
+    @Override
     public Optional<ProjectMembership> findByProjectIdAndUserId(long projectId, long userId) {
         return jpa.findByProjectIdAndUserId(projectId, userId).map(ProjectMembershipRepositoryAdapter::toDomain);
+    }
+
+    @Override
+    public void deleteById(long membershipId) {
+        jpa.deleteById(membershipId);
     }
 
     private static ProjectMembershipEntity toEntity(ProjectMembership m) {

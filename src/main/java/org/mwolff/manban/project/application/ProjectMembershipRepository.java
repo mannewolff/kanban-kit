@@ -11,5 +11,9 @@ public interface ProjectMembershipRepository {
 
     List<ProjectMembership> findByUserId(long userId);
 
+    List<ProjectMembership> findByProjectId(long projectId);
+
     Optional<ProjectMembership> findByProjectIdAndUserId(long projectId, long userId);
+
+    void deleteById(long membershipId);
 }
