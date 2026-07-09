@@ -11,6 +11,7 @@ import { LoginPage } from './pages/LoginPage'
 import { ProjectBoardsPage } from './pages/ProjectBoardsPage'
 import { ProjectMembersPage } from './pages/ProjectMembersPage'
 import { ProjectsPage } from './pages/ProjectsPage'
+import { RolesPage } from './pages/RolesPage'
 import { ResetPasswordPage } from './pages/ResetPasswordPage'
 import { SignupPage } from './pages/SignupPage'
 import { VerifyNoticePage } from './pages/VerifyNoticePage'
@@ -34,6 +35,7 @@ export function App() {
           <Route path="/boards/:boardId/epics" element={<EpicsPage />} />
           <Route path="/admin" element={<AdminPage />} />
           <Route path="/admin/bootstrap" element={<BootstrapAdminPage />} />
+          <Route path="/roles" element={<RolesPage />} />
           <Route path="/invitations/accept" element={<AcceptInvitationPage />} />
         </Route>
       </Route>

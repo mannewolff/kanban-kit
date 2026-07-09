@@ -97,9 +97,10 @@ export function ProjectMembersPage({ api = defaultMembersApi, loadRole }: Props)
   return (
     <Box>
       <Link component={RouterLink} to={`/projects/${id}`}>← Boards</Link>
-      <Typography variant="h5" sx={{ mt: 1, mb: 2 }}>
-        Mitglieder
-      </Typography>
+      <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mt: 1, mb: 2 }}>
+        <Typography variant="h5">Mitglieder</Typography>
+        <Link component={RouterLink} to="/roles">Rollen &amp; Rechte</Link>
+      </Stack>
 
       {message && <Alert severity={message.kind} sx={{ mb: 2 }}>{message.text}</Alert>}
 
