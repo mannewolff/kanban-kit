@@ -1,4 +1,4 @@
-import { Outlet, Route, Routes } from 'react-router-dom'
+import { Route, Routes } from 'react-router-dom'
 import { AppShell } from './components/AppShell'
 import { AcceptInvitationPage } from './pages/AcceptInvitationPage'
 import { BoardPage } from './pages/BoardPage'
@@ -21,7 +21,7 @@ export function App() {
       <Route path="/forgot" element={<ForgotPasswordPage />} />
       <Route path="/reset" element={<ResetPasswordPage />} />
       <Route element={<ProtectedRoute />}>
-        <Route element={<AppShell><Outlet /></AppShell>}>
+        <Route element={<AppShell />}>
           <Route path="/" element={<ProjectsPage />} />
           <Route path="/projects/:projectId" element={<ProjectBoardsPage />} />
           <Route path="/projects/:projectId/members" element={<ProjectMembersPage />} />
