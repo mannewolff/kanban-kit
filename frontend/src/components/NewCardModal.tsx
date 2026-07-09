@@ -26,6 +26,8 @@ interface Props {
   epics: Epic[]
   onClose: () => void
   onSubmit: (input: NewItemInput) => Promise<void> | void
+  /** Nur Epic anlegen: Typ vorbelegt EPIC, ohne Typ-/Zuordnungs-Auswahl (für die Epics-Ansicht). */
+  epicOnly?: boolean
 }
 
 /**
@@ -33,8 +35,8 @@ interface Props {
  * Typ (Karte/Epic); bei Karte optionale Epic-Zuordnung, bei Epic optionales Kürzel;
  * Titel (Pflicht) + Beschreibung mit vierteiliger Markdown-Vorlage.
  */
-export function NewCardModal({ open, columnName, epics, onClose, onSubmit }: Props) {
-  const [type, setType] = useState<CardType>('CARD')
+export function NewCardModal({ open, columnName, epics, onClose, onSubmit, epicOnly = false }: Props) {
+  const [type, setType] = useState<CardType>(epicOnly ? 'EPIC' : 'CARD')
   const [title, setTitle] = useState('')
   const [body, setBody] = useState(BODY_TEMPLATE)
   const [parentId, setParentId] = useState<number | null>(null)
@@ -43,13 +45,13 @@ export function NewCardModal({ open, columnName, epics, onClose, onSubmit }: Pro
 
   useEffect(() => {
     if (!open) return
-    setType('CARD')
+    setType(epicOnly ? 'EPIC' : 'CARD')
     setTitle('')
     setBody(BODY_TEMPLATE)
     setParentId(null)
     setShortcode('')
     setSaving(false)
-  }, [open])
+  }, [open, epicOnly])
 
   const canSubmit = title.trim().length > 0 && !saving
 
@@ -77,18 +79,20 @@ export function NewCardModal({ open, columnName, epics, onClose, onSubmit }: Pro
       </DialogTitle>
       <DialogContent>
         <Stack spacing={2} sx={{ mt: 0.5 }}>
-          <TextField
-            select
-            SelectProps={{ native: true }}
-            label="Typ"
-            value={type}
-            onChange={(e) => setType(e.target.value as CardType)}
-            inputProps={{ 'aria-label': 'Typ' }}
-            fullWidth
-          >
-            <option value="CARD">Karte</option>
-            <option value="EPIC">Epic</option>
-          </TextField>
+          {!epicOnly && (
+            <TextField
+              select
+              SelectProps={{ native: true }}
+              label="Typ"
+              value={type}
+              onChange={(e) => setType(e.target.value as CardType)}
+              inputProps={{ 'aria-label': 'Typ' }}
+              fullWidth
+            >
+              <option value="CARD">Karte</option>
+              <option value="EPIC">Epic</option>
+            </TextField>
+          )}
 
           {type === 'CARD' && (
             <TextField

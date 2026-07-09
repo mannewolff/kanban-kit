@@ -1,4 +1,6 @@
+import AddIcon from '@mui/icons-material/Add'
 import Box from '@mui/material/Box'
+import Button from '@mui/material/Button'
 import LinearProgress from '@mui/material/LinearProgress'
 import Link from '@mui/material/Link'
 import Paper from '@mui/material/Paper'
@@ -13,6 +15,7 @@ import { projectsApi } from '../api/projects'
 import { useAuth } from '../auth/AuthContext'
 import { CardDetailModal } from '../components/CardDetailModal'
 import { EpicBadge } from '../components/EpicBadge'
+import { NewCardModal } from '../components/NewCardModal'
 import { canEditCards, isPlatformAdmin } from '../lib/roles'
 
 function epicToCard(epic: Epic, boardId: number): Card {
@@ -32,6 +35,7 @@ export function EpicsPage() {
   const [cards, setCards] = useState<Card[]>([])
   const [fetchedRole, setFetchedRole] = useState<string | null>(null)
   const [selected, setSelected] = useState<Epic | null>(null)
+  const [creating, setCreating] = useState(false)
 
   const reload = () => {
     void epicsApi.list(id).then(setEpics)
@@ -59,9 +63,14 @@ export function EpicsPage() {
   return (
     <Box>
       <Link component={RouterLink} to={`/boards/${id}`}>← Board</Link>
-      <Typography variant="h5" sx={{ mt: 1, mb: 2 }}>
-        Epics
-      </Typography>
+      <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mt: 1, mb: 2 }}>
+        <Typography variant="h5">Epics</Typography>
+        {canEdit && (
+          <Button variant="contained" size="small" startIcon={<AddIcon />} onClick={() => setCreating(true)}>
+            Neues Epic
+          </Button>
+        )}
+      </Stack>
 
       <Stack spacing={1.5}>
         {epics.map((epic) => {
@@ -79,7 +88,7 @@ export function EpicsPage() {
                   {epic.title}
                 </Typography>
                 <Typography variant="caption" color="text.secondary">
-                  {epic.done}/{epic.total}
+                  {epic.done}/{epic.total} Stories fertig
                 </Typography>
               </Stack>
               <LinearProgress
@@ -93,6 +102,18 @@ export function EpicsPage() {
         })}
         {epics.length === 0 && <Typography color="text.secondary">Noch keine Epics.</Typography>}
       </Stack>
+
+      <NewCardModal
+        open={creating}
+        epicOnly
+        columnName=""
+        epics={[]}
+        onClose={() => setCreating(false)}
+        onSubmit={async (input) => {
+          await epicsApi.create(id, input.title, input.description, input.shortcode)
+          reload()
+        }}
+      />
 
       {selected && (
         <CardDetailModal
