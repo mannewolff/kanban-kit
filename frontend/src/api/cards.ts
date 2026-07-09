@@ -19,6 +19,11 @@ export const cardsApi = {
     apiFetch<Card>(`/api/boards/${boardId}/cards`, { method: 'POST', body: JSON.stringify({ columnId, title }) }),
   move: (cardId: number, columnId: number, position: number) =>
     apiFetch<Card>(`/api/cards/${cardId}/move`, { method: 'POST', body: JSON.stringify({ columnId, position }) }),
+  update: (cardId: number, title: string, description: string | null, dependencies?: number[]) =>
+    apiFetch<Card>(`/api/cards/${cardId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ title, description, dependencies }),
+    }),
 }
 
 export type CardsApi = typeof cardsApi

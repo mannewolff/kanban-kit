@@ -8,6 +8,7 @@ import { boardsApi, type Board } from '../api/boards'
 import { cardsApi, type Card } from '../api/cards'
 import { projectsApi } from '../api/projects'
 import { BoardView } from '../components/BoardView'
+import { CardDetailModal } from '../components/CardDetailModal'
 import { canEditCards } from '../lib/roles'
 
 export function BoardPage() {
@@ -17,6 +18,11 @@ export function BoardPage() {
   const [cards, setCards] = useState<Card[]>([])
   const [role, setRole] = useState('VIEWER')
   const [loading, setLoading] = useState(true)
+  const [selectedCard, setSelectedCard] = useState<Card | null>(null)
+
+  const reloadCards = () => {
+    void cardsApi.list(id).then(setCards)
+  }
 
   useEffect(() => {
     let active = true
@@ -59,7 +65,20 @@ export function BoardPage() {
       <Typography variant="h5" sx={{ mt: 1, mb: 2 }}>
         {board.name}
       </Typography>
-      <BoardView board={board} initialCards={cards} canEdit={canEditCards(role)} />
+      <BoardView
+        board={board}
+        initialCards={cards}
+        canEdit={canEditCards(role)}
+        onCardClick={setSelectedCard}
+      />
+      {selectedCard && (
+        <CardDetailModal
+          card={selectedCard}
+          canEdit={canEditCards(role)}
+          onClose={() => setSelectedCard(null)}
+          onChanged={reloadCards}
+        />
+      )}
     </Box>
   )
 }
