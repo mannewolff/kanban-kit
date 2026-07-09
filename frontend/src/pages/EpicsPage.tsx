@@ -63,7 +63,7 @@ export function EpicsPage() {
         Epics
       </Typography>
 
-      <Stack spacing={1.5} sx={{ maxWidth: 640 }}>
+      <Stack spacing={1.5}>
         {epics.map((epic) => {
           const pct = epic.total > 0 ? (epic.done / epic.total) * 100 : 0
           return (

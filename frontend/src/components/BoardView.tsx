@@ -111,7 +111,18 @@ export function BoardView({
         </Box>
       )}
 
-      <Stack direction="row" spacing={2} sx={{ overflowX: 'auto', pb: 2, alignItems: 'flex-start' }}>
+      <Stack
+        direction="row"
+        spacing={2}
+        sx={{
+          overflowX: 'auto',
+          pb: 2,
+          width: '100%',
+          alignItems: 'stretch',
+          // Spalten füllen die Höhe bis nahe an den Viewport-Rand (Offset ≈ AppBar + Header).
+          minHeight: 'calc(100vh - 210px)',
+        }}
+      >
         {columns.map((column) => {
           const colors = statusColors(column.name)
           const count = activeCardsInColumn(cards, column.id).length
@@ -129,7 +140,15 @@ export function BoardView({
                   void moveCard(id, column.id)
                 }
               }}
-              sx={{ width: 280, minWidth: 280, bgcolor: COLUMN_SURFACE_BG, borderRadius: 2, overflow: 'hidden' }}
+              sx={{
+                flex: '1 1 0',
+                minWidth: 240,
+                display: 'flex',
+                flexDirection: 'column',
+                bgcolor: COLUMN_SURFACE_BG,
+                borderRadius: 2,
+                overflow: 'hidden',
+              }}
             >
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 1.5, py: 1, bgcolor: colors.bg, color: colors.text }}>
                 <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: colors.dot, flexShrink: 0 }} />
@@ -149,7 +168,7 @@ export function BoardView({
                 )}
               </Box>
 
-              <Stack spacing={1} sx={{ p: 1, minHeight: 24 }}>
+              <Stack spacing={1} sx={{ p: 1, flex: 1 }}>
                 {activeCardsInColumn(cards, column.id).map((card) => {
                   const epic = card.parentId != null ? epicById.get(card.parentId) : undefined
                   const showDone = done && card.movedToDoneAt != null
