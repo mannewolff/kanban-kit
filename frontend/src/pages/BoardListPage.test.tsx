@@ -46,8 +46,23 @@ function renderPage() {
   )
 }
 
+function fakeStorage(): Storage {
+  const map = new Map<string, string>()
+  return {
+    getItem: (k) => map.get(k) ?? null,
+    setItem: (k, v) => void map.set(k, String(v)),
+    removeItem: (k) => void map.delete(k),
+    clear: () => map.clear(),
+    key: (i) => [...map.keys()][i] ?? null,
+    get length() { return map.size },
+  }
+}
+
 describe('BoardListPage', () => {
-  beforeEach(() => vi.clearAllMocks())
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.stubGlobal('localStorage', fakeStorage())
+  })
 
   it('zeigt aktive Karten mit Status-Chip und Body-Vorschau, archivierte erst nach Filter', async () => {
     renderPage()
@@ -64,5 +79,25 @@ describe('BoardListPage', () => {
     renderPage()
     fireEvent.click(await screen.findByText('Aufgabe'))
     await waitFor(() => expect(screen.getByRole('button', { name: 'Schließen' })).toBeInTheDocument())
+  })
+
+  it('sortiert Spalten per Header-Drag um und merkt die Reihenfolge', async () => {
+    renderPage()
+    await screen.findByText('Aufgabe')
+
+    // Vorher: erste Spalte ist 'Nr'.
+    const before = screen.getAllByLabelText(/^Spalte /).map((el) => el.getAttribute('aria-label'))
+    expect(before[0]).toBe('Spalte Nr')
+
+    fireEvent.dragStart(screen.getByLabelText('Spalte Beschreibung'))
+    fireEvent.dragOver(screen.getByLabelText('Spalte Nr'))
+    fireEvent.drop(screen.getByLabelText('Spalte Nr'))
+
+    // Nachher: 'Beschreibung' steht vorne und die Reihenfolge liegt in localStorage.
+    const after = screen.getAllByLabelText(/^Spalte /).map((el) => el.getAttribute('aria-label'))
+    expect(after[0]).toBe('Spalte Beschreibung')
+    expect(JSON.parse(localStorage.getItem('manban.listColumns.1')!)).toEqual(
+      ['excerpt', 'number', 'status', 'epic', 'title'],
+    )
   })
 })
