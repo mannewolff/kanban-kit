@@ -3,6 +3,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { boardsApi } from '../api/boards'
 import { cardsApi } from '../api/cards'
+import { epicsApi } from '../api/epics'
 import { projectsApi } from '../api/projects'
 import { BoardPage } from './BoardPage'
 
@@ -12,10 +13,12 @@ vi.mock('../auth/AuthContext', () => ({
 }))
 vi.mock('../api/boards', () => ({ boardsApi: { get: vi.fn() } }))
 vi.mock('../api/cards', () => ({ cardsApi: { list: vi.fn() } }))
+vi.mock('../api/epics', () => ({ epicsApi: { list: vi.fn(), assign: vi.fn() } }))
 vi.mock('../api/projects', () => ({ projectsApi: { list: vi.fn() } }))
 
 const mockedBoards = boardsApi as unknown as { get: ReturnType<typeof vi.fn> }
 const mockedCards = cardsApi as unknown as { list: ReturnType<typeof vi.fn> }
+const mockedEpics = epicsApi as unknown as { list: ReturnType<typeof vi.fn> }
 const mockedProjects = projectsApi as unknown as { list: ReturnType<typeof vi.fn> }
 
 function renderPage() {
@@ -24,6 +27,7 @@ function renderPage() {
     columns: [{ id: 10, name: 'Backlog', position: 0, wipLimit: null }],
   })
   mockedCards.list.mockResolvedValue([])
+  mockedEpics.list.mockResolvedValue([])
   mockedProjects.list.mockResolvedValue([{ id: 9, name: 'P', role: 'OWNER', createdAt: '' }])
   return render(
     <MemoryRouter initialEntries={['/boards/1']}>

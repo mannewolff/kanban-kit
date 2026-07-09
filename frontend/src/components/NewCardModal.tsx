@@ -6,29 +6,48 @@ import DialogTitle from '@mui/material/DialogTitle'
 import Stack from '@mui/material/Stack'
 import TextField from '@mui/material/TextField'
 import { useEffect, useState } from 'react'
+import type { CardType } from '../api/cards'
+import type { Epic } from '../api/epics'
+import { epicShortcode } from '../lib/epicMeta'
 
 const BODY_TEMPLATE = '## Kontext\n\n## Aufgabe\n\n## Akzeptanzkriterium\n\n## Abhängigkeiten\n'
+
+export interface NewItemInput {
+  type: CardType
+  title: string
+  description: string
+  parentId: number | null
+  shortcode: string | null
+}
 
 interface Props {
   open: boolean
   columnName: string
+  epics: Epic[]
   onClose: () => void
-  onSubmit: (title: string, description: string) => Promise<void> | void
+  onSubmit: (input: NewItemInput) => Promise<void> | void
 }
 
 /**
- * Zentrierter Anlage-Dialog für neue Karten (Port von KanbanNewItemModal): Titel (Pflicht)
- * + Beschreibung mit vierteiliger Markdown-Vorlage. Ersetzt das versteckte Enter-only-Feld.
+ * Zentrierter Anlage-Dialog für neue Karten und Epics (Port von KanbanNewItemModal):
+ * Typ (Karte/Epic); bei Karte optionale Epic-Zuordnung, bei Epic optionales Kürzel;
+ * Titel (Pflicht) + Beschreibung mit vierteiliger Markdown-Vorlage.
  */
-export function NewCardModal({ open, columnName, onClose, onSubmit }: Props) {
+export function NewCardModal({ open, columnName, epics, onClose, onSubmit }: Props) {
+  const [type, setType] = useState<CardType>('CARD')
   const [title, setTitle] = useState('')
   const [body, setBody] = useState(BODY_TEMPLATE)
+  const [parentId, setParentId] = useState<number | null>(null)
+  const [shortcode, setShortcode] = useState('')
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
     if (!open) return
+    setType('CARD')
     setTitle('')
     setBody(BODY_TEMPLATE)
+    setParentId(null)
+    setShortcode('')
     setSaving(false)
   }, [open])
 
@@ -38,7 +57,13 @@ export function NewCardModal({ open, columnName, onClose, onSubmit }: Props) {
     if (!canSubmit) return
     setSaving(true)
     try {
-      await onSubmit(title.trim(), body)
+      await onSubmit({
+        type,
+        title: title.trim(),
+        description: body,
+        parentId: type === 'CARD' ? parentId : null,
+        shortcode: type === 'EPIC' ? (shortcode.trim() || null) : null,
+      })
       onClose()
     } finally {
       setSaving(false)
@@ -47,9 +72,56 @@ export function NewCardModal({ open, columnName, onClose, onSubmit }: Props) {
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth aria-labelledby="new-card-title">
-      <DialogTitle id="new-card-title">Neue Karte in „{columnName}“</DialogTitle>
+      <DialogTitle id="new-card-title">
+        {type === 'EPIC' ? 'Neues Epic' : `Neue Karte in „${columnName}“`}
+      </DialogTitle>
       <DialogContent>
         <Stack spacing={2} sx={{ mt: 0.5 }}>
+          <TextField
+            select
+            SelectProps={{ native: true }}
+            label="Typ"
+            value={type}
+            onChange={(e) => setType(e.target.value as CardType)}
+            inputProps={{ 'aria-label': 'Typ' }}
+            fullWidth
+          >
+            <option value="CARD">Karte</option>
+            <option value="EPIC">Epic</option>
+          </TextField>
+
+          {type === 'CARD' && (
+            <TextField
+              select
+              SelectProps={{ native: true }}
+              label="Epic"
+              value={parentId ?? ''}
+              onChange={(e) => setParentId(e.target.value === '' ? null : Number(e.target.value))}
+              inputProps={{ 'aria-label': 'Epic' }}
+              InputLabelProps={{ shrink: true }}
+              fullWidth
+            >
+              <option value="">(kein Epic)</option>
+              {epics.map((epic) => (
+                <option key={epic.id} value={epic.id}>
+                  {epicShortcode(epic.title, epic.shortcode)} – {epic.title}
+                </option>
+              ))}
+            </TextField>
+          )}
+
+          {type === 'EPIC' && (
+            <TextField
+              label="Kürzel (optional)"
+              value={shortcode}
+              onChange={(e) => setShortcode(e.target.value)}
+              placeholder={epicShortcode(title)}
+              helperText="Leer lassen, um es aus dem Titel abzuleiten."
+              inputProps={{ maxLength: 16, 'aria-label': 'Kürzel' }}
+              fullWidth
+            />
+          )}
+
           <TextField
             label="Titel"
             value={title}

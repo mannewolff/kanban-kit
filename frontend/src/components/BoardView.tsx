@@ -8,17 +8,22 @@ import Typography from '@mui/material/Typography'
 import { useEffect, useState } from 'react'
 import type { Board } from '../api/boards'
 import { cardsApi, type Card, type CardsApi } from '../api/cards'
+import { epicsApi as defaultEpicsApi, type Epic, type EpicsApi } from '../api/epics'
 import { activeCardsInColumn, applyMove } from '../lib/boardOps'
 import { COLUMN_SURFACE_BG, statusColors } from '../lib/statusColors'
-import { NewCardModal } from './NewCardModal'
+import { EpicBadge } from './EpicBadge'
+import { NewCardModal, type NewItemInput } from './NewCardModal'
 
 interface Props {
   board: Board
   initialCards: Card[]
   canEdit: boolean
+  epics?: Epic[]
   onCardClick?: (card: Card) => void
+  onEpicsChanged?: () => void
   /** Injizierbar für Tests. */
   api?: Pick<CardsApi, 'create' | 'move'>
+  epicsApi?: Pick<EpicsApi, 'create'>
 }
 
 /**
@@ -26,11 +31,22 @@ interface Props {
  * sofort und rollt bei einem API-Fehler auf den vorigen Stand zurück. Karten werden
  * über einen sichtbaren „+"-Dialog je Spalte angelegt.
  */
-export function BoardView({ board, initialCards, canEdit, onCardClick, api = cardsApi }: Props) {
+export function BoardView({
+  board,
+  initialCards,
+  canEdit,
+  epics = [],
+  onCardClick,
+  onEpicsChanged,
+  api = cardsApi,
+  epicsApi = defaultEpicsApi,
+}: Props) {
   const [cards, setCards] = useState<Card[]>(initialCards)
   const [modalColumn, setModalColumn] = useState<{ id: number; name: string } | null>(null)
 
   useEffect(() => setCards(initialCards), [initialCards])
+
+  const epicById = new Map(epics.map((e) => [e.id, e]))
 
   const columns = [...board.columns].sort((a, b) => a.position - b.position)
 
@@ -49,8 +65,13 @@ export function BoardView({ board, initialCards, canEdit, onCardClick, api = car
     }
   }
 
-  const addCard = async (columnId: number, title: string, description: string) => {
-    const created = await api.create(board.id, columnId, title, description)
+  const createItem = async (columnId: number, input: NewItemInput) => {
+    if (input.type === 'EPIC') {
+      await epicsApi.create(board.id, input.title, input.description, input.shortcode)
+      onEpicsChanged?.()
+      return
+    }
+    const created = await api.create(board.id, columnId, input.title, input.description, input.parentId)
     setCards((current) => [...current, created])
   }
 
@@ -127,9 +148,18 @@ export function BoardView({ board, initialCards, canEdit, onCardClick, api = car
                     '&:active': { cursor: canEdit ? 'grabbing' : 'pointer' },
                   }}
                 >
-                  <Typography variant="caption" color="text.secondary">
-                    #{card.number}
-                  </Typography>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 0.25 }}>
+                    <Typography variant="caption" color="text.secondary">
+                      #{card.number}
+                    </Typography>
+                    {card.parentId != null && epicById.has(card.parentId) && (
+                      <EpicBadge
+                        epicId={card.parentId}
+                        title={epicById.get(card.parentId)!.title}
+                        shortcode={epicById.get(card.parentId)!.shortcode}
+                      />
+                    )}
+                  </Box>
                   <Typography variant="body2">{card.title}</Typography>
                 </Paper>
               ))}
@@ -141,10 +171,9 @@ export function BoardView({ board, initialCards, canEdit, onCardClick, api = car
       <NewCardModal
         open={modalColumn !== null}
         columnName={modalColumn?.name ?? ''}
+        epics={epics}
         onClose={() => setModalColumn(null)}
-        onSubmit={(title, description) =>
-          modalColumn ? addCard(modalColumn.id, title, description) : undefined
-        }
+        onSubmit={(input) => (modalColumn ? createItem(modalColumn.id, input) : undefined)}
       />
     </Stack>
   )

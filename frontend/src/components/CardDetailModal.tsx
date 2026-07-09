@@ -8,6 +8,7 @@ import DialogTitle from '@mui/material/DialogTitle'
 import Divider from '@mui/material/Divider'
 import IconButton from '@mui/material/IconButton'
 import Link from '@mui/material/Link'
+import MenuItem from '@mui/material/MenuItem'
 import Stack from '@mui/material/Stack'
 import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
@@ -18,6 +19,8 @@ import { attachmentsApi as defaultAttachmentsApi, type Attachment, type Attachme
 import { cardsApi as defaultCardsApi } from '../api/cards'
 import type { Card } from '../api/cards'
 import { commentsApi as defaultCommentsApi, type Comment, type CommentsApi } from '../api/comments'
+import type { Epic } from '../api/epics'
+import { epicShortcode } from '../lib/epicMeta'
 import { useAuth } from '../auth/AuthContext'
 
 interface Props {
@@ -25,6 +28,12 @@ interface Props {
   canEdit: boolean
   onClose: () => void
   onChanged?: () => void
+  /** Board-Epics für die Epic-Zuordnung einer Karte. */
+  epics?: Epic[]
+  /** Setzt/löst die Epic-Zuordnung einer Karte. */
+  onAssignParent?: (cardId: number, parentId: number | null) => Promise<void> | void
+  /** Kind-Karten eines Epics (nur bei type === 'EPIC'). */
+  children?: Card[]
   commentsApi?: CommentsApi
   attachmentsApi?: AttachmentsApi
   cardsApi?: Pick<typeof defaultCardsApi, 'update'>
@@ -35,12 +44,18 @@ export function CardDetailModal({
   canEdit,
   onClose,
   onChanged,
+  epics = [],
+  onAssignParent,
+  children = [],
   commentsApi = defaultCommentsApi,
   attachmentsApi = defaultAttachmentsApi,
   cardsApi = defaultCardsApi,
 }: Props) {
   const { user } = useAuth()
+  const isEpic = card.type === 'EPIC'
   const [description, setDescription] = useState(card.description ?? '')
+  const [shortcode, setShortcode] = useState(card.shortcode ?? '')
+  const [parentId, setParentId] = useState<number | null>(card.parentId)
   const [editingDesc, setEditingDesc] = useState(false)
   const [comments, setComments] = useState<Comment[]>([])
   const [newComment, setNewComment] = useState('')
@@ -63,9 +78,20 @@ export function CardDetailModal({
   }, [card.id, commentsApi, attachmentsApi])
 
   const saveDescription = async () => {
-    await cardsApi.update(card.id, card.title, description)
+    await cardsApi.update(
+      card.id,
+      card.title,
+      description,
+      undefined,
+      isEpic ? shortcode.trim() || null : undefined,
+    )
     setEditingDesc(false)
     onChanged?.()
+  }
+
+  const changeParent = async (next: number | null) => {
+    setParentId(next)
+    await onAssignParent?.(card.id, next)
   }
 
   const addComment = async () => {
@@ -102,10 +128,34 @@ export function CardDetailModal({
   return (
     <Dialog open onClose={onClose} maxWidth="md" fullWidth>
       <DialogTitle>
-        #{card.number} · {card.title}
+        {isEpic ? 'Epic ' : ''}#{card.number} · {card.title}
       </DialogTitle>
       <DialogContent dividers>
         <Stack spacing={3}>
+          {!isEpic && onAssignParent && (
+            <Box>
+              <Typography variant="subtitle2" gutterBottom>
+                Epic
+              </Typography>
+              <TextField
+                select
+                size="small"
+                value={parentId ?? ''}
+                disabled={!canEdit}
+                onChange={(e) => void changeParent(e.target.value === '' ? null : Number(e.target.value))}
+                inputProps={{ 'aria-label': 'Epic-Zuordnung' }}
+                sx={{ minWidth: 220 }}
+              >
+                <MenuItem value="">(kein Epic)</MenuItem>
+                {epics.map((epic) => (
+                  <MenuItem key={epic.id} value={epic.id}>
+                    {epicShortcode(epic.title, epic.shortcode)} – {epic.title}
+                  </MenuItem>
+                ))}
+              </TextField>
+            </Box>
+          )}
+
           {card.dependencies.length > 0 && (
             <Box>
               <Typography variant="subtitle2" gutterBottom>
@@ -130,6 +180,11 @@ export function CardDetailModal({
             </Stack>
             {editingDesc ? (
               <Stack spacing={1} sx={{ mt: 1 }}>
+                {isEpic && (
+                  <TextField size="small" label="Kürzel" value={shortcode}
+                    onChange={(e) => setShortcode(e.target.value)}
+                    inputProps={{ maxLength: 16, 'aria-label': 'Kürzel' }} sx={{ maxWidth: 200 }} />
+                )}
                 <TextField multiline minRows={4} fullWidth value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   inputProps={{ 'aria-label': 'Beschreibung bearbeiten' }} />
@@ -152,6 +207,27 @@ export function CardDetailModal({
               </Box>
             )}
           </Box>
+
+          {isEpic && (
+            <>
+              <Divider />
+              <Box>
+                <Typography variant="subtitle2" gutterBottom>
+                  Karten ({children.length})
+                </Typography>
+                <Stack spacing={0.5}>
+                  {children.map((c) => (
+                    <Typography key={c.id} variant="body2">
+                      #{c.number} · {c.title}
+                    </Typography>
+                  ))}
+                  {children.length === 0 && (
+                    <Typography color="text.secondary">Keine zugeordneten Karten.</Typography>
+                  )}
+                </Stack>
+              </Box>
+            </>
+          )}
 
           <Divider />
 

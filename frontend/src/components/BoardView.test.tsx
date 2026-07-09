@@ -18,6 +18,7 @@ const board: Board = {
 const card: Card = {
   id: 100, boardId: 1, columnId: 10, number: 1, title: 'Aufgabe', description: null,
   positionInColumn: 0, archived: false, movedToDoneAt: null, dependencies: [],
+  type: 'CARD', parentId: null, shortcode: null,
 }
 
 function dropOnColumn(columnId: number, cardId: number) {
@@ -58,7 +59,7 @@ describe('BoardView Drag & Drop', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Anlegen' }))
 
     await waitFor(() =>
-      expect(api.create).toHaveBeenCalledWith(1, 20, 'Neu', expect.stringContaining('## Kontext')),
+      expect(api.create).toHaveBeenCalledWith(1, 20, 'Neu', expect.stringContaining('## Kontext'), null),
     )
     expect(within(screen.getByTestId('column-20')).getByTestId('card-200')).toBeInTheDocument()
   })
@@ -67,5 +68,32 @@ describe('BoardView Drag & Drop', () => {
     const api = { create: vi.fn(), move: vi.fn() }
     render(<BoardView board={board} initialCards={[card]} canEdit={false} api={api} />)
     expect(screen.queryByLabelText('Karte in Done anlegen')).not.toBeInTheDocument()
+  })
+
+  it('legt über Typ=Epic ein Epic an statt einer Karte', async () => {
+    const api = { create: vi.fn(), move: vi.fn() }
+    const epicsApi = { create: vi.fn().mockResolvedValue({ id: 5 }) }
+    const onEpicsChanged = vi.fn()
+    render(
+      <BoardView board={board} initialCards={[card]} canEdit api={api}
+        epicsApi={epicsApi} onEpicsChanged={onEpicsChanged} />,
+    )
+
+    fireEvent.click(screen.getByLabelText('Karte in Backlog anlegen'))
+    fireEvent.change(screen.getByLabelText('Typ'), { target: { value: 'EPIC' } })
+    fireEvent.change(screen.getByLabelText('Kürzel'), { target: { value: 'AUT' } })
+    fireEvent.change(screen.getByLabelText('Titel'), { target: { value: 'Auth' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Anlegen' }))
+
+    await waitFor(() => expect(epicsApi.create).toHaveBeenCalledWith(1, 'Auth', expect.any(String), 'AUT'))
+    expect(api.create).not.toHaveBeenCalled()
+    expect(onEpicsChanged).toHaveBeenCalled()
+  })
+
+  it('zeigt ein Epic-Badge auf zugeordneten Karten', () => {
+    const assigned: Card = { ...card, parentId: 9 }
+    const epics = [{ id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 0, total: 1 }]
+    render(<BoardView board={board} initialCards={[assigned]} canEdit epics={epics} api={{ create: vi.fn(), move: vi.fn() }} />)
+    expect(screen.getByText('AUT')).toBeInTheDocument()
   })
 })

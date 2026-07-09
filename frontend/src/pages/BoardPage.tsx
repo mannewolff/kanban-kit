@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react'
 import { Link as RouterLink, useParams } from 'react-router-dom'
 import { boardsApi, type Board } from '../api/boards'
 import { cardsApi, type Card } from '../api/cards'
+import { epicsApi, type Epic } from '../api/epics'
 import { projectsApi } from '../api/projects'
 import { useAuth } from '../auth/AuthContext'
 import { BoardView } from '../components/BoardView'
@@ -18,6 +19,7 @@ export function BoardPage() {
   const { user } = useAuth()
   const [board, setBoard] = useState<Board | null>(null)
   const [cards, setCards] = useState<Card[]>([])
+  const [epics, setEpics] = useState<Epic[]>([])
   const [fetchedRole, setFetchedRole] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [selectedCard, setSelectedCard] = useState<Card | null>(null)
@@ -25,16 +27,20 @@ export function BoardPage() {
   const reloadCards = () => {
     void cardsApi.list(id).then(setCards)
   }
+  const reloadEpics = () => {
+    void epicsApi.list(id).then(setEpics)
+  }
 
   useEffect(() => {
     let active = true
-    Promise.all([boardsApi.get(id), cardsApi.list(id)])
-      .then(([loadedBoard, loadedCards]) => {
+    Promise.all([boardsApi.get(id), cardsApi.list(id), epicsApi.list(id)])
+      .then(([loadedBoard, loadedCards, loadedEpics]) => {
         if (!active) {
           return
         }
         setBoard(loadedBoard)
         setCards(loadedCards)
+        setEpics(loadedEpics)
         setLoading(false)
       })
       .catch(() => setLoading(false))
@@ -42,6 +48,12 @@ export function BoardPage() {
       active = false
     }
   }, [id])
+
+  const assignParent = async (cardId: number, parentId: number | null) => {
+    await epicsApi.assign(cardId, parentId)
+    reloadCards()
+    reloadEpics()
+  }
 
   // Rolle bevorzugt synchron aus den Memberships (kein Race). Ist das Projekt dort noch nicht
   // bekannt (z. B. frisch in dieser Session angelegt), einmal frisch nachladen.
@@ -88,13 +100,25 @@ export function BoardPage() {
       <Typography variant="h5" sx={{ mt: 1, mb: 2 }}>
         {board.name}
       </Typography>
-      <BoardView board={board} initialCards={cards} canEdit={canEdit} onCardClick={setSelectedCard} />
+      <BoardView
+        board={board}
+        initialCards={cards}
+        canEdit={canEdit}
+        epics={epics}
+        onCardClick={setSelectedCard}
+        onEpicsChanged={reloadEpics}
+      />
       {selectedCard && (
         <CardDetailModal
           card={selectedCard}
           canEdit={canEdit}
+          epics={epics}
+          onAssignParent={assignParent}
           onClose={() => setSelectedCard(null)}
-          onChanged={reloadCards}
+          onChanged={() => {
+            reloadCards()
+            reloadEpics()
+          }}
         />
       )}
     </Box>

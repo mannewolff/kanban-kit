@@ -12,6 +12,7 @@ vi.mock('../auth/AuthContext', () => ({
 const card: Card = {
   id: 100, boardId: 1, columnId: 10, number: 5, title: 'Aufgabe', description: '# Titel\n\n- a\n- b',
   positionInColumn: 0, archived: false, movedToDoneAt: null, dependencies: [3, 4],
+  type: 'CARD', parentId: null, shortcode: null,
 }
 
 function makeApis() {
@@ -65,7 +66,9 @@ describe('CardDetailModal', () => {
     fireEvent.change(screen.getByLabelText('Beschreibung bearbeiten'), { target: { value: 'Neuer Text' } })
     fireEvent.click(screen.getByRole('button', { name: 'Speichern' }))
 
-    await waitFor(() => expect(apis.cardsApi.update).toHaveBeenCalledWith(100, 'Aufgabe', 'Neuer Text'))
+    await waitFor(() =>
+      expect(apis.cardsApi.update).toHaveBeenCalledWith(100, 'Aufgabe', 'Neuer Text', undefined, undefined),
+    )
     expect(onChanged).toHaveBeenCalled()
   })
 })
