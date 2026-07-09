@@ -39,6 +39,7 @@ manban:
     session-secret: ${MANBAN_SESSION_SECRET:dev-only-insecure-secret-change-me}
     session-ttl: P7D
     cookie-secure: ${MANBAN_COOKIE_SECURE:true}
+    reset-ttl: PT1H
   mail:
     enabled: ${MANBAN_MAIL_ENABLED:false}
     from: ${MANBAN_MAIL_FROM:no-reply@manban.local}

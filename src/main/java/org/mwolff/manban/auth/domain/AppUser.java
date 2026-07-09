@@ -22,4 +22,9 @@ public record AppUser(
     public AppUser withEmailVerified(boolean verified) {
         return new AppUser(id, email, passwordHash, displayName, verified, platformRole);
     }
+
+    /** Kopie mit neuem Passwort-Hash. */
+    public AppUser withPasswordHash(String newPasswordHash) {
+        return new AppUser(id, email, newPasswordHash, displayName, emailVerified, platformRole);
+    }
 }

@@ -20,7 +20,8 @@ public record AuthProperties(
         Duration verificationTtl,
         String sessionSecret,
         Duration sessionTtl,
-        Boolean cookieSecure) {
+        Boolean cookieSecure,
+        Duration resetTtl) {
 
     public AuthProperties {
         if (baseUrl == null || baseUrl.isBlank()) {
@@ -28,6 +29,9 @@ public record AuthProperties(
         }
         if (verificationTtl == null) {
             verificationTtl = Duration.ofHours(24);
+        }
+        if (resetTtl == null) {
+            resetTtl = Duration.ofHours(1);
         }
         if (sessionSecret == null || sessionSecret.isBlank()) {
             sessionSecret = "dev-only-insecure-secret-change-me";

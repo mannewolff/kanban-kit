@@ -36,7 +36,8 @@ class SecurityConfig {
                 .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/auth/register", "/api/auth/verify",
-                                "/api/auth/login", "/api/auth/logout").permitAll()
+                                "/api/auth/login", "/api/auth/logout",
+                                "/api/auth/forgot", "/api/auth/reset").permitAll()
                         .requestMatchers("/api/**").authenticated()
                         .anyRequest().permitAll())
                 .exceptionHandling(e -> e.authenticationEntryPoint(
