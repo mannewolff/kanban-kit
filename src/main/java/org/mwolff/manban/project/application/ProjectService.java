@@ -2,6 +2,7 @@ package org.mwolff.manban.project.application;
 
 import java.time.Instant;
 import java.util.List;
+import org.mwolff.manban.project.domain.Permission;
 import org.mwolff.manban.project.domain.Project;
 import org.mwolff.manban.project.domain.ProjectMembership;
 import org.mwolff.manban.project.domain.ProjectRole;
@@ -10,18 +11,22 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Projekt-Use-Cases. Owner-Isolation läuft über die Mitgliedschaft: Nichtmitglieder
- * bekommen 404 (kein Existenz-Leak). Umbenennen/Löschen erfordert die Rolle OWNER
- * (die feingranulare RBAC-Durchsetzung folgt mit P2).
+ * bekommen 404 (kein Existenz-Leak). Umbenennen/Löschen wird über den
+ * {@link PermissionChecker} anhand der Rollen-Rechte-Matrix durchgesetzt
+ * (PROJECT_EDIT / PROJECT_DELETE).
  */
 @Service
 public class ProjectService {
 
     private final ProjectRepository projects;
     private final ProjectMembershipRepository memberships;
+    private final PermissionChecker permissions;
 
-    public ProjectService(ProjectRepository projects, ProjectMembershipRepository memberships) {
+    public ProjectService(ProjectRepository projects, ProjectMembershipRepository memberships,
+                          PermissionChecker permissions) {
         this.projects = projects;
         this.memberships = memberships;
+        this.permissions = permissions;
     }
 
     @Transactional
@@ -44,7 +49,7 @@ public class ProjectService {
 
     @Transactional
     public ProjectView rename(long userId, long projectId, String newName) {
-        ProjectMembership membership = requireOwner(userId, projectId);
+        ProjectMembership membership = permissions.require(userId, projectId, Permission.PROJECT_EDIT);
         Project project = projects.findById(projectId).orElseThrow(ProjectNotFoundException::new);
         Project renamed = projects.save(project.withName(newName.trim()));
         return new ProjectView(renamed.id(), renamed.name(), membership.role(), renamed.createdAt());
@@ -52,17 +57,8 @@ public class ProjectService {
 
     @Transactional
     public void delete(long userId, long projectId) {
-        requireOwner(userId, projectId);
+        permissions.require(userId, projectId, Permission.PROJECT_DELETE);
         projects.deleteById(projectId);
-    }
-
-    private ProjectMembership requireOwner(long userId, long projectId) {
-        ProjectMembership membership = memberships.findByProjectIdAndUserId(projectId, userId)
-                .orElseThrow(ProjectNotFoundException::new);
-        if (membership.role() != ProjectRole.OWNER) {
-            throw new ProjectAccessDeniedException();
-        }
-        return membership;
     }
 
     /** Projektdarstellung inkl. der Rolle des anfragenden Benutzers. */
