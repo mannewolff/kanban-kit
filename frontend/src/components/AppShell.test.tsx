@@ -1,5 +1,5 @@
-import { fireEvent, render, screen } from '@testing-library/react'
-import { MemoryRouter } from 'react-router-dom'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { MemoryRouter, useNavigate } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { AppShell } from './AppShell'
 
@@ -51,5 +51,21 @@ describe('AppShell', () => {
     expect(localStorage.getItem('sidebar-collapsed')).toBe('true')
     // Nach dem Einklappen bietet der Button das Ausklappen an.
     expect(screen.getByLabelText('Menü ausklappen')).toBeInTheDocument()
+  })
+
+  it('überlebt den Wechsel von einer Nicht-Board- auf eine Board-Route (Rules of Hooks)', async () => {
+    function Nav() {
+      const navigate = useNavigate()
+      return <button onClick={() => navigate('/boards/1')}>go</button>
+    }
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <Nav />
+        <AppShell />
+      </MemoryRouter>,
+    )
+    // Übergang /  ->  /boards/1: darf nicht crashen und zeigt die Board-Gruppe.
+    fireEvent.click(screen.getByText('go'))
+    await waitFor(() => expect(screen.getByText('B')).toBeInTheDocument())
   })
 })

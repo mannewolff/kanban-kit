@@ -62,7 +62,10 @@ export function AppShell() {
   const [flyout, setFlyout] = useState<{ label: string; anchor: HTMLElement } | null>(null)
 
   // Board-Kontext für die Seitenleiste: auf einer Board-Route den Namen nachladen.
-  const boardMatch = useMatch('/boards/:boardId/*') ?? useMatch('/boards/:boardId')
+  // Ein einzelnes Muster mit Splat matcht sowohl /boards/:id als auch /boards/:id/epics.
+  // (Kein `useMatch(a) ?? useMatch(b)` — der `??`-Short-Circuit würde den zweiten Hook
+  // bedingt aufrufen und die Rules of Hooks verletzen.)
+  const boardMatch = useMatch('/boards/:boardId/*')
   const boardId = boardMatch?.params.boardId ? Number(boardMatch.params.boardId) : null
 
   useEffect(() => {
