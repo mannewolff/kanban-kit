@@ -15,8 +15,11 @@ export interface Card {
 
 export const cardsApi = {
   list: (boardId: number) => apiFetch<Card[]>(`/api/boards/${boardId}/cards`),
-  create: (boardId: number, columnId: number, title: string) =>
-    apiFetch<Card>(`/api/boards/${boardId}/cards`, { method: 'POST', body: JSON.stringify({ columnId, title }) }),
+  create: (boardId: number, columnId: number, title: string, description?: string) =>
+    apiFetch<Card>(`/api/boards/${boardId}/cards`, {
+      method: 'POST',
+      body: JSON.stringify({ columnId, title, description }),
+    }),
   move: (cardId: number, columnId: number, position: number) =>
     apiFetch<Card>(`/api/cards/${cardId}/move`, { method: 'POST', body: JSON.stringify({ columnId, position }) }),
   update: (cardId: number, title: string, description: string | null, dependencies?: number[]) =>

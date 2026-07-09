@@ -21,7 +21,8 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class BoardService {
 
-    private static final List<String> DEFAULT_COLUMNS = List.of("Backlog", "In Progress", "Review", "Done");
+    private static final List<String> DEFAULT_COLUMNS =
+            List.of("Backlog", "Ready", "In Progress", "In Review", "Done");
 
     private final BoardRepository boards;
     private final BoardColumnRepository columns;

@@ -70,9 +70,10 @@ class CardMoveIT {
                         .contentType("application/json").content("{\"name\":\"B\"}"))
                 .andReturn().getResponse().getContentAsString());
         boardId = board.get("id").asLong();
+        // Default-Spalten: [0]=Backlog, [1]=Ready, [2]=In Progress, [3]=In Review, [4]=Done
         backlog = board.get("columns").get(0).get("id").asLong();
-        inProgress = board.get("columns").get(1).get("id").asLong();
-        done = board.get("columns").get(3).get("id").asLong();
+        inProgress = board.get("columns").get(2).get("id").asLong();
+        done = board.get("columns").get(4).get("id").asLong();
     }
 
     private int createCard(long columnId, String title) throws Exception {

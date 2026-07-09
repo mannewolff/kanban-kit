@@ -47,4 +47,25 @@ describe('BoardView Drag & Drop', () => {
     await waitFor(() => expect(within(screen.getByTestId('column-10')).getByTestId('card-100')).toBeInTheDocument())
     expect(within(screen.getByTestId('column-20')).queryByTestId('card-100')).not.toBeInTheDocument()
   })
+
+  it('legt über den +Dialog eine Karte mit Beschreibung an', async () => {
+    const created: Card = { ...card, id: 200, number: 2, title: 'Neu', columnId: 20 }
+    const api = { create: vi.fn().mockResolvedValue(created), move: vi.fn() }
+    render(<BoardView board={board} initialCards={[card]} canEdit api={api} />)
+
+    fireEvent.click(screen.getByLabelText('Karte in Done anlegen'))
+    fireEvent.change(screen.getByLabelText('Titel'), { target: { value: 'Neu' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Anlegen' }))
+
+    await waitFor(() =>
+      expect(api.create).toHaveBeenCalledWith(1, 20, 'Neu', expect.stringContaining('## Kontext')),
+    )
+    expect(within(screen.getByTestId('column-20')).getByTestId('card-200')).toBeInTheDocument()
+  })
+
+  it('blendet den +Button für Nicht-Editoren aus', () => {
+    const api = { create: vi.fn(), move: vi.fn() }
+    render(<BoardView board={board} initialCards={[card]} canEdit={false} api={api} />)
+    expect(screen.queryByLabelText('Karte in Done anlegen')).not.toBeInTheDocument()
+  })
 })

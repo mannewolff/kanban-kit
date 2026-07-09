@@ -7,6 +7,7 @@ import { Link as RouterLink, useParams } from 'react-router-dom'
 import { boardsApi, type Board } from '../api/boards'
 import { cardsApi, type Card } from '../api/cards'
 import { projectsApi } from '../api/projects'
+import { useAuth } from '../auth/AuthContext'
 import { BoardView } from '../components/BoardView'
 import { CardDetailModal } from '../components/CardDetailModal'
 import { canEditCards } from '../lib/roles'
@@ -14,9 +15,10 @@ import { canEditCards } from '../lib/roles'
 export function BoardPage() {
   const { boardId } = useParams()
   const id = Number(boardId)
+  const { user } = useAuth()
   const [board, setBoard] = useState<Board | null>(null)
   const [cards, setCards] = useState<Card[]>([])
-  const [role, setRole] = useState('VIEWER')
+  const [fetchedRole, setFetchedRole] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [selectedCard, setSelectedCard] = useState<Card | null>(null)
 
@@ -34,18 +36,39 @@ export function BoardPage() {
         setBoard(loadedBoard)
         setCards(loadedCards)
         setLoading(false)
-        void projectsApi.list().then((projects) => {
-          const project = projects.find((p) => p.id === loadedBoard.projectId)
-          if (project && active) {
-            setRole(project.role)
-          }
-        })
       })
       .catch(() => setLoading(false))
     return () => {
       active = false
     }
   }, [id])
+
+  // Rolle bevorzugt synchron aus den Memberships (kein Race). Ist das Projekt dort noch nicht
+  // bekannt (z. B. frisch in dieser Session angelegt), einmal frisch nachladen.
+  const membershipRole = board
+    ? user?.memberships.find((m) => m.projectId === board.projectId)?.role
+    : undefined
+
+  useEffect(() => {
+    if (!board || membershipRole) {
+      setFetchedRole(null)
+      return
+    }
+    let active = true
+    projectsApi
+      .list()
+      .then((projects) => {
+        if (active) {
+          setFetchedRole(projects.find((p) => p.id === board.projectId)?.role ?? 'VIEWER')
+        }
+      })
+      .catch(() => active && setFetchedRole('VIEWER'))
+    return () => {
+      active = false
+    }
+  }, [board, membershipRole])
+
+  const canEdit = canEditCards(membershipRole ?? fetchedRole ?? 'VIEWER')
 
   if (loading) {
     return (
@@ -65,16 +88,11 @@ export function BoardPage() {
       <Typography variant="h5" sx={{ mt: 1, mb: 2 }}>
         {board.name}
       </Typography>
-      <BoardView
-        board={board}
-        initialCards={cards}
-        canEdit={canEditCards(role)}
-        onCardClick={setSelectedCard}
-      />
+      <BoardView board={board} initialCards={cards} canEdit={canEdit} onCardClick={setSelectedCard} />
       {selectedCard && (
         <CardDetailModal
           card={selectedCard}
-          canEdit={canEditCards(role)}
+          canEdit={canEdit}
           onClose={() => setSelectedCard(null)}
           onChanged={reloadCards}
         />

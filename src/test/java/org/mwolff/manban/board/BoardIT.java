@@ -91,9 +91,12 @@ class BoardIT {
                         .contentType("application/json").content("{\"name\":\"Board 1\"}"))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.name").value("Board 1"))
-                .andExpect(jsonPath("$.columns.length()").value(4))
+                .andExpect(jsonPath("$.columns.length()").value(5))
                 .andExpect(jsonPath("$.columns[0].name").value("Backlog"))
-                .andExpect(jsonPath("$.columns[3].name").value("Done"))
+                .andExpect(jsonPath("$.columns[1].name").value("Ready"))
+                .andExpect(jsonPath("$.columns[2].name").value("In Progress"))
+                .andExpect(jsonPath("$.columns[3].name").value("In Review"))
+                .andExpect(jsonPath("$.columns[4].name").value("Done"))
                 .andExpect(jsonPath("$.columns[0].position").value(0));
     }
 
@@ -143,18 +146,19 @@ class BoardIT {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.name").value("Umbenannt"));
 
-        // Umsortieren: die 5 Spalten in umgekehrter Reihenfolge
+        // Umsortieren: alle Spalten (5 Default + Extra) in umgekehrter Reihenfolge
         long c0 = board.get("columns").get(0).get("id").asLong();
         long c1 = board.get("columns").get(1).get("id").asLong();
         long c2 = board.get("columns").get(2).get("id").asLong();
         long c3 = board.get("columns").get(3).get("id").asLong();
+        long c4 = board.get("columns").get(4).get("id").asLong();
         mvc.perform(put("/api/boards/" + boardId + "/columns/order").cookie(alice)
                         .contentType("application/json")
-                        .content("{\"columnIds\":[%d,%d,%d,%d,%d]}".formatted(extraId, c3, c2, c1, c0)))
+                        .content("{\"columnIds\":[%d,%d,%d,%d,%d,%d]}".formatted(extraId, c4, c3, c2, c1, c0)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].id").value((int) extraId))
                 .andExpect(jsonPath("$[0].position").value(0))
-                .andExpect(jsonPath("$[4].id").value((int) c0));
+                .andExpect(jsonPath("$[5].id").value((int) c0));
 
         // Leere Spalte löschen
         mvc.perform(delete("/api/columns/" + extraId).cookie(alice))
@@ -171,7 +175,7 @@ class BoardIT {
                         .get("/api/boards/" + boardId).cookie(alice))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.name").value("Board"))
-                .andExpect(jsonPath("$.columns.length()").value(4));
+                .andExpect(jsonPath("$.columns.length()").value(5));
     }
 
     @Test
