@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Optional;
 import org.mwolff.manban.card.application.CardRepository;
 import org.mwolff.manban.card.domain.Card;
+import org.mwolff.manban.card.domain.CardType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
@@ -78,7 +79,7 @@ class CardRepositoryAdapter implements CardRepository {
         jdbc.update("UPDATE card SET column_id = ?, position_in_column = ? WHERE id = ?",
                 newColumnId, PARK_MOVED_CARD, cardId);
         jdbc.update("UPDATE card SET position_in_column = position_in_column + ? "
-                        + "WHERE archived = false AND id <> ? AND column_id IN (?, ?)",
+                        + "WHERE archived = false AND type <> 'EPIC' AND id <> ? AND column_id IN (?, ?)",
                 PARK_OFFSET, cardId, oldColumnId, newColumnId);
 
         // Phase 2 — finale, lückenlose Positionen (jeweils < PARK_OFFSET, kollisionsfrei).
@@ -93,7 +94,7 @@ class CardRepositoryAdapter implements CardRepository {
 
     private List<Long> activeCardIds(long columnId, long excludeCardId) {
         return jdbc.queryForList(
-                "SELECT id FROM card WHERE column_id = ? AND archived = false AND id <> ? "
+                "SELECT id FROM card WHERE column_id = ? AND archived = false AND type <> 'EPIC' AND id <> ? "
                         + "ORDER BY position_in_column",
                 Long.class, columnId, excludeCardId);
     }
@@ -111,12 +112,14 @@ class CardRepositoryAdapter implements CardRepository {
 
     private static CardEntity toEntity(Card c) {
         return new CardEntity(c.id(), c.boardId(), c.columnId(), c.number(), c.title(), c.description(),
-                c.positionInColumn(), c.archived(), c.movedToDoneAt(), c.createdBy(), c.createdAt(), c.updatedAt());
+                c.positionInColumn(), c.archived(), c.movedToDoneAt(), c.createdBy(), c.createdAt(), c.updatedAt(),
+                c.type().name(), c.parentId(), c.shortcode());
     }
 
     private static Card toDomain(CardEntity e) {
         return new Card(e.getId(), e.getBoardId(), e.getColumnId(), e.getNumber(), e.getTitle(),
                 e.getDescription(), e.getPositionInColumn(), e.isArchived(), e.getMovedToDoneAt(),
-                e.getCreatedBy(), e.getCreatedAt(), e.getUpdatedAt());
+                e.getCreatedBy(), e.getCreatedAt(), e.getUpdatedAt(),
+                CardType.valueOf(e.getType()), e.getParentId(), e.getShortcode());
     }
 }

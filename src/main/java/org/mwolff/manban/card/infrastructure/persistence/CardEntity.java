@@ -53,13 +53,22 @@ class CardEntity {
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
+    @Column(name = "type", nullable = false)
+    private String type;
+
+    @Column(name = "parent_id")
+    private Long parentId;
+
+    @Column(name = "shortcode")
+    private String shortcode;
+
     protected CardEntity() {
         // für JPA
     }
 
     CardEntity(Long id, Long boardId, Long columnId, int number, String title, String description,
                int positionInColumn, boolean archived, Instant movedToDoneAt, Long createdBy,
-               Instant createdAt, Instant updatedAt) {
+               Instant createdAt, Instant updatedAt, String type, Long parentId, String shortcode) {
         this.id = id;
         this.boardId = boardId;
         this.columnId = columnId;
@@ -72,6 +81,9 @@ class CardEntity {
         this.createdBy = createdBy;
         this.createdAt = createdAt;
         this.updatedAt = updatedAt;
+        this.type = type;
+        this.parentId = parentId;
+        this.shortcode = shortcode;
     }
 
     Long getId() {
@@ -120,5 +132,17 @@ class CardEntity {
 
     Instant getUpdatedAt() {
         return updatedAt;
+    }
+
+    String getType() {
+        return type;
+    }
+
+    Long getParentId() {
+        return parentId;
+    }
+
+    String getShortcode() {
+        return shortcode;
     }
 }

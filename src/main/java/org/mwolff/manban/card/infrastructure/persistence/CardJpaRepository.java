@@ -18,6 +18,6 @@ interface CardJpaRepository extends JpaRepository<CardEntity, Long> {
     int maxNumberInBoard(Long boardId);
 
     @Query("select coalesce(max(c.positionInColumn), -1) from CardEntity c "
-            + "where c.columnId = ?1 and c.archived = false")
+            + "where c.columnId = ?1 and c.archived = false and c.type <> 'EPIC'")
     int maxActivePositionInColumn(Long columnId);
 }
