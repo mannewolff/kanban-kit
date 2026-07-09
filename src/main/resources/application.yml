@@ -55,3 +55,7 @@ manban:
     enabled: ${MANBAN_CLEANUP_ENABLED:true}
     done-retention-days: ${MANBAN_DONE_RETENTION_DAYS:30}
     cron: "0 0 * * * *"
+  bootstrap:
+    # Einmal-Token, um auf einer frischen Instanz den ersten Plattform-Admin zu erzeugen.
+    # Leer = deaktiviert. Greift nur, solange kein Admin existiert.
+    admin-token: ${MANBAN_BOOTSTRAP_ADMIN_TOKEN:}

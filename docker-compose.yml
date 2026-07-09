@@ -31,6 +31,8 @@ services:
     build: .
     environment:
       MANBAN_BASE_URL: ${MANBAN_BASE_URL:-https://localhost}
+      # Einmal-Token für den ersten Plattform-Admin (leer = deaktiviert; greift nur ohne Admin).
+      MANBAN_BOOTSTRAP_ADMIN_TOKEN: ${MANBAN_BOOTSTRAP_ADMIN_TOKEN:-}
       MANBAN_DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-manban}
       MANBAN_DB_USER: ${POSTGRES_USER:-manban}
       MANBAN_DB_PASSWORD: ${POSTGRES_PASSWORD:-manban}
