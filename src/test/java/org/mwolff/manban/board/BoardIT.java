@@ -162,6 +162,19 @@ class BoardIT {
     }
 
     @Test
+    void getBoardReturnsColumns() throws Exception {
+        Cookie alice = loginAs("get-board@example.com");
+        long projectId = createProject(alice, "GB");
+        long boardId = createBoard(alice, projectId, "Board").get("id").asLong();
+
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .get("/api/boards/" + boardId).cookie(alice))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.name").value("Board"))
+                .andExpect(jsonPath("$.columns.length()").value(4));
+    }
+
+    @Test
     void deleteColumnWithCardsIsBlocked() throws Exception {
         Cookie alice = loginAs("cards-owner@example.com");
         long projectId = createProject(alice, "Cards");

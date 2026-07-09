@@ -52,6 +52,13 @@ public class BoardService {
         return boards.findByProjectId(projectId).stream().map(this::view).toList();
     }
 
+    @Transactional(readOnly = true)
+    public BoardView getBoard(long userId, long boardId) {
+        Board board = requireBoard(boardId);
+        permissions.requireMembership(userId, board.projectId());
+        return view(board);
+    }
+
     @Transactional
     public BoardView renameBoard(long userId, long boardId, String name) {
         Board board = requireBoard(boardId);

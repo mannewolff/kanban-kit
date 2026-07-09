@@ -17,6 +17,7 @@ export interface Board {
 
 export const boardsApi = {
   list: (projectId: number) => apiFetch<Board[]>(`/api/projects/${projectId}/boards`),
+  get: (boardId: number) => apiFetch<Board>(`/api/boards/${boardId}`),
   create: (projectId: number, name: string) =>
     apiFetch<Board>(`/api/projects/${projectId}/boards`, { method: 'POST', body: JSON.stringify({ name }) }),
 }

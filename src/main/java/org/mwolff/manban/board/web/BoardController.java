@@ -39,6 +39,11 @@ class BoardController {
         return boards.listBoards(userId, projectId);
     }
 
+    @GetMapping("/api/boards/{boardId}")
+    BoardView get(@AuthenticationPrincipal Long userId, @PathVariable long boardId) {
+        return boards.getBoard(userId, boardId);
+    }
+
     @PatchMapping("/api/boards/{boardId}")
     BoardView rename(@AuthenticationPrincipal Long userId, @PathVariable long boardId,
                      @Valid @RequestBody BoardRequest request) {
