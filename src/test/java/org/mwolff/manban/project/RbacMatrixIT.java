@@ -47,13 +47,23 @@ class RbacMatrixIT {
     private static final Map<ProjectRole, Set<Permission>> EXPECTED = new EnumMap<>(ProjectRole.class);
 
     static {
-        Set<Permission> member = EnumSet.of(
-                Permission.CARD_CREATE, Permission.CARD_MOVE, Permission.CARD_DELETE,
-                Permission.COMMENT_CREATE, Permission.ATTACHMENT_UPLOAD);
+        Set<Permission> reads = EnumSet.of(
+                Permission.BOARD_READ, Permission.EPIC_READ, Permission.TICKET_READ,
+                Permission.COMMENT_READ, Permission.ATTACHMENT_READ);
+
+        Set<Permission> member = EnumSet.copyOf(reads);
+        member.addAll(EnumSet.of(
+                Permission.TICKET_CREATE, Permission.TICKET_UPDATE, Permission.TICKET_DELETE, Permission.CARD_MOVE,
+                Permission.EPIC_CREATE, Permission.EPIC_UPDATE, Permission.EPIC_DELETE,
+                Permission.COMMENT_CREATE, Permission.COMMENT_UPDATE,
+                Permission.ATTACHMENT_CREATE, Permission.ATTACHMENT_DELETE));
+
         Set<Permission> admin = EnumSet.copyOf(member);
-        admin.addAll(EnumSet.of(Permission.COLUMN_EDIT, Permission.BOARD_CREATE, Permission.BOARD_DELETE,
-                Permission.MEMBER_INVITE, Permission.MEMBER_REMOVE));
-        EXPECTED.put(ProjectRole.VIEWER, EnumSet.noneOf(Permission.class));
+        admin.addAll(EnumSet.of(
+                Permission.BOARD_CREATE, Permission.BOARD_UPDATE, Permission.BOARD_DELETE,
+                Permission.COMMENT_DELETE, Permission.MEMBER_INVITE, Permission.MEMBER_REMOVE));
+
+        EXPECTED.put(ProjectRole.VIEWER, reads);
         EXPECTED.put(ProjectRole.MEMBER, member);
         EXPECTED.put(ProjectRole.ADMIN, admin);
         EXPECTED.put(ProjectRole.OWNER, EnumSet.allOf(Permission.class));

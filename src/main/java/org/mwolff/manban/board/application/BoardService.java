@@ -15,7 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Board- und Spalten-Use-Cases. Rechte laufen über den {@link PermissionChecker}:
- * BOARD_CREATE (anlegen/umbenennen), BOARD_DELETE (löschen), COLUMN_EDIT (Spalten).
+ * BOARD_CREATE (anlegen), BOARD_UPDATE (umbenennen/Spalten), BOARD_DELETE (löschen).
  * Lesezugriffe verlangen nur Projekt-Mitgliedschaft.
  */
 @Service
@@ -63,7 +63,7 @@ public class BoardService {
     @Transactional
     public BoardView renameBoard(long userId, long boardId, String name) {
         Board board = requireBoard(boardId);
-        permissions.require(userId, board.projectId(), Permission.BOARD_CREATE);
+        permissions.require(userId, board.projectId(), Permission.BOARD_UPDATE);
         return view(boards.save(board.withName(name.trim())));
     }
 
@@ -77,7 +77,7 @@ public class BoardService {
     @Transactional
     public ColumnView addColumn(long userId, long boardId, String name, Integer wipLimit) {
         Board board = requireBoard(boardId);
-        permissions.require(userId, board.projectId(), Permission.COLUMN_EDIT);
+        permissions.require(userId, board.projectId(), Permission.BOARD_UPDATE);
         int nextPosition = columns.findByBoardId(boardId).stream()
                 .mapToInt(BoardColumn::position).max().orElse(-1) + 1;
         return toColumnView(columns.save(new BoardColumn(null, boardId, name.trim(), nextPosition, wipLimit)));
@@ -87,7 +87,7 @@ public class BoardService {
     public ColumnView updateColumn(long userId, long columnId, String name, Integer wipLimit) {
         BoardColumn column = requireColumn(columnId);
         Board board = requireBoard(column.boardId());
-        permissions.require(userId, board.projectId(), Permission.COLUMN_EDIT);
+        permissions.require(userId, board.projectId(), Permission.BOARD_UPDATE);
         return toColumnView(columns.save(column.with(name.trim(), wipLimit)));
     }
 
@@ -95,7 +95,7 @@ public class BoardService {
     public void deleteColumn(long userId, long columnId) {
         BoardColumn column = requireColumn(columnId);
         Board board = requireBoard(column.boardId());
-        permissions.require(userId, board.projectId(), Permission.COLUMN_EDIT);
+        permissions.require(userId, board.projectId(), Permission.BOARD_UPDATE);
         if (cardCounter.countByColumnId(columnId) > 0) {
             throw new ColumnNotEmptyException();
         }
@@ -105,7 +105,7 @@ public class BoardService {
     @Transactional
     public List<ColumnView> reorderColumns(long userId, long boardId, List<Long> orderedColumnIds) {
         Board board = requireBoard(boardId);
-        permissions.require(userId, board.projectId(), Permission.COLUMN_EDIT);
+        permissions.require(userId, board.projectId(), Permission.BOARD_UPDATE);
 
         List<BoardColumn> current = columns.findByBoardId(boardId);
         List<Long> existing = current.stream().map(BoardColumn::id).sorted().toList();

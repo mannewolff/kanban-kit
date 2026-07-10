@@ -19,7 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * Anhang-Use-Cases. Der Blob wandert in den Objektspeicher (MinIO), nur Metadaten in
  * die DB. Content-Type wird aus den Magic-Bytes bestimmt (nicht dem Client vertraut).
- * Upload/Löschen erfordern ATTACHMENT_UPLOAD, Lesen nur Mitgliedschaft.
+ * Upload erfordert ATTACHMENT_CREATE, Löschen ATTACHMENT_DELETE, Lesen nur Mitgliedschaft.
  */
 @Service
 public class AttachmentService {
@@ -46,7 +46,7 @@ public class AttachmentService {
 
     @Transactional
     public AttachmentView upload(long userId, long cardId, String filename, byte[] content) {
-        permissions.require(userId, projectIdOfCard(cardId), Permission.ATTACHMENT_UPLOAD);
+        permissions.require(userId, projectIdOfCard(cardId), Permission.ATTACHMENT_CREATE);
         if (attachments.countByCardId(cardId) >= properties.maxPerCard()) {
             throw new AttachmentLimitExceededException(properties.maxPerCard());
         }
@@ -75,7 +75,7 @@ public class AttachmentService {
     @Transactional
     public void delete(long userId, long attachmentId) {
         Attachment attachment = attachments.findById(attachmentId).orElseThrow(AttachmentNotFoundException::new);
-        permissions.require(userId, projectIdOfCard(attachment.cardId()), Permission.ATTACHMENT_UPLOAD);
+        permissions.require(userId, projectIdOfCard(attachment.cardId()), Permission.ATTACHMENT_DELETE);
         storage.delete(attachment.objectKey());
         attachments.deleteById(attachment.id());
     }

@@ -72,7 +72,7 @@ public class AccessTokenService {
             throw new InvalidTokenBindingException(
                     "Board " + boardId + " gehört nicht zu Projekt " + projectId);
         }
-        if (!permissions.hasPermission(userId, projectId, Permission.CARD_CREATE)) {
+        if (!permissions.hasPermission(userId, projectId, Permission.TICKET_CREATE)) {
             throw new ProjectAccessDeniedException();
         }
     }

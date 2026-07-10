@@ -52,10 +52,10 @@ class AppUserRepositoryIT {
 
     @Test
     void seedsRolePermissionMatrix() {
-        assertThat(permissionCount("OWNER")).isEqualTo(12);
-        assertThat(permissionCount("ADMIN")).isEqualTo(10);
-        assertThat(permissionCount("MEMBER")).isEqualTo(5);
-        assertThat(permissionCount("VIEWER")).isZero();
+        assertThat(permissionCount("OWNER")).isEqualTo(24);
+        assertThat(permissionCount("ADMIN")).isEqualTo(22);
+        assertThat(permissionCount("MEMBER")).isEqualTo(16);
+        assertThat(permissionCount("VIEWER")).isEqualTo(5);
     }
 
     private int permissionCount(String role) {

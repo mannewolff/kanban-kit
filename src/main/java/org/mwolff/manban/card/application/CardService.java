@@ -46,7 +46,7 @@ public class CardService {
     public CardView create(long userId, long boardId, long columnId, String title, String description,
                            List<Integer> dependsOn, Long parentId) {
         Board board = boards.findById(boardId).orElseThrow(BoardNotFoundException::new);
-        permissions.require(userId, board.projectId(), Permission.CARD_CREATE);
+        permissions.require(userId, board.projectId(), Permission.TICKET_CREATE);
         requireColumnInBoard(columnId, boardId);
         Long effectiveParent = parentId == null ? null : requireEpicInBoard(parentId, boardId).id();
 
@@ -65,7 +65,7 @@ public class CardService {
     @Transactional
     public CardView createEpic(long userId, long boardId, String title, String description, String shortcode) {
         Board board = boards.findById(boardId).orElseThrow(BoardNotFoundException::new);
-        permissions.require(userId, board.projectId(), Permission.CARD_CREATE);
+        permissions.require(userId, board.projectId(), Permission.EPIC_CREATE);
 
         long columnId = columns.findByBoardId(boardId).stream()
                 .min(Comparator.comparingInt(BoardColumn::position))
@@ -119,7 +119,7 @@ public class CardService {
     @Transactional
     public CardView update(long userId, long cardId, String title, String description,
                            List<Integer> dependsOn, String shortcode, Long parentId) {
-        Card card = requireCardWithPermission(userId, cardId, Permission.CARD_CREATE);
+        Card card = requireCardOp(userId, cardId, Permission.TICKET_UPDATE, Permission.EPIC_UPDATE);
         Card updated = card.withContent(title.trim(), normalize(description));
         if (card.type() == CardType.EPIC) {
             // Epics tragen ein Kürzel, aber keinen Parent.
@@ -139,7 +139,7 @@ public class CardService {
     /** Ordnet eine Karte einem Epic zu ({@code parentId}) oder löst die Zuordnung ({@code null}). */
     @Transactional
     public CardView assignParent(long userId, long cardId, Long parentId) {
-        Card card = requireCardWithPermission(userId, cardId, Permission.CARD_CREATE);
+        Card card = requireCardOp(userId, cardId, Permission.TICKET_UPDATE, Permission.EPIC_UPDATE);
         if (card.type() != CardType.CARD) {
             throw new InvalidDependencyException("Nur Karten können einem Epic zugeordnet werden");
         }
@@ -178,28 +178,30 @@ public class CardService {
 
     @Transactional
     public CardView archive(long userId, long cardId) {
-        Card card = requireCardWithPermission(userId, cardId, Permission.CARD_DELETE);
+        Card card = requireCardOp(userId, cardId, Permission.TICKET_DELETE, Permission.EPIC_DELETE);
         return view(cards.save(card.asArchived()));
     }
 
     @Transactional
     public CardView restore(long userId, long cardId) {
-        Card card = requireCardWithPermission(userId, cardId, Permission.CARD_DELETE);
+        Card card = requireCardOp(userId, cardId, Permission.TICKET_DELETE, Permission.EPIC_DELETE);
         int position = cards.maxActivePositionInColumn(card.columnId()) + 1;
         return view(cards.save(card.asRestored(position)));
     }
 
     @Transactional
     public void delete(long userId, long cardId) {
-        Card card = requireCardWithPermission(userId, cardId, Permission.CARD_DELETE);
+        Card card = requireCardOp(userId, cardId, Permission.TICKET_DELETE, Permission.EPIC_DELETE);
         dependencies.deleteByCardId(card.id());
         cards.deleteById(card.id());
     }
 
-    private Card requireCardWithPermission(long userId, long cardId, Permission permission) {
+    /** Lädt die Karte und verlangt das je nach Kartentyp (Ticket/Epic) passende Recht. */
+    private Card requireCardOp(long userId, long cardId, Permission ticketPermission, Permission epicPermission) {
         Card card = cards.findById(cardId).orElseThrow(CardNotFoundException::new);
         Board board = boards.findById(card.boardId()).orElseThrow(BoardNotFoundException::new);
-        permissions.require(userId, board.projectId(), permission);
+        permissions.require(userId, board.projectId(),
+                card.type() == CardType.EPIC ? epicPermission : ticketPermission);
         return card;
     }
 
