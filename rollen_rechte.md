@@ -1,44 +1,116 @@
 # Spezifikation Rollen und Rechte
 
 ## Rollen
+
 Es gibt drei Ebenen von Rollen:
-1. Die erste Ebene ist die Systemebene. Dort gibt es Admin und User. Jeder User kann zum Admin gemacht werden, aber nur von einem anderen Admin.
-2. Die zweite Ebene sind fertige Rollen, die mit fertigen Rechten versehen sind. Diese Rollen sind Viewer, Member, Admin und Owner.
-3. Die dritte Ebene sind zusätzliche Rollen, die ein Admin einrichten kann (Ver 2.0)
+
+1. **Systemebene (Plattform-Rolle):** `ADMIN` und `USER`. Jeder User kann zum Admin
+   gemacht werden, aber nur von einem anderen Admin. Der System-Admin ist Super-User:
+   er sieht und bearbeitet alle Projekte und legt Projekte an bzw. löscht sie.
+2. **Projekt-Rollen (fertige Rollen mit festen Rechten):** `Viewer`, `Member`, `Admin`,
+   `Owner`. Sie gelten je Projekt (eine Mitgliedschaft = ein User + eine Rolle je Projekt).
+3. **Zusatzrollen (Version 2.0, noch nicht umsetzen):** Ein Admin kann weitere Rollen
+   anlegen und ihnen Rechte über dieselbe Matrix zuweisen. Diese hängen als weitere
+   Zeile hinter Viewer/Member/Admin/Owner.
 
 ## Rechte
 
-Die Rechte für die Standardrollen sind statisch:
-- Viewer können Boards und Karten lesen.
-- Member können zusätzlich Karten und Epics anlegen, verschieben und löschen, Kommentare schreiben und Anhänge hochladen.
+Die Rechte sind granular als **CRUD-Matrix pro Ressource** modelliert (je Operation ein
+Recht). Für die vier Standardrollen sind sie statisch gesetzt; ab 2.0 sind sie für
+Zusatzrollen konfigurierbar (dieselben Spalten, dann als aktivierbare Haken).
 
-In Version 2.0 im Moment noch nicht umsetzen, können dann weitere Rollen konfiguriert werden vom Admin und mit weiteren Rechten versehen werden
+Ressourcen und Operationen:
+- **Board:** Create, Read, Update, Delete (Update umfasst auch das Bearbeiten der Spalten)
+- **Epic:** Create, Read, Update, Delete
+- **Ticket:** Create, Read, Update, Delete
+- **Karten verschieben (Move):** eigene Operation
+- **Kommentar:** Create, Read, Update, Delete (mit Sonderregeln, s. u.)
+- **Anhang:** Create, Read, Delete
+- **Verwaltung:** Mitglieder einladen/entfernen, Projekt umbenennen
 
-Rechte werden mit CRUD konfiguriert. Diese Rechte gibt es auf verschiedene Ebenen. Mitglieder sind Menschen, die zu einem Board hinzugefügt werden. Das können neben Admins auch Menschen mit der Rolle Owner machen. Also, wenn ich in einem Projekt Demo hinzugefügt habe und die Rolle Owner habe, dann kann ich weitere Mitglieder einladen.
+### Rechte-Matrix (Standardrollen)
 
-Das heißt, von Anfang an gibt es diese Matrix:
+| Recht | Viewer | Member | Admin | Owner |
+|---|:--:|:--:|:--:|:--:|
+| Board – Read | ✓ | ✓ | ✓ | ✓ |
+| Board – Create / Update / Delete | – | – | ✓ | ✓ |
+| Epic – Read | ✓ | ✓ | ✓ | ✓ |
+| Epic – Create / Update / Delete | – | ✓ | ✓ | ✓ |
+| Ticket – Read | ✓ | ✓ | ✓ | ✓ |
+| Ticket – Create / Update / Delete | – | ✓ | ✓ | ✓ |
+| Karten verschieben (Move) | – | ✓ | ✓ | ✓ |
+| Kommentar – Read | ✓ | ✓ | ✓ | ✓ |
+| Kommentar – Create | – | ✓ | ✓ | ✓ |
+| Kommentar – Update *(nur eigener)* | – | ✓ | ✓ | ✓ |
+| Kommentar – Delete | – | – | ✓ | ✓ |
+| Anhang – Read | ✓ | ✓ | ✓ | ✓ |
+| Anhang – Create | – | ✓ | ✓ | ✓ |
+| Anhang – Delete | – | ✓ | ✓ | ✓ |
+| Mitglieder einladen / entfernen | – | – | ✓ | ✓ |
+| Projekt umbenennen | – | – | – | ✓ |
+| **Projekt anlegen / löschen** | **nur System-Admin (Plattform-Ebene, keine Projekt-Rolle)** | | | |
 
-- Board: Create, Read, Update, Delete
-- Epics: Create, Read, Update, Delete
-- Tickets: Create, Read, Update, Delete
-- Kommentare: nur Create und Read
-- Anhänge: Create, Read und Delete
-- Karten verschieben  
+### Rollen im Detail
 
-Für die Standardrollen sind die dann dementsprechend gesetzt, und für zusätzliche Rollen kann man das dann ab 2.0 anlegen.
-
-Benutzer           Bord               Epics            Tickets       Kommentare       Anhänge       Karten Verschieben
-               C   R   U   D      C   R   U   D     C   R   U   D        C   R       C   R   D 
-Rolle         [ ] [ ] [ ] [ ]    [ ] [ ] [ ] [ ]   [ ] [ ] [ ] [ ]      [ ] [ ]     [ ] [ ] [ ]            [ ] 
-
+- **Viewer:** darf ausschließlich lesen (Boards, Epics, Tickets, Kommentare, Anhänge).
+- **Member:** zusätzlich Tickets und Epics anlegen, bearbeiten, löschen und verschieben,
+  Kommentare schreiben (und eigene bearbeiten) sowie Anhänge hochladen und löschen.
+- **Admin:** zusätzlich Boards und Spalten verwalten, Kommentare löschen (Moderation)
+  und Mitglieder einladen/entfernen.
+- **Owner:** alle Projekt-Rechte inklusive Projekt umbenennen.
 
 ## Projekte
 
-Projekte werden ausschließlich vom Admin angelegt. Admins können die Projekte auch löschen. Es gibt eine Sicherheitsabfrage, und wenn ein Projekt gelöscht wird, werden alle zugehörigen EPICs, Tickets und Boards mitgelöscht.
+Projekte werden **ausschließlich vom System-Admin** angelegt. Beim Anlegen bestimmt der
+Admin den **Owner** des Projekts per E-Mail (der genannte User wird OWNER; der Admin ist
+dadurch nicht automatisch Mitglied, hat aber als Plattform-Admin ohnehin Vollzugriff).
+Löschen darf ebenfalls nur der System-Admin. Es gibt eine Sicherheitsabfrage; beim Löschen
+werden alle zugehörigen Boards, Epics und Tickets mitgelöscht (Kaskade).
 
 ## Boards
-Owner können Boards anlegen.Wohner können Boards auch löschen. Es gibt dann eine Sicherheitsfrage, wenn ein Board gelöscht wird und alle zugehörigen EPICS und Tickets mit gelöscht werden.
 
-## Tickets/Epics
+**Owner und Projekt-Admins** können Boards anlegen, umbenennen (Update, inkl. Spalten) und
+löschen. Beim Löschen gibt es eine Sicherheitsabfrage; alle zugehörigen Epics und Tickets
+werden mitgelöscht (Kaskade).
 
-Member können Tickets anlegen, verschieben und löschen. Member können auch Epics anlegen, verschieben und löschen. Ab Member-Ebene können Kommentare erzeugt werden und Items auf dem Board verschoben werden.
+## Tickets / Epics
+
+Ab **Member** dürfen Tickets und Epics angelegt, bearbeitet und gelöscht sowie Karten auf
+dem Board verschoben werden. Read gilt für alle Rollen (inkl. Viewer).
+
+## Kommentare
+
+Kommentare sind voll CRUD, aber mit Eigentums-/Rollenregeln:
+- **Create:** ab Member.
+- **Read:** alle Rollen.
+- **Update:** **nur der Ersteller** des Kommentars (auch ein Admin/Owner darf fremde
+  Kommentare nicht bearbeiten).
+- **Delete:** **nur Projekt-Admin/Owner** (Moderation); der Autor allein löscht nicht.
+
+## Anhänge
+
+Ab **Member** dürfen Anhänge hochgeladen (Create) und gelöscht (Delete) werden; Read gilt
+für alle Rollen.
+
+## Anzeige der Rechte-Matrix
+
+Die Matrix ist die einzige Quelle der Wahrheit und wird serverseitig geliefert
+(`GET /api/roles/matrix`: Rollen, Rechte mit Ressource/Operation, Grants je Rolle). Die
+`/roles`-Ansicht rendert sie als **Checkbox-Grid**: Spalten = einzelne Rechte (je Operation
+eine Spalte), Zeilen = Rollen. Für die vier eingebauten Rollen sind die Haken **disabled**
+(read-only). In 2.0 wird eine neue Rolle einfach als weitere Zeile angehängt, deren Haken
+dann **aktivierbar** sind.
+
+## Navigation / Sichtbarkeit
+
+Es wird nichts angezeigt, was man nicht auswählen kann:
+- „Projekte" erscheint links nur, wenn der Nutzer **≥ 2** Projekte sehen kann.
+- „Boards" erscheint nur, wenn das Projekt **≥ 2** Boards hat.
+- Bei genau einem Projekt bzw. Board wird direkt dorthin geleitet; die Zwischenebene
+  entfällt. Anlege-Einstiege bleiben für Berechtigte erreichbar (Owner/Admin: „+ neues
+  Board", System-Admin: „+ neues Projekt").
+
+## Ausblick Version 2.0
+
+Zusätzliche, frei konfigurierbare Rollen: dieselbe Matrix, weitere Zeilen, aktivierbare
+Haken pro Recht — ohne Änderung an den bestehenden vier Standardrollen.
