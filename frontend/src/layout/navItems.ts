@@ -28,26 +28,51 @@ export type NavNode = NavLink | NavGroup
 export interface BoardContext {
   id: number
   name: string
+  projectId: number
 }
 
 /**
- * Baut die Navigationsbäume: „Projekte" ist immer da; ist ein Board offen,
- * kommt eine nach dem Board benannte Gruppe hinzu (Kind „Board"; „Epics" ergänzt E2).
+ * Parameter für den Navigationsbaum. Zählungen ({@code null} = noch unbekannt) steuern die
+ * Sichtbarkeit: nichts anzeigen, was man nicht wählen kann.
  */
-export function buildNavItems(board: BoardContext | null, isAdmin = false): NavNode[] {
-  const items: NavNode[] = [{ kind: 'link', label: 'Projekte', path: '/', icon: FolderIcon }]
-  if (board) {
-    items.push({
-      kind: 'group',
-      label: board.name,
-      icon: ViewColumnIcon,
-      children: [
-        { kind: 'link', label: 'Board', path: `/boards/${board.id}`, icon: ViewColumnIcon },
-        { kind: 'link', label: 'Liste', path: `/boards/${board.id}/list`, icon: ViewListIcon },
-        { kind: 'link', label: 'Epics', path: `/boards/${board.id}/epics`, icon: AccountTreeIcon },
-      ],
-    })
+export interface NavParams {
+  board: BoardContext | null
+  isAdmin?: boolean
+  /** Anzahl sichtbarer Projekte; bei genau 1 wird „Projekte" ausgeblendet (außer System-Admin). */
+  projectCount?: number | null
+  /** Anzahl Boards im aktuellen Projekt; bei genau 1 wird „Boards" ausgeblendet (außer man darf Boards verwalten). */
+  boardCount?: number | null
+  /** Ob man im aktuellen Projekt Boards anlegen/löschen darf (dann bleibt „Boards" erreichbar). */
+  canManageBoards?: boolean
+}
+
+/**
+ * Baut den Navigationsbaum kontextbewusst. „Projekte" erscheint nur, wenn es etwas zu wählen gibt
+ * (≥ 2 Projekte) oder man System-Admin ist (Anlege-Zugang). Ist ein Board offen, kommt eine nach
+ * dem Board benannte Gruppe hinzu; darin verlinkt „Boards" zurück zur Boardauswahl — aber nur, wenn
+ * das Projekt ≥ 2 Boards hat oder man Boards verwalten darf.
+ */
+export function buildNavItems(params: NavParams): NavNode[] {
+  const { board, isAdmin = false, projectCount = null, boardCount = null, canManageBoards = false } = params
+  const items: NavNode[] = []
+
+  if (isAdmin || projectCount !== 1) {
+    items.push({ kind: 'link', label: 'Projekte', path: '/', icon: FolderIcon })
   }
+
+  if (board) {
+    const children: NavLink[] = []
+    if (canManageBoards || boardCount !== 1) {
+      children.push({ kind: 'link', label: 'Boards', path: `/projects/${board.projectId}/boards`, icon: FolderIcon })
+    }
+    children.push(
+      { kind: 'link', label: 'Board', path: `/boards/${board.id}`, icon: ViewColumnIcon },
+      { kind: 'link', label: 'Liste', path: `/boards/${board.id}/list`, icon: ViewListIcon },
+      { kind: 'link', label: 'Epics', path: `/boards/${board.id}/epics`, icon: AccountTreeIcon },
+    )
+    items.push({ kind: 'group', label: board.name, icon: ViewColumnIcon, children })
+  }
+
   if (isAdmin) {
     items.push({ kind: 'link', label: 'Admin', path: '/admin', icon: AdminPanelSettingsIcon })
   }

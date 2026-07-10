@@ -10,7 +10,20 @@ vi.mock('../auth/AuthContext', () => ({
   }),
 }))
 
-vi.mock('../api/boards', () => ({ boardsApi: { get: vi.fn().mockResolvedValue({ id: 1, name: 'B', columns: [] }) } }))
+vi.mock('../api/boards', () => ({
+  boardsApi: {
+    get: vi.fn().mockResolvedValue({ id: 1, name: 'B', projectId: 5, columns: [] }),
+    list: vi.fn().mockResolvedValue([]),
+  },
+}))
+vi.mock('../api/projects', () => ({
+  projectsApi: {
+    list: vi.fn().mockResolvedValue([
+      { id: 5, name: 'P1', role: 'OWNER', createdAt: '' },
+      { id: 6, name: 'P2', role: 'MEMBER', createdAt: '' },
+    ]),
+  },
+}))
 
 function fakeStorage(): Storage {
   const map = new Map<string, string>()

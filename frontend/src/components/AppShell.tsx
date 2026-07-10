@@ -24,9 +24,10 @@ import LogoutIcon from '@mui/icons-material/Logout'
 import { useEffect, useMemo, useState } from 'react'
 import { Outlet, useLocation, useMatch, useNavigate } from 'react-router-dom'
 import { boardsApi } from '../api/boards'
+import { projectsApi, type Project } from '../api/projects'
 import { useAuth } from '../auth/AuthContext'
 import { buildNavItems, type BoardContext, type NavGroup, type NavLink, type NavNode } from '../layout/navItems'
-import { isPlatformAdmin } from '../lib/roles'
+import { canManageBoards, isPlatformAdmin } from '../lib/roles'
 
 const DRAWER_WIDTH = 240
 const DRAWER_COLLAPSED_WIDTH = 56
@@ -60,7 +61,14 @@ export function AppShell() {
 
   const [collapsed, setCollapsed] = useState<boolean>(readCollapsed)
   const [board, setBoard] = useState<BoardContext | null>(null)
+  const [projects, setProjects] = useState<Project[] | null>(null)
+  const [boardCount, setBoardCount] = useState<number | null>(null)
   const [flyout, setFlyout] = useState<{ label: string; anchor: HTMLElement } | null>(null)
+
+  // Projektliste für die Sichtbarkeit von „Projekte" (Anzahl) und die Board-Verwaltungsrolle.
+  useEffect(() => {
+    projectsApi.list().then(setProjects).catch(() => setProjects(null))
+  }, [])
 
   // Board-Kontext für die Seitenleiste: auf einer Board-Route den Namen nachladen.
   // Ein einzelnes Muster mit Splat matcht sowohl /boards/:id als auch /boards/:id/epics.
@@ -72,26 +80,46 @@ export function AppShell() {
   useEffect(() => {
     if (boardId == null) {
       setBoard(null)
+      setBoardCount(null)
       return
     }
     let cancelled = false
     boardsApi
       .get(boardId)
       .then((b) => {
-        if (!cancelled) setBoard({ id: b.id, name: b.name })
+        if (cancelled) return
+        setBoard({ id: b.id, name: b.name, projectId: b.projectId })
+        // Anzahl Boards im Projekt für die Sichtbarkeit des „Boards"-Eintrags.
+        boardsApi
+          .list(b.projectId)
+          .then((bs) => {
+            if (!cancelled) setBoardCount(bs.length)
+          })
+          .catch(() => {
+            if (!cancelled) setBoardCount(null)
+          })
       })
       .catch(() => {
-        if (!cancelled) setBoard(null)
+        if (!cancelled) {
+          setBoard(null)
+          setBoardCount(null)
+        }
       })
     return () => {
       cancelled = true
     }
   }, [boardId])
 
-  // An den abgeleiteten Boolean binden, nicht an die user-Objektidentität (sonst rechnet
-  // useMemo bei jeder neuen user-Referenz neu und die openGroups-Effect-Schleife läuft endlos).
+  // An abgeleitete Primitive binden, nicht an Objektidentitäten (sonst rechnet useMemo bei jeder
+  // neuen user-Referenz neu und die openGroups-Effect-Schleife läuft endlos).
   const admin = isPlatformAdmin(user)
-  const navItems = useMemo(() => buildNavItems(board, admin), [board, admin])
+  const projectCount = projects?.length ?? null
+  const currentProject = board ? projects?.find((p) => p.id === board.projectId) : undefined
+  const canManageCurrentBoards = canManageBoards(currentProject?.role ?? 'VIEWER', admin)
+  const navItems = useMemo(
+    () => buildNavItems({ board, isAdmin: admin, projectCount, boardCount, canManageBoards: canManageCurrentBoards }),
+    [board, admin, projectCount, boardCount, canManageCurrentBoards],
+  )
 
   const [openGroups, setOpenGroups] = useState<Set<string>>(new Set())
   // Gruppe der aktiven Route automatisch aufklappen.
