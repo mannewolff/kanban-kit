@@ -1,10 +1,17 @@
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
+import Dialog from '@mui/material/Dialog'
+import DialogActions from '@mui/material/DialogActions'
+import DialogContent from '@mui/material/DialogContent'
+import DialogContentText from '@mui/material/DialogContentText'
+import DialogTitle from '@mui/material/DialogTitle'
+import IconButton from '@mui/material/IconButton'
 import Link from '@mui/material/Link'
 import Paper from '@mui/material/Paper'
 import Stack from '@mui/material/Stack'
 import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline'
 import { useEffect, useState } from 'react'
 import { Link as RouterLink, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { boardsApi, type Board } from '../api/boards'
@@ -20,6 +27,7 @@ export function ProjectBoardsPage() {
   const [role, setRole] = useState<string>('VIEWER')
   const [projectName, setProjectName] = useState<string>('')
   const [name, setName] = useState('')
+  const [confirmBoard, setConfirmBoard] = useState<Board | null>(null)
 
   const reload = () => boardsApi.list(id).then(setBoards)
 
@@ -49,6 +57,12 @@ export function ProjectBoardsPage() {
     }
     await boardsApi.create(id, name.trim())
     setName('')
+    await reload()
+  }
+
+  const handleDeleteBoard = async (boardId: number) => {
+    await boardsApi.remove(boardId)
+    setConfirmBoard(null)
     await reload()
   }
 
@@ -102,10 +116,38 @@ export function ProjectBoardsPage() {
               <Typography variant="caption" color="text.secondary">
                 {board.columns.length} Spalten
               </Typography>
+              {canManageBoards(role) && (
+                <IconButton
+                  size="small"
+                  aria-label={`Board ${board.name} löschen`}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setConfirmBoard(board)
+                  }}
+                >
+                  <DeleteOutlineIcon fontSize="small" />
+                </IconButton>
+              )}
             </Paper>
           ))}
         </Stack>
       )}
+
+      <Dialog open={confirmBoard !== null} onClose={() => setConfirmBoard(null)}>
+        <DialogTitle>Board löschen?</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            Das Board „{confirmBoard?.name}" und alle zugehörigen Epics und Tickets werden
+            unwiderruflich gelöscht.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setConfirmBoard(null)}>Abbrechen</Button>
+          <Button color="error" onClick={() => { if (confirmBoard) void handleDeleteBoard(confirmBoard.id) }}>
+            Löschen
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   )
 }

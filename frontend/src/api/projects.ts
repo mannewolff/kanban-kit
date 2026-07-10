@@ -11,7 +11,8 @@ const json = (data: unknown, method: string): RequestInit => ({ method, body: JS
 
 export const projectsApi = {
   list: () => apiFetch<Project[]>('/api/projects'),
-  create: (name: string) => apiFetch<Project>('/api/projects', json({ name }, 'POST')),
+  create: (name: string, ownerEmail: string) =>
+    apiFetch<Project>('/api/projects', json({ name, ownerEmail }, 'POST')),
   rename: (id: number, name: string) => apiFetch<Project>(`/api/projects/${id}`, json({ name }, 'PATCH')),
   remove: (id: number) => apiFetch<void>(`/api/projects/${id}`, { method: 'DELETE' }),
 }

@@ -20,4 +20,5 @@ export const boardsApi = {
   get: (boardId: number) => apiFetch<Board>(`/api/boards/${boardId}`),
   create: (projectId: number, name: string) =>
     apiFetch<Board>(`/api/projects/${projectId}/boards`, { method: 'POST', body: JSON.stringify({ name }) }),
+  remove: (boardId: number) => apiFetch<void>(`/api/boards/${boardId}`, { method: 'DELETE' }),
 }
