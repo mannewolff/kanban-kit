@@ -257,7 +257,15 @@ export function AppShell() {
             </ListItemIcon>
             <ListItemText
               primary={group.label}
-              primaryTypographyProps={hasActiveChild ? { color: 'primary', fontWeight: 600 } : undefined}
+              primaryTypographyProps={{
+                sx: {
+                  textTransform: 'uppercase',
+                  letterSpacing: '.08em',
+                  fontSize: 12,
+                  fontWeight: 700,
+                  color: hasActiveChild ? 'primary.main' : '#5F7A7F',
+                },
+              }}
             />
             {expanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
           </ListItemButton>
@@ -278,9 +286,12 @@ export function AppShell() {
     <Box sx={{ display: 'flex', minHeight: '100vh' }}>
       <AppBar position="fixed" sx={{ zIndex: (t) => t.zIndex.drawer + 1 }}>
         <Toolbar>
-          <Typography variant="h6" noWrap component="div" sx={{ flexGrow: 1, fontWeight: 700 }}>
-            kanban-kit
-          </Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexGrow: 1 }}>
+            <Box component="img" src="/knight.svg" alt="" sx={{ width: 22, height: 22, filter: 'brightness(0) invert(1)' }} />
+            <Typography variant="h6" noWrap component="div" sx={{ fontWeight: 700 }}>
+              kanban-kit
+            </Typography>
+          </Box>
           {user && (
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               <Avatar
@@ -314,6 +325,7 @@ export function AppShell() {
             width: drawerWidth,
             boxSizing: 'border-box',
             overflowX: 'hidden',
+            borderLeft: '4px solid #2F8C97',
             transition: (t) =>
               t.transitions.create('width', {
                 easing: t.transitions.easing.sharp,
