@@ -6,8 +6,9 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.util.List;
-import java.util.OptionalLong;
+import java.util.Optional;
 import org.mwolff.manban.accesstoken.application.AccessTokenService;
+import org.mwolff.manban.accesstoken.application.KanbanPrincipal;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -37,10 +38,14 @@ public class PatAuthenticationFilter extends OncePerRequestFilter {
         String header = request.getHeader(HEADER);
         if (header != null && !header.isBlank()
                 && SecurityContextHolder.getContext().getAuthentication() == null) {
-            OptionalLong userId = accessTokens.resolve(header);
-            if (userId.isPresent()) {
+            Optional<KanbanPrincipal> principal = accessTokens.resolveBinding(header);
+            if (principal.isPresent()) {
+                KanbanPrincipal p = principal.get();
                 var authentication = new UsernamePasswordAuthenticationToken(
-                        userId.getAsLong(), null, List.of(new SimpleGrantedAuthority(AUTHORITY)));
+                        p.userId(), null, List.of(new SimpleGrantedAuthority(AUTHORITY)));
+                // Die Projekt-/Board-Bindung wandert in die details, damit die Kanban-Compat-API
+                // (#45) das gebundene Board ohne zweiten Token-Lookup kennt.
+                authentication.setDetails(p);
                 SecurityContextHolder.getContext().setAuthentication(authentication);
             }
         }

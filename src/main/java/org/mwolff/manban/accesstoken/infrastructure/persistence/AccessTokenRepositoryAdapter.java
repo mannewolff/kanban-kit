@@ -40,13 +40,13 @@ class AccessTokenRepositoryAdapter implements AccessTokenRepository {
 
     private static KanbanAccessTokenEntity toEntity(AccessToken t) {
         return new KanbanAccessTokenEntity(
-                t.id(), t.userId(), t.name(), t.tokenHash(), t.displayName(),
+                t.id(), t.userId(), t.projectId(), t.boardId(), t.name(), t.tokenHash(), t.displayName(),
                 t.createdAt(), t.lastUsedAt(), t.revoked());
     }
 
     private static AccessToken toDomain(KanbanAccessTokenEntity e) {
         return new AccessToken(
-                e.getId(), e.getUserId(), e.getName(), e.getTokenHash(), e.getDisplayName(),
-                e.getCreatedAt(), e.getLastUsedAt(), e.isRevoked());
+                e.getId(), e.getUserId(), e.getProjectId(), e.getBoardId(), e.getName(), e.getTokenHash(),
+                e.getDisplayName(), e.getCreatedAt(), e.getLastUsedAt(), e.isRevoked());
     }
 }

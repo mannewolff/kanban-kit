@@ -36,7 +36,7 @@ class AccessTokenController {
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     CreatedAccessToken create(@AuthenticationPrincipal Long userId, @Valid @RequestBody CreateAccessTokenRequest request) {
-        return accessTokens.create(userId, request.name());
+        return accessTokens.create(userId, request.name(), request.projectId(), request.boardId());
     }
 
     @GetMapping
@@ -50,6 +50,10 @@ class AccessTokenController {
         accessTokens.revoke(userId, id);
     }
 
-    record CreateAccessTokenRequest(@NotBlank @Size(max = 120) String name) {
+    /**
+     * {@code projectId}/{@code boardId} sind optional: sind beide gesetzt, wird das Token an
+     * dieses Board gebunden (Kanban-Compat-API). Beide leer = ungebundenes Token.
+     */
+    record CreateAccessTokenRequest(@NotBlank @Size(max = 120) String name, Long projectId, Long boardId) {
     }
 }

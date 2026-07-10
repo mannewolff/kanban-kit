@@ -20,6 +20,12 @@ class KanbanAccessTokenEntity {
     @Column(name = "user_id", nullable = false)
     private Long userId;
 
+    @Column(name = "project_id")
+    private Long projectId;
+
+    @Column(name = "board_id")
+    private Long boardId;
+
     @Column(name = "name", nullable = false)
     private String name;
 
@@ -42,10 +48,12 @@ class KanbanAccessTokenEntity {
         // für JPA
     }
 
-    KanbanAccessTokenEntity(Long id, Long userId, String name, String tokenHash, String displayName,
-                            Instant createdAt, Instant lastUsedAt, boolean revoked) {
+    KanbanAccessTokenEntity(Long id, Long userId, Long projectId, Long boardId, String name, String tokenHash,
+                            String displayName, Instant createdAt, Instant lastUsedAt, boolean revoked) {
         this.id = id;
         this.userId = userId;
+        this.projectId = projectId;
+        this.boardId = boardId;
         this.name = name;
         this.tokenHash = tokenHash;
         this.displayName = displayName;
@@ -60,6 +68,14 @@ class KanbanAccessTokenEntity {
 
     Long getUserId() {
         return userId;
+    }
+
+    Long getProjectId() {
+        return projectId;
+    }
+
+    Long getBoardId() {
+        return boardId;
     }
 
     String getName() {

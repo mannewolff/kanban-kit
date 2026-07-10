@@ -113,4 +113,86 @@ class AccessTokenIT {
         mvc.perform(get("/api/access-tokens").header("X-Kanban-Token", plaintext))
                 .andExpect(status().isForbidden());
     }
+
+    // --- Projekt-/Board-Bindung (#44) -----------------------------------------
+
+    private long createProject(Cookie session, String name) throws Exception {
+        String body = mvc.perform(post("/api/projects").cookie(session)
+                        .contentType("application/json").content("{\"name\":\"%s\"}".formatted(name)))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        return json.readTree(body).get("id").asLong();
+    }
+
+    private long createBoard(Cookie session, long projectId, String name) throws Exception {
+        String body = mvc.perform(post("/api/projects/" + projectId + "/boards").cookie(session)
+                        .contentType("application/json").content("{\"name\":\"%s\"}".formatted(name)))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        return json.readTree(body).get("id").asLong();
+    }
+
+    @Test
+    void boundTokenAuthenticatesAndPersistsBinding() throws Exception {
+        Cookie session = loginAs("bind-owner@example.com");
+        long projectId = createProject(session, "Bindungsprojekt");
+        long boardId = createBoard(session, projectId, "Board A");
+
+        String body = mvc.perform(post("/api/access-tokens").cookie(session)
+                        .contentType("application/json")
+                        .content("{\"name\":\"Board-A-Token\",\"projectId\":%d,\"boardId\":%d}"
+                                .formatted(projectId, boardId)))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        String plaintext = json.readTree(body).get("plaintext").asText();
+
+        // PAT authentifiziert weiterhin (Filter löst über resolveBinding auf).
+        mvc.perform(get("/api/me").header("X-Kanban-Token", plaintext))
+                .andExpect(status().isOk());
+
+        // Liste (neuestes Token zuerst) zeigt die persistierte Bindung.
+        mvc.perform(get("/api/access-tokens").cookie(session))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].name").value("Board-A-Token"))
+                .andExpect(jsonPath("$[0].projectId").value((int) projectId))
+                .andExpect(jsonPath("$[0].boardId").value((int) boardId));
+    }
+
+    @Test
+    void bindingToBoardWithoutMembershipIsForbidden() throws Exception {
+        Cookie owner = loginAs("bind-a@example.com");
+        long projectId = createProject(owner, "A-Projekt");
+        long boardId = createBoard(owner, projectId, "A-Board");
+
+        Cookie outsider = loginAs("bind-b@example.com");
+        mvc.perform(post("/api/access-tokens").cookie(outsider)
+                        .contentType("application/json")
+                        .content("{\"name\":\"steal\",\"projectId\":%d,\"boardId\":%d}"
+                                .formatted(projectId, boardId)))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void bindingToBoardOfDifferentProjectIsBadRequest() throws Exception {
+        Cookie session = loginAs("bind-cross@example.com");
+        long p1 = createProject(session, "P1");
+        long p2 = createProject(session, "P2");
+        long b1 = createBoard(session, p1, "B1");
+
+        mvc.perform(post("/api/access-tokens").cookie(session)
+                        .contentType("application/json")
+                        .content("{\"name\":\"cross\",\"projectId\":%d,\"boardId\":%d}".formatted(p2, b1)))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void bindingWithOnlyProjectIsBadRequest() throws Exception {
+        Cookie session = loginAs("bind-partial@example.com");
+        long p1 = createProject(session, "PP");
+
+        mvc.perform(post("/api/access-tokens").cookie(session)
+                        .contentType("application/json")
+                        .content("{\"name\":\"partial\",\"projectId\":%d}".formatted(p1)))
+                .andExpect(status().isBadRequest());
+    }
 }

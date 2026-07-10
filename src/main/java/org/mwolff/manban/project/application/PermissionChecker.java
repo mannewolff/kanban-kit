@@ -40,6 +40,22 @@ public class PermissionChecker {
     }
 
     /**
+     * Prüft (ohne zu werfen), ob der Benutzer das Recht im Projekt hat. Ein Plattform-Admin
+     * hat immer Zugriff; ansonsten entscheidet die Projekt-Mitgliedschaft plus Rollen-Rechte-Matrix.
+     * Nichtmitglieder erhalten {@code false} (kein Werfen, kein Existenz-Leak) — der Aufrufer
+     * entscheidet über die Reaktion (z. B. 403 statt 404 bei der Token-Bindung).
+     */
+    @Transactional(readOnly = true)
+    public boolean hasPermission(long userId, long projectId, Permission permission) {
+        if (isPlatformAdmin(userId)) {
+            return true;
+        }
+        return memberships.findByProjectIdAndUserId(projectId, userId)
+                .map(m -> rolePermissions.isGranted(m.role(), permission))
+                .orElse(false);
+    }
+
+    /**
      * Stellt sicher, dass der Benutzer das Recht im Projekt hat.
      *
      * @return die Mitgliedschaft des Benutzers (u. a. für die Rolle in Responses);
