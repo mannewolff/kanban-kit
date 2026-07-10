@@ -26,7 +26,7 @@
 - **Anlegen:** „+" im Spaltenkopf (Karte direkt in dieser Spalte) oder der Button **„Neues Item"**
   oben (legt in der ersten Spalte an). Titel + Markdown-Beschreibung.
 - **Verschieben:** per Drag & Drop zwischen den Spalten. Alternativ über das **⋮-Menü** der Karte
-  („Nach <Spalte>") — auch per Tastatur bedienbar.
+  (Eintrag „Nach Zielspalte") — auch per Tastatur bedienbar.
 - **⋮-Menü:** Bearbeiten (öffnet das Detail im Bearbeiten-Modus), Archivieren, Verschieben.
 - **Done-Countdown:** Karten in einer Done-Spalte zeigen „wird in X Tagen archiviert"
   (steuerbar über `MANBAN_DONE_RETENTION_DAYS`).

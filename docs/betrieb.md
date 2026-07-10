@@ -76,7 +76,7 @@ Admin-Konto — „Admin" ist eine Rolle, die einem echten (E-Mail-)Account verl
 
 Wirkt **nur, solange kein Admin existiert** (selbstheilend, kein Aussperren).
 
-1. `MANBAN_BOOTSTRAP_ADMIN_TOKEN=<geheim>` in der `.env` setzen und **neu bauen** (`docker compose up --build -d`).
+1. `MANBAN_BOOTSTRAP_ADMIN_TOKEN=DEIN_TOKEN` in der `.env` setzen und **neu bauen** (`docker compose up --build -d`).
 2. Normal **registrieren** und **einloggen** (E-Mail vorher bestätigen, s. o.).
 3. Eingeloggt **`https://localhost/admin/bootstrap`** öffnen, den Token eingeben → „Admin werden".
 
