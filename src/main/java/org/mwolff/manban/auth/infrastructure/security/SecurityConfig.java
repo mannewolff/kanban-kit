@@ -45,6 +45,8 @@ class SecurityConfig {
                         // Admin-Bereich (inkl. Bootstrap) nur per Session-Login, nicht per PAT.
                         // Die Admin-Autorisierung selbst erledigt der AdminService pro Endpunkt.
                         .requestMatchers("/api/admin/**").hasAuthority(SessionAuthenticationFilter.AUTHORITY)
+                        // Kanban-Compat-API (tbx.mjs/board.mjs) ausschließlich per PAT.
+                        .requestMatchers("/api/kanban/**").hasAuthority(PatAuthenticationFilter.AUTHORITY)
                         .requestMatchers("/api/**").authenticated()
                         .anyRequest().permitAll())
                 .exceptionHandling(e -> e.authenticationEntryPoint(
