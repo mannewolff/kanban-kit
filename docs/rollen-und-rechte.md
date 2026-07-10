@@ -1,0 +1,44 @@
+# Rollen & Rechte
+
+kanban-kit hat **zwei** Rollen-Ebenen. Sie werden oft verwechselt — deshalb zuerst die Abgrenzung:
+
+| Ebene | Werte | Gültigkeit | Wo sichtbar |
+|------|-------|------------|-------------|
+| **Plattform-Rolle** | `USER`, `ADMIN` | instanzweit (ganzes System) | „Admin"-Bereich / Seitenleiste |
+| **Projekt-Rolle** | `OWNER`, `ADMIN`, `MEMBER`, `VIEWER` | pro Projekt (Mitgliedschaft) | Mitglieder-Seite eines Projekts |
+
+Ein Nutzer kann also plattformweit **USER** sein und in *seinem* Projekt trotzdem **OWNER** — beides ist
+unabhängig. Die Mitglieder-Seite zeigt ausschließlich die **Projekt-Rolle**.
+
+## Projekt-Rollen: Rechte-Matrix
+
+| Recht | VIEWER | MEMBER | ADMIN | OWNER |
+|-------|:------:|:------:|:-----:|:-----:|
+| Boards & Karten lesen | ✓ | ✓ | ✓ | ✓ |
+| Karten anlegen / verschieben / löschen | – | ✓ | ✓ | ✓ |
+| Kommentare schreiben | – | ✓ | ✓ | ✓ |
+| Anhänge hochladen | – | ✓ | ✓ | ✓ |
+| Spalten bearbeiten | – | – | ✓ | ✓ |
+| Boards anlegen / löschen | – | – | ✓ | ✓ |
+| Mitglieder einladen / entfernen | – | – | ✓ | ✓ |
+| Projekt umbenennen / löschen | – | – | – | ✓ |
+
+Dieselbe Übersicht ist in der App unter **`/roles`** erreichbar (Link „Rollen & Rechte" auf der
+Mitglieder-Seite).
+
+## Plattform-Rollen
+
+- **USER** — sieht und bearbeitet nur eigene Projekte bzw. Projekte, in denen er Mitglied ist.
+- **ADMIN** — **Super-User**: Vollzugriff auf **alle** Projekte (unabhängig von der Mitgliedschaft) und
+  **Nutzerverwaltung**.
+
+## Admin-Bereich (`/admin`)
+
+Nur für Plattform-Admins sichtbar (Eintrag „Admin" in der Seitenleiste):
+
+- **Nutzerliste** (E-Mail, Name, verifiziert, Rolle).
+- **Plattform-Rolle umschalten** (USER ↔ ADMIN).
+- **Schutz:** der **letzte** Plattform-Admin kann nicht degradiert werden (kein Aussperren).
+
+Den ersten Admin richtet man über den Bootstrap-Token oder direkt in der DB ein — siehe
+[Betrieb → Den ersten Admin einrichten](betrieb.md#den-ersten-admin-einrichten).
