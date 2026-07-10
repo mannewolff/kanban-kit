@@ -1,10 +1,12 @@
 /**
- * Statusfarben je Spalte, aus dem Spaltennamen abgeleitet (portiert aus der Toolbox,
- * kit/board-ui.mjs). Bewusste Ausnahme von "Farben nur über das Theme": Board-Status ist
- * eine feste, kleine, semantische Menge — ein zentraler Ort statt verstreuter Hex-Werte.
+ * Statusfarben je Spalte, aus dem Spaltennamen abgeleitet. Bewusste Ausnahme von
+ * "Farben nur über das Theme": Board-Status ist eine feste, kleine, semantische Menge —
+ * ein zentraler Ort statt verstreuter Hex-Werte. Entsättigt auf die Marken-Familie
+ * (brand.md): weiche, helle Tints als Pill-Flächen, dunkler Text derselben Familie, ein
+ * ruhiger Akzent-Punkt.
  */
 export interface StatusColorSet {
-  /** Hintergrund für Spalten-Header. */
+  /** Weiche Tint-Fläche (Pills/Badges). */
   bg: string
   /** Textfarbe auf {@link bg}. */
   text: string
@@ -12,17 +14,18 @@ export interface StatusColorSet {
   dot: string
 }
 
-const NEUTRAL: StatusColorSet = { bg: '#dfe1e6', text: '#42526e', dot: '#6b7280' }
+const NEUTRAL: StatusColorSet = { bg: '#F1F5F6', text: '#5F7A7F', dot: '#8FA6AB' }
 
 // Reihenfolge nach Namensmuster; erster Treffer gewinnt (keine Überschneidungen).
 const PALETTE: ReadonlyArray<{ match: string; colors: StatusColorSet }> = [
-  { match: 'done', colors: { bg: '#e3fcef', text: '#006644', dot: '#0e8a16' } },
-  { match: 'review', colors: { bg: '#ffedeb', text: '#bf2600', dot: '#d93f0b' } },
-  { match: 'progress', colors: { bg: '#fffae6', text: '#7a6000', dot: '#e4b400' } },
-  { match: 'ready', colors: { bg: '#deebff', text: '#0747a6', dot: '#0075ca' } },
+  { match: 'done', colors: { bg: '#E4F3EC', text: '#14624A', dot: '#2E9E7A' } },
+  { match: 'review', colors: { bg: '#F7EAE4', text: '#8A3F28', dot: '#C46B4E' } },
+  { match: 'progress', colors: { bg: '#FAF3E3', text: '#7A5B12', dot: '#C99A2E' } },
+  { match: 'ready', colors: { bg: '#E1F0F2', text: '#1E5F68', dot: '#2F8C97' } },
+  { match: 'backlog', colors: { bg: '#EDF5F6', text: '#1E5F68', dot: '#5BABB5' } },
 ]
 
-/** Volles Farbset einer Spalte (Header-Hintergrund, Text, Punkt). */
+/** Volles Farbset einer Spalte (Tint-Fläche, Text, Punkt). */
 export function statusColors(name: string): StatusColorSet {
   const n = name.toLowerCase()
   for (const entry of PALETTE) {
@@ -33,14 +36,14 @@ export function statusColors(name: string): StatusColorSet {
   return NEUTRAL
 }
 
-/** Neutrale Spaltenfläche (Kit: #ebecf0). */
-export const COLUMN_SURFACE_BG = '#ebecf0'
+/** Neutrale Spaltenfläche (hell, Marken-Ton). */
+export const COLUMN_SURFACE_BG = '#F6FAFB'
 
 /** Farbe für archivierte Items (Badges/Listen). */
-export const ARCHIVED_STATUS_COLOR: StatusColorSet = { bg: '#f0f0f0', text: '#666666', dot: '#9e9e9e' }
+export const ARCHIVED_STATUS_COLOR: StatusColorSet = { bg: '#F0F2F2', text: '#5F7A7F', dot: '#9FB0B4' }
 
-/** Chrome-Farben des Detail-Modals (aus der Toolbox), bewusst außerhalb des Themes. */
-export const MODAL_BORDER = '#e8e8e8'
-export const MODAL_HEADER_BG = '#f7f8fa'
-export const MODAL_TEXT_PRIMARY = '#344563'
-export const MODAL_TEXT_SECONDARY = '#6b778c'
+/** Chrome-Farben des Detail-Modals (Marken-Töne). */
+export const MODAL_BORDER = '#D8ECEE'
+export const MODAL_HEADER_BG = '#F6FAFB'
+export const MODAL_TEXT_PRIMARY = '#243539'
+export const MODAL_TEXT_SECONDARY = '#5F7A7F'

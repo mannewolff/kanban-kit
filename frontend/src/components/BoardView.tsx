@@ -194,18 +194,18 @@ export function BoardView({
                 overflow: 'hidden',
               }}
             >
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 1.5, py: 1, bgcolor: colors.bg, color: colors.text }}>
-                <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: colors.dot, flexShrink: 0 }} />
-                <Typography variant="subtitle2" sx={{ fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.04em', flexGrow: 1 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 1.5, py: 1, bgcolor: '#FFFFFF', borderBottom: '1px solid #D8ECEE' }}>
+                <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: colors.dot, flexShrink: 0 }} />
+                <Typography variant="caption" sx={{ fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.08em', color: '#5F7A7F', flexGrow: 1 }}>
                   {column.name}
                 </Typography>
-                <Typography variant="caption" sx={{ opacity: 0.75 }}>
+                <Typography variant="caption" sx={{ color: '#5F7A7F', bgcolor: '#F6FAFB', border: '1px solid #D8ECEE', borderRadius: 10, px: 0.75, lineHeight: 1.6 }}>
                   {column.wipLimit != null ? `${count}/${column.wipLimit}` : count}
                 </Typography>
                 {canEdit && (
                   <Tooltip title="Karte anlegen">
                     <IconButton size="small" aria-label={`Karte in ${column.name} anlegen`}
-                      onClick={() => setModalColumn({ id: column.id, name: column.name })} sx={{ color: colors.text }}>
+                      onClick={() => setModalColumn({ id: column.id, name: column.name })} sx={{ color: 'text.secondary' }}>
                       <AddIcon fontSize="small" />
                     </IconButton>
                   </Tooltip>
@@ -223,14 +223,16 @@ export function BoardView({
                       draggable={canEdit}
                       onDragStart={(e) => e.dataTransfer.setData('text/plain', String(card.id))}
                       onClick={() => onCardClick?.(card)}
-                      elevation={1}
+                      elevation={0}
                       sx={{
                         p: 1.25,
                         borderRadius: 1.5,
+                        bgcolor: '#FFFFFF',
+                        border: '1px solid #D8ECEE',
                         borderLeft: epic ? `4px solid ${epicColor(epic.id)}` : undefined,
                         cursor: canEdit ? 'grab' : 'pointer',
-                        transition: 'box-shadow .15s',
-                        '&:hover': { boxShadow: 3 },
+                        transition: 'border-color .15s',
+                        '&:hover': { borderColor: '#5BABB5' },
                         '&:active': { cursor: canEdit ? 'grabbing' : 'pointer' },
                       }}
                     >
