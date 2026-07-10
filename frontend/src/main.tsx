@@ -1,3 +1,5 @@
+import '@fontsource/carlito/400.css'
+import '@fontsource/carlito/700.css'
 import CssBaseline from '@mui/material/CssBaseline'
 import { ThemeProvider } from '@mui/material/styles'
 import { StrictMode } from 'react'
