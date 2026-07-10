@@ -1,5 +1,6 @@
 package org.mwolff.manban.project.application;
 
+import java.util.Set;
 import org.mwolff.manban.project.domain.Permission;
 import org.mwolff.manban.project.domain.ProjectRole;
 
@@ -7,4 +8,7 @@ import org.mwolff.manban.project.domain.ProjectRole;
 public interface RolePermissionRepository {
 
     boolean isGranted(ProjectRole role, Permission permission);
+
+    /** Alle einer Rolle gewährten Rechte (für die Matrix-Anzeige). */
+    Set<Permission> grantedTo(ProjectRole role);
 }

@@ -1,5 +1,8 @@
 package org.mwolff.manban.project.infrastructure.persistence;
 
+import java.util.EnumSet;
+import java.util.List;
+import java.util.Set;
 import org.mwolff.manban.project.application.RolePermissionRepository;
 import org.mwolff.manban.project.domain.Permission;
 import org.mwolff.manban.project.domain.ProjectRole;
@@ -26,5 +29,16 @@ class JdbcRolePermissionRepository implements RolePermissionRepository {
                         + "WHERE rp.role = ? AND p.key = ?",
                 Integer.class, role.name(), permission.name());
         return count != null && count > 0;
+    }
+
+    @Override
+    public Set<Permission> grantedTo(ProjectRole role) {
+        List<String> keys = jdbc.queryForList(
+                "SELECT p.key FROM role_permission rp JOIN permission p ON p.id = rp.permission_id "
+                        + "WHERE rp.role = ?",
+                String.class, role.name());
+        Set<Permission> result = EnumSet.noneOf(Permission.class);
+        keys.forEach(key -> result.add(Permission.valueOf(key)));
+        return result;
     }
 }
