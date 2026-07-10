@@ -76,8 +76,10 @@ class AttachmentIT {
                         .content("{\"email\":\"%s\",\"password\":\"%s\"}".formatted(email, PASSWORD)))
                 .andExpect(status().isOk()).andReturn().getResponse().getCookie("manban_session");
 
-        long projectId = json.readTree(mvc.perform(post("/api/projects").cookie(login)
-                        .contentType("application/json").content("{\"name\":\"P\"}"))
+        Cookie admin = platformAdminSession();
+        long projectId = json.readTree(mvc.perform(post("/api/projects").cookie(admin)
+                        .contentType("application/json")
+                        .content("{\"name\":\"P\",\"ownerEmail\":\"%s\"}".formatted(email)))
                 .andReturn().getResponse().getContentAsString()).get("id").asLong();
         JsonNode board = json.readTree(mvc.perform(post("/api/projects/" + projectId + "/boards").cookie(login)
                         .contentType("application/json").content("{\"name\":\"B\"}"))
@@ -94,6 +96,17 @@ class AttachmentIT {
                         .file(new MockMultipartFile("file", filename, declaredType, content)).cookie(login))
                 .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
         return json.readTree(body).get("id").asLong();
+    }
+
+    private Cookie platformAdminSession() throws Exception {
+        String email = "project-admin@example.com";
+        if (users.findByEmail(email).isEmpty()) {
+            users.save(new AppUser(null, email, passwordEncoder.encode(PASSWORD), "Person", true, PlatformRole.ADMIN));
+        }
+        return mvc.perform(post("/api/auth/login").contentType("application/json")
+                        .content("{\"email\":\"%s\",\"password\":\"%s\"}".formatted(email, PASSWORD)))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getCookie("manban_session");
     }
 
     @Test

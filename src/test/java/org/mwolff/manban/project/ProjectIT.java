@@ -1,5 +1,6 @@
 package org.mwolff.manban.project;
 
+import static org.hamcrest.Matchers.hasItem;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
@@ -68,75 +69,116 @@ class ProjectIT {
                 .andReturn().getResponse().getCookie("manban_session");
     }
 
-    private long createProject(Cookie session, String name) throws Exception {
-        String body = mvc.perform(post("/api/projects").cookie(session)
-                        .contentType("application/json").content("{\"name\":\"%s\"}".formatted(name)))
+    private long createProject(String ownerEmail, String name) throws Exception {
+        if (users.findByEmail(ownerEmail).isEmpty()) {
+            users.save(new AppUser(null, ownerEmail, passwordEncoder.encode(PASSWORD), "Person", true, PlatformRole.USER));
+        }
+        Cookie admin = platformAdminSession();
+        String body = mvc.perform(post("/api/projects").cookie(admin)
+                        .contentType("application/json")
+                        .content("{\"name\":\"%s\",\"ownerEmail\":\"%s\"}".formatted(name, ownerEmail)))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.role").value("OWNER"))
                 .andReturn().getResponse().getContentAsString();
         return json.readTree(body).get("id").asLong();
     }
 
-    @Test
-    void creatorBecomesOwnerAndSeesProjectInList() throws Exception {
-        Cookie alice = loginAs("alice-p1@example.com");
-        createProject(alice, "Alices Projekt");
-
-        mvc.perform(get("/api/projects").cookie(alice))
+    private Cookie platformAdminSession() throws Exception {
+        String email = "project-admin@example.com";
+        if (users.findByEmail(email).isEmpty()) {
+            users.save(new AppUser(null, email, passwordEncoder.encode(PASSWORD), "Person", true, PlatformRole.ADMIN));
+        }
+        return mvc.perform(post("/api/auth/login").contentType("application/json")
+                        .content("{\"email\":\"%s\",\"password\":\"%s\"}".formatted(email, PASSWORD)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[?(@.name=='Alices Projekt')].role").value(org.hamcrest.Matchers.hasItem("OWNER")));
+                .andReturn().getResponse().getCookie("manban_session");
     }
 
     @Test
-    void nonMemberGets404AndDoesNotSeeProject() throws Exception {
-        Cookie alice = loginAs("alice-iso@example.com");
+    void adminCreatesProjectWithChosenOwner() throws Exception {
+        Cookie alice = loginAs("alice-p1@example.com");
+        createProject("alice-p1@example.com", "Alices Projekt");
+
+        // Alice (normaler USER) ist OWNER und sieht das Projekt.
+        mvc.perform(get("/api/projects").cookie(alice))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.name=='Alices Projekt')].role").value(hasItem("OWNER")));
+    }
+
+    @Test
+    void nonAdminCannotCreateProject() throws Exception {
+        Cookie alice = loginAs("alice-nonadmin@example.com");
+        mvc.perform(post("/api/projects").cookie(alice)
+                        .contentType("application/json")
+                        .content("{\"name\":\"X\",\"ownerEmail\":\"alice-nonadmin@example.com\"}"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void unknownOwnerEmailIsBadRequest() throws Exception {
+        mvc.perform(post("/api/projects").cookie(platformAdminSession())
+                        .contentType("application/json")
+                        .content("{\"name\":\"X\",\"ownerEmail\":\"ghost@example.com\"}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void nonMemberCannotSeeOrModify() throws Exception {
+        loginAs("alice-iso@example.com");
         Cookie bob = loginAs("bob-iso@example.com");
-        long projectId = createProject(alice, "Geheim");
+        long projectId = createProject("alice-iso@example.com", "Geheim");
 
         // Bobs Liste enthält Alices Projekt nicht.
         mvc.perform(get("/api/projects").cookie(bob))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[?(@.name=='Geheim')]").isEmpty());
 
-        // Nichtmitglied -> 404 (kein Existenz-Leak), nicht 403.
+        // Umbenennen durch Nichtmitglied -> 404 (kein Existenz-Leak).
         mvc.perform(patch("/api/projects/" + projectId).cookie(bob)
                         .contentType("application/json").content("{\"name\":\"gekapert\"}"))
                 .andExpect(status().isNotFound());
+
+        // Löschen ist System-Admin-Sache -> Nicht-Admin 403.
         mvc.perform(delete("/api/projects/" + projectId).cookie(bob))
-                .andExpect(status().isNotFound());
+                .andExpect(status().isForbidden());
     }
 
     @Test
-    void ownerCanRenameAndDelete() throws Exception {
+    void ownerRenamesButOnlyAdminDeletes() throws Exception {
         Cookie alice = loginAs("alice-crud@example.com");
-        long projectId = createProject(alice, "Alt");
+        long projectId = createProject("alice-crud@example.com", "Alt");
 
+        // Owner darf umbenennen.
         mvc.perform(patch("/api/projects/" + projectId).cookie(alice)
                         .contentType("application/json").content("{\"name\":\"Neu\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.name").value("Neu"));
 
+        // Owner darf NICHT löschen (nur System-Admin).
         mvc.perform(delete("/api/projects/" + projectId).cookie(alice))
-                .andExpect(status().isNoContent());
+                .andExpect(status().isForbidden());
 
+        // System-Admin löscht.
+        mvc.perform(delete("/api/projects/" + projectId).cookie(platformAdminSession()))
+                .andExpect(status().isNoContent());
         mvc.perform(get("/api/projects").cookie(alice))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[?(@.id==" + projectId + ")]").isEmpty());
     }
 
     @Test
-    void memberWithoutOwnerRoleCannotModify() throws Exception {
+    void memberCannotModify() throws Exception {
         Cookie alice = loginAs("alice-role@example.com");
         Cookie carol = loginAs("carol-role@example.com");
-        long projectId = createProject(alice, "Team");
+        long projectId = createProject("alice-role@example.com", "Team");
 
-        // Carol als MEMBER hinzufügen (Einladung kommt erst mit P3; hier direkt gesetzt).
+        // Carol als MEMBER hinzufügen.
         memberships.save(new ProjectMembership(null, projectId, userId("carol-role@example.com"),
                 ProjectRole.MEMBER, Instant.now()));
 
-        // Sieht das Projekt (Mitglied), darf es aber nicht umbenennen/löschen (nicht OWNER) -> 403.
+        // Sieht das Projekt (Mitglied), darf es aber nicht umbenennen (nicht OWNER) bzw. löschen (nicht Admin).
         mvc.perform(get("/api/projects").cookie(carol))
-                .andExpect(jsonPath("$[?(@.id==" + projectId + ")].role").value(org.hamcrest.Matchers.hasItem("MEMBER")));
+                .andExpect(jsonPath("$[?(@.id==" + projectId + ")].role").value(hasItem("MEMBER")));
         mvc.perform(patch("/api/projects/" + projectId).cookie(carol)
                         .contentType("application/json").content("{\"name\":\"x\"}"))
                 .andExpect(status().isForbidden());

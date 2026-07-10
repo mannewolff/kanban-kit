@@ -64,11 +64,27 @@ class CardIT {
                 .andReturn().getResponse().getCookie("manban_session");
     }
 
-    private long createProject(Cookie session, String name) throws Exception {
-        String body = mvc.perform(post("/api/projects").cookie(session)
-                        .contentType("application/json").content("{\"name\":\"%s\"}".formatted(name)))
+    private long createProject(String ownerEmail, String name) throws Exception {
+        if (users.findByEmail(ownerEmail).isEmpty()) {
+            users.save(new AppUser(null, ownerEmail, passwordEncoder.encode(PASSWORD), "Person", true, PlatformRole.USER));
+        }
+        Cookie admin = platformAdminSession();
+        String body = mvc.perform(post("/api/projects").cookie(admin)
+                        .contentType("application/json")
+                        .content("{\"name\":\"%s\",\"ownerEmail\":\"%s\"}".formatted(name, ownerEmail)))
                 .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
         return json.readTree(body).get("id").asLong();
+    }
+
+    private Cookie platformAdminSession() throws Exception {
+        String email = "project-admin@example.com";
+        if (users.findByEmail(email).isEmpty()) {
+            users.save(new AppUser(null, email, passwordEncoder.encode(PASSWORD), "Person", true, PlatformRole.ADMIN));
+        }
+        return mvc.perform(post("/api/auth/login").contentType("application/json")
+                        .content("{\"email\":\"%s\",\"password\":\"%s\"}".formatted(email, PASSWORD)))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getCookie("manban_session");
     }
 
     private JsonNode createBoard(Cookie session, long projectId) throws Exception {
@@ -91,7 +107,7 @@ class CardIT {
     @Test
     void cardNumbersAreSequentialAndBoardScoped() throws Exception {
         Cookie alice = loginAs("card-owner@example.com");
-        long projectId = createProject(alice, "P");
+        long projectId = createProject("card-owner@example.com", "P");
         JsonNode board = createBoard(alice, projectId);
         long boardId = board.get("id").asLong();
         long columnId = board.get("columns").get(0).get("id").asLong();
@@ -112,7 +128,7 @@ class CardIT {
     @Test
     void dependencyValidation() throws Exception {
         Cookie alice = loginAs("dep-owner@example.com");
-        long projectId = createProject(alice, "Dep");
+        long projectId = createProject("dep-owner@example.com", "Dep");
         JsonNode board = createBoard(alice, projectId);
         long boardId = board.get("id").asLong();
         long columnId = board.get("columns").get(0).get("id").asLong();
@@ -137,7 +153,7 @@ class CardIT {
     @Test
     void archiveRestoreFlow() throws Exception {
         Cookie alice = loginAs("arch-owner@example.com");
-        long projectId = createProject(alice, "Arch");
+        long projectId = createProject("arch-owner@example.com", "Arch");
         JsonNode board = createBoard(alice, projectId);
         long boardId = board.get("id").asLong();
         long columnId = board.get("columns").get(0).get("id").asLong();
@@ -158,7 +174,7 @@ class CardIT {
     @Test
     void updateAndDelete() throws Exception {
         Cookie alice = loginAs("ud-owner@example.com");
-        long projectId = createProject(alice, "UD");
+        long projectId = createProject("ud-owner@example.com", "UD");
         JsonNode board = createBoard(alice, projectId);
         long boardId = board.get("id").asLong();
         long columnId = board.get("columns").get(0).get("id").asLong();
@@ -181,7 +197,7 @@ class CardIT {
     void viewerCannotCreateCard() throws Exception {
         Cookie alice = loginAs("cc-owner@example.com");
         Cookie viewer = loginAs("cc-viewer@example.com");
-        long projectId = createProject(alice, "V");
+        long projectId = createProject("cc-owner@example.com", "V");
         JsonNode board = createBoard(alice, projectId);
         long boardId = board.get("id").asLong();
         long columnId = board.get("columns").get(0).get("id").asLong();

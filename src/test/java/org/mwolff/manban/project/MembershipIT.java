@@ -96,19 +96,35 @@ class MembershipIT {
                 .andReturn().getResponse().getCookie("manban_session");
     }
 
-    private long createProject(Cookie session, String name) throws Exception {
-        String body = mvc.perform(post("/api/projects").cookie(session)
-                        .contentType("application/json").content("{\"name\":\"%s\"}".formatted(name)))
+    private long createProject(String ownerEmail, String name) throws Exception {
+        if (users.findByEmail(ownerEmail).isEmpty()) {
+            users.save(new AppUser(null, ownerEmail, passwordEncoder.encode(PASSWORD), "Person", true, PlatformRole.USER));
+        }
+        Cookie admin = platformAdminSession();
+        String body = mvc.perform(post("/api/projects").cookie(admin)
+                        .contentType("application/json")
+                        .content("{\"name\":\"%s\",\"ownerEmail\":\"%s\"}".formatted(name, ownerEmail)))
                 .andExpect(status().isCreated())
                 .andReturn().getResponse().getContentAsString();
         return json.readTree(body).get("id").asLong();
+    }
+
+    private Cookie platformAdminSession() throws Exception {
+        String email = "project-admin@example.com";
+        if (users.findByEmail(email).isEmpty()) {
+            users.save(new AppUser(null, email, passwordEncoder.encode(PASSWORD), "Person", true, PlatformRole.ADMIN));
+        }
+        return mvc.perform(post("/api/auth/login").contentType("application/json")
+                        .content("{\"email\":\"%s\",\"password\":\"%s\"}".formatted(email, PASSWORD)))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getCookie("manban_session");
     }
 
     @Test
     void inviteAcceptFlowGrantsCorrectRole() throws Exception {
         Cookie alice = loginAs("owner-inv@example.com");
         Cookie bob = loginAs("member-inv@example.com");
-        long projectId = createProject(alice, "Team");
+        long projectId = createProject("owner-inv@example.com", "Team");
 
         mvc.perform(post("/api/projects/" + projectId + "/invitations").cookie(alice)
                         .contentType("application/json")
@@ -132,7 +148,7 @@ class MembershipIT {
     void expiredInvitationIsRejected() throws Exception {
         Cookie alice = loginAs("owner-exp@example.com");
         Cookie carol = loginAs("carol-exp@example.com");
-        long projectId = createProject(alice, "Expired");
+        long projectId = createProject("owner-exp@example.com", "Expired");
 
         String plaintext = "abgelaufene-einladung";
         invitations.save(new ProjectInvitation(null, projectId, "carol-exp@example.com", ProjectRole.MEMBER,
@@ -146,7 +162,7 @@ class MembershipIT {
     @Test
     void lastOwnerCannotBeRemoved() throws Exception {
         Cookie alice = loginAs("solo-owner@example.com");
-        long projectId = createProject(alice, "Solo");
+        long projectId = createProject("solo-owner@example.com", "Solo");
 
         mvc.perform(delete("/api/projects/" + projectId + "/members/" + userId("solo-owner@example.com"))
                         .cookie(alice))
@@ -157,7 +173,7 @@ class MembershipIT {
     void memberWithoutInvitePermissionCannotInvite() throws Exception {
         Cookie alice = loginAs("owner-perm@example.com");
         Cookie bob = loginAs("plain-member@example.com");
-        long projectId = createProject(alice, "Perm");
+        long projectId = createProject("owner-perm@example.com", "Perm");
         memberships.save(new ProjectMembership(null, projectId, userId("plain-member@example.com"),
                 ProjectRole.MEMBER, Instant.now()));
 
@@ -171,7 +187,7 @@ class MembershipIT {
     void acceptWithMismatchedEmailIsForbidden() throws Exception {
         Cookie alice = loginAs("owner-mism@example.com");
         Cookie mallory = loginAs("mallory@example.com");
-        long projectId = createProject(alice, "Mismatch");
+        long projectId = createProject("owner-mism@example.com", "Mismatch");
 
         mvc.perform(post("/api/projects/" + projectId + "/invitations").cookie(alice)
                         .contentType("application/json")
@@ -188,7 +204,7 @@ class MembershipIT {
     void ownerCanChangeMemberRoleAndRemove() throws Exception {
         Cookie alice = loginAs("owner-mgmt@example.com");
         loginAs("target-mgmt@example.com");
-        long projectId = createProject(alice, "Manage");
+        long projectId = createProject("owner-mgmt@example.com", "Manage");
         long targetId = userId("target-mgmt@example.com");
         memberships.save(new ProjectMembership(null, projectId, targetId, ProjectRole.MEMBER, Instant.now()));
 

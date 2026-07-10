@@ -103,7 +103,7 @@ class RbacMatrixIT {
     void adminMemberCannotEditProjectButOwnerCan() throws Exception {
         Cookie alice = loginAs("owner-rbac@example.com");
         Cookie bob = loginAs("admin-rbac@example.com");
-        long projectId = createProject(alice, "RBAC");
+        long projectId = createProject("owner-rbac@example.com", "RBAC");
 
         // Bob als ADMIN — hat BOARD_CREATE, aber NICHT PROJECT_EDIT.
         memberships.save(new ProjectMembership(null, projectId, userId("admin-rbac@example.com"),
@@ -131,11 +131,27 @@ class RbacMatrixIT {
                 .andReturn().getResponse().getCookie("manban_session");
     }
 
-    private long createProject(Cookie session, String name) throws Exception {
-        String body = mvc.perform(post("/api/projects").cookie(session)
-                        .contentType("application/json").content("{\"name\":\"%s\"}".formatted(name)))
+    private long createProject(String ownerEmail, String name) throws Exception {
+        if (users.findByEmail(ownerEmail).isEmpty()) {
+            users.save(new AppUser(null, ownerEmail, passwordEncoder.encode(PASSWORD), "Person", true, PlatformRole.USER));
+        }
+        Cookie admin = platformAdminSession();
+        String body = mvc.perform(post("/api/projects").cookie(admin)
+                        .contentType("application/json")
+                        .content("{\"name\":\"%s\",\"ownerEmail\":\"%s\"}".formatted(name, ownerEmail)))
                 .andExpect(status().isCreated())
                 .andReturn().getResponse().getContentAsString();
         return json.readTree(body).get("id").asLong();
+    }
+
+    private Cookie platformAdminSession() throws Exception {
+        String email = "project-admin@example.com";
+        if (users.findByEmail(email).isEmpty()) {
+            users.save(new AppUser(null, email, passwordEncoder.encode(PASSWORD), "Person", true, PlatformRole.ADMIN));
+        }
+        return mvc.perform(post("/api/auth/login").contentType("application/json")
+                        .content("{\"email\":\"%s\",\"password\":\"%s\"}".formatted(email, PASSWORD)))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getCookie("manban_session");
     }
 }

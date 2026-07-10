@@ -68,11 +68,27 @@ class BoardIT {
                 .andReturn().getResponse().getCookie("manban_session");
     }
 
-    private long createProject(Cookie session, String name) throws Exception {
-        String body = mvc.perform(post("/api/projects").cookie(session)
-                        .contentType("application/json").content("{\"name\":\"%s\"}".formatted(name)))
+    private long createProject(String ownerEmail, String name) throws Exception {
+        if (users.findByEmail(ownerEmail).isEmpty()) {
+            users.save(new AppUser(null, ownerEmail, passwordEncoder.encode(PASSWORD), "Person", true, PlatformRole.USER));
+        }
+        Cookie admin = platformAdminSession();
+        String body = mvc.perform(post("/api/projects").cookie(admin)
+                        .contentType("application/json")
+                        .content("{\"name\":\"%s\",\"ownerEmail\":\"%s\"}".formatted(name, ownerEmail)))
                 .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
         return json.readTree(body).get("id").asLong();
+    }
+
+    private Cookie platformAdminSession() throws Exception {
+        String email = "project-admin@example.com";
+        if (users.findByEmail(email).isEmpty()) {
+            users.save(new AppUser(null, email, passwordEncoder.encode(PASSWORD), "Person", true, PlatformRole.ADMIN));
+        }
+        return mvc.perform(post("/api/auth/login").contentType("application/json")
+                        .content("{\"email\":\"%s\",\"password\":\"%s\"}".formatted(email, PASSWORD)))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getCookie("manban_session");
     }
 
     private JsonNode createBoard(Cookie session, long projectId, String name) throws Exception {
@@ -85,7 +101,7 @@ class BoardIT {
     @Test
     void boardCreatedWithDefaultColumns() throws Exception {
         Cookie alice = loginAs("board-owner@example.com");
-        long projectId = createProject(alice, "P");
+        long projectId = createProject("board-owner@example.com", "P");
 
         mvc.perform(post("/api/projects/" + projectId + "/boards").cookie(alice)
                         .contentType("application/json").content("{\"name\":\"Board 1\"}"))
@@ -104,7 +120,7 @@ class BoardIT {
     void nonMemberCannotCreateBoard() throws Exception {
         Cookie alice = loginAs("bo-owner@example.com");
         Cookie eve = loginAs("bo-eve@example.com");
-        long projectId = createProject(alice, "Closed");
+        long projectId = createProject("bo-owner@example.com", "Closed");
 
         mvc.perform(post("/api/projects/" + projectId + "/boards").cookie(eve)
                         .contentType("application/json").content("{\"name\":\"X\"}"))
@@ -115,7 +131,7 @@ class BoardIT {
     void viewerCannotEditColumns() throws Exception {
         Cookie alice = loginAs("col-owner@example.com");
         Cookie viewer = loginAs("col-viewer@example.com");
-        long projectId = createProject(alice, "RBAC");
+        long projectId = createProject("col-owner@example.com", "RBAC");
         long boardId = createBoard(alice, projectId, "B").get("id").asLong();
         memberships.save(new ProjectMembership(null, projectId, userId("col-viewer@example.com"),
                 ProjectRole.VIEWER, Instant.now()));
@@ -128,7 +144,7 @@ class BoardIT {
     @Test
     void columnLifecycleAddUpdateReorderDelete() throws Exception {
         Cookie alice = loginAs("cl-owner@example.com");
-        long projectId = createProject(alice, "CL");
+        long projectId = createProject("cl-owner@example.com", "CL");
         JsonNode board = createBoard(alice, projectId, "B");
         long boardId = board.get("id").asLong();
 
@@ -168,7 +184,7 @@ class BoardIT {
     @Test
     void getBoardReturnsColumns() throws Exception {
         Cookie alice = loginAs("get-board@example.com");
-        long projectId = createProject(alice, "GB");
+        long projectId = createProject("get-board@example.com", "GB");
         long boardId = createBoard(alice, projectId, "Board").get("id").asLong();
 
         mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
@@ -181,7 +197,7 @@ class BoardIT {
     @Test
     void deleteColumnWithCardsIsBlocked() throws Exception {
         Cookie alice = loginAs("cards-owner@example.com");
-        long projectId = createProject(alice, "Cards");
+        long projectId = createProject("cards-owner@example.com", "Cards");
         JsonNode board = createBoard(alice, projectId, "B");
         long boardId = board.get("id").asLong();
         long columnId = board.get("columns").get(0).get("id").asLong();

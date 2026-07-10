@@ -64,7 +64,7 @@ class RoleMatrixIT {
                 .andExpect(jsonPath("$.roles[0]").value("VIEWER"))
                 .andExpect(jsonPath("$.roles[3]").value("OWNER"))
                 // Rechte inkl. abgeleiteter Ressource/Operation
-                .andExpect(jsonPath("$.permissions.length()").value(24))
+                .andExpect(jsonPath("$.permissions.length()").value(23))
                 .andExpect(jsonPath("$.permissions[?(@.key=='BOARD_CREATE')].resource").value(hasItem("BOARD")))
                 .andExpect(jsonPath("$.permissions[?(@.key=='BOARD_CREATE')].operation").value(hasItem("CREATE")))
                 // Grants je Rolle passend zum V4-Seed
@@ -75,7 +75,7 @@ class RoleMatrixIT {
                 .andExpect(jsonPath("$.grants.MEMBER").value(not(hasItem("COMMENT_DELETE"))))
                 .andExpect(jsonPath("$.grants.ADMIN.length()").value(22))
                 .andExpect(jsonPath("$.grants.ADMIN").value(hasItem("COMMENT_DELETE")))
-                .andExpect(jsonPath("$.grants.OWNER.length()").value(24));
+                .andExpect(jsonPath("$.grants.OWNER.length()").value(23));
     }
 
     @Test

@@ -38,6 +38,5 @@ public enum Permission {
     MEMBER_INVITE,
     MEMBER_REMOVE,
 
-    PROJECT_EDIT,
-    PROJECT_DELETE
+    PROJECT_EDIT
 }

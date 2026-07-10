@@ -56,8 +56,10 @@ class DoneRetentionIT {
     @Test
     void archivesOnlyExpiredDoneCards() throws Exception {
         Cookie alice = login("retention@example.com");
-        long projectId = json.readTree(mvc.perform(post("/api/projects").cookie(alice)
-                        .contentType("application/json").content("{\"name\":\"P\"}"))
+        Cookie admin = platformAdminSession();
+        long projectId = json.readTree(mvc.perform(post("/api/projects").cookie(admin)
+                        .contentType("application/json")
+                        .content("{\"name\":\"P\",\"ownerEmail\":\"retention@example.com\"}"))
                 .andReturn().getResponse().getContentAsString()).get("id").asLong();
         JsonNode board = json.readTree(mvc.perform(post("/api/projects/" + projectId + "/boards").cookie(alice)
                         .contentType("application/json").content("{\"name\":\"B\"}"))
@@ -85,6 +87,16 @@ class DoneRetentionIT {
     private Cookie login(String email) throws Exception {
         if (users.findByEmail(email).isEmpty()) {
             users.save(new AppUser(null, email, passwordEncoder.encode(PASSWORD), "P", true, PlatformRole.USER));
+        }
+        return mvc.perform(post("/api/auth/login").contentType("application/json")
+                        .content("{\"email\":\"%s\",\"password\":\"%s\"}".formatted(email, PASSWORD)))
+                .andExpect(status().isOk()).andReturn().getResponse().getCookie("manban_session");
+    }
+
+    private Cookie platformAdminSession() throws Exception {
+        String email = "project-admin@example.com";
+        if (users.findByEmail(email).isEmpty()) {
+            users.save(new AppUser(null, email, passwordEncoder.encode(PASSWORD), "Person", true, PlatformRole.ADMIN));
         }
         return mvc.perform(post("/api/auth/login").contentType("application/json")
                         .content("{\"email\":\"%s\",\"password\":\"%s\"}".formatted(email, PASSWORD)))

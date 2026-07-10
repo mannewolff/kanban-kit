@@ -53,11 +53,27 @@ class AdminBypassIT {
                 .andReturn().getResponse().getCookie("manban_session");
     }
 
-    private long createProject(Cookie session, String name) throws Exception {
-        String body = mvc.perform(post("/api/projects").cookie(session)
-                        .contentType("application/json").content("{\"name\":\"%s\"}".formatted(name)))
+    private long createProject(String ownerEmail, String name) throws Exception {
+        if (users.findByEmail(ownerEmail).isEmpty()) {
+            users.save(new AppUser(null, ownerEmail, passwordEncoder.encode(PASSWORD), "Person", true, PlatformRole.USER));
+        }
+        Cookie admin = platformAdminSession();
+        String body = mvc.perform(post("/api/projects").cookie(admin)
+                        .contentType("application/json")
+                        .content("{\"name\":\"%s\",\"ownerEmail\":\"%s\"}".formatted(name, ownerEmail)))
                 .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
         return json.readTree(body).get("id").asLong();
+    }
+
+    private Cookie platformAdminSession() throws Exception {
+        String email = "project-admin@example.com";
+        if (users.findByEmail(email).isEmpty()) {
+            users.save(new AppUser(null, email, passwordEncoder.encode(PASSWORD), "Person", true, PlatformRole.ADMIN));
+        }
+        return mvc.perform(post("/api/auth/login").contentType("application/json")
+                        .content("{\"email\":\"%s\",\"password\":\"%s\"}".formatted(email, PASSWORD)))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getCookie("manban_session");
     }
 
     private JsonNode createBoard(Cookie session, long projectId) throws Exception {
@@ -70,7 +86,7 @@ class AdminBypassIT {
     @Test
     void adminActsOnForeignProjectButNonMemberCannot() throws Exception {
         Cookie alice = login("bypass-alice@example.com", PlatformRole.USER);
-        long projectId = createProject(alice, "Alices Projekt");
+        long projectId = createProject("bypass-alice@example.com", "Alices Projekt");
         JsonNode board = createBoard(alice, projectId);
         long boardId = board.get("id").asLong();
         long backlog = board.get("columns").get(0).get("id").asLong();
@@ -95,8 +111,8 @@ class AdminBypassIT {
     void adminSeesAllProjectsUserSeesOnlyOwn() throws Exception {
         Cookie alice = login("all-alice@example.com", PlatformRole.USER);
         Cookie bob = login("all-bob@example.com", PlatformRole.USER);
-        createProject(alice, "Alice P");
-        createProject(bob, "Bob P");
+        createProject("all-alice@example.com", "Alice P");
+        createProject("all-bob@example.com", "Bob P");
 
         Cookie admin = login("all-admin@example.com", PlatformRole.ADMIN);
         String adminList = mvc.perform(get("/api/projects").cookie(admin))

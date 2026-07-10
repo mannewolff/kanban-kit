@@ -60,12 +60,28 @@ class KanbanCompatIT {
                 .andReturn().getResponse().getCookie("manban_session");
     }
 
-    private long createProject(Cookie session, String name) throws Exception {
-        String body = mvc.perform(post("/api/projects").cookie(session)
-                        .contentType("application/json").content("{\"name\":\"%s\"}".formatted(name)))
+    private long createProject(String ownerEmail, String name) throws Exception {
+        if (users.findByEmail(ownerEmail).isEmpty()) {
+            users.save(new AppUser(null, ownerEmail, passwordEncoder.encode(PASSWORD), "Person", true, PlatformRole.USER));
+        }
+        Cookie admin = platformAdminSession();
+        String body = mvc.perform(post("/api/projects").cookie(admin)
+                        .contentType("application/json")
+                        .content("{\"name\":\"%s\",\"ownerEmail\":\"%s\"}".formatted(name, ownerEmail)))
                 .andExpect(status().isCreated())
                 .andReturn().getResponse().getContentAsString();
         return json.readTree(body).get("id").asLong();
+    }
+
+    private Cookie platformAdminSession() throws Exception {
+        String email = "project-admin@example.com";
+        if (users.findByEmail(email).isEmpty()) {
+            users.save(new AppUser(null, email, passwordEncoder.encode(PASSWORD), "Person", true, PlatformRole.ADMIN));
+        }
+        return mvc.perform(post("/api/auth/login").contentType("application/json")
+                        .content("{\"email\":\"%s\",\"password\":\"%s\"}".formatted(email, PASSWORD)))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getCookie("manban_session");
     }
 
     private long createBoard(Cookie session, long projectId, String name) throws Exception {
@@ -105,7 +121,7 @@ class KanbanCompatIT {
     @Test
     void fullClientFlowCreateListMoveComment() throws Exception {
         Cookie session = loginAs("kanban-owner@example.com");
-        long projectId = createProject(session, "Dogfood");
+        long projectId = createProject("kanban-owner@example.com", "Dogfood");
         long boardId = createBoard(session, projectId, "Board");
         String token = boundToken(session, projectId, boardId);
 
@@ -151,7 +167,7 @@ class KanbanCompatIT {
     @Test
     void epicsEndpointReportsProgress() throws Exception {
         Cookie session = loginAs("kanban-epics@example.com");
-        long projectId = createProject(session, "Epic-Projekt");
+        long projectId = createProject("kanban-epics@example.com", "Epic-Projekt");
         long boardId = createBoard(session, projectId, "Epic-Board");
         String token = boundToken(session, projectId, boardId);
 
@@ -191,7 +207,7 @@ class KanbanCompatIT {
     @Test
     void tokenIsScopedToItsBoard() throws Exception {
         Cookie session = loginAs("kanban-scope@example.com");
-        long projectId = createProject(session, "Scope-Projekt");
+        long projectId = createProject("kanban-scope@example.com", "Scope-Projekt");
         long board1 = createBoard(session, projectId, "Board 1");
         long board2 = createBoard(session, projectId, "Board 2");
         String token1 = boundToken(session, projectId, board1);

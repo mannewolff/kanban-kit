@@ -1,6 +1,7 @@
 package org.mwolff.manban.project.web;
 
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import java.util.List;
@@ -31,8 +32,8 @@ class ProjectController {
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    ProjectView create(@AuthenticationPrincipal Long userId, @Valid @RequestBody ProjectRequest request) {
-        return projects.create(userId, request.name());
+    ProjectView create(@AuthenticationPrincipal Long userId, @Valid @RequestBody CreateProjectRequest request) {
+        return projects.create(userId, request.name(), request.ownerEmail());
     }
 
     @GetMapping
@@ -52,7 +53,12 @@ class ProjectController {
         projects.delete(userId, id);
     }
 
-    /** Request-Body für Anlegen und Umbenennen. */
+    /** Request-Body für das Umbenennen. */
     record ProjectRequest(@NotBlank @Size(max = 200) String name) {
+    }
+
+    /** Request-Body für das Anlegen: Name + Owner-E-Mail (System-Admin bestimmt den Owner). */
+    record CreateProjectRequest(@NotBlank @Size(max = 200) String name,
+                                @NotBlank @Email @Size(max = 254) String ownerEmail) {
     }
 }

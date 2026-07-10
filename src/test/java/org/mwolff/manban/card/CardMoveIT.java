@@ -61,10 +61,22 @@ class CardMoveIT {
                 .andExpect(status().isOk()).andReturn().getResponse().getCookie("manban_session");
     }
 
+    private Cookie platformAdminSession() throws Exception {
+        String email = "project-admin@example.com";
+        if (users.findByEmail(email).isEmpty()) {
+            users.save(new AppUser(null, email, passwordEncoder.encode(PASSWORD), "Person", true, PlatformRole.ADMIN));
+        }
+        return mvc.perform(post("/api/auth/login").contentType("application/json")
+                        .content("{\"email\":\"%s\",\"password\":\"%s\"}".formatted(email, PASSWORD)))
+                .andExpect(status().isOk()).andReturn().getResponse().getCookie("manban_session");
+    }
+
     private void setup(String email) throws Exception {
         login = loginAs(email);
-        String p = mvc.perform(post("/api/projects").cookie(login).contentType("application/json")
-                        .content("{\"name\":\"P\"}")).andReturn().getResponse().getContentAsString();
+        Cookie admin = platformAdminSession();
+        String p = mvc.perform(post("/api/projects").cookie(admin).contentType("application/json")
+                        .content("{\"name\":\"P\",\"ownerEmail\":\"%s\"}".formatted(email)))
+                .andReturn().getResponse().getContentAsString();
         long projectId = json.readTree(p).get("id").asLong();
         JsonNode board = json.readTree(mvc.perform(post("/api/projects/" + projectId + "/boards").cookie(login)
                         .contentType("application/json").content("{\"name\":\"B\"}"))

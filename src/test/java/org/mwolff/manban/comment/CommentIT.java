@@ -65,9 +65,11 @@ class CommentIT {
     }
 
     /** Legt Projekt+Board+Karte an (alice als OWNER) und gibt die cardId zurück. */
-    private long setupCard(Cookie owner) throws Exception {
-        String p = mvc.perform(post("/api/projects").cookie(owner).contentType("application/json")
-                        .content("{\"name\":\"P\"}")).andReturn().getResponse().getContentAsString();
+    private long setupCard(Cookie owner, String ownerEmail) throws Exception {
+        Cookie admin = platformAdminSession();
+        String p = mvc.perform(post("/api/projects").cookie(admin).contentType("application/json")
+                        .content("{\"name\":\"P\",\"ownerEmail\":\"%s\"}".formatted(ownerEmail)))
+                .andReturn().getResponse().getContentAsString();
         long projectId = json.readTree(p).get("id").asLong();
         JsonNode board = json.readTree(mvc.perform(post("/api/projects/" + projectId + "/boards").cookie(owner)
                         .contentType("application/json").content("{\"name\":\"B\"}"))
@@ -83,6 +85,16 @@ class CommentIT {
 
     private long projectId;
 
+    private Cookie platformAdminSession() throws Exception {
+        String email = "project-admin@example.com";
+        if (users.findByEmail(email).isEmpty()) {
+            users.save(new AppUser(null, email, passwordEncoder.encode(PASSWORD), "Person", true, PlatformRole.ADMIN));
+        }
+        return mvc.perform(post("/api/auth/login").contentType("application/json")
+                        .content("{\"email\":\"%s\",\"password\":\"%s\"}".formatted(email, PASSWORD)))
+                .andExpect(status().isOk()).andReturn().getResponse().getCookie("manban_session");
+    }
+
     private long createComment(Cookie session, long cardId, String body) throws Exception {
         String r = mvc.perform(post("/api/cards/" + cardId + "/comments").cookie(session)
                         .contentType("application/json").content("{\"body\":\"%s\"}".formatted(body)))
@@ -93,7 +105,7 @@ class CommentIT {
     @Test
     void authorCanCrudOwnComment() throws Exception {
         Cookie alice = loginAs("cm-alice@example.com");
-        long cardId = setupCard(alice);
+        long cardId = setupCard(alice, "cm-alice@example.com");
 
         long commentId = createComment(alice, cardId, "Hallo");
         mvc.perform(get("/api/cards/" + cardId + "/comments").cookie(alice))
@@ -114,7 +126,7 @@ class CommentIT {
         Cookie alice = loginAs("cm-owner@example.com");
         Cookie bob = loginAs("cm-bob@example.com");
         Cookie carol = loginAs("cm-carol@example.com");
-        long cardId = setupCard(alice);
+        long cardId = setupCard(alice, "cm-owner@example.com");
         memberships.save(new ProjectMembership(null, projectId, userId("cm-bob@example.com"), ProjectRole.MEMBER, Instant.now()));
         memberships.save(new ProjectMembership(null, projectId, userId("cm-carol@example.com"), ProjectRole.MEMBER, Instant.now()));
 
@@ -131,7 +143,7 @@ class CommentIT {
     void ownerCanModerateForeignComment() throws Exception {
         Cookie alice = loginAs("cm-mod-owner@example.com");
         Cookie bob = loginAs("cm-mod-bob@example.com");
-        long cardId = setupCard(alice);
+        long cardId = setupCard(alice, "cm-mod-owner@example.com");
         memberships.save(new ProjectMembership(null, projectId, userId("cm-mod-bob@example.com"), ProjectRole.MEMBER, Instant.now()));
 
         long bobComment = createComment(bob, cardId, "Bob");
@@ -147,7 +159,7 @@ class CommentIT {
     void viewerCannotComment() throws Exception {
         Cookie alice = loginAs("cm-v-owner@example.com");
         Cookie viewer = loginAs("cm-viewer@example.com");
-        long cardId = setupCard(alice);
+        long cardId = setupCard(alice, "cm-v-owner@example.com");
         memberships.save(new ProjectMembership(null, projectId, userId("cm-viewer@example.com"), ProjectRole.VIEWER, Instant.now()));
 
         mvc.perform(post("/api/cards/" + cardId + "/comments").cookie(viewer)
