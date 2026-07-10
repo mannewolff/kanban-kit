@@ -62,6 +62,8 @@ const descriptionSx = {
 interface Props {
   card: Card
   canEdit: boolean
+  /** Ob der Nutzer Kommentare moderieren (löschen) darf — Projekt-ADMIN/OWNER oder Plattform-Admin. */
+  canModerateComments?: boolean
   onClose: () => void
   onChanged?: () => void
   /** Direkt im Edit-Modus öffnen (z. B. aus dem Karten-⋮-Menü). */
@@ -80,6 +82,7 @@ interface Props {
 export function CardDetailModal({
   card,
   canEdit,
+  canModerateComments = false,
   onClose,
   onChanged,
   initialEditing = false,
@@ -104,6 +107,8 @@ export function CardDetailModal({
 
   const [comments, setComments] = useState<Comment[]>([])
   const [newComment, setNewComment] = useState('')
+  const [editingCommentId, setEditingCommentId] = useState<number | null>(null)
+  const [editingBody, setEditingBody] = useState('')
   const [attachments, setAttachments] = useState<Attachment[]>([])
   const [previews, setPreviews] = useState<Record<number, string>>({})
   const [uploadError, setUploadError] = useState<string | null>(null)
@@ -167,6 +172,18 @@ export function CardDetailModal({
   const deleteComment = async (id: number) => {
     await commentsApi.remove(id)
     setComments((c) => c.filter((x) => x.id !== id))
+  }
+
+  const startEditComment = (c: Comment) => {
+    setEditingCommentId(c.id)
+    setEditingBody(c.body)
+  }
+
+  const saveEditComment = async () => {
+    if (editingCommentId == null || !editingBody.trim()) return
+    const updated = await commentsApi.update(editingCommentId, editingBody.trim())
+    setComments((cs) => cs.map((x) => (x.id === updated.id ? updated : x)))
+    setEditingCommentId(null)
   }
 
   const uploadFile = async (file: File) => {
@@ -395,21 +412,45 @@ export function CardDetailModal({
                   Kommentare
                 </Typography>
                 <Stack spacing={1}>
-                  {comments.map((c) => (
-                    <Box key={c.id}>
-                      <Stack direction="row" justifyContent="space-between" alignItems="center">
-                        <Typography variant="body2" fontWeight={600}>
-                          {c.authorName}
-                        </Typography>
-                        {user && c.authorUserId === user.userId && (
-                          <IconButton size="small" aria-label="Kommentar löschen" onClick={() => deleteComment(c.id)}>
-                            ✕
-                          </IconButton>
+                  {comments.map((c) => {
+                    const isAuthor = user != null && c.authorUserId === user.userId
+                    return (
+                      <Box key={c.id}>
+                        <Stack direction="row" justifyContent="space-between" alignItems="center">
+                          <Typography variant="body2" fontWeight={600}>
+                            {c.authorName}
+                          </Typography>
+                          <Stack direction="row" spacing={0.5}>
+                            {/* Bearbeiten darf nur der Autor selbst. */}
+                            {isAuthor && editingCommentId !== c.id && (
+                              <IconButton size="small" aria-label="Kommentar bearbeiten" onClick={() => startEditComment(c)}>
+                                ✎
+                              </IconButton>
+                            )}
+                            {/* Löschen ist Moderation: nur Admin/Owner (bzw. Plattform-Admin). */}
+                            {canModerateComments && (
+                              <IconButton size="small" aria-label="Kommentar löschen" onClick={() => deleteComment(c.id)}>
+                                ✕
+                              </IconButton>
+                            )}
+                          </Stack>
+                        </Stack>
+                        {editingCommentId === c.id ? (
+                          <Stack spacing={1}>
+                            <TextField multiline size="small" value={editingBody}
+                              onChange={(e) => setEditingBody(e.target.value)}
+                              inputProps={{ maxLength: 10_000, 'aria-label': 'Kommentar bearbeiten' }} />
+                            <Stack direction="row" spacing={1}>
+                              <Button size="small" variant="contained" onClick={() => void saveEditComment()}>Speichern</Button>
+                              <Button size="small" onClick={() => setEditingCommentId(null)}>Abbrechen</Button>
+                            </Stack>
+                          </Stack>
+                        ) : (
+                          <Typography variant="body2">{c.body}</Typography>
                         )}
-                      </Stack>
-                      <Typography variant="body2">{c.body}</Typography>
-                    </Box>
-                  ))}
+                      </Box>
+                    )
+                  })}
                   {comments.length === 0 && <Typography color="text.secondary">Noch keine Kommentare.</Typography>}
                 </Stack>
                 <Stack direction="row" spacing={1} sx={{ mt: 1 }}>

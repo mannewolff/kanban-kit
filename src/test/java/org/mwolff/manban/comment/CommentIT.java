@@ -140,17 +140,38 @@ class CommentIT {
     }
 
     @Test
-    void ownerCanModerateForeignComment() throws Exception {
+    void ownerDeletesForeignCommentButCannotEditIt() throws Exception {
         Cookie alice = loginAs("cm-mod-owner@example.com");
         Cookie bob = loginAs("cm-mod-bob@example.com");
         long cardId = setupCard(alice, "cm-mod-owner@example.com");
         memberships.save(new ProjectMembership(null, projectId, userId("cm-mod-bob@example.com"), ProjectRole.MEMBER, Instant.now()));
 
         long bobComment = createComment(bob, cardId, "Bob");
-        // OWNER darf fremden Kommentar moderieren.
+        // Bearbeiten darf nur der Autor — auch der OWNER nicht fremde Kommentare.
         mvc.perform(patch("/api/comments/" + bobComment).cookie(alice)
                         .contentType("application/json").content("{\"body\":\"moderiert\"}"))
+                .andExpect(status().isForbidden());
+        // Löschen ist Moderation: OWNER darf.
+        mvc.perform(delete("/api/comments/" + bobComment).cookie(alice))
+                .andExpect(status().isNoContent());
+    }
+
+    @Test
+    void memberAuthorEditsOwnButCannotDeleteOnlyAdmin() throws Exception {
+        Cookie alice = loginAs("cm-md-owner@example.com");
+        Cookie bob = loginAs("cm-md-bob@example.com");
+        long cardId = setupCard(alice, "cm-md-owner@example.com");
+        memberships.save(new ProjectMembership(null, projectId, userId("cm-md-bob@example.com"), ProjectRole.MEMBER, Instant.now()));
+
+        long bobComment = createComment(bob, cardId, "Bob");
+        // Autor (MEMBER) darf eigenen Kommentar bearbeiten ...
+        mvc.perform(patch("/api/comments/" + bobComment).cookie(bob)
+                        .contentType("application/json").content("{\"body\":\"neu\"}"))
                 .andExpect(status().isOk());
+        // ... aber NICHT löschen (Löschen ist Admin/Owner-Moderation).
+        mvc.perform(delete("/api/comments/" + bobComment).cookie(bob))
+                .andExpect(status().isForbidden());
+        // Der OWNER löscht.
         mvc.perform(delete("/api/comments/" + bobComment).cookie(alice))
                 .andExpect(status().isNoContent());
     }

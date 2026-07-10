@@ -12,7 +12,7 @@ import { projectsApi } from '../api/projects'
 import { useAuth } from '../auth/AuthContext'
 import { BoardView } from '../components/BoardView'
 import { CardDetailModal } from '../components/CardDetailModal'
-import { canEditCards, isPlatformAdmin } from '../lib/roles'
+import { canEditCards, canModerateComments, isPlatformAdmin } from '../lib/roles'
 
 export function BoardPage() {
   const { boardId } = useParams()
@@ -81,7 +81,9 @@ export function BoardPage() {
     }
   }, [board, membershipRole])
 
-  const canEdit = canEditCards(membershipRole ?? fetchedRole ?? 'VIEWER', isPlatformAdmin(user))
+  const effectiveRole = membershipRole ?? fetchedRole ?? 'VIEWER'
+  const canEdit = canEditCards(effectiveRole, isPlatformAdmin(user))
+  const canModerate = canModerateComments(effectiveRole, isPlatformAdmin(user))
 
   if (loading) {
     return (
@@ -117,6 +119,7 @@ export function BoardPage() {
           key={selectedCard.id}
           card={selectedCard}
           canEdit={canEdit}
+          canModerateComments={canModerate}
           epics={epics}
           initialEditing={openEditing}
           columnName={board.columns.find((c) => c.id === selectedCard.columnId)?.name}

@@ -16,7 +16,7 @@ import { useAuth } from '../auth/AuthContext'
 import { CardDetailModal } from '../components/CardDetailModal'
 import { EpicBadge } from '../components/EpicBadge'
 import { NewCardModal } from '../components/NewCardModal'
-import { canEditCards, isPlatformAdmin } from '../lib/roles'
+import { canEditCards, canModerateComments, isPlatformAdmin } from '../lib/roles'
 
 function epicToCard(epic: Epic, boardId: number): Card {
   return {
@@ -58,7 +58,9 @@ export function EpicsPage() {
     }
     void projectsApi.list().then((ps) => setFetchedRole(ps.find((p) => p.id === board.projectId)?.role ?? 'VIEWER'))
   }, [board, membershipRole])
-  const canEdit = canEditCards(membershipRole ?? fetchedRole ?? 'VIEWER', isPlatformAdmin(user))
+  const effectiveRole = membershipRole ?? fetchedRole ?? 'VIEWER'
+  const canEdit = canEditCards(effectiveRole, isPlatformAdmin(user))
+  const canModerate = canModerateComments(effectiveRole, isPlatformAdmin(user))
 
   return (
     <Box>
@@ -119,6 +121,7 @@ export function EpicsPage() {
         <CardDetailModal
           card={epicToCard(selected, id)}
           canEdit={canEdit}
+          canModerateComments={canModerate}
           children={cards.filter((c) => c.parentId === selected.id)}
           onClose={() => setSelected(null)}
           onChanged={reload}

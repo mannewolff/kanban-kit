@@ -13,14 +13,13 @@ import org.mwolff.manban.comment.domain.Comment;
 import org.mwolff.manban.project.application.PermissionChecker;
 import org.mwolff.manban.project.application.ProjectAccessDeniedException;
 import org.mwolff.manban.project.domain.Permission;
-import org.mwolff.manban.project.domain.ProjectMembership;
-import org.mwolff.manban.project.domain.ProjectRole;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Kommentar-Use-Cases. Anlegen erfordert COMMENT_CREATE. Bearbeiten/Löschen darf nur
- * der Autor selbst — oder ein Projekt-ADMIN/OWNER (Moderation).
+ * Kommentar-Use-Cases. Anlegen erfordert COMMENT_CREATE. <b>Bearbeiten</b> darf nur der Autor
+ * selbst (COMMENT_UPDATE; auch ein Admin/Owner nicht fremde Kommentare). <b>Löschen</b> ist
+ * Moderation und nur Projekt-ADMIN/OWNER vorbehalten (COMMENT_DELETE).
  */
 @Service
 public class CommentService {
@@ -58,27 +57,21 @@ public class CommentService {
 
     @Transactional
     public CommentView update(long userId, long commentId, String body) {
-        Comment comment = requireModifiable(userId, commentId);
+        Comment comment = comments.findById(commentId).orElseThrow(CommentNotFoundException::new);
+        permissions.require(userId, projectIdOfCard(comment.cardId()), Permission.COMMENT_UPDATE);
+        // Bearbeiten darf nur der Autor selbst — auch ein Admin/Owner nicht fremde Kommentare.
+        if (comment.authorUserId() == null || comment.authorUserId() != userId) {
+            throw new ProjectAccessDeniedException();
+        }
         return view(comments.save(comment.withBody(body)));
     }
 
     @Transactional
     public void delete(long userId, long commentId) {
-        Comment comment = requireModifiable(userId, commentId);
-        comments.deleteById(comment.id());
-    }
-
-    /** Autor selbst oder Projekt-ADMIN/OWNER darf ändern/löschen; sonst 403. */
-    private Comment requireModifiable(long userId, long commentId) {
         Comment comment = comments.findById(commentId).orElseThrow(CommentNotFoundException::new);
-        long projectId = projectIdOfCard(comment.cardId());
-        ProjectMembership membership = permissions.requireMembership(userId, projectId);
-        boolean isAuthor = comment.authorUserId() != null && comment.authorUserId() == userId;
-        boolean isModerator = membership.role() == ProjectRole.ADMIN || membership.role() == ProjectRole.OWNER;
-        if (!isAuthor && !isModerator) {
-            throw new ProjectAccessDeniedException();
-        }
-        return comment;
+        // Löschen ist Moderation: nur Projekt-ADMIN/OWNER (COMMENT_DELETE), nicht der Autor allein.
+        permissions.require(userId, projectIdOfCard(comment.cardId()), Permission.COMMENT_DELETE);
+        comments.deleteById(comment.id());
     }
 
     private long projectIdOfCard(long cardId) {

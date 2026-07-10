@@ -88,6 +88,39 @@ describe('CardDetailModal', () => {
     expect(onChanged).toHaveBeenCalled()
   })
 
+  it('zeigt dem Autor Bearbeiten, aber ohne Moderationsrecht kein Löschen', async () => {
+    const apis = makeApis()
+    render(<CardDetailModal card={card} canEdit onClose={vi.fn()} {...apis} />)
+    await waitFor(() => expect(screen.getByText('Hallo')).toBeInTheDocument())
+
+    expect(screen.getByRole('button', { name: 'Kommentar bearbeiten' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Kommentar löschen' })).not.toBeInTheDocument()
+  })
+
+  it('zeigt Moderatoren den Löschen-Button', async () => {
+    const apis = makeApis()
+    render(<CardDetailModal card={card} canEdit canModerateComments onClose={vi.fn()} {...apis} />)
+    await waitFor(() => expect(screen.getByText('Hallo')).toBeInTheDocument())
+
+    expect(screen.getByRole('button', { name: 'Kommentar löschen' })).toBeInTheDocument()
+  })
+
+  it('bearbeitet einen eigenen Kommentar inline', async () => {
+    const apis = makeApis()
+    apis.commentsApi.update = vi.fn().mockResolvedValue(
+      { id: 1, cardId: 100, authorUserId: 7, authorName: 'A', body: 'Geändert', createdAt: '', updatedAt: '' },
+    )
+    render(<CardDetailModal card={card} canEdit onClose={vi.fn()} {...apis} />)
+    await waitFor(() => expect(screen.getByText('Hallo')).toBeInTheDocument())
+
+    fireEvent.click(screen.getByRole('button', { name: 'Kommentar bearbeiten' }))
+    fireEvent.change(screen.getByLabelText('Kommentar bearbeiten'), { target: { value: 'Geändert' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Speichern' }))
+
+    await waitFor(() => expect(apis.commentsApi.update).toHaveBeenCalledWith(1, 'Geändert'))
+    expect(await screen.findByText('Geändert')).toBeInTheDocument()
+  })
+
   it('öffnet eine Lightbox-Vorschau beim Klick auf einen PDF-Anhang', async () => {
     const apis = makeApis()
     apis.attachmentsApi.list = vi.fn().mockResolvedValue([

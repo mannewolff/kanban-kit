@@ -21,6 +21,10 @@ export const canManageMembers = (role: string, platformAdmin = false): boolean =
 export const canEditCards = (role: string, platformAdmin = false): boolean =>
   platformAdmin || role !== 'VIEWER'
 
+/** Wer Kommentare moderieren (löschen) darf (COMMENT_DELETE) — ADMIN/OWNER oder Plattform-Admin. */
+export const canModerateComments = (role: string, platformAdmin = false): boolean =>
+  platformAdmin || role === 'OWNER' || role === 'ADMIN'
+
 /** Ob der eingeloggte Nutzer plattformweit Admin ist. */
 export const isPlatformAdmin = (user: { platformRole?: string } | null | undefined): boolean =>
   user?.platformRole === 'ADMIN'
