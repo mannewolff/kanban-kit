@@ -16,6 +16,7 @@ export default defineConfig({
       { text: "Betrieb", link: "/betrieb" },
       { text: "Nutzung", link: "/nutzung" },
       { text: "Rollen & Rechte", link: "/rollen-und-rechte" },
+      { text: "Dogfooding", link: "/dogfooding" },
     ],
 
     sidebar: [
@@ -48,6 +49,12 @@ export default defineConfig({
           { text: "Projekt- & Plattform-Rollen", link: "/rollen-und-rechte" },
           { text: "Rechte-Matrix", link: "/rollen-und-rechte#projekt-rollen-rechte-matrix" },
           { text: "Admin-Bereich", link: "/rollen-und-rechte#admin-bereich-admin" },
+        ],
+      },
+      {
+        text: "Dogfooding",
+        items: [
+          { text: "Eigenes Board anbinden", link: "/dogfooding" },
         ],
       },
     ],
