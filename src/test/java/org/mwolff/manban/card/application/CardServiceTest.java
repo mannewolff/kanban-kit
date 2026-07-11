@@ -1,7 +1,9 @@
 package org.mwolff.manban.card.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -9,49 +11,584 @@ import static org.mockito.Mockito.when;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.List;
 import java.util.Optional;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mwolff.manban.board.application.BoardColumnRepository;
+import org.mwolff.manban.board.application.BoardNotFoundException;
 import org.mwolff.manban.board.application.BoardRepository;
+import org.mwolff.manban.board.application.ColumnNotFoundException;
 import org.mwolff.manban.board.domain.Board;
 import org.mwolff.manban.board.domain.BoardColumn;
 import org.mwolff.manban.card.domain.Card;
+import org.mwolff.manban.card.domain.CardType;
 import org.mwolff.manban.project.application.PermissionChecker;
+import org.mwolff.manban.project.domain.Permission;
 
-/** Zeit-Test: der Anlege-Zeitstempel einer Karte stammt aus der injizierten Clock. */
+/** Verhaltenstests der Karten- und Epic-Use-Cases (Mockito an den Ports). */
 class CardServiceTest {
 
     private static final Instant FIXED = Instant.parse("2026-01-02T03:04:05Z");
+    private static final long BOARD = 10L;
+
+    private CardRepository cards;
+    private CardDependencyRepository dependencies;
+    private BoardRepository boards;
+    private BoardColumnRepository columns;
+    private PermissionChecker permissions;
+    private CardService service;
+
+    private static Card card(long id, long columnId, int number, boolean archived, Instant done,
+                             CardType type, Long parentId, String shortcode) {
+        return new Card(id, BOARD, columnId, number, "Titel", null, 0, archived, done, 1L, FIXED, FIXED,
+                type, parentId, shortcode);
+    }
+
+    private static BoardColumn column(long id, String name, int position) {
+        return new BoardColumn(id, BOARD, name, position, null);
+    }
+
+    @BeforeEach
+    void setUp() {
+        cards = mock(CardRepository.class);
+        dependencies = mock(CardDependencyRepository.class);
+        boards = mock(BoardRepository.class);
+        columns = mock(BoardColumnRepository.class);
+        permissions = mock(PermissionChecker.class);
+        Clock clock = Clock.fixed(FIXED, ZoneOffset.UTC);
+        service = new CardService(cards, dependencies, boards, columns, permissions, clock);
+        when(boards.findById(BOARD)).thenReturn(Optional.of(new Board(BOARD, 1L, "B", FIXED)));
+        when(cards.save(any(Card.class))).thenAnswer(inv -> withId(inv.getArgument(0)));
+    }
+
+    private static Card withId(Card c) {
+        return new Card(c.id() == null ? 1L : c.id(), c.boardId(), c.columnId(), c.number(), c.title(),
+                c.description(), c.positionInColumn(), c.archived(), c.movedToDoneAt(), c.createdBy(),
+                c.createdAt(), c.updatedAt(), c.type(), c.parentId(), c.shortcode());
+    }
+
+    // --- create -----------------------------------------------------------
 
     @Test
     void create_setsCreatedAtFromInjectedClock() {
         // Given
-        CardRepository cards = mock(CardRepository.class);
-        CardDependencyRepository dependencies = mock(CardDependencyRepository.class);
-        BoardRepository boards = mock(BoardRepository.class);
-        BoardColumnRepository columns = mock(BoardColumnRepository.class);
-        PermissionChecker permissions = mock(PermissionChecker.class);
-        Clock clock = Clock.fixed(FIXED, ZoneOffset.UTC);
-        when(boards.findById(10L)).thenReturn(Optional.of(new Board(10L, 1L, "B", FIXED)));
-        when(columns.findById(20L)).thenReturn(Optional.of(new BoardColumn(20L, 10L, "Backlog", 0, null)));
-        when(cards.maxNumberInBoard(10L)).thenReturn(0);
+        when(columns.findById(20L)).thenReturn(Optional.of(column(20L, "Backlog", 0)));
+        when(cards.maxNumberInBoard(BOARD)).thenReturn(0);
         when(cards.maxActivePositionInColumn(20L)).thenReturn(-1);
-        when(cards.save(any(Card.class))).thenAnswer(inv -> withId(inv.getArgument(0)));
-        CardService service = new CardService(cards, dependencies, boards, columns, permissions, clock);
 
         // When
-        service.create(1L, 10L, 20L, "Titel", null, null, null);
+        ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
+        service.create(1L, BOARD, 20L, "Titel", null, null, null);
 
         // Then
-        ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
         verify(cards).save(captor.capture());
         assertThat(captor.getValue().createdAt()).isEqualTo(FIXED);
     }
 
-    private static Card withId(Card c) {
-        return new Card(1L, c.boardId(), c.columnId(), c.number(), c.title(), c.description(),
-                c.positionInColumn(), c.archived(), c.movedToDoneAt(), c.createdBy(), c.createdAt(),
-                c.updatedAt(), c.type(), c.parentId(), c.shortcode());
+    @Test
+    void create_assignsNextBoardNumber() {
+        // Given
+        when(columns.findById(20L)).thenReturn(Optional.of(column(20L, "Backlog", 0)));
+        when(cards.maxNumberInBoard(BOARD)).thenReturn(7);
+        when(cards.maxActivePositionInColumn(20L)).thenReturn(-1);
+
+        // When
+        ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
+        service.create(1L, BOARD, 20L, "Titel", null, null, null);
+
+        // Then
+        verify(cards).save(captor.capture());
+        assertThat(captor.getValue().number()).isEqualTo(8);
+    }
+
+    @Test
+    void create_appendsAtNextPositionInColumn() {
+        // Given
+        when(columns.findById(20L)).thenReturn(Optional.of(column(20L, "Backlog", 0)));
+        when(cards.maxNumberInBoard(BOARD)).thenReturn(0);
+        when(cards.maxActivePositionInColumn(20L)).thenReturn(4);
+
+        // When
+        ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
+        service.create(1L, BOARD, 20L, "Titel", null, null, null);
+
+        // Then
+        verify(cards).save(captor.capture());
+        assertThat(captor.getValue().positionInColumn()).isEqualTo(5);
+    }
+
+    @Test
+    void create_trimsTitle() {
+        // Given
+        when(columns.findById(20L)).thenReturn(Optional.of(column(20L, "Backlog", 0)));
+
+        // When
+        ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
+        service.create(1L, BOARD, 20L, "  Titel  ", null, null, null);
+
+        // Then
+        verify(cards).save(captor.capture());
+        assertThat(captor.getValue().title()).isEqualTo("Titel");
+    }
+
+    @Test
+    void create_attachesToParentEpic() {
+        // Given
+        when(columns.findById(20L)).thenReturn(Optional.of(column(20L, "Backlog", 0)));
+        when(cards.findById(30L)).thenReturn(Optional.of(card(30L, 20L, 5, false, null, CardType.EPIC, null, "E")));
+
+        // When
+        ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
+        service.create(1L, BOARD, 20L, "Titel", null, null, 30L);
+
+        // Then
+        verify(cards).save(captor.capture());
+        assertThat(captor.getValue().parentId()).isEqualTo(30L);
+    }
+
+    @Test
+    void create_setsDependencies_whenProvided() {
+        // Given
+        when(columns.findById(20L)).thenReturn(Optional.of(column(20L, "Backlog", 0)));
+        when(cards.maxNumberInBoard(BOARD)).thenReturn(4);
+        when(cards.findByBoardId(BOARD)).thenReturn(List.of(
+                card(2L, 20L, 3, false, null, CardType.CARD, null, null)));
+
+        // When
+        service.create(1L, BOARD, 20L, "Titel", null, List.of(3, 3), null);
+
+        // Then
+        verify(dependencies).replaceDependencies(1L, List.of(3));
+    }
+
+    @Test
+    void create_throwsBoardNotFound_whenBoardUnknown() {
+        // Given
+        when(boards.findById(BOARD)).thenReturn(Optional.empty());
+
+        // When / Then
+        assertThatThrownBy(() -> service.create(1L, BOARD, 20L, "Titel", null, null, null))
+                .isInstanceOf(BoardNotFoundException.class);
+    }
+
+    @Test
+    void create_throwsColumnNotFound_whenColumnUnknown() {
+        // Given
+        when(columns.findById(20L)).thenReturn(Optional.empty());
+
+        // When / Then
+        assertThatThrownBy(() -> service.create(1L, BOARD, 20L, "Titel", null, null, null))
+                .isInstanceOf(ColumnNotFoundException.class);
+    }
+
+    @Test
+    void create_throwsColumnNotFound_whenColumnOnOtherBoard() {
+        // Given
+        when(columns.findById(20L)).thenReturn(Optional.of(new BoardColumn(20L, 99L, "Backlog", 0, null)));
+
+        // When / Then
+        assertThatThrownBy(() -> service.create(1L, BOARD, 20L, "Titel", null, null, null))
+                .isInstanceOf(ColumnNotFoundException.class);
+    }
+
+    @Test
+    void create_throwsInvalidDependency_whenParentIsNotEpic() {
+        // Given
+        when(columns.findById(20L)).thenReturn(Optional.of(column(20L, "Backlog", 0)));
+        when(cards.findById(30L)).thenReturn(Optional.of(card(30L, 20L, 5, false, null, CardType.CARD, null, null)));
+
+        // When / Then
+        assertThatThrownBy(() -> service.create(1L, BOARD, 20L, "Titel", null, null, 30L))
+                .isInstanceOf(InvalidDependencyException.class);
+    }
+
+    @Test
+    void create_throwsCardNotFound_whenParentUnknown() {
+        // Given
+        when(columns.findById(20L)).thenReturn(Optional.of(column(20L, "Backlog", 0)));
+        when(cards.findById(30L)).thenReturn(Optional.empty());
+
+        // When / Then
+        assertThatThrownBy(() -> service.create(1L, BOARD, 20L, "Titel", null, null, 30L))
+                .isInstanceOf(CardNotFoundException.class);
+    }
+
+    @Test
+    void create_throwsInvalidDependency_onSelfDependency() {
+        // Given
+        when(columns.findById(20L)).thenReturn(Optional.of(column(20L, "Backlog", 0)));
+        when(cards.maxNumberInBoard(BOARD)).thenReturn(0);
+
+        // When / Then: neue Karte bekommt Nummer 1, hängt von 1 (sich selbst) ab
+        assertThatThrownBy(() -> service.create(1L, BOARD, 20L, "Titel", null, List.of(1), null))
+                .isInstanceOf(InvalidDependencyException.class);
+    }
+
+    @Test
+    void create_throwsInvalidDependency_onUnknownDependencyNumber() {
+        // Given
+        when(columns.findById(20L)).thenReturn(Optional.of(column(20L, "Backlog", 0)));
+        when(cards.maxNumberInBoard(BOARD)).thenReturn(0);
+        when(cards.findByBoardId(BOARD)).thenReturn(List.of());
+
+        // When / Then
+        assertThatThrownBy(() -> service.create(1L, BOARD, 20L, "Titel", null, List.of(99), null))
+                .isInstanceOf(InvalidDependencyException.class);
+    }
+
+    // --- createEpic -------------------------------------------------------
+
+    @Test
+    void createEpic_savesEpicType() {
+        // Given
+        when(columns.findByBoardId(BOARD)).thenReturn(List.of(column(20L, "Backlog", 0), column(21L, "Done", 1)));
+        when(cards.maxNumberInBoard(BOARD)).thenReturn(0);
+
+        // When
+        ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
+        service.createEpic(1L, BOARD, "Epic", null, "SHC");
+
+        // Then
+        verify(cards).save(captor.capture());
+        assertThat(captor.getValue().type()).isEqualTo(CardType.EPIC);
+    }
+
+    @Test
+    void createEpic_trimsBlankShortcodeToNull() {
+        // Given
+        when(columns.findByBoardId(BOARD)).thenReturn(List.of(column(20L, "Backlog", 0)));
+        when(cards.maxNumberInBoard(BOARD)).thenReturn(0);
+
+        // When
+        ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
+        service.createEpic(1L, BOARD, "Epic", null, "   ");
+
+        // Then
+        verify(cards).save(captor.capture());
+        assertThat(captor.getValue().shortcode()).isNull();
+    }
+
+    @Test
+    void createEpic_throwsBoardNotFound_whenBoardUnknown() {
+        // Given
+        when(boards.findById(BOARD)).thenReturn(Optional.empty());
+
+        // When / Then
+        assertThatThrownBy(() -> service.createEpic(1L, BOARD, "Epic", null, null))
+                .isInstanceOf(BoardNotFoundException.class);
+    }
+
+    @Test
+    void createEpic_throwsColumnNotFound_whenBoardHasNoColumns() {
+        // Given
+        when(columns.findByBoardId(BOARD)).thenReturn(List.of());
+
+        // When / Then
+        assertThatThrownBy(() -> service.createEpic(1L, BOARD, "Epic", null, null))
+                .isInstanceOf(ColumnNotFoundException.class);
+    }
+
+    // --- listByBoard / listEpics -----------------------------------------
+
+    @Test
+    void listByBoard_returnsOnlyCards() {
+        // Given
+        when(cards.findByBoardId(BOARD)).thenReturn(List.of(
+                card(1L, 20L, 1, false, null, CardType.CARD, null, null),
+                card(2L, 20L, 2, false, null, CardType.EPIC, null, "E")));
+
+        // When
+        List<CardService.CardView> result = service.listByBoard(1L, BOARD);
+
+        // Then
+        assertThat(result).singleElement().extracting(CardService.CardView::id).isEqualTo(1L);
+    }
+
+    @Test
+    void listByBoard_throwsBoardNotFound_whenBoardUnknown() {
+        // Given
+        when(boards.findById(BOARD)).thenReturn(Optional.empty());
+
+        // When / Then
+        assertThatThrownBy(() -> service.listByBoard(1L, BOARD)).isInstanceOf(BoardNotFoundException.class);
+    }
+
+    @Test
+    void listEpics_countsDoneChildren() {
+        // Given
+        when(columns.findByBoardId(BOARD)).thenReturn(List.of(column(20L, "Backlog", 0), column(21L, "Done", 1)));
+        when(cards.findByBoardId(BOARD)).thenReturn(List.of(
+                card(5L, 20L, 1, false, null, CardType.EPIC, null, "E"),
+                card(6L, 21L, 2, false, null, CardType.CARD, 5L, null),
+                card(7L, 20L, 3, false, null, CardType.CARD, 5L, null)));
+
+        // When
+        List<CardService.EpicView> result = service.listEpics(1L, BOARD);
+
+        // Then
+        assertThat(result).singleElement()
+                .extracting(CardService.EpicView::done, CardService.EpicView::total)
+                .containsExactly(1, 2);
+    }
+
+    @Test
+    void listEpics_throwsBoardNotFound_whenBoardUnknown() {
+        // Given
+        when(boards.findById(BOARD)).thenReturn(Optional.empty());
+
+        // When / Then
+        assertThatThrownBy(() -> service.listEpics(1L, BOARD)).isInstanceOf(BoardNotFoundException.class);
+    }
+
+    // --- update -----------------------------------------------------------
+
+    @Test
+    void update_setsCardParent() {
+        // Given
+        when(cards.findById(1L)).thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
+        when(cards.findById(30L)).thenReturn(Optional.of(card(30L, 20L, 5, false, null, CardType.EPIC, null, "E")));
+
+        // When
+        ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
+        service.update(1L, 1L, "Neu", null, null, null, 30L);
+
+        // Then
+        verify(cards).save(captor.capture());
+        assertThat(captor.getValue().parentId()).isEqualTo(30L);
+    }
+
+    @Test
+    void update_setsEpicShortcode() {
+        // Given
+        when(cards.findById(5L)).thenReturn(Optional.of(card(5L, 20L, 5, false, null, CardType.EPIC, null, "old")));
+
+        // When
+        ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
+        service.update(1L, 5L, "Neu", null, null, "NEW", null);
+
+        // Then
+        verify(cards).save(captor.capture());
+        assertThat(captor.getValue().shortcode()).isEqualTo("NEW");
+    }
+
+    @Test
+    void update_replacesDependencies_whenProvided() {
+        // Given
+        when(cards.findById(1L)).thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
+        when(cards.findByBoardId(BOARD)).thenReturn(List.of(
+                card(2L, 20L, 3, false, null, CardType.CARD, null, null)));
+
+        // When
+        service.update(1L, 1L, "Neu", null, List.of(3), null, null);
+
+        // Then
+        verify(dependencies).replaceDependencies(1L, List.of(3));
+    }
+
+    @Test
+    void update_throwsCardNotFound_whenCardUnknown() {
+        // Given
+        when(cards.findById(1L)).thenReturn(Optional.empty());
+
+        // When / Then
+        assertThatThrownBy(() -> service.update(1L, 1L, "Neu", null, null, null, null))
+                .isInstanceOf(CardNotFoundException.class);
+    }
+
+    // --- assignParent -----------------------------------------------------
+
+    @Test
+    void assignParent_setsParent() {
+        // Given
+        when(cards.findById(1L)).thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
+        when(cards.findById(30L)).thenReturn(Optional.of(card(30L, 20L, 5, false, null, CardType.EPIC, null, "E")));
+
+        // When
+        ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
+        service.assignParent(1L, 1L, 30L);
+
+        // Then
+        verify(cards).save(captor.capture());
+        assertThat(captor.getValue().parentId()).isEqualTo(30L);
+    }
+
+    @Test
+    void assignParent_throwsInvalidDependency_whenCardIsEpic() {
+        // Given
+        when(cards.findById(5L)).thenReturn(Optional.of(card(5L, 20L, 5, false, null, CardType.EPIC, null, "E")));
+
+        // When / Then
+        assertThatThrownBy(() -> service.assignParent(1L, 5L, 30L))
+                .isInstanceOf(InvalidDependencyException.class);
+    }
+
+    // --- move -------------------------------------------------------------
+
+    @Test
+    void move_setsMovedToDoneAt_whenEnteringDoneColumn() {
+        // Given
+        Card before = card(1L, 20L, 1, false, null, CardType.CARD, null, null);
+        when(cards.findById(1L)).thenReturn(Optional.of(before));
+        when(columns.findById(21L)).thenReturn(Optional.of(column(21L, "Done", 4)));
+
+        // When
+        ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
+        service.move(1L, 1L, 21L, 0);
+
+        // Then
+        verify(cards).save(captor.capture());
+        assertThat(captor.getValue().movedToDoneAt()).isEqualTo(FIXED);
+    }
+
+    @Test
+    void move_clearsMovedToDoneAt_whenLeavingDoneColumn() {
+        // Given
+        Card before = card(1L, 21L, 1, false, FIXED.minusSeconds(10), CardType.CARD, null, null);
+        when(cards.findById(1L)).thenReturn(Optional.of(before));
+        when(columns.findById(20L)).thenReturn(Optional.of(column(20L, "Backlog", 0)));
+
+        // When
+        ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
+        service.move(1L, 1L, 20L, 0);
+
+        // Then
+        verify(cards).save(captor.capture());
+        assertThat(captor.getValue().movedToDoneAt()).isNull();
+    }
+
+    @Test
+    void move_throwsCardNotFound_whenCardUnknown() {
+        // Given
+        when(cards.findById(1L)).thenReturn(Optional.empty());
+
+        // When / Then
+        assertThatThrownBy(() -> service.move(1L, 1L, 20L, 0)).isInstanceOf(CardNotFoundException.class);
+    }
+
+    @Test
+    void move_throwsInvalidDependency_forEpic() {
+        // Given
+        when(cards.findById(5L)).thenReturn(Optional.of(card(5L, 20L, 5, false, null, CardType.EPIC, null, "E")));
+
+        // When / Then
+        assertThatThrownBy(() -> service.move(1L, 5L, 20L, 0)).isInstanceOf(InvalidDependencyException.class);
+    }
+
+    @Test
+    void move_throwsColumnNotFound_whenTargetUnknown() {
+        // Given
+        when(cards.findById(1L)).thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
+        when(columns.findById(21L)).thenReturn(Optional.empty());
+
+        // When / Then
+        assertThatThrownBy(() -> service.move(1L, 1L, 21L, 0)).isInstanceOf(ColumnNotFoundException.class);
+    }
+
+    @Test
+    void move_throwsColumnNotFound_whenTargetOnOtherBoard() {
+        // Given
+        when(cards.findById(1L)).thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
+        when(columns.findById(21L)).thenReturn(Optional.of(new BoardColumn(21L, 99L, "Done", 4, null)));
+
+        // When / Then
+        assertThatThrownBy(() -> service.move(1L, 1L, 21L, 0)).isInstanceOf(ColumnNotFoundException.class);
+    }
+
+    @Test
+    void move_throwsBoardNotFound_whenBoardUnknown() {
+        // Given
+        when(cards.findById(1L)).thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
+        when(boards.findById(BOARD)).thenReturn(Optional.empty());
+
+        // When / Then
+        assertThatThrownBy(() -> service.move(1L, 1L, 21L, 0)).isInstanceOf(BoardNotFoundException.class);
+    }
+
+    // --- archive / restore / delete --------------------------------------
+
+    @Test
+    void archive_marksCardArchived() {
+        // Given
+        when(cards.findById(1L)).thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
+
+        // When
+        ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
+        service.archive(1L, 1L);
+
+        // Then
+        verify(cards).save(captor.capture());
+        assertThat(captor.getValue().archived()).isTrue();
+    }
+
+    @Test
+    void archive_requiresEpicDeletePermission_forEpic() {
+        // Given
+        when(cards.findById(5L)).thenReturn(Optional.of(card(5L, 20L, 5, false, null, CardType.EPIC, null, "E")));
+
+        // When
+        service.archive(1L, 5L);
+
+        // Then
+        verify(permissions).require(1L, 1L, Permission.EPIC_DELETE);
+    }
+
+    @Test
+    void archive_throwsCardNotFound_whenCardUnknown() {
+        // Given
+        when(cards.findById(1L)).thenReturn(Optional.empty());
+
+        // When / Then
+        assertThatThrownBy(() -> service.archive(1L, 1L)).isInstanceOf(CardNotFoundException.class);
+    }
+
+    @Test
+    void archive_throwsBoardNotFound_whenBoardUnknown() {
+        // Given
+        when(cards.findById(1L)).thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
+        when(boards.findById(BOARD)).thenReturn(Optional.empty());
+
+        // When / Then
+        assertThatThrownBy(() -> service.archive(1L, 1L)).isInstanceOf(BoardNotFoundException.class);
+    }
+
+    @Test
+    void restore_appendsAtNextPosition() {
+        // Given
+        when(cards.findById(1L)).thenReturn(Optional.of(card(1L, 20L, 1, true, null, CardType.CARD, null, null)));
+        when(cards.maxActivePositionInColumn(20L)).thenReturn(2);
+
+        // When
+        ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
+        service.restore(1L, 1L);
+
+        // Then
+        verify(cards).save(captor.capture());
+        assertThat(captor.getValue().positionInColumn()).isEqualTo(3);
+    }
+
+    @Test
+    void delete_removesDependenciesAndCard() {
+        // Given
+        when(cards.findById(1L)).thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
+
+        // When
+        service.delete(1L, 1L);
+
+        // Then
+        verify(cards).deleteById(1L);
+    }
+
+    @Test
+    void delete_requiresTicketDeletePermission_forCard() {
+        // Given
+        when(cards.findById(1L)).thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
+
+        // When
+        service.delete(1L, 1L);
+
+        // Then
+        verify(permissions).require(eq(1L), eq(1L), eq(Permission.TICKET_DELETE));
     }
 }

@@ -50,6 +50,17 @@ class BootstrapServiceTest {
     }
 
     @Test
+    void throwsUserNotFoundWhenCallerMissing() {
+        AppUserRepository users = mock(AppUserRepository.class);
+        when(users.findAll()).thenReturn(List.of(user(1, PlatformRole.USER)));
+        when(users.findById(1L)).thenReturn(Optional.empty());
+        BootstrapService svc = new BootstrapService(users, new BootstrapProperties("secret"));
+
+        assertThatThrownBy(() -> svc.bootstrap(1, "secret"))
+                .isInstanceOf(UserNotFoundException.class);
+    }
+
+    @Test
     void elevatesCallerWithCorrectToken() {
         AppUserRepository users = mock(AppUserRepository.class);
         when(users.findAll()).thenReturn(List.of(user(1, PlatformRole.USER)));
