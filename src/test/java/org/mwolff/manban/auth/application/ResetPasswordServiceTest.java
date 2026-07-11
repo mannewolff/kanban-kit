@@ -92,9 +92,12 @@ class ResetPasswordServiceTest {
 
   @Test
   void reset_throwsInvalidToken_whenTokenAlreadyUsed() {
-    // Given
+    // Given: gültiger Nutzer + Encoder gestubbt, damit ein Umgehen des Used-Guards
+    // (Mutant) sichtbar in einen Erfolg (kein Wurf) umschlägt statt weiter unten zu werfen.
     when(tokens.findByTokenHash(anyString()))
         .thenReturn(Optional.of(token(FIXED.plusSeconds(3600), FIXED.minusSeconds(10))));
+    when(users.findById(2L)).thenReturn(Optional.of(user()));
+    when(encoder.encode(anyString())).thenReturn("newHash");
 
     // When / Then
     assertThatThrownBy(() -> service.reset("plaintext", "newPw"))
@@ -103,9 +106,11 @@ class ResetPasswordServiceTest {
 
   @Test
   void reset_throwsInvalidToken_whenTokenExpired() {
-    // Given
+    // Given: gültiger Nutzer + Encoder gestubbt (s. o.).
     when(tokens.findByTokenHash(anyString()))
         .thenReturn(Optional.of(token(FIXED.minusSeconds(1), null)));
+    when(users.findById(2L)).thenReturn(Optional.of(user()));
+    when(encoder.encode(anyString())).thenReturn("newHash");
 
     // When / Then
     assertThatThrownBy(() -> service.reset("plaintext", "newPw"))

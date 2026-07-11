@@ -88,9 +88,13 @@ class VerifyEmailServiceTest {
 
   @Test
   void verify_throwsInvalidToken_whenTokenAlreadyUsed() {
-    // Given
+    // Given: gültiger Nutzer gestubbt, damit ein Umgehen des Used-Guards (Mutant) in
+    // einen Erfolg (kein Wurf) umschlägt statt unten am fehlenden Nutzer zu werfen.
     when(tokens.findByTokenHash(anyString()))
         .thenReturn(Optional.of(token(FIXED.plusSeconds(3600), FIXED.minusSeconds(10))));
+    when(users.findById(2L))
+        .thenReturn(
+            Optional.of(new AppUser(2L, "a@x.de", "hash", "Ada", false, PlatformRole.USER)));
 
     // When / Then
     assertThatThrownBy(() -> service.verify("plaintext"))
@@ -99,9 +103,12 @@ class VerifyEmailServiceTest {
 
   @Test
   void verify_throwsInvalidToken_whenTokenExpired() {
-    // Given
+    // Given: gültiger Nutzer gestubbt (s. o.).
     when(tokens.findByTokenHash(anyString()))
         .thenReturn(Optional.of(token(FIXED.minusSeconds(1), null)));
+    when(users.findById(2L))
+        .thenReturn(
+            Optional.of(new AppUser(2L, "a@x.de", "hash", "Ada", false, PlatformRole.USER)));
 
     // When / Then
     assertThatThrownBy(() -> service.verify("plaintext"))

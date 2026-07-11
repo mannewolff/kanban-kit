@@ -98,6 +98,12 @@ class AccessTokenServiceTest {
 
   @Test
   void create_throwsInvalidBinding_whenOnlyBoardIdSet() {
+    // Given: das Board existiert sogar — trotzdem muss die fehlende projectId (erste
+    // Bedingung des Guards) abgewiesen werden. Ohne den Board-Stub würde ein Umgehen des
+    // projectId==null-Zweigs (Mutant) über „Board unbekannt" dieselbe Ausnahme werfen und
+    // unentdeckt bleiben.
+    when(boards.findById(20L)).thenReturn(Optional.of(new Board(20L, 5L, "B", FIXED)));
+
     // When / Then
     assertThatThrownBy(() -> service.create(1L, "CI", null, 20L))
         .isInstanceOf(InvalidTokenBindingException.class);

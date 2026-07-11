@@ -354,14 +354,10 @@
                  check an verify-Phase. IT-Coverage (Failsafe) fließt bewusst NICHT in jacoco.exec
                  ein, daher werden IT-only-Klassen trotz voller IT-Abdeckung ausgeschlossen (§5.2).
 
-                 Ausschlüsse stehen klassenweise (keine Paket-Wildcards, §5.2) und sind in zwei
-                 Sorten getrennt:
-                   - DAUERHAFT (§5.2): main-Klasse, Config-/Bean-Wiring, reine DTO-/Record-Typen,
-                     IT-only-Infrastruktur (Entities, DB-gebundene Adapter, Jdbc*, Mail/S3),
-                     Krypto-Plumbing mit nachweislich nicht erreichbaren Zweigen.
-                   - TEMPORÄR (bis #0077): unit-testbare Klassen, die aktuell noch keinen
-                     *Test haben (v. a. die 18 Controller sowie die Security-Filter/Session-Helfer).
-                     Sobald #0077 die Tests nachzieht, wird der jeweilige Ausschluss entfernt. -->
+                 Ausschlüsse stehen klassenweise (keine Paket-Wildcards, §5.2), ausschließlich
+                 DAUERHAFT nach §5.2: main-Klasse, Config-/Bean-Wiring, reine DTO-/Record-Typen,
+                 IT-only-Infrastruktur (Entities, DB-gebundene Adapter, Jdbc*, Mail/S3),
+                 Krypto-Plumbing mit nachweislich nicht erreichbaren Zweigen. -->
             <plugin>
                 <groupId>org.jacoco</groupId>
                 <artifactId>jacoco-maven-plugin</artifactId>
@@ -456,42 +452,6 @@
                              NoSuchAlgorithmException-catch für den garantiert vorhandenen
                              SHA-256-Provider ist nicht testbar (§5.2). -->
                         <exclude>org/mwolff/manban/common/SecureTokens.class</exclude>
-
-                        <!-- =========================================================== -->
-                        <!-- TEMPORÄR ausgeschlossen (bis #0077 die Unit-Tests nachzieht) -->
-                        <!-- =========================================================== -->
-
-                        <!-- Controller: dünne HTTP-Adapter, aktuell nur via IT abgedeckt.
-                             TODO #0077: Unit-Test (@WebMvcTest o. ä.) nachziehen, dann Ausschluss entfernen. -->
-                        <exclude>org/mwolff/manban/accesstoken/web/AccessTokenController.class</exclude>
-                        <exclude>org/mwolff/manban/attachment/web/AttachmentController.class</exclude>
-                        <exclude>org/mwolff/manban/auth/web/AdminUserController.class</exclude>
-                        <exclude>org/mwolff/manban/auth/web/AuthController.class</exclude>
-                        <exclude>org/mwolff/manban/auth/web/BootstrapController.class</exclude>
-                        <exclude>org/mwolff/manban/auth/web/MeController.class</exclude>
-                        <exclude>org/mwolff/manban/auth/web/PasswordResetController.class</exclude>
-                        <exclude>org/mwolff/manban/auth/web/SessionController.class</exclude>
-                        <exclude>org/mwolff/manban/board/web/BoardController.class</exclude>
-                        <exclude>org/mwolff/manban/board/web/ColumnController.class</exclude>
-                        <exclude>org/mwolff/manban/card/web/CardController.class</exclude>
-                        <exclude>org/mwolff/manban/card/web/ConfigController.class</exclude>
-                        <exclude>org/mwolff/manban/comment/web/CommentController.class</exclude>
-                        <exclude>org/mwolff/manban/kanbancompat/web/KanbanCompatController.class</exclude>
-                        <exclude>org/mwolff/manban/project/web/InvitationController.class</exclude>
-                        <exclude>org/mwolff/manban/project/web/MemberController.class</exclude>
-                        <exclude>org/mwolff/manban/project/web/ProjectController.class</exclude>
-                        <exclude>org/mwolff/manban/project/web/RolesController.class</exclude>
-
-                        <!-- Security-Filter / Session-Helfer: unit-testbar (Mock von Request/Response
-                             bzw. deterministisches HMAC), aktuell aber nur via IT abgedeckt.
-                             TODO #0077: Unit-Test nachziehen, dann Ausschluss entfernen. -->
-                        <exclude>org/mwolff/manban/accesstoken/infrastructure/security/PatAuthenticationFilter.class</exclude>
-                        <exclude>org/mwolff/manban/auth/infrastructure/security/SessionAuthenticationFilter.class</exclude>
-                        <exclude>org/mwolff/manban/auth/infrastructure/security/SessionCookieManager.class</exclude>
-                        <exclude>org/mwolff/manban/auth/infrastructure/security/SignedSessionTokens.class</exclude>
-                        <!-- Token-Krypto-Adapter: unit-testbar (Format/Hash prüfbar), aktuell ohne Test.
-                             TODO #0077: Unit-Test nachziehen, dann Ausschluss entfernen. -->
-                        <exclude>org/mwolff/manban/common/token/Sha256TokenCryptoAdapter.class</exclude>
                     </excludes>
                 </configuration>
                 <executions>
@@ -729,6 +689,17 @@
                             <timeoutFactor>1.5</timeoutFactor>
                             <timeoutConstant>4000</timeoutConstant>
 
+                            <!-- FANN (Filter by ANNotation) honoriert zusätzlich zur Default-Liste
+                                 (Generated/DoNotMutate/CoverageIgnore) die projekteigene
+                                 §5.4-Annotation @ExcludeFromJacocoGeneratedReport. So werden exakt
+                                 dieselben nachweislich nicht erreichbaren Zweige aus der Mutation
+                                 genommen, die auch JaCoCo ausnimmt (z. B. der defensive
+                                 ""-Fallback in RoleMatrixService.toView, dessen Mutanten äquivalent
+                                 und damit nicht tötbar sind). Keine Mutator-Deaktivierung (§5.3). -->
+                            <features>
+                                <feature>+FANN(annotation[Generated] annotation[DoNotMutate] annotation[CoverageIgnore] annotation[ExcludeFromJacocoGeneratedReport])</feature>
+                            </features>
+
                             <!-- Scope: gemutiert werden nur die unit-getesteten Klassen —
                                  Application-Schicht (Services + Werte/Properties) und Domäne.
                                  Analog zu den JaCoCo-<excludes> (web/infrastructure/config/main). -->
@@ -757,19 +728,14 @@
                                 <value>XML</value>
                             </outputFormats>
 
-                            <!-- Ehrliches, grünes Gate für den AKTUELLEN Stand:
-                                 Mutation Score = Test Strength = 94 % (466/494 Mutanten getötet,
-                                 Line Coverage der mutierten Klassen 100 %). Der Schwellwert bildet
-                                 exakt den erreichten Stand ab — nicht künstlich hoch (bräche sonst),
-                                 nicht künstlich niedrig.
-                                 TODO #0077: auf 100 % anheben, sobald die 28 verbleibenden Mutanten
-                                 (überwiegend RemoveConditional-Guards in den Services) durch
-                                 zusätzliche Unit-Tests getötet sind (§5.3) — keine Mutator-
-                                 Deaktivierung.
+                            <!-- 100 % Mutation Score (§5.1): alle Mutanten der Application-/Domain-
+                                 Klassen werden durch Unit-Tests getötet; die einzigen nicht tötbaren
+                                 (äquivalenten) Mutanten liegen auf §5.4-annotierten, nachweislich
+                                 nicht erreichbaren Zweigen und werden per FANN (s. o.) — analog zur
+                                 JaCoCo-Ausnahme — aus der Mutation genommen.
                                  Eine eigene Test-Strength-Schwelle bietet pitest-maven nicht als
-                                 Parameter; sie wird über #0077 gemeinsam mit dem Mutation-Score
-                                 auf 100 % gezogen. -->
-                            <mutationThreshold>94</mutationThreshold>
+                                 Parameter; sie liegt bei erreichten 100 % gleichauf. -->
+                            <mutationThreshold>100</mutationThreshold>
                         </configuration>
                     </plugin>
                 </plugins>

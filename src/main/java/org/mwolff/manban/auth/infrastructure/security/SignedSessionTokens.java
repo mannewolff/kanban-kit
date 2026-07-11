@@ -8,6 +8,7 @@ import java.util.OptionalLong;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import org.mwolff.manban.auth.application.AuthProperties;
+import org.mwolff.manban.common.ExcludeFromJacocoGeneratedReport;
 import org.springframework.stereotype.Component;
 
 /**
@@ -84,6 +85,13 @@ public class SignedSessionTokens {
     }
   }
 
+  // §5.4/§5.2: Der catch bündelt die *geprüften* JCA-Ausnahmen (NoSuchAlgorithmException aus
+  // Mac.getInstance, InvalidKeyException aus init) für den vom JCA garantiert vorhandenen
+  // HmacSHA256-Provider. Der Zweig ist nachweislich nicht erreichbar (der Schlüssel ist über die
+  // AuthProperties nie leer, sonst würde bereits der SecretKeySpec-Konstruktor werfen), aber zum
+  // Kompilieren der Checked Exceptions zwingend. Die Fachlogik (Signatur/Ablauf) ist über die
+  // issue/verify-Round-Trip-Tests voll abgedeckt; deshalb Coverage-Ausnahme statt Entfernung.
+  @ExcludeFromJacocoGeneratedReport
   private byte[] hmac(String data) {
     try {
       Mac mac = Mac.getInstance(HMAC_ALGORITHM);

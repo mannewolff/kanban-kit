@@ -33,6 +33,10 @@ class BootstrapServiceTest {
   void rejectsWrongToken() {
     AppUserRepository users = mock(AppUserRepository.class);
     when(users.findAll()).thenReturn(List.of(user(1, PlatformRole.USER)));
+    // Downstream (Nutzer + save) gestubbt: ein Umgehen des Token-Guards (Mutant) schlägt
+    // dadurch in einen Erfolg statt in eine UserNotFound-Ausnahme um und wird sichtbar.
+    when(users.findById(1L)).thenReturn(Optional.of(user(1, PlatformRole.USER)));
+    when(users.save(any(AppUser.class))).thenAnswer(inv -> inv.getArgument(0));
     BootstrapService svc = new BootstrapService(users, new BootstrapProperties("secret"));
 
     assertThatThrownBy(() -> svc.bootstrap(1, "falsch"))
@@ -50,9 +54,26 @@ class BootstrapServiceTest {
   }
 
   @Test
+  void rejectsBlankConfiguredToken_evenWhenPresentedTokenEqualsBlank() {
+    // Given: leerer konfigurierter Token, den der Aufrufer exakt „trifft". Der Blank-Guard
+    // muss trotzdem greifen; würde er umgangen (Mutant), liefe die Token-Prüfung durch
+    // (identische Strings) und der Bootstrap gelänge fälschlich.
+    AppUserRepository users = mock(AppUserRepository.class);
+    when(users.findAll()).thenReturn(List.of(user(1, PlatformRole.USER)));
+    when(users.findById(1L)).thenReturn(Optional.of(user(1, PlatformRole.USER)));
+    when(users.save(any(AppUser.class))).thenAnswer(inv -> inv.getArgument(0));
+    BootstrapService svc = new BootstrapService(users, new BootstrapProperties("   "));
+
+    assertThatThrownBy(() -> svc.bootstrap(1, "   "))
+        .isInstanceOf(InvalidBootstrapTokenException.class);
+  }
+
+  @Test
   void rejectsNullToken() {
     AppUserRepository users = mock(AppUserRepository.class);
     when(users.findAll()).thenReturn(List.of(user(1, PlatformRole.USER)));
+    when(users.findById(1L)).thenReturn(Optional.of(user(1, PlatformRole.USER)));
+    when(users.save(any(AppUser.class))).thenAnswer(inv -> inv.getArgument(0));
     BootstrapService svc = new BootstrapService(users, new BootstrapProperties("secret"));
 
     assertThatThrownBy(() -> svc.bootstrap(1, null))

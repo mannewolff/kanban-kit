@@ -3,8 +3,11 @@ package org.mwolff.manban.card.application;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -244,9 +247,13 @@ class CardServiceTest {
 
   @Test
   void create_throwsInvalidDependency_onSelfDependency() {
-    // Given
+    // Given: die eigene Nummer 1 IST eine gültige Board-Nummer. So schlägt ein Umgehen des
+    // Selbstbezug-Guards (Mutant) NICHT in „Unbekannte Nummer" um, sondern in einen Erfolg —
+    // der Selbstbezug-Guard wird dadurch beweisbar geprüft.
     when(columns.findById(20L)).thenReturn(Optional.of(column(20L, "Backlog", 0)));
     when(cards.maxNumberInBoard(BOARD)).thenReturn(0);
+    when(cards.findByBoardId(BOARD))
+        .thenReturn(List.of(card(9L, 20L, 1, false, null, CardType.CARD, null, null)));
 
     // When / Then: neue Karte bekommt Nummer 1, hängt von 1 (sich selbst) ab
     assertThatThrownBy(() -> service.create(1L, BOARD, 20L, "Titel", null, List.of(1), null))
@@ -725,6 +732,36 @@ class CardServiceTest {
 
     // Then
     verify(dependencies).replaceDependencies(1L, List.of());
+    // Eine leere Liste wird ohne Board-Lookup direkt geleert (Kurzschluss des isEmpty-Zweigs);
+    // ein Umgehen dieses Zweigs (Mutant) würde die Board-Nummern unnötig nachladen.
+    verify(cards, never()).findByBoardId(BOARD);
+  }
+
+  @Test
+  void create_clearsDependencies_whenNullList() {
+    // Given: dependsOn == null muss (wie leere Liste) die Abhängigkeiten leeren. Ein Umgehen
+    // des null-Zweigs (Mutant) liefe in isEmpty() auf null und würde eine NPE werfen.
+    when(columns.findById(20L)).thenReturn(Optional.of(column(20L, "Backlog", 0)));
+
+    // When
+    service.create(1L, BOARD, 20L, "Titel", null, null, null);
+
+    // Then
+    verify(dependencies).replaceDependencies(1L, List.of());
+  }
+
+  @Test
+  void update_leavesDependenciesUntouched_whenDependsOnNull() {
+    // Given: bei dependsOn == null darf update die Abhängigkeiten NICHT anfassen. Ein Umgehen
+    // des null-Guards (Mutant) würde replaceDependencies aufrufen.
+    when(cards.findById(1L))
+        .thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
+
+    // When
+    service.update(1L, 1L, "Neu", null, null, null, null);
+
+    // Then
+    verify(dependencies, never()).replaceDependencies(anyLong(), anyList());
   }
 
   @Test

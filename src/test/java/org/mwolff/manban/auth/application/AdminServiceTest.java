@@ -194,4 +194,40 @@ class AdminServiceTest {
     assertThatThrownBy(() -> service.changePlatformRole(2L, 2L, PlatformRole.USER))
         .isInstanceOf(LastAdminException.class);
   }
+
+  @Test
+  void changePlatformRole_succeeds_whenTargetIsNotAdmin_evenIfSoleAdminGuardWouldTrigger() {
+    // Given: Ziel ist KEIN Admin (erste Guard-Bedingung false); neue Rolle nicht Admin und
+    // nur ein Admin im System (die beiden anderen Bedingungen true). Der Aussperr-Schutz darf
+    // NICHT greifen — ein Umgehen der „target ist Admin"-Bedingung (Mutant) würde hier fälschlich
+    // LastAdmin werfen.
+    when(users.findById(1L)).thenReturn(Optional.of(user(1, PlatformRole.ADMIN)));
+    when(users.findById(2L)).thenReturn(Optional.of(user(2, PlatformRole.USER)));
+    when(users.findAll()).thenReturn(List.of(user(1, PlatformRole.ADMIN)));
+    when(users.save(any(AppUser.class))).thenAnswer(inv -> inv.getArgument(0));
+
+    // When
+    AdminService.UserView view = service.changePlatformRole(1L, 2L, PlatformRole.USER);
+
+    // Then
+    assertThat(view.platformRole()).isEqualTo(PlatformRole.USER);
+  }
+
+  @Test
+  void changePlatformRole_throwsLastAdmin_whenSoleAdminAmongManyUsers() {
+    // Given: nur EIN Admin, aber mehrere Nutzer. adminCount() muss genau die Admins zählen —
+    // eine Zählung aller Nutzer (Mutant am Filter-Prädikat) ergäbe >1 und würde den
+    // Aussperr-Schutz fälschlich aushebeln.
+    when(users.findById(2L)).thenReturn(Optional.of(user(2, PlatformRole.ADMIN)));
+    when(users.findAll())
+        .thenReturn(
+            List.of(
+                user(2, PlatformRole.ADMIN),
+                user(3, PlatformRole.USER),
+                user(4, PlatformRole.USER)));
+
+    // When / Then
+    assertThatThrownBy(() -> service.changePlatformRole(2L, 2L, PlatformRole.USER))
+        .isInstanceOf(LastAdminException.class);
+  }
 }

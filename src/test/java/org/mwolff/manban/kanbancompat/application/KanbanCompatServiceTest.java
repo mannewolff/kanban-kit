@@ -194,6 +194,47 @@ class KanbanCompatServiceTest {
   }
 
   @Test
+  void items_marksRegularCardsAsCardType() {
+    // Given: eine gewöhnliche Karte (kein Epic)
+    when(boards.findById(BOARD)).thenReturn(Optional.of(new Board(BOARD, 5L, "B", FIXED)));
+    when(columns.findByBoardId(BOARD)).thenReturn(standardColumns());
+    when(cards.findByBoardId(BOARD)).thenReturn(List.of(card(1L, 100L, 1)));
+
+    // When
+    Map<String, List<KanbanCompatService.Item>> grouped = service.items(bound());
+
+    // Then: der Typ ist „card" (nicht „epic")
+    assertThat(grouped.get("BACKLOG"))
+        .singleElement()
+        .extracting(KanbanCompatService.Item::type)
+        .isEqualTo("card");
+  }
+
+  @Test
+  void items_saturatesFallbackKeyAtLastColumn_whenBoardHasMoreColumnsThanKeys() {
+    // Given: sechs Spalten ohne kanonische Namen -> für jede greift der Positions-Fallback.
+    // Ab der sechsten (Index 5) muss der Fallback-Index bei der letzten Kanban-Spalte (DONE)
+    // gedeckelt werden (Math.min(i, size-1)); ein „size+1" (Mutant) liefe aus dem Index.
+    List<BoardColumn> sixColumns =
+        List.of(
+            new BoardColumn(100L, BOARD, "Alpha", 0, null),
+            new BoardColumn(101L, BOARD, "Beta", 1, null),
+            new BoardColumn(102L, BOARD, "Gamma", 2, null),
+            new BoardColumn(103L, BOARD, "Delta", 3, null),
+            new BoardColumn(104L, BOARD, "Epsilon", 4, null),
+            new BoardColumn(105L, BOARD, "Zeta", 5, null));
+    when(boards.findById(BOARD)).thenReturn(Optional.of(new Board(BOARD, 5L, "B", FIXED)));
+    when(columns.findByBoardId(BOARD)).thenReturn(sixColumns);
+    when(cards.findByBoardId(BOARD)).thenReturn(List.of(card(1L, 105L, 1)));
+
+    // When
+    Map<String, List<KanbanCompatService.Item>> grouped = service.items(bound());
+
+    // Then: die Karte in der sechsten Spalte landet unter dem gedeckelten Key „DONE"
+    assertThat(grouped.get("DONE")).extracting(KanbanCompatService.Item::number).containsExactly(1);
+  }
+
+  @Test
   void items_throwsTokenNotBound_whenPrincipalUnbound() {
     // Given
     KanbanPrincipal unbound = new KanbanPrincipal(1L, 2L, null, null);
@@ -271,9 +312,11 @@ class KanbanCompatServiceTest {
     // Given
     when(columns.findByBoardId(BOARD)).thenReturn(standardColumns());
 
-    // When / Then
+    // When / Then: die Meldung muss aus dem COLUMNS-Guard stammen (nicht aus dem späteren
+    // Board-Lookup), sonst bliebe ein Umgehen des Guards unentdeckt.
     assertThatThrownBy(() -> service.create(bound(), "Titel", "Body", "NOPE"))
-        .isInstanceOf(InvalidKanbanColumnException.class);
+        .isInstanceOf(InvalidKanbanColumnException.class)
+        .hasMessageContaining("Unbekannte Kanban-Spalte");
   }
 
   @Test
@@ -347,6 +390,34 @@ class KanbanCompatServiceTest {
 
     // Then
     verify(commentService).create(1L, 1L, "Hallo");
+  }
+
+  @Test
+  void comment_throwsCardNotFound_whenCardNotOnBoard() {
+    // Given: die Karte liegt auf einem anderen Board — der Board-Guard muss greifen. Fällt der
+    // requireCardOnBoard-Aufruf weg (Mutant), würde der Kommentar fälschlich angelegt.
+    Card otherBoard =
+        new Card(
+            1L,
+            99L,
+            100L,
+            1,
+            "T",
+            null,
+            0,
+            false,
+            null,
+            1L,
+            FIXED,
+            FIXED,
+            CardType.CARD,
+            null,
+            null);
+    when(cards.findById(1L)).thenReturn(Optional.of(otherBoard));
+
+    // When / Then
+    assertThatThrownBy(() -> service.comment(bound(), 1L, "Hallo"))
+        .isInstanceOf(org.mwolff.manban.card.application.CardNotFoundException.class);
   }
 
   @Test

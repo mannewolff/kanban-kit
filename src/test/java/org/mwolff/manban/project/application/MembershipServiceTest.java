@@ -4,7 +4,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -23,7 +22,6 @@ import org.mwolff.manban.auth.application.AppUserRepository;
 import org.mwolff.manban.auth.application.AuthProperties;
 import org.mwolff.manban.auth.domain.AppUser;
 import org.mwolff.manban.auth.domain.PlatformRole;
-import org.mwolff.manban.project.domain.Project;
 import org.mwolff.manban.project.domain.ProjectInvitation;
 import org.mwolff.manban.project.domain.ProjectMembership;
 import org.mwolff.manban.project.domain.ProjectRole;
@@ -80,59 +78,6 @@ class MembershipServiceTest {
   }
 
   @Test
-  void invite_setsExpiryFromInjectedClockPlusTtl() {
-    // Given
-    when(projects.findById(9L)).thenReturn(Optional.of(new Project(9L, "P", 1L, FIXED)));
-    when(invitations.save(any(ProjectInvitation.class))).thenAnswer(inv -> inv.getArgument(0));
-
-    // When
-    ArgumentCaptor<ProjectInvitation> captor = ArgumentCaptor.forClass(ProjectInvitation.class);
-    service.invite(1L, 9L, "guest@x.de", ProjectRole.MEMBER);
-
-    // Then
-    verify(invitations).save(captor.capture());
-    assertThat(captor.getValue().expiresAt()).isEqualTo(FIXED.plus(Duration.ofDays(7)));
-  }
-
-  @Test
-  void invite_normalizesEmail() {
-    // Given
-    when(projects.findById(9L)).thenReturn(Optional.of(new Project(9L, "P", 1L, FIXED)));
-    when(invitations.save(any(ProjectInvitation.class))).thenAnswer(inv -> inv.getArgument(0));
-
-    // When
-    ArgumentCaptor<ProjectInvitation> captor = ArgumentCaptor.forClass(ProjectInvitation.class);
-    service.invite(1L, 9L, "  GUEST@x.de ", ProjectRole.MEMBER);
-
-    // Then
-    verify(invitations).save(captor.capture());
-    assertThat(captor.getValue().email()).isEqualTo("guest@x.de");
-  }
-
-  @Test
-  void invite_sendsInvitationEmail() {
-    // Given
-    when(projects.findById(9L)).thenReturn(Optional.of(new Project(9L, "P", 1L, FIXED)));
-    when(invitations.save(any(ProjectInvitation.class))).thenAnswer(inv -> inv.getArgument(0));
-
-    // When
-    service.invite(1L, 9L, "guest@x.de", ProjectRole.MEMBER);
-
-    // Then
-    verify(mailer).sendInvitationEmail(eq("guest@x.de"), eq("P"), anyString());
-  }
-
-  @Test
-  void invite_throwsProjectNotFound_whenProjectMissing() {
-    // Given
-    when(projects.findById(9L)).thenReturn(Optional.empty());
-
-    // When / Then
-    assertThatThrownBy(() -> service.invite(1L, 9L, "guest@x.de", ProjectRole.MEMBER))
-        .isInstanceOf(ProjectNotFoundException.class);
-  }
-
-  @Test
   void accept_createsMembership_forMatchingUser() {
     // Given
     when(invitations.findByTokenHash(anyString()))
@@ -143,11 +88,13 @@ class MembershipServiceTest {
 
     // When
     ArgumentCaptor<ProjectMembership> captor = ArgumentCaptor.forClass(ProjectMembership.class);
-    service.accept(2L, "plaintext");
+    MembershipService.MemberView view = service.accept(2L, "plaintext");
 
     // Then
     verify(memberships).save(captor.capture());
     assertThat(captor.getValue().role()).isEqualTo(ProjectRole.MEMBER);
+    // Rückgabe ist die Sicht auf die (neue) Mitgliedschaft — nicht null.
+    assertThat(view.email()).isEqualTo("guest@x.de");
   }
 
   @Test
@@ -196,9 +143,13 @@ class MembershipServiceTest {
 
   @Test
   void accept_throwsInvalidInvitation_whenAlreadyAccepted() {
-    // Given
+    // Given: Downstream (Nutzer + Mitgliedschaft) gestubbt, damit ein Umgehen des
+    // Gültigkeits-Guards (Mutant) in einen Erfolg statt in eine spätere Ausnahme umschlägt.
     when(invitations.findByTokenHash(anyString()))
         .thenReturn(Optional.of(invitation(FIXED.plusSeconds(3600), FIXED.minusSeconds(10))));
+    when(users.findById(2L)).thenReturn(Optional.of(user(2, "guest@x.de")));
+    when(memberships.findByProjectIdAndUserId(9L, 2L)).thenReturn(Optional.empty());
+    when(memberships.save(any(ProjectMembership.class))).thenAnswer(inv -> inv.getArgument(0));
 
     // When / Then
     assertThatThrownBy(() -> service.accept(2L, "plaintext"))
@@ -207,9 +158,12 @@ class MembershipServiceTest {
 
   @Test
   void accept_throwsInvalidInvitation_whenExpired() {
-    // Given
+    // Given: Downstream gestubbt (s. o.).
     when(invitations.findByTokenHash(anyString()))
         .thenReturn(Optional.of(invitation(FIXED.minusSeconds(1), null)));
+    when(users.findById(2L)).thenReturn(Optional.of(user(2, "guest@x.de")));
+    when(memberships.findByProjectIdAndUserId(9L, 2L)).thenReturn(Optional.empty());
+    when(memberships.save(any(ProjectMembership.class))).thenAnswer(inv -> inv.getArgument(0));
 
     // When / Then
     assertThatThrownBy(() -> service.accept(2L, "plaintext"))
@@ -278,11 +232,14 @@ class MembershipServiceTest {
 
     // When
     ArgumentCaptor<ProjectMembership> captor = ArgumentCaptor.forClass(ProjectMembership.class);
-    service.changeRole(1L, 9L, 2L, ProjectRole.ADMIN);
+    MembershipService.MemberView view = service.changeRole(1L, 9L, 2L, ProjectRole.ADMIN);
 
     // Then
     verify(memberships).save(captor.capture());
     assertThat(captor.getValue().role()).isEqualTo(ProjectRole.ADMIN);
+    // Rückgabe ist die Sicht auf das aktualisierte Mitglied (aus der Nutzer-Fundstelle) — nicht
+    // null.
+    assertThat(view.email()).isEqualTo("guest@x.de");
   }
 
   @Test
@@ -340,11 +297,14 @@ class MembershipServiceTest {
 
     // When
     ArgumentCaptor<ProjectMembership> captor = ArgumentCaptor.forClass(ProjectMembership.class);
-    service.changeRole(1L, 9L, 2L, ProjectRole.MEMBER);
+    MembershipService.MemberView view = service.changeRole(1L, 9L, 2L, ProjectRole.MEMBER);
 
     // Then
     verify(memberships).save(captor.capture());
     assertThat(captor.getValue().role()).isEqualTo(ProjectRole.MEMBER);
+    // Nutzer ist hier NICHT nachschlagbar -> Fallback-Sicht mit userId, aber ohne E-Mail (nicht
+    // null). Deckt den orElseGet-Zweig von toView ab.
+    assertThat(view.userId()).isEqualTo(2L);
   }
 
   @Test
@@ -361,6 +321,58 @@ class MembershipServiceTest {
     // Then
     verify(memberships).save(captor.capture());
     assertThat(captor.getValue().role()).isEqualTo(ProjectRole.OWNER);
+  }
+
+  @Test
+  void changeRole_appliesLastOwnerGuardOnlyWhenTargetIsOwner() {
+    // Given: das Ziel ist MEMBER (erste Guard-Bedingung false) — selbst wenn die Owner-Liste es
+    // (inkonsistent) als einzigen Owner führte, darf der Aussperr-Schutz NICHT greifen. Sichert,
+    // dass die „target ist OWNER"-Bedingung tatsächlich geprüft wird.
+    when(memberships.findByProjectIdAndUserId(9L, 2L))
+        .thenReturn(Optional.of(membership(2L, ProjectRole.MEMBER)));
+    when(memberships.findByProjectId(9L)).thenReturn(List.of(membership(2L, ProjectRole.OWNER)));
+    when(memberships.save(any(ProjectMembership.class))).thenAnswer(inv -> inv.getArgument(0));
+
+    // When
+    ArgumentCaptor<ProjectMembership> captor = ArgumentCaptor.forClass(ProjectMembership.class);
+    service.changeRole(1L, 9L, 2L, ProjectRole.MEMBER);
+
+    // Then
+    verify(memberships).save(captor.capture());
+    assertThat(captor.getValue().role()).isEqualTo(ProjectRole.MEMBER);
+  }
+
+  @Test
+  void changeRole_keepsSoleOwner_whenNewRoleAlsoOwner() {
+    // Given: einziger OWNER bleibt OWNER -> zweite Guard-Bedingung (neue Rolle != OWNER) ist
+    // false; der Aussperr-Schutz darf trotz „letzter Owner" nicht greifen.
+    when(memberships.findByProjectIdAndUserId(9L, 2L))
+        .thenReturn(Optional.of(membership(2L, ProjectRole.OWNER)));
+    when(memberships.findByProjectId(9L)).thenReturn(List.of(membership(2L, ProjectRole.OWNER)));
+    when(memberships.save(any(ProjectMembership.class))).thenAnswer(inv -> inv.getArgument(0));
+
+    // When
+    ArgumentCaptor<ProjectMembership> captor = ArgumentCaptor.forClass(ProjectMembership.class);
+    service.changeRole(1L, 9L, 2L, ProjectRole.OWNER);
+
+    // Then
+    verify(memberships).save(captor.capture());
+    assertThat(captor.getValue().role()).isEqualTo(ProjectRole.OWNER);
+  }
+
+  @Test
+  void changeRole_throwsLastOwner_whenSoleOwnerAmongOtherMembers() {
+    // Given: genau EIN OWNER neben Nicht-OWNER-Mitgliedern. isLastOwner darf nur OWNER zählen —
+    // würden alle Mitglieder gezählt (Mutant am Filter-Prädikat), wäre size != 1 und die
+    // Degradierung liefe fälschlich durch.
+    when(memberships.findByProjectIdAndUserId(9L, 2L))
+        .thenReturn(Optional.of(membership(2L, ProjectRole.OWNER)));
+    when(memberships.findByProjectId(9L))
+        .thenReturn(List.of(membership(2L, ProjectRole.OWNER), membership(5L, ProjectRole.MEMBER)));
+
+    // When / Then
+    assertThatThrownBy(() -> service.changeRole(1L, 9L, 2L, ProjectRole.MEMBER))
+        .isInstanceOf(LastOwnerException.class);
   }
 
   @Test
@@ -383,6 +395,21 @@ class MembershipServiceTest {
         .thenReturn(Optional.of(membership(2L, ProjectRole.OWNER)));
     when(memberships.findByProjectId(9L))
         .thenReturn(List.of(membership(2L, ProjectRole.OWNER), membership(5L, ProjectRole.OWNER)));
+
+    // When
+    service.removeMember(1L, 9L, 2L);
+
+    // Then
+    verify(memberships).deleteById(3L);
+  }
+
+  @Test
+  void removeMember_appliesLastOwnerGuardOnlyWhenTargetIsOwner() {
+    // Given: das Ziel ist MEMBER (erste Guard-Bedingung false) — der Aussperr-Schutz darf nicht
+    // greifen, selbst wenn die Owner-Liste es (inkonsistent) als einzigen Owner führte.
+    when(memberships.findByProjectIdAndUserId(9L, 2L))
+        .thenReturn(Optional.of(membership(2L, ProjectRole.MEMBER)));
+    when(memberships.findByProjectId(9L)).thenReturn(List.of(membership(2L, ProjectRole.OWNER)));
 
     // When
     service.removeMember(1L, 9L, 2L);

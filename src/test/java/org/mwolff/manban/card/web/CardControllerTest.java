@@ -1,0 +1,179 @@
+package org.mwolff.manban.card.web;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+import java.util.List;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.mwolff.manban.board.application.ColumnNotFoundException;
+import org.mwolff.manban.card.application.CardService;
+import org.mwolff.manban.card.application.CardService.CardView;
+import org.mwolff.manban.card.application.CardService.EpicView;
+import org.mwolff.manban.card.domain.CardType;
+
+/** Unit-Tests des Karten-/Epic-Controllers (Service gemockt). */
+class CardControllerTest {
+
+  private CardService service;
+  private CardController controller;
+
+  private static CardView card() {
+    return new CardView(
+        1L, 2L, 3L, 4, "Title", "Desc", 0, false, null, List.of(), CardType.CARD, null, null);
+  }
+
+  @BeforeEach
+  void setUp() {
+    service = mock(CardService.class);
+    controller = new CardController(service);
+  }
+
+  @Test
+  void create_epicType_delegatesToCreateEpic() {
+    // Given
+    CardView view = card();
+    var request =
+        new CardController.CreateCardRequest(
+            null, "Epic", "Desc", null, CardType.EPIC, null, "EP-1");
+    when(service.createEpic(3L, 2L, "Epic", "Desc", "EP-1")).thenReturn(view);
+
+    // When
+    CardView result = controller.create(3L, 2L, request);
+
+    // Then
+    assertThat(result).isSameAs(view);
+  }
+
+  @Test
+  void create_nullTypeDefaultsToCard_delegatesToCreate() {
+    // Given
+    CardView view = card();
+    var deps = List.of(1, 2);
+    var request = new CardController.CreateCardRequest(7L, "Title", "Desc", deps, null, 9L, null);
+    when(service.create(3L, 2L, 7L, "Title", "Desc", deps, 9L)).thenReturn(view);
+
+    // When
+    CardView result = controller.create(3L, 2L, request);
+
+    // Then
+    assertThat(result).isSameAs(view);
+  }
+
+  @Test
+  void create_cardTypeWithoutColumn_throwsColumnNotFound() {
+    // Given
+    var request =
+        new CardController.CreateCardRequest(
+            null, "Title", "Desc", null, CardType.CARD, null, null);
+
+    // When / Then
+    assertThatThrownBy(() -> controller.create(3L, 2L, request))
+        .isInstanceOf(ColumnNotFoundException.class);
+  }
+
+  @Test
+  void list_delegatesToService() {
+    // Given
+    List<CardView> views = List.of(card());
+    when(service.listByBoard(3L, 2L)).thenReturn(views);
+
+    // When
+    List<CardView> result = controller.list(3L, 2L);
+
+    // Then
+    assertThat(result).isSameAs(views);
+  }
+
+  @Test
+  void epics_delegatesToService() {
+    // Given
+    List<EpicView> views = List.of(new EpicView(1L, 4, "Epic", "Desc", "EP-1", 1, 3));
+    when(service.listEpics(3L, 2L)).thenReturn(views);
+
+    // When
+    List<EpicView> result = controller.epics(3L, 2L);
+
+    // Then
+    assertThat(result).isSameAs(views);
+  }
+
+  @Test
+  void update_delegatesToService() {
+    // Given
+    CardView view = card();
+    var deps = List.of(3, 4);
+    var request = new CardController.UpdateCardRequest("Title", "Desc", deps, "SC-1", 9L);
+    when(service.update(3L, 8L, "Title", "Desc", deps, "SC-1", 9L)).thenReturn(view);
+
+    // When
+    CardView result = controller.update(3L, 8L, request);
+
+    // Then
+    assertThat(result).isSameAs(view);
+  }
+
+  @Test
+  void assignParent_delegatesToService() {
+    // Given
+    CardView view = card();
+    when(service.assignParent(3L, 8L, 9L)).thenReturn(view);
+
+    // When
+    CardView result = controller.assignParent(3L, 8L, new CardController.AssignParentRequest(9L));
+
+    // Then
+    assertThat(result).isSameAs(view);
+  }
+
+  @Test
+  void move_delegatesToService() {
+    // Given
+    CardView view = card();
+    when(service.move(3L, 8L, 5L, 2)).thenReturn(view);
+
+    // When
+    CardView result = controller.move(3L, 8L, new CardController.MoveCardRequest(5L, 2));
+
+    // Then
+    assertThat(result).isSameAs(view);
+  }
+
+  @Test
+  void archive_delegatesToService() {
+    // Given
+    CardView view = card();
+    when(service.archive(3L, 8L)).thenReturn(view);
+
+    // When
+    CardView result = controller.archive(3L, 8L);
+
+    // Then
+    assertThat(result).isSameAs(view);
+  }
+
+  @Test
+  void restore_delegatesToService() {
+    // Given
+    CardView view = card();
+    when(service.restore(3L, 8L)).thenReturn(view);
+
+    // When
+    CardView result = controller.restore(3L, 8L);
+
+    // Then
+    assertThat(result).isSameAs(view);
+  }
+
+  @Test
+  void delete_delegatesToService() {
+    // When
+    controller.delete(3L, 8L);
+
+    // Then
+    verify(service).delete(3L, 8L);
+  }
+}
