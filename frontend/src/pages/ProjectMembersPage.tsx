@@ -34,6 +34,7 @@ export function ProjectMembersPage({ api = defaultMembersApi, loadRole }: Props)
   const [inviteEmail, setInviteEmail] = useState('')
   const [inviteRole, setInviteRole] = useState<ProjectRole>('MEMBER')
   const [message, setMessage] = useState<{ kind: 'success' | 'error'; text: string } | null>(null)
+  const [inviting, setInviting] = useState(false)
 
   const reload = () => api.list(id).then(setMembers)
 
@@ -59,12 +60,15 @@ export function ProjectMembersPage({ api = defaultMembersApi, loadRole }: Props)
       return
     }
     setMessage(null)
+    setInviting(true)
     try {
       await api.invite(id, inviteEmail.trim(), inviteRole)
       setInviteEmail('')
       setMessage({ kind: 'success', text: 'Einladung verschickt.' })
     } catch {
       setMessage({ kind: 'error', text: 'Einladung fehlgeschlagen.' })
+    } finally {
+      setInviting(false)
     }
   }
 
@@ -122,7 +126,7 @@ export function ProjectMembersPage({ api = defaultMembersApi, loadRole }: Props)
               inputProps={{ 'aria-label': 'Einladungsrolle' }}>
               {ROLES.map((r) => <MenuItem key={r} value={r}>{r}</MenuItem>)}
             </TextField>
-            <Button type="submit" variant="contained">
+            <Button type="submit" variant="contained" disabled={inviting || !inviteEmail.trim()}>
               Einladen
             </Button>
           </Stack>

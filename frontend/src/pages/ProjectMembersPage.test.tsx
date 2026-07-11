@@ -79,4 +79,24 @@ describe('ProjectMembersPage', () => {
     expect(api.list).not.toHaveBeenCalled()
     expect(loadRole).not.toHaveBeenCalled()
   })
+
+  it('verhindert Doppel-Submit: Button während Pending deaktiviert, Invite feuert nur einmal', async () => {
+    let resolveInvite: (() => void) | undefined
+    const invite = vi.fn(() => new Promise<void>((resolve) => { resolveInvite = () => resolve() }))
+    const api = makeApi({ invite })
+    renderPage(api, 'OWNER')
+    await waitFor(() => expect(screen.getByText('Olga Owner')).toBeInTheDocument())
+
+    fireEvent.change(screen.getByLabelText(/E-Mail einladen/), { target: { value: 'neu@x.de' } })
+    const button = screen.getByRole('button', { name: 'Einladen' })
+    fireEvent.click(button)
+
+    // Pending: Button deaktiviert -> zweiter Klick löst keinen weiteren Invite aus
+    await waitFor(() => expect(button).toBeDisabled())
+    fireEvent.click(button)
+    expect(invite).toHaveBeenCalledTimes(1)
+
+    resolveInvite?.()
+    expect(await screen.findByText('Einladung verschickt.')).toBeInTheDocument()
+  })
 })
