@@ -239,9 +239,10 @@ Wenn eine Implementierungsaufgabe gestellt wird, gehe **exakt** in dieser Reihen
 8. **Abschluss-Check:**
    - `mvn verify` läuft komplett grün.
    - JaCoCo-Report: 100 %.
-   - PIT-Report: 100 % Mutation Score.
+   - PIT-Report: 100 % Mutation Score (`mvn -Ppit test`).
    - ArchUnit: grün.
    - Spotless, Checkstyle, SpotBugs, PMD: keine Findings.
+   - **CI erzwingt dieselben Gates** (`.github/workflows/ci.yml`): verify-Job + eigener PIT-Job (`-Ppit`) + Frontend-Job. Was lokal grün sein muss, ist auch in CI ein Pflicht-Gate.
 9. **Zusammenfassung** an den Nutzer im Format aus [CLAUDE-workflow.md](.claude/CLAUDE-workflow.md): was getestet wurde, welche Coverage erreicht wurde, was bewusst nicht abgedeckt ist (mit Begründung).
 
 ### 8.1 Wenn du versucht bist, abzukürzen

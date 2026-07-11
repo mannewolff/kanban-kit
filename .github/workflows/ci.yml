@@ -20,6 +20,23 @@ jobs:
       - name: Build & test (inkl. gebündeltem Frontend)
         run: mvn -B verify
 
+  # Mutation-Gate (CLAUDE-java.md §5): PIT läuft im Profil -Ppit gegen die Surefire-Unit-Tests
+  # (kein Docker/Testcontainers nötig). Eigener Job parallel zum verify-Job — voller Lauf,
+  # mutationThreshold=100 bricht bei jedem überlebenden Mutanten.
+  mutation:
+    name: Backend (PIT Mutation -Ppit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up JDK 25
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+      - name: Mutationstests (100% Gate)
+        run: mvn -B -Ppit -Dskip.frontend=true test
+
   frontend:
     name: Frontend (npm build)
     runs-on: ubuntu-latest
