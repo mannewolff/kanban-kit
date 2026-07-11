@@ -111,6 +111,20 @@ class CommentServiceTest {
     }
 
     @Test
+    void create_returnsViewOfPersistedComment() {
+        // Given
+        when(users.findById(1L)).thenReturn(Optional.of(
+                new AppUser(1L, "u@x.de", "hash", "Ada", true, PlatformRole.USER)));
+        when(comments.save(any(Comment.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        // When
+        CommentService.CommentView view = service.create(1L, 5L, "Hallo");
+
+        // Then
+        assertThat(view.body()).isEqualTo("Hallo");
+    }
+
+    @Test
     void create_throwsCardNotFound_whenCardUnknown() {
         // Given
         when(cards.findById(5L)).thenReturn(Optional.empty());
@@ -144,6 +158,19 @@ class CommentServiceTest {
         // Then
         verify(comments).save(captor.capture());
         assertThat(captor.getValue().body()).isEqualTo("Geändert");
+    }
+
+    @Test
+    void update_returnsViewWithNewBody() {
+        // Given
+        when(comments.findById(3L)).thenReturn(Optional.of(comment(1L)));
+        when(comments.save(any(Comment.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        // When
+        CommentService.CommentView view = service.update(1L, 3L, "Geändert");
+
+        // Then
+        assertThat(view.body()).isEqualTo("Geändert");
     }
 
     @Test

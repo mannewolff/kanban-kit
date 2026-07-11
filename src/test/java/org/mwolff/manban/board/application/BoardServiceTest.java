@@ -88,6 +88,15 @@ class BoardServiceTest {
     }
 
     @Test
+    void createBoard_returnsViewOfPersistedBoard() {
+        // When
+        BoardService.BoardView view = service.createBoard(1L, 2L, "Board");
+
+        // Then
+        assertThat(view.name()).isEqualTo("Board");
+    }
+
+    @Test
     void listBoards_mapsBoardsToViews() {
         // Given
         when(boards.findByProjectId(1L)).thenReturn(List.of(board()));
@@ -112,6 +121,19 @@ class BoardServiceTest {
     }
 
     @Test
+    void getBoard_mapsColumnsIntoView() {
+        // Given
+        when(boards.findById(10L)).thenReturn(Optional.of(board()));
+        when(columns.findByBoardId(10L)).thenReturn(List.of(column(1L, "Todo", 0)));
+
+        // When
+        BoardService.BoardView view = service.getBoard(1L, 10L);
+
+        // Then
+        assertThat(view.columns()).singleElement().extracting(BoardService.ColumnView::name).isEqualTo("Todo");
+    }
+
+    @Test
     void getBoard_throwsBoardNotFound_whenUnknown() {
         // Given
         when(boards.findById(10L)).thenReturn(Optional.empty());
@@ -132,6 +154,18 @@ class BoardServiceTest {
         // Then
         verify(boards).save(captor.capture());
         assertThat(captor.getValue().name()).isEqualTo("Renamed");
+    }
+
+    @Test
+    void renameBoard_returnsViewWithNewName() {
+        // Given
+        when(boards.findById(10L)).thenReturn(Optional.of(board()));
+
+        // When
+        BoardService.BoardView view = service.renameBoard(1L, 10L, "Renamed");
+
+        // Then
+        assertThat(view.name()).isEqualTo("Renamed");
     }
 
     @Test
@@ -174,6 +208,18 @@ class BoardServiceTest {
     }
 
     @Test
+    void addColumn_returnsViewOfPersistedColumn() {
+        // Given
+        when(boards.findById(10L)).thenReturn(Optional.of(board()));
+
+        // When
+        BoardService.ColumnView view = service.addColumn(1L, 10L, "Todo", 4);
+
+        // Then
+        assertThat(view.name()).isEqualTo("Todo");
+    }
+
+    @Test
     void addColumn_startsAtPositionZero_whenNoColumnsExist() {
         // Given
         when(boards.findById(10L)).thenReturn(Optional.of(board()));
@@ -200,6 +246,19 @@ class BoardServiceTest {
         // Then
         verify(columns).save(captor.capture());
         assertThat(captor.getValue().name()).isEqualTo("New");
+    }
+
+    @Test
+    void updateColumn_returnsViewWithNewName() {
+        // Given
+        when(columns.findById(2L)).thenReturn(Optional.of(column(2L, "Old", 1)));
+        when(boards.findById(10L)).thenReturn(Optional.of(board()));
+
+        // When
+        BoardService.ColumnView view = service.updateColumn(1L, 2L, "New", 5);
+
+        // Then
+        assertThat(view.name()).isEqualTo("New");
     }
 
     @Test
@@ -261,6 +320,19 @@ class BoardServiceTest {
 
         // Then
         assertThat(result).extracting(BoardService.ColumnView::position).containsExactly(0, 1);
+    }
+
+    @Test
+    void reorderColumns_persistsNewOrderViaRepository() {
+        // Given
+        when(boards.findById(10L)).thenReturn(Optional.of(board()));
+        when(columns.findByBoardId(10L)).thenReturn(List.of(column(1L, "A", 0), column(2L, "B", 1)));
+
+        // When
+        service.reorderColumns(1L, 10L, List.of(2L, 1L));
+
+        // Then
+        verify(columns).reorder(10L, List.of(2L, 1L));
     }
 
     @Test

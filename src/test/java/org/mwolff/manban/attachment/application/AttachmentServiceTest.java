@@ -3,6 +3,7 @@ package org.mwolff.manban.attachment.application;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -103,6 +104,37 @@ class AttachmentServiceTest {
     }
 
     @Test
+    void upload_putsBlobIntoObjectStorage() {
+        // Given
+        cardAndBoardResolve();
+        when(attachments.countByCardId(5L)).thenReturn(0L);
+        when(detector.detect(any(), any())).thenReturn("text/plain");
+        when(attachments.save(any(Attachment.class))).thenAnswer(inv -> inv.getArgument(0));
+        byte[] content = {1, 2, 3};
+
+        // When
+        service.upload(1L, 5L, "note.txt", content);
+
+        // Then
+        verify(storage).put(any(), eq(content), eq("text/plain"));
+    }
+
+    @Test
+    void upload_returnsViewOfPersistedAttachment() {
+        // Given
+        cardAndBoardResolve();
+        when(attachments.countByCardId(5L)).thenReturn(0L);
+        when(detector.detect(any(), any())).thenReturn("text/plain");
+        when(attachments.save(any(Attachment.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        // When
+        AttachmentService.AttachmentView view = service.upload(1L, 5L, "note.txt", new byte[] {1, 2, 3});
+
+        // Then
+        assertThat(view.filename()).isEqualTo("note.txt");
+    }
+
+    @Test
     void upload_requiresAttachmentCreatePermission() {
         // Given
         cardAndBoardResolve();
@@ -200,6 +232,19 @@ class AttachmentServiceTest {
 
         // Then
         verify(storage).delete("cards/5/key");
+    }
+
+    @Test
+    void delete_removesMetadataViaRepository() {
+        // Given
+        when(attachments.findById(7L)).thenReturn(Optional.of(attachment()));
+        cardAndBoardResolve();
+
+        // When
+        service.delete(1L, 7L);
+
+        // Then
+        verify(attachments).deleteById(7L);
     }
 
     @Test

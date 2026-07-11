@@ -64,6 +64,18 @@ class RegisterUserServiceTest {
     }
 
     @Test
+    void register_returnsPersistedUser() {
+        // Given
+        when(users.existsByEmail("a@x.de")).thenReturn(false);
+
+        // When
+        AppUser registered = service.register("a@x.de", "pw", "Ada");
+
+        // Then
+        assertThat(registered.id()).isEqualTo(2L);
+    }
+
+    @Test
     void register_normalizesEmail() {
         // Given
         when(users.existsByEmail("a@x.de")).thenReturn(false);

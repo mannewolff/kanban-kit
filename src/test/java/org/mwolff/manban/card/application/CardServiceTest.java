@@ -724,4 +724,134 @@ class CardServiceTest {
         verify(cards).save(captor.capture());
         assertThat(captor.getValue().movedToDoneAt()).isNull();
     }
+
+    // --- Rückgabe-/Interaktions-Verhalten (Issue #0073, Mutationsabdeckung) ----
+
+    @Test
+    void create_returnsViewOfPersistedCard() {
+        // Given
+        when(columns.findById(20L)).thenReturn(Optional.of(column(20L, "Backlog", 0)));
+
+        // When
+        CardService.CardView view = service.create(1L, BOARD, 20L, "Titel", null, null, null);
+
+        // Then
+        assertThat(view.title()).isEqualTo("Titel");
+    }
+
+    @Test
+    void createEpic_assignsNextBoardNumber() {
+        // Given
+        when(columns.findByBoardId(BOARD)).thenReturn(List.of(column(20L, "Backlog", 0)));
+        when(cards.maxNumberInBoard(BOARD)).thenReturn(4);
+
+        // When
+        ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
+        service.createEpic(1L, BOARD, "Epic", null, "SHC");
+
+        // Then
+        verify(cards).save(captor.capture());
+        assertThat(captor.getValue().number()).isEqualTo(5);
+    }
+
+    @Test
+    void createEpic_returnsViewOfPersistedEpic() {
+        // Given
+        when(columns.findByBoardId(BOARD)).thenReturn(List.of(column(20L, "Backlog", 0)));
+
+        // When
+        CardService.CardView view = service.createEpic(1L, BOARD, "Epic", null, "SHC");
+
+        // Then
+        assertThat(view.title()).isEqualTo("Epic");
+    }
+
+    @Test
+    void update_returnsUpdatedView() {
+        // Given
+        when(cards.findById(1L)).thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
+
+        // When
+        CardService.CardView view = service.update(1L, 1L, "Neu", null, null, null, null);
+
+        // Then
+        assertThat(view.title()).isEqualTo("Neu");
+    }
+
+    @Test
+    void assignParent_returnsViewWithParent() {
+        // Given
+        when(cards.findById(1L)).thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
+        when(cards.findById(30L)).thenReturn(Optional.of(card(30L, 20L, 5, false, null, CardType.EPIC, null, "E")));
+
+        // When
+        CardService.CardView view = service.assignParent(1L, 1L, 30L);
+
+        // Then
+        assertThat(view.parentId()).isEqualTo(30L);
+    }
+
+    @Test
+    void move_persistsMoveViaRepository() {
+        // Given
+        Card before = card(1L, 20L, 1, false, null, CardType.CARD, null, null);
+        when(cards.findById(1L)).thenReturn(Optional.of(before));
+        when(columns.findById(21L)).thenReturn(Optional.of(column(21L, "Done", 4)));
+
+        // When
+        service.move(1L, 1L, 21L, 3);
+
+        // Then
+        verify(cards).move(1L, 21L, 3);
+    }
+
+    @Test
+    void move_returnsViewOfMovedCard() {
+        // Given
+        Card before = card(1L, 20L, 1, false, null, CardType.CARD, null, null);
+        when(cards.findById(1L)).thenReturn(Optional.of(before));
+        when(columns.findById(21L)).thenReturn(Optional.of(column(21L, "Done", 4)));
+
+        // When
+        CardService.CardView view = service.move(1L, 1L, 21L, 0);
+
+        // Then
+        assertThat(view.id()).isEqualTo(1L);
+    }
+
+    @Test
+    void archive_returnsArchivedView() {
+        // Given
+        when(cards.findById(1L)).thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
+
+        // When
+        CardService.CardView view = service.archive(1L, 1L);
+
+        // Then
+        assertThat(view.archived()).isTrue();
+    }
+
+    @Test
+    void restore_returnsRestoredView() {
+        // Given
+        when(cards.findById(1L)).thenReturn(Optional.of(card(1L, 20L, 1, true, null, CardType.CARD, null, null)));
+
+        // When
+        CardService.CardView view = service.restore(1L, 1L);
+
+        // Then
+        assertThat(view.archived()).isFalse();
+    }
+
+    @Test
+    void delete_removesCardDependencies() {
+        // Given
+        when(cards.findById(1L)).thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
+
+        // When
+        service.delete(1L, 1L);
+
+        // Then
+        verify(dependencies).deleteByCardId(1L);
+    }
 }

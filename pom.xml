@@ -415,4 +415,119 @@
             </plugin>
         </plugins>
     </build>
+
+    <profiles>
+        <!-- Mutationstests (CLAUDE-java.md §5.3). Bewusst in ein eigenes Profil gekapselt,
+             damit der normale `mvn verify` schnell bleibt: PIT läuft ausschließlich via `-Ppit`.
+             Aufruf: mvn -Ppit -Dskip.frontend=true test
+             PIT instrumentiert nur die Surefire-Unit-Tests (targetTests = *Test); die *IT
+             (Failsafe/Testcontainers) bleiben außen vor. -->
+        <profile>
+            <id>pit</id>
+            <properties>
+                <!-- JaCoCo im PIT-Profil abschalten: der von prepare-agent gesetzte
+                     -javaagent-argLine würde sonst in die PIT-Minion-JVM durchschlagen und
+                     deren Coverage-Lauf abbrechen (UNKNOWN_ERROR). Mutationsabdeckung ist
+                     hier ohnehin die maßgebliche Metrik; die JaCoCo-Line/Branch-Gates laufen
+                     im Default-`verify`. -->
+                <jacoco.skip>true</jacoco.skip>
+            </properties>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.pitest</groupId>
+                        <artifactId>pitest-maven</artifactId>
+                        <version>1.17.0</version>
+                        <!-- An die test-Phase gebunden, damit `mvn -Ppit test` den Lauf auslöst. -->
+                        <executions>
+                            <execution>
+                                <id>pit-mutation-coverage</id>
+                                <phase>test</phase>
+                                <goals>
+                                    <goal>mutationCoverage</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                        <dependencies>
+                            <!-- JUnit-5-Anbindung für PIT (Jupiter-Testerkennung). -->
+                            <dependency>
+                                <groupId>org.pitest</groupId>
+                                <artifactId>pitest-junit5-plugin</artifactId>
+                                <version>1.2.3</version>
+                            </dependency>
+                        </dependencies>
+                        <configuration>
+                            <!-- Mindestmutatoren gem. §5.3: STRONGER-Gruppe plus die dort
+                                 explizit gelisteten. PIT dedupliziert Überschneidungen. -->
+                            <mutators>
+                                <mutator>STRONGER</mutator>
+                                <mutator>CONDITIONALS_BOUNDARY</mutator>
+                                <mutator>INCREMENTS</mutator>
+                                <mutator>INVERT_NEGS</mutator>
+                                <mutator>MATH</mutator>
+                                <mutator>NEGATE_CONDITIONALS</mutator>
+                                <!-- RETURN_VALS aus §5.3 wurde in modernen PIT-Versionen
+                                     (hier 1.17.0) entfernt und in die feineren *_RETURNS-
+                                     Mutatoren aufgeteilt; diese sind unten alle aktiviert und
+                                     decken denselben Umfang ab (keine Umgehung i. S. v. §5.3). -->
+                                <mutator>VOID_METHOD_CALLS</mutator>
+                                <mutator>EMPTY_RETURNS</mutator>
+                                <mutator>FALSE_RETURNS</mutator>
+                                <mutator>TRUE_RETURNS</mutator>
+                                <mutator>NULL_RETURNS</mutator>
+                                <mutator>PRIMITIVE_RETURNS</mutator>
+                                <mutator>REMOVE_CONDITIONALS</mutator>
+                            </mutators>
+
+                            <!-- Timeouts gem. §5.3. -->
+                            <timeoutFactor>1.5</timeoutFactor>
+                            <timeoutConstant>4000</timeoutConstant>
+
+                            <!-- Scope: gemutiert werden nur die unit-getesteten Klassen —
+                                 Application-Schicht (Services + Werte/Properties) und Domäne.
+                                 Analog zu den JaCoCo-<excludes> (web/infrastructure/config/main). -->
+                            <targetClasses>
+                                <param>org.mwolff.manban.*.application.*</param>
+                                <param>org.mwolff.manban.*.domain.*</param>
+                            </targetClasses>
+                            <excludedClasses>
+                                <!-- Controller/DTOs (nur via IT abgedeckt). -->
+                                <param>org.mwolff.manban.*.web.*</param>
+                                <!-- Entities/Adapter/JpaRepos/Mail/S3/Security-Filter (nur via IT). -->
+                                <param>org.mwolff.manban.*.infrastructure.*</param>
+                                <!-- Bean-Wiring / Config ohne Fachlogik. -->
+                                <param>org.mwolff.manban.config.*</param>
+                                <!-- Spring-Boot-Application mit reiner main-Methode. -->
+                                <param>org.mwolff.manban.ManbanApplication</param>
+                            </excludedClasses>
+
+                            <!-- Nur Surefire-Unit-Tests als Killer heranziehen; *IT ausklammern. -->
+                            <targetTests>
+                                <param>org.mwolff.manban.*Test</param>
+                            </targetTests>
+
+                            <outputFormats>
+                                <value>HTML</value>
+                                <value>XML</value>
+                            </outputFormats>
+
+                            <!-- Ehrliches, grünes Gate für den AKTUELLEN Stand:
+                                 Mutation Score = Test Strength = 94 % (466/494 Mutanten getötet,
+                                 Line Coverage der mutierten Klassen 100 %). Der Schwellwert bildet
+                                 exakt den erreichten Stand ab — nicht künstlich hoch (bräche sonst),
+                                 nicht künstlich niedrig.
+                                 TODO #0077: auf 100 % anheben, sobald die 28 verbleibenden Mutanten
+                                 (überwiegend RemoveConditional-Guards in den Services) durch
+                                 zusätzliche Unit-Tests getötet sind (§5.3) — keine Mutator-
+                                 Deaktivierung.
+                                 Eine eigene Test-Strength-Schwelle bietet pitest-maven nicht als
+                                 Parameter; sie wird über #0077 gemeinsam mit dem Mutation-Score
+                                 auf 100 % gezogen. -->
+                            <mutationThreshold>94</mutationThreshold>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 </project>

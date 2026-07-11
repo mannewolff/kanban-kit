@@ -86,6 +86,24 @@ class ProjectServiceTest {
     }
 
     @Test
+    void create_returnsViewOfCreatedProject() {
+        // Given
+        when(permissions.isPlatformAdmin(1L)).thenReturn(true);
+        when(users.findByEmail("owner@x.de")).thenReturn(Optional.of(
+                new AppUser(2L, "owner@x.de", "hash", "Owner", true, PlatformRole.USER)));
+        when(projects.save(any(Project.class))).thenAnswer(inv -> {
+            Project p = inv.getArgument(0);
+            return new Project(9L, p.name(), p.ownerUserId(), p.createdAt());
+        });
+
+        // When
+        ProjectService.ProjectView view = service.create(1L, "Neu", "owner@x.de");
+
+        // Then
+        assertThat(view.name()).isEqualTo("Neu");
+    }
+
+    @Test
     void create_throwsAccessDenied_whenActorNotPlatformAdmin() {
         // Given
         when(permissions.isPlatformAdmin(1L)).thenReturn(false);
@@ -163,6 +181,21 @@ class ProjectServiceTest {
         // Then
         verify(projects).save(captor.capture());
         assertThat(captor.getValue().name()).isEqualTo("Neu");
+    }
+
+    @Test
+    void rename_returnsViewWithNewName() {
+        // Given
+        when(permissions.require(2L, 9L, Permission.PROJECT_EDIT))
+                .thenReturn(membership(9L, 2L, ProjectRole.OWNER));
+        when(projects.findById(9L)).thenReturn(Optional.of(new Project(9L, "Alt", 2L, FIXED)));
+        when(projects.save(any(Project.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        // When
+        ProjectService.ProjectView view = service.rename(2L, 9L, "Neu");
+
+        // Then
+        assertThat(view.name()).isEqualTo("Neu");
     }
 
     @Test

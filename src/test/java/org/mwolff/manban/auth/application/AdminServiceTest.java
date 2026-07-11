@@ -72,6 +72,19 @@ class AdminServiceTest {
     }
 
     @Test
+    void listUsers_mapsUserFieldsIntoView() {
+        // Given
+        when(users.findById(1L)).thenReturn(Optional.of(user(1, PlatformRole.ADMIN)));
+        when(users.findAll()).thenReturn(List.of(user(2, PlatformRole.USER)));
+
+        // When
+        List<AdminService.UserView> result = service.listUsers(1L);
+
+        // Then
+        assertThat(result).singleElement().extracting(AdminService.UserView::email).isEqualTo("u2@x.de");
+    }
+
+    @Test
     void listUsers_throwsAdminAccessDenied_whenActorIsNotAdmin() {
         // Given
         when(users.findById(9L)).thenReturn(Optional.of(user(9, PlatformRole.USER)));
