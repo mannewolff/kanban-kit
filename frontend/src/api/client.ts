@@ -13,7 +13,11 @@ export class ApiError extends Error {
  * Dünner Fetch-Wrapper. Sendet Cookies mit (Session-Auth), setzt JSON-Header und
  * wirft {@link ApiError} bei nicht-2xx-Antworten. Leere Antworten -> undefined.
  */
-export async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
+export async function apiFetch<T>(
+  path: string,
+  options: RequestInit = {},
+  parse?: (data: unknown) => T,
+): Promise<T> {
   const response = await fetch(path, {
     credentials: 'include',
     headers: { 'Content-Type': 'application/json', ...(options.headers ?? {}) },
@@ -26,5 +30,10 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
   }
 
   const text = await response.text()
-  return (text ? JSON.parse(text) : undefined) as T
+  // Extern stammende Daten sind `unknown`, bis validiert. Sicherheitsrelevante Endpoints
+  // übergeben einen `parse`-Type-Guard (z. B. authApi.me/login). Ohne `parse` bleibt der
+  // Wrapper generisch: der Cast auf T ist die bewusst dokumentierte Systemgrenze eines
+  // typisierten fetch-Wrappers — kein Cast zur Umgehung eines Modellfehlers.
+  const data: unknown = text ? JSON.parse(text) : undefined
+  return parse ? parse(data) : (data as T)
 }

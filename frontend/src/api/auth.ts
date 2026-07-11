@@ -1,4 +1,4 @@
-import { apiFetch } from './client'
+import { apiFetch, ApiError } from './client'
 
 export interface Membership {
   projectId: number
@@ -15,9 +15,30 @@ export interface Me {
 
 const jsonBody = (data: unknown): RequestInit => ({ method: 'POST', body: JSON.stringify(data) })
 
+/** Laufzeit-Verengung der sicherheitsrelevanten Me-Antwort (Autorisierungsquelle). */
+function isMe(data: unknown): data is Me {
+  if (typeof data !== 'object' || data === null) return false
+  const d = data as Record<string, unknown>
+  return (
+    typeof d.userId === 'number' &&
+    typeof d.email === 'string' &&
+    typeof d.displayName === 'string' &&
+    typeof d.platformRole === 'string' &&
+    Array.isArray(d.memberships)
+  )
+}
+
+function parseMe(data: unknown): Me {
+  if (!isMe(data)) {
+    throw new ApiError(500, 'Unerwartete Antwort vom Server (Me).')
+  }
+  return data
+}
+
 export const authApi = {
-  me: () => apiFetch<Me>('/api/me'),
-  login: (email: string, password: string) => apiFetch<Me>('/api/auth/login', jsonBody({ email, password })),
+  me: () => apiFetch<Me>('/api/me', {}, parseMe),
+  login: (email: string, password: string) =>
+    apiFetch<Me>('/api/auth/login', jsonBody({ email, password }), parseMe),
   logout: () => apiFetch<void>('/api/auth/logout', { method: 'POST' }),
   register: (email: string, password: string, displayName: string) =>
     apiFetch<{ id: number; email: string }>('/api/auth/register', jsonBody({ email, password, displayName })),
