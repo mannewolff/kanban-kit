@@ -8,7 +8,7 @@ import TableCell from '@mui/material/TableCell'
 import TableHead from '@mui/material/TableHead'
 import TableRow from '@mui/material/TableRow'
 import Typography from '@mui/material/Typography'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { adminApi as defaultAdminApi, type AdminApi, type AdminUser } from '../api/admin'
 import { ApiError } from '../api/client'
 
@@ -20,17 +20,16 @@ export function AdminPage({ api = defaultAdminApi }: Props) {
   const [users, setUsers] = useState<AdminUser[]>([])
   const [error, setError] = useState<string | null>(null)
 
-  const reload = () => {
+  const reload = useCallback(() => {
     api
       .listUsers()
       .then(setUsers)
       .catch((e) => setError(e instanceof ApiError && e.status === 403 ? 'Kein Admin-Zugriff.' : 'Laden fehlgeschlagen.'))
-  }
+  }, [api])
 
   useEffect(() => {
     reload()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [reload])
 
   const toggleRole = async (u: AdminUser) => {
     setError(null)

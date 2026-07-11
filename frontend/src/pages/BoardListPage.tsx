@@ -118,7 +118,6 @@ export function BoardListPage() {
     return () => {
       active = false
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, validId])
 
   // Laufenden Resize-Drag bei Unmount abräumen.

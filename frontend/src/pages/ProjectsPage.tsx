@@ -53,6 +53,8 @@ export function ProjectsPage() {
         navigate(`/projects/${ps[0].id}`, { replace: true, state: { autoRoute: true } })
       }
     })
+    // Nur beim Mount laden: location/navigate bewusst aus den Deps ausgelassen, damit der
+    // Single-Projekt-Auto-Redirect nicht bei jeder Navigation neu feuert.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 

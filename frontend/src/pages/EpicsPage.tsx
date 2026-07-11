@@ -61,7 +61,6 @@ export function EpicsPage() {
     return () => {
       active = false
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, validId])
 
   const membershipRole = board

@@ -58,6 +58,8 @@ export function ProjectBoardsPage() {
     return () => {
       active = false
     }
+    // location/navigate bewusst nicht in den Deps: der Single-Board-Auto-Redirect soll nur
+    // bei Projektwechsel (id) greifen, nicht bei jeder Navigation.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, validId])
 

@@ -55,8 +55,7 @@ export function ProjectMembersPage({ api = defaultMembersApi, loadRole }: Props)
     return () => {
       active = false
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id, validId])
+  }, [id, validId, api, loadRole])
 
   const manage = canManageMembers(role)
   const ownerCount = members.filter((m) => m.role === 'OWNER').length
