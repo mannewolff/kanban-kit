@@ -215,7 +215,7 @@ export function BoardView({
               <Stack spacing={1} sx={{ p: 1, flex: 1 }}>
                 {activeCardsInColumn(filteredCards, column.id).map((card) => {
                   const epic = card.parentId != null ? epicById.get(card.parentId) : undefined
-                  const showDone = done && card.movedToDoneAt != null
+                  const doneAt = done ? card.movedToDoneAt : null
                   return (
                     <Paper
                       key={card.id}
@@ -257,9 +257,9 @@ export function BoardView({
                           </IconButton>
                         )}
                       </Stack>
-                      {showDone && (
+                      {doneAt != null && (
                         <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
-                          {cleanupCountdownLabel(cleanupDaysRemaining(card.movedToDoneAt!, retentionDays))}
+                          {cleanupCountdownLabel(cleanupDaysRemaining(doneAt, retentionDays))}
                         </Typography>
                       )}
                     </Paper>

@@ -223,10 +223,11 @@ export function BoardListPage() {
   }
 
   const onRowDrop = async (target: Card) => {
+    const dragId = rowDrag
     const ok = validRowDrop(target)
     setRowOver(null)
-    if (!ok) return
-    await cardsApi.move(rowDrag!, target.columnId, target.positionInColumn)
+    if (!ok || dragId == null) return
+    await cardsApi.move(dragId, target.columnId, target.positionInColumn)
     reloadCards()
   }
 
