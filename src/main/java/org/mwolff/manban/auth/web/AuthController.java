@@ -18,27 +18,27 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/auth")
 class AuthController {
 
-    private final RegisterUserService registerUser;
-    private final VerifyEmailService verifyEmail;
+  private final RegisterUserService registerUser;
+  private final VerifyEmailService verifyEmail;
 
-    AuthController(RegisterUserService registerUser, VerifyEmailService verifyEmail) {
-        this.registerUser = registerUser;
-        this.verifyEmail = verifyEmail;
-    }
+  AuthController(RegisterUserService registerUser, VerifyEmailService verifyEmail) {
+    this.registerUser = registerUser;
+    this.verifyEmail = verifyEmail;
+  }
 
-    @PostMapping("/register")
-    @ResponseStatus(HttpStatus.CREATED)
-    RegisteredUserResponse register(@Valid @RequestBody RegisterRequest request) {
-        AppUser user = registerUser.register(request.email(), request.password(), request.displayName());
-        return new RegisteredUserResponse(user.id(), user.email(), user.emailVerified());
-    }
+  @PostMapping("/register")
+  @ResponseStatus(HttpStatus.CREATED)
+  RegisteredUserResponse register(@Valid @RequestBody RegisterRequest request) {
+    AppUser user =
+        registerUser.register(request.email(), request.password(), request.displayName());
+    return new RegisteredUserResponse(user.id(), user.email(), user.emailVerified());
+  }
 
-    @GetMapping("/verify")
-    @ResponseStatus(HttpStatus.OK)
-    void verify(@RequestParam("token") String token) {
-        verifyEmail.verify(token);
-    }
+  @GetMapping("/verify")
+  @ResponseStatus(HttpStatus.OK)
+  void verify(@RequestParam("token") String token) {
+    verifyEmail.verify(token);
+  }
 
-    record RegisteredUserResponse(Long id, String email, boolean emailVerified) {
-    }
+  record RegisteredUserResponse(Long id, String email, boolean emailVerified) {}
 }

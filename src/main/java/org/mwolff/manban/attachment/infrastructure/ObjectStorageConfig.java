@@ -9,11 +9,11 @@ import org.springframework.context.annotation.Configuration;
 @Configuration
 class ObjectStorageConfig {
 
-    @Bean
-    MinioClient minioClient(ObjectStorageProperties properties) {
-        return MinioClient.builder()
-                .endpoint(properties.endpoint())
-                .credentials(properties.accessKey(), properties.secretKey())
-                .build();
-    }
+  @Bean
+  MinioClient minioClient(ObjectStorageProperties properties) {
+    return MinioClient.builder()
+        .endpoint(properties.endpoint())
+        .credentials(properties.accessKey(), properties.secretKey())
+        .build();
+  }
 }

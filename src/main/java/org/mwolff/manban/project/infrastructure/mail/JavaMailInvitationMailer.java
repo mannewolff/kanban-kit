@@ -9,39 +9,44 @@ import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.stereotype.Component;
 
 /**
- * Versendet die Einladungs-E-Mail per SMTP, schaltbar über {@code manban.mail.enabled}.
- * In Dev/Test (Default: aus) wird der Einladungs-Link nur geloggt.
+ * Versendet die Einladungs-E-Mail per SMTP, schaltbar über {@code manban.mail.enabled}. In Dev/Test
+ * (Default: aus) wird der Einladungs-Link nur geloggt.
  */
 @Component
 class JavaMailInvitationMailer implements InvitationMailer {
 
-    private static final Logger log = LoggerFactory.getLogger(JavaMailInvitationMailer.class);
+  private static final Logger log = LoggerFactory.getLogger(JavaMailInvitationMailer.class);
 
-    private final JavaMailSender mailSender;
-    private final boolean mailEnabled;
-    private final String from;
+  private final JavaMailSender mailSender;
+  private final boolean mailEnabled;
+  private final String from;
 
-    JavaMailInvitationMailer(JavaMailSender mailSender,
-                             @Value("${manban.mail.enabled:false}") boolean mailEnabled,
-                             @Value("${manban.mail.from:no-reply@manban.local}") String from) {
-        this.mailSender = mailSender;
-        this.mailEnabled = mailEnabled;
-        this.from = from;
+  JavaMailInvitationMailer(
+      JavaMailSender mailSender,
+      @Value("${manban.mail.enabled:false}") boolean mailEnabled,
+      @Value("${manban.mail.from:no-reply@manban.local}") String from) {
+    this.mailSender = mailSender;
+    this.mailEnabled = mailEnabled;
+    this.from = from;
+  }
+
+  @Override
+  public void sendInvitationEmail(String toEmail, String projectName, String invitationUrl) {
+    if (!mailEnabled) {
+      log.info("[DEV] Einladung ins Projekt '{}' für {}: {}", projectName, toEmail, invitationUrl);
+      return;
     }
-
-    @Override
-    public void sendInvitationEmail(String toEmail, String projectName, String invitationUrl) {
-        if (!mailEnabled) {
-            log.info("[DEV] Einladung ins Projekt '{}' für {}: {}", projectName, toEmail, invitationUrl);
-            return;
-        }
-        SimpleMailMessage message = new SimpleMailMessage();
-        message.setFrom(from);
-        message.setTo(toEmail);
-        message.setSubject("manban: Einladung ins Projekt " + projectName);
-        message.setText("Du wurdest ins Projekt '" + projectName + "' eingeladen. Annehmen über:\n\n"
-                + invitationUrl + "\n");
-        mailSender.send(message);
-        log.info("Einladungs-E-Mail an {} versandt", toEmail);
-    }
+    SimpleMailMessage message = new SimpleMailMessage();
+    message.setFrom(from);
+    message.setTo(toEmail);
+    message.setSubject("manban: Einladung ins Projekt " + projectName);
+    message.setText(
+        "Du wurdest ins Projekt '"
+            + projectName
+            + "' eingeladen. Annehmen über:\n\n"
+            + invitationUrl
+            + "\n");
+    mailSender.send(message);
+    log.info("Einladungs-E-Mail an {} versandt", toEmail);
+  }
 }

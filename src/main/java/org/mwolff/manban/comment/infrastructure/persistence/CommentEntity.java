@@ -13,68 +13,74 @@ import java.time.Instant;
 @Table(name = "comment")
 class CommentEntity {
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+  @Id
+  @GeneratedValue(strategy = GenerationType.IDENTITY)
+  private Long id;
 
-    @Column(name = "card_id", nullable = false)
-    private Long cardId;
+  @Column(name = "card_id", nullable = false)
+  private Long cardId;
 
-    @Column(name = "author_user_id")
-    private Long authorUserId;
+  @Column(name = "author_user_id")
+  private Long authorUserId;
 
-    @Column(name = "author_name", nullable = false)
-    private String authorName;
+  @Column(name = "author_name", nullable = false)
+  private String authorName;
 
-    @Column(name = "body", nullable = false)
-    private String body;
+  @Column(name = "body", nullable = false)
+  private String body;
 
-    @Column(name = "created_at", nullable = false)
-    private Instant createdAt;
+  @Column(name = "created_at", nullable = false)
+  private Instant createdAt;
 
-    @Column(name = "updated_at", nullable = false)
-    private Instant updatedAt;
+  @Column(name = "updated_at", nullable = false)
+  private Instant updatedAt;
 
-    protected CommentEntity() {
-        // für JPA
-    }
+  protected CommentEntity() {
+    // für JPA
+  }
 
-    CommentEntity(Long id, Long cardId, Long authorUserId, String authorName, String body,
-                  Instant createdAt, Instant updatedAt) {
-        this.id = id;
-        this.cardId = cardId;
-        this.authorUserId = authorUserId;
-        this.authorName = authorName;
-        this.body = body;
-        this.createdAt = createdAt;
-        this.updatedAt = updatedAt;
-    }
+  CommentEntity(
+      Long id,
+      Long cardId,
+      Long authorUserId,
+      String authorName,
+      String body,
+      Instant createdAt,
+      Instant updatedAt) {
+    this.id = id;
+    this.cardId = cardId;
+    this.authorUserId = authorUserId;
+    this.authorName = authorName;
+    this.body = body;
+    this.createdAt = createdAt;
+    this.updatedAt = updatedAt;
+  }
 
-    Long getId() {
-        return id;
-    }
+  Long getId() {
+    return id;
+  }
 
-    Long getCardId() {
-        return cardId;
-    }
+  Long getCardId() {
+    return cardId;
+  }
 
-    Long getAuthorUserId() {
-        return authorUserId;
-    }
+  Long getAuthorUserId() {
+    return authorUserId;
+  }
 
-    String getAuthorName() {
-        return authorName;
-    }
+  String getAuthorName() {
+    return authorName;
+  }
 
-    String getBody() {
-        return body;
-    }
+  String getBody() {
+    return body;
+  }
 
-    Instant getCreatedAt() {
-        return createdAt;
-    }
+  Instant getCreatedAt() {
+    return createdAt;
+  }
 
-    Instant getUpdatedAt() {
-        return updatedAt;
-    }
+  Instant getUpdatedAt() {
+    return updatedAt;
+  }
 }

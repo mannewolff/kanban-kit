@@ -6,7 +6,7 @@ import org.mwolff.manban.auth.domain.EmailVerificationToken;
 /** Ausgehender Port für die Persistenz von E-Mail-Verifikations-Tokens. */
 public interface EmailVerificationTokenRepository {
 
-    EmailVerificationToken save(EmailVerificationToken token);
+  EmailVerificationToken save(EmailVerificationToken token);
 
-    Optional<EmailVerificationToken> findByTokenHash(String tokenHash);
+  Optional<EmailVerificationToken> findByTokenHash(String tokenHash);
 }

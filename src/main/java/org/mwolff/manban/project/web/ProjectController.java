@@ -24,41 +24,43 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/projects")
 class ProjectController {
 
-    private final ProjectService projects;
+  private final ProjectService projects;
 
-    ProjectController(ProjectService projects) {
-        this.projects = projects;
-    }
+  ProjectController(ProjectService projects) {
+    this.projects = projects;
+  }
 
-    @PostMapping
-    @ResponseStatus(HttpStatus.CREATED)
-    ProjectView create(@AuthenticationPrincipal Long userId, @Valid @RequestBody CreateProjectRequest request) {
-        return projects.create(userId, request.name(), request.ownerEmail());
-    }
+  @PostMapping
+  @ResponseStatus(HttpStatus.CREATED)
+  ProjectView create(
+      @AuthenticationPrincipal Long userId, @Valid @RequestBody CreateProjectRequest request) {
+    return projects.create(userId, request.name(), request.ownerEmail());
+  }
 
-    @GetMapping
-    List<ProjectView> list(@AuthenticationPrincipal Long userId) {
-        return projects.list(userId);
-    }
+  @GetMapping
+  List<ProjectView> list(@AuthenticationPrincipal Long userId) {
+    return projects.list(userId);
+  }
 
-    @PatchMapping("/{id}")
-    ProjectView rename(@AuthenticationPrincipal Long userId, @PathVariable long id,
-                       @Valid @RequestBody ProjectRequest request) {
-        return projects.rename(userId, id, request.name());
-    }
+  @PatchMapping("/{id}")
+  ProjectView rename(
+      @AuthenticationPrincipal Long userId,
+      @PathVariable long id,
+      @Valid @RequestBody ProjectRequest request) {
+    return projects.rename(userId, id, request.name());
+  }
 
-    @DeleteMapping("/{id}")
-    @ResponseStatus(HttpStatus.NO_CONTENT)
-    void delete(@AuthenticationPrincipal Long userId, @PathVariable long id) {
-        projects.delete(userId, id);
-    }
+  @DeleteMapping("/{id}")
+  @ResponseStatus(HttpStatus.NO_CONTENT)
+  void delete(@AuthenticationPrincipal Long userId, @PathVariable long id) {
+    projects.delete(userId, id);
+  }
 
-    /** Request-Body für das Umbenennen. */
-    record ProjectRequest(@NotBlank @Size(max = 200) String name) {
-    }
+  /** Request-Body für das Umbenennen. */
+  record ProjectRequest(@NotBlank @Size(max = 200) String name) {}
 
-    /** Request-Body für das Anlegen: Name + Owner-E-Mail (System-Admin bestimmt den Owner). */
-    record CreateProjectRequest(@NotBlank @Size(max = 200) String name,
-                                @NotBlank @Email @Size(max = 254) String ownerEmail) {
-    }
+  /** Request-Body für das Anlegen: Name + Owner-E-Mail (System-Admin bestimmt den Owner). */
+  record CreateProjectRequest(
+      @NotBlank @Size(max = 200) String name,
+      @NotBlank @Email @Size(max = 254) String ownerEmail) {}
 }

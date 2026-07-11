@@ -7,7 +7,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 @ResponseStatus(HttpStatus.FORBIDDEN)
 public class EmailNotVerifiedException extends RuntimeException {
 
-    public EmailNotVerifiedException() {
-        super("E-Mail-Adresse ist noch nicht bestätigt");
-    }
+  public EmailNotVerifiedException() {
+    super("E-Mail-Adresse ist noch nicht bestätigt");
+  }
 }

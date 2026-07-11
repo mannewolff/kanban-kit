@@ -23,40 +23,44 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 class ColumnController {
 
-    private final BoardService boards;
+  private final BoardService boards;
 
-    ColumnController(BoardService boards) {
-        this.boards = boards;
-    }
+  ColumnController(BoardService boards) {
+    this.boards = boards;
+  }
 
-    @PostMapping("/api/boards/{boardId}/columns")
-    @ResponseStatus(HttpStatus.CREATED)
-    ColumnView add(@AuthenticationPrincipal Long userId, @PathVariable long boardId,
-                   @Valid @RequestBody ColumnRequest request) {
-        return boards.addColumn(userId, boardId, request.name(), request.wipLimit());
-    }
+  @PostMapping("/api/boards/{boardId}/columns")
+  @ResponseStatus(HttpStatus.CREATED)
+  ColumnView add(
+      @AuthenticationPrincipal Long userId,
+      @PathVariable long boardId,
+      @Valid @RequestBody ColumnRequest request) {
+    return boards.addColumn(userId, boardId, request.name(), request.wipLimit());
+  }
 
-    @PatchMapping("/api/columns/{columnId}")
-    ColumnView update(@AuthenticationPrincipal Long userId, @PathVariable long columnId,
-                      @Valid @RequestBody ColumnRequest request) {
-        return boards.updateColumn(userId, columnId, request.name(), request.wipLimit());
-    }
+  @PatchMapping("/api/columns/{columnId}")
+  ColumnView update(
+      @AuthenticationPrincipal Long userId,
+      @PathVariable long columnId,
+      @Valid @RequestBody ColumnRequest request) {
+    return boards.updateColumn(userId, columnId, request.name(), request.wipLimit());
+  }
 
-    @DeleteMapping("/api/columns/{columnId}")
-    @ResponseStatus(HttpStatus.NO_CONTENT)
-    void delete(@AuthenticationPrincipal Long userId, @PathVariable long columnId) {
-        boards.deleteColumn(userId, columnId);
-    }
+  @DeleteMapping("/api/columns/{columnId}")
+  @ResponseStatus(HttpStatus.NO_CONTENT)
+  void delete(@AuthenticationPrincipal Long userId, @PathVariable long columnId) {
+    boards.deleteColumn(userId, columnId);
+  }
 
-    @PutMapping("/api/boards/{boardId}/columns/order")
-    List<ColumnView> reorder(@AuthenticationPrincipal Long userId, @PathVariable long boardId,
-                             @Valid @RequestBody ReorderRequest request) {
-        return boards.reorderColumns(userId, boardId, request.columnIds());
-    }
+  @PutMapping("/api/boards/{boardId}/columns/order")
+  List<ColumnView> reorder(
+      @AuthenticationPrincipal Long userId,
+      @PathVariable long boardId,
+      @Valid @RequestBody ReorderRequest request) {
+    return boards.reorderColumns(userId, boardId, request.columnIds());
+  }
 
-    record ColumnRequest(@NotBlank @Size(max = 120) String name, @Positive Integer wipLimit) {
-    }
+  record ColumnRequest(@NotBlank @Size(max = 120) String name, @Positive Integer wipLimit) {}
 
-    record ReorderRequest(@NotEmpty List<Long> columnIds) {
-    }
+  record ReorderRequest(@NotEmpty List<Long> columnIds) {}
 }

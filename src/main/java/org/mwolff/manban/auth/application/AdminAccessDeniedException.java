@@ -7,7 +7,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 @ResponseStatus(HttpStatus.FORBIDDEN)
 public class AdminAccessDeniedException extends RuntimeException {
 
-    public AdminAccessDeniedException() {
-        super("Plattform-Admin-Recht erforderlich");
-    }
+  public AdminAccessDeniedException() {
+    super("Plattform-Admin-Recht erforderlich");
+  }
 }

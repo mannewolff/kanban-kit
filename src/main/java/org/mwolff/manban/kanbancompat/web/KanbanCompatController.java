@@ -24,62 +24,66 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Toolbox-Kanban-API für tbx.mjs / board.mjs (Dogfooding, #45). Vertragsgleich mit dem
- * bestehenden Toolbox-Backend: der Client sendet nur den Token ({@code X-Kanban-Token});
- * das Board kommt aus der Token-Bindung (#44), die der {@code PatAuthenticationFilter} an
- * die Authentication-{@code details} hängt. Nur per PAT erreichbar (SecurityConfig).
+ * Toolbox-Kanban-API für tbx.mjs / board.mjs (Dogfooding, #45). Vertragsgleich mit dem bestehenden
+ * Toolbox-Backend: der Client sendet nur den Token ({@code X-Kanban-Token}); das Board kommt aus
+ * der Token-Bindung (#44), die der {@code PatAuthenticationFilter} an die Authentication-{@code
+ * details} hängt. Nur per PAT erreichbar (SecurityConfig).
  */
 @RestController
 @RequestMapping("/api/kanban")
 class KanbanCompatController {
 
-    private final KanbanCompatService service;
+  private final KanbanCompatService service;
 
-    KanbanCompatController(KanbanCompatService service) {
-        this.service = service;
-    }
+  KanbanCompatController(KanbanCompatService service) {
+    this.service = service;
+  }
 
-    @GetMapping("/items")
-    Map<String, List<Item>> items(Authentication authentication) {
-        return service.items(principal(authentication));
-    }
+  @GetMapping("/items")
+  Map<String, List<Item>> items(Authentication authentication) {
+    return service.items(principal(authentication));
+  }
 
-    @PostMapping("/items")
-    @ResponseStatus(HttpStatus.CREATED)
-    Created create(Authentication authentication, @Valid @RequestBody CreateItemRequest request) {
-        return service.create(principal(authentication), request.title(), request.body(), request.column());
-    }
+  @PostMapping("/items")
+  @ResponseStatus(HttpStatus.CREATED)
+  Created create(Authentication authentication, @Valid @RequestBody CreateItemRequest request) {
+    return service.create(
+        principal(authentication), request.title(), request.body(), request.column());
+  }
 
-    @PutMapping("/items/{id}/move")
-    void move(Authentication authentication, @PathVariable long id, @Valid @RequestBody MoveRequest request) {
-        service.move(principal(authentication), id, request.column(), request.position());
-    }
+  @PutMapping("/items/{id}/move")
+  void move(
+      Authentication authentication,
+      @PathVariable long id,
+      @Valid @RequestBody MoveRequest request) {
+    service.move(principal(authentication), id, request.column(), request.position());
+  }
 
-    @PostMapping("/items/{id}/comments")
-    @ResponseStatus(HttpStatus.CREATED)
-    void comment(Authentication authentication, @PathVariable long id, @Valid @RequestBody CommentRequest request) {
-        service.comment(principal(authentication), id, request.body());
-    }
+  @PostMapping("/items/{id}/comments")
+  @ResponseStatus(HttpStatus.CREATED)
+  void comment(
+      Authentication authentication,
+      @PathVariable long id,
+      @Valid @RequestBody CommentRequest request) {
+    service.comment(principal(authentication), id, request.body());
+  }
 
-    @GetMapping("/epics")
-    List<Epic> epics(Authentication authentication) {
-        return service.epics(principal(authentication));
-    }
+  @GetMapping("/epics")
+  List<Epic> epics(Authentication authentication) {
+    return service.epics(principal(authentication));
+  }
 
-    /** Zieht die Token-Bindung aus den Authentication-details; ohne Bindung → 409. */
-    private static KanbanPrincipal principal(Authentication authentication) {
-        if (authentication != null && authentication.getDetails() instanceof KanbanPrincipal p) {
-            return p;
-        }
-        throw new TokenNotBoundException();
+  /** Zieht die Token-Bindung aus den Authentication-details; ohne Bindung → 409. */
+  private static KanbanPrincipal principal(Authentication authentication) {
+    if (authentication != null && authentication.getDetails() instanceof KanbanPrincipal p) {
+      return p;
     }
+    throw new TokenNotBoundException();
+  }
 
-    record CreateItemRequest(@NotBlank @Size(max = 300) String title, String body, String column) {
-    }
+  record CreateItemRequest(@NotBlank @Size(max = 300) String title, String body, String column) {}
 
-    record MoveRequest(@NotBlank String column, @PositiveOrZero int position) {
-    }
+  record MoveRequest(@NotBlank String column, @PositiveOrZero int position) {}
 
-    record CommentRequest(@NotBlank String body) {
-    }
+  record CommentRequest(@NotBlank String body) {}
 }

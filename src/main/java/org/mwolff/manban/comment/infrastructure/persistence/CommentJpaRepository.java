@@ -6,5 +6,5 @@ import org.springframework.data.jpa.repository.JpaRepository;
 /** Spring-Data-Repository für {@link CommentEntity}. */
 interface CommentJpaRepository extends JpaRepository<CommentEntity, Long> {
 
-    List<CommentEntity> findByCardIdOrderByCreatedAt(Long cardId);
+  List<CommentEntity> findByCardIdOrderByCreatedAt(Long cardId);
 }

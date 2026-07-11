@@ -27,48 +27,55 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 @TestPropertySource(properties = "manban.bootstrap.admin-token=it-boot-token")
 class BootstrapIT {
 
-    @Container
-    @ServiceConnection
-    static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16");
+  @Container @ServiceConnection
+  static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16");
 
-    private static final String PASSWORD = "sup3r-secret";
+  private static final String PASSWORD = "sup3r-secret";
 
-    @Autowired
-    private MockMvc mvc;
-    @Autowired
-    private AppUserRepository users;
-    @Autowired
-    private PasswordEncoder passwordEncoder;
+  @Autowired private MockMvc mvc;
+  @Autowired private AppUserRepository users;
+  @Autowired private PasswordEncoder passwordEncoder;
 
-    private Cookie login(String email) throws Exception {
-        if (users.findByEmail(email).isEmpty()) {
-            users.save(new AppUser(null, email, passwordEncoder.encode(PASSWORD), "Person", true, PlatformRole.USER));
-        }
-        return mvc.perform(post("/api/auth/login").contentType("application/json")
-                        .content("{\"email\":\"%s\",\"password\":\"%s\"}".formatted(email, PASSWORD)))
-                .andExpect(status().isOk())
-                .andReturn().getResponse().getCookie("manban_session");
+  private Cookie login(String email) throws Exception {
+    if (users.findByEmail(email).isEmpty()) {
+      users.save(
+          new AppUser(
+              null, email, passwordEncoder.encode(PASSWORD), "Person", true, PlatformRole.USER));
     }
+    return mvc.perform(
+            post("/api/auth/login")
+                .contentType("application/json")
+                .content("{\"email\":\"%s\",\"password\":\"%s\"}".formatted(email, PASSWORD)))
+        .andExpect(status().isOk())
+        .andReturn()
+        .getResponse()
+        .getCookie("manban_session");
+  }
 
-    @Test
-    void unauthenticatedBootstrapRejected() throws Exception {
-        mvc.perform(post("/api/admin/bootstrap").contentType("application/json")
-                        .content("{\"token\":\"it-boot-token\"}"))
-                .andExpect(status().isUnauthorized());
-    }
+  @Test
+  void unauthenticatedBootstrapRejected() throws Exception {
+    mvc.perform(
+            post("/api/admin/bootstrap")
+                .contentType("application/json")
+                .content("{\"token\":\"it-boot-token\"}"))
+        .andExpect(status().isUnauthorized());
+  }
 
-    @Test
-    void loggedInUserBecomesAdminWithCorrectToken() throws Exception {
-        Cookie user = login("boot-first@example.com");
+  @Test
+  void loggedInUserBecomesAdminWithCorrectToken() throws Exception {
+    Cookie user = login("boot-first@example.com");
 
-        mvc.perform(post("/api/admin/bootstrap").cookie(user)
-                        .contentType("application/json").content("{\"token\":\"it-boot-token\"}"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.platformRole").value("ADMIN"));
+    mvc.perform(
+            post("/api/admin/bootstrap")
+                .cookie(user)
+                .contentType("application/json")
+                .content("{\"token\":\"it-boot-token\"}"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.platformRole").value("ADMIN"));
 
-        // Danach ist der Nutzer Admin.
-        org.assertj.core.api.Assertions.assertThat(
-                users.findByEmail("boot-first@example.com").orElseThrow().platformRole())
-                .isEqualTo(PlatformRole.ADMIN);
-    }
+    // Danach ist der Nutzer Admin.
+    org.assertj.core.api.Assertions.assertThat(
+            users.findByEmail("boot-first@example.com").orElseThrow().platformRole())
+        .isEqualTo(PlatformRole.ADMIN);
+  }
 }

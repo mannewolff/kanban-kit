@@ -17,23 +17,24 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 class AdminUserController {
 
-    private final AdminService admin;
+  private final AdminService admin;
 
-    AdminUserController(AdminService admin) {
-        this.admin = admin;
-    }
+  AdminUserController(AdminService admin) {
+    this.admin = admin;
+  }
 
-    @GetMapping("/api/admin/users")
-    List<UserView> list(@AuthenticationPrincipal Long userId) {
-        return admin.listUsers(userId);
-    }
+  @GetMapping("/api/admin/users")
+  List<UserView> list(@AuthenticationPrincipal Long userId) {
+    return admin.listUsers(userId);
+  }
 
-    @PatchMapping("/api/admin/users/{id}")
-    UserView changeRole(@AuthenticationPrincipal Long userId, @PathVariable long id,
-                        @Valid @RequestBody ChangeRoleRequest request) {
-        return admin.changePlatformRole(userId, id, request.platformRole());
-    }
+  @PatchMapping("/api/admin/users/{id}")
+  UserView changeRole(
+      @AuthenticationPrincipal Long userId,
+      @PathVariable long id,
+      @Valid @RequestBody ChangeRoleRequest request) {
+    return admin.changePlatformRole(userId, id, request.platformRole());
+  }
 
-    record ChangeRoleRequest(@NotNull PlatformRole platformRole) {
-    }
+  record ChangeRoleRequest(@NotNull PlatformRole platformRole) {}
 }

@@ -15,24 +15,25 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/auth")
 class PasswordResetController {
 
-    private final RequestPasswordResetService requestReset;
-    private final ResetPasswordService resetPassword;
+  private final RequestPasswordResetService requestReset;
+  private final ResetPasswordService resetPassword;
 
-    PasswordResetController(RequestPasswordResetService requestReset, ResetPasswordService resetPassword) {
-        this.requestReset = requestReset;
-        this.resetPassword = resetPassword;
-    }
+  PasswordResetController(
+      RequestPasswordResetService requestReset, ResetPasswordService resetPassword) {
+    this.requestReset = requestReset;
+    this.resetPassword = resetPassword;
+  }
 
-    /** Antwortet immer mit 200 — kein Rückschluss, ob die E-Mail existiert. */
-    @PostMapping("/forgot")
-    @ResponseStatus(HttpStatus.OK)
-    void forgot(@Valid @RequestBody ForgotPasswordRequest request) {
-        requestReset.requestReset(request.email());
-    }
+  /** Antwortet immer mit 200 — kein Rückschluss, ob die E-Mail existiert. */
+  @PostMapping("/forgot")
+  @ResponseStatus(HttpStatus.OK)
+  void forgot(@Valid @RequestBody ForgotPasswordRequest request) {
+    requestReset.requestReset(request.email());
+  }
 
-    @PostMapping("/reset")
-    @ResponseStatus(HttpStatus.NO_CONTENT)
-    void reset(@Valid @RequestBody ResetPasswordRequest request) {
-        resetPassword.reset(request.token(), request.newPassword());
-    }
+  @PostMapping("/reset")
+  @ResponseStatus(HttpStatus.NO_CONTENT)
+  void reset(@Valid @RequestBody ResetPasswordRequest request) {
+    resetPassword.reset(request.token(), request.newPassword());
+  }
 }

@@ -16,51 +16,51 @@ import org.mwolff.manban.auth.domain.PlatformRole;
 /** Verhaltenstests der Selbstauskunft {@code /api/me} (Mockito an den Ports). */
 class MeServiceTest {
 
-    private AppUserRepository users;
-    private ProjectMembershipReader memberships;
-    private MeService service;
+  private AppUserRepository users;
+  private ProjectMembershipReader memberships;
+  private MeService service;
 
-    @BeforeEach
-    void setUp() {
-        users = mock(AppUserRepository.class);
-        memberships = mock(ProjectMembershipReader.class);
-        service = new MeService(users, memberships);
-    }
+  @BeforeEach
+  void setUp() {
+    users = mock(AppUserRepository.class);
+    memberships = mock(ProjectMembershipReader.class);
+    service = new MeService(users, memberships);
+  }
 
-    @Test
-    void load_returnsUserIdentity_whenUserExists() {
-        // Given
-        when(users.findById(2L)).thenReturn(Optional.of(
-                new AppUser(2L, "a@x.de", "hash", "Ada", true, PlatformRole.USER)));
-        when(memberships.findByUserId(2L)).thenReturn(List.of());
+  @Test
+  void load_returnsUserIdentity_whenUserExists() {
+    // Given
+    when(users.findById(2L))
+        .thenReturn(Optional.of(new AppUser(2L, "a@x.de", "hash", "Ada", true, PlatformRole.USER)));
+    when(memberships.findByUserId(2L)).thenReturn(List.of());
 
-        // When
-        MeService.MeView view = service.load(2L);
+    // When
+    MeService.MeView view = service.load(2L);
 
-        // Then
-        assertThat(view.email()).isEqualTo("a@x.de");
-    }
+    // Then
+    assertThat(view.email()).isEqualTo("a@x.de");
+  }
 
-    @Test
-    void load_includesMemberships_fromReader() {
-        // Given
-        when(users.findById(2L)).thenReturn(Optional.of(
-                new AppUser(2L, "a@x.de", "hash", "Ada", true, PlatformRole.USER)));
-        when(memberships.findByUserId(2L)).thenReturn(List.of(new Membership(7L, "OWNER")));
+  @Test
+  void load_includesMemberships_fromReader() {
+    // Given
+    when(users.findById(2L))
+        .thenReturn(Optional.of(new AppUser(2L, "a@x.de", "hash", "Ada", true, PlatformRole.USER)));
+    when(memberships.findByUserId(2L)).thenReturn(List.of(new Membership(7L, "OWNER")));
 
-        // When
-        MeService.MeView view = service.load(2L);
+    // When
+    MeService.MeView view = service.load(2L);
 
-        // Then
-        assertThat(view.memberships()).containsExactly(new Membership(7L, "OWNER"));
-    }
+    // Then
+    assertThat(view.memberships()).containsExactly(new Membership(7L, "OWNER"));
+  }
 
-    @Test
-    void load_throwsInvalidCredentials_whenUserUnknown() {
-        // Given
-        when(users.findById(2L)).thenReturn(Optional.empty());
+  @Test
+  void load_throwsInvalidCredentials_whenUserUnknown() {
+    // Given
+    when(users.findById(2L)).thenReturn(Optional.empty());
 
-        // When / Then
-        assertThatThrownBy(() -> service.load(2L)).isInstanceOf(InvalidCredentialsException.class);
-    }
+    // When / Then
+    assertThatThrownBy(() -> service.load(2L)).isInstanceOf(InvalidCredentialsException.class);
+  }
 }

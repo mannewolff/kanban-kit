@@ -10,14 +10,14 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 class MeController {
 
-    private final MeService meService;
+  private final MeService meService;
 
-    MeController(MeService meService) {
-        this.meService = meService;
-    }
+  MeController(MeService meService) {
+    this.meService = meService;
+  }
 
-    @GetMapping("/api/me")
-    MeView me(@AuthenticationPrincipal Long userId) {
-        return meService.load(userId);
-    }
+  @GetMapping("/api/me")
+  MeView me(@AuthenticationPrincipal Long userId) {
+    return meService.load(userId);
+  }
 }

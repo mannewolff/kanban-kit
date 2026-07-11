@@ -7,7 +7,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 @ResponseStatus(HttpStatus.CONFLICT)
 public class LastOwnerException extends RuntimeException {
 
-    public LastOwnerException() {
-        super("Der letzte OWNER kann nicht entfernt oder herabgestuft werden");
-    }
+  public LastOwnerException() {
+    super("Der letzte OWNER kann nicht entfernt oder herabgestuft werden");
+  }
 }

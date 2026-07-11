@@ -9,19 +9,18 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 /**
  * Einstiegspunkt der manban-Anwendung.
  *
- * <p>manban ist eine eigenständige, self-hostbare Kanban-Board-Anwendung
- * (Trello-Alternative). Aufbau nach hexagonaler Architektur je Fachmodul,
- * siehe {@code package-info.java} im Basispaket.
+ * <p>manban ist eine eigenständige, self-hostbare Kanban-Board-Anwendung (Trello-Alternative).
+ * Aufbau nach hexagonaler Architektur je Fachmodul, siehe {@code package-info.java} im Basispaket.
  *
- * <p>{@code UserDetailsServiceAutoConfiguration} ist ausgeschlossen: manban nutzt
- * eigene Cookie-basierte Auth, kein In-Memory-Default-User mit generiertem Passwort.
+ * <p>{@code UserDetailsServiceAutoConfiguration} ist ausgeschlossen: manban nutzt eigene
+ * Cookie-basierte Auth, kein In-Memory-Default-User mit generiertem Passwort.
  */
 @SpringBootApplication(exclude = UserDetailsServiceAutoConfiguration.class)
 @ConfigurationPropertiesScan
 @EnableScheduling
 public class ManbanApplication {
 
-    public static void main(String[] args) {
-        SpringApplication.run(ManbanApplication.class, args);
-    }
+  public static void main(String[] args) {
+    SpringApplication.run(ManbanApplication.class, args);
+  }
 }

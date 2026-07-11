@@ -7,7 +7,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 @ResponseStatus(HttpStatus.CONFLICT)
 public class EmailAlreadyRegisteredException extends RuntimeException {
 
-    public EmailAlreadyRegisteredException() {
-        super("E-Mail-Adresse ist bereits registriert");
-    }
+  public EmailAlreadyRegisteredException() {
+    super("E-Mail-Adresse ist bereits registriert");
+  }
 }

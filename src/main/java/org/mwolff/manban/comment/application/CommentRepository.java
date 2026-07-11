@@ -7,11 +7,11 @@ import org.mwolff.manban.comment.domain.Comment;
 /** Ausgehender Port für die Persistenz von Kommentaren. */
 public interface CommentRepository {
 
-    Comment save(Comment comment);
+  Comment save(Comment comment);
 
-    Optional<Comment> findById(long id);
+  Optional<Comment> findById(long id);
 
-    List<Comment> findByCardId(long cardId);
+  List<Comment> findByCardId(long cardId);
 
-    void deleteById(long id);
+  void deleteById(long id);
 }

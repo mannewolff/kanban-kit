@@ -7,7 +7,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 @ResponseStatus(HttpStatus.BAD_REQUEST)
 public class InvalidVerificationTokenException extends RuntimeException {
 
-    public InvalidVerificationTokenException() {
-        super("Verifikations-Token ist ungültig oder abgelaufen");
-    }
+  public InvalidVerificationTokenException() {
+    super("Verifikations-Token ist ungültig oder abgelaufen");
+  }
 }

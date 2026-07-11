@@ -26,39 +26,41 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 @Testcontainers
 class ConfigIT {
 
-    @Container
-    @ServiceConnection
-    static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16");
+  @Container @ServiceConnection
+  static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16");
 
-    private static final String PASSWORD = "sup3r-secret";
+  private static final String PASSWORD = "sup3r-secret";
 
-    @Autowired
-    private MockMvc mvc;
-    @Autowired
-    private AppUserRepository users;
-    @Autowired
-    private PasswordEncoder passwordEncoder;
+  @Autowired private MockMvc mvc;
+  @Autowired private AppUserRepository users;
+  @Autowired private PasswordEncoder passwordEncoder;
 
-    private Cookie loginAs(String email) throws Exception {
-        if (users.findByEmail(email).isEmpty()) {
-            users.save(new AppUser(null, email, passwordEncoder.encode(PASSWORD), "Person", true, PlatformRole.USER));
-        }
-        return mvc.perform(post("/api/auth/login").contentType("application/json")
-                        .content("{\"email\":\"%s\",\"password\":\"%s\"}".formatted(email, PASSWORD)))
-                .andExpect(status().isOk())
-                .andReturn().getResponse().getCookie("manban_session");
+  private Cookie loginAs(String email) throws Exception {
+    if (users.findByEmail(email).isEmpty()) {
+      users.save(
+          new AppUser(
+              null, email, passwordEncoder.encode(PASSWORD), "Person", true, PlatformRole.USER));
     }
+    return mvc.perform(
+            post("/api/auth/login")
+                .contentType("application/json")
+                .content("{\"email\":\"%s\",\"password\":\"%s\"}".formatted(email, PASSWORD)))
+        .andExpect(status().isOk())
+        .andReturn()
+        .getResponse()
+        .getCookie("manban_session");
+  }
 
-    @Test
-    void configReturnsDoneRetentionDays() throws Exception {
-        Cookie alice = loginAs("config@example.com");
-        mvc.perform(get("/api/config").cookie(alice))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.doneRetentionDays").value(30));
-    }
+  @Test
+  void configReturnsDoneRetentionDays() throws Exception {
+    Cookie alice = loginAs("config@example.com");
+    mvc.perform(get("/api/config").cookie(alice))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.doneRetentionDays").value(30));
+  }
 
-    @Test
-    void configRequiresAuthentication() throws Exception {
-        mvc.perform(get("/api/config")).andExpect(status().isUnauthorized());
-    }
+  @Test
+  void configRequiresAuthentication() throws Exception {
+    mvc.perform(get("/api/config")).andExpect(status().isUnauthorized());
+  }
 }

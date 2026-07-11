@@ -7,11 +7,11 @@ import org.mwolff.manban.board.domain.Board;
 /** Ausgehender Port für die Persistenz von Boards. */
 public interface BoardRepository {
 
-    Board save(Board board);
+  Board save(Board board);
 
-    Optional<Board> findById(long id);
+  Optional<Board> findById(long id);
 
-    List<Board> findByProjectId(long projectId);
+  List<Board> findByProjectId(long projectId);
 
-    void deleteById(long id);
+  void deleteById(long id);
 }

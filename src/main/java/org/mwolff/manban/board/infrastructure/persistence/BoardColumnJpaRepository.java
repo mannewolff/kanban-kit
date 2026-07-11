@@ -6,5 +6,5 @@ import org.springframework.data.jpa.repository.JpaRepository;
 /** Spring-Data-Repository für {@link BoardColumnEntity}. */
 interface BoardColumnJpaRepository extends JpaRepository<BoardColumnEntity, Long> {
 
-    List<BoardColumnEntity> findByBoardIdOrderByPosition(Long boardId);
+  List<BoardColumnEntity> findByBoardIdOrderByPosition(Long boardId);
 }

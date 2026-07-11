@@ -29,245 +29,248 @@ import org.mwolff.manban.project.domain.Permission;
 /** Verhaltenstests der API-Token-Verwaltung (Mockito an den Ports). */
 class AccessTokenServiceTest {
 
-    private static final Instant FIXED = Instant.parse("2026-01-02T03:04:05Z");
+  private static final Instant FIXED = Instant.parse("2026-01-02T03:04:05Z");
 
-    private AccessTokenRepository tokens;
-    private TokenCryptoPort crypto;
-    private BoardRepository boards;
-    private PermissionChecker permissions;
-    private AccessTokenService service;
+  private AccessTokenRepository tokens;
+  private TokenCryptoPort crypto;
+  private BoardRepository boards;
+  private PermissionChecker permissions;
+  private AccessTokenService service;
 
-    private static AccessToken token(long id, long userId, boolean revoked) {
-        return new AccessToken(id, userId, null, null, "CI", "hash", "CI", FIXED, null, revoked);
-    }
+  private static AccessToken token(long id, long userId, boolean revoked) {
+    return new AccessToken(id, userId, null, null, "CI", "hash", "CI", FIXED, null, revoked);
+  }
 
-    @BeforeEach
-    void setUp() {
-        tokens = mock(AccessTokenRepository.class);
-        crypto = mock(TokenCryptoPort.class);
-        boards = mock(BoardRepository.class);
-        permissions = mock(PermissionChecker.class);
-        Clock clock = Clock.fixed(FIXED, ZoneOffset.UTC);
-        service = new AccessTokenService(tokens, crypto, boards, permissions, clock);
-    }
+  @BeforeEach
+  void setUp() {
+    tokens = mock(AccessTokenRepository.class);
+    crypto = mock(TokenCryptoPort.class);
+    boards = mock(BoardRepository.class);
+    permissions = mock(PermissionChecker.class);
+    Clock clock = Clock.fixed(FIXED, ZoneOffset.UTC);
+    service = new AccessTokenService(tokens, crypto, boards, permissions, clock);
+  }
 
-    @Test
-    void create_setsCreatedAtFromInjectedClock() {
-        // Given
-        when(crypto.generate()).thenReturn(new GeneratedToken("tk_plain", "hash"));
-        when(tokens.save(any(AccessToken.class))).thenAnswer(inv -> inv.getArgument(0));
+  @Test
+  void create_setsCreatedAtFromInjectedClock() {
+    // Given
+    when(crypto.generate()).thenReturn(new GeneratedToken("tk_plain", "hash"));
+    when(tokens.save(any(AccessToken.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        // When
-        service.create(1L, "CI", null, null);
+    // When
+    service.create(1L, "CI", null, null);
 
-        // Then
-        ArgumentCaptor<AccessToken> captor = ArgumentCaptor.forClass(AccessToken.class);
-        verify(tokens).save(captor.capture());
-        assertThat(captor.getValue().createdAt()).isEqualTo(FIXED);
-    }
+    // Then
+    ArgumentCaptor<AccessToken> captor = ArgumentCaptor.forClass(AccessToken.class);
+    verify(tokens).save(captor.capture());
+    assertThat(captor.getValue().createdAt()).isEqualTo(FIXED);
+  }
 
-    @Test
-    void create_returnsPlaintextOnce_forUnboundToken() {
-        // Given
-        when(crypto.generate()).thenReturn(new GeneratedToken("tk_plain", "hash"));
-        when(tokens.save(any(AccessToken.class))).thenAnswer(inv -> inv.getArgument(0));
+  @Test
+  void create_returnsPlaintextOnce_forUnboundToken() {
+    // Given
+    when(crypto.generate()).thenReturn(new GeneratedToken("tk_plain", "hash"));
+    when(tokens.save(any(AccessToken.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        // When
-        AccessTokenService.CreatedAccessToken created = service.create(1L, "CI", null, null);
+    // When
+    AccessTokenService.CreatedAccessToken created = service.create(1L, "CI", null, null);
 
-        // Then
-        assertThat(created.plaintext()).isEqualTo("tk_plain");
-    }
+    // Then
+    assertThat(created.plaintext()).isEqualTo("tk_plain");
+  }
 
-    @Test
-    void create_bindsTokenToBoard_whenBindingValid() {
-        // Given
-        when(boards.findById(20L)).thenReturn(Optional.of(new Board(20L, 5L, "B", FIXED)));
-        when(permissions.hasPermission(1L, 5L, Permission.TICKET_CREATE)).thenReturn(true);
-        when(crypto.generate()).thenReturn(new GeneratedToken("tk_plain", "hash"));
-        when(tokens.save(any(AccessToken.class))).thenAnswer(inv -> inv.getArgument(0));
+  @Test
+  void create_bindsTokenToBoard_whenBindingValid() {
+    // Given
+    when(boards.findById(20L)).thenReturn(Optional.of(new Board(20L, 5L, "B", FIXED)));
+    when(permissions.hasPermission(1L, 5L, Permission.TICKET_CREATE)).thenReturn(true);
+    when(crypto.generate()).thenReturn(new GeneratedToken("tk_plain", "hash"));
+    when(tokens.save(any(AccessToken.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        // When
-        ArgumentCaptor<AccessToken> captor = ArgumentCaptor.forClass(AccessToken.class);
-        service.create(1L, "CI", 5L, 20L);
+    // When
+    ArgumentCaptor<AccessToken> captor = ArgumentCaptor.forClass(AccessToken.class);
+    service.create(1L, "CI", 5L, 20L);
 
-        // Then
-        verify(tokens).save(captor.capture());
-        assertThat(captor.getValue().boardId()).isEqualTo(20L);
-    }
+    // Then
+    verify(tokens).save(captor.capture());
+    assertThat(captor.getValue().boardId()).isEqualTo(20L);
+  }
 
-    @Test
-    void create_throwsInvalidBinding_whenOnlyBoardIdSet() {
-        // When / Then
-        assertThatThrownBy(() -> service.create(1L, "CI", null, 20L))
-                .isInstanceOf(InvalidTokenBindingException.class);
-    }
+  @Test
+  void create_throwsInvalidBinding_whenOnlyBoardIdSet() {
+    // When / Then
+    assertThatThrownBy(() -> service.create(1L, "CI", null, 20L))
+        .isInstanceOf(InvalidTokenBindingException.class);
+  }
 
-    @Test
-    void create_throwsInvalidBinding_whenOnlyProjectIdSet() {
-        // When / Then: projectId gesetzt, boardId fehlt -> unschlüssige Bindung
-        assertThatThrownBy(() -> service.create(1L, "CI", 5L, null))
-                .isInstanceOf(InvalidTokenBindingException.class);
-    }
+  @Test
+  void create_throwsInvalidBinding_whenOnlyProjectIdSet() {
+    // When / Then: projectId gesetzt, boardId fehlt -> unschlüssige Bindung
+    assertThatThrownBy(() -> service.create(1L, "CI", 5L, null))
+        .isInstanceOf(InvalidTokenBindingException.class);
+  }
 
-    @Test
-    void create_throwsInvalidBinding_whenBoardUnknown() {
-        // Given
-        when(boards.findById(20L)).thenReturn(Optional.empty());
+  @Test
+  void create_throwsInvalidBinding_whenBoardUnknown() {
+    // Given
+    when(boards.findById(20L)).thenReturn(Optional.empty());
 
-        // When / Then
-        assertThatThrownBy(() -> service.create(1L, "CI", 5L, 20L))
-                .isInstanceOf(InvalidTokenBindingException.class);
-    }
+    // When / Then
+    assertThatThrownBy(() -> service.create(1L, "CI", 5L, 20L))
+        .isInstanceOf(InvalidTokenBindingException.class);
+  }
 
-    @Test
-    void create_throwsInvalidBinding_whenBoardNotInProject() {
-        // Given
-        when(boards.findById(20L)).thenReturn(Optional.of(new Board(20L, 99L, "B", FIXED)));
+  @Test
+  void create_throwsInvalidBinding_whenBoardNotInProject() {
+    // Given
+    when(boards.findById(20L)).thenReturn(Optional.of(new Board(20L, 99L, "B", FIXED)));
 
-        // When / Then
-        assertThatThrownBy(() -> service.create(1L, "CI", 5L, 20L))
-                .isInstanceOf(InvalidTokenBindingException.class);
-    }
+    // When / Then
+    assertThatThrownBy(() -> service.create(1L, "CI", 5L, 20L))
+        .isInstanceOf(InvalidTokenBindingException.class);
+  }
 
-    @Test
-    void create_throwsAccessDenied_whenUserMayNotWorkOnBoard() {
-        // Given
-        when(boards.findById(20L)).thenReturn(Optional.of(new Board(20L, 5L, "B", FIXED)));
-        when(permissions.hasPermission(1L, 5L, Permission.TICKET_CREATE)).thenReturn(false);
+  @Test
+  void create_throwsAccessDenied_whenUserMayNotWorkOnBoard() {
+    // Given
+    when(boards.findById(20L)).thenReturn(Optional.of(new Board(20L, 5L, "B", FIXED)));
+    when(permissions.hasPermission(1L, 5L, Permission.TICKET_CREATE)).thenReturn(false);
 
-        // When / Then
-        assertThatThrownBy(() -> service.create(1L, "CI", 5L, 20L))
-                .isInstanceOf(ProjectAccessDeniedException.class);
-    }
+    // When / Then
+    assertThatThrownBy(() -> service.create(1L, "CI", 5L, 20L))
+        .isInstanceOf(ProjectAccessDeniedException.class);
+  }
 
-    @Test
-    void list_mapsTokensToViews() {
-        // Given
-        when(tokens.findByUserId(1L)).thenReturn(List.of(token(3L, 1L, false)));
+  @Test
+  void list_mapsTokensToViews() {
+    // Given
+    when(tokens.findByUserId(1L)).thenReturn(List.of(token(3L, 1L, false)));
 
-        // When
-        List<AccessTokenService.AccessTokenView> views = service.list(1L);
+    // When
+    List<AccessTokenService.AccessTokenView> views = service.list(1L);
 
-        // Then
-        assertThat(views).singleElement().extracting(AccessTokenService.AccessTokenView::id).isEqualTo(3L);
-    }
+    // Then
+    assertThat(views)
+        .singleElement()
+        .extracting(AccessTokenService.AccessTokenView::id)
+        .isEqualTo(3L);
+  }
 
-    @Test
-    void revoke_savesRevokedToken_whenActive() {
-        // Given
-        when(tokens.findById(3L)).thenReturn(Optional.of(token(3L, 1L, false)));
-        when(tokens.save(any(AccessToken.class))).thenAnswer(inv -> inv.getArgument(0));
+  @Test
+  void revoke_savesRevokedToken_whenActive() {
+    // Given
+    when(tokens.findById(3L)).thenReturn(Optional.of(token(3L, 1L, false)));
+    when(tokens.save(any(AccessToken.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        // When
-        ArgumentCaptor<AccessToken> captor = ArgumentCaptor.forClass(AccessToken.class);
-        service.revoke(1L, 3L);
+    // When
+    ArgumentCaptor<AccessToken> captor = ArgumentCaptor.forClass(AccessToken.class);
+    service.revoke(1L, 3L);
 
-        // Then
-        verify(tokens).save(captor.capture());
-        assertThat(captor.getValue().revoked()).isTrue();
-    }
+    // Then
+    verify(tokens).save(captor.capture());
+    assertThat(captor.getValue().revoked()).isTrue();
+  }
 
-    @Test
-    void revoke_isNoOp_whenAlreadyRevoked() {
-        // Given
-        when(tokens.findById(3L)).thenReturn(Optional.of(token(3L, 1L, true)));
+  @Test
+  void revoke_isNoOp_whenAlreadyRevoked() {
+    // Given
+    when(tokens.findById(3L)).thenReturn(Optional.of(token(3L, 1L, true)));
 
-        // When
-        service.revoke(1L, 3L);
+    // When
+    service.revoke(1L, 3L);
 
-        // Then
-        verify(tokens, never()).save(any(AccessToken.class));
-    }
+    // Then
+    verify(tokens, never()).save(any(AccessToken.class));
+  }
 
-    @Test
-    void revoke_throwsNotFound_whenTokenBelongsToOtherUser() {
-        // Given
-        when(tokens.findById(3L)).thenReturn(Optional.of(token(3L, 99L, false)));
+  @Test
+  void revoke_throwsNotFound_whenTokenBelongsToOtherUser() {
+    // Given
+    when(tokens.findById(3L)).thenReturn(Optional.of(token(3L, 99L, false)));
 
-        // When / Then
-        assertThatThrownBy(() -> service.revoke(1L, 3L))
-                .isInstanceOf(AccessTokenNotFoundException.class);
-    }
+    // When / Then
+    assertThatThrownBy(() -> service.revoke(1L, 3L))
+        .isInstanceOf(AccessTokenNotFoundException.class);
+  }
 
-    @Test
-    void revoke_throwsNotFound_whenTokenUnknown() {
-        // Given
-        when(tokens.findById(3L)).thenReturn(Optional.empty());
+  @Test
+  void revoke_throwsNotFound_whenTokenUnknown() {
+    // Given
+    when(tokens.findById(3L)).thenReturn(Optional.empty());
 
-        // When / Then
-        assertThatThrownBy(() -> service.revoke(1L, 3L))
-                .isInstanceOf(AccessTokenNotFoundException.class);
-    }
+    // When / Then
+    assertThatThrownBy(() -> service.revoke(1L, 3L))
+        .isInstanceOf(AccessTokenNotFoundException.class);
+  }
 
-    @Test
-    void resolveBinding_returnsPrincipal_forActiveToken() {
-        // Given
-        when(crypto.hash("plain")).thenReturn("hash");
-        when(tokens.findByTokenHash("hash")).thenReturn(Optional.of(token(3L, 1L, false)));
-        when(tokens.save(any(AccessToken.class))).thenAnswer(inv -> inv.getArgument(0));
+  @Test
+  void resolveBinding_returnsPrincipal_forActiveToken() {
+    // Given
+    when(crypto.hash("plain")).thenReturn("hash");
+    when(tokens.findByTokenHash("hash")).thenReturn(Optional.of(token(3L, 1L, false)));
+    when(tokens.save(any(AccessToken.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        // When
-        Optional<KanbanPrincipal> principal = service.resolveBinding("plain");
+    // When
+    Optional<KanbanPrincipal> principal = service.resolveBinding("plain");
 
-        // Then
-        assertThat(principal).map(KanbanPrincipal::userId).contains(1L);
-    }
+    // Then
+    assertThat(principal).map(KanbanPrincipal::userId).contains(1L);
+  }
 
-    @Test
-    void resolveBinding_updatesLastUsedAt_fromClock() {
-        // Given
-        when(crypto.hash("plain")).thenReturn("hash");
-        when(tokens.findByTokenHash("hash")).thenReturn(Optional.of(token(3L, 1L, false)));
-        when(tokens.save(any(AccessToken.class))).thenAnswer(inv -> inv.getArgument(0));
+  @Test
+  void resolveBinding_updatesLastUsedAt_fromClock() {
+    // Given
+    when(crypto.hash("plain")).thenReturn("hash");
+    when(tokens.findByTokenHash("hash")).thenReturn(Optional.of(token(3L, 1L, false)));
+    when(tokens.save(any(AccessToken.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        // When
-        ArgumentCaptor<AccessToken> captor = ArgumentCaptor.forClass(AccessToken.class);
-        service.resolveBinding("plain");
+    // When
+    ArgumentCaptor<AccessToken> captor = ArgumentCaptor.forClass(AccessToken.class);
+    service.resolveBinding("plain");
 
-        // Then
-        verify(tokens).save(captor.capture());
-        assertThat(captor.getValue().lastUsedAt()).isEqualTo(FIXED);
-    }
+    // Then
+    verify(tokens).save(captor.capture());
+    assertThat(captor.getValue().lastUsedAt()).isEqualTo(FIXED);
+  }
 
-    @Test
-    void resolveBinding_returnsEmpty_forRevokedToken() {
-        // Given
-        when(crypto.hash("plain")).thenReturn("hash");
-        when(tokens.findByTokenHash("hash")).thenReturn(Optional.of(token(3L, 1L, true)));
+  @Test
+  void resolveBinding_returnsEmpty_forRevokedToken() {
+    // Given
+    when(crypto.hash("plain")).thenReturn("hash");
+    when(tokens.findByTokenHash("hash")).thenReturn(Optional.of(token(3L, 1L, true)));
 
-        // When / Then
-        assertThat(service.resolveBinding("plain")).isEmpty();
-    }
+    // When / Then
+    assertThat(service.resolveBinding("plain")).isEmpty();
+  }
 
-    @Test
-    void resolveBinding_returnsEmpty_forUnknownToken() {
-        // Given
-        when(crypto.hash("plain")).thenReturn("hash");
-        when(tokens.findByTokenHash("hash")).thenReturn(Optional.empty());
+  @Test
+  void resolveBinding_returnsEmpty_forUnknownToken() {
+    // Given
+    when(crypto.hash("plain")).thenReturn("hash");
+    when(tokens.findByTokenHash("hash")).thenReturn(Optional.empty());
 
-        // When / Then
-        assertThat(service.resolveBinding("plain")).isEmpty();
-    }
+    // When / Then
+    assertThat(service.resolveBinding("plain")).isEmpty();
+  }
 
-    @Test
-    void resolve_returnsUserId_forActiveToken() {
-        // Given
-        when(crypto.hash("plain")).thenReturn("hash");
-        when(tokens.findByTokenHash("hash")).thenReturn(Optional.of(token(3L, 1L, false)));
-        when(tokens.save(any(AccessToken.class))).thenAnswer(inv -> inv.getArgument(0));
+  @Test
+  void resolve_returnsUserId_forActiveToken() {
+    // Given
+    when(crypto.hash("plain")).thenReturn("hash");
+    when(tokens.findByTokenHash("hash")).thenReturn(Optional.of(token(3L, 1L, false)));
+    when(tokens.save(any(AccessToken.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        // When / Then
-        assertThat(service.resolve("plain")).isEqualTo(OptionalLong.of(1L));
-    }
+    // When / Then
+    assertThat(service.resolve("plain")).isEqualTo(OptionalLong.of(1L));
+  }
 
-    @Test
-    void resolve_returnsEmpty_forUnknownToken() {
-        // Given
-        when(crypto.hash("plain")).thenReturn("hash");
-        when(tokens.findByTokenHash("hash")).thenReturn(Optional.empty());
+  @Test
+  void resolve_returnsEmpty_forUnknownToken() {
+    // Given
+    when(crypto.hash("plain")).thenReturn("hash");
+    when(tokens.findByTokenHash("hash")).thenReturn(Optional.empty());
 
-        // When / Then
-        assertThat(service.resolve("plain")).isEmpty();
-    }
+    // When / Then
+    assertThat(service.resolve("plain")).isEmpty();
+  }
 }

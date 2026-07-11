@@ -13,92 +13,101 @@ import java.time.Instant;
 @Table(name = "kanban_access_token")
 class KanbanAccessTokenEntity {
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+  @Id
+  @GeneratedValue(strategy = GenerationType.IDENTITY)
+  private Long id;
 
-    @Column(name = "user_id", nullable = false)
-    private Long userId;
+  @Column(name = "user_id", nullable = false)
+  private Long userId;
 
-    @Column(name = "project_id")
-    private Long projectId;
+  @Column(name = "project_id")
+  private Long projectId;
 
-    @Column(name = "board_id")
-    private Long boardId;
+  @Column(name = "board_id")
+  private Long boardId;
 
-    @Column(name = "name", nullable = false)
-    private String name;
+  @Column(name = "name", nullable = false)
+  private String name;
 
-    @Column(name = "token_hash", nullable = false)
-    private String tokenHash;
+  @Column(name = "token_hash", nullable = false)
+  private String tokenHash;
 
-    @Column(name = "display_name")
-    private String displayName;
+  @Column(name = "display_name")
+  private String displayName;
 
-    @Column(name = "created_at", nullable = false)
-    private Instant createdAt;
+  @Column(name = "created_at", nullable = false)
+  private Instant createdAt;
 
-    @Column(name = "last_used_at")
-    private Instant lastUsedAt;
+  @Column(name = "last_used_at")
+  private Instant lastUsedAt;
 
-    @Column(name = "revoked", nullable = false)
-    private boolean revoked;
+  @Column(name = "revoked", nullable = false)
+  private boolean revoked;
 
-    protected KanbanAccessTokenEntity() {
-        // für JPA
-    }
+  protected KanbanAccessTokenEntity() {
+    // für JPA
+  }
 
-    KanbanAccessTokenEntity(Long id, Long userId, Long projectId, Long boardId, String name, String tokenHash,
-                            String displayName, Instant createdAt, Instant lastUsedAt, boolean revoked) {
-        this.id = id;
-        this.userId = userId;
-        this.projectId = projectId;
-        this.boardId = boardId;
-        this.name = name;
-        this.tokenHash = tokenHash;
-        this.displayName = displayName;
-        this.createdAt = createdAt;
-        this.lastUsedAt = lastUsedAt;
-        this.revoked = revoked;
-    }
+  KanbanAccessTokenEntity(
+      Long id,
+      Long userId,
+      Long projectId,
+      Long boardId,
+      String name,
+      String tokenHash,
+      String displayName,
+      Instant createdAt,
+      Instant lastUsedAt,
+      boolean revoked) {
+    this.id = id;
+    this.userId = userId;
+    this.projectId = projectId;
+    this.boardId = boardId;
+    this.name = name;
+    this.tokenHash = tokenHash;
+    this.displayName = displayName;
+    this.createdAt = createdAt;
+    this.lastUsedAt = lastUsedAt;
+    this.revoked = revoked;
+  }
 
-    Long getId() {
-        return id;
-    }
+  Long getId() {
+    return id;
+  }
 
-    Long getUserId() {
-        return userId;
-    }
+  Long getUserId() {
+    return userId;
+  }
 
-    Long getProjectId() {
-        return projectId;
-    }
+  Long getProjectId() {
+    return projectId;
+  }
 
-    Long getBoardId() {
-        return boardId;
-    }
+  Long getBoardId() {
+    return boardId;
+  }
 
-    String getName() {
-        return name;
-    }
+  String getName() {
+    return name;
+  }
 
-    String getTokenHash() {
-        return tokenHash;
-    }
+  String getTokenHash() {
+    return tokenHash;
+  }
 
-    String getDisplayName() {
-        return displayName;
-    }
+  String getDisplayName() {
+    return displayName;
+  }
 
-    Instant getCreatedAt() {
-        return createdAt;
-    }
+  Instant getCreatedAt() {
+    return createdAt;
+  }
 
-    Instant getLastUsedAt() {
-        return lastUsedAt;
-    }
+  Instant getLastUsedAt() {
+    return lastUsedAt;
+  }
 
-    boolean isRevoked() {
-        return revoked;
-    }
+  boolean isRevoked() {
+    return revoked;
+  }
 }

@@ -6,37 +6,38 @@ package org.mwolff.manban.project.domain;
  * Zuordnung zu Rollen liegt in {@code role_permission}.
  *
  * <p>Konvention: {@code <RESSOURCE>_<OPERATION>} — daraus lassen sich Ressource und Operation
- * ableiten (z. B. für die Matrix-Anzeige). {@code CARD_MOVE} ist die Operation „Karten verschieben".
+ * ableiten (z. B. für die Matrix-Anzeige). {@code CARD_MOVE} ist die Operation „Karten
+ * verschieben".
  */
 public enum Permission {
-    BOARD_CREATE,
-    BOARD_READ,
-    BOARD_UPDATE,
-    BOARD_DELETE,
+  BOARD_CREATE,
+  BOARD_READ,
+  BOARD_UPDATE,
+  BOARD_DELETE,
 
-    EPIC_CREATE,
-    EPIC_READ,
-    EPIC_UPDATE,
-    EPIC_DELETE,
+  EPIC_CREATE,
+  EPIC_READ,
+  EPIC_UPDATE,
+  EPIC_DELETE,
 
-    TICKET_CREATE,
-    TICKET_READ,
-    TICKET_UPDATE,
-    TICKET_DELETE,
+  TICKET_CREATE,
+  TICKET_READ,
+  TICKET_UPDATE,
+  TICKET_DELETE,
 
-    CARD_MOVE,
+  CARD_MOVE,
 
-    COMMENT_CREATE,
-    COMMENT_READ,
-    COMMENT_UPDATE,
-    COMMENT_DELETE,
+  COMMENT_CREATE,
+  COMMENT_READ,
+  COMMENT_UPDATE,
+  COMMENT_DELETE,
 
-    ATTACHMENT_CREATE,
-    ATTACHMENT_READ,
-    ATTACHMENT_DELETE,
+  ATTACHMENT_CREATE,
+  ATTACHMENT_READ,
+  ATTACHMENT_DELETE,
 
-    MEMBER_INVITE,
-    MEMBER_REMOVE,
+  MEMBER_INVITE,
+  MEMBER_REMOVE,
 
-    PROJECT_EDIT
+  PROJECT_EDIT
 }

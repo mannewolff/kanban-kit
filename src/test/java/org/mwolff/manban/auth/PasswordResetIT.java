@@ -32,125 +32,135 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 @Testcontainers
 class PasswordResetIT {
 
-    @Container
-    @ServiceConnection
-    static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16");
+  @Container @ServiceConnection
+  static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16");
 
-    private static final String OLD_PASSWORD = "old-password-123";
-    private static final String NEW_PASSWORD = "new-password-456";
+  private static final String OLD_PASSWORD = "old-password-123";
+  private static final String NEW_PASSWORD = "new-password-456";
 
-    @TestConfiguration
-    static class MailTestConfig {
-        @Bean
-        @Primary
-        CapturingResetMailer capturingResetMailer() {
-            return new CapturingResetMailer();
-        }
+  @TestConfiguration
+  static class MailTestConfig {
+    @Bean
+    @Primary
+    CapturingResetMailer capturingResetMailer() {
+      return new CapturingResetMailer();
+    }
+  }
+
+  static class CapturingResetMailer implements PasswordResetMailer {
+    volatile String lastUrl;
+
+    @Override
+    public void sendPasswordResetEmail(String toEmail, String resetUrl) {
+      this.lastUrl = resetUrl;
     }
 
-    static class CapturingResetMailer implements PasswordResetMailer {
-        volatile String lastUrl;
-
-        @Override
-        public void sendPasswordResetEmail(String toEmail, String resetUrl) {
-            this.lastUrl = resetUrl;
-        }
-
-        String lastToken() {
-            return lastUrl.substring(lastUrl.indexOf("token=") + "token=".length());
-        }
+    String lastToken() {
+      return lastUrl.substring(lastUrl.indexOf("token=") + "token=".length());
     }
+  }
 
-    @Autowired
-    private MockMvc mvc;
+  @Autowired private MockMvc mvc;
 
-    @Autowired
-    private AppUserRepository users;
+  @Autowired private AppUserRepository users;
 
-    @Autowired
-    private PasswordResetTokenRepository tokens;
+  @Autowired private PasswordResetTokenRepository tokens;
 
-    @Autowired
-    private PasswordEncoder passwordEncoder;
+  @Autowired private PasswordEncoder passwordEncoder;
 
-    @Autowired
-    private CapturingResetMailer mailer;
+  @Autowired private CapturingResetMailer mailer;
 
-    private void createVerifiedUser(String email) {
-        if (users.findByEmail(email).isEmpty()) {
-            users.save(new AppUser(null, email, passwordEncoder.encode(OLD_PASSWORD),
-                    "Person", true, PlatformRole.USER));
-        }
+  private void createVerifiedUser(String email) {
+    if (users.findByEmail(email).isEmpty()) {
+      users.save(
+          new AppUser(
+              null,
+              email,
+              passwordEncoder.encode(OLD_PASSWORD),
+              "Person",
+              true,
+              PlatformRole.USER));
     }
+  }
 
-    private void forgot(String email) throws Exception {
-        mvc.perform(post("/api/auth/forgot").contentType("application/json")
-                        .content("{\"email\":\"%s\"}".formatted(email)))
-                .andExpect(status().isOk());
-    }
+  private void forgot(String email) throws Exception {
+    mvc.perform(
+            post("/api/auth/forgot")
+                .contentType("application/json")
+                .content("{\"email\":\"%s\"}".formatted(email)))
+        .andExpect(status().isOk());
+  }
 
-    private void login(String email, String password, int expectedStatus) throws Exception {
-        mvc.perform(post("/api/auth/login").contentType("application/json")
-                        .content("{\"email\":\"%s\",\"password\":\"%s\"}".formatted(email, password)))
-                .andExpect(status().is(expectedStatus));
-    }
+  private void login(String email, String password, int expectedStatus) throws Exception {
+    mvc.perform(
+            post("/api/auth/login")
+                .contentType("application/json")
+                .content("{\"email\":\"%s\",\"password\":\"%s\"}".formatted(email, password)))
+        .andExpect(status().is(expectedStatus));
+  }
 
-    private void reset(String token, String newPassword, int expectedStatus) throws Exception {
-        mvc.perform(post("/api/auth/reset").contentType("application/json")
-                        .content("{\"token\":\"%s\",\"newPassword\":\"%s\"}".formatted(token, newPassword)))
-                .andExpect(status().is(expectedStatus));
-    }
+  private void reset(String token, String newPassword, int expectedStatus) throws Exception {
+    mvc.perform(
+            post("/api/auth/reset")
+                .contentType("application/json")
+                .content("{\"token\":\"%s\",\"newPassword\":\"%s\"}".formatted(token, newPassword)))
+        .andExpect(status().is(expectedStatus));
+  }
 
-    @Test
-    void forgotThenResetThenLoginWithNewPassword() throws Exception {
-        String email = "reset-happy@example.com";
-        createVerifiedUser(email);
+  @Test
+  void forgotThenResetThenLoginWithNewPassword() throws Exception {
+    String email = "reset-happy@example.com";
+    createVerifiedUser(email);
 
-        forgot(email);
-        String token = mailer.lastToken();
+    forgot(email);
+    String token = mailer.lastToken();
 
-        reset(token, NEW_PASSWORD, 204);
+    reset(token, NEW_PASSWORD, 204);
 
-        login(email, NEW_PASSWORD, 200);
-        login(email, OLD_PASSWORD, 401);
-    }
+    login(email, NEW_PASSWORD, 200);
+    login(email, OLD_PASSWORD, 401);
+  }
 
-    @Test
-    void forgotUnknownEmailReturns200AndSendsNothing() throws Exception {
-        mailer.lastUrl = null;
-        forgot("nobody-here@example.com");
-        assertThat(mailer.lastUrl).isNull();
-    }
+  @Test
+  void forgotUnknownEmailReturns200AndSendsNothing() throws Exception {
+    mailer.lastUrl = null;
+    forgot("nobody-here@example.com");
+    assertThat(mailer.lastUrl).isNull();
+  }
 
-    @Test
-    void resetWithInvalidTokenReturns400() throws Exception {
-        reset("does-not-exist", NEW_PASSWORD, 400);
-    }
+  @Test
+  void resetWithInvalidTokenReturns400() throws Exception {
+    reset("does-not-exist", NEW_PASSWORD, 400);
+  }
 
-    @Test
-    void resetWithExpiredTokenReturns400() throws Exception {
-        String email = "reset-expired@example.com";
-        createVerifiedUser(email);
-        Long userId = users.findByEmail(email).orElseThrow().id();
+  @Test
+  void resetWithExpiredTokenReturns400() throws Exception {
+    String email = "reset-expired@example.com";
+    createVerifiedUser(email);
+    Long userId = users.findByEmail(email).orElseThrow().id();
 
-        String plaintext = "abgelaufener-reset";
-        tokens.save(new PasswordResetToken(
-                null, userId, SecureTokens.sha256Hex(plaintext),
-                Instant.now().minusSeconds(3600), null));
+    String plaintext = "abgelaufener-reset";
+    tokens.save(
+        new PasswordResetToken(
+            null,
+            userId,
+            SecureTokens.sha256Hex(plaintext),
+            Instant.now().minusSeconds(3600),
+            null));
 
-        reset(plaintext, NEW_PASSWORD, 400);
-        login(email, OLD_PASSWORD, 200); // Passwort unverändert
-    }
+    reset(plaintext, NEW_PASSWORD, 400);
+    login(email, OLD_PASSWORD, 200); // Passwort unverändert
+  }
 
-    @Test
-    void resetTokenIsSingleUse() throws Exception {
-        String email = "reset-single@example.com";
-        createVerifiedUser(email);
+  @Test
+  void resetTokenIsSingleUse() throws Exception {
+    String email = "reset-single@example.com";
+    createVerifiedUser(email);
 
-        forgot(email);
-        String token = mailer.lastToken();
+    forgot(email);
+    String token = mailer.lastToken();
 
-        reset(token, NEW_PASSWORD, 204);
-        reset(token, "another-password-789", 400); // zweite Einlösung schlägt fehl
-    }
+    reset(token, NEW_PASSWORD, 204);
+    reset(token, "another-password-789", 400); // zweite Einlösung schlägt fehl
+  }
 }

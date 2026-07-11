@@ -13,43 +13,43 @@ import java.time.Instant;
 @Table(name = "project")
 class ProjectEntity {
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+  @Id
+  @GeneratedValue(strategy = GenerationType.IDENTITY)
+  private Long id;
 
-    @Column(name = "name", nullable = false)
-    private String name;
+  @Column(name = "name", nullable = false)
+  private String name;
 
-    @Column(name = "owner_user_id", nullable = false)
-    private Long ownerUserId;
+  @Column(name = "owner_user_id", nullable = false)
+  private Long ownerUserId;
 
-    @Column(name = "created_at", nullable = false)
-    private Instant createdAt;
+  @Column(name = "created_at", nullable = false)
+  private Instant createdAt;
 
-    protected ProjectEntity() {
-        // für JPA
-    }
+  protected ProjectEntity() {
+    // für JPA
+  }
 
-    ProjectEntity(Long id, String name, Long ownerUserId, Instant createdAt) {
-        this.id = id;
-        this.name = name;
-        this.ownerUserId = ownerUserId;
-        this.createdAt = createdAt;
-    }
+  ProjectEntity(Long id, String name, Long ownerUserId, Instant createdAt) {
+    this.id = id;
+    this.name = name;
+    this.ownerUserId = ownerUserId;
+    this.createdAt = createdAt;
+  }
 
-    Long getId() {
-        return id;
-    }
+  Long getId() {
+    return id;
+  }
 
-    String getName() {
-        return name;
-    }
+  String getName() {
+    return name;
+  }
 
-    Long getOwnerUserId() {
-        return ownerUserId;
-    }
+  Long getOwnerUserId() {
+    return ownerUserId;
+  }
 
-    Instant getCreatedAt() {
-        return createdAt;
-    }
+  Instant getCreatedAt() {
+    return createdAt;
+  }
 }

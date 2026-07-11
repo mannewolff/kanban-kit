@@ -7,7 +7,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 @ResponseStatus(HttpStatus.CONFLICT)
 public class AttachmentLimitExceededException extends RuntimeException {
 
-    public AttachmentLimitExceededException(int max) {
-        super("Maximal " + max + " Anhänge pro Karte erlaubt");
-    }
+  public AttachmentLimitExceededException(int max) {
+    super("Maximal " + max + " Anhänge pro Karte erlaubt");
+  }
 }

@@ -7,7 +7,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 @ResponseStatus(HttpStatus.NOT_FOUND)
 public class AttachmentNotFoundException extends RuntimeException {
 
-    public AttachmentNotFoundException() {
-        super("Anhang nicht gefunden");
-    }
+  public AttachmentNotFoundException() {
+    super("Anhang nicht gefunden");
+  }
 }

@@ -19,41 +19,42 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Verwaltung persönlicher API-Zugriffstokens. Nur per Cookie-Login erreichbar
- * (SecurityConfig verlangt {@code AUTH_SESSION}); nicht per PAT selbst (Least Privilege).
+ * Verwaltung persönlicher API-Zugriffstokens. Nur per Cookie-Login erreichbar (SecurityConfig
+ * verlangt {@code AUTH_SESSION}); nicht per PAT selbst (Least Privilege).
  */
 @RestController
 @RequestMapping("/api/access-tokens")
 class AccessTokenController {
 
-    private final AccessTokenService accessTokens;
+  private final AccessTokenService accessTokens;
 
-    AccessTokenController(AccessTokenService accessTokens) {
-        this.accessTokens = accessTokens;
-    }
+  AccessTokenController(AccessTokenService accessTokens) {
+    this.accessTokens = accessTokens;
+  }
 
-    /** Legt ein Token an; der Klartext wird hier GENAU EINMAL zurückgegeben. */
-    @PostMapping
-    @ResponseStatus(HttpStatus.CREATED)
-    CreatedAccessToken create(@AuthenticationPrincipal Long userId, @Valid @RequestBody CreateAccessTokenRequest request) {
-        return accessTokens.create(userId, request.name(), request.projectId(), request.boardId());
-    }
+  /** Legt ein Token an; der Klartext wird hier GENAU EINMAL zurückgegeben. */
+  @PostMapping
+  @ResponseStatus(HttpStatus.CREATED)
+  CreatedAccessToken create(
+      @AuthenticationPrincipal Long userId, @Valid @RequestBody CreateAccessTokenRequest request) {
+    return accessTokens.create(userId, request.name(), request.projectId(), request.boardId());
+  }
 
-    @GetMapping
-    List<AccessTokenView> list(@AuthenticationPrincipal Long userId) {
-        return accessTokens.list(userId);
-    }
+  @GetMapping
+  List<AccessTokenView> list(@AuthenticationPrincipal Long userId) {
+    return accessTokens.list(userId);
+  }
 
-    @DeleteMapping("/{id}")
-    @ResponseStatus(HttpStatus.NO_CONTENT)
-    void revoke(@AuthenticationPrincipal Long userId, @PathVariable long id) {
-        accessTokens.revoke(userId, id);
-    }
+  @DeleteMapping("/{id}")
+  @ResponseStatus(HttpStatus.NO_CONTENT)
+  void revoke(@AuthenticationPrincipal Long userId, @PathVariable long id) {
+    accessTokens.revoke(userId, id);
+  }
 
-    /**
-     * {@code projectId}/{@code boardId} sind optional: sind beide gesetzt, wird das Token an
-     * dieses Board gebunden (Kanban-Compat-API). Beide leer = ungebundenes Token.
-     */
-    record CreateAccessTokenRequest(@NotBlank @Size(max = 120) String name, Long projectId, Long boardId) {
-    }
+  /**
+   * {@code projectId}/{@code boardId} sind optional: sind beide gesetzt, wird das Token an dieses
+   * Board gebunden (Kanban-Compat-API). Beide leer = ungebundenes Token.
+   */
+  record CreateAccessTokenRequest(
+      @NotBlank @Size(max = 120) String name, Long projectId, Long boardId) {}
 }

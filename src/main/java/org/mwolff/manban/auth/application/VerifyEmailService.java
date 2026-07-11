@@ -9,37 +9,40 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Löst ein E-Mail-Verifikations-Token ein: prüft Gültigkeit, markiert die E-Mail des
- * Benutzers als bestätigt und verbraucht das Token (einmalig).
+ * Löst ein E-Mail-Verifikations-Token ein: prüft Gültigkeit, markiert die E-Mail des Benutzers als
+ * bestätigt und verbraucht das Token (einmalig).
  */
 @Service
 public class VerifyEmailService {
 
-    private final AppUserRepository users;
-    private final EmailVerificationTokenRepository tokens;
-    private final Clock clock;
+  private final AppUserRepository users;
+  private final EmailVerificationTokenRepository tokens;
+  private final Clock clock;
 
-    public VerifyEmailService(AppUserRepository users, EmailVerificationTokenRepository tokens, Clock clock) {
-        this.users = users;
-        this.tokens = tokens;
-        this.clock = clock;
+  public VerifyEmailService(
+      AppUserRepository users, EmailVerificationTokenRepository tokens, Clock clock) {
+    this.users = users;
+    this.tokens = tokens;
+    this.clock = clock;
+  }
+
+  @Transactional
+  public void verify(String plaintextToken) {
+    Instant now = clock.instant();
+
+    EmailVerificationToken token =
+        tokens
+            .findByTokenHash(SecureTokens.sha256Hex(plaintextToken))
+            .orElseThrow(InvalidVerificationTokenException::new);
+
+    if (token.isUsed() || token.isExpired(now)) {
+      throw new InvalidVerificationTokenException();
     }
 
-    @Transactional
-    public void verify(String plaintextToken) {
-        Instant now = clock.instant();
+    AppUser user =
+        users.findById(token.userId()).orElseThrow(InvalidVerificationTokenException::new);
 
-        EmailVerificationToken token = tokens.findByTokenHash(SecureTokens.sha256Hex(plaintextToken))
-                .orElseThrow(InvalidVerificationTokenException::new);
-
-        if (token.isUsed() || token.isExpired(now)) {
-            throw new InvalidVerificationTokenException();
-        }
-
-        AppUser user = users.findById(token.userId())
-                .orElseThrow(InvalidVerificationTokenException::new);
-
-        users.save(user.withEmailVerified(true));
-        tokens.save(token.markUsed(now));
-    }
+    users.save(user.withEmailVerified(true));
+    tokens.save(token.markUsed(now));
+  }
 }

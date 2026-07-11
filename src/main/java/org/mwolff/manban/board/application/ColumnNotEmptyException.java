@@ -7,7 +7,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 @ResponseStatus(HttpStatus.CONFLICT)
 public class ColumnNotEmptyException extends RuntimeException {
 
-    public ColumnNotEmptyException() {
-        super("Spalte enthält noch Karten und kann nicht gelöscht werden");
-    }
+  public ColumnNotEmptyException() {
+    super("Spalte enthält noch Karten und kann nicht gelöscht werden");
+  }
 }

@@ -7,13 +7,13 @@ import org.mwolff.manban.project.domain.ProjectMembership;
 /** Ausgehender Port für die Persistenz von Projekt-Mitgliedschaften. */
 public interface ProjectMembershipRepository {
 
-    ProjectMembership save(ProjectMembership membership);
+  ProjectMembership save(ProjectMembership membership);
 
-    List<ProjectMembership> findByUserId(long userId);
+  List<ProjectMembership> findByUserId(long userId);
 
-    List<ProjectMembership> findByProjectId(long projectId);
+  List<ProjectMembership> findByProjectId(long projectId);
 
-    Optional<ProjectMembership> findByProjectIdAndUserId(long projectId, long userId);
+  Optional<ProjectMembership> findByProjectIdAndUserId(long projectId, long userId);
 
-    void deleteById(long membershipId);
+  void deleteById(long membershipId);
 }

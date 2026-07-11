@@ -21,36 +21,39 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 class CommentController {
 
-    private final CommentService comments;
+  private final CommentService comments;
 
-    CommentController(CommentService comments) {
-        this.comments = comments;
-    }
+  CommentController(CommentService comments) {
+    this.comments = comments;
+  }
 
-    @PostMapping("/api/cards/{cardId}/comments")
-    @ResponseStatus(HttpStatus.CREATED)
-    CommentView create(@AuthenticationPrincipal Long userId, @PathVariable long cardId,
-                       @Valid @RequestBody CommentRequest request) {
-        return comments.create(userId, cardId, request.body());
-    }
+  @PostMapping("/api/cards/{cardId}/comments")
+  @ResponseStatus(HttpStatus.CREATED)
+  CommentView create(
+      @AuthenticationPrincipal Long userId,
+      @PathVariable long cardId,
+      @Valid @RequestBody CommentRequest request) {
+    return comments.create(userId, cardId, request.body());
+  }
 
-    @GetMapping("/api/cards/{cardId}/comments")
-    List<CommentView> list(@AuthenticationPrincipal Long userId, @PathVariable long cardId) {
-        return comments.list(userId, cardId);
-    }
+  @GetMapping("/api/cards/{cardId}/comments")
+  List<CommentView> list(@AuthenticationPrincipal Long userId, @PathVariable long cardId) {
+    return comments.list(userId, cardId);
+  }
 
-    @PatchMapping("/api/comments/{commentId}")
-    CommentView update(@AuthenticationPrincipal Long userId, @PathVariable long commentId,
-                       @Valid @RequestBody CommentRequest request) {
-        return comments.update(userId, commentId, request.body());
-    }
+  @PatchMapping("/api/comments/{commentId}")
+  CommentView update(
+      @AuthenticationPrincipal Long userId,
+      @PathVariable long commentId,
+      @Valid @RequestBody CommentRequest request) {
+    return comments.update(userId, commentId, request.body());
+  }
 
-    @DeleteMapping("/api/comments/{commentId}")
-    @ResponseStatus(HttpStatus.NO_CONTENT)
-    void delete(@AuthenticationPrincipal Long userId, @PathVariable long commentId) {
-        comments.delete(userId, commentId);
-    }
+  @DeleteMapping("/api/comments/{commentId}")
+  @ResponseStatus(HttpStatus.NO_CONTENT)
+  void delete(@AuthenticationPrincipal Long userId, @PathVariable long commentId) {
+    comments.delete(userId, commentId);
+  }
 
-    record CommentRequest(@NotBlank @Size(max = 10_000) String body) {
-    }
+  record CommentRequest(@NotBlank @Size(max = 10_000) String body) {}
 }

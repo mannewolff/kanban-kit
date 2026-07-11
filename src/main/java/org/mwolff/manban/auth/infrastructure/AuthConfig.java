@@ -9,9 +9,9 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 @Configuration
 class AuthConfig {
 
-    /** Argon2id-Passwort-Encoder mit den empfohlenen Spring-Security-Parametern. */
-    @Bean
-    PasswordEncoder passwordEncoder() {
-        return Argon2PasswordEncoder.defaultsForSpringSecurity_v5_8();
-    }
+  /** Argon2id-Passwort-Encoder mit den empfohlenen Spring-Security-Parametern. */
+  @Bean
+  PasswordEncoder passwordEncoder() {
+    return Argon2PasswordEncoder.defaultsForSpringSecurity_v5_8();
+  }
 }

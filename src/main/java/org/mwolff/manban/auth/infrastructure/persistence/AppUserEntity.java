@@ -11,68 +11,73 @@ import jakarta.persistence.Table;
 import org.mwolff.manban.auth.domain.PlatformRole;
 
 /**
- * JPA-Abbildung der Tabelle {@code app_user}. Zeitstempel (created_at/updated_at)
- * verwaltet die Datenbank (Default + Trigger) und sind hier bewusst nicht gemappt.
+ * JPA-Abbildung der Tabelle {@code app_user}. Zeitstempel (created_at/updated_at) verwaltet die
+ * Datenbank (Default + Trigger) und sind hier bewusst nicht gemappt.
  */
 @Entity
 @Table(name = "app_user")
 class AppUserEntity {
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+  @Id
+  @GeneratedValue(strategy = GenerationType.IDENTITY)
+  private Long id;
 
-    @Column(name = "email", nullable = false)
-    private String email;
+  @Column(name = "email", nullable = false)
+  private String email;
 
-    @Column(name = "password_hash", nullable = false)
-    private String passwordHash;
+  @Column(name = "password_hash", nullable = false)
+  private String passwordHash;
 
-    @Column(name = "display_name", nullable = false)
-    private String displayName;
+  @Column(name = "display_name", nullable = false)
+  private String displayName;
 
-    @Column(name = "email_verified", nullable = false)
-    private boolean emailVerified;
+  @Column(name = "email_verified", nullable = false)
+  private boolean emailVerified;
 
-    @Enumerated(EnumType.STRING)
-    @Column(name = "platform_role", nullable = false)
-    private PlatformRole platformRole;
+  @Enumerated(EnumType.STRING)
+  @Column(name = "platform_role", nullable = false)
+  private PlatformRole platformRole;
 
-    protected AppUserEntity() {
-        // für JPA
-    }
+  protected AppUserEntity() {
+    // für JPA
+  }
 
-    AppUserEntity(Long id, String email, String passwordHash, String displayName,
-                  boolean emailVerified, PlatformRole platformRole) {
-        this.id = id;
-        this.email = email;
-        this.passwordHash = passwordHash;
-        this.displayName = displayName;
-        this.emailVerified = emailVerified;
-        this.platformRole = platformRole;
-    }
+  AppUserEntity(
+      Long id,
+      String email,
+      String passwordHash,
+      String displayName,
+      boolean emailVerified,
+      PlatformRole platformRole) {
+    this.id = id;
+    this.email = email;
+    this.passwordHash = passwordHash;
+    this.displayName = displayName;
+    this.emailVerified = emailVerified;
+    this.platformRole = platformRole;
+  }
 
-    Long getId() {
-        return id;
-    }
+  Long getId() {
+    return id;
+  }
 
-    String getEmail() {
-        return email;
-    }
+  String getEmail() {
+    return email;
+  }
 
-    String getPasswordHash() {
-        return passwordHash;
-    }
+  String getPasswordHash() {
+    return passwordHash;
+  }
 
-    String getDisplayName() {
-        return displayName;
-    }
+  String getDisplayName() {
+    return displayName;
+  }
 
-    boolean isEmailVerified() {
-        return emailVerified;
-    }
+  boolean isEmailVerified() {
+    return emailVerified;
+  }
 
-    PlatformRole getPlatformRole() {
-        return platformRole;
-    }
+  PlatformRole getPlatformRole() {
+    return platformRole;
+  }
 }

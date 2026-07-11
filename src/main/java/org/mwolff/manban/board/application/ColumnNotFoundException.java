@@ -7,7 +7,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 @ResponseStatus(HttpStatus.NOT_FOUND)
 public class ColumnNotFoundException extends RuntimeException {
 
-    public ColumnNotFoundException() {
-        super("Spalte nicht gefunden");
-    }
+  public ColumnNotFoundException() {
+    super("Spalte nicht gefunden");
+  }
 }

@@ -37,121 +37,163 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 @Testcontainers
 class RbacMatrixIT {
 
-    @Container
-    @ServiceConnection
-    static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16");
+  @Container @ServiceConnection
+  static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16");
 
-    private static final String PASSWORD = "sup3r-secret";
+  private static final String PASSWORD = "sup3r-secret";
 
-    // Erwartete feste Matrix (Konzept §2 / F2-Seed).
-    private static final Map<ProjectRole, Set<Permission>> EXPECTED = new EnumMap<>(ProjectRole.class);
+  // Erwartete feste Matrix (Konzept §2 / F2-Seed).
+  private static final Map<ProjectRole, Set<Permission>> EXPECTED =
+      new EnumMap<>(ProjectRole.class);
 
-    static {
-        Set<Permission> reads = EnumSet.of(
-                Permission.BOARD_READ, Permission.EPIC_READ, Permission.TICKET_READ,
-                Permission.COMMENT_READ, Permission.ATTACHMENT_READ);
+  static {
+    Set<Permission> reads =
+        EnumSet.of(
+            Permission.BOARD_READ,
+            Permission.EPIC_READ,
+            Permission.TICKET_READ,
+            Permission.COMMENT_READ,
+            Permission.ATTACHMENT_READ);
 
-        Set<Permission> member = EnumSet.copyOf(reads);
-        member.addAll(EnumSet.of(
-                Permission.TICKET_CREATE, Permission.TICKET_UPDATE, Permission.TICKET_DELETE, Permission.CARD_MOVE,
-                Permission.EPIC_CREATE, Permission.EPIC_UPDATE, Permission.EPIC_DELETE,
-                Permission.COMMENT_CREATE, Permission.COMMENT_UPDATE,
-                Permission.ATTACHMENT_CREATE, Permission.ATTACHMENT_DELETE));
+    Set<Permission> member = EnumSet.copyOf(reads);
+    member.addAll(
+        EnumSet.of(
+            Permission.TICKET_CREATE,
+            Permission.TICKET_UPDATE,
+            Permission.TICKET_DELETE,
+            Permission.CARD_MOVE,
+            Permission.EPIC_CREATE,
+            Permission.EPIC_UPDATE,
+            Permission.EPIC_DELETE,
+            Permission.COMMENT_CREATE,
+            Permission.COMMENT_UPDATE,
+            Permission.ATTACHMENT_CREATE,
+            Permission.ATTACHMENT_DELETE));
 
-        Set<Permission> admin = EnumSet.copyOf(member);
-        admin.addAll(EnumSet.of(
-                Permission.BOARD_CREATE, Permission.BOARD_UPDATE, Permission.BOARD_DELETE,
-                Permission.COMMENT_DELETE, Permission.MEMBER_INVITE, Permission.MEMBER_REMOVE));
+    Set<Permission> admin = EnumSet.copyOf(member);
+    admin.addAll(
+        EnumSet.of(
+            Permission.BOARD_CREATE,
+            Permission.BOARD_UPDATE,
+            Permission.BOARD_DELETE,
+            Permission.COMMENT_DELETE,
+            Permission.MEMBER_INVITE,
+            Permission.MEMBER_REMOVE));
 
-        EXPECTED.put(ProjectRole.VIEWER, reads);
-        EXPECTED.put(ProjectRole.MEMBER, member);
-        EXPECTED.put(ProjectRole.ADMIN, admin);
-        EXPECTED.put(ProjectRole.OWNER, EnumSet.allOf(Permission.class));
+    EXPECTED.put(ProjectRole.VIEWER, reads);
+    EXPECTED.put(ProjectRole.MEMBER, member);
+    EXPECTED.put(ProjectRole.ADMIN, admin);
+    EXPECTED.put(ProjectRole.OWNER, EnumSet.allOf(Permission.class));
+  }
+
+  @Autowired private RolePermissionRepository rolePermissions;
+
+  @Autowired private MockMvc mvc;
+
+  @Autowired private AppUserRepository users;
+
+  @Autowired private ProjectMembershipRepository memberships;
+
+  @Autowired private PasswordEncoder passwordEncoder;
+
+  @Autowired private ObjectMapper json;
+
+  @Test
+  void eachRoleHasExactlyItsPermissions() {
+    for (ProjectRole role : ProjectRole.values()) {
+      for (Permission permission : Permission.values()) {
+        boolean expected = EXPECTED.get(role).contains(permission);
+        assertThat(rolePermissions.isGranted(role, permission))
+            .as("Rolle %s Recht %s", role, permission)
+            .isEqualTo(expected);
+      }
     }
+  }
 
-    @Autowired
-    private RolePermissionRepository rolePermissions;
+  @Test
+  void adminMemberCannotEditProjectButOwnerCan() throws Exception {
+    Cookie alice = loginAs("owner-rbac@example.com");
+    Cookie bob = loginAs("admin-rbac@example.com");
+    long projectId = createProject("owner-rbac@example.com", "RBAC");
 
-    @Autowired
-    private MockMvc mvc;
+    // Bob als ADMIN — hat BOARD_CREATE, aber NICHT PROJECT_EDIT.
+    memberships.save(
+        new ProjectMembership(
+            null, projectId, userId("admin-rbac@example.com"), ProjectRole.ADMIN, Instant.now()));
 
-    @Autowired
-    private AppUserRepository users;
+    mvc.perform(
+            patch("/api/projects/" + projectId)
+                .cookie(bob)
+                .contentType("application/json")
+                .content("{\"name\":\"x\"}"))
+        .andExpect(status().isForbidden());
+    mvc.perform(
+            patch("/api/projects/" + projectId)
+                .cookie(alice)
+                .contentType("application/json")
+                .content("{\"name\":\"OK\"}"))
+        .andExpect(status().isOk());
+  }
 
-    @Autowired
-    private ProjectMembershipRepository memberships;
+  private long userId(String email) {
+    return users.findByEmail(email).orElseThrow().id();
+  }
 
-    @Autowired
-    private PasswordEncoder passwordEncoder;
-
-    @Autowired
-    private ObjectMapper json;
-
-    @Test
-    void eachRoleHasExactlyItsPermissions() {
-        for (ProjectRole role : ProjectRole.values()) {
-            for (Permission permission : Permission.values()) {
-                boolean expected = EXPECTED.get(role).contains(permission);
-                assertThat(rolePermissions.isGranted(role, permission))
-                        .as("Rolle %s Recht %s", role, permission)
-                        .isEqualTo(expected);
-            }
-        }
+  private Cookie loginAs(String email) throws Exception {
+    if (users.findByEmail(email).isEmpty()) {
+      users.save(
+          new AppUser(
+              null, email, passwordEncoder.encode(PASSWORD), "Person", true, PlatformRole.USER));
     }
+    return mvc.perform(
+            post("/api/auth/login")
+                .contentType("application/json")
+                .content("{\"email\":\"%s\",\"password\":\"%s\"}".formatted(email, PASSWORD)))
+        .andExpect(status().isOk())
+        .andReturn()
+        .getResponse()
+        .getCookie("manban_session");
+  }
 
-    @Test
-    void adminMemberCannotEditProjectButOwnerCan() throws Exception {
-        Cookie alice = loginAs("owner-rbac@example.com");
-        Cookie bob = loginAs("admin-rbac@example.com");
-        long projectId = createProject("owner-rbac@example.com", "RBAC");
-
-        // Bob als ADMIN — hat BOARD_CREATE, aber NICHT PROJECT_EDIT.
-        memberships.save(new ProjectMembership(null, projectId, userId("admin-rbac@example.com"),
-                ProjectRole.ADMIN, Instant.now()));
-
-        mvc.perform(patch("/api/projects/" + projectId).cookie(bob)
-                        .contentType("application/json").content("{\"name\":\"x\"}"))
-                .andExpect(status().isForbidden());
-        mvc.perform(patch("/api/projects/" + projectId).cookie(alice)
-                        .contentType("application/json").content("{\"name\":\"OK\"}"))
-                .andExpect(status().isOk());
+  private long createProject(String ownerEmail, String name) throws Exception {
+    if (users.findByEmail(ownerEmail).isEmpty()) {
+      users.save(
+          new AppUser(
+              null,
+              ownerEmail,
+              passwordEncoder.encode(PASSWORD),
+              "Person",
+              true,
+              PlatformRole.USER));
     }
+    Cookie admin = platformAdminSession();
+    String body =
+        mvc.perform(
+                post("/api/projects")
+                    .cookie(admin)
+                    .contentType("application/json")
+                    .content("{\"name\":\"%s\",\"ownerEmail\":\"%s\"}".formatted(name, ownerEmail)))
+            .andExpect(status().isCreated())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+    return json.readTree(body).get("id").asLong();
+  }
 
-    private long userId(String email) {
-        return users.findByEmail(email).orElseThrow().id();
+  private Cookie platformAdminSession() throws Exception {
+    String email = "project-admin@example.com";
+    if (users.findByEmail(email).isEmpty()) {
+      users.save(
+          new AppUser(
+              null, email, passwordEncoder.encode(PASSWORD), "Person", true, PlatformRole.ADMIN));
     }
-
-    private Cookie loginAs(String email) throws Exception {
-        if (users.findByEmail(email).isEmpty()) {
-            users.save(new AppUser(null, email, passwordEncoder.encode(PASSWORD), "Person", true, PlatformRole.USER));
-        }
-        return mvc.perform(post("/api/auth/login").contentType("application/json")
-                        .content("{\"email\":\"%s\",\"password\":\"%s\"}".formatted(email, PASSWORD)))
-                .andExpect(status().isOk())
-                .andReturn().getResponse().getCookie("manban_session");
-    }
-
-    private long createProject(String ownerEmail, String name) throws Exception {
-        if (users.findByEmail(ownerEmail).isEmpty()) {
-            users.save(new AppUser(null, ownerEmail, passwordEncoder.encode(PASSWORD), "Person", true, PlatformRole.USER));
-        }
-        Cookie admin = platformAdminSession();
-        String body = mvc.perform(post("/api/projects").cookie(admin)
-                        .contentType("application/json")
-                        .content("{\"name\":\"%s\",\"ownerEmail\":\"%s\"}".formatted(name, ownerEmail)))
-                .andExpect(status().isCreated())
-                .andReturn().getResponse().getContentAsString();
-        return json.readTree(body).get("id").asLong();
-    }
-
-    private Cookie platformAdminSession() throws Exception {
-        String email = "project-admin@example.com";
-        if (users.findByEmail(email).isEmpty()) {
-            users.save(new AppUser(null, email, passwordEncoder.encode(PASSWORD), "Person", true, PlatformRole.ADMIN));
-        }
-        return mvc.perform(post("/api/auth/login").contentType("application/json")
-                        .content("{\"email\":\"%s\",\"password\":\"%s\"}".formatted(email, PASSWORD)))
-                .andExpect(status().isOk())
-                .andReturn().getResponse().getCookie("manban_session");
-    }
+    return mvc.perform(
+            post("/api/auth/login")
+                .contentType("application/json")
+                .content("{\"email\":\"%s\",\"password\":\"%s\"}".formatted(email, PASSWORD)))
+        .andExpect(status().isOk())
+        .andReturn()
+        .getResponse()
+        .getCookie("manban_session");
+  }
 }

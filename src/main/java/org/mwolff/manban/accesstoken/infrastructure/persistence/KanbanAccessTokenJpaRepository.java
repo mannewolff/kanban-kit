@@ -7,7 +7,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 /** Spring-Data-Repository für {@link KanbanAccessTokenEntity}. */
 interface KanbanAccessTokenJpaRepository extends JpaRepository<KanbanAccessTokenEntity, Long> {
 
-    List<KanbanAccessTokenEntity> findByUserIdOrderByCreatedAtDesc(Long userId);
+  List<KanbanAccessTokenEntity> findByUserIdOrderByCreatedAtDesc(Long userId);
 
-    Optional<KanbanAccessTokenEntity> findByTokenHash(String tokenHash);
+  Optional<KanbanAccessTokenEntity> findByTokenHash(String tokenHash);
 }

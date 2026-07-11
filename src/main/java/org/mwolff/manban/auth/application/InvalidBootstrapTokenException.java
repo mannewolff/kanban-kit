@@ -7,7 +7,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 @ResponseStatus(HttpStatus.FORBIDDEN)
 public class InvalidBootstrapTokenException extends RuntimeException {
 
-    public InvalidBootstrapTokenException() {
-        super("Ungültiger oder nicht konfigurierter Bootstrap-Token");
-    }
+  public InvalidBootstrapTokenException() {
+    super("Ungültiger oder nicht konfigurierter Bootstrap-Token");
+  }
 }

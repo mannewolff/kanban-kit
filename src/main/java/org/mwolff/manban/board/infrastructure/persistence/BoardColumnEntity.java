@@ -12,51 +12,51 @@ import jakarta.persistence.Table;
 @Table(name = "board_column")
 class BoardColumnEntity {
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+  @Id
+  @GeneratedValue(strategy = GenerationType.IDENTITY)
+  private Long id;
 
-    @Column(name = "board_id", nullable = false)
-    private Long boardId;
+  @Column(name = "board_id", nullable = false)
+  private Long boardId;
 
-    @Column(name = "name", nullable = false)
-    private String name;
+  @Column(name = "name", nullable = false)
+  private String name;
 
-    @Column(name = "position", nullable = false)
-    private int position;
+  @Column(name = "position", nullable = false)
+  private int position;
 
-    @Column(name = "wip_limit")
-    private Integer wipLimit;
+  @Column(name = "wip_limit")
+  private Integer wipLimit;
 
-    protected BoardColumnEntity() {
-        // für JPA
-    }
+  protected BoardColumnEntity() {
+    // für JPA
+  }
 
-    BoardColumnEntity(Long id, Long boardId, String name, int position, Integer wipLimit) {
-        this.id = id;
-        this.boardId = boardId;
-        this.name = name;
-        this.position = position;
-        this.wipLimit = wipLimit;
-    }
+  BoardColumnEntity(Long id, Long boardId, String name, int position, Integer wipLimit) {
+    this.id = id;
+    this.boardId = boardId;
+    this.name = name;
+    this.position = position;
+    this.wipLimit = wipLimit;
+  }
 
-    Long getId() {
-        return id;
-    }
+  Long getId() {
+    return id;
+  }
 
-    Long getBoardId() {
-        return boardId;
-    }
+  Long getBoardId() {
+    return boardId;
+  }
 
-    String getName() {
-        return name;
-    }
+  String getName() {
+    return name;
+  }
 
-    int getPosition() {
-        return position;
-    }
+  int getPosition() {
+    return position;
+  }
 
-    Integer getWipLimit() {
-        return wipLimit;
-    }
+  Integer getWipLimit() {
+    return wipLimit;
+  }
 }

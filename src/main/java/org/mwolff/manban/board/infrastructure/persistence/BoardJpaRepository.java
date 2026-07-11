@@ -6,5 +6,5 @@ import org.springframework.data.jpa.repository.JpaRepository;
 /** Spring-Data-Repository für {@link BoardEntity}. */
 interface BoardJpaRepository extends JpaRepository<BoardEntity, Long> {
 
-    List<BoardEntity> findByProjectIdOrderByCreatedAt(Long projectId);
+  List<BoardEntity> findByProjectIdOrderByCreatedAt(Long projectId);
 }

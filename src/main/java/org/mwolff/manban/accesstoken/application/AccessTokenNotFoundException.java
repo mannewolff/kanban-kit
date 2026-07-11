@@ -7,7 +7,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 @ResponseStatus(HttpStatus.NOT_FOUND)
 public class AccessTokenNotFoundException extends RuntimeException {
 
-    public AccessTokenNotFoundException() {
-        super("Zugriffstoken nicht gefunden");
-    }
+  public AccessTokenNotFoundException() {
+    super("Zugriffstoken nicht gefunden");
+  }
 }

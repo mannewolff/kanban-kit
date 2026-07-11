@@ -7,7 +7,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 @ResponseStatus(HttpStatus.FORBIDDEN)
 public class InvitationEmailMismatchException extends RuntimeException {
 
-    public InvitationEmailMismatchException() {
-        super("Einladung gehört zu einer anderen E-Mail-Adresse");
-    }
+  public InvitationEmailMismatchException() {
+    super("Einladung gehört zu einer anderen E-Mail-Adresse");
+  }
 }

@@ -21,41 +21,44 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 class BoardController {
 
-    private final BoardService boards;
+  private final BoardService boards;
 
-    BoardController(BoardService boards) {
-        this.boards = boards;
-    }
+  BoardController(BoardService boards) {
+    this.boards = boards;
+  }
 
-    @PostMapping("/api/projects/{projectId}/boards")
-    @ResponseStatus(HttpStatus.CREATED)
-    BoardView create(@AuthenticationPrincipal Long userId, @PathVariable long projectId,
-                     @Valid @RequestBody BoardRequest request) {
-        return boards.createBoard(userId, projectId, request.name());
-    }
+  @PostMapping("/api/projects/{projectId}/boards")
+  @ResponseStatus(HttpStatus.CREATED)
+  BoardView create(
+      @AuthenticationPrincipal Long userId,
+      @PathVariable long projectId,
+      @Valid @RequestBody BoardRequest request) {
+    return boards.createBoard(userId, projectId, request.name());
+  }
 
-    @GetMapping("/api/projects/{projectId}/boards")
-    List<BoardView> list(@AuthenticationPrincipal Long userId, @PathVariable long projectId) {
-        return boards.listBoards(userId, projectId);
-    }
+  @GetMapping("/api/projects/{projectId}/boards")
+  List<BoardView> list(@AuthenticationPrincipal Long userId, @PathVariable long projectId) {
+    return boards.listBoards(userId, projectId);
+  }
 
-    @GetMapping("/api/boards/{boardId}")
-    BoardView get(@AuthenticationPrincipal Long userId, @PathVariable long boardId) {
-        return boards.getBoard(userId, boardId);
-    }
+  @GetMapping("/api/boards/{boardId}")
+  BoardView get(@AuthenticationPrincipal Long userId, @PathVariable long boardId) {
+    return boards.getBoard(userId, boardId);
+  }
 
-    @PatchMapping("/api/boards/{boardId}")
-    BoardView rename(@AuthenticationPrincipal Long userId, @PathVariable long boardId,
-                     @Valid @RequestBody BoardRequest request) {
-        return boards.renameBoard(userId, boardId, request.name());
-    }
+  @PatchMapping("/api/boards/{boardId}")
+  BoardView rename(
+      @AuthenticationPrincipal Long userId,
+      @PathVariable long boardId,
+      @Valid @RequestBody BoardRequest request) {
+    return boards.renameBoard(userId, boardId, request.name());
+  }
 
-    @DeleteMapping("/api/boards/{boardId}")
-    @ResponseStatus(HttpStatus.NO_CONTENT)
-    void delete(@AuthenticationPrincipal Long userId, @PathVariable long boardId) {
-        boards.deleteBoard(userId, boardId);
-    }
+  @DeleteMapping("/api/boards/{boardId}")
+  @ResponseStatus(HttpStatus.NO_CONTENT)
+  void delete(@AuthenticationPrincipal Long userId, @PathVariable long boardId) {
+    boards.deleteBoard(userId, boardId);
+  }
 
-    record BoardRequest(@NotBlank @Size(max = 200) String name) {
-    }
+  record BoardRequest(@NotBlank @Size(max = 200) String name) {}
 }

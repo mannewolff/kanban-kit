@@ -17,39 +17,39 @@ import org.mwolff.manban.card.application.DoneRetentionService;
 /** Zeit-Test: der Aufräum-Job reicht den Clock-Zeitpunkt an die Retention weiter. */
 class DoneRetentionJobTest {
 
-    private static final Instant FIXED = Instant.parse("2026-01-02T03:04:05Z");
+  private static final Instant FIXED = Instant.parse("2026-01-02T03:04:05Z");
 
-    @Test
-    void run_passesClockInstantToRetention() {
-        // Given
-        DoneRetentionService retention = mock(DoneRetentionService.class);
-        CleanupProperties properties = new CleanupProperties(true, 30, null);
-        Clock clock = Clock.fixed(FIXED, ZoneOffset.UTC);
-        when(retention.archiveExpiredDoneCards(FIXED, 30)).thenReturn(0);
-        DoneRetentionJob job = new DoneRetentionJob(retention, properties, clock);
+  @Test
+  void run_passesClockInstantToRetention() {
+    // Given
+    DoneRetentionService retention = mock(DoneRetentionService.class);
+    CleanupProperties properties = new CleanupProperties(true, 30, null);
+    Clock clock = Clock.fixed(FIXED, ZoneOffset.UTC);
+    when(retention.archiveExpiredDoneCards(FIXED, 30)).thenReturn(0);
+    DoneRetentionJob job = new DoneRetentionJob(retention, properties, clock);
 
-        // When
-        job.run();
+    // When
+    job.run();
 
-        // Then
-        ArgumentCaptor<Instant> captor = ArgumentCaptor.forClass(Instant.class);
-        verify(retention).archiveExpiredDoneCards(captor.capture(), anyInt());
-        assertThat(captor.getValue()).isEqualTo(FIXED);
-    }
+    // Then
+    ArgumentCaptor<Instant> captor = ArgumentCaptor.forClass(Instant.class);
+    verify(retention).archiveExpiredDoneCards(captor.capture(), anyInt());
+    assertThat(captor.getValue()).isEqualTo(FIXED);
+  }
 
-    @Test
-    void run_delegatesRetentionDays_whenCardsArchived() {
-        // Given: die Retention meldet archivierte Karten (> 0) -> Log-Zweig wird betreten
-        DoneRetentionService retention = mock(DoneRetentionService.class);
-        CleanupProperties properties = new CleanupProperties(true, 30, null);
-        Clock clock = Clock.fixed(FIXED, ZoneOffset.UTC);
-        when(retention.archiveExpiredDoneCards(FIXED, 30)).thenReturn(5);
-        DoneRetentionJob job = new DoneRetentionJob(retention, properties, clock);
+  @Test
+  void run_delegatesRetentionDays_whenCardsArchived() {
+    // Given: die Retention meldet archivierte Karten (> 0) -> Log-Zweig wird betreten
+    DoneRetentionService retention = mock(DoneRetentionService.class);
+    CleanupProperties properties = new CleanupProperties(true, 30, null);
+    Clock clock = Clock.fixed(FIXED, ZoneOffset.UTC);
+    when(retention.archiveExpiredDoneCards(FIXED, 30)).thenReturn(5);
+    DoneRetentionJob job = new DoneRetentionJob(retention, properties, clock);
 
-        // When
-        job.run();
+    // When
+    job.run();
 
-        // Then
-        verify(retention).archiveExpiredDoneCards(FIXED, 30);
-    }
+    // Then
+    verify(retention).archiveExpiredDoneCards(FIXED, 30);
+  }
 }

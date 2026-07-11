@@ -10,37 +10,37 @@ import org.springframework.stereotype.Component;
 @Component
 class ProjectRepositoryAdapter implements ProjectRepository {
 
-    private final ProjectJpaRepository jpa;
+  private final ProjectJpaRepository jpa;
 
-    ProjectRepositoryAdapter(ProjectJpaRepository jpa) {
-        this.jpa = jpa;
-    }
+  ProjectRepositoryAdapter(ProjectJpaRepository jpa) {
+    this.jpa = jpa;
+  }
 
-    @Override
-    public Project save(Project project) {
-        return toDomain(jpa.save(toEntity(project)));
-    }
+  @Override
+  public Project save(Project project) {
+    return toDomain(jpa.save(toEntity(project)));
+  }
 
-    @Override
-    public Optional<Project> findById(long id) {
-        return jpa.findById(id).map(ProjectRepositoryAdapter::toDomain);
-    }
+  @Override
+  public Optional<Project> findById(long id) {
+    return jpa.findById(id).map(ProjectRepositoryAdapter::toDomain);
+  }
 
-    @Override
-    public List<Project> findAll() {
-        return jpa.findAll().stream().map(ProjectRepositoryAdapter::toDomain).toList();
-    }
+  @Override
+  public List<Project> findAll() {
+    return jpa.findAll().stream().map(ProjectRepositoryAdapter::toDomain).toList();
+  }
 
-    @Override
-    public void deleteById(long id) {
-        jpa.deleteById(id);
-    }
+  @Override
+  public void deleteById(long id) {
+    jpa.deleteById(id);
+  }
 
-    private static ProjectEntity toEntity(Project p) {
-        return new ProjectEntity(p.id(), p.name(), p.ownerUserId(), p.createdAt());
-    }
+  private static ProjectEntity toEntity(Project p) {
+    return new ProjectEntity(p.id(), p.name(), p.ownerUserId(), p.createdAt());
+  }
 
-    private static Project toDomain(ProjectEntity e) {
-        return new Project(e.getId(), e.getName(), e.getOwnerUserId(), e.getCreatedAt());
-    }
+  private static Project toDomain(ProjectEntity e) {
+    return new Project(e.getId(), e.getName(), e.getOwnerUserId(), e.getCreatedAt());
+  }
 }

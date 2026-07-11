@@ -7,7 +7,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 @ResponseStatus(HttpStatus.FORBIDDEN)
 public class ProjectAccessDeniedException extends RuntimeException {
 
-    public ProjectAccessDeniedException() {
-        super("Keine Berechtigung für diese Projekt-Aktion");
-    }
+  public ProjectAccessDeniedException() {
+    super("Keine Berechtigung für diese Projekt-Aktion");
+  }
 }

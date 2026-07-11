@@ -42,183 +42,236 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 @Testcontainers
 class MembershipIT {
 
-    @Container
-    @ServiceConnection
-    static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16");
+  @Container @ServiceConnection
+  static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16");
 
-    private static final String PASSWORD = "sup3r-secret";
+  private static final String PASSWORD = "sup3r-secret";
 
-    @TestConfiguration
-    static class MailTestConfig {
-        @Bean
-        @Primary
-        CapturingInvitationMailer capturingInvitationMailer() {
-            return new CapturingInvitationMailer();
-        }
+  @TestConfiguration
+  static class MailTestConfig {
+    @Bean
+    @Primary
+    CapturingInvitationMailer capturingInvitationMailer() {
+      return new CapturingInvitationMailer();
+    }
+  }
+
+  static class CapturingInvitationMailer implements InvitationMailer {
+    volatile String lastUrl;
+
+    @Override
+    public void sendInvitationEmail(String toEmail, String projectName, String invitationUrl) {
+      this.lastUrl = invitationUrl;
     }
 
-    static class CapturingInvitationMailer implements InvitationMailer {
-        volatile String lastUrl;
-
-        @Override
-        public void sendInvitationEmail(String toEmail, String projectName, String invitationUrl) {
-            this.lastUrl = invitationUrl;
-        }
-
-        String lastToken() {
-            return lastUrl.substring(lastUrl.indexOf("token=") + "token=".length());
-        }
+    String lastToken() {
+      return lastUrl.substring(lastUrl.indexOf("token=") + "token=".length());
     }
+  }
 
-    @Autowired
-    private MockMvc mvc;
-    @Autowired
-    private AppUserRepository users;
-    @Autowired
-    private ProjectMembershipRepository memberships;
-    @Autowired
-    private ProjectInvitationRepository invitations;
-    @Autowired
-    private PasswordEncoder passwordEncoder;
-    @Autowired
-    private ObjectMapper json;
-    @Autowired
-    private CapturingInvitationMailer mailer;
+  @Autowired private MockMvc mvc;
+  @Autowired private AppUserRepository users;
+  @Autowired private ProjectMembershipRepository memberships;
+  @Autowired private ProjectInvitationRepository invitations;
+  @Autowired private PasswordEncoder passwordEncoder;
+  @Autowired private ObjectMapper json;
+  @Autowired private CapturingInvitationMailer mailer;
 
-    private long userId(String email) {
-        return users.findByEmail(email).orElseThrow().id();
+  private long userId(String email) {
+    return users.findByEmail(email).orElseThrow().id();
+  }
+
+  private Cookie loginAs(String email) throws Exception {
+    if (users.findByEmail(email).isEmpty()) {
+      users.save(
+          new AppUser(
+              null, email, passwordEncoder.encode(PASSWORD), "Person", true, PlatformRole.USER));
     }
+    return mvc.perform(
+            post("/api/auth/login")
+                .contentType("application/json")
+                .content("{\"email\":\"%s\",\"password\":\"%s\"}".formatted(email, PASSWORD)))
+        .andExpect(status().isOk())
+        .andReturn()
+        .getResponse()
+        .getCookie("manban_session");
+  }
 
-    private Cookie loginAs(String email) throws Exception {
-        if (users.findByEmail(email).isEmpty()) {
-            users.save(new AppUser(null, email, passwordEncoder.encode(PASSWORD), "Person", true, PlatformRole.USER));
-        }
-        return mvc.perform(post("/api/auth/login").contentType("application/json")
-                        .content("{\"email\":\"%s\",\"password\":\"%s\"}".formatted(email, PASSWORD)))
-                .andExpect(status().isOk())
-                .andReturn().getResponse().getCookie("manban_session");
+  private long createProject(String ownerEmail, String name) throws Exception {
+    if (users.findByEmail(ownerEmail).isEmpty()) {
+      users.save(
+          new AppUser(
+              null,
+              ownerEmail,
+              passwordEncoder.encode(PASSWORD),
+              "Person",
+              true,
+              PlatformRole.USER));
     }
+    Cookie admin = platformAdminSession();
+    String body =
+        mvc.perform(
+                post("/api/projects")
+                    .cookie(admin)
+                    .contentType("application/json")
+                    .content("{\"name\":\"%s\",\"ownerEmail\":\"%s\"}".formatted(name, ownerEmail)))
+            .andExpect(status().isCreated())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+    return json.readTree(body).get("id").asLong();
+  }
 
-    private long createProject(String ownerEmail, String name) throws Exception {
-        if (users.findByEmail(ownerEmail).isEmpty()) {
-            users.save(new AppUser(null, ownerEmail, passwordEncoder.encode(PASSWORD), "Person", true, PlatformRole.USER));
-        }
-        Cookie admin = platformAdminSession();
-        String body = mvc.perform(post("/api/projects").cookie(admin)
-                        .contentType("application/json")
-                        .content("{\"name\":\"%s\",\"ownerEmail\":\"%s\"}".formatted(name, ownerEmail)))
-                .andExpect(status().isCreated())
-                .andReturn().getResponse().getContentAsString();
-        return json.readTree(body).get("id").asLong();
+  private Cookie platformAdminSession() throws Exception {
+    String email = "project-admin@example.com";
+    if (users.findByEmail(email).isEmpty()) {
+      users.save(
+          new AppUser(
+              null, email, passwordEncoder.encode(PASSWORD), "Person", true, PlatformRole.ADMIN));
     }
+    return mvc.perform(
+            post("/api/auth/login")
+                .contentType("application/json")
+                .content("{\"email\":\"%s\",\"password\":\"%s\"}".formatted(email, PASSWORD)))
+        .andExpect(status().isOk())
+        .andReturn()
+        .getResponse()
+        .getCookie("manban_session");
+  }
 
-    private Cookie platformAdminSession() throws Exception {
-        String email = "project-admin@example.com";
-        if (users.findByEmail(email).isEmpty()) {
-            users.save(new AppUser(null, email, passwordEncoder.encode(PASSWORD), "Person", true, PlatformRole.ADMIN));
-        }
-        return mvc.perform(post("/api/auth/login").contentType("application/json")
-                        .content("{\"email\":\"%s\",\"password\":\"%s\"}".formatted(email, PASSWORD)))
-                .andExpect(status().isOk())
-                .andReturn().getResponse().getCookie("manban_session");
-    }
+  @Test
+  void inviteAcceptFlowGrantsCorrectRole() throws Exception {
+    Cookie alice = loginAs("owner-inv@example.com");
+    Cookie bob = loginAs("member-inv@example.com");
+    long projectId = createProject("owner-inv@example.com", "Team");
 
-    @Test
-    void inviteAcceptFlowGrantsCorrectRole() throws Exception {
-        Cookie alice = loginAs("owner-inv@example.com");
-        Cookie bob = loginAs("member-inv@example.com");
-        long projectId = createProject("owner-inv@example.com", "Team");
+    mvc.perform(
+            post("/api/projects/" + projectId + "/invitations")
+                .cookie(alice)
+                .contentType("application/json")
+                .content("{\"email\":\"member-inv@example.com\",\"role\":\"MEMBER\"}"))
+        .andExpect(status().isAccepted());
 
-        mvc.perform(post("/api/projects/" + projectId + "/invitations").cookie(alice)
-                        .contentType("application/json")
-                        .content("{\"email\":\"member-inv@example.com\",\"role\":\"MEMBER\"}"))
-                .andExpect(status().isAccepted());
+    mvc.perform(
+            post("/api/invitations/accept")
+                .cookie(bob)
+                .contentType("application/json")
+                .content("{\"token\":\"%s\"}".formatted(mailer.lastToken())))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.role").value("MEMBER"))
+        .andExpect(jsonPath("$.email").value("member-inv@example.com"));
 
-        mvc.perform(post("/api/invitations/accept").cookie(bob)
-                        .contentType("application/json")
-                        .content("{\"token\":\"%s\"}".formatted(mailer.lastToken())))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.role").value("MEMBER"))
-                .andExpect(jsonPath("$.email").value("member-inv@example.com"));
+    String membersBody =
+        mvc.perform(get("/api/projects/" + projectId + "/members").cookie(alice))
+            .andExpect(status().isOk())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+    assertThat(
+            (List<Object>)
+                JsonPath.read(membersBody, "$[?(@.email=='member-inv@example.com')].role"))
+        .contains("MEMBER");
+  }
 
-        String membersBody = mvc.perform(get("/api/projects/" + projectId + "/members").cookie(alice))
-                .andExpect(status().isOk())
-                .andReturn().getResponse().getContentAsString();
-        assertThat((List<Object>) JsonPath.read(membersBody, "$[?(@.email=='member-inv@example.com')].role"))
-                .contains("MEMBER");
-    }
+  @Test
+  void expiredInvitationIsRejected() throws Exception {
+    Cookie alice = loginAs("owner-exp@example.com");
+    Cookie carol = loginAs("carol-exp@example.com");
+    long projectId = createProject("owner-exp@example.com", "Expired");
 
-    @Test
-    void expiredInvitationIsRejected() throws Exception {
-        Cookie alice = loginAs("owner-exp@example.com");
-        Cookie carol = loginAs("carol-exp@example.com");
-        long projectId = createProject("owner-exp@example.com", "Expired");
+    String plaintext = "abgelaufene-einladung";
+    invitations.save(
+        new ProjectInvitation(
+            null,
+            projectId,
+            "carol-exp@example.com",
+            ProjectRole.MEMBER,
+            SecureTokens.sha256Hex(plaintext),
+            Instant.now().minusSeconds(3600),
+            null,
+            userId("owner-exp@example.com")));
 
-        String plaintext = "abgelaufene-einladung";
-        invitations.save(new ProjectInvitation(null, projectId, "carol-exp@example.com", ProjectRole.MEMBER,
-                SecureTokens.sha256Hex(plaintext), Instant.now().minusSeconds(3600), null, userId("owner-exp@example.com")));
+    mvc.perform(
+            post("/api/invitations/accept")
+                .cookie(carol)
+                .contentType("application/json")
+                .content("{\"token\":\"%s\"}".formatted(plaintext)))
+        .andExpect(status().isBadRequest());
+  }
 
-        mvc.perform(post("/api/invitations/accept").cookie(carol)
-                        .contentType("application/json").content("{\"token\":\"%s\"}".formatted(plaintext)))
-                .andExpect(status().isBadRequest());
-    }
+  @Test
+  void lastOwnerCannotBeRemoved() throws Exception {
+    Cookie alice = loginAs("solo-owner@example.com");
+    long projectId = createProject("solo-owner@example.com", "Solo");
 
-    @Test
-    void lastOwnerCannotBeRemoved() throws Exception {
-        Cookie alice = loginAs("solo-owner@example.com");
-        long projectId = createProject("solo-owner@example.com", "Solo");
+    mvc.perform(
+            delete("/api/projects/" + projectId + "/members/" + userId("solo-owner@example.com"))
+                .cookie(alice))
+        .andExpect(status().isConflict());
+  }
 
-        mvc.perform(delete("/api/projects/" + projectId + "/members/" + userId("solo-owner@example.com"))
-                        .cookie(alice))
-                .andExpect(status().isConflict());
-    }
+  @Test
+  void memberWithoutInvitePermissionCannotInvite() throws Exception {
+    Cookie alice = loginAs("owner-perm@example.com");
+    Cookie bob = loginAs("plain-member@example.com");
+    long projectId = createProject("owner-perm@example.com", "Perm");
+    memberships.save(
+        new ProjectMembership(
+            null,
+            projectId,
+            userId("plain-member@example.com"),
+            ProjectRole.MEMBER,
+            Instant.now()));
 
-    @Test
-    void memberWithoutInvitePermissionCannotInvite() throws Exception {
-        Cookie alice = loginAs("owner-perm@example.com");
-        Cookie bob = loginAs("plain-member@example.com");
-        long projectId = createProject("owner-perm@example.com", "Perm");
-        memberships.save(new ProjectMembership(null, projectId, userId("plain-member@example.com"),
-                ProjectRole.MEMBER, Instant.now()));
+    mvc.perform(
+            post("/api/projects/" + projectId + "/invitations")
+                .cookie(bob)
+                .contentType("application/json")
+                .content("{\"email\":\"x@example.com\",\"role\":\"MEMBER\"}"))
+        .andExpect(status().isForbidden());
+  }
 
-        mvc.perform(post("/api/projects/" + projectId + "/invitations").cookie(bob)
-                        .contentType("application/json")
-                        .content("{\"email\":\"x@example.com\",\"role\":\"MEMBER\"}"))
-                .andExpect(status().isForbidden());
-    }
+  @Test
+  void acceptWithMismatchedEmailIsForbidden() throws Exception {
+    Cookie alice = loginAs("owner-mism@example.com");
+    Cookie mallory = loginAs("mallory@example.com");
+    long projectId = createProject("owner-mism@example.com", "Mismatch");
 
-    @Test
-    void acceptWithMismatchedEmailIsForbidden() throws Exception {
-        Cookie alice = loginAs("owner-mism@example.com");
-        Cookie mallory = loginAs("mallory@example.com");
-        long projectId = createProject("owner-mism@example.com", "Mismatch");
+    mvc.perform(
+            post("/api/projects/" + projectId + "/invitations")
+                .cookie(alice)
+                .contentType("application/json")
+                .content("{\"email\":\"intended@example.com\",\"role\":\"MEMBER\"}"))
+        .andExpect(status().isAccepted());
 
-        mvc.perform(post("/api/projects/" + projectId + "/invitations").cookie(alice)
-                        .contentType("application/json")
-                        .content("{\"email\":\"intended@example.com\",\"role\":\"MEMBER\"}"))
-                .andExpect(status().isAccepted());
+    // Mallory (andere E-Mail) versucht, die Einladung anzunehmen.
+    mvc.perform(
+            post("/api/invitations/accept")
+                .cookie(mallory)
+                .contentType("application/json")
+                .content("{\"token\":\"%s\"}".formatted(mailer.lastToken())))
+        .andExpect(status().isForbidden());
+  }
 
-        // Mallory (andere E-Mail) versucht, die Einladung anzunehmen.
-        mvc.perform(post("/api/invitations/accept").cookie(mallory)
-                        .contentType("application/json").content("{\"token\":\"%s\"}".formatted(mailer.lastToken())))
-                .andExpect(status().isForbidden());
-    }
+  @Test
+  void ownerCanChangeMemberRoleAndRemove() throws Exception {
+    Cookie alice = loginAs("owner-mgmt@example.com");
+    loginAs("target-mgmt@example.com");
+    long projectId = createProject("owner-mgmt@example.com", "Manage");
+    long targetId = userId("target-mgmt@example.com");
+    memberships.save(
+        new ProjectMembership(null, projectId, targetId, ProjectRole.MEMBER, Instant.now()));
 
-    @Test
-    void ownerCanChangeMemberRoleAndRemove() throws Exception {
-        Cookie alice = loginAs("owner-mgmt@example.com");
-        loginAs("target-mgmt@example.com");
-        long projectId = createProject("owner-mgmt@example.com", "Manage");
-        long targetId = userId("target-mgmt@example.com");
-        memberships.save(new ProjectMembership(null, projectId, targetId, ProjectRole.MEMBER, Instant.now()));
+    mvc.perform(
+            org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch(
+                    "/api/projects/" + projectId + "/members/" + targetId)
+                .cookie(alice)
+                .contentType("application/json")
+                .content("{\"role\":\"ADMIN\"}"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.role").value("ADMIN"));
 
-        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
-                        .patch("/api/projects/" + projectId + "/members/" + targetId).cookie(alice)
-                        .contentType("application/json").content("{\"role\":\"ADMIN\"}"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.role").value("ADMIN"));
-
-        mvc.perform(delete("/api/projects/" + projectId + "/members/" + targetId).cookie(alice))
-                .andExpect(status().isNoContent());
-    }
+    mvc.perform(delete("/api/projects/" + projectId + "/members/" + targetId).cookie(alice))
+        .andExpect(status().isNoContent());
+  }
 }

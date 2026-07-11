@@ -11,23 +11,23 @@ import org.springframework.web.bind.annotation.RestController;
 
 /**
  * Admin-Bootstrap: hebt den eingeloggten Nutzer per Env-Token zum ersten Plattform-Admin.
- * Session-Auth erforderlich (über SecurityConfig /api/admin/**), aber KEIN Admin-Recht —
- * sonst könnte niemand je der erste Admin werden.
+ * Session-Auth erforderlich (über SecurityConfig /api/admin/**), aber KEIN Admin-Recht — sonst
+ * könnte niemand je der erste Admin werden.
  */
 @RestController
 class BootstrapController {
 
-    private final BootstrapService bootstrap;
+  private final BootstrapService bootstrap;
 
-    BootstrapController(BootstrapService bootstrap) {
-        this.bootstrap = bootstrap;
-    }
+  BootstrapController(BootstrapService bootstrap) {
+    this.bootstrap = bootstrap;
+  }
 
-    @PostMapping("/api/admin/bootstrap")
-    UserView bootstrap(@AuthenticationPrincipal Long userId, @Valid @RequestBody BootstrapRequest request) {
-        return bootstrap.bootstrap(userId, request.token());
-    }
+  @PostMapping("/api/admin/bootstrap")
+  UserView bootstrap(
+      @AuthenticationPrincipal Long userId, @Valid @RequestBody BootstrapRequest request) {
+    return bootstrap.bootstrap(userId, request.token());
+  }
 
-    record BootstrapRequest(@NotBlank String token) {
-    }
+  record BootstrapRequest(@NotBlank String token) {}
 }

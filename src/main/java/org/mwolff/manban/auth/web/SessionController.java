@@ -21,30 +21,33 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/auth")
 class SessionController {
 
-    private final LoginService loginService;
-    private final MeService meService;
-    private final SignedSessionTokens tokens;
-    private final SessionCookieManager cookies;
+  private final LoginService loginService;
+  private final MeService meService;
+  private final SignedSessionTokens tokens;
+  private final SessionCookieManager cookies;
 
-    SessionController(LoginService loginService, MeService meService,
-                      SignedSessionTokens tokens, SessionCookieManager cookies) {
-        this.loginService = loginService;
-        this.meService = meService;
-        this.tokens = tokens;
-        this.cookies = cookies;
-    }
+  SessionController(
+      LoginService loginService,
+      MeService meService,
+      SignedSessionTokens tokens,
+      SessionCookieManager cookies) {
+    this.loginService = loginService;
+    this.meService = meService;
+    this.tokens = tokens;
+    this.cookies = cookies;
+  }
 
-    @PostMapping("/login")
-    MeView login(@Valid @RequestBody LoginRequest request, HttpServletResponse response) {
-        AppUser user = loginService.login(request.email(), request.password());
-        String token = tokens.issue(user.id());
-        response.addHeader(HttpHeaders.SET_COOKIE, cookies.create(token).toString());
-        return meService.load(user.id());
-    }
+  @PostMapping("/login")
+  MeView login(@Valid @RequestBody LoginRequest request, HttpServletResponse response) {
+    AppUser user = loginService.login(request.email(), request.password());
+    String token = tokens.issue(user.id());
+    response.addHeader(HttpHeaders.SET_COOKIE, cookies.create(token).toString());
+    return meService.load(user.id());
+  }
 
-    @PostMapping("/logout")
-    @ResponseStatus(HttpStatus.NO_CONTENT)
-    void logout(HttpServletResponse response) {
-        response.addHeader(HttpHeaders.SET_COOKIE, cookies.clear().toString());
-    }
+  @PostMapping("/logout")
+  @ResponseStatus(HttpStatus.NO_CONTENT)
+  void logout(HttpServletResponse response) {
+    response.addHeader(HttpHeaders.SET_COOKIE, cookies.clear().toString());
+  }
 }

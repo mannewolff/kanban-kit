@@ -16,52 +16,53 @@ import org.mwolff.manban.project.domain.ProjectRole;
 @Table(name = "project_membership")
 class ProjectMembershipEntity {
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+  @Id
+  @GeneratedValue(strategy = GenerationType.IDENTITY)
+  private Long id;
 
-    @Column(name = "project_id", nullable = false)
-    private Long projectId;
+  @Column(name = "project_id", nullable = false)
+  private Long projectId;
 
-    @Column(name = "user_id", nullable = false)
-    private Long userId;
+  @Column(name = "user_id", nullable = false)
+  private Long userId;
 
-    @Enumerated(EnumType.STRING)
-    @Column(name = "role", nullable = false)
-    private ProjectRole role;
+  @Enumerated(EnumType.STRING)
+  @Column(name = "role", nullable = false)
+  private ProjectRole role;
 
-    @Column(name = "created_at", nullable = false)
-    private Instant createdAt;
+  @Column(name = "created_at", nullable = false)
+  private Instant createdAt;
 
-    protected ProjectMembershipEntity() {
-        // für JPA
-    }
+  protected ProjectMembershipEntity() {
+    // für JPA
+  }
 
-    ProjectMembershipEntity(Long id, Long projectId, Long userId, ProjectRole role, Instant createdAt) {
-        this.id = id;
-        this.projectId = projectId;
-        this.userId = userId;
-        this.role = role;
-        this.createdAt = createdAt;
-    }
+  ProjectMembershipEntity(
+      Long id, Long projectId, Long userId, ProjectRole role, Instant createdAt) {
+    this.id = id;
+    this.projectId = projectId;
+    this.userId = userId;
+    this.role = role;
+    this.createdAt = createdAt;
+  }
 
-    Long getId() {
-        return id;
-    }
+  Long getId() {
+    return id;
+  }
 
-    Long getProjectId() {
-        return projectId;
-    }
+  Long getProjectId() {
+    return projectId;
+  }
 
-    Long getUserId() {
-        return userId;
-    }
+  Long getUserId() {
+    return userId;
+  }
 
-    ProjectRole getRole() {
-        return role;
-    }
+  ProjectRole getRole() {
+    return role;
+  }
 
-    Instant getCreatedAt() {
-        return createdAt;
-    }
+  Instant getCreatedAt() {
+    return createdAt;
+  }
 }

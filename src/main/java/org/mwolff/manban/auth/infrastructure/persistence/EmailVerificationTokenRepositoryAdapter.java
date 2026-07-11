@@ -9,28 +9,29 @@ import org.springframework.stereotype.Component;
 @Component
 class EmailVerificationTokenRepositoryAdapter implements EmailVerificationTokenRepository {
 
-    private final EmailVerificationTokenJpaRepository jpa;
+  private final EmailVerificationTokenJpaRepository jpa;
 
-    EmailVerificationTokenRepositoryAdapter(EmailVerificationTokenJpaRepository jpa) {
-        this.jpa = jpa;
-    }
+  EmailVerificationTokenRepositoryAdapter(EmailVerificationTokenJpaRepository jpa) {
+    this.jpa = jpa;
+  }
 
-    @Override
-    public EmailVerificationToken save(EmailVerificationToken token) {
-        return toDomain(jpa.save(toEntity(token)));
-    }
+  @Override
+  public EmailVerificationToken save(EmailVerificationToken token) {
+    return toDomain(jpa.save(toEntity(token)));
+  }
 
-    @Override
-    public Optional<EmailVerificationToken> findByTokenHash(String tokenHash) {
-        return jpa.findByTokenHash(tokenHash).map(EmailVerificationTokenRepositoryAdapter::toDomain);
-    }
+  @Override
+  public Optional<EmailVerificationToken> findByTokenHash(String tokenHash) {
+    return jpa.findByTokenHash(tokenHash).map(EmailVerificationTokenRepositoryAdapter::toDomain);
+  }
 
-    private static EmailVerificationTokenEntity toEntity(EmailVerificationToken t) {
-        return new EmailVerificationTokenEntity(t.id(), t.userId(), t.tokenHash(), t.expiresAt(), t.usedAt());
-    }
+  private static EmailVerificationTokenEntity toEntity(EmailVerificationToken t) {
+    return new EmailVerificationTokenEntity(
+        t.id(), t.userId(), t.tokenHash(), t.expiresAt(), t.usedAt());
+  }
 
-    private static EmailVerificationToken toDomain(EmailVerificationTokenEntity e) {
-        return new EmailVerificationToken(
-                e.getId(), e.getUserId(), e.getTokenHash(), e.getExpiresAt(), e.getUsedAt());
-    }
+  private static EmailVerificationToken toDomain(EmailVerificationTokenEntity e) {
+    return new EmailVerificationToken(
+        e.getId(), e.getUserId(), e.getTokenHash(), e.getExpiresAt(), e.getUsedAt());
+  }
 }

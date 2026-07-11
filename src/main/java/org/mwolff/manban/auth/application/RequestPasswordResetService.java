@@ -8,43 +8,48 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Startet einen Passwort-Reset: existiert der Benutzer, wird ein Reset-Token erzeugt
- * und per E-Mail zugestellt. Existiert er nicht, passiert nichts — nach außen ist der
- * Ausgang identisch (keine User-Enumeration).
+ * Startet einen Passwort-Reset: existiert der Benutzer, wird ein Reset-Token erzeugt und per E-Mail
+ * zugestellt. Existiert er nicht, passiert nichts — nach außen ist der Ausgang identisch (keine
+ * User-Enumeration).
  */
 @Service
 public class RequestPasswordResetService {
 
-    private final AppUserRepository users;
-    private final PasswordResetTokenRepository tokens;
-    private final PasswordResetMailer mailer;
-    private final AuthProperties properties;
-    private final Clock clock;
+  private final AppUserRepository users;
+  private final PasswordResetTokenRepository tokens;
+  private final PasswordResetMailer mailer;
+  private final AuthProperties properties;
+  private final Clock clock;
 
-    public RequestPasswordResetService(AppUserRepository users, PasswordResetTokenRepository tokens,
-                                       PasswordResetMailer mailer, AuthProperties properties, Clock clock) {
-        this.users = users;
-        this.tokens = tokens;
-        this.mailer = mailer;
-        this.properties = properties;
-        this.clock = clock;
-    }
+  public RequestPasswordResetService(
+      AppUserRepository users,
+      PasswordResetTokenRepository tokens,
+      PasswordResetMailer mailer,
+      AuthProperties properties,
+      Clock clock) {
+    this.users = users;
+    this.tokens = tokens;
+    this.mailer = mailer;
+    this.properties = properties;
+    this.clock = clock;
+  }
 
-    @Transactional
-    public void requestReset(String email) {
-        String normalizedEmail = email.trim().toLowerCase();
-        users.findByEmail(normalizedEmail).ifPresent(this::issueToken);
-    }
+  @Transactional
+  public void requestReset(String email) {
+    String normalizedEmail = email.trim().toLowerCase();
+    users.findByEmail(normalizedEmail).ifPresent(this::issueToken);
+  }
 
-    private void issueToken(AppUser user) {
-        String plaintext = SecureTokens.newToken();
-        tokens.save(new PasswordResetToken(
-                null,
-                user.id(),
-                SecureTokens.sha256Hex(plaintext),
-                clock.instant().plus(properties.resetTtl()),
-                null));
-        String resetUrl = properties.baseUrl() + "/api/auth/reset?token=" + plaintext;
-        mailer.sendPasswordResetEmail(user.email(), resetUrl);
-    }
+  private void issueToken(AppUser user) {
+    String plaintext = SecureTokens.newToken();
+    tokens.save(
+        new PasswordResetToken(
+            null,
+            user.id(),
+            SecureTokens.sha256Hex(plaintext),
+            clock.instant().plus(properties.resetTtl()),
+            null));
+    String resetUrl = properties.baseUrl() + "/api/auth/reset?token=" + plaintext;
+    mailer.sendPasswordResetEmail(user.email(), resetUrl);
+  }
 }

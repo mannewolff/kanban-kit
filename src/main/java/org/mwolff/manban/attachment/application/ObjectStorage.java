@@ -5,9 +5,9 @@ import java.io.InputStream;
 /** Ausgehender Port zum Objektspeicher (Blobs). */
 public interface ObjectStorage {
 
-    void put(String objectKey, byte[] content, String contentType);
+  void put(String objectKey, byte[] content, String contentType);
 
-    InputStream get(String objectKey);
+  InputStream get(String objectKey);
 
-    void delete(String objectKey);
+  void delete(String objectKey);
 }

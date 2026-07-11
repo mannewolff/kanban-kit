@@ -7,7 +7,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 @ResponseStatus(HttpStatus.BAD_REQUEST)
 public class InvalidInvitationException extends RuntimeException {
 
-    public InvalidInvitationException() {
-        super("Einladung ist ungültig oder abgelaufen");
-    }
+  public InvalidInvitationException() {
+    super("Einladung ist ungültig oder abgelaufen");
+  }
 }

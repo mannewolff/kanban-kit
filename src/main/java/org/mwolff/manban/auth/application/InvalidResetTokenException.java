@@ -7,7 +7,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 @ResponseStatus(HttpStatus.BAD_REQUEST)
 public class InvalidResetTokenException extends RuntimeException {
 
-    public InvalidResetTokenException() {
-        super("Reset-Token ist ungültig oder abgelaufen");
-    }
+  public InvalidResetTokenException() {
+    super("Reset-Token ist ungültig oder abgelaufen");
+  }
 }

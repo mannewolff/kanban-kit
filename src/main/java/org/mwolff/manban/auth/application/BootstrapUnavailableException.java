@@ -7,7 +7,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 @ResponseStatus(HttpStatus.CONFLICT)
 public class BootstrapUnavailableException extends RuntimeException {
 
-    public BootstrapUnavailableException() {
-        super("Es existiert bereits ein Plattform-Admin");
-    }
+  public BootstrapUnavailableException() {
+    super("Es existiert bereits ein Plattform-Admin");
+  }
 }

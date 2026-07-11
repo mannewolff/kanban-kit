@@ -9,29 +9,43 @@ import org.springframework.stereotype.Component;
 @Component
 class ProjectInvitationRepositoryAdapter implements ProjectInvitationRepository {
 
-    private final ProjectInvitationJpaRepository jpa;
+  private final ProjectInvitationJpaRepository jpa;
 
-    ProjectInvitationRepositoryAdapter(ProjectInvitationJpaRepository jpa) {
-        this.jpa = jpa;
-    }
+  ProjectInvitationRepositoryAdapter(ProjectInvitationJpaRepository jpa) {
+    this.jpa = jpa;
+  }
 
-    @Override
-    public ProjectInvitation save(ProjectInvitation invitation) {
-        return toDomain(jpa.save(toEntity(invitation)));
-    }
+  @Override
+  public ProjectInvitation save(ProjectInvitation invitation) {
+    return toDomain(jpa.save(toEntity(invitation)));
+  }
 
-    @Override
-    public Optional<ProjectInvitation> findByTokenHash(String tokenHash) {
-        return jpa.findByTokenHash(tokenHash).map(ProjectInvitationRepositoryAdapter::toDomain);
-    }
+  @Override
+  public Optional<ProjectInvitation> findByTokenHash(String tokenHash) {
+    return jpa.findByTokenHash(tokenHash).map(ProjectInvitationRepositoryAdapter::toDomain);
+  }
 
-    private static ProjectInvitationEntity toEntity(ProjectInvitation i) {
-        return new ProjectInvitationEntity(i.id(), i.projectId(), i.email(), i.role(), i.tokenHash(),
-                i.expiresAt(), i.acceptedAt(), i.invitedBy());
-    }
+  private static ProjectInvitationEntity toEntity(ProjectInvitation i) {
+    return new ProjectInvitationEntity(
+        i.id(),
+        i.projectId(),
+        i.email(),
+        i.role(),
+        i.tokenHash(),
+        i.expiresAt(),
+        i.acceptedAt(),
+        i.invitedBy());
+  }
 
-    private static ProjectInvitation toDomain(ProjectInvitationEntity e) {
-        return new ProjectInvitation(e.getId(), e.getProjectId(), e.getEmail(), e.getRole(), e.getTokenHash(),
-                e.getExpiresAt(), e.getAcceptedAt(), e.getInvitedBy());
-    }
+  private static ProjectInvitation toDomain(ProjectInvitationEntity e) {
+    return new ProjectInvitation(
+        e.getId(),
+        e.getProjectId(),
+        e.getEmail(),
+        e.getRole(),
+        e.getTokenHash(),
+        e.getExpiresAt(),
+        e.getAcceptedAt(),
+        e.getInvitedBy());
+  }
 }

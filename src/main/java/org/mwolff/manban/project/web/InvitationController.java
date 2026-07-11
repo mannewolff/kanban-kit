@@ -13,36 +13,35 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.bind.annotation.ResponseStatus;
+import org.springframework.web.bind.annotation.RestController;
 
 /** Projekt-Einladungen: erstellen (mit MEMBER_INVITE) und annehmen. */
 @RestController
 class InvitationController {
 
-    private final MembershipService memberships;
+  private final MembershipService memberships;
 
-    InvitationController(MembershipService memberships) {
-        this.memberships = memberships;
-    }
+  InvitationController(MembershipService memberships) {
+    this.memberships = memberships;
+  }
 
-    @PostMapping("/api/projects/{id}/invitations")
-    @ResponseStatus(HttpStatus.ACCEPTED)
-    void invite(@AuthenticationPrincipal Long userId, @PathVariable long id,
-                @Valid @RequestBody InviteRequest request) {
-        memberships.invite(userId, id, request.email(), request.role());
-    }
+  @PostMapping("/api/projects/{id}/invitations")
+  @ResponseStatus(HttpStatus.ACCEPTED)
+  void invite(
+      @AuthenticationPrincipal Long userId,
+      @PathVariable long id,
+      @Valid @RequestBody InviteRequest request) {
+    memberships.invite(userId, id, request.email(), request.role());
+  }
 
-    @PostMapping("/api/invitations/accept")
-    MemberView accept(@AuthenticationPrincipal Long userId, @Valid @RequestBody AcceptInvitationRequest request) {
-        return memberships.accept(userId, request.token());
-    }
+  @PostMapping("/api/invitations/accept")
+  MemberView accept(
+      @AuthenticationPrincipal Long userId, @Valid @RequestBody AcceptInvitationRequest request) {
+    return memberships.accept(userId, request.token());
+  }
 
-    record InviteRequest(
-            @NotBlank @Email @Size(max = 320) String email,
-            @NotNull ProjectRole role) {
-    }
+  record InviteRequest(@NotBlank @Email @Size(max = 320) String email, @NotNull ProjectRole role) {}
 
-    record AcceptInvitationRequest(@NotBlank String token) {
-    }
+  record AcceptInvitationRequest(@NotBlank String token) {}
 }

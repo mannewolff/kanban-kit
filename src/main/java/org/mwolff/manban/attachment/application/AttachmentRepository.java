@@ -7,13 +7,13 @@ import org.mwolff.manban.attachment.domain.Attachment;
 /** Ausgehender Port für die Persistenz von Anhang-Metadaten. */
 public interface AttachmentRepository {
 
-    Attachment save(Attachment attachment);
+  Attachment save(Attachment attachment);
 
-    Optional<Attachment> findById(long id);
+  Optional<Attachment> findById(long id);
 
-    List<Attachment> findByCardId(long cardId);
+  List<Attachment> findByCardId(long cardId);
 
-    long countByCardId(long cardId);
+  long countByCardId(long cardId);
 
-    void deleteById(long id);
+  void deleteById(long id);
 }

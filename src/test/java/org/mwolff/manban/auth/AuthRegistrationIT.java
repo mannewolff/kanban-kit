@@ -26,120 +26,129 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 /**
- * End-to-End-Test der Registrierung + E-Mail-Verifikation gegen echtes Postgres.
- * Der Mailer wird durch ein Test-Double ersetzt, das den Verifikations-Link (und
- * damit das Klartext-Token) mitschneidet.
+ * End-to-End-Test der Registrierung + E-Mail-Verifikation gegen echtes Postgres. Der Mailer wird
+ * durch ein Test-Double ersetzt, das den Verifikations-Link (und damit das Klartext-Token)
+ * mitschneidet.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK)
 @AutoConfigureMockMvc
 @Testcontainers
 class AuthRegistrationIT {
 
-    @Container
-    @ServiceConnection
-    static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16");
+  @Container @ServiceConnection
+  static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16");
 
-    @TestConfiguration
-    static class MailTestConfig {
-        @Bean
-        @Primary
-        CapturingMailer capturingMailer() {
-            return new CapturingMailer();
-        }
+  @TestConfiguration
+  static class MailTestConfig {
+    @Bean
+    @Primary
+    CapturingMailer capturingMailer() {
+      return new CapturingMailer();
+    }
+  }
+
+  /** Fängt den Verifikations-Link ab, statt eine E-Mail zu versenden. */
+  static class CapturingMailer implements VerificationMailer {
+    volatile String lastUrl;
+
+    @Override
+    public void sendVerificationEmail(String toEmail, String verificationUrl) {
+      this.lastUrl = verificationUrl;
     }
 
-    /** Fängt den Verifikations-Link ab, statt eine E-Mail zu versenden. */
-    static class CapturingMailer implements VerificationMailer {
-        volatile String lastUrl;
-
-        @Override
-        public void sendVerificationEmail(String toEmail, String verificationUrl) {
-            this.lastUrl = verificationUrl;
-        }
-
-        String lastToken() {
-            int idx = lastUrl.indexOf("token=");
-            return lastUrl.substring(idx + "token=".length());
-        }
+    String lastToken() {
+      int idx = lastUrl.indexOf("token=");
+      return lastUrl.substring(idx + "token=".length());
     }
+  }
 
-    @Autowired
-    private MockMvc mvc;
+  @Autowired private MockMvc mvc;
 
-    @Autowired
-    private AppUserRepository users;
+  @Autowired private AppUserRepository users;
 
-    @Autowired
-    private EmailVerificationTokenRepository tokens;
+  @Autowired private EmailVerificationTokenRepository tokens;
 
-    @Autowired
-    private CapturingMailer mailer;
+  @Autowired private CapturingMailer mailer;
 
-    private static String registerBody(String email) {
-        return """
+  private static String registerBody(String email) {
+    return """
                 {"email":"%s","password":"sup3r-secret","displayName":"Alice"}
-                """.formatted(email);
-    }
+                """
+        .formatted(email);
+  }
 
-    @Test
-    void registerHappyPathThenVerify() throws Exception {
-        String email = "happy@example.com";
+  @Test
+  void registerHappyPathThenVerify() throws Exception {
+    String email = "happy@example.com";
 
-        mvc.perform(post("/api/auth/register").contentType("application/json").content(registerBody(email)))
-                .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.email").value(email))
-                .andExpect(jsonPath("$.emailVerified").value(false));
+    mvc.perform(
+            post("/api/auth/register").contentType("application/json").content(registerBody(email)))
+        .andExpect(status().isCreated())
+        .andExpect(jsonPath("$.email").value(email))
+        .andExpect(jsonPath("$.emailVerified").value(false));
 
-        assertThat(users.findByEmail(email)).get()
-                .satisfies(u -> assertThat(u.emailVerified()).isFalse());
+    assertThat(users.findByEmail(email))
+        .get()
+        .satisfies(u -> assertThat(u.emailVerified()).isFalse());
 
-        // Verifikation über das mitgeschnittene Klartext-Token.
-        mvc.perform(get("/api/auth/verify").param("token", mailer.lastToken()))
-                .andExpect(status().isOk());
+    // Verifikation über das mitgeschnittene Klartext-Token.
+    mvc.perform(get("/api/auth/verify").param("token", mailer.lastToken()))
+        .andExpect(status().isOk());
 
-        assertThat(users.findByEmail(email)).get()
-                .satisfies(u -> assertThat(u.emailVerified()).isTrue());
-    }
+    assertThat(users.findByEmail(email))
+        .get()
+        .satisfies(u -> assertThat(u.emailVerified()).isTrue());
+  }
 
-    @Test
-    void duplicateEmailReturns409() throws Exception {
-        String email = "dupe@example.com";
-        mvc.perform(post("/api/auth/register").contentType("application/json").content(registerBody(email)))
-                .andExpect(status().isCreated());
-        mvc.perform(post("/api/auth/register").contentType("application/json").content(registerBody(email)))
-                .andExpect(status().isConflict());
-    }
+  @Test
+  void duplicateEmailReturns409() throws Exception {
+    String email = "dupe@example.com";
+    mvc.perform(
+            post("/api/auth/register").contentType("application/json").content(registerBody(email)))
+        .andExpect(status().isCreated());
+    mvc.perform(
+            post("/api/auth/register").contentType("application/json").content(registerBody(email)))
+        .andExpect(status().isConflict());
+  }
 
-    @Test
-    void invalidTokenReturns400() throws Exception {
-        mvc.perform(get("/api/auth/verify").param("token", "does-not-exist"))
-                .andExpect(status().isBadRequest());
-    }
+  @Test
+  void invalidTokenReturns400() throws Exception {
+    mvc.perform(get("/api/auth/verify").param("token", "does-not-exist"))
+        .andExpect(status().isBadRequest());
+  }
 
-    @Test
-    void expiredTokenReturns400() throws Exception {
-        String email = "expired@example.com";
-        mvc.perform(post("/api/auth/register").contentType("application/json").content(registerBody(email)))
-                .andExpect(status().isCreated());
-        Long userId = users.findByEmail(email).orElseThrow().id();
+  @Test
+  void expiredTokenReturns400() throws Exception {
+    String email = "expired@example.com";
+    mvc.perform(
+            post("/api/auth/register").contentType("application/json").content(registerBody(email)))
+        .andExpect(status().isCreated());
+    Long userId = users.findByEmail(email).orElseThrow().id();
 
-        String plaintext = "abgelaufenes-token";
-        tokens.save(new EmailVerificationToken(
-                null, userId, SecureTokens.sha256Hex(plaintext),
-                Instant.now().minusSeconds(3600), null));
+    String plaintext = "abgelaufenes-token";
+    tokens.save(
+        new EmailVerificationToken(
+            null,
+            userId,
+            SecureTokens.sha256Hex(plaintext),
+            Instant.now().minusSeconds(3600),
+            null));
 
-        mvc.perform(get("/api/auth/verify").param("token", plaintext))
-                .andExpect(status().isBadRequest());
+    mvc.perform(get("/api/auth/verify").param("token", plaintext))
+        .andExpect(status().isBadRequest());
 
-        // Das abgelaufene Token darf die E-Mail NICHT verifiziert haben.
-        assertThat(users.findByEmail(email)).get()
-                .satisfies(u -> assertThat(u.emailVerified()).isFalse());
-    }
+    // Das abgelaufene Token darf die E-Mail NICHT verifiziert haben.
+    assertThat(users.findByEmail(email))
+        .get()
+        .satisfies(u -> assertThat(u.emailVerified()).isFalse());
+  }
 
-    @Test
-    void invalidRequestBodyReturns400() throws Exception {
-        mvc.perform(post("/api/auth/register").contentType("application/json")
-                        .content("{\"email\":\"not-an-email\",\"password\":\"x\",\"displayName\":\"\"}"))
-                .andExpect(status().isBadRequest());
-    }
+  @Test
+  void invalidRequestBodyReturns400() throws Exception {
+    mvc.perform(
+            post("/api/auth/register")
+                .contentType("application/json")
+                .content("{\"email\":\"not-an-email\",\"password\":\"x\",\"displayName\":\"\"}"))
+        .andExpect(status().isBadRequest());
+  }
 }

@@ -6,7 +6,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 /** Spring-Data-Repository für {@link AppUserEntity}. */
 interface AppUserJpaRepository extends JpaRepository<AppUserEntity, Long> {
 
-    Optional<AppUserEntity> findByEmail(String email);
+  Optional<AppUserEntity> findByEmail(String email);
 
-    boolean existsByEmail(String email);
+  boolean existsByEmail(String email);
 }

@@ -25,43 +25,48 @@ import org.springframework.web.multipart.MultipartFile;
 @RestController
 class AttachmentController {
 
-    private final AttachmentService attachments;
+  private final AttachmentService attachments;
 
-    AttachmentController(AttachmentService attachments) {
-        this.attachments = attachments;
-    }
+  AttachmentController(AttachmentService attachments) {
+    this.attachments = attachments;
+  }
 
-    @PostMapping("/api/cards/{cardId}/attachments")
-    @ResponseStatus(HttpStatus.CREATED)
-    AttachmentView upload(@AuthenticationPrincipal Long userId, @PathVariable long cardId,
-                          @RequestParam("file") MultipartFile file) throws IOException {
-        String filename = file.getOriginalFilename() == null ? "datei" : file.getOriginalFilename();
-        return attachments.upload(userId, cardId, filename, file.getBytes());
-    }
+  @PostMapping("/api/cards/{cardId}/attachments")
+  @ResponseStatus(HttpStatus.CREATED)
+  AttachmentView upload(
+      @AuthenticationPrincipal Long userId,
+      @PathVariable long cardId,
+      @RequestParam("file") MultipartFile file)
+      throws IOException {
+    String filename = file.getOriginalFilename() == null ? "datei" : file.getOriginalFilename();
+    return attachments.upload(userId, cardId, filename, file.getBytes());
+  }
 
-    @GetMapping("/api/cards/{cardId}/attachments")
-    List<AttachmentView> list(@AuthenticationPrincipal Long userId, @PathVariable long cardId) {
-        return attachments.list(userId, cardId);
-    }
+  @GetMapping("/api/cards/{cardId}/attachments")
+  List<AttachmentView> list(@AuthenticationPrincipal Long userId, @PathVariable long cardId) {
+    return attachments.list(userId, cardId);
+  }
 
-    /**
-     * Download. Immer {@code Content-Disposition: attachment} — getarnte HTML/SVG werden
-     * so heruntergeladen statt inline gerendert (Anti-XSS).
-     */
-    @GetMapping("/api/attachments/{id}")
-    ResponseEntity<InputStreamResource> download(@AuthenticationPrincipal Long userId, @PathVariable long id) {
-        Download download = attachments.download(userId, id);
-        ContentDisposition disposition = ContentDisposition.attachment().filename(download.filename()).build();
-        return ResponseEntity.ok()
-                .header(HttpHeaders.CONTENT_DISPOSITION, disposition.toString())
-                .contentType(MediaType.parseMediaType(download.contentType()))
-                .contentLength(download.size())
-                .body(new InputStreamResource(download.content()));
-    }
+  /**
+   * Download. Immer {@code Content-Disposition: attachment} — getarnte HTML/SVG werden so
+   * heruntergeladen statt inline gerendert (Anti-XSS).
+   */
+  @GetMapping("/api/attachments/{id}")
+  ResponseEntity<InputStreamResource> download(
+      @AuthenticationPrincipal Long userId, @PathVariable long id) {
+    Download download = attachments.download(userId, id);
+    ContentDisposition disposition =
+        ContentDisposition.attachment().filename(download.filename()).build();
+    return ResponseEntity.ok()
+        .header(HttpHeaders.CONTENT_DISPOSITION, disposition.toString())
+        .contentType(MediaType.parseMediaType(download.contentType()))
+        .contentLength(download.size())
+        .body(new InputStreamResource(download.content()));
+  }
 
-    @DeleteMapping("/api/attachments/{id}")
-    @ResponseStatus(HttpStatus.NO_CONTENT)
-    void delete(@AuthenticationPrincipal Long userId, @PathVariable long id) {
-        attachments.delete(userId, id);
-    }
+  @DeleteMapping("/api/attachments/{id}")
+  @ResponseStatus(HttpStatus.NO_CONTENT)
+  void delete(@AuthenticationPrincipal Long userId, @PathVariable long id) {
+    attachments.delete(userId, id);
+  }
 }

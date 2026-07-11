@@ -21,26 +21,27 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 @Testcontainers
 class SpaFallbackIT {
 
-    @Container
-    @ServiceConnection
-    static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16");
+  @Container @ServiceConnection
+  static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16");
 
-    @Autowired
-    private MockMvc mvc;
+  @Autowired private MockMvc mvc;
 
-    @Test
-    void clientRoutesServeSpaIndex() throws Exception {
-        String body = mvc.perform(get("/admin/bootstrap"))
-                .andExpect(status().isOk())
-                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
-        assertThat(body).contains("id=\"root\"");
-        mvc.perform(get("/boards/1")).andExpect(status().isOk());
-        mvc.perform(get("/roles")).andExpect(status().isOk());
-    }
+  @Test
+  void clientRoutesServeSpaIndex() throws Exception {
+    String body =
+        mvc.perform(get("/admin/bootstrap"))
+            .andExpect(status().isOk())
+            .andReturn()
+            .getResponse()
+            .getContentAsString(StandardCharsets.UTF_8);
+    assertThat(body).contains("id=\"root\"");
+    mvc.perform(get("/boards/1")).andExpect(status().isOk());
+    mvc.perform(get("/roles")).andExpect(status().isOk());
+  }
 
-    @Test
-    void apiPathsAreNotSwallowedBySpa() throws Exception {
-        // Unbekannter /api-Pfad ohne Auth -> 401 (nicht auf die SPA umgeleitet).
-        mvc.perform(get("/api/gibtsnicht")).andExpect(status().isUnauthorized());
-    }
+  @Test
+  void apiPathsAreNotSwallowedBySpa() throws Exception {
+    // Unbekannter /api-Pfad ohne Auth -> 401 (nicht auf die SPA umgeleitet).
+    mvc.perform(get("/api/gibtsnicht")).andExpect(status().isUnauthorized());
+  }
 }

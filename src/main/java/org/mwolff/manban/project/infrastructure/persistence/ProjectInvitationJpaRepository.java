@@ -6,5 +6,5 @@ import org.springframework.data.jpa.repository.JpaRepository;
 /** Spring-Data-Repository für {@link ProjectInvitationEntity}. */
 interface ProjectInvitationJpaRepository extends JpaRepository<ProjectInvitationEntity, Long> {
 
-    Optional<ProjectInvitationEntity> findByTokenHash(String tokenHash);
+  Optional<ProjectInvitationEntity> findByTokenHash(String tokenHash);
 }

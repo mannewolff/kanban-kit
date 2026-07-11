@@ -7,7 +7,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 @ResponseStatus(HttpStatus.NOT_FOUND)
 public class MemberNotFoundException extends RuntimeException {
 
-    public MemberNotFoundException() {
-        super("Mitglied nicht gefunden");
-    }
+  public MemberNotFoundException() {
+    super("Mitglied nicht gefunden");
+  }
 }

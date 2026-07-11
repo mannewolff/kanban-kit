@@ -8,15 +8,16 @@ import org.springframework.stereotype.Component;
 @Component
 class JdbcColumnCardCounter implements ColumnCardCounter {
 
-    private final JdbcTemplate jdbc;
+  private final JdbcTemplate jdbc;
 
-    JdbcColumnCardCounter(JdbcTemplate jdbc) {
-        this.jdbc = jdbc;
-    }
+  JdbcColumnCardCounter(JdbcTemplate jdbc) {
+    this.jdbc = jdbc;
+  }
 
-    @Override
-    public long countByColumnId(long columnId) {
-        Long count = jdbc.queryForObject("SELECT count(*) FROM card WHERE column_id = ?", Long.class, columnId);
-        return count == null ? 0 : count;
-    }
+  @Override
+  public long countByColumnId(long columnId) {
+    Long count =
+        jdbc.queryForObject("SELECT count(*) FROM card WHERE column_id = ?", Long.class, columnId);
+    return count == null ? 0 : count;
+  }
 }

@@ -10,31 +10,30 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class MeService {
 
-    private final AppUserRepository users;
-    private final ProjectMembershipReader memberships;
+  private final AppUserRepository users;
+  private final ProjectMembershipReader memberships;
 
-    public MeService(AppUserRepository users, ProjectMembershipReader memberships) {
-        this.users = users;
-        this.memberships = memberships;
-    }
+  public MeService(AppUserRepository users, ProjectMembershipReader memberships) {
+    this.users = users;
+    this.memberships = memberships;
+  }
 
-    @Transactional(readOnly = true)
-    public MeView load(long userId) {
-        AppUser user = users.findById(userId).orElseThrow(InvalidCredentialsException::new);
-        return new MeView(
-                user.id(),
-                user.email(),
-                user.displayName(),
-                user.platformRole(),
-                memberships.findByUserId(userId));
-    }
+  @Transactional(readOnly = true)
+  public MeView load(long userId) {
+    AppUser user = users.findById(userId).orElseThrow(InvalidCredentialsException::new);
+    return new MeView(
+        user.id(),
+        user.email(),
+        user.displayName(),
+        user.platformRole(),
+        memberships.findByUserId(userId));
+  }
 
-    /** Selbstauskunft eines angemeldeten Benutzers. */
-    public record MeView(
-            Long userId,
-            String email,
-            String displayName,
-            PlatformRole platformRole,
-            List<ProjectMembershipReader.Membership> memberships) {
-    }
+  /** Selbstauskunft eines angemeldeten Benutzers. */
+  public record MeView(
+      Long userId,
+      String email,
+      String displayName,
+      PlatformRole platformRole,
+      List<ProjectMembershipReader.Membership> memberships) {}
 }

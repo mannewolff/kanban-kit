@@ -7,7 +7,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 @ResponseStatus(HttpStatus.CONFLICT)
 public class LastAdminException extends RuntimeException {
 
-    public LastAdminException() {
-        super("Der letzte Plattform-Admin kann nicht degradiert werden");
-    }
+  public LastAdminException() {
+    super("Der letzte Plattform-Admin kann nicht degradiert werden");
+  }
 }

@@ -22,30 +22,34 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/projects/{projectId}/members")
 class MemberController {
 
-    private final MembershipService memberships;
+  private final MembershipService memberships;
 
-    MemberController(MembershipService memberships) {
-        this.memberships = memberships;
-    }
+  MemberController(MembershipService memberships) {
+    this.memberships = memberships;
+  }
 
-    @GetMapping
-    List<MemberView> list(@AuthenticationPrincipal Long userId, @PathVariable long projectId) {
-        return memberships.listMembers(userId, projectId);
-    }
+  @GetMapping
+  List<MemberView> list(@AuthenticationPrincipal Long userId, @PathVariable long projectId) {
+    return memberships.listMembers(userId, projectId);
+  }
 
-    @PatchMapping("/{targetUserId}")
-    MemberView changeRole(@AuthenticationPrincipal Long userId, @PathVariable long projectId,
-                          @PathVariable long targetUserId, @Valid @RequestBody ChangeRoleRequest request) {
-        return memberships.changeRole(userId, projectId, targetUserId, request.role());
-    }
+  @PatchMapping("/{targetUserId}")
+  MemberView changeRole(
+      @AuthenticationPrincipal Long userId,
+      @PathVariable long projectId,
+      @PathVariable long targetUserId,
+      @Valid @RequestBody ChangeRoleRequest request) {
+    return memberships.changeRole(userId, projectId, targetUserId, request.role());
+  }
 
-    @DeleteMapping("/{targetUserId}")
-    @ResponseStatus(HttpStatus.NO_CONTENT)
-    void remove(@AuthenticationPrincipal Long userId, @PathVariable long projectId,
-                @PathVariable long targetUserId) {
-        memberships.removeMember(userId, projectId, targetUserId);
-    }
+  @DeleteMapping("/{targetUserId}")
+  @ResponseStatus(HttpStatus.NO_CONTENT)
+  void remove(
+      @AuthenticationPrincipal Long userId,
+      @PathVariable long projectId,
+      @PathVariable long targetUserId) {
+    memberships.removeMember(userId, projectId, targetUserId);
+  }
 
-    record ChangeRoleRequest(@NotNull ProjectRole role) {
-    }
+  record ChangeRoleRequest(@NotNull ProjectRole role) {}
 }

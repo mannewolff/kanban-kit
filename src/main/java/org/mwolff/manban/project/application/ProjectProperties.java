@@ -11,9 +11,9 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @ConfigurationProperties(prefix = "manban.project")
 public record ProjectProperties(Duration invitationTtl) {
 
-    public ProjectProperties {
-        if (invitationTtl == null) {
-            invitationTtl = Duration.ofDays(7);
-        }
+  public ProjectProperties {
+    if (invitationTtl == null) {
+      invitationTtl = Duration.ofDays(7);
     }
+  }
 }

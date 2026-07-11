@@ -10,43 +10,59 @@ import org.springframework.stereotype.Component;
 @Component
 class AccessTokenRepositoryAdapter implements AccessTokenRepository {
 
-    private final KanbanAccessTokenJpaRepository jpa;
+  private final KanbanAccessTokenJpaRepository jpa;
 
-    AccessTokenRepositoryAdapter(KanbanAccessTokenJpaRepository jpa) {
-        this.jpa = jpa;
-    }
+  AccessTokenRepositoryAdapter(KanbanAccessTokenJpaRepository jpa) {
+    this.jpa = jpa;
+  }
 
-    @Override
-    public AccessToken save(AccessToken token) {
-        return toDomain(jpa.save(toEntity(token)));
-    }
+  @Override
+  public AccessToken save(AccessToken token) {
+    return toDomain(jpa.save(toEntity(token)));
+  }
 
-    @Override
-    public Optional<AccessToken> findById(long id) {
-        return jpa.findById(id).map(AccessTokenRepositoryAdapter::toDomain);
-    }
+  @Override
+  public Optional<AccessToken> findById(long id) {
+    return jpa.findById(id).map(AccessTokenRepositoryAdapter::toDomain);
+  }
 
-    @Override
-    public List<AccessToken> findByUserId(long userId) {
-        return jpa.findByUserIdOrderByCreatedAtDesc(userId).stream()
-                .map(AccessTokenRepositoryAdapter::toDomain)
-                .toList();
-    }
+  @Override
+  public List<AccessToken> findByUserId(long userId) {
+    return jpa.findByUserIdOrderByCreatedAtDesc(userId).stream()
+        .map(AccessTokenRepositoryAdapter::toDomain)
+        .toList();
+  }
 
-    @Override
-    public Optional<AccessToken> findByTokenHash(String tokenHash) {
-        return jpa.findByTokenHash(tokenHash).map(AccessTokenRepositoryAdapter::toDomain);
-    }
+  @Override
+  public Optional<AccessToken> findByTokenHash(String tokenHash) {
+    return jpa.findByTokenHash(tokenHash).map(AccessTokenRepositoryAdapter::toDomain);
+  }
 
-    private static KanbanAccessTokenEntity toEntity(AccessToken t) {
-        return new KanbanAccessTokenEntity(
-                t.id(), t.userId(), t.projectId(), t.boardId(), t.name(), t.tokenHash(), t.displayName(),
-                t.createdAt(), t.lastUsedAt(), t.revoked());
-    }
+  private static KanbanAccessTokenEntity toEntity(AccessToken t) {
+    return new KanbanAccessTokenEntity(
+        t.id(),
+        t.userId(),
+        t.projectId(),
+        t.boardId(),
+        t.name(),
+        t.tokenHash(),
+        t.displayName(),
+        t.createdAt(),
+        t.lastUsedAt(),
+        t.revoked());
+  }
 
-    private static AccessToken toDomain(KanbanAccessTokenEntity e) {
-        return new AccessToken(
-                e.getId(), e.getUserId(), e.getProjectId(), e.getBoardId(), e.getName(), e.getTokenHash(),
-                e.getDisplayName(), e.getCreatedAt(), e.getLastUsedAt(), e.isRevoked());
-    }
+  private static AccessToken toDomain(KanbanAccessTokenEntity e) {
+    return new AccessToken(
+        e.getId(),
+        e.getUserId(),
+        e.getProjectId(),
+        e.getBoardId(),
+        e.getName(),
+        e.getTokenHash(),
+        e.getDisplayName(),
+        e.getCreatedAt(),
+        e.getLastUsedAt(),
+        e.isRevoked());
+  }
 }
