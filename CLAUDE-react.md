@@ -176,6 +176,7 @@ Aktuelle Struktur unter `frontend/src/`:
 ## 🧪 Tests
 
 - Neue oder geänderte Logik braucht Tests (Vitest + React Testing Library).
+- **Coverage-Gate:** `npm run test:coverage` (v8-Provider) bricht bei Unterschreitung der Schwellen in `vite.config.ts` (Stand 07/2026: 87 % Lines/Branches, 58 % Functions — ehrlicher Ist-Floor gegen Rückschritt, Zielpfad: schrittweise anheben). Ausschlüsse einzeln begründet in der Config; läuft auch in CI.
 - Verhalten testen, nicht Implementierungsdetails — Tests sollen aus Nutzerperspektive lesbar sein.
 - Kritische UI-Zustände abdecken: Loading, Error, Empty, Success, Disabled.
 - Mocks realistisch und klein halten. Snapshot-Tests nur, wenn sie wirklich Stabilität messen.
