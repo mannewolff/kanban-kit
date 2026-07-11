@@ -48,8 +48,19 @@ export function EpicsPage() {
     if (!validId) {
       return
     }
-    void boardsApi.get(id).then(setBoard)
-    reload()
+    let active = true
+    void boardsApi.get(id).then((b) => {
+      if (active) setBoard(b)
+    })
+    void epicsApi.list(id).then((es) => {
+      if (active) setEpics(es)
+    })
+    void cardsApi.list(id).then((cs) => {
+      if (active) setCards(cs)
+    })
+    return () => {
+      active = false
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, validId])
 

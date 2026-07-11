@@ -94,7 +94,9 @@ export function BoardListPage() {
     if (!validId) {
       return
     }
+    let active = true
     void boardsApi.get(id).then((b) => {
+      if (!active) return
       setBoard(b)
       let initial: Set<FilterKey> | null = null
       try {
@@ -105,10 +107,17 @@ export function BoardListPage() {
       }
       setFilters(initial ?? new Set<FilterKey>(b.columns.map((c) => c.id)))
     })
-    reloadCards()
-    void epicsApi.list(id).then(setEpics)
+    void cardsApi.list(id).then((cs) => {
+      if (active) setCards(cs)
+    })
+    void epicsApi.list(id).then((es) => {
+      if (active) setEpics(es)
+    })
     setOrder(readColumnOrder(id))
     setExcerptWidth(readExcerptWidth(id))
+    return () => {
+      active = false
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, validId])
 

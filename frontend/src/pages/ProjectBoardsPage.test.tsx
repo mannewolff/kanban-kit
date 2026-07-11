@@ -1,9 +1,21 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { MemoryRouter, Route, Routes, useNavigate } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { boardsApi } from '../api/boards'
+import { boardsApi, type Board } from '../api/boards'
 import { projectsApi } from '../api/projects'
 import { ProjectBoardsPage } from './ProjectBoardsPage'
+
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>((r) => {
+    resolve = r
+  })
+  return { promise, resolve }
+}
+
+function makeBoards(names: string[], projectId: number): Board[] {
+  return names.map((name, i) => ({ id: 100 + i, name, projectId, createdAt: '', columns: [] }))
+}
 
 vi.mock('../api/projects', () => ({ projectsApi: { list: vi.fn() } }))
 vi.mock('../api/boards', () => ({ boardsApi: { list: vi.fn(), create: vi.fn(), remove: vi.fn() } }))
@@ -84,6 +96,40 @@ describe('ProjectBoardsPage RBAC', () => {
       </MemoryRouter>,
     )
     expect(await screen.findByText('Board-Ansicht')).toBeInTheDocument()
+  })
+
+  it('verwirft eine spät auflösende Antwort der alten Projekt-ID nach einem ID-Wechsel', async () => {
+    // Zwei Boards je Projekt, damit kein Auto-Routing bei genau einem Board greift.
+    const dOld = deferred<Board[]>()
+    const dNew = deferred<Board[]>()
+    mockedBoards.list.mockReturnValueOnce(dOld.promise).mockReturnValueOnce(dNew.promise)
+    mockedProjects.list.mockResolvedValue([
+      { id: 5, name: 'Team5', role: 'OWNER', createdAt: '' },
+      { id: 6, name: 'Team6', role: 'OWNER', createdAt: '' },
+    ])
+
+    function Nav() {
+      const navigate = useNavigate()
+      return <button onClick={() => navigate('/projects/6')}>wechseln</button>
+    }
+    render(
+      <MemoryRouter initialEntries={['/projects/5']}>
+        <Nav />
+        <Routes>
+          <Route path="/projects/:projectId" element={<ProjectBoardsPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    // Wechsel auf Projekt 6, bevor die Antwort für Projekt 5 da ist.
+    fireEvent.click(screen.getByText('wechseln'))
+    dNew.resolve(makeBoards(['NeuesBoard1', 'NeuesBoard2'], 6))
+    expect(await screen.findByText('NeuesBoard1')).toBeInTheDocument()
+
+    // Die verspätete Antwort der alten ID darf den State nicht mehr überschreiben.
+    dOld.resolve(makeBoards(['AltesBoard1', 'AltesBoard2'], 5))
+    await waitFor(() => expect(screen.getByText('NeuesBoard1')).toBeInTheDocument())
+    expect(screen.queryByText('AltesBoard1')).not.toBeInTheDocument()
   })
 
   it('zeigt bei ungültiger Projekt-ID einen Fehler und ruft keine API auf', async () => {

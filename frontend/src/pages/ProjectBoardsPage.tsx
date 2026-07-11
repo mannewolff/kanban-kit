@@ -37,7 +37,9 @@ export function ProjectBoardsPage() {
     if (!validId) {
       return
     }
+    let active = true
     void boardsApi.list(id).then((bs) => {
+      if (!active) return
       setBoards(bs)
       // Bei genau einem Board direkt aufs Board — nur beim Erst-Aufruf oder in der Auto-Routing-Kette.
       const auto = location.key === 'default' || (location.state as { autoRoute?: boolean } | null)?.autoRoute
@@ -46,12 +48,16 @@ export function ProjectBoardsPage() {
       }
     })
     void projectsApi.list().then((projects) => {
+      if (!active) return
       const project = projects.find((p) => p.id === id)
       if (project) {
         setRole(project.role)
         setProjectName(project.name)
       }
     })
+    return () => {
+      active = false
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, validId])
 

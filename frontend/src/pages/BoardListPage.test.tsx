@@ -1,10 +1,18 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { MemoryRouter, Route, Routes, useNavigate } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { boardsApi } from '../api/boards'
 import { cardsApi, type Card } from '../api/cards'
 import { epicsApi } from '../api/epics'
 import { BoardListPage } from './BoardListPage'
+
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>((r) => {
+    resolve = r
+  })
+  return { promise, resolve }
+}
 
 vi.mock('../auth/AuthContext', () => ({
   useAuth: () => ({ user: { userId: 1, memberships: [{ projectId: 9, role: 'OWNER' }] } }),
@@ -99,6 +107,47 @@ describe('BoardListPage', () => {
     expect(JSON.parse(localStorage.getItem('manban.listColumns.1')!)).toEqual(
       ['excerpt', 'number', 'status', 'epic', 'title'],
     )
+  })
+
+  it('verwirft eine spät auflösende Karten-Antwort der alten Board-ID nach einem ID-Wechsel', async () => {
+    const boardShape = (id: number) => ({
+      id, projectId: 9, name: 'B', createdAt: '',
+      columns: [
+        { id: 10, name: 'Backlog', position: 0, wipLimit: null },
+        { id: 20, name: 'Done', position: 1, wipLimit: null },
+      ],
+    })
+    mBoards.get.mockImplementation((id: number) => Promise.resolve(boardShape(id)))
+    mEpics.list.mockResolvedValue([])
+
+    const oldCard: Card = { ...base, id: 200, columnId: 10, number: 5, title: 'AlteAufgabe', description: 'x', archived: false }
+    const newCard: Card = { ...base, id: 300, columnId: 10, number: 6, title: 'NeueAufgabe', description: 'y', archived: false }
+    const dOld = deferred<Card[]>()
+    const dNew = deferred<Card[]>()
+    mCards.list.mockReturnValueOnce(dOld.promise).mockReturnValueOnce(dNew.promise)
+
+    function Nav() {
+      const navigate = useNavigate()
+      return <button onClick={() => navigate('/boards/2/list')}>wechseln</button>
+    }
+    render(
+      <MemoryRouter initialEntries={['/boards/1/list']}>
+        <Nav />
+        <Routes>
+          <Route path="/boards/:boardId/list" element={<BoardListPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    // Wechsel auf Board 2, bevor die Karten von Board 1 geladen sind.
+    fireEvent.click(screen.getByText('wechseln'))
+    dNew.resolve([newCard])
+    expect(await screen.findByText('NeueAufgabe')).toBeInTheDocument()
+
+    // Die verspätete Antwort für Board 1 darf die Karten nicht mehr überschreiben.
+    dOld.resolve([oldCard])
+    await waitFor(() => expect(screen.getByText('NeueAufgabe')).toBeInTheDocument())
+    expect(screen.queryByText('AlteAufgabe')).not.toBeInTheDocument()
   })
 
   it('zeigt bei ungültiger Board-ID einen Fehler und ruft keine API auf', async () => {

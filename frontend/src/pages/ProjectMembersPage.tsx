@@ -42,11 +42,19 @@ export function ProjectMembersPage({ api = defaultMembersApi, loadRole }: Props)
     if (!validId) {
       return
     }
-    void reload()
+    let active = true
+    void api.list(id).then((ms) => {
+      if (active) setMembers(ms)
+    })
     const roleLoader = loadRole
       ? loadRole(id)
       : projectsApi.list().then((projects) => projects.find((p) => p.id === id)?.role ?? 'VIEWER')
-    void roleLoader.then(setRole)
+    void roleLoader.then((r) => {
+      if (active) setRole(r)
+    })
+    return () => {
+      active = false
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, validId])
 
