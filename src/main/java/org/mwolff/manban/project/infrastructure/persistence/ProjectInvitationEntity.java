@@ -9,6 +9,7 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.time.Instant;
+import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.project.domain.ProjectRole;
 
 /** JPA-Abbildung der Tabelle {@code project_invitation}. */
@@ -18,7 +19,7 @@ class ProjectInvitationEntity {
 
   @Id
   @GeneratedValue(strategy = GenerationType.IDENTITY)
-  private Long id;
+  private @Nullable Long id;
 
   @Column(name = "project_id", nullable = false)
   private Long projectId;
@@ -37,7 +38,7 @@ class ProjectInvitationEntity {
   private Instant expiresAt;
 
   @Column(name = "accepted_at")
-  private Instant acceptedAt;
+  private @Nullable Instant acceptedAt;
 
   @Column(name = "invited_by")
   private Long invitedBy;
@@ -47,13 +48,13 @@ class ProjectInvitationEntity {
   }
 
   ProjectInvitationEntity(
-      Long id,
+      @Nullable Long id,
       Long projectId,
       String email,
       ProjectRole role,
       String tokenHash,
       Instant expiresAt,
-      Instant acceptedAt,
+      @Nullable Instant acceptedAt,
       Long invitedBy) {
     this.id = id;
     this.projectId = projectId;
@@ -65,7 +66,7 @@ class ProjectInvitationEntity {
     this.invitedBy = invitedBy;
   }
 
-  Long getId() {
+  @Nullable Long getId() {
     return id;
   }
 
@@ -89,7 +90,7 @@ class ProjectInvitationEntity {
     return expiresAt;
   }
 
-  Instant getAcceptedAt() {
+  @Nullable Instant getAcceptedAt() {
     return acceptedAt;
   }
 

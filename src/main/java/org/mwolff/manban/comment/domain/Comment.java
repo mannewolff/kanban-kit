@@ -1,6 +1,8 @@
 package org.mwolff.manban.comment.domain;
 
 import java.time.Instant;
+import org.jspecify.annotations.Nullable;
+import org.mwolff.manban.common.Identifiable;
 
 /**
  * Kommentar an einer Karte.
@@ -14,13 +16,14 @@ import java.time.Instant;
  * @param updatedAt letzte Änderung
  */
 public record Comment(
-    Long id,
+    @Nullable Long id,
     Long cardId,
-    Long authorUserId,
+    @Nullable Long authorUserId,
     String authorName,
     String body,
     Instant createdAt,
-    Instant updatedAt) {
+    Instant updatedAt)
+    implements Identifiable {
 
   public Comment withBody(String newBody) {
     return new Comment(id, cardId, authorUserId, authorName, newBody, createdAt, updatedAt);

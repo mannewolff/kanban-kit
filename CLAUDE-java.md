@@ -177,6 +177,7 @@ Wenn 100 % unmöglich erscheinen, lautet die Antwort **nicht** „Schwellwert se
 - **Records bevorzugen** für unveränderliche Daten.
 - **`final` als Default** für Felder, Parameter, lokale Variablen — Veränderlichkeit muss begründet sein.
 - **Null vermeiden:** `Optional` für Rückgabewerte, niemals als Parameter oder Feld. Sammlungen niemals null, immer leer.
+  - **Erzwungen durch JSpecify + NullAway (Issue #0080):** Jedes Fachpackage trägt `@NullMarked` (`package-info.java`) — Referenzen sind damit per Default non-null. Wo `null` fachlich legitim ist (z. B. `Card.movedToDoneAt`, `parentId`, IDs vor der Persistierung), steht explizit `org.jspecify.annotations.Nullable` an der Komponente/dem Parameter. NullAway läuft als Error-Prone-Plugin im JSpecify-Modus mit `-Xep:NullAway:ERROR`: jedes Finding bricht den Build. Findings werden behoben (echte Lücke schließen oder `@Nullable` dort, wo es fachlich stimmt), nie unterdrückt. Die ID persistierter Instanzen liefert `Identifiable.requireId()` statt verstreuter `requireNonNull`-Aufrufe. Das Gate gilt für Produktivcode; Testcode kompiliert ohne NullAway (Tests konstruieren absichtlich mit `null`), Error Prone bleibt dort aktiv.
 - **Keine Exceptions zur Ablaufsteuerung.** Checked Exceptions nur, wenn der Aufrufer reagieren kann; sonst eigene unchecked Domänenexceptions.
 - **Keine statischen Hilfsmethoden mit Zustand.** Keine `Calendar`/`Date` — nur `java.time`.
 - **`Clock` injizieren** statt `LocalDateTime.now()` direkt aufzurufen. Sonst sind Zeitlogiken untestbar.

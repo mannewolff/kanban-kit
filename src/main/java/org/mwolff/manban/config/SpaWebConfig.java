@@ -1,6 +1,7 @@
 package org.mwolff.manban.config;
 
 import java.io.IOException;
+import org.jspecify.annotations.Nullable;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.core.io.Resource;
@@ -27,7 +28,7 @@ public class SpaWebConfig implements WebMvcConfigurer {
         .addResolver(
             new PathResourceResolver() {
               @Override
-              protected Resource getResource(String resourcePath, Resource location)
+              protected @Nullable Resource getResource(String resourcePath, Resource location)
                   throws IOException {
                 Resource requested = location.createRelative(resourcePath);
                 if (requested.exists() && requested.isReadable()) {

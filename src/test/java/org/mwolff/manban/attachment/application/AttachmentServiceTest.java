@@ -77,7 +77,7 @@ class AttachmentServiceTest {
     cardAndBoardResolve();
     when(attachments.countByCardId(5L)).thenReturn(0L);
     when(detector.detect(any(), any())).thenReturn("text/plain");
-    when(attachments.save(any(Attachment.class))).thenAnswer(inv -> inv.getArgument(0));
+    when(attachments.save(any(Attachment.class))).thenAnswer(inv -> saved(inv.getArgument(0)));
 
     // When
     ArgumentCaptor<Attachment> captor = ArgumentCaptor.forClass(Attachment.class);
@@ -94,7 +94,7 @@ class AttachmentServiceTest {
     cardAndBoardResolve();
     when(attachments.countByCardId(5L)).thenReturn(0L);
     when(detector.detect(any(), any())).thenReturn("image/png");
-    when(attachments.save(any(Attachment.class))).thenAnswer(inv -> inv.getArgument(0));
+    when(attachments.save(any(Attachment.class))).thenAnswer(inv -> saved(inv.getArgument(0)));
 
     // When
     ArgumentCaptor<Attachment> captor = ArgumentCaptor.forClass(Attachment.class);
@@ -111,7 +111,7 @@ class AttachmentServiceTest {
     cardAndBoardResolve();
     when(attachments.countByCardId(5L)).thenReturn(0L);
     when(detector.detect(any(), any())).thenReturn("text/plain");
-    when(attachments.save(any(Attachment.class))).thenAnswer(inv -> inv.getArgument(0));
+    when(attachments.save(any(Attachment.class))).thenAnswer(inv -> saved(inv.getArgument(0)));
     byte[] content = {1, 2, 3};
 
     // When
@@ -127,7 +127,7 @@ class AttachmentServiceTest {
     cardAndBoardResolve();
     when(attachments.countByCardId(5L)).thenReturn(0L);
     when(detector.detect(any(), any())).thenReturn("text/plain");
-    when(attachments.save(any(Attachment.class))).thenAnswer(inv -> inv.getArgument(0));
+    when(attachments.save(any(Attachment.class))).thenAnswer(inv -> saved(inv.getArgument(0)));
 
     // When
     AttachmentService.AttachmentView view =
@@ -143,7 +143,7 @@ class AttachmentServiceTest {
     cardAndBoardResolve();
     when(attachments.countByCardId(5L)).thenReturn(0L);
     when(detector.detect(any(), any())).thenReturn("text/plain");
-    when(attachments.save(any(Attachment.class))).thenAnswer(inv -> inv.getArgument(0));
+    when(attachments.save(any(Attachment.class))).thenAnswer(inv -> saved(inv.getArgument(0)));
 
     // When
     service.upload(1L, 5L, "note.txt", new byte[] {1, 2, 3});
@@ -282,5 +282,14 @@ class AttachmentServiceTest {
     // When / Then
     assertThatThrownBy(() -> service.delete(1L, 7L))
         .isInstanceOf(AttachmentNotFoundException.class);
+  }
+
+  /** Simuliert die DB: vergibt beim ersten Speichern eine ID (Issue #0080). */
+  private static Attachment saved(Attachment a) {
+    if (a.id() != null) {
+      return a;
+    }
+    return new Attachment(
+        7L, a.cardId(), a.filename(), a.contentType(), a.size(), a.objectKey(), a.createdAt());
   }
 }

@@ -1,6 +1,8 @@
 package org.mwolff.manban.project.domain;
 
 import java.time.Instant;
+import org.jspecify.annotations.Nullable;
+import org.mwolff.manban.common.Identifiable;
 
 /**
  * Einladung einer E-Mail-Adresse in ein Projekt mit vorgesehener Rolle. Persistiert wird nur der
@@ -16,14 +18,15 @@ import java.time.Instant;
  * @param invitedBy einladender Benutzer
  */
 public record ProjectInvitation(
-    Long id,
+    @Nullable Long id,
     Long projectId,
     String email,
     ProjectRole role,
     String tokenHash,
     Instant expiresAt,
-    Instant acceptedAt,
-    Long invitedBy) {
+    @Nullable Instant acceptedAt,
+    Long invitedBy)
+    implements Identifiable {
 
   public boolean isAccepted() {
     return acceptedAt != null;

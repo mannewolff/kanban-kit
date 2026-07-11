@@ -56,9 +56,12 @@ public class ProjectService {
             .orElseThrow(() -> new ProjectOwnerNotFoundException(ownerEmail));
 
     Instant now = clock.instant();
-    Project project = projects.save(new Project(null, name.trim(), owner.id(), now));
-    memberships.save(new ProjectMembership(null, project.id(), owner.id(), ProjectRole.OWNER, now));
-    return new ProjectView(project.id(), project.name(), ProjectRole.OWNER, project.createdAt());
+    Project project = projects.save(new Project(null, name.trim(), owner.requireId(), now));
+    memberships.save(
+        new ProjectMembership(
+            null, project.requireId(), owner.requireId(), ProjectRole.OWNER, now));
+    return new ProjectView(
+        project.requireId(), project.name(), ProjectRole.OWNER, project.createdAt());
   }
 
   @Transactional(readOnly = true)
@@ -74,7 +77,7 @@ public class ProjectService {
           .map(
               p ->
                   new ProjectView(
-                      p.id(),
+                      p.requireId(),
                       p.name(),
                       ownRoles.getOrDefault(p.id(), ProjectRole.OWNER),
                       p.createdAt()))
@@ -85,7 +88,7 @@ public class ProjectService {
             m ->
                 projects
                     .findById(m.projectId())
-                    .map(p -> new ProjectView(p.id(), p.name(), m.role(), p.createdAt()))
+                    .map(p -> new ProjectView(p.requireId(), p.name(), m.role(), p.createdAt()))
                     .orElse(null))
         .filter(java.util.Objects::nonNull)
         .toList();
@@ -96,7 +99,8 @@ public class ProjectService {
     ProjectMembership membership = permissions.require(userId, projectId, Permission.PROJECT_EDIT);
     Project project = projects.findById(projectId).orElseThrow(ProjectNotFoundException::new);
     Project renamed = projects.save(project.withName(newName.trim()));
-    return new ProjectView(renamed.id(), renamed.name(), membership.role(), renamed.createdAt());
+    return new ProjectView(
+        renamed.requireId(), renamed.name(), membership.role(), renamed.createdAt());
   }
 
   /**

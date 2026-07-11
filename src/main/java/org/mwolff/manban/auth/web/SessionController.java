@@ -40,9 +40,10 @@ class SessionController {
   @PostMapping("/login")
   MeView login(@Valid @RequestBody LoginRequest request, HttpServletResponse response) {
     AppUser user = loginService.login(request.email(), request.password());
-    String token = tokens.issue(user.id());
+    long userId = user.requireId();
+    String token = tokens.issue(userId);
     response.addHeader(HttpHeaders.SET_COOKIE, cookies.create(token).toString());
-    return meService.load(user.id());
+    return meService.load(userId);
   }
 
   @PostMapping("/logout")

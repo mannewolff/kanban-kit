@@ -46,7 +46,7 @@ public class RequestPasswordResetService {
     tokens.save(
         new PasswordResetToken(
             null,
-            user.id(),
+            user.requireId(),
             SecureTokens.sha256Hex(plaintext),
             clock.instant().plus(properties.resetTtl()),
             null));

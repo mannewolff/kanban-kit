@@ -6,6 +6,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import org.jspecify.annotations.Nullable;
 
 /** JPA-Abbildung der Tabelle {@code board_column}. */
 @Entity
@@ -14,7 +15,7 @@ class BoardColumnEntity {
 
   @Id
   @GeneratedValue(strategy = GenerationType.IDENTITY)
-  private Long id;
+  private @Nullable Long id;
 
   @Column(name = "board_id", nullable = false)
   private Long boardId;
@@ -26,13 +27,14 @@ class BoardColumnEntity {
   private int position;
 
   @Column(name = "wip_limit")
-  private Integer wipLimit;
+  private @Nullable Integer wipLimit;
 
   protected BoardColumnEntity() {
     // für JPA
   }
 
-  BoardColumnEntity(Long id, Long boardId, String name, int position, Integer wipLimit) {
+  BoardColumnEntity(
+      @Nullable Long id, Long boardId, String name, int position, @Nullable Integer wipLimit) {
     this.id = id;
     this.boardId = boardId;
     this.name = name;
@@ -40,7 +42,7 @@ class BoardColumnEntity {
     this.wipLimit = wipLimit;
   }
 
-  Long getId() {
+  @Nullable Long getId() {
     return id;
   }
 
@@ -56,7 +58,7 @@ class BoardColumnEntity {
     return position;
   }
 
-  Integer getWipLimit() {
+  @Nullable Integer getWipLimit() {
     return wipLimit;
   }
 }

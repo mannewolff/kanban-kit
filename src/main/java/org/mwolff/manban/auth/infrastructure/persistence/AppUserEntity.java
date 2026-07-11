@@ -8,6 +8,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.auth.domain.PlatformRole;
 
 /**
@@ -20,7 +21,7 @@ class AppUserEntity {
 
   @Id
   @GeneratedValue(strategy = GenerationType.IDENTITY)
-  private Long id;
+  private @Nullable Long id;
 
   @Column(name = "email", nullable = false)
   private String email;
@@ -43,7 +44,7 @@ class AppUserEntity {
   }
 
   AppUserEntity(
-      Long id,
+      @Nullable Long id,
       String email,
       String passwordHash,
       String displayName,
@@ -57,7 +58,7 @@ class AppUserEntity {
     this.platformRole = platformRole;
   }
 
-  Long getId() {
+  @Nullable Long getId() {
     return id;
   }
 

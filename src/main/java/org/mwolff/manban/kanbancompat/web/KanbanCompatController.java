@@ -6,6 +6,7 @@ import jakarta.validation.constraints.PositiveOrZero;
 import jakarta.validation.constraints.Size;
 import java.util.List;
 import java.util.Map;
+import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.accesstoken.application.KanbanPrincipal;
 import org.mwolff.manban.kanbancompat.application.KanbanCompatService;
 import org.mwolff.manban.kanbancompat.application.KanbanCompatService.Created;
@@ -40,20 +41,21 @@ class KanbanCompatController {
   }
 
   @GetMapping("/items")
-  Map<String, List<Item>> items(Authentication authentication) {
+  Map<String, List<Item>> items(@Nullable Authentication authentication) {
     return service.items(principal(authentication));
   }
 
   @PostMapping("/items")
   @ResponseStatus(HttpStatus.CREATED)
-  Created create(Authentication authentication, @Valid @RequestBody CreateItemRequest request) {
+  Created create(
+      @Nullable Authentication authentication, @Valid @RequestBody CreateItemRequest request) {
     return service.create(
         principal(authentication), request.title(), request.body(), request.column());
   }
 
   @PutMapping("/items/{id}/move")
   void move(
-      Authentication authentication,
+      @Nullable Authentication authentication,
       @PathVariable long id,
       @Valid @RequestBody MoveRequest request) {
     service.move(principal(authentication), id, request.column(), request.position());
@@ -62,19 +64,19 @@ class KanbanCompatController {
   @PostMapping("/items/{id}/comments")
   @ResponseStatus(HttpStatus.CREATED)
   void comment(
-      Authentication authentication,
+      @Nullable Authentication authentication,
       @PathVariable long id,
       @Valid @RequestBody CommentRequest request) {
     service.comment(principal(authentication), id, request.body());
   }
 
   @GetMapping("/epics")
-  List<Epic> epics(Authentication authentication) {
+  List<Epic> epics(@Nullable Authentication authentication) {
     return service.epics(principal(authentication));
   }
 
   /** Zieht die Token-Bindung aus den Authentication-details; ohne Bindung → 409. */
-  private static KanbanPrincipal principal(Authentication authentication) {
+  private static KanbanPrincipal principal(@Nullable Authentication authentication) {
     if (authentication != null && authentication.getDetails() instanceof KanbanPrincipal p) {
       return p;
     }

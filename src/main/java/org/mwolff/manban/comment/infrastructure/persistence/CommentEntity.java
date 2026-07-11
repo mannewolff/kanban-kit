@@ -7,6 +7,7 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.time.Instant;
+import org.jspecify.annotations.Nullable;
 
 /** JPA-Abbildung der Tabelle {@code comment}. */
 @Entity
@@ -15,13 +16,13 @@ class CommentEntity {
 
   @Id
   @GeneratedValue(strategy = GenerationType.IDENTITY)
-  private Long id;
+  private @Nullable Long id;
 
   @Column(name = "card_id", nullable = false)
   private Long cardId;
 
   @Column(name = "author_user_id")
-  private Long authorUserId;
+  private @Nullable Long authorUserId;
 
   @Column(name = "author_name", nullable = false)
   private String authorName;
@@ -40,9 +41,9 @@ class CommentEntity {
   }
 
   CommentEntity(
-      Long id,
+      @Nullable Long id,
       Long cardId,
-      Long authorUserId,
+      @Nullable Long authorUserId,
       String authorName,
       String body,
       Instant createdAt,
@@ -56,7 +57,7 @@ class CommentEntity {
     this.updatedAt = updatedAt;
   }
 
-  Long getId() {
+  @Nullable Long getId() {
     return id;
   }
 
@@ -64,7 +65,7 @@ class CommentEntity {
     return cardId;
   }
 
-  Long getAuthorUserId() {
+  @Nullable Long getAuthorUserId() {
     return authorUserId;
   }
 

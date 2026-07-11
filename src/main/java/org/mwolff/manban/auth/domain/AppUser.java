@@ -1,5 +1,8 @@
 package org.mwolff.manban.auth.domain;
 
+import org.jspecify.annotations.Nullable;
+import org.mwolff.manban.common.Identifiable;
+
 /**
  * Domänen-Repräsentation eines Benutzers. Frei von Persistenz- und Framework-Bezug.
  *
@@ -11,12 +14,13 @@ package org.mwolff.manban.auth.domain;
  * @param platformRole plattformweite Rolle
  */
 public record AppUser(
-    Long id,
+    @Nullable Long id,
     String email,
     String passwordHash,
     String displayName,
     boolean emailVerified,
-    PlatformRole platformRole) {
+    PlatformRole platformRole)
+    implements Identifiable {
 
   /** Kopie mit gesetztem E-Mail-Verifikations-Status. */
   public AppUser withEmailVerified(boolean verified) {

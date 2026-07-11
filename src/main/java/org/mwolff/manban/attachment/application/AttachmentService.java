@@ -93,7 +93,7 @@ public class AttachmentService {
         attachments.findById(attachmentId).orElseThrow(AttachmentNotFoundException::new);
     permissions.require(userId, projectIdOfCard(attachment.cardId()), Permission.ATTACHMENT_DELETE);
     storage.delete(attachment.objectKey());
-    attachments.deleteById(attachment.id());
+    attachments.deleteById(attachment.requireId());
   }
 
   private long projectIdOfCard(long cardId) {
@@ -104,7 +104,7 @@ public class AttachmentService {
 
   private static AttachmentView view(Attachment a) {
     return new AttachmentView(
-        a.id(), a.cardId(), a.filename(), a.contentType(), a.size(), a.createdAt());
+        a.requireId(), a.cardId(), a.filename(), a.contentType(), a.size(), a.createdAt());
   }
 
   /** Metadaten-Darstellung eines Anhangs. */

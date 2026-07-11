@@ -1,6 +1,8 @@
 package org.mwolff.manban.attachment.domain;
 
 import java.time.Instant;
+import org.jspecify.annotations.Nullable;
+import org.mwolff.manban.common.Identifiable;
 
 /**
  * Metadaten eines Karten-Anhangs. Der eigentliche Blob liegt im Objektspeicher (MinIO),
@@ -15,10 +17,11 @@ import java.time.Instant;
  * @param createdAt Upload-Zeitpunkt
  */
 public record Attachment(
-    Long id,
+    @Nullable Long id,
     Long cardId,
     String filename,
     String contentType,
     long size,
     String objectKey,
-    Instant createdAt) {}
+    Instant createdAt)
+    implements Identifiable {}

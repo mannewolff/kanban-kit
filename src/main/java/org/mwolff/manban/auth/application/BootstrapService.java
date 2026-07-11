@@ -36,7 +36,7 @@ public class BootstrapService {
     AppUser user = users.findById(userId).orElseThrow(UserNotFoundException::new);
     AppUser saved = users.save(user.withPlatformRole(PlatformRole.ADMIN));
     return new UserView(
-        saved.id(),
+        saved.requireId(),
         saved.email(),
         saved.displayName(),
         saved.platformRole(),

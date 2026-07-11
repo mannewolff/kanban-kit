@@ -7,6 +7,7 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.time.Instant;
+import org.jspecify.annotations.Nullable;
 
 /** JPA-Abbildung der Tabelle {@code project}. */
 @Entity
@@ -15,7 +16,7 @@ class ProjectEntity {
 
   @Id
   @GeneratedValue(strategy = GenerationType.IDENTITY)
-  private Long id;
+  private @Nullable Long id;
 
   @Column(name = "name", nullable = false)
   private String name;
@@ -30,14 +31,14 @@ class ProjectEntity {
     // für JPA
   }
 
-  ProjectEntity(Long id, String name, Long ownerUserId, Instant createdAt) {
+  ProjectEntity(@Nullable Long id, String name, Long ownerUserId, Instant createdAt) {
     this.id = id;
     this.name = name;
     this.ownerUserId = ownerUserId;
     this.createdAt = createdAt;
   }
 
-  Long getId() {
+  @Nullable Long getId() {
     return id;
   }
 

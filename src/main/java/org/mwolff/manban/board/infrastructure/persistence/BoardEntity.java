@@ -7,6 +7,7 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.time.Instant;
+import org.jspecify.annotations.Nullable;
 
 /** JPA-Abbildung der Tabelle {@code board}. */
 @Entity
@@ -15,7 +16,7 @@ class BoardEntity {
 
   @Id
   @GeneratedValue(strategy = GenerationType.IDENTITY)
-  private Long id;
+  private @Nullable Long id;
 
   @Column(name = "project_id", nullable = false)
   private Long projectId;
@@ -30,14 +31,14 @@ class BoardEntity {
     // für JPA
   }
 
-  BoardEntity(Long id, Long projectId, String name, Instant createdAt) {
+  BoardEntity(@Nullable Long id, Long projectId, String name, Instant createdAt) {
     this.id = id;
     this.projectId = projectId;
     this.name = name;
     this.createdAt = createdAt;
   }
 
-  Long getId() {
+  @Nullable Long getId() {
     return id;
   }
 

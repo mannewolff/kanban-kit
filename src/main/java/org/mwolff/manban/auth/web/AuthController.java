@@ -31,7 +31,7 @@ class AuthController {
   RegisteredUserResponse register(@Valid @RequestBody RegisterRequest request) {
     AppUser user =
         registerUser.register(request.email(), request.password(), request.displayName());
-    return new RegisteredUserResponse(user.id(), user.email(), user.emailVerified());
+    return new RegisteredUserResponse(user.requireId(), user.email(), user.emailVerified());
   }
 
   @GetMapping("/verify")

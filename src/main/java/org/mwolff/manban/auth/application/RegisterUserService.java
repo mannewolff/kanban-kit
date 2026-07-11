@@ -60,7 +60,7 @@ public class RegisterUserService {
     tokens.save(
         new EmailVerificationToken(
             null,
-            user.id(),
+            user.requireId(),
             SecureTokens.sha256Hex(plaintext),
             clock.instant().plus(properties.verificationTtl()),
             null));

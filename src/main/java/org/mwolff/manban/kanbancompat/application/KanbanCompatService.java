@@ -6,7 +6,9 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
+import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.accesstoken.application.KanbanPrincipal;
 import org.mwolff.manban.board.application.BoardColumnRepository;
 import org.mwolff.manban.board.application.BoardNotFoundException;
@@ -81,11 +83,12 @@ public class KanbanCompatService {
         .forEach(
             c -> {
               String key = keyByColumn.getOrDefault(c.columnId(), "BACKLOG");
-              grouped
-                  .get(key)
+              // grouped ist mit allen COLUMNS-Keys vorbelegt und key stammt aus COLUMNS;
+              // requireNonNull macht das fuer NullAway explizit (Map.get liefert @Nullable).
+              Objects.requireNonNull(grouped.get(key))
                   .add(
                       new Item(
-                          c.id(),
+                          c.requireId(),
                           c.number(),
                           c.title(),
                           c.description(),
@@ -98,7 +101,8 @@ public class KanbanCompatService {
 
   /** Legt ein Item in der angegebenen (Default: BACKLOG) Spalte des gebundenen Boards an. */
   @Transactional
-  public Created create(KanbanPrincipal principal, String title, String body, String column) {
+  public Created create(
+      KanbanPrincipal principal, String title, @Nullable String body, @Nullable String column) {
     long boardId = requireBound(principal);
     long columnId =
         columnIdForKey(boardId, column == null || column.isBlank() ? "BACKLOG" : column);
@@ -134,11 +138,12 @@ public class KanbanCompatService {
 
   // --- interne Helfer -------------------------------------------------------
 
-  private long requireBound(KanbanPrincipal principal) {
+  private long requireBound(@Nullable KanbanPrincipal principal) {
     if (principal == null || !principal.isBound()) {
       throw new TokenNotBoundException();
     }
-    return principal.boardId();
+    // isBound() garantiert die Bindung; requireNonNull macht das fuer NullAway explizit.
+    return Objects.requireNonNull(principal.boardId());
   }
 
   /** Sichert die Token-Bindung ab: die Karte muss auf dem gebundenen Board liegen (sonst 404). */
@@ -159,12 +164,12 @@ public class KanbanCompatService {
     for (int i = 0; i < ordered.size(); i++) {
       BoardColumn c = ordered.get(i);
       String fallback = COLUMNS.get(Math.min(i, COLUMNS.size() - 1));
-      map.put(c.id(), canonicalKey(c.name()).orElse(fallback));
+      map.put(c.requireId(), canonicalKey(c.name()).orElse(fallback));
     }
     return map;
   }
 
-  private long columnIdForKey(long boardId, String key) {
+  private long columnIdForKey(long boardId, @Nullable String key) {
     String wanted = key == null ? "" : key.trim().toUpperCase(Locale.ROOT);
     if (!COLUMNS.contains(wanted)) {
       throw new InvalidKanbanColumnException("Unbekannte Kanban-Spalte: " + key);
@@ -181,7 +186,7 @@ public class KanbanCompatService {
   }
 
   /** Normalisierter Namensabgleich auf einen Kanban-Key; leer, wenn kein Treffer. */
-  static Optional<String> canonicalKey(String columnName) {
+  static Optional<String> canonicalKey(@Nullable String columnName) {
     if (columnName == null) {
       return Optional.empty();
     }
@@ -200,11 +205,17 @@ public class KanbanCompatService {
 
   /** Board-Item; {@code column} ist der Kanban-Key, {@code type} ist "card" oder "epic". */
   public record Item(
-      Long id, int number, String title, String body, String column, int position, String type) {}
+      Long id,
+      int number,
+      String title,
+      @Nullable String body,
+      String column,
+      int position,
+      String type) {}
 
   public record Created(int number) {}
 
-  public record Epic(int number, String title, String shortcode, Progress progress) {}
+  public record Epic(int number, String title, @Nullable String shortcode, Progress progress) {}
 
   public record Progress(int total, int done) {}
 }

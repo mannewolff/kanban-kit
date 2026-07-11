@@ -54,7 +54,15 @@ class BoardServiceTest {
               Board b = inv.getArgument(0);
               return b.id() == null ? new Board(10L, b.projectId(), b.name(), b.createdAt()) : b;
             });
-    when(columns.save(any(BoardColumn.class))).thenAnswer(inv -> inv.getArgument(0));
+    // Simuliert die DB: beim ersten Speichern wird eine ID vergeben (Issue #0080).
+    when(columns.save(any(BoardColumn.class)))
+        .thenAnswer(
+            inv -> {
+              BoardColumn c = inv.getArgument(0);
+              return c.id() == null
+                  ? new BoardColumn(99L, c.boardId(), c.name(), c.position(), c.wipLimit())
+                  : c;
+            });
     when(columns.findByBoardId(10L)).thenReturn(List.of());
   }
 

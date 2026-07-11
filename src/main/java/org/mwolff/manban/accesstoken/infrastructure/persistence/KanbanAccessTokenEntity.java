@@ -7,6 +7,7 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.time.Instant;
+import org.jspecify.annotations.Nullable;
 
 /** JPA-Abbildung der Tabelle {@code kanban_access_token}. */
 @Entity
@@ -15,16 +16,16 @@ class KanbanAccessTokenEntity {
 
   @Id
   @GeneratedValue(strategy = GenerationType.IDENTITY)
-  private Long id;
+  private @Nullable Long id;
 
   @Column(name = "user_id", nullable = false)
   private Long userId;
 
   @Column(name = "project_id")
-  private Long projectId;
+  private @Nullable Long projectId;
 
   @Column(name = "board_id")
-  private Long boardId;
+  private @Nullable Long boardId;
 
   @Column(name = "name", nullable = false)
   private String name;
@@ -39,7 +40,7 @@ class KanbanAccessTokenEntity {
   private Instant createdAt;
 
   @Column(name = "last_used_at")
-  private Instant lastUsedAt;
+  private @Nullable Instant lastUsedAt;
 
   @Column(name = "revoked", nullable = false)
   private boolean revoked;
@@ -49,15 +50,15 @@ class KanbanAccessTokenEntity {
   }
 
   KanbanAccessTokenEntity(
-      Long id,
+      @Nullable Long id,
       Long userId,
-      Long projectId,
-      Long boardId,
+      @Nullable Long projectId,
+      @Nullable Long boardId,
       String name,
       String tokenHash,
       String displayName,
       Instant createdAt,
-      Instant lastUsedAt,
+      @Nullable Instant lastUsedAt,
       boolean revoked) {
     this.id = id;
     this.userId = userId;
@@ -71,7 +72,7 @@ class KanbanAccessTokenEntity {
     this.revoked = revoked;
   }
 
-  Long getId() {
+  @Nullable Long getId() {
     return id;
   }
 
@@ -79,11 +80,11 @@ class KanbanAccessTokenEntity {
     return userId;
   }
 
-  Long getProjectId() {
+  @Nullable Long getProjectId() {
     return projectId;
   }
 
-  Long getBoardId() {
+  @Nullable Long getBoardId() {
     return boardId;
   }
 
@@ -103,7 +104,7 @@ class KanbanAccessTokenEntity {
     return createdAt;
   }
 
-  Instant getLastUsedAt() {
+  @Nullable Instant getLastUsedAt() {
     return lastUsedAt;
   }
 

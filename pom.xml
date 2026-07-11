@@ -32,6 +32,10 @@
         <pmd.version>7.26.0</pmd.version>
         <spotbugs-maven-plugin.version>4.10.2.0</spotbugs-maven-plugin.version>
         <error-prone.version>2.50.0</error-prone.version>
+        <!-- Null-Safety-Gate (Issue #0080): JSpecify-Annotationen + NullAway als
+             Error-Prone-Plugin. -->
+        <jspecify.version>1.0.0</jspecify.version>
+        <nullaway.version>0.13.7</nullaway.version>
     </properties>
 
     <!-- Dependency-Konvergenz (CLAUDE-java.md §1, vom maven-enforcer erzwungen).
@@ -114,6 +118,19 @@
             <artifactId>tika-core</artifactId>
             <version>2.9.2</version>
         </dependency>
+        <!-- Compile-only (Issue #0080): tika-core annotiert seine package-info-Klassen mit
+             @aQute.bnd.annotation.Version (OSGi-Metadaten), liefert die Annotation aber nicht mit.
+             Seit NullAway die Paket-Annotationen von Klassenpfad-Paketen liest (JSpecify-Modus:
+             Suche nach @NullMarked), muss javac diese Annotation auflösen können — sonst bricht
+             die classfile-Warnung „Annotationsmethode value() nicht gefunden" via -Werror den
+             Build. 4.2.0 ist die letzte Version mit dem Legacy-Paket aQute.bnd.annotation;
+             keine transitiven Abhängigkeiten, landet via provided nicht im Jar. -->
+        <dependency>
+            <groupId>biz.aQute.bnd</groupId>
+            <artifactId>biz.aQute.bnd.annotation</artifactId>
+            <version>4.2.0</version>
+            <scope>provided</scope>
+        </dependency>
 
         <!-- Test -->
         <dependency>
@@ -153,6 +170,15 @@
             <artifactId>spotbugs-annotations</artifactId>
             <version>4.10.2</version>
             <scope>provided</scope>
+        </dependency>
+
+        <!-- Null-Safety (CLAUDE-java.md §6.2, Issue #0080): JSpecify-Annotationen
+             (@NullMarked/@Nullable). Compile-Scope, weil die Annotationen (Retention CLASS bzw.
+             RUNTIME) im Bytecode landen und von NullAway sowie Downstream-Tools gelesen werden. -->
+        <dependency>
+            <groupId>org.jspecify</groupId>
+            <artifactId>jspecify</artifactId>
+            <version>${jspecify.version}</version>
         </dependency>
 
         <!-- Architekturtests: erzwingen Schichtentrennung und Paketregeln (CLAUDE-java.md §3.1/§6.1/§6.5). -->
@@ -232,7 +258,8 @@
                         <arg>-Xlint:all,-serial</arg>
                         <arg>-XDcompilePolicy=simple</arg>
                         <arg>--should-stop=ifError=FLOW</arg>
-                        <arg>-Xplugin:ErrorProne</arg>
+                        <!-- -Xplugin:ErrorProne wird NICHT hier, sondern je Execution gesetzt
+                             (siehe <executions> unten): Produktivcode mit NullAway, Testcode ohne. -->
                         <arg>-J--add-exports=jdk.compiler/com.sun.tools.javac.api=ALL-UNNAMED</arg>
                         <arg>-J--add-exports=jdk.compiler/com.sun.tools.javac.file=ALL-UNNAMED</arg>
                         <arg>-J--add-exports=jdk.compiler/com.sun.tools.javac.main=ALL-UNNAMED</arg>
@@ -250,8 +277,44 @@
                             <artifactId>error_prone_core</artifactId>
                             <version>${error-prone.version}</version>
                         </path>
+                        <!-- NullAway (Issue #0080): Null-Analyse als Error-Prone-Plugin. -->
+                        <path>
+                            <groupId>com.uber.nullaway</groupId>
+                            <artifactId>nullaway</artifactId>
+                            <version>${nullaway.version}</version>
+                        </path>
                     </annotationProcessorPaths>
                 </configuration>
+                <!-- Null-Safety-Gate (§6.2, Issue #0080): NullAway läuft als Error-Prone-Plugin
+                     im JSpecify-Modus; jedes Finding ist ein Compile-FEHLER. Die NullAway-Optionen
+                     gehören IN das -Xplugin:ErrorProne-Argument (ein einziges javac-Argument).
+                     Das Gate zielt auf PRODUKTIVCODE (default-compile). Testcode wird bewusst ohne
+                     NullAway kompiliert (default-testCompile, Error Prone selbst bleibt aktiv):
+                     Tests konstruieren Domänenobjekte absichtlich mit null (z. B. Bean-Validation-
+                     Tests der @ConfigurationProperties-Records, unpersistierte Fixtures) — das ist
+                     dort Testabsicht, kein Null-Safety-Verstoß. combine.children="append" hängt
+                     das jeweilige -Xplugin-Argument an die gemeinsamen compilerArgs oben an. -->
+                <executions>
+                    <execution>
+                        <id>default-compile</id>
+                        <configuration>
+                            <compilerArgs combine.children="append">
+                                <arg>-Xplugin:ErrorProne -Xep:NullAway:ERROR -XepOpt:NullAway:AnnotatedPackages=org.mwolff.manban -XepOpt:NullAway:JSpecifyMode=true</arg>
+                            </compilerArgs>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>default-testCompile</id>
+                        <configuration>
+                            <compilerArgs combine.children="append">
+                                <!-- NullAway liegt auf dem Processor-Pfad und würde ohne Optionen
+                                     beim Laden crashen; explizites OFF verhindert die
+                                     Instanziierung im Test-Compile. -->
+                                <arg>-Xplugin:ErrorProne -Xep:NullAway:OFF</arg>
+                            </compilerArgs>
+                        </configuration>
+                    </execution>
+                </executions>
             </plugin>
 
             <!-- Format-Gate (CLAUDE-java.md §3.2/§7): Spotless mit Google Java Format.

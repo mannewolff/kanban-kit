@@ -7,6 +7,7 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.time.Instant;
+import org.jspecify.annotations.Nullable;
 
 /** JPA-Abbildung der Tabelle {@code email_verification_token}. */
 @Entity
@@ -15,7 +16,7 @@ class EmailVerificationTokenEntity {
 
   @Id
   @GeneratedValue(strategy = GenerationType.IDENTITY)
-  private Long id;
+  private @Nullable Long id;
 
   @Column(name = "user_id", nullable = false)
   private Long userId;
@@ -27,14 +28,18 @@ class EmailVerificationTokenEntity {
   private Instant expiresAt;
 
   @Column(name = "used_at")
-  private Instant usedAt;
+  private @Nullable Instant usedAt;
 
   protected EmailVerificationTokenEntity() {
     // für JPA
   }
 
   EmailVerificationTokenEntity(
-      Long id, Long userId, String tokenHash, Instant expiresAt, Instant usedAt) {
+      @Nullable Long id,
+      Long userId,
+      String tokenHash,
+      Instant expiresAt,
+      @Nullable Instant usedAt) {
     this.id = id;
     this.userId = userId;
     this.tokenHash = tokenHash;
@@ -42,7 +47,7 @@ class EmailVerificationTokenEntity {
     this.usedAt = usedAt;
   }
 
-  Long getId() {
+  @Nullable Long getId() {
     return id;
   }
 
@@ -58,7 +63,7 @@ class EmailVerificationTokenEntity {
     return expiresAt;
   }
 
-  Instant getUsedAt() {
+  @Nullable Instant getUsedAt() {
     return usedAt;
   }
 }

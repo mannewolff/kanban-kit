@@ -1,6 +1,8 @@
 package org.mwolff.manban.card.domain;
 
 import java.time.Instant;
+import org.jspecify.annotations.Nullable;
+import org.mwolff.manban.common.Identifiable;
 
 /**
  * Karte — Kern-Aggregat. Die {@code number} ist board-scoped (eindeutig pro Board).
@@ -26,23 +28,24 @@ import java.time.Instant;
  * @param shortcode Kürzel eines Epics (nullable; nur an EPIC)
  */
 public record Card(
-    Long id,
+    @Nullable Long id,
     Long boardId,
     Long columnId,
     int number,
     String title,
-    String description,
+    @Nullable String description,
     int positionInColumn,
     boolean archived,
-    Instant movedToDoneAt,
-    Long createdBy,
+    @Nullable Instant movedToDoneAt,
+    @Nullable Long createdBy,
     Instant createdAt,
     Instant updatedAt,
     CardType type,
-    Long parentId,
-    String shortcode) {
+    @Nullable Long parentId,
+    @Nullable String shortcode)
+    implements Identifiable {
 
-  public Card withContent(String newTitle, String newDescription) {
+  public Card withContent(String newTitle, @Nullable String newDescription) {
     return new Card(
         id,
         boardId,
@@ -100,7 +103,7 @@ public record Card(
         shortcode);
   }
 
-  public Card withMovedToDoneAt(Instant when) {
+  public Card withMovedToDoneAt(@Nullable Instant when) {
     return new Card(
         id,
         boardId,
@@ -120,7 +123,7 @@ public record Card(
   }
 
   /** Setzt oder löscht ({@code null}) die Epic-Zuordnung. */
-  public Card withParent(Long newParentId) {
+  public Card withParent(@Nullable Long newParentId) {
     return new Card(
         id,
         boardId,
@@ -140,7 +143,7 @@ public record Card(
   }
 
   /** Setzt das Kürzel (nur für Epics sinnvoll). */
-  public Card withShortcode(String newShortcode) {
+  public Card withShortcode(@Nullable String newShortcode) {
     return new Card(
         id,
         boardId,

@@ -55,7 +55,7 @@ class AccessTokenServiceTest {
   void create_setsCreatedAtFromInjectedClock() {
     // Given
     when(crypto.generate()).thenReturn(new GeneratedToken("tk_plain", "hash"));
-    when(tokens.save(any(AccessToken.class))).thenAnswer(inv -> inv.getArgument(0));
+    when(tokens.save(any(AccessToken.class))).thenAnswer(inv -> saved(inv.getArgument(0)));
 
     // When
     service.create(1L, "CI", null, null);
@@ -70,7 +70,7 @@ class AccessTokenServiceTest {
   void create_returnsPlaintextOnce_forUnboundToken() {
     // Given
     when(crypto.generate()).thenReturn(new GeneratedToken("tk_plain", "hash"));
-    when(tokens.save(any(AccessToken.class))).thenAnswer(inv -> inv.getArgument(0));
+    when(tokens.save(any(AccessToken.class))).thenAnswer(inv -> saved(inv.getArgument(0)));
 
     // When
     AccessTokenService.CreatedAccessToken created = service.create(1L, "CI", null, null);
@@ -85,7 +85,7 @@ class AccessTokenServiceTest {
     when(boards.findById(20L)).thenReturn(Optional.of(new Board(20L, 5L, "B", FIXED)));
     when(permissions.hasPermission(1L, 5L, Permission.TICKET_CREATE)).thenReturn(true);
     when(crypto.generate()).thenReturn(new GeneratedToken("tk_plain", "hash"));
-    when(tokens.save(any(AccessToken.class))).thenAnswer(inv -> inv.getArgument(0));
+    when(tokens.save(any(AccessToken.class))).thenAnswer(inv -> saved(inv.getArgument(0)));
 
     // When
     ArgumentCaptor<AccessToken> captor = ArgumentCaptor.forClass(AccessToken.class);
@@ -166,7 +166,7 @@ class AccessTokenServiceTest {
   void revoke_savesRevokedToken_whenActive() {
     // Given
     when(tokens.findById(3L)).thenReturn(Optional.of(token(3L, 1L, false)));
-    when(tokens.save(any(AccessToken.class))).thenAnswer(inv -> inv.getArgument(0));
+    when(tokens.save(any(AccessToken.class))).thenAnswer(inv -> saved(inv.getArgument(0)));
 
     // When
     ArgumentCaptor<AccessToken> captor = ArgumentCaptor.forClass(AccessToken.class);
@@ -214,7 +214,7 @@ class AccessTokenServiceTest {
     // Given
     when(crypto.hash("plain")).thenReturn("hash");
     when(tokens.findByTokenHash("hash")).thenReturn(Optional.of(token(3L, 1L, false)));
-    when(tokens.save(any(AccessToken.class))).thenAnswer(inv -> inv.getArgument(0));
+    when(tokens.save(any(AccessToken.class))).thenAnswer(inv -> saved(inv.getArgument(0)));
 
     // When
     Optional<KanbanPrincipal> principal = service.resolveBinding("plain");
@@ -228,7 +228,7 @@ class AccessTokenServiceTest {
     // Given
     when(crypto.hash("plain")).thenReturn("hash");
     when(tokens.findByTokenHash("hash")).thenReturn(Optional.of(token(3L, 1L, false)));
-    when(tokens.save(any(AccessToken.class))).thenAnswer(inv -> inv.getArgument(0));
+    when(tokens.save(any(AccessToken.class))).thenAnswer(inv -> saved(inv.getArgument(0)));
 
     // When
     ArgumentCaptor<AccessToken> captor = ArgumentCaptor.forClass(AccessToken.class);
@@ -264,7 +264,7 @@ class AccessTokenServiceTest {
     // Given
     when(crypto.hash("plain")).thenReturn("hash");
     when(tokens.findByTokenHash("hash")).thenReturn(Optional.of(token(3L, 1L, false)));
-    when(tokens.save(any(AccessToken.class))).thenAnswer(inv -> inv.getArgument(0));
+    when(tokens.save(any(AccessToken.class))).thenAnswer(inv -> saved(inv.getArgument(0)));
 
     // When / Then
     assertThat(service.resolve("plain")).isEqualTo(OptionalLong.of(1L));
@@ -278,5 +278,23 @@ class AccessTokenServiceTest {
 
     // When / Then
     assertThat(service.resolve("plain")).isEmpty();
+  }
+
+  /** Simuliert die DB: vergibt beim ersten Speichern eine ID (Issue #0080). */
+  private static AccessToken saved(AccessToken t) {
+    if (t.id() != null) {
+      return t;
+    }
+    return new AccessToken(
+        7L,
+        t.userId(),
+        t.projectId(),
+        t.boardId(),
+        t.name(),
+        t.tokenHash(),
+        t.displayName(),
+        t.createdAt(),
+        t.lastUsedAt(),
+        t.revoked());
   }
 }

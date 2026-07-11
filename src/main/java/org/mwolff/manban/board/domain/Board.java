@@ -1,6 +1,8 @@
 package org.mwolff.manban.board.domain;
 
 import java.time.Instant;
+import org.jspecify.annotations.Nullable;
+import org.mwolff.manban.common.Identifiable;
 
 /**
  * Board — Container für Karten innerhalb eines Projekts.
@@ -10,7 +12,8 @@ import java.time.Instant;
  * @param name Board-Name
  * @param createdAt Erstellzeitpunkt
  */
-public record Board(Long id, Long projectId, String name, Instant createdAt) {
+public record Board(@Nullable Long id, Long projectId, String name, Instant createdAt)
+    implements Identifiable {
 
   public Board withName(String newName) {
     return new Board(id, projectId, newName, createdAt);

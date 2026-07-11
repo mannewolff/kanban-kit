@@ -5,6 +5,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.OptionalLong;
+import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.accesstoken.domain.AccessToken;
 import org.mwolff.manban.board.application.BoardRepository;
 import org.mwolff.manban.board.domain.Board;
@@ -55,7 +56,8 @@ public class AccessTokenService {
    * @throws ProjectAccessDeniedException Nutzer darf auf dem gebundenen Board nicht arbeiten (403)
    */
   @Transactional
-  public CreatedAccessToken create(long userId, String name, Long projectId, Long boardId) {
+  public CreatedAccessToken create(
+      long userId, String name, @Nullable Long projectId, @Nullable Long boardId) {
     validateBinding(userId, projectId, boardId);
     GeneratedToken generated = crypto.generate();
     AccessToken saved =
@@ -71,11 +73,11 @@ public class AccessTokenService {
                 clock.instant(),
                 null,
                 false));
-    return new CreatedAccessToken(saved.id(), saved.name(), generated.plaintext());
+    return new CreatedAccessToken(saved.requireId(), saved.name(), generated.plaintext());
   }
 
   /** Prüft die optionale Projekt-/Board-Bindung eines neu anzulegenden Tokens. */
-  private void validateBinding(long userId, Long projectId, Long boardId) {
+  private void validateBinding(long userId, @Nullable Long projectId, @Nullable Long boardId) {
     if (projectId == null && boardId == null) {
       return; // ungebundenes Token
     }
@@ -102,7 +104,7 @@ public class AccessTokenService {
         .map(
             t ->
                 new AccessTokenView(
-                    t.id(),
+                    t.requireId(),
                     t.name(),
                     t.projectId(),
                     t.boardId(),
@@ -136,7 +138,7 @@ public class AccessTokenService {
         .map(
             t -> {
               tokens.save(t.withLastUsedAt(clock.instant()));
-              return new KanbanPrincipal(t.userId(), t.id(), t.projectId(), t.boardId());
+              return new KanbanPrincipal(t.userId(), t.requireId(), t.projectId(), t.boardId());
             });
   }
 
@@ -155,9 +157,9 @@ public class AccessTokenService {
   public record AccessTokenView(
       Long id,
       String name,
-      Long projectId,
-      Long boardId,
+      @Nullable Long projectId,
+      @Nullable Long boardId,
       Instant createdAt,
-      Instant lastUsedAt,
+      @Nullable Instant lastUsedAt,
       boolean revoked) {}
 }

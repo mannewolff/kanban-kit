@@ -8,6 +8,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
+import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.board.application.BoardColumnRepository;
 import org.mwolff.manban.board.application.BoardNotFoundException;
 import org.mwolff.manban.board.application.BoardRepository;
@@ -58,13 +59,14 @@ public class CardService {
       long boardId,
       long columnId,
       String title,
-      String description,
-      List<Integer> dependsOn,
-      Long parentId) {
+      @Nullable String description,
+      @Nullable List<Integer> dependsOn,
+      @Nullable Long parentId) {
     Board board = boards.findById(boardId).orElseThrow(BoardNotFoundException::new);
     permissions.require(userId, board.projectId(), Permission.TICKET_CREATE);
     requireColumnInBoard(columnId, boardId);
-    Long effectiveParent = parentId == null ? null : requireEpicInBoard(parentId, boardId).id();
+    Long effectiveParent =
+        parentId == null ? null : requireEpicInBoard(parentId, boardId).requireId();
 
     int number = cards.maxNumberInBoard(boardId) + 1;
     int position = cards.maxActivePositionInColumn(columnId) + 1;
@@ -97,7 +99,11 @@ public class CardService {
    */
   @Transactional
   public CardView createEpic(
-      long userId, long boardId, String title, String description, String shortcode) {
+      long userId,
+      long boardId,
+      String title,
+      @Nullable String description,
+      @Nullable String shortcode) {
     Board board = boards.findById(boardId).orElseThrow(BoardNotFoundException::new);
     permissions.require(userId, board.projectId(), Permission.EPIC_CREATE);
 
@@ -105,7 +111,7 @@ public class CardService {
         columns.findByBoardId(boardId).stream()
             .min(Comparator.comparingInt(BoardColumn::position))
             .orElseThrow(ColumnNotFoundException::new)
-            .id();
+            .requireId();
 
     int number = cards.maxNumberInBoard(boardId) + 1;
     Instant now = clock.instant();
@@ -157,7 +163,7 @@ public class CardService {
             epic -> {
               List<Card> children =
                   all.stream()
-                      .filter(c -> epic.id().equals(c.parentId()) && !c.archived())
+                      .filter(c -> epic.requireId().equals(c.parentId()) && !c.archived())
                       .toList();
               int total = children.size();
               int done =
@@ -166,7 +172,7 @@ public class CardService {
                           .filter(c -> isDoneColumn(columnNames.get(c.columnId())))
                           .count();
               return new EpicView(
-                  epic.id(),
+                  epic.requireId(),
                   epic.number(),
                   epic.title(),
                   epic.description(),
@@ -182,10 +188,10 @@ public class CardService {
       long userId,
       long cardId,
       String title,
-      String description,
-      List<Integer> dependsOn,
-      String shortcode,
-      Long parentId) {
+      @Nullable String description,
+      @Nullable List<Integer> dependsOn,
+      @Nullable String shortcode,
+      @Nullable Long parentId) {
     Card card = requireCardOp(userId, cardId, Permission.TICKET_UPDATE, Permission.EPIC_UPDATE);
     Card updated = card.withContent(title.trim(), normalize(description));
     if (card.type() == CardType.EPIC) {
@@ -194,7 +200,7 @@ public class CardService {
     } else {
       // Karten: Epic-Zuordnung im selben PUT setzen/lösen (parentId == null -> lösen).
       Long effectiveParent =
-          parentId == null ? null : requireEpicInBoard(parentId, card.boardId()).id();
+          parentId == null ? null : requireEpicInBoard(parentId, card.boardId()).requireId();
       updated = updated.withParent(effectiveParent);
     }
     Card saved = cards.save(updated);
@@ -206,12 +212,13 @@ public class CardService {
 
   /** Ordnet eine Karte einem Epic zu ({@code parentId}) oder löst die Zuordnung ({@code null}). */
   @Transactional
-  public CardView assignParent(long userId, long cardId, Long parentId) {
+  public CardView assignParent(long userId, long cardId, @Nullable Long parentId) {
     Card card = requireCardOp(userId, cardId, Permission.TICKET_UPDATE, Permission.EPIC_UPDATE);
     if (card.type() != CardType.CARD) {
       throw new InvalidDependencyException("Nur Karten können einem Epic zugeordnet werden");
     }
-    Long effective = parentId == null ? null : requireEpicInBoard(parentId, card.boardId()).id();
+    Long effective =
+        parentId == null ? null : requireEpicInBoard(parentId, card.boardId()).requireId();
     return view(cards.save(card.withParent(effective)));
   }
 
@@ -262,8 +269,8 @@ public class CardService {
   @Transactional
   public void delete(long userId, long cardId) {
     Card card = requireCardOp(userId, cardId, Permission.TICKET_DELETE, Permission.EPIC_DELETE);
-    dependencies.deleteByCardId(card.id());
-    cards.deleteById(card.id());
+    dependencies.deleteByCardId(card.requireId());
+    cards.deleteById(card.requireId());
   }
 
   /** Lädt die Karte und verlangt das je nach Kartentyp (Ticket/Epic) passende Recht. */
@@ -293,9 +300,9 @@ public class CardService {
     }
   }
 
-  private void setDependencies(Card card, List<Integer> dependsOn) {
+  private void setDependencies(Card card, @Nullable List<Integer> dependsOn) {
     if (dependsOn == null || dependsOn.isEmpty()) {
-      dependencies.replaceDependencies(card.id(), List.of());
+      dependencies.replaceDependencies(card.requireId(), List.of());
       return;
     }
     List<Integer> distinct = dependsOn.stream().distinct().toList();
@@ -309,24 +316,24 @@ public class CardService {
         throw new InvalidDependencyException("Unbekannte Kartennummer: " + dep);
       }
     }
-    dependencies.replaceDependencies(card.id(), distinct);
+    dependencies.replaceDependencies(card.requireId(), distinct);
   }
 
-  private static boolean isDoneColumn(String name) {
+  private static boolean isDoneColumn(@Nullable String name) {
     return name != null && name.toLowerCase(Locale.ROOT).contains("done");
   }
 
-  private static String normalize(String description) {
+  private static @Nullable String normalize(@Nullable String description) {
     return description == null || description.isBlank() ? null : description;
   }
 
-  private static String trimToNull(String value) {
+  private static @Nullable String trimToNull(@Nullable String value) {
     return value == null || value.isBlank() ? null : value.trim();
   }
 
   private CardView view(Card c) {
     return new CardView(
-        c.id(),
+        c.requireId(),
         c.boardId(),
         c.columnId(),
         c.number(),
@@ -335,7 +342,7 @@ public class CardService {
         c.positionInColumn(),
         c.archived(),
         c.movedToDoneAt(),
-        dependencies.findByCardId(c.id()),
+        dependencies.findByCardId(c.requireId()),
         c.type(),
         c.parentId(),
         c.shortcode());
@@ -348,22 +355,22 @@ public class CardService {
       Long columnId,
       int number,
       String title,
-      String description,
+      @Nullable String description,
       int positionInColumn,
       boolean archived,
-      Instant movedToDoneAt,
+      @Nullable Instant movedToDoneAt,
       List<Integer> dependencies,
       CardType type,
-      Long parentId,
-      String shortcode) {}
+      @Nullable Long parentId,
+      @Nullable String shortcode) {}
 
   /** Epic-Darstellung inkl. Fortschritt (Kinder gesamt / in Done). */
   public record EpicView(
       Long id,
       int number,
       String title,
-      String description,
-      String shortcode,
+      @Nullable String description,
+      @Nullable String shortcode,
       int done,
       int total) {}
 }

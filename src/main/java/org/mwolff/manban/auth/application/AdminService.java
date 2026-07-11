@@ -32,7 +32,7 @@ public class AdminService {
         .map(
             u ->
                 new UserView(
-                    u.id(), u.email(), u.displayName(), u.platformRole(), u.emailVerified()))
+                    u.requireId(), u.email(), u.displayName(), u.platformRole(), u.emailVerified()))
         .toList();
   }
 
@@ -50,7 +50,7 @@ public class AdminService {
 
     AppUser saved = users.save(target.withPlatformRole(newRole));
     return new UserView(
-        saved.id(),
+        saved.requireId(),
         saved.email(),
         saved.displayName(),
         saved.platformRole(),

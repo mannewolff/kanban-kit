@@ -7,6 +7,7 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.time.Instant;
+import org.jspecify.annotations.Nullable;
 
 /** JPA-Abbildung der Tabelle {@code attachment_meta}. */
 @Entity
@@ -15,7 +16,7 @@ class AttachmentEntity {
 
   @Id
   @GeneratedValue(strategy = GenerationType.IDENTITY)
-  private Long id;
+  private @Nullable Long id;
 
   @Column(name = "card_id", nullable = false)
   private Long cardId;
@@ -40,7 +41,7 @@ class AttachmentEntity {
   }
 
   AttachmentEntity(
-      Long id,
+      @Nullable Long id,
       Long cardId,
       String filename,
       String contentType,
@@ -56,7 +57,7 @@ class AttachmentEntity {
     this.createdAt = createdAt;
   }
 
-  Long getId() {
+  @Nullable Long getId() {
     return id;
   }
 

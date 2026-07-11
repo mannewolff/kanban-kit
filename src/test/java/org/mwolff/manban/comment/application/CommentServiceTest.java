@@ -68,7 +68,7 @@ class CommentServiceTest {
     // Given
     when(users.findById(1L))
         .thenReturn(Optional.of(new AppUser(1L, "u@x.de", "hash", "Ada", true, PlatformRole.USER)));
-    when(comments.save(any(Comment.class))).thenAnswer(inv -> inv.getArgument(0));
+    when(comments.save(any(Comment.class))).thenAnswer(inv -> saved(inv.getArgument(0)));
 
     // When
     ArgumentCaptor<Comment> captor = ArgumentCaptor.forClass(Comment.class);
@@ -84,7 +84,7 @@ class CommentServiceTest {
     // Given
     when(users.findById(1L))
         .thenReturn(Optional.of(new AppUser(1L, "u@x.de", "hash", "Ada", true, PlatformRole.USER)));
-    when(comments.save(any(Comment.class))).thenAnswer(inv -> inv.getArgument(0));
+    when(comments.save(any(Comment.class))).thenAnswer(inv -> saved(inv.getArgument(0)));
 
     // When
     ArgumentCaptor<Comment> captor = ArgumentCaptor.forClass(Comment.class);
@@ -99,7 +99,7 @@ class CommentServiceTest {
   void create_fallsBackToUnknownAuthorName_whenUserMissing() {
     // Given
     when(users.findById(1L)).thenReturn(Optional.empty());
-    when(comments.save(any(Comment.class))).thenAnswer(inv -> inv.getArgument(0));
+    when(comments.save(any(Comment.class))).thenAnswer(inv -> saved(inv.getArgument(0)));
 
     // When
     ArgumentCaptor<Comment> captor = ArgumentCaptor.forClass(Comment.class);
@@ -115,7 +115,7 @@ class CommentServiceTest {
     // Given
     when(users.findById(1L))
         .thenReturn(Optional.of(new AppUser(1L, "u@x.de", "hash", "Ada", true, PlatformRole.USER)));
-    when(comments.save(any(Comment.class))).thenAnswer(inv -> inv.getArgument(0));
+    when(comments.save(any(Comment.class))).thenAnswer(inv -> saved(inv.getArgument(0)));
 
     // When
     CommentService.CommentView view = service.create(1L, 5L, "Hallo");
@@ -153,7 +153,7 @@ class CommentServiceTest {
   void update_persistsNewBody_whenAuthorEditsOwnComment() {
     // Given
     when(comments.findById(3L)).thenReturn(Optional.of(comment(1L)));
-    when(comments.save(any(Comment.class))).thenAnswer(inv -> inv.getArgument(0));
+    when(comments.save(any(Comment.class))).thenAnswer(inv -> saved(inv.getArgument(0)));
 
     // When
     ArgumentCaptor<Comment> captor = ArgumentCaptor.forClass(Comment.class);
@@ -168,7 +168,7 @@ class CommentServiceTest {
   void update_returnsViewWithNewBody() {
     // Given
     when(comments.findById(3L)).thenReturn(Optional.of(comment(1L)));
-    when(comments.save(any(Comment.class))).thenAnswer(inv -> inv.getArgument(0));
+    when(comments.save(any(Comment.class))).thenAnswer(inv -> saved(inv.getArgument(0)));
 
     // When
     CommentService.CommentView view = service.update(1L, 3L, "Geändert");
@@ -238,5 +238,14 @@ class CommentServiceTest {
 
     // When / Then
     assertThatThrownBy(() -> service.delete(1L, 3L)).isInstanceOf(CommentNotFoundException.class);
+  }
+
+  /** Simuliert die DB: vergibt beim ersten Speichern eine ID (Issue #0080). */
+  private static Comment saved(Comment c) {
+    if (c.id() != null) {
+      return c;
+    }
+    return new Comment(
+        7L, c.cardId(), c.authorUserId(), c.authorName(), c.body(), c.createdAt(), c.updatedAt());
   }
 }

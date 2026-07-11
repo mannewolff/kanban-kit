@@ -1,6 +1,8 @@
 package org.mwolff.manban.auth.domain;
 
 import java.time.Instant;
+import org.jspecify.annotations.Nullable;
+import org.mwolff.manban.common.Identifiable;
 
 /**
  * Passwort-Reset-Token. Persistiert wird nur der Hash; das Klartext-Token erhält der Nutzer
@@ -13,7 +15,8 @@ import java.time.Instant;
  * @param usedAt Zeitpunkt der Einlösung; {@code null} solange ungenutzt
  */
 public record PasswordResetToken(
-    Long id, Long userId, String tokenHash, Instant expiresAt, Instant usedAt) {
+    @Nullable Long id, Long userId, String tokenHash, Instant expiresAt, @Nullable Instant usedAt)
+    implements Identifiable {
 
   public boolean isUsed() {
     return usedAt != null;

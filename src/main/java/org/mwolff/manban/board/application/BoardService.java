@@ -5,8 +5,10 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.board.domain.Board;
 import org.mwolff.manban.board.domain.BoardColumn;
 import org.mwolff.manban.project.application.PermissionChecker;
@@ -49,7 +51,7 @@ public class BoardService {
     permissions.require(userId, projectId, Permission.BOARD_CREATE);
     Board board = boards.save(new Board(null, projectId, name.trim(), clock.instant()));
     for (int i = 0; i < DEFAULT_COLUMNS.size(); i++) {
-      columns.save(new BoardColumn(null, board.id(), DEFAULT_COLUMNS.get(i), i, null));
+      columns.save(new BoardColumn(null, board.requireId(), DEFAULT_COLUMNS.get(i), i, null));
     }
     return view(board);
   }
@@ -82,7 +84,7 @@ public class BoardService {
   }
 
   @Transactional
-  public ColumnView addColumn(long userId, long boardId, String name, Integer wipLimit) {
+  public ColumnView addColumn(long userId, long boardId, String name, @Nullable Integer wipLimit) {
     Board board = requireBoard(boardId);
     permissions.require(userId, board.projectId(), Permission.BOARD_UPDATE);
     int nextPosition =
@@ -93,7 +95,8 @@ public class BoardService {
   }
 
   @Transactional
-  public ColumnView updateColumn(long userId, long columnId, String name, Integer wipLimit) {
+  public ColumnView updateColumn(
+      long userId, long columnId, String name, @Nullable Integer wipLimit) {
     BoardColumn column = requireColumn(columnId);
     Board board = requireBoard(column.boardId());
     permissions.require(userId, board.projectId(), Permission.BOARD_UPDATE);
@@ -131,8 +134,10 @@ public class BoardService {
         current.stream().collect(Collectors.toMap(BoardColumn::id, Function.identity()));
     List<ColumnView> result = new ArrayList<>();
     for (int i = 0; i < orderedColumnIds.size(); i++) {
-      BoardColumn c = byId.get(orderedColumnIds.get(i));
-      result.add(new ColumnView(c.id(), c.name(), i, c.wipLimit()));
+      // Nach dem Set-Abgleich oben ist jede angefragte ID vorhanden; requireNonNull macht
+      // diese Invariante fuer NullAway explizit (Map.get liefert @Nullable).
+      BoardColumn c = Objects.requireNonNull(byId.get(orderedColumnIds.get(i)));
+      result.add(new ColumnView(c.requireId(), c.name(), i, c.wipLimit()));
     }
     return result;
   }
@@ -147,13 +152,13 @@ public class BoardService {
 
   private BoardView view(Board board) {
     List<ColumnView> columnViews =
-        columns.findByBoardId(board.id()).stream().map(BoardService::toColumnView).toList();
+        columns.findByBoardId(board.requireId()).stream().map(BoardService::toColumnView).toList();
     return new BoardView(
-        board.id(), board.projectId(), board.name(), board.createdAt(), columnViews);
+        board.requireId(), board.projectId(), board.name(), board.createdAt(), columnViews);
   }
 
   private static ColumnView toColumnView(BoardColumn c) {
-    return new ColumnView(c.id(), c.name(), c.position(), c.wipLimit());
+    return new ColumnView(c.requireId(), c.name(), c.position(), c.wipLimit());
   }
 
   /** Board inkl. seiner Spalten. */
@@ -161,5 +166,5 @@ public class BoardService {
       Long id, Long projectId, String name, Instant createdAt, List<ColumnView> columns) {}
 
   /** Spaltendarstellung. */
-  public record ColumnView(Long id, String name, int position, Integer wipLimit) {}
+  public record ColumnView(Long id, String name, int position, @Nullable Integer wipLimit) {}
 }

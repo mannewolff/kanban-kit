@@ -17,5 +17,15 @@
  * <p>Die Abhängigkeitsrichtung zeigt stets nach innen: {@code web}/{@code infrastructure} → {@code
  * application} → {@code domain}. Dieses Skelett (Issue F1) legt nur die Basis; die Fachmodule
  * entstehen mit den Feature-Issues.
+ *
+ * <h2>Null-Safety (Issue #0080)</h2>
+ *
+ * <p>{@code @NullMarked} gilt nicht rekursiv, sondern pro Package: Jedes Package dieses Moduls
+ * trägt eine eigene {@code package-info.java} mit {@code @NullMarked}. Referenzen sind damit per
+ * Default non-null; Ausnahmen tragen explizit {@code @Nullable} (CLAUDE-java.md §6.2). NullAway
+ * erzwingt das zur Compile-Zeit als Fehler.
  */
+@NullMarked
 package org.mwolff.manban;
+
+import org.jspecify.annotations.NullMarked;

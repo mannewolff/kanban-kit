@@ -55,7 +55,12 @@ class ProjectServiceTest {
     when(users.findByEmail("owner@x.de"))
         .thenReturn(
             Optional.of(new AppUser(2L, "owner@x.de", "hash", "Owner", true, PlatformRole.USER)));
-    when(projects.save(any(Project.class))).thenAnswer(inv -> inv.getArgument(0));
+    when(projects.save(any(Project.class)))
+        .thenAnswer(
+            inv -> {
+              Project p = inv.getArgument(0);
+              return p.id() == null ? new Project(9L, p.name(), p.ownerUserId(), p.createdAt()) : p;
+            });
 
     // When
     ArgumentCaptor<Project> captor = ArgumentCaptor.forClass(Project.class);
@@ -185,7 +190,12 @@ class ProjectServiceTest {
     when(permissions.require(2L, 9L, Permission.PROJECT_EDIT))
         .thenReturn(membership(9L, 2L, ProjectRole.OWNER));
     when(projects.findById(9L)).thenReturn(Optional.of(new Project(9L, "Alt", 2L, FIXED)));
-    when(projects.save(any(Project.class))).thenAnswer(inv -> inv.getArgument(0));
+    when(projects.save(any(Project.class)))
+        .thenAnswer(
+            inv -> {
+              Project p = inv.getArgument(0);
+              return p.id() == null ? new Project(9L, p.name(), p.ownerUserId(), p.createdAt()) : p;
+            });
 
     // When
     ArgumentCaptor<Project> captor = ArgumentCaptor.forClass(Project.class);
@@ -202,7 +212,12 @@ class ProjectServiceTest {
     when(permissions.require(2L, 9L, Permission.PROJECT_EDIT))
         .thenReturn(membership(9L, 2L, ProjectRole.OWNER));
     when(projects.findById(9L)).thenReturn(Optional.of(new Project(9L, "Alt", 2L, FIXED)));
-    when(projects.save(any(Project.class))).thenAnswer(inv -> inv.getArgument(0));
+    when(projects.save(any(Project.class)))
+        .thenAnswer(
+            inv -> {
+              Project p = inv.getArgument(0);
+              return p.id() == null ? new Project(9L, p.name(), p.ownerUserId(), p.createdAt()) : p;
+            });
 
     // When
     ProjectService.ProjectView view = service.rename(2L, 9L, "Neu");

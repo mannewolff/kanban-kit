@@ -3,6 +3,7 @@ package org.mwolff.manban.comment.application;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
+import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.auth.application.AppUserRepository;
 import org.mwolff.manban.board.application.BoardNotFoundException;
 import org.mwolff.manban.board.application.BoardRepository;
@@ -68,7 +69,8 @@ public class CommentService {
     Comment comment = comments.findById(commentId).orElseThrow(CommentNotFoundException::new);
     permissions.require(userId, projectIdOfCard(comment.cardId()), Permission.COMMENT_UPDATE);
     // Bearbeiten darf nur der Autor selbst — auch ein Admin/Owner nicht fremde Kommentare.
-    if (comment.authorUserId() == null || comment.authorUserId() != userId) {
+    Long author = comment.authorUserId();
+    if (author == null || author != userId) {
       throw new ProjectAccessDeniedException();
     }
     return view(comments.save(comment.withBody(body)));
@@ -79,7 +81,7 @@ public class CommentService {
     Comment comment = comments.findById(commentId).orElseThrow(CommentNotFoundException::new);
     // Löschen ist Moderation: nur Projekt-ADMIN/OWNER (COMMENT_DELETE), nicht der Autor allein.
     permissions.require(userId, projectIdOfCard(comment.cardId()), Permission.COMMENT_DELETE);
-    comments.deleteById(comment.id());
+    comments.deleteById(comment.requireId());
   }
 
   private long projectIdOfCard(long cardId) {
@@ -90,7 +92,7 @@ public class CommentService {
 
   private static CommentView view(Comment c) {
     return new CommentView(
-        c.id(),
+        c.requireId(),
         c.cardId(),
         c.authorUserId(),
         c.authorName(),
@@ -103,7 +105,7 @@ public class CommentService {
   public record CommentView(
       Long id,
       Long cardId,
-      Long authorUserId,
+      @Nullable Long authorUserId,
       String authorName,
       String body,
       Instant createdAt,

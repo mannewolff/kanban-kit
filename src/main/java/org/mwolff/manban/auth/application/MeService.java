@@ -22,7 +22,7 @@ public class MeService {
   public MeView load(long userId) {
     AppUser user = users.findById(userId).orElseThrow(InvalidCredentialsException::new);
     return new MeView(
-        user.id(),
+        user.requireId(),
         user.email(),
         user.displayName(),
         user.platformRole(),

@@ -7,6 +7,7 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.time.Instant;
+import org.jspecify.annotations.Nullable;
 
 /**
  * JPA-Abbildung der Tabelle {@code card}. Die generierte Spalte {@code active_position} wird von
@@ -18,7 +19,7 @@ class CardEntity {
 
   @Id
   @GeneratedValue(strategy = GenerationType.IDENTITY)
-  private Long id;
+  private @Nullable Long id;
 
   @Column(name = "board_id", nullable = false)
   private Long boardId;
@@ -33,7 +34,7 @@ class CardEntity {
   private String title;
 
   @Column(name = "description")
-  private String description;
+  private @Nullable String description;
 
   @Column(name = "position_in_column", nullable = false)
   private int positionInColumn;
@@ -42,10 +43,10 @@ class CardEntity {
   private boolean archived;
 
   @Column(name = "moved_to_done_at")
-  private Instant movedToDoneAt;
+  private @Nullable Instant movedToDoneAt;
 
   @Column(name = "created_by")
-  private Long createdBy;
+  private @Nullable Long createdBy;
 
   @Column(name = "created_at", nullable = false)
   private Instant createdAt;
@@ -57,31 +58,31 @@ class CardEntity {
   private String type;
 
   @Column(name = "parent_id")
-  private Long parentId;
+  private @Nullable Long parentId;
 
   @Column(name = "shortcode")
-  private String shortcode;
+  private @Nullable String shortcode;
 
   protected CardEntity() {
     // für JPA
   }
 
   CardEntity(
-      Long id,
+      @Nullable Long id,
       Long boardId,
       Long columnId,
       int number,
       String title,
-      String description,
+      @Nullable String description,
       int positionInColumn,
       boolean archived,
-      Instant movedToDoneAt,
-      Long createdBy,
+      @Nullable Instant movedToDoneAt,
+      @Nullable Long createdBy,
       Instant createdAt,
       Instant updatedAt,
       String type,
-      Long parentId,
-      String shortcode) {
+      @Nullable Long parentId,
+      @Nullable String shortcode) {
     this.id = id;
     this.boardId = boardId;
     this.columnId = columnId;
@@ -99,7 +100,7 @@ class CardEntity {
     this.shortcode = shortcode;
   }
 
-  Long getId() {
+  @Nullable Long getId() {
     return id;
   }
 
@@ -119,7 +120,7 @@ class CardEntity {
     return title;
   }
 
-  String getDescription() {
+  @Nullable String getDescription() {
     return description;
   }
 
@@ -131,11 +132,11 @@ class CardEntity {
     return archived;
   }
 
-  Instant getMovedToDoneAt() {
+  @Nullable Instant getMovedToDoneAt() {
     return movedToDoneAt;
   }
 
-  Long getCreatedBy() {
+  @Nullable Long getCreatedBy() {
     return createdBy;
   }
 
@@ -151,11 +152,11 @@ class CardEntity {
     return type;
   }
 
-  Long getParentId() {
+  @Nullable Long getParentId() {
     return parentId;
   }
 
-  String getShortcode() {
+  @Nullable String getShortcode() {
     return shortcode;
   }
 }

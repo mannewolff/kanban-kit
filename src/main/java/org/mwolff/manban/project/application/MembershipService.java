@@ -4,6 +4,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
 import java.util.Locale;
+import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.auth.application.AppUserRepository;
 import org.mwolff.manban.auth.application.AuthProperties;
 import org.mwolff.manban.auth.domain.AppUser;
@@ -146,7 +147,7 @@ public class MembershipService {
     if (target.role() == ProjectRole.OWNER && isLastOwner(projectId, targetUserId)) {
       throw new LastOwnerException();
     }
-    memberships.deleteById(target.id());
+    memberships.deleteById(target.requireId());
   }
 
   private boolean isLastOwner(long projectId, long targetUserId) {
@@ -160,10 +161,11 @@ public class MembershipService {
   private MemberView toView(ProjectMembership m) {
     return users
         .findById(m.userId())
-        .map(u -> new MemberView(u.id(), u.email(), u.displayName(), m.role()))
+        .map(u -> new MemberView(u.requireId(), u.email(), u.displayName(), m.role()))
         .orElseGet(() -> new MemberView(m.userId(), null, null, m.role()));
   }
 
   /** Mitgliederdarstellung. */
-  public record MemberView(Long userId, String email, String displayName, ProjectRole role) {}
+  public record MemberView(
+      Long userId, @Nullable String email, @Nullable String displayName, ProjectRole role) {}
 }

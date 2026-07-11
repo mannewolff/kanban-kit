@@ -1,6 +1,8 @@
 package org.mwolff.manban.accesstoken.domain;
 
 import java.time.Instant;
+import org.jspecify.annotations.Nullable;
+import org.mwolff.manban.common.Identifiable;
 
 /**
  * Persönliches API-Zugriffstoken (PAT). Persistiert wird nur {@code tokenHash}; der Klartext wird
@@ -22,16 +24,17 @@ import java.time.Instant;
  * @param revoked ob das Token widerrufen wurde
  */
 public record AccessToken(
-    Long id,
+    @Nullable Long id,
     Long userId,
-    Long projectId,
-    Long boardId,
+    @Nullable Long projectId,
+    @Nullable Long boardId,
     String name,
     String tokenHash,
     String displayName,
     Instant createdAt,
-    Instant lastUsedAt,
-    boolean revoked) {
+    @Nullable Instant lastUsedAt,
+    boolean revoked)
+    implements Identifiable {
 
   /** Ob das Token an ein Projekt + Board gebunden ist. */
   public boolean isBound() {
