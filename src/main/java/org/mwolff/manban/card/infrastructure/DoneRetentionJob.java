@@ -1,6 +1,6 @@
 package org.mwolff.manban.card.infrastructure;
 
-import java.time.Instant;
+import java.time.Clock;
 import org.mwolff.manban.card.application.CleanupProperties;
 import org.mwolff.manban.card.application.DoneRetentionService;
 import org.slf4j.Logger;
@@ -22,15 +22,17 @@ class DoneRetentionJob {
 
     private final DoneRetentionService retention;
     private final CleanupProperties properties;
+    private final Clock clock;
 
-    DoneRetentionJob(DoneRetentionService retention, CleanupProperties properties) {
+    DoneRetentionJob(DoneRetentionService retention, CleanupProperties properties, Clock clock) {
         this.retention = retention;
         this.properties = properties;
+        this.clock = clock;
     }
 
     @Scheduled(cron = "${manban.cleanup.cron:0 0 * * * *}")
     void run() {
-        int archived = retention.archiveExpiredDoneCards(Instant.now(), properties.doneRetentionDays());
+        int archived = retention.archiveExpiredDoneCards(clock.instant(), properties.doneRetentionDays());
         if (archived > 0) {
             log.info("Done-Retention: {} abgelaufene Karten archiviert", archived);
         }

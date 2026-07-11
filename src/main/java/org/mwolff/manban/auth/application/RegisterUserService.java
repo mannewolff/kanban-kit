@@ -1,6 +1,6 @@
 package org.mwolff.manban.auth.application;
 
-import java.time.Instant;
+import java.time.Clock;
 import org.mwolff.manban.auth.domain.AppUser;
 import org.mwolff.manban.auth.domain.EmailVerificationToken;
 import org.mwolff.manban.auth.domain.PlatformRole;
@@ -21,15 +21,17 @@ public class RegisterUserService {
     private final VerificationMailer mailer;
     private final PasswordEncoder passwordEncoder;
     private final AuthProperties properties;
+    private final Clock clock;
 
     public RegisterUserService(AppUserRepository users, EmailVerificationTokenRepository tokens,
                                VerificationMailer mailer, PasswordEncoder passwordEncoder,
-                               AuthProperties properties) {
+                               AuthProperties properties, Clock clock) {
         this.users = users;
         this.tokens = tokens;
         this.mailer = mailer;
         this.passwordEncoder = passwordEncoder;
         this.properties = properties;
+        this.clock = clock;
     }
 
     @Transactional
@@ -52,7 +54,7 @@ public class RegisterUserService {
                 null,
                 user.id(),
                 SecureTokens.sha256Hex(plaintext),
-                Instant.now().plus(properties.verificationTtl()),
+                clock.instant().plus(properties.verificationTtl()),
                 null));
 
         String verificationUrl = properties.baseUrl() + "/api/auth/verify?token=" + plaintext;

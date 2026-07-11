@@ -1,5 +1,6 @@
 package org.mwolff.manban.project.application;
 
+import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
 import org.mwolff.manban.auth.application.AppUserRepository;
@@ -30,11 +31,12 @@ public class MembershipService {
     private final AppUserRepository users;
     private final AuthProperties authProperties;
     private final ProjectProperties projectProperties;
+    private final Clock clock;
 
     public MembershipService(ProjectRepository projects, ProjectMembershipRepository memberships,
                              ProjectInvitationRepository invitations, PermissionChecker permissions,
                              InvitationMailer mailer, AppUserRepository users,
-                             AuthProperties authProperties, ProjectProperties projectProperties) {
+                             AuthProperties authProperties, ProjectProperties projectProperties, Clock clock) {
         this.projects = projects;
         this.memberships = memberships;
         this.invitations = invitations;
@@ -43,6 +45,7 @@ public class MembershipService {
         this.users = users;
         this.authProperties = authProperties;
         this.projectProperties = projectProperties;
+        this.clock = clock;
     }
 
     @Transactional
@@ -53,7 +56,7 @@ public class MembershipService {
         String plaintext = SecureTokens.newToken();
         invitations.save(new ProjectInvitation(
                 null, projectId, email.trim().toLowerCase(), role, SecureTokens.sha256Hex(plaintext),
-                Instant.now().plus(projectProperties.invitationTtl()), null, inviterUserId));
+                clock.instant().plus(projectProperties.invitationTtl()), null, inviterUserId));
 
         String url = authProperties.baseUrl() + "/invitations/accept?token=" + plaintext;
         mailer.sendInvitationEmail(email.trim().toLowerCase(), project.name(), url);
@@ -61,7 +64,7 @@ public class MembershipService {
 
     @Transactional
     public MemberView accept(long acceptingUserId, String plaintextToken) {
-        Instant now = Instant.now();
+        Instant now = clock.instant();
         ProjectInvitation invitation = invitations.findByTokenHash(SecureTokens.sha256Hex(plaintextToken))
                 .orElseThrow(InvalidInvitationException::new);
         if (invitation.isAccepted() || invitation.isExpired(now)) {

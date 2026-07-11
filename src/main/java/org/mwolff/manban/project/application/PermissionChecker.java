@@ -1,6 +1,6 @@
 package org.mwolff.manban.project.application;
 
-import java.time.Instant;
+import java.time.Clock;
 import java.util.Optional;
 import org.mwolff.manban.auth.application.AppUserRepository;
 import org.mwolff.manban.auth.domain.PlatformRole;
@@ -25,12 +25,14 @@ public class PermissionChecker {
     private final ProjectMembershipRepository memberships;
     private final RolePermissionRepository rolePermissions;
     private final AppUserRepository users;
+    private final Clock clock;
 
     public PermissionChecker(ProjectMembershipRepository memberships, RolePermissionRepository rolePermissions,
-                             AppUserRepository users) {
+                             AppUserRepository users, Clock clock) {
         this.memberships = memberships;
         this.rolePermissions = rolePermissions;
         this.users = users;
+        this.clock = clock;
     }
 
     /** Ob der Benutzer plattformweit Admin (Super-User) ist. */
@@ -91,7 +93,7 @@ public class PermissionChecker {
     }
 
     /** Synthetische Mitgliedschaft für einen Plattform-Admin ohne echte Mitgliedschaft (Vollzugriff). */
-    private static ProjectMembership adminMembership(long projectId, long userId) {
-        return new ProjectMembership(null, projectId, userId, ProjectRole.OWNER, Instant.now());
+    private ProjectMembership adminMembership(long projectId, long userId) {
+        return new ProjectMembership(null, projectId, userId, ProjectRole.OWNER, clock.instant());
     }
 }

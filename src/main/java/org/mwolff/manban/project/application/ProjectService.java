@@ -1,5 +1,6 @@
 package org.mwolff.manban.project.application;
 
+import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
 import org.mwolff.manban.auth.application.AppUserRepository;
@@ -24,13 +25,15 @@ public class ProjectService {
     private final ProjectMembershipRepository memberships;
     private final PermissionChecker permissions;
     private final AppUserRepository users;
+    private final Clock clock;
 
     public ProjectService(ProjectRepository projects, ProjectMembershipRepository memberships,
-                          PermissionChecker permissions, AppUserRepository users) {
+                          PermissionChecker permissions, AppUserRepository users, Clock clock) {
         this.projects = projects;
         this.memberships = memberships;
         this.permissions = permissions;
         this.users = users;
+        this.clock = clock;
     }
 
     /**
@@ -46,7 +49,7 @@ public class ProjectService {
         AppUser owner = users.findByEmail(ownerEmail.trim())
                 .orElseThrow(() -> new ProjectOwnerNotFoundException(ownerEmail));
 
-        Instant now = Instant.now();
+        Instant now = clock.instant();
         Project project = projects.save(new Project(null, name.trim(), owner.id(), now));
         memberships.save(new ProjectMembership(null, project.id(), owner.id(), ProjectRole.OWNER, now));
         return new ProjectView(project.id(), project.name(), ProjectRole.OWNER, project.createdAt());

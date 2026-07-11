@@ -1,6 +1,6 @@
 package org.mwolff.manban.auth.application;
 
-import java.time.Instant;
+import java.time.Clock;
 import org.mwolff.manban.auth.domain.AppUser;
 import org.mwolff.manban.auth.domain.PasswordResetToken;
 import org.mwolff.manban.common.SecureTokens;
@@ -19,13 +19,15 @@ public class RequestPasswordResetService {
     private final PasswordResetTokenRepository tokens;
     private final PasswordResetMailer mailer;
     private final AuthProperties properties;
+    private final Clock clock;
 
     public RequestPasswordResetService(AppUserRepository users, PasswordResetTokenRepository tokens,
-                                       PasswordResetMailer mailer, AuthProperties properties) {
+                                       PasswordResetMailer mailer, AuthProperties properties, Clock clock) {
         this.users = users;
         this.tokens = tokens;
         this.mailer = mailer;
         this.properties = properties;
+        this.clock = clock;
     }
 
     @Transactional
@@ -40,7 +42,7 @@ public class RequestPasswordResetService {
                 null,
                 user.id(),
                 SecureTokens.sha256Hex(plaintext),
-                Instant.now().plus(properties.resetTtl()),
+                clock.instant().plus(properties.resetTtl()),
                 null));
         String resetUrl = properties.baseUrl() + "/api/auth/reset?token=" + plaintext;
         mailer.sendPasswordResetEmail(user.email(), resetUrl);

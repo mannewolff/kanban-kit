@@ -1,5 +1,6 @@
 package org.mwolff.manban.comment.application;
 
+import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
 import org.mwolff.manban.auth.application.AppUserRepository;
@@ -29,14 +30,16 @@ public class CommentService {
     private final BoardRepository boards;
     private final PermissionChecker permissions;
     private final AppUserRepository users;
+    private final Clock clock;
 
     public CommentService(CommentRepository comments, CardRepository cards, BoardRepository boards,
-                          PermissionChecker permissions, AppUserRepository users) {
+                          PermissionChecker permissions, AppUserRepository users, Clock clock) {
         this.comments = comments;
         this.cards = cards;
         this.boards = boards;
         this.permissions = permissions;
         this.users = users;
+        this.clock = clock;
     }
 
     @Transactional
@@ -44,7 +47,7 @@ public class CommentService {
         long projectId = projectIdOfCard(cardId);
         permissions.require(userId, projectId, Permission.COMMENT_CREATE);
         String authorName = users.findById(userId).map(u -> u.displayName()).orElse("Unbekannt");
-        Instant now = Instant.now();
+        Instant now = clock.instant();
         Comment saved = comments.save(new Comment(null, cardId, userId, authorName, body, now, now));
         return view(saved);
     }

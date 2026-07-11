@@ -1,6 +1,7 @@
 package org.mwolff.manban.attachment.application;
 
 import java.io.InputStream;
+import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -31,10 +32,12 @@ public class AttachmentService {
     private final CardRepository cards;
     private final BoardRepository boards;
     private final PermissionChecker permissions;
+    private final Clock clock;
 
     public AttachmentService(AttachmentRepository attachments, ObjectStorage storage,
                              ContentTypeDetector contentTypeDetector, ObjectStorageProperties properties,
-                             CardRepository cards, BoardRepository boards, PermissionChecker permissions) {
+                             CardRepository cards, BoardRepository boards, PermissionChecker permissions,
+                             Clock clock) {
         this.attachments = attachments;
         this.storage = storage;
         this.contentTypeDetector = contentTypeDetector;
@@ -42,6 +45,7 @@ public class AttachmentService {
         this.cards = cards;
         this.boards = boards;
         this.permissions = permissions;
+        this.clock = clock;
     }
 
     @Transactional
@@ -54,7 +58,7 @@ public class AttachmentService {
         String objectKey = "cards/" + cardId + "/" + UUID.randomUUID();
         storage.put(objectKey, content, contentType);
         Attachment saved = attachments.save(new Attachment(
-                null, cardId, filename, contentType, content.length, objectKey, Instant.now()));
+                null, cardId, filename, contentType, content.length, objectKey, clock.instant()));
         return view(saved);
     }
 

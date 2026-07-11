@@ -1,5 +1,6 @@
 package org.mwolff.manban.accesstoken.application;
 
+import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -30,13 +31,15 @@ public class AccessTokenService {
     private final TokenCryptoPort crypto;
     private final BoardRepository boards;
     private final PermissionChecker permissions;
+    private final Clock clock;
 
     public AccessTokenService(AccessTokenRepository tokens, TokenCryptoPort crypto,
-                              BoardRepository boards, PermissionChecker permissions) {
+                              BoardRepository boards, PermissionChecker permissions, Clock clock) {
         this.tokens = tokens;
         this.crypto = crypto;
         this.boards = boards;
         this.permissions = permissions;
+        this.clock = clock;
     }
 
     /**
@@ -53,7 +56,7 @@ public class AccessTokenService {
         validateBinding(userId, projectId, boardId);
         GeneratedToken generated = crypto.generate();
         AccessToken saved = tokens.save(new AccessToken(
-                null, userId, projectId, boardId, name, generated.hash(), name, Instant.now(), null, false));
+                null, userId, projectId, boardId, name, generated.hash(), name, clock.instant(), null, false));
         return new CreatedAccessToken(saved.id(), saved.name(), generated.plaintext());
     }
 
@@ -104,7 +107,7 @@ public class AccessTokenService {
         return tokens.findByTokenHash(crypto.hash(plaintext))
                 .filter(t -> !t.revoked())
                 .map(t -> {
-                    tokens.save(t.withLastUsedAt(Instant.now()));
+                    tokens.save(t.withLastUsedAt(clock.instant()));
                     return new KanbanPrincipal(t.userId(), t.id(), t.projectId(), t.boardId());
                 });
     }

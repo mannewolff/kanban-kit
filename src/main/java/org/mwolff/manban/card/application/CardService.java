@@ -1,5 +1,6 @@
 package org.mwolff.manban.card.application;
 
+import java.time.Clock;
 import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
@@ -32,14 +33,16 @@ public class CardService {
     private final BoardRepository boards;
     private final BoardColumnRepository columns;
     private final PermissionChecker permissions;
+    private final Clock clock;
 
     public CardService(CardRepository cards, CardDependencyRepository dependencies, BoardRepository boards,
-                       BoardColumnRepository columns, PermissionChecker permissions) {
+                       BoardColumnRepository columns, PermissionChecker permissions, Clock clock) {
         this.cards = cards;
         this.dependencies = dependencies;
         this.boards = boards;
         this.columns = columns;
         this.permissions = permissions;
+        this.clock = clock;
     }
 
     @Transactional
@@ -52,7 +55,7 @@ public class CardService {
 
         int number = cards.maxNumberInBoard(boardId) + 1;
         int position = cards.maxActivePositionInColumn(columnId) + 1;
-        Instant now = Instant.now();
+        Instant now = clock.instant();
         Card saved = cards.save(new Card(null, boardId, columnId, number, title.trim(),
                 normalize(description), position, false, null, userId, now, now,
                 CardType.CARD, effectiveParent, null));
@@ -73,7 +76,7 @@ public class CardService {
                 .id();
 
         int number = cards.maxNumberInBoard(boardId) + 1;
-        Instant now = Instant.now();
+        Instant now = clock.instant();
         Card saved = cards.save(new Card(null, boardId, columnId, number, title.trim(),
                 normalize(description), 0, false, null, userId, now, now,
                 CardType.EPIC, null, trimToNull(shortcode)));
@@ -167,7 +170,7 @@ public class CardService {
         boolean targetIsDone = isDoneColumn(target.name());
         Instant done = card.movedToDoneAt();
         if (targetIsDone && done == null) {
-            done = Instant.now();
+            done = clock.instant();
         } else if (!targetIsDone) {
             done = null;
         }

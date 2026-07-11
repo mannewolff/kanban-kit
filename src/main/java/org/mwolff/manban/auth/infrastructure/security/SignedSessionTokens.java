@@ -2,7 +2,7 @@ package org.mwolff.manban.auth.infrastructure.security;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
-import java.time.Instant;
+import java.time.Clock;
 import java.util.Base64;
 import java.util.OptionalLong;
 import javax.crypto.Mac;
@@ -26,15 +26,17 @@ public class SignedSessionTokens {
 
     private final byte[] secret;
     private final java.time.Duration ttl;
+    private final Clock clock;
 
-    public SignedSessionTokens(AuthProperties properties) {
+    public SignedSessionTokens(AuthProperties properties, Clock clock) {
         this.secret = properties.sessionSecret().getBytes(StandardCharsets.UTF_8);
         this.ttl = properties.sessionTtl();
+        this.clock = clock;
     }
 
     /** Signiertes Token für den Benutzer, gültig für die konfigurierte TTL. */
     public String issue(long userId) {
-        long expiry = Instant.now().plus(ttl).toEpochMilli();
+        long expiry = clock.instant().plus(ttl).toEpochMilli();
         String payload = userId + ":" + expiry;
         String encodedPayload = ENCODER.encodeToString(payload.getBytes(StandardCharsets.UTF_8));
         return encodedPayload + "." + ENCODER.encodeToString(hmac(encodedPayload));
@@ -68,7 +70,7 @@ public class SignedSessionTokens {
             int colon = payload.indexOf(':');
             long userId = Long.parseLong(payload.substring(0, colon));
             long expiry = Long.parseLong(payload.substring(colon + 1));
-            if (Instant.now().toEpochMilli() > expiry) {
+            if (clock.instant().toEpochMilli() > expiry) {
                 return OptionalLong.empty();
             }
             return OptionalLong.of(userId);

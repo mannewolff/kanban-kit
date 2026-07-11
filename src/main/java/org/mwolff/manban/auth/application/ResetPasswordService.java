@@ -1,5 +1,6 @@
 package org.mwolff.manban.auth.application;
 
+import java.time.Clock;
 import java.time.Instant;
 import org.mwolff.manban.auth.domain.AppUser;
 import org.mwolff.manban.auth.domain.PasswordResetToken;
@@ -18,17 +19,19 @@ public class ResetPasswordService {
     private final AppUserRepository users;
     private final PasswordResetTokenRepository tokens;
     private final PasswordEncoder passwordEncoder;
+    private final Clock clock;
 
     public ResetPasswordService(AppUserRepository users, PasswordResetTokenRepository tokens,
-                                PasswordEncoder passwordEncoder) {
+                                PasswordEncoder passwordEncoder, Clock clock) {
         this.users = users;
         this.tokens = tokens;
         this.passwordEncoder = passwordEncoder;
+        this.clock = clock;
     }
 
     @Transactional
     public void reset(String plaintextToken, String newRawPassword) {
-        Instant now = Instant.now();
+        Instant now = clock.instant();
 
         PasswordResetToken token = tokens.findByTokenHash(SecureTokens.sha256Hex(plaintextToken))
                 .orElseThrow(InvalidResetTokenException::new);

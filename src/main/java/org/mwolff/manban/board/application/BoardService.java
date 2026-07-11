@@ -1,5 +1,6 @@
 package org.mwolff.manban.board.application;
 
+import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -28,19 +29,21 @@ public class BoardService {
     private final BoardColumnRepository columns;
     private final ColumnCardCounter cardCounter;
     private final PermissionChecker permissions;
+    private final Clock clock;
 
     public BoardService(BoardRepository boards, BoardColumnRepository columns,
-                        ColumnCardCounter cardCounter, PermissionChecker permissions) {
+                        ColumnCardCounter cardCounter, PermissionChecker permissions, Clock clock) {
         this.boards = boards;
         this.columns = columns;
         this.cardCounter = cardCounter;
         this.permissions = permissions;
+        this.clock = clock;
     }
 
     @Transactional
     public BoardView createBoard(long userId, long projectId, String name) {
         permissions.require(userId, projectId, Permission.BOARD_CREATE);
-        Board board = boards.save(new Board(null, projectId, name.trim(), Instant.now()));
+        Board board = boards.save(new Board(null, projectId, name.trim(), clock.instant()));
         for (int i = 0; i < DEFAULT_COLUMNS.size(); i++) {
             columns.save(new BoardColumn(null, board.id(), DEFAULT_COLUMNS.get(i), i, null));
         }

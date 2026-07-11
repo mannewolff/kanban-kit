@@ -1,5 +1,6 @@
 package org.mwolff.manban.auth.application;
 
+import java.time.Clock;
 import java.time.Instant;
 import org.mwolff.manban.auth.domain.AppUser;
 import org.mwolff.manban.auth.domain.EmailVerificationToken;
@@ -16,15 +17,17 @@ public class VerifyEmailService {
 
     private final AppUserRepository users;
     private final EmailVerificationTokenRepository tokens;
+    private final Clock clock;
 
-    public VerifyEmailService(AppUserRepository users, EmailVerificationTokenRepository tokens) {
+    public VerifyEmailService(AppUserRepository users, EmailVerificationTokenRepository tokens, Clock clock) {
         this.users = users;
         this.tokens = tokens;
+        this.clock = clock;
     }
 
     @Transactional
     public void verify(String plaintextToken) {
-        Instant now = Instant.now();
+        Instant now = clock.instant();
 
         EmailVerificationToken token = tokens.findByTokenHash(SecureTokens.sha256Hex(plaintextToken))
                 .orElseThrow(InvalidVerificationTokenException::new);
