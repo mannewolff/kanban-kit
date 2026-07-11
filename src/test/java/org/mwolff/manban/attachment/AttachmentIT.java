@@ -13,42 +13,29 @@ import jakarta.servlet.http.Cookie;
 import java.nio.charset.StandardCharsets;
 import org.assertj.core.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.mwolff.manban.AbstractIntegrationTest;
 import org.mwolff.manban.auth.application.AppUserRepository;
 import org.mwolff.manban.auth.domain.AppUser;
 import org.mwolff.manban.auth.domain.PlatformRole;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
-import org.testcontainers.containers.MinIOContainer;
-import org.testcontainers.containers.PostgreSQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
 
 /** End-to-End-Test für Anhänge gegen echtes Postgres + MinIO (Testcontainers). */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK)
 @AutoConfigureMockMvc
-@Testcontainers
-class AttachmentIT {
-
-  @Container @ServiceConnection
-  static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16");
-
-  @Container static final MinIOContainer MINIO = new MinIOContainer("minio/minio");
+class AttachmentIT extends AbstractIntegrationTest {
 
   private static final String PASSWORD = "sup3r-secret";
 
+  /** Kleines Limit, damit der Limit-Test (perCardLimitIsEnforced) günstig bleibt. */
   @DynamicPropertySource
-  static void storageProperties(DynamicPropertyRegistry registry) {
-    registry.add("manban.storage.endpoint", MINIO::getS3URL);
-    registry.add("manban.storage.access-key", MINIO::getUserName);
-    registry.add("manban.storage.secret-key", MINIO::getPassword);
-    registry.add("manban.storage.bucket", () -> "manban-test");
-    registry.add("manban.storage.max-per-card", () -> "2"); // günstiger Limit-Test
+  static void attachmentLimit(DynamicPropertyRegistry registry) {
+    registry.add("manban.storage.max-per-card", () -> "2");
   }
 
   @Autowired private MockMvc mvc;

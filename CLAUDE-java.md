@@ -195,7 +195,7 @@ Wenn 100 % unmöglich erscheinen, lautet die Antwort **nicht** „Schwellwert se
 ### 6.4 Datenbank
 
 - Schemamigrationen ausschließlich über **Flyway**. Niemals `hibernate.ddl-auto=update/create` außerhalb von Tests. In Produktion: `validate`.
-- Integrationstests verwenden **dieselbe DB-Engine** wie Produktion (PostgreSQL via Testcontainers, `@Container @ServiceConnection` — derzeit je Testklasse ein eigener Container; die Umstellung auf eine geteilte Singleton-Instanz ist als eigenes Issue geplant).
+- Integrationstests verwenden **dieselbe DB-Engine** wie Produktion (PostgreSQL via Testcontainers). Alle `*IT` erben von `AbstractIntegrationTest`: **eine** geteilte Postgres-/MinIO-Singleton-Instanz für die ganze Suite (`@ServiceConnection`, Start im statischen Initialisierer — bewusst ohne `@Container`, die JUnit-Extension würde pro Klasse stoppen). Datenisolation: vor jeder Testmethode werden alle Fachtabellen geleert (Seed-Tabellen `permission`/`role_permission` bleiben).
 - Repository-Tests prüfen tatsächliche SQL-Ausführung, nicht nur Spring-Data-Methodennamen.
 - **Prepared Statements / Parameter-Bindung** ist Pflicht. Niemals Benutzereingaben in JPQL/SQL konkatenieren. Siehe [CLAUDE-security.md](CLAUDE-security.md).
 
