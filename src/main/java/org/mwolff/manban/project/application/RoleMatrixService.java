@@ -5,6 +5,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import org.mwolff.manban.common.ExcludeFromJacocoGeneratedReport;
 import org.mwolff.manban.project.domain.Permission;
 import org.mwolff.manban.project.domain.ProjectRole;
 import org.springframework.stereotype.Service;
@@ -48,7 +49,16 @@ public class RoleMatrixService {
         return new RoleMatrixView(roles, permissions, grants);
     }
 
-    /** Leitet Ressource + Operation aus dem Permission-Key ab ({@code <RESSOURCE>_<OPERATION>}). */
+    /**
+     * Leitet Ressource + Operation aus dem Permission-Key ab ({@code <RESSOURCE>_<OPERATION>}).
+     *
+     * <p>Der {@code : ""}-Zweig fängt einen Permission-Key ohne {@code _} ab. Alle definierten
+     * {@link Permission}-Werte folgen der Konvention {@code <RESSOURCE>_<OPERATION>}, sodass
+     * {@code split} stets zwei Teile liefert; der Fallback ist damit ein nachweislich nicht
+     * erreichbarer, aber bewusst behaltener Schutz gegen künftige einteilige Keys. Deshalb von
+     * der Coverage ausgenommen (CLAUDE-java.md §5.4, Punkt 3) statt entfernt (Robustheit).
+     */
+    @ExcludeFromJacocoGeneratedReport
     private static PermissionView toView(Permission permission) {
         String[] parts = permission.name().split("_", 2);
         return new PermissionView(permission.name(), parts[0], parts.length > 1 ? parts[1] : "");

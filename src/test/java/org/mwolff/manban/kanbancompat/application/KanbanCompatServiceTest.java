@@ -128,6 +128,23 @@ class KanbanCompatServiceTest {
     }
 
     @Test
+    void items_marksEpicItemsAsEpicType() {
+        // Given: ein Epic auf dem Board
+        Card epic = new Card(3L, BOARD, 100L, 3, "E", "body", 0, false, null, 1L, FIXED, FIXED,
+                CardType.EPIC, null, "E");
+        when(boards.findById(BOARD)).thenReturn(Optional.of(new Board(BOARD, 5L, "B", FIXED)));
+        when(columns.findByBoardId(BOARD)).thenReturn(standardColumns());
+        when(cards.findByBoardId(BOARD)).thenReturn(List.of(epic));
+
+        // When
+        Map<String, List<KanbanCompatService.Item>> grouped = service.items(bound());
+
+        // Then
+        assertThat(grouped.get("BACKLOG")).singleElement()
+                .extracting(KanbanCompatService.Item::type).isEqualTo("epic");
+    }
+
+    @Test
     void items_throwsTokenNotBound_whenPrincipalUnbound() {
         // Given
         KanbanPrincipal unbound = new KanbanPrincipal(1L, 2L, null, null);
@@ -158,12 +175,37 @@ class KanbanCompatServiceTest {
     }
 
     @Test
+    void create_defaultsToBacklog_whenColumnBlank() {
+        // Given: leerer (blank) Spalten-Parameter -> BACKLOG
+        when(columns.findByBoardId(BOARD)).thenReturn(standardColumns());
+        when(cardService.create(eq(1L), eq(BOARD), eq(100L), eq("Titel"), eq("Body"), isNull(), isNull()))
+                .thenReturn(new CardView(1L, BOARD, 100L, 7, "Titel", "Body", 0, false, null, List.of(),
+                        CardType.CARD, null, null));
+
+        // When
+        KanbanCompatService.Created created = service.create(bound(), "Titel", "Body", "   ");
+
+        // Then
+        assertThat(created.number()).isEqualTo(7);
+    }
+
+    @Test
     void create_throwsInvalidKanbanColumn_whenColumnKeyUnknown() {
         // Given
         when(columns.findByBoardId(BOARD)).thenReturn(standardColumns());
 
         // When / Then
         assertThatThrownBy(() -> service.create(bound(), "Titel", "Body", "NOPE"))
+                .isInstanceOf(InvalidKanbanColumnException.class);
+    }
+
+    @Test
+    void create_throwsInvalidKanbanColumn_whenBoardHasNoColumnForKey() {
+        // Given: gültiger Kanban-Key, aber das Board hat keine passende Spalte
+        when(columns.findByBoardId(BOARD)).thenReturn(List.of(new BoardColumn(100L, BOARD, "Backlog", 0, null)));
+
+        // When / Then
+        assertThatThrownBy(() -> service.create(bound(), "Titel", "Body", "DONE"))
                 .isInstanceOf(InvalidKanbanColumnException.class);
     }
 
@@ -190,6 +232,16 @@ class KanbanCompatServiceTest {
         // When / Then
         assertThatThrownBy(() -> service.move(bound(), 1L, "DONE", 0))
                 .isInstanceOf(org.mwolff.manban.card.application.CardNotFoundException.class);
+    }
+
+    @Test
+    void move_throwsInvalidKanbanColumn_whenColumnNull() {
+        // Given: Karte liegt auf dem Board, aber die Ziel-Spalte ist null
+        when(cards.findById(1L)).thenReturn(Optional.of(card(1L, 100L, 1)));
+
+        // When / Then
+        assertThatThrownBy(() -> service.move(bound(), 1L, null, 0))
+                .isInstanceOf(InvalidKanbanColumnException.class);
     }
 
     @Test

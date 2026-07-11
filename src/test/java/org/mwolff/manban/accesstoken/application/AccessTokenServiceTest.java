@@ -104,6 +104,13 @@ class AccessTokenServiceTest {
     }
 
     @Test
+    void create_throwsInvalidBinding_whenOnlyProjectIdSet() {
+        // When / Then: projectId gesetzt, boardId fehlt -> unschlüssige Bindung
+        assertThatThrownBy(() -> service.create(1L, "CI", 5L, null))
+                .isInstanceOf(InvalidTokenBindingException.class);
+    }
+
+    @Test
     void create_throwsInvalidBinding_whenBoardUnknown() {
         // Given
         when(boards.findById(20L)).thenReturn(Optional.empty());

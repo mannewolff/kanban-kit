@@ -36,4 +36,20 @@ class DoneRetentionJobTest {
         verify(retention).archiveExpiredDoneCards(captor.capture(), anyInt());
         assertThat(captor.getValue()).isEqualTo(FIXED);
     }
+
+    @Test
+    void run_delegatesRetentionDays_whenCardsArchived() {
+        // Given: die Retention meldet archivierte Karten (> 0) -> Log-Zweig wird betreten
+        DoneRetentionService retention = mock(DoneRetentionService.class);
+        CleanupProperties properties = new CleanupProperties(true, 30, null);
+        Clock clock = Clock.fixed(FIXED, ZoneOffset.UTC);
+        when(retention.archiveExpiredDoneCards(FIXED, 30)).thenReturn(5);
+        DoneRetentionJob job = new DoneRetentionJob(retention, properties, clock);
+
+        // When
+        job.run();
+
+        // Then
+        verify(retention).archiveExpiredDoneCards(FIXED, 30);
+    }
 }

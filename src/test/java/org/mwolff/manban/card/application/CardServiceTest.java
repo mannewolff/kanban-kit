@@ -591,4 +591,137 @@ class CardServiceTest {
         // Then
         verify(permissions).require(eq(1L), eq(1L), eq(Permission.TICKET_DELETE));
     }
+
+    // --- Randfälle: Zweigabdeckung ---------------------------------------
+
+    @Test
+    void listEpics_ignoresArchivedChildrenAndForeignChildren() {
+        // Given: ein Epic mit einem gezählten Kind, einem archivierten Kind und einem fremden Kind
+        when(columns.findByBoardId(BOARD)).thenReturn(List.of(column(20L, "Backlog", 0), column(21L, "Done", 1)));
+        when(cards.findByBoardId(BOARD)).thenReturn(List.of(
+                card(5L, 20L, 1, false, null, CardType.EPIC, null, "E"),
+                card(6L, 20L, 2, false, null, CardType.CARD, 5L, null),
+                card(7L, 20L, 3, true, null, CardType.CARD, 5L, null),
+                card(8L, 20L, 4, false, null, CardType.CARD, 99L, null)));
+
+        // When
+        List<CardService.EpicView> result = service.listEpics(1L, BOARD);
+
+        // Then: nur das nicht-archivierte, zugehörige Kind zählt
+        assertThat(result).singleElement().extracting(CardService.EpicView::total).isEqualTo(1);
+    }
+
+    @Test
+    void assignParent_clearsParent_whenParentNull() {
+        // Given
+        when(cards.findById(1L)).thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, 30L, null)));
+
+        // When
+        ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
+        service.assignParent(1L, 1L, null);
+
+        // Then
+        verify(cards).save(captor.capture());
+        assertThat(captor.getValue().parentId()).isNull();
+    }
+
+    @Test
+    void create_throwsInvalidDependency_whenParentEpicOnOtherBoard() {
+        // Given: Parent ist ein Epic, liegt aber auf einem anderen Board
+        when(columns.findById(20L)).thenReturn(Optional.of(column(20L, "Backlog", 0)));
+        Card epicOtherBoard = new Card(30L, 99L, 20L, 5, "Epic", null, 0, false, null, 1L, FIXED, FIXED,
+                CardType.EPIC, null, "E");
+        when(cards.findById(30L)).thenReturn(Optional.of(epicOtherBoard));
+
+        // When / Then
+        assertThatThrownBy(() -> service.create(1L, BOARD, 20L, "Titel", null, null, 30L))
+                .isInstanceOf(InvalidDependencyException.class);
+    }
+
+    @Test
+    void create_clearsDependencies_whenEmptyList() {
+        // Given
+        when(columns.findById(20L)).thenReturn(Optional.of(column(20L, "Backlog", 0)));
+
+        // When
+        service.create(1L, BOARD, 20L, "Titel", null, List.of(), null);
+
+        // Then
+        verify(dependencies).replaceDependencies(1L, List.of());
+    }
+
+    @Test
+    void create_normalizesBlankDescriptionToNull() {
+        // Given
+        when(columns.findById(20L)).thenReturn(Optional.of(column(20L, "Backlog", 0)));
+
+        // When
+        ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
+        service.create(1L, BOARD, 20L, "Titel", "   ", null, null);
+
+        // Then
+        verify(cards).save(captor.capture());
+        assertThat(captor.getValue().description()).isNull();
+    }
+
+    @Test
+    void create_keepsNonBlankDescription() {
+        // Given
+        when(columns.findById(20L)).thenReturn(Optional.of(column(20L, "Backlog", 0)));
+
+        // When
+        ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
+        service.create(1L, BOARD, 20L, "Titel", "Beschreibung", null, null);
+
+        // Then
+        verify(cards).save(captor.capture());
+        assertThat(captor.getValue().description()).isEqualTo("Beschreibung");
+    }
+
+    @Test
+    void createEpic_allowsNullShortcode() {
+        // Given
+        when(columns.findByBoardId(BOARD)).thenReturn(List.of(column(20L, "Backlog", 0)));
+
+        // When
+        ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
+        service.createEpic(1L, BOARD, "Epic", null, null);
+
+        // Then
+        verify(cards).save(captor.capture());
+        assertThat(captor.getValue().shortcode()).isNull();
+    }
+
+    @Test
+    void move_keepsMovedToDoneAt_whenStayingInDoneColumn() {
+        // Given: Karte ist bereits "done" und wechselt in eine andere Done-Spalte
+        Instant earlier = FIXED.minusSeconds(10);
+        Card before = card(1L, 104L, 1, false, earlier, CardType.CARD, null, null);
+        when(cards.findById(1L)).thenReturn(Optional.of(before));
+        when(columns.findById(21L)).thenReturn(Optional.of(column(21L, "Done", 4)));
+
+        // When
+        ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
+        service.move(1L, 1L, 21L, 0);
+
+        // Then: der ursprüngliche Done-Zeitpunkt bleibt erhalten
+        verify(cards).save(captor.capture());
+        assertThat(captor.getValue().movedToDoneAt()).isEqualTo(earlier);
+    }
+
+    @Test
+    void move_treatsNullColumnNameAsNotDone() {
+        // Given: Ziel-Spalte ohne Namen -> gilt nicht als Done
+        Card before = card(1L, 20L, 1, false, null, CardType.CARD, null, null);
+        when(cards.findById(1L)).thenReturn(Optional.of(before));
+        when(columns.findById(22L)).thenReturn(Optional.of(column(22L, null, 5)));
+
+        // When
+        ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
+        service.move(1L, 1L, 22L, 0);
+
+        // Then
+        verify(cards).save(captor.capture());
+        assertThat(captor.getValue().movedToDoneAt()).isNull();
+    }
 }

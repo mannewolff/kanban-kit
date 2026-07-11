@@ -40,6 +40,26 @@ class BootstrapServiceTest {
     }
 
     @Test
+    void rejectsBlankConfiguredToken() {
+        AppUserRepository users = mock(AppUserRepository.class);
+        when(users.findAll()).thenReturn(List.of(user(1, PlatformRole.USER)));
+        BootstrapService svc = new BootstrapService(users, new BootstrapProperties("   "));
+
+        assertThatThrownBy(() -> svc.bootstrap(1, "irgendwas"))
+                .isInstanceOf(InvalidBootstrapTokenException.class);
+    }
+
+    @Test
+    void rejectsNullToken() {
+        AppUserRepository users = mock(AppUserRepository.class);
+        when(users.findAll()).thenReturn(List.of(user(1, PlatformRole.USER)));
+        BootstrapService svc = new BootstrapService(users, new BootstrapProperties("secret"));
+
+        assertThatThrownBy(() -> svc.bootstrap(1, null))
+                .isInstanceOf(InvalidBootstrapTokenException.class);
+    }
+
+    @Test
     void inertWhenAdminExists() {
         AppUserRepository users = mock(AppUserRepository.class);
         when(users.findAll()).thenReturn(List.of(user(1, PlatformRole.ADMIN)));

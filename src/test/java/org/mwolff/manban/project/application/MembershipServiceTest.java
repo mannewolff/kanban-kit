@@ -295,10 +295,78 @@ class MembershipServiceTest {
     }
 
     @Test
+    void changeRole_demotesOwner_whenAnotherOwnerRemains() {
+        // Given: mehrere OWNER (neben einem MEMBER) -> Degradierung erlaubt, Filter trifft auch Nicht-OWNER
+        when(memberships.findByProjectIdAndUserId(9L, 2L))
+                .thenReturn(Optional.of(membership(2L, ProjectRole.OWNER)));
+        when(memberships.findByProjectId(9L)).thenReturn(List.of(
+                membership(2L, ProjectRole.OWNER),
+                membership(5L, ProjectRole.OWNER),
+                membership(7L, ProjectRole.MEMBER)));
+        when(memberships.save(any(ProjectMembership.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        // When
+        ArgumentCaptor<ProjectMembership> captor = ArgumentCaptor.forClass(ProjectMembership.class);
+        service.changeRole(1L, 9L, 2L, ProjectRole.MEMBER);
+
+        // Then
+        verify(memberships).save(captor.capture());
+        assertThat(captor.getValue().role()).isEqualTo(ProjectRole.MEMBER);
+    }
+
+    @Test
+    void changeRole_demotesOwner_whenSoleOwnerIsDifferentUser() {
+        // Given: genau ein OWNER, aber nicht das Ziel -> Ziel ist nicht der letzte OWNER
+        when(memberships.findByProjectIdAndUserId(9L, 2L))
+                .thenReturn(Optional.of(membership(2L, ProjectRole.OWNER)));
+        when(memberships.findByProjectId(9L)).thenReturn(List.of(membership(5L, ProjectRole.OWNER)));
+        when(memberships.save(any(ProjectMembership.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        // When
+        ArgumentCaptor<ProjectMembership> captor = ArgumentCaptor.forClass(ProjectMembership.class);
+        service.changeRole(1L, 9L, 2L, ProjectRole.MEMBER);
+
+        // Then
+        verify(memberships).save(captor.capture());
+        assertThat(captor.getValue().role()).isEqualTo(ProjectRole.MEMBER);
+    }
+
+    @Test
+    void changeRole_keepsOwner_whenNewRoleAlsoOwner() {
+        // Given: OWNER bleibt OWNER -> Aussperr-Schutz greift nicht (zweite Bedingung false)
+        when(memberships.findByProjectIdAndUserId(9L, 2L))
+                .thenReturn(Optional.of(membership(2L, ProjectRole.OWNER)));
+        when(memberships.save(any(ProjectMembership.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        // When
+        ArgumentCaptor<ProjectMembership> captor = ArgumentCaptor.forClass(ProjectMembership.class);
+        service.changeRole(1L, 9L, 2L, ProjectRole.OWNER);
+
+        // Then
+        verify(memberships).save(captor.capture());
+        assertThat(captor.getValue().role()).isEqualTo(ProjectRole.OWNER);
+    }
+
+    @Test
     void removeMember_deletesMembership() {
         // Given
         when(memberships.findByProjectIdAndUserId(9L, 2L))
                 .thenReturn(Optional.of(membership(2L, ProjectRole.MEMBER)));
+
+        // When
+        service.removeMember(1L, 9L, 2L);
+
+        // Then
+        verify(memberships).deleteById(3L);
+    }
+
+    @Test
+    void removeMember_removesOwner_whenAnotherOwnerRemains() {
+        // Given: OWNER, aber nicht der letzte -> Entfernen erlaubt
+        when(memberships.findByProjectIdAndUserId(9L, 2L))
+                .thenReturn(Optional.of(membership(2L, ProjectRole.OWNER)));
+        when(memberships.findByProjectId(9L)).thenReturn(List.of(
+                membership(2L, ProjectRole.OWNER), membership(5L, ProjectRole.OWNER)));
 
         // When
         service.removeMember(1L, 9L, 2L);

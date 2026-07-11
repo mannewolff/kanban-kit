@@ -133,6 +133,36 @@ class AdminServiceTest {
     }
 
     @Test
+    void changePlatformRole_keepsAdmin_whenNewRoleAlsoAdmin() {
+        // Given: Ziel ist Admin, neue Rolle ist ebenfalls Admin -> kein Aussperr-Schutz nötig
+        when(users.findById(1L)).thenReturn(Optional.of(user(1, PlatformRole.ADMIN)));
+        when(users.findById(2L)).thenReturn(Optional.of(user(2, PlatformRole.ADMIN)));
+        when(users.save(any(AppUser.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        // When
+        AdminService.UserView view = service.changePlatformRole(1L, 2L, PlatformRole.ADMIN);
+
+        // Then
+        assertThat(view.platformRole()).isEqualTo(PlatformRole.ADMIN);
+    }
+
+    @Test
+    void changePlatformRole_demotesAdmin_whenAnotherAdminAmongNonAdmins() {
+        // Given: mehrere Admins (neben Nicht-Admins) -> Degradierung erlaubt
+        when(users.findById(1L)).thenReturn(Optional.of(user(1, PlatformRole.ADMIN)));
+        when(users.findById(2L)).thenReturn(Optional.of(user(2, PlatformRole.ADMIN)));
+        when(users.findAll()).thenReturn(List.of(
+                user(1, PlatformRole.ADMIN), user(2, PlatformRole.ADMIN), user(3, PlatformRole.USER)));
+        when(users.save(any(AppUser.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        // When
+        AdminService.UserView view = service.changePlatformRole(1L, 2L, PlatformRole.USER);
+
+        // Then
+        assertThat(view.platformRole()).isEqualTo(PlatformRole.USER);
+    }
+
+    @Test
     void changePlatformRole_throwsLastAdmin_whenDemotingSoleAdmin() {
         // Given
         when(users.findById(2L)).thenReturn(Optional.of(user(2, PlatformRole.ADMIN)));
