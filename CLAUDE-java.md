@@ -190,7 +190,7 @@ Wenn 100 % unmöglich erscheinen, lautet die Antwort **nicht** „Schwellwert se
 - **Keine Geschäftslogik in Controllern.** Controller validieren, delegieren, mappen Statuscodes — mehr nicht.
 - **Transaktionsgrenzen** in der Application-Schicht (`@Transactional` auf Use-Case-Klassen), nicht auf Repositories oder Controllern.
 - **Konfiguration über `@ConfigurationProperties`-Records** mit Bean Validation (`@Validated`).
-- **Fehlerbehandlung nach außen:** derzeit über `@ResponseStatus`-annotierte Domänenexceptions (je Modul), keine Stacktraces nach außen. Zielbild ist ein globaler `@RestControllerAdvice` mit RFC-9457 Problem Details (`ProblemDetail`) — als eigenes Issue geplant; sobald er existiert, ist er die einzige Stelle für Fehler-Mapping.
+- **Fehlerbehandlung nach außen:** zentral im globalen `@RestControllerAdvice` [`GlobalExceptionHandler`](src/main/java/org/mwolff/manban/common/web/GlobalExceptionHandler.java) — die einzige Stelle für Fehler-Mapping. Er mappt die `@ResponseStatus`-annotierten Domänenexceptions (Statuscode generisch aus der Annotation) und Bean-Validation-Fehler (400 + `fieldErrors`-Extension) auf RFC-9457 Problem Details (`ProblemDetail`, `application/problem+json`); unerwartete Fehler ergeben 500 mit generischem `detail` — keine Stacktraces/internen Details nach außen.
 
 ### 6.4 Datenbank
 
