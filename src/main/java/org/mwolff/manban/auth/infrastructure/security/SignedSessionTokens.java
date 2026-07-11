@@ -17,6 +17,11 @@ import org.springframework.stereotype.Component;
  * <p>Kein Server-Session-Store nötig; die Gültigkeit ergibt sich aus Signatur + Ablauf. Der
  * Signaturschlüssel muss über Neustarts/Instanzen stabil sein (siehe AuthProperties).
  */
+// PMD.AvoidCatchingGenericException: (1) beim Verifizieren wird jede RuntimeException eines
+// manipulierten Tokens bewusst als "ungültig" (leeres Ergebnis) behandelt, ohne Details zu leaken;
+// (2) die HMAC-Berechnung bündelt die geprüften JCA-Ausnahmen (NoSuchAlgorithm/InvalidKey) für den
+// garantiert vorhandenen HmacSHA256-Provider zu IllegalStateException. Beides ist Krypto-Plumbing.
+@SuppressWarnings("PMD.AvoidCatchingGenericException")
 @Component
 public class SignedSessionTokens {
 

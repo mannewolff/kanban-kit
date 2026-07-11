@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ruleset name="manban"
+         xmlns="http://pmd.sourceforge.net/ruleset/2.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://pmd.sourceforge.net/ruleset/2.0.0
+                             https://pmd.sourceforge.io/ruleset_2_0_0.xsd">
+
+  <description>
+    manban PMD-Regelset (CLAUDE-java.md §7), kalibriert für PMD 7.
+
+    Bewusst kuratiert aus drei PMD-Kategorien (keine Pauschal-„alle Regeln"):
+      * category/java/bestpractices.xml — solide Java-Praxis.
+      * category/java/errorprone.xml    — echte Bug-Muster; bewusst SCHARF gelassen (zweiter
+                                          Bug-Finder neben SpotBugs/Error Prone). Nur eine Regel
+                                          deaktiviert, s. u.
+      * category/java/design.xml        — Komplexitäts-/Kopplungssignale; Schwellen projekt-
+                                          kalibriert statt Regeln pauschal abzuschalten.
+
+    NICHT aufgenommen: codestyle (Formatierung/Naming decken Spotless + Checkstyle bereits ab —
+    doppelte/gegenläufige Meldungen vermeiden), documentation (Javadoc-Politik s. Checkstyle),
+    multithreading/performance (für diese CRUD-Anwendung wenig aussagekräftig, hohe
+    Fehlalarmquote). Jede einzelne Regel-Deaktivierung bzw. Schwellen-Anpassung ist unten begründet.
+  </description>
+
+  <!-- ================= Best Practices ================= -->
+  <rule ref="category/java/bestpractices.xml">
+    <!-- AssertJ-basierte Tests: PMDs Assert-Heuristik erkennt fluent assertThat(...) nur
+         eingeschränkt und ist an JUnit-Assert/JUnit4 orientiert. §3.3 erlaubt zudem bewusst
+         mehrere assertThat, die denselben Aspekt prüfen. -->
+    <exclude name="UnitTestShouldIncludeAssert"/>
+    <exclude name="UnitTestContainsTooManyAsserts"/>
+    <exclude name="UnitTestAssertionsShouldIncludeMessage"/>
+    <!-- Loggerdisziplin ist in §6.5 geregelt; GuardLogStatement ist eine Performance-Mikro-
+         optimierung mit hoher Rauschquote. -->
+    <exclude name="GuardLogStatement"/>
+  </rule>
+
+  <!-- ================= Error Prone (Bug-Finder, bewusst scharf) ================= -->
+  <rule ref="category/java/errorprone.xml">
+    <!-- Deaktiviert: Domänen-Exceptions (RuntimeException-Ableitungen) werden in dieser Anwendung
+         nirgends serialisiert (kein RMI, keine Session-Serialisierung von Exceptions). Ein
+         serialVersionUID an ~30 Exceptions wäre toter Ballast und widerspräche YAGNI (§6.2); der
+         Google-Stil vergibt es ebenfalls nicht. -->
+    <exclude name="MissingSerialVersionUID"/>
+    <!-- Deaktiviert: null wird bewusst zugewiesen, um nullbare Domänen-Zeitstempel zu löschen
+         (z. B. movedToDoneAt beim Verlassen der Done-Spalte) und um Test-Fakes zurückzusetzen.
+         §6.2 verbietet null nur für Rückgabewerte/Parameter, nicht für das Leeren nullbarer
+         lokaler Zustände. Echte NPE-Risiken fängt SpotBugs/Error Prone. -->
+    <exclude name="NullAssignment"/>
+    <!-- Deaktiviert: praktisch alle Treffer sind wiederholte, absichtliche Fixture-/Protokoll-
+         Literale (Test-E-Mails, JSON-Fragmente, Kanban-Spalten-Keys). Konstanten-Extraktion
+         würde die Lesbarkeit/Lokalität der Tests verschlechtern; geringer Signalwert. -->
+    <exclude name="AvoidDuplicateLiterals"/>
+    <!-- Übrige Error-Prone-Regeln bleiben scharf. -->
+  </rule>
+
+  <!-- ================= Design ================= -->
+  <rule ref="category/java/design.xml">
+    <!-- JUnit-Testmethoden und die Spring-SecurityFilterChain deklarieren konventionsgemäß
+         `throws Exception`. Die Regel ist hier reines Rauschen. -->
+    <exclude name="SignatureDeclareThrowsException"/>
+    <!-- LawOfDemeter kollidiert fundamental mit dem Stream-/Fluent-Stil (Optional.map(...),
+         Stream-Ketten) und erzeugt flächendeckend Fehlalarme — projektweit deaktiviert. -->
+    <exclude name="LawOfDemeter"/>
+    <!-- Konstruktor-DI (§6.3) erzeugt naturgemäß parameterreiche Service-Konstruktoren. -->
+    <exclude name="ExcessiveParameterList"/>
+    <!-- Domänen-Records/DTOs sind bewusst reine Datenklassen (§6.2). -->
+    <exclude name="DataClass"/>
+    <!-- Braucht projekt­spezifische Paketpaare als Konfiguration; ohne die nur Fehlalarme. -->
+    <exclude name="LoosePackageCoupling"/>
+    <!-- SingularField trifft nur Mockito-Testfixtures (Kollaborateure als Felder, teils nur im
+         @BeforeEach zum Aufbau des SUT genutzt) — etabliertes, lesbares Testmuster. -->
+    <exclude name="SingularField"/>
+    <!-- Schwellen unten projektkalibriert re-referenziert (statt Regel abzuschalten). -->
+    <exclude name="TooManyMethods"/>
+    <exclude name="CyclomaticComplexity"/>
+    <exclude name="ExcessiveImports"/>
+  </rule>
+
+  <!-- Use-Case-reiche Services/Controller und methodenreiche Testsuiten (viele kleine @Test)
+       sind hier normal. Schwelle angehoben, damit die Regel nur echte Monolithen meldet. -->
+  <rule ref="category/java/design.xml/TooManyMethods">
+    <properties>
+      <property name="maxmethods" value="30"/>
+    </properties>
+  </rule>
+  <!-- Guard-Clause-lastige Validierungsmethoden liegen knapp über 10; leicht angehoben. -->
+  <rule ref="category/java/design.xml/CyclomaticComplexity">
+    <properties>
+      <property name="methodReportLevel" value="12"/>
+    </properties>
+  </rule>
+  <!-- MockMvc-Integrationstests ziehen viele statische Importe; Schwelle für Tests angehoben. -->
+  <rule ref="category/java/design.xml/ExcessiveImports">
+    <properties>
+      <property name="minimum" value="40"/>
+    </properties>
+  </rule>
+
+</ruleset>

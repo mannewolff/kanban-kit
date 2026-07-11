@@ -15,6 +15,9 @@ import org.springframework.scheduling.annotation.EnableScheduling;
  * <p>{@code UserDetailsServiceAutoConfiguration} ist ausgeschlossen: manban nutzt eigene
  * Cookie-basierte Auth, kein In-Memory-Default-User mit generiertem Passwort.
  */
+// PMD.UseUtilityClass: Spring-Boot-Einstiegspunkt — die Klasse muss von Spring als
+// Konfigurationsklasse instanziierbar sein und darf keinen privaten Konstruktor haben.
+@SuppressWarnings("PMD.UseUtilityClass")
 @SpringBootApplication(exclude = UserDetailsServiceAutoConfiguration.class)
 @ConfigurationPropertiesScan
 @EnableScheduling

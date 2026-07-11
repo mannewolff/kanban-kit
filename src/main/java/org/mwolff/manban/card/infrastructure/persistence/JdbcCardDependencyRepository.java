@@ -32,7 +32,8 @@ class JdbcCardDependencyRepository implements CardDependencyRepository {
   @Override
   public List<Integer> findByCardId(long cardId) {
     return jdbc.queryForList(
-        "SELECT depends_on_card_number FROM card_dependency WHERE card_id = ? ORDER BY depends_on_card_number",
+        "SELECT depends_on_card_number FROM card_dependency WHERE card_id = ? "
+            + "ORDER BY depends_on_card_number",
         Integer.class,
         cardId);
   }

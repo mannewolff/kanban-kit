@@ -24,6 +24,14 @@
         <skip.frontend>false</skip.frontend>
         <node.version>v22.11.0</node.version>
         <frontend-maven-plugin.version>1.15.1</frontend-maven-plugin.version>
+
+        <!-- Statische Analyse (CLAUDE-java.md §7). Regelsets versioniert unter config/. -->
+        <maven-checkstyle-plugin.version>3.6.0</maven-checkstyle-plugin.version>
+        <checkstyle.version>10.21.4</checkstyle.version>
+        <maven-pmd-plugin.version>3.26.0</maven-pmd-plugin.version>
+        <pmd.version>7.10.0</pmd.version>
+        <spotbugs-maven-plugin.version>4.8.6.6</spotbugs-maven-plugin.version>
+        <error-prone.version>2.36.0</error-prone.version>
     </properties>
 
     <dependencies>
@@ -116,6 +124,14 @@
             <scope>test</scope>
         </dependency>
 
+        <!-- SpotBugs-Annotationen (@SuppressFBWarnings) für gezielte, begründete Ausnahmen. -->
+        <dependency>
+            <groupId>com.github.spotbugs</groupId>
+            <artifactId>spotbugs-annotations</artifactId>
+            <version>4.8.6</version>
+            <scope>provided</scope>
+        </dependency>
+
         <!-- Architekturtests: erzwingen Schichtentrennung und Paketregeln (CLAUDE-java.md §3.1/§6.1/§6.5). -->
         <dependency>
             <groupId>com.tngtech.archunit</groupId>
@@ -131,6 +147,46 @@
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+
+            <!-- Error Prone (CLAUDE-java.md §7): Bug-Finder, der als javac-Plugin mitläuft und
+                 bewusst SCHARF bleibt. Echte Findings werden behoben, nicht unterdrückt.
+                 JDK 21: Error Prone braucht Zugriff auf javac-Interna, daher fork=true plus die
+                 add-exports/add-opens-Flags (als J-Argumente an die Compiler-JVM);
+                 XDcompilePolicy=simple und should-stop=ifError=FLOW sind von Error Prone
+                 vorgeschrieben. -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <fork>true</fork>
+                    <!-- §7: Error-Prone-WARNUNGEN brechen den Build. -Werror promotet jede
+                         (auch Error-Prone-)Warnung zum Fehler; die Codebasis kompiliert warnungsfrei. -->
+                    <failOnWarning>true</failOnWarning>
+                    <compilerArgs>
+                        <arg>-Werror</arg>
+                        <arg>-XDcompilePolicy=simple</arg>
+                        <arg>--should-stop=ifError=FLOW</arg>
+                        <arg>-Xplugin:ErrorProne</arg>
+                        <arg>-J--add-exports=jdk.compiler/com.sun.tools.javac.api=ALL-UNNAMED</arg>
+                        <arg>-J--add-exports=jdk.compiler/com.sun.tools.javac.file=ALL-UNNAMED</arg>
+                        <arg>-J--add-exports=jdk.compiler/com.sun.tools.javac.main=ALL-UNNAMED</arg>
+                        <arg>-J--add-exports=jdk.compiler/com.sun.tools.javac.model=ALL-UNNAMED</arg>
+                        <arg>-J--add-exports=jdk.compiler/com.sun.tools.javac.parser=ALL-UNNAMED</arg>
+                        <arg>-J--add-exports=jdk.compiler/com.sun.tools.javac.processing=ALL-UNNAMED</arg>
+                        <arg>-J--add-exports=jdk.compiler/com.sun.tools.javac.tree=ALL-UNNAMED</arg>
+                        <arg>-J--add-exports=jdk.compiler/com.sun.tools.javac.util=ALL-UNNAMED</arg>
+                        <arg>-J--add-opens=jdk.compiler/com.sun.tools.javac.code=ALL-UNNAMED</arg>
+                        <arg>-J--add-opens=jdk.compiler/com.sun.tools.javac.comp=ALL-UNNAMED</arg>
+                    </compilerArgs>
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>com.google.errorprone</groupId>
+                            <artifactId>error_prone_core</artifactId>
+                            <version>${error-prone.version}</version>
+                        </path>
+                    </annotationProcessorPaths>
+                </configuration>
             </plugin>
 
             <!-- Format-Gate (CLAUDE-java.md §3.2/§7): Spotless mit Google Java Format.
@@ -413,6 +469,103 @@
                                 </rule>
                             </rules>
                         </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <!-- Checkstyle (CLAUDE-java.md §7): Google-Java-Style-Basis, projektspezifisch
+                 angepasst (config/checkstyle/checkstyle.xml). violationSeverity=error, an die
+                 verify-Phase gebunden; jeder Verstoß bricht den Build. -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-checkstyle-plugin</artifactId>
+                <version>${maven-checkstyle-plugin.version}</version>
+                <dependencies>
+                    <dependency>
+                        <groupId>com.puppycrawl.tools</groupId>
+                        <artifactId>checkstyle</artifactId>
+                        <version>${checkstyle.version}</version>
+                    </dependency>
+                </dependencies>
+                <configuration>
+                    <configLocation>config/checkstyle/checkstyle.xml</configLocation>
+                    <includeTestSourceDirectory>true</includeTestSourceDirectory>
+                    <consoleOutput>true</consoleOutput>
+                    <failOnViolation>true</failOnViolation>
+                    <violationSeverity>error</violationSeverity>
+                    <linkXRef>false</linkXRef>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>checkstyle-check</id>
+                        <phase>verify</phase>
+                        <goals>
+                            <goal>check</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <!-- PMD (CLAUDE-java.md §7): projektspezifisch dokumentiertes Regelset
+                 (config/pmd/ruleset.xml), an die verify-Phase gebunden. failOnViolation bricht
+                 den Build bei jedem Finding. -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-pmd-plugin</artifactId>
+                <version>${maven-pmd-plugin.version}</version>
+                <dependencies>
+                    <dependency>
+                        <groupId>net.sourceforge.pmd</groupId>
+                        <artifactId>pmd-core</artifactId>
+                        <version>${pmd.version}</version>
+                    </dependency>
+                    <dependency>
+                        <groupId>net.sourceforge.pmd</groupId>
+                        <artifactId>pmd-java</artifactId>
+                        <version>${pmd.version}</version>
+                    </dependency>
+                </dependencies>
+                <configuration>
+                    <rulesets>
+                        <ruleset>config/pmd/ruleset.xml</ruleset>
+                    </rulesets>
+                    <includeTests>true</includeTests>
+                    <printFailingErrors>true</printFailingErrors>
+                    <failOnViolation>true</failOnViolation>
+                    <targetJdk>${java.version}</targetJdk>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>pmd-check</id>
+                        <phase>verify</phase>
+                        <goals>
+                            <goal>check</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <!-- SpotBugs (CLAUDE-java.md §7): Bytecode-Bug-Finder, bewusst scharf. threshold=Medium
+                 (meldet Medium + High), effort=Max, failOnError=true; an verify gebunden. Echte
+                 Findings werden behoben, nicht unterdrückt. -->
+            <plugin>
+                <groupId>com.github.spotbugs</groupId>
+                <artifactId>spotbugs-maven-plugin</artifactId>
+                <version>${spotbugs-maven-plugin.version}</version>
+                <configuration>
+                    <threshold>Medium</threshold>
+                    <effort>Max</effort>
+                    <failOnError>true</failOnError>
+                    <includeTests>false</includeTests>
+                    <excludeFilterFile>config/spotbugs/exclude.xml</excludeFilterFile>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>spotbugs-check</id>
+                        <phase>verify</phase>
+                        <goals>
+                            <goal>check</goal>
+                        </goals>
                     </execution>
                 </executions>
             </plugin>

@@ -13,6 +13,8 @@ public interface TokenCryptoPort {
   String hash(String plaintext);
 
   /**
+   * Neu erzeugtes Token-Paar aus Klartext und zugehörigem Hash.
+   *
    * @param plaintext einmalig auszugebender Klartext ({@code tk_<hex>})
    * @param hash zu persistierender Hash
    */

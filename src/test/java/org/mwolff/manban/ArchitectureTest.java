@@ -31,6 +31,8 @@ import org.junit.jupiter.api.Test;
 class ArchitectureTest {
 
   /** Produktionsklassen ohne Testklassen (entspricht {@code importOptions = DoNotIncludeTests}). */
+  // PMD.LooseCoupling: JavaClasses ist der konkrete ArchUnit-API-Typ (kein Interface verfügbar).
+  @SuppressWarnings("PMD.LooseCoupling")
   private static final JavaClasses PRODUKTIONSKLASSEN =
       new ClassFileImporter()
           .withImportOption(new ImportOption.DoNotIncludeTests())

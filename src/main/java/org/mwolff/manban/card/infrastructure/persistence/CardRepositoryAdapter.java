@@ -107,8 +107,8 @@ class CardRepositoryAdapter implements CardRepository {
 
   private List<Long> activeCardIds(long columnId, long excludeCardId) {
     return jdbc.queryForList(
-        "SELECT id FROM card WHERE column_id = ? AND archived = false AND type <> 'EPIC' AND id <> ? "
-            + "ORDER BY position_in_column",
+        "SELECT id FROM card WHERE column_id = ? AND archived = false AND type <> 'EPIC' "
+            + "AND id <> ? ORDER BY position_in_column",
         Long.class,
         columnId,
         excludeCardId);

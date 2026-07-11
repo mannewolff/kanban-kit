@@ -4,7 +4,9 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Collectors;
 import org.mwolff.manban.board.application.BoardColumnRepository;
 import org.mwolff.manban.board.application.BoardNotFoundException;
@@ -223,7 +225,9 @@ public class CardService {
     permissions.require(userId, board.projectId(), Permission.CARD_MOVE);
 
     BoardColumn target = columns.findById(targetColumnId).orElseThrow(ColumnNotFoundException::new);
-    if (target.boardId() != card.boardId()) {
+    // Wertvergleich der Board-IDs (Long): '!=' würde Referenzen vergleichen und bei IDs
+    // jenseits des Long-Caches (> 127) falsch schlagen.
+    if (!Objects.equals(target.boardId(), card.boardId())) {
       throw new ColumnNotFoundException();
     }
 
@@ -309,7 +313,7 @@ public class CardService {
   }
 
   private static boolean isDoneColumn(String name) {
-    return name != null && name.toLowerCase().contains("done");
+    return name != null && name.toLowerCase(Locale.ROOT).contains("done");
   }
 
   private static String normalize(String description) {

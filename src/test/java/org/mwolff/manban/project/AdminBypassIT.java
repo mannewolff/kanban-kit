@@ -139,7 +139,7 @@ class AdminBypassIT {
   @Test
   void adminSeesAllProjectsUserSeesOnlyOwn() throws Exception {
     Cookie alice = login("all-alice@example.com", PlatformRole.USER);
-    Cookie bob = login("all-bob@example.com", PlatformRole.USER);
+    login("all-bob@example.com", PlatformRole.USER);
     createProject("all-alice@example.com", "Alice P");
     createProject("all-bob@example.com", "Bob P");
 

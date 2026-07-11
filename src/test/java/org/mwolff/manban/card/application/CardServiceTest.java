@@ -28,6 +28,9 @@ import org.mwolff.manban.project.application.PermissionChecker;
 import org.mwolff.manban.project.domain.Permission;
 
 /** Verhaltenstests der Karten- und Epic-Use-Cases (Mockito an den Ports). */
+// PMD.TooManyMethods: umfassende Unit-Suite (Karten + Epics, Erfolgs- und Fehlerpfade je
+// Use-Case). Viele kleine @Test-Methoden sind hier gewollt, kein God-Class-Smell.
+@SuppressWarnings("PMD.TooManyMethods")
 class CardServiceTest {
 
   private static final Instant FIXED = Instant.parse("2026-01-02T03:04:05Z");

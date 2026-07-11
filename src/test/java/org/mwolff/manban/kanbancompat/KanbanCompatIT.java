@@ -171,7 +171,8 @@ class KanbanCompatIT {
                     .header("X-Kanban-Token", token)
                     .contentType("application/json")
                     .content(
-                        "{\"title\":\"Erste Aufgabe\",\"body\":\"Beschreibung\",\"column\":\"BACKLOG\"}"))
+                        "{\"title\":\"Erste Aufgabe\",\"body\":\"Beschreibung\","
+                            + "\"column\":\"BACKLOG\"}"))
             .andExpect(status().isCreated())
             .andExpect(jsonPath("$.number").exists())
             .andReturn()

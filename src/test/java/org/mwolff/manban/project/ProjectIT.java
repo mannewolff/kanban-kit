@@ -202,7 +202,7 @@ class ProjectIT {
 
   @Test
   void memberCannotModify() throws Exception {
-    Cookie alice = loginAs("alice-role@example.com");
+    loginAs("alice-role@example.com");
     Cookie carol = loginAs("carol-role@example.com");
     long projectId = createProject("alice-role@example.com", "Team");
 

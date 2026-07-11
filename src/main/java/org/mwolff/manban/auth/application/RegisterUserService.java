@@ -1,6 +1,7 @@
 package org.mwolff.manban.auth.application;
 
 import java.time.Clock;
+import java.util.Locale;
 import org.mwolff.manban.auth.domain.AppUser;
 import org.mwolff.manban.auth.domain.EmailVerificationToken;
 import org.mwolff.manban.auth.domain.PlatformRole;
@@ -40,7 +41,7 @@ public class RegisterUserService {
 
   @Transactional
   public AppUser register(String email, String rawPassword, String displayName) {
-    String normalizedEmail = email.trim().toLowerCase();
+    String normalizedEmail = email.trim().toLowerCase(Locale.ROOT);
     if (users.existsByEmail(normalizedEmail)) {
       throw new EmailAlreadyRegisteredException();
     }

@@ -146,7 +146,7 @@ class BoardIT {
 
   @Test
   void nonMemberCannotCreateBoard() throws Exception {
-    Cookie alice = loginAs("bo-owner@example.com");
+    loginAs("bo-owner@example.com");
     Cookie eve = loginAs("bo-eve@example.com");
     long projectId = createProject("bo-owner@example.com", "Closed");
 
@@ -252,7 +252,8 @@ class BoardIT {
 
     // Karte direkt einfügen (Karten-CRUD kommt erst mit B2).
     jdbc.update(
-        "INSERT INTO card (board_id, column_id, number, title, position_in_column) VALUES (?,?,?,?,?)",
+        "INSERT INTO card (board_id, column_id, number, title, position_in_column) "
+            + "VALUES (?,?,?,?,?)",
         boardId,
         columnId,
         1,

@@ -93,7 +93,7 @@ class AdminUserIT {
         .filter(
             u ->
                 u.platformRole() == PlatformRole.ADMIN
-                    && !u.email().equals("last-admin@example.com"))
+                    && !"last-admin@example.com".equals(u.email()))
         .forEach(u -> users.save(u.withPlatformRole(PlatformRole.USER)));
     AppUser la = users.findByEmail("last-admin@example.com").orElseThrow();
     if (la.platformRole() != PlatformRole.ADMIN) {

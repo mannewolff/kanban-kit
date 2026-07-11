@@ -3,7 +3,7 @@
  *
  * <h2>Architektur-Konvention (hexagonal, je Fachmodul)</h2>
  *
- * Jedes Fachmodul (z. B. {@code auth}, {@code project}, {@code board}) gliedert sich in:
+ * <p>Jedes Fachmodul (z. B. {@code auth}, {@code project}, {@code board}) gliedert sich in:
  *
  * <ul>
  *   <li>{@code domain} — Aggregate, Wertobjekte, fachliche Invarianten. Keine
@@ -14,7 +14,7 @@
  *       Crypto.
  * </ul>
  *
- * Die Abhängigkeitsrichtung zeigt stets nach innen: {@code web}/{@code infrastructure} → {@code
+ * <p>Die Abhängigkeitsrichtung zeigt stets nach innen: {@code web}/{@code infrastructure} → {@code
  * application} → {@code domain}. Dieses Skelett (Issue F1) legt nur die Basis; die Fachmodule
  * entstehen mit den Feature-Issues.
  */

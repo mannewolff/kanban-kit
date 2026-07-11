@@ -24,8 +24,8 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
  *       ist der zustandslose Cookie-Ansatz CSRF-resistent.
  * </ul>
  *
- * 2FA-Vorbereitung: Der zweite Faktor hängt im Login-Flow (SessionController / LoginService), nicht
- * hier — die Filterkette bleibt unverändert.
+ * <p>2FA-Vorbereitung: Der zweite Faktor hängt im Login-Flow (SessionController / LoginService),
+ * nicht hier — die Filterkette bleibt unverändert.
  */
 @Configuration
 @EnableWebSecurity

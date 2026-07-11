@@ -52,13 +52,11 @@ public class PermissionChecker {
    */
   @Transactional(readOnly = true)
   public boolean hasPermission(long userId, long projectId, Permission permission) {
-    if (isPlatformAdmin(userId)) {
-      return true;
-    }
-    return memberships
-        .findByProjectIdAndUserId(projectId, userId)
-        .map(m -> rolePermissions.isGranted(m.role(), permission))
-        .orElse(false);
+    return isPlatformAdmin(userId)
+        || memberships
+            .findByProjectIdAndUserId(projectId, userId)
+            .map(m -> rolePermissions.isGranted(m.role(), permission))
+            .orElse(false);
   }
 
   /**

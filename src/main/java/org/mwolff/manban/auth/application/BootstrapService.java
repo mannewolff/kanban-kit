@@ -48,10 +48,8 @@ public class BootstrapService {
   }
 
   private static boolean constantTimeEquals(String expected, String actual) {
-    if (actual == null) {
-      return false;
-    }
-    return MessageDigest.isEqual(
-        expected.getBytes(StandardCharsets.UTF_8), actual.getBytes(StandardCharsets.UTF_8));
+    return actual != null
+        && MessageDigest.isEqual(
+            expected.getBytes(StandardCharsets.UTF_8), actual.getBytes(StandardCharsets.UTF_8));
   }
 }

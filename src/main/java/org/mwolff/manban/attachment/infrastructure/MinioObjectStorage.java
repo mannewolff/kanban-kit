@@ -16,6 +16,10 @@ import org.springframework.stereotype.Component;
  * {@link ObjectStorage} auf Basis von MinIO. Der Ziel-Bucket wird faul beim ersten Zugriff angelegt
  * (nicht beim Start), sodass Kontexte ohne Anhang-Nutzung keinen Objektspeicher benötigen.
  */
+// PMD.AvoidCatchingGenericException: Der MinIO-Client deklariert bei jedem Aufruf ein breites
+// Bündel geprüfter Ausnahmen (IO, Krypto, Server, XML-Parsing). Sie werden hier bewusst gebündelt
+// als Infrastruktur-Fehler in ObjectStorageException gekapselt (§6.5: kein stilles Schlucken).
+@SuppressWarnings("PMD.AvoidCatchingGenericException")
 @Component
 class MinioObjectStorage implements ObjectStorage {
 

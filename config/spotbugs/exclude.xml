@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  manban SpotBugs-Ausschlussfilter (CLAUDE-java.md §7).
+
+  SpotBugs bleibt bewusst scharf (threshold=Medium): ALLE echten Bug-Detektoren (Null-Deref,
+  Ressourcenlecks, falsche Casts, RC_*/RCN_*, Nebenläufigkeit usw.) sind aktiv; echte Findings
+  werden im Code behoben, NICHT hier weggefiltert.
+
+  Ausgeschlossen sind ausschließlich die zwei „Defensive-Copy"-STILREGELN EI_EXPOSE_REP und
+  EI_EXPOSE_REP2. Sie sind mit den tragenden Mustern dieses Projekts grundsätzlich unvereinbar
+  und liefern hier ausnahmslos Fehlalarme:
+
+    1. Spring-Konstruktor-Injektion (§6.3): Jeder Service/Filter speichert die injizierten
+       Singleton-Kollaborateure (Repositories, andere Services, Clock, Cookie-Manager) in
+       final-Feldern — genau der Sinn von DI. Ein Repository/Clock lässt sich nicht „defensiv
+       kopieren"; das ist kein exponierter interner Zustand.
+    2. Unveränderliche View-Records (DTOs): BoardView, CardView, MeView, RoleMatrixView u. a.
+       halten Listen/Maps, die von den Services über Stream.toList() bzw. List.copyOf gebaut und
+       damit unveränderlich sind. SpotBugs kann die Unveränderlichkeit nicht beweisen und meldet
+       „exposure", obwohl kein Aufrufer die Sammlung mutieren kann.
+
+  Beide Muster sind projektweit dokumentiert; eine defensive Kopie wäre entweder unmöglich (DI)
+  oder reiner Overhead (bereits unveränderliche Listen). Alle übrigen SpotBugs-Prüfungen bleiben
+  unangetastet.
+-->
+<FindBugsFilter>
+  <Match>
+    <Bug pattern="EI_EXPOSE_REP,EI_EXPOSE_REP2"/>
+  </Match>
+</FindBugsFilter>

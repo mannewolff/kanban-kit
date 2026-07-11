@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import org.mwolff.manban.accesstoken.application.KanbanPrincipal;
@@ -164,7 +165,7 @@ public class KanbanCompatService {
   }
 
   private long columnIdForKey(long boardId, String key) {
-    String wanted = key == null ? "" : key.trim().toUpperCase();
+    String wanted = key == null ? "" : key.trim().toUpperCase(Locale.ROOT);
     if (!COLUMNS.contains(wanted)) {
       throw new InvalidKanbanColumnException("Unbekannte Kanban-Spalte: " + key);
     }
@@ -184,7 +185,7 @@ public class KanbanCompatService {
     if (columnName == null) {
       return Optional.empty();
     }
-    String n = columnName.toLowerCase().replaceAll("[^a-z]", "");
+    String n = columnName.toLowerCase(Locale.ROOT).replaceAll("[^a-z]", "");
     return switch (n) {
       case "backlog" -> Optional.of("BACKLOG");
       case "ready" -> Optional.of("READY");

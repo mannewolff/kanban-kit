@@ -1,5 +1,6 @@
 package org.mwolff.manban.auth.application;
 
+import java.util.Locale;
 import org.mwolff.manban.auth.domain.AppUser;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -27,7 +28,9 @@ public class LoginService {
   @Transactional(readOnly = true)
   public AppUser login(String email, String rawPassword) {
     AppUser user =
-        users.findByEmail(email.trim().toLowerCase()).orElseThrow(InvalidCredentialsException::new);
+        users
+            .findByEmail(email.trim().toLowerCase(Locale.ROOT))
+            .orElseThrow(InvalidCredentialsException::new);
 
     if (!passwordEncoder.matches(rawPassword, user.passwordHash())) {
       throw new InvalidCredentialsException();

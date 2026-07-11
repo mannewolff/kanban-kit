@@ -3,6 +3,7 @@ package org.mwolff.manban.project.application;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
+import java.util.Locale;
 import org.mwolff.manban.auth.application.AppUserRepository;
 import org.mwolff.manban.auth.application.AuthProperties;
 import org.mwolff.manban.auth.domain.AppUser;
@@ -64,7 +65,7 @@ public class MembershipService {
         new ProjectInvitation(
             null,
             projectId,
-            email.trim().toLowerCase(),
+            email.trim().toLowerCase(Locale.ROOT),
             role,
             SecureTokens.sha256Hex(plaintext),
             clock.instant().plus(projectProperties.invitationTtl()),
@@ -72,7 +73,7 @@ public class MembershipService {
             inviterUserId));
 
     String url = authProperties.baseUrl() + "/invitations/accept?token=" + plaintext;
-    mailer.sendInvitationEmail(email.trim().toLowerCase(), project.name(), url);
+    mailer.sendInvitationEmail(email.trim().toLowerCase(Locale.ROOT), project.name(), url);
   }
 
   @Transactional
@@ -110,10 +111,10 @@ public class MembershipService {
 
   @Transactional(readOnly = true)
   public List<MemberView> listMembers(long userId, long projectId) {
-    // Jedes Mitglied darf die Mitgliederliste sehen.
-    memberships
-        .findByProjectIdAndUserId(projectId, userId)
-        .orElseThrow(ProjectNotFoundException::new);
+    // Jedes Mitglied darf die Mitgliederliste sehen; Nichtmitglieder erhalten 404.
+    if (memberships.findByProjectIdAndUserId(projectId, userId).isEmpty()) {
+      throw new ProjectNotFoundException();
+    }
     return memberships.findByProjectId(projectId).stream().map(this::toView).toList();
   }
 

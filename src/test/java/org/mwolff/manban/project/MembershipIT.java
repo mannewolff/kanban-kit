@@ -175,7 +175,7 @@ class MembershipIT {
 
   @Test
   void expiredInvitationIsRejected() throws Exception {
-    Cookie alice = loginAs("owner-exp@example.com");
+    loginAs("owner-exp@example.com");
     Cookie carol = loginAs("carol-exp@example.com");
     long projectId = createProject("owner-exp@example.com", "Expired");
 
@@ -212,7 +212,7 @@ class MembershipIT {
 
   @Test
   void memberWithoutInvitePermissionCannotInvite() throws Exception {
-    Cookie alice = loginAs("owner-perm@example.com");
+    loginAs("owner-perm@example.com");
     Cookie bob = loginAs("plain-member@example.com");
     long projectId = createProject("owner-perm@example.com", "Perm");
     memberships.save(

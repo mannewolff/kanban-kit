@@ -1,6 +1,7 @@
 package org.mwolff.manban.auth.application;
 
 import java.time.Clock;
+import java.util.Locale;
 import org.mwolff.manban.auth.domain.AppUser;
 import org.mwolff.manban.auth.domain.PasswordResetToken;
 import org.mwolff.manban.common.SecureTokens;
@@ -36,7 +37,7 @@ public class RequestPasswordResetService {
 
   @Transactional
   public void requestReset(String email) {
-    String normalizedEmail = email.trim().toLowerCase();
+    String normalizedEmail = email.trim().toLowerCase(Locale.ROOT);
     users.findByEmail(normalizedEmail).ifPresent(this::issueToken);
   }
 

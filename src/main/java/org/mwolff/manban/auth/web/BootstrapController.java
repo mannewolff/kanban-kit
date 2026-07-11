@@ -17,16 +17,16 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 class BootstrapController {
 
-  private final BootstrapService bootstrap;
+  private final BootstrapService bootstrapService;
 
-  BootstrapController(BootstrapService bootstrap) {
-    this.bootstrap = bootstrap;
+  BootstrapController(BootstrapService bootstrapService) {
+    this.bootstrapService = bootstrapService;
   }
 
   @PostMapping("/api/admin/bootstrap")
   UserView bootstrap(
       @AuthenticationPrincipal Long userId, @Valid @RequestBody BootstrapRequest request) {
-    return bootstrap.bootstrap(userId, request.token());
+    return bootstrapService.bootstrap(userId, request.token());
   }
 
   record BootstrapRequest(@NotBlank String token) {}
