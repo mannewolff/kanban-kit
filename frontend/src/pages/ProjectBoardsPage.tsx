@@ -1,3 +1,4 @@
+import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import Dialog from '@mui/material/Dialog'
@@ -20,7 +21,8 @@ import { canManageBoards, canManageMembers } from '../lib/roles'
 
 export function ProjectBoardsPage() {
   const { projectId } = useParams()
-  const id = Number(projectId)
+  const id = Number.parseInt(projectId ?? '', 10)
+  const validId = Number.isInteger(id) && id > 0
   const navigate = useNavigate()
   const location = useLocation()
   const [boards, setBoards] = useState<Board[]>([])
@@ -32,6 +34,9 @@ export function ProjectBoardsPage() {
   const reload = () => boardsApi.list(id).then(setBoards)
 
   useEffect(() => {
+    if (!validId) {
+      return
+    }
     void boardsApi.list(id).then((bs) => {
       setBoards(bs)
       // Bei genau einem Board direkt aufs Board — nur beim Erst-Aufruf oder in der Auto-Routing-Kette.
@@ -48,7 +53,7 @@ export function ProjectBoardsPage() {
       }
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id])
+  }, [id, validId])
 
   const handleCreate = async (event: React.FormEvent) => {
     event.preventDefault()
@@ -64,6 +69,10 @@ export function ProjectBoardsPage() {
     await boardsApi.remove(boardId)
     setConfirmBoard(null)
     await reload()
+  }
+
+  if (!validId) {
+    return <Alert severity="error">Ungültige Projekt-ID.</Alert>
   }
 
   return (

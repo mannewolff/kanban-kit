@@ -27,7 +27,8 @@ interface Props {
 
 export function ProjectMembersPage({ api = defaultMembersApi, loadRole }: Props) {
   const { projectId } = useParams()
-  const id = Number(projectId)
+  const id = Number.parseInt(projectId ?? '', 10)
+  const validId = Number.isInteger(id) && id > 0
   const [members, setMembers] = useState<Member[]>([])
   const [role, setRole] = useState<string>('VIEWER')
   const [inviteEmail, setInviteEmail] = useState('')
@@ -37,13 +38,16 @@ export function ProjectMembersPage({ api = defaultMembersApi, loadRole }: Props)
   const reload = () => api.list(id).then(setMembers)
 
   useEffect(() => {
+    if (!validId) {
+      return
+    }
     void reload()
     const roleLoader = loadRole
       ? loadRole(id)
       : projectsApi.list().then((projects) => projects.find((p) => p.id === id)?.role ?? 'VIEWER')
     void roleLoader.then(setRole)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id])
+  }, [id, validId])
 
   const manage = canManageMembers(role)
   const ownerCount = members.filter((m) => m.role === 'OWNER').length
@@ -92,6 +96,10 @@ export function ProjectMembersPage({ api = defaultMembersApi, loadRole }: Props)
           : 'Entfernen fehlgeschlagen.',
       })
     }
+  }
+
+  if (!validId) {
+    return <Alert severity="error">Ungültige Projekt-ID.</Alert>
   }
 
   return (

@@ -101,6 +101,20 @@ describe('BoardListPage', () => {
     )
   })
 
+  it('zeigt bei ungültiger Board-ID einen Fehler und ruft keine API auf', async () => {
+    render(
+      <MemoryRouter initialEntries={['/boards/abc/list']}>
+        <Routes>
+          <Route path="/boards/:boardId/list" element={<BoardListPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+    expect(await screen.findByText('Ungültige Board-ID.')).toBeInTheDocument()
+    expect(mBoards.get).not.toHaveBeenCalled()
+    expect(mCards.list).not.toHaveBeenCalled()
+    expect(mEpics.list).not.toHaveBeenCalled()
+  })
+
   it('verbreitert die Beschreibungs-Spalte per Resize-Drag und merkt die Breite', async () => {
     const rectSpy = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({
       width: 1000, height: 0, top: 0, left: 0, right: 1000, bottom: 0, x: 0, y: 0, toJSON: () => ({}),

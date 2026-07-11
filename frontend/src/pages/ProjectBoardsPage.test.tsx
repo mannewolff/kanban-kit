@@ -85,4 +85,17 @@ describe('ProjectBoardsPage RBAC', () => {
     )
     expect(await screen.findByText('Board-Ansicht')).toBeInTheDocument()
   })
+
+  it('zeigt bei ungültiger Projekt-ID einen Fehler und ruft keine API auf', async () => {
+    render(
+      <MemoryRouter initialEntries={['/projects/abc']}>
+        <Routes>
+          <Route path="/projects/:projectId" element={<ProjectBoardsPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+    expect(await screen.findByText('Ungültige Projekt-ID.')).toBeInTheDocument()
+    expect(mockedBoards.list).not.toHaveBeenCalled()
+    expect(mockedProjects.list).not.toHaveBeenCalled()
+  })
 })

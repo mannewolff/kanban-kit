@@ -61,4 +61,22 @@ describe('ProjectMembersPage', () => {
     expect(screen.queryByLabelText(/E-Mail einladen/)).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Mika Member entfernen')).not.toBeInTheDocument()
   })
+
+  it('zeigt bei ungültiger Projekt-ID einen Fehler und ruft keine API auf', async () => {
+    const api = makeApi()
+    const loadRole = vi.fn().mockResolvedValue('OWNER')
+    render(
+      <MemoryRouter initialEntries={['/projects/abc/members']}>
+        <Routes>
+          <Route
+            path="/projects/:projectId/members"
+            element={<ProjectMembersPage api={api} loadRole={loadRole} />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+    expect(await screen.findByText('Ungültige Projekt-ID.')).toBeInTheDocument()
+    expect(api.list).not.toHaveBeenCalled()
+    expect(loadRole).not.toHaveBeenCalled()
+  })
 })

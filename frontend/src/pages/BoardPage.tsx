@@ -1,3 +1,4 @@
+import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
 import CircularProgress from '@mui/material/CircularProgress'
 import Link from '@mui/material/Link'
@@ -16,7 +17,8 @@ import { canEditCards, canModerateComments, isPlatformAdmin } from '../lib/roles
 
 export function BoardPage() {
   const { boardId } = useParams()
-  const id = Number(boardId)
+  const id = Number.parseInt(boardId ?? '', 10)
+  const validId = Number.isInteger(id) && id > 0
   const { user } = useAuth()
   const [board, setBoard] = useState<Board | null>(null)
   const [cards, setCards] = useState<Card[]>([])
@@ -35,6 +37,9 @@ export function BoardPage() {
   }
 
   useEffect(() => {
+    if (!validId) {
+      return
+    }
     let active = true
     Promise.all([boardsApi.get(id), cardsApi.list(id), epicsApi.list(id)])
       .then(([loadedBoard, loadedCards, loadedEpics]) => {
@@ -50,7 +55,7 @@ export function BoardPage() {
     return () => {
       active = false
     }
-  }, [id])
+  }, [id, validId])
 
   useEffect(() => {
     void configApi.get().then((c) => setRetentionDays(c.doneRetentionDays)).catch(() => {})
@@ -84,6 +89,10 @@ export function BoardPage() {
   const effectiveRole = membershipRole ?? fetchedRole ?? 'VIEWER'
   const canEdit = canEditCards(effectiveRole, isPlatformAdmin(user))
   const canModerate = canModerateComments(effectiveRole, isPlatformAdmin(user))
+
+  if (!validId) {
+    return <Alert severity="error">Ungültige Board-ID.</Alert>
+  }
 
   if (loading) {
     return (

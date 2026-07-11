@@ -59,4 +59,18 @@ describe('EpicsPage', () => {
 
     await waitFor(() => expect(mEpics.create).toHaveBeenCalledWith(1, 'Auth-Epic', expect.any(String), null))
   })
+
+  it('zeigt bei ungültiger Board-ID einen Fehler und ruft keine API auf', async () => {
+    render(
+      <MemoryRouter initialEntries={['/boards/abc/epics']}>
+        <Routes>
+          <Route path="/boards/:boardId/epics" element={<EpicsPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+    expect(await screen.findByText('Ungültige Board-ID.')).toBeInTheDocument()
+    expect(mBoards.get).not.toHaveBeenCalled()
+    expect(mEpics.list).not.toHaveBeenCalled()
+    expect(mCards.list).not.toHaveBeenCalled()
+  })
 })

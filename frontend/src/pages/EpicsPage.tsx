@@ -1,4 +1,5 @@
 import AddIcon from '@mui/icons-material/Add'
+import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import LinearProgress from '@mui/material/LinearProgress'
@@ -28,7 +29,8 @@ function epicToCard(epic: Epic, boardId: number): Card {
 
 export function EpicsPage() {
   const { boardId } = useParams()
-  const id = Number(boardId)
+  const id = Number.parseInt(boardId ?? '', 10)
+  const validId = Number.isInteger(id) && id > 0
   const { user } = useAuth()
   const [board, setBoard] = useState<Board | null>(null)
   const [epics, setEpics] = useState<Epic[]>([])
@@ -43,10 +45,13 @@ export function EpicsPage() {
   }
 
   useEffect(() => {
+    if (!validId) {
+      return
+    }
     void boardsApi.get(id).then(setBoard)
     reload()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id])
+  }, [id, validId])
 
   const membershipRole = board
     ? user?.memberships.find((m) => m.projectId === board.projectId)?.role
@@ -61,6 +66,10 @@ export function EpicsPage() {
   const effectiveRole = membershipRole ?? fetchedRole ?? 'VIEWER'
   const canEdit = canEditCards(effectiveRole, isPlatformAdmin(user))
   const canModerate = canModerateComments(effectiveRole, isPlatformAdmin(user))
+
+  if (!validId) {
+    return <Alert severity="error">Ungültige Board-ID.</Alert>
+  }
 
   return (
     <Box>

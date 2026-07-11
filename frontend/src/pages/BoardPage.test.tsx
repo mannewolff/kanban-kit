@@ -55,4 +55,19 @@ describe('BoardPage canEdit aus Membership', () => {
     expect(await screen.findByText('B')).toBeInTheDocument()
     expect(screen.queryByLabelText('Karte in Backlog anlegen')).not.toBeInTheDocument()
   })
+
+  it('zeigt bei ungültiger Board-ID einen Fehler und ruft keine API auf', async () => {
+    memberships = []
+    render(
+      <MemoryRouter initialEntries={['/boards/abc']}>
+        <Routes>
+          <Route path="/boards/:boardId" element={<BoardPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+    expect(await screen.findByText('Ungültige Board-ID.')).toBeInTheDocument()
+    expect(mockedBoards.get).not.toHaveBeenCalled()
+    expect(mockedCards.list).not.toHaveBeenCalled()
+    expect(mockedEpics.list).not.toHaveBeenCalled()
+  })
 })

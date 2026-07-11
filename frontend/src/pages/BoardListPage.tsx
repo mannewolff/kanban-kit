@@ -1,3 +1,4 @@
+import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
 import Chip from '@mui/material/Chip'
 import Link from '@mui/material/Link'
@@ -66,7 +67,8 @@ function readColumnOrder(boardId: number): ColumnKey[] {
 
 export function BoardListPage() {
   const { boardId } = useParams()
-  const id = Number(boardId)
+  const id = Number.parseInt(boardId ?? '', 10)
+  const validId = Number.isInteger(id) && id > 0
   const { user } = useAuth()
   const [board, setBoard] = useState<Board | null>(null)
   const [cards, setCards] = useState<Card[]>([])
@@ -89,6 +91,9 @@ export function BoardListPage() {
   }
 
   useEffect(() => {
+    if (!validId) {
+      return
+    }
     void boardsApi.get(id).then((b) => {
       setBoard(b)
       let initial: Set<FilterKey> | null = null
@@ -105,7 +110,7 @@ export function BoardListPage() {
     setOrder(readColumnOrder(id))
     setExcerptWidth(readExcerptWidth(id))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id])
+  }, [id, validId])
 
   // Laufenden Resize-Drag bei Unmount abräumen.
   useEffect(() => () => resizeCleanupRef.current?.(), [])
@@ -236,6 +241,10 @@ export function BoardListPage() {
       case 'excerpt':
         return <Typography variant="caption" color="text.secondary" noWrap sx={{ display: 'block' }}>{stripMarkdown(card.description ?? '')}</Typography>
     }
+  }
+
+  if (!validId) {
+    return <Alert severity="error">Ungültige Board-ID.</Alert>
   }
 
   return (
