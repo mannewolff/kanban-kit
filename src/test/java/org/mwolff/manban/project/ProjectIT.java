@@ -126,7 +126,7 @@ class ProjectIT {
             .andReturn()
             .getResponse()
             .getContentAsString();
-    assertThat((List<Object>) JsonPath.read(body, "$[?(@.name=='Alices Projekt')].role"))
+    assertThat(JsonPath.<List<Object>>read(body, "$[?(@.name=='Alices Projekt')].role"))
         .contains("OWNER");
   }
 
@@ -218,7 +218,7 @@ class ProjectIT {
             .andReturn()
             .getResponse()
             .getContentAsString();
-    assertThat((List<Object>) JsonPath.read(projectsBody, "$[?(@.id==" + projectId + ")].role"))
+    assertThat(JsonPath.<List<Object>>read(projectsBody, "$[?(@.id==" + projectId + ")].role"))
         .contains("MEMBER");
     mvc.perform(
             patch("/api/projects/" + projectId)

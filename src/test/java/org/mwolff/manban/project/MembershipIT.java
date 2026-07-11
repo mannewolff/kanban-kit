@@ -168,8 +168,8 @@ class MembershipIT {
             .getResponse()
             .getContentAsString();
     assertThat(
-            (List<Object>)
-                JsonPath.read(membersBody, "$[?(@.email=='member-inv@example.com')].role"))
+            JsonPath.<List<Object>>read(
+                membersBody, "$[?(@.email=='member-inv@example.com')].role"))
         .contains("MEMBER");
   }
 

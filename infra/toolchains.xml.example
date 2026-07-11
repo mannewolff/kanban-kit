@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Beispiel-Toolchain-Konfiguration für manban (CLAUDE-java.md §1).
+
+  Zweck: Der Build erzwingt JDK 21 (maven-enforcer requireJavaVersion=[21,22)).
+  Wer lokal mehrere JDKs installiert hat und nicht dauerhaft JAVA_HOME umstellen
+  möchte, kann Maven per Toolchain gezielt auf ein JDK-21 zeigen lassen — der Build
+  wählt dann unabhängig vom aufrufenden JAVA_HOME das hier hinterlegte JDK.
+
+  Installation:
+    1. Diese Datei nach ~/.m2/toolchains.xml kopieren.
+    2. <jdkHome> auf den JDK-21-Pfad des eigenen Systems anpassen
+       (Beispiel unten: Homebrew openjdk@21 auf Apple Silicon).
+    3. Ermitteln des Pfads z. B. via:  /usr/libexec/java_home -v 21   (macOS)
+       oder                            update-java-alternatives -l    (Linux)
+
+  Hinweis: Diese Datei ist NUR ein Beispiel und wird nicht vom Build gelesen.
+  Alternativ genügt weiterhin:  export JAVA_HOME=<jdk-21-home>
+-->
+<toolchains xmlns="http://maven.apache.org/TOOLCHAINS/1.1.0"
+            xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+            xsi:schemaLocation="http://maven.apache.org/TOOLCHAINS/1.1.0 https://maven.apache.org/xsd/toolchains-1.1.0.xsd">
+    <toolchain>
+        <type>jdk</type>
+        <provides>
+            <version>21</version>
+            <vendor>openjdk</vendor>
+        </provides>
+        <configuration>
+            <!-- An das eigene System anpassen. Beispiel: Homebrew openjdk@21 (Apple Silicon). -->
+            <jdkHome>/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home</jdkHome>
+        </configuration>
+    </toolchain>
+</toolchains>

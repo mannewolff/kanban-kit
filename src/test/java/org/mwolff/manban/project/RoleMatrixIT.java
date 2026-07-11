@@ -80,17 +80,17 @@ class RoleMatrixIT {
 
     // Rechte inkl. abgeleiteter Ressource/Operation
     assertThat(
-            (List<Object>) JsonPath.read(body, "$.permissions[?(@.key=='BOARD_CREATE')].resource"))
+            JsonPath.<List<Object>>read(body, "$.permissions[?(@.key=='BOARD_CREATE')].resource"))
         .contains("BOARD");
     assertThat(
-            (List<Object>) JsonPath.read(body, "$.permissions[?(@.key=='BOARD_CREATE')].operation"))
+            JsonPath.<List<Object>>read(body, "$.permissions[?(@.key=='BOARD_CREATE')].operation"))
         .contains("CREATE");
     // Grants je Rolle passend zum V4-Seed
-    assertThat((List<Object>) JsonPath.read(body, "$.grants.VIEWER")).contains("BOARD_READ");
-    assertThat((List<Object>) JsonPath.read(body, "$.grants.MEMBER")).contains("TICKET_CREATE");
-    assertThat((List<Object>) JsonPath.read(body, "$.grants.MEMBER"))
+    assertThat(JsonPath.<List<Object>>read(body, "$.grants.VIEWER")).contains("BOARD_READ");
+    assertThat(JsonPath.<List<Object>>read(body, "$.grants.MEMBER")).contains("TICKET_CREATE");
+    assertThat(JsonPath.<List<Object>>read(body, "$.grants.MEMBER"))
         .doesNotContain("COMMENT_DELETE");
-    assertThat((List<Object>) JsonPath.read(body, "$.grants.ADMIN")).contains("COMMENT_DELETE");
+    assertThat(JsonPath.<List<Object>>read(body, "$.grants.ADMIN")).contains("COMMENT_DELETE");
   }
 
   @Test

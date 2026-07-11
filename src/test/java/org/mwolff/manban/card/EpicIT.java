@@ -291,7 +291,7 @@ class EpicIT {
             .getResponse()
             .getContentAsString();
     org.assertj.core.api.Assertions.assertThat(
-            (Object) JsonPath.parse(unassignedBody).read("$.parentId"))
+            JsonPath.parse(unassignedBody).<Object>read("$.parentId"))
         .isNull();
   }
 
