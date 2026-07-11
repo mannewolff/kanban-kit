@@ -17,6 +17,8 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     emptyOutDir: true,
+    // Performance-Budget (CLAUDE-react.md): Warn-Grenze = dokumentiertes Chunk-Budget.
+    chunkSizeWarningLimit: 600,
   },
   test: {
     environment: 'jsdom',
