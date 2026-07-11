@@ -1,5 +1,6 @@
 package org.mwolff.manban.project;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -7,8 +8,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.jayway.jsonpath.JsonPath;
 import jakarta.servlet.http.Cookie;
 import java.time.Instant;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.mwolff.manban.auth.application.AppUserRepository;
 import org.mwolff.manban.auth.domain.AppUser;
@@ -138,10 +141,11 @@ class MembershipIT {
                 .andExpect(jsonPath("$.role").value("MEMBER"))
                 .andExpect(jsonPath("$.email").value("member-inv@example.com"));
 
-        mvc.perform(get("/api/projects/" + projectId + "/members").cookie(alice))
+        String membersBody = mvc.perform(get("/api/projects/" + projectId + "/members").cookie(alice))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[?(@.email=='member-inv@example.com')].role")
-                        .value(org.hamcrest.Matchers.hasItem("MEMBER")));
+                .andReturn().getResponse().getContentAsString();
+        assertThat((List<Object>) JsonPath.read(membersBody, "$[?(@.email=='member-inv@example.com')].role"))
+                .contains("MEMBER");
     }
 
     @Test

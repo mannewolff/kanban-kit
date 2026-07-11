@@ -4,7 +4,6 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -118,9 +117,8 @@ class AttachmentIT {
 
         var response = mvc.perform(get("/api/attachments/" + id).cookie(login))
                 .andExpect(status().isOk())
-                .andExpect(header().string("Content-Disposition",
-                        org.hamcrest.Matchers.containsString("attachment")))
                 .andReturn().getResponse();
+        Assertions.assertThat(response.getHeader("Content-Disposition")).contains("attachment");
         Assertions.assertThat(response.getContentAsByteArray()).isEqualTo(png);
         Assertions.assertThat(response.getContentType()).isEqualTo("image/png");
 
@@ -138,12 +136,11 @@ class AttachmentIT {
         // Als PNG getarnt hochgeladen — der Content-Type wird per Magic-Bytes korrigiert.
         long id = upload("harmlos.png", "image/png", html);
 
-        mvc.perform(get("/api/attachments/" + id).cookie(login))
+        var response = mvc.perform(get("/api/attachments/" + id).cookie(login))
                 .andExpect(status().isOk())
-                .andExpect(header().string("Content-Disposition",
-                        org.hamcrest.Matchers.containsString("attachment")))
-                .andExpect(header().string("Content-Type",
-                        org.hamcrest.Matchers.containsString("text/html")));
+                .andReturn().getResponse();
+        Assertions.assertThat(response.getHeader("Content-Disposition")).contains("attachment");
+        Assertions.assertThat(response.getHeader("Content-Type")).contains("text/html");
     }
 
     @Test

@@ -1,13 +1,14 @@
 package org.mwolff.manban.project;
 
-import static org.hamcrest.Matchers.hasItem;
-import static org.hamcrest.Matchers.not;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.jayway.jsonpath.JsonPath;
 import jakarta.servlet.http.Cookie;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.mwolff.manban.auth.application.AppUserRepository;
 import org.mwolff.manban.auth.domain.AppUser;
@@ -57,7 +58,7 @@ class RoleMatrixIT {
     void matrixReflectsSeededGrants() throws Exception {
         Cookie session = loginAs("matrix-user@example.com");
 
-        mvc.perform(get("/api/roles/matrix").cookie(session))
+        String body = mvc.perform(get("/api/roles/matrix").cookie(session))
                 .andExpect(status().isOk())
                 // Rollen in Anzeige-Reihenfolge
                 .andExpect(jsonPath("$.roles.length()").value(4))
@@ -65,17 +66,23 @@ class RoleMatrixIT {
                 .andExpect(jsonPath("$.roles[3]").value("OWNER"))
                 // Rechte inkl. abgeleiteter Ressource/Operation
                 .andExpect(jsonPath("$.permissions.length()").value(23))
-                .andExpect(jsonPath("$.permissions[?(@.key=='BOARD_CREATE')].resource").value(hasItem("BOARD")))
-                .andExpect(jsonPath("$.permissions[?(@.key=='BOARD_CREATE')].operation").value(hasItem("CREATE")))
                 // Grants je Rolle passend zum V4-Seed
                 .andExpect(jsonPath("$.grants.VIEWER.length()").value(5))
-                .andExpect(jsonPath("$.grants.VIEWER").value(hasItem("BOARD_READ")))
                 .andExpect(jsonPath("$.grants.MEMBER.length()").value(16))
-                .andExpect(jsonPath("$.grants.MEMBER").value(hasItem("TICKET_CREATE")))
-                .andExpect(jsonPath("$.grants.MEMBER").value(not(hasItem("COMMENT_DELETE"))))
                 .andExpect(jsonPath("$.grants.ADMIN.length()").value(22))
-                .andExpect(jsonPath("$.grants.ADMIN").value(hasItem("COMMENT_DELETE")))
-                .andExpect(jsonPath("$.grants.OWNER.length()").value(23));
+                .andExpect(jsonPath("$.grants.OWNER.length()").value(23))
+                .andReturn().getResponse().getContentAsString();
+
+        // Rechte inkl. abgeleiteter Ressource/Operation
+        assertThat((List<Object>) JsonPath.read(body, "$.permissions[?(@.key=='BOARD_CREATE')].resource"))
+                .contains("BOARD");
+        assertThat((List<Object>) JsonPath.read(body, "$.permissions[?(@.key=='BOARD_CREATE')].operation"))
+                .contains("CREATE");
+        // Grants je Rolle passend zum V4-Seed
+        assertThat((List<Object>) JsonPath.read(body, "$.grants.VIEWER")).contains("BOARD_READ");
+        assertThat((List<Object>) JsonPath.read(body, "$.grants.MEMBER")).contains("TICKET_CREATE");
+        assertThat((List<Object>) JsonPath.read(body, "$.grants.MEMBER")).doesNotContain("COMMENT_DELETE");
+        assertThat((List<Object>) JsonPath.read(body, "$.grants.ADMIN")).contains("COMMENT_DELETE");
     }
 
     @Test

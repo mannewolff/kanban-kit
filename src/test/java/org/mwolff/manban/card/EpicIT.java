@@ -9,6 +9,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.jayway.jsonpath.JsonPath;
 import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.Test;
 import org.mwolff.manban.auth.application.AppUserRepository;
@@ -219,10 +220,12 @@ class EpicIT {
                 .andExpect(jsonPath("$.parentId").value((int) epic));
 
         // parentId=null löst die Zuordnung
-        mvc.perform(patch("/api/cards/" + child).cookie(alice).contentType("application/json")
+        String unassignedBody = mvc.perform(patch("/api/cards/" + child).cookie(alice).contentType("application/json")
                         .content("{\"title\":\"A2\",\"parentId\":null}"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.parentId").value(org.hamcrest.Matchers.nullValue()));
+                .andReturn().getResponse().getContentAsString();
+        org.assertj.core.api.Assertions.assertThat((Object) JsonPath.parse(unassignedBody).read("$.parentId"))
+                .isNull();
     }
 
     @Test

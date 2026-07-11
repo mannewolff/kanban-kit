@@ -1,9 +1,10 @@
 package org.mwolff.manban;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.nio.charset.StandardCharsets;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -29,9 +30,10 @@ class SpaFallbackIT {
 
     @Test
     void clientRoutesServeSpaIndex() throws Exception {
-        mvc.perform(get("/admin/bootstrap"))
+        String body = mvc.perform(get("/admin/bootstrap"))
                 .andExpect(status().isOk())
-                .andExpect(content().string(org.hamcrest.Matchers.containsString("id=\"root\"")));
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        assertThat(body).contains("id=\"root\"");
         mvc.perform(get("/boards/1")).andExpect(status().isOk());
         mvc.perform(get("/roles")).andExpect(status().isOk());
     }

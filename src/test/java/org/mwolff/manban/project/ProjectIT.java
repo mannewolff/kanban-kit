@@ -1,6 +1,6 @@
 package org.mwolff.manban.project;
 
-import static org.hamcrest.Matchers.hasItem;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
@@ -9,8 +9,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.jayway.jsonpath.JsonPath;
 import jakarta.servlet.http.Cookie;
 import java.time.Instant;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.mwolff.manban.auth.application.AppUserRepository;
 import org.mwolff.manban.auth.domain.AppUser;
@@ -100,9 +102,10 @@ class ProjectIT {
         createProject("alice-p1@example.com", "Alices Projekt");
 
         // Alice (normaler USER) ist OWNER und sieht das Projekt.
-        mvc.perform(get("/api/projects").cookie(alice))
+        String body = mvc.perform(get("/api/projects").cookie(alice))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[?(@.name=='Alices Projekt')].role").value(hasItem("OWNER")));
+                .andReturn().getResponse().getContentAsString();
+        assertThat((List<Object>) JsonPath.read(body, "$[?(@.name=='Alices Projekt')].role")).contains("OWNER");
     }
 
     @Test
@@ -177,8 +180,9 @@ class ProjectIT {
                 ProjectRole.MEMBER, Instant.now()));
 
         // Sieht das Projekt (Mitglied), darf es aber nicht umbenennen (nicht OWNER) bzw. löschen (nicht Admin).
-        mvc.perform(get("/api/projects").cookie(carol))
-                .andExpect(jsonPath("$[?(@.id==" + projectId + ")].role").value(hasItem("MEMBER")));
+        String projectsBody = mvc.perform(get("/api/projects").cookie(carol))
+                .andReturn().getResponse().getContentAsString();
+        assertThat((List<Object>) JsonPath.read(projectsBody, "$[?(@.id==" + projectId + ")].role")).contains("MEMBER");
         mvc.perform(patch("/api/projects/" + projectId).cookie(carol)
                         .contentType("application/json").content("{\"name\":\"x\"}"))
                 .andExpect(status().isForbidden());
