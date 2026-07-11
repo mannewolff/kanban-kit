@@ -7,7 +7,7 @@
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>3.5.0</version>
+        <version>3.5.16</version>
         <relativePath/>
     </parent>
 
@@ -18,7 +18,7 @@
     <description>mannewolff Kanban Board — eigenständige, self-hostbare Trello-Alternative</description>
 
     <properties>
-        <java.version>21</java.version>
+        <java.version>25</java.version>
         <!-- Frontend build (frontend-maven-plugin). Im Docker-Build via -Dskip.frontend=true übersprungen,
              weil dort eine dedizierte Node-Stage das Frontend baut. -->
         <skip.frontend>false</skip.frontend>
@@ -28,10 +28,10 @@
         <!-- Statische Analyse (CLAUDE-java.md §7). Regelsets versioniert unter config/. -->
         <maven-checkstyle-plugin.version>3.6.0</maven-checkstyle-plugin.version>
         <checkstyle.version>10.21.4</checkstyle.version>
-        <maven-pmd-plugin.version>3.26.0</maven-pmd-plugin.version>
-        <pmd.version>7.10.0</pmd.version>
-        <spotbugs-maven-plugin.version>4.8.6.6</spotbugs-maven-plugin.version>
-        <error-prone.version>2.36.0</error-prone.version>
+        <maven-pmd-plugin.version>3.28.0</maven-pmd-plugin.version>
+        <pmd.version>7.26.0</pmd.version>
+        <spotbugs-maven-plugin.version>4.10.2.0</spotbugs-maven-plugin.version>
+        <error-prone.version>2.50.0</error-prone.version>
     </properties>
 
     <!-- Dependency-Konvergenz (CLAUDE-java.md §1, vom maven-enforcer erzwungen).
@@ -151,7 +151,7 @@
         <dependency>
             <groupId>com.github.spotbugs</groupId>
             <artifactId>spotbugs-annotations</artifactId>
-            <version>4.8.6</version>
+            <version>4.10.2</version>
             <scope>provided</scope>
         </dependency>
 
@@ -159,7 +159,7 @@
         <dependency>
             <groupId>com.tngtech.archunit</groupId>
             <artifactId>archunit-junit5</artifactId>
-            <version>1.4.0</version>
+            <version>1.4.2</version>
             <scope>test</scope>
         </dependency>
     </dependencies>
@@ -175,8 +175,8 @@
             <!-- Enforcer (CLAUDE-java.md §1): erzwingt die Bauumgebung, an die frühe
                  validate-Phase gebunden, damit ein falsches Setup abbricht, bevor irgendetwas
                  kompiliert wird.
-                   - requireJavaVersion=21: bricht auf jeder anderen JDK-Hauptversion ab
-                     ([21,22) schließt 21.x ein, 22+ und 17/20 aus).
+                   - requireJavaVersion=25: bricht auf jeder anderen JDK-Hauptversion ab
+                     ([25,26) schließt 25.x ein, 26+ und 21/24 aus).
                    - dependencyConvergence: erzwingt, dass transitiv gezogene Versionen einer
                      Abhängigkeit konvergieren (Konflikte werden in dependencyManagement gepinnt).
                    - banDuplicatePomDependencyVersions: verbietet doppelte <dependency>-Einträge
@@ -195,7 +195,7 @@
                         <configuration>
                             <rules>
                                 <requireJavaVersion>
-                                    <version>[21,22)</version>
+                                    <version>[25,26)</version>
                                 </requireJavaVersion>
                                 <dependencyConvergence/>
                                 <banDuplicatePomDependencyVersions/>
@@ -265,8 +265,10 @@
                 <version>2.44.5</version>
                 <configuration>
                     <java>
+                        <!-- 1.25.2 scheitert auf JDK 25 (NoSuchMethodError in javac-Interna);
+                             1.35.0 ist die aktuelle, JDK-25-taugliche Version (Issue #0087). -->
                         <googleJavaFormat>
-                            <version>1.25.2</version>
+                            <version>1.35.0</version>
                         </googleJavaFormat>
                         <removeUnusedImports/>
                     </java>
@@ -643,7 +645,7 @@
                     <plugin>
                         <groupId>org.pitest</groupId>
                         <artifactId>pitest-maven</artifactId>
-                        <version>1.17.0</version>
+                        <version>1.25.7</version>
                         <!-- An die test-Phase gebunden, damit `mvn -Ppit test` den Lauf auslöst. -->
                         <executions>
                             <execution>
