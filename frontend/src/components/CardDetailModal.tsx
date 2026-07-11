@@ -21,7 +21,7 @@ import type { Card } from '../api/cards'
 import { commentsApi as defaultCommentsApi, type Comment, type CommentsApi } from '../api/comments'
 import type { Epic } from '../api/epics'
 import { epicShortcode } from '../lib/epicMeta'
-import { MODAL_BORDER, MODAL_TEXT_PRIMARY, statusColors } from '../lib/statusColors'
+import { CODE_BLOCK_BG, MODAL_BORDER, MODAL_TEXT_PRIMARY, statusColors } from '../lib/statusColors'
 import { useAuth } from '../auth/AuthContext'
 import { AttachmentPreview } from './AttachmentPreview'
 
@@ -54,8 +54,8 @@ const descriptionSx = {
   '& h3, & h4': { fontWeight: 600, fontSize: '1rem', mt: 1.5, mb: 0.5 },
   '& p, & li': { lineHeight: 1.6, color: MODAL_TEXT_PRIMARY },
   '& ul, & ol': { pl: 3, my: 1 },
-  '& code': { backgroundColor: '#f4f5f7', px: 0.5, borderRadius: '3px', fontFamily: 'monospace', fontSize: '0.85em' },
-  '& pre': { backgroundColor: '#f4f5f7', p: 1.5, borderRadius: 1, overflowX: 'auto' },
+  '& code': { backgroundColor: CODE_BLOCK_BG, px: 0.5, borderRadius: '3px', fontFamily: 'monospace', fontSize: '0.85em' },
+  '& pre': { backgroundColor: CODE_BLOCK_BG, p: 1.5, borderRadius: 1, overflowX: 'auto' },
   '& pre code': { backgroundColor: 'transparent', px: 0 },
 } as const
 

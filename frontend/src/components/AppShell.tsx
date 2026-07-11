@@ -263,7 +263,7 @@ export function AppShell() {
                   letterSpacing: '.08em',
                   fontSize: 12,
                   fontWeight: 700,
-                  color: hasActiveChild ? 'primary.main' : '#5F7A7F',
+                  color: hasActiveChild ? 'primary.main' : 'text.secondary',
                 },
               }}
             />
@@ -325,7 +325,7 @@ export function AppShell() {
             width: drawerWidth,
             boxSizing: 'border-box',
             overflowX: 'hidden',
-            borderLeft: '4px solid #2F8C97',
+            borderLeft: (t) => `4px solid ${t.palette.primary.main}`,
             transition: (t) =>
               t.transitions.create('width', {
                 easing: t.transitions.easing.sharp,

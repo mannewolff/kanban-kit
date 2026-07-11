@@ -47,3 +47,5 @@ export const MODAL_BORDER = '#D8ECEE'
 export const MODAL_HEADER_BG = '#F6FAFB'
 export const MODAL_TEXT_PRIMARY = '#243539'
 export const MODAL_TEXT_SECONDARY = '#5F7A7F'
+/** Neutraler Hintergrund für Inline-Code/Codeblöcke im Karten-Detail (wertgleich zentralisiert). */
+export const CODE_BLOCK_BG = '#f4f5f7'

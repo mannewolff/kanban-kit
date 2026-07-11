@@ -194,12 +194,12 @@ export function BoardView({
                 overflow: 'hidden',
               }}
             >
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 1.5, py: 1, bgcolor: '#FFFFFF', borderBottom: '1px solid #D8ECEE' }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 1.5, py: 1, bgcolor: 'background.paper', borderBottom: 1, borderColor: 'divider' }}>
                 <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: colors.dot, flexShrink: 0 }} />
-                <Typography variant="caption" sx={{ fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.08em', color: '#5F7A7F', flexGrow: 1 }}>
+                <Typography variant="caption" sx={{ fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.08em', color: 'text.secondary', flexGrow: 1 }}>
                   {column.name}
                 </Typography>
-                <Typography variant="caption" sx={{ color: '#5F7A7F', bgcolor: '#F6FAFB', border: '1px solid #D8ECEE', borderRadius: 10, px: 0.75, lineHeight: 1.6 }}>
+                <Typography variant="caption" sx={{ color: 'text.secondary', bgcolor: COLUMN_SURFACE_BG, border: 1, borderColor: 'divider', borderRadius: 10, px: 0.75, lineHeight: 1.6 }}>
                   {column.wipLimit != null ? `${count}/${column.wipLimit}` : count}
                 </Typography>
                 {canEdit && (
@@ -227,12 +227,13 @@ export function BoardView({
                       sx={{
                         p: 1.25,
                         borderRadius: 1.5,
-                        bgcolor: '#FFFFFF',
-                        border: '1px solid #D8ECEE',
+                        bgcolor: 'background.paper',
+                        border: 1,
+                        borderColor: 'divider',
                         borderLeft: epic ? `4px solid ${epicColor(epic.id)}` : undefined,
                         cursor: canEdit ? 'grab' : 'pointer',
                         transition: 'border-color .15s',
-                        '&:hover': { borderColor: '#5BABB5' },
+                        '&:hover': { borderColor: 'primary.light' },
                         '&:active': { cursor: canEdit ? 'grabbing' : 'pointer' },
                       }}
                     >
