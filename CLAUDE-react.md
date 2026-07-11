@@ -209,7 +209,7 @@ Aktuelle Struktur unter `frontend/src/`:
 cd frontend && npm run lint   # ESLint auf src/
 ```
 
-**Konfiguration:** `frontend/eslint.config.js` (flat config)
+**Konfiguration:** [`eslint.config.js`](frontend/eslint.config.js) (flat config, ESLint 9+)
 - `typescript-eslint` (recommended): TypeScript-Korrektheit, kein `any`
 - `eslint-plugin-react` (recommended + jsx-runtime): React-Regeln
 - `eslint-plugin-react-hooks` (recommended): Hooks-Regeln, `exhaustive-deps`

@@ -73,7 +73,7 @@ interface Props {
   /** Board-Epics für das Epic-Dropdown. */
   epics?: Epic[]
   /** Kind-Karten eines Epics (nur bei type === 'EPIC'). */
-  children?: Card[]
+  childCards?: Card[]
   commentsApi?: CommentsApi
   attachmentsApi?: AttachmentsApi
   cardsApi?: Pick<typeof defaultCardsApi, 'update'>
@@ -88,7 +88,7 @@ export function CardDetailModal({
   initialEditing = false,
   columnName,
   epics = [],
-  children = [],
+  childCards = [],
   commentsApi = defaultCommentsApi,
   attachmentsApi = defaultAttachmentsApi,
   cardsApi = defaultCardsApi,
@@ -342,15 +342,15 @@ export function CardDetailModal({
               <Divider />
               <Box>
                 <Typography variant="subtitle2" gutterBottom>
-                  Karten ({children.length})
+                  Karten ({childCards.length})
                 </Typography>
                 <Stack spacing={0.5}>
-                  {children.map((c) => (
+                  {childCards.map((c) => (
                     <Typography key={c.id} variant="body2">
                       #{c.number} · {c.title}
                     </Typography>
                   ))}
-                  {children.length === 0 && (
+                  {childCards.length === 0 && (
                     <Typography color="text.secondary">Keine zugeordneten Karten.</Typography>
                   )}
                 </Stack>

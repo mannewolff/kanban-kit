@@ -161,7 +161,7 @@ export function ProjectsPage() {
         <DialogTitle>Projekt löschen?</DialogTitle>
         <DialogContent>
           <DialogContentText>
-            Das Projekt „{confirmDelete?.name}" und alle zugehörigen Boards, Epics und Tickets werden
+            Das Projekt „{confirmDelete?.name}&ldquo; und alle zugehörigen Boards, Epics und Tickets werden
             unwiderruflich gelöscht.
           </DialogContentText>
         </DialogContent>

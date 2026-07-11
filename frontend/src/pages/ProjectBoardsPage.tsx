@@ -154,7 +154,7 @@ export function ProjectBoardsPage() {
         <DialogTitle>Board löschen?</DialogTitle>
         <DialogContent>
           <DialogContentText>
-            Das Board „{confirmBoard?.name}" und alle zugehörigen Epics und Tickets werden
+            Das Board „{confirmBoard?.name}&ldquo; und alle zugehörigen Epics und Tickets werden
             unwiderruflich gelöscht.
           </DialogContentText>
         </DialogContent>
