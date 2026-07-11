@@ -5,6 +5,7 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import org.mwolff.manban.accesstoken.application.KanbanPrincipal;
 import org.mwolff.manban.board.application.BoardColumnRepository;
 import org.mwolff.manban.board.application.BoardNotFoundException;
@@ -139,8 +140,8 @@ public class KanbanCompatService {
         Map<Long, String> map = new LinkedHashMap<>();
         for (int i = 0; i < ordered.size(); i++) {
             BoardColumn c = ordered.get(i);
-            String byName = canonicalKey(c.name());
-            map.put(c.id(), byName != null ? byName : COLUMNS.get(Math.min(i, COLUMNS.size() - 1)));
+            String fallback = COLUMNS.get(Math.min(i, COLUMNS.size() - 1));
+            map.put(c.id(), canonicalKey(c.name()).orElse(fallback));
         }
         return map;
     }
@@ -159,19 +160,19 @@ public class KanbanCompatService {
                         "Board " + boardId + " hat keine Spalte für " + wanted));
     }
 
-    /** Normalisierter Namensabgleich auf einen Kanban-Key; {@code null} wenn kein Treffer. */
-    static String canonicalKey(String columnName) {
+    /** Normalisierter Namensabgleich auf einen Kanban-Key; leer, wenn kein Treffer. */
+    static Optional<String> canonicalKey(String columnName) {
         if (columnName == null) {
-            return null;
+            return Optional.empty();
         }
         String n = columnName.toLowerCase().replaceAll("[^a-z]", "");
         return switch (n) {
-            case "backlog" -> "BACKLOG";
-            case "ready" -> "READY";
-            case "inprogress" -> "IN_PROGRESS";
-            case "inreview" -> "IN_REVIEW";
-            case "done" -> "DONE";
-            default -> null;
+            case "backlog" -> Optional.of("BACKLOG");
+            case "ready" -> Optional.of("READY");
+            case "inprogress" -> Optional.of("IN_PROGRESS");
+            case "inreview" -> Optional.of("IN_REVIEW");
+            case "done" -> Optional.of("DONE");
+            default -> Optional.empty();
         };
     }
 
