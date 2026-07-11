@@ -21,12 +21,21 @@ spring:
     locations: classpath:db/migration
     baseline-on-migrate: false
 
-  # SMTP wird mit Issue A1 konkret konfiguriert; hier nur konfigurierbare Platzhalter.
+  # SMTP-Versand (aktiv nur bei manban.mail.enabled=true). Default 587/STARTTLS mit Auth;
+  # für 465/SSL bzw. lokale Mailcatcher lassen sich Auth/STARTTLS per Env abschalten.
   mail:
     host: ${MANBAN_SMTP_HOST:localhost}
     port: ${MANBAN_SMTP_PORT:1025}
     username: ${MANBAN_SMTP_USER:}
     password: ${MANBAN_SMTP_PASSWORD:}
+    properties:
+      mail.smtp.auth: ${MANBAN_SMTP_AUTH:true}
+      mail.smtp.starttls.enable: ${MANBAN_SMTP_STARTTLS:true}
+      mail.smtp.starttls.required: ${MANBAN_SMTP_STARTTLS:true}
+      # Versand läuft synchron im Request — harte Timeouts statt hängender Registrierungen.
+      mail.smtp.connectiontimeout: 10000
+      mail.smtp.timeout: 10000
+      mail.smtp.writetimeout: 10000
 
 server:
   port: 8080

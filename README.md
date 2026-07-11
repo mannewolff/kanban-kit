@@ -55,6 +55,23 @@ docker compose exec -T postgres psql -U manban -d manban \
 
 Danach ab- und wieder anmelden — die Rolle wird beim Login geladen.
 
+## Mailversand aktivieren
+
+Ohne Konfiguration werden Verifikations- und Reset-Links nur ins Log geschrieben (kein SMTP
+nötig). Für echten Versand in der `.env` setzen (Beispiel Strato, 587/STARTTLS):
+
+```
+MANBAN_MAIL_ENABLED=true
+MANBAN_MAIL_FROM=info@mwolff.org
+MANBAN_SMTP_HOST=smtp.strato.de
+MANBAN_SMTP_PORT=587
+MANBAN_SMTP_USER=info@mwolff.org
+MANBAN_SMTP_PASSWORD=***
+```
+
+Alle Varianten (465/SSL, Auth/STARTTLS abschalten) stehen in [.env.example](.env.example)
+und [docs/betrieb.md](docs/betrieb.md).
+
 ## Dokumentation
 
 Die ausführliche Benutzer- und Betriebsdokumentation liegt unter [`docs/`](docs/):
