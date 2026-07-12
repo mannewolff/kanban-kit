@@ -51,14 +51,26 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
    ```
    Mindestens:
    - `MANBAN_BASE_URL=https://kanban.mwolff.org`
-   - `MANBAN_SESSION_SECRET=$(openssl rand -base64 48)` — **ohne diesen Wert bricht der
-     Start absichtlich ab** (fail-fast).
+   - `MANBAN_SESSION_SECRET=$(openssl rand -hex 32)` — **ohne diesen Wert bricht der
+     Start absichtlich ab** (fail-fast). `-hex` liefert nur `0-9a-f`, also kein `$`-Escaping nötig.
    - `MANBAN_COOKIE_SECURE=true`
    - `POSTGRES_PASSWORD`, `MINIO_ROOT_USER`, `MINIO_ROOT_PASSWORD` — starke Werte.
    - Mail (Strato): `MANBAN_MAIL_ENABLED=true`, `MANBAN_SMTP_*`, `MANBAN_MAIL_FROM=info@mwolff.org`,
      echtes SMTP-Passwort. Ohne echten Mailversand können sich Nutzer nicht selbst verifizieren
      (Links landen nur im Log).
    - `MANBAN_BOOTSTRAP_ADMIN_TOKEN=<Zufallswert>` — für den ersten Admin.
+
+   > **⚠️ Sonderzeichen in Secrets (`$`).** Docker Compose interpoliert `$` in `.env`-Werten.
+   > Enthält ein Wert ein `$` (typisch: ein vorgegebenes SMTP-Passwort), muss **jedes `$` als `$$`**
+   > geschrieben werden — sonst wird der Wert stillschweigend verstümmelt und z. B. die SMTP-Auth
+   > schlägt fehl. Symptom beim Start: `WARN The "…" variable is not set. Defaulting to a blank string.`
+   > Beispiel: Passwort `ab$cd` → `ab$$cd`. Für **selbst erzeugte** Tokens `$`-freie Erzeugung
+   > bevorzugen (`openssl rand -hex 32`), dann entfällt das Escaping.
+   > **Kontrolle** (muss `0` liefern):
+   > ```bash
+   > docker compose -f docker-compose.yml -f docker-compose.prod.yml config 2>&1 >/dev/null \
+   >   | grep -c "is not set"
+   > ```
 
 5. **Starten:**
    ```bash

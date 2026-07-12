@@ -50,7 +50,7 @@ public class RequestPasswordResetService {
             SecureTokens.sha256Hex(plaintext),
             clock.instant().plus(properties.resetTtl()),
             null));
-    String resetUrl = properties.baseUrl() + "/api/auth/reset?token=" + plaintext;
+    String resetUrl = properties.baseUrl() + "/reset?token=" + plaintext;
     mailer.sendPasswordResetEmail(user.email(), resetUrl);
   }
 }

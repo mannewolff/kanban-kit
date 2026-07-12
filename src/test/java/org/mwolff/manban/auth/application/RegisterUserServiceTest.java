@@ -129,15 +129,19 @@ class RegisterUserServiceTest {
   }
 
   @Test
-  void register_sendsVerificationEmail() {
+  void register_sendsVerificationEmail_withFrontendVerifyUrl() {
     // Given
     when(users.existsByEmail("a@x.de")).thenReturn(false);
 
     // When
+    ArgumentCaptor<String> url = ArgumentCaptor.forClass(String.class);
     service.register("a@x.de", "pw", "Ada");
 
-    // Then
-    verify(mailer).sendVerificationEmail(eq("a@x.de"), anyString());
+    // Then — Link zeigt auf die Frontend-Seite /verify, nicht auf den API-Endpunkt.
+    verify(mailer).sendVerificationEmail(eq("a@x.de"), url.capture());
+    assertThat(url.getValue())
+        .startsWith("https://app.example/verify?token=")
+        .doesNotContain("/api/auth/verify");
   }
 
   @Test

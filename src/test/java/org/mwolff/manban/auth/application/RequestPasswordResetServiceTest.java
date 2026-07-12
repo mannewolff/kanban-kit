@@ -57,16 +57,20 @@ class RequestPasswordResetServiceTest {
   }
 
   @Test
-  void requestReset_sendsResetEmail_whenUserExists() {
+  void requestReset_sendsResetEmail_withFrontendResetUrl() {
     // Given
     when(users.findByEmail("a@x.de"))
         .thenReturn(Optional.of(new AppUser(2L, "a@x.de", "hash", "Ada", true, PlatformRole.USER)));
 
     // When
+    ArgumentCaptor<String> url = ArgumentCaptor.forClass(String.class);
     service.requestReset("  A@X.de ");
 
-    // Then
-    verify(mailer).sendPasswordResetEmail(anyString(), anyString());
+    // Then — Link zeigt auf die Frontend-Seite /reset, nicht auf den API-Endpunkt.
+    verify(mailer).sendPasswordResetEmail(anyString(), url.capture());
+    assertThat(url.getValue())
+        .startsWith("https://app.example/reset?token=")
+        .doesNotContain("/api/auth/reset");
   }
 
   @Test

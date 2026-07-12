@@ -133,9 +133,10 @@ class SmtpMailIT extends AbstractIntegrationTest {
     assertThat(JsonPath.<String>read(message, "$.From.Address")).isEqualTo(FROM);
     assertThat(JsonPath.<String>read(message, "$.To[0].Address")).isEqualTo(email);
     String text = JsonPath.read(message, "$.Text");
-    assertThat(text).contains("/api/auth/verify?token=");
+    // Mail verlinkt auf die Frontend-Seite /verify (nicht den API-Endpunkt).
+    assertThat(text).contains("/verify?token=").doesNotContain("/api/auth/verify");
 
-    // Der Link aus der echten Mail funktioniert: Token einlösen, User ist danach verifiziert.
+    // Der Token aus der Mail funktioniert am API-Endpunkt: einlösen, User ist danach verifiziert.
     assertThat(get("/api/auth/verify?token=" + tokenFrom(text)).statusCode()).isEqualTo(200);
     assertThat(users.findByEmail(email))
         .get()
@@ -153,7 +154,10 @@ class SmtpMailIT extends AbstractIntegrationTest {
     String message = awaitMessage(email, RESET_SUBJECT);
     assertThat(JsonPath.<String>read(message, "$.From.Address")).isEqualTo(FROM);
     assertThat(JsonPath.<String>read(message, "$.To[0].Address")).isEqualTo(email);
-    assertThat(JsonPath.<String>read(message, "$.Text")).contains("/api/auth/reset?token=");
+    // Mail verlinkt auf die Frontend-Seite /reset (nicht den API-Endpunkt).
+    assertThat(JsonPath.<String>read(message, "$.Text"))
+        .contains("/reset?token=")
+        .doesNotContain("/api/auth/reset");
   }
 
   @Test
