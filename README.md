@@ -20,8 +20,8 @@ Docker Compose.
 ## Schnellstart
 
 ```
-git clone https://github.com/mannewolff/manban.git
-cd manban
+git clone https://github.com/mannewolff/kanban-kit.git
+cd kanban-kit
 docker compose up --build -d
 ```
 

@@ -60,7 +60,7 @@ export default defineConfig({
     ],
 
     socialLinks: [
-      { icon: "github", link: "https://github.com/mannewolff/manban" },
+      { icon: "github", link: "https://github.com/mannewolff/kanban-kit" },
     ],
 
     footer: {
