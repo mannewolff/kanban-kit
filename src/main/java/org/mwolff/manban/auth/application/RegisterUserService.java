@@ -65,7 +65,7 @@ public class RegisterUserService {
             clock.instant().plus(properties.verificationTtl()),
             null));
 
-    String verificationUrl = properties.baseUrl() + "/api/auth/verify?token=" + plaintext;
+    String verificationUrl = properties.baseUrl() + "/verify?token=" + plaintext;
     mailer.sendVerificationEmail(user.email(), verificationUrl);
 
     return user;
