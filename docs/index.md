@@ -10,6 +10,7 @@ Funktionsstand nachgezogen.
 ## Inhalt
 
 - [Betrieb & Installation](betrieb.md) — Start via Docker, Umgebungsvariablen, erster Admin, E-Mail/Verifikation.
+- [Produktions-Deployment (Hostinger)](deployment-hostinger.md) — öffentlicher Betrieb hinter Traefik unter `kanban.mwolff.org`.
 - [Nutzung](nutzung.md) — Registrieren, Projekte, Boards, Karten, Listen-Ansicht, Anhänge, Epics, Mitglieder.
 - [Rollen & Rechte](rollen-und-rechte.md) — Plattform- vs. Projekt-Rollen, Rechte-Matrix, Admin-Bereich.
 
