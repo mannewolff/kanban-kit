@@ -41,7 +41,7 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
 
 3. **Code holen.** Repo (Branch `production`) nach `/root/opt/manban` klonen (bzw. `git pull`):
    ```bash
-   git clone -b production https://github.com/mannewolff/manban.git /root/opt/manban
+   git clone -b production https://github.com/mannewolff/kanban-kit.git /root/opt/manban
    cd /root/opt/manban
    ```
 
