@@ -164,4 +164,17 @@ describe('BoardView', () => {
     expect(screen.getByTestId('card-100')).toBeInTheDocument()
     expect(screen.queryByTestId('card-200')).not.toBeInTheDocument()
   })
+
+  it('zeigt den Verschieben-Menüeintrag nur mit canTransfer', () => {
+    const { unmount } = render(
+      <BoardView board={board} initialCards={[card]} canEdit api={mkApi()} />,
+    )
+    fireEvent.click(screen.getByLabelText('Menü Aufgabe'))
+    expect(screen.queryByText('Auf anderes Board verschieben…')).not.toBeInTheDocument()
+    unmount()
+
+    render(<BoardView board={board} initialCards={[card]} canEdit canTransfer api={mkApi()} />)
+    fireEvent.click(screen.getByLabelText('Menü Aufgabe'))
+    expect(screen.getByText('Auf anderes Board verschieben…')).toBeInTheDocument()
+  })
 })

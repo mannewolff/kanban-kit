@@ -20,6 +20,7 @@ import { epicColor, epicShortcode } from '../lib/epicMeta'
 import { COLUMN_SURFACE_BG, statusColors } from '../lib/statusColors'
 import { EpicBadge } from './EpicBadge'
 import { NewCardModal, type NewCardInitialValues, type NewItemInput } from './NewCardModal'
+import { TransferCardDialog } from './TransferCardDialog'
 
 const isDoneColumn = (name: string) => name.toLowerCase().includes('done')
 
@@ -33,6 +34,10 @@ interface Props {
   onEditCard?: (card: Card) => void
   onEpicsChanged?: () => void
   onCardsChanged?: () => void
+  /** Ob der Nutzer Karten board-/projektübergreifend verschieben darf (OWNER/Plattform-Admin). */
+  canTransfer?: boolean
+  /** Ob der Nutzer Plattform-Admin ist (darf in alle Projekte verschieben). */
+  platformAdmin?: boolean
   /** Injizierbar für Tests. */
   api?: Pick<CardsApi, 'create' | 'move' | 'archive' | 'restore' | 'remove'>
   epicsApi?: Pick<EpicsApi, 'create'>
@@ -53,6 +58,8 @@ export function BoardView({
   onEditCard,
   onEpicsChanged,
   onCardsChanged,
+  canTransfer = false,
+  platformAdmin = false,
   api = cardsApi,
   epicsApi = defaultEpicsApi,
 }: Props) {
@@ -60,6 +67,7 @@ export function BoardView({
   const [modalColumn, setModalColumn] = useState<{ id: number; name: string } | null>(null)
   const [duplicateValues, setDuplicateValues] = useState<NewCardInitialValues | null>(null)
   const [menu, setMenu] = useState<{ card: Card; anchor: HTMLElement } | null>(null)
+  const [transferCard, setTransferCard] = useState<Card | null>(null)
   const [epicFilter, setEpicFilter] = useState<number | null>(() => {
     try {
       const raw = localStorage.getItem(`manban.boardEpicFilter.${board.id}`)
@@ -292,6 +300,16 @@ export function BoardView({
           <MenuItem key="archive" onClick={() => { const c = menu.card; closeMenu(); void archiveCard(c) }}>
             Archivieren
           </MenuItem>,
+          ...(canTransfer
+            ? [
+                <MenuItem
+                  key="transfer"
+                  onClick={() => { const c = menu.card; closeMenu(); setTransferCard(c) }}
+                >
+                  Auf anderes Board verschieben…
+                </MenuItem>,
+              ]
+            : []),
           ...columns
             .filter((col) => col.id !== menu.card.columnId)
             .map((col) => (
@@ -310,6 +328,21 @@ export function BoardView({
         onClose={() => { setModalColumn(null); setDuplicateValues(null) }}
         onSubmit={(input) => (modalColumn ? createItem(modalColumn.id, input) : undefined)}
       />
+
+      {transferCard && (
+        <TransferCardDialog
+          card={transferCard}
+          currentBoardId={board.id}
+          platformAdmin={platformAdmin}
+          onClose={() => setTransferCard(null)}
+          onTransferred={() => {
+            const c = transferCard
+            setTransferCard(null)
+            setCards((current) => current.filter((x) => x.id !== c.id))
+            onCardsChanged?.()
+          }}
+        />
+      )}
     </Box>
   )
 }

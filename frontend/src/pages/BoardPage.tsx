@@ -15,7 +15,7 @@ import { useAuth } from '../auth/AuthContext'
 import { BoardView } from '../components/BoardView'
 import { CardDetailModal } from '../components/CardDetailModal'
 import { useSnackbar } from '../components/SnackbarProvider'
-import { canEditCards, canModerateComments, isPlatformAdmin } from '../lib/roles'
+import { canEditCards, canManageProject, canModerateComments, isPlatformAdmin } from '../lib/roles'
 import { useRefetchOnFocus } from '../lib/useRefetchOnFocus'
 
 export function BoardPage() {
@@ -115,9 +115,11 @@ export function BoardPage() {
     }
   }, [board, membershipRole])
 
+  const admin = isPlatformAdmin(user)
   const effectiveRole = membershipRole ?? fetchedRole ?? 'VIEWER'
-  const canEdit = canEditCards(effectiveRole, isPlatformAdmin(user))
-  const canModerate = canModerateComments(effectiveRole, isPlatformAdmin(user))
+  const canEdit = canEditCards(effectiveRole, admin)
+  const canModerate = canModerateComments(effectiveRole, admin)
+  const canTransfer = canManageProject(effectiveRole, admin)
 
   if (!validId) {
     return <Alert severity="error">Ungültige Board-ID.</Alert>
@@ -151,6 +153,8 @@ export function BoardPage() {
         onEditCard={(card) => { setOpenEditing(true); setSelectedCard(card) }}
         onEpicsChanged={reloadEpics}
         onCardsChanged={reloadCards}
+        canTransfer={canTransfer}
+        platformAdmin={admin}
       />
       {selectedCard && (
         <CardDetailModal
