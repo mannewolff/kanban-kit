@@ -151,7 +151,7 @@ class MembershipInvitationTest {
     verify(invitations, never()).save(any(ProjectInvitation.class));
     verify(mailer)
         .sendProjectAssignedEmail(
-            eq("bob@x.de"), eq("P"), eq(ProjectRole.MEMBER), eq("https://app.example/projects/9"));
+            "bob@x.de", "P", ProjectRole.MEMBER, "https://app.example/projects/9");
   }
 
   @Test
