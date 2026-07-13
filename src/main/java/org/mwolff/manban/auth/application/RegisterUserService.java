@@ -54,7 +54,10 @@ public class RegisterUserService {
                 passwordEncoder.encode(rawPassword),
                 displayName.trim(),
                 false,
-                PlatformRole.USER));
+                PlatformRole.USER,
+                // Selbst-Registrierung: wartet auf Admin-Freigabe (Issue #0097).
+                null,
+                null));
 
     String plaintext = SecureTokens.newToken();
     tokens.save(

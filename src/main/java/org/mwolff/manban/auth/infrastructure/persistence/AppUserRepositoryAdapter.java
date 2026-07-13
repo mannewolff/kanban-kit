@@ -44,7 +44,14 @@ class AppUserRepositoryAdapter implements AppUserRepository {
 
   private static AppUserEntity toEntity(AppUser u) {
     return new AppUserEntity(
-        u.id(), u.email(), u.passwordHash(), u.displayName(), u.emailVerified(), u.platformRole());
+        u.id(),
+        u.email(),
+        u.passwordHash(),
+        u.displayName(),
+        u.emailVerified(),
+        u.platformRole(),
+        u.approvedAt(),
+        u.approvedBy());
   }
 
   private static AppUser toDomain(AppUserEntity e) {
@@ -54,6 +61,8 @@ class AppUserRepositoryAdapter implements AppUserRepository {
         e.getPasswordHash(),
         e.getDisplayName(),
         e.isEmailVerified(),
-        e.getPlatformRole());
+        e.getPlatformRole(),
+        e.getApprovedAt(),
+        e.getApprovedBy());
   }
 }

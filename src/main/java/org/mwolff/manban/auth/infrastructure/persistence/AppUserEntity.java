@@ -8,6 +8,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import java.time.Instant;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.auth.domain.PlatformRole;
 
@@ -39,6 +40,12 @@ class AppUserEntity {
   @Column(name = "platform_role", nullable = false)
   private PlatformRole platformRole;
 
+  @Column(name = "approved_at")
+  private @Nullable Instant approvedAt;
+
+  @Column(name = "approved_by")
+  private @Nullable Long approvedBy;
+
   protected AppUserEntity() {
     // für JPA
   }
@@ -49,13 +56,17 @@ class AppUserEntity {
       String passwordHash,
       String displayName,
       boolean emailVerified,
-      PlatformRole platformRole) {
+      PlatformRole platformRole,
+      @Nullable Instant approvedAt,
+      @Nullable Long approvedBy) {
     this.id = id;
     this.email = email;
     this.passwordHash = passwordHash;
     this.displayName = displayName;
     this.emailVerified = emailVerified;
     this.platformRole = platformRole;
+    this.approvedAt = approvedAt;
+    this.approvedBy = approvedBy;
   }
 
   @Nullable Long getId() {
@@ -80,5 +91,13 @@ class AppUserEntity {
 
   PlatformRole getPlatformRole() {
     return platformRole;
+  }
+
+  @Nullable Instant getApprovedAt() {
+    return approvedAt;
+  }
+
+  @Nullable Long getApprovedBy() {
+    return approvedBy;
   }
 }

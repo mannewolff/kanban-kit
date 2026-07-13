@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import java.time.Instant;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mwolff.manban.auth.application.AdminService.UserView;
@@ -25,7 +26,7 @@ class BootstrapControllerTest {
   @Test
   void bootstrap_delegatesToService() {
     // Given
-    UserView user = new UserView(3L, "a@b.de", "A", PlatformRole.ADMIN, true);
+    UserView user = new UserView(3L, "a@b.de", "A", PlatformRole.ADMIN, true, Instant.EPOCH);
     var request = new BootstrapController.BootstrapRequest("env-token");
     when(service.bootstrap(3L, "env-token")).thenReturn(user);
 

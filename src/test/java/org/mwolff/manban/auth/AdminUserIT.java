@@ -42,6 +42,33 @@ class AdminUserIT extends AbstractIntegrationTest {
         .id();
   }
 
+  /** Verifizierter, aber noch nicht freigegebener Benutzer ({@code approvedAt=null}). */
+  private long ensurePendingUser(String email) {
+    return users
+        .findByEmail(email)
+        .orElseGet(
+            () ->
+                users.save(
+                    new AppUser(
+                        null,
+                        email,
+                        passwordEncoder.encode(PASSWORD),
+                        "Person",
+                        true,
+                        PlatformRole.USER,
+                        null,
+                        null)))
+        .id();
+  }
+
+  private org.springframework.test.web.servlet.ResultActions attemptLogin(String email)
+      throws Exception {
+    return mvc.perform(
+        post("/api/auth/login")
+            .contentType("application/json")
+            .content("{\"email\":\"%s\",\"password\":\"%s\"}".formatted(email, PASSWORD)));
+  }
+
   private Cookie login(String email, PlatformRole role) throws Exception {
     ensureUser(email, role);
     return mvc.perform(
@@ -76,6 +103,28 @@ class AdminUserIT extends AbstractIntegrationTest {
     // Nicht-Admin bekommt 403.
     Cookie user = login("au-user@example.com", PlatformRole.USER);
     mvc.perform(get("/api/admin/users").cookie(user)).andExpect(status().isForbidden());
+  }
+
+  @Test
+  void pendingUserCannotLoginUntilAdminApprovesNonAdminForbidden() throws Exception {
+    Cookie admin = login("ap-admin@example.com", PlatformRole.ADMIN);
+    long pendingId = ensurePendingUser("ap-pending@example.com");
+
+    // Nicht freigegebener Nutzer: Login abgelehnt (403).
+    attemptLogin("ap-pending@example.com").andExpect(status().isForbidden());
+
+    // Nicht-Admin darf nicht freigeben (403).
+    Cookie plain = login("ap-user@example.com", PlatformRole.USER);
+    mvc.perform(post("/api/admin/users/" + pendingId + "/approve").cookie(plain))
+        .andExpect(status().isForbidden());
+
+    // Admin gibt frei.
+    mvc.perform(post("/api/admin/users/" + pendingId + "/approve").cookie(admin))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.approvedAt").isNotEmpty());
+
+    // Jetzt gelingt der Login.
+    attemptLogin("ap-pending@example.com").andExpect(status().isOk());
   }
 
   @Test
