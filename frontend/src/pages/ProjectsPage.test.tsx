@@ -4,7 +4,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { projectsApi } from '../api/projects'
 import { ProjectsPage } from './ProjectsPage'
 
-vi.mock('../api/projects', () => ({ projectsApi: { list: vi.fn(), create: vi.fn(), remove: vi.fn() } }))
+vi.mock('../api/projects', () => ({
+  projectsApi: { list: vi.fn(), create: vi.fn(), remove: vi.fn(), rename: vi.fn() },
+}))
 
 let mockUser: { platformRole: string } | null = { platformRole: 'USER' }
 vi.mock('../auth/AuthContext', () => ({ useAuth: () => ({ user: mockUser }) }))
@@ -13,6 +15,7 @@ const mocked = projectsApi as unknown as {
   list: ReturnType<typeof vi.fn>
   create: ReturnType<typeof vi.fn>
   remove: ReturnType<typeof vi.fn>
+  rename: ReturnType<typeof vi.fn>
 }
 
 describe('ProjectsPage', () => {
@@ -70,5 +73,25 @@ describe('ProjectsPage', () => {
       </MemoryRouter>,
     )
     expect(await screen.findByText('Boardauswahl')).toBeInTheDocument()
+  })
+
+  it('benennt ein Projekt als OWNER um', async () => {
+    mocked.list.mockResolvedValue([{ id: 1, name: 'Meins', role: 'OWNER', createdAt: '' }])
+    mocked.rename.mockResolvedValue({ id: 1, name: 'Neu', role: 'OWNER', createdAt: '' })
+    render(<MemoryRouter><ProjectsPage /></MemoryRouter>)
+
+    fireEvent.click(await screen.findByLabelText('Projekt Meins umbenennen'))
+    fireEvent.change(screen.getByLabelText('Neuer Projektname'), { target: { value: 'Neu' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Speichern' }))
+
+    await waitFor(() => expect(mocked.rename).toHaveBeenCalledWith(1, 'Neu'))
+  })
+
+  it('zeigt Nicht-OWNER kein Umbenennen', async () => {
+    mocked.list.mockResolvedValue([{ id: 1, name: 'Fremd', role: 'MEMBER', createdAt: '' }])
+    render(<MemoryRouter><ProjectsPage /></MemoryRouter>)
+
+    expect(await screen.findByText('Fremd')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Projekt Fremd umbenennen')).not.toBeInTheDocument()
   })
 })
