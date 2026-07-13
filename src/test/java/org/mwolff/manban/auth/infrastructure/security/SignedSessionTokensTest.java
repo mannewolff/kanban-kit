@@ -12,6 +12,9 @@ import java.util.OptionalLong;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.NullSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mwolff.manban.auth.application.AuthProperties;
 
 /**
@@ -79,37 +82,16 @@ class SignedSessionTokensTest {
     assertThat(result).hasValue(42L);
   }
 
-  @Test
-  void verify_nullToken_returnsEmpty() {
+  /**
+   * Vier strukturell identische Ungültigkeits-Fälle (null, kein Trennzeichen, Signatur nicht
+   * Base64, Signatur-Mismatch) parametrisiert statt als separate Tests (Sonar S5976).
+   */
+  @ParameterizedTest
+  @NullSource
+  @ValueSource(strings = {"no-dot-here", "payload.$$$not-base64$$$", "payload.AAAA"})
+  void verify_invalidToken_returnsEmpty(String token) {
     // When
-    OptionalLong result = at(ISSUED_AT).verify(null);
-
-    // Then
-    assertThat(result).isEmpty();
-  }
-
-  @Test
-  void verify_tokenWithoutSeparator_returnsEmpty() {
-    // When
-    OptionalLong result = at(ISSUED_AT).verify("no-dot-here");
-
-    // Then
-    assertThat(result).isEmpty();
-  }
-
-  @Test
-  void verify_signatureNotBase64_returnsEmpty() {
-    // When
-    OptionalLong result = at(ISSUED_AT).verify("payload.$$$not-base64$$$");
-
-    // Then
-    assertThat(result).isEmpty();
-  }
-
-  @Test
-  void verify_signatureMismatch_returnsEmpty() {
-    // When: gültiges Base64, aber nicht die echte Signatur der Nutzlast
-    OptionalLong result = at(ISSUED_AT).verify("payload.AAAA");
+    OptionalLong result = at(ISSUED_AT).verify(token);
 
     // Then
     assertThat(result).isEmpty();
