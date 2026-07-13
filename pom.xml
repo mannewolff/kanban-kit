@@ -481,6 +481,7 @@
                         <exclude>org/mwolff/manban/board/infrastructure/persistence/BoardColumnEntity.class</exclude>
                         <exclude>org/mwolff/manban/board/infrastructure/persistence/BoardEntity.class</exclude>
                         <exclude>org/mwolff/manban/card/infrastructure/persistence/CardEntity.class</exclude>
+                        <exclude>org/mwolff/manban/card/infrastructure/persistence/CardColumnTransitionEntity.class</exclude>
                         <exclude>org/mwolff/manban/comment/infrastructure/persistence/CommentEntity.class</exclude>
                         <exclude>org/mwolff/manban/project/infrastructure/persistence/ProjectEntity.class</exclude>
                         <exclude>org/mwolff/manban/project/infrastructure/persistence/ProjectInvitationEntity.class</exclude>
@@ -495,6 +496,7 @@
                         <exclude>org/mwolff/manban/board/infrastructure/persistence/BoardColumnRepositoryAdapter.class</exclude>
                         <exclude>org/mwolff/manban/board/infrastructure/persistence/BoardRepositoryAdapter.class</exclude>
                         <exclude>org/mwolff/manban/card/infrastructure/persistence/CardRepositoryAdapter.class</exclude>
+                        <exclude>org/mwolff/manban/card/infrastructure/persistence/CardColumnTransitionRepositoryAdapter.class</exclude>
                         <exclude>org/mwolff/manban/comment/infrastructure/persistence/CommentRepositoryAdapter.class</exclude>
                         <exclude>org/mwolff/manban/project/infrastructure/persistence/ProjectInvitationRepositoryAdapter.class</exclude>
                         <exclude>org/mwolff/manban/project/infrastructure/persistence/ProjectMembershipRepositoryAdapter.class</exclude>
