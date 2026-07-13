@@ -1,6 +1,11 @@
 import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
+import Dialog from '@mui/material/Dialog'
+import DialogActions from '@mui/material/DialogActions'
+import DialogContent from '@mui/material/DialogContent'
+import DialogContentText from '@mui/material/DialogContentText'
+import DialogTitle from '@mui/material/DialogTitle'
 import Link from '@mui/material/Link'
 import MenuItem from '@mui/material/MenuItem'
 import Stack from '@mui/material/Stack'
@@ -16,6 +21,7 @@ import { Link as RouterLink, useParams } from 'react-router-dom'
 import { membersApi as defaultMembersApi, type Member, type MembersApi } from '../api/members'
 import { projectsApi } from '../api/projects'
 import { ApiError } from '../api/client'
+import { useAuth } from '../auth/AuthContext'
 import { canManageMembers, type ProjectRole } from '../lib/roles'
 
 const ROLES: ProjectRole[] = ['OWNER', 'ADMIN', 'MEMBER', 'VIEWER']
@@ -29,9 +35,12 @@ export function ProjectMembersPage({ api = defaultMembersApi, loadRole }: Props)
   const { projectId } = useParams()
   const id = Number.parseInt(projectId ?? '', 10)
   const validId = Number.isInteger(id) && id > 0
+  const { user } = useAuth()
   const [members, setMembers] = useState<Member[]>([])
   const [role, setRole] = useState<string>('VIEWER')
   const [projectName, setProjectName] = useState<string | null>(null)
+  const [transferTarget, setTransferTarget] = useState<Member | null>(null)
+  const [transferError, setTransferError] = useState<string | null>(null)
   const [inviteEmail, setInviteEmail] = useState('')
   const [inviteRole, setInviteRole] = useState<ProjectRole>('MEMBER')
   const [message, setMessage] = useState<{ kind: 'success' | 'error'; text: string } | null>(null)
@@ -66,8 +75,25 @@ export function ProjectMembersPage({ api = defaultMembersApi, loadRole }: Props)
   }, [id, validId, api, loadRole])
 
   const manage = canManageMembers(role)
+  const isOwner = role === 'OWNER'
   const ownerCount = members.filter((m) => m.role === 'OWNER').length
   const isLastOwner = (m: Member) => m.role === 'OWNER' && ownerCount === 1
+
+  const handleTransferOwner = async () => {
+    if (!transferTarget) {
+      return
+    }
+    setTransferError(null)
+    try {
+      await projectsApi.transferOwner(id, transferTarget.userId)
+      setTransferTarget(null)
+      // Der Aufrufer verliert die Owner-Rechte und wird Admin (Backend-Semantik).
+      setRole('ADMIN')
+      await reload()
+    } catch {
+      setTransferError('Eigentümer-Wechsel fehlgeschlagen.')
+    }
+  }
 
   const handleInvite = async (event: React.FormEvent) => {
     event.preventDefault()
@@ -192,6 +218,13 @@ export function ProjectMembersPage({ api = defaultMembersApi, loadRole }: Props)
               </TableCell>
               {manage && (
                 <TableCell align="right">
+                  {isOwner && member.userId !== user?.userId && (
+                    <Button size="small" sx={{ mr: 1 }}
+                      aria-label={`${member.displayName} zum Eigentümer machen`}
+                      onClick={() => setTransferTarget(member)}>
+                      Zum Eigentümer machen
+                    </Button>
+                  )}
                   <Button size="small" color="error" disabled={isLastOwner(member)}
                     aria-label={`${member.displayName} entfernen`} onClick={() => handleRemove(member)}>
                     Entfernen
@@ -202,6 +235,23 @@ export function ProjectMembersPage({ api = defaultMembersApi, loadRole }: Props)
           ))}
         </TableBody>
       </Table>
+
+      <Dialog open={transferTarget !== null} onClose={() => setTransferTarget(null)}>
+        <DialogTitle>Zum Eigentümer machen?</DialogTitle>
+        <DialogContent>
+          {transferError && <Alert severity="error" sx={{ mb: 2 }}>{transferError}</Alert>}
+          <DialogContentText>
+            „{transferTarget?.displayName}&ldquo; wird Eigentümer dieses Projekts. Du verlierst
+            dabei deine Owner-Rechte und wirst zum Admin herabgestuft.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setTransferTarget(null)}>Abbrechen</Button>
+          <Button variant="contained" onClick={() => void handleTransferOwner()}>
+            Übertragen
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   )
 }

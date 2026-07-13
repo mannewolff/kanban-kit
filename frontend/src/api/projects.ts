@@ -15,4 +15,6 @@ export const projectsApi = {
     apiFetch<Project>('/api/projects', json({ name, ownerEmail }, 'POST')),
   rename: (id: number, name: string) => apiFetch<Project>(`/api/projects/${id}`, json({ name }, 'PATCH')),
   remove: (id: number) => apiFetch<void>(`/api/projects/${id}`, { method: 'DELETE' }),
+  transferOwner: (id: number, newOwnerUserId: number) =>
+    apiFetch<void>(`/api/projects/${id}/owner`, json({ newOwnerUserId }, 'POST')),
 }
