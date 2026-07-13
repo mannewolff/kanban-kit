@@ -31,9 +31,10 @@ export default defineConfig({
     setupFiles: './src/test/setup.ts',
     css: false,
     // Coverage-Gate (CLAUDE-react.md §Tests): v8-Provider, Build bricht bei Unterschreitung.
+    // lcov zusätzlich zu text/html: wird von SonarQube importiert (sonar-project.properties).
     coverage: {
       provider: 'v8',
-      reporter: ['text', 'html'],
+      reporter: ['text', 'html', 'lcov'],
       include: ['src/**'],
       exclude: [
         // Begründete Ausschlüsse (analog CLAUDE-java.md §5.2, einzeln):

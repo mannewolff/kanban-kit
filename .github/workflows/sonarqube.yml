@@ -1,0 +1,53 @@
+name: SonarQube Cloud
+
+# Läuft beim tatsächlichen Merge nach production (nicht bei jedem Push auf main) —
+# Sonar-Scan + Coverage-Import sind an den Release-Zeitpunkt gebunden, siehe RELEASING.md.
+on:
+  push:
+    branches: [production]
+
+jobs:
+  sonarqube:
+    name: SonarQube-Analyse (inkl. Coverage) + GitHub-Sync
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write # für scripts/sync-sonar-issues-to-github.mjs (gh issue create)
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # voller Verlauf nötig, sonst fehlen Sonar die Blame-Infos
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+
+      - name: Backend Build + Tests (JaCoCo-Coverage)
+        run: mvn -B verify
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Frontend Tests (lcov-Coverage)
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run test:coverage
+
+      # Auf Commit-SHA gepinnt statt beweglichem Tag (Supply-Chain-Härtung, siehe
+      # CLAUDE-security.md) — entspricht v8.2.0.
+      - name: SonarQube-Scan
+        uses: SonarSource/sonarqube-scan-action@713881670b6b3676cda39549040e2d88c70d582e # v8.2.0
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+      - name: Neue Findings nach GitHub synchronisieren
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node scripts/sync-sonar-issues-to-github.mjs

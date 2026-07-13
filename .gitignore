@@ -7,6 +7,10 @@ target/
 # Umgebung (Secrets)
 .env
 
+# Lokales Nachschlage-Log des Sonar-Sync-Skripts — nicht Quelle der Wahrheit
+# (Duplikat-Prüfung läuft live gegen GitHub, siehe scripts/sync-sonar-issues-to-github.mjs).
+scripts/.sonar-issue-map.json
+
 # Node (Frontend hat zusätzlich eine eigene .gitignore)
 /node_modules/
 frontend/node_modules/
