@@ -27,15 +27,24 @@ class BoardEntity {
   @Column(name = "created_at", nullable = false)
   private Instant createdAt;
 
+  @Column(name = "archived_at")
+  private @Nullable Instant archivedAt;
+
   protected BoardEntity() {
     // für JPA
   }
 
-  BoardEntity(@Nullable Long id, Long projectId, String name, Instant createdAt) {
+  BoardEntity(
+      @Nullable Long id,
+      Long projectId,
+      String name,
+      Instant createdAt,
+      @Nullable Instant archivedAt) {
     this.id = id;
     this.projectId = projectId;
     this.name = name;
     this.createdAt = createdAt;
+    this.archivedAt = archivedAt;
   }
 
   @Nullable Long getId() {
@@ -52,5 +61,9 @@ class BoardEntity {
 
   Instant getCreatedAt() {
     return createdAt;
+  }
+
+  @Nullable Instant getArchivedAt() {
+    return archivedAt;
   }
 }

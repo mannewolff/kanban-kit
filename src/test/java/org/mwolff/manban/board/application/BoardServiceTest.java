@@ -194,15 +194,15 @@ class BoardServiceTest {
   }
 
   @Test
-  void deleteBoard_deletesById() {
+  void deleteBoard_archivesInsteadOfDeleting() {
     // Given
     when(boards.findById(10L)).thenReturn(Optional.of(board()));
 
     // When
     service.deleteBoard(1L, 10L);
 
-    // Then
-    verify(boards).deleteById(10L);
+    // Then (Archiv-Lebenszyklus im Detail: siehe BoardArchiveServiceTest)
+    verify(boards).save(any(Board.class));
   }
 
   @Test

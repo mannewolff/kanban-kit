@@ -11,11 +11,32 @@ import org.mwolff.manban.common.Identifiable;
  * @param projectId zugehöriges Projekt
  * @param name Board-Name
  * @param createdAt Erstellzeitpunkt
+ * @param archivedAt Archivierungszeitpunkt; {@code null} bedeutet „aktiv"
  */
-public record Board(@Nullable Long id, Long projectId, String name, Instant createdAt)
+public record Board(
+    @Nullable Long id, Long projectId, String name, Instant createdAt, @Nullable Instant archivedAt)
     implements Identifiable {
 
+  /** Kompakt-Konstruktor für ein aktives (nicht archiviertes) Board. */
+  public Board(@Nullable Long id, Long projectId, String name, Instant createdAt) {
+    this(id, projectId, name, createdAt, null);
+  }
+
   public Board withName(String newName) {
-    return new Board(id, projectId, newName, createdAt);
+    return new Board(id, projectId, newName, createdAt, archivedAt);
+  }
+
+  /** Markiert das Board als archiviert. */
+  public Board archivedAt(Instant when) {
+    return new Board(id, projectId, name, createdAt, when);
+  }
+
+  /** Hebt die Archivierung auf (wieder aktiv). */
+  public Board restored() {
+    return new Board(id, projectId, name, createdAt, null);
+  }
+
+  public boolean isArchived() {
+    return archivedAt != null;
   }
 }

@@ -88,4 +88,39 @@ class BoardControllerTest {
     // Then
     verify(service).deleteBoard(3L, 5L);
   }
+
+  @Test
+  void listArchived_delegatesToService() {
+    // Given
+    List<BoardView> views = List.of(board());
+    when(service.listArchivedBoards(3L, 2L)).thenReturn(views);
+
+    // When
+    List<BoardView> result = controller.listArchived(3L, 2L);
+
+    // Then
+    assertThat(result).isSameAs(views);
+  }
+
+  @Test
+  void restore_delegatesToService() {
+    // Given
+    BoardView view = board();
+    when(service.restoreBoard(3L, 5L)).thenReturn(view);
+
+    // When
+    BoardView result = controller.restore(3L, 5L);
+
+    // Then
+    assertThat(result).isSameAs(view);
+  }
+
+  @Test
+  void purge_delegatesToService() {
+    // When
+    controller.purge(3L, 5L);
+
+    // Then
+    verify(service).purgeBoard(3L, 5L);
+  }
 }
