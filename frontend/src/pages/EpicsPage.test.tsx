@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { boardsApi } from '../api/boards'
 import { cardsApi } from '../api/cards'
 import { epicsApi } from '../api/epics'
+import { projectsApi } from '../api/projects'
 import { EpicsPage } from './EpicsPage'
 
 vi.mock('../auth/AuthContext', () => ({
@@ -17,6 +18,7 @@ vi.mock('../api/projects', () => ({ projectsApi: { list: vi.fn() } }))
 const mBoards = boardsApi as unknown as { get: ReturnType<typeof vi.fn> }
 const mCards = cardsApi as unknown as { list: ReturnType<typeof vi.fn> }
 const mEpics = epicsApi as unknown as { list: ReturnType<typeof vi.fn>; create: ReturnType<typeof vi.fn> }
+const mProjects = projectsApi as unknown as { list: ReturnType<typeof vi.fn> }
 
 function renderPage() {
   return render(
@@ -34,6 +36,7 @@ describe('EpicsPage', () => {
     mBoards.get.mockResolvedValue({ id: 1, projectId: 9, name: 'B', createdAt: '', columns: [] })
     mCards.list.mockResolvedValue([])
     mEpics.create.mockResolvedValue({})
+    mProjects.list.mockResolvedValue([{ id: 9, name: 'Projekt', role: 'OWNER', createdAt: '' }])
   })
 
   it('listet Epics mit Kürzel und Fortschritt', async () => {

@@ -30,5 +30,11 @@ public interface CardRepository {
    */
   void move(long cardId, long newColumnId, int newPosition);
 
+  /**
+   * Hängt eine Karte board-/spaltenübergreifend um: setzt Board, Spalte und eine neue board-scoped
+   * Nummer, hängt sie ans Ende der Zielspalte und reindiziert die Quellspalte lückenlos.
+   */
+  void transfer(long cardId, long targetBoardId, long targetColumnId, int newNumber);
+
   void deleteById(long id);
 }

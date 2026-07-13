@@ -1,6 +1,7 @@
 package org.mwolff.manban.project.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -194,5 +195,45 @@ class PermissionCheckerTest {
     // When / Then
     assertThatThrownBy(() -> checker.requireMembership(2L, 7L))
         .isInstanceOf(ProjectNotFoundException.class);
+  }
+
+  @Test
+  void requireOwner_passes_forOwnerMember() {
+    // Given
+    when(memberships.findByProjectIdAndUserId(7L, 2L))
+        .thenReturn(Optional.of(membership(7L, 2L, ProjectRole.OWNER)));
+
+    // When / Then
+    assertThatCode(() -> checker.requireOwner(2L, 7L)).doesNotThrowAnyException();
+  }
+
+  @Test
+  void requireOwner_passes_forPlatformAdmin_withoutMembership() {
+    // Given
+    when(platformAdminChecker.isPlatformAdmin(1L)).thenReturn(true);
+
+    // When / Then
+    assertThatCode(() -> checker.requireOwner(1L, 7L)).doesNotThrowAnyException();
+  }
+
+  @Test
+  void requireOwner_throwsProjectNotFound_forNonMember() {
+    // Given
+    when(memberships.findByProjectIdAndUserId(7L, 2L)).thenReturn(Optional.empty());
+
+    // When / Then
+    assertThatThrownBy(() -> checker.requireOwner(2L, 7L))
+        .isInstanceOf(ProjectNotFoundException.class);
+  }
+
+  @Test
+  void requireOwner_throwsProjectAccessDenied_forNonOwnerMember() {
+    // Given
+    when(memberships.findByProjectIdAndUserId(7L, 2L))
+        .thenReturn(Optional.of(membership(7L, 2L, ProjectRole.ADMIN)));
+
+    // When / Then
+    assertThatThrownBy(() -> checker.requireOwner(2L, 7L))
+        .isInstanceOf(ProjectAccessDeniedException.class);
   }
 }

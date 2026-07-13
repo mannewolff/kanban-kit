@@ -3,7 +3,15 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { describe, expect, it, vi } from 'vitest'
 import { ApiError } from '../api/client'
 import type { Member, MembersApi } from '../api/members'
+import { projectsApi } from '../api/projects'
 import { ProjectMembersPage } from './ProjectMembersPage'
+
+vi.mock('../api/projects', () => ({ projectsApi: { list: vi.fn(), transferOwner: vi.fn() } }))
+vi.mock('../auth/AuthContext', () => ({ useAuth: () => ({ user: { userId: 1 } }) }))
+const mProjects = projectsApi as unknown as {
+  list: ReturnType<typeof vi.fn>
+  transferOwner: ReturnType<typeof vi.fn>
+}
 
 const members: Member[] = [
   { userId: 1, email: 'owner@x.de', displayName: 'Olga Owner', role: 'OWNER' },
@@ -133,5 +141,24 @@ describe('ProjectMembersPage', () => {
     expect(
       await screen.findByText('Nutzer ist noch nicht vom Admin freigegeben.'),
     ).toBeInTheDocument()
+  })
+
+  it('überträgt die Eigentümerschaft nach Bestätigung (Owner)', async () => {
+    mProjects.transferOwner.mockResolvedValue(undefined)
+    renderPage(makeApi(), 'OWNER')
+
+    // Nicht beim eigenen Eintrag (Olga, userId 1), aber bei Mika (userId 2).
+    await waitFor(() => expect(screen.getByText('Mika Member')).toBeInTheDocument())
+    expect(screen.queryByLabelText('Olga Owner zum Eigentümer machen')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByLabelText('Mika Member zum Eigentümer machen'))
+    fireEvent.click(screen.getByRole('button', { name: 'Übertragen' }))
+    await waitFor(() => expect(mProjects.transferOwner).toHaveBeenCalledWith(5, 2))
+  })
+
+  it('zeigt Nicht-Ownern kein Zum-Eigentümer-machen', async () => {
+    renderPage(makeApi(), 'MEMBER')
+    await waitFor(() => expect(screen.getByText('Mika Member')).toBeInTheDocument())
+    expect(screen.queryByLabelText('Mika Member zum Eigentümer machen')).not.toBeInTheDocument()
   })
 })

@@ -23,12 +23,24 @@ class BoardRepositoryAdapter implements BoardRepository {
 
   @Override
   public Optional<Board> findById(long id) {
+    return jpa.findByIdAndArchivedAtIsNull(id).map(BoardRepositoryAdapter::toDomain);
+  }
+
+  @Override
+  public Optional<Board> findByIdIncludingArchived(long id) {
     return jpa.findById(id).map(BoardRepositoryAdapter::toDomain);
   }
 
   @Override
   public List<Board> findByProjectId(long projectId) {
-    return jpa.findByProjectIdOrderByCreatedAt(projectId).stream()
+    return jpa.findByProjectIdAndArchivedAtIsNullOrderByCreatedAt(projectId).stream()
+        .map(BoardRepositoryAdapter::toDomain)
+        .toList();
+  }
+
+  @Override
+  public List<Board> findArchivedByProjectId(long projectId) {
+    return jpa.findByProjectIdAndArchivedAtIsNotNullOrderByCreatedAt(projectId).stream()
         .map(BoardRepositoryAdapter::toDomain)
         .toList();
   }
@@ -39,10 +51,10 @@ class BoardRepositoryAdapter implements BoardRepository {
   }
 
   private static BoardEntity toEntity(Board b) {
-    return new BoardEntity(b.id(), b.projectId(), b.name(), b.createdAt());
+    return new BoardEntity(b.id(), b.projectId(), b.name(), b.createdAt(), b.archivedAt());
   }
 
   private static Board toDomain(BoardEntity e) {
-    return new Board(e.getId(), e.getProjectId(), e.getName(), e.getCreatedAt());
+    return new Board(e.getId(), e.getProjectId(), e.getName(), e.getCreatedAt(), e.getArchivedAt());
   }
 }

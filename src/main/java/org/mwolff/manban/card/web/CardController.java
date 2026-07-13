@@ -102,6 +102,14 @@ class CardController {
     return cards.move(userId, cardId, request.columnId(), request.position());
   }
 
+  @PostMapping("/api/cards/{cardId}/transfer")
+  CardView transfer(
+      @AuthenticationPrincipal Long userId,
+      @PathVariable long cardId,
+      @Valid @RequestBody TransferCardRequest request) {
+    return cards.transfer(userId, cardId, request.targetBoardId(), request.targetColumnId());
+  }
+
   @PostMapping("/api/cards/{cardId}/archive")
   CardView archive(@AuthenticationPrincipal Long userId, @PathVariable long cardId) {
     return cards.archive(userId, cardId);
@@ -138,4 +146,6 @@ class CardController {
 
   record MoveCardRequest(
       @NotNull Long columnId, @jakarta.validation.constraints.PositiveOrZero int position) {}
+
+  record TransferCardRequest(@NotNull Long targetBoardId, @NotNull Long targetColumnId) {}
 }

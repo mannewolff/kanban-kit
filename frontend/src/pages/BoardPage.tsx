@@ -1,8 +1,17 @@
 import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
+import Button from '@mui/material/Button'
 import CircularProgress from '@mui/material/CircularProgress'
+import Dialog from '@mui/material/Dialog'
+import DialogActions from '@mui/material/DialogActions'
+import DialogContent from '@mui/material/DialogContent'
+import DialogTitle from '@mui/material/DialogTitle'
+import IconButton from '@mui/material/IconButton'
 import Link from '@mui/material/Link'
+import Stack from '@mui/material/Stack'
+import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
+import EditOutlinedIcon from '@mui/icons-material/EditOutlined'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link as RouterLink, useNavigate, useParams } from 'react-router-dom'
 import { ApiError } from '../api/client'
@@ -15,7 +24,8 @@ import { useAuth } from '../auth/AuthContext'
 import { BoardView } from '../components/BoardView'
 import { CardDetailModal } from '../components/CardDetailModal'
 import { useSnackbar } from '../components/SnackbarProvider'
-import { canEditCards, canModerateComments, isPlatformAdmin } from '../lib/roles'
+import { canEditCards, canManageProject, canModerateComments, isPlatformAdmin } from '../lib/roles'
+import { useProjectName } from '../lib/useProjectName'
 import { useRefetchOnFocus } from '../lib/useRefetchOnFocus'
 
 export function BoardPage() {
@@ -33,6 +43,8 @@ export function BoardPage() {
   const [selectedCard, setSelectedCard] = useState<Card | null>(null)
   const [openEditing, setOpenEditing] = useState(false)
   const [retentionDays, setRetentionDays] = useState(30)
+  const [renameOpen, setRenameOpen] = useState(false)
+  const [renameValue, setRenameValue] = useState('')
 
   // Letztes bekanntes Projekt des Boards, um bei einem 404 (Board zwischenzeitlich archiviert/
   // gelöscht) auf dessen Board-Liste zurückzuleiten. Einmal-Guard gegen doppelte Navigation.
@@ -115,9 +127,27 @@ export function BoardPage() {
     }
   }, [board, membershipRole])
 
+  const projectName = useProjectName(board?.projectId ?? null)
+  const admin = isPlatformAdmin(user)
   const effectiveRole = membershipRole ?? fetchedRole ?? 'VIEWER'
-  const canEdit = canEditCards(effectiveRole, isPlatformAdmin(user))
-  const canModerate = canModerateComments(effectiveRole, isPlatformAdmin(user))
+  const canEdit = canEditCards(effectiveRole, admin)
+  const canModerate = canModerateComments(effectiveRole, admin)
+  const canTransfer = canManageProject(effectiveRole, admin)
+
+  const openRename = () => {
+    if (board) {
+      setRenameValue(board.name)
+      setRenameOpen(true)
+    }
+  }
+  const handleRename = async () => {
+    if (!board || !renameValue.trim()) {
+      return
+    }
+    const updated = await boardsApi.rename(board.id, renameValue.trim())
+    setBoard(updated)
+    setRenameOpen(false)
+  }
 
   if (!validId) {
     return <Alert severity="error">Ungültige Board-ID.</Alert>
@@ -138,9 +168,21 @@ export function BoardPage() {
   return (
     <Box>
       <Link component={RouterLink} to={`/projects/${board.projectId}`}>← Boards</Link>
-      <Typography variant="h5" sx={{ mt: 1, mb: 2 }}>
-        {board.name}
-      </Typography>
+      <Stack direction="row" alignItems="center" spacing={0.5} sx={{ mt: 1, mb: 2 }}>
+        <Typography variant="h5">
+          {projectName && (
+            <Box component="span" sx={{ color: 'text.secondary', fontWeight: 400 }}>
+              {projectName} /{' '}
+            </Box>
+          )}
+          <Box component="span">{board.name}</Box>
+        </Typography>
+        {canEdit && (
+          <IconButton size="small" aria-label="Board umbenennen" onClick={openRename}>
+            <EditOutlinedIcon fontSize="small" />
+          </IconButton>
+        )}
+      </Stack>
       <BoardView
         board={board}
         initialCards={cards}
@@ -151,6 +193,8 @@ export function BoardPage() {
         onEditCard={(card) => { setOpenEditing(true); setSelectedCard(card) }}
         onEpicsChanged={reloadEpics}
         onCardsChanged={reloadCards}
+        canTransfer={canTransfer}
+        platformAdmin={admin}
       />
       {selectedCard && (
         <CardDetailModal
@@ -168,6 +212,27 @@ export function BoardPage() {
           }}
         />
       )}
+
+      <Dialog open={renameOpen} onClose={() => setRenameOpen(false)}>
+        <DialogTitle>Board umbenennen</DialogTitle>
+        <DialogContent>
+          <TextField
+            autoFocus
+            fullWidth
+            label="Board-Name"
+            value={renameValue}
+            onChange={(e) => setRenameValue(e.target.value)}
+            sx={{ mt: 1 }}
+            inputProps={{ 'aria-label': 'Neuer Board-Name' }}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setRenameOpen(false)}>Abbrechen</Button>
+          <Button variant="contained" disabled={!renameValue.trim()} onClick={() => void handleRename()}>
+            Speichern
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   )
 }

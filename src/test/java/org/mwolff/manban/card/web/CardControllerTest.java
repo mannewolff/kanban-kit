@@ -176,4 +176,17 @@ class CardControllerTest {
     // Then
     verify(service).delete(3L, 8L);
   }
+
+  @Test
+  void transfer_delegatesToService() {
+    // Given
+    CardView view = card();
+    when(service.transfer(3L, 8L, 20L, 60L)).thenReturn(view);
+
+    // When
+    CardView result = controller.transfer(3L, 8L, new CardController.TransferCardRequest(20L, 60L));
+
+    // Then
+    assertThat(result).isSameAs(view);
+  }
 }

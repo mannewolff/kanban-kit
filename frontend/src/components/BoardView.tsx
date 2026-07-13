@@ -1,7 +1,15 @@
 import AddIcon from '@mui/icons-material/Add'
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline'
+import EditOutlinedIcon from '@mui/icons-material/EditOutlined'
 import MoreVertIcon from '@mui/icons-material/MoreVert'
+import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
+import Dialog from '@mui/material/Dialog'
+import DialogActions from '@mui/material/DialogActions'
+import DialogContent from '@mui/material/DialogContent'
+import DialogContentText from '@mui/material/DialogContentText'
+import DialogTitle from '@mui/material/DialogTitle'
 import IconButton from '@mui/material/IconButton'
 import Menu from '@mui/material/Menu'
 import MenuItem from '@mui/material/MenuItem'
@@ -11,8 +19,10 @@ import TextField from '@mui/material/TextField'
 import Tooltip from '@mui/material/Tooltip'
 import Typography from '@mui/material/Typography'
 import { useEffect, useState } from 'react'
-import type { Board } from '../api/boards'
+import type { Board, BoardColumn } from '../api/boards'
 import { cardsApi, type Card, type CardsApi } from '../api/cards'
+import { ApiError } from '../api/client'
+import { columnsApi } from '../api/columns'
 import { epicsApi as defaultEpicsApi, type Epic, type EpicsApi } from '../api/epics'
 import { activeCardsInColumn, applyMove } from '../lib/boardOps'
 import { cleanupCountdownLabel, cleanupDaysRemaining } from '../lib/cleanupCountdown'
@@ -20,6 +30,7 @@ import { epicColor, epicShortcode } from '../lib/epicMeta'
 import { COLUMN_SURFACE_BG, statusColors } from '../lib/statusColors'
 import { EpicBadge } from './EpicBadge'
 import { NewCardModal, type NewCardInitialValues, type NewItemInput } from './NewCardModal'
+import { TransferCardDialog } from './TransferCardDialog'
 
 const isDoneColumn = (name: string) => name.toLowerCase().includes('done')
 
@@ -33,6 +44,10 @@ interface Props {
   onEditCard?: (card: Card) => void
   onEpicsChanged?: () => void
   onCardsChanged?: () => void
+  /** Ob der Nutzer Karten board-/projektübergreifend verschieben darf (OWNER/Plattform-Admin). */
+  canTransfer?: boolean
+  /** Ob der Nutzer Plattform-Admin ist (darf in alle Projekte verschieben). */
+  platformAdmin?: boolean
   /** Injizierbar für Tests. */
   api?: Pick<CardsApi, 'create' | 'move' | 'archive' | 'restore' | 'remove'>
   epicsApi?: Pick<EpicsApi, 'create'>
@@ -53,6 +68,8 @@ export function BoardView({
   onEditCard,
   onEpicsChanged,
   onCardsChanged,
+  canTransfer = false,
+  platformAdmin = false,
   api = cardsApi,
   epicsApi = defaultEpicsApi,
 }: Props) {
@@ -60,6 +77,7 @@ export function BoardView({
   const [modalColumn, setModalColumn] = useState<{ id: number; name: string } | null>(null)
   const [duplicateValues, setDuplicateValues] = useState<NewCardInitialValues | null>(null)
   const [menu, setMenu] = useState<{ card: Card; anchor: HTMLElement } | null>(null)
+  const [transferCard, setTransferCard] = useState<Card | null>(null)
   const [epicFilter, setEpicFilter] = useState<number | null>(() => {
     try {
       const raw = localStorage.getItem(`manban.boardEpicFilter.${board.id}`)
@@ -72,7 +90,87 @@ export function BoardView({
   useEffect(() => setCards(initialCards), [initialCards])
 
   const epicById = new Map(epics.map((e) => [e.id, e]))
-  const columns = [...board.columns].sort((a, b) => a.position - b.position)
+  const sortColumns = (cols: BoardColumn[]) => [...cols].sort((a, b) => a.position - b.position)
+  const [columns, setColumns] = useState<BoardColumn[]>(() => sortColumns(board.columns))
+  useEffect(() => setColumns(sortColumns(board.columns)), [board.columns])
+
+  // Spalten-Dialog: 'new' = anlegen, ein Column-Objekt = bearbeiten.
+  const [columnDialog, setColumnDialog] = useState<'new' | BoardColumn | null>(null)
+  const [columnName, setColumnName] = useState('')
+  const [columnWip, setColumnWip] = useState('')
+
+  const openColumnDialog = (target: 'new' | BoardColumn) => {
+    setColumnDialog(target)
+    setColumnName(target === 'new' ? '' : target.name)
+    setColumnWip(target === 'new' || target.wipLimit == null ? '' : String(target.wipLimit))
+  }
+  const closeColumnDialog = () => setColumnDialog(null)
+
+  // Spalten-Reihenfolge per Drag & Drop (getrennt vom Karten-Drag, das dataTransfer nutzt).
+  const [colDrag, setColDrag] = useState<number | null>(null)
+  const reorderColumn = async (fromId: number, toId: number) => {
+    if (fromId === toId) {
+      return
+    }
+    const previous = columns
+    const fromIdx = columns.findIndex((c) => c.id === fromId)
+    const toIdx = columns.findIndex((c) => c.id === toId)
+    if (fromIdx < 0 || toIdx < 0) {
+      return
+    }
+    const next = [...columns]
+    const [moved] = next.splice(fromIdx, 1)
+    next.splice(toIdx, 0, moved)
+    setColumns(next) // optimistisch
+    try {
+      const updated = await columnsApi.reorder(board.id, next.map((c) => c.id))
+      setColumns(sortColumns(updated))
+    } catch {
+      setColumns(previous)
+    }
+  }
+
+  const [deleteColumn, setDeleteColumn] = useState<BoardColumn | null>(null)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
+  const handleDeleteColumn = async () => {
+    if (!deleteColumn) {
+      return
+    }
+    setDeleteError(null)
+    try {
+      await columnsApi.remove(deleteColumn.id)
+      setColumns((cs) => cs.filter((c) => c.id !== deleteColumn.id))
+      setDeleteColumn(null)
+    } catch (e) {
+      setDeleteError(
+        e instanceof ApiError && e.status === 409
+          ? 'Spalte enthält noch Karten und kann nicht gelöscht werden.'
+          : 'Löschen fehlgeschlagen.',
+      )
+    }
+  }
+
+  const parsedWip = (): number | null | undefined => {
+    const raw = columnWip.trim()
+    if (raw === '') return null
+    const n = Number(raw)
+    return Number.isInteger(n) && n > 0 ? n : undefined // undefined = ungültig
+  }
+  const saveColumn = async () => {
+    const name = columnName.trim()
+    const wip = parsedWip()
+    if (!name || wip === undefined) {
+      return
+    }
+    if (columnDialog === 'new') {
+      const created = await columnsApi.create(board.id, name, wip)
+      setColumns((cs) => sortColumns([...cs, created]))
+    } else if (columnDialog) {
+      const updated = await columnsApi.update(columnDialog.id, name, wip)
+      setColumns((cs) => sortColumns(cs.map((c) => (c.id === updated.id ? updated : c))))
+    }
+    closeColumnDialog()
+  }
   // Anzeige-Filter nach Epic (nur Darstellung; Move/Anlegen arbeiten auf dem vollen Bestand).
   const filteredCards = epicFilter == null ? cards : cards.filter((c) => c.parentId === epicFilter)
 
@@ -195,7 +293,18 @@ export function BoardView({
                 overflow: 'hidden',
               }}
             >
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 1.5, py: 1, bgcolor: 'background.paper', borderBottom: 1, borderColor: 'divider' }}>
+              <Box
+                data-testid={`column-header-${column.id}`}
+                draggable={canEdit}
+                onDragStart={canEdit ? (e) => { e.stopPropagation(); setColDrag(column.id) } : undefined}
+                onDragOver={canEdit ? (e) => { if (colDrag != null && colDrag !== column.id) { e.preventDefault(); e.stopPropagation() } } : undefined}
+                onDrop={canEdit ? (e) => {
+                  if (colDrag != null) { e.preventDefault(); e.stopPropagation(); void reorderColumn(colDrag, column.id) }
+                  setColDrag(null)
+                } : undefined}
+                onDragEnd={() => setColDrag(null)}
+                sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 1.5, py: 1, bgcolor: 'background.paper', borderBottom: 1, borderColor: 'divider', cursor: canEdit ? 'grab' : undefined }}
+              >
                 <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: colors.dot, flexShrink: 0 }} />
                 <Typography variant="caption" sx={{ fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.08em', color: 'text.secondary', flexGrow: 1 }}>
                   {column.name}
@@ -208,6 +317,22 @@ export function BoardView({
                     <IconButton size="small" aria-label={`Karte in ${column.name} anlegen`}
                       onClick={() => setModalColumn({ id: column.id, name: column.name })} sx={{ color: 'text.secondary' }}>
                       <AddIcon fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                )}
+                {canEdit && (
+                  <Tooltip title="Spalte bearbeiten">
+                    <IconButton size="small" aria-label={`Spalte ${column.name} bearbeiten`}
+                      onClick={() => openColumnDialog(column)} sx={{ color: 'text.secondary' }}>
+                      <EditOutlinedIcon fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                )}
+                {canEdit && (
+                  <Tooltip title="Spalte löschen">
+                    <IconButton size="small" aria-label={`Spalte ${column.name} löschen`}
+                      onClick={() => { setDeleteError(null); setDeleteColumn(column) }} sx={{ color: 'text.secondary' }}>
+                      <DeleteOutlineIcon fontSize="small" />
                     </IconButton>
                   </Tooltip>
                 )}
@@ -270,7 +395,62 @@ export function BoardView({
             </Paper>
           )
         })}
+        {canEdit && (
+          <Box sx={{ flexShrink: 0, alignSelf: 'flex-start', pt: 0.5 }}>
+            <Button size="small" startIcon={<AddIcon />} onClick={() => openColumnDialog('new')}>
+              Spalte
+            </Button>
+          </Box>
+        )}
       </Stack>
+
+      <Dialog open={columnDialog !== null} onClose={closeColumnDialog}>
+        <DialogTitle>{columnDialog === 'new' ? 'Neue Spalte' : 'Spalte bearbeiten'}</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ mt: 1 }}>
+            <TextField
+              autoFocus
+              label="Name"
+              value={columnName}
+              onChange={(e) => setColumnName(e.target.value)}
+              inputProps={{ maxLength: 120, 'aria-label': 'Spaltenname' }}
+            />
+            <TextField
+              label="WIP-Limit (optional)"
+              type="number"
+              value={columnWip}
+              onChange={(e) => setColumnWip(e.target.value)}
+              inputProps={{ min: 1, 'aria-label': 'WIP-Limit' }}
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={closeColumnDialog}>Abbrechen</Button>
+          <Button
+            variant="contained"
+            disabled={!columnName.trim() || parsedWip() === undefined}
+            onClick={() => void saveColumn()}
+          >
+            Speichern
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={deleteColumn !== null} onClose={() => setDeleteColumn(null)}>
+        <DialogTitle>Spalte löschen?</DialogTitle>
+        <DialogContent>
+          {deleteError && <Alert severity="error" sx={{ mb: 2 }}>{deleteError}</Alert>}
+          <DialogContentText>
+            Die Spalte „{deleteColumn?.name}&ldquo; wird gelöscht.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteColumn(null)}>Abbrechen</Button>
+          <Button color="error" onClick={() => void handleDeleteColumn()}>
+            Löschen
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       <Menu anchorEl={menu?.anchor ?? null} open={menu != null} onClose={closeMenu}>
         {menu && !menu.card.archived && [
@@ -292,6 +472,16 @@ export function BoardView({
           <MenuItem key="archive" onClick={() => { const c = menu.card; closeMenu(); void archiveCard(c) }}>
             Archivieren
           </MenuItem>,
+          ...(canTransfer
+            ? [
+                <MenuItem
+                  key="transfer"
+                  onClick={() => { const c = menu.card; closeMenu(); setTransferCard(c) }}
+                >
+                  Auf anderes Board verschieben…
+                </MenuItem>,
+              ]
+            : []),
           ...columns
             .filter((col) => col.id !== menu.card.columnId)
             .map((col) => (
@@ -310,6 +500,21 @@ export function BoardView({
         onClose={() => { setModalColumn(null); setDuplicateValues(null) }}
         onSubmit={(input) => (modalColumn ? createItem(modalColumn.id, input) : undefined)}
       />
+
+      {transferCard && (
+        <TransferCardDialog
+          card={transferCard}
+          currentBoardId={board.id}
+          platformAdmin={platformAdmin}
+          onClose={() => setTransferCard(null)}
+          onTransferred={() => {
+            const c = transferCard
+            setTransferCard(null)
+            setCards((current) => current.filter((x) => x.id !== c.id))
+            onCardsChanged?.()
+          }}
+        />
+      )}
     </Box>
   )
 }

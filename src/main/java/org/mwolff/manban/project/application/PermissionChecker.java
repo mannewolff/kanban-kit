@@ -81,6 +81,24 @@ public class PermissionChecker {
   }
 
   /**
+   * Stellt sicher, dass der Benutzer im Projekt die Rolle OWNER hat (oder Plattform-Admin ist).
+   * Nichtmitglied → 404 (kein Existenz-Leak); Mitglied ohne OWNER-Rolle → 403.
+   */
+  @Transactional(readOnly = true)
+  public void requireOwner(long userId, long projectId) {
+    if (platformAdminChecker.isPlatformAdmin(userId)) {
+      return;
+    }
+    ProjectMembership m =
+        memberships
+            .findByProjectIdAndUserId(projectId, userId)
+            .orElseThrow(ProjectNotFoundException::new);
+    if (m.role() != ProjectRole.OWNER) {
+      throw new ProjectAccessDeniedException();
+    }
+  }
+
+  /**
    * Stellt nur die Projekt-Mitgliedschaft sicher (für Lesezugriffe, die keiner speziellen
    * Berechtigung bedürfen). Nichtmitglied → 404 (kein Existenz-Leak); ein Plattform-Admin passiert
    * immer.

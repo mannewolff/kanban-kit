@@ -76,10 +76,43 @@ public class BoardService {
     return view(boards.save(board.withName(name.trim())));
   }
 
+  /**
+   * Archiviert das Board (reversibel), statt es physisch zu löschen. Karten und Spalten bleiben
+   * erhalten; das Board verschwindet aus der aktiven Liste und ist für normale Zugriffe nicht mehr
+   * auffindbar (→ 404).
+   */
   @Transactional
   public void deleteBoard(long userId, long boardId) {
     Board board = requireBoard(boardId);
     permissions.require(userId, board.projectId(), Permission.BOARD_DELETE);
+    boards.save(board.archivedAt(clock.instant()));
+  }
+
+  @Transactional(readOnly = true)
+  public List<BoardView> listArchivedBoards(long userId, long projectId) {
+    permissions.requireMembership(userId, projectId);
+    return boards.findArchivedByProjectId(projectId).stream().map(this::view).toList();
+  }
+
+  /** Hebt die Archivierung auf; das Board ist wieder aktiv und normal auffindbar. */
+  @Transactional
+  public BoardView restoreBoard(long userId, long boardId) {
+    Board board = requireBoardIncludingArchived(boardId);
+    permissions.require(userId, board.projectId(), Permission.BOARD_DELETE);
+    return view(boards.save(board.restored()));
+  }
+
+  /**
+   * Löscht ein zuvor archiviertes Board endgültig (physischer Hard-Delete inkl. Cascade auf Spalten
+   * und Karten). Ein noch aktives Board muss erst archiviert werden.
+   */
+  @Transactional
+  public void purgeBoard(long userId, long boardId) {
+    Board board = requireBoardIncludingArchived(boardId);
+    permissions.require(userId, board.projectId(), Permission.BOARD_DELETE);
+    if (!board.isArchived()) {
+      throw new BoardNotArchivedException();
+    }
     boards.deleteById(boardId);
   }
 
@@ -144,6 +177,10 @@ public class BoardService {
 
   private Board requireBoard(long boardId) {
     return boards.findById(boardId).orElseThrow(BoardNotFoundException::new);
+  }
+
+  private Board requireBoardIncludingArchived(long boardId) {
+    return boards.findByIdIncludingArchived(boardId).orElseThrow(BoardNotFoundException::new);
   }
 
   private BoardColumn requireColumn(long columnId) {

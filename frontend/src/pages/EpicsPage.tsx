@@ -18,6 +18,7 @@ import { CardDetailModal } from '../components/CardDetailModal'
 import { EpicBadge } from '../components/EpicBadge'
 import { NewCardModal } from '../components/NewCardModal'
 import { canEditCards, canModerateComments, isPlatformAdmin } from '../lib/roles'
+import { useProjectName } from '../lib/useProjectName'
 
 function epicToCard(epic: Epic, boardId: number): Card {
   return {
@@ -76,6 +77,7 @@ export function EpicsPage() {
   const effectiveRole = membershipRole ?? fetchedRole ?? 'VIEWER'
   const canEdit = canEditCards(effectiveRole, isPlatformAdmin(user))
   const canModerate = canModerateComments(effectiveRole, isPlatformAdmin(user))
+  const projectName = useProjectName(board?.projectId ?? null)
 
   if (!validId) {
     return <Alert severity="error">Ungültige Board-ID.</Alert>
@@ -85,7 +87,14 @@ export function EpicsPage() {
     <Box>
       <Link component={RouterLink} to={`/boards/${id}`}>← Board</Link>
       <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mt: 1, mb: 2 }}>
-        <Typography variant="h5">Epics</Typography>
+        <Typography variant="h5">
+          {projectName && (
+            <Box component="span" sx={{ color: 'text.secondary', fontWeight: 400 }}>
+              {projectName} /{' '}
+            </Box>
+          )}
+          <Box component="span">Epics</Box>
+        </Typography>
         {canEdit && (
           <Button variant="contained" size="small" startIcon={<AddIcon />} onClick={() => setCreating(true)}>
             Neues Epic

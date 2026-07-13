@@ -253,6 +253,34 @@ public class CardService {
     return view(cards.save(moved.withMovedToDoneAt(done)));
   }
 
+  /**
+   * Verschiebt eine Karte board- und projektübergreifend in eine Spalte eines anderen Boards. Nur
+   * möglich, wenn der Benutzer im Quell- und im Zielprojekt OWNER (oder Plattform-Admin) ist. Die
+   * Karte erhält eine neue board-scoped Nummer und landet am Ende der Zielspalte; Epic-Zuordnung
+   * und Abhängigkeiten (board-lokal) werden entfernt. Kommentare und Anhänge wandern mit (an der
+   * Karten-ID).
+   */
+  @Transactional
+  public CardView transfer(long userId, long cardId, long targetBoardId, long targetColumnId) {
+    Card card = cards.findById(cardId).orElseThrow(CardNotFoundException::new);
+    if (card.type() == CardType.EPIC) {
+      throw new InvalidDependencyException("Epics können nicht verschoben werden");
+    }
+    Board sourceBoard = boards.findById(card.boardId()).orElseThrow(BoardNotFoundException::new);
+    Board targetBoard = boards.findById(targetBoardId).orElseThrow(BoardNotFoundException::new);
+    requireColumnInBoard(targetColumnId, targetBoardId);
+
+    permissions.requireOwner(userId, sourceBoard.projectId());
+    permissions.requireOwner(userId, targetBoard.projectId());
+
+    int newNumber = cards.maxNumberInBoard(targetBoardId) + 1;
+    cards.transfer(cardId, targetBoardId, targetColumnId, newNumber);
+    dependencies.deleteByCardId(cardId);
+
+    Card moved = cards.findById(cardId).orElseThrow(CardNotFoundException::new);
+    return view(cards.save(moved.withParent(null).withMovedToDoneAt(null)));
+  }
+
   @Transactional
   public CardView archive(long userId, long cardId) {
     Card card = requireCardOp(userId, cardId, Permission.TICKET_DELETE, Permission.EPIC_DELETE);

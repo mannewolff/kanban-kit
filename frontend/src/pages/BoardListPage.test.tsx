@@ -3,6 +3,7 @@ import { MemoryRouter, Route, Routes, useNavigate } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { boardsApi } from '../api/boards'
 import { cardsApi, type Card } from '../api/cards'
+import { projectsApi } from '../api/projects'
 import { epicsApi } from '../api/epics'
 import { BoardListPage } from './BoardListPage'
 
@@ -27,6 +28,7 @@ vi.mock('../api/attachments', () => ({ attachmentsApi: { list: vi.fn().mockResol
 const mBoards = boardsApi as unknown as { get: ReturnType<typeof vi.fn> }
 const mCards = cardsApi as unknown as { list: ReturnType<typeof vi.fn> }
 const mEpics = epicsApi as unknown as { list: ReturnType<typeof vi.fn> }
+const mProjects = projectsApi as unknown as { list: ReturnType<typeof vi.fn> }
 
 const base = {
   boardId: 1, positionInColumn: 0, movedToDoneAt: null as string | null,
@@ -45,6 +47,7 @@ function renderPage() {
   })
   mCards.list.mockResolvedValue([active, archived])
   mEpics.list.mockResolvedValue([])
+  mProjects.list.mockResolvedValue([{ id: 9, name: 'Projekt', role: 'OWNER', createdAt: '' }])
   return render(
     <MemoryRouter initialEntries={['/boards/1/list']}>
       <Routes>
@@ -70,6 +73,7 @@ describe('BoardListPage', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.stubGlobal('localStorage', fakeStorage())
+    mProjects.list.mockResolvedValue([{ id: 9, name: 'Projekt', role: 'OWNER', createdAt: '' }])
   })
 
   it('zeigt aktive Karten mit Status-Chip und Body-Vorschau, archivierte erst nach Filter', async () => {

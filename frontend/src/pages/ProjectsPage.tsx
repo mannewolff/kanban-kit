@@ -13,6 +13,7 @@ import Stack from '@mui/material/Stack'
 import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline'
+import EditOutlinedIcon from '@mui/icons-material/EditOutlined'
 import { useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { ApiError } from '../api/client'
@@ -40,8 +41,33 @@ export function ProjectsPage() {
   const [ownerEmail, setOwnerEmail] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [confirmDelete, setConfirmDelete] = useState<Project | null>(null)
+  const [renameProject, setRenameProject] = useState<Project | null>(null)
+  const [renameValue, setRenameValue] = useState('')
+  const [renameError, setRenameError] = useState<string | null>(null)
 
   const reload = () => projectsApi.list().then(setProjects)
+
+  const openRename = (project: Project) => {
+    setRenameProject(project)
+    setRenameValue(project.name)
+    setRenameError(null)
+  }
+  const closeRename = () => {
+    setRenameProject(null)
+    setRenameError(null)
+  }
+  const handleRename = async () => {
+    if (!renameProject || !renameValue.trim()) {
+      return
+    }
+    try {
+      await projectsApi.rename(renameProject.id, renameValue.trim())
+      closeRename()
+      await reload()
+    } catch {
+      setRenameError('Umbenennen fehlgeschlagen.')
+    }
+  }
 
   useEffect(() => {
     void projectsApi.list().then((ps) => {
@@ -140,6 +166,18 @@ export function ProjectsPage() {
                   {formatDate(project.createdAt)}
                 </Typography>
               )}
+              {project.role === 'OWNER' && (
+                <IconButton
+                  size="small"
+                  aria-label={`Projekt ${project.name} umbenennen`}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    openRename(project)
+                  }}
+                >
+                  <EditOutlinedIcon fontSize="small" />
+                </IconButton>
+              )}
               {admin && (
                 <IconButton
                   size="small"
@@ -169,6 +207,28 @@ export function ProjectsPage() {
           <Button onClick={() => setConfirmDelete(null)}>Abbrechen</Button>
           <Button color="error" onClick={() => { if (confirmDelete) void handleDelete(confirmDelete.id) }}>
             Löschen
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={renameProject !== null} onClose={closeRename}>
+        <DialogTitle>Projekt umbenennen</DialogTitle>
+        <DialogContent>
+          {renameError && <Alert severity="error" sx={{ mb: 2 }}>{renameError}</Alert>}
+          <TextField
+            autoFocus
+            fullWidth
+            label="Projektname"
+            value={renameValue}
+            onChange={(e) => setRenameValue(e.target.value)}
+            sx={{ mt: 1 }}
+            inputProps={{ 'aria-label': 'Neuer Projektname' }}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={closeRename}>Abbrechen</Button>
+          <Button variant="contained" disabled={!renameValue.trim()} onClick={() => void handleRename()}>
+            Speichern
           </Button>
         </DialogActions>
       </Dialog>

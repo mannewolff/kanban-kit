@@ -253,4 +253,65 @@ class CardIT extends AbstractIntegrationTest {
                 .content("{\"columnId\":%d,\"title\":\"X\"}".formatted(columnId)))
         .andExpect(status().isForbidden());
   }
+
+  @Test
+  void transferMovesCardAcrossProjectsForOwner() throws Exception {
+    Cookie alice = loginAs("xfer-owner@example.com");
+    long p1 = createProject("xfer-owner@example.com", "XferP1");
+    long p2 = createProject("xfer-owner@example.com", "XferP2");
+    JsonNode boardA = createBoard(alice, p1);
+    JsonNode boardB = createBoard(alice, p2);
+    long boardIdA = boardA.get("id").asLong();
+    long boardIdB = boardB.get("id").asLong();
+    long colA = boardA.get("columns").get(0).get("id").asLong();
+    long colB = boardB.get("columns").get(0).get("id").asLong();
+    long cardId = createCard(alice, boardIdA, colA, "Wanderkarte", null).get("id").asLong();
+
+    mvc.perform(
+            post("/api/cards/" + cardId + "/transfer")
+                .cookie(alice)
+                .contentType("application/json")
+                .content("{\"targetBoardId\":%d,\"targetColumnId\":%d}".formatted(boardIdB, colB)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.boardId").value((int) boardIdB))
+        .andExpect(jsonPath("$.columnId").value((int) colB));
+
+    // Quellboard leer, Zielboard hält die (umgehängte) Karte.
+    mvc.perform(
+            org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get(
+                    "/api/boards/" + boardIdA + "/cards")
+                .cookie(alice))
+        .andExpect(jsonPath("$.length()").value(0));
+    mvc.perform(
+            org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get(
+                    "/api/boards/" + boardIdB + "/cards")
+                .cookie(alice))
+        .andExpect(jsonPath("$.length()").value(1))
+        .andExpect(jsonPath("$[0].id").value((int) cardId));
+  }
+
+  @Test
+  void transferForbiddenForNonOwner() throws Exception {
+    Cookie alice = loginAs("xfer-rbac-owner@example.com");
+    Cookie mallory = loginAs("xfer-rbac-member@example.com");
+    long p1 = createProject("xfer-rbac-owner@example.com", "XferRbac1");
+    long p2 = createProject("xfer-rbac-owner@example.com", "XferRbac2");
+    JsonNode boardA = createBoard(alice, p1);
+    JsonNode boardB = createBoard(alice, p2);
+    long boardIdA = boardA.get("id").asLong();
+    long colA = boardA.get("columns").get(0).get("id").asLong();
+    long boardIdB = boardB.get("id").asLong();
+    long colB = boardB.get("columns").get(0).get("id").asLong();
+    long cardId = createCard(alice, boardIdA, colA, "Karte", null).get("id").asLong();
+    memberships.save(
+        new ProjectMembership(
+            null, p1, userId("xfer-rbac-member@example.com"), ProjectRole.MEMBER, Instant.now()));
+
+    mvc.perform(
+            post("/api/cards/" + cardId + "/transfer")
+                .cookie(mallory)
+                .contentType("application/json")
+                .content("{\"targetBoardId\":%d,\"targetColumnId\":%d}".formatted(boardIdB, colB)))
+        .andExpect(status().isForbidden());
+  }
 }

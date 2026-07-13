@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '../api/client'
@@ -13,12 +13,15 @@ let memberships: { projectId: number; role: string }[] = []
 vi.mock('../auth/AuthContext', () => ({
   useAuth: () => ({ user: { userId: 1, email: 'a@b.c', displayName: 'A', platformRole: 'USER', memberships } }),
 }))
-vi.mock('../api/boards', () => ({ boardsApi: { get: vi.fn() } }))
+vi.mock('../api/boards', () => ({ boardsApi: { get: vi.fn(), rename: vi.fn() } }))
 vi.mock('../api/cards', () => ({ cardsApi: { list: vi.fn() } }))
 vi.mock('../api/epics', () => ({ epicsApi: { list: vi.fn(), assign: vi.fn() } }))
 vi.mock('../api/projects', () => ({ projectsApi: { list: vi.fn() } }))
 
-const mockedBoards = boardsApi as unknown as { get: ReturnType<typeof vi.fn> }
+const mockedBoards = boardsApi as unknown as {
+  get: ReturnType<typeof vi.fn>
+  rename: ReturnType<typeof vi.fn>
+}
 const mockedCards = cardsApi as unknown as { list: ReturnType<typeof vi.fn> }
 const mockedEpics = epicsApi as unknown as { list: ReturnType<typeof vi.fn> }
 const mockedProjects = projectsApi as unknown as { list: ReturnType<typeof vi.fn> }
@@ -43,12 +46,13 @@ function renderPage() {
 describe('BoardPage canEdit aus Membership', () => {
   beforeEach(() => vi.clearAllMocks())
 
-  it('leitet Editier-Rechte synchron aus den Memberships ab (kein projectsApi-Nachladen)', async () => {
+  it('leitet Editier-Rechte synchron aus den Memberships ab', async () => {
     memberships = [{ projectId: 9, role: 'OWNER' }]
     renderPage()
     expect(await screen.findByText('B')).toBeInTheDocument()
     await waitFor(() => expect(screen.getByLabelText('Karte in Backlog anlegen')).toBeInTheDocument())
-    expect(mockedProjects.list).not.toHaveBeenCalled()
+    // Hinweis: projectsApi.list() läuft seit #160 für den Projektnamen (useProjectName); die
+    // Rolle selbst kommt weiterhin synchron aus den Memberships (Anlege-Aktion sofort sichtbar).
   })
 
   it('blendet für VIEWER-Membership die Anlege-Aktion aus', async () => {
@@ -56,6 +60,29 @@ describe('BoardPage canEdit aus Membership', () => {
     renderPage()
     expect(await screen.findByText('B')).toBeInTheDocument()
     expect(screen.queryByLabelText('Karte in Backlog anlegen')).not.toBeInTheDocument()
+  })
+
+  it('benennt das Board über das Edit-Icon um (mit Bearbeiten-Recht)', async () => {
+    memberships = [{ projectId: 9, role: 'OWNER' }]
+    mockedBoards.rename.mockResolvedValue({
+      id: 1, projectId: 9, name: 'Neu', createdAt: '',
+      columns: [{ id: 10, name: 'Backlog', position: 0, wipLimit: null }],
+    })
+    renderPage()
+
+    fireEvent.click(await screen.findByLabelText('Board umbenennen'))
+    fireEvent.change(screen.getByLabelText('Neuer Board-Name'), { target: { value: 'Neu' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Speichern' }))
+
+    await waitFor(() => expect(mockedBoards.rename).toHaveBeenCalledWith(1, 'Neu'))
+    expect(await screen.findByText('Neu')).toBeInTheDocument()
+  })
+
+  it('blendet das Board-Umbenennen für VIEWER aus', async () => {
+    memberships = [{ projectId: 9, role: 'VIEWER' }]
+    renderPage()
+    expect(await screen.findByText('B')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Board umbenennen')).not.toBeInTheDocument()
   })
 
   it('zeigt bei ungültiger Board-ID einen Fehler und ruft keine API auf', async () => {

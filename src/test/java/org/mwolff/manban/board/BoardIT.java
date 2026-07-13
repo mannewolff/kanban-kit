@@ -235,6 +235,88 @@ class BoardIT extends AbstractIntegrationTest {
         .andExpect(jsonPath("$.columns.length()").value(5));
   }
 
+  private int cardCount(long boardId) {
+    Integer count =
+        jdbc.queryForObject("SELECT count(*) FROM card WHERE board_id = ?", Integer.class, boardId);
+    return count == null ? 0 : count;
+  }
+
+  @Test
+  void boardArchiveRestorePurgeLifecycle() throws Exception {
+    Cookie alice = loginAs("arch-owner@example.com");
+    long projectId = createProject("arch-owner@example.com", "Arch");
+    JsonNode board = createBoard(alice, projectId, "Lifecycle");
+    long boardId = board.get("id").asLong();
+    long columnId = board.get("columns").get(0).get("id").asLong();
+    jdbc.update(
+        "INSERT INTO card (board_id, column_id, number, title, position_in_column) "
+            + "VALUES (?,?,?,?,?)",
+        boardId,
+        columnId,
+        1,
+        "Karte",
+        0);
+
+    // Archivieren (Löschen wird zum Archivieren): Karte bleibt erhalten.
+    mvc.perform(delete("/api/boards/" + boardId).cookie(alice)).andExpect(status().isNoContent());
+    mvc.perform(
+            org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get(
+                    "/api/boards/" + boardId)
+                .cookie(alice))
+        .andExpect(status().isNotFound());
+    org.assertj.core.api.Assertions.assertThat(cardCount(boardId)).isEqualTo(1);
+
+    // Archiviertes Board taucht nur in der Archiv-Liste auf, nicht in der aktiven.
+    mvc.perform(
+            org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get(
+                    "/api/projects/" + projectId + "/boards")
+                .cookie(alice))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.length()").value(0));
+    mvc.perform(
+            org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get(
+                    "/api/projects/" + projectId + "/boards/archived")
+                .cookie(alice))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.length()").value(1))
+        .andExpect(jsonPath("$[0].id").value((int) boardId));
+
+    // Wiederherstellen: wieder aktiv und auffindbar.
+    mvc.perform(post("/api/boards/" + boardId + "/restore").cookie(alice))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.name").value("Lifecycle"));
+    mvc.perform(
+            org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get(
+                    "/api/boards/" + boardId)
+                .cookie(alice))
+        .andExpect(status().isOk());
+
+    // Endgültiges Löschen erst nach erneutem Archivieren; Cascade entfernt die Karte.
+    mvc.perform(delete("/api/boards/" + boardId + "/purge").cookie(alice))
+        .andExpect(status().isConflict());
+    mvc.perform(delete("/api/boards/" + boardId).cookie(alice)).andExpect(status().isNoContent());
+    mvc.perform(delete("/api/boards/" + boardId + "/purge").cookie(alice))
+        .andExpect(status().isNoContent());
+    org.assertj.core.api.Assertions.assertThat(cardCount(boardId)).isZero();
+  }
+
+  @Test
+  void viewerCannotArchiveBoard() throws Exception {
+    Cookie alice = loginAs("arch-rbac-owner@example.com");
+    Cookie viewer = loginAs("arch-rbac-viewer@example.com");
+    long projectId = createProject("arch-rbac-owner@example.com", "ArchRBAC");
+    long boardId = createBoard(alice, projectId, "B").get("id").asLong();
+    memberships.save(
+        new ProjectMembership(
+            null,
+            projectId,
+            userId("arch-rbac-viewer@example.com"),
+            ProjectRole.VIEWER,
+            Instant.now()));
+
+    mvc.perform(delete("/api/boards/" + boardId).cookie(viewer)).andExpect(status().isForbidden());
+  }
+
   @Test
   void deleteColumnWithCardsIsBlocked() throws Exception {
     Cookie alice = loginAs("cards-owner@example.com");

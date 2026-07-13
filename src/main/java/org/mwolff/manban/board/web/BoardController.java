@@ -41,6 +41,11 @@ class BoardController {
     return boards.listBoards(userId, projectId);
   }
 
+  @GetMapping("/api/projects/{projectId}/boards/archived")
+  List<BoardView> listArchived(@AuthenticationPrincipal Long userId, @PathVariable long projectId) {
+    return boards.listArchivedBoards(userId, projectId);
+  }
+
   @GetMapping("/api/boards/{boardId}")
   BoardView get(@AuthenticationPrincipal Long userId, @PathVariable long boardId) {
     return boards.getBoard(userId, boardId);
@@ -58,6 +63,17 @@ class BoardController {
   @ResponseStatus(HttpStatus.NO_CONTENT)
   void delete(@AuthenticationPrincipal Long userId, @PathVariable long boardId) {
     boards.deleteBoard(userId, boardId);
+  }
+
+  @PostMapping("/api/boards/{boardId}/restore")
+  BoardView restore(@AuthenticationPrincipal Long userId, @PathVariable long boardId) {
+    return boards.restoreBoard(userId, boardId);
+  }
+
+  @DeleteMapping("/api/boards/{boardId}/purge")
+  @ResponseStatus(HttpStatus.NO_CONTENT)
+  void purge(@AuthenticationPrincipal Long userId, @PathVariable long boardId) {
+    boards.purgeBoard(userId, boardId);
   }
 
   record BoardRequest(@NotBlank @Size(max = 200) String name) {}

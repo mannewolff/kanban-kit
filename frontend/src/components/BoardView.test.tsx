@@ -2,7 +2,19 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { describe, expect, it, vi } from 'vitest'
 import type { Board } from '../api/boards'
 import type { Card } from '../api/cards'
+import { ApiError } from '../api/client'
+import { columnsApi } from '../api/columns'
 import { BoardView } from './BoardView'
+
+vi.mock('../api/columns', () => ({
+  columnsApi: { create: vi.fn(), update: vi.fn(), remove: vi.fn(), reorder: vi.fn() },
+}))
+const mColumns = columnsApi as unknown as {
+  create: ReturnType<typeof vi.fn>
+  update: ReturnType<typeof vi.fn>
+  remove: ReturnType<typeof vi.fn>
+  reorder: ReturnType<typeof vi.fn>
+}
 
 const board: Board = {
   id: 1,
@@ -163,5 +175,105 @@ describe('BoardView', () => {
     fireEvent.change(screen.getByLabelText('Epic-Filter'), { target: { value: '9' } })
     expect(screen.getByTestId('card-100')).toBeInTheDocument()
     expect(screen.queryByTestId('card-200')).not.toBeInTheDocument()
+  })
+
+  it('legt eine neue Spalte an (mit canEdit)', async () => {
+    mColumns.create.mockResolvedValue({ id: 30, name: 'Neu', position: 2, wipLimit: null })
+    render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Spalte' }))
+    fireEvent.change(screen.getByLabelText('Spaltenname'), { target: { value: 'Neu' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Speichern' }))
+
+    await waitFor(() => expect(mColumns.create).toHaveBeenCalledWith(1, 'Neu', null))
+    expect(await screen.findByText('Neu')).toBeInTheDocument()
+  })
+
+  it('bearbeitet Name und WIP-Limit einer Spalte', async () => {
+    mColumns.update.mockResolvedValue({ id: 10, name: 'Todo', position: 0, wipLimit: 3 })
+    render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} />)
+
+    fireEvent.click(screen.getByLabelText('Spalte Backlog bearbeiten'))
+    fireEvent.change(screen.getByLabelText('Spaltenname'), { target: { value: 'Todo' } })
+    fireEvent.change(screen.getByLabelText('WIP-Limit'), { target: { value: '3' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Speichern' }))
+
+    await waitFor(() => expect(mColumns.update).toHaveBeenCalledWith(10, 'Todo', 3))
+  })
+
+  it('blendet Spalten-Bearbeitung ohne canEdit aus', () => {
+    render(<BoardView board={board} initialCards={[card]} canEdit={false} api={mkApi()} />)
+    expect(screen.queryByRole('button', { name: 'Spalte' })).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Spalte Backlog bearbeiten')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Spalte Backlog löschen')).not.toBeInTheDocument()
+  })
+
+  it('löscht eine leere Spalte nach Bestätigung', async () => {
+    mColumns.remove.mockResolvedValue(undefined)
+    render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} />)
+
+    fireEvent.click(screen.getByLabelText('Spalte Done löschen'))
+    fireEvent.click(screen.getByRole('button', { name: 'Löschen' }))
+
+    await waitFor(() => expect(mColumns.remove).toHaveBeenCalledWith(20))
+    await waitFor(() => expect(screen.queryByText('Done')).not.toBeInTheDocument())
+  })
+
+  it('zeigt einen Fehler, wenn die Spalte noch Karten enthält (409)', async () => {
+    mColumns.remove.mockRejectedValue(new ApiError(409, 'nicht leer'))
+    render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} />)
+
+    fireEvent.click(screen.getByLabelText('Spalte Backlog löschen'))
+    fireEvent.click(screen.getByRole('button', { name: 'Löschen' }))
+
+    expect(
+      await screen.findByText('Spalte enthält noch Karten und kann nicht gelöscht werden.'),
+    ).toBeInTheDocument()
+    expect(screen.getByText('Backlog')).toBeInTheDocument()
+  })
+
+  it('ordnet Spalten per Drag & Drop neu und persistiert die Reihenfolge', async () => {
+    mColumns.reorder.mockResolvedValue([
+      { id: 20, name: 'Done', position: 0, wipLimit: null },
+      { id: 10, name: 'Backlog', position: 1, wipLimit: null },
+    ])
+    render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} />)
+
+    fireEvent.dragStart(screen.getByTestId('column-header-20'))
+    fireEvent.drop(screen.getByTestId('column-header-10'))
+
+    await waitFor(() => expect(mColumns.reorder).toHaveBeenCalledWith(1, [20, 10]))
+  })
+
+  it('stellt die Spalten-Reihenfolge bei einem Fehler wieder her', async () => {
+    mColumns.reorder.mockRejectedValue(new Error('kaputt'))
+    render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} />)
+
+    fireEvent.dragStart(screen.getByTestId('column-header-20'))
+    fireEvent.drop(screen.getByTestId('column-header-10'))
+
+    await waitFor(() => expect(mColumns.reorder).toHaveBeenCalled())
+    // Nach dem Rollback steht Backlog wieder vor Done.
+    const headers = screen.getAllByTestId(/^column-header-/)
+    expect(headers[0]).toHaveAttribute('data-testid', 'column-header-10')
+    expect(headers[1]).toHaveAttribute('data-testid', 'column-header-20')
+  })
+
+  it('macht Spalten ohne canEdit nicht draggable', () => {
+    render(<BoardView board={board} initialCards={[card]} canEdit={false} api={mkApi()} />)
+    expect(screen.getByTestId('column-header-10')).not.toHaveAttribute('draggable', 'true')
+  })
+
+  it('zeigt den Verschieben-Menüeintrag nur mit canTransfer', () => {
+    const { unmount } = render(
+      <BoardView board={board} initialCards={[card]} canEdit api={mkApi()} />,
+    )
+    fireEvent.click(screen.getByLabelText('Menü Aufgabe'))
+    expect(screen.queryByText('Auf anderes Board verschieben…')).not.toBeInTheDocument()
+    unmount()
+
+    render(<BoardView board={board} initialCards={[card]} canEdit canTransfer api={mkApi()} />)
+    fireEvent.click(screen.getByLabelText('Menü Aufgabe'))
+    expect(screen.getByText('Auf anderes Board verschieben…')).toBeInTheDocument()
   })
 })

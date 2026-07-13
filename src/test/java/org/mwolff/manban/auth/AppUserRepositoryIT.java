@@ -45,7 +45,7 @@ class AppUserRepositoryIT extends AbstractIntegrationTest {
 
   @Test
   void seedsRolePermissionMatrix() {
-    assertThat(permissionCount("OWNER")).isEqualTo(23);
+    assertThat(permissionCount("OWNER")).isEqualTo(24);
     assertThat(permissionCount("ADMIN")).isEqualTo(22);
     assertThat(permissionCount("MEMBER")).isEqualTo(16);
     assertThat(permissionCount("VIEWER")).isEqualTo(5);
