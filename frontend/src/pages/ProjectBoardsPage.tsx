@@ -137,7 +137,8 @@ export function ProjectBoardsPage() {
       <Link component={RouterLink} to="/">← Projekte</Link>
       <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mt: 1, mb: 2 }}>
         <Typography variant="h5">
-          {projectName || 'Projekt'}
+          <Box component="span">{projectName || 'Projekt'}</Box>
+          <Box component="span" sx={{ color: 'text.secondary', fontWeight: 400 }}> / Boards</Box>
         </Typography>
         {canManageMembers(role) && (
           <Link component={RouterLink} to={`/projects/${id}/members`}>Mitglieder</Link>

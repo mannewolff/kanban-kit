@@ -31,6 +31,7 @@ export function ProjectMembersPage({ api = defaultMembersApi, loadRole }: Props)
   const validId = Number.isInteger(id) && id > 0
   const [members, setMembers] = useState<Member[]>([])
   const [role, setRole] = useState<string>('VIEWER')
+  const [projectName, setProjectName] = useState<string | null>(null)
   const [inviteEmail, setInviteEmail] = useState('')
   const [inviteRole, setInviteRole] = useState<ProjectRole>('MEMBER')
   const [message, setMessage] = useState<{ kind: 'success' | 'error'; text: string } | null>(null)
@@ -46,12 +47,19 @@ export function ProjectMembersPage({ api = defaultMembersApi, loadRole }: Props)
     void api.list(id).then((ms) => {
       if (active) setMembers(ms)
     })
-    const roleLoader = loadRole
-      ? loadRole(id)
-      : projectsApi.list().then((projects) => projects.find((p) => p.id === id)?.role ?? 'VIEWER')
-    void roleLoader.then((r) => {
-      if (active) setRole(r)
-    })
+    if (loadRole) {
+      void loadRole(id).then((r) => {
+        if (active) setRole(r)
+      })
+    } else {
+      // Rolle und Projektname aus demselben list()-Aufruf (kein zusätzlicher Request).
+      void projectsApi.list().then((projects) => {
+        if (!active) return
+        const project = projects.find((p) => p.id === id)
+        setRole(project?.role ?? 'VIEWER')
+        setProjectName(project?.name ?? null)
+      })
+    }
     return () => {
       active = false
     }
@@ -128,7 +136,12 @@ export function ProjectMembersPage({ api = defaultMembersApi, loadRole }: Props)
     <Box>
       <Link component={RouterLink} to={`/projects/${id}`}>← Boards</Link>
       <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mt: 1, mb: 2 }}>
-        <Typography variant="h5">Mitglieder</Typography>
+        <Typography variant="h5">
+          {projectName && <Box component="span">{projectName}</Box>}
+          <Box component="span" sx={projectName ? { color: 'text.secondary', fontWeight: 400 } : undefined}>
+            {projectName ? ' / Mitglieder' : 'Mitglieder'}
+          </Box>
+        </Typography>
         <Link component={RouterLink} to="/roles">Rollen &amp; Rechte</Link>
       </Stack>
 
