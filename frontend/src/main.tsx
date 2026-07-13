@@ -7,6 +7,7 @@ import { createRoot } from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
 import { App } from './App'
 import { AuthProvider } from './auth/AuthContext'
+import { SnackbarProvider } from './components/SnackbarProvider'
 import { theme } from './theme'
 
 const container = document.getElementById('root')
@@ -20,7 +21,9 @@ createRoot(container).render(
       <CssBaseline />
       <BrowserRouter>
         <AuthProvider>
-          <App />
+          <SnackbarProvider>
+            <App />
+          </SnackbarProvider>
         </AuthProvider>
       </BrowserRouter>
     </ThemeProvider>

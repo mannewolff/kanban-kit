@@ -13,11 +13,12 @@ import Stack from '@mui/material/Stack'
 import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Link as RouterLink, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { boardsApi, type Board } from '../api/boards'
 import { projectsApi } from '../api/projects'
 import { canManageBoards, canManageMembers } from '../lib/roles'
+import { useRefetchOnFocus } from '../lib/useRefetchOnFocus'
 
 export function ProjectBoardsPage() {
   const { projectId } = useParams()
@@ -62,6 +63,23 @@ export function ProjectBoardsPage() {
     // bei Projektwechsel (id) greifen, nicht bei jeder Navigation.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, validId])
+
+  // Beim Zurückkehren in den Tab die Board-Liste und die eigene Rolle neu laden (ein Board kann in
+  // einer anderen Session hinzugekommen oder entfernt worden sein) — ohne den Single-Board-Redirect.
+  const refetchOnFocus = useCallback(() => {
+    if (!validId) {
+      return
+    }
+    void boardsApi.list(id).then(setBoards).catch(() => {})
+    void projectsApi.list().then((projects) => {
+      const project = projects.find((p) => p.id === id)
+      if (project) {
+        setRole(project.role)
+        setProjectName(project.name)
+      }
+    })
+  }, [id, validId])
+  useRefetchOnFocus(refetchOnFocus)
 
   const handleCreate = async (event: React.FormEvent) => {
     event.preventDefault()

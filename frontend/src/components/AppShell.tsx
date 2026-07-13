@@ -21,13 +21,14 @@ import ChevronRightIcon from '@mui/icons-material/ChevronRight'
 import ExpandLessIcon from '@mui/icons-material/ExpandLess'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import LogoutIcon from '@mui/icons-material/Logout'
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Outlet, useLocation, useMatch, useNavigate } from 'react-router-dom'
 import { boardsApi } from '../api/boards'
 import { projectsApi, type Project } from '../api/projects'
 import { useAuth } from '../auth/AuthContext'
 import { buildNavItems, type BoardContext, type NavGroup, type NavLink, type NavNode } from '../layout/navItems'
 import { canManageBoards, isPlatformAdmin } from '../lib/roles'
+import { useRefetchOnFocus } from '../lib/useRefetchOnFocus'
 
 const DRAWER_WIDTH = 240
 const DRAWER_COLLAPSED_WIDTH = 56
@@ -109,6 +110,29 @@ export function AppShell() {
       cancelled = true
     }
   }, [boardId])
+
+  // Beim Zurückkehren in den Tab Projekt- und Board-Kontext neu laden, damit die Seitenleiste
+  // nicht auf einem in einer anderen Session veränderten Stand (z. B. entferntes Board) verharrt.
+  const refetchOnFocus = useCallback(() => {
+    projectsApi.list().then(setProjects).catch(() => setProjects(null))
+    if (boardId == null) {
+      return
+    }
+    boardsApi
+      .get(boardId)
+      .then((b) => {
+        setBoard({ id: b.id, name: b.name, projectId: b.projectId })
+        boardsApi
+          .list(b.projectId)
+          .then((bs) => setBoardCount(bs.length))
+          .catch(() => setBoardCount(null))
+      })
+      .catch(() => {
+        setBoard(null)
+        setBoardCount(null)
+      })
+  }, [boardId])
+  useRefetchOnFocus(refetchOnFocus)
 
   // An abgeleitete Primitive binden, nicht an Objektidentitäten (sonst rechnet useMemo bei jeder
   // neuen user-Referenz neu und die openGroups-Effect-Schleife läuft endlos).
