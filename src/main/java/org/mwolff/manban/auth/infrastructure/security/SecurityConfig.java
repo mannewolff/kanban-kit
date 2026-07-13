@@ -31,6 +31,11 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 @EnableWebSecurity
 class SecurityConfig {
 
+  // CSRF bewusst deaktiviert (Sonar java:S4502): das Auth-Cookie ist HttpOnly + SameSite=Strict +
+  // Secure (SessionCookieManager) und wird daher nie cross-site gesendet — der zustandslose
+  // Cookie-Ansatz ist von sich aus CSRF-resistent, ein Synchronizer-Token wäre wirkungslose
+  // Zusatzkomplexität. Siehe CLAUDE-security.md, Abschnitt "Session-Cookie — Sicherheitsmodell".
+  @SuppressWarnings("java:S4502")
   @Bean
   SecurityFilterChain filterChain(
       HttpSecurity http,
