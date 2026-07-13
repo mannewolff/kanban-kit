@@ -314,7 +314,8 @@ class KanbanCompatServiceTest {
 
     // When / Then: die Meldung muss aus dem COLUMNS-Guard stammen (nicht aus dem späteren
     // Board-Lookup), sonst bliebe ein Umgehen des Guards unentdeckt.
-    assertThatThrownBy(() -> service.create(bound(), "Titel", "Body", "NOPE"))
+    KanbanPrincipal principal = bound();
+    assertThatThrownBy(() -> service.create(principal, "Titel", "Body", "NOPE"))
         .isInstanceOf(InvalidKanbanColumnException.class)
         .hasMessageContaining("Unbekannte Kanban-Spalte");
   }
@@ -326,7 +327,8 @@ class KanbanCompatServiceTest {
         .thenReturn(List.of(new BoardColumn(100L, BOARD, "Backlog", 0, null)));
 
     // When / Then
-    assertThatThrownBy(() -> service.create(bound(), "Titel", "Body", "DONE"))
+    KanbanPrincipal principal = bound();
+    assertThatThrownBy(() -> service.create(principal, "Titel", "Body", "DONE"))
         .isInstanceOf(InvalidKanbanColumnException.class);
   }
 
@@ -376,7 +378,8 @@ class KanbanCompatServiceTest {
     when(cards.findById(1L)).thenReturn(Optional.of(card(1L, 100L, 1)));
 
     // When / Then
-    assertThatThrownBy(() -> service.move(bound(), 1L, null, 0))
+    KanbanPrincipal principal = bound();
+    assertThatThrownBy(() -> service.move(principal, 1L, null, 0))
         .isInstanceOf(InvalidKanbanColumnException.class);
   }
 
