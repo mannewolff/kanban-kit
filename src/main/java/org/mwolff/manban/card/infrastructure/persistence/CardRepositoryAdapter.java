@@ -126,22 +126,7 @@ class CardRepositoryAdapter implements CardRepository {
   }
 
   private static CardEntity toEntity(Card c) {
-    return new CardEntity(
-        c.id(),
-        c.boardId(),
-        c.columnId(),
-        c.number(),
-        c.title(),
-        c.description(),
-        c.positionInColumn(),
-        c.archived(),
-        c.movedToDoneAt(),
-        c.createdBy(),
-        c.createdAt(),
-        c.updatedAt(),
-        c.type().name(),
-        c.parentId(),
-        c.shortcode());
+    return new CardEntity(c);
   }
 
   private static Card toDomain(CardEntity e) {

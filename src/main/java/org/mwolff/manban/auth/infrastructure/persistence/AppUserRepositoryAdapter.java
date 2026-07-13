@@ -51,15 +51,7 @@ class AppUserRepositoryAdapter implements AppUserRepository {
   }
 
   private static AppUserEntity toEntity(AppUser u) {
-    return new AppUserEntity(
-        u.id(),
-        u.email(),
-        u.passwordHash(),
-        u.displayName(),
-        u.emailVerified(),
-        u.platformRole(),
-        u.approvedAt(),
-        u.approvedBy());
+    return new AppUserEntity(u);
   }
 
   private static AppUser toDomain(AppUserEntity e) {

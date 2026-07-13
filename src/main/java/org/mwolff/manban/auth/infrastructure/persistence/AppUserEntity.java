@@ -10,6 +10,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.time.Instant;
 import org.jspecify.annotations.Nullable;
+import org.mwolff.manban.auth.domain.AppUser;
 import org.mwolff.manban.auth.domain.PlatformRole;
 
 /**
@@ -50,23 +51,16 @@ class AppUserEntity {
     // für JPA
   }
 
-  AppUserEntity(
-      @Nullable Long id,
-      String email,
-      String passwordHash,
-      String displayName,
-      boolean emailVerified,
-      PlatformRole platformRole,
-      @Nullable Instant approvedAt,
-      @Nullable Long approvedBy) {
-    this.id = id;
-    this.email = email;
-    this.passwordHash = passwordHash;
-    this.displayName = displayName;
-    this.emailVerified = emailVerified;
-    this.platformRole = platformRole;
-    this.approvedAt = approvedAt;
-    this.approvedBy = approvedBy;
+  /** Baut die Entity direkt aus dem Domänenobjekt (statt aus 8 Einzelparametern, Sonar S107). */
+  AppUserEntity(AppUser u) {
+    this.id = u.id();
+    this.email = u.email();
+    this.passwordHash = u.passwordHash();
+    this.displayName = u.displayName();
+    this.emailVerified = u.emailVerified();
+    this.platformRole = u.platformRole();
+    this.approvedAt = u.approvedAt();
+    this.approvedBy = u.approvedBy();
   }
 
   @Nullable Long getId() {

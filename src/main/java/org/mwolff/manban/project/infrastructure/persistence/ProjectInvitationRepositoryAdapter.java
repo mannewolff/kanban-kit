@@ -32,15 +32,7 @@ class ProjectInvitationRepositoryAdapter implements ProjectInvitationRepository 
   }
 
   private static ProjectInvitationEntity toEntity(ProjectInvitation i) {
-    return new ProjectInvitationEntity(
-        i.id(),
-        i.projectId(),
-        i.email(),
-        i.role(),
-        i.tokenHash(),
-        i.expiresAt(),
-        i.acceptedAt(),
-        i.invitedBy());
+    return new ProjectInvitationEntity(i);
   }
 
   private static ProjectInvitation toDomain(ProjectInvitationEntity e) {
