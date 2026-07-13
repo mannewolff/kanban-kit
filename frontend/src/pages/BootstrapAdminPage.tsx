@@ -2,13 +2,13 @@ import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import Stack from '@mui/material/Stack'
-import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { adminApi as defaultAdminApi, type AdminApi } from '../api/admin'
 import { ApiError } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
+import { PasswordField } from '../components/PasswordField'
 
 interface Props {
   api?: AdminApi
@@ -53,9 +53,8 @@ export function BootstrapAdminPage({ api = defaultAdminApi }: Props) {
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
       <Box component="form" onSubmit={submit}>
         <Stack direction="row" spacing={1}>
-          <TextField
+          <PasswordField
             size="small"
-            type="password"
             label="Bootstrap-Token"
             value={token}
             onChange={(e) => setToken(e.target.value)}

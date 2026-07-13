@@ -9,6 +9,7 @@ import { Link as RouterLink, useNavigate } from 'react-router-dom'
 import { authApi } from '../api/auth'
 import { ApiError } from '../api/client'
 import { AuthCard } from '../components/AuthCard'
+import { PasswordField } from '../components/PasswordField'
 
 export function SignupPage() {
   const navigate = useNavigate()
@@ -45,7 +46,7 @@ export function SignupPage() {
             required fullWidth />
           <TextField label="E-Mail" type="email" value={email} onChange={(e) => setEmail(e.target.value)}
             required fullWidth autoComplete="email" />
-          <TextField label="Passwort" type="password" value={password} onChange={(e) => setPassword(e.target.value)}
+          <PasswordField label="Passwort" value={password} onChange={(e) => setPassword(e.target.value)}
             required fullWidth autoComplete="new-password" helperText="Mindestens 8 Zeichen" />
           <Button type="submit" variant="contained" disabled={busy} fullWidth>
             Konto erstellen
