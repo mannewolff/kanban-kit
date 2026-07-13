@@ -291,6 +291,9 @@ export function AppShell() {
             <Typography variant="h6" noWrap component="div" sx={{ fontWeight: 700 }}>
               kanban-kit
             </Typography>
+            <Typography variant="caption" noWrap sx={{ opacity: 0.7 }}>
+              v{__APP_VERSION__}
+            </Typography>
           </Box>
           {user && (
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
