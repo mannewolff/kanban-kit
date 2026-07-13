@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.Optional;
 import org.mwolff.manban.auth.application.AppUserRepository;
 import org.mwolff.manban.auth.domain.AppUser;
+import org.mwolff.manban.auth.domain.PlatformRole;
 import org.springframework.stereotype.Component;
 
 /** Adapter, der den {@link AppUserRepository}-Port auf Spring Data JPA abbildet. */
@@ -42,9 +43,15 @@ class AppUserRepositoryAdapter implements AppUserRepository {
     return jpa.findAll().stream().map(AppUserRepositoryAdapter::toDomain).toList();
   }
 
+  @Override
+  public List<AppUser> findByPlatformRole(PlatformRole platformRole) {
+    return jpa.findByPlatformRole(platformRole).stream()
+        .map(AppUserRepositoryAdapter::toDomain)
+        .toList();
+  }
+
   private static AppUserEntity toEntity(AppUser u) {
-    return new AppUserEntity(
-        u.id(), u.email(), u.passwordHash(), u.displayName(), u.emailVerified(), u.platformRole());
+    return new AppUserEntity(u);
   }
 
   private static AppUser toDomain(AppUserEntity e) {
@@ -54,6 +61,8 @@ class AppUserRepositoryAdapter implements AppUserRepository {
         e.getPasswordHash(),
         e.getDisplayName(),
         e.isEmailVerified(),
-        e.getPlatformRole());
+        e.getPlatformRole(),
+        e.getApprovedAt(),
+        e.getApprovedBy());
   }
 }

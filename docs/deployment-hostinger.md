@@ -1,6 +1,6 @@
 # Produktions-Deployment (Hostinger, hinter Traefik)
 
-Diese Anleitung beschreibt den öffentlichen Betrieb von manban unter
+Diese Anleitung beschreibt den öffentlichen Betrieb von kanban-kit unter
 **`https://kanban.mwolff.org`** auf dem Hostinger-Server. Für den **lokalen** Betrieb
 (eigener Caddy, self-signed TLS) siehe [Betrieb & Installation](betrieb.md) — dort stehen
 auch die gemeinsamen Konzepte (Umgebungsvariablen, erster Admin, E-Mail-Verifikation).
@@ -8,7 +8,7 @@ auch die gemeinsamen Konzepte (Umgebungsvariablen, erster Admin, E-Mail-Verifika
 ## Überblick
 
 Auf dem Server läuft bereits **Traefik** (Reverse-Proxy + Let's Encrypt) auf Port 80/443.
-manban wird deshalb **hinter dieses Traefik** gehängt statt seinen eigenen Caddy zu nutzen:
+kanban-kit wird deshalb **hinter dieses Traefik** gehängt statt seinen eigenen Caddy zu nutzen:
 
 - `manban-api` hängt am externen Docker-Netz **`web`** und wird über Traefik-Labels
   veröffentlicht (TLS über den certresolver **`mytlschallenge`**).

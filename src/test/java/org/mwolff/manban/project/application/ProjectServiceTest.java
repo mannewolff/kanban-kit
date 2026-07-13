@@ -3,6 +3,8 @@ package org.mwolff.manban.project.application;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -16,6 +18,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mwolff.manban.auth.application.AppUserRepository;
+import org.mwolff.manban.auth.application.AuthProperties;
 import org.mwolff.manban.auth.domain.AppUser;
 import org.mwolff.manban.auth.domain.PlatformRole;
 import org.mwolff.manban.project.domain.Permission;
@@ -32,6 +35,7 @@ class ProjectServiceTest {
   private ProjectMembershipRepository memberships;
   private PermissionChecker permissions;
   private AppUserRepository users;
+  private InvitationMailer mailer;
   private ProjectService service;
 
   private static ProjectMembership membership(long projectId, long userId, ProjectRole role) {
@@ -44,8 +48,13 @@ class ProjectServiceTest {
     memberships = mock(ProjectMembershipRepository.class);
     permissions = mock(PermissionChecker.class);
     users = mock(AppUserRepository.class);
+    mailer = mock(InvitationMailer.class);
+    AuthProperties authProperties =
+        new AuthProperties("https://app.example", null, null, null, null, null);
     Clock clock = Clock.fixed(FIXED, ZoneOffset.UTC);
-    service = new ProjectService(projects, memberships, permissions, users, clock);
+    service =
+        new ProjectService(
+            projects, memberships, permissions, users, mailer, authProperties, clock);
   }
 
   @Test
@@ -113,6 +122,64 @@ class ProjectServiceTest {
 
     // Then
     assertThat(view.name()).isEqualTo("Neu");
+  }
+
+  @Test
+  void create_sendsAssignmentInfoMailToOwner() {
+    // Given
+    when(permissions.isPlatformAdmin(1L)).thenReturn(true);
+    when(users.findByEmail("owner@x.de"))
+        .thenReturn(
+            Optional.of(new AppUser(2L, "owner@x.de", "hash", "Owner", true, PlatformRole.USER)));
+    when(projects.save(any(Project.class)))
+        .thenAnswer(
+            inv -> {
+              Project p = inv.getArgument(0);
+              return new Project(9L, p.name(), p.ownerUserId(), p.createdAt());
+            });
+
+    // When
+    service.create(1L, "Neu", "owner@x.de");
+
+    // Then
+    verify(mailer)
+        .sendProjectAssignedEmail(eq("owner@x.de"), eq("Neu"), eq(ProjectRole.OWNER), anyString());
+  }
+
+  @Test
+  void create_normalizesOwnerEmailToLowercase() {
+    // Given: gespeicherte E-Mail ist lowercase; der Aufruf liefert sie gemischt/mit Rand.
+    when(permissions.isPlatformAdmin(1L)).thenReturn(true);
+    when(users.findByEmail("owner@x.de"))
+        .thenReturn(
+            Optional.of(new AppUser(2L, "owner@x.de", "hash", "Owner", true, PlatformRole.USER)));
+    when(projects.save(any(Project.class)))
+        .thenAnswer(
+            inv -> {
+              Project p = inv.getArgument(0);
+              return new Project(9L, p.name(), p.ownerUserId(), p.createdAt());
+            });
+
+    // When
+    service.create(1L, "Neu", "  Owner@X.de ");
+
+    // Then
+    verify(users).findByEmail("owner@x.de");
+  }
+
+  @Test
+  void create_throwsMemberNotApproved_whenOwnerPending() {
+    // Given: Owner existiert, ist aber noch nicht freigegeben (approvedAt=null).
+    when(permissions.isPlatformAdmin(1L)).thenReturn(true);
+    when(users.findByEmail("owner@x.de"))
+        .thenReturn(
+            Optional.of(
+                new AppUser(
+                    2L, "owner@x.de", "hash", "Owner", true, PlatformRole.USER, null, null)));
+
+    // When / Then
+    assertThatThrownBy(() -> service.create(1L, "Neu", "owner@x.de"))
+        .isInstanceOf(MemberNotApprovedException.class);
   }
 
   @Test

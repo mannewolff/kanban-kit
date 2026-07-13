@@ -2,8 +2,7 @@ package org.mwolff.manban.project.application;
 
 import java.time.Clock;
 import java.util.Optional;
-import org.mwolff.manban.auth.application.AppUserRepository;
-import org.mwolff.manban.auth.domain.PlatformRole;
+import org.mwolff.manban.auth.application.PlatformAdminChecker;
 import org.mwolff.manban.project.domain.Permission;
 import org.mwolff.manban.project.domain.ProjectMembership;
 import org.mwolff.manban.project.domain.ProjectRole;
@@ -14,9 +13,9 @@ import org.springframework.transaction.annotation.Transactional;
  * Zentrale Rechteprüfung: Hat der Benutzer das Recht X im Projekt Y? Grundlage ist die
  * Projekt-Mitgliedschaft (Rolle) plus die feste Rollen-Rechte-Matrix.
  *
- * <p>Ein <b>Plattform-Admin</b> ({@link PlatformRole#ADMIN}) ist Super-User: er passiert jede
- * Prüfung, auch ohne Mitgliedschaft im Projekt. Für Nicht-Admins gilt: alle
- * projekt-/board-/karten-verändernden Use-Cases rufen {@link #require} auf. Nichtmitglieder
+ * <p>Ein <b>Plattform-Admin</b> ({@link org.mwolff.manban.auth.domain.PlatformRole#ADMIN}) ist
+ * Super-User: er passiert jede Prüfung, auch ohne Mitgliedschaft im Projekt. Für Nicht-Admins gilt:
+ * alle projekt-/board-/karten-verändernden Use-Cases rufen {@link #require} auf. Nichtmitglieder
  * erhalten 404 (kein Existenz-Leak), Mitglieder ohne das Recht 403.
  */
 @Component
@@ -24,24 +23,24 @@ public class PermissionChecker {
 
   private final ProjectMembershipRepository memberships;
   private final RolePermissionRepository rolePermissions;
-  private final AppUserRepository users;
+  private final PlatformAdminChecker platformAdminChecker;
   private final Clock clock;
 
   public PermissionChecker(
       ProjectMembershipRepository memberships,
       RolePermissionRepository rolePermissions,
-      AppUserRepository users,
+      PlatformAdminChecker platformAdminChecker,
       Clock clock) {
     this.memberships = memberships;
     this.rolePermissions = rolePermissions;
-    this.users = users;
+    this.platformAdminChecker = platformAdminChecker;
     this.clock = clock;
   }
 
   /** Ob der Benutzer plattformweit Admin (Super-User) ist. */
   @Transactional(readOnly = true)
   public boolean isPlatformAdmin(long userId) {
-    return users.findById(userId).map(u -> u.platformRole() == PlatformRole.ADMIN).orElse(false);
+    return platformAdminChecker.isPlatformAdmin(userId);
   }
 
   /**
@@ -52,7 +51,7 @@ public class PermissionChecker {
    */
   @Transactional(readOnly = true)
   public boolean hasPermission(long userId, long projectId, Permission permission) {
-    return isPlatformAdmin(userId)
+    return platformAdminChecker.isPlatformAdmin(userId)
         || memberships
             .findByProjectIdAndUserId(projectId, userId)
             .map(m -> rolePermissions.isGranted(m.role(), permission))
@@ -71,7 +70,7 @@ public class PermissionChecker {
   public ProjectMembership require(long userId, long projectId, Permission permission) {
     Optional<ProjectMembership> membership =
         memberships.findByProjectIdAndUserId(projectId, userId);
-    if (isPlatformAdmin(userId)) {
+    if (platformAdminChecker.isPlatformAdmin(userId)) {
       return membership.orElseGet(() -> adminMembership(projectId, userId));
     }
     ProjectMembership m = membership.orElseThrow(ProjectNotFoundException::new);
@@ -90,7 +89,7 @@ public class PermissionChecker {
   public ProjectMembership requireMembership(long userId, long projectId) {
     Optional<ProjectMembership> membership =
         memberships.findByProjectIdAndUserId(projectId, userId);
-    if (isPlatformAdmin(userId)) {
+    if (platformAdminChecker.isPlatformAdmin(userId)) {
       return membership.orElseGet(() -> adminMembership(projectId, userId));
     }
     return membership.orElseThrow(ProjectNotFoundException::new);

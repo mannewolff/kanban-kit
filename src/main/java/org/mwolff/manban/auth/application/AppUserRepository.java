@@ -3,6 +3,7 @@ package org.mwolff.manban.auth.application;
 import java.util.List;
 import java.util.Optional;
 import org.mwolff.manban.auth.domain.AppUser;
+import org.mwolff.manban.auth.domain.PlatformRole;
 
 /**
  * Ausgehender Port für die Persistenz von Benutzern. Die Anwendungs-/Domänenschicht spricht nur
@@ -20,4 +21,9 @@ public interface AppUserRepository {
   Optional<AppUser> findByEmail(String email);
 
   boolean existsByEmail(String email);
+
+  /**
+   * Alle Benutzer mit der angegebenen Plattform-Rolle (z. B. alle Admins für Benachrichtigungen).
+   */
+  List<AppUser> findByPlatformRole(PlatformRole platformRole);
 }

@@ -51,10 +51,17 @@ class MembershipIT extends AbstractIntegrationTest {
 
   static class CapturingInvitationMailer implements InvitationMailer {
     volatile String lastUrl;
+    volatile String lastAssignedEmail;
 
     @Override
     public void sendInvitationEmail(String toEmail, String projectName, String invitationUrl) {
       this.lastUrl = invitationUrl;
+    }
+
+    @Override
+    public void sendProjectAssignedEmail(
+        String toEmail, String projectName, ProjectRole role, String projectUrl) {
+      this.lastAssignedEmail = toEmail;
     }
 
     String lastToken() {
@@ -135,16 +142,19 @@ class MembershipIT extends AbstractIntegrationTest {
   @Test
   void inviteAcceptFlowGrantsCorrectRole() throws Exception {
     Cookie alice = loginAs("owner-inv@example.com");
-    Cookie bob = loginAs("member-inv@example.com");
     long projectId = createProject("owner-inv@example.com", "Team");
 
+    // Noch unbekannte E-Mail -> Einladungs-/Token-Pfad (Antwort "invited").
     mvc.perform(
             post("/api/projects/" + projectId + "/invitations")
                 .cookie(alice)
                 .contentType("application/json")
                 .content("{\"email\":\"member-inv@example.com\",\"role\":\"MEMBER\"}"))
-        .andExpect(status().isAccepted());
+        .andExpect(status().isAccepted())
+        .andExpect(jsonPath("$.status").value("invited"));
 
+    // Erst danach registriert sich der Eingeladene und nimmt per Token an.
+    Cookie bob = loginAs("member-inv@example.com");
     mvc.perform(
             post("/api/invitations/accept")
                 .cookie(bob)
@@ -266,5 +276,56 @@ class MembershipIT extends AbstractIntegrationTest {
 
     mvc.perform(delete("/api/projects/" + projectId + "/members/" + targetId).cookie(alice))
         .andExpect(status().isNoContent());
+  }
+
+  @Test
+  void inviteRegisteredApprovedUserAddsDirectly() throws Exception {
+    Cookie alice = loginAs("owner-dir@example.com");
+    loginAs("member-dir@example.com"); // registriert + freigegeben
+    long projectId = createProject("owner-dir@example.com", "Direct");
+
+    mvc.perform(
+            post("/api/projects/" + projectId + "/invitations")
+                .cookie(alice)
+                .contentType("application/json")
+                .content("{\"email\":\"member-dir@example.com\",\"role\":\"MEMBER\"}"))
+        .andExpect(status().isAccepted())
+        .andExpect(jsonPath("$.status").value("added"));
+
+    // Direkt Mitglied, ohne Accept-Schritt.
+    String membersBody =
+        mvc.perform(get("/api/projects/" + projectId + "/members").cookie(alice))
+            .andExpect(status().isOk())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+    assertThat(
+            JsonPath.<List<Object>>read(
+                membersBody, "$[?(@.email=='member-dir@example.com')].role"))
+        .contains("MEMBER");
+  }
+
+  @Test
+  void invitePendingUserIsRejected() throws Exception {
+    Cookie alice = loginAs("owner-pend@example.com");
+    long projectId = createProject("owner-pend@example.com", "Pending");
+    // Registrierter, aber noch nicht freigegebener Nutzer (approvedAt=null).
+    users.save(
+        new AppUser(
+            null,
+            "pending@example.com",
+            passwordEncoder.encode(PASSWORD),
+            "Pending",
+            true,
+            PlatformRole.USER,
+            null,
+            null));
+
+    mvc.perform(
+            post("/api/projects/" + projectId + "/invitations")
+                .cookie(alice)
+                .contentType("application/json")
+                .content("{\"email\":\"pending@example.com\",\"role\":\"MEMBER\"}"))
+        .andExpect(status().isUnprocessableEntity());
   }
 }

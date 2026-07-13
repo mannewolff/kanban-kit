@@ -2,8 +2,9 @@
 
 kanban-kit kann sein **eigenes** Board als Issue-Tracker treiben — sowohl über die
 Stellwerk-CLI `board.mjs` (claude-workflow-kit) als auch über die eigenständige
-`tbx.mjs`-CLI. Beide sprechen dasselbe Kanban-Protokoll (`/api/kanban/*`) und
-authentifizieren sich mit einem **board-gebundenen Token** (`X-Kanban-Token`).
+`tbx.mjs`-CLI, die mit dem Produkt ausgeliefert wird ([`cli/tbx.mjs`](../cli/tbx.mjs)).
+Beide sprechen dasselbe Kanban-Protokoll (`/api/kanban/*`) und authentifizieren sich
+mit einem **board-gebundenen Token** (`X-Kanban-Token`).
 
 Der Clou: Der Client sendet **nur den Token**, keine Board-ID. Welches Board bedient
 wird, steckt in der Token-Bindung — ähnlich einem GitHub-Fine-grained-PAT, der auf ein
@@ -50,11 +51,11 @@ Den `plaintext` (`tk_…`) sicher notieren — er wird **nur genau einmal** ange
 
 ## 3. CLI anmelden
 
-Mit der `tbx.mjs`-CLI (oder direkt über die von `board.mjs` gelesenen Token-Dateien unter
-`~/.config/toolbox-cli/`):
+Mit der im Repo mitgelieferten `cli/tbx.mjs` (oder direkt über die von `board.mjs`
+gelesenen Token-Dateien unter `~/.config/toolbox-cli/`):
 
 ```
-tbx auth login --host https://localhost --token tk_…
+node cli/tbx.mjs auth login --host https://localhost --token tk_…
 ```
 
 ## 4. board.mjs auf das eigene Board umstellen

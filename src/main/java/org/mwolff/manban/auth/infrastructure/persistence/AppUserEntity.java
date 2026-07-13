@@ -8,7 +8,9 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import java.time.Instant;
 import org.jspecify.annotations.Nullable;
+import org.mwolff.manban.auth.domain.AppUser;
 import org.mwolff.manban.auth.domain.PlatformRole;
 
 /**
@@ -39,23 +41,26 @@ class AppUserEntity {
   @Column(name = "platform_role", nullable = false)
   private PlatformRole platformRole;
 
+  @Column(name = "approved_at")
+  private @Nullable Instant approvedAt;
+
+  @Column(name = "approved_by")
+  private @Nullable Long approvedBy;
+
   protected AppUserEntity() {
     // für JPA
   }
 
-  AppUserEntity(
-      @Nullable Long id,
-      String email,
-      String passwordHash,
-      String displayName,
-      boolean emailVerified,
-      PlatformRole platformRole) {
-    this.id = id;
-    this.email = email;
-    this.passwordHash = passwordHash;
-    this.displayName = displayName;
-    this.emailVerified = emailVerified;
-    this.platformRole = platformRole;
+  /** Baut die Entity direkt aus dem Domänenobjekt (statt aus 8 Einzelparametern, Sonar S107). */
+  AppUserEntity(AppUser u) {
+    this.id = u.id();
+    this.email = u.email();
+    this.passwordHash = u.passwordHash();
+    this.displayName = u.displayName();
+    this.emailVerified = u.emailVerified();
+    this.platformRole = u.platformRole();
+    this.approvedAt = u.approvedAt();
+    this.approvedBy = u.approvedBy();
   }
 
   @Nullable Long getId() {
@@ -80,5 +85,13 @@ class AppUserEntity {
 
   PlatformRole getPlatformRole() {
     return platformRole;
+  }
+
+  @Nullable Instant getApprovedAt() {
+    return approvedAt;
+  }
+
+  @Nullable Long getApprovedBy() {
+    return approvedBy;
   }
 }

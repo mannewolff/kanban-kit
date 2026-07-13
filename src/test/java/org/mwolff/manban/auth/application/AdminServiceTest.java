@@ -4,9 +4,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
@@ -18,17 +22,28 @@ import org.mwolff.manban.auth.domain.PlatformRole;
 /** Verhaltenstests der Plattform-Administration (Mockito am AppUserRepository-Port). */
 class AdminServiceTest {
 
+  private static final Instant NOW = Instant.parse("2026-07-13T10:00:00Z");
+  private static final Clock CLOCK = Clock.fixed(NOW, ZoneOffset.UTC);
+
   private AppUserRepository users;
+  private PlatformAdminChecker platformAdminChecker;
   private AdminService service;
 
   private static AppUser user(long id, PlatformRole role) {
     return new AppUser(id, "u" + id + "@x.de", "hash", "U" + id, true, role);
   }
 
+  /** Noch nicht freigegebener Benutzer (kanonischer Konstruktor, {@code approvedAt=null}). */
+  private static AppUser pendingUser(long id) {
+    return new AppUser(
+        id, "u" + id + "@x.de", "hash", "U" + id, true, PlatformRole.USER, null, null);
+  }
+
   @BeforeEach
   void setUp() {
     users = mock(AppUserRepository.class);
-    service = new AdminService(users);
+    platformAdminChecker = new PlatformAdminChecker(users);
+    service = new AdminService(users, CLOCK, platformAdminChecker);
   }
 
   @Test
@@ -95,6 +110,71 @@ class AdminServiceTest {
 
     // When / Then
     assertThatThrownBy(() -> service.listUsers(9L)).isInstanceOf(AdminAccessDeniedException.class);
+  }
+
+  @Test
+  void listUsers_mapsApprovalTimestampIntoView() {
+    // Given: freigegebener Nutzer (Bequem-Konstruktor => approvedAt gesetzt).
+    when(users.findById(1L)).thenReturn(Optional.of(user(1, PlatformRole.ADMIN)));
+    when(users.findAll()).thenReturn(List.of(user(2, PlatformRole.USER)));
+
+    // When
+    List<AdminService.UserView> result = service.listUsers(1L);
+
+    // Then
+    assertThat(result).singleElement().extracting(AdminService.UserView::approvedAt).isNotNull();
+  }
+
+  @Test
+  void approve_setsApprovedAtAndBy_whenTargetPending() {
+    // Given
+    when(users.findById(1L)).thenReturn(Optional.of(user(1, PlatformRole.ADMIN)));
+    when(users.findById(2L)).thenReturn(Optional.of(pendingUser(2)));
+    when(users.save(any(AppUser.class))).thenAnswer(inv -> inv.getArgument(0));
+
+    // When
+    ArgumentCaptor<AppUser> captor = ArgumentCaptor.forClass(AppUser.class);
+    AdminService.UserView view = service.approve(1L, 2L);
+
+    // Then
+    verify(users).save(captor.capture());
+    assertThat(captor.getValue().approvedAt()).isEqualTo(NOW);
+    assertThat(captor.getValue().approvedBy()).isEqualTo(1L);
+    assertThat(view.approvedAt()).isEqualTo(NOW);
+  }
+
+  @Test
+  void approve_isIdempotent_whenTargetAlreadyApproved() {
+    // Given: Ziel ist bereits freigegeben (Bequem-Konstruktor).
+    when(users.findById(1L)).thenReturn(Optional.of(user(1, PlatformRole.ADMIN)));
+    when(users.findById(2L)).thenReturn(Optional.of(user(2, PlatformRole.USER)));
+
+    // When
+    AdminService.UserView view = service.approve(1L, 2L);
+
+    // Then: kein erneutes Speichern, Freigabe unverändert.
+    verify(users, never()).save(any(AppUser.class));
+    assertThat(view.approvedAt()).isNotNull();
+  }
+
+  @Test
+  void approve_throwsAdminAccessDenied_whenActorIsNotAdmin() {
+    // Given
+    when(users.findById(9L)).thenReturn(Optional.of(user(9, PlatformRole.USER)));
+
+    // When / Then
+    assertThatThrownBy(() -> service.approve(9L, 2L))
+        .isInstanceOf(AdminAccessDeniedException.class);
+  }
+
+  @Test
+  void approve_throwsUserNotFound_whenTargetUnknown() {
+    // Given
+    when(users.findById(1L)).thenReturn(Optional.of(user(1, PlatformRole.ADMIN)));
+    when(users.findById(2L)).thenReturn(Optional.empty());
+
+    // When / Then
+    assertThatThrownBy(() -> service.approve(1L, 2L)).isInstanceOf(UserNotFoundException.class);
   }
 
   @Test

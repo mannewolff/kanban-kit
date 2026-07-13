@@ -69,11 +69,22 @@ export function ProjectMembersPage({ api = defaultMembersApi, loadRole }: Props)
     setMessage(null)
     setInviting(true)
     try {
-      await api.invite(id, inviteEmail.trim(), inviteRole)
+      const result = await api.invite(id, inviteEmail.trim(), inviteRole)
       setInviteEmail('')
-      setMessage({ kind: 'success', text: 'Einladung verschickt.' })
-    } catch {
-      setMessage({ kind: 'error', text: 'Einladung fehlgeschlagen.' })
+      if (result.status === 'added') {
+        setMessage({ kind: 'success', text: 'Nutzer wurde hinzugefügt.' })
+        await reload()
+      } else {
+        setMessage({ kind: 'success', text: 'Einladung verschickt.' })
+      }
+    } catch (error) {
+      setMessage({
+        kind: 'error',
+        text:
+          error instanceof ApiError && error.status === 422
+            ? 'Nutzer ist noch nicht vom Admin freigegeben.'
+            : 'Einladung fehlgeschlagen.',
+      })
     } finally {
       setInviting(false)
     }

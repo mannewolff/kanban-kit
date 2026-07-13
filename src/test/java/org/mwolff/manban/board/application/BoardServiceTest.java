@@ -356,7 +356,8 @@ class BoardServiceTest {
     when(columns.findByBoardId(10L)).thenReturn(List.of(column(1L, "A", 0), column(2L, "B", 1)));
 
     // When / Then
-    assertThatThrownBy(() -> service.reorderColumns(1L, 10L, List.of(1L, 99L)))
+    List<Long> mismatchedIds = List.of(1L, 99L);
+    assertThatThrownBy(() -> service.reorderColumns(1L, 10L, mismatchedIds))
         .isInstanceOf(ColumnNotFoundException.class);
   }
 }

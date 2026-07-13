@@ -5,7 +5,7 @@ import DialogContent from '@mui/material/DialogContent'
 import DialogTitle from '@mui/material/DialogTitle'
 import Stack from '@mui/material/Stack'
 import TextField from '@mui/material/TextField'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { CardType } from '../api/cards'
 import type { Epic } from '../api/epics'
 import { epicShortcode } from '../lib/epicMeta'
@@ -20,6 +20,13 @@ export interface NewItemInput {
   shortcode: string | null
 }
 
+/** Vorbefüllung für „Duplizieren": Titel/Beschreibung/Epic-Zuordnung der Quellkarte. */
+export interface NewCardInitialValues {
+  title: string
+  description: string
+  parentId: number | null
+}
+
 interface Props {
   open: boolean
   columnName: string
@@ -28,6 +35,8 @@ interface Props {
   onSubmit: (input: NewItemInput) => Promise<void> | void
   /** Nur Epic anlegen: Typ vorbelegt EPIC, ohne Typ-/Zuordnungs-Auswahl (für die Epics-Ansicht). */
   epicOnly?: boolean
+  /** Vorbefüllung für „Duplizieren"; ohne Angabe startet der Dialog leer. */
+  initialValues?: NewCardInitialValues
 }
 
 /**
@@ -35,23 +44,34 @@ interface Props {
  * Typ (Karte/Epic); bei Karte optionale Epic-Zuordnung, bei Epic optionales Kürzel;
  * Titel (Pflicht) + Beschreibung mit vierteiliger Markdown-Vorlage.
  */
-export function NewCardModal({ open, columnName, epics, onClose, onSubmit, epicOnly = false }: Props) {
+export function NewCardModal({
+  open,
+  columnName,
+  epics,
+  onClose,
+  onSubmit,
+  epicOnly = false,
+  initialValues,
+}: Props) {
   const [type, setType] = useState<CardType>(epicOnly ? 'EPIC' : 'CARD')
   const [title, setTitle] = useState('')
   const [body, setBody] = useState(BODY_TEMPLATE)
   const [parentId, setParentId] = useState<number | null>(null)
   const [shortcode, setShortcode] = useState('')
   const [saving, setSaving] = useState(false)
+  const titleInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     if (!open) return
     setType(epicOnly ? 'EPIC' : 'CARD')
-    setTitle('')
-    setBody(BODY_TEMPLATE)
-    setParentId(null)
+    setTitle(initialValues?.title ?? '')
+    setBody(initialValues?.description ?? BODY_TEMPLATE)
+    setParentId(initialValues?.parentId ?? null)
     setShortcode('')
     setSaving(false)
-  }, [open, epicOnly])
+    // Titel selektieren, damit ein Überschreiben (z. B. beim Duplizieren) ohne Löschen möglich ist.
+    titleInputRef.current?.select()
+  }, [open, epicOnly, initialValues])
 
   const canSubmit = title.trim().length > 0 && !saving
 
@@ -133,6 +153,7 @@ export function NewCardModal({ open, columnName, epics, onClose, onSubmit, epicO
             required
             autoFocus
             fullWidth
+            inputRef={titleInputRef}
             inputProps={{ maxLength: 300, 'aria-label': 'Titel' }}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) void handleCreate()

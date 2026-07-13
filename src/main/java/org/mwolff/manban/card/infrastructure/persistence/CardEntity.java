@@ -8,6 +8,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.time.Instant;
 import org.jspecify.annotations.Nullable;
+import org.mwolff.manban.card.domain.Card;
 
 /**
  * JPA-Abbildung der Tabelle {@code card}. Die generierte Spalte {@code active_position} wird von
@@ -67,37 +68,23 @@ class CardEntity {
     // für JPA
   }
 
-  CardEntity(
-      @Nullable Long id,
-      Long boardId,
-      Long columnId,
-      int number,
-      String title,
-      @Nullable String description,
-      int positionInColumn,
-      boolean archived,
-      @Nullable Instant movedToDoneAt,
-      @Nullable Long createdBy,
-      Instant createdAt,
-      Instant updatedAt,
-      String type,
-      @Nullable Long parentId,
-      @Nullable String shortcode) {
-    this.id = id;
-    this.boardId = boardId;
-    this.columnId = columnId;
-    this.number = number;
-    this.title = title;
-    this.description = description;
-    this.positionInColumn = positionInColumn;
-    this.archived = archived;
-    this.movedToDoneAt = movedToDoneAt;
-    this.createdBy = createdBy;
-    this.createdAt = createdAt;
-    this.updatedAt = updatedAt;
-    this.type = type;
-    this.parentId = parentId;
-    this.shortcode = shortcode;
+  /** Baut die Entity direkt aus dem Domänenobjekt (statt aus 15 Einzelparametern, Sonar S107). */
+  CardEntity(Card c) {
+    this.id = c.id();
+    this.boardId = c.boardId();
+    this.columnId = c.columnId();
+    this.number = c.number();
+    this.title = c.title();
+    this.description = c.description();
+    this.positionInColumn = c.positionInColumn();
+    this.archived = c.archived();
+    this.movedToDoneAt = c.movedToDoneAt();
+    this.createdBy = c.createdBy();
+    this.createdAt = c.createdAt();
+    this.updatedAt = c.updatedAt();
+    this.type = c.type().name();
+    this.parentId = c.parentId();
+    this.shortcode = c.shortcode();
   }
 
   @Nullable Long getId() {

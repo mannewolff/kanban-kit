@@ -30,6 +30,7 @@ class RegisterUserServiceTest {
   private EmailVerificationTokenRepository tokens;
   private VerificationMailer mailer;
   private PasswordEncoder encoder;
+  private RegistrationApprovalPolicy approvalPolicy;
   private RegisterUserService service;
 
   @BeforeEach
@@ -38,10 +39,12 @@ class RegisterUserServiceTest {
     tokens = mock(EmailVerificationTokenRepository.class);
     mailer = mock(VerificationMailer.class);
     encoder = mock(PasswordEncoder.class);
+    approvalPolicy = mock(RegistrationApprovalPolicy.class);
     AuthProperties properties =
         new AuthProperties("https://app.example", Duration.ofHours(24), null, null, null, null);
     Clock clock = Clock.fixed(FIXED, ZoneOffset.UTC);
-    service = new RegisterUserService(users, tokens, mailer, encoder, properties, clock);
+    service =
+        new RegisterUserService(users, tokens, mailer, encoder, properties, clock, approvalPolicy);
     when(encoder.encode(anyString())).thenReturn("argon2hash");
     when(users.save(any(AppUser.class)))
         .thenAnswer(
@@ -142,6 +145,35 @@ class RegisterUserServiceTest {
     assertThat(url.getValue())
         .startsWith("https://app.example/verify?token=")
         .doesNotContain("/api/auth/verify");
+  }
+
+  @Test
+  void register_autoApprovesUser_whenPolicyApproves() {
+    // Given: für die E-Mail liegt eine offene Einladung vor (Policy = true).
+    when(users.existsByEmail("a@x.de")).thenReturn(false);
+    when(approvalPolicy.shouldAutoApprove("a@x.de")).thenReturn(true);
+
+    // When
+    ArgumentCaptor<AppUser> captor = ArgumentCaptor.forClass(AppUser.class);
+    service.register("a@x.de", "pw", "Ada");
+
+    // Then: sofort freigegeben mit dem Uhr-Zeitpunkt.
+    verify(users).save(captor.capture());
+    assertThat(captor.getValue().approvedAt()).isEqualTo(FIXED);
+  }
+
+  @Test
+  void register_leavesUserPending_whenPolicyDeclines() {
+    // Given: keine offene Einladung (Policy = false, Mockito-Default).
+    when(users.existsByEmail("a@x.de")).thenReturn(false);
+
+    // When
+    ArgumentCaptor<AppUser> captor = ArgumentCaptor.forClass(AppUser.class);
+    service.register("a@x.de", "pw", "Ada");
+
+    // Then: wartet auf Admin-Freigabe.
+    verify(users).save(captor.capture());
+    assertThat(captor.getValue().approvedAt()).isNull();
   }
 
   @Test

@@ -14,6 +14,7 @@ import org.mwolff.manban.common.token.TokenCryptoPort.GeneratedToken;
 import org.mwolff.manban.project.application.PermissionChecker;
 import org.mwolff.manban.project.application.ProjectAccessDeniedException;
 import org.mwolff.manban.project.domain.Permission;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -32,18 +33,21 @@ public class AccessTokenService {
   private final BoardRepository boards;
   private final PermissionChecker permissions;
   private final Clock clock;
+  private final ObjectProvider<AccessTokenService> self;
 
   public AccessTokenService(
       AccessTokenRepository tokens,
       TokenCryptoPort crypto,
       BoardRepository boards,
       PermissionChecker permissions,
-      Clock clock) {
+      Clock clock,
+      ObjectProvider<AccessTokenService> self) {
     this.tokens = tokens;
     this.crypto = crypto;
     this.boards = boards;
     this.permissions = permissions;
     this.clock = clock;
+    this.self = self;
   }
 
   /**
@@ -142,10 +146,15 @@ public class AccessTokenService {
             });
   }
 
-  /** Löst einen eingehenden Klartext-Header zur User-ID auf; leer bei unbekannt/widerrufen. */
+  /**
+   * Löst einen eingehenden Klartext-Header zur User-ID auf; leer bei unbekannt/widerrufen. Ruft
+   * {@link #resolveBinding} über den injizierten Self-Provider auf (nicht via {@code this}), damit
+   * der Aufruf durch den Spring-Transaktions-Proxy läuft (Sonar {@code java:S6809}).
+   */
   @Transactional
   public OptionalLong resolve(String plaintext) {
-    return resolveBinding(plaintext)
+    return self.getObject()
+        .resolveBinding(plaintext)
         .map(p -> OptionalLong.of(p.userId()))
         .orElseGet(OptionalLong::empty);
   }

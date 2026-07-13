@@ -10,6 +10,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.time.Instant;
 import org.jspecify.annotations.Nullable;
+import org.mwolff.manban.project.domain.ProjectInvitation;
 import org.mwolff.manban.project.domain.ProjectRole;
 
 /** JPA-Abbildung der Tabelle {@code project_invitation}. */
@@ -47,23 +48,16 @@ class ProjectInvitationEntity {
     // für JPA
   }
 
-  ProjectInvitationEntity(
-      @Nullable Long id,
-      Long projectId,
-      String email,
-      ProjectRole role,
-      String tokenHash,
-      Instant expiresAt,
-      @Nullable Instant acceptedAt,
-      Long invitedBy) {
-    this.id = id;
-    this.projectId = projectId;
-    this.email = email;
-    this.role = role;
-    this.tokenHash = tokenHash;
-    this.expiresAt = expiresAt;
-    this.acceptedAt = acceptedAt;
-    this.invitedBy = invitedBy;
+  /** Baut die Entity direkt aus dem Domänenobjekt (statt aus 8 Einzelparametern, Sonar S107). */
+  ProjectInvitationEntity(ProjectInvitation i) {
+    this.id = i.id();
+    this.projectId = i.projectId();
+    this.email = i.email();
+    this.role = i.role();
+    this.tokenHash = i.tokenHash();
+    this.expiresAt = i.expiresAt();
+    this.acceptedAt = i.acceptedAt();
+    this.invitedBy = i.invitedBy();
   }
 
   @Nullable Long getId() {

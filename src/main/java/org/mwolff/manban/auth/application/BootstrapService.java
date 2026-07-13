@@ -2,6 +2,7 @@ package org.mwolff.manban.auth.application;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.time.Clock;
 import org.mwolff.manban.auth.application.AdminService.UserView;
 import org.mwolff.manban.auth.domain.AppUser;
 import org.mwolff.manban.auth.domain.PlatformRole;
@@ -18,10 +19,12 @@ public class BootstrapService {
 
   private final AppUserRepository users;
   private final BootstrapProperties properties;
+  private final Clock clock;
 
-  public BootstrapService(AppUserRepository users, BootstrapProperties properties) {
+  public BootstrapService(AppUserRepository users, BootstrapProperties properties, Clock clock) {
     this.users = users;
     this.properties = properties;
+    this.clock = clock;
   }
 
   @Transactional
@@ -34,13 +37,21 @@ public class BootstrapService {
       throw new InvalidBootstrapTokenException();
     }
     AppUser user = users.findById(userId).orElseThrow(UserNotFoundException::new);
-    AppUser saved = users.save(user.withPlatformRole(PlatformRole.ADMIN));
+    // Der erste Admin gibt sich beim Bootstrap zugleich selbst frei — sonst würde ihn der
+    // Login-Gate (Issue #0097) bei der nächsten Anmeldung aussperren.
+    AppUser elevated = user.withPlatformRole(PlatformRole.ADMIN);
+    AppUser saved =
+        users.save(
+            elevated.approved()
+                ? elevated
+                : elevated.withApproved(clock.instant(), user.requireId()));
     return new UserView(
         saved.requireId(),
         saved.email(),
         saved.displayName(),
         saved.platformRole(),
-        saved.emailVerified());
+        saved.emailVerified(),
+        saved.approvedAt());
   }
 
   private boolean adminExists() {

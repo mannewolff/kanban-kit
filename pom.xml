@@ -13,7 +13,7 @@
 
     <groupId>org.mwolff</groupId>
     <artifactId>manban</artifactId>
-    <version>0.1.0-SNAPSHOT</version>
+    <version>0.2.0</version>
     <name>manban</name>
     <description>mannewolff Kanban Board — eigenständige, self-hostbare Trello-Alternative</description>
 
@@ -509,6 +509,7 @@
                         <!-- IT-only: Adapter zu externer Infrastruktur (SMTP / S3-MinIO), nur via IT (§5.2). -->
                         <exclude>org/mwolff/manban/auth/infrastructure/mail/JavaMailPasswordResetMailer.class</exclude>
                         <exclude>org/mwolff/manban/auth/infrastructure/mail/JavaMailVerificationMailer.class</exclude>
+                        <exclude>org/mwolff/manban/auth/infrastructure/mail/JavaMailAdminNotificationMailer.class</exclude>
                         <exclude>org/mwolff/manban/project/infrastructure/mail/JavaMailInvitationMailer.class</exclude>
                         <exclude>org/mwolff/manban/attachment/infrastructure/MinioObjectStorage.class</exclude>
                         <exclude>org/mwolff/manban/attachment/infrastructure/MinioObjectStorage$ObjectStorageException.class</exclude>

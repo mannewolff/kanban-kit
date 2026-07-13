@@ -75,11 +75,11 @@ class CommentIT extends AbstractIntegrationTest {
             .andReturn()
             .getResponse()
             .getContentAsString();
-    long projectId = json.readTree(p).get("id").asLong();
+    long createdProjectId = json.readTree(p).get("id").asLong();
     JsonNode board =
         json.readTree(
             mvc.perform(
-                    post("/api/projects/" + projectId + "/boards")
+                    post("/api/projects/" + createdProjectId + "/boards")
                         .cookie(owner)
                         .contentType("application/json")
                         .content("{\"name\":\"B\"}"))
@@ -97,7 +97,7 @@ class CommentIT extends AbstractIntegrationTest {
             .andReturn()
             .getResponse()
             .getContentAsString();
-    this.projectId = projectId;
+    this.projectId = createdProjectId;
     return json.readTree(card).get("id").asLong();
   }
 

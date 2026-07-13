@@ -2,6 +2,7 @@ package org.mwolff.manban.auth.application;
 
 import java.util.Locale;
 import org.mwolff.manban.auth.domain.AppUser;
+import org.mwolff.manban.auth.domain.PlatformRole;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -38,6 +39,16 @@ public class LoginService {
     if (!user.emailVerified()) {
       throw new EmailNotVerifiedException();
     }
+    // Freigabe-Gate (Issue #0097). Ausnahme: Solange noch kein Plattform-Admin existiert, darf sich
+    // der (noch nicht freigegebene) erste Nutzer einloggen, um sich per Bootstrap-Token zum ersten
+    // Admin zu erheben — sonst gäbe es niemanden, der freigeben könnte (kein Aussperren).
+    if (!user.approved() && anyAdminExists()) {
+      throw new UserNotApprovedException();
+    }
     return user;
+  }
+
+  private boolean anyAdminExists() {
+    return users.findAll().stream().anyMatch(u -> u.platformRole() == PlatformRole.ADMIN);
   }
 }

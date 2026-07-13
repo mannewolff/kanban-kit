@@ -1,39 +1,42 @@
 package org.mwolff.manban.auth.application;
 
+import java.time.Clock;
+import java.time.Instant;
 import java.util.List;
+import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.auth.domain.AppUser;
 import org.mwolff.manban.auth.domain.PlatformRole;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Plattform-Administration: Nutzer auflisten und Plattform-Rollen setzen. Alle Operationen
- * erfordern, dass der Aufrufer selbst Plattform-Admin ist. Der letzte Admin ist gegen Degradierung
- * geschützt (kein Aussperren).
+ * Plattform-Administration: Nutzer auflisten, Plattform-Rollen setzen und Registrierungen
+ * freigeben. Alle Operationen erfordern, dass der Aufrufer selbst Plattform-Admin ist. Der letzte
+ * Admin ist gegen Degradierung geschützt (kein Aussperren).
  */
 @Service
 public class AdminService {
 
   private final AppUserRepository users;
+  private final Clock clock;
+  private final PlatformAdminChecker platformAdminChecker;
 
-  public AdminService(AppUserRepository users) {
+  public AdminService(
+      AppUserRepository users, Clock clock, PlatformAdminChecker platformAdminChecker) {
     this.users = users;
+    this.clock = clock;
+    this.platformAdminChecker = platformAdminChecker;
   }
 
   @Transactional(readOnly = true)
   public boolean isPlatformAdmin(long userId) {
-    return users.findById(userId).map(u -> u.platformRole() == PlatformRole.ADMIN).orElse(false);
+    return platformAdminChecker.isPlatformAdmin(userId);
   }
 
   @Transactional(readOnly = true)
   public List<UserView> listUsers(long actorUserId) {
     requirePlatformAdmin(actorUserId);
-    return users.findAll().stream()
-        .map(
-            u ->
-                new UserView(
-                    u.requireId(), u.email(), u.displayName(), u.platformRole(), u.emailVerified()))
-        .toList();
+    return users.findAll().stream().map(AdminService::toView).toList();
   }
 
   @Transactional
@@ -49,16 +52,26 @@ public class AdminService {
     }
 
     AppUser saved = users.save(target.withPlatformRole(newRole));
-    return new UserView(
-        saved.requireId(),
-        saved.email(),
-        saved.displayName(),
-        saved.platformRole(),
-        saved.emailVerified());
+    return toView(saved);
+  }
+
+  /**
+   * Gibt einen Benutzer frei. Idempotent: Ein bereits freigegebener Benutzer bleibt unverändert
+   * (Zeitpunkt und freigebender Admin werden nicht überschrieben).
+   */
+  @Transactional
+  public UserView approve(long actorUserId, long targetUserId) {
+    requirePlatformAdmin(actorUserId);
+    AppUser target = users.findById(targetUserId).orElseThrow(UserNotFoundException::new);
+    if (target.approved()) {
+      return toView(target);
+    }
+    AppUser saved = users.save(target.withApproved(clock.instant(), actorUserId));
+    return toView(saved);
   }
 
   private void requirePlatformAdmin(long actorUserId) {
-    if (!isPlatformAdmin(actorUserId)) {
+    if (!platformAdminChecker.isPlatformAdmin(actorUserId)) {
       throw new AdminAccessDeniedException();
     }
   }
@@ -67,11 +80,22 @@ public class AdminService {
     return users.findAll().stream().filter(u -> u.platformRole() == PlatformRole.ADMIN).count();
   }
 
+  private static UserView toView(AppUser u) {
+    return new UserView(
+        u.requireId(),
+        u.email(),
+        u.displayName(),
+        u.platformRole(),
+        u.emailVerified(),
+        u.approvedAt());
+  }
+
   /** Nutzerdarstellung für die Admin-Verwaltung. */
   public record UserView(
       Long id,
       String email,
       String displayName,
       PlatformRole platformRole,
-      boolean emailVerified) {}
+      boolean emailVerified,
+      @Nullable Instant approvedAt) {}
 }

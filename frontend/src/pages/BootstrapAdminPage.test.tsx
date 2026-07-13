@@ -9,7 +9,12 @@ vi.mock('../auth/AuthContext', () => ({ useAuth: () => ({ refresh }) }))
 
 describe('BootstrapAdminPage', () => {
   it('sendet den Token und frischt die Auth auf', async () => {
-    const api = { listUsers: vi.fn(), setRole: vi.fn(), bootstrap: vi.fn().mockResolvedValue({}) } satisfies AdminApi
+    const api = {
+      listUsers: vi.fn(),
+      setRole: vi.fn(),
+      approve: vi.fn(),
+      bootstrap: vi.fn().mockResolvedValue({}),
+    } satisfies AdminApi
     render(
       <MemoryRouter>
         <BootstrapAdminPage api={api} />

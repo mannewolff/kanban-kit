@@ -157,7 +157,7 @@ class KanbanCompatIT extends AbstractIntegrationTest {
     long boardId = createBoard(session, projectId, "Board");
     String token = boundToken(session, projectId, boardId);
 
-    // create -> {number}
+    // Anlegen liefert die neue Kartennummer im JSON-Feld "number".
     String created =
         mvc.perform(
                 post("/api/kanban/items")
@@ -286,8 +286,18 @@ class KanbanCompatIT extends AbstractIntegrationTest {
                 .content("{\"column\":\"DONE\",\"position\":0}"))
         .andExpect(status().isNotFound());
 
-    // board1-Items enthalten die Fremdkarte nicht.
+    // Eigene Karte auf board1 anlegen: sonst wären alle Spalten leer und die Non-Leak-Prüfung
+    // unten würde vacuously durchlaufen, ohne wirklich etwas zu beweisen (Sonar S5841).
+    mvc.perform(
+            post("/api/kanban/items")
+                .header("X-Kanban-Token", token1)
+                .contentType("application/json")
+                .content("{\"title\":\"Eigene Karte\",\"column\":\"BACKLOG\"}"))
+        .andExpect(status().isCreated());
+
+    // board1-Items enthalten die eigene Karte, aber nicht die Fremdkarte (Scope-Beweis).
     JsonNode items = kanbanItems(token1);
+    assertThat(items.get("BACKLOG")).isNotEmpty();
     for (String col : new String[] {"BACKLOG", "READY", "IN_PROGRESS", "IN_REVIEW", "DONE"}) {
       assertThat(items.get(col))
           .allSatisfy(n -> assertThat(n.get("title").asText()).isNotEqualTo("Fremd"));

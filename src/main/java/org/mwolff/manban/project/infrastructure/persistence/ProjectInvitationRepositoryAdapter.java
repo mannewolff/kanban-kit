@@ -1,5 +1,6 @@
 package org.mwolff.manban.project.infrastructure.persistence;
 
+import java.time.Instant;
 import java.util.Optional;
 import org.mwolff.manban.project.application.ProjectInvitationRepository;
 import org.mwolff.manban.project.domain.ProjectInvitation;
@@ -25,16 +26,13 @@ class ProjectInvitationRepositoryAdapter implements ProjectInvitationRepository 
     return jpa.findByTokenHash(tokenHash).map(ProjectInvitationRepositoryAdapter::toDomain);
   }
 
+  @Override
+  public boolean existsOpenInvitation(String email, Instant now) {
+    return jpa.existsByEmailAndAcceptedAtIsNullAndExpiresAtAfter(email, now);
+  }
+
   private static ProjectInvitationEntity toEntity(ProjectInvitation i) {
-    return new ProjectInvitationEntity(
-        i.id(),
-        i.projectId(),
-        i.email(),
-        i.role(),
-        i.tokenHash(),
-        i.expiresAt(),
-        i.acceptedAt(),
-        i.invitedBy());
+    return new ProjectInvitationEntity(i);
   }
 
   private static ProjectInvitation toDomain(ProjectInvitationEntity e) {

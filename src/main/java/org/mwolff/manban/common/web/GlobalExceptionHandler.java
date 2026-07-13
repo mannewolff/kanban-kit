@@ -70,7 +70,7 @@ class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 
   /** Bean-Validation-Fehler: 400 plus {@code fieldErrors}-Extension (Feld → Meldung). */
   @Override
-  protected ResponseEntity<Object> handleMethodArgumentNotValid(
+  protected @Nullable ResponseEntity<Object> handleMethodArgumentNotValid(
       MethodArgumentNotValidException ex,
       HttpHeaders headers,
       HttpStatusCode status,

@@ -59,6 +59,19 @@ class ArchitectureTest {
           .resideInAnyPackage("..web..", "..application..", "..infrastructure..")
           .as("domain darf application/web/infrastructure nicht kennen");
 
+  // --- Modul-Grenze: auth ist unabhaengig vom project-Modul (Port-Inversion, Issue #0099) ------
+  // Die Auto-Freigabe eingeladener Nutzer haengt an einem im auth-Modul definierten Port
+  // (RegistrationApprovalPolicy), den das project-Modul implementiert. auth darf project daher
+  // nicht kennen.
+  static final ArchRule AUTH_HAENGT_NICHT_VON_PROJECT_AB =
+      noClasses()
+          .that()
+          .resideInAPackage("org.mwolff.manban.auth..")
+          .should()
+          .dependOnClassesThat()
+          .resideInAPackage("org.mwolff.manban.project..")
+          .as("auth darf das project-Modul nicht kennen (Port-Inversion)");
+
   // --- §6.1: Schichtzugriff (hexagonal, domain innerste Schicht) ------------------------------
   // consideringOnlyDependenciesInLayers() macht die Regel robust gegenueber Modulen, die nicht
   // alle vier Schichten besitzen (z. B. kanbancompat ohne domain/infrastructure): Abhaengigkeiten
@@ -132,6 +145,11 @@ class ArchitectureTest {
   @Test
   void domainKenntKeineAeusserenSchichten() {
     DOMAIN_KENNT_KEINE_AEUSSEREN_SCHICHTEN.check(PRODUKTIONSKLASSEN);
+  }
+
+  @Test
+  void authHaengtNichtVonProjectAb() {
+    AUTH_HAENGT_NICHT_VON_PROJECT_AB.check(PRODUKTIONSKLASSEN);
   }
 
   @Test

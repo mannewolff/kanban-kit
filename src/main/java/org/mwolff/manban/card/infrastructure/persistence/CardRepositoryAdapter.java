@@ -74,7 +74,7 @@ class CardRepositoryAdapter implements CardRepository {
     }
 
     List<Long> targetActive = activeCardIds(newColumnId, cardId);
-    int index = Math.max(0, Math.min(newPosition, targetActive.size()));
+    int index = Math.clamp(newPosition, 0, targetActive.size());
     List<Long> targetOrder = new ArrayList<>(targetActive);
     targetOrder.add(index, cardId);
 
@@ -126,22 +126,7 @@ class CardRepositoryAdapter implements CardRepository {
   }
 
   private static CardEntity toEntity(Card c) {
-    return new CardEntity(
-        c.id(),
-        c.boardId(),
-        c.columnId(),
-        c.number(),
-        c.title(),
-        c.description(),
-        c.positionInColumn(),
-        c.archived(),
-        c.movedToDoneAt(),
-        c.createdBy(),
-        c.createdAt(),
-        c.updatedAt(),
-        c.type().name(),
-        c.parentId(),
-        c.shortcode());
+    return new CardEntity(c);
   }
 
   private static Card toDomain(CardEntity e) {

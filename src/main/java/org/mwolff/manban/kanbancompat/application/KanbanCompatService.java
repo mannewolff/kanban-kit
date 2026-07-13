@@ -39,12 +39,15 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class KanbanCompatService {
 
+  /** Kanban-Key der Backlog-Spalte; auch Fallback bei unbekannter Spalten-Zuordnung. */
+  private static final String BACKLOG = "BACKLOG";
+
   /** Feste Reihenfolge der Kanban-Spalten-Keys (spiegelt das tbx.mjs-Protokoll). */
   public static final List<String> COLUMNS =
-      List.of("BACKLOG", "READY", "IN_PROGRESS", "IN_REVIEW", "DONE");
+      List.of(BACKLOG, "READY", "IN_PROGRESS", "IN_REVIEW", "DONE");
 
   private final CardRepository cards;
-  private final BoardColumnRepository columns;
+  private final BoardColumnRepository boardColumns;
   private final BoardRepository boards;
   private final CardService cardService;
   private final CommentService commentService;
@@ -52,13 +55,13 @@ public class KanbanCompatService {
 
   public KanbanCompatService(
       CardRepository cards,
-      BoardColumnRepository columns,
+      BoardColumnRepository boardColumns,
       BoardRepository boards,
       CardService cardService,
       CommentService commentService,
       PermissionChecker permissions) {
     this.cards = cards;
-    this.columns = columns;
+    this.boardColumns = boardColumns;
     this.boards = boards;
     this.cardService = cardService;
     this.commentService = commentService;
@@ -82,7 +85,7 @@ public class KanbanCompatService {
         .sorted(Comparator.comparingInt(Card::positionInColumn))
         .forEach(
             c -> {
-              String key = keyByColumn.getOrDefault(c.columnId(), "BACKLOG");
+              String key = keyByColumn.getOrDefault(c.columnId(), BACKLOG);
               // grouped ist mit allen COLUMNS-Keys vorbelegt und key stammt aus COLUMNS;
               // requireNonNull macht das fuer NullAway explizit (Map.get liefert @Nullable).
               Objects.requireNonNull(grouped.get(key))
@@ -104,8 +107,7 @@ public class KanbanCompatService {
   public Created create(
       KanbanPrincipal principal, String title, @Nullable String body, @Nullable String column) {
     long boardId = requireBound(principal);
-    long columnId =
-        columnIdForKey(boardId, column == null || column.isBlank() ? "BACKLOG" : column);
+    long columnId = columnIdForKey(boardId, column == null || column.isBlank() ? BACKLOG : column);
     CardView v = cardService.create(principal.userId(), boardId, columnId, title, body, null, null);
     return new Created(v.number());
   }
@@ -157,7 +159,7 @@ public class KanbanCompatService {
   /** Bildet jede Board-Spalte auf einen Kanban-Key ab: Name zuerst, sonst Position. */
   private Map<Long, String> keyByColumn(long boardId) {
     List<BoardColumn> ordered =
-        columns.findByBoardId(boardId).stream()
+        boardColumns.findByBoardId(boardId).stream()
             .sorted(Comparator.comparingInt(BoardColumn::position))
             .toList();
     Map<Long, String> map = new LinkedHashMap<>();
@@ -192,7 +194,7 @@ public class KanbanCompatService {
     }
     String n = columnName.toLowerCase(Locale.ROOT).replaceAll("[^a-z]", "");
     return switch (n) {
-      case "backlog" -> Optional.of("BACKLOG");
+      case "backlog" -> Optional.of(BACKLOG);
       case "ready" -> Optional.of("READY");
       case "inprogress" -> Optional.of("IN_PROGRESS");
       case "inreview" -> Optional.of("IN_REVIEW");

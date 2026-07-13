@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter, useNavigate } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import pkg from '../../package.json'
 import { AppShell } from './AppShell'
 
 vi.mock('../auth/AuthContext', () => ({
@@ -56,6 +57,11 @@ describe('AppShell', () => {
     expect(screen.getByText('Projekte')).toBeInTheDocument()
     expect(screen.getByText('Manne')).toBeInTheDocument()
     expect(screen.getByLabelText('Abmelden')).toBeInTheDocument()
+  })
+
+  it('zeigt die aktuelle App-Version im Header', () => {
+    renderShell()
+    expect(screen.getByText(`v${pkg.version}`)).toBeInTheDocument()
   })
 
   it('klappt die Seitenleiste ein und merkt den Zustand in localStorage', () => {

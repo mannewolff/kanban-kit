@@ -3,7 +3,9 @@ package org.mwolff.manban.project.application;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
+import java.util.Locale;
 import org.mwolff.manban.auth.application.AppUserRepository;
+import org.mwolff.manban.auth.application.AuthProperties;
 import org.mwolff.manban.auth.domain.AppUser;
 import org.mwolff.manban.project.domain.Permission;
 import org.mwolff.manban.project.domain.Project;
@@ -25,6 +27,8 @@ public class ProjectService {
   private final ProjectMembershipRepository memberships;
   private final PermissionChecker permissions;
   private final AppUserRepository users;
+  private final InvitationMailer mailer;
+  private final AuthProperties authProperties;
   private final Clock clock;
 
   public ProjectService(
@@ -32,11 +36,15 @@ public class ProjectService {
       ProjectMembershipRepository memberships,
       PermissionChecker permissions,
       AppUserRepository users,
+      InvitationMailer mailer,
+      AuthProperties authProperties,
       Clock clock) {
     this.projects = projects;
     this.memberships = memberships;
     this.permissions = permissions;
     this.users = users;
+    this.mailer = mailer;
+    this.authProperties = authProperties;
     this.clock = clock;
   }
 
@@ -46,20 +54,30 @@ public class ProjectService {
    *
    * @throws ProjectAccessDeniedException wenn der Aufrufer kein System-Admin ist (403)
    * @throws ProjectOwnerNotFoundException wenn zur Owner-E-Mail kein Nutzer existiert (400)
+   * @throws MemberNotApprovedException wenn der Owner noch nicht freigegeben ist (422)
    */
   @Transactional
   public ProjectView create(long adminUserId, String name, String ownerEmail) {
     requirePlatformAdmin(adminUserId);
+    String normalizedEmail = ownerEmail.trim().toLowerCase(Locale.ROOT);
     AppUser owner =
         users
-            .findByEmail(ownerEmail.trim())
+            .findByEmail(normalizedEmail)
             .orElseThrow(() -> new ProjectOwnerNotFoundException(ownerEmail));
+    if (!owner.approved()) {
+      throw new MemberNotApprovedException(normalizedEmail);
+    }
 
     Instant now = clock.instant();
     Project project = projects.save(new Project(null, name.trim(), owner.requireId(), now));
     memberships.save(
         new ProjectMembership(
             null, project.requireId(), owner.requireId(), ProjectRole.OWNER, now));
+    mailer.sendProjectAssignedEmail(
+        owner.email(),
+        project.name(),
+        ProjectRole.OWNER,
+        authProperties.baseUrl() + "/projects/" + project.requireId());
     return new ProjectView(
         project.requireId(), project.name(), ProjectRole.OWNER, project.createdAt());
   }

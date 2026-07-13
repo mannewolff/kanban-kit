@@ -64,7 +64,7 @@ public class SignedSessionTokens {
     byte[] provided;
     try {
       provided = DECODER.decode(providedSignature);
-    } catch (IllegalArgumentException e) {
+    } catch (IllegalArgumentException _) {
       return OptionalLong.empty();
     }
     if (!MessageDigest.isEqual(expected, provided)) {
@@ -80,7 +80,7 @@ public class SignedSessionTokens {
         return OptionalLong.empty();
       }
       return OptionalLong.of(userId);
-    } catch (RuntimeException e) {
+    } catch (RuntimeException _) {
       return OptionalLong.empty();
     }
   }

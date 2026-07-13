@@ -8,6 +8,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.time.Instant;
 import org.jspecify.annotations.Nullable;
+import org.mwolff.manban.accesstoken.domain.AccessToken;
 
 /** JPA-Abbildung der Tabelle {@code kanban_access_token}. */
 @Entity
@@ -49,27 +50,18 @@ class KanbanAccessTokenEntity {
     // für JPA
   }
 
-  KanbanAccessTokenEntity(
-      @Nullable Long id,
-      Long userId,
-      @Nullable Long projectId,
-      @Nullable Long boardId,
-      String name,
-      String tokenHash,
-      String displayName,
-      Instant createdAt,
-      @Nullable Instant lastUsedAt,
-      boolean revoked) {
-    this.id = id;
-    this.userId = userId;
-    this.projectId = projectId;
-    this.boardId = boardId;
-    this.name = name;
-    this.tokenHash = tokenHash;
-    this.displayName = displayName;
-    this.createdAt = createdAt;
-    this.lastUsedAt = lastUsedAt;
-    this.revoked = revoked;
+  /** Baut die Entity direkt aus dem Domänenobjekt (statt aus 10 Einzelparametern, Sonar S107). */
+  KanbanAccessTokenEntity(AccessToken t) {
+    this.id = t.id();
+    this.userId = t.userId();
+    this.projectId = t.projectId();
+    this.boardId = t.boardId();
+    this.name = t.name();
+    this.tokenHash = t.tokenHash();
+    this.displayName = t.displayName();
+    this.createdAt = t.createdAt();
+    this.lastUsedAt = t.lastUsedAt();
+    this.revoked = t.revoked();
   }
 
   @Nullable Long getId() {

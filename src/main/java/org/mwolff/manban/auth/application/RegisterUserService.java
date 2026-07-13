@@ -1,6 +1,7 @@
 package org.mwolff.manban.auth.application;
 
 import java.time.Clock;
+import java.time.Instant;
 import java.util.Locale;
 import org.mwolff.manban.auth.domain.AppUser;
 import org.mwolff.manban.auth.domain.EmailVerificationToken;
@@ -23,6 +24,7 @@ public class RegisterUserService {
   private final PasswordEncoder passwordEncoder;
   private final AuthProperties properties;
   private final Clock clock;
+  private final RegistrationApprovalPolicy approvalPolicy;
 
   public RegisterUserService(
       AppUserRepository users,
@@ -30,13 +32,15 @@ public class RegisterUserService {
       VerificationMailer mailer,
       PasswordEncoder passwordEncoder,
       AuthProperties properties,
-      Clock clock) {
+      Clock clock,
+      RegistrationApprovalPolicy approvalPolicy) {
     this.users = users;
     this.tokens = tokens;
     this.mailer = mailer;
     this.passwordEncoder = passwordEncoder;
     this.properties = properties;
     this.clock = clock;
+    this.approvalPolicy = approvalPolicy;
   }
 
   @Transactional
@@ -46,6 +50,10 @@ public class RegisterUserService {
       throw new EmailAlreadyRegisteredException();
     }
 
+    // Per Token eingeladene E-Mails werden sofort freigegeben (Issue #0099, „Einladung =
+    // Freigabe"); alle anderen Selbst-Registrierer warten auf die Admin-Freigabe (Issue #0097).
+    Instant approvedAt = approvalPolicy.shouldAutoApprove(normalizedEmail) ? clock.instant() : null;
+
     AppUser user =
         users.save(
             new AppUser(
@@ -54,7 +62,9 @@ public class RegisterUserService {
                 passwordEncoder.encode(rawPassword),
                 displayName.trim(),
                 false,
-                PlatformRole.USER));
+                PlatformRole.USER,
+                approvedAt,
+                null));
 
     String plaintext = SecureTokens.newToken();
     tokens.save(

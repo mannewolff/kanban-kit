@@ -1,0 +1,635 @@
+{
+  "0001": {
+    "githubNumber": "5",
+    "status": "done",
+    "title": "F1 — Repo-Gerüst, Build, Docker-Compose, CI"
+  },
+  "0002": {
+    "githubNumber": "6",
+    "status": "done",
+    "title": "F2 — Postgres-Baseline (Flyway V1) + Domain-Skeleton"
+  },
+  "0003": {
+    "githubNumber": "7",
+    "status": "done",
+    "title": "A1 — User-Registrierung + E-Mail-Verifikation"
+  },
+  "0004": {
+    "githubNumber": "8",
+    "status": "done",
+    "title": "A2 — Login + Session + Spring-Security-Config",
+    "closed": true
+  },
+  "0005": {
+    "githubNumber": "9",
+    "status": "done",
+    "title": "A3 — Passwort-Reset",
+    "closed": true
+  },
+  "0006": {
+    "githubNumber": "10",
+    "status": "done",
+    "title": "A4 — PAT / API-Token portieren",
+    "closed": true
+  },
+  "0007": {
+    "githubNumber": "11",
+    "status": "done",
+    "title": "P1 — Projekt + Mitgliedschaft (Datenmodell + Use-Cases)",
+    "closed": true
+  },
+  "0008": {
+    "githubNumber": "12",
+    "status": "done",
+    "title": "P2 — RBAC-Durchsetzung (feste Rollen, permission-Tabelle)",
+    "closed": true
+  },
+  "0009": {
+    "githubNumber": "13",
+    "status": "done",
+    "title": "P3 — Mitglieder-Einladung & -Verwaltung",
+    "closed": true
+  },
+  "0010": {
+    "githubNumber": "14",
+    "status": "done",
+    "title": "B1 — Board + Spalten (CRUD)",
+    "closed": true
+  },
+  "0011": {
+    "githubNumber": "15",
+    "status": "done",
+    "title": "B2 — Karten-CRUD (board-scoped Nummern)",
+    "closed": true
+  },
+  "0012": {
+    "githubNumber": "16",
+    "status": "done",
+    "title": "B3 — Move / Drag + Positions-Integrität",
+    "closed": true
+  },
+  "0013": {
+    "githubNumber": "17",
+    "status": "done",
+    "title": "B4 — Kommentare",
+    "closed": true
+  },
+  "0014": {
+    "githubNumber": "18",
+    "status": "done",
+    "title": "B5 — Anhänge über Objektspeicher (MinIO)",
+    "closed": true
+  },
+  "0015": {
+    "githubNumber": "19",
+    "status": "done",
+    "title": "B6 — Cleanup-Job (Done-Retention)",
+    "closed": true
+  },
+  "0016": {
+    "githubNumber": "20",
+    "status": "done",
+    "title": "U1 — Gebrandete Shell + Auth-Screens",
+    "closed": true
+  },
+  "0017": {
+    "githubNumber": "21",
+    "status": "done",
+    "title": "U2 — Projekt- & Board-Auswahl + Navigation",
+    "closed": true
+  },
+  "0018": {
+    "githubNumber": "22",
+    "status": "done",
+    "title": "U3 — Board-Ansicht (Karten, Spalten, Drag & Drop)",
+    "closed": true
+  },
+  "0019": {
+    "githubNumber": "23",
+    "status": "done",
+    "title": "U4 — Karten-Detail (Beschreibung, Kommentare, Anhänge)",
+    "closed": true
+  },
+  "0020": {
+    "githubNumber": "24",
+    "status": "done",
+    "title": "U5 — Mitglieder- & Einladungsverwaltung (UI)",
+    "closed": true
+  },
+  "0021": {
+    "githubNumber": "25",
+    "status": "in_review",
+    "title": "D1 — Stellwerk-Board-Adapter auf manban umstellen (Dogfooding)",
+    "closed": false
+  },
+  "0022": {
+    "githubNumber": "26",
+    "status": "done",
+    "title": "U6 — Toolbox-Shell (einklappbare Sidebar) + Petrol-Theme",
+    "closed": true
+  },
+  "0023": {
+    "githubNumber": "27",
+    "status": "done",
+    "title": "U7 — Board-UX: +Karte-Dialog, canEdit-Fix, Spaltenfarben, Ready-Spalte",
+    "closed": true
+  },
+  "0024": {
+    "githubNumber": "28",
+    "status": "done",
+    "title": "E1 — Epics Backend (type/parent_id/shortcode, Fortschritt)",
+    "closed": true
+  },
+  "0025": {
+    "githubNumber": "29",
+    "status": "done",
+    "title": "E2 — Epics Frontend (Anlege-Dialog, Badge, Epics-Ansicht, Sidebar)",
+    "closed": true
+  },
+  "0026": {
+    "githubNumber": "30",
+    "status": "done",
+    "title": "U8 — Professionelle Projektliste (Karten statt Textliste)",
+    "closed": true
+  },
+  "0027": {
+    "githubNumber": "31",
+    "status": "done",
+    "title": "U9 — Vereinheitlichtes Detail-Modal (ein Edit-Formular) + update um parentId",
+    "closed": true
+  },
+  "0028": {
+    "githubNumber": "32",
+    "status": "done",
+    "title": "U10 — Board-Karten-Politur (Epic-Rand, ⋮-Menü, Archiv-Countdown, Neues Item)",
+    "closed": true
+  },
+  "0029": {
+    "githubNumber": "33",
+    "status": "done",
+    "title": "U11 — Listen-Ansicht (Filter-Chips, Zeilen mit Body-Vorschau)",
+    "closed": true
+  },
+  "0030": {
+    "githubNumber": "34",
+    "status": "done",
+    "title": "Sichtbaren App-Namen von „manban\" auf „kanban-kit\" ändern",
+    "closed": true
+  },
+  "0031": {
+    "githubNumber": "35",
+    "status": "done",
+    "title": "Board & Listen füllen den Viewport (volle Breite + volle Höhe)",
+    "closed": true
+  },
+  "0032": {
+    "githubNumber": "36",
+    "status": "done",
+    "title": "Listen-Ansicht: Spalten per Drag umsortierbar (Excel-artig)",
+    "closed": true
+  },
+  "0033": {
+    "githubNumber": "37",
+    "status": "done",
+    "title": "Projekt- & Board-Liste als volle-Breite-Zeilen",
+    "closed": true
+  },
+  "0034": {
+    "githubNumber": "38",
+    "status": "done",
+    "title": "Listen-Ansicht: Beschreibungs-Spalte per Ziehen verbreiterbar (resizable)",
+    "closed": true
+  },
+  "0035": {
+    "githubNumber": "39",
+    "status": "done",
+    "title": "Plattform-Admin als Super-User durchsetzen (alle Projekte)",
+    "closed": true
+  },
+  "0036": {
+    "githubNumber": "40",
+    "status": "done",
+    "title": "Nutzerverwaltung: Admin-Endpunkte (Liste, Rolle ändern)",
+    "closed": true
+  },
+  "0037": {
+    "githubNumber": "41",
+    "status": "done",
+    "title": "Admin-Bootstrap: Env-Token, aktiv nur solange kein Admin existiert",
+    "closed": true
+  },
+  "0038": {
+    "githubNumber": "42",
+    "status": "done",
+    "title": "Admin-UI: Nutzerverwaltung + Bootstrap-Token-Flow",
+    "closed": true
+  },
+  "0039": {
+    "githubNumber": "43",
+    "status": "done",
+    "title": "Rollen- & Rechte-Übersicht im UI (Projekt-Matrix + Plattform-Admin)",
+    "closed": true
+  },
+  "0040": {
+    "githubNumber": "44",
+    "status": "done",
+    "title": "Auto-Routing bei genau einem Projekt / einem Board",
+    "closed": true
+  },
+  "0041": {
+    "githubNumber": "45",
+    "status": "done",
+    "title": "Anhang-Vorschau beim Klick (Lightbox für Bilder + PDF)",
+    "closed": true
+  },
+  "0042": {
+    "githubNumber": "46",
+    "status": "done",
+    "title": "Board: nach Epic filtern",
+    "closed": true
+  },
+  "0043": {
+    "githubNumber": "47",
+    "status": "done",
+    "title": "Epics-Übersicht: Fortschrittsbalken + „Neues Epic\"-Button",
+    "closed": true
+  },
+  "0044": {
+    "githubNumber": "48",
+    "status": "in_review",
+    "title": "Kanban-Token an Projekt + Board binden",
+    "closed": false
+  },
+  "0045": {
+    "githubNumber": "49",
+    "status": "in_review",
+    "title": "Kanban-Compat-API (/api/kanban/*) für tbx.mjs/board.mjs",
+    "closed": false
+  },
+  "0046": {
+    "githubNumber": "50",
+    "status": "in_review",
+    "title": "Dogfooding-Wiring: board.mjs Toolbox-Adapter + Doku",
+    "closed": false
+  },
+  "0047": {
+    "githubNumber": "51",
+    "status": "done",
+    "title": "README: Getting-Started fürs öffentliche Repo",
+    "closed": true
+  },
+  "0048": {
+    "githubNumber": "52",
+    "status": "done",
+    "title": "Granulares Rechte-Modell (CRUD-Matrix) + V4-Reseed",
+    "closed": true
+  },
+  "0049": {
+    "githubNumber": "53",
+    "status": "done",
+    "title": "Projekt-Lifecycle auf System-Admin (Owner per E-Mail)",
+    "closed": true
+  },
+  "0050": {
+    "githubNumber": "54",
+    "status": "done",
+    "title": "Kommentar-Regeln: Update=Autor, Delete=Admin",
+    "closed": true
+  },
+  "0051": {
+    "githubNumber": "55",
+    "status": "done",
+    "title": "Rollen-Matrix-Endpunkt (GET /api/roles/matrix)",
+    "closed": true
+  },
+  "0052": {
+    "githubNumber": "56",
+    "status": "done",
+    "title": "Frontend: Projekt-Anlegen-Gate + Owner-Feld + Löschen-Bestätigung",
+    "closed": true
+  },
+  "0053": {
+    "githubNumber": "57",
+    "status": "done",
+    "title": "Frontend: /roles Checkbox-Grid (data-driven)",
+    "closed": true
+  },
+  "0054": {
+    "githubNumber": "58",
+    "status": "done",
+    "title": "Frontend: Navigations-Sichtbarkeit (Projekte/Boards ausblenden)",
+    "closed": true
+  },
+  "0055": {
+    "githubNumber": "59",
+    "status": "done",
+    "title": "Doku: rollen-und-rechte.md an finale Matrix angleichen",
+    "closed": true
+  },
+  "0056": {
+    "githubNumber": "60",
+    "status": "done",
+    "title": "Marke: Theme-Fundament (Palette, Carlito, Haarlinien statt Schatten)",
+    "closed": true
+  },
+  "0057": {
+    "githubNumber": "61",
+    "status": "done",
+    "title": "Marke: Status-/Spalten-/Modal-Farben entsättigen (de-Trello)",
+    "closed": true
+  },
+  "0058": {
+    "githubNumber": "62",
+    "status": "done",
+    "title": "Marke: Struktur-Motive (Teal-Leiste, Eyebrow, Springer-Favicon)",
+    "closed": true
+  },
+  "0059": {
+    "githubNumber": "63",
+    "status": "done",
+    "title": "Java: Clock injizieren statt direktem Instant.now()/LocalDateTime.now()",
+    "closed": true
+  },
+  "0060": {
+    "githubNumber": "64",
+    "status": "done",
+    "title": "Java: return null durch Optional in KanbanCompatService.canonicalKey ersetzen",
+    "closed": true
+  },
+  "0061": {
+    "githubNumber": "65",
+    "status": "done",
+    "title": "Java: Unit-Tests fuer Application-Services ergaenzen (Testpyramide korrigieren)",
+    "closed": true
+  },
+  "0062": {
+    "githubNumber": "66",
+    "status": "done",
+    "title": "Java: Hamcrest-Matcher in Tests durch AssertJ ersetzen",
+    "closed": true
+  },
+  "0063": {
+    "githubNumber": "67",
+    "status": "done",
+    "title": "Frontend: Route-Level Lazy Loading in App.tsx einfuehren (React.lazy + Suspense)",
+    "closed": true
+  },
+  "0064": {
+    "githubNumber": "68",
+    "status": "done",
+    "title": "Frontend: Hartcodierte Hex-Farben durch Theme-Token ersetzen",
+    "closed": true
+  },
+  "0065": {
+    "githubNumber": "69",
+    "status": "done",
+    "title": "Frontend: URL-Parameter defensiv parsen (Number.parseInt + Range-Check)",
+    "closed": true
+  },
+  "0066": {
+    "githubNumber": "70",
+    "status": "done",
+    "title": "Frontend: Doppel-Submit im Einladungsformular verhindern",
+    "closed": true
+  },
+  "0067": {
+    "githubNumber": "71",
+    "status": "done",
+    "title": "Frontend: Async-Effekte gegen Race-Conditions absichern (Cancellation)",
+    "closed": true
+  },
+  "0068": {
+    "githubNumber": "72",
+    "status": "done",
+    "title": "Frontend: exhaustive-deps-Disables aufloesen oder begruenden",
+    "closed": true
+  },
+  "0069": {
+    "githubNumber": "73",
+    "status": "done",
+    "title": "Frontend: Non-Null-Assertions durch Guards ersetzen",
+    "closed": true
+  },
+  "0070": {
+    "githubNumber": "74",
+    "status": "done",
+    "title": "Frontend: Ungeprueften as-T-Cast im API-Client an der Systemgrenze verengen",
+    "closed": true
+  },
+  "0071": {
+    "githubNumber": "75",
+    "status": "done",
+    "title": "Java: ArchUnit einfuehren — Schichten- und Paketregeln erzwingen",
+    "closed": true
+  },
+  "0072": {
+    "githubNumber": "76",
+    "status": "done",
+    "title": "Java: JaCoCo einfuehren — 100% Line/Branch-Coverage-Gate",
+    "closed": true
+  },
+  "0073": {
+    "githubNumber": "77",
+    "status": "done",
+    "title": "Java: PIT (pitest) einrichten — 100% Mutation Score + Test Strength",
+    "closed": true
+  },
+  "0074": {
+    "githubNumber": "78",
+    "status": "done",
+    "title": "Java: Spotless (Google Java Format) — Format-Gate",
+    "closed": true
+  },
+  "0075": {
+    "githubNumber": "79",
+    "status": "done",
+    "title": "Java: Static-Analysis-Kette — Checkstyle, PMD, SpotBugs, Error Prone",
+    "closed": true
+  },
+  "0076": {
+    "githubNumber": "80",
+    "status": "done",
+    "title": "Java: maven-enforcer + Compiler-Haertung (-Xlint:all -Werror, JDK 21)",
+    "closed": true
+  },
+  "0077": {
+    "githubNumber": "81",
+    "status": "done",
+    "title": "Java: Unit-Tests nachziehen bis Coverage/Mutation-Gates 100% erreichen",
+    "closed": true
+  },
+  "0078": {
+    "githubNumber": "82",
+    "status": "done",
+    "title": "Realer Mailversand einrichten",
+    "closed": true
+  },
+  "0079": {
+    "githubNumber": "83",
+    "status": "done",
+    "title": "Doku: CLAUDE-java.md an manban-Realitaet und Stand 2026 angleichen",
+    "closed": true
+  },
+  "0080": {
+    "githubNumber": "84",
+    "status": "done",
+    "title": "Java: Null-Safety-Gate mit JSpecify @NullMarked + NullAway (Error Prone)",
+    "closed": true
+  },
+  "0081": {
+    "githubNumber": "85",
+    "status": "done",
+    "title": "Java: Globaler Fehler-Handler mit RFC-9457 Problem Details",
+    "closed": true
+  },
+  "0082": {
+    "githubNumber": "86",
+    "status": "done",
+    "title": "CI: PIT-Mutation-Gate (-Ppit) in GitHub Actions ergaenzen",
+    "closed": true
+  },
+  "0083": {
+    "githubNumber": "87",
+    "status": "done",
+    "title": "Java: Geteilter Testcontainers-Container fuer alle ITs (Singleton)",
+    "closed": true
+  },
+  "0084": {
+    "githubNumber": "88",
+    "status": "done",
+    "title": "Doku: CLAUDE-react.md an manban-Realitaet und Stand 2026 angleichen",
+    "closed": true
+  },
+  "0085": {
+    "githubNumber": "89",
+    "status": "done",
+    "title": "Frontend: ESLint (flat config) einfuehren — typescript-eslint, react-hooks, jsx-a11y",
+    "closed": true
+  },
+  "0086": {
+    "githubNumber": "90",
+    "status": "done",
+    "title": "Frontend: Vitest-Coverage-Gate einfuehren (v8, thresholds, CI)",
+    "closed": true
+  },
+  "0087": {
+    "githubNumber": "91",
+    "status": "done",
+    "title": "Java: Upgrade auf Java 25 (LTS) — pom, Toolchain, Docker, CI",
+    "closed": true
+  },
+  "0088": {
+    "githubNumber": "92",
+    "status": "done",
+    "title": "Deployment: Session-Secret + Cookie-Secure in docker-compose.yml durchreichen",
+    "closed": true
+  },
+  "0089": {
+    "githubNumber": "93",
+    "status": "done",
+    "title": "Deployment: docker-compose.prod.yml — manban hinter Traefik, Caddy in Prod deaktiviert",
+    "closed": true
+  },
+  "0090": {
+    "githubNumber": "94",
+    "status": "done",
+    "title": "Deployment: .env.example Prod-Block + docs/deployment-hostinger.md",
+    "closed": true
+  },
+  "0091": {
+    "githubNumber": "95",
+    "status": "done",
+    "title": "Deployment-Checkliste (manuell, Manne): manban Prod-Deploy auf Hostinger kanban.mwolff.org",
+    "closed": true
+  },
+  "0092": {
+    "githubNumber": "96",
+    "status": "done",
+    "title": "manban soll kanban-kit heißen",
+    "closed": true
+  },
+  "0093": {
+    "githubNumber": "97",
+    "status": "done",
+    "title": "Repo-URL-Referenzen von mannewolff/manban auf kanban-kit umstellen",
+    "closed": true
+  },
+  "0094": {
+    "githubNumber": "98",
+    "status": "done",
+    "title": "Verifikations- & Reset-Mail auf Frontend-Routen /verify und /reset verlinken",
+    "closed": true
+  },
+  "0095": {
+    "githubNumber": "99",
+    "status": "done",
+    "title": "Deployment-Doku: $-Escaping in .env-Secrets ($$) + $-freie Tokens empfehlen",
+    "closed": true
+  },
+  "0096": {
+    "githubNumber": "100",
+    "status": "done",
+    "title": ".env.example: irreführenden SMTP-465-Hinweis korrigieren (nur 587/STARTTLS)",
+    "closed": true
+  },
+  "0097": {
+    "githubNumber": "101",
+    "status": "in_review",
+    "title": "Admin-Freigabe: Approval-Feld, Login-Gate & /approve-Endpunkt",
+    "closed": false
+  },
+  "0098": {
+    "githubNumber": "102",
+    "status": "in_review",
+    "title": "Admin-Benachrichtigung bei neuer Registrierung (nach Verifikation)",
+    "closed": false
+  },
+  "0099": {
+    "githubNumber": "103",
+    "status": "in_review",
+    "title": "Eingeladene E-Mails automatisch freigeben (Deadlock-Auflösung)",
+    "closed": false
+  },
+  "0100": {
+    "githubNumber": "104",
+    "status": "in_review",
+    "title": "Admin-UI: Freigabe-Status & Freigeben-Button",
+    "closed": false
+  },
+  "0101": {
+    "githubNumber": "105",
+    "status": "in_review",
+    "title": "Registrierter Nutzer direkt Mitglied + Info-Mail + Zuordnungs-Gate",
+    "closed": false
+  },
+  "0102": {
+    "githubNumber": "106",
+    "status": "in_review",
+    "title": "Frontend: Hinzugefügt-vs-Eingeladen & Freigabe-Fehler im Einladen-Dialog",
+    "closed": false
+  },
+  "0103": {
+    "githubNumber": "107",
+    "status": "in_review",
+    "title": "tbx-CLI nach kanban-kit umziehen (cli/tbx.mjs)",
+    "closed": false
+  },
+  "0104": {
+    "githubNumber": "108",
+    "status": "in_review",
+    "title": "Dogfooding-Durchstich: eigenes Board als Issue-Tracker",
+    "closed": false
+  },
+  "0105": {
+    "githubNumber": "109",
+    "status": "in_review",
+    "title": "Versionsschema (X.Y.Z): Bump-Skript + RELEASING.md",
+    "closed": false
+  },
+  "0106": {
+    "githubNumber": "110",
+    "status": "in_review",
+    "title": "Aktuelle Version im Board-Header anzeigen",
+    "closed": false
+  }
+}
