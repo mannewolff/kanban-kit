@@ -232,6 +232,38 @@ describe('BoardView', () => {
     expect(screen.getByText('Backlog')).toBeInTheDocument()
   })
 
+  it('ordnet Spalten per Drag & Drop neu und persistiert die Reihenfolge', async () => {
+    mColumns.reorder.mockResolvedValue([
+      { id: 20, name: 'Done', position: 0, wipLimit: null },
+      { id: 10, name: 'Backlog', position: 1, wipLimit: null },
+    ])
+    render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} />)
+
+    fireEvent.dragStart(screen.getByTestId('column-header-20'))
+    fireEvent.drop(screen.getByTestId('column-header-10'))
+
+    await waitFor(() => expect(mColumns.reorder).toHaveBeenCalledWith(1, [20, 10]))
+  })
+
+  it('stellt die Spalten-Reihenfolge bei einem Fehler wieder her', async () => {
+    mColumns.reorder.mockRejectedValue(new Error('kaputt'))
+    render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} />)
+
+    fireEvent.dragStart(screen.getByTestId('column-header-20'))
+    fireEvent.drop(screen.getByTestId('column-header-10'))
+
+    await waitFor(() => expect(mColumns.reorder).toHaveBeenCalled())
+    // Nach dem Rollback steht Backlog wieder vor Done.
+    const headers = screen.getAllByTestId(/^column-header-/)
+    expect(headers[0]).toHaveAttribute('data-testid', 'column-header-10')
+    expect(headers[1]).toHaveAttribute('data-testid', 'column-header-20')
+  })
+
+  it('macht Spalten ohne canEdit nicht draggable', () => {
+    render(<BoardView board={board} initialCards={[card]} canEdit={false} api={mkApi()} />)
+    expect(screen.getByTestId('column-header-10')).not.toHaveAttribute('draggable', 'true')
+  })
+
   it('zeigt den Verschieben-Menüeintrag nur mit canTransfer', () => {
     const { unmount } = render(
       <BoardView board={board} initialCards={[card]} canEdit api={mkApi()} />,

@@ -106,6 +106,30 @@ export function BoardView({
   }
   const closeColumnDialog = () => setColumnDialog(null)
 
+  // Spalten-Reihenfolge per Drag & Drop (getrennt vom Karten-Drag, das dataTransfer nutzt).
+  const [colDrag, setColDrag] = useState<number | null>(null)
+  const reorderColumn = async (fromId: number, toId: number) => {
+    if (fromId === toId) {
+      return
+    }
+    const previous = columns
+    const fromIdx = columns.findIndex((c) => c.id === fromId)
+    const toIdx = columns.findIndex((c) => c.id === toId)
+    if (fromIdx < 0 || toIdx < 0) {
+      return
+    }
+    const next = [...columns]
+    const [moved] = next.splice(fromIdx, 1)
+    next.splice(toIdx, 0, moved)
+    setColumns(next) // optimistisch
+    try {
+      const updated = await columnsApi.reorder(board.id, next.map((c) => c.id))
+      setColumns(sortColumns(updated))
+    } catch {
+      setColumns(previous)
+    }
+  }
+
   const [deleteColumn, setDeleteColumn] = useState<BoardColumn | null>(null)
   const [deleteError, setDeleteError] = useState<string | null>(null)
   const handleDeleteColumn = async () => {
@@ -269,7 +293,18 @@ export function BoardView({
                 overflow: 'hidden',
               }}
             >
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 1.5, py: 1, bgcolor: 'background.paper', borderBottom: 1, borderColor: 'divider' }}>
+              <Box
+                data-testid={`column-header-${column.id}`}
+                draggable={canEdit}
+                onDragStart={canEdit ? (e) => { e.stopPropagation(); setColDrag(column.id) } : undefined}
+                onDragOver={canEdit ? (e) => { if (colDrag != null && colDrag !== column.id) { e.preventDefault(); e.stopPropagation() } } : undefined}
+                onDrop={canEdit ? (e) => {
+                  if (colDrag != null) { e.preventDefault(); e.stopPropagation(); void reorderColumn(colDrag, column.id) }
+                  setColDrag(null)
+                } : undefined}
+                onDragEnd={() => setColDrag(null)}
+                sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 1.5, py: 1, bgcolor: 'background.paper', borderBottom: 1, borderColor: 'divider', cursor: canEdit ? 'grab' : undefined }}
+              >
                 <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: colors.dot, flexShrink: 0 }} />
                 <Typography variant="caption" sx={{ fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.08em', color: 'text.secondary', flexGrow: 1 }}>
                   {column.name}
