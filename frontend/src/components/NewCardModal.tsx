@@ -93,7 +93,27 @@ export function NewCardModal({
   }
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth aria-labelledby="new-card-title">
+    <Dialog
+      open={open}
+      onClose={onClose}
+      maxWidth={false}
+      aria-labelledby="new-card-title"
+      // Im Kontextbereich zentrieren, 90 % Breite/Höhe — identisch zum Kartendetail-Dialog
+      // (CardDetailModal.tsx), damit Anlegen und Bearbeiten optisch konsistent sind.
+      sx={{
+        '& .MuiDialog-container': {
+          position: 'absolute',
+          top: 'var(--app-content-top, 0px)',
+          left: 'var(--app-content-left, 0px)',
+          right: 0,
+          bottom: 0,
+          height: 'auto',
+        },
+      }}
+      slotProps={{
+        paper: { sx: { width: '90%', maxWidth: '90%', height: '90%', maxHeight: '90%', m: 0 } },
+      }}
+    >
       <DialogTitle id="new-card-title">
         {type === 'EPIC' ? 'Neues Epic' : `Neue Karte in „${columnName}“`}
       </DialogTitle>
