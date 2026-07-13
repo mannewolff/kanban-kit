@@ -509,6 +509,7 @@
                         <!-- IT-only: Adapter zu externer Infrastruktur (SMTP / S3-MinIO), nur via IT (§5.2). -->
                         <exclude>org/mwolff/manban/auth/infrastructure/mail/JavaMailPasswordResetMailer.class</exclude>
                         <exclude>org/mwolff/manban/auth/infrastructure/mail/JavaMailVerificationMailer.class</exclude>
+                        <exclude>org/mwolff/manban/auth/infrastructure/mail/JavaMailAdminNotificationMailer.class</exclude>
                         <exclude>org/mwolff/manban/project/infrastructure/mail/JavaMailInvitationMailer.class</exclude>
                         <exclude>org/mwolff/manban/attachment/infrastructure/MinioObjectStorage.class</exclude>
                         <exclude>org/mwolff/manban/attachment/infrastructure/MinioObjectStorage$ObjectStorageException.class</exclude>
