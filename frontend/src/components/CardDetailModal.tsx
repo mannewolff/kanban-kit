@@ -12,8 +12,8 @@ import Link from '@mui/material/Link'
 import Stack from '@mui/material/Stack'
 import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
-import { useEffect, useState } from 'react'
-import Markdown from 'react-markdown'
+import { memo, useCallback, useEffect, useRef, useState, type ComponentPropsWithoutRef } from 'react'
+import Markdown, { type Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { attachmentsApi as defaultAttachmentsApi, type Attachment, type AttachmentsApi } from '../api/attachments'
 import { cardsApi as defaultCardsApi } from '../api/cards'
@@ -21,6 +21,7 @@ import type { Card } from '../api/cards'
 import { commentsApi as defaultCommentsApi, type Comment, type CommentsApi } from '../api/comments'
 import type { Epic } from '../api/epics'
 import { epicShortcode } from '../lib/epicMeta'
+import { normalizeTaskLists, toggleTaskAt } from '../lib/markdownTasks'
 import { CODE_BLOCK_BG, MODAL_BORDER, MODAL_TEXT_PRIMARY, statusColors } from '../lib/statusColors'
 import { useAuth } from '../auth/AuthContext'
 import { AttachmentPreview } from './AttachmentPreview'
@@ -44,6 +45,47 @@ export function parseDependencyInput(input: string): { deps: number[]; valid: bo
   }
   return { deps, valid: true }
 }
+
+/**
+ * Rendert die Karten-Beschreibung als Markdown mit klickbaren Task-Checkboxen. Als eigene,
+ * memoized Komponente ausgelagert, damit Re-Renders des Modals (z. B. Nachladen von Kommentaren)
+ * die Beschreibung nicht neu mounten. Der Checkbox-Index läuft in Dokumentreihenfolge (lokaler
+ * Zähler pro Render); `onToggle` muss stabil sein, damit `memo` greift.
+ */
+const TaskMarkdown = memo(function TaskMarkdown({
+  body,
+  canEdit,
+  onToggle,
+}: {
+  body: string
+  canEdit: boolean
+  onToggle: (index: number) => void
+}) {
+  let counter = 0
+  const components: Components = {
+    input: ({ node, ...props }: ComponentPropsWithoutRef<'input'> & { node?: unknown }) => {
+      void node
+      if (props.type !== 'checkbox') {
+        return <input {...props} />
+      }
+      const index = counter++
+      return (
+        <input
+          type="checkbox"
+          checked={props.checked ?? false}
+          disabled={!canEdit}
+          onChange={() => onToggle(index)}
+          aria-label={`Aufgabe ${index + 1}`}
+        />
+      )
+    },
+  }
+  return (
+    <Markdown remarkPlugins={[remarkGfm]} components={components}>
+      {normalizeTaskLists(body)}
+    </Markdown>
+  )
+})
 
 const descriptionSx = {
   border: `1px solid ${MODAL_BORDER}`,
@@ -162,6 +204,32 @@ export function CardDetailModal({
     }
   }
 
+  // Klick auf eine Checkbox im View-Modus: n-ten Marker im Beschreibungstext flippen und sofort
+  // persistieren (optimistisch, Rollback bei Fehler) — ohne den Edit-Modus zu öffnen.
+  const toggleTask = async (index: number) => {
+    if (!canEdit || saving) return
+    const previous = body
+    const next = toggleTaskAt(previous, index)
+    if (next === previous) return
+    setBody(next)
+    setSaving(true)
+    try {
+      await cardsApi.update(
+        card.id,
+        card.title,
+        next,
+        card.dependencies,
+        isEpic ? (card.shortcode ?? null) : undefined,
+        isEpic ? undefined : card.parentId,
+      )
+      onChanged?.()
+    } catch {
+      setBody(previous)
+    } finally {
+      setSaving(false)
+    }
+  }
+
   const addComment = async () => {
     if (!newComment.trim()) return
     const created = await commentsApi.create(card.id, newComment.trim())
@@ -224,9 +292,39 @@ export function CardDetailModal({
 
   const colors = columnName ? statusColors(columnName) : null
 
+  // Aktuellen Toggle-Handler über ein Ref halten und als stabile Callback-Identität an TaskMarkdown
+  // reichen, damit dessen `memo` greift (kein Remount der Beschreibung bei Kommentar-Nachladen).
+  const toggleTaskRef = useRef(toggleTask)
+  useEffect(() => {
+    toggleTaskRef.current = toggleTask
+  })
+  const onToggleTask = useCallback((index: number) => {
+    void toggleTaskRef.current(index)
+  }, [])
+
   return (
     <>
-    <Dialog open onClose={editing ? () => setEditing(false) : onClose} maxWidth="md" fullWidth scroll="paper">
+    <Dialog
+      open
+      onClose={editing ? () => setEditing(false) : onClose}
+      maxWidth="md"
+      fullWidth
+      scroll="paper"
+      // Im Kontextbereich zentrieren (unter der Kopfleiste, rechts der Sidebar) statt über dem ganzen
+      // Viewport; Höhe auf 90 % dieses Bereichs. Der Backdrop bleibt bildschirmfüllend. Außerhalb der
+      // Shell (CSS-Variablen ungesetzt) fällt es auf volle Zentrierung zurück (Default 0).
+      sx={{
+        '& .MuiDialog-container': {
+          position: 'absolute',
+          top: 'var(--app-content-top, 0px)',
+          left: 'var(--app-content-left, 0px)',
+          right: 0,
+          bottom: 0,
+          height: 'auto',
+        },
+      }}
+      slotProps={{ paper: { sx: { height: '90%', maxHeight: '90%', m: 0 } } }}
+    >
       <DialogTitle sx={{ borderBottom: `1px solid ${MODAL_BORDER}` }}>
         <Stack direction="row" alignItems="center" spacing={1} sx={{ flexWrap: 'wrap' }}>
           {isEpic ? (
@@ -324,7 +422,7 @@ export function CardDetailModal({
             <>
               <Box aria-label="Beschreibung" data-testid="description-view" sx={descriptionSx}>
                 {body ? (
-                  <Markdown remarkPlugins={[remarkGfm]}>{body}</Markdown>
+                  <TaskMarkdown body={body} canEdit={canEdit} onToggle={onToggleTask} />
                 ) : (
                   <Typography color="text.secondary">Keine Beschreibung.</Typography>
                 )}

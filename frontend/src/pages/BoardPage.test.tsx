@@ -1,10 +1,12 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { act, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { ApiError } from '../api/client'
 import { boardsApi } from '../api/boards'
 import { cardsApi } from '../api/cards'
 import { epicsApi } from '../api/epics'
 import { projectsApi } from '../api/projects'
+import { SnackbarProvider } from '../components/SnackbarProvider'
 import { BoardPage } from './BoardPage'
 
 let memberships: { projectId: number; role: string }[] = []
@@ -69,5 +71,53 @@ describe('BoardPage canEdit aus Membership', () => {
     expect(mockedBoards.get).not.toHaveBeenCalled()
     expect(mockedCards.list).not.toHaveBeenCalled()
     expect(mockedEpics.list).not.toHaveBeenCalled()
+  })
+})
+
+describe('BoardPage 404-Handling und Refetch', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  function renderWith(entry: string, targets: React.ReactNode) {
+    mockedCards.list.mockResolvedValue([])
+    mockedEpics.list.mockResolvedValue([])
+    mockedProjects.list.mockResolvedValue([])
+    return render(
+      <SnackbarProvider>
+        <MemoryRouter initialEntries={[entry]}>
+          <Routes>
+            <Route path="/boards/:boardId" element={<BoardPage />} />
+            {targets}
+          </Routes>
+        </MemoryRouter>
+      </SnackbarProvider>,
+    )
+  }
+
+  it('leitet bei 404 auf die Projektübersicht um und zeigt einen Hinweis', async () => {
+    memberships = []
+    mockedBoards.get.mockRejectedValue(new ApiError(404, 'weg'))
+    renderWith('/boards/1', <Route path="/" element={<div>Projektübersicht</div>} />)
+
+    expect(await screen.findByText('Projektübersicht')).toBeInTheDocument()
+    expect(
+      await screen.findByText('Dieses Board wurde archiviert oder gelöscht.'),
+    ).toBeInTheDocument()
+  })
+
+  it('leitet bei erneutem Fokus auf die Board-Liste um, wenn das Board verschwunden ist', async () => {
+    memberships = [{ projectId: 9, role: 'OWNER' }]
+    mockedBoards.get.mockResolvedValueOnce({
+      id: 1, projectId: 9, name: 'B', createdAt: '',
+      columns: [{ id: 10, name: 'Backlog', position: 0, wipLimit: null }],
+    })
+    renderWith('/boards/1', <Route path="/projects/:projectId" element={<div>Board-Liste</div>} />)
+
+    expect(await screen.findByText('B')).toBeInTheDocument()
+
+    // Board ist in einer anderen Session verschwunden: nächster Load liefert 404.
+    mockedBoards.get.mockRejectedValue(new ApiError(404, 'weg'))
+    act(() => window.dispatchEvent(new Event('focus')))
+
+    expect(await screen.findByText('Board-Liste')).toBeInTheDocument()
   })
 })

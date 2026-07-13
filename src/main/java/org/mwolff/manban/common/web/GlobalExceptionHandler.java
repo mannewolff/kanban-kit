@@ -68,9 +68,18 @@ class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     return ProblemDetail.forStatusAndDetail(status, detailOf(ex, responseStatus, status));
   }
 
-  /** Bean-Validation-Fehler: 400 plus {@code fieldErrors}-Extension (Feld → Meldung). */
+  /**
+   * Bean-Validation-Fehler: 400 plus {@code fieldErrors}-Extension (Feld → Meldung).
+   *
+   * <p>Rückgabetyp trägt bewusst Springs eigenes {@code org.springframework.lang.Nullable} (nicht
+   * JSpecify): {@link ResponseEntityExceptionHandler#handleMethodArgumentNotValid} deklariert den
+   * Rückgabewert genau damit als nullable, und Sonar java:S2638 gleicht Overrides gegen exakt diese
+   * Spring-eigene Annotation ab, nicht gegen unsere {@code @NullMarked}/JSpecify-Konvention. Diese
+   * Implementierung gibt trotzdem nie null zurück.
+   */
   @Override
-  protected @Nullable ResponseEntity<Object> handleMethodArgumentNotValid(
+  @org.springframework.lang.Nullable
+  protected ResponseEntity<Object> handleMethodArgumentNotValid(
       MethodArgumentNotValidException ex,
       HttpHeaders headers,
       HttpStatusCode status,
