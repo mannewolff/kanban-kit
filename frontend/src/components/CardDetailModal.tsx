@@ -304,7 +304,27 @@ export function CardDetailModal({
 
   return (
     <>
-    <Dialog open onClose={editing ? () => setEditing(false) : onClose} maxWidth="md" fullWidth scroll="paper">
+    <Dialog
+      open
+      onClose={editing ? () => setEditing(false) : onClose}
+      maxWidth="md"
+      fullWidth
+      scroll="paper"
+      // Im Kontextbereich zentrieren (unter der Kopfleiste, rechts der Sidebar) statt über dem ganzen
+      // Viewport; Höhe auf 90 % dieses Bereichs. Der Backdrop bleibt bildschirmfüllend. Außerhalb der
+      // Shell (CSS-Variablen ungesetzt) fällt es auf volle Zentrierung zurück (Default 0).
+      sx={{
+        '& .MuiDialog-container': {
+          position: 'absolute',
+          top: 'var(--app-content-top, 0px)',
+          left: 'var(--app-content-left, 0px)',
+          right: 0,
+          bottom: 0,
+          height: 'auto',
+        },
+      }}
+      slotProps={{ paper: { sx: { height: '90%', maxHeight: '90%', m: 0 } } }}
+    >
       <DialogTitle sx={{ borderBottom: `1px solid ${MODAL_BORDER}` }}>
         <Stack direction="row" alignItems="center" spacing={1} sx={{ flexWrap: 'wrap' }}>
           {isEpic ? (

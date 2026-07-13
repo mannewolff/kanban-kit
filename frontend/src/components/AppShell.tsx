@@ -32,6 +32,8 @@ import { useRefetchOnFocus } from '../lib/useRefetchOnFocus'
 
 const DRAWER_WIDTH = 240
 const DRAWER_COLLAPSED_WIDTH = 56
+/** Höhe der fixen Kopfleiste (MUI-Standard-Toolbar, Desktop). */
+const APPBAR_HEIGHT = 64
 const STORAGE_KEY = 'sidebar-collapsed'
 
 function readCollapsed(): boolean {
@@ -304,6 +306,19 @@ export function AppShell() {
   }
 
   const drawerWidth = collapsed ? DRAWER_COLLAPSED_WIDTH : DRAWER_WIDTH
+
+  // Maße des Kontextbereichs (unter der Kopfleiste, rechts der Sidebar) als CSS-Variablen an :root,
+  // damit portalbasierte Overlays (z. B. der Kartendetail-Dialog) sich darin positionieren können.
+  // Reaktiv zur Drawer-Breite; Default 0 gilt außerhalb der Shell (volle Zentrierung).
+  useEffect(() => {
+    const root = document.documentElement
+    root.style.setProperty('--app-content-left', `${drawerWidth}px`)
+    root.style.setProperty('--app-content-top', `${APPBAR_HEIGHT}px`)
+    return () => {
+      root.style.removeProperty('--app-content-left')
+      root.style.removeProperty('--app-content-top')
+    }
+  }, [drawerWidth])
   const initial = user?.displayName?.trim().charAt(0).toUpperCase() ?? '?'
 
   return (

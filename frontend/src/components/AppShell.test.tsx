@@ -72,6 +72,16 @@ describe('AppShell', () => {
     expect(screen.getByLabelText('Menü ausklappen')).toBeInTheDocument()
   })
 
+  it('setzt die Kontextbereich-Maße als CSS-Variablen und aktualisiert sie beim Einklappen', () => {
+    renderShell()
+    const root = document.documentElement
+    expect(root.style.getPropertyValue('--app-content-left')).toBe('240px')
+    expect(root.style.getPropertyValue('--app-content-top')).toBe('64px')
+
+    fireEvent.click(screen.getByLabelText('Menü einklappen'))
+    expect(root.style.getPropertyValue('--app-content-left')).toBe('56px')
+  })
+
   it('überlebt den Wechsel von einer Nicht-Board- auf eine Board-Route (Rules of Hooks)', async () => {
     function Nav() {
       const navigate = useNavigate()
