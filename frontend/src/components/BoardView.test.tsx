@@ -30,7 +30,7 @@ const board: Board = {
 const card: Card = {
   id: 100, boardId: 1, columnId: 10, number: 1, title: 'Aufgabe', description: null,
   positionInColumn: 0, archived: false, movedToDoneAt: null, dependencies: [],
-  type: 'CARD', parentId: null, shortcode: null,
+  type: 'CARD', parentId: null, shortcode: null, assignees: [],
 }
 
 function mkApi(over: Record<string, unknown> = {}) {
@@ -275,5 +275,16 @@ describe('BoardView', () => {
     render(<BoardView board={board} initialCards={[card]} canEdit canTransfer api={mkApi()} />)
     fireEvent.click(screen.getByLabelText('Menü Aufgabe'))
     expect(screen.getByText('Auf anderes Board verschieben…')).toBeInTheDocument()
+  })
+
+  it('zeigt Zuständigen-Avatare mit Initialen auf der Karte', () => {
+    const assigned: Card = { ...card, assignees: [5] }
+    const members = [{ userId: 5, email: 'm@x.de', displayName: 'Max Mustermann', role: 'MEMBER' as const }]
+    render(
+      <BoardView board={board} initialCards={[assigned]} canEdit members={members} api={mkApi()} />,
+    )
+
+    expect(screen.getByLabelText('Zuständige Aufgabe')).toBeInTheDocument()
+    expect(screen.getByText('MM')).toBeInTheDocument()
   })
 })

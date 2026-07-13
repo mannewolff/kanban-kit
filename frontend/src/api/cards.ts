@@ -16,6 +16,7 @@ export interface Card {
   type: CardType
   parentId: number | null
   shortcode: string | null
+  assignees: number[]
 }
 
 export const cardsApi = {
@@ -31,6 +32,11 @@ export const cardsApi = {
     apiFetch<Card>(`/api/cards/${cardId}/transfer`, {
       method: 'POST',
       body: JSON.stringify({ targetBoardId, targetColumnId }),
+    }),
+  setAssignees: (cardId: number, assignees: number[]) =>
+    apiFetch<Card>(`/api/cards/${cardId}/assignees`, {
+      method: 'PUT',
+      body: JSON.stringify({ assignees }),
     }),
   archive: (cardId: number) => apiFetch<Card>(`/api/cards/${cardId}/archive`, { method: 'POST' }),
   restore: (cardId: number) => apiFetch<Card>(`/api/cards/${cardId}/restore`, { method: 'POST' }),

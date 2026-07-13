@@ -3,6 +3,8 @@ import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline'
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined'
 import MoreVertIcon from '@mui/icons-material/MoreVert'
 import Alert from '@mui/material/Alert'
+import Avatar from '@mui/material/Avatar'
+import AvatarGroup from '@mui/material/AvatarGroup'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import Dialog from '@mui/material/Dialog'
@@ -24,6 +26,7 @@ import { cardsApi, type Card, type CardsApi } from '../api/cards'
 import { ApiError } from '../api/client'
 import { columnsApi } from '../api/columns'
 import { epicsApi as defaultEpicsApi, type Epic, type EpicsApi } from '../api/epics'
+import type { Member } from '../api/members'
 import { activeCardsInColumn, applyMove } from '../lib/boardOps'
 import { cleanupCountdownLabel, cleanupDaysRemaining } from '../lib/cleanupCountdown'
 import { epicColor, epicShortcode } from '../lib/epicMeta'
@@ -34,12 +37,22 @@ import { TransferCardDialog } from './TransferCardDialog'
 
 const isDoneColumn = (name: string) => name.toLowerCase().includes('done')
 
+/** Initialen (max. 2 Zeichen) aus einem Anzeigenamen für Assignee-Avatare. */
+function initials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter((p) => p.length > 0)
+  const first = parts[0]?.charAt(0) ?? ''
+  const last = parts.length > 1 ? parts[parts.length - 1].charAt(0) : ''
+  return (first + last).toUpperCase() || '?'
+}
+
 interface Props {
   board: Board
   initialCards: Card[]
   canEdit: boolean
   epics?: Epic[]
   retentionDays?: number
+  /** Projektmitglieder für die Zuständigen-Avatare auf den Karten. */
+  members?: Member[]
   onCardClick?: (card: Card) => void
   onEditCard?: (card: Card) => void
   onEpicsChanged?: () => void
@@ -64,6 +77,7 @@ export function BoardView({
   canEdit,
   epics = [],
   retentionDays = 30,
+  members = [],
   onCardClick,
   onEditCard,
   onEpicsChanged,
@@ -387,6 +401,24 @@ export function BoardView({
                         <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
                           {cleanupCountdownLabel(cleanupDaysRemaining(doneAt, retentionDays))}
                         </Typography>
+                      )}
+                      {card.assignees.length > 0 && (
+                        <Stack direction="row" justifyContent="flex-end" sx={{ mt: 0.5 }}>
+                          <AvatarGroup
+                            max={4}
+                            aria-label={`Zuständige ${card.title}`}
+                            sx={{ '& .MuiAvatar-root': { width: 24, height: 24, fontSize: '0.7rem' } }}
+                          >
+                            {card.assignees.map((uid) => {
+                              const name = members.find((m) => m.userId === uid)?.displayName ?? `#${uid}`
+                              return (
+                                <Avatar key={uid} title={name}>
+                                  {initials(name)}
+                                </Avatar>
+                              )
+                            })}
+                          </AvatarGroup>
+                        </Stack>
                       )}
                     </Paper>
                   )

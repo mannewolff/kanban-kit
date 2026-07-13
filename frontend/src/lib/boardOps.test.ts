@@ -6,7 +6,7 @@ function card(id: number, columnId: number, position: number, archived = false):
   return {
     id, boardId: 1, columnId, number: id, title: `#${id}`, description: null,
     positionInColumn: position, archived, movedToDoneAt: null, dependencies: [],
-    type: 'CARD', parentId: null, shortcode: null,
+    type: 'CARD', parentId: null, shortcode: null, assignees: [],
   }
 }
 

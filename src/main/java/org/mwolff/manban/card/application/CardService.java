@@ -18,6 +18,7 @@ import org.mwolff.manban.board.domain.BoardColumn;
 import org.mwolff.manban.card.domain.Card;
 import org.mwolff.manban.card.domain.CardType;
 import org.mwolff.manban.project.application.PermissionChecker;
+import org.mwolff.manban.project.application.ProjectMembershipRepository;
 import org.mwolff.manban.project.domain.Permission;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -28,6 +29,10 @@ import org.springframework.transaction.annotation.Transactional;
  * {@link CardType#EPIC}: sie erscheinen nicht auf dem Board, halten keine Position und gruppieren
  * Karten über {@code parentId}. Rechte über den {@link PermissionChecker}.
  */
+// PMD.CouplingBetweenObjects: zentraler Karten-Use-Case-Service; die Kopplung an die Ports
+// (Karten, Abhängigkeiten, Boards/Spalten, Rechte, Zykluszeit, Zuständige, Mitgliedschaften)
+// ist fachlich begründet und kein God-Class-Smell.
+@SuppressWarnings("PMD.CouplingBetweenObjects")
 @Service
 public class CardService {
 
@@ -37,6 +42,8 @@ public class CardService {
   private final BoardColumnRepository columns;
   private final PermissionChecker permissions;
   private final CardColumnTransitionRepository transitions;
+  private final CardAssigneeRepository assignees;
+  private final ProjectMembershipRepository memberships;
   private final Clock clock;
 
   public CardService(
@@ -46,6 +53,8 @@ public class CardService {
       BoardColumnRepository columns,
       PermissionChecker permissions,
       CardColumnTransitionRepository transitions,
+      CardAssigneeRepository assignees,
+      ProjectMembershipRepository memberships,
       Clock clock) {
     this.cards = cards;
     this.dependencies = dependencies;
@@ -53,6 +62,8 @@ public class CardService {
     this.columns = columns;
     this.permissions = permissions;
     this.transitions = transitions;
+    this.assignees = assignees;
+    this.memberships = memberships;
     this.clock = clock;
   }
 
@@ -214,6 +225,30 @@ public class CardService {
     return view(saved);
   }
 
+  /**
+   * Ersetzt die Zuständigen einer Karte. Nur Karten (keine Epics); zugewiesen werden dürfen
+   * ausschließlich Mitglieder des Projekts. Recht: {@link Permission#TICKET_UPDATE} (Member und
+   * aufwärts).
+   */
+  @Transactional
+  public CardView setAssignees(long userId, long cardId, List<Long> assigneeIds) {
+    Card card = cards.findById(cardId).orElseThrow(CardNotFoundException::new);
+    if (card.type() != CardType.CARD) {
+      throw new InvalidDependencyException("Nur Karten haben Zuständige");
+    }
+    Board board = boards.findById(card.boardId()).orElseThrow(BoardNotFoundException::new);
+    permissions.require(userId, board.projectId(), Permission.TICKET_UPDATE);
+
+    List<Long> distinct = assigneeIds.stream().distinct().toList();
+    for (Long assignee : distinct) {
+      if (memberships.findByProjectIdAndUserId(board.projectId(), assignee).isEmpty()) {
+        throw new InvalidAssigneeException("Kein Projektmitglied: " + assignee);
+      }
+    }
+    assignees.replaceAssignees(cardId, distinct);
+    return view(card);
+  }
+
   /** Ordnet eine Karte einem Epic zu ({@code parentId}) oder löst die Zuordnung ({@code null}). */
   @Transactional
   public CardView assignParent(long userId, long cardId, @Nullable Long parentId) {
@@ -289,6 +324,8 @@ public class CardService {
     int newNumber = cards.maxNumberInBoard(targetBoardId) + 1;
     cards.transfer(cardId, targetBoardId, targetColumnId, newNumber);
     dependencies.deleteByCardId(cardId);
+    // Zuständige gehören zum Quellprojekt; im Zielprojekt sind sie evtl. keine Mitglieder.
+    assignees.deleteByCardId(cardId);
 
     // Zykluszeit: der board-/spaltenübergreifende Umzug zählt als Spaltenwechsel.
     Instant switchedAt = clock.instant();
@@ -392,7 +429,8 @@ public class CardService {
         dependencies.findByCardId(c.requireId()),
         c.type(),
         c.parentId(),
-        c.shortcode());
+        c.shortcode(),
+        assignees.findByCardId(c.requireId()));
   }
 
   /** Kartendarstellung inkl. Abhängigkeits-Nummern, Typ und Epic-Zuordnung. */
@@ -409,7 +447,8 @@ public class CardService {
       List<Integer> dependencies,
       CardType type,
       @Nullable Long parentId,
-      @Nullable String shortcode) {}
+      @Nullable String shortcode,
+      List<Long> assignees) {}
 
   /** Epic-Darstellung inkl. Fortschritt (Kinder gesamt / in Done). */
   public record EpicView(

@@ -461,6 +461,7 @@
                         <exclude>org/mwolff/manban/card/web/CardController$CreateCardRequest.class</exclude>
                         <exclude>org/mwolff/manban/card/web/CardController$MoveCardRequest.class</exclude>
                         <exclude>org/mwolff/manban/card/web/CardController$UpdateCardRequest.class</exclude>
+                        <exclude>org/mwolff/manban/card/web/CardController$AssigneesRequest.class</exclude>
                         <exclude>org/mwolff/manban/card/web/ConfigController$ConfigView.class</exclude>
                         <exclude>org/mwolff/manban/comment/web/CommentController$CommentRequest.class</exclude>
                         <exclude>org/mwolff/manban/kanbancompat/web/KanbanCompatController$CommentRequest.class</exclude>
@@ -506,6 +507,7 @@
                         <exclude>org/mwolff/manban/auth/infrastructure/persistence/JdbcProjectMembershipReader.class</exclude>
                         <exclude>org/mwolff/manban/board/infrastructure/persistence/JdbcColumnCardCounter.class</exclude>
                         <exclude>org/mwolff/manban/card/infrastructure/persistence/JdbcCardDependencyRepository.class</exclude>
+                        <exclude>org/mwolff/manban/card/infrastructure/persistence/JdbcCardAssigneeRepository.class</exclude>
                         <exclude>org/mwolff/manban/project/infrastructure/persistence/JdbcRolePermissionRepository.class</exclude>
 
                         <!-- IT-only: Adapter zu externer Infrastruktur (SMTP / S3-MinIO), nur via IT (§5.2). -->

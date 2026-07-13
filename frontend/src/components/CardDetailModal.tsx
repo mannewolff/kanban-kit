@@ -1,4 +1,5 @@
 import Alert from '@mui/material/Alert'
+import Autocomplete from '@mui/material/Autocomplete'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import Chip from '@mui/material/Chip'
@@ -20,6 +21,7 @@ import { cardsApi as defaultCardsApi } from '../api/cards'
 import type { Card } from '../api/cards'
 import { commentsApi as defaultCommentsApi, type Comment, type CommentsApi } from '../api/comments'
 import type { Epic } from '../api/epics'
+import type { Member } from '../api/members'
 import { epicShortcode } from '../lib/epicMeta'
 import { normalizeTaskLists, toggleTaskAt } from '../lib/markdownTasks'
 import { CODE_BLOCK_BG, MODAL_BORDER, MODAL_TEXT_PRIMARY, statusColors } from '../lib/statusColors'
@@ -116,9 +118,11 @@ interface Props {
   epics?: Epic[]
   /** Kind-Karten eines Epics (nur bei type === 'EPIC'). */
   childCards?: Card[]
+  /** Projektmitglieder für die Zuständigen-Auswahl (Namen + Auswahlliste). */
+  members?: Member[]
   commentsApi?: CommentsApi
   attachmentsApi?: AttachmentsApi
-  cardsApi?: Pick<typeof defaultCardsApi, 'update'>
+  cardsApi?: Pick<typeof defaultCardsApi, 'update' | 'setAssignees'>
 }
 
 export function CardDetailModal({
@@ -131,12 +135,23 @@ export function CardDetailModal({
   columnName,
   epics = [],
   childCards = [],
+  members = [],
   commentsApi = defaultCommentsApi,
   attachmentsApi = defaultAttachmentsApi,
   cardsApi = defaultCardsApi,
 }: Props) {
   const { user } = useAuth()
   const isEpic = card.type === 'EPIC'
+  const [assigneeIds, setAssigneeIds] = useState<number[]>(card.assignees)
+
+  const memberName = (userId: number) =>
+    members.find((m) => m.userId === userId)?.displayName ?? `#${userId}`
+
+  const saveAssignees = async (ids: number[]) => {
+    setAssigneeIds(ids)
+    await cardsApi.setAssignees(card.id, ids)
+    onChanged?.()
+  }
 
   const [editing, setEditing] = useState(initialEditing)
   const [title, setTitle] = useState(card.title)
@@ -437,6 +452,36 @@ export function CardDetailModal({
                 </Typography>
               )}
             </>
+          )}
+
+          {!isEpic && (
+            <Box>
+              <Typography variant="subtitle2" gutterBottom>
+                Zuständige
+              </Typography>
+              {canEdit ? (
+                <Autocomplete
+                  multiple
+                  size="small"
+                  options={members}
+                  getOptionLabel={(m) => m.displayName}
+                  isOptionEqualToValue={(a, b) => a.userId === b.userId}
+                  value={members.filter((m) => assigneeIds.includes(m.userId))}
+                  onChange={(_, selected) => void saveAssignees(selected.map((m) => m.userId))}
+                  renderInput={(params) => (
+                    <TextField {...params} label="Zuständige" inputProps={{ ...params.inputProps, 'aria-label': 'Zuständige' }} />
+                  )}
+                />
+              ) : assigneeIds.length > 0 ? (
+                <Stack direction="row" spacing={0.5} sx={{ flexWrap: 'wrap' }}>
+                  {assigneeIds.map((uid) => (
+                    <Chip key={uid} size="small" label={memberName(uid)} />
+                  ))}
+                </Stack>
+              ) : (
+                <Typography color="text.secondary">Niemand zugewiesen.</Typography>
+              )}
+            </Box>
           )}
 
           {!editing && isEpic && (

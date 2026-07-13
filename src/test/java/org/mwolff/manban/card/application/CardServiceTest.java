@@ -6,6 +6,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -30,12 +31,15 @@ import org.mwolff.manban.board.domain.BoardColumn;
 import org.mwolff.manban.card.domain.Card;
 import org.mwolff.manban.card.domain.CardType;
 import org.mwolff.manban.project.application.PermissionChecker;
+import org.mwolff.manban.project.application.ProjectAccessDeniedException;
+import org.mwolff.manban.project.application.ProjectMembershipRepository;
 import org.mwolff.manban.project.domain.Permission;
+import org.mwolff.manban.project.domain.ProjectMembership;
 
 /** Verhaltenstests der Karten- und Epic-Use-Cases (Mockito an den Ports). */
 // PMD.TooManyMethods: umfassende Unit-Suite (Karten + Epics, Erfolgs- und Fehlerpfade je
 // Use-Case). Viele kleine @Test-Methoden sind hier gewollt, kein God-Class-Smell.
-@SuppressWarnings("PMD.TooManyMethods")
+@SuppressWarnings({"PMD.TooManyMethods", "PMD.CyclomaticComplexity"})
 class CardServiceTest {
 
   private static final Instant FIXED = Instant.parse("2026-01-02T03:04:05Z");
@@ -47,6 +51,8 @@ class CardServiceTest {
   private BoardColumnRepository columns;
   private PermissionChecker permissions;
   private CardColumnTransitionRepository transitions;
+  private CardAssigneeRepository assignees;
+  private ProjectMembershipRepository memberships;
   private CardService service;
 
   private static Card card(
@@ -75,9 +81,20 @@ class CardServiceTest {
     columns = mock(BoardColumnRepository.class);
     permissions = mock(PermissionChecker.class);
     transitions = mock(CardColumnTransitionRepository.class);
+    assignees = mock(CardAssigneeRepository.class);
+    memberships = mock(ProjectMembershipRepository.class);
     Clock clock = Clock.fixed(FIXED, ZoneOffset.UTC);
     service =
-        new CardService(cards, dependencies, boards, columns, permissions, transitions, clock);
+        new CardService(
+            cards,
+            dependencies,
+            boards,
+            columns,
+            permissions,
+            transitions,
+            assignees,
+            memberships,
+            clock);
     when(boards.findById(BOARD)).thenReturn(Optional.of(new Board(BOARD, 1L, "B", FIXED)));
     when(cards.save(any(Card.class))).thenAnswer(inv -> withId(inv.getArgument(0)));
   }
@@ -1020,6 +1037,7 @@ class CardServiceTest {
 
     // Then
     verify(dependencies).deleteByCardId(100L);
+    verify(assignees).deleteByCardId(100L);
     verify(cards).save(captor.capture());
     assertThat(captor.getValue().parentId()).isNull();
     assertThat(captor.getValue().movedToDoneAt()).isNull();
@@ -1084,6 +1102,70 @@ class CardServiceTest {
     // When / Then
     assertThatThrownBy(() -> service.transfer(1L, 100L, 20L, 60L))
         .isInstanceOf(ColumnNotFoundException.class);
+  }
+
+  // --- Zuständige (Assignees) -------------------------------------------
+
+  @Test
+  void setAssignees_replacesWithDistinctMembers() {
+    when(cards.findById(1L))
+        .thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
+    when(memberships.findByProjectIdAndUserId(1L, 7L))
+        .thenReturn(Optional.of(mock(ProjectMembership.class)));
+    when(memberships.findByProjectIdAndUserId(1L, 8L))
+        .thenReturn(Optional.of(mock(ProjectMembership.class)));
+    when(assignees.findByCardId(1L)).thenReturn(List.of(7L, 8L));
+
+    CardService.CardView result = service.setAssignees(3L, 1L, List.of(7L, 8L, 7L));
+
+    verify(permissions).require(3L, 1L, Permission.TICKET_UPDATE);
+    verify(assignees).replaceAssignees(1L, List.of(7L, 8L));
+    assertThat(result.id()).isEqualTo(1L);
+    assertThat(result.assignees()).containsExactly(7L, 8L);
+  }
+
+  @Test
+  void setAssignees_rejectsNonMember() {
+    when(cards.findById(1L))
+        .thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
+    when(memberships.findByProjectIdAndUserId(1L, 7L))
+        .thenReturn(Optional.of(mock(ProjectMembership.class)));
+    when(memberships.findByProjectIdAndUserId(1L, 8L)).thenReturn(Optional.empty());
+
+    assertThatThrownBy(() -> service.setAssignees(3L, 1L, List.of(7L, 8L)))
+        .isInstanceOf(InvalidAssigneeException.class);
+    verify(assignees, never()).replaceAssignees(anyLong(), anyList());
+  }
+
+  @Test
+  void setAssignees_rejectsEpic() {
+    when(cards.findById(5L))
+        .thenReturn(Optional.of(card(5L, 20L, 5, false, null, CardType.EPIC, null, "E")));
+
+    assertThatThrownBy(() -> service.setAssignees(3L, 5L, List.of(7L)))
+        .isInstanceOf(InvalidDependencyException.class);
+    verify(assignees, never()).replaceAssignees(anyLong(), anyList());
+  }
+
+  @Test
+  void setAssignees_throwsCardNotFound_whenUnknown() {
+    when(cards.findById(1L)).thenReturn(Optional.empty());
+
+    assertThatThrownBy(() -> service.setAssignees(3L, 1L, List.of()))
+        .isInstanceOf(CardNotFoundException.class);
+  }
+
+  @Test
+  void setAssignees_propagatesPermissionDenied() {
+    when(cards.findById(1L))
+        .thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
+    doThrow(new ProjectAccessDeniedException())
+        .when(permissions)
+        .require(9L, 1L, Permission.TICKET_UPDATE);
+
+    assertThatThrownBy(() -> service.setAssignees(9L, 1L, List.of()))
+        .isInstanceOf(ProjectAccessDeniedException.class);
+    verify(assignees, never()).replaceAssignees(anyLong(), anyList());
   }
 
   // --- Zykluszeit-Tracking (card_column_transition) ---------------------

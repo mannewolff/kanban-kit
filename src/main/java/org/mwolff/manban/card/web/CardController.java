@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
@@ -126,6 +127,16 @@ class CardController {
     cards.delete(userId, cardId);
   }
 
+  /** Ersetzt die Zuständigen der Karte (leere/fehlende Liste = keine Zuständigen). */
+  @PutMapping("/api/cards/{cardId}/assignees")
+  CardView setAssignees(
+      @AuthenticationPrincipal Long userId,
+      @PathVariable long cardId,
+      @RequestBody AssigneesRequest request) {
+    List<Long> ids = request.assignees() == null ? List.of() : request.assignees();
+    return cards.setAssignees(userId, cardId, ids);
+  }
+
   record CreateCardRequest(
       Long columnId,
       @NotBlank @Size(max = 300) String title,
@@ -148,4 +159,6 @@ class CardController {
       @NotNull Long columnId, @jakarta.validation.constraints.PositiveOrZero int position) {}
 
   record TransferCardRequest(@NotNull Long targetBoardId, @NotNull Long targetColumnId) {}
+
+  record AssigneesRequest(@org.jspecify.annotations.Nullable List<Long> assignees) {}
 }

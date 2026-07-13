@@ -23,7 +23,20 @@ class CardControllerTest {
 
   private static CardView card() {
     return new CardView(
-        1L, 2L, 3L, 4, "Title", "Desc", 0, false, null, List.of(), CardType.CARD, null, null);
+        1L,
+        2L,
+        3L,
+        4,
+        "Title",
+        "Desc",
+        0,
+        false,
+        null,
+        List.of(),
+        CardType.CARD,
+        null,
+        null,
+        List.of());
   }
 
   @BeforeEach
@@ -188,5 +201,33 @@ class CardControllerTest {
 
     // Then
     assertThat(result).isSameAs(view);
+  }
+
+  @Test
+  void setAssignees_delegatesToService() {
+    // Given
+    CardView view = card();
+    when(service.setAssignees(3L, 8L, List.of(5L, 6L))).thenReturn(view);
+
+    // When
+    CardView result =
+        controller.setAssignees(3L, 8L, new CardController.AssigneesRequest(List.of(5L, 6L)));
+
+    // Then
+    assertThat(result).isSameAs(view);
+  }
+
+  @Test
+  void setAssignees_coalescesNullListToEmpty() {
+    // Given
+    CardView view = card();
+    when(service.setAssignees(3L, 8L, List.of())).thenReturn(view);
+
+    // When
+    CardView result = controller.setAssignees(3L, 8L, new CardController.AssigneesRequest(null));
+
+    // Then
+    assertThat(result).isSameAs(view);
+    verify(service).setAssignees(3L, 8L, List.of());
   }
 }

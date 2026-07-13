@@ -12,7 +12,7 @@ vi.mock('../auth/AuthContext', () => ({
 const card: Card = {
   id: 100, boardId: 1, columnId: 10, number: 5, title: 'Aufgabe', description: '# Titel\n\n- a\n- b',
   positionInColumn: 0, archived: false, movedToDoneAt: null, dependencies: [3, 4],
-  type: 'CARD', parentId: null, shortcode: null,
+  type: 'CARD', parentId: null, shortcode: null, assignees: [],
 }
 
 function makeApis() {
@@ -32,7 +32,10 @@ function makeApis() {
     remove: vi.fn(),
     fetchBlob: vi.fn(),
   } satisfies AttachmentsApi
-  const cardsApi = { update: vi.fn().mockResolvedValue({ ...card }) }
+  const cardsApi = {
+    update: vi.fn().mockResolvedValue({ ...card }),
+    setAssignees: vi.fn().mockResolvedValue({ ...card }),
+  }
   return { commentsApi, attachmentsApi, cardsApi }
 }
 
@@ -166,5 +169,49 @@ describe('CardDetailModal', () => {
     expect(box).toBeDisabled()
     fireEvent.click(box)
     expect(apis.cardsApi.update).not.toHaveBeenCalled()
+  })
+
+  it('zeigt Zuständige als Chips im Lesemodus (ohne Bearbeiten-Recht)', async () => {
+    const apis = makeApis()
+    const members = [
+      { userId: 5, email: 'm@x.de', displayName: 'Max', role: 'MEMBER' as const },
+    ]
+    render(
+      <CardDetailModal
+        card={{ ...card, assignees: [5] }}
+        canEdit={false}
+        members={members}
+        onClose={vi.fn()}
+        {...apis}
+      />,
+    )
+
+    expect(await screen.findByText('Max')).toBeInTheDocument()
+  })
+
+  it('setzt Zuständige über die Mehrfachauswahl', async () => {
+    const apis = makeApis()
+    const onChanged = vi.fn()
+    const members = [
+      { userId: 5, email: 'm@x.de', displayName: 'Max', role: 'MEMBER' as const },
+      { userId: 6, email: 'e@x.de', displayName: 'Eva', role: 'MEMBER' as const },
+    ]
+    render(
+      <CardDetailModal
+        card={card}
+        canEdit
+        members={members}
+        onClose={vi.fn()}
+        onChanged={onChanged}
+        {...apis}
+      />,
+    )
+
+    const input = await screen.findByLabelText('Zuständige')
+    fireEvent.mouseDown(input)
+    fireEvent.click(await screen.findByText('Eva'))
+
+    await waitFor(() => expect(apis.cardsApi.setAssignees).toHaveBeenCalledWith(100, [6]))
+    expect(onChanged).toHaveBeenCalled()
   })
 })

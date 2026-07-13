@@ -24,7 +24,7 @@ function epicToCard(epic: Epic, boardId: number): Card {
   return {
     id: epic.id, boardId, columnId: 0, number: epic.number, title: epic.title,
     description: epic.description, positionInColumn: 0, archived: false, movedToDoneAt: null,
-    dependencies: [], type: 'EPIC', parentId: null, shortcode: epic.shortcode,
+    dependencies: [], type: 'EPIC', parentId: null, shortcode: epic.shortcode, assignees: [],
   }
 }
 

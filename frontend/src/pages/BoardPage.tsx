@@ -19,6 +19,7 @@ import { boardsApi, type Board } from '../api/boards'
 import { cardsApi, type Card } from '../api/cards'
 import { configApi } from '../api/config'
 import { epicsApi, type Epic } from '../api/epics'
+import { membersApi, type Member } from '../api/members'
 import { projectsApi } from '../api/projects'
 import { useAuth } from '../auth/AuthContext'
 import { BoardView } from '../components/BoardView'
@@ -45,6 +46,7 @@ export function BoardPage() {
   const [retentionDays, setRetentionDays] = useState(30)
   const [renameOpen, setRenameOpen] = useState(false)
   const [renameValue, setRenameValue] = useState('')
+  const [members, setMembers] = useState<Member[]>([])
 
   // Letztes bekanntes Projekt des Boards, um bei einem 404 (Board zwischenzeitlich archiviert/
   // gelöscht) auf dessen Board-Liste zurückzuleiten. Einmal-Guard gegen doppelte Navigation.
@@ -101,6 +103,15 @@ export function BoardPage() {
   useEffect(() => {
     void configApi.get().then((c) => setRetentionDays(c.doneRetentionDays)).catch(() => {})
   }, [])
+
+  // Projektmitglieder für Zuständigen-Auswahl/-Avatare laden, sobald das Projekt bekannt ist.
+  const projectId = board?.projectId
+  useEffect(() => {
+    if (projectId == null) {
+      return
+    }
+    void membersApi.list(projectId).then(setMembers).catch(() => setMembers([]))
+  }, [projectId])
 
   // Rolle bevorzugt synchron aus den Memberships (kein Race). Ist das Projekt dort noch nicht
   // bekannt (z. B. frisch in dieser Session angelegt), einmal frisch nachladen.
@@ -189,6 +200,7 @@ export function BoardPage() {
         canEdit={canEdit}
         epics={epics}
         retentionDays={retentionDays}
+        members={members}
         onCardClick={(card) => { setOpenEditing(false); setSelectedCard(card) }}
         onEditCard={(card) => { setOpenEditing(true); setSelectedCard(card) }}
         onEpicsChanged={reloadEpics}
@@ -203,6 +215,7 @@ export function BoardPage() {
           canEdit={canEdit}
           canModerateComments={canModerate}
           epics={epics}
+          members={members}
           initialEditing={openEditing}
           columnName={board.columns.find((c) => c.id === selectedCard.columnId)?.name}
           onClose={() => setSelectedCard(null)}
