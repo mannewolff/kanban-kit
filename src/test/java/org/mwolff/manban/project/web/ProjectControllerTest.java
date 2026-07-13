@@ -9,6 +9,7 @@ import java.time.Instant;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mwolff.manban.project.application.MembershipService;
 import org.mwolff.manban.project.application.ProjectService;
 import org.mwolff.manban.project.application.ProjectService.ProjectView;
 import org.mwolff.manban.project.domain.ProjectRole;
@@ -17,6 +18,7 @@ import org.mwolff.manban.project.domain.ProjectRole;
 class ProjectControllerTest {
 
   private ProjectService service;
+  private MembershipService memberships;
   private ProjectController controller;
 
   private static ProjectView project() {
@@ -26,7 +28,8 @@ class ProjectControllerTest {
   @BeforeEach
   void setUp() {
     service = mock(ProjectService.class);
-    controller = new ProjectController(service);
+    memberships = mock(MembershipService.class);
+    controller = new ProjectController(service, memberships);
   }
 
   @Test
@@ -76,5 +79,14 @@ class ProjectControllerTest {
 
     // Then
     verify(service).delete(3L, 5L);
+  }
+
+  @Test
+  void transferOwner_delegatesToMembershipService() {
+    // When
+    controller.transferOwner(3L, 5L, new ProjectController.TransferOwnerRequest(8L));
+
+    // Then
+    verify(memberships).transferOwnership(3L, 5L, 8L);
   }
 }

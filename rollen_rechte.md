@@ -48,6 +48,7 @@ Ressourcen und Operationen:
 | Anhang – Delete | – | ✓ | ✓ | ✓ |
 | Mitglieder einladen / entfernen | – | – | ✓ | ✓ |
 | Projekt umbenennen | – | – | – | ✓ |
+| Eigentümer übertragen | – | – | – | ✓ |
 | **Projekt anlegen / löschen** | **nur System-Admin (Plattform-Ebene, keine Projekt-Rolle)** | | | |
 
 ### Rollen im Detail
@@ -57,7 +58,9 @@ Ressourcen und Operationen:
   Kommentare schreiben (und eigene bearbeiten) sowie Anhänge hochladen und löschen.
 - **Admin:** zusätzlich Boards und Spalten verwalten, Kommentare löschen (Moderation)
   und Mitglieder einladen/entfernen.
-- **Owner:** alle Projekt-Rechte inklusive Projekt umbenennen.
+- **Owner:** alle Projekt-Rechte inklusive Projekt umbenennen und die Eigentümerschaft an ein
+  anderes Mitglied übertragen (dabei wird der bisherige Owner zum Admin; das Recht hat bewusst
+  nur der Owner, nicht der Admin).
 
 ## Projekte
 

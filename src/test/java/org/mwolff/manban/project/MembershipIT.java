@@ -328,4 +328,47 @@ class MembershipIT extends AbstractIntegrationTest {
                 .content("{\"email\":\"pending@example.com\",\"role\":\"MEMBER\"}"))
         .andExpect(status().isUnprocessableEntity());
   }
+
+  @Test
+  void transferOwnershipPromotesTargetAndDemotesCaller() throws Exception {
+    Cookie alice = loginAs("xfer-owner@example.com");
+    loginAs("xfer-member@example.com");
+    long projectId = createProject("xfer-owner@example.com", "OwnerXfer");
+    long targetId = userId("xfer-member@example.com");
+    memberships.save(
+        new ProjectMembership(null, projectId, targetId, ProjectRole.MEMBER, Instant.now()));
+
+    mvc.perform(
+            post("/api/projects/" + projectId + "/owner")
+                .cookie(alice)
+                .contentType("application/json")
+                .content("{\"newOwnerUserId\":%d}".formatted(targetId)))
+        .andExpect(status().isOk());
+
+    assertThat(memberships.findByProjectIdAndUserId(projectId, targetId).orElseThrow().role())
+        .isEqualTo(ProjectRole.OWNER);
+    assertThat(
+            memberships
+                .findByProjectIdAndUserId(projectId, userId("xfer-owner@example.com"))
+                .orElseThrow()
+                .role())
+        .isEqualTo(ProjectRole.ADMIN);
+  }
+
+  @Test
+  void transferOwnershipForbiddenForNonOwner() throws Exception {
+    loginAs("xfer2-owner@example.com");
+    Cookie mallory = loginAs("xfer2-member@example.com");
+    long projectId = createProject("xfer2-owner@example.com", "OwnerXfer2");
+    long malloryId = userId("xfer2-member@example.com");
+    memberships.save(
+        new ProjectMembership(null, projectId, malloryId, ProjectRole.MEMBER, Instant.now()));
+
+    mvc.perform(
+            post("/api/projects/" + projectId + "/owner")
+                .cookie(mallory)
+                .contentType("application/json")
+                .content("{\"newOwnerUserId\":%d}".formatted(malloryId)))
+        .andExpect(status().isForbidden());
+  }
 }

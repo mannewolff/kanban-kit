@@ -6,6 +6,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -22,11 +23,15 @@ import org.mwolff.manban.auth.application.AppUserRepository;
 import org.mwolff.manban.auth.application.AuthProperties;
 import org.mwolff.manban.auth.domain.AppUser;
 import org.mwolff.manban.auth.domain.PlatformRole;
+import org.mwolff.manban.project.domain.Permission;
 import org.mwolff.manban.project.domain.ProjectInvitation;
 import org.mwolff.manban.project.domain.ProjectMembership;
 import org.mwolff.manban.project.domain.ProjectRole;
 
 /** Verhaltenstests der Mitgliederverwaltung (Mockito an den Ports). */
+// PMD.TooManyMethods: umfassende Unit-Suite (Einladen/Annehmen/Rolle/Entfernen/Eigentümer-Transfer,
+// je Erfolgs- und Fehlerpfad). Viele kleine @Test-Methoden sind hier gewollt, kein God-Class-Smell.
+@SuppressWarnings("PMD.TooManyMethods")
 class MembershipServiceTest {
 
   private static final Instant FIXED = Instant.parse("2026-01-02T03:04:05Z");
@@ -438,5 +443,89 @@ class MembershipServiceTest {
     // When / Then
     assertThatThrownBy(() -> service.removeMember(1L, 9L, 2L))
         .isInstanceOf(LastOwnerException.class);
+  }
+
+  @Test
+  void transferOwnership_makesTargetOwnerAndDemotesCaller() {
+    // Given
+    when(memberships.findByProjectIdAndUserId(9L, 2L))
+        .thenReturn(Optional.of(membership(2L, ProjectRole.MEMBER)));
+    when(memberships.findByProjectIdAndUserId(9L, 1L))
+        .thenReturn(Optional.of(membership(1L, ProjectRole.OWNER)));
+
+    // When
+    ArgumentCaptor<ProjectMembership> captor = ArgumentCaptor.forClass(ProjectMembership.class);
+    service.transferOwnership(1L, 9L, 2L);
+
+    // Then
+    verify(memberships, times(2)).save(captor.capture());
+    assertThat(captor.getAllValues())
+        .anySatisfy(
+            m -> {
+              assertThat(m.userId()).isEqualTo(2L);
+              assertThat(m.role()).isEqualTo(ProjectRole.OWNER);
+            })
+        .anySatisfy(
+            m -> {
+              assertThat(m.userId()).isEqualTo(1L);
+              assertThat(m.role()).isEqualTo(ProjectRole.ADMIN);
+            });
+  }
+
+  @Test
+  void transferOwnership_requiresOwnerTransferPermission() {
+    // Given
+    when(memberships.findByProjectIdAndUserId(9L, 2L))
+        .thenReturn(Optional.of(membership(2L, ProjectRole.MEMBER)));
+    when(memberships.findByProjectIdAndUserId(9L, 1L))
+        .thenReturn(Optional.of(membership(1L, ProjectRole.OWNER)));
+
+    // When
+    service.transferOwnership(1L, 9L, 2L);
+
+    // Then
+    verify(permissions).require(1L, 9L, Permission.PROJECT_OWNER_TRANSFER);
+  }
+
+  @Test
+  void transferOwnership_throwsMemberNotFound_whenTargetNotMember() {
+    // Given
+    when(memberships.findByProjectIdAndUserId(9L, 2L)).thenReturn(Optional.empty());
+
+    // When / Then
+    assertThatThrownBy(() -> service.transferOwnership(1L, 9L, 2L))
+        .isInstanceOf(MemberNotFoundException.class);
+  }
+
+  @Test
+  void transferOwnership_isNoOp_whenTargetAlreadyOwner() {
+    // Given
+    when(memberships.findByProjectIdAndUserId(9L, 2L))
+        .thenReturn(Optional.of(membership(2L, ProjectRole.OWNER)));
+
+    // When
+    service.transferOwnership(1L, 9L, 2L);
+
+    // Then
+    verify(memberships, never()).save(any(ProjectMembership.class));
+  }
+
+  @Test
+  void transferOwnership_doesNotDemoteCaller_whenNotOwnerMember() {
+    // Given — Aufrufer ist kein OWNER-Mitglied (z. B. Plattform-Admin-Sonderfall): nur das Ziel
+    // wird zum OWNER, es wird niemand herabgestuft.
+    when(memberships.findByProjectIdAndUserId(9L, 2L))
+        .thenReturn(Optional.of(membership(2L, ProjectRole.MEMBER)));
+    when(memberships.findByProjectIdAndUserId(9L, 1L))
+        .thenReturn(Optional.of(membership(1L, ProjectRole.ADMIN)));
+
+    // When
+    ArgumentCaptor<ProjectMembership> captor = ArgumentCaptor.forClass(ProjectMembership.class);
+    service.transferOwnership(1L, 9L, 2L);
+
+    // Then
+    verify(memberships, times(1)).save(captor.capture());
+    assertThat(captor.getValue().userId()).isEqualTo(2L);
+    assertThat(captor.getValue().role()).isEqualTo(ProjectRole.OWNER);
   }
 }

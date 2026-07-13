@@ -61,12 +61,12 @@ class RoleMatrixIT extends AbstractIntegrationTest {
             .andExpect(jsonPath("$.roles[0]").value("VIEWER"))
             .andExpect(jsonPath("$.roles[3]").value("OWNER"))
             // Rechte inkl. abgeleiteter Ressource/Operation
-            .andExpect(jsonPath("$.permissions.length()").value(23))
+            .andExpect(jsonPath("$.permissions.length()").value(24))
             // Grants je Rolle passend zum V4-Seed
             .andExpect(jsonPath("$.grants.VIEWER.length()").value(5))
             .andExpect(jsonPath("$.grants.MEMBER.length()").value(16))
             .andExpect(jsonPath("$.grants.ADMIN.length()").value(22))
-            .andExpect(jsonPath("$.grants.OWNER.length()").value(23))
+            .andExpect(jsonPath("$.grants.OWNER.length()").value(24))
             .andReturn()
             .getResponse()
             .getContentAsString();

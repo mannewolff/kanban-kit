@@ -170,6 +170,31 @@ public class MembershipService {
     return toView(memberships.save(target.withRole(newRole)));
   }
 
+  /**
+   * Überträgt die Projekt-Eigentümerschaft atomar an ein bestehendes Mitglied: Das Ziel wird OWNER,
+   * der aufrufende (bisherige) Owner wird ADMIN. Nur der amtierende OWNER (Recht {@link
+   * Permission#PROJECT_OWNER_TRANSFER}) darf übertragen — bewusst nicht ADMIN. Ist das Ziel bereits
+   * OWNER, ist der Aufruf ein No-Op. Etwaige weitere (Alt-)Owner bleiben unangetastet.
+   */
+  @Transactional
+  public void transferOwnership(long callerUserId, long projectId, long newOwnerUserId) {
+    permissions.require(callerUserId, projectId, Permission.PROJECT_OWNER_TRANSFER);
+    ProjectMembership target =
+        memberships
+            .findByProjectIdAndUserId(projectId, newOwnerUserId)
+            .orElseThrow(MemberNotFoundException::new);
+    if (target.role() == ProjectRole.OWNER) {
+      return;
+    }
+    memberships.save(target.withRole(ProjectRole.OWNER));
+    // Den bisherigen Owner (Aufrufer) herabstufen — nur wenn er ein echtes OWNER-Mitglied ist
+    // (ein Plattform-Admin ohne Mitgliedschaft hat keine Rolle im Projekt).
+    memberships
+        .findByProjectIdAndUserId(projectId, callerUserId)
+        .filter(m -> m.role() == ProjectRole.OWNER)
+        .ifPresent(m -> memberships.save(m.withRole(ProjectRole.ADMIN)));
+  }
+
   @Transactional
   public void removeMember(long actorUserId, long projectId, long targetUserId) {
     permissions.require(actorUserId, projectId, Permission.MEMBER_REMOVE);
