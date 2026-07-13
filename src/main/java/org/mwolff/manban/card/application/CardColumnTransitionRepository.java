@@ -22,4 +22,7 @@ public interface CardColumnTransitionRepository {
 
   /** Alle Aufenthalte der Karte, chronologisch nach Eintritt. */
   List<CardColumnTransition> findByCardId(long cardId);
+
+  /** Alle Aufenthalte aller Karten eines Boards (für die Dashboard-Aggregation). */
+  List<CardColumnTransition> findByBoardId(long boardId);
 }

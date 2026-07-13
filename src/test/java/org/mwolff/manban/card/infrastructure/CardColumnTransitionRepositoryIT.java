@@ -125,4 +125,29 @@ class CardColumnTransitionRepositoryIT extends AbstractIntegrationTest {
   void findByCardIdReturnsEmptyForUnknownCard() {
     assertThat(transitions.findByCardId(cardId + 999)).isEmpty();
   }
+
+  @Test
+  void findByBoardIdReturnsTransitionsOfAllCardsOnTheBoard() {
+    long otherCard =
+        insert(
+            "INSERT INTO card (board_id, column_id, number, title, position_in_column) "
+                + "VALUES ((SELECT board_id FROM card WHERE id = "
+                + cardId
+                + "), "
+                + columnId
+                + ", 2, 'B', 1) RETURNING id");
+    transitions.open(cardId, columnId, "Ready", ENTERED);
+    transitions.open(otherCard, columnId, "Ready", ENTERED);
+
+    List<CardColumnTransition> rows = transitions.findByBoardId(boardIdOfCard());
+    assertThat(rows)
+        .extracting(CardColumnTransition::cardId)
+        .containsExactlyInAnyOrder(cardId, otherCard);
+  }
+
+  private long boardIdOfCard() {
+    Long boardId =
+        jdbc.queryForObject("SELECT board_id FROM card WHERE id = ?", Long.class, cardId);
+    return boardId == null ? 0L : boardId;
+  }
 }

@@ -39,6 +39,13 @@ class CardColumnTransitionRepositoryAdapter implements CardColumnTransitionRepos
         .toList();
   }
 
+  @Override
+  public List<CardColumnTransition> findByBoardId(long boardId) {
+    return jpa.findByBoardId(boardId).stream()
+        .map(CardColumnTransitionRepositoryAdapter::toDomain)
+        .toList();
+  }
+
   private static CardColumnTransition toDomain(CardColumnTransitionEntity e) {
     return new CardColumnTransition(
         e.getId(),
