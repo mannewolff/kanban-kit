@@ -8,6 +8,11 @@ export interface Member {
   role: ProjectRole
 }
 
+/** Ergebnis einer Zuordnung: `added` (sofort Mitglied) oder `invited` (Token-Einladung). */
+export interface InviteResult {
+  status: 'added' | 'invited'
+}
+
 const json = (data: unknown, method: string): RequestInit => ({ method, body: JSON.stringify(data) })
 
 export const membersApi = {
@@ -17,7 +22,7 @@ export const membersApi = {
   remove: (projectId: number, userId: number) =>
     apiFetch<void>(`/api/projects/${projectId}/members/${userId}`, { method: 'DELETE' }),
   invite: (projectId: number, email: string, role: ProjectRole) =>
-    apiFetch<void>(`/api/projects/${projectId}/invitations`, json({ email, role }, 'POST')),
+    apiFetch<InviteResult>(`/api/projects/${projectId}/invitations`, json({ email, role }, 'POST')),
   accept: (token: string) => apiFetch<Member>('/api/invitations/accept', json({ token }, 'POST')),
 }
 

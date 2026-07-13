@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { describe, expect, it, vi } from 'vitest'
+import { ApiError } from '../api/client'
 import type { Member, MembersApi } from '../api/members'
 import { ProjectMembersPage } from './ProjectMembersPage'
 
@@ -14,7 +15,7 @@ function makeApi(overrides: Partial<MembersApi> = {}): MembersApi {
     list: vi.fn().mockResolvedValue(members),
     changeRole: vi.fn(),
     remove: vi.fn().mockResolvedValue(undefined),
-    invite: vi.fn().mockResolvedValue(undefined),
+    invite: vi.fn().mockResolvedValue({ status: 'invited' }),
     accept: vi.fn(),
     ...overrides,
   }
@@ -81,8 +82,13 @@ describe('ProjectMembersPage', () => {
   })
 
   it('verhindert Doppel-Submit: Button während Pending deaktiviert, Invite feuert nur einmal', async () => {
-    let resolveInvite: (() => void) | undefined
-    const invite = vi.fn(() => new Promise<void>((resolve) => { resolveInvite = () => resolve() }))
+    let resolveInvite: ((result: { status: 'added' | 'invited' }) => void) | undefined
+    const invite = vi.fn(
+      () =>
+        new Promise<{ status: 'added' | 'invited' }>((resolve) => {
+          resolveInvite = resolve
+        }),
+    )
     const api = makeApi({ invite })
     renderPage(api, 'OWNER')
     await waitFor(() => expect(screen.getByText('Olga Owner')).toBeInTheDocument())
@@ -96,7 +102,36 @@ describe('ProjectMembersPage', () => {
     fireEvent.click(button)
     expect(invite).toHaveBeenCalledTimes(1)
 
-    resolveInvite?.()
+    resolveInvite?.({ status: 'invited' })
     expect(await screen.findByText('Einladung verschickt.')).toBeInTheDocument()
+  })
+
+  it('meldet direkte Zuordnung als "hinzugefügt" und lädt die Mitgliederliste neu', async () => {
+    const invite = vi.fn().mockResolvedValue({ status: 'added' })
+    const list = vi.fn().mockResolvedValue(members)
+    const api = makeApi({ invite, list })
+    renderPage(api, 'OWNER')
+    await waitFor(() => expect(screen.getByText('Olga Owner')).toBeInTheDocument())
+
+    fireEvent.change(screen.getByLabelText(/E-Mail einladen/), { target: { value: 'bob@x.de' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Einladen' }))
+
+    expect(await screen.findByText('Nutzer wurde hinzugefügt.')).toBeInTheDocument()
+    // Erster Aufruf beim Laden der Seite, zweiter nach der direkten Zuordnung.
+    await waitFor(() => expect(list).toHaveBeenCalledTimes(2))
+  })
+
+  it('zeigt einen Freigabe-Hinweis, wenn der Nutzer noch nicht freigegeben ist (422)', async () => {
+    const invite = vi.fn().mockRejectedValue(new ApiError(422, 'Nutzer ist noch nicht freigegeben'))
+    const api = makeApi({ invite })
+    renderPage(api, 'OWNER')
+    await waitFor(() => expect(screen.getByText('Olga Owner')).toBeInTheDocument())
+
+    fireEvent.change(screen.getByLabelText(/E-Mail einladen/), { target: { value: 'pending@x.de' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Einladen' }))
+
+    expect(
+      await screen.findByText('Nutzer ist noch nicht vom Admin freigegeben.'),
+    ).toBeInTheDocument()
   })
 })
