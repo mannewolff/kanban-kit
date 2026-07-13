@@ -19,15 +19,18 @@ public class AdminService {
 
   private final AppUserRepository users;
   private final Clock clock;
+  private final PlatformAdminChecker platformAdminChecker;
 
-  public AdminService(AppUserRepository users, Clock clock) {
+  public AdminService(
+      AppUserRepository users, Clock clock, PlatformAdminChecker platformAdminChecker) {
     this.users = users;
     this.clock = clock;
+    this.platformAdminChecker = platformAdminChecker;
   }
 
   @Transactional(readOnly = true)
   public boolean isPlatformAdmin(long userId) {
-    return users.findById(userId).map(u -> u.platformRole() == PlatformRole.ADMIN).orElse(false);
+    return platformAdminChecker.isPlatformAdmin(userId);
   }
 
   @Transactional(readOnly = true)
@@ -68,7 +71,7 @@ public class AdminService {
   }
 
   private void requirePlatformAdmin(long actorUserId) {
-    if (!isPlatformAdmin(actorUserId)) {
+    if (!platformAdminChecker.isPlatformAdmin(actorUserId)) {
       throw new AdminAccessDeniedException();
     }
   }

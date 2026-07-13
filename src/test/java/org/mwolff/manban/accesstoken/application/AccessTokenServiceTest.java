@@ -25,6 +25,7 @@ import org.mwolff.manban.common.token.TokenCryptoPort.GeneratedToken;
 import org.mwolff.manban.project.application.PermissionChecker;
 import org.mwolff.manban.project.application.ProjectAccessDeniedException;
 import org.mwolff.manban.project.domain.Permission;
+import org.springframework.beans.factory.ObjectProvider;
 
 /** Verhaltenstests der API-Token-Verwaltung (Mockito an den Ports). */
 class AccessTokenServiceTest {
@@ -48,7 +49,14 @@ class AccessTokenServiceTest {
     boards = mock(BoardRepository.class);
     permissions = mock(PermissionChecker.class);
     Clock clock = Clock.fixed(FIXED, ZoneOffset.UTC);
-    service = new AccessTokenService(tokens, crypto, boards, permissions, clock);
+    ObjectProvider<AccessTokenService> self =
+        new ObjectProvider<>() {
+          @Override
+          public AccessTokenService getObject() {
+            return service;
+          }
+        };
+    service = new AccessTokenService(tokens, crypto, boards, permissions, clock, self);
   }
 
   @Test

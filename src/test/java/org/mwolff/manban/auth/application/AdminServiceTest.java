@@ -26,6 +26,7 @@ class AdminServiceTest {
   private static final Clock CLOCK = Clock.fixed(NOW, ZoneOffset.UTC);
 
   private AppUserRepository users;
+  private PlatformAdminChecker platformAdminChecker;
   private AdminService service;
 
   private static AppUser user(long id, PlatformRole role) {
@@ -41,7 +42,8 @@ class AdminServiceTest {
   @BeforeEach
   void setUp() {
     users = mock(AppUserRepository.class);
-    service = new AdminService(users, CLOCK);
+    platformAdminChecker = new PlatformAdminChecker(users);
+    service = new AdminService(users, CLOCK, platformAdminChecker);
   }
 
   @Test
