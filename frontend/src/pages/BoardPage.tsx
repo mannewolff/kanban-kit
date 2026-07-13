@@ -16,6 +16,7 @@ import { BoardView } from '../components/BoardView'
 import { CardDetailModal } from '../components/CardDetailModal'
 import { useSnackbar } from '../components/SnackbarProvider'
 import { canEditCards, canManageProject, canModerateComments, isPlatformAdmin } from '../lib/roles'
+import { useProjectName } from '../lib/useProjectName'
 import { useRefetchOnFocus } from '../lib/useRefetchOnFocus'
 
 export function BoardPage() {
@@ -115,6 +116,7 @@ export function BoardPage() {
     }
   }, [board, membershipRole])
 
+  const projectName = useProjectName(board?.projectId ?? null)
   const admin = isPlatformAdmin(user)
   const effectiveRole = membershipRole ?? fetchedRole ?? 'VIEWER'
   const canEdit = canEditCards(effectiveRole, admin)
@@ -141,7 +143,12 @@ export function BoardPage() {
     <Box>
       <Link component={RouterLink} to={`/projects/${board.projectId}`}>← Boards</Link>
       <Typography variant="h5" sx={{ mt: 1, mb: 2 }}>
-        {board.name}
+        {projectName && (
+          <Box component="span" sx={{ color: 'text.secondary', fontWeight: 400 }}>
+            {projectName} /{' '}
+          </Box>
+        )}
+        <Box component="span">{board.name}</Box>
       </Typography>
       <BoardView
         board={board}

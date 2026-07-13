@@ -43,12 +43,13 @@ function renderPage() {
 describe('BoardPage canEdit aus Membership', () => {
   beforeEach(() => vi.clearAllMocks())
 
-  it('leitet Editier-Rechte synchron aus den Memberships ab (kein projectsApi-Nachladen)', async () => {
+  it('leitet Editier-Rechte synchron aus den Memberships ab', async () => {
     memberships = [{ projectId: 9, role: 'OWNER' }]
     renderPage()
     expect(await screen.findByText('B')).toBeInTheDocument()
     await waitFor(() => expect(screen.getByLabelText('Karte in Backlog anlegen')).toBeInTheDocument())
-    expect(mockedProjects.list).not.toHaveBeenCalled()
+    // Hinweis: projectsApi.list() läuft seit #160 für den Projektnamen (useProjectName); die
+    // Rolle selbst kommt weiterhin synchron aus den Memberships (Anlege-Aktion sofort sichtbar).
   })
 
   it('blendet für VIEWER-Membership die Anlege-Aktion aus', async () => {

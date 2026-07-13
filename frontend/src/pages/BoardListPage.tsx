@@ -17,6 +17,7 @@ import { CardDetailModal } from '../components/CardDetailModal'
 import { EpicBadge } from '../components/EpicBadge'
 import { clampExcerptWidth, EXCERPT_DEFAULT_PCT, stripMarkdown } from '../lib/listExcerpt'
 import { canEditCards, canModerateComments, isPlatformAdmin } from '../lib/roles'
+import { useProjectName } from '../lib/useProjectName'
 import { ARCHIVED_STATUS_COLOR, statusColors } from '../lib/statusColors'
 
 const ARCHIVED = 'archived'
@@ -174,6 +175,7 @@ export function BoardListPage() {
   const effectiveRole = membershipRole ?? fetchedRole ?? 'VIEWER'
   const canEdit = canEditCards(effectiveRole, isPlatformAdmin(user))
   const canModerate = canModerateComments(effectiveRole, isPlatformAdmin(user))
+  const projectName = useProjectName(board?.projectId ?? null)
 
   const columns = useMemo(() => [...(board?.columns ?? [])].sort((a, b) => a.position - b.position), [board])
   const columnById = useMemo(() => new Map(columns.map((c) => [c.id, c])), [columns])
@@ -260,7 +262,12 @@ export function BoardListPage() {
     <Box ref={viewRef}>
       <Link component={RouterLink} to={`/boards/${id}`}>← Board</Link>
       <Typography variant="h5" sx={{ mt: 1, mb: 2 }}>
-        {board?.name ?? 'Liste'}
+        {projectName && (
+          <Box component="span" sx={{ color: 'text.secondary', fontWeight: 400 }}>
+            {projectName} /{' '}
+          </Box>
+        )}
+        <Box component="span">{board?.name ?? 'Liste'}</Box>
       </Typography>
 
       <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mb: 2 }}>
