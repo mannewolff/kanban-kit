@@ -1,6 +1,7 @@
 package org.mwolff.manban.auth;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
 
 import com.jayway.jsonpath.JsonPath;
 import java.io.IOException;
@@ -9,7 +10,9 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.mwolff.manban.AbstractIntegrationTest;
@@ -113,15 +116,18 @@ class SmtpMailIT extends AbstractIntegrationTest {
   private String awaitMessage(String email, String subject) throws Exception {
     String filter =
         "$.messages[?(@.To[0].Address=='" + email + "' && @.Subject=='" + subject + "')].ID";
-    for (int attempt = 0; attempt < 50; attempt++) {
-      List<String> ids = JsonPath.read(mailpitGet("/api/v1/messages"), filter);
-      if (!ids.isEmpty()) {
-        assertThat(ids).hasSize(1);
-        return mailpitGet("/api/v1/message/" + ids.get(0));
-      }
-      Thread.sleep(100);
-    }
-    throw new AssertionError("Keine Mail an " + email + " mit Betreff '" + subject + "' gefunden");
+    List<String> ids = new ArrayList<>();
+    await()
+        .atMost(Duration.ofSeconds(5))
+        .pollInterval(Duration.ofMillis(100))
+        .untilAsserted(
+            () -> {
+              ids.clear();
+              ids.addAll(JsonPath.<List<String>>read(mailpitGet("/api/v1/messages"), filter));
+              assertThat(ids).isNotEmpty();
+            });
+    assertThat(ids).hasSize(1);
+    return mailpitGet("/api/v1/message/" + ids.get(0));
   }
 
   private static String tokenFrom(String mailText) {
@@ -225,12 +231,17 @@ class SmtpMailIT extends AbstractIntegrationTest {
 
     // Negativer Nachweis: kurz warten (Mailpit legt Mails asynchron ab), dann sicherstellen,
     // dass keine Freigabe-Benachrichtigung ankam.
-    Thread.sleep(500);
-    List<String> ids =
-        JsonPath.read(
-            mailpitGet("/api/v1/messages"),
-            "$.messages[?(@.To[0].Address=='admin3-notify@example.com')].ID");
-    assertThat(ids).isEmpty();
+    await()
+        .pollDelay(Duration.ofMillis(500))
+        .atMost(Duration.ofMillis(600))
+        .untilAsserted(
+            () -> {
+              List<String> ids =
+                  JsonPath.read(
+                      mailpitGet("/api/v1/messages"),
+                      "$.messages[?(@.To[0].Address=='admin3-notify@example.com')].ID");
+              assertThat(ids).isEmpty();
+            });
   }
 
   /** Reserviert kurz einen freien Port und gibt ihn geschlossen zurück — dort lauscht niemand. */
