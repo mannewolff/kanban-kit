@@ -115,6 +115,36 @@ describe('BoardView', () => {
     await waitFor(() => expect(api.move).toHaveBeenCalledWith(100, 20, 0))
   })
 
+  it('dupliziert eine Karte über das ⋮-Menü vorbefüllt in derselben Spalte', async () => {
+    const source: Card = { ...card, title: 'Original', description: 'Original-Text', parentId: 9 }
+    const created: Card = { ...card, id: 300, number: 3, title: 'Original' }
+    const api = mkApi({ create: vi.fn().mockResolvedValue(created) })
+    render(<BoardView board={board} initialCards={[source]} canEdit api={api} />)
+
+    fireEvent.click(screen.getByLabelText('Menü Original'))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Duplizieren' }))
+
+    expect(screen.getByLabelText('Titel')).toHaveValue('Original')
+    expect(screen.getByLabelText('Beschreibung')).toHaveValue('Original-Text')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Anlegen' }))
+
+    await waitFor(() => expect(api.create).toHaveBeenCalledWith(1, 10, 'Original', 'Original-Text', 9))
+    // Quellkarte bleibt unverändert erhalten.
+    expect(screen.getByTestId('card-100')).toBeInTheDocument()
+  })
+
+  it('legt beim Abbrechen des Duplizieren-Dialogs keine neue Karte an', () => {
+    const api = mkApi()
+    render(<BoardView board={board} initialCards={[card]} canEdit api={api} />)
+
+    fireEvent.click(screen.getByLabelText('Menü Aufgabe'))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Duplizieren' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Abbrechen' }))
+
+    expect(api.create).not.toHaveBeenCalled()
+  })
+
   it('zeigt den Archiv-Countdown auf Done-Karten', () => {
     const doneCard: Card = { ...card, columnId: 20, movedToDoneAt: new Date().toISOString() }
     render(<BoardView board={board} initialCards={[doneCard]} canEdit retentionDays={5} api={mkApi()} />)

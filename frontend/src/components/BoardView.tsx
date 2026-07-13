@@ -19,7 +19,7 @@ import { cleanupCountdownLabel, cleanupDaysRemaining } from '../lib/cleanupCount
 import { epicColor, epicShortcode } from '../lib/epicMeta'
 import { COLUMN_SURFACE_BG, statusColors } from '../lib/statusColors'
 import { EpicBadge } from './EpicBadge'
-import { NewCardModal, type NewItemInput } from './NewCardModal'
+import { NewCardModal, type NewCardInitialValues, type NewItemInput } from './NewCardModal'
 
 const isDoneColumn = (name: string) => name.toLowerCase().includes('done')
 
@@ -58,6 +58,7 @@ export function BoardView({
 }: Props) {
   const [cards, setCards] = useState<Card[]>(initialCards)
   const [modalColumn, setModalColumn] = useState<{ id: number; name: string } | null>(null)
+  const [duplicateValues, setDuplicateValues] = useState<NewCardInitialValues | null>(null)
   const [menu, setMenu] = useState<{ card: Card; anchor: HTMLElement } | null>(null)
   const [epicFilter, setEpicFilter] = useState<number | null>(() => {
     try {
@@ -276,6 +277,18 @@ export function BoardView({
           <MenuItem key="edit" onClick={() => { const c = menu.card; closeMenu(); onEditCard?.(c) }}>
             Bearbeiten
           </MenuItem>,
+          <MenuItem
+            key="duplicate"
+            onClick={() => {
+              const c = menu.card
+              const column = columns.find((col) => col.id === c.columnId)
+              closeMenu()
+              setDuplicateValues({ title: c.title, description: c.description ?? '', parentId: c.parentId })
+              setModalColumn({ id: c.columnId, name: column?.name ?? '' })
+            }}
+          >
+            Duplizieren
+          </MenuItem>,
           <MenuItem key="archive" onClick={() => { const c = menu.card; closeMenu(); void archiveCard(c) }}>
             Archivieren
           </MenuItem>,
@@ -293,7 +306,8 @@ export function BoardView({
         open={modalColumn !== null}
         columnName={modalColumn?.name ?? ''}
         epics={epics}
-        onClose={() => setModalColumn(null)}
+        initialValues={duplicateValues ?? undefined}
+        onClose={() => { setModalColumn(null); setDuplicateValues(null) }}
         onSubmit={(input) => (modalColumn ? createItem(modalColumn.id, input) : undefined)}
       />
     </Box>
