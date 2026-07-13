@@ -1,5 +1,6 @@
 package org.mwolff.manban.project.infrastructure.persistence;
 
+import java.time.Instant;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
 
@@ -7,4 +8,6 @@ import org.springframework.data.jpa.repository.JpaRepository;
 interface ProjectInvitationJpaRepository extends JpaRepository<ProjectInvitationEntity, Long> {
 
   Optional<ProjectInvitationEntity> findByTokenHash(String tokenHash);
+
+  boolean existsByEmailAndAcceptedAtIsNullAndExpiresAtAfter(String email, Instant now);
 }
