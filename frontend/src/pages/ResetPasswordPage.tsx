@@ -3,11 +3,11 @@ import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import Link from '@mui/material/Link'
 import Stack from '@mui/material/Stack'
-import TextField from '@mui/material/TextField'
 import { useState } from 'react'
 import { Link as RouterLink, useSearchParams } from 'react-router-dom'
 import { authApi } from '../api/auth'
 import { AuthCard } from '../components/AuthCard'
+import { PasswordField } from '../components/PasswordField'
 
 export function ResetPasswordPage() {
   const [params] = useSearchParams()
@@ -43,7 +43,7 @@ export function ResetPasswordPage() {
           <Stack spacing={2}>
             {error && <Alert severity="error">{error}</Alert>}
             {!token && <Alert severity="warning">Kein Token in der URL gefunden.</Alert>}
-            <TextField label="Neues Passwort" type="password" value={password}
+            <PasswordField label="Neues Passwort" value={password}
               onChange={(e) => setPassword(e.target.value)} required fullWidth autoComplete="new-password"
               helperText="Mindestens 8 Zeichen" />
             <Button type="submit" variant="contained" disabled={busy || !token} fullWidth>

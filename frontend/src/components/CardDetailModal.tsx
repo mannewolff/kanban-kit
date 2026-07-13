@@ -307,12 +307,14 @@ export function CardDetailModal({
     <Dialog
       open
       onClose={editing ? () => setEditing(false) : onClose}
-      maxWidth="md"
-      fullWidth
+      maxWidth={false}
       scroll="paper"
       // Im Kontextbereich zentrieren (unter der Kopfleiste, rechts der Sidebar) statt über dem ganzen
-      // Viewport; Höhe auf 90 % dieses Bereichs. Der Backdrop bleibt bildschirmfüllend. Außerhalb der
-      // Shell (CSS-Variablen ungesetzt) fällt es auf volle Zentrierung zurück (Default 0).
+      // Viewport; Breite UND Höhe auf 90 % dieses Bereichs, damit der Rand auf allen vier Seiten
+      // gleich groß ist (reines maxWidth="md" ergäbe eine von der Breakpoint-Breite abhängige,
+      // meist andere horizontale Marge als die 90%-Höhe vertikal). Der Backdrop bleibt
+      // bildschirmfüllend. Außerhalb der Shell (CSS-Variablen ungesetzt) fällt es auf volle
+      // Zentrierung zurück (Default 0).
       sx={{
         '& .MuiDialog-container': {
           position: 'absolute',
@@ -323,7 +325,9 @@ export function CardDetailModal({
           height: 'auto',
         },
       }}
-      slotProps={{ paper: { sx: { height: '90%', maxHeight: '90%', m: 0 } } }}
+      slotProps={{
+        paper: { sx: { width: '90%', maxWidth: '90%', height: '90%', maxHeight: '90%', m: 0 } },
+      }}
     >
       <DialogTitle sx={{ borderBottom: `1px solid ${MODAL_BORDER}` }}>
         <Stack direction="row" alignItems="center" spacing={1} sx={{ flexWrap: 'wrap' }}>

@@ -41,7 +41,7 @@ describe('LoginPage', () => {
     renderLogin()
     expect(await screen.findByRole('button', { name: 'Anmelden' })).toBeInTheDocument()
     expect(screen.getByLabelText(/E-Mail/)).toBeInTheDocument()
-    expect(screen.getByLabelText(/Passwort/)).toBeInTheDocument()
+    expect(screen.getByLabelText(/Passwort/, { selector: 'input' })).toBeInTheDocument()
   })
 
   it('ruft login mit den Eingaben auf', async () => {
@@ -50,7 +50,7 @@ describe('LoginPage', () => {
     })
     renderLogin()
     await userEvent.type(screen.getByLabelText(/E-Mail/), 'a@b.de')
-    await userEvent.type(screen.getByLabelText(/Passwort/), 'geheim123')
+    await userEvent.type(screen.getByLabelText(/Passwort/, { selector: 'input' }), 'geheim123')
     await userEvent.click(screen.getByRole('button', { name: 'Anmelden' }))
     expect(mockedApi.login).toHaveBeenCalledWith('a@b.de', 'geheim123')
   })
@@ -61,7 +61,7 @@ describe('LoginPage', () => {
     })
     renderLogin()
     await userEvent.type(screen.getByLabelText(/E-Mail/), 'a@b.de')
-    await userEvent.type(screen.getByLabelText(/Passwort/), 'geheim123')
+    await userEvent.type(screen.getByLabelText(/Passwort/, { selector: 'input' }), 'geheim123')
     await userEvent.click(screen.getByRole('button', { name: 'Anmelden' }))
 
     await waitFor(() =>

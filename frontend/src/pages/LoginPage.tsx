@@ -9,6 +9,7 @@ import { Link as RouterLink, useNavigate } from 'react-router-dom'
 import { ApiError } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
 import { AuthCard } from '../components/AuthCard'
+import { PasswordField } from '../components/PasswordField'
 
 export function LoginPage() {
   const { login } = useAuth()
@@ -45,7 +46,7 @@ export function LoginPage() {
           {error && <Alert severity="error">{error}</Alert>}
           <TextField label="E-Mail" type="email" value={email} onChange={(e) => setEmail(e.target.value)}
             required fullWidth autoComplete="email" />
-          <TextField label="Passwort" type="password" value={password} onChange={(e) => setPassword(e.target.value)}
+          <PasswordField label="Passwort" value={password} onChange={(e) => setPassword(e.target.value)}
             required fullWidth autoComplete="current-password" />
           <Button type="submit" variant="contained" disabled={busy} fullWidth>
             Anmelden
