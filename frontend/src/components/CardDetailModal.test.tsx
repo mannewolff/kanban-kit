@@ -132,4 +132,39 @@ describe('CardDetailModal', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'doc.pdf' }))
     await waitFor(() => expect(screen.getByLabelText('Vorschau doc.pdf')).toBeInTheDocument())
   })
+
+  const taskCard: Card = { ...card, description: '[ ] eins\n[ ] zwei' }
+
+  it('rendert auch nackte [ ] als Checkbox', async () => {
+    const apis = makeApis()
+    render(<CardDetailModal card={taskCard} canEdit onClose={vi.fn()} {...apis} />)
+
+    expect(await screen.findByLabelText('Aufgabe 1')).toBeInTheDocument()
+    expect(screen.getByLabelText('Aufgabe 2')).toBeInTheDocument()
+  })
+
+  it('persistiert den Klick auf die n-te Checkbox mit geflipptem Marker', async () => {
+    const apis = makeApis()
+    const onChanged = vi.fn()
+    render(<CardDetailModal card={taskCard} canEdit onChanged={onChanged} onClose={vi.fn()} {...apis} />)
+
+    fireEvent.click(screen.getByLabelText('Aufgabe 2'))
+
+    await waitFor(() =>
+      expect(apis.cardsApi.update).toHaveBeenCalledWith(
+        100, 'Aufgabe', '[ ] eins\n[x] zwei', [3, 4], undefined, null,
+      ),
+    )
+    expect(onChanged).toHaveBeenCalled()
+  })
+
+  it('lässt Checkboxen ohne Bearbeiten-Recht deaktiviert', async () => {
+    const apis = makeApis()
+    render(<CardDetailModal card={taskCard} canEdit={false} onClose={vi.fn()} {...apis} />)
+
+    const box = await screen.findByLabelText('Aufgabe 1')
+    expect(box).toBeDisabled()
+    fireEvent.click(box)
+    expect(apis.cardsApi.update).not.toHaveBeenCalled()
+  })
 })
