@@ -74,7 +74,7 @@ class CardRepositoryAdapter implements CardRepository {
     }
 
     List<Long> targetActive = activeCardIds(newColumnId, cardId);
-    int index = Math.max(0, Math.min(newPosition, targetActive.size()));
+    int index = Math.clamp(newPosition, 0, targetActive.size());
     List<Long> targetOrder = new ArrayList<>(targetActive);
     targetOrder.add(index, cardId);
 
