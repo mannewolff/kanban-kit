@@ -1,6 +1,7 @@
 package org.mwolff.manban.project.infrastructure.mail;
 
 import org.mwolff.manban.project.application.InvitationMailer;
+import org.mwolff.manban.project.domain.ProjectRole;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -48,5 +49,33 @@ class JavaMailInvitationMailer implements InvitationMailer {
             + "\n");
     mailSender.send(message);
     log.info("Einladungs-E-Mail an {} versandt", toEmail);
+  }
+
+  @Override
+  public void sendProjectAssignedEmail(
+      String toEmail, String projectName, ProjectRole role, String projectUrl) {
+    if (!mailEnabled) {
+      log.info(
+          "[DEV] Zuordnung zum Projekt '{}' als {} für {}: {}",
+          projectName,
+          role,
+          toEmail,
+          projectUrl);
+      return;
+    }
+    SimpleMailMessage message = new SimpleMailMessage();
+    message.setFrom(from);
+    message.setTo(toEmail);
+    message.setSubject("manban: Du wurdest dem Projekt " + projectName + " hinzugefügt");
+    message.setText(
+        "Du wurdest dem Projekt '"
+            + projectName
+            + "' als "
+            + role
+            + " hinzugefügt. Zum Projekt:\n\n"
+            + projectUrl
+            + "\n");
+    mailSender.send(message);
+    log.info("Zuordnungs-E-Mail an {} versandt", toEmail);
   }
 }

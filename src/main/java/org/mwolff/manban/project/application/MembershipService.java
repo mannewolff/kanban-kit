@@ -56,17 +56,46 @@ public class MembershipService {
     this.clock = clock;
   }
 
+  /**
+   * Ordnet eine E-Mail einem Projekt zu. Gehört sie zu einem bereits registrierten und
+   * freigegebenen Nutzer, wird dieser <strong>sofort</strong> Mitglied (idempotent; bestehende
+   * Mitgliedschaft wird auf die neue Rolle aktualisiert) und nur per Info-Mail benachrichtigt.
+   * Nicht freigegebene Nutzer werden abgelehnt ({@link MemberNotApprovedException}). Unbekannte
+   * E-Mails durchlaufen den Einladungs-/Token-Pfad.
+   *
+   * @return {@link InviteOutcome#ADDED} bei direkter Mitgliedschaft, sonst {@link
+   *     InviteOutcome#INVITED}
+   */
   @Transactional
-  public void invite(long inviterUserId, long projectId, String email, ProjectRole role) {
+  public InviteOutcome invite(long inviterUserId, long projectId, String email, ProjectRole role) {
     permissions.require(inviterUserId, projectId, Permission.MEMBER_INVITE);
     Project project = projects.findById(projectId).orElseThrow(ProjectNotFoundException::new);
+    String normalizedEmail = email.trim().toLowerCase(Locale.ROOT);
+
+    @Nullable AppUser existing = users.findByEmail(normalizedEmail).orElse(null);
+    if (existing != null) {
+      if (!existing.approved()) {
+        throw new MemberNotApprovedException(normalizedEmail);
+      }
+      long userId = existing.requireId();
+      @Nullable ProjectMembership current =
+          memberships.findByProjectIdAndUserId(projectId, userId).orElse(null);
+      if (current != null) {
+        // Idempotent: bestehende Mitgliedschaft auf die neue Rolle aktualisieren.
+        memberships.save(current.withRole(role));
+      } else {
+        memberships.save(new ProjectMembership(null, projectId, userId, role, clock.instant()));
+      }
+      mailer.sendProjectAssignedEmail(normalizedEmail, project.name(), role, projectUrl(projectId));
+      return InviteOutcome.ADDED;
+    }
 
     String plaintext = SecureTokens.newToken();
     invitations.save(
         new ProjectInvitation(
             null,
             projectId,
-            email.trim().toLowerCase(Locale.ROOT),
+            normalizedEmail,
             role,
             SecureTokens.sha256Hex(plaintext),
             clock.instant().plus(projectProperties.invitationTtl()),
@@ -74,7 +103,12 @@ public class MembershipService {
             inviterUserId));
 
     String url = authProperties.baseUrl() + "/invitations/accept?token=" + plaintext;
-    mailer.sendInvitationEmail(email.trim().toLowerCase(Locale.ROOT), project.name(), url);
+    mailer.sendInvitationEmail(normalizedEmail, project.name(), url);
+    return InviteOutcome.INVITED;
+  }
+
+  private String projectUrl(long projectId) {
+    return authProperties.baseUrl() + "/projects/" + projectId;
   }
 
   @Transactional

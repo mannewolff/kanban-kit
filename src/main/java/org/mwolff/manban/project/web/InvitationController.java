@@ -5,6 +5,7 @@ import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
+import org.mwolff.manban.project.application.InviteOutcome;
 import org.mwolff.manban.project.application.MembershipService;
 import org.mwolff.manban.project.application.MembershipService.MemberView;
 import org.mwolff.manban.project.domain.ProjectRole;
@@ -28,11 +29,12 @@ class InvitationController {
 
   @PostMapping("/api/projects/{id}/invitations")
   @ResponseStatus(HttpStatus.ACCEPTED)
-  void invite(
+  InviteResponse invite(
       @AuthenticationPrincipal Long userId,
       @PathVariable long id,
       @Valid @RequestBody InviteRequest request) {
-    memberships.invite(userId, id, request.email(), request.role());
+    InviteOutcome outcome = memberships.invite(userId, id, request.email(), request.role());
+    return new InviteResponse(outcome.status());
   }
 
   @PostMapping("/api/invitations/accept")
@@ -42,6 +44,9 @@ class InvitationController {
   }
 
   record InviteRequest(@NotBlank @Email @Size(max = 320) String email, @NotNull ProjectRole role) {}
+
+  /** Ergebnis der Zuordnung: {@code "added"} (direkt Mitglied) oder {@code "invited"}. */
+  record InviteResponse(String status) {}
 
   record AcceptInvitationRequest(@NotBlank String token) {}
 }
