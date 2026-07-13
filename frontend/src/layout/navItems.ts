@@ -3,6 +3,7 @@ import type { SvgIconProps } from '@mui/material'
 import AccountTreeIcon from '@mui/icons-material/AccountTree'
 import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings'
 import FolderIcon from '@mui/icons-material/Folder'
+import InsightsIcon from '@mui/icons-material/Insights'
 import ViewColumnIcon from '@mui/icons-material/ViewColumn'
 import ViewListIcon from '@mui/icons-material/ViewList'
 
@@ -69,6 +70,7 @@ export function buildNavItems(params: NavParams): NavNode[] {
       { kind: 'link', label: 'Board', path: `/boards/${board.id}`, icon: ViewColumnIcon },
       { kind: 'link', label: 'Liste', path: `/boards/${board.id}/list`, icon: ViewListIcon },
       { kind: 'link', label: 'Epics', path: `/boards/${board.id}/epics`, icon: AccountTreeIcon },
+      { kind: 'link', label: 'Dashboard', path: `/boards/${board.id}/dashboard`, icon: InsightsIcon },
     )
     items.push({ kind: 'group', label: board.name, icon: ViewColumnIcon, children })
   }
