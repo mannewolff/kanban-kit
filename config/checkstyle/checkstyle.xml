@@ -254,7 +254,9 @@
              value="Lambda parameter name ''{0}'' must match pattern ''{1}''."/>
     </module>
     <module name="CatchParameterName">
-      <property name="format" value="^[a-z]([a-z0-9][a-zA-Z0-9]*)?$"/>
+      <!-- Erlaubt zusätzlich "_" (Java-Unnamed-Variable, JEP 456) für ungenutzte
+           Catch-Parameter statt eines nie gelesenen "e" (Sonar java:S7467). -->
+      <property name="format" value="^[a-z]([a-z0-9][a-zA-Z0-9]*)?$|^_$"/>
       <message key="name.invalidPattern"
              value="Catch parameter name ''{0}'' must match pattern ''{1}''."/>
     </module>
