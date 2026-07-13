@@ -3,6 +3,7 @@ package org.mwolff.manban.card.application;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.mock;
@@ -974,5 +975,109 @@ class CardServiceTest {
 
     // Then
     verify(dependencies).deleteByCardId(1L);
+  }
+
+  // --- transfer (board-/projektübergreifend) ----------------------------
+
+  /**
+   * Stubbt Karte, Ziel-Board (Projekt 2) und Ziel-Spalte für einen Transfer und liefert die Karte.
+   */
+  private void stubTransferScenario(Long parentId) {
+    when(cards.findById(100L))
+        .thenReturn(Optional.of(card(100L, 50L, 3, false, FIXED, CardType.CARD, parentId, null)));
+    when(boards.findById(20L)).thenReturn(Optional.of(new Board(20L, 2L, "Ziel", FIXED)));
+    when(columns.findById(60L))
+        .thenReturn(Optional.of(new BoardColumn(60L, 20L, "Backlog", 0, null)));
+    when(cards.maxNumberInBoard(20L)).thenReturn(7);
+  }
+
+  @Test
+  void transfer_movesCardToTargetBoardWithNextNumber() {
+    // Given
+    stubTransferScenario(9L);
+
+    // When
+    CardService.CardView view = service.transfer(1L, 100L, 20L, 60L);
+
+    // Then
+    verify(cards).transfer(100L, 20L, 60L, 8);
+    assertThat(view.id()).isEqualTo(100L);
+  }
+
+  @Test
+  void transfer_clearsParentAndDependencies() {
+    // Given
+    stubTransferScenario(9L);
+
+    // When
+    ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
+    service.transfer(1L, 100L, 20L, 60L);
+
+    // Then
+    verify(dependencies).deleteByCardId(100L);
+    verify(cards).save(captor.capture());
+    assertThat(captor.getValue().parentId()).isNull();
+    assertThat(captor.getValue().movedToDoneAt()).isNull();
+  }
+
+  @Test
+  void transfer_requiresOwnerInBothProjects() {
+    // Given
+    stubTransferScenario(null);
+
+    // When
+    service.transfer(1L, 100L, 20L, 60L);
+
+    // Then — Quellprojekt (1) und Zielprojekt (2)
+    verify(permissions).requireOwner(1L, 1L);
+    verify(permissions).requireOwner(1L, 2L);
+  }
+
+  @Test
+  void transfer_rejectsEpic() {
+    // Given
+    when(cards.findById(100L))
+        .thenReturn(Optional.of(card(100L, 50L, 3, false, null, CardType.EPIC, null, "EP")));
+
+    // When / Then
+    assertThatThrownBy(() -> service.transfer(1L, 100L, 20L, 60L))
+        .isInstanceOf(InvalidDependencyException.class);
+    verify(cards, never()).transfer(anyLong(), anyLong(), anyLong(), anyInt());
+  }
+
+  @Test
+  void transfer_throwsCardNotFound_whenUnknown() {
+    // Given
+    when(cards.findById(100L)).thenReturn(Optional.empty());
+
+    // When / Then
+    assertThatThrownBy(() -> service.transfer(1L, 100L, 20L, 60L))
+        .isInstanceOf(CardNotFoundException.class);
+  }
+
+  @Test
+  void transfer_throwsBoardNotFound_whenTargetBoardUnknown() {
+    // Given
+    when(cards.findById(100L))
+        .thenReturn(Optional.of(card(100L, 50L, 3, false, null, CardType.CARD, null, null)));
+    when(boards.findById(20L)).thenReturn(Optional.empty());
+
+    // When / Then
+    assertThatThrownBy(() -> service.transfer(1L, 100L, 20L, 60L))
+        .isInstanceOf(BoardNotFoundException.class);
+  }
+
+  @Test
+  void transfer_throwsColumnNotFound_whenTargetColumnInOtherBoard() {
+    // Given
+    when(cards.findById(100L))
+        .thenReturn(Optional.of(card(100L, 50L, 3, false, null, CardType.CARD, null, null)));
+    when(boards.findById(20L)).thenReturn(Optional.of(new Board(20L, 2L, "Ziel", FIXED)));
+    when(columns.findById(60L))
+        .thenReturn(Optional.of(new BoardColumn(60L, 99L, "Fremd", 0, null)));
+
+    // When / Then
+    assertThatThrownBy(() -> service.transfer(1L, 100L, 20L, 60L))
+        .isInstanceOf(ColumnNotFoundException.class);
   }
 }

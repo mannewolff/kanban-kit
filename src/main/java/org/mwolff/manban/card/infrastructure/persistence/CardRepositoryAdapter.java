@@ -105,6 +105,34 @@ class CardRepositoryAdapter implements CardRepository {
     entityManager.clear();
   }
 
+  @Override
+  public void transfer(long cardId, long targetBoardId, long targetColumnId, int newNumber) {
+    entityManager.flush();
+
+    Long oldColumnId =
+        jdbc.queryForObject("SELECT column_id FROM card WHERE id = ?", Long.class, cardId);
+    if (oldColumnId == null) {
+      return;
+    }
+
+    // Ans Ende der Zielspalte (hinter deren aktive Karten) — kollisionsfrei zum
+    // active_position-Unique.
+    int endPosition = activeCardIds(targetColumnId, cardId).size();
+    jdbc.update(
+        "UPDATE card SET board_id = ?, column_id = ?, number = ?, position_in_column = ? "
+            + "WHERE id = ?",
+        targetBoardId,
+        targetColumnId,
+        newNumber,
+        endPosition,
+        cardId);
+
+    // Quellspalte lückenlos nachziehen (die verschobene Karte ist dort nicht mehr enthalten).
+    assignPositions(activeCardIds(oldColumnId, cardId));
+
+    entityManager.clear();
+  }
+
   private List<Long> activeCardIds(long columnId, long excludeCardId) {
     return jdbc.queryForList(
         "SELECT id FROM card WHERE column_id = ? AND archived = false AND type <> 'EPIC' "
