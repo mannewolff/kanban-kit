@@ -63,7 +63,7 @@ export function buildNavItems(params: NavParams): NavNode[] {
   if (board) {
     const children: NavLink[] = []
     if (canManageBoards || boardCount !== 1) {
-      children.push({ kind: 'link', label: 'Boards', path: `/projects/${board.projectId}/boards`, icon: FolderIcon })
+      children.push({ kind: 'link', label: 'Boards', path: `/projects/${board.projectId}`, icon: FolderIcon })
     }
     children.push(
       { kind: 'link', label: 'Board', path: `/boards/${board.id}`, icon: ViewColumnIcon },

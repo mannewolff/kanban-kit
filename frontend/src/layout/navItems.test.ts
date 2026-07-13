@@ -39,4 +39,12 @@ describe('buildNavItems Sichtbarkeit', () => {
   it('zeigt „Boards" trotz einem Board, wenn man Boards verwalten darf', () => {
     expect(groupChildren({ board, boardCount: 1, canManageBoards: true })).toContain('Boards')
   })
+
+  it('verlinkt „Boards" auf die existierende Projekt-Route (nicht /projects/:id/boards)', () => {
+    // Regression zu Issue #3: /projects/:id/boards ist in App.tsx keine registrierte Route
+    // (nur /projects/:id) — der falsche Pfad führte zu einer leeren Seite.
+    const group = buildNavItems({ board, boardCount: 2 }).find((n) => n.label === 'B')
+    const boardsLink = group?.kind === 'group' ? group.children.find((c) => c.label === 'Boards') : undefined
+    expect(boardsLink?.path).toBe(`/projects/${board.projectId}`)
+  })
 })
