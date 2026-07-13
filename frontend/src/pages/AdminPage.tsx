@@ -46,6 +46,16 @@ export function AdminPage({ api = defaultAdminApi }: Props) {
     }
   }
 
+  const approve = async (u: AdminUser) => {
+    setError(null)
+    try {
+      await api.approve(u.id)
+      reload()
+    } catch {
+      setError('Freigabe fehlgeschlagen.')
+    }
+  }
+
   return (
     <Box>
       <Typography variant="h5" gutterBottom>
@@ -59,6 +69,7 @@ export function AdminPage({ api = defaultAdminApi }: Props) {
             <TableCell>Name</TableCell>
             <TableCell>E-Mail</TableCell>
             <TableCell>Verifiziert</TableCell>
+            <TableCell>Freigabe</TableCell>
             <TableCell>Rolle</TableCell>
             <TableCell align="right">Aktion</TableCell>
           </TableRow>
@@ -70,9 +81,26 @@ export function AdminPage({ api = defaultAdminApi }: Props) {
               <TableCell>{u.email}</TableCell>
               <TableCell>{u.emailVerified ? 'ja' : 'nein'}</TableCell>
               <TableCell>
+                <Chip
+                  label={u.approvedAt ? 'Freigegeben' : 'Wartet auf Freigabe'}
+                  size="small"
+                  color={u.approvedAt ? 'success' : 'warning'}
+                />
+              </TableCell>
+              <TableCell>
                 <Chip label={u.platformRole} size="small" color={u.platformRole === 'ADMIN' ? 'primary' : 'default'} />
               </TableCell>
               <TableCell align="right">
+                {!u.approvedAt && (
+                  <Button
+                    size="small"
+                    aria-label={`${u.displayName} freigeben`}
+                    onClick={() => approve(u)}
+                    sx={{ mr: 1 }}
+                  >
+                    Freigeben
+                  </Button>
+                )}
                 <Button size="small" aria-label={`Rolle von ${u.displayName} umschalten`} onClick={() => toggleRole(u)}>
                   {u.platformRole === 'ADMIN' ? 'Zu USER' : 'Zu ADMIN'}
                 </Button>
