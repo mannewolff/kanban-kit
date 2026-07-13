@@ -2,7 +2,18 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { describe, expect, it, vi } from 'vitest'
 import type { Board } from '../api/boards'
 import type { Card } from '../api/cards'
+import { columnsApi } from '../api/columns'
 import { BoardView } from './BoardView'
+
+vi.mock('../api/columns', () => ({
+  columnsApi: { create: vi.fn(), update: vi.fn(), remove: vi.fn(), reorder: vi.fn() },
+}))
+const mColumns = columnsApi as unknown as {
+  create: ReturnType<typeof vi.fn>
+  update: ReturnType<typeof vi.fn>
+  remove: ReturnType<typeof vi.fn>
+  reorder: ReturnType<typeof vi.fn>
+}
 
 const board: Board = {
   id: 1,
@@ -163,6 +174,36 @@ describe('BoardView', () => {
     fireEvent.change(screen.getByLabelText('Epic-Filter'), { target: { value: '9' } })
     expect(screen.getByTestId('card-100')).toBeInTheDocument()
     expect(screen.queryByTestId('card-200')).not.toBeInTheDocument()
+  })
+
+  it('legt eine neue Spalte an (mit canEdit)', async () => {
+    mColumns.create.mockResolvedValue({ id: 30, name: 'Neu', position: 2, wipLimit: null })
+    render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Spalte' }))
+    fireEvent.change(screen.getByLabelText('Spaltenname'), { target: { value: 'Neu' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Speichern' }))
+
+    await waitFor(() => expect(mColumns.create).toHaveBeenCalledWith(1, 'Neu', null))
+    expect(await screen.findByText('Neu')).toBeInTheDocument()
+  })
+
+  it('bearbeitet Name und WIP-Limit einer Spalte', async () => {
+    mColumns.update.mockResolvedValue({ id: 10, name: 'Todo', position: 0, wipLimit: 3 })
+    render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} />)
+
+    fireEvent.click(screen.getByLabelText('Spalte Backlog bearbeiten'))
+    fireEvent.change(screen.getByLabelText('Spaltenname'), { target: { value: 'Todo' } })
+    fireEvent.change(screen.getByLabelText('WIP-Limit'), { target: { value: '3' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Speichern' }))
+
+    await waitFor(() => expect(mColumns.update).toHaveBeenCalledWith(10, 'Todo', 3))
+  })
+
+  it('blendet Spalten-Bearbeitung ohne canEdit aus', () => {
+    render(<BoardView board={board} initialCards={[card]} canEdit={false} api={mkApi()} />)
+    expect(screen.queryByRole('button', { name: 'Spalte' })).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Spalte Backlog bearbeiten')).not.toBeInTheDocument()
   })
 
   it('zeigt den Verschieben-Menüeintrag nur mit canTransfer', () => {

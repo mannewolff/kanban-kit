@@ -1,7 +1,12 @@
 import AddIcon from '@mui/icons-material/Add'
+import EditOutlinedIcon from '@mui/icons-material/EditOutlined'
 import MoreVertIcon from '@mui/icons-material/MoreVert'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
+import Dialog from '@mui/material/Dialog'
+import DialogActions from '@mui/material/DialogActions'
+import DialogContent from '@mui/material/DialogContent'
+import DialogTitle from '@mui/material/DialogTitle'
 import IconButton from '@mui/material/IconButton'
 import Menu from '@mui/material/Menu'
 import MenuItem from '@mui/material/MenuItem'
@@ -11,8 +16,9 @@ import TextField from '@mui/material/TextField'
 import Tooltip from '@mui/material/Tooltip'
 import Typography from '@mui/material/Typography'
 import { useEffect, useState } from 'react'
-import type { Board } from '../api/boards'
+import type { Board, BoardColumn } from '../api/boards'
 import { cardsApi, type Card, type CardsApi } from '../api/cards'
+import { columnsApi } from '../api/columns'
 import { epicsApi as defaultEpicsApi, type Epic, type EpicsApi } from '../api/epics'
 import { activeCardsInColumn, applyMove } from '../lib/boardOps'
 import { cleanupCountdownLabel, cleanupDaysRemaining } from '../lib/cleanupCountdown'
@@ -80,7 +86,43 @@ export function BoardView({
   useEffect(() => setCards(initialCards), [initialCards])
 
   const epicById = new Map(epics.map((e) => [e.id, e]))
-  const columns = [...board.columns].sort((a, b) => a.position - b.position)
+  const sortColumns = (cols: BoardColumn[]) => [...cols].sort((a, b) => a.position - b.position)
+  const [columns, setColumns] = useState<BoardColumn[]>(() => sortColumns(board.columns))
+  useEffect(() => setColumns(sortColumns(board.columns)), [board.columns])
+
+  // Spalten-Dialog: 'new' = anlegen, ein Column-Objekt = bearbeiten.
+  const [columnDialog, setColumnDialog] = useState<'new' | BoardColumn | null>(null)
+  const [columnName, setColumnName] = useState('')
+  const [columnWip, setColumnWip] = useState('')
+
+  const openColumnDialog = (target: 'new' | BoardColumn) => {
+    setColumnDialog(target)
+    setColumnName(target === 'new' ? '' : target.name)
+    setColumnWip(target === 'new' || target.wipLimit == null ? '' : String(target.wipLimit))
+  }
+  const closeColumnDialog = () => setColumnDialog(null)
+
+  const parsedWip = (): number | null | undefined => {
+    const raw = columnWip.trim()
+    if (raw === '') return null
+    const n = Number(raw)
+    return Number.isInteger(n) && n > 0 ? n : undefined // undefined = ungültig
+  }
+  const saveColumn = async () => {
+    const name = columnName.trim()
+    const wip = parsedWip()
+    if (!name || wip === undefined) {
+      return
+    }
+    if (columnDialog === 'new') {
+      const created = await columnsApi.create(board.id, name, wip)
+      setColumns((cs) => sortColumns([...cs, created]))
+    } else if (columnDialog) {
+      const updated = await columnsApi.update(columnDialog.id, name, wip)
+      setColumns((cs) => sortColumns(cs.map((c) => (c.id === updated.id ? updated : c))))
+    }
+    closeColumnDialog()
+  }
   // Anzeige-Filter nach Epic (nur Darstellung; Move/Anlegen arbeiten auf dem vollen Bestand).
   const filteredCards = epicFilter == null ? cards : cards.filter((c) => c.parentId === epicFilter)
 
@@ -219,6 +261,14 @@ export function BoardView({
                     </IconButton>
                   </Tooltip>
                 )}
+                {canEdit && (
+                  <Tooltip title="Spalte bearbeiten">
+                    <IconButton size="small" aria-label={`Spalte ${column.name} bearbeiten`}
+                      onClick={() => openColumnDialog(column)} sx={{ color: 'text.secondary' }}>
+                      <EditOutlinedIcon fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                )}
               </Box>
 
               <Stack spacing={1} sx={{ p: 1, flex: 1 }}>
@@ -278,7 +328,46 @@ export function BoardView({
             </Paper>
           )
         })}
+        {canEdit && (
+          <Box sx={{ flexShrink: 0, alignSelf: 'flex-start', pt: 0.5 }}>
+            <Button size="small" startIcon={<AddIcon />} onClick={() => openColumnDialog('new')}>
+              Spalte
+            </Button>
+          </Box>
+        )}
       </Stack>
+
+      <Dialog open={columnDialog !== null} onClose={closeColumnDialog}>
+        <DialogTitle>{columnDialog === 'new' ? 'Neue Spalte' : 'Spalte bearbeiten'}</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ mt: 1 }}>
+            <TextField
+              autoFocus
+              label="Name"
+              value={columnName}
+              onChange={(e) => setColumnName(e.target.value)}
+              inputProps={{ maxLength: 120, 'aria-label': 'Spaltenname' }}
+            />
+            <TextField
+              label="WIP-Limit (optional)"
+              type="number"
+              value={columnWip}
+              onChange={(e) => setColumnWip(e.target.value)}
+              inputProps={{ min: 1, 'aria-label': 'WIP-Limit' }}
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={closeColumnDialog}>Abbrechen</Button>
+          <Button
+            variant="contained"
+            disabled={!columnName.trim() || parsedWip() === undefined}
+            onClick={() => void saveColumn()}
+          >
+            Speichern
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       <Menu anchorEl={menu?.anchor ?? null} open={menu != null} onClose={closeMenu}>
         {menu && !menu.card.archived && [
