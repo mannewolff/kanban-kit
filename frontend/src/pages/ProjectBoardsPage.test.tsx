@@ -18,12 +18,24 @@ function makeBoards(names: string[], projectId: number): Board[] {
 }
 
 vi.mock('../api/projects', () => ({ projectsApi: { list: vi.fn() } }))
-vi.mock('../api/boards', () => ({ boardsApi: { list: vi.fn(), create: vi.fn(), remove: vi.fn() } }))
+vi.mock('../api/boards', () => ({
+  boardsApi: {
+    list: vi.fn(),
+    listArchived: vi.fn(),
+    create: vi.fn(),
+    remove: vi.fn(),
+    restore: vi.fn(),
+    purge: vi.fn(),
+  },
+}))
 
 const mockedProjects = projectsApi as unknown as { list: ReturnType<typeof vi.fn> }
 const mockedBoards = boardsApi as unknown as {
   list: ReturnType<typeof vi.fn>
+  listArchived: ReturnType<typeof vi.fn>
   remove: ReturnType<typeof vi.fn>
+  restore: ReturnType<typeof vi.fn>
+  purge: ReturnType<typeof vi.fn>
 }
 
 function renderAt(role: string, boards: Array<{ id: number; name: string }>) {
@@ -31,6 +43,7 @@ function renderAt(role: string, boards: Array<{ id: number; name: string }>) {
   mockedBoards.list.mockResolvedValue(
     boards.map((b) => ({ ...b, projectId: 5, createdAt: '', columns: [] })),
   )
+  mockedBoards.listArchived.mockResolvedValue([])
   return render(
     <MemoryRouter initialEntries={['/projects/5']}>
       <Routes>
@@ -43,6 +56,7 @@ function renderAt(role: string, boards: Array<{ id: number; name: string }>) {
 function renderPage(role: string) {
   mockedProjects.list.mockResolvedValue([{ id: 5, name: 'Team', role, createdAt: '2026-01-01T00:00:00Z' }])
   mockedBoards.list.mockResolvedValue([])
+  mockedBoards.listArchived.mockResolvedValue([])
   return render(
     <MemoryRouter initialEntries={['/projects/5']}>
       <Routes>
@@ -67,26 +81,87 @@ describe('ProjectBoardsPage RBAC', () => {
     expect(screen.queryByLabelText(/Neues Board/)).not.toBeInTheDocument()
   })
 
-  it('löscht ein Board erst nach Bestätigung (OWNER)', async () => {
+  it('archiviert ein Board erst nach Bestätigung (OWNER)', async () => {
     // Zwei Boards, damit kein Auto-Routing greift.
     renderAt('OWNER', [{ id: 9, name: 'Board A' }, { id: 10, name: 'Board B' }])
     mockedBoards.remove.mockResolvedValue(undefined)
 
-    fireEvent.click(await screen.findByLabelText('Board Board A löschen'))
-    expect(await screen.findByText('Board löschen?')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Löschen' }))
+    fireEvent.click(await screen.findByLabelText('Board Board A archivieren'))
+    expect(await screen.findByText('Board archivieren?')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Archivieren' }))
     await waitFor(() => expect(mockedBoards.remove).toHaveBeenCalledWith(9))
   })
 
-  it('blendet den Board-Löschen-Button für VIEWER aus', async () => {
+  it('blendet den Board-Archivieren-Button für VIEWER aus', async () => {
     renderAt('VIEWER', [{ id: 9, name: 'Board A' }, { id: 10, name: 'Board B' }])
     expect(await screen.findByText('Board A')).toBeInTheDocument()
-    expect(screen.queryByLabelText('Board Board A löschen')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Board Board A archivieren')).not.toBeInTheDocument()
+  })
+
+  it('zeigt archivierte Boards, stellt sie wieder her und löscht sie endgültig nur bei Namensgleichheit', async () => {
+    mockedProjects.list.mockResolvedValue([{ id: 5, name: 'Team', role: 'OWNER', createdAt: '' }])
+    mockedBoards.list.mockResolvedValue([
+      { id: 9, name: 'Aktiv', projectId: 5, createdAt: '', columns: [] },
+      { id: 10, name: 'Aktiv2', projectId: 5, createdAt: '', columns: [] },
+    ])
+    mockedBoards.listArchived.mockResolvedValue([
+      { id: 20, name: 'Altes Board', projectId: 5, createdAt: '', columns: [] },
+    ])
+    mockedBoards.restore.mockResolvedValue(undefined)
+    mockedBoards.purge.mockResolvedValue(undefined)
+    render(
+      <MemoryRouter initialEntries={['/projects/5']}>
+        <Routes>
+          <Route path="/projects/:projectId" element={<ProjectBoardsPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    // Archiv-Sektion zeigt das archivierte Board.
+    expect(await screen.findByText('Altes Board')).toBeInTheDocument()
+
+    // Endgültig löschen: Button erst bei exakt eingetipptem Namen aktiv.
+    fireEvent.click(screen.getByLabelText('Board Altes Board endgültig löschen'))
+    const purgeButton = screen.getByRole('button', { name: 'Endgültig löschen' })
+    expect(purgeButton).toBeDisabled()
+    fireEvent.change(screen.getByLabelText('Board-Name zur Bestätigung'), {
+      target: { value: 'falsch' },
+    })
+    expect(purgeButton).toBeDisabled()
+    fireEvent.change(screen.getByLabelText('Board-Name zur Bestätigung'), {
+      target: { value: 'Altes Board' },
+    })
+    expect(purgeButton).toBeEnabled()
+    fireEvent.click(purgeButton)
+    await waitFor(() => expect(mockedBoards.purge).toHaveBeenCalledWith(20))
+  })
+
+  it('stellt ein archiviertes Board wieder her', async () => {
+    mockedProjects.list.mockResolvedValue([{ id: 5, name: 'Team', role: 'OWNER', createdAt: '' }])
+    mockedBoards.list.mockResolvedValue([
+      { id: 9, name: 'Aktiv', projectId: 5, createdAt: '', columns: [] },
+      { id: 10, name: 'Aktiv2', projectId: 5, createdAt: '', columns: [] },
+    ])
+    mockedBoards.listArchived.mockResolvedValue([
+      { id: 20, name: 'Altes Board', projectId: 5, createdAt: '', columns: [] },
+    ])
+    mockedBoards.restore.mockResolvedValue(undefined)
+    render(
+      <MemoryRouter initialEntries={['/projects/5']}>
+        <Routes>
+          <Route path="/projects/:projectId" element={<ProjectBoardsPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Wiederherstellen' }))
+    await waitFor(() => expect(mockedBoards.restore).toHaveBeenCalledWith(20))
   })
 
   it('routet beim Erst-Aufruf mit genau einem Board direkt aufs Board', async () => {
     mockedProjects.list.mockResolvedValue([{ id: 5, name: 'Team', role: 'OWNER', createdAt: '' }])
     mockedBoards.list.mockResolvedValue([{ id: 9, name: 'Solo', projectId: 5, createdAt: '', columns: [] }])
+    mockedBoards.listArchived.mockResolvedValue([])
     render(
       <MemoryRouter initialEntries={['/projects/5']}>
         <Routes>
@@ -103,6 +178,7 @@ describe('ProjectBoardsPage RBAC', () => {
     const dOld = deferred<Board[]>()
     const dNew = deferred<Board[]>()
     mockedBoards.list.mockReturnValueOnce(dOld.promise).mockReturnValueOnce(dNew.promise)
+    mockedBoards.listArchived.mockResolvedValue([])
     mockedProjects.list.mockResolvedValue([
       { id: 5, name: 'Team5', role: 'OWNER', createdAt: '' },
       { id: 6, name: 'Team6', role: 'OWNER', createdAt: '' },

@@ -12,8 +12,9 @@ import Paper from '@mui/material/Paper'
 import Stack from '@mui/material/Stack'
 import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
+import ArchiveOutlinedIcon from '@mui/icons-material/ArchiveOutlined'
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline'
-import { useCallback, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link as RouterLink, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { boardsApi, type Board } from '../api/boards'
 import { projectsApi } from '../api/projects'
@@ -27,12 +28,21 @@ export function ProjectBoardsPage() {
   const navigate = useNavigate()
   const location = useLocation()
   const [boards, setBoards] = useState<Board[]>([])
+  const [archived, setArchived] = useState<Board[]>([])
   const [role, setRole] = useState<string>('VIEWER')
   const [projectName, setProjectName] = useState<string>('')
   const [name, setName] = useState('')
   const [confirmBoard, setConfirmBoard] = useState<Board | null>(null)
+  const [purgeBoard, setPurgeBoard] = useState<Board | null>(null)
+  const [purgeInput, setPurgeInput] = useState('')
 
-  const reload = () => boardsApi.list(id).then(setBoards)
+  const canManage = canManageBoards(role)
+
+  const reload = () =>
+    Promise.all([boardsApi.list(id), boardsApi.listArchived(id)]).then(([bs, arch]) => {
+      setBoards(bs)
+      setArchived(arch)
+    })
 
   useEffect(() => {
     if (!validId) {
@@ -47,6 +57,9 @@ export function ProjectBoardsPage() {
       if (bs.length === 1 && auto) {
         navigate(`/boards/${bs[0].id}`, { replace: true })
       }
+    })
+    void boardsApi.listArchived(id).then((arch) => {
+      if (active) setArchived(arch)
     })
     void projectsApi.list().then((projects) => {
       if (!active) return
@@ -66,11 +79,13 @@ export function ProjectBoardsPage() {
 
   // Beim Zurückkehren in den Tab die Board-Liste und die eigene Rolle neu laden (ein Board kann in
   // einer anderen Session hinzugekommen oder entfernt worden sein) — ohne den Single-Board-Redirect.
-  const refetchOnFocus = useCallback(() => {
+  // Keine Memoisierung nötig: useRefetchOnFocus hält die jeweils aktuelle Referenz per Ref.
+  const refetchOnFocus = () => {
     if (!validId) {
       return
     }
     void boardsApi.list(id).then(setBoards).catch(() => {})
+    void boardsApi.listArchived(id).then(setArchived).catch(() => {})
     void projectsApi.list().then((projects) => {
       const project = projects.find((p) => p.id === id)
       if (project) {
@@ -78,7 +93,7 @@ export function ProjectBoardsPage() {
         setProjectName(project.name)
       }
     })
-  }, [id, validId])
+  }
   useRefetchOnFocus(refetchOnFocus)
 
   const handleCreate = async (event: React.FormEvent) => {
@@ -91,9 +106,25 @@ export function ProjectBoardsPage() {
     await reload()
   }
 
-  const handleDeleteBoard = async (boardId: number) => {
+  const handleArchiveBoard = async (boardId: number) => {
     await boardsApi.remove(boardId)
     setConfirmBoard(null)
+    await reload()
+  }
+
+  const handleRestoreBoard = async (boardId: number) => {
+    await boardsApi.restore(boardId)
+    await reload()
+  }
+
+  const closePurge = () => {
+    setPurgeBoard(null)
+    setPurgeInput('')
+  }
+
+  const handlePurgeBoard = async (boardId: number) => {
+    await boardsApi.purge(boardId)
+    closePurge()
     await reload()
   }
 
@@ -113,7 +144,7 @@ export function ProjectBoardsPage() {
         )}
       </Stack>
 
-      {canManageBoards(role) && (
+      {canManage && (
         <Box component="form" onSubmit={handleCreate} sx={{ mb: 3 }}>
           <Stack direction="row" spacing={1}>
             <TextField size="small" label="Neues Board" value={name} onChange={(e) => setName(e.target.value)} />
@@ -151,16 +182,16 @@ export function ProjectBoardsPage() {
               <Typography variant="caption" color="text.secondary">
                 {board.columns.length} Spalten
               </Typography>
-              {canManageBoards(role) && (
+              {canManage && (
                 <IconButton
                   size="small"
-                  aria-label={`Board ${board.name} löschen`}
+                  aria-label={`Board ${board.name} archivieren`}
                   onClick={(e) => {
                     e.stopPropagation()
                     setConfirmBoard(board)
                   }}
                 >
-                  <DeleteOutlineIcon fontSize="small" />
+                  <ArchiveOutlinedIcon fontSize="small" />
                 </IconButton>
               )}
             </Paper>
@@ -168,18 +199,79 @@ export function ProjectBoardsPage() {
         </Stack>
       )}
 
+      {canManage && archived.length > 0 && (
+        <Box sx={{ mt: 4 }}>
+          <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1 }}>
+            Archiv
+          </Typography>
+          <Stack spacing={1}>
+            {archived.map((board) => (
+              <Paper
+                key={board.id}
+                variant="outlined"
+                sx={{ px: 2, py: 1.5, display: 'flex', alignItems: 'center', gap: 1.5, opacity: 0.85 }}
+              >
+                <Typography variant="subtitle1" sx={{ fontWeight: 600, flexGrow: 1, minWidth: 0 }}>
+                  {board.name}
+                </Typography>
+                <Button size="small" onClick={() => void handleRestoreBoard(board.id)}>
+                  Wiederherstellen
+                </Button>
+                <IconButton
+                  size="small"
+                  color="error"
+                  aria-label={`Board ${board.name} endgültig löschen`}
+                  onClick={() => setPurgeBoard(board)}
+                >
+                  <DeleteOutlineIcon fontSize="small" />
+                </IconButton>
+              </Paper>
+            ))}
+          </Stack>
+        </Box>
+      )}
+
       <Dialog open={confirmBoard !== null} onClose={() => setConfirmBoard(null)}>
-        <DialogTitle>Board löschen?</DialogTitle>
+        <DialogTitle>Board archivieren?</DialogTitle>
         <DialogContent>
           <DialogContentText>
-            Das Board „{confirmBoard?.name}&ldquo; und alle zugehörigen Epics und Tickets werden
-            unwiderruflich gelöscht.
+            Das Board „{confirmBoard?.name}&ldquo; wird archiviert. Es verschwindet aus der Liste,
+            bleibt aber mit allen Epics und Tickets erhalten und lässt sich im Archiv
+            wiederherstellen.
           </DialogContentText>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setConfirmBoard(null)}>Abbrechen</Button>
-          <Button color="error" onClick={() => { if (confirmBoard) void handleDeleteBoard(confirmBoard.id) }}>
-            Löschen
+          <Button color="error" onClick={() => { if (confirmBoard) void handleArchiveBoard(confirmBoard.id) }}>
+            Archivieren
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={purgeBoard !== null} onClose={closePurge}>
+        <DialogTitle>Board endgültig löschen?</DialogTitle>
+        <DialogContent>
+          <DialogContentText sx={{ mb: 2 }}>
+            Das Board „{purgeBoard?.name}&ldquo; und alle zugehörigen Epics und Tickets werden
+            unwiderruflich gelöscht. Gib zur Bestätigung den Board-Namen ein.
+          </DialogContentText>
+          <TextField
+            fullWidth
+            size="small"
+            label="Board-Name"
+            value={purgeInput}
+            onChange={(e) => setPurgeInput(e.target.value)}
+            inputProps={{ 'aria-label': 'Board-Name zur Bestätigung' }}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={closePurge}>Abbrechen</Button>
+          <Button
+            color="error"
+            disabled={purgeInput !== purgeBoard?.name}
+            onClick={() => { if (purgeBoard) void handlePurgeBoard(purgeBoard.id) }}
+          >
+            Endgültig löschen
           </Button>
         </DialogActions>
       </Dialog>
