@@ -6,6 +6,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -19,6 +20,7 @@ import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mwolff.manban.board.application.BoardColumnRepository;
 import org.mwolff.manban.board.application.BoardNotFoundException;
 import org.mwolff.manban.board.application.BoardRepository;
@@ -44,6 +46,7 @@ class CardServiceTest {
   private BoardRepository boards;
   private BoardColumnRepository columns;
   private PermissionChecker permissions;
+  private CardColumnTransitionRepository transitions;
   private CardService service;
 
   private static Card card(
@@ -71,8 +74,10 @@ class CardServiceTest {
     boards = mock(BoardRepository.class);
     columns = mock(BoardColumnRepository.class);
     permissions = mock(PermissionChecker.class);
+    transitions = mock(CardColumnTransitionRepository.class);
     Clock clock = Clock.fixed(FIXED, ZoneOffset.UTC);
-    service = new CardService(cards, dependencies, boards, columns, permissions, clock);
+    service =
+        new CardService(cards, dependencies, boards, columns, permissions, transitions, clock);
     when(boards.findById(BOARD)).thenReturn(Optional.of(new Board(BOARD, 1L, "B", FIXED)));
     when(cards.save(any(Card.class))).thenAnswer(inv -> withId(inv.getArgument(0)));
   }
@@ -1079,5 +1084,66 @@ class CardServiceTest {
     // When / Then
     assertThatThrownBy(() -> service.transfer(1L, 100L, 20L, 60L))
         .isInstanceOf(ColumnNotFoundException.class);
+  }
+
+  // --- Zykluszeit-Tracking (card_column_transition) ---------------------
+
+  @Test
+  void create_opensColumnTransition() {
+    // Given
+    when(columns.findById(20L)).thenReturn(Optional.of(column(20L, "Backlog", 0)));
+    when(cards.maxNumberInBoard(BOARD)).thenReturn(0);
+    when(cards.maxActivePositionInColumn(20L)).thenReturn(-1);
+
+    // When
+    service.create(1L, BOARD, 20L, "Titel", null, null, null);
+
+    // Then — Eintritt in die Zielspalte wird mit dem Erstellzeitpunkt eröffnet.
+    verify(transitions).open(1L, 20L, "Backlog", FIXED);
+  }
+
+  @Test
+  void move_closesOldAndOpensNewTransition_whenColumnChanges() {
+    // Given
+    Card before = card(1L, 20L, 1, false, null, CardType.CARD, null, null);
+    when(cards.findById(1L)).thenReturn(Optional.of(before));
+    when(columns.findById(21L)).thenReturn(Optional.of(column(21L, "Done", 4)));
+
+    // When
+    service.move(1L, 1L, 21L, 0);
+
+    // Then — erst die verlassene Spalte schließen, dann die Zielspalte eröffnen.
+    InOrder order = inOrder(transitions);
+    order.verify(transitions).closeOpen(1L, FIXED);
+    order.verify(transitions).open(1L, 21L, "Done", FIXED);
+  }
+
+  @Test
+  void move_recordsNoTransition_whenColumnUnchanged() {
+    // Given: Reindex innerhalb derselben Spalte (Ziel == aktuelle Spalte).
+    Card before = card(1L, 20L, 1, false, null, CardType.CARD, null, null);
+    when(cards.findById(1L)).thenReturn(Optional.of(before));
+    when(columns.findById(20L)).thenReturn(Optional.of(column(20L, "Backlog", 0)));
+
+    // When
+    service.move(1L, 1L, 20L, 2);
+
+    // Then — kein Spaltenwechsel, keine Transition.
+    verify(transitions, never()).closeOpen(anyLong(), any());
+    verify(transitions, never()).open(anyLong(), anyLong(), any(), any());
+  }
+
+  @Test
+  void transfer_recordsColumnTransition() {
+    // Given
+    stubTransferScenario(null);
+
+    // When
+    service.transfer(1L, 100L, 20L, 60L);
+
+    // Then — Umzug schließt die alte und eröffnet die Ziel-Spalte.
+    InOrder order = inOrder(transitions);
+    order.verify(transitions).closeOpen(100L, FIXED);
+    order.verify(transitions).open(100L, 60L, "Backlog", FIXED);
   }
 }

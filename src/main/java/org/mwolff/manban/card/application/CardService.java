@@ -36,6 +36,7 @@ public class CardService {
   private final BoardRepository boards;
   private final BoardColumnRepository columns;
   private final PermissionChecker permissions;
+  private final CardColumnTransitionRepository transitions;
   private final Clock clock;
 
   public CardService(
@@ -44,12 +45,14 @@ public class CardService {
       BoardRepository boards,
       BoardColumnRepository columns,
       PermissionChecker permissions,
+      CardColumnTransitionRepository transitions,
       Clock clock) {
     this.cards = cards;
     this.dependencies = dependencies;
     this.boards = boards;
     this.columns = columns;
     this.permissions = permissions;
+    this.transitions = transitions;
     this.clock = clock;
   }
 
@@ -64,7 +67,7 @@ public class CardService {
       @Nullable Long parentId) {
     Board board = boards.findById(boardId).orElseThrow(BoardNotFoundException::new);
     permissions.require(userId, board.projectId(), Permission.TICKET_CREATE);
-    requireColumnInBoard(columnId, boardId);
+    BoardColumn column = requireColumnInBoard(columnId, boardId);
     Long effectiveParent =
         parentId == null ? null : requireEpicInBoard(parentId, boardId).requireId();
 
@@ -90,6 +93,7 @@ public class CardService {
                 effectiveParent,
                 null));
 
+    transitions.open(saved.requireId(), columnId, column.name(), now);
     setDependencies(saved, dependsOn);
     return view(saved);
   }
@@ -240,6 +244,15 @@ public class CardService {
 
     cards.move(cardId, targetColumnId, targetPosition);
 
+    // Zykluszeit: nur bei echtem Spaltenwechsel (kein Eintrag bei reinem Reindex). Ein einziger
+    // Zeitstempel schließt die verlassene und eröffnet die Ziel-Spalte lückenlos.
+    long fromColumn = card.columnId();
+    if (fromColumn != targetColumnId) {
+      Instant switchedAt = clock.instant();
+      transitions.closeOpen(cardId, switchedAt);
+      transitions.open(cardId, targetColumnId, target.name(), switchedAt);
+    }
+
     // moved_to_done_at: beim Eintritt in eine "Done"-Spalte setzen, beim Verlassen löschen.
     boolean targetIsDone = isDoneColumn(target.name());
     Instant done = card.movedToDoneAt();
@@ -268,7 +281,7 @@ public class CardService {
     }
     Board sourceBoard = boards.findById(card.boardId()).orElseThrow(BoardNotFoundException::new);
     Board targetBoard = boards.findById(targetBoardId).orElseThrow(BoardNotFoundException::new);
-    requireColumnInBoard(targetColumnId, targetBoardId);
+    BoardColumn targetColumn = requireColumnInBoard(targetColumnId, targetBoardId);
 
     permissions.requireOwner(userId, sourceBoard.projectId());
     permissions.requireOwner(userId, targetBoard.projectId());
@@ -276,6 +289,11 @@ public class CardService {
     int newNumber = cards.maxNumberInBoard(targetBoardId) + 1;
     cards.transfer(cardId, targetBoardId, targetColumnId, newNumber);
     dependencies.deleteByCardId(cardId);
+
+    // Zykluszeit: der board-/spaltenübergreifende Umzug zählt als Spaltenwechsel.
+    Instant switchedAt = clock.instant();
+    transitions.closeOpen(cardId, switchedAt);
+    transitions.open(cardId, targetColumnId, targetColumn.name(), switchedAt);
 
     Card moved = cards.findById(cardId).orElseThrow(CardNotFoundException::new);
     return view(cards.save(moved.withParent(null).withMovedToDoneAt(null)));
@@ -321,11 +339,12 @@ public class CardService {
     return epic;
   }
 
-  private void requireColumnInBoard(long columnId, long boardId) {
+  private BoardColumn requireColumnInBoard(long columnId, long boardId) {
     BoardColumn column = columns.findById(columnId).orElseThrow(ColumnNotFoundException::new);
     if (column.boardId() != boardId) {
       throw new ColumnNotFoundException();
     }
+    return column;
   }
 
   private void setDependencies(Card card, @Nullable List<Integer> dependsOn) {
