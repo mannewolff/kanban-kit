@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { describe, expect, it, vi } from 'vitest'
 import type { Board } from '../api/boards'
 import type { Card } from '../api/cards'
+import { ApiError } from '../api/client'
 import { columnsApi } from '../api/columns'
 import { BoardView } from './BoardView'
 
@@ -204,6 +205,31 @@ describe('BoardView', () => {
     render(<BoardView board={board} initialCards={[card]} canEdit={false} api={mkApi()} />)
     expect(screen.queryByRole('button', { name: 'Spalte' })).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Spalte Backlog bearbeiten')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Spalte Backlog löschen')).not.toBeInTheDocument()
+  })
+
+  it('löscht eine leere Spalte nach Bestätigung', async () => {
+    mColumns.remove.mockResolvedValue(undefined)
+    render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} />)
+
+    fireEvent.click(screen.getByLabelText('Spalte Done löschen'))
+    fireEvent.click(screen.getByRole('button', { name: 'Löschen' }))
+
+    await waitFor(() => expect(mColumns.remove).toHaveBeenCalledWith(20))
+    await waitFor(() => expect(screen.queryByText('Done')).not.toBeInTheDocument())
+  })
+
+  it('zeigt einen Fehler, wenn die Spalte noch Karten enthält (409)', async () => {
+    mColumns.remove.mockRejectedValue(new ApiError(409, 'nicht leer'))
+    render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} />)
+
+    fireEvent.click(screen.getByLabelText('Spalte Backlog löschen'))
+    fireEvent.click(screen.getByRole('button', { name: 'Löschen' }))
+
+    expect(
+      await screen.findByText('Spalte enthält noch Karten und kann nicht gelöscht werden.'),
+    ).toBeInTheDocument()
+    expect(screen.getByText('Backlog')).toBeInTheDocument()
   })
 
   it('zeigt den Verschieben-Menüeintrag nur mit canTransfer', () => {

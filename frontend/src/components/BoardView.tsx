@@ -1,11 +1,14 @@
 import AddIcon from '@mui/icons-material/Add'
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline'
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined'
 import MoreVertIcon from '@mui/icons-material/MoreVert'
+import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import Dialog from '@mui/material/Dialog'
 import DialogActions from '@mui/material/DialogActions'
 import DialogContent from '@mui/material/DialogContent'
+import DialogContentText from '@mui/material/DialogContentText'
 import DialogTitle from '@mui/material/DialogTitle'
 import IconButton from '@mui/material/IconButton'
 import Menu from '@mui/material/Menu'
@@ -18,6 +21,7 @@ import Typography from '@mui/material/Typography'
 import { useEffect, useState } from 'react'
 import type { Board, BoardColumn } from '../api/boards'
 import { cardsApi, type Card, type CardsApi } from '../api/cards'
+import { ApiError } from '../api/client'
 import { columnsApi } from '../api/columns'
 import { epicsApi as defaultEpicsApi, type Epic, type EpicsApi } from '../api/epics'
 import { activeCardsInColumn, applyMove } from '../lib/boardOps'
@@ -101,6 +105,26 @@ export function BoardView({
     setColumnWip(target === 'new' || target.wipLimit == null ? '' : String(target.wipLimit))
   }
   const closeColumnDialog = () => setColumnDialog(null)
+
+  const [deleteColumn, setDeleteColumn] = useState<BoardColumn | null>(null)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
+  const handleDeleteColumn = async () => {
+    if (!deleteColumn) {
+      return
+    }
+    setDeleteError(null)
+    try {
+      await columnsApi.remove(deleteColumn.id)
+      setColumns((cs) => cs.filter((c) => c.id !== deleteColumn.id))
+      setDeleteColumn(null)
+    } catch (e) {
+      setDeleteError(
+        e instanceof ApiError && e.status === 409
+          ? 'Spalte enthält noch Karten und kann nicht gelöscht werden.'
+          : 'Löschen fehlgeschlagen.',
+      )
+    }
+  }
 
   const parsedWip = (): number | null | undefined => {
     const raw = columnWip.trim()
@@ -269,6 +293,14 @@ export function BoardView({
                     </IconButton>
                   </Tooltip>
                 )}
+                {canEdit && (
+                  <Tooltip title="Spalte löschen">
+                    <IconButton size="small" aria-label={`Spalte ${column.name} löschen`}
+                      onClick={() => { setDeleteError(null); setDeleteColumn(column) }} sx={{ color: 'text.secondary' }}>
+                      <DeleteOutlineIcon fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                )}
               </Box>
 
               <Stack spacing={1} sx={{ p: 1, flex: 1 }}>
@@ -365,6 +397,22 @@ export function BoardView({
             onClick={() => void saveColumn()}
           >
             Speichern
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={deleteColumn !== null} onClose={() => setDeleteColumn(null)}>
+        <DialogTitle>Spalte löschen?</DialogTitle>
+        <DialogContent>
+          {deleteError && <Alert severity="error" sx={{ mb: 2 }}>{deleteError}</Alert>}
+          <DialogContentText>
+            Die Spalte „{deleteColumn?.name}&ldquo; wird gelöscht.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteColumn(null)}>Abbrechen</Button>
+          <Button color="error" onClick={() => void handleDeleteColumn()}>
+            Löschen
           </Button>
         </DialogActions>
       </Dialog>
