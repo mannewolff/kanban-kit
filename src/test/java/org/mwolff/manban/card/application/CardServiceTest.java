@@ -5,7 +5,6 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyLong;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -256,7 +255,8 @@ class CardServiceTest {
         .thenReturn(List.of(card(9L, 20L, 1, false, null, CardType.CARD, null, null)));
 
     // When / Then: neue Karte bekommt Nummer 1, hängt von 1 (sich selbst) ab
-    assertThatThrownBy(() -> service.create(1L, BOARD, 20L, "Titel", null, List.of(1), null))
+    List<Integer> selfDependency = List.of(1);
+    assertThatThrownBy(() -> service.create(1L, BOARD, 20L, "Titel", null, selfDependency, null))
         .isInstanceOf(InvalidDependencyException.class);
   }
 
@@ -268,7 +268,8 @@ class CardServiceTest {
     when(cards.findByBoardId(BOARD)).thenReturn(List.of());
 
     // When / Then
-    assertThatThrownBy(() -> service.create(1L, BOARD, 20L, "Titel", null, List.of(99), null))
+    List<Integer> unknownDependency = List.of(99);
+    assertThatThrownBy(() -> service.create(1L, BOARD, 20L, "Titel", null, unknownDependency, null))
         .isInstanceOf(InvalidDependencyException.class);
   }
 
@@ -654,7 +655,7 @@ class CardServiceTest {
     service.delete(1L, 1L);
 
     // Then
-    verify(permissions).require(eq(1L), eq(1L), eq(Permission.TICKET_DELETE));
+    verify(permissions).require(1L, 1L, Permission.TICKET_DELETE);
   }
 
   // --- Randfälle: Zweigabdeckung ---------------------------------------
@@ -732,8 +733,8 @@ class CardServiceTest {
 
     // Then
     verify(dependencies).replaceDependencies(1L, List.of());
-    // Eine leere Liste wird ohne Board-Lookup direkt geleert (Kurzschluss des isEmpty-Zweigs);
-    // ein Umgehen dieses Zweigs (Mutant) würde die Board-Nummern unnötig nachladen.
+    // Eine leere Liste wird ohne Board-Lookup direkt geleert (Kurzschluss des isEmpty-Zweigs).
+    // Ein Umgehen dieses Zweigs (Mutant) würde die Board-Nummern unnötig nachladen.
     verify(cards, never()).findByBoardId(BOARD);
   }
 
