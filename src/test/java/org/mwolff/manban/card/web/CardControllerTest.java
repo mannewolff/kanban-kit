@@ -18,6 +18,8 @@ import org.mwolff.manban.card.domain.CardType;
 /** Unit-Tests des Karten-/Epic-Controllers (Service gemockt). */
 class CardControllerTest {
 
+  private static final java.time.Instant INSTANT = java.time.Instant.parse("2026-01-01T00:00:00Z");
+
   private CardService service;
   private CardController controller;
 
@@ -253,5 +255,31 @@ class CardControllerTest {
 
     assertThat(result).isSameAs(view);
     verify(service).setLabels(3L, 8L, List.of());
+  }
+
+  @Test
+  void activity_mapsDomainToViews() {
+    var entry =
+        new org.mwolff.manban.card.domain.CardActivity(
+            5L,
+            8L,
+            9L,
+            org.mwolff.manban.card.domain.CardActivityType.MOVED,
+            "Verschoben",
+            INSTANT);
+    when(service.listActivity(3L, 8L)).thenReturn(List.of(entry));
+
+    List<CardController.ActivityView> result = controller.activity(3L, 8L);
+
+    assertThat(result)
+        .singleElement()
+        .satisfies(
+            v -> {
+              assertThat(v.id()).isEqualTo(5L);
+              assertThat(v.actorUserId()).isEqualTo(9L);
+              assertThat(v.type()).isEqualTo("MOVED");
+              assertThat(v.detail()).isEqualTo("Verschoben");
+              assertThat(v.createdAt()).isEqualTo(INSTANT);
+            });
   }
 }

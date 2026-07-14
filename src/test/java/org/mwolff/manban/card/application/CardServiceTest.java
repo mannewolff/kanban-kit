@@ -29,6 +29,8 @@ import org.mwolff.manban.board.application.ColumnNotFoundException;
 import org.mwolff.manban.board.domain.Board;
 import org.mwolff.manban.board.domain.BoardColumn;
 import org.mwolff.manban.card.domain.Card;
+import org.mwolff.manban.card.domain.CardActivity;
+import org.mwolff.manban.card.domain.CardActivityType;
 import org.mwolff.manban.card.domain.CardType;
 import org.mwolff.manban.card.domain.Label;
 import org.mwolff.manban.project.application.PermissionChecker;
@@ -56,6 +58,7 @@ class CardServiceTest {
   private ProjectMembershipRepository memberships;
   private LabelRepository labels;
   private CardLabelRepository cardLabels;
+  private CardActivityRepository activity;
   private CardService service;
 
   private static Card card(
@@ -88,6 +91,7 @@ class CardServiceTest {
     memberships = mock(ProjectMembershipRepository.class);
     labels = mock(LabelRepository.class);
     cardLabels = mock(CardLabelRepository.class);
+    activity = mock(CardActivityRepository.class);
     Clock clock = Clock.fixed(FIXED, ZoneOffset.UTC);
     service =
         new CardService(
@@ -101,6 +105,7 @@ class CardServiceTest {
             memberships,
             labels,
             cardLabels,
+            activity,
             clock);
     when(boards.findById(BOARD)).thenReturn(Optional.of(new Board(BOARD, 1L, "B", FIXED)));
     when(cards.save(any(Card.class))).thenAnswer(inv -> withId(inv.getArgument(0)));
@@ -1143,6 +1148,7 @@ class CardServiceTest {
 
     verify(permissions).require(3L, 1L, Permission.TICKET_UPDATE);
     verify(assignees).replaceAssignees(1L, List.of(7L, 8L));
+    verify(activity).add(1L, 3L, CardActivityType.ASSIGNED, "Zuständige geändert", FIXED);
     assertThat(result.id()).isEqualTo(1L);
     assertThat(result.assignees()).containsExactly(7L, 8L);
   }
@@ -1249,6 +1255,80 @@ class CardServiceTest {
     assertThatThrownBy(() -> service.setLabels(9L, 1L, List.of()))
         .isInstanceOf(ProjectAccessDeniedException.class);
     verify(cardLabels, never()).replaceLabels(anyLong(), anyList());
+  }
+
+  // --- Aktivitätsverlauf (card_activity) --------------------------------
+
+  @Test
+  void create_recordsCreatedActivity() {
+    when(columns.findById(20L)).thenReturn(Optional.of(column(20L, "Backlog", 0)));
+
+    service.create(1L, BOARD, 20L, "Titel", null, null, null);
+
+    verify(activity).add(1L, 1L, CardActivityType.CREATED, "Karte angelegt", FIXED);
+  }
+
+  @Test
+  void move_recordsMovedActivity_whenColumnChanges() {
+    when(cards.findById(1L))
+        .thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
+    when(columns.findById(21L)).thenReturn(Optional.of(column(21L, "Done", 4)));
+
+    service.move(9L, 1L, 21L, 0);
+
+    verify(activity).add(1L, 9L, CardActivityType.MOVED, "Verschoben nach Done", FIXED);
+  }
+
+  @Test
+  void update_recordsUpdatedActivity() {
+    when(cards.findById(1L))
+        .thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
+
+    service.update(9L, 1L, "Neu", null, null, null, null, null);
+
+    verify(activity).add(1L, 9L, CardActivityType.UPDATED, "Karte bearbeitet", FIXED);
+  }
+
+  @Test
+  void archive_recordsArchivedActivity() {
+    when(cards.findById(1L))
+        .thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
+
+    service.archive(9L, 1L);
+
+    verify(activity).add(1L, 9L, CardActivityType.ARCHIVED, "Archiviert", FIXED);
+  }
+
+  @Test
+  void restore_recordsRestoredActivity() {
+    when(cards.findById(1L))
+        .thenReturn(Optional.of(card(1L, 20L, 1, true, null, CardType.CARD, null, null)));
+
+    service.restore(9L, 1L);
+
+    verify(activity).add(1L, 9L, CardActivityType.RESTORED, "Wiederhergestellt", FIXED);
+  }
+
+  @Test
+  void listActivity_returnsHistoryForMember() {
+    when(cards.findById(1L))
+        .thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
+    CardActivity entry =
+        new CardActivity(3L, 1L, 9L, CardActivityType.CREATED, "Karte angelegt", FIXED);
+    when(activity.findByCardId(1L)).thenReturn(List.of(entry));
+
+    List<CardActivity> result = service.listActivity(5L, 1L);
+
+    verify(permissions).requireMembership(5L, 1L);
+    assertThat(result).containsExactly(entry);
+  }
+
+  @Test
+  void listActivity_throwsCardNotFound_whenUnknown() {
+    when(cards.findById(1L)).thenReturn(Optional.empty());
+
+    assertThatThrownBy(() -> service.listActivity(5L, 1L))
+        .isInstanceOf(CardNotFoundException.class);
   }
 
   // --- Zykluszeit-Tracking (card_column_transition) ---------------------

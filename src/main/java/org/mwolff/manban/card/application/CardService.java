@@ -16,6 +16,8 @@ import org.mwolff.manban.board.application.ColumnNotFoundException;
 import org.mwolff.manban.board.domain.Board;
 import org.mwolff.manban.board.domain.BoardColumn;
 import org.mwolff.manban.card.domain.Card;
+import org.mwolff.manban.card.domain.CardActivity;
+import org.mwolff.manban.card.domain.CardActivityType;
 import org.mwolff.manban.card.domain.CardType;
 import org.mwolff.manban.card.domain.Label;
 import org.mwolff.manban.project.application.PermissionChecker;
@@ -47,6 +49,7 @@ public class CardService {
   private final ProjectMembershipRepository memberships;
   private final LabelRepository labels;
   private final CardLabelRepository cardLabels;
+  private final CardActivityRepository activity;
   private final Clock clock;
 
   public CardService(
@@ -60,6 +63,7 @@ public class CardService {
       ProjectMembershipRepository memberships,
       LabelRepository labels,
       CardLabelRepository cardLabels,
+      CardActivityRepository activity,
       Clock clock) {
     this.cards = cards;
     this.dependencies = dependencies;
@@ -71,6 +75,7 @@ public class CardService {
     this.memberships = memberships;
     this.labels = labels;
     this.cardLabels = cardLabels;
+    this.activity = activity;
     this.clock = clock;
   }
 
@@ -113,6 +118,7 @@ public class CardService {
                 null));
 
     transitions.open(saved.requireId(), columnId, column.name(), now);
+    activity.add(saved.requireId(), userId, CardActivityType.CREATED, "Karte angelegt", now);
     setDependencies(saved, dependsOn);
     return view(saved);
   }
@@ -229,6 +235,7 @@ public class CardService {
       updated = updated.withParent(effectiveParent).withDueDate(dueDate);
     }
     Card saved = cards.save(updated);
+    activity.add(cardId, userId, CardActivityType.UPDATED, "Karte bearbeitet", clock.instant());
     if (dependsOn != null) {
       setDependencies(saved, dependsOn);
     }
@@ -256,6 +263,7 @@ public class CardService {
       }
     }
     assignees.replaceAssignees(cardId, distinct);
+    activity.add(cardId, userId, CardActivityType.ASSIGNED, "Zuständige geändert", clock.instant());
     return view(card);
   }
 
@@ -321,6 +329,8 @@ public class CardService {
       Instant switchedAt = clock.instant();
       transitions.closeOpen(cardId, switchedAt);
       transitions.open(cardId, targetColumnId, target.name(), switchedAt);
+      activity.add(
+          cardId, userId, CardActivityType.MOVED, "Verschoben nach " + target.name(), switchedAt);
     }
 
     // moved_to_done_at: beim Eintritt in eine "Done"-Spalte setzen, beim Verlassen löschen.
@@ -374,6 +384,8 @@ public class CardService {
   @Transactional
   public CardView archive(long userId, long cardId) {
     Card card = requireCardOp(userId, cardId, Permission.TICKET_DELETE, Permission.EPIC_DELETE);
+    activity.add(
+        card.requireId(), userId, CardActivityType.ARCHIVED, "Archiviert", clock.instant());
     return view(cards.save(card.asArchived()));
   }
 
@@ -381,7 +393,18 @@ public class CardService {
   public CardView restore(long userId, long cardId) {
     Card card = requireCardOp(userId, cardId, Permission.TICKET_DELETE, Permission.EPIC_DELETE);
     int position = cards.maxActivePositionInColumn(card.columnId()) + 1;
+    activity.add(
+        card.requireId(), userId, CardActivityType.RESTORED, "Wiederhergestellt", clock.instant());
     return view(cards.save(card.asRestored(position)));
+  }
+
+  /** Aktivitätsverlauf einer Karte (chronologisch). Erfordert Board-Mitgliedschaft (Leserecht). */
+  @Transactional(readOnly = true)
+  public List<CardActivity> listActivity(long userId, long cardId) {
+    Card card = cards.findById(cardId).orElseThrow(CardNotFoundException::new);
+    Board board = boards.findById(card.boardId()).orElseThrow(BoardNotFoundException::new);
+    permissions.requireMembership(userId, board.projectId());
+    return activity.findByCardId(cardId);
   }
 
   @Transactional

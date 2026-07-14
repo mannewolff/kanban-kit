@@ -36,6 +36,7 @@ function makeApis() {
     update: vi.fn().mockResolvedValue({ ...card }),
     setAssignees: vi.fn().mockResolvedValue({ ...card }),
     setLabels: vi.fn().mockResolvedValue({ ...card }),
+    getActivity: vi.fn().mockResolvedValue([]),
   }
   return { commentsApi, attachmentsApi, cardsApi }
 }
@@ -277,5 +278,17 @@ describe('CardDetailModal', () => {
     fireEvent.click(await screen.findByText('Ux'))
 
     await waitFor(() => expect(apis.cardsApi.setLabels).toHaveBeenCalledWith(100, [6]))
+  })
+
+  it('zeigt den Aktivitätsverlauf mit Akteur und Detail', async () => {
+    const apis = makeApis()
+    apis.cardsApi.getActivity = vi.fn().mockResolvedValue([
+      { id: 1, actorUserId: 5, type: 'MOVED', detail: 'Verschoben nach Done', createdAt: '2026-01-01T10:00:00Z' },
+    ])
+    const members = [{ userId: 5, email: 'm@x.de', displayName: 'Max', role: 'MEMBER' as const }]
+    render(<CardDetailModal card={card} canEdit members={members} onClose={vi.fn()} {...apis} />)
+
+    expect(await screen.findByText(/Verschoben nach Done/)).toBeInTheDocument()
+    expect(screen.getByText(/Max/)).toBeInTheDocument()
   })
 })

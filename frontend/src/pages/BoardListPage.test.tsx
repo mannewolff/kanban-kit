@@ -20,7 +20,7 @@ vi.mock('../auth/AuthContext', () => ({
   useAuth: () => ({ user: { userId: 1, memberships: [{ projectId: 9, role: 'OWNER' }] } }),
 }))
 vi.mock('../api/boards', () => ({ boardsApi: { get: vi.fn() } }))
-vi.mock('../api/cards', () => ({ cardsApi: { list: vi.fn(), move: vi.fn() } }))
+vi.mock('../api/cards', () => ({ cardsApi: { list: vi.fn(), move: vi.fn(), getActivity: vi.fn().mockResolvedValue([]) } }))
 vi.mock('../api/epics', () => ({ epicsApi: { list: vi.fn() } }))
 vi.mock('../api/labels', () => ({ labelsApi: { list: vi.fn().mockResolvedValue([]) } }))
 vi.mock('../api/projects', () => ({ projectsApi: { list: vi.fn() } }))

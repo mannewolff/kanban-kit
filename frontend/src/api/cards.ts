@@ -21,8 +21,17 @@ export interface Card {
   labels: number[]
 }
 
+export interface CardActivity {
+  id: number
+  actorUserId: number | null
+  type: string
+  detail: string
+  createdAt: string
+}
+
 export const cardsApi = {
   list: (boardId: number) => apiFetch<Card[]>(`/api/boards/${boardId}/cards`),
+  getActivity: (cardId: number) => apiFetch<CardActivity[]>(`/api/cards/${cardId}/activity`),
   create: (boardId: number, columnId: number, title: string, description?: string, parentId?: number | null) =>
     apiFetch<Card>(`/api/boards/${boardId}/cards`, {
       method: 'POST',

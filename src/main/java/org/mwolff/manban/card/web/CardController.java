@@ -11,6 +11,7 @@ import org.mwolff.manban.board.application.ColumnNotFoundException;
 import org.mwolff.manban.card.application.CardService;
 import org.mwolff.manban.card.application.CardService.CardView;
 import org.mwolff.manban.card.application.CardService.EpicView;
+import org.mwolff.manban.card.domain.CardActivity;
 import org.mwolff.manban.card.domain.CardType;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -150,6 +151,16 @@ class CardController {
     return cards.setLabels(userId, cardId, ids);
   }
 
+  /** Aktivitätsverlauf einer Karte (chronologisch, Leserecht wie Board-Ansicht). */
+  @GetMapping("/api/cards/{cardId}/activity")
+  List<ActivityView> activity(@AuthenticationPrincipal Long userId, @PathVariable long cardId) {
+    return cards.listActivity(userId, cardId).stream().map(CardController::activityView).toList();
+  }
+
+  private static ActivityView activityView(CardActivity a) {
+    return new ActivityView(a.id(), a.actorUserId(), a.type().name(), a.detail(), a.createdAt());
+  }
+
   record CreateCardRequest(
       Long columnId,
       @NotBlank @Size(max = 300) String title,
@@ -177,4 +188,11 @@ class CardController {
   record AssigneesRequest(@Nullable List<Long> assignees) {}
 
   record LabelsRequest(@Nullable List<Long> labels) {}
+
+  record ActivityView(
+      @Nullable Long id,
+      @Nullable Long actorUserId,
+      String type,
+      String detail,
+      Instant createdAt) {}
 }

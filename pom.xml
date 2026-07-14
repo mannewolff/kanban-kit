@@ -463,6 +463,7 @@
                         <exclude>org/mwolff/manban/card/web/CardController$UpdateCardRequest.class</exclude>
                         <exclude>org/mwolff/manban/card/web/CardController$AssigneesRequest.class</exclude>
                         <exclude>org/mwolff/manban/card/web/CardController$LabelsRequest.class</exclude>
+                        <exclude>org/mwolff/manban/card/web/CardController$ActivityView.class</exclude>
                         <exclude>org/mwolff/manban/card/web/LabelController$LabelView.class</exclude>
                         <exclude>org/mwolff/manban/card/web/LabelController$LabelRequest.class</exclude>
                         <exclude>org/mwolff/manban/card/web/ConfigController$ConfigView.class</exclude>
@@ -487,6 +488,7 @@
                         <exclude>org/mwolff/manban/card/infrastructure/persistence/CardEntity.class</exclude>
                         <exclude>org/mwolff/manban/card/infrastructure/persistence/CardColumnTransitionEntity.class</exclude>
                         <exclude>org/mwolff/manban/card/infrastructure/persistence/LabelEntity.class</exclude>
+                        <exclude>org/mwolff/manban/card/infrastructure/persistence/CardActivityEntity.class</exclude>
                         <exclude>org/mwolff/manban/comment/infrastructure/persistence/CommentEntity.class</exclude>
                         <exclude>org/mwolff/manban/project/infrastructure/persistence/ProjectEntity.class</exclude>
                         <exclude>org/mwolff/manban/project/infrastructure/persistence/ProjectInvitationEntity.class</exclude>
@@ -503,6 +505,7 @@
                         <exclude>org/mwolff/manban/card/infrastructure/persistence/CardRepositoryAdapter.class</exclude>
                         <exclude>org/mwolff/manban/card/infrastructure/persistence/CardColumnTransitionRepositoryAdapter.class</exclude>
                         <exclude>org/mwolff/manban/card/infrastructure/persistence/LabelRepositoryAdapter.class</exclude>
+                        <exclude>org/mwolff/manban/card/infrastructure/persistence/CardActivityRepositoryAdapter.class</exclude>
                         <exclude>org/mwolff/manban/comment/infrastructure/persistence/CommentRepositoryAdapter.class</exclude>
                         <exclude>org/mwolff/manban/project/infrastructure/persistence/ProjectInvitationRepositoryAdapter.class</exclude>
                         <exclude>org/mwolff/manban/project/infrastructure/persistence/ProjectMembershipRepositoryAdapter.class</exclude>

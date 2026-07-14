@@ -18,7 +18,7 @@ import Markdown, { type Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { attachmentsApi as defaultAttachmentsApi, type Attachment, type AttachmentsApi } from '../api/attachments'
 import { cardsApi as defaultCardsApi } from '../api/cards'
-import type { Card } from '../api/cards'
+import type { Card, CardActivity } from '../api/cards'
 import { commentsApi as defaultCommentsApi, type Comment, type CommentsApi } from '../api/comments'
 import type { Epic } from '../api/epics'
 import type { Label as BoardLabel } from '../api/labels'
@@ -126,7 +126,7 @@ interface Props {
   boardLabels?: BoardLabel[]
   commentsApi?: CommentsApi
   attachmentsApi?: AttachmentsApi
-  cardsApi?: Pick<typeof defaultCardsApi, 'update' | 'setAssignees' | 'setLabels'>
+  cardsApi?: Pick<typeof defaultCardsApi, 'update' | 'setAssignees' | 'setLabels' | 'getActivity'>
 }
 
 export function CardDetailModal({
@@ -157,6 +157,10 @@ export function CardDetailModal({
     await cardsApi.setAssignees(card.id, ids)
     onChanged?.()
   }
+
+  const [activities, setActivities] = useState<CardActivity[]>([])
+  const actorName = (userId: number | null) =>
+    members.find((m) => m.userId === userId)?.displayName ?? 'System'
 
   const [labelIds, setLabelIds] = useState<number[]>(card.labels)
   const saveLabels = async (ids: number[]) => {
@@ -197,6 +201,10 @@ export function CardDetailModal({
         })
     })
   }, [card.id, commentsApi, attachmentsApi])
+
+  useEffect(() => {
+    void cardsApi.getActivity(card.id).then(setActivities).catch(() => setActivities([]))
+  }, [card.id, cardsApi])
 
   const startEditing = () => {
     setTitle(card.title)
@@ -693,6 +701,23 @@ export function CardDetailModal({
                   <Button variant="contained" size="small" onClick={addComment}>
                     Senden
                   </Button>
+                </Stack>
+              </Box>
+
+              <Divider />
+              <Box>
+                <Typography variant="subtitle2" gutterBottom>
+                  Aktivität
+                </Typography>
+                <Stack spacing={0.5}>
+                  {activities.map((a) => (
+                    <Typography key={a.id} variant="caption" color="text.secondary">
+                      {new Date(a.createdAt).toLocaleString('de-DE')} · {actorName(a.actorUserId)} · {a.detail}
+                    </Typography>
+                  ))}
+                  {activities.length === 0 && (
+                    <Typography color="text.secondary">Keine Aktivität.</Typography>
+                  )}
                 </Stack>
               </Box>
             </>
