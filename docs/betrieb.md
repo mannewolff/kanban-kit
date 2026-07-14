@@ -51,10 +51,15 @@ geladen und ist per `.gitignore` ausgeschlossen).
 | `MANBAN_BASE_URL` | Basis-URL für Links in E-Mails | `https://localhost` |
 | `MANBAN_BOOTSTRAP_ADMIN_TOKEN` | Einmal-Token für den ersten Admin (leer = deaktiviert) | leer |
 | `MANBAN_MAIL_ENABLED` | echten Mailversand aktivieren | `false` (Links werden geloggt) |
+| `MANBAN_CLEANUP_ENABLED` | geplante Aufräum-Jobs aktivieren (Done-Archivierung **und** Papierkorb-Leerung) | `true` |
 | `MANBAN_DONE_RETENTION_DAYS` | Tage bis Done-Karten automatisch archiviert werden | `30` |
 | `MANBAN_SESSION_SECRET` | HMAC-Secret der Session-Cookies (in Produktion setzen!) | Dev-Default |
 | `MANBAN_COOKIE_SECURE` | Session-Cookie nur über HTTPS | `true` |
 | `POSTGRES_*`, `MINIO_*` | DB- und Objektspeicher-Zugangsdaten | siehe `docker-compose.yml` |
+
+> **Papierkorb-Aufbewahrung:** Karten im Papierkorb werden nach **30 Tagen** automatisch endgültig
+> gelöscht. Diese Frist ist derzeit fest eingestellt (nicht über eine Umgebungsvariable steuerbar);
+> abschalten lässt sich die Automatik nur global über `MANBAN_CLEANUP_ENABLED=false`.
 
 ## E-Mail-Bestätigung (ohne Mailserver)
 
