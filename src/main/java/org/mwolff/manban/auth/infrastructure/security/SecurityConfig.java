@@ -40,7 +40,8 @@ class SecurityConfig {
   SecurityFilterChain filterChain(
       HttpSecurity http,
       SessionAuthenticationFilter sessionFilter,
-      PatAuthenticationFilter patFilter)
+      PatAuthenticationFilter patFilter,
+      DisabledUserGuardFilter disabledGuard)
       throws Exception {
     http.csrf(csrf -> csrf.disable())
         .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
@@ -74,7 +75,10 @@ class SecurityConfig {
                     (request, response, ex) ->
                         response.sendError(HttpServletResponse.SC_UNAUTHORIZED)))
         .addFilterBefore(sessionFilter, UsernamePasswordAuthenticationFilter.class)
-        .addFilterBefore(patFilter, UsernamePasswordAuthenticationFilter.class);
+        .addFilterBefore(patFilter, UsernamePasswordAuthenticationFilter.class)
+        // Läuft nach beiden Auth-Filtern: sperrt authentifizierte Anfragen gesperrter Konten
+        // (Session wie PAT), indem der Kontext geleert wird.
+        .addFilterAfter(disabledGuard, PatAuthenticationFilter.class);
     return http.build();
   }
 }

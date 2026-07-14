@@ -20,6 +20,7 @@ import org.mwolff.manban.auth.domain.AppUser;
 import org.mwolff.manban.auth.domain.PlatformRole;
 
 /** Verhaltenstests der Plattform-Administration (Mockito am AppUserRepository-Port). */
+@SuppressWarnings("PMD.TooManyMethods")
 class AdminServiceTest {
 
   private static final Instant NOW = Instant.parse("2026-07-13T10:00:00Z");
@@ -309,5 +310,94 @@ class AdminServiceTest {
     // When / Then
     assertThatThrownBy(() -> service.changePlatformRole(2L, 2L, PlatformRole.USER))
         .isInstanceOf(LastAdminException.class);
+  }
+
+  // --- disable / enable -------------------------------------------------
+
+  private static AppUser disabledUser(long id, PlatformRole role) {
+    return new AppUser(
+        id, "u" + id + "@x.de", "hash", "U" + id, true, role, Instant.EPOCH, null, NOW);
+  }
+
+  @Test
+  void disable_setsDisabledAt_forOtherUser() {
+    when(users.findById(1L)).thenReturn(Optional.of(user(1, PlatformRole.ADMIN)));
+    when(users.findById(2L)).thenReturn(Optional.of(user(2, PlatformRole.USER)));
+    when(users.save(any(AppUser.class))).thenAnswer(inv -> inv.getArgument(0));
+
+    ArgumentCaptor<AppUser> captor = ArgumentCaptor.forClass(AppUser.class);
+    AdminService.UserView view = service.disable(1L, 2L);
+
+    verify(users).save(captor.capture());
+    assertThat(captor.getValue().disabledAt()).isEqualTo(NOW);
+    assertThat(view.disabled()).isTrue();
+  }
+
+  @Test
+  void disable_rejectsSelf() {
+    when(users.findById(1L)).thenReturn(Optional.of(user(1, PlatformRole.ADMIN)));
+
+    assertThatThrownBy(() -> service.disable(1L, 1L))
+        .isInstanceOf(CannotDisableSelfException.class);
+    verify(users, never()).save(any());
+  }
+
+  @Test
+  void disable_isIdempotent_whenAlreadyDisabled() {
+    when(users.findById(1L)).thenReturn(Optional.of(user(1, PlatformRole.ADMIN)));
+    when(users.findById(2L)).thenReturn(Optional.of(disabledUser(2, PlatformRole.USER)));
+
+    AdminService.UserView view = service.disable(1L, 2L);
+
+    assertThat(view.disabled()).isTrue();
+    verify(users, never()).save(any());
+  }
+
+  @Test
+  void disable_throwsUserNotFound_whenTargetUnknown() {
+    when(users.findById(1L)).thenReturn(Optional.of(user(1, PlatformRole.ADMIN)));
+    when(users.findById(2L)).thenReturn(Optional.empty());
+
+    assertThatThrownBy(() -> service.disable(1L, 2L)).isInstanceOf(UserNotFoundException.class);
+  }
+
+  @Test
+  void disable_deniedForNonAdmin() {
+    when(users.findById(9L)).thenReturn(Optional.of(user(9, PlatformRole.USER)));
+
+    assertThatThrownBy(() -> service.disable(9L, 2L))
+        .isInstanceOf(AdminAccessDeniedException.class);
+  }
+
+  @Test
+  void enable_clearsDisabledAt() {
+    when(users.findById(1L)).thenReturn(Optional.of(user(1, PlatformRole.ADMIN)));
+    when(users.findById(2L)).thenReturn(Optional.of(disabledUser(2, PlatformRole.USER)));
+    when(users.save(any(AppUser.class))).thenAnswer(inv -> inv.getArgument(0));
+
+    ArgumentCaptor<AppUser> captor = ArgumentCaptor.forClass(AppUser.class);
+    AdminService.UserView view = service.enable(1L, 2L);
+
+    verify(users).save(captor.capture());
+    assertThat(captor.getValue().disabledAt()).isNull();
+    assertThat(view.disabled()).isFalse();
+  }
+
+  @Test
+  void enable_deniedForNonAdmin() {
+    when(users.findById(9L)).thenReturn(Optional.of(user(9, PlatformRole.USER)));
+
+    assertThatThrownBy(() -> service.enable(9L, 2L)).isInstanceOf(AdminAccessDeniedException.class);
+  }
+
+  @Test
+  void enable_isIdempotent_whenActive() {
+    when(users.findById(1L)).thenReturn(Optional.of(user(1, PlatformRole.ADMIN)));
+    when(users.findById(2L)).thenReturn(Optional.of(user(2, PlatformRole.USER)));
+
+    AdminService.UserView view = service.enable(1L, 2L);
+
+    assertThat(view.disabled()).isFalse();
+    verify(users, never()).save(any());
   }
 }

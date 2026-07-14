@@ -36,6 +36,9 @@ public class LoginService {
     if (!passwordEncoder.matches(rawPassword, user.passwordHash())) {
       throw new InvalidCredentialsException();
     }
+    if (user.disabled()) {
+      throw new UserDisabledException();
+    }
     if (!user.emailVerified()) {
       throw new EmailNotVerifiedException();
     }

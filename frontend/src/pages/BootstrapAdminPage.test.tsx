@@ -13,6 +13,8 @@ describe('BootstrapAdminPage', () => {
       listUsers: vi.fn(),
       setRole: vi.fn(),
       approve: vi.fn(),
+      disable: vi.fn(),
+      enable: vi.fn(),
       bootstrap: vi.fn().mockResolvedValue({}),
     } satisfies AdminApi
     render(

@@ -42,5 +42,15 @@ class AdminUserController {
     return admin.approve(userId, id);
   }
 
+  @PostMapping("/api/admin/users/{id}/disable")
+  UserView disable(@AuthenticationPrincipal Long userId, @PathVariable long id) {
+    return admin.disable(userId, id);
+  }
+
+  @PostMapping("/api/admin/users/{id}/enable")
+  UserView enable(@AuthenticationPrincipal Long userId, @PathVariable long id) {
+    return admin.enable(userId, id);
+  }
+
   record ChangeRoleRequest(@NotNull PlatformRole platformRole) {}
 }

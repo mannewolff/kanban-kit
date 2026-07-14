@@ -27,7 +27,8 @@ class AdminUserControllerTest {
   @Test
   void list_delegatesToService() {
     // Given
-    List<UserView> users = List.of(new UserView(1L, "a@b.de", "A", PlatformRole.USER, true, null));
+    List<UserView> users =
+        List.of(new UserView(1L, "a@b.de", "A", PlatformRole.USER, true, null, false));
     when(service.listUsers(3L)).thenReturn(users);
 
     // When
@@ -40,7 +41,7 @@ class AdminUserControllerTest {
   @Test
   void changeRole_delegatesToService() {
     // Given
-    UserView user = new UserView(5L, "a@b.de", "A", PlatformRole.ADMIN, true, Instant.EPOCH);
+    UserView user = new UserView(5L, "a@b.de", "A", PlatformRole.ADMIN, true, Instant.EPOCH, false);
     var request = new AdminUserController.ChangeRoleRequest(PlatformRole.ADMIN);
     when(service.changePlatformRole(3L, 5L, PlatformRole.ADMIN)).thenReturn(user);
 
@@ -54,7 +55,7 @@ class AdminUserControllerTest {
   @Test
   void approve_delegatesToService() {
     // Given
-    UserView user = new UserView(7L, "p@b.de", "P", PlatformRole.USER, true, Instant.EPOCH);
+    UserView user = new UserView(7L, "p@b.de", "P", PlatformRole.USER, true, Instant.EPOCH, false);
     when(service.approve(3L, 7L)).thenReturn(user);
 
     // When
@@ -62,5 +63,21 @@ class AdminUserControllerTest {
 
     // Then
     assertThat(result).isSameAs(user);
+  }
+
+  @Test
+  void disable_delegatesToService() {
+    UserView user = new UserView(7L, "p@b.de", "P", PlatformRole.USER, true, Instant.EPOCH, true);
+    when(service.disable(3L, 7L)).thenReturn(user);
+
+    assertThat(controller.disable(3L, 7L)).isSameAs(user);
+  }
+
+  @Test
+  void enable_delegatesToService() {
+    UserView user = new UserView(7L, "p@b.de", "P", PlatformRole.USER, true, Instant.EPOCH, false);
+    when(service.enable(3L, 7L)).thenReturn(user);
+
+    assertThat(controller.enable(3L, 7L)).isSameAs(user);
   }
 }

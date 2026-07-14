@@ -3,6 +3,10 @@ import { describe, expect, it, vi } from 'vitest'
 import type { AdminApi } from '../api/admin'
 import { AdminPage } from './AdminPage'
 
+vi.mock('../auth/AuthContext', () => ({
+  useAuth: () => ({ user: { userId: 99, memberships: [] } }),
+}))
+
 function makeApi(): AdminApi {
   return {
     listUsers: vi.fn().mockResolvedValue([
@@ -13,6 +17,7 @@ function makeApi(): AdminApi {
         platformRole: 'USER',
         emailVerified: true,
         approvedAt: '2026-07-13T10:00:00Z',
+        disabled: false,
       },
       {
         id: 2,
@@ -21,6 +26,7 @@ function makeApi(): AdminApi {
         platformRole: 'ADMIN',
         emailVerified: true,
         approvedAt: '2026-07-13T10:00:00Z',
+        disabled: false,
       },
       {
         id: 3,
@@ -29,10 +35,13 @@ function makeApi(): AdminApi {
         platformRole: 'USER',
         emailVerified: true,
         approvedAt: null,
+        disabled: true,
       },
     ]),
     setRole: vi.fn().mockResolvedValue({}),
     approve: vi.fn().mockResolvedValue({}),
+    disable: vi.fn().mockResolvedValue({}),
+    enable: vi.fn().mockResolvedValue({}),
     bootstrap: vi.fn(),
   }
 }
@@ -64,5 +73,17 @@ describe('AdminPage', () => {
     await waitFor(() => expect(api.approve).toHaveBeenCalledWith(3))
     // Nach Erfolg wird neu geladen (zweiter listUsers-Aufruf).
     await waitFor(() => expect(api.listUsers).toHaveBeenCalledTimes(2))
+  })
+
+  it('sperrt einen aktiven und entsperrt einen gesperrten Nutzer', async () => {
+    const api = makeApi()
+    render(<AdminPage api={api} />)
+    await screen.findByText('Alice')
+
+    fireEvent.click(screen.getByLabelText('Alice sperren'))
+    await waitFor(() => expect(api.disable).toHaveBeenCalledWith(1))
+
+    fireEvent.click(screen.getByLabelText('Carol entsperren'))
+    await waitFor(() => expect(api.enable).toHaveBeenCalledWith(3))
   })
 })

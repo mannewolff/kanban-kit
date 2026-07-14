@@ -16,6 +16,7 @@ import org.mwolff.manban.common.Identifiable;
  * @param approvedAt Zeitpunkt der Admin-Freigabe; {@code null} = noch nicht freigegeben (pending)
  * @param approvedBy ID des freigebenden Plattform-Admins; {@code null} wenn nicht (durch einen
  *     Admin) freigegeben
+ * @param disabledAt Zeitpunkt der Sperre; {@code null} = aktiv (nicht gesperrt)
  */
 public record AppUser(
     @Nullable Long id,
@@ -25,7 +26,8 @@ public record AppUser(
     boolean emailVerified,
     PlatformRole platformRole,
     @Nullable Instant approvedAt,
-    @Nullable Long approvedBy)
+    @Nullable Long approvedBy,
+    @Nullable Instant disabledAt)
     implements Identifiable {
 
   /**
@@ -36,7 +38,7 @@ public record AppUser(
 
   /**
    * Bequem-Konstruktor für bereits im System bestehende Benutzer (geseedet, importiert oder in
-   * Tests aufgebaut): Der so erzeugte Benutzer gilt als <strong>freigegeben</strong>. Der
+   * Tests aufgebaut): Der so erzeugte Benutzer gilt als <strong>freigegeben</strong> und aktiv. Der
    * Registrierungs-Pfad ({@code RegisterUserService}) nutzt bewusst den kanonischen Konstruktor mit
    * {@code approvedAt=null}, um einen noch nicht freigegebenen (pending) Benutzer zu erzeugen.
    */
@@ -47,7 +49,40 @@ public record AppUser(
       String displayName,
       boolean emailVerified,
       PlatformRole platformRole) {
-    this(id, email, passwordHash, displayName, emailVerified, platformRole, PRE_APPROVED, null);
+    this(
+        id,
+        email,
+        passwordHash,
+        displayName,
+        emailVerified,
+        platformRole,
+        PRE_APPROVED,
+        null,
+        null);
+  }
+
+  /**
+   * Bequem-Konstruktor ohne Sperr-Feld: erzeugt einen aktiven Benutzer ({@code disabledAt=null}).
+   */
+  public AppUser(
+      @Nullable Long id,
+      String email,
+      String passwordHash,
+      String displayName,
+      boolean emailVerified,
+      PlatformRole platformRole,
+      @Nullable Instant approvedAt,
+      @Nullable Long approvedBy) {
+    this(
+        id,
+        email,
+        passwordHash,
+        displayName,
+        emailVerified,
+        platformRole,
+        approvedAt,
+        approvedBy,
+        null);
   }
 
   /** Ob der Benutzer von einem Plattform-Admin (bzw. beim Seed/Import) freigegeben wurde. */
@@ -55,10 +90,23 @@ public record AppUser(
     return approvedAt != null;
   }
 
+  /** Ob der Benutzer gesperrt (deaktiviert) ist. */
+  public boolean disabled() {
+    return disabledAt != null;
+  }
+
   /** Kopie mit gesetztem E-Mail-Verifikations-Status. */
   public AppUser withEmailVerified(boolean verified) {
     return new AppUser(
-        id, email, passwordHash, displayName, verified, platformRole, approvedAt, approvedBy);
+        id,
+        email,
+        passwordHash,
+        displayName,
+        verified,
+        platformRole,
+        approvedAt,
+        approvedBy,
+        disabledAt);
   }
 
   /** Kopie mit neuem Passwort-Hash. */
@@ -71,7 +119,8 @@ public record AppUser(
         emailVerified,
         platformRole,
         approvedAt,
-        approvedBy);
+        approvedBy,
+        disabledAt);
   }
 
   /** Kopie mit neuer Plattform-Rolle. */
@@ -84,11 +133,27 @@ public record AppUser(
         emailVerified,
         newPlatformRole,
         approvedAt,
-        approvedBy);
+        approvedBy,
+        disabledAt);
   }
 
   /** Kopie mit gesetzter Freigabe (Zeitpunkt + ID des freigebenden Admins). */
   public AppUser withApproved(Instant when, @Nullable Long by) {
-    return new AppUser(id, email, passwordHash, displayName, emailVerified, platformRole, when, by);
+    return new AppUser(
+        id, email, passwordHash, displayName, emailVerified, platformRole, when, by, disabledAt);
+  }
+
+  /** Kopie mit gesetzter/aufgehobener Sperre ({@code null} = entsperrt). */
+  public AppUser withDisabledAt(@Nullable Instant when) {
+    return new AppUser(
+        id,
+        email,
+        passwordHash,
+        displayName,
+        emailVerified,
+        platformRole,
+        approvedAt,
+        approvedBy,
+        when);
   }
 }
