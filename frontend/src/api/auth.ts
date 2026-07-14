@@ -37,6 +37,8 @@ function parseMe(data: unknown): Me {
 
 export const authApi = {
   me: () => apiFetch<Me>('/api/me', {}, parseMe),
+  updateProfile: (displayName: string) =>
+    apiFetch<Me>('/api/me', { method: 'PATCH', body: JSON.stringify({ displayName }) }, parseMe),
   login: (email: string, password: string) =>
     apiFetch<Me>('/api/auth/login', jsonBody({ email, password }), parseMe),
   logout: () => apiFetch<void>('/api/auth/logout', { method: 'POST' }),

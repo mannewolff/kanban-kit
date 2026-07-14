@@ -2,6 +2,7 @@ import AppBar from '@mui/material/AppBar'
 import Avatar from '@mui/material/Avatar'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
+import ButtonBase from '@mui/material/ButtonBase'
 import Collapse from '@mui/material/Collapse'
 import Divider from '@mui/material/Divider'
 import Drawer from '@mui/material/Drawer'
@@ -336,15 +337,22 @@ export function AppShell() {
           </Box>
           {user && (
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <Avatar
-                sx={{ bgcolor: 'primary.dark', width: 32, height: 32, fontSize: '0.875rem' }}
-                aria-label={`Angemeldet als ${user.displayName}`}
-              >
-                {initial}
-              </Avatar>
-              <Typography variant="body2" sx={{ display: { xs: 'none', sm: 'inline' } }}>
-                {user.displayName}
-              </Typography>
+              <Tooltip title="Profil bearbeiten">
+                <ButtonBase
+                  onClick={() => navigate('/profil')}
+                  aria-label={`Profil von ${user.displayName} bearbeiten`}
+                  sx={{ display: 'flex', alignItems: 'center', gap: 1, borderRadius: 1, p: 0.5 }}
+                >
+                  <Avatar
+                    sx={{ bgcolor: 'primary.dark', width: 32, height: 32, fontSize: '0.875rem' }}
+                  >
+                    {initial}
+                  </Avatar>
+                  <Typography variant="body2" sx={{ display: { xs: 'none', sm: 'inline' } }}>
+                    {user.displayName}
+                  </Typography>
+                </ButtonBase>
+              </Tooltip>
               <Button color="inherit" startIcon={<LogoutIcon />} onClick={handleLogout} aria-label="Abmelden">
                 Abmelden
               </Button>

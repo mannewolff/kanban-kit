@@ -123,6 +123,20 @@ public record AppUser(
         disabledAt);
   }
 
+  /** Kopie mit neuem Anzeigenamen. */
+  public AppUser withDisplayName(String newDisplayName) {
+    return new AppUser(
+        id,
+        email,
+        passwordHash,
+        newDisplayName,
+        emailVerified,
+        platformRole,
+        approvedAt,
+        approvedBy,
+        disabledAt);
+  }
+
   /** Kopie mit neuer Plattform-Rolle. */
   public AppUser withPlatformRole(PlatformRole newPlatformRole) {
     return new AppUser(

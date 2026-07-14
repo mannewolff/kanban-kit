@@ -2,13 +2,16 @@ package org.mwolff.manban.auth.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.mwolff.manban.auth.application.ProjectMembershipReader.Membership;
 import org.mwolff.manban.auth.domain.AppUser;
 import org.mwolff.manban.auth.domain.PlatformRole;
@@ -62,5 +65,34 @@ class MeServiceTest {
 
     // When / Then
     assertThatThrownBy(() -> service.load(2L)).isInstanceOf(InvalidCredentialsException.class);
+  }
+
+  @Test
+  void updateDisplayName_trimsPersistsAndReturnsUpdatedView() {
+    // Given
+    when(users.findById(2L))
+        .thenReturn(Optional.of(new AppUser(2L, "a@x.de", "hash", "Alt", true, PlatformRole.USER)));
+    when(users.save(any(AppUser.class))).thenAnswer(inv -> inv.getArgument(0));
+    when(memberships.findByUserId(2L)).thenReturn(List.of());
+
+    // When
+    MeService.MeView view = service.updateDisplayName(2L, "  Neuer Name  ");
+
+    // Then
+    assertThat(view.displayName()).isEqualTo("Neuer Name");
+    assertThat(view.email()).isEqualTo("a@x.de");
+    ArgumentCaptor<AppUser> saved = ArgumentCaptor.forClass(AppUser.class);
+    verify(users).save(saved.capture());
+    assertThat(saved.getValue().displayName()).isEqualTo("Neuer Name");
+  }
+
+  @Test
+  void updateDisplayName_throwsInvalidCredentials_whenUserUnknown() {
+    // Given
+    when(users.findById(2L)).thenReturn(Optional.empty());
+
+    // When / Then
+    assertThatThrownBy(() -> service.updateDisplayName(2L, "Neu"))
+        .isInstanceOf(InvalidCredentialsException.class);
   }
 }
