@@ -102,6 +102,7 @@ public class CardService {
                 now,
                 CardType.CARD,
                 effectiveParent,
+                null,
                 null));
 
     transitions.open(saved.requireId(), columnId, column.name(), now);
@@ -147,7 +148,8 @@ public class CardService {
                 now,
                 CardType.EPIC,
                 null,
-                trimToNull(shortcode)));
+                trimToNull(shortcode),
+                null));
     return view(saved);
   }
 
@@ -206,7 +208,8 @@ public class CardService {
       @Nullable String description,
       @Nullable List<Integer> dependsOn,
       @Nullable String shortcode,
-      @Nullable Long parentId) {
+      @Nullable Long parentId,
+      @Nullable Instant dueDate) {
     Card card = requireCardOp(userId, cardId, Permission.TICKET_UPDATE, Permission.EPIC_UPDATE);
     Card updated = card.withContent(title.trim(), normalize(description));
     if (card.type() == CardType.EPIC) {
@@ -216,7 +219,7 @@ public class CardService {
       // Karten: Epic-Zuordnung im selben PUT setzen/lösen (parentId == null -> lösen).
       Long effectiveParent =
           parentId == null ? null : requireEpicInBoard(parentId, card.boardId()).requireId();
-      updated = updated.withParent(effectiveParent);
+      updated = updated.withParent(effectiveParent).withDueDate(dueDate);
     }
     Card saved = cards.save(updated);
     if (dependsOn != null) {
@@ -430,7 +433,8 @@ public class CardService {
         c.type(),
         c.parentId(),
         c.shortcode(),
-        assignees.findByCardId(c.requireId()));
+        assignees.findByCardId(c.requireId()),
+        c.dueDate());
   }
 
   /** Kartendarstellung inkl. Abhängigkeits-Nummern, Typ und Epic-Zuordnung. */
@@ -448,7 +452,8 @@ public class CardService {
       CardType type,
       @Nullable Long parentId,
       @Nullable String shortcode,
-      List<Long> assignees) {}
+      List<Long> assignees,
+      @Nullable Instant dueDate) {}
 
   /** Epic-Darstellung inkl. Fortschritt (Kinder gesamt / in Done). */
   public record EpicView(

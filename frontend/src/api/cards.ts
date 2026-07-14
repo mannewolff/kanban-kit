@@ -17,6 +17,7 @@ export interface Card {
   parentId: number | null
   shortcode: string | null
   assignees: number[]
+  dueDate: string | null
 }
 
 export const cardsApi = {
@@ -48,10 +49,11 @@ export const cardsApi = {
     dependencies?: number[],
     shortcode?: string | null,
     parentId?: number | null,
+    dueDate?: string | null,
   ) =>
     apiFetch<Card>(`/api/cards/${cardId}`, {
       method: 'PATCH',
-      body: JSON.stringify({ title, description, dependencies, shortcode, parentId }),
+      body: JSON.stringify({ title, description, dependencies, shortcode, parentId, dueDate }),
     }),
 }
 

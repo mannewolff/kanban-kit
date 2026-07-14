@@ -18,6 +18,7 @@ import { EpicBadge } from '../components/EpicBadge'
 import { clampExcerptWidth, EXCERPT_DEFAULT_PCT, stripMarkdown } from '../lib/listExcerpt'
 import { canEditCards, canModerateComments, isPlatformAdmin } from '../lib/roles'
 import { useProjectName } from '../lib/useProjectName'
+import { formatDueDate, isOverdue } from '../lib/dueDate'
 import { ARCHIVED_STATUS_COLOR, statusColors } from '../lib/statusColors'
 
 const ARCHIVED = 'archived'
@@ -247,8 +248,24 @@ export function BoardListPage() {
         const epic = card.parentId != null ? epicById.get(card.parentId) : undefined
         return epic ? <EpicBadge epicId={epic.id} title={epic.title} shortcode={epic.shortcode} /> : null
       }
-      case 'title':
-        return <Typography variant="body2" noWrap sx={{ fontWeight: 500 }}>{card.title}</Typography>
+      case 'title': {
+        const overdue = isOverdue(card.dueDate, (col?.name ?? '').toLowerCase().includes('done'))
+        return (
+          <Box>
+            <Typography variant="body2" noWrap sx={{ fontWeight: 500 }}>{card.title}</Typography>
+            {card.dueDate != null && (
+              <Typography
+                variant="caption"
+                aria-label={`Fällig ${card.title}`}
+                color={overdue ? 'error' : 'text.secondary'}
+                sx={{ display: 'block', fontWeight: overdue ? 600 : 400 }}
+              >
+                📅 {formatDueDate(card.dueDate)}
+              </Typography>
+            )}
+          </Box>
+        )
+      }
       case 'excerpt':
         return <Typography variant="caption" color="text.secondary" noWrap sx={{ display: 'block' }}>{stripMarkdown(card.description ?? '')}</Typography>
     }

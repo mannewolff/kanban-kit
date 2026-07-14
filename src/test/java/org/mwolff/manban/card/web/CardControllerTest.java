@@ -36,7 +36,8 @@ class CardControllerTest {
         CardType.CARD,
         null,
         null,
-        List.of());
+        List.of(),
+        null);
   }
 
   @BeforeEach
@@ -119,8 +120,8 @@ class CardControllerTest {
     // Given
     CardView view = card();
     var deps = List.of(3, 4);
-    var request = new CardController.UpdateCardRequest("Title", "Desc", deps, "SC-1", 9L);
-    when(service.update(3L, 8L, "Title", "Desc", deps, "SC-1", 9L)).thenReturn(view);
+    var request = new CardController.UpdateCardRequest("Title", "Desc", deps, "SC-1", 9L, null);
+    when(service.update(3L, 8L, "Title", "Desc", deps, "SC-1", 9L, null)).thenReturn(view);
 
     // When
     CardView result = controller.update(3L, 8L, request);

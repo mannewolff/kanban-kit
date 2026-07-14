@@ -22,6 +22,7 @@ import type { Card } from '../api/cards'
 import { commentsApi as defaultCommentsApi, type Comment, type CommentsApi } from '../api/comments'
 import type { Epic } from '../api/epics'
 import type { Member } from '../api/members'
+import { dueInputToIso, formatDueDate, isOverdue } from '../lib/dueDate'
 import { epicShortcode } from '../lib/epicMeta'
 import { normalizeTaskLists, toggleTaskAt } from '../lib/markdownTasks'
 import { CODE_BLOCK_BG, MODAL_BORDER, MODAL_TEXT_PRIMARY, statusColors } from '../lib/statusColors'
@@ -158,6 +159,7 @@ export function CardDetailModal({
   const [body, setBody] = useState(card.description ?? '')
   const [parentId, setParentId] = useState<number | null>(card.parentId)
   const [shortcode, setShortcode] = useState(card.shortcode ?? '')
+  const [dueInput, setDueInput] = useState(card.dueDate ? card.dueDate.slice(0, 10) : '')
   const [depsInput, setDepsInput] = useState(card.dependencies.join(', '))
   const [depsError, setDepsError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
@@ -190,6 +192,7 @@ export function CardDetailModal({
     setBody(card.description ?? '')
     setParentId(card.parentId)
     setShortcode(card.shortcode ?? '')
+    setDueInput(card.dueDate ? card.dueDate.slice(0, 10) : '')
     setDepsInput(card.dependencies.join(', '))
     setDepsError(null)
     setEditing(true)
@@ -211,6 +214,7 @@ export function CardDetailModal({
         deps,
         isEpic ? shortcode.trim() || null : undefined,
         isEpic ? undefined : parentId,
+        isEpic ? undefined : dueInputToIso(dueInput),
       )
       setEditing(false)
       onChanged?.()
@@ -236,6 +240,7 @@ export function CardDetailModal({
         card.dependencies,
         isEpic ? (card.shortcode ?? null) : undefined,
         isEpic ? undefined : card.parentId,
+        isEpic ? undefined : card.dueDate,
       )
       onChanged?.()
     } catch {
@@ -306,6 +311,8 @@ export function CardDetailModal({
   }
 
   const colors = columnName ? statusColors(columnName) : null
+  const dueOverdue =
+    !isEpic && isOverdue(card.dueDate, (columnName ?? '').toLowerCase().includes('done'))
 
   // Aktuellen Toggle-Handler über ein Ref halten und als stabile Callback-Identität an TaskMarkdown
   // reichen, damit dessen `memo` greift (kein Remount der Beschreibung bei Kommentar-Nachladen).
@@ -434,6 +441,15 @@ export function CardDetailModal({
                     inputProps={{ 'aria-label': 'Abhängig von' }}
                     fullWidth
                   />
+                  <TextField
+                    type="date"
+                    label="Fällig am"
+                    value={dueInput}
+                    onChange={(e) => setDueInput(e.target.value)}
+                    InputLabelProps={{ shrink: true }}
+                    inputProps={{ 'aria-label': 'Fällig am' }}
+                    sx={{ maxWidth: 200 }}
+                  />
                 </>
               )}
             </>
@@ -449,6 +465,17 @@ export function CardDetailModal({
               {card.dependencies.length > 0 && (
                 <Typography variant="body2" color="text.secondary" aria-label="Abhängigkeiten">
                   Abhängig von: {card.dependencies.map((n) => `#${n}`).join(', ')}
+                </Typography>
+              )}
+              {!isEpic && card.dueDate && (
+                <Typography
+                  variant="body2"
+                  aria-label="Fälligkeitsdatum"
+                  color={dueOverdue ? 'error' : 'text.secondary'}
+                  sx={{ fontWeight: dueOverdue ? 600 : 400 }}
+                >
+                  Fällig am {formatDueDate(card.dueDate)}
+                  {dueOverdue && ' — überfällig'}
                 </Typography>
               )}
             </>

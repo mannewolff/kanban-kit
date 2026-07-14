@@ -4,7 +4,9 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
+import java.time.Instant;
 import java.util.List;
+import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.board.application.ColumnNotFoundException;
 import org.mwolff.manban.card.application.CardService;
 import org.mwolff.manban.card.application.CardService.CardView;
@@ -80,7 +82,8 @@ class CardController {
         request.description(),
         request.dependencies(),
         request.shortcode(),
-        request.parentId());
+        request.parentId(),
+        request.dueDate());
   }
 
   /**
@@ -151,7 +154,8 @@ class CardController {
       String description,
       List<Integer> dependencies,
       @Size(max = 16) String shortcode,
-      Long parentId) {}
+      Long parentId,
+      @Nullable Instant dueDate) {}
 
   record AssignParentRequest(Long parentId) {}
 

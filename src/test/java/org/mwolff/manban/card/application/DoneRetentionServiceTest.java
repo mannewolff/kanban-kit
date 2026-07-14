@@ -39,6 +39,7 @@ class DoneRetentionServiceTest {
         NOW,
         CardType.CARD,
         null,
+        null,
         null);
   }
 

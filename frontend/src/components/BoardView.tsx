@@ -29,6 +29,7 @@ import { epicsApi as defaultEpicsApi, type Epic, type EpicsApi } from '../api/ep
 import type { Member } from '../api/members'
 import { activeCardsInColumn, applyMove } from '../lib/boardOps'
 import { cleanupCountdownLabel, cleanupDaysRemaining } from '../lib/cleanupCountdown'
+import { formatDueDate, isOverdue } from '../lib/dueDate'
 import { epicColor, epicShortcode } from '../lib/epicMeta'
 import { COLUMN_SURFACE_BG, statusColors } from '../lib/statusColors'
 import { EpicBadge } from './EpicBadge'
@@ -356,6 +357,7 @@ export function BoardView({
                 {activeCardsInColumn(filteredCards, column.id).map((card) => {
                   const epic = card.parentId != null ? epicById.get(card.parentId) : undefined
                   const doneAt = done ? card.movedToDoneAt : null
+                  const overdue = isOverdue(card.dueDate, done)
                   return (
                     <Paper
                       key={card.id}
@@ -400,6 +402,16 @@ export function BoardView({
                       {doneAt != null && (
                         <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
                           {cleanupCountdownLabel(cleanupDaysRemaining(doneAt, retentionDays))}
+                        </Typography>
+                      )}
+                      {card.dueDate != null && (
+                        <Typography
+                          variant="caption"
+                          aria-label={`Fällig ${card.title}`}
+                          color={overdue ? 'error' : 'text.secondary'}
+                          sx={{ display: 'block', mt: 0.5, fontWeight: overdue ? 600 : 400 }}
+                        >
+                          📅 {formatDueDate(card.dueDate)}
                         </Typography>
                       )}
                       {card.assignees.length > 0 && (

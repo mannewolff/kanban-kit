@@ -66,7 +66,7 @@ class CardServiceTest {
       String shortcode) {
     return new Card(
         id, BOARD, columnId, number, "Titel", null, 0, archived, done, 1L, FIXED, FIXED, type,
-        parentId, shortcode);
+        parentId, shortcode, null);
   }
 
   private static BoardColumn column(long id, String name, int position) {
@@ -115,7 +115,8 @@ class CardServiceTest {
         c.updatedAt(),
         c.type(),
         c.parentId(),
-        c.shortcode());
+        c.shortcode(),
+        c.dueDate());
   }
 
   // --- create -----------------------------------------------------------
@@ -421,7 +422,7 @@ class CardServiceTest {
 
     // When
     ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
-    service.update(1L, 1L, "Neu", null, null, null, 30L);
+    service.update(1L, 1L, "Neu", null, null, null, 30L, null);
 
     // Then
     verify(cards).save(captor.capture());
@@ -436,7 +437,7 @@ class CardServiceTest {
 
     // When
     ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
-    service.update(1L, 5L, "Neu", null, null, "NEW", null);
+    service.update(1L, 5L, "Neu", null, null, "NEW", null, null);
 
     // Then
     verify(cards).save(captor.capture());
@@ -452,7 +453,7 @@ class CardServiceTest {
         .thenReturn(List.of(card(2L, 20L, 3, false, null, CardType.CARD, null, null)));
 
     // When
-    service.update(1L, 1L, "Neu", null, List.of(3), null, null);
+    service.update(1L, 1L, "Neu", null, List.of(3), null, null, null);
 
     // Then
     verify(dependencies).replaceDependencies(1L, List.of(3));
@@ -464,7 +465,7 @@ class CardServiceTest {
     when(cards.findById(1L)).thenReturn(Optional.empty());
 
     // When / Then
-    assertThatThrownBy(() -> service.update(1L, 1L, "Neu", null, null, null, null))
+    assertThatThrownBy(() -> service.update(1L, 1L, "Neu", null, null, null, null, null))
         .isInstanceOf(CardNotFoundException.class);
   }
 
@@ -738,7 +739,8 @@ class CardServiceTest {
             FIXED,
             CardType.EPIC,
             null,
-            "E");
+            "E",
+            null);
     when(cards.findById(30L)).thenReturn(Optional.of(epicOtherBoard));
 
     // When / Then
@@ -782,7 +784,7 @@ class CardServiceTest {
         .thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
 
     // When
-    service.update(1L, 1L, "Neu", null, null, null, null);
+    service.update(1L, 1L, "Neu", null, null, null, null, null);
 
     // Then
     verify(dependencies, never()).replaceDependencies(anyLong(), anyList());
@@ -911,7 +913,7 @@ class CardServiceTest {
         .thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
 
     // When
-    CardService.CardView view = service.update(1L, 1L, "Neu", null, null, null, null);
+    CardService.CardView view = service.update(1L, 1L, "Neu", null, null, null, null, null);
 
     // Then
     assertThat(view.title()).isEqualTo("Neu");
@@ -1102,6 +1104,20 @@ class CardServiceTest {
     // When / Then
     assertThatThrownBy(() -> service.transfer(1L, 100L, 20L, 60L))
         .isInstanceOf(ColumnNotFoundException.class);
+  }
+
+  @Test
+  void update_setsDueDate_forCard() {
+    when(cards.findById(1L))
+        .thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
+    Instant due = FIXED.plusSeconds(86_400);
+
+    ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
+    CardService.CardView view = service.update(1L, 1L, "Neu", null, null, null, null, due);
+
+    verify(cards).save(captor.capture());
+    assertThat(captor.getValue().dueDate()).isEqualTo(due);
+    assertThat(view.dueDate()).isEqualTo(due);
   }
 
   // --- Zuständige (Assignees) -------------------------------------------

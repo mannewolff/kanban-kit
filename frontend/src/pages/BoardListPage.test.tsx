@@ -32,7 +32,7 @@ const mProjects = projectsApi as unknown as { list: ReturnType<typeof vi.fn> }
 
 const base = {
   boardId: 1, positionInColumn: 0, movedToDoneAt: null as string | null,
-  dependencies: [] as number[], type: 'CARD' as const, parentId: null as number | null, shortcode: null as string | null, assignees: [] as number[],
+  dependencies: [] as number[], type: 'CARD' as const, parentId: null as number | null, shortcode: null as string | null, assignees: [] as number[], dueDate: null as string | null,
 }
 const active: Card = { ...base, id: 100, columnId: 10, number: 1, title: 'Aufgabe', description: '# Titel\nText **fett**', archived: false }
 const archived: Card = { ...base, id: 101, columnId: 20, number: 2, title: 'AlteKarte', description: 'x', archived: true }

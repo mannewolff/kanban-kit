@@ -44,7 +44,22 @@ class AttachmentServiceTest {
 
   private static Card card() {
     return new Card(
-        5L, 10L, 20L, 1, "T", null, 0, false, null, 1L, FIXED, FIXED, CardType.CARD, null, null);
+        5L,
+        10L,
+        20L,
+        1,
+        "T",
+        null,
+        0,
+        false,
+        null,
+        1L,
+        FIXED,
+        FIXED,
+        CardType.CARD,
+        null,
+        null,
+        null);
   }
 
   private static Attachment attachment() {

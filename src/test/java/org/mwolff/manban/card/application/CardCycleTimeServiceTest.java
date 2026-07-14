@@ -78,6 +78,7 @@ class CardCycleTimeServiceTest {
         createdAt,
         CardType.CARD,
         null,
+        null,
         null);
   }
 
@@ -175,7 +176,8 @@ class CardCycleTimeServiceTest {
             NOW.minusSeconds(500_000),
             CardType.EPIC,
             null,
-            "EP");
+            "EP",
+            null);
     stub(
         List.of(
             card(1L, 20L, 1, "a", NOW.minusSeconds(100), NOW),

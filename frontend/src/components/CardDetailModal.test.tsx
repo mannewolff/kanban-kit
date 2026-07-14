@@ -12,7 +12,7 @@ vi.mock('../auth/AuthContext', () => ({
 const card: Card = {
   id: 100, boardId: 1, columnId: 10, number: 5, title: 'Aufgabe', description: '# Titel\n\n- a\n- b',
   positionInColumn: 0, archived: false, movedToDoneAt: null, dependencies: [3, 4],
-  type: 'CARD', parentId: null, shortcode: null, assignees: [],
+  type: 'CARD', parentId: null, shortcode: null, assignees: [], dueDate: null,
 }
 
 function makeApis() {
@@ -86,7 +86,7 @@ describe('CardDetailModal', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Speichern' }))
 
     await waitFor(() =>
-      expect(apis.cardsApi.update).toHaveBeenCalledWith(100, 'Aufgabe', 'Neuer Text', [3, 4], undefined, null),
+      expect(apis.cardsApi.update).toHaveBeenCalledWith(100, 'Aufgabe', 'Neuer Text', [3, 4], undefined, null, null),
     )
     expect(onChanged).toHaveBeenCalled()
   })
@@ -155,7 +155,7 @@ describe('CardDetailModal', () => {
 
     await waitFor(() =>
       expect(apis.cardsApi.update).toHaveBeenCalledWith(
-        100, 'Aufgabe', '[ ] eins\n[x] zwei', [3, 4], undefined, null,
+        100, 'Aufgabe', '[ ] eins\n[x] zwei', [3, 4], undefined, null, null,
       ),
     )
     expect(onChanged).toHaveBeenCalled()
@@ -213,5 +213,36 @@ describe('CardDetailModal', () => {
 
     await waitFor(() => expect(apis.cardsApi.setAssignees).toHaveBeenCalledWith(100, [6]))
     expect(onChanged).toHaveBeenCalled()
+  })
+
+  it('zeigt ein überfälliges Datum hervorgehoben im Lesemodus', () => {
+    const apis = makeApis()
+    render(
+      <CardDetailModal
+        card={{ ...card, dueDate: '2020-01-01T00:00:00Z' }}
+        canEdit={false}
+        columnName="In Progress"
+        onClose={vi.fn()}
+        {...apis}
+      />,
+    )
+
+    const due = screen.getByLabelText('Fälligkeitsdatum')
+    expect(due).toHaveTextContent('überfällig')
+  })
+
+  it('speichert ein gesetztes Fälligkeitsdatum als ISO-Zeitstempel', async () => {
+    const apis = makeApis()
+    render(<CardDetailModal card={card} canEdit onClose={vi.fn()} {...apis} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Bearbeiten' }))
+    fireEvent.change(screen.getByLabelText('Fällig am'), { target: { value: '2026-08-01' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Speichern' }))
+
+    await waitFor(() =>
+      expect(apis.cardsApi.update).toHaveBeenCalledWith(
+        100, 'Aufgabe', expect.any(String), [3, 4], undefined, null, '2026-08-01T00:00:00Z',
+      ),
+    )
   })
 })

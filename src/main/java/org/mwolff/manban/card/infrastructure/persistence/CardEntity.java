@@ -14,6 +14,8 @@ import org.mwolff.manban.card.domain.Card;
  * JPA-Abbildung der Tabelle {@code card}. Die generierte Spalte {@code active_position} wird von
  * der Datenbank verwaltet (STORED) und daher NICHT gemappt.
  */
+// PMD.TooManyFields: 1:1-Abbildung der Tabelle card; die Feldzahl folgt den Spalten, kein Smell.
+@SuppressWarnings("PMD.TooManyFields")
 @Entity
 @Table(name = "card")
 class CardEntity {
@@ -64,6 +66,9 @@ class CardEntity {
   @Column(name = "shortcode")
   private @Nullable String shortcode;
 
+  @Column(name = "due_date")
+  private @Nullable Instant dueDate;
+
   protected CardEntity() {
     // für JPA
   }
@@ -85,6 +90,7 @@ class CardEntity {
     this.type = c.type().name();
     this.parentId = c.parentId();
     this.shortcode = c.shortcode();
+    this.dueDate = c.dueDate();
   }
 
   @Nullable Long getId() {
@@ -145,5 +151,9 @@ class CardEntity {
 
   @Nullable String getShortcode() {
     return shortcode;
+  }
+
+  @Nullable Instant getDueDate() {
+    return dueDate;
   }
 }
