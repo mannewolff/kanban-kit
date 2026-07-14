@@ -407,11 +407,64 @@ public class CardService {
     return activity.findByCardId(cardId);
   }
 
+  /**
+   * Verschiebt eine Karte in den Papierkorb (Soft-Delete, reversibel). Recht: TICKET/EPIC_DELETE.
+   */
   @Transactional
   public void delete(long userId, long cardId) {
     Card card = requireCardOp(userId, cardId, Permission.TICKET_DELETE, Permission.EPIC_DELETE);
+    // Beim Löschen eines Epics die Kinder lösen — die DB-„ON DELETE SET NULL"-Kaskade auf
+    // parent_id feuert nur beim Hard-Delete, nicht beim Soft-Delete.
+    if (card.type() == CardType.EPIC) {
+      cards.findByBoardId(card.boardId()).stream()
+          .filter(c -> Objects.equals(c.parentId(), card.requireId()))
+          .forEach(child -> cards.save(child.withParent(null)));
+    }
+    cards.softDelete(card.requireId(), clock.instant());
+  }
+
+  /**
+   * Holt eine Karte aus dem Papierkorb zurück (ans Spaltenende). Recht wie Löschen (Member und
+   * aufwärts) — so kann ein Member eine versehentlich gelöschte Karte selbst wiederherstellen.
+   */
+  @Transactional
+  public CardView restoreFromTrash(long userId, long cardId) {
+    Card card = requireCardOp(userId, cardId, Permission.TICKET_DELETE, Permission.EPIC_DELETE);
+    int position = cards.maxActivePositionInColumn(card.columnId()) + 1;
+    cards.restoreFromTrash(card.requireId(), position);
+    activity.add(
+        card.requireId(),
+        userId,
+        CardActivityType.RESTORED,
+        "Aus Papierkorb wiederhergestellt",
+        clock.instant());
+    // View aus der bereits geladenen Karte mit neuer Position — der JDBC-Restore hat die DB-Zeile
+    // geändert; ein erneutes findById käme aus dem JPA-Cache noch mit dem alten Stand.
+    return view(card.asRestored(position));
+  }
+
+  /**
+   * Entfernt eine Karte endgültig (Hard-Delete). Nur für Board-Verwalter (Projekt-Admin/Owner,
+   * Recht {@link Permission#BOARD_DELETE}) — bewusst restriktiver als das reversible Löschen.
+   */
+  @Transactional
+  public void purge(long userId, long cardId) {
+    Card card = cards.findById(cardId).orElseThrow(CardNotFoundException::new);
+    Board board = boards.findById(card.boardId()).orElseThrow(BoardNotFoundException::new);
+    permissions.require(userId, board.projectId(), Permission.BOARD_DELETE);
     dependencies.deleteByCardId(card.requireId());
     cards.deleteById(card.requireId());
+  }
+
+  /** Karten im Papierkorb eines Boards. Erfordert Board-Mitgliedschaft (Leserecht). */
+  @Transactional(readOnly = true)
+  public List<CardView> listTrash(long userId, long boardId) {
+    Board board = boards.findById(boardId).orElseThrow(BoardNotFoundException::new);
+    permissions.requireMembership(userId, board.projectId());
+    return cards.findTrashByBoardId(boardId).stream()
+        .filter(c -> c.type() == CardType.CARD)
+        .map(this::view)
+        .toList();
   }
 
   /** Lädt die Karte und verlangt das je nach Kartentyp (Ticket/Epic) passende Recht. */

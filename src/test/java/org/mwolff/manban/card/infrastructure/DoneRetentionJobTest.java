@@ -23,7 +23,7 @@ class DoneRetentionJobTest {
   void run_passesClockInstantToRetention() {
     // Given
     DoneRetentionService retention = mock(DoneRetentionService.class);
-    CleanupProperties properties = new CleanupProperties(true, 30, null);
+    CleanupProperties properties = new CleanupProperties(true, 30, 30, null);
     Clock clock = Clock.fixed(FIXED, ZoneOffset.UTC);
     when(retention.archiveExpiredDoneCards(FIXED, 30)).thenReturn(0);
     DoneRetentionJob job = new DoneRetentionJob(retention, properties, clock);
@@ -41,7 +41,7 @@ class DoneRetentionJobTest {
   void run_delegatesRetentionDays_whenCardsArchived() {
     // Given: die Retention meldet archivierte Karten (> 0) -> Log-Zweig wird betreten
     DoneRetentionService retention = mock(DoneRetentionService.class);
-    CleanupProperties properties = new CleanupProperties(true, 30, null);
+    CleanupProperties properties = new CleanupProperties(true, 30, 30, null);
     Clock clock = Clock.fixed(FIXED, ZoneOffset.UTC);
     when(retention.archiveExpiredDoneCards(FIXED, 30)).thenReturn(5);
     DoneRetentionJob job = new DoneRetentionJob(retention, properties, clock);

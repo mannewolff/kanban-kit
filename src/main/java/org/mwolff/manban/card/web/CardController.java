@@ -125,10 +125,30 @@ class CardController {
     return cards.restore(userId, cardId);
   }
 
+  /** Verschiebt eine Karte in den Papierkorb (Soft-Delete, reversibel). */
   @DeleteMapping("/api/cards/{cardId}")
   @ResponseStatus(HttpStatus.NO_CONTENT)
   void delete(@AuthenticationPrincipal Long userId, @PathVariable long cardId) {
     cards.delete(userId, cardId);
+  }
+
+  /** Papierkorb eines Boards. */
+  @GetMapping("/api/boards/{boardId}/trash")
+  List<CardView> trash(@AuthenticationPrincipal Long userId, @PathVariable long boardId) {
+    return cards.listTrash(userId, boardId);
+  }
+
+  /** Holt eine Karte aus dem Papierkorb zurück. */
+  @PostMapping("/api/cards/{cardId}/restore-deleted")
+  CardView restoreDeleted(@AuthenticationPrincipal Long userId, @PathVariable long cardId) {
+    return cards.restoreFromTrash(userId, cardId);
+  }
+
+  /** Entfernt eine Karte endgültig (nur Projekt-Admin/Owner). */
+  @DeleteMapping("/api/cards/{cardId}/purge")
+  @ResponseStatus(HttpStatus.NO_CONTENT)
+  void purge(@AuthenticationPrincipal Long userId, @PathVariable long cardId) {
+    cards.purge(userId, cardId);
   }
 
   /** Ersetzt die Zuständigen der Karte (leere/fehlende Liste = keine Zuständigen). */

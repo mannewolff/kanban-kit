@@ -26,6 +26,7 @@ import { useAuth } from '../auth/AuthContext'
 import { BoardView } from '../components/BoardView'
 import { CardDetailModal } from '../components/CardDetailModal'
 import { LabelManagerDialog } from '../components/LabelManagerDialog'
+import { TrashDialog } from '../components/TrashDialog'
 import { useSnackbar } from '../components/SnackbarProvider'
 import { canEditCards, canManageProject, canModerateComments, isPlatformAdmin } from '../lib/roles'
 import { useProjectName } from '../lib/useProjectName'
@@ -51,6 +52,7 @@ export function BoardPage() {
   const [members, setMembers] = useState<Member[]>([])
   const [labels, setLabels] = useState<Label[]>([])
   const [labelManagerOpen, setLabelManagerOpen] = useState(false)
+  const [trashOpen, setTrashOpen] = useState(false)
 
   const reloadLabels = () => {
     void labelsApi.list(id).then(setLabels).catch(() => {})
@@ -213,6 +215,11 @@ export function BoardPage() {
             Labels
           </Button>
         )}
+        {canEdit && (
+          <Button size="small" onClick={() => setTrashOpen(true)}>
+            Papierkorb
+          </Button>
+        )}
       </Stack>
       <BoardView
         board={board}
@@ -257,6 +264,14 @@ export function BoardPage() {
           reloadLabels()
           reloadCards()
         }}
+      />
+
+      <TrashDialog
+        open={trashOpen}
+        boardId={id}
+        canPurge={admin || effectiveRole === 'OWNER' || effectiveRole === 'ADMIN'}
+        onClose={() => setTrashOpen(false)}
+        onChanged={reloadCards}
       />
 
       <Dialog open={renameOpen} onClose={() => setRenameOpen(false)}>

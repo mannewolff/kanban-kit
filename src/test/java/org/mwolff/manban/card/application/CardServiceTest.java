@@ -669,7 +669,7 @@ class CardServiceTest {
   }
 
   @Test
-  void delete_removesDependenciesAndCard() {
+  void delete_softDeletesCard() {
     // Given
     when(cards.findById(1L))
         .thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
@@ -677,8 +677,31 @@ class CardServiceTest {
     // When
     service.delete(1L, 1L);
 
-    // Then
-    verify(cards).deleteById(1L);
+    // Then — Löschen ist reversibel (Papierkorb), kein Hard-Delete.
+    verify(cards).softDelete(1L, FIXED);
+    verify(cards, never()).deleteById(anyLong());
+    // Kein Epic -> keine Kinder-Entkopplung (findByBoardId bleibt ungenutzt).
+    verify(cards, never()).findByBoardId(anyLong());
+  }
+
+  @Test
+  void delete_epicUnassignsChildrenBeforeSoftDelete() {
+    when(cards.findById(5L))
+        .thenReturn(Optional.of(card(5L, 20L, 5, false, null, CardType.EPIC, null, "E")));
+    when(cards.findByBoardId(BOARD))
+        .thenReturn(
+            List.of(
+                card(1L, 20L, 1, false, null, CardType.CARD, 5L, null),
+                card(2L, 20L, 2, false, null, CardType.CARD, null, null)));
+
+    ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
+    service.delete(9L, 5L);
+
+    // Nur das Kind des Epics wird von seiner Zuordnung gelöst; danach das Epic soft-gelöscht.
+    verify(cards).save(captor.capture());
+    assertThat(captor.getValue().id()).isEqualTo(1L);
+    assertThat(captor.getValue().parentId()).isNull();
+    verify(cards).softDelete(5L, FIXED);
   }
 
   @Test
@@ -1000,17 +1023,53 @@ class CardServiceTest {
     assertThat(view.archived()).isFalse();
   }
 
+  // --- Papierkorb (Soft-Delete) -----------------------------------------
+
   @Test
-  void delete_removesCardDependencies() {
-    // Given
+  void restoreFromTrash_clearsDeletionAndAppends() {
+    when(cards.findById(1L))
+        .thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
+    when(cards.maxActivePositionInColumn(20L)).thenReturn(4);
+
+    CardService.CardView view = service.restoreFromTrash(9L, 1L);
+
+    verify(cards).restoreFromTrash(1L, 5);
+    verify(activity)
+        .add(1L, 9L, CardActivityType.RESTORED, "Aus Papierkorb wiederhergestellt", FIXED);
+    assertThat(view.id()).isEqualTo(1L);
+  }
+
+  @Test
+  void purge_hardDeletes_forBoardManager() {
     when(cards.findById(1L))
         .thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
 
-    // When
-    service.delete(1L, 1L);
+    service.purge(9L, 1L);
 
-    // Then
+    verify(permissions).require(9L, 1L, Permission.BOARD_DELETE);
     verify(dependencies).deleteByCardId(1L);
+    verify(cards).deleteById(1L);
+  }
+
+  @Test
+  void purge_throwsCardNotFound_whenUnknown() {
+    when(cards.findById(1L)).thenReturn(Optional.empty());
+
+    assertThatThrownBy(() -> service.purge(9L, 1L)).isInstanceOf(CardNotFoundException.class);
+  }
+
+  @Test
+  void listTrash_returnsOnlyTrashedCards() {
+    when(cards.findTrashByBoardId(BOARD))
+        .thenReturn(
+            List.of(
+                card(1L, 20L, 1, false, null, CardType.CARD, null, null),
+                card(2L, 20L, 2, false, null, CardType.EPIC, null, "E")));
+
+    List<CardService.CardView> trash = service.listTrash(5L, BOARD);
+
+    verify(permissions).requireMembership(5L, 1L);
+    assertThat(trash).extracting(CardService.CardView::id).containsExactly(1L);
   }
 
   // --- transfer (board-/projektübergreifend) ----------------------------

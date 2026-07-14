@@ -69,6 +69,12 @@ class CardEntity {
   @Column(name = "due_date")
   private @Nullable Instant dueDate;
 
+  // Soft-Delete (Issue #179): nur für die JPA-Filterung ({@code deletedAt is null}) gemappt; der
+  // Papierkorb-Lebenszyklus (löschen/wiederherstellen/purge) läuft über den Adapter per SQL, nicht
+  // über den Card-Domain-Record.
+  @Column(name = "deleted_at")
+  private @Nullable Instant deletedAt;
+
   protected CardEntity() {
     // für JPA
   }
@@ -155,5 +161,9 @@ class CardEntity {
 
   @Nullable Instant getDueDate() {
     return dueDate;
+  }
+
+  @Nullable Instant getDeletedAt() {
+    return deletedAt;
   }
 }

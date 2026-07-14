@@ -32,6 +32,10 @@ export interface CardActivity {
 export const cardsApi = {
   list: (boardId: number) => apiFetch<Card[]>(`/api/boards/${boardId}/cards`),
   getActivity: (cardId: number) => apiFetch<CardActivity[]>(`/api/cards/${cardId}/activity`),
+  listTrash: (boardId: number) => apiFetch<Card[]>(`/api/boards/${boardId}/trash`),
+  restoreDeleted: (cardId: number) =>
+    apiFetch<Card>(`/api/cards/${cardId}/restore-deleted`, { method: 'POST' }),
+  purge: (cardId: number) => apiFetch<void>(`/api/cards/${cardId}/purge`, { method: 'DELETE' }),
   create: (boardId: number, columnId: number, title: string, description?: string, parentId?: number | null) =>
     apiFetch<Card>(`/api/boards/${boardId}/cards`, {
       method: 'POST',

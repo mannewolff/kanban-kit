@@ -258,6 +258,29 @@ class CardControllerTest {
   }
 
   @Test
+  void trash_delegatesToService() {
+    List<CardView> views = List.of(card());
+    when(service.listTrash(3L, 2L)).thenReturn(views);
+
+    assertThat(controller.trash(3L, 2L)).isSameAs(views);
+  }
+
+  @Test
+  void restoreDeleted_delegatesToService() {
+    CardView view = card();
+    when(service.restoreFromTrash(3L, 8L)).thenReturn(view);
+
+    assertThat(controller.restoreDeleted(3L, 8L)).isSameAs(view);
+  }
+
+  @Test
+  void purge_delegatesToService() {
+    controller.purge(3L, 8L);
+
+    verify(service).purge(3L, 8L);
+  }
+
+  @Test
   void activity_mapsDomainToViews() {
     var entry =
         new org.mwolff.manban.card.domain.CardActivity(
