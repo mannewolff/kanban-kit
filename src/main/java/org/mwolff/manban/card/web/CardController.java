@@ -140,6 +140,16 @@ class CardController {
     return cards.setAssignees(userId, cardId, ids);
   }
 
+  /** Ersetzt die Labels der Karte (leere/fehlende Liste = keine Labels). */
+  @PutMapping("/api/cards/{cardId}/labels")
+  CardView setLabels(
+      @AuthenticationPrincipal Long userId,
+      @PathVariable long cardId,
+      @RequestBody LabelsRequest request) {
+    List<Long> ids = request.labels() == null ? List.of() : request.labels();
+    return cards.setLabels(userId, cardId, ids);
+  }
+
   record CreateCardRequest(
       Long columnId,
       @NotBlank @Size(max = 300) String title,
@@ -164,5 +174,7 @@ class CardController {
 
   record TransferCardRequest(@NotNull Long targetBoardId, @NotNull Long targetColumnId) {}
 
-  record AssigneesRequest(@org.jspecify.annotations.Nullable List<Long> assignees) {}
+  record AssigneesRequest(@Nullable List<Long> assignees) {}
+
+  record LabelsRequest(@Nullable List<Long> labels) {}
 }

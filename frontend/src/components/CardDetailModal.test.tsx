@@ -12,7 +12,7 @@ vi.mock('../auth/AuthContext', () => ({
 const card: Card = {
   id: 100, boardId: 1, columnId: 10, number: 5, title: 'Aufgabe', description: '# Titel\n\n- a\n- b',
   positionInColumn: 0, archived: false, movedToDoneAt: null, dependencies: [3, 4],
-  type: 'CARD', parentId: null, shortcode: null, assignees: [], dueDate: null,
+  type: 'CARD', parentId: null, shortcode: null, assignees: [], dueDate: null, labels: [],
 }
 
 function makeApis() {
@@ -35,6 +35,7 @@ function makeApis() {
   const cardsApi = {
     update: vi.fn().mockResolvedValue({ ...card }),
     setAssignees: vi.fn().mockResolvedValue({ ...card }),
+    setLabels: vi.fn().mockResolvedValue({ ...card }),
   }
   return { commentsApi, attachmentsApi, cardsApi }
 }
@@ -244,5 +245,37 @@ describe('CardDetailModal', () => {
         100, 'Aufgabe', expect.any(String), [3, 4], undefined, null, '2026-08-01T00:00:00Z',
       ),
     )
+  })
+
+  it('zeigt Labels als farbige Chips im Lesemodus', () => {
+    const apis = makeApis()
+    const boardLabels = [{ id: 5, boardId: 1, name: 'Bug', color: '#f00' }]
+    render(
+      <CardDetailModal
+        card={{ ...card, labels: [5] }}
+        canEdit={false}
+        boardLabels={boardLabels}
+        onClose={vi.fn()}
+        {...apis}
+      />,
+    )
+
+    expect(screen.getByText('Bug')).toBeInTheDocument()
+  })
+
+  it('setzt Labels über die Mehrfachauswahl', async () => {
+    const apis = makeApis()
+    const boardLabels = [
+      { id: 5, boardId: 1, name: 'Bug', color: '#f00' },
+      { id: 6, boardId: 1, name: 'Ux', color: '#0f0' },
+    ]
+    render(
+      <CardDetailModal card={card} canEdit boardLabels={boardLabels} onClose={vi.fn()} {...apis} />,
+    )
+
+    fireEvent.mouseDown(await screen.findByLabelText('Labels'))
+    fireEvent.click(await screen.findByText('Ux'))
+
+    await waitFor(() => expect(apis.cardsApi.setLabels).toHaveBeenCalledWith(100, [6]))
   })
 })

@@ -274,7 +274,8 @@ class KanbanCompatServiceTest {
                 null,
                 null,
                 List.of(),
-                null));
+                null,
+                List.of()));
 
     // When
     KanbanCompatService.Created created = service.create(bound(), "Titel", "Body", null);
@@ -305,7 +306,8 @@ class KanbanCompatServiceTest {
                 null,
                 null,
                 List.of(),
-                null));
+                null,
+                List.of()));
 
     // When
     KanbanCompatService.Created created = service.create(bound(), "Titel", "Body", "   ");

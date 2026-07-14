@@ -37,7 +37,8 @@ class CardControllerTest {
         null,
         null,
         List.of(),
-        null);
+        null,
+        List.of());
   }
 
   @BeforeEach
@@ -230,5 +231,27 @@ class CardControllerTest {
     // Then
     assertThat(result).isSameAs(view);
     verify(service).setAssignees(3L, 8L, List.of());
+  }
+
+  @Test
+  void setLabels_delegatesToService() {
+    CardView view = card();
+    when(service.setLabels(3L, 8L, List.of(5L, 6L))).thenReturn(view);
+
+    CardView result =
+        controller.setLabels(3L, 8L, new CardController.LabelsRequest(List.of(5L, 6L)));
+
+    assertThat(result).isSameAs(view);
+  }
+
+  @Test
+  void setLabels_coalescesNullListToEmpty() {
+    CardView view = card();
+    when(service.setLabels(3L, 8L, List.of())).thenReturn(view);
+
+    CardView result = controller.setLabels(3L, 8L, new CardController.LabelsRequest(null));
+
+    assertThat(result).isSameAs(view);
+    verify(service).setLabels(3L, 8L, List.of());
   }
 }

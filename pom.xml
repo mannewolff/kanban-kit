@@ -462,6 +462,9 @@
                         <exclude>org/mwolff/manban/card/web/CardController$MoveCardRequest.class</exclude>
                         <exclude>org/mwolff/manban/card/web/CardController$UpdateCardRequest.class</exclude>
                         <exclude>org/mwolff/manban/card/web/CardController$AssigneesRequest.class</exclude>
+                        <exclude>org/mwolff/manban/card/web/CardController$LabelsRequest.class</exclude>
+                        <exclude>org/mwolff/manban/card/web/LabelController$LabelView.class</exclude>
+                        <exclude>org/mwolff/manban/card/web/LabelController$LabelRequest.class</exclude>
                         <exclude>org/mwolff/manban/card/web/ConfigController$ConfigView.class</exclude>
                         <exclude>org/mwolff/manban/comment/web/CommentController$CommentRequest.class</exclude>
                         <exclude>org/mwolff/manban/kanbancompat/web/KanbanCompatController$CommentRequest.class</exclude>
@@ -483,6 +486,7 @@
                         <exclude>org/mwolff/manban/board/infrastructure/persistence/BoardEntity.class</exclude>
                         <exclude>org/mwolff/manban/card/infrastructure/persistence/CardEntity.class</exclude>
                         <exclude>org/mwolff/manban/card/infrastructure/persistence/CardColumnTransitionEntity.class</exclude>
+                        <exclude>org/mwolff/manban/card/infrastructure/persistence/LabelEntity.class</exclude>
                         <exclude>org/mwolff/manban/comment/infrastructure/persistence/CommentEntity.class</exclude>
                         <exclude>org/mwolff/manban/project/infrastructure/persistence/ProjectEntity.class</exclude>
                         <exclude>org/mwolff/manban/project/infrastructure/persistence/ProjectInvitationEntity.class</exclude>
@@ -498,6 +502,7 @@
                         <exclude>org/mwolff/manban/board/infrastructure/persistence/BoardRepositoryAdapter.class</exclude>
                         <exclude>org/mwolff/manban/card/infrastructure/persistence/CardRepositoryAdapter.class</exclude>
                         <exclude>org/mwolff/manban/card/infrastructure/persistence/CardColumnTransitionRepositoryAdapter.class</exclude>
+                        <exclude>org/mwolff/manban/card/infrastructure/persistence/LabelRepositoryAdapter.class</exclude>
                         <exclude>org/mwolff/manban/comment/infrastructure/persistence/CommentRepositoryAdapter.class</exclude>
                         <exclude>org/mwolff/manban/project/infrastructure/persistence/ProjectInvitationRepositoryAdapter.class</exclude>
                         <exclude>org/mwolff/manban/project/infrastructure/persistence/ProjectMembershipRepositoryAdapter.class</exclude>
@@ -508,6 +513,7 @@
                         <exclude>org/mwolff/manban/board/infrastructure/persistence/JdbcColumnCardCounter.class</exclude>
                         <exclude>org/mwolff/manban/card/infrastructure/persistence/JdbcCardDependencyRepository.class</exclude>
                         <exclude>org/mwolff/manban/card/infrastructure/persistence/JdbcCardAssigneeRepository.class</exclude>
+                        <exclude>org/mwolff/manban/card/infrastructure/persistence/JdbcCardLabelRepository.class</exclude>
                         <exclude>org/mwolff/manban/project/infrastructure/persistence/JdbcRolePermissionRepository.class</exclude>
 
                         <!-- IT-only: Adapter zu externer Infrastruktur (SMTP / S3-MinIO), nur via IT (§5.2). -->

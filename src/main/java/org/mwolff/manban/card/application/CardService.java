@@ -17,6 +17,7 @@ import org.mwolff.manban.board.domain.Board;
 import org.mwolff.manban.board.domain.BoardColumn;
 import org.mwolff.manban.card.domain.Card;
 import org.mwolff.manban.card.domain.CardType;
+import org.mwolff.manban.card.domain.Label;
 import org.mwolff.manban.project.application.PermissionChecker;
 import org.mwolff.manban.project.application.ProjectMembershipRepository;
 import org.mwolff.manban.project.domain.Permission;
@@ -44,6 +45,8 @@ public class CardService {
   private final CardColumnTransitionRepository transitions;
   private final CardAssigneeRepository assignees;
   private final ProjectMembershipRepository memberships;
+  private final LabelRepository labels;
+  private final CardLabelRepository cardLabels;
   private final Clock clock;
 
   public CardService(
@@ -55,6 +58,8 @@ public class CardService {
       CardColumnTransitionRepository transitions,
       CardAssigneeRepository assignees,
       ProjectMembershipRepository memberships,
+      LabelRepository labels,
+      CardLabelRepository cardLabels,
       Clock clock) {
     this.cards = cards;
     this.dependencies = dependencies;
@@ -64,6 +69,8 @@ public class CardService {
     this.transitions = transitions;
     this.assignees = assignees;
     this.memberships = memberships;
+    this.labels = labels;
+    this.cardLabels = cardLabels;
     this.clock = clock;
   }
 
@@ -252,6 +259,31 @@ public class CardService {
     return view(card);
   }
 
+  /**
+   * Ersetzt die Labels einer Karte. Nur Karten (keine Epics); zugeordnet werden dürfen nur Labels
+   * desselben Boards. Recht: {@link Permission#TICKET_UPDATE} (Member und aufwärts).
+   */
+  @Transactional
+  public CardView setLabels(long userId, long cardId, List<Long> labelIds) {
+    Card card = cards.findById(cardId).orElseThrow(CardNotFoundException::new);
+    if (card.type() != CardType.CARD) {
+      throw new InvalidDependencyException("Nur Karten haben Labels");
+    }
+    Board board = boards.findById(card.boardId()).orElseThrow(BoardNotFoundException::new);
+    permissions.require(userId, board.projectId(), Permission.TICKET_UPDATE);
+
+    List<Long> distinct = labelIds.stream().distinct().toList();
+    List<Long> boardLabelIds =
+        labels.findByBoardId(card.boardId()).stream().map(Label::requireId).toList();
+    for (Long labelId : distinct) {
+      if (!boardLabelIds.contains(labelId)) {
+        throw new InvalidLabelException("Kein Label dieses Boards: " + labelId);
+      }
+    }
+    cardLabels.replaceLabels(cardId, distinct);
+    return view(card);
+  }
+
   /** Ordnet eine Karte einem Epic zu ({@code parentId}) oder löst die Zuordnung ({@code null}). */
   @Transactional
   public CardView assignParent(long userId, long cardId, @Nullable Long parentId) {
@@ -434,7 +466,8 @@ public class CardService {
         c.parentId(),
         c.shortcode(),
         assignees.findByCardId(c.requireId()),
-        c.dueDate());
+        c.dueDate(),
+        cardLabels.findByCardId(c.requireId()));
   }
 
   /** Kartendarstellung inkl. Abhängigkeits-Nummern, Typ und Epic-Zuordnung. */
@@ -453,7 +486,8 @@ public class CardService {
       @Nullable Long parentId,
       @Nullable String shortcode,
       List<Long> assignees,
-      @Nullable Instant dueDate) {}
+      @Nullable Instant dueDate,
+      List<Long> labels) {}
 
   /** Epic-Darstellung inkl. Fortschritt (Kinder gesamt / in Done). */
   public record EpicView(

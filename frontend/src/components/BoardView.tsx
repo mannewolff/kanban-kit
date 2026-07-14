@@ -7,6 +7,7 @@ import Avatar from '@mui/material/Avatar'
 import AvatarGroup from '@mui/material/AvatarGroup'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
+import Chip from '@mui/material/Chip'
 import Dialog from '@mui/material/Dialog'
 import DialogActions from '@mui/material/DialogActions'
 import DialogContent from '@mui/material/DialogContent'
@@ -29,6 +30,7 @@ import { epicsApi as defaultEpicsApi, type Epic, type EpicsApi } from '../api/ep
 import type { Member } from '../api/members'
 import { activeCardsInColumn, applyMove } from '../lib/boardOps'
 import { cleanupCountdownLabel, cleanupDaysRemaining } from '../lib/cleanupCountdown'
+import type { Label } from '../api/labels'
 import { formatDueDate, isOverdue } from '../lib/dueDate'
 import { epicColor, epicShortcode } from '../lib/epicMeta'
 import { COLUMN_SURFACE_BG, statusColors } from '../lib/statusColors'
@@ -54,6 +56,8 @@ interface Props {
   retentionDays?: number
   /** Projektmitglieder für die Zuständigen-Avatare auf den Karten. */
   members?: Member[]
+  /** Board-Labels für die farbigen Label-Chips auf den Karten. */
+  boardLabels?: Label[]
   onCardClick?: (card: Card) => void
   onEditCard?: (card: Card) => void
   onEpicsChanged?: () => void
@@ -79,6 +83,7 @@ export function BoardView({
   epics = [],
   retentionDays = 30,
   members = [],
+  boardLabels = [],
   onCardClick,
   onEditCard,
   onEpicsChanged,
@@ -380,6 +385,21 @@ export function BoardView({
                       }}
                     >
                       {epic && <EpicBadge epicId={epic.id} title={epic.title} shortcode={epic.shortcode} sx={{ mb: 0.5 }} />}
+                      {card.labels.length > 0 && (
+                        <Stack direction="row" spacing={0.5} sx={{ flexWrap: 'wrap', mb: 0.5 }} aria-label={`Labels ${card.title}`}>
+                          {card.labels.map((labelId) => {
+                            const l = boardLabels.find((b) => b.id === labelId)
+                            return (
+                              <Chip
+                                key={labelId}
+                                size="small"
+                                label={l?.name ?? `#${labelId}`}
+                                sx={{ bgcolor: l?.color ?? 'grey.500', color: '#fff', height: 18, '& .MuiChip-label': { px: 0.75, fontSize: '0.65rem' } }}
+                              />
+                            )
+                          })}
+                        </Stack>
+                      )}
                       <Stack direction="row" alignItems="flex-start" spacing={0.5}>
                         <Typography variant="body2" sx={{ flex: 1, minWidth: 0 }}>
                           <Box component="span" sx={{ color: 'text.secondary' }}>#{card.number} – </Box>

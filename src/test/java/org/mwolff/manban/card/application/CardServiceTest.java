@@ -30,6 +30,7 @@ import org.mwolff.manban.board.domain.Board;
 import org.mwolff.manban.board.domain.BoardColumn;
 import org.mwolff.manban.card.domain.Card;
 import org.mwolff.manban.card.domain.CardType;
+import org.mwolff.manban.card.domain.Label;
 import org.mwolff.manban.project.application.PermissionChecker;
 import org.mwolff.manban.project.application.ProjectAccessDeniedException;
 import org.mwolff.manban.project.application.ProjectMembershipRepository;
@@ -39,7 +40,7 @@ import org.mwolff.manban.project.domain.ProjectMembership;
 /** Verhaltenstests der Karten- und Epic-Use-Cases (Mockito an den Ports). */
 // PMD.TooManyMethods: umfassende Unit-Suite (Karten + Epics, Erfolgs- und Fehlerpfade je
 // Use-Case). Viele kleine @Test-Methoden sind hier gewollt, kein God-Class-Smell.
-@SuppressWarnings({"PMD.TooManyMethods", "PMD.CyclomaticComplexity"})
+@SuppressWarnings({"PMD.TooManyMethods", "PMD.CyclomaticComplexity", "PMD.CouplingBetweenObjects"})
 class CardServiceTest {
 
   private static final Instant FIXED = Instant.parse("2026-01-02T03:04:05Z");
@@ -53,6 +54,8 @@ class CardServiceTest {
   private CardColumnTransitionRepository transitions;
   private CardAssigneeRepository assignees;
   private ProjectMembershipRepository memberships;
+  private LabelRepository labels;
+  private CardLabelRepository cardLabels;
   private CardService service;
 
   private static Card card(
@@ -83,6 +86,8 @@ class CardServiceTest {
     transitions = mock(CardColumnTransitionRepository.class);
     assignees = mock(CardAssigneeRepository.class);
     memberships = mock(ProjectMembershipRepository.class);
+    labels = mock(LabelRepository.class);
+    cardLabels = mock(CardLabelRepository.class);
     Clock clock = Clock.fixed(FIXED, ZoneOffset.UTC);
     service =
         new CardService(
@@ -94,6 +99,8 @@ class CardServiceTest {
             transitions,
             assignees,
             memberships,
+            labels,
+            cardLabels,
             clock);
     when(boards.findById(BOARD)).thenReturn(Optional.of(new Board(BOARD, 1L, "B", FIXED)));
     when(cards.save(any(Card.class))).thenAnswer(inv -> withId(inv.getArgument(0)));
@@ -1182,6 +1189,66 @@ class CardServiceTest {
     assertThatThrownBy(() -> service.setAssignees(9L, 1L, List.of()))
         .isInstanceOf(ProjectAccessDeniedException.class);
     verify(assignees, never()).replaceAssignees(anyLong(), anyList());
+  }
+
+  // --- Labels -----------------------------------------------------------
+
+  @Test
+  void setLabels_replacesWithDistinctBoardLabels() {
+    when(cards.findById(1L))
+        .thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
+    when(labels.findByBoardId(BOARD))
+        .thenReturn(
+            List.of(new Label(7L, BOARD, "Bug", "#f00"), new Label(8L, BOARD, "Ux", "#0f0")));
+    when(cardLabels.findByCardId(1L)).thenReturn(List.of(7L, 8L));
+
+    CardService.CardView view = service.setLabels(3L, 1L, List.of(7L, 8L, 7L));
+
+    verify(permissions).require(3L, 1L, Permission.TICKET_UPDATE);
+    verify(cardLabels).replaceLabels(1L, List.of(7L, 8L));
+    assertThat(view.labels()).containsExactly(7L, 8L);
+  }
+
+  @Test
+  void setLabels_rejectsForeignLabel() {
+    when(cards.findById(1L))
+        .thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
+    when(labels.findByBoardId(BOARD)).thenReturn(List.of(new Label(7L, BOARD, "Bug", "#f00")));
+
+    assertThatThrownBy(() -> service.setLabels(3L, 1L, List.of(7L, 8L)))
+        .isInstanceOf(InvalidLabelException.class);
+    verify(cardLabels, never()).replaceLabels(anyLong(), anyList());
+  }
+
+  @Test
+  void setLabels_rejectsEpic() {
+    when(cards.findById(5L))
+        .thenReturn(Optional.of(card(5L, 20L, 5, false, null, CardType.EPIC, null, "E")));
+
+    assertThatThrownBy(() -> service.setLabels(3L, 5L, List.of(7L)))
+        .isInstanceOf(InvalidDependencyException.class);
+    verify(cardLabels, never()).replaceLabels(anyLong(), anyList());
+  }
+
+  @Test
+  void setLabels_throwsCardNotFound_whenUnknown() {
+    when(cards.findById(1L)).thenReturn(Optional.empty());
+
+    assertThatThrownBy(() -> service.setLabels(3L, 1L, List.of()))
+        .isInstanceOf(CardNotFoundException.class);
+  }
+
+  @Test
+  void setLabels_propagatesPermissionDenied() {
+    when(cards.findById(1L))
+        .thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
+    doThrow(new ProjectAccessDeniedException())
+        .when(permissions)
+        .require(9L, 1L, Permission.TICKET_UPDATE);
+
+    assertThatThrownBy(() -> service.setLabels(9L, 1L, List.of()))
+        .isInstanceOf(ProjectAccessDeniedException.class);
+    verify(cardLabels, never()).replaceLabels(anyLong(), anyList());
   }
 
   // --- Zykluszeit-Tracking (card_column_transition) ---------------------

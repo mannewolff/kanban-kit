@@ -11,6 +11,7 @@ import { Link as RouterLink, useParams } from 'react-router-dom'
 import { boardsApi, type Board } from '../api/boards'
 import { cardsApi, type Card } from '../api/cards'
 import { epicsApi, type Epic } from '../api/epics'
+import { labelsApi, type Label } from '../api/labels'
 import { projectsApi } from '../api/projects'
 import { useAuth } from '../auth/AuthContext'
 import { CardDetailModal } from '../components/CardDetailModal'
@@ -75,6 +76,8 @@ export function BoardListPage() {
   const [board, setBoard] = useState<Board | null>(null)
   const [cards, setCards] = useState<Card[]>([])
   const [epics, setEpics] = useState<Epic[]>([])
+  const [labels, setLabels] = useState<Label[]>([])
+  const [labelFilter, setLabelFilter] = useState<Set<number>>(new Set())
   const [filters, setFilters] = useState<Set<FilterKey> | null>(null)
   const [order, setOrder] = useState<ColumnKey[]>(() => readColumnOrder(id))
   const [fetchedRole, setFetchedRole] = useState<string | null>(null)
@@ -114,6 +117,9 @@ export function BoardListPage() {
     })
     void epicsApi.list(id).then((es) => {
       if (active) setEpics(es)
+    })
+    void labelsApi.list(id).then((ls) => {
+      if (active) setLabels(ls)
     })
     setOrder(readColumnOrder(id))
     setExcerptWidth(readExcerptWidth(id))
@@ -210,9 +216,19 @@ export function BoardListPage() {
     })
   }
 
+  const toggleLabel = (labelId: number) => {
+    setLabelFilter((prev) => {
+      const next = new Set(prev)
+      if (next.has(labelId)) next.delete(labelId)
+      else next.add(labelId)
+      return next
+    })
+  }
+
   const archiveActive = filters?.has(ARCHIVED) ?? false
   const visible = cards
     .filter((c) => (c.archived ? archiveActive : (filters?.has(c.columnId) ?? false)))
+    .filter((c) => labelFilter.size === 0 || c.labels.some((l) => labelFilter.has(l)))
     .sort((a, b) => {
       const pa = columnById.get(a.columnId)?.position ?? 0
       const pb = columnById.get(b.columnId)?.position ?? 0
@@ -300,6 +316,26 @@ export function BoardListPage() {
           onClick={() => toggleFilter(ARCHIVED)} variant={archiveActive ? 'filled' : 'outlined'}
           color={archiveActive ? 'primary' : 'default'} size="small" />
       </Stack>
+
+      {labels.length > 0 && (
+        <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mb: 2 }}>
+          {labels.map((label) => {
+            const active = labelFilter.has(label.id)
+            return (
+              <Chip
+                key={label.id}
+                label={label.name}
+                aria-label={`Label-Filter ${label.name}`}
+                aria-pressed={active}
+                onClick={() => toggleLabel(label.id)}
+                size="small"
+                variant={active ? 'filled' : 'outlined'}
+                sx={active ? { bgcolor: label.color, color: '#fff' } : { borderColor: label.color, color: label.color }}
+              />
+            )
+          })}
+        </Stack>
+      )}
 
       {visible.length === 0 ? (
         <Typography variant="body2" color="text.secondary" sx={{ py: 2 }}>

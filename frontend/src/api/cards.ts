@@ -18,6 +18,7 @@ export interface Card {
   shortcode: string | null
   assignees: number[]
   dueDate: string | null
+  labels: number[]
 }
 
 export const cardsApi = {
@@ -38,6 +39,11 @@ export const cardsApi = {
     apiFetch<Card>(`/api/cards/${cardId}/assignees`, {
       method: 'PUT',
       body: JSON.stringify({ assignees }),
+    }),
+  setLabels: (cardId: number, labels: number[]) =>
+    apiFetch<Card>(`/api/cards/${cardId}/labels`, {
+      method: 'PUT',
+      body: JSON.stringify({ labels }),
     }),
   archive: (cardId: number) => apiFetch<Card>(`/api/cards/${cardId}/archive`, { method: 'POST' }),
   restore: (cardId: number) => apiFetch<Card>(`/api/cards/${cardId}/restore`, { method: 'POST' }),

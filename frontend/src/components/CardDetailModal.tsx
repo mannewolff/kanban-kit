@@ -21,6 +21,7 @@ import { cardsApi as defaultCardsApi } from '../api/cards'
 import type { Card } from '../api/cards'
 import { commentsApi as defaultCommentsApi, type Comment, type CommentsApi } from '../api/comments'
 import type { Epic } from '../api/epics'
+import type { Label as BoardLabel } from '../api/labels'
 import type { Member } from '../api/members'
 import { dueInputToIso, formatDueDate, isOverdue } from '../lib/dueDate'
 import { epicShortcode } from '../lib/epicMeta'
@@ -121,9 +122,11 @@ interface Props {
   childCards?: Card[]
   /** Projektmitglieder für die Zuständigen-Auswahl (Namen + Auswahlliste). */
   members?: Member[]
+  /** Board-Labels für die Label-Auswahl (Name + Farbe). */
+  boardLabels?: BoardLabel[]
   commentsApi?: CommentsApi
   attachmentsApi?: AttachmentsApi
-  cardsApi?: Pick<typeof defaultCardsApi, 'update' | 'setAssignees'>
+  cardsApi?: Pick<typeof defaultCardsApi, 'update' | 'setAssignees' | 'setLabels'>
 }
 
 export function CardDetailModal({
@@ -137,6 +140,7 @@ export function CardDetailModal({
   epics = [],
   childCards = [],
   members = [],
+  boardLabels = [],
   commentsApi = defaultCommentsApi,
   attachmentsApi = defaultAttachmentsApi,
   cardsApi = defaultCardsApi,
@@ -151,6 +155,13 @@ export function CardDetailModal({
   const saveAssignees = async (ids: number[]) => {
     setAssigneeIds(ids)
     await cardsApi.setAssignees(card.id, ids)
+    onChanged?.()
+  }
+
+  const [labelIds, setLabelIds] = useState<number[]>(card.labels)
+  const saveLabels = async (ids: number[]) => {
+    setLabelIds(ids)
+    await cardsApi.setLabels(card.id, ids)
     onChanged?.()
   }
 
@@ -507,6 +518,55 @@ export function CardDetailModal({
                 </Stack>
               ) : (
                 <Typography color="text.secondary">Niemand zugewiesen.</Typography>
+              )}
+            </Box>
+          )}
+
+          {!isEpic && (
+            <Box>
+              <Typography variant="subtitle2" gutterBottom>
+                Labels
+              </Typography>
+              {canEdit ? (
+                <Autocomplete
+                  multiple
+                  size="small"
+                  options={boardLabels}
+                  getOptionLabel={(l) => l.name}
+                  isOptionEqualToValue={(a, b) => a.id === b.id}
+                  value={boardLabels.filter((l) => labelIds.includes(l.id))}
+                  onChange={(_, selected) => void saveLabels(selected.map((l) => l.id))}
+                  renderTags={(value, getTagProps) =>
+                    value.map((l, index) => (
+                      <Chip
+                        {...getTagProps({ index })}
+                        key={l.id}
+                        size="small"
+                        label={l.name}
+                        sx={{ bgcolor: l.color, color: '#fff' }}
+                      />
+                    ))
+                  }
+                  renderInput={(params) => (
+                    <TextField {...params} label="Labels" inputProps={{ ...params.inputProps, 'aria-label': 'Labels' }} />
+                  )}
+                />
+              ) : labelIds.length > 0 ? (
+                <Stack direction="row" spacing={0.5} sx={{ flexWrap: 'wrap' }}>
+                  {labelIds.map((id) => {
+                    const l = boardLabels.find((b) => b.id === id)
+                    return (
+                      <Chip
+                        key={id}
+                        size="small"
+                        label={l?.name ?? `#${id}`}
+                        sx={{ bgcolor: l?.color ?? 'grey.500', color: '#fff' }}
+                      />
+                    )
+                  })}
+                </Stack>
+              ) : (
+                <Typography color="text.secondary">Keine Labels.</Typography>
               )}
             </Box>
           )}
