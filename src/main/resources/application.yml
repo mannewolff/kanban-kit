@@ -51,7 +51,10 @@ manban:
     reset-ttl: PT1H
   mail:
     enabled: ${MANBAN_MAIL_ENABLED:false}
-    from: ${MANBAN_MAIL_FROM:no-reply@manban.local}
+    from: ${MANBAN_MAIL_FROM:no-reply@kanban-kit.local}
+    # Sichtbarer Produktname in E-Mail-Betreffs. Interner Codename bleibt "manban" (Property-Ebene),
+    # nach außen heißt das Produkt "kanban-kit".
+    product-name: ${MANBAN_MAIL_PRODUCT_NAME:kanban-kit}
   project:
     invitation-ttl: P7D
   storage:

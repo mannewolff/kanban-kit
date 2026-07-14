@@ -20,14 +20,17 @@ class JavaMailAdminNotificationMailer implements AdminNotificationMailer {
   private final JavaMailSender mailSender;
   private final boolean mailEnabled;
   private final String from;
+  private final String productName;
 
   JavaMailAdminNotificationMailer(
       JavaMailSender mailSender,
       @Value("${manban.mail.enabled:false}") boolean mailEnabled,
-      @Value("${manban.mail.from:no-reply@manban.local}") String from) {
+      @Value("${manban.mail.from:no-reply@kanban-kit.local}") String from,
+      @Value("${manban.mail.product-name:kanban-kit}") String productName) {
     this.mailSender = mailSender;
     this.mailEnabled = mailEnabled;
     this.from = from;
+    this.productName = productName;
   }
 
   @Override
@@ -44,7 +47,7 @@ class JavaMailAdminNotificationMailer implements AdminNotificationMailer {
     SimpleMailMessage message = new SimpleMailMessage();
     message.setFrom(from);
     message.setTo(adminEmail);
-    message.setSubject("manban: Neue Registrierung wartet auf Freigabe");
+    message.setSubject(productName + ": Neue Registrierung wartet auf Freigabe");
     message.setText(
         "Neu registriert und verifiziert: "
             + newUserDisplayName

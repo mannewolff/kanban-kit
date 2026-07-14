@@ -44,10 +44,10 @@ class SmtpMailIT extends AbstractIntegrationTest {
   private static final int SMTP_PORT = 1025;
   private static final int HTTP_API_PORT = 8025;
   private static final String FROM = "no-reply@manban.test";
-  private static final String VERIFY_SUBJECT = "manban: E-Mail bestätigen";
-  private static final String RESET_SUBJECT = "manban: Passwort zurücksetzen";
+  private static final String VERIFY_SUBJECT = "kanban-kit: E-Mail bestätigen";
+  private static final String RESET_SUBJECT = "kanban-kit: Passwort zurücksetzen";
   private static final String APPROVAL_NOTIFICATION_SUBJECT =
-      "manban: Neue Registrierung wartet auf Freigabe";
+      "kanban-kit: Neue Registrierung wartet auf Freigabe";
 
   @Container
   static final GenericContainer<?> MAILPIT =

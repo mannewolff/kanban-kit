@@ -23,14 +23,17 @@ class JavaMailVerificationMailer implements VerificationMailer {
   private final JavaMailSender mailSender;
   private final boolean mailEnabled;
   private final String from;
+  private final String productName;
 
   JavaMailVerificationMailer(
       JavaMailSender mailSender,
       @Value("${manban.mail.enabled:false}") boolean mailEnabled,
-      @Value("${manban.mail.from:no-reply@manban.local}") String from) {
+      @Value("${manban.mail.from:no-reply@kanban-kit.local}") String from,
+      @Value("${manban.mail.product-name:kanban-kit}") String productName) {
     this.mailSender = mailSender;
     this.mailEnabled = mailEnabled;
     this.from = from;
+    this.productName = productName;
   }
 
   @Override
@@ -42,7 +45,7 @@ class JavaMailVerificationMailer implements VerificationMailer {
     SimpleMailMessage message = new SimpleMailMessage();
     message.setFrom(from);
     message.setTo(toEmail);
-    message.setSubject("manban: E-Mail bestätigen");
+    message.setSubject(productName + ": E-Mail bestätigen");
     message.setText(
         "Bitte bestätige deine E-Mail-Adresse über diesen Link:\n\n" + verificationUrl + "\n");
     mailSender.send(message);

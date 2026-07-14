@@ -21,14 +21,17 @@ class JavaMailInvitationMailer implements InvitationMailer {
   private final JavaMailSender mailSender;
   private final boolean mailEnabled;
   private final String from;
+  private final String productName;
 
   JavaMailInvitationMailer(
       JavaMailSender mailSender,
       @Value("${manban.mail.enabled:false}") boolean mailEnabled,
-      @Value("${manban.mail.from:no-reply@manban.local}") String from) {
+      @Value("${manban.mail.from:no-reply@kanban-kit.local}") String from,
+      @Value("${manban.mail.product-name:kanban-kit}") String productName) {
     this.mailSender = mailSender;
     this.mailEnabled = mailEnabled;
     this.from = from;
+    this.productName = productName;
   }
 
   @Override
@@ -40,13 +43,19 @@ class JavaMailInvitationMailer implements InvitationMailer {
     SimpleMailMessage message = new SimpleMailMessage();
     message.setFrom(from);
     message.setTo(toEmail);
-    message.setSubject("manban: Einladung ins Projekt " + projectName);
+    message.setSubject(productName + ": Einladung ins Projekt " + projectName);
     message.setText(
         "Du wurdest ins Projekt '"
             + projectName
-            + "' eingeladen. Annehmen über:\n\n"
+            + "' eingeladen.\n\n"
+            + "So nimmst du die Einladung an:\n"
+            + "1. Registriere dich mit genau dieser E-Mail-Adresse (der, an die diese Nachricht"
+            + " ging).\n"
+            + "2. Bestätige deine E-Mail über den Link aus der Bestätigungs-Mail.\n"
+            + "3. Öffne anschließend diesen Link, um die Einladung anzunehmen:\n\n"
             + invitationUrl
-            + "\n");
+            + "\n\n"
+            + "Hast du bereits ein Konto mit dieser E-Mail-Adresse, genügt Schritt 3.\n");
     mailSender.send(message);
     log.info("Einladungs-E-Mail an {} versandt", toEmail);
   }
@@ -66,7 +75,7 @@ class JavaMailInvitationMailer implements InvitationMailer {
     SimpleMailMessage message = new SimpleMailMessage();
     message.setFrom(from);
     message.setTo(toEmail);
-    message.setSubject("manban: Du wurdest dem Projekt " + projectName + " hinzugefügt");
+    message.setSubject(productName + ": Du wurdest dem Projekt " + projectName + " hinzugefügt");
     message.setText(
         "Du wurdest dem Projekt '"
             + projectName
