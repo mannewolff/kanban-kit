@@ -528,4 +528,44 @@ class MembershipServiceTest {
     assertThat(captor.getValue().userId()).isEqualTo(2L);
     assertThat(captor.getValue().role()).isEqualTo(ProjectRole.OWNER);
   }
+
+  @Test
+  void changeMemberDisplayName_trimsPersistsGlobalNameAndReturnsView() {
+    // Given
+    when(memberships.findByProjectIdAndUserId(9L, 2L))
+        .thenReturn(Optional.of(membership(2L, ProjectRole.MEMBER)));
+    when(users.findById(2L)).thenReturn(Optional.of(user(2, "guest@x.de")));
+    when(users.save(any(AppUser.class))).thenAnswer(inv -> inv.getArgument(0));
+
+    // When
+    MembershipService.MemberView view =
+        service.changeMemberDisplayName(1L, 9L, 2L, "  Neuer Name  ");
+
+    // Then
+    assertThat(view.displayName()).isEqualTo("Neuer Name");
+    assertThat(view.email()).isEqualTo("guest@x.de");
+    assertThat(view.role()).isEqualTo(ProjectRole.MEMBER);
+    verify(permissions).require(1L, 9L, Permission.MEMBER_REMOVE);
+    ArgumentCaptor<AppUser> saved = ArgumentCaptor.forClass(AppUser.class);
+    verify(users).save(saved.capture());
+    assertThat(saved.getValue().displayName()).isEqualTo("Neuer Name");
+  }
+
+  @Test
+  void changeMemberDisplayName_throwsMemberNotFound_whenMembershipMissing() {
+    when(memberships.findByProjectIdAndUserId(9L, 2L)).thenReturn(Optional.empty());
+
+    assertThatThrownBy(() -> service.changeMemberDisplayName(1L, 9L, 2L, "X"))
+        .isInstanceOf(MemberNotFoundException.class);
+  }
+
+  @Test
+  void changeMemberDisplayName_throwsMemberNotFound_whenUserMissing() {
+    when(memberships.findByProjectIdAndUserId(9L, 2L))
+        .thenReturn(Optional.of(membership(2L, ProjectRole.MEMBER)));
+    when(users.findById(2L)).thenReturn(Optional.empty());
+
+    assertThatThrownBy(() -> service.changeMemberDisplayName(1L, 9L, 2L, "X"))
+        .isInstanceOf(MemberNotFoundException.class);
+  }
 }

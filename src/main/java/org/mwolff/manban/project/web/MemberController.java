@@ -1,7 +1,9 @@
 package org.mwolff.manban.project.web;
 
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 import java.util.List;
 import org.mwolff.manban.project.application.MembershipService;
 import org.mwolff.manban.project.application.MembershipService.MemberView;
@@ -42,6 +44,16 @@ class MemberController {
     return memberships.changeRole(userId, projectId, targetUserId, request.role());
   }
 
+  @PatchMapping("/{targetUserId}/display-name")
+  MemberView changeDisplayName(
+      @AuthenticationPrincipal Long userId,
+      @PathVariable long projectId,
+      @PathVariable long targetUserId,
+      @Valid @RequestBody ChangeDisplayNameRequest request) {
+    return memberships.changeMemberDisplayName(
+        userId, projectId, targetUserId, request.displayName());
+  }
+
   @DeleteMapping("/{targetUserId}")
   @ResponseStatus(HttpStatus.NO_CONTENT)
   void remove(
@@ -52,4 +64,6 @@ class MemberController {
   }
 
   record ChangeRoleRequest(@NotNull ProjectRole role) {}
+
+  record ChangeDisplayNameRequest(@NotBlank @Size(max = 120) String displayName) {}
 }

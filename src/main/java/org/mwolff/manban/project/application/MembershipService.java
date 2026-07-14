@@ -171,6 +171,24 @@ public class MembershipService {
   }
 
   /**
+   * Ändert den Anzeigenamen eines Projekt-Mitglieds. Recht {@link Permission#MEMBER_REMOVE} (wie
+   * Rolle ändern). <strong>Achtung:</strong> Es gibt kein projektspezifisches Namensfeld — dies
+   * ändert den <strong>globalen</strong> {@code AppUser}-Namen projektübergreifend.
+   */
+  @Transactional
+  public MemberView changeMemberDisplayName(
+      long actorUserId, long projectId, long targetUserId, String displayName) {
+    permissions.require(actorUserId, projectId, Permission.MEMBER_REMOVE);
+    ProjectMembership target =
+        memberships
+            .findByProjectIdAndUserId(projectId, targetUserId)
+            .orElseThrow(MemberNotFoundException::new);
+    AppUser user = users.findById(targetUserId).orElseThrow(MemberNotFoundException::new);
+    AppUser saved = users.save(user.withDisplayName(displayName.trim()));
+    return new MemberView(saved.requireId(), saved.email(), saved.displayName(), target.role());
+  }
+
+  /**
    * Überträgt die Projekt-Eigentümerschaft atomar an ein bestehendes Mitglied: Das Ziel wird OWNER,
    * der aufrufende (bisherige) Owner wird ADMIN. Nur der amtierende OWNER (Recht {@link
    * Permission#PROJECT_OWNER_TRANSFER}) darf übertragen — bewusst nicht ADMIN. Ist das Ziel bereits

@@ -7,7 +7,14 @@ import { AcceptInvitationPage } from './AcceptInvitationPage'
 const member: Member = { userId: 9, email: 'neu@x.de', displayName: 'Neu', role: 'MEMBER' }
 
 function makeApi(accept: MembersApi['accept']): MembersApi {
-  return { list: vi.fn(), changeRole: vi.fn(), remove: vi.fn(), invite: vi.fn(), accept }
+  return {
+    list: vi.fn(),
+    changeRole: vi.fn(),
+    changeDisplayName: vi.fn(),
+    remove: vi.fn(),
+    invite: vi.fn(),
+    accept,
+  }
 }
 
 function renderAt(entry: string, api: MembersApi) {
