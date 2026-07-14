@@ -80,4 +80,15 @@ class AdminUserControllerTest {
 
     assertThat(controller.enable(3L, 7L)).isSameAs(user);
   }
+
+  @Test
+  void changeDisplayName_delegatesToService() {
+    UserView user = new UserView(7L, "p@b.de", "Neu", PlatformRole.USER, true, Instant.EPOCH, false);
+    when(service.changeDisplayName(3L, 7L, "Neu")).thenReturn(user);
+
+    assertThat(
+            controller.changeDisplayName(
+                3L, 7L, new AdminUserController.ChangeDisplayNameRequest("Neu")))
+        .isSameAs(user);
+  }
 }

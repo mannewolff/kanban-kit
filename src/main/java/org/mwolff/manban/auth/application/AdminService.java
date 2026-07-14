@@ -55,6 +55,14 @@ public class AdminService {
     return toView(saved);
   }
 
+  /** Ändert den Anzeigenamen eines beliebigen Benutzers (nur Plattform-Admin; getrimmt). */
+  @Transactional
+  public UserView changeDisplayName(long actorUserId, long targetUserId, String displayName) {
+    requirePlatformAdmin(actorUserId);
+    AppUser target = users.findById(targetUserId).orElseThrow(UserNotFoundException::new);
+    return toView(users.save(target.withDisplayName(displayName.trim())));
+  }
+
   /**
    * Gibt einen Benutzer frei. Idempotent: Ein bereits freigegebener Benutzer bleibt unverändert
    * (Zeitpunkt und freigebender Admin werden nicht überschrieben).

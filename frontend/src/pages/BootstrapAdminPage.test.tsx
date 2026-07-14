@@ -12,6 +12,7 @@ describe('BootstrapAdminPage', () => {
     const api = {
       listUsers: vi.fn(),
       setRole: vi.fn(),
+      setDisplayName: vi.fn(),
       approve: vi.fn(),
       disable: vi.fn(),
       enable: vi.fn(),

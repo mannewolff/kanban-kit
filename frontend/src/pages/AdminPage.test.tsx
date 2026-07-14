@@ -39,6 +39,7 @@ function makeApi(): AdminApi {
       },
     ]),
     setRole: vi.fn().mockResolvedValue({}),
+    setDisplayName: vi.fn().mockResolvedValue({}),
     approve: vi.fn().mockResolvedValue({}),
     disable: vi.fn().mockResolvedValue({}),
     enable: vi.fn().mockResolvedValue({}),
@@ -56,6 +57,18 @@ describe('AdminPage', () => {
 
     fireEvent.click(screen.getByLabelText('Rolle von Alice umschalten'))
     await waitFor(() => expect(api.setRole).toHaveBeenCalledWith(1, 'ADMIN'))
+  })
+
+  it('bearbeitet den Anzeigenamen eines Nutzers inline', async () => {
+    const api = makeApi()
+    render(<AdminPage api={api} />)
+
+    fireEvent.click(await screen.findByLabelText('Namen von Alice bearbeiten'))
+    const input = screen.getByLabelText('Anzeigename von a@x.de')
+    fireEvent.change(input, { target: { value: 'Alicia' } })
+    fireEvent.click(screen.getByLabelText('Namen speichern'))
+
+    await waitFor(() => expect(api.setDisplayName).toHaveBeenCalledWith(1, 'Alicia'))
   })
 
   it('zeigt den Freigabe-Status und gibt einen wartenden Nutzer frei', async () => {

@@ -400,4 +400,35 @@ class AdminServiceTest {
     assertThat(view.disabled()).isFalse();
     verify(users, never()).save(any());
   }
+
+  @Test
+  void changeDisplayName_trimsAndUpdatesName_whenActorIsAdmin() {
+    when(users.findById(1L)).thenReturn(Optional.of(user(1, PlatformRole.ADMIN)));
+    when(users.findById(2L)).thenReturn(Optional.of(user(2, PlatformRole.USER)));
+    when(users.save(any(AppUser.class))).thenAnswer(inv -> inv.getArgument(0));
+
+    AdminService.UserView view = service.changeDisplayName(1L, 2L, "  Neuer Name  ");
+
+    assertThat(view.displayName()).isEqualTo("Neuer Name");
+    ArgumentCaptor<AppUser> saved = ArgumentCaptor.forClass(AppUser.class);
+    verify(users).save(saved.capture());
+    assertThat(saved.getValue().displayName()).isEqualTo("Neuer Name");
+  }
+
+  @Test
+  void changeDisplayName_throwsUserNotFound_whenTargetUnknown() {
+    when(users.findById(1L)).thenReturn(Optional.of(user(1, PlatformRole.ADMIN)));
+    when(users.findById(2L)).thenReturn(Optional.empty());
+
+    assertThatThrownBy(() -> service.changeDisplayName(1L, 2L, "X"))
+        .isInstanceOf(UserNotFoundException.class);
+  }
+
+  @Test
+  void changeDisplayName_deniedForNonAdmin() {
+    when(users.findById(9L)).thenReturn(Optional.of(user(9, PlatformRole.USER)));
+
+    assertThatThrownBy(() -> service.changeDisplayName(9L, 2L, "X"))
+        .isInstanceOf(AdminAccessDeniedException.class);
+  }
 }
