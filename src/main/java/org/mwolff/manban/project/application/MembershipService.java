@@ -14,6 +14,9 @@ import org.mwolff.manban.project.domain.Project;
 import org.mwolff.manban.project.domain.ProjectInvitation;
 import org.mwolff.manban.project.domain.ProjectMembership;
 import org.mwolff.manban.project.domain.ProjectRole;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.mail.MailException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -24,6 +27,8 @@ import org.springframework.transaction.annotation.Transactional;
  */
 @Service
 public class MembershipService {
+
+  private static final Logger log = LoggerFactory.getLogger(MembershipService.class);
 
   private final ProjectRepository projects;
   private final ProjectMembershipRepository memberships;
@@ -86,7 +91,17 @@ public class MembershipService {
       } else {
         memberships.save(new ProjectMembership(null, projectId, userId, role, clock.instant()));
       }
-      mailer.sendProjectAssignedEmail(normalizedEmail, project.name(), role, projectUrl(projectId));
+      // Info-Mail ist ein Nebeneffekt: Ein Versandfehler darf die bereits gespeicherte
+      // Mitgliedschaft nicht zurückrollen — daher fangen und nur loggen (kein 500).
+      try {
+        mailer.sendProjectAssignedEmail(
+            normalizedEmail, project.name(), role, projectUrl(projectId));
+      } catch (MailException e) {
+        log.warn(
+            "Zuordnungs-Mail an {} fehlgeschlagen; Mitgliedschaft bleibt bestehen",
+            normalizedEmail,
+            e);
+      }
       return InviteOutcome.ADDED;
     }
 
@@ -103,7 +118,14 @@ public class MembershipService {
             inviterUserId));
 
     String url = authProperties.baseUrl() + "/invitations/accept?token=" + plaintext;
-    mailer.sendInvitationEmail(normalizedEmail, project.name(), url);
+    // Einladungs-Mail ist essenziell (der Link kommt nur per Mail): Bei Versandfehler klaren 502
+    // melden statt generischem 500; die Transaktion rollt zurück, sodass keine unbrauchbare
+    // Invitation ohne versandten Link zurückbleibt.
+    try {
+      mailer.sendInvitationEmail(normalizedEmail, project.name(), url);
+    } catch (MailException e) {
+      throw new MailDeliveryException(e);
+    }
     return InviteOutcome.INVITED;
   }
 
