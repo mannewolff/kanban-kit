@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { authApi } from '../api/auth'
+import { ApiError } from '../api/client'
 import { AuthProvider } from '../auth/AuthContext'
 import { LoginPage } from './LoginPage'
 
@@ -67,5 +68,40 @@ describe('LoginPage', () => {
     await waitFor(() =>
       expect(navigateMock).toHaveBeenCalledWith('/', { replace: true, state: { autoRoute: true } }),
     )
+  })
+
+  async function submitLogin() {
+    renderLogin()
+    await userEvent.type(screen.getByLabelText(/E-Mail/), 'a@b.de')
+    await userEvent.type(screen.getByLabelText(/Passwort/, { selector: 'input' }), 'geheim123')
+    await userEvent.click(screen.getByRole('button', { name: 'Anmelden' }))
+  }
+
+  it('zeigt bei 403 die konkrete Backend-Meldung (Freigabe) statt der Verify-Meldung', async () => {
+    mockedApi.login.mockRejectedValue(
+      new ApiError(403, 'Benutzer ist noch nicht vom Administrator freigegeben'),
+    )
+    await submitLogin()
+    expect(
+      await screen.findByText('Benutzer ist noch nicht vom Administrator freigegeben'),
+    ).toBeInTheDocument()
+  })
+
+  it('zeigt bei 403 die E-Mail-Bestätigungs-Meldung des Backends', async () => {
+    mockedApi.login.mockRejectedValue(new ApiError(403, 'E-Mail-Adresse ist noch nicht bestätigt'))
+    await submitLogin()
+    expect(await screen.findByText('E-Mail-Adresse ist noch nicht bestätigt')).toBeInTheDocument()
+  })
+
+  it('zeigt bei 401 eine generische Anmeldedaten-Meldung', async () => {
+    mockedApi.login.mockRejectedValue(new ApiError(401, 'Invalid credentials'))
+    await submitLogin()
+    expect(await screen.findByText('Ungültige Anmeldedaten.')).toBeInTheDocument()
+  })
+
+  it('zeigt bei Netzfehler (kein ApiError) einen generischen Fallback', async () => {
+    mockedApi.login.mockRejectedValue(new Error('network down'))
+    await submitLogin()
+    expect(await screen.findByText(/fehlgeschlagen/i)).toBeInTheDocument()
   })
 })

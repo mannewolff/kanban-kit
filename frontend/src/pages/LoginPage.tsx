@@ -29,10 +29,15 @@ export function LoginPage() {
       // (nach dem Login ist die Navigation ein Push, also nicht location.key === 'default').
       navigate('/', { replace: true, state: { autoRoute: true } })
     } catch (e) {
-      if (e instanceof ApiError && e.status === 403) {
-        setError('Bitte bestätige zuerst deine E-Mail-Adresse.')
-      } else {
+      if (e instanceof ApiError && e.status === 401) {
+        // Falsche Zugangsdaten: generische Meldung (verrät nicht, ob E-Mail oder Passwort falsch).
         setError('Ungültige Anmeldedaten.')
+      } else if (e instanceof ApiError && e.message) {
+        // Backend liefert die konkrete RFC-9457-Meldung (403: E-Mail nicht bestätigt / noch nicht
+        // freigegeben / Konto gesperrt). Direkt anzeigen, statt pauschal auf E-Mail zu verweisen.
+        setError(e.message)
+      } else {
+        setError('Anmeldung fehlgeschlagen. Bitte später erneut versuchen.')
       }
     } finally {
       setBusy(false)
