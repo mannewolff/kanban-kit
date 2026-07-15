@@ -144,7 +144,9 @@ export function ProjectsPage() {
             <Paper
               key={project.id}
               variant="outlined"
-              onClick={() => navigate(`/projects/${project.id}`)}
+              // autoRoute mitgeben, damit die Board-Ebene bei genau einem Board direkt durchroutet —
+              // auch wenn der Nutzer mehrere Projekte hat und das Projekt manuell anwählt.
+              onClick={() => navigate(`/projects/${project.id}`, { state: { autoRoute: true } })}
               sx={{
                 px: 2,
                 py: 1.5,
