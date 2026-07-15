@@ -7,6 +7,20 @@ Versionierung folgt der dreiteiligen Betriebsversion (siehe [RELEASING.md](RELEA
 Einträge je Version sind ein automatischer Auszug der Commit-Titel seit dem letzten Release,
 erzeugt von `scripts/gen-changelog.mjs`.
 
+## [0.7.0] – 2026-07-15
+
+- Archivierte Karten wiederherstellen: Restore in Listenansicht und Detail-Modal ([#204](https://github.com/mannewolff/kanban-kit/issues/204))
+- Bulk-Aktion 'In den Papierkorb': BulkActionBar + Anbindung mit Bestätigung ([#203](https://github.com/mannewolff/kanban-kit/issues/203))
+- Bulk-Löschen mehrerer Karten in den Papierkorb: POST /api/cards/bulk-delete ([#202](https://github.com/mannewolff/kanban-kit/issues/202))
+- Breadcrumb auf restliche Seiten ausrollen: Mitglieder, Liste, Epics, Dashboard ([#201](https://github.com/mannewolff/kanban-kit/issues/201))
+- Wiederverwendbare Breadcrumb-Komponente: vollständiger Pfad, nur letztes Segment fett ([#200](https://github.com/mannewolff/kanban-kit/issues/200))
+- Auto-Routing: bei manueller Projektauswahl mit einem Board durchrouten ([#199](https://github.com/mannewolff/kanban-kit/issues/199))
+- Bulk-Aktionen anbinden: API, Bulk-Transfer-Dialog und Archiv-Bestätigung ([#198](https://github.com/mannewolff/kanban-kit/issues/198))
+- Karten-Auswahlmodus im Board mit Mehrfachauswahl und BulkActionBar-Gerüst ([#197](https://github.com/mannewolff/kanban-kit/issues/197))
+- Bulk-Verschieben mehrerer Karten auf ein anderes Board: POST /api/cards/bulk-transfer ([#196](https://github.com/mannewolff/kanban-kit/issues/196))
+- Bulk-Archivieren mehrerer Karten: POST /api/cards/bulk-archive ([#195](https://github.com/mannewolff/kanban-kit/issues/195))
+- Release-Changelog-Tooling: gen-changelog.mjs, CHANGELOG.md, Git-Tags ([#194](https://github.com/mannewolff/kanban-kit/issues/194))
+
 ## [0.6.0] – 2026-07-15
 
 - Marken-Assets und Deployment-Spec einchecken

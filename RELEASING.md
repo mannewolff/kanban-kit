@@ -23,13 +23,17 @@ Bei jedem `merge production`: Minor-Teil erhöhen (Y+1, Z→0), Changelog schrei
 Release taggen. Schrittfolge:
 
 ```
-node scripts/gen-changelog.mjs      # Changelog-Block für die neue Version oben in CHANGELOG.md
-node scripts/bump-version.mjs minor # VERSION/pom/package hochziehen + Tag vX.Y.Z setzen
+node scripts/bump-version.mjs minor # VERSION/pom/package auf die neue Version + Tag vX.Y.Z setzen
+node scripts/gen-changelog.mjs      # Changelog-Block der NEUEN Version oben in CHANGELOG.md
 # Release-Commit (VERSION, pom.xml, package(-lock).json, CHANGELOG.md)
 git push origin main --follow-tags  # main + Tag pushen
 # PR main -> production erstellen (Mannes Merge ist der Stop-Punkt)
 # nach dem Merge: GitHub Release zum Tag vX.Y.Z anlegen (Changelog-Block als Beschreibung)
 ```
+
+Reihenfolge beachten: **erst** der Version-Bump, **dann** `gen-changelog.mjs` — das Skript liest
+die Zielversion aus `VERSION` für den Blocktitel; liefe es vor dem Bump, entstünde ein Block für
+die alte Version.
 
 `gen-changelog.mjs` grenzt den Range über den Tag der Vorversion ab (roher Dump der Commit-Titel,
 Keep-a-Changelog-Format). `bump-version.mjs minor` setzt den Tag `vX.Y.Z`, der beim nächsten
