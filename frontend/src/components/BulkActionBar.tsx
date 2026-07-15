@@ -2,6 +2,7 @@ import Button from '@mui/material/Button'
 import Paper from '@mui/material/Paper'
 import Typography from '@mui/material/Typography'
 import ArchiveOutlinedIcon from '@mui/icons-material/ArchiveOutlined'
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline'
 import DriveFileMoveOutlinedIcon from '@mui/icons-material/DriveFileMoveOutlined'
 
 interface Props {
@@ -11,6 +12,7 @@ interface Props {
   canMove: boolean
   onArchive: () => void
   onMove: () => void
+  onDelete: () => void
   onCancel: () => void
 }
 
@@ -18,7 +20,7 @@ interface Props {
  * Fixierte Aktionsleiste für die Mehrfachauswahl von Karten. Erscheint, sobald mindestens eine
  * Karte ausgewählt ist, und bietet Archivieren, optional Verschieben sowie Abbrechen.
  */
-export function BulkActionBar({ count, canMove, onArchive, onMove, onCancel }: Props) {
+export function BulkActionBar({ count, canMove, onArchive, onMove, onDelete, onCancel }: Props) {
   return (
     <Paper
       elevation={6}
@@ -46,8 +48,11 @@ export function BulkActionBar({ count, canMove, onArchive, onMove, onCancel }: P
           Verschieben
         </Button>
       )}
-      <Button size="small" color="error" startIcon={<ArchiveOutlinedIcon />} onClick={onArchive}>
+      <Button size="small" startIcon={<ArchiveOutlinedIcon />} onClick={onArchive}>
         Archivieren
+      </Button>
+      <Button size="small" color="error" startIcon={<DeleteOutlineIcon />} onClick={onDelete}>
+        In den Papierkorb
       </Button>
       <Button size="small" onClick={onCancel}>
         Abbrechen

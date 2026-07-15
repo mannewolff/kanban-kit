@@ -66,6 +66,8 @@ export const cardsApi = {
       method: 'POST',
       body: JSON.stringify({ cardIds, targetBoardId, targetColumnId }),
     }),
+  bulkDelete: (cardIds: number[]) =>
+    apiFetch<void>(`/api/cards/bulk-delete`, { method: 'POST', body: JSON.stringify({ cardIds }) }),
   restore: (cardId: number) => apiFetch<Card>(`/api/cards/${cardId}/restore`, { method: 'POST' }),
   remove: (cardId: number) => apiFetch<void>(`/api/cards/${cardId}`, { method: 'DELETE' }),
   update: (

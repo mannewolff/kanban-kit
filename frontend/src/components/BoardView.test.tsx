@@ -39,7 +39,7 @@ const card: Card = {
 function mkApi(over: Record<string, unknown> = {}) {
   return {
     create: vi.fn(), move: vi.fn(), archive: vi.fn(), restore: vi.fn(), remove: vi.fn(),
-    bulkArchive: vi.fn(), bulkTransfer: vi.fn(), ...over,
+    bulkArchive: vi.fn(), bulkTransfer: vi.fn(), bulkDelete: vi.fn(), ...over,
   }
 }
 
@@ -373,6 +373,40 @@ describe('BoardView', () => {
     fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Archivieren' }))
 
     await waitFor(() => expect(screen.getByText('Archivieren fehlgeschlagen.')).toBeInTheDocument())
+    expect(screen.getByTestId('card-100')).toBeInTheDocument()
+  })
+
+  it('verschiebt die Auswahl nach Bestätigung in den Papierkorb', async () => {
+    const api = mkApi({ bulkDelete: vi.fn().mockResolvedValue(undefined) })
+    render(<BoardView board={board} initialCards={[card]} canEdit api={api} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Auswählen' }))
+    fireEvent.click(screen.getByTestId('card-100'))
+    fireEvent.click(screen.getByRole('button', { name: 'In den Papierkorb' }))
+
+    expect(api.bulkDelete).not.toHaveBeenCalled()
+    fireEvent.click(
+      within(screen.getByRole('dialog')).getByRole('button', { name: 'In den Papierkorb' }),
+    )
+
+    await waitFor(() => expect(api.bulkDelete).toHaveBeenCalledWith([100]))
+    await waitFor(() => expect(screen.queryByTestId('card-100')).not.toBeInTheDocument())
+  })
+
+  it('rollt beim Fehler des Bulk-Papierkorbs zurück und meldet ihn', async () => {
+    const api = mkApi({ bulkDelete: vi.fn().mockRejectedValue(new Error('fail')) })
+    render(<BoardView board={board} initialCards={[card]} canEdit api={api} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Auswählen' }))
+    fireEvent.click(screen.getByTestId('card-100'))
+    fireEvent.click(screen.getByRole('button', { name: 'In den Papierkorb' }))
+    fireEvent.click(
+      within(screen.getByRole('dialog')).getByRole('button', { name: 'In den Papierkorb' }),
+    )
+
+    await waitFor(() =>
+      expect(screen.getByText('In den Papierkorb verschieben fehlgeschlagen.')).toBeInTheDocument(),
+    )
     expect(screen.getByTestId('card-100')).toBeInTheDocument()
   })
 

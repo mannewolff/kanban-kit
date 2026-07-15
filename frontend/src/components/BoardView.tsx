@@ -72,7 +72,7 @@ interface Props {
   /** Injizierbar für Tests. */
   api?: Pick<
     CardsApi,
-    'create' | 'move' | 'archive' | 'restore' | 'remove' | 'bulkArchive' | 'bulkTransfer'
+    'create' | 'move' | 'archive' | 'restore' | 'remove' | 'bulkArchive' | 'bulkTransfer' | 'bulkDelete'
   >
   epicsApi?: Pick<EpicsApi, 'create'>
 }
@@ -108,6 +108,7 @@ export function BoardView({
   const [selectionMode, setSelectionMode] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<number>>(() => new Set())
   const [bulkArchiveConfirm, setBulkArchiveConfirm] = useState(false)
+  const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState(false)
   const [bulkTransferOpen, setBulkTransferOpen] = useState(false)
   const [snackbar, setSnackbar] = useState<string | null>(null)
   const [epicFilter, setEpicFilter] = useState<number | null>(() => {
@@ -273,6 +274,22 @@ export function BoardView({
     } catch {
       setCards(previous)
       setSnackbar('Archivieren fehlgeschlagen.')
+    }
+  }
+
+  // Bulk-Löschen: nach Bestätigung optimistisch aus der Ansicht nehmen, bei Fehler zurückrollen.
+  const confirmBulkDelete = async () => {
+    const ids = [...selectedIds]
+    const previous = cards
+    setCards(previous.filter((c) => !selectedIds.has(c.id)))
+    setBulkDeleteConfirm(false)
+    exitSelection()
+    try {
+      await api.bulkDelete(ids)
+      onCardsChanged?.()
+    } catch {
+      setCards(previous)
+      setSnackbar('In den Papierkorb verschieben fehlgeschlagen.')
     }
   }
 
@@ -674,12 +691,31 @@ export function BoardView({
         </DialogActions>
       </Dialog>
 
+      <Dialog open={bulkDeleteConfirm} onClose={() => setBulkDeleteConfirm(false)}>
+        <DialogTitle>In den Papierkorb verschieben?</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            {selectedIds.size === 1
+              ? 'Die ausgewählte Karte wird in den Papierkorb verschoben.'
+              : `${selectedIds.size} Karten werden in den Papierkorb verschoben.`}{' '}
+            Von dort lassen sie sich wiederherstellen oder endgültig löschen.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setBulkDeleteConfirm(false)}>Abbrechen</Button>
+          <Button color="error" onClick={() => void confirmBulkDelete()}>
+            In den Papierkorb
+          </Button>
+        </DialogActions>
+      </Dialog>
+
       {selectionMode && selectedIds.size > 0 && (
         <BulkActionBar
           count={selectedIds.size}
           canMove={canTransfer}
           onArchive={() => setBulkArchiveConfirm(true)}
           onMove={() => setBulkTransferOpen(true)}
+          onDelete={() => setBulkDeleteConfirm(true)}
           onCancel={exitSelection}
         />
       )}
