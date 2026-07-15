@@ -186,6 +186,20 @@ class CardControllerTest {
   }
 
   @Test
+  void bulkArchive_delegatesToService() {
+    // Given
+    List<CardView> views = List.of(card());
+    var request = new CardController.BulkArchiveRequest(List.of(8L, 9L));
+    when(service.bulkArchive(3L, List.of(8L, 9L))).thenReturn(views);
+
+    // When
+    List<CardView> result = controller.bulkArchive(3L, request);
+
+    // Then
+    assertThat(result).isSameAs(views);
+  }
+
+  @Test
   void delete_delegatesToService() {
     // When
     controller.delete(3L, 8L);

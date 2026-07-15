@@ -2,6 +2,7 @@ package org.mwolff.manban.card.web;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import java.time.Instant;
@@ -120,6 +121,13 @@ class CardController {
     return cards.archive(userId, cardId);
   }
 
+  /** Archiviert mehrere Karten in einer Transaktion (alles-oder-nichts). */
+  @PostMapping("/api/cards/bulk-archive")
+  List<CardView> bulkArchive(
+      @AuthenticationPrincipal Long userId, @Valid @RequestBody BulkArchiveRequest request) {
+    return cards.bulkArchive(userId, request.cardIds());
+  }
+
   @PostMapping("/api/cards/{cardId}/restore")
   CardView restore(@AuthenticationPrincipal Long userId, @PathVariable long cardId) {
     return cards.restore(userId, cardId);
@@ -204,6 +212,8 @@ class CardController {
       @NotNull Long columnId, @jakarta.validation.constraints.PositiveOrZero int position) {}
 
   record TransferCardRequest(@NotNull Long targetBoardId, @NotNull Long targetColumnId) {}
+
+  record BulkArchiveRequest(@NotEmpty @Size(max = 200) List<Long> cardIds) {}
 
   record AssigneesRequest(@Nullable List<Long> assignees) {}
 

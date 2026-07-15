@@ -10,6 +10,7 @@ import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -1021,6 +1022,35 @@ class CardServiceTest {
 
     // Then
     assertThat(view.archived()).isFalse();
+  }
+
+  @Test
+  void bulkArchive_archivesEveryCardAndReturnsViews() {
+    // Given
+    when(cards.findById(1L))
+        .thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
+    when(cards.findById(2L))
+        .thenReturn(Optional.of(card(2L, 20L, 2, false, null, CardType.CARD, null, null)));
+
+    // When
+    List<CardService.CardView> result = service.bulkArchive(9L, List.of(1L, 2L));
+
+    // Then
+    assertThat(result).hasSize(2).allMatch(CardService.CardView::archived);
+    ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
+    verify(cards, times(2)).save(captor.capture());
+    assertThat(captor.getAllValues()).allMatch(Card::archived);
+  }
+
+  @Test
+  void bulkArchive_propagatesAndStopsWhenOneCardUnknown() {
+    // Given: erste ID unbekannt -> Fehler vor jeglicher Speicherung (Rollback im echten Betrieb)
+    when(cards.findById(2L)).thenReturn(Optional.empty());
+
+    // When / Then
+    assertThatThrownBy(() -> service.bulkArchive(9L, List.of(2L, 1L)))
+        .isInstanceOf(CardNotFoundException.class);
+    verify(cards, never()).save(org.mockito.ArgumentMatchers.any(Card.class));
   }
 
   // --- Papierkorb (Soft-Delete) -----------------------------------------

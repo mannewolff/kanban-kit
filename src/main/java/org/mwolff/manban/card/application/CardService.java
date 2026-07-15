@@ -389,6 +389,17 @@ public class CardService {
     return view(cards.save(card.asArchived()));
   }
 
+  /**
+   * Archiviert mehrere Karten in einer Transaktion (alles-oder-nichts). Nutzt je Karte die
+   * Einzel-Logik von {@link #archive(long, long)} inklusive Rechteprüfung; fehlt an einer Karte das
+   * Recht oder existiert sie nicht, rollt der gesamte Batch zurück. Kein Positions-Reindex nötig,
+   * da archivierte Karten über {@code active_position = NULL} aus dem Namespace fallen.
+   */
+  @Transactional
+  public List<CardView> bulkArchive(long userId, List<Long> cardIds) {
+    return cardIds.stream().map(cardId -> archive(userId, cardId)).toList();
+  }
+
   @Transactional
   public CardView restore(long userId, long cardId) {
     Card card = requireCardOp(userId, cardId, Permission.TICKET_DELETE, Permission.EPIC_DELETE);
