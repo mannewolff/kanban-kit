@@ -14,7 +14,7 @@ vi.mock('../auth/AuthContext', () => ({
   useAuth: () => ({ user: { userId: 1, email: 'a@b.c', displayName: 'A', platformRole: 'USER', memberships } }),
 }))
 vi.mock('../api/boards', () => ({ boardsApi: { get: vi.fn(), rename: vi.fn() } }))
-vi.mock('../api/cards', () => ({ cardsApi: { list: vi.fn() } }))
+vi.mock('../api/cards', () => ({ cardsApi: { list: vi.fn(), getActivity: vi.fn().mockResolvedValue([]) } }))
 vi.mock('../api/epics', () => ({ epicsApi: { list: vi.fn(), assign: vi.fn() } }))
 vi.mock('../api/projects', () => ({ projectsApi: { list: vi.fn() } }))
 

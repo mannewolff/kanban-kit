@@ -3,6 +3,7 @@ import { MemoryRouter, Route, Routes, useNavigate } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { boardsApi } from '../api/boards'
 import { cardsApi, type Card } from '../api/cards'
+import { labelsApi } from '../api/labels'
 import { projectsApi } from '../api/projects'
 import { epicsApi } from '../api/epics'
 import { BoardListPage } from './BoardListPage'
@@ -19,8 +20,9 @@ vi.mock('../auth/AuthContext', () => ({
   useAuth: () => ({ user: { userId: 1, memberships: [{ projectId: 9, role: 'OWNER' }] } }),
 }))
 vi.mock('../api/boards', () => ({ boardsApi: { get: vi.fn() } }))
-vi.mock('../api/cards', () => ({ cardsApi: { list: vi.fn(), move: vi.fn() } }))
+vi.mock('../api/cards', () => ({ cardsApi: { list: vi.fn(), move: vi.fn(), getActivity: vi.fn().mockResolvedValue([]) } }))
 vi.mock('../api/epics', () => ({ epicsApi: { list: vi.fn() } }))
+vi.mock('../api/labels', () => ({ labelsApi: { list: vi.fn().mockResolvedValue([]) } }))
 vi.mock('../api/projects', () => ({ projectsApi: { list: vi.fn() } }))
 vi.mock('../api/comments', () => ({ commentsApi: { list: vi.fn().mockResolvedValue([]), create: vi.fn(), update: vi.fn(), remove: vi.fn() } }))
 vi.mock('../api/attachments', () => ({ attachmentsApi: { list: vi.fn().mockResolvedValue([]), upload: vi.fn(), remove: vi.fn(), fetchBlob: vi.fn() } }))
@@ -29,10 +31,11 @@ const mBoards = boardsApi as unknown as { get: ReturnType<typeof vi.fn> }
 const mCards = cardsApi as unknown as { list: ReturnType<typeof vi.fn> }
 const mEpics = epicsApi as unknown as { list: ReturnType<typeof vi.fn> }
 const mProjects = projectsApi as unknown as { list: ReturnType<typeof vi.fn> }
+const mLabels = labelsApi as unknown as { list: ReturnType<typeof vi.fn> }
 
 const base = {
   boardId: 1, positionInColumn: 0, movedToDoneAt: null as string | null,
-  dependencies: [] as number[], type: 'CARD' as const, parentId: null as number | null, shortcode: null as string | null,
+  dependencies: [] as number[], type: 'CARD' as const, parentId: null as number | null, shortcode: null as string | null, assignees: [] as number[], dueDate: null as string | null, labels: [] as number[],
 }
 const active: Card = { ...base, id: 100, columnId: 10, number: 1, title: 'Aufgabe', description: '# Titel\nText **fett**', archived: false }
 const archived: Card = { ...base, id: 101, columnId: 20, number: 2, title: 'AlteKarte', description: 'x', archived: true }
@@ -186,5 +189,34 @@ describe('BoardListPage', () => {
     } finally {
       rectSpy.mockRestore()
     }
+  })
+
+  it('filtert die Liste nach Label', async () => {
+    const labelled: Card = { ...base, id: 100, columnId: 10, number: 1, title: 'MitLabel', description: '', archived: false, labels: [5] }
+    const other: Card = { ...base, id: 102, columnId: 10, number: 3, title: 'OhneLabel', description: '', archived: false }
+    mBoards.get.mockResolvedValue({
+      id: 1, projectId: 9, name: 'B', createdAt: '',
+      columns: [{ id: 10, name: 'Backlog', position: 0, wipLimit: null }],
+    })
+    mCards.list.mockResolvedValue([labelled, other])
+    mEpics.list.mockResolvedValue([])
+    mProjects.list.mockResolvedValue([{ id: 9, name: 'Projekt', role: 'OWNER', createdAt: '' }])
+    mLabels.list.mockResolvedValue([{ id: 5, boardId: 1, name: 'Bug', color: '#f00' }])
+
+    render(
+      <MemoryRouter initialEntries={['/boards/1/list']}>
+        <Routes>
+          <Route path="/boards/:boardId/list" element={<BoardListPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByText('MitLabel')).toBeInTheDocument()
+    expect(screen.getByText('OhneLabel')).toBeInTheDocument()
+
+    fireEvent.click(await screen.findByLabelText('Label-Filter Bug'))
+
+    await waitFor(() => expect(screen.queryByText('OhneLabel')).not.toBeInTheDocument())
+    expect(screen.getByText('MitLabel')).toBeInTheDocument()
   })
 })

@@ -74,6 +74,7 @@ class KanbanCompatServiceTest {
         FIXED,
         CardType.CARD,
         null,
+        null,
         null);
   }
 
@@ -147,6 +148,7 @@ class KanbanCompatServiceTest {
             FIXED,
             CardType.CARD,
             null,
+            null,
             null);
     when(boards.findById(BOARD)).thenReturn(Optional.of(new Board(BOARD, 5L, "B", FIXED)));
     when(columns.findByBoardId(BOARD)).thenReturn(standardColumns());
@@ -178,7 +180,8 @@ class KanbanCompatServiceTest {
             FIXED,
             CardType.EPIC,
             null,
-            "E");
+            "E",
+            null);
     when(boards.findById(BOARD)).thenReturn(Optional.of(new Board(BOARD, 5L, "B", FIXED)));
     when(columns.findByBoardId(BOARD)).thenReturn(standardColumns());
     when(cards.findByBoardId(BOARD)).thenReturn(List.of(epic));
@@ -269,7 +272,10 @@ class KanbanCompatServiceTest {
                 List.of(),
                 CardType.CARD,
                 null,
-                null));
+                null,
+                List.of(),
+                null,
+                List.of()));
 
     // When
     KanbanCompatService.Created created = service.create(bound(), "Titel", "Body", null);
@@ -298,7 +304,10 @@ class KanbanCompatServiceTest {
                 List.of(),
                 CardType.CARD,
                 null,
-                null));
+                null,
+                List.of(),
+                null,
+                List.of()));
 
     // When
     KanbanCompatService.Created created = service.create(bound(), "Titel", "Body", "   ");
@@ -364,6 +373,7 @@ class KanbanCompatServiceTest {
             FIXED,
             CardType.CARD,
             null,
+            null,
             null);
     when(cards.findById(1L)).thenReturn(Optional.of(otherBoard));
 
@@ -414,6 +424,7 @@ class KanbanCompatServiceTest {
             FIXED,
             FIXED,
             CardType.CARD,
+            null,
             null,
             null);
     when(cards.findById(1L)).thenReturn(Optional.of(otherBoard));

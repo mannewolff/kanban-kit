@@ -18,12 +18,29 @@ import org.mwolff.manban.card.domain.CardType;
 /** Unit-Tests des Karten-/Epic-Controllers (Service gemockt). */
 class CardControllerTest {
 
+  private static final java.time.Instant INSTANT = java.time.Instant.parse("2026-01-01T00:00:00Z");
+
   private CardService service;
   private CardController controller;
 
   private static CardView card() {
     return new CardView(
-        1L, 2L, 3L, 4, "Title", "Desc", 0, false, null, List.of(), CardType.CARD, null, null);
+        1L,
+        2L,
+        3L,
+        4,
+        "Title",
+        "Desc",
+        0,
+        false,
+        null,
+        List.of(),
+        CardType.CARD,
+        null,
+        null,
+        List.of(),
+        null,
+        List.of());
   }
 
   @BeforeEach
@@ -106,8 +123,8 @@ class CardControllerTest {
     // Given
     CardView view = card();
     var deps = List.of(3, 4);
-    var request = new CardController.UpdateCardRequest("Title", "Desc", deps, "SC-1", 9L);
-    when(service.update(3L, 8L, "Title", "Desc", deps, "SC-1", 9L)).thenReturn(view);
+    var request = new CardController.UpdateCardRequest("Title", "Desc", deps, "SC-1", 9L, null);
+    when(service.update(3L, 8L, "Title", "Desc", deps, "SC-1", 9L, null)).thenReturn(view);
 
     // When
     CardView result = controller.update(3L, 8L, request);
@@ -188,5 +205,104 @@ class CardControllerTest {
 
     // Then
     assertThat(result).isSameAs(view);
+  }
+
+  @Test
+  void setAssignees_delegatesToService() {
+    // Given
+    CardView view = card();
+    when(service.setAssignees(3L, 8L, List.of(5L, 6L))).thenReturn(view);
+
+    // When
+    CardView result =
+        controller.setAssignees(3L, 8L, new CardController.AssigneesRequest(List.of(5L, 6L)));
+
+    // Then
+    assertThat(result).isSameAs(view);
+  }
+
+  @Test
+  void setAssignees_coalescesNullListToEmpty() {
+    // Given
+    CardView view = card();
+    when(service.setAssignees(3L, 8L, List.of())).thenReturn(view);
+
+    // When
+    CardView result = controller.setAssignees(3L, 8L, new CardController.AssigneesRequest(null));
+
+    // Then
+    assertThat(result).isSameAs(view);
+    verify(service).setAssignees(3L, 8L, List.of());
+  }
+
+  @Test
+  void setLabels_delegatesToService() {
+    CardView view = card();
+    when(service.setLabels(3L, 8L, List.of(5L, 6L))).thenReturn(view);
+
+    CardView result =
+        controller.setLabels(3L, 8L, new CardController.LabelsRequest(List.of(5L, 6L)));
+
+    assertThat(result).isSameAs(view);
+  }
+
+  @Test
+  void setLabels_coalescesNullListToEmpty() {
+    CardView view = card();
+    when(service.setLabels(3L, 8L, List.of())).thenReturn(view);
+
+    CardView result = controller.setLabels(3L, 8L, new CardController.LabelsRequest(null));
+
+    assertThat(result).isSameAs(view);
+    verify(service).setLabels(3L, 8L, List.of());
+  }
+
+  @Test
+  void trash_delegatesToService() {
+    List<CardView> views = List.of(card());
+    when(service.listTrash(3L, 2L)).thenReturn(views);
+
+    assertThat(controller.trash(3L, 2L)).isSameAs(views);
+  }
+
+  @Test
+  void restoreDeleted_delegatesToService() {
+    CardView view = card();
+    when(service.restoreFromTrash(3L, 8L)).thenReturn(view);
+
+    assertThat(controller.restoreDeleted(3L, 8L)).isSameAs(view);
+  }
+
+  @Test
+  void purge_delegatesToService() {
+    controller.purge(3L, 8L);
+
+    verify(service).purge(3L, 8L);
+  }
+
+  @Test
+  void activity_mapsDomainToViews() {
+    var entry =
+        new org.mwolff.manban.card.domain.CardActivity(
+            5L,
+            8L,
+            9L,
+            org.mwolff.manban.card.domain.CardActivityType.MOVED,
+            "Verschoben",
+            INSTANT);
+    when(service.listActivity(3L, 8L)).thenReturn(List.of(entry));
+
+    List<CardController.ActivityView> result = controller.activity(3L, 8L);
+
+    assertThat(result)
+        .singleElement()
+        .satisfies(
+            v -> {
+              assertThat(v.id()).isEqualTo(5L);
+              assertThat(v.actorUserId()).isEqualTo(9L);
+              assertThat(v.type()).isEqualTo("MOVED");
+              assertThat(v.detail()).isEqualTo("Verschoben");
+              assertThat(v.createdAt()).isEqualTo(INSTANT);
+            });
   }
 }

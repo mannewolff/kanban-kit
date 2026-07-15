@@ -1,3 +1,4 @@
+import EditIcon from '@mui/icons-material/Edit'
 import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
@@ -6,6 +7,7 @@ import DialogActions from '@mui/material/DialogActions'
 import DialogContent from '@mui/material/DialogContent'
 import DialogContentText from '@mui/material/DialogContentText'
 import DialogTitle from '@mui/material/DialogTitle'
+import IconButton from '@mui/material/IconButton'
 import Link from '@mui/material/Link'
 import MenuItem from '@mui/material/MenuItem'
 import Stack from '@mui/material/Stack'
@@ -15,6 +17,7 @@ import TableCell from '@mui/material/TableCell'
 import TableHead from '@mui/material/TableHead'
 import TableRow from '@mui/material/TableRow'
 import TextField from '@mui/material/TextField'
+import Tooltip from '@mui/material/Tooltip'
 import Typography from '@mui/material/Typography'
 import { useEffect, useState } from 'react'
 import { Link as RouterLink, useParams } from 'react-router-dom'
@@ -45,6 +48,7 @@ export function ProjectMembersPage({ api = defaultMembersApi, loadRole }: Props)
   const [inviteRole, setInviteRole] = useState<ProjectRole>('MEMBER')
   const [message, setMessage] = useState<{ kind: 'success' | 'error'; text: string } | null>(null)
   const [inviting, setInviting] = useState(false)
+  const [editingName, setEditingName] = useState<{ userId: number; name: string } | null>(null)
 
   const reload = () => api.list(id).then(setMembers)
 
@@ -139,6 +143,23 @@ export function ProjectMembersPage({ api = defaultMembersApi, loadRole }: Props)
     }
   }
 
+  const handleChangeDisplayName = async () => {
+    if (!editingName || editingName.name.trim().length === 0) {
+      return
+    }
+    setMessage(null)
+    try {
+      await api.changeDisplayName(id, editingName.userId, editingName.name)
+      setEditingName(null)
+      await reload()
+    } catch (error) {
+      setMessage({
+        kind: 'error',
+        text: error instanceof ApiError ? error.message : 'Namensänderung fehlgeschlagen.',
+      })
+    }
+  }
+
   const handleRemove = async (member: Member) => {
     setMessage(null)
     try {
@@ -202,7 +223,40 @@ export function ProjectMembersPage({ api = defaultMembersApi, loadRole }: Props)
         <TableBody>
           {members.map((member) => (
             <TableRow key={member.userId} data-testid={`member-${member.userId}`}>
-              <TableCell>{member.displayName}</TableCell>
+              <TableCell>
+                {manage && editingName?.userId === member.userId ? (
+                  <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                    <TextField
+                      size="small"
+                      variant="standard"
+                      value={editingName.name}
+                      onChange={(e) => setEditingName({ userId: member.userId, name: e.target.value })}
+                      inputProps={{ maxLength: 120, 'aria-label': `Anzeigename von ${member.email}` }}
+                    />
+                    <Button size="small" aria-label="Namen speichern" onClick={handleChangeDisplayName}>
+                      Speichern
+                    </Button>
+                    <Button size="small" aria-label="Bearbeiten abbrechen" onClick={() => setEditingName(null)}>
+                      Abbrechen
+                    </Button>
+                  </Box>
+                ) : (
+                  <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center' }}>
+                    {member.displayName}
+                    {manage && (
+                      <Tooltip title="Anzeigename ändern (global, projektübergreifend)">
+                        <IconButton
+                          size="small"
+                          aria-label={`Namen von ${member.displayName} bearbeiten`}
+                          onClick={() => setEditingName({ userId: member.userId, name: member.displayName })}
+                        >
+                          <EditIcon fontSize="inherit" />
+                        </IconButton>
+                      </Tooltip>
+                    )}
+                  </Box>
+                )}
+              </TableCell>
               <TableCell>{member.email}</TableCell>
               <TableCell>
                 {manage ? (

@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
@@ -34,6 +35,28 @@ class LoginServiceTest {
     users = mock(AppUserRepository.class);
     passwordEncoder = mock(PasswordEncoder.class);
     service = new LoginService(users, passwordEncoder);
+  }
+
+  private static AppUser disabledUser() {
+    return new AppUser(
+        2L,
+        "a@x.de",
+        "storedHash",
+        "Ada",
+        true,
+        PlatformRole.USER,
+        Instant.EPOCH,
+        null,
+        Instant.EPOCH);
+  }
+
+  @Test
+  void login_throwsUserDisabled_whenAccountDisabled() {
+    when(users.findByEmail("a@x.de")).thenReturn(Optional.of(disabledUser()));
+    when(passwordEncoder.matches("pw", "storedHash")).thenReturn(true);
+
+    assertThatThrownBy(() -> service.login("a@x.de", "pw"))
+        .isInstanceOf(UserDisabledException.class);
   }
 
   @Test

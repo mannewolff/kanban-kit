@@ -1,7 +1,9 @@
 package org.mwolff.manban.auth.web;
 
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 import java.util.List;
 import org.mwolff.manban.auth.application.AdminService;
 import org.mwolff.manban.auth.application.AdminService.UserView;
@@ -42,5 +44,25 @@ class AdminUserController {
     return admin.approve(userId, id);
   }
 
+  @PostMapping("/api/admin/users/{id}/disable")
+  UserView disable(@AuthenticationPrincipal Long userId, @PathVariable long id) {
+    return admin.disable(userId, id);
+  }
+
+  @PostMapping("/api/admin/users/{id}/enable")
+  UserView enable(@AuthenticationPrincipal Long userId, @PathVariable long id) {
+    return admin.enable(userId, id);
+  }
+
+  @PatchMapping("/api/admin/users/{id}/display-name")
+  UserView changeDisplayName(
+      @AuthenticationPrincipal Long userId,
+      @PathVariable long id,
+      @Valid @RequestBody ChangeDisplayNameRequest request) {
+    return admin.changeDisplayName(userId, id, request.displayName());
+  }
+
   record ChangeRoleRequest(@NotNull PlatformRole platformRole) {}
+
+  record ChangeDisplayNameRequest(@NotBlank @Size(max = 120) String displayName) {}
 }

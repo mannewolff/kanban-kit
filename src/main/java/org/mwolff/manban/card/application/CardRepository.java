@@ -36,5 +36,21 @@ public interface CardRepository {
    */
   void transfer(long cardId, long targetBoardId, long targetColumnId, int newNumber);
 
+  /** Verschiebt eine Karte in den Papierkorb (Soft-Delete): setzt {@code deleted_at}. */
+  void softDelete(long cardId, Instant when);
+
+  /**
+   * Holt eine Karte aus dem Papierkorb zurück: löscht {@code deleted_at} und setzt sie an die
+   * angegebene (freie) Position.
+   */
+  void restoreFromTrash(long cardId, int newPosition);
+
+  /** Karten im Papierkorb eines Boards (deleted_at gesetzt), aufsteigend nach Nummer. */
+  List<Card> findTrashByBoardId(long boardId);
+
+  /** Karten, die vor {@code threshold} gelöscht wurden (für die Papierkorb-Retention). */
+  List<Card> findPurgeableTrash(Instant threshold);
+
+  /** Entfernt eine Karte endgültig (Hard-Delete). */
   void deleteById(long id);
 }

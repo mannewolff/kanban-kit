@@ -51,7 +51,8 @@ public class BootstrapService {
         saved.displayName(),
         saved.platformRole(),
         saved.emailVerified(),
-        saved.approvedAt());
+        saved.approvedAt(),
+        saved.disabled());
   }
 
   private boolean adminExists() {

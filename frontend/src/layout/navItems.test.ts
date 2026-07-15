@@ -47,4 +47,11 @@ describe('buildNavItems Sichtbarkeit', () => {
     const boardsLink = group?.kind === 'group' ? group.children.find((c) => c.label === 'Boards') : undefined
     expect(boardsLink?.path).toBe(`/projects/${board.projectId}`)
   })
+
+  it('verlinkt „Dashboard" auf die Board-Dashboard-Route', () => {
+    expect(groupChildren({ board })).toContain('Dashboard')
+    const group = buildNavItems({ board }).find((n) => n.label === 'B')
+    const link = group?.kind === 'group' ? group.children.find((c) => c.label === 'Dashboard') : undefined
+    expect(link?.path).toBe(`/boards/${board.id}/dashboard`)
+  })
 })

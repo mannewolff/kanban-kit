@@ -3,8 +3,11 @@ import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline'
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined'
 import MoreVertIcon from '@mui/icons-material/MoreVert'
 import Alert from '@mui/material/Alert'
+import Avatar from '@mui/material/Avatar'
+import AvatarGroup from '@mui/material/AvatarGroup'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
+import Chip from '@mui/material/Chip'
 import Dialog from '@mui/material/Dialog'
 import DialogActions from '@mui/material/DialogActions'
 import DialogContent from '@mui/material/DialogContent'
@@ -24,8 +27,11 @@ import { cardsApi, type Card, type CardsApi } from '../api/cards'
 import { ApiError } from '../api/client'
 import { columnsApi } from '../api/columns'
 import { epicsApi as defaultEpicsApi, type Epic, type EpicsApi } from '../api/epics'
+import type { Member } from '../api/members'
 import { activeCardsInColumn, applyMove } from '../lib/boardOps'
 import { cleanupCountdownLabel, cleanupDaysRemaining } from '../lib/cleanupCountdown'
+import type { Label } from '../api/labels'
+import { formatDueDate, isOverdue } from '../lib/dueDate'
 import { epicColor, epicShortcode } from '../lib/epicMeta'
 import { COLUMN_SURFACE_BG, statusColors } from '../lib/statusColors'
 import { EpicBadge } from './EpicBadge'
@@ -34,12 +40,24 @@ import { TransferCardDialog } from './TransferCardDialog'
 
 const isDoneColumn = (name: string) => name.toLowerCase().includes('done')
 
+/** Initialen (max. 2 Zeichen) aus einem Anzeigenamen für Assignee-Avatare. */
+function initials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter((p) => p.length > 0)
+  const first = parts[0]?.charAt(0) ?? ''
+  const last = parts.length > 1 ? parts[parts.length - 1].charAt(0) : ''
+  return (first + last).toUpperCase() || '?'
+}
+
 interface Props {
   board: Board
   initialCards: Card[]
   canEdit: boolean
   epics?: Epic[]
   retentionDays?: number
+  /** Projektmitglieder für die Zuständigen-Avatare auf den Karten. */
+  members?: Member[]
+  /** Board-Labels für die farbigen Label-Chips auf den Karten. */
+  boardLabels?: Label[]
   onCardClick?: (card: Card) => void
   onEditCard?: (card: Card) => void
   onEpicsChanged?: () => void
@@ -64,6 +82,8 @@ export function BoardView({
   canEdit,
   epics = [],
   retentionDays = 30,
+  members = [],
+  boardLabels = [],
   onCardClick,
   onEditCard,
   onEpicsChanged,
@@ -342,6 +362,7 @@ export function BoardView({
                 {activeCardsInColumn(filteredCards, column.id).map((card) => {
                   const epic = card.parentId != null ? epicById.get(card.parentId) : undefined
                   const doneAt = done ? card.movedToDoneAt : null
+                  const overdue = isOverdue(card.dueDate, done)
                   return (
                     <Paper
                       key={card.id}
@@ -364,6 +385,21 @@ export function BoardView({
                       }}
                     >
                       {epic && <EpicBadge epicId={epic.id} title={epic.title} shortcode={epic.shortcode} sx={{ mb: 0.5 }} />}
+                      {card.labels.length > 0 && (
+                        <Stack direction="row" spacing={0.5} sx={{ flexWrap: 'wrap', mb: 0.5 }} aria-label={`Labels ${card.title}`}>
+                          {card.labels.map((labelId) => {
+                            const l = boardLabels.find((b) => b.id === labelId)
+                            return (
+                              <Chip
+                                key={labelId}
+                                size="small"
+                                label={l?.name ?? `#${labelId}`}
+                                sx={{ bgcolor: l?.color ?? 'grey.500', color: '#fff', height: 18, '& .MuiChip-label': { px: 0.75, fontSize: '0.65rem' } }}
+                              />
+                            )
+                          })}
+                        </Stack>
+                      )}
                       <Stack direction="row" alignItems="flex-start" spacing={0.5}>
                         <Typography variant="body2" sx={{ flex: 1, minWidth: 0 }}>
                           <Box component="span" sx={{ color: 'text.secondary' }}>#{card.number} – </Box>
@@ -387,6 +423,34 @@ export function BoardView({
                         <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
                           {cleanupCountdownLabel(cleanupDaysRemaining(doneAt, retentionDays))}
                         </Typography>
+                      )}
+                      {card.dueDate != null && (
+                        <Typography
+                          variant="caption"
+                          aria-label={`Fällig ${card.title}`}
+                          color={overdue ? 'error' : 'text.secondary'}
+                          sx={{ display: 'block', mt: 0.5, fontWeight: overdue ? 600 : 400 }}
+                        >
+                          📅 {formatDueDate(card.dueDate)}
+                        </Typography>
+                      )}
+                      {card.assignees.length > 0 && (
+                        <Stack direction="row" justifyContent="flex-end" sx={{ mt: 0.5 }}>
+                          <AvatarGroup
+                            max={4}
+                            aria-label={`Zuständige ${card.title}`}
+                            sx={{ '& .MuiAvatar-root': { width: 24, height: 24, fontSize: '0.7rem' } }}
+                          >
+                            {card.assignees.map((uid) => {
+                              const name = members.find((m) => m.userId === uid)?.displayName ?? `#${uid}`
+                              return (
+                                <Avatar key={uid} title={name}>
+                                  {initials(name)}
+                                </Avatar>
+                              )
+                            })}
+                          </AvatarGroup>
+                        </Stack>
                       )}
                     </Paper>
                   )

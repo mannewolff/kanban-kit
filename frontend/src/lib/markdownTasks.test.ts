@@ -24,6 +24,27 @@ describe('normalizeTaskLists', () => {
     const md = '```\n[ ] kein Task\n```'
     expect(normalizeTaskLists(md)).toBe(md)
   })
+
+  it('kanonisiert Marker mit abweichender Leerzeichen-Zahl bei Listen-Items', () => {
+    expect(normalizeTaskLists('- [  ] doppelt')).toBe('- [ ] doppelt')
+    expect(normalizeTaskLists('- [] leer')).toBe('- [ ] leer')
+    expect(normalizeTaskLists('- [ x ] umrahmt')).toBe('- [x] umrahmt')
+    expect(normalizeTaskLists('- [X] gross')).toBe('- [x] gross')
+    expect(normalizeTaskLists('- [X]y')).toBe('- [x] y')
+  })
+
+  it('kanonisiert auch nackte Marker mit Varianten', () => {
+    expect(normalizeTaskLists('[  ] doppelt')).toBe('- [ ] doppelt')
+    expect(normalizeTaskLists('[] leer')).toBe('- [ ] leer')
+  })
+
+  it('rendert benachbarte Zeilen mit unterschiedlicher Leerzeichen-Zahl beide als Task', () => {
+    expect(normalizeTaskLists('- [ ] a\n- [  ] b')).toBe('- [ ] a\n- [ ] b')
+  })
+
+  it('lässt nackte Klammern ohne folgenden Whitespace (Fließtext) unangetastet', () => {
+    expect(normalizeTaskLists('[x]foo bar')).toBe('[x]foo bar')
+  })
 })
 
 describe('toggleTaskAt', () => {
@@ -53,5 +74,17 @@ describe('toggleTaskAt', () => {
 
   it('lässt den Text bei ungültigem Index unverändert', () => {
     expect(toggleTaskAt('[ ] eins', 5)).toBe('[ ] eins')
+  })
+
+  it('zählt und flippt Marker mit abweichender Leerzeichen-Zahl konsistent zum Rendern', () => {
+    // Gerendert (normalizeTaskLists) sind beides Checkboxen an Index 0 und 1; ein Klick auf die
+    // zweite (Index 1) muss genau die zweite Zeile treffen, obwohl sie zwei Leerzeichen hat.
+    const md = '- [ ] a\n- [  ] b'
+    expect(toggleTaskAt(md, 1)).toBe('- [ ] a\n- [x] b')
+  })
+
+  it('flippt leere und umrahmte Marker kanonisch', () => {
+    expect(toggleTaskAt('- [] x', 0)).toBe('- [x] x')
+    expect(toggleTaskAt('- [ x ] y', 0)).toBe('- [ ] y')
   })
 })

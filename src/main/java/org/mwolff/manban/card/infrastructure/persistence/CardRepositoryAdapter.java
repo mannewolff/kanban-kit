@@ -41,7 +41,21 @@ class CardRepositoryAdapter implements CardRepository {
 
   @Override
   public List<Card> findByBoardId(long boardId) {
-    return jpa.findByBoardIdOrderByNumber(boardId).stream()
+    return jpa.findByBoardIdAndDeletedAtIsNullOrderByNumber(boardId).stream()
+        .map(CardRepositoryAdapter::toDomain)
+        .toList();
+  }
+
+  @Override
+  public List<Card> findTrashByBoardId(long boardId) {
+    return jpa.findByBoardIdAndDeletedAtIsNotNullOrderByNumber(boardId).stream()
+        .map(CardRepositoryAdapter::toDomain)
+        .toList();
+  }
+
+  @Override
+  public List<Card> findPurgeableTrash(java.time.Instant threshold) {
+    return jpa.findByDeletedAtNotNullAndDeletedAtBefore(threshold).stream()
         .map(CardRepositoryAdapter::toDomain)
         .toList();
   }
@@ -149,6 +163,20 @@ class CardRepositoryAdapter implements CardRepository {
   }
 
   @Override
+  public void softDelete(long cardId, java.time.Instant when) {
+    jdbc.update(
+        "UPDATE card SET deleted_at = ? WHERE id = ?", java.sql.Timestamp.from(when), cardId);
+  }
+
+  @Override
+  public void restoreFromTrash(long cardId, int newPosition) {
+    jdbc.update(
+        "UPDATE card SET deleted_at = NULL, position_in_column = ? WHERE id = ?",
+        newPosition,
+        cardId);
+  }
+
+  @Override
   public void deleteById(long id) {
     jpa.deleteById(id);
   }
@@ -173,6 +201,7 @@ class CardRepositoryAdapter implements CardRepository {
         e.getUpdatedAt(),
         CardType.valueOf(e.getType()),
         e.getParentId(),
-        e.getShortcode());
+        e.getShortcode(),
+        e.getDueDate());
   }
 }

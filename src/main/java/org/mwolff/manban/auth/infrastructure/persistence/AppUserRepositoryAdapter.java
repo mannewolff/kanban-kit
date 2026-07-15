@@ -63,6 +63,7 @@ class AppUserRepositoryAdapter implements AppUserRepository {
         e.isEmailVerified(),
         e.getPlatformRole(),
         e.getApprovedAt(),
-        e.getApprovedBy());
+        e.getApprovedBy(),
+        e.getDisabledAt());
   }
 }

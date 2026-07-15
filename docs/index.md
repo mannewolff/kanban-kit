@@ -1,8 +1,9 @@
 # kanban-kit — Dokumentation
 
 kanban-kit ist ein eigenständiges, selbst-hostbares Kanban-Board (Trello-Alternative) mit
-Projekten, mehreren Boards, dynamischen Spalten, Karten, Epics, Kommentaren, Anhängen und
-einer rollenbasierten Rechteverwaltung.
+Projekten, mehreren Boards, dynamischen Spalten, Karten (mit Zuständigen, Fälligkeit und Labels),
+Epics, Kommentaren, Anhängen, einem Papierkorb, einem KPI-Dashboard und einer rollenbasierten
+Rechteverwaltung.
 
 Diese Dokumentation ist die **Benutzer- und Betriebsdokumentation**. Sie wird laufend mit dem
 Funktionsstand nachgezogen.
@@ -11,8 +12,9 @@ Funktionsstand nachgezogen.
 
 - [Betrieb & Installation](betrieb.md) — Start via Docker, Umgebungsvariablen, erster Admin, E-Mail/Verifikation.
 - [Produktions-Deployment (Hostinger)](deployment-hostinger.md) — öffentlicher Betrieb hinter Traefik unter `kanban.mwolff.org`.
-- [Nutzung](nutzung.md) — Registrieren, Projekte, Boards, Karten, Listen-Ansicht, Anhänge, Epics, Mitglieder.
-- [Rollen & Rechte](rollen-und-rechte.md) — Plattform- vs. Projekt-Rollen, Rechte-Matrix, Admin-Bereich.
+- [Nutzung](nutzung.md) — Registrieren, Projekte, Boards, Karten (Zuständige, Fälligkeit, Labels),
+  Papierkorb, Listen-Ansicht, Dashboard, Epics, Mitglieder.
+- [Rollen & Rechte](rollen-und-rechte.md) — Plattform- vs. Projekt-Rollen, Rechte-Matrix, Admin-Bereich (inkl. Konten sperren).
 
 ## Kurzüberblick der Ebenen
 

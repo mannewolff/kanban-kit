@@ -47,11 +47,14 @@ class AppUserEntity {
   @Column(name = "approved_by")
   private @Nullable Long approvedBy;
 
+  @Column(name = "disabled_at")
+  private @Nullable Instant disabledAt;
+
   protected AppUserEntity() {
     // für JPA
   }
 
-  /** Baut die Entity direkt aus dem Domänenobjekt (statt aus 8 Einzelparametern, Sonar S107). */
+  /** Baut die Entity direkt aus dem Domänenobjekt (statt aus 9 Einzelparametern, Sonar S107). */
   AppUserEntity(AppUser u) {
     this.id = u.id();
     this.email = u.email();
@@ -61,6 +64,7 @@ class AppUserEntity {
     this.platformRole = u.platformRole();
     this.approvedAt = u.approvedAt();
     this.approvedBy = u.approvedBy();
+    this.disabledAt = u.disabledAt();
   }
 
   @Nullable Long getId() {
@@ -93,5 +97,9 @@ class AppUserEntity {
 
   @Nullable Long getApprovedBy() {
     return approvedBy;
+  }
+
+  @Nullable Instant getDisabledAt() {
+    return disabledAt;
   }
 }

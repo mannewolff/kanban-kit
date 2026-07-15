@@ -16,8 +16,12 @@ import org.mwolff.manban.board.application.ColumnNotFoundException;
 import org.mwolff.manban.board.domain.Board;
 import org.mwolff.manban.board.domain.BoardColumn;
 import org.mwolff.manban.card.domain.Card;
+import org.mwolff.manban.card.domain.CardActivity;
+import org.mwolff.manban.card.domain.CardActivityType;
 import org.mwolff.manban.card.domain.CardType;
+import org.mwolff.manban.card.domain.Label;
 import org.mwolff.manban.project.application.PermissionChecker;
+import org.mwolff.manban.project.application.ProjectMembershipRepository;
 import org.mwolff.manban.project.domain.Permission;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -28,6 +32,10 @@ import org.springframework.transaction.annotation.Transactional;
  * {@link CardType#EPIC}: sie erscheinen nicht auf dem Board, halten keine Position und gruppieren
  * Karten über {@code parentId}. Rechte über den {@link PermissionChecker}.
  */
+// PMD.CouplingBetweenObjects: zentraler Karten-Use-Case-Service; die Kopplung an die Ports
+// (Karten, Abhängigkeiten, Boards/Spalten, Rechte, Zykluszeit, Zuständige, Mitgliedschaften)
+// ist fachlich begründet und kein God-Class-Smell.
+@SuppressWarnings("PMD.CouplingBetweenObjects")
 @Service
 public class CardService {
 
@@ -36,6 +44,12 @@ public class CardService {
   private final BoardRepository boards;
   private final BoardColumnRepository columns;
   private final PermissionChecker permissions;
+  private final CardColumnTransitionRepository transitions;
+  private final CardAssigneeRepository assignees;
+  private final ProjectMembershipRepository memberships;
+  private final LabelRepository labels;
+  private final CardLabelRepository cardLabels;
+  private final CardActivityRepository activity;
   private final Clock clock;
 
   public CardService(
@@ -44,12 +58,24 @@ public class CardService {
       BoardRepository boards,
       BoardColumnRepository columns,
       PermissionChecker permissions,
+      CardColumnTransitionRepository transitions,
+      CardAssigneeRepository assignees,
+      ProjectMembershipRepository memberships,
+      LabelRepository labels,
+      CardLabelRepository cardLabels,
+      CardActivityRepository activity,
       Clock clock) {
     this.cards = cards;
     this.dependencies = dependencies;
     this.boards = boards;
     this.columns = columns;
     this.permissions = permissions;
+    this.transitions = transitions;
+    this.assignees = assignees;
+    this.memberships = memberships;
+    this.labels = labels;
+    this.cardLabels = cardLabels;
+    this.activity = activity;
     this.clock = clock;
   }
 
@@ -64,7 +90,7 @@ public class CardService {
       @Nullable Long parentId) {
     Board board = boards.findById(boardId).orElseThrow(BoardNotFoundException::new);
     permissions.require(userId, board.projectId(), Permission.TICKET_CREATE);
-    requireColumnInBoard(columnId, boardId);
+    BoardColumn column = requireColumnInBoard(columnId, boardId);
     Long effectiveParent =
         parentId == null ? null : requireEpicInBoard(parentId, boardId).requireId();
 
@@ -88,8 +114,11 @@ public class CardService {
                 now,
                 CardType.CARD,
                 effectiveParent,
+                null,
                 null));
 
+    transitions.open(saved.requireId(), columnId, column.name(), now);
+    activity.add(saved.requireId(), userId, CardActivityType.CREATED, "Karte angelegt", now);
     setDependencies(saved, dependsOn);
     return view(saved);
   }
@@ -132,7 +161,8 @@ public class CardService {
                 now,
                 CardType.EPIC,
                 null,
-                trimToNull(shortcode)));
+                trimToNull(shortcode),
+                null));
     return view(saved);
   }
 
@@ -191,7 +221,8 @@ public class CardService {
       @Nullable String description,
       @Nullable List<Integer> dependsOn,
       @Nullable String shortcode,
-      @Nullable Long parentId) {
+      @Nullable Long parentId,
+      @Nullable Instant dueDate) {
     Card card = requireCardOp(userId, cardId, Permission.TICKET_UPDATE, Permission.EPIC_UPDATE);
     Card updated = card.withContent(title.trim(), normalize(description));
     if (card.type() == CardType.EPIC) {
@@ -201,13 +232,64 @@ public class CardService {
       // Karten: Epic-Zuordnung im selben PUT setzen/lösen (parentId == null -> lösen).
       Long effectiveParent =
           parentId == null ? null : requireEpicInBoard(parentId, card.boardId()).requireId();
-      updated = updated.withParent(effectiveParent);
+      updated = updated.withParent(effectiveParent).withDueDate(dueDate);
     }
     Card saved = cards.save(updated);
+    activity.add(cardId, userId, CardActivityType.UPDATED, "Karte bearbeitet", clock.instant());
     if (dependsOn != null) {
       setDependencies(saved, dependsOn);
     }
     return view(saved);
+  }
+
+  /**
+   * Ersetzt die Zuständigen einer Karte. Nur Karten (keine Epics); zugewiesen werden dürfen
+   * ausschließlich Mitglieder des Projekts. Recht: {@link Permission#TICKET_UPDATE} (Member und
+   * aufwärts).
+   */
+  @Transactional
+  public CardView setAssignees(long userId, long cardId, List<Long> assigneeIds) {
+    Card card = cards.findById(cardId).orElseThrow(CardNotFoundException::new);
+    if (card.type() != CardType.CARD) {
+      throw new InvalidDependencyException("Nur Karten haben Zuständige");
+    }
+    Board board = boards.findById(card.boardId()).orElseThrow(BoardNotFoundException::new);
+    permissions.require(userId, board.projectId(), Permission.TICKET_UPDATE);
+
+    List<Long> distinct = assigneeIds.stream().distinct().toList();
+    for (Long assignee : distinct) {
+      if (memberships.findByProjectIdAndUserId(board.projectId(), assignee).isEmpty()) {
+        throw new InvalidAssigneeException("Kein Projektmitglied: " + assignee);
+      }
+    }
+    assignees.replaceAssignees(cardId, distinct);
+    activity.add(cardId, userId, CardActivityType.ASSIGNED, "Zuständige geändert", clock.instant());
+    return view(card);
+  }
+
+  /**
+   * Ersetzt die Labels einer Karte. Nur Karten (keine Epics); zugeordnet werden dürfen nur Labels
+   * desselben Boards. Recht: {@link Permission#TICKET_UPDATE} (Member und aufwärts).
+   */
+  @Transactional
+  public CardView setLabels(long userId, long cardId, List<Long> labelIds) {
+    Card card = cards.findById(cardId).orElseThrow(CardNotFoundException::new);
+    if (card.type() != CardType.CARD) {
+      throw new InvalidDependencyException("Nur Karten haben Labels");
+    }
+    Board board = boards.findById(card.boardId()).orElseThrow(BoardNotFoundException::new);
+    permissions.require(userId, board.projectId(), Permission.TICKET_UPDATE);
+
+    List<Long> distinct = labelIds.stream().distinct().toList();
+    List<Long> boardLabelIds =
+        labels.findByBoardId(card.boardId()).stream().map(Label::requireId).toList();
+    for (Long labelId : distinct) {
+      if (!boardLabelIds.contains(labelId)) {
+        throw new InvalidLabelException("Kein Label dieses Boards: " + labelId);
+      }
+    }
+    cardLabels.replaceLabels(cardId, distinct);
+    return view(card);
   }
 
   /** Ordnet eine Karte einem Epic zu ({@code parentId}) oder löst die Zuordnung ({@code null}). */
@@ -240,6 +322,17 @@ public class CardService {
 
     cards.move(cardId, targetColumnId, targetPosition);
 
+    // Zykluszeit: nur bei echtem Spaltenwechsel (kein Eintrag bei reinem Reindex). Ein einziger
+    // Zeitstempel schließt die verlassene und eröffnet die Ziel-Spalte lückenlos.
+    long fromColumn = card.columnId();
+    if (fromColumn != targetColumnId) {
+      Instant switchedAt = clock.instant();
+      transitions.closeOpen(cardId, switchedAt);
+      transitions.open(cardId, targetColumnId, target.name(), switchedAt);
+      activity.add(
+          cardId, userId, CardActivityType.MOVED, "Verschoben nach " + target.name(), switchedAt);
+    }
+
     // moved_to_done_at: beim Eintritt in eine "Done"-Spalte setzen, beim Verlassen löschen.
     boolean targetIsDone = isDoneColumn(target.name());
     Instant done = card.movedToDoneAt();
@@ -268,7 +361,7 @@ public class CardService {
     }
     Board sourceBoard = boards.findById(card.boardId()).orElseThrow(BoardNotFoundException::new);
     Board targetBoard = boards.findById(targetBoardId).orElseThrow(BoardNotFoundException::new);
-    requireColumnInBoard(targetColumnId, targetBoardId);
+    BoardColumn targetColumn = requireColumnInBoard(targetColumnId, targetBoardId);
 
     permissions.requireOwner(userId, sourceBoard.projectId());
     permissions.requireOwner(userId, targetBoard.projectId());
@@ -276,6 +369,13 @@ public class CardService {
     int newNumber = cards.maxNumberInBoard(targetBoardId) + 1;
     cards.transfer(cardId, targetBoardId, targetColumnId, newNumber);
     dependencies.deleteByCardId(cardId);
+    // Zuständige gehören zum Quellprojekt; im Zielprojekt sind sie evtl. keine Mitglieder.
+    assignees.deleteByCardId(cardId);
+
+    // Zykluszeit: der board-/spaltenübergreifende Umzug zählt als Spaltenwechsel.
+    Instant switchedAt = clock.instant();
+    transitions.closeOpen(cardId, switchedAt);
+    transitions.open(cardId, targetColumnId, targetColumn.name(), switchedAt);
 
     Card moved = cards.findById(cardId).orElseThrow(CardNotFoundException::new);
     return view(cards.save(moved.withParent(null).withMovedToDoneAt(null)));
@@ -284,6 +384,8 @@ public class CardService {
   @Transactional
   public CardView archive(long userId, long cardId) {
     Card card = requireCardOp(userId, cardId, Permission.TICKET_DELETE, Permission.EPIC_DELETE);
+    activity.add(
+        card.requireId(), userId, CardActivityType.ARCHIVED, "Archiviert", clock.instant());
     return view(cards.save(card.asArchived()));
   }
 
@@ -291,14 +393,78 @@ public class CardService {
   public CardView restore(long userId, long cardId) {
     Card card = requireCardOp(userId, cardId, Permission.TICKET_DELETE, Permission.EPIC_DELETE);
     int position = cards.maxActivePositionInColumn(card.columnId()) + 1;
+    activity.add(
+        card.requireId(), userId, CardActivityType.RESTORED, "Wiederhergestellt", clock.instant());
     return view(cards.save(card.asRestored(position)));
   }
 
+  /** Aktivitätsverlauf einer Karte (chronologisch). Erfordert Board-Mitgliedschaft (Leserecht). */
+  @Transactional(readOnly = true)
+  public List<CardActivity> listActivity(long userId, long cardId) {
+    Card card = cards.findById(cardId).orElseThrow(CardNotFoundException::new);
+    Board board = boards.findById(card.boardId()).orElseThrow(BoardNotFoundException::new);
+    permissions.requireMembership(userId, board.projectId());
+    return activity.findByCardId(cardId);
+  }
+
+  /**
+   * Verschiebt eine Karte in den Papierkorb (Soft-Delete, reversibel). Recht: TICKET/EPIC_DELETE.
+   */
   @Transactional
   public void delete(long userId, long cardId) {
     Card card = requireCardOp(userId, cardId, Permission.TICKET_DELETE, Permission.EPIC_DELETE);
+    // Beim Löschen eines Epics die Kinder lösen — die DB-„ON DELETE SET NULL"-Kaskade auf
+    // parent_id feuert nur beim Hard-Delete, nicht beim Soft-Delete.
+    if (card.type() == CardType.EPIC) {
+      cards.findByBoardId(card.boardId()).stream()
+          .filter(c -> Objects.equals(c.parentId(), card.requireId()))
+          .forEach(child -> cards.save(child.withParent(null)));
+    }
+    cards.softDelete(card.requireId(), clock.instant());
+  }
+
+  /**
+   * Holt eine Karte aus dem Papierkorb zurück (ans Spaltenende). Recht wie Löschen (Member und
+   * aufwärts) — so kann ein Member eine versehentlich gelöschte Karte selbst wiederherstellen.
+   */
+  @Transactional
+  public CardView restoreFromTrash(long userId, long cardId) {
+    Card card = requireCardOp(userId, cardId, Permission.TICKET_DELETE, Permission.EPIC_DELETE);
+    int position = cards.maxActivePositionInColumn(card.columnId()) + 1;
+    cards.restoreFromTrash(card.requireId(), position);
+    activity.add(
+        card.requireId(),
+        userId,
+        CardActivityType.RESTORED,
+        "Aus Papierkorb wiederhergestellt",
+        clock.instant());
+    // View aus der bereits geladenen Karte mit neuer Position — der JDBC-Restore hat die DB-Zeile
+    // geändert; ein erneutes findById käme aus dem JPA-Cache noch mit dem alten Stand.
+    return view(card.asRestored(position));
+  }
+
+  /**
+   * Entfernt eine Karte endgültig (Hard-Delete). Nur für Board-Verwalter (Projekt-Admin/Owner,
+   * Recht {@link Permission#BOARD_DELETE}) — bewusst restriktiver als das reversible Löschen.
+   */
+  @Transactional
+  public void purge(long userId, long cardId) {
+    Card card = cards.findById(cardId).orElseThrow(CardNotFoundException::new);
+    Board board = boards.findById(card.boardId()).orElseThrow(BoardNotFoundException::new);
+    permissions.require(userId, board.projectId(), Permission.BOARD_DELETE);
     dependencies.deleteByCardId(card.requireId());
     cards.deleteById(card.requireId());
+  }
+
+  /** Karten im Papierkorb eines Boards. Erfordert Board-Mitgliedschaft (Leserecht). */
+  @Transactional(readOnly = true)
+  public List<CardView> listTrash(long userId, long boardId) {
+    Board board = boards.findById(boardId).orElseThrow(BoardNotFoundException::new);
+    permissions.requireMembership(userId, board.projectId());
+    return cards.findTrashByBoardId(boardId).stream()
+        .filter(c -> c.type() == CardType.CARD)
+        .map(this::view)
+        .toList();
   }
 
   /** Lädt die Karte und verlangt das je nach Kartentyp (Ticket/Epic) passende Recht. */
@@ -321,11 +487,12 @@ public class CardService {
     return epic;
   }
 
-  private void requireColumnInBoard(long columnId, long boardId) {
+  private BoardColumn requireColumnInBoard(long columnId, long boardId) {
     BoardColumn column = columns.findById(columnId).orElseThrow(ColumnNotFoundException::new);
     if (column.boardId() != boardId) {
       throw new ColumnNotFoundException();
     }
+    return column;
   }
 
   private void setDependencies(Card card, @Nullable List<Integer> dependsOn) {
@@ -373,7 +540,10 @@ public class CardService {
         dependencies.findByCardId(c.requireId()),
         c.type(),
         c.parentId(),
-        c.shortcode());
+        c.shortcode(),
+        assignees.findByCardId(c.requireId()),
+        c.dueDate(),
+        cardLabels.findByCardId(c.requireId()));
   }
 
   /** Kartendarstellung inkl. Abhängigkeits-Nummern, Typ und Epic-Zuordnung. */
@@ -390,7 +560,10 @@ public class CardService {
       List<Integer> dependencies,
       CardType type,
       @Nullable Long parentId,
-      @Nullable String shortcode) {}
+      @Nullable String shortcode,
+      List<Long> assignees,
+      @Nullable Instant dueDate,
+      List<Long> labels) {}
 
   /** Epic-Darstellung inkl. Fortschritt (Kinder gesamt / in Done). */
   public record EpicView(

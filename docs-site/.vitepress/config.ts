@@ -38,7 +38,11 @@ export default defineConfig({
         items: [
           { text: "Registrieren & Anmelden", link: "/nutzung#registrieren-anmelden" },
           { text: "Projekte, Boards, Karten", link: "/nutzung#karten" },
+          { text: "Karten-Detail", link: "/nutzung#karten-detail" },
+          { text: "Labels", link: "/nutzung#labels" },
+          { text: "Papierkorb", link: "/nutzung#papierkorb" },
           { text: "Listen-Ansicht", link: "/nutzung#listen-ansicht" },
+          { text: "Dashboard (Kennzahlen)", link: "/nutzung#dashboard-kennzahlen" },
           { text: "Epics", link: "/nutzung#epics" },
           { text: "Mitglieder", link: "/nutzung#mitglieder" },
         ],

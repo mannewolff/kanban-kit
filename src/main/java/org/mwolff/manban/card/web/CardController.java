@@ -4,11 +4,14 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
+import java.time.Instant;
 import java.util.List;
+import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.board.application.ColumnNotFoundException;
 import org.mwolff.manban.card.application.CardService;
 import org.mwolff.manban.card.application.CardService.CardView;
 import org.mwolff.manban.card.application.CardService.EpicView;
+import org.mwolff.manban.card.domain.CardActivity;
 import org.mwolff.manban.card.domain.CardType;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -17,6 +20,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
@@ -79,7 +83,8 @@ class CardController {
         request.description(),
         request.dependencies(),
         request.shortcode(),
-        request.parentId());
+        request.parentId(),
+        request.dueDate());
   }
 
   /**
@@ -120,10 +125,60 @@ class CardController {
     return cards.restore(userId, cardId);
   }
 
+  /** Verschiebt eine Karte in den Papierkorb (Soft-Delete, reversibel). */
   @DeleteMapping("/api/cards/{cardId}")
   @ResponseStatus(HttpStatus.NO_CONTENT)
   void delete(@AuthenticationPrincipal Long userId, @PathVariable long cardId) {
     cards.delete(userId, cardId);
+  }
+
+  /** Papierkorb eines Boards. */
+  @GetMapping("/api/boards/{boardId}/trash")
+  List<CardView> trash(@AuthenticationPrincipal Long userId, @PathVariable long boardId) {
+    return cards.listTrash(userId, boardId);
+  }
+
+  /** Holt eine Karte aus dem Papierkorb zurück. */
+  @PostMapping("/api/cards/{cardId}/restore-deleted")
+  CardView restoreDeleted(@AuthenticationPrincipal Long userId, @PathVariable long cardId) {
+    return cards.restoreFromTrash(userId, cardId);
+  }
+
+  /** Entfernt eine Karte endgültig (nur Projekt-Admin/Owner). */
+  @DeleteMapping("/api/cards/{cardId}/purge")
+  @ResponseStatus(HttpStatus.NO_CONTENT)
+  void purge(@AuthenticationPrincipal Long userId, @PathVariable long cardId) {
+    cards.purge(userId, cardId);
+  }
+
+  /** Ersetzt die Zuständigen der Karte (leere/fehlende Liste = keine Zuständigen). */
+  @PutMapping("/api/cards/{cardId}/assignees")
+  CardView setAssignees(
+      @AuthenticationPrincipal Long userId,
+      @PathVariable long cardId,
+      @RequestBody AssigneesRequest request) {
+    List<Long> ids = request.assignees() == null ? List.of() : request.assignees();
+    return cards.setAssignees(userId, cardId, ids);
+  }
+
+  /** Ersetzt die Labels der Karte (leere/fehlende Liste = keine Labels). */
+  @PutMapping("/api/cards/{cardId}/labels")
+  CardView setLabels(
+      @AuthenticationPrincipal Long userId,
+      @PathVariable long cardId,
+      @RequestBody LabelsRequest request) {
+    List<Long> ids = request.labels() == null ? List.of() : request.labels();
+    return cards.setLabels(userId, cardId, ids);
+  }
+
+  /** Aktivitätsverlauf einer Karte (chronologisch, Leserecht wie Board-Ansicht). */
+  @GetMapping("/api/cards/{cardId}/activity")
+  List<ActivityView> activity(@AuthenticationPrincipal Long userId, @PathVariable long cardId) {
+    return cards.listActivity(userId, cardId).stream().map(CardController::activityView).toList();
+  }
+
+  private static ActivityView activityView(CardActivity a) {
+    return new ActivityView(a.id(), a.actorUserId(), a.type().name(), a.detail(), a.createdAt());
   }
 
   record CreateCardRequest(
@@ -140,7 +195,8 @@ class CardController {
       String description,
       List<Integer> dependencies,
       @Size(max = 16) String shortcode,
-      Long parentId) {}
+      Long parentId,
+      @Nullable Instant dueDate) {}
 
   record AssignParentRequest(Long parentId) {}
 
@@ -148,4 +204,15 @@ class CardController {
       @NotNull Long columnId, @jakarta.validation.constraints.PositiveOrZero int position) {}
 
   record TransferCardRequest(@NotNull Long targetBoardId, @NotNull Long targetColumnId) {}
+
+  record AssigneesRequest(@Nullable List<Long> assignees) {}
+
+  record LabelsRequest(@Nullable List<Long> labels) {}
+
+  record ActivityView(
+      @Nullable Long id,
+      @Nullable Long actorUserId,
+      String type,
+      String detail,
+      Instant createdAt) {}
 }

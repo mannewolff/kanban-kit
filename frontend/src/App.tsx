@@ -14,6 +14,9 @@ const BoardListPage = lazy(() =>
   import('./pages/BoardListPage').then((m) => ({ default: m.BoardListPage })),
 )
 const BoardPage = lazy(() => import('./pages/BoardPage').then((m) => ({ default: m.BoardPage })))
+const DashboardPage = lazy(() =>
+  import('./pages/DashboardPage').then((m) => ({ default: m.DashboardPage })),
+)
 const BootstrapAdminPage = lazy(() =>
   import('./pages/BootstrapAdminPage').then((m) => ({ default: m.BootstrapAdminPage })),
 )
@@ -30,6 +33,9 @@ const ProjectMembersPage = lazy(() =>
 )
 const ProjectsPage = lazy(() =>
   import('./pages/ProjectsPage').then((m) => ({ default: m.ProjectsPage })),
+)
+const ProfilePage = lazy(() =>
+  import('./pages/ProfilePage').then((m) => ({ default: m.ProfilePage })),
 )
 const RolesPage = lazy(() => import('./pages/RolesPage').then((m) => ({ default: m.RolesPage })))
 const ResetPasswordPage = lazy(() =>
@@ -65,9 +71,11 @@ export function App() {
             <Route path="/boards/:boardId" element={<BoardPage />} />
             <Route path="/boards/:boardId/list" element={<BoardListPage />} />
             <Route path="/boards/:boardId/epics" element={<EpicsPage />} />
+            <Route path="/boards/:boardId/dashboard" element={<DashboardPage />} />
             <Route path="/admin" element={<AdminPage />} />
             <Route path="/admin/bootstrap" element={<BootstrapAdminPage />} />
             <Route path="/roles" element={<RolesPage />} />
+            <Route path="/profil" element={<ProfilePage />} />
             <Route path="/invitations/accept" element={<AcceptInvitationPage />} />
           </Route>
         </Route>

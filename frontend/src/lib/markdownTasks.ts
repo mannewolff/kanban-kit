@@ -1,20 +1,31 @@
 // Task-Checkbox-Behandlung für Karten-Beschreibungen.
 //
-// GitHub-Flavored-Markdown erzeugt Checkboxen nur aus echten Task-List-Items (`- [ ]`, `1. [ ]`).
-// Ein „nacktes" `[ ]` am Zeilenanfang ohne Listenmarker bleibt Text. Damit `[ ]`/`[x]` überall
-// einheitlich als Checkbox erscheinen, normalisieren wir nackte Marker vor dem Rendern zu echten
-// Task-Items — aber nur am Zeilenanfang und nicht innerhalb von Code-Fences.
+// GitHub-Flavored-Markdown erzeugt Checkboxen nur aus echten Task-List-Items mit **genau einem**
+// Zeichen zwischen den Klammern (`- [ ]`, `- [x]`). Nutzer schreiben aber oft `[  ]` (zwei
+// Leerzeichen), `[]` (leer) oder `[ x ]` — GFM rendert diese dann als rohen Text statt als
+// Checkbox. Damit `[ ]`/`[x]` in allen Varianten einheitlich als Checkbox erscheinen, kanonisieren
+// wir die Marker vor dem Rendern zu `[ ]`/`[x]` — am Zeilenanfang und außerhalb von Code-Fences.
+// Nackte Marker ohne Listenmarker bekommen zusätzlich einen `- `, damit GFM sie als Liste erkennt.
 
 const FENCE = /^\s*(```|~~~)/
-/** Nacktes `[ ]`/`[x]` am Zeilenanfang (ohne vorangestellten Listenmarker), gefolgt von Text. */
-const NAKED_TASK = /^(\s*)(\[[ xX]\]\s.*)$/
-/** Zeile, die als gerenderte Checkbox zählt: optionaler Listenmarker, dann `[ ]`/`[x]` + Whitespace. */
-const TASK_LINE = /^\s*(?:[-*+]\s+|\d+[.)]\s+)?\[[ xX]\]\s/
+/** Marker-Kern: eckige Klammern mit optionalem x/X und beliebigem Whitespace. */
+const MARKER = /\[\s*[xX]?\s*\]/
+/** Zeile mit Listenmarker (`-`/`*`/`+`/`1.`) direkt vor dem Task-Marker. */
+const LISTED = /^(\s*(?:[-*+]|\d+[.)])\s+)(\[\s*[xX]?\s*\])(.*)$/
+/** Nackter Task-Marker am Zeilenanfang (ohne Listenmarker), gefolgt von Whitespace. */
+const NAKED = /^(\s*)(\[\s*[xX]?\s*\])(\s.*)$/
+
+/** Kanonische Marker-Form: `[x]` wenn irgendein x/X enthalten ist, sonst `[ ]`. */
+function canonical(marker: string): string {
+  return /[xX]/.test(marker) ? '[x]' : '[ ]'
+}
 
 /**
- * Wandelt nackte `[ ]`/`[x]` am Zeilenanfang in echte GFM-Task-List-Items (`- [ ]`) um, damit sie
- * als Checkbox gerendert werden. Zeilen mit bereits vorhandenem Listenmarker und Inhalte von
- * Code-Fences bleiben unangetastet.
+ * Wandelt Task-Marker am Zeilenanfang in kanonische GFM-Task-List-Items (`- [ ]`/`- [x]`) um, damit
+ * sie zuverlässig als Checkbox gerendert werden — unabhängig von Leerzeichen-Zahl (`[  ]`, `[]`,
+ * `[ x ]`) oder Groß-/Kleinschreibung (`[X]`). Listenmarker bleiben erhalten; nackte Marker (ohne
+ * Listenmarker) bekommen einen `- ` und werden nur mit folgendem Whitespace behandelt, damit
+ * Klammern im Fließtext unangetastet bleiben. Code-Fences bleiben unverändert.
  */
 export function normalizeTaskLists(md: string): string {
   let inFence = false
@@ -28,15 +39,28 @@ export function normalizeTaskLists(md: string): string {
       if (inFence) {
         return line
       }
-      return line.replace(NAKED_TASK, '$1- $2')
+      const listed = line.match(LISTED)
+      if (listed) {
+        const [, prefix, marker, rest] = listed
+        const body = rest.replace(/^\s*/, '')
+        return `${prefix}${canonical(marker)}${body ? ` ${body}` : ''}`
+      }
+      const naked = line.match(NAKED)
+      if (naked) {
+        const [, indent, marker, rest] = naked
+        const body = rest.replace(/^\s*/, '')
+        return `${indent}- ${canonical(marker)}${body ? ` ${body}` : ''}`
+      }
+      return line
     })
     .join('\n')
 }
 
 /**
  * Schaltet die `targetIndex`-te Checkbox (0-basiert, in Dokumentreihenfolge) zwischen `[ ]` und
- * `[x]` um. Zählweise identisch zu {@link normalizeTaskLists}/GFM (Code-Fences zählen nicht), damit
- * der Index dem gerenderten Checkbox-Index entspricht. Kein Treffer → unveränderter Text.
+ * `[x]` um und schreibt sie kanonisch. Zählweise identisch zu {@link normalizeTaskLists}/GFM
+ * (Code-Fences zählen nicht; Marker-Varianten wie `[  ]`/`[]`/`[ x ]` zählen mit), damit der Index
+ * dem gerenderten Checkbox-Index entspricht. Kein Treffer → unveränderter Text.
  */
 export function toggleTaskAt(md: string, targetIndex: number): string {
   const lines = md.split('\n')
@@ -48,12 +72,12 @@ export function toggleTaskAt(md: string, targetIndex: number): string {
       inFence = !inFence
       continue
     }
-    if (inFence || !TASK_LINE.test(line)) {
+    if (inFence || (!LISTED.test(line) && !NAKED.test(line))) {
       continue
     }
     if (i === targetIndex) {
-      // Nur das erste `[...]` (die Checkbox am Zeilenanfang) flippen, nicht Klammern im Task-Text.
-      lines[l] = line.replace(/\[[ xX]\]/, (m) => (m === '[ ]' ? '[x]' : '[ ]'))
+      // Nur den führenden Marker flippen (nicht Klammern im Task-Text) und kanonisch schreiben.
+      lines[l] = line.replace(MARKER, (mk) => (/[xX]/.test(mk) ? '[ ]' : '[x]'))
       return lines.join('\n')
     }
     i++

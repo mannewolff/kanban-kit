@@ -26,6 +26,7 @@ import org.mwolff.manban.common.Identifiable;
  * @param type CARD oder EPIC
  * @param parentId zugeordnetes Epic (nullable; nur an CARD gesetzt)
  * @param shortcode Kürzel eines Epics (nullable; nur an EPIC)
+ * @param dueDate Fälligkeitsdatum (nullable; nur an CARD sinnvoll)
  */
 public record Card(
     @Nullable Long id,
@@ -42,7 +43,8 @@ public record Card(
     Instant updatedAt,
     CardType type,
     @Nullable Long parentId,
-    @Nullable String shortcode)
+    @Nullable String shortcode,
+    @Nullable Instant dueDate)
     implements Identifiable {
 
   public Card withContent(String newTitle, @Nullable String newDescription) {
@@ -61,7 +63,8 @@ public record Card(
         updatedAt,
         type,
         parentId,
-        shortcode);
+        shortcode,
+        dueDate);
   }
 
   public Card asArchived() {
@@ -80,7 +83,8 @@ public record Card(
         updatedAt,
         type,
         parentId,
-        shortcode);
+        shortcode,
+        dueDate);
   }
 
   /** Wiederherstellen an einer freien Position (append), um Positionskollisionen zu vermeiden. */
@@ -100,7 +104,8 @@ public record Card(
         updatedAt,
         type,
         parentId,
-        shortcode);
+        shortcode,
+        dueDate);
   }
 
   public Card withMovedToDoneAt(@Nullable Instant when) {
@@ -119,7 +124,8 @@ public record Card(
         updatedAt,
         type,
         parentId,
-        shortcode);
+        shortcode,
+        dueDate);
   }
 
   /** Setzt oder löscht ({@code null}) die Epic-Zuordnung. */
@@ -139,7 +145,8 @@ public record Card(
         updatedAt,
         type,
         newParentId,
-        shortcode);
+        shortcode,
+        dueDate);
   }
 
   /** Setzt das Kürzel (nur für Epics sinnvoll). */
@@ -159,6 +166,28 @@ public record Card(
         updatedAt,
         type,
         parentId,
-        newShortcode);
+        newShortcode,
+        dueDate);
+  }
+
+  /** Setzt oder löscht ({@code null}) das Fälligkeitsdatum. */
+  public Card withDueDate(@Nullable Instant newDueDate) {
+    return new Card(
+        id,
+        boardId,
+        columnId,
+        number,
+        title,
+        description,
+        positionInColumn,
+        archived,
+        movedToDoneAt,
+        createdBy,
+        createdAt,
+        updatedAt,
+        type,
+        parentId,
+        shortcode,
+        newDueDate);
   }
 }

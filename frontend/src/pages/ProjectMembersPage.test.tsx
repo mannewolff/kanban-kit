@@ -22,6 +22,7 @@ function makeApi(overrides: Partial<MembersApi> = {}): MembersApi {
   return {
     list: vi.fn().mockResolvedValue(members),
     changeRole: vi.fn(),
+    changeDisplayName: vi.fn().mockResolvedValue({}),
     remove: vi.fn().mockResolvedValue(undefined),
     invite: vi.fn().mockResolvedValue({ status: 'invited' }),
     accept: vi.fn(),
@@ -49,6 +50,25 @@ describe('ProjectMembersPage', () => {
 
     expect(screen.getByLabelText('Olga Owner entfernen')).toBeDisabled()
     expect(screen.getByLabelText('Mika Member entfernen')).toBeEnabled()
+  })
+
+  it('bearbeitet den Anzeigenamen eines Mitglieds inline (Owner)', async () => {
+    const changeDisplayName = vi.fn().mockResolvedValue({})
+    renderPage(makeApi({ changeDisplayName }), 'OWNER')
+
+    fireEvent.click(await screen.findByLabelText('Namen von Mika Member bearbeiten'))
+    fireEvent.change(screen.getByLabelText('Anzeigename von member@x.de'), {
+      target: { value: 'Mika M.' },
+    })
+    fireEvent.click(screen.getByLabelText('Namen speichern'))
+
+    await waitFor(() => expect(changeDisplayName).toHaveBeenCalledWith(5, 2, 'Mika M.'))
+  })
+
+  it('zeigt keine Namens-Bearbeitung für Nicht-Verwalter (Viewer)', async () => {
+    renderPage(makeApi(), 'VIEWER')
+    await waitFor(() => expect(screen.getByText('Mika Member')).toBeInTheDocument())
+    expect(screen.queryByLabelText('Namen von Mika Member bearbeiten')).not.toBeInTheDocument()
   })
 
   it('verschickt eine Einladung', async () => {

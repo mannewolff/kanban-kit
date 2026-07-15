@@ -20,14 +20,17 @@ class JavaMailPasswordResetMailer implements PasswordResetMailer {
   private final JavaMailSender mailSender;
   private final boolean mailEnabled;
   private final String from;
+  private final String productName;
 
   JavaMailPasswordResetMailer(
       JavaMailSender mailSender,
       @Value("${manban.mail.enabled:false}") boolean mailEnabled,
-      @Value("${manban.mail.from:no-reply@manban.local}") String from) {
+      @Value("${manban.mail.from:no-reply@kanban-kit.local}") String from,
+      @Value("${manban.mail.product-name:kanban-kit}") String productName) {
     this.mailSender = mailSender;
     this.mailEnabled = mailEnabled;
     this.from = from;
+    this.productName = productName;
   }
 
   @Override
@@ -39,7 +42,7 @@ class JavaMailPasswordResetMailer implements PasswordResetMailer {
     SimpleMailMessage message = new SimpleMailMessage();
     message.setFrom(from);
     message.setTo(toEmail);
-    message.setSubject("manban: Passwort zurücksetzen");
+    message.setSubject(productName + ": Passwort zurücksetzen");
     message.setText("Setze dein Passwort über diesen Link zurück:\n\n" + resetUrl + "\n");
     mailSender.send(message);
     log.info("Passwort-Reset-E-Mail an {} versandt", toEmail);

@@ -26,7 +26,7 @@ class BootstrapControllerTest {
   @Test
   void bootstrap_delegatesToService() {
     // Given
-    UserView user = new UserView(3L, "a@b.de", "A", PlatformRole.ADMIN, true, Instant.EPOCH);
+    UserView user = new UserView(3L, "a@b.de", "A", PlatformRole.ADMIN, true, Instant.EPOCH, false);
     var request = new BootstrapController.BootstrapRequest("env-token");
     when(service.bootstrap(3L, "env-token")).thenReturn(user);
 

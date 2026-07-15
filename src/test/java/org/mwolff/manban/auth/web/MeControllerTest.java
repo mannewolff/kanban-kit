@@ -35,4 +35,17 @@ class MeControllerTest {
     // Then
     assertThat(result).isSameAs(view);
   }
+
+  @Test
+  void updateProfile_delegatesDisplayNameToService() {
+    // Given
+    var view = new MeView(3L, "a@b.de", "Neu", PlatformRole.USER, List.of());
+    when(service.updateDisplayName(3L, "Neu")).thenReturn(view);
+
+    // When
+    MeView result = controller.updateProfile(3L, new MeController.UpdateProfileRequest("Neu"));
+
+    // Then
+    assertThat(result).isSameAs(view);
+  }
 }

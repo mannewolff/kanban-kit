@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -26,6 +27,7 @@ import org.mwolff.manban.project.domain.Project;
 import org.mwolff.manban.project.domain.ProjectInvitation;
 import org.mwolff.manban.project.domain.ProjectMembership;
 import org.mwolff.manban.project.domain.ProjectRole;
+import org.springframework.mail.MailSendException;
 
 /** Verhaltenstests des Einladens (invite) — Mockito an den Ports. */
 class MembershipInvitationTest {
@@ -194,5 +196,39 @@ class MembershipInvitationTest {
     // Deckt die InviteOutcome.status()-Abbildung ab (added/invited).
     assertThat(InviteOutcome.ADDED.status()).isEqualTo("added");
     assertThat(InviteOutcome.INVITED.status()).isEqualTo("invited");
+  }
+
+  @Test
+  void invite_addsMember_evenWhenAssignedMailFails() {
+    // Bestehender, freigegebener Nutzer wird sofort Mitglied; die Info-Mail scheitert.
+    when(projects.findById(9L)).thenReturn(Optional.of(new Project(9L, "P", 1L, FIXED)));
+    AppUser existing = new AppUser(5L, "guest@x.de", "hash", "Guest", true, PlatformRole.USER);
+    when(users.findByEmail("guest@x.de")).thenReturn(Optional.of(existing));
+    when(memberships.findByProjectIdAndUserId(9L, 5L)).thenReturn(Optional.empty());
+    when(memberships.save(any(ProjectMembership.class))).thenAnswer(inv -> inv.getArgument(0));
+    doThrow(new MailSendException("smtp down"))
+        .when(mailer)
+        .sendProjectAssignedEmail(anyString(), anyString(), any(), anyString());
+
+    // When
+    InviteOutcome outcome = service.invite(1L, 9L, "guest@x.de", ProjectRole.MEMBER);
+
+    // Then: Mitgliedschaft ist gespeichert, kein Fehler nach außen.
+    assertThat(outcome).isEqualTo(InviteOutcome.ADDED);
+    verify(memberships).save(any(ProjectMembership.class));
+  }
+
+  @Test
+  void invite_throwsMailDelivery_whenInvitationMailFails() {
+    // Unbekannte E-Mail -> Token-Pfad; die essenzielle Einladungs-Mail scheitert.
+    when(projects.findById(9L)).thenReturn(Optional.of(new Project(9L, "P", 1L, FIXED)));
+    when(invitations.save(any(ProjectInvitation.class))).thenAnswer(inv -> inv.getArgument(0));
+    doThrow(new MailSendException("smtp down"))
+        .when(mailer)
+        .sendInvitationEmail(anyString(), anyString(), anyString());
+
+    // When / Then
+    assertThatThrownBy(() -> service.invite(1L, 9L, "guest@x.de", ProjectRole.MEMBER))
+        .isInstanceOf(MailDeliveryException.class);
   }
 }

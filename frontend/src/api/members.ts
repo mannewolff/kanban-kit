@@ -19,6 +19,11 @@ export const membersApi = {
   list: (projectId: number) => apiFetch<Member[]>(`/api/projects/${projectId}/members`),
   changeRole: (projectId: number, userId: number, role: ProjectRole) =>
     apiFetch<Member>(`/api/projects/${projectId}/members/${userId}`, json({ role }, 'PATCH')),
+  changeDisplayName: (projectId: number, userId: number, displayName: string) =>
+    apiFetch<Member>(
+      `/api/projects/${projectId}/members/${userId}/display-name`,
+      json({ displayName }, 'PATCH'),
+    ),
   remove: (projectId: number, userId: number) =>
     apiFetch<void>(`/api/projects/${projectId}/members/${userId}`, { method: 'DELETE' }),
   invite: (projectId: number, email: string, role: ProjectRole) =>

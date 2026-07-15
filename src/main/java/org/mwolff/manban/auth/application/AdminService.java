@@ -55,6 +55,14 @@ public class AdminService {
     return toView(saved);
   }
 
+  /** Ändert den Anzeigenamen eines beliebigen Benutzers (nur Plattform-Admin; getrimmt). */
+  @Transactional
+  public UserView changeDisplayName(long actorUserId, long targetUserId, String displayName) {
+    requirePlatformAdmin(actorUserId);
+    AppUser target = users.findById(targetUserId).orElseThrow(UserNotFoundException::new);
+    return toView(users.save(target.withDisplayName(displayName.trim())));
+  }
+
   /**
    * Gibt einen Benutzer frei. Idempotent: Ein bereits freigegebener Benutzer bleibt unverändert
    * (Zeitpunkt und freigebender Admin werden nicht überschrieben).
@@ -68,6 +76,35 @@ public class AdminService {
     }
     AppUser saved = users.save(target.withApproved(clock.instant(), actorUserId));
     return toView(saved);
+  }
+
+  /**
+   * Sperrt (deaktiviert) ein Konto. Der Aufrufer kann sich nicht selbst sperren — dadurch bleibt
+   * stets mindestens ein aktiver Admin (der Sperrende selbst) übrig, ein Komplett-Aussperren ist
+   * nicht möglich. Idempotent (ein bereits gesperrtes Konto bleibt unverändert).
+   */
+  @Transactional
+  public UserView disable(long actorUserId, long targetUserId) {
+    requirePlatformAdmin(actorUserId);
+    if (actorUserId == targetUserId) {
+      throw new CannotDisableSelfException();
+    }
+    AppUser target = users.findById(targetUserId).orElseThrow(UserNotFoundException::new);
+    if (target.disabled()) {
+      return toView(target);
+    }
+    return toView(users.save(target.withDisabledAt(clock.instant())));
+  }
+
+  /** Entsperrt ein Konto. Idempotent (ein aktives Konto bleibt unverändert). */
+  @Transactional
+  public UserView enable(long actorUserId, long targetUserId) {
+    requirePlatformAdmin(actorUserId);
+    AppUser target = users.findById(targetUserId).orElseThrow(UserNotFoundException::new);
+    if (!target.disabled()) {
+      return toView(target);
+    }
+    return toView(users.save(target.withDisabledAt(null)));
   }
 
   private void requirePlatformAdmin(long actorUserId) {
@@ -87,7 +124,8 @@ public class AdminService {
         u.displayName(),
         u.platformRole(),
         u.emailVerified(),
-        u.approvedAt());
+        u.approvedAt(),
+        u.disabled());
   }
 
   /** Nutzerdarstellung für die Admin-Verwaltung. */
@@ -97,5 +135,6 @@ public class AdminService {
       String displayName,
       PlatformRole platformRole,
       boolean emailVerified,
-      @Nullable Instant approvedAt) {}
+      @Nullable Instant approvedAt,
+      boolean disabled) {}
 }

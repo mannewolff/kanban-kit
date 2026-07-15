@@ -1,4 +1,5 @@
 import Alert from '@mui/material/Alert'
+import Autocomplete from '@mui/material/Autocomplete'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import Chip from '@mui/material/Chip'
@@ -17,9 +18,12 @@ import Markdown, { type Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { attachmentsApi as defaultAttachmentsApi, type Attachment, type AttachmentsApi } from '../api/attachments'
 import { cardsApi as defaultCardsApi } from '../api/cards'
-import type { Card } from '../api/cards'
+import type { Card, CardActivity } from '../api/cards'
 import { commentsApi as defaultCommentsApi, type Comment, type CommentsApi } from '../api/comments'
 import type { Epic } from '../api/epics'
+import type { Label as BoardLabel } from '../api/labels'
+import type { Member } from '../api/members'
+import { dueInputToIso, formatDueDate, isOverdue } from '../lib/dueDate'
 import { epicShortcode } from '../lib/epicMeta'
 import { normalizeTaskLists, toggleTaskAt } from '../lib/markdownTasks'
 import { CODE_BLOCK_BG, MODAL_BORDER, MODAL_TEXT_PRIMARY, statusColors } from '../lib/statusColors'
@@ -116,9 +120,13 @@ interface Props {
   epics?: Epic[]
   /** Kind-Karten eines Epics (nur bei type === 'EPIC'). */
   childCards?: Card[]
+  /** Projektmitglieder für die Zuständigen-Auswahl (Namen + Auswahlliste). */
+  members?: Member[]
+  /** Board-Labels für die Label-Auswahl (Name + Farbe). */
+  boardLabels?: BoardLabel[]
   commentsApi?: CommentsApi
   attachmentsApi?: AttachmentsApi
-  cardsApi?: Pick<typeof defaultCardsApi, 'update'>
+  cardsApi?: Pick<typeof defaultCardsApi, 'update' | 'setAssignees' | 'setLabels' | 'getActivity'>
 }
 
 export function CardDetailModal({
@@ -131,18 +139,42 @@ export function CardDetailModal({
   columnName,
   epics = [],
   childCards = [],
+  members = [],
+  boardLabels = [],
   commentsApi = defaultCommentsApi,
   attachmentsApi = defaultAttachmentsApi,
   cardsApi = defaultCardsApi,
 }: Props) {
   const { user } = useAuth()
   const isEpic = card.type === 'EPIC'
+  const [assigneeIds, setAssigneeIds] = useState<number[]>(card.assignees)
+
+  const memberName = (userId: number) =>
+    members.find((m) => m.userId === userId)?.displayName ?? `#${userId}`
+
+  const saveAssignees = async (ids: number[]) => {
+    setAssigneeIds(ids)
+    await cardsApi.setAssignees(card.id, ids)
+    onChanged?.()
+  }
+
+  const [activities, setActivities] = useState<CardActivity[]>([])
+  const actorName = (userId: number | null) =>
+    members.find((m) => m.userId === userId)?.displayName ?? 'System'
+
+  const [labelIds, setLabelIds] = useState<number[]>(card.labels)
+  const saveLabels = async (ids: number[]) => {
+    setLabelIds(ids)
+    await cardsApi.setLabels(card.id, ids)
+    onChanged?.()
+  }
 
   const [editing, setEditing] = useState(initialEditing)
   const [title, setTitle] = useState(card.title)
   const [body, setBody] = useState(card.description ?? '')
   const [parentId, setParentId] = useState<number | null>(card.parentId)
   const [shortcode, setShortcode] = useState(card.shortcode ?? '')
+  const [dueInput, setDueInput] = useState(card.dueDate ? card.dueDate.slice(0, 10) : '')
   const [depsInput, setDepsInput] = useState(card.dependencies.join(', '))
   const [depsError, setDepsError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
@@ -170,11 +202,16 @@ export function CardDetailModal({
     })
   }, [card.id, commentsApi, attachmentsApi])
 
+  useEffect(() => {
+    void cardsApi.getActivity(card.id).then(setActivities).catch(() => setActivities([]))
+  }, [card.id, cardsApi])
+
   const startEditing = () => {
     setTitle(card.title)
     setBody(card.description ?? '')
     setParentId(card.parentId)
     setShortcode(card.shortcode ?? '')
+    setDueInput(card.dueDate ? card.dueDate.slice(0, 10) : '')
     setDepsInput(card.dependencies.join(', '))
     setDepsError(null)
     setEditing(true)
@@ -196,6 +233,7 @@ export function CardDetailModal({
         deps,
         isEpic ? shortcode.trim() || null : undefined,
         isEpic ? undefined : parentId,
+        isEpic ? undefined : dueInputToIso(dueInput),
       )
       setEditing(false)
       onChanged?.()
@@ -221,6 +259,7 @@ export function CardDetailModal({
         card.dependencies,
         isEpic ? (card.shortcode ?? null) : undefined,
         isEpic ? undefined : card.parentId,
+        isEpic ? undefined : card.dueDate,
       )
       onChanged?.()
     } catch {
@@ -291,6 +330,8 @@ export function CardDetailModal({
   }
 
   const colors = columnName ? statusColors(columnName) : null
+  const dueOverdue =
+    !isEpic && isOverdue(card.dueDate, (columnName ?? '').toLowerCase().includes('done'))
 
   // Aktuellen Toggle-Handler über ein Ref halten und als stabile Callback-Identität an TaskMarkdown
   // reichen, damit dessen `memo` greift (kein Remount der Beschreibung bei Kommentar-Nachladen).
@@ -419,6 +460,15 @@ export function CardDetailModal({
                     inputProps={{ 'aria-label': 'Abhängig von' }}
                     fullWidth
                   />
+                  <TextField
+                    type="date"
+                    label="Fällig am"
+                    value={dueInput}
+                    onChange={(e) => setDueInput(e.target.value)}
+                    InputLabelProps={{ shrink: true }}
+                    inputProps={{ 'aria-label': 'Fällig am' }}
+                    sx={{ maxWidth: 200 }}
+                  />
                 </>
               )}
             </>
@@ -436,7 +486,97 @@ export function CardDetailModal({
                   Abhängig von: {card.dependencies.map((n) => `#${n}`).join(', ')}
                 </Typography>
               )}
+              {!isEpic && card.dueDate && (
+                <Typography
+                  variant="body2"
+                  aria-label="Fälligkeitsdatum"
+                  color={dueOverdue ? 'error' : 'text.secondary'}
+                  sx={{ fontWeight: dueOverdue ? 600 : 400 }}
+                >
+                  Fällig am {formatDueDate(card.dueDate)}
+                  {dueOverdue && ' — überfällig'}
+                </Typography>
+              )}
             </>
+          )}
+
+          {!isEpic && (
+            <Box>
+              <Typography variant="subtitle2" gutterBottom>
+                Zuständige
+              </Typography>
+              {canEdit ? (
+                <Autocomplete
+                  multiple
+                  size="small"
+                  options={members}
+                  getOptionLabel={(m) => m.displayName}
+                  isOptionEqualToValue={(a, b) => a.userId === b.userId}
+                  value={members.filter((m) => assigneeIds.includes(m.userId))}
+                  onChange={(_, selected) => void saveAssignees(selected.map((m) => m.userId))}
+                  renderInput={(params) => (
+                    <TextField {...params} label="Zuständige" inputProps={{ ...params.inputProps, 'aria-label': 'Zuständige' }} />
+                  )}
+                />
+              ) : assigneeIds.length > 0 ? (
+                <Stack direction="row" spacing={0.5} sx={{ flexWrap: 'wrap' }}>
+                  {assigneeIds.map((uid) => (
+                    <Chip key={uid} size="small" label={memberName(uid)} />
+                  ))}
+                </Stack>
+              ) : (
+                <Typography color="text.secondary">Niemand zugewiesen.</Typography>
+              )}
+            </Box>
+          )}
+
+          {!isEpic && (
+            <Box>
+              <Typography variant="subtitle2" gutterBottom>
+                Labels
+              </Typography>
+              {canEdit ? (
+                <Autocomplete
+                  multiple
+                  size="small"
+                  options={boardLabels}
+                  getOptionLabel={(l) => l.name}
+                  isOptionEqualToValue={(a, b) => a.id === b.id}
+                  value={boardLabels.filter((l) => labelIds.includes(l.id))}
+                  onChange={(_, selected) => void saveLabels(selected.map((l) => l.id))}
+                  renderTags={(value, getTagProps) =>
+                    value.map((l, index) => (
+                      <Chip
+                        {...getTagProps({ index })}
+                        key={l.id}
+                        size="small"
+                        label={l.name}
+                        sx={{ bgcolor: l.color, color: '#fff' }}
+                      />
+                    ))
+                  }
+                  renderInput={(params) => (
+                    <TextField {...params} label="Labels" inputProps={{ ...params.inputProps, 'aria-label': 'Labels' }} />
+                  )}
+                />
+              ) : labelIds.length > 0 ? (
+                <Stack direction="row" spacing={0.5} sx={{ flexWrap: 'wrap' }}>
+                  {labelIds.map((id) => {
+                    const l = boardLabels.find((b) => b.id === id)
+                    return (
+                      <Chip
+                        key={id}
+                        size="small"
+                        label={l?.name ?? `#${id}`}
+                        sx={{ bgcolor: l?.color ?? 'grey.500', color: '#fff' }}
+                      />
+                    )
+                  })}
+                </Stack>
+              ) : (
+                <Typography color="text.secondary">Keine Labels.</Typography>
+              )}
+            </Box>
           )}
 
           {!editing && isEpic && (
@@ -561,6 +701,23 @@ export function CardDetailModal({
                   <Button variant="contained" size="small" onClick={addComment}>
                     Senden
                   </Button>
+                </Stack>
+              </Box>
+
+              <Divider />
+              <Box>
+                <Typography variant="subtitle2" gutterBottom>
+                  Aktivität
+                </Typography>
+                <Stack spacing={0.5}>
+                  {activities.map((a) => (
+                    <Typography key={a.id} variant="caption" color="text.secondary">
+                      {new Date(a.createdAt).toLocaleString('de-DE')} · {actorName(a.actorUserId)} · {a.detail}
+                    </Typography>
+                  ))}
+                  {activities.length === 0 && (
+                    <Typography color="text.secondary">Keine Aktivität.</Typography>
+                  )}
                 </Stack>
               </Box>
             </>

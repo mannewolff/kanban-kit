@@ -8,10 +8,17 @@ import org.springframework.data.jpa.repository.Query;
 /** Spring-Data-Repository für {@link CardEntity}. */
 interface CardJpaRepository extends JpaRepository<CardEntity, Long> {
 
-  List<CardEntity> findByBoardIdOrderByNumber(Long boardId);
+  /** Aktive (nicht gelöschte) Karten des Boards. */
+  List<CardEntity> findByBoardIdAndDeletedAtIsNullOrderByNumber(Long boardId);
+
+  /** Karten im Papierkorb des Boards. */
+  List<CardEntity> findByBoardIdAndDeletedAtIsNotNullOrderByNumber(Long boardId);
+
+  /** Karten, die vor dem Zeitpunkt gelöscht wurden (Papierkorb-Retention). */
+  List<CardEntity> findByDeletedAtNotNullAndDeletedAtBefore(Instant threshold);
 
   @Query(
-      "select c from CardEntity c where c.archived = false "
+      "select c from CardEntity c where c.archived = false and c.deletedAt is null "
           + "and c.movedToDoneAt is not null and c.movedToDoneAt < ?1")
   List<CardEntity> findArchivableDoneCards(Instant threshold);
 
@@ -20,6 +27,7 @@ interface CardJpaRepository extends JpaRepository<CardEntity, Long> {
 
   @Query(
       "select coalesce(max(c.positionInColumn), -1) from CardEntity c "
-          + "where c.columnId = ?1 and c.archived = false and c.type <> 'EPIC'")
+          + "where c.columnId = ?1 and c.archived = false and c.deletedAt is null "
+          + "and c.type <> 'EPIC'")
   int maxActivePositionInColumn(Long columnId);
 }

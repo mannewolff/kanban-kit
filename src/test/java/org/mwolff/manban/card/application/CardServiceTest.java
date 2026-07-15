@@ -6,6 +6,8 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -19,6 +21,7 @@ import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mwolff.manban.board.application.BoardColumnRepository;
 import org.mwolff.manban.board.application.BoardNotFoundException;
 import org.mwolff.manban.board.application.BoardRepository;
@@ -26,14 +29,20 @@ import org.mwolff.manban.board.application.ColumnNotFoundException;
 import org.mwolff.manban.board.domain.Board;
 import org.mwolff.manban.board.domain.BoardColumn;
 import org.mwolff.manban.card.domain.Card;
+import org.mwolff.manban.card.domain.CardActivity;
+import org.mwolff.manban.card.domain.CardActivityType;
 import org.mwolff.manban.card.domain.CardType;
+import org.mwolff.manban.card.domain.Label;
 import org.mwolff.manban.project.application.PermissionChecker;
+import org.mwolff.manban.project.application.ProjectAccessDeniedException;
+import org.mwolff.manban.project.application.ProjectMembershipRepository;
 import org.mwolff.manban.project.domain.Permission;
+import org.mwolff.manban.project.domain.ProjectMembership;
 
 /** Verhaltenstests der Karten- und Epic-Use-Cases (Mockito an den Ports). */
 // PMD.TooManyMethods: umfassende Unit-Suite (Karten + Epics, Erfolgs- und Fehlerpfade je
 // Use-Case). Viele kleine @Test-Methoden sind hier gewollt, kein God-Class-Smell.
-@SuppressWarnings("PMD.TooManyMethods")
+@SuppressWarnings({"PMD.TooManyMethods", "PMD.CyclomaticComplexity", "PMD.CouplingBetweenObjects"})
 class CardServiceTest {
 
   private static final Instant FIXED = Instant.parse("2026-01-02T03:04:05Z");
@@ -44,6 +53,12 @@ class CardServiceTest {
   private BoardRepository boards;
   private BoardColumnRepository columns;
   private PermissionChecker permissions;
+  private CardColumnTransitionRepository transitions;
+  private CardAssigneeRepository assignees;
+  private ProjectMembershipRepository memberships;
+  private LabelRepository labels;
+  private CardLabelRepository cardLabels;
+  private CardActivityRepository activity;
   private CardService service;
 
   private static Card card(
@@ -57,7 +72,7 @@ class CardServiceTest {
       String shortcode) {
     return new Card(
         id, BOARD, columnId, number, "Titel", null, 0, archived, done, 1L, FIXED, FIXED, type,
-        parentId, shortcode);
+        parentId, shortcode, null);
   }
 
   private static BoardColumn column(long id, String name, int position) {
@@ -71,8 +86,27 @@ class CardServiceTest {
     boards = mock(BoardRepository.class);
     columns = mock(BoardColumnRepository.class);
     permissions = mock(PermissionChecker.class);
+    transitions = mock(CardColumnTransitionRepository.class);
+    assignees = mock(CardAssigneeRepository.class);
+    memberships = mock(ProjectMembershipRepository.class);
+    labels = mock(LabelRepository.class);
+    cardLabels = mock(CardLabelRepository.class);
+    activity = mock(CardActivityRepository.class);
     Clock clock = Clock.fixed(FIXED, ZoneOffset.UTC);
-    service = new CardService(cards, dependencies, boards, columns, permissions, clock);
+    service =
+        new CardService(
+            cards,
+            dependencies,
+            boards,
+            columns,
+            permissions,
+            transitions,
+            assignees,
+            memberships,
+            labels,
+            cardLabels,
+            activity,
+            clock);
     when(boards.findById(BOARD)).thenReturn(Optional.of(new Board(BOARD, 1L, "B", FIXED)));
     when(cards.save(any(Card.class))).thenAnswer(inv -> withId(inv.getArgument(0)));
   }
@@ -93,7 +127,8 @@ class CardServiceTest {
         c.updatedAt(),
         c.type(),
         c.parentId(),
-        c.shortcode());
+        c.shortcode(),
+        c.dueDate());
   }
 
   // --- create -----------------------------------------------------------
@@ -399,7 +434,7 @@ class CardServiceTest {
 
     // When
     ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
-    service.update(1L, 1L, "Neu", null, null, null, 30L);
+    service.update(1L, 1L, "Neu", null, null, null, 30L, null);
 
     // Then
     verify(cards).save(captor.capture());
@@ -414,7 +449,7 @@ class CardServiceTest {
 
     // When
     ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
-    service.update(1L, 5L, "Neu", null, null, "NEW", null);
+    service.update(1L, 5L, "Neu", null, null, "NEW", null, null);
 
     // Then
     verify(cards).save(captor.capture());
@@ -430,7 +465,7 @@ class CardServiceTest {
         .thenReturn(List.of(card(2L, 20L, 3, false, null, CardType.CARD, null, null)));
 
     // When
-    service.update(1L, 1L, "Neu", null, List.of(3), null, null);
+    service.update(1L, 1L, "Neu", null, List.of(3), null, null, null);
 
     // Then
     verify(dependencies).replaceDependencies(1L, List.of(3));
@@ -442,7 +477,7 @@ class CardServiceTest {
     when(cards.findById(1L)).thenReturn(Optional.empty());
 
     // When / Then
-    assertThatThrownBy(() -> service.update(1L, 1L, "Neu", null, null, null, null))
+    assertThatThrownBy(() -> service.update(1L, 1L, "Neu", null, null, null, null, null))
         .isInstanceOf(CardNotFoundException.class);
   }
 
@@ -634,7 +669,7 @@ class CardServiceTest {
   }
 
   @Test
-  void delete_removesDependenciesAndCard() {
+  void delete_softDeletesCard() {
     // Given
     when(cards.findById(1L))
         .thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
@@ -642,8 +677,31 @@ class CardServiceTest {
     // When
     service.delete(1L, 1L);
 
-    // Then
-    verify(cards).deleteById(1L);
+    // Then — Löschen ist reversibel (Papierkorb), kein Hard-Delete.
+    verify(cards).softDelete(1L, FIXED);
+    verify(cards, never()).deleteById(anyLong());
+    // Kein Epic -> keine Kinder-Entkopplung (findByBoardId bleibt ungenutzt).
+    verify(cards, never()).findByBoardId(anyLong());
+  }
+
+  @Test
+  void delete_epicUnassignsChildrenBeforeSoftDelete() {
+    when(cards.findById(5L))
+        .thenReturn(Optional.of(card(5L, 20L, 5, false, null, CardType.EPIC, null, "E")));
+    when(cards.findByBoardId(BOARD))
+        .thenReturn(
+            List.of(
+                card(1L, 20L, 1, false, null, CardType.CARD, 5L, null),
+                card(2L, 20L, 2, false, null, CardType.CARD, null, null)));
+
+    ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
+    service.delete(9L, 5L);
+
+    // Nur das Kind des Epics wird von seiner Zuordnung gelöst; danach das Epic soft-gelöscht.
+    verify(cards).save(captor.capture());
+    assertThat(captor.getValue().id()).isEqualTo(1L);
+    assertThat(captor.getValue().parentId()).isNull();
+    verify(cards).softDelete(5L, FIXED);
   }
 
   @Test
@@ -716,7 +774,8 @@ class CardServiceTest {
             FIXED,
             CardType.EPIC,
             null,
-            "E");
+            "E",
+            null);
     when(cards.findById(30L)).thenReturn(Optional.of(epicOtherBoard));
 
     // When / Then
@@ -760,7 +819,7 @@ class CardServiceTest {
         .thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
 
     // When
-    service.update(1L, 1L, "Neu", null, null, null, null);
+    service.update(1L, 1L, "Neu", null, null, null, null, null);
 
     // Then
     verify(dependencies, never()).replaceDependencies(anyLong(), anyList());
@@ -889,7 +948,7 @@ class CardServiceTest {
         .thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
 
     // When
-    CardService.CardView view = service.update(1L, 1L, "Neu", null, null, null, null);
+    CardService.CardView view = service.update(1L, 1L, "Neu", null, null, null, null, null);
 
     // Then
     assertThat(view.title()).isEqualTo("Neu");
@@ -964,17 +1023,53 @@ class CardServiceTest {
     assertThat(view.archived()).isFalse();
   }
 
+  // --- Papierkorb (Soft-Delete) -----------------------------------------
+
   @Test
-  void delete_removesCardDependencies() {
-    // Given
+  void restoreFromTrash_clearsDeletionAndAppends() {
+    when(cards.findById(1L))
+        .thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
+    when(cards.maxActivePositionInColumn(20L)).thenReturn(4);
+
+    CardService.CardView view = service.restoreFromTrash(9L, 1L);
+
+    verify(cards).restoreFromTrash(1L, 5);
+    verify(activity)
+        .add(1L, 9L, CardActivityType.RESTORED, "Aus Papierkorb wiederhergestellt", FIXED);
+    assertThat(view.id()).isEqualTo(1L);
+  }
+
+  @Test
+  void purge_hardDeletes_forBoardManager() {
     when(cards.findById(1L))
         .thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
 
-    // When
-    service.delete(1L, 1L);
+    service.purge(9L, 1L);
 
-    // Then
+    verify(permissions).require(9L, 1L, Permission.BOARD_DELETE);
     verify(dependencies).deleteByCardId(1L);
+    verify(cards).deleteById(1L);
+  }
+
+  @Test
+  void purge_throwsCardNotFound_whenUnknown() {
+    when(cards.findById(1L)).thenReturn(Optional.empty());
+
+    assertThatThrownBy(() -> service.purge(9L, 1L)).isInstanceOf(CardNotFoundException.class);
+  }
+
+  @Test
+  void listTrash_returnsOnlyTrashedCards() {
+    when(cards.findTrashByBoardId(BOARD))
+        .thenReturn(
+            List.of(
+                card(1L, 20L, 1, false, null, CardType.CARD, null, null),
+                card(2L, 20L, 2, false, null, CardType.EPIC, null, "E")));
+
+    List<CardService.CardView> trash = service.listTrash(5L, BOARD);
+
+    verify(permissions).requireMembership(5L, 1L);
+    assertThat(trash).extracting(CardService.CardView::id).containsExactly(1L);
   }
 
   // --- transfer (board-/projektübergreifend) ----------------------------
@@ -1015,6 +1110,7 @@ class CardServiceTest {
 
     // Then
     verify(dependencies).deleteByCardId(100L);
+    verify(assignees).deleteByCardId(100L);
     verify(cards).save(captor.capture());
     assertThat(captor.getValue().parentId()).isNull();
     assertThat(captor.getValue().movedToDoneAt()).isNull();
@@ -1079,5 +1175,279 @@ class CardServiceTest {
     // When / Then
     assertThatThrownBy(() -> service.transfer(1L, 100L, 20L, 60L))
         .isInstanceOf(ColumnNotFoundException.class);
+  }
+
+  @Test
+  void update_setsDueDate_forCard() {
+    when(cards.findById(1L))
+        .thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
+    Instant due = FIXED.plusSeconds(86_400);
+
+    ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
+    CardService.CardView view = service.update(1L, 1L, "Neu", null, null, null, null, due);
+
+    verify(cards).save(captor.capture());
+    assertThat(captor.getValue().dueDate()).isEqualTo(due);
+    assertThat(view.dueDate()).isEqualTo(due);
+  }
+
+  // --- Zuständige (Assignees) -------------------------------------------
+
+  @Test
+  void setAssignees_replacesWithDistinctMembers() {
+    when(cards.findById(1L))
+        .thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
+    when(memberships.findByProjectIdAndUserId(1L, 7L))
+        .thenReturn(Optional.of(mock(ProjectMembership.class)));
+    when(memberships.findByProjectIdAndUserId(1L, 8L))
+        .thenReturn(Optional.of(mock(ProjectMembership.class)));
+    when(assignees.findByCardId(1L)).thenReturn(List.of(7L, 8L));
+
+    CardService.CardView result = service.setAssignees(3L, 1L, List.of(7L, 8L, 7L));
+
+    verify(permissions).require(3L, 1L, Permission.TICKET_UPDATE);
+    verify(assignees).replaceAssignees(1L, List.of(7L, 8L));
+    verify(activity).add(1L, 3L, CardActivityType.ASSIGNED, "Zuständige geändert", FIXED);
+    assertThat(result.id()).isEqualTo(1L);
+    assertThat(result.assignees()).containsExactly(7L, 8L);
+  }
+
+  @Test
+  void setAssignees_rejectsNonMember() {
+    when(cards.findById(1L))
+        .thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
+    when(memberships.findByProjectIdAndUserId(1L, 7L))
+        .thenReturn(Optional.of(mock(ProjectMembership.class)));
+    when(memberships.findByProjectIdAndUserId(1L, 8L)).thenReturn(Optional.empty());
+
+    assertThatThrownBy(() -> service.setAssignees(3L, 1L, List.of(7L, 8L)))
+        .isInstanceOf(InvalidAssigneeException.class);
+    verify(assignees, never()).replaceAssignees(anyLong(), anyList());
+  }
+
+  @Test
+  void setAssignees_rejectsEpic() {
+    when(cards.findById(5L))
+        .thenReturn(Optional.of(card(5L, 20L, 5, false, null, CardType.EPIC, null, "E")));
+
+    assertThatThrownBy(() -> service.setAssignees(3L, 5L, List.of(7L)))
+        .isInstanceOf(InvalidDependencyException.class);
+    verify(assignees, never()).replaceAssignees(anyLong(), anyList());
+  }
+
+  @Test
+  void setAssignees_throwsCardNotFound_whenUnknown() {
+    when(cards.findById(1L)).thenReturn(Optional.empty());
+
+    assertThatThrownBy(() -> service.setAssignees(3L, 1L, List.of()))
+        .isInstanceOf(CardNotFoundException.class);
+  }
+
+  @Test
+  void setAssignees_propagatesPermissionDenied() {
+    when(cards.findById(1L))
+        .thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
+    doThrow(new ProjectAccessDeniedException())
+        .when(permissions)
+        .require(9L, 1L, Permission.TICKET_UPDATE);
+
+    assertThatThrownBy(() -> service.setAssignees(9L, 1L, List.of()))
+        .isInstanceOf(ProjectAccessDeniedException.class);
+    verify(assignees, never()).replaceAssignees(anyLong(), anyList());
+  }
+
+  // --- Labels -----------------------------------------------------------
+
+  @Test
+  void setLabels_replacesWithDistinctBoardLabels() {
+    when(cards.findById(1L))
+        .thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
+    when(labels.findByBoardId(BOARD))
+        .thenReturn(
+            List.of(new Label(7L, BOARD, "Bug", "#f00"), new Label(8L, BOARD, "Ux", "#0f0")));
+    when(cardLabels.findByCardId(1L)).thenReturn(List.of(7L, 8L));
+
+    CardService.CardView view = service.setLabels(3L, 1L, List.of(7L, 8L, 7L));
+
+    verify(permissions).require(3L, 1L, Permission.TICKET_UPDATE);
+    verify(cardLabels).replaceLabels(1L, List.of(7L, 8L));
+    assertThat(view.labels()).containsExactly(7L, 8L);
+  }
+
+  @Test
+  void setLabels_rejectsForeignLabel() {
+    when(cards.findById(1L))
+        .thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
+    when(labels.findByBoardId(BOARD)).thenReturn(List.of(new Label(7L, BOARD, "Bug", "#f00")));
+
+    assertThatThrownBy(() -> service.setLabels(3L, 1L, List.of(7L, 8L)))
+        .isInstanceOf(InvalidLabelException.class);
+    verify(cardLabels, never()).replaceLabels(anyLong(), anyList());
+  }
+
+  @Test
+  void setLabels_rejectsEpic() {
+    when(cards.findById(5L))
+        .thenReturn(Optional.of(card(5L, 20L, 5, false, null, CardType.EPIC, null, "E")));
+
+    assertThatThrownBy(() -> service.setLabels(3L, 5L, List.of(7L)))
+        .isInstanceOf(InvalidDependencyException.class);
+    verify(cardLabels, never()).replaceLabels(anyLong(), anyList());
+  }
+
+  @Test
+  void setLabels_throwsCardNotFound_whenUnknown() {
+    when(cards.findById(1L)).thenReturn(Optional.empty());
+
+    assertThatThrownBy(() -> service.setLabels(3L, 1L, List.of()))
+        .isInstanceOf(CardNotFoundException.class);
+  }
+
+  @Test
+  void setLabels_propagatesPermissionDenied() {
+    when(cards.findById(1L))
+        .thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
+    doThrow(new ProjectAccessDeniedException())
+        .when(permissions)
+        .require(9L, 1L, Permission.TICKET_UPDATE);
+
+    assertThatThrownBy(() -> service.setLabels(9L, 1L, List.of()))
+        .isInstanceOf(ProjectAccessDeniedException.class);
+    verify(cardLabels, never()).replaceLabels(anyLong(), anyList());
+  }
+
+  // --- Aktivitätsverlauf (card_activity) --------------------------------
+
+  @Test
+  void create_recordsCreatedActivity() {
+    when(columns.findById(20L)).thenReturn(Optional.of(column(20L, "Backlog", 0)));
+
+    service.create(1L, BOARD, 20L, "Titel", null, null, null);
+
+    verify(activity).add(1L, 1L, CardActivityType.CREATED, "Karte angelegt", FIXED);
+  }
+
+  @Test
+  void move_recordsMovedActivity_whenColumnChanges() {
+    when(cards.findById(1L))
+        .thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
+    when(columns.findById(21L)).thenReturn(Optional.of(column(21L, "Done", 4)));
+
+    service.move(9L, 1L, 21L, 0);
+
+    verify(activity).add(1L, 9L, CardActivityType.MOVED, "Verschoben nach Done", FIXED);
+  }
+
+  @Test
+  void update_recordsUpdatedActivity() {
+    when(cards.findById(1L))
+        .thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
+
+    service.update(9L, 1L, "Neu", null, null, null, null, null);
+
+    verify(activity).add(1L, 9L, CardActivityType.UPDATED, "Karte bearbeitet", FIXED);
+  }
+
+  @Test
+  void archive_recordsArchivedActivity() {
+    when(cards.findById(1L))
+        .thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
+
+    service.archive(9L, 1L);
+
+    verify(activity).add(1L, 9L, CardActivityType.ARCHIVED, "Archiviert", FIXED);
+  }
+
+  @Test
+  void restore_recordsRestoredActivity() {
+    when(cards.findById(1L))
+        .thenReturn(Optional.of(card(1L, 20L, 1, true, null, CardType.CARD, null, null)));
+
+    service.restore(9L, 1L);
+
+    verify(activity).add(1L, 9L, CardActivityType.RESTORED, "Wiederhergestellt", FIXED);
+  }
+
+  @Test
+  void listActivity_returnsHistoryForMember() {
+    when(cards.findById(1L))
+        .thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
+    CardActivity entry =
+        new CardActivity(3L, 1L, 9L, CardActivityType.CREATED, "Karte angelegt", FIXED);
+    when(activity.findByCardId(1L)).thenReturn(List.of(entry));
+
+    List<CardActivity> result = service.listActivity(5L, 1L);
+
+    verify(permissions).requireMembership(5L, 1L);
+    assertThat(result).containsExactly(entry);
+  }
+
+  @Test
+  void listActivity_throwsCardNotFound_whenUnknown() {
+    when(cards.findById(1L)).thenReturn(Optional.empty());
+
+    assertThatThrownBy(() -> service.listActivity(5L, 1L))
+        .isInstanceOf(CardNotFoundException.class);
+  }
+
+  // --- Zykluszeit-Tracking (card_column_transition) ---------------------
+
+  @Test
+  void create_opensColumnTransition() {
+    // Given
+    when(columns.findById(20L)).thenReturn(Optional.of(column(20L, "Backlog", 0)));
+    when(cards.maxNumberInBoard(BOARD)).thenReturn(0);
+    when(cards.maxActivePositionInColumn(20L)).thenReturn(-1);
+
+    // When
+    service.create(1L, BOARD, 20L, "Titel", null, null, null);
+
+    // Then — Eintritt in die Zielspalte wird mit dem Erstellzeitpunkt eröffnet.
+    verify(transitions).open(1L, 20L, "Backlog", FIXED);
+  }
+
+  @Test
+  void move_closesOldAndOpensNewTransition_whenColumnChanges() {
+    // Given
+    Card before = card(1L, 20L, 1, false, null, CardType.CARD, null, null);
+    when(cards.findById(1L)).thenReturn(Optional.of(before));
+    when(columns.findById(21L)).thenReturn(Optional.of(column(21L, "Done", 4)));
+
+    // When
+    service.move(1L, 1L, 21L, 0);
+
+    // Then — erst die verlassene Spalte schließen, dann die Zielspalte eröffnen.
+    InOrder order = inOrder(transitions);
+    order.verify(transitions).closeOpen(1L, FIXED);
+    order.verify(transitions).open(1L, 21L, "Done", FIXED);
+  }
+
+  @Test
+  void move_recordsNoTransition_whenColumnUnchanged() {
+    // Given: Reindex innerhalb derselben Spalte (Ziel == aktuelle Spalte).
+    Card before = card(1L, 20L, 1, false, null, CardType.CARD, null, null);
+    when(cards.findById(1L)).thenReturn(Optional.of(before));
+    when(columns.findById(20L)).thenReturn(Optional.of(column(20L, "Backlog", 0)));
+
+    // When
+    service.move(1L, 1L, 20L, 2);
+
+    // Then — kein Spaltenwechsel, keine Transition.
+    verify(transitions, never()).closeOpen(anyLong(), any());
+    verify(transitions, never()).open(anyLong(), anyLong(), any(), any());
+  }
+
+  @Test
+  void transfer_recordsColumnTransition() {
+    // Given
+    stubTransferScenario(null);
+
+    // When
+    service.transfer(1L, 100L, 20L, 60L);
+
+    // Then — Umzug schließt die alte und eröffnet die Ziel-Spalte.
+    InOrder order = inOrder(transitions);
+    order.verify(transitions).closeOpen(100L, FIXED);
+    order.verify(transitions).open(100L, 60L, "Backlog", FIXED);
   }
 }

@@ -63,4 +63,19 @@ class MemberControllerTest {
     // Then
     verify(service).removeMember(3L, 2L, 5L);
   }
+
+  @Test
+  void changeDisplayName_delegatesToService() {
+    // Given
+    MemberView view = new MemberView(5L, "a@b.de", "Neu", ProjectRole.MEMBER);
+    when(service.changeMemberDisplayName(3L, 2L, 5L, "Neu")).thenReturn(view);
+
+    // When
+    MemberView result =
+        controller.changeDisplayName(
+            3L, 2L, 5L, new MemberController.ChangeDisplayNameRequest("Neu"));
+
+    // Then
+    assertThat(result).isSameAs(view);
+  }
 }
