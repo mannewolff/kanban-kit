@@ -18,6 +18,7 @@ import { useEffect, useState } from 'react'
 import { Link as RouterLink, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { boardsApi, type Board } from '../api/boards'
 import { projectsApi } from '../api/projects'
+import { Breadcrumbs } from '../components/Breadcrumbs'
 import { canManageBoards, canManageMembers } from '../lib/roles'
 import { useRefetchOnFocus } from '../lib/useRefetchOnFocus'
 
@@ -134,12 +135,8 @@ export function ProjectBoardsPage() {
 
   return (
     <Box>
-      <Link component={RouterLink} to="/">← Projekte</Link>
-      <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mt: 1, mb: 2 }}>
-        <Typography variant="h5">
-          <Box component="span">{projectName || 'Projekt'}</Box>
-          <Box component="span" sx={{ color: 'text.secondary', fontWeight: 400 }}> / Boards</Box>
-        </Typography>
+      <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
+        <Breadcrumbs items={[{ label: 'Projekte', to: '/' }, { label: projectName || 'Projekt' }]} />
         {canManageMembers(role) && (
           <Link component={RouterLink} to={`/projects/${id}/members`}>Mitglieder</Link>
         )}
