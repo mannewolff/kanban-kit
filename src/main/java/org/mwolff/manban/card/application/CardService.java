@@ -381,6 +381,21 @@ public class CardService {
     return view(cards.save(moved.withParent(null).withMovedToDoneAt(null)));
   }
 
+  /**
+   * Verschiebt mehrere Karten in einer Transaktion auf dasselbe Zielboard und dieselbe Zielspalte
+   * (alles-oder-nichts). Nutzt je Karte die Einzel-Logik von {@link #transfer(long, long, long,
+   * long)} inklusive Owner-Prüfung in Quell- und Zielprojekt sowie Epic-Ausschluss; scheitert eine
+   * Karte, rollt der gesamte Batch zurück. Die Karten landen in Eingabereihenfolge am Ende der
+   * Zielspalte, jede Quellspalte wird dabei lückenlos nachgezogen.
+   */
+  @Transactional
+  public List<CardView> bulkTransfer(
+      long userId, List<Long> cardIds, long targetBoardId, long targetColumnId) {
+    return cardIds.stream()
+        .map(cardId -> transfer(userId, cardId, targetBoardId, targetColumnId))
+        .toList();
+  }
+
   @Transactional
   public CardView archive(long userId, long cardId) {
     Card card = requireCardOp(userId, cardId, Permission.TICKET_DELETE, Permission.EPIC_DELETE);

@@ -116,6 +116,14 @@ class CardController {
     return cards.transfer(userId, cardId, request.targetBoardId(), request.targetColumnId());
   }
 
+  /** Verschiebt mehrere Karten in einer Transaktion auf ein anderes Board (alles-oder-nichts). */
+  @PostMapping("/api/cards/bulk-transfer")
+  List<CardView> bulkTransfer(
+      @AuthenticationPrincipal Long userId, @Valid @RequestBody BulkTransferRequest request) {
+    return cards.bulkTransfer(
+        userId, request.cardIds(), request.targetBoardId(), request.targetColumnId());
+  }
+
   @PostMapping("/api/cards/{cardId}/archive")
   CardView archive(@AuthenticationPrincipal Long userId, @PathVariable long cardId) {
     return cards.archive(userId, cardId);
@@ -214,6 +222,11 @@ class CardController {
   record TransferCardRequest(@NotNull Long targetBoardId, @NotNull Long targetColumnId) {}
 
   record BulkArchiveRequest(@NotEmpty @Size(max = 200) List<Long> cardIds) {}
+
+  record BulkTransferRequest(
+      @NotEmpty @Size(max = 200) List<Long> cardIds,
+      @NotNull Long targetBoardId,
+      @NotNull Long targetColumnId) {}
 
   record AssigneesRequest(@Nullable List<Long> assignees) {}
 

@@ -200,6 +200,20 @@ class CardControllerTest {
   }
 
   @Test
+  void bulkTransfer_delegatesToService() {
+    // Given
+    List<CardView> views = List.of(card());
+    var request = new CardController.BulkTransferRequest(List.of(8L, 9L), 20L, 60L);
+    when(service.bulkTransfer(3L, List.of(8L, 9L), 20L, 60L)).thenReturn(views);
+
+    // When
+    List<CardView> result = controller.bulkTransfer(3L, request);
+
+    // Then
+    assertThat(result).isSameAs(views);
+  }
+
+  @Test
   void delete_delegatesToService() {
     // When
     controller.delete(3L, 8L);

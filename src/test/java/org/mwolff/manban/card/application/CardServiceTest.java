@@ -1182,6 +1182,39 @@ class CardServiceTest {
   }
 
   @Test
+  void bulkTransfer_transfersEveryCardToTarget() {
+    // Given: zwei Karten, gemeinsames Zielboard/-spalte
+    when(cards.findById(100L))
+        .thenReturn(Optional.of(card(100L, 50L, 3, false, FIXED, CardType.CARD, null, null)));
+    when(cards.findById(101L))
+        .thenReturn(Optional.of(card(101L, 50L, 4, false, FIXED, CardType.CARD, null, null)));
+    when(boards.findById(20L)).thenReturn(Optional.of(new Board(20L, 2L, "Ziel", FIXED)));
+    when(columns.findById(60L))
+        .thenReturn(Optional.of(new BoardColumn(60L, 20L, "Backlog", 0, null)));
+    when(cards.maxNumberInBoard(20L)).thenReturn(7);
+
+    // When
+    List<CardService.CardView> result = service.bulkTransfer(1L, List.of(100L, 101L), 20L, 60L);
+
+    // Then — die Views je Karte werden zurückgegeben (nicht null)
+    assertThat(result).extracting(CardService.CardView::id).containsExactly(100L, 101L);
+    verify(cards).transfer(100L, 20L, 60L, 8);
+    verify(cards).transfer(101L, 20L, 60L, 8);
+  }
+
+  @Test
+  void bulkTransfer_propagatesAndTransfersNoneWhenOneIsEpic() {
+    // Given: erste Karte ein Epic -> Abbruch vor jeglichem Transfer (Rollback im echten Betrieb)
+    when(cards.findById(100L))
+        .thenReturn(Optional.of(card(100L, 50L, 3, false, null, CardType.EPIC, null, "EP")));
+
+    // When / Then
+    assertThatThrownBy(() -> service.bulkTransfer(1L, List.of(100L, 101L), 20L, 60L))
+        .isInstanceOf(InvalidDependencyException.class);
+    verify(cards, never()).transfer(anyLong(), anyLong(), anyLong(), anyInt());
+  }
+
+  @Test
   void transfer_throwsBoardNotFound_whenTargetBoardUnknown() {
     // Given
     when(cards.findById(100L))
