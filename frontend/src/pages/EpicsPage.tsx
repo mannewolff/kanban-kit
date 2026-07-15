@@ -3,13 +3,13 @@ import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import LinearProgress from '@mui/material/LinearProgress'
-import Link from '@mui/material/Link'
 import Paper from '@mui/material/Paper'
 import Stack from '@mui/material/Stack'
 import Typography from '@mui/material/Typography'
 import { useEffect, useState } from 'react'
-import { Link as RouterLink, useParams } from 'react-router-dom'
+import { useParams } from 'react-router-dom'
 import { boardsApi, type Board } from '../api/boards'
+import { Breadcrumbs } from '../components/Breadcrumbs'
 import { cardsApi, type Card } from '../api/cards'
 import { epicsApi, type Epic } from '../api/epics'
 import { projectsApi } from '../api/projects'
@@ -85,16 +85,15 @@ export function EpicsPage() {
 
   return (
     <Box>
-      <Link component={RouterLink} to={`/boards/${id}`}>← Board</Link>
-      <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mt: 1, mb: 2 }}>
-        <Typography variant="h5">
-          {projectName && (
-            <Box component="span" sx={{ color: 'text.secondary', fontWeight: 400 }}>
-              {projectName} /{' '}
-            </Box>
-          )}
-          <Box component="span">Epics</Box>
-        </Typography>
+      <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
+        <Breadcrumbs
+          items={[
+            { label: 'Projekte', to: '/' },
+            ...(board && projectName ? [{ label: projectName, to: `/projects/${board.projectId}` }] : []),
+            ...(board ? [{ label: board.name, to: `/boards/${id}` }] : []),
+            { label: 'Epics' },
+          ]}
+        />
         {canEdit && (
           <Button variant="contained" size="small" startIcon={<AddIcon />} onClick={() => setCreating(true)}>
             Neues Epic

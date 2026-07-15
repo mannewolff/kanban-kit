@@ -18,10 +18,10 @@ import TableHead from '@mui/material/TableHead'
 import TableRow from '@mui/material/TableRow'
 import TextField from '@mui/material/TextField'
 import Tooltip from '@mui/material/Tooltip'
-import Typography from '@mui/material/Typography'
 import { useEffect, useState } from 'react'
 import { Link as RouterLink, useParams } from 'react-router-dom'
 import { membersApi as defaultMembersApi, type Member, type MembersApi } from '../api/members'
+import { Breadcrumbs } from '../components/Breadcrumbs'
 import { projectsApi } from '../api/projects'
 import { ApiError } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
@@ -181,14 +181,14 @@ export function ProjectMembersPage({ api = defaultMembersApi, loadRole }: Props)
 
   return (
     <Box>
-      <Link component={RouterLink} to={`/projects/${id}`}>← Boards</Link>
-      <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mt: 1, mb: 2 }}>
-        <Typography variant="h5">
-          {projectName && <Box component="span">{projectName}</Box>}
-          <Box component="span" sx={projectName ? { color: 'text.secondary', fontWeight: 400 } : undefined}>
-            {projectName ? ' / Mitglieder' : 'Mitglieder'}
-          </Box>
-        </Typography>
+      <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
+        <Breadcrumbs
+          items={[
+            { label: 'Projekte', to: '/' },
+            ...(projectName ? [{ label: projectName, to: `/projects/${id}` }] : []),
+            { label: 'Mitglieder' },
+          ]}
+        />
         <Link component={RouterLink} to="/roles">Rollen &amp; Rechte</Link>
       </Stack>
 

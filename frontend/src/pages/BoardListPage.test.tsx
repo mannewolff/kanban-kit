@@ -79,6 +79,11 @@ describe('BoardListPage', () => {
     mProjects.list.mockResolvedValue([{ id: 9, name: 'Projekt', role: 'OWNER', createdAt: '' }])
   })
 
+  it('zeigt den Breadcrumb-Pfad ab Projekte', async () => {
+    renderPage()
+    expect(await screen.findByRole('link', { name: 'Projekte' })).toHaveAttribute('href', '/')
+  })
+
   it('zeigt aktive Karten mit Status-Chip und Body-Vorschau, archivierte erst nach Filter', async () => {
     renderPage()
     expect(await screen.findByText('Aufgabe')).toBeInTheDocument()

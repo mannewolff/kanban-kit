@@ -1,6 +1,5 @@
 import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
-import Link from '@mui/material/Link'
 import Paper from '@mui/material/Paper'
 import Stack from '@mui/material/Stack'
 import Table from '@mui/material/Table'
@@ -13,8 +12,9 @@ import Typography from '@mui/material/Typography'
 import { BarChart } from '@mui/x-charts/BarChart'
 import { LineChart } from '@mui/x-charts/LineChart'
 import { useEffect, useState } from 'react'
-import { Link as RouterLink, useParams } from 'react-router-dom'
+import { useParams } from 'react-router-dom'
 import { boardsApi, type Board } from '../api/boards'
+import { Breadcrumbs } from '../components/Breadcrumbs'
 import { dashboardApi, type BoardDashboardKpis } from '../api/dashboard'
 import { formatDuration } from '../lib/formatDuration'
 import { useProjectName } from '../lib/useProjectName'
@@ -63,17 +63,16 @@ export function DashboardPage() {
 
   return (
     <Box>
-      <Link component={RouterLink} to={`/boards/${id}`}>
-        ← Board
-      </Link>
-      <Typography variant="h5" sx={{ mt: 1, mb: 2 }}>
-        {projectName && (
-          <Box component="span" sx={{ color: 'text.secondary', fontWeight: 400 }}>
-            {projectName} /{' '}
-          </Box>
-        )}
-        <Box component="span">Dashboard</Box>
-      </Typography>
+      <Box sx={{ mb: 2 }}>
+        <Breadcrumbs
+          items={[
+            { label: 'Projekte', to: '/' },
+            ...(board && projectName ? [{ label: projectName, to: `/projects/${board.projectId}` }] : []),
+            ...(board ? [{ label: board.name, to: `/boards/${id}` }] : []),
+            { label: 'Dashboard' },
+          ]}
+        />
+      </Box>
 
       {!kpis && <Typography color="text.secondary">Kennzahlen werden geladen …</Typography>}
 

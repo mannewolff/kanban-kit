@@ -57,6 +57,11 @@ describe('DashboardPage', () => {
     mDashboard.get.mockResolvedValue(kpis)
   })
 
+  it('zeigt den Breadcrumb-Pfad ab Projekte', async () => {
+    renderPage()
+    expect(await screen.findByRole('link', { name: 'Projekte' })).toHaveAttribute('href', '/')
+  })
+
   it('zeigt Lead/Cycle-Time-Kacheln (Cycle null als n. v.)', async () => {
     renderPage()
     expect(await screen.findByText('2 T 3 Std')).toBeInTheDocument()

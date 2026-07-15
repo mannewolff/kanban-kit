@@ -1,14 +1,14 @@
 import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
 import Chip from '@mui/material/Chip'
-import Link from '@mui/material/Link'
 import Stack from '@mui/material/Stack'
 import Typography from '@mui/material/Typography'
 import type { SxProps, Theme } from '@mui/material/styles'
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Link as RouterLink, useParams } from 'react-router-dom'
+import { useParams } from 'react-router-dom'
 import { boardsApi, type Board } from '../api/boards'
+import { Breadcrumbs } from '../components/Breadcrumbs'
 import { cardsApi, type Card } from '../api/cards'
 import { epicsApi, type Epic } from '../api/epics'
 import { labelsApi, type Label } from '../api/labels'
@@ -293,15 +293,16 @@ export function BoardListPage() {
 
   return (
     <Box ref={viewRef}>
-      <Link component={RouterLink} to={`/boards/${id}`}>← Board</Link>
-      <Typography variant="h5" sx={{ mt: 1, mb: 2 }}>
-        {projectName && (
-          <Box component="span" sx={{ color: 'text.secondary', fontWeight: 400 }}>
-            {projectName} /{' '}
-          </Box>
-        )}
-        <Box component="span">{board?.name ?? 'Liste'}</Box>
-      </Typography>
+      <Box sx={{ mb: 2 }}>
+        <Breadcrumbs
+          items={[
+            { label: 'Projekte', to: '/' },
+            ...(board && projectName ? [{ label: projectName, to: `/projects/${board.projectId}` }] : []),
+            ...(board ? [{ label: board.name, to: `/boards/${id}` }] : []),
+            { label: 'Liste' },
+          ]}
+        />
+      </Box>
 
       <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mb: 2 }}>
         {columns.map((col) => {
