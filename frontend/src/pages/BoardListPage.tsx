@@ -1,10 +1,13 @@
 import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
 import Chip from '@mui/material/Chip'
+import IconButton from '@mui/material/IconButton'
 import Stack from '@mui/material/Stack'
+import Tooltip from '@mui/material/Tooltip'
 import Typography from '@mui/material/Typography'
 import type { SxProps, Theme } from '@mui/material/styles'
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator'
+import RestoreOutlinedIcon from '@mui/icons-material/RestoreOutlined'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { boardsApi, type Board } from '../api/boards'
@@ -93,6 +96,11 @@ export function BoardListPage() {
 
   const reloadCards = () => {
     void cardsApi.list(id).then(setCards)
+  }
+
+  const restoreCard = async (cardId: number) => {
+    await cardsApi.restore(cardId)
+    reloadCards()
   }
 
   useEffect(() => {
@@ -431,6 +439,21 @@ export function BoardListPage() {
                     {renderCell(key, card)}
                   </Box>
                 ))}
+                {canEdit && card.archived && (
+                  <Tooltip title="Wiederherstellen">
+                    <IconButton
+                      size="small"
+                      aria-label={`Karte ${card.title} wiederherstellen`}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        void restoreCard(card.id)
+                      }}
+                      sx={{ flexShrink: 0 }}
+                    >
+                      <RestoreOutlinedIcon fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                )}
               </Box>
             ))}
           </Stack>
