@@ -19,11 +19,22 @@ node scripts/bump-version.mjs patch
 
 ## merge production
 
-Bei jedem `merge production`: Minor-Teil erhöhen (Y+1, Z→0).
+Bei jedem `merge production`: Minor-Teil erhöhen (Y+1, Z→0), Changelog schreiben und den
+Release taggen. Schrittfolge:
 
 ```
-node scripts/bump-version.mjs minor
+node scripts/gen-changelog.mjs      # Changelog-Block für die neue Version oben in CHANGELOG.md
+node scripts/bump-version.mjs minor # VERSION/pom/package hochziehen + Tag vX.Y.Z setzen
+# Release-Commit (VERSION, pom.xml, package(-lock).json, CHANGELOG.md)
+git push origin main --follow-tags  # main + Tag pushen
+# PR main -> production erstellen (Mannes Merge ist der Stop-Punkt)
+# nach dem Merge: GitHub Release zum Tag vX.Y.Z anlegen (Changelog-Block als Beschreibung)
 ```
+
+`gen-changelog.mjs` grenzt den Range über den Tag der Vorversion ab (roher Dump der Commit-Titel,
+Keep-a-Changelog-Format). `bump-version.mjs minor` setzt den Tag `vX.Y.Z`, der beim nächsten
+Release wiederum die Range-Untergrenze bildet. Ein `push main` (Patch-Bump) erzeugt bewusst
+weder Changelog-Block noch Tag.
 
 **Zusätzlich (automatisch, kein manueller Schritt hier):** Sobald der PR tatsächlich nach
 `production` gemerged wird, löst der Push auf den `production`-Branch

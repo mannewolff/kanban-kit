@@ -67,6 +67,22 @@ function updateFrontend(newVersion) {
   );
 }
 
+/**
+ * Setzt beim minor-Bump (= merge production) einen Tag `vX.Y.Z`, der den Release-Stand markiert.
+ * Der Tag ist der Anker für die Range-Abgrenzung von gen-changelog.mjs. patch/major bleiben ohne
+ * Tag. Idempotent: existiert der Tag bereits, wird er nicht neu gesetzt.
+ */
+function tagRelease(newVersion) {
+  const tag = `v${newVersion}`;
+  const existing = execFileSync('git', ['tag', '--list', tag], { cwd: REPO_ROOT, encoding: 'utf-8' }).trim();
+  if (existing) {
+    process.stdout.write(`Tag ${tag} existiert bereits — kein neuer Tag.\n`);
+    return;
+  }
+  execFileSync('git', ['tag', tag], { cwd: REPO_ROOT, stdio: 'inherit' });
+  process.stdout.write(`Tag ${tag} gesetzt.\n`);
+}
+
 function main(argv) {
   const part = argv[0];
   if (!PARTS.includes(part)) {
@@ -81,6 +97,10 @@ function main(argv) {
   writeFileSync(VERSION_PATH, `${nextText}\n`);
   updatePom(nextText);
   updateFrontend(nextText);
+
+  if (part === 'minor') {
+    tagRelease(nextText);
+  }
 
   process.stdout.write(`Version: ${currentText} -> ${nextText}\n`);
 }
