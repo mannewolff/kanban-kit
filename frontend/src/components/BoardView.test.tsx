@@ -9,6 +9,9 @@ import { BoardView } from './BoardView'
 vi.mock('../api/columns', () => ({
   columnsApi: { create: vi.fn(), update: vi.fn(), remove: vi.fn(), reorder: vi.fn() },
 }))
+// Nur vom Transfer-Dialog zur Laufzeit genutzt; leere Listen genügen zum Öffnen.
+vi.mock('../api/projects', () => ({ projectsApi: { list: vi.fn().mockResolvedValue([]) } }))
+vi.mock('../api/boards', () => ({ boardsApi: { list: vi.fn().mockResolvedValue([]) } }))
 const mColumns = columnsApi as unknown as {
   create: ReturnType<typeof vi.fn>
   update: ReturnType<typeof vi.fn>
@@ -34,7 +37,10 @@ const card: Card = {
 }
 
 function mkApi(over: Record<string, unknown> = {}) {
-  return { create: vi.fn(), move: vi.fn(), archive: vi.fn(), restore: vi.fn(), remove: vi.fn(), ...over }
+  return {
+    create: vi.fn(), move: vi.fn(), archive: vi.fn(), restore: vi.fn(), remove: vi.fn(),
+    bulkArchive: vi.fn(), bulkTransfer: vi.fn(), ...over,
+  }
 }
 
 function dropOnColumn(columnId: number, cardId: number) {
@@ -328,38 +334,56 @@ describe('BoardView', () => {
     expect(onCardClick).not.toHaveBeenCalled()
   })
 
-  it('reicht die ausgewählten IDs an onBulkArchive und verlässt den Modus', () => {
-    const onBulkArchive = vi.fn()
-    render(
-      <BoardView board={board} initialCards={[card]} canEdit api={mkApi()} onBulkArchive={onBulkArchive} />,
-    )
+  it('archiviert die Auswahl nach Bestätigung über die Bulk-API und entfernt sie optimistisch', async () => {
+    const api = mkApi({ bulkArchive: vi.fn().mockResolvedValue([]) })
+    render(<BoardView board={board} initialCards={[card]} canEdit api={api} />)
 
     fireEvent.click(screen.getByRole('button', { name: 'Auswählen' }))
     fireEvent.click(screen.getByTestId('card-100'))
     fireEvent.click(screen.getByRole('button', { name: 'Archivieren' }))
 
-    expect(onBulkArchive).toHaveBeenCalledWith([100])
-    expect(screen.queryByText('1 ausgewählt')).not.toBeInTheDocument()
+    // Bestätigungsdialog erscheint; erst dessen Bestätigung löst die API aus.
+    expect(api.bulkArchive).not.toHaveBeenCalled()
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Archivieren' }))
+
+    await waitFor(() => expect(api.bulkArchive).toHaveBeenCalledWith([100]))
+    await waitFor(() => expect(screen.queryByTestId('card-100')).not.toBeInTheDocument())
   })
 
-  it('bietet Verschieben nur mit Transfer-Recht und reicht IDs an onBulkTransfer', () => {
-    const onBulkTransfer = vi.fn()
-    render(
-      <BoardView
-        board={board}
-        initialCards={[card]}
-        canEdit
-        canTransfer
-        api={mkApi()}
-        onBulkTransfer={onBulkTransfer}
-      />,
-    )
+  it('archiviert nicht, wenn die Bestätigung abgebrochen wird', () => {
+    const api = mkApi()
+    render(<BoardView board={board} initialCards={[card]} canEdit api={api} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Auswählen' }))
+    fireEvent.click(screen.getByTestId('card-100'))
+    fireEvent.click(screen.getByRole('button', { name: 'Archivieren' }))
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Abbrechen' }))
+
+    expect(api.bulkArchive).not.toHaveBeenCalled()
+    expect(screen.getByTestId('card-100')).toBeInTheDocument()
+  })
+
+  it('rollt beim Fehler des Bulk-Archivierens zurück und meldet ihn', async () => {
+    const api = mkApi({ bulkArchive: vi.fn().mockRejectedValue(new Error('fail')) })
+    render(<BoardView board={board} initialCards={[card]} canEdit api={api} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Auswählen' }))
+    fireEvent.click(screen.getByTestId('card-100'))
+    fireEvent.click(screen.getByRole('button', { name: 'Archivieren' }))
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Archivieren' }))
+
+    await waitFor(() => expect(screen.getByText('Archivieren fehlgeschlagen.')).toBeInTheDocument())
+    expect(screen.getByTestId('card-100')).toBeInTheDocument()
+  })
+
+  it('öffnet mit Transfer-Recht den Verschieben-Dialog für die Auswahl', () => {
+    render(<BoardView board={board} initialCards={[card]} canEdit canTransfer api={mkApi()} />)
 
     fireEvent.click(screen.getByRole('button', { name: 'Auswählen' }))
     fireEvent.click(screen.getByTestId('card-100'))
     fireEvent.click(screen.getByRole('button', { name: 'Verschieben' }))
 
-    expect(onBulkTransfer).toHaveBeenCalledWith([100])
+    expect(screen.getByText('Auf anderes Board verschieben')).toBeInTheDocument()
   })
 
   it('leert die Auswahl beim Abbrechen', () => {

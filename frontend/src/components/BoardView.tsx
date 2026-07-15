@@ -18,6 +18,7 @@ import IconButton from '@mui/material/IconButton'
 import Menu from '@mui/material/Menu'
 import MenuItem from '@mui/material/MenuItem'
 import Paper from '@mui/material/Paper'
+import Snackbar from '@mui/material/Snackbar'
 import Stack from '@mui/material/Stack'
 import TextField from '@mui/material/TextField'
 import Tooltip from '@mui/material/Tooltip'
@@ -68,12 +69,11 @@ interface Props {
   canTransfer?: boolean
   /** Ob der Nutzer Plattform-Admin ist (darf in alle Projekte verschieben). */
   platformAdmin?: boolean
-  /** Bulk-Aktion: die gewählten Karten archivieren (Anbindung erfolgt im Parent). */
-  onBulkArchive?: (cardIds: number[]) => void
-  /** Bulk-Aktion: die gewählten Karten auf ein anderes Board verschieben (Anbindung im Parent). */
-  onBulkTransfer?: (cardIds: number[]) => void
   /** Injizierbar für Tests. */
-  api?: Pick<CardsApi, 'create' | 'move' | 'archive' | 'restore' | 'remove'>
+  api?: Pick<
+    CardsApi,
+    'create' | 'move' | 'archive' | 'restore' | 'remove' | 'bulkArchive' | 'bulkTransfer'
+  >
   epicsApi?: Pick<EpicsApi, 'create'>
 }
 
@@ -96,8 +96,6 @@ export function BoardView({
   onCardsChanged,
   canTransfer = false,
   platformAdmin = false,
-  onBulkArchive,
-  onBulkTransfer,
   api = cardsApi,
   epicsApi = defaultEpicsApi,
 }: Props) {
@@ -109,6 +107,9 @@ export function BoardView({
   // Auswahlmodus für Bulk-Aktionen: blendet Checkboxen ein, Klick selektiert statt zu öffnen.
   const [selectionMode, setSelectionMode] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<number>>(() => new Set())
+  const [bulkArchiveConfirm, setBulkArchiveConfirm] = useState(false)
+  const [bulkTransferOpen, setBulkTransferOpen] = useState(false)
+  const [snackbar, setSnackbar] = useState<string | null>(null)
   const [epicFilter, setEpicFilter] = useState<number | null>(() => {
     try {
       const raw = localStorage.getItem(`manban.boardEpicFilter.${board.id}`)
@@ -259,10 +260,29 @@ export function BoardView({
       else next.add(cardId)
       return next
     })
-  // Bulk-Aktion auslösen: IDs an den Parent reichen und den Auswahlmodus verlassen.
-  const runBulk = (action?: (ids: number[]) => void) => {
-    action?.([...selectedIds])
+  // Bulk-Archivieren: nach Bestätigung optimistisch aus der Ansicht nehmen, bei Fehler zurückrollen.
+  const confirmBulkArchive = async () => {
+    const ids = [...selectedIds]
+    const previous = cards
+    setCards(previous.filter((c) => !selectedIds.has(c.id)))
+    setBulkArchiveConfirm(false)
     exitSelection()
+    try {
+      await api.bulkArchive(ids)
+      onCardsChanged?.()
+    } catch {
+      setCards(previous)
+      setSnackbar('Archivieren fehlgeschlagen.')
+    }
+  }
+
+  // Bulk-Verschieben: der Dialog erledigt den Transfer; danach die Karten aus der Ansicht nehmen.
+  const onBulkTransferred = (movedIds: number[]) => {
+    const moved = new Set(movedIds)
+    setCards((current) => current.filter((c) => !moved.has(c.id)))
+    setBulkTransferOpen(false)
+    exitSelection()
+    onCardsChanged?.()
   }
 
   return (
@@ -612,7 +632,7 @@ export function BoardView({
 
       {transferCard && (
         <TransferCardDialog
-          card={transferCard}
+          cardIds={[transferCard.id]}
           currentBoardId={board.id}
           platformAdmin={platformAdmin}
           onClose={() => setTransferCard(null)}
@@ -625,15 +645,52 @@ export function BoardView({
         />
       )}
 
+      {bulkTransferOpen && (
+        <TransferCardDialog
+          cardIds={[...selectedIds]}
+          currentBoardId={board.id}
+          platformAdmin={platformAdmin}
+          onClose={() => setBulkTransferOpen(false)}
+          onTransferred={() => onBulkTransferred([...selectedIds])}
+        />
+      )}
+
+      <Dialog open={bulkArchiveConfirm} onClose={() => setBulkArchiveConfirm(false)}>
+        <DialogTitle>Karten archivieren?</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            {selectedIds.size === 1
+              ? 'Die ausgewählte Karte wird archiviert.'
+              : `${selectedIds.size} Karten werden archiviert.`}{' '}
+            Sie verschwinden aus dem Board, bleiben aber erhalten und lassen sich einzeln
+            wiederherstellen.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setBulkArchiveConfirm(false)}>Abbrechen</Button>
+          <Button color="error" onClick={() => void confirmBulkArchive()}>
+            Archivieren
+          </Button>
+        </DialogActions>
+      </Dialog>
+
       {selectionMode && selectedIds.size > 0 && (
         <BulkActionBar
           count={selectedIds.size}
           canMove={canTransfer}
-          onArchive={() => runBulk(onBulkArchive)}
-          onMove={() => runBulk(onBulkTransfer)}
+          onArchive={() => setBulkArchiveConfirm(true)}
+          onMove={() => setBulkTransferOpen(true)}
           onCancel={exitSelection}
         />
       )}
+
+      <Snackbar
+        open={snackbar !== null}
+        autoHideDuration={5000}
+        onClose={() => setSnackbar(null)}
+        message={snackbar ?? ''}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      />
     </Box>
   )
 }
