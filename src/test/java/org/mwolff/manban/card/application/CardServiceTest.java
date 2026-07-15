@@ -686,6 +686,33 @@ class CardServiceTest {
   }
 
   @Test
+  void bulkDelete_softDeletesEveryCard() {
+    // Given
+    when(cards.findById(1L))
+        .thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
+    when(cards.findById(2L))
+        .thenReturn(Optional.of(card(2L, 20L, 2, false, null, CardType.CARD, null, null)));
+
+    // When
+    service.bulkDelete(9L, List.of(1L, 2L));
+
+    // Then
+    verify(cards).softDelete(1L, FIXED);
+    verify(cards).softDelete(2L, FIXED);
+  }
+
+  @Test
+  void bulkDelete_propagatesAndDeletesNoneWhenOneCardUnknown() {
+    // Given: erste ID unbekannt -> Fehler vor jeglichem Soft-Delete (Rollback im echten Betrieb)
+    when(cards.findById(2L)).thenReturn(Optional.empty());
+
+    // When / Then
+    assertThatThrownBy(() -> service.bulkDelete(9L, List.of(2L, 1L)))
+        .isInstanceOf(CardNotFoundException.class);
+    verify(cards, never()).softDelete(anyLong(), org.mockito.ArgumentMatchers.any());
+  }
+
+  @Test
   void delete_epicUnassignsChildrenBeforeSoftDelete() {
     when(cards.findById(5L))
         .thenReturn(Optional.of(card(5L, 20L, 5, false, null, CardType.EPIC, null, "E")));

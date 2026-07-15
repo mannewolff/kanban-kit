@@ -223,6 +223,18 @@ class CardControllerTest {
   }
 
   @Test
+  void bulkDelete_delegatesToService() {
+    // Given
+    var request = new CardController.BulkDeleteRequest(List.of(8L, 9L));
+
+    // When
+    controller.bulkDelete(3L, request);
+
+    // Then
+    verify(service).bulkDelete(3L, List.of(8L, 9L));
+  }
+
+  @Test
   void transfer_delegatesToService() {
     // Given
     CardView view = card();

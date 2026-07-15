@@ -148,6 +148,14 @@ class CardController {
     cards.delete(userId, cardId);
   }
 
+  /** Verschiebt mehrere Karten in einer Transaktion in den Papierkorb (alles-oder-nichts). */
+  @PostMapping("/api/cards/bulk-delete")
+  @ResponseStatus(HttpStatus.NO_CONTENT)
+  void bulkDelete(
+      @AuthenticationPrincipal Long userId, @Valid @RequestBody BulkDeleteRequest request) {
+    cards.bulkDelete(userId, request.cardIds());
+  }
+
   /** Papierkorb eines Boards. */
   @GetMapping("/api/boards/{boardId}/trash")
   List<CardView> trash(@AuthenticationPrincipal Long userId, @PathVariable long boardId) {
@@ -222,6 +230,8 @@ class CardController {
   record TransferCardRequest(@NotNull Long targetBoardId, @NotNull Long targetColumnId) {}
 
   record BulkArchiveRequest(@NotEmpty @Size(max = 200) List<Long> cardIds) {}
+
+  record BulkDeleteRequest(@NotEmpty @Size(max = 200) List<Long> cardIds) {}
 
   record BulkTransferRequest(
       @NotEmpty @Size(max = 200) List<Long> cardIds,

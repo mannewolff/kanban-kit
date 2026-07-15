@@ -450,6 +450,17 @@ public class CardService {
   }
 
   /**
+   * Verschiebt mehrere Karten in einer Transaktion in den Papierkorb (alles-oder-nichts). Nutzt je
+   * Karte die Einzel-Logik von {@link #delete(long, long)} inklusive Rechteprüfung und Lösen der
+   * Epic-Kinder; fehlt an einer Karte das Recht oder existiert sie nicht, rollt der gesamte Batch
+   * zurück.
+   */
+  @Transactional
+  public void bulkDelete(long userId, List<Long> cardIds) {
+    cardIds.forEach(cardId -> delete(userId, cardId));
+  }
+
+  /**
    * Holt eine Karte aus dem Papierkorb zurück (ans Spaltenende). Recht wie Löschen (Member und
    * aufwärts) — so kann ein Member eine versehentlich gelöschte Karte selbst wiederherstellen.
    */

@@ -461,6 +461,94 @@ class CardIT extends AbstractIntegrationTest {
   }
 
   @Test
+  void bulkDeleteMovesEveryCardToTrash() throws Exception {
+    Cookie alice = loginAs("bulk-del-owner@example.com");
+    long projectId = createProject("bulk-del-owner@example.com", "BulkDel");
+    JsonNode board = createBoard(alice, projectId);
+    long boardId = board.get("id").asLong();
+    long columnId = board.get("columns").get(0).get("id").asLong();
+    long c1 = createCard(alice, boardId, columnId, "Eins", null).get("id").asLong();
+    long c2 = createCard(alice, boardId, columnId, "Zwei", null).get("id").asLong();
+
+    mvc.perform(
+            post("/api/cards/bulk-delete")
+                .cookie(alice)
+                .contentType("application/json")
+                .content("{\"cardIds\":[%d,%d]}".formatted(c1, c2)))
+        .andExpect(status().isNoContent());
+
+    // Aktive Liste leer, beide Karten im Papierkorb.
+    mvc.perform(
+            org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get(
+                    "/api/boards/" + boardId + "/cards")
+                .cookie(alice))
+        .andExpect(jsonPath("$.length()").value(0));
+    mvc.perform(
+            org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get(
+                    "/api/boards/" + boardId + "/trash")
+                .cookie(alice))
+        .andExpect(jsonPath("$.length()").value(2));
+  }
+
+  @Test
+  void bulkDeleteRollsBackWhenPermissionMissingOnOneCard() throws Exception {
+    Cookie alice = loginAs("bulk-del-rb-owner@example.com");
+    Cookie bob = loginAs("bulk-del-rb-bob@example.com");
+    long p1 = createProject("bulk-del-rb-owner@example.com", "BulkDelRb1");
+    long p2 = createProject("bulk-del-rb-bob@example.com", "BulkDelRb2");
+    JsonNode boardA = createBoard(alice, p1);
+    JsonNode boardB = createBoard(bob, p2);
+    long boardIdA = boardA.get("id").asLong();
+    long colA = boardA.get("columns").get(0).get("id").asLong();
+    long boardIdB = boardB.get("id").asLong();
+    long colB = boardB.get("columns").get(0).get("id").asLong();
+    long ownCard = createCard(alice, boardIdA, colA, "Meine", null).get("id").asLong();
+    long foreignCard = createCard(bob, boardIdB, colB, "Fremde", null).get("id").asLong();
+    // alice ist in bobs Projekt nur VIEWER -> kein TICKET_DELETE.
+    memberships.save(
+        new ProjectMembership(
+            null, p2, userId("bulk-del-rb-owner@example.com"), ProjectRole.VIEWER, Instant.now()));
+
+    mvc.perform(
+            post("/api/cards/bulk-delete")
+                .cookie(alice)
+                .contentType("application/json")
+                .content("{\"cardIds\":[%d,%d]}".formatted(ownCard, foreignCard)))
+        .andExpect(status().isForbidden());
+
+    // Rollback: alices eigene Karte ist weiterhin aktiv (nicht im Papierkorb).
+    mvc.perform(
+            org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get(
+                    "/api/boards/" + boardIdA + "/cards")
+                .cookie(alice))
+        .andExpect(jsonPath("$.length()").value(1))
+        .andExpect(jsonPath("$[0].archived").value(false));
+  }
+
+  @Test
+  void bulkDeleteRejectsEmptyAndOversizedList() throws Exception {
+    Cookie alice = loginAs("bulk-del-val-owner@example.com");
+
+    mvc.perform(
+            post("/api/cards/bulk-delete")
+                .cookie(alice)
+                .contentType("application/json")
+                .content("{\"cardIds\":[]}"))
+        .andExpect(status().isBadRequest());
+
+    String tooMany =
+        java.util.stream.IntStream.rangeClosed(1, 201)
+            .mapToObj(Integer::toString)
+            .collect(java.util.stream.Collectors.joining(","));
+    mvc.perform(
+            post("/api/cards/bulk-delete")
+                .cookie(alice)
+                .contentType("application/json")
+                .content("{\"cardIds\":[%s]}".formatted(tooMany)))
+        .andExpect(status().isBadRequest());
+  }
+
+  @Test
   void updateAndDelete() throws Exception {
     Cookie alice = loginAs("ud-owner@example.com");
     long projectId = createProject("ud-owner@example.com", "UD");
