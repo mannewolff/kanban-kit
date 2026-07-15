@@ -298,4 +298,78 @@ describe('BoardView', () => {
     expect(screen.getByLabelText('Zuständige Aufgabe')).toBeInTheDocument()
     expect(screen.getByText('MM')).toBeInTheDocument()
   })
+
+  it('blendet im Auswahlmodus Checkboxen ein und selektiert per Klick', () => {
+    render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} />)
+
+    // Vor dem Auswahlmodus keine Checkbox.
+    expect(screen.queryByLabelText('Karte Aufgabe auswählen')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Auswählen' }))
+    expect(screen.getByLabelText('Karte Aufgabe auswählen')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByTestId('card-100'))
+    expect(screen.getByText('1 ausgewählt')).toBeInTheDocument()
+
+    // Erneuter Klick hebt die Auswahl auf -> Aktionsleiste verschwindet.
+    fireEvent.click(screen.getByTestId('card-100'))
+    expect(screen.queryByText('1 ausgewählt')).not.toBeInTheDocument()
+  })
+
+  it('öffnet im Auswahlmodus nicht das Detail beim Klick auf die Karte', () => {
+    const onCardClick = vi.fn()
+    render(
+      <BoardView board={board} initialCards={[card]} canEdit api={mkApi()} onCardClick={onCardClick} />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Auswählen' }))
+    fireEvent.click(screen.getByTestId('card-100'))
+
+    expect(onCardClick).not.toHaveBeenCalled()
+  })
+
+  it('reicht die ausgewählten IDs an onBulkArchive und verlässt den Modus', () => {
+    const onBulkArchive = vi.fn()
+    render(
+      <BoardView board={board} initialCards={[card]} canEdit api={mkApi()} onBulkArchive={onBulkArchive} />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Auswählen' }))
+    fireEvent.click(screen.getByTestId('card-100'))
+    fireEvent.click(screen.getByRole('button', { name: 'Archivieren' }))
+
+    expect(onBulkArchive).toHaveBeenCalledWith([100])
+    expect(screen.queryByText('1 ausgewählt')).not.toBeInTheDocument()
+  })
+
+  it('bietet Verschieben nur mit Transfer-Recht und reicht IDs an onBulkTransfer', () => {
+    const onBulkTransfer = vi.fn()
+    render(
+      <BoardView
+        board={board}
+        initialCards={[card]}
+        canEdit
+        canTransfer
+        api={mkApi()}
+        onBulkTransfer={onBulkTransfer}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Auswählen' }))
+    fireEvent.click(screen.getByTestId('card-100'))
+    fireEvent.click(screen.getByRole('button', { name: 'Verschieben' }))
+
+    expect(onBulkTransfer).toHaveBeenCalledWith([100])
+  })
+
+  it('leert die Auswahl beim Abbrechen', () => {
+    render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Auswählen' }))
+    fireEvent.click(screen.getByTestId('card-100'))
+    fireEvent.click(screen.getByRole('button', { name: 'Abbrechen' }))
+
+    expect(screen.queryByLabelText('Karte Aufgabe auswählen')).not.toBeInTheDocument()
+    expect(screen.queryByText('1 ausgewählt')).not.toBeInTheDocument()
+  })
 })

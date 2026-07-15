@@ -7,6 +7,7 @@ import Avatar from '@mui/material/Avatar'
 import AvatarGroup from '@mui/material/AvatarGroup'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
+import Checkbox from '@mui/material/Checkbox'
 import Chip from '@mui/material/Chip'
 import Dialog from '@mui/material/Dialog'
 import DialogActions from '@mui/material/DialogActions'
@@ -34,6 +35,7 @@ import type { Label } from '../api/labels'
 import { formatDueDate, isOverdue } from '../lib/dueDate'
 import { epicColor, epicShortcode } from '../lib/epicMeta'
 import { COLUMN_SURFACE_BG, statusColors } from '../lib/statusColors'
+import { BulkActionBar } from './BulkActionBar'
 import { EpicBadge } from './EpicBadge'
 import { NewCardModal, type NewCardInitialValues, type NewItemInput } from './NewCardModal'
 import { TransferCardDialog } from './TransferCardDialog'
@@ -66,6 +68,10 @@ interface Props {
   canTransfer?: boolean
   /** Ob der Nutzer Plattform-Admin ist (darf in alle Projekte verschieben). */
   platformAdmin?: boolean
+  /** Bulk-Aktion: die gewählten Karten archivieren (Anbindung erfolgt im Parent). */
+  onBulkArchive?: (cardIds: number[]) => void
+  /** Bulk-Aktion: die gewählten Karten auf ein anderes Board verschieben (Anbindung im Parent). */
+  onBulkTransfer?: (cardIds: number[]) => void
   /** Injizierbar für Tests. */
   api?: Pick<CardsApi, 'create' | 'move' | 'archive' | 'restore' | 'remove'>
   epicsApi?: Pick<EpicsApi, 'create'>
@@ -90,6 +96,8 @@ export function BoardView({
   onCardsChanged,
   canTransfer = false,
   platformAdmin = false,
+  onBulkArchive,
+  onBulkTransfer,
   api = cardsApi,
   epicsApi = defaultEpicsApi,
 }: Props) {
@@ -98,6 +106,9 @@ export function BoardView({
   const [duplicateValues, setDuplicateValues] = useState<NewCardInitialValues | null>(null)
   const [menu, setMenu] = useState<{ card: Card; anchor: HTMLElement } | null>(null)
   const [transferCard, setTransferCard] = useState<Card | null>(null)
+  // Auswahlmodus für Bulk-Aktionen: blendet Checkboxen ein, Klick selektiert statt zu öffnen.
+  const [selectionMode, setSelectionMode] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(() => new Set())
   const [epicFilter, setEpicFilter] = useState<number | null>(() => {
     try {
       const raw = localStorage.getItem(`manban.boardEpicFilter.${board.id}`)
@@ -236,6 +247,24 @@ export function BoardView({
 
   const closeMenu = () => setMenu(null)
 
+  const exitSelection = () => {
+    setSelectionMode(false)
+    setSelectedIds(new Set())
+  }
+  const toggleSelectionMode = () => (selectionMode ? exitSelection() : setSelectionMode(true))
+  const toggleSelect = (cardId: number) =>
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(cardId)) next.delete(cardId)
+      else next.add(cardId)
+      return next
+    })
+  // Bulk-Aktion auslösen: IDs an den Parent reichen und den Auswahlmodus verlassen.
+  const runBulk = (action?: (ids: number[]) => void) => {
+    action?.([...selectedIds])
+    exitSelection()
+  }
+
   return (
     <Box>
       {(epics.length > 0 || (canEdit && columns.length > 0)) && (
@@ -261,6 +290,11 @@ export function BoardView({
             </TextField>
           )}
           <Box sx={{ flexGrow: 1 }} />
+          {canEdit && columns.length > 0 && (
+            <Button size="small" onClick={toggleSelectionMode}>
+              {selectionMode ? 'Auswahl beenden' : 'Auswählen'}
+            </Button>
+          )}
           {canEdit && columns.length > 0 && (
             <Button
               variant="contained"
@@ -363,25 +397,26 @@ export function BoardView({
                   const epic = card.parentId != null ? epicById.get(card.parentId) : undefined
                   const doneAt = done ? card.movedToDoneAt : null
                   const overdue = isOverdue(card.dueDate, done)
+                  const selected = selectedIds.has(card.id)
                   return (
                     <Paper
                       key={card.id}
                       data-testid={`card-${card.id}`}
-                      draggable={canEdit}
+                      draggable={canEdit && !selectionMode}
                       onDragStart={(e) => e.dataTransfer.setData('text/plain', String(card.id))}
-                      onClick={() => onCardClick?.(card)}
+                      onClick={() => (selectionMode ? toggleSelect(card.id) : onCardClick?.(card))}
                       elevation={0}
                       sx={{
                         p: 1.25,
                         borderRadius: 1.5,
-                        bgcolor: 'background.paper',
+                        bgcolor: selected ? 'action.selected' : 'background.paper',
                         border: 1,
-                        borderColor: 'divider',
+                        borderColor: selected ? 'primary.main' : 'divider',
                         borderLeft: epic ? `4px solid ${epicColor(epic.id)}` : undefined,
-                        cursor: canEdit ? 'grab' : 'pointer',
+                        cursor: selectionMode ? 'pointer' : canEdit ? 'grab' : 'pointer',
                         transition: 'border-color .15s',
                         '&:hover': { borderColor: 'primary.light' },
-                        '&:active': { cursor: canEdit ? 'grabbing' : 'pointer' },
+                        '&:active': { cursor: selectionMode ? 'pointer' : canEdit ? 'grabbing' : 'pointer' },
                       }}
                     >
                       {epic && <EpicBadge epicId={epic.id} title={epic.title} shortcode={epic.shortcode} sx={{ mb: 0.5 }} />}
@@ -401,11 +436,21 @@ export function BoardView({
                         </Stack>
                       )}
                       <Stack direction="row" alignItems="flex-start" spacing={0.5}>
+                        {selectionMode && (
+                          <Checkbox
+                            size="small"
+                            checked={selected}
+                            onChange={() => toggleSelect(card.id)}
+                            onClick={(e) => e.stopPropagation()}
+                            inputProps={{ 'aria-label': `Karte ${card.title} auswählen` }}
+                            sx={{ p: 0, mt: 0.25 }}
+                          />
+                        )}
                         <Typography variant="body2" sx={{ flex: 1, minWidth: 0 }}>
                           <Box component="span" sx={{ color: 'text.secondary' }}>#{card.number} – </Box>
                           <Box component="span" sx={{ fontWeight: 600 }}>{card.title}</Box>
                         </Typography>
-                        {canEdit && (
+                        {canEdit && !selectionMode && (
                           <IconButton
                             size="small"
                             aria-label={`Menü ${card.title}`}
@@ -577,6 +622,16 @@ export function BoardView({
             setCards((current) => current.filter((x) => x.id !== c.id))
             onCardsChanged?.()
           }}
+        />
+      )}
+
+      {selectionMode && selectedIds.size > 0 && (
+        <BulkActionBar
+          count={selectedIds.size}
+          canMove={canTransfer}
+          onArchive={() => runBulk(onBulkArchive)}
+          onMove={() => runBulk(onBulkTransfer)}
+          onCancel={exitSelection}
         />
       )}
     </Box>
