@@ -381,12 +381,38 @@ public class CardService {
     return view(cards.save(moved.withParent(null).withMovedToDoneAt(null)));
   }
 
+  /**
+   * Verschiebt mehrere Karten in einer Transaktion auf dasselbe Zielboard und dieselbe Zielspalte
+   * (alles-oder-nichts). Nutzt je Karte die Einzel-Logik von {@link #transfer(long, long, long,
+   * long)} inklusive Owner-Prüfung in Quell- und Zielprojekt sowie Epic-Ausschluss; scheitert eine
+   * Karte, rollt der gesamte Batch zurück. Die Karten landen in Eingabereihenfolge am Ende der
+   * Zielspalte, jede Quellspalte wird dabei lückenlos nachgezogen.
+   */
+  @Transactional
+  public List<CardView> bulkTransfer(
+      long userId, List<Long> cardIds, long targetBoardId, long targetColumnId) {
+    return cardIds.stream()
+        .map(cardId -> transfer(userId, cardId, targetBoardId, targetColumnId))
+        .toList();
+  }
+
   @Transactional
   public CardView archive(long userId, long cardId) {
     Card card = requireCardOp(userId, cardId, Permission.TICKET_DELETE, Permission.EPIC_DELETE);
     activity.add(
         card.requireId(), userId, CardActivityType.ARCHIVED, "Archiviert", clock.instant());
     return view(cards.save(card.asArchived()));
+  }
+
+  /**
+   * Archiviert mehrere Karten in einer Transaktion (alles-oder-nichts). Nutzt je Karte die
+   * Einzel-Logik von {@link #archive(long, long)} inklusive Rechteprüfung; fehlt an einer Karte das
+   * Recht oder existiert sie nicht, rollt der gesamte Batch zurück. Kein Positions-Reindex nötig,
+   * da archivierte Karten über {@code active_position = NULL} aus dem Namespace fallen.
+   */
+  @Transactional
+  public List<CardView> bulkArchive(long userId, List<Long> cardIds) {
+    return cardIds.stream().map(cardId -> archive(userId, cardId)).toList();
   }
 
   @Transactional
@@ -421,6 +447,17 @@ public class CardService {
           .forEach(child -> cards.save(child.withParent(null)));
     }
     cards.softDelete(card.requireId(), clock.instant());
+  }
+
+  /**
+   * Verschiebt mehrere Karten in einer Transaktion in den Papierkorb (alles-oder-nichts). Nutzt je
+   * Karte die Einzel-Logik von {@link #delete(long, long)} inklusive Rechteprüfung und Lösen der
+   * Epic-Kinder; fehlt an einer Karte das Recht oder existiert sie nicht, rollt der gesamte Batch
+   * zurück.
+   */
+  @Transactional
+  public void bulkDelete(long userId, List<Long> cardIds) {
+    cardIds.forEach(cardId -> delete(userId, cardId));
   }
 
   /**

@@ -10,6 +10,7 @@ import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -685,6 +686,33 @@ class CardServiceTest {
   }
 
   @Test
+  void bulkDelete_softDeletesEveryCard() {
+    // Given
+    when(cards.findById(1L))
+        .thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
+    when(cards.findById(2L))
+        .thenReturn(Optional.of(card(2L, 20L, 2, false, null, CardType.CARD, null, null)));
+
+    // When
+    service.bulkDelete(9L, List.of(1L, 2L));
+
+    // Then
+    verify(cards).softDelete(1L, FIXED);
+    verify(cards).softDelete(2L, FIXED);
+  }
+
+  @Test
+  void bulkDelete_propagatesAndDeletesNoneWhenOneCardUnknown() {
+    // Given: erste ID unbekannt -> Fehler vor jeglichem Soft-Delete (Rollback im echten Betrieb)
+    when(cards.findById(2L)).thenReturn(Optional.empty());
+
+    // When / Then
+    assertThatThrownBy(() -> service.bulkDelete(9L, List.of(2L, 1L)))
+        .isInstanceOf(CardNotFoundException.class);
+    verify(cards, never()).softDelete(anyLong(), org.mockito.ArgumentMatchers.any());
+  }
+
+  @Test
   void delete_epicUnassignsChildrenBeforeSoftDelete() {
     when(cards.findById(5L))
         .thenReturn(Optional.of(card(5L, 20L, 5, false, null, CardType.EPIC, null, "E")));
@@ -1023,6 +1051,35 @@ class CardServiceTest {
     assertThat(view.archived()).isFalse();
   }
 
+  @Test
+  void bulkArchive_archivesEveryCardAndReturnsViews() {
+    // Given
+    when(cards.findById(1L))
+        .thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
+    when(cards.findById(2L))
+        .thenReturn(Optional.of(card(2L, 20L, 2, false, null, CardType.CARD, null, null)));
+
+    // When
+    List<CardService.CardView> result = service.bulkArchive(9L, List.of(1L, 2L));
+
+    // Then
+    assertThat(result).hasSize(2).allMatch(CardService.CardView::archived);
+    ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
+    verify(cards, times(2)).save(captor.capture());
+    assertThat(captor.getAllValues()).allMatch(Card::archived);
+  }
+
+  @Test
+  void bulkArchive_propagatesAndStopsWhenOneCardUnknown() {
+    // Given: erste ID unbekannt -> Fehler vor jeglicher Speicherung (Rollback im echten Betrieb)
+    when(cards.findById(2L)).thenReturn(Optional.empty());
+
+    // When / Then
+    assertThatThrownBy(() -> service.bulkArchive(9L, List.of(2L, 1L)))
+        .isInstanceOf(CardNotFoundException.class);
+    verify(cards, never()).save(org.mockito.ArgumentMatchers.any(Card.class));
+  }
+
   // --- Papierkorb (Soft-Delete) -----------------------------------------
 
   @Test
@@ -1149,6 +1206,39 @@ class CardServiceTest {
     // When / Then
     assertThatThrownBy(() -> service.transfer(1L, 100L, 20L, 60L))
         .isInstanceOf(CardNotFoundException.class);
+  }
+
+  @Test
+  void bulkTransfer_transfersEveryCardToTarget() {
+    // Given: zwei Karten, gemeinsames Zielboard/-spalte
+    when(cards.findById(100L))
+        .thenReturn(Optional.of(card(100L, 50L, 3, false, FIXED, CardType.CARD, null, null)));
+    when(cards.findById(101L))
+        .thenReturn(Optional.of(card(101L, 50L, 4, false, FIXED, CardType.CARD, null, null)));
+    when(boards.findById(20L)).thenReturn(Optional.of(new Board(20L, 2L, "Ziel", FIXED)));
+    when(columns.findById(60L))
+        .thenReturn(Optional.of(new BoardColumn(60L, 20L, "Backlog", 0, null)));
+    when(cards.maxNumberInBoard(20L)).thenReturn(7);
+
+    // When
+    List<CardService.CardView> result = service.bulkTransfer(1L, List.of(100L, 101L), 20L, 60L);
+
+    // Then — die Views je Karte werden zurückgegeben (nicht null)
+    assertThat(result).extracting(CardService.CardView::id).containsExactly(100L, 101L);
+    verify(cards).transfer(100L, 20L, 60L, 8);
+    verify(cards).transfer(101L, 20L, 60L, 8);
+  }
+
+  @Test
+  void bulkTransfer_propagatesAndTransfersNoneWhenOneIsEpic() {
+    // Given: erste Karte ein Epic -> Abbruch vor jeglichem Transfer (Rollback im echten Betrieb)
+    when(cards.findById(100L))
+        .thenReturn(Optional.of(card(100L, 50L, 3, false, null, CardType.EPIC, null, "EP")));
+
+    // When / Then
+    assertThatThrownBy(() -> service.bulkTransfer(1L, List.of(100L, 101L), 20L, 60L))
+        .isInstanceOf(InvalidDependencyException.class);
+    verify(cards, never()).transfer(anyLong(), anyLong(), anyLong(), anyInt());
   }
 
   @Test

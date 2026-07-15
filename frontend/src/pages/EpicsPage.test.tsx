@@ -39,6 +39,12 @@ describe('EpicsPage', () => {
     mProjects.list.mockResolvedValue([{ id: 9, name: 'Projekt', role: 'OWNER', createdAt: '' }])
   })
 
+  it('zeigt den Breadcrumb-Pfad ab Projekte', async () => {
+    mEpics.list.mockResolvedValue([])
+    renderPage()
+    expect(await screen.findByRole('link', { name: 'Projekte' })).toHaveAttribute('href', '/')
+  })
+
   it('listet Epics mit Kürzel und Fortschritt', async () => {
     mEpics.list.mockResolvedValue([
       { id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 1, total: 2 },

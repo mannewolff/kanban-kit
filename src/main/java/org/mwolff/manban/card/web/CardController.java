@@ -2,6 +2,7 @@ package org.mwolff.manban.card.web;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import java.time.Instant;
@@ -115,9 +116,24 @@ class CardController {
     return cards.transfer(userId, cardId, request.targetBoardId(), request.targetColumnId());
   }
 
+  /** Verschiebt mehrere Karten in einer Transaktion auf ein anderes Board (alles-oder-nichts). */
+  @PostMapping("/api/cards/bulk-transfer")
+  List<CardView> bulkTransfer(
+      @AuthenticationPrincipal Long userId, @Valid @RequestBody BulkTransferRequest request) {
+    return cards.bulkTransfer(
+        userId, request.cardIds(), request.targetBoardId(), request.targetColumnId());
+  }
+
   @PostMapping("/api/cards/{cardId}/archive")
   CardView archive(@AuthenticationPrincipal Long userId, @PathVariable long cardId) {
     return cards.archive(userId, cardId);
+  }
+
+  /** Archiviert mehrere Karten in einer Transaktion (alles-oder-nichts). */
+  @PostMapping("/api/cards/bulk-archive")
+  List<CardView> bulkArchive(
+      @AuthenticationPrincipal Long userId, @Valid @RequestBody BulkArchiveRequest request) {
+    return cards.bulkArchive(userId, request.cardIds());
   }
 
   @PostMapping("/api/cards/{cardId}/restore")
@@ -130,6 +146,14 @@ class CardController {
   @ResponseStatus(HttpStatus.NO_CONTENT)
   void delete(@AuthenticationPrincipal Long userId, @PathVariable long cardId) {
     cards.delete(userId, cardId);
+  }
+
+  /** Verschiebt mehrere Karten in einer Transaktion in den Papierkorb (alles-oder-nichts). */
+  @PostMapping("/api/cards/bulk-delete")
+  @ResponseStatus(HttpStatus.NO_CONTENT)
+  void bulkDelete(
+      @AuthenticationPrincipal Long userId, @Valid @RequestBody BulkDeleteRequest request) {
+    cards.bulkDelete(userId, request.cardIds());
   }
 
   /** Papierkorb eines Boards. */
@@ -204,6 +228,15 @@ class CardController {
       @NotNull Long columnId, @jakarta.validation.constraints.PositiveOrZero int position) {}
 
   record TransferCardRequest(@NotNull Long targetBoardId, @NotNull Long targetColumnId) {}
+
+  record BulkArchiveRequest(@NotEmpty @Size(max = 200) List<Long> cardIds) {}
+
+  record BulkDeleteRequest(@NotEmpty @Size(max = 200) List<Long> cardIds) {}
+
+  record BulkTransferRequest(
+      @NotEmpty @Size(max = 200) List<Long> cardIds,
+      @NotNull Long targetBoardId,
+      @NotNull Long targetColumnId) {}
 
   record AssigneesRequest(@Nullable List<Long> assignees) {}
 

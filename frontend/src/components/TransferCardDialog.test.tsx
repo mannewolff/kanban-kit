@@ -7,11 +7,11 @@ import { TransferCardDialog } from './TransferCardDialog'
 
 vi.mock('../api/projects', () => ({ projectsApi: { list: vi.fn() } }))
 vi.mock('../api/boards', () => ({ boardsApi: { list: vi.fn() } }))
-vi.mock('../api/cards', () => ({ cardsApi: { transfer: vi.fn() } }))
+vi.mock('../api/cards', () => ({ cardsApi: { bulkTransfer: vi.fn() } }))
 
 const mockedProjects = projectsApi as unknown as { list: ReturnType<typeof vi.fn> }
 const mockedBoards = boardsApi as unknown as { list: ReturnType<typeof vi.fn> }
-const mockedCards = cardsApi as unknown as { transfer: ReturnType<typeof vi.fn> }
+const mockedCards = cardsApi as unknown as { bulkTransfer: ReturnType<typeof vi.fn> }
 
 const card: Card = {
   id: 7, boardId: 99, columnId: 1, number: 3, title: 'Karte', description: null,
@@ -22,7 +22,7 @@ const card: Card = {
 function renderDialog(platformAdmin = false) {
   return render(
     <TransferCardDialog
-      card={card}
+      cardIds={[card.id]}
       currentBoardId={99}
       platformAdmin={platformAdmin}
       onClose={vi.fn()}
@@ -50,7 +50,7 @@ describe('TransferCardDialog', () => {
     renderDialog(false)
     expect(await screen.findByRole('option', { name: 'Eigenes' })).toBeInTheDocument()
     expect(screen.queryByRole('option', { name: 'Fremdes' })).not.toBeInTheDocument()
-    expect(screen.getByText(/Epic-Zuordnung und die\s+Abhängigkeiten/)).toBeInTheDocument()
+    expect(screen.getByText(/Epic-Zuordnung und Abhängigkeiten/)).toBeInTheDocument()
   })
 
   it('zeigt einem Plattform-Admin alle Projekte', async () => {
@@ -60,11 +60,11 @@ describe('TransferCardDialog', () => {
   })
 
   it('verschiebt nach Auswahl von Projekt, Board und Spalte (aktuelles Board ausgeschlossen)', async () => {
-    mockedCards.transfer.mockResolvedValue({ ...card, boardId: 10 })
+    mockedCards.bulkTransfer.mockResolvedValue([{ ...card, boardId: 10 }])
     const onTransferred = vi.fn()
     render(
       <TransferCardDialog
-        card={card}
+        cardIds={[card.id]}
         currentBoardId={99}
         platformAdmin={false}
         onClose={vi.fn()}
@@ -81,7 +81,7 @@ describe('TransferCardDialog', () => {
     fireEvent.change(await screen.findByLabelText('Zielspalte'), { target: { value: '100' } })
     fireEvent.click(screen.getByRole('button', { name: 'Verschieben' }))
 
-    await waitFor(() => expect(mockedCards.transfer).toHaveBeenCalledWith(7, 10, 100))
+    await waitFor(() => expect(mockedCards.bulkTransfer).toHaveBeenCalledWith([7], 10, 100))
     expect(onTransferred).toHaveBeenCalled()
   })
 })

@@ -130,6 +130,22 @@ class CardIT extends AbstractIntegrationTest {
     return json.readTree(body);
   }
 
+  private long createEpic(Cookie session, long boardId, String shortcode) throws Exception {
+    String body =
+        mvc.perform(
+                post("/api/boards/" + boardId + "/cards")
+                    .cookie(session)
+                    .contentType("application/json")
+                    .content(
+                        "{\"title\":\"Epic\",\"type\":\"EPIC\",\"shortcode\":\"%s\"}"
+                            .formatted(shortcode)))
+            .andExpect(status().isCreated())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+    return json.readTree(body).get("id").asLong();
+  }
+
   @Test
   void cardNumbersAreSequentialAndBoardScoped() throws Exception {
     Cookie alice = loginAs("card-owner@example.com");
@@ -205,6 +221,331 @@ class CardIT extends AbstractIntegrationTest {
     mvc.perform(post("/api/cards/" + cardId + "/restore").cookie(alice))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.archived").value(false));
+  }
+
+  @Test
+  void bulkArchiveArchivesEveryCardAndEpic() throws Exception {
+    Cookie alice = loginAs("bulk-arch-owner@example.com");
+    long projectId = createProject("bulk-arch-owner@example.com", "BulkArch");
+    JsonNode board = createBoard(alice, projectId);
+    long boardId = board.get("id").asLong();
+    long columnId = board.get("columns").get(0).get("id").asLong();
+    long c1 = createCard(alice, boardId, columnId, "Eins", null).get("id").asLong();
+    long c2 = createCard(alice, boardId, columnId, "Zwei", null).get("id").asLong();
+    String epicBody =
+        mvc.perform(
+                post("/api/boards/" + boardId + "/cards")
+                    .cookie(alice)
+                    .contentType("application/json")
+                    .content("{\"title\":\"Epic\",\"type\":\"EPIC\",\"shortcode\":\"EP\"}"))
+            .andExpect(status().isCreated())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+    long epicId = json.readTree(epicBody).get("id").asLong();
+
+    mvc.perform(
+            post("/api/cards/bulk-archive")
+                .cookie(alice)
+                .contentType("application/json")
+                .content("{\"cardIds\":[%d,%d,%d]}".formatted(c1, c2, epicId)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.length()").value(3))
+        .andExpect(jsonPath("$[0].archived").value(true))
+        .andExpect(jsonPath("$[1].archived").value(true))
+        .andExpect(jsonPath("$[2].archived").value(true)); // die Epic (3. in der Liste)
+
+    // Persistenz: die Karten bleiben in der (client-seitig gefilterten) Board-Liste, aber
+    // archiviert.
+    mvc.perform(
+            org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get(
+                    "/api/boards/" + boardId + "/cards")
+                .cookie(alice))
+        .andExpect(jsonPath("$.length()").value(2))
+        .andExpect(jsonPath("$[0].archived").value(true))
+        .andExpect(jsonPath("$[1].archived").value(true));
+  }
+
+  @Test
+  void bulkArchiveRollsBackWhenPermissionMissingOnOneCard() throws Exception {
+    Cookie alice = loginAs("bulk-rb-owner@example.com");
+    Cookie bob = loginAs("bulk-rb-bob@example.com");
+    long p1 = createProject("bulk-rb-owner@example.com", "BulkRb1");
+    long p2 = createProject("bulk-rb-bob@example.com", "BulkRb2");
+    JsonNode boardA = createBoard(alice, p1);
+    JsonNode boardB = createBoard(bob, p2);
+    long boardIdA = boardA.get("id").asLong();
+    long colA = boardA.get("columns").get(0).get("id").asLong();
+    long boardIdB = boardB.get("id").asLong();
+    long colB = boardB.get("columns").get(0).get("id").asLong();
+    long ownCard = createCard(alice, boardIdA, colA, "Meine", null).get("id").asLong();
+    long foreignCard = createCard(bob, boardIdB, colB, "Fremde", null).get("id").asLong();
+    // alice ist in bobs Projekt nur VIEWER -> kein TICKET_DELETE.
+    memberships.save(
+        new ProjectMembership(
+            null, p2, userId("bulk-rb-owner@example.com"), ProjectRole.VIEWER, Instant.now()));
+
+    mvc.perform(
+            post("/api/cards/bulk-archive")
+                .cookie(alice)
+                .contentType("application/json")
+                .content("{\"cardIds\":[%d,%d]}".formatted(ownCard, foreignCard)))
+        .andExpect(status().isForbidden());
+
+    // Rollback: alices eigene Karte ist weiterhin aktiv (nicht archiviert).
+    mvc.perform(
+            org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get(
+                    "/api/boards/" + boardIdA + "/cards")
+                .cookie(alice))
+        .andExpect(jsonPath("$.length()").value(1))
+        .andExpect(jsonPath("$[0].archived").value(false));
+  }
+
+  @Test
+  void bulkArchiveRejectsEmptyAndOversizedList() throws Exception {
+    Cookie alice = loginAs("bulk-val-owner@example.com");
+
+    mvc.perform(
+            post("/api/cards/bulk-archive")
+                .cookie(alice)
+                .contentType("application/json")
+                .content("{\"cardIds\":[]}"))
+        .andExpect(status().isBadRequest());
+
+    String tooMany =
+        java.util.stream.IntStream.rangeClosed(1, 201)
+            .mapToObj(Integer::toString)
+            .collect(java.util.stream.Collectors.joining(","));
+    mvc.perform(
+            post("/api/cards/bulk-archive")
+                .cookie(alice)
+                .contentType("application/json")
+                .content("{\"cardIds\":[%s]}".formatted(tooMany)))
+        .andExpect(status().isBadRequest());
+  }
+
+  @Test
+  void bulkTransferMovesEveryCardToTargetForOwner() throws Exception {
+    Cookie alice = loginAs("bulk-xfer-owner@example.com");
+    long p1 = createProject("bulk-xfer-owner@example.com", "BulkXfer1");
+    long p2 = createProject("bulk-xfer-owner@example.com", "BulkXfer2");
+    JsonNode boardA = createBoard(alice, p1);
+    JsonNode boardB = createBoard(alice, p2);
+    long boardIdA = boardA.get("id").asLong();
+    long colA = boardA.get("columns").get(0).get("id").asLong();
+    long boardIdB = boardB.get("id").asLong();
+    long colB = boardB.get("columns").get(0).get("id").asLong();
+    long c1 = createCard(alice, boardIdA, colA, "Eins", null).get("id").asLong();
+    long c2 = createCard(alice, boardIdA, colA, "Zwei", null).get("id").asLong();
+
+    mvc.perform(
+            post("/api/cards/bulk-transfer")
+                .cookie(alice)
+                .contentType("application/json")
+                .content(
+                    "{\"cardIds\":[%d,%d],\"targetBoardId\":%d,\"targetColumnId\":%d}"
+                        .formatted(c1, c2, boardIdB, colB)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.length()").value(2))
+        .andExpect(jsonPath("$[0].boardId").value((int) boardIdB))
+        .andExpect(jsonPath("$[1].boardId").value((int) boardIdB));
+
+    // Quellboard leer, Zielboard hält beide (umgehängten) Karten.
+    mvc.perform(
+            org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get(
+                    "/api/boards/" + boardIdA + "/cards")
+                .cookie(alice))
+        .andExpect(jsonPath("$.length()").value(0));
+    mvc.perform(
+            org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get(
+                    "/api/boards/" + boardIdB + "/cards")
+                .cookie(alice))
+        .andExpect(jsonPath("$.length()").value(2));
+  }
+
+  @Test
+  void bulkTransferRollsBackWhenNotOwnerInTargetProject() throws Exception {
+    Cookie alice = loginAs("bulk-xfer-rb-owner@example.com");
+    Cookie bob = loginAs("bulk-xfer-rb-bob@example.com");
+    long p1 = createProject("bulk-xfer-rb-owner@example.com", "BulkXferRb1");
+    long p2 = createProject("bulk-xfer-rb-bob@example.com", "BulkXferRb2");
+    JsonNode boardA = createBoard(alice, p1);
+    JsonNode boardB = createBoard(bob, p2);
+    long boardIdA = boardA.get("id").asLong();
+    long colA = boardA.get("columns").get(0).get("id").asLong();
+    long boardIdB = boardB.get("id").asLong();
+    long colB = boardB.get("columns").get(0).get("id").asLong();
+    long c1 = createCard(alice, boardIdA, colA, "Eins", null).get("id").asLong();
+    long c2 = createCard(alice, boardIdA, colA, "Zwei", null).get("id").asLong();
+    // alice ist in bobs Zielprojekt nur MEMBER -> kein Owner-Recht zum Transfer.
+    memberships.save(
+        new ProjectMembership(
+            null, p2, userId("bulk-xfer-rb-owner@example.com"), ProjectRole.MEMBER, Instant.now()));
+
+    mvc.perform(
+            post("/api/cards/bulk-transfer")
+                .cookie(alice)
+                .contentType("application/json")
+                .content(
+                    "{\"cardIds\":[%d,%d],\"targetBoardId\":%d,\"targetColumnId\":%d}"
+                        .formatted(c1, c2, boardIdB, colB)))
+        .andExpect(status().isForbidden());
+
+    // Rollback: beide Karten liegen weiterhin im Quellboard.
+    mvc.perform(
+            org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get(
+                    "/api/boards/" + boardIdA + "/cards")
+                .cookie(alice))
+        .andExpect(jsonPath("$.length()").value(2));
+  }
+
+  @Test
+  void bulkTransferRollsBackWhenSelectionContainsEpic() throws Exception {
+    Cookie alice = loginAs("bulk-xfer-epic-owner@example.com");
+    long p1 = createProject("bulk-xfer-epic-owner@example.com", "BulkXferEpic1");
+    long p2 = createProject("bulk-xfer-epic-owner@example.com", "BulkXferEpic2");
+    JsonNode boardA = createBoard(alice, p1);
+    JsonNode boardB = createBoard(alice, p2);
+    long boardIdA = boardA.get("id").asLong();
+    long colA = boardA.get("columns").get(0).get("id").asLong();
+    long boardIdB = boardB.get("id").asLong();
+    long colB = boardB.get("columns").get(0).get("id").asLong();
+    long c1 = createCard(alice, boardIdA, colA, "Karte", null).get("id").asLong();
+    long epicId = createEpic(alice, boardIdA, "EP");
+
+    mvc.perform(
+            post("/api/cards/bulk-transfer")
+                .cookie(alice)
+                .contentType("application/json")
+                .content(
+                    "{\"cardIds\":[%d,%d],\"targetBoardId\":%d,\"targetColumnId\":%d}"
+                        .formatted(c1, epicId, boardIdB, colB)))
+        .andExpect(status().isBadRequest());
+
+    // Rollback: die Karte ist nicht ins Zielboard gewandert.
+    mvc.perform(
+            org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get(
+                    "/api/boards/" + boardIdA + "/cards")
+                .cookie(alice))
+        .andExpect(jsonPath("$.length()").value(1));
+    mvc.perform(
+            org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get(
+                    "/api/boards/" + boardIdB + "/cards")
+                .cookie(alice))
+        .andExpect(jsonPath("$.length()").value(0));
+  }
+
+  @Test
+  void bulkTransferRejectsEmptyAndOversizedList() throws Exception {
+    Cookie alice = loginAs("bulk-xfer-val-owner@example.com");
+
+    mvc.perform(
+            post("/api/cards/bulk-transfer")
+                .cookie(alice)
+                .contentType("application/json")
+                .content("{\"cardIds\":[],\"targetBoardId\":1,\"targetColumnId\":1}"))
+        .andExpect(status().isBadRequest());
+
+    String tooMany =
+        java.util.stream.IntStream.rangeClosed(1, 201)
+            .mapToObj(Integer::toString)
+            .collect(java.util.stream.Collectors.joining(","));
+    mvc.perform(
+            post("/api/cards/bulk-transfer")
+                .cookie(alice)
+                .contentType("application/json")
+                .content(
+                    "{\"cardIds\":[%s],\"targetBoardId\":1,\"targetColumnId\":1}"
+                        .formatted(tooMany)))
+        .andExpect(status().isBadRequest());
+  }
+
+  @Test
+  void bulkDeleteMovesEveryCardToTrash() throws Exception {
+    Cookie alice = loginAs("bulk-del-owner@example.com");
+    long projectId = createProject("bulk-del-owner@example.com", "BulkDel");
+    JsonNode board = createBoard(alice, projectId);
+    long boardId = board.get("id").asLong();
+    long columnId = board.get("columns").get(0).get("id").asLong();
+    long c1 = createCard(alice, boardId, columnId, "Eins", null).get("id").asLong();
+    long c2 = createCard(alice, boardId, columnId, "Zwei", null).get("id").asLong();
+
+    mvc.perform(
+            post("/api/cards/bulk-delete")
+                .cookie(alice)
+                .contentType("application/json")
+                .content("{\"cardIds\":[%d,%d]}".formatted(c1, c2)))
+        .andExpect(status().isNoContent());
+
+    // Aktive Liste leer, beide Karten im Papierkorb.
+    mvc.perform(
+            org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get(
+                    "/api/boards/" + boardId + "/cards")
+                .cookie(alice))
+        .andExpect(jsonPath("$.length()").value(0));
+    mvc.perform(
+            org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get(
+                    "/api/boards/" + boardId + "/trash")
+                .cookie(alice))
+        .andExpect(jsonPath("$.length()").value(2));
+  }
+
+  @Test
+  void bulkDeleteRollsBackWhenPermissionMissingOnOneCard() throws Exception {
+    Cookie alice = loginAs("bulk-del-rb-owner@example.com");
+    Cookie bob = loginAs("bulk-del-rb-bob@example.com");
+    long p1 = createProject("bulk-del-rb-owner@example.com", "BulkDelRb1");
+    long p2 = createProject("bulk-del-rb-bob@example.com", "BulkDelRb2");
+    JsonNode boardA = createBoard(alice, p1);
+    JsonNode boardB = createBoard(bob, p2);
+    long boardIdA = boardA.get("id").asLong();
+    long colA = boardA.get("columns").get(0).get("id").asLong();
+    long boardIdB = boardB.get("id").asLong();
+    long colB = boardB.get("columns").get(0).get("id").asLong();
+    long ownCard = createCard(alice, boardIdA, colA, "Meine", null).get("id").asLong();
+    long foreignCard = createCard(bob, boardIdB, colB, "Fremde", null).get("id").asLong();
+    // alice ist in bobs Projekt nur VIEWER -> kein TICKET_DELETE.
+    memberships.save(
+        new ProjectMembership(
+            null, p2, userId("bulk-del-rb-owner@example.com"), ProjectRole.VIEWER, Instant.now()));
+
+    mvc.perform(
+            post("/api/cards/bulk-delete")
+                .cookie(alice)
+                .contentType("application/json")
+                .content("{\"cardIds\":[%d,%d]}".formatted(ownCard, foreignCard)))
+        .andExpect(status().isForbidden());
+
+    // Rollback: alices eigene Karte ist weiterhin aktiv (nicht im Papierkorb).
+    mvc.perform(
+            org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get(
+                    "/api/boards/" + boardIdA + "/cards")
+                .cookie(alice))
+        .andExpect(jsonPath("$.length()").value(1))
+        .andExpect(jsonPath("$[0].archived").value(false));
+  }
+
+  @Test
+  void bulkDeleteRejectsEmptyAndOversizedList() throws Exception {
+    Cookie alice = loginAs("bulk-del-val-owner@example.com");
+
+    mvc.perform(
+            post("/api/cards/bulk-delete")
+                .cookie(alice)
+                .contentType("application/json")
+                .content("{\"cardIds\":[]}"))
+        .andExpect(status().isBadRequest());
+
+    String tooMany =
+        java.util.stream.IntStream.rangeClosed(1, 201)
+            .mapToObj(Integer::toString)
+            .collect(java.util.stream.Collectors.joining(","));
+    mvc.perform(
+            post("/api/cards/bulk-delete")
+                .cookie(alice)
+                .contentType("application/json")
+                .content("{\"cardIds\":[%s]}".formatted(tooMany)))
+        .andExpect(status().isBadRequest());
   }
 
   @Test

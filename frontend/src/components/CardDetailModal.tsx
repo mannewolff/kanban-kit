@@ -126,7 +126,10 @@ interface Props {
   boardLabels?: BoardLabel[]
   commentsApi?: CommentsApi
   attachmentsApi?: AttachmentsApi
-  cardsApi?: Pick<typeof defaultCardsApi, 'update' | 'setAssignees' | 'setLabels' | 'getActivity'>
+  cardsApi?: Pick<
+    typeof defaultCardsApi,
+    'update' | 'setAssignees' | 'setLabels' | 'getActivity' | 'restore'
+  >
 }
 
 export function CardDetailModal({
@@ -156,6 +159,12 @@ export function CardDetailModal({
     setAssigneeIds(ids)
     await cardsApi.setAssignees(card.id, ids)
     onChanged?.()
+  }
+
+  const restore = async () => {
+    await cardsApi.restore(card.id)
+    onChanged?.()
+    onClose()
   }
 
   const [activities, setActivities] = useState<CardActivity[]>([])
@@ -734,7 +743,12 @@ export function CardDetailModal({
             </Button>
           </>
         ) : (
-          <Button onClick={onClose}>Schließen</Button>
+          <>
+            {canEdit && card.archived && (
+              <Button onClick={() => void restore()}>Wiederherstellen</Button>
+            )}
+            <Button onClick={onClose}>Schließen</Button>
+          </>
         )}
       </DialogActions>
     </Dialog>

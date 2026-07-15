@@ -44,6 +44,11 @@ function renderPage(api: MembersApi, role: string) {
 }
 
 describe('ProjectMembersPage', () => {
+  it('zeigt den Breadcrumb-Pfad ab Projekte', async () => {
+    renderPage(makeApi(), 'OWNER')
+    expect(await screen.findByRole('link', { name: 'Projekte' })).toHaveAttribute('href', '/')
+  })
+
   it('sperrt Entfernen für den letzten Owner, erlaubt es für andere', async () => {
     renderPage(makeApi(), 'OWNER')
     await waitFor(() => expect(screen.getByText('Olga Owner')).toBeInTheDocument())

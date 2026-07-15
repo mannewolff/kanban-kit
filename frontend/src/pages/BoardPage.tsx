@@ -7,13 +7,12 @@ import DialogActions from '@mui/material/DialogActions'
 import DialogContent from '@mui/material/DialogContent'
 import DialogTitle from '@mui/material/DialogTitle'
 import IconButton from '@mui/material/IconButton'
-import Link from '@mui/material/Link'
 import Stack from '@mui/material/Stack'
 import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Link as RouterLink, useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { ApiError } from '../api/client'
 import { boardsApi, type Board } from '../api/boards'
 import { cardsApi, type Card } from '../api/cards'
@@ -24,6 +23,7 @@ import { membersApi, type Member } from '../api/members'
 import { projectsApi } from '../api/projects'
 import { useAuth } from '../auth/AuthContext'
 import { BoardView } from '../components/BoardView'
+import { Breadcrumbs } from '../components/Breadcrumbs'
 import { CardDetailModal } from '../components/CardDetailModal'
 import { LabelManagerDialog } from '../components/LabelManagerDialog'
 import { TrashDialog } from '../components/TrashDialog'
@@ -195,16 +195,14 @@ export function BoardPage() {
 
   return (
     <Box>
-      <Link component={RouterLink} to={`/projects/${board.projectId}`}>← Boards</Link>
-      <Stack direction="row" alignItems="center" spacing={0.5} sx={{ mt: 1, mb: 2 }}>
-        <Typography variant="h5">
-          {projectName && (
-            <Box component="span" sx={{ color: 'text.secondary', fontWeight: 400 }}>
-              {projectName} /{' '}
-            </Box>
-          )}
-          <Box component="span">{board.name}</Box>
-        </Typography>
+      <Stack direction="row" alignItems="center" spacing={0.5} sx={{ mb: 2 }}>
+        <Breadcrumbs
+          items={[
+            { label: 'Projekte', to: '/' },
+            ...(projectName ? [{ label: projectName, to: `/projects/${board.projectId}` }] : []),
+            { label: board.name },
+          ]}
+        />
         {canEdit && (
           <IconButton size="small" aria-label="Board umbenennen" onClick={openRename}>
             <EditOutlinedIcon fontSize="small" />

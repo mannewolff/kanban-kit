@@ -59,6 +59,15 @@ export const cardsApi = {
       body: JSON.stringify({ labels }),
     }),
   archive: (cardId: number) => apiFetch<Card>(`/api/cards/${cardId}/archive`, { method: 'POST' }),
+  bulkArchive: (cardIds: number[]) =>
+    apiFetch<Card[]>(`/api/cards/bulk-archive`, { method: 'POST', body: JSON.stringify({ cardIds }) }),
+  bulkTransfer: (cardIds: number[], targetBoardId: number, targetColumnId: number) =>
+    apiFetch<Card[]>(`/api/cards/bulk-transfer`, {
+      method: 'POST',
+      body: JSON.stringify({ cardIds, targetBoardId, targetColumnId }),
+    }),
+  bulkDelete: (cardIds: number[]) =>
+    apiFetch<void>(`/api/cards/bulk-delete`, { method: 'POST', body: JSON.stringify({ cardIds }) }),
   restore: (cardId: number) => apiFetch<Card>(`/api/cards/${cardId}/restore`, { method: 'POST' }),
   remove: (cardId: number) => apiFetch<void>(`/api/cards/${cardId}`, { method: 'DELETE' }),
   update: (

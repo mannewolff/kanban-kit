@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { projectsApi } from '../api/projects'
 import { ProjectsPage } from './ProjectsPage'
@@ -73,6 +73,28 @@ describe('ProjectsPage', () => {
       </MemoryRouter>,
     )
     expect(await screen.findByText('Boardauswahl')).toBeInTheDocument()
+  })
+
+  it('gibt beim manuellen Anwählen eines Projekts autoRoute weiter, damit bei einem Board durchgeroutet wird', async () => {
+    mocked.list.mockResolvedValue([
+      { id: 1, name: 'Eins', role: 'OWNER', createdAt: '' },
+      { id: 2, name: 'Zwei', role: 'OWNER', createdAt: '' },
+    ])
+    function Target() {
+      const { state } = useLocation()
+      return <div>autoRoute={String((state as { autoRoute?: boolean } | null)?.autoRoute)}</div>
+    }
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <Routes>
+          <Route path="/" element={<ProjectsPage />} />
+          <Route path="/projects/:id" element={<Target />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    fireEvent.click(await screen.findByText('Zwei'))
+    expect(await screen.findByText('autoRoute=true')).toBeInTheDocument()
   })
 
   it('benennt ein Projekt als OWNER um', async () => {

@@ -20,7 +20,7 @@ vi.mock('../auth/AuthContext', () => ({
   useAuth: () => ({ user: { userId: 1, memberships: [{ projectId: 9, role: 'OWNER' }] } }),
 }))
 vi.mock('../api/boards', () => ({ boardsApi: { get: vi.fn() } }))
-vi.mock('../api/cards', () => ({ cardsApi: { list: vi.fn(), move: vi.fn(), getActivity: vi.fn().mockResolvedValue([]) } }))
+vi.mock('../api/cards', () => ({ cardsApi: { list: vi.fn(), move: vi.fn(), restore: vi.fn(), getActivity: vi.fn().mockResolvedValue([]) } }))
 vi.mock('../api/epics', () => ({ epicsApi: { list: vi.fn() } }))
 vi.mock('../api/labels', () => ({ labelsApi: { list: vi.fn().mockResolvedValue([]) } }))
 vi.mock('../api/projects', () => ({ projectsApi: { list: vi.fn() } }))
@@ -28,7 +28,10 @@ vi.mock('../api/comments', () => ({ commentsApi: { list: vi.fn().mockResolvedVal
 vi.mock('../api/attachments', () => ({ attachmentsApi: { list: vi.fn().mockResolvedValue([]), upload: vi.fn(), remove: vi.fn(), fetchBlob: vi.fn() } }))
 
 const mBoards = boardsApi as unknown as { get: ReturnType<typeof vi.fn> }
-const mCards = cardsApi as unknown as { list: ReturnType<typeof vi.fn> }
+const mCards = cardsApi as unknown as {
+  list: ReturnType<typeof vi.fn>
+  restore: ReturnType<typeof vi.fn>
+}
 const mEpics = epicsApi as unknown as { list: ReturnType<typeof vi.fn> }
 const mProjects = projectsApi as unknown as { list: ReturnType<typeof vi.fn> }
 const mLabels = labelsApi as unknown as { list: ReturnType<typeof vi.fn> }
@@ -79,6 +82,11 @@ describe('BoardListPage', () => {
     mProjects.list.mockResolvedValue([{ id: 9, name: 'Projekt', role: 'OWNER', createdAt: '' }])
   })
 
+  it('zeigt den Breadcrumb-Pfad ab Projekte', async () => {
+    renderPage()
+    expect(await screen.findByRole('link', { name: 'Projekte' })).toHaveAttribute('href', '/')
+  })
+
   it('zeigt aktive Karten mit Status-Chip und Body-Vorschau, archivierte erst nach Filter', async () => {
     renderPage()
     expect(await screen.findByText('Aufgabe')).toBeInTheDocument()
@@ -88,6 +96,19 @@ describe('BoardListPage', () => {
 
     fireEvent.click(screen.getByLabelText('Filter Archiv'))
     expect(await screen.findByText('AlteKarte')).toBeInTheDocument()
+  })
+
+  it('stellt eine archivierte Karte über die Zeilen-Aktion wieder her', async () => {
+    mCards.restore.mockResolvedValue({})
+    renderPage()
+    fireEvent.click(await screen.findByLabelText('Filter Archiv'))
+    await screen.findByText('AlteKarte')
+
+    // Nur die archivierte Karte trägt die Wiederherstellen-Aktion.
+    expect(screen.queryByLabelText('Karte Aufgabe wiederherstellen')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByLabelText('Karte AlteKarte wiederherstellen'))
+
+    await waitFor(() => expect(mCards.restore).toHaveBeenCalledWith(101))
   })
 
   it('öffnet das Detail-Modal beim Klick auf eine Zeile', async () => {

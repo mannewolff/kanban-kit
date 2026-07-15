@@ -9,11 +9,12 @@ import Stack from '@mui/material/Stack'
 import TextField from '@mui/material/TextField'
 import { useEffect, useState } from 'react'
 import { boardsApi, type Board } from '../api/boards'
-import { cardsApi, type Card } from '../api/cards'
+import { cardsApi } from '../api/cards'
 import { projectsApi, type Project } from '../api/projects'
 
 interface Props {
-  card: Card
+  /** Eine oder mehrere zu verschiebende Karten. */
+  cardIds: number[]
   currentBoardId: number
   /** Plattform-Admin darf in alle Projekte verschieben, sonst nur in eigene OWNER-Projekte. */
   platformAdmin: boolean
@@ -22,12 +23,12 @@ interface Props {
 }
 
 /**
- * Auswahl-Dialog für das board-/projektübergreifende Verschieben einer Karte: Projekt → Board →
- * Spalte. Es werden nur Projekte angeboten, in denen der Nutzer OWNER ist (Plattform-Admin: alle);
- * die Durchsetzung erfolgt zusätzlich serverseitig.
+ * Auswahl-Dialog für das board-/projektübergreifende Verschieben einer oder mehrerer Karten:
+ * Projekt → Board → Spalte. Es werden nur Projekte angeboten, in denen der Nutzer OWNER ist
+ * (Plattform-Admin: alle); die Durchsetzung erfolgt zusätzlich serverseitig.
  */
 export function TransferCardDialog({
-  card,
+  cardIds,
   currentBoardId,
   platformAdmin,
   onClose,
@@ -68,7 +69,7 @@ export function TransferCardDialog({
     setBusy(true)
     setError(null)
     try {
-      await cardsApi.transfer(card.id, boardId, columnId)
+      await cardsApi.bulkTransfer(cardIds, boardId, columnId)
       onTransferred()
     } catch {
       setError('Verschieben fehlgeschlagen.')
@@ -83,8 +84,9 @@ export function TransferCardDialog({
       <DialogTitle>Auf anderes Board verschieben</DialogTitle>
       <DialogContent>
         <DialogContentText sx={{ mb: 2 }}>
-          Die Karte wird in das gewählte Board verschoben. Dabei gehen die Epic-Zuordnung und die
-          Abhängigkeiten der Karte verloren; Kommentare und Anhänge bleiben erhalten.
+          {cardIds.length === 1 ? 'Die Karte wird' : `Die ${cardIds.length} Karten werden`} in das
+          gewählte Board verschoben. Dabei gehen Epic-Zuordnung und Abhängigkeiten verloren;
+          Kommentare und Anhänge bleiben erhalten.
         </DialogContentText>
         {error && (
           <Alert severity="error" sx={{ mb: 2 }}>

@@ -9,6 +9,9 @@ import { BoardView } from './BoardView'
 vi.mock('../api/columns', () => ({
   columnsApi: { create: vi.fn(), update: vi.fn(), remove: vi.fn(), reorder: vi.fn() },
 }))
+// Nur vom Transfer-Dialog zur Laufzeit genutzt; leere Listen genügen zum Öffnen.
+vi.mock('../api/projects', () => ({ projectsApi: { list: vi.fn().mockResolvedValue([]) } }))
+vi.mock('../api/boards', () => ({ boardsApi: { list: vi.fn().mockResolvedValue([]) } }))
 const mColumns = columnsApi as unknown as {
   create: ReturnType<typeof vi.fn>
   update: ReturnType<typeof vi.fn>
@@ -34,7 +37,10 @@ const card: Card = {
 }
 
 function mkApi(over: Record<string, unknown> = {}) {
-  return { create: vi.fn(), move: vi.fn(), archive: vi.fn(), restore: vi.fn(), remove: vi.fn(), ...over }
+  return {
+    create: vi.fn(), move: vi.fn(), archive: vi.fn(), restore: vi.fn(), remove: vi.fn(),
+    bulkArchive: vi.fn(), bulkTransfer: vi.fn(), bulkDelete: vi.fn(), ...over,
+  }
 }
 
 function dropOnColumn(columnId: number, cardId: number) {
@@ -297,5 +303,131 @@ describe('BoardView', () => {
 
     expect(screen.getByLabelText('Zuständige Aufgabe')).toBeInTheDocument()
     expect(screen.getByText('MM')).toBeInTheDocument()
+  })
+
+  it('blendet im Auswahlmodus Checkboxen ein und selektiert per Klick', () => {
+    render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} />)
+
+    // Vor dem Auswahlmodus keine Checkbox.
+    expect(screen.queryByLabelText('Karte Aufgabe auswählen')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Auswählen' }))
+    expect(screen.getByLabelText('Karte Aufgabe auswählen')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByTestId('card-100'))
+    expect(screen.getByText('1 ausgewählt')).toBeInTheDocument()
+
+    // Erneuter Klick hebt die Auswahl auf -> Aktionsleiste verschwindet.
+    fireEvent.click(screen.getByTestId('card-100'))
+    expect(screen.queryByText('1 ausgewählt')).not.toBeInTheDocument()
+  })
+
+  it('öffnet im Auswahlmodus nicht das Detail beim Klick auf die Karte', () => {
+    const onCardClick = vi.fn()
+    render(
+      <BoardView board={board} initialCards={[card]} canEdit api={mkApi()} onCardClick={onCardClick} />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Auswählen' }))
+    fireEvent.click(screen.getByTestId('card-100'))
+
+    expect(onCardClick).not.toHaveBeenCalled()
+  })
+
+  it('archiviert die Auswahl nach Bestätigung über die Bulk-API und entfernt sie optimistisch', async () => {
+    const api = mkApi({ bulkArchive: vi.fn().mockResolvedValue([]) })
+    render(<BoardView board={board} initialCards={[card]} canEdit api={api} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Auswählen' }))
+    fireEvent.click(screen.getByTestId('card-100'))
+    fireEvent.click(screen.getByRole('button', { name: 'Archivieren' }))
+
+    // Bestätigungsdialog erscheint; erst dessen Bestätigung löst die API aus.
+    expect(api.bulkArchive).not.toHaveBeenCalled()
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Archivieren' }))
+
+    await waitFor(() => expect(api.bulkArchive).toHaveBeenCalledWith([100]))
+    await waitFor(() => expect(screen.queryByTestId('card-100')).not.toBeInTheDocument())
+  })
+
+  it('archiviert nicht, wenn die Bestätigung abgebrochen wird', () => {
+    const api = mkApi()
+    render(<BoardView board={board} initialCards={[card]} canEdit api={api} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Auswählen' }))
+    fireEvent.click(screen.getByTestId('card-100'))
+    fireEvent.click(screen.getByRole('button', { name: 'Archivieren' }))
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Abbrechen' }))
+
+    expect(api.bulkArchive).not.toHaveBeenCalled()
+    expect(screen.getByTestId('card-100')).toBeInTheDocument()
+  })
+
+  it('rollt beim Fehler des Bulk-Archivierens zurück und meldet ihn', async () => {
+    const api = mkApi({ bulkArchive: vi.fn().mockRejectedValue(new Error('fail')) })
+    render(<BoardView board={board} initialCards={[card]} canEdit api={api} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Auswählen' }))
+    fireEvent.click(screen.getByTestId('card-100'))
+    fireEvent.click(screen.getByRole('button', { name: 'Archivieren' }))
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Archivieren' }))
+
+    await waitFor(() => expect(screen.getByText('Archivieren fehlgeschlagen.')).toBeInTheDocument())
+    expect(screen.getByTestId('card-100')).toBeInTheDocument()
+  })
+
+  it('verschiebt die Auswahl nach Bestätigung in den Papierkorb', async () => {
+    const api = mkApi({ bulkDelete: vi.fn().mockResolvedValue(undefined) })
+    render(<BoardView board={board} initialCards={[card]} canEdit api={api} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Auswählen' }))
+    fireEvent.click(screen.getByTestId('card-100'))
+    fireEvent.click(screen.getByRole('button', { name: 'In den Papierkorb' }))
+
+    expect(api.bulkDelete).not.toHaveBeenCalled()
+    fireEvent.click(
+      within(screen.getByRole('dialog')).getByRole('button', { name: 'In den Papierkorb' }),
+    )
+
+    await waitFor(() => expect(api.bulkDelete).toHaveBeenCalledWith([100]))
+    await waitFor(() => expect(screen.queryByTestId('card-100')).not.toBeInTheDocument())
+  })
+
+  it('rollt beim Fehler des Bulk-Papierkorbs zurück und meldet ihn', async () => {
+    const api = mkApi({ bulkDelete: vi.fn().mockRejectedValue(new Error('fail')) })
+    render(<BoardView board={board} initialCards={[card]} canEdit api={api} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Auswählen' }))
+    fireEvent.click(screen.getByTestId('card-100'))
+    fireEvent.click(screen.getByRole('button', { name: 'In den Papierkorb' }))
+    fireEvent.click(
+      within(screen.getByRole('dialog')).getByRole('button', { name: 'In den Papierkorb' }),
+    )
+
+    await waitFor(() =>
+      expect(screen.getByText('In den Papierkorb verschieben fehlgeschlagen.')).toBeInTheDocument(),
+    )
+    expect(screen.getByTestId('card-100')).toBeInTheDocument()
+  })
+
+  it('öffnet mit Transfer-Recht den Verschieben-Dialog für die Auswahl', () => {
+    render(<BoardView board={board} initialCards={[card]} canEdit canTransfer api={mkApi()} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Auswählen' }))
+    fireEvent.click(screen.getByTestId('card-100'))
+    fireEvent.click(screen.getByRole('button', { name: 'Verschieben' }))
+
+    expect(screen.getByText('Auf anderes Board verschieben')).toBeInTheDocument()
+  })
+
+  it('leert die Auswahl beim Abbrechen', () => {
+    render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Auswählen' }))
+    fireEvent.click(screen.getByTestId('card-100'))
+    fireEvent.click(screen.getByRole('button', { name: 'Abbrechen' }))
+
+    expect(screen.queryByLabelText('Karte Aufgabe auswählen')).not.toBeInTheDocument()
+    expect(screen.queryByText('1 ausgewählt')).not.toBeInTheDocument()
   })
 })

@@ -37,6 +37,7 @@ function makeApis() {
     setAssignees: vi.fn().mockResolvedValue({ ...card }),
     setLabels: vi.fn().mockResolvedValue({ ...card }),
     getActivity: vi.fn().mockResolvedValue([]),
+    restore: vi.fn().mockResolvedValue({ ...card }),
   }
   return { commentsApi, attachmentsApi, cardsApi }
 }
@@ -290,5 +291,33 @@ describe('CardDetailModal', () => {
 
     expect(await screen.findByText(/Verschoben nach Done/)).toBeInTheDocument()
     expect(screen.getByText(/Max/)).toBeInTheDocument()
+  })
+
+  it('bietet bei archivierter Karte Wiederherstellen und ruft restore', async () => {
+    const apis = makeApis()
+    const onChanged = vi.fn()
+    const onClose = vi.fn()
+    render(
+      <CardDetailModal
+        card={{ ...card, archived: true }}
+        canEdit
+        onChanged={onChanged}
+        onClose={onClose}
+        {...apis}
+      />,
+    )
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Wiederherstellen' }))
+
+    await waitFor(() => expect(apis.cardsApi.restore).toHaveBeenCalledWith(100))
+    expect(onChanged).toHaveBeenCalled()
+    expect(onClose).toHaveBeenCalled()
+  })
+
+  it('zeigt keinen Wiederherstellen-Button für aktive Karten', () => {
+    const apis = makeApis()
+    render(<CardDetailModal card={card} canEdit onClose={vi.fn()} {...apis} />)
+
+    expect(screen.queryByRole('button', { name: 'Wiederherstellen' })).not.toBeInTheDocument()
   })
 })
