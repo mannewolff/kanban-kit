@@ -20,7 +20,7 @@ interface Props {
   api?: AdminApi
 }
 
-export function AdminPage({ api = defaultAdminApi }: Props) {
+export function AdminPage({ api = defaultAdminApi }: Readonly<Props>) {
   const { user: currentUser } = useAuth()
   const [users, setUsers] = useState<AdminUser[]>([])
   const [error, setError] = useState<string | null>(null)

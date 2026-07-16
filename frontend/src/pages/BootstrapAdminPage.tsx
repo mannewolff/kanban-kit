@@ -15,7 +15,7 @@ interface Props {
 }
 
 /** Hebt den eingeloggten Nutzer per Env-Token zum ersten Plattform-Admin (nur auf frischer Instanz). */
-export function BootstrapAdminPage({ api = defaultAdminApi }: Props) {
+export function BootstrapAdminPage({ api = defaultAdminApi }: Readonly<Props>) {
   const { refresh } = useAuth()
   const navigate = useNavigate()
   const [token, setToken] = useState('')

@@ -30,7 +30,7 @@ export function LabelManagerDialog({
   onClose,
   onChanged,
   api = defaultLabelsApi,
-}: Props) {
+}: Readonly<Props>) {
   const [newName, setNewName] = useState('')
   const [newColor, setNewColor] = useState(DEFAULT_COLOR)
   const [error, setError] = useState<string | null>(null)

@@ -34,7 +34,7 @@ interface Props {
   loadRole?: (projectId: number) => Promise<string>
 }
 
-export function ProjectMembersPage({ api = defaultMembersApi, loadRole }: Props) {
+export function ProjectMembersPage({ api = defaultMembersApi, loadRole }: Readonly<Props>) {
   const { projectId } = useParams()
   const id = Number.parseInt(projectId ?? '', 10)
   const validId = Number.isInteger(id) && id > 0

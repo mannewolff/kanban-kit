@@ -52,7 +52,7 @@ export function NewCardModal({
   onSubmit,
   epicOnly = false,
   initialValues,
-}: Props) {
+}: Readonly<Props>) {
   const [type, setType] = useState<CardType>(epicOnly ? 'EPIC' : 'CARD')
   const [title, setTitle] = useState('')
   const [body, setBody] = useState(BODY_TEMPLATE)

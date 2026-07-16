@@ -17,7 +17,7 @@ interface Props {
  * Vollständiger Breadcrumb-Pfad in Überschrift-Optik: alle Segmente durch „/" getrennt, Vorsegmente
  * mit `to` als Links, nur das letzte Segment fett und als aktuelle Seite ausgezeichnet.
  */
-export function Breadcrumbs({ items }: Props) {
+export function Breadcrumbs({ items }: Readonly<Props>) {
   return (
     <Typography variant="h5" component="h1" sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'baseline' }}>
       {items.map((item, index) => {

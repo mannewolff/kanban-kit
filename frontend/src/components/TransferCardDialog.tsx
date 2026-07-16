@@ -33,7 +33,7 @@ export function TransferCardDialog({
   platformAdmin,
   onClose,
   onTransferred,
-}: Props) {
+}: Readonly<Props>) {
   const [projects, setProjects] = useState<Project[]>([])
   const [boards, setBoards] = useState<Board[]>([])
   const [projectId, setProjectId] = useState<number | ''>('')

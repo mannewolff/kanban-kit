@@ -16,7 +16,7 @@ interface Props {
 }
 
 /** Lightbox für Anhänge: Bilder inline, PDF im Frame, Download als Fallback. */
-export function AttachmentPreview({ filename, contentType, url, downloadHref, onClose }: Props) {
+export function AttachmentPreview({ filename, contentType, url, downloadHref, onClose }: Readonly<Props>) {
   const isImage = contentType.startsWith('image/')
   return (
     <Dialog open onClose={onClose} maxWidth="lg" fullWidth aria-label={`Vorschau ${filename}`}>

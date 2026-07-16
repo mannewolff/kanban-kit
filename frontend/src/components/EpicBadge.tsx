@@ -12,7 +12,7 @@ interface Props {
 }
 
 /** Kürzel-Badge eines Epics: farbiger Punkt + Kürzel auf zartem Grund in der Epic-Farbe (Toolbox-Stil). */
-export function EpicBadge({ epicId, title, shortcode, sx }: Props) {
+export function EpicBadge({ epicId, title, shortcode, sx }: Readonly<Props>) {
   const hue = epicColor(epicId)
   const label = epicShortcode(title, shortcode)
   return (

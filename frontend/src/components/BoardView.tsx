@@ -98,7 +98,7 @@ export function BoardView({
   platformAdmin = false,
   api = cardsApi,
   epicsApi = defaultEpicsApi,
-}: Props) {
+}: Readonly<Props>) {
   const [cards, setCards] = useState<Card[]>(initialCards)
   const [modalColumn, setModalColumn] = useState<{ id: number; name: string } | null>(null)
   const [duplicateValues, setDuplicateValues] = useState<NewCardInitialValues | null>(null)
