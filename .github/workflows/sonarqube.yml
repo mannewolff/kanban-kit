@@ -2,9 +2,12 @@ name: SonarQube Cloud
 
 # Läuft beim tatsächlichen Merge nach production (nicht bei jedem Push auf main) —
 # Sonar-Scan + Coverage-Import sind an den Release-Zeitpunkt gebunden, siehe RELEASING.md.
+# workflow_dispatch erlaubt einen manuellen Nachlauf (z. B. auf main) ohne künstlichen
+# production-Merge — der Scan meldet dank sonar.branch.name ohnehin immer den main-Branch.
 on:
   push:
     branches: [production]
+  workflow_dispatch:
 
 jobs:
   sonarqube:
@@ -41,8 +44,17 @@ jobs:
 
       # Auf Commit-SHA gepinnt statt beweglichem Tag (Supply-Chain-Härtung, siehe
       # CLAUDE-security.md) — entspricht v8.2.0.
+      # sonar.branch.name=main erzwingen: Der Workflow triggert auf push nach production,
+      # wodurch der Scanner sonst branch=production auto-erkennt. Die kostenlose SonarCloud-
+      # Stufe kennt aber nur den main-Branch — production-Analysen kämen dort nicht an.
+      # Inhalt von production == main nach dem Release-Merge, daher ist die Meldung als main
+      # korrekt (siehe auch fetchAllIssues in scripts/sync-sonar-issues-to-github.mjs, das
+      # ebenfalls den main-Branch ausliest).
       - name: SonarQube-Scan
         uses: SonarSource/sonarqube-scan-action@713881670b6b3676cda39549040e2d88c70d582e # v8.2.0
+        with:
+          args: >
+            -Dsonar.branch.name=main
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
