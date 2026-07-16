@@ -51,6 +51,55 @@ function initials(name: string): string {
   return (first + last).toUpperCase() || '?'
 }
 
+/**
+ * Farbige Label-Chips einer Karte. Als eigene Komponente ausgelagert, damit die
+ * `find`-Suche nicht innerhalb der tief verschachtelten Spalten-/Karten-`map` steht.
+ */
+function CardLabels({ labelIds, boardLabels, cardTitle }: Readonly<{ labelIds: number[]; boardLabels: Label[]; cardTitle: string }>) {
+  if (labelIds.length === 0) return null
+  return (
+    <Stack direction="row" spacing={0.5} sx={{ flexWrap: 'wrap', mb: 0.5 }} aria-label={`Labels ${cardTitle}`}>
+      {labelIds.map((labelId) => {
+        const l = boardLabels.find((b) => b.id === labelId)
+        return (
+          <Chip
+            key={labelId}
+            size="small"
+            label={l?.name ?? `#${labelId}`}
+            sx={{ bgcolor: l?.color ?? 'grey.500', color: '#fff', height: 18, '& .MuiChip-label': { px: 0.75, fontSize: '0.65rem' } }}
+          />
+        )
+      })}
+    </Stack>
+  )
+}
+
+/**
+ * Zuständigen-Avatare einer Karte. Analog zu {@link CardLabels} ausgelagert, um die
+ * `find`-Suche aus der verschachtelten Karten-`map` zu holen.
+ */
+function CardAssignees({ assigneeIds, members, cardTitle }: Readonly<{ assigneeIds: number[]; members: Member[]; cardTitle: string }>) {
+  if (assigneeIds.length === 0) return null
+  return (
+    <Stack direction="row" justifyContent="flex-end" sx={{ mt: 0.5 }}>
+      <AvatarGroup
+        max={4}
+        aria-label={`Zuständige ${cardTitle}`}
+        sx={{ '& .MuiAvatar-root': { width: 24, height: 24, fontSize: '0.7rem' } }}
+      >
+        {assigneeIds.map((uid) => {
+          const name = members.find((m) => m.userId === uid)?.displayName ?? `#${uid}`
+          return (
+            <Avatar key={uid} title={name}>
+              {initials(name)}
+            </Avatar>
+          )
+        })}
+      </AvatarGroup>
+    </Stack>
+  )
+}
+
 interface Props {
   board: Board
   initialCards: Card[]
@@ -435,6 +484,9 @@ export function BoardView({
                   const doneAt = done ? card.movedToDoneAt : null
                   const overdue = isOverdue(card.dueDate, done)
                   const selected = selectedIds.has(card.id)
+                  // Nur greifbar (Drag-Cursor), wenn bearbeitbar und nicht im Auswahlmodus —
+                  // ersetzt zwei verschachtelte Cursor-Ternaries (S3358).
+                  const grabbable = canEdit && !selectionMode
                   return (
                     <Paper
                       key={card.id}
@@ -450,28 +502,14 @@ export function BoardView({
                         border: 1,
                         borderColor: selected ? 'primary.main' : 'divider',
                         borderLeft: epic ? `4px solid ${epicColor(epic.id)}` : undefined,
-                        cursor: selectionMode ? 'pointer' : canEdit ? 'grab' : 'pointer',
+                        cursor: grabbable ? 'grab' : 'pointer',
                         transition: 'border-color .15s',
                         '&:hover': { borderColor: 'primary.light' },
-                        '&:active': { cursor: selectionMode ? 'pointer' : canEdit ? 'grabbing' : 'pointer' },
+                        '&:active': { cursor: grabbable ? 'grabbing' : 'pointer' },
                       }}
                     >
                       {epic && <EpicBadge epicId={epic.id} title={epic.title} shortcode={epic.shortcode} sx={{ mb: 0.5 }} />}
-                      {card.labels.length > 0 && (
-                        <Stack direction="row" spacing={0.5} sx={{ flexWrap: 'wrap', mb: 0.5 }} aria-label={`Labels ${card.title}`}>
-                          {card.labels.map((labelId) => {
-                            const l = boardLabels.find((b) => b.id === labelId)
-                            return (
-                              <Chip
-                                key={labelId}
-                                size="small"
-                                label={l?.name ?? `#${labelId}`}
-                                sx={{ bgcolor: l?.color ?? 'grey.500', color: '#fff', height: 18, '& .MuiChip-label': { px: 0.75, fontSize: '0.65rem' } }}
-                              />
-                            )
-                          })}
-                        </Stack>
-                      )}
+                      <CardLabels labelIds={card.labels} boardLabels={boardLabels} cardTitle={card.title} />
                       <Stack direction="row" alignItems="flex-start" spacing={0.5}>
                         {selectionMode && (
                           <Checkbox
@@ -516,24 +554,7 @@ export function BoardView({
                           📅 {formatDueDate(card.dueDate)}
                         </Typography>
                       )}
-                      {card.assignees.length > 0 && (
-                        <Stack direction="row" justifyContent="flex-end" sx={{ mt: 0.5 }}>
-                          <AvatarGroup
-                            max={4}
-                            aria-label={`Zuständige ${card.title}`}
-                            sx={{ '& .MuiAvatar-root': { width: 24, height: 24, fontSize: '0.7rem' } }}
-                          >
-                            {card.assignees.map((uid) => {
-                              const name = members.find((m) => m.userId === uid)?.displayName ?? `#${uid}`
-                              return (
-                                <Avatar key={uid} title={name}>
-                                  {initials(name)}
-                                </Avatar>
-                              )
-                            })}
-                          </AvatarGroup>
-                        </Stack>
-                      )}
+                      <CardAssignees assigneeIds={card.assignees} members={members} cardTitle={card.title} />
                     </Paper>
                   )
                 })}
