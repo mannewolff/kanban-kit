@@ -133,23 +133,27 @@ describe('BoardView', () => {
     await waitFor(() => expect(api.move).toHaveBeenCalledWith(100, 20, 0))
   })
 
-  it('dupliziert eine Karte über das ⋮-Menü vorbefüllt in derselben Spalte', async () => {
-    const source: Card = { ...card, title: 'Original', description: 'Original-Text', parentId: 9 }
-    const created: Card = { ...card, id: 300, number: 3, title: 'Original' }
+  it('dupliziert eine Karte über das ⋮-Menü vorbefüllt, aber immer nach Backlog (erste Spalte)', async () => {
+    // Quelle bewusst NICHT in der ersten Spalte (Backlog=10), sondern in Done=20 — die Kopie ist
+    // ein neues Item und muss den kompletten Prozess durchlaufen, unabhängig davon, wo die
+    // Quellkarte gerade steht.
+    const source: Card = { ...card, columnId: 20, title: 'Original', description: 'Original-Text', parentId: 9 }
+    const created: Card = { ...card, id: 300, number: 3, columnId: 10, title: 'Original' }
     const api = mkApi({ create: vi.fn().mockResolvedValue(created) })
     render(<BoardView board={board} initialCards={[source]} canEdit api={api} />)
 
     fireEvent.click(screen.getByLabelText('Menü Original'))
     fireEvent.click(screen.getByRole('menuitem', { name: 'Duplizieren' }))
 
+    expect(screen.getByRole('heading', { name: 'Neue Karte in „Backlog“' })).toBeInTheDocument()
     expect(screen.getByLabelText('Titel')).toHaveValue('Original')
     expect(screen.getByLabelText('Beschreibung')).toHaveValue('Original-Text')
 
     fireEvent.click(screen.getByRole('button', { name: 'Anlegen' }))
 
     await waitFor(() => expect(api.create).toHaveBeenCalledWith(1, 10, 'Original', 'Original-Text', 9))
-    // Quellkarte bleibt unverändert erhalten.
-    expect(screen.getByTestId('card-100')).toBeInTheDocument()
+    // Quellkarte bleibt unverändert in ihrer Spalte (Done) erhalten.
+    expect(within(screen.getByTestId('column-20')).getByTestId('card-100')).toBeInTheDocument()
   })
 
   it('legt beim Abbrechen des Duplizieren-Dialogs keine neue Karte an', () => {

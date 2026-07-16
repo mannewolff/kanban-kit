@@ -628,10 +628,13 @@ export function BoardView({
             key="duplicate"
             onClick={() => {
               const c = menu.card
-              const column = columns.find((col) => col.id === c.columnId)
               closeMenu()
+              if (columns.length === 0) return
+              // Die Kopie ist ein neues Item und soll den kompletten Prozess durchlaufen —
+              // deshalb immer in die erste Spalte ("Backlog"), nicht in die Spalte der
+              // Quellkarte (analog zum board-weiten "+"-Button, der ebenfalls columns[0] nutzt).
               setDuplicateValues({ title: c.title, description: c.description ?? '', parentId: c.parentId })
-              setModalColumn({ id: c.columnId, name: column?.name ?? '' })
+              setModalColumn({ id: columns[0].id, name: columns[0].name })
             }}
           >
             Duplizieren
