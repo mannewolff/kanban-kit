@@ -176,11 +176,19 @@ Aktuelle Struktur unter `frontend/src/`:
 ## 🧪 Tests
 
 - Neue oder geänderte Logik braucht Tests (Vitest + React Testing Library).
-- **Coverage-Gate:** `npm run test:coverage` (v8-Provider) bricht bei Unterschreitung der Schwellen in `vite.config.ts` (Stand 07/2026: 87 % Lines/Branches, 58 % Functions — ehrlicher Ist-Floor gegen Rückschritt, Zielpfad: schrittweise anheben). Ausschlüsse einzeln begründet in der Config; läuft auch in CI.
+- **Coverage-Gate:** `npm run test:coverage` (v8-Provider) bricht bei Unterschreitung der Schwellen in `vite.config.ts` (Stand 2026-07-16: 93 % Lines/Statements, 90 % Branches, 79 % Functions — ehrlicher Ist-Floor gegen Rückschritt). Ausschlüsse einzeln begründet in der Config; läuft auch in CI.
 - Verhalten testen, nicht Implementierungsdetails — Tests sollen aus Nutzerperspektive lesbar sein.
 - Kritische UI-Zustände abdecken: Loading, Error, Empty, Success, Disabled.
 - Mocks realistisch und klein halten. Snapshot-Tests nur, wenn sie wirklich Stabilität messen.
 - API-Mocks: bevorzugt `fetch` über `vi.spyOn(global, 'fetch')` oder `msw` — keine ungetypten Mock-Objekte.
+
+**Coverage-Philosophie** (analog zu `CLAUDE-java.md` §5.4 — die Backend-Antwort auf „100 % unmöglich" ist dort schon verbindlich; das Folgende überträgt sie aufs Frontend):
+
+- **Signal-Charakter.** Die Coverage-Zahl ist ein externes Vertrauenssignal, kein Selbstzweck — sie ist das Werkzeug, mit dem der Mensch KI-erzeugten Code beurteilt, ohne jede Zeile selbst lesen zu müssen. Zeigt sie 98 %, müssen die restlichen 2 % *echt ungetestete Logik* sein: eine bewusste Entscheidungsstelle („reinschauen oder Tests nachziehen"), kein Blindfleck durch großzügige Ausschlüsse.
+- **Ziel 100 % der sinnvollen Logik.** Die vite-Schwellen (`thresholds` in `vite.config.ts`) sind ein **Ratchet**: nur anheben, nie senken. Der aktuelle Stand ist ein Zwischenstand, kein Endziel.
+- **Ausschließen nur logikfrei.** `coverage.exclude` nimmt ausschließlich Dateien ohne eigenes Verhalten — Bootstrap/Wiring/Design-Tokens (Vorbild: `main.tsx`, `App.tsx`, `theme.ts`), jeweils mit Inline-Begründung in `vite.config.ts`, dateiweise wie die JaCoCo-Ausschlüsse im Backend (keine Verzeichnis-Wildcards). **Untestete Logik gehört nie in `coverage.exclude`** — das würde das Signal fälschen. Gegenbeispiel aus der Praxis: die `api/*.ts`-Endpoint-Wrapper enthalten echte Logik (Pfad, HTTP-Methode, Body, Response-Mapping) und wurden deshalb direkt getestet statt ausgeschlossen (kanban-kit#216).
+- **Wenn 100 % schwierig erscheint,** lautet die Antwort wie im Backend **nicht** „Schwellwert senken", sondern: testen, den Code testbar umbauen, oder — nur wenn die Datei wirklich logikfrei ist — begründet ausschließen.
+- **Sonar-Sync.** `sonar.coverage.exclusions` (`sonar-project.properties`) muss synchron zu `vite.config.ts` `coverage.exclude` (und zu den JaCoCo-Excludes in `pom.xml`) bleiben. Ohne diesen Abgleich sieht SonarCloud einen anderen Mess-Scope als die lokalen Gates und wertet dort ausgeschlossene, logikfreie Dateien als 0 % ab — die Overall-Zahl fällt dann weit unter den echten lokalen Stand, obwohl lokal alles grün ist (siehe kanban-kit#215). Bei jeder Änderung an einer der drei Exclude-Listen die anderen beiden gegenprüfen.
 
 ---
 
