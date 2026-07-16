@@ -12,10 +12,14 @@
  *   node scripts/gen-changelog.mjs --date 2026-07-15
  *   node scripts/gen-changelog.mjs --end <ref>     (Range-Endpunkt statt HEAD)
  *
- * Range-Abgrenzung läuft über Git-Tags (vX.Y.Z), die bump-version.mjs beim minor-Bump setzt.
- * Existiert noch kein passender Tag (erster Lauf), greift der definierte Startpunkt INITIAL_SINCE
- * für den retroaktiven 0.6.0-Block. Reines Node-Skript, nur git + Dateizugriff, keine externen
- * Abhängigkeiten. Idempotent: ein bereits vorhandener Versionsblock wird nicht dupliziert.
+ * Range-Abgrenzung läuft über Git-Tags (vX.Y.Z), die `bump-version.mjs tag` nach dem Release-
+ * Commit setzt (siehe RELEASING.md). Für die Range-Untergrenze ist das Timing des NEUEN Tags
+ * unerheblich: previousVersionTag() sucht ausschließlich Tags mit Version < der aktuellen und
+ * findet damit den Tag der vorherigen Minor-Version, unabhängig davon, ob/wann der Tag der
+ * aktuellen Version schon existiert. Existiert noch kein passender Tag (erster Lauf), greift der
+ * definierte Startpunkt INITIAL_SINCE für den retroaktiven 0.6.0-Block. Reines Node-Skript, nur
+ * git + Dateizugriff, keine externen Abhängigkeiten. Idempotent: ein bereits vorhandener
+ * Versionsblock wird nicht dupliziert.
  */
 
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
@@ -30,7 +34,7 @@ const CHANGELOG_PATH = join(REPO_ROOT, 'CHANGELOG.md');
 /**
  * Definierter Startpunkt für den allerersten Lauf (retroaktiver 0.6.0-Block): der Parent des
  * ersten 0.6.0-Feature-Commits (Issue #170), also das Ende des 0.5.0-Release. Sobald Minor-
- * Releases über bump-version.mjs getaggt werden, wird dieser Fallback nicht mehr gebraucht —
+ * Releases über `bump-version.mjs tag` getaggt werden, wird dieser Fallback nicht mehr gebraucht —
  * die Range-Abgrenzung läuft dann über den Tag der Vorversion.
  */
 const INITIAL_SINCE = '61812816ecf16c125a7511ed762886e73de858e9';

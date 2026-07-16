@@ -31,22 +31,26 @@ Bei jedem `merge production`: Minor-Teil erhöhen (Y+1, Z→0), Changelog schrei
 Release taggen. Schrittfolge:
 
 ```
-node scripts/bump-version.mjs minor # VERSION/pom/package auf die neue Version + Tag vX.Y.Z setzen
+node scripts/bump-version.mjs minor # VERSION/pom/package auf die neue Version setzen
 node scripts/gen-changelog.mjs      # Changelog-Block der NEUEN Version oben in CHANGELOG.md
 # Release-Commit (VERSION, pom.xml, package(-lock).json, CHANGELOG.md)
-git push origin main --follow-tags  # main + Tag pushen
+node scripts/bump-version.mjs tag   # annotated Tag vX.Y.Z auf den Release-Commit setzen
+git push origin main --follow-tags  # main + Tag pushen (annotated Tag wird mitgenommen)
 # PR main -> production erstellen (Mannes Merge ist der Stop-Punkt)
 # nach dem Merge: GitHub Release zum Tag vX.Y.Z anlegen (Changelog-Block als Beschreibung)
 ```
 
-Reihenfolge beachten: **erst** der Version-Bump, **dann** `gen-changelog.mjs` — das Skript liest
-die Zielversion aus `VERSION` für den Blocktitel; liefe es vor dem Bump, entstünde ein Block für
-die alte Version.
+Reihenfolge beachten: **erst** der Version-Bump, **dann** `gen-changelog.mjs`, **dann** der
+Release-Commit, **erst danach** `bump-version.mjs tag` — das Skript liest die Zielversion aus
+`VERSION` für den Blocktitel; liefe `gen-changelog.mjs` vor dem Bump, entstünde ein Block für die
+alte Version. Der Tag muss nach dem Release-Commit gesetzt werden, sonst zeigt er auf den Commit
+davor statt auf den eigentlichen Release-Stand.
 
 `gen-changelog.mjs` grenzt den Range über den Tag der Vorversion ab (roher Dump der Commit-Titel,
-Keep-a-Changelog-Format). `bump-version.mjs minor` setzt den Tag `vX.Y.Z`, der beim nächsten
-Release wiederum die Range-Untergrenze bildet. Ein `push main` (Patch-Bump) erzeugt bewusst
-weder Changelog-Block noch Tag.
+Keep-a-Changelog-Format). `bump-version.mjs tag` setzt den annotated Tag `vX.Y.Z` (annotated statt
+lightweight, damit `git push --follow-tags` ihn mitnimmt — kein separater Tag-Push nötig), der beim
+nächsten Release wiederum die Range-Untergrenze bildet. Ein `push main` (Patch-Bump) erzeugt
+bewusst weder Changelog-Block noch Tag.
 
 ## Major-Version erhöhen
 
