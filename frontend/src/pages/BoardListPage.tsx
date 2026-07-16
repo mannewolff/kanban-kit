@@ -362,7 +362,7 @@ export function BoardListPage() {
                 aria-label={`Spalte ${COLUMN_META[key].label}`}
                 onDragStart={(e) => { e.stopPropagation(); setColDrag(key) }}
                 onDragOver={(e) => { if (colDrag && colDrag !== key) { e.preventDefault(); setColOver(key) } }}
-                onDrop={(e) => { e.preventDefault(); if (colDrag) reorderColumns(colDrag, key); setColDrag(null); setColOver(null) }}
+                onDrop={(e) => { e.preventDefault(); if (colDrag) { reorderColumns(colDrag, key) } setColDrag(null); setColOver(null) }}
                 onDragEnd={() => { setColDrag(null); setColOver(null) }}
                 sx={{
                   ...cellSx(key),

@@ -5,6 +5,7 @@ import java.time.Instant;
 import java.util.List;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.auth.application.AppUserRepository;
+import org.mwolff.manban.auth.domain.AppUser;
 import org.mwolff.manban.board.application.BoardNotFoundException;
 import org.mwolff.manban.board.application.BoardRepository;
 import org.mwolff.manban.board.domain.Board;
@@ -52,7 +53,7 @@ public class CommentService {
   public CommentView create(long userId, long cardId, String body) {
     long projectId = projectIdOfCard(cardId);
     permissions.require(userId, projectId, Permission.COMMENT_CREATE);
-    String authorName = users.findById(userId).map(u -> u.displayName()).orElse("Unbekannt");
+    String authorName = users.findById(userId).map(AppUser::displayName).orElse("Unbekannt");
     Instant now = clock.instant();
     Comment saved = comments.save(new Comment(null, cardId, userId, authorName, body, now, now));
     return view(saved);

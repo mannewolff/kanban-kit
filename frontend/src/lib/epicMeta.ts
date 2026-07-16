@@ -13,7 +13,7 @@ function hashId(id: number): number {
   const s = String(id)
   let h = 0
   for (let i = 0; i < s.length; i++) {
-    h = (h * 31 + s.charCodeAt(i)) >>> 0
+    h = (h * 31 + (s.codePointAt(i) ?? 0)) >>> 0
   }
   return h
 }
