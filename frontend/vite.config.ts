@@ -44,14 +44,17 @@ export default defineConfig({
         'src/App.tsx', // reines Routen-Wiring (lazy-Imports); Verhalten über Page-Tests gedeckt
         'src/theme.ts', // Design-Token-Objekt ohne Logik
       ],
-      // Ehrliche Ist-Schwellen (Stand 2026-07-11) als Gate gegen Rückschritt.
-      // Zielpfad: schrittweise anheben, wenn Lücken (v. a. Auth-Seiten, BoardPage-Interaktionen)
-      // geschlossen werden — analog zum PIT-Vorgehen im Backend (94 → 100).
+      // Ehrliche Ist-Schwellen (Stand 2026-07-16) als Gate gegen Rückschritt — reiner Ratchet,
+      // nur anheben, nie senken (CLAUDE-react.md §Tests, kanban-kit#216). api/*.ts (Endpoint-
+      // Wrapper) ist jetzt direkt getestet statt gemockt (99,66/98,57/98,44 % L/B/F) und treibt
+      // functions von 58 auf 79 — das war die größte verbleibende Frontend-Lücke.
+      // Zielpfad: schrittweise weiter anheben, wenn Lücken (v. a. AppShell, BoardPage-Interaktionen,
+      // CardDetailModal) geschlossen werden — analog zum PIT-Vorgehen im Backend (94 → 100).
       thresholds: {
-        lines: 87,
-        branches: 87,
-        functions: 58,
-        statements: 87,
+        lines: 93,
+        branches: 90,
+        functions: 79,
+        statements: 93,
       },
     },
   },
