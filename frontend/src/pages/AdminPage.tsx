@@ -115,7 +115,7 @@ export function AdminPage({ api = defaultAdminApi }: Props) {
                       size="small"
                       value={editing.name}
                       onChange={(e) => setEditing({ id: u.id, name: e.target.value })}
-                      inputProps={{ maxLength: 120, 'aria-label': `Anzeigename von ${u.email}` }}
+                      slotProps={{ htmlInput: { maxLength: 120, 'aria-label': `Anzeigename von ${u.email}` } }}
                     />
                     <Button size="small" aria-label="Namen speichern" onClick={saveDisplayName}>
                       Speichern

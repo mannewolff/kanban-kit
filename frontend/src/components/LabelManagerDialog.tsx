@@ -76,7 +76,7 @@ export function LabelManagerDialog({
               label="Neues Label"
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
-              inputProps={{ maxLength: 60, 'aria-label': 'Neues Label' }}
+              slotProps={{ htmlInput: { maxLength: 60, 'aria-label': 'Neues Label' } }}
             />
             <Box
               component="input"
@@ -123,7 +123,7 @@ function LabelRow({
         size="small"
         value={name}
         onChange={(e) => setName(e.target.value)}
-        inputProps={{ maxLength: 60, 'aria-label': `Label ${label.name}` }}
+        slotProps={{ htmlInput: { maxLength: 60, 'aria-label': `Label ${label.name}` } }}
       />
       <Box
         component="input"

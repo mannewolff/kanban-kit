@@ -58,7 +58,7 @@ export function BootstrapAdminPage({ api = defaultAdminApi }: Props) {
             label="Bootstrap-Token"
             value={token}
             onChange={(e) => setToken(e.target.value)}
-            inputProps={{ 'aria-label': 'Bootstrap-Token' }}
+            slotProps={{ htmlInput: { 'aria-label': 'Bootstrap-Token' } }}
           />
           <Button type="submit" variant="contained" disabled={busy}>
             Admin werden

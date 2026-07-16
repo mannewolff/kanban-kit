@@ -107,7 +107,7 @@ export function RolesPage({ api = defaultRolesApi }: { api?: RolesApi } = {}) {
                         size="small"
                         disabled
                         checked={matrix.grants[role]?.includes(p.key) ?? false}
-                        inputProps={{ 'aria-label': `${p.key} für ${role}` }}
+                        slotProps={{ input: { 'aria-label': `${p.key} für ${role}` } }}
                       />
                     </TableCell>
                   ))}

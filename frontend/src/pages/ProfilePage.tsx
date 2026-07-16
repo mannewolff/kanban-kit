@@ -52,7 +52,7 @@ export function ProfilePage() {
             }}
             required
             fullWidth
-            inputProps={{ maxLength: 120, 'aria-label': 'Anzeigename' }}
+            slotProps={{ htmlInput: { maxLength: 120, 'aria-label': 'Anzeigename' } }}
           />
           <Button type="submit" variant="contained" disabled={busy || displayName.trim().length === 0}>
             Speichern

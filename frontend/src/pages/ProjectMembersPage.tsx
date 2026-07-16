@@ -201,7 +201,7 @@ export function ProjectMembersPage({ api = defaultMembersApi, loadRole }: Props)
               onChange={(e) => setInviteEmail(e.target.value)} />
             <TextField size="small" select label="Rolle" value={inviteRole} sx={{ minWidth: 120 }}
               onChange={(e) => setInviteRole(e.target.value as ProjectRole)}
-              inputProps={{ 'aria-label': 'Einladungsrolle' }}>
+              slotProps={{ htmlInput: { 'aria-label': 'Einladungsrolle' } }}>
               {ROLES.map((r) => <MenuItem key={r} value={r}>{r}</MenuItem>)}
             </TextField>
             <Button type="submit" variant="contained" disabled={inviting || !inviteEmail.trim()}>
@@ -231,7 +231,7 @@ export function ProjectMembersPage({ api = defaultMembersApi, loadRole }: Props)
                       variant="standard"
                       value={editingName.name}
                       onChange={(e) => setEditingName({ userId: member.userId, name: e.target.value })}
-                      inputProps={{ maxLength: 120, 'aria-label': `Anzeigename von ${member.email}` }}
+                      slotProps={{ htmlInput: { maxLength: 120, 'aria-label': `Anzeigename von ${member.email}` } }}
                     />
                     <Button size="small" aria-label="Namen speichern" onClick={handleChangeDisplayName}>
                       Speichern
@@ -263,7 +263,7 @@ export function ProjectMembersPage({ api = defaultMembersApi, loadRole }: Props)
                   <TextField select size="small" value={member.role} variant="standard"
                     disabled={isLastOwner(member)} sx={{ minWidth: 110 }}
                     onChange={(e) => handleChangeRole(member, e.target.value as ProjectRole)}
-                    inputProps={{ 'aria-label': `Rolle von ${member.displayName}` }}>
+                    slotProps={{ htmlInput: { 'aria-label': `Rolle von ${member.displayName}` } }}>
                     {ROLES.map((r) => <MenuItem key={r} value={r}>{r}</MenuItem>)}
                   </TextField>
                 ) : (

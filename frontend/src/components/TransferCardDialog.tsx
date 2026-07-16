@@ -99,7 +99,7 @@ export function TransferCardDialog({
             label="Projekt"
             value={projectId}
             onChange={(e) => setProjectId(e.target.value === '' ? '' : Number(e.target.value))}
-            inputProps={{ 'aria-label': 'Zielprojekt' }}
+            slotProps={{ htmlInput: { 'aria-label': 'Zielprojekt' } }}
           >
             <option value="">(wählen)</option>
             {projects.map((p) => (
@@ -117,7 +117,7 @@ export function TransferCardDialog({
               setBoardId(e.target.value === '' ? '' : Number(e.target.value))
               setColumnId('')
             }}
-            inputProps={{ 'aria-label': 'Zielboard' }}
+            slotProps={{ htmlInput: { 'aria-label': 'Zielboard' } }}
           >
             <option value="">(wählen)</option>
             {boards.map((b) => (
@@ -132,7 +132,7 @@ export function TransferCardDialog({
             value={columnId}
             disabled={boardId === ''}
             onChange={(e) => setColumnId(e.target.value === '' ? '' : Number(e.target.value))}
-            inputProps={{ 'aria-label': 'Zielspalte' }}
+            slotProps={{ htmlInput: { 'aria-label': 'Zielspalte' } }}
           >
             <option value="">(wählen)</option>
             {columns.map((c) => (

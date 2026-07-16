@@ -224,7 +224,7 @@ export function ProjectsPage() {
             value={renameValue}
             onChange={(e) => setRenameValue(e.target.value)}
             sx={{ mt: 1 }}
-            inputProps={{ 'aria-label': 'Neuer Projektname' }}
+            slotProps={{ htmlInput: { 'aria-label': 'Neuer Projektname' } }}
           />
         </DialogContent>
         <DialogActions>

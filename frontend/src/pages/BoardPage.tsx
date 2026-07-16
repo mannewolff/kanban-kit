@@ -282,7 +282,7 @@ export function BoardPage() {
             value={renameValue}
             onChange={(e) => setRenameValue(e.target.value)}
             sx={{ mt: 1 }}
-            inputProps={{ 'aria-label': 'Neuer Board-Name' }}
+            slotProps={{ htmlInput: { 'aria-label': 'Neuer Board-Name' } }}
           />
         </DialogContent>
         <DialogActions>

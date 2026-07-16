@@ -418,7 +418,7 @@ export function CardDetailModal({
                 required
                 autoFocus
                 fullWidth
-                inputProps={{ maxLength: 300, 'aria-label': 'Titel' }}
+                slotProps={{ htmlInput: { maxLength: 300, 'aria-label': 'Titel' } }}
               />
               <TextField
                 label="Markdown-Beschreibung"
@@ -427,7 +427,7 @@ export function CardDetailModal({
                 multiline
                 rows={8}
                 fullWidth
-                inputProps={{ maxLength: 10_000, 'aria-label': 'Markdown-Beschreibung' }}
+                slotProps={{ htmlInput: { maxLength: 10_000, 'aria-label': 'Markdown-Beschreibung' } }}
                 sx={{ '& textarea': { fontFamily: 'monospace', resize: 'vertical' } }}
               />
               {isEpic ? (
@@ -435,7 +435,7 @@ export function CardDetailModal({
                   label="Kürzel"
                   value={shortcode}
                   onChange={(e) => setShortcode(e.target.value)}
-                  inputProps={{ maxLength: 16, 'aria-label': 'Kürzel' }}
+                  slotProps={{ htmlInput: { maxLength: 16, 'aria-label': 'Kürzel' } }}
                   sx={{ maxWidth: 200 }}
                 />
               ) : (
@@ -446,7 +446,7 @@ export function CardDetailModal({
                     label="Epic"
                     value={parentId ?? ''}
                     onChange={(e) => setParentId(e.target.value === '' ? null : Number(e.target.value))}
-                    inputProps={{ 'aria-label': 'Epic' }}
+                    slotProps={{ htmlInput: { 'aria-label': 'Epic' } }}
                     InputLabelProps={{ shrink: true }}
                     fullWidth
                   >
@@ -466,7 +466,7 @@ export function CardDetailModal({
                     }}
                     error={depsError != null}
                     helperText={depsError ?? 'z. B. 12, 34'}
-                    inputProps={{ 'aria-label': 'Abhängig von' }}
+                    slotProps={{ htmlInput: { 'aria-label': 'Abhängig von' } }}
                     fullWidth
                   />
                   <TextField
@@ -475,7 +475,7 @@ export function CardDetailModal({
                     value={dueInput}
                     onChange={(e) => setDueInput(e.target.value)}
                     InputLabelProps={{ shrink: true }}
-                    inputProps={{ 'aria-label': 'Fällig am' }}
+                    slotProps={{ htmlInput: { 'aria-label': 'Fällig am' } }}
                     sx={{ maxWidth: 200 }}
                   />
                 </>
@@ -524,7 +524,7 @@ export function CardDetailModal({
                   value={members.filter((m) => assigneeIds.includes(m.userId))}
                   onChange={(_, selected) => void saveAssignees(selected.map((m) => m.userId))}
                   renderInput={(params) => (
-                    <TextField {...params} label="Zuständige" inputProps={{ ...params.inputProps, 'aria-label': 'Zuständige' }} />
+                    <TextField {...params} label="Zuständige" slotProps={{ htmlInput: { ...params.inputProps, 'aria-label': 'Zuständige' } }} />
                   )}
                 />
               ) : assigneeIds.length > 0 ? (
@@ -565,7 +565,7 @@ export function CardDetailModal({
                     ))
                   }
                   renderInput={(params) => (
-                    <TextField {...params} label="Labels" inputProps={{ ...params.inputProps, 'aria-label': 'Labels' }} />
+                    <TextField {...params} label="Labels" slotProps={{ htmlInput: { ...params.inputProps, 'aria-label': 'Labels' } }} />
                   )}
                 />
               ) : labelIds.length > 0 ? (
@@ -690,7 +690,7 @@ export function CardDetailModal({
                           <Stack spacing={1}>
                             <TextField multiline size="small" value={editingBody}
                               onChange={(e) => setEditingBody(e.target.value)}
-                              inputProps={{ maxLength: 10_000, 'aria-label': 'Kommentar bearbeiten' }} />
+                              slotProps={{ htmlInput: { maxLength: 10_000, 'aria-label': 'Kommentar bearbeiten' } }} />
                             <Stack direction="row" spacing={1}>
                               <Button size="small" variant="contained" onClick={() => void saveEditComment()}>Speichern</Button>
                               <Button size="small" onClick={() => setEditingCommentId(null)}>Abbrechen</Button>
@@ -706,7 +706,7 @@ export function CardDetailModal({
                 </Stack>
                 <Stack direction="row" spacing={1} sx={{ mt: 1 }}>
                   <TextField size="small" fullWidth placeholder="Kommentar schreiben" value={newComment}
-                    onChange={(e) => setNewComment(e.target.value)} inputProps={{ 'aria-label': 'Kommentar schreiben' }} />
+                    onChange={(e) => setNewComment(e.target.value)} slotProps={{ htmlInput: { 'aria-label': 'Kommentar schreiben' } }} />
                   <Button variant="contained" size="small" onClick={addComment}>
                     Senden
                   </Button>

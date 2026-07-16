@@ -10,14 +10,16 @@ import { useState } from 'react'
  * MUI-`TextField` (alle Props werden durchgereicht), nur das `type`-Feld steuert die Komponente
  * selbst. Der Umschalter belegt das End-Adornment des Feldes.
  */
-export function PasswordField(props: Omit<TextFieldProps, 'type'>) {
+export function PasswordField({ slotProps, ...props }: Omit<TextFieldProps, 'type'>) {
   const [show, setShow] = useState(false)
   return (
     <TextField
       {...props}
       type={show ? 'text' : 'password'}
       slotProps={{
+        ...slotProps,
         input: {
+          ...slotProps?.input,
           endAdornment: (
             <InputAdornment position="end">
               <IconButton

@@ -314,7 +314,7 @@ export function BoardView({
               label="Epic-Filter"
               value={epicFilter ?? ''}
               onChange={(e) => changeEpicFilter(e.target.value === '' ? null : Number(e.target.value))}
-              inputProps={{ 'aria-label': 'Epic-Filter' }}
+              slotProps={{ htmlInput: { 'aria-label': 'Epic-Filter' } }}
               InputLabelProps={{ shrink: true }}
               sx={{ minWidth: 200 }}
             >
@@ -479,7 +479,7 @@ export function BoardView({
                             checked={selected}
                             onChange={() => toggleSelect(card.id)}
                             onClick={(e) => e.stopPropagation()}
-                            inputProps={{ 'aria-label': `Karte ${card.title} auswählen` }}
+                            slotProps={{ input: { 'aria-label': `Karte ${card.title} auswählen` } }}
                             sx={{ p: 0, mt: 0.25 }}
                           />
                         )}
@@ -559,14 +559,14 @@ export function BoardView({
               label="Name"
               value={columnName}
               onChange={(e) => setColumnName(e.target.value)}
-              inputProps={{ maxLength: 120, 'aria-label': 'Spaltenname' }}
+              slotProps={{ htmlInput: { maxLength: 120, 'aria-label': 'Spaltenname' } }}
             />
             <TextField
               label="WIP-Limit (optional)"
               type="number"
               value={columnWip}
               onChange={(e) => setColumnWip(e.target.value)}
-              inputProps={{ min: 1, 'aria-label': 'WIP-Limit' }}
+              slotProps={{ htmlInput: { min: 1, 'aria-label': 'WIP-Limit' } }}
             />
           </Stack>
         </DialogContent>
