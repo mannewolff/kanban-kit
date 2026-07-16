@@ -17,6 +17,14 @@ Bei jedem `push main`: Patch-Teil erhöhen (Z+1).
 node scripts/bump-version.mjs patch
 ```
 
+**Zusätzlich (automatisch, kein manueller Schritt hier):** Jeder Push auf `main` löst
+[.github/workflows/sonarqube.yml](.github/workflows/sonarqube.yml) aus — Backend-/Frontend-Tests
+inkl. Coverage, SonarQube-Cloud-Scan, danach automatischer Sync neuer Findings als GitHub Issues
+(Label `sonar`, siehe [scripts/sync-sonar-issues-to-github.mjs](scripts/sync-sonar-issues-to-github.mjs),
+Issue #111/#112). Nicht mehr an den `production`-Merge gebunden: SonarCloud (Free-Tier) kennt
+ohnehin nur den `main`-Branch, ein zusätzlicher Scan bei `merge production` wäre nur eine
+redundante Zweitanalyse desselben Commits (main -> production per PR-Merge, siehe unten).
+
 ## merge production
 
 Bei jedem `merge production`: Minor-Teil erhöhen (Y+1, Z→0), Changelog schreiben und den
@@ -39,14 +47,6 @@ die alte Version.
 Keep-a-Changelog-Format). `bump-version.mjs minor` setzt den Tag `vX.Y.Z`, der beim nächsten
 Release wiederum die Range-Untergrenze bildet. Ein `push main` (Patch-Bump) erzeugt bewusst
 weder Changelog-Block noch Tag.
-
-**Zusätzlich (automatisch, kein manueller Schritt hier):** Sobald der PR tatsächlich nach
-`production` gemerged wird, löst der Push auf den `production`-Branch
-[.github/workflows/sonarqube.yml](.github/workflows/sonarqube.yml) aus — Backend-/Frontend-Tests
-inkl. Coverage, SonarQube-Cloud-Scan, danach automatischer Sync neuer Findings als GitHub Issues
-(Label `sonar`, siehe [scripts/sync-sonar-issues-to-github.mjs](scripts/sync-sonar-issues-to-github.mjs),
-Issue #111/#112). Das ist an den echten GitHub-Merge gebunden, nicht an das Erstellen des PRs durch
-den `merge-production`-Skill.
 
 ## Major-Version erhöhen
 
