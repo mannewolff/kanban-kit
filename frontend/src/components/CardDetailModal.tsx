@@ -19,6 +19,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type ComponentPropsWithoutRef,
@@ -130,11 +131,18 @@ const TaskMarkdown = memo(function TaskMarkdown({
   canEdit: boolean
   onToggle: (index: number) => void
 }) {
-  // Render-lokaler Zähler (frisch pro Render, wie zuvor `let counter = 0`): react-markdown ruft
-  // `nextIndex` je Checkbox in Dokumentreihenfolge. Bewusst kein useRef (Schreiben während des
-  // Renders) und kein useMemo (Zähler muss pro Render zurückgesetzt sein).
-  const counter = { value: 0 }
-  const ctxValue = { canEdit, onToggle, nextIndex: () => counter.value++ }
+  // Zähler muss bei jedem tatsächlichen Render dieser (memoized) Komponente zurückgesetzt werden:
+  // react-markdown ruft `nextIndex` je Checkbox in Dokumentreihenfolge auf. Da die Deps exakt den
+  // Props entsprechen, gegen die `memo` oben vergleicht, fällt das useMemo-Recompute mit jedem
+  // echten Funktionsaufruf zusammen — der Zähler startet dabei trotzdem frisch bei 0, weil er
+  // innerhalb der Factory neu angelegt wird. Bewusst kein useRef (Schreiben während des Renders).
+  const ctxValue = useMemo(() => {
+    const counter = { value: 0 }
+    return { canEdit, onToggle, nextIndex: () => counter.value++ }
+    // body wird in der Factory nicht gelesen, muss aber in den Deps stehen: ein neuer body-Wert
+    // soll den Zähler zurücksetzen, obwohl body selbst nicht in ctxValue einfließt.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [body, canEdit, onToggle])
   return (
     <TaskCheckboxContext.Provider value={ctxValue}>
       <Markdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
@@ -352,9 +360,15 @@ function AttachmentsSection({
       </Stack>
       {canEdit && (
         <Button component="label" size="small" sx={{ mt: 1 }}>
-          Datei anhängen
-          <input hidden type="file" aria-label="Datei anhängen"
-            onChange={(e) => { const f = e.target.files?.[0]; if (f) onUpload(f) }} />
+          Datei anhängen<input
+            hidden
+            type="file"
+            aria-label="Datei anhängen"
+            onChange={(e) => {
+              const f = e.target.files?.[0]
+              if (f) onUpload(f)
+            }}
+          />
         </Button>
       )}
     </Box>
@@ -514,12 +528,14 @@ function CardEditForm({
     <>
       <TextField
         select
-        SelectProps={{ native: true }}
         label="Epic"
         value={parentId ?? ''}
         onChange={(e) => onParentIdChange(e.target.value === '' ? null : Number(e.target.value))}
-        slotProps={{ htmlInput: { 'aria-label': 'Epic' } }}
-        InputLabelProps={{ shrink: true }}
+        slotProps={{
+          htmlInput: { 'aria-label': 'Epic' },
+          select: { native: true },
+          inputLabel: { shrink: true },
+        }}
         fullWidth
       >
         <option value="">(kein Epic)</option>
@@ -543,8 +559,10 @@ function CardEditForm({
         label="Fällig am"
         value={dueInput}
         onChange={(e) => onDueInputChange(e.target.value)}
-        InputLabelProps={{ shrink: true }}
-        slotProps={{ htmlInput: { 'aria-label': 'Fällig am' } }}
+        slotProps={{
+          htmlInput: { 'aria-label': 'Fällig am' },
+          inputLabel: { shrink: true },
+        }}
         sx={{ maxWidth: 200 }}
       />
     </>
@@ -580,6 +598,68 @@ function CardEditForm({
         />
       ) : (
         nonEpicFields
+      )}
+    </>
+  )
+}
+
+/** Status-Chip in der Kopfleiste: „Epic" bei Epics, sonst der Spalten-Chip (falls bekannt). */
+function CardStatusChip({
+  isEpic,
+  columnName,
+  colors,
+}: Readonly<{
+  isEpic: boolean
+  columnName?: string
+  colors: { bg: string; text: string } | null
+}>) {
+  if (isEpic) return <Chip label="Epic" size="small" color="secondary" />
+  if (!colors) return null
+  return <Chip label={columnName} size="small" sx={{ bgcolor: colors.bg, color: colors.text, fontWeight: 600 }} />
+}
+
+/** View-Modus-Inhalt: Beschreibung (Markdown mit Task-Checkboxen), Abhängigkeiten, Fälligkeitsdatum. */
+function CardBodyView({
+  body,
+  canEdit,
+  onToggleTask,
+  dependencies,
+  isEpic,
+  dueDate,
+  dueOverdue,
+}: Readonly<{
+  body: string
+  canEdit: boolean
+  onToggleTask: (index: number) => void
+  dependencies: number[]
+  isEpic: boolean
+  dueDate: string | null
+  dueOverdue: boolean
+}>) {
+  return (
+    <>
+      <Box aria-label="Beschreibung" data-testid="description-view" sx={descriptionSx}>
+        {body ? (
+          <TaskMarkdown body={body} canEdit={canEdit} onToggle={onToggleTask} />
+        ) : (
+          <Typography color="text.secondary">Keine Beschreibung.</Typography>
+        )}
+      </Box>
+      {dependencies.length > 0 && (
+        <Typography variant="body2" color="text.secondary" aria-label="Abhängigkeiten">
+          Abhängig von: {dependencies.map((n) => `#${n}`).join(', ')}
+        </Typography>
+      )}
+      {!isEpic && dueDate && (
+        <Typography
+          variant="body2"
+          aria-label="Fälligkeitsdatum"
+          color={dueOverdue ? 'error' : 'text.secondary'}
+          sx={{ fontWeight: dueOverdue ? 600 : 400 }}
+        >
+          Fällig am {formatDueDate(dueDate)}
+          {dueOverdue && ' — überfällig'}
+        </Typography>
       )}
     </>
   )
@@ -627,7 +707,7 @@ export function CardDetailModal({
   commentsApi = defaultCommentsApi,
   attachmentsApi = defaultAttachmentsApi,
   cardsApi = defaultCardsApi,
-}: Props) {
+}: Readonly<Props>) {
   const { user } = useAuth()
   const isEpic = card.type === 'EPIC'
   const [assigneeIds, setAssigneeIds] = useState<number[]>(card.assignees)
@@ -852,17 +932,7 @@ export function CardDetailModal({
     >
       <DialogTitle sx={{ borderBottom: `1px solid ${MODAL_BORDER}` }}>
         <Stack direction="row" alignItems="center" spacing={1} sx={{ flexWrap: 'wrap' }}>
-          {isEpic ? (
-            <Chip label="Epic" size="small" color="secondary" />
-          ) : (
-            colors && (
-              <Chip
-                label={columnName}
-                size="small"
-                sx={{ bgcolor: colors.bg, color: colors.text, fontWeight: 600 }}
-              />
-            )
-          )}
+          <CardStatusChip isEpic={isEpic} columnName={columnName} colors={colors} />
           <Typography component="span" variant="body2" color="text.secondary">
             #{card.number}
           </Typography>
@@ -902,31 +972,15 @@ export function CardDetailModal({
               onDueInputChange={setDueInput}
             />
           ) : (
-            <>
-              <Box aria-label="Beschreibung" data-testid="description-view" sx={descriptionSx}>
-                {body ? (
-                  <TaskMarkdown body={body} canEdit={canEdit} onToggle={onToggleTask} />
-                ) : (
-                  <Typography color="text.secondary">Keine Beschreibung.</Typography>
-                )}
-              </Box>
-              {card.dependencies.length > 0 && (
-                <Typography variant="body2" color="text.secondary" aria-label="Abhängigkeiten">
-                  Abhängig von: {card.dependencies.map((n) => `#${n}`).join(', ')}
-                </Typography>
-              )}
-              {!isEpic && card.dueDate && (
-                <Typography
-                  variant="body2"
-                  aria-label="Fälligkeitsdatum"
-                  color={dueOverdue ? 'error' : 'text.secondary'}
-                  sx={{ fontWeight: dueOverdue ? 600 : 400 }}
-                >
-                  Fällig am {formatDueDate(card.dueDate)}
-                  {dueOverdue && ' — überfällig'}
-                </Typography>
-              )}
-            </>
+            <CardBodyView
+              body={body}
+              canEdit={canEdit}
+              onToggleTask={onToggleTask}
+              dependencies={card.dependencies}
+              isEpic={isEpic}
+              dueDate={card.dueDate}
+              dueOverdue={dueOverdue}
+            />
           )}
 
           {!isEpic && (
