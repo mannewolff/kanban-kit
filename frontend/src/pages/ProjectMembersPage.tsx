@@ -83,13 +83,12 @@ export function ProjectMembersPage({ api = defaultMembersApi, loadRole }: Readon
   const ownerCount = members.filter((m) => m.role === 'OWNER').length
   const isLastOwner = (m: Member) => m.role === 'OWNER' && ownerCount === 1
 
-  const handleTransferOwner = async () => {
-    if (!transferTarget) {
-      return
-    }
+  // Kein Nullable-Guard nötig: der Übertragen-Button existiert nur, solange der Dialog offen ist
+  // (open={transferTarget !== null}, siehe unten) — das Ziel wird ihm direkt übergeben.
+  const handleTransferOwner = async (target: Member) => {
     setTransferError(null)
     try {
-      await projectsApi.transferOwner(id, transferTarget.userId)
+      await projectsApi.transferOwner(id, target.userId)
       setTransferTarget(null)
       // Der Aufrufer verliert die Owner-Rechte und wird Admin (Backend-Semantik).
       setRole('ADMIN')
@@ -290,22 +289,24 @@ export function ProjectMembersPage({ api = defaultMembersApi, loadRole }: Readon
         </TableBody>
       </Table>
 
-      <Dialog open={transferTarget !== null} onClose={() => setTransferTarget(null)}>
-        <DialogTitle>Zum Eigentümer machen?</DialogTitle>
-        <DialogContent>
-          {transferError && <Alert severity="error" sx={{ mb: 2 }}>{transferError}</Alert>}
-          <DialogContentText>
-            „{transferTarget?.displayName}&ldquo; wird Eigentümer dieses Projekts. Du verlierst
-            dabei deine Owner-Rechte und wirst zum Admin herabgestuft.
-          </DialogContentText>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setTransferTarget(null)}>Abbrechen</Button>
-          <Button variant="contained" onClick={() => void handleTransferOwner()}>
-            Übertragen
-          </Button>
-        </DialogActions>
-      </Dialog>
+      {transferTarget && (
+        <Dialog open onClose={() => setTransferTarget(null)}>
+          <DialogTitle>Zum Eigentümer machen?</DialogTitle>
+          <DialogContent>
+            {transferError && <Alert severity="error" sx={{ mb: 2 }}>{transferError}</Alert>}
+            <DialogContentText>
+              „{transferTarget.displayName}&ldquo; wird Eigentümer dieses Projekts. Du verlierst
+              dabei deine Owner-Rechte und wirst zum Admin herabgestuft.
+            </DialogContentText>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setTransferTarget(null)}>Abbrechen</Button>
+            <Button variant="contained" onClick={() => void handleTransferOwner(transferTarget)}>
+              Übertragen
+            </Button>
+          </DialogActions>
+        </Dialog>
+      )}
     </Box>
   )
 }

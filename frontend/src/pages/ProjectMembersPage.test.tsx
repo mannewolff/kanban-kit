@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '../api/client'
 import type { Member, MembersApi } from '../api/members'
 import { projectsApi } from '../api/projects'
@@ -44,6 +44,8 @@ function renderPage(api: MembersApi, role: string) {
 }
 
 describe('ProjectMembersPage', () => {
+  beforeEach(() => vi.clearAllMocks())
+
   it('zeigt den Breadcrumb-Pfad ab Projekte', async () => {
     renderPage(makeApi(), 'OWNER')
     expect(await screen.findByRole('link', { name: 'Projekte' })).toHaveAttribute('href', '/')
@@ -185,5 +187,186 @@ describe('ProjectMembersPage', () => {
     renderPage(makeApi(), 'MEMBER')
     await waitFor(() => expect(screen.getByText('Mika Member')).toBeInTheDocument())
     expect(screen.queryByLabelText('Mika Member zum Eigentümer machen')).not.toBeInTheDocument()
+  })
+
+  it('zeigt einen Fehler, wenn die Eigentümer-Übertragung fehlschlägt', async () => {
+    mProjects.transferOwner.mockRejectedValue(new Error('boom'))
+    renderPage(makeApi(), 'OWNER')
+    await waitFor(() => expect(screen.getByText('Mika Member')).toBeInTheDocument())
+
+    fireEvent.click(screen.getByLabelText('Mika Member zum Eigentümer machen'))
+    fireEvent.click(screen.getByRole('button', { name: 'Übertragen' }))
+
+    expect(await screen.findByText('Eigentümer-Wechsel fehlgeschlagen.')).toBeInTheDocument()
+  })
+
+  it('zeigt eine generische Fehlermeldung bei fehlgeschlagener Einladung', async () => {
+    const invite = vi.fn().mockRejectedValue(new Error('boom'))
+    renderPage(makeApi({ invite }), 'OWNER')
+    await waitFor(() => expect(screen.getByText('Olga Owner')).toBeInTheDocument())
+
+    fireEvent.change(screen.getByLabelText(/E-Mail einladen/), { target: { value: 'x@x.de' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Einladen' }))
+
+    expect(await screen.findByText('Einladung fehlgeschlagen.')).toBeInTheDocument()
+  })
+
+  it('zeigt bei Rollenänderung des letzten Owners eine spezifische Fehlermeldung (409)', async () => {
+    const changeRole = vi.fn().mockRejectedValue(new ApiError(409, 'letzter Owner'))
+    renderPage(makeApi({ changeRole }), 'OWNER')
+    await waitFor(() => expect(screen.getByText('Mika Member')).toBeInTheDocument())
+
+    fireEvent.mouseDown(screen.getByLabelText('Rolle von Mika Member'))
+    fireEvent.click(await screen.findByRole('option', { name: 'ADMIN' }))
+
+    expect(
+      await screen.findByText('Der letzte Owner kann nicht herabgestuft werden.'),
+    ).toBeInTheDocument()
+  })
+
+  it('zeigt eine generische Fehlermeldung bei fehlgeschlagener Rollenänderung', async () => {
+    const changeRole = vi.fn().mockRejectedValue(new Error('boom'))
+    renderPage(makeApi({ changeRole }), 'OWNER')
+    await waitFor(() => expect(screen.getByText('Mika Member')).toBeInTheDocument())
+
+    fireEvent.mouseDown(screen.getByLabelText('Rolle von Mika Member'))
+    fireEvent.click(await screen.findByRole('option', { name: 'ADMIN' }))
+
+    expect(await screen.findByText('Rollenänderung fehlgeschlagen.')).toBeInTheDocument()
+  })
+
+  it('zeigt eine Fehlermeldung, wenn das Ändern des Anzeigenamens fehlschlägt', async () => {
+    const changeDisplayName = vi.fn().mockRejectedValue(new ApiError(400, 'Name ungültig'))
+    renderPage(makeApi({ changeDisplayName }), 'OWNER')
+    await waitFor(() => expect(screen.getByText('Mika Member')).toBeInTheDocument())
+
+    fireEvent.click(screen.getByLabelText('Namen von Mika Member bearbeiten'))
+    fireEvent.change(screen.getByLabelText('Anzeigename von member@x.de'), { target: { value: 'X' } })
+    fireEvent.click(screen.getByLabelText('Namen speichern'))
+
+    expect(await screen.findByText('Name ungültig')).toBeInTheDocument()
+  })
+
+  it('bricht das Bearbeiten des Anzeigenamens ab', async () => {
+    renderPage(makeApi(), 'OWNER')
+    await waitFor(() => expect(screen.getByText('Mika Member')).toBeInTheDocument())
+
+    fireEvent.click(screen.getByLabelText('Namen von Mika Member bearbeiten'))
+    fireEvent.click(screen.getByLabelText('Bearbeiten abbrechen'))
+
+    expect(screen.queryByLabelText('Anzeigename von member@x.de')).not.toBeInTheDocument()
+    expect(screen.getByText('Mika Member')).toBeInTheDocument()
+  })
+
+  it('entfernt ein Mitglied', async () => {
+    const remove = vi.fn().mockResolvedValue(undefined)
+    const list = vi.fn()
+      .mockResolvedValueOnce(members)
+      .mockResolvedValueOnce([members[0]])
+    renderPage(makeApi({ remove, list }), 'OWNER')
+    await waitFor(() => expect(screen.getByText('Mika Member')).toBeInTheDocument())
+
+    fireEvent.click(screen.getByLabelText('Mika Member entfernen'))
+
+    await waitFor(() => expect(remove).toHaveBeenCalledWith(5, 2))
+    await waitFor(() => expect(screen.queryByText('Mika Member')).not.toBeInTheDocument())
+  })
+
+  it('zeigt bei serverseitig zwischenzeitlich letztem Owner eine spezifische Fehlermeldung (409)', async () => {
+    // Clientseitig zwei Owner (Button also nicht disabled), aber der Server lehnt ab, weil der
+    // andere Owner in einer anderen Session bereits entfernt wurde (echte Race Condition).
+    const twoOwners: Member[] = [
+      { userId: 1, email: 'owner@x.de', displayName: 'Olga Owner', role: 'OWNER' },
+      { userId: 3, email: 'owner2@x.de', displayName: 'Otto Owner', role: 'OWNER' },
+    ]
+    const remove = vi.fn().mockRejectedValue(new ApiError(409, 'letzter Owner'))
+    const list = vi.fn().mockResolvedValue(twoOwners)
+    renderPage(makeApi({ remove, list }), 'OWNER')
+    await waitFor(() => expect(screen.getByText('Otto Owner')).toBeInTheDocument())
+
+    fireEvent.click(screen.getByLabelText('Otto Owner entfernen'))
+
+    expect(
+      await screen.findByText('Der letzte Owner kann nicht entfernt werden.'),
+    ).toBeInTheDocument()
+  })
+
+  it('zeigt eine generische Fehlermeldung, wenn das Entfernen fehlschlägt', async () => {
+    const remove = vi.fn().mockRejectedValue(new Error('boom'))
+    renderPage(makeApi({ remove }), 'OWNER')
+    await waitFor(() => expect(screen.getByText('Mika Member')).toBeInTheDocument())
+
+    fireEvent.click(screen.getByLabelText('Mika Member entfernen'))
+
+    expect(await screen.findByText('Entfernen fehlgeschlagen.')).toBeInTheDocument()
+  })
+
+  it('ändert die Rolle eines Mitglieds erfolgreich', async () => {
+    const changeRole = vi.fn().mockResolvedValue(undefined)
+    const list = vi.fn()
+      .mockResolvedValueOnce(members)
+      .mockResolvedValueOnce([members[0], { ...members[1], role: 'ADMIN' }])
+    renderPage(makeApi({ changeRole, list }), 'OWNER')
+    await waitFor(() => expect(screen.getByText('Mika Member')).toBeInTheDocument())
+
+    fireEvent.mouseDown(screen.getByLabelText('Rolle von Mika Member'))
+    fireEvent.click(await screen.findByRole('option', { name: 'ADMIN' }))
+
+    await waitFor(() => expect(changeRole).toHaveBeenCalledWith(5, 2, 'ADMIN'))
+    await waitFor(() => expect(list).toHaveBeenCalledTimes(2))
+  })
+
+  it('speichert keinen leeren Anzeigenamen', async () => {
+    const changeDisplayName = vi.fn()
+    renderPage(makeApi({ changeDisplayName }), 'OWNER')
+    await waitFor(() => expect(screen.getByText('Mika Member')).toBeInTheDocument())
+
+    fireEvent.click(screen.getByLabelText('Namen von Mika Member bearbeiten'))
+    fireEvent.change(screen.getByLabelText('Anzeigename von member@x.de'), { target: { value: '   ' } })
+    fireEvent.click(screen.getByLabelText('Namen speichern'))
+
+    expect(changeDisplayName).not.toHaveBeenCalled()
+  })
+
+  it('wählt eine andere Einladungsrolle', async () => {
+    const invite = vi.fn().mockResolvedValue({ status: 'invited' })
+    renderPage(makeApi({ invite }), 'OWNER')
+    await waitFor(() => expect(screen.getByText('Olga Owner')).toBeInTheDocument())
+
+    fireEvent.mouseDown(screen.getByLabelText('Einladungsrolle'))
+    fireEvent.click(await screen.findByRole('option', { name: 'ADMIN' }))
+
+    fireEvent.change(screen.getByLabelText(/E-Mail einladen/), { target: { value: 'neu@x.de' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Einladen' }))
+
+    await waitFor(() => expect(invite).toHaveBeenCalledWith(5, 'neu@x.de', 'ADMIN'))
+  })
+
+  it('schließt den Übertragen-Dialog per Escape und über Abbrechen', async () => {
+    renderPage(makeApi(), 'OWNER')
+    await waitFor(() => expect(screen.getByText('Mika Member')).toBeInTheDocument())
+
+    fireEvent.click(screen.getByLabelText('Mika Member zum Eigentümer machen'))
+    fireEvent.keyDown(await screen.findByRole('dialog'), { key: 'Escape', code: 'Escape' })
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+
+    fireEvent.click(screen.getByLabelText('Mika Member zum Eigentümer machen'))
+    fireEvent.click(await screen.findByRole('button', { name: 'Abbrechen' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(mProjects.transferOwner).not.toHaveBeenCalled()
+  })
+
+  it('lädt Rolle und Projektname ohne loadRole-Prop über projectsApi.list', async () => {
+    mProjects.list.mockResolvedValue([{ id: 5, name: 'Mein Projekt', role: 'OWNER', createdAt: '' }])
+    render(
+      <MemoryRouter initialEntries={['/projects/5/members']}>
+        <Routes>
+          <Route path="/projects/:projectId/members" element={<ProjectMembersPage api={makeApi()} />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByRole('link', { name: 'Mein Projekt' })).toHaveAttribute('href', '/projects/5')
+    expect(await screen.findByLabelText(/E-Mail einladen/)).toBeInTheDocument()
   })
 })
