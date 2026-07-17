@@ -358,13 +358,15 @@ export function BoardView({
           {epics.length > 0 && (
             <TextField
               select
-              SelectProps={{ native: true }}
               size="small"
               label="Epic-Filter"
               value={epicFilter ?? ''}
               onChange={(e) => changeEpicFilter(e.target.value === '' ? null : Number(e.target.value))}
-              slotProps={{ htmlInput: { 'aria-label': 'Epic-Filter' } }}
-              InputLabelProps={{ shrink: true }}
+              slotProps={{
+                htmlInput: { 'aria-label': 'Epic-Filter' },
+                select: { native: true },
+                inputLabel: { shrink: true },
+              }}
               sx={{ minWidth: 200 }}
             >
               <option value="">Alle Epics</option>
