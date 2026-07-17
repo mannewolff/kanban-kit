@@ -5,6 +5,9 @@ import { ApiError } from '../api/client'
 import { boardsApi } from '../api/boards'
 import { cardsApi } from '../api/cards'
 import { epicsApi } from '../api/epics'
+import { labelsApi } from '../api/labels'
+import { membersApi } from '../api/members'
+import { configApi } from '../api/config'
 import { projectsApi } from '../api/projects'
 import { SnackbarProvider } from '../components/SnackbarProvider'
 import { BoardPage } from './BoardPage'
@@ -14,16 +17,53 @@ vi.mock('../auth/AuthContext', () => ({
   useAuth: () => ({ user: { userId: 1, email: 'a@b.c', displayName: 'A', platformRole: 'USER', memberships } }),
 }))
 vi.mock('../api/boards', () => ({ boardsApi: { get: vi.fn(), rename: vi.fn() } }))
-vi.mock('../api/cards', () => ({ cardsApi: { list: vi.fn(), getActivity: vi.fn().mockResolvedValue([]) } }))
-vi.mock('../api/epics', () => ({ epicsApi: { list: vi.fn(), assign: vi.fn() } }))
+vi.mock('../api/cards', () => ({
+  cardsApi: {
+    list: vi.fn(),
+    getActivity: vi.fn().mockResolvedValue([]),
+    update: vi.fn(),
+    setAssignees: vi.fn(),
+    setLabels: vi.fn(),
+    restore: vi.fn(),
+    archive: vi.fn(),
+    move: vi.fn(),
+    create: vi.fn(),
+    remove: vi.fn(),
+    bulkArchive: vi.fn(),
+    bulkTransfer: vi.fn(),
+    bulkDelete: vi.fn(),
+    listTrash: vi.fn().mockResolvedValue([]),
+    restoreDeleted: vi.fn(),
+    purge: vi.fn(),
+  },
+}))
+vi.mock('../api/epics', () => ({ epicsApi: { list: vi.fn(), assign: vi.fn(), create: vi.fn() } }))
+vi.mock('../api/labels', () => ({ labelsApi: { list: vi.fn(), create: vi.fn(), update: vi.fn(), remove: vi.fn() } }))
+vi.mock('../api/members', () => ({ membersApi: { list: vi.fn() } }))
+vi.mock('../api/config', () => ({ configApi: { get: vi.fn() } }))
+vi.mock('../api/comments', () => ({
+  commentsApi: { list: vi.fn().mockResolvedValue([]), create: vi.fn(), update: vi.fn(), remove: vi.fn() },
+}))
+vi.mock('../api/attachments', () => ({
+  attachmentsApi: { list: vi.fn().mockResolvedValue([]), upload: vi.fn(), remove: vi.fn(), fetchBlob: vi.fn() },
+}))
 vi.mock('../api/projects', () => ({ projectsApi: { list: vi.fn() } }))
 
 const mockedBoards = boardsApi as unknown as {
   get: ReturnType<typeof vi.fn>
   rename: ReturnType<typeof vi.fn>
 }
-const mockedCards = cardsApi as unknown as { list: ReturnType<typeof vi.fn> }
-const mockedEpics = epicsApi as unknown as { list: ReturnType<typeof vi.fn> }
+const mockedCards = cardsApi as unknown as {
+  list: ReturnType<typeof vi.fn>
+  update: ReturnType<typeof vi.fn>
+}
+const mockedEpics = epicsApi as unknown as { list: ReturnType<typeof vi.fn>; create: ReturnType<typeof vi.fn> }
+const mockedLabels = labelsApi as unknown as {
+  list: ReturnType<typeof vi.fn>
+  create: ReturnType<typeof vi.fn>
+}
+const mockedMembers = membersApi as unknown as { list: ReturnType<typeof vi.fn> }
+const mockedConfig = configApi as unknown as { get: ReturnType<typeof vi.fn> }
 const mockedProjects = projectsApi as unknown as { list: ReturnType<typeof vi.fn> }
 
 function renderPage() {
@@ -33,6 +73,9 @@ function renderPage() {
   })
   mockedCards.list.mockResolvedValue([])
   mockedEpics.list.mockResolvedValue([])
+  mockedLabels.list.mockResolvedValue([])
+  mockedMembers.list.mockResolvedValue([])
+  mockedConfig.get.mockResolvedValue({ doneRetentionDays: 30 })
   mockedProjects.list.mockResolvedValue([{ id: 9, name: 'P', role: 'OWNER', createdAt: '' }])
   return render(
     <MemoryRouter initialEntries={['/boards/1']}>
@@ -107,6 +150,9 @@ describe('BoardPage 404-Handling und Refetch', () => {
   function renderWith(entry: string, targets: React.ReactNode) {
     mockedCards.list.mockResolvedValue([])
     mockedEpics.list.mockResolvedValue([])
+    mockedLabels.list.mockResolvedValue([])
+    mockedMembers.list.mockResolvedValue([])
+    mockedConfig.get.mockResolvedValue({ doneRetentionDays: 30 })
     mockedProjects.list.mockResolvedValue([])
     return render(
       <SnackbarProvider>
@@ -146,5 +192,226 @@ describe('BoardPage 404-Handling und Refetch', () => {
     act(() => window.dispatchEvent(new Event('focus')))
 
     expect(await screen.findByText('Board-Liste')).toBeInTheDocument()
+  })
+
+  it('zeigt „Board nicht gefunden.“ bei einem anderen Ladefehler als 404', async () => {
+    memberships = []
+    mockedBoards.get.mockRejectedValue(new Error('Netzwerkfehler'))
+    renderWith('/boards/1', <Route path="/" element={<div>Projektübersicht</div>} />)
+
+    expect(await screen.findByText('Board nicht gefunden.')).toBeInTheDocument()
+  })
+})
+
+describe('BoardPage weitere Orchestrierung', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it('lädt die Rolle nach, wenn sie nicht in den Memberships steht', async () => {
+    memberships = []
+    mockedBoards.get.mockResolvedValue({
+      id: 1, projectId: 9, name: 'B', createdAt: '',
+      columns: [{ id: 10, name: 'Backlog', position: 0, wipLimit: null }],
+    })
+    mockedCards.list.mockResolvedValue([])
+    mockedEpics.list.mockResolvedValue([])
+    mockedLabels.list.mockResolvedValue([])
+    mockedMembers.list.mockResolvedValue([])
+    mockedConfig.get.mockResolvedValue({ doneRetentionDays: 30 })
+    // VIEWER darf keine Karten anlegen — Rolle kommt hier ausschließlich über den Fallback-Fetch.
+    mockedProjects.list.mockResolvedValue([{ id: 9, name: 'P', role: 'VIEWER', createdAt: '' }])
+    render(
+      <MemoryRouter initialEntries={['/boards/1']}>
+        <Routes>
+          <Route path="/boards/:boardId" element={<BoardPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByText('B')).toBeInTheDocument()
+    await waitFor(() => expect(mockedProjects.list).toHaveBeenCalled())
+    expect(screen.queryByLabelText('Karte in Backlog anlegen')).not.toBeInTheDocument()
+  })
+
+  it('legt ein Epic über BoardView an und lädt die Epics neu', async () => {
+    memberships = [{ projectId: 9, role: 'OWNER' }]
+    renderPage()
+    const epicsApiMock = epicsApi as unknown as { create: ReturnType<typeof vi.fn> }
+    epicsApiMock.create.mockResolvedValue({
+      id: 20, number: 1, title: 'Auth', description: '', shortcode: 'AUT', done: 0, total: 0,
+    })
+    await waitFor(() => expect(screen.getByLabelText('Karte in Backlog anlegen')).toBeInTheDocument())
+
+    fireEvent.click(screen.getByLabelText('Karte in Backlog anlegen'))
+    fireEvent.change(screen.getByLabelText('Typ'), { target: { value: 'EPIC' } })
+    fireEvent.change(screen.getByLabelText('Kürzel'), { target: { value: 'AUT' } })
+    fireEvent.change(screen.getByLabelText('Titel'), { target: { value: 'Auth' } })
+    mockedEpics.list.mockClear()
+    fireEvent.click(screen.getByRole('button', { name: 'Anlegen' }))
+
+    await waitFor(() => expect(epicsApiMock.create).toHaveBeenCalled())
+    await waitFor(() => expect(mockedEpics.list).toHaveBeenCalled())
+  })
+
+  it('legt ein Label über den Label-Manager an und lädt Labels und Karten neu', async () => {
+    memberships = [{ projectId: 9, role: 'OWNER' }]
+    renderPage()
+    mockedLabels.create.mockResolvedValue({ id: 5, boardId: 1, name: 'Bug', color: '#1976d2' })
+    await waitFor(() => expect(screen.getByLabelText('Karte in Backlog anlegen')).toBeInTheDocument())
+
+    fireEvent.click(screen.getByRole('button', { name: 'Labels' }))
+    fireEvent.change(await screen.findByLabelText('Neues Label'), { target: { value: 'Bug' } })
+    mockedLabels.list.mockClear()
+    mockedCards.list.mockClear()
+    fireEvent.click(screen.getByRole('button', { name: 'Anlegen' }))
+
+    await waitFor(() => expect(mockedLabels.create).toHaveBeenCalledWith(1, 'Bug', expect.any(String)))
+    await waitFor(() => expect(mockedLabels.list).toHaveBeenCalled())
+    expect(mockedCards.list).toHaveBeenCalled()
+  })
+
+  it('öffnet eine Karte per Klick über die echte BoardView und lädt nach dem Speichern Karten und Epics neu', async () => {
+    memberships = [{ projectId: 9, role: 'OWNER' }]
+    const openCard = {
+      id: 100, boardId: 1, columnId: 10, number: 1, title: 'Aufgabe', description: null,
+      positionInColumn: 0, archived: false, movedToDoneAt: null, dependencies: [],
+      type: 'CARD' as const, parentId: null, shortcode: null, assignees: [], dueDate: null, labels: [],
+    }
+    mockedBoards.get.mockResolvedValue({
+      id: 1, projectId: 9, name: 'B', createdAt: '',
+      columns: [{ id: 10, name: 'Backlog', position: 0, wipLimit: null }],
+    })
+    mockedCards.list.mockResolvedValue([openCard])
+    mockedCards.update.mockResolvedValue(openCard)
+    mockedEpics.list.mockResolvedValue([])
+    mockedLabels.list.mockResolvedValue([])
+    mockedMembers.list.mockResolvedValue([])
+    mockedConfig.get.mockResolvedValue({ doneRetentionDays: 30 })
+    mockedProjects.list.mockResolvedValue([{ id: 9, name: 'P', role: 'OWNER', createdAt: '' }])
+    render(
+      <MemoryRouter initialEntries={['/boards/1']}>
+        <Routes>
+          <Route path="/boards/:boardId" element={<BoardPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    fireEvent.click(await screen.findByTestId('card-100'))
+    fireEvent.click(await screen.findByRole('button', { name: 'Bearbeiten' }))
+    mockedCards.list.mockClear()
+    mockedEpics.list.mockClear()
+    fireEvent.click(screen.getByRole('button', { name: 'Speichern' }))
+
+    await waitFor(() => expect(mockedCards.update).toHaveBeenCalled())
+    await waitFor(() => expect(mockedCards.list).toHaveBeenCalled())
+    expect(mockedEpics.list).toHaveBeenCalled()
+  })
+
+  it('öffnet und schließt den Papierkorb-Dialog', async () => {
+    memberships = [{ projectId: 9, role: 'OWNER' }]
+    renderPage()
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Papierkorb' })).toBeInTheDocument())
+
+    fireEvent.click(screen.getByRole('button', { name: 'Papierkorb' }))
+    expect(await screen.findByRole('dialog')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Schließen' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+  })
+
+  it('öffnet und schließt den Label-Manager', async () => {
+    memberships = [{ projectId: 9, role: 'OWNER' }]
+    renderPage()
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Labels' })).toBeInTheDocument())
+
+    fireEvent.click(screen.getByRole('button', { name: 'Labels' }))
+    expect(await screen.findByLabelText('Neues Label')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Schließen' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+  })
+
+  it('schließt das Karten-Detail wieder', async () => {
+    memberships = [{ projectId: 9, role: 'OWNER' }]
+    const openCard = {
+      id: 100, boardId: 1, columnId: 10, number: 1, title: 'Aufgabe', description: null,
+      positionInColumn: 0, archived: false, movedToDoneAt: null, dependencies: [],
+      type: 'CARD' as const, parentId: null, shortcode: null, assignees: [], dueDate: null, labels: [],
+    }
+    mockedBoards.get.mockResolvedValue({
+      id: 1, projectId: 9, name: 'B', createdAt: '',
+      columns: [{ id: 10, name: 'Backlog', position: 0, wipLimit: null }],
+    })
+    mockedCards.list.mockResolvedValue([openCard])
+    mockedEpics.list.mockResolvedValue([])
+    mockedLabels.list.mockResolvedValue([])
+    mockedMembers.list.mockResolvedValue([])
+    mockedConfig.get.mockResolvedValue({ doneRetentionDays: 30 })
+    mockedProjects.list.mockResolvedValue([{ id: 9, name: 'P', role: 'OWNER', createdAt: '' }])
+    render(
+      <MemoryRouter initialEntries={['/boards/1']}>
+        <Routes>
+          <Route path="/boards/:boardId" element={<BoardPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    fireEvent.click(await screen.findByTestId('card-100'))
+    fireEvent.click(await screen.findByRole('button', { name: 'Schließen' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+  })
+
+  it('bricht das Umbenennen über Abbrechen ab', async () => {
+    memberships = [{ projectId: 9, role: 'OWNER' }]
+    renderPage()
+    await waitFor(() => expect(screen.getByLabelText('Board umbenennen')).toBeInTheDocument())
+
+    fireEvent.click(screen.getByLabelText('Board umbenennen'))
+    fireEvent.click(await screen.findByRole('button', { name: 'Abbrechen' }))
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(mockedBoards.rename).not.toHaveBeenCalled()
+  })
+
+  it('schließt den Umbenennen-Dialog per Escape', async () => {
+    memberships = [{ projectId: 9, role: 'OWNER' }]
+    renderPage()
+    await waitFor(() => expect(screen.getByLabelText('Board umbenennen')).toBeInTheDocument())
+
+    fireEvent.click(screen.getByLabelText('Board umbenennen'))
+    fireEvent.keyDown(await screen.findByRole('dialog'), { key: 'Escape', code: 'Escape' })
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(mockedBoards.rename).not.toHaveBeenCalled()
+  })
+
+  it('öffnet eine Karte im Edit-Modus über das ⋮-Menü der BoardView', async () => {
+    memberships = [{ projectId: 9, role: 'OWNER' }]
+    const openCard = {
+      id: 100, boardId: 1, columnId: 10, number: 1, title: 'Aufgabe', description: null,
+      positionInColumn: 0, archived: false, movedToDoneAt: null, dependencies: [],
+      type: 'CARD' as const, parentId: null, shortcode: null, assignees: [], dueDate: null, labels: [],
+    }
+    mockedBoards.get.mockResolvedValue({
+      id: 1, projectId: 9, name: 'B', createdAt: '',
+      columns: [{ id: 10, name: 'Backlog', position: 0, wipLimit: null }],
+    })
+    mockedCards.list.mockResolvedValue([openCard])
+    mockedEpics.list.mockResolvedValue([])
+    mockedLabels.list.mockResolvedValue([])
+    mockedMembers.list.mockResolvedValue([])
+    mockedConfig.get.mockResolvedValue({ doneRetentionDays: 30 })
+    mockedProjects.list.mockResolvedValue([{ id: 9, name: 'P', role: 'OWNER', createdAt: '' }])
+    render(
+      <MemoryRouter initialEntries={['/boards/1']}>
+        <Routes>
+          <Route path="/boards/:boardId" element={<BoardPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    fireEvent.click(await screen.findByLabelText('Menü Aufgabe'))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Bearbeiten' }))
+
+    expect(await screen.findByLabelText('Titel')).toBeInTheDocument()
   })
 })
