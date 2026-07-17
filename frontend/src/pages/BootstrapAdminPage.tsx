@@ -15,7 +15,7 @@ interface Props {
 }
 
 /** Hebt den eingeloggten Nutzer per Env-Token zum ersten Plattform-Admin (nur auf frischer Instanz). */
-export function BootstrapAdminPage({ api = defaultAdminApi }: Props) {
+export function BootstrapAdminPage({ api = defaultAdminApi }: Readonly<Props>) {
   const { refresh } = useAuth()
   const navigate = useNavigate()
   const [token, setToken] = useState('')
@@ -58,7 +58,7 @@ export function BootstrapAdminPage({ api = defaultAdminApi }: Props) {
             label="Bootstrap-Token"
             value={token}
             onChange={(e) => setToken(e.target.value)}
-            inputProps={{ 'aria-label': 'Bootstrap-Token' }}
+            slotProps={{ htmlInput: { 'aria-label': 'Bootstrap-Token' } }}
           />
           <Button type="submit" variant="contained" disabled={busy}>
             Admin werden

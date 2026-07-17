@@ -33,6 +33,7 @@ const mockedProjects = projectsApi as unknown as { list: ReturnType<typeof vi.fn
 const mockedBoards = boardsApi as unknown as {
   list: ReturnType<typeof vi.fn>
   listArchived: ReturnType<typeof vi.fn>
+  create: ReturnType<typeof vi.fn>
   remove: ReturnType<typeof vi.fn>
   restore: ReturnType<typeof vi.fn>
   purge: ReturnType<typeof vi.fn>
@@ -219,5 +220,73 @@ describe('ProjectBoardsPage RBAC', () => {
     expect(await screen.findByText('Ungültige Projekt-ID.')).toBeInTheDocument()
     expect(mockedBoards.list).not.toHaveBeenCalled()
     expect(mockedProjects.list).not.toHaveBeenCalled()
+  })
+
+  it('legt ein neues Board an', async () => {
+    mockedBoards.create.mockResolvedValue({ id: 30, name: 'Neu', projectId: 5, createdAt: '', columns: [] })
+    renderAt('OWNER', [{ id: 9, name: 'Board A' }, { id: 10, name: 'Board B' }])
+    await screen.findByText('Board A')
+
+    fireEvent.change(screen.getByLabelText(/Neues Board/), { target: { value: 'Neu' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Anlegen' }))
+
+    await waitFor(() => expect(mockedBoards.create).toHaveBeenCalledWith(5, 'Neu'))
+  })
+
+  it('legt kein Board ohne Namen an', async () => {
+    renderAt('OWNER', [{ id: 9, name: 'Board A' }, { id: 10, name: 'Board B' }])
+    await screen.findByText('Board A')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Anlegen' }))
+
+    expect(mockedBoards.create).not.toHaveBeenCalled()
+  })
+
+  it('lädt Boards, Archiv und Rolle beim Fensterfokus neu', async () => {
+    renderAt('OWNER', [{ id: 9, name: 'Board A' }, { id: 10, name: 'Board B' }])
+    await screen.findByText('Board A')
+    mockedBoards.list.mockClear()
+    mockedBoards.listArchived.mockClear()
+    mockedProjects.list.mockClear()
+
+    fireEvent(window, new Event('focus'))
+
+    await waitFor(() => expect(mockedBoards.list).toHaveBeenCalled())
+    expect(mockedBoards.listArchived).toHaveBeenCalled()
+    expect(mockedProjects.list).toHaveBeenCalled()
+  })
+
+  it('navigiert per Klick auf ein Board', async () => {
+    mockedProjects.list.mockResolvedValue([{ id: 5, name: 'Team', role: 'OWNER', createdAt: '' }])
+    mockedBoards.list.mockResolvedValue([
+      { id: 9, name: 'Board A', projectId: 5, createdAt: '', columns: [] },
+      { id: 10, name: 'Board B', projectId: 5, createdAt: '', columns: [] },
+    ])
+    mockedBoards.listArchived.mockResolvedValue([])
+    render(
+      <MemoryRouter initialEntries={['/projects/5']}>
+        <Routes>
+          <Route path="/projects/:projectId" element={<ProjectBoardsPage />} />
+          <Route path="/boards/:boardId" element={<div>Board-Ansicht</div>} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    fireEvent.click(await screen.findByText('Board A'))
+    expect(await screen.findByText('Board-Ansicht')).toBeInTheDocument()
+  })
+
+  it('schließt den Archivieren-Dialog per Escape und über Abbrechen', async () => {
+    renderAt('OWNER', [{ id: 9, name: 'Board A' }, { id: 10, name: 'Board B' }])
+    await screen.findByText('Board A')
+
+    fireEvent.click(screen.getByLabelText('Board Board A archivieren'))
+    fireEvent.keyDown(await screen.findByRole('dialog'), { key: 'Escape', code: 'Escape' })
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+
+    fireEvent.click(screen.getByLabelText('Board Board A archivieren'))
+    fireEvent.click(await screen.findByRole('button', { name: 'Abbrechen' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(mockedBoards.remove).not.toHaveBeenCalled()
   })
 })

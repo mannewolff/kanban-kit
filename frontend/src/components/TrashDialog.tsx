@@ -27,7 +27,7 @@ export function TrashDialog({
   onClose,
   onChanged,
   api = defaultCardsApi,
-}: Props) {
+}: Readonly<Props>) {
   const [cards, setCards] = useState<Card[]>([])
 
   const reload = () => {

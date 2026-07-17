@@ -16,7 +16,7 @@ type State =
   | { status: 'ok'; member: Member }
   | { status: 'error' }
 
-export function AcceptInvitationPage({ api = defaultMembersApi }: Props) {
+export function AcceptInvitationPage({ api = defaultMembersApi }: Readonly<Props>) {
   const [params] = useSearchParams()
   const token = params.get('token')
   const [state, setState] = useState<State>({ status: 'loading' })

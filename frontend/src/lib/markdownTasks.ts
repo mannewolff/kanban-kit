@@ -8,12 +8,17 @@
 // Nackte Marker ohne Listenmarker bekommen zusätzlich einen `- `, damit GFM sie als Liste erkennt.
 
 const FENCE = /^\s*(```|~~~)/
+// Marker-Kern durchgängig `\[\s*(?:[xX]\s*)?\]` statt `\[\s*[xX]?\s*\]`: Letzteres hat zwei
+// benachbarte `\s*` um ein optionales Zeichen und erlaubt super-lineares Backtracking bei
+// Eingaben wie `[` + vielen Leerzeichen ohne `]` (S8786). Das `[xX]` trennt hier die beiden
+// Whitespace-Gruppen als Anker; die Menge der akzeptierten Marker ist identisch
+// (`[]`, `[ ]`, `[  ]`, `[x]`, `[ x ]`, `[X]`).
 /** Marker-Kern: eckige Klammern mit optionalem x/X und beliebigem Whitespace. */
-const MARKER = /\[\s*[xX]?\s*\]/
+const MARKER = /\[\s*(?:[xX]\s*)?\]/
 /** Zeile mit Listenmarker (`-`/`*`/`+`/`1.`) direkt vor dem Task-Marker. */
-const LISTED = /^(\s*(?:[-*+]|\d+[.)])\s+)(\[\s*[xX]?\s*\])(.*)$/
+const LISTED = /^(\s*(?:[-*+]|\d+[.)])\s+)(\[\s*(?:[xX]\s*)?\])(.*)$/
 /** Nackter Task-Marker am Zeilenanfang (ohne Listenmarker), gefolgt von Whitespace. */
-const NAKED = /^(\s*)(\[\s*[xX]?\s*\])(\s.*)$/
+const NAKED = /^(\s*)(\[\s*(?:[xX]\s*)?\])(\s.*)$/
 
 /** Kanonische Marker-Form: `[x]` wenn irgendein x/X enthalten ist, sonst `[ ]`. */
 function canonical(marker: string): string {
@@ -39,17 +44,19 @@ export function normalizeTaskLists(md: string): string {
       if (inFence) {
         return line
       }
-      const listed = line.match(LISTED)
+      const listed = LISTED.exec(line)
       if (listed) {
         const [, prefix, marker, rest] = listed
         const body = rest.replace(/^\s*/, '')
-        return `${prefix}${canonical(marker)}${body ? ` ${body}` : ''}`
+        const suffix = body ? ` ${body}` : ''
+        return `${prefix}${canonical(marker)}${suffix}`
       }
-      const naked = line.match(NAKED)
+      const naked = NAKED.exec(line)
       if (naked) {
         const [, indent, marker, rest] = naked
         const body = rest.replace(/^\s*/, '')
-        return `${indent}- ${canonical(marker)}${body ? ` ${body}` : ''}`
+        const suffix = body ? ` ${body}` : ''
+        return `${indent}- ${canonical(marker)}${suffix}`
       }
       return line
     })

@@ -168,11 +168,11 @@ export function BoardPage() {
       setRenameOpen(true)
     }
   }
-  const handleRename = async () => {
-    if (!board || !renameValue.trim()) {
-      return
-    }
-    const updated = await boardsApi.rename(board.id, renameValue.trim())
+  // Kein Nullable-Guard nötig: der einzige Aufrufer ist der Speichern-Button im Umbenennen-Dialog,
+  // der nur bei gesetztem board sichtbar ist (siehe die frühen Returns oben) und bei leerem
+  // renameValue bereits disabled ist.
+  const handleRename = async (currentBoard: Board) => {
+    const updated = await boardsApi.rename(currentBoard.id, renameValue.trim())
     setBoard(updated)
     setRenameOpen(false)
   }
@@ -282,12 +282,12 @@ export function BoardPage() {
             value={renameValue}
             onChange={(e) => setRenameValue(e.target.value)}
             sx={{ mt: 1 }}
-            inputProps={{ 'aria-label': 'Neuer Board-Name' }}
+            slotProps={{ htmlInput: { 'aria-label': 'Neuer Board-Name' } }}
           />
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setRenameOpen(false)}>Abbrechen</Button>
-          <Button variant="contained" disabled={!renameValue.trim()} onClick={() => void handleRename()}>
+          <Button variant="contained" disabled={!renameValue.trim()} onClick={() => void handleRename(board)}>
             Speichern
           </Button>
         </DialogActions>

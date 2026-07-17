@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import type { AdminApi } from '../api/admin'
+import { ApiError } from '../api/client'
 import { AdminPage } from './AdminPage'
 
 vi.mock('../auth/AuthContext', () => ({
@@ -98,5 +99,84 @@ describe('AdminPage', () => {
 
     fireEvent.click(screen.getByLabelText('Carol entsperren'))
     await waitFor(() => expect(api.enable).toHaveBeenCalledWith(3))
+  })
+
+  it('zeigt beim letzten Admin eine spezifische Fehlermeldung (409)', async () => {
+    const api = makeApi()
+    api.setRole = vi.fn().mockRejectedValue(new ApiError(409, 'letzter Admin'))
+    render(<AdminPage api={api} />)
+    await screen.findByText('Bob')
+
+    fireEvent.click(screen.getByLabelText('Rolle von Bob umschalten'))
+    expect(
+      await screen.findByText('Der letzte Admin kann nicht degradiert werden.'),
+    ).toBeInTheDocument()
+  })
+
+  it('zeigt eine generische Fehlermeldung bei fehlgeschlagener Rollenänderung', async () => {
+    const api = makeApi()
+    api.setRole = vi.fn().mockRejectedValue(new Error('boom'))
+    render(<AdminPage api={api} />)
+    await screen.findByText('Alice')
+
+    fireEvent.click(screen.getByLabelText('Rolle von Alice umschalten'))
+    expect(await screen.findByText('Rollenänderung fehlgeschlagen.')).toBeInTheDocument()
+  })
+
+  it('zeigt eine Fehlermeldung, wenn die Freigabe fehlschlägt', async () => {
+    const api = makeApi()
+    api.approve = vi.fn().mockRejectedValue(new Error('boom'))
+    render(<AdminPage api={api} />)
+    await screen.findByText('Carol')
+
+    fireEvent.click(screen.getByLabelText('Carol freigeben'))
+    expect(await screen.findByText('Freigabe fehlgeschlagen.')).toBeInTheDocument()
+  })
+
+  it('zeigt eine Fehlermeldung, wenn das Ändern des Anzeigenamens fehlschlägt', async () => {
+    const api = makeApi()
+    api.setDisplayName = vi.fn().mockRejectedValue(new ApiError(400, 'Name ungültig'))
+    render(<AdminPage api={api} />)
+
+    fireEvent.click(await screen.findByLabelText('Namen von Alice bearbeiten'))
+    fireEvent.change(screen.getByLabelText('Anzeigename von a@x.de'), { target: { value: 'X' } })
+    fireEvent.click(screen.getByLabelText('Namen speichern'))
+
+    expect(await screen.findByText('Name ungültig')).toBeInTheDocument()
+  })
+
+  it('speichert keinen leeren Anzeigenamen', async () => {
+    const api = makeApi()
+    render(<AdminPage api={api} />)
+
+    fireEvent.click(await screen.findByLabelText('Namen von Alice bearbeiten'))
+    fireEvent.change(screen.getByLabelText('Anzeigename von a@x.de'), { target: { value: '   ' } })
+    fireEvent.click(screen.getByLabelText('Namen speichern'))
+
+    expect(api.setDisplayName).not.toHaveBeenCalled()
+  })
+
+  it('bricht das Bearbeiten des Anzeigenamens ab', async () => {
+    const api = makeApi()
+    render(<AdminPage api={api} />)
+
+    fireEvent.click(await screen.findByLabelText('Namen von Alice bearbeiten'))
+    fireEvent.click(screen.getByLabelText('Bearbeiten abbrechen'))
+
+    expect(screen.queryByLabelText('Anzeigename von a@x.de')).not.toBeInTheDocument()
+  })
+
+  it('zeigt eine Fehlermeldung, wenn das Sperren/Entsperren fehlschlägt', async () => {
+    const api = makeApi()
+    api.disable = vi.fn().mockRejectedValue(new Error('boom'))
+    api.enable = vi.fn().mockRejectedValue(new Error('boom'))
+    render(<AdminPage api={api} />)
+    await screen.findByText('Alice')
+
+    fireEvent.click(screen.getByLabelText('Alice sperren'))
+    expect(await screen.findByText('Sperren fehlgeschlagen.')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByLabelText('Carol entsperren'))
+    expect(await screen.findByText('Entsperren fehlgeschlagen.')).toBeInTheDocument()
   })
 })

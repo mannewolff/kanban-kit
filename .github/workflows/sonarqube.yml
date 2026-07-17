@@ -1,10 +1,16 @@
 name: SonarQube Cloud
 
-# Läuft beim tatsächlichen Merge nach production (nicht bei jedem Push auf main) —
-# Sonar-Scan + Coverage-Import sind an den Release-Zeitpunkt gebunden, siehe RELEASING.md.
+# Läuft bei jedem Push auf main. Der Release-Flow ist main -> production per PR-Merge
+# (siehe RELEASING.md); production hat zum Merge-Zeitpunkt denselben Inhalt wie main, ein
+# zusätzlicher Scan dort wäre nur eine redundante Zweitanalyse desselben Commits. Da
+# SonarCloud (Free-Tier) ohnehin nur den main-Branch kennt und der Scan dank sonar.branch.name
+# immer als main gemeldet wird, bringt die Bindung an production keinen Zusatznutzen mehr —
+# nur verzögertes Feedback bis zum nächsten Release. workflow_dispatch bleibt als manueller
+# Nachlauf.
 on:
   push:
-    branches: [production]
+    branches: [main]
+  workflow_dispatch:
 
 jobs:
   sonarqube:
@@ -41,13 +47,23 @@ jobs:
 
       # Auf Commit-SHA gepinnt statt beweglichem Tag (Supply-Chain-Härtung, siehe
       # CLAUDE-security.md) — entspricht v8.2.0.
+      # sonar.branch.name=main explizit gesetzt statt dem Auto-Erkennen des Scanners
+      # überlassen: robust auch bei workflow_dispatch (kann von jedem Branch/Ref manuell
+      # gestartet werden). Die kostenlose SonarCloud-Stufe kennt ohnehin nur den main-Branch
+      # (siehe auch fetchAllIssues in scripts/sync-sonar-issues-to-github.mjs, das ebenfalls
+      # den main-Branch ausliest).
       - name: SonarQube-Scan
         uses: SonarSource/sonarqube-scan-action@713881670b6b3676cda39549040e2d88c70d582e # v8.2.0
+        with:
+          args: >
+            -Dsonar.branch.name=main
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
       - name: Neue Findings nach GitHub synchronisieren
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # secrets.GITHUB_TOKEN kann keine GitHub-Projects-v2-Boards lesen/beschreiben
+          # (gh project list/item-add) — dafuer zwingend ein PAT mit repo+project-Scope.
+          GH_TOKEN: ${{ secrets.PROJECTS_PAT }}
         run: node scripts/sync-sonar-issues-to-github.mjs

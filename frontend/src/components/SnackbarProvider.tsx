@@ -18,7 +18,7 @@ interface Toast {
  * Stellt einen globalen `notify(...)`-Auslöser bereit und rendert die zugehörige MUI-`Snackbar`.
  * Eine Meldung nach der anderen; ein neuer Aufruf ersetzt die aktuelle.
  */
-export function SnackbarProvider({ children }: { children: ReactNode }) {
+export function SnackbarProvider({ children }: Readonly<{ children: ReactNode }>) {
   const [toast, setToast] = useState<Toast | null>(null)
 
   const notify = useCallback<Notify>((message, severity = 'info') => {

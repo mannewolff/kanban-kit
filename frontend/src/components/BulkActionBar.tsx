@@ -20,7 +20,7 @@ interface Props {
  * Fixierte Aktionsleiste für die Mehrfachauswahl von Karten. Erscheint, sobald mindestens eine
  * Karte ausgewählt ist, und bietet Archivieren, optional Verschieben sowie Abbrechen.
  */
-export function BulkActionBar({ count, canMove, onArchive, onMove, onDelete, onCancel }: Props) {
+export function BulkActionBar({ count, canMove, onArchive, onMove, onDelete, onCancel }: Readonly<Props>) {
   return (
     <Paper
       elevation={6}

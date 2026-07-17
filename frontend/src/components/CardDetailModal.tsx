@@ -13,7 +13,19 @@ import Link from '@mui/material/Link'
 import Stack from '@mui/material/Stack'
 import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
-import { memo, useCallback, useEffect, useRef, useState, type ComponentPropsWithoutRef } from 'react'
+import {
+  createContext,
+  memo,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ComponentPropsWithoutRef,
+  type Dispatch,
+  type SetStateAction,
+} from 'react'
 import Markdown, { type Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { attachmentsApi as defaultAttachmentsApi, type Attachment, type AttachmentsApi } from '../api/attachments'
@@ -35,6 +47,23 @@ const isPreviewable = (contentType: string) =>
   contentType.startsWith('image/') || contentType === 'application/pdf'
 
 /**
+ * Lädt für alle Bild-Anhänge einer Liste die Vorschau-URL nach (Blob → Object-URL). Als
+ * Modul-Helfer ausgelagert, damit die `fetchBlob`-Kette nicht tief im Effect verschachtelt steht.
+ */
+function loadImagePreviews(
+  list: Attachment[],
+  attachmentsApi: Pick<AttachmentsApi, 'fetchBlob'>,
+  setPreviews: Dispatch<SetStateAction<Record<number, string>>>,
+) {
+  for (const a of list) {
+    if (!a.contentType.startsWith('image/')) continue
+    void attachmentsApi
+      .fetchBlob(a.id)
+      .then((blob) => setPreviews((p) => ({ ...p, [a.id]: URL.createObjectURL(blob) })))
+  }
+}
+
+/**
  * Parst die kommagetrennte Abhängigkeits-Eingabe in Nummern. Nur positive Ganzzahlen sind gültig;
  * Leer-Tokens werden ignoriert, Duplikate entfernt. valid=false bei nicht-numerischem/nicht-positivem Token.
  */
@@ -51,10 +80,45 @@ export function parseDependencyInput(input: string): { deps: number[]; valid: bo
 }
 
 /**
+ * Kontext für den Task-Checkbox-Renderer: liefert Bearbeitbarkeit, Toggle-Callback und den
+ * fortlaufenden Checkbox-Index (Dokumentreihenfolge). Erlaubt, den `input`-Renderer auf
+ * Modulebene zu definieren (statt in `TaskMarkdown`) und die Daten per Kontext zu übergeben.
+ */
+const TaskCheckboxContext = createContext<{
+  canEdit: boolean
+  onToggle: (index: number) => void
+  nextIndex: () => number
+} | null>(null)
+
+/**
+ * `input`-Renderer für react-markdown: rendert GFM-Task-Checkboxen klickbar (Index in
+ * Dokumentreihenfolge über den Kontext). Wird ausschließlich innerhalb von `TaskMarkdown`
+ * verwendet (immer im TaskCheckboxContext.Provider, remarkGfm ohne rehype-raw erzeugt
+ * ausschließlich `type="checkbox"`-Inputs) — kein Fallback für andere Fälle nötig.
+ */
+function MarkdownInput(props: ComponentPropsWithoutRef<'input'>) {
+  // Nicht null: MarkdownInput wird ausschließlich innerhalb von TaskCheckboxContext.Provider
+  // gerendert (siehe TaskMarkdown unten).
+  const ctx = useContext(TaskCheckboxContext)!
+  const index = ctx.nextIndex()
+  return (
+    <input
+      type="checkbox"
+      checked={props.checked ?? false}
+      disabled={!ctx.canEdit}
+      onChange={() => ctx.onToggle(index)}
+      aria-label={`Aufgabe ${index + 1}`}
+    />
+  )
+}
+
+const markdownComponents: Components = { input: MarkdownInput }
+
+/**
  * Rendert die Karten-Beschreibung als Markdown mit klickbaren Task-Checkboxen. Als eigene,
  * memoized Komponente ausgelagert, damit Re-Renders des Modals (z. B. Nachladen von Kommentaren)
- * die Beschreibung nicht neu mounten. Der Checkbox-Index läuft in Dokumentreihenfolge (lokaler
- * Zähler pro Render); `onToggle` muss stabil sein, damit `memo` greift.
+ * die Beschreibung nicht neu mounten. Der Checkbox-Index läuft in Dokumentreihenfolge (Zähler pro
+ * Render zurückgesetzt); `onToggle` muss stabil sein, damit `memo` greift.
  */
 const TaskMarkdown = memo(function TaskMarkdown({
   body,
@@ -65,29 +129,24 @@ const TaskMarkdown = memo(function TaskMarkdown({
   canEdit: boolean
   onToggle: (index: number) => void
 }) {
-  let counter = 0
-  const components: Components = {
-    input: ({ node, ...props }: ComponentPropsWithoutRef<'input'> & { node?: unknown }) => {
-      void node
-      if (props.type !== 'checkbox') {
-        return <input {...props} />
-      }
-      const index = counter++
-      return (
-        <input
-          type="checkbox"
-          checked={props.checked ?? false}
-          disabled={!canEdit}
-          onChange={() => onToggle(index)}
-          aria-label={`Aufgabe ${index + 1}`}
-        />
-      )
-    },
-  }
+  // Zähler muss bei jedem tatsächlichen Render dieser (memoized) Komponente zurückgesetzt werden:
+  // react-markdown ruft `nextIndex` je Checkbox in Dokumentreihenfolge auf. Da die Deps exakt den
+  // Props entsprechen, gegen die `memo` oben vergleicht, fällt das useMemo-Recompute mit jedem
+  // echten Funktionsaufruf zusammen — der Zähler startet dabei trotzdem frisch bei 0, weil er
+  // innerhalb der Factory neu angelegt wird. Bewusst kein useRef (Schreiben während des Renders).
+  const ctxValue = useMemo(() => {
+    const counter = { value: 0 }
+    return { canEdit, onToggle, nextIndex: () => counter.value++ }
+    // body wird in der Factory nicht gelesen, muss aber in den Deps stehen: ein neuer body-Wert
+    // soll den Zähler zurücksetzen, obwohl body selbst nicht in ctxValue einfließt.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [body, canEdit, onToggle])
   return (
-    <Markdown remarkPlugins={[remarkGfm]} components={components}>
-      {normalizeTaskLists(body)}
-    </Markdown>
+    <TaskCheckboxContext.Provider value={ctxValue}>
+      <Markdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+        {normalizeTaskLists(body)}
+      </Markdown>
+    </TaskCheckboxContext.Provider>
   )
 })
 
@@ -104,6 +163,505 @@ const descriptionSx = {
   '& pre': { backgroundColor: CODE_BLOCK_BG, p: 1.5, borderRadius: 1, overflowX: 'auto' },
   '& pre code': { backgroundColor: 'transparent', px: 0 },
 } as const
+
+/** Zuständige-Sektion: Autocomplete im Edit-Modus, sonst Chips oder Leer-Hinweis. */
+function AssigneeSection({
+  canEdit,
+  members,
+  assigneeIds,
+  onChange,
+}: Readonly<{
+  canEdit: boolean
+  members: Member[]
+  assigneeIds: number[]
+  onChange: (ids: number[]) => void
+}>) {
+  const memberName = (userId: number) =>
+    members.find((m) => m.userId === userId)?.displayName ?? `#${userId}`
+  const readOnly =
+    assigneeIds.length > 0 ? (
+      <Stack direction="row" spacing={0.5} sx={{ flexWrap: 'wrap' }}>
+        {assigneeIds.map((uid) => (
+          <Chip key={uid} size="small" label={memberName(uid)} />
+        ))}
+      </Stack>
+    ) : (
+      <Typography color="text.secondary">Niemand zugewiesen.</Typography>
+    )
+  return (
+    <Box>
+      <Typography variant="subtitle2" gutterBottom>
+        Zuständige
+      </Typography>
+      {canEdit ? (
+        <Autocomplete
+          multiple
+          size="small"
+          options={members}
+          getOptionLabel={(m) => m.displayName}
+          isOptionEqualToValue={(a, b) => a.userId === b.userId}
+          value={members.filter((m) => assigneeIds.includes(m.userId))}
+          onChange={(_, selected) => onChange(selected.map((m) => m.userId))}
+          renderInput={(params) => (
+            <TextField {...params} label="Zuständige" slotProps={{ htmlInput: { ...params.inputProps, 'aria-label': 'Zuständige' } }} />
+          )}
+        />
+      ) : (
+        readOnly
+      )}
+    </Box>
+  )
+}
+
+/** Label-Sektion: Autocomplete im Edit-Modus, sonst farbige Chips oder Leer-Hinweis. */
+function LabelSection({
+  canEdit,
+  boardLabels,
+  labelIds,
+  onChange,
+}: Readonly<{
+  canEdit: boolean
+  boardLabels: BoardLabel[]
+  labelIds: number[]
+  onChange: (ids: number[]) => void
+}>) {
+  const readOnly =
+    labelIds.length > 0 ? (
+      <Stack direction="row" spacing={0.5} sx={{ flexWrap: 'wrap' }}>
+        {labelIds.map((id) => {
+          const l = boardLabels.find((b) => b.id === id)
+          return (
+            <Chip
+              key={id}
+              size="small"
+              label={l?.name ?? `#${id}`}
+              sx={{ bgcolor: l?.color ?? 'grey.500', color: '#fff' }}
+            />
+          )
+        })}
+      </Stack>
+    ) : (
+      <Typography color="text.secondary">Keine Labels.</Typography>
+    )
+  return (
+    <Box>
+      <Typography variant="subtitle2" gutterBottom>
+        Labels
+      </Typography>
+      {canEdit ? (
+        <Autocomplete
+          multiple
+          size="small"
+          options={boardLabels}
+          getOptionLabel={(l) => l.name}
+          isOptionEqualToValue={(a, b) => a.id === b.id}
+          value={boardLabels.filter((l) => labelIds.includes(l.id))}
+          onChange={(_, selected) => onChange(selected.map((l) => l.id))}
+          renderTags={(value, getTagProps) =>
+            value.map((l, index) => (
+              <Chip
+                {...getTagProps({ index })}
+                key={l.id}
+                size="small"
+                label={l.name}
+                sx={{ bgcolor: l.color, color: '#fff' }}
+              />
+            ))
+          }
+          renderInput={(params) => (
+            <TextField {...params} label="Labels" slotProps={{ htmlInput: { ...params.inputProps, 'aria-label': 'Labels' } }} />
+          )}
+        />
+      ) : (
+        readOnly
+      )}
+    </Box>
+  )
+}
+
+/** Kind-Karten eines Epics (nur View-Modus). */
+function ChildCardsSection({ childCards }: Readonly<{ childCards: Card[] }>) {
+  return (
+    <>
+      <Divider />
+      <Box>
+        <Typography variant="subtitle2" gutterBottom>
+          Karten ({childCards.length})
+        </Typography>
+        <Stack spacing={0.5}>
+          {childCards.map((c) => (
+            <Typography key={c.id} variant="body2">
+              #{c.number} · {c.title}
+            </Typography>
+          ))}
+          {childCards.length === 0 && (
+            <Typography color="text.secondary">Keine zugeordneten Karten.</Typography>
+          )}
+        </Stack>
+      </Box>
+    </>
+  )
+}
+
+/** Anhänge-Sektion: Liste mit Vorschau/Download, Löschen und Upload (nur View-Modus). */
+function AttachmentsSection({
+  attachments,
+  previews,
+  uploadError,
+  canEdit,
+  onOpenPreview,
+  onDelete,
+  onUpload,
+}: Readonly<{
+  attachments: Attachment[]
+  previews: Record<number, string>
+  uploadError: string | null
+  canEdit: boolean
+  onOpenPreview: (a: Attachment) => void
+  onDelete: (id: number) => void
+  onUpload: (file: File) => void
+}>) {
+  return (
+    <Box>
+      <Typography variant="subtitle2" gutterBottom>
+        Anhänge
+      </Typography>
+      {uploadError && <Alert severity="error" sx={{ mb: 1 }}>{uploadError}</Alert>}
+      <Stack spacing={1}>
+        {attachments.map((a) => (
+          <Box key={a.id}>
+            <Stack direction="row" spacing={1} alignItems="center">
+              {isPreviewable(a.contentType) ? (
+                <Link component="button" type="button" onClick={() => onOpenPreview(a)} sx={{ textAlign: 'left' }}>
+                  {a.filename}
+                </Link>
+              ) : (
+                <Link href={`/api/attachments/${a.id}`}>{a.filename}</Link>
+              )}
+              <Typography variant="caption" color="text.secondary">
+                {Math.round(a.size / 1024)} KB
+              </Typography>
+              {canEdit && (
+                <IconButton size="small" aria-label={`Anhang ${a.filename} löschen`} onClick={() => onDelete(a.id)}>
+                  ✕
+                </IconButton>
+              )}
+            </Stack>
+            {previews[a.id] && (
+              <Box component="img" src={previews[a.id]} alt={a.filename}
+                onClick={() => onOpenPreview(a)}
+                sx={{ maxWidth: 240, maxHeight: 160, mt: 0.5, borderRadius: 1, cursor: 'pointer', display: 'block' }} />
+            )}
+          </Box>
+        ))}
+        {attachments.length === 0 && <Typography color="text.secondary">Keine Anhänge.</Typography>}
+      </Stack>
+      {canEdit && (
+        <Button component="label" size="small" sx={{ mt: 1 }}>
+          Datei anhängen<input
+            hidden
+            type="file"
+            aria-label="Datei anhängen"
+            onChange={(e) => {
+              const f = e.target.files?.[0]
+              if (f) onUpload(f)
+            }}
+          />
+        </Button>
+      )}
+    </Box>
+  )
+}
+
+/** Kommentar-Sektion: Liste mit Inline-Edit/Moderation + Eingabe (nur View-Modus). */
+function CommentsSection({
+  comments,
+  currentUserId,
+  canModerateComments,
+  editingCommentId,
+  editingBody,
+  newComment,
+  onStartEdit,
+  onSaveEdit,
+  onCancelEdit,
+  onDelete,
+  onEditingBodyChange,
+  onNewCommentChange,
+  onAdd,
+}: Readonly<{
+  comments: Comment[]
+  currentUserId: number | undefined
+  canModerateComments: boolean
+  editingCommentId: number | null
+  editingBody: string
+  newComment: string
+  onStartEdit: (c: Comment) => void
+  onSaveEdit: () => void
+  onCancelEdit: () => void
+  onDelete: (id: number) => void
+  onEditingBodyChange: (value: string) => void
+  onNewCommentChange: (value: string) => void
+  onAdd: () => void
+}>) {
+  return (
+    <Box>
+      <Typography variant="subtitle2" gutterBottom>
+        Kommentare
+      </Typography>
+      <Stack spacing={1}>
+        {comments.map((c) => {
+          const isAuthor = c.authorUserId === currentUserId
+          return (
+            <Box key={c.id}>
+              <Stack direction="row" justifyContent="space-between" alignItems="center">
+                <Typography variant="body2" fontWeight={600}>
+                  {c.authorName}
+                </Typography>
+                <Stack direction="row" spacing={0.5}>
+                  {/* Bearbeiten darf nur der Autor selbst. */}
+                  {isAuthor && editingCommentId !== c.id && (
+                    <IconButton size="small" aria-label="Kommentar bearbeiten" onClick={() => onStartEdit(c)}>
+                      ✎
+                    </IconButton>
+                  )}
+                  {/* Löschen ist Moderation: nur Admin/Owner (bzw. Plattform-Admin). */}
+                  {canModerateComments && (
+                    <IconButton size="small" aria-label="Kommentar löschen" onClick={() => onDelete(c.id)}>
+                      ✕
+                    </IconButton>
+                  )}
+                </Stack>
+              </Stack>
+              {editingCommentId === c.id ? (
+                <Stack spacing={1}>
+                  <TextField multiline size="small" value={editingBody}
+                    onChange={(e) => onEditingBodyChange(e.target.value)}
+                    slotProps={{ htmlInput: { maxLength: 10_000, 'aria-label': 'Kommentar bearbeiten' } }} />
+                  <Stack direction="row" spacing={1}>
+                    <Button size="small" variant="contained" onClick={onSaveEdit}>Speichern</Button>
+                    <Button size="small" onClick={onCancelEdit}>Abbrechen</Button>
+                  </Stack>
+                </Stack>
+              ) : (
+                <Typography variant="body2">{c.body}</Typography>
+              )}
+            </Box>
+          )
+        })}
+        {comments.length === 0 && <Typography color="text.secondary">Noch keine Kommentare.</Typography>}
+      </Stack>
+      <Stack direction="row" spacing={1} sx={{ mt: 1 }}>
+        <TextField size="small" fullWidth placeholder="Kommentar schreiben" value={newComment}
+          onChange={(e) => onNewCommentChange(e.target.value)} slotProps={{ htmlInput: { 'aria-label': 'Kommentar schreiben' } }} />
+        <Button variant="contained" size="small" onClick={onAdd}>
+          Senden
+        </Button>
+      </Stack>
+    </Box>
+  )
+}
+
+/** Aktivitäts-Sektion: chronologische Ereignisliste (nur View-Modus). */
+function ActivitySection({
+  activities,
+  actorName,
+}: Readonly<{
+  activities: CardActivity[]
+  actorName: (userId: number | null) => string
+}>) {
+  return (
+    <Box>
+      <Typography variant="subtitle2" gutterBottom>
+        Aktivität
+      </Typography>
+      <Stack spacing={0.5}>
+        {activities.map((a) => (
+          <Typography key={a.id} variant="caption" color="text.secondary">
+            {new Date(a.createdAt).toLocaleString('de-DE')} · {actorName(a.actorUserId)} · {a.detail}
+          </Typography>
+        ))}
+        {activities.length === 0 && (
+          <Typography color="text.secondary">Keine Aktivität.</Typography>
+        )}
+      </Stack>
+    </Box>
+  )
+}
+
+/** Edit-Formular: Titel/Beschreibung immer, sonst Kürzel (Epic) bzw. Epic/Abhängigkeiten/Fälligkeit. */
+function CardEditForm({
+  isEpic,
+  title,
+  body,
+  shortcode,
+  parentId,
+  epics,
+  depsInput,
+  depsError,
+  dueInput,
+  onTitleChange,
+  onBodyChange,
+  onShortcodeChange,
+  onParentIdChange,
+  onDepsInputChange,
+  onDueInputChange,
+}: Readonly<{
+  isEpic: boolean
+  title: string
+  body: string
+  shortcode: string
+  parentId: number | null
+  epics: Epic[]
+  depsInput: string
+  depsError: string | null
+  dueInput: string
+  onTitleChange: (value: string) => void
+  onBodyChange: (value: string) => void
+  onShortcodeChange: (value: string) => void
+  onParentIdChange: (value: number | null) => void
+  onDepsInputChange: (value: string) => void
+  onDueInputChange: (value: string) => void
+}>) {
+  const nonEpicFields = (
+    <>
+      <TextField
+        select
+        label="Epic"
+        value={parentId ?? ''}
+        onChange={(e) => onParentIdChange(e.target.value === '' ? null : Number(e.target.value))}
+        slotProps={{
+          htmlInput: { 'aria-label': 'Epic' },
+          select: { native: true },
+          inputLabel: { shrink: true },
+        }}
+        fullWidth
+      >
+        <option value="">(kein Epic)</option>
+        {epics.map((epic) => (
+          <option key={epic.id} value={epic.id}>
+            {epicShortcode(epic.title, epic.shortcode)} – {epic.title}
+          </option>
+        ))}
+      </TextField>
+      <TextField
+        label="Abhängig von (Nummern, kommagetrennt)"
+        value={depsInput}
+        onChange={(e) => onDepsInputChange(e.target.value)}
+        error={depsError != null}
+        helperText={depsError ?? 'z. B. 12, 34'}
+        slotProps={{ htmlInput: { 'aria-label': 'Abhängig von' } }}
+        fullWidth
+      />
+      <TextField
+        type="date"
+        label="Fällig am"
+        value={dueInput}
+        onChange={(e) => onDueInputChange(e.target.value)}
+        slotProps={{
+          htmlInput: { 'aria-label': 'Fällig am' },
+          inputLabel: { shrink: true },
+        }}
+        sx={{ maxWidth: 200 }}
+      />
+    </>
+  )
+  return (
+    <>
+      <TextField
+        label="Titel"
+        value={title}
+        onChange={(e) => onTitleChange(e.target.value)}
+        required
+        autoFocus
+        fullWidth
+        slotProps={{ htmlInput: { maxLength: 300, 'aria-label': 'Titel' } }}
+      />
+      <TextField
+        label="Markdown-Beschreibung"
+        value={body}
+        onChange={(e) => onBodyChange(e.target.value)}
+        multiline
+        rows={8}
+        fullWidth
+        slotProps={{ htmlInput: { maxLength: 10_000, 'aria-label': 'Markdown-Beschreibung' } }}
+        sx={{ '& textarea': { fontFamily: 'monospace', resize: 'vertical' } }}
+      />
+      {isEpic ? (
+        <TextField
+          label="Kürzel"
+          value={shortcode}
+          onChange={(e) => onShortcodeChange(e.target.value)}
+          slotProps={{ htmlInput: { maxLength: 16, 'aria-label': 'Kürzel' } }}
+          sx={{ maxWidth: 200 }}
+        />
+      ) : (
+        nonEpicFields
+      )}
+    </>
+  )
+}
+
+/** Status-Chip in der Kopfleiste: „Epic" bei Epics, sonst der Spalten-Chip (falls bekannt). */
+function CardStatusChip({
+  isEpic,
+  columnName,
+  colors,
+}: Readonly<{
+  isEpic: boolean
+  columnName?: string
+  colors: { bg: string; text: string } | null
+}>) {
+  if (isEpic) return <Chip label="Epic" size="small" color="secondary" />
+  if (!colors) return null
+  return <Chip label={columnName} size="small" sx={{ bgcolor: colors.bg, color: colors.text, fontWeight: 600 }} />
+}
+
+/** View-Modus-Inhalt: Beschreibung (Markdown mit Task-Checkboxen), Abhängigkeiten, Fälligkeitsdatum. */
+function CardBodyView({
+  body,
+  canEdit,
+  onToggleTask,
+  dependencies,
+  isEpic,
+  dueDate,
+  dueOverdue,
+}: Readonly<{
+  body: string
+  canEdit: boolean
+  onToggleTask: (index: number) => void
+  dependencies: number[]
+  isEpic: boolean
+  dueDate: string | null
+  dueOverdue: boolean
+}>) {
+  return (
+    <>
+      <Box aria-label="Beschreibung" data-testid="description-view" sx={descriptionSx}>
+        {body ? (
+          <TaskMarkdown body={body} canEdit={canEdit} onToggle={onToggleTask} />
+        ) : (
+          <Typography color="text.secondary">Keine Beschreibung.</Typography>
+        )}
+      </Box>
+      {dependencies.length > 0 && (
+        <Typography variant="body2" color="text.secondary" aria-label="Abhängigkeiten">
+          Abhängig von: {dependencies.map((n) => `#${n}`).join(', ')}
+        </Typography>
+      )}
+      {!isEpic && dueDate && (
+        <Typography
+          variant="body2"
+          aria-label="Fälligkeitsdatum"
+          color={dueOverdue ? 'error' : 'text.secondary'}
+          sx={{ fontWeight: dueOverdue ? 600 : 400 }}
+        >
+          Fällig am {formatDueDate(dueDate)}
+          {dueOverdue && ' — überfällig'}
+        </Typography>
+      )}
+    </>
+  )
+}
 
 interface Props {
   card: Card
@@ -147,13 +705,10 @@ export function CardDetailModal({
   commentsApi = defaultCommentsApi,
   attachmentsApi = defaultAttachmentsApi,
   cardsApi = defaultCardsApi,
-}: Props) {
+}: Readonly<Props>) {
   const { user } = useAuth()
   const isEpic = card.type === 'EPIC'
   const [assigneeIds, setAssigneeIds] = useState<number[]>(card.assignees)
-
-  const memberName = (userId: number) =>
-    members.find((m) => m.userId === userId)?.displayName ?? `#${userId}`
 
   const saveAssignees = async (ids: number[]) => {
     setAssigneeIds(ids)
@@ -201,13 +756,7 @@ export function CardDetailModal({
     void commentsApi.list(card.id).then(setComments)
     void attachmentsApi.list(card.id).then((list) => {
       setAttachments(list)
-      list
-        .filter((a) => a.contentType.startsWith('image/'))
-        .forEach((a) => {
-          void attachmentsApi
-            .fetchBlob(a.id)
-            .then((blob) => setPreviews((p) => ({ ...p, [a.id]: URL.createObjectURL(blob) })))
-        })
+      loadImagePreviews(list, attachmentsApi, setPreviews)
     })
   }, [card.id, commentsApi, attachmentsApi])
 
@@ -381,17 +930,7 @@ export function CardDetailModal({
     >
       <DialogTitle sx={{ borderBottom: `1px solid ${MODAL_BORDER}` }}>
         <Stack direction="row" alignItems="center" spacing={1} sx={{ flexWrap: 'wrap' }}>
-          {isEpic ? (
-            <Chip label="Epic" size="small" color="secondary" />
-          ) : (
-            colors && (
-              <Chip
-                label={columnName}
-                size="small"
-                sx={{ bgcolor: colors.bg, color: colors.text, fontWeight: 600 }}
-              />
-            )
-          )}
+          <CardStatusChip isEpic={isEpic} columnName={columnName} colors={colors} />
           <Typography component="span" variant="body2" color="text.secondary">
             #{card.number}
           </Typography>
@@ -410,325 +949,90 @@ export function CardDetailModal({
       <DialogContent dividers sx={{ overflowY: 'auto' }}>
         <Stack spacing={2} sx={{ mt: 0.5 }}>
           {editing ? (
-            <>
-              <TextField
-                label="Titel"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                required
-                autoFocus
-                fullWidth
-                inputProps={{ maxLength: 300, 'aria-label': 'Titel' }}
-              />
-              <TextField
-                label="Markdown-Beschreibung"
-                value={body}
-                onChange={(e) => setBody(e.target.value)}
-                multiline
-                rows={8}
-                fullWidth
-                inputProps={{ maxLength: 10_000, 'aria-label': 'Markdown-Beschreibung' }}
-                sx={{ '& textarea': { fontFamily: 'monospace', resize: 'vertical' } }}
-              />
-              {isEpic ? (
-                <TextField
-                  label="Kürzel"
-                  value={shortcode}
-                  onChange={(e) => setShortcode(e.target.value)}
-                  inputProps={{ maxLength: 16, 'aria-label': 'Kürzel' }}
-                  sx={{ maxWidth: 200 }}
-                />
-              ) : (
-                <>
-                  <TextField
-                    select
-                    SelectProps={{ native: true }}
-                    label="Epic"
-                    value={parentId ?? ''}
-                    onChange={(e) => setParentId(e.target.value === '' ? null : Number(e.target.value))}
-                    inputProps={{ 'aria-label': 'Epic' }}
-                    InputLabelProps={{ shrink: true }}
-                    fullWidth
-                  >
-                    <option value="">(kein Epic)</option>
-                    {epics.map((epic) => (
-                      <option key={epic.id} value={epic.id}>
-                        {epicShortcode(epic.title, epic.shortcode)} – {epic.title}
-                      </option>
-                    ))}
-                  </TextField>
-                  <TextField
-                    label="Abhängig von (Nummern, kommagetrennt)"
-                    value={depsInput}
-                    onChange={(e) => {
-                      setDepsInput(e.target.value)
-                      if (depsError) setDepsError(null)
-                    }}
-                    error={depsError != null}
-                    helperText={depsError ?? 'z. B. 12, 34'}
-                    inputProps={{ 'aria-label': 'Abhängig von' }}
-                    fullWidth
-                  />
-                  <TextField
-                    type="date"
-                    label="Fällig am"
-                    value={dueInput}
-                    onChange={(e) => setDueInput(e.target.value)}
-                    InputLabelProps={{ shrink: true }}
-                    inputProps={{ 'aria-label': 'Fällig am' }}
-                    sx={{ maxWidth: 200 }}
-                  />
-                </>
-              )}
-            </>
+            <CardEditForm
+              isEpic={isEpic}
+              title={title}
+              body={body}
+              shortcode={shortcode}
+              parentId={parentId}
+              epics={epics}
+              depsInput={depsInput}
+              depsError={depsError}
+              dueInput={dueInput}
+              onTitleChange={setTitle}
+              onBodyChange={setBody}
+              onShortcodeChange={setShortcode}
+              onParentIdChange={setParentId}
+              onDepsInputChange={(value) => {
+                setDepsInput(value)
+                if (depsError) setDepsError(null)
+              }}
+              onDueInputChange={setDueInput}
+            />
           ) : (
-            <>
-              <Box aria-label="Beschreibung" data-testid="description-view" sx={descriptionSx}>
-                {body ? (
-                  <TaskMarkdown body={body} canEdit={canEdit} onToggle={onToggleTask} />
-                ) : (
-                  <Typography color="text.secondary">Keine Beschreibung.</Typography>
-                )}
-              </Box>
-              {card.dependencies.length > 0 && (
-                <Typography variant="body2" color="text.secondary" aria-label="Abhängigkeiten">
-                  Abhängig von: {card.dependencies.map((n) => `#${n}`).join(', ')}
-                </Typography>
-              )}
-              {!isEpic && card.dueDate && (
-                <Typography
-                  variant="body2"
-                  aria-label="Fälligkeitsdatum"
-                  color={dueOverdue ? 'error' : 'text.secondary'}
-                  sx={{ fontWeight: dueOverdue ? 600 : 400 }}
-                >
-                  Fällig am {formatDueDate(card.dueDate)}
-                  {dueOverdue && ' — überfällig'}
-                </Typography>
-              )}
-            </>
+            <CardBodyView
+              body={body}
+              canEdit={canEdit}
+              onToggleTask={onToggleTask}
+              dependencies={card.dependencies}
+              isEpic={isEpic}
+              dueDate={card.dueDate}
+              dueOverdue={dueOverdue}
+            />
           )}
 
           {!isEpic && (
-            <Box>
-              <Typography variant="subtitle2" gutterBottom>
-                Zuständige
-              </Typography>
-              {canEdit ? (
-                <Autocomplete
-                  multiple
-                  size="small"
-                  options={members}
-                  getOptionLabel={(m) => m.displayName}
-                  isOptionEqualToValue={(a, b) => a.userId === b.userId}
-                  value={members.filter((m) => assigneeIds.includes(m.userId))}
-                  onChange={(_, selected) => void saveAssignees(selected.map((m) => m.userId))}
-                  renderInput={(params) => (
-                    <TextField {...params} label="Zuständige" inputProps={{ ...params.inputProps, 'aria-label': 'Zuständige' }} />
-                  )}
-                />
-              ) : assigneeIds.length > 0 ? (
-                <Stack direction="row" spacing={0.5} sx={{ flexWrap: 'wrap' }}>
-                  {assigneeIds.map((uid) => (
-                    <Chip key={uid} size="small" label={memberName(uid)} />
-                  ))}
-                </Stack>
-              ) : (
-                <Typography color="text.secondary">Niemand zugewiesen.</Typography>
-              )}
-            </Box>
+            <AssigneeSection
+              canEdit={canEdit}
+              members={members}
+              assigneeIds={assigneeIds}
+              onChange={(ids) => void saveAssignees(ids)}
+            />
           )}
 
           {!isEpic && (
-            <Box>
-              <Typography variant="subtitle2" gutterBottom>
-                Labels
-              </Typography>
-              {canEdit ? (
-                <Autocomplete
-                  multiple
-                  size="small"
-                  options={boardLabels}
-                  getOptionLabel={(l) => l.name}
-                  isOptionEqualToValue={(a, b) => a.id === b.id}
-                  value={boardLabels.filter((l) => labelIds.includes(l.id))}
-                  onChange={(_, selected) => void saveLabels(selected.map((l) => l.id))}
-                  renderTags={(value, getTagProps) =>
-                    value.map((l, index) => (
-                      <Chip
-                        {...getTagProps({ index })}
-                        key={l.id}
-                        size="small"
-                        label={l.name}
-                        sx={{ bgcolor: l.color, color: '#fff' }}
-                      />
-                    ))
-                  }
-                  renderInput={(params) => (
-                    <TextField {...params} label="Labels" inputProps={{ ...params.inputProps, 'aria-label': 'Labels' }} />
-                  )}
-                />
-              ) : labelIds.length > 0 ? (
-                <Stack direction="row" spacing={0.5} sx={{ flexWrap: 'wrap' }}>
-                  {labelIds.map((id) => {
-                    const l = boardLabels.find((b) => b.id === id)
-                    return (
-                      <Chip
-                        key={id}
-                        size="small"
-                        label={l?.name ?? `#${id}`}
-                        sx={{ bgcolor: l?.color ?? 'grey.500', color: '#fff' }}
-                      />
-                    )
-                  })}
-                </Stack>
-              ) : (
-                <Typography color="text.secondary">Keine Labels.</Typography>
-              )}
-            </Box>
+            <LabelSection
+              canEdit={canEdit}
+              boardLabels={boardLabels}
+              labelIds={labelIds}
+              onChange={(ids) => void saveLabels(ids)}
+            />
           )}
 
-          {!editing && isEpic && (
-            <>
-              <Divider />
-              <Box>
-                <Typography variant="subtitle2" gutterBottom>
-                  Karten ({childCards.length})
-                </Typography>
-                <Stack spacing={0.5}>
-                  {childCards.map((c) => (
-                    <Typography key={c.id} variant="body2">
-                      #{c.number} · {c.title}
-                    </Typography>
-                  ))}
-                  {childCards.length === 0 && (
-                    <Typography color="text.secondary">Keine zugeordneten Karten.</Typography>
-                  )}
-                </Stack>
-              </Box>
-            </>
-          )}
+          {!editing && isEpic && <ChildCardsSection childCards={childCards} />}
 
           {!editing && (
             <>
               <Divider />
-              <Box>
-                <Typography variant="subtitle2" gutterBottom>
-                  Anhänge
-                </Typography>
-                {uploadError && <Alert severity="error" sx={{ mb: 1 }}>{uploadError}</Alert>}
-                <Stack spacing={1}>
-                  {attachments.map((a) => (
-                    <Box key={a.id}>
-                      <Stack direction="row" spacing={1} alignItems="center">
-                        {isPreviewable(a.contentType) ? (
-                          <Link component="button" type="button" onClick={() => void openPreview(a)}
-                            sx={{ textAlign: 'left' }}>
-                            {a.filename}
-                          </Link>
-                        ) : (
-                          <Link href={`/api/attachments/${a.id}`}>{a.filename}</Link>
-                        )}
-                        <Typography variant="caption" color="text.secondary">
-                          {Math.round(a.size / 1024)} KB
-                        </Typography>
-                        {canEdit && (
-                          <IconButton size="small" aria-label={`Anhang ${a.filename} löschen`}
-                            onClick={() => deleteAttachment(a.id)}>
-                            ✕
-                          </IconButton>
-                        )}
-                      </Stack>
-                      {previews[a.id] && (
-                        <Box component="img" src={previews[a.id]} alt={a.filename}
-                          onClick={() => void openPreview(a)}
-                          sx={{ maxWidth: 240, maxHeight: 160, mt: 0.5, borderRadius: 1, cursor: 'pointer', display: 'block' }} />
-                      )}
-                    </Box>
-                  ))}
-                  {attachments.length === 0 && <Typography color="text.secondary">Keine Anhänge.</Typography>}
-                </Stack>
-                {canEdit && (
-                  <Button component="label" size="small" sx={{ mt: 1 }}>
-                    Datei anhängen
-                    <input hidden type="file" aria-label="Datei anhängen"
-                      onChange={(e) => { const f = e.target.files?.[0]; if (f) void uploadFile(f) }} />
-                  </Button>
-                )}
-              </Box>
+              <AttachmentsSection
+                attachments={attachments}
+                previews={previews}
+                uploadError={uploadError}
+                canEdit={canEdit}
+                onOpenPreview={(a) => void openPreview(a)}
+                onDelete={(id) => void deleteAttachment(id)}
+                onUpload={(file) => void uploadFile(file)}
+              />
 
               <Divider />
-              <Box>
-                <Typography variant="subtitle2" gutterBottom>
-                  Kommentare
-                </Typography>
-                <Stack spacing={1}>
-                  {comments.map((c) => {
-                    const isAuthor = user != null && c.authorUserId === user.userId
-                    return (
-                      <Box key={c.id}>
-                        <Stack direction="row" justifyContent="space-between" alignItems="center">
-                          <Typography variant="body2" fontWeight={600}>
-                            {c.authorName}
-                          </Typography>
-                          <Stack direction="row" spacing={0.5}>
-                            {/* Bearbeiten darf nur der Autor selbst. */}
-                            {isAuthor && editingCommentId !== c.id && (
-                              <IconButton size="small" aria-label="Kommentar bearbeiten" onClick={() => startEditComment(c)}>
-                                ✎
-                              </IconButton>
-                            )}
-                            {/* Löschen ist Moderation: nur Admin/Owner (bzw. Plattform-Admin). */}
-                            {canModerateComments && (
-                              <IconButton size="small" aria-label="Kommentar löschen" onClick={() => deleteComment(c.id)}>
-                                ✕
-                              </IconButton>
-                            )}
-                          </Stack>
-                        </Stack>
-                        {editingCommentId === c.id ? (
-                          <Stack spacing={1}>
-                            <TextField multiline size="small" value={editingBody}
-                              onChange={(e) => setEditingBody(e.target.value)}
-                              inputProps={{ maxLength: 10_000, 'aria-label': 'Kommentar bearbeiten' }} />
-                            <Stack direction="row" spacing={1}>
-                              <Button size="small" variant="contained" onClick={() => void saveEditComment()}>Speichern</Button>
-                              <Button size="small" onClick={() => setEditingCommentId(null)}>Abbrechen</Button>
-                            </Stack>
-                          </Stack>
-                        ) : (
-                          <Typography variant="body2">{c.body}</Typography>
-                        )}
-                      </Box>
-                    )
-                  })}
-                  {comments.length === 0 && <Typography color="text.secondary">Noch keine Kommentare.</Typography>}
-                </Stack>
-                <Stack direction="row" spacing={1} sx={{ mt: 1 }}>
-                  <TextField size="small" fullWidth placeholder="Kommentar schreiben" value={newComment}
-                    onChange={(e) => setNewComment(e.target.value)} inputProps={{ 'aria-label': 'Kommentar schreiben' }} />
-                  <Button variant="contained" size="small" onClick={addComment}>
-                    Senden
-                  </Button>
-                </Stack>
-              </Box>
+              <CommentsSection
+                comments={comments}
+                currentUserId={user?.userId}
+                canModerateComments={canModerateComments}
+                editingCommentId={editingCommentId}
+                editingBody={editingBody}
+                newComment={newComment}
+                onStartEdit={startEditComment}
+                onSaveEdit={() => void saveEditComment()}
+                onCancelEdit={() => setEditingCommentId(null)}
+                onDelete={(id) => void deleteComment(id)}
+                onEditingBodyChange={setEditingBody}
+                onNewCommentChange={setNewComment}
+                onAdd={() => void addComment()}
+              />
 
               <Divider />
-              <Box>
-                <Typography variant="subtitle2" gutterBottom>
-                  Aktivität
-                </Typography>
-                <Stack spacing={0.5}>
-                  {activities.map((a) => (
-                    <Typography key={a.id} variant="caption" color="text.secondary">
-                      {new Date(a.createdAt).toLocaleString('de-DE')} · {actorName(a.actorUserId)} · {a.detail}
-                    </Typography>
-                  ))}
-                  {activities.length === 0 && (
-                    <Typography color="text.secondary">Keine Aktivität.</Typography>
-                  )}
-                </Stack>
-              </Box>
+              <ActivitySection activities={activities} actorName={actorName} />
             </>
           )}
         </Stack>

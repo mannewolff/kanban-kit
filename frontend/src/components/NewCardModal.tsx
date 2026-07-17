@@ -52,7 +52,7 @@ export function NewCardModal({
   onSubmit,
   epicOnly = false,
   initialValues,
-}: Props) {
+}: Readonly<Props>) {
   const [type, setType] = useState<CardType>(epicOnly ? 'EPIC' : 'CARD')
   const [title, setTitle] = useState('')
   const [body, setBody] = useState(BODY_TEMPLATE)
@@ -122,11 +122,10 @@ export function NewCardModal({
           {!epicOnly && (
             <TextField
               select
-              SelectProps={{ native: true }}
               label="Typ"
               value={type}
               onChange={(e) => setType(e.target.value as CardType)}
-              inputProps={{ 'aria-label': 'Typ' }}
+              slotProps={{ htmlInput: { 'aria-label': 'Typ' }, select: { native: true } }}
               fullWidth
             >
               <option value="CARD">Karte</option>
@@ -137,12 +136,14 @@ export function NewCardModal({
           {type === 'CARD' && (
             <TextField
               select
-              SelectProps={{ native: true }}
               label="Epic"
               value={parentId ?? ''}
               onChange={(e) => setParentId(e.target.value === '' ? null : Number(e.target.value))}
-              inputProps={{ 'aria-label': 'Epic' }}
-              InputLabelProps={{ shrink: true }}
+              slotProps={{
+                htmlInput: { 'aria-label': 'Epic' },
+                select: { native: true },
+                inputLabel: { shrink: true },
+              }}
               fullWidth
             >
               <option value="">(kein Epic)</option>
@@ -161,7 +162,7 @@ export function NewCardModal({
               onChange={(e) => setShortcode(e.target.value)}
               placeholder={epicShortcode(title)}
               helperText="Leer lassen, um es aus dem Titel abzuleiten."
-              inputProps={{ maxLength: 16, 'aria-label': 'Kürzel' }}
+              slotProps={{ htmlInput: { maxLength: 16, 'aria-label': 'Kürzel' } }}
               fullWidth
             />
           )}
@@ -174,7 +175,7 @@ export function NewCardModal({
             autoFocus
             fullWidth
             inputRef={titleInputRef}
-            inputProps={{ maxLength: 300, 'aria-label': 'Titel' }}
+            slotProps={{ htmlInput: { maxLength: 300, 'aria-label': 'Titel' } }}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) void handleCreate()
             }}
@@ -186,7 +187,7 @@ export function NewCardModal({
             multiline
             rows={8}
             fullWidth
-            inputProps={{ maxLength: 10_000, 'aria-label': 'Beschreibung' }}
+            slotProps={{ htmlInput: { maxLength: 10_000, 'aria-label': 'Beschreibung' } }}
             sx={{ '& textarea': { fontFamily: 'monospace', resize: 'vertical' } }}
           />
         </Stack>

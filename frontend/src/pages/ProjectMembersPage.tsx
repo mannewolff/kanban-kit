@@ -34,7 +34,7 @@ interface Props {
   loadRole?: (projectId: number) => Promise<string>
 }
 
-export function ProjectMembersPage({ api = defaultMembersApi, loadRole }: Props) {
+export function ProjectMembersPage({ api = defaultMembersApi, loadRole }: Readonly<Props>) {
   const { projectId } = useParams()
   const id = Number.parseInt(projectId ?? '', 10)
   const validId = Number.isInteger(id) && id > 0
@@ -83,13 +83,12 @@ export function ProjectMembersPage({ api = defaultMembersApi, loadRole }: Props)
   const ownerCount = members.filter((m) => m.role === 'OWNER').length
   const isLastOwner = (m: Member) => m.role === 'OWNER' && ownerCount === 1
 
-  const handleTransferOwner = async () => {
-    if (!transferTarget) {
-      return
-    }
+  // Kein Nullable-Guard nötig: der Übertragen-Button existiert nur, solange der Dialog offen ist
+  // (open={transferTarget !== null}, siehe unten) — das Ziel wird ihm direkt übergeben.
+  const handleTransferOwner = async (target: Member) => {
     setTransferError(null)
     try {
-      await projectsApi.transferOwner(id, transferTarget.userId)
+      await projectsApi.transferOwner(id, target.userId)
       setTransferTarget(null)
       // Der Aufrufer verliert die Owner-Rechte und wird Admin (Backend-Semantik).
       setRole('ADMIN')
@@ -201,7 +200,7 @@ export function ProjectMembersPage({ api = defaultMembersApi, loadRole }: Props)
               onChange={(e) => setInviteEmail(e.target.value)} />
             <TextField size="small" select label="Rolle" value={inviteRole} sx={{ minWidth: 120 }}
               onChange={(e) => setInviteRole(e.target.value as ProjectRole)}
-              inputProps={{ 'aria-label': 'Einladungsrolle' }}>
+              slotProps={{ htmlInput: { 'aria-label': 'Einladungsrolle' } }}>
               {ROLES.map((r) => <MenuItem key={r} value={r}>{r}</MenuItem>)}
             </TextField>
             <Button type="submit" variant="contained" disabled={inviting || !inviteEmail.trim()}>
@@ -231,7 +230,7 @@ export function ProjectMembersPage({ api = defaultMembersApi, loadRole }: Props)
                       variant="standard"
                       value={editingName.name}
                       onChange={(e) => setEditingName({ userId: member.userId, name: e.target.value })}
-                      inputProps={{ maxLength: 120, 'aria-label': `Anzeigename von ${member.email}` }}
+                      slotProps={{ htmlInput: { maxLength: 120, 'aria-label': `Anzeigename von ${member.email}` } }}
                     />
                     <Button size="small" aria-label="Namen speichern" onClick={handleChangeDisplayName}>
                       Speichern
@@ -263,7 +262,7 @@ export function ProjectMembersPage({ api = defaultMembersApi, loadRole }: Props)
                   <TextField select size="small" value={member.role} variant="standard"
                     disabled={isLastOwner(member)} sx={{ minWidth: 110 }}
                     onChange={(e) => handleChangeRole(member, e.target.value as ProjectRole)}
-                    inputProps={{ 'aria-label': `Rolle von ${member.displayName}` }}>
+                    slotProps={{ htmlInput: { 'aria-label': `Rolle von ${member.displayName}` } }}>
                     {ROLES.map((r) => <MenuItem key={r} value={r}>{r}</MenuItem>)}
                   </TextField>
                 ) : (
@@ -290,22 +289,24 @@ export function ProjectMembersPage({ api = defaultMembersApi, loadRole }: Props)
         </TableBody>
       </Table>
 
-      <Dialog open={transferTarget !== null} onClose={() => setTransferTarget(null)}>
-        <DialogTitle>Zum Eigentümer machen?</DialogTitle>
-        <DialogContent>
-          {transferError && <Alert severity="error" sx={{ mb: 2 }}>{transferError}</Alert>}
-          <DialogContentText>
-            „{transferTarget?.displayName}&ldquo; wird Eigentümer dieses Projekts. Du verlierst
-            dabei deine Owner-Rechte und wirst zum Admin herabgestuft.
-          </DialogContentText>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setTransferTarget(null)}>Abbrechen</Button>
-          <Button variant="contained" onClick={() => void handleTransferOwner()}>
-            Übertragen
-          </Button>
-        </DialogActions>
-      </Dialog>
+      {transferTarget && (
+        <Dialog open onClose={() => setTransferTarget(null)}>
+          <DialogTitle>Zum Eigentümer machen?</DialogTitle>
+          <DialogContent>
+            {transferError && <Alert severity="error" sx={{ mb: 2 }}>{transferError}</Alert>}
+            <DialogContentText>
+              „{transferTarget.displayName}&ldquo; wird Eigentümer dieses Projekts. Du verlierst
+              dabei deine Owner-Rechte und wirst zum Admin herabgestuft.
+            </DialogContentText>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setTransferTarget(null)}>Abbrechen</Button>
+            <Button variant="contained" onClick={() => void handleTransferOwner(transferTarget)}>
+              Übertragen
+            </Button>
+          </DialogActions>
+        </Dialog>
+      )}
     </Box>
   )
 }

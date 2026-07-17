@@ -7,6 +7,44 @@ Versionierung folgt der dreiteiligen Betriebsversion (siehe [RELEASING.md](RELEA
 Einträge je Version sind ein automatischer Auszug der Commit-Titel seit dem letzten Release,
 erzeugt von `scripts/gen-changelog.mjs`.
 
+## [0.8.0] – 2026-07-17
+
+- Coverage-Schwellen in vite.config.ts final anheben ([#237](https://github.com/mannewolff/kanban-kit/issues/237))
+- Restliche Fehlerpfade in bestehenden Seiten-Tests bündeln ([#236](https://github.com/mannewolff/kanban-kit/issues/236))
+- ProjectMembersPage.tsx Coverage-Lücken schließen ([#235](https://github.com/mannewolff/kanban-kit/issues/235))
+- BoardListPage.tsx Coverage-Lücken schließen ([#234](https://github.com/mannewolff/kanban-kit/issues/234))
+- BoardPage.tsx Coverage-Lücken schließen ([#233](https://github.com/mannewolff/kanban-kit/issues/233))
+- CardDetailModal.tsx Coverage-Lücken schließen ([#232](https://github.com/mannewolff/kanban-kit/issues/232))
+- BoardView.tsx Coverage-Lücken schließen ([#231](https://github.com/mannewolff/kanban-kit/issues/231))
+- AppShell.tsx Coverage-Lücken schließen ([#230](https://github.com/mannewolff/kanban-kit/issues/230))
+- AuthContext.tsx direkt testen ([#229](https://github.com/mannewolff/kanban-kit/issues/229))
+- Vier leere Auth-Flow-Seiten testen ([#228](https://github.com/mannewolff/kanban-kit/issues/228))
+- CardDetailModal.tsx: erneut aufgetretene Sonar-Findings nach #214 bündeln ([#222](https://github.com/mannewolff/kanban-kit/issues/222))
+- NewCardModal.tsx: SelectProps/InputLabelProps auf slotProps migrieren ([#224](https://github.com/mannewolff/kanban-kit/issues/224))
+- BoardView.tsx: SelectProps/InputLabelProps auf slotProps migrieren ([#221](https://github.com/mannewolff/kanban-kit/issues/221))
+- DashboardPage.tsx: Props als Readonly markieren ([#227](https://github.com/mannewolff/kanban-kit/issues/227))
+- SnackbarProvider.tsx: Props als Readonly markieren ([#226](https://github.com/mannewolff/kanban-kit/issues/226))
+- PasswordField.tsx: Props als Readonly markieren ([#225](https://github.com/mannewolff/kanban-kit/issues/225))
+- LabelManagerDialog.tsx: Props als Readonly markieren ([#223](https://github.com/mannewolff/kanban-kit/issues/223))
+- AuthCard.tsx: Props als Readonly markieren ([#220](https://github.com/mannewolff/kanban-kit/issues/220))
+- AppShell.tsx: primaryTypographyProps auf slotProps migrieren ([#219](https://github.com/mannewolff/kanban-kit/issues/219))
+- AuthContext.tsx: Props als Readonly markieren ([#218](https://github.com/mannewolff/kanban-kit/issues/218))
+- SonarQube-Sync: PROJECTS_PAT statt GITHUB_TOKEN fuer GitHub-Projects-v2-Zugriff
+- Kopierte Karte immer nach Backlog statt in die Ursprungsspalte ([#207](https://github.com/mannewolff/kanban-kit/issues/207))
+- Release-Tag-Handling: annotated Tags auf den Release-Commit ([#206](https://github.com/mannewolff/kanban-kit/issues/206))
+- SonarCloud-Trigger von production auf main umstellen
+- Frontend-Coverage-Philosophie in CLAUDE-react.md verankern ([#217](https://github.com/mannewolff/kanban-kit/issues/217))
+- Frontend-API-Schicht direkt testen statt ausschließen ([#216](https://github.com/mannewolff/kanban-kit/issues/216))
+- sonar.coverage.exclusions ergänzen: Sonar-Scope an lokale Gates angleichen ([#215](https://github.com/mannewolff/kanban-kit/issues/215))
+- CardDetailModal.tsx: alle Sonar-Findings bündeln ([#214](https://github.com/mannewolff/kanban-kit/issues/214))
+- SonarCloud-Sync: auf Compute-Engine-Task warten ([#213](https://github.com/mannewolff/kanban-kit/issues/213))
+- Restliche Sonar-Code-Smells abräumen ([#212](https://github.com/mannewolff/kanban-kit/issues/212))
+- markdownTasks.ts: Regex-Backtracking + Template-Literals + exec ([#210](https://github.com/mannewolff/kanban-kit/issues/210))
+- BoardView.tsx: Komplexitäts-Smells reduzieren ([#211](https://github.com/mannewolff/kanban-kit/issues/211))
+- Component-Props als Readonly markieren ([#209](https://github.com/mannewolff/kanban-kit/issues/209))
+- MUI inputProps-Deprecation auf slotProps migrieren ([#208](https://github.com/mannewolff/kanban-kit/issues/208))
+- SonarCloud: Analyse immer als main-Branch melden (Free-Plan-Fix)
+
 ## [0.7.0] – 2026-07-15
 
 - Archivierte Karten wiederherstellen: Restore in Listenansicht und Detail-Modal ([#204](https://github.com/mannewolff/kanban-kit/issues/204))

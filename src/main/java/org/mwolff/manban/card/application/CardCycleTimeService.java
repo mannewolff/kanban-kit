@@ -114,19 +114,15 @@ public class CardCycleTimeService {
         continue;
       }
       long secondsAgo = Duration.between(done, now).toSeconds();
-      if (secondsAgo < 0) {
-        continue;
-      }
       long weeksAgo = secondsAgo / WEEK_SECONDS;
-      if (weeksAgo >= THROUGHPUT_WEEKS) {
-        continue;
+      if (secondsAgo >= 0 && weeksAgo < THROUGHPUT_WEEKS) {
+        counts[(int) (THROUGHPUT_WEEKS - 1 - weeksAgo)]++;
       }
-      counts[(int) (THROUGHPUT_WEEKS - 1 - weeksAgo)]++;
     }
 
     List<WeeklyThroughput> result = new ArrayList<>(THROUGHPUT_WEEKS);
     for (int j = 0; j < THROUGHPUT_WEEKS; j++) {
-      Instant weekStart = now.minusSeconds((long) (THROUGHPUT_WEEKS - j) * WEEK_SECONDS);
+      Instant weekStart = now.minusSeconds((THROUGHPUT_WEEKS - j) * WEEK_SECONDS);
       result.add(new WeeklyThroughput(weekStart, counts[j]));
     }
     return result;

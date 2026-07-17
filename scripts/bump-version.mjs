@@ -8,8 +8,11 @@
  *   node scripts/bump-version.mjs patch   (Z+1)              -> push main
  *   node scripts/bump-version.mjs minor   (Y+1, Z=0)         -> merge production
  *   node scripts/bump-version.mjs major   (X+1, Y=0, Z=0)    -> nur auf explizite Anordnung
+ *   node scripts/bump-version.mjs tag     annotated Tag vX.Y.Z auf HEAD -> merge production,
+ *                                          NACH dem Release-Commit (sonst zeigt der Tag auf den
+ *                                          Commit davor statt auf den Release-Stand)
  *
- * Siehe RELEASING.md fuer den Kontext, wann welcher Teil erhoeht wird.
+ * Siehe RELEASING.md fuer den Kontext, wann welcher Teil/Befehl faellig ist.
  */
 
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -68,9 +71,13 @@ function updateFrontend(newVersion) {
 }
 
 /**
- * Setzt beim minor-Bump (= merge production) einen Tag `vX.Y.Z`, der den Release-Stand markiert.
- * Der Tag ist der Anker für die Range-Abgrenzung von gen-changelog.mjs. patch/major bleiben ohne
- * Tag. Idempotent: existiert der Tag bereits, wird er nicht neu gesetzt.
+ * Setzt einen annotated Tag `vX.Y.Z` (git tag -a), der den Release-Stand markiert — annotated
+ * statt lightweight, damit `git push --follow-tags` (siehe RELEASING.md) ihn mitnimmt; ein
+ * lightweight Tag bliebe sonst beim Push liegen und müsste separat gepusht werden. Der Tag ist
+ * der Anker für die Range-Abgrenzung von gen-changelog.mjs. Bewusst ein eigener Befehl statt Teil
+ * von `minor`: er muss NACH dem Release-Commit laufen (siehe RELEASING.md), sonst zeigt der Tag
+ * auf den Commit davor statt auf den eigentlichen Release-Stand. Idempotent: existiert der Tag
+ * bereits, wird er nicht neu gesetzt.
  */
 function tagRelease(newVersion) {
   const tag = `v${newVersion}`;
@@ -79,28 +86,31 @@ function tagRelease(newVersion) {
     process.stdout.write(`Tag ${tag} existiert bereits — kein neuer Tag.\n`);
     return;
   }
-  execFileSync('git', ['tag', tag], { cwd: REPO_ROOT, stdio: 'inherit' });
-  process.stdout.write(`Tag ${tag} gesetzt.\n`);
+  execFileSync('git', ['tag', '-a', tag, '-m', `Release ${tag}`], { cwd: REPO_ROOT, stdio: 'inherit' });
+  process.stdout.write(`Tag ${tag} (annotated) auf HEAD gesetzt.\n`);
 }
 
 function main(argv) {
-  const part = argv[0];
-  if (!PARTS.includes(part)) {
-    fail(`Erwartet einen von: ${PARTS.join(', ')}`);
+  const cmd = argv[0];
+
+  if (cmd === 'tag') {
+    const current = parseVersion(readFileSync(VERSION_PATH, 'utf-8'));
+    tagRelease(formatVersion(current));
+    return;
+  }
+
+  if (!PARTS.includes(cmd)) {
+    fail(`Erwartet einen von: ${PARTS.join(', ')}, tag`);
   }
 
   const current = parseVersion(readFileSync(VERSION_PATH, 'utf-8'));
-  const next = bump(current, part);
+  const next = bump(current, cmd);
   const currentText = formatVersion(current);
   const nextText = formatVersion(next);
 
   writeFileSync(VERSION_PATH, `${nextText}\n`);
   updatePom(nextText);
   updateFrontend(nextText);
-
-  if (part === 'minor') {
-    tagRelease(nextText);
-  }
 
   process.stdout.write(`Version: ${currentText} -> ${nextText}\n`);
 }

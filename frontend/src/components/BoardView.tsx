@@ -47,8 +47,57 @@ const isDoneColumn = (name: string) => name.toLowerCase().includes('done')
 function initials(name: string): string {
   const parts = name.trim().split(/\s+/).filter((p) => p.length > 0)
   const first = parts[0]?.charAt(0) ?? ''
-  const last = parts.length > 1 ? parts[parts.length - 1].charAt(0) : ''
+  const last = parts.length > 1 ? (parts.at(-1)?.charAt(0) ?? '') : ''
   return (first + last).toUpperCase() || '?'
+}
+
+/**
+ * Farbige Label-Chips einer Karte. Als eigene Komponente ausgelagert, damit die
+ * `find`-Suche nicht innerhalb der tief verschachtelten Spalten-/Karten-`map` steht.
+ */
+function CardLabels({ labelIds, boardLabels, cardTitle }: Readonly<{ labelIds: number[]; boardLabels: Label[]; cardTitle: string }>) {
+  if (labelIds.length === 0) return null
+  return (
+    <Stack direction="row" spacing={0.5} sx={{ flexWrap: 'wrap', mb: 0.5 }} aria-label={`Labels ${cardTitle}`}>
+      {labelIds.map((labelId) => {
+        const l = boardLabels.find((b) => b.id === labelId)
+        return (
+          <Chip
+            key={labelId}
+            size="small"
+            label={l?.name ?? `#${labelId}`}
+            sx={{ bgcolor: l?.color ?? 'grey.500', color: '#fff', height: 18, '& .MuiChip-label': { px: 0.75, fontSize: '0.65rem' } }}
+          />
+        )
+      })}
+    </Stack>
+  )
+}
+
+/**
+ * Zuständigen-Avatare einer Karte. Analog zu {@link CardLabels} ausgelagert, um die
+ * `find`-Suche aus der verschachtelten Karten-`map` zu holen.
+ */
+function CardAssignees({ assigneeIds, members, cardTitle }: Readonly<{ assigneeIds: number[]; members: Member[]; cardTitle: string }>) {
+  if (assigneeIds.length === 0) return null
+  return (
+    <Stack direction="row" justifyContent="flex-end" sx={{ mt: 0.5 }}>
+      <AvatarGroup
+        max={4}
+        aria-label={`Zuständige ${cardTitle}`}
+        sx={{ '& .MuiAvatar-root': { width: 24, height: 24, fontSize: '0.7rem' } }}
+      >
+        {assigneeIds.map((uid) => {
+          const name = members.find((m) => m.userId === uid)?.displayName ?? `#${uid}`
+          return (
+            <Avatar key={uid} title={name}>
+              {initials(name)}
+            </Avatar>
+          )
+        })}
+      </AvatarGroup>
+    </Stack>
+  )
 }
 
 interface Props {
@@ -98,7 +147,7 @@ export function BoardView({
   platformAdmin = false,
   api = cardsApi,
   epicsApi = defaultEpicsApi,
-}: Props) {
+}: Readonly<Props>) {
   const [cards, setCards] = useState<Card[]>(initialCards)
   const [modalColumn, setModalColumn] = useState<{ id: number; name: string } | null>(null)
   const [duplicateValues, setDuplicateValues] = useState<NewCardInitialValues | null>(null)
@@ -165,14 +214,13 @@ export function BoardView({
 
   const [deleteColumn, setDeleteColumn] = useState<BoardColumn | null>(null)
   const [deleteError, setDeleteError] = useState<string | null>(null)
-  const handleDeleteColumn = async () => {
-    if (!deleteColumn) {
-      return
-    }
+  // Kein Nullable-Guard nötig: der Dialog (und damit der einzige Aufrufer) existiert nur,
+  // solange deleteColumn gesetzt ist — siehe die {deleteColumn && (...)}-Bedingung unten.
+  const handleDeleteColumn = async (column: BoardColumn) => {
     setDeleteError(null)
     try {
-      await columnsApi.remove(deleteColumn.id)
-      setColumns((cs) => cs.filter((c) => c.id !== deleteColumn.id))
+      await columnsApi.remove(column.id)
+      setColumns((cs) => cs.filter((c) => c.id !== column.id))
       setDeleteColumn(null)
     } catch (e) {
       setDeleteError(
@@ -309,13 +357,15 @@ export function BoardView({
           {epics.length > 0 && (
             <TextField
               select
-              SelectProps={{ native: true }}
               size="small"
               label="Epic-Filter"
               value={epicFilter ?? ''}
               onChange={(e) => changeEpicFilter(e.target.value === '' ? null : Number(e.target.value))}
-              inputProps={{ 'aria-label': 'Epic-Filter' }}
-              InputLabelProps={{ shrink: true }}
+              slotProps={{
+                htmlInput: { 'aria-label': 'Epic-Filter' },
+                select: { native: true },
+                inputLabel: { shrink: true },
+              }}
               sx={{ minWidth: 200 }}
             >
               <option value="">Alle Epics</option>
@@ -435,6 +485,9 @@ export function BoardView({
                   const doneAt = done ? card.movedToDoneAt : null
                   const overdue = isOverdue(card.dueDate, done)
                   const selected = selectedIds.has(card.id)
+                  // Nur greifbar (Drag-Cursor), wenn bearbeitbar und nicht im Auswahlmodus —
+                  // ersetzt zwei verschachtelte Cursor-Ternaries (S3358).
+                  const grabbable = canEdit && !selectionMode
                   return (
                     <Paper
                       key={card.id}
@@ -450,28 +503,14 @@ export function BoardView({
                         border: 1,
                         borderColor: selected ? 'primary.main' : 'divider',
                         borderLeft: epic ? `4px solid ${epicColor(epic.id)}` : undefined,
-                        cursor: selectionMode ? 'pointer' : canEdit ? 'grab' : 'pointer',
+                        cursor: grabbable ? 'grab' : 'pointer',
                         transition: 'border-color .15s',
                         '&:hover': { borderColor: 'primary.light' },
-                        '&:active': { cursor: selectionMode ? 'pointer' : canEdit ? 'grabbing' : 'pointer' },
+                        '&:active': { cursor: grabbable ? 'grabbing' : 'pointer' },
                       }}
                     >
                       {epic && <EpicBadge epicId={epic.id} title={epic.title} shortcode={epic.shortcode} sx={{ mb: 0.5 }} />}
-                      {card.labels.length > 0 && (
-                        <Stack direction="row" spacing={0.5} sx={{ flexWrap: 'wrap', mb: 0.5 }} aria-label={`Labels ${card.title}`}>
-                          {card.labels.map((labelId) => {
-                            const l = boardLabels.find((b) => b.id === labelId)
-                            return (
-                              <Chip
-                                key={labelId}
-                                size="small"
-                                label={l?.name ?? `#${labelId}`}
-                                sx={{ bgcolor: l?.color ?? 'grey.500', color: '#fff', height: 18, '& .MuiChip-label': { px: 0.75, fontSize: '0.65rem' } }}
-                              />
-                            )
-                          })}
-                        </Stack>
-                      )}
+                      <CardLabels labelIds={card.labels} boardLabels={boardLabels} cardTitle={card.title} />
                       <Stack direction="row" alignItems="flex-start" spacing={0.5}>
                         {selectionMode && (
                           <Checkbox
@@ -479,7 +518,7 @@ export function BoardView({
                             checked={selected}
                             onChange={() => toggleSelect(card.id)}
                             onClick={(e) => e.stopPropagation()}
-                            inputProps={{ 'aria-label': `Karte ${card.title} auswählen` }}
+                            slotProps={{ input: { 'aria-label': `Karte ${card.title} auswählen` } }}
                             sx={{ p: 0, mt: 0.25 }}
                           />
                         )}
@@ -516,24 +555,7 @@ export function BoardView({
                           📅 {formatDueDate(card.dueDate)}
                         </Typography>
                       )}
-                      {card.assignees.length > 0 && (
-                        <Stack direction="row" justifyContent="flex-end" sx={{ mt: 0.5 }}>
-                          <AvatarGroup
-                            max={4}
-                            aria-label={`Zuständige ${card.title}`}
-                            sx={{ '& .MuiAvatar-root': { width: 24, height: 24, fontSize: '0.7rem' } }}
-                          >
-                            {card.assignees.map((uid) => {
-                              const name = members.find((m) => m.userId === uid)?.displayName ?? `#${uid}`
-                              return (
-                                <Avatar key={uid} title={name}>
-                                  {initials(name)}
-                                </Avatar>
-                              )
-                            })}
-                          </AvatarGroup>
-                        </Stack>
-                      )}
+                      <CardAssignees assigneeIds={card.assignees} members={members} cardTitle={card.title} />
                     </Paper>
                   )
                 })}
@@ -559,14 +581,14 @@ export function BoardView({
               label="Name"
               value={columnName}
               onChange={(e) => setColumnName(e.target.value)}
-              inputProps={{ maxLength: 120, 'aria-label': 'Spaltenname' }}
+              slotProps={{ htmlInput: { maxLength: 120, 'aria-label': 'Spaltenname' } }}
             />
             <TextField
               label="WIP-Limit (optional)"
               type="number"
               value={columnWip}
               onChange={(e) => setColumnWip(e.target.value)}
-              inputProps={{ min: 1, 'aria-label': 'WIP-Limit' }}
+              slotProps={{ htmlInput: { min: 1, 'aria-label': 'WIP-Limit' } }}
             />
           </Stack>
         </DialogContent>
@@ -582,21 +604,23 @@ export function BoardView({
         </DialogActions>
       </Dialog>
 
-      <Dialog open={deleteColumn !== null} onClose={() => setDeleteColumn(null)}>
-        <DialogTitle>Spalte löschen?</DialogTitle>
-        <DialogContent>
-          {deleteError && <Alert severity="error" sx={{ mb: 2 }}>{deleteError}</Alert>}
-          <DialogContentText>
-            Die Spalte „{deleteColumn?.name}&ldquo; wird gelöscht.
-          </DialogContentText>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setDeleteColumn(null)}>Abbrechen</Button>
-          <Button color="error" onClick={() => void handleDeleteColumn()}>
-            Löschen
-          </Button>
-        </DialogActions>
-      </Dialog>
+      {deleteColumn && (
+        <Dialog open onClose={() => setDeleteColumn(null)}>
+          <DialogTitle>Spalte löschen?</DialogTitle>
+          <DialogContent>
+            {deleteError && <Alert severity="error" sx={{ mb: 2 }}>{deleteError}</Alert>}
+            <DialogContentText>
+              Die Spalte „{deleteColumn.name}&ldquo; wird gelöscht.
+            </DialogContentText>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setDeleteColumn(null)}>Abbrechen</Button>
+            <Button color="error" onClick={() => void handleDeleteColumn(deleteColumn)}>
+              Löschen
+            </Button>
+          </DialogActions>
+        </Dialog>
+      )}
 
       <Menu anchorEl={menu?.anchor ?? null} open={menu != null} onClose={closeMenu}>
         {menu && !menu.card.archived && [
@@ -607,10 +631,13 @@ export function BoardView({
             key="duplicate"
             onClick={() => {
               const c = menu.card
-              const column = columns.find((col) => col.id === c.columnId)
               closeMenu()
+              if (columns.length === 0) return
+              // Die Kopie ist ein neues Item und soll den kompletten Prozess durchlaufen —
+              // deshalb immer in die erste Spalte ("Backlog"), nicht in die Spalte der
+              // Quellkarte (analog zum board-weiten "+"-Button, der ebenfalls columns[0] nutzt).
               setDuplicateValues({ title: c.title, description: c.description ?? '', parentId: c.parentId })
-              setModalColumn({ id: c.columnId, name: column?.name ?? '' })
+              setModalColumn({ id: columns[0].id, name: columns[0].name })
             }}
           >
             Duplizieren

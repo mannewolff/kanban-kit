@@ -45,6 +45,21 @@ describe('normalizeTaskLists', () => {
   it('lässt nackte Klammern ohne folgenden Whitespace (Fließtext) unangetastet', () => {
     expect(normalizeTaskLists('[x]foo bar')).toBe('[x]foo bar')
   })
+
+  // Regression S8786: `[` + sehr viele Leerzeichen ohne schließendes `]` löste beim alten
+  // Marker-Muster `\[\s*[xX]?\s*\]` super-lineares Backtracking aus (zwei benachbarte `\s*`).
+  // Mit dem verankerten Muster `\[\s*(?:[xX]\s*)?\]` läuft es linear; die Zeile bleibt (kein
+  // gültiger Marker) unverändert. Timeout des Tests wäre der Regressionsindikator.
+  it('verarbeitet pathologische Marker-Eingaben ohne katastrophales Backtracking', () => {
+    const nakedish = `[${' '.repeat(50_000)}`
+    expect(normalizeTaskLists(nakedish)).toBe(nakedish)
+
+    const listedish = `-  [${' '.repeat(50_000)}`
+    expect(normalizeTaskLists(listedish)).toBe(listedish)
+
+    // Gegenprobe: ein gültiger Marker mit vielen Leerzeichen wird weiterhin korrekt kanonisiert.
+    expect(normalizeTaskLists(`[${' '.repeat(500)}] tief eingerückt`)).toBe('- [ ] tief eingerückt')
+  })
 })
 
 describe('toggleTaskAt', () => {

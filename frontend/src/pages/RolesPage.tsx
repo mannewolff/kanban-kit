@@ -37,8 +37,8 @@ const OPERATION_LABEL: Record<string, string> = {
 function groupByResource(permissions: PermissionDef[]): { resource: string; perms: PermissionDef[] }[] {
   const groups: { resource: string; perms: PermissionDef[] }[] = []
   for (const p of permissions) {
-    const last = groups[groups.length - 1]
-    if (last && last.resource === p.resource) {
+    const last = groups.at(-1)
+    if (last?.resource === p.resource) {
       last.perms.push(p)
     } else {
       groups.push({ resource: p.resource, perms: [p] })
@@ -107,7 +107,7 @@ export function RolesPage({ api = defaultRolesApi }: { api?: RolesApi } = {}) {
                         size="small"
                         disabled
                         checked={matrix.grants[role]?.includes(p.key) ?? false}
-                        inputProps={{ 'aria-label': `${p.key} für ${role}` }}
+                        slotProps={{ input: { 'aria-label': `${p.key} für ${role}` } }}
                       />
                     </TableCell>
                   ))}

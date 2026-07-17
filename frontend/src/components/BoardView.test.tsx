@@ -1,23 +1,31 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Board } from '../api/boards'
+import { cardsApi } from '../api/cards'
 import type { Card } from '../api/cards'
 import { ApiError } from '../api/client'
 import { columnsApi } from '../api/columns'
+import { boardsApi } from '../api/boards'
+import { projectsApi } from '../api/projects'
 import { BoardView } from './BoardView'
 
 vi.mock('../api/columns', () => ({
   columnsApi: { create: vi.fn(), update: vi.fn(), remove: vi.fn(), reorder: vi.fn() },
 }))
-// Nur vom Transfer-Dialog zur Laufzeit genutzt; leere Listen genügen zum Öffnen.
+// Nur vom Transfer-Dialog zur Laufzeit genutzt; leere Listen genügen zum Öffnen, einzelne Tests
+// überschreiben sie mit echten Projekten/Boards, um den Verschieben-Flow bis zum Ende zu treiben.
 vi.mock('../api/projects', () => ({ projectsApi: { list: vi.fn().mockResolvedValue([]) } }))
 vi.mock('../api/boards', () => ({ boardsApi: { list: vi.fn().mockResolvedValue([]) } }))
+vi.mock('../api/cards', () => ({ cardsApi: { bulkTransfer: vi.fn() } }))
 const mColumns = columnsApi as unknown as {
   create: ReturnType<typeof vi.fn>
   update: ReturnType<typeof vi.fn>
   remove: ReturnType<typeof vi.fn>
   reorder: ReturnType<typeof vi.fn>
 }
+const mProjects = projectsApi as unknown as { list: ReturnType<typeof vi.fn> }
+const mBoards = boardsApi as unknown as { list: ReturnType<typeof vi.fn> }
+const mCards = cardsApi as unknown as { bulkTransfer: ReturnType<typeof vi.fn> }
 
 const board: Board = {
   id: 1,
@@ -50,6 +58,16 @@ function dropOnColumn(columnId: number, cardId: number) {
 }
 
 describe('BoardView', () => {
+  beforeEach(() => {
+    mProjects.list.mockResolvedValue([])
+    mBoards.list.mockResolvedValue([])
+    mCards.bulkTransfer.mockReset()
+    mColumns.create.mockReset()
+    mColumns.update.mockReset()
+    mColumns.remove.mockReset()
+    mColumns.reorder.mockReset()
+  })
+
   it('verschiebt die Karte optimistisch in die Zielspalte', async () => {
     const api = mkApi({ move: vi.fn().mockResolvedValue(undefined) })
     render(<BoardView board={board} initialCards={[card]} canEdit api={api} />)
@@ -133,23 +151,27 @@ describe('BoardView', () => {
     await waitFor(() => expect(api.move).toHaveBeenCalledWith(100, 20, 0))
   })
 
-  it('dupliziert eine Karte über das ⋮-Menü vorbefüllt in derselben Spalte', async () => {
-    const source: Card = { ...card, title: 'Original', description: 'Original-Text', parentId: 9 }
-    const created: Card = { ...card, id: 300, number: 3, title: 'Original' }
+  it('dupliziert eine Karte über das ⋮-Menü vorbefüllt, aber immer nach Backlog (erste Spalte)', async () => {
+    // Quelle bewusst NICHT in der ersten Spalte (Backlog=10), sondern in Done=20 — die Kopie ist
+    // ein neues Item und muss den kompletten Prozess durchlaufen, unabhängig davon, wo die
+    // Quellkarte gerade steht.
+    const source: Card = { ...card, columnId: 20, title: 'Original', description: 'Original-Text', parentId: 9 }
+    const created: Card = { ...card, id: 300, number: 3, columnId: 10, title: 'Original' }
     const api = mkApi({ create: vi.fn().mockResolvedValue(created) })
     render(<BoardView board={board} initialCards={[source]} canEdit api={api} />)
 
     fireEvent.click(screen.getByLabelText('Menü Original'))
     fireEvent.click(screen.getByRole('menuitem', { name: 'Duplizieren' }))
 
+    expect(screen.getByRole('heading', { name: 'Neue Karte in „Backlog“' })).toBeInTheDocument()
     expect(screen.getByLabelText('Titel')).toHaveValue('Original')
     expect(screen.getByLabelText('Beschreibung')).toHaveValue('Original-Text')
 
     fireEvent.click(screen.getByRole('button', { name: 'Anlegen' }))
 
     await waitFor(() => expect(api.create).toHaveBeenCalledWith(1, 10, 'Original', 'Original-Text', 9))
-    // Quellkarte bleibt unverändert erhalten.
-    expect(screen.getByTestId('card-100')).toBeInTheDocument()
+    // Quellkarte bleibt unverändert in ihrer Spalte (Done) erhalten.
+    expect(within(screen.getByTestId('column-20')).getByTestId('card-100')).toBeInTheDocument()
   })
 
   it('legt beim Abbrechen des Duplizieren-Dialogs keine neue Karte an', () => {
@@ -238,6 +260,16 @@ describe('BoardView', () => {
     expect(screen.getByText('Backlog')).toBeInTheDocument()
   })
 
+  it('zeigt eine generische Fehlermeldung bei einem anderen Löschfehler', async () => {
+    mColumns.remove.mockRejectedValue(new Error('boom'))
+    render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} />)
+
+    fireEvent.click(screen.getByLabelText('Spalte Backlog löschen'))
+    fireEvent.click(screen.getByRole('button', { name: 'Löschen' }))
+
+    expect(await screen.findByText('Löschen fehlgeschlagen.')).toBeInTheDocument()
+  })
+
   it('ordnet Spalten per Drag & Drop neu und persistiert die Reihenfolge', async () => {
     mColumns.reorder.mockResolvedValue([
       { id: 20, name: 'Done', position: 0, wipLimit: null },
@@ -246,9 +278,28 @@ describe('BoardView', () => {
     render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} />)
 
     fireEvent.dragStart(screen.getByTestId('column-header-20'))
+    // Während des Ziehens über eine ANDERE Spalte hinweg (dragOver) und am Ende dragEnd —
+    // vollständige Drag-Sequenz statt nur des isolierten drop.
+    fireEvent.dragOver(screen.getByTestId('column-header-10'))
     fireEvent.drop(screen.getByTestId('column-header-10'))
+    fireEvent.dragEnd(screen.getByTestId('column-header-10'))
 
     await waitFor(() => expect(mColumns.reorder).toHaveBeenCalledWith(1, [20, 10]))
+  })
+
+  it('ignoriert dragOver über der eigenen Spalte beim Spalten-Reorder', () => {
+    render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} />)
+    fireEvent.dragStart(screen.getByTestId('column-header-20'))
+    // dragOver über der Spalte, von der aus gezogen wird: kein preventDefault/Fehler.
+    fireEvent.dragOver(screen.getByTestId('column-header-20'))
+    expect(screen.getByTestId('column-header-20')).toBeInTheDocument()
+  })
+
+  it('reordert nicht, wenn eine Spalte auf sich selbst fallengelassen wird', () => {
+    render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} />)
+    fireEvent.dragStart(screen.getByTestId('column-header-20'))
+    fireEvent.drop(screen.getByTestId('column-header-20'))
+    expect(mColumns.reorder).not.toHaveBeenCalled()
   })
 
   it('stellt die Spalten-Reihenfolge bei einem Fehler wieder her', async () => {
@@ -429,5 +480,250 @@ describe('BoardView', () => {
 
     expect(screen.queryByLabelText('Karte Aufgabe auswählen')).not.toBeInTheDocument()
     expect(screen.queryByText('1 ausgewählt')).not.toBeInTheDocument()
+  })
+
+  it('zeigt das Fälligkeitsdatum-Badge, hervorgehoben bei überfälligen Karten', () => {
+    const future = new Date(Date.now() + 86_400_000).toISOString()
+    const past = new Date(Date.now() - 86_400_000).toISOString()
+    const dueSoon: Card = { ...card, id: 100, title: 'Bald fällig', dueDate: future }
+    const overdue: Card = { ...card, id: 200, number: 2, title: 'Überfällig', dueDate: past }
+    render(<BoardView board={board} initialCards={[dueSoon, overdue]} canEdit api={mkApi()} />)
+
+    expect(screen.getByLabelText('Fällig Bald fällig')).toBeInTheDocument()
+    expect(screen.getByLabelText('Fällig Überfällig')).toBeInTheDocument()
+    expect(screen.getAllByText(/📅/)).toHaveLength(2)
+  })
+
+  it('rollt eine fehlgeschlagene Kartenverschiebung zurück', async () => {
+    const api = mkApi({ move: vi.fn().mockRejectedValue(new Error('fail')) })
+    render(<BoardView board={board} initialCards={[card]} canEdit api={api} />)
+
+    fireEvent.click(screen.getByLabelText('Menü Aufgabe'))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Nach Done' }))
+
+    await waitFor(() => expect(api.move).toHaveBeenCalled())
+    expect(within(screen.getByTestId('column-10')).getByTestId('card-100')).toBeInTheDocument()
+    expect(within(screen.getByTestId('column-20')).queryByTestId('card-100')).not.toBeInTheDocument()
+  })
+
+  it('verschiebt eine einzelne Karte über das Menü auf ein anderes Board', async () => {
+    const onCardsChanged = vi.fn()
+    mProjects.list.mockResolvedValue([{ id: 2, name: 'Anderes Projekt', role: 'OWNER', createdAt: '' }])
+    mBoards.list.mockResolvedValue([
+      { id: 99, projectId: 2, name: 'Zielboard', createdAt: '',
+        columns: [{ id: 900, name: 'Backlog', position: 0, wipLimit: null }] },
+    ])
+    mCards.bulkTransfer.mockResolvedValue([{ ...card, boardId: 99, columnId: 900 }])
+    render(
+      <BoardView board={board} initialCards={[card]} canEdit canTransfer api={mkApi()}
+        onCardsChanged={onCardsChanged} />,
+    )
+
+    fireEvent.click(screen.getByLabelText('Menü Aufgabe'))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Auf anderes Board verschieben…' }))
+
+    fireEvent.change(await screen.findByLabelText('Zielprojekt'), { target: { value: '2' } })
+    fireEvent.change(await screen.findByLabelText('Zielboard'), { target: { value: '99' } })
+    fireEvent.change(await screen.findByLabelText('Zielspalte'), { target: { value: '900' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Verschieben' }))
+
+    await waitFor(() => expect(mCards.bulkTransfer).toHaveBeenCalledWith([100], 99, 900))
+    await waitFor(() => expect(screen.queryByTestId('card-100')).not.toBeInTheDocument())
+    expect(onCardsChanged).toHaveBeenCalled()
+  })
+
+  it('verschiebt die Auswahl über den Bulk-Transfer-Dialog und entfernt sie aus der Ansicht', async () => {
+    const onCardsChanged = vi.fn()
+    mProjects.list.mockResolvedValue([{ id: 2, name: 'Anderes Projekt', role: 'OWNER', createdAt: '' }])
+    mBoards.list.mockResolvedValue([
+      { id: 99, projectId: 2, name: 'Zielboard', createdAt: '',
+        columns: [{ id: 900, name: 'Backlog', position: 0, wipLimit: null }] },
+    ])
+    mCards.bulkTransfer.mockResolvedValue([{ ...card, boardId: 99, columnId: 900 }])
+    render(
+      <BoardView board={board} initialCards={[card]} canEdit canTransfer api={mkApi()}
+        onCardsChanged={onCardsChanged} />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Auswählen' }))
+    fireEvent.click(screen.getByTestId('card-100'))
+    fireEvent.click(screen.getByRole('button', { name: 'Verschieben' }))
+
+    fireEvent.change(await screen.findByLabelText('Zielprojekt'), { target: { value: '2' } })
+    fireEvent.change(await screen.findByLabelText('Zielboard'), { target: { value: '99' } })
+    fireEvent.change(await screen.findByLabelText('Zielspalte'), { target: { value: '900' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Verschieben' }))
+
+    await waitFor(() => expect(mCards.bulkTransfer).toHaveBeenCalledWith([100], 99, 900))
+    await waitFor(() => expect(screen.queryByTestId('card-100')).not.toBeInTheDocument())
+    expect(screen.queryByText('1 ausgewählt')).not.toBeInTheDocument()
+    expect(onCardsChanged).toHaveBeenCalled()
+  })
+
+  it('öffnet den Anlage-Dialog für die erste Spalte über „Neues Item"', () => {
+    render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Neues Item' }))
+    expect(screen.getByRole('heading', { name: 'Neue Karte in „Backlog“' })).toBeInTheDocument()
+  })
+
+  it('wählt eine Karte per Klick auf die Checkbox selbst aus', () => {
+    render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Auswählen' }))
+    fireEvent.click(screen.getByLabelText('Karte Aufgabe auswählen'))
+    expect(screen.getByText('1 ausgewählt')).toBeInTheDocument()
+  })
+
+  it('setzt beim Ziehen einer Karte die dataTransfer-Nutzlast und reagiert auf dragOver der Zielspalte', async () => {
+    const api = mkApi({ move: vi.fn().mockResolvedValue(undefined) })
+    render(<BoardView board={board} initialCards={[card]} canEdit api={api} />)
+
+    const setData = vi.fn()
+    fireEvent.dragStart(screen.getByTestId('card-100'), { dataTransfer: { setData } })
+    fireEvent.dragOver(screen.getByTestId('column-20'), { dataTransfer: {} })
+    fireEvent.drop(screen.getByTestId('column-20'), { dataTransfer: { getData: () => '100' } })
+
+    expect(setData).toHaveBeenCalledWith('text/plain', '100')
+    await waitFor(() => expect(api.move).toHaveBeenCalledWith(100, 20, 0))
+  })
+
+  it('bearbeitet eine Karte über „Bearbeiten“ im Menü', () => {
+    const onEditCard = vi.fn()
+    render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} onEditCard={onEditCard} />)
+
+    fireEvent.click(screen.getByLabelText('Menü Aufgabe'))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Bearbeiten' }))
+
+    expect(onEditCard).toHaveBeenCalledWith(card)
+  })
+
+  it('bricht das Löschen einer Spalte über Abbrechen ab und schließt den Dialog per Escape', async () => {
+    render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} />)
+
+    fireEvent.click(screen.getByLabelText('Spalte Backlog löschen'))
+    fireEvent.click(screen.getByRole('button', { name: 'Abbrechen' }))
+    await waitFor(() => expect(screen.queryByText('Spalte löschen?')).not.toBeInTheDocument())
+
+    fireEvent.click(screen.getByLabelText('Spalte Backlog löschen'))
+    fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape', code: 'Escape' })
+    await waitFor(() => expect(screen.queryByText('Spalte löschen?')).not.toBeInTheDocument())
+  })
+
+  it('bricht das Verschieben der Auswahl in den Papierkorb über Abbrechen ab', () => {
+    const api = mkApi()
+    render(<BoardView board={board} initialCards={[card]} canEdit api={api} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Auswählen' }))
+    fireEvent.click(screen.getByTestId('card-100'))
+    fireEvent.click(screen.getByRole('button', { name: 'In den Papierkorb' }))
+    fireEvent.click(
+      within(screen.getByRole('dialog')).getByRole('button', { name: 'Abbrechen' }),
+    )
+
+    expect(api.bulkDelete).not.toHaveBeenCalled()
+    expect(screen.getByTestId('card-100')).toBeInTheDocument()
+  })
+
+  it('schließt die Bulk-Bestätigungsdialoge (Archivieren/Papierkorb) per Escape ohne Aktion', async () => {
+    const api = mkApi()
+    render(<BoardView board={board} initialCards={[card]} canEdit api={api} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Auswählen' }))
+    fireEvent.click(screen.getByTestId('card-100'))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Archivieren' }))
+    fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape', code: 'Escape' })
+    await waitFor(() => expect(screen.queryByText('Karten archivieren?')).not.toBeInTheDocument())
+
+    fireEvent.click(screen.getByRole('button', { name: 'In den Papierkorb' }))
+    fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape', code: 'Escape' })
+    await waitFor(() =>
+      expect(screen.queryByText('In den Papierkorb verschieben?')).not.toBeInTheDocument(),
+    )
+
+    expect(api.bulkArchive).not.toHaveBeenCalled()
+    expect(api.bulkDelete).not.toHaveBeenCalled()
+  })
+
+  it('schließt den Einzelkarten- und den Bulk-Verschieben-Dialog per Escape', async () => {
+    mProjects.list.mockResolvedValue([])
+    render(<BoardView board={board} initialCards={[card]} canEdit canTransfer api={mkApi()} />)
+
+    fireEvent.click(screen.getByLabelText('Menü Aufgabe'))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Auf anderes Board verschieben…' }))
+    fireEvent.keyDown(await screen.findByRole('dialog'), { key: 'Escape', code: 'Escape' })
+    await waitFor(() =>
+      expect(screen.queryByText('Auf anderes Board verschieben')).not.toBeInTheDocument(),
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Auswählen' }))
+    fireEvent.click(screen.getByTestId('card-100'))
+    fireEvent.click(screen.getByRole('button', { name: 'Verschieben' }))
+    fireEvent.keyDown(await screen.findByRole('dialog'), { key: 'Escape', code: 'Escape' })
+    await waitFor(() =>
+      expect(screen.queryByText('Auf anderes Board verschieben')).not.toBeInTheDocument(),
+    )
+  })
+
+  it('blendet die Fehler-Snackbar nach Ablauf der Anzeigedauer wieder aus', async () => {
+    vi.useFakeTimers()
+    try {
+      const api = mkApi({ bulkArchive: vi.fn().mockRejectedValue(new Error('fail')) })
+      render(<BoardView board={board} initialCards={[card]} canEdit api={api} />)
+
+      fireEvent.click(screen.getByRole('button', { name: 'Auswählen' }))
+      fireEvent.click(screen.getByTestId('card-100'))
+      fireEvent.click(screen.getByRole('button', { name: 'Archivieren' }))
+      fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Archivieren' }))
+
+      await vi.waitFor(() =>
+        expect(screen.getByText('Archivieren fehlgeschlagen.')).toBeInTheDocument(),
+      )
+
+      vi.advanceTimersByTime(5000)
+
+      await vi.waitFor(() =>
+        expect(screen.queryByText('Archivieren fehlgeschlagen.')).not.toBeInTheDocument(),
+      )
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('bricht das Spalten-Reorder ab, wenn die gezogene Spalte zwischenzeitlich verschwunden ist', () => {
+    const { rerender } = render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} />)
+    fireEvent.dragStart(screen.getByTestId('column-header-20'))
+
+    // Spalte 20 verschwindet aus board.columns, bevor der Drop passiert (z. B. andere Session).
+    const updatedBoard: Board = { ...board, columns: [{ id: 10, name: 'Backlog', position: 0, wipLimit: null }] }
+    rerender(<BoardView board={updatedBoard} initialCards={[card]} canEdit api={mkApi()} />)
+
+    fireEvent.drop(screen.getByTestId('column-header-10'))
+    expect(mColumns.reorder).not.toHaveBeenCalled()
+  })
+
+  it('ignoriert das Verschieben einer Karte auf ihre eigene Spalte', () => {
+    const api = mkApi()
+    render(<BoardView board={board} initialCards={[card]} canEdit api={api} />)
+    dropOnColumn(10, 100)
+    expect(api.move).not.toHaveBeenCalled()
+  })
+
+  it('ändert den Epic-Filter auch, wenn localStorage nicht verfügbar ist', () => {
+    vi.stubGlobal('localStorage', {
+      getItem: () => { throw new Error('storage disabled') },
+      setItem: () => { throw new Error('storage disabled') },
+      removeItem: () => { throw new Error('storage disabled') },
+      clear: () => {}, key: () => null, length: 0,
+    })
+    try {
+      const epics = [{ id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 0, total: 1 }]
+      const inEpic: Card = { ...card, parentId: 9 }
+      render(<BoardView board={board} initialCards={[inEpic]} canEdit epics={epics} api={mkApi()} />)
+      fireEvent.change(screen.getByLabelText('Epic-Filter'), { target: { value: '9' } })
+      // Filter greift trotz localStorage-Fehler (nur das Persistieren schlägt stumm fehl).
+      expect(screen.getByTestId('card-100')).toBeInTheDocument()
+    } finally {
+      vi.unstubAllGlobals()
+    }
   })
 })

@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { ApiError } from '../api/client'
 import { projectsApi } from '../api/projects'
 import { ProjectsPage } from './ProjectsPage'
 
@@ -115,5 +116,88 @@ describe('ProjectsPage', () => {
 
     expect(await screen.findByText('Fremd')).toBeInTheDocument()
     expect(screen.queryByLabelText('Projekt Fremd umbenennen')).not.toBeInTheDocument()
+  })
+
+  it('zeigt eine Fehlermeldung, wenn das Umbenennen fehlschlägt', async () => {
+    mocked.list.mockResolvedValue([{ id: 1, name: 'Meins', role: 'OWNER', createdAt: '' }])
+    mocked.rename.mockRejectedValue(new Error('boom'))
+    render(<MemoryRouter><ProjectsPage /></MemoryRouter>)
+
+    fireEvent.click(await screen.findByLabelText('Projekt Meins umbenennen'))
+    fireEvent.change(screen.getByLabelText('Neuer Projektname'), { target: { value: 'Neu' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Speichern' }))
+
+    expect(await screen.findByText('Umbenennen fehlgeschlagen.')).toBeInTheDocument()
+  })
+
+  it('legt kein Projekt ohne Name oder Owner-E-Mail an', async () => {
+    mockUser = { platformRole: 'ADMIN' }
+    mocked.list.mockResolvedValue([])
+    render(<MemoryRouter><ProjectsPage /></MemoryRouter>)
+    await screen.findByRole('button', { name: 'Anlegen' })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Anlegen' }))
+
+    expect(mocked.create).not.toHaveBeenCalled()
+  })
+
+  it('zeigt beim Anlegen eine spezifische Fehlermeldung bei unbekannter Owner-E-Mail (400)', async () => {
+    mockUser = { platformRole: 'ADMIN' }
+    mocked.list.mockResolvedValue([])
+    mocked.create.mockRejectedValue(new ApiError(400, 'unbekannt'))
+    render(<MemoryRouter><ProjectsPage /></MemoryRouter>)
+    await screen.findByRole('button', { name: 'Anlegen' })
+
+    fireEvent.change(screen.getByLabelText('Neues Projekt'), { target: { value: 'Neu' } })
+    fireEvent.change(screen.getByLabelText('Owner (E-Mail)'), { target: { value: 'x@x.de' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Anlegen' }))
+
+    expect(
+      await screen.findByText('Kein Nutzer mit dieser Owner-E-Mail gefunden.'),
+    ).toBeInTheDocument()
+  })
+
+  it('zeigt beim Anlegen eine spezifische Fehlermeldung ohne Admin-Recht (403)', async () => {
+    mockUser = { platformRole: 'ADMIN' }
+    mocked.list.mockResolvedValue([])
+    mocked.create.mockRejectedValue(new ApiError(403, 'verboten'))
+    render(<MemoryRouter><ProjectsPage /></MemoryRouter>)
+    await screen.findByRole('button', { name: 'Anlegen' })
+
+    fireEvent.change(screen.getByLabelText('Neues Projekt'), { target: { value: 'Neu' } })
+    fireEvent.change(screen.getByLabelText('Owner (E-Mail)'), { target: { value: 'x@x.de' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Anlegen' }))
+
+    expect(
+      await screen.findByText('Nur Administratoren dürfen Projekte anlegen.'),
+    ).toBeInTheDocument()
+  })
+
+  it('zeigt beim Anlegen eine generische Fehlermeldung bei anderem Fehler', async () => {
+    mockUser = { platformRole: 'ADMIN' }
+    mocked.list.mockResolvedValue([])
+    mocked.create.mockRejectedValue(new Error('boom'))
+    render(<MemoryRouter><ProjectsPage /></MemoryRouter>)
+    await screen.findByRole('button', { name: 'Anlegen' })
+
+    fireEvent.change(screen.getByLabelText('Neues Projekt'), { target: { value: 'Neu' } })
+    fireEvent.change(screen.getByLabelText('Owner (E-Mail)'), { target: { value: 'x@x.de' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Anlegen' }))
+
+    expect(await screen.findByText('Anlegen fehlgeschlagen.')).toBeInTheDocument()
+  })
+
+  it('legt ein Projekt erfolgreich an', async () => {
+    mockUser = { platformRole: 'ADMIN' }
+    mocked.list.mockResolvedValue([])
+    mocked.create.mockResolvedValue({ id: 5, name: 'Neu', role: 'OWNER', createdAt: '' })
+    render(<MemoryRouter><ProjectsPage /></MemoryRouter>)
+    await screen.findByRole('button', { name: 'Anlegen' })
+
+    fireEvent.change(screen.getByLabelText('Neues Projekt'), { target: { value: 'Neu' } })
+    fireEvent.change(screen.getByLabelText('Owner (E-Mail)'), { target: { value: 'x@x.de' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Anlegen' }))
+
+    await waitFor(() => expect(mocked.create).toHaveBeenCalledWith('Neu', 'x@x.de'))
   })
 })

@@ -30,7 +30,7 @@ export function LabelManagerDialog({
   onClose,
   onChanged,
   api = defaultLabelsApi,
-}: Props) {
+}: Readonly<Props>) {
   const [newName, setNewName] = useState('')
   const [newColor, setNewColor] = useState(DEFAULT_COLOR)
   const [error, setError] = useState<string | null>(null)
@@ -76,7 +76,7 @@ export function LabelManagerDialog({
               label="Neues Label"
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
-              inputProps={{ maxLength: 60, 'aria-label': 'Neues Label' }}
+              slotProps={{ htmlInput: { maxLength: 60, 'aria-label': 'Neues Label' } }}
             />
             <Box
               component="input"
@@ -108,11 +108,11 @@ function LabelRow({
   label,
   onSave,
   onDelete,
-}: {
+}: Readonly<{
   label: Label
   onSave: (label: Label, name: string, color: string) => Promise<void>
   onDelete: (label: Label) => Promise<void>
-}) {
+}>) {
   const [name, setName] = useState(label.name)
   const [color, setColor] = useState(label.color)
   const dirty = name !== label.name || color !== label.color
@@ -123,7 +123,7 @@ function LabelRow({
         size="small"
         value={name}
         onChange={(e) => setName(e.target.value)}
-        inputProps={{ maxLength: 60, 'aria-label': `Label ${label.name}` }}
+        slotProps={{ htmlInput: { maxLength: 60, 'aria-label': `Label ${label.name}` } }}
       />
       <Box
         component="input"

@@ -44,14 +44,18 @@ export default defineConfig({
         'src/App.tsx', // reines Routen-Wiring (lazy-Imports); Verhalten über Page-Tests gedeckt
         'src/theme.ts', // Design-Token-Objekt ohne Logik
       ],
-      // Ehrliche Ist-Schwellen (Stand 2026-07-11) als Gate gegen Rückschritt.
-      // Zielpfad: schrittweise anheben, wenn Lücken (v. a. Auth-Seiten, BoardPage-Interaktionen)
-      // geschlossen werden — analog zum PIT-Vorgehen im Backend (94 → 100).
+      // Ehrliche Ist-Schwellen (Stand 2026-07-17, kanban-kit#228-#236) als Gate gegen Rückschritt —
+      // reiner Ratchet, nur anheben, nie senken (CLAUDE-react.md §Tests). Alle vormals größten
+      // Lücken (AppShell, BoardView, CardDetailModal, BoardPage, BoardListPage,
+      // ProjectMembersPage, sowie diverse kleinere Seiten/Komponenten) sind geschlossen;
+      // Gesamt-Ist-Stand 99,78/96,25/94,84/99,78 % (Statements/Branches/Functions/Lines).
+      // Verbleibende Lücken sind einzeln begründete Restfälle (Race-Conditions, TypeScript-
+      // Typverengung an unerreichbaren Guards, o. ä. — siehe Commit-Historie der jeweiligen Issues).
       thresholds: {
-        lines: 87,
-        branches: 87,
-        functions: 58,
-        statements: 87,
+        lines: 99,
+        branches: 96,
+        functions: 94,
+        statements: 99,
       },
     },
   },

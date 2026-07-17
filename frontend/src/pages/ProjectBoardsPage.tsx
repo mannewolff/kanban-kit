@@ -259,7 +259,7 @@ export function ProjectBoardsPage() {
             label="Board-Name"
             value={purgeInput}
             onChange={(e) => setPurgeInput(e.target.value)}
-            inputProps={{ 'aria-label': 'Board-Name zur Bestätigung' }}
+            slotProps={{ htmlInput: { 'aria-label': 'Board-Name zur Bestätigung' } }}
           />
         </DialogContent>
         <DialogActions>

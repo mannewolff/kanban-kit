@@ -19,7 +19,7 @@ import { dashboardApi, type BoardDashboardKpis } from '../api/dashboard'
 import { formatDuration } from '../lib/formatDuration'
 import { useProjectName } from '../lib/useProjectName'
 
-function KpiTile({ label, value }: { label: string; value: string }) {
+function KpiTile({ label, value }: Readonly<{ label: string; value: string }>) {
   return (
     <Paper variant="outlined" sx={{ p: 2, flex: 1, minWidth: 160 }}>
       <Typography variant="caption" color="text.secondary">

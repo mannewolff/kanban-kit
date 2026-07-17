@@ -19,6 +19,8 @@ export function ForgotPasswordPage() {
     setBusy(true)
     try {
       await authApi.forgot(email)
+    } catch {
+      // Fehler bewusst verschluckt: derselbe Hinweis unabhängig vom Ausgang (siehe unten).
     } finally {
       // Immer denselben Hinweis zeigen (keine Preisgabe, ob die E-Mail existiert).
       setSent(true)
