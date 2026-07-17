@@ -284,13 +284,15 @@ export function AppShell() {
             </ListItemIcon>
             <ListItemText
               primary={group.label}
-              primaryTypographyProps={{
-                sx: {
-                  textTransform: 'uppercase',
-                  letterSpacing: '.08em',
-                  fontSize: 12,
-                  fontWeight: 700,
-                  color: hasActiveChild ? 'primary.main' : 'text.secondary',
+              slotProps={{
+                primary: {
+                  sx: {
+                    textTransform: 'uppercase',
+                    letterSpacing: '.08em',
+                    fontSize: 12,
+                    fontWeight: 700,
+                    color: hasActiveChild ? 'primary.main' : 'text.secondary',
+                  },
                 },
               }}
             />
