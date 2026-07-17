@@ -108,11 +108,11 @@ function LabelRow({
   label,
   onSave,
   onDelete,
-}: {
+}: Readonly<{
   label: Label
   onSave: (label: Label, name: string, color: string) => Promise<void>
   onDelete: (label: Label) => Promise<void>
-}) {
+}>) {
   const [name, setName] = useState(label.name)
   const [color, setColor] = useState(label.color)
   const dirty = name !== label.name || color !== label.color
