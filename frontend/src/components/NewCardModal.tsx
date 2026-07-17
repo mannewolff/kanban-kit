@@ -122,11 +122,10 @@ export function NewCardModal({
           {!epicOnly && (
             <TextField
               select
-              SelectProps={{ native: true }}
               label="Typ"
               value={type}
               onChange={(e) => setType(e.target.value as CardType)}
-              slotProps={{ htmlInput: { 'aria-label': 'Typ' } }}
+              slotProps={{ htmlInput: { 'aria-label': 'Typ' }, select: { native: true } }}
               fullWidth
             >
               <option value="CARD">Karte</option>
@@ -137,12 +136,14 @@ export function NewCardModal({
           {type === 'CARD' && (
             <TextField
               select
-              SelectProps={{ native: true }}
               label="Epic"
               value={parentId ?? ''}
               onChange={(e) => setParentId(e.target.value === '' ? null : Number(e.target.value))}
-              slotProps={{ htmlInput: { 'aria-label': 'Epic' } }}
-              InputLabelProps={{ shrink: true }}
+              slotProps={{
+                htmlInput: { 'aria-label': 'Epic' },
+                select: { native: true },
+                inputLabel: { shrink: true },
+              }}
               fullWidth
             >
               <option value="">(kein Epic)</option>
