@@ -63,5 +63,7 @@ jobs:
       - name: Neue Findings nach GitHub synchronisieren
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # secrets.GITHUB_TOKEN kann keine GitHub-Projects-v2-Boards lesen/beschreiben
+          # (gh project list/item-add) — dafuer zwingend ein PAT mit repo+project-Scope.
+          GH_TOKEN: ${{ secrets.PROJECTS_PAT }}
         run: node scripts/sync-sonar-issues-to-github.mjs
