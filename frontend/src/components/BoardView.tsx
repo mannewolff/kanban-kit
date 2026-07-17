@@ -214,14 +214,13 @@ export function BoardView({
 
   const [deleteColumn, setDeleteColumn] = useState<BoardColumn | null>(null)
   const [deleteError, setDeleteError] = useState<string | null>(null)
-  const handleDeleteColumn = async () => {
-    if (!deleteColumn) {
-      return
-    }
+  // Kein Nullable-Guard nötig: der Dialog (und damit der einzige Aufrufer) existiert nur,
+  // solange deleteColumn gesetzt ist — siehe die {deleteColumn && (...)}-Bedingung unten.
+  const handleDeleteColumn = async (column: BoardColumn) => {
     setDeleteError(null)
     try {
-      await columnsApi.remove(deleteColumn.id)
-      setColumns((cs) => cs.filter((c) => c.id !== deleteColumn.id))
+      await columnsApi.remove(column.id)
+      setColumns((cs) => cs.filter((c) => c.id !== column.id))
       setDeleteColumn(null)
     } catch (e) {
       setDeleteError(
@@ -605,21 +604,23 @@ export function BoardView({
         </DialogActions>
       </Dialog>
 
-      <Dialog open={deleteColumn !== null} onClose={() => setDeleteColumn(null)}>
-        <DialogTitle>Spalte löschen?</DialogTitle>
-        <DialogContent>
-          {deleteError && <Alert severity="error" sx={{ mb: 2 }}>{deleteError}</Alert>}
-          <DialogContentText>
-            Die Spalte „{deleteColumn?.name}&ldquo; wird gelöscht.
-          </DialogContentText>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setDeleteColumn(null)}>Abbrechen</Button>
-          <Button color="error" onClick={() => void handleDeleteColumn()}>
-            Löschen
-          </Button>
-        </DialogActions>
-      </Dialog>
+      {deleteColumn && (
+        <Dialog open onClose={() => setDeleteColumn(null)}>
+          <DialogTitle>Spalte löschen?</DialogTitle>
+          <DialogContent>
+            {deleteError && <Alert severity="error" sx={{ mb: 2 }}>{deleteError}</Alert>}
+            <DialogContentText>
+              Die Spalte „{deleteColumn.name}&ldquo; wird gelöscht.
+            </DialogContentText>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setDeleteColumn(null)}>Abbrechen</Button>
+            <Button color="error" onClick={() => void handleDeleteColumn(deleteColumn)}>
+              Löschen
+            </Button>
+          </DialogActions>
+        </Dialog>
+      )}
 
       <Menu anchorEl={menu?.anchor ?? null} open={menu != null} onClose={closeMenu}>
         {menu && !menu.card.archived && [
