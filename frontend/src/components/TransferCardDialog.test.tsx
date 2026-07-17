@@ -84,4 +84,16 @@ describe('TransferCardDialog', () => {
     await waitFor(() => expect(mockedCards.bulkTransfer).toHaveBeenCalledWith([7], 10, 100))
     expect(onTransferred).toHaveBeenCalled()
   })
+
+  it('zeigt eine Fehlermeldung, wenn das Verschieben fehlschlägt', async () => {
+    mockedCards.bulkTransfer.mockRejectedValue(new Error('boom'))
+    renderDialog(false)
+
+    fireEvent.change(await screen.findByLabelText('Zielprojekt'), { target: { value: '1' } })
+    fireEvent.change(await screen.findByLabelText('Zielboard'), { target: { value: '10' } })
+    fireEvent.change(await screen.findByLabelText('Zielspalte'), { target: { value: '100' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Verschieben' }))
+
+    expect(await screen.findByText('Verschieben fehlgeschlagen.')).toBeInTheDocument()
+  })
 })

@@ -11,9 +11,24 @@ vi.mock('../auth/AuthContext', () => ({
   useAuth: () => ({ user: { userId: 1, memberships: [{ projectId: 9, role: 'OWNER' }] } }),
 }))
 vi.mock('../api/boards', () => ({ boardsApi: { get: vi.fn() } }))
-vi.mock('../api/cards', () => ({ cardsApi: { list: vi.fn() } }))
+vi.mock('../api/cards', () => ({
+  cardsApi: {
+    list: vi.fn(),
+    getActivity: vi.fn().mockResolvedValue([]),
+    update: vi.fn(),
+    setAssignees: vi.fn(),
+    setLabels: vi.fn(),
+    restore: vi.fn(),
+  },
+}))
 vi.mock('../api/epics', () => ({ epicsApi: { list: vi.fn(), assign: vi.fn(), create: vi.fn() } }))
 vi.mock('../api/projects', () => ({ projectsApi: { list: vi.fn() } }))
+vi.mock('../api/comments', () => ({
+  commentsApi: { list: vi.fn().mockResolvedValue([]), create: vi.fn(), update: vi.fn(), remove: vi.fn() },
+}))
+vi.mock('../api/attachments', () => ({
+  attachmentsApi: { list: vi.fn().mockResolvedValue([]), upload: vi.fn(), remove: vi.fn(), fetchBlob: vi.fn() },
+}))
 
 const mBoards = boardsApi as unknown as { get: ReturnType<typeof vi.fn> }
 const mCards = cardsApi as unknown as { list: ReturnType<typeof vi.fn> }
@@ -81,5 +96,35 @@ describe('EpicsPage', () => {
     expect(mBoards.get).not.toHaveBeenCalled()
     expect(mEpics.list).not.toHaveBeenCalled()
     expect(mCards.list).not.toHaveBeenCalled()
+  })
+
+  it('öffnet ein Epic per Klick im Detail-Modal mit seinen Kind-Karten', async () => {
+    mEpics.list.mockResolvedValue([
+      { id: 9, number: 2, title: 'Auth', description: 'Text', shortcode: 'AUT', done: 1, total: 2 },
+    ])
+    mCards.list.mockResolvedValue([
+      {
+        id: 30, boardId: 1, columnId: 10, number: 3, title: 'Kind', description: null,
+        positionInColumn: 0, archived: false, movedToDoneAt: null, dependencies: [],
+        type: 'CARD', parentId: 9, shortcode: null, assignees: [], dueDate: null, labels: [],
+      },
+    ])
+    renderPage()
+
+    fireEvent.click(await screen.findByText('Auth'))
+
+    expect(await screen.findByText('Karten (1)')).toBeInTheDocument()
+    expect(screen.getByText('#3 · Kind')).toBeInTheDocument()
+  })
+
+  it('lädt die Rolle nach, wenn sie nicht in den Memberships steht', async () => {
+    mBoards.get.mockResolvedValue({ id: 1, projectId: 42, name: 'B', createdAt: '', columns: [] })
+    mEpics.list.mockResolvedValue([])
+    mProjects.list.mockResolvedValue([{ id: 42, name: 'Fremd', role: 'VIEWER', createdAt: '' }])
+    renderPage()
+
+    await screen.findByText('Epics')
+    await waitFor(() => expect(mProjects.list).toHaveBeenCalled())
+    expect(screen.queryByRole('button', { name: 'Neues Epic' })).not.toBeInTheDocument()
   })
 })

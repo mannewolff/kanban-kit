@@ -56,12 +56,11 @@ export function ProjectsPage() {
     setRenameProject(null)
     setRenameError(null)
   }
-  const handleRename = async () => {
-    if (!renameProject || !renameValue.trim()) {
-      return
-    }
+  // Kein Nullable-Guard nötig: der Speichern-Button existiert nur im Dialog, der ausschließlich
+  // bei gesetztem renameProject gemountet ist; bei leerem renameValue ist er zusätzlich disabled.
+  const handleRename = async (project: Project) => {
     try {
-      await projectsApi.rename(renameProject.id, renameValue.trim())
+      await projectsApi.rename(project.id, renameValue.trim())
       closeRename()
       await reload()
     } catch {
@@ -213,27 +212,33 @@ export function ProjectsPage() {
         </DialogActions>
       </Dialog>
 
-      <Dialog open={renameProject !== null} onClose={closeRename}>
-        <DialogTitle>Projekt umbenennen</DialogTitle>
-        <DialogContent>
-          {renameError && <Alert severity="error" sx={{ mb: 2 }}>{renameError}</Alert>}
-          <TextField
-            autoFocus
-            fullWidth
-            label="Projektname"
-            value={renameValue}
-            onChange={(e) => setRenameValue(e.target.value)}
-            sx={{ mt: 1 }}
-            slotProps={{ htmlInput: { 'aria-label': 'Neuer Projektname' } }}
-          />
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={closeRename}>Abbrechen</Button>
-          <Button variant="contained" disabled={!renameValue.trim()} onClick={() => void handleRename()}>
-            Speichern
-          </Button>
-        </DialogActions>
-      </Dialog>
+      {renameProject && (
+        <Dialog open onClose={closeRename}>
+          <DialogTitle>Projekt umbenennen</DialogTitle>
+          <DialogContent>
+            {renameError && <Alert severity="error" sx={{ mb: 2 }}>{renameError}</Alert>}
+            <TextField
+              autoFocus
+              fullWidth
+              label="Projektname"
+              value={renameValue}
+              onChange={(e) => setRenameValue(e.target.value)}
+              sx={{ mt: 1 }}
+              slotProps={{ htmlInput: { 'aria-label': 'Neuer Projektname' } }}
+            />
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={closeRename}>Abbrechen</Button>
+            <Button
+              variant="contained"
+              disabled={!renameValue.trim()}
+              onClick={() => void handleRename(renameProject)}
+            >
+              Speichern
+            </Button>
+          </DialogActions>
+        </Dialog>
+      )}
     </Box>
   )
 }

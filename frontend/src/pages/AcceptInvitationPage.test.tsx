@@ -42,4 +42,13 @@ describe('AcceptInvitationPage', () => {
 
     expect(await screen.findByText(/ungültig oder abgelaufen/)).toBeInTheDocument()
   })
+
+  it('zeigt einen Fehler, wenn kein Token in der URL steht', async () => {
+    const accept = vi.fn()
+    const api = makeApi(accept)
+    renderAt('/invitations/accept', api)
+
+    expect(await screen.findByText(/ungültig oder abgelaufen/)).toBeInTheDocument()
+    expect(accept).not.toHaveBeenCalled()
+  })
 })
