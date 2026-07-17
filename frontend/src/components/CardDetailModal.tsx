@@ -92,16 +92,14 @@ const TaskCheckboxContext = createContext<{
 
 /**
  * `input`-Renderer für react-markdown: rendert GFM-Task-Checkboxen klickbar (Index in
- * Dokumentreihenfolge über den Kontext). Andere `input`-Elemente werden unverändert
- * durchgereicht; das von react-markdown übergebene `node`-Feld gehört nicht ans DOM.
+ * Dokumentreihenfolge über den Kontext). Wird ausschließlich innerhalb von `TaskMarkdown`
+ * verwendet (immer im TaskCheckboxContext.Provider, remarkGfm ohne rehype-raw erzeugt
+ * ausschließlich `type="checkbox"`-Inputs) — kein Fallback für andere Fälle nötig.
  */
-function MarkdownInput(props: ComponentPropsWithoutRef<'input'> & { node?: unknown }) {
-  const ctx = useContext(TaskCheckboxContext)
-  if (props.type !== 'checkbox' || ctx == null) {
-    const domProps = { ...props }
-    delete domProps.node
-    return <input {...domProps} />
-  }
+function MarkdownInput(props: ComponentPropsWithoutRef<'input'>) {
+  // Nicht null: MarkdownInput wird ausschließlich innerhalb von TaskCheckboxContext.Provider
+  // gerendert (siehe TaskMarkdown unten).
+  const ctx = useContext(TaskCheckboxContext)!
   const index = ctx.nextIndex()
   return (
     <input
