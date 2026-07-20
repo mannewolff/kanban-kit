@@ -45,6 +45,9 @@ class CardEntity {
   @Column(name = "archived", nullable = false)
   private boolean archived;
 
+  @Column(name = "idea_stored", nullable = false)
+  private boolean ideaStored;
+
   @Column(name = "moved_to_done_at")
   private @Nullable Instant movedToDoneAt;
 
@@ -89,6 +92,7 @@ class CardEntity {
     this.description = c.description();
     this.positionInColumn = c.positionInColumn();
     this.archived = c.archived();
+    this.ideaStored = c.ideaStored();
     this.movedToDoneAt = c.movedToDoneAt();
     this.createdBy = c.createdBy();
     this.createdAt = c.createdAt();
@@ -129,6 +133,10 @@ class CardEntity {
 
   boolean isArchived() {
     return archived;
+  }
+
+  boolean isIdeaStored() {
+    return ideaStored;
   }
 
   @Nullable Instant getMovedToDoneAt() {

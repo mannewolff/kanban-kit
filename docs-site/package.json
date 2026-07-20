@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "dev": "vitepress dev",
-    "build": "vitepress build",
+    "build": "node copy-docs.mjs && VITEPRESS_SRC=content vitepress build",
     "preview": "vitepress preview"
   },
   "devDependencies": {

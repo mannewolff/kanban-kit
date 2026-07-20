@@ -11,6 +11,7 @@ export interface Card {
   description: string | null
   positionInColumn: number
   archived: boolean
+  ideaStored: boolean
   movedToDoneAt: string | null
   dependencies: number[]
   type: CardType
@@ -36,10 +37,17 @@ export const cardsApi = {
   restoreDeleted: (cardId: number) =>
     apiFetch<Card>(`/api/cards/${cardId}/restore-deleted`, { method: 'POST' }),
   purge: (cardId: number) => apiFetch<void>(`/api/cards/${cardId}/purge`, { method: 'DELETE' }),
-  create: (boardId: number, columnId: number, title: string, description?: string, parentId?: number | null) =>
+  create: (
+    boardId: number,
+    columnId: number,
+    title: string,
+    description?: string,
+    parentId?: number | null,
+    ideaStored?: boolean,
+  ) =>
     apiFetch<Card>(`/api/boards/${boardId}/cards`, {
       method: 'POST',
-      body: JSON.stringify({ columnId, title, description, parentId }),
+      body: JSON.stringify({ columnId, title, description, parentId, ideaStored }),
     }),
   move: (cardId: number, columnId: number, position: number) =>
     apiFetch<Card>(`/api/cards/${cardId}/move`, { method: 'POST', body: JSON.stringify({ columnId, position }) }),
@@ -59,6 +67,9 @@ export const cardsApi = {
       body: JSON.stringify({ labels }),
     }),
   archive: (cardId: number) => apiFetch<Card>(`/api/cards/${cardId}/archive`, { method: 'POST' }),
+  moveToIdeaStorage: (cardId: number) =>
+    apiFetch<Card>(`/api/cards/${cardId}/idea-storage`, { method: 'POST' }),
+  promote: (cardId: number) => apiFetch<Card>(`/api/cards/${cardId}/promote`, { method: 'POST' }),
   bulkArchive: (cardIds: number[]) =>
     apiFetch<Card[]>(`/api/cards/bulk-archive`, { method: 'POST', body: JSON.stringify({ cardIds }) }),
   bulkTransfer: (cardIds: number[], targetBoardId: number, targetColumnId: number) =>

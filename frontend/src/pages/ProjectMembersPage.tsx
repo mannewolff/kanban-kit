@@ -25,6 +25,7 @@ import { Breadcrumbs } from '../components/Breadcrumbs'
 import { projectsApi } from '../api/projects'
 import { ApiError } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
+import { useEditMode } from '../lib/EditModeContext'
 import { canManageMembers, type ProjectRole } from '../lib/roles'
 
 const ROLES: ProjectRole[] = ['OWNER', 'ADMIN', 'MEMBER', 'VIEWER']
@@ -79,6 +80,7 @@ export function ProjectMembersPage({ api = defaultMembersApi, loadRole }: Readon
   }, [id, validId, api, loadRole])
 
   const manage = canManageMembers(role)
+  const { editMode } = useEditMode()
   const isOwner = role === 'OWNER'
   const ownerCount = members.filter((m) => m.role === 'OWNER').length
   const isLastOwner = (m: Member) => m.role === 'OWNER' && ownerCount === 1
@@ -242,7 +244,7 @@ export function ProjectMembersPage({ api = defaultMembersApi, loadRole }: Readon
                 ) : (
                   <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center' }}>
                     {member.displayName}
-                    {manage && (
+                    {manage && editMode && (
                       <Tooltip title="Anzeigename ändern (global, projektübergreifend)">
                         <IconButton
                           size="small"

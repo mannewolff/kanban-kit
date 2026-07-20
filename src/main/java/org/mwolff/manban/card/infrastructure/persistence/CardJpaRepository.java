@@ -27,7 +27,7 @@ interface CardJpaRepository extends JpaRepository<CardEntity, Long> {
 
   @Query(
       "select coalesce(max(c.positionInColumn), -1) from CardEntity c "
-          + "where c.columnId = ?1 and c.archived = false and c.deletedAt is null "
-          + "and c.type <> 'EPIC'")
+          + "where c.columnId = ?1 and c.archived = false and c.ideaStored = false "
+          + "and c.deletedAt is null and c.type <> 'EPIC'")
   int maxActivePositionInColumn(Long columnId);
 }

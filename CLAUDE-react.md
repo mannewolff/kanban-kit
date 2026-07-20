@@ -178,6 +178,7 @@ Aktuelle Struktur unter `frontend/src/`:
 - Neue oder geänderte Logik braucht Tests (Vitest + React Testing Library).
 - **Coverage-Gate:** `npm run test:coverage` (v8-Provider) bricht bei Unterschreitung der Schwellen in `vite.config.ts` (Stand 2026-07-16: 93 % Lines/Statements, 90 % Branches, 79 % Functions — ehrlicher Ist-Floor gegen Rückschritt). Ausschlüsse einzeln begründet in der Config; läuft auch in CI.
 - Verhalten testen, nicht Implementierungsdetails — Tests sollen aus Nutzerperspektive lesbar sein.
+- **Asynchrones Erscheinen:** `await screen.findByX(...)` statt `await waitFor(() => expect(screen.getByX(...)).toBeInTheDocument())` — die ESLint-Regel `testing-library/prefer-find-by` erzwingt das (autofixbar). `waitFor` bleibt legitim für mehrere Assertions oder Nicht-Query-Bedingungen (z. B. `expect(mock).toHaveBeenCalled()`).
 - Kritische UI-Zustände abdecken: Loading, Error, Empty, Success, Disabled.
 - Mocks realistisch und klein halten. Snapshot-Tests nur, wenn sie wirklich Stabilität messen.
 - API-Mocks: bevorzugt `fetch` über `vi.spyOn(global, 'fetch')` oder `msw` — keine ungetypten Mock-Objekte.
@@ -223,6 +224,10 @@ cd frontend && npm run lint   # ESLint auf src/
 - `eslint-plugin-react` (recommended + jsx-runtime): React-Regeln
 - `eslint-plugin-react-hooks` (recommended): Hooks-Regeln, `exhaustive-deps`
 - `eslint-plugin-jsx-a11y` (recommended): Accessibility-Regeln
+- `eslint-plugin-testing-library` (recommended, **nur an Test-Dateien** `**/*.test.{ts,tsx}`): fängt Test-Anti-Muster wie `waitFor(() => expect(getByX()))` → `findByX` (`prefer-find-by`) direkt im Gate ab, autofixbar.
+- `@typescript-eslint/no-deprecated` (**typed rule**, deshalb `parserOptions.projectService: true`): Nutzung `@deprecated`-markierter APIs (z. B. abgekündigte MUI-Props wie `inputProps`) ist ein harter Lint-Fehler.
+
+**Leitplanke im Gate statt Doku, die bittet.** Wenn ein Modell wiederholt dasselbe veraltete/nicht-idiomatische Muster reproduziert (es kennt das *häufigste*, nicht das *aktuellste* aus dem Trainingskorpus — so entstanden die `prefer-find-by`- und `inputProps`-Wellen, die erst spät bei Sonar auffielen), ist die wirksame Antwort eine **harte ESLint-Regel im Pflicht-Gate**, nicht ein Satz in dieser Datei. Doku wird übersehen; das Gate nicht.
 
 **Regel-Deaktivierungen** stehen einzeln begründet in der Config — pauschales Abschalten von Kategorien ist verboten. **Neue `eslint-disable`-Kommentare** im Produktivcode brauchen einen Begründungskommentar direkt darüber (etabliertes Beispiel: die zwei dokumentierten `exhaustive-deps`-Ausnahmen für das Auto-Routing in ProjectsPage/ProjectBoardsPage).
 

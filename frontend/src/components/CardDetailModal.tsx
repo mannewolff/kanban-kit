@@ -35,6 +35,7 @@ import { commentsApi as defaultCommentsApi, type Comment, type CommentsApi } fro
 import type { Epic } from '../api/epics'
 import type { Label as BoardLabel } from '../api/labels'
 import type { Member } from '../api/members'
+import { useEditMode } from '../lib/EditModeContext'
 import { dueInputToIso, formatDueDate, isOverdue } from '../lib/dueDate'
 import { epicShortcode } from '../lib/epicMeta'
 import { normalizeTaskLists, toggleTaskAt } from '../lib/markdownTasks'
@@ -124,11 +125,11 @@ const TaskMarkdown = memo(function TaskMarkdown({
   body,
   canEdit,
   onToggle,
-}: {
+}: Readonly<{
   body: string
   canEdit: boolean
   onToggle: (index: number) => void
-}) {
+}>) {
   // Zähler muss bei jedem tatsächlichen Render dieser (memoized) Komponente zurückgesetzt werden:
   // react-markdown ruft `nextIndex` je Checkbox in Dokumentreihenfolge auf. Da die Deps exakt den
   // Props entsprechen, gegen die `memo` oben vergleicht, fällt das useMemo-Recompute mit jedem
@@ -686,7 +687,7 @@ interface Props {
   attachmentsApi?: AttachmentsApi
   cardsApi?: Pick<
     typeof defaultCardsApi,
-    'update' | 'setAssignees' | 'setLabels' | 'getActivity' | 'restore'
+    'update' | 'setAssignees' | 'setLabels' | 'getActivity' | 'restore' | 'moveToIdeaStorage'
   >
 }
 
@@ -707,6 +708,7 @@ export function CardDetailModal({
   cardsApi = defaultCardsApi,
 }: Readonly<Props>) {
   const { user } = useAuth()
+  const { editMode } = useEditMode()
   const isEpic = card.type === 'EPIC'
   const [assigneeIds, setAssigneeIds] = useState<number[]>(card.assignees)
 
@@ -718,6 +720,13 @@ export function CardDetailModal({
 
   const restore = async () => {
     await cardsApi.restore(card.id)
+    onChanged?.()
+    onClose()
+  }
+
+  // In den Ideen-Speicher: Alltags-Aktion (an canEdit gebunden, nicht editiermodus-gegatet).
+  const moveToIdeaStorage = async () => {
+    await cardsApi.moveToIdeaStorage(card.id)
     onChanged?.()
     onClose()
   }
@@ -938,7 +947,7 @@ export function CardDetailModal({
             {card.title}
           </Typography>
           <Box sx={{ flexGrow: 1 }} />
-          {canEdit && !editing && (
+          {canEdit && editMode && !editing && (
             <Button size="small" variant="outlined" onClick={startEditing}>
               Bearbeiten
             </Button>
@@ -1050,6 +1059,9 @@ export function CardDetailModal({
           <>
             {canEdit && card.archived && (
               <Button onClick={() => void restore()}>Wiederherstellen</Button>
+            )}
+            {canEdit && !card.archived && !card.ideaStored && !isEpic && (
+              <Button onClick={() => void moveToIdeaStorage()}>In Ideen-Speicher</Button>
             )}
             <Button onClick={onClose}>Schließen</Button>
           </>

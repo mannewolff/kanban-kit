@@ -8,6 +8,12 @@ import { ProjectMembersPage } from './ProjectMembersPage'
 
 vi.mock('../api/projects', () => ({ projectsApi: { list: vi.fn(), transferOwner: vi.fn() } }))
 vi.mock('../auth/AuthContext', () => ({ useAuth: () => ({ user: { userId: 1 } }) }))
+// Editiermodus gemockt: Bestandstests mit editMode=true (Bleistift sichtbar); der Editiermodus-
+// aus-Test schaltet editMode.value=false.
+const editMode = vi.hoisted(() => ({ value: true }))
+vi.mock('../lib/EditModeContext', () => ({
+  useEditMode: () => ({ editMode: editMode.value, setEditMode: vi.fn(), toggleEditMode: vi.fn() }),
+}))
 const mProjects = projectsApi as unknown as {
   list: ReturnType<typeof vi.fn>
   transferOwner: ReturnType<typeof vi.fn>
@@ -44,7 +50,20 @@ function renderPage(api: MembersApi, role: string) {
 }
 
 describe('ProjectMembersPage', () => {
-  beforeEach(() => vi.clearAllMocks())
+  beforeEach(() => {
+    vi.clearAllMocks()
+    editMode.value = true
+  })
+
+  it('blendet bei ausgeschaltetem Editiermodus die Namens-Bearbeitung aus, behält aber Entfernen', async () => {
+    editMode.value = false
+    renderPage(makeApi(), 'OWNER')
+    expect(await screen.findByText('Mika Member')).toBeInTheDocument()
+    // Bleistift weg ...
+    expect(screen.queryByLabelText('Namen von Mika Member bearbeiten')).not.toBeInTheDocument()
+    // ... die operative Mitglieder-Verwaltung (Entfernen) bleibt.
+    expect(screen.getByLabelText('Mika Member entfernen')).toBeInTheDocument()
+  })
 
   it('zeigt den Breadcrumb-Pfad ab Projekte', async () => {
     renderPage(makeApi(), 'OWNER')
@@ -53,7 +72,7 @@ describe('ProjectMembersPage', () => {
 
   it('sperrt Entfernen für den letzten Owner, erlaubt es für andere', async () => {
     renderPage(makeApi(), 'OWNER')
-    await waitFor(() => expect(screen.getByText('Olga Owner')).toBeInTheDocument())
+    expect(await screen.findByText('Olga Owner')).toBeInTheDocument()
 
     expect(screen.getByLabelText('Olga Owner entfernen')).toBeDisabled()
     expect(screen.getByLabelText('Mika Member entfernen')).toBeEnabled()
@@ -74,14 +93,14 @@ describe('ProjectMembersPage', () => {
 
   it('zeigt keine Namens-Bearbeitung für Nicht-Verwalter (Viewer)', async () => {
     renderPage(makeApi(), 'VIEWER')
-    await waitFor(() => expect(screen.getByText('Mika Member')).toBeInTheDocument())
+    expect(await screen.findByText('Mika Member')).toBeInTheDocument()
     expect(screen.queryByLabelText('Namen von Mika Member bearbeiten')).not.toBeInTheDocument()
   })
 
   it('verschickt eine Einladung', async () => {
     const api = makeApi()
     renderPage(api, 'OWNER')
-    await waitFor(() => expect(screen.getByText('Olga Owner')).toBeInTheDocument())
+    expect(await screen.findByText('Olga Owner')).toBeInTheDocument()
 
     fireEvent.change(screen.getByLabelText(/E-Mail einladen/), { target: { value: 'neu@x.de' } })
     fireEvent.click(screen.getByRole('button', { name: 'Einladen' }))
@@ -92,7 +111,7 @@ describe('ProjectMembersPage', () => {
 
   it('blendet Verwaltungsaktionen für VIEWER aus', async () => {
     renderPage(makeApi(), 'VIEWER')
-    await waitFor(() => expect(screen.getByText('Olga Owner')).toBeInTheDocument())
+    expect(await screen.findByText('Olga Owner')).toBeInTheDocument()
 
     expect(screen.queryByLabelText(/E-Mail einladen/)).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Mika Member entfernen')).not.toBeInTheDocument()
@@ -126,7 +145,7 @@ describe('ProjectMembersPage', () => {
     )
     const api = makeApi({ invite })
     renderPage(api, 'OWNER')
-    await waitFor(() => expect(screen.getByText('Olga Owner')).toBeInTheDocument())
+    expect(await screen.findByText('Olga Owner')).toBeInTheDocument()
 
     fireEvent.change(screen.getByLabelText(/E-Mail einladen/), { target: { value: 'neu@x.de' } })
     const button = screen.getByRole('button', { name: 'Einladen' })
@@ -146,7 +165,7 @@ describe('ProjectMembersPage', () => {
     const list = vi.fn().mockResolvedValue(members)
     const api = makeApi({ invite, list })
     renderPage(api, 'OWNER')
-    await waitFor(() => expect(screen.getByText('Olga Owner')).toBeInTheDocument())
+    expect(await screen.findByText('Olga Owner')).toBeInTheDocument()
 
     fireEvent.change(screen.getByLabelText(/E-Mail einladen/), { target: { value: 'bob@x.de' } })
     fireEvent.click(screen.getByRole('button', { name: 'Einladen' }))
@@ -160,7 +179,7 @@ describe('ProjectMembersPage', () => {
     const invite = vi.fn().mockRejectedValue(new ApiError(422, 'Nutzer ist noch nicht freigegeben'))
     const api = makeApi({ invite })
     renderPage(api, 'OWNER')
-    await waitFor(() => expect(screen.getByText('Olga Owner')).toBeInTheDocument())
+    expect(await screen.findByText('Olga Owner')).toBeInTheDocument()
 
     fireEvent.change(screen.getByLabelText(/E-Mail einladen/), { target: { value: 'pending@x.de' } })
     fireEvent.click(screen.getByRole('button', { name: 'Einladen' }))
@@ -175,7 +194,7 @@ describe('ProjectMembersPage', () => {
     renderPage(makeApi(), 'OWNER')
 
     // Nicht beim eigenen Eintrag (Olga, userId 1), aber bei Mika (userId 2).
-    await waitFor(() => expect(screen.getByText('Mika Member')).toBeInTheDocument())
+    expect(await screen.findByText('Mika Member')).toBeInTheDocument()
     expect(screen.queryByLabelText('Olga Owner zum Eigentümer machen')).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByLabelText('Mika Member zum Eigentümer machen'))
@@ -185,14 +204,14 @@ describe('ProjectMembersPage', () => {
 
   it('zeigt Nicht-Ownern kein Zum-Eigentümer-machen', async () => {
     renderPage(makeApi(), 'MEMBER')
-    await waitFor(() => expect(screen.getByText('Mika Member')).toBeInTheDocument())
+    expect(await screen.findByText('Mika Member')).toBeInTheDocument()
     expect(screen.queryByLabelText('Mika Member zum Eigentümer machen')).not.toBeInTheDocument()
   })
 
   it('zeigt einen Fehler, wenn die Eigentümer-Übertragung fehlschlägt', async () => {
     mProjects.transferOwner.mockRejectedValue(new Error('boom'))
     renderPage(makeApi(), 'OWNER')
-    await waitFor(() => expect(screen.getByText('Mika Member')).toBeInTheDocument())
+    expect(await screen.findByText('Mika Member')).toBeInTheDocument()
 
     fireEvent.click(screen.getByLabelText('Mika Member zum Eigentümer machen'))
     fireEvent.click(screen.getByRole('button', { name: 'Übertragen' }))
@@ -203,7 +222,7 @@ describe('ProjectMembersPage', () => {
   it('zeigt eine generische Fehlermeldung bei fehlgeschlagener Einladung', async () => {
     const invite = vi.fn().mockRejectedValue(new Error('boom'))
     renderPage(makeApi({ invite }), 'OWNER')
-    await waitFor(() => expect(screen.getByText('Olga Owner')).toBeInTheDocument())
+    expect(await screen.findByText('Olga Owner')).toBeInTheDocument()
 
     fireEvent.change(screen.getByLabelText(/E-Mail einladen/), { target: { value: 'x@x.de' } })
     fireEvent.click(screen.getByRole('button', { name: 'Einladen' }))
@@ -214,7 +233,7 @@ describe('ProjectMembersPage', () => {
   it('zeigt bei Rollenänderung des letzten Owners eine spezifische Fehlermeldung (409)', async () => {
     const changeRole = vi.fn().mockRejectedValue(new ApiError(409, 'letzter Owner'))
     renderPage(makeApi({ changeRole }), 'OWNER')
-    await waitFor(() => expect(screen.getByText('Mika Member')).toBeInTheDocument())
+    expect(await screen.findByText('Mika Member')).toBeInTheDocument()
 
     fireEvent.mouseDown(screen.getByLabelText('Rolle von Mika Member'))
     fireEvent.click(await screen.findByRole('option', { name: 'ADMIN' }))
@@ -227,7 +246,7 @@ describe('ProjectMembersPage', () => {
   it('zeigt eine generische Fehlermeldung bei fehlgeschlagener Rollenänderung', async () => {
     const changeRole = vi.fn().mockRejectedValue(new Error('boom'))
     renderPage(makeApi({ changeRole }), 'OWNER')
-    await waitFor(() => expect(screen.getByText('Mika Member')).toBeInTheDocument())
+    expect(await screen.findByText('Mika Member')).toBeInTheDocument()
 
     fireEvent.mouseDown(screen.getByLabelText('Rolle von Mika Member'))
     fireEvent.click(await screen.findByRole('option', { name: 'ADMIN' }))
@@ -238,7 +257,7 @@ describe('ProjectMembersPage', () => {
   it('zeigt eine Fehlermeldung, wenn das Ändern des Anzeigenamens fehlschlägt', async () => {
     const changeDisplayName = vi.fn().mockRejectedValue(new ApiError(400, 'Name ungültig'))
     renderPage(makeApi({ changeDisplayName }), 'OWNER')
-    await waitFor(() => expect(screen.getByText('Mika Member')).toBeInTheDocument())
+    expect(await screen.findByText('Mika Member')).toBeInTheDocument()
 
     fireEvent.click(screen.getByLabelText('Namen von Mika Member bearbeiten'))
     fireEvent.change(screen.getByLabelText('Anzeigename von member@x.de'), { target: { value: 'X' } })
@@ -249,7 +268,7 @@ describe('ProjectMembersPage', () => {
 
   it('bricht das Bearbeiten des Anzeigenamens ab', async () => {
     renderPage(makeApi(), 'OWNER')
-    await waitFor(() => expect(screen.getByText('Mika Member')).toBeInTheDocument())
+    expect(await screen.findByText('Mika Member')).toBeInTheDocument()
 
     fireEvent.click(screen.getByLabelText('Namen von Mika Member bearbeiten'))
     fireEvent.click(screen.getByLabelText('Bearbeiten abbrechen'))
@@ -264,7 +283,7 @@ describe('ProjectMembersPage', () => {
       .mockResolvedValueOnce(members)
       .mockResolvedValueOnce([members[0]])
     renderPage(makeApi({ remove, list }), 'OWNER')
-    await waitFor(() => expect(screen.getByText('Mika Member')).toBeInTheDocument())
+    expect(await screen.findByText('Mika Member')).toBeInTheDocument()
 
     fireEvent.click(screen.getByLabelText('Mika Member entfernen'))
 
@@ -282,7 +301,7 @@ describe('ProjectMembersPage', () => {
     const remove = vi.fn().mockRejectedValue(new ApiError(409, 'letzter Owner'))
     const list = vi.fn().mockResolvedValue(twoOwners)
     renderPage(makeApi({ remove, list }), 'OWNER')
-    await waitFor(() => expect(screen.getByText('Otto Owner')).toBeInTheDocument())
+    expect(await screen.findByText('Otto Owner')).toBeInTheDocument()
 
     fireEvent.click(screen.getByLabelText('Otto Owner entfernen'))
 
@@ -294,7 +313,7 @@ describe('ProjectMembersPage', () => {
   it('zeigt eine generische Fehlermeldung, wenn das Entfernen fehlschlägt', async () => {
     const remove = vi.fn().mockRejectedValue(new Error('boom'))
     renderPage(makeApi({ remove }), 'OWNER')
-    await waitFor(() => expect(screen.getByText('Mika Member')).toBeInTheDocument())
+    expect(await screen.findByText('Mika Member')).toBeInTheDocument()
 
     fireEvent.click(screen.getByLabelText('Mika Member entfernen'))
 
@@ -307,7 +326,7 @@ describe('ProjectMembersPage', () => {
       .mockResolvedValueOnce(members)
       .mockResolvedValueOnce([members[0], { ...members[1], role: 'ADMIN' }])
     renderPage(makeApi({ changeRole, list }), 'OWNER')
-    await waitFor(() => expect(screen.getByText('Mika Member')).toBeInTheDocument())
+    expect(await screen.findByText('Mika Member')).toBeInTheDocument()
 
     fireEvent.mouseDown(screen.getByLabelText('Rolle von Mika Member'))
     fireEvent.click(await screen.findByRole('option', { name: 'ADMIN' }))
@@ -319,7 +338,7 @@ describe('ProjectMembersPage', () => {
   it('speichert keinen leeren Anzeigenamen', async () => {
     const changeDisplayName = vi.fn()
     renderPage(makeApi({ changeDisplayName }), 'OWNER')
-    await waitFor(() => expect(screen.getByText('Mika Member')).toBeInTheDocument())
+    expect(await screen.findByText('Mika Member')).toBeInTheDocument()
 
     fireEvent.click(screen.getByLabelText('Namen von Mika Member bearbeiten'))
     fireEvent.change(screen.getByLabelText('Anzeigename von member@x.de'), { target: { value: '   ' } })
@@ -331,7 +350,7 @@ describe('ProjectMembersPage', () => {
   it('wählt eine andere Einladungsrolle', async () => {
     const invite = vi.fn().mockResolvedValue({ status: 'invited' })
     renderPage(makeApi({ invite }), 'OWNER')
-    await waitFor(() => expect(screen.getByText('Olga Owner')).toBeInTheDocument())
+    expect(await screen.findByText('Olga Owner')).toBeInTheDocument()
 
     fireEvent.mouseDown(screen.getByLabelText('Einladungsrolle'))
     fireEvent.click(await screen.findByRole('option', { name: 'ADMIN' }))
@@ -344,7 +363,7 @@ describe('ProjectMembersPage', () => {
 
   it('schließt den Übertragen-Dialog per Escape und über Abbrechen', async () => {
     renderPage(makeApi(), 'OWNER')
-    await waitFor(() => expect(screen.getByText('Mika Member')).toBeInTheDocument())
+    expect(await screen.findByText('Mika Member')).toBeInTheDocument()
 
     fireEvent.click(screen.getByLabelText('Mika Member zum Eigentümer machen'))
     fireEvent.keyDown(await screen.findByRole('dialog'), { key: 'Escape', code: 'Escape' })

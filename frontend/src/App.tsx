@@ -10,6 +10,9 @@ const AcceptInvitationPage = lazy(() =>
   import('./pages/AcceptInvitationPage').then((m) => ({ default: m.AcceptInvitationPage })),
 )
 const AdminPage = lazy(() => import('./pages/AdminPage').then((m) => ({ default: m.AdminPage })))
+const AdministrationPage = lazy(() =>
+  import('./pages/AdministrationPage').then((m) => ({ default: m.AdministrationPage })),
+)
 const BoardListPage = lazy(() =>
   import('./pages/BoardListPage').then((m) => ({ default: m.BoardListPage })),
 )
@@ -76,6 +79,7 @@ export function App() {
             <Route path="/admin/bootstrap" element={<BootstrapAdminPage />} />
             <Route path="/roles" element={<RolesPage />} />
             <Route path="/profil" element={<ProfilePage />} />
+            <Route path="/administration" element={<AdministrationPage />} />
             <Route path="/invitations/accept" element={<AcceptInvitationPage />} />
           </Route>
         </Route>

@@ -35,7 +35,9 @@ import org.springframework.transaction.annotation.Transactional;
 // PMD.CouplingBetweenObjects: zentraler Karten-Use-Case-Service; die Kopplung an die Ports
 // (Karten, Abhängigkeiten, Boards/Spalten, Rechte, Zykluszeit, Zuständige, Mitgliedschaften)
 // ist fachlich begründet und kein God-Class-Smell.
-@SuppressWarnings("PMD.CouplingBetweenObjects")
+// PMD.CyclomaticComplexity: die Klassen-Gesamtkomplexität summiert viele kleine, je für sich
+// einfache Use-Case-Methoden (höchste Einzelmethode weit unter dem Schwellwert); kein Smell.
+@SuppressWarnings({"PMD.CouplingBetweenObjects", "PMD.CyclomaticComplexity"})
 @Service
 public class CardService {
 
@@ -88,6 +90,24 @@ public class CardService {
       @Nullable String description,
       @Nullable List<Integer> dependsOn,
       @Nullable Long parentId) {
+    return create(userId, boardId, columnId, title, description, dependsOn, parentId, false);
+  }
+
+  /**
+   * Legt eine Karte an. Mit {@code ideaStored=true} entsteht sie direkt im Ideen-Speicher: sie hält
+   * keinen aktiven Positions-Anspruch (fällt via {@code active_position=NULL} aus dem Namespace)
+   * und eröffnet keine Spalten-Transition, weil sie nicht am Board-Workflow teilnimmt.
+   */
+  @Transactional
+  public CardView create(
+      long userId,
+      long boardId,
+      long columnId,
+      String title,
+      @Nullable String description,
+      @Nullable List<Integer> dependsOn,
+      @Nullable Long parentId,
+      boolean ideaStored) {
     Board board = boards.findById(boardId).orElseThrow(BoardNotFoundException::new);
     permissions.require(userId, board.projectId(), Permission.TICKET_CREATE);
     BoardColumn column = requireColumnInBoard(columnId, boardId);
@@ -108,6 +128,7 @@ public class CardService {
                 normalize(description),
                 position,
                 false,
+                ideaStored,
                 null,
                 userId,
                 now,
@@ -117,7 +138,9 @@ public class CardService {
                 null,
                 null));
 
-    transitions.open(saved.requireId(), columnId, column.name(), now);
+    if (!ideaStored) {
+      transitions.open(saved.requireId(), columnId, column.name(), now);
+    }
     activity.add(saved.requireId(), userId, CardActivityType.CREATED, "Karte angelegt", now);
     setDependencies(saved, dependsOn);
     return view(saved);
@@ -154,6 +177,7 @@ public class CardService {
                 title.trim(),
                 normalize(description),
                 0,
+                false,
                 false,
                 null,
                 userId,
@@ -424,6 +448,54 @@ public class CardService {
     return view(cards.save(card.asRestored(position)));
   }
 
+  /**
+   * Legt eine Karte in den Ideen-Speicher (Demotion, analog {@link #archive(long, long)}): sie
+   * fällt aus dem aktiven Board (kein Positions-Reindex nötig, {@code active_position=NULL}).
+   * Ideen-Pflege ist normaler Arbeitsfluss, kein Löschen — daher das Karten-Verschieberecht ({@link
+   * Permission#CARD_MOVE}), nicht das Archiv-/Lösch-Recht. Nur Karten, keine Epics.
+   */
+  @Transactional
+  public CardView moveToIdeaStorage(long userId, long cardId) {
+    Card card = cards.findById(cardId).orElseThrow(CardNotFoundException::new);
+    if (card.type() == CardType.EPIC) {
+      throw new InvalidDependencyException("Epics können nicht in den Ideen-Speicher");
+    }
+    Board board = boards.findById(card.boardId()).orElseThrow(BoardNotFoundException::new);
+    permissions.require(userId, board.projectId(), Permission.CARD_MOVE);
+    activity.add(
+        card.requireId(),
+        userId,
+        CardActivityType.IDEA_STORED,
+        "In den Ideen-Speicher",
+        clock.instant());
+    return view(cards.save(card.asIdeaStored()));
+  }
+
+  /**
+   * Holt eine Idee aus dem Ideen-Speicher zurück ins Backlog (Promotion, analog {@link
+   * #restore(long, long)}). Anders als das Wiederherstellen wandert die Karte bewusst in die erste
+   * Spalte (das Backlog, niedrigste Position) und landet dort am Ende. Recht wie die Demotion
+   * ({@link Permission#CARD_MOVE}). Nur Karten, keine Epics.
+   */
+  @Transactional
+  public CardView promoteToBacklog(long userId, long cardId) {
+    Card card = cards.findById(cardId).orElseThrow(CardNotFoundException::new);
+    if (card.type() == CardType.EPIC) {
+      throw new InvalidDependencyException("Epics können nicht ins Backlog geholt werden");
+    }
+    Board board = boards.findById(card.boardId()).orElseThrow(BoardNotFoundException::new);
+    permissions.require(userId, board.projectId(), Permission.CARD_MOVE);
+    long firstColumnId =
+        columns.findByBoardId(card.boardId()).stream()
+            .min(Comparator.comparingInt(BoardColumn::position))
+            .orElseThrow(ColumnNotFoundException::new)
+            .requireId();
+    int position = cards.maxActivePositionInColumn(firstColumnId) + 1;
+    activity.add(
+        card.requireId(), userId, CardActivityType.PROMOTED, "Ins Backlog geholt", clock.instant());
+    return view(cards.save(card.asPromoted(position, firstColumnId)));
+  }
+
   /** Aktivitätsverlauf einer Karte (chronologisch). Erfordert Board-Mitgliedschaft (Leserecht). */
   @Transactional(readOnly = true)
   public List<CardActivity> listActivity(long userId, long cardId) {
@@ -573,6 +645,7 @@ public class CardService {
         c.description(),
         c.positionInColumn(),
         c.archived(),
+        c.ideaStored(),
         c.movedToDoneAt(),
         dependencies.findByCardId(c.requireId()),
         c.type(),
@@ -593,6 +666,7 @@ public class CardService {
       @Nullable String description,
       int positionInColumn,
       boolean archived,
+      boolean ideaStored,
       @Nullable Instant movedToDoneAt,
       List<Integer> dependencies,
       CardType type,

@@ -35,6 +35,8 @@ interface Props {
   onSubmit: (input: NewItemInput) => Promise<void> | void
   /** Nur Epic anlegen: Typ vorbelegt EPIC, ohne Typ-/Zuordnungs-Auswahl (für die Epics-Ansicht). */
   epicOnly?: boolean
+  /** Nur Idee anlegen: Typ fest CARD, ohne Typ-Auswahl (für die Ideen-Speicher-Zone). */
+  ideaOnly?: boolean
   /** Vorbefüllung für „Duplizieren"; ohne Angabe startet der Dialog leer. */
   initialValues?: NewCardInitialValues
 }
@@ -51,6 +53,7 @@ export function NewCardModal({
   onClose,
   onSubmit,
   epicOnly = false,
+  ideaOnly = false,
   initialValues,
 }: Readonly<Props>) {
   const [type, setType] = useState<CardType>(epicOnly ? 'EPIC' : 'CARD')
@@ -115,11 +118,11 @@ export function NewCardModal({
       }}
     >
       <DialogTitle id="new-card-title">
-        {type === 'EPIC' ? 'Neues Epic' : `Neue Karte in „${columnName}“`}
+        {type === 'EPIC' ? 'Neues Epic' : ideaOnly ? 'Neue Idee' : `Neue Karte in „${columnName}“`}
       </DialogTitle>
       <DialogContent>
         <Stack spacing={2} sx={{ mt: 0.5 }}>
-          {!epicOnly && (
+          {!epicOnly && !ideaOnly && (
             <TextField
               select
               label="Typ"

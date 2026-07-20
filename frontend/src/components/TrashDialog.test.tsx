@@ -4,7 +4,7 @@ import type { Card } from '../api/cards'
 import { TrashDialog } from './TrashDialog'
 
 const base = {
-  boardId: 1, columnId: 10, positionInColumn: 0, archived: false, movedToDoneAt: null as string | null,
+  boardId: 1, columnId: 10, positionInColumn: 0, archived: false, ideaStored: false, movedToDoneAt: null as string | null,
   dependencies: [] as number[], type: 'CARD' as const, parentId: null as number | null,
   shortcode: null as string | null, assignees: [] as number[], dueDate: null as string | null,
   labels: [] as number[],

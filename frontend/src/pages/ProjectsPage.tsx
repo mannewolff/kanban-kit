@@ -18,8 +18,9 @@ import { useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { ApiError } from '../api/client'
 import { projectsApi, type Project } from '../api/projects'
-import { isPlatformAdmin } from '../lib/roles'
+import { canManageProject, isPlatformAdmin } from '../lib/roles'
 import { useAuth } from '../auth/AuthContext'
+import { useEditMode } from '../lib/EditModeContext'
 
 const ROLE_CHIP: Record<string, 'primary' | 'info' | 'default'> = {
   OWNER: 'primary',
@@ -35,6 +36,7 @@ export function ProjectsPage() {
   const navigate = useNavigate()
   const location = useLocation()
   const { user } = useAuth()
+  const { editMode } = useEditMode()
   const admin = isPlatformAdmin(user)
   const [projects, setProjects] = useState<Project[]>([])
   const [name, setName] = useState('')
@@ -167,7 +169,7 @@ export function ProjectsPage() {
                   {formatDate(project.createdAt)}
                 </Typography>
               )}
-              {project.role === 'OWNER' && (
+              {canManageProject(project.role, admin) && editMode && (
                 <IconButton
                   size="small"
                   aria-label={`Projekt ${project.name} umbenennen`}
@@ -179,7 +181,7 @@ export function ProjectsPage() {
                   <EditOutlinedIcon fontSize="small" />
                 </IconButton>
               )}
-              {admin && (
+              {admin && editMode && (
                 <IconButton
                   size="small"
                   aria-label={`Projekt ${project.name} löschen`}

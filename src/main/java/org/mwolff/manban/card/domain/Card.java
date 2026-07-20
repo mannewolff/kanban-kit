@@ -19,6 +19,8 @@ import org.mwolff.manban.common.Identifiable;
  * @param description Markdown-Beschreibung (nullable)
  * @param positionInColumn Position in der Spalte
  * @param archived ob archiviert (dann außerhalb des aktiven Positions-Namespace)
+ * @param ideaStored ob im Ideen-Speicher (dann außerhalb des aktiven Positions-Namespace, im Board
+ *     unsichtbar; nur in der Listenansicht sichtbar)
  * @param movedToDoneAt Zeitpunkt des Zugs nach Done (nullable)
  * @param createdBy Ersteller (nullable, z. B. bei PAT)
  * @param createdAt Erstellzeitpunkt
@@ -37,6 +39,7 @@ public record Card(
     @Nullable String description,
     int positionInColumn,
     boolean archived,
+    boolean ideaStored,
     @Nullable Instant movedToDoneAt,
     @Nullable Long createdBy,
     Instant createdAt,
@@ -57,6 +60,7 @@ public record Card(
         newDescription,
         positionInColumn,
         archived,
+        ideaStored,
         movedToDoneAt,
         createdBy,
         createdAt,
@@ -77,6 +81,7 @@ public record Card(
         description,
         positionInColumn,
         true,
+        ideaStored,
         movedToDoneAt,
         createdBy,
         createdAt,
@@ -98,6 +103,57 @@ public record Card(
         description,
         newPositionInColumn,
         false,
+        ideaStored,
+        movedToDoneAt,
+        createdBy,
+        createdAt,
+        updatedAt,
+        type,
+        parentId,
+        shortcode,
+        dueDate);
+  }
+
+  /**
+   * In den Ideen-Speicher legen (analog {@link #asArchived()}); fällt aus dem aktiven Namespace.
+   */
+  public Card asIdeaStored() {
+    return new Card(
+        id,
+        boardId,
+        columnId,
+        number,
+        title,
+        description,
+        positionInColumn,
+        archived,
+        true,
+        movedToDoneAt,
+        createdBy,
+        createdAt,
+        updatedAt,
+        type,
+        parentId,
+        shortcode,
+        dueDate);
+  }
+
+  /**
+   * Aus dem Ideen-Speicher ins Backlog holen: {@code ideaStored=false}, mit neuer Spalte (die
+   * Backlog-Spalte) und einer freien Position dort. Anders als {@link #asRestored(int)}, das die
+   * bisherige Spalte behält, wandert eine promotete Idee bewusst in die erste Spalte.
+   */
+  public Card asPromoted(int newPositionInColumn, long newColumnId) {
+    return new Card(
+        id,
+        boardId,
+        newColumnId,
+        number,
+        title,
+        description,
+        newPositionInColumn,
+        archived,
+        false,
         movedToDoneAt,
         createdBy,
         createdAt,
@@ -118,6 +174,7 @@ public record Card(
         description,
         positionInColumn,
         archived,
+        ideaStored,
         when,
         createdBy,
         createdAt,
@@ -139,6 +196,7 @@ public record Card(
         description,
         positionInColumn,
         archived,
+        ideaStored,
         movedToDoneAt,
         createdBy,
         createdAt,
@@ -160,6 +218,7 @@ public record Card(
         description,
         positionInColumn,
         archived,
+        ideaStored,
         movedToDoneAt,
         createdBy,
         createdAt,
@@ -181,6 +240,7 @@ public record Card(
         description,
         positionInColumn,
         archived,
+        ideaStored,
         movedToDoneAt,
         createdBy,
         createdAt,

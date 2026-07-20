@@ -8,10 +8,16 @@ import { CardDetailModal, parseDependencyInput } from './CardDetailModal'
 vi.mock('../auth/AuthContext', () => ({
   useAuth: () => ({ user: { userId: 7, email: 'a@b.c', displayName: 'A', platformRole: 'USER', memberships: [] } }),
 }))
+// Editiermodus gemockt: Bestandstests laufen mit editMode=true (Bearbeiten-Button sichtbar), der
+// Editiermodus-aus-Test schaltet editMode.value=false.
+const editMode = vi.hoisted(() => ({ value: true }))
+vi.mock('../lib/EditModeContext', () => ({
+  useEditMode: () => ({ editMode: editMode.value, setEditMode: vi.fn(), toggleEditMode: vi.fn() }),
+}))
 
 const card: Card = {
   id: 100, boardId: 1, columnId: 10, number: 5, title: 'Aufgabe', description: '# Titel\n\n- a\n- b',
-  positionInColumn: 0, archived: false, movedToDoneAt: null, dependencies: [3, 4],
+  positionInColumn: 0, archived: false, ideaStored: false, movedToDoneAt: null, dependencies: [3, 4],
   type: 'CARD', parentId: null, shortcode: null, assignees: [], dueDate: null, labels: [],
 }
 
@@ -38,6 +44,7 @@ function makeApis() {
     setLabels: vi.fn().mockResolvedValue({ ...card }),
     getActivity: vi.fn().mockResolvedValue([]),
     restore: vi.fn().mockResolvedValue({ ...card }),
+    moveToIdeaStorage: vi.fn().mockResolvedValue({ ...card }),
   }
   return { commentsApi, attachmentsApi, cardsApi }
 }
@@ -54,9 +61,19 @@ describe('parseDependencyInput', () => {
 
 describe('CardDetailModal', () => {
   beforeEach(() => {
+    editMode.value = true
     // jsdom kennt createObjectURL nicht.
     URL.createObjectURL = vi.fn(() => 'blob:preview')
     URL.revokeObjectURL = vi.fn()
+  })
+
+  it('blendet bei ausgeschaltetem Editiermodus den Bearbeiten-Button aus (trotz canEdit)', async () => {
+    editMode.value = false
+    const apis = makeApis()
+    render(<CardDetailModal card={card} canEdit columnName="In Progress" onClose={vi.fn()} {...apis} />)
+    // Lesemodus lädt Kommentare asynchron nach — abwarten, dann den fehlenden Button prüfen.
+    expect(await screen.findByText('Hallo')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Bearbeiten' })).not.toBeInTheDocument()
   })
 
   it('rendert im Lesemodus Markdown, Abhängigkeiten und Kommentare', async () => {
@@ -65,7 +82,7 @@ describe('CardDetailModal', () => {
 
     expect(screen.getByRole('heading', { name: 'Titel' })).toBeInTheDocument()
     expect(screen.getByLabelText('Abhängigkeiten')).toHaveTextContent('Abhängig von: #3, #4')
-    await waitFor(() => expect(screen.getByText('Hallo')).toBeInTheDocument())
+    expect(await screen.findByText('Hallo')).toBeInTheDocument()
   })
 
   it('legt einen Kommentar an', async () => {
@@ -77,6 +94,27 @@ describe('CardDetailModal', () => {
 
     await waitFor(() => expect(apis.commentsApi.create).toHaveBeenCalledWith(100, 'Neu'))
     expect(await screen.findByText('Neu')).toBeInTheDocument()
+  })
+
+  it('legt eine aktive Karte über den Detail-Button in den Ideen-Speicher', async () => {
+    const apis = makeApis()
+    const onChanged = vi.fn()
+    const onClose = vi.fn()
+    render(<CardDetailModal card={card} canEdit onChanged={onChanged} onClose={onClose} {...apis} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'In Ideen-Speicher' }))
+
+    await waitFor(() => expect(apis.cardsApi.moveToIdeaStorage).toHaveBeenCalledWith(100))
+    expect(onChanged).toHaveBeenCalled()
+    expect(onClose).toHaveBeenCalled()
+  })
+
+  it('zeigt „In Ideen-Speicher“ nicht für eine bereits gespeicherte Idee', () => {
+    const apis = makeApis()
+    const idea: Card = { ...card, ideaStored: true }
+    render(<CardDetailModal card={idea} canEdit onClose={vi.fn()} {...apis} />)
+
+    expect(screen.queryByRole('button', { name: 'In Ideen-Speicher' })).not.toBeInTheDocument()
   })
 
   it('speichert Titel, Beschreibung, Abhängigkeiten und Epic in einem Update', async () => {
@@ -97,7 +135,7 @@ describe('CardDetailModal', () => {
   it('zeigt dem Autor Bearbeiten, aber ohne Moderationsrecht kein Löschen', async () => {
     const apis = makeApis()
     render(<CardDetailModal card={card} canEdit onClose={vi.fn()} {...apis} />)
-    await waitFor(() => expect(screen.getByText('Hallo')).toBeInTheDocument())
+    expect(await screen.findByText('Hallo')).toBeInTheDocument()
 
     expect(screen.getByRole('button', { name: 'Kommentar bearbeiten' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Kommentar löschen' })).not.toBeInTheDocument()
@@ -106,7 +144,7 @@ describe('CardDetailModal', () => {
   it('zeigt Moderatoren den Löschen-Button', async () => {
     const apis = makeApis()
     render(<CardDetailModal card={card} canEdit canModerateComments onClose={vi.fn()} {...apis} />)
-    await waitFor(() => expect(screen.getByText('Hallo')).toBeInTheDocument())
+    expect(await screen.findByText('Hallo')).toBeInTheDocument()
 
     expect(screen.getByRole('button', { name: 'Kommentar löschen' })).toBeInTheDocument()
   })
@@ -117,7 +155,7 @@ describe('CardDetailModal', () => {
       { id: 1, cardId: 100, authorUserId: 7, authorName: 'A', body: 'Geändert', createdAt: '', updatedAt: '' },
     )
     render(<CardDetailModal card={card} canEdit onClose={vi.fn()} {...apis} />)
-    await waitFor(() => expect(screen.getByText('Hallo')).toBeInTheDocument())
+    expect(await screen.findByText('Hallo')).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Kommentar bearbeiten' }))
     fireEvent.change(screen.getByLabelText('Kommentar bearbeiten'), { target: { value: 'Geändert' } })
@@ -136,7 +174,7 @@ describe('CardDetailModal', () => {
     render(<CardDetailModal card={card} canEdit columnName="In Progress" onClose={vi.fn()} {...apis} />)
 
     fireEvent.click(await screen.findByRole('button', { name: 'doc.pdf' }))
-    await waitFor(() => expect(screen.getByLabelText('Vorschau doc.pdf')).toBeInTheDocument())
+    expect(await screen.findByLabelText('Vorschau doc.pdf')).toBeInTheDocument()
   })
 
   const taskCard: Card = { ...card, description: '[ ] eins\n[ ] zwei' }
@@ -393,7 +431,7 @@ describe('CardDetailModal', () => {
     expect(thumb).toHaveAttribute('src', 'blob:preview')
 
     fireEvent.click(thumb)
-    await waitFor(() => expect(screen.getByLabelText('Vorschau bild.png')).toBeInTheDocument())
+    expect(await screen.findByLabelText('Vorschau bild.png')).toBeInTheDocument()
   })
 
   it('lädt eine Datei hoch und zeigt sie in der Liste', async () => {
@@ -468,7 +506,7 @@ describe('CardDetailModal', () => {
     render(<CardDetailModal card={card} canEdit columnName="In Progress" onClose={vi.fn()} {...apis} />)
 
     fireEvent.click(await screen.findByRole('button', { name: 'doc.pdf' }))
-    await waitFor(() => expect(screen.getByLabelText('Vorschau doc.pdf')).toBeInTheDocument())
+    expect(await screen.findByLabelText('Vorschau doc.pdf')).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: /schließen/i }))
     await waitFor(() => expect(screen.queryByLabelText('Vorschau doc.pdf')).not.toBeInTheDocument())
@@ -508,7 +546,7 @@ describe('CardDetailModal', () => {
   it('löscht einen Kommentar', async () => {
     const apis = makeApis()
     render(<CardDetailModal card={card} canEdit canModerateComments onClose={vi.fn()} {...apis} />)
-    await waitFor(() => expect(screen.getByText('Hallo')).toBeInTheDocument())
+    expect(await screen.findByText('Hallo')).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Kommentar löschen' }))
 
@@ -605,7 +643,7 @@ describe('CardDetailModal', () => {
   it('speichert keinen leeren Kommentar beim inline-Bearbeiten und bricht per Abbrechen ab', async () => {
     const apis = makeApis()
     render(<CardDetailModal card={card} canEdit onClose={vi.fn()} {...apis} />)
-    await waitFor(() => expect(screen.getByText('Hallo')).toBeInTheDocument())
+    expect(await screen.findByText('Hallo')).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Kommentar bearbeiten' }))
     fireEvent.change(screen.getByLabelText('Kommentar bearbeiten'), { target: { value: '   ' } })
@@ -728,7 +766,7 @@ describe('CardDetailModal', () => {
       { id: 1, cardId: 100, authorUserId: 7, authorName: 'A', body: 'Geändert', createdAt: '', updatedAt: '' },
     )
     render(<CardDetailModal card={card} canEdit onClose={vi.fn()} {...apis} />)
-    await waitFor(() => expect(screen.getByText('Zweiter')).toBeInTheDocument())
+    expect(await screen.findByText('Zweiter')).toBeInTheDocument()
 
     fireEvent.click(screen.getAllByRole('button', { name: 'Kommentar bearbeiten' })[0])
     fireEvent.change(screen.getByRole('textbox', { name: 'Kommentar bearbeiten' }), { target: { value: 'Geändert' } })
@@ -747,7 +785,7 @@ describe('CardDetailModal', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Bearbeiten' }))
     fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape', code: 'Escape' })
 
-    await waitFor(() => expect(screen.getByRole('heading', { name: 'Titel' })).toBeInTheDocument())
+    expect(await screen.findByRole('heading', { name: 'Titel' })).toBeInTheDocument()
     expect(onClose).not.toHaveBeenCalled()
   })
 })

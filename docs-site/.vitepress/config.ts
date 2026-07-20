@@ -7,7 +7,10 @@ export default defineConfig({
   description:
     "Selbst-hostbares Kanban-Board mit Projekten, Boards, Epics, Anhängen und rollenbasierter Rechteverwaltung — Benutzer- und Betriebsdokumentation.",
   appearance: false,
-  srcDir: "../docs",
+  // Dev liest direkt aus ../docs (Live-Reload). Der statische Build läuft über die nach content/
+  // kopierten Quellen (VITEPRESS_SRC=content), weil ein srcDir außerhalb des Projektroots den
+  // Build bricht (VitePress-Issue #2713, siehe copy-docs.mjs).
+  srcDir: process.env.VITEPRESS_SRC ?? "../docs",
   outDir: ".vitepress/dist",
 
   themeConfig: {

@@ -48,6 +48,15 @@ vi.mock('../api/attachments', () => ({
   attachmentsApi: { list: vi.fn().mockResolvedValue([]), upload: vi.fn(), remove: vi.fn(), fetchBlob: vi.fn() },
 }))
 vi.mock('../api/projects', () => ({ projectsApi: { list: vi.fn() } }))
+// Editiermodus gemockt: Bestandstests laufen mit editMode=true (Bleistifte sichtbar); der
+// Editiermodus-aus-Test schaltet editMode.value=false.
+const editMode = vi.hoisted(() => ({ value: true }))
+vi.mock('../lib/EditModeContext', () => ({
+  useEditMode: () => ({ editMode: editMode.value, setEditMode: vi.fn(), toggleEditMode: vi.fn() }),
+}))
+beforeEach(() => {
+  editMode.value = true
+})
 
 const mockedBoards = boardsApi as unknown as {
   get: ReturnType<typeof vi.fn>
@@ -93,7 +102,7 @@ describe('BoardPage canEdit aus Membership', () => {
     memberships = [{ projectId: 9, role: 'OWNER' }]
     renderPage()
     expect(await screen.findByText('B')).toBeInTheDocument()
-    await waitFor(() => expect(screen.getByLabelText('Karte in Backlog anlegen')).toBeInTheDocument())
+    expect(await screen.findByLabelText('Karte in Backlog anlegen')).toBeInTheDocument()
     // Hinweis: projectsApi.list() läuft seit #160 für den Projektnamen (useProjectName); die
     // Rolle selbst kommt weiterhin synchron aus den Memberships (Anlege-Aktion sofort sichtbar).
   })
@@ -126,6 +135,19 @@ describe('BoardPage canEdit aus Membership', () => {
     renderPage()
     expect(await screen.findByText('B')).toBeInTheDocument()
     expect(screen.queryByLabelText('Board umbenennen')).not.toBeInTheDocument()
+  })
+
+  it('blendet bei ausgeschaltetem Editiermodus Umbenennen und Labels aus, behält aber den Papierkorb', async () => {
+    memberships = [{ projectId: 9, role: 'OWNER' }]
+    editMode.value = false
+    renderPage()
+    expect(await screen.findByText('B')).toBeInTheDocument()
+    // Struktur-/Verwaltungs-Bleistifte verschwinden ...
+    expect(screen.queryByLabelText('Board umbenennen')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Labels' })).not.toBeInTheDocument()
+    // ... Papierkorb-Zugang und Karten-Alltag bleiben.
+    expect(screen.getByRole('button', { name: 'Papierkorb' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Karte in Backlog anlegen')).toBeInTheDocument()
   })
 
   it('zeigt bei ungültiger Board-ID einen Fehler und ruft keine API auf', async () => {
@@ -239,7 +261,7 @@ describe('BoardPage weitere Orchestrierung', () => {
     epicsApiMock.create.mockResolvedValue({
       id: 20, number: 1, title: 'Auth', description: '', shortcode: 'AUT', done: 0, total: 0,
     })
-    await waitFor(() => expect(screen.getByLabelText('Karte in Backlog anlegen')).toBeInTheDocument())
+    expect(await screen.findByLabelText('Karte in Backlog anlegen')).toBeInTheDocument()
 
     fireEvent.click(screen.getByLabelText('Karte in Backlog anlegen'))
     fireEvent.change(screen.getByLabelText('Typ'), { target: { value: 'EPIC' } })
@@ -256,7 +278,7 @@ describe('BoardPage weitere Orchestrierung', () => {
     memberships = [{ projectId: 9, role: 'OWNER' }]
     renderPage()
     mockedLabels.create.mockResolvedValue({ id: 5, boardId: 1, name: 'Bug', color: '#1976d2' })
-    await waitFor(() => expect(screen.getByLabelText('Karte in Backlog anlegen')).toBeInTheDocument())
+    expect(await screen.findByLabelText('Karte in Backlog anlegen')).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Labels' }))
     fireEvent.change(await screen.findByLabelText('Neues Label'), { target: { value: 'Bug' } })
@@ -273,7 +295,7 @@ describe('BoardPage weitere Orchestrierung', () => {
     memberships = [{ projectId: 9, role: 'OWNER' }]
     const openCard = {
       id: 100, boardId: 1, columnId: 10, number: 1, title: 'Aufgabe', description: null,
-      positionInColumn: 0, archived: false, movedToDoneAt: null, dependencies: [],
+      positionInColumn: 0, archived: false, ideaStored: false, movedToDoneAt: null, dependencies: [],
       type: 'CARD' as const, parentId: null, shortcode: null, assignees: [], dueDate: null, labels: [],
     }
     mockedBoards.get.mockResolvedValue({
@@ -309,7 +331,7 @@ describe('BoardPage weitere Orchestrierung', () => {
   it('öffnet und schließt den Papierkorb-Dialog', async () => {
     memberships = [{ projectId: 9, role: 'OWNER' }]
     renderPage()
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Papierkorb' })).toBeInTheDocument())
+    expect(await screen.findByRole('button', { name: 'Papierkorb' })).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Papierkorb' }))
     expect(await screen.findByRole('dialog')).toBeInTheDocument()
@@ -321,7 +343,7 @@ describe('BoardPage weitere Orchestrierung', () => {
   it('öffnet und schließt den Label-Manager', async () => {
     memberships = [{ projectId: 9, role: 'OWNER' }]
     renderPage()
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Labels' })).toBeInTheDocument())
+    expect(await screen.findByRole('button', { name: 'Labels' })).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Labels' }))
     expect(await screen.findByLabelText('Neues Label')).toBeInTheDocument()
@@ -334,7 +356,7 @@ describe('BoardPage weitere Orchestrierung', () => {
     memberships = [{ projectId: 9, role: 'OWNER' }]
     const openCard = {
       id: 100, boardId: 1, columnId: 10, number: 1, title: 'Aufgabe', description: null,
-      positionInColumn: 0, archived: false, movedToDoneAt: null, dependencies: [],
+      positionInColumn: 0, archived: false, ideaStored: false, movedToDoneAt: null, dependencies: [],
       type: 'CARD' as const, parentId: null, shortcode: null, assignees: [], dueDate: null, labels: [],
     }
     mockedBoards.get.mockResolvedValue({
@@ -363,7 +385,7 @@ describe('BoardPage weitere Orchestrierung', () => {
   it('bricht das Umbenennen über Abbrechen ab', async () => {
     memberships = [{ projectId: 9, role: 'OWNER' }]
     renderPage()
-    await waitFor(() => expect(screen.getByLabelText('Board umbenennen')).toBeInTheDocument())
+    expect(await screen.findByLabelText('Board umbenennen')).toBeInTheDocument()
 
     fireEvent.click(screen.getByLabelText('Board umbenennen'))
     fireEvent.click(await screen.findByRole('button', { name: 'Abbrechen' }))
@@ -375,7 +397,7 @@ describe('BoardPage weitere Orchestrierung', () => {
   it('schließt den Umbenennen-Dialog per Escape', async () => {
     memberships = [{ projectId: 9, role: 'OWNER' }]
     renderPage()
-    await waitFor(() => expect(screen.getByLabelText('Board umbenennen')).toBeInTheDocument())
+    expect(await screen.findByLabelText('Board umbenennen')).toBeInTheDocument()
 
     fireEvent.click(screen.getByLabelText('Board umbenennen'))
     fireEvent.keyDown(await screen.findByRole('dialog'), { key: 'Escape', code: 'Escape' })
@@ -388,7 +410,7 @@ describe('BoardPage weitere Orchestrierung', () => {
     memberships = [{ projectId: 9, role: 'OWNER' }]
     const openCard = {
       id: 100, boardId: 1, columnId: 10, number: 1, title: 'Aufgabe', description: null,
-      positionInColumn: 0, archived: false, movedToDoneAt: null, dependencies: [],
+      positionInColumn: 0, archived: false, ideaStored: false, movedToDoneAt: null, dependencies: [],
       type: 'CARD' as const, parentId: null, shortcode: null, assignees: [], dueDate: null, labels: [],
     }
     mockedBoards.get.mockResolvedValue({

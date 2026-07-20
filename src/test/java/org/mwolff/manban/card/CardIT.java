@@ -224,6 +224,74 @@ class CardIT extends AbstractIntegrationTest {
   }
 
   @Test
+  void ideaStorageAndPromoteFlow() throws Exception {
+    Cookie alice = loginAs("idea-owner@example.com");
+    long projectId = createProject("idea-owner@example.com", "Idea");
+    JsonNode board = createBoard(alice, projectId);
+    long boardId = board.get("id").asLong();
+    long columnId = board.get("columns").get(0).get("id").asLong();
+    long cardId = createCard(alice, boardId, columnId, "Idee", null).get("id").asLong();
+
+    // Demotion: Karte in den Ideen-Speicher -> ideaStored=true, aktive Position fällt weg.
+    mvc.perform(post("/api/cards/" + cardId + "/idea-storage").cookie(alice))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.ideaStored").value(true));
+
+    // Die Idee taucht weiter in der Kartenliste auf (mit ideaStored=true) — Board-Unsichtbarkeit
+    // filtert das Frontend.
+    mvc.perform(
+            org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get(
+                    "/api/boards/" + boardId + "/cards")
+                .cookie(alice))
+        .andExpect(jsonPath("$.length()").value(1))
+        .andExpect(jsonPath("$[0].ideaStored").value(true));
+
+    // Eine neue Karte an Position 0 derselben Spalte kollidiert nicht (Idee außerhalb des
+    // Namespace).
+    createCard(alice, boardId, columnId, "Nachrücker", null);
+
+    // Promotion: Idee zurück ins Backlog (erste Spalte) am Ende -> ideaStored=false.
+    mvc.perform(post("/api/cards/" + cardId + "/promote").cookie(alice))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.ideaStored").value(false))
+        .andExpect(jsonPath("$.columnId").value((int) columnId));
+  }
+
+  @Test
+  void createCardDirectlyAsIdeaViaRest() throws Exception {
+    Cookie alice = loginAs("create-idea-owner@example.com");
+    long projectId = createProject("create-idea-owner@example.com", "CreateIdea");
+    JsonNode board = createBoard(alice, projectId);
+    long boardId = board.get("id").asLong();
+    long columnId = board.get("columns").get(0).get("id").asLong();
+
+    // Anlegen mit ideaStored=true erzeugt direkt eine Idee.
+    mvc.perform(
+            post("/api/boards/" + boardId + "/cards")
+                .cookie(alice)
+                .contentType("application/json")
+                .content(
+                    "{\"columnId\":%d,\"title\":\"Direkt-Idee\",\"ideaStored\":true}"
+                        .formatted(columnId)))
+        .andExpect(status().isCreated())
+        .andExpect(jsonPath("$.ideaStored").value(true));
+  }
+
+  @Test
+  void ideaStorageRejectsEpic() throws Exception {
+    Cookie alice = loginAs("idea-epic-owner@example.com");
+    long projectId = createProject("idea-epic-owner@example.com", "IdeaEpic");
+    JsonNode board = createBoard(alice, projectId);
+    long boardId = board.get("id").asLong();
+    long epicId = createEpic(alice, boardId, "EP");
+
+    mvc.perform(post("/api/cards/" + epicId + "/idea-storage").cookie(alice))
+        .andExpect(status().isBadRequest());
+    mvc.perform(post("/api/cards/" + epicId + "/promote").cookie(alice))
+        .andExpect(status().isBadRequest());
+  }
+
+  @Test
   void bulkArchiveArchivesEveryCardAndEpic() throws Exception {
     Cookie alice = loginAs("bulk-arch-owner@example.com");
     long projectId = createProject("bulk-arch-owner@example.com", "BulkArch");

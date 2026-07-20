@@ -59,7 +59,8 @@ class CardController {
         request.title(),
         request.description(),
         request.dependencies(),
-        request.parentId());
+        request.parentId(),
+        Boolean.TRUE.equals(request.ideaStored()));
   }
 
   @GetMapping("/api/boards/{boardId}/cards")
@@ -141,6 +142,18 @@ class CardController {
     return cards.restore(userId, cardId);
   }
 
+  /** Legt eine Karte in den Ideen-Speicher (Demotion, verschwindet aus dem aktiven Board). */
+  @PostMapping("/api/cards/{cardId}/idea-storage")
+  CardView moveToIdeaStorage(@AuthenticationPrincipal Long userId, @PathVariable long cardId) {
+    return cards.moveToIdeaStorage(userId, cardId);
+  }
+
+  /** Holt eine Idee aus dem Ideen-Speicher zurück ins Backlog (Promotion). */
+  @PostMapping("/api/cards/{cardId}/promote")
+  CardView promote(@AuthenticationPrincipal Long userId, @PathVariable long cardId) {
+    return cards.promoteToBacklog(userId, cardId);
+  }
+
   /** Verschiebt eine Karte in den Papierkorb (Soft-Delete, reversibel). */
   @DeleteMapping("/api/cards/{cardId}")
   @ResponseStatus(HttpStatus.NO_CONTENT)
@@ -212,7 +225,8 @@ class CardController {
       List<Integer> dependencies,
       CardType type,
       Long parentId,
-      @Size(max = 16) String shortcode) {}
+      @Size(max = 16) String shortcode,
+      @Nullable Boolean ideaStored) {}
 
   record UpdateCardRequest(
       @NotBlank @Size(max = 300) String title,

@@ -1,9 +1,12 @@
 import type { Card } from '../api/cards'
 
-/** Aktive (nicht-archivierte) Karten einer Spalte, nach Position sortiert. */
+/**
+ * Aktive Karten einer Spalte, nach Position sortiert. Archivierte Karten und Ideen (Ideen-Speicher)
+ * fallen aus der Board-/Spaltenansicht — sie halten keinen aktiven Positions-Anspruch.
+ */
 export function activeCardsInColumn(cards: Card[], columnId: number): Card[] {
   return cards
-    .filter((c) => c.columnId === columnId && !c.archived)
+    .filter((c) => c.columnId === columnId && !c.archived && !c.ideaStored)
     .sort((a, b) => a.positionInColumn - b.positionInColumn)
 }
 

@@ -33,6 +33,7 @@ class CardControllerTest {
         "Desc",
         0,
         false,
+        false,
         null,
         List.of(),
         CardType.CARD,
@@ -55,7 +56,7 @@ class CardControllerTest {
     CardView view = card();
     var request =
         new CardController.CreateCardRequest(
-            null, "Epic", "Desc", null, CardType.EPIC, null, "EP-1");
+            null, "Epic", "Desc", null, CardType.EPIC, null, "EP-1", null);
     when(service.createEpic(3L, 2L, "Epic", "Desc", "EP-1")).thenReturn(view);
 
     // When
@@ -70,8 +71,25 @@ class CardControllerTest {
     // Given
     CardView view = card();
     var deps = List.of(1, 2);
-    var request = new CardController.CreateCardRequest(7L, "Title", "Desc", deps, null, 9L, null);
-    when(service.create(3L, 2L, 7L, "Title", "Desc", deps, 9L)).thenReturn(view);
+    var request =
+        new CardController.CreateCardRequest(7L, "Title", "Desc", deps, null, 9L, null, null);
+    when(service.create(3L, 2L, 7L, "Title", "Desc", deps, 9L, false)).thenReturn(view);
+
+    // When
+    CardView result = controller.create(3L, 2L, request);
+
+    // Then
+    assertThat(result).isSameAs(view);
+  }
+
+  @Test
+  void create_cardTypeWithIdeaStored_delegatesFlag() {
+    // Given: Idee direkt anlegen -> ideaStored=true an den Service
+    CardView view = card();
+    var request =
+        new CardController.CreateCardRequest(
+            7L, "Idee", "Desc", null, CardType.CARD, null, null, true);
+    when(service.create(3L, 2L, 7L, "Idee", "Desc", null, null, true)).thenReturn(view);
 
     // When
     CardView result = controller.create(3L, 2L, request);
@@ -85,7 +103,7 @@ class CardControllerTest {
     // Given
     var request =
         new CardController.CreateCardRequest(
-            null, "Title", "Desc", null, CardType.CARD, null, null);
+            null, "Title", "Desc", null, CardType.CARD, null, null, null);
 
     // When / Then
     assertThatThrownBy(() -> controller.create(3L, 2L, request))
@@ -180,6 +198,32 @@ class CardControllerTest {
 
     // When
     CardView result = controller.restore(3L, 8L);
+
+    // Then
+    assertThat(result).isSameAs(view);
+  }
+
+  @Test
+  void moveToIdeaStorage_delegatesToService() {
+    // Given
+    CardView view = card();
+    when(service.moveToIdeaStorage(3L, 8L)).thenReturn(view);
+
+    // When
+    CardView result = controller.moveToIdeaStorage(3L, 8L);
+
+    // Then
+    assertThat(result).isSameAs(view);
+  }
+
+  @Test
+  void promote_delegatesToService() {
+    // Given
+    CardView view = card();
+    when(service.promoteToBacklog(3L, 8L)).thenReturn(view);
+
+    // When
+    CardView result = controller.promote(3L, 8L);
 
     // Then
     assertThat(result).isSameAs(view);

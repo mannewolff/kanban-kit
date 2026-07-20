@@ -69,7 +69,7 @@ describe('EpicsPage', () => {
     expect(await screen.findByText('Auth')).toBeInTheDocument()
     expect(screen.getByText('AUT')).toBeInTheDocument()
     expect(screen.getByText('1/2 Stories fertig')).toBeInTheDocument()
-    await waitFor(() => expect(screen.getByLabelText('Fortschritt Auth')).toBeInTheDocument())
+    expect(await screen.findByLabelText('Fortschritt Auth')).toBeInTheDocument()
   })
 
   it('legt über „Neues Epic" ein Epic an', async () => {
@@ -105,7 +105,7 @@ describe('EpicsPage', () => {
     mCards.list.mockResolvedValue([
       {
         id: 30, boardId: 1, columnId: 10, number: 3, title: 'Kind', description: null,
-        positionInColumn: 0, archived: false, movedToDoneAt: null, dependencies: [],
+        positionInColumn: 0, archived: false, ideaStored: false, movedToDoneAt: null, dependencies: [],
         type: 'CARD', parentId: 9, shortcode: null, assignees: [], dueDate: null, labels: [],
       },
     ])
