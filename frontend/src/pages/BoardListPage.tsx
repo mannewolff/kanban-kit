@@ -21,12 +21,10 @@ import { NewCardModal, type NewItemInput } from '../components/NewCardModal'
 import { cardsApi, type Card } from '../api/cards'
 import { epicsApi, type Epic } from '../api/epics'
 import { labelsApi, type Label } from '../api/labels'
-import { projectsApi } from '../api/projects'
-import { useAuth } from '../auth/AuthContext'
 import { CardDetailModal } from '../components/CardDetailModal'
 import { EpicBadge } from '../components/EpicBadge'
 import { clampExcerptWidth, EXCERPT_DEFAULT_PCT, stripMarkdown } from '../lib/listExcerpt'
-import { canEditCards, canModerateComments, isPlatformAdmin } from '../lib/roles'
+import { useBoardRole } from '../lib/useBoardRole'
 import { useProjectName } from '../lib/useProjectName'
 import { formatDueDate, isOverdue } from '../lib/dueDate'
 import { ARCHIVED_STATUS_COLOR, statusColors } from '../lib/statusColors'
@@ -81,7 +79,6 @@ export function BoardListPage() {
   const { boardId } = useParams()
   const id = Number.parseInt(boardId ?? '', 10)
   const validId = Number.isInteger(id) && id > 0
-  const { user } = useAuth()
   const [board, setBoard] = useState<Board | null>(null)
   const [cards, setCards] = useState<Card[]>([])
   const [epics, setEpics] = useState<Epic[]>([])
@@ -89,7 +86,6 @@ export function BoardListPage() {
   const [labelFilter, setLabelFilter] = useState<Set<number>>(new Set())
   const [filters, setFilters] = useState<Set<FilterKey> | null>(null)
   const [order, setOrder] = useState<ColumnKey[]>(() => readColumnOrder(id))
-  const [fetchedRole, setFetchedRole] = useState<string | null>(null)
   const [detailCard, setDetailCard] = useState<Card | null>(null)
   const [snackbar, setSnackbar] = useState<string | null>(null)
   const [newIdeaOpen, setNewIdeaOpen] = useState(false)
@@ -185,19 +181,7 @@ export function BoardListPage() {
   const cellSx = (key: ColumnKey): SxProps<Theme> =>
     key === 'excerpt' ? { ...COLUMN_META.excerpt.sx, flex: `0 0 ${excerptWidth}%` } : COLUMN_META[key].sx
 
-  const membershipRole = board
-    ? user?.memberships.find((m) => m.projectId === board.projectId)?.role
-    : undefined
-  useEffect(() => {
-    if (!board || membershipRole) {
-      setFetchedRole(null)
-      return
-    }
-    void projectsApi.list().then((ps) => setFetchedRole(ps.find((p) => p.id === board.projectId)?.role ?? 'VIEWER'))
-  }, [board, membershipRole])
-  const effectiveRole = membershipRole ?? fetchedRole ?? 'VIEWER'
-  const canEdit = canEditCards(effectiveRole, isPlatformAdmin(user))
-  const canModerate = canModerateComments(effectiveRole, isPlatformAdmin(user))
+  const { canEdit, canModerate } = useBoardRole(board)
   const projectName = useProjectName(board?.projectId ?? null)
 
   const columns = useMemo(() => [...(board?.columns ?? [])].sort((a, b) => a.position - b.position), [board])

@@ -12,12 +12,10 @@ import { boardsApi, type Board } from '../api/boards'
 import { Breadcrumbs } from '../components/Breadcrumbs'
 import { cardsApi, type Card } from '../api/cards'
 import { epicsApi, type Epic } from '../api/epics'
-import { projectsApi } from '../api/projects'
-import { useAuth } from '../auth/AuthContext'
 import { CardDetailModal } from '../components/CardDetailModal'
 import { EpicBadge } from '../components/EpicBadge'
 import { NewCardModal } from '../components/NewCardModal'
-import { canEditCards, canModerateComments, isPlatformAdmin } from '../lib/roles'
+import { useBoardRole } from '../lib/useBoardRole'
 import { useProjectName } from '../lib/useProjectName'
 
 function epicToCard(epic: Epic, boardId: number): Card {
@@ -32,11 +30,9 @@ export function EpicsPage() {
   const { boardId } = useParams()
   const id = Number.parseInt(boardId ?? '', 10)
   const validId = Number.isInteger(id) && id > 0
-  const { user } = useAuth()
   const [board, setBoard] = useState<Board | null>(null)
   const [epics, setEpics] = useState<Epic[]>([])
   const [cards, setCards] = useState<Card[]>([])
-  const [fetchedRole, setFetchedRole] = useState<string | null>(null)
   const [selected, setSelected] = useState<Epic | null>(null)
   const [creating, setCreating] = useState(false)
 
@@ -64,19 +60,7 @@ export function EpicsPage() {
     }
   }, [id, validId])
 
-  const membershipRole = board
-    ? user?.memberships.find((m) => m.projectId === board.projectId)?.role
-    : undefined
-  useEffect(() => {
-    if (!board || membershipRole) {
-      setFetchedRole(null)
-      return
-    }
-    void projectsApi.list().then((ps) => setFetchedRole(ps.find((p) => p.id === board.projectId)?.role ?? 'VIEWER'))
-  }, [board, membershipRole])
-  const effectiveRole = membershipRole ?? fetchedRole ?? 'VIEWER'
-  const canEdit = canEditCards(effectiveRole, isPlatformAdmin(user))
-  const canModerate = canModerateComments(effectiveRole, isPlatformAdmin(user))
+  const { canEdit, canModerate } = useBoardRole(board)
   const projectName = useProjectName(board?.projectId ?? null)
 
   if (!validId) {
