@@ -117,6 +117,22 @@ describe('EpicsPage', () => {
     expect(screen.getByText('#3 · Kind')).toBeInTheDocument()
   })
 
+  it('zeigt 0 % Fortschritt für ein Epic ohne Stories und schließt das Detail-Modal', async () => {
+    mEpics.list.mockResolvedValue([
+      { id: 9, number: 2, title: 'Leer', description: 'X', shortcode: 'LEE', done: 0, total: 0 },
+    ])
+    renderPage()
+
+    const progress = await screen.findByLabelText('Fortschritt Leer')
+    expect(progress).toHaveAttribute('aria-valuenow', '0')
+
+    fireEvent.click(screen.getByText('Leer'))
+    expect(await screen.findByText('Karten (0)')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Schließen' }))
+    await waitFor(() => expect(screen.queryByText('Karten (0)')).not.toBeInTheDocument())
+  })
+
   it('lädt die Rolle nach, wenn sie nicht in den Memberships steht', async () => {
     mBoards.get.mockResolvedValue({ id: 1, projectId: 42, name: 'B', createdAt: '', columns: [] })
     mEpics.list.mockResolvedValue([])
@@ -126,5 +142,16 @@ describe('EpicsPage', () => {
     await screen.findByText('Epics')
     await waitFor(() => expect(mProjects.list).toHaveBeenCalled())
     expect(screen.queryByRole('button', { name: 'Neues Epic' })).not.toBeInTheDocument()
+  })
+
+  it('behandelt einen fehlenden Board-Parameter als ungültig (boardId undefined)', () => {
+    render(
+      <MemoryRouter initialEntries={['/epics']}>
+        <Routes>
+          <Route path="/epics" element={<EpicsPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+    expect(screen.getByText('Ungültige Board-ID.')).toBeInTheDocument()
   })
 })

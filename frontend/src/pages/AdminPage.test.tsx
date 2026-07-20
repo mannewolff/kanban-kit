@@ -34,7 +34,7 @@ function makeApi(): AdminApi {
         email: 'c@x.de',
         displayName: 'Carol',
         platformRole: 'USER',
-        emailVerified: true,
+        emailVerified: false,
         approvedAt: null,
         disabled: true,
       },
@@ -143,6 +143,18 @@ describe('AdminPage', () => {
     fireEvent.click(screen.getByLabelText('Namen speichern'))
 
     expect(await screen.findByText('Name ungültig')).toBeInTheDocument()
+  })
+
+  it('zeigt eine generische Meldung, wenn die Namensänderung ohne ApiError scheitert', async () => {
+    const api = makeApi()
+    api.setDisplayName = vi.fn().mockRejectedValue(new Error('boom'))
+    render(<AdminPage api={api} />)
+
+    fireEvent.click(await screen.findByLabelText('Namen von Alice bearbeiten'))
+    fireEvent.change(screen.getByLabelText('Anzeigename von a@x.de'), { target: { value: 'X' } })
+    fireEvent.click(screen.getByLabelText('Namen speichern'))
+
+    expect(await screen.findByText('Namensänderung fehlgeschlagen.')).toBeInTheDocument()
   })
 
   it('speichert keinen leeren Anzeigenamen', async () => {

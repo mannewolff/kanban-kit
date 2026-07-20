@@ -41,6 +41,19 @@ describe('ProfilePage', () => {
     mockedApi.me.mockResolvedValue({ ...alt })
   })
 
+  it('zeigt leere Felder, solange kein Nutzer geladen ist', () => {
+    mockedApi.me.mockReturnValue(new Promise(() => {})) // bleibt pending → user null
+    render(
+      <MemoryRouter>
+        <AuthProvider>
+          <ProfilePage />
+        </AuthProvider>
+      </MemoryRouter>,
+    )
+    expect(screen.getByLabelText('Anzeigename')).toHaveValue('')
+    expect(screen.getByLabelText('E-Mail')).toHaveValue('')
+  })
+
   it('lädt den aktuellen Anzeigenamen vorbefüllt', async () => {
     renderProfile()
     expect(await screen.findByLabelText('Anzeigename')).toHaveValue('Alt')
@@ -68,5 +81,16 @@ describe('ProfilePage', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Speichern' }))
 
     expect(await screen.findByText('Validierung fehlgeschlagen')).toBeInTheDocument()
+  })
+
+  it('zeigt eine generische Meldung bei unerwartetem Fehler', async () => {
+    mockedApi.updateProfile.mockRejectedValue(new Error('boom'))
+    renderProfile()
+    const input = await screen.findByLabelText('Anzeigename')
+    await userEvent.clear(input)
+    await userEvent.type(input, 'X')
+    await userEvent.click(screen.getByRole('button', { name: 'Speichern' }))
+
+    expect(await screen.findByText('Speichern fehlgeschlagen.')).toBeInTheDocument()
   })
 })

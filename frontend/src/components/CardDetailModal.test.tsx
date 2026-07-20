@@ -303,6 +303,22 @@ describe('CardDetailModal', () => {
     expect(screen.getByText('Bug')).toBeInTheDocument()
   })
 
+  it('zeigt für ein unbekanntes Label eine graue #ID-Chip', () => {
+    const apis = makeApis()
+    // Label 99 fehlt in boardLabels → find() undefined → Fallback `#99` und grey.500.
+    render(
+      <CardDetailModal
+        card={{ ...card, labels: [99] }}
+        canEdit={false}
+        boardLabels={[{ id: 5, boardId: 1, name: 'Bug', color: '#f00' }]}
+        onClose={vi.fn()}
+        {...apis}
+      />,
+    )
+
+    expect(screen.getByText('#99')).toBeInTheDocument()
+  })
+
   it('setzt Labels über die Mehrfachauswahl', async () => {
     const apis = makeApis()
     const boardLabels = [
@@ -399,6 +415,32 @@ describe('CardDetailModal', () => {
     await waitFor(() =>
       expect(apis.cardsApi.update).toHaveBeenCalledWith(100, 'Aufgabe', expect.any(String), [3, 4], undefined, 9, null),
     )
+  })
+
+  it('setzt die Epic-Zuordnung über die leere Auswahl wieder auf null', async () => {
+    const apis = makeApis()
+    const epics = [{ id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 0, total: 1 }]
+    render(<CardDetailModal card={{ ...card, parentId: 9 }} canEdit epics={epics} onClose={vi.fn()} {...apis} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Bearbeiten' }))
+    // Auswahl auf „—" (leerer Wert) → onParentIdChange(null), deckt den `=== '' ? null`-Zweig ab.
+    fireEvent.change(screen.getByLabelText('Epic'), { target: { value: '' } })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Speichern' }))
+    await waitFor(() =>
+      expect(apis.cardsApi.update).toHaveBeenCalledWith(100, 'Aufgabe', expect.any(String), [3, 4], undefined, null, null),
+    )
+  })
+
+  it('deaktiviert den Speichern-Button bei leerem Titel im Edit-Modus', async () => {
+    const apis = makeApis()
+    render(<CardDetailModal card={card} canEdit onClose={vi.fn()} {...apis} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Bearbeiten' }))
+    fireEvent.change(screen.getByLabelText('Titel'), { target: { value: '   ' } })
+
+    // Der Button ist die Gatung (kein redundanter Guard in save()): leerer Titel → disabled.
+    expect(screen.getByRole('button', { name: 'Speichern' })).toBeDisabled()
   })
 
   it('zeigt „Keine Beschreibung.“ bei leerem Beschreibungstext', () => {

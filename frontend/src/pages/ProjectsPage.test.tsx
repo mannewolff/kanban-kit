@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
+import { MemoryRouter, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '../api/client'
 import { projectsApi } from '../api/projects'
@@ -81,6 +81,17 @@ describe('ProjectsPage', () => {
     await waitFor(() => expect(mocked.remove).toHaveBeenCalledWith(1))
   })
 
+  it('schließt den Löschen-Dialog per Escape', async () => {
+    mockUser = { platformRole: 'ADMIN' }
+    mocked.list.mockResolvedValue([{ id: 1, name: 'Meins', role: 'OWNER', createdAt: '2026-01-01T00:00:00Z' }])
+    render(<MemoryRouter><ProjectsPage /></MemoryRouter>)
+
+    fireEvent.click(await screen.findByLabelText('Projekt Meins löschen'))
+    fireEvent.keyDown(await screen.findByRole('dialog'), { key: 'Escape', code: 'Escape' })
+
+    await waitFor(() => expect(screen.queryByText('Projekt löschen?')).not.toBeInTheDocument())
+  })
+
   it('routet beim Erst-Aufruf mit genau einem Projekt direkt zur Boardauswahl', async () => {
     mocked.list.mockResolvedValue([{ id: 5, name: 'Solo', role: 'OWNER', createdAt: '' }])
     render(
@@ -91,6 +102,26 @@ describe('ProjectsPage', () => {
         </Routes>
       </MemoryRouter>,
     )
+    expect(await screen.findByText('Boardauswahl')).toBeInTheDocument()
+  })
+
+  it('routet mit autoRoute-State und genau einem Projekt durch, auch ohne default-Key', async () => {
+    mocked.list.mockResolvedValue([{ id: 5, name: 'Solo', role: 'OWNER', createdAt: '' }])
+    function Start() {
+      const navigate = useNavigate()
+      return <button onClick={() => navigate('/', { state: { autoRoute: true } })}>los</button>
+    }
+    render(
+      <MemoryRouter initialEntries={['/start']}>
+        <Routes>
+          <Route path="/start" element={<Start />} />
+          <Route path="/" element={<ProjectsPage />} />
+          <Route path="/projects/:id" element={<div>Boardauswahl</div>} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    fireEvent.click(screen.getByText('los'))
     expect(await screen.findByText('Boardauswahl')).toBeInTheDocument()
   })
 

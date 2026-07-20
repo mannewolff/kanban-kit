@@ -101,4 +101,15 @@ describe('DashboardPage', () => {
     renderPage('/boards/abc/dashboard')
     expect(screen.getByText('Ungültige Board-ID.')).toBeInTheDocument()
   })
+
+  it('behandelt einen fehlenden Board-Parameter als ungültig (boardId undefined)', () => {
+    render(
+      <MemoryRouter initialEntries={['/dashboard']}>
+        <Routes>
+          <Route path="/dashboard" element={<DashboardPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+    expect(screen.getByText('Ungültige Board-ID.')).toBeInTheDocument()
+  })
 })

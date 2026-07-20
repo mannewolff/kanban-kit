@@ -47,9 +47,12 @@ const isDoneColumn = (name: string) => name.toLowerCase().includes('done')
 /** Initialen (max. 2 Zeichen) aus einem Anzeigenamen für Assignee-Avatare. */
 function initials(name: string): string {
   const parts = name.trim().split(/\s+/).filter((p) => p.length > 0)
-  const first = parts[0]?.charAt(0) ?? ''
-  const last = parts.length > 1 ? (parts.at(-1)?.charAt(0) ?? '') : ''
-  return (first + last).toUpperCase() || '?'
+  // Leerer/nur-Whitespace-Name hat kein Wort -> Platzhalter. Danach ist parts garantiert nicht
+  // leer, sodass parts[0] und das letzte Element ohne Optional-Chaining/Default zugreifbar sind.
+  if (parts.length === 0) return '?'
+  const first = parts[0].charAt(0)
+  const last = parts.length > 1 ? parts[parts.length - 1].charAt(0) : ''
+  return (first + last).toUpperCase()
 }
 
 /**
@@ -251,11 +254,11 @@ export function BoardView({
     return Number.isInteger(n) && n > 0 ? n : undefined // undefined = ungültig
   }
   const saveColumn = async () => {
+    // Kein Guard auf leeren Namen / ungültiges WIP nötig: Der "Speichern"-Button ist über exakt
+    // dieselbe Bedingung deaktiviert (disabled={!columnName.trim() || parsedWip() === undefined}),
+    // solange die Eingabe ungültig ist — saveColumn läuft also nur mit gültigem Zustand.
     const name = columnName.trim()
     const wip = parsedWip()
-    if (!name || wip === undefined) {
-      return
-    }
     if (columnDialog === 'new') {
       const created = await columnsApi.create(board.id, name, wip)
       setColumns((cs) => sortColumns([...cs, created]))
@@ -699,13 +702,15 @@ export function BoardView({
         ]}
       </Menu>
 
+      {/* modalColumn ist beim Submit immer gesetzt: NewCardModal ist nur offen, solange
+          open={modalColumn !== null} — der Anlegen-Button existiert also nur in diesem Zustand. */}
       <NewCardModal
         open={modalColumn !== null}
         columnName={modalColumn?.name ?? ''}
         epics={epics}
         initialValues={duplicateValues ?? undefined}
         onClose={() => { setModalColumn(null); setDuplicateValues(null) }}
-        onSubmit={(input) => (modalColumn ? createItem(modalColumn.id, input) : undefined)}
+        onSubmit={(input) => createItem(modalColumn!.id, input)}
       />
 
       {transferCard && (

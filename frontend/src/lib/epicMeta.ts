@@ -13,7 +13,9 @@ function hashId(id: number): number {
   const s = String(id)
   let h = 0
   for (let i = 0; i < s.length; i++) {
-    h = (h * 31 + (s.codePointAt(i) ?? 0)) >>> 0
+    // charCodeAt liefert immer eine Zahl (kein optionaler Zweig); für Ziffern (BMP) identisch zu
+    // codePointAt, aber ohne den unerreichbaren `?? 0`-Fallback.
+    h = (h * 31 + s.charCodeAt(i)) >>> 0
   }
   return h
 }

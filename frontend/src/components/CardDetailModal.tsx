@@ -105,7 +105,7 @@ function MarkdownInput(props: Readonly<ComponentPropsWithoutRef<'input'>>) {
   return (
     <input
       type="checkbox"
-      checked={props.checked ?? false}
+      checked={props.checked === true}
       disabled={!ctx.canEdit}
       onChange={() => ctx.onToggle(index)}
       aria-label={`Aufgabe ${index + 1}`}
@@ -785,7 +785,8 @@ export function CardDetailModal({
   }
 
   const save = async () => {
-    if (!title.trim() || saving) return
+    // Kein `!title.trim() || saving`-Guard nötig: der einzige Aufrufer ist der Speichern-Button,
+    // der exakt unter diesen Bedingungen disabled ist (siehe DialogActions) — der Guard wäre tot.
     const { deps, valid } = parseDependencyInput(depsInput)
     if (!valid) {
       setDepsError('Nur positive Nummern, kommagetrennt (z. B. 12, 34).')
@@ -814,8 +815,10 @@ export function CardDetailModal({
   const toggleTask = async (index: number) => {
     if (!canEdit || saving) return
     const previous = body
+    // `index` stammt immer aus einer real gerenderten Checkbox (MarkdownInput zählt in derselben
+    // Marker-Logik wie toggleTaskAt), daher findet toggleTaskAt stets einen Treffer und flippt —
+    // ein No-op-Ergebnis (next === previous) ist ausgeschlossen, kein toter Guard nötig.
     const next = toggleTaskAt(previous, index)
-    if (next === previous) return
     setBody(next)
     setSaving(true)
     try {

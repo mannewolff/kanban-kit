@@ -73,6 +73,8 @@ export function NewCardModal({
     setShortcode('')
     setSaving(false)
     // Titel selektieren, damit ein Überschreiben (z. B. beim Duplizieren) ohne Löschen möglich ist.
+    // Beim ersten Effektlauf ist der Input wegen der Dialog-Transition ggf. noch nicht gemountet
+    // (current === null); bei späteren Läufen (z. B. geänderte initialValues) greift die Selektion.
     titleInputRef.current?.select()
   }, [open, epicOnly, initialValues])
 

@@ -93,6 +93,18 @@ describe('apiFetch – ApiError aus RFC-9457 Problem Details', () => {
     expect(error.message).toBe(body)
   })
 
+  it('fällt bei JSON null auf den Roh-Body zurück', async () => {
+    mockErrorResponse(400, 'null')
+
+    expect((await failingFetch()).message).toBe('null')
+  })
+
+  it('fällt bei einem JSON-Primitiv (Zahl) auf den Roh-Body zurück', async () => {
+    mockErrorResponse(400, '42')
+
+    expect((await failingFetch()).message).toBe('42')
+  })
+
   it('fällt bei leerem Body auf statusText zurück', async () => {
     mockErrorResponse(500, '', 'Internal Server Error')
 

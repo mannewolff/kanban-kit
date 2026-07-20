@@ -196,7 +196,7 @@ export function ProjectMembersPage({ api = defaultMembersApi, loadRole }: Readon
       {message && <Alert severity={message.kind} sx={{ mb: 2 }}>{message.text}</Alert>}
 
       {manage && (
-        <Box component="form" onSubmit={handleInvite} sx={{ mb: 3 }}>
+        <Box component="form" aria-label="Nutzer einladen" onSubmit={handleInvite} sx={{ mb: 3 }}>
           <Stack direction="row" spacing={1} alignItems="center">
             <TextField size="small" type="email" label="E-Mail einladen" value={inviteEmail}
               onChange={(e) => setInviteEmail(e.target.value)} />

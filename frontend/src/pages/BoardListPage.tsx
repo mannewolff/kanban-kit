@@ -262,10 +262,14 @@ export function BoardListPage() {
     })
   }
 
-  const archiveActive = filters?.has(ARCHIVED) ?? false
+  // filters ist nur bis zum ersten Board-Load null; sobald das Board (und damit die Spalten-Chips)
+  // gerendert werden, ist es gesetzt. Der Null-Fall wird hier einmal zentral abgefangen, damit die
+  // einzelnen Zugriffe (Filterleiste, Sichtbarkeit, Spalten-Chips) ohne eigenen Null-Guard auskommen.
+  const activeFilters = filters ?? new Set<FilterKey>()
+  const archiveActive = activeFilters.has(ARCHIVED)
   // Obere Zone: aktive Karten wie bisher — Ideen (ideaStored) sind hier ausgeblendet.
   const visible = cards
-    .filter((c) => !c.ideaStored && (c.archived ? archiveActive : (filters?.has(c.columnId) ?? false)))
+    .filter((c) => !c.ideaStored && (c.archived ? archiveActive : activeFilters.has(c.columnId)))
     .filter((c) => labelFilter.size === 0 || c.labels.some((l) => labelFilter.has(l)))
     .sort((a, b) => {
       const pa = columnById.get(a.columnId)?.position ?? 0
@@ -349,7 +353,7 @@ export function BoardListPage() {
 
       <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mb: 2 }}>
         {columns.map((col) => {
-          const active = filters?.has(col.id) ?? false
+          const active = activeFilters.has(col.id)
           return (
             <Chip key={col.id} label={col.name} aria-label={`Filter ${col.name}`} aria-pressed={active}
               onClick={() => toggleFilter(col.id)} variant={active ? 'filled' : 'outlined'}

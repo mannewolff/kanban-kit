@@ -27,6 +27,21 @@ describe('Breadcrumbs', () => {
     expect(screen.getByText('default')).toHaveAttribute('aria-current', 'page')
   })
 
+  it('rendert ein Mittelsegment ohne `to` als nicht-aktuelles Nicht-Link-Segment', () => {
+    render(
+      <MemoryRouter>
+        <Breadcrumbs
+          items={[{ label: 'A', to: '/' }, { label: 'Mitte' }, { label: 'Ende' }]}
+        />
+      </MemoryRouter>,
+    )
+
+    // 'Mitte' hat kein `to` und ist nicht das letzte Segment: kein Link, aber auch nicht aria-current.
+    expect(screen.queryByRole('link', { name: 'Mitte' })).not.toBeInTheDocument()
+    expect(screen.getByText('Mitte')).not.toHaveAttribute('aria-current', 'page')
+    expect(screen.getByText('Ende')).toHaveAttribute('aria-current', 'page')
+  })
+
   it('rendert ein einzelnes Segment ohne Link', () => {
     render(
       <MemoryRouter>

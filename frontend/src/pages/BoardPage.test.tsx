@@ -216,6 +216,26 @@ describe('BoardPage 404-Handling und Refetch', () => {
     expect(await screen.findByText('Board-Liste')).toBeInTheDocument()
   })
 
+  it('ignoriert einen zweiten Board-verschwunden-Trigger (goneRef bereits gesetzt)', async () => {
+    memberships = [{ projectId: 9, role: 'OWNER' }]
+    mockedBoards.get.mockResolvedValueOnce({
+      id: 1, projectId: 9, name: 'B', createdAt: '',
+      columns: [{ id: 10, name: 'Backlog', position: 0, wipLimit: null }],
+    })
+    renderWith('/boards/1', <Route path="/projects/:projectId" element={<div>Board-Liste</div>} />)
+    expect(await screen.findByText('B')).toBeInTheDocument()
+
+    // Zwei Fokus-Events feuern gleichzeitig: beide Loads laufen los, bevor der erste 404 navigiert.
+    // Der zweite Trigger trifft goneRef.current === true und kehrt früh zurück.
+    mockedBoards.get.mockRejectedValue(new ApiError(404, 'weg'))
+    act(() => {
+      window.dispatchEvent(new Event('focus'))
+      window.dispatchEvent(new Event('focus'))
+    })
+
+    expect(await screen.findByText('Board-Liste')).toBeInTheDocument()
+  })
+
   it('zeigt „Board nicht gefunden.“ bei einem anderen Ladefehler als 404', async () => {
     memberships = []
     mockedBoards.get.mockRejectedValue(new Error('Netzwerkfehler'))
@@ -241,6 +261,32 @@ describe('BoardPage weitere Orchestrierung', () => {
     mockedConfig.get.mockResolvedValue({ doneRetentionDays: 30 })
     // VIEWER darf keine Karten anlegen — Rolle kommt hier ausschließlich über den Fallback-Fetch.
     mockedProjects.list.mockResolvedValue([{ id: 9, name: 'P', role: 'VIEWER', createdAt: '' }])
+    render(
+      <MemoryRouter initialEntries={['/boards/1']}>
+        <Routes>
+          <Route path="/boards/:boardId" element={<BoardPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByText('B')).toBeInTheDocument()
+    await waitFor(() => expect(mockedProjects.list).toHaveBeenCalled())
+    expect(screen.queryByLabelText('Karte in Backlog anlegen')).not.toBeInTheDocument()
+  })
+
+  it('nutzt VIEWER als Fallback, wenn das Projekt nicht in der Liste steht', async () => {
+    memberships = []
+    mockedBoards.get.mockResolvedValue({
+      id: 1, projectId: 9, name: 'B', createdAt: '',
+      columns: [{ id: 10, name: 'Backlog', position: 0, wipLimit: null }],
+    })
+    mockedCards.list.mockResolvedValue([])
+    mockedEpics.list.mockResolvedValue([])
+    mockedLabels.list.mockResolvedValue([])
+    mockedMembers.list.mockResolvedValue([])
+    mockedConfig.get.mockResolvedValue({ doneRetentionDays: 30 })
+    // Projekt 9 (Board-Projekt) fehlt in der Liste → find() undefined → Fallback 'VIEWER'.
+    mockedProjects.list.mockResolvedValue([{ id: 999, name: 'Anderes', role: 'OWNER', createdAt: '' }])
     render(
       <MemoryRouter initialEntries={['/boards/1']}>
         <Routes>
@@ -435,5 +481,16 @@ describe('BoardPage weitere Orchestrierung', () => {
     fireEvent.click(screen.getByRole('menuitem', { name: 'Bearbeiten' }))
 
     expect(await screen.findByLabelText('Titel')).toBeInTheDocument()
+  })
+
+  it('behandelt einen fehlenden Board-Parameter als ungültig (boardId undefined)', () => {
+    render(
+      <MemoryRouter initialEntries={['/x']}>
+        <Routes>
+          <Route path="/x" element={<BoardPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+    expect(screen.getByText('Ungültige Board-ID.')).toBeInTheDocument()
   })
 })
