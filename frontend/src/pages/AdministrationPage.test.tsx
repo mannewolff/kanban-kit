@@ -28,7 +28,7 @@ const memberProject = { id: 3, name: 'Dogfood', role: 'MEMBER', createdAt: '' }
 const viewerProject = { id: 4, name: 'NurLesen', role: 'VIEWER', createdAt: '' }
 const boardA = { id: 7, name: 'Board A' }
 const boundToken = {
-  id: 1, name: 'stellwerk', projectId: 3, boardId: 7,
+  id: 1, name: 'board-cli', projectId: 3, boardId: 7,
   createdAt: '2026-01-01', lastUsedAt: null, revoked: false,
 }
 
@@ -51,7 +51,7 @@ describe('AdministrationPage', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mTokens.list.mockResolvedValue([])
-    mTokens.create.mockResolvedValue({ id: 1, name: 'stellwerk', plaintext: 'tk_geheim' })
+    mTokens.create.mockResolvedValue({ id: 1, name: 'board-cli', plaintext: 'tk_geheim' })
     mTokens.revoke.mockResolvedValue(undefined)
     mProjects.list.mockResolvedValue([])
     mBoards.list.mockResolvedValue([])
@@ -84,7 +84,7 @@ describe('AdministrationPage', () => {
     mProjects.list.mockResolvedValue([memberProject])
     renderPage()
 
-    expect(await screen.findByText('stellwerk')).toBeInTheDocument()
+    expect(await screen.findByText('board-cli')).toBeInTheDocument()
     expect(screen.getByText('Projekt „Dogfood“ · Board 7')).toBeInTheDocument()
   })
 
@@ -103,13 +103,13 @@ describe('AdministrationPage', () => {
     renderPage()
 
     fireEvent.click(await screen.findByRole('button', { name: 'Token erzeugen' }))
-    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'stellwerk' } })
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'board-cli' } })
     fireEvent.change(screen.getByLabelText('Projekt'), { target: { value: '3' } })
     await screen.findByRole('option', { name: 'Board A' })
     fireEvent.change(screen.getByLabelText('Board'), { target: { value: '7' } })
     fireEvent.click(screen.getByRole('button', { name: 'Erzeugen' }))
 
-    await waitFor(() => expect(mTokens.create).toHaveBeenCalledWith('stellwerk', 3, 7))
+    await waitFor(() => expect(mTokens.create).toHaveBeenCalledWith('board-cli', 3, 7))
     // Der Dialog schließt nach Erfolg — warten, bis er weg ist (sonst ist der Hintergrund noch
     // aria-hidden und der Kopieren-Button per Rolle unsichtbar).
     await waitFor(() => expect(screen.queryByText('Neues API-Token')).not.toBeInTheDocument())
@@ -125,7 +125,7 @@ describe('AdministrationPage', () => {
     mTokens.list.mockResolvedValue([boundToken])
     renderPage()
 
-    fireEvent.click(await screen.findByLabelText('Token stellwerk widerrufen'))
+    fireEvent.click(await screen.findByLabelText('Token board-cli widerrufen'))
     await waitFor(() => expect(mTokens.revoke).toHaveBeenCalledWith(1))
   })
 
@@ -159,7 +159,7 @@ describe('AdministrationPage', () => {
     renderPage()
 
     expect(await screen.findByText('Widerrufen')).toBeInTheDocument()
-    expect(screen.queryByLabelText('Token stellwerk widerrufen')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Token board-cli widerrufen')).not.toBeInTheDocument()
   })
 
   it('zeigt ungebundene Tokens als „ungebunden"', async () => {
@@ -177,7 +177,7 @@ describe('AdministrationPage', () => {
     mTokens.list.mockResolvedValue([boundToken])
     renderPage()
 
-    fireEvent.click(await screen.findByLabelText('Token stellwerk widerrufen'))
+    fireEvent.click(await screen.findByLabelText('Token board-cli widerrufen'))
     expect(mTokens.revoke).not.toHaveBeenCalled()
   })
 })

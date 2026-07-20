@@ -1,7 +1,7 @@
 # kanban-kit als eigenes Board anbinden
 
 kanban-kit kann sein **eigenes** Board als Issue-Tracker treiben — sowohl über die
-Stellwerk-CLI `board.mjs` (claude-workflow-kit) als auch über die eigenständige
+`board.mjs`-CLI (claude-workflow-kit) als auch über die eigenständige
 `tbx.mjs`-CLI, die mit dem Produkt ausgeliefert wird ([`cli/tbx.mjs`](../cli/tbx.mjs)).
 Beide sprechen dasselbe Kanban-Protokoll (`/api/kanban/*`) und authentifizieren sich
 mit einem **board-gebundenen Token** (`X-Kanban-Token`).
@@ -42,10 +42,10 @@ selbst:
 curl -sk https://localhost/api/access-tokens \
   -b "manban_session=DEIN_SESSION_COOKIE" \
   -H "Content-Type: application/json" \
-  -d '{"name":"stellwerk","projectId":3,"boardId":7}'
+  -d '{"name":"board-cli","projectId":3,"boardId":7}'
 ```
 
-Antwort (einmalig sichtbar): `{ "id": 1, "name": "stellwerk", "plaintext": "tk_…" }`.
+Antwort (einmalig sichtbar): `{ "id": 1, "name": "board-cli", "plaintext": "tk_…" }`.
 
 > Bindet man ein Board, in dem man kein Karten-Anlegerecht hat → `403`. Passt das Board nicht zum
 > Projekt → `400`. Ohne `projectId`/`boardId` entsteht ein **ungebundenes** Token, das die

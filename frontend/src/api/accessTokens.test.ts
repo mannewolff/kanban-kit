@@ -20,7 +20,7 @@ afterEach(() => vi.restoreAllMocks())
 describe('accessTokensApi', () => {
   it('list ruft GET /api/access-tokens und liefert die geparste Antwort', async () => {
     const token = {
-      id: 1, name: 'stellwerk', projectId: 3, boardId: 7,
+      id: 1, name: 'board-cli', projectId: 3, boardId: 7,
       createdAt: '2026-01-01', lastUsedAt: null, revoked: false,
     }
     spyFetch(JSON.stringify([token]))
@@ -29,12 +29,12 @@ describe('accessTokensApi', () => {
   })
 
   it('create ruft POST /api/access-tokens mit Name und Board-Bindung', async () => {
-    const f = spyFetch(JSON.stringify({ id: 1, name: 'stellwerk', plaintext: 'tk_geheim' }))
-    const created = await accessTokensApi.create('stellwerk', 3, 7)
+    const f = spyFetch(JSON.stringify({ id: 1, name: 'board-cli', plaintext: 'tk_geheim' }))
+    const created = await accessTokensApi.create('board-cli', 3, 7)
     const c = lastCall(f)
     expect(c.url).toBe('/api/access-tokens')
     expect(c.method).toBe('POST')
-    expect(JSON.parse(String(c.body))).toEqual({ name: 'stellwerk', projectId: 3, boardId: 7 })
+    expect(JSON.parse(String(c.body))).toEqual({ name: 'board-cli', projectId: 3, boardId: 7 })
     expect(created.plaintext).toBe('tk_geheim')
   })
 

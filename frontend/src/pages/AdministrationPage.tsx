@@ -133,8 +133,8 @@ function ApiTokensSection() {
         </Stack>
 
         <Typography variant="body2" color="text.secondary">
-          Ein board-gebundenes Token treibt ein Board über die API (z. B. die Stellwerk-CLI), ohne
-          Login — gebunden an genau ein Board. Der Klartext wird beim Erzeugen{' '}
+          Ein board-gebundenes Token treibt ein Board über die API (z. B. aus einer CLI oder
+          CI-Pipeline), ohne Login — gebunden an genau ein Board. Der Klartext wird beim Erzeugen{' '}
           <strong>nur einmal</strong> angezeigt.
         </Typography>
         {projects.length === 0 && (
