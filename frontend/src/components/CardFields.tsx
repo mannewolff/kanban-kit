@@ -1,4 +1,5 @@
 import TextField from '@mui/material/TextField'
+import type { KeyboardEvent, Ref } from 'react'
 import type { Epic } from '../api/epics'
 import { epicShortcode } from '../lib/epicMeta'
 
@@ -24,6 +25,8 @@ export function CardFields({
   onParentIdChange,
   onDepsInputChange,
   onDueInputChange,
+  titleInputRef,
+  onTitleKeyDown,
 }: Readonly<{
   isEpic: boolean
   title: string
@@ -40,6 +43,10 @@ export function CardFields({
   onParentIdChange: (value: number | null) => void
   onDepsInputChange: (value: string) => void
   onDueInputChange: (value: string) => void
+  /** Optionaler Ref auf das Titel-Input (Anlege-Dialog selektiert den Titel beim Öffnen). */
+  titleInputRef?: Ref<HTMLInputElement>
+  /** Optionaler KeyDown-Handler am Titel (Anlege-Dialog: Cmd/Ctrl+Enter legt an). */
+  onTitleKeyDown?: (event: KeyboardEvent) => void
 }>) {
   const nonEpicFields = (
     <>
@@ -93,6 +100,8 @@ export function CardFields({
         required
         autoFocus
         fullWidth
+        inputRef={titleInputRef}
+        onKeyDown={onTitleKeyDown}
         slotProps={{ htmlInput: { maxLength: 300, 'aria-label': 'Titel' } }}
       />
       <TextField

@@ -32,11 +32,133 @@ describe('NewCardModal', () => {
     // Wieder abwählen -> deckt den `? null`-Zweig der Epic-Auswahl ab.
     fireEvent.change(screen.getByLabelText('Epic'), { target: { value: '' } })
     fireEvent.change(screen.getByLabelText('Epic'), { target: { value: '9' } })
-    fireEvent.change(screen.getByLabelText('Beschreibung'), { target: { value: 'Text' } })
+    fireEvent.change(screen.getByLabelText('Markdown-Beschreibung'), { target: { value: 'Text' } })
     fireEvent.click(screen.getByRole('button', { name: 'Anlegen' }))
 
     expect(onSubmit).toHaveBeenCalledWith(
       expect.objectContaining({ title: 'Karte', parentId: 9, description: 'Text' }),
+    )
+    await Promise.resolve()
+  })
+
+  it('legt eine Karte mit Zuständigen, Fälligkeit, Abhängigkeiten und Labels in einem Schritt an', async () => {
+    const onSubmit = vi.fn().mockResolvedValue(undefined)
+    const members = [{ userId: 7, email: 'a@x.de', displayName: 'Alice', role: 'MEMBER' as const }]
+    const boardLabels = [{ id: 5, boardId: 1, name: 'Bug', color: '#f00' }]
+    render(
+      <NewCardModal
+        open
+        columnName="Backlog"
+        epics={[]}
+        members={members}
+        boardLabels={boardLabels}
+        onClose={vi.fn()}
+        onSubmit={onSubmit}
+      />,
+    )
+
+    fireEvent.change(screen.getByLabelText('Titel'), { target: { value: 'Karte' } })
+    fireEvent.change(screen.getByLabelText('Abhängig von'), { target: { value: '3, 4' } })
+    fireEvent.change(screen.getByLabelText('Fällig am'), { target: { value: '2026-03-01' } })
+    fireEvent.mouseDown(screen.getByLabelText('Zuständige'))
+    fireEvent.click(await screen.findByText('Alice'))
+    fireEvent.mouseDown(screen.getByLabelText('Labels'))
+    fireEvent.click(await screen.findByText('Bug'))
+    fireEvent.click(screen.getByRole('button', { name: 'Anlegen' }))
+
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'CARD',
+        title: 'Karte',
+        dependencies: [3, 4],
+        dueDate: '2026-03-01T00:00:00Z',
+        assigneeIds: [7],
+        labelIds: [5],
+      }),
+    )
+    await Promise.resolve()
+  })
+
+  it('meldet ungültige Abhängigkeiten und legt nichts an', async () => {
+    const onSubmit = vi.fn()
+    render(
+      <NewCardModal open columnName="Backlog" epics={[]} onClose={vi.fn()} onSubmit={onSubmit} />,
+    )
+
+    fireEvent.change(screen.getByLabelText('Titel'), { target: { value: 'Karte' } })
+    fireEvent.change(screen.getByLabelText('Abhängig von'), { target: { value: 'abc' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Anlegen' }))
+
+    expect(
+      await screen.findByText('Nur positive Nummern, kommagetrennt (z. B. 12, 34).'),
+    ).toBeInTheDocument()
+    expect(onSubmit).not.toHaveBeenCalled()
+
+    // Erneute Eingabe löscht den Fehler wieder.
+    fireEvent.change(screen.getByLabelText('Abhängig von'), { target: { value: '3' } })
+    expect(
+      screen.queryByText('Nur positive Nummern, kommagetrennt (z. B. 12, 34).'),
+    ).not.toBeInTheDocument()
+  })
+
+  it('zeigt im Ideen-Modus nur den schlanken Feldsatz und legt ohne Zusatzfelder an', async () => {
+    const onSubmit = vi.fn().mockResolvedValue(undefined)
+    const epics = [{ id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 0, total: 1 }]
+    render(
+      <NewCardModal open ideaOnly columnName="" epics={epics} onClose={vi.fn()} onSubmit={onSubmit} />,
+    )
+
+    expect(screen.getByLabelText('Titel')).toBeInTheDocument()
+    expect(screen.getByLabelText('Beschreibung')).toBeInTheDocument()
+    expect(screen.getByLabelText('Epic')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Zuständige')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Labels')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Fällig am')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Abhängig von')).not.toBeInTheDocument()
+
+    fireEvent.change(screen.getByLabelText('Titel'), { target: { value: 'Idee' } })
+    fireEvent.change(screen.getByLabelText('Beschreibung'), { target: { value: 'Ideentext' } })
+    // Epic-Auswahl im schlanken Zweig auslösen (deckt onChange + beide Ternary-Seiten ab).
+    fireEvent.change(screen.getByLabelText('Epic'), { target: { value: '9' } })
+    fireEvent.change(screen.getByLabelText('Epic'), { target: { value: '' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Anlegen' }))
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'CARD',
+        title: 'Idee',
+        description: 'Ideentext',
+        dependencies: [],
+        dueDate: null,
+        assigneeIds: [],
+        labelIds: [],
+      }),
+    )
+    await Promise.resolve()
+  })
+
+  it('legt ein Epic mit Kürzel an, ohne die neuen Kartenfelder', async () => {
+    const onSubmit = vi.fn().mockResolvedValue(undefined)
+    render(
+      <NewCardModal open epicOnly columnName="" epics={[]} onClose={vi.fn()} onSubmit={onSubmit} />,
+    )
+
+    expect(screen.getByLabelText('Kürzel')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Zuständige')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Fällig am')).not.toBeInTheDocument()
+
+    fireEvent.change(screen.getByLabelText('Titel'), { target: { value: 'Epic' } })
+    fireEvent.change(screen.getByLabelText('Kürzel'), { target: { value: 'EP' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Anlegen' }))
+
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'EPIC',
+        title: 'Epic',
+        shortcode: 'EP',
+        dependencies: [],
+        assigneeIds: [],
+        labelIds: [],
+      }),
     )
     await Promise.resolve()
   })

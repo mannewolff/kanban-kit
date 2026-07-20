@@ -165,7 +165,7 @@ const descriptionSx = {
 } as const
 
 /** Zuständige-Sektion: Autocomplete im Edit-Modus, sonst Chips oder Leer-Hinweis. */
-function AssigneeSection({
+export function AssigneeSection({
   canEdit,
   members,
   assigneeIds,
@@ -214,7 +214,7 @@ function AssigneeSection({
 }
 
 /** Label-Sektion: Autocomplete im Edit-Modus, sonst farbige Chips oder Leer-Hinweis. */
-function LabelSection({
+export function LabelSection({
   canEdit,
   boardLabels,
   labelIds,

@@ -304,7 +304,20 @@ export function BoardView({
       onEpicsChanged?.()
       return
     }
-    const created = await api.create(board.id, columnId, input.title, input.description, input.parentId)
+    const created = await api.create(
+      board.id,
+      columnId,
+      input.title,
+      input.description,
+      input.parentId,
+      false,
+      {
+        dependencies: input.dependencies,
+        dueDate: input.dueDate,
+        assigneeIds: input.assigneeIds,
+        labelIds: input.labelIds,
+      },
+    )
     setCards((current) => [...current, created])
   }
 
@@ -710,6 +723,8 @@ export function BoardView({
         open={modalColumn !== null}
         columnName={modalColumn?.name ?? ''}
         epics={epics}
+        members={members}
+        boardLabels={boardLabels}
         initialValues={duplicateValues ?? undefined}
         onClose={() => { setModalColumn(null); setDuplicateValues(null) }}
         onSubmit={(input) => createItem(modalColumn!.id, input)}

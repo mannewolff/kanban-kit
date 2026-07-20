@@ -106,7 +106,12 @@ describe('BoardView', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Anlegen' }))
 
     await waitFor(() =>
-      expect(api.create).toHaveBeenCalledWith(1, 20, 'Neu', expect.stringContaining('## Kontext'), null),
+      expect(api.create).toHaveBeenCalledWith(1, 20, 'Neu', expect.stringContaining('## Kontext'), null, false, {
+        dependencies: [],
+        dueDate: null,
+        assigneeIds: [],
+        labelIds: [],
+      }),
     )
     expect(within(screen.getByTestId('column-20')).getByTestId('card-200')).toBeInTheDocument()
   })
@@ -210,11 +215,18 @@ describe('BoardView', () => {
 
     expect(screen.getByRole('heading', { name: 'Neue Karte in „Backlog“' })).toBeInTheDocument()
     expect(screen.getByLabelText('Titel')).toHaveValue('Original')
-    expect(screen.getByLabelText('Beschreibung')).toHaveValue('Original-Text')
+    expect(screen.getByLabelText('Markdown-Beschreibung')).toHaveValue('Original-Text')
 
     fireEvent.click(screen.getByRole('button', { name: 'Anlegen' }))
 
-    await waitFor(() => expect(api.create).toHaveBeenCalledWith(1, 10, 'Original', 'Original-Text', 9))
+    await waitFor(() =>
+      expect(api.create).toHaveBeenCalledWith(1, 10, 'Original', 'Original-Text', 9, false, {
+        dependencies: [],
+        dueDate: null,
+        assigneeIds: [],
+        labelIds: [],
+      }),
+    )
     // Quellkarte bleibt unverändert in ihrer Spalte (Done) erhalten.
     expect(within(screen.getByTestId('column-20')).getByTestId('card-100')).toBeInTheDocument()
   })
