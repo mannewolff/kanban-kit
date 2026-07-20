@@ -7,6 +7,15 @@ Versionierung folgt der dreiteiligen Betriebsversion (siehe [RELEASING.md](RELEA
 Einträge je Version sind ein automatischer Auszug der Commit-Titel seit dem letzten Release,
 erzeugt von `scripts/gen-changelog.mjs`.
 
+## [1.1.0] – 2026-07-20
+
+- Release 1.0.2 (push main)
+- Doku-Inhalt nachziehen: Ideen-Speicher + Editiermodus ([#316](https://github.com/mannewolff/kanban-kit/issues/316))
+- "Dokumentation"-Eintrag im Administrations-Bereich, oeffnet /docs/ ([#315](https://github.com/mannewolff/kanban-kit/issues/315))
+- Doku-Auslieferung unter /docs/ (VitePress in die App bündeln) ([#314](https://github.com/mannewolff/kanban-kit/issues/314))
+- Release 1.0.1 (push main)
+- Sonar-Findings beheben: MarkdownInput-Props Readonly + Ternary aufloesen (#250, #312)
+
 ## [1.0.0] – 2026-07-20
 
 - Release 0.8.2 (push main)
