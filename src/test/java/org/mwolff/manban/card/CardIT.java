@@ -258,6 +258,26 @@ class CardIT extends AbstractIntegrationTest {
   }
 
   @Test
+  void createCardDirectlyAsIdeaViaRest() throws Exception {
+    Cookie alice = loginAs("create-idea-owner@example.com");
+    long projectId = createProject("create-idea-owner@example.com", "CreateIdea");
+    JsonNode board = createBoard(alice, projectId);
+    long boardId = board.get("id").asLong();
+    long columnId = board.get("columns").get(0).get("id").asLong();
+
+    // Anlegen mit ideaStored=true erzeugt direkt eine Idee.
+    mvc.perform(
+            post("/api/boards/" + boardId + "/cards")
+                .cookie(alice)
+                .contentType("application/json")
+                .content(
+                    "{\"columnId\":%d,\"title\":\"Direkt-Idee\",\"ideaStored\":true}"
+                        .formatted(columnId)))
+        .andExpect(status().isCreated())
+        .andExpect(jsonPath("$.ideaStored").value(true));
+  }
+
+  @Test
   void ideaStorageRejectsEpic() throws Exception {
     Cookie alice = loginAs("idea-epic-owner@example.com");
     long projectId = createProject("idea-epic-owner@example.com", "IdeaEpic");

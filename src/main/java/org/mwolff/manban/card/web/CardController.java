@@ -59,7 +59,8 @@ class CardController {
         request.title(),
         request.description(),
         request.dependencies(),
-        request.parentId());
+        request.parentId(),
+        Boolean.TRUE.equals(request.ideaStored()));
   }
 
   @GetMapping("/api/boards/{boardId}/cards")
@@ -224,7 +225,8 @@ class CardController {
       List<Integer> dependencies,
       CardType type,
       Long parentId,
-      @Size(max = 16) String shortcode) {}
+      @Size(max = 16) String shortcode,
+      @Nullable Boolean ideaStored) {}
 
   record UpdateCardRequest(
       @NotBlank @Size(max = 300) String title,
