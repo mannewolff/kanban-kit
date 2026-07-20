@@ -49,9 +49,11 @@ function initials(name: string): string {
   const parts = name.trim().split(/\s+/).filter((p) => p.length > 0)
   // Leerer/nur-Whitespace-Name hat kein Wort -> Platzhalter. Danach ist parts garantiert nicht
   // leer, sodass parts[0] und das letzte Element ohne Optional-Chaining/Default zugreifbar sind.
+  // Das Non-null-`!` bei .at(-1) vermeidet den unerreichbaren Optional-Zweig (100 % Branch) und
+  // hält zugleich die von Sonar (S7755) bevorzugte .at()-Form.
   if (parts.length === 0) return '?'
   const first = parts[0].charAt(0)
-  const last = parts.length > 1 ? parts[parts.length - 1].charAt(0) : ''
+  const last = parts.length > 1 ? parts.at(-1)!.charAt(0) : ''
   return (first + last).toUpperCase()
 }
 
