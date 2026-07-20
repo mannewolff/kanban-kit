@@ -11,17 +11,13 @@ import IconButton from '@mui/material/IconButton'
 import Link from '@mui/material/Link'
 import MenuItem from '@mui/material/MenuItem'
 import Stack from '@mui/material/Stack'
-import Table from '@mui/material/Table'
-import TableBody from '@mui/material/TableBody'
-import TableCell from '@mui/material/TableCell'
-import TableHead from '@mui/material/TableHead'
-import TableRow from '@mui/material/TableRow'
 import TextField from '@mui/material/TextField'
 import Tooltip from '@mui/material/Tooltip'
 import { useEffect, useState } from 'react'
 import { Link as RouterLink, useParams } from 'react-router-dom'
 import { membersApi as defaultMembersApi, type Member, type MembersApi } from '../api/members'
 import { Breadcrumbs } from '../components/Breadcrumbs'
+import { DataTable, type DataTableColumn } from '../components/DataTable'
 import { projectsApi } from '../api/projects'
 import { ApiError } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
@@ -180,6 +176,95 @@ export function ProjectMembersPage({ api = defaultMembersApi, loadRole }: Readon
     return <Alert severity="error">Ungültige Projekt-ID.</Alert>
   }
 
+  const nameCell = (member: Member) =>
+    manage && editingName?.userId === member.userId ? (
+      <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+        <TextField
+          size="small"
+          variant="standard"
+          value={editingName.name}
+          onChange={(e) => setEditingName({ userId: member.userId, name: e.target.value })}
+          slotProps={{ htmlInput: { maxLength: 120, 'aria-label': `Anzeigename von ${member.email}` } }}
+        />
+        <Button size="small" aria-label="Namen speichern" onClick={handleChangeDisplayName}>
+          Speichern
+        </Button>
+        <Button size="small" aria-label="Bearbeiten abbrechen" onClick={() => setEditingName(null)}>
+          Abbrechen
+        </Button>
+      </Box>
+    ) : (
+      <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center' }}>
+        {member.displayName}
+        {manage && editMode && (
+          <Tooltip title="Anzeigename ändern (global, projektübergreifend)">
+            <IconButton
+              size="small"
+              aria-label={`Namen von ${member.displayName} bearbeiten`}
+              onClick={() => setEditingName({ userId: member.userId, name: member.displayName })}
+            >
+              <EditIcon fontSize="inherit" />
+            </IconButton>
+          </Tooltip>
+        )}
+      </Box>
+    )
+
+  const roleCell = (member: Member) =>
+    manage ? (
+      <TextField
+        select
+        size="small"
+        value={member.role}
+        variant="standard"
+        disabled={isLastOwner(member)}
+        sx={{ minWidth: 110 }}
+        onChange={(e) => handleChangeRole(member, e.target.value as ProjectRole)}
+        slotProps={{ htmlInput: { 'aria-label': `Rolle von ${member.displayName}` } }}
+      >
+        {ROLES.map((r) => (
+          <MenuItem key={r} value={r}>
+            {r}
+          </MenuItem>
+        ))}
+      </TextField>
+    ) : (
+      member.role
+    )
+
+  const actionsCell = (member: Member) => (
+    <>
+      {isOwner && member.userId !== user?.userId && (
+        <Button
+          size="small"
+          sx={{ mr: 1 }}
+          aria-label={`${member.displayName} zum Eigentümer machen`}
+          onClick={() => setTransferTarget(member)}
+        >
+          Zum Eigentümer machen
+        </Button>
+      )}
+      <Button
+        size="small"
+        color="error"
+        disabled={isLastOwner(member)}
+        aria-label={`${member.displayName} entfernen`}
+        onClick={() => handleRemove(member)}
+      >
+        Entfernen
+      </Button>
+    </>
+  )
+
+  const columns: DataTableColumn<Member>[] = [
+    { key: 'name', header: 'Name', render: nameCell, defaultWidth: 200, minWidth: 120, hideable: true, resizable: true },
+    { key: 'email', header: 'E-Mail', render: (m) => m.email, defaultWidth: 220, minWidth: 120, hideable: true, resizable: true },
+    { key: 'role', header: 'Rolle', render: roleCell, defaultWidth: 140, minWidth: 100, hideable: true, resizable: true },
+    ...(manage
+      ? [{ key: 'actions', header: 'Aktionen', render: actionsCell, align: 'right' as const, defaultWidth: 260 }]
+      : []),
+  ]
+
   return (
     <Box>
       <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
@@ -212,84 +297,13 @@ export function ProjectMembersPage({ api = defaultMembersApi, loadRole }: Readon
         </Box>
       )}
 
-      <Table size="small">
-        <TableHead>
-          <TableRow>
-            <TableCell>Name</TableCell>
-            <TableCell>E-Mail</TableCell>
-            <TableCell>Rolle</TableCell>
-            {manage && <TableCell align="right">Aktionen</TableCell>}
-          </TableRow>
-        </TableHead>
-        <TableBody>
-          {members.map((member) => (
-            <TableRow key={member.userId} data-testid={`member-${member.userId}`}>
-              <TableCell>
-                {manage && editingName?.userId === member.userId ? (
-                  <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-                    <TextField
-                      size="small"
-                      variant="standard"
-                      value={editingName.name}
-                      onChange={(e) => setEditingName({ userId: member.userId, name: e.target.value })}
-                      slotProps={{ htmlInput: { maxLength: 120, 'aria-label': `Anzeigename von ${member.email}` } }}
-                    />
-                    <Button size="small" aria-label="Namen speichern" onClick={handleChangeDisplayName}>
-                      Speichern
-                    </Button>
-                    <Button size="small" aria-label="Bearbeiten abbrechen" onClick={() => setEditingName(null)}>
-                      Abbrechen
-                    </Button>
-                  </Box>
-                ) : (
-                  <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center' }}>
-                    {member.displayName}
-                    {manage && editMode && (
-                      <Tooltip title="Anzeigename ändern (global, projektübergreifend)">
-                        <IconButton
-                          size="small"
-                          aria-label={`Namen von ${member.displayName} bearbeiten`}
-                          onClick={() => setEditingName({ userId: member.userId, name: member.displayName })}
-                        >
-                          <EditIcon fontSize="inherit" />
-                        </IconButton>
-                      </Tooltip>
-                    )}
-                  </Box>
-                )}
-              </TableCell>
-              <TableCell>{member.email}</TableCell>
-              <TableCell>
-                {manage ? (
-                  <TextField select size="small" value={member.role} variant="standard"
-                    disabled={isLastOwner(member)} sx={{ minWidth: 110 }}
-                    onChange={(e) => handleChangeRole(member, e.target.value as ProjectRole)}
-                    slotProps={{ htmlInput: { 'aria-label': `Rolle von ${member.displayName}` } }}>
-                    {ROLES.map((r) => <MenuItem key={r} value={r}>{r}</MenuItem>)}
-                  </TextField>
-                ) : (
-                  member.role
-                )}
-              </TableCell>
-              {manage && (
-                <TableCell align="right">
-                  {isOwner && member.userId !== user?.userId && (
-                    <Button size="small" sx={{ mr: 1 }}
-                      aria-label={`${member.displayName} zum Eigentümer machen`}
-                      onClick={() => setTransferTarget(member)}>
-                      Zum Eigentümer machen
-                    </Button>
-                  )}
-                  <Button size="small" color="error" disabled={isLastOwner(member)}
-                    aria-label={`${member.displayName} entfernen`} onClick={() => handleRemove(member)}>
-                    Entfernen
-                  </Button>
-                </TableCell>
-              )}
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+      <DataTable
+        columns={columns}
+        rows={members}
+        getRowKey={(m) => m.userId}
+        getRowTestId={(m) => `member-${m.userId}`}
+        storageKey="project-members"
+      />
 
       {transferTarget && (
         <Dialog open onClose={() => setTransferTarget(null)}>
