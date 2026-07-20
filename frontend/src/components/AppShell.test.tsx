@@ -278,6 +278,19 @@ describe('AppShell', () => {
     await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/profil'))
   })
 
+  it('zeigt unten den abgesetzten Administration-Eintrag und navigiert dorthin', async () => {
+    renderShell()
+    fireEvent.click(screen.getByText('Administration'))
+    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/administration'))
+  })
+
+  it('erreicht den Administration-Eintrag auch bei eingeklappter Sidebar', async () => {
+    renderShell()
+    fireEvent.click(screen.getByLabelText('Menü einklappen'))
+    fireEvent.click(screen.getByRole('button', { name: 'Administration' }))
+    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/administration'))
+  })
+
   it('zeigt ohne angemeldeten Nutzer weder Avatar noch Abmelden-Button', () => {
     useAuthMock.mockReturnValue({ user: null, logout: logoutMock })
     renderShell()

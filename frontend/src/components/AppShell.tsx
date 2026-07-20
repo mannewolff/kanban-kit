@@ -22,6 +22,7 @@ import ChevronRightIcon from '@mui/icons-material/ChevronRight'
 import ExpandLessIcon from '@mui/icons-material/ExpandLess'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import LogoutIcon from '@mui/icons-material/Logout'
+import SettingsIcon from '@mui/icons-material/Settings'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Outlet, useLocation, useMatch, useNavigate } from 'react-router-dom'
 import { boardsApi } from '../api/boards'
@@ -36,6 +37,18 @@ const DRAWER_COLLAPSED_WIDTH = 56
 /** Höhe der fixen Kopfleiste (MUI-Standard-Toolbar, Desktop). */
 const APPBAR_HEIGHT = 64
 const STORAGE_KEY = 'sidebar-collapsed'
+
+/**
+ * Fester, vom kontextuellen Navigationsbaum abgesetzter Eintrag am unteren Rand der Seitenleiste.
+ * Immer sichtbar; führt auf die Administrations-/Einstellungsseite. Bewusst nicht in
+ * {@link buildNavItems}, da er positionell (unten) und semantisch getrennt und stets präsent ist.
+ */
+const ADMINISTRATION_LINK: NavLink = {
+  kind: 'link',
+  label: 'Administration',
+  path: '/administration',
+  icon: SettingsIcon,
+}
 
 function readCollapsed(): boolean {
   try {
@@ -392,6 +405,8 @@ export function AppShell() {
             <List>{navItems.map((node) => (isGroup(node) ? renderGroup(node) : renderLink(node, false)))}</List>
           </Box>
           <Box>
+            <Divider />
+            <List disablePadding>{renderLink(ADMINISTRATION_LINK, false)}</List>
             <Divider />
             <Box sx={{ display: 'flex', justifyContent: collapsed ? 'center' : 'flex-end', p: 0.5 }}>
               <Tooltip title={collapsed ? 'Menü ausklappen' : 'Menü einklappen'} placement="right">
