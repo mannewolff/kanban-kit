@@ -36,4 +36,37 @@ class SpaFallbackIT extends AbstractIntegrationTest {
     // Unbekannter /api-Pfad ohne Auth -> 401 (nicht auf die SPA umgeleitet).
     mvc.perform(get("/api/gibtsnicht")).andExpect(status().isUnauthorized());
   }
+
+  @Test
+  void docsRootServesVitePressNotSpa() throws Exception {
+    // /docs/ liefert das VitePress-index.html der gebündelten Doku, NICHT die SPA.
+    String body =
+        mvc.perform(get("/docs/"))
+            .andExpect(status().isOk())
+            .andReturn()
+            .getResponse()
+            .getContentAsString(StandardCharsets.UTF_8);
+    assertThat(body).doesNotContain("id=\"root\"");
+    // Asset-Pfade müssen unter /docs/ liegen (base='/docs/').
+    assertThat(body).contains("/docs/assets/");
+  }
+
+  @Test
+  void docsPagesAreServedStatically() throws Exception {
+    // Eine echte Doku-Seite wird direkt als statische Datei ausgeliefert (Beleg: Doku ist
+    // gebündelt).
+    mvc.perform(get("/docs/nutzung.html")).andExpect(status().isOk());
+  }
+
+  @Test
+  void unknownDocsPathServesVitePressNotSpa() throws Exception {
+    // Unbekannter /docs-Pfad -> VitePress-404, nicht der SPA-Fallback.
+    String body =
+        mvc.perform(get("/docs/gibtsnicht.html"))
+            .andExpect(status().isOk())
+            .andReturn()
+            .getResponse()
+            .getContentAsString(StandardCharsets.UTF_8);
+    assertThat(body).doesNotContain("id=\"root\"");
+  }
 }
