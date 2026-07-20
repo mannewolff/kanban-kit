@@ -28,6 +28,7 @@ import { CardDetailModal } from '../components/CardDetailModal'
 import { LabelManagerDialog } from '../components/LabelManagerDialog'
 import { TrashDialog } from '../components/TrashDialog'
 import { useSnackbar } from '../components/SnackbarProvider'
+import { useEditMode } from '../lib/EditModeContext'
 import { canEditCards, canManageProject, canModerateComments, isPlatformAdmin } from '../lib/roles'
 import { useProjectName } from '../lib/useProjectName'
 import { useRefetchOnFocus } from '../lib/useRefetchOnFocus'
@@ -158,7 +159,11 @@ export function BoardPage() {
   const projectName = useProjectName(board?.projectId ?? null)
   const admin = isPlatformAdmin(user)
   const effectiveRole = membershipRole ?? fetchedRole ?? 'VIEWER'
+  const { editMode } = useEditMode()
   const canEdit = canEditCards(effectiveRole, admin)
+  // Board-Verwaltung (Umbenennen, Label-Verwaltung) nur im Editiermodus sichtbar; der Papierkorb-
+  // Zugang bleibt als operativer Alltag an canEdit.
+  const canEditStructure = canEdit && editMode
   const canModerate = canModerateComments(effectiveRole, admin)
   const canTransfer = canManageProject(effectiveRole, admin)
 
@@ -203,12 +208,12 @@ export function BoardPage() {
             { label: board.name },
           ]}
         />
-        {canEdit && (
+        {canEditStructure && (
           <IconButton size="small" aria-label="Board umbenennen" onClick={openRename}>
             <EditOutlinedIcon fontSize="small" />
           </IconButton>
         )}
-        {canEdit && (
+        {canEditStructure && (
           <Button size="small" onClick={() => setLabelManagerOpen(true)}>
             Labels
           </Button>

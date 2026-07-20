@@ -36,6 +36,11 @@ vi.mock('../api/labels', () => ({ labelsApi: { list: vi.fn().mockResolvedValue([
 vi.mock('../api/projects', () => ({ projectsApi: { list: vi.fn() } }))
 vi.mock('../api/comments', () => ({ commentsApi: { list: vi.fn().mockResolvedValue([]), create: vi.fn(), update: vi.fn(), remove: vi.fn() } }))
 vi.mock('../api/attachments', () => ({ attachmentsApi: { list: vi.fn().mockResolvedValue([]), upload: vi.fn(), remove: vi.fn(), fetchBlob: vi.fn() } }))
+// BoardListPage selbst kennt keinen Editiermodus; das eingebettete CardDetailModal aber schon —
+// für dessen Bearbeiten-Button laufen die Tests mit editMode=true.
+vi.mock('../lib/EditModeContext', () => ({
+  useEditMode: () => ({ editMode: true, setEditMode: vi.fn(), toggleEditMode: vi.fn() }),
+}))
 
 const mBoards = boardsApi as unknown as { get: ReturnType<typeof vi.fn> }
 const mCards = cardsApi as unknown as {

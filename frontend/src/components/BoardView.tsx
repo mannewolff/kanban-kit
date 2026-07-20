@@ -32,6 +32,7 @@ import { epicsApi as defaultEpicsApi, type Epic, type EpicsApi } from '../api/ep
 import type { Member } from '../api/members'
 import { activeCardsInColumn, applyMove } from '../lib/boardOps'
 import { cleanupCountdownLabel, cleanupDaysRemaining } from '../lib/cleanupCountdown'
+import { useEditMode } from '../lib/EditModeContext'
 import type { Label } from '../api/labels'
 import { formatDueDate, isOverdue } from '../lib/dueDate'
 import { epicColor, epicShortcode } from '../lib/epicMeta'
@@ -148,6 +149,10 @@ export function BoardView({
   api = cardsApi,
   epicsApi = defaultEpicsApi,
 }: Readonly<Props>) {
+  const { editMode } = useEditMode()
+  // Struktur-Affordances (Spalten anlegen/bearbeiten/löschen/umsortieren, Karte bearbeiten) sind
+  // nur im Editiermodus sichtbar. Karten-Alltag (anlegen, verschieben, archivieren) bleibt an canEdit.
+  const showStructureEdit = canEdit && editMode
   const [cards, setCards] = useState<Card[]>(initialCards)
   const [modalColumn, setModalColumn] = useState<{ id: number; name: string } | null>(null)
   const [duplicateValues, setDuplicateValues] = useState<NewCardInitialValues | null>(null)
@@ -436,15 +441,15 @@ export function BoardView({
             >
               <Box
                 data-testid={`column-header-${column.id}`}
-                draggable={canEdit}
-                onDragStart={canEdit ? (e) => { e.stopPropagation(); setColDrag(column.id) } : undefined}
-                onDragOver={canEdit ? (e) => { if (colDrag != null && colDrag !== column.id) { e.preventDefault(); e.stopPropagation() } } : undefined}
-                onDrop={canEdit ? (e) => {
+                draggable={showStructureEdit}
+                onDragStart={showStructureEdit ? (e) => { e.stopPropagation(); setColDrag(column.id) } : undefined}
+                onDragOver={showStructureEdit ? (e) => { if (colDrag != null && colDrag !== column.id) { e.preventDefault(); e.stopPropagation() } } : undefined}
+                onDrop={showStructureEdit ? (e) => {
                   if (colDrag != null) { e.preventDefault(); e.stopPropagation(); void reorderColumn(colDrag, column.id) }
                   setColDrag(null)
                 } : undefined}
                 onDragEnd={() => setColDrag(null)}
-                sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 1.5, py: 1, bgcolor: 'background.paper', borderBottom: 1, borderColor: 'divider', cursor: canEdit ? 'grab' : undefined }}
+                sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 1.5, py: 1, bgcolor: 'background.paper', borderBottom: 1, borderColor: 'divider', cursor: showStructureEdit ? 'grab' : undefined }}
               >
                 <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: colors.dot, flexShrink: 0 }} />
                 <Typography variant="caption" sx={{ fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.08em', color: 'text.secondary', flexGrow: 1 }}>
@@ -461,7 +466,7 @@ export function BoardView({
                     </IconButton>
                   </Tooltip>
                 )}
-                {canEdit && (
+                {showStructureEdit && (
                   <Tooltip title="Spalte bearbeiten">
                     <IconButton size="small" aria-label={`Spalte ${column.name} bearbeiten`}
                       onClick={() => openColumnDialog(column)} sx={{ color: 'text.secondary' }}>
@@ -469,7 +474,7 @@ export function BoardView({
                     </IconButton>
                   </Tooltip>
                 )}
-                {canEdit && (
+                {showStructureEdit && (
                   <Tooltip title="Spalte löschen">
                     <IconButton size="small" aria-label={`Spalte ${column.name} löschen`}
                       onClick={() => { setDeleteError(null); setDeleteColumn(column) }} sx={{ color: 'text.secondary' }}>
@@ -563,7 +568,7 @@ export function BoardView({
             </Paper>
           )
         })}
-        {canEdit && (
+        {showStructureEdit && (
           <Box sx={{ flexShrink: 0, alignSelf: 'flex-start', pt: 0.5 }}>
             <Button size="small" startIcon={<AddIcon />} onClick={() => openColumnDialog('new')}>
               Spalte
@@ -624,9 +629,13 @@ export function BoardView({
 
       <Menu anchorEl={menu?.anchor ?? null} open={menu != null} onClose={closeMenu}>
         {menu && !menu.card.archived && [
-          <MenuItem key="edit" onClick={() => { const c = menu.card; closeMenu(); onEditCard?.(c) }}>
-            Bearbeiten
-          </MenuItem>,
+          // Bearbeiten (Bleistift) nur im Editiermodus; Duplizieren/Archivieren/Verschieben bleiben
+          // als Alltags-Aktionen erhalten.
+          showStructureEdit ? (
+            <MenuItem key="edit" onClick={() => { const c = menu.card; closeMenu(); onEditCard?.(c) }}>
+              Bearbeiten
+            </MenuItem>
+          ) : null,
           <MenuItem
             key="duplicate"
             onClick={() => {

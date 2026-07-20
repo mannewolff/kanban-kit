@@ -17,6 +17,12 @@ vi.mock('../api/columns', () => ({
 vi.mock('../api/projects', () => ({ projectsApi: { list: vi.fn().mockResolvedValue([]) } }))
 vi.mock('../api/boards', () => ({ boardsApi: { list: vi.fn().mockResolvedValue([]) } }))
 vi.mock('../api/cards', () => ({ cardsApi: { bulkTransfer: vi.fn() } }))
+// Editiermodus wird gemockt: Bestandstests laufen mit editMode=true (Bleistifte sichtbar); einzelne
+// Tests schalten editMode.value=false, um das Ausblenden der Struktur-Affordances zu prüfen.
+const editMode = vi.hoisted(() => ({ value: true }))
+vi.mock('../lib/EditModeContext', () => ({
+  useEditMode: () => ({ editMode: editMode.value, setEditMode: vi.fn(), toggleEditMode: vi.fn() }),
+}))
 const mColumns = columnsApi as unknown as {
   create: ReturnType<typeof vi.fn>
   update: ReturnType<typeof vi.fn>
@@ -59,6 +65,7 @@ function dropOnColumn(columnId: number, cardId: number) {
 
 describe('BoardView', () => {
   beforeEach(() => {
+    editMode.value = true
     mProjects.list.mockResolvedValue([])
     mBoards.list.mockResolvedValue([])
     mCards.bulkTransfer.mockReset()
@@ -725,5 +732,31 @@ describe('BoardView', () => {
     } finally {
       vi.unstubAllGlobals()
     }
+  })
+
+  describe('Editiermodus aus (editMode=false)', () => {
+    it('blendet die Struktur-Affordances aus, lässt aber den Karten-Alltag stehen', () => {
+      editMode.value = false
+      render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} />)
+
+      // Struktur-Bleistifte verschwinden ...
+      expect(screen.queryByLabelText('Spalte Backlog bearbeiten')).not.toBeInTheDocument()
+      expect(screen.queryByLabelText('Spalte Backlog löschen')).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Spalte' })).not.toBeInTheDocument()
+
+      // ... der tägliche Kanban-Alltag bleibt erhalten.
+      expect(screen.getByLabelText('Karte in Backlog anlegen')).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Neues Item' })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Menü Aufgabe' })).toBeInTheDocument()
+    })
+
+    it('zeigt im Karten-Menü kein „Bearbeiten“, aber weiterhin die Alltags-Aktionen', () => {
+      editMode.value = false
+      render(<BoardView board={board} initialCards={[card]} canEdit onEditCard={vi.fn()} api={mkApi()} />)
+
+      fireEvent.click(screen.getByRole('button', { name: 'Menü Aufgabe' }))
+      expect(screen.queryByRole('menuitem', { name: 'Bearbeiten' })).not.toBeInTheDocument()
+      expect(screen.getByRole('menuitem', { name: 'Archivieren' })).toBeInTheDocument()
+    })
   })
 })

@@ -48,6 +48,15 @@ vi.mock('../api/attachments', () => ({
   attachmentsApi: { list: vi.fn().mockResolvedValue([]), upload: vi.fn(), remove: vi.fn(), fetchBlob: vi.fn() },
 }))
 vi.mock('../api/projects', () => ({ projectsApi: { list: vi.fn() } }))
+// Editiermodus gemockt: Bestandstests laufen mit editMode=true (Bleistifte sichtbar); der
+// Editiermodus-aus-Test schaltet editMode.value=false.
+const editMode = vi.hoisted(() => ({ value: true }))
+vi.mock('../lib/EditModeContext', () => ({
+  useEditMode: () => ({ editMode: editMode.value, setEditMode: vi.fn(), toggleEditMode: vi.fn() }),
+}))
+beforeEach(() => {
+  editMode.value = true
+})
 
 const mockedBoards = boardsApi as unknown as {
   get: ReturnType<typeof vi.fn>
@@ -126,6 +135,19 @@ describe('BoardPage canEdit aus Membership', () => {
     renderPage()
     expect(await screen.findByText('B')).toBeInTheDocument()
     expect(screen.queryByLabelText('Board umbenennen')).not.toBeInTheDocument()
+  })
+
+  it('blendet bei ausgeschaltetem Editiermodus Umbenennen und Labels aus, behält aber den Papierkorb', async () => {
+    memberships = [{ projectId: 9, role: 'OWNER' }]
+    editMode.value = false
+    renderPage()
+    expect(await screen.findByText('B')).toBeInTheDocument()
+    // Struktur-/Verwaltungs-Bleistifte verschwinden ...
+    expect(screen.queryByLabelText('Board umbenennen')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Labels' })).not.toBeInTheDocument()
+    // ... Papierkorb-Zugang und Karten-Alltag bleiben.
+    expect(screen.getByRole('button', { name: 'Papierkorb' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Karte in Backlog anlegen')).toBeInTheDocument()
   })
 
   it('zeigt bei ungültiger Board-ID einen Fehler und ruft keine API auf', async () => {
