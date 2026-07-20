@@ -7,6 +7,23 @@ Versionierung folgt der dreiteiligen Betriebsversion (siehe [RELEASING.md](RELEA
 Einträge je Version sind ein automatischer Auszug der Commit-Titel seit dem letzten Release,
 erzeugt von `scripts/gen-changelog.mjs`.
 
+## [1.0.0] – 2026-07-20
+
+- Release 0.8.2 (push main)
+- Sonar-Sync: Severity-Filter + NUL-Bytes bereinigen + Fehlerausgabe ([#310](https://github.com/mannewolff/kanban-kit/issues/310))
+- ESLint-Leitplanken: testing-library/recommended + no-deprecated ([#309](https://github.com/mannewolff/kanban-kit/issues/309))
+- TaskMarkdown-Props als Readonly markieren ([#250](https://github.com/mannewolff/kanban-kit/issues/250))
+- Ideen-Speicher: Zwei-Zonen-Listenansicht mit Hochziehen und Idee-anlegen ([#247](https://github.com/mannewolff/kanban-kit/issues/247))
+- Ideen-Speicher: Frontend-API + Board-Unsichtbarkeit + Karten-Aktion ([#246](https://github.com/mannewolff/kanban-kit/issues/246))
+- Ideen-Speicher: Service-Logik + Endpoints + kanbancompat-Ingest ([#245](https://github.com/mannewolff/kanban-kit/issues/245))
+- Ideen-Speicher: Datenmodell + Migration V16 ([#244](https://github.com/mannewolff/kanban-kit/issues/244))
+- docs-site: statischen VitePress-Build reparieren (srcDir außerhalb Root)
+- Editiermodus-Gating der Bleistifte auf den Projekt-Seiten ([#243](https://github.com/mannewolff/kanban-kit/issues/243))
+- Editiermodus-Gating der Bleistifte auf den Board-Seiten ([#242](https://github.com/mannewolff/kanban-kit/issues/242))
+- Administration-Eintrag unten in der Sidebar ([#241](https://github.com/mannewolff/kanban-kit/issues/241))
+- AdministrationPage mit Editiermodus-Schalter ([#240](https://github.com/mannewolff/kanban-kit/issues/240))
+- Editiermodus-Context einführen ([#239](https://github.com/mannewolff/kanban-kit/issues/239))
+
 ## [0.8.0] – 2026-07-17
 
 - Coverage-Schwellen in vite.config.ts final anheben ([#237](https://github.com/mannewolff/kanban-kit/issues/237))
