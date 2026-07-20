@@ -125,11 +125,11 @@ const TaskMarkdown = memo(function TaskMarkdown({
   body,
   canEdit,
   onToggle,
-}: {
+}: Readonly<{
   body: string
   canEdit: boolean
   onToggle: (index: number) => void
-}) {
+}>) {
   // Zähler muss bei jedem tatsächlichen Render dieser (memoized) Komponente zurückgesetzt werden:
   // react-markdown ruft `nextIndex` je Checkbox in Dokumentreihenfolge auf. Da die Deps exakt den
   // Props entsprechen, gegen die `memo` oben vergleicht, fällt das useMemo-Recompute mit jedem
