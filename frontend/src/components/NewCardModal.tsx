@@ -78,6 +78,16 @@ export function NewCardModal({
 
   const canSubmit = title.trim().length > 0 && !saving
 
+  // Kein verschachteltes Ternary im JSX (Sonar S3358): der Titel richtet sich nach dem Modus.
+  let dialogTitle
+  if (type === 'EPIC') {
+    dialogTitle = 'Neues Epic'
+  } else if (ideaOnly) {
+    dialogTitle = 'Neue Idee'
+  } else {
+    dialogTitle = `Neue Karte in „${columnName}“`
+  }
+
   const handleCreate = async () => {
     if (!canSubmit) return
     setSaving(true)
@@ -117,9 +127,7 @@ export function NewCardModal({
         paper: { sx: { width: '90%', maxWidth: '90%', height: '90%', maxHeight: '90%', m: 0 } },
       }}
     >
-      <DialogTitle id="new-card-title">
-        {type === 'EPIC' ? 'Neues Epic' : ideaOnly ? 'Neue Idee' : `Neue Karte in „${columnName}“`}
-      </DialogTitle>
+      <DialogTitle id="new-card-title">{dialogTitle}</DialogTitle>
       <DialogContent>
         <Stack spacing={2} sx={{ mt: 0.5 }}>
           {!epicOnly && !ideaOnly && (
