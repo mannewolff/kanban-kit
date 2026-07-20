@@ -56,3 +56,11 @@ Den ersten Admin richtet man über den Bootstrap-Token oder direkt in der DB ein
 > Der **„Admin"-Bereich** (`/admin`) oben ist ausschließlich für Plattform-Admins. Der Editiermodus
 > vergibt keine Rechte — er blendet nur die Bearbeiten-Symbole ein, sofern die Rolle das Recht
 > ohnehin hat.
+
+## API-Tokens
+
+Persönliche API-Tokens (für die Kanban-Compat-API / CLIs) erzeugt und widerruft man unter
+**Administration → API-Tokens** (siehe [Dogfooding](dogfooding.md)). Ein **board-gebundenes** Token
+darf nur anlegen, wer auf dem betreffenden Board das Recht hat, **Karten anzulegen** (`TICKET_CREATE`)
+— ein VIEWER also nicht. Damit kann ein Token nie mehr als sein Ersteller: das Board über die API zu
+treiben (Karten anlegen/verschieben) entspricht genau dem Recht, das man dafür ohnehin bräuchte.

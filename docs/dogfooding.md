@@ -18,17 +18,25 @@ genau dieses Projekt/Board zugreift.
   **Backlog · Ready · In Progress · In Review · Done** haben (die Compat-API bildet die
   fünf festen Kanban-Status auf diese Spalten ab).
 
-## 1. Projekt- und Board-ID ermitteln
+## 1. Board-gebundenes Token erzeugen
 
-Öffne das gewünschte Board in der Web-UI. Die IDs stehen in der URL, z. B.
-`https://localhost/boards/7` → Board-ID `7`. Die Projekt-ID zeigt die Projekt-/Boardliste
-(bzw. die URL der Boardauswahl `.../projects/3/boards`).
+Am einfachsten in der **Web-UI** — kein DevTools-/Cookie-Gefummel nötig:
 
-## 2. Board-gebundenes Token erzeugen
+1. Anmelden und in der Seitenleiste unten **„Administration"** öffnen.
+2. Im Abschnitt **„API-Tokens"** auf **„Token erzeugen"** klicken.
+3. Einen **Namen** vergeben und **Projekt → Board** wählen (zur Auswahl stehen nur Boards, auf
+   denen du Karten anlegen darfst).
+4. **„Erzeugen"** — der Klartext (`tk_…`) erscheint **genau einmal**; über den
+   **Kopieren**-Button sichern.
 
-Das Token wird per API angelegt (Cookie-Login vorausgesetzt — Token-Verwaltung ist aus
-Sicherheitsgründen nur per Session erreichbar, nicht per Token selbst). `projectId` und
-`boardId` binden das Token an genau dieses Board:
+> Das Token ist an genau dieses Board gebunden. Es zu erzeugen setzt das Recht voraus, auf dem
+> Board **Karten anzulegen** (`TICKET_CREATE`) — ein VIEWER kann kein board-gebundenes Token
+> bauen. In der Liste lässt sich jedes Token wieder **widerrufen**.
+
+**Alternative (Automatisierung, ohne UI):** direkt per API. Projekt-/Board-ID stehen in der URL
+(`…/boards/7` → Board `7`, `…/projects/3/boards` → Projekt `3`); der Session-Cookie ist hier nötig,
+weil die Token-Verwaltung aus Sicherheitsgründen nur per Login erreichbar ist, nicht per Token
+selbst:
 
 ```
 curl -sk https://localhost/api/access-tokens \
@@ -37,19 +45,13 @@ curl -sk https://localhost/api/access-tokens \
   -d '{"name":"stellwerk","projectId":3,"boardId":7}'
 ```
 
-Antwort (einmalig sichtbar):
+Antwort (einmalig sichtbar): `{ "id": 1, "name": "stellwerk", "plaintext": "tk_…" }`.
 
-```json
-{ "id": 1, "name": "stellwerk", "plaintext": "tk_…" }
-```
-
-Den `plaintext` (`tk_…`) sicher notieren — er wird **nur genau einmal** angezeigt.
-
-> Bindet man ein Board, in dem man nicht Mitglied ist → `403`. Passt das Board nicht zum
+> Bindet man ein Board, in dem man kein Karten-Anlegerecht hat → `403`. Passt das Board nicht zum
 > Projekt → `400`. Ohne `projectId`/`boardId` entsteht ein **ungebundenes** Token, das die
 > Kanban-Compat-API mit `409` ablehnt.
 
-## 3. CLI anmelden
+## 2. CLI anmelden
 
 Mit der im Repo mitgelieferten `cli/tbx.mjs` (oder direkt über die von `board.mjs`
 gelesenen Token-Dateien unter `~/.config/toolbox-cli/`):
@@ -58,7 +60,7 @@ gelesenen Token-Dateien unter `~/.config/toolbox-cli/`):
 node cli/tbx.mjs auth login --host https://localhost --token tk_…
 ```
 
-## 4. board.mjs auf das eigene Board umstellen
+## 3. board.mjs auf das eigene Board umstellen
 
 In der `.claude/workflow.config.json` des Repos, das das Board treiben soll:
 
@@ -72,7 +74,7 @@ In der `.claude/workflow.config.json` des Repos, das das Board treiben soll:
 `codeHost` (z. B. `github`) bleibt davon unberührt — nur der Issue-Tracker wechselt aufs
 eigene Board (Zwei-Achsen-Modell: Code bleibt, wo er ist).
 
-## 5. Smoke-Test
+## 4. Smoke-Test
 
 ```
 node .claude/kit/board.mjs issue list
