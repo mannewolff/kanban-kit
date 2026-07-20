@@ -61,6 +61,20 @@ describe('DataTable', () => {
     expect(screen.getByText('b@x.de')).toBeInTheDocument()
   })
 
+  it('setzt ein data-testid je Zeile, wenn getRowTestId übergeben ist', () => {
+    render(
+      <DataTable
+        columns={makeColumns()}
+        rows={rows}
+        getRowKey={(r) => r.id}
+        getRowTestId={(r) => `row-${r.id}`}
+        storageKey="users"
+      />,
+    )
+    expect(screen.getByTestId('row-1')).toBeInTheDocument()
+    expect(screen.getByTestId('row-2')).toBeInTheDocument()
+  })
+
   it('blendet eine Spalte über das Menü aus und persistiert', () => {
     renderTable()
     expect(screen.getByText('a@x.de')).toBeInTheDocument()

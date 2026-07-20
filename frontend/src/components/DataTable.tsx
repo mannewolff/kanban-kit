@@ -32,6 +32,8 @@ interface Props<Row> {
   columns: ReadonlyArray<DataTableColumn<Row>>
   rows: ReadonlyArray<Row>
   getRowKey: (row: Row) => string | number
+  /** Optionales `data-testid` je Zeile (z. B. um bestehende Test-Hooks zu erhalten). */
+  getRowTestId?: (row: Row) => string | undefined
   /** Namensraum für die localStorage-Persistenz (`manban.table.<storageKey>.*`). */
   storageKey: string
 }
@@ -62,7 +64,13 @@ function readHidden(storageKey: string): string[] {
  * und ein-/ausblendbaren Spalten. Zebra-Streifen kommen global über das Theme (#329). Persistenz per
  * localStorage je `storageKey` (robust gegen gesperrten Storage, wie in BoardListPage/AppShell).
  */
-export function DataTable<Row>({ columns, rows, getRowKey, storageKey }: Readonly<Props<Row>>) {
+export function DataTable<Row>({
+  columns,
+  rows,
+  getRowKey,
+  getRowTestId,
+  storageKey,
+}: Readonly<Props<Row>>) {
   const [widths, setWidths] = useState<Record<string, number>>(() => readWidths(storageKey))
   const [hidden, setHidden] = useState<string[]>(() => readHidden(storageKey))
   const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null)
@@ -171,7 +179,7 @@ export function DataTable<Row>({ columns, rows, getRowKey, storageKey }: Readonl
         </TableHead>
         <TableBody>
           {rows.map((row) => (
-            <TableRow key={getRowKey(row)}>
+            <TableRow key={getRowKey(row)} data-testid={getRowTestId?.(row)}>
               {visibleColumns.map((col) => (
                 <TableCell key={col.key} align={col.align}>
                   {col.render(row)}
