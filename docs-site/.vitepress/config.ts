@@ -7,6 +7,9 @@ export default defineConfig({
   description:
     "Selbst-hostbares Kanban-Board mit Projekten, Boards, Epics, Anhängen und rollenbasierter Rechteverwaltung — Benutzer- und Betriebsdokumentation.",
   appearance: false,
+  // Ausgeliefert von Spring Boot unter /docs/ (in die App gebündelt, #314); alle Asset-Pfade
+  // müssen deshalb unter /docs/ auflösen.
+  base: "/docs/",
   // Dev liest direkt aus ../docs (Live-Reload). Der statische Build läuft über die nach content/
   // kopierten Quellen (VITEPRESS_SRC=content), weil ein srcDir außerhalb des Projektroots den
   // Build bricht (VitePress-Issue #2713, siehe copy-docs.mjs).

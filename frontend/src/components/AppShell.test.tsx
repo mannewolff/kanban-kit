@@ -109,6 +109,22 @@ describe('AppShell', () => {
     expect(screen.getByText(`v${pkg.version}`)).toBeInTheDocument()
   })
 
+  it('verlinkt „Dokumentation" im Administrations-Bereich auf /docs/ in neuem Tab', () => {
+    renderShell()
+    const doc = screen.getByRole('link', { name: 'Dokumentation' })
+    expect(doc).toHaveAttribute('href', '/docs/')
+    expect(doc).toHaveAttribute('target', '_blank')
+    expect(doc).toHaveAttribute('rel', expect.stringContaining('noopener'))
+  })
+
+  it('zeigt „Dokumentation" auch eingeklappt als Anker mit /docs/', () => {
+    renderShell()
+    fireEvent.click(screen.getByLabelText('Menü einklappen'))
+    const doc = screen.getByRole('link', { name: 'Dokumentation' })
+    expect(doc).toHaveAttribute('href', '/docs/')
+    expect(doc).toHaveAttribute('target', '_blank')
+  })
+
   it('klappt die Seitenleiste ein und merkt den Zustand in localStorage', () => {
     renderShell()
     fireEvent.click(screen.getByLabelText('Menü einklappen'))

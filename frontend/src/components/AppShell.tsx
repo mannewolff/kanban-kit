@@ -22,6 +22,7 @@ import ChevronRightIcon from '@mui/icons-material/ChevronRight'
 import ExpandLessIcon from '@mui/icons-material/ExpandLess'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import LogoutIcon from '@mui/icons-material/Logout'
+import MenuBookIcon from '@mui/icons-material/MenuBook'
 import SettingsIcon from '@mui/icons-material/Settings'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Outlet, useLocation, useMatch, useNavigate } from 'react-router-dom'
@@ -234,6 +235,41 @@ export function AppShell() {
     )
   }
 
+  // Doku ist statisch unter /docs/ ausgeliefert (#314), keine SPA-Route -> echter Anker im neuen
+  // Tab, nicht navigate(). Steht im abgesetzten Administrations-Bereich (unten).
+  const renderDocsLink = () => {
+    if (collapsed) {
+      return (
+        <Tooltip title="Dokumentation" placement="right">
+          <ListItem disablePadding>
+            <ListItemButton
+              component="a"
+              href="/docs/"
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="Dokumentation"
+              sx={{ justifyContent: 'center', px: 1 }}
+            >
+              <ListItemIcon sx={{ minWidth: 0 }}>
+                <MenuBookIcon />
+              </ListItemIcon>
+            </ListItemButton>
+          </ListItem>
+        </Tooltip>
+      )
+    }
+    return (
+      <ListItem disablePadding>
+        <ListItemButton component="a" href="/docs/" target="_blank" rel="noopener noreferrer">
+          <ListItemIcon>
+            <MenuBookIcon />
+          </ListItemIcon>
+          <ListItemText primary="Dokumentation" />
+        </ListItemButton>
+      </ListItem>
+    )
+  }
+
   const renderGroup = (group: NavGroup) => {
     const GroupIcon = group.icon
     const expanded = openGroups.has(group.label)
@@ -406,7 +442,10 @@ export function AppShell() {
           </Box>
           <Box>
             <Divider />
-            <List disablePadding>{renderLink(ADMINISTRATION_LINK, false)}</List>
+            <List disablePadding>
+              {renderLink(ADMINISTRATION_LINK, false)}
+              {renderDocsLink()}
+            </List>
             <Divider />
             <Box sx={{ display: 'flex', justifyContent: collapsed ? 'center' : 'flex-end', p: 0.5 }}>
               <Tooltip title={collapsed ? 'Menü ausklappen' : 'Menü einklappen'} placement="right">

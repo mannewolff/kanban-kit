@@ -97,7 +97,7 @@ const TaskCheckboxContext = createContext<{
  * verwendet (immer im TaskCheckboxContext.Provider, remarkGfm ohne rehype-raw erzeugt
  * ausschließlich `type="checkbox"`-Inputs) — kein Fallback für andere Fälle nötig.
  */
-function MarkdownInput(props: ComponentPropsWithoutRef<'input'>) {
+function MarkdownInput(props: Readonly<ComponentPropsWithoutRef<'input'>>) {
   // Nicht null: MarkdownInput wird ausschließlich innerhalb von TaskCheckboxContext.Provider
   // gerendert (siehe TaskMarkdown unten).
   const ctx = useContext(TaskCheckboxContext)!

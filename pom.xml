@@ -13,7 +13,7 @@
 
     <groupId>org.mwolff</groupId>
     <artifactId>manban</artifactId>
-    <version>1.0.0</version>
+    <version>1.2.0</version>
     <name>manban</name>
     <description>mannewolff Kanban Board — eigenständige, self-hostbare Trello-Alternative</description>
 
@@ -411,6 +411,31 @@
                             <arguments>run build</arguments>
                         </configuration>
                     </execution>
+                    <!-- VitePress-Doku (docs-site) mit demselben Node bauen; wird unter static/docs
+                         ins Jar gebündelt (#314). Nutzt das oben installierte Node (installDirectory
+                         target), nur workingDirectory abweichend. -->
+                    <execution>
+                        <id>docs-npm-install</id>
+                        <goals>
+                            <goal>npm</goal>
+                        </goals>
+                        <phase>generate-resources</phase>
+                        <configuration>
+                            <workingDirectory>docs-site</workingDirectory>
+                            <arguments>install</arguments>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>docs-npm-build</id>
+                        <goals>
+                            <goal>npm</goal>
+                        </goals>
+                        <phase>generate-resources</phase>
+                        <configuration>
+                            <workingDirectory>docs-site</workingDirectory>
+                            <arguments>run build</arguments>
+                        </configuration>
+                    </execution>
                 </executions>
             </plugin>
 
@@ -691,6 +716,25 @@
                             <resources>
                                 <resource>
                                     <directory>frontend/dist</directory>
+                                    <filtering>false</filtering>
+                                </resource>
+                            </resources>
+                        </configuration>
+                    </execution>
+                    <!-- Gebaute VitePress-Doku nach static/docs kopieren -> Spring liefert sie unter
+                         /docs/ aus (#314). -->
+                    <execution>
+                        <id>copy-docs</id>
+                        <goals>
+                            <goal>copy-resources</goal>
+                        </goals>
+                        <phase>prepare-package</phase>
+                        <configuration>
+                            <skip>${skip.frontend}</skip>
+                            <outputDirectory>${project.build.outputDirectory}/static/docs</outputDirectory>
+                            <resources>
+                                <resource>
+                                    <directory>docs-site/.vitepress/dist</directory>
                                     <filtering>false</filtering>
                                 </resource>
                             </resources>
