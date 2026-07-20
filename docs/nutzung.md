@@ -31,7 +31,8 @@
 - **Verschieben:** per Drag & Drop zwischen den Spalten. Alternativ über das **⋮-Menü** der Karte
   (Eintrag „Nach *Zielspalte*") — auch per Tastatur bedienbar.
 - **⋮-Menü:** „Bearbeiten" (öffnet das Detail im Bearbeiten-Modus), „Duplizieren", „Archivieren",
-  „Nach *Zielspalte*" und — mit Board-Recht — „Auf anderes Board verschieben…".
+  „In Ideen-Speicher" (legt die Karte in den [Ideen-Speicher](#ideen-speicher)), „Nach *Zielspalte*"
+  und — mit Board-Recht — „Auf anderes Board verschieben…".
 - **Auf der Karte sichtbar:** farbige **Label**-Chips, eine gesetzte **Fälligkeit** („📅 *Datum*",
   überfällige rot und fett) sowie rechts unten die **Avatare der Zuständigen** (Initialen, bis zu vier).
 - **Done-Countdown:** Karten in einer Done-Spalte zeigen „wird in X Tagen archiviert"
@@ -98,6 +99,30 @@ Papierkorb wird über den Button **„Papierkorb"** in der Board-Kopfzeile geöf
 - **Beschreibung verbreitern:** den Griff links der „Beschreibung"-Spalte ziehen.
 - **Zeilen umsortieren:** über den Drag-Handle links (innerhalb derselben Spalte).
 
+## Ideen-Speicher
+
+Der **Ideen-Speicher** ist ein Ablageort für Karten, die noch nicht auf dem Board sichtbar sein
+sollen — ein leichtgewichtiges Grooming, kein Löschen. Die Listen-Ansicht zeigt ihn als **zweite
+Zone** unterhalb der aktiven Karten (abgesetzt durch die Überschrift „Ideen-Speicher"):
+
+- **Obere Zone:** die aktiven Karten wie gewohnt (mit Spalten- und Label-Filtern).
+- **Untere Zone:** alle Ideen des Boards, nach Kartennummer sortiert (nicht umsortierbar).
+
+Ideen erscheinen **nicht** in der Board-Spaltenansicht und halten keine aktive Position — sie
+kollidieren also nicht mit den Karten der Spalten.
+
+- **Idee anlegen:** Button **„Idee anlegen"** in der Ideen-Zone (Titel + Markdown-Beschreibung, wie
+  eine normale Karte, nur direkt als Idee).
+- **In den Ideen-Speicher legen (Demotion):** über das **⋮-Menü** einer Karte oder im Karten-Detail
+  den Eintrag **„In Ideen-Speicher"**. Die Karte verschwindet aus dem Board und taucht in der unteren
+  Zone auf.
+- **Ins Backlog holen (Promotion):** je Idee der Button **„→ Backlog"**. Die Idee wird zur normalen
+  Karte in der **ersten Spalte** (Backlog), ans Ende, und erscheint wieder auf dem Board.
+
+Beide Richtungen zählen als normaler Arbeitsfluss und brauchen nur das Recht zum **Verschieben** von
+Karten (kein Löschrecht). Auch der Ingest über die API (kanbancompat) kann ein Item direkt als Idee
+anlegen.
+
 ## Dashboard (Kennzahlen)
 
 Über den Sidebar-Eintrag **„Dashboard"** (im Board-Kontext) zeigt eine KPI-Seite, wie schnell Karten
@@ -128,3 +153,15 @@ Auf der Board-/Projektseite über „Mitglieder" (nur für OWNER/ADMIN sichtbar)
 - **Einladen:** E-Mail + Rolle. Der/die Eingeladene erhält einen Annahme-Link (im Log, wenn Mail aus).
 - **Rolle ändern / entfernen.** Der **letzte OWNER** kann nicht entfernt/degradiert werden.
 - **Einladung annehmen:** über den Link `…/invitations/accept?token=…` (angemeldet).
+
+## Editiermodus
+
+Der **Editiermodus** trennt den Kanban-Alltag von den strukturellen Änderungen. Er wird über den
+Sidebar-Eintrag **„Administration"** ein- und ausgeschaltet:
+
+- **Standardmäßig aus** und **nicht dauerhaft gemerkt** — nach einem Neustart ist er wieder aus.
+- **Ist er aktiv,** erscheinen die **Bearbeiten-/Umbenennen-Symbole** (Bleistifte) — etwa zum
+  Umbenennen von Projekten, Boards und Spalten sowie zum Anlegen/Bearbeiten/Löschen von Spalten —,
+  **sofern du die nötigen Rechte hast**.
+- **Der Alltag bleibt unberührt:** Karten anlegen, verschieben, archivieren und in den Ideen-Speicher
+  legen funktioniert **unabhängig** vom Editiermodus.

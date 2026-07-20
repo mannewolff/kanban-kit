@@ -50,3 +50,9 @@ Nur für Plattform-Admins sichtbar (Eintrag „Admin" in der Seitenleiste):
 
 Den ersten Admin richtet man über den Bootstrap-Token oder direkt in der DB ein — siehe
 [Betrieb → Den ersten Admin einrichten](betrieb.md#den-ersten-admin-einrichten).
+
+> **Nicht zu verwechseln:** Der Sidebar-Eintrag **„Administration"** (`/administration`) ist für
+> **alle** angemeldeten Nutzer da und enthält den [Editiermodus](nutzung.md#editiermodus)-Schalter.
+> Der **„Admin"-Bereich** (`/admin`) oben ist ausschließlich für Plattform-Admins. Der Editiermodus
+> vergibt keine Rechte — er blendet nur die Bearbeiten-Symbole ein, sofern die Rolle das Recht
+> ohnehin hat.
