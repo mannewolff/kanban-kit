@@ -11,6 +11,12 @@ vi.mock('../api/projects', () => ({
 
 let mockUser: { platformRole: string } | null = { platformRole: 'USER' }
 vi.mock('../auth/AuthContext', () => ({ useAuth: () => ({ user: mockUser }) }))
+// Editiermodus gemockt: Bestandstests mit editMode=true (Bleistifte sichtbar); der Editiermodus-
+// aus-Test schaltet editMode.value=false.
+const editMode = vi.hoisted(() => ({ value: true }))
+vi.mock('../lib/EditModeContext', () => ({
+  useEditMode: () => ({ editMode: editMode.value, setEditMode: vi.fn(), toggleEditMode: vi.fn() }),
+}))
 
 const mocked = projectsApi as unknown as {
   list: ReturnType<typeof vi.fn>
@@ -23,6 +29,18 @@ describe('ProjectsPage', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockUser = { platformRole: 'USER' }
+    editMode.value = true
+  })
+
+  it('blendet bei ausgeschaltetem Editiermodus Umbenennen und Löschen aus', async () => {
+    mockUser = { platformRole: 'ADMIN' }
+    editMode.value = false
+    mocked.list.mockResolvedValue([{ id: 1, name: 'Meins', role: 'OWNER', createdAt: '2026-01-01T00:00:00Z' }])
+    render(<MemoryRouter><ProjectsPage /></MemoryRouter>)
+
+    expect(await screen.findByText('Meins')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Projekt Meins umbenennen')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Projekt Meins löschen')).not.toBeInTheDocument()
   })
 
   it('zeigt Nicht-Admins weder Anlegen noch Löschen', async () => {

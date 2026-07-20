@@ -8,6 +8,12 @@ import { ProjectMembersPage } from './ProjectMembersPage'
 
 vi.mock('../api/projects', () => ({ projectsApi: { list: vi.fn(), transferOwner: vi.fn() } }))
 vi.mock('../auth/AuthContext', () => ({ useAuth: () => ({ user: { userId: 1 } }) }))
+// Editiermodus gemockt: Bestandstests mit editMode=true (Bleistift sichtbar); der Editiermodus-
+// aus-Test schaltet editMode.value=false.
+const editMode = vi.hoisted(() => ({ value: true }))
+vi.mock('../lib/EditModeContext', () => ({
+  useEditMode: () => ({ editMode: editMode.value, setEditMode: vi.fn(), toggleEditMode: vi.fn() }),
+}))
 const mProjects = projectsApi as unknown as {
   list: ReturnType<typeof vi.fn>
   transferOwner: ReturnType<typeof vi.fn>
@@ -44,7 +50,20 @@ function renderPage(api: MembersApi, role: string) {
 }
 
 describe('ProjectMembersPage', () => {
-  beforeEach(() => vi.clearAllMocks())
+  beforeEach(() => {
+    vi.clearAllMocks()
+    editMode.value = true
+  })
+
+  it('blendet bei ausgeschaltetem Editiermodus die Namens-Bearbeitung aus, behält aber Entfernen', async () => {
+    editMode.value = false
+    renderPage(makeApi(), 'OWNER')
+    await waitFor(() => expect(screen.getByText('Mika Member')).toBeInTheDocument())
+    // Bleistift weg ...
+    expect(screen.queryByLabelText('Namen von Mika Member bearbeiten')).not.toBeInTheDocument()
+    // ... die operative Mitglieder-Verwaltung (Entfernen) bleibt.
+    expect(screen.getByLabelText('Mika Member entfernen')).toBeInTheDocument()
+  })
 
   it('zeigt den Breadcrumb-Pfad ab Projekte', async () => {
     renderPage(makeApi(), 'OWNER')
