@@ -7,6 +7,15 @@ Versionierung folgt der dreiteiligen Betriebsversion (siehe [RELEASING.md](RELEA
 Einträge je Version sind ein automatischer Auszug der Commit-Titel seit dem letzten Release,
 erzeugt von `scripts/gen-changelog.mjs`.
 
+## [1.2.0] – 2026-07-20
+
+- Release 1.1.1 (push main)
+- Toten Namen 'Stellwerk' aus Produkt und Doku entfernen
+- Token-Dialog: Select-Labels shrinken lassen (Fix zu #319)
+- API-Tokens: Dogfooding-Doku auf UI-Weg umstellen ([#320](https://github.com/mannewolff/kanban-kit/issues/320))
+- API-Tokens: Erzeugen/Listen/Widerrufen auf der Administration-Seite ([#319](https://github.com/mannewolff/kanban-kit/issues/319))
+- API-Tokens: Frontend-API-Wrapper ([#318](https://github.com/mannewolff/kanban-kit/issues/318))
+
 ## [1.1.0] – 2026-07-20
 
 - Release 1.0.2 (push main)
