@@ -138,7 +138,7 @@ describe('BoardListPage', () => {
   it('öffnet das Detail-Modal beim Klick auf eine Zeile', async () => {
     renderPage()
     fireEvent.click(await screen.findByText('Aufgabe'))
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Schließen' })).toBeInTheDocument())
+    expect(await screen.findByRole('button', { name: 'Schließen' })).toBeInTheDocument()
   })
 
   it('zeigt Ideen ausschließlich in der Ideen-Zone, nie in der oberen Liste', async () => {
@@ -271,7 +271,7 @@ describe('BoardListPage', () => {
 
     // Die verspätete Antwort für Board 1 darf die Karten nicht mehr überschreiben.
     dOld.resolve([oldCard])
-    await waitFor(() => expect(screen.getByText('NeueAufgabe')).toBeInTheDocument())
+    expect(await screen.findByText('NeueAufgabe')).toBeInTheDocument()
     expect(screen.queryByText('AlteAufgabe')).not.toBeInTheDocument()
   })
 
@@ -496,7 +496,7 @@ describe('BoardListPage', () => {
     renderPage()
     const row = await screen.findByLabelText('Detail öffnen: Aufgabe')
     fireEvent.keyDown(row, { key: 'Enter' })
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Schließen' })).toBeInTheDocument())
+    expect(await screen.findByRole('button', { name: 'Schließen' })).toBeInTheDocument()
   })
 
   it('schließt das Detail-Modal wieder und lädt nach dem Speichern Karten und Epics neu', async () => {

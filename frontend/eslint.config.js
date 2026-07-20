@@ -1,10 +1,15 @@
 import jsxA11y from 'eslint-plugin-jsx-a11y'
 import react from 'eslint-plugin-react'
 import reactHooks from 'eslint-plugin-react-hooks'
+import testingLibrary from 'eslint-plugin-testing-library'
 import tseslint from 'typescript-eslint'
 
 // ESLint-Gate (CLAUDE-react.md): typescript-eslint + react + react-hooks + jsx-a11y,
 // flat config. Regel-Deaktivierungen nur einzeln und mit Begründung direkt an der Regel.
+//
+// Typed Linting ist aktiv (parserOptions.projectService), damit typbasierte Regeln wie
+// @typescript-eslint/no-deprecated greifen — Deprecation-Nutzungen (z. B. abgekündigte
+// MUI-Props) fallen so als harter Lint-Fehler im Gate auf statt spät bei Sonar.
 export default tseslint.config(
   { ignores: ['dist/**', 'node_modules/**'] },
   {
@@ -16,6 +21,12 @@ export default tseslint.config(
       reactHooks.configs.flat.recommended,
       jsxA11y.flatConfigs.recommended,
     ],
+    languageOptions: {
+      parserOptions: {
+        projectService: true,
+        tsconfigRootDir: import.meta.dirname,
+      },
+    },
     settings: {
       react: { version: 'detect' },
     },
@@ -29,6 +40,17 @@ export default tseslint.config(
       // (Fokus gehört beim Öffnen in den Dialog); ein pauschales Verbot wäre ein
       // A11y-Rückschritt. Betroffene Stellen: CardDetailModal, NewCardModal.
       'jsx-a11y/no-autofocus': 'off',
+      // Aktiviert (typed): Nutzung @deprecated-markierter APIs (z. B. abgekündigte MUI-Props
+      // wie inputProps) als harter Lint-Fehler im Pflicht-Gate — fängt genau die Klasse, die
+      // zuvor erst spät als Sonar-Findings auffiel ("Leitplanke im Gate statt Doku").
+      '@typescript-eslint/no-deprecated': 'error',
     },
+  },
+  {
+    // testing-library/recommended (flat/react) nur an Test-Dateien — das Plugin gehört an die
+    // Tests, nicht an den src-Produktivcode. Fängt idiomatische Test-Anti-Muster wie
+    // `waitFor(() => expect(getByX()))` (prefer-find-by) direkt im Gate ab.
+    files: ['src/**/*.test.{ts,tsx}'],
+    extends: [testingLibrary.configs['flat/react']],
   },
 )

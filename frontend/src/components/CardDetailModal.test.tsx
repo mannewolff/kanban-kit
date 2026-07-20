@@ -72,7 +72,7 @@ describe('CardDetailModal', () => {
     const apis = makeApis()
     render(<CardDetailModal card={card} canEdit columnName="In Progress" onClose={vi.fn()} {...apis} />)
     // Lesemodus lädt Kommentare asynchron nach — abwarten, dann den fehlenden Button prüfen.
-    await waitFor(() => expect(screen.getByText('Hallo')).toBeInTheDocument())
+    expect(await screen.findByText('Hallo')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Bearbeiten' })).not.toBeInTheDocument()
   })
 
@@ -82,7 +82,7 @@ describe('CardDetailModal', () => {
 
     expect(screen.getByRole('heading', { name: 'Titel' })).toBeInTheDocument()
     expect(screen.getByLabelText('Abhängigkeiten')).toHaveTextContent('Abhängig von: #3, #4')
-    await waitFor(() => expect(screen.getByText('Hallo')).toBeInTheDocument())
+    expect(await screen.findByText('Hallo')).toBeInTheDocument()
   })
 
   it('legt einen Kommentar an', async () => {
@@ -135,7 +135,7 @@ describe('CardDetailModal', () => {
   it('zeigt dem Autor Bearbeiten, aber ohne Moderationsrecht kein Löschen', async () => {
     const apis = makeApis()
     render(<CardDetailModal card={card} canEdit onClose={vi.fn()} {...apis} />)
-    await waitFor(() => expect(screen.getByText('Hallo')).toBeInTheDocument())
+    expect(await screen.findByText('Hallo')).toBeInTheDocument()
 
     expect(screen.getByRole('button', { name: 'Kommentar bearbeiten' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Kommentar löschen' })).not.toBeInTheDocument()
@@ -144,7 +144,7 @@ describe('CardDetailModal', () => {
   it('zeigt Moderatoren den Löschen-Button', async () => {
     const apis = makeApis()
     render(<CardDetailModal card={card} canEdit canModerateComments onClose={vi.fn()} {...apis} />)
-    await waitFor(() => expect(screen.getByText('Hallo')).toBeInTheDocument())
+    expect(await screen.findByText('Hallo')).toBeInTheDocument()
 
     expect(screen.getByRole('button', { name: 'Kommentar löschen' })).toBeInTheDocument()
   })
@@ -155,7 +155,7 @@ describe('CardDetailModal', () => {
       { id: 1, cardId: 100, authorUserId: 7, authorName: 'A', body: 'Geändert', createdAt: '', updatedAt: '' },
     )
     render(<CardDetailModal card={card} canEdit onClose={vi.fn()} {...apis} />)
-    await waitFor(() => expect(screen.getByText('Hallo')).toBeInTheDocument())
+    expect(await screen.findByText('Hallo')).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Kommentar bearbeiten' }))
     fireEvent.change(screen.getByLabelText('Kommentar bearbeiten'), { target: { value: 'Geändert' } })
@@ -174,7 +174,7 @@ describe('CardDetailModal', () => {
     render(<CardDetailModal card={card} canEdit columnName="In Progress" onClose={vi.fn()} {...apis} />)
 
     fireEvent.click(await screen.findByRole('button', { name: 'doc.pdf' }))
-    await waitFor(() => expect(screen.getByLabelText('Vorschau doc.pdf')).toBeInTheDocument())
+    expect(await screen.findByLabelText('Vorschau doc.pdf')).toBeInTheDocument()
   })
 
   const taskCard: Card = { ...card, description: '[ ] eins\n[ ] zwei' }
@@ -431,7 +431,7 @@ describe('CardDetailModal', () => {
     expect(thumb).toHaveAttribute('src', 'blob:preview')
 
     fireEvent.click(thumb)
-    await waitFor(() => expect(screen.getByLabelText('Vorschau bild.png')).toBeInTheDocument())
+    expect(await screen.findByLabelText('Vorschau bild.png')).toBeInTheDocument()
   })
 
   it('lädt eine Datei hoch und zeigt sie in der Liste', async () => {
@@ -506,7 +506,7 @@ describe('CardDetailModal', () => {
     render(<CardDetailModal card={card} canEdit columnName="In Progress" onClose={vi.fn()} {...apis} />)
 
     fireEvent.click(await screen.findByRole('button', { name: 'doc.pdf' }))
-    await waitFor(() => expect(screen.getByLabelText('Vorschau doc.pdf')).toBeInTheDocument())
+    expect(await screen.findByLabelText('Vorschau doc.pdf')).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: /schließen/i }))
     await waitFor(() => expect(screen.queryByLabelText('Vorschau doc.pdf')).not.toBeInTheDocument())
@@ -546,7 +546,7 @@ describe('CardDetailModal', () => {
   it('löscht einen Kommentar', async () => {
     const apis = makeApis()
     render(<CardDetailModal card={card} canEdit canModerateComments onClose={vi.fn()} {...apis} />)
-    await waitFor(() => expect(screen.getByText('Hallo')).toBeInTheDocument())
+    expect(await screen.findByText('Hallo')).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Kommentar löschen' }))
 
@@ -643,7 +643,7 @@ describe('CardDetailModal', () => {
   it('speichert keinen leeren Kommentar beim inline-Bearbeiten und bricht per Abbrechen ab', async () => {
     const apis = makeApis()
     render(<CardDetailModal card={card} canEdit onClose={vi.fn()} {...apis} />)
-    await waitFor(() => expect(screen.getByText('Hallo')).toBeInTheDocument())
+    expect(await screen.findByText('Hallo')).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Kommentar bearbeiten' }))
     fireEvent.change(screen.getByLabelText('Kommentar bearbeiten'), { target: { value: '   ' } })
@@ -766,7 +766,7 @@ describe('CardDetailModal', () => {
       { id: 1, cardId: 100, authorUserId: 7, authorName: 'A', body: 'Geändert', createdAt: '', updatedAt: '' },
     )
     render(<CardDetailModal card={card} canEdit onClose={vi.fn()} {...apis} />)
-    await waitFor(() => expect(screen.getByText('Zweiter')).toBeInTheDocument())
+    expect(await screen.findByText('Zweiter')).toBeInTheDocument()
 
     fireEvent.click(screen.getAllByRole('button', { name: 'Kommentar bearbeiten' })[0])
     fireEvent.change(screen.getByRole('textbox', { name: 'Kommentar bearbeiten' }), { target: { value: 'Geändert' } })
@@ -785,7 +785,7 @@ describe('CardDetailModal', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Bearbeiten' }))
     fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape', code: 'Escape' })
 
-    await waitFor(() => expect(screen.getByRole('heading', { name: 'Titel' })).toBeInTheDocument())
+    expect(await screen.findByRole('heading', { name: 'Titel' })).toBeInTheDocument()
     expect(onClose).not.toHaveBeenCalled()
   })
 })

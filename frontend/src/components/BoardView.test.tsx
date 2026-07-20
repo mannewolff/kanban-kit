@@ -464,7 +464,7 @@ describe('BoardView', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Archivieren' }))
     fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Archivieren' }))
 
-    await waitFor(() => expect(screen.getByText('Archivieren fehlgeschlagen.')).toBeInTheDocument())
+    expect(await screen.findByText('Archivieren fehlgeschlagen.')).toBeInTheDocument()
     expect(screen.getByTestId('card-100')).toBeInTheDocument()
   })
 
@@ -496,9 +496,7 @@ describe('BoardView', () => {
       within(screen.getByRole('dialog')).getByRole('button', { name: 'In den Papierkorb' }),
     )
 
-    await waitFor(() =>
-      expect(screen.getByText('In den Papierkorb verschieben fehlgeschlagen.')).toBeInTheDocument(),
-    )
+    expect(await screen.findByText('In den Papierkorb verschieben fehlgeschlagen.')).toBeInTheDocument()
     expect(screen.getByTestId('card-100')).toBeInTheDocument()
   })
 

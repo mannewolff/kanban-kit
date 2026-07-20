@@ -73,7 +73,7 @@ describe('ProjectBoardsPage RBAC', () => {
   it('zeigt Angemeldeten mit OWNER-Rolle den Board-Anlegen-Bereich', async () => {
     renderPage('OWNER')
     expect(await screen.findByText('Team')).toBeInTheDocument()
-    await waitFor(() => expect(screen.getByLabelText(/Neues Board/)).toBeInTheDocument())
+    expect(await screen.findByLabelText(/Neues Board/)).toBeInTheDocument()
   })
 
   it('blendet für VIEWER die Bearbeiten-Aktionen aus', async () => {
@@ -205,7 +205,7 @@ describe('ProjectBoardsPage RBAC', () => {
 
     // Die verspätete Antwort der alten ID darf den State nicht mehr überschreiben.
     dOld.resolve(makeBoards(['AltesBoard1', 'AltesBoard2'], 5))
-    await waitFor(() => expect(screen.getByText('NeuesBoard1')).toBeInTheDocument())
+    expect(await screen.findByText('NeuesBoard1')).toBeInTheDocument()
     expect(screen.queryByText('AltesBoard1')).not.toBeInTheDocument()
   })
 

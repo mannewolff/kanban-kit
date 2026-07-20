@@ -102,7 +102,7 @@ describe('BoardPage canEdit aus Membership', () => {
     memberships = [{ projectId: 9, role: 'OWNER' }]
     renderPage()
     expect(await screen.findByText('B')).toBeInTheDocument()
-    await waitFor(() => expect(screen.getByLabelText('Karte in Backlog anlegen')).toBeInTheDocument())
+    expect(await screen.findByLabelText('Karte in Backlog anlegen')).toBeInTheDocument()
     // Hinweis: projectsApi.list() läuft seit #160 für den Projektnamen (useProjectName); die
     // Rolle selbst kommt weiterhin synchron aus den Memberships (Anlege-Aktion sofort sichtbar).
   })
@@ -261,7 +261,7 @@ describe('BoardPage weitere Orchestrierung', () => {
     epicsApiMock.create.mockResolvedValue({
       id: 20, number: 1, title: 'Auth', description: '', shortcode: 'AUT', done: 0, total: 0,
     })
-    await waitFor(() => expect(screen.getByLabelText('Karte in Backlog anlegen')).toBeInTheDocument())
+    expect(await screen.findByLabelText('Karte in Backlog anlegen')).toBeInTheDocument()
 
     fireEvent.click(screen.getByLabelText('Karte in Backlog anlegen'))
     fireEvent.change(screen.getByLabelText('Typ'), { target: { value: 'EPIC' } })
@@ -278,7 +278,7 @@ describe('BoardPage weitere Orchestrierung', () => {
     memberships = [{ projectId: 9, role: 'OWNER' }]
     renderPage()
     mockedLabels.create.mockResolvedValue({ id: 5, boardId: 1, name: 'Bug', color: '#1976d2' })
-    await waitFor(() => expect(screen.getByLabelText('Karte in Backlog anlegen')).toBeInTheDocument())
+    expect(await screen.findByLabelText('Karte in Backlog anlegen')).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Labels' }))
     fireEvent.change(await screen.findByLabelText('Neues Label'), { target: { value: 'Bug' } })
@@ -331,7 +331,7 @@ describe('BoardPage weitere Orchestrierung', () => {
   it('öffnet und schließt den Papierkorb-Dialog', async () => {
     memberships = [{ projectId: 9, role: 'OWNER' }]
     renderPage()
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Papierkorb' })).toBeInTheDocument())
+    expect(await screen.findByRole('button', { name: 'Papierkorb' })).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Papierkorb' }))
     expect(await screen.findByRole('dialog')).toBeInTheDocument()
@@ -343,7 +343,7 @@ describe('BoardPage weitere Orchestrierung', () => {
   it('öffnet und schließt den Label-Manager', async () => {
     memberships = [{ projectId: 9, role: 'OWNER' }]
     renderPage()
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Labels' })).toBeInTheDocument())
+    expect(await screen.findByRole('button', { name: 'Labels' })).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Labels' }))
     expect(await screen.findByLabelText('Neues Label')).toBeInTheDocument()
@@ -385,7 +385,7 @@ describe('BoardPage weitere Orchestrierung', () => {
   it('bricht das Umbenennen über Abbrechen ab', async () => {
     memberships = [{ projectId: 9, role: 'OWNER' }]
     renderPage()
-    await waitFor(() => expect(screen.getByLabelText('Board umbenennen')).toBeInTheDocument())
+    expect(await screen.findByLabelText('Board umbenennen')).toBeInTheDocument()
 
     fireEvent.click(screen.getByLabelText('Board umbenennen'))
     fireEvent.click(await screen.findByRole('button', { name: 'Abbrechen' }))
@@ -397,7 +397,7 @@ describe('BoardPage weitere Orchestrierung', () => {
   it('schließt den Umbenennen-Dialog per Escape', async () => {
     memberships = [{ projectId: 9, role: 'OWNER' }]
     renderPage()
-    await waitFor(() => expect(screen.getByLabelText('Board umbenennen')).toBeInTheDocument())
+    expect(await screen.findByLabelText('Board umbenennen')).toBeInTheDocument()
 
     fireEvent.click(screen.getByLabelText('Board umbenennen'))
     fireEvent.keyDown(await screen.findByRole('dialog'), { key: 'Escape', code: 'Escape' })

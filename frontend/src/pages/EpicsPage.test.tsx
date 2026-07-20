@@ -69,7 +69,7 @@ describe('EpicsPage', () => {
     expect(await screen.findByText('Auth')).toBeInTheDocument()
     expect(screen.getByText('AUT')).toBeInTheDocument()
     expect(screen.getByText('1/2 Stories fertig')).toBeInTheDocument()
-    await waitFor(() => expect(screen.getByLabelText('Fortschritt Auth')).toBeInTheDocument())
+    expect(await screen.findByLabelText('Fortschritt Auth')).toBeInTheDocument()
   })
 
   it('legt über „Neues Epic" ein Epic an', async () => {

@@ -140,7 +140,7 @@ describe('AppShell', () => {
     )
     // Übergang /  ->  /boards/1: darf nicht crashen und zeigt die Board-Gruppe.
     fireEvent.click(screen.getByText('go'))
-    await waitFor(() => expect(screen.getByText('B')).toBeInTheDocument())
+    expect(await screen.findByText('B')).toBeInTheDocument()
   })
 
   it('startet ausgeklappt, wenn localStorage beim Lesen wirft', () => {
@@ -168,12 +168,12 @@ describe('AppShell', () => {
     mockedBoards.list.mockRejectedValue(new Error('500'))
     renderShell('/boards/1')
     // Board selbst ist trotzdem geladen (Gruppe sichtbar).
-    await waitFor(() => expect(screen.getByText('B')).toBeInTheDocument())
+    expect(await screen.findByText('B')).toBeInTheDocument()
   })
 
   it('lädt Projekt- und Board-Kontext beim Fensterfokus neu', async () => {
     renderShell('/boards/1')
-    await waitFor(() => expect(screen.getByText('B')).toBeInTheDocument())
+    expect(await screen.findByText('B')).toBeInTheDocument()
     mockedProjects.list.mockClear()
     mockedBoards.get.mockClear()
 
@@ -185,7 +185,7 @@ describe('AppShell', () => {
 
   it('setzt Board und Boardanzahl zurück, wenn das Board beim Fensterfokus-Nachladen nicht mehr geladen werden kann', async () => {
     renderShell('/boards/1')
-    await waitFor(() => expect(screen.getByText('B')).toBeInTheDocument())
+    expect(await screen.findByText('B')).toBeInTheDocument()
     mockedBoards.get.mockRejectedValue(new Error('404'))
 
     fireEvent(window, new Event('focus'))
@@ -214,7 +214,7 @@ describe('AppShell', () => {
 
   it('klappt eine Nav-Gruppe bei ausgeklappter Sidebar zu und wieder auf', async () => {
     renderShell('/boards/1')
-    await waitFor(() => expect(screen.getByText('B')).toBeInTheDocument())
+    expect(await screen.findByText('B')).toBeInTheDocument()
     // Die Board-Gruppe ist wegen der aktiven Route automatisch aufgeklappt.
     expect(screen.getByText('Liste')).toBeInTheDocument()
 
@@ -222,12 +222,12 @@ describe('AppShell', () => {
     await waitFor(() => expect(screen.queryByText('Liste')).not.toBeInTheDocument())
 
     fireEvent.click(screen.getByRole('button', { name: 'B' }))
-    await waitFor(() => expect(screen.getByText('Liste')).toBeInTheDocument())
+    expect(await screen.findByText('Liste')).toBeInTheDocument()
   })
 
   it('öffnet bei eingeklappter Sidebar ein Flyout-Menü für eine Nav-Gruppe und navigiert darüber', async () => {
     renderShell('/boards/1')
-    await waitFor(() => expect(screen.getByText('B')).toBeInTheDocument())
+    expect(await screen.findByText('B')).toBeInTheDocument()
 
     fireEvent.click(screen.getByLabelText('Menü einklappen'))
     fireEvent.click(screen.getByRole('button', { name: 'B' }))
@@ -245,7 +245,7 @@ describe('AppShell', () => {
 
   it('schließt das Flyout-Menü per Escape, ohne zu navigieren', async () => {
     renderShell('/boards/1')
-    await waitFor(() => expect(screen.getByText('B')).toBeInTheDocument())
+    expect(await screen.findByText('B')).toBeInTheDocument()
 
     fireEvent.click(screen.getByLabelText('Menü einklappen'))
     fireEvent.click(screen.getByRole('button', { name: 'B' }))
@@ -259,7 +259,7 @@ describe('AppShell', () => {
 
   it('navigiert bei eingeklappter Sidebar über einen einfachen Link', async () => {
     renderShell('/boards/1')
-    await waitFor(() => expect(screen.getByText('B')).toBeInTheDocument())
+    expect(await screen.findByText('B')).toBeInTheDocument()
     fireEvent.click(screen.getByLabelText('Menü einklappen'))
     fireEvent.click(screen.getByRole('button', { name: 'Projekte' }))
     await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/'))
@@ -267,7 +267,7 @@ describe('AppShell', () => {
 
   it('navigiert bei ausgeklappter Sidebar über einen einfachen Link', async () => {
     renderShell('/boards/1')
-    await waitFor(() => expect(screen.getByText('B')).toBeInTheDocument())
+    expect(await screen.findByText('B')).toBeInTheDocument()
     fireEvent.click(screen.getByText('Projekte'))
     await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/'))
   })
