@@ -35,7 +35,6 @@ import { commentsApi as defaultCommentsApi, type Comment, type CommentsApi } fro
 import type { Epic } from '../api/epics'
 import type { Label as BoardLabel } from '../api/labels'
 import type { Member } from '../api/members'
-import { useEditMode } from '../lib/EditModeContext'
 import { dueInputToIso, formatDueDate, isOverdue } from '../lib/dueDate'
 import { epicShortcode } from '../lib/epicMeta'
 import { normalizeTaskLists, toggleTaskAt } from '../lib/markdownTasks'
@@ -708,7 +707,6 @@ export function CardDetailModal({
   cardsApi = defaultCardsApi,
 }: Readonly<Props>) {
   const { user } = useAuth()
-  const { editMode } = useEditMode()
   const isEpic = card.type === 'EPIC'
   const [assigneeIds, setAssigneeIds] = useState<number[]>(card.assignees)
 
@@ -950,7 +948,7 @@ export function CardDetailModal({
             {card.title}
           </Typography>
           <Box sx={{ flexGrow: 1 }} />
-          {canEdit && editMode && !editing && (
+          {canEdit && !editing && (
             <Button size="small" variant="outlined" onClick={startEditing}>
               Bearbeiten
             </Button>
