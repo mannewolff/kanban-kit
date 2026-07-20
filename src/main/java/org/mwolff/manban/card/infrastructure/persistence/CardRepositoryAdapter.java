@@ -103,7 +103,8 @@ class CardRepositoryAdapter implements CardRepository {
         cardId);
     jdbc.update(
         "UPDATE card SET position_in_column = position_in_column + ? "
-            + "WHERE archived = false AND type <> 'EPIC' AND id <> ? AND column_id IN (?, ?)",
+            + "WHERE archived = false AND idea_stored = false AND type <> 'EPIC' "
+            + "AND id <> ? AND column_id IN (?, ?)",
         PARK_OFFSET,
         cardId,
         oldColumnId,
@@ -149,8 +150,8 @@ class CardRepositoryAdapter implements CardRepository {
 
   private List<Long> activeCardIds(long columnId, long excludeCardId) {
     return jdbc.queryForList(
-        "SELECT id FROM card WHERE column_id = ? AND archived = false AND type <> 'EPIC' "
-            + "AND id <> ? ORDER BY position_in_column",
+        "SELECT id FROM card WHERE column_id = ? AND archived = false AND idea_stored = false "
+            + "AND type <> 'EPIC' AND id <> ? ORDER BY position_in_column",
         Long.class,
         columnId,
         excludeCardId);
@@ -195,6 +196,7 @@ class CardRepositoryAdapter implements CardRepository {
         e.getDescription(),
         e.getPositionInColumn(),
         e.isArchived(),
+        e.isIdeaStored(),
         e.getMovedToDoneAt(),
         e.getCreatedBy(),
         e.getCreatedAt(),

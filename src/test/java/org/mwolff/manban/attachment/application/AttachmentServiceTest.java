@@ -52,6 +52,7 @@ class AttachmentServiceTest {
         null,
         0,
         false,
+        false,
         null,
         1L,
         FIXED,

@@ -72,8 +72,8 @@ class CardServiceTest {
       Long parentId,
       String shortcode) {
     return new Card(
-        id, BOARD, columnId, number, "Titel", null, 0, archived, done, 1L, FIXED, FIXED, type,
-        parentId, shortcode, null);
+        id, BOARD, columnId, number, "Titel", null, 0, archived, false, done, 1L, FIXED, FIXED,
+        type, parentId, shortcode, null);
   }
 
   private static BoardColumn column(long id, String name, int position) {
@@ -122,6 +122,7 @@ class CardServiceTest {
         c.description(),
         c.positionInColumn(),
         c.archived(),
+        c.ideaStored(),
         c.movedToDoneAt(),
         c.createdBy(),
         c.createdAt(),
@@ -795,6 +796,7 @@ class CardServiceTest {
             "Epic",
             null,
             0,
+            false,
             false,
             null,
             1L,
