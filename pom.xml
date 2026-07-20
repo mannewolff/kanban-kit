@@ -506,6 +506,7 @@
                         <exclude>org/mwolff/manban/accesstoken/infrastructure/persistence/KanbanAccessTokenEntity.class</exclude>
                         <exclude>org/mwolff/manban/attachment/infrastructure/persistence/AttachmentEntity.class</exclude>
                         <exclude>org/mwolff/manban/auth/infrastructure/persistence/AppUserEntity.class</exclude>
+                        <exclude>org/mwolff/manban/auth/infrastructure/persistence/AbstractAuthTokenEntity.class</exclude>
                         <exclude>org/mwolff/manban/auth/infrastructure/persistence/EmailVerificationTokenEntity.class</exclude>
                         <exclude>org/mwolff/manban/auth/infrastructure/persistence/PasswordResetTokenEntity.class</exclude>
                         <exclude>org/mwolff/manban/board/infrastructure/persistence/BoardColumnEntity.class</exclude>
