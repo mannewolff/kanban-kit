@@ -1,11 +1,17 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AdminApi } from '../api/admin'
 import { ApiError } from '../api/client'
 import { AdminPage } from './AdminPage'
 
 vi.mock('../auth/AuthContext', () => ({
   useAuth: () => ({ user: { userId: 99, memberships: [] } }),
+}))
+// Editiermodus gemockt: Bestandstests laufen mit editMode=true (Namen-Bleistift sichtbar); der
+// Editiermodus-aus-Test schaltet editMode.value=false.
+const editMode = vi.hoisted(() => ({ value: true }))
+vi.mock('../lib/EditModeContext', () => ({
+  useEditMode: () => ({ editMode: editMode.value, setEditMode: vi.fn(), toggleEditMode: vi.fn() }),
 }))
 
 function makeApi(): AdminApi {
@@ -49,6 +55,24 @@ function makeApi(): AdminApi {
 }
 
 describe('AdminPage', () => {
+  beforeEach(() => {
+    editMode.value = true
+  })
+
+  it('blendet bei ausgeschaltetem Editiermodus den Namen-Bleistift aus, behält aber die Aktionen', async () => {
+    editMode.value = false
+    const api = makeApi()
+    render(<AdminPage api={api} />)
+
+    expect(await screen.findByText('Alice')).toBeInTheDocument()
+    // Namen-Bleistift weg ...
+    expect(screen.queryByLabelText('Namen von Alice bearbeiten')).not.toBeInTheDocument()
+    // ... die eigenständigen Admin-Aktionen bleiben sichtbar.
+    expect(screen.getByLabelText('Rolle von Alice umschalten')).toBeInTheDocument()
+    expect(screen.getByLabelText('Alice sperren')).toBeInTheDocument()
+    expect(screen.getByLabelText('Carol freigeben')).toBeInTheDocument()
+  })
+
   it('listet Nutzer und schaltet die Rolle um', async () => {
     const api = makeApi()
     render(<AdminPage api={api} />)

@@ -15,6 +15,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { adminApi as defaultAdminApi, type AdminApi, type AdminUser } from '../api/admin'
 import { ApiError } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
+import { useEditMode } from '../lib/EditModeContext'
 
 interface Props {
   api?: AdminApi
@@ -22,6 +23,7 @@ interface Props {
 
 export function AdminPage({ api = defaultAdminApi }: Readonly<Props>) {
   const { user: currentUser } = useAuth()
+  const { editMode } = useEditMode()
   const [users, setUsers] = useState<AdminUser[]>([])
   const [error, setError] = useState<string | null>(null)
   const [editing, setEditing] = useState<{ id: number; name: string } | null>(null)
@@ -127,13 +129,15 @@ export function AdminPage({ api = defaultAdminApi }: Readonly<Props>) {
                 ) : (
                   <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center' }}>
                     {u.displayName}
-                    <IconButton
-                      size="small"
-                      aria-label={`Namen von ${u.displayName} bearbeiten`}
-                      onClick={() => setEditing({ id: u.id, name: u.displayName })}
-                    >
-                      <EditIcon fontSize="inherit" />
-                    </IconButton>
+                    {editMode && (
+                      <IconButton
+                        size="small"
+                        aria-label={`Namen von ${u.displayName} bearbeiten`}
+                        onClick={() => setEditing({ id: u.id, name: u.displayName })}
+                      >
+                        <EditIcon fontSize="inherit" />
+                      </IconButton>
+                    )}
                   </Box>
                 )}
               </TableCell>
