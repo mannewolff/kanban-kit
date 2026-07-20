@@ -8,6 +8,7 @@ import { BrowserRouter } from 'react-router-dom'
 import { App } from './App'
 import { AuthProvider } from './auth/AuthContext'
 import { SnackbarProvider } from './components/SnackbarProvider'
+import { EditModeProvider } from './lib/EditModeContext'
 import { theme } from './theme'
 
 const container = document.getElementById('root')
@@ -21,9 +22,11 @@ createRoot(container).render(
       <CssBaseline />
       <BrowserRouter>
         <AuthProvider>
-          <SnackbarProvider>
-            <App />
-          </SnackbarProvider>
+          <EditModeProvider>
+            <SnackbarProvider>
+              <App />
+            </SnackbarProvider>
+          </EditModeProvider>
         </AuthProvider>
       </BrowserRouter>
     </ThemeProvider>
