@@ -318,7 +318,11 @@ function CreateTokenDialog({
               setProjectId(e.target.value === '' ? '' : Number(e.target.value))
               setBoardId('')
             }}
-            slotProps={{ htmlInput: { 'aria-label': 'Projekt' }, select: { native: true } }}
+            slotProps={{
+              htmlInput: { 'aria-label': 'Projekt' },
+              select: { native: true },
+              inputLabel: { shrink: true },
+            }}
             fullWidth
           >
             <option value="">(Projekt wählen)</option>
@@ -334,7 +338,11 @@ function CreateTokenDialog({
             value={boardId === '' ? '' : String(boardId)}
             onChange={(e) => setBoardId(e.target.value === '' ? '' : Number(e.target.value))}
             disabled={projectId === ''}
-            slotProps={{ htmlInput: { 'aria-label': 'Board' }, select: { native: true } }}
+            slotProps={{
+              htmlInput: { 'aria-label': 'Board' },
+              select: { native: true },
+              inputLabel: { shrink: true },
+            }}
             fullWidth
           >
             <option value="">(Board wählen)</option>
