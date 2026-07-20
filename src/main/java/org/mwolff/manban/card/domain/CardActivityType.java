@@ -7,5 +7,7 @@ public enum CardActivityType {
   UPDATED,
   ASSIGNED,
   ARCHIVED,
-  RESTORED
+  RESTORED,
+  IDEA_STORED,
+  PROMOTED
 }

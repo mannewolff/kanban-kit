@@ -141,6 +141,18 @@ class CardController {
     return cards.restore(userId, cardId);
   }
 
+  /** Legt eine Karte in den Ideen-Speicher (Demotion, verschwindet aus dem aktiven Board). */
+  @PostMapping("/api/cards/{cardId}/idea-storage")
+  CardView moveToIdeaStorage(@AuthenticationPrincipal Long userId, @PathVariable long cardId) {
+    return cards.moveToIdeaStorage(userId, cardId);
+  }
+
+  /** Holt eine Idee aus dem Ideen-Speicher zurück ins Backlog (Promotion). */
+  @PostMapping("/api/cards/{cardId}/promote")
+  CardView promote(@AuthenticationPrincipal Long userId, @PathVariable long cardId) {
+    return cards.promoteToBacklog(userId, cardId);
+  }
+
   /** Verschiebt eine Karte in den Papierkorb (Soft-Delete, reversibel). */
   @DeleteMapping("/api/cards/{cardId}")
   @ResponseStatus(HttpStatus.NO_CONTENT)

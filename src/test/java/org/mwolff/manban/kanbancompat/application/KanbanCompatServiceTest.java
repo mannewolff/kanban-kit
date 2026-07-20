@@ -260,7 +260,7 @@ class KanbanCompatServiceTest {
     // Given
     when(columns.findByBoardId(BOARD)).thenReturn(standardColumns());
     when(cardService.create(
-            eq(1L), eq(BOARD), eq(100L), eq("Titel"), eq("Body"), isNull(), isNull()))
+            eq(1L), eq(BOARD), eq(100L), eq("Titel"), eq("Body"), isNull(), isNull(), eq(false)))
         .thenReturn(
             new CardView(
                 1L,
@@ -270,6 +270,7 @@ class KanbanCompatServiceTest {
                 "Titel",
                 "Body",
                 0,
+                false,
                 false,
                 null,
                 List.of(),
@@ -281,7 +282,7 @@ class KanbanCompatServiceTest {
                 List.of()));
 
     // When
-    KanbanCompatService.Created created = service.create(bound(), "Titel", "Body", null);
+    KanbanCompatService.Created created = service.create(bound(), "Titel", "Body", null, false);
 
     // Then
     assertThat(created.number()).isEqualTo(7);
@@ -292,7 +293,7 @@ class KanbanCompatServiceTest {
     // Given: leerer (blank) Spalten-Parameter -> BACKLOG
     when(columns.findByBoardId(BOARD)).thenReturn(standardColumns());
     when(cardService.create(
-            eq(1L), eq(BOARD), eq(100L), eq("Titel"), eq("Body"), isNull(), isNull()))
+            eq(1L), eq(BOARD), eq(100L), eq("Titel"), eq("Body"), isNull(), isNull(), eq(false)))
         .thenReturn(
             new CardView(
                 1L,
@@ -302,6 +303,7 @@ class KanbanCompatServiceTest {
                 "Titel",
                 "Body",
                 0,
+                false,
                 false,
                 null,
                 List.of(),
@@ -313,9 +315,42 @@ class KanbanCompatServiceTest {
                 List.of()));
 
     // When
-    KanbanCompatService.Created created = service.create(bound(), "Titel", "Body", "   ");
+    KanbanCompatService.Created created = service.create(bound(), "Titel", "Body", "   ", false);
 
     // Then
+    assertThat(created.number()).isEqualTo(7);
+  }
+
+  @Test
+  void create_passesIdeaStoredFlagThrough_whenTrue() {
+    // Given: der ideaStored-Ingest muss das Flag rückwärtskompatibel an CardService durchreichen.
+    when(columns.findByBoardId(BOARD)).thenReturn(standardColumns());
+    when(cardService.create(
+            eq(1L), eq(BOARD), eq(100L), eq("Titel"), eq("Body"), isNull(), isNull(), eq(true)))
+        .thenReturn(
+            new CardView(
+                1L,
+                BOARD,
+                100L,
+                7,
+                "Titel",
+                "Body",
+                0,
+                false,
+                true,
+                null,
+                List.of(),
+                CardType.CARD,
+                null,
+                null,
+                List.of(),
+                null,
+                List.of()));
+
+    // When
+    KanbanCompatService.Created created = service.create(bound(), "Titel", "Body", null, true);
+
+    // Then — Delegation mit ideaStored=true (der Stub matcht nur eq(true))
     assertThat(created.number()).isEqualTo(7);
   }
 
@@ -327,7 +362,7 @@ class KanbanCompatServiceTest {
     // When / Then: die Meldung muss aus dem COLUMNS-Guard stammen (nicht aus dem späteren
     // Board-Lookup), sonst bliebe ein Umgehen des Guards unentdeckt.
     KanbanPrincipal principal = bound();
-    assertThatThrownBy(() -> service.create(principal, "Titel", "Body", "NOPE"))
+    assertThatThrownBy(() -> service.create(principal, "Titel", "Body", "NOPE", false))
         .isInstanceOf(InvalidKanbanColumnException.class)
         .hasMessageContaining("Unbekannte Kanban-Spalte");
   }
@@ -340,7 +375,7 @@ class KanbanCompatServiceTest {
 
     // When / Then
     KanbanPrincipal principal = bound();
-    assertThatThrownBy(() -> service.create(principal, "Titel", "Body", "DONE"))
+    assertThatThrownBy(() -> service.create(principal, "Titel", "Body", "DONE", false))
         .isInstanceOf(InvalidKanbanColumnException.class);
   }
 

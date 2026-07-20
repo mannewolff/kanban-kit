@@ -33,6 +33,7 @@ class CardControllerTest {
         "Desc",
         0,
         false,
+        false,
         null,
         List.of(),
         CardType.CARD,
@@ -180,6 +181,32 @@ class CardControllerTest {
 
     // When
     CardView result = controller.restore(3L, 8L);
+
+    // Then
+    assertThat(result).isSameAs(view);
+  }
+
+  @Test
+  void moveToIdeaStorage_delegatesToService() {
+    // Given
+    CardView view = card();
+    when(service.moveToIdeaStorage(3L, 8L)).thenReturn(view);
+
+    // When
+    CardView result = controller.moveToIdeaStorage(3L, 8L);
+
+    // Then
+    assertThat(result).isSameAs(view);
+  }
+
+  @Test
+  void promote_delegatesToService() {
+    // Given
+    CardView view = card();
+    when(service.promoteToBacklog(3L, 8L)).thenReturn(view);
+
+    // When
+    CardView result = controller.promote(3L, 8L);
 
     // Then
     assertThat(result).isSameAs(view);

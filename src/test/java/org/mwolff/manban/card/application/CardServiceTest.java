@@ -670,6 +670,161 @@ class CardServiceTest {
     assertThat(captor.getValue().positionInColumn()).isEqualTo(3);
   }
 
+  // --- Ideen-Speicher (Demotion / Promotion) ----------------------------
+
+  @Test
+  void moveToIdeaStorage_marksCardIdeaStoredWithMoveRight() {
+    // Given
+    when(cards.findById(1L))
+        .thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
+
+    // When
+    ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
+    CardService.CardView view = service.moveToIdeaStorage(9L, 1L);
+
+    // Then — Ideen-Pflege nutzt das Verschieberecht (kein Löschen), setzt ideaStored und
+    // protokolliert.
+    verify(permissions).require(9L, 1L, Permission.CARD_MOVE);
+    verify(cards).save(captor.capture());
+    assertThat(captor.getValue().ideaStored()).isTrue();
+    assertThat(view.ideaStored()).isTrue();
+    verify(activity).add(1L, 9L, CardActivityType.IDEA_STORED, "In den Ideen-Speicher", FIXED);
+  }
+
+  @Test
+  void moveToIdeaStorage_rejectsEpic() {
+    // Given
+    when(cards.findById(5L))
+        .thenReturn(Optional.of(card(5L, 20L, 5, false, null, CardType.EPIC, null, "E")));
+
+    // When / Then — Epics gehören nicht in den Ideen-Speicher; kein Save.
+    assertThatThrownBy(() -> service.moveToIdeaStorage(9L, 5L))
+        .isInstanceOf(InvalidDependencyException.class);
+    verify(cards, never()).save(any(Card.class));
+  }
+
+  @Test
+  void moveToIdeaStorage_throwsCardNotFound_whenUnknown() {
+    // Given
+    when(cards.findById(1L)).thenReturn(Optional.empty());
+
+    // When / Then
+    assertThatThrownBy(() -> service.moveToIdeaStorage(9L, 1L))
+        .isInstanceOf(CardNotFoundException.class);
+  }
+
+  @Test
+  void moveToIdeaStorage_throwsBoardNotFound_whenBoardUnknown() {
+    // Given
+    when(cards.findById(1L))
+        .thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
+    when(boards.findById(BOARD)).thenReturn(Optional.empty());
+
+    // When / Then
+    assertThatThrownBy(() -> service.moveToIdeaStorage(9L, 1L))
+        .isInstanceOf(BoardNotFoundException.class);
+  }
+
+  @Test
+  void promoteToBacklog_movesToFirstColumnAtEndWithMoveRight() {
+    // Given: eine Idee und ein Board mit (absichtlich unsortierten) Spalten — die erste Spalte
+    // ist die mit der niedrigsten Position (Backlog), nicht die erste der Liste.
+    when(cards.findById(1L))
+        .thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
+    when(columns.findByBoardId(BOARD))
+        .thenReturn(List.of(column(21L, "Ready", 1), column(20L, "Backlog", 0)));
+    when(cards.maxActivePositionInColumn(20L)).thenReturn(4);
+
+    // When
+    ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
+    CardService.CardView view = service.promoteToBacklog(9L, 1L);
+
+    // Then — landet in der Backlog-Spalte (20) am Ende (5), nicht mehr im Ideen-Speicher.
+    verify(permissions).require(9L, 1L, Permission.CARD_MOVE);
+    verify(cards).save(captor.capture());
+    assertThat(captor.getValue().columnId()).isEqualTo(20L);
+    assertThat(captor.getValue().positionInColumn()).isEqualTo(5);
+    assertThat(captor.getValue().ideaStored()).isFalse();
+    assertThat(view.ideaStored()).isFalse();
+    verify(activity).add(1L, 9L, CardActivityType.PROMOTED, "Ins Backlog geholt", FIXED);
+  }
+
+  @Test
+  void promoteToBacklog_rejectsEpic() {
+    // Given
+    when(cards.findById(5L))
+        .thenReturn(Optional.of(card(5L, 20L, 5, false, null, CardType.EPIC, null, "E")));
+
+    // When / Then
+    assertThatThrownBy(() -> service.promoteToBacklog(9L, 5L))
+        .isInstanceOf(InvalidDependencyException.class);
+    verify(cards, never()).save(any(Card.class));
+  }
+
+  @Test
+  void promoteToBacklog_throwsCardNotFound_whenUnknown() {
+    // Given
+    when(cards.findById(1L)).thenReturn(Optional.empty());
+
+    // When / Then
+    assertThatThrownBy(() -> service.promoteToBacklog(9L, 1L))
+        .isInstanceOf(CardNotFoundException.class);
+  }
+
+  @Test
+  void promoteToBacklog_throwsBoardNotFound_whenBoardUnknown() {
+    // Given
+    when(cards.findById(1L))
+        .thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
+    when(boards.findById(BOARD)).thenReturn(Optional.empty());
+
+    // When / Then
+    assertThatThrownBy(() -> service.promoteToBacklog(9L, 1L))
+        .isInstanceOf(BoardNotFoundException.class);
+  }
+
+  @Test
+  void promoteToBacklog_throwsColumnNotFound_whenBoardHasNoColumns() {
+    // Given
+    when(cards.findById(1L))
+        .thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
+    when(columns.findByBoardId(BOARD)).thenReturn(List.of());
+
+    // When / Then
+    assertThatThrownBy(() -> service.promoteToBacklog(9L, 1L))
+        .isInstanceOf(ColumnNotFoundException.class);
+  }
+
+  @Test
+  void create_asIdea_marksIdeaStoredAndSkipsTransition() {
+    // Given
+    when(columns.findById(20L)).thenReturn(Optional.of(column(20L, "Backlog", 0)));
+
+    // When: direkt als Idee angelegt
+    ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
+    CardService.CardView view = service.create(1L, BOARD, 20L, "Idee", null, null, null, true);
+
+    // Then — ideaStored gesetzt, keine Spalten-Transition (kein Board-Workflow), CREATED
+    // protokolliert.
+    verify(cards).save(captor.capture());
+    assertThat(captor.getValue().ideaStored()).isTrue();
+    assertThat(view.ideaStored()).isTrue();
+    verify(transitions, never()).open(anyLong(), anyLong(), any(), any());
+    verify(activity).add(1L, 1L, CardActivityType.CREATED, "Karte angelegt", FIXED);
+  }
+
+  @Test
+  void create_normalCard_hasIdeaStoredFalseInView() {
+    // Given
+    when(columns.findById(20L)).thenReturn(Optional.of(column(20L, "Backlog", 0)));
+
+    // When
+    CardService.CardView view = service.create(1L, BOARD, 20L, "Titel", null, null, null);
+
+    // Then — ohne Idee-Flag ist die Karte eine normale Board-Karte.
+    assertThat(view.ideaStored()).isFalse();
+  }
+
   @Test
   void delete_softDeletesCard() {
     // Given

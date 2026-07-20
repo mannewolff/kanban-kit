@@ -209,6 +209,54 @@ class KanbanCompatIT extends AbstractIntegrationTest {
   }
 
   @Test
+  void ingestCreatesIdea_whenIdeaStoredTrue_andBacklogCardOtherwise() throws Exception {
+    Cookie session = loginAs("kanban-idea@example.com");
+    long projectId = createProject("kanban-idea@example.com", "Idea-Dogfood");
+    long boardId = createBoard(session, projectId, "Idea-Board");
+    String token = boundToken(session, projectId, boardId);
+
+    // Ingest mit ideaStored=true legt eine Idee an.
+    mvc.perform(
+            post("/api/kanban/items")
+                .header("X-Kanban-Token", token)
+                .contentType("application/json")
+                .content("{\"title\":\"Als Idee\",\"ideaStored\":true}"))
+        .andExpect(status().isCreated());
+
+    // Ingest ohne Feld bleibt rückwärtskompatibel eine normale Backlog-Karte.
+    mvc.perform(
+            post("/api/kanban/items")
+                .header("X-Kanban-Token", token)
+                .contentType("application/json")
+                .content("{\"title\":\"Normale Karte\"}"))
+        .andExpect(status().isCreated());
+
+    // Gegenprobe über die Cookie-API: die Idee trägt ideaStored=true, die andere Karte false.
+    String cards =
+        mvc.perform(get("/api/boards/" + boardId + "/cards").cookie(session))
+            .andExpect(status().isOk())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+    JsonNode list = json.readTree(cards);
+    final String ideaTitle = "Als Idee";
+    final String normalTitle = "Normale Karte";
+    boolean ideaFlagged = false;
+    boolean normalUnflagged = false;
+    for (JsonNode card : list) {
+      String title = card.get("title").asText();
+      if (title.equals(ideaTitle)) {
+        ideaFlagged = card.get("ideaStored").asBoolean();
+      }
+      if (title.equals(normalTitle)) {
+        normalUnflagged = !card.get("ideaStored").asBoolean();
+      }
+    }
+    assertThat(ideaFlagged).isTrue();
+    assertThat(normalUnflagged).isTrue();
+  }
+
+  @Test
   void epicsEndpointReportsProgress() throws Exception {
     Cookie session = loginAs("kanban-epics@example.com");
     long projectId = createProject("kanban-epics@example.com", "Epic-Projekt");

@@ -102,13 +102,23 @@ public class KanbanCompatService {
     return grouped;
   }
 
-  /** Legt ein Item in der angegebenen (Default: BACKLOG) Spalte des gebundenen Boards an. */
+  /**
+   * Legt ein Item in der angegebenen (Default: BACKLOG) Spalte des gebundenen Boards an. Mit {@code
+   * ideaStored=true} entsteht das Item direkt im Ideen-Speicher (rückwärtskompatibel: ohne Feld
+   * landet der Ingest wie bisher als normale Backlog-Karte).
+   */
   @Transactional
   public Created create(
-      KanbanPrincipal principal, String title, @Nullable String body, @Nullable String column) {
+      KanbanPrincipal principal,
+      String title,
+      @Nullable String body,
+      @Nullable String column,
+      boolean ideaStored) {
     long boardId = requireBound(principal);
     long columnId = columnIdForKey(boardId, column == null || column.isBlank() ? BACKLOG : column);
-    CardView v = cardService.create(principal.userId(), boardId, columnId, title, body, null, null);
+    CardView v =
+        cardService.create(
+            principal.userId(), boardId, columnId, title, body, null, null, ideaStored);
     return new Created(v.number());
   }
 

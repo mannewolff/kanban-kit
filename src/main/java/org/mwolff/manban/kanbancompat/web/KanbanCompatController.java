@@ -50,7 +50,11 @@ class KanbanCompatController {
   Created create(
       @Nullable Authentication authentication, @Valid @RequestBody CreateItemRequest request) {
     return service.create(
-        principal(authentication), request.title(), request.body(), request.column());
+        principal(authentication),
+        request.title(),
+        request.body(),
+        request.column(),
+        Boolean.TRUE.equals(request.ideaStored()));
   }
 
   @PutMapping("/items/{id}/move")
@@ -83,7 +87,11 @@ class KanbanCompatController {
     throw new TokenNotBoundException();
   }
 
-  record CreateItemRequest(@NotBlank @Size(max = 300) String title, String body, String column) {}
+  record CreateItemRequest(
+      @NotBlank @Size(max = 300) String title,
+      String body,
+      String column,
+      @Nullable Boolean ideaStored) {}
 
   record MoveRequest(@NotBlank String column, @PositiveOrZero int position) {}
 
