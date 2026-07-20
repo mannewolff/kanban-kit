@@ -105,7 +105,7 @@ describe('EpicsPage', () => {
     mCards.list.mockResolvedValue([
       {
         id: 30, boardId: 1, columnId: 10, number: 3, title: 'Kind', description: null,
-        positionInColumn: 0, archived: false, movedToDoneAt: null, dependencies: [],
+        positionInColumn: 0, archived: false, ideaStored: false, movedToDoneAt: null, dependencies: [],
         type: 'CARD', parentId: 9, shortcode: null, assignees: [], dueDate: null, labels: [],
       },
     ])

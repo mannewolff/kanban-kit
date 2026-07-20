@@ -122,7 +122,15 @@ interface Props {
   /** Injizierbar für Tests. */
   api?: Pick<
     CardsApi,
-    'create' | 'move' | 'archive' | 'restore' | 'remove' | 'bulkArchive' | 'bulkTransfer' | 'bulkDelete'
+    | 'create'
+    | 'move'
+    | 'archive'
+    | 'moveToIdeaStorage'
+    | 'restore'
+    | 'remove'
+    | 'bulkArchive'
+    | 'bulkTransfer'
+    | 'bulkDelete'
   >
   epicsApi?: Pick<EpicsApi, 'create'>
 }
@@ -298,6 +306,20 @@ export function BoardView({
   const archiveCard = async (card: Card) => {
     await api.archive(card.id)
     onCardsChanged?.()
+  }
+
+  // In den Ideen-Speicher: Alltags-Aktion (nicht editiermodus-gegatet). Optimistisch aus der
+  // Board-Ansicht nehmen (ideaStored filtert activeCardsInColumn), bei Fehler zurückrollen.
+  const moveToIdeaStorageCard = async (card: Card) => {
+    const previous = cards
+    setCards((current) => current.map((c) => (c.id === card.id ? { ...c, ideaStored: true } : c)))
+    try {
+      await api.moveToIdeaStorage(card.id)
+      onCardsChanged?.()
+    } catch {
+      setCards(previous)
+      setSnackbar('In den Ideen-Speicher fehlgeschlagen.')
+    }
   }
 
   const closeMenu = () => setMenu(null)
@@ -653,6 +675,9 @@ export function BoardView({
           </MenuItem>,
           <MenuItem key="archive" onClick={() => { const c = menu.card; closeMenu(); void archiveCard(c) }}>
             Archivieren
+          </MenuItem>,
+          <MenuItem key="idea-storage" onClick={() => { const c = menu.card; closeMenu(); void moveToIdeaStorageCard(c) }}>
+            In Ideen-Speicher
           </MenuItem>,
           ...(canTransfer
             ? [

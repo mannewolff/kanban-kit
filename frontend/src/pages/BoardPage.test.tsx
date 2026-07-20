@@ -295,7 +295,7 @@ describe('BoardPage weitere Orchestrierung', () => {
     memberships = [{ projectId: 9, role: 'OWNER' }]
     const openCard = {
       id: 100, boardId: 1, columnId: 10, number: 1, title: 'Aufgabe', description: null,
-      positionInColumn: 0, archived: false, movedToDoneAt: null, dependencies: [],
+      positionInColumn: 0, archived: false, ideaStored: false, movedToDoneAt: null, dependencies: [],
       type: 'CARD' as const, parentId: null, shortcode: null, assignees: [], dueDate: null, labels: [],
     }
     mockedBoards.get.mockResolvedValue({
@@ -356,7 +356,7 @@ describe('BoardPage weitere Orchestrierung', () => {
     memberships = [{ projectId: 9, role: 'OWNER' }]
     const openCard = {
       id: 100, boardId: 1, columnId: 10, number: 1, title: 'Aufgabe', description: null,
-      positionInColumn: 0, archived: false, movedToDoneAt: null, dependencies: [],
+      positionInColumn: 0, archived: false, ideaStored: false, movedToDoneAt: null, dependencies: [],
       type: 'CARD' as const, parentId: null, shortcode: null, assignees: [], dueDate: null, labels: [],
     }
     mockedBoards.get.mockResolvedValue({
@@ -410,7 +410,7 @@ describe('BoardPage weitere Orchestrierung', () => {
     memberships = [{ projectId: 9, role: 'OWNER' }]
     const openCard = {
       id: 100, boardId: 1, columnId: 10, number: 1, title: 'Aufgabe', description: null,
-      positionInColumn: 0, archived: false, movedToDoneAt: null, dependencies: [],
+      positionInColumn: 0, archived: false, ideaStored: false, movedToDoneAt: null, dependencies: [],
       type: 'CARD' as const, parentId: null, shortcode: null, assignees: [], dueDate: null, labels: [],
     }
     mockedBoards.get.mockResolvedValue({

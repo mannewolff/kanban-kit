@@ -2,10 +2,16 @@ import { describe, expect, it } from 'vitest'
 import type { Card } from '../api/cards'
 import { activeCardsInColumn, applyMove } from './boardOps'
 
-function card(id: number, columnId: number, position: number, archived = false): Card {
+function card(
+  id: number,
+  columnId: number,
+  position: number,
+  archived = false,
+  ideaStored = false,
+): Card {
   return {
     id, boardId: 1, columnId, number: id, title: `#${id}`, description: null,
-    positionInColumn: position, archived, movedToDoneAt: null, dependencies: [],
+    positionInColumn: position, archived, ideaStored, movedToDoneAt: null, dependencies: [],
     type: 'CARD', parentId: null, shortcode: null, assignees: [], dueDate: null, labels: [],
   }
 }
@@ -13,6 +19,13 @@ function card(id: number, columnId: number, position: number, archived = false):
 describe('boardOps', () => {
   it('activeCardsInColumn filtert archivierte und sortiert nach Position', () => {
     const cards = [card(1, 10, 1), card(2, 10, 0), card(3, 10, 2, true), card(4, 20, 0)]
+    const result = activeCardsInColumn(cards, 10).map((c) => c.id)
+    expect(result).toEqual([2, 1])
+  })
+
+  it('activeCardsInColumn filtert Ideen (ideaStored) aus der Spaltenansicht', () => {
+    const idea = card(5, 10, 3, false, true)
+    const cards = [card(1, 10, 1), idea, card(2, 10, 0)]
     const result = activeCardsInColumn(cards, 10).map((c) => c.id)
     expect(result).toEqual([2, 1])
   })

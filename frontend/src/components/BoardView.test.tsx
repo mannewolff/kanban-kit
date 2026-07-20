@@ -46,13 +46,14 @@ const board: Board = {
 
 const card: Card = {
   id: 100, boardId: 1, columnId: 10, number: 1, title: 'Aufgabe', description: null,
-  positionInColumn: 0, archived: false, movedToDoneAt: null, dependencies: [],
+  positionInColumn: 0, archived: false, ideaStored: false, movedToDoneAt: null, dependencies: [],
   type: 'CARD', parentId: null, shortcode: null, assignees: [], dueDate: null, labels: [],
 }
 
 function mkApi(over: Record<string, unknown> = {}) {
   return {
-    create: vi.fn(), move: vi.fn(), archive: vi.fn(), restore: vi.fn(), remove: vi.fn(),
+    create: vi.fn(), move: vi.fn(), archive: vi.fn(), moveToIdeaStorage: vi.fn(),
+    restore: vi.fn(), remove: vi.fn(),
     bulkArchive: vi.fn(), bulkTransfer: vi.fn(), bulkDelete: vi.fn(), ...over,
   }
 }
@@ -156,6 +157,39 @@ describe('BoardView', () => {
     fireEvent.click(screen.getByLabelText('Menü Aufgabe'))
     fireEvent.click(screen.getByRole('menuitem', { name: 'Nach Done' }))
     await waitFor(() => expect(api.move).toHaveBeenCalledWith(100, 20, 0))
+  })
+
+  it('zeigt Ideen (ideaStored) nicht in der Spaltenansicht', () => {
+    const idea: Card = { ...card, id: 500, number: 5, title: 'Idee', ideaStored: true }
+    render(<BoardView board={board} initialCards={[card, idea]} canEdit api={mkApi()} />)
+
+    expect(within(screen.getByTestId('column-10')).getByTestId('card-100')).toBeInTheDocument()
+    expect(within(screen.getByTestId('column-10')).queryByTestId('card-500')).not.toBeInTheDocument()
+  })
+
+  it('legt eine Karte über das ⋮-Menü in den Ideen-Speicher und entfernt sie optimistisch', async () => {
+    const api = mkApi({ moveToIdeaStorage: vi.fn().mockResolvedValue({}) })
+    const onCardsChanged = vi.fn()
+    render(<BoardView board={board} initialCards={[card]} canEdit api={api} onCardsChanged={onCardsChanged} />)
+
+    fireEvent.click(screen.getByLabelText('Menü Aufgabe'))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'In Ideen-Speicher' }))
+
+    await waitFor(() => expect(api.moveToIdeaStorage).toHaveBeenCalledWith(100))
+    expect(onCardsChanged).toHaveBeenCalled()
+    // Optimistisch aus dem Board entfernt (ideaStored filtert die Spaltenansicht).
+    expect(within(screen.getByTestId('column-10')).queryByTestId('card-100')).not.toBeInTheDocument()
+  })
+
+  it('rollt bei Fehler im Ideen-Speicher zurück und zeigt die Karte wieder', async () => {
+    const api = mkApi({ moveToIdeaStorage: vi.fn().mockRejectedValue(new Error('fail')) })
+    render(<BoardView board={board} initialCards={[card]} canEdit api={api} />)
+
+    fireEvent.click(screen.getByLabelText('Menü Aufgabe'))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'In Ideen-Speicher' }))
+
+    await screen.findByText('In den Ideen-Speicher fehlgeschlagen.')
+    expect(within(screen.getByTestId('column-10')).getByTestId('card-100')).toBeInTheDocument()
   })
 
   it('dupliziert eine Karte über das ⋮-Menü vorbefüllt, aber immer nach Backlog (erste Spalte)', async () => {

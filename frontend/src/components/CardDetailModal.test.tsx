@@ -17,7 +17,7 @@ vi.mock('../lib/EditModeContext', () => ({
 
 const card: Card = {
   id: 100, boardId: 1, columnId: 10, number: 5, title: 'Aufgabe', description: '# Titel\n\n- a\n- b',
-  positionInColumn: 0, archived: false, movedToDoneAt: null, dependencies: [3, 4],
+  positionInColumn: 0, archived: false, ideaStored: false, movedToDoneAt: null, dependencies: [3, 4],
   type: 'CARD', parentId: null, shortcode: null, assignees: [], dueDate: null, labels: [],
 }
 
@@ -44,6 +44,7 @@ function makeApis() {
     setLabels: vi.fn().mockResolvedValue({ ...card }),
     getActivity: vi.fn().mockResolvedValue([]),
     restore: vi.fn().mockResolvedValue({ ...card }),
+    moveToIdeaStorage: vi.fn().mockResolvedValue({ ...card }),
   }
   return { commentsApi, attachmentsApi, cardsApi }
 }
@@ -93,6 +94,27 @@ describe('CardDetailModal', () => {
 
     await waitFor(() => expect(apis.commentsApi.create).toHaveBeenCalledWith(100, 'Neu'))
     expect(await screen.findByText('Neu')).toBeInTheDocument()
+  })
+
+  it('legt eine aktive Karte über den Detail-Button in den Ideen-Speicher', async () => {
+    const apis = makeApis()
+    const onChanged = vi.fn()
+    const onClose = vi.fn()
+    render(<CardDetailModal card={card} canEdit onChanged={onChanged} onClose={onClose} {...apis} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'In Ideen-Speicher' }))
+
+    await waitFor(() => expect(apis.cardsApi.moveToIdeaStorage).toHaveBeenCalledWith(100))
+    expect(onChanged).toHaveBeenCalled()
+    expect(onClose).toHaveBeenCalled()
+  })
+
+  it('zeigt „In Ideen-Speicher“ nicht für eine bereits gespeicherte Idee', () => {
+    const apis = makeApis()
+    const idea: Card = { ...card, ideaStored: true }
+    render(<CardDetailModal card={idea} canEdit onClose={vi.fn()} {...apis} />)
+
+    expect(screen.queryByRole('button', { name: 'In Ideen-Speicher' })).not.toBeInTheDocument()
   })
 
   it('speichert Titel, Beschreibung, Abhängigkeiten und Epic in einem Update', async () => {

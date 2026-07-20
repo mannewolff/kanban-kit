@@ -687,7 +687,7 @@ interface Props {
   attachmentsApi?: AttachmentsApi
   cardsApi?: Pick<
     typeof defaultCardsApi,
-    'update' | 'setAssignees' | 'setLabels' | 'getActivity' | 'restore'
+    'update' | 'setAssignees' | 'setLabels' | 'getActivity' | 'restore' | 'moveToIdeaStorage'
   >
 }
 
@@ -720,6 +720,13 @@ export function CardDetailModal({
 
   const restore = async () => {
     await cardsApi.restore(card.id)
+    onChanged?.()
+    onClose()
+  }
+
+  // In den Ideen-Speicher: Alltags-Aktion (an canEdit gebunden, nicht editiermodus-gegatet).
+  const moveToIdeaStorage = async () => {
+    await cardsApi.moveToIdeaStorage(card.id)
     onChanged?.()
     onClose()
   }
@@ -1052,6 +1059,9 @@ export function CardDetailModal({
           <>
             {canEdit && card.archived && (
               <Button onClick={() => void restore()}>Wiederherstellen</Button>
+            )}
+            {canEdit && !card.archived && !card.ideaStored && !isEpic && (
+              <Button onClick={() => void moveToIdeaStorage()}>In Ideen-Speicher</Button>
             )}
             <Button onClick={onClose}>Schließen</Button>
           </>
