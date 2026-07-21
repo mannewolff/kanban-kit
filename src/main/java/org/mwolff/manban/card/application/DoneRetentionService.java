@@ -23,12 +23,16 @@ public class DoneRetentionService {
 
   /**
    * Archiviert alle nicht-archivierten Karten, die vor {@code now - retentionDays} nach Done
-   * verschoben wurden.
+   * verschoben wurden. Bei {@code retentionDays <= 0} ist das Auto-Archiv abgeschaltet: es wird
+   * nichts abgefragt und nichts archiviert.
    *
    * @return Anzahl der archivierten Karten
    */
   @Transactional
   public int archiveExpiredDoneCards(Instant now, int retentionDays) {
+    if (retentionDays <= 0) {
+      return 0;
+    }
     Instant threshold = now.minus(Duration.ofDays(retentionDays));
     List<Card> expired = cards.findArchivableDoneCards(threshold);
     expired.forEach(card -> cards.save(card.asArchived()));
