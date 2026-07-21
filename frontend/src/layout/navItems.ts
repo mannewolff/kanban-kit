@@ -49,9 +49,10 @@ export interface NavParams {
 
 /**
  * Baut den Navigationsbaum kontextbewusst. „Projekte" erscheint nur, wenn es etwas zu wählen gibt
- * (≥ 2 Projekte) oder man System-Admin ist (Anlege-Zugang). Ist ein Board offen, kommt eine nach
- * dem Board benannte Gruppe hinzu; darin verlinkt „Boards" zurück zur Boardauswahl — aber nur, wenn
- * das Projekt ≥ 2 Boards hat oder man Boards verwalten darf.
+ * (≥ 2 Projekte) oder man System-Admin ist (Anlege-Zugang). Ist ein Board offen, kommt ein
+ * Top-Level-Einstieg „Boards" (zurück zur Boardauswahl, nur bei ≥ 2 Boards oder Verwaltungsrecht)
+ * und danach eine nach dem Board benannte Gruppe mit den vier Ansichten (Board/Liste/Epics/Dashboard)
+ * hinzu.
  */
 export function buildNavItems(params: NavParams): NavNode[] {
   const { board, isAdmin = false, projectCount = null, boardCount = null, canManageBoards = false } = params
@@ -62,16 +63,18 @@ export function buildNavItems(params: NavParams): NavNode[] {
   }
 
   if (board) {
-    const children: NavLink[] = []
+    // „Boards" ist die Eltern-Ebene (die Sammlung, in der das Board liegt), kein View des Boards —
+    // deshalb als Top-Level-Einstieg neben „Projekte", nicht als Kind der Board-Gruppe. Sichtbar nur,
+    // wenn es ≥ 2 Boards gibt oder man Boards verwalten darf.
     if (canManageBoards || boardCount !== 1) {
-      children.push({ kind: 'link', label: 'Boards', path: `/projects/${board.projectId}`, icon: FolderIcon })
+      items.push({ kind: 'link', label: 'Boards', path: `/projects/${board.projectId}`, icon: FolderIcon })
     }
-    children.push(
+    const children: NavLink[] = [
       { kind: 'link', label: 'Board', path: `/boards/${board.id}`, icon: ViewColumnIcon },
       { kind: 'link', label: 'Liste', path: `/boards/${board.id}/list`, icon: ViewListIcon },
       { kind: 'link', label: 'Epics', path: `/boards/${board.id}/epics`, icon: AccountTreeIcon },
       { kind: 'link', label: 'Dashboard', path: `/boards/${board.id}/dashboard`, icon: InsightsIcon },
-    )
+    ]
     items.push({ kind: 'group', label: board.name, icon: ViewColumnIcon, children })
   }
 
