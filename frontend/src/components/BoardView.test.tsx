@@ -106,7 +106,12 @@ describe('BoardView', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Anlegen' }))
 
     await waitFor(() =>
-      expect(api.create).toHaveBeenCalledWith(1, 20, 'Neu', expect.stringContaining('## Kontext'), null),
+      expect(api.create).toHaveBeenCalledWith(1, 20, 'Neu', expect.stringContaining('## Kontext'), null, false, {
+        dependencies: [],
+        dueDate: null,
+        assigneeIds: [],
+        labelIds: [],
+      }),
     )
     expect(within(screen.getByTestId('column-20')).getByTestId('card-200')).toBeInTheDocument()
   })
@@ -170,7 +175,9 @@ describe('BoardView', () => {
   it('legt eine Karte über das ⋮-Menü in den Ideen-Speicher und entfernt sie optimistisch', async () => {
     const api = mkApi({ moveToIdeaStorage: vi.fn().mockResolvedValue({}) })
     const onCardsChanged = vi.fn()
-    render(<BoardView board={board} initialCards={[card]} canEdit api={api} onCardsChanged={onCardsChanged} />)
+    // Zweite Karte in derselben Spalte: der optimistische map bleibt für sie unverändert (: c-Zweig).
+    const other: Card = { ...card, id: 101, number: 2, title: 'Andere' }
+    render(<BoardView board={board} initialCards={[card, other]} canEdit api={api} onCardsChanged={onCardsChanged} />)
 
     fireEvent.click(screen.getByLabelText('Menü Aufgabe'))
     fireEvent.click(screen.getByRole('menuitem', { name: 'In Ideen-Speicher' }))
@@ -179,6 +186,8 @@ describe('BoardView', () => {
     expect(onCardsChanged).toHaveBeenCalled()
     // Optimistisch aus dem Board entfernt (ideaStored filtert die Spaltenansicht).
     expect(within(screen.getByTestId('column-10')).queryByTestId('card-100')).not.toBeInTheDocument()
+    // Die zweite Karte bleibt unangetastet sichtbar.
+    expect(within(screen.getByTestId('column-10')).getByTestId('card-101')).toBeInTheDocument()
   })
 
   it('rollt bei Fehler im Ideen-Speicher zurück und zeigt die Karte wieder', async () => {
@@ -206,11 +215,18 @@ describe('BoardView', () => {
 
     expect(screen.getByRole('heading', { name: 'Neue Karte in „Backlog“' })).toBeInTheDocument()
     expect(screen.getByLabelText('Titel')).toHaveValue('Original')
-    expect(screen.getByLabelText('Beschreibung')).toHaveValue('Original-Text')
+    expect(screen.getByLabelText('Markdown-Beschreibung')).toHaveValue('Original-Text')
 
     fireEvent.click(screen.getByRole('button', { name: 'Anlegen' }))
 
-    await waitFor(() => expect(api.create).toHaveBeenCalledWith(1, 10, 'Original', 'Original-Text', 9))
+    await waitFor(() =>
+      expect(api.create).toHaveBeenCalledWith(1, 10, 'Original', 'Original-Text', 9, false, {
+        dependencies: [],
+        dueDate: null,
+        assigneeIds: [],
+        labelIds: [],
+      }),
+    )
     // Quellkarte bleibt unverändert in ihrer Spalte (Done) erhalten.
     expect(within(screen.getByTestId('column-20')).getByTestId('card-100')).toBeInTheDocument()
   })
@@ -386,15 +402,34 @@ describe('BoardView', () => {
     expect(screen.getByText('Bug')).toBeInTheDocument()
   })
 
-  it('zeigt Zuständigen-Avatare mit Initialen auf der Karte', () => {
-    const assigned: Card = { ...card, assignees: [5] }
-    const members = [{ userId: 5, email: 'm@x.de', displayName: 'Max Mustermann', role: 'MEMBER' as const }]
+  it('zeigt Zuständigen-Avatare mit Initialen (zwei Wörter, ein Wort, leerer Name, Fallback)', () => {
+    // Deckt alle initials()-Zweige ab: 'Max Mustermann' -> MM (zwei Wörter), 'Cher' -> C (ein Wort),
+    // leerer Anzeigename -> '?' (kein Wort) und ein Assignee ohne Mitglied -> '#8' -> '#'.
+    const assigned: Card = { ...card, assignees: [5, 6, 7, 8] }
+    const members = [
+      { userId: 5, email: 'a@x.de', displayName: 'Max Mustermann', role: 'MEMBER' as const },
+      { userId: 6, email: 'b@x.de', displayName: 'Cher', role: 'MEMBER' as const },
+      { userId: 7, email: 'c@x.de', displayName: '', role: 'MEMBER' as const },
+    ]
     render(
       <BoardView board={board} initialCards={[assigned]} canEdit members={members} api={mkApi()} />,
     )
 
-    expect(screen.getByLabelText('Zuständige Aufgabe')).toBeInTheDocument()
-    expect(screen.getByText('MM')).toBeInTheDocument()
+    const group = screen.getByLabelText('Zuständige Aufgabe')
+    expect(group).toBeInTheDocument()
+    expect(within(group).getByText('MM')).toBeInTheDocument()
+    expect(within(group).getByText('C')).toBeInTheDocument()
+    expect(within(group).getByText('?')).toBeInTheDocument()
+    expect(within(group).getByText('#')).toBeInTheDocument()
+  })
+
+  it('zeigt für ein unbekanntes Label die Id als grauen Fallback-Chip', () => {
+    // labelId 999 hat kein Board-Label -> Chip zeigt „#999" und die graue Fallback-Farbe.
+    const labelled: Card = { ...card, labels: [999] }
+    render(<BoardView board={board} initialCards={[labelled]} canEdit boardLabels={[]} api={mkApi()} />)
+
+    expect(screen.getByLabelText('Labels Aufgabe')).toBeInTheDocument()
+    expect(screen.getByText('#999')).toBeInTheDocument()
   })
 
   it('blendet im Auswahlmodus Checkboxen ein und selektiert per Klick', () => {
@@ -428,7 +463,8 @@ describe('BoardView', () => {
 
   it('archiviert die Auswahl nach Bestätigung über die Bulk-API und entfernt sie optimistisch', async () => {
     const api = mkApi({ bulkArchive: vi.fn().mockResolvedValue([]) })
-    render(<BoardView board={board} initialCards={[card]} canEdit api={api} />)
+    const onCardsChanged = vi.fn()
+    render(<BoardView board={board} initialCards={[card]} canEdit api={api} onCardsChanged={onCardsChanged} />)
 
     fireEvent.click(screen.getByRole('button', { name: 'Auswählen' }))
     fireEvent.click(screen.getByTestId('card-100'))
@@ -440,6 +476,8 @@ describe('BoardView', () => {
 
     await waitFor(() => expect(api.bulkArchive).toHaveBeenCalledWith([100]))
     await waitFor(() => expect(screen.queryByTestId('card-100')).not.toBeInTheDocument())
+    // Erfolgspfad benachrichtigt das Elternteil (onCardsChanged?.()-Aufrufzweig).
+    expect(onCardsChanged).toHaveBeenCalled()
   })
 
   it('archiviert nicht, wenn die Bestätigung abgebrochen wird', () => {
@@ -470,7 +508,8 @@ describe('BoardView', () => {
 
   it('verschiebt die Auswahl nach Bestätigung in den Papierkorb', async () => {
     const api = mkApi({ bulkDelete: vi.fn().mockResolvedValue(undefined) })
-    render(<BoardView board={board} initialCards={[card]} canEdit api={api} />)
+    const onCardsChanged = vi.fn()
+    render(<BoardView board={board} initialCards={[card]} canEdit api={api} onCardsChanged={onCardsChanged} />)
 
     fireEvent.click(screen.getByRole('button', { name: 'Auswählen' }))
     fireEvent.click(screen.getByTestId('card-100'))
@@ -483,6 +522,8 @@ describe('BoardView', () => {
 
     await waitFor(() => expect(api.bulkDelete).toHaveBeenCalledWith([100]))
     await waitFor(() => expect(screen.queryByTestId('card-100')).not.toBeInTheDocument())
+    // Erfolgspfad benachrichtigt das Elternteil (onCardsChanged?.()-Aufrufzweig).
+    expect(onCardsChanged).toHaveBeenCalled()
   })
 
   it('rollt beim Fehler des Bulk-Papierkorbs zurück und meldet ihn', async () => {
@@ -764,6 +805,106 @@ describe('BoardView', () => {
     } finally {
       vi.unstubAllGlobals()
     }
+  })
+
+  it('liest einen gespeicherten Epic-Filter beim Mount aus localStorage', () => {
+    // Funktionaler localStorage-Stub mit vorbelegtem Wert -> der Lazy-Initializer nimmt beim
+    // Mount den truthy-Zweig (Number(raw)) statt des null-Fallbacks.
+    const store = new Map<string, string>([['manban.boardEpicFilter.1', '9']])
+    vi.stubGlobal('localStorage', {
+      getItem: (k: string) => store.get(k) ?? null,
+      setItem: (k: string, v: string) => { store.set(k, v) },
+      removeItem: (k: string) => { store.delete(k) },
+      clear: () => store.clear(), key: () => null, length: 0,
+    })
+    try {
+      const epics = [{ id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 0, total: 1 }]
+      const inEpic: Card = { ...card, id: 100, parentId: 9 }
+      const other: Card = { ...card, id: 200, number: 2, parentId: null }
+      render(<BoardView board={board} initialCards={[inEpic, other]} canEdit epics={epics} api={mkApi()} />)
+
+      // Filter greift sofort beim Mount: nur die Epic-Karte ist sichtbar.
+      expect(screen.getByTestId('card-100')).toBeInTheDocument()
+      expect(screen.queryByTestId('card-200')).not.toBeInTheDocument()
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('startet ohne aktiven Epic-Filter, wenn nichts gespeichert ist', () => {
+    // Funktionaler, aber leerer localStorage: getItem liefert null -> der Initializer nimmt den
+    // null-Zweig von `raw ? Number(raw) : null` (nicht den catch-Fallback).
+    vi.stubGlobal('localStorage', {
+      getItem: () => null,
+      setItem: () => {}, removeItem: () => {},
+      clear: () => {}, key: () => null, length: 0,
+    })
+    try {
+      render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} />)
+      expect(screen.getByTestId('card-100')).toBeInTheDocument()
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('setzt den Epic-Filter auf „Alle" zurück und entfernt den gespeicherten Wert', () => {
+    const epics = [{ id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 0, total: 1 }]
+    const inEpic: Card = { ...card, id: 100, parentId: 9 }
+    const other: Card = { ...card, id: 200, number: 2, parentId: null }
+    render(<BoardView board={board} initialCards={[inEpic, other]} canEdit epics={epics} api={mkApi()} />)
+
+    // Erst filtern (setItem/Number-Zweig) ...
+    fireEvent.change(screen.getByLabelText('Epic-Filter'), { target: { value: '9' } })
+    expect(screen.queryByTestId('card-200')).not.toBeInTheDocument()
+    // ... dann auf leeren Wert zurück: onChange nimmt den null-Zweig, changeEpicFilter den removeItem-Zweig.
+    fireEvent.change(screen.getByLabelText('Epic-Filter'), { target: { value: '' } })
+    expect(screen.getByTestId('card-200')).toBeInTheDocument()
+  })
+
+  it('füllt beim Bearbeiten das WIP-Limit-Feld mit dem bestehenden Wert vor', () => {
+    const boardWithWip: Board = {
+      ...board,
+      columns: [{ id: 10, name: 'Backlog', position: 0, wipLimit: 5 }, board.columns[1]],
+    }
+    render(<BoardView board={boardWithWip} initialCards={[card]} canEdit api={mkApi()} />)
+
+    fireEvent.click(screen.getByLabelText('Spalte Backlog bearbeiten'))
+    // Bestehendes WIP-Limit (!= null) wird als String vorbefüllt.
+    expect(screen.getByLabelText('WIP-Limit')).toHaveValue(5)
+  })
+
+  it('deaktiviert „Speichern" bei ungültigem WIP-Limit', () => {
+    render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} />)
+
+    fireEvent.click(screen.getByLabelText('Spalte Backlog bearbeiten'))
+    // 0 ist kein gültiges (positives) WIP-Limit -> parsedWip() === undefined -> Button disabled.
+    fireEvent.change(screen.getByLabelText('WIP-Limit'), { target: { value: '0' } })
+    expect(screen.getByRole('button', { name: 'Speichern' })).toBeDisabled()
+  })
+
+  it('beendet den Auswahlmodus über denselben Umschalt-Button', () => {
+    render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Auswählen' }))
+    expect(screen.getByLabelText('Karte Aufgabe auswählen')).toBeInTheDocument()
+    // Erneuter Klick (jetzt „Auswahl beenden") nimmt den exitSelection-Zweig von toggleSelectionMode.
+    fireEvent.click(screen.getByRole('button', { name: 'Auswahl beenden' }))
+    expect(screen.queryByLabelText('Karte Aufgabe auswählen')).not.toBeInTheDocument()
+  })
+
+  it('bricht das Duplizieren ab, wenn zwischenzeitlich keine Spalte mehr existiert', () => {
+    const api = mkApi()
+    const { rerender } = render(<BoardView board={board} initialCards={[card]} canEdit api={api} />)
+    fireEvent.click(screen.getByLabelText('Menü Aufgabe'))
+
+    // Alle Spalten verschwinden (z. B. andere Session), während das Menü offen ist.
+    const emptyBoard: Board = { ...board, columns: [] }
+    rerender(<BoardView board={emptyBoard} initialCards={[card]} canEdit api={api} />)
+
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Duplizieren' }))
+    // Guard columns.length === 0 greift: kein Anlage-Dialog, kein create.
+    expect(screen.queryByRole('heading', { name: /Neue Karte/ })).not.toBeInTheDocument()
+    expect(api.create).not.toHaveBeenCalled()
   })
 
   describe('Editiermodus aus (editMode=false)', () => {

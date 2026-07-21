@@ -5,10 +5,15 @@ import DialogContent from '@mui/material/DialogContent'
 import DialogTitle from '@mui/material/DialogTitle'
 import Stack from '@mui/material/Stack'
 import TextField from '@mui/material/TextField'
-import { useEffect, useRef, useState } from 'react'
+import { type KeyboardEvent, useEffect, useRef, useState } from 'react'
 import type { CardType } from '../api/cards'
 import type { Epic } from '../api/epics'
+import type { Label as BoardLabel } from '../api/labels'
+import type { Member } from '../api/members'
 import { epicShortcode } from '../lib/epicMeta'
+import { dueInputToIso } from '../lib/dueDate'
+import { CardFields } from './CardFields'
+import { AssigneeSection, LabelSection, parseDependencyInput } from './CardDetailModal'
 
 const BODY_TEMPLATE = '## Kontext\n\n## Aufgabe\n\n## Akzeptanzkriterium\n\n## Abhängigkeiten\n'
 
@@ -18,6 +23,14 @@ export interface NewItemInput {
   description: string
   parentId: number | null
   shortcode: string | null
+  /** Kartennummern, von denen die neue Karte abhängt (leer bei Idee/Epic). */
+  dependencies: number[]
+  /** Fälligkeit als ISO-String (null bei Idee/Epic oder leerer Eingabe). */
+  dueDate: string | null
+  /** Zuständige (User-IDs); leer bei Idee/Epic. */
+  assigneeIds: number[]
+  /** Labels (IDs); leer bei Idee/Epic. */
+  labelIds: number[]
 }
 
 /** Vorbefüllung für „Duplizieren": Titel/Beschreibung/Epic-Zuordnung der Quellkarte. */
@@ -39,6 +52,10 @@ interface Props {
   ideaOnly?: boolean
   /** Vorbefüllung für „Duplizieren"; ohne Angabe startet der Dialog leer. */
   initialValues?: NewCardInitialValues
+  /** Projektmitglieder für die Zuständigen-Auswahl (nur voller Karten-Anlege-Modus). */
+  members?: Member[]
+  /** Board-Labels für die Label-Auswahl (nur voller Karten-Anlege-Modus). */
+  boardLabels?: BoardLabel[]
 }
 
 /**
@@ -55,12 +72,19 @@ export function NewCardModal({
   epicOnly = false,
   ideaOnly = false,
   initialValues,
+  members = [],
+  boardLabels = [],
 }: Readonly<Props>) {
   const [type, setType] = useState<CardType>(epicOnly ? 'EPIC' : 'CARD')
   const [title, setTitle] = useState('')
   const [body, setBody] = useState(BODY_TEMPLATE)
   const [parentId, setParentId] = useState<number | null>(null)
   const [shortcode, setShortcode] = useState('')
+  const [depsInput, setDepsInput] = useState('')
+  const [depsError, setDepsError] = useState<string | null>(null)
+  const [dueInput, setDueInput] = useState('')
+  const [assigneeIds, setAssigneeIds] = useState<number[]>([])
+  const [labelIds, setLabelIds] = useState<number[]>([])
   const [saving, setSaving] = useState(false)
   const titleInputRef = useRef<HTMLInputElement>(null)
 
@@ -71,12 +95,22 @@ export function NewCardModal({
     setBody(initialValues?.description ?? BODY_TEMPLATE)
     setParentId(initialValues?.parentId ?? null)
     setShortcode('')
+    setDepsInput('')
+    setDepsError(null)
+    setDueInput('')
+    setAssigneeIds([])
+    setLabelIds([])
     setSaving(false)
     // Titel selektieren, damit ein Überschreiben (z. B. beim Duplizieren) ohne Löschen möglich ist.
+    // Beim ersten Effektlauf ist der Input wegen der Dialog-Transition ggf. noch nicht gemountet
+    // (current === null); bei späteren Läufen (z. B. geänderte initialValues) greift die Selektion.
     titleInputRef.current?.select()
   }, [open, epicOnly, initialValues])
 
   const canSubmit = title.trim().length > 0 && !saving
+  // Voller Karten-Anlege-Modus: nur echte Karten (kein Epic) außerhalb des schlanken Ideen-Dialogs
+  // bekommen Abhängigkeiten, Fälligkeit, Zuständige und Labels.
+  const fullCard = type === 'CARD' && !ideaOnly
 
   // Kein verschachteltes Ternary im JSX (Sonar S3358): der Titel richtet sich nach dem Modus.
   let dialogTitle
@@ -90,6 +124,17 @@ export function NewCardModal({
 
   const handleCreate = async () => {
     if (!canSubmit) return
+    let dependencies: number[] = []
+    let dueDate: string | null = null
+    if (fullCard) {
+      const parsed = parseDependencyInput(depsInput)
+      if (!parsed.valid) {
+        setDepsError('Nur positive Nummern, kommagetrennt (z. B. 12, 34).')
+        return
+      }
+      dependencies = parsed.deps
+      dueDate = dueInputToIso(dueInput)
+    }
     setSaving(true)
     try {
       await onSubmit({
@@ -97,12 +142,20 @@ export function NewCardModal({
         title: title.trim(),
         description: body,
         parentId: type === 'CARD' ? parentId : null,
-        shortcode: type === 'EPIC' ? (shortcode.trim() || null) : null,
+        shortcode: type === 'EPIC' ? shortcode.trim() || null : null,
+        dependencies,
+        dueDate,
+        assigneeIds: fullCard ? assigneeIds : [],
+        labelIds: fullCard ? labelIds : [],
       })
       onClose()
     } finally {
       setSaving(false)
     }
+  }
+
+  const handleTitleKeyDown = (e: KeyboardEvent) => {
+    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) void handleCreate()
   }
 
   return (
@@ -144,63 +197,104 @@ export function NewCardModal({
             </TextField>
           )}
 
-          {type === 'CARD' && (
-            <TextField
-              select
-              label="Epic"
-              value={parentId ?? ''}
-              onChange={(e) => setParentId(e.target.value === '' ? null : Number(e.target.value))}
-              slotProps={{
-                htmlInput: { 'aria-label': 'Epic' },
-                select: { native: true },
-                inputLabel: { shrink: true },
-              }}
-              fullWidth
-            >
-              <option value="">(kein Epic)</option>
-              {epics.map((epic) => (
-                <option key={epic.id} value={epic.id}>
-                  {epicShortcode(epic.title, epic.shortcode)} – {epic.title}
-                </option>
-              ))}
-            </TextField>
-          )}
+          {fullCard ? (
+            <>
+              {/* Karte: gemeinsame Feldbasis mit dem Bearbeiten (#326) plus die deferred
+                  gesammelten Zuständigen/Labels — im Anlegen wird alles atomar mitgeschickt (#325). */}
+              <CardFields
+                isEpic={false}
+                title={title}
+                body={body}
+                shortcode={shortcode}
+                parentId={parentId}
+                epics={epics}
+                depsInput={depsInput}
+                depsError={depsError}
+                dueInput={dueInput}
+                onTitleChange={setTitle}
+                onBodyChange={setBody}
+                onShortcodeChange={setShortcode}
+                onParentIdChange={setParentId}
+                onDepsInputChange={(value) => {
+                  setDepsInput(value)
+                  if (depsError) setDepsError(null)
+                }}
+                onDueInputChange={setDueInput}
+                titleInputRef={titleInputRef}
+                onTitleKeyDown={handleTitleKeyDown}
+              />
+              <AssigneeSection
+                canEdit
+                members={members}
+                assigneeIds={assigneeIds}
+                onChange={setAssigneeIds}
+              />
+              <LabelSection
+                canEdit
+                boardLabels={boardLabels}
+                labelIds={labelIds}
+                onChange={setLabelIds}
+              />
+            </>
+          ) : (
+            <>
+              {/* Ideen-Speicher (ideaOnly) und Epic bleiben bewusst schlank: nur die bisherigen
+                  Felder, keine Zuständigen/Labels/Fälligkeit/Abhängigkeiten. */}
+              {type === 'EPIC' ? (
+                <TextField
+                  label="Kürzel (optional)"
+                  value={shortcode}
+                  onChange={(e) => setShortcode(e.target.value)}
+                  placeholder={epicShortcode(title)}
+                  helperText="Leer lassen, um es aus dem Titel abzuleiten."
+                  slotProps={{ htmlInput: { maxLength: 16, 'aria-label': 'Kürzel' } }}
+                  fullWidth
+                />
+              ) : (
+                <TextField
+                  select
+                  label="Epic"
+                  value={parentId ?? ''}
+                  onChange={(e) => setParentId(e.target.value === '' ? null : Number(e.target.value))}
+                  slotProps={{
+                    htmlInput: { 'aria-label': 'Epic' },
+                    select: { native: true },
+                    inputLabel: { shrink: true },
+                  }}
+                  fullWidth
+                >
+                  <option value="">(kein Epic)</option>
+                  {epics.map((epic) => (
+                    <option key={epic.id} value={epic.id}>
+                      {epicShortcode(epic.title, epic.shortcode)} – {epic.title}
+                    </option>
+                  ))}
+                </TextField>
+              )}
 
-          {type === 'EPIC' && (
-            <TextField
-              label="Kürzel (optional)"
-              value={shortcode}
-              onChange={(e) => setShortcode(e.target.value)}
-              placeholder={epicShortcode(title)}
-              helperText="Leer lassen, um es aus dem Titel abzuleiten."
-              slotProps={{ htmlInput: { maxLength: 16, 'aria-label': 'Kürzel' } }}
-              fullWidth
-            />
+              <TextField
+                label="Titel"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                required
+                autoFocus
+                fullWidth
+                inputRef={titleInputRef}
+                slotProps={{ htmlInput: { maxLength: 300, 'aria-label': 'Titel' } }}
+                onKeyDown={handleTitleKeyDown}
+              />
+              <TextField
+                label="Beschreibung"
+                value={body}
+                onChange={(e) => setBody(e.target.value)}
+                multiline
+                rows={8}
+                fullWidth
+                slotProps={{ htmlInput: { maxLength: 10_000, 'aria-label': 'Beschreibung' } }}
+                sx={{ '& textarea': { fontFamily: 'monospace', resize: 'vertical' } }}
+              />
+            </>
           )}
-
-          <TextField
-            label="Titel"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            required
-            autoFocus
-            fullWidth
-            inputRef={titleInputRef}
-            slotProps={{ htmlInput: { maxLength: 300, 'aria-label': 'Titel' } }}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) void handleCreate()
-            }}
-          />
-          <TextField
-            label="Beschreibung"
-            value={body}
-            onChange={(e) => setBody(e.target.value)}
-            multiline
-            rows={8}
-            fullWidth
-            slotProps={{ htmlInput: { maxLength: 10_000, 'aria-label': 'Beschreibung' } }}
-            sx={{ '& textarea': { fontFamily: 'monospace', resize: 'vertical' } }}
-          />
         </Stack>
       </DialogContent>
       <DialogActions>

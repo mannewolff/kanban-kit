@@ -90,17 +90,16 @@ function ApiTokensSection() {
       .then((ps) => setProjects(ps.filter((p) => canEditCards(p.role, platformAdmin))))
   }, [platformAdmin])
 
-  const projectName = (id: number | null): string =>
-    id == null ? '' : (projects.find((p) => p.id === id)?.name ?? `#${id}`)
+  // Wird nur mit gebundener (nicht-null) projectId aufgerufen (siehe binding), daher `id: number`.
+  const projectName = (id: number): string => projects.find((p) => p.id === id)?.name ?? `#${id}`
 
   const binding = (t: AccessToken): string =>
     t.projectId != null && t.boardId != null
       ? `Projekt „${projectName(t.projectId)}“ · Board ${t.boardId}`
       : 'ungebunden'
 
-  const copyPlaintext = async () => {
-    if (!created) return
-    await navigator.clipboard.writeText(created.plaintext)
+  const copyPlaintext = async (plaintext: string) => {
+    await navigator.clipboard.writeText(plaintext)
     setCopied(true)
   }
 
@@ -153,7 +152,7 @@ function ApiTokensSection() {
                 size="small"
                 aria-label="Token kopieren"
                 startIcon={<ContentCopyIcon fontSize="small" />}
-                onClick={() => void copyPlaintext()}
+                onClick={() => void copyPlaintext(created.plaintext)}
               >
                 {copied ? 'Kopiert' : 'Kopieren'}
               </Button>
@@ -279,12 +278,12 @@ function CreateTokenDialog({
   const canSubmit = name.trim().length > 0 && projectId !== '' && boardId !== '' && !saving
 
   const submit = async () => {
-    // canSubmit garantiert projectId/boardId als number (TS-Alias-Narrowing).
-    if (!canSubmit) return
     setSaving(true)
     setError(null)
     try {
-      const res = await accessTokensApi.create(name.trim(), projectId, boardId)
+      // projectId/boardId sind hier Zahlen (der Erzeugen-Button ist bei !canSubmit disabled);
+      // Number(...) verengt number|'' ohne toten Guard-Zweig.
+      const res = await accessTokensApi.create(name.trim(), Number(projectId), Number(boardId))
       onCreated(res)
     } catch {
       setError(

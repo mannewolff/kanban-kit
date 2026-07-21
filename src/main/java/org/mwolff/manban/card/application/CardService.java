@@ -37,7 +37,10 @@ import org.springframework.transaction.annotation.Transactional;
 // ist fachlich begründet und kein God-Class-Smell.
 // PMD.CyclomaticComplexity: die Klassen-Gesamtkomplexität summiert viele kleine, je für sich
 // einfache Use-Case-Methoden (höchste Einzelmethode weit unter dem Schwellwert); kein Smell.
-@SuppressWarnings({"PMD.CouplingBetweenObjects", "PMD.CyclomaticComplexity"})
+// PMD.TooManyMethods: zentraler Karten-/Epic-Use-Case-Service — viele kleine, kohäsive Methoden
+// (Anlegen/Bearbeiten/Move/Archiv/Ideen-Speicher/Zuständige/Labels je Erfolgs- und Fehlerpfad);
+// eine Aufspaltung würde denselben Use-Case-Kontext künstlich zerreißen, kein God-Class-Smell.
+@SuppressWarnings({"PMD.CouplingBetweenObjects", "PMD.CyclomaticComplexity", "PMD.TooManyMethods"})
 @Service
 public class CardService {
 
@@ -94,9 +97,9 @@ public class CardService {
   }
 
   /**
-   * Legt eine Karte an. Mit {@code ideaStored=true} entsteht sie direkt im Ideen-Speicher: sie hält
-   * keinen aktiven Positions-Anspruch (fällt via {@code active_position=NULL} aus dem Namespace)
-   * und eröffnet keine Spalten-Transition, weil sie nicht am Board-Workflow teilnimmt.
+   * Legt eine Karte an (ohne Fälligkeit/Zuständige/Labels). Delegiert an die Voll-Signatur mit
+   * {@code null} für die inhaltlichen Zusatzfelder — genutzt vom {@code kanbancompat}-Ingest und
+   * der schlanken internen Überladung, die diese Felder nicht setzen.
    */
   @Transactional
   public CardView create(
@@ -108,6 +111,42 @@ public class CardService {
       @Nullable List<Integer> dependsOn,
       @Nullable Long parentId,
       boolean ideaStored) {
+    return create(
+        userId,
+        boardId,
+        columnId,
+        title,
+        description,
+        dependsOn,
+        parentId,
+        ideaStored,
+        null,
+        null,
+        null);
+  }
+
+  /**
+   * Legt eine Karte an. Mit {@code ideaStored=true} entsteht sie direkt im Ideen-Speicher: sie hält
+   * keinen aktiven Positions-Anspruch (fällt via {@code active_position=NULL} aus dem Namespace)
+   * und eröffnet keine Spalten-Transition, weil sie nicht am Board-Workflow teilnimmt. {@code
+   * dueDate}, {@code assigneeIds} und {@code labelIds} werden — sofern gesetzt — atomar mit der
+   * Anlage übernommen (ein einziger {@code CREATED}-Aktivitätseintrag, kein Teil-Zustand); {@code
+   * null}/leer bedeutet „nicht gesetzt". Assignees/Labels durchlaufen dieselbe Prüfung wie {@link
+   * #setAssignees} / {@link #setLabels} (Mitglied im Projekt, Label des Boards).
+   */
+  @Transactional
+  public CardView create(
+      long userId,
+      long boardId,
+      long columnId,
+      String title,
+      @Nullable String description,
+      @Nullable List<Integer> dependsOn,
+      @Nullable Long parentId,
+      boolean ideaStored,
+      @Nullable Instant dueDate,
+      @Nullable List<Long> assigneeIds,
+      @Nullable List<Long> labelIds) {
     Board board = boards.findById(boardId).orElseThrow(BoardNotFoundException::new);
     permissions.require(userId, board.projectId(), Permission.TICKET_CREATE);
     BoardColumn column = requireColumnInBoard(columnId, boardId);
@@ -136,13 +175,19 @@ public class CardService {
                 CardType.CARD,
                 effectiveParent,
                 null,
-                null));
+                dueDate));
 
     if (!ideaStored) {
       transitions.open(saved.requireId(), columnId, column.name(), now);
     }
     activity.add(saved.requireId(), userId, CardActivityType.CREATED, "Karte angelegt", now);
     setDependencies(saved, dependsOn);
+    if (assigneeIds != null && !assigneeIds.isEmpty()) {
+      assignValidatedAssignees(saved.requireId(), board.projectId(), assigneeIds);
+    }
+    if (labelIds != null && !labelIds.isEmpty()) {
+      assignValidatedLabels(saved.requireId(), boardId, labelIds);
+    }
     return view(saved);
   }
 
@@ -280,13 +325,7 @@ public class CardService {
     Board board = boards.findById(card.boardId()).orElseThrow(BoardNotFoundException::new);
     permissions.require(userId, board.projectId(), Permission.TICKET_UPDATE);
 
-    List<Long> distinct = assigneeIds.stream().distinct().toList();
-    for (Long assignee : distinct) {
-      if (memberships.findByProjectIdAndUserId(board.projectId(), assignee).isEmpty()) {
-        throw new InvalidAssigneeException("Kein Projektmitglied: " + assignee);
-      }
-    }
-    assignees.replaceAssignees(cardId, distinct);
+    assignValidatedAssignees(cardId, board.projectId(), assigneeIds);
     activity.add(cardId, userId, CardActivityType.ASSIGNED, "Zuständige geändert", clock.instant());
     return view(card);
   }
@@ -304,16 +343,40 @@ public class CardService {
     Board board = boards.findById(card.boardId()).orElseThrow(BoardNotFoundException::new);
     permissions.require(userId, board.projectId(), Permission.TICKET_UPDATE);
 
+    assignValidatedLabels(cardId, card.boardId(), labelIds);
+    return view(card);
+  }
+
+  /**
+   * Prüft und setzt die Zuständigen einer Karte (Duplikate raus; jede ID muss Mitglied des Projekts
+   * sein) ohne Aktivitätseintrag — die wiederverwendbare Kernlogik von {@link #setAssignees} und
+   * dem atomaren {@link #create}.
+   */
+  private void assignValidatedAssignees(long cardId, long projectId, List<Long> assigneeIds) {
+    List<Long> distinct = assigneeIds.stream().distinct().toList();
+    for (Long assignee : distinct) {
+      if (memberships.findByProjectIdAndUserId(projectId, assignee).isEmpty()) {
+        throw new InvalidAssigneeException("Kein Projektmitglied: " + assignee);
+      }
+    }
+    assignees.replaceAssignees(cardId, distinct);
+  }
+
+  /**
+   * Prüft und setzt die Labels einer Karte (Duplikate raus; jede ID muss ein Label desselben Boards
+   * sein) — die wiederverwendbare Kernlogik von {@link #setLabels} und dem atomaren {@link
+   * #create}.
+   */
+  private void assignValidatedLabels(long cardId, long boardId, List<Long> labelIds) {
     List<Long> distinct = labelIds.stream().distinct().toList();
     List<Long> boardLabelIds =
-        labels.findByBoardId(card.boardId()).stream().map(Label::requireId).toList();
+        labels.findByBoardId(boardId).stream().map(Label::requireId).toList();
     for (Long labelId : distinct) {
       if (!boardLabelIds.contains(labelId)) {
         throw new InvalidLabelException("Kein Label dieses Boards: " + labelId);
       }
     }
     cardLabels.replaceLabels(cardId, distinct);
-    return view(card);
   }
 
   /** Ordnet eine Karte einem Epic zu ({@code parentId}) oder löst die Zuordnung ({@code null}). */

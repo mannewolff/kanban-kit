@@ -174,6 +174,29 @@ describe('ProjectBoardsPage RBAC', () => {
     expect(await screen.findByText('Board-Ansicht')).toBeInTheDocument()
   })
 
+  it('routet mit autoRoute-State und genau einem Board durch, auch ohne default-Key', async () => {
+    mockedProjects.list.mockResolvedValue([{ id: 5, name: 'Team', role: 'OWNER', createdAt: '' }])
+    mockedBoards.list.mockResolvedValue([{ id: 9, name: 'Solo', projectId: 5, createdAt: '', columns: [] }])
+    mockedBoards.listArchived.mockResolvedValue([])
+
+    function Start() {
+      const navigate = useNavigate()
+      return <button onClick={() => navigate('/projects/5', { state: { autoRoute: true } })}>los</button>
+    }
+    render(
+      <MemoryRouter initialEntries={['/start']}>
+        <Routes>
+          <Route path="/start" element={<Start />} />
+          <Route path="/projects/:projectId" element={<ProjectBoardsPage />} />
+          <Route path="/boards/:boardId" element={<div>Board-Ansicht</div>} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    fireEvent.click(screen.getByText('los'))
+    expect(await screen.findByText('Board-Ansicht')).toBeInTheDocument()
+  })
+
   it('verwirft eine spät auflösende Antwort der alten Projekt-ID nach einem ID-Wechsel', async () => {
     // Zwei Boards je Projekt, damit kein Auto-Routing bei genau einem Board greift.
     const dOld = deferred<Board[]>()
@@ -220,6 +243,21 @@ describe('ProjectBoardsPage RBAC', () => {
     expect(await screen.findByText('Ungültige Projekt-ID.')).toBeInTheDocument()
     expect(mockedBoards.list).not.toHaveBeenCalled()
     expect(mockedProjects.list).not.toHaveBeenCalled()
+  })
+
+  it('lädt beim Fensterfokus nichts nach, wenn die Projekt-ID ungültig ist', async () => {
+    render(
+      <MemoryRouter initialEntries={['/projects/abc']}>
+        <Routes>
+          <Route path="/projects/:projectId" element={<ProjectBoardsPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+    await screen.findByText('Ungültige Projekt-ID.')
+
+    fireEvent(window, new Event('focus'))
+
+    expect(mockedBoards.list).not.toHaveBeenCalled()
   })
 
   it('legt ein neues Board an', async () => {
@@ -288,5 +326,16 @@ describe('ProjectBoardsPage RBAC', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Abbrechen' }))
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
     expect(mockedBoards.remove).not.toHaveBeenCalled()
+  })
+
+  it('behandelt einen fehlenden Projekt-Parameter als ungültig (projectId undefined)', () => {
+    render(
+      <MemoryRouter initialEntries={['/x']}>
+        <Routes>
+          <Route path="/x" element={<ProjectBoardsPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+    expect(screen.getByText('Ungültige Projekt-ID.')).toBeInTheDocument()
   })
 })

@@ -7,6 +7,22 @@ Versionierung folgt der dreiteiligen Betriebsversion (siehe [RELEASING.md](RELEA
 Einträge je Version sind ein automatischer Auszug der Commit-Titel seit dem letzten Release,
 erzeugt von `scripts/gen-changelog.mjs`.
 
+## [1.3.0] – 2026-07-21
+
+- Projektmitglieder-Liste auf DataTable umstellen ([#332](https://github.com/mannewolff/kanban-kit/issues/332))
+- Nutzerverwaltung (/admin) auf DataTable umstellen ([#331](https://github.com/mannewolff/kanban-kit/issues/331))
+- Wiederverwendbare DataTable-Komponente ([#330](https://github.com/mannewolff/kanban-kit/issues/330))
+- Zebra-Zeilenfarben für alle Tabellen global im Theme ([#329](https://github.com/mannewolff/kanban-kit/issues/329))
+- Namen-Bleistift in der Nutzerverwaltung an den Editiermodus koppeln ([#328](https://github.com/mannewolff/kanban-kit/issues/328))
+- Karten-Anlegen mit vollem Feldsatz verdrahten ([#327](https://github.com/mannewolff/kanban-kit/issues/327))
+- Gemeinsame CardFields-Komponente aus CardEditForm extrahieren ([#326](https://github.com/mannewolff/kanban-kit/issues/326))
+- Karten-Anlegen: Fälligkeit, Zuständige und Labels atomar im Create-Endpoint ([#325](https://github.com/mannewolff/kanban-kit/issues/325))
+- Item-/Epic-Bearbeiten aus dem Editiermodus-Gate lösen ([#324](https://github.com/mannewolff/kanban-kit/issues/324))
+- Sonar S7755/S7758: .at()/codePointAt() statt Index/charCodeAt (New Code)
+- Frontend-Coverage auf echte 100/100/100/100 + finaler Ratchet ([#323](https://github.com/mannewolff/kanban-kit/issues/323))
+- Sonar-Duplikate: useBoardRole-Hook extrahieren + config.ts testen ([#322](https://github.com/mannewolff/kanban-kit/issues/322))
+- Sonar-Duplikate: gemeinsame Basis fuer die Auth-Token-Entities ([#321](https://github.com/mannewolff/kanban-kit/issues/321))
+
 ## [1.2.0] – 2026-07-20
 
 - Release 1.1.1 (push main)

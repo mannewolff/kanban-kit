@@ -44,10 +44,17 @@ export const cardsApi = {
     description?: string,
     parentId?: number | null,
     ideaStored?: boolean,
+    // Inhaltlicher Zusatz-Feldsatz beim atomaren Anlegen (Backend #325); leer/weggelassen = wie bisher.
+    extra?: {
+      dependencies?: number[]
+      dueDate?: string | null
+      assigneeIds?: number[]
+      labelIds?: number[]
+    },
   ) =>
     apiFetch<Card>(`/api/boards/${boardId}/cards`, {
       method: 'POST',
-      body: JSON.stringify({ columnId, title, description, parentId, ideaStored }),
+      body: JSON.stringify({ columnId, title, description, parentId, ideaStored, ...extra }),
     }),
   move: (cardId: number, columnId: number, position: number) =>
     apiFetch<Card>(`/api/cards/${cardId}/move`, { method: 'POST', body: JSON.stringify({ columnId, position }) }),

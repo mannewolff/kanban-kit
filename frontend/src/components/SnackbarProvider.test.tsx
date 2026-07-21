@@ -31,6 +31,18 @@ describe('SnackbarProvider', () => {
     expect(screen.queryByText('Board weg')).not.toBeInTheDocument()
   })
 
+  it('schließt die Meldung über Escape (Snackbar-onClose)', async () => {
+    render(
+      <SnackbarProvider>
+        <Trigger message="Board weg" />
+      </SnackbarProvider>,
+    )
+    await userEvent.click(screen.getByText('auslösen'))
+    expect(await screen.findByText('Board weg')).toBeInTheDocument()
+    await userEvent.keyboard('{Escape}')
+    expect(screen.queryByText('Board weg')).not.toBeInTheDocument()
+  })
+
   it('ist ohne Provider ein No-op (kein Crash)', async () => {
     render(<Trigger message="Board weg" />)
     await userEvent.click(screen.getByText('auslösen'))

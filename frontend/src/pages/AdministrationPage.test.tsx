@@ -121,6 +121,39 @@ describe('AdministrationPage', () => {
     )
   })
 
+  it('leert Projekt/Board über die (wählen)-Option und deaktiviert Erzeugen', async () => {
+    mProjects.list.mockResolvedValue([memberProject])
+    mBoards.list.mockResolvedValue([boardA])
+    renderPage()
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Token erzeugen' }))
+    fireEvent.change(screen.getByLabelText('Projekt'), { target: { value: '3' } })
+    await screen.findByRole('option', { name: 'Board A' })
+    fireEvent.change(screen.getByLabelText('Board'), { target: { value: '7' } })
+    fireEvent.change(screen.getByLabelText('Board'), { target: { value: '' } })
+    fireEvent.change(screen.getByLabelText('Projekt'), { target: { value: '' } })
+
+    expect(screen.getByRole('button', { name: 'Erzeugen' })).toBeDisabled()
+  })
+
+  it('schließt den Erzeugen-Dialog über Abbrechen', async () => {
+    mProjects.list.mockResolvedValue([memberProject])
+    renderPage()
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Token erzeugen' }))
+    expect(screen.getByText('Neues API-Token')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Abbrechen' }))
+    await waitFor(() => expect(screen.queryByText('Neues API-Token')).not.toBeInTheDocument())
+  })
+
+  it('zeigt die Bindung mit #id, wenn das Projekt nicht (mehr) sichtbar ist', async () => {
+    mTokens.list.mockResolvedValue([{ ...boundToken, projectId: 99, boardId: 7 }])
+    mProjects.list.mockResolvedValue([memberProject]) // Projekt 99 nicht dabei
+    renderPage()
+
+    expect(await screen.findByText('Projekt „#99“ · Board 7')).toBeInTheDocument()
+  })
+
   it('widerruft ein Token über die Zeilen-Aktion (nach Bestätigung)', async () => {
     mTokens.list.mockResolvedValue([boundToken])
     renderPage()

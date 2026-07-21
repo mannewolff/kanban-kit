@@ -8,12 +8,6 @@ import { CardDetailModal, parseDependencyInput } from './CardDetailModal'
 vi.mock('../auth/AuthContext', () => ({
   useAuth: () => ({ user: { userId: 7, email: 'a@b.c', displayName: 'A', platformRole: 'USER', memberships: [] } }),
 }))
-// Editiermodus gemockt: Bestandstests laufen mit editMode=true (Bearbeiten-Button sichtbar), der
-// Editiermodus-aus-Test schaltet editMode.value=false.
-const editMode = vi.hoisted(() => ({ value: true }))
-vi.mock('../lib/EditModeContext', () => ({
-  useEditMode: () => ({ editMode: editMode.value, setEditMode: vi.fn(), toggleEditMode: vi.fn() }),
-}))
 
 const card: Card = {
   id: 100, boardId: 1, columnId: 10, number: 5, title: 'Aufgabe', description: '# Titel\n\n- a\n- b',
@@ -61,19 +55,16 @@ describe('parseDependencyInput', () => {
 
 describe('CardDetailModal', () => {
   beforeEach(() => {
-    editMode.value = true
     // jsdom kennt createObjectURL nicht.
     URL.createObjectURL = vi.fn(() => 'blob:preview')
     URL.revokeObjectURL = vi.fn()
   })
 
-  it('blendet bei ausgeschaltetem Editiermodus den Bearbeiten-Button aus (trotz canEdit)', async () => {
-    editMode.value = false
+  it('zeigt den Bearbeiten-Button bei canEdit unabhängig vom Editiermodus (#324)', async () => {
     const apis = makeApis()
     render(<CardDetailModal card={card} canEdit columnName="In Progress" onClose={vi.fn()} {...apis} />)
-    // Lesemodus lädt Kommentare asynchron nach — abwarten, dann den fehlenden Button prüfen.
-    expect(await screen.findByText('Hallo')).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Bearbeiten' })).not.toBeInTheDocument()
+    // Item-/Epic-Bearbeiten ist Kanban-Alltag und nicht mehr ans Editiermodus-Gate gekoppelt.
+    expect(await screen.findByRole('button', { name: 'Bearbeiten' })).toBeInTheDocument()
   })
 
   it('rendert im Lesemodus Markdown, Abhängigkeiten und Kommentare', async () => {
@@ -303,6 +294,22 @@ describe('CardDetailModal', () => {
     expect(screen.getByText('Bug')).toBeInTheDocument()
   })
 
+  it('zeigt für ein unbekanntes Label eine graue #ID-Chip', () => {
+    const apis = makeApis()
+    // Label 99 fehlt in boardLabels → find() undefined → Fallback `#99` und grey.500.
+    render(
+      <CardDetailModal
+        card={{ ...card, labels: [99] }}
+        canEdit={false}
+        boardLabels={[{ id: 5, boardId: 1, name: 'Bug', color: '#f00' }]}
+        onClose={vi.fn()}
+        {...apis}
+      />,
+    )
+
+    expect(screen.getByText('#99')).toBeInTheDocument()
+  })
+
   it('setzt Labels über die Mehrfachauswahl', async () => {
     const apis = makeApis()
     const boardLabels = [
@@ -399,6 +406,32 @@ describe('CardDetailModal', () => {
     await waitFor(() =>
       expect(apis.cardsApi.update).toHaveBeenCalledWith(100, 'Aufgabe', expect.any(String), [3, 4], undefined, 9, null),
     )
+  })
+
+  it('setzt die Epic-Zuordnung über die leere Auswahl wieder auf null', async () => {
+    const apis = makeApis()
+    const epics = [{ id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 0, total: 1 }]
+    render(<CardDetailModal card={{ ...card, parentId: 9 }} canEdit epics={epics} onClose={vi.fn()} {...apis} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Bearbeiten' }))
+    // Auswahl auf „—" (leerer Wert) → onParentIdChange(null), deckt den `=== '' ? null`-Zweig ab.
+    fireEvent.change(screen.getByLabelText('Epic'), { target: { value: '' } })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Speichern' }))
+    await waitFor(() =>
+      expect(apis.cardsApi.update).toHaveBeenCalledWith(100, 'Aufgabe', expect.any(String), [3, 4], undefined, null, null),
+    )
+  })
+
+  it('deaktiviert den Speichern-Button bei leerem Titel im Edit-Modus', async () => {
+    const apis = makeApis()
+    render(<CardDetailModal card={card} canEdit onClose={vi.fn()} {...apis} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Bearbeiten' }))
+    fireEvent.change(screen.getByLabelText('Titel'), { target: { value: '   ' } })
+
+    // Der Button ist die Gatung (kein redundanter Guard in save()): leerer Titel → disabled.
+    expect(screen.getByRole('button', { name: 'Speichern' })).toBeDisabled()
   })
 
   it('zeigt „Keine Beschreibung.“ bei leerem Beschreibungstext', () => {

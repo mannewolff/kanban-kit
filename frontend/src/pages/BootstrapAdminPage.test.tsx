@@ -52,6 +52,19 @@ describe('BootstrapAdminPage', () => {
     ).toBeInTheDocument()
   })
 
+  it('bricht bei leerem Token ohne API-Aufruf ab', () => {
+    const api = makeApi(vi.fn().mockResolvedValue({}))
+    render(
+      <MemoryRouter>
+        <BootstrapAdminPage api={api} />
+      </MemoryRouter>,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Admin werden' }))
+
+    expect(api.bootstrap).not.toHaveBeenCalled()
+  })
+
   it('zeigt eine generische Fehlermeldung bei ungültigem Token', async () => {
     const api = makeApi(vi.fn().mockRejectedValue(new Error('boom')))
     render(

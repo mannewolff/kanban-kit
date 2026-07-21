@@ -5,7 +5,7 @@ import { boardsApi } from '../api/boards'
 import { cardsApi, type Card } from '../api/cards'
 import { labelsApi } from '../api/labels'
 import { projectsApi } from '../api/projects'
-import { epicsApi } from '../api/epics'
+import { epicsApi, type Epic } from '../api/epics'
 import { BoardListPage } from './BoardListPage'
 
 function deferred<T>() {
@@ -66,6 +66,7 @@ const base = {
 const active: Card = { ...base, id: 100, columnId: 10, number: 1, title: 'Aufgabe', description: '# Titel\nText **fett**', archived: false }
 const archived: Card = { ...base, id: 101, columnId: 20, number: 2, title: 'AlteKarte', description: 'x', archived: true }
 const idea: Card = { ...base, id: 102, columnId: 10, number: 3, title: 'MeineIdee', description: 'Idee-Text', archived: false, ideaStored: true }
+const epic: Epic = { id: 7, number: 1, title: 'Mein Epic', description: null, shortcode: 'EP1', done: 0, total: 1 }
 
 function renderPage(cards: Card[] = [active, archived]) {
   mBoards.get.mockResolvedValue({
@@ -499,6 +500,13 @@ describe('BoardListPage', () => {
     expect(await screen.findByRole('button', { name: 'Schließen' })).toBeInTheDocument()
   })
 
+  it('öffnet das Detail per Leertaste auf einer Zeile', async () => {
+    renderPage()
+    const row = await screen.findByLabelText('Detail öffnen: Aufgabe')
+    fireEvent.keyDown(row, { key: ' ' })
+    expect(await screen.findByRole('button', { name: 'Schließen' })).toBeInTheDocument()
+  })
+
   it('schließt das Detail-Modal wieder und lädt nach dem Speichern Karten und Epics neu', async () => {
     const editCard: Card = {
       ...base, id: 100, columnId: 10, number: 1, title: 'Aufgabe', description: '', archived: false,
@@ -551,5 +559,338 @@ describe('BoardListPage', () => {
     )
 
     expect(await screen.findByLabelText('Fällig Aufgabe')).toBeInTheDocument()
+  })
+
+  it('zeigt kein überfälliges Fälligkeitsdatum in schlichter Farbe an', async () => {
+    const withFutureDue: Card = {
+      ...base, id: 100, columnId: 10, number: 1, title: 'Aufgabe', description: '', archived: false,
+      dueDate: new Date(Date.now() + 7 * 86_400_000).toISOString(),
+    }
+    mBoards.get.mockResolvedValue({
+      id: 1, projectId: 9, name: 'B', createdAt: '',
+      columns: [{ id: 10, name: 'Backlog', position: 0, wipLimit: null }],
+    })
+    mCards.list.mockResolvedValue([withFutureDue])
+    mEpics.list.mockResolvedValue([])
+    render(
+      <MemoryRouter initialEntries={['/boards/1/list']}>
+        <Routes>
+          <Route path="/boards/:boardId/list" element={<BoardListPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByLabelText('Fällig Aufgabe')).toBeInTheDocument()
+  })
+
+  it('zeigt ein Epic-Badge in der Epic-Spalte, wenn die Karte einem Epic zugeordnet ist', async () => {
+    const child: Card = {
+      ...base, id: 100, columnId: 10, number: 1, title: 'Aufgabe', description: '', archived: false, parentId: 7,
+    }
+    mBoards.get.mockResolvedValue({
+      id: 1, projectId: 9, name: 'B', createdAt: '',
+      columns: [{ id: 10, name: 'Backlog', position: 0, wipLimit: null }],
+    })
+    mCards.list.mockResolvedValue([child])
+    mEpics.list.mockResolvedValue([epic])
+    render(
+      <MemoryRouter initialEntries={['/boards/1/list']}>
+        <Routes>
+          <Route path="/boards/:boardId/list" element={<BoardListPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await screen.findByText('Aufgabe')
+    expect(screen.getByText('EP1')).toBeInTheDocument()
+  })
+
+  it('rendert die Beschreibungs-Spalte auch bei fehlender Beschreibung ohne Fehler', async () => {
+    const noDesc: Card = {
+      ...base, id: 100, columnId: 10, number: 1, title: 'OhneText', description: null, archived: false,
+    }
+    mBoards.get.mockResolvedValue({
+      id: 1, projectId: 9, name: 'B', createdAt: '',
+      columns: [{ id: 10, name: 'Backlog', position: 0, wipLimit: null }],
+    })
+    mCards.list.mockResolvedValue([noDesc])
+    mEpics.list.mockResolvedValue([])
+    render(
+      <MemoryRouter initialEntries={['/boards/1/list']}>
+        <Routes>
+          <Route path="/boards/:boardId/list" element={<BoardListPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByText('OhneText')).toBeInTheDocument()
+  })
+
+  it('zeigt eine Karte an, deren Spalte nicht mehr existiert (leerer Status)', async () => {
+    localStorage.setItem('manban.listFilters.1', JSON.stringify([999]))
+    const orphan: Card = {
+      ...base, id: 100, columnId: 999, number: 1, title: 'Verwaist', description: 'x', archived: false,
+    }
+    mBoards.get.mockResolvedValue({
+      id: 1, projectId: 9, name: 'B', createdAt: '',
+      columns: [{ id: 10, name: 'Backlog', position: 0, wipLimit: null }],
+    })
+    mCards.list.mockResolvedValue([orphan])
+    mEpics.list.mockResolvedValue([])
+    render(
+      <MemoryRouter initialEntries={['/boards/1/list']}>
+        <Routes>
+          <Route path="/boards/:boardId/list" element={<BoardListPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByText('Verwaist')).toBeInTheDocument()
+  })
+
+  it('sortiert mehrere archivierte Karten ohne existierende Spalte stabil nach Position', async () => {
+    const a1: Card = { ...base, id: 100, columnId: 999, number: 1, title: 'ArchivEins', description: 'x', archived: true, positionInColumn: 0 }
+    const a2: Card = { ...base, id: 101, columnId: 999, number: 2, title: 'ArchivZwei', description: 'y', archived: true, positionInColumn: 1 }
+    mBoards.get.mockResolvedValue({
+      id: 1, projectId: 9, name: 'B', createdAt: '',
+      columns: [{ id: 10, name: 'Backlog', position: 0, wipLimit: null }],
+    })
+    mCards.list.mockResolvedValue([a1, a2])
+    mEpics.list.mockResolvedValue([])
+    render(
+      <MemoryRouter initialEntries={['/boards/1/list']}>
+        <Routes>
+          <Route path="/boards/:boardId/list" element={<BoardListPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    fireEvent.click(await screen.findByLabelText('Filter Archiv'))
+    expect(await screen.findByText('ArchivEins')).toBeInTheDocument()
+    expect(screen.getByText('ArchivZwei')).toBeInTheDocument()
+  })
+
+  it('nimmt eine gespeicherte Beschreibungs-Breite aus localStorage beim Mount an', async () => {
+    localStorage.setItem('manban.listExcerptWidth.1', '45')
+    renderPage()
+    expect(await screen.findByText('Aufgabe')).toBeInTheDocument()
+  })
+
+  it('zeigt bei fehlendem Board-ID-Parameter einen Fehler', async () => {
+    render(
+      <MemoryRouter initialEntries={['/list']}>
+        <Routes>
+          <Route path="/list" element={<BoardListPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+    expect(await screen.findByText('Ungültige Board-ID.')).toBeInTheDocument()
+    expect(mBoards.get).not.toHaveBeenCalled()
+  })
+
+  it('räumt einen laufenden Resize-Drag beim Unmount ab', async () => {
+    const rectSpy = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({
+      width: 1000, height: 0, top: 0, left: 0, right: 1000, bottom: 0, x: 0, y: 0, toJSON: () => ({}),
+    } as DOMRect)
+    const removeSpy = vi.spyOn(document, 'removeEventListener')
+    try {
+      const { unmount } = renderPage()
+      await screen.findByText('Aufgabe')
+
+      // Drag starten (registriert Listener + Cleanup-Ref), dann ohne mouseUp unmounten.
+      fireEvent.mouseDown(screen.getByLabelText('Beschreibung-Spalte breiter ziehen'), { clientX: 500 })
+      removeSpy.mockClear()
+      unmount()
+
+      expect(removeSpy).toHaveBeenCalledWith('mousemove', expect.any(Function))
+      expect(removeSpy).toHaveBeenCalledWith('mouseup', expect.any(Function))
+    } finally {
+      removeSpy.mockRestore()
+      rectSpy.mockRestore()
+    }
+  })
+
+  it('ignoriert Resize-Bewegungen, wenn die View-Breite nicht bestimmbar ist', async () => {
+    const rectSpy = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({
+      width: undefined, height: 0, top: 0, left: 0, right: 0, bottom: 0, x: 0, y: 0, toJSON: () => ({}),
+    } as unknown as DOMRect)
+    try {
+      renderPage()
+      await screen.findByText('Aufgabe')
+
+      const handle = screen.getByLabelText('Beschreibung-Spalte breiter ziehen')
+      fireEvent.mouseDown(handle, { clientX: 500 })
+      fireEvent.mouseMove(document, { clientX: 400 })
+      fireEvent.mouseUp(document)
+
+      // Ohne bestimmbare Breite bleibt die gespeicherte Breite auf dem Default (keine Verbreiterung).
+      expect(localStorage.getItem('manban.listExcerptWidth.1')).toBe('30')
+    } finally {
+      rectSpy.mockRestore()
+    }
+  })
+
+  it('behandelt einen Klick auf den Archiv-Filter, bevor das Board geladen ist', async () => {
+    mBoards.get.mockReturnValue(new Promise(() => {}))
+    mCards.list.mockResolvedValue([active])
+    mEpics.list.mockResolvedValue([])
+    render(
+      <MemoryRouter initialEntries={['/boards/1/list']}>
+        <Routes>
+          <Route path="/boards/:boardId/list" element={<BoardListPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const archiv = await screen.findByLabelText('Filter Archiv')
+    expect(archiv).toHaveAttribute('aria-pressed', 'false')
+    fireEvent.click(archiv)
+    expect(screen.getByLabelText('Filter Archiv')).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('schaltet einen Label-Filter durch erneuten Klick wieder aus', async () => {
+    const labelled: Card = { ...base, id: 100, columnId: 10, number: 1, title: 'MitLabel', description: '', archived: false, labels: [5] }
+    const other: Card = { ...base, id: 102, columnId: 10, number: 3, title: 'OhneLabel', description: '', archived: false }
+    mBoards.get.mockResolvedValue({
+      id: 1, projectId: 9, name: 'B', createdAt: '',
+      columns: [{ id: 10, name: 'Backlog', position: 0, wipLimit: null }],
+    })
+    mCards.list.mockResolvedValue([labelled, other])
+    mEpics.list.mockResolvedValue([])
+    mLabels.list.mockResolvedValue([{ id: 5, boardId: 1, name: 'Bug', color: '#f00' }])
+    render(
+      <MemoryRouter initialEntries={['/boards/1/list']}>
+        <Routes>
+          <Route path="/boards/:boardId/list" element={<BoardListPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    fireEvent.click(await screen.findByLabelText('Label-Filter Bug'))
+    await waitFor(() => expect(screen.queryByText('OhneLabel')).not.toBeInTheDocument())
+    // Zweiter Klick entfernt das Label wieder aus dem Filter.
+    fireEvent.click(screen.getByLabelText('Label-Filter Bug'))
+    expect(await screen.findByText('OhneLabel')).toBeInTheDocument()
+  })
+
+  it('ignoriert einen Spalten-Drop auf dieselbe Spalte (keine Umsortierung)', async () => {
+    renderPage()
+    await screen.findByText('Aufgabe')
+
+    fireEvent.dragStart(screen.getByLabelText('Spalte Nr'))
+    fireEvent.drop(screen.getByLabelText('Spalte Nr'))
+    fireEvent.dragEnd(screen.getByLabelText('Spalte Nr'))
+
+    const order = screen.getAllByLabelText(/^Spalte /).map((el) => el.getAttribute('aria-label'))
+    expect(order[0]).toBe('Spalte Nr')
+    expect(localStorage.getItem('manban.listColumns.1')).toBeNull()
+  })
+
+  it('ignoriert einen Zeilen-Drop ohne vorangehenden Drag', async () => {
+    renderPage([active])
+    await screen.findByText('Aufgabe')
+
+    fireEvent.drop(screen.getByLabelText('Detail öffnen: Aufgabe'))
+
+    expect(mCards.move).not.toHaveBeenCalled()
+  })
+
+  it('zieht bei fehlenden Spalten eine Idee ohne Zielspalte hoch', async () => {
+    mCards.promote.mockResolvedValue({})
+    mBoards.get.mockResolvedValue({
+      id: 1, projectId: 9, name: 'B', createdAt: '',
+      columns: [],
+    })
+    mCards.list.mockResolvedValue([idea])
+    mEpics.list.mockResolvedValue([])
+    render(
+      <MemoryRouter initialEntries={['/boards/1/list']}>
+        <Routes>
+          <Route path="/boards/:boardId/list" element={<BoardListPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    fireEvent.click(await screen.findByLabelText('Idee MeineIdee ins Backlog'))
+    await waitFor(() => expect(mCards.promote).toHaveBeenCalledWith(102))
+  })
+
+  it('legt keine Idee an, wenn das Board keine Spalten hat', async () => {
+    mBoards.get.mockResolvedValue({
+      id: 1, projectId: 9, name: 'B', createdAt: '',
+      columns: [],
+    })
+    mCards.list.mockResolvedValue([idea])
+    mEpics.list.mockResolvedValue([])
+    render(
+      <MemoryRouter initialEntries={['/boards/1/list']}>
+        <Routes>
+          <Route path="/boards/:boardId/list" element={<BoardListPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await screen.findByText('MeineIdee')
+    fireEvent.click(screen.getByRole('button', { name: 'Idee anlegen' }))
+    fireEvent.change(await screen.findByLabelText('Titel'), { target: { value: 'Neue Idee' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Anlegen' }))
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(mCards.create).not.toHaveBeenCalled()
+  })
+
+  it('rollt bei einem Demotion-Fehler zurück und meldet ihn', async () => {
+    mCards.moveToIdeaStorage.mockRejectedValue(new Error('fail'))
+    const second: Card = { ...base, id: 103, columnId: 10, number: 4, title: 'Zweite', description: '', archived: false, positionInColumn: 1 }
+    mBoards.get.mockResolvedValue({
+      id: 1, projectId: 9, name: 'B', createdAt: '',
+      columns: [{ id: 10, name: 'Backlog', position: 0, wipLimit: null }],
+    })
+    mCards.list.mockResolvedValue([active, second])
+    mEpics.list.mockResolvedValue([])
+    render(
+      <MemoryRouter initialEntries={['/boards/1/list']}>
+        <Routes>
+          <Route path="/boards/:boardId/list" element={<BoardListPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await screen.findByText('Aufgabe')
+    fireEvent.click(screen.getByLabelText('Karte Aufgabe in Ideen-Speicher'))
+
+    await screen.findByText('In den Ideen-Speicher fehlgeschlagen.')
+    // Die andere Karte bleibt unverändert in der Liste.
+    expect(screen.getByText('Zweite')).toBeInTheDocument()
+  })
+
+  it('öffnet das Detail beim Klick und per Enter-Taste auf einer Ideen-Zeile', async () => {
+    renderPage([active, idea])
+    const ideaRow = await screen.findByLabelText('Detail öffnen: MeineIdee')
+
+    fireEvent.click(ideaRow)
+    expect(await screen.findByRole('button', { name: 'Schließen' })).toBeInTheDocument()
+    fireEvent.click(await screen.findByRole('button', { name: 'Schließen' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+
+    fireEvent.keyDown(screen.getByLabelText('Detail öffnen: MeineIdee'), { key: 'Enter' })
+    expect(await screen.findByRole('button', { name: 'Schließen' })).toBeInTheDocument()
+    fireEvent.click(await screen.findByRole('button', { name: 'Schließen' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+
+    fireEvent.keyDown(screen.getByLabelText('Detail öffnen: MeineIdee'), { key: ' ' })
+    expect(await screen.findByRole('button', { name: 'Schließen' })).toBeInTheDocument()
+  })
+
+  it('schließt den Fehler-Snackbar bei einem Klick daneben', async () => {
+    mCards.promote.mockRejectedValue(new Error('fail'))
+    renderPage([active, idea])
+    await screen.findByText('MeineIdee')
+
+    fireEvent.click(screen.getByLabelText('Idee MeineIdee ins Backlog'))
+    await screen.findByText('Hochziehen fehlgeschlagen.')
+
+    fireEvent.click(document.body)
+    await waitFor(() => expect(screen.queryByText('Hochziehen fehlgeschlagen.')).not.toBeInTheDocument())
   })
 })

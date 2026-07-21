@@ -37,6 +37,10 @@ export default defineConfig({
       reporter: ['text', 'html', 'lcov'],
       include: ['src/**'],
       exclude: [
+        // Testdateien selbst nicht messen (Vitest-Default; unsere Custom-`exclude`-Liste ersetzt den
+        // Default, daher hier explizit): Test-Helper/Fixtures sind keine Produktlogik.
+        '**/*.test.ts',
+        '**/*.test.tsx',
         // Begründete Ausschlüsse (analog CLAUDE-java.md §5.2, einzeln):
         'src/main.tsx', // React-Bootstrap ohne Logik (Root-Mount)
         'src/vite-env.d.ts', // Typ-Deklaration
@@ -44,18 +48,16 @@ export default defineConfig({
         'src/App.tsx', // reines Routen-Wiring (lazy-Imports); Verhalten über Page-Tests gedeckt
         'src/theme.ts', // Design-Token-Objekt ohne Logik
       ],
-      // Ehrliche Ist-Schwellen (Stand 2026-07-17, kanban-kit#228-#236) als Gate gegen Rückschritt —
-      // reiner Ratchet, nur anheben, nie senken (CLAUDE-react.md §Tests). Alle vormals größten
-      // Lücken (AppShell, BoardView, CardDetailModal, BoardPage, BoardListPage,
-      // ProjectMembersPage, sowie diverse kleinere Seiten/Komponenten) sind geschlossen;
-      // Gesamt-Ist-Stand 99,78/96,25/94,84/99,78 % (Statements/Branches/Functions/Lines).
-      // Verbleibende Lücken sind einzeln begründete Restfälle (Race-Conditions, TypeScript-
-      // Typverengung an unerreichbaren Guards, o. ä. — siehe Commit-Historie der jeweiligen Issues).
+      // Finaler Ratchet (Stand 2026-07-20, kanban-kit#323): echte 100/100/100/100 über den
+      // gesamten Produktcode (Statements/Branches/Functions/Lines). Erreicht ohne `c8 ignore`-
+      // Ausnahmen — jede vormalige Lücke wurde entweder als echte Kante getestet oder als
+      // beweisbar toter Guard branchfrei umstrukturiert (dokumentiert an der jeweiligen Stelle).
+      // Ab hier ist jeder Rückschritt ein Fehler: neue Logik kommt nur mit passenden Tests herein.
       thresholds: {
-        lines: 99,
-        branches: 96,
-        functions: 94,
-        statements: 99,
+        lines: 100,
+        branches: 100,
+        functions: 100,
+        statements: 100,
       },
     },
   },

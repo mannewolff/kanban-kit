@@ -53,6 +53,19 @@ describe('TransferCardDialog', () => {
     expect(screen.getByText(/Epic-Zuordnung und Abhängigkeiten/)).toBeInTheDocument()
   })
 
+  it('formuliert den Hinweis im Plural bei mehreren Karten', async () => {
+    render(
+      <TransferCardDialog
+        cardIds={[7, 8]}
+        currentBoardId={99}
+        platformAdmin={false}
+        onClose={vi.fn()}
+        onTransferred={vi.fn()}
+      />,
+    )
+    expect(await screen.findByText(/Die 2 Karten werden/)).toBeInTheDocument()
+  })
+
   it('zeigt einem Plattform-Admin alle Projekte', async () => {
     renderDialog(true)
     expect(await screen.findByRole('option', { name: 'Eigenes' })).toBeInTheDocument()
@@ -83,6 +96,22 @@ describe('TransferCardDialog', () => {
 
     await waitFor(() => expect(mockedCards.bulkTransfer).toHaveBeenCalledWith([7], 10, 100))
     expect(onTransferred).toHaveBeenCalled()
+  })
+
+  it('leert die Auswahl über die (wählen)-Option und deaktiviert dann Verschieben', async () => {
+    renderDialog(false)
+
+    fireEvent.change(await screen.findByLabelText('Zielprojekt'), { target: { value: '1' } })
+    await waitFor(() => expect(screen.getByLabelText('Zielboard')).not.toBeDisabled())
+    fireEvent.change(screen.getByLabelText('Zielboard'), { target: { value: '10' } })
+    fireEvent.change(await screen.findByLabelText('Zielspalte'), { target: { value: '100' } })
+
+    // Auswahl wieder leeren -> deckt den ''-Zweig der drei onChange ab.
+    fireEvent.change(screen.getByLabelText('Zielspalte'), { target: { value: '' } })
+    fireEvent.change(screen.getByLabelText('Zielboard'), { target: { value: '' } })
+    fireEvent.change(screen.getByLabelText('Zielprojekt'), { target: { value: '' } })
+
+    expect(screen.getByRole('button', { name: 'Verschieben' })).toBeDisabled()
   })
 
   it('zeigt eine Fehlermeldung, wenn das Verschieben fehlschlägt', async () => {

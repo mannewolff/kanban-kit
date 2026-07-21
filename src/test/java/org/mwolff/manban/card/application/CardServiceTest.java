@@ -152,6 +152,106 @@ class CardServiceTest {
   }
 
   @Test
+  void create_setsDueDate_whenProvided() {
+    when(columns.findById(20L)).thenReturn(Optional.of(column(20L, "Backlog", 0)));
+    when(cards.maxNumberInBoard(BOARD)).thenReturn(0);
+    when(cards.maxActivePositionInColumn(20L)).thenReturn(-1);
+    Instant due = Instant.parse("2026-02-01T00:00:00Z");
+
+    ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
+    service.create(1L, BOARD, 20L, "Titel", null, null, null, false, due, null, null);
+
+    verify(cards).save(captor.capture());
+    assertThat(captor.getValue().dueDate()).isEqualTo(due);
+  }
+
+  @Test
+  void create_appliesAssignees_atomically_withSingleCreatedActivity() {
+    when(columns.findById(20L)).thenReturn(Optional.of(column(20L, "Backlog", 0)));
+    when(cards.maxNumberInBoard(BOARD)).thenReturn(0);
+    when(cards.maxActivePositionInColumn(20L)).thenReturn(-1);
+    when(memberships.findByProjectIdAndUserId(1L, 7L))
+        .thenReturn(Optional.of(mock(ProjectMembership.class)));
+    when(memberships.findByProjectIdAndUserId(1L, 8L))
+        .thenReturn(Optional.of(mock(ProjectMembership.class)));
+
+    service.create(
+        1L, BOARD, 20L, "Titel", null, null, null, false, null, List.of(7L, 8L, 7L), null);
+
+    verify(assignees).replaceAssignees(1L, List.of(7L, 8L));
+    // Genau ein Aktivitätseintrag (CREATED) — kein zusätzlicher ASSIGNED beim atomaren Anlegen.
+    verify(activity).add(1L, 1L, CardActivityType.CREATED, "Karte angelegt", FIXED);
+    verify(activity, times(1)).add(anyLong(), anyLong(), any(), any(), any());
+  }
+
+  @Test
+  void create_ignoresEmptyAssignees() {
+    when(columns.findById(20L)).thenReturn(Optional.of(column(20L, "Backlog", 0)));
+    when(cards.maxNumberInBoard(BOARD)).thenReturn(0);
+    when(cards.maxActivePositionInColumn(20L)).thenReturn(-1);
+
+    service.create(1L, BOARD, 20L, "Titel", null, null, null, false, null, List.of(), null);
+
+    verify(assignees, never()).replaceAssignees(anyLong(), anyList());
+  }
+
+  @Test
+  void create_rejectsForeignAssignee() {
+    when(columns.findById(20L)).thenReturn(Optional.of(column(20L, "Backlog", 0)));
+    when(cards.maxNumberInBoard(BOARD)).thenReturn(0);
+    when(cards.maxActivePositionInColumn(20L)).thenReturn(-1);
+    when(memberships.findByProjectIdAndUserId(1L, 9L)).thenReturn(Optional.empty());
+
+    assertThatThrownBy(
+            () ->
+                service.create(
+                    1L, BOARD, 20L, "Titel", null, null, null, false, null, List.of(9L), null))
+        .isInstanceOf(InvalidAssigneeException.class);
+    verify(assignees, never()).replaceAssignees(anyLong(), anyList());
+  }
+
+  @Test
+  void create_appliesLabels_whenProvided() {
+    when(columns.findById(20L)).thenReturn(Optional.of(column(20L, "Backlog", 0)));
+    when(cards.maxNumberInBoard(BOARD)).thenReturn(0);
+    when(cards.maxActivePositionInColumn(20L)).thenReturn(-1);
+    when(labels.findByBoardId(BOARD))
+        .thenReturn(
+            List.of(new Label(7L, BOARD, "Bug", "#f00"), new Label(8L, BOARD, "Ux", "#0f0")));
+
+    service.create(
+        1L, BOARD, 20L, "Titel", null, null, null, false, null, null, List.of(7L, 8L, 7L));
+
+    verify(cardLabels).replaceLabels(1L, List.of(7L, 8L));
+  }
+
+  @Test
+  void create_ignoresEmptyLabels() {
+    when(columns.findById(20L)).thenReturn(Optional.of(column(20L, "Backlog", 0)));
+    when(cards.maxNumberInBoard(BOARD)).thenReturn(0);
+    when(cards.maxActivePositionInColumn(20L)).thenReturn(-1);
+
+    service.create(1L, BOARD, 20L, "Titel", null, null, null, false, null, null, List.of());
+
+    verify(cardLabels, never()).replaceLabels(anyLong(), anyList());
+  }
+
+  @Test
+  void create_rejectsForeignLabel() {
+    when(columns.findById(20L)).thenReturn(Optional.of(column(20L, "Backlog", 0)));
+    when(cards.maxNumberInBoard(BOARD)).thenReturn(0);
+    when(cards.maxActivePositionInColumn(20L)).thenReturn(-1);
+    when(labels.findByBoardId(BOARD)).thenReturn(List.of(new Label(7L, BOARD, "Bug", "#f00")));
+
+    assertThatThrownBy(
+            () ->
+                service.create(
+                    1L, BOARD, 20L, "Titel", null, null, null, false, null, null, List.of(8L)))
+        .isInstanceOf(InvalidLabelException.class);
+    verify(cardLabels, never()).replaceLabels(anyLong(), anyList());
+  }
+
+  @Test
   void create_assignsNextBoardNumber() {
     // Given
     when(columns.findById(20L)).thenReturn(Optional.of(column(20L, "Backlog", 0)));

@@ -13,7 +13,9 @@ function hashId(id: number): number {
   const s = String(id)
   let h = 0
   for (let i = 0; i < s.length; i++) {
-    h = (h * 31 + (s.codePointAt(i) ?? 0)) >>> 0
+    // codePointAt(i) ist hier immer definiert (i < s.length) — das Non-null-`!` vermeidet den
+    // unerreichbaren `?? 0`-Zweig (100 % Branch) und hält zugleich codePointAt (Sonar S7758).
+    h = (h * 31 + s.codePointAt(i)!) >>> 0
   }
   return h
 }

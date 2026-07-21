@@ -38,4 +38,20 @@ describe('RolesPage', () => {
     // Plattform-Rollen weiterhin erklärt.
     expect(screen.getByText(/Super-User/)).toBeInTheDocument()
   })
+
+  it('nutzt Fallbacks für unbekannte Ressource/Operation und fehlende Grants', async () => {
+    const matrix: RoleMatrix = {
+      roles: ['GUEST'],
+      permissions: [{ key: 'MYSTERY_PONDER', resource: 'MYSTERY', operation: 'PONDER' }],
+      grants: {}, // GUEST fehlt -> grants['GUEST'] undefined
+    }
+    const api = { matrix: vi.fn().mockResolvedValue(matrix) } as unknown as RolesApi
+    render(<RolesPage api={api} />)
+
+    // Ohne Label-Eintrag fällt die Anzeige auf den rohen Schlüssel zurück.
+    expect(await screen.findByText('MYSTERY')).toBeInTheDocument()
+    expect(screen.getByText('PONDER')).toBeInTheDocument()
+    // Fehlender Grant-Eintrag -> Checkbox nicht gesetzt (?? false).
+    expect(screen.getByLabelText('MYSTERY_PONDER für GUEST')).not.toBeChecked()
+  })
 })

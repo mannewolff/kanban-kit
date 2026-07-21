@@ -79,5 +79,16 @@ export const theme = createTheme({
     MuiSelect: {
       styleOverrides: { icon: { color: TEAL } },
     },
+    // Zebra für alle Daten-Tabellen: nur gerade Zeilen im TableBody dezent tönen. Header-Zeilen
+    // liegen im TableHead und bleiben ungestreift; das Hover-Verhalten bleibt unberührt.
+    MuiTable: {
+      styleOverrides: {
+        root: {
+          '& .MuiTableBody-root .MuiTableRow-root:nth-of-type(even)': {
+            backgroundColor: CARD_BG,
+          },
+        },
+      },
+    },
   },
 })

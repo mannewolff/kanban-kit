@@ -49,10 +49,59 @@ function renderPage(api: MembersApi, role: string) {
   )
 }
 
+function renderNoRole(api: MembersApi) {
+  return render(
+    <MemoryRouter initialEntries={['/projects/5/members']}>
+      <Routes>
+        <Route path="/projects/:projectId/members" element={<ProjectMembersPage api={api} />} />
+      </Routes>
+    </MemoryRouter>,
+  )
+}
+
 describe('ProjectMembersPage', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     editMode.value = true
+  })
+
+  it('behandelt einen fehlenden Projekt-Parameter als ungültig', () => {
+    render(
+      <MemoryRouter initialEntries={['/members']}>
+        <Routes>
+          <Route path="/members" element={<ProjectMembersPage api={makeApi()} />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+    expect(screen.getByText('Ungültige Projekt-ID.')).toBeInTheDocument()
+  })
+
+  it('lädt Rolle und Projektname über projectsApi, wenn kein loadRole übergeben ist', async () => {
+    mProjects.list.mockResolvedValue([{ id: 5, name: 'Team', role: 'OWNER', createdAt: '' }])
+    renderNoRole(makeApi())
+    expect(await screen.findByText('Mika Member')).toBeInTheDocument()
+    // OWNER sieht das Einladen-Feld (Rolle kam über projectsApi).
+    expect(await screen.findByLabelText(/E-Mail einladen/)).toBeInTheDocument()
+  })
+
+  it('fällt auf VIEWER zurück, wenn das Projekt nicht in der projectsApi-Liste steht', async () => {
+    mProjects.list.mockResolvedValue([])
+    renderNoRole(makeApi())
+    expect(await screen.findByText('Mika Member')).toBeInTheDocument()
+    await waitFor(() => expect(mProjects.list).toHaveBeenCalled())
+    // Ohne gefundenes Projekt bleibt die Rolle VIEWER → keine Verwaltungsaktionen.
+    expect(screen.queryByLabelText(/E-Mail einladen/)).not.toBeInTheDocument()
+  })
+
+  it('ignoriert eine spät aufgelöste Projektliste nach dem Unmount (kein loadRole)', async () => {
+    let resolveList: (value: unknown) => void = () => {}
+    mProjects.list.mockReturnValue(new Promise((r) => { resolveList = r }))
+    const { unmount } = renderNoRole(makeApi())
+    expect(await screen.findByText('Mika Member')).toBeInTheDocument()
+
+    unmount()
+    // Verspätete Auflösung nach dem Unmount: active === false, der Guard in Zeile 71 greift.
+    resolveList([{ id: 5, name: 'Team', role: 'OWNER', createdAt: '' }])
   })
 
   it('blendet bei ausgeschaltetem Editiermodus die Namens-Bearbeitung aus, behält aber Entfernen', async () => {
@@ -107,6 +156,14 @@ describe('ProjectMembersPage', () => {
 
     await waitFor(() => expect(api.invite).toHaveBeenCalledWith(5, 'neu@x.de', 'MEMBER'))
     expect(await screen.findByText('Einladung verschickt.')).toBeInTheDocument()
+  })
+
+  it('ignoriert einen Invite-Submit mit leerer E-Mail', async () => {
+    const api = makeApi()
+    renderPage(api, 'OWNER')
+    await screen.findByText('Olga Owner')
+    fireEvent.submit(screen.getByRole('form', { name: 'Nutzer einladen' }))
+    expect(api.invite).not.toHaveBeenCalled()
   })
 
   it('blendet Verwaltungsaktionen für VIEWER aus', async () => {
@@ -264,6 +321,18 @@ describe('ProjectMembersPage', () => {
     fireEvent.click(screen.getByLabelText('Namen speichern'))
 
     expect(await screen.findByText('Name ungültig')).toBeInTheDocument()
+  })
+
+  it('zeigt eine generische Meldung, wenn die Namensänderung ohne ApiError scheitert', async () => {
+    const changeDisplayName = vi.fn().mockRejectedValue(new Error('boom'))
+    renderPage(makeApi({ changeDisplayName }), 'OWNER')
+    expect(await screen.findByText('Mika Member')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByLabelText('Namen von Mika Member bearbeiten'))
+    fireEvent.change(screen.getByLabelText('Anzeigename von member@x.de'), { target: { value: 'X' } })
+    fireEvent.click(screen.getByLabelText('Namen speichern'))
+
+    expect(await screen.findByText('Namensänderung fehlgeschlagen.')).toBeInTheDocument()
   })
 
   it('bricht das Bearbeiten des Anzeigenamens ab', async () => {

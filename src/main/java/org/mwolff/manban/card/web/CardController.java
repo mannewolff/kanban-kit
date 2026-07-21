@@ -60,7 +60,10 @@ class CardController {
         request.description(),
         request.dependencies(),
         request.parentId(),
-        Boolean.TRUE.equals(request.ideaStored()));
+        Boolean.TRUE.equals(request.ideaStored()),
+        request.dueDate(),
+        request.assigneeIds(),
+        request.labelIds());
   }
 
   @GetMapping("/api/boards/{boardId}/cards")
@@ -226,7 +229,10 @@ class CardController {
       CardType type,
       Long parentId,
       @Size(max = 16) String shortcode,
-      @Nullable Boolean ideaStored) {}
+      @Nullable Boolean ideaStored,
+      @Nullable Instant dueDate,
+      @Nullable List<Long> assigneeIds,
+      @Nullable List<Long> labelIds) {}
 
   record UpdateCardRequest(
       @NotBlank @Size(max = 300) String title,

@@ -13,7 +13,7 @@
 
     <groupId>org.mwolff</groupId>
     <artifactId>manban</artifactId>
-    <version>1.2.0</version>
+    <version>1.3.0</version>
     <name>manban</name>
     <description>mannewolff Kanban Board — eigenständige, self-hostbare Trello-Alternative</description>
 
@@ -506,6 +506,7 @@
                         <exclude>org/mwolff/manban/accesstoken/infrastructure/persistence/KanbanAccessTokenEntity.class</exclude>
                         <exclude>org/mwolff/manban/attachment/infrastructure/persistence/AttachmentEntity.class</exclude>
                         <exclude>org/mwolff/manban/auth/infrastructure/persistence/AppUserEntity.class</exclude>
+                        <exclude>org/mwolff/manban/auth/infrastructure/persistence/AbstractAuthTokenEntity.class</exclude>
                         <exclude>org/mwolff/manban/auth/infrastructure/persistence/EmailVerificationTokenEntity.class</exclude>
                         <exclude>org/mwolff/manban/auth/infrastructure/persistence/PasswordResetTokenEntity.class</exclude>
                         <exclude>org/mwolff/manban/board/infrastructure/persistence/BoardColumnEntity.class</exclude>

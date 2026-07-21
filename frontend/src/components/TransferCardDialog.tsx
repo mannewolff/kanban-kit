@@ -63,13 +63,12 @@ export function TransferCardDialog({
   const columns = selectedBoard ? [...selectedBoard.columns].sort((a, b) => a.position - b.position) : []
 
   const submit = async () => {
-    if (boardId === '' || columnId === '') {
-      return
-    }
     setBusy(true)
     setError(null)
     try {
-      await cardsApi.bulkTransfer(cardIds, boardId, columnId)
+      // boardId/columnId sind hier garantiert Zahlen (der Verschieben-Button ist bei leerer
+      // Auswahl disabled); Number(...) verengt number|'' ohne toten Guard-Zweig.
+      await cardsApi.bulkTransfer(cardIds, Number(boardId), Number(columnId))
       onTransferred()
     } catch {
       setError('Verschieben fehlgeschlagen.')

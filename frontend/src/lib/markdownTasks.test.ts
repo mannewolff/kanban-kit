@@ -7,6 +7,13 @@ describe('normalizeTaskLists', () => {
     expect(normalizeTaskLists('[x] erledigt')).toBe('- [x] erledigt')
   })
 
+  it('behält Marker ohne nachfolgenden Text ohne angehängtes Leerzeichen', () => {
+    // Leerer Body -> Suffix '' (kein „- [ ] " mit Trailing-Space).
+    expect(normalizeTaskLists('- [x]')).toBe('- [x]')
+    // NAKED verlangt Whitespace nach dem Marker; leerer Body danach -> normalisiert ohne Trailing.
+    expect(normalizeTaskLists('[ ] ')).toBe('- [ ]')
+  })
+
   it('lässt bereits vorhandene Listenmarker unverändert', () => {
     expect(normalizeTaskLists('- [ ] schon Liste')).toBe('- [ ] schon Liste')
     expect(normalizeTaskLists('1. [ ] nummeriert')).toBe('1. [ ] nummeriert')
