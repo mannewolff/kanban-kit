@@ -13,7 +13,7 @@
 
     <groupId>org.mwolff</groupId>
     <artifactId>manban</artifactId>
-    <version>1.3.0</version>
+    <version>1.3.1</version>
     <name>manban</name>
     <description>mannewolff Kanban Board — eigenständige, self-hostbare Trello-Alternative</description>
 
