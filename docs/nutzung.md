@@ -26,7 +26,7 @@
 
 ## Karten
 
-- **Anlegen:** „+" im Spaltenkopf (Karte direkt in dieser Spalte) oder der Button **„Neues Item"**
+- **Anlegen:** „+" im Spaltenkopf (Karte direkt in dieser Spalte) oder der Button **„Neu anlegen"**
   oben (legt in der ersten Spalte an). Titel + Markdown-Beschreibung.
 - **Verschieben:** per Drag & Drop zwischen den Spalten. Alternativ über das **⋮-Menü** der Karte
   (Eintrag „Nach *Zielspalte*") — auch per Tastatur bedienbar.
@@ -120,7 +120,7 @@ kollidieren also nicht mit den Karten der Spalten.
   Karte in der **ersten Spalte** (Backlog), ans Ende, und erscheint wieder auf dem Board.
 
 Beide Richtungen zählen als normaler Arbeitsfluss und brauchen nur das Recht zum **Verschieben** von
-Karten (kein Löschrecht). Auch der Ingest über die API (kanbancompat) kann ein Item direkt als Idee
+Karten (kein Löschrecht). Auch der Ingest über die API (kanbancompat) kann eine Karte direkt als Idee
 anlegen.
 
 ## Dashboard (Kennzahlen)

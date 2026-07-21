@@ -39,7 +39,7 @@ export function statusColors(name: string): StatusColorSet {
 /** Neutrale Spaltenfläche (hell, Marken-Ton). */
 export const COLUMN_SURFACE_BG = '#F6FAFB'
 
-/** Farbe für archivierte Items (Badges/Listen). */
+/** Farbe für archivierte Karten (Badges/Listen). */
 export const ARCHIVED_STATUS_COLOR: StatusColorSet = { bg: '#F0F2F2', text: '#5F7A7F', dot: '#9FB0B4' }
 
 /** Chrome-Farben des Detail-Modals (Marken-Töne). */
