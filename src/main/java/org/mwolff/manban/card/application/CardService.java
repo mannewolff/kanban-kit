@@ -9,6 +9,8 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
 import org.jspecify.annotations.Nullable;
+import org.mwolff.manban.board.application.BoardChangedEvent;
+import org.mwolff.manban.board.application.BoardChangedEvent.ChangeType;
 import org.mwolff.manban.board.application.BoardColumnRepository;
 import org.mwolff.manban.board.application.BoardNotFoundException;
 import org.mwolff.manban.board.application.BoardRepository;
@@ -23,6 +25,7 @@ import org.mwolff.manban.card.domain.Label;
 import org.mwolff.manban.project.application.PermissionChecker;
 import org.mwolff.manban.project.application.ProjectMembershipRepository;
 import org.mwolff.manban.project.domain.Permission;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -55,6 +58,7 @@ public class CardService {
   private final LabelRepository labels;
   private final CardLabelRepository cardLabels;
   private final CardActivityRepository activity;
+  private final ApplicationEventPublisher events;
   private final Clock clock;
 
   public CardService(
@@ -69,6 +73,7 @@ public class CardService {
       LabelRepository labels,
       CardLabelRepository cardLabels,
       CardActivityRepository activity,
+      ApplicationEventPublisher events,
       Clock clock) {
     this.cards = cards;
     this.dependencies = dependencies;
@@ -81,7 +86,17 @@ public class CardService {
     this.labels = labels;
     this.cardLabels = cardLabels;
     this.activity = activity;
+    this.events = events;
     this.clock = clock;
+  }
+
+  /**
+   * Publiziert ein {@link BoardChangedEvent} für Live-Board-Updates. Der Board-Event-Listener
+   * reicht es transaktionsgebunden (nach Commit) an die SSE-Registry weiter — bei Rollback entsteht
+   * kein Event. Wird am erfolgreichen Ende jeder board-relevanten Karten-Mutation aufgerufen.
+   */
+  private void publishChanged(long boardId, ChangeType type, @Nullable Long cardId) {
+    events.publishEvent(new BoardChangedEvent(boardId, type, cardId));
   }
 
   @Transactional
@@ -188,6 +203,7 @@ public class CardService {
     if (labelIds != null && !labelIds.isEmpty()) {
       assignValidatedLabels(saved.requireId(), boardId, labelIds);
     }
+    publishChanged(boardId, ChangeType.CREATED, saved.requireId());
     return view(saved);
   }
 
@@ -232,6 +248,7 @@ public class CardService {
                 null,
                 trimToNull(shortcode),
                 null));
+    publishChanged(boardId, ChangeType.CREATED, saved.requireId());
     return view(saved);
   }
 
@@ -308,6 +325,7 @@ public class CardService {
     if (dependsOn != null) {
       setDependencies(saved, dependsOn);
     }
+    publishChanged(saved.boardId(), ChangeType.UPDATED, cardId);
     return view(saved);
   }
 
@@ -327,6 +345,7 @@ public class CardService {
 
     assignValidatedAssignees(cardId, board.projectId(), assigneeIds);
     activity.add(cardId, userId, CardActivityType.ASSIGNED, "Zuständige geändert", clock.instant());
+    publishChanged(card.boardId(), ChangeType.UPDATED, cardId);
     return view(card);
   }
 
@@ -344,6 +363,7 @@ public class CardService {
     permissions.require(userId, board.projectId(), Permission.TICKET_UPDATE);
 
     assignValidatedLabels(cardId, card.boardId(), labelIds);
+    publishChanged(card.boardId(), ChangeType.UPDATED, cardId);
     return view(card);
   }
 
@@ -388,7 +408,9 @@ public class CardService {
     }
     Long effective =
         parentId == null ? null : requireEpicInBoard(parentId, card.boardId()).requireId();
-    return view(cards.save(card.withParent(effective)));
+    Card saved = cards.save(card.withParent(effective));
+    publishChanged(card.boardId(), ChangeType.UPDATED, cardId);
+    return view(saved);
   }
 
   @Transactional
@@ -430,7 +452,9 @@ public class CardService {
     }
 
     Card moved = cards.findById(cardId).orElseThrow(CardNotFoundException::new);
-    return view(cards.save(moved.withMovedToDoneAt(done)));
+    CardView result = view(cards.save(moved.withMovedToDoneAt(done)));
+    publishChanged(card.boardId(), ChangeType.MOVED, cardId);
+    return result;
   }
 
   /**
@@ -465,7 +489,11 @@ public class CardService {
     transitions.open(cardId, targetColumnId, targetColumn.name(), switchedAt);
 
     Card moved = cards.findById(cardId).orElseThrow(CardNotFoundException::new);
-    return view(cards.save(moved.withParent(null).withMovedToDoneAt(null)));
+    CardView result = view(cards.save(moved.withParent(null).withMovedToDoneAt(null)));
+    // Board-übergreifend: Quell- und Ziel-Board müssen beide live nachziehen.
+    publishChanged(card.boardId(), ChangeType.MOVED, cardId);
+    publishChanged(targetBoardId, ChangeType.MOVED, cardId);
+    return result;
   }
 
   /**
@@ -488,7 +516,9 @@ public class CardService {
     Card card = requireCardOp(userId, cardId, Permission.TICKET_DELETE, Permission.EPIC_DELETE);
     activity.add(
         card.requireId(), userId, CardActivityType.ARCHIVED, "Archiviert", clock.instant());
-    return view(cards.save(card.asArchived()));
+    CardView result = view(cards.save(card.asArchived()));
+    publishChanged(card.boardId(), ChangeType.ARCHIVED, card.requireId());
+    return result;
   }
 
   /**
@@ -508,7 +538,9 @@ public class CardService {
     int position = cards.maxActivePositionInColumn(card.columnId()) + 1;
     activity.add(
         card.requireId(), userId, CardActivityType.RESTORED, "Wiederhergestellt", clock.instant());
-    return view(cards.save(card.asRestored(position)));
+    CardView result = view(cards.save(card.asRestored(position)));
+    publishChanged(card.boardId(), ChangeType.RESTORED, card.requireId());
+    return result;
   }
 
   /**
@@ -531,7 +563,9 @@ public class CardService {
         CardActivityType.IDEA_STORED,
         "In den Ideen-Speicher",
         clock.instant());
-    return view(cards.save(card.asIdeaStored()));
+    CardView result = view(cards.save(card.asIdeaStored()));
+    publishChanged(card.boardId(), ChangeType.MOVED, card.requireId());
+    return result;
   }
 
   /**
@@ -556,7 +590,9 @@ public class CardService {
     int position = cards.maxActivePositionInColumn(firstColumnId) + 1;
     activity.add(
         card.requireId(), userId, CardActivityType.PROMOTED, "Ins Backlog geholt", clock.instant());
-    return view(cards.save(card.asPromoted(position, firstColumnId)));
+    CardView result = view(cards.save(card.asPromoted(position, firstColumnId)));
+    publishChanged(card.boardId(), ChangeType.MOVED, card.requireId());
+    return result;
   }
 
   /** Aktivitätsverlauf einer Karte (chronologisch). Erfordert Board-Mitgliedschaft (Leserecht). */
@@ -582,6 +618,7 @@ public class CardService {
           .forEach(child -> cards.save(child.withParent(null)));
     }
     cards.softDelete(card.requireId(), clock.instant());
+    publishChanged(card.boardId(), ChangeType.DELETED, card.requireId());
   }
 
   /**
@@ -610,6 +647,7 @@ public class CardService {
         CardActivityType.RESTORED,
         "Aus Papierkorb wiederhergestellt",
         clock.instant());
+    publishChanged(card.boardId(), ChangeType.RESTORED, card.requireId());
     // View aus der bereits geladenen Karte mit neuer Position — der JDBC-Restore hat die DB-Zeile
     // geändert; ein erneutes findById käme aus dem JPA-Cache noch mit dem alten Stand.
     return view(card.asRestored(position));
@@ -626,6 +664,7 @@ public class CardService {
     permissions.require(userId, board.projectId(), Permission.BOARD_DELETE);
     dependencies.deleteByCardId(card.requireId());
     cards.deleteById(card.requireId());
+    publishChanged(card.boardId(), ChangeType.DELETED, card.requireId());
   }
 
   /** Karten im Papierkorb eines Boards. Erfordert Board-Mitgliedschaft (Leserecht). */

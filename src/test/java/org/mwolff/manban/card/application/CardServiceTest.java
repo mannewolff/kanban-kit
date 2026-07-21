@@ -23,6 +23,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
+import org.mwolff.manban.board.application.BoardChangedEvent;
+import org.mwolff.manban.board.application.BoardChangedEvent.ChangeType;
 import org.mwolff.manban.board.application.BoardColumnRepository;
 import org.mwolff.manban.board.application.BoardNotFoundException;
 import org.mwolff.manban.board.application.BoardRepository;
@@ -39,11 +41,19 @@ import org.mwolff.manban.project.application.ProjectAccessDeniedException;
 import org.mwolff.manban.project.application.ProjectMembershipRepository;
 import org.mwolff.manban.project.domain.Permission;
 import org.mwolff.manban.project.domain.ProjectMembership;
+import org.springframework.context.ApplicationEventPublisher;
 
 /** Verhaltenstests der Karten- und Epic-Use-Cases (Mockito an den Ports). */
 // PMD.TooManyMethods: umfassende Unit-Suite (Karten + Epics, Erfolgs- und Fehlerpfade je
 // Use-Case). Viele kleine @Test-Methoden sind hier gewollt, kein God-Class-Smell.
-@SuppressWarnings({"PMD.TooManyMethods", "PMD.CyclomaticComplexity", "PMD.CouplingBetweenObjects"})
+// PMD.ExcessiveImports: die Suite deckt viele Ports/Domänentypen ab (inkl. der Live-Board-Events);
+// die Import-Zahl folgt aus dem breiten Testumfang, kein Kopplungs-Smell.
+@SuppressWarnings({
+  "PMD.TooManyMethods",
+  "PMD.CyclomaticComplexity",
+  "PMD.CouplingBetweenObjects",
+  "PMD.ExcessiveImports"
+})
 class CardServiceTest {
 
   private static final Instant FIXED = Instant.parse("2026-01-02T03:04:05Z");
@@ -60,6 +70,7 @@ class CardServiceTest {
   private LabelRepository labels;
   private CardLabelRepository cardLabels;
   private CardActivityRepository activity;
+  private ApplicationEventPublisher events;
   private CardService service;
 
   private static Card card(
@@ -93,6 +104,7 @@ class CardServiceTest {
     labels = mock(LabelRepository.class);
     cardLabels = mock(CardLabelRepository.class);
     activity = mock(CardActivityRepository.class);
+    events = mock(ApplicationEventPublisher.class);
     Clock clock = Clock.fixed(FIXED, ZoneOffset.UTC);
     service =
         new CardService(
@@ -107,6 +119,7 @@ class CardServiceTest {
             labels,
             cardLabels,
             activity,
+            events,
             clock);
     when(boards.findById(BOARD)).thenReturn(Optional.of(new Board(BOARD, 1L, "B", FIXED)));
     when(cards.save(any(Card.class))).thenAnswer(inv -> withId(inv.getArgument(0)));
@@ -1796,5 +1809,187 @@ class CardServiceTest {
     InOrder order = inOrder(transitions);
     order.verify(transitions).closeOpen(100L, FIXED);
     order.verify(transitions).open(100L, 60L, "Backlog", FIXED);
+  }
+
+  // --- Live-Board-Events (#342): je board-relevanter Mutation ein BoardChangedEvent ------------
+
+  private BoardChangedEvent onlyPublishedEvent() {
+    ArgumentCaptor<BoardChangedEvent> captor = ArgumentCaptor.forClass(BoardChangedEvent.class);
+    verify(events).publishEvent(captor.capture());
+    return captor.getValue();
+  }
+
+  @Test
+  void create_publishesCreatedEvent() {
+    when(columns.findById(20L)).thenReturn(Optional.of(column(20L, "Backlog", 0)));
+
+    service.create(1L, BOARD, 20L, "Titel", null, null, null);
+
+    assertThat(onlyPublishedEvent())
+        .isEqualTo(new BoardChangedEvent(BOARD, ChangeType.CREATED, 1L));
+  }
+
+  @Test
+  void createEpic_publishesCreatedEvent() {
+    when(columns.findByBoardId(BOARD)).thenReturn(List.of(column(20L, "Backlog", 0)));
+
+    service.createEpic(1L, BOARD, "Epic", null, "E");
+
+    assertThat(onlyPublishedEvent())
+        .isEqualTo(new BoardChangedEvent(BOARD, ChangeType.CREATED, 1L));
+  }
+
+  @Test
+  void update_publishesUpdatedEvent() {
+    when(cards.findById(1L))
+        .thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
+
+    service.update(1L, 1L, "Neu", null, null, null, null, null);
+
+    assertThat(onlyPublishedEvent())
+        .isEqualTo(new BoardChangedEvent(BOARD, ChangeType.UPDATED, 1L));
+  }
+
+  @Test
+  void setAssignees_publishesUpdatedEvent() {
+    when(cards.findById(1L))
+        .thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
+
+    service.setAssignees(3L, 1L, List.of());
+
+    assertThat(onlyPublishedEvent())
+        .isEqualTo(new BoardChangedEvent(BOARD, ChangeType.UPDATED, 1L));
+  }
+
+  @Test
+  void setLabels_publishesUpdatedEvent() {
+    when(cards.findById(1L))
+        .thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
+
+    service.setLabels(3L, 1L, List.of());
+
+    assertThat(onlyPublishedEvent())
+        .isEqualTo(new BoardChangedEvent(BOARD, ChangeType.UPDATED, 1L));
+  }
+
+  @Test
+  void assignParent_publishesUpdatedEvent() {
+    when(cards.findById(1L))
+        .thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
+
+    service.assignParent(1L, 1L, null);
+
+    assertThat(onlyPublishedEvent())
+        .isEqualTo(new BoardChangedEvent(BOARD, ChangeType.UPDATED, 1L));
+  }
+
+  @Test
+  void move_publishesMovedEvent() {
+    when(cards.findById(1L))
+        .thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
+    when(columns.findById(21L)).thenReturn(Optional.of(column(21L, "Ready", 1)));
+
+    service.move(1L, 1L, 21L, 0);
+
+    assertThat(onlyPublishedEvent()).isEqualTo(new BoardChangedEvent(BOARD, ChangeType.MOVED, 1L));
+  }
+
+  @Test
+  void archive_publishesArchivedEvent() {
+    when(cards.findById(1L))
+        .thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
+
+    service.archive(1L, 1L);
+
+    assertThat(onlyPublishedEvent())
+        .isEqualTo(new BoardChangedEvent(BOARD, ChangeType.ARCHIVED, 1L));
+  }
+
+  @Test
+  void restore_publishesRestoredEvent() {
+    when(cards.findById(1L))
+        .thenReturn(Optional.of(card(1L, 20L, 1, true, null, CardType.CARD, null, null)));
+
+    service.restore(1L, 1L);
+
+    assertThat(onlyPublishedEvent())
+        .isEqualTo(new BoardChangedEvent(BOARD, ChangeType.RESTORED, 1L));
+  }
+
+  @Test
+  void moveToIdeaStorage_publishesMovedEvent() {
+    when(cards.findById(1L))
+        .thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
+
+    service.moveToIdeaStorage(9L, 1L);
+
+    assertThat(onlyPublishedEvent()).isEqualTo(new BoardChangedEvent(BOARD, ChangeType.MOVED, 1L));
+  }
+
+  @Test
+  void promoteToBacklog_publishesMovedEvent() {
+    when(cards.findById(1L))
+        .thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
+    when(columns.findByBoardId(BOARD)).thenReturn(List.of(column(20L, "Backlog", 0)));
+
+    service.promoteToBacklog(9L, 1L);
+
+    assertThat(onlyPublishedEvent()).isEqualTo(new BoardChangedEvent(BOARD, ChangeType.MOVED, 1L));
+  }
+
+  @Test
+  void delete_publishesDeletedEvent() {
+    when(cards.findById(1L))
+        .thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
+
+    service.delete(1L, 1L);
+
+    assertThat(onlyPublishedEvent())
+        .isEqualTo(new BoardChangedEvent(BOARD, ChangeType.DELETED, 1L));
+  }
+
+  @Test
+  void restoreFromTrash_publishesRestoredEvent() {
+    when(cards.findById(1L))
+        .thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
+
+    service.restoreFromTrash(9L, 1L);
+
+    assertThat(onlyPublishedEvent())
+        .isEqualTo(new BoardChangedEvent(BOARD, ChangeType.RESTORED, 1L));
+  }
+
+  @Test
+  void purge_publishesDeletedEvent() {
+    when(cards.findById(1L))
+        .thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
+
+    service.purge(9L, 1L);
+
+    assertThat(onlyPublishedEvent())
+        .isEqualTo(new BoardChangedEvent(BOARD, ChangeType.DELETED, 1L));
+  }
+
+  @Test
+  void transfer_publishesMovedEventForBothBoards() {
+    stubTransferScenario(null);
+
+    service.transfer(1L, 100L, 20L, 60L);
+
+    ArgumentCaptor<BoardChangedEvent> captor = ArgumentCaptor.forClass(BoardChangedEvent.class);
+    verify(events, times(2)).publishEvent(captor.capture());
+    assertThat(captor.getAllValues())
+        .containsExactly(
+            new BoardChangedEvent(BOARD, ChangeType.MOVED, 100L),
+            new BoardChangedEvent(20L, ChangeType.MOVED, 100L));
+  }
+
+  @Test
+  void failedMutation_publishesNoEvent() {
+    when(cards.findById(1L)).thenReturn(Optional.empty());
+
+    assertThatThrownBy(() -> service.archive(1L, 1L)).isInstanceOf(CardNotFoundException.class);
+
+    verify(events, never()).publishEvent(any());
   }
 }
