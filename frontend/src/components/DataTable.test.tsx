@@ -141,6 +141,13 @@ describe('DataTable', () => {
     expect(screen.queryByLabelText('Breite von Spalte actions ändern')).not.toBeInTheDocument()
   })
 
+  it('zeigt beim Überfahren des Ziehgriffs den Tooltip „Breite ziehen"', async () => {
+    renderTable()
+    fireEvent.mouseOver(screen.getByLabelText('Breite von Spalte name ändern'))
+    // Hover-Farbe/-Griffpunkt sind reines CSS (in jsdom nicht messbar); geprüft wird der Tooltip.
+    expect(await screen.findByRole('tooltip')).toHaveTextContent('Breite ziehen')
+  })
+
   it('schreibt die geänderte Breite in den localStorage', () => {
     renderTable()
     const handle = screen.getByLabelText('Breite von Spalte name ändern')

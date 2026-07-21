@@ -434,7 +434,7 @@ export function BoardView({
               startIcon={<AddIcon />}
               onClick={() => setModalColumn({ id: columns[0].id, name: columns[0].name })}
             >
-              Neues Item
+              Neu anlegen
             </Button>
           )}
         </Box>
@@ -585,7 +585,7 @@ export function BoardView({
                           </IconButton>
                         )}
                       </Stack>
-                      {doneAt != null && (
+                      {doneAt != null && retentionDays > 0 && (
                         <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
                           {cleanupCountdownLabel(cleanupDaysRemaining(doneAt, retentionDays))}
                         </Typography>
@@ -682,7 +682,7 @@ export function BoardView({
               const c = menu.card
               closeMenu()
               if (columns.length === 0) return
-              // Die Kopie ist ein neues Item und soll den kompletten Prozess durchlaufen —
+              // Die Kopie ist eine neue Karte und soll den kompletten Prozess durchlaufen —
               // deshalb immer in die erste Spalte ("Backlog"), nicht in die Spalte der
               // Quellkarte (analog zum board-weiten "+"-Button, der ebenfalls columns[0] nutzt).
               setDuplicateValues({ title: c.title, description: c.description ?? '', parentId: c.parentId })

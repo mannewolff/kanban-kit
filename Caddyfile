@@ -7,6 +7,9 @@
 }
 
 {$MANBAN_DOMAIN:localhost} {
+	# Server-Sent-Events (Live-Board, GET /api/boards/*/events) laufen ohne Zusatz-Config:
+	# Caddys reverse_proxy erkennt text/event-stream und flusht solche Streams sofort durch
+	# (kein Buffering, keine gzip-Kompression auf Event-Streams). Kein flush_interval nötig.
 	encode gzip
 	reverse_proxy manban-api:8080
 }

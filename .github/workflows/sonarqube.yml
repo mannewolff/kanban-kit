@@ -31,8 +31,11 @@ jobs:
           java-version: '25'
           cache: maven
 
+      # copy-dependencies legt die Dependency-Jars workspace-relativ unter
+      # target/dependency ab, damit sonar.java.libraries (siehe sonar-project.properties)
+      # ohne Tilde-Pfad auf sie zeigen kann (SonarJava-Bytecode-Referenz).
       - name: Backend Build + Tests (JaCoCo-Coverage)
-        run: mvn -B verify
+        run: mvn -B verify dependency:copy-dependencies -DoutputDirectory=target/dependency
 
       - name: Set up Node 22
         uses: actions/setup-node@v4

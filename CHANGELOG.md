@@ -7,6 +7,20 @@ Versionierung folgt der dreiteiligen Betriebsversion (siehe [RELEASING.md](RELEA
 Einträge je Version sind ein automatischer Auszug der Commit-Titel seit dem letzten Release,
 erzeugt von `scripts/gen-changelog.mjs`.
 
+## [1.4.0] – 2026-07-21
+
+- Version 1.3.1 (push main)
+- Live-Board: EventSource-Hook + Verdrahtung in Board- und Listen-Ansicht ([#343](https://github.com/mannewolff/kanban-kit/issues/343))
+- Live-Board: BoardChangedEvent bei allen board-relevanten Card-Mutationen publizieren ([#342](https://github.com/mannewolff/kanban-kit/issues/342))
+- Live-Board: SSE-Infrastruktur (Endpoint + Emitter-Registry + Heartbeat + Auth) ([#341](https://github.com/mannewolff/kanban-kit/issues/341))
+- Administration: Done-Aufbewahrung anzeigen/ändern + Countdown auf effektiven Wert ([#340](https://github.com/mannewolff/kanban-kit/issues/340))
+- Global änderbare Done-Aufbewahrung: Persistenz + Admin-Endpoint + effektiver Wert ([#339](https://github.com/mannewolff/kanban-kit/issues/339))
+- „Boards" in der Navigation auf Projekte-Ebene hochziehen ([#338](https://github.com/mannewolff/kanban-kit/issues/338))
+- DataTable: Spalten-Ziehgriff sichtbar machen ([#337](https://github.com/mannewolff/kanban-kit/issues/337))
+- BoardPage-Tests gegen reloadEpics-Coverage-Flake härten ([#336](https://github.com/mannewolff/kanban-kit/issues/336))
+- Sonar java.libraries: Tilde-Pfad durch target/dependency ersetzen ([#335](https://github.com/mannewolff/kanban-kit/issues/335))
+- Board-Button "Neues Item" neutral benennen ([#333](https://github.com/mannewolff/kanban-kit/issues/333))
+
 ## [1.3.0] – 2026-07-21
 
 - Projektmitglieder-Liste auf DataTable umstellen ([#332](https://github.com/mannewolff/kanban-kit/issues/332))

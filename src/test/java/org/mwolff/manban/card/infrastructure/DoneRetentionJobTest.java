@@ -11,10 +11,10 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
-import org.mwolff.manban.card.application.CleanupProperties;
 import org.mwolff.manban.card.application.DoneRetentionService;
+import org.mwolff.manban.card.application.DoneRetentionSettingService;
 
-/** Zeit-Test: der Aufräum-Job reicht den Clock-Zeitpunkt an die Retention weiter. */
+/** Zeit-Test: der Aufräum-Job reicht Clock-Zeitpunkt und effektiven Retention-Wert weiter. */
 class DoneRetentionJobTest {
 
   private static final Instant FIXED = Instant.parse("2026-01-02T03:04:05Z");
@@ -23,10 +23,11 @@ class DoneRetentionJobTest {
   void run_passesClockInstantToRetention() {
     // Given
     DoneRetentionService retention = mock(DoneRetentionService.class);
-    CleanupProperties properties = new CleanupProperties(true, 30, 30, null);
+    DoneRetentionSettingService retentionSetting = mock(DoneRetentionSettingService.class);
     Clock clock = Clock.fixed(FIXED, ZoneOffset.UTC);
+    when(retentionSetting.effectiveRetentionDays()).thenReturn(30);
     when(retention.archiveExpiredDoneCards(FIXED, 30)).thenReturn(0);
-    DoneRetentionJob job = new DoneRetentionJob(retention, properties, clock);
+    DoneRetentionJob job = new DoneRetentionJob(retention, retentionSetting, clock);
 
     // When
     job.run();
@@ -38,18 +39,20 @@ class DoneRetentionJobTest {
   }
 
   @Test
-  void run_delegatesRetentionDays_whenCardsArchived() {
-    // Given: die Retention meldet archivierte Karten (> 0) -> Log-Zweig wird betreten
+  void run_passesEffectiveRetentionDays_andLogsWhenCardsArchived() {
+    // Given: der effektive Wert kommt aus dem Setting-Service; die Retention meldet > 0 archivierte
+    // Karten -> Log-Zweig wird betreten
     DoneRetentionService retention = mock(DoneRetentionService.class);
-    CleanupProperties properties = new CleanupProperties(true, 30, 30, null);
+    DoneRetentionSettingService retentionSetting = mock(DoneRetentionSettingService.class);
     Clock clock = Clock.fixed(FIXED, ZoneOffset.UTC);
-    when(retention.archiveExpiredDoneCards(FIXED, 30)).thenReturn(5);
-    DoneRetentionJob job = new DoneRetentionJob(retention, properties, clock);
+    when(retentionSetting.effectiveRetentionDays()).thenReturn(7);
+    when(retention.archiveExpiredDoneCards(FIXED, 7)).thenReturn(5);
+    DoneRetentionJob job = new DoneRetentionJob(retention, retentionSetting, clock);
 
     // When
     job.run();
 
     // Then
-    verify(retention).archiveExpiredDoneCards(FIXED, 30);
+    verify(retention).archiveExpiredDoneCards(FIXED, 7);
   }
 }

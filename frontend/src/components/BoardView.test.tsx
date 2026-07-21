@@ -119,7 +119,7 @@ describe('BoardView', () => {
   it('blendet Anlege-Buttons für Nicht-Editoren aus', () => {
     render(<BoardView board={board} initialCards={[card]} canEdit={false} api={mkApi()} />)
     expect(screen.queryByLabelText('Karte in Done anlegen')).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Neues Item' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Neu anlegen' })).not.toBeInTheDocument()
   })
 
   it('legt über Typ=Epic ein Epic an statt einer Karte', async () => {
@@ -246,6 +246,12 @@ describe('BoardView', () => {
     const doneCard: Card = { ...card, columnId: 20, movedToDoneAt: new Date().toISOString() }
     render(<BoardView board={board} initialCards={[doneCard]} canEdit retentionDays={5} api={mkApi()} />)
     expect(screen.getByText(/wird in 5 Tagen archiviert/)).toBeInTheDocument()
+  })
+
+  it('zeigt keinen Archiv-Countdown, wenn die Aufbewahrung 0 ist (kein Auto-Archiv)', () => {
+    const doneCard: Card = { ...card, columnId: 20, movedToDoneAt: new Date().toISOString() }
+    render(<BoardView board={board} initialCards={[doneCard]} canEdit retentionDays={0} api={mkApi()} />)
+    expect(screen.queryByText(/archiviert/)).not.toBeInTheDocument()
   })
 
   it('filtert das Board nach Epic', () => {
@@ -640,9 +646,9 @@ describe('BoardView', () => {
     expect(onCardsChanged).toHaveBeenCalled()
   })
 
-  it('öffnet den Anlage-Dialog für die erste Spalte über „Neues Item"', () => {
+  it('öffnet den Anlage-Dialog für die erste Spalte über „Neu anlegen"', () => {
     render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} />)
-    fireEvent.click(screen.getByRole('button', { name: 'Neues Item' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Neu anlegen' }))
     expect(screen.getByRole('heading', { name: 'Neue Karte in „Backlog“' })).toBeInTheDocument()
   })
 
@@ -919,7 +925,7 @@ describe('BoardView', () => {
 
       // ... der tägliche Kanban-Alltag bleibt erhalten.
       expect(screen.getByLabelText('Karte in Backlog anlegen')).toBeInTheDocument()
-      expect(screen.getByRole('button', { name: 'Neues Item' })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Neu anlegen' })).toBeInTheDocument()
       expect(screen.getByRole('button', { name: 'Menü Aufgabe' })).toBeInTheDocument()
     })
 

@@ -24,6 +24,7 @@ import { labelsApi, type Label } from '../api/labels'
 import { CardDetailModal } from '../components/CardDetailModal'
 import { EpicBadge } from '../components/EpicBadge'
 import { clampExcerptWidth, EXCERPT_DEFAULT_PCT, stripMarkdown } from '../lib/listExcerpt'
+import { useBoardEvents } from '../lib/useBoardEvents'
 import { useBoardRole } from '../lib/useBoardRole'
 import { useProjectName } from '../lib/useProjectName'
 import { formatDueDate, isOverdue } from '../lib/dueDate'
@@ -101,6 +102,9 @@ export function BoardListPage() {
   const reloadCards = () => {
     void cardsApi.list(id).then(setCards)
   }
+
+  // Live-Updates: bei einer Änderung durch andere die Kartenliste neu laden.
+  useBoardEvents(id, reloadCards)
 
   const restoreCard = async (cardId: number) => {
     await cardsApi.restore(cardId)

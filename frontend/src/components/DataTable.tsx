@@ -10,6 +10,7 @@ import TableBody from '@mui/material/TableBody'
 import TableCell from '@mui/material/TableCell'
 import TableHead from '@mui/material/TableHead'
 import TableRow from '@mui/material/TableRow'
+import Tooltip from '@mui/material/Tooltip'
 import { type ReactNode, useRef, useState } from 'react'
 
 /** Spaltendefinition für {@link DataTable}. */
@@ -158,20 +159,49 @@ export function DataTable<Row>({
               >
                 {col.header}
                 {col.resizable && (
-                  <Box
-                    role="separator"
-                    aria-label={`Breite von Spalte ${col.key} ändern`}
-                    onMouseDown={(e) => startResize(col, e)}
-                    sx={{
-                      position: 'absolute',
-                      top: 0,
-                      right: 0,
-                      height: '100%',
-                      width: 6,
-                      cursor: 'col-resize',
-                      userSelect: 'none',
-                    }}
-                  />
+                  <Tooltip title="Breite ziehen">
+                    <Box
+                      role="separator"
+                      aria-label={`Breite von Spalte ${col.key} ändern`}
+                      onMouseDown={(e) => startResize(col, e)}
+                      sx={{
+                        position: 'absolute',
+                        top: 0,
+                        right: 0,
+                        height: '100%',
+                        width: 6,
+                        cursor: 'col-resize',
+                        userSelect: 'none',
+                        // Immer sichtbare, dezente Haarlinie am Spaltenrand (Marken-BORDER).
+                        '&::before': {
+                          content: '""',
+                          position: 'absolute',
+                          top: 4,
+                          bottom: 4,
+                          right: 0,
+                          width: '1px',
+                          bgcolor: 'divider',
+                          transition: 'background-color 120ms, width 120ms',
+                        },
+                        // Kleiner Griffpunkt als „hier ziehen"-Signal, nur beim Überfahren sichtbar.
+                        '&::after': {
+                          content: '""',
+                          position: 'absolute',
+                          top: '50%',
+                          right: '-1px',
+                          transform: 'translateY(-50%)',
+                          width: 5,
+                          height: 5,
+                          borderRadius: '50%',
+                          bgcolor: 'primary.main',
+                          opacity: 0,
+                          transition: 'opacity 120ms',
+                        },
+                        '&:hover::before': { bgcolor: 'primary.main', width: '2px' },
+                        '&:hover::after': { opacity: 1 },
+                      }}
+                    />
+                  </Tooltip>
                 )}
               </TableCell>
             ))}

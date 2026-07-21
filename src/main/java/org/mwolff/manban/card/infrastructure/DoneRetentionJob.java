@@ -1,8 +1,8 @@
 package org.mwolff.manban.card.infrastructure;
 
 import java.time.Clock;
-import org.mwolff.manban.card.application.CleanupProperties;
 import org.mwolff.manban.card.application.DoneRetentionService;
+import org.mwolff.manban.card.application.DoneRetentionSettingService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -21,19 +21,21 @@ class DoneRetentionJob {
   private static final Logger log = LoggerFactory.getLogger(DoneRetentionJob.class);
 
   private final DoneRetentionService retention;
-  private final CleanupProperties properties;
+  private final DoneRetentionSettingService retentionSetting;
   private final Clock clock;
 
-  DoneRetentionJob(DoneRetentionService retention, CleanupProperties properties, Clock clock) {
+  DoneRetentionJob(
+      DoneRetentionService retention, DoneRetentionSettingService retentionSetting, Clock clock) {
     this.retention = retention;
-    this.properties = properties;
+    this.retentionSetting = retentionSetting;
     this.clock = clock;
   }
 
   @Scheduled(cron = "${manban.cleanup.cron:0 0 * * * *}")
   void run() {
     int archived =
-        retention.archiveExpiredDoneCards(clock.instant(), properties.doneRetentionDays());
+        retention.archiveExpiredDoneCards(
+            clock.instant(), retentionSetting.effectiveRetentionDays());
     if (archived > 0) {
       log.info("Done-Retention: {} abgelaufene Karten archiviert", archived);
     }

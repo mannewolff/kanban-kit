@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import java.time.Duration;
@@ -100,5 +101,17 @@ class DoneRetentionServiceTest {
 
     // Then
     assertThat(count).isZero();
+  }
+
+  @Test
+  void archiveExpiredDoneCards_archivesNothingAndSkipsQuery_whenRetentionZero() {
+    // Given: 0 = Auto-Archiv aus
+
+    // When
+    int count = service.archiveExpiredDoneCards(NOW, 0);
+
+    // Then: kein Zugriff aufs Repository, nichts archiviert
+    assertThat(count).isZero();
+    verifyNoInteractions(cards);
   }
 }
