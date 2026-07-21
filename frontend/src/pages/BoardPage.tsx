@@ -30,6 +30,7 @@ import { TrashDialog } from '../components/TrashDialog'
 import { useSnackbar } from '../components/SnackbarProvider'
 import { useEditMode } from '../lib/EditModeContext'
 import { canEditCards, canManageProject, canModerateComments, isPlatformAdmin } from '../lib/roles'
+import { useBoardEvents } from '../lib/useBoardEvents'
 import { useProjectName } from '../lib/useProjectName'
 import { useRefetchOnFocus } from '../lib/useRefetchOnFocus'
 
@@ -110,6 +111,8 @@ export function BoardPage() {
   // Kommt der Tab wieder in den Vordergrund, den Board-Zustand neu prüfen: Wurde das Board in einer
   // anderen Session entfernt, greift dabei das 404-Handling (Redirect + Hinweis).
   useRefetchOnFocus(load)
+  // Live-Updates: bei einer Änderung durch andere (Move/Anlegen/…) das Board neu laden.
+  useBoardEvents(id, load)
 
   useEffect(() => {
     void configApi.get().then((c) => setRetentionDays(c.doneRetentionDays)).catch(() => {})
