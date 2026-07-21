@@ -585,7 +585,7 @@ export function BoardView({
                           </IconButton>
                         )}
                       </Stack>
-                      {doneAt != null && (
+                      {doneAt != null && retentionDays > 0 && (
                         <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
                           {cleanupCountdownLabel(cleanupDaysRemaining(doneAt, retentionDays))}
                         </Typography>

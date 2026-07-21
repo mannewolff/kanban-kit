@@ -3,18 +3,30 @@ import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { accessTokensApi } from '../api/accessTokens'
 import { boardsApi } from '../api/boards'
+import { ApiError } from '../api/client'
+import { configApi } from '../api/config'
 import { projectsApi } from '../api/projects'
 import { EditModeProvider, useEditMode } from '../lib/EditModeContext'
 import { AdministrationPage } from './AdministrationPage'
 
-vi.mock('../auth/AuthContext', () => ({
-  useAuth: () => ({ user: { platformRole: 'USER', memberships: [] } }),
+// Rolle je Test umschaltbar: Default USER (Nicht-Admin, blendet Admin-Abschnitte aus).
+const authState = vi.hoisted(() => ({
+  user: { platformRole: 'USER', memberships: [] } as { platformRole: string; memberships: [] },
 }))
+vi.mock('../auth/AuthContext', () => ({ useAuth: () => authState }))
 vi.mock('../api/accessTokens', () => ({
   accessTokensApi: { list: vi.fn(), create: vi.fn(), revoke: vi.fn() },
 }))
 vi.mock('../api/projects', () => ({ projectsApi: { list: vi.fn() } }))
 vi.mock('../api/boards', () => ({ boardsApi: { list: vi.fn() } }))
+vi.mock('../api/config', () => ({
+  configApi: { getDoneRetention: vi.fn(), setDoneRetention: vi.fn() },
+}))
+
+const mConfig = configApi as unknown as {
+  getDoneRetention: ReturnType<typeof vi.fn>
+  setDoneRetention: ReturnType<typeof vi.fn>
+}
 
 const mTokens = accessTokensApi as unknown as {
   list: ReturnType<typeof vi.fn>
@@ -50,11 +62,14 @@ function ModeProbe() {
 describe('AdministrationPage', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    authState.user = { platformRole: 'USER', memberships: [] }
     mTokens.list.mockResolvedValue([])
     mTokens.create.mockResolvedValue({ id: 1, name: 'board-cli', plaintext: 'tk_geheim' })
     mTokens.revoke.mockResolvedValue(undefined)
     mProjects.list.mockResolvedValue([])
     mBoards.list.mockResolvedValue([])
+    mConfig.getDoneRetention.mockResolvedValue({ effective: 30, override: null })
+    mConfig.setDoneRetention.mockResolvedValue({ effective: 30, override: 30 })
     Object.assign(navigator, { clipboard: { writeText: vi.fn().mockResolvedValue(undefined) } })
     vi.spyOn(window, 'confirm').mockReturnValue(true)
   })
@@ -212,5 +227,91 @@ describe('AdministrationPage', () => {
 
     fireEvent.click(await screen.findByLabelText('Token board-cli widerrufen'))
     expect(mTokens.revoke).not.toHaveBeenCalled()
+  })
+
+  describe('Done-Aufbewahrung', () => {
+    const asAdmin = () => {
+      authState.user = { platformRole: 'ADMIN', memberships: [] }
+    }
+
+    it('blendet den Abschnitt für Nicht-Admins aus', () => {
+      renderPage() // Default USER
+      expect(screen.queryByText('Done-Aufbewahrung')).not.toBeInTheDocument()
+      expect(mConfig.getDoneRetention).not.toHaveBeenCalled()
+    })
+
+    it('lädt und zeigt den aktuellen effektiven Wert (Admin)', async () => {
+      asAdmin()
+      mConfig.getDoneRetention.mockResolvedValue({ effective: 30, override: null })
+      renderPage()
+
+      expect(await screen.findByText('Done-Aufbewahrung')).toBeInTheDocument()
+      const line = await screen.findByText(/Aktuell wirksam:/)
+      expect(line).toHaveTextContent('30 Tage')
+      expect(screen.getByLabelText('Done-Aufbewahrung in Tagen')).toHaveValue(30)
+    })
+
+    it('speichert 0 (kein Auto-Archiv) und meldet Erfolg', async () => {
+      asAdmin()
+      mConfig.getDoneRetention.mockResolvedValue({ effective: 30, override: null })
+      mConfig.setDoneRetention.mockResolvedValue({ effective: 0, override: 0 })
+      renderPage()
+
+      const field = await screen.findByLabelText('Done-Aufbewahrung in Tagen')
+      fireEvent.change(field, { target: { value: '0' } })
+      fireEvent.click(screen.getByRole('button', { name: 'Speichern' }))
+
+      await waitFor(() => expect(mConfig.setDoneRetention).toHaveBeenCalledWith(0))
+      expect(await screen.findByText('Gespeichert.')).toBeInTheDocument()
+      expect(screen.getByText(/Aktuell wirksam:/)).toHaveTextContent('kein Auto-Archiv')
+    })
+
+    it('lehnt negative Werte ab, ohne zu speichern', async () => {
+      asAdmin()
+      renderPage()
+
+      const field = await screen.findByLabelText('Done-Aufbewahrung in Tagen')
+      fireEvent.change(field, { target: { value: '-1' } })
+      fireEvent.click(screen.getByRole('button', { name: 'Speichern' }))
+
+      expect(await screen.findByText(/ganze Zahl/)).toBeInTheDocument()
+      expect(mConfig.setDoneRetention).not.toHaveBeenCalled()
+    })
+
+    it('lehnt nicht-ganzzahlige Werte ab, ohne zu speichern', async () => {
+      asAdmin()
+      renderPage()
+
+      const field = await screen.findByLabelText('Done-Aufbewahrung in Tagen')
+      fireEvent.change(field, { target: { value: '1.5' } })
+      fireEvent.click(screen.getByRole('button', { name: 'Speichern' }))
+
+      expect(await screen.findByText(/ganze Zahl/)).toBeInTheDocument()
+      expect(mConfig.setDoneRetention).not.toHaveBeenCalled()
+    })
+
+    it('zeigt die Server-Fehlermeldung, wenn das Speichern scheitert (ApiError)', async () => {
+      asAdmin()
+      mConfig.setDoneRetention.mockRejectedValue(new ApiError(409, 'Konflikt beim Speichern'))
+      renderPage()
+
+      const field = await screen.findByLabelText('Done-Aufbewahrung in Tagen')
+      fireEvent.change(field, { target: { value: '7' } })
+      fireEvent.click(screen.getByRole('button', { name: 'Speichern' }))
+
+      expect(await screen.findByText('Konflikt beim Speichern')).toBeInTheDocument()
+    })
+
+    it('zeigt eine generische Fehlermeldung bei nicht-ApiError-Fehlern', async () => {
+      asAdmin()
+      mConfig.setDoneRetention.mockRejectedValue(new Error('boom'))
+      renderPage()
+
+      const field = await screen.findByLabelText('Done-Aufbewahrung in Tagen')
+      fireEvent.change(field, { target: { value: '7' } })
+      fireEvent.click(screen.getByRole('button', { name: 'Speichern' }))
+
+      expect(await screen.findByText('Speichern fehlgeschlagen.')).toBeInTheDocument()
+    })
   })
 })

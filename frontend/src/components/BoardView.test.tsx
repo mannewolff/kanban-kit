@@ -248,6 +248,12 @@ describe('BoardView', () => {
     expect(screen.getByText(/wird in 5 Tagen archiviert/)).toBeInTheDocument()
   })
 
+  it('zeigt keinen Archiv-Countdown, wenn die Aufbewahrung 0 ist (kein Auto-Archiv)', () => {
+    const doneCard: Card = { ...card, columnId: 20, movedToDoneAt: new Date().toISOString() }
+    render(<BoardView board={board} initialCards={[doneCard]} canEdit retentionDays={0} api={mkApi()} />)
+    expect(screen.queryByText(/archiviert/)).not.toBeInTheDocument()
+  })
+
   it('filtert das Board nach Epic', () => {
     const epics = [{ id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 0, total: 1 }]
     const inEpic: Card = { ...card, id: 100, parentId: 9 }

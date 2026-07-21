@@ -19,6 +19,8 @@ import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline'
 import { useEffect, useState } from 'react'
 import { accessTokensApi, type AccessToken, type CreatedAccessToken } from '../api/accessTokens'
 import { boardsApi, type Board } from '../api/boards'
+import { ApiError } from '../api/client'
+import { configApi } from '../api/config'
 import { projectsApi, type Project } from '../api/projects'
 import { useAuth } from '../auth/AuthContext'
 import { useEditMode } from '../lib/EditModeContext'
@@ -60,9 +62,95 @@ export function AdministrationPage() {
           </Stack>
         </Paper>
 
+        <DoneRetentionSection />
+
         <ApiTokensSection />
       </Stack>
     </Box>
+  )
+}
+
+/**
+ * Globale Done-Aufbewahrung (nur Plattform-Admin): aktuellen effektiven Wert anzeigen und ändern.
+ * {@code 0} = kein Auto-Archiv. Rendert für Nicht-Admins nichts.
+ */
+function DoneRetentionSection() {
+  const { user } = useAuth()
+  const admin = isPlatformAdmin(user)
+  const [days, setDays] = useState('')
+  const [effective, setEffective] = useState<number | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [saved, setSaved] = useState(false)
+
+  useEffect(() => {
+    if (!admin) {
+      return
+    }
+    void configApi.getDoneRetention().then((r) => {
+      setEffective(r.effective)
+      setDays(String(r.effective))
+    })
+  }, [admin])
+
+  if (!admin) {
+    return null
+  }
+
+  const save = async () => {
+    const n = Number(days)
+    if (!Number.isInteger(n) || n < 0) {
+      setError('Bitte eine ganze Zahl ≥ 0 angeben (0 = kein Auto-Archiv).')
+      setSaved(false)
+      return
+    }
+    try {
+      const r = await configApi.setDoneRetention(n)
+      setEffective(r.effective)
+      setDays(String(r.effective))
+      setError(null)
+      setSaved(true)
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : 'Speichern fehlgeschlagen.')
+      setSaved(false)
+    }
+  }
+
+  return (
+    <Paper variant="outlined" sx={{ p: 2 }}>
+      <Stack spacing={1.5}>
+        <Typography variant="h6" component="h2">
+          Done-Aufbewahrung
+        </Typography>
+        <Typography variant="body2" color="text.secondary">
+          Erledigte Karten werden nach dieser Anzahl Tage automatisch archiviert.{' '}
+          <strong>0 = kein Auto-Archiv.</strong> Der Wert gilt global.
+        </Typography>
+        {effective !== null && (
+          <Typography variant="body2" color="text.secondary">
+            Aktuell wirksam: {effective === 0 ? 'kein Auto-Archiv' : `${effective} Tage`}
+          </Typography>
+        )}
+        <Stack direction="row" spacing={1} alignItems="flex-start">
+          <TextField
+            type="number"
+            size="small"
+            label="Tage"
+            value={days}
+            onChange={(e) => {
+              setDays(e.target.value)
+              setSaved(false)
+            }}
+            slotProps={{ htmlInput: { min: 0, 'aria-label': 'Done-Aufbewahrung in Tagen' } }}
+            sx={{ width: 140 }}
+          />
+          <Button variant="contained" onClick={() => void save()} sx={{ mt: 0.5 }}>
+            Speichern
+          </Button>
+        </Stack>
+        {error && <Alert severity="error">{error}</Alert>}
+        {saved && <Alert severity="success">Gespeichert.</Alert>}
+      </Stack>
+    </Paper>
   )
 }
 
