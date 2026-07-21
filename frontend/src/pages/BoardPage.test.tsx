@@ -318,6 +318,10 @@ describe('BoardPage weitere Orchestrierung', () => {
 
     await waitFor(() => expect(epicsApiMock.create).toHaveBeenCalled())
     await waitFor(() => expect(mockedEpics.list).toHaveBeenCalled())
+    // reloadEpics stößt ein nachgelagertes setEpics an (list().then(setEpics)); die Microtask
+    // deterministisch settlen lassen, sonst kann v8 die reloadEpics-Branch unter CI-Last
+    // gelegentlich verfehlen (Coverage-Flake) und React eine act-Warnung emittieren.
+    await act(async () => { await Promise.resolve() })
   })
 
   it('legt ein Label über den Label-Manager an und lädt Labels und Karten neu', async () => {
@@ -335,6 +339,9 @@ describe('BoardPage weitere Orchestrierung', () => {
     await waitFor(() => expect(mockedLabels.create).toHaveBeenCalledWith(1, 'Bug', expect.any(String)))
     await waitFor(() => expect(mockedLabels.list).toHaveBeenCalled())
     expect(mockedCards.list).toHaveBeenCalled()
+    // reloadLabels + reloadCards stoßen nachgelagerte setState-Microtasks an; deterministisch
+    // settlen lassen (siehe Kommentar beim Epic-Test).
+    await act(async () => { await Promise.resolve() })
   })
 
   it('öffnet eine Karte per Klick über die echte BoardView und lädt nach dem Speichern Karten und Epics neu', async () => {
@@ -372,6 +379,9 @@ describe('BoardPage weitere Orchestrierung', () => {
     await waitFor(() => expect(mockedCards.update).toHaveBeenCalled())
     await waitFor(() => expect(mockedCards.list).toHaveBeenCalled())
     expect(mockedEpics.list).toHaveBeenCalled()
+    // onChanged ruft reloadCards + reloadEpics; deren nachgelagerte setState-Microtasks
+    // deterministisch settlen lassen (siehe Kommentar beim Epic-Test).
+    await act(async () => { await Promise.resolve() })
   })
 
   it('öffnet und schließt den Papierkorb-Dialog', async () => {
