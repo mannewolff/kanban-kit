@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter, Route, Routes, useNavigate } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { boardsApi } from '../api/boards'
@@ -25,7 +25,6 @@ vi.mock('../api/cards', () => ({
     list: vi.fn(),
     move: vi.fn(),
     restore: vi.fn(),
-    promote: vi.fn(),
     moveToIdeaStorage: vi.fn(),
     create: vi.fn(),
     getActivity: vi.fn().mockResolvedValue([]),
@@ -51,7 +50,6 @@ const mCards = cardsApi as unknown as {
   restore: ReturnType<typeof vi.fn>
   move: ReturnType<typeof vi.fn>
   update: ReturnType<typeof vi.fn>
-  promote: ReturnType<typeof vi.fn>
   moveToIdeaStorage: ReturnType<typeof vi.fn>
   create: ReturnType<typeof vi.fn>
 }
@@ -142,76 +140,14 @@ describe('BoardListPage', () => {
     expect(await screen.findByRole('button', { name: 'Schließen' })).toBeInTheDocument()
   })
 
-  it('zeigt Ideen ausschließlich in der Ideen-Zone, nie in der oberen Liste', async () => {
+  it('blendet ideaStored-Karten komplett aus der Liste aus (Ideen sind jetzt projektweit)', async () => {
     renderPage([active, idea])
     await screen.findByText('Aufgabe')
 
-    // Die Idee steht in der unteren Zone (Ideen-Speicher), nicht in der oberen Liste.
-    const ideaZone = screen.getByTestId('idea-zone')
-    expect(within(ideaZone).getByText('MeineIdee')).toBeInTheDocument()
-    // Die aktive Karte steht nicht in der Ideen-Zone.
-    expect(within(ideaZone).queryByText('Aufgabe')).not.toBeInTheDocument()
-    // Die Ideen-Aktion (Hochziehen) gibt es nur in der Ideen-Zone.
-    expect(screen.getByLabelText('Idee MeineIdee ins Backlog')).toBeInTheDocument()
-  })
-
-  it('zieht eine Idee über den →Backlog-Button ins Backlog (Promotion)', async () => {
-    mCards.promote.mockResolvedValue({})
-    renderPage([active, idea])
-    await screen.findByText('MeineIdee')
-    // Der Reload nach der Promotion liefert die Idee als Backlog-Karte (wie das echte Backend).
-    mCards.list.mockResolvedValue([active, { ...idea, ideaStored: false, columnId: 10 }])
-
-    fireEvent.click(screen.getByLabelText('Idee MeineIdee ins Backlog'))
-
-    await waitFor(() => expect(mCards.promote).toHaveBeenCalledWith(102))
-    // Aus der Ideen-Zone verschwunden, in der oberen Liste angekommen.
-    await waitFor(() =>
-      expect(within(screen.getByTestId('idea-zone')).queryByText('MeineIdee')).not.toBeInTheDocument(),
-    )
-  })
-
-  it('legt eine aktive Karte über die Zeilen-Aktion in den Ideen-Speicher (Demotion)', async () => {
-    mCards.moveToIdeaStorage.mockResolvedValue({})
-    renderPage([active])
-    await screen.findByText('Aufgabe')
-    // Der Reload nach der Demotion liefert die Karte als Idee zurück.
-    mCards.list.mockResolvedValue([{ ...active, ideaStored: true }])
-
-    fireEvent.click(screen.getByLabelText('Karte Aufgabe in Ideen-Speicher'))
-
-    await waitFor(() => expect(mCards.moveToIdeaStorage).toHaveBeenCalledWith(100))
-    // Die Karte taucht in der Ideen-Zone auf.
-    await waitFor(() =>
-      expect(within(screen.getByTestId('idea-zone')).getByText('Aufgabe')).toBeInTheDocument(),
-    )
-  })
-
-  it('rollt bei einem Promotion-Fehler zurück und meldet ihn', async () => {
-    mCards.promote.mockRejectedValue(new Error('fail'))
-    renderPage([active, idea])
-    await screen.findByText('MeineIdee')
-
-    fireEvent.click(screen.getByLabelText('Idee MeineIdee ins Backlog'))
-
-    await screen.findByText('Hochziehen fehlgeschlagen.')
-    // Die Idee bleibt in der Ideen-Zone.
-    expect(within(screen.getByTestId('idea-zone')).getByText('MeineIdee')).toBeInTheDocument()
-  })
-
-  it('legt über „Idee anlegen“ eine neue Karte mit ideaStored=true an', async () => {
-    mCards.create.mockResolvedValue({ ...idea, id: 200, number: 4, title: 'Neue Idee' })
-    renderPage([active])
-    await screen.findByText('Aufgabe')
-
-    fireEvent.click(screen.getByRole('button', { name: 'Idee anlegen' }))
-    fireEvent.change(await screen.findByLabelText('Titel'), { target: { value: 'Neue Idee' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Anlegen' }))
-
-    // Erste Spalte (Backlog=10), Titel, Vorlagen-Beschreibung, kein Epic, ideaStored=true.
-    await waitFor(() =>
-      expect(mCards.create).toHaveBeenCalledWith(1, 10, 'Neue Idee', expect.any(String), null, true),
-    )
+    // Die Idee (ideaStored) taucht in der Board-Listenansicht nicht mehr auf — sie lebt seit dem
+    // projektweiten Ideen-Pool auf der Projekt-Ideen-Seite. Es gibt keine Ideen-Zone mehr.
+    expect(screen.queryByText('MeineIdee')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('idea-zone')).not.toBeInTheDocument()
   })
 
   it('sortiert Spalten per Header-Drag um und merkt die Reihenfolge', async () => {
@@ -795,102 +731,21 @@ describe('BoardListPage', () => {
     expect(mCards.move).not.toHaveBeenCalled()
   })
 
-  it('zieht bei fehlenden Spalten eine Idee ohne Zielspalte hoch', async () => {
-    mCards.promote.mockResolvedValue({})
-    mBoards.get.mockResolvedValue({
-      id: 1, projectId: 9, name: 'B', createdAt: '',
-      columns: [],
-    })
-    mCards.list.mockResolvedValue([idea])
-    mEpics.list.mockResolvedValue([])
-    render(
-      <MemoryRouter initialEntries={['/boards/1/list']}>
-        <Routes>
-          <Route path="/boards/:boardId/list" element={<BoardListPage />} />
-        </Routes>
-      </MemoryRouter>,
-    )
+  it('öffnet das Detail beim Klick und per Enter-/Leertaste auf einer Karten-Zeile', async () => {
+    renderPage([active])
+    const row = await screen.findByLabelText('Detail öffnen: Aufgabe')
 
-    fireEvent.click(await screen.findByLabelText('Idee MeineIdee ins Backlog'))
-    await waitFor(() => expect(mCards.promote).toHaveBeenCalledWith(102))
-  })
-
-  it('legt keine Idee an, wenn das Board keine Spalten hat', async () => {
-    mBoards.get.mockResolvedValue({
-      id: 1, projectId: 9, name: 'B', createdAt: '',
-      columns: [],
-    })
-    mCards.list.mockResolvedValue([idea])
-    mEpics.list.mockResolvedValue([])
-    render(
-      <MemoryRouter initialEntries={['/boards/1/list']}>
-        <Routes>
-          <Route path="/boards/:boardId/list" element={<BoardListPage />} />
-        </Routes>
-      </MemoryRouter>,
-    )
-
-    await screen.findByText('MeineIdee')
-    fireEvent.click(screen.getByRole('button', { name: 'Idee anlegen' }))
-    fireEvent.change(await screen.findByLabelText('Titel'), { target: { value: 'Neue Idee' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Anlegen' }))
-
-    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
-    expect(mCards.create).not.toHaveBeenCalled()
-  })
-
-  it('rollt bei einem Demotion-Fehler zurück und meldet ihn', async () => {
-    mCards.moveToIdeaStorage.mockRejectedValue(new Error('fail'))
-    const second: Card = { ...base, id: 103, columnId: 10, number: 4, title: 'Zweite', description: '', archived: false, positionInColumn: 1 }
-    mBoards.get.mockResolvedValue({
-      id: 1, projectId: 9, name: 'B', createdAt: '',
-      columns: [{ id: 10, name: 'Backlog', position: 0, wipLimit: null }],
-    })
-    mCards.list.mockResolvedValue([active, second])
-    mEpics.list.mockResolvedValue([])
-    render(
-      <MemoryRouter initialEntries={['/boards/1/list']}>
-        <Routes>
-          <Route path="/boards/:boardId/list" element={<BoardListPage />} />
-        </Routes>
-      </MemoryRouter>,
-    )
-
-    await screen.findByText('Aufgabe')
-    fireEvent.click(screen.getByLabelText('Karte Aufgabe in Ideen-Speicher'))
-
-    await screen.findByText('In den Ideen-Speicher fehlgeschlagen.')
-    // Die andere Karte bleibt unverändert in der Liste.
-    expect(screen.getByText('Zweite')).toBeInTheDocument()
-  })
-
-  it('öffnet das Detail beim Klick und per Enter-Taste auf einer Ideen-Zeile', async () => {
-    renderPage([active, idea])
-    const ideaRow = await screen.findByLabelText('Detail öffnen: MeineIdee')
-
-    fireEvent.click(ideaRow)
+    fireEvent.click(row)
     expect(await screen.findByRole('button', { name: 'Schließen' })).toBeInTheDocument()
     fireEvent.click(await screen.findByRole('button', { name: 'Schließen' }))
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
 
-    fireEvent.keyDown(screen.getByLabelText('Detail öffnen: MeineIdee'), { key: 'Enter' })
+    fireEvent.keyDown(screen.getByLabelText('Detail öffnen: Aufgabe'), { key: 'Enter' })
     expect(await screen.findByRole('button', { name: 'Schließen' })).toBeInTheDocument()
     fireEvent.click(await screen.findByRole('button', { name: 'Schließen' }))
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
 
-    fireEvent.keyDown(screen.getByLabelText('Detail öffnen: MeineIdee'), { key: ' ' })
+    fireEvent.keyDown(screen.getByLabelText('Detail öffnen: Aufgabe'), { key: ' ' })
     expect(await screen.findByRole('button', { name: 'Schließen' })).toBeInTheDocument()
-  })
-
-  it('schließt den Fehler-Snackbar bei einem Klick daneben', async () => {
-    mCards.promote.mockRejectedValue(new Error('fail'))
-    renderPage([active, idea])
-    await screen.findByText('MeineIdee')
-
-    fireEvent.click(screen.getByLabelText('Idee MeineIdee ins Backlog'))
-    await screen.findByText('Hochziehen fehlgeschlagen.')
-
-    fireEvent.click(document.body)
-    await waitFor(() => expect(screen.queryByText('Hochziehen fehlgeschlagen.')).not.toBeInTheDocument())
   })
 })
