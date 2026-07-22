@@ -44,18 +44,22 @@ class CardController {
       @AuthenticationPrincipal Long userId,
       @PathVariable long boardId,
       @Valid @RequestBody CreateCardRequest request) {
-    CardType type = request.type() == null ? CardType.CARD : request.type();
+    // Getter je einmal in eine lokale Variable ziehen: der Null-Check verengt dann den (nun
+    // @Nullable) Typ, statt bei einem zweiten Aufruf erneut als potenziell null zu gelten.
+    CardType requestedType = request.type();
+    CardType type = requestedType == null ? CardType.CARD : requestedType;
     if (type == CardType.EPIC) {
       return cards.createEpic(
           userId, boardId, request.title(), request.description(), request.shortcode());
     }
-    if (request.columnId() == null) {
+    Long columnId = request.columnId();
+    if (columnId == null) {
       throw new ColumnNotFoundException();
     }
     return cards.create(
         userId,
         boardId,
-        request.columnId(),
+        columnId,
         request.title(),
         request.description(),
         request.dependencies(),
@@ -221,14 +225,17 @@ class CardController {
     return new ActivityView(a.id(), a.actorUserId(), a.type().name(), a.detail(), a.createdAt());
   }
 
+  // Nur `title` ist Pflicht. Die übrigen Felder sind optional: Jackson lässt sie bei fehlendem
+  // JSON-Feld `null`, weshalb sie unter @NullMarked als @Nullable deklariert sein müssen (sonst
+  // hält der Nullness-Dataflow die Null-Prüfungen in `create` für tot — java:S2583).
   record CreateCardRequest(
-      Long columnId,
+      @Nullable Long columnId,
       @NotBlank @Size(max = 300) String title,
-      String description,
-      List<Integer> dependencies,
-      CardType type,
-      Long parentId,
-      @Size(max = 16) String shortcode,
+      @Nullable String description,
+      @Nullable List<Integer> dependencies,
+      @Nullable CardType type,
+      @Nullable Long parentId,
+      @Nullable @Size(max = 16) String shortcode,
       @Nullable Boolean ideaStored,
       @Nullable Instant dueDate,
       @Nullable List<Long> assigneeIds,
