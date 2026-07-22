@@ -43,7 +43,15 @@ import org.springframework.transaction.annotation.Transactional;
 // PMD.TooManyMethods: zentraler Karten-/Epic-Use-Case-Service — viele kleine, kohäsive Methoden
 // (Anlegen/Bearbeiten/Move/Archiv/Ideen-Speicher/Zuständige/Labels je Erfolgs- und Fehlerpfad);
 // eine Aufspaltung würde denselben Use-Case-Kontext künstlich zerreißen, kein God-Class-Smell.
-@SuppressWarnings({"PMD.CouplingBetweenObjects", "PMD.CyclomaticComplexity", "PMD.TooManyMethods"})
+// PMD.GodClass: dieselbe bewusste Kohäsion — die je-Use-Case-Aufteilung in @Transactional-Einstieg
+// + privaten Kern (Vermeidung von Self-Invocation, java:S6809) erhöht die Methodenzahl leicht, ohne
+// die fachliche Verantwortung zu verwässern.
+@SuppressWarnings({
+  "PMD.CouplingBetweenObjects",
+  "PMD.CyclomaticComplexity",
+  "PMD.TooManyMethods",
+  "PMD.GodClass"
+})
 @Service
 public class CardService {
 
@@ -108,7 +116,18 @@ public class CardService {
       @Nullable String description,
       @Nullable List<Integer> dependsOn,
       @Nullable Long parentId) {
-    return create(userId, boardId, columnId, title, description, dependsOn, parentId, false);
+    return doCreate(
+        userId,
+        boardId,
+        columnId,
+        title,
+        description,
+        dependsOn,
+        parentId,
+        false,
+        null,
+        null,
+        null);
   }
 
   /**
@@ -126,7 +145,7 @@ public class CardService {
       @Nullable List<Integer> dependsOn,
       @Nullable Long parentId,
       boolean ideaStored) {
-    return create(
+    return doCreate(
         userId,
         boardId,
         columnId,
@@ -151,6 +170,34 @@ public class CardService {
    */
   @Transactional
   public CardView create(
+      long userId,
+      long boardId,
+      long columnId,
+      String title,
+      @Nullable String description,
+      @Nullable List<Integer> dependsOn,
+      @Nullable Long parentId,
+      boolean ideaStored,
+      @Nullable Instant dueDate,
+      @Nullable List<Long> assigneeIds,
+      @Nullable List<Long> labelIds) {
+    return doCreate(
+        userId,
+        boardId,
+        columnId,
+        title,
+        description,
+        dependsOn,
+        parentId,
+        ideaStored,
+        dueDate,
+        assigneeIds,
+        labelIds);
+  }
+
+  // Kern-Logik des Anlegens ohne eigene @Transactional: wird von den öffentlichen create-
+  // Überladungen (je @Transactional) aufgerufen, ohne Self-Invocation über den Proxy (java:S6809).
+  private CardView doCreate(
       long userId,
       long boardId,
       long columnId,
@@ -466,6 +513,10 @@ public class CardService {
    */
   @Transactional
   public CardView transfer(long userId, long cardId, long targetBoardId, long targetColumnId) {
+    return doTransfer(userId, cardId, targetBoardId, targetColumnId);
+  }
+
+  private CardView doTransfer(long userId, long cardId, long targetBoardId, long targetColumnId) {
     Card card = cards.findById(cardId).orElseThrow(CardNotFoundException::new);
     if (card.type() == CardType.EPIC) {
       throw new InvalidDependencyException("Epics können nicht verschoben werden");
@@ -507,12 +558,16 @@ public class CardService {
   public List<CardView> bulkTransfer(
       long userId, List<Long> cardIds, long targetBoardId, long targetColumnId) {
     return cardIds.stream()
-        .map(cardId -> transfer(userId, cardId, targetBoardId, targetColumnId))
+        .map(cardId -> doTransfer(userId, cardId, targetBoardId, targetColumnId))
         .toList();
   }
 
   @Transactional
   public CardView archive(long userId, long cardId) {
+    return doArchive(userId, cardId);
+  }
+
+  private CardView doArchive(long userId, long cardId) {
     Card card = requireCardOp(userId, cardId, Permission.TICKET_DELETE, Permission.EPIC_DELETE);
     activity.add(
         card.requireId(), userId, CardActivityType.ARCHIVED, "Archiviert", clock.instant());
@@ -529,7 +584,7 @@ public class CardService {
    */
   @Transactional
   public List<CardView> bulkArchive(long userId, List<Long> cardIds) {
-    return cardIds.stream().map(cardId -> archive(userId, cardId)).toList();
+    return cardIds.stream().map(cardId -> doArchive(userId, cardId)).toList();
   }
 
   @Transactional
@@ -609,6 +664,10 @@ public class CardService {
    */
   @Transactional
   public void delete(long userId, long cardId) {
+    doDelete(userId, cardId);
+  }
+
+  private void doDelete(long userId, long cardId) {
     Card card = requireCardOp(userId, cardId, Permission.TICKET_DELETE, Permission.EPIC_DELETE);
     // Beim Löschen eines Epics die Kinder lösen — die DB-„ON DELETE SET NULL"-Kaskade auf
     // parent_id feuert nur beim Hard-Delete, nicht beim Soft-Delete.
@@ -629,7 +688,7 @@ public class CardService {
    */
   @Transactional
   public void bulkDelete(long userId, List<Long> cardIds) {
-    cardIds.forEach(cardId -> delete(userId, cardId));
+    cardIds.forEach(cardId -> doDelete(userId, cardId));
   }
 
   /**

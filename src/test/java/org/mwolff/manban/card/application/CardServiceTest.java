@@ -172,10 +172,14 @@ class CardServiceTest {
     Instant due = Instant.parse("2026-02-01T00:00:00Z");
 
     ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
-    service.create(1L, BOARD, 20L, "Titel", null, null, null, false, due, null, null);
+    // Die zurückgegebene View der Voll-Signatur (11 Args) wird bewusst geprüft, damit der
+    // @Transactional-Einstieg (der an den privaten Kern doCreate delegiert) nicht null zurückgibt.
+    CardService.CardView result =
+        service.create(1L, BOARD, 20L, "Titel", null, null, null, false, due, null, null);
 
     verify(cards).save(captor.capture());
     assertThat(captor.getValue().dueDate()).isEqualTo(due);
+    assertThat(result.dueDate()).isEqualTo(due);
   }
 
   @Test
