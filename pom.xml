@@ -488,6 +488,8 @@
                         <exclude>org/mwolff/manban/card/web/CardController$UpdateCardRequest.class</exclude>
                         <exclude>org/mwolff/manban/card/web/CardController$AssigneesRequest.class</exclude>
                         <exclude>org/mwolff/manban/card/web/CardController$LabelsRequest.class</exclude>
+                        <exclude>org/mwolff/manban/card/web/CardController$PlanRequest.class</exclude>
+                        <exclude>org/mwolff/manban/card/web/ProjectIdeaController$CreateIdeaRequest.class</exclude>
                         <exclude>org/mwolff/manban/card/web/CardController$ActivityView.class</exclude>
                         <exclude>org/mwolff/manban/card/web/LabelController$LabelView.class</exclude>
                         <exclude>org/mwolff/manban/card/web/LabelController$LabelRequest.class</exclude>

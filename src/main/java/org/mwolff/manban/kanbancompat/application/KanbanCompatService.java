@@ -119,7 +119,8 @@ public class KanbanCompatService {
     CardView v =
         cardService.create(
             principal.userId(), boardId, columnId, title, body, null, null, ideaStored);
-    return new Created(v.number());
+    // Board-gebundenes Anlegen -> die Karte trägt immer eine board-scoped Nummer.
+    return new Created(Objects.requireNonNull(v.number()));
   }
 
   /** Verschiebt ein Item des gebundenen Boards in die Ziel-Spalte an die Ziel-Position. */

@@ -43,15 +43,7 @@ import org.springframework.transaction.annotation.Transactional;
 // PMD.TooManyMethods: zentraler Karten-/Epic-Use-Case-Service — viele kleine, kohäsive Methoden
 // (Anlegen/Bearbeiten/Move/Archiv/Ideen-Speicher/Zuständige/Labels je Erfolgs- und Fehlerpfad);
 // eine Aufspaltung würde denselben Use-Case-Kontext künstlich zerreißen, kein God-Class-Smell.
-// PMD.GodClass: dieselbe bewusste Kohäsion — die je-Use-Case-Aufteilung in @Transactional-Einstieg
-// + privaten Kern (Vermeidung von Self-Invocation, java:S6809) erhöht die Methodenzahl leicht, ohne
-// die fachliche Verantwortung zu verwässern.
-@SuppressWarnings({
-  "PMD.CouplingBetweenObjects",
-  "PMD.CyclomaticComplexity",
-  "PMD.TooManyMethods",
-  "PMD.GodClass"
-})
+@SuppressWarnings({"PMD.CouplingBetweenObjects", "PMD.CyclomaticComplexity", "PMD.TooManyMethods"})
 @Service
 public class CardService {
 
@@ -655,6 +647,104 @@ public class CardService {
     return result;
   }
 
+  // --- Projektweiter Ideen-Pool (board-lose Ideen) --------------------------
+
+  /**
+   * Legt eine board-lose Idee im projektweiten Pool an. Recht: {@link Permission#TICKET_CREATE}.
+   */
+  @Transactional
+  public CardView createProjectIdea(
+      long userId,
+      long projectId,
+      String title,
+      @Nullable String description,
+      @Nullable Long targetBoardId) {
+    permissions.require(userId, projectId, Permission.TICKET_CREATE);
+    Instant now = clock.instant();
+    Card saved =
+        cards.save(
+            new Card(
+                null,
+                null,
+                null,
+                null,
+                title.trim(),
+                normalize(description),
+                0,
+                false,
+                true,
+                null,
+                userId,
+                now,
+                now,
+                CardType.CARD,
+                null,
+                null,
+                null,
+                projectId,
+                targetBoardId));
+    activity.add(saved.requireId(), userId, CardActivityType.CREATED, "Idee angelegt", now);
+    return view(saved);
+  }
+
+  /**
+   * Plant eine Idee ins Backlog (erste Spalte) eines Boards desselben Projekts ein: setzt
+   * Board/Spalte/Nummer/Position, löscht das Ideen-Flag und den Zielboard-Hinweis. Recht {@link
+   * Permission#TICKET_CREATE} im Zielboard.
+   */
+  @Transactional
+  public CardView planOntoBoard(long userId, long cardId, long targetBoardId) {
+    Card card = cards.findById(cardId).orElseThrow(CardNotFoundException::new);
+    Board targetBoard = boards.findById(targetBoardId).orElseThrow(BoardNotFoundException::new);
+    // Nur auf ein Board des eigenen Projekts einplanbar (kein Existenz-Leak fremder Boards).
+    if (!Objects.equals(targetBoard.projectId(), card.projectId())) {
+      throw new BoardNotFoundException();
+    }
+    permissions.require(userId, targetBoard.projectId(), Permission.TICKET_CREATE);
+    BoardColumn backlog =
+        columns.findByBoardId(targetBoardId).stream()
+            .min(Comparator.comparingInt(BoardColumn::position))
+            .orElseThrow(ColumnNotFoundException::new);
+    long columnId = backlog.requireId();
+    int number = cards.maxNumberInBoard(targetBoardId) + 1;
+    int position = cards.maxActivePositionInColumn(columnId) + 1;
+    Instant now = clock.instant();
+    Card planned = cards.save(card.withPlannedOnBoard(targetBoardId, columnId, number, position));
+    transitions.open(cardId, columnId, backlog.name(), now);
+    activity.add(cardId, userId, CardActivityType.PROMOTED, "Auf Board eingeplant", now);
+    publishChanged(targetBoardId, ChangeType.CREATED, cardId);
+    return view(planned);
+  }
+
+  /**
+   * Holt eine board-gebundene Karte zurück in den projektweiten Ideen-Pool (board-los); das
+   * bisherige Board wird als Zielboard-Hinweis notiert. Recht {@link Permission#CARD_MOVE}.
+   */
+  @Transactional
+  public CardView moveBackToPool(long userId, long cardId) {
+    Card card = cards.findById(cardId).orElseThrow(CardNotFoundException::new);
+    Board board = boards.findById(card.requireBoardId()).orElseThrow(BoardNotFoundException::new);
+    permissions.require(userId, board.projectId(), Permission.CARD_MOVE);
+    Card pooled = cards.save(card.asPooledIdea(card.boardId()));
+    activity.add(
+        cardId, userId, CardActivityType.IDEA_STORED, "Zurück in den Ideen-Pool", clock.instant());
+    publishChanged(card.requireBoardId(), ChangeType.MOVED, cardId);
+    return view(pooled);
+  }
+
+  /**
+   * Alle Ideen eines Projekts (board-lose Pool-Ideen und board-gebundene Legacy-Ideen), neueste
+   * zuerst. Erfordert Projekt-Mitgliedschaft (Leserecht).
+   */
+  @Transactional(readOnly = true)
+  public List<CardView> listProjectIdeas(long userId, long projectId) {
+    permissions.requireMembership(userId, projectId);
+    return cards.findIdeasByProjectId(projectId).stream()
+        .filter(c -> c.type() == CardType.CARD)
+        .map(this::view)
+        .toList();
+  }
+
   /** Aktivitätsverlauf einer Karte (chronologisch). Erfordert Board-Mitgliedschaft (Leserecht). */
   @Transactional(readOnly = true)
   public List<CardActivity> listActivity(long userId, long cardId) {
@@ -804,9 +894,9 @@ public class CardService {
   private CardView view(Card c) {
     return new CardView(
         c.requireId(),
-        c.requireBoardId(),
-        c.requireColumnId(),
-        c.requireNumber(),
+        c.boardId(),
+        c.columnId(),
+        c.number(),
         c.title(),
         c.description(),
         c.positionInColumn(),
@@ -825,9 +915,9 @@ public class CardService {
   /** Kartendarstellung inkl. Abhängigkeits-Nummern, Typ und Epic-Zuordnung. */
   public record CardView(
       Long id,
-      Long boardId,
-      Long columnId,
-      int number,
+      @Nullable Long boardId,
+      @Nullable Long columnId,
+      @Nullable Integer number,
       String title,
       @Nullable String description,
       int positionInColumn,

@@ -16,6 +16,8 @@ import org.mwolff.manban.card.application.CardService.EpicView;
 import org.mwolff.manban.card.domain.CardType;
 
 /** Unit-Tests des Karten-/Epic-Controllers (Service gemockt). */
+// PMD.TooManyMethods: umfassende Controller-Suite (je Endpoint ein Delegations-/Fehlerpfad-Test).
+@SuppressWarnings("PMD.TooManyMethods")
 class CardControllerTest {
 
   private static final java.time.Instant INSTANT = java.time.Instant.parse("2026-01-01T00:00:00Z");
@@ -420,5 +422,25 @@ class CardControllerTest {
               assertThat(v.detail()).isEqualTo("Verschoben");
               assertThat(v.createdAt()).isEqualTo(INSTANT);
             });
+  }
+
+  @Test
+  void plan_delegatesToPlanOntoBoard() {
+    when(service.planOntoBoard(7L, 1L, 5L)).thenReturn(card());
+
+    CardView result = controller.plan(7L, 1L, new CardController.PlanRequest(5L));
+
+    verify(service).planOntoBoard(7L, 1L, 5L);
+    assertThat(result.id()).isEqualTo(1L);
+  }
+
+  @Test
+  void toPool_delegatesToMoveBackToPool() {
+    when(service.moveBackToPool(7L, 1L)).thenReturn(card());
+
+    CardView result = controller.toPool(7L, 1L);
+
+    verify(service).moveBackToPool(7L, 1L);
+    assertThat(result.id()).isEqualTo(1L);
   }
 }

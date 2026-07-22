@@ -161,6 +161,21 @@ class CardController {
     return cards.promoteToBacklog(userId, cardId);
   }
 
+  /** Plant eine board-lose Pool-Idee ins Backlog eines Boards desselben Projekts ein. */
+  @PutMapping("/api/cards/{cardId}/plan")
+  CardView plan(
+      @AuthenticationPrincipal Long userId,
+      @PathVariable long cardId,
+      @Valid @RequestBody PlanRequest request) {
+    return cards.planOntoBoard(userId, cardId, request.targetBoardId());
+  }
+
+  /** Holt eine board-gebundene Karte zurück in den projektweiten Ideen-Pool (board-los). */
+  @PutMapping("/api/cards/{cardId}/to-pool")
+  CardView toPool(@AuthenticationPrincipal Long userId, @PathVariable long cardId) {
+    return cards.moveBackToPool(userId, cardId);
+  }
+
   /** Verschiebt eine Karte in den Papierkorb (Soft-Delete, reversibel). */
   @DeleteMapping("/api/cards/{cardId}")
   @ResponseStatus(HttpStatus.NO_CONTENT)
@@ -255,6 +270,8 @@ class CardController {
       @NotNull Long columnId, @jakarta.validation.constraints.PositiveOrZero int position) {}
 
   record TransferCardRequest(@NotNull Long targetBoardId, @NotNull Long targetColumnId) {}
+
+  record PlanRequest(@NotNull Long targetBoardId) {}
 
   record BulkArchiveRequest(@NotEmpty @Size(max = 200) List<Long> cardIds) {}
 

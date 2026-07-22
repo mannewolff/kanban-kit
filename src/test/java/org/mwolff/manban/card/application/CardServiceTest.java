@@ -2001,4 +2001,110 @@ class CardServiceTest {
 
     verify(events, never()).publishEvent(any());
   }
+
+  // --- Projektweiter Ideen-Pool (#372) -----------------------------------
+
+  private static Card poolIdea(long id) {
+    return new Card(
+        id,
+        null,
+        null,
+        null,
+        "Idee",
+        null,
+        0,
+        false,
+        true,
+        null,
+        1L,
+        FIXED,
+        FIXED,
+        CardType.CARD,
+        null,
+        null,
+        null,
+        PROJECT,
+        null);
+  }
+
+  @Test
+  void createProjectIdea_savesBoardlessIdea_withProjectAndTargetBoard() {
+    ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
+    CardService.CardView view = service.createProjectIdea(1L, PROJECT, "Idee", "d", 7L);
+
+    verify(permissions).require(1L, PROJECT, Permission.TICKET_CREATE);
+    verify(cards).save(captor.capture());
+    assertThat(captor.getValue().boardId()).isNull();
+    assertThat(captor.getValue().columnId()).isNull();
+    assertThat(captor.getValue().number()).isNull();
+    assertThat(captor.getValue().ideaStored()).isTrue();
+    assertThat(captor.getValue().projectId()).isEqualTo(PROJECT);
+    assertThat(captor.getValue().targetBoardId()).isEqualTo(7L);
+    verify(activity).add(1L, 1L, CardActivityType.CREATED, "Idee angelegt", FIXED);
+    assertThat(view.boardId()).isNull();
+  }
+
+  @Test
+  void planOntoBoard_movesIdeaIntoBacklog_assignsNumberPosition_andPublishes() {
+    when(cards.findById(1L)).thenReturn(Optional.of(poolIdea(1L)));
+    when(columns.findByBoardId(BOARD))
+        .thenReturn(List.of(column(21L, "Ready", 1), column(20L, "Backlog", 0)));
+    when(cards.maxNumberInBoard(BOARD)).thenReturn(4);
+    when(cards.maxActivePositionInColumn(20L)).thenReturn(2);
+
+    ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
+    CardService.CardView result = service.planOntoBoard(9L, 1L, BOARD);
+
+    verify(permissions).require(9L, PROJECT, Permission.TICKET_CREATE);
+    verify(cards).save(captor.capture());
+    assertThat(captor.getValue().boardId()).isEqualTo(BOARD);
+    assertThat(captor.getValue().columnId()).isEqualTo(20L);
+    assertThat(captor.getValue().number()).isEqualTo(5);
+    assertThat(captor.getValue().positionInColumn()).isEqualTo(3);
+    assertThat(captor.getValue().ideaStored()).isFalse();
+    verify(transitions).open(1L, 20L, "Backlog", FIXED);
+    verify(activity).add(1L, 9L, CardActivityType.PROMOTED, "Auf Board eingeplant", FIXED);
+    verify(events).publishEvent(new BoardChangedEvent(BOARD, ChangeType.CREATED, 1L));
+    assertThat(result.boardId()).isEqualTo(BOARD);
+    assertThat(result.ideaStored()).isFalse();
+  }
+
+  @Test
+  void planOntoBoard_rejectsBoardOfOtherProject() {
+    when(cards.findById(1L)).thenReturn(Optional.of(poolIdea(1L)));
+    when(boards.findById(BOARD)).thenReturn(Optional.of(new Board(BOARD, 99L, "B", FIXED)));
+
+    assertThatThrownBy(() -> service.planOntoBoard(9L, 1L, BOARD))
+        .isInstanceOf(BoardNotFoundException.class);
+    verify(cards, never()).save(any(Card.class));
+  }
+
+  @Test
+  void moveBackToPool_makesCardBoardless_notesOldBoard_andPublishes() {
+    when(cards.findById(1L))
+        .thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
+
+    ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
+    CardService.CardView result = service.moveBackToPool(9L, 1L);
+
+    verify(permissions).require(9L, PROJECT, Permission.CARD_MOVE);
+    verify(cards).save(captor.capture());
+    assertThat(captor.getValue().boardId()).isNull();
+    assertThat(captor.getValue().ideaStored()).isTrue();
+    assertThat(captor.getValue().targetBoardId()).isEqualTo(BOARD);
+    verify(activity).add(1L, 9L, CardActivityType.IDEA_STORED, "Zurück in den Ideen-Pool", FIXED);
+    verify(events).publishEvent(new BoardChangedEvent(BOARD, ChangeType.MOVED, 1L));
+    assertThat(result.boardId()).isNull();
+  }
+
+  @Test
+  void listProjectIdeas_returnsOnlyCards_forMember() {
+    when(cards.findIdeasByProjectId(PROJECT))
+        .thenReturn(List.of(poolIdea(1L), card(2L, 20L, 2, false, null, CardType.EPIC, null, "E")));
+
+    List<CardService.CardView> result = service.listProjectIdeas(1L, PROJECT);
+
+    verify(permissions).requireMembership(1L, PROJECT);
+    assertThat(result).singleElement().extracting(CardService.CardView::id).isEqualTo(1L);
+  }
 }

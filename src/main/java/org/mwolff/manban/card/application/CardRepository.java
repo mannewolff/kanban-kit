@@ -14,6 +14,12 @@ public interface CardRepository {
 
   List<Card> findByBoardId(long boardId);
 
+  /**
+   * Ideen-Karten eines Projekts (idea_stored), neueste zuerst — board-lose Pool-Ideen und
+   * board-gebundene Legacy-Ideen. Papierkorb-Karten sind ausgenommen.
+   */
+  List<Card> findIdeasByProjectId(long projectId);
+
   /** Nicht-archivierte Karten, die vor {@code threshold} nach Done verschoben wurden. */
   List<Card> findArchivableDoneCards(Instant threshold);
 
