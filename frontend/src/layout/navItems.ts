@@ -4,6 +4,7 @@ import AccountTreeIcon from '@mui/icons-material/AccountTree'
 import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings'
 import FolderIcon from '@mui/icons-material/Folder'
 import InsightsIcon from '@mui/icons-material/Insights'
+import LightbulbIcon from '@mui/icons-material/Lightbulb'
 import ViewColumnIcon from '@mui/icons-material/ViewColumn'
 import ViewListIcon from '@mui/icons-material/ViewList'
 
@@ -45,6 +46,12 @@ export interface NavParams {
   boardCount?: number | null
   /** Ob man im aktuellen Projekt Boards anlegen/löschen darf (dann bleibt „Boards" erreichbar). */
   canManageBoards?: boolean
+  /**
+   * Aktueller Projekt-Kontext auch ohne offenes Board (z. B. auf der Boards-/Ideen-Seite). Steuert
+   * die Sichtbarkeit des projektweiten „Ideen"-Links. Bei offenem Board hat {@code board.projectId}
+   * Vorrang; {@code null} = kein Projekt-Kontext (dann kein „Ideen"-Link).
+   */
+  projectId?: number | null
 }
 
 /**
@@ -55,20 +62,42 @@ export interface NavParams {
  * hinzu.
  */
 export function buildNavItems(params: NavParams): NavNode[] {
-  const { board, isAdmin = false, projectCount = null, boardCount = null, canManageBoards = false } = params
+  const {
+    board,
+    isAdmin = false,
+    projectCount = null,
+    boardCount = null,
+    canManageBoards = false,
+    projectId = null,
+  } = params
   const items: NavNode[] = []
 
   if (isAdmin || projectCount !== 1) {
     items.push({ kind: 'link', label: 'Projekte', path: '/', icon: FolderIcon })
   }
 
-  if (board) {
+  // Projekt-Kontext: entweder aus dem offenen Board oder direkt aus einer Projekt-Route.
+  const currentProjectId = board?.projectId ?? projectId
+
+  if (board && (canManageBoards || boardCount !== 1)) {
     // „Boards" ist die Eltern-Ebene (die Sammlung, in der das Board liegt), kein View des Boards —
     // deshalb als Top-Level-Einstieg neben „Projekte", nicht als Kind der Board-Gruppe. Sichtbar nur,
     // wenn es ≥ 2 Boards gibt oder man Boards verwalten darf.
-    if (canManageBoards || boardCount !== 1) {
-      items.push({ kind: 'link', label: 'Boards', path: `/projects/${board.projectId}`, icon: FolderIcon })
-    }
+    items.push({ kind: 'link', label: 'Boards', path: `/projects/${board.projectId}`, icon: FolderIcon })
+  }
+
+  // „Ideen" ist projektweit (Geschwister von „Boards") und auch ohne offenes Board sichtbar,
+  // sobald ein Projekt-Kontext bekannt ist — dort liegt der board-lose Ideen-Pool.
+  if (currentProjectId !== null) {
+    items.push({
+      kind: 'link',
+      label: 'Ideen',
+      path: `/projects/${currentProjectId}/ideas`,
+      icon: LightbulbIcon,
+    })
+  }
+
+  if (board) {
     const children: NavLink[] = [
       { kind: 'link', label: 'Board', path: `/boards/${board.id}`, icon: ViewColumnIcon },
       { kind: 'link', label: 'Liste', path: `/boards/${board.id}/list`, icon: ViewListIcon },

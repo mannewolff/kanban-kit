@@ -24,6 +24,7 @@ const BootstrapAdminPage = lazy(() =>
   import('./pages/BootstrapAdminPage').then((m) => ({ default: m.BootstrapAdminPage })),
 )
 const EpicsPage = lazy(() => import('./pages/EpicsPage').then((m) => ({ default: m.EpicsPage })))
+const IdeasPage = lazy(() => import('./pages/IdeasPage').then((m) => ({ default: m.IdeasPage })))
 const ForgotPasswordPage = lazy(() =>
   import('./pages/ForgotPasswordPage').then((m) => ({ default: m.ForgotPasswordPage })),
 )
@@ -70,6 +71,7 @@ export function App() {
           <Route element={<AppShell />}>
             <Route path="/" element={<ProjectsPage />} />
             <Route path="/projects/:projectId" element={<ProjectBoardsPage />} />
+            <Route path="/projects/:projectId/ideas" element={<IdeasPage />} />
             <Route path="/projects/:projectId/members" element={<ProjectMembersPage />} />
             <Route path="/boards/:boardId" element={<BoardPage />} />
             <Route path="/boards/:boardId/list" element={<BoardListPage />} />

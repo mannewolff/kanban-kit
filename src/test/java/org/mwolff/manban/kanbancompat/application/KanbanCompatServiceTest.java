@@ -102,7 +102,8 @@ class KanbanCompatServiceTest {
         null,
         List.of(),
         null,
-        List.of());
+        List.of(),
+        BOARD);
   }
 
   @BeforeEach

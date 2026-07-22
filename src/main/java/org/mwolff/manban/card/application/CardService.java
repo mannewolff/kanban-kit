@@ -909,7 +909,8 @@ public class CardService {
         c.shortcode(),
         assignees.findByCardId(c.requireId()),
         c.dueDate(),
-        cardLabels.findByCardId(c.requireId()));
+        cardLabels.findByCardId(c.requireId()),
+        c.targetBoardId());
   }
 
   /** Kartendarstellung inkl. Abhängigkeits-Nummern, Typ und Epic-Zuordnung. */
@@ -930,7 +931,8 @@ public class CardService {
       @Nullable String shortcode,
       List<Long> assignees,
       @Nullable Instant dueDate,
-      List<Long> labels) {}
+      List<Long> labels,
+      @Nullable Long targetBoardId) {}
 
   /** Epic-Darstellung inkl. Fortschritt (Kinder gesamt / in Done). */
   public record EpicView(

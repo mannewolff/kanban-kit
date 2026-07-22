@@ -2042,6 +2042,8 @@ class CardServiceTest {
     assertThat(captor.getValue().targetBoardId()).isEqualTo(7L);
     verify(activity).add(1L, 1L, CardActivityType.CREATED, "Idee angelegt", FIXED);
     assertThat(view.boardId()).isNull();
+    // view() muss das notierte Zielboard durchreichen — das Frontend wählt es beim Einplanen vor.
+    assertThat(view.targetBoardId()).isEqualTo(7L);
   }
 
   @Test

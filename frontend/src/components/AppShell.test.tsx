@@ -342,4 +342,13 @@ describe('AppShell', () => {
     resolveGet({ id: 1, name: 'B', projectId: 5, columns: [] })
     await waitFor(() => expect(screen.queryByText('B')).not.toBeInTheDocument())
   })
+
+  it('zeigt den projektweiten „Ideen"-Link auf einer Projekt-Route (ohne offenes Board)', async () => {
+    renderShell('/projects/5')
+
+    const ideen = await screen.findByText('Ideen')
+    fireEvent.click(ideen)
+
+    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/projects/5/ideas'))
+  })
 })

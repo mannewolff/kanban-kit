@@ -95,6 +95,12 @@ export function AppShell() {
   const boardMatch = useMatch('/boards/:boardId/*')
   const boardId = boardMatch?.params.boardId ? Number(boardMatch.params.boardId) : null
 
+  // Projekt-Kontext auch ohne offenes Board (Boards-/Ideen-/Mitglieder-Seite), damit der
+  // projektweite „Ideen"-Link auch dort sichtbar/aktiv ist. Das Splat matcht /projects/:id ebenso
+  // wie /projects/:id/ideas. Auf Board-Routen ist dieser Match null — dort liefert board.projectId.
+  const projectMatch = useMatch('/projects/:projectId/*')
+  const routeProjectId = projectMatch?.params.projectId ? Number(projectMatch.params.projectId) : null
+
   useEffect(() => {
     if (boardId == null) {
       setBoard(null)
@@ -158,8 +164,16 @@ export function AppShell() {
   const currentProject = board ? projects?.find((p) => p.id === board.projectId) : undefined
   const canManageCurrentBoards = canManageBoards(currentProject?.role ?? 'VIEWER', admin)
   const navItems = useMemo(
-    () => buildNavItems({ board, isAdmin: admin, projectCount, boardCount, canManageBoards: canManageCurrentBoards }),
-    [board, admin, projectCount, boardCount, canManageCurrentBoards],
+    () =>
+      buildNavItems({
+        board,
+        isAdmin: admin,
+        projectCount,
+        boardCount,
+        canManageBoards: canManageCurrentBoards,
+        projectId: routeProjectId,
+      }),
+    [board, admin, projectCount, boardCount, canManageCurrentBoards, routeProjectId],
   )
 
   const [openGroups, setOpenGroups] = useState<Set<string>>(new Set())
