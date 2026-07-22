@@ -103,9 +103,15 @@ public class KanbanCompatService {
   }
 
   /**
-   * Legt ein Item in der angegebenen (Default: BACKLOG) Spalte des gebundenen Boards an. Mit {@code
-   * ideaStored=true} entsteht das Item direkt im Ideen-Speicher (rückwärtskompatibel: ohne Feld
-   * landet der Ingest wie bisher als normale Backlog-Karte).
+   * Nimmt einen kanbancompat-Ingest entgegen und legt ihn als board-lose Pool-Idee im Projekt des
+   * gebundenen Boards an; das Token-Board wird als Zielboard notiert ({@code target_board_id}).
+   *
+   * <p>Entscheidung B: Jeder board-token-Ingest landet bewusst im Projekt-Ideen-Pool statt direkt
+   * im Board-Backlog, damit der Night-Modus (der aus <em>Ready</em> zieht) nichts autonom
+   * abarbeitet, was nicht bewusst eingeplant wurde. Die Parameter {@code column} und {@code
+   * ideaStored} sind dadurch gegenstandslos — sie bleiben aus Rückwärtskompatibilität im Request,
+   * werden hier aber ignoriert. Zurückgegeben wird die {@code id} der neuen Pool-Idee (board-lose
+   * Ideen tragen keine board-scoped Nummer).
    */
   @Transactional
   public Created create(
@@ -115,12 +121,10 @@ public class KanbanCompatService {
       @Nullable String column,
       boolean ideaStored) {
     long boardId = requireBound(principal);
-    long columnId = columnIdForKey(boardId, column == null || column.isBlank() ? BACKLOG : column);
+    Board board = boards.findById(boardId).orElseThrow(BoardNotFoundException::new);
     CardView v =
-        cardService.create(
-            principal.userId(), boardId, columnId, title, body, null, null, ideaStored);
-    // Board-gebundenes Anlegen -> die Karte trägt immer eine board-scoped Nummer.
-    return new Created(Objects.requireNonNull(v.number()));
+        cardService.createProjectIdea(principal.userId(), board.projectId(), title, body, boardId);
+    return new Created(v.id());
   }
 
   /** Verschiebt ein Item des gebundenen Boards in die Ziel-Spalte an die Ziel-Position. */
@@ -226,7 +230,7 @@ public class KanbanCompatService {
       int position,
       String type) {}
 
-  public record Created(int number) {}
+  public record Created(long id) {}
 
   public record Epic(int number, String title, @Nullable String shortcode, Progress progress) {}
 
