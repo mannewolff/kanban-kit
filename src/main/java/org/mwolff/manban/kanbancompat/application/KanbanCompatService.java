@@ -92,7 +92,7 @@ public class KanbanCompatService {
                   .add(
                       new Item(
                           c.requireId(),
-                          c.number(),
+                          c.requireNumber(),
                           c.title(),
                           c.description(),
                           key,

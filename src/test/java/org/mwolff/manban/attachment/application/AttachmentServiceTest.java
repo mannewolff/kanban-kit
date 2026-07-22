@@ -60,6 +60,8 @@ class AttachmentServiceTest {
         CardType.CARD,
         null,
         null,
+        null,
+        1L,
         null);
   }
 

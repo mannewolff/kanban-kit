@@ -76,6 +76,8 @@ class KanbanCompatServiceTest {
         CardType.CARD,
         null,
         null,
+        null,
+        1L,
         null);
   }
 
@@ -151,6 +153,8 @@ class KanbanCompatServiceTest {
             CardType.CARD,
             null,
             null,
+            null,
+            1L,
             null);
     when(boards.findById(BOARD)).thenReturn(Optional.of(new Board(BOARD, 5L, "B", FIXED)));
     when(columns.findByBoardId(BOARD)).thenReturn(standardColumns());
@@ -184,6 +188,8 @@ class KanbanCompatServiceTest {
             CardType.EPIC,
             null,
             "E",
+            null,
+            1L,
             null);
     when(boards.findById(BOARD)).thenReturn(Optional.of(new Board(BOARD, 5L, "B", FIXED)));
     when(columns.findByBoardId(BOARD)).thenReturn(standardColumns());
@@ -413,6 +419,8 @@ class KanbanCompatServiceTest {
             CardType.CARD,
             null,
             null,
+            null,
+            1L,
             null);
     when(cards.findById(1L)).thenReturn(Optional.of(otherBoard));
 
@@ -466,6 +474,8 @@ class KanbanCompatServiceTest {
             CardType.CARD,
             null,
             null,
+            null,
+            1L,
             null);
     when(cards.findById(1L)).thenReturn(Optional.of(otherBoard));
 

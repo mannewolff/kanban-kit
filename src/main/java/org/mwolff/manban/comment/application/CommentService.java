@@ -87,7 +87,7 @@ public class CommentService {
 
   private long projectIdOfCard(long cardId) {
     Card card = cards.findById(cardId).orElseThrow(CardNotFoundException::new);
-    Board board = boards.findById(card.boardId()).orElseThrow(BoardNotFoundException::new);
+    Board board = boards.findById(card.requireBoardId()).orElseThrow(BoardNotFoundException::new);
     return board.projectId();
   }
 

@@ -204,6 +204,8 @@ class CardRepositoryAdapter implements CardRepository {
         CardType.valueOf(e.getType()),
         e.getParentId(),
         e.getShortcode(),
-        e.getDueDate());
+        e.getDueDate(),
+        e.getProjectId(),
+        e.getTargetBoardId());
   }
 }

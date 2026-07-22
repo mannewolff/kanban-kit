@@ -80,6 +80,8 @@ class CardCycleTimeServiceTest {
         CardType.CARD,
         null,
         null,
+        null,
+        1L,
         null);
   }
 
@@ -179,6 +181,8 @@ class CardCycleTimeServiceTest {
             CardType.EPIC,
             null,
             "EP",
+            null,
+            1L,
             null);
     stub(
         List.of(

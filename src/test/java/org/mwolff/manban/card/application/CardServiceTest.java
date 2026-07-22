@@ -58,6 +58,7 @@ class CardServiceTest {
 
   private static final Instant FIXED = Instant.parse("2026-01-02T03:04:05Z");
   private static final long BOARD = 10L;
+  private static final long PROJECT = 1L;
 
   private CardRepository cards;
   private CardDependencyRepository dependencies;
@@ -84,7 +85,7 @@ class CardServiceTest {
       String shortcode) {
     return new Card(
         id, BOARD, columnId, number, "Titel", null, 0, archived, false, done, 1L, FIXED, FIXED,
-        type, parentId, shortcode, null);
+        type, parentId, shortcode, null, PROJECT, null);
   }
 
   private static BoardColumn column(long id, String name, int position) {
@@ -143,7 +144,9 @@ class CardServiceTest {
         c.type(),
         c.parentId(),
         c.shortcode(),
-        c.dueDate());
+        c.dueDate(),
+        c.projectId(),
+        c.targetBoardId());
   }
 
   // --- create -----------------------------------------------------------
@@ -1077,6 +1080,8 @@ class CardServiceTest {
             CardType.EPIC,
             null,
             "E",
+            null,
+            PROJECT,
             null);
     when(cards.findById(30L)).thenReturn(Optional.of(epicOtherBoard));
 
