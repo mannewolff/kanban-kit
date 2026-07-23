@@ -77,8 +77,8 @@ class CardRepositoryAdapter implements CardRepository {
   }
 
   @Override
-  public int maxNumberInBoard(long boardId) {
-    return jpa.maxNumberInBoard(boardId);
+  public int maxNumberInProject(long projectId) {
+    return jpa.maxNumberInProject(projectId);
   }
 
   @Override
@@ -142,13 +142,17 @@ class CardRepositoryAdapter implements CardRepository {
     // Ans Ende der Zielspalte (hinter deren aktive Karten) — kollisionsfrei zum
     // active_position-Unique.
     int endPosition = activeCardIds(targetColumnId, cardId).size();
+    // project_id muss mit dem Ziel-Board wandern (bei board-/projektübergreifendem Umzug): sonst
+    // bliebe project_id am Quellprojekt und die projektweite Nummer (uq (project_id, number)) würde
+    // gegen die falsche Menge geprüft.
     jdbc.update(
-        "UPDATE card SET board_id = ?, column_id = ?, number = ?, position_in_column = ? "
-            + "WHERE id = ?",
+        "UPDATE card SET board_id = ?, column_id = ?, number = ?, position_in_column = ?, "
+            + "project_id = (SELECT project_id FROM board WHERE id = ?) WHERE id = ?",
         targetBoardId,
         targetColumnId,
         newNumber,
         endPosition,
+        targetBoardId,
         cardId);
 
     // Quellspalte lückenlos nachziehen (die verschobene Karte ist dort nicht mehr enthalten).

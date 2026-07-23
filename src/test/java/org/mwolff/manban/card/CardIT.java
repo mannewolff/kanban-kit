@@ -147,7 +147,7 @@ class CardIT extends AbstractIntegrationTest {
   }
 
   @Test
-  void cardNumbersAreSequentialAndBoardScoped() throws Exception {
+  void cardNumbersAreSequentialAndProjectScoped() throws Exception {
     Cookie alice = loginAs("card-owner@example.com");
     long projectId = createProject("card-owner@example.com", "P");
     JsonNode board = createBoard(alice, projectId);
@@ -159,13 +159,13 @@ class CardIT extends AbstractIntegrationTest {
     int n3 = createCard(alice, boardId, columnId, "C", null).get("number").asInt();
     org.assertj.core.api.Assertions.assertThat(new int[] {n1, n2, n3}).containsExactly(1, 2, 3);
 
-    // Zweites Board startet wieder bei 1 (board-scoped).
+    // Zweites Board desselben Projekts zählt projektweit weiter (nicht wieder bei 1).
     JsonNode board2 = createBoard(alice, projectId);
     long boardId2 = board2.get("id").asLong();
     long columnId2 = board2.get("columns").get(0).get("id").asLong();
     org.assertj.core.api.Assertions.assertThat(
             createCard(alice, boardId2, columnId2, "X", null).get("number").asInt())
-        .isEqualTo(1);
+        .isEqualTo(4);
   }
 
   @Test

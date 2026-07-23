@@ -23,8 +23,8 @@ public interface CardRepository {
   /** Nicht-archivierte Karten, die vor {@code threshold} nach Done verschoben wurden. */
   List<Card> findArchivableDoneCards(Instant threshold);
 
-  /** Höchste vergebene board-scoped Nummer (0, wenn keine Karten). */
-  int maxNumberInBoard(long boardId);
+  /** Höchste vergebene projekt-scoped Nummer (0, wenn keine Karten). */
+  int maxNumberInProject(long projectId);
 
   /** Höchste Position unter nicht-archivierten Karten der Spalte (-1, wenn keine). */
   int maxActivePositionInColumn(long columnId);

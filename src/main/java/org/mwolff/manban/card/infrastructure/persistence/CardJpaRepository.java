@@ -26,8 +26,8 @@ interface CardJpaRepository extends JpaRepository<CardEntity, Long> {
           + "and c.movedToDoneAt is not null and c.movedToDoneAt < ?1")
   List<CardEntity> findArchivableDoneCards(Instant threshold);
 
-  @Query("select coalesce(max(c.number), 0) from CardEntity c where c.boardId = ?1")
-  int maxNumberInBoard(Long boardId);
+  @Query("select coalesce(max(c.number), 0) from CardEntity c where c.projectId = ?1")
+  int maxNumberInProject(Long projectId);
 
   @Query(
       "select coalesce(max(c.positionInColumn), -1) from CardEntity c "

@@ -30,7 +30,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Karten- und Epic-Use-Cases: Anlegen (board-scoped Nummer, ans Spaltenende), Bearbeiten,
+ * Karten- und Epic-Use-Cases: Anlegen (projektweite Nummer, ans Spaltenende), Bearbeiten,
  * Archivieren/Wiederherstellen, Löschen, Move/Reindex und Abhängigkeiten. Epics sind Karten vom Typ
  * {@link CardType#EPIC}: sie erscheinen nicht auf dem Board, halten keine Position und gruppieren
  * Karten über {@code parentId}. Rechte über den {@link PermissionChecker}.
@@ -207,7 +207,7 @@ public class CardService {
     Long effectiveParent =
         parentId == null ? null : requireEpicInBoard(parentId, boardId).requireId();
 
-    int number = cards.maxNumberInBoard(boardId) + 1;
+    int number = cards.maxNumberInProject(board.projectId()) + 1;
     int position = cards.maxActivePositionInColumn(columnId) + 1;
     Instant now = clock.instant();
     Card saved =
@@ -267,7 +267,7 @@ public class CardService {
             .orElseThrow(ColumnNotFoundException::new)
             .requireId();
 
-    int number = cards.maxNumberInBoard(boardId) + 1;
+    int number = cards.maxNumberInProject(board.projectId()) + 1;
     Instant now = clock.instant();
     Card saved =
         cards.save(
@@ -503,7 +503,7 @@ public class CardService {
   /**
    * Verschiebt eine Karte board- und projektübergreifend in eine Spalte eines anderen Boards. Nur
    * möglich, wenn der Benutzer im Quell- und im Zielprojekt OWNER (oder Plattform-Admin) ist. Die
-   * Karte erhält eine neue board-scoped Nummer und landet am Ende der Zielspalte; Epic-Zuordnung
+   * Karte erhält eine neue projekt-scoped Nummer und landet am Ende der Zielspalte; Epic-Zuordnung
    * und Abhängigkeiten (board-lokal) werden entfernt. Kommentare und Anhänge wandern mit (an der
    * Karten-ID).
    */
@@ -525,7 +525,7 @@ public class CardService {
     permissions.requireOwner(userId, sourceBoard.projectId());
     permissions.requireOwner(userId, targetBoard.projectId());
 
-    int newNumber = cards.maxNumberInBoard(targetBoardId) + 1;
+    int newNumber = cards.maxNumberInProject(targetBoard.projectId()) + 1;
     cards.transfer(cardId, targetBoardId, targetColumnId, newNumber);
     dependencies.deleteByCardId(cardId);
     // Zuständige gehören zum Quellprojekt; im Zielprojekt sind sie evtl. keine Mitglieder.
@@ -706,7 +706,7 @@ public class CardService {
             .min(Comparator.comparingInt(BoardColumn::position))
             .orElseThrow(ColumnNotFoundException::new);
     long columnId = backlog.requireId();
-    int number = cards.maxNumberInBoard(targetBoardId) + 1;
+    int number = cards.maxNumberInProject(card.projectId()) + 1;
     int position = cards.maxActivePositionInColumn(columnId) + 1;
     Instant now = clock.instant();
     Card planned = cards.save(card.withPlannedOnBoard(targetBoardId, columnId, number, position));
