@@ -7,6 +7,16 @@ Versionierung folgt der dreiteiligen Betriebsversion (siehe [RELEASING.md](RELEA
 Einträge je Version sind ein automatischer Auszug der Commit-Titel seit dem letzten Release,
 erzeugt von `scripts/gen-changelog.mjs`.
 
+## [1.6.0] – 2026-07-23
+
+- Release 1.5.2 (push main)
+- Deploy-Pfad korrigieren: /root/opt/kanban-kit ([#384](https://github.com/mannewolff/kanban-kit/issues/384))
+- Release 1.5.1 (push main)
+- Transfer & Abhängigkeiten projektweit: richtungsabhängiger Umzug ([#386](https://github.com/mannewolff/kanban-kit/issues/386))
+- Kartennummern projektweit: Generator + Constraint + Migration V19 ([#385](https://github.com/mannewolff/kanban-kit/issues/385))
+- Automatisches Deployment via self-hosted Actions-Runner ([#384](https://github.com/mannewolff/kanban-kit/issues/384))
+- Toast-Tests: drei 3-s-Auto-Hide-Tests parametrisieren ([#382](https://github.com/mannewolff/kanban-kit/issues/382))
+
 ## [1.5.0] – 2026-07-23
 
 - Version 1.4.4 (push main)
