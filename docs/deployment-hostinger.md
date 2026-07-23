@@ -101,6 +101,27 @@ Flyway migriert die Datenbank automatisch beim Boot der `manban-api`. Neue
 Umgebungsvariablen zuerst in die `.env` eintragen, dann mit `--force-recreate` neu erstellen
 (Container lesen Env nur beim Erstellen).
 
+## Automatisches Deployment
+
+Die Update-Routine oben läuft auf Wunsch automatisch: Ein **Push auf `production`** (Ergebnis von
+`merge production` + Merge des Release-PRs) triggert den Workflow
+[`.github/workflows/deploy.yml`](../.github/workflows/deploy.yml), der auf einem **self-hosted
+Runner** auf dem VPS genau `git reset --hard origin/production` + das Compose-Kommando ausführt.
+
+Einmalige Einrichtung (Server + GitHub, nicht Teil des Repos):
+
+1. **Runner installieren** auf dem VPS und als Dienst einrichten (`config.sh` gegen dieses Repo,
+   dann `svc.sh install` / `svc.sh start`) — Befehle/Token unter *Settings → Actions → Runners →
+   New self-hosted runner*.
+2. **Docker-Rechte:** der Runner-User muss Docker fahren und in `/root/opt/manban` fetchen/resetten
+   dürfen.
+3. **Sicherheit (Pflicht bei öffentlichem Repo):** Der Workflow triggert **ausschließlich** auf
+   `push` nach `production`, **nie** auf `pull_request` — so kann kein Fork-Code auf dem VPS laufen.
+   Zusätzlich unter *Settings → Actions* Fork-Runs auf **Approval** stellen.
+
+Hintergrund und die verworfene Alternative (Checkout-Variante) stehen in
+[deployment-spec.md](../deployment-spec.md).
+
 ## Verifikation
 
 - `curl -I https://kanban.mwolff.org` → `200` mit gültigem Let's-Encrypt-Zertifikat

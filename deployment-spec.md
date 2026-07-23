@@ -54,9 +54,9 @@ sudo usermod -aG docker deploy   # danach einmal neu einloggen
 
 ## Workflow-Definition
 
-Datei: `.github/workflows/deploy.yml`
+Datei: [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) — **umgesetzt**.
 
-Es gibt zwei Varianten. Variante A ist der GitHub-Standard, Variante B bildet den bestehenden manuellen Ablauf eins zu eins nach.
+**Entschieden: Variante B** (bestehendes Server-Verzeichnis, deterministisches `git reset --hard`). Der reale Workflow liegt in der Datei oben; die folgenden zwei Varianten dokumentieren die Abwägung. Variante A ist der GitHub-Standard, Variante B bildet den bisher manuellen Ablauf eins zu eins nach.
 
 ### Variante A: Checkout in das Runner-Arbeitsverzeichnis
 
@@ -92,21 +92,25 @@ jobs:
   deploy:
     runs-on: self-hosted
     steps:
-      - name: Pull and rebuild
+      - name: Pull production und Container neu bauen
         run: |
-          cd /var/www/app
-          git pull origin production
-          docker compose up -d --build
+          cd /root/opt/manban
+          git fetch origin production
+          git reset --hard origin/production
+          docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
 ```
 
-Dies entspricht exakt dem bisher manuellen Vorgehen.
+Entspricht dem manuellen Ablauf aus [docs/deployment-hostinger.md](docs/deployment-hostinger.md), mit zwei bewussten Schärfungen:
+
+- **`git reset --hard origin/production`** statt `git pull` — deterministisch (auch nach Rebase/Force-Push auf `production`); die gitignorete `.env` bleibt unberührt.
+- **Beide Compose-Files** (`-f docker-compose.yml -f docker-compose.prod.yml`) — sonst fehlte das Prod-Overlay (Traefik/TLS).
 
 - Vorteil: Keine Änderung an Pfaden, Volumes oder `.env`.
-- Preis: Der Runner läuft als `deploy`-User. Dieser User muss in `/var/www/app` das `git pull` durchführen dürfen (Verzeichnis-Ownership und git-Credentials). Wird bisher als anderer User gepullt, fehlt dem Runner diese Berechtigung.
+- Preis: Der Runner läuft im gewählten Verzeichnis (hier `/root/opt/manban`, also als root) und muss dort fetchen/resetten dürfen. Für ein öffentliches Repo ist kein git-Credential nötig (HTTPS-Fetch anonym).
 
-### Empfehlung
+### Entscheidung
 
-Für den Einstieg ist Variante B mental am nächsten am bekannten Ablauf und vermeidet Überraschungen bei Pfaden. Variante A ist langfristig sauberer, weil sie ohne git-Credentials auf dem Server auskommt. Der Wechsel lohnt sich, sobald sichergestellt ist, dass die Compose-Pfade den Verzeichniswechsel mitmachen.
+**Umgesetzt ist Variante B** — mental am nächsten am bekannten Ablauf, keine Überraschungen bei Pfaden/`.env`. Variante A (Checkout ins Runner-Workdir, ohne git-Credentials) bleibt als spätere Option, sobald sichergestellt ist, dass die Compose-Pfade den Verzeichniswechsel mitmachen.
 
 ## Sicherheit (relevant bei geplanter Open-Source-Veröffentlichung)
 
@@ -120,6 +124,7 @@ Solange der Deploy ausschließlich am `production`-Push hängt, ist die Konfigur
 
 ## Offene Punkte
 
-- Prüfen, ob die Pfade und Volumes der `docker-compose.yml` mit dem gewählten Arbeitsverzeichnis (Variante A oder B) zusammenpassen.
-- Klären, ob eine `.env` auf dem Server liegt und aus dem gewählten Verzeichnis erreichbar ist.
+- **Einmalige Server-/GitHub-Einrichtung (manuell):** Runner als Dienst installieren (`config.sh` + `svc.sh`, siehe oben), Docker-Rechte, und in den Repo-Actions-Settings Fork-Runs auf „Approval" stellen.
 - Optional: Health-Check nach dem Deploy ergänzen, um fehlgeschlagene Builds sichtbar zu machen.
+
+Erledigt: Verzeichnis (`/root/opt/manban`) und `.env` sind über [docs/deployment-hostinger.md](docs/deployment-hostinger.md) geklärt; Variante B ist als Workflow umgesetzt.

@@ -1,0 +1,26 @@
+name: Deploy
+
+# Automatisches Deployment auf den Hostinger-VPS bei jedem Push auf `production`
+# (Ergebnis von `merge production` + Merge des Release-PRs).
+#
+# SICHERHEIT: bewusst NUR `push` auf `production`, NIEMALS `pull_request`. Ein self-hosted Runner
+# an einem öffentlichen Repo ist eine scharfe Kante (fremder Fork-Code könnte sonst auf dem VPS
+# laufen). Ein Push auf `production` kann nur, wer Schreibrechte hat; ein Fork-PR löst nichts aus.
+# Zusätzlich in den Repo-Actions-Settings Fork-Runs auf „Approval" stellen. Siehe deployment-spec.md.
+on:
+  push:
+    branches: [production]
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+    steps:
+      # Variante B: kein actions/checkout — wir arbeiten im bestehenden Server-Verzeichnis, das die
+      # .env und beide Compose-Files (mit relativen Pfaden) enthält. `reset --hard` macht den Stand
+      # deterministisch gleich origin/production; die gitignorete .env bleibt unberührt.
+      - name: Pull production und Container neu bauen
+        run: |
+          cd /root/opt/manban
+          git fetch origin production
+          git reset --hard origin/production
+          docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
