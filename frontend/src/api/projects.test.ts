@@ -58,4 +58,19 @@ describe('projectsApi', () => {
     expect(c.method).toBe('POST')
     expect(JSON.parse(String(c.body))).toEqual({ newOwnerUserId: 42 })
   })
+
+  it('nextCardNumber ruft GET /api/projects/{id}/next-card-number', async () => {
+    spyFetch(JSON.stringify({ nextCardNumber: 13457 }))
+    const result = await projectsApi.nextCardNumber(3)
+    expect(result).toEqual({ nextCardNumber: 13457 })
+  })
+
+  it('setNextCardNumber ruft PUT /api/projects/{id}/next-card-number mit dem Wert', async () => {
+    const f = spyFetch(JSON.stringify({ nextCardNumber: 13457 }))
+    await projectsApi.setNextCardNumber(3, 13457)
+    const c = lastCall(f)
+    expect(c.url).toBe('/api/projects/3/next-card-number')
+    expect(c.method).toBe('PUT')
+    expect(JSON.parse(String(c.body))).toEqual({ nextCardNumber: 13457 })
+  })
 })
