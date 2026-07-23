@@ -338,7 +338,7 @@ class CardServiceTest {
     // Given
     when(columns.findById(20L)).thenReturn(Optional.of(column(20L, "Backlog", 0)));
     when(cards.maxNumberInProject(PROJECT)).thenReturn(4);
-    when(cards.findByBoardId(BOARD))
+    when(cards.findByProjectId(PROJECT))
         .thenReturn(List.of(card(2L, 20L, 3, false, null, CardType.CARD, null, null)));
 
     // When
@@ -409,7 +409,7 @@ class CardServiceTest {
     // der Selbstbezug-Guard wird dadurch beweisbar geprüft.
     when(columns.findById(20L)).thenReturn(Optional.of(column(20L, "Backlog", 0)));
     when(cards.maxNumberInProject(PROJECT)).thenReturn(0);
-    when(cards.findByBoardId(BOARD))
+    when(cards.findByProjectId(PROJECT))
         .thenReturn(List.of(card(9L, 20L, 1, false, null, CardType.CARD, null, null)));
 
     // When / Then: neue Karte bekommt Nummer 1, hängt von 1 (sich selbst) ab
@@ -423,7 +423,7 @@ class CardServiceTest {
     // Given
     when(columns.findById(20L)).thenReturn(Optional.of(column(20L, "Backlog", 0)));
     when(cards.maxNumberInProject(PROJECT)).thenReturn(0);
-    when(cards.findByBoardId(BOARD)).thenReturn(List.of());
+    when(cards.findByProjectId(PROJECT)).thenReturn(List.of());
 
     // When / Then
     List<Integer> unknownDependency = List.of(99);
@@ -583,7 +583,7 @@ class CardServiceTest {
     // Given
     when(cards.findById(1L))
         .thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
-    when(cards.findByBoardId(BOARD))
+    when(cards.findByProjectId(PROJECT))
         .thenReturn(List.of(card(2L, 20L, 3, false, null, CardType.CARD, null, null)));
 
     // When
@@ -1100,9 +1100,9 @@ class CardServiceTest {
 
     // Then
     verify(dependencies).replaceDependencies(1L, List.of());
-    // Eine leere Liste wird ohne Board-Lookup direkt geleert (Kurzschluss des isEmpty-Zweigs).
-    // Ein Umgehen dieses Zweigs (Mutant) würde die Board-Nummern unnötig nachladen.
-    verify(cards, never()).findByBoardId(BOARD);
+    // Eine leere Liste wird ohne Projekt-Lookup direkt geleert (Kurzschluss des isEmpty-Zweigs).
+    // Ein Umgehen dieses Zweigs (Mutant) würde die projektweiten Nummern unnötig nachladen.
+    verify(cards, never()).findByProjectId(PROJECT);
   }
 
   @Test
@@ -1450,6 +1450,26 @@ class CardServiceTest {
     verify(cards).save(captor.capture());
     assertThat(captor.getValue().parentId()).isNull();
     assertThat(captor.getValue().movedToDoneAt()).isNull();
+  }
+
+  @Test
+  void transfer_sameProject_keepsNumberAndKeepsDependenciesAndAssignees() {
+    // Given: Ziel-Board liegt im SELBEN Projekt (1) wie die Quelle (card 100 hat projectId 1).
+    when(cards.findById(100L))
+        .thenReturn(Optional.of(card(100L, 50L, 3, false, FIXED, CardType.CARD, 9L, null)));
+    when(boards.findById(20L)).thenReturn(Optional.of(new Board(20L, 1L, "Ziel", FIXED)));
+    when(columns.findById(60L))
+        .thenReturn(Optional.of(new BoardColumn(60L, 20L, "Backlog", 0, null)));
+
+    // When
+    service.transfer(1L, 100L, 20L, 60L);
+
+    // Then: die Nummer (3) bleibt erhalten — keine Neuvergabe, kein maxNumberInProject-Lookup …
+    verify(cards).transfer(100L, 20L, 60L, 3);
+    verify(cards, never()).maxNumberInProject(anyLong());
+    // … und projekt-lokale Verknüpfungen wandern mit (werden NICHT gelöscht).
+    verify(dependencies, never()).deleteByCardId(anyLong());
+    verify(assignees, never()).deleteByCardId(anyLong());
   }
 
   @Test

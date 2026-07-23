@@ -501,11 +501,20 @@ public class CardService {
   }
 
   /**
-   * Verschiebt eine Karte board- und projektübergreifend in eine Spalte eines anderen Boards. Nur
-   * möglich, wenn der Benutzer im Quell- und im Zielprojekt OWNER (oder Plattform-Admin) ist. Die
-   * Karte erhält eine neue projekt-scoped Nummer und landet am Ende der Zielspalte; Epic-Zuordnung
-   * und Abhängigkeiten (board-lokal) werden entfernt. Kommentare und Anhänge wandern mit (an der
-   * Karten-ID).
+   * Verschiebt eine Karte in eine Spalte eines anderen Boards. Nur möglich, wenn der Benutzer im
+   * Quell- und im Zielprojekt OWNER (oder Plattform-Admin) ist; die Karte landet am Ende der
+   * Zielspalte. Richtungsabhängig:
+   *
+   * <ul>
+   *   <li><b>Selbes Projekt:</b> die Nummer bleibt erhalten (projektweit ohnehin eindeutig),
+   *       Abhängigkeiten und Zuständige wandern mit — so brechen Querverweise beim Board-Wechsel
+   *       nicht.
+   *   <li><b>Anderes Projekt:</b> die Karte erhält eine neue projekt-scoped Nummer; Abhängigkeiten
+   *       und Zuständige (projekt-lokal) werden entfernt.
+   * </ul>
+   *
+   * <p>Die board-lokale Epic-Zuordnung wird in beiden Fällen entfernt (das Ziel-Board hat eigene
+   * Epics). Kommentare und Anhänge wandern immer mit (an der Karten-ID).
    */
   @Transactional
   public CardView transfer(long userId, long cardId, long targetBoardId, long targetColumnId) {
@@ -525,11 +534,19 @@ public class CardService {
     permissions.requireOwner(userId, sourceBoard.projectId());
     permissions.requireOwner(userId, targetBoard.projectId());
 
-    int newNumber = cards.maxNumberInProject(targetBoard.projectId()) + 1;
+    // Innerhalb desselben Projekts bleibt die Nummer erhalten (projektweit ohnehin eindeutig) und
+    // Abhängigkeiten/Zuständige wandern mit — nur so bleiben Querverweise beim Board-Wechsel
+    // stabil.
+    // Nur über Projektgrenzen wird neu nummeriert und werden die projekt-lokalen Verknüpfungen
+    // (Abhängigkeiten, Zuständige) entfernt.
+    boolean sameProject = Objects.equals(sourceBoard.projectId(), targetBoard.projectId());
+    int newNumber =
+        sameProject ? card.requireNumber() : cards.maxNumberInProject(targetBoard.projectId()) + 1;
     cards.transfer(cardId, targetBoardId, targetColumnId, newNumber);
-    dependencies.deleteByCardId(cardId);
-    // Zuständige gehören zum Quellprojekt; im Zielprojekt sind sie evtl. keine Mitglieder.
-    assignees.deleteByCardId(cardId);
+    if (!sameProject) {
+      dependencies.deleteByCardId(cardId);
+      assignees.deleteByCardId(cardId);
+    }
 
     // Zykluszeit: der board-/spaltenübergreifende Umzug zählt als Spaltenwechsel.
     Instant switchedAt = clock.instant();
@@ -866,13 +883,19 @@ public class CardService {
       return;
     }
     List<Integer> distinct = dependsOn.stream().distinct().toList();
-    List<Integer> boardNumbers =
-        cards.findByBoardId(card.requireBoardId()).stream().map(Card::number).toList();
+    // Querverweise werden projektweit aufgelöst: eine #N-Abhängigkeit darf auf jede Karte desselben
+    // Projekts zeigen (board-übergreifend), nicht nur auf dasselbe Board. Board-lose Pool-Ideen
+    // (number == null) fallen dabei heraus.
+    List<Integer> projectNumbers =
+        cards.findByProjectId(card.projectId()).stream()
+            .map(Card::number)
+            .filter(Objects::nonNull)
+            .toList();
     for (Integer dep : distinct) {
       if (dep == card.requireNumber()) {
         throw new InvalidDependencyException("Karte kann nicht von sich selbst abhängen");
       }
-      if (!boardNumbers.contains(dep)) {
+      if (!projectNumbers.contains(dep)) {
         throw new InvalidDependencyException("Unbekannte Kartennummer: " + dep);
       }
     }

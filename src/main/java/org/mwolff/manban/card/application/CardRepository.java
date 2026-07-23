@@ -14,6 +14,9 @@ public interface CardRepository {
 
   List<Card> findByBoardId(long boardId);
 
+  /** Alle nicht-gelöschten Karten eines Projekts (board-übergreifend, inkl. board-loser Ideen). */
+  List<Card> findByProjectId(long projectId);
+
   /**
    * Ideen-Karten eines Projekts (idea_stored), neueste zuerst — board-lose Pool-Ideen und
    * board-gebundene Legacy-Ideen. Papierkorb-Karten sind ausgenommen.

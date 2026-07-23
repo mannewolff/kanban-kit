@@ -120,7 +120,7 @@ Einmalige Einrichtung (Server + GitHub, nicht Teil des Repos):
    Zusätzlich unter *Settings → Actions* Fork-Runs auf **Approval** stellen.
 
 Hintergrund und die verworfene Alternative (Checkout-Variante) stehen in
-[deployment-spec.md](../deployment-spec.md).
+`deployment-spec.md` im Repo-Wurzelverzeichnis.
 
 ## Verifikation
 
