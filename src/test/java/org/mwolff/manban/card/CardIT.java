@@ -1,8 +1,10 @@
 package org.mwolff.manban.card;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -753,6 +755,56 @@ class CardIT extends AbstractIntegrationTest {
     org.assertj.core.api.Assertions.assertThat(
             createCard(alice, boardId, columnId, "C", null).get("number").asInt())
         .isEqualTo(13459);
+  }
+
+  @Test
+  void nextCardNumberEndpoint_setsAndGuardsStartNumber() throws Exception {
+    Cookie alice = loginAs("nextnum-owner@example.com");
+    Cookie mallory = loginAs("nextnum-member@example.com");
+    long projectId = createProject("nextnum-owner@example.com", "NextNum");
+    JsonNode board = createBoard(alice, projectId);
+    long boardId = board.get("id").asLong();
+    long columnId = board.get("columns").get(0).get("id").asLong();
+
+    // GET auf leerem Projekt → effektiv 1.
+    mvc.perform(get("/api/projects/" + projectId + "/next-card-number").cookie(alice))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.nextCardNumber").value(1));
+
+    // Owner setzt 13457 → GET/PUT liefern 13457, erste Karte trägt 13457.
+    mvc.perform(
+            put("/api/projects/" + projectId + "/next-card-number")
+                .cookie(alice)
+                .contentType("application/json")
+                .content("{\"nextCardNumber\":13457}"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.nextCardNumber").value(13457));
+    org.assertj.core.api.Assertions.assertThat(
+            createCard(alice, boardId, columnId, "A", null).get("number").asInt())
+        .isEqualTo(13457);
+
+    // Wert ≤ höchste vergebene Nummer (jetzt 13457) → 400.
+    mvc.perform(
+            put("/api/projects/" + projectId + "/next-card-number")
+                .cookie(alice)
+                .contentType("application/json")
+                .content("{\"nextCardNumber\":13457}"))
+        .andExpect(status().isBadRequest());
+
+    // Nicht-Owner (nur Mitglied) → 403.
+    memberships.save(
+        new ProjectMembership(
+            null,
+            projectId,
+            userId("nextnum-member@example.com"),
+            ProjectRole.MEMBER,
+            Instant.now()));
+    mvc.perform(
+            put("/api/projects/" + projectId + "/next-card-number")
+                .cookie(mallory)
+                .contentType("application/json")
+                .content("{\"nextCardNumber\":99999}"))
+        .andExpect(status().isForbidden());
   }
 
   @Test

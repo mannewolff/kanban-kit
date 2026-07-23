@@ -35,6 +35,12 @@ public interface CardRepository {
    */
   int nextCardNumber(long projectId);
 
+  /**
+   * Höchste bereits vergebene projektweite Kartennummer (0, wenn keine nummerierte Karte). Dient
+   * der Validierung einer neu gesetzten Projekt-Startnummer (sie muss darüber liegen).
+   */
+  int highestNumberInProject(long projectId);
+
   /** Höchste Position unter nicht-archivierten Karten der Spalte (-1, wenn keine). */
   int maxActivePositionInColumn(long columnId);
 

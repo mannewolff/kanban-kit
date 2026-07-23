@@ -16,4 +16,11 @@ public interface ProjectRepository {
 
   /** Löscht das Projekt; Boards/Karten/Mitgliedschaften kaskadieren über DB-FKs. */
   void deleteById(long id);
+
+  /**
+   * Setzt die Projekt-Startnummer ({@code next_card_number}) — die Untergrenze für die nächste
+   * projektweite Kartennummer. Wird beim Anlegen der nächsten nummerierten Karte als Floor
+   * herangezogen (siehe {@code CardRepository.nextCardNumber}).
+   */
+  void setNextCardNumber(long projectId, int value);
 }

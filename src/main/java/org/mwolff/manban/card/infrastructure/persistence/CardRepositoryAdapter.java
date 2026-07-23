@@ -98,6 +98,15 @@ class CardRepositoryAdapter implements CardRepository {
   }
 
   @Override
+  public int highestNumberInProject(long projectId) {
+    return java.util.Objects.requireNonNull(
+        jdbc.queryForObject(
+            "SELECT COALESCE(MAX(number), 0) FROM card WHERE project_id = ?",
+            Integer.class,
+            projectId));
+  }
+
+  @Override
   public int maxActivePositionInColumn(long columnId) {
     return jpa.maxActivePositionInColumn(columnId);
   }
