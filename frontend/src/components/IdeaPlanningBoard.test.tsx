@@ -6,13 +6,13 @@ import { ideasApi, type Idea } from '../api/ideas'
 import { IdeaPlanningBoard } from './IdeaPlanningBoard'
 
 vi.mock('../api/boards', () => ({ boardsApi: { list: vi.fn() } }))
-vi.mock('../api/cards', () => ({ cardsApi: { list: vi.fn() } }))
+vi.mock('../api/cards', () => ({ cardsApi: { list: vi.fn(), move: vi.fn() } }))
 vi.mock('../api/ideas', () => ({
   ideasApi: { list: vi.fn(), planOntoBoard: vi.fn(), moveBackToPool: vi.fn() },
 }))
 
 const mBoards = boardsApi as unknown as { list: ReturnType<typeof vi.fn> }
-const mCards = cardsApi as unknown as { list: ReturnType<typeof vi.fn> }
+const mCards = cardsApi as unknown as { list: ReturnType<typeof vi.fn>; move: ReturnType<typeof vi.fn> }
 const mIdeas = ideasApi as unknown as {
   list: ReturnType<typeof vi.fn>
   planOntoBoard: ReturnType<typeof vi.fn>
@@ -76,6 +76,7 @@ function setup({
 } = {}) {
   mBoards.list.mockResolvedValue(boards)
   mCards.list.mockResolvedValue(cards)
+  mCards.move.mockResolvedValue({})
   mIdeas.list.mockResolvedValue(ideas)
   mIdeas.planOntoBoard.mockResolvedValue(idea({ id: 20, title: 'x' }))
   mIdeas.moveBackToPool.mockResolvedValue(idea({ id: 1, title: 'x' }))
@@ -303,5 +304,52 @@ describe('IdeaPlanningBoard', () => {
 
     // active=false nach Unmount -> die späte Antwort setzt keinen State und lädt kein Backlog.
     expect(mCards.list).not.toHaveBeenCalled()
+  })
+
+  it('sortiert eine Backlog-Karte per Drag auf eine andere Zeile um', async () => {
+    setup()
+    renderBoard()
+    await screen.findByText('Backlog A')
+
+    // „Backlog A" (id 1) auf „Backlog Z" (id 5, Spalte 100, Position 1) ziehen.
+    fireEvent.dragStart(screen.getByTestId('backlog-item-1'), dt())
+    fireEvent.dragOver(screen.getByTestId('backlog-item-5'), dt())
+    fireEvent.drop(screen.getByTestId('backlog-item-5'), dt())
+
+    await waitFor(() => expect(mCards.move).toHaveBeenCalledWith(1, 100, 1))
+  })
+
+  it('sortiert nicht um, wenn eine Karte auf sich selbst fällt', async () => {
+    setup()
+    renderBoard()
+    await screen.findByText('Backlog A')
+
+    fireEvent.dragStart(screen.getByTestId('backlog-item-1'), dt())
+    fireEvent.drop(screen.getByTestId('backlog-item-1'), dt())
+
+    expect(mCards.move).not.toHaveBeenCalled()
+  })
+
+  it('sortiert nicht um bei einem Drop ohne Drag', async () => {
+    setup()
+    renderBoard()
+    await screen.findByText('Backlog A')
+
+    fireEvent.drop(screen.getByTestId('backlog-item-1'), dt())
+
+    expect(mCards.move).not.toHaveBeenCalled()
+  })
+
+  it('plant (statt sortieren), wenn eine Pool-Idee auf eine Backlog-Zeile fällt', async () => {
+    setup()
+    renderBoard()
+    await screen.findByText('Pool 1')
+
+    // Pool-Quelle auf eine Backlog-Zeile: die Zeile reicht durch, die Zone plant ein.
+    fireEvent.dragStart(screen.getByTestId('pool-item-20'), dt())
+    fireEvent.drop(screen.getByTestId('backlog-item-1'), dt())
+
+    await waitFor(() => expect(mIdeas.planOntoBoard).toHaveBeenCalledWith(20, 10))
+    expect(mCards.move).not.toHaveBeenCalled()
   })
 })

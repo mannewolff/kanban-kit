@@ -147,6 +147,23 @@ export function IdeaPlanningBoard({
     else if (zone === 'pool' && d.source === 'backlog') void toPool(d.id)
   }
 
+  const reorder = async (cardId: number, columnId: number, position: number) => {
+    await cardsApi.move(cardId, columnId, position)
+    await loadBacklog()
+  }
+
+  // Drop einer Backlog-Karte auf eine andere: an deren Position einsortieren (gleiche Spalte).
+  // Andere Fälle (Pool-Quelle, Drop auf sich selbst, kein Drag) durchreichen — der Pool→Backlog-
+  // Drop wird dann von der Zonen-Ebene (handleDrop) verarbeitet.
+  const handleBacklogRowDrop = (target: Card) => (e: React.DragEvent) => {
+    const d = dragged
+    if (d === null || d.source !== 'backlog' || d.id === target.id) return
+    e.preventDefault()
+    e.stopPropagation()
+    setDragged(null)
+    void reorder(d.id, target.columnId, target.positionInColumn)
+  }
+
   if (boards.length === 0) {
     return (
       <Alert severity="info">
@@ -199,6 +216,8 @@ export function IdeaPlanningBoard({
                 variant="outlined"
                 draggable={canEdit}
                 onDragStart={startDrag('backlog', card.id)}
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={handleBacklogRowDrop(card)}
                 sx={{ px: 1.5, py: 1, display: 'flex', alignItems: 'center', gap: 1.5, cursor: canEdit ? 'grab' : 'default' }}
               >
                 <Typography variant="caption" color="text.secondary" sx={{ width: 48, flexShrink: 0 }}>
