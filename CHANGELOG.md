@@ -7,6 +7,28 @@ Versionierung folgt der dreiteiligen Betriebsversion (siehe [RELEASING.md](RELEA
 Einträge je Version sind ein automatischer Auszug der Commit-Titel seit dem letzten Release,
 erzeugt von `scripts/gen-changelog.mjs`.
 
+## [1.5.0] – 2026-07-23
+
+- Version 1.4.4 (push main)
+- Board-Listenansicht: Sortieren nur bei ausgewählter Einzelspalte ([#381](https://github.com/mannewolff/kanban-kit/issues/381))
+- Ideen-Planungsboard: Direktsprung in die Board-Listenansicht ([#380](https://github.com/mannewolff/kanban-kit/issues/380))
+- Ideen-Planungsboard: Ziehgriff-Icon an den verschiebbaren Zeilen ([#379](https://github.com/mannewolff/kanban-kit/issues/379))
+- Toast-Benachrichtigungen: oben-mittiger Stapel mit Severity-Logik ([#378](https://github.com/mannewolff/kanban-kit/issues/378))
+- Ideen-Planungsboard: Backlog-Reihenfolge per Drag sortieren ([#377](https://github.com/mannewolff/kanban-kit/issues/377))
+- Ideen-Seite: Umschalter Liste/Planen + gestapeltes Planungs-Board ([#376](https://github.com/mannewolff/kanban-kit/issues/376))
+- install.mjs ins gitignore
+- Version 1.4.3 (push main)
+- BoardListPage: per-Board-Ideen-Zone zurückbauen ([#375](https://github.com/mannewolff/kanban-kit/issues/375))
+- Projekt-Ideen-Seite + Nav + API-Client ([#374](https://github.com/mannewolff/kanban-kit/issues/374))
+- kanbancompat-Ingest in den Projekt-Ideen-Pool routen ([#373](https://github.com/mannewolff/kanban-kit/issues/373))
+- Ideen-Pool: Use-Cases + Endpoints (anlegen/einplanen/zurück/Liste) ([#372](https://github.com/mannewolff/kanban-kit/issues/372))
+- Datenmodell: Karte board-optional + project_id (Migration V18) ([#371](https://github.com/mannewolff/kanban-kit/issues/371))
+- Version 1.4.2 (push main)
+- Self-Invocation von @Transactional-Methoden (S6809) auflösen ([#370](https://github.com/mannewolff/kanban-kit/issues/370))
+- Version 1.4.1 (push main)
+- Leere close()-Methode im EventSource-Test-Stub kommentieren ([#369](https://github.com/mannewolff/kanban-kit/issues/369))
+- Reliability-Gate: 3x S2583 durch korrekte @Nullable-Annotationen beheben ([#368](https://github.com/mannewolff/kanban-kit/issues/368))
+
 ## [1.4.0] – 2026-07-21
 
 - Version 1.3.1 (push main)
