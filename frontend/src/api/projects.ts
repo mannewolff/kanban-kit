@@ -14,6 +14,13 @@ export const projectsApi = {
   create: (name: string, ownerEmail: string) =>
     apiFetch<Project>('/api/projects', json({ name, ownerEmail }, 'POST')),
   rename: (id: number, name: string) => apiFetch<Project>(`/api/projects/${id}`, json({ name }, 'PATCH')),
+  nextCardNumber: (id: number) =>
+    apiFetch<{ nextCardNumber: number }>(`/api/projects/${id}/next-card-number`),
+  setNextCardNumber: (id: number, nextCardNumber: number) =>
+    apiFetch<{ nextCardNumber: number }>(
+      `/api/projects/${id}/next-card-number`,
+      json({ nextCardNumber }, 'PUT'),
+    ),
   remove: (id: number) => apiFetch<void>(`/api/projects/${id}`, { method: 'DELETE' }),
   transferOwner: (id: number, newOwnerUserId: number) =>
     apiFetch<void>(`/api/projects/${id}/owner`, json({ newOwnerUserId }, 'POST')),

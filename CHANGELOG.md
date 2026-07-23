@@ -7,6 +7,16 @@ Versionierung folgt der dreiteiligen Betriebsversion (siehe [RELEASING.md](RELEA
 Einträge je Version sind ein automatischer Auszug der Commit-Titel seit dem letzten Release,
 erzeugt von `scripts/gen-changelog.mjs`.
 
+## [1.7.0] – 2026-07-23
+
+- Release 1.6.1 (push main)
+- Speichern-Feedback über globale Toasts ([#393](https://github.com/mannewolff/kanban-kit/issues/393))
+- Editiermodus-Hinweisleiste über dem Header ([#392](https://github.com/mannewolff/kanban-kit/issues/392))
+- Feld „Nächste Kartennummer" im Projekt-Umbenennen-Dialog ([#391](https://github.com/mannewolff/kanban-kit/issues/391))
+- Projekt-Startnummer setzen: Owner-Endpoint im card-Modul ([#390](https://github.com/mannewolff/kanban-kit/issues/390))
+- Projekt-Startnummer: Floor-basierte Nummernvergabe + Flyway V20 ([#389](https://github.com/mannewolff/kanban-kit/issues/389))
+- Sidebar-Akzentrand von 4px auf 8px verbreitern
+
 ## [1.6.0] – 2026-07-23
 
 - Release 1.5.2 (push main)

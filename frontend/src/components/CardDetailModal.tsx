@@ -41,6 +41,7 @@ import { normalizeTaskLists, toggleTaskAt } from '../lib/markdownTasks'
 import { CODE_BLOCK_BG, MODAL_BORDER, MODAL_TEXT_PRIMARY, statusColors } from '../lib/statusColors'
 import { useAuth } from '../auth/AuthContext'
 import { AttachmentPreview } from './AttachmentPreview'
+import { useSnackbar } from './SnackbarProvider'
 
 /** Bilder und PDF werden in der Lightbox angezeigt; andere Typen nur heruntergeladen. */
 const isPreviewable = (contentType: string) =>
@@ -636,6 +637,7 @@ export function CardDetailModal({
   const [depsInput, setDepsInput] = useState(card.dependencies.join(', '))
   const [depsError, setDepsError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const notify = useSnackbar()
 
   const [comments, setComments] = useState<Comment[]>([])
   const [newComment, setNewComment] = useState('')
@@ -690,6 +692,9 @@ export function CardDetailModal({
       )
       setEditing(false)
       onChanged?.()
+      notify('Karte gespeichert.', 'success')
+    } catch {
+      notify('Speichern fehlgeschlagen.', 'error')
     } finally {
       setSaving(false)
     }

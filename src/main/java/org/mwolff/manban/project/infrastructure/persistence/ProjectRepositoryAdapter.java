@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.Optional;
 import org.mwolff.manban.project.application.ProjectRepository;
 import org.mwolff.manban.project.domain.Project;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
 /** Adapter des {@link ProjectRepository}-Ports auf Spring Data JPA. */
@@ -11,9 +12,11 @@ import org.springframework.stereotype.Component;
 class ProjectRepositoryAdapter implements ProjectRepository {
 
   private final ProjectJpaRepository jpa;
+  private final JdbcTemplate jdbc;
 
-  ProjectRepositoryAdapter(ProjectJpaRepository jpa) {
+  ProjectRepositoryAdapter(ProjectJpaRepository jpa, JdbcTemplate jdbc) {
     this.jpa = jpa;
+    this.jdbc = jdbc;
   }
 
   @Override
@@ -34,6 +37,13 @@ class ProjectRepositoryAdapter implements ProjectRepository {
   @Override
   public void deleteById(long id) {
     jpa.deleteById(id);
+  }
+
+  @Override
+  public void setNextCardNumber(long projectId, int value) {
+    // next_card_number wird bewusst nicht auf die JPA-Entity gemappt (reine Nummerierungs-Belange
+    // liest CardRepository.nextCardNumber direkt per SQL); daher der gezielte Direkt-Update.
+    jdbc.update("UPDATE project SET next_card_number = ? WHERE id = ?", value, projectId);
   }
 
   private static ProjectEntity toEntity(Project p) {

@@ -6,6 +6,7 @@ import { boardsApi } from '../api/boards'
 import { ApiError } from '../api/client'
 import { configApi } from '../api/config'
 import { projectsApi } from '../api/projects'
+import { SnackbarProvider } from '../components/SnackbarProvider'
 import { EditModeProvider, useEditMode } from '../lib/EditModeContext'
 import { AdministrationPage } from './AdministrationPage'
 
@@ -46,10 +47,12 @@ const boundToken = {
 
 function renderPage() {
   return render(
-    <EditModeProvider>
-      <AdministrationPage />
-      <ModeProbe />
-    </EditModeProvider>,
+    <SnackbarProvider>
+      <EditModeProvider>
+        <AdministrationPage />
+        <ModeProbe />
+      </EditModeProvider>
+    </SnackbarProvider>,
   )
 }
 

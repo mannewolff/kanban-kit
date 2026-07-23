@@ -207,7 +207,7 @@ public class CardService {
     Long effectiveParent =
         parentId == null ? null : requireEpicInBoard(parentId, boardId).requireId();
 
-    int number = cards.maxNumberInProject(board.projectId()) + 1;
+    int number = cards.nextCardNumber(board.projectId());
     int position = cards.maxActivePositionInColumn(columnId) + 1;
     Instant now = clock.instant();
     Card saved =
@@ -267,7 +267,7 @@ public class CardService {
             .orElseThrow(ColumnNotFoundException::new)
             .requireId();
 
-    int number = cards.maxNumberInProject(board.projectId()) + 1;
+    int number = cards.nextCardNumber(board.projectId());
     Instant now = clock.instant();
     Card saved =
         cards.save(
@@ -541,7 +541,7 @@ public class CardService {
     // (Abhängigkeiten, Zuständige) entfernt.
     boolean sameProject = Objects.equals(sourceBoard.projectId(), targetBoard.projectId());
     int newNumber =
-        sameProject ? card.requireNumber() : cards.maxNumberInProject(targetBoard.projectId()) + 1;
+        sameProject ? card.requireNumber() : cards.nextCardNumber(targetBoard.projectId());
     cards.transfer(cardId, targetBoardId, targetColumnId, newNumber);
     if (!sameProject) {
       dependencies.deleteByCardId(cardId);
@@ -723,7 +723,7 @@ public class CardService {
             .min(Comparator.comparingInt(BoardColumn::position))
             .orElseThrow(ColumnNotFoundException::new);
     long columnId = backlog.requireId();
-    int number = cards.maxNumberInProject(card.projectId()) + 1;
+    int number = cards.nextCardNumber(card.projectId());
     int position = cards.maxActivePositionInColumn(columnId) + 1;
     Instant now = clock.instant();
     Card planned = cards.save(card.withPlannedOnBoard(targetBoardId, columnId, number, position));

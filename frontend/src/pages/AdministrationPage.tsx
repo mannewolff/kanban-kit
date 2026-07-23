@@ -23,6 +23,7 @@ import { ApiError } from '../api/client'
 import { configApi } from '../api/config'
 import { projectsApi, type Project } from '../api/projects'
 import { useAuth } from '../auth/AuthContext'
+import { useSnackbar } from '../components/SnackbarProvider'
 import { useEditMode } from '../lib/EditModeContext'
 import { canEditCards, isPlatformAdmin } from '../lib/roles'
 
@@ -79,8 +80,7 @@ function DoneRetentionSection() {
   const admin = isPlatformAdmin(user)
   const [days, setDays] = useState('')
   const [effective, setEffective] = useState<number | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [saved, setSaved] = useState(false)
+  const notify = useSnackbar()
 
   useEffect(() => {
     if (!admin) {
@@ -99,19 +99,16 @@ function DoneRetentionSection() {
   const save = async () => {
     const n = Number(days)
     if (!Number.isInteger(n) || n < 0) {
-      setError('Bitte eine ganze Zahl ≥ 0 angeben (0 = kein Auto-Archiv).')
-      setSaved(false)
+      notify('Bitte eine ganze Zahl ≥ 0 angeben (0 = kein Auto-Archiv).', 'warning')
       return
     }
     try {
       const r = await configApi.setDoneRetention(n)
       setEffective(r.effective)
       setDays(String(r.effective))
-      setError(null)
-      setSaved(true)
+      notify('Gespeichert.', 'success')
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : 'Speichern fehlgeschlagen.')
-      setSaved(false)
+      notify(e instanceof ApiError ? e.message : 'Speichern fehlgeschlagen.', 'error')
     }
   }
 
@@ -136,10 +133,7 @@ function DoneRetentionSection() {
             size="small"
             label="Tage"
             value={days}
-            onChange={(e) => {
-              setDays(e.target.value)
-              setSaved(false)
-            }}
+            onChange={(e) => setDays(e.target.value)}
             slotProps={{ htmlInput: { min: 0, 'aria-label': 'Done-Aufbewahrung in Tagen' } }}
             sx={{ width: 140 }}
           />
@@ -147,8 +141,6 @@ function DoneRetentionSection() {
             Speichern
           </Button>
         </Stack>
-        {error && <Alert severity="error">{error}</Alert>}
-        {saved && <Alert severity="success">Gespeichert.</Alert>}
       </Stack>
     </Paper>
   )

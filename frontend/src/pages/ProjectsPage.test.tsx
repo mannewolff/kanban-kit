@@ -6,7 +6,14 @@ import { projectsApi } from '../api/projects'
 import { ProjectsPage } from './ProjectsPage'
 
 vi.mock('../api/projects', () => ({
-  projectsApi: { list: vi.fn(), create: vi.fn(), remove: vi.fn(), rename: vi.fn() },
+  projectsApi: {
+    list: vi.fn(),
+    create: vi.fn(),
+    remove: vi.fn(),
+    rename: vi.fn(),
+    nextCardNumber: vi.fn(),
+    setNextCardNumber: vi.fn(),
+  },
 }))
 
 let mockUser: { platformRole: string } | null = { platformRole: 'USER' }
@@ -23,6 +30,8 @@ const mocked = projectsApi as unknown as {
   create: ReturnType<typeof vi.fn>
   remove: ReturnType<typeof vi.fn>
   rename: ReturnType<typeof vi.fn>
+  nextCardNumber: ReturnType<typeof vi.fn>
+  setNextCardNumber: ReturnType<typeof vi.fn>
 }
 
 describe('ProjectsPage', () => {
@@ -30,6 +39,8 @@ describe('ProjectsPage', () => {
     vi.clearAllMocks()
     mockUser = { platformRole: 'USER' }
     editMode.value = true
+    mocked.nextCardNumber.mockResolvedValue({ nextCardNumber: 5 })
+    mocked.setNextCardNumber.mockResolvedValue({ nextCardNumber: 13457 })
   })
 
   it('blendet bei ausgeschaltetem Editiermodus Umbenennen und Löschen aus', async () => {
@@ -177,6 +188,63 @@ describe('ProjectsPage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Speichern' }))
 
     expect(await screen.findByText('Umbenennen fehlgeschlagen.')).toBeInTheDocument()
+  })
+
+  it('belegt die nächste Kartennummer im Umbenennen-Dialog vor', async () => {
+    mocked.list.mockResolvedValue([{ id: 1, name: 'Meins', role: 'OWNER', createdAt: '' }])
+    mocked.nextCardNumber.mockResolvedValue({ nextCardNumber: 42 })
+    render(<MemoryRouter><ProjectsPage /></MemoryRouter>)
+
+    fireEvent.click(await screen.findByLabelText('Projekt Meins umbenennen'))
+    const field = await screen.findByLabelText('Nächste Kartennummer')
+    await waitFor(() => expect(field).toHaveValue(42))
+    expect(mocked.nextCardNumber).toHaveBeenCalledWith(1)
+  })
+
+  it('setzt eine geänderte nächste Kartennummer beim Speichern', async () => {
+    mocked.list.mockResolvedValue([{ id: 1, name: 'Meins', role: 'OWNER', createdAt: '' }])
+    mocked.rename.mockResolvedValue({ id: 1, name: 'Meins', role: 'OWNER', createdAt: '' })
+    render(<MemoryRouter><ProjectsPage /></MemoryRouter>)
+
+    fireEvent.click(await screen.findByLabelText('Projekt Meins umbenennen'))
+    const field = await screen.findByLabelText('Nächste Kartennummer')
+    await waitFor(() => expect(field).toHaveValue(5))
+    fireEvent.change(field, { target: { value: '13457' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Speichern' }))
+
+    await waitFor(() => expect(mocked.setNextCardNumber).toHaveBeenCalledWith(1, 13457))
+  })
+
+  it('zeigt eine Fehlermeldung, wenn die Startnummer zu klein ist', async () => {
+    mocked.list.mockResolvedValue([{ id: 1, name: 'Meins', role: 'OWNER', createdAt: '' }])
+    mocked.rename.mockResolvedValue({ id: 1, name: 'Meins', role: 'OWNER', createdAt: '' })
+    mocked.setNextCardNumber.mockRejectedValue(new Error('boom'))
+    render(<MemoryRouter><ProjectsPage /></MemoryRouter>)
+
+    fireEvent.click(await screen.findByLabelText('Projekt Meins umbenennen'))
+    const field = await screen.findByLabelText('Nächste Kartennummer')
+    await waitFor(() => expect(field).toHaveValue(5))
+    fireEvent.change(field, { target: { value: '3' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Speichern' }))
+
+    expect(
+      await screen.findByText('Nächste Nummer muss größer als die höchste vergebene Nummer sein.'),
+    ).toBeInTheDocument()
+  })
+
+  it('setzt keine Startnummer, wenn das Feld geleert wurde', async () => {
+    mocked.list.mockResolvedValue([{ id: 1, name: 'Meins', role: 'OWNER', createdAt: '' }])
+    mocked.rename.mockResolvedValue({ id: 1, name: 'Meins', role: 'OWNER', createdAt: '' })
+    render(<MemoryRouter><ProjectsPage /></MemoryRouter>)
+
+    fireEvent.click(await screen.findByLabelText('Projekt Meins umbenennen'))
+    const field = await screen.findByLabelText('Nächste Kartennummer')
+    await waitFor(() => expect(field).toHaveValue(5))
+    fireEvent.change(field, { target: { value: '' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Speichern' }))
+
+    await waitFor(() => expect(mocked.rename).toHaveBeenCalled())
+    expect(mocked.setNextCardNumber).not.toHaveBeenCalled()
   })
 
   it('legt kein Projekt ohne Name oder Owner-E-Mail an', async () => {

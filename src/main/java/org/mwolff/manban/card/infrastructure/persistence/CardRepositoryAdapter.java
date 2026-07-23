@@ -84,8 +84,26 @@ class CardRepositoryAdapter implements CardRepository {
   }
 
   @Override
-  public int maxNumberInProject(long projectId) {
-    return jpa.maxNumberInProject(projectId);
+  public int nextCardNumber(long projectId) {
+    // Untergrenze aus max(number)+1 und der optionalen Projekt-Startnummer. COALESCE fängt leeres
+    // Projekt bzw. nicht gesetzte Startnummer (NULL) ab; GREATEST liefert stets einen Wert.
+    return java.util.Objects.requireNonNull(
+        jdbc.queryForObject(
+            "SELECT GREATEST("
+                + "COALESCE((SELECT MAX(number) FROM card WHERE project_id = ?), 0) + 1, "
+                + "COALESCE((SELECT next_card_number FROM project WHERE id = ?), 0))",
+            Integer.class,
+            projectId,
+            projectId));
+  }
+
+  @Override
+  public int highestNumberInProject(long projectId) {
+    return java.util.Objects.requireNonNull(
+        jdbc.queryForObject(
+            "SELECT COALESCE(MAX(number), 0) FROM card WHERE project_id = ?",
+            Integer.class,
+            projectId));
   }
 
   @Override

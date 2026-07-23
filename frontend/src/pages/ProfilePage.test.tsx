@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { authApi } from '../api/auth'
 import { ApiError } from '../api/client'
 import { AuthProvider, useAuth } from '../auth/AuthContext'
+import { SnackbarProvider } from '../components/SnackbarProvider'
 import { ProfilePage } from './ProfilePage'
 
 vi.mock('../api/auth', () => ({
@@ -29,7 +30,9 @@ function renderProfile() {
   return render(
     <MemoryRouter>
       <AuthProvider>
-        <Gate />
+        <SnackbarProvider>
+          <Gate />
+        </SnackbarProvider>
       </AuthProvider>
     </MemoryRouter>,
   )

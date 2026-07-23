@@ -20,6 +20,7 @@ import { ApiError } from '../api/client'
 import { projectsApi, type Project } from '../api/projects'
 import { canManageProject, isPlatformAdmin } from '../lib/roles'
 import { useAuth } from '../auth/AuthContext'
+import { useSnackbar } from '../components/SnackbarProvider'
 import { useEditMode } from '../lib/EditModeContext'
 
 const ROLE_CHIP: Record<string, 'primary' | 'info' | 'default'> = {
@@ -37,6 +38,7 @@ export function ProjectsPage() {
   const location = useLocation()
   const { user } = useAuth()
   const { editMode } = useEditMode()
+  const notify = useSnackbar()
   const admin = isPlatformAdmin(user)
   const [projects, setProjects] = useState<Project[]>([])
   const [name, setName] = useState('')
@@ -46,6 +48,10 @@ export function ProjectsPage() {
   const [renameProject, setRenameProject] = useState<Project | null>(null)
   const [renameValue, setRenameValue] = useState('')
   const [renameError, setRenameError] = useState<string | null>(null)
+  // Nächste Kartennummer: mit dem effektiven Wert aus dem Backend vorbelegt (nächste logische
+  // Nummer); nextOriginal merkt sich den geladenen Wert, damit nur bei echter Änderung ein PUT geht.
+  const [nextValue, setNextValue] = useState('')
+  const [nextOriginal, setNextOriginal] = useState('')
 
   const reload = () => projectsApi.list().then(setProjects)
 
@@ -53,6 +59,12 @@ export function ProjectsPage() {
     setRenameProject(project)
     setRenameValue(project.name)
     setRenameError(null)
+    setNextValue('')
+    setNextOriginal('')
+    void projectsApi.nextCardNumber(project.id).then((r) => {
+      setNextValue(String(r.nextCardNumber))
+      setNextOriginal(String(r.nextCardNumber))
+    })
   }
   const closeRename = () => {
     setRenameProject(null)
@@ -63,11 +75,23 @@ export function ProjectsPage() {
   const handleRename = async (project: Project) => {
     try {
       await projectsApi.rename(project.id, renameValue.trim())
-      closeRename()
-      await reload()
     } catch {
       setRenameError('Umbenennen fehlgeschlagen.')
+      return
     }
+    // Nur bei geänderter, gültiger Startnummer setzen. Ein zu kleiner Wert (≤ höchste vergebene
+    // Nummer) liefert 400 → verständliche Meldung.
+    if (nextValue.trim() !== nextOriginal && Number(nextValue) >= 1) {
+      try {
+        await projectsApi.setNextCardNumber(project.id, Number(nextValue))
+      } catch {
+        setRenameError('Nächste Nummer muss größer als die höchste vergebene Nummer sein.')
+        return
+      }
+    }
+    notify('Projekt gespeichert.', 'success')
+    closeRename()
+    await reload()
   }
 
   useEffect(() => {
@@ -227,6 +251,16 @@ export function ProjectsPage() {
               onChange={(e) => setRenameValue(e.target.value)}
               sx={{ mt: 1 }}
               slotProps={{ htmlInput: { 'aria-label': 'Neuer Projektname' } }}
+            />
+            <TextField
+              fullWidth
+              type="number"
+              label="Nächste Kartennummer"
+              value={nextValue}
+              onChange={(e) => setNextValue(e.target.value)}
+              helperText="Nummer, die die nächste neue Karte bekommt."
+              sx={{ mt: 2 }}
+              slotProps={{ htmlInput: { 'aria-label': 'Nächste Kartennummer', min: 1 } }}
             />
           </DialogContent>
           <DialogActions>

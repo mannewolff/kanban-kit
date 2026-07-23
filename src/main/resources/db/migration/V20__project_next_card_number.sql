@@ -1,0 +1,11 @@
+-- Projekt-Startnummer: frei wählbarer Beginn des Nummernkreises
+-- ---------------------------------------------------------------------------
+-- Erlaubt einem Projekt, seine Kartennummerierung bei einem beliebigen Wert zu beginnen
+-- (z. B. 13457), statt zwingend bei 1 — Grundlage für den Umzug der Entwicklung ins kanban-kit,
+-- damit an die bisherige Issue-Nummerierung angeschlossen werden kann.
+--
+-- Die effektive nächste Nummer wird als Untergrenze (Floor) berechnet:
+--   GREATEST(max(number) + 1, next_card_number)
+-- NULL = Verhalten wie bisher (ab 1). Ein Wert wirkt nur, solange er über der höchsten bereits
+-- vergebenen Nummer liegt; danach übernimmt max(number)+1 von selbst.
+ALTER TABLE project ADD COLUMN next_card_number integer;

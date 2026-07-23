@@ -1,4 +1,3 @@
-import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import Stack from '@mui/material/Stack'
@@ -8,26 +7,24 @@ import { useState } from 'react'
 import { authApi } from '../api/auth'
 import { ApiError } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
+import { useSnackbar } from '../components/SnackbarProvider'
 
 /** Selbstpflege des Profils: Anzeigenamen des angemeldeten Benutzers ändern. */
 export function ProfilePage() {
   const { user, refresh } = useAuth()
   const [displayName, setDisplayName] = useState(user?.displayName ?? '')
   const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [saved, setSaved] = useState(false)
+  const notify = useSnackbar()
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault()
-    setError(null)
-    setSaved(false)
     setBusy(true)
     try {
       await authApi.updateProfile(displayName)
       await refresh()
-      setSaved(true)
+      notify('Anzeigename gespeichert.', 'success')
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : 'Speichern fehlgeschlagen.')
+      notify(e instanceof ApiError ? e.message : 'Speichern fehlgeschlagen.', 'error')
     } finally {
       setBusy(false)
     }
@@ -40,16 +37,11 @@ export function ProfilePage() {
       </Typography>
       <Box component="form" onSubmit={handleSubmit} sx={{ maxWidth: 480 }}>
         <Stack spacing={2}>
-          {error && <Alert severity="error">{error}</Alert>}
-          {saved && <Alert severity="success">Anzeigename gespeichert.</Alert>}
           <TextField label="E-Mail" value={user?.email ?? ''} disabled fullWidth />
           <TextField
             label="Anzeigename"
             value={displayName}
-            onChange={(e) => {
-              setDisplayName(e.target.value)
-              setSaved(false)
-            }}
+            onChange={(e) => setDisplayName(e.target.value)}
             required
             fullWidth
             slotProps={{ htmlInput: { maxLength: 120, 'aria-label': 'Anzeigename' } }}
