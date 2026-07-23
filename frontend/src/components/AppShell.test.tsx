@@ -29,6 +29,16 @@ vi.mock('../api/projects', () => ({
   },
 }))
 
+// Editiermodus gemockt (Default aus): Bestandstests laufen ohne Banner; ein Test schaltet ihn an.
+const editModeState = vi.hoisted(() => ({ editMode: false }))
+vi.mock('../lib/EditModeContext', () => ({
+  useEditMode: () => ({
+    editMode: editModeState.editMode,
+    setEditMode: vi.fn(),
+    toggleEditMode: vi.fn(),
+  }),
+}))
+
 const mockedBoards = boardsApi as unknown as {
   get: ReturnType<typeof vi.fn>
   list: ReturnType<typeof vi.fn>
@@ -86,6 +96,7 @@ describe('AppShell', () => {
   beforeEach(() => {
     vi.stubGlobal('localStorage', fakeStorage())
     vi.clearAllMocks()
+    editModeState.editMode = false
     logoutMock.mockResolvedValue(undefined)
     useAuthMock.mockReturnValue({ user: loggedInUser, logout: logoutMock })
     mockedBoards.get.mockResolvedValue({ id: 1, name: 'B', projectId: 5, columns: [] })
@@ -94,6 +105,17 @@ describe('AppShell', () => {
       { id: 5, name: 'P1', role: 'OWNER', createdAt: '' },
       { id: 6, name: 'P2', role: 'MEMBER', createdAt: '' },
     ])
+  })
+
+  it('blendet im Ansichtsmodus keinen Editiermodus-Banner ein', () => {
+    renderShell()
+    expect(screen.queryByText('Achtung, Du befindest Dich im Editiermodus')).not.toBeInTheDocument()
+  })
+
+  it('zeigt bei aktivem Editiermodus den Hinweis-Banner über dem Header', () => {
+    editModeState.editMode = true
+    renderShell()
+    expect(screen.getByText('Achtung, Du befindest Dich im Editiermodus')).toBeInTheDocument()
   })
 
   it('rendert Marke, Projekte-Navigation und den angemeldeten Nutzer', () => {

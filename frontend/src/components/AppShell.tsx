@@ -31,7 +31,9 @@ import { projectsApi, type Project } from '../api/projects'
 import { useAuth } from '../auth/AuthContext'
 import { buildNavItems, type BoardContext, type NavGroup, type NavLink, type NavNode } from '../layout/navItems'
 import { canManageBoards, isPlatformAdmin } from '../lib/roles'
+import { useEditMode } from '../lib/EditModeContext'
 import { useRefetchOnFocus } from '../lib/useRefetchOnFocus'
+import { EditModeBanner, EDIT_MODE_BANNER_HEIGHT } from './EditModeBanner'
 
 const DRAWER_WIDTH = 240
 const DRAWER_COLLAPSED_WIDTH = 56
@@ -373,23 +375,29 @@ export function AppShell() {
 
   const drawerWidth = collapsed ? DRAWER_COLLAPSED_WIDTH : DRAWER_WIDTH
 
+  const { editMode } = useEditMode()
+  // Im Editiermodus liegt der Hinweisstreifen über dem Header; Header und Inhalt weichen um die
+  // Bannerhöhe nach unten, damit nichts verdeckt wird.
+  const bannerOffset = editMode ? EDIT_MODE_BANNER_HEIGHT : 0
+
   // Maße des Kontextbereichs (unter der Kopfleiste, rechts der Sidebar) als CSS-Variablen an :root,
   // damit portalbasierte Overlays (z. B. der Kartendetail-Dialog) sich darin positionieren können.
-  // Reaktiv zur Drawer-Breite; Default 0 gilt außerhalb der Shell (volle Zentrierung).
+  // Reaktiv zur Drawer-Breite und zum Editiermodus-Banner; Default 0 gilt außerhalb der Shell.
   useEffect(() => {
     const root = document.documentElement
     root.style.setProperty('--app-content-left', `${drawerWidth}px`)
-    root.style.setProperty('--app-content-top', `${APPBAR_HEIGHT}px`)
+    root.style.setProperty('--app-content-top', `${APPBAR_HEIGHT + bannerOffset}px`)
     return () => {
       root.style.removeProperty('--app-content-left')
       root.style.removeProperty('--app-content-top')
     }
-  }, [drawerWidth])
+  }, [drawerWidth, bannerOffset])
   const initial = user?.displayName?.trim().charAt(0).toUpperCase() ?? '?'
 
   return (
     <Box sx={{ display: 'flex', minHeight: '100vh' }}>
-      <AppBar position="fixed" sx={{ zIndex: (t) => t.zIndex.drawer + 1 }}>
+      <EditModeBanner />
+      <AppBar position="fixed" sx={{ zIndex: (t) => t.zIndex.drawer + 1, top: `${bannerOffset}px` }}>
         <Toolbar>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexGrow: 1 }}>
             <Box component="img" src="/knight.svg" alt="" sx={{ width: 22, height: 22, filter: 'brightness(0) invert(1)' }} />
@@ -449,7 +457,7 @@ export function AppShell() {
           },
         }}
       >
-        <Toolbar />
+        <Toolbar sx={{ mt: `${bannerOffset}px` }} />
         <Box sx={{ overflow: 'auto', display: 'flex', flexDirection: 'column', height: '100%' }}>
           <Box sx={{ flexGrow: 1 }}>
             <List>{navItems.map((node) => (isGroup(node) ? renderGroup(node) : renderLink(node, false)))}</List>
@@ -477,7 +485,7 @@ export function AppShell() {
       </Drawer>
 
       <Box component="main" sx={{ flexGrow: 1, p: 3, bgcolor: 'background.default', minWidth: 0 }}>
-        <Toolbar />
+        <Toolbar sx={{ mt: `${bannerOffset}px` }} />
         <Outlet />
       </Box>
     </Box>
