@@ -21,12 +21,16 @@ import org.mwolff.manban.project.domain.ProjectRole;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 
 /** End-to-End-Test für Karten-CRUD, projektweite Nummern, Abhängigkeiten und Archiv-Flow. */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK)
 @AutoConfigureMockMvc
+// End-to-End-Suite deckt Karten-CRUD, Nummerierung, Abhängigkeiten, Transfer und Archiv-Flow
+// ab; die Methodenzahl ist für eine IT dieses Umfangs gewollt, nicht ein Refactoring-Signal.
+@SuppressWarnings("PMD.TooManyMethods")
 class CardIT extends AbstractIntegrationTest {
 
   private static final String PASSWORD = "sup3r-secret";
@@ -36,6 +40,7 @@ class CardIT extends AbstractIntegrationTest {
   @Autowired private ProjectMembershipRepository memberships;
   @Autowired private PasswordEncoder passwordEncoder;
   @Autowired private ObjectMapper json;
+  @Autowired private JdbcTemplate jdbc;
 
   private long userId(String email) {
     return users.findByEmail(email).orElseThrow().id();
@@ -722,6 +727,32 @@ class CardIT extends AbstractIntegrationTest {
                 .contentType("application/json")
                 .content("{\"targetBoardId\":%d,\"targetColumnId\":%d}".formatted(boardIdB, colB)))
         .andExpect(status().isForbidden());
+  }
+
+  @Test
+  void startNumberFloorsCardNumbering() throws Exception {
+    Cookie alice = loginAs("startnum-owner@example.com");
+    long projectId = createProject("startnum-owner@example.com", "StartNum");
+    JsonNode board = createBoard(alice, projectId);
+    long boardId = board.get("id").asLong();
+    long columnId = board.get("columns").get(0).get("id").asLong();
+
+    // Startnummer 13457 setzen — der Owner-Endpoint dafür kommt in #390, hier direkt per SQL.
+    jdbc.update("UPDATE project SET next_card_number = 13457 WHERE id = ?", projectId);
+
+    // Leeres Projekt + Startnummer → erste Karte 13457, zweite 13458 (ab dann gewinnt max+1).
+    org.assertj.core.api.Assertions.assertThat(
+            createCard(alice, boardId, columnId, "A", null).get("number").asInt())
+        .isEqualTo(13457);
+    org.assertj.core.api.Assertions.assertThat(
+            createCard(alice, boardId, columnId, "B", null).get("number").asInt())
+        .isEqualTo(13458);
+
+    // Startnummer unter dem aktuellen Max → GREATEST ignoriert sie, max+1 (13459) gewinnt.
+    jdbc.update("UPDATE project SET next_card_number = 100 WHERE id = ?", projectId);
+    org.assertj.core.api.Assertions.assertThat(
+            createCard(alice, boardId, columnId, "C", null).get("number").asInt())
+        .isEqualTo(13459);
   }
 
   @Test

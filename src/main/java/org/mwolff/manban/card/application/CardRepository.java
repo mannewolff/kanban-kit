@@ -26,8 +26,14 @@ public interface CardRepository {
   /** Nicht-archivierte Karten, die vor {@code threshold} nach Done verschoben wurden. */
   List<Card> findArchivableDoneCards(Instant threshold);
 
-  /** Höchste vergebene projekt-scoped Nummer (0, wenn keine Karten). */
-  int maxNumberInProject(long projectId);
+  /**
+   * Nächste zu vergebende projektweite Kartennummer: die Untergrenze (Floor) aus höchster bereits
+   * vergebener Nummer + 1 und der optionalen Projekt-Startnummer ({@code
+   * project.next_card_number}). Ohne gesetzte Startnummer schlicht {@code max(number) + 1} (bzw. 1,
+   * wenn das Projekt keine nummerierten Karten hat). Eine gesetzte Startnummer wirkt nur, solange
+   * sie über der höchsten vergebenen Nummer liegt.
+   */
+  int nextCardNumber(long projectId);
 
   /** Höchste Position unter nicht-archivierten Karten der Spalte (-1, wenn keine). */
   int maxActivePositionInColumn(long columnId);
