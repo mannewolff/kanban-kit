@@ -11,6 +11,7 @@ import org.mwolff.manban.project.domain.Permission;
 import org.mwolff.manban.project.domain.Project;
 import org.mwolff.manban.project.domain.ProjectMembership;
 import org.mwolff.manban.project.domain.ProjectRole;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -28,6 +29,7 @@ public class ProjectService {
   private final PermissionChecker permissions;
   private final AppUserRepository users;
   private final InvitationMailer mailer;
+  private final ApplicationEventPublisher events;
   private final AuthProperties authProperties;
   private final Clock clock;
 
@@ -37,6 +39,7 @@ public class ProjectService {
       PermissionChecker permissions,
       AppUserRepository users,
       InvitationMailer mailer,
+      ApplicationEventPublisher events,
       AuthProperties authProperties,
       Clock clock) {
     this.projects = projects;
@@ -44,6 +47,7 @@ public class ProjectService {
     this.permissions = permissions;
     this.users = users;
     this.mailer = mailer;
+    this.events = events;
     this.authProperties = authProperties;
     this.clock = clock;
   }
@@ -73,6 +77,9 @@ public class ProjectService {
     memberships.save(
         new ProjectMembership(
             null, project.requireId(), owner.requireId(), ProjectRole.OWNER, now));
+    // Synchron im selben Transaktions-Scope: der Board-seitige Listener legt das Default-Board an;
+    // scheitert das, rollt die Projektanlage (inkl. Mail-Auslösung) atomar mit zurück.
+    events.publishEvent(new ProjectCreatedEvent(project.requireId(), owner.requireId()));
     mailer.sendProjectAssignedEmail(
         owner.email(),
         project.name(),
