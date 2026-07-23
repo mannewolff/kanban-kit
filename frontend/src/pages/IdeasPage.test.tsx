@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter, Route, Routes, useNavigate } from 'react-router-dom'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { boardsApi, type Board } from '../api/boards'
 import { ideasApi, type Idea } from '../api/ideas'
 import { projectsApi } from '../api/projects'
@@ -19,6 +19,16 @@ vi.mock('../api/ideas', () => ({
 }))
 vi.mock('../api/boards', () => ({ boardsApi: { list: vi.fn() } }))
 vi.mock('../api/projects', () => ({ projectsApi: { list: vi.fn() } }))
+
+// Das Planungs-Board ist separat getestet (IdeaPlanningBoard.test.tsx) — hier durch einen Stub
+// ersetzt, damit die Toggle-Logik der Seite isoliert geprüft werden kann.
+vi.mock('../components/IdeaPlanningBoard', () => ({
+  IdeaPlanningBoard: ({ projectId, canEdit }: { projectId: number; canEdit: boolean }) => (
+    <div data-testid="planning-board">
+      board {projectId} canEdit {String(canEdit)}
+    </div>
+  ),
+}))
 
 // NewCardModal ist separat getestet — hier durch einen schlanken Stub ersetzt, der onSubmit mit
 // einer festen Idee auslöst, damit der handleCreate-Pfad der Seite geprüft werden kann.
@@ -123,7 +133,26 @@ function renderPage({
   )
 }
 
-beforeEach(() => vi.clearAllMocks())
+function fakeStorage(): Storage {
+  const map = new Map<string, string>()
+  return {
+    getItem: (k) => map.get(k) ?? null,
+    setItem: (k, v) => void map.set(k, String(v)),
+    removeItem: (k) => void map.delete(k),
+    clear: () => map.clear(),
+    key: (i) => [...map.keys()][i] ?? null,
+    get length() {
+      return map.size
+    },
+  }
+}
+
+beforeEach(() => {
+  vi.clearAllMocks()
+  vi.stubGlobal('localStorage', fakeStorage())
+})
+
+afterEach(() => vi.unstubAllGlobals())
 
 describe('IdeasPage', () => {
   it('meldet eine ungültige Projekt-ID', async () => {
@@ -382,5 +411,67 @@ describe('IdeasPage', () => {
     fireEvent(window, new Event('focus'))
 
     expect(mockedIdeas.list).not.toHaveBeenCalled()
+  })
+
+  it('zeigt standardmäßig die Liste, nicht das Planungs-Board', async () => {
+    renderPage({ ideas: [poolA] })
+    await screen.findByText('Pool A')
+
+    expect(screen.getByRole('button', { name: 'Liste' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Planen' })).toBeInTheDocument()
+    expect(screen.queryByTestId('planning-board')).not.toBeInTheDocument()
+  })
+
+  it('schaltet auf „Planen" um, blendet die Liste aus und merkt die Ansicht', async () => {
+    renderPage({ ideas: [poolA] })
+    await screen.findByText('Pool A')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Planen' }))
+
+    const board = await screen.findByTestId('planning-board')
+    expect(board).toHaveTextContent('board 5')
+    expect(board).toHaveTextContent('canEdit true')
+    expect(screen.queryByText('Pool A')).not.toBeInTheDocument()
+    expect(localStorage.getItem('manban.ideasView')).toBe('planen')
+  })
+
+  it('startet im „Planen"-Modus, wenn er zuletzt gewählt war', async () => {
+    localStorage.setItem('manban.ideasView', 'planen')
+    renderPage({ ideas: [poolA] })
+
+    expect(await screen.findByTestId('planning-board')).toBeInTheDocument()
+    expect(screen.queryByText('Pool A')).not.toBeInTheDocument()
+  })
+
+  it('bleibt in der Liste, wenn der bereits aktive Umschalter geklickt wird', async () => {
+    renderPage({ ideas: [poolA] })
+    await screen.findByText('Pool A')
+
+    // MUI liefert im exklusiven Modus beim Klick auf den aktiven Button null -> keine Änderung.
+    fireEvent.click(screen.getByRole('button', { name: 'Liste' }))
+
+    expect(screen.getByText('Pool A')).toBeInTheDocument()
+    expect(screen.queryByTestId('planning-board')).not.toBeInTheDocument()
+  })
+
+  it('funktioniert bei einem localStorage-Fehler (Default Liste, Umschalten ohne Crash)', async () => {
+    const boom = () => {
+      throw new Error('storage disabled')
+    }
+    vi.stubGlobal('localStorage', {
+      getItem: boom,
+      setItem: boom,
+      removeItem: boom,
+      clear: boom,
+      key: boom,
+      get length() {
+        return 0
+      },
+    } as unknown as Storage)
+    renderPage({ ideas: [poolA] })
+    await screen.findByText('Pool A')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Planen' }))
+    expect(await screen.findByTestId('planning-board')).toBeInTheDocument()
   })
 })

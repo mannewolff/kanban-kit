@@ -9,6 +9,8 @@ import DialogTitle from '@mui/material/DialogTitle'
 import Paper from '@mui/material/Paper'
 import Stack from '@mui/material/Stack'
 import TextField from '@mui/material/TextField'
+import ToggleButton from '@mui/material/ToggleButton'
+import ToggleButtonGroup from '@mui/material/ToggleButtonGroup'
 import Typography from '@mui/material/Typography'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
@@ -16,12 +18,34 @@ import { boardsApi, type Board } from '../api/boards'
 import { ideasApi, type Idea } from '../api/ideas'
 import { projectsApi } from '../api/projects'
 import { Breadcrumbs } from '../components/Breadcrumbs'
+import { IdeaPlanningBoard } from '../components/IdeaPlanningBoard'
 import { NewCardModal, type NewItemInput } from '../components/NewCardModal'
 import { canEditCards } from '../lib/roles'
 import { useRefetchOnFocus } from '../lib/useRefetchOnFocus'
 
 /** Filter nach notiertem Zielboard: alle, ohne Zielboard, oder eine konkrete Board-ID. */
 type BoardFilter = 'all' | 'none' | number
+
+/** Ansicht der Ideen-Seite: die filterbare Liste oder das gestapelte Planungs-Board. */
+type ViewMode = 'liste' | 'planen'
+
+const VIEW_STORAGE_KEY = 'manban.ideasView'
+
+function readView(): ViewMode {
+  try {
+    return localStorage.getItem(VIEW_STORAGE_KEY) === 'planen' ? 'planen' : 'liste'
+  } catch {
+    return 'liste'
+  }
+}
+
+function writeView(view: ViewMode): void {
+  try {
+    localStorage.setItem(VIEW_STORAGE_KEY, view)
+  } catch {
+    // localStorage nicht verfügbar — kein Hard-Fail
+  }
+}
 
 /**
  * Projektweite Ideen-Seite (Projekt-Ebene, Geschwister von „Boards"): listet den board-losen
@@ -43,8 +67,14 @@ export function IdeasPage() {
   const [createOpen, setCreateOpen] = useState(false)
   const [planTarget, setPlanTarget] = useState<Idea | null>(null)
   const [planBoardId, setPlanBoardId] = useState<number>(0)
+  const [view, setView] = useState<ViewMode>(readView)
 
   const canEdit = canEditCards(role)
+
+  const changeView = (next: ViewMode) => {
+    setView(next)
+    writeView(next)
+  }
 
   const reload = useCallback(() => {
     if (!validId) {
@@ -137,13 +167,31 @@ export function IdeasPage() {
             { label: 'Ideen' },
           ]}
         />
-        {canEdit && (
-          <Button variant="contained" onClick={() => setCreateOpen(true)}>
-            Idee anlegen
-          </Button>
-        )}
+        <Stack direction="row" spacing={1} alignItems="center">
+          <ToggleButtonGroup
+            size="small"
+            exclusive
+            value={view}
+            onChange={(_, next) => {
+              if (next !== null) changeView(next)
+            }}
+            aria-label="Ansicht"
+          >
+            <ToggleButton value="liste">Liste</ToggleButton>
+            <ToggleButton value="planen">Planen</ToggleButton>
+          </ToggleButtonGroup>
+          {view === 'liste' && canEdit && (
+            <Button variant="contained" onClick={() => setCreateOpen(true)}>
+              Idee anlegen
+            </Button>
+          )}
+        </Stack>
       </Stack>
 
+      {view === 'planen' ? (
+        <IdeaPlanningBoard projectId={id} canEdit={canEdit} />
+      ) : (
+        <>
       <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ mb: 3 }}>
         <TextField
           size="small"
@@ -269,6 +317,8 @@ export function IdeasPage() {
           </Button>
         </DialogActions>
       </Dialog>
+        </>
+      )}
     </Box>
   )
 }
