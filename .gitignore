@@ -24,3 +24,5 @@ docs-site/.vitepress/cache/
 
 # OS / Editor
 .DS_Store
+
+install.mjs
