@@ -20,7 +20,7 @@ jobs:
       # deterministisch gleich origin/production; die gitignorete .env bleibt unberührt.
       - name: Pull production und Container neu bauen
         run: |
-          cd /root/opt/manban
+          cd /root/opt/kanban-kit
           git fetch origin production
           git reset --hard origin/production
           docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build

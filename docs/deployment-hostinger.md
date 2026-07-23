@@ -39,10 +39,10 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
    dig kanban.mwolff.org +short  # -> 72.60.131.171
    ```
 
-3. **Code holen.** Repo (Branch `production`) nach `/root/opt/manban` klonen (bzw. `git pull`):
+3. **Code holen.** Repo (Branch `production`) nach `/root/opt/kanban-kit` klonen (bzw. `git pull`):
    ```bash
-   git clone -b production https://github.com/mannewolff/kanban-kit.git /root/opt/manban
-   cd /root/opt/manban
+   git clone -b production https://github.com/mannewolff/kanban-kit.git /root/opt/kanban-kit
+   cd /root/opt/kanban-kit
    ```
 
 4. **`.env` anlegen** (aus `.env.example`) und die echten Prod-Werte setzen:
@@ -92,7 +92,7 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
 ## Update-Routine
 
 ```bash
-cd /root/opt/manban
+cd /root/opt/kanban-kit
 git pull
 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
 ```
@@ -113,7 +113,7 @@ Einmalige Einrichtung (Server + GitHub, nicht Teil des Repos):
 1. **Runner installieren** auf dem VPS und als Dienst einrichten (`config.sh` gegen dieses Repo,
    dann `svc.sh install` / `svc.sh start`) — Befehle/Token unter *Settings → Actions → Runners →
    New self-hosted runner*.
-2. **Docker-Rechte:** der Runner-User muss Docker fahren und in `/root/opt/manban` fetchen/resetten
+2. **Docker-Rechte:** der Runner-User muss Docker fahren und in `/root/opt/kanban-kit` fetchen/resetten
    dürfen.
 3. **Sicherheit (Pflicht bei öffentlichem Repo):** Der Workflow triggert **ausschließlich** auf
    `push` nach `production`, **nie** auf `pull_request` — so kann kein Fork-Code auf dem VPS laufen.

@@ -94,7 +94,7 @@ jobs:
     steps:
       - name: Pull production und Container neu bauen
         run: |
-          cd /root/opt/manban
+          cd /root/opt/kanban-kit
           git fetch origin production
           git reset --hard origin/production
           docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
@@ -106,7 +106,7 @@ Entspricht dem manuellen Ablauf aus [docs/deployment-hostinger.md](docs/deployme
 - **Beide Compose-Files** (`-f docker-compose.yml -f docker-compose.prod.yml`) — sonst fehlte das Prod-Overlay (Traefik/TLS).
 
 - Vorteil: Keine Änderung an Pfaden, Volumes oder `.env`.
-- Preis: Der Runner läuft im gewählten Verzeichnis (hier `/root/opt/manban`, also als root) und muss dort fetchen/resetten dürfen. Für ein öffentliches Repo ist kein git-Credential nötig (HTTPS-Fetch anonym).
+- Preis: Der Runner läuft im gewählten Verzeichnis (hier `/root/opt/kanban-kit`, also als root) und muss dort fetchen/resetten dürfen. Für ein öffentliches Repo ist kein git-Credential nötig (HTTPS-Fetch anonym).
 
 ### Entscheidung
 
@@ -127,4 +127,4 @@ Solange der Deploy ausschließlich am `production`-Push hängt, ist die Konfigur
 - **Einmalige Server-/GitHub-Einrichtung (manuell):** Runner als Dienst installieren (`config.sh` + `svc.sh`, siehe oben), Docker-Rechte, und in den Repo-Actions-Settings Fork-Runs auf „Approval" stellen.
 - Optional: Health-Check nach dem Deploy ergänzen, um fehlgeschlagene Builds sichtbar zu machen.
 
-Erledigt: Verzeichnis (`/root/opt/manban`) und `.env` sind über [docs/deployment-hostinger.md](docs/deployment-hostinger.md) geklärt; Variante B ist als Workflow umgesetzt.
+Erledigt: Verzeichnis (`/root/opt/kanban-kit`) und `.env` sind über [docs/deployment-hostinger.md](docs/deployment-hostinger.md) geklärt; Variante B ist als Workflow umgesetzt.
