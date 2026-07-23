@@ -21,6 +21,7 @@ import { Breadcrumbs } from '../components/Breadcrumbs'
 import { IdeaPlanningBoard } from '../components/IdeaPlanningBoard'
 import { NewCardModal, type NewItemInput } from '../components/NewCardModal'
 import { canEditCards } from '../lib/roles'
+import { useProjectIdeaEvents } from '../lib/useProjectIdeaEvents'
 import { useRefetchOnFocus } from '../lib/useRefetchOnFocus'
 
 /** Filter nach notiertem Zielboard: alle, ohne Zielboard, oder eine konkrete Board-ID. */
@@ -110,8 +111,14 @@ export function IdeasPage() {
     }
   }, [id, validId])
 
-  // Beim Zurückkehren in den Tab neu laden (Ideen können per Ingest in einer anderen Session
-  // hinzugekommen sein). useRefetchOnFocus hält die aktuelle Referenz per Ref.
+  // Live nachziehen: der Server pusht per SSE, sobald sich der Ideen-Pool des Projekts ändert
+  // (Ingest oder andere Nutzer). useProjectIdeaEvents hält die aktuelle Referenz per Ref.
+  useProjectIdeaEvents(id, () => {
+    void reload().catch(() => {})
+  })
+
+  // Beim Zurückkehren in den Tab neu laden — füllt Lücken nach einem SSE-Reconnect.
+  // useRefetchOnFocus hält die aktuelle Referenz per Ref.
   useRefetchOnFocus(() => {
     void reload().catch(() => {})
   })
