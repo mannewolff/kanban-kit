@@ -2120,6 +2120,36 @@ class CardServiceTest {
   }
 
   @Test
+  void createProjectIdea_publishesIdeasChanged() {
+    service.createProjectIdea(1L, PROJECT, "Idee", "d", 7L);
+
+    verify(events).publishEvent(new ProjectIdeasChangedEvent(PROJECT));
+  }
+
+  @Test
+  void planOntoBoard_publishesIdeasChanged() {
+    when(cards.findById(1L)).thenReturn(Optional.of(poolIdea(1L)));
+    when(columns.findByBoardId(BOARD))
+        .thenReturn(List.of(column(21L, "Ready", 1), column(20L, "Backlog", 0)));
+    when(cards.nextCardNumber(PROJECT)).thenReturn(5);
+    when(cards.maxActivePositionInColumn(20L)).thenReturn(2);
+
+    service.planOntoBoard(9L, 1L, BOARD);
+
+    verify(events).publishEvent(new ProjectIdeasChangedEvent(PROJECT));
+  }
+
+  @Test
+  void moveBackToPool_publishesIdeasChanged() {
+    when(cards.findById(1L))
+        .thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
+
+    service.moveBackToPool(9L, 1L);
+
+    verify(events).publishEvent(new ProjectIdeasChangedEvent(PROJECT));
+  }
+
+  @Test
   void listProjectIdeas_returnsOnlyCards_forMember() {
     when(cards.findIdeasByProjectId(PROJECT))
         .thenReturn(List.of(poolIdea(1L), card(2L, 20L, 2, false, null, CardType.EPIC, null, "E")));

@@ -99,6 +99,16 @@ public class CardService {
     events.publishEvent(new BoardChangedEvent(boardId, type, cardId));
   }
 
+  /**
+   * Publiziert ein {@link ProjectIdeasChangedEvent} für Live-Updates des projektweiten Ideen-Pools.
+   * Der Ideen-Event-Listener reicht es transaktionsgebunden (nach Commit) an die SSE-Registry
+   * weiter — bei Rollback entsteht kein Event. Wird am erfolgreichen Ende jeder pool-relevanten
+   * Karten-Mutation aufgerufen (Idee anlegen, einplanen, zurück in den Pool).
+   */
+  private void publishIdeasChanged(long projectId) {
+    events.publishEvent(new ProjectIdeasChangedEvent(projectId));
+  }
+
   @Transactional
   public CardView create(
       long userId,
@@ -701,6 +711,7 @@ public class CardService {
                 projectId,
                 targetBoardId));
     activity.add(saved.requireId(), userId, CardActivityType.CREATED, "Idee angelegt", now);
+    publishIdeasChanged(projectId);
     return view(saved);
   }
 
@@ -730,6 +741,7 @@ public class CardService {
     transitions.open(cardId, columnId, backlog.name(), now);
     activity.add(cardId, userId, CardActivityType.PROMOTED, "Auf Board eingeplant", now);
     publishChanged(targetBoardId, ChangeType.CREATED, cardId);
+    publishIdeasChanged(card.projectId());
     return view(planned);
   }
 
@@ -746,6 +758,7 @@ public class CardService {
     activity.add(
         cardId, userId, CardActivityType.IDEA_STORED, "Zurück in den Ideen-Pool", clock.instant());
     publishChanged(card.requireBoardId(), ChangeType.MOVED, cardId);
+    publishIdeasChanged(card.projectId());
     return view(pooled);
   }
 
