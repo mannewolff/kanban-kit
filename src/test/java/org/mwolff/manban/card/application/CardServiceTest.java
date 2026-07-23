@@ -764,17 +764,6 @@ class CardServiceTest {
   }
 
   @Test
-  void archive_throwsBoardNotFound_whenBoardUnknown() {
-    // Given
-    when(cards.findById(1L))
-        .thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
-    when(boards.findById(BOARD)).thenReturn(Optional.empty());
-
-    // When / Then
-    assertThatThrownBy(() -> service.archive(1L, 1L)).isInstanceOf(BoardNotFoundException.class);
-  }
-
-  @Test
   void restore_appendsAtNextPosition() {
     // Given
     when(cards.findById(1L))
@@ -2199,5 +2188,58 @@ class CardServiceTest {
 
     verify(permissions).requireMembership(1L, PROJECT);
     assertThat(result).singleElement().extracting(CardService.CardView::id).isEqualTo(1L);
+  }
+
+  // --- Board-lose Pool-Ideen editierbar (#405) --------------------------
+
+  @Test
+  void update_onBoardlessPoolIdea_editsViaProjectRight_andSkipsBoardEvent() {
+    // Board-lose Idee: Recht projekt-basiert (card.projectId()), kein Board-Live-Update.
+    when(cards.findById(1L)).thenReturn(Optional.of(poolIdea(1L)));
+
+    CardService.CardView view = service.update(9L, 1L, "Neu", null, null, null, null, null);
+
+    verify(permissions).require(9L, PROJECT, Permission.TICKET_UPDATE);
+    verify(activity).add(1L, 9L, CardActivityType.UPDATED, "Karte bearbeitet", FIXED);
+    verify(events, never()).publishEvent(any(BoardChangedEvent.class));
+    assertThat(view.title()).isEqualTo("Neu");
+    assertThat(view.boardId()).isNull();
+  }
+
+  @Test
+  void update_onBoardlessPoolIdea_setsDueDate() {
+    // Fälligkeit an einer board-losen Idee editierbar.
+    when(cards.findById(1L)).thenReturn(Optional.of(poolIdea(1L)));
+    Instant due = Instant.parse("2026-03-01T00:00:00Z");
+
+    ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
+    service.update(9L, 1L, "Neu", null, null, null, null, due);
+
+    verify(cards).save(captor.capture());
+    assertThat(captor.getValue().dueDate()).isEqualTo(due);
+  }
+
+  @Test
+  void setAssignees_onBoardlessPoolIdea_worksViaProjectRight_andSkipsBoardEvent() {
+    when(cards.findById(1L)).thenReturn(Optional.of(poolIdea(1L)));
+    when(memberships.findByProjectIdAndUserId(PROJECT, 7L))
+        .thenReturn(Optional.of(mock(ProjectMembership.class)));
+
+    service.setAssignees(3L, 1L, List.of(7L));
+
+    verify(permissions).require(3L, PROJECT, Permission.TICKET_UPDATE);
+    verify(assignees).replaceAssignees(1L, List.of(7L));
+    verify(activity).add(1L, 3L, CardActivityType.ASSIGNED, "Zuständige geändert", FIXED);
+    verify(events, never()).publishEvent(any(BoardChangedEvent.class));
+  }
+
+  @Test
+  void listActivity_onBoardlessPoolIdea_checksMembershipViaProject() {
+    when(cards.findById(1L)).thenReturn(Optional.of(poolIdea(1L)));
+    when(activity.findByCardId(1L)).thenReturn(List.of());
+
+    service.listActivity(5L, 1L);
+
+    verify(permissions).requireMembership(5L, PROJECT);
   }
 }

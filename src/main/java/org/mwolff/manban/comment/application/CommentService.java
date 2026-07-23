@@ -6,9 +6,6 @@ import java.util.List;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.auth.application.AppUserRepository;
 import org.mwolff.manban.auth.domain.AppUser;
-import org.mwolff.manban.board.application.BoardNotFoundException;
-import org.mwolff.manban.board.application.BoardRepository;
-import org.mwolff.manban.board.domain.Board;
 import org.mwolff.manban.card.application.CardNotFoundException;
 import org.mwolff.manban.card.application.CardRepository;
 import org.mwolff.manban.card.domain.Card;
@@ -29,7 +26,6 @@ public class CommentService {
 
   private final CommentRepository comments;
   private final CardRepository cards;
-  private final BoardRepository boards;
   private final PermissionChecker permissions;
   private final AppUserRepository users;
   private final Clock clock;
@@ -37,13 +33,11 @@ public class CommentService {
   public CommentService(
       CommentRepository comments,
       CardRepository cards,
-      BoardRepository boards,
       PermissionChecker permissions,
       AppUserRepository users,
       Clock clock) {
     this.comments = comments;
     this.cards = cards;
-    this.boards = boards;
     this.permissions = permissions;
     this.users = users;
     this.clock = clock;
@@ -86,9 +80,10 @@ public class CommentService {
   }
 
   private long projectIdOfCard(long cardId) {
+    // Projekt-basiert über card.projectId() (immer gesetzt, V18) — nicht board-abgeleitet, damit
+    // Kommentare auch an board-losen Pool-Ideen funktionieren (#405).
     Card card = cards.findById(cardId).orElseThrow(CardNotFoundException::new);
-    Board board = boards.findById(card.requireBoardId()).orElseThrow(BoardNotFoundException::new);
-    return board.projectId();
+    return card.projectId();
   }
 
   private static CommentView view(Comment c) {

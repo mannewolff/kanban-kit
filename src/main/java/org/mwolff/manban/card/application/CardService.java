@@ -378,7 +378,7 @@ public class CardService {
     if (dependsOn != null) {
       setDependencies(saved, dependsOn);
     }
-    publishChanged(saved.requireBoardId(), ChangeType.UPDATED, cardId);
+    publishChangedIfOnBoard(saved.boardId(), ChangeType.UPDATED, cardId);
     return view(saved);
   }
 
@@ -393,12 +393,12 @@ public class CardService {
     if (card.type() != CardType.CARD) {
       throw new InvalidDependencyException("Nur Karten haben Zuständige");
     }
-    Board board = boards.findById(card.requireBoardId()).orElseThrow(BoardNotFoundException::new);
-    permissions.require(userId, board.projectId(), Permission.TICKET_UPDATE);
+    // Projekt-basierte Rechte (#405): auch board-lose Pool-Ideen haben Zuständige.
+    permissions.require(userId, card.projectId(), Permission.TICKET_UPDATE);
 
-    assignValidatedAssignees(cardId, board.projectId(), assigneeIds);
+    assignValidatedAssignees(cardId, card.projectId(), assigneeIds);
     activity.add(cardId, userId, CardActivityType.ASSIGNED, "Zuständige geändert", clock.instant());
-    publishChanged(card.requireBoardId(), ChangeType.UPDATED, cardId);
+    publishChangedIfOnBoard(card.boardId(), ChangeType.UPDATED, cardId);
     return view(card);
   }
 
@@ -412,8 +412,9 @@ public class CardService {
     if (card.type() != CardType.CARD) {
       throw new InvalidDependencyException("Nur Karten haben Labels");
     }
-    Board board = boards.findById(card.requireBoardId()).orElseThrow(BoardNotFoundException::new);
-    permissions.require(userId, board.projectId(), Permission.TICKET_UPDATE);
+    // Projekt-basierte Rechte (#405). Labels bleiben board-scoped: eine board-lose Pool-Idee hat
+    // kein Board mit Labels; das Frontend ruft setLabels für sie nicht auf.
+    permissions.require(userId, card.projectId(), Permission.TICKET_UPDATE);
 
     assignValidatedLabels(cardId, card.requireBoardId(), labelIds);
     publishChanged(card.requireBoardId(), ChangeType.UPDATED, cardId);
@@ -781,12 +782,14 @@ public class CardService {
         .toList();
   }
 
-  /** Aktivitätsverlauf einer Karte (chronologisch). Erfordert Board-Mitgliedschaft (Leserecht). */
+  /**
+   * Aktivitätsverlauf einer Karte (chronologisch). Erfordert Projekt-Mitgliedschaft (Leserecht),
+   * geprüft über {@code card.projectId()} — auch für board-lose Pool-Ideen (#405).
+   */
   @Transactional(readOnly = true)
   public List<CardActivity> listActivity(long userId, long cardId) {
     Card card = cards.findById(cardId).orElseThrow(CardNotFoundException::new);
-    Board board = boards.findById(card.requireBoardId()).orElseThrow(BoardNotFoundException::new);
-    permissions.requireMembership(userId, board.projectId());
+    permissions.requireMembership(userId, card.projectId());
     return activity.findByCardId(cardId);
   }
 
@@ -868,16 +871,30 @@ public class CardService {
         .toList();
   }
 
-  /** Lädt die Karte und verlangt das je nach Kartentyp (Ticket/Epic) passende Recht. */
+  /**
+   * Lädt die Karte und verlangt das je nach Kartentyp (Ticket/Epic) passende Recht. Die Rechte sind
+   * projekt-basiert und werden über {@code card.projectId()} (immer gesetzt, V18) geprüft — nicht
+   * über das Board. So sind auch board-lose Pool-Ideen (#405) editierbar; für board-gebundene Karten
+   * ist die Prüfung identisch (Projekt-ID stimmt mit dem Board-Projekt überein).
+   */
   private Card requireCardOp(
       long userId, long cardId, Permission ticketPermission, Permission epicPermission) {
     Card card = cards.findById(cardId).orElseThrow(CardNotFoundException::new);
-    Board board = boards.findById(card.requireBoardId()).orElseThrow(BoardNotFoundException::new);
     permissions.require(
         userId,
-        board.projectId(),
+        card.projectId(),
         card.type() == CardType.EPIC ? epicPermission : ticketPermission);
     return card;
+  }
+
+  /**
+   * Feuert ein Board-Live-Update nur für board-gebundene Karten. Board-lose Pool-Ideen (#405) haben
+   * kein Board, das per SSE nachziehen müsste — für sie entfällt das Event.
+   */
+  private void publishChangedIfOnBoard(@Nullable Long boardId, ChangeType type, long cardId) {
+    if (boardId != null) {
+      publishChanged(boardId, type, cardId);
+    }
   }
 
   private Card requireEpicInBoard(long epicId, long boardId) {
