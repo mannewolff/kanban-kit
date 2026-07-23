@@ -29,34 +29,19 @@ afterEach(() => {
 })
 
 describe('SnackbarProvider', () => {
-  it('blendet eine Erfolgsmeldung nach 3 s aus', () => {
+  // success/warning/info (Info = Default-Severity, notify ohne severity) blenden alle nach 3 s aus.
+  it.each([
+    ['Erfolgsmeldung', 'ok', 'Erfolg'],
+    ['Warnung', 'warn', 'Warnung'],
+    ['Info-Meldung (Default-Severity)', 'info', 'Info'],
+  ])('blendet eine %s nach 3 s aus', (_label, button, message) => {
     renderProvider()
-    fireEvent.click(screen.getByText('ok'))
-    expect(screen.getByText('Erfolg')).toBeInTheDocument()
+    fireEvent.click(screen.getByText(button))
+    expect(screen.getByText(message)).toBeInTheDocument()
 
     act(() => vi.advanceTimersByTime(3000))
 
-    expect(screen.queryByText('Erfolg')).not.toBeInTheDocument()
-  })
-
-  it('blendet eine Warnung nach 3 s aus', () => {
-    renderProvider()
-    fireEvent.click(screen.getByText('warn'))
-    expect(screen.getByText('Warnung')).toBeInTheDocument()
-
-    act(() => vi.advanceTimersByTime(3000))
-
-    expect(screen.queryByText('Warnung')).not.toBeInTheDocument()
-  })
-
-  it('blendet eine Info-Meldung (Default-Severity) nach 3 s aus', () => {
-    renderProvider()
-    fireEvent.click(screen.getByText('info'))
-    expect(screen.getByText('Info')).toBeInTheDocument()
-
-    act(() => vi.advanceTimersByTime(3000))
-
-    expect(screen.queryByText('Info')).not.toBeInTheDocument()
+    expect(screen.queryByText(message)).not.toBeInTheDocument()
   })
 
   it('lässt einen Fehler stehen (blendet nicht aus)', () => {

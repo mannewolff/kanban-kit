@@ -14,6 +14,9 @@ public interface CardRepository {
 
   List<Card> findByBoardId(long boardId);
 
+  /** Alle nicht-gelöschten Karten eines Projekts (board-übergreifend, inkl. board-loser Ideen). */
+  List<Card> findByProjectId(long projectId);
+
   /**
    * Ideen-Karten eines Projekts (idea_stored), neueste zuerst — board-lose Pool-Ideen und
    * board-gebundene Legacy-Ideen. Papierkorb-Karten sind ausgenommen.
@@ -23,8 +26,8 @@ public interface CardRepository {
   /** Nicht-archivierte Karten, die vor {@code threshold} nach Done verschoben wurden. */
   List<Card> findArchivableDoneCards(Instant threshold);
 
-  /** Höchste vergebene board-scoped Nummer (0, wenn keine Karten). */
-  int maxNumberInBoard(long boardId);
+  /** Höchste vergebene projekt-scoped Nummer (0, wenn keine Karten). */
+  int maxNumberInProject(long projectId);
 
   /** Höchste Position unter nicht-archivierten Karten der Spalte (-1, wenn keine). */
   int maxActivePositionInColumn(long columnId);

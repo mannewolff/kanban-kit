@@ -155,7 +155,7 @@ class CardServiceTest {
   void create_setsCreatedAtFromInjectedClock() {
     // Given
     when(columns.findById(20L)).thenReturn(Optional.of(column(20L, "Backlog", 0)));
-    when(cards.maxNumberInBoard(BOARD)).thenReturn(0);
+    when(cards.maxNumberInProject(PROJECT)).thenReturn(0);
     when(cards.maxActivePositionInColumn(20L)).thenReturn(-1);
 
     // When
@@ -170,7 +170,7 @@ class CardServiceTest {
   @Test
   void create_setsDueDate_whenProvided() {
     when(columns.findById(20L)).thenReturn(Optional.of(column(20L, "Backlog", 0)));
-    when(cards.maxNumberInBoard(BOARD)).thenReturn(0);
+    when(cards.maxNumberInProject(PROJECT)).thenReturn(0);
     when(cards.maxActivePositionInColumn(20L)).thenReturn(-1);
     Instant due = Instant.parse("2026-02-01T00:00:00Z");
 
@@ -188,7 +188,7 @@ class CardServiceTest {
   @Test
   void create_appliesAssignees_atomically_withSingleCreatedActivity() {
     when(columns.findById(20L)).thenReturn(Optional.of(column(20L, "Backlog", 0)));
-    when(cards.maxNumberInBoard(BOARD)).thenReturn(0);
+    when(cards.maxNumberInProject(PROJECT)).thenReturn(0);
     when(cards.maxActivePositionInColumn(20L)).thenReturn(-1);
     when(memberships.findByProjectIdAndUserId(1L, 7L))
         .thenReturn(Optional.of(mock(ProjectMembership.class)));
@@ -207,7 +207,7 @@ class CardServiceTest {
   @Test
   void create_ignoresEmptyAssignees() {
     when(columns.findById(20L)).thenReturn(Optional.of(column(20L, "Backlog", 0)));
-    when(cards.maxNumberInBoard(BOARD)).thenReturn(0);
+    when(cards.maxNumberInProject(PROJECT)).thenReturn(0);
     when(cards.maxActivePositionInColumn(20L)).thenReturn(-1);
 
     service.create(1L, BOARD, 20L, "Titel", null, null, null, false, null, List.of(), null);
@@ -218,7 +218,7 @@ class CardServiceTest {
   @Test
   void create_rejectsForeignAssignee() {
     when(columns.findById(20L)).thenReturn(Optional.of(column(20L, "Backlog", 0)));
-    when(cards.maxNumberInBoard(BOARD)).thenReturn(0);
+    when(cards.maxNumberInProject(PROJECT)).thenReturn(0);
     when(cards.maxActivePositionInColumn(20L)).thenReturn(-1);
     when(memberships.findByProjectIdAndUserId(1L, 9L)).thenReturn(Optional.empty());
 
@@ -233,7 +233,7 @@ class CardServiceTest {
   @Test
   void create_appliesLabels_whenProvided() {
     when(columns.findById(20L)).thenReturn(Optional.of(column(20L, "Backlog", 0)));
-    when(cards.maxNumberInBoard(BOARD)).thenReturn(0);
+    when(cards.maxNumberInProject(PROJECT)).thenReturn(0);
     when(cards.maxActivePositionInColumn(20L)).thenReturn(-1);
     when(labels.findByBoardId(BOARD))
         .thenReturn(
@@ -248,7 +248,7 @@ class CardServiceTest {
   @Test
   void create_ignoresEmptyLabels() {
     when(columns.findById(20L)).thenReturn(Optional.of(column(20L, "Backlog", 0)));
-    when(cards.maxNumberInBoard(BOARD)).thenReturn(0);
+    when(cards.maxNumberInProject(PROJECT)).thenReturn(0);
     when(cards.maxActivePositionInColumn(20L)).thenReturn(-1);
 
     service.create(1L, BOARD, 20L, "Titel", null, null, null, false, null, null, List.of());
@@ -259,7 +259,7 @@ class CardServiceTest {
   @Test
   void create_rejectsForeignLabel() {
     when(columns.findById(20L)).thenReturn(Optional.of(column(20L, "Backlog", 0)));
-    when(cards.maxNumberInBoard(BOARD)).thenReturn(0);
+    when(cards.maxNumberInProject(PROJECT)).thenReturn(0);
     when(cards.maxActivePositionInColumn(20L)).thenReturn(-1);
     when(labels.findByBoardId(BOARD)).thenReturn(List.of(new Label(7L, BOARD, "Bug", "#f00")));
 
@@ -275,7 +275,7 @@ class CardServiceTest {
   void create_assignsNextBoardNumber() {
     // Given
     when(columns.findById(20L)).thenReturn(Optional.of(column(20L, "Backlog", 0)));
-    when(cards.maxNumberInBoard(BOARD)).thenReturn(7);
+    when(cards.maxNumberInProject(PROJECT)).thenReturn(7);
     when(cards.maxActivePositionInColumn(20L)).thenReturn(-1);
 
     // When
@@ -291,7 +291,7 @@ class CardServiceTest {
   void create_appendsAtNextPositionInColumn() {
     // Given
     when(columns.findById(20L)).thenReturn(Optional.of(column(20L, "Backlog", 0)));
-    when(cards.maxNumberInBoard(BOARD)).thenReturn(0);
+    when(cards.maxNumberInProject(PROJECT)).thenReturn(0);
     when(cards.maxActivePositionInColumn(20L)).thenReturn(4);
 
     // When
@@ -337,8 +337,8 @@ class CardServiceTest {
   void create_setsDependencies_whenProvided() {
     // Given
     when(columns.findById(20L)).thenReturn(Optional.of(column(20L, "Backlog", 0)));
-    when(cards.maxNumberInBoard(BOARD)).thenReturn(4);
-    when(cards.findByBoardId(BOARD))
+    when(cards.maxNumberInProject(PROJECT)).thenReturn(4);
+    when(cards.findByProjectId(PROJECT))
         .thenReturn(List.of(card(2L, 20L, 3, false, null, CardType.CARD, null, null)));
 
     // When
@@ -408,8 +408,8 @@ class CardServiceTest {
     // Selbstbezug-Guards (Mutant) NICHT in „Unbekannte Nummer" um, sondern in einen Erfolg —
     // der Selbstbezug-Guard wird dadurch beweisbar geprüft.
     when(columns.findById(20L)).thenReturn(Optional.of(column(20L, "Backlog", 0)));
-    when(cards.maxNumberInBoard(BOARD)).thenReturn(0);
-    when(cards.findByBoardId(BOARD))
+    when(cards.maxNumberInProject(PROJECT)).thenReturn(0);
+    when(cards.findByProjectId(PROJECT))
         .thenReturn(List.of(card(9L, 20L, 1, false, null, CardType.CARD, null, null)));
 
     // When / Then: neue Karte bekommt Nummer 1, hängt von 1 (sich selbst) ab
@@ -422,8 +422,8 @@ class CardServiceTest {
   void create_throwsInvalidDependency_onUnknownDependencyNumber() {
     // Given
     when(columns.findById(20L)).thenReturn(Optional.of(column(20L, "Backlog", 0)));
-    when(cards.maxNumberInBoard(BOARD)).thenReturn(0);
-    when(cards.findByBoardId(BOARD)).thenReturn(List.of());
+    when(cards.maxNumberInProject(PROJECT)).thenReturn(0);
+    when(cards.findByProjectId(PROJECT)).thenReturn(List.of());
 
     // When / Then
     List<Integer> unknownDependency = List.of(99);
@@ -438,7 +438,7 @@ class CardServiceTest {
     // Given
     when(columns.findByBoardId(BOARD))
         .thenReturn(List.of(column(20L, "Backlog", 0), column(21L, "Done", 1)));
-    when(cards.maxNumberInBoard(BOARD)).thenReturn(0);
+    when(cards.maxNumberInProject(PROJECT)).thenReturn(0);
 
     // When
     ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
@@ -453,7 +453,7 @@ class CardServiceTest {
   void createEpic_trimsBlankShortcodeToNull() {
     // Given
     when(columns.findByBoardId(BOARD)).thenReturn(List.of(column(20L, "Backlog", 0)));
-    when(cards.maxNumberInBoard(BOARD)).thenReturn(0);
+    when(cards.maxNumberInProject(PROJECT)).thenReturn(0);
 
     // When
     ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
@@ -583,7 +583,7 @@ class CardServiceTest {
     // Given
     when(cards.findById(1L))
         .thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
-    when(cards.findByBoardId(BOARD))
+    when(cards.findByProjectId(PROJECT))
         .thenReturn(List.of(card(2L, 20L, 3, false, null, CardType.CARD, null, null)));
 
     // When
@@ -1100,9 +1100,9 @@ class CardServiceTest {
 
     // Then
     verify(dependencies).replaceDependencies(1L, List.of());
-    // Eine leere Liste wird ohne Board-Lookup direkt geleert (Kurzschluss des isEmpty-Zweigs).
-    // Ein Umgehen dieses Zweigs (Mutant) würde die Board-Nummern unnötig nachladen.
-    verify(cards, never()).findByBoardId(BOARD);
+    // Eine leere Liste wird ohne Projekt-Lookup direkt geleert (Kurzschluss des isEmpty-Zweigs).
+    // Ein Umgehen dieses Zweigs (Mutant) würde die projektweiten Nummern unnötig nachladen.
+    verify(cards, never()).findByProjectId(PROJECT);
   }
 
   @Test
@@ -1225,7 +1225,7 @@ class CardServiceTest {
   void createEpic_assignsNextBoardNumber() {
     // Given
     when(columns.findByBoardId(BOARD)).thenReturn(List.of(column(20L, "Backlog", 0)));
-    when(cards.maxNumberInBoard(BOARD)).thenReturn(4);
+    when(cards.maxNumberInProject(PROJECT)).thenReturn(4);
 
     // When
     ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
@@ -1419,7 +1419,7 @@ class CardServiceTest {
     when(boards.findById(20L)).thenReturn(Optional.of(new Board(20L, 2L, "Ziel", FIXED)));
     when(columns.findById(60L))
         .thenReturn(Optional.of(new BoardColumn(60L, 20L, "Backlog", 0, null)));
-    when(cards.maxNumberInBoard(20L)).thenReturn(7);
+    when(cards.maxNumberInProject(2L)).thenReturn(7);
   }
 
   @Test
@@ -1450,6 +1450,26 @@ class CardServiceTest {
     verify(cards).save(captor.capture());
     assertThat(captor.getValue().parentId()).isNull();
     assertThat(captor.getValue().movedToDoneAt()).isNull();
+  }
+
+  @Test
+  void transfer_sameProject_keepsNumberAndKeepsDependenciesAndAssignees() {
+    // Given: Ziel-Board liegt im SELBEN Projekt (1) wie die Quelle (card 100 hat projectId 1).
+    when(cards.findById(100L))
+        .thenReturn(Optional.of(card(100L, 50L, 3, false, FIXED, CardType.CARD, 9L, null)));
+    when(boards.findById(20L)).thenReturn(Optional.of(new Board(20L, 1L, "Ziel", FIXED)));
+    when(columns.findById(60L))
+        .thenReturn(Optional.of(new BoardColumn(60L, 20L, "Backlog", 0, null)));
+
+    // When
+    service.transfer(1L, 100L, 20L, 60L);
+
+    // Then: die Nummer (3) bleibt erhalten — keine Neuvergabe, kein maxNumberInProject-Lookup …
+    verify(cards).transfer(100L, 20L, 60L, 3);
+    verify(cards, never()).maxNumberInProject(anyLong());
+    // … und projekt-lokale Verknüpfungen wandern mit (werden NICHT gelöscht).
+    verify(dependencies, never()).deleteByCardId(anyLong());
+    verify(assignees, never()).deleteByCardId(anyLong());
   }
 
   @Test
@@ -1497,7 +1517,7 @@ class CardServiceTest {
     when(boards.findById(20L)).thenReturn(Optional.of(new Board(20L, 2L, "Ziel", FIXED)));
     when(columns.findById(60L))
         .thenReturn(Optional.of(new BoardColumn(60L, 20L, "Backlog", 0, null)));
-    when(cards.maxNumberInBoard(20L)).thenReturn(7);
+    when(cards.maxNumberInProject(2L)).thenReturn(7);
 
     // When
     List<CardService.CardView> result = service.bulkTransfer(1L, List.of(100L, 101L), 20L, 60L);
@@ -1765,7 +1785,7 @@ class CardServiceTest {
   void create_opensColumnTransition() {
     // Given
     when(columns.findById(20L)).thenReturn(Optional.of(column(20L, "Backlog", 0)));
-    when(cards.maxNumberInBoard(BOARD)).thenReturn(0);
+    when(cards.maxNumberInProject(PROJECT)).thenReturn(0);
     when(cards.maxActivePositionInColumn(20L)).thenReturn(-1);
 
     // When
@@ -2051,7 +2071,7 @@ class CardServiceTest {
     when(cards.findById(1L)).thenReturn(Optional.of(poolIdea(1L)));
     when(columns.findByBoardId(BOARD))
         .thenReturn(List.of(column(21L, "Ready", 1), column(20L, "Backlog", 0)));
-    when(cards.maxNumberInBoard(BOARD)).thenReturn(4);
+    when(cards.maxNumberInProject(PROJECT)).thenReturn(4);
     when(cards.maxActivePositionInColumn(20L)).thenReturn(2);
 
     ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);

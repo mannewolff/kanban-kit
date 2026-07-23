@@ -24,7 +24,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 
-/** End-to-End-Test für Karten-CRUD, board-scoped Nummern, Abhängigkeiten und Archiv-Flow. */
+/** End-to-End-Test für Karten-CRUD, projektweite Nummern, Abhängigkeiten und Archiv-Flow. */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK)
 @AutoConfigureMockMvc
 class CardIT extends AbstractIntegrationTest {
@@ -147,7 +147,7 @@ class CardIT extends AbstractIntegrationTest {
   }
 
   @Test
-  void cardNumbersAreSequentialAndBoardScoped() throws Exception {
+  void cardNumbersAreSequentialAndProjectScoped() throws Exception {
     Cookie alice = loginAs("card-owner@example.com");
     long projectId = createProject("card-owner@example.com", "P");
     JsonNode board = createBoard(alice, projectId);
@@ -159,13 +159,13 @@ class CardIT extends AbstractIntegrationTest {
     int n3 = createCard(alice, boardId, columnId, "C", null).get("number").asInt();
     org.assertj.core.api.Assertions.assertThat(new int[] {n1, n2, n3}).containsExactly(1, 2, 3);
 
-    // Zweites Board startet wieder bei 1 (board-scoped).
+    // Zweites Board desselben Projekts zählt projektweit weiter (nicht wieder bei 1).
     JsonNode board2 = createBoard(alice, projectId);
     long boardId2 = board2.get("id").asLong();
     long columnId2 = board2.get("columns").get(0).get("id").asLong();
     org.assertj.core.api.Assertions.assertThat(
             createCard(alice, boardId2, columnId2, "X", null).get("number").asInt())
-        .isEqualTo(1);
+        .isEqualTo(4);
   }
 
   @Test
@@ -722,5 +722,84 @@ class CardIT extends AbstractIntegrationTest {
                 .contentType("application/json")
                 .content("{\"targetBoardId\":%d,\"targetColumnId\":%d}".formatted(boardIdB, colB)))
         .andExpect(status().isForbidden());
+  }
+
+  @Test
+  void dependencyReferencesAnotherBoardInSameProject() throws Exception {
+    Cookie alice = loginAs("xboard-dep-owner@example.com");
+    long projectId = createProject("xboard-dep-owner@example.com", "XBoardDep");
+    JsonNode boardA = createBoard(alice, projectId);
+    JsonNode boardB = createBoard(alice, projectId);
+    long colA = boardA.get("columns").get(0).get("id").asLong();
+    long boardIdB = boardB.get("id").asLong();
+    long colB = boardB.get("columns").get(0).get("id").asLong();
+
+    // #1 auf Board A; #2 auf Board B hängt projektweit von #1 (anderes Board) ab — vor #386 wäre
+    // die board-lokale Validierung an der fremden Nummer gescheitert.
+    createCard(alice, boardA.get("id").asLong(), colA, "OnA", null); // Nummer 1
+    JsonNode onB = createCard(alice, boardIdB, colB, "OnB", "[1]");
+    org.assertj.core.api.Assertions.assertThat(onB.get("number").asInt()).isEqualTo(2);
+    org.assertj.core.api.Assertions.assertThat(onB.get("dependencies").get(0).asInt()).isEqualTo(1);
+  }
+
+  @Test
+  void transferWithinProjectKeepsNumberAndDependencies() throws Exception {
+    Cookie alice = loginAs("xfer-same-owner@example.com");
+    long projectId = createProject("xfer-same-owner@example.com", "XferSame");
+    JsonNode boardA = createBoard(alice, projectId);
+    JsonNode boardB = createBoard(alice, projectId);
+    long colA = boardA.get("columns").get(0).get("id").asLong();
+    long boardIdB = boardB.get("id").asLong();
+    long colB = boardB.get("columns").get(0).get("id").asLong();
+
+    createCard(alice, boardA.get("id").asLong(), colA, "Dep", null); // Nummer 1
+    JsonNode card =
+        createCard(alice, boardA.get("id").asLong(), colA, "Wanderer", "[1]"); // Nummer 2
+    long cardId = card.get("id").asLong();
+
+    // Umzug ins Schwesterboard desselben Projekts: Nummer bleibt 2, Abhängigkeit auf #1 bleibt.
+    String moved =
+        mvc.perform(
+                post("/api/cards/" + cardId + "/transfer")
+                    .cookie(alice)
+                    .contentType("application/json")
+                    .content(
+                        "{\"targetBoardId\":%d,\"targetColumnId\":%d}".formatted(boardIdB, colB)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.boardId").value((int) boardIdB))
+            .andExpect(jsonPath("$.number").value(2))
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+    org.assertj.core.api.Assertions.assertThat(
+            json.readTree(moved).get("dependencies").get(0).asInt())
+        .isEqualTo(1);
+  }
+
+  @Test
+  void transferAcrossProjectsReassignsNumberAndDropsDependencies() throws Exception {
+    Cookie alice = loginAs("xfer-drop-owner@example.com");
+    long p1 = createProject("xfer-drop-owner@example.com", "XferDrop1");
+    long p2 = createProject("xfer-drop-owner@example.com", "XferDrop2");
+    JsonNode boardA = createBoard(alice, p1);
+    JsonNode boardB = createBoard(alice, p2);
+    long colA = boardA.get("columns").get(0).get("id").asLong();
+    long boardIdB = boardB.get("id").asLong();
+    long colB = boardB.get("columns").get(0).get("id").asLong();
+
+    createCard(alice, boardA.get("id").asLong(), colA, "Dep", null); // P1 Nummer 1
+    JsonNode card =
+        createCard(alice, boardA.get("id").asLong(), colA, "Wanderer", "[1]"); // P1 Nr. 2
+    long cardId = card.get("id").asLong();
+
+    // Ins leere Projekt P2: neue projektweite Nummer (1); projekt-lokale Abhängigkeiten entfallen.
+    mvc.perform(
+            post("/api/cards/" + cardId + "/transfer")
+                .cookie(alice)
+                .contentType("application/json")
+                .content("{\"targetBoardId\":%d,\"targetColumnId\":%d}".formatted(boardIdB, colB)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.number").value(1))
+        .andExpect(jsonPath("$.dependencies.length()").value(0));
   }
 }
