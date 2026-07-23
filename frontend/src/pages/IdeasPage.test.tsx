@@ -92,6 +92,15 @@ function idea(partial: Partial<Idea> & { id: number; title: string }): Idea {
     ideaStored: true,
     targetBoardId: null,
     type: 'CARD',
+    positionInColumn: 0,
+    archived: false,
+    movedToDoneAt: null,
+    dependencies: [],
+    parentId: null,
+    shortcode: null,
+    assignees: [],
+    dueDate: null,
+    labels: [],
     ...partial,
   }
 }

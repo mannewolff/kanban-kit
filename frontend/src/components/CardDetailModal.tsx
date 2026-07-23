@@ -30,7 +30,7 @@ import Markdown, { type Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { attachmentsApi as defaultAttachmentsApi, type Attachment, type AttachmentsApi } from '../api/attachments'
 import { cardsApi as defaultCardsApi } from '../api/cards'
-import type { Card, CardActivity } from '../api/cards'
+import type { Card, CardActivity, CardDetail } from '../api/cards'
 import { commentsApi as defaultCommentsApi, type Comment, type CommentsApi } from '../api/comments'
 import type { Epic } from '../api/epics'
 import type { Label as BoardLabel } from '../api/labels'
@@ -552,7 +552,7 @@ function CardBodyView({
 }
 
 interface Props {
-  card: Card
+  card: CardDetail
   canEdit: boolean
   /** Ob der Nutzer Kommentare moderieren (löschen) darf — Projekt-ADMIN/OWNER oder Plattform-Admin. */
   canModerateComments?: boolean
@@ -833,9 +833,12 @@ export function CardDetailModal({
       <DialogTitle sx={{ borderBottom: `1px solid ${MODAL_BORDER}` }}>
         <Stack direction="row" alignItems="center" spacing={1} sx={{ flexWrap: 'wrap' }}>
           <CardStatusChip isEpic={isEpic} columnName={columnName} colors={colors} />
-          <Typography component="span" variant="body2" color="text.secondary">
-            #{card.number}
-          </Typography>
+          {/* Legacy-Pool-Ideen ohne projektweite Nummer zeigen kein nacktes „#". */}
+          {card.number != null && (
+            <Typography component="span" variant="body2" color="text.secondary">
+              #{card.number}
+            </Typography>
+          )}
           <Typography component="span" sx={{ fontWeight: 600 }}>
             {card.title}
           </Typography>

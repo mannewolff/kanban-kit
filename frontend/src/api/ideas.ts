@@ -19,6 +19,19 @@ export interface Idea {
   ideaStored: boolean
   targetBoardId: number | null
   type: CardType
+  // Volle Karten-Form: das Backend liefert diese Felder in `listProjectIdeas` (dieselbe `CardView`
+  // wie Board-Karten) bereits mit; nur board-lose Ideen tragen `boardId`/`columnId`/`number` als
+  // `null`. So erfüllt eine Idee das strukturelle `CardDetail` und ist im CardDetailModal voll
+  // bearbeitbar (Zuständige/Abhängigkeiten/Fälligkeit …).
+  positionInColumn: number
+  archived: boolean
+  movedToDoneAt: string | null
+  dependencies: number[]
+  parentId: number | null
+  shortcode: string | null
+  assignees: number[]
+  dueDate: string | null
+  labels: number[]
 }
 
 export const ideasApi = {

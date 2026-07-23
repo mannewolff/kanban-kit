@@ -1,6 +1,7 @@
 import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
+import Link from '@mui/material/Link'
 import Paper from '@mui/material/Paper'
 import Stack from '@mui/material/Stack'
 import TextField from '@mui/material/TextField'
@@ -14,6 +15,8 @@ import { useNavigate } from 'react-router-dom'
 import { boardsApi, type Board } from '../api/boards'
 import { cardsApi, type Card } from '../api/cards'
 import { ideasApi, type Idea } from '../api/ideas'
+import { membersApi, type Member } from '../api/members'
+import { CardDetailModal } from './CardDetailModal'
 import { useRefetchOnFocus } from '../lib/useRefetchOnFocus'
 
 /** Merkt das zuletzt im Planungs-Board gewählte Board je Projekt. */
@@ -56,6 +59,9 @@ export function IdeaPlanningBoard({
   const [selectedBoardId, setSelectedBoardId] = useState<number>(0)
   const [backlog, setBacklog] = useState<Card[]>([])
   const [pool, setPool] = useState<Idea[]>([])
+  const [members, setMembers] = useState<Member[]>([])
+  // Board-lose Pool-Idee, die im Detail-Modal geöffnet ist (null = geschlossen).
+  const [selectedIdea, setSelectedIdea] = useState<Idea | null>(null)
   const [dragged, setDragged] = useState<{ source: DragSource; id: number } | null>(null)
   const navigate = useNavigate()
 
@@ -105,6 +111,11 @@ export function IdeaPlanningBoard({
   useEffect(() => {
     void loadPool()
   }, [loadPool])
+
+  // Projektmitglieder für die Zuständigen-Auswahl im Detail-Modal (Namen + Autocomplete-Optionen).
+  useEffect(() => {
+    void membersApi.list(projectId).then(setMembers).catch(() => setMembers([]))
+  }, [projectId])
 
   useRefetchOnFocus(() => {
     void loadBacklog().catch(() => {})
@@ -308,9 +319,19 @@ export function IdeaPlanningBoard({
                     #{idea.number}
                   </Typography>
                 )}
-                <Typography variant="body2" noWrap sx={{ flex: 1, minWidth: 0, fontWeight: 500 }}>
+                {/* Dedizierte Öffnen-Affordanz: Klick auf den Titel öffnet das Detail-Modal. Der Drag
+                    bleibt am Ziehgriff (bzw. der Zeile) — ein Klick startet keinen Drag, kein Konflikt. */}
+                <Link
+                  component="button"
+                  type="button"
+                  variant="body2"
+                  underline="hover"
+                  color="text.primary"
+                  onClick={() => setSelectedIdea(idea)}
+                  sx={{ flex: 1, minWidth: 0, fontWeight: 500, textAlign: 'left', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: 'pointer' }}
+                >
                   {idea.title}
-                </Typography>
+                </Link>
                 {canEdit && (
                   <Button
                     size="small"
@@ -326,6 +347,20 @@ export function IdeaPlanningBoard({
           </Stack>
         )}
       </Box>
+
+      {/* Board-lose Pool-Idee im vollen Detail-Modal öffnen. Board-spezifische Teile bleiben leer
+          (kein columnName/Board-Labels/Epics) — das Modal toleriert das. */}
+      {selectedIdea && (
+        <CardDetailModal
+          card={selectedIdea}
+          canEdit={canEdit}
+          members={members}
+          epics={[]}
+          boardLabels={[]}
+          onClose={() => setSelectedIdea(null)}
+          onChanged={() => void reload()}
+        />
+      )}
     </Box>
   )
 }
