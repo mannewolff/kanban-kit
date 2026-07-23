@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { MemoryRouter, useLocation } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { boardsApi, type Board } from '../api/boards'
 import { cardsApi, type Card } from '../api/cards'
@@ -82,8 +83,18 @@ function setup({
   mIdeas.moveBackToPool.mockResolvedValue(idea({ id: 1, title: 'x' }))
 }
 
+function LocationProbe() {
+  const location = useLocation()
+  return <div data-testid="location">{location.pathname}</div>
+}
+
 function renderBoard(canEdit = true) {
-  return render(<IdeaPlanningBoard projectId={5} canEdit={canEdit} />)
+  return render(
+    <MemoryRouter initialEntries={['/start']}>
+      <LocationProbe />
+      <IdeaPlanningBoard projectId={5} canEdit={canEdit} />
+    </MemoryRouter>,
+  )
 }
 
 const dt = () => ({ dataTransfer: { setData: vi.fn() } })
@@ -215,6 +226,27 @@ describe('IdeaPlanningBoard', () => {
     expect(screen.getByText('Keine Ideen im Pool.')).toBeInTheDocument()
   })
 
+  it('springt per „Board öffnen" in die Listenansicht des gewählten Boards', async () => {
+    setup()
+    renderBoard()
+    await screen.findByText('Backlog A')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Board öffnen' }))
+
+    expect(screen.getByTestId('location')).toHaveTextContent('/boards/10/list')
+  })
+
+  it('öffnet nach einem Board-Wechsel die Liste des dann gewählten Boards', async () => {
+    setup()
+    renderBoard()
+    await screen.findByText('Backlog A')
+
+    fireEvent.change(screen.getByLabelText('Board wählen'), { target: { value: '11' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Board öffnen' }))
+
+    expect(screen.getByTestId('location')).toHaveTextContent('/boards/11/list')
+  })
+
   it('zeigt an jeder ziehbaren Zeile einen Ziehgriff', async () => {
     setup()
     renderBoard()
@@ -307,7 +339,11 @@ describe('IdeaPlanningBoard', () => {
     mCards.list.mockResolvedValue([])
     mIdeas.list.mockResolvedValue([])
 
-    const { unmount } = render(<IdeaPlanningBoard projectId={5} canEdit />)
+    const { unmount } = render(
+      <MemoryRouter>
+        <IdeaPlanningBoard projectId={5} canEdit />
+      </MemoryRouter>,
+    )
     unmount()
     d.resolve(BOARDS)
     await d.promise

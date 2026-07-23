@@ -8,7 +8,9 @@ import Typography from '@mui/material/Typography'
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator'
 import NorthOutlinedIcon from '@mui/icons-material/NorthOutlined'
 import SouthOutlinedIcon from '@mui/icons-material/SouthOutlined'
+import ViewListIcon from '@mui/icons-material/ViewList'
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { boardsApi, type Board } from '../api/boards'
 import { cardsApi, type Card } from '../api/cards'
 import { ideasApi, type Idea } from '../api/ideas'
@@ -55,6 +57,7 @@ export function IdeaPlanningBoard({
   const [backlog, setBacklog] = useState<Card[]>([])
   const [pool, setPool] = useState<Idea[]>([])
   const [dragged, setDragged] = useState<{ source: DragSource; id: number } | null>(null)
+  const navigate = useNavigate()
 
   useEffect(() => {
     let active = true
@@ -175,21 +178,32 @@ export function IdeaPlanningBoard({
 
   return (
     <Box>
-      <TextField
-        select
-        size="small"
-        label="Board"
-        value={String(selectedBoardId)}
-        onChange={(e) => onSelectBoard(Number(e.target.value))}
-        slotProps={{ htmlInput: { 'aria-label': 'Board wählen' }, select: { native: true } }}
-        sx={{ minWidth: 220, mb: 2 }}
-      >
-        {boards.map((board) => (
-          <option key={board.id} value={board.id}>
-            {board.name}
-          </option>
-        ))}
-      </TextField>
+      <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 2 }}>
+        <TextField
+          select
+          size="small"
+          label="Board"
+          value={String(selectedBoardId)}
+          onChange={(e) => onSelectBoard(Number(e.target.value))}
+          slotProps={{ htmlInput: { 'aria-label': 'Board wählen' }, select: { native: true } }}
+          sx={{ minWidth: 220 }}
+        >
+          {boards.map((board) => (
+            <option key={board.id} value={board.id}>
+              {board.name}
+            </option>
+          ))}
+        </TextField>
+        {/* Direkt in die Listenansicht des Boards springen — das Planungstool mit allen Items,
+            statt über Projekte/Boards zu navigieren. */}
+        <Button
+          variant="outlined"
+          startIcon={<ViewListIcon />}
+          onClick={() => navigate(`/boards/${selectedBoardId}/list`)}
+        >
+          Board öffnen
+        </Button>
+      </Stack>
 
       {/* Obere Zone: Backlog des gewählten Boards (Ziel beim Einplanen). */}
       <Box
