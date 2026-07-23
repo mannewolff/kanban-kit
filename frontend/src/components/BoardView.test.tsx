@@ -8,6 +8,7 @@ import { columnsApi } from '../api/columns'
 import { boardsApi } from '../api/boards'
 import { projectsApi } from '../api/projects'
 import { BoardView } from './BoardView'
+import { SnackbarProvider } from './SnackbarProvider'
 
 vi.mock('../api/columns', () => ({
   columnsApi: { create: vi.fn(), update: vi.fn(), remove: vi.fn(), reorder: vi.fn() },
@@ -192,7 +193,9 @@ describe('BoardView', () => {
 
   it('rollt bei Fehler im Ideen-Speicher zurück und zeigt die Karte wieder', async () => {
     const api = mkApi({ moveToIdeaStorage: vi.fn().mockRejectedValue(new Error('fail')) })
-    render(<BoardView board={board} initialCards={[card]} canEdit api={api} />)
+    render(<BoardView board={board} initialCards={[card]} canEdit api={api} />, {
+      wrapper: SnackbarProvider,
+    })
 
     fireEvent.click(screen.getByLabelText('Menü Aufgabe'))
     fireEvent.click(screen.getByRole('menuitem', { name: 'In Ideen-Speicher' }))
@@ -501,7 +504,9 @@ describe('BoardView', () => {
 
   it('rollt beim Fehler des Bulk-Archivierens zurück und meldet ihn', async () => {
     const api = mkApi({ bulkArchive: vi.fn().mockRejectedValue(new Error('fail')) })
-    render(<BoardView board={board} initialCards={[card]} canEdit api={api} />)
+    render(<BoardView board={board} initialCards={[card]} canEdit api={api} />, {
+      wrapper: SnackbarProvider,
+    })
 
     fireEvent.click(screen.getByRole('button', { name: 'Auswählen' }))
     fireEvent.click(screen.getByTestId('card-100'))
@@ -534,7 +539,9 @@ describe('BoardView', () => {
 
   it('rollt beim Fehler des Bulk-Papierkorbs zurück und meldet ihn', async () => {
     const api = mkApi({ bulkDelete: vi.fn().mockRejectedValue(new Error('fail')) })
-    render(<BoardView board={board} initialCards={[card]} canEdit api={api} />)
+    render(<BoardView board={board} initialCards={[card]} canEdit api={api} />, {
+      wrapper: SnackbarProvider,
+    })
 
     fireEvent.click(screen.getByRole('button', { name: 'Auswählen' }))
     fireEvent.click(screen.getByTestId('card-100'))
@@ -750,11 +757,13 @@ describe('BoardView', () => {
     )
   })
 
-  it('blendet die Fehler-Snackbar nach Ablauf der Anzeigedauer wieder aus', async () => {
+  it('lässt die Fehler-Toast-Meldung stehen (kein Auto-Hide für Fehler)', async () => {
     vi.useFakeTimers()
     try {
       const api = mkApi({ bulkArchive: vi.fn().mockRejectedValue(new Error('fail')) })
-      render(<BoardView board={board} initialCards={[card]} canEdit api={api} />)
+      render(<BoardView board={board} initialCards={[card]} canEdit api={api} />, {
+        wrapper: SnackbarProvider,
+      })
 
       fireEvent.click(screen.getByRole('button', { name: 'Auswählen' }))
       fireEvent.click(screen.getByTestId('card-100'))
@@ -765,11 +774,10 @@ describe('BoardView', () => {
         expect(screen.getByText('Archivieren fehlgeschlagen.')).toBeInTheDocument(),
       )
 
+      // Fehler-Toasts blenden sich NICHT selbst aus (bleiben bis zum Wegklicken).
       vi.advanceTimersByTime(5000)
 
-      await vi.waitFor(() =>
-        expect(screen.queryByText('Archivieren fehlgeschlagen.')).not.toBeInTheDocument(),
-      )
+      expect(screen.getByText('Archivieren fehlgeschlagen.')).toBeInTheDocument()
     } finally {
       vi.useRealTimers()
     }

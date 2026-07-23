@@ -20,6 +20,7 @@ import { ApiError } from '../api/client'
 import { projectsApi, type Project } from '../api/projects'
 import { canManageProject, isPlatformAdmin } from '../lib/roles'
 import { useAuth } from '../auth/AuthContext'
+import { useSnackbar } from '../components/SnackbarProvider'
 import { useEditMode } from '../lib/EditModeContext'
 
 const ROLE_CHIP: Record<string, 'primary' | 'info' | 'default'> = {
@@ -37,6 +38,7 @@ export function ProjectsPage() {
   const location = useLocation()
   const { user } = useAuth()
   const { editMode } = useEditMode()
+  const notify = useSnackbar()
   const admin = isPlatformAdmin(user)
   const [projects, setProjects] = useState<Project[]>([])
   const [name, setName] = useState('')
@@ -87,6 +89,7 @@ export function ProjectsPage() {
         return
       }
     }
+    notify('Projekt gespeichert.', 'success')
     closeRename()
     await reload()
   }

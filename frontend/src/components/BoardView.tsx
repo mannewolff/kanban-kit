@@ -18,7 +18,6 @@ import IconButton from '@mui/material/IconButton'
 import Menu from '@mui/material/Menu'
 import MenuItem from '@mui/material/MenuItem'
 import Paper from '@mui/material/Paper'
-import Snackbar from '@mui/material/Snackbar'
 import Stack from '@mui/material/Stack'
 import TextField from '@mui/material/TextField'
 import Tooltip from '@mui/material/Tooltip'
@@ -40,6 +39,7 @@ import { COLUMN_SURFACE_BG, statusColors } from '../lib/statusColors'
 import { BulkActionBar } from './BulkActionBar'
 import { EpicBadge } from './EpicBadge'
 import { NewCardModal, type NewCardInitialValues, type NewItemInput } from './NewCardModal'
+import { useSnackbar } from './SnackbarProvider'
 import { TransferCardDialog } from './TransferCardDialog'
 
 const isDoneColumn = (name: string) => name.toLowerCase().includes('done')
@@ -177,7 +177,7 @@ export function BoardView({
   const [bulkArchiveConfirm, setBulkArchiveConfirm] = useState(false)
   const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState(false)
   const [bulkTransferOpen, setBulkTransferOpen] = useState(false)
-  const [snackbar, setSnackbar] = useState<string | null>(null)
+  const notify = useSnackbar()
   const [epicFilter, setEpicFilter] = useState<number | null>(() => {
     try {
       const raw = localStorage.getItem(`manban.boardEpicFilter.${board.id}`)
@@ -240,6 +240,7 @@ export function BoardView({
       await columnsApi.remove(column.id)
       setColumns((cs) => cs.filter((c) => c.id !== column.id))
       setDeleteColumn(null)
+      notify('Spalte gelöscht.', 'success')
     } catch (e) {
       setDeleteError(
         e instanceof ApiError && e.status === 409
@@ -264,9 +265,11 @@ export function BoardView({
     if (columnDialog === 'new') {
       const created = await columnsApi.create(board.id, name, wip)
       setColumns((cs) => sortColumns([...cs, created]))
+      notify('Spalte angelegt.', 'success')
     } else if (columnDialog) {
       const updated = await columnsApi.update(columnDialog.id, name, wip)
       setColumns((cs) => sortColumns(cs.map((c) => (c.id === updated.id ? updated : c))))
+      notify('Spalte gespeichert.', 'success')
     }
     closeColumnDialog()
   }
@@ -336,7 +339,7 @@ export function BoardView({
       onCardsChanged?.()
     } catch {
       setCards(previous)
-      setSnackbar('In den Ideen-Speicher fehlgeschlagen.')
+      notify('In den Ideen-Speicher fehlgeschlagen.', 'error')
     }
   }
 
@@ -366,7 +369,7 @@ export function BoardView({
       onCardsChanged?.()
     } catch {
       setCards(previous)
-      setSnackbar('Archivieren fehlgeschlagen.')
+      notify('Archivieren fehlgeschlagen.', 'error')
     }
   }
 
@@ -382,7 +385,7 @@ export function BoardView({
       onCardsChanged?.()
     } catch {
       setCards(previous)
-      setSnackbar('In den Papierkorb verschieben fehlgeschlagen.')
+      notify('In den Papierkorb verschieben fehlgeschlagen.', 'error')
     }
   }
 
@@ -803,13 +806,6 @@ export function BoardView({
         />
       )}
 
-      <Snackbar
-        open={snackbar !== null}
-        autoHideDuration={5000}
-        onClose={() => setSnackbar(null)}
-        message={snackbar ?? ''}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-      />
     </Box>
   )
 }

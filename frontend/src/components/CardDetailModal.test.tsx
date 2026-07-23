@@ -4,6 +4,7 @@ import type { AttachmentsApi } from '../api/attachments'
 import type { Card } from '../api/cards'
 import type { CommentsApi } from '../api/comments'
 import { CardDetailModal, parseDependencyInput } from './CardDetailModal'
+import { SnackbarProvider } from './SnackbarProvider'
 
 vi.mock('../auth/AuthContext', () => ({
   useAuth: () => ({ user: { userId: 7, email: 'a@b.c', displayName: 'A', platformRole: 'USER', memberships: [] } }),
@@ -121,6 +122,20 @@ describe('CardDetailModal', () => {
       expect(apis.cardsApi.update).toHaveBeenCalledWith(100, 'Aufgabe', 'Neuer Text', [3, 4], undefined, null, null),
     )
     expect(onChanged).toHaveBeenCalled()
+  })
+
+  it('zeigt einen Fehler-Toast, wenn das Speichern der Karte scheitert', async () => {
+    const apis = makeApis()
+    apis.cardsApi.update = vi.fn().mockRejectedValue(new Error('boom'))
+    render(<CardDetailModal card={card} canEdit onClose={vi.fn()} {...apis} />, {
+      wrapper: SnackbarProvider,
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Bearbeiten' }))
+    fireEvent.change(screen.getByLabelText('Markdown-Beschreibung'), { target: { value: 'X' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Speichern' }))
+
+    expect(await screen.findByText('Speichern fehlgeschlagen.')).toBeInTheDocument()
   })
 
   it('zeigt dem Autor Bearbeiten, aber ohne Moderationsrecht kein Löschen', async () => {
