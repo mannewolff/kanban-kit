@@ -440,7 +440,7 @@ export function AppShell() {
             width: drawerWidth,
             boxSizing: 'border-box',
             overflowX: 'hidden',
-            borderLeft: (t) => `4px solid ${t.palette.primary.main}`,
+            borderLeft: (t) => `8px solid ${t.palette.primary.main}`,
             transition: (t) =>
               t.transitions.create('width', {
                 easing: t.transitions.easing.sharp,
