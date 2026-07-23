@@ -429,6 +429,94 @@ describe('BoardListPage', () => {
     await waitFor(() => expect(mCards.move).toHaveBeenCalledWith(100, 10, 1))
   })
 
+  it('zeigt in der Mehrspalt-Ansicht keine Ziehgriffe, aber einen Sortier-Hinweis', async () => {
+    // Default-Board: zwei Spalten (Backlog + Done), beide gefiltert-sichtbar -> nicht sortierbar.
+    renderPage()
+    await screen.findByText('Aufgabe')
+
+    expect(screen.queryByLabelText('Reihenfolge ändern')).not.toBeInTheDocument()
+    expect(screen.getByText('Zum Sortieren eine einzelne Spalte auswählen.')).toBeInTheDocument()
+    expect(screen.getByLabelText('Detail öffnen: Aufgabe')).not.toHaveAttribute('draggable', 'true')
+  })
+
+  it('sortiert nicht per Drag, solange mehrere Spalten sichtbar sind', async () => {
+    const first: Card = { ...base, id: 100, columnId: 10, number: 1, title: 'Erste', description: '', archived: false }
+    const second: Card = { ...base, id: 103, columnId: 10, number: 4, title: 'Zweite', description: '', archived: false, positionInColumn: 1 }
+    mCards.move.mockResolvedValue({})
+    renderPage([first, second]) // Default-Board hat zwei Spalten -> Mehrspalt-Ansicht.
+    await screen.findByText('Erste')
+
+    const dataTransfer = { setData: vi.fn() }
+    fireEvent.dragStart(screen.getByText('Erste'), { dataTransfer })
+    fireEvent.dragOver(screen.getByText('Zweite'), { dataTransfer })
+    fireEvent.drop(screen.getByText('Zweite'), { dataTransfer })
+
+    expect(mCards.move).not.toHaveBeenCalled()
+  })
+
+  it('aktiviert das Sortieren, sobald nur noch eine Spalte gefiltert ist', async () => {
+    const first: Card = { ...base, id: 100, columnId: 10, number: 1, title: 'Erste', description: '', archived: false }
+    const second: Card = { ...base, id: 103, columnId: 10, number: 4, title: 'Zweite', description: '', archived: false, positionInColumn: 1 }
+    mCards.move.mockResolvedValue({})
+    renderPage([first, second])
+    await screen.findByText('Erste')
+    // Mehrspalt: kein Griff, Hinweis da.
+    expect(screen.queryByLabelText('Reihenfolge ändern')).not.toBeInTheDocument()
+    expect(screen.getByText('Zum Sortieren eine einzelne Spalte auswählen.')).toBeInTheDocument()
+
+    // „Done" abwählen -> nur noch Backlog aktiv -> sortierbar: Ziehgriffe erscheinen, Hinweis weg.
+    fireEvent.click(screen.getByLabelText('Filter Done'))
+
+    await waitFor(() => expect(screen.getAllByLabelText('Reihenfolge ändern').length).toBeGreaterThan(0))
+    expect(screen.queryByText('Zum Sortieren eine einzelne Spalte auswählen.')).not.toBeInTheDocument()
+  })
+
+  it('sortiert nicht, wenn eine Karte auf sich selbst fällt (Einzelspalt)', async () => {
+    const only: Card = { ...base, id: 100, columnId: 10, number: 1, title: 'Erste', description: '', archived: false }
+    mBoards.get.mockResolvedValue({
+      id: 1, projectId: 9, name: 'B', createdAt: '',
+      columns: [{ id: 10, name: 'Backlog', position: 0, wipLimit: null }],
+    })
+    mCards.list.mockResolvedValue([only])
+    mCards.move.mockResolvedValue({})
+    render(
+      <MemoryRouter initialEntries={['/boards/1/list']}>
+        <Routes>
+          <Route path="/boards/:boardId/list" element={<BoardListPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+    await screen.findByText('Erste')
+
+    const dataTransfer = { setData: vi.fn() }
+    fireEvent.dragStart(screen.getByText('Erste'), { dataTransfer })
+    fireEvent.drop(screen.getByText('Erste'), { dataTransfer })
+
+    expect(mCards.move).not.toHaveBeenCalled()
+  })
+
+  it('sortiert nicht bei einem Drop ohne laufenden Drag (Einzelspalt)', async () => {
+    const only: Card = { ...base, id: 100, columnId: 10, number: 1, title: 'Erste', description: '', archived: false }
+    mBoards.get.mockResolvedValue({
+      id: 1, projectId: 9, name: 'B', createdAt: '',
+      columns: [{ id: 10, name: 'Backlog', position: 0, wipLimit: null }],
+    })
+    mCards.list.mockResolvedValue([only])
+    mCards.move.mockResolvedValue({})
+    render(
+      <MemoryRouter initialEntries={['/boards/1/list']}>
+        <Routes>
+          <Route path="/boards/:boardId/list" element={<BoardListPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+    await screen.findByText('Erste')
+
+    fireEvent.drop(screen.getByText('Erste'), { dataTransfer: { setData: vi.fn() } })
+
+    expect(mCards.move).not.toHaveBeenCalled()
+  })
+
   it('öffnet das Detail per Enter-Taste auf einer Zeile', async () => {
     renderPage()
     const row = await screen.findByLabelText('Detail öffnen: Aufgabe')

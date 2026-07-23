@@ -237,11 +237,17 @@ export function BoardListPage() {
       return pa - pb || a.positionInColumn - b.positionInColumn
     })
 
-  const validRowDrop = (target: Card): boolean => {
-    if (rowDrag == null || rowDrag === target.id || target.archived) return false
-    const dragged = cards.find((c) => c.id === rowDrag)
-    return !!dragged && !dragged.archived && dragged.columnId === target.columnId
-  }
+  // Umsortieren per Drag nur, wenn genau eine echte Spalte gefiltert ist: die Liste zeigt sonst
+  // mehrere Spalten gemischt und ein Cross-Spalten-Drop wäre mehrdeutig (und würde den Status
+  // ändern). Archiv zählt nicht (archivierte Karten haben keine aktive Position).
+  const activeColumns = columns.filter((c) => activeFilters.has(c.id))
+  const sortable = canEdit && !archiveActive && activeColumns.length === 1
+
+  // Nur im sortierbaren Zustand (genau eine echte Spalte) ist ein Zeilen-Drop gültig. Dort liegen
+  // alle sichtbaren Karten in derselben, nicht-archivierten Spalte — die frühere Spalten-/Archiv-
+  // Prüfung ist damit redundant; es bleibt: ein laufender Drag, nicht auf sich selbst.
+  const validRowDrop = (target: Card): boolean =>
+    sortable && rowDrag !== null && rowDrag !== target.id
 
   const onRowDrop = async (target: Card) => {
     const dragId = rowDrag
@@ -340,6 +346,12 @@ export function BoardListPage() {
         </Stack>
       )}
 
+      {canEdit && !sortable && (
+        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+          Zum Sortieren eine einzelne Spalte auswählen.
+        </Typography>
+      )}
+
       {visible.length === 0 ? (
         <Typography variant="body2" color="text.secondary" sx={{ py: 2 }}>
           Keine Karten
@@ -401,7 +413,7 @@ export function BoardListPage() {
                 role="button"
                 tabIndex={0}
                 aria-label={`Detail öffnen: ${card.title}`}
-                draggable={canEdit && !card.archived}
+                draggable={sortable}
                 onDragStart={(e) => { setRowDrag(card.id); e.dataTransfer.setData('text/plain', String(card.id)) }}
                 onDragOver={(e) => { if (validRowDrop(card)) { e.preventDefault(); setRowOver(card.id) } }}
                 onDrop={(e) => { e.preventDefault(); void onRowDrop(card) }}
@@ -426,8 +438,13 @@ export function BoardListPage() {
                   '&:hover': { boxShadow: 2 },
                 }}
               >
-                <DragIndicatorIcon fontSize="small" aria-label="Reihenfolge ändern"
-                  sx={{ flexShrink: 0, color: 'action.disabled', visibility: card.archived ? 'hidden' : 'visible' }} />
+                {sortable && (
+                  <DragIndicatorIcon
+                    fontSize="small"
+                    aria-label="Reihenfolge ändern"
+                    sx={{ flexShrink: 0, color: 'action.disabled' }}
+                  />
+                )}
                 {order.map((key) => (
                   <Box key={key} sx={{ ...cellSx(key), overflow: 'hidden' }}>
                     {renderCell(key, card)}
