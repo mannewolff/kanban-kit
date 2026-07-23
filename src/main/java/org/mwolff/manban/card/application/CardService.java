@@ -874,16 +874,14 @@ public class CardService {
   /**
    * Lädt die Karte und verlangt das je nach Kartentyp (Ticket/Epic) passende Recht. Die Rechte sind
    * projekt-basiert und werden über {@code card.projectId()} (immer gesetzt, V18) geprüft — nicht
-   * über das Board. So sind auch board-lose Pool-Ideen (#405) editierbar; für board-gebundene Karten
-   * ist die Prüfung identisch (Projekt-ID stimmt mit dem Board-Projekt überein).
+   * über das Board. So sind auch board-lose Pool-Ideen (#405) editierbar; für board-gebundene
+   * Karten ist die Prüfung identisch (Projekt-ID stimmt mit dem Board-Projekt überein).
    */
   private Card requireCardOp(
       long userId, long cardId, Permission ticketPermission, Permission epicPermission) {
     Card card = cards.findById(cardId).orElseThrow(CardNotFoundException::new);
     permissions.require(
-        userId,
-        card.projectId(),
-        card.type() == CardType.EPIC ? epicPermission : ticketPermission);
+        userId, card.projectId(), card.type() == CardType.EPIC ? epicPermission : ticketPermission);
     return card;
   }
 

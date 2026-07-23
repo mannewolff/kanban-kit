@@ -123,32 +123,34 @@ class ProjectIdeaEditIT extends AbstractIntegrationTest {
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.body").value("Nachgeschärft"));
 
-    // Mitglied liest den Aktivitätsverlauf (CREATED beim Anlegen + UPDATED + ASSIGNED beim Editieren).
+    // Mitglied liest den Aktivitätsverlauf (CREATED beim Anlegen + UPDATED + ASSIGNED beim
+    // Editieren).
     mvc.perform(get("/api/cards/" + ideaId + "/activity").cookie(owner))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.length()").value(3));
 
-    // Nichtmitglied ist an allen Editier-/Lese-Pfaden ausgesperrt.
+    // Nichtmitglied ist an allen Editier-/Lese-Pfaden ausgesperrt — 404 (kein Existenz-Leak, s.
+    // PermissionChecker: Nichtmitglieder erhalten 404, nicht 403).
     mvc.perform(
             patch("/api/cards/" + ideaId)
                 .cookie(stranger)
                 .contentType("application/json")
                 .content("{\"title\":\"gekapert\"}"))
-        .andExpect(status().isForbidden());
+        .andExpect(status().isNotFound());
     mvc.perform(
             put("/api/cards/" + ideaId + "/assignees")
                 .cookie(stranger)
                 .contentType("application/json")
                 .content("{\"assignees\":[]}"))
-        .andExpect(status().isForbidden());
+        .andExpect(status().isNotFound());
     mvc.perform(
             post("/api/cards/" + ideaId + "/comments")
                 .cookie(stranger)
                 .contentType("application/json")
                 .content("{\"body\":\"x\"}"))
-        .andExpect(status().isForbidden());
+        .andExpect(status().isNotFound());
     mvc.perform(get("/api/cards/" + ideaId + "/activity").cookie(stranger))
-        .andExpect(status().isForbidden());
+        .andExpect(status().isNotFound());
   }
 
   private Cookie session(String email, PlatformRole role) throws Exception {
