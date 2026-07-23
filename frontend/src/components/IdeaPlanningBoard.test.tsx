@@ -215,6 +215,15 @@ describe('IdeaPlanningBoard', () => {
     expect(screen.getByText('Keine Ideen im Pool.')).toBeInTheDocument()
   })
 
+  it('zeigt an jeder ziehbaren Zeile einen Ziehgriff', async () => {
+    setup()
+    renderBoard()
+    await screen.findByText('Backlog A')
+
+    // 2 Backlog-Karten + 1 Pool-Idee = 3 ziehbare Zeilen, jede mit Ziehgriff.
+    expect(screen.getAllByLabelText('Ziehen')).toHaveLength(3)
+  })
+
   it('blendet für Betrachter (canEdit=false) alle Aktionen aus', async () => {
     setup()
     renderBoard(false)
@@ -222,6 +231,7 @@ describe('IdeaPlanningBoard', () => {
 
     expect(screen.queryByRole('button', { name: /einplanen/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /in den Pool/i })).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Ziehen')).not.toBeInTheDocument()
     expect(screen.getByTestId('pool-item-20')).not.toHaveAttribute('draggable', 'true')
   })
 

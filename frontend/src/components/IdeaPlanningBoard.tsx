@@ -5,6 +5,7 @@ import Paper from '@mui/material/Paper'
 import Stack from '@mui/material/Stack'
 import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
+import DragIndicatorIcon from '@mui/icons-material/DragIndicator'
 import NorthOutlinedIcon from '@mui/icons-material/NorthOutlined'
 import SouthOutlinedIcon from '@mui/icons-material/SouthOutlined'
 import { useCallback, useEffect, useMemo, useState } from 'react'
@@ -220,6 +221,13 @@ export function IdeaPlanningBoard({
                 onDrop={handleBacklogRowDrop(card)}
                 sx={{ px: 1.5, py: 1, display: 'flex', alignItems: 'center', gap: 1.5, cursor: canEdit ? 'grab' : 'default' }}
               >
+                {canEdit && (
+                  <DragIndicatorIcon
+                    fontSize="small"
+                    aria-label="Ziehen"
+                    sx={{ flexShrink: 0, color: 'action.disabled' }}
+                  />
+                )}
                 <Typography variant="caption" color="text.secondary" sx={{ width: 48, flexShrink: 0 }}>
                   #{card.number}
                 </Typography>
@@ -272,6 +280,13 @@ export function IdeaPlanningBoard({
                 onDragStart={startDrag('pool', idea.id)}
                 sx={{ px: 1.5, py: 1, display: 'flex', alignItems: 'center', gap: 1.5, bgcolor: 'action.hover', cursor: canEdit ? 'grab' : 'default' }}
               >
+                {canEdit && (
+                  <DragIndicatorIcon
+                    fontSize="small"
+                    aria-label="Ziehen"
+                    sx={{ flexShrink: 0, color: 'action.disabled' }}
+                  />
+                )}
                 <Typography variant="body2" noWrap sx={{ flex: 1, minWidth: 0, fontWeight: 500 }}>
                   {idea.title}
                 </Typography>
