@@ -39,6 +39,7 @@ import org.mwolff.manban.card.domain.Label;
 import org.mwolff.manban.project.application.PermissionChecker;
 import org.mwolff.manban.project.application.ProjectAccessDeniedException;
 import org.mwolff.manban.project.application.ProjectMembershipRepository;
+import org.mwolff.manban.project.application.ProjectNotFoundException;
 import org.mwolff.manban.project.domain.Permission;
 import org.mwolff.manban.project.domain.ProjectMembership;
 import org.springframework.context.ApplicationEventPublisher;
@@ -2188,6 +2189,62 @@ class CardServiceTest {
 
     verify(permissions).requireMembership(1L, PROJECT);
     assertThat(result).singleElement().extracting(CardService.CardView::id).isEqualTo(1L);
+  }
+
+  // --- getByNumber (#408) -----------------------------------------------
+
+  @Test
+  void getByNumber_returnsBoardCardView_forMember() {
+    when(cards.findByProjectIdAndNumber(PROJECT, 42))
+        .thenReturn(Optional.of(card(1L, 20L, 42, false, null, CardType.CARD, null, null)));
+
+    CardService.CardView view = service.getByNumber(5L, PROJECT, 42);
+
+    assertThat(view.id()).isEqualTo(1L);
+    assertThat(view.number()).isEqualTo(42);
+    assertThat(view.boardId()).isEqualTo(BOARD);
+  }
+
+  @Test
+  void getByNumber_returnsPoolIdeaView_forMember() {
+    // Auch eine board-lose Pool-Idee ist per projektweiter Nummer auflösbar.
+    when(cards.findByProjectIdAndNumber(PROJECT, 7)).thenReturn(Optional.of(poolIdea(1L)));
+
+    CardService.CardView view = service.getByNumber(5L, PROJECT, 7);
+
+    assertThat(view.id()).isEqualTo(1L);
+    assertThat(view.boardId()).isNull();
+    assertThat(view.ideaStored()).isTrue();
+  }
+
+  @Test
+  void getByNumber_checksMembershipBeforeLookup() {
+    // Reihenfolge: erst Mitgliedschaft (404 bei Nichtmitglied), dann Karten-Lookup.
+    when(cards.findByProjectIdAndNumber(PROJECT, 42))
+        .thenReturn(Optional.of(card(1L, 20L, 42, false, null, CardType.CARD, null, null)));
+
+    service.getByNumber(5L, PROJECT, 42);
+
+    InOrder order = inOrder(permissions, cards);
+    order.verify(permissions).requireMembership(5L, PROJECT);
+    order.verify(cards).findByProjectIdAndNumber(PROJECT, 42);
+  }
+
+  @Test
+  void getByNumber_propagatesMembership404_forNonMember() {
+    doThrow(new ProjectNotFoundException()).when(permissions).requireMembership(5L, PROJECT);
+
+    assertThatThrownBy(() -> service.getByNumber(5L, PROJECT, 42))
+        .isInstanceOf(ProjectNotFoundException.class);
+    verify(cards, never()).findByProjectIdAndNumber(anyLong(), anyInt());
+  }
+
+  @Test
+  void getByNumber_throwsCardNotFound_whenUnknownNumber() {
+    when(cards.findByProjectIdAndNumber(PROJECT, 99)).thenReturn(Optional.empty());
+
+    assertThatThrownBy(() -> service.getByNumber(5L, PROJECT, 99))
+        .isInstanceOf(CardNotFoundException.class);
   }
 
   // --- Board-lose Pool-Ideen editierbar (#405) --------------------------

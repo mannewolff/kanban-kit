@@ -783,6 +783,20 @@ public class CardService {
   }
 
   /**
+   * Löst eine projektweite Kartennummer zu ihrer {@link CardView} auf (board-gebundene Karte oder
+   * board-lose Pool-Idee). Erfordert Projekt-Mitgliedschaft (Leserecht); Nichtmitglied wie
+   * unbekannte oder gelöschte Nummer → 404 (kein Existenz-Leak). Basis für klickbare {@code
+   * #N}-Verweise (#403).
+   */
+  @Transactional(readOnly = true)
+  public CardView getByNumber(long userId, long projectId, int number) {
+    permissions.requireMembership(userId, projectId);
+    Card card =
+        cards.findByProjectIdAndNumber(projectId, number).orElseThrow(CardNotFoundException::new);
+    return view(card);
+  }
+
+  /**
    * Aktivitätsverlauf einer Karte (chronologisch). Erfordert Projekt-Mitgliedschaft (Leserecht),
    * geprüft über {@code card.projectId()} — auch für board-lose Pool-Ideen (#405).
    */

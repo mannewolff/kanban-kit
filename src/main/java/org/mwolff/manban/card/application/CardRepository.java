@@ -12,6 +12,13 @@ public interface CardRepository {
 
   Optional<Card> findById(long id);
 
+  /**
+   * Nicht-gelöschte Karte eines Projekts nach ihrer projektweiten Nummer (board-gebundene Karte
+   * oder board-lose Pool-Idee). Nummern sind projektweit eindeutig; leer, wenn keine solche Karte
+   * existiert.
+   */
+  Optional<Card> findByProjectIdAndNumber(long projectId, int number);
+
   List<Card> findByBoardId(long boardId);
 
   /** Alle nicht-gelöschten Karten eines Projekts (board-übergreifend, inkl. board-loser Ideen). */
