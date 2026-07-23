@@ -2049,19 +2049,23 @@ class CardServiceTest {
 
   @Test
   void createProjectIdea_savesBoardlessIdea_withProjectAndTargetBoard() {
+    // Neue Pool-Ideen bekommen sofort eine projektweite Nummer (#402), bleiben aber board-los.
+    when(cards.nextCardNumber(PROJECT)).thenReturn(3);
     ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
     CardService.CardView view = service.createProjectIdea(1L, PROJECT, "Idee", "d", 7L);
 
     verify(permissions).require(1L, PROJECT, Permission.TICKET_CREATE);
+    verify(cards).nextCardNumber(PROJECT);
     verify(cards).save(captor.capture());
     assertThat(captor.getValue().boardId()).isNull();
     assertThat(captor.getValue().columnId()).isNull();
-    assertThat(captor.getValue().number()).isNull();
+    assertThat(captor.getValue().number()).isEqualTo(3);
     assertThat(captor.getValue().ideaStored()).isTrue();
     assertThat(captor.getValue().projectId()).isEqualTo(PROJECT);
     assertThat(captor.getValue().targetBoardId()).isEqualTo(7L);
     verify(activity).add(1L, 1L, CardActivityType.CREATED, "Idee angelegt", FIXED);
     assertThat(view.boardId()).isNull();
+    assertThat(view.number()).isEqualTo(3);
     // view() muss das notierte Zielboard durchreichen — das Frontend wählt es beim Einplanen vor.
     assertThat(view.targetBoardId()).isEqualTo(7L);
   }
@@ -2089,6 +2093,43 @@ class CardServiceTest {
     verify(events).publishEvent(new BoardChangedEvent(BOARD, ChangeType.CREATED, 1L));
     assertThat(result.boardId()).isEqualTo(BOARD);
     assertThat(result.ideaStored()).isFalse();
+  }
+
+  @Test
+  void planOntoBoard_keepsExistingNumber_forAlreadyNumberedIdea() {
+    // Seit #402 tragen Pool-Ideen bereits bei der Anlage eine projektweite Nummer; beim Einplanen
+    // wird sie behalten (keine Neuvergabe).
+    Card numbered =
+        new Card(
+            1L,
+            null,
+            null,
+            42,
+            "Idee",
+            null,
+            0,
+            false,
+            true,
+            null,
+            1L,
+            FIXED,
+            FIXED,
+            CardType.CARD,
+            null,
+            null,
+            null,
+            PROJECT,
+            null);
+    when(cards.findById(1L)).thenReturn(Optional.of(numbered));
+    when(columns.findByBoardId(BOARD)).thenReturn(List.of(column(20L, "Backlog", 0)));
+    when(cards.maxActivePositionInColumn(20L)).thenReturn(-1);
+
+    ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
+    service.planOntoBoard(9L, 1L, BOARD);
+
+    verify(cards).save(captor.capture());
+    assertThat(captor.getValue().number()).isEqualTo(42);
+    verify(cards, never()).nextCardNumber(anyLong());
   }
 
   @Test

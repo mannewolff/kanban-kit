@@ -688,13 +688,16 @@ public class CardService {
       @Nullable Long targetBoardId) {
     permissions.require(userId, projectId, Permission.TICKET_CREATE);
     Instant now = clock.instant();
+    // #402: Pool-Ideen bekommen sofort eine projektweite Nummer (referenzierbar wie Board-Karten);
+    // sie bleiben board-los und behalten die Nummer beim späteren Einplanen.
+    int number = cards.nextCardNumber(projectId);
     Card saved =
         cards.save(
             new Card(
                 null,
                 null,
                 null,
-                null,
+                number,
                 title.trim(),
                 normalize(description),
                 0,
@@ -734,7 +737,10 @@ public class CardService {
             .min(Comparator.comparingInt(BoardColumn::position))
             .orElseThrow(ColumnNotFoundException::new);
     long columnId = backlog.requireId();
-    int number = cards.nextCardNumber(card.projectId());
+    // #402: eine bereits nummerierte Pool-Idee behält ihre Nummer; nur Legacy-Ideen ohne Nummer
+    // bekommen beim Einplanen eine.
+    int number =
+        card.number() != null ? card.requireNumber() : cards.nextCardNumber(card.projectId());
     int position = cards.maxActivePositionInColumn(columnId) + 1;
     Instant now = clock.instant();
     Card planned = cards.save(card.withPlannedOnBoard(targetBoardId, columnId, number, position));

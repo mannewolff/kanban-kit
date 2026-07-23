@@ -89,7 +89,7 @@ class KanbanCompatServiceTest {
         id,
         null,
         null,
-        null,
+        7,
         "Titel",
         "Body",
         0,
@@ -297,9 +297,10 @@ class KanbanCompatServiceTest {
     KanbanCompatService.Created created = service.create(bound(), "Titel", "Body", null, false);
 
     // Then: kein board-gebundenes create mehr, sondern eine board-lose Pool-Idee; zurück kommt
-    // deren id (Pool-Ideen tragen keine board-scoped Nummer).
+    // deren id samt der projektweiten Nummer (#402), damit der Adapter sofort #N zeigen kann.
     verify(cardService).createProjectIdea(1L, 5L, "Titel", "Body", BOARD);
     assertThat(created.id()).isEqualTo(42L);
+    assertThat(created.number()).isEqualTo(7);
   }
 
   @Test
@@ -316,6 +317,7 @@ class KanbanCompatServiceTest {
     // Then: keine InvalidKanbanColumnException, Delegation unveraendert
     verify(cardService).createProjectIdea(1L, 5L, "Titel", "Body", BOARD);
     assertThat(created.id()).isEqualTo(42L);
+    assertThat(created.number()).isEqualTo(7);
   }
 
   @Test

@@ -301,6 +301,13 @@ export function IdeaPlanningBoard({
                     sx={{ flexShrink: 0, color: 'action.disabled' }}
                   />
                 )}
+                {/* #402: neue Pool-Ideen tragen eine projektweite Nummer; Legacy-Ideen ohne Nummer
+                    zeigen kein nacktes „#". */}
+                {idea.number != null && (
+                  <Typography variant="caption" color="text.secondary" sx={{ width: 48, flexShrink: 0 }}>
+                    #{idea.number}
+                  </Typography>
+                )}
                 <Typography variant="body2" noWrap sx={{ flex: 1, minWidth: 0, fontWeight: 500 }}>
                   {idea.title}
                 </Typography>

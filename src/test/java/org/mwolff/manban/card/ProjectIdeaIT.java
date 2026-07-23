@@ -62,32 +62,36 @@ class ProjectIdeaIT extends AbstractIntegrationTest {
             .get("id")
             .asLong();
 
-    // Board-lose Idee im Pool anlegen (mit notiertem Zielboard).
-    long ideaId =
+    // Board-lose Idee im Pool anlegen (mit notiertem Zielboard). Sie bekommt sofort eine
+    // projektweite Nummer (#402).
+    var ideaNode =
         json.readTree(
-                mvc.perform(
-                        post("/api/projects/" + projectId + "/ideas")
-                            .cookie(owner)
-                            .contentType("application/json")
-                            .content("{\"title\":\"Idee A\",\"targetBoardId\":" + boardId + "}"))
-                    .andExpect(status().isCreated())
-                    .andExpect(jsonPath("$.boardId").value(nullValue()))
-                    .andExpect(jsonPath("$.ideaStored").value(true))
-                    .andReturn()
-                    .getResponse()
-                    .getContentAsString())
-            .get("id")
-            .asLong();
+            mvc.perform(
+                    post("/api/projects/" + projectId + "/ideas")
+                        .cookie(owner)
+                        .contentType("application/json")
+                        .content("{\"title\":\"Idee A\",\"targetBoardId\":" + boardId + "}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.boardId").value(nullValue()))
+                .andExpect(jsonPath("$.number").isNumber())
+                .andExpect(jsonPath("$.ideaStored").value(true))
+                .andReturn()
+                .getResponse()
+                .getContentAsString());
+    long ideaId = ideaNode.get("id").asLong();
+    int ideaNumber = ideaNode.get("number").asInt();
 
-    // Taucht in der Projekt-Ideen-Liste auf, aber nicht in den Board-Karten.
+    // Taucht in der Projekt-Ideen-Liste (mit Nummer) auf, aber nicht in den Board-Karten.
     mvc.perform(get("/api/projects/" + projectId + "/ideas").cookie(owner))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.length()").value(1))
-        .andExpect(jsonPath("$[0].id").value(ideaId));
+        .andExpect(jsonPath("$[0].id").value(ideaId))
+        .andExpect(jsonPath("$[0].number").value(ideaNumber));
     mvc.perform(get("/api/boards/" + boardId + "/cards").cookie(owner))
         .andExpect(jsonPath("$.length()").value(0));
 
-    // Einplanen -> landet im Board-Backlog (board-gebunden, nicht mehr Idee).
+    // Einplanen -> landet im Board-Backlog (board-gebunden, nicht mehr Idee); die Nummer bleibt
+    // dieselbe (keine Neuvergabe).
     mvc.perform(
             put("/api/cards/" + ideaId + "/plan")
                 .cookie(owner)
@@ -95,6 +99,7 @@ class ProjectIdeaIT extends AbstractIntegrationTest {
                 .content("{\"targetBoardId\":" + boardId + "}"))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.boardId").value(boardId))
+        .andExpect(jsonPath("$.number").value(ideaNumber))
         .andExpect(jsonPath("$.ideaStored").value(false));
     mvc.perform(get("/api/boards/" + boardId + "/cards").cookie(owner))
         .andExpect(jsonPath("$.length()").value(1))

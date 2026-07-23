@@ -4,8 +4,10 @@ import type { CardType } from './cards'
 /**
  * Projektweite Idee — eine board-lose Karte im Ideen-Pool oder eine bereits eingeplante bzw.
  * Legacy-Karte mit gesetztem Ideen-Flag. Spiegelt die board-optionale `CardView` des Backends:
- * `boardId`/`columnId`/`number` sind `null`, solange die Idee im Pool liegt; `targetBoardId` hält
- * das (z. B. aus dem kanbancompat-Ingest) notierte Zielboard für die Vorauswahl beim Einplanen.
+ * `boardId`/`columnId` sind `null`, solange die Idee im Pool liegt. Seit #402 trägt eine neue
+ * Pool-Idee sofort eine projektweite `number`; nur Legacy-Ideen ohne Nummer haben hier `null`.
+ * `targetBoardId` hält das (z. B. aus dem kanbancompat-Ingest) notierte Zielboard für die
+ * Vorauswahl beim Einplanen.
  */
 export interface Idea {
   id: number

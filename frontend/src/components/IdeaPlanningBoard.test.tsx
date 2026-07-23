@@ -152,6 +152,17 @@ describe('IdeaPlanningBoard', () => {
     expect(screen.queryByText('Legacy')).not.toBeInTheDocument()
   })
 
+  it('zeigt #N einer nummerierten Pool-Idee, aber kein nacktes # für Legacy-Ideen ohne Nummer', async () => {
+    const numbered = idea({ id: 22, title: 'Pool Nummeriert', number: 42 })
+    const legacyNoNumber = idea({ id: 23, title: 'Pool Legacy' }) // number: null
+    setup({ ideas: [numbered, legacyNoNumber] })
+    renderBoard()
+    await screen.findByText('Pool Nummeriert')
+
+    expect(screen.getByTestId('pool-item-22')).toHaveTextContent('#42')
+    expect(screen.getByTestId('pool-item-23')).not.toHaveTextContent('#')
+  })
+
   it('plant eine Pool-Idee per Button ein', async () => {
     setup()
     renderBoard()
