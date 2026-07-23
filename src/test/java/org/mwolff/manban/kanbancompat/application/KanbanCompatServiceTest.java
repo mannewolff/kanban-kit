@@ -2,8 +2,6 @@ package org.mwolff.manban.kanbancompat.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -20,6 +18,7 @@ import org.junit.jupiter.params.provider.NullSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mwolff.manban.accesstoken.application.KanbanPrincipal;
 import org.mwolff.manban.board.application.BoardColumnRepository;
+import org.mwolff.manban.board.application.BoardNotFoundException;
 import org.mwolff.manban.board.application.BoardRepository;
 import org.mwolff.manban.board.domain.Board;
 import org.mwolff.manban.board.domain.BoardColumn;
@@ -76,7 +75,35 @@ class KanbanCompatServiceTest {
         CardType.CARD,
         null,
         null,
+        null,
+        1L,
         null);
+  }
+
+  private static Board boardWithProject(long id, long projectId) {
+    return new Board(id, projectId, "B", FIXED);
+  }
+
+  private static CardView pooledIdea(long id) {
+    return new CardView(
+        id,
+        null,
+        null,
+        null,
+        "Titel",
+        "Body",
+        0,
+        false,
+        true,
+        null,
+        List.of(),
+        CardType.CARD,
+        null,
+        null,
+        List.of(),
+        null,
+        List.of(),
+        BOARD);
   }
 
   @BeforeEach
@@ -151,6 +178,8 @@ class KanbanCompatServiceTest {
             CardType.CARD,
             null,
             null,
+            null,
+            1L,
             null);
     when(boards.findById(BOARD)).thenReturn(Optional.of(new Board(BOARD, 5L, "B", FIXED)));
     when(columns.findByBoardId(BOARD)).thenReturn(standardColumns());
@@ -184,6 +213,8 @@ class KanbanCompatServiceTest {
             CardType.EPIC,
             null,
             "E",
+            null,
+            1L,
             null);
     when(boards.findById(BOARD)).thenReturn(Optional.of(new Board(BOARD, 5L, "B", FIXED)));
     when(columns.findByBoardId(BOARD)).thenReturn(standardColumns());
@@ -256,126 +287,60 @@ class KanbanCompatServiceTest {
   }
 
   @Test
-  void create_delegatesToCardServiceInBacklog_byDefault() {
-    // Given
-    when(columns.findByBoardId(BOARD)).thenReturn(standardColumns());
-    when(cardService.create(
-            eq(1L), eq(BOARD), eq(100L), eq("Titel"), eq("Body"), isNull(), isNull(), eq(false)))
-        .thenReturn(
-            new CardView(
-                1L,
-                BOARD,
-                100L,
-                7,
-                "Titel",
-                "Body",
-                0,
-                false,
-                false,
-                null,
-                List.of(),
-                CardType.CARD,
-                null,
-                null,
-                List.of(),
-                null,
-                List.of()));
+  void create_delegatesToCreateProjectIdea_asPoolIdea() {
+    // Given: der board-gebundene Token liefert das Board; daraus wird das Projekt abgeleitet und
+    // das Board nur noch als Zielboard (target_board_id) notiert.
+    when(boards.findById(BOARD)).thenReturn(Optional.of(boardWithProject(BOARD, 5L)));
+    when(cardService.createProjectIdea(1L, 5L, "Titel", "Body", BOARD)).thenReturn(pooledIdea(42L));
 
     // When
     KanbanCompatService.Created created = service.create(bound(), "Titel", "Body", null, false);
 
-    // Then
-    assertThat(created.number()).isEqualTo(7);
+    // Then: kein board-gebundenes create mehr, sondern eine board-lose Pool-Idee; zurück kommt
+    // deren id (Pool-Ideen tragen keine board-scoped Nummer).
+    verify(cardService).createProjectIdea(1L, 5L, "Titel", "Body", BOARD);
+    assertThat(created.id()).isEqualTo(42L);
   }
 
   @Test
-  void create_defaultsToBacklog_whenColumnBlank() {
-    // Given: leerer (blank) Spalten-Parameter -> BACKLOG
-    when(columns.findByBoardId(BOARD)).thenReturn(standardColumns());
-    when(cardService.create(
-            eq(1L), eq(BOARD), eq(100L), eq("Titel"), eq("Body"), isNull(), isNull(), eq(false)))
-        .thenReturn(
-            new CardView(
-                1L,
-                BOARD,
-                100L,
-                7,
-                "Titel",
-                "Body",
-                0,
-                false,
-                false,
-                null,
-                List.of(),
-                CardType.CARD,
-                null,
-                null,
-                List.of(),
-                null,
-                List.of()));
+  void create_ignoresColumnAndIdeaStored() {
+    // Given: seit Entscheidung B sind column und ideaStored gegenstandslos — egal was reinkommt,
+    // es entsteht dieselbe Pool-Idee (keine Spalten-Validierung, kein Ideen-Flag-Durchreichen).
+    when(boards.findById(BOARD)).thenReturn(Optional.of(boardWithProject(BOARD, 5L)));
+    when(cardService.createProjectIdea(1L, 5L, "Titel", "Body", BOARD)).thenReturn(pooledIdea(42L));
 
-    // When
-    KanbanCompatService.Created created = service.create(bound(), "Titel", "Body", "   ", false);
+    // When: absichtlich eine (frueher unbekannte) Spalte + ideaStored=true
+    KanbanCompatService.Created created =
+        service.create(bound(), "Titel", "Body", "VOELLIG-UNBEKANNT", true);
 
-    // Then
-    assertThat(created.number()).isEqualTo(7);
+    // Then: keine InvalidKanbanColumnException, Delegation unveraendert
+    verify(cardService).createProjectIdea(1L, 5L, "Titel", "Body", BOARD);
+    assertThat(created.id()).isEqualTo(42L);
   }
 
   @Test
-  void create_passesIdeaStoredFlagThrough_whenTrue() {
-    // Given: der ideaStored-Ingest muss das Flag rückwärtskompatibel an CardService durchreichen.
-    when(columns.findByBoardId(BOARD)).thenReturn(standardColumns());
-    when(cardService.create(
-            eq(1L), eq(BOARD), eq(100L), eq("Titel"), eq("Body"), isNull(), isNull(), eq(true)))
-        .thenReturn(
-            new CardView(
-                1L,
-                BOARD,
-                100L,
-                7,
-                "Titel",
-                "Body",
-                0,
-                false,
-                true,
-                null,
-                List.of(),
-                CardType.CARD,
-                null,
-                null,
-                List.of(),
-                null,
-                List.of()));
+  void create_throwsBoardNotFound_whenBoardMissing() {
+    // Given: der Token ist gebunden, aber das Board existiert nicht (mehr)
+    when(boards.findById(BOARD)).thenReturn(Optional.empty());
 
-    // When
-    KanbanCompatService.Created created = service.create(bound(), "Titel", "Body", null, true);
-
-    // Then — Delegation mit ideaStored=true (der Stub matcht nur eq(true))
-    assertThat(created.number()).isEqualTo(7);
-  }
-
-  @Test
-  void create_throwsInvalidKanbanColumn_whenColumnKeyUnknown() {
-    // Given
-    when(columns.findByBoardId(BOARD)).thenReturn(standardColumns());
-
-    // When / Then: die Meldung muss aus dem COLUMNS-Guard stammen (nicht aus dem späteren
-    // Board-Lookup), sonst bliebe ein Umgehen des Guards unentdeckt.
+    // When / Then
     KanbanPrincipal principal = bound();
-    assertThatThrownBy(() -> service.create(principal, "Titel", "Body", "NOPE", false))
-        .isInstanceOf(InvalidKanbanColumnException.class)
-        .hasMessageContaining("Unbekannte Kanban-Spalte");
+    assertThatThrownBy(() -> service.create(principal, "Titel", "Body", null, false))
+        .isInstanceOf(BoardNotFoundException.class);
   }
 
   @Test
-  void create_throwsInvalidKanbanColumn_whenBoardHasNoColumnForKey() {
-    // Given: gültiger Kanban-Key, aber das Board hat keine passende Spalte
+  void move_throwsInvalidKanbanColumn_whenBoardHasNoColumnForKey() {
+    // Given: gültiger Kanban-Key, aber das Board hat keine passende Spalte. Dieser
+    // columnIdForKey-Guard ist seit Entscheidung B nur noch über move erreichbar (create wertet
+    // keine Spalte mehr aus).
+    when(cards.findById(1L)).thenReturn(Optional.of(card(1L, 100L, 1)));
     when(columns.findByBoardId(BOARD))
         .thenReturn(List.of(new BoardColumn(100L, BOARD, "Backlog", 0, null)));
 
     // When / Then
     KanbanPrincipal principal = bound();
-    assertThatThrownBy(() -> service.create(principal, "Titel", "Body", "DONE", false))
+    assertThatThrownBy(() -> service.move(principal, 1L, "DONE", 0))
         .isInstanceOf(InvalidKanbanColumnException.class);
   }
 
@@ -413,6 +378,8 @@ class KanbanCompatServiceTest {
             CardType.CARD,
             null,
             null,
+            null,
+            1L,
             null);
     when(cards.findById(1L)).thenReturn(Optional.of(otherBoard));
 
@@ -426,10 +393,12 @@ class KanbanCompatServiceTest {
     // Given: Karte liegt auf dem Board, aber die Ziel-Spalte ist null
     when(cards.findById(1L)).thenReturn(Optional.of(card(1L, 100L, 1)));
 
-    // When / Then
+    // When / Then: die Meldung muss aus dem COLUMNS-Guard stammen ("Unbekannte Kanban-Spalte"),
+    // nicht aus dem späteren Board-Lookup — sonst bliebe ein Umgehen des Guards unentdeckt.
     KanbanPrincipal principal = bound();
     assertThatThrownBy(() -> service.move(principal, 1L, null, 0))
-        .isInstanceOf(InvalidKanbanColumnException.class);
+        .isInstanceOf(InvalidKanbanColumnException.class)
+        .hasMessageContaining("Unbekannte Kanban-Spalte");
   }
 
   @Test
@@ -466,6 +435,8 @@ class KanbanCompatServiceTest {
             CardType.CARD,
             null,
             null,
+            null,
+            1L,
             null);
     when(cards.findById(1L)).thenReturn(Optional.of(otherBoard));
 

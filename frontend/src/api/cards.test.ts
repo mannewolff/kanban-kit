@@ -83,13 +83,6 @@ describe('cardsApi', () => {
     expect(c.method).toBe('POST')
   })
 
-  it('promote ruft POST /api/cards/{id}/promote', async () => {
-    const f = spyFetch()
-    await cardsApi.promote(1)
-    const c = lastCall(f)
-    expect(c.url).toBe('/api/cards/1/promote')
-    expect(c.method).toBe('POST')
-  })
 
   it('move ruft POST /api/cards/{id}/move mit Spalte und Position', async () => {
     const f = spyFetch()

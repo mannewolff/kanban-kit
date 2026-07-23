@@ -1,23 +1,17 @@
 import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
-import Button from '@mui/material/Button'
 import Chip from '@mui/material/Chip'
 import IconButton from '@mui/material/IconButton'
-import Snackbar from '@mui/material/Snackbar'
 import Stack from '@mui/material/Stack'
 import Tooltip from '@mui/material/Tooltip'
 import Typography from '@mui/material/Typography'
 import type { SxProps, Theme } from '@mui/material/styles'
-import AddIcon from '@mui/icons-material/Add'
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator'
-import LightbulbOutlinedIcon from '@mui/icons-material/LightbulbOutlined'
-import NorthOutlinedIcon from '@mui/icons-material/NorthOutlined'
 import RestoreOutlinedIcon from '@mui/icons-material/RestoreOutlined'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { boardsApi, type Board } from '../api/boards'
 import { Breadcrumbs } from '../components/Breadcrumbs'
-import { NewCardModal, type NewItemInput } from '../components/NewCardModal'
 import { cardsApi, type Card } from '../api/cards'
 import { epicsApi, type Epic } from '../api/epics'
 import { labelsApi, type Label } from '../api/labels'
@@ -88,8 +82,6 @@ export function BoardListPage() {
   const [filters, setFilters] = useState<Set<FilterKey> | null>(null)
   const [order, setOrder] = useState<ColumnKey[]>(() => readColumnOrder(id))
   const [detailCard, setDetailCard] = useState<Card | null>(null)
-  const [snackbar, setSnackbar] = useState<string | null>(null)
-  const [newIdeaOpen, setNewIdeaOpen] = useState(false)
   const [rowDrag, setRowDrag] = useState<number | null>(null)
   const [rowOver, setRowOver] = useState<number | null>(null)
   const [colDrag, setColDrag] = useState<ColumnKey | null>(null)
@@ -192,43 +184,6 @@ export function BoardListPage() {
   const columnById = useMemo(() => new Map(columns.map((c) => [c.id, c])), [columns])
   const epicById = useMemo(() => new Map(epics.map((e) => [e.id, e])), [epics])
 
-  // Ideen-Speicher-Aktionen (Alltag, an canEdit gebunden): optimistisch mit Rollback bei Fehler.
-  const promoteCard = async (cardId: number) => {
-    const previous = cards
-    const firstColumnId = columns[0]?.id
-    setCards((cur) =>
-      cur.map((c) =>
-        c.id === cardId ? { ...c, ideaStored: false, columnId: firstColumnId ?? c.columnId } : c,
-      ),
-    )
-    try {
-      await cardsApi.promote(cardId)
-      reloadCards()
-    } catch {
-      setCards(previous)
-      setSnackbar('Hochziehen fehlgeschlagen.')
-    }
-  }
-
-  const demoteCard = async (cardId: number) => {
-    const previous = cards
-    setCards((cur) => cur.map((c) => (c.id === cardId ? { ...c, ideaStored: true } : c)))
-    try {
-      await cardsApi.moveToIdeaStorage(cardId)
-      reloadCards()
-    } catch {
-      setCards(previous)
-      setSnackbar('In den Ideen-Speicher fehlgeschlagen.')
-    }
-  }
-
-  const createIdea = async (input: NewItemInput) => {
-    const firstColumnId = columns[0]?.id
-    if (firstColumnId == null) return
-    await cardsApi.create(id, firstColumnId, input.title, input.description, input.parentId, true)
-    reloadCards()
-  }
-
   const toggleFilter = (key: FilterKey) => {
     setFilters((prev) => {
       const next = new Set(prev ?? [])
@@ -271,7 +226,8 @@ export function BoardListPage() {
   // einzelnen Zugriffe (Filterleiste, Sichtbarkeit, Spalten-Chips) ohne eigenen Null-Guard auskommen.
   const activeFilters = filters ?? new Set<FilterKey>()
   const archiveActive = activeFilters.has(ARCHIVED)
-  // Obere Zone: aktive Karten wie bisher — Ideen (ideaStored) sind hier ausgeblendet.
+  // Die Liste zeigt nur aktive Karten. Board-lose bzw. board-gebundene Ideen (ideaStored) leben
+  // jetzt in der projektweiten Ideen-Seite und sind hier ausgeblendet.
   const visible = cards
     .filter((c) => !c.ideaStored && (c.archived ? archiveActive : activeFilters.has(c.columnId)))
     .filter((c) => labelFilter.size === 0 || c.labels.some((l) => labelFilter.has(l)))
@@ -281,16 +237,17 @@ export function BoardListPage() {
       return pa - pb || a.positionInColumn - b.positionInColumn
     })
 
-  // Untere Zone: alle Ideen des Boards, unsortierbar, nach Kartennummer sortiert.
-  const ideas = cards
-    .filter((c) => c.ideaStored && !c.archived)
-    .sort((a, b) => a.number - b.number)
+  // Umsortieren per Drag nur, wenn genau eine echte Spalte gefiltert ist: die Liste zeigt sonst
+  // mehrere Spalten gemischt und ein Cross-Spalten-Drop wäre mehrdeutig (und würde den Status
+  // ändern). Archiv zählt nicht (archivierte Karten haben keine aktive Position).
+  const activeColumns = columns.filter((c) => activeFilters.has(c.id))
+  const sortable = canEdit && !archiveActive && activeColumns.length === 1
 
-  const validRowDrop = (target: Card): boolean => {
-    if (rowDrag == null || rowDrag === target.id || target.archived) return false
-    const dragged = cards.find((c) => c.id === rowDrag)
-    return !!dragged && !dragged.archived && dragged.columnId === target.columnId
-  }
+  // Nur im sortierbaren Zustand (genau eine echte Spalte) ist ein Zeilen-Drop gültig. Dort liegen
+  // alle sichtbaren Karten in derselben, nicht-archivierten Spalte — die frühere Spalten-/Archiv-
+  // Prüfung ist damit redundant; es bleibt: ein laufender Drag, nicht auf sich selbst.
+  const validRowDrop = (target: Card): boolean =>
+    sortable && rowDrag !== null && rowDrag !== target.id
 
   const onRowDrop = async (target: Card) => {
     const dragId = rowDrag
@@ -389,6 +346,12 @@ export function BoardListPage() {
         </Stack>
       )}
 
+      {canEdit && !sortable && (
+        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+          Zum Sortieren eine einzelne Spalte auswählen.
+        </Typography>
+      )}
+
       {visible.length === 0 ? (
         <Typography variant="body2" color="text.secondary" sx={{ py: 2 }}>
           Keine Karten
@@ -450,7 +413,7 @@ export function BoardListPage() {
                 role="button"
                 tabIndex={0}
                 aria-label={`Detail öffnen: ${card.title}`}
-                draggable={canEdit && !card.archived}
+                draggable={sortable}
                 onDragStart={(e) => { setRowDrag(card.id); e.dataTransfer.setData('text/plain', String(card.id)) }}
                 onDragOver={(e) => { if (validRowDrop(card)) { e.preventDefault(); setRowOver(card.id) } }}
                 onDrop={(e) => { e.preventDefault(); void onRowDrop(card) }}
@@ -475,8 +438,13 @@ export function BoardListPage() {
                   '&:hover': { boxShadow: 2 },
                 }}
               >
-                <DragIndicatorIcon fontSize="small" aria-label="Reihenfolge ändern"
-                  sx={{ flexShrink: 0, color: 'action.disabled', visibility: card.archived ? 'hidden' : 'visible' }} />
+                {sortable && (
+                  <DragIndicatorIcon
+                    fontSize="small"
+                    aria-label="Reihenfolge ändern"
+                    sx={{ flexShrink: 0, color: 'action.disabled' }}
+                  />
+                )}
                 {order.map((key) => (
                   <Box key={key} sx={{ ...cellSx(key), overflow: 'hidden' }}>
                     {renderCell(key, card)}
@@ -497,104 +465,11 @@ export function BoardListPage() {
                     </IconButton>
                   </Tooltip>
                 )}
-                {canEdit && !card.archived && (
-                  <Tooltip title="In Ideen-Speicher">
-                    <IconButton
-                      size="small"
-                      aria-label={`Karte ${card.title} in Ideen-Speicher`}
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        void demoteCard(card.id)
-                      }}
-                      sx={{ flexShrink: 0 }}
-                    >
-                      <LightbulbOutlinedIcon fontSize="small" />
-                    </IconButton>
-                  </Tooltip>
-                )}
               </Box>
             ))}
           </Stack>
         </>
       )}
-
-      {/* Zweite Zone: Ideen-Speicher, deutlich abgesetzt. */}
-      <Box sx={{ mt: 4 }} data-testid="idea-zone">
-        <Stack
-          direction="row"
-          alignItems="center"
-          spacing={1}
-          sx={{ mb: 1.5, pt: 2, borderTop: '2px dashed', borderColor: 'divider' }}
-        >
-          <LightbulbOutlinedIcon fontSize="small" color="action" />
-          <Typography
-            variant="subtitle2"
-            sx={{ fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.03em', color: 'text.secondary' }}
-          >
-            Ideen-Speicher
-          </Typography>
-          <Box sx={{ flex: 1 }} />
-          {canEdit && (
-            <Button size="small" startIcon={<AddIcon />} onClick={() => setNewIdeaOpen(true)}>
-              Idee anlegen
-            </Button>
-          )}
-        </Stack>
-
-        {ideas.length === 0 ? (
-          <Typography variant="body2" color="text.secondary" sx={{ py: 1 }}>
-            Keine Ideen
-          </Typography>
-        ) : (
-          <Stack spacing={0.75}>
-            {ideas.map((card) => (
-              <Box
-                key={card.id}
-                role="button"
-                tabIndex={0}
-                aria-label={`Detail öffnen: ${card.title}`}
-                onClick={() => setDetailCard(card)}
-                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setDetailCard(card) } }}
-                sx={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 1.5,
-                  bgcolor: 'action.hover',
-                  border: '1px dashed',
-                  borderColor: 'divider',
-                  borderRadius: 1.5,
-                  px: 1.5,
-                  py: 1,
-                  cursor: 'pointer',
-                  '&:hover': { boxShadow: 1 },
-                }}
-              >
-                <Typography variant="caption" color="text.secondary" sx={{ width: 48, flexShrink: 0 }}>
-                  #{card.number}
-                </Typography>
-                <Typography variant="body2" noWrap sx={{ flex: 1, minWidth: 0, fontWeight: 500 }}>
-                  {card.title}
-                </Typography>
-                {canEdit && (
-                  <Tooltip title="Ins Backlog holen">
-                    <IconButton
-                      size="small"
-                      aria-label={`Idee ${card.title} ins Backlog`}
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        void promoteCard(card.id)
-                      }}
-                      sx={{ flexShrink: 0 }}
-                    >
-                      <NorthOutlinedIcon fontSize="small" />
-                    </IconButton>
-                  </Tooltip>
-                )}
-              </Box>
-            ))}
-          </Stack>
-        )}
-      </Box>
 
       {detailCard && (
         <CardDetailModal
@@ -608,22 +483,6 @@ export function BoardListPage() {
           onChanged={() => { reloadCards(); void epicsApi.list(id).then(setEpics) }}
         />
       )}
-
-      <NewCardModal
-        open={newIdeaOpen}
-        columnName=""
-        epics={epics}
-        ideaOnly
-        onClose={() => setNewIdeaOpen(false)}
-        onSubmit={createIdea}
-      />
-
-      <Snackbar
-        open={snackbar != null}
-        autoHideDuration={4000}
-        onClose={() => setSnackbar(null)}
-        message={snackbar ?? ''}
-      />
     </Box>
   )
 }

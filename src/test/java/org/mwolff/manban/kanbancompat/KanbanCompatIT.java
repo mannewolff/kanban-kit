@@ -151,13 +151,14 @@ class KanbanCompatIT extends AbstractIntegrationTest {
   // --- Tests ----------------------------------------------------------------
 
   @Test
-  void fullClientFlowCreateListMoveComment() throws Exception {
+  void fullClientFlow_ingestToPool_thenPlan_thenListMoveComment() throws Exception {
     Cookie session = loginAs("kanban-owner@example.com");
     long projectId = createProject("kanban-owner@example.com", "Dogfood");
     long boardId = createBoard(session, projectId, "Board");
     String token = boundToken(session, projectId, boardId);
 
-    // Anlegen liefert die neue Kartennummer im JSON-Feld "number".
+    // Ingest über den board-gebundenen Token landet seit Entscheidung B als board-lose Pool-Idee,
+    // NICHT direkt im Board. Zurück kommt die id der Idee (keine board-scoped Nummer).
     String created =
         mvc.perform(
                 post("/api/kanban/items")
@@ -167,11 +168,27 @@ class KanbanCompatIT extends AbstractIntegrationTest {
                         "{\"title\":\"Erste Aufgabe\",\"body\":\"Beschreibung\","
                             + "\"column\":\"BACKLOG\"}"))
             .andExpect(status().isCreated())
-            .andExpect(jsonPath("$.number").exists())
+            .andExpect(jsonPath("$.id").exists())
             .andReturn()
             .getResponse()
             .getContentAsString();
-    int number = json.readTree(created).get("number").asInt();
+    long ideaId = json.readTree(created).get("id").asLong();
+
+    // Die Idee liegt im Projekt-Pool und ist (noch) nicht in den kanbancompat-Board-Items sichtbar.
+    mvc.perform(get("/api/projects/" + projectId + "/ideas").cookie(session))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.length()").value(1))
+        .andExpect(jsonPath("$[0].id").value(ideaId));
+    assertThat(kanbanItems(token).get("BACKLOG")).isEmpty();
+
+    // Einplanen (Cookie-API) macht daraus eine board-gebundene Karte; erst dann sehen die
+    // kanbancompat-Operationen (list/move/comment) das Item.
+    mvc.perform(
+            put("/api/cards/" + ideaId + "/plan")
+                .cookie(session)
+                .contentType("application/json")
+                .content("{\"targetBoardId\":" + boardId + "}"))
+        .andExpect(status().isOk());
 
     // list -> gruppiert, Item im BACKLOG mit type "card"
     JsonNode items = kanbanItems(token);
@@ -183,25 +200,24 @@ class KanbanCompatIT extends AbstractIntegrationTest {
     JsonNode item = items.get("BACKLOG").get(0);
     assertThat(item.get("title").asText()).isEqualTo("Erste Aufgabe");
     assertThat(item.get("body").asText()).isEqualTo("Beschreibung");
-    assertThat(item.get("number").asInt()).isEqualTo(number);
+    assertThat(item.get("id").asLong()).isEqualTo(ideaId);
     assertThat(item.get("column").asText()).isEqualTo("BACKLOG");
     assertThat(item.get("type").asText()).isEqualTo("card");
-    long id = item.get("id").asLong();
 
     // move -> IN_PROGRESS
     mvc.perform(
-            put("/api/kanban/items/" + id + "/move")
+            put("/api/kanban/items/" + ideaId + "/move")
                 .header("X-Kanban-Token", token)
                 .contentType("application/json")
                 .content("{\"column\":\"IN_PROGRESS\",\"position\":0}"))
         .andExpect(status().isOk());
     JsonNode afterMove = kanbanItems(token);
     assertThat(afterMove.get("BACKLOG")).isEmpty();
-    assertThat(afterMove.get("IN_PROGRESS").get(0).get("number").asInt()).isEqualTo(number);
+    assertThat(afterMove.get("IN_PROGRESS").get(0).get("id").asLong()).isEqualTo(ideaId);
 
     // comment
     mvc.perform(
-            post("/api/kanban/items/" + id + "/comments")
+            post("/api/kanban/items/" + ideaId + "/comments")
                 .header("X-Kanban-Token", token)
                 .contentType("application/json")
                 .content("{\"body\":\"Ein Kommentar\"}"))
@@ -209,51 +225,37 @@ class KanbanCompatIT extends AbstractIntegrationTest {
   }
 
   @Test
-  void ingestCreatesIdea_whenIdeaStoredTrue_andBacklogCardOtherwise() throws Exception {
+  void ingest_landsInProjectIdeaPool_notOnBoard() throws Exception {
     Cookie session = loginAs("kanban-idea@example.com");
     long projectId = createProject("kanban-idea@example.com", "Idea-Dogfood");
     long boardId = createBoard(session, projectId, "Idea-Board");
     String token = boundToken(session, projectId, boardId);
 
-    // Ingest mit ideaStored=true legt eine Idee an.
-    mvc.perform(
-            post("/api/kanban/items")
-                .header("X-Kanban-Token", token)
-                .contentType("application/json")
-                .content("{\"title\":\"Als Idee\",\"ideaStored\":true}"))
-        .andExpect(status().isCreated());
-
-    // Ingest ohne Feld bleibt rückwärtskompatibel eine normale Backlog-Karte.
-    mvc.perform(
-            post("/api/kanban/items")
-                .header("X-Kanban-Token", token)
-                .contentType("application/json")
-                .content("{\"title\":\"Normale Karte\"}"))
-        .andExpect(status().isCreated());
-
-    // Gegenprobe über die Cookie-API: die Idee trägt ideaStored=true, die andere Karte false.
-    String cards =
-        mvc.perform(get("/api/boards/" + boardId + "/cards").cookie(session))
-            .andExpect(status().isOk())
+    // Entscheidung B: jeder board-token-Ingest landet als board-lose Pool-Idee. Das ideaStored-Feld
+    // ist gegenstandslos (hier bewusst weggelassen — das Ergebnis ist mit/ohne Feld identisch).
+    String created =
+        mvc.perform(
+                post("/api/kanban/items")
+                    .header("X-Kanban-Token", token)
+                    .contentType("application/json")
+                    .content("{\"title\":\"Als Idee\"}"))
+            .andExpect(status().isCreated())
             .andReturn()
             .getResponse()
             .getContentAsString();
-    JsonNode list = json.readTree(cards);
-    final String ideaTitle = "Als Idee";
-    final String normalTitle = "Normale Karte";
-    boolean ideaFlagged = false;
-    boolean normalUnflagged = false;
-    for (JsonNode card : list) {
-      String title = card.get("title").asText();
-      if (title.equals(ideaTitle)) {
-        ideaFlagged = card.get("ideaStored").asBoolean();
-      }
-      if (title.equals(normalTitle)) {
-        normalUnflagged = !card.get("ideaStored").asBoolean();
-      }
-    }
-    assertThat(ideaFlagged).isTrue();
-    assertThat(normalUnflagged).isTrue();
+    long ideaId = json.readTree(created).get("id").asLong();
+
+    // Akzeptanzkriterium: erscheint in GET /api/projects/{id}/ideas ...
+    mvc.perform(get("/api/projects/" + projectId + "/ideas").cookie(session))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.length()").value(1))
+        .andExpect(jsonPath("$[0].id").value(ideaId))
+        .andExpect(jsonPath("$[0].title").value("Als Idee"))
+        .andExpect(jsonPath("$[0].ideaStored").value(true));
+    // ... aber NICHT in GET /api/boards/{id}/cards.
+    mvc.perform(get("/api/boards/" + boardId + "/cards").cookie(session))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.length()").value(0));
   }
 
   @Test
@@ -334,13 +336,15 @@ class KanbanCompatIT extends AbstractIntegrationTest {
                 .content("{\"column\":\"DONE\",\"position\":0}"))
         .andExpect(status().isNotFound());
 
-    // Eigene Karte auf board1 anlegen: sonst wären alle Spalten leer und die Non-Leak-Prüfung
-    // unten würde vacuously durchlaufen, ohne wirklich etwas zu beweisen (Sonar S5841).
+    // Eigene Karte auf board1 über die Cookie-API anlegen (ein Ingest ginge seit Entscheidung B in
+    // den Pool, nicht aufs Board): sonst wären alle Spalten leer und die Non-Leak-Prüfung unten
+    // würde vacuously durchlaufen, ohne wirklich etwas zu beweisen (Sonar S5841).
+    long col1 = firstColumnId(session, board1);
     mvc.perform(
-            post("/api/kanban/items")
-                .header("X-Kanban-Token", token1)
+            post("/api/boards/" + board1 + "/cards")
+                .cookie(session)
                 .contentType("application/json")
-                .content("{\"title\":\"Eigene Karte\",\"column\":\"BACKLOG\"}"))
+                .content("{\"title\":\"Eigene Karte\",\"columnId\":%d}".formatted(col1)))
         .andExpect(status().isCreated());
 
     // board1-Items enthalten die eigene Karte, aber nicht die Fremdkarte (Scope-Beweis).

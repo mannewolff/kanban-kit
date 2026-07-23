@@ -24,14 +24,20 @@ class CardEntity {
   @GeneratedValue(strategy = GenerationType.IDENTITY)
   private @Nullable Long id;
 
-  @Column(name = "board_id", nullable = false)
-  private Long boardId;
+  @Column(name = "project_id", nullable = false)
+  private Long projectId;
 
-  @Column(name = "column_id", nullable = false)
-  private Long columnId;
+  @Column(name = "board_id")
+  private @Nullable Long boardId;
 
-  @Column(name = "number", nullable = false)
-  private int number;
+  @Column(name = "column_id")
+  private @Nullable Long columnId;
+
+  @Column(name = "number")
+  private @Nullable Integer number;
+
+  @Column(name = "target_board_id")
+  private @Nullable Long targetBoardId;
 
   @Column(name = "title", nullable = false)
   private String title;
@@ -85,9 +91,11 @@ class CardEntity {
   /** Baut die Entity direkt aus dem Domänenobjekt (statt aus 15 Einzelparametern, Sonar S107). */
   CardEntity(Card c) {
     this.id = c.id();
+    this.projectId = c.projectId();
     this.boardId = c.boardId();
     this.columnId = c.columnId();
     this.number = c.number();
+    this.targetBoardId = c.targetBoardId();
     this.title = c.title();
     this.description = c.description();
     this.positionInColumn = c.positionInColumn();
@@ -107,16 +115,24 @@ class CardEntity {
     return id;
   }
 
-  Long getBoardId() {
+  Long getProjectId() {
+    return projectId;
+  }
+
+  @Nullable Long getBoardId() {
     return boardId;
   }
 
-  Long getColumnId() {
+  @Nullable Long getColumnId() {
     return columnId;
   }
 
-  int getNumber() {
+  @Nullable Integer getNumber() {
     return number;
+  }
+
+  @Nullable Long getTargetBoardId() {
+    return targetBoardId;
   }
 
   String getTitle() {

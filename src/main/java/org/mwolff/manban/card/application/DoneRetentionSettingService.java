@@ -36,6 +36,12 @@ public class DoneRetentionSettingService {
   /** Effektiver Wert: gesetzter Override, sonst der Env-Default. Kann {@code 0} sein (= aus). */
   @Transactional(readOnly = true)
   public int effectiveRetentionDays() {
+    return computeEffective();
+  }
+
+  // Kern ohne eigene @Transactional: von effectiveRetentionDays() und dem internen current()
+  // genutzt, ohne Self-Invocation der @Transactional-Methode über den Proxy (java:S6809).
+  private int computeEffective() {
     return override().orElse(cleanup.doneRetentionDays());
   }
 
@@ -61,7 +67,7 @@ public class DoneRetentionSettingService {
   }
 
   private RetentionSettings current() {
-    return new RetentionSettings(effectiveRetentionDays(), override().orElse(null));
+    return new RetentionSettings(computeEffective(), override().orElse(null));
   }
 
   private Optional<Integer> override() {

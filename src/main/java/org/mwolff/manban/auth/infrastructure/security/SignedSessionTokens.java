@@ -7,6 +7,7 @@ import java.util.Base64;
 import java.util.OptionalLong;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
+import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.auth.application.AuthProperties;
 import org.mwolff.manban.common.ExcludeFromJacocoGeneratedReport;
 import org.springframework.stereotype.Component;
@@ -48,8 +49,12 @@ public class SignedSessionTokens {
     return encodedPayload + "." + ENCODER.encodeToString(hmac(encodedPayload));
   }
 
-  /** Verifiziert Signatur und Ablauf; liefert die userId oder leer bei Ungültigkeit. */
-  public OptionalLong verify(String token) {
+  /**
+   * Verifiziert Signatur und Ablauf; liefert die userId oder leer bei Ungültigkeit. Der Parameter
+   * ist bewusst {@code @Nullable}: der Verifizierer toleriert {@code null} defensiv (leeres
+   * Ergebnis statt NPE), auch wenn der aktuelle Aufrufer stets non-null übergibt.
+   */
+  public OptionalLong verify(@Nullable String token) {
     if (token == null) {
       return OptionalLong.empty();
     }

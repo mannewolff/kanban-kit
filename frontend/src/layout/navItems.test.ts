@@ -63,3 +63,33 @@ describe('buildNavItems Sichtbarkeit', () => {
     expect(link?.path).toBe(`/boards/${board.id}/dashboard`)
   })
 })
+
+describe('buildNavItems Ideen-Link', () => {
+  const ideasLink = (params: NavParams) => {
+    const node = buildNavItems(params).find((n) => n.label === 'Ideen')
+    return node?.kind === 'link' ? node : undefined
+  }
+
+  it('zeigt „Ideen" bei offenem Board (Projekt-Kontext aus dem Board)', () => {
+    expect(ideasLink({ board })?.path).toBe(`/projects/${board.projectId}/ideas`)
+  })
+
+  it('zeigt „Ideen" auf einer Projekt-Route ohne offenes Board', () => {
+    expect(ideasLink({ board: null, projectId: 7 })?.path).toBe('/projects/7/ideas')
+  })
+
+  it('blendet „Ideen" ohne Projekt-Kontext aus (kein Board, keine projectId)', () => {
+    expect(ideasLink({ board: null })).toBeUndefined()
+  })
+
+  it('bevorzugt den Board-Projektkontext vor einer abweichenden projectId', () => {
+    // Bei offenem Board hat board.projectId Vorrang — der Ideen-Link bleibt beim Board-Projekt.
+    expect(ideasLink({ board, projectId: 99 })?.path).toBe(`/projects/${board.projectId}/ideas`)
+  })
+
+  it('hängt „Ideen" als Geschwister von „Boards" (nach Boards, vor die Board-Gruppe)', () => {
+    const labels = topLabels({ board, boardCount: 2 })
+    expect(labels.indexOf('Ideen')).toBeGreaterThan(labels.indexOf('Boards'))
+    expect(labels.indexOf('Ideen')).toBeLessThan(labels.indexOf('B'))
+  })
+})

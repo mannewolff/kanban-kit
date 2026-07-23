@@ -76,7 +76,6 @@ export const cardsApi = {
   archive: (cardId: number) => apiFetch<Card>(`/api/cards/${cardId}/archive`, { method: 'POST' }),
   moveToIdeaStorage: (cardId: number) =>
     apiFetch<Card>(`/api/cards/${cardId}/idea-storage`, { method: 'POST' }),
-  promote: (cardId: number) => apiFetch<Card>(`/api/cards/${cardId}/promote`, { method: 'POST' }),
   bulkArchive: (cardIds: number[]) =>
     apiFetch<Card[]>(`/api/cards/bulk-archive`, { method: 'POST', body: JSON.stringify({ cardIds }) }),
   bulkTransfer: (cardIds: number[], targetBoardId: number, targetColumnId: number) =>

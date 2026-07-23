@@ -19,7 +19,9 @@ class EventSourceStub {
   removeEventListener(type: string, cb: (e: Event) => void): void {
     this.listeners.get(type)?.delete(cb)
   }
-  close(): void {}
+  close(): void {
+    // bewusst leer: der Stub hält keine echte Verbindung, die geschlossen werden müsste.
+  }
 }
 vi.stubGlobal('EventSource', EventSourceStub)
 

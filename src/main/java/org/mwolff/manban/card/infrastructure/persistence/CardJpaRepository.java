@@ -11,6 +11,10 @@ interface CardJpaRepository extends JpaRepository<CardEntity, Long> {
   /** Aktive (nicht gelöschte) Karten des Boards. */
   List<CardEntity> findByBoardIdAndDeletedAtIsNullOrderByNumber(Long boardId);
 
+  /** Ideen-Karten eines Projekts (board-los + Legacy), neueste zuerst. */
+  List<CardEntity> findByProjectIdAndIdeaStoredTrueAndDeletedAtIsNullOrderByCreatedAtDesc(
+      Long projectId);
+
   /** Karten im Papierkorb des Boards. */
   List<CardEntity> findByBoardIdAndDeletedAtIsNotNullOrderByNumber(Long boardId);
 

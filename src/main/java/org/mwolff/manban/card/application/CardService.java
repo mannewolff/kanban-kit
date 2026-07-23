@@ -108,7 +108,18 @@ public class CardService {
       @Nullable String description,
       @Nullable List<Integer> dependsOn,
       @Nullable Long parentId) {
-    return create(userId, boardId, columnId, title, description, dependsOn, parentId, false);
+    return doCreate(
+        userId,
+        boardId,
+        columnId,
+        title,
+        description,
+        dependsOn,
+        parentId,
+        false,
+        null,
+        null,
+        null);
   }
 
   /**
@@ -126,7 +137,7 @@ public class CardService {
       @Nullable List<Integer> dependsOn,
       @Nullable Long parentId,
       boolean ideaStored) {
-    return create(
+    return doCreate(
         userId,
         boardId,
         columnId,
@@ -151,6 +162,34 @@ public class CardService {
    */
   @Transactional
   public CardView create(
+      long userId,
+      long boardId,
+      long columnId,
+      String title,
+      @Nullable String description,
+      @Nullable List<Integer> dependsOn,
+      @Nullable Long parentId,
+      boolean ideaStored,
+      @Nullable Instant dueDate,
+      @Nullable List<Long> assigneeIds,
+      @Nullable List<Long> labelIds) {
+    return doCreate(
+        userId,
+        boardId,
+        columnId,
+        title,
+        description,
+        dependsOn,
+        parentId,
+        ideaStored,
+        dueDate,
+        assigneeIds,
+        labelIds);
+  }
+
+  // Kern-Logik des Anlegens ohne eigene @Transactional: wird von den öffentlichen create-
+  // Überladungen (je @Transactional) aufgerufen, ohne Self-Invocation über den Proxy (java:S6809).
+  private CardView doCreate(
       long userId,
       long boardId,
       long columnId,
@@ -190,7 +229,9 @@ public class CardService {
                 CardType.CARD,
                 effectiveParent,
                 null,
-                dueDate));
+                dueDate,
+                board.projectId(),
+                null));
 
     if (!ideaStored) {
       transitions.open(saved.requireId(), columnId, column.name(), now);
@@ -247,6 +288,8 @@ public class CardService {
                 CardType.EPIC,
                 null,
                 trimToNull(shortcode),
+                null,
+                board.projectId(),
                 null));
     publishChanged(boardId, ChangeType.CREATED, saved.requireId());
     return view(saved);
@@ -289,7 +332,7 @@ public class CardService {
                           .count();
               return new EpicView(
                   epic.requireId(),
-                  epic.number(),
+                  epic.requireNumber(),
                   epic.title(),
                   epic.description(),
                   epic.shortcode(),
@@ -317,7 +360,7 @@ public class CardService {
     } else {
       // Karten: Epic-Zuordnung im selben PUT setzen/lösen (parentId == null -> lösen).
       Long effectiveParent =
-          parentId == null ? null : requireEpicInBoard(parentId, card.boardId()).requireId();
+          parentId == null ? null : requireEpicInBoard(parentId, card.requireBoardId()).requireId();
       updated = updated.withParent(effectiveParent).withDueDate(dueDate);
     }
     Card saved = cards.save(updated);
@@ -325,7 +368,7 @@ public class CardService {
     if (dependsOn != null) {
       setDependencies(saved, dependsOn);
     }
-    publishChanged(saved.boardId(), ChangeType.UPDATED, cardId);
+    publishChanged(saved.requireBoardId(), ChangeType.UPDATED, cardId);
     return view(saved);
   }
 
@@ -340,12 +383,12 @@ public class CardService {
     if (card.type() != CardType.CARD) {
       throw new InvalidDependencyException("Nur Karten haben Zuständige");
     }
-    Board board = boards.findById(card.boardId()).orElseThrow(BoardNotFoundException::new);
+    Board board = boards.findById(card.requireBoardId()).orElseThrow(BoardNotFoundException::new);
     permissions.require(userId, board.projectId(), Permission.TICKET_UPDATE);
 
     assignValidatedAssignees(cardId, board.projectId(), assigneeIds);
     activity.add(cardId, userId, CardActivityType.ASSIGNED, "Zuständige geändert", clock.instant());
-    publishChanged(card.boardId(), ChangeType.UPDATED, cardId);
+    publishChanged(card.requireBoardId(), ChangeType.UPDATED, cardId);
     return view(card);
   }
 
@@ -359,11 +402,11 @@ public class CardService {
     if (card.type() != CardType.CARD) {
       throw new InvalidDependencyException("Nur Karten haben Labels");
     }
-    Board board = boards.findById(card.boardId()).orElseThrow(BoardNotFoundException::new);
+    Board board = boards.findById(card.requireBoardId()).orElseThrow(BoardNotFoundException::new);
     permissions.require(userId, board.projectId(), Permission.TICKET_UPDATE);
 
-    assignValidatedLabels(cardId, card.boardId(), labelIds);
-    publishChanged(card.boardId(), ChangeType.UPDATED, cardId);
+    assignValidatedLabels(cardId, card.requireBoardId(), labelIds);
+    publishChanged(card.requireBoardId(), ChangeType.UPDATED, cardId);
     return view(card);
   }
 
@@ -407,9 +450,9 @@ public class CardService {
       throw new InvalidDependencyException("Nur Karten können einem Epic zugeordnet werden");
     }
     Long effective =
-        parentId == null ? null : requireEpicInBoard(parentId, card.boardId()).requireId();
+        parentId == null ? null : requireEpicInBoard(parentId, card.requireBoardId()).requireId();
     Card saved = cards.save(card.withParent(effective));
-    publishChanged(card.boardId(), ChangeType.UPDATED, cardId);
+    publishChanged(card.requireBoardId(), ChangeType.UPDATED, cardId);
     return view(saved);
   }
 
@@ -419,13 +462,13 @@ public class CardService {
     if (card.type() == CardType.EPIC) {
       throw new InvalidDependencyException("Epics werden nicht auf dem Board positioniert");
     }
-    Board board = boards.findById(card.boardId()).orElseThrow(BoardNotFoundException::new);
+    Board board = boards.findById(card.requireBoardId()).orElseThrow(BoardNotFoundException::new);
     permissions.require(userId, board.projectId(), Permission.CARD_MOVE);
 
     BoardColumn target = columns.findById(targetColumnId).orElseThrow(ColumnNotFoundException::new);
     // Wertvergleich der Board-IDs (Long): '!=' würde Referenzen vergleichen und bei IDs
     // jenseits des Long-Caches (> 127) falsch schlagen.
-    if (!Objects.equals(target.boardId(), card.boardId())) {
+    if (!Objects.equals(target.boardId(), card.requireBoardId())) {
       throw new ColumnNotFoundException();
     }
 
@@ -433,7 +476,7 @@ public class CardService {
 
     // Zykluszeit: nur bei echtem Spaltenwechsel (kein Eintrag bei reinem Reindex). Ein einziger
     // Zeitstempel schließt die verlassene und eröffnet die Ziel-Spalte lückenlos.
-    long fromColumn = card.columnId();
+    long fromColumn = card.requireColumnId();
     if (fromColumn != targetColumnId) {
       Instant switchedAt = clock.instant();
       transitions.closeOpen(cardId, switchedAt);
@@ -453,7 +496,7 @@ public class CardService {
 
     Card moved = cards.findById(cardId).orElseThrow(CardNotFoundException::new);
     CardView result = view(cards.save(moved.withMovedToDoneAt(done)));
-    publishChanged(card.boardId(), ChangeType.MOVED, cardId);
+    publishChanged(card.requireBoardId(), ChangeType.MOVED, cardId);
     return result;
   }
 
@@ -466,11 +509,16 @@ public class CardService {
    */
   @Transactional
   public CardView transfer(long userId, long cardId, long targetBoardId, long targetColumnId) {
+    return doTransfer(userId, cardId, targetBoardId, targetColumnId);
+  }
+
+  private CardView doTransfer(long userId, long cardId, long targetBoardId, long targetColumnId) {
     Card card = cards.findById(cardId).orElseThrow(CardNotFoundException::new);
     if (card.type() == CardType.EPIC) {
       throw new InvalidDependencyException("Epics können nicht verschoben werden");
     }
-    Board sourceBoard = boards.findById(card.boardId()).orElseThrow(BoardNotFoundException::new);
+    Board sourceBoard =
+        boards.findById(card.requireBoardId()).orElseThrow(BoardNotFoundException::new);
     Board targetBoard = boards.findById(targetBoardId).orElseThrow(BoardNotFoundException::new);
     BoardColumn targetColumn = requireColumnInBoard(targetColumnId, targetBoardId);
 
@@ -491,7 +539,7 @@ public class CardService {
     Card moved = cards.findById(cardId).orElseThrow(CardNotFoundException::new);
     CardView result = view(cards.save(moved.withParent(null).withMovedToDoneAt(null)));
     // Board-übergreifend: Quell- und Ziel-Board müssen beide live nachziehen.
-    publishChanged(card.boardId(), ChangeType.MOVED, cardId);
+    publishChanged(card.requireBoardId(), ChangeType.MOVED, cardId);
     publishChanged(targetBoardId, ChangeType.MOVED, cardId);
     return result;
   }
@@ -507,17 +555,21 @@ public class CardService {
   public List<CardView> bulkTransfer(
       long userId, List<Long> cardIds, long targetBoardId, long targetColumnId) {
     return cardIds.stream()
-        .map(cardId -> transfer(userId, cardId, targetBoardId, targetColumnId))
+        .map(cardId -> doTransfer(userId, cardId, targetBoardId, targetColumnId))
         .toList();
   }
 
   @Transactional
   public CardView archive(long userId, long cardId) {
+    return doArchive(userId, cardId);
+  }
+
+  private CardView doArchive(long userId, long cardId) {
     Card card = requireCardOp(userId, cardId, Permission.TICKET_DELETE, Permission.EPIC_DELETE);
     activity.add(
         card.requireId(), userId, CardActivityType.ARCHIVED, "Archiviert", clock.instant());
     CardView result = view(cards.save(card.asArchived()));
-    publishChanged(card.boardId(), ChangeType.ARCHIVED, card.requireId());
+    publishChanged(card.requireBoardId(), ChangeType.ARCHIVED, card.requireId());
     return result;
   }
 
@@ -529,17 +581,17 @@ public class CardService {
    */
   @Transactional
   public List<CardView> bulkArchive(long userId, List<Long> cardIds) {
-    return cardIds.stream().map(cardId -> archive(userId, cardId)).toList();
+    return cardIds.stream().map(cardId -> doArchive(userId, cardId)).toList();
   }
 
   @Transactional
   public CardView restore(long userId, long cardId) {
     Card card = requireCardOp(userId, cardId, Permission.TICKET_DELETE, Permission.EPIC_DELETE);
-    int position = cards.maxActivePositionInColumn(card.columnId()) + 1;
+    int position = cards.maxActivePositionInColumn(card.requireColumnId()) + 1;
     activity.add(
         card.requireId(), userId, CardActivityType.RESTORED, "Wiederhergestellt", clock.instant());
     CardView result = view(cards.save(card.asRestored(position)));
-    publishChanged(card.boardId(), ChangeType.RESTORED, card.requireId());
+    publishChanged(card.requireBoardId(), ChangeType.RESTORED, card.requireId());
     return result;
   }
 
@@ -555,7 +607,7 @@ public class CardService {
     if (card.type() == CardType.EPIC) {
       throw new InvalidDependencyException("Epics können nicht in den Ideen-Speicher");
     }
-    Board board = boards.findById(card.boardId()).orElseThrow(BoardNotFoundException::new);
+    Board board = boards.findById(card.requireBoardId()).orElseThrow(BoardNotFoundException::new);
     permissions.require(userId, board.projectId(), Permission.CARD_MOVE);
     activity.add(
         card.requireId(),
@@ -564,7 +616,7 @@ public class CardService {
         "In den Ideen-Speicher",
         clock.instant());
     CardView result = view(cards.save(card.asIdeaStored()));
-    publishChanged(card.boardId(), ChangeType.MOVED, card.requireId());
+    publishChanged(card.requireBoardId(), ChangeType.MOVED, card.requireId());
     return result;
   }
 
@@ -580,10 +632,10 @@ public class CardService {
     if (card.type() == CardType.EPIC) {
       throw new InvalidDependencyException("Epics können nicht ins Backlog geholt werden");
     }
-    Board board = boards.findById(card.boardId()).orElseThrow(BoardNotFoundException::new);
+    Board board = boards.findById(card.requireBoardId()).orElseThrow(BoardNotFoundException::new);
     permissions.require(userId, board.projectId(), Permission.CARD_MOVE);
     long firstColumnId =
-        columns.findByBoardId(card.boardId()).stream()
+        columns.findByBoardId(card.requireBoardId()).stream()
             .min(Comparator.comparingInt(BoardColumn::position))
             .orElseThrow(ColumnNotFoundException::new)
             .requireId();
@@ -591,15 +643,113 @@ public class CardService {
     activity.add(
         card.requireId(), userId, CardActivityType.PROMOTED, "Ins Backlog geholt", clock.instant());
     CardView result = view(cards.save(card.asPromoted(position, firstColumnId)));
-    publishChanged(card.boardId(), ChangeType.MOVED, card.requireId());
+    publishChanged(card.requireBoardId(), ChangeType.MOVED, card.requireId());
     return result;
+  }
+
+  // --- Projektweiter Ideen-Pool (board-lose Ideen) --------------------------
+
+  /**
+   * Legt eine board-lose Idee im projektweiten Pool an. Recht: {@link Permission#TICKET_CREATE}.
+   */
+  @Transactional
+  public CardView createProjectIdea(
+      long userId,
+      long projectId,
+      String title,
+      @Nullable String description,
+      @Nullable Long targetBoardId) {
+    permissions.require(userId, projectId, Permission.TICKET_CREATE);
+    Instant now = clock.instant();
+    Card saved =
+        cards.save(
+            new Card(
+                null,
+                null,
+                null,
+                null,
+                title.trim(),
+                normalize(description),
+                0,
+                false,
+                true,
+                null,
+                userId,
+                now,
+                now,
+                CardType.CARD,
+                null,
+                null,
+                null,
+                projectId,
+                targetBoardId));
+    activity.add(saved.requireId(), userId, CardActivityType.CREATED, "Idee angelegt", now);
+    return view(saved);
+  }
+
+  /**
+   * Plant eine Idee ins Backlog (erste Spalte) eines Boards desselben Projekts ein: setzt
+   * Board/Spalte/Nummer/Position, löscht das Ideen-Flag und den Zielboard-Hinweis. Recht {@link
+   * Permission#TICKET_CREATE} im Zielboard.
+   */
+  @Transactional
+  public CardView planOntoBoard(long userId, long cardId, long targetBoardId) {
+    Card card = cards.findById(cardId).orElseThrow(CardNotFoundException::new);
+    Board targetBoard = boards.findById(targetBoardId).orElseThrow(BoardNotFoundException::new);
+    // Nur auf ein Board des eigenen Projekts einplanbar (kein Existenz-Leak fremder Boards).
+    if (!Objects.equals(targetBoard.projectId(), card.projectId())) {
+      throw new BoardNotFoundException();
+    }
+    permissions.require(userId, targetBoard.projectId(), Permission.TICKET_CREATE);
+    BoardColumn backlog =
+        columns.findByBoardId(targetBoardId).stream()
+            .min(Comparator.comparingInt(BoardColumn::position))
+            .orElseThrow(ColumnNotFoundException::new);
+    long columnId = backlog.requireId();
+    int number = cards.maxNumberInBoard(targetBoardId) + 1;
+    int position = cards.maxActivePositionInColumn(columnId) + 1;
+    Instant now = clock.instant();
+    Card planned = cards.save(card.withPlannedOnBoard(targetBoardId, columnId, number, position));
+    transitions.open(cardId, columnId, backlog.name(), now);
+    activity.add(cardId, userId, CardActivityType.PROMOTED, "Auf Board eingeplant", now);
+    publishChanged(targetBoardId, ChangeType.CREATED, cardId);
+    return view(planned);
+  }
+
+  /**
+   * Holt eine board-gebundene Karte zurück in den projektweiten Ideen-Pool (board-los); das
+   * bisherige Board wird als Zielboard-Hinweis notiert. Recht {@link Permission#CARD_MOVE}.
+   */
+  @Transactional
+  public CardView moveBackToPool(long userId, long cardId) {
+    Card card = cards.findById(cardId).orElseThrow(CardNotFoundException::new);
+    Board board = boards.findById(card.requireBoardId()).orElseThrow(BoardNotFoundException::new);
+    permissions.require(userId, board.projectId(), Permission.CARD_MOVE);
+    Card pooled = cards.save(card.asPooledIdea(card.boardId()));
+    activity.add(
+        cardId, userId, CardActivityType.IDEA_STORED, "Zurück in den Ideen-Pool", clock.instant());
+    publishChanged(card.requireBoardId(), ChangeType.MOVED, cardId);
+    return view(pooled);
+  }
+
+  /**
+   * Alle Ideen eines Projekts (board-lose Pool-Ideen und board-gebundene Legacy-Ideen), neueste
+   * zuerst. Erfordert Projekt-Mitgliedschaft (Leserecht).
+   */
+  @Transactional(readOnly = true)
+  public List<CardView> listProjectIdeas(long userId, long projectId) {
+    permissions.requireMembership(userId, projectId);
+    return cards.findIdeasByProjectId(projectId).stream()
+        .filter(c -> c.type() == CardType.CARD)
+        .map(this::view)
+        .toList();
   }
 
   /** Aktivitätsverlauf einer Karte (chronologisch). Erfordert Board-Mitgliedschaft (Leserecht). */
   @Transactional(readOnly = true)
   public List<CardActivity> listActivity(long userId, long cardId) {
     Card card = cards.findById(cardId).orElseThrow(CardNotFoundException::new);
-    Board board = boards.findById(card.boardId()).orElseThrow(BoardNotFoundException::new);
+    Board board = boards.findById(card.requireBoardId()).orElseThrow(BoardNotFoundException::new);
     permissions.requireMembership(userId, board.projectId());
     return activity.findByCardId(cardId);
   }
@@ -609,16 +759,20 @@ public class CardService {
    */
   @Transactional
   public void delete(long userId, long cardId) {
+    doDelete(userId, cardId);
+  }
+
+  private void doDelete(long userId, long cardId) {
     Card card = requireCardOp(userId, cardId, Permission.TICKET_DELETE, Permission.EPIC_DELETE);
     // Beim Löschen eines Epics die Kinder lösen — die DB-„ON DELETE SET NULL"-Kaskade auf
     // parent_id feuert nur beim Hard-Delete, nicht beim Soft-Delete.
     if (card.type() == CardType.EPIC) {
-      cards.findByBoardId(card.boardId()).stream()
+      cards.findByBoardId(card.requireBoardId()).stream()
           .filter(c -> Objects.equals(c.parentId(), card.requireId()))
           .forEach(child -> cards.save(child.withParent(null)));
     }
     cards.softDelete(card.requireId(), clock.instant());
-    publishChanged(card.boardId(), ChangeType.DELETED, card.requireId());
+    publishChanged(card.requireBoardId(), ChangeType.DELETED, card.requireId());
   }
 
   /**
@@ -629,7 +783,7 @@ public class CardService {
    */
   @Transactional
   public void bulkDelete(long userId, List<Long> cardIds) {
-    cardIds.forEach(cardId -> delete(userId, cardId));
+    cardIds.forEach(cardId -> doDelete(userId, cardId));
   }
 
   /**
@@ -639,7 +793,7 @@ public class CardService {
   @Transactional
   public CardView restoreFromTrash(long userId, long cardId) {
     Card card = requireCardOp(userId, cardId, Permission.TICKET_DELETE, Permission.EPIC_DELETE);
-    int position = cards.maxActivePositionInColumn(card.columnId()) + 1;
+    int position = cards.maxActivePositionInColumn(card.requireColumnId()) + 1;
     cards.restoreFromTrash(card.requireId(), position);
     activity.add(
         card.requireId(),
@@ -647,7 +801,7 @@ public class CardService {
         CardActivityType.RESTORED,
         "Aus Papierkorb wiederhergestellt",
         clock.instant());
-    publishChanged(card.boardId(), ChangeType.RESTORED, card.requireId());
+    publishChanged(card.requireBoardId(), ChangeType.RESTORED, card.requireId());
     // View aus der bereits geladenen Karte mit neuer Position — der JDBC-Restore hat die DB-Zeile
     // geändert; ein erneutes findById käme aus dem JPA-Cache noch mit dem alten Stand.
     return view(card.asRestored(position));
@@ -660,11 +814,11 @@ public class CardService {
   @Transactional
   public void purge(long userId, long cardId) {
     Card card = cards.findById(cardId).orElseThrow(CardNotFoundException::new);
-    Board board = boards.findById(card.boardId()).orElseThrow(BoardNotFoundException::new);
+    Board board = boards.findById(card.requireBoardId()).orElseThrow(BoardNotFoundException::new);
     permissions.require(userId, board.projectId(), Permission.BOARD_DELETE);
     dependencies.deleteByCardId(card.requireId());
     cards.deleteById(card.requireId());
-    publishChanged(card.boardId(), ChangeType.DELETED, card.requireId());
+    publishChanged(card.requireBoardId(), ChangeType.DELETED, card.requireId());
   }
 
   /** Karten im Papierkorb eines Boards. Erfordert Board-Mitgliedschaft (Leserecht). */
@@ -682,7 +836,7 @@ public class CardService {
   private Card requireCardOp(
       long userId, long cardId, Permission ticketPermission, Permission epicPermission) {
     Card card = cards.findById(cardId).orElseThrow(CardNotFoundException::new);
-    Board board = boards.findById(card.boardId()).orElseThrow(BoardNotFoundException::new);
+    Board board = boards.findById(card.requireBoardId()).orElseThrow(BoardNotFoundException::new);
     permissions.require(
         userId,
         board.projectId(),
@@ -692,7 +846,7 @@ public class CardService {
 
   private Card requireEpicInBoard(long epicId, long boardId) {
     Card epic = cards.findById(epicId).orElseThrow(CardNotFoundException::new);
-    if (epic.type() != CardType.EPIC || epic.boardId() != boardId) {
+    if (epic.type() != CardType.EPIC || epic.requireBoardId() != boardId) {
       throw new InvalidDependencyException("Kein Epic dieses Boards: " + epicId);
     }
     return epic;
@@ -713,9 +867,9 @@ public class CardService {
     }
     List<Integer> distinct = dependsOn.stream().distinct().toList();
     List<Integer> boardNumbers =
-        cards.findByBoardId(card.boardId()).stream().map(Card::number).toList();
+        cards.findByBoardId(card.requireBoardId()).stream().map(Card::number).toList();
     for (Integer dep : distinct) {
-      if (dep == card.number()) {
+      if (dep == card.requireNumber()) {
         throw new InvalidDependencyException("Karte kann nicht von sich selbst abhängen");
       }
       if (!boardNumbers.contains(dep)) {
@@ -755,15 +909,16 @@ public class CardService {
         c.shortcode(),
         assignees.findByCardId(c.requireId()),
         c.dueDate(),
-        cardLabels.findByCardId(c.requireId()));
+        cardLabels.findByCardId(c.requireId()),
+        c.targetBoardId());
   }
 
   /** Kartendarstellung inkl. Abhängigkeits-Nummern, Typ und Epic-Zuordnung. */
   public record CardView(
       Long id,
-      Long boardId,
-      Long columnId,
-      int number,
+      @Nullable Long boardId,
+      @Nullable Long columnId,
+      @Nullable Integer number,
       String title,
       @Nullable String description,
       int positionInColumn,
@@ -776,7 +931,8 @@ public class CardService {
       @Nullable String shortcode,
       List<Long> assignees,
       @Nullable Instant dueDate,
-      List<Long> labels) {}
+      List<Long> labels,
+      @Nullable Long targetBoardId) {}
 
   /** Epic-Darstellung inkl. Fortschritt (Kinder gesamt / in Done). */
   public record EpicView(
