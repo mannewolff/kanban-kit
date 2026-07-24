@@ -99,6 +99,16 @@ public class CardService {
     events.publishEvent(new BoardChangedEvent(boardId, type, cardId));
   }
 
+  /**
+   * Publiziert ein {@link ProjectIdeasChangedEvent} für Live-Updates des projektweiten Ideen-Pools.
+   * Der Ideen-Event-Listener reicht es transaktionsgebunden (nach Commit) an die SSE-Registry
+   * weiter — bei Rollback entsteht kein Event. Wird am erfolgreichen Ende jeder pool-relevanten
+   * Karten-Mutation aufgerufen (Idee anlegen, einplanen, zurück in den Pool).
+   */
+  private void publishIdeasChanged(long projectId) {
+    events.publishEvent(new ProjectIdeasChangedEvent(projectId));
+  }
+
   @Transactional
   public CardView create(
       long userId,
@@ -368,7 +378,7 @@ public class CardService {
     if (dependsOn != null) {
       setDependencies(saved, dependsOn);
     }
-    publishChanged(saved.requireBoardId(), ChangeType.UPDATED, cardId);
+    publishChangedIfOnBoard(saved.boardId(), ChangeType.UPDATED, cardId);
     return view(saved);
   }
 
@@ -383,12 +393,12 @@ public class CardService {
     if (card.type() != CardType.CARD) {
       throw new InvalidDependencyException("Nur Karten haben Zuständige");
     }
-    Board board = boards.findById(card.requireBoardId()).orElseThrow(BoardNotFoundException::new);
-    permissions.require(userId, board.projectId(), Permission.TICKET_UPDATE);
+    // Projekt-basierte Rechte (#405): auch board-lose Pool-Ideen haben Zuständige.
+    permissions.require(userId, card.projectId(), Permission.TICKET_UPDATE);
 
-    assignValidatedAssignees(cardId, board.projectId(), assigneeIds);
+    assignValidatedAssignees(cardId, card.projectId(), assigneeIds);
     activity.add(cardId, userId, CardActivityType.ASSIGNED, "Zuständige geändert", clock.instant());
-    publishChanged(card.requireBoardId(), ChangeType.UPDATED, cardId);
+    publishChangedIfOnBoard(card.boardId(), ChangeType.UPDATED, cardId);
     return view(card);
   }
 
@@ -402,8 +412,9 @@ public class CardService {
     if (card.type() != CardType.CARD) {
       throw new InvalidDependencyException("Nur Karten haben Labels");
     }
-    Board board = boards.findById(card.requireBoardId()).orElseThrow(BoardNotFoundException::new);
-    permissions.require(userId, board.projectId(), Permission.TICKET_UPDATE);
+    // Projekt-basierte Rechte (#405). Labels bleiben board-scoped: eine board-lose Pool-Idee hat
+    // kein Board mit Labels; das Frontend ruft setLabels für sie nicht auf.
+    permissions.require(userId, card.projectId(), Permission.TICKET_UPDATE);
 
     assignValidatedLabels(cardId, card.requireBoardId(), labelIds);
     publishChanged(card.requireBoardId(), ChangeType.UPDATED, cardId);
@@ -678,13 +689,16 @@ public class CardService {
       @Nullable Long targetBoardId) {
     permissions.require(userId, projectId, Permission.TICKET_CREATE);
     Instant now = clock.instant();
+    // #402: Pool-Ideen bekommen sofort eine projektweite Nummer (referenzierbar wie Board-Karten);
+    // sie bleiben board-los und behalten die Nummer beim späteren Einplanen.
+    int number = cards.nextCardNumber(projectId);
     Card saved =
         cards.save(
             new Card(
                 null,
                 null,
                 null,
-                null,
+                number,
                 title.trim(),
                 normalize(description),
                 0,
@@ -701,6 +715,7 @@ public class CardService {
                 projectId,
                 targetBoardId));
     activity.add(saved.requireId(), userId, CardActivityType.CREATED, "Idee angelegt", now);
+    publishIdeasChanged(projectId);
     return view(saved);
   }
 
@@ -723,13 +738,17 @@ public class CardService {
             .min(Comparator.comparingInt(BoardColumn::position))
             .orElseThrow(ColumnNotFoundException::new);
     long columnId = backlog.requireId();
-    int number = cards.nextCardNumber(card.projectId());
+    // #402: eine bereits nummerierte Pool-Idee behält ihre Nummer; nur Legacy-Ideen ohne Nummer
+    // bekommen beim Einplanen eine.
+    int number =
+        card.number() != null ? card.requireNumber() : cards.nextCardNumber(card.projectId());
     int position = cards.maxActivePositionInColumn(columnId) + 1;
     Instant now = clock.instant();
     Card planned = cards.save(card.withPlannedOnBoard(targetBoardId, columnId, number, position));
     transitions.open(cardId, columnId, backlog.name(), now);
     activity.add(cardId, userId, CardActivityType.PROMOTED, "Auf Board eingeplant", now);
     publishChanged(targetBoardId, ChangeType.CREATED, cardId);
+    publishIdeasChanged(card.projectId());
     return view(planned);
   }
 
@@ -746,6 +765,7 @@ public class CardService {
     activity.add(
         cardId, userId, CardActivityType.IDEA_STORED, "Zurück in den Ideen-Pool", clock.instant());
     publishChanged(card.requireBoardId(), ChangeType.MOVED, cardId);
+    publishIdeasChanged(card.projectId());
     return view(pooled);
   }
 
@@ -762,12 +782,28 @@ public class CardService {
         .toList();
   }
 
-  /** Aktivitätsverlauf einer Karte (chronologisch). Erfordert Board-Mitgliedschaft (Leserecht). */
+  /**
+   * Löst eine projektweite Kartennummer zu ihrer {@link CardView} auf (board-gebundene Karte oder
+   * board-lose Pool-Idee). Erfordert Projekt-Mitgliedschaft (Leserecht); Nichtmitglied wie
+   * unbekannte oder gelöschte Nummer → 404 (kein Existenz-Leak). Basis für klickbare {@code
+   * #N}-Verweise (#403).
+   */
+  @Transactional(readOnly = true)
+  public CardView getByNumber(long userId, long projectId, int number) {
+    permissions.requireMembership(userId, projectId);
+    Card card =
+        cards.findByProjectIdAndNumber(projectId, number).orElseThrow(CardNotFoundException::new);
+    return view(card);
+  }
+
+  /**
+   * Aktivitätsverlauf einer Karte (chronologisch). Erfordert Projekt-Mitgliedschaft (Leserecht),
+   * geprüft über {@code card.projectId()} — auch für board-lose Pool-Ideen (#405).
+   */
   @Transactional(readOnly = true)
   public List<CardActivity> listActivity(long userId, long cardId) {
     Card card = cards.findById(cardId).orElseThrow(CardNotFoundException::new);
-    Board board = boards.findById(card.requireBoardId()).orElseThrow(BoardNotFoundException::new);
-    permissions.requireMembership(userId, board.projectId());
+    permissions.requireMembership(userId, card.projectId());
     return activity.findByCardId(cardId);
   }
 
@@ -849,16 +885,28 @@ public class CardService {
         .toList();
   }
 
-  /** Lädt die Karte und verlangt das je nach Kartentyp (Ticket/Epic) passende Recht. */
+  /**
+   * Lädt die Karte und verlangt das je nach Kartentyp (Ticket/Epic) passende Recht. Die Rechte sind
+   * projekt-basiert und werden über {@code card.projectId()} (immer gesetzt, V18) geprüft — nicht
+   * über das Board. So sind auch board-lose Pool-Ideen (#405) editierbar; für board-gebundene
+   * Karten ist die Prüfung identisch (Projekt-ID stimmt mit dem Board-Projekt überein).
+   */
   private Card requireCardOp(
       long userId, long cardId, Permission ticketPermission, Permission epicPermission) {
     Card card = cards.findById(cardId).orElseThrow(CardNotFoundException::new);
-    Board board = boards.findById(card.requireBoardId()).orElseThrow(BoardNotFoundException::new);
     permissions.require(
-        userId,
-        board.projectId(),
-        card.type() == CardType.EPIC ? epicPermission : ticketPermission);
+        userId, card.projectId(), card.type() == CardType.EPIC ? epicPermission : ticketPermission);
     return card;
+  }
+
+  /**
+   * Feuert ein Board-Live-Update nur für board-gebundene Karten. Board-lose Pool-Ideen (#405) haben
+   * kein Board, das per SSE nachziehen müsste — für sie entfällt das Event.
+   */
+  private void publishChangedIfOnBoard(@Nullable Long boardId, ChangeType type, long cardId) {
+    if (boardId != null) {
+      publishChanged(boardId, type, cardId);
+    }
   }
 
   private Card requireEpicInBoard(long epicId, long boardId) {

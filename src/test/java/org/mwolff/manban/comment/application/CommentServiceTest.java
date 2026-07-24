@@ -18,8 +18,6 @@ import org.mockito.ArgumentCaptor;
 import org.mwolff.manban.auth.application.AppUserRepository;
 import org.mwolff.manban.auth.domain.AppUser;
 import org.mwolff.manban.auth.domain.PlatformRole;
-import org.mwolff.manban.board.application.BoardRepository;
-import org.mwolff.manban.board.domain.Board;
 import org.mwolff.manban.card.application.CardNotFoundException;
 import org.mwolff.manban.card.application.CardRepository;
 import org.mwolff.manban.card.domain.Card;
@@ -36,7 +34,6 @@ class CommentServiceTest {
 
   private CommentRepository comments;
   private CardRepository cards;
-  private BoardRepository boards;
   private PermissionChecker permissions;
   private AppUserRepository users;
   private CommentService service;
@@ -64,6 +61,30 @@ class CommentServiceTest {
         null);
   }
 
+  /** Board-lose Pool-Idee (#405): kein Board/Spalte/Nummer, aber immer eine Projekt-ID. */
+  private static Card poolIdea() {
+    return new Card(
+        5L,
+        null,
+        null,
+        null,
+        "Idee",
+        null,
+        0,
+        false,
+        true,
+        null,
+        1L,
+        FIXED,
+        FIXED,
+        CardType.CARD,
+        null,
+        null,
+        null,
+        1L,
+        null);
+  }
+
   private static Comment comment(Long authorUserId) {
     return new Comment(3L, 5L, authorUserId, "Ada", "Hallo", FIXED, FIXED);
   }
@@ -72,13 +93,11 @@ class CommentServiceTest {
   void setUp() {
     comments = mock(CommentRepository.class);
     cards = mock(CardRepository.class);
-    boards = mock(BoardRepository.class);
     permissions = mock(PermissionChecker.class);
     users = mock(AppUserRepository.class);
     Clock clock = Clock.fixed(FIXED, ZoneOffset.UTC);
-    service = new CommentService(comments, cards, boards, permissions, users, clock);
+    service = new CommentService(comments, cards, permissions, users, clock);
     when(cards.findById(5L)).thenReturn(Optional.of(card()));
-    when(boards.findById(10L)).thenReturn(Optional.of(new Board(10L, 1L, "B", FIXED)));
   }
 
   @Test
@@ -150,6 +169,32 @@ class CommentServiceTest {
     // When / Then
     assertThatThrownBy(() -> service.create(1L, 5L, "Hallo"))
         .isInstanceOf(CardNotFoundException.class);
+  }
+
+  @Test
+  void create_onBoardlessPoolIdea_derivesProjectFromCard() {
+    // #405: eine board-lose Pool-Idee (boardId == null) trägt dennoch eine Projekt-ID; das Recht
+    // wird darüber geprüft, nicht über ein Board (das es nicht gibt).
+    when(cards.findById(5L)).thenReturn(Optional.of(poolIdea()));
+    when(users.findById(1L))
+        .thenReturn(Optional.of(new AppUser(1L, "u@x.de", "hash", "Ada", true, PlatformRole.USER)));
+    when(comments.save(any(Comment.class))).thenAnswer(inv -> saved(inv.getArgument(0)));
+
+    CommentService.CommentView view = service.create(1L, 5L, "Hallo");
+
+    verify(permissions).require(1L, 1L, Permission.COMMENT_CREATE);
+    assertThat(view.body()).isEqualTo("Hallo");
+  }
+
+  @Test
+  void list_onBoardlessPoolIdea_checksMembershipViaProject() {
+    // #405: Lesen der Kommentare einer board-losen Pool-Idee prüft die Projekt-Mitgliedschaft.
+    when(cards.findById(5L)).thenReturn(Optional.of(poolIdea()));
+    when(comments.findByCardId(5L)).thenReturn(List.of(comment(1L)));
+
+    service.list(1L, 5L);
+
+    verify(permissions).requireMembership(1L, 1L);
   }
 
   @Test

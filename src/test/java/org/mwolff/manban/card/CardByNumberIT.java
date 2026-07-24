@@ -3,7 +3,6 @@ package org.mwolff.manban.card;
 import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -20,10 +19,13 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 
-/** End-to-End des projektweiten Ideen-Pools: anlegen (board-los), einplanen, zurück in den Pool. */
+/**
+ * End-to-End des projektweiten Karten-Lookups nach Nummer: Mitglied löst Board-Karte und board-lose
+ * Pool-Idee per Nummer auf; Nichtmitglied und unbekannte Nummer → 404 (#408).
+ */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK)
 @AutoConfigureMockMvc
-class ProjectIdeaIT extends AbstractIntegrationTest {
+class CardByNumberIT extends AbstractIntegrationTest {
 
   private static final String PASSWORD = "sup3r-secret";
 
@@ -33,9 +35,10 @@ class ProjectIdeaIT extends AbstractIntegrationTest {
   @Autowired private ObjectMapper json;
 
   @Test
-  void idea_created_planned_onto_board_and_back_to_pool() throws Exception {
-    Cookie owner = session("idea-owner@example.com", PlatformRole.USER);
-    Cookie admin = session("idea-admin@example.com", PlatformRole.ADMIN);
+  void resolvesBoardCardAndPoolIdeaByNumber_andRejectsNonMemberAndUnknown() throws Exception {
+    Cookie owner = session("bynum-owner@example.com", PlatformRole.USER);
+    Cookie admin = session("bynum-admin@example.com", PlatformRole.ADMIN);
+    Cookie stranger = session("bynum-stranger@example.com", PlatformRole.USER);
 
     long projectId =
         json.readTree(
@@ -43,79 +46,80 @@ class ProjectIdeaIT extends AbstractIntegrationTest {
                         post("/api/projects")
                             .cookie(admin)
                             .contentType("application/json")
-                            .content("{\"name\":\"P\",\"ownerEmail\":\"idea-owner@example.com\"}"))
+                            .content("{\"name\":\"P\",\"ownerEmail\":\"bynum-owner@example.com\"}"))
                     .andReturn()
                     .getResponse()
                     .getContentAsString())
             .get("id")
             .asLong();
-    long boardId =
+    var boardNode =
         json.readTree(
-                mvc.perform(
-                        post("/api/projects/" + projectId + "/boards")
-                            .cookie(owner)
-                            .contentType("application/json")
-                            .content("{\"name\":\"B\"}"))
-                    .andReturn()
-                    .getResponse()
-                    .getContentAsString())
-            .get("id")
-            .asLong();
+            mvc.perform(
+                    post("/api/projects/" + projectId + "/boards")
+                        .cookie(owner)
+                        .contentType("application/json")
+                        .content("{\"name\":\"B\"}"))
+                .andReturn()
+                .getResponse()
+                .getContentAsString());
+    long boardId = boardNode.get("id").asLong();
+    long columnId = boardNode.get("columns").get(0).get("id").asLong();
 
-    // Board-lose Idee im Pool anlegen (mit notiertem Zielboard). Sie bekommt sofort eine
-    // projektweite Nummer (#402).
+    // Board-gebundene Karte anlegen (projektweite Nummer).
+    var cardNode =
+        json.readTree(
+            mvc.perform(
+                    post("/api/boards/" + boardId + "/cards")
+                        .cookie(owner)
+                        .contentType("application/json")
+                        .content("{\"columnId\":" + columnId + ",\"title\":\"Karte\"}"))
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getContentAsString());
+    long cardId = cardNode.get("id").asLong();
+    int cardNumber = cardNode.get("number").asInt();
+
+    // Board-lose Pool-Idee anlegen (bekommt sofort eine projektweite Nummer, #402).
     var ideaNode =
         json.readTree(
             mvc.perform(
                     post("/api/projects/" + projectId + "/ideas")
                         .cookie(owner)
                         .contentType("application/json")
-                        .content("{\"title\":\"Idee A\",\"targetBoardId\":" + boardId + "}"))
+                        .content("{\"title\":\"Idee\"}"))
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.boardId").value(nullValue()))
-                .andExpect(jsonPath("$.number").isNumber())
-                .andExpect(jsonPath("$.ideaStored").value(true))
                 .andReturn()
                 .getResponse()
                 .getContentAsString());
     long ideaId = ideaNode.get("id").asLong();
     int ideaNumber = ideaNode.get("number").asInt();
 
-    // Taucht in der Projekt-Ideen-Liste (mit Nummer) auf, aber nicht in den Board-Karten.
-    mvc.perform(get("/api/projects/" + projectId + "/ideas").cookie(owner))
+    // Mitglied löst die Board-Karte per Nummer auf.
+    mvc.perform(get("/api/projects/" + projectId + "/cards/by-number/" + cardNumber).cookie(owner))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.length()").value(1))
-        .andExpect(jsonPath("$[0].id").value(ideaId))
-        .andExpect(jsonPath("$[0].number").value(ideaNumber));
-    mvc.perform(get("/api/boards/" + boardId + "/cards").cookie(owner))
-        .andExpect(jsonPath("$.length()").value(0));
+        .andExpect(jsonPath("$.id").value(cardId))
+        .andExpect(jsonPath("$.number").value(cardNumber))
+        .andExpect(jsonPath("$.boardId").value(boardId));
 
-    // Einplanen -> landet im Board-Backlog (board-gebunden, nicht mehr Idee); die Nummer bleibt
-    // dieselbe (keine Neuvergabe).
-    mvc.perform(
-            put("/api/cards/" + ideaId + "/plan")
-                .cookie(owner)
-                .contentType("application/json")
-                .content("{\"targetBoardId\":" + boardId + "}"))
+    // Mitglied löst auch die board-lose Pool-Idee per Nummer auf.
+    mvc.perform(get("/api/projects/" + projectId + "/cards/by-number/" + ideaNumber).cookie(owner))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.boardId").value(boardId))
+        .andExpect(jsonPath("$.id").value(ideaId))
         .andExpect(jsonPath("$.number").value(ideaNumber))
-        .andExpect(jsonPath("$.ideaStored").value(false));
-    mvc.perform(get("/api/boards/" + boardId + "/cards").cookie(owner))
-        .andExpect(jsonPath("$.length()").value(1))
-        .andExpect(jsonPath("$[0].id").value(ideaId));
-    mvc.perform(get("/api/projects/" + projectId + "/ideas").cookie(owner))
-        .andExpect(jsonPath("$.length()").value(0));
-
-    // Zurück in den Pool -> wieder board-los.
-    mvc.perform(put("/api/cards/" + ideaId + "/to-pool").cookie(owner))
-        .andExpect(status().isOk())
         .andExpect(jsonPath("$.boardId").value(nullValue()))
         .andExpect(jsonPath("$.ideaStored").value(true));
-    mvc.perform(get("/api/projects/" + projectId + "/ideas").cookie(owner))
-        .andExpect(jsonPath("$.length()").value(1));
-    mvc.perform(get("/api/boards/" + boardId + "/cards").cookie(owner))
-        .andExpect(jsonPath("$.length()").value(0));
+
+    // Nichtmitglied → 404 (kein Existenz-Leak).
+    mvc.perform(
+            get("/api/projects/" + projectId + "/cards/by-number/" + cardNumber).cookie(stranger))
+        .andExpect(status().isNotFound());
+
+    // Unbekannte Nummer → 404.
+    mvc.perform(
+            get("/api/projects/" + projectId + "/cards/by-number/" + (ideaNumber + 999))
+                .cookie(owner))
+        .andExpect(status().isNotFound());
   }
 
   private Cookie session(String email, PlatformRole role) throws Exception {

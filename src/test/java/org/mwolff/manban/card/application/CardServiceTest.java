@@ -39,6 +39,7 @@ import org.mwolff.manban.card.domain.Label;
 import org.mwolff.manban.project.application.PermissionChecker;
 import org.mwolff.manban.project.application.ProjectAccessDeniedException;
 import org.mwolff.manban.project.application.ProjectMembershipRepository;
+import org.mwolff.manban.project.application.ProjectNotFoundException;
 import org.mwolff.manban.project.domain.Permission;
 import org.mwolff.manban.project.domain.ProjectMembership;
 import org.springframework.context.ApplicationEventPublisher;
@@ -761,17 +762,6 @@ class CardServiceTest {
 
     // When / Then
     assertThatThrownBy(() -> service.archive(1L, 1L)).isInstanceOf(CardNotFoundException.class);
-  }
-
-  @Test
-  void archive_throwsBoardNotFound_whenBoardUnknown() {
-    // Given
-    when(cards.findById(1L))
-        .thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
-    when(boards.findById(BOARD)).thenReturn(Optional.empty());
-
-    // When / Then
-    assertThatThrownBy(() -> service.archive(1L, 1L)).isInstanceOf(BoardNotFoundException.class);
   }
 
   @Test
@@ -2049,19 +2039,23 @@ class CardServiceTest {
 
   @Test
   void createProjectIdea_savesBoardlessIdea_withProjectAndTargetBoard() {
+    // Neue Pool-Ideen bekommen sofort eine projektweite Nummer (#402), bleiben aber board-los.
+    when(cards.nextCardNumber(PROJECT)).thenReturn(3);
     ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
     CardService.CardView view = service.createProjectIdea(1L, PROJECT, "Idee", "d", 7L);
 
     verify(permissions).require(1L, PROJECT, Permission.TICKET_CREATE);
+    verify(cards).nextCardNumber(PROJECT);
     verify(cards).save(captor.capture());
     assertThat(captor.getValue().boardId()).isNull();
     assertThat(captor.getValue().columnId()).isNull();
-    assertThat(captor.getValue().number()).isNull();
+    assertThat(captor.getValue().number()).isEqualTo(3);
     assertThat(captor.getValue().ideaStored()).isTrue();
     assertThat(captor.getValue().projectId()).isEqualTo(PROJECT);
     assertThat(captor.getValue().targetBoardId()).isEqualTo(7L);
     verify(activity).add(1L, 1L, CardActivityType.CREATED, "Idee angelegt", FIXED);
     assertThat(view.boardId()).isNull();
+    assertThat(view.number()).isEqualTo(3);
     // view() muss das notierte Zielboard durchreichen — das Frontend wählt es beim Einplanen vor.
     assertThat(view.targetBoardId()).isEqualTo(7L);
   }
@@ -2089,6 +2083,43 @@ class CardServiceTest {
     verify(events).publishEvent(new BoardChangedEvent(BOARD, ChangeType.CREATED, 1L));
     assertThat(result.boardId()).isEqualTo(BOARD);
     assertThat(result.ideaStored()).isFalse();
+  }
+
+  @Test
+  void planOntoBoard_keepsExistingNumber_forAlreadyNumberedIdea() {
+    // Seit #402 tragen Pool-Ideen bereits bei der Anlage eine projektweite Nummer; beim Einplanen
+    // wird sie behalten (keine Neuvergabe).
+    Card numbered =
+        new Card(
+            1L,
+            null,
+            null,
+            42,
+            "Idee",
+            null,
+            0,
+            false,
+            true,
+            null,
+            1L,
+            FIXED,
+            FIXED,
+            CardType.CARD,
+            null,
+            null,
+            null,
+            PROJECT,
+            null);
+    when(cards.findById(1L)).thenReturn(Optional.of(numbered));
+    when(columns.findByBoardId(BOARD)).thenReturn(List.of(column(20L, "Backlog", 0)));
+    when(cards.maxActivePositionInColumn(20L)).thenReturn(-1);
+
+    ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
+    service.planOntoBoard(9L, 1L, BOARD);
+
+    verify(cards).save(captor.capture());
+    assertThat(captor.getValue().number()).isEqualTo(42);
+    verify(cards, never()).nextCardNumber(anyLong());
   }
 
   @Test
@@ -2120,6 +2151,36 @@ class CardServiceTest {
   }
 
   @Test
+  void createProjectIdea_publishesIdeasChanged() {
+    service.createProjectIdea(1L, PROJECT, "Idee", "d", 7L);
+
+    verify(events).publishEvent(new ProjectIdeasChangedEvent(PROJECT));
+  }
+
+  @Test
+  void planOntoBoard_publishesIdeasChanged() {
+    when(cards.findById(1L)).thenReturn(Optional.of(poolIdea(1L)));
+    when(columns.findByBoardId(BOARD))
+        .thenReturn(List.of(column(21L, "Ready", 1), column(20L, "Backlog", 0)));
+    when(cards.nextCardNumber(PROJECT)).thenReturn(5);
+    when(cards.maxActivePositionInColumn(20L)).thenReturn(2);
+
+    service.planOntoBoard(9L, 1L, BOARD);
+
+    verify(events).publishEvent(new ProjectIdeasChangedEvent(PROJECT));
+  }
+
+  @Test
+  void moveBackToPool_publishesIdeasChanged() {
+    when(cards.findById(1L))
+        .thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
+
+    service.moveBackToPool(9L, 1L);
+
+    verify(events).publishEvent(new ProjectIdeasChangedEvent(PROJECT));
+  }
+
+  @Test
   void listProjectIdeas_returnsOnlyCards_forMember() {
     when(cards.findIdeasByProjectId(PROJECT))
         .thenReturn(List.of(poolIdea(1L), card(2L, 20L, 2, false, null, CardType.EPIC, null, "E")));
@@ -2128,5 +2189,114 @@ class CardServiceTest {
 
     verify(permissions).requireMembership(1L, PROJECT);
     assertThat(result).singleElement().extracting(CardService.CardView::id).isEqualTo(1L);
+  }
+
+  // --- getByNumber (#408) -----------------------------------------------
+
+  @Test
+  void getByNumber_returnsBoardCardView_forMember() {
+    when(cards.findByProjectIdAndNumber(PROJECT, 42))
+        .thenReturn(Optional.of(card(1L, 20L, 42, false, null, CardType.CARD, null, null)));
+
+    CardService.CardView view = service.getByNumber(5L, PROJECT, 42);
+
+    assertThat(view.id()).isEqualTo(1L);
+    assertThat(view.number()).isEqualTo(42);
+    assertThat(view.boardId()).isEqualTo(BOARD);
+  }
+
+  @Test
+  void getByNumber_returnsPoolIdeaView_forMember() {
+    // Auch eine board-lose Pool-Idee ist per projektweiter Nummer auflösbar.
+    when(cards.findByProjectIdAndNumber(PROJECT, 7)).thenReturn(Optional.of(poolIdea(1L)));
+
+    CardService.CardView view = service.getByNumber(5L, PROJECT, 7);
+
+    assertThat(view.id()).isEqualTo(1L);
+    assertThat(view.boardId()).isNull();
+    assertThat(view.ideaStored()).isTrue();
+  }
+
+  @Test
+  void getByNumber_checksMembershipBeforeLookup() {
+    // Reihenfolge: erst Mitgliedschaft (404 bei Nichtmitglied), dann Karten-Lookup.
+    when(cards.findByProjectIdAndNumber(PROJECT, 42))
+        .thenReturn(Optional.of(card(1L, 20L, 42, false, null, CardType.CARD, null, null)));
+
+    service.getByNumber(5L, PROJECT, 42);
+
+    InOrder order = inOrder(permissions, cards);
+    order.verify(permissions).requireMembership(5L, PROJECT);
+    order.verify(cards).findByProjectIdAndNumber(PROJECT, 42);
+  }
+
+  @Test
+  void getByNumber_propagatesMembership404_forNonMember() {
+    doThrow(new ProjectNotFoundException()).when(permissions).requireMembership(5L, PROJECT);
+
+    assertThatThrownBy(() -> service.getByNumber(5L, PROJECT, 42))
+        .isInstanceOf(ProjectNotFoundException.class);
+    verify(cards, never()).findByProjectIdAndNumber(anyLong(), anyInt());
+  }
+
+  @Test
+  void getByNumber_throwsCardNotFound_whenUnknownNumber() {
+    when(cards.findByProjectIdAndNumber(PROJECT, 99)).thenReturn(Optional.empty());
+
+    assertThatThrownBy(() -> service.getByNumber(5L, PROJECT, 99))
+        .isInstanceOf(CardNotFoundException.class);
+  }
+
+  // --- Board-lose Pool-Ideen editierbar (#405) --------------------------
+
+  @Test
+  void update_onBoardlessPoolIdea_editsViaProjectRight_andSkipsBoardEvent() {
+    // Board-lose Idee: Recht projekt-basiert (card.projectId()), kein Board-Live-Update.
+    when(cards.findById(1L)).thenReturn(Optional.of(poolIdea(1L)));
+
+    CardService.CardView view = service.update(9L, 1L, "Neu", null, null, null, null, null);
+
+    verify(permissions).require(9L, PROJECT, Permission.TICKET_UPDATE);
+    verify(activity).add(1L, 9L, CardActivityType.UPDATED, "Karte bearbeitet", FIXED);
+    verify(events, never()).publishEvent(any(BoardChangedEvent.class));
+    assertThat(view.title()).isEqualTo("Neu");
+    assertThat(view.boardId()).isNull();
+  }
+
+  @Test
+  void update_onBoardlessPoolIdea_setsDueDate() {
+    // Fälligkeit an einer board-losen Idee editierbar.
+    when(cards.findById(1L)).thenReturn(Optional.of(poolIdea(1L)));
+    Instant due = Instant.parse("2026-03-01T00:00:00Z");
+
+    ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
+    service.update(9L, 1L, "Neu", null, null, null, null, due);
+
+    verify(cards).save(captor.capture());
+    assertThat(captor.getValue().dueDate()).isEqualTo(due);
+  }
+
+  @Test
+  void setAssignees_onBoardlessPoolIdea_worksViaProjectRight_andSkipsBoardEvent() {
+    when(cards.findById(1L)).thenReturn(Optional.of(poolIdea(1L)));
+    when(memberships.findByProjectIdAndUserId(PROJECT, 7L))
+        .thenReturn(Optional.of(mock(ProjectMembership.class)));
+
+    service.setAssignees(3L, 1L, List.of(7L));
+
+    verify(permissions).require(3L, PROJECT, Permission.TICKET_UPDATE);
+    verify(assignees).replaceAssignees(1L, List.of(7L));
+    verify(activity).add(1L, 3L, CardActivityType.ASSIGNED, "Zuständige geändert", FIXED);
+    verify(events, never()).publishEvent(any(BoardChangedEvent.class));
+  }
+
+  @Test
+  void listActivity_onBoardlessPoolIdea_checksMembershipViaProject() {
+    when(cards.findById(1L)).thenReturn(Optional.of(poolIdea(1L)));
+    when(activity.findByCardId(1L)).thenReturn(List.of());
+
+    service.listActivity(5L, 1L);
+
+    verify(permissions).requireMembership(5L, PROJECT);
   }
 }

@@ -1,24 +1,58 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter, useLocation } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { attachmentsApi } from '../api/attachments'
 import { boardsApi, type Board } from '../api/boards'
 import { cardsApi, type Card } from '../api/cards'
+import { commentsApi } from '../api/comments'
 import { ideasApi, type Idea } from '../api/ideas'
+import { membersApi } from '../api/members'
 import { IdeaPlanningBoard } from './IdeaPlanningBoard'
 
 vi.mock('../api/boards', () => ({ boardsApi: { list: vi.fn() } }))
-vi.mock('../api/cards', () => ({ cardsApi: { list: vi.fn(), move: vi.fn() } }))
+vi.mock('../api/cards', () => ({
+  cardsApi: {
+    list: vi.fn(),
+    move: vi.fn(),
+    update: vi.fn(),
+    setAssignees: vi.fn(),
+    setLabels: vi.fn(),
+    getActivity: vi.fn(),
+    restore: vi.fn(),
+    moveToIdeaStorage: vi.fn(),
+  },
+}))
 vi.mock('../api/ideas', () => ({
   ideasApi: { list: vi.fn(), planOntoBoard: vi.fn(), moveBackToPool: vi.fn() },
 }))
+vi.mock('../api/members', () => ({ membersApi: { list: vi.fn() } }))
+// Das im Modal geöffnete CardDetailModal lädt Kommentare/Anhänge/Aktivität und liest den User —
+// hier nur so weit gemockt, dass das Öffnen einer Pool-Idee ohne echtes Backend rendert.
+vi.mock('../api/comments', () => ({
+  commentsApi: { list: vi.fn(), create: vi.fn(), update: vi.fn(), remove: vi.fn() },
+}))
+vi.mock('../api/attachments', () => ({
+  attachmentsApi: { list: vi.fn(), upload: vi.fn(), remove: vi.fn(), fetchBlob: vi.fn() },
+}))
+vi.mock('../auth/AuthContext', () => ({
+  useAuth: () => ({ user: { userId: 7, email: 'a@b.c', displayName: 'A', platformRole: 'USER', memberships: [] } }),
+}))
 
 const mBoards = boardsApi as unknown as { list: ReturnType<typeof vi.fn> }
-const mCards = cardsApi as unknown as { list: ReturnType<typeof vi.fn>; move: ReturnType<typeof vi.fn> }
+const mCards = cardsApi as unknown as {
+  list: ReturnType<typeof vi.fn>
+  move: ReturnType<typeof vi.fn>
+  update: ReturnType<typeof vi.fn>
+  getActivity: ReturnType<typeof vi.fn>
+}
 const mIdeas = ideasApi as unknown as {
   list: ReturnType<typeof vi.fn>
   planOntoBoard: ReturnType<typeof vi.fn>
   moveBackToPool: ReturnType<typeof vi.fn>
 }
+const mMembers = membersApi as unknown as { list: ReturnType<typeof vi.fn> }
+const mComments = commentsApi as unknown as { list: ReturnType<typeof vi.fn> }
+const mAttachments = attachmentsApi as unknown as { list: ReturnType<typeof vi.fn> }
 
 const col = (id: number, name: string, position: number) => ({ id, name, position, wipLimit: null })
 
@@ -54,6 +88,15 @@ function idea(partial: Partial<Idea> & { id: number; title: string }): Idea {
     ideaStored: true,
     targetBoardId: null,
     type: 'CARD',
+    positionInColumn: 0,
+    archived: false,
+    movedToDoneAt: null,
+    dependencies: [],
+    parentId: null,
+    shortcode: null,
+    assignees: [],
+    dueDate: null,
+    labels: [],
     ...partial,
   }
 }
@@ -78,9 +121,14 @@ function setup({
   mBoards.list.mockResolvedValue(boards)
   mCards.list.mockResolvedValue(cards)
   mCards.move.mockResolvedValue({})
+  mCards.update.mockResolvedValue(idea({ id: 20, title: 'x' }))
+  mCards.getActivity.mockResolvedValue([])
   mIdeas.list.mockResolvedValue(ideas)
   mIdeas.planOntoBoard.mockResolvedValue(idea({ id: 20, title: 'x' }))
   mIdeas.moveBackToPool.mockResolvedValue(idea({ id: 1, title: 'x' }))
+  mMembers.list.mockResolvedValue([])
+  mComments.list.mockResolvedValue([])
+  mAttachments.list.mockResolvedValue([])
 }
 
 function LocationProbe() {
@@ -150,6 +198,17 @@ describe('IdeaPlanningBoard', () => {
     // Pool: nur board-lose Ideen (Legacy board-gebunden bleibt draußen).
     expect(screen.getByText('Pool 1')).toBeInTheDocument()
     expect(screen.queryByText('Legacy')).not.toBeInTheDocument()
+  })
+
+  it('zeigt #N einer nummerierten Pool-Idee, aber kein nacktes # für Legacy-Ideen ohne Nummer', async () => {
+    const numbered = idea({ id: 22, title: 'Pool Nummeriert', number: 42 })
+    const legacyNoNumber = idea({ id: 23, title: 'Pool Legacy' }) // number: null
+    setup({ ideas: [numbered, legacyNoNumber] })
+    renderBoard()
+    await screen.findByText('Pool Nummeriert')
+
+    expect(screen.getByTestId('pool-item-22')).toHaveTextContent('#42')
+    expect(screen.getByTestId('pool-item-23')).not.toHaveTextContent('#')
   })
 
   it('plant eine Pool-Idee per Button ein', async () => {
@@ -397,5 +456,69 @@ describe('IdeaPlanningBoard', () => {
 
     await waitFor(() => expect(mIdeas.planOntoBoard).toHaveBeenCalledWith(20, 10))
     expect(mCards.move).not.toHaveBeenCalled()
+  })
+
+  describe('Pool-Idee im Detail-Modal öffnen (#404)', () => {
+    const richIdea = idea({ id: 20, title: 'Pool 1', description: '# Story\n\nDetails der Idee' })
+
+    it('öffnet eine Pool-Idee mit vollständigem Inhalt (Story + Kommentar-Bereich)', async () => {
+      setup({ ideas: [richIdea] })
+      renderBoard()
+
+      fireEvent.click(await screen.findByRole('button', { name: 'Pool 1' }))
+
+      expect(await screen.findByRole('heading', { name: 'Story' })).toBeInTheDocument()
+      expect(screen.getByText('Details der Idee')).toBeInTheDocument()
+      // Board-lose Idee, dennoch voll: der Kommentar-Bereich ist sichtbar.
+      expect(screen.getByText('Kommentare')).toBeInTheDocument()
+    })
+
+    it('speichert eine Titel-/Beschreibungs-Änderung über cardsApi.update', async () => {
+      setup({ ideas: [richIdea] })
+      renderBoard()
+
+      fireEvent.click(await screen.findByRole('button', { name: 'Pool 1' }))
+      fireEvent.click(await screen.findByRole('button', { name: 'Bearbeiten' }))
+      fireEvent.change(screen.getByLabelText('Markdown-Beschreibung'), { target: { value: 'Neuer Text' } })
+      fireEvent.click(screen.getByRole('button', { name: 'Speichern' }))
+
+      await waitFor(() =>
+        expect(mCards.update).toHaveBeenCalledWith(20, 'Pool 1', 'Neuer Text', [], undefined, null, null),
+      )
+    })
+
+    it('öffnet per Titel-Klick, ohne Drag/Einplanen auszulösen (kein Konflikt)', async () => {
+      setup({ ideas: [richIdea] })
+      renderBoard()
+
+      fireEvent.click(await screen.findByRole('button', { name: 'Pool 1' }))
+      await screen.findByRole('heading', { name: 'Story' })
+
+      // Ein Klick auf den Titel öffnet nur — er plant nicht ein; die Zeile bleibt ziehbar.
+      expect(mIdeas.planOntoBoard).not.toHaveBeenCalled()
+      expect(screen.getByTestId('pool-item-20')).toHaveAttribute('draggable', 'true')
+    })
+
+    it('schließt das Modal über „Schließen"', async () => {
+      setup({ ideas: [richIdea] })
+      renderBoard()
+
+      fireEvent.click(await screen.findByRole('button', { name: 'Pool 1' }))
+      await screen.findByRole('heading', { name: 'Story' })
+
+      fireEvent.click(screen.getByRole('button', { name: 'Schließen' }))
+
+      await waitFor(() => expect(screen.queryByRole('heading', { name: 'Story' })).not.toBeInTheDocument())
+    })
+
+    it('bleibt funktionsfähig, wenn das Laden der Mitglieder scheitert', async () => {
+      setup({ ideas: [richIdea] })
+      mMembers.list.mockRejectedValueOnce(new Error('boom'))
+      renderBoard()
+
+      // Trotz fehlgeschlagenem Members-Load öffnet die Idee (Fallback auf leere Mitgliederliste).
+      fireEvent.click(await screen.findByRole('button', { name: 'Pool 1' }))
+      expect(await screen.findByRole('heading', { name: 'Story' })).toBeInTheDocument()
+    })
   })
 })

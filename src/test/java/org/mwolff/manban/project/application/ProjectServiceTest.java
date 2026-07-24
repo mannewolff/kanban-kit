@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -17,6 +18,7 @@ import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mwolff.manban.auth.application.AppUserRepository;
 import org.mwolff.manban.auth.application.AuthProperties;
 import org.mwolff.manban.auth.domain.AppUser;
@@ -25,6 +27,7 @@ import org.mwolff.manban.project.domain.Permission;
 import org.mwolff.manban.project.domain.Project;
 import org.mwolff.manban.project.domain.ProjectMembership;
 import org.mwolff.manban.project.domain.ProjectRole;
+import org.springframework.context.ApplicationEventPublisher;
 
 /** Verhaltenstests der Projekt-Use-Cases (Mockito an den Ports). */
 class ProjectServiceTest {
@@ -36,6 +39,7 @@ class ProjectServiceTest {
   private PermissionChecker permissions;
   private AppUserRepository users;
   private InvitationMailer mailer;
+  private ApplicationEventPublisher events;
   private ProjectService service;
 
   private static ProjectMembership membership(long projectId, long userId, ProjectRole role) {
@@ -49,12 +53,13 @@ class ProjectServiceTest {
     permissions = mock(PermissionChecker.class);
     users = mock(AppUserRepository.class);
     mailer = mock(InvitationMailer.class);
+    events = mock(ApplicationEventPublisher.class);
     AuthProperties authProperties =
         new AuthProperties("https://app.example", null, null, null, null, null);
     Clock clock = Clock.fixed(FIXED, ZoneOffset.UTC);
     service =
         new ProjectService(
-            projects, memberships, permissions, users, mailer, authProperties, clock);
+            projects, memberships, permissions, users, mailer, events, authProperties, clock);
   }
 
   @Test
@@ -144,6 +149,55 @@ class ProjectServiceTest {
     // Then
     verify(mailer)
         .sendProjectAssignedEmail(eq("owner@x.de"), eq("Neu"), eq(ProjectRole.OWNER), anyString());
+  }
+
+  @Test
+  void create_publishesProjectCreatedEvent_withProjectIdAndOwnerId() {
+    // Given
+    when(permissions.isPlatformAdmin(1L)).thenReturn(true);
+    when(users.findByEmail("owner@x.de"))
+        .thenReturn(
+            Optional.of(new AppUser(2L, "owner@x.de", "hash", "Owner", true, PlatformRole.USER)));
+    when(projects.save(any(Project.class)))
+        .thenAnswer(
+            inv -> {
+              Project p = inv.getArgument(0);
+              return new Project(9L, p.name(), p.ownerUserId(), p.createdAt());
+            });
+
+    // When
+    ArgumentCaptor<ProjectCreatedEvent> captor = ArgumentCaptor.forClass(ProjectCreatedEvent.class);
+    service.create(1L, "Neu", "owner@x.de");
+
+    // Then
+    verify(events).publishEvent(captor.capture());
+    assertThat(captor.getValue().projectId()).isEqualTo(9L);
+    assertThat(captor.getValue().ownerUserId()).isEqualTo(2L);
+  }
+
+  @Test
+  void create_publishesEventBeforeSendingAssignmentMail() {
+    // Given
+    when(permissions.isPlatformAdmin(1L)).thenReturn(true);
+    when(users.findByEmail("owner@x.de"))
+        .thenReturn(
+            Optional.of(new AppUser(2L, "owner@x.de", "hash", "Owner", true, PlatformRole.USER)));
+    when(projects.save(any(Project.class)))
+        .thenAnswer(
+            inv -> {
+              Project p = inv.getArgument(0);
+              return new Project(9L, p.name(), p.ownerUserId(), p.createdAt());
+            });
+
+    // When
+    service.create(1L, "Neu", "owner@x.de");
+
+    // Then: Board-Anlage (Event) vor dem Mailversand — scheitert sie, rollt alles atomar zurueck.
+    InOrder order = inOrder(events, mailer);
+    order.verify(events).publishEvent(any(ProjectCreatedEvent.class));
+    order
+        .verify(mailer)
+        .sendProjectAssignedEmail(anyString(), anyString(), any(ProjectRole.class), anyString());
   }
 
   @Test

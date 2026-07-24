@@ -92,6 +92,15 @@ function idea(partial: Partial<Idea> & { id: number; title: string }): Idea {
     ideaStored: true,
     targetBoardId: null,
     type: 'CARD',
+    positionInColumn: 0,
+    archived: false,
+    movedToDoneAt: null,
+    dependencies: [],
+    parentId: null,
+    shortcode: null,
+    assignees: [],
+    dueDate: null,
+    labels: [],
     ...partial,
   }
 }
@@ -147,9 +156,36 @@ function fakeStorage(): Storage {
   }
 }
 
+class MockEventSource {
+  static instances: MockEventSource[] = []
+  url: string
+  closed = false
+  private readonly listeners = new Map<string, Set<(e: Event) => void>>()
+  constructor(url: string) {
+    this.url = url
+    MockEventSource.instances.push(this)
+  }
+  addEventListener(type: string, cb: (e: Event) => void): void {
+    const set = this.listeners.get(type) ?? new Set()
+    set.add(cb)
+    this.listeners.set(type, set)
+  }
+  removeEventListener(type: string, cb: (e: Event) => void): void {
+    this.listeners.get(type)?.delete(cb)
+  }
+  close(): void {
+    this.closed = true
+  }
+  emit(type: string): void {
+    this.listeners.get(type)?.forEach((cb) => cb(new Event(type)))
+  }
+}
+
 beforeEach(() => {
   vi.clearAllMocks()
+  MockEventSource.instances = []
   vi.stubGlobal('localStorage', fakeStorage())
+  vi.stubGlobal('EventSource', MockEventSource)
 })
 
 afterEach(() => vi.unstubAllGlobals())
@@ -400,6 +436,18 @@ describe('IdeasPage', () => {
     mockedIdeas.list.mockClear()
 
     fireEvent(window, new Event('focus'))
+
+    await waitFor(() => expect(mockedIdeas.list).toHaveBeenCalled())
+  })
+
+  it('abonniert den Ideen-Stream und lädt bei einem Live-Event nach', async () => {
+    renderPage({ ideas: [poolA] })
+    await screen.findByText('Pool A')
+    expect(MockEventSource.instances).toHaveLength(1)
+    expect(MockEventSource.instances[0].url).toBe('/api/projects/5/ideas/events')
+    mockedIdeas.list.mockClear()
+
+    MockEventSource.instances[0].emit('project-ideas-changed')
 
     await waitFor(() => expect(mockedIdeas.list).toHaveBeenCalled())
   })

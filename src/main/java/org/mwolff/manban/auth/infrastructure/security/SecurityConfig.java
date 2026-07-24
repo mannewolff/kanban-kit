@@ -1,5 +1,6 @@
 package org.mwolff.manban.auth.infrastructure.security;
 
+import jakarta.servlet.DispatcherType;
 import jakarta.servlet.http.HttpServletResponse;
 import org.mwolff.manban.accesstoken.infrastructure.security.PatAuthenticationFilter;
 import org.springframework.context.annotation.Bean;
@@ -47,7 +48,14 @@ class SecurityConfig {
         .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
         .authorizeHttpRequests(
             auth ->
-                auth.requestMatchers(
+                // Interne Container-Re-Dispatches (ASYNC bei SseEmitter-Streams, ERROR bei der
+                // Fehlerseite) nicht erneut autorisieren: dort ist kein SecurityContext gesetzt,
+                // sonst 403 auf dem bereits committeten SSE-Stream (Reconnect-Sturm). Der REQUEST-
+                // Dispatch bleibt voll autorisiert; DispatcherType setzt der Container, nicht der
+                // Client — nicht fälschbar.
+                auth.dispatcherTypeMatchers(DispatcherType.ASYNC, DispatcherType.ERROR)
+                    .permitAll()
+                    .requestMatchers(
                         "/api/auth/register",
                         "/api/auth/verify",
                         "/api/auth/login",

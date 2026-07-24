@@ -110,8 +110,9 @@ public class KanbanCompatService {
    * im Board-Backlog, damit der Night-Modus (der aus <em>Ready</em> zieht) nichts autonom
    * abarbeitet, was nicht bewusst eingeplant wurde. Die Parameter {@code column} und {@code
    * ideaStored} sind dadurch gegenstandslos — sie bleiben aus Rückwärtskompatibilität im Request,
-   * werden hier aber ignoriert. Zurückgegeben wird die {@code id} der neuen Pool-Idee (board-lose
-   * Ideen tragen keine board-scoped Nummer).
+   * werden hier aber ignoriert. Zurückgegeben werden {@code id} und die sofort vergebene
+   * projektweite {@code number} der neuen Pool-Idee (#402), damit CLI/Adapter direkt {@code #N}
+   * zeigen können.
    */
   @Transactional
   public Created create(
@@ -124,7 +125,9 @@ public class KanbanCompatService {
     Board board = boards.findById(boardId).orElseThrow(BoardNotFoundException::new);
     CardView v =
         cardService.createProjectIdea(principal.userId(), board.projectId(), title, body, boardId);
-    return new Created(v.id());
+    // Seit #402 vergibt createProjectIdea sofort eine Nummer; requireNonNull macht das fuer
+    // NullAway explizit (CardView.number() ist @Nullable fuer Legacy-Ideen ohne Nummer).
+    return new Created(v.id(), Objects.requireNonNull(v.number()));
   }
 
   /** Verschiebt ein Item des gebundenen Boards in die Ziel-Spalte an die Ziel-Position. */
@@ -230,7 +233,7 @@ public class KanbanCompatService {
       int position,
       String type) {}
 
-  public record Created(long id) {}
+  public record Created(long id, int number) {}
 
   public record Epic(int number, String title, @Nullable String shortcode, Progress progress) {}
 

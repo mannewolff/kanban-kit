@@ -240,16 +240,20 @@ class KanbanCompatIT extends AbstractIntegrationTest {
                     .contentType("application/json")
                     .content("{\"title\":\"Als Idee\"}"))
             .andExpect(status().isCreated())
+            // #402: die Ingest-Antwort enthält die sofort vergebene projektweite Nummer.
+            .andExpect(jsonPath("$.number").isNumber())
             .andReturn()
             .getResponse()
             .getContentAsString();
     long ideaId = json.readTree(created).get("id").asLong();
+    int ideaNumber = json.readTree(created).get("number").asInt();
 
-    // Akzeptanzkriterium: erscheint in GET /api/projects/{id}/ideas ...
+    // Akzeptanzkriterium: erscheint in GET /api/projects/{id}/ideas mit derselben Nummer ...
     mvc.perform(get("/api/projects/" + projectId + "/ideas").cookie(session))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.length()").value(1))
         .andExpect(jsonPath("$[0].id").value(ideaId))
+        .andExpect(jsonPath("$[0].number").value(ideaNumber))
         .andExpect(jsonPath("$[0].title").value("Als Idee"))
         .andExpect(jsonPath("$[0].ideaStored").value(true));
     // ... aber NICHT in GET /api/boards/{id}/cards.

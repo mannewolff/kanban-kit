@@ -124,6 +124,48 @@ class ProjectIT extends AbstractIntegrationTest {
   }
 
   @Test
+  void newProjectHasNormalDefaultBoardWithStandardColumns() throws Exception {
+    Cookie alice = loginAs("alice-defaultboard@example.com");
+    long projectId = createProject("alice-defaultboard@example.com", "Startklar");
+
+    // Direkt nach der Anlage existiert genau ein Board "default".
+    String boardsBody =
+        mvc.perform(get("/api/projects/" + projectId + "/boards").cookie(alice))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.length()").value(1))
+            .andExpect(jsonPath("$[0].name").value("default"))
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+    long boardId = json.readTree(boardsBody).get(0).get("id").asLong();
+
+    // ... mit genau den fuenf Standardspalten in Reihenfolge.
+    mvc.perform(get("/api/boards/" + boardId).cookie(alice))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.columns.length()").value(5))
+        .andExpect(jsonPath("$.columns[0].name").value("Backlog"))
+        .andExpect(jsonPath("$.columns[1].name").value("Ready"))
+        .andExpect(jsonPath("$.columns[2].name").value("In Progress"))
+        .andExpect(jsonPath("$.columns[3].name").value("In Review"))
+        .andExpect(jsonPath("$.columns[4].name").value("Done"));
+
+    // Das "default"-Board ist ein normales Board: umbenennbar ...
+    mvc.perform(
+            patch("/api/boards/" + boardId)
+                .cookie(alice)
+                .contentType("application/json")
+                .content("{\"name\":\"Umbenannt\"}"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.name").value("Umbenannt"));
+
+    // ... und loeschbar, auch als letztes Board.
+    mvc.perform(delete("/api/boards/" + boardId).cookie(alice)).andExpect(status().isNoContent());
+    mvc.perform(get("/api/projects/" + projectId + "/boards").cookie(alice))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.length()").value(0));
+  }
+
+  @Test
   void nonAdminCannotCreateProject() throws Exception {
     Cookie alice = loginAs("alice-nonadmin@example.com");
     mvc.perform(

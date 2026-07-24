@@ -2,6 +2,7 @@ package org.mwolff.manban.card.infrastructure.persistence;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 
@@ -12,6 +13,9 @@ interface CardJpaRepository extends JpaRepository<CardEntity, Long> {
   List<CardEntity> findByBoardIdAndDeletedAtIsNullOrderByNumber(Long boardId);
 
   List<CardEntity> findByProjectIdAndDeletedAtIsNull(Long projectId);
+
+  /** Nicht-gelöschte Karte eines Projekts nach projektweiter Nummer (projektweit eindeutig). */
+  Optional<CardEntity> findByProjectIdAndNumberAndDeletedAtIsNull(Long projectId, Integer number);
 
   /** Ideen-Karten eines Projekts (board-los + Legacy), neueste zuerst. */
   List<CardEntity> findByProjectIdAndIdeaStoredTrueAndDeletedAtIsNullOrderByCreatedAtDesc(

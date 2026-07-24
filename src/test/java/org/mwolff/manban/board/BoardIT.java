@@ -266,13 +266,14 @@ class BoardIT extends AbstractIntegrationTest {
         .andExpect(status().isNotFound());
     org.assertj.core.api.Assertions.assertThat(cardCount(boardId)).isEqualTo(1);
 
-    // Archiviertes Board taucht nur in der Archiv-Liste auf, nicht in der aktiven.
+    // Archiviertes Board taucht nur in der Archiv-Liste auf, nicht in der aktiven. Die aktive Liste
+    // enthält weiterhin das bei der Projektanlage automatisch erzeugte "default"-Board.
     mvc.perform(
             org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get(
                     "/api/projects/" + projectId + "/boards")
                 .cookie(alice))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.length()").value(0));
+        .andExpect(jsonPath("$[?(@.id==" + boardId + ")]").isEmpty());
     mvc.perform(
             org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get(
                     "/api/projects/" + projectId + "/boards/archived")

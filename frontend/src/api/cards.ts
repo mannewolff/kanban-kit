@@ -22,6 +22,29 @@ export interface Card {
   labels: number[]
 }
 
+/**
+ * Strukturelle Karten-Form, die das CardDetailModal tatsächlich liest — erfüllt sowohl die
+ * board-gebundene `Card` als auch die board-nullable Pool-`Idea`. So kann das Modal beide öffnen,
+ * ohne die FE-`Card` global board-nullable zu machen. `number` ist board-nullable (Legacy-Ideen
+ * ohne projektweite Nummer). Board-spezifische Felder (`boardId`/`columnId`/`positionInColumn`/
+ * `movedToDoneAt`) nutzt das Modal nicht und stehen deshalb bewusst nicht hier.
+ */
+export interface CardDetail {
+  id: number
+  number: number | null
+  title: string
+  description: string | null
+  type: CardType
+  dependencies: number[]
+  assignees: number[]
+  labels: number[]
+  parentId: number | null
+  shortcode: string | null
+  dueDate: string | null
+  archived: boolean
+  ideaStored: boolean
+}
+
 export interface CardActivity {
   id: number
   actorUserId: number | null
