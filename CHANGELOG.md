@@ -7,6 +7,20 @@ Versionierung folgt der dreiteiligen Betriebsversion (siehe [RELEASING.md](RELEA
 Einträge je Version sind ein automatischer Auszug der Commit-Titel seit dem letzten Release,
 erzeugt von `scripts/gen-changelog.mjs`.
 
+## [1.8.0] – 2026-07-24
+
+- Release 1.7.1 (push main)
+- SSE-Endpoints: 403 auf Async-Dispatch beheben (ASYNC/ERROR permitten)
+- Karte nach projektweiter Nummer auflösen (GET by-number) ([#408](https://github.com/mannewolff/kanban-kit/issues/408))
+- Gate-Regression aus #405 beheben: Spotless + Nichtmitglied-Status 404
+- Default-Board bei Projektanlage automatisch anlegen ([#406](https://github.com/mannewolff/kanban-kit/issues/406))
+- Board-lose Pool-Ideen editierbar (projekt-basierte Rechte/Ops) ([#405](https://github.com/mannewolff/kanban-kit/issues/405))
+- Pool-Idee im CardDetailModal öffnen & bearbeiten ([#404](https://github.com/mannewolff/kanban-kit/issues/404))
+- Pool-Ideen sofort projektweit nummerieren (Generator + Ingest-Antwort) ([#402](https://github.com/mannewolff/kanban-kit/issues/402))
+- Live-Ideen-Pool: SSE-Backend (Event + Registry + Endpoint + Publikation) ([#401](https://github.com/mannewolff/kanban-kit/issues/401))
+- Live-Ideen-Pool: EventSource-Hook + IdeasPage-Verdrahtung ([#400](https://github.com/mannewolff/kanban-kit/issues/400))
+- release.mjs als convinient script eingeführt
+
 ## [1.7.0] – 2026-07-23
 
 - Release 1.6.1 (push main)
