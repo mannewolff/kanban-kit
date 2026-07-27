@@ -166,9 +166,71 @@ describe('BoardListPage', () => {
     // Nachher: 'Beschreibung' steht vorne und die Reihenfolge liegt in localStorage.
     const after = screen.getAllByLabelText(/^Spalte /).map((el) => el.getAttribute('aria-label'))
     expect(after[0]).toBe('Spalte Beschreibung')
-    expect(JSON.parse(localStorage.getItem('manban.listColumns.1')!)).toEqual(
+    expect(JSON.parse(localStorage.getItem('manban.listColumns')!)).toEqual(
       ['excerpt', 'number', 'status', 'epic', 'title'],
     )
+  })
+
+  it('merkt die Spaltenreihenfolge über einen Neu-Mount hinweg', async () => {
+    const view = renderPage()
+    await screen.findByText('Aufgabe')
+    fireEvent.dragStart(screen.getByLabelText('Spalte Beschreibung'))
+    fireEvent.dragOver(screen.getByLabelText('Spalte Nr'))
+    fireEvent.drop(screen.getByLabelText('Spalte Nr'))
+    view.unmount()
+
+    renderPage()
+    await screen.findByText('Aufgabe')
+    const order = screen.getAllByLabelText(/^Spalte /).map((el) => el.getAttribute('aria-label'))
+    expect(order[0]).toBe('Spalte Beschreibung')
+  })
+
+  it('gilt mit Reihenfolge und Breite auch auf einem anderen Board', async () => {
+    localStorage.setItem('manban.listColumns', JSON.stringify(['excerpt', 'title', 'number', 'status', 'epic']))
+    localStorage.setItem('manban.listExcerptWidth', '45')
+    mBoards.get.mockResolvedValue({
+      id: 2, projectId: 9, name: 'Zweites', createdAt: '',
+      columns: [{ id: 10, name: 'Backlog', position: 0, wipLimit: null }],
+    })
+    mCards.list.mockResolvedValue([active])
+    mEpics.list.mockResolvedValue([])
+    render(
+      <MemoryRouter initialEntries={['/boards/2/list']}>
+        <Routes>
+          <Route path="/boards/:boardId/list" element={<BoardListPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+    await screen.findByText('Aufgabe')
+
+    const order = screen.getAllByLabelText(/^Spalte /).map((el) => el.getAttribute('aria-label'))
+    expect(order[0]).toBe('Spalte Beschreibung')
+  })
+
+  it('entfernt board-gebundene Alt-Schlüssel für Reihenfolge und Breite beim Laden', async () => {
+    localStorage.setItem('manban.listColumns.1', JSON.stringify(['excerpt']))
+    localStorage.setItem('manban.listExcerptWidth.7', '42')
+    localStorage.setItem('manban.listFilters.1', JSON.stringify([10]))
+    renderPage()
+    await screen.findByText('Aufgabe')
+
+    expect(localStorage.getItem('manban.listColumns.1')).toBeNull()
+    expect(localStorage.getItem('manban.listExcerptWidth.7')).toBeNull()
+    // Der Spalten-Filter bleibt bewusst board-gebunden und wird nicht angetastet.
+    expect(localStorage.getItem('manban.listFilters.1')).not.toBeNull()
+  })
+
+  it('bricht nicht ab, wenn beim Aufräumen der Alt-Schlüssel localStorage wirft', async () => {
+    vi.stubGlobal('localStorage', {
+      getItem: () => null,
+      setItem: () => undefined,
+      removeItem: () => { throw new Error('nope') },
+      clear: () => undefined,
+      key: () => 'manban.listColumns.1',
+      get length() { return 1 },
+    })
+    renderPage()
+    expect(await screen.findByText('Aufgabe')).toBeInTheDocument()
   })
 
   it('verwirft eine spät auflösende Karten-Antwort der alten Board-ID nach einem ID-Wechsel', async () => {
@@ -242,7 +304,7 @@ describe('BoardListPage', () => {
       fireEvent.mouseUp(document)
 
       // Default 30 % + 10 % = 40 %, in localStorage persistiert.
-      expect(localStorage.getItem('manban.listExcerptWidth.1')).toBe('40')
+      expect(localStorage.getItem('manban.listExcerptWidth')).toBe('40')
     } finally {
       rectSpy.mockRestore()
     }
@@ -288,7 +350,7 @@ describe('BoardListPage', () => {
   })
 
   it('übernimmt eine gespeicherte Spaltenreihenfolge und ignoriert unbekannte Einträge', async () => {
-    localStorage.setItem('manban.listColumns.1', JSON.stringify(['excerpt', 'foo', 'title']))
+    localStorage.setItem('manban.listColumns', JSON.stringify(['excerpt', 'foo', 'title']))
     renderPage()
     await screen.findByText('Aufgabe')
 
@@ -695,7 +757,7 @@ describe('BoardListPage', () => {
   })
 
   it('nimmt eine gespeicherte Beschreibungs-Breite aus localStorage beim Mount an', async () => {
-    localStorage.setItem('manban.listExcerptWidth.1', '45')
+    localStorage.setItem('manban.listExcerptWidth', '45')
     renderPage()
     expect(await screen.findByText('Aufgabe')).toBeInTheDocument()
   })
@@ -748,7 +810,7 @@ describe('BoardListPage', () => {
       fireEvent.mouseUp(document)
 
       // Ohne bestimmbare Breite bleibt die gespeicherte Breite auf dem Default (keine Verbreiterung).
-      expect(localStorage.getItem('manban.listExcerptWidth.1')).toBe('30')
+      expect(localStorage.getItem('manban.listExcerptWidth')).toBe('30')
     } finally {
       rectSpy.mockRestore()
     }

@@ -1,4 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react'
+import { useState } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import type { Epic } from '../api/epics'
 import { CardFields } from './CardFields'
@@ -139,5 +140,77 @@ describe('CardFields', () => {
     expect(screen.queryByLabelText('Epic')).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Abhängig von')).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Fällig am')).not.toBeInTheDocument()
+  })
+
+  // Checkbox-Kurzschreibweise (Issue #420): Der Hook führt den Cursor nach dem Render nach, deshalb
+  // braucht es hier eine echt kontrollierte Umgebung statt eines onChange-Mocks.
+  function Controlled({ initial = '' }: Readonly<{ initial?: string }>) {
+    const [body, setBody] = useState(initial)
+    return (
+      <CardFields
+        isEpic={false}
+        title="T"
+        body={body}
+        shortcode=""
+        parentId={null}
+        epics={epics}
+        depsInput=""
+        depsError={null}
+        dueInput=""
+        onTitleChange={vi.fn()}
+        onBodyChange={setBody}
+        onShortcodeChange={vi.fn()}
+        onParentIdChange={vi.fn()}
+        onDepsInputChange={vi.fn()}
+        onDueInputChange={vi.fn()}
+      />
+    )
+  }
+
+  function typeInBody(value: string, caret: number): HTMLTextAreaElement {
+    const field = screen.getByLabelText('Markdown-Beschreibung') as HTMLTextAreaElement
+    fireEvent.change(field, { target: { value, selectionStart: caret, selectionEnd: caret } })
+    return field
+  }
+
+  it('macht aus Slash plus Leerzeichen eine leere Checkbox und setzt den Cursor dahinter', () => {
+    render(<Controlled />)
+    const field = typeInBody('/ ', 2)
+    expect(field).toHaveValue('- [ ] ')
+    expect(field.selectionStart).toBe(6)
+  })
+
+  it('macht aus /x plus Leerzeichen eine abgehakte Checkbox', () => {
+    render(<Controlled />)
+    expect(typeInBody('/x ', 3)).toHaveValue('- [x] ')
+  })
+
+  it('lässt eine Zeile mit einem Pfad unangetastet', () => {
+    render(<Controlled />)
+    expect(typeInBody('/api/cards ', 11)).toHaveValue('/api/cards ')
+  })
+
+  it('nimmt die Ersetzung per Backspace zurück und stellt den Cursor wieder her', () => {
+    render(<Controlled />)
+    const field = typeInBody('/ ', 2)
+    expect(field).toHaveValue('- [ ] ')
+    fireEvent.keyDown(field, { key: 'Backspace' })
+    expect(field).toHaveValue('/ ')
+    expect(field.selectionStart).toBe(2)
+  })
+
+  it('nimmt nur unmittelbar zurück: nach einer anderen Taste bleibt die Checkbox stehen', () => {
+    render(<Controlled />)
+    const field = typeInBody('/ ', 2)
+    fireEvent.keyDown(field, { key: 'a' })
+    fireEvent.keyDown(field, { key: 'Backspace' })
+    expect(field).toHaveValue('- [ ] ')
+  })
+
+  it('lässt Backspace ohne vorangehende Ersetzung unverändert durch', () => {
+    render(<Controlled initial="Text" />)
+    const field = screen.getByLabelText('Markdown-Beschreibung') as HTMLTextAreaElement
+    fireEvent.keyDown(field, { key: 'Backspace' })
+    expect(field).toHaveValue('Text')
   })
 })

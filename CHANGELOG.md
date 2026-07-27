@@ -7,6 +7,19 @@ Versionierung folgt der dreiteiligen Betriebsversion (siehe [RELEASING.md](RELEA
 Einträge je Version sind ein automatischer Auszug der Commit-Titel seit dem letzten Release,
 erzeugt von `scripts/gen-changelog.mjs`.
 
+## [1.9.0] – 2026-07-27
+
+- Release 1.8.2 (push main)
+- Ideen-Speicher führt in den Pool: board-los, Nummer bleibt, Bestand migriert ([#433](https://github.com/mannewolff/kanban-kit/issues/433))
+- Release 1.8.1 (push main)
+- kanbancompat blendet Ideen aus ([#434](https://github.com/mannewolff/kanban-kit/issues/434))
+- Issue-Dateien ins Board überführt und entfernt (#438–#447)
+- Ideen-Pool aufsteigend sortieren: älteste zuerst ([#419](https://github.com/mannewolff/kanban-kit/issues/419))
+- Checkbox-Kurzschreibweise: / und /x beim Tippen expandieren ([#420](https://github.com/mannewolff/kanban-kit/issues/420))
+- Listenansicht: Spaltenreihenfolge und Breite global merken ([#432](https://github.com/mannewolff/kanban-kit/issues/432))
+- Versionskennung im Header größer und kontrastreicher ([#421](https://github.com/mannewolff/kanban-kit/issues/421))
+- Sonar-Findings + Coverage: vier Issue-Dateien zum Nachziehen (Tracker im Deploy)
+
 ## [1.8.0] – 2026-07-24
 
 - Release 1.7.1 (push main)

@@ -17,8 +17,12 @@ interface CardJpaRepository extends JpaRepository<CardEntity, Long> {
   /** Nicht-gelöschte Karte eines Projekts nach projektweiter Nummer (projektweit eindeutig). */
   Optional<CardEntity> findByProjectIdAndNumberAndDeletedAtIsNull(Long projectId, Integer number);
 
-  /** Ideen-Karten eines Projekts (board-los + Legacy), neueste zuerst. */
-  List<CardEntity> findByProjectIdAndIdeaStoredTrueAndDeletedAtIsNullOrderByCreatedAtDesc(
+  /**
+   * Ideen-Karten eines Projekts (board-los + Legacy), <b>älteste zuerst</b> (#419): Der Pool wird
+   * von oben nach unten abgearbeitet, und das Backlog daneben ist aufsteigend sortiert — bei
+   * absteigendem Pool kehrte sich die Reihenfolge beim Einplanen um.
+   */
+  List<CardEntity> findByProjectIdAndIdeaStoredTrueAndDeletedAtIsNullOrderByCreatedAtAsc(
       Long projectId);
 
   /** Karten im Papierkorb des Boards. */

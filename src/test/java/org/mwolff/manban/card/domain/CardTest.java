@@ -34,29 +34,6 @@ class CardTest {
           null);
 
   @Test
-  void asIdeaStored_setztNurDasFlag() {
-    Card result = CARD.asIdeaStored();
-
-    assertThat(result.ideaStored()).isTrue();
-    assertThat(result).usingRecursiveComparison().ignoringFields("ideaStored").isEqualTo(CARD);
-  }
-
-  @Test
-  void asPromoted_loeschtFlag_setztSpalteUndPosition_haeltRest() {
-    Card idea = CARD.asIdeaStored();
-
-    Card result = idea.asPromoted(7, 99L);
-
-    assertThat(result.ideaStored()).isFalse();
-    assertThat(result.columnId()).isEqualTo(99L);
-    assertThat(result.positionInColumn()).isEqualTo(7);
-    assertThat(result)
-        .usingRecursiveComparison()
-        .ignoringFields("ideaStored", "columnId", "positionInColumn")
-        .isEqualTo(idea);
-  }
-
-  @Test
   void requireBoardColumnNumber_liefernDieWerte_beiBoardgebundenerKarte() {
     assertThat(CARD.requireBoardId()).isEqualTo(10L);
     assertThat(CARD.requireColumnId()).isEqualTo(20L);
@@ -64,24 +41,57 @@ class CardTest {
   }
 
   @Test
-  void asPooledIdea_entferntBoardSpalteNummer_setztFlagUndZielboard() {
+  void asPooledIdea_entferntBoardUndSpalte_behaeltNummer_setztFlagUndZielboard() {
     Card idea = CARD.asPooledIdea(42L);
 
     assertThat(idea.ideaStored()).isTrue();
     assertThat(idea.boardId()).isNull();
     assertThat(idea.columnId()).isNull();
-    assertThat(idea.number()).isNull();
+    // Issue #433: die projektweite Nummer bleibt erhalten (vorher wurde sie genullt) — der Weg in
+    // den Ideen-Speicher soll Rückverweise (#N) nicht mehr brechen.
+    assertThat(idea.number()).isEqualTo(5);
     assertThat(idea.targetBoardId()).isEqualTo(42L);
     assertThat(idea.projectId()).isEqualTo(1L);
   }
 
   @Test
-  void requireBoardColumnNumber_werfen_beiBoardloserPoolIdee() {
+  void requireBoardColumn_werfen_beiBoardloserPoolIdee() {
+    // Seit #433 behält asPooledIdea die Nummer — requireBoardId/requireColumnId werfen weiterhin,
+    // requireNumber nicht mehr (eigener Test unten für eine echt nummernlose Karte).
     Card idea = CARD.asPooledIdea(null);
 
     assertThatExceptionOfType(IllegalStateException.class).isThrownBy(idea::requireBoardId);
     assertThatExceptionOfType(IllegalStateException.class).isThrownBy(idea::requireColumnId);
-    assertThatExceptionOfType(IllegalStateException.class).isThrownBy(idea::requireNumber);
+    assertThat(idea.requireNumber()).isEqualTo(5);
+  }
+
+  @Test
+  void requireNumber_wirft_beiEchtNummernloserKarte() {
+    // Nur Alt-Ideen aus der Zeit vor #402 haben number == null; requireNumber bleibt für diesen
+    // Fall zuständig (planOntoBoard prüft genau darauf, bevor es eine Nummer nachvergibt).
+    Card numberless =
+        new Card(
+            1L,
+            null,
+            null,
+            null,
+            "T",
+            "desc",
+            3,
+            false,
+            true,
+            null,
+            1L,
+            FIXED,
+            FIXED,
+            CardType.CARD,
+            null,
+            null,
+            null,
+            1L,
+            null);
+
+    assertThatExceptionOfType(IllegalStateException.class).isThrownBy(numberless::requireNumber);
   }
 
   @Test

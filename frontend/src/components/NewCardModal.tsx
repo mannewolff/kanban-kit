@@ -12,6 +12,7 @@ import type { Label as BoardLabel } from '../api/labels'
 import type { Member } from '../api/members'
 import { epicShortcode } from '../lib/epicMeta'
 import { dueInputToIso } from '../lib/dueDate'
+import { useCheckboxShortcut } from '../lib/useCheckboxShortcut'
 import { CardFields } from './CardFields'
 import { AssigneeSection, LabelSection, parseDependencyInput } from './CardDetailModal'
 
@@ -78,6 +79,7 @@ export function NewCardModal({
   const [type, setType] = useState<CardType>(epicOnly ? 'EPIC' : 'CARD')
   const [title, setTitle] = useState('')
   const [body, setBody] = useState(BODY_TEMPLATE)
+  const bodyShortcut = useCheckboxShortcut(setBody)
   const [parentId, setParentId] = useState<number | null>(null)
   const [shortcode, setShortcode] = useState('')
   const [depsInput, setDepsInput] = useState('')
@@ -286,7 +288,8 @@ export function NewCardModal({
               <TextField
                 label="Beschreibung"
                 value={body}
-                onChange={(e) => setBody(e.target.value)}
+                onChange={bodyShortcut.onChange}
+                onKeyDown={bodyShortcut.onKeyDown}
                 multiline
                 rows={8}
                 fullWidth

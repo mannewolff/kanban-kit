@@ -68,7 +68,14 @@ public class KanbanCompatService {
     this.permissions = permissions;
   }
 
-  /** Nach Kanban-Spalte gruppierte, nicht-archivierte Items des gebundenen Boards (inkl. Epics). */
+  /**
+   * Nach Kanban-Spalte gruppierte, nicht-archivierte Items des gebundenen Boards (inkl. Epics).
+   *
+   * <p>Karten im Ideen-Speicher bleiben ausgeschlossen (#434): Sie tragen weiterhin Board und
+   * Spalte, sind in der Oberfläche aber ausgeblendet. Ohne diesen Filter meldete die Schnittstelle
+   * sie als reguläre Karten ihrer Spalte — Kit und Nacht-Runner sahen dann Aufgaben, die für
+   * Menschen auf dem Board nicht existieren.
+   */
   @Transactional(readOnly = true)
   public Map<String, List<Item>> items(KanbanPrincipal principal) {
     long boardId = requireBound(principal);
@@ -81,7 +88,7 @@ public class KanbanCompatService {
       grouped.put(key, new ArrayList<>());
     }
     cards.findByBoardId(boardId).stream()
-        .filter(c -> !c.archived())
+        .filter(c -> !c.archived() && !c.ideaStored())
         .sorted(Comparator.comparingInt(Card::positionInColumn))
         .forEach(
             c -> {
@@ -166,10 +173,16 @@ public class KanbanCompatService {
     return Objects.requireNonNull(principal.boardId());
   }
 
-  /** Sichert die Token-Bindung ab: die Karte muss auf dem gebundenen Board liegen (sonst 404). */
+  /**
+   * Sichert die Token-Bindung ab: die Karte muss auf dem gebundenen Board liegen (sonst 404).
+   *
+   * <p>Eine Karte im Ideen-Speicher gilt hier als nicht vorhanden (#434) — sie ist für Menschen
+   * ausgeblendet, also darf die Automatik sie auch nicht bewegen oder kommentieren. Andernfalls
+   * entstünden Änderungen an einer Karte, die auf dem Board niemand sieht.
+   */
   private void requireCardOnBoard(long cardId, long boardId) {
     Card card = cards.findById(cardId).orElseThrow(CardNotFoundException::new);
-    if (!Long.valueOf(boardId).equals(card.boardId())) {
+    if (!Long.valueOf(boardId).equals(card.boardId()) || card.ideaStored()) {
       throw new CardNotFoundException();
     }
   }

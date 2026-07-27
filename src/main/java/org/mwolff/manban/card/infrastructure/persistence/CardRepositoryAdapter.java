@@ -62,7 +62,7 @@ class CardRepositoryAdapter implements CardRepository {
   @Override
   public List<Card> findIdeasByProjectId(long projectId) {
     return jpa
-        .findByProjectIdAndIdeaStoredTrueAndDeletedAtIsNullOrderByCreatedAtDesc(projectId)
+        .findByProjectIdAndIdeaStoredTrueAndDeletedAtIsNullOrderByCreatedAtAsc(projectId)
         .stream()
         .map(CardRepositoryAdapter::toDomain)
         .toList();

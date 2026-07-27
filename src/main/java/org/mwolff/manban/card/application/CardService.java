@@ -624,10 +624,12 @@ public class CardService {
   }
 
   /**
-   * Legt eine Karte in den Ideen-Speicher (Demotion, analog {@link #archive(long, long)}): sie
-   * fällt aus dem aktiven Board (kein Positions-Reindex nötig, {@code active_position=NULL}).
-   * Ideen-Pflege ist normaler Arbeitsfluss, kein Löschen — daher das Karten-Verschieberecht ({@link
-   * Permission#CARD_MOVE}), nicht das Archiv-/Lösch-Recht. Nur Karten, keine Epics.
+   * Legt eine Karte in den Ideen-Speicher (analog {@link #moveBackToPool(long, long)}): sie wird
+   * board-los und landet im projektweiten Ideen-Pool, das bisherige Board als Zielboard-Hinweis
+   * notiert (#433). Vorher blieb die Karte board-gebunden und war dadurch in keiner Ansicht mehr
+   * sichtbar — ein unauffindbarer Zwischenzustand (#428). Ideen-Pflege ist normaler Arbeitsfluss,
+   * kein Löschen — daher das Karten-Verschieberecht ({@link Permission#CARD_MOVE}), nicht das
+   * Archiv-/Lösch-Recht. Nur Karten, keine Epics.
    */
   @Transactional
   public CardView moveToIdeaStorage(long userId, long cardId) {
@@ -643,35 +645,9 @@ public class CardService {
         CardActivityType.IDEA_STORED,
         "In den Ideen-Speicher",
         clock.instant());
-    CardView result = view(cards.save(card.asIdeaStored()));
+    CardView result = view(cards.save(card.asPooledIdea(card.boardId())));
     publishChanged(card.requireBoardId(), ChangeType.MOVED, card.requireId());
-    return result;
-  }
-
-  /**
-   * Holt eine Idee aus dem Ideen-Speicher zurück ins Backlog (Promotion, analog {@link
-   * #restore(long, long)}). Anders als das Wiederherstellen wandert die Karte bewusst in die erste
-   * Spalte (das Backlog, niedrigste Position) und landet dort am Ende. Recht wie die Demotion
-   * ({@link Permission#CARD_MOVE}). Nur Karten, keine Epics.
-   */
-  @Transactional
-  public CardView promoteToBacklog(long userId, long cardId) {
-    Card card = cards.findById(cardId).orElseThrow(CardNotFoundException::new);
-    if (card.type() == CardType.EPIC) {
-      throw new InvalidDependencyException("Epics können nicht ins Backlog geholt werden");
-    }
-    Board board = boards.findById(card.requireBoardId()).orElseThrow(BoardNotFoundException::new);
-    permissions.require(userId, board.projectId(), Permission.CARD_MOVE);
-    long firstColumnId =
-        columns.findByBoardId(card.requireBoardId()).stream()
-            .min(Comparator.comparingInt(BoardColumn::position))
-            .orElseThrow(ColumnNotFoundException::new)
-            .requireId();
-    int position = cards.maxActivePositionInColumn(firstColumnId) + 1;
-    activity.add(
-        card.requireId(), userId, CardActivityType.PROMOTED, "Ins Backlog geholt", clock.instant());
-    CardView result = view(cards.save(card.asPromoted(position, firstColumnId)));
-    publishChanged(card.requireBoardId(), ChangeType.MOVED, card.requireId());
+    publishIdeasChanged(card.projectId());
     return result;
   }
 
@@ -770,7 +746,7 @@ public class CardService {
   }
 
   /**
-   * Alle Ideen eines Projekts (board-lose Pool-Ideen und board-gebundene Legacy-Ideen), neueste
+   * Alle Ideen eines Projekts (board-lose Pool-Ideen und board-gebundene Legacy-Ideen), älteste
    * zuerst. Erfordert Projekt-Mitgliedschaft (Leserecht).
    */
   @Transactional(readOnly = true)

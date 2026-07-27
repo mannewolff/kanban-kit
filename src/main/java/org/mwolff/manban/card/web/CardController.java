@@ -149,16 +149,14 @@ class CardController {
     return cards.restore(userId, cardId);
   }
 
-  /** Legt eine Karte in den Ideen-Speicher (Demotion, verschwindet aus dem aktiven Board). */
+  /**
+   * Legt eine Karte in den Ideen-Speicher: sie wird board-los und landet im projektweiten
+   * Ideen-Pool (#433). Der frühere Rückweg {@code POST /api/cards/{id}/promote} entfällt damit —
+   * zurück aufs Board geht seither über {@link #plan(Long, long, PlanRequest)}.
+   */
   @PostMapping("/api/cards/{cardId}/idea-storage")
   CardView moveToIdeaStorage(@AuthenticationPrincipal Long userId, @PathVariable long cardId) {
     return cards.moveToIdeaStorage(userId, cardId);
-  }
-
-  /** Holt eine Idee aus dem Ideen-Speicher zurück ins Backlog (Promotion). */
-  @PostMapping("/api/cards/{cardId}/promote")
-  CardView promote(@AuthenticationPrincipal Long userId, @PathVariable long cardId) {
-    return cards.promoteToBacklog(userId, cardId);
   }
 
   /** Plant eine board-lose Pool-Idee ins Backlog eines Boards desselben Projekts ein. */

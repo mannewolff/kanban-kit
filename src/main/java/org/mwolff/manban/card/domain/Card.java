@@ -8,10 +8,12 @@ import org.mwolff.manban.common.Identifiable;
  * Karte — Kern-Aggregat. Die {@code number} ist board-scoped (eindeutig pro Board).
  *
  * <p>Eine Karte gehört immer zu einem Projekt ({@code projectId}). Die Board-Bindung ist optional:
- * eine board-gebundene Karte trägt {@code boardId}, {@code columnId} und {@code number}; eine
- * board-lose Pool-Idee ({@code ideaStored=true}) hat diese drei {@code null} und lebt nur im
- * projektweiten Ideen-Pool. {@code targetBoardId} notiert das gewünschte Zielboard einer Pool-Idee
- * (z. B. aus dem Ingest), ohne sie schon dort einzuplanen.
+ * eine board-gebundene Karte trägt {@code boardId} und {@code columnId}; eine board-lose Pool-Idee
+ * ({@code ideaStored=true}) hat beide {@code null} und lebt nur im projektweiten Ideen-Pool. Die
+ * projektweite {@code number} bleibt beim Weg in den Pool erhalten (#433) — sie ist seit #402
+ * sofort vergeben und wird nur bei Alt-Ideen aus der Zeit davor vermisst. {@code targetBoardId}
+ * notiert das gewünschte Zielboard einer Pool-Idee (z. B. aus dem Ingest oder dem Ideen-Speicher),
+ * ohne sie schon dort einzuplanen.
  *
  * <p>Ein Datensatz ist entweder eine normale Karte ({@link CardType#CARD}) oder ein Epic ({@link
  * CardType#EPIC}). Epics nehmen nicht am Spalten-Workflow teil (keine aktive Position) und können
@@ -20,7 +22,7 @@ import org.mwolff.manban.common.Identifiable;
  * @param id technische ID; {@code null} vor der Persistierung
  * @param boardId zugehöriges Board; {@code null} bei einer board-losen Pool-Idee
  * @param columnId aktuelle Spalte; {@code null} bei einer board-losen Pool-Idee
- * @param number board-scoped Anzeigenummer; {@code null} bei einer board-losen Pool-Idee
+ * @param number board-scoped Anzeigenummer; {@code null} nur bei Alt-Ideen von vor #402
  * @param title Titel
  * @param description Markdown-Beschreibung (nullable)
  * @param positionInColumn Position in der Spalte
@@ -154,42 +156,17 @@ public record Card(
   }
 
   /**
-   * In den Ideen-Speicher legen (analog {@link #asArchived()}); fällt aus dem aktiven Namespace.
-   */
-  public Card asIdeaStored() {
-    return new Card(
-        id,
-        boardId,
-        columnId,
-        number,
-        title,
-        description,
-        positionInColumn,
-        archived,
-        true,
-        movedToDoneAt,
-        createdBy,
-        createdAt,
-        updatedAt,
-        type,
-        parentId,
-        shortcode,
-        dueDate,
-        projectId,
-        targetBoardId);
-  }
-
-  /**
-   * Macht die Karte zu einer board-losen Pool-Idee: {@code board/column/number} entfallen, {@code
+   * Macht die Karte zu einer board-losen Pool-Idee: {@code board/column} entfallen, {@code
    * ideaStored=true}, optional wird das bisherige/gewünschte Board als {@code targetBoardId}
-   * notiert.
+   * notiert. Die projektweite {@code number} bleibt erhalten (#433) — sie ist seit #402 sofort
+   * vergeben, und Rückverweise (#N) auf die Karte dürfen beim Weg in den Pool nicht brechen.
    */
   public Card asPooledIdea(@Nullable Long newTargetBoardId) {
     return new Card(
         id,
         null,
         null,
-        null,
+        number,
         title,
         description,
         positionInColumn,
@@ -233,34 +210,6 @@ public record Card(
         dueDate,
         projectId,
         null);
-  }
-
-  /**
-   * Aus dem Ideen-Speicher ins Backlog holen: {@code ideaStored=false}, mit neuer Spalte (die
-   * Backlog-Spalte) und einer freien Position dort. Anders als {@link #asRestored(int)}, das die
-   * bisherige Spalte behält, wandert eine promotete Idee bewusst in die erste Spalte.
-   */
-  public Card asPromoted(int newPositionInColumn, long newColumnId) {
-    return new Card(
-        id,
-        boardId,
-        newColumnId,
-        number,
-        title,
-        description,
-        newPositionInColumn,
-        archived,
-        false,
-        movedToDoneAt,
-        createdBy,
-        createdAt,
-        updatedAt,
-        type,
-        parentId,
-        shortcode,
-        dueDate,
-        projectId,
-        targetBoardId);
   }
 
   public Card withMovedToDoneAt(@Nullable Instant when) {
