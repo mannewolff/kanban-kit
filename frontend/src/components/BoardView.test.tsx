@@ -97,29 +97,28 @@ describe('BoardView', () => {
     expect(within(screen.getByTestId('column-20')).queryByTestId('card-100')).not.toBeInTheDocument()
   })
 
-  it('legt über den +Dialog eine Karte mit Beschreibung an', async () => {
-    const created: Card = { ...card, id: 200, number: 2, title: 'Neu', columnId: 20 }
+  it('legt über den Anlage-Dialog eine Karte mit Beschreibung an', async () => {
+    const created: Card = { ...card, id: 200, number: 2, title: 'Neu' }
     const api = mkApi({ create: vi.fn().mockResolvedValue(created) })
     render(<BoardView board={board} initialCards={[card]} canEdit api={api} />)
 
-    fireEvent.click(screen.getByLabelText('Karte in Done anlegen'))
+    fireEvent.click(screen.getByRole('button', { name: 'Neu anlegen' }))
     fireEvent.change(screen.getByLabelText('Titel'), { target: { value: 'Neu' } })
     fireEvent.click(screen.getByRole('button', { name: 'Anlegen' }))
 
     await waitFor(() =>
-      expect(api.create).toHaveBeenCalledWith(1, 20, 'Neu', expect.stringContaining('## Kontext'), null, false, {
+      expect(api.create).toHaveBeenCalledWith(1, 10, 'Neu', expect.stringContaining('## Kontext'), null, false, {
         dependencies: [],
         dueDate: null,
         assigneeIds: [],
         labelIds: [],
       }),
     )
-    expect(within(screen.getByTestId('column-20')).getByTestId('card-200')).toBeInTheDocument()
+    expect(within(screen.getByTestId('column-10')).getByTestId('card-200')).toBeInTheDocument()
   })
 
-  it('blendet Anlege-Buttons für Nicht-Editoren aus', () => {
+  it('blendet den Anlege-Button für Nicht-Editoren aus', () => {
     render(<BoardView board={board} initialCards={[card]} canEdit={false} api={mkApi()} />)
-    expect(screen.queryByLabelText('Karte in Done anlegen')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Neu anlegen' })).not.toBeInTheDocument()
   })
 
@@ -132,7 +131,7 @@ describe('BoardView', () => {
         epicsApi={epicsApi} onEpicsChanged={onEpicsChanged} />,
     )
 
-    fireEvent.click(screen.getByLabelText('Karte in Backlog anlegen'))
+    fireEvent.click(screen.getByRole('button', { name: 'Neu anlegen' }))
     fireEvent.change(screen.getByLabelText('Typ'), { target: { value: 'EPIC' } })
     fireEvent.change(screen.getByLabelText('Kürzel'), { target: { value: 'AUT' } })
     fireEvent.change(screen.getByLabelText('Titel'), { target: { value: 'Auth' } })
@@ -1006,7 +1005,6 @@ describe('BoardView', () => {
       expect(screen.queryByRole('button', { name: 'Spalte' })).not.toBeInTheDocument()
 
       // ... der tägliche Kanban-Alltag bleibt erhalten.
-      expect(screen.getByLabelText('Karte in Backlog anlegen')).toBeInTheDocument()
       expect(screen.getByRole('button', { name: 'Neu anlegen' })).toBeInTheDocument()
       expect(screen.getByRole('button', { name: 'Menü Aufgabe' })).toBeInTheDocument()
     })
@@ -1018,6 +1016,91 @@ describe('BoardView', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Menü Aufgabe' }))
       expect(screen.queryByRole('menuitem', { name: 'Bearbeiten' })).not.toBeInTheDocument()
       expect(screen.getByRole('menuitem', { name: 'Archivieren' })).toBeInTheDocument()
+    })
+  })
+
+  describe('Tastenkürzel „+“', () => {
+    const epics = [
+      { id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 0, total: 1 },
+    ]
+
+    it('trägt in keinem Spaltenkopf mehr ein „+“', () => {
+      render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} />)
+      expect(screen.queryByLabelText('Karte in Backlog anlegen')).not.toBeInTheDocument()
+      expect(screen.queryByLabelText('Karte in Done anlegen')).not.toBeInTheDocument()
+    })
+
+    it('öffnet den Anlage-Dialog für die erste Spalte', () => {
+      render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} />)
+
+      fireEvent.keyDown(document.body, { key: '+' })
+
+      expect(screen.getByRole('heading', { name: 'Neue Karte in „Backlog“' })).toBeInTheDocument()
+    })
+
+    it('legt die Karte in der ersten Spalte an', async () => {
+      const created: Card = { ...card, id: 200, number: 2, title: 'Neu' }
+      const api = mkApi({ create: vi.fn().mockResolvedValue(created) })
+      render(<BoardView board={board} initialCards={[card]} canEdit api={api} />)
+
+      fireEvent.keyDown(document.body, { key: '+' })
+      fireEvent.change(screen.getByLabelText('Titel'), { target: { value: 'Neu' } })
+      fireEvent.click(screen.getByRole('button', { name: 'Anlegen' }))
+
+      await waitFor(() =>
+        expect(api.create).toHaveBeenCalledWith(1, 10, 'Neu', expect.any(String), null, false, expect.any(Object)),
+      )
+      expect(within(screen.getByTestId('column-10')).getByTestId('card-200')).toBeInTheDocument()
+    })
+
+    it('greift nicht, solange der Fokus in einem Eingabefeld steht', () => {
+      render(<BoardView board={board} initialCards={[card]} canEdit epics={epics} api={mkApi()} />)
+
+      fireEvent.keyDown(screen.getByLabelText('Epic-Filter'), { key: '+' })
+
+      expect(screen.queryByRole('heading', { name: /Neue Karte/ })).not.toBeInTheDocument()
+    })
+
+    it('greift nicht, solange ein Dialog offen ist', () => {
+      render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} />)
+      fireEvent.click(screen.getByLabelText('Spalte Backlog bearbeiten'))
+
+      fireEvent.keyDown(screen.getByRole('dialog'), { key: '+' })
+
+      expect(screen.queryByRole('heading', { name: /Neue Karte/ })).not.toBeInTheDocument()
+      expect(screen.getByRole('heading', { name: 'Spalte bearbeiten' })).toBeInTheDocument()
+    })
+
+    it('greift nicht ohne Bearbeitungsrecht', () => {
+      render(<BoardView board={board} initialCards={[card]} canEdit={false} api={mkApi()} />)
+
+      fireEvent.keyDown(document.body, { key: '+' })
+
+      expect(screen.queryByRole('heading', { name: /Neue Karte/ })).not.toBeInTheDocument()
+    })
+
+    it('greift nicht, wenn das Board keine Spalten hat', () => {
+      const emptyBoard: Board = { ...board, columns: [] }
+      render(<BoardView board={emptyBoard} initialCards={[]} canEdit api={mkApi()} />)
+
+      fireEvent.keyDown(document.body, { key: '+' })
+
+      expect(screen.queryByRole('heading', { name: /Neue Karte/ })).not.toBeInTheDocument()
+    })
+
+    it('meldet den Tastatur-Listener beim Verlassen der Ansicht wieder ab', () => {
+      const add = vi.spyOn(document, 'addEventListener')
+      const remove = vi.spyOn(document, 'removeEventListener')
+      const { unmount } = render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} />)
+      const registered = add.mock.calls.filter(([type]) => type === 'keydown').map(([, fn]) => fn)
+
+      unmount()
+
+      const removed = remove.mock.calls.filter(([type]) => type === 'keydown').map(([, fn]) => fn)
+      expect(registered).toHaveLength(1)
+      expect(removed).toEqual(registered)
+      add.mockRestore()
+      remove.mockRestore()
     })
   })
 })

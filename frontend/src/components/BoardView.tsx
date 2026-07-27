@@ -35,6 +35,7 @@ import { useEditMode } from '../lib/EditModeContext'
 import type { Label } from '../api/labels'
 import { formatDueDate, isOverdue } from '../lib/dueDate'
 import { epicColor, epicShortcode } from '../lib/epicMeta'
+import { useKeyboardShortcut } from '../lib/useKeyboardShortcut'
 import { COLUMN_SURFACE_BG, statusColors } from '../lib/statusColors'
 import { BulkActionBar } from './BulkActionBar'
 import { EpicBadge } from './EpicBadge'
@@ -143,7 +144,7 @@ interface Props {
 /**
  * Spaltenansicht mit Drag & Drop. Verschieben ist optimistisch (Revert bei Fehler). Karten tragen
  * Epic-Badge + farbigen Rand, ein ⋮-Menü (Bearbeiten/Archivieren/Verschieben) und auf Done einen
- * Archiv-Countdown. Karten werden über einen sichtbaren „+"-Dialog angelegt.
+ * Archiv-Countdown. Angelegt wird über „Neu anlegen“ oder die Taste „+“ — stets in der ersten Spalte.
  */
 export function BoardView({
   board,
@@ -193,6 +194,12 @@ export function BoardView({
   const sortColumns = (cols: BoardColumn[]) => [...cols].sort((a, b) => a.position - b.position)
   const [columns, setColumns] = useState<BoardColumn[]>(() => sortColumns(board.columns))
   useEffect(() => setColumns(sortColumns(board.columns)), [board.columns])
+
+  // Die Taste „+“ tut dasselbe wie der Button „Neu anlegen“: anlegen in der ersten Spalte. Ohne
+  // Bearbeitungsrecht oder ohne Spalte gibt es nichts anzulegen, dann bleibt das Kürzel stumm.
+  useKeyboardShortcut('+', canEdit && columns.length > 0, () =>
+    setModalColumn({ id: columns[0].id, name: columns[0].name }),
+  )
 
   // Spalten-Dialog: 'new' = anlegen, ein Column-Objekt = bearbeiten.
   const [columnDialog, setColumnDialog] = useState<'new' | BoardColumn | null>(null)
@@ -514,14 +521,6 @@ export function BoardView({
                 <Typography variant="caption" sx={{ color: 'text.secondary', bgcolor: COLUMN_SURFACE_BG, border: 1, borderColor: 'divider', borderRadius: 10, px: 0.75, lineHeight: 1.6 }}>
                   {column.wipLimit != null ? `${count}/${column.wipLimit}` : count}
                 </Typography>
-                {canEdit && (
-                  <Tooltip title="Karte anlegen">
-                    <IconButton size="small" aria-label={`Karte in ${column.name} anlegen`}
-                      onClick={() => setModalColumn({ id: column.id, name: column.name })} sx={{ color: 'text.secondary' }}>
-                      <AddIcon fontSize="small" />
-                    </IconButton>
-                  </Tooltip>
-                )}
                 {showStructureEdit && (
                   <Tooltip title="Spalte bearbeiten">
                     <IconButton size="small" aria-label={`Spalte ${column.name} bearbeiten`}

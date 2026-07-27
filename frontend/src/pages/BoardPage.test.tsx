@@ -102,7 +102,7 @@ describe('BoardPage canEdit aus Membership', () => {
     memberships = [{ projectId: 9, role: 'OWNER' }]
     renderPage()
     expect(await screen.findByText('B')).toBeInTheDocument()
-    expect(await screen.findByLabelText('Karte in Backlog anlegen')).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Neu anlegen' })).toBeInTheDocument()
     // Hinweis: projectsApi.list() läuft seit #160 für den Projektnamen (useProjectName); die
     // Rolle selbst kommt weiterhin synchron aus den Memberships (Anlege-Aktion sofort sichtbar).
   })
@@ -111,7 +111,7 @@ describe('BoardPage canEdit aus Membership', () => {
     memberships = [{ projectId: 9, role: 'VIEWER' }]
     renderPage()
     expect(await screen.findByText('B')).toBeInTheDocument()
-    expect(screen.queryByLabelText('Karte in Backlog anlegen')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Neu anlegen' })).not.toBeInTheDocument()
   })
 
   it('benennt das Board über das Edit-Icon um (mit Bearbeiten-Recht)', async () => {
@@ -147,7 +147,7 @@ describe('BoardPage canEdit aus Membership', () => {
     expect(screen.queryByRole('button', { name: 'Labels' })).not.toBeInTheDocument()
     // ... Papierkorb-Zugang und Karten-Alltag bleiben.
     expect(screen.getByRole('button', { name: 'Papierkorb' })).toBeInTheDocument()
-    expect(screen.getByLabelText('Karte in Backlog anlegen')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Neu anlegen' })).toBeInTheDocument()
   })
 
   it('zeigt bei ungültiger Board-ID einen Fehler und ruft keine API auf', async () => {
@@ -271,7 +271,7 @@ describe('BoardPage weitere Orchestrierung', () => {
 
     expect(await screen.findByText('B')).toBeInTheDocument()
     await waitFor(() => expect(mockedProjects.list).toHaveBeenCalled())
-    expect(screen.queryByLabelText('Karte in Backlog anlegen')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Neu anlegen' })).not.toBeInTheDocument()
   })
 
   it('nutzt VIEWER als Fallback, wenn das Projekt nicht in der Liste steht', async () => {
@@ -297,7 +297,7 @@ describe('BoardPage weitere Orchestrierung', () => {
 
     expect(await screen.findByText('B')).toBeInTheDocument()
     await waitFor(() => expect(mockedProjects.list).toHaveBeenCalled())
-    expect(screen.queryByLabelText('Karte in Backlog anlegen')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Neu anlegen' })).not.toBeInTheDocument()
   })
 
   it('legt ein Epic über BoardView an und lädt die Epics neu', async () => {
@@ -307,9 +307,9 @@ describe('BoardPage weitere Orchestrierung', () => {
     epicsApiMock.create.mockResolvedValue({
       id: 20, number: 1, title: 'Auth', description: '', shortcode: 'AUT', done: 0, total: 0,
     })
-    expect(await screen.findByLabelText('Karte in Backlog anlegen')).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Neu anlegen' })).toBeInTheDocument()
 
-    fireEvent.click(screen.getByLabelText('Karte in Backlog anlegen'))
+    fireEvent.click(screen.getByRole('button', { name: 'Neu anlegen' }))
     fireEvent.change(screen.getByLabelText('Typ'), { target: { value: 'EPIC' } })
     fireEvent.change(screen.getByLabelText('Kürzel'), { target: { value: 'AUT' } })
     fireEvent.change(screen.getByLabelText('Titel'), { target: { value: 'Auth' } })
@@ -328,7 +328,7 @@ describe('BoardPage weitere Orchestrierung', () => {
     memberships = [{ projectId: 9, role: 'OWNER' }]
     renderPage()
     mockedLabels.create.mockResolvedValue({ id: 5, boardId: 1, name: 'Bug', color: '#1976d2' })
-    expect(await screen.findByLabelText('Karte in Backlog anlegen')).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Neu anlegen' })).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Labels' }))
     fireEvent.change(await screen.findByLabelText('Neues Label'), { target: { value: 'Bug' } })
