@@ -345,9 +345,10 @@ export function BoardView({
     try {
       await api.moveToIdeaStorage(card.id)
       onCardsChanged?.()
+      notify('In den Ideen-Pool verschoben — unter Ideen zu finden.', 'success')
     } catch {
       setCards(previous)
-      notify('In den Ideen-Speicher fehlgeschlagen.', 'error')
+      notify('In den Ideen-Pool verschieben fehlgeschlagen.', 'error')
     }
   }
 
@@ -716,7 +717,7 @@ export function BoardView({
             Archivieren
           </MenuItem>,
           <MenuItem key="idea-storage" onClick={() => { const c = menu.card; closeMenu(); void moveToIdeaStorageCard(c) }}>
-            In Ideen-Speicher
+            In den Ideen-Pool
           </MenuItem>,
           ...(canTransfer
             ? [

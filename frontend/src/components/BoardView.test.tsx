@@ -173,34 +173,39 @@ describe('BoardView', () => {
     expect(within(screen.getByTestId('column-10')).queryByTestId('card-500')).not.toBeInTheDocument()
   })
 
-  it('legt eine Karte über das ⋮-Menü in den Ideen-Speicher und entfernt sie optimistisch', async () => {
+  it('legt eine Karte über das ⋮-Menü in den Ideen-Pool und entfernt sie optimistisch', async () => {
     const api = mkApi({ moveToIdeaStorage: vi.fn().mockResolvedValue({}) })
     const onCardsChanged = vi.fn()
     // Zweite Karte in derselben Spalte: der optimistische map bleibt für sie unverändert (: c-Zweig).
     const other: Card = { ...card, id: 101, number: 2, title: 'Andere' }
-    render(<BoardView board={board} initialCards={[card, other]} canEdit api={api} onCardsChanged={onCardsChanged} />)
+    render(
+      <BoardView board={board} initialCards={[card, other]} canEdit api={api} onCardsChanged={onCardsChanged} />,
+      { wrapper: SnackbarProvider },
+    )
 
     fireEvent.click(screen.getByLabelText('Menü Aufgabe'))
-    fireEvent.click(screen.getByRole('menuitem', { name: 'In Ideen-Speicher' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'In den Ideen-Pool' }))
 
     await waitFor(() => expect(api.moveToIdeaStorage).toHaveBeenCalledWith(100))
     expect(onCardsChanged).toHaveBeenCalled()
+    // Erfolgs-Toast benennt den Zielort.
+    expect(await screen.findByText('In den Ideen-Pool verschoben — unter Ideen zu finden.')).toBeInTheDocument()
     // Optimistisch aus dem Board entfernt (ideaStored filtert die Spaltenansicht).
     expect(within(screen.getByTestId('column-10')).queryByTestId('card-100')).not.toBeInTheDocument()
     // Die zweite Karte bleibt unangetastet sichtbar.
     expect(within(screen.getByTestId('column-10')).getByTestId('card-101')).toBeInTheDocument()
   })
 
-  it('rollt bei Fehler im Ideen-Speicher zurück und zeigt die Karte wieder', async () => {
+  it('rollt bei Fehler im Ideen-Pool zurück und zeigt die Karte wieder', async () => {
     const api = mkApi({ moveToIdeaStorage: vi.fn().mockRejectedValue(new Error('fail')) })
     render(<BoardView board={board} initialCards={[card]} canEdit api={api} />, {
       wrapper: SnackbarProvider,
     })
 
     fireEvent.click(screen.getByLabelText('Menü Aufgabe'))
-    fireEvent.click(screen.getByRole('menuitem', { name: 'In Ideen-Speicher' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'In den Ideen-Pool' }))
 
-    await screen.findByText('In den Ideen-Speicher fehlgeschlagen.')
+    await screen.findByText('In den Ideen-Pool verschieben fehlgeschlagen.')
     expect(within(screen.getByTestId('column-10')).getByTestId('card-100')).toBeInTheDocument()
   })
 
@@ -1186,7 +1191,7 @@ describe('BoardView', () => {
 
       fireEvent.click(screen.getByLabelText('Menü Aufgabe'))
 
-      for (const name of ['Bearbeiten', 'Duplizieren', 'Archivieren', 'In Ideen-Speicher',
+      for (const name of ['Bearbeiten', 'Duplizieren', 'Archivieren', 'In den Ideen-Pool',
         'Auf anderes Board verschieben…']) {
         expect(screen.getByRole('menuitem', { name })).toBeInTheDocument()
       }
