@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { useState } from 'react'
 import { MemoryRouter, useLocation } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { attachmentsApi } from '../api/attachments'
@@ -618,5 +619,62 @@ describe('IdeaPlanningBoard', () => {
       fireEvent.click(await screen.findByRole('button', { name: 'Pool 1' }))
       expect(await screen.findByRole('heading', { name: 'Story' })).toBeInTheDocument()
     })
+  })
+
+  describe('Pool-Suche (Titel-Filter)', () => {
+    const poolOne = idea({ id: 20, title: 'Pool 1' })
+    const poolOther = idea({ id: 24, title: 'Andere Idee' })
+
+    it('grenzt den Pool nach Titel ein und lässt die Backlog-Zone unberührt', async () => {
+      setup({ ideas: [poolOne, poolOther] })
+      render(
+        <MemoryRouter>
+          <IdeaPlanningBoard projectId={5} canEdit filter="pool" />
+        </MemoryRouter>,
+      )
+      await screen.findByText('Backlog A')
+
+      // Nur die passende Pool-Idee bleibt; die Backlog-Karte bleibt sichtbar (nicht gefiltert).
+      expect(screen.getByText('Pool 1')).toBeInTheDocument()
+      expect(screen.queryByText('Andere Idee')).not.toBeInTheDocument()
+      expect(screen.getByText('Backlog A')).toBeInTheDocument()
+    })
+
+    it('zeigt einen Such-Leerzustand, wenn keine Pool-Idee passt, und behält das Backlog', async () => {
+      setup({ ideas: [poolOne, poolOther] })
+      render(
+        <MemoryRouter>
+          <IdeaPlanningBoard projectId={5} canEdit filter="zzz" />
+        </MemoryRouter>,
+      )
+      await screen.findByText('Backlog A')
+
+      expect(screen.getByText('Keine Idee passt zur Suche.')).toBeInTheDocument()
+      expect(screen.queryByText('Pool 1')).not.toBeInTheDocument()
+      expect(screen.getByText('Backlog A')).toBeInTheDocument()
+    })
+  })
+
+  it('lädt Pool und Backlogs neu, wenn sich refreshKey ändert', async () => {
+    setup()
+    function Harness() {
+      const [key, setKey] = useState(0)
+      return (
+        <MemoryRouter>
+          <button onClick={() => setKey((n) => n + 1)}>bump</button>
+          <IdeaPlanningBoard projectId={5} canEdit refreshKey={key} />
+        </MemoryRouter>
+      )
+    }
+    render(<Harness />)
+    await screen.findByText('Backlog A')
+    mCards.list.mockClear()
+    mIdeas.list.mockClear()
+
+    fireEvent.click(screen.getByText('bump'))
+
+    await waitFor(() => expect(mIdeas.list).toHaveBeenCalled())
+    expect(mCards.list).toHaveBeenCalledWith(10)
+    expect(mCards.list).toHaveBeenCalledWith(11)
   })
 })

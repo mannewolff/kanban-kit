@@ -9,7 +9,7 @@ import DragIndicatorIcon from '@mui/icons-material/DragIndicator'
 import NorthOutlinedIcon from '@mui/icons-material/NorthOutlined'
 import SouthOutlinedIcon from '@mui/icons-material/SouthOutlined'
 import ViewListIcon from '@mui/icons-material/ViewList'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { boardsApi, type Board } from '../api/boards'
 import { cardsApi, type Card } from '../api/cards'
@@ -43,11 +43,17 @@ const SCROLL_STEP_PX = 16
  * per Button) auf ein beliebiges Board eingeplant und Board-Karten zurück in den Pool geholt. Das
  * Umsortieren innerhalb einer Board-Spalte ist möglich; eine bereits eingeplante Karte lässt sich
  * per Drag von einem Board auf ein anderes verschieben (Transfer in dessen erste Spalte).
+ *
+ * `filter` grenzt die Anzeige des Pools nach Idee-Titel ein (Groß-/Kleinschreibung egal); die
+ * Backlog-Zonen der Boards bleiben davon unberührt. `refreshKey` ist ein Reload-Impuls von außen:
+ * Bei jeder Änderung werden Pool und Backlogs neu geladen (z. B. nach „Idee anlegen" auf der Seite).
  */
 export function IdeaPlanningBoard({
   projectId,
   canEdit,
-}: Readonly<{ projectId: number; canEdit: boolean }>) {
+  filter = '',
+  refreshKey,
+}: Readonly<{ projectId: number; canEdit: boolean; filter?: string; refreshKey?: number }>) {
   const [boards, setBoards] = useState<Board[]>([])
   // Backlog-Karten je Board-ID (erste Spalte, aktiv, keine Ideen), nach Position sortiert.
   const [cardsByBoard, setCardsByBoard] = useState<Record<number, Card[]>>({})
@@ -126,6 +132,16 @@ export function IdeaPlanningBoard({
     () => Promise.all([loadBacklogs(), loadPool()]),
     [loadBacklogs, loadPool],
   )
+
+  // Externer Reload-Impuls (z. B. nach „Idee anlegen" auf der Seite): bei jeder Änderung von
+  // refreshKey Pool und Backlogs neu laden. Der erste Render und die verzögerte Board-Ladung
+  // (unveränderter refreshKey) lösen bewusst nichts aus.
+  const seenRefresh = useRef(refreshKey)
+  useEffect(() => {
+    if (seenRefresh.current === refreshKey) return
+    seenRefresh.current = refreshKey
+    void reload().catch(() => {})
+  }, [refreshKey, reload])
 
   const plan = useCallback(
     async (cardId: number, boardId: number) => {
@@ -214,6 +230,10 @@ export function IdeaPlanningBoard({
       </Alert>
     )
   }
+
+  // Suchfeld der Seite grenzt nur den Pool nach Titel ein; leeres Feld zeigt alles.
+  const query = filter.trim().toLowerCase()
+  const visiblePool = query ? pool.filter((idea) => idea.title.toLowerCase().includes(query)) : pool
 
   return (
     <Box>
@@ -315,9 +335,13 @@ export function IdeaPlanningBoard({
           <Typography variant="body2" color="text.secondary" sx={{ py: 1 }}>
             Keine Ideen im Pool.
           </Typography>
+        ) : visiblePool.length === 0 ? (
+          <Typography variant="body2" color="text.secondary" sx={{ py: 1 }}>
+            Keine Idee passt zur Suche.
+          </Typography>
         ) : (
           <Stack spacing={0.75}>
-            {pool.map((idea) => (
+            {visiblePool.map((idea) => (
               <Paper
                 key={idea.id}
                 data-testid={`pool-item-${idea.id}`}

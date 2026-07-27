@@ -1,103 +1,56 @@
 import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
-import Chip from '@mui/material/Chip'
-import Dialog from '@mui/material/Dialog'
-import DialogActions from '@mui/material/DialogActions'
-import DialogContent from '@mui/material/DialogContent'
-import DialogTitle from '@mui/material/DialogTitle'
-import Paper from '@mui/material/Paper'
 import Stack from '@mui/material/Stack'
 import TextField from '@mui/material/TextField'
-import ToggleButton from '@mui/material/ToggleButton'
-import ToggleButtonGroup from '@mui/material/ToggleButtonGroup'
-import Typography from '@mui/material/Typography'
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
-import { boardsApi, type Board } from '../api/boards'
-import { ideasApi, type Idea } from '../api/ideas'
+import { useEffect, useState } from 'react'
+import { useParams } from 'react-router-dom'
+import { ideasApi } from '../api/ideas'
 import { projectsApi } from '../api/projects'
 import { Breadcrumbs } from '../components/Breadcrumbs'
 import { IdeaPlanningBoard } from '../components/IdeaPlanningBoard'
 import { NewCardModal, type NewItemInput } from '../components/NewCardModal'
 import { canEditCards } from '../lib/roles'
 import { useProjectIdeaEvents } from '../lib/useProjectIdeaEvents'
-import { useRefetchOnFocus } from '../lib/useRefetchOnFocus'
 
-/** Filter nach notiertem Zielboard: alle, ohne Zielboard, oder eine konkrete Board-ID. */
-type BoardFilter = 'all' | 'none' | number
-
-/** Ansicht der Ideen-Seite: die filterbare Liste oder das gestapelte Planungs-Board. */
-type ViewMode = 'liste' | 'planen'
-
-const VIEW_STORAGE_KEY = 'manban.ideasView'
-
-function readView(): ViewMode {
-  try {
-    return localStorage.getItem(VIEW_STORAGE_KEY) === 'planen' ? 'planen' : 'liste'
-  } catch {
-    return 'liste'
-  }
-}
-
-function writeView(view: ViewMode): void {
-  try {
-    localStorage.setItem(VIEW_STORAGE_KEY, view)
-  } catch {
-    // localStorage nicht verfügbar — kein Hard-Fail
-  }
-}
+// Der frühere Liste/Planen-Umschalter ist entfallen (nur noch die Planen-Ansicht). Sein
+// localStorage-Zustand wird beim Laden einmalig entfernt, damit kein toter Wert zurückbleibt.
+const LEGACY_VIEW_STORAGE_KEY = 'manban.ideasView'
 
 /**
- * Projektweite Ideen-Seite (Projekt-Ebene, Geschwister von „Boards"): listet den board-losen
- * Ideen-Pool des Projekts, legt board-lose Ideen an, plant sie auf ein Board ein (Zielboard aus
- * dem Ingest vorausgewählt) und holt eingeplante/Legacy-Karten zurück in den Pool.
+ * Projektweite Ideen-Seite (Projekt-Ebene, Geschwister von „Boards"): zeigt die gestapelte
+ * Planen-Ansicht ({@link IdeaPlanningBoard}) mit allen Boards und dem board-losen Ideen-Pool. Oben
+ * legt „Idee anlegen" eine board-lose Pool-Idee an; ein Suchfeld darüber filtert den Pool nach Titel.
  */
 export function IdeasPage() {
   const { projectId } = useParams()
   const id = Number.parseInt(projectId ?? '', 10)
   const validId = Number.isInteger(id) && id > 0
-  const navigate = useNavigate()
 
-  const [ideas, setIdeas] = useState<Idea[]>([])
-  const [boards, setBoards] = useState<Board[]>([])
   const [role, setRole] = useState<string>('VIEWER')
   const [projectName, setProjectName] = useState<string>('')
   const [textFilter, setTextFilter] = useState('')
-  const [boardFilter, setBoardFilter] = useState<BoardFilter>('all')
   const [createOpen, setCreateOpen] = useState(false)
-  const [planTarget, setPlanTarget] = useState<Idea | null>(null)
-  const [planBoardId, setPlanBoardId] = useState<number>(0)
-  const [view, setView] = useState<ViewMode>(readView)
+  // Reload-Impuls für die Planen-Ansicht: nach dem Anlegen einer Idee und bei Live-Events erhöht,
+  // damit der vom IdeaPlanningBoard gehaltene Pool die neue bzw. geänderte Idee zeigt.
+  const [refreshKey, setRefreshKey] = useState(0)
 
   const canEdit = canEditCards(role)
 
-  const changeView = (next: ViewMode) => {
-    setView(next)
-    writeView(next)
-  }
-
-  const reload = useCallback(() => {
-    if (!validId) {
-      return Promise.resolve()
+  // Veralteten Ansichts-Zustand einmalig entfernen (nicht nur ignorieren).
+  useEffect(() => {
+    try {
+      localStorage.removeItem(LEGACY_VIEW_STORAGE_KEY)
+    } catch {
+      // localStorage nicht verfügbar — kein Hard-Fail
     }
-    return Promise.all([ideasApi.list(id), boardsApi.list(id)]).then(([is, bs]) => {
-      setIdeas(is)
-      setBoards(bs)
-    })
-  }, [id, validId])
+  }, [])
 
   useEffect(() => {
     if (!validId) {
       return
     }
     let active = true
-    void ideasApi.list(id).then((is) => {
-      if (active) setIdeas(is)
-    })
-    void boardsApi.list(id).then((bs) => {
-      if (active) setBoards(bs)
-    })
     void projectsApi.list().then((projects) => {
       if (!active) return
       const project = projects.find((p) => p.id === id)
@@ -112,52 +65,12 @@ export function IdeasPage() {
   }, [id, validId])
 
   // Live nachziehen: der Server pusht per SSE, sobald sich der Ideen-Pool des Projekts ändert
-  // (Ingest oder andere Nutzer). useProjectIdeaEvents hält die aktuelle Referenz per Ref.
-  useProjectIdeaEvents(id, () => {
-    void reload().catch(() => {})
-  })
-
-  // Beim Zurückkehren in den Tab neu laden — füllt Lücken nach einem SSE-Reconnect.
-  // useRefetchOnFocus hält die aktuelle Referenz per Ref.
-  useRefetchOnFocus(() => {
-    void reload().catch(() => {})
-  })
-
-  const boardName = useMemo(() => new Map(boards.map((b) => [b.id, b.name])), [boards])
-
-  const filtered = useMemo(() => {
-    const text = textFilter.trim().toLowerCase()
-    return ideas.filter((idea) => {
-      if (text && !idea.title.toLowerCase().includes(text)) return false
-      if (boardFilter === 'all') return true
-      if (boardFilter === 'none') return idea.targetBoardId === null
-      return idea.targetBoardId === boardFilter
-    })
-  }, [ideas, textFilter, boardFilter])
+  // (Ingest oder andere Nutzer). Der Impuls bewegt refreshKey, das IdeaPlanningBoard lädt neu.
+  useProjectIdeaEvents(id, () => setRefreshKey((n) => n + 1))
 
   const handleCreate = async (input: NewItemInput) => {
     await ideasApi.create(id, { title: input.title, description: input.description })
-    await reload()
-  }
-
-  const openPlan = (idea: Idea) => {
-    // Zielboard vorwählen: das notierte target_board_id (sofern das Board noch existiert), sonst
-    // das erste Board. Der „Einplanen"-Button ist bei leerer Board-Liste deaktiviert, daher gibt es
-    // hier stets mindestens ein Board.
-    const noted = idea.targetBoardId !== null && boardName.has(idea.targetBoardId) ? idea.targetBoardId : null
-    setPlanBoardId(noted ?? boards[0].id)
-    setPlanTarget(idea)
-  }
-
-  const doPlan = async (cardId: number, target: number) => {
-    await ideasApi.planOntoBoard(cardId, target)
-    setPlanTarget(null)
-    navigate(`/boards/${target}/list`)
-  }
-
-  const handleBackToPool = async (idea: Idea) => {
-    await ideasApi.moveBackToPool(idea.id)
-    await reload()
+    setRefreshKey((n) => n + 1)
   }
 
   if (!validId) {
@@ -174,32 +87,14 @@ export function IdeasPage() {
             { label: 'Ideen' },
           ]}
         />
-        <Stack direction="row" spacing={1} alignItems="center">
-          <ToggleButtonGroup
-            size="small"
-            exclusive
-            value={view}
-            onChange={(_, next) => {
-              if (next !== null) changeView(next)
-            }}
-            aria-label="Ansicht"
-          >
-            <ToggleButton value="liste">Liste</ToggleButton>
-            <ToggleButton value="planen">Planen</ToggleButton>
-          </ToggleButtonGroup>
-          {view === 'liste' && canEdit && (
-            <Button variant="contained" onClick={() => setCreateOpen(true)}>
-              Idee anlegen
-            </Button>
-          )}
-        </Stack>
+        {canEdit && (
+          <Button variant="contained" onClick={() => setCreateOpen(true)}>
+            Idee anlegen
+          </Button>
+        )}
       </Stack>
 
-      {view === 'planen' ? (
-        <IdeaPlanningBoard projectId={id} canEdit={canEdit} />
-      ) : (
-        <>
-      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ mb: 3 }}>
+      <Box sx={{ mb: 2 }}>
         <TextField
           size="small"
           label="Suche"
@@ -207,78 +102,9 @@ export function IdeasPage() {
           onChange={(e) => setTextFilter(e.target.value)}
           slotProps={{ htmlInput: { 'aria-label': 'Ideen durchsuchen' } }}
         />
-        <TextField
-          select
-          size="small"
-          label="Zielboard"
-          value={boardFilter === 'all' ? 'all' : String(boardFilter)}
-          onChange={(e) => {
-            const value = e.target.value
-            if (value === 'all' || value === 'none') setBoardFilter(value)
-            else setBoardFilter(Number(value))
-          }}
-          slotProps={{ htmlInput: { 'aria-label': 'Nach Zielboard filtern' }, select: { native: true } }}
-          sx={{ minWidth: 180 }}
-        >
-          <option value="all">Alle</option>
-          <option value="none">(ohne Zielboard)</option>
-          {boards.map((board) => (
-            <option key={board.id} value={board.id}>
-              {board.name}
-            </option>
-          ))}
-        </TextField>
-      </Stack>
+      </Box>
 
-      {filtered.length === 0 ? (
-        <Typography color="text.secondary">
-          {ideas.length === 0 ? 'Noch keine Ideen im Pool.' : 'Keine Ideen für diesen Filter.'}
-        </Typography>
-      ) : (
-        <Stack spacing={1}>
-          {filtered.map((idea) => {
-            const notedBoard = idea.targetBoardId !== null ? boardName.get(idea.targetBoardId) : undefined
-            return (
-              <Paper
-                key={idea.id}
-                variant="outlined"
-                sx={{ px: 2, py: 1.5, display: 'flex', alignItems: 'center', gap: 1.5 }}
-              >
-                <Box sx={{ flexGrow: 1, minWidth: 0 }}>
-                  <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
-                    {idea.title}
-                  </Typography>
-                  <Stack direction="row" spacing={1} sx={{ mt: 0.5 }} alignItems="center">
-                    {idea.boardId !== null && (
-                      <Chip size="small" label={`Auf Board: ${boardName.get(idea.boardId) ?? idea.boardId}`} />
-                    )}
-                    {notedBoard !== undefined && (
-                      <Typography variant="caption" color="text.secondary">
-                        Zielboard: {notedBoard}
-                      </Typography>
-                    )}
-                  </Stack>
-                </Box>
-                {canEdit &&
-                  (idea.boardId !== null ? (
-                    <Button size="small" onClick={() => void handleBackToPool(idea)}>
-                      Zurück in Pool
-                    </Button>
-                  ) : (
-                    <Button
-                      size="small"
-                      variant="outlined"
-                      disabled={boards.length === 0}
-                      onClick={() => openPlan(idea)}
-                    >
-                      Einplanen
-                    </Button>
-                  ))}
-              </Paper>
-            )
-          })}
-        </Stack>
-      )}
+      <IdeaPlanningBoard projectId={id} canEdit={canEdit} filter={textFilter} refreshKey={refreshKey} />
 
       <NewCardModal
         open={createOpen}
@@ -288,44 +114,6 @@ export function IdeasPage() {
         onClose={() => setCreateOpen(false)}
         onSubmit={handleCreate}
       />
-
-      <Dialog open={planTarget !== null} onClose={() => setPlanTarget(null)}>
-        <DialogTitle>Idee einplanen</DialogTitle>
-        <DialogContent>
-          <TextField
-            select
-            fullWidth
-            label="Zielboard"
-            value={String(planBoardId)}
-            onChange={(e) => setPlanBoardId(Number(e.target.value))}
-            slotProps={{
-              htmlInput: { 'aria-label': 'Zielboard wählen' },
-              select: { native: true },
-              inputLabel: { shrink: true },
-            }}
-            sx={{ mt: 1, minWidth: 240 }}
-          >
-            {boards.map((board) => (
-              <option key={board.id} value={board.id}>
-                {board.name}
-              </option>
-            ))}
-          </TextField>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setPlanTarget(null)}>Abbrechen</Button>
-          <Button
-            variant="contained"
-            onClick={() => {
-              if (planTarget) void doPlan(planTarget.id, planBoardId)
-            }}
-          >
-            Einplanen
-          </Button>
-        </DialogActions>
-      </Dialog>
-        </>
-      )}
     </Box>
   )
 }
