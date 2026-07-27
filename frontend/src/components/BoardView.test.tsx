@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Board } from '../api/boards'
 import { cardsApi } from '../api/cards'
@@ -160,7 +161,7 @@ describe('BoardView', () => {
     expect(onCardsChanged).toHaveBeenCalled()
 
     fireEvent.click(screen.getByLabelText('Menü Aufgabe'))
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Nach Done' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Nach rechts verschieben' }))
     await waitFor(() => expect(api.move).toHaveBeenCalledWith(100, 20, 0))
   })
 
@@ -591,7 +592,7 @@ describe('BoardView', () => {
     render(<BoardView board={board} initialCards={[card]} canEdit api={api} />)
 
     fireEvent.click(screen.getByLabelText('Menü Aufgabe'))
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Nach Done' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Nach rechts verschieben' }))
 
     await waitFor(() => expect(api.move).toHaveBeenCalled())
     expect(within(screen.getByTestId('column-10')).getByTestId('card-100')).toBeInTheDocument()
@@ -1101,6 +1102,118 @@ describe('BoardView', () => {
       expect(removed).toEqual(registered)
       add.mockRestore()
       remove.mockRestore()
+    })
+  })
+
+  describe('Verschieben im ⋮-Menü', () => {
+    // Drei Spalten, damit es eine echte Mitte mit beiden Nachbarn gibt.
+    const wideBoard: Board = {
+      ...board,
+      columns: [
+        { id: 10, name: 'Backlog', position: 0, wipLimit: null },
+        { id: 20, name: 'Doing', position: 1, wipLimit: null },
+        { id: 30, name: 'Done', position: 2, wipLimit: null },
+      ],
+    }
+    const middleCard: Card = { ...card, columnId: 20 }
+    const lastCard: Card = { ...card, columnId: 30 }
+    const moveItems = () =>
+      screen.getAllByRole('menuitem').filter((item) => item.textContent?.startsWith('Nach '))
+
+    it('zeigt in einer mittleren Spalte genau zwei Verschieben-Einträge', () => {
+      render(<BoardView board={wideBoard} initialCards={[middleCard]} canEdit api={mkApi()} />)
+
+      fireEvent.click(screen.getByLabelText('Menü Aufgabe'))
+
+      expect(moveItems().map((item) => item.textContent)).toEqual([
+        'Nach links verschieben',
+        'Nach rechts verschieben',
+      ])
+    })
+
+    it('verschiebt nach rechts in die Spalte mit der nächsthöheren Position', async () => {
+      const api = mkApi({ move: vi.fn().mockResolvedValue({}) })
+      render(<BoardView board={wideBoard} initialCards={[middleCard]} canEdit api={api} />)
+
+      fireEvent.click(screen.getByLabelText('Menü Aufgabe'))
+      fireEvent.click(screen.getByRole('menuitem', { name: 'Nach rechts verschieben' }))
+
+      await waitFor(() => expect(api.move).toHaveBeenCalledWith(100, 30, 0))
+      expect(within(screen.getByTestId('column-30')).getByTestId('card-100')).toBeInTheDocument()
+    })
+
+    it('verschiebt nach links in die Spalte mit der nächstniedrigeren Position', async () => {
+      const api = mkApi({ move: vi.fn().mockResolvedValue({}) })
+      render(<BoardView board={wideBoard} initialCards={[middleCard]} canEdit api={api} />)
+
+      fireEvent.click(screen.getByLabelText('Menü Aufgabe'))
+      fireEvent.click(screen.getByRole('menuitem', { name: 'Nach links verschieben' }))
+
+      await waitFor(() => expect(api.move).toHaveBeenCalledWith(100, 10, 0))
+      expect(within(screen.getByTestId('column-10')).getByTestId('card-100')).toBeInTheDocument()
+    })
+
+    it('lässt in der ersten Spalte „nach links“ weg', () => {
+      render(<BoardView board={wideBoard} initialCards={[card]} canEdit api={mkApi()} />)
+
+      fireEvent.click(screen.getByLabelText('Menü Aufgabe'))
+
+      expect(screen.getByRole('menuitem', { name: 'Nach rechts verschieben' })).toBeInTheDocument()
+      expect(screen.queryByRole('menuitem', { name: 'Nach links verschieben' })).not.toBeInTheDocument()
+    })
+
+    it('lässt in der letzten Spalte „nach rechts“ weg', () => {
+      render(<BoardView board={wideBoard} initialCards={[lastCard]} canEdit api={mkApi()} />)
+
+      fireEvent.click(screen.getByLabelText('Menü Aufgabe'))
+
+      expect(screen.getByRole('menuitem', { name: 'Nach links verschieben' })).toBeInTheDocument()
+      expect(screen.queryByRole('menuitem', { name: 'Nach rechts verschieben' })).not.toBeInTheDocument()
+    })
+
+    it('zeigt bei einem Board mit nur einer Spalte keinen Verschieben-Eintrag', () => {
+      const single: Board = { ...board, columns: [{ id: 10, name: 'Backlog', position: 0, wipLimit: null }] }
+      render(<BoardView board={single} initialCards={[card]} canEdit api={mkApi()} />)
+
+      fireEvent.click(screen.getByLabelText('Menü Aufgabe'))
+
+      expect(moveItems()).toHaveLength(0)
+    })
+
+    it('lässt die übrigen Menüeinträge unangetastet', () => {
+      render(<BoardView board={wideBoard} initialCards={[middleCard]} canEdit canTransfer
+        onEditCard={vi.fn()} api={mkApi()} />)
+
+      fireEvent.click(screen.getByLabelText('Menü Aufgabe'))
+
+      for (const name of ['Bearbeiten', 'Duplizieren', 'Archivieren', 'In Ideen-Speicher',
+        'Auf anderes Board verschieben…']) {
+        expect(screen.getByRole('menuitem', { name })).toBeInTheDocument()
+      }
+    })
+
+    it('ist ohne Maus bedienbar: Tab zum ⋮, Enter, Pfeiltasten, Enter', async () => {
+      const user = userEvent.setup()
+      const api = mkApi({ move: vi.fn().mockResolvedValue({}) })
+      render(<BoardView board={wideBoard} initialCards={[middleCard]} canEdit api={api} />)
+      const focused = (el: HTMLElement) => el.matches(':focus')
+      const menuButton = screen.getByLabelText('Menü Aufgabe')
+
+      // Tabben, bis der ⋮-Button den Fokus hat — er muss in der Tab-Reihenfolge liegen.
+      for (let i = 0; i < 40 && !focused(menuButton); i++) {
+        await user.tab()
+      }
+      expect(menuButton).toHaveFocus()
+
+      await user.keyboard('{Enter}')
+      const target = await screen.findByRole('menuitem', { name: 'Nach rechts verschieben' })
+      for (let i = 0; i < 10 && !focused(target); i++) {
+        await user.keyboard('{ArrowDown}')
+      }
+      expect(target).toHaveFocus()
+      await user.keyboard('{Enter}')
+
+      await waitFor(() => expect(api.move).toHaveBeenCalledWith(100, 30, 0))
     })
   })
 })

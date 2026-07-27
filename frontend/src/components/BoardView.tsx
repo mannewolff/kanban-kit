@@ -31,6 +31,7 @@ import { epicsApi as defaultEpicsApi, type Epic, type EpicsApi } from '../api/ep
 import type { Member } from '../api/members'
 import { activeCardsInColumn, applyMove } from '../lib/boardOps'
 import { cleanupCountdownLabel, cleanupDaysRemaining } from '../lib/cleanupCountdown'
+import { neighbourColumns } from '../lib/columnMeta'
 import { useEditMode } from '../lib/EditModeContext'
 import type { Label } from '../api/labels'
 import { formatDueDate, isOverdue } from '../lib/dueDate'
@@ -351,6 +352,11 @@ export function BoardView({
   }
 
   const closeMenu = () => setMenu(null)
+
+  // Ziele der beiden Verschieben-Einträge im ⋮-Menü: je genau eine Spalte weit.
+  const { left: moveLeft, right: moveRight } = menu
+    ? neighbourColumns(columns, menu.card.columnId)
+    : { left: null, right: null }
 
   const exitSelection = () => {
     setSelectionMode(false)
@@ -722,13 +728,24 @@ export function BoardView({
                 </MenuItem>,
               ]
             : []),
-          ...columns
-            .filter((col) => col.id !== menu.card.columnId)
-            .map((col) => (
-              <MenuItem key={`move-${col.id}`} onClick={() => { const c = menu.card; closeMenu(); void moveCard(c.id, col.id) }}>
-                Nach {col.name}
-              </MenuItem>
-            )),
+          // Genau eine Spalte weit nach links bzw. rechts — nicht ein Eintrag je Zielspalte, sonst
+          // wächst das Menü mit der Spaltenzahl. Am Rand fehlt die jeweilige Richtung.
+          moveLeft ? (
+            <MenuItem
+              key="move-left"
+              onClick={() => { const c = menu.card; closeMenu(); void moveCard(c.id, moveLeft.id) }}
+            >
+              Nach links verschieben
+            </MenuItem>
+          ) : null,
+          moveRight ? (
+            <MenuItem
+              key="move-right"
+              onClick={() => { const c = menu.card; closeMenu(); void moveCard(c.id, moveRight.id) }}
+            >
+              Nach rechts verschieben
+            </MenuItem>
+          ) : null,
         ]}
       </Menu>
 
