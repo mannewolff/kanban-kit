@@ -3,6 +3,7 @@ package org.mwolff.manban.auth.application;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.Clock;
+import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.auth.application.AdminService.UserView;
 import org.mwolff.manban.auth.domain.AppUser;
 import org.mwolff.manban.auth.domain.PlatformRole;
@@ -27,8 +28,16 @@ public class BootstrapService {
     this.clock = clock;
   }
 
+  /**
+   * Hebt den aufrufenden Nutzer zum ersten Plattform-Admin, sofern noch keiner existiert.
+   *
+   * @param userId der eingeloggte Aufrufer, der elevatet wird
+   * @param token vom Aufrufer präsentiertes Bootstrap-Token; {@code null} gilt als ungültig. Der
+   *     Service prüft das selbst, statt sich auf die {@code @NotBlank}-Validierung des Controllers
+   *     zu verlassen (Defense in Depth im Rechte-Eskalationspfad).
+   */
   @Transactional
-  public UserView bootstrap(long userId, String token) {
+  public UserView bootstrap(long userId, @Nullable String token) {
     if (adminExists()) {
       throw new BootstrapUnavailableException();
     }
@@ -59,7 +68,7 @@ public class BootstrapService {
     return users.findAll().stream().anyMatch(u -> u.platformRole() == PlatformRole.ADMIN);
   }
 
-  private static boolean constantTimeEquals(String expected, String actual) {
+  private static boolean constantTimeEquals(String expected, @Nullable String actual) {
     return actual != null
         && MessageDigest.isEqual(
             expected.getBytes(StandardCharsets.UTF_8), actual.getBytes(StandardCharsets.UTF_8));
