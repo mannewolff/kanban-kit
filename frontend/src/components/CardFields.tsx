@@ -2,6 +2,7 @@ import TextField from '@mui/material/TextField'
 import type { KeyboardEvent, Ref } from 'react'
 import type { Epic } from '../api/epics'
 import { epicShortcode } from '../lib/epicMeta'
+import { useCheckboxShortcut } from '../lib/useCheckboxShortcut'
 
 /**
  * Kontrollierte, präsentationale Karten-Felder (Werte + onChange als Props, keine eigene
@@ -48,6 +49,7 @@ export function CardFields({
   /** Optionaler KeyDown-Handler am Titel (Anlege-Dialog: Cmd/Ctrl+Enter legt an). */
   onTitleKeyDown?: (event: KeyboardEvent) => void
 }>) {
+  const bodyShortcut = useCheckboxShortcut(onBodyChange)
   const nonEpicFields = (
     <>
       <TextField
@@ -107,7 +109,8 @@ export function CardFields({
       <TextField
         label="Markdown-Beschreibung"
         value={body}
-        onChange={(e) => onBodyChange(e.target.value)}
+        onChange={bodyShortcut.onChange}
+        onKeyDown={bodyShortcut.onKeyDown}
         multiline
         rows={8}
         fullWidth
