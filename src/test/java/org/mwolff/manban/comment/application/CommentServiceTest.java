@@ -15,9 +15,8 @@ import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
-import org.mwolff.manban.auth.application.AppUserRepository;
-import org.mwolff.manban.auth.domain.AppUser;
-import org.mwolff.manban.auth.domain.PlatformRole;
+import org.mwolff.manban.auth.application.UserLookup;
+import org.mwolff.manban.auth.application.UserSummary;
 import org.mwolff.manban.card.application.CardNotFoundException;
 import org.mwolff.manban.card.application.CardService;
 import org.mwolff.manban.comment.domain.Comment;
@@ -33,7 +32,7 @@ class CommentServiceTest {
   private CommentRepository comments;
   private CardService cardService;
   private PermissionChecker permissions;
-  private AppUserRepository users;
+  private UserLookup users;
   private CommentService service;
 
   private static Comment comment(Long authorUserId) {
@@ -45,7 +44,7 @@ class CommentServiceTest {
     comments = mock(CommentRepository.class);
     cardService = mock(CardService.class);
     permissions = mock(PermissionChecker.class);
-    users = mock(AppUserRepository.class);
+    users = mock(UserLookup.class);
     Clock clock = Clock.fixed(FIXED, ZoneOffset.UTC);
     service = new CommentService(comments, cardService, permissions, users, clock);
     when(cardService.requireProjectId(5L)).thenReturn(1L);
@@ -54,8 +53,7 @@ class CommentServiceTest {
   @Test
   void create_setsCreatedAtFromInjectedClock() {
     // Given
-    when(users.findById(1L))
-        .thenReturn(Optional.of(new AppUser(1L, "u@x.de", "hash", "Ada", true, PlatformRole.USER)));
+    when(users.findById(1L)).thenReturn(Optional.of(new UserSummary(1L, "u@x.de", "Ada", true)));
     when(comments.save(any(Comment.class))).thenAnswer(inv -> saved(inv.getArgument(0)));
 
     // When
@@ -70,8 +68,7 @@ class CommentServiceTest {
   @Test
   void create_usesAuthorDisplayName() {
     // Given
-    when(users.findById(1L))
-        .thenReturn(Optional.of(new AppUser(1L, "u@x.de", "hash", "Ada", true, PlatformRole.USER)));
+    when(users.findById(1L)).thenReturn(Optional.of(new UserSummary(1L, "u@x.de", "Ada", true)));
     when(comments.save(any(Comment.class))).thenAnswer(inv -> saved(inv.getArgument(0)));
 
     // When
@@ -101,8 +98,7 @@ class CommentServiceTest {
   @Test
   void create_returnsViewOfPersistedComment() {
     // Given
-    when(users.findById(1L))
-        .thenReturn(Optional.of(new AppUser(1L, "u@x.de", "hash", "Ada", true, PlatformRole.USER)));
+    when(users.findById(1L)).thenReturn(Optional.of(new UserSummary(1L, "u@x.de", "Ada", true)));
     when(comments.save(any(Comment.class))).thenAnswer(inv -> saved(inv.getArgument(0)));
 
     // When
@@ -128,8 +124,7 @@ class CommentServiceTest {
     // eine) und wird unveraendert fuer die Rechtepruefung genutzt. Eine abweichende ID belegt das
     // Durchreichen — eine anderweitig hergeleitete ID fiele hier auf.
     when(cardService.requireProjectId(5L)).thenReturn(42L);
-    when(users.findById(1L))
-        .thenReturn(Optional.of(new AppUser(1L, "u@x.de", "hash", "Ada", true, PlatformRole.USER)));
+    when(users.findById(1L)).thenReturn(Optional.of(new UserSummary(1L, "u@x.de", "Ada", true)));
     when(comments.save(any(Comment.class))).thenAnswer(inv -> saved(inv.getArgument(0)));
 
     CommentService.CommentView view = service.create(1L, 5L, "Hallo");

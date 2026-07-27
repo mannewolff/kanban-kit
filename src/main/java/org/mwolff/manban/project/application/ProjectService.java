@@ -4,9 +4,9 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
 import java.util.Locale;
-import org.mwolff.manban.auth.application.AppUserRepository;
 import org.mwolff.manban.auth.application.AuthProperties;
-import org.mwolff.manban.auth.domain.AppUser;
+import org.mwolff.manban.auth.application.UserLookup;
+import org.mwolff.manban.auth.application.UserSummary;
 import org.mwolff.manban.project.domain.Permission;
 import org.mwolff.manban.project.domain.Project;
 import org.mwolff.manban.project.domain.ProjectMembership;
@@ -27,7 +27,7 @@ public class ProjectService {
   private final ProjectRepository projects;
   private final ProjectMembershipRepository memberships;
   private final PermissionChecker permissions;
-  private final AppUserRepository users;
+  private final UserLookup users;
   private final InvitationMailer mailer;
   private final ApplicationEventPublisher events;
   private final AuthProperties authProperties;
@@ -37,7 +37,7 @@ public class ProjectService {
       ProjectRepository projects,
       ProjectMembershipRepository memberships,
       PermissionChecker permissions,
-      AppUserRepository users,
+      UserLookup users,
       InvitationMailer mailer,
       ApplicationEventPublisher events,
       AuthProperties authProperties,
@@ -64,7 +64,7 @@ public class ProjectService {
   public ProjectView create(long adminUserId, String name, String ownerEmail) {
     requirePlatformAdmin(adminUserId);
     String normalizedEmail = ownerEmail.trim().toLowerCase(Locale.ROOT);
-    AppUser owner =
+    UserSummary owner =
         users
             .findByEmail(normalizedEmail)
             .orElseThrow(() -> new ProjectOwnerNotFoundException(ownerEmail));
@@ -73,13 +73,12 @@ public class ProjectService {
     }
 
     Instant now = clock.instant();
-    Project project = projects.save(new Project(null, name.trim(), owner.requireId(), now));
+    Project project = projects.save(new Project(null, name.trim(), owner.id(), now));
     memberships.save(
-        new ProjectMembership(
-            null, project.requireId(), owner.requireId(), ProjectRole.OWNER, now));
+        new ProjectMembership(null, project.requireId(), owner.id(), ProjectRole.OWNER, now));
     // Synchron im selben Transaktions-Scope: der Board-seitige Listener legt das Default-Board an;
     // scheitert das, rollt die Projektanlage (inkl. Mail-Auslösung) atomar mit zurück.
-    events.publishEvent(new ProjectCreatedEvent(project.requireId(), owner.requireId()));
+    events.publishEvent(new ProjectCreatedEvent(project.requireId(), owner.id()));
     mailer.sendProjectAssignedEmail(
         owner.email(),
         project.name(),

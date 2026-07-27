@@ -5,9 +5,10 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Locale;
 import org.jspecify.annotations.Nullable;
-import org.mwolff.manban.auth.application.AppUserRepository;
 import org.mwolff.manban.auth.application.AuthProperties;
-import org.mwolff.manban.auth.domain.AppUser;
+import org.mwolff.manban.auth.application.UserDisplayNameWriter;
+import org.mwolff.manban.auth.application.UserLookup;
+import org.mwolff.manban.auth.application.UserSummary;
 import org.mwolff.manban.common.SecureTokens;
 import org.mwolff.manban.project.domain.Permission;
 import org.mwolff.manban.project.domain.Project;
@@ -25,6 +26,14 @@ import org.springframework.transaction.annotation.Transactional;
  * Entfernen. Rechteprüfung über den {@link PermissionChecker} (MEMBER_INVITE bzw. MEMBER_REMOVE).
  * Der letzte OWNER ist geschützt.
  */
+// PMD.CouplingBetweenObjects: Schwellwert um eins überschritten (21), seit der breite
+// AppUserRepository-Zugriff durch die getrennten auth-Ports UserLookup/UserDisplayNameWriter samt
+// UserSummary ersetzt ist (Issue #460). Die Trennung von Lesen und Schreiben ist genau der Gewinn
+// dieses Umbaus — sie hier wieder zu einem Kombi-Port zusammenzuziehen, nur um einen Zähler zu
+// senken, wäre eine Verschlechterung. Die verbleibende Kopplung ist fachlich begründet
+// (Projekte, Mitgliedschaften, Einladungen, Rechte, Mailversand, Benutzer) und kein
+// God-Class-Smell.
+@SuppressWarnings("PMD.CouplingBetweenObjects")
 @Service
 public class MembershipService {
 
@@ -35,7 +44,8 @@ public class MembershipService {
   private final ProjectInvitationRepository invitations;
   private final PermissionChecker permissions;
   private final InvitationMailer mailer;
-  private final AppUserRepository users;
+  private final UserLookup users;
+  private final UserDisplayNameWriter displayNames;
   private final AuthProperties authProperties;
   private final ProjectProperties projectProperties;
   private final Clock clock;
@@ -46,7 +56,8 @@ public class MembershipService {
       ProjectInvitationRepository invitations,
       PermissionChecker permissions,
       InvitationMailer mailer,
-      AppUserRepository users,
+      UserLookup users,
+      UserDisplayNameWriter displayNames,
       AuthProperties authProperties,
       ProjectProperties projectProperties,
       Clock clock) {
@@ -56,6 +67,7 @@ public class MembershipService {
     this.permissions = permissions;
     this.mailer = mailer;
     this.users = users;
+    this.displayNames = displayNames;
     this.authProperties = authProperties;
     this.projectProperties = projectProperties;
     this.clock = clock;
@@ -77,12 +89,12 @@ public class MembershipService {
     Project project = projects.findById(projectId).orElseThrow(ProjectNotFoundException::new);
     String normalizedEmail = email.trim().toLowerCase(Locale.ROOT);
 
-    @Nullable AppUser existing = users.findByEmail(normalizedEmail).orElse(null);
+    @Nullable UserSummary existing = users.findByEmail(normalizedEmail).orElse(null);
     if (existing != null) {
       if (!existing.approved()) {
         throw new MemberNotApprovedException(normalizedEmail);
       }
-      long userId = existing.requireId();
+      long userId = existing.id();
       @Nullable ProjectMembership current =
           memberships.findByProjectIdAndUserId(projectId, userId).orElse(null);
       if (current != null) {
@@ -144,7 +156,7 @@ public class MembershipService {
       throw new InvalidInvitationException();
     }
 
-    AppUser user = users.findById(acceptingUserId).orElseThrow(InvalidInvitationException::new);
+    UserSummary user = users.findById(acceptingUserId).orElseThrow(InvalidInvitationException::new);
     if (!user.email().equalsIgnoreCase(invitation.email())) {
       throw new InvitationEmailMismatchException();
     }
@@ -195,7 +207,10 @@ public class MembershipService {
   /**
    * Ändert den Anzeigenamen eines Projekt-Mitglieds. Recht {@link Permission#MEMBER_REMOVE} (wie
    * Rolle ändern). <strong>Achtung:</strong> Es gibt kein projektspezifisches Namensfeld — dies
-   * ändert den <strong>globalen</strong> {@code AppUser}-Namen projektübergreifend.
+   * ändert den <strong>globalen</strong> Benutzernamen projektübergreifend.
+   *
+   * <p>Die Rechteprüfung liegt vollständig hier: Der {@link UserDisplayNameWriter} prüft bewusst
+   * nichts (Issue #460) — er wird erst nach {@code permissions.require(...)} aufgerufen.
    */
   @Transactional
   public MemberView changeMemberDisplayName(
@@ -205,9 +220,11 @@ public class MembershipService {
         memberships
             .findByProjectIdAndUserId(projectId, targetUserId)
             .orElseThrow(MemberNotFoundException::new);
-    AppUser user = users.findById(targetUserId).orElseThrow(MemberNotFoundException::new);
-    AppUser saved = users.save(user.withDisplayName(displayName.trim()));
-    return new MemberView(saved.requireId(), saved.email(), saved.displayName(), target.role());
+    // Erst nachschlagen: Ein unbekannter Benutzer ist hier ein fehlendes Mitglied (404), nicht die
+    // auth-eigene UserNotFoundException des Schreib-Ports.
+    UserSummary user = users.findById(targetUserId).orElseThrow(MemberNotFoundException::new);
+    UserSummary saved = displayNames.updateDisplayName(user.id(), displayName);
+    return new MemberView(saved.id(), saved.email(), saved.displayName(), target.role());
   }
 
   /**
@@ -260,7 +277,7 @@ public class MembershipService {
   private MemberView toView(ProjectMembership m) {
     return users
         .findById(m.userId())
-        .map(u -> new MemberView(u.requireId(), u.email(), u.displayName(), m.role()))
+        .map(u -> new MemberView(u.id(), u.email(), u.displayName(), m.role()))
         .orElseGet(() -> new MemberView(m.userId(), null, null, m.role()));
   }
 

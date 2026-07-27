@@ -4,8 +4,8 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
 import org.jspecify.annotations.Nullable;
-import org.mwolff.manban.auth.application.AppUserRepository;
-import org.mwolff.manban.auth.domain.AppUser;
+import org.mwolff.manban.auth.application.UserLookup;
+import org.mwolff.manban.auth.application.UserSummary;
 import org.mwolff.manban.card.application.CardService;
 import org.mwolff.manban.comment.domain.Comment;
 import org.mwolff.manban.project.application.PermissionChecker;
@@ -25,14 +25,14 @@ public class CommentService {
   private final CommentRepository comments;
   private final CardService cardService;
   private final PermissionChecker permissions;
-  private final AppUserRepository users;
+  private final UserLookup users;
   private final Clock clock;
 
   public CommentService(
       CommentRepository comments,
       CardService cardService,
       PermissionChecker permissions,
-      AppUserRepository users,
+      UserLookup users,
       Clock clock) {
     this.comments = comments;
     this.cardService = cardService;
@@ -45,7 +45,7 @@ public class CommentService {
   public CommentView create(long userId, long cardId, String body) {
     long projectId = cardService.requireProjectId(cardId);
     permissions.require(userId, projectId, Permission.COMMENT_CREATE);
-    String authorName = users.findById(userId).map(AppUser::displayName).orElse("Unbekannt");
+    String authorName = users.findById(userId).map(UserSummary::displayName).orElse("Unbekannt");
     Instant now = clock.instant();
     Comment saved = comments.save(new Comment(null, cardId, userId, authorName, body, now, now));
     return view(saved);

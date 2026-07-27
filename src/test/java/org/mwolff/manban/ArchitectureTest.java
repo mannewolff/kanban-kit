@@ -145,6 +145,31 @@ class ArchitectureTest {
               "org\\.mwolff\\.manban\\.board\\.application\\.BoardChangedEvent(\\$.*)?")
           .as("BoardChangedEvent gehoert dem board-Modul (Uebersetzung in der Composition-Root)");
 
+  // --- Modul-Grenze: auth-Fassade (Issue #460) ------------------------------------------------
+  // Gegenstueck zu AUTH_HAENGT_NICHT_VON_PROJECT_AB/..._ACCESSTOKEN_AB: Jene Regeln sichern die
+  // Grenze aus Sicht des auth-Moduls (was auth nicht kennen darf), diese hier aus Anbieter-Sicht
+  // (was fremde Module von auth nicht sehen duerfen). Das Benutzer-Aggregat und der
+  // Benutzer-Persistenz-Port sind modulintern; project und comment gehen ueber die fachlichen
+  // Ports UserLookup/UserDisplayNameWriter — sonst mutiert ein fremdes Modul eine fremde
+  // Aggregat-Wurzel (MembershipService schrieb bisher direkt via AppUserRepository.save).
+  static final ArchRule AUTH_DOMAIN_IST_MODULINTERN =
+      noClasses()
+          .that()
+          .resideOutsideOfPackage("org.mwolff.manban.auth..")
+          .should()
+          .dependOnClassesThat()
+          .resideInAPackage("org.mwolff.manban.auth.domain..")
+          .as("auth.domain ist modulintern (Zugriff nur ueber die auth.application-Ports)");
+
+  static final ArchRule AUTH_REPOSITORIES_SIND_MODULINTERN =
+      noClasses()
+          .that()
+          .resideOutsideOfPackage("org.mwolff.manban.auth..")
+          .should()
+          .dependOnClassesThat()
+          .haveNameMatching("org\\.mwolff\\.manban\\.auth\\.application\\..*Repository")
+          .as("auth-Repository-Ports sind modulintern (nur ueber die auth.application-Ports)");
+
   // --- §6.1: Schichtzugriff (hexagonal, domain innerste Schicht) ------------------------------
   // consideringOnlyDependenciesInLayers() macht die Regel robust gegenueber Modulen, die nicht
   // alle vier Schichten besitzen (z. B. kanbancompat ohne domain/infrastructure): Abhaengigkeiten
@@ -253,6 +278,16 @@ class ArchitectureTest {
   @Test
   void boardChangedEventIstModulintern() {
     BOARD_CHANGED_EVENT_IST_MODULINTERN.check(PRODUKTIONSKLASSEN);
+  }
+
+  @Test
+  void authDomainIstModulintern() {
+    AUTH_DOMAIN_IST_MODULINTERN.check(PRODUKTIONSKLASSEN);
+  }
+
+  @Test
+  void authRepositoriesSindModulintern() {
+    AUTH_REPOSITORIES_SIND_MODULINTERN.check(PRODUKTIONSKLASSEN);
   }
 
   @Test
