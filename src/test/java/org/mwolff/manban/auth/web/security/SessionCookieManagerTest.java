@@ -1,4 +1,4 @@
-package org.mwolff.manban.auth.infrastructure.security;
+package org.mwolff.manban.auth.web.security;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;

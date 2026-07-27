@@ -1,8 +1,10 @@
-package org.mwolff.manban.auth.infrastructure.security;
+package org.mwolff.manban.config;
 
 import jakarta.servlet.DispatcherType;
 import jakarta.servlet.http.HttpServletResponse;
-import org.mwolff.manban.accesstoken.infrastructure.security.PatAuthenticationFilter;
+import org.mwolff.manban.accesstoken.web.security.PatAuthenticationFilter;
+import org.mwolff.manban.auth.web.security.DisabledUserGuardFilter;
+import org.mwolff.manban.auth.web.security.SessionAuthenticationFilter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -12,7 +14,13 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
 /**
- * Zentrale Web-Security.
+ * Zentrale Web-Security und zugleich die anwendungsweite Composition-Root der Filterkette.
+ *
+ * <p>Die Klasse liegt bewusst außerhalb der Fachmodule (Issue #438): Sie verdrahtet Adapter aus
+ * {@code auth} und {@code accesstoken}, und genau diese Verdrahtung schloss zuvor — als Teil des
+ * {@code auth}-Moduls — den Modulzyklus {@code auth → accesstoken → board → project → auth}. Als
+ * modulfreie Composition-Root darf sie beide Seiten kennen, ohne dass die Fachmodule einander
+ * kennen müssen.
  *
  * <ul>
  *   <li>Zustandslos: kein Server-Session-Store; Authentifizierung über das signierte Session-Cookie

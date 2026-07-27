@@ -1,4 +1,4 @@
-package org.mwolff.manban.auth.infrastructure.security;
+package org.mwolff.manban.auth.web.security;
 
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -7,6 +7,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.util.List;
 import java.util.OptionalLong;
+import org.mwolff.manban.auth.application.SessionTokens;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -25,9 +26,9 @@ public class SessionAuthenticationFilter extends OncePerRequestFilter {
   public static final String AUTHORITY = "AUTH_SESSION";
 
   private final SessionCookieManager cookies;
-  private final SignedSessionTokens tokens;
+  private final SessionTokens tokens;
 
-  public SessionAuthenticationFilter(SessionCookieManager cookies, SignedSessionTokens tokens) {
+  public SessionAuthenticationFilter(SessionCookieManager cookies, SessionTokens tokens) {
     this.cookies = cookies;
     this.tokens = tokens;
   }

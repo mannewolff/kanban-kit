@@ -5,9 +5,9 @@ import jakarta.validation.Valid;
 import org.mwolff.manban.auth.application.LoginService;
 import org.mwolff.manban.auth.application.MeService;
 import org.mwolff.manban.auth.application.MeService.MeView;
+import org.mwolff.manban.auth.application.SessionTokens;
 import org.mwolff.manban.auth.domain.AppUser;
-import org.mwolff.manban.auth.infrastructure.security.SessionCookieManager;
-import org.mwolff.manban.auth.infrastructure.security.SignedSessionTokens;
+import org.mwolff.manban.auth.web.security.SessionCookieManager;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -23,13 +23,13 @@ class SessionController {
 
   private final LoginService loginService;
   private final MeService meService;
-  private final SignedSessionTokens tokens;
+  private final SessionTokens tokens;
   private final SessionCookieManager cookies;
 
   SessionController(
       LoginService loginService,
       MeService meService,
-      SignedSessionTokens tokens,
+      SessionTokens tokens,
       SessionCookieManager cookies) {
     this.loginService = loginService;
     this.meService = meService;

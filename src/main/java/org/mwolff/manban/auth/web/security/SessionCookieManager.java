@@ -1,4 +1,4 @@
-package org.mwolff.manban.auth.infrastructure.security;
+package org.mwolff.manban.auth.web.security;
 
 import jakarta.servlet.http.HttpServletRequest;
 import java.time.Duration;

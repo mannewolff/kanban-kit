@@ -1,6 +1,5 @@
 package org.mwolff.manban;
 
-import static com.tngtech.archunit.core.domain.JavaClass.Predicates.resideInAPackage;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.classes;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 import static com.tngtech.archunit.library.Architectures.layeredArchitecture;
@@ -72,16 +71,28 @@ class ArchitectureTest {
           .resideInAPackage("org.mwolff.manban.project..")
           .as("auth darf das project-Modul nicht kennen (Port-Inversion)");
 
+  // --- Modul-Grenze: auth ist unabhaengig vom accesstoken-Modul (Issue #438) ------------------
+  // Die Security-Filterkette wird nicht mehr im auth-Modul, sondern in der anwendungsweiten
+  // Composition-Root org.mwolff.manban.config.SecurityConfig verdrahtet. Damit verschwindet die
+  // Kante auth -> accesstoken, die zusammen mit accesstoken -> board -> project -> auth den
+  // Modulzyklus schloss.
+  static final ArchRule AUTH_HAENGT_NICHT_VON_ACCESSTOKEN_AB =
+      noClasses()
+          .that()
+          .resideInAPackage("org.mwolff.manban.auth..")
+          .should()
+          .dependOnClassesThat()
+          .resideInAPackage("org.mwolff.manban.accesstoken..")
+          .as(
+              "auth darf das accesstoken-Modul nicht kennen (Wiring gehoert in die "
+                  + "Composition-Root)");
+
   // --- §6.1: Schichtzugriff (hexagonal, domain innerste Schicht) ------------------------------
   // consideringOnlyDependenciesInLayers() macht die Regel robust gegenueber Modulen, die nicht
   // alle vier Schichten besitzen (z. B. kanbancompat ohne domain/infrastructure): Abhaengigkeiten
   // von/zu Klassen ausserhalb der definierten Schichten (config, common, ManbanApplication)
-  // werden ignoriert.
-  //
-  // Hinweis (bewusste Abweichung von striktem Hexagon, siehe Bericht): infrastructure wird nicht
-  // ausschliesslich von sich selbst genutzt, sondern auch von web
-  // (auth.web.SessionController -> auth.infrastructure.security.{SessionCookieManager,
-  // SignedSessionTokens} fuer HTTP-/Cookie-Belange). Die Regel bildet diesen Ist-Zustand ab.
+  // werden ignoriert. Insbesondere die Composition-Root config.SecurityConfig darf die Adapter
+  // beider Seiten verdrahten, ohne die Schichtenregel zu verletzen.
   static final ArchRule SCHICHTEN =
       layeredArchitecture()
           .consideringOnlyDependenciesInLayers()
@@ -96,26 +107,30 @@ class ArchitectureTest {
           .whereLayer("Web")
           .mayNotBeAccessedByAnyLayer()
           .whereLayer("Infrastructure")
-          .mayOnlyBeAccessedByLayers("Web")
+          .mayNotBeAccessedByAnyLayer()
           .whereLayer("Application")
           .mayOnlyBeAccessedByLayers("Web", "Infrastructure")
           .whereLayer("Domain")
           .mayOnlyBeAccessedByLayers("Application", "Web", "Infrastructure");
 
-  // --- §6.5: Keine zyklischen Abhaengigkeiten zwischen den Fachmodulen ------------------------
-  // Ignoriert wird die einzige Kante, die den Modul-Zyklus schliesst: die Security-Composition-
-  // Root auth.infrastructure.security.SecurityConfig verdrahtet den PAT-Filter aus dem
-  // accesstoken-Modul (auth -> accesstoken). Ohne diese eine Wiring-Kante ist der Modulgraph
-  // azyklisch. Dies ist eine bewusste, dokumentierte Ausnahme (siehe Bericht), keine
-  // Architektur-Reparatur.
-  static final ArchRule KEINE_MODUL_ZYKLEN =
-      SlicesRuleDefinition.slices()
-          .matching("org.mwolff.manban.(*)..")
+  // --- §6.1: web ist ein eingehender Adapter und kennt keine Infrastruktur --------------------
+  // Redundant zur Schichtenregel, aber mit praeziser Fehlermeldung: Ein Web-Adapter, der einen
+  // Infrastruktur-Typ direkt verwendet, bindet die HTTP-Schicht an ein Persistenz-/Krypto-Detail.
+  // Der Weg fuehrt ueber einen Application-Port (z. B. auth.application.SessionTokens).
+  static final ArchRule WEB_KENNT_KEINE_INFRASTRUCTURE =
+      noClasses()
+          .that()
+          .resideInAPackage("..web..")
           .should()
-          .beFreeOfCycles()
-          .ignoreDependency(
-              resideInAPackage("org.mwolff.manban.auth.."),
-              resideInAPackage("org.mwolff.manban.accesstoken.."));
+          .dependOnClassesThat()
+          .resideInAPackage("..infrastructure..")
+          .as("web darf infrastructure nicht kennen (Zugriff nur ueber Application-Ports)");
+
+  // --- §6.5: Keine zyklischen Abhaengigkeiten zwischen den Fachmodulen ------------------------
+  // Ohne ignoreDependency (Issue #438): Der Modulgraph ist vollstaendig zyklusfrei, seit die
+  // Security-Verdrahtung in der Composition-Root ausserhalb der Fachmodule liegt.
+  static final ArchRule KEINE_MODUL_ZYKLEN =
+      SlicesRuleDefinition.slices().matching("org.mwolff.manban.(*)..").should().beFreeOfCycles();
 
   // --- §6.1: Controller liegen in web, JPA-Entities in infrastructure ------------------------
 
@@ -153,8 +168,18 @@ class ArchitectureTest {
   }
 
   @Test
+  void authHaengtNichtVonAccesstokenAb() {
+    AUTH_HAENGT_NICHT_VON_ACCESSTOKEN_AB.check(PRODUKTIONSKLASSEN);
+  }
+
+  @Test
   void schichtenWerdenEingehalten() {
     SCHICHTEN.check(PRODUKTIONSKLASSEN);
+  }
+
+  @Test
+  void webKenntKeineInfrastructure() {
+    WEB_KENNT_KEINE_INFRASTRUCTURE.check(PRODUKTIONSKLASSEN);
   }
 
   @Test
