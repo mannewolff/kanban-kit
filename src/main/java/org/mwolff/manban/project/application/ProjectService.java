@@ -138,6 +138,17 @@ public class ProjectService {
     projects.deleteById(projectId);
   }
 
+  /**
+   * Setzt {@code project.next_card_number}. Fassade für das card-Modul, dem die Kartennummerierung
+   * fachlich gehört: Der Rechte- und Plausibilitätscheck liegt beim Aufrufer ({@code
+   * ProjectStartNumberService}, PROJECT_EDIT plus Prüfung gegen die höchste vergebene Nummer) —
+   * diese Methode kapselt allein den Schreibzugriff auf das Projekt-Aggregat.
+   */
+  @Transactional
+  public void setNextCardNumber(long projectId, int value) {
+    projects.setNextCardNumber(projectId, value);
+  }
+
   /** Stellt sicher, dass der Aufrufer System-Admin ist (sonst 403). */
   private void requirePlatformAdmin(long userId) {
     if (!permissions.isPlatformAdmin(userId)) {

@@ -1,7 +1,7 @@
 package org.mwolff.manban.card.application;
 
 import org.mwolff.manban.project.application.PermissionChecker;
-import org.mwolff.manban.project.application.ProjectRepository;
+import org.mwolff.manban.project.application.ProjectService;
 import org.mwolff.manban.project.domain.Permission;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -9,19 +9,20 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * Verwaltet die projektweite Startnummer ({@code project.next_card_number}). Liegt im card-Modul,
  * weil die Nummerierung eine Karten-Belange ist und card bereits vom project-Modul abhängen darf
- * (die Umkehrung project→card wäre ein Modul-Zyklus). Das Lesen liefert den <em>effektiven</em>
- * nächsten Wert (Floor aus höchster Nummer + Startnummer); das Setzen ist Owner-/Edit-gated und
- * lehnt eine Nummer ab, die bereits vergeben ist.
+ * (die Umkehrung project→card wäre ein Modul-Zyklus). Der Zugriff läuft über die fachliche Fassade
+ * {@link ProjectService}, nicht über den Projekt-Persistenz-Port. Das Lesen liefert den
+ * <em>effektiven</em> nächsten Wert (Floor aus höchster Nummer + Startnummer); das Setzen ist
+ * Owner-/Edit-gated und lehnt eine Nummer ab, die bereits vergeben ist.
  */
 @Service
 public class ProjectStartNumberService {
 
   private final CardRepository cards;
-  private final ProjectRepository projects;
+  private final ProjectService projects;
   private final PermissionChecker permissions;
 
   public ProjectStartNumberService(
-      CardRepository cards, ProjectRepository projects, PermissionChecker permissions) {
+      CardRepository cards, ProjectService projects, PermissionChecker permissions) {
     this.cards = cards;
     this.projects = projects;
     this.permissions = permissions;

@@ -19,7 +19,6 @@ import org.mwolff.manban.card.domain.CardActivityType;
 import org.mwolff.manban.card.domain.CardType;
 import org.mwolff.manban.card.domain.Label;
 import org.mwolff.manban.project.application.PermissionChecker;
-import org.mwolff.manban.project.application.ProjectMembershipRepository;
 import org.mwolff.manban.project.domain.Permission;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
@@ -32,7 +31,7 @@ import org.springframework.transaction.annotation.Transactional;
  * Karten über {@code parentId}. Rechte über den {@link PermissionChecker}.
  */
 // PMD.CouplingBetweenObjects: zentraler Karten-Use-Case-Service; die Kopplung an die Ports
-// (Karten, Abhängigkeiten, Boards/Spalten, Rechte, Zykluszeit, Zuständige, Mitgliedschaften)
+// (Karten, Abhängigkeiten, Boards/Spalten, Rechte, Zykluszeit, Zuständige, Labels)
 // ist fachlich begründet und kein God-Class-Smell.
 // PMD.CyclomaticComplexity: die Klassen-Gesamtkomplexität summiert viele kleine, je für sich
 // einfache Use-Case-Methoden (höchste Einzelmethode weit unter dem Schwellwert); kein Smell.
@@ -49,7 +48,6 @@ public class CardService {
   private final PermissionChecker permissions;
   private final CardColumnTransitionRepository transitions;
   private final CardAssigneeRepository assignees;
-  private final ProjectMembershipRepository memberships;
   private final LabelRepository labels;
   private final CardLabelRepository cardLabels;
   private final CardActivityRepository activity;
@@ -63,7 +61,6 @@ public class CardService {
       PermissionChecker permissions,
       CardColumnTransitionRepository transitions,
       CardAssigneeRepository assignees,
-      ProjectMembershipRepository memberships,
       LabelRepository labels,
       CardLabelRepository cardLabels,
       CardActivityRepository activity,
@@ -75,7 +72,6 @@ public class CardService {
     this.permissions = permissions;
     this.transitions = transitions;
     this.assignees = assignees;
-    this.memberships = memberships;
     this.labels = labels;
     this.cardLabels = cardLabels;
     this.activity = activity;
@@ -478,7 +474,7 @@ public class CardService {
   private void assignValidatedAssignees(long cardId, long projectId, List<Long> assigneeIds) {
     List<Long> distinct = assigneeIds.stream().distinct().toList();
     for (Long assignee : distinct) {
-      if (memberships.findByProjectIdAndUserId(projectId, assignee).isEmpty()) {
+      if (!permissions.isMember(assignee, projectId)) {
         throw new InvalidAssigneeException("Kein Projektmitglied: " + assignee);
       }
     }

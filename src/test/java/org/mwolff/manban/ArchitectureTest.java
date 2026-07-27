@@ -170,6 +170,40 @@ class ArchitectureTest {
           .haveNameMatching("org\\.mwolff\\.manban\\.auth\\.application\\..*Repository")
           .as("auth-Repository-Ports sind modulintern (nur ueber die auth.application-Ports)");
 
+  // --- Modul-Grenze: project-Fassade (Issue #461) ---------------------------------------------
+  // Die Projekt-/Mitgliedschafts-Persistenz-Ports sind modulintern. card darf vom project-Modul
+  // abhaengen (die Umkehrung waere ein Zyklus), aber nur ueber die fachliche Fassade
+  // PermissionChecker/ProjectService — sonst liest und schreibt ein fremdes Modul direkt am
+  // Projekt-Aggregat vorbei an jeder Rechte- und Konsistenzregel.
+  static final ArchRule PROJECT_REPOSITORIES_SIND_MODULINTERN =
+      noClasses()
+          .that()
+          .resideOutsideOfPackage("org.mwolff.manban.project..")
+          .should()
+          .dependOnClassesThat()
+          .haveNameMatching("org\\.mwolff\\.manban\\.project\\.application\\..*Repository")
+          .as(
+              "project-Repository-Ports sind modulintern (nur ueber PermissionChecker/"
+                  + "ProjectService)");
+
+  // Gegenstueck zu CARD_/BOARD_/AUTH_DOMAIN_IST_MODULINTERN, mit einer bewussten Ausnahme:
+  // Permission ist das Vokabular der Fassade selbst (Parametertyp von PermissionChecker.require/
+  // hasPermission) und damit Teil des oeffentlichen Vertrags. Die uebrigen Domaentypen (Project,
+  // ProjectMembership, ProjectRole) bleiben modulintern.
+  static final ArchRule PROJECT_DOMAIN_IST_MODULINTERN =
+      noClasses()
+          .that()
+          .resideOutsideOfPackage("org.mwolff.manban.project..")
+          .should()
+          .dependOnClassesThat()
+          // Negative Lookahead statt zweier verknuepfter Bedingungen: ArchUnit verknuepft
+          // should()-Bedingungen je Klasse, nicht je Abhaengigkeit — die Ausnahme muss deshalb im
+          // Zielklassen-Praedikat selbst stehen.
+          .haveNameMatching("org\\.mwolff\\.manban\\.project\\.domain\\.(?!Permission\\b).*")
+          .as(
+              "project.domain ist modulintern (Zugriff nur ueber die project.application-Fassade; "
+                  + "Ausnahme: Permission als Vokabular der Fassade)");
+
   // --- §6.1: Schichtzugriff (hexagonal, domain innerste Schicht) ------------------------------
   // consideringOnlyDependenciesInLayers() macht die Regel robust gegenueber Modulen, die nicht
   // alle vier Schichten besitzen (z. B. kanbancompat ohne domain/infrastructure): Abhaengigkeiten
@@ -288,6 +322,16 @@ class ArchitectureTest {
   @Test
   void authRepositoriesSindModulintern() {
     AUTH_REPOSITORIES_SIND_MODULINTERN.check(PRODUKTIONSKLASSEN);
+  }
+
+  @Test
+  void projectRepositoriesSindModulintern() {
+    PROJECT_REPOSITORIES_SIND_MODULINTERN.check(PRODUKTIONSKLASSEN);
+  }
+
+  @Test
+  void projectDomainIstModulintern() {
+    PROJECT_DOMAIN_IST_MODULINTERN.check(PRODUKTIONSKLASSEN);
   }
 
   @Test

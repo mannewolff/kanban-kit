@@ -36,23 +36,14 @@ import org.mwolff.manban.card.domain.CardType;
 import org.mwolff.manban.card.domain.Label;
 import org.mwolff.manban.project.application.PermissionChecker;
 import org.mwolff.manban.project.application.ProjectAccessDeniedException;
-import org.mwolff.manban.project.application.ProjectMembershipRepository;
 import org.mwolff.manban.project.application.ProjectNotFoundException;
 import org.mwolff.manban.project.domain.Permission;
-import org.mwolff.manban.project.domain.ProjectMembership;
 import org.springframework.context.ApplicationEventPublisher;
 
 /** Verhaltenstests der Karten- und Epic-Use-Cases (Mockito an den Ports). */
 // PMD.TooManyMethods: umfassende Unit-Suite (Karten + Epics, Erfolgs- und Fehlerpfade je
 // Use-Case). Viele kleine @Test-Methoden sind hier gewollt, kein God-Class-Smell.
-// PMD.ExcessiveImports: die Suite deckt viele Ports/Domänentypen ab (inkl. der Live-Board-Events);
-// die Import-Zahl folgt aus dem breiten Testumfang, kein Kopplungs-Smell.
-@SuppressWarnings({
-  "PMD.TooManyMethods",
-  "PMD.CyclomaticComplexity",
-  "PMD.CouplingBetweenObjects",
-  "PMD.ExcessiveImports"
-})
+@SuppressWarnings({"PMD.TooManyMethods", "PMD.CyclomaticComplexity", "PMD.CouplingBetweenObjects"})
 class CardServiceTest {
 
   private static final Instant FIXED = Instant.parse("2026-01-02T03:04:05Z");
@@ -65,7 +56,6 @@ class CardServiceTest {
   private PermissionChecker permissions;
   private CardColumnTransitionRepository transitions;
   private CardAssigneeRepository assignees;
-  private ProjectMembershipRepository memberships;
   private LabelRepository labels;
   private CardLabelRepository cardLabels;
   private CardActivityRepository activity;
@@ -98,7 +88,6 @@ class CardServiceTest {
     permissions = mock(PermissionChecker.class);
     transitions = mock(CardColumnTransitionRepository.class);
     assignees = mock(CardAssigneeRepository.class);
-    memberships = mock(ProjectMembershipRepository.class);
     labels = mock(LabelRepository.class);
     cardLabels = mock(CardLabelRepository.class);
     activity = mock(CardActivityRepository.class);
@@ -112,7 +101,6 @@ class CardServiceTest {
             permissions,
             transitions,
             assignees,
-            memberships,
             labels,
             cardLabels,
             activity,
@@ -186,10 +174,8 @@ class CardServiceTest {
     when(boardService.requireColumn(20L, BOARD)).thenReturn(column(20L, "Backlog", 0));
     when(cards.nextCardNumber(PROJECT)).thenReturn(1);
     when(cards.maxActivePositionInColumn(20L)).thenReturn(-1);
-    when(memberships.findByProjectIdAndUserId(1L, 7L))
-        .thenReturn(Optional.of(mock(ProjectMembership.class)));
-    when(memberships.findByProjectIdAndUserId(1L, 8L))
-        .thenReturn(Optional.of(mock(ProjectMembership.class)));
+    when(permissions.isMember(7L, 1L)).thenReturn(true);
+    when(permissions.isMember(8L, 1L)).thenReturn(true);
 
     service.create(
         1L, BOARD, 20L, "Titel", null, null, null, false, null, List.of(7L, 8L, 7L), null);
@@ -216,7 +202,7 @@ class CardServiceTest {
     when(boardService.requireColumn(20L, BOARD)).thenReturn(column(20L, "Backlog", 0));
     when(cards.nextCardNumber(PROJECT)).thenReturn(1);
     when(cards.maxActivePositionInColumn(20L)).thenReturn(-1);
-    when(memberships.findByProjectIdAndUserId(1L, 9L)).thenReturn(Optional.empty());
+    when(permissions.isMember(9L, 1L)).thenReturn(false);
 
     assertThatThrownBy(
             () ->
@@ -1519,10 +1505,8 @@ class CardServiceTest {
   void setAssignees_replacesWithDistinctMembers() {
     when(cards.findById(1L))
         .thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
-    when(memberships.findByProjectIdAndUserId(1L, 7L))
-        .thenReturn(Optional.of(mock(ProjectMembership.class)));
-    when(memberships.findByProjectIdAndUserId(1L, 8L))
-        .thenReturn(Optional.of(mock(ProjectMembership.class)));
+    when(permissions.isMember(7L, 1L)).thenReturn(true);
+    when(permissions.isMember(8L, 1L)).thenReturn(true);
     when(assignees.findByCardId(1L)).thenReturn(List.of(7L, 8L));
 
     CardService.CardView result = service.setAssignees(3L, 1L, List.of(7L, 8L, 7L));
@@ -1538,9 +1522,8 @@ class CardServiceTest {
   void setAssignees_rejectsNonMember() {
     when(cards.findById(1L))
         .thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
-    when(memberships.findByProjectIdAndUserId(1L, 7L))
-        .thenReturn(Optional.of(mock(ProjectMembership.class)));
-    when(memberships.findByProjectIdAndUserId(1L, 8L)).thenReturn(Optional.empty());
+    when(permissions.isMember(7L, 1L)).thenReturn(true);
+    when(permissions.isMember(8L, 1L)).thenReturn(false);
 
     assertThatThrownBy(() -> service.setAssignees(3L, 1L, List.of(7L, 8L)))
         .isInstanceOf(InvalidAssigneeException.class);
@@ -2216,8 +2199,7 @@ class CardServiceTest {
   @Test
   void setAssignees_onBoardlessPoolIdea_worksViaProjectRight_andSkipsBoardEvent() {
     when(cards.findById(1L)).thenReturn(Optional.of(poolIdea(1L)));
-    when(memberships.findByProjectIdAndUserId(PROJECT, 7L))
-        .thenReturn(Optional.of(mock(ProjectMembership.class)));
+    when(permissions.isMember(7L, PROJECT)).thenReturn(true);
 
     service.setAssignees(3L, 1L, List.of(7L));
 

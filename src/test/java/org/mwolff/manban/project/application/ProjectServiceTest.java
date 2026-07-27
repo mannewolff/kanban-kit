@@ -62,6 +62,15 @@ class ProjectServiceTest {
   }
 
   @Test
+  void setNextCardNumber_delegatesToRepository() {
+    // When
+    service.setNextCardNumber(9L, 13457);
+
+    // Then
+    verify(projects).setNextCardNumber(9L, 13457);
+  }
+
+  @Test
   void create_setsCreatedAtFromInjectedClock() {
     // Given
     when(permissions.isPlatformAdmin(1L)).thenReturn(true);
