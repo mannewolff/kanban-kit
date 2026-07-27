@@ -359,4 +359,95 @@ class KanbanCompatIT extends AbstractIntegrationTest {
           .allSatisfy(n -> assertThat(n.get("title").asText()).isNotEqualTo("Fremd"));
     }
   }
+
+  /**
+   * Eine Karte im Ideen-Speicher trägt weiterhin Board und Spalte, ist in der Oberfläche aber
+   * ausgeblendet. Die Compat-Schicht filterte nur archivierte Karten und meldete sie deshalb als
+   * reguläre Karte ihrer Spalte — Kit und Nacht-Runner sahen eine Aufgabe, die für Menschen nicht
+   * existiert (real passiert, Issue #428). Sie darf über diese Schnittstelle weder auftauchen noch
+   * bewegt noch kommentiert werden.
+   */
+  @Test
+  void ideaStoredCardIsInvisibleAndUntouchableForTheAutomation() throws Exception {
+    long projectId = createProject("ghost-owner@example.com", "GhostProjekt");
+    Cookie owner = loginAs("ghost-owner@example.com");
+    long boardId = createBoard(owner, projectId, "GhostBoard");
+    long columnId = firstColumnId(owner, boardId);
+    String token = boundToken(owner, projectId, boardId);
+
+    long visible = createCard(owner, boardId, columnId, "SichtbareKarte");
+    long ghost = createCard(owner, boardId, columnId, "GeisterKarte");
+    long archivedCard = createCard(owner, boardId, columnId, "ArchivierteKarte");
+
+    // Vor dem Verschieben in den Ideen-Speicher sind alle drei Karten für die Automatik da.
+    assertThat(kanbanItems(token).get("BACKLOG")).hasSize(3);
+
+    // Archiviert und im Ideen-Speicher sind zwei unabhängige Gründe, eine Karte auszublenden —
+    // jeder muss für sich greifen.
+    mvc.perform(post("/api/cards/" + archivedCard + "/archive").cookie(owner))
+        .andExpect(status().isOk());
+
+    mvc.perform(post("/api/cards/" + ghost + "/idea-storage").cookie(owner))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.ideaStored").value(true))
+        .andExpect(jsonPath("$.boardId").value(boardId));
+
+    // Die Automatik sieht nur noch die sichtbare Karte — und damit genauso viele wie die UI-API.
+    JsonNode items = kanbanItems(token);
+    assertThat(items.get("BACKLOG")).hasSize(1);
+    assertThat(items.get("BACKLOG").get(0).get("id").asLong()).isEqualTo(visible);
+
+    String uiCards =
+        mvc.perform(get("/api/boards/" + boardId + "/cards").cookie(owner))
+            .andExpect(status().isOk())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+    long uiVisible =
+        json.readTree(uiCards)
+            .valueStream()
+            .filter(c -> !c.get("ideaStored").asBoolean() && !c.get("archived").asBoolean())
+            .count();
+    assertThat((long) items.get("BACKLOG").size()).isEqualTo(uiVisible);
+
+    // Bewegen und Kommentieren der unsichtbaren Karte sind über die Schnittstelle nicht möglich.
+    mvc.perform(
+            put("/api/kanban/items/" + ghost + "/move")
+                .header("X-Kanban-Token", token)
+                .contentType("application/json")
+                .content("{\"column\":\"READY\"}"))
+        .andExpect(status().isNotFound());
+    mvc.perform(
+            post("/api/kanban/items/" + ghost + "/comments")
+                .header("X-Kanban-Token", token)
+                .contentType("application/json")
+                .content("{\"body\":\"Kommentar\"}"))
+        .andExpect(status().isNotFound());
+
+    // Gegenprobe zum zweiten Grund derselben Prüfung: eine reguläre Karte auf einem anderen Board
+    // ist über dieses Token ebenfalls nicht kommentierbar.
+    long otherBoard = createBoard(owner, projectId, "AnderesBoard");
+    long foreign = createCard(owner, otherBoard, firstColumnId(owner, otherBoard), "FremdeKarte");
+    mvc.perform(
+            post("/api/kanban/items/" + foreign + "/comments")
+                .header("X-Kanban-Token", token)
+                .contentType("application/json")
+                .content("{\"body\":\"Kommentar\"}"))
+        .andExpect(status().isNotFound());
+  }
+
+  private long createCard(Cookie session, long boardId, long columnId, String title)
+      throws Exception {
+    String body =
+        mvc.perform(
+                post("/api/boards/" + boardId + "/cards")
+                    .cookie(session)
+                    .contentType("application/json")
+                    .content("{\"columnId\":%d,\"title\":\"%s\"}".formatted(columnId, title)))
+            .andExpect(status().isCreated())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+    return json.readTree(body).get("id").asLong();
+  }
 }

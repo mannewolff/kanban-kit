@@ -57,6 +57,30 @@ class KanbanCompatServiceTest {
         new BoardColumn(104L, BOARD, "Done", 4, null));
   }
 
+  /** Karte im Ideen-Speicher — auf dem gebundenen Board, aber in der Oberfläche ausgeblendet. */
+  private static Card ideaStoredCard(long id, long columnId) {
+    return new Card(
+        id,
+        BOARD,
+        columnId,
+        1,
+        "T",
+        null,
+        0,
+        false,
+        true,
+        null,
+        1L,
+        FIXED,
+        FIXED,
+        CardType.CARD,
+        null,
+        null,
+        null,
+        1L,
+        null);
+  }
+
   private static Card card(long id, long columnId, int number) {
     return new Card(
         id,
@@ -461,5 +485,39 @@ class KanbanCompatServiceTest {
         .singleElement()
         .extracting(e -> e.progress().total(), e -> e.progress().done())
         .containsExactly(4, 2);
+  }
+
+  @Test
+  void items_skipsIdeaStoredCards() {
+    // Given — Karte im Ideen-Speicher: nicht archiviert, aber ausgeblendet (#434).
+    when(boards.findById(BOARD)).thenReturn(Optional.of(new Board(BOARD, 5L, "B", FIXED)));
+    when(columns.findByBoardId(BOARD)).thenReturn(standardColumns());
+    when(cards.findByBoardId(BOARD)).thenReturn(List.of(ideaStoredCard(2L, 100L)));
+
+    // When
+    Map<String, List<KanbanCompatService.Item>> grouped = service.items(bound());
+
+    // Then
+    assertThat(grouped.get("BACKLOG")).isEmpty();
+  }
+
+  @Test
+  void move_throwsCardNotFound_whenCardIsIdeaStored() {
+    // Given — auf dem gebundenen Board, aber im Ideen-Speicher: für die Automatik nicht vorhanden.
+    when(cards.findById(1L)).thenReturn(Optional.of(ideaStoredCard(1L, 100L)));
+
+    // When / Then
+    assertThatThrownBy(() -> service.move(bound(), 1L, "DONE", 0))
+        .isInstanceOf(org.mwolff.manban.card.application.CardNotFoundException.class);
+  }
+
+  @Test
+  void comment_throwsCardNotFound_whenCardIsIdeaStored() {
+    // Given
+    when(cards.findById(1L)).thenReturn(Optional.of(ideaStoredCard(1L, 100L)));
+
+    // When / Then
+    assertThatThrownBy(() -> service.comment(bound(), 1L, "Kommentar"))
+        .isInstanceOf(org.mwolff.manban.card.application.CardNotFoundException.class);
   }
 }
