@@ -88,3 +88,10 @@ cd docs-site
 npm install
 npm run dev        # http://localhost:5173
 ```
+
+## Lizenz
+
+kanban-kit steht unter der MIT-Lizenz. Der vollständige Lizenztext liegt in
+[LICENSE](LICENSE).
+
+Copyright (c) 2026 Manfred Wolff
