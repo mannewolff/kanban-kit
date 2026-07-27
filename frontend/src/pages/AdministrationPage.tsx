@@ -40,6 +40,8 @@ export function AdministrationPage() {
         Administration
       </Typography>
       <Stack spacing={2} sx={{ maxWidth: 720 }}>
+        <LegalSection />
+
         <Paper variant="outlined" sx={{ p: 2 }}>
           <Stack spacing={1}>
             <Typography variant="h6" component="h2">
@@ -68,6 +70,29 @@ export function AdministrationPage() {
         <ApiTokensSection />
       </Stack>
     </Box>
+  )
+}
+
+/**
+ * Copyright- und Lizenzhinweis, sichtbar für jeden angemeldeten Nutzer. Das Jahr steht fest und
+ * wird nicht aus der Systemzeit abgeleitet — ein mitlaufendes Jahr brächte urheberrechtlich nichts
+ * und wäre eine untestbare Zeitabhängigkeit.
+ */
+function LegalSection() {
+  return (
+    <Paper variant="outlined" sx={{ p: 2 }}>
+      <Stack spacing={1}>
+        <Typography variant="h6" component="h2">
+          Rechtliches
+        </Typography>
+        <Typography variant="body2">© 2026 Manfred Wolff</Typography>
+        <Typography variant="body2" color="text.secondary">
+          kanban-kit steht unter der MIT-Lizenz. Nutzung, Änderung und Weitergabe sind gestattet,
+          sofern Copyright-Vermerk und Lizenztext erhalten bleiben. Die Software wird ohne Gewähr
+          bereitgestellt.
+        </Typography>
+      </Stack>
+    </Paper>
   )
 }
 
