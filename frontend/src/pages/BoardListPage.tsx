@@ -41,16 +41,34 @@ const ALL_KEYS = new Set<ColumnKey>(DEFAULT_ORDER)
 function filterKey(boardId: number): string {
   return `manban.listFilters.${boardId}`
 }
-function columnKey(boardId: number): string {
-  return `manban.listColumns.${boardId}`
-}
-function excerptKey(boardId: number): string {
-  return `manban.listExcerptWidth.${boardId}`
+// Spaltenreihenfolge und Beschreibungsbreite gelten global (Issue #432): Wer die Beschreibung
+// einmal nach vorne zieht, will sie auf jedem Board vorne haben. Der Spalten-FILTER bleibt dagegen
+// board-gebunden — welche Spalten es gibt, unterscheidet sich je Board.
+const COLUMN_KEY = 'manban.listColumns'
+const EXCERPT_KEY = 'manban.listExcerptWidth'
+/** Alt-Schlüssel aus der Zeit, als beide Einstellungen pro Board gespeichert wurden. */
+const LEGACY_VIEW_KEY = /^manban\.(listColumns|listExcerptWidth)\.\d+$/
+
+/**
+ * Entfernt die board-gebundenen Alt-Schlüssel. Bewusst ohne Migration: Sie müsste willkürlich
+ * festlegen, welches Board gewinnt — die Einstellung wird einmal auf Standard zurückgesetzt.
+ */
+function purgeLegacyViewKeys(): void {
+  try {
+    const stale: string[] = []
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i)
+      if (k !== null && LEGACY_VIEW_KEY.test(k)) stale.push(k)
+    }
+    stale.forEach((k) => localStorage.removeItem(k))
+  } catch {
+    // localStorage nicht verfügbar — dann gibt es auch nichts aufzuräumen.
+  }
 }
 
-function readExcerptWidth(boardId: number): number {
+function readExcerptWidth(): number {
   try {
-    const raw = localStorage.getItem(excerptKey(boardId))
+    const raw = localStorage.getItem(EXCERPT_KEY)
     return raw == null ? EXCERPT_DEFAULT_PCT : clampExcerptWidth(Number.parseFloat(raw))
   } catch {
     return EXCERPT_DEFAULT_PCT
@@ -58,9 +76,9 @@ function readExcerptWidth(boardId: number): number {
 }
 
 /** Liest die gespeicherte Spaltenreihenfolge; unbekannte Keys raus, fehlende hinten anfügen. */
-function readColumnOrder(boardId: number): ColumnKey[] {
+function readColumnOrder(): ColumnKey[] {
   try {
-    const raw = localStorage.getItem(columnKey(boardId))
+    const raw = localStorage.getItem(COLUMN_KEY)
     if (!raw) return DEFAULT_ORDER
     const stored = (JSON.parse(raw) as string[]).filter((k): k is ColumnKey => ALL_KEYS.has(k as ColumnKey))
     const missing = DEFAULT_ORDER.filter((k) => !stored.includes(k))
@@ -80,13 +98,13 @@ export function BoardListPage() {
   const [labels, setLabels] = useState<Label[]>([])
   const [labelFilter, setLabelFilter] = useState<Set<number>>(new Set())
   const [filters, setFilters] = useState<Set<FilterKey> | null>(null)
-  const [order, setOrder] = useState<ColumnKey[]>(() => readColumnOrder(id))
+  const [order, setOrder] = useState<ColumnKey[]>(() => readColumnOrder())
   const [detailCard, setDetailCard] = useState<Card | null>(null)
   const [rowDrag, setRowDrag] = useState<number | null>(null)
   const [rowOver, setRowOver] = useState<number | null>(null)
   const [colDrag, setColDrag] = useState<ColumnKey | null>(null)
   const [colOver, setColOver] = useState<ColumnKey | null>(null)
-  const [excerptWidth, setExcerptWidth] = useState<number>(() => readExcerptWidth(id))
+  const [excerptWidth, setExcerptWidth] = useState<number>(() => readExcerptWidth())
   const viewRef = useRef<HTMLDivElement>(null)
   const resizingRef = useRef(false)
   const resizeCleanupRef = useRef<(() => void) | null>(null)
@@ -129,12 +147,13 @@ export function BoardListPage() {
     void labelsApi.list(id).then((ls) => {
       if (active) setLabels(ls)
     })
-    setOrder(readColumnOrder(id))
-    setExcerptWidth(readExcerptWidth(id))
     return () => {
       active = false
     }
   }, [id, validId])
+
+  // Alt-Schlüssel aus der Pro-Board-Zeit einmalig aufräumen (Issue #432).
+  useEffect(purgeLegacyViewKeys, [])
 
   // Laufenden Resize-Drag bei Unmount abräumen.
   useEffect(() => () => resizeCleanupRef.current?.(), [])
@@ -158,7 +177,7 @@ export function BoardListPage() {
       detach()
       setExcerptWidth((w) => {
         try {
-          localStorage.setItem(excerptKey(id), String(w))
+          localStorage.setItem(EXCERPT_KEY, String(w))
         } catch {
           // localStorage nicht verfügbar
         }
@@ -204,7 +223,7 @@ export function BoardListPage() {
       const next = prev.filter((k) => k !== from)
       next.splice(next.indexOf(to), 0, from)
       try {
-        localStorage.setItem(columnKey(id), JSON.stringify(next))
+        localStorage.setItem(COLUMN_KEY, JSON.stringify(next))
       } catch {
         // localStorage nicht verfügbar
       }
