@@ -12,7 +12,8 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 /**
- * Persistenz des Ideen-Speicher-Zustands: idea_stored fällt aus dem aktiven Positions-Namespace.
+ * Persistenz des Ideen-Speicher-Zustands: idea_stored fällt aus dem aktiven Positions-Namespace —
+ * unabhängig davon, ob die Karte (seit #433) zusätzlich board-los wird.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE)
 class CardIdeaStorageIT extends AbstractIntegrationTest {
@@ -59,7 +60,7 @@ class CardIdeaStorageIT extends AbstractIntegrationTest {
   void ideaStoredCardFallsOutOfActiveNamespace() {
     Card card = cards.findById(cardId).orElseThrow();
 
-    cards.save(card.asIdeaStored());
+    cards.save(card.asPooledIdea(boardId));
 
     assertThat(
             jdbc.queryForObject(
@@ -70,7 +71,7 @@ class CardIdeaStorageIT extends AbstractIntegrationTest {
   @Test
   void ideaStoredCardDoesNotBlockActivePosition() {
     Card card = cards.findById(cardId).orElseThrow();
-    cards.save(card.asIdeaStored());
+    cards.save(card.asPooledIdea(boardId));
 
     // Neue Karte an Position 0 in derselben Spalte -> kein Unique-Konflikt mit der Idee.
     jdbc.update(

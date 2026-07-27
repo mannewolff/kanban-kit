@@ -231,37 +231,54 @@ class CardIT extends AbstractIntegrationTest {
   }
 
   @Test
-  void ideaStorageAndPromoteFlow() throws Exception {
+  void ideaStorageMovesCardIntoTheProjectwideIdeaPool() throws Exception {
     Cookie alice = loginAs("idea-owner@example.com");
     long projectId = createProject("idea-owner@example.com", "Idea");
     JsonNode board = createBoard(alice, projectId);
     long boardId = board.get("id").asLong();
     long columnId = board.get("columns").get(0).get("id").asLong();
-    long cardId = createCard(alice, boardId, columnId, "Idee", null).get("id").asLong();
+    JsonNode created = createCard(alice, boardId, columnId, "Idee", null);
+    long cardId = created.get("id").asLong();
+    int number = created.get("number").asInt();
 
-    // Demotion: Karte in den Ideen-Speicher -> ideaStored=true, aktive Position fällt weg.
+    // In den Ideen-Speicher: die Karte wird board-los (#433), behält ihre Nummer und notiert das
+    // bisherige Board als Zielboard-Hinweis.
     mvc.perform(post("/api/cards/" + cardId + "/idea-storage").cookie(alice))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.ideaStored").value(true));
+        .andExpect(jsonPath("$.ideaStored").value(true))
+        .andExpect(jsonPath("$.boardId").doesNotExist())
+        .andExpect(jsonPath("$.number").value(number));
 
-    // Die Idee taucht weiter in der Kartenliste auf (mit ideaStored=true) — Board-Unsichtbarkeit
-    // filtert das Frontend.
+    // Sie verschwindet aus der Board-Kartenliste ...
     mvc.perform(
             org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get(
                     "/api/boards/" + boardId + "/cards")
                 .cookie(alice))
-        .andExpect(jsonPath("$.length()").value(1))
-        .andExpect(jsonPath("$[0].ideaStored").value(true));
+        .andExpect(jsonPath("$.length()").value(0));
 
-    // Eine neue Karte an Position 0 derselben Spalte kollidiert nicht (Idee außerhalb des
-    // Namespace).
+    // ... und erscheint stattdessen im projektweiten Ideen-Pool, mit unveränderter Nummer.
+    mvc.perform(
+            org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get(
+                    "/api/projects/" + projectId + "/ideas")
+                .cookie(alice))
+        .andExpect(jsonPath("$.length()").value(1))
+        .andExpect(jsonPath("$[0].id").value(cardId))
+        .andExpect(jsonPath("$[0].number").value(number));
+
+    // Eine neue Karte an Position 0 derselben Spalte kollidiert nicht (die Idee belegt keine
+    // aktive Position mehr).
     createCard(alice, boardId, columnId, "Nachrücker", null);
 
-    // Promotion: Idee zurück ins Backlog (erste Spalte) am Ende -> ideaStored=false.
-    mvc.perform(post("/api/cards/" + cardId + "/promote").cookie(alice))
+    // Zurück aufs Board (Einplanen) -> wieder in der ersten Spalte, dieselbe Nummer.
+    mvc.perform(
+            put("/api/cards/" + cardId + "/plan")
+                .cookie(alice)
+                .contentType("application/json")
+                .content("{\"targetBoardId\":" + boardId + "}"))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.ideaStored").value(false))
-        .andExpect(jsonPath("$.columnId").value((int) columnId));
+        .andExpect(jsonPath("$.columnId").value((int) columnId))
+        .andExpect(jsonPath("$.number").value(number));
   }
 
   @Test
@@ -293,8 +310,6 @@ class CardIT extends AbstractIntegrationTest {
     long epicId = createEpic(alice, boardId, "EP");
 
     mvc.perform(post("/api/cards/" + epicId + "/idea-storage").cookie(alice))
-        .andExpect(status().isBadRequest());
-    mvc.perform(post("/api/cards/" + epicId + "/promote").cookie(alice))
         .andExpect(status().isBadRequest());
   }
 

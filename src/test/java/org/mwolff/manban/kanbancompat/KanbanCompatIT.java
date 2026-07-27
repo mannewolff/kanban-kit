@@ -387,10 +387,12 @@ class KanbanCompatIT extends AbstractIntegrationTest {
     mvc.perform(post("/api/cards/" + archivedCard + "/archive").cookie(owner))
         .andExpect(status().isOk());
 
+    // Seit #433 wird die Karte beim Weg in den Ideen-Speicher board-los (vorher blieb boardId
+    // gesetzt — genau das machte sie zur unauffindbaren Geisterkarte).
     mvc.perform(post("/api/cards/" + ghost + "/idea-storage").cookie(owner))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.ideaStored").value(true))
-        .andExpect(jsonPath("$.boardId").value(boardId));
+        .andExpect(jsonPath("$.boardId").doesNotExist());
 
     // Die Automatik sieht nur noch die sichtbare Karte — und damit genauso viele wie die UI-API.
     JsonNode items = kanbanItems(token);
