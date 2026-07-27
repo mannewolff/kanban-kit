@@ -1,6 +1,7 @@
 package org.mwolff.manban.card.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
@@ -2246,5 +2247,226 @@ class CardServiceTest {
     service.listActivity(5L, 1L);
 
     verify(permissions).requireMembership(5L, PROJECT);
+  }
+
+  // --- Modul-Fassade fuer fremde Module (#458) --------------------------
+
+  /** Board-gebundene Karte mit frei waehlbarer Position, Sichtbarkeit und Typ. */
+  private static Card boardCard(
+      long id, long columnId, int number, int position, boolean archived, boolean ideaStored) {
+    return new Card(
+        id,
+        BOARD,
+        columnId,
+        number,
+        "Titel",
+        "Body",
+        position,
+        archived,
+        ideaStored,
+        null,
+        1L,
+        FIXED,
+        FIXED,
+        CardType.CARD,
+        null,
+        null,
+        null,
+        PROJECT,
+        null);
+  }
+
+  @Test
+  void listBoardItems_requiresMembershipInBoardProject() {
+    when(cards.findByBoardId(BOARD)).thenReturn(List.of());
+
+    service.listBoardItems(5L, BOARD);
+
+    verify(permissions).requireMembership(5L, PROJECT);
+  }
+
+  @Test
+  void listBoardItems_throwsBoardNotFound_whenBoardUnknown() {
+    when(boards.findById(BOARD)).thenReturn(Optional.empty());
+
+    assertThatThrownBy(() -> service.listBoardItems(5L, BOARD))
+        .isInstanceOf(BoardNotFoundException.class);
+  }
+
+  @Test
+  void listBoardItems_skipsArchivedCards() {
+    when(cards.findByBoardId(BOARD)).thenReturn(List.of(boardCard(1L, 20L, 1, 0, true, false)));
+
+    assertThat(service.listBoardItems(5L, BOARD)).isEmpty();
+  }
+
+  @Test
+  void listBoardItems_skipsIdeaStoredCards() {
+    // #434: im Ideen-Speicher liegende Karten tragen weiter Board und Spalte, sind fuer Menschen
+    // aber ausgeblendet — die Automatik darf sie folglich auch nicht sehen.
+    when(cards.findByBoardId(BOARD)).thenReturn(List.of(boardCard(2L, 20L, 1, 0, false, true)));
+
+    assertThat(service.listBoardItems(5L, BOARD)).isEmpty();
+  }
+
+  @Test
+  void listBoardItems_sortsByPositionInColumn() {
+    when(cards.findByBoardId(BOARD))
+        .thenReturn(
+            List.of(
+                boardCard(1L, 20L, 1, 2, false, false),
+                boardCard(2L, 20L, 2, 0, false, false),
+                boardCard(3L, 20L, 3, 1, false, false)));
+
+    assertThat(service.listBoardItems(5L, BOARD))
+        .extracting(CardService.BoardItemView::id)
+        .containsExactly(2L, 3L, 1L);
+  }
+
+  @Test
+  void listBoardItems_projectsCardFieldsIntoView() {
+    when(cards.findByBoardId(BOARD)).thenReturn(List.of(boardCard(1L, 20L, 7, 3, false, false)));
+
+    assertThat(service.listBoardItems(5L, BOARD))
+        .singleElement()
+        .extracting(
+            CardService.BoardItemView::id,
+            CardService.BoardItemView::number,
+            CardService.BoardItemView::title,
+            CardService.BoardItemView::description,
+            CardService.BoardItemView::columnId,
+            CardService.BoardItemView::positionInColumn,
+            CardService.BoardItemView::epic)
+        .containsExactly(1L, 7, "Titel", "Body", 20L, 3, false);
+  }
+
+  @Test
+  void listBoardItems_marksEpicsAsEpic() {
+    // Epics gehoeren zur Item-Liste (anders als bei listByBoard) und muessen als solche erkennbar
+    // sein, ohne den Kartentyp aus card.domain nach aussen zu geben.
+    when(cards.findByBoardId(BOARD))
+        .thenReturn(List.of(card(5L, 20L, 3, false, null, CardType.EPIC, null, "E")));
+
+    assertThat(service.listBoardItems(5L, BOARD))
+        .singleElement()
+        .extracting(CardService.BoardItemView::epic)
+        .isEqualTo(true);
+  }
+
+  @Test
+  void requireProjectId_returnsProjectOfCard() {
+    when(cards.findById(1L)).thenReturn(Optional.of(boardCard(1L, 20L, 1, 0, false, false)));
+
+    assertThat(service.requireProjectId(1L)).isEqualTo(PROJECT);
+  }
+
+  @Test
+  void requireProjectId_worksForBoardlessPoolIdea() {
+    // #405: eine board-lose Pool-Idee traegt keine Board-ID, aber immer eine Projekt-ID — genau
+    // deshalb loest die Fassade ueber die Karte auf und nicht ueber deren Board.
+    when(cards.findById(1L)).thenReturn(Optional.of(poolIdea(1L)));
+
+    assertThat(service.requireProjectId(1L)).isEqualTo(PROJECT);
+  }
+
+  @Test
+  void requireProjectId_throwsCardNotFound_whenCardUnknown() {
+    when(cards.findById(1L)).thenReturn(Optional.empty());
+
+    assertThatThrownBy(() -> service.requireProjectId(1L))
+        .isInstanceOf(CardNotFoundException.class);
+  }
+
+  @Test
+  void requireOnBoard_passes_whenCardIsOnBoard() {
+    when(cards.findById(1L)).thenReturn(Optional.of(boardCard(1L, 20L, 1, 0, false, false)));
+
+    assertThatCode(() -> service.requireOnBoard(1L, BOARD)).doesNotThrowAnyException();
+  }
+
+  @Test
+  void requireOnBoard_throwsCardNotFound_whenCardUnknown() {
+    when(cards.findById(1L)).thenReturn(Optional.empty());
+
+    assertThatThrownBy(() -> service.requireOnBoard(1L, BOARD))
+        .isInstanceOf(CardNotFoundException.class);
+  }
+
+  @Test
+  void requireOnBoard_throwsCardNotFound_whenCardOnOtherBoard() {
+    Card otherBoard =
+        new Card(
+            1L,
+            99L,
+            20L,
+            1,
+            "T",
+            null,
+            0,
+            false,
+            false,
+            null,
+            1L,
+            FIXED,
+            FIXED,
+            CardType.CARD,
+            null,
+            null,
+            null,
+            PROJECT,
+            null);
+    when(cards.findById(1L)).thenReturn(Optional.of(otherBoard));
+
+    assertThatThrownBy(() -> service.requireOnBoard(1L, BOARD))
+        .isInstanceOf(CardNotFoundException.class);
+  }
+
+  @Test
+  void requireOnBoard_throwsCardNotFound_whenCardIsBoardless() {
+    // Board-lose Pool-Idee: boardId == null darf nicht als Treffer durchgehen (NPE-frei).
+    when(cards.findById(1L)).thenReturn(Optional.of(poolIdea(1L)));
+
+    assertThatThrownBy(() -> service.requireOnBoard(1L, BOARD))
+        .isInstanceOf(CardNotFoundException.class);
+  }
+
+  @Test
+  void requireOnBoard_throwsCardNotFound_whenCardIsIdeaStored() {
+    // #434: auf dem richtigen Board, aber im Ideen-Speicher — fuer die Automatik nicht vorhanden.
+    when(cards.findById(1L)).thenReturn(Optional.of(boardCard(1L, 20L, 1, 0, false, true)));
+
+    assertThatThrownBy(() -> service.requireOnBoard(1L, BOARD))
+        .isInstanceOf(CardNotFoundException.class);
+  }
+
+  @Test
+  void requireOnBoard_comparesBoardIdsByValue_beyondLongCache() {
+    // Board-IDs jenseits des Long-Caches (> 127): ein Referenzvergleich ('!=') wuerde hier
+    // faelschlich CardNotFound werfen und den kanbancompat-Zugriff auf grossen Boards zerlegen.
+    long largeBoard = 5000L;
+    Card onLargeBoard =
+        new Card(
+            1L,
+            largeBoard,
+            20L,
+            1,
+            "T",
+            null,
+            0,
+            false,
+            false,
+            null,
+            1L,
+            FIXED,
+            FIXED,
+            CardType.CARD,
+            null,
+            null,
+            null,
+            PROJECT,
+            null);
+    when(cards.findById(1L)).thenReturn(Optional.of(onLargeBoard));
+
+    assertThatCode(() -> service.requireOnBoard(1L, largeBoard)).doesNotThrowAnyException();
   }
 }

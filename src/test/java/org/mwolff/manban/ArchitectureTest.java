@@ -87,6 +87,28 @@ class ArchitectureTest {
               "auth darf das accesstoken-Modul nicht kennen (Wiring gehoert in die "
                   + "Composition-Root)");
 
+  // --- Modul-Grenze: card-Fassade (Issue #458) ------------------------------------------------
+  // Das Kartenmodell und die Karten-/Label-Ports sind modulintern. Fremde Module gehen ueber die
+  // fachliche card.application-Fassade (CardService/LabelService) — sonst haengt jede fremde
+  // Rechtepruefung am Aggregat und an dessen Persistenz-Ports statt an einem Use-Case.
+  static final ArchRule CARD_DOMAIN_IST_MODULINTERN =
+      noClasses()
+          .that()
+          .resideOutsideOfPackage("org.mwolff.manban.card..")
+          .should()
+          .dependOnClassesThat()
+          .resideInAPackage("org.mwolff.manban.card.domain..")
+          .as("card.domain ist modulintern (Zugriff nur ueber die card.application-Fassade)");
+
+  static final ArchRule CARD_REPOSITORIES_SIND_MODULINTERN =
+      noClasses()
+          .that()
+          .resideOutsideOfPackage("org.mwolff.manban.card..")
+          .should()
+          .dependOnClassesThat()
+          .haveNameMatching("org\\.mwolff\\.manban\\.card\\.application\\..*Repository")
+          .as("card-Repository-Ports sind modulintern (nur ueber CardService/LabelService)");
+
   // --- §6.1: Schichtzugriff (hexagonal, domain innerste Schicht) ------------------------------
   // consideringOnlyDependenciesInLayers() macht die Regel robust gegenueber Modulen, die nicht
   // alle vier Schichten besitzen (z. B. kanbancompat ohne domain/infrastructure): Abhaengigkeiten
@@ -170,6 +192,16 @@ class ArchitectureTest {
   @Test
   void authHaengtNichtVonAccesstokenAb() {
     AUTH_HAENGT_NICHT_VON_ACCESSTOKEN_AB.check(PRODUKTIONSKLASSEN);
+  }
+
+  @Test
+  void cardDomainIstModulintern() {
+    CARD_DOMAIN_IST_MODULINTERN.check(PRODUKTIONSKLASSEN);
+  }
+
+  @Test
+  void cardRepositoriesSindModulintern() {
+    CARD_REPOSITORIES_SIND_MODULINTERN.check(PRODUKTIONSKLASSEN);
   }
 
   @Test

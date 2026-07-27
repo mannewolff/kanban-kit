@@ -11,6 +11,7 @@ import static org.mockito.Mockito.when;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -29,6 +30,7 @@ class LabelServiceTest {
   private static final long PROJECT = 1L;
 
   private LabelRepository labels;
+  private CardLabelRepository cardLabels;
   private BoardRepository boards;
   private PermissionChecker permissions;
   private LabelService service;
@@ -36,9 +38,10 @@ class LabelServiceTest {
   @BeforeEach
   void setUp() {
     labels = mock(LabelRepository.class);
+    cardLabels = mock(CardLabelRepository.class);
     boards = mock(BoardRepository.class);
     permissions = mock(PermissionChecker.class);
-    service = new LabelService(labels, boards, permissions);
+    service = new LabelService(labels, cardLabels, boards, permissions);
     when(boards.findById(BOARD))
         .thenReturn(Optional.of(new Board(BOARD, PROJECT, "B", Instant.EPOCH)));
     when(labels.save(any(Label.class))).thenAnswer(inv -> inv.getArgument(0));
@@ -151,5 +154,67 @@ class LabelServiceTest {
 
     assertThatThrownBy(() -> service.delete(5L, 1L)).isInstanceOf(LabelNotFoundException.class);
     verify(labels, never()).deleteById(anyLong());
+  }
+
+  // --- namesByCard: Batch-Auflösung der Label-Namen je Karte (#458) ---------------------------
+
+  @Test
+  void namesByCard_mapsAssignedLabelIdsToNames() {
+    when(labels.findByBoardId(BOARD))
+        .thenReturn(
+            List.of(new Label(7L, BOARD, "Bug", "#f00"), new Label(8L, BOARD, "Ux", "#0f0")));
+    when(cardLabels.findByCardIds(List.of(1L))).thenReturn(Map.of(1L, List.of(7L, 8L)));
+
+    Map<Long, List<String>> result = service.namesByCard(BOARD, List.of(1L));
+
+    assertThat(result).containsEntry(1L, List.of("Bug", "Ux"));
+  }
+
+  @Test
+  void namesByCard_returnsEmptyList_forCardWithoutLabels() {
+    // Karten ohne Zuordnung fehlen in der Batch-Antwort — sie müssen dennoch als Eintrag mit
+    // leerer Liste erscheinen, sonst müsste jeder Aufrufer den Null-Fall behandeln.
+    when(labels.findByBoardId(BOARD)).thenReturn(List.of(new Label(7L, BOARD, "Bug", "#f00")));
+    when(cardLabels.findByCardIds(List.of(1L))).thenReturn(Map.of());
+
+    Map<Long, List<String>> result = service.namesByCard(BOARD, List.of(1L));
+
+    assertThat(result).containsEntry(1L, List.of());
+  }
+
+  @Test
+  void namesByCard_ordersNamesByBoardDefinition_notByAssignment() {
+    // Die Zuordnung nennt (8, 7), das Board definiert (7 "Bug", 8 "Ux") — die Board-Reihenfolge
+    // gewinnt, damit die Ausgabe unabhängig von der Zuordnungsreihenfolge stabil bleibt.
+    when(labels.findByBoardId(BOARD))
+        .thenReturn(
+            List.of(new Label(7L, BOARD, "Bug", "#f00"), new Label(8L, BOARD, "Ux", "#0f0")));
+    when(cardLabels.findByCardIds(List.of(1L))).thenReturn(Map.of(1L, List.of(8L, 7L)));
+
+    Map<Long, List<String>> result = service.namesByCard(BOARD, List.of(1L));
+
+    assertThat(result).containsEntry(1L, List.of("Bug", "Ux"));
+  }
+
+  @Test
+  void namesByCard_ignoresLabelsOfOtherCards() {
+    // Zwei Karten, jede mit eigener Zuordnung: die Namen dürfen nicht über Karten hinweg verlaufen.
+    when(labels.findByBoardId(BOARD))
+        .thenReturn(
+            List.of(new Label(7L, BOARD, "Bug", "#f00"), new Label(8L, BOARD, "Ux", "#0f0")));
+    when(cardLabels.findByCardIds(List.of(1L, 2L)))
+        .thenReturn(Map.of(1L, List.of(7L), 2L, List.of(8L)));
+
+    Map<Long, List<String>> result = service.namesByCard(BOARD, List.of(1L, 2L));
+
+    assertThat(result).containsEntry(1L, List.of("Bug")).containsEntry(2L, List.of("Ux"));
+  }
+
+  @Test
+  void namesByCard_returnsEmptyMap_forNoCards() {
+    when(labels.findByBoardId(BOARD)).thenReturn(List.of(new Label(7L, BOARD, "Bug", "#f00")));
+    when(cardLabels.findByCardIds(List.of())).thenReturn(Map.of());
+
+    assertThat(service.namesByCard(BOARD, List.of())).isEmpty();
   }
 }

@@ -1,6 +1,11 @@
 package org.mwolff.manban.card.application;
 
+import java.util.Collection;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import org.mwolff.manban.board.application.BoardNotFoundException;
 import org.mwolff.manban.board.application.BoardRepository;
 import org.mwolff.manban.board.domain.Board;
@@ -18,14 +23,46 @@ import org.springframework.transaction.annotation.Transactional;
 public class LabelService {
 
   private final LabelRepository labels;
+  private final CardLabelRepository cardLabels;
   private final BoardRepository boards;
   private final PermissionChecker permissions;
 
   public LabelService(
-      LabelRepository labels, BoardRepository boards, PermissionChecker permissions) {
+      LabelRepository labels,
+      CardLabelRepository cardLabels,
+      BoardRepository boards,
+      PermissionChecker permissions) {
     this.labels = labels;
+    this.cardLabels = cardLabels;
     this.boards = boards;
     this.permissions = permissions;
+  }
+
+  /**
+   * Baut je Karte die Liste der Label-<em>Namen</em> aus genau zwei Batch-Abfragen auf — {@link
+   * LabelRepository#findByBoardId} (Namen) und {@link CardLabelRepository#findByCardIds}
+   * (Zuordnung) — unabhängig von der Kartenzahl (kein N+1). Die Reihenfolge je Karte folgt der
+   * Board-Definitionsreihenfolge, nicht der Zuordnungsreihenfolge; jede übergebene Karten-ID erhält
+   * einen Eintrag (leere Liste, wenn ihr kein Label zugeordnet ist).
+   *
+   * <p>Ohne eigene Rechteprüfung: die Karten-IDs stammen beim einzigen Aufrufer aus einer bereits
+   * rechtegeprüften Board-Abfrage ({@link CardService#listBoardItems}).
+   */
+  @Transactional(readOnly = true)
+  public Map<Long, List<String>> namesByCard(long boardId, Collection<Long> cardIds) {
+    List<Label> boardLabels = labels.findByBoardId(boardId);
+    Map<Long, List<Long>> labelIdsByCard = cardLabels.findByCardIds(cardIds);
+    Map<Long, List<String>> result = new LinkedHashMap<>();
+    for (Long cardId : cardIds) {
+      Set<Long> assigned = new HashSet<>(labelIdsByCard.getOrDefault(cardId, List.of()));
+      result.put(
+          cardId,
+          boardLabels.stream()
+              .filter(l -> assigned.contains(l.requireId()))
+              .map(Label::name)
+              .toList());
+    }
+    return result;
   }
 
   @Transactional(readOnly = true)

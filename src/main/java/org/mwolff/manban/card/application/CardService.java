@@ -315,6 +315,68 @@ public class CardService {
         .toList();
   }
 
+  /**
+   * Sichtbare Board-Items (Karten <em>und</em> Epics) als schlanke Projektion für modulfremde
+   * Aufrufer: ohne archivierte und ohne im Ideen-Speicher liegende Karten, nach Position in der
+   * Spalte sortiert. Erfordert Projekt-Mitgliedschaft (Leserecht).
+   *
+   * <p>Bewusst nicht {@link CardView}: diese Projektion kommt mit einer einzigen Abfrage aus,
+   * während {@code view(...)} je Karte Abhängigkeiten, Zuständige und Labels nachlädt (N+1). Der
+   * {@code kanbancompat}-Ingest listet ganze Boards und braucht davon nichts.
+   */
+  @Transactional(readOnly = true)
+  public List<BoardItemView> listBoardItems(long userId, long boardId) {
+    Board board = boards.findById(boardId).orElseThrow(BoardNotFoundException::new);
+    permissions.requireMembership(userId, board.projectId());
+    return cards.findByBoardId(boardId).stream()
+        .filter(c -> !c.archived() && !c.ideaStored())
+        .sorted(Comparator.comparingInt(Card::positionInColumn))
+        .map(
+            c ->
+                new BoardItemView(
+                    c.requireId(),
+                    c.requireNumber(),
+                    c.title(),
+                    c.description(),
+                    c.columnId(),
+                    c.positionInColumn(),
+                    c.type() == CardType.EPIC))
+        .toList();
+  }
+
+  /**
+   * Projekt-ID der Karte — die Auflösung, die modulfremde Rechteprüfungen (Anhänge, Kommentare)
+   * brauchen, ohne das Kartenaggregat oder dessen Port zu kennen. Projekt-basiert über {@code
+   * card.projectId()} (immer gesetzt, V18), daher auch für board-lose Pool-Ideen (#405) korrekt.
+   *
+   * @throws CardNotFoundException wenn die Karte nicht existiert
+   */
+  @Transactional(readOnly = true)
+  public long requireProjectId(long cardId) {
+    return cards.findById(cardId).orElseThrow(CardNotFoundException::new).projectId();
+  }
+
+  /**
+   * Sichert zu, dass die Karte auf dem angegebenen Board liegt — der Board-Guard des
+   * token-gebundenen {@code kanbancompat}-Zugriffs (#44).
+   *
+   * <p>Eine Karte im Ideen-Speicher gilt dabei als nicht vorhanden (#434): sie ist für Menschen
+   * ausgeblendet, also darf die Automatik sie auch nicht bewegen oder kommentieren. Andernfalls
+   * entstünden Änderungen an einer Karte, die auf dem Board niemand sieht.
+   *
+   * @throws CardNotFoundException wenn die Karte fehlt, auf einem anderen Board liegt oder im
+   *     Ideen-Speicher liegt
+   */
+  @Transactional(readOnly = true)
+  public void requireOnBoard(long cardId, long boardId) {
+    Card card = cards.findById(cardId).orElseThrow(CardNotFoundException::new);
+    // Wertvergleich der Board-IDs (Long): '!=' würde Referenzen vergleichen und bei IDs
+    // jenseits des Long-Caches (> 127) falsch schlagen.
+    if (!Long.valueOf(boardId).equals(card.boardId()) || card.ideaStored()) {
+      throw new CardNotFoundException();
+    }
+  }
+
   /** Epics eines Boards inkl. Fortschritt (nicht-archivierte Kinder: gesamt / in Done). */
   @Transactional(readOnly = true)
   public List<EpicView> listEpics(long userId, long boardId) {
@@ -989,6 +1051,20 @@ public class CardService {
       @Nullable Instant dueDate,
       List<Long> labels,
       @Nullable Long targetBoardId) {}
+
+  /**
+   * Schlanke Board-Projektion einer Karte oder eines Epics — ohne Abhängigkeiten, Zuständige und
+   * Labels. {@code epic} unterscheidet die beiden Ausprägungen, ohne den Kartentyp aus {@code
+   * card.domain} nach außen zu geben.
+   */
+  public record BoardItemView(
+      Long id,
+      int number,
+      String title,
+      @Nullable String description,
+      @Nullable Long columnId,
+      int positionInColumn,
+      boolean epic) {}
 
   /** Epic-Darstellung inkl. Fortschritt (Kinder gesamt / in Done). */
   public record EpicView(

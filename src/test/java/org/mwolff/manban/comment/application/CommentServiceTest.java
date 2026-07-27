@@ -19,9 +19,7 @@ import org.mwolff.manban.auth.application.AppUserRepository;
 import org.mwolff.manban.auth.domain.AppUser;
 import org.mwolff.manban.auth.domain.PlatformRole;
 import org.mwolff.manban.card.application.CardNotFoundException;
-import org.mwolff.manban.card.application.CardRepository;
-import org.mwolff.manban.card.domain.Card;
-import org.mwolff.manban.card.domain.CardType;
+import org.mwolff.manban.card.application.CardService;
 import org.mwolff.manban.comment.domain.Comment;
 import org.mwolff.manban.project.application.PermissionChecker;
 import org.mwolff.manban.project.application.ProjectAccessDeniedException;
@@ -33,57 +31,10 @@ class CommentServiceTest {
   private static final Instant FIXED = Instant.parse("2026-01-02T03:04:05Z");
 
   private CommentRepository comments;
-  private CardRepository cards;
+  private CardService cardService;
   private PermissionChecker permissions;
   private AppUserRepository users;
   private CommentService service;
-
-  private static Card card() {
-    return new Card(
-        5L,
-        10L,
-        20L,
-        1,
-        "T",
-        null,
-        0,
-        false,
-        false,
-        null,
-        1L,
-        FIXED,
-        FIXED,
-        CardType.CARD,
-        null,
-        null,
-        null,
-        1L,
-        null);
-  }
-
-  /** Board-lose Pool-Idee (#405): kein Board/Spalte/Nummer, aber immer eine Projekt-ID. */
-  private static Card poolIdea() {
-    return new Card(
-        5L,
-        null,
-        null,
-        null,
-        "Idee",
-        null,
-        0,
-        false,
-        true,
-        null,
-        1L,
-        FIXED,
-        FIXED,
-        CardType.CARD,
-        null,
-        null,
-        null,
-        1L,
-        null);
-  }
 
   private static Comment comment(Long authorUserId) {
     return new Comment(3L, 5L, authorUserId, "Ada", "Hallo", FIXED, FIXED);
@@ -92,12 +43,12 @@ class CommentServiceTest {
   @BeforeEach
   void setUp() {
     comments = mock(CommentRepository.class);
-    cards = mock(CardRepository.class);
+    cardService = mock(CardService.class);
     permissions = mock(PermissionChecker.class);
     users = mock(AppUserRepository.class);
     Clock clock = Clock.fixed(FIXED, ZoneOffset.UTC);
-    service = new CommentService(comments, cards, permissions, users, clock);
-    when(cards.findById(5L)).thenReturn(Optional.of(card()));
+    service = new CommentService(comments, cardService, permissions, users, clock);
+    when(cardService.requireProjectId(5L)).thenReturn(1L);
   }
 
   @Test
@@ -163,8 +114,8 @@ class CommentServiceTest {
 
   @Test
   void create_throwsCardNotFound_whenCardUnknown() {
-    // Given
-    when(cards.findById(5L)).thenReturn(Optional.empty());
+    // Given: die card-Fassade meldet die unbekannte Karte — der Kommentar-Service reicht sie durch.
+    when(cardService.requireProjectId(5L)).thenThrow(new CardNotFoundException());
 
     // When / Then
     assertThatThrownBy(() -> service.create(1L, 5L, "Hallo"))
@@ -172,29 +123,30 @@ class CommentServiceTest {
   }
 
   @Test
-  void create_onBoardlessPoolIdea_derivesProjectFromCard() {
-    // #405: eine board-lose Pool-Idee (boardId == null) trägt dennoch eine Projekt-ID; das Recht
-    // wird darüber geprüft, nicht über ein Board (das es nicht gibt).
-    when(cards.findById(5L)).thenReturn(Optional.of(poolIdea()));
+  void create_checksPermissionAgainstProjectFromCardFacade() {
+    // #405/#458: die Projekt-ID kommt aus der card-Fassade (auch board-lose Pool-Ideen tragen
+    // eine) und wird unveraendert fuer die Rechtepruefung genutzt. Eine abweichende ID belegt das
+    // Durchreichen — eine anderweitig hergeleitete ID fiele hier auf.
+    when(cardService.requireProjectId(5L)).thenReturn(42L);
     when(users.findById(1L))
         .thenReturn(Optional.of(new AppUser(1L, "u@x.de", "hash", "Ada", true, PlatformRole.USER)));
     when(comments.save(any(Comment.class))).thenAnswer(inv -> saved(inv.getArgument(0)));
 
     CommentService.CommentView view = service.create(1L, 5L, "Hallo");
 
-    verify(permissions).require(1L, 1L, Permission.COMMENT_CREATE);
+    verify(permissions).require(1L, 42L, Permission.COMMENT_CREATE);
     assertThat(view.body()).isEqualTo("Hallo");
   }
 
   @Test
-  void list_onBoardlessPoolIdea_checksMembershipViaProject() {
-    // #405: Lesen der Kommentare einer board-losen Pool-Idee prüft die Projekt-Mitgliedschaft.
-    when(cards.findById(5L)).thenReturn(Optional.of(poolIdea()));
+  void list_checksMembershipAgainstProjectFromCardFacade() {
+    // Lesen prueft die Mitgliedschaft im Projekt der Karte — ebenfalls ueber die card-Fassade.
+    when(cardService.requireProjectId(5L)).thenReturn(42L);
     when(comments.findByCardId(5L)).thenReturn(List.of(comment(1L)));
 
     service.list(1L, 5L);
 
-    verify(permissions).requireMembership(1L, 1L);
+    verify(permissions).requireMembership(1L, 42L);
   }
 
   @Test
