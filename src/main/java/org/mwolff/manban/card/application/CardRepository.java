@@ -25,7 +25,7 @@ public interface CardRepository {
   List<Card> findByProjectId(long projectId);
 
   /**
-   * Ideen-Karten eines Projekts (idea_stored), neueste zuerst — board-lose Pool-Ideen und
+   * Ideen-Karten eines Projekts (idea_stored), älteste zuerst — board-lose Pool-Ideen und
    * board-gebundene Legacy-Ideen. Papierkorb-Karten sind ausgenommen.
    */
   List<Card> findIdeasByProjectId(long projectId);

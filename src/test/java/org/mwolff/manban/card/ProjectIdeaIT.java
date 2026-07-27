@@ -118,6 +118,96 @@ class ProjectIdeaIT extends AbstractIntegrationTest {
         .andExpect(jsonPath("$.length()").value(0));
   }
 
+  /**
+   * Der Pool liefert die älteste Idee zuerst (#419), und wer ihn in dieser Reihenfolge einplant,
+   * findet sie im Backlog in derselben Reihenfolge wieder. Vorher lief der Pool absteigend, während
+   * das Backlog aufsteigend sortiert ist — beim Abarbeiten von oben nach unten kehrte sich die
+   * Reihenfolge dadurch um.
+   */
+  @Test
+  void pool_lists_oldest_first_and_planning_in_that_order_preserves_it() throws Exception {
+    Cookie owner = session("idea-order-owner@example.com", PlatformRole.USER);
+    Cookie admin = session("idea-order-admin@example.com", PlatformRole.ADMIN);
+
+    long projectId = createProject(admin, "idea-order-owner@example.com");
+    long boardId = createBoard(owner, projectId);
+
+    long first = createIdea(owner, projectId, "Idee A");
+    long second = createIdea(owner, projectId, "Idee B");
+    long third = createIdea(owner, projectId, "Idee C");
+
+    // Älteste zuerst; die projektweiten Nummern steigen entsprechend an.
+    mvc.perform(get("/api/projects/" + projectId + "/ideas").cookie(owner))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.length()").value(3))
+        .andExpect(jsonPath("$[0].id").value(first))
+        .andExpect(jsonPath("$[1].id").value(second))
+        .andExpect(jsonPath("$[2].id").value(third))
+        .andExpect(jsonPath("$[0].title").value("Idee A"))
+        .andExpect(jsonPath("$[2].title").value("Idee C"));
+
+    // In Listenreihenfolge einplanen — jede Karte landet am Ende der ersten Spalte.
+    for (long ideaId : new long[] {first, second, third}) {
+      mvc.perform(
+              put("/api/cards/" + ideaId + "/plan")
+                  .cookie(owner)
+                  .contentType("application/json")
+                  .content("{\"targetBoardId\":" + boardId + "}"))
+          .andExpect(status().isOk());
+    }
+
+    // Im Backlog stehen sie in derselben Reihenfolge, mit aufsteigenden Positionen.
+    mvc.perform(get("/api/boards/" + boardId + "/cards").cookie(owner))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.length()").value(3))
+        .andExpect(jsonPath("$[?(@.id == " + first + ")].positionInColumn").value(0))
+        .andExpect(jsonPath("$[?(@.id == " + second + ")].positionInColumn").value(1))
+        .andExpect(jsonPath("$[?(@.id == " + third + ")].positionInColumn").value(2));
+  }
+
+  private long createProject(Cookie admin, String ownerEmail) throws Exception {
+    return json.readTree(
+            mvc.perform(
+                    post("/api/projects")
+                        .cookie(admin)
+                        .contentType("application/json")
+                        .content("{\"name\":\"P\",\"ownerEmail\":\"%s\"}".formatted(ownerEmail)))
+                .andReturn()
+                .getResponse()
+                .getContentAsString())
+        .get("id")
+        .asLong();
+  }
+
+  private long createBoard(Cookie owner, long projectId) throws Exception {
+    return json.readTree(
+            mvc.perform(
+                    post("/api/projects/" + projectId + "/boards")
+                        .cookie(owner)
+                        .contentType("application/json")
+                        .content("{\"name\":\"B\"}"))
+                .andReturn()
+                .getResponse()
+                .getContentAsString())
+        .get("id")
+        .asLong();
+  }
+
+  private long createIdea(Cookie owner, long projectId, String title) throws Exception {
+    return json.readTree(
+            mvc.perform(
+                    post("/api/projects/" + projectId + "/ideas")
+                        .cookie(owner)
+                        .contentType("application/json")
+                        .content("{\"title\":\"%s\"}".formatted(title)))
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getContentAsString())
+        .get("id")
+        .asLong();
+  }
+
   private Cookie session(String email, PlatformRole role) throws Exception {
     if (users.findByEmail(email).isEmpty()) {
       users.save(new AppUser(null, email, passwordEncoder.encode(PASSWORD), "P", true, role));

@@ -770,7 +770,7 @@ public class CardService {
   }
 
   /**
-   * Alle Ideen eines Projekts (board-lose Pool-Ideen und board-gebundene Legacy-Ideen), neueste
+   * Alle Ideen eines Projekts (board-lose Pool-Ideen und board-gebundene Legacy-Ideen), älteste
    * zuerst. Erfordert Projekt-Mitgliedschaft (Leserecht).
    */
   @Transactional(readOnly = true)
