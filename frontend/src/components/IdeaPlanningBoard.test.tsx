@@ -57,7 +57,7 @@ const mAttachments = attachmentsApi as unknown as { list: ReturnType<typeof vi.f
 const col = (id: number, name: string, position: number) => ({ id, name, position, wipLimit: null })
 
 const BOARDS = [
-  { id: 10, name: 'Board X', projectId: 5, createdAt: '', columns: [col(100, 'Backlog', 0), col(101, 'Ready', 1)] },
+  { id: 10, name: 'Board X', projectId: 5, createdAt: '', columns: [col(101, 'Ready', 1), col(100, 'Backlog', 0)] },
   { id: 11, name: 'Board Y', projectId: 5, createdAt: '', columns: [col(110, 'Backlog', 0)] },
 ]
 
@@ -101,25 +101,33 @@ function idea(partial: Partial<Idea> & { id: number; title: string }): Idea {
   }
 }
 
-// board 10, erste Spalte 100: nur die aktiven Nicht-Idee-Karten der ersten Spalte gehören ins
+// Board 10, erste Spalte 100: nur die aktiven Nicht-Idee-Karten der ersten Spalte gehören ins
 // Backlog. backlogCard2 kommt im Input VOR backlogCard, muss aber nach positionInColumn dahinter
-// einsortiert werden (deckt den Sort-Comparator ab).
+// einsortiert werden (deckt den Sort-Comparator ab). Die erste Spalte ist 100 (position 0),
+// obwohl sie im Board-Array hinter 101 steht — deckt den Spalten-Sort nach position ab.
 const backlogCard = card({ id: 1, columnId: 100, number: 7, title: 'Backlog A', positionInColumn: 0 })
 const backlogCard2 = card({ id: 5, columnId: 100, number: 6, title: 'Backlog Z', positionInColumn: 1 })
 const readyCard = card({ id: 2, columnId: 101, number: 8, title: 'Ready B', positionInColumn: 0 })
 const archivedCard = card({ id: 3, columnId: 100, number: 9, title: 'Archiv C', positionInColumn: 2, archived: true })
 const ideaCard = card({ id: 4, columnId: 100, number: 10, title: 'Idee D', positionInColumn: 3, ideaStored: true })
+// Board 11, erste (einzige) Spalte 110: eigene Karte, damit sichtbar wird, dass je Board geladen wird.
+const boardYCard = card({ id: 8, columnId: 110, number: 20, title: 'Board Y Karte', positionInColumn: 0, boardId: 11 })
 
 const poolIdea = idea({ id: 20, title: 'Pool 1' })
 const legacyIdea = idea({ id: 21, title: 'Legacy', boardId: 10 })
 
+const CARDS_BY_BOARD: Record<number, Card[]> = {
+  10: [backlogCard2, backlogCard, readyCard, archivedCard, ideaCard],
+  11: [boardYCard],
+}
+
 function setup({
   boards = BOARDS,
-  cards = [backlogCard2, backlogCard, readyCard, archivedCard, ideaCard],
+  cardsByBoard = CARDS_BY_BOARD,
   ideas = [poolIdea, legacyIdea],
-} = {}) {
+}: { boards?: Board[]; cardsByBoard?: Record<number, Card[]>; ideas?: Idea[] } = {}) {
   mBoards.list.mockResolvedValue(boards)
-  mCards.list.mockResolvedValue(cards)
+  mCards.list.mockImplementation((boardId: number) => Promise.resolve(cardsByBoard[boardId] ?? []))
   mCards.move.mockResolvedValue({})
   mCards.update.mockResolvedValue(idea({ id: 20, title: 'x' }))
   mCards.getActivity.mockResolvedValue([])
@@ -155,23 +163,8 @@ function deferred<T>() {
   return { promise, resolve }
 }
 
-function fakeStorage(): Storage {
-  const map = new Map<string, string>()
-  return {
-    getItem: (k) => map.get(k) ?? null,
-    setItem: (k, v) => void map.set(k, String(v)),
-    removeItem: (k) => void map.delete(k),
-    clear: () => map.clear(),
-    key: (i) => [...map.keys()][i] ?? null,
-    get length() {
-      return map.size
-    },
-  }
-}
-
 beforeEach(() => {
   vi.clearAllMocks()
-  vi.stubGlobal('localStorage', fakeStorage())
 })
 
 afterEach(() => vi.unstubAllGlobals())
@@ -184,20 +177,43 @@ describe('IdeaPlanningBoard', () => {
     expect(mCards.list).not.toHaveBeenCalled()
   })
 
-  it('lädt das Backlog der ersten Spalte und den board-losen Pool', async () => {
+  it('rendert alle Boards untereinander mit ihrer ersten Spalte und den Pool darunter', async () => {
     setup()
     renderBoard()
 
-    // Backlog: nur die aktiven Nicht-Idee-Karten der ersten Spalte, nach Position sortiert.
+    // Beide Boards sind sichtbar, in der Reihenfolge aus boardsApi.list.
     expect(await screen.findByText('Backlog A')).toBeInTheDocument()
+    expect(screen.getByText('Board X')).toBeInTheDocument()
+    expect(screen.getByText('Board Y')).toBeInTheDocument()
+
+    // Board X: nur aktive Nicht-Idee-Karten der ersten Spalte (100), nach Position sortiert.
+    const zoneX = screen.getByTestId('board-zone-10')
     const backlogItems = screen.getAllByText(/^Backlog [AZ]$/).map((el) => el.textContent)
     expect(backlogItems).toEqual(['Backlog A', 'Backlog Z'])
+    expect(zoneX).toHaveTextContent('Backlog A')
     expect(screen.queryByText('Ready B')).not.toBeInTheDocument()
     expect(screen.queryByText('Archiv C')).not.toBeInTheDocument()
     expect(screen.queryByText('Idee D')).not.toBeInTheDocument()
+
+    // Board Y bekommt seine eigenen Karten (je Board geladen).
+    expect(screen.getByTestId('board-zone-11')).toHaveTextContent('Board Y Karte')
+    expect(mCards.list).toHaveBeenCalledWith(10)
+    expect(mCards.list).toHaveBeenCalledWith(11)
+
     // Pool: nur board-lose Ideen (Legacy board-gebunden bleibt draußen).
     expect(screen.getByText('Pool 1')).toBeInTheDocument()
     expect(screen.queryByText('Legacy')).not.toBeInTheDocument()
+  })
+
+  it('zeigt für ein Board ohne Spalten einen Leerzustand und lädt dafür keine Karten', async () => {
+    const noCols = { id: 12, name: 'Board Leer', projectId: 5, createdAt: '', columns: [] }
+    setup({ boards: [...BOARDS, noCols] })
+    renderBoard()
+
+    await screen.findByText('Board Leer')
+    // Für das spaltenlose Board wird kein Karten-Load ausgelöst.
+    expect(mCards.list).not.toHaveBeenCalledWith(12)
+    expect(screen.getByTestId('board-zone-12')).toHaveTextContent(/Kein Backlog/i)
   })
 
   it('zeigt #N einer nummerierten Pool-Idee, aber kein nacktes # für Legacy-Ideen ohne Nummer', async () => {
@@ -211,7 +227,7 @@ describe('IdeaPlanningBoard', () => {
     expect(screen.getByTestId('pool-item-23')).not.toHaveTextContent('#')
   })
 
-  it('plant eine Pool-Idee per Button ein', async () => {
+  it('plant eine Pool-Idee per Button auf das erste Board ein', async () => {
     setup()
     renderBoard()
     await screen.findByText('Pool 1')
@@ -221,7 +237,7 @@ describe('IdeaPlanningBoard', () => {
     await waitFor(() => expect(mIdeas.planOntoBoard).toHaveBeenCalledWith(20, 10))
   })
 
-  it('holt eine Backlog-Karte per Button in den Pool', async () => {
+  it('holt eine Board-Karte per Button in den Pool', async () => {
     setup()
     renderBoard()
     await screen.findByText('Backlog A')
@@ -231,31 +247,46 @@ describe('IdeaPlanningBoard', () => {
     await waitFor(() => expect(mIdeas.moveBackToPool).toHaveBeenCalledWith(1))
   })
 
-  it('plant per Drag von Pool auf das Backlog ein', async () => {
+  it('plant per Drag von Pool auf ein beliebiges Board ein (nicht nur das erste)', async () => {
     setup()
     renderBoard()
     await screen.findByText('Pool 1')
 
+    // Auf das ZWEITE Board (id 11) ziehen — nicht das erste.
     fireEvent.dragStart(screen.getByTestId('pool-item-20'), dt())
-    fireEvent.dragOver(screen.getByTestId('backlog-zone'), dt())
-    fireEvent.drop(screen.getByTestId('backlog-zone'), dt())
+    fireEvent.dragOver(screen.getByTestId('board-zone-11'), dt())
+    fireEvent.drop(screen.getByTestId('board-zone-11'), dt())
 
-    await waitFor(() => expect(mIdeas.planOntoBoard).toHaveBeenCalledWith(20, 10))
+    await waitFor(() => expect(mIdeas.planOntoBoard).toHaveBeenCalledWith(20, 11))
   })
 
-  it('holt per Drag vom Backlog in den Pool', async () => {
+  it('holt per Drag von einem Board in den Pool', async () => {
     setup()
     renderBoard()
     await screen.findByText('Backlog A')
 
-    fireEvent.dragStart(screen.getByTestId('backlog-item-1'), dt())
+    fireEvent.dragStart(screen.getByTestId('board-item-1'), dt())
     fireEvent.dragOver(screen.getByTestId('pool-zone'), dt())
     fireEvent.drop(screen.getByTestId('pool-zone'), dt())
 
     await waitFor(() => expect(mIdeas.moveBackToPool).toHaveBeenCalledWith(1))
   })
 
-  it('ignoriert einen Drop in dieselbe Zone', async () => {
+  it('löst beim Drop einer Board-Karte auf ein anderes Board (noch) keinen Transfer aus', async () => {
+    // Board→Board-Verschieben ist Issue #426; hier passiert bewusst nichts.
+    setup()
+    renderBoard()
+    await screen.findByText('Backlog A')
+
+    fireEvent.dragStart(screen.getByTestId('board-item-1'), dt())
+    fireEvent.drop(screen.getByTestId('board-zone-11'), dt())
+
+    expect(mIdeas.planOntoBoard).not.toHaveBeenCalled()
+    expect(mIdeas.moveBackToPool).not.toHaveBeenCalled()
+    expect(mCards.move).not.toHaveBeenCalled()
+  })
+
+  it('ignoriert einen Drop einer Pool-Idee zurück in den Pool', async () => {
     setup()
     renderBoard()
     await screen.findByText('Pool 1')
@@ -267,41 +298,41 @@ describe('IdeaPlanningBoard', () => {
     expect(mIdeas.moveBackToPool).not.toHaveBeenCalled()
   })
 
-  it('ignoriert einen Drop ohne vorheriges Dragstart', async () => {
+  it('ignoriert einen Board-Drop ohne vorheriges Dragstart', async () => {
     setup()
     renderBoard()
     await screen.findByText('Backlog A')
 
-    fireEvent.drop(screen.getByTestId('backlog-zone'), dt())
+    fireEvent.drop(screen.getByTestId('board-zone-10'), dt())
 
     expect(mIdeas.planOntoBoard).not.toHaveBeenCalled()
   })
 
-  it('zeigt Leer-Hinweise für Backlog und Pool', async () => {
-    setup({ cards: [], ideas: [] })
+  it('ignoriert einen Pool-Drop ohne vorheriges Dragstart', async () => {
+    setup()
+    renderBoard()
+    await screen.findByText('Pool 1')
+
+    fireEvent.drop(screen.getByTestId('pool-zone'), dt())
+
+    expect(mIdeas.moveBackToPool).not.toHaveBeenCalled()
+  })
+
+  it('zeigt Leer-Hinweise für ein leeres Board-Backlog und einen leeren Pool', async () => {
+    setup({ cardsByBoard: { 10: [], 11: [] }, ideas: [] })
     renderBoard()
 
-    expect(await screen.findByText(/Kein Backlog/i)).toBeInTheDocument()
+    expect(await screen.findAllByText(/Kein Backlog/i)).toHaveLength(2)
     expect(screen.getByText('Keine Ideen im Pool.')).toBeInTheDocument()
   })
 
-  it('springt per „Board öffnen" in die Listenansicht des gewählten Boards', async () => {
+  it('springt per „Board öffnen" in die Listenansicht des jeweiligen Boards', async () => {
     setup()
     renderBoard()
-    await screen.findByText('Backlog A')
+    await screen.findByText('Board Y')
 
-    fireEvent.click(screen.getByRole('button', { name: 'Board öffnen' }))
-
-    expect(screen.getByTestId('location')).toHaveTextContent('/boards/10/list')
-  })
-
-  it('öffnet nach einem Board-Wechsel die Liste des dann gewählten Boards', async () => {
-    setup()
-    renderBoard()
-    await screen.findByText('Backlog A')
-
-    fireEvent.change(screen.getByLabelText('Board wählen'), { target: { value: '11' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Board öffnen' }))
+    // Der „Board öffnen"-Knopf des zweiten Boards führt zu dessen Liste.
+    fireEvent.click(screen.getByRole('button', { name: 'Board Board Y öffnen' }))
 
     expect(screen.getByTestId('location')).toHaveTextContent('/boards/11/list')
   })
@@ -311,8 +342,8 @@ describe('IdeaPlanningBoard', () => {
     renderBoard()
     await screen.findByText('Backlog A')
 
-    // 2 Backlog-Karten + 1 Pool-Idee = 3 ziehbare Zeilen, jede mit Ziehgriff.
-    expect(screen.getAllByLabelText('Ziehen')).toHaveLength(3)
+    // 2 Karten (Board X) + 1 Karte (Board Y) + 1 Pool-Idee = 4 ziehbare Zeilen, jede mit Ziehgriff.
+    expect(screen.getAllByLabelText('Ziehen')).toHaveLength(4)
   })
 
   it('blendet für Betrachter (canEdit=false) alle Aktionen aus', async () => {
@@ -326,35 +357,6 @@ describe('IdeaPlanningBoard', () => {
     expect(screen.getByTestId('pool-item-20')).not.toHaveAttribute('draggable', 'true')
   })
 
-  it('wechselt das Board und lädt dessen Backlog + merkt die Wahl', async () => {
-    setup()
-    renderBoard()
-    await screen.findByText('Backlog A')
-    mCards.list.mockClear()
-
-    fireEvent.change(screen.getByLabelText('Board wählen'), { target: { value: '11' } })
-
-    await waitFor(() => expect(mCards.list).toHaveBeenCalledWith(11))
-    expect(localStorage.getItem('manban.ideaBoard.5')).toBe('11')
-  })
-
-  it('wählt das zuletzt gemerkte Board vor', async () => {
-    localStorage.setItem('manban.ideaBoard.5', '11')
-    setup()
-    renderBoard()
-
-    await waitFor(() => expect(mCards.list).toHaveBeenCalledWith(11))
-    expect((screen.getByLabelText('Board wählen') as HTMLSelectElement).value).toBe('11')
-  })
-
-  it('fällt auf das erste Board zurück, wenn das gemerkte Board nicht mehr existiert', async () => {
-    localStorage.setItem('manban.ideaBoard.5', '999')
-    setup()
-    renderBoard()
-
-    await waitFor(() => expect(mCards.list).toHaveBeenCalledWith(10))
-  })
-
   it('lädt beim Fensterfokus neu', async () => {
     setup()
     renderBoard()
@@ -366,30 +368,6 @@ describe('IdeaPlanningBoard', () => {
 
     await waitFor(() => expect(mCards.list).toHaveBeenCalled())
     expect(mIdeas.list).toHaveBeenCalled()
-  })
-
-  it('bleibt bei einem lokalStorage-Fehler funktionsfähig', async () => {
-    const boom = () => {
-      throw new Error('storage disabled')
-    }
-    vi.stubGlobal('localStorage', {
-      getItem: boom,
-      setItem: boom,
-      removeItem: boom,
-      clear: boom,
-      key: boom,
-      get length() {
-        return 0
-      },
-    } as unknown as Storage)
-    setup()
-    renderBoard()
-
-    // Ohne lesbares localStorage: Fallback auf das erste Board, kein Crash.
-    await waitFor(() => expect(mCards.list).toHaveBeenCalledWith(10))
-    // Board-Wechsel schreibt ins (werfende) localStorage, ohne zu brechen.
-    fireEvent.change(screen.getByLabelText('Board wählen'), { target: { value: '11' } })
-    await waitFor(() => expect(mCards.list).toHaveBeenCalledWith(11))
   })
 
   it('ignoriert eine spät auflösende Board-Antwort nach Unmount', async () => {
@@ -411,15 +389,15 @@ describe('IdeaPlanningBoard', () => {
     expect(mCards.list).not.toHaveBeenCalled()
   })
 
-  it('sortiert eine Backlog-Karte per Drag auf eine andere Zeile um', async () => {
+  it('sortiert eine Board-Karte per Drag auf eine andere Zeile desselben Boards um', async () => {
     setup()
     renderBoard()
     await screen.findByText('Backlog A')
 
     // „Backlog A" (id 1) auf „Backlog Z" (id 5, Spalte 100, Position 1) ziehen.
-    fireEvent.dragStart(screen.getByTestId('backlog-item-1'), dt())
-    fireEvent.dragOver(screen.getByTestId('backlog-item-5'), dt())
-    fireEvent.drop(screen.getByTestId('backlog-item-5'), dt())
+    fireEvent.dragStart(screen.getByTestId('board-item-1'), dt())
+    fireEvent.dragOver(screen.getByTestId('board-item-5'), dt())
+    fireEvent.drop(screen.getByTestId('board-item-5'), dt())
 
     await waitFor(() => expect(mCards.move).toHaveBeenCalledWith(1, 100, 1))
   })
@@ -429,8 +407,8 @@ describe('IdeaPlanningBoard', () => {
     renderBoard()
     await screen.findByText('Backlog A')
 
-    fireEvent.dragStart(screen.getByTestId('backlog-item-1'), dt())
-    fireEvent.drop(screen.getByTestId('backlog-item-1'), dt())
+    fireEvent.dragStart(screen.getByTestId('board-item-1'), dt())
+    fireEvent.drop(screen.getByTestId('board-item-1'), dt())
 
     expect(mCards.move).not.toHaveBeenCalled()
   })
@@ -440,22 +418,91 @@ describe('IdeaPlanningBoard', () => {
     renderBoard()
     await screen.findByText('Backlog A')
 
-    fireEvent.drop(screen.getByTestId('backlog-item-1'), dt())
+    fireEvent.drop(screen.getByTestId('board-item-1'), dt())
 
     expect(mCards.move).not.toHaveBeenCalled()
   })
 
-  it('plant (statt sortieren), wenn eine Pool-Idee auf eine Backlog-Zeile fällt', async () => {
+  it('sortiert nicht um, wenn eine Karte auf eine Zeile eines anderen Boards fällt', async () => {
+    // Board→Board ist Issue #426; eine Zeilen-Umsortierung über Board-Grenzen gibt es nicht.
+    setup()
+    renderBoard()
+    await screen.findByText('Board Y Karte')
+
+    fireEvent.dragStart(screen.getByTestId('board-item-1'), dt())
+    fireEvent.drop(screen.getByTestId('board-item-8'), dt())
+
+    expect(mCards.move).not.toHaveBeenCalled()
+  })
+
+  it('plant (statt sortieren), wenn eine Pool-Idee auf eine Board-Zeile fällt', async () => {
     setup()
     renderBoard()
     await screen.findByText('Pool 1')
 
-    // Pool-Quelle auf eine Backlog-Zeile: die Zeile reicht durch, die Zone plant ein.
+    // Pool-Quelle auf eine Board-Zeile: die Zeile reicht durch, die Zone plant ein.
     fireEvent.dragStart(screen.getByTestId('pool-item-20'), dt())
-    fireEvent.drop(screen.getByTestId('backlog-item-1'), dt())
+    fireEvent.drop(screen.getByTestId('board-item-1'), dt())
 
     await waitFor(() => expect(mIdeas.planOntoBoard).toHaveBeenCalledWith(20, 10))
     expect(mCards.move).not.toHaveBeenCalled()
+  })
+
+  describe('Auto-Scroll beim Ziehen', () => {
+    it('scrollt nach oben, wenn der Zeiger den oberen Rand erreicht', async () => {
+      const scrollBy = vi.fn()
+      vi.stubGlobal('scrollBy', scrollBy)
+      setup()
+      renderBoard()
+      await screen.findByText('Pool 1')
+
+      fireEvent.dragStart(screen.getByTestId('pool-item-20'), dt())
+      window.dispatchEvent(new MouseEvent('dragover', { clientY: 5 }))
+
+      expect(scrollBy).toHaveBeenCalledTimes(1)
+      const [, dy] = scrollBy.mock.calls[0]
+      expect(dy).toBeLessThan(0)
+    })
+
+    it('scrollt nach unten, wenn der Zeiger den unteren Rand erreicht', async () => {
+      const scrollBy = vi.fn()
+      vi.stubGlobal('scrollBy', scrollBy)
+      setup()
+      renderBoard()
+      await screen.findByText('Pool 1')
+
+      fireEvent.dragStart(screen.getByTestId('pool-item-20'), dt())
+      window.dispatchEvent(new MouseEvent('dragover', { clientY: window.innerHeight - 1 }))
+
+      expect(scrollBy).toHaveBeenCalledTimes(1)
+      const [, dy] = scrollBy.mock.calls[0]
+      expect(dy).toBeGreaterThan(0)
+    })
+
+    it('scrollt nicht, solange der Zeiger in der Mitte bleibt', async () => {
+      const scrollBy = vi.fn()
+      vi.stubGlobal('scrollBy', scrollBy)
+      setup()
+      renderBoard()
+      await screen.findByText('Pool 1')
+
+      fireEvent.dragStart(screen.getByTestId('pool-item-20'), dt())
+      window.dispatchEvent(new MouseEvent('dragover', { clientY: Math.round(window.innerHeight / 2) }))
+
+      expect(scrollBy).not.toHaveBeenCalled()
+    })
+
+    it('scrollt nicht ohne laufenden Drag', async () => {
+      const scrollBy = vi.fn()
+      vi.stubGlobal('scrollBy', scrollBy)
+      setup()
+      renderBoard()
+      await screen.findByText('Pool 1')
+
+      window.dispatchEvent(new MouseEvent('dragover', { clientY: 5 }))
+
+      expect(scrollBy).not.toHaveBeenCalled()
+    })
   })
 
   describe('Pool-Idee im Detail-Modal öffnen (#404)', () => {
