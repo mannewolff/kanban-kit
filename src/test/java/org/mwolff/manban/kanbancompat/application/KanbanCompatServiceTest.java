@@ -22,15 +22,21 @@ import org.mwolff.manban.board.application.BoardNotFoundException;
 import org.mwolff.manban.board.application.BoardRepository;
 import org.mwolff.manban.board.domain.Board;
 import org.mwolff.manban.board.domain.BoardColumn;
+import org.mwolff.manban.card.application.CardLabelRepository;
 import org.mwolff.manban.card.application.CardRepository;
 import org.mwolff.manban.card.application.CardService;
 import org.mwolff.manban.card.application.CardService.CardView;
+import org.mwolff.manban.card.application.LabelRepository;
 import org.mwolff.manban.card.domain.Card;
 import org.mwolff.manban.card.domain.CardType;
+import org.mwolff.manban.card.domain.Label;
 import org.mwolff.manban.comment.application.CommentService;
 import org.mwolff.manban.project.application.PermissionChecker;
 
 /** Unit-Tests der Kanban-Compat-Schicht (Spaltennamen-Normalisierung + Verhalten an den Ports). */
+// PMD.TooManyMethods: umfassende Unit-Suite (Spalten-Mapping, Items inkl. Labels, Create/Move/
+// Comment/Epics je Erfolgs- und Fehlerpfad); eine Aufspaltung zerrisse denselben Testkontext.
+@SuppressWarnings("PMD.TooManyMethods")
 class KanbanCompatServiceTest {
 
   private static final Instant FIXED = Instant.parse("2026-01-02T03:04:05Z");
@@ -42,6 +48,8 @@ class KanbanCompatServiceTest {
   private CardService cardService;
   private CommentService commentService;
   private PermissionChecker permissions;
+  private LabelRepository labels;
+  private CardLabelRepository cardLabels;
   private KanbanCompatService service;
 
   private static KanbanPrincipal bound() {
@@ -138,8 +146,11 @@ class KanbanCompatServiceTest {
     cardService = mock(CardService.class);
     commentService = mock(CommentService.class);
     permissions = mock(PermissionChecker.class);
+    labels = mock(LabelRepository.class);
+    cardLabels = mock(CardLabelRepository.class);
     service =
-        new KanbanCompatService(cards, columns, boards, cardService, commentService, permissions);
+        new KanbanCompatService(
+            cards, columns, boards, cardService, commentService, permissions, labels, cardLabels);
   }
 
   @ParameterizedTest
@@ -519,5 +530,67 @@ class KanbanCompatServiceTest {
     // When / Then
     assertThatThrownBy(() -> service.comment(bound(), 1L, "Kommentar"))
         .isInstanceOf(org.mwolff.manban.card.application.CardNotFoundException.class);
+  }
+
+  private static Label label(long id, String name) {
+    return new Label(id, BOARD, name, "#000");
+  }
+
+  @Test
+  void items_exposesLabelNamesPerCard() {
+    // Given: eine Karte mit zwei zugeordneten Labels (IDs), Namen kommen aus dem Board.
+    when(boards.findById(BOARD)).thenReturn(Optional.of(new Board(BOARD, 5L, "B", FIXED)));
+    when(columns.findByBoardId(BOARD)).thenReturn(standardColumns());
+    when(cards.findByBoardId(BOARD)).thenReturn(List.of(card(1L, 100L, 1)));
+    when(labels.findByBoardId(BOARD)).thenReturn(List.of(label(7L, "Bug"), label(8L, "Ux")));
+    when(cardLabels.findByCardIds(List.of(1L))).thenReturn(Map.of(1L, List.of(7L, 8L)));
+
+    // When
+    Map<String, List<KanbanCompatService.Item>> grouped = service.items(bound());
+
+    // Then: pro Karte die Label-Namen (nicht IDs)
+    assertThat(grouped.get("BACKLOG"))
+        .singleElement()
+        .extracting(KanbanCompatService.Item::labels)
+        .isEqualTo(List.of("Bug", "Ux"));
+  }
+
+  @Test
+  void items_returnsEmptyLabels_forCardWithoutLabels() {
+    // Given: Board hat Labels, aber die Karte ist keinem zugeordnet.
+    when(boards.findById(BOARD)).thenReturn(Optional.of(new Board(BOARD, 5L, "B", FIXED)));
+    when(columns.findByBoardId(BOARD)).thenReturn(standardColumns());
+    when(cards.findByBoardId(BOARD)).thenReturn(List.of(card(1L, 100L, 1)));
+    when(labels.findByBoardId(BOARD)).thenReturn(List.of(label(7L, "Bug")));
+    when(cardLabels.findByCardIds(List.of(1L))).thenReturn(Map.of());
+
+    // When
+    Map<String, List<KanbanCompatService.Item>> grouped = service.items(bound());
+
+    // Then: leere Liste, nicht null
+    assertThat(grouped.get("BACKLOG"))
+        .singleElement()
+        .extracting(KanbanCompatService.Item::labels)
+        .isEqualTo(List.of());
+  }
+
+  @Test
+  void items_ordersLabelsByBoardDefinition_notByAssignment() {
+    // Given: die Zuordnung nennt die Labels in umgekehrter Reihenfolge (8, 7), das Board definiert
+    // sie als (7 "Bug", 8 "Ux"). Ausschlaggebend ist die Board-Definitionsreihenfolge.
+    when(boards.findById(BOARD)).thenReturn(Optional.of(new Board(BOARD, 5L, "B", FIXED)));
+    when(columns.findByBoardId(BOARD)).thenReturn(standardColumns());
+    when(cards.findByBoardId(BOARD)).thenReturn(List.of(card(1L, 100L, 1)));
+    when(labels.findByBoardId(BOARD)).thenReturn(List.of(label(7L, "Bug"), label(8L, "Ux")));
+    when(cardLabels.findByCardIds(List.of(1L))).thenReturn(Map.of(1L, List.of(8L, 7L)));
+
+    // When
+    Map<String, List<KanbanCompatService.Item>> grouped = service.items(bound());
+
+    // Then: Board-Reihenfolge (Bug, Ux), nicht Zuordnungsreihenfolge (Ux, Bug)
+    assertThat(grouped.get("BACKLOG"))
+        .singleElement()
+        .extracting(KanbanCompatService.Item::labels)
+        .isEqualTo(List.of("Bug", "Ux"));
   }
 }

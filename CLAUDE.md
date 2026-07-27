@@ -52,7 +52,7 @@ Diese Datei ist der Einstiegspunkt für alle Engineering-Regeln in diesem Projek
 
 **Verbindung Frontend↔Backend:** Im Dev leitet der Vite-Dev-Server (`:5173`) `/api/*` an Spring Boot auf `:8080` weiter. In Produktion serviert Spring Boot den React-Build aus `classpath:/static/` (SPA-Forwarding über [`SpaWebConfig`](src/main/java/org/mwolff/manban/config/SpaWebConfig.java)); davor liegt Caddy als Reverse-Proxy mit TLS. Eine Origin, kein CORS.
 
-**Identity / Auth:** Authentifizierung ist projekteigen — kein externer Identity-Provider. Registrierung mit E-Mail-Verifikation, Passwort-Reset per Token/Mail, ein per Bootstrap-Token angelegter erster Plattform-Admin, sowie signierte Session-Tokens (HttpOnly-Cookie). Für den Kanban-kompatiblen Ingest ohne Login gibt es projektgebundene Access-Tokens (`accesstoken` + `kanbancompat`). Autorisierung ist rollenbasiert: **Projekt-Rollen** (RBAC pro Projekt) plus **Plattform-Admin**. Rollen- und Rechte-Matrix: [rollen_rechte.md](rollen_rechte.md).
+**Identity / Auth:** Authentifizierung ist projekteigen — kein externer Identity-Provider. Registrierung mit E-Mail-Verifikation, Passwort-Reset per Token/Mail, ein per Bootstrap-Token angelegter erster Plattform-Admin, sowie signierte Session-Tokens (HttpOnly-Cookie). Für den Kanban-kompatiblen Ingest ohne Login gibt es projektgebundene Access-Tokens (`accesstoken` + `kanbancompat`). Autorisierung ist rollenbasiert: **Projekt-Rollen** (RBAC pro Projekt) plus **Plattform-Admin**. Rollen- und Rechte-Matrix: [docs/rollen-und-rechte.md](docs/rollen-und-rechte.md).
 
 ---
 

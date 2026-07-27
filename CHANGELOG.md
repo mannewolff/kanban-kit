@@ -7,6 +7,24 @@ Versionierung folgt der dreiteiligen Betriebsversion (siehe [RELEASING.md](RELEA
 Einträge je Version sind ein automatischer Auszug der Commit-Titel seit dem letzten Release,
 erzeugt von `scripts/gen-changelog.mjs`.
 
+## [1.10.0] – 2026-07-27
+
+- Release 1.9.1 (push main)
+- Doku: nutzung.md an den Batch anpassen ([#436](https://github.com/mannewolff/kanban-kit/issues/436))
+- kanbancompat: Labels je Karte exponieren ([#457](https://github.com/mannewolff/kanban-kit/issues/457))
+- Ideen-Pool: Beschriftung und Erfolgs-Toast beim Verschieben ([#435](https://github.com/mannewolff/kanban-kit/issues/435))
+- Ideen-Seite: Listen-Ansicht entfernen, Suche in die Planen-Ansicht ([#431](https://github.com/mannewolff/kanban-kit/issues/431))
+- Ideenbereich: Karte per Drag von Board zu Board verschieben ([#426](https://github.com/mannewolff/kanban-kit/issues/426))
+- Ideenbereich: alle Boards untereinander statt Board-Auswahl ([#425](https://github.com/mannewolff/kanban-kit/issues/425))
+- Rechte-Matrix vervollstaendigen und Doppelung aufloesen ([#437](https://github.com/mannewolff/kanban-kit/issues/437))
+- Karten-Menü: zwei Verschieben-Einträge statt einer Zielspalten-Liste ([#430](https://github.com/mannewolff/kanban-kit/issues/430))
+- Spalten-Plus entfernen, Taste + löst Neu anlegen aus ([#429](https://github.com/mannewolff/kanban-kit/issues/429))
+- Transfer-Recht richtungsabhängig: projektintern CARD_MOVE statt OWNER ([#424](https://github.com/mannewolff/kanban-kit/issues/424))
+- Rechtliches-Abschnitt in der Administration: Copyright und MIT-Hinweis ([#423](https://github.com/mannewolff/kanban-kit/issues/423))
+- MIT-Lizenz im Repository verankern ([#422](https://github.com/mannewolff/kanban-kit/issues/422))
+- Bulk-Verschieben überträgt die Sichtreihenfolge statt der Klick-Reihenfolge ([#418](https://github.com/mannewolff/kanban-kit/issues/418))
+- issues/ als lokalen Board-Fallback ins .gitignore aufnehmen
+
 ## [1.9.0] – 2026-07-27
 
 - Release 1.8.2 (push main)

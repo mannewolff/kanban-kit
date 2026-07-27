@@ -1400,16 +1400,34 @@ class CardServiceTest {
   }
 
   @Test
-  void transfer_requiresOwnerInBothProjects() {
+  void transfer_acrossProjects_requiresOwnerInBothProjects() {
     // Given
     stubTransferScenario(null);
 
     // When
     service.transfer(1L, 100L, 20L, 60L);
 
-    // Then — Quellprojekt (1) und Zielprojekt (2)
+    // Then — Quellprojekt (1) und Zielprojekt (2); das Verschieberecht genügt hier nicht
     verify(permissions).requireOwner(1L, 1L);
     verify(permissions).requireOwner(1L, 2L);
+    verify(permissions, never()).require(anyLong(), anyLong(), any(Permission.class));
+  }
+
+  @Test
+  void transfer_sameProject_requiresCardMoveInsteadOfOwner() {
+    // Given: Ziel-Board liegt im SELBEN Projekt (1) wie die Quelle.
+    when(cards.findById(100L))
+        .thenReturn(Optional.of(card(100L, 50L, 3, false, FIXED, CardType.CARD, null, null)));
+    when(boards.findById(20L)).thenReturn(Optional.of(new Board(20L, 1L, "Ziel", FIXED)));
+    when(columns.findById(60L))
+        .thenReturn(Optional.of(new BoardColumn(60L, 20L, "Backlog", 0, null)));
+
+    // When
+    service.transfer(1L, 100L, 20L, 60L);
+
+    // Then — projektintern genügt das Verschieberecht, Eigentümer wird nicht verlangt
+    verify(permissions).require(1L, 1L, Permission.CARD_MOVE);
+    verify(permissions, never()).requireOwner(anyLong(), anyLong());
   }
 
   @Test

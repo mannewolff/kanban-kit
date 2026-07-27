@@ -610,11 +610,17 @@ export function CardDetailModal({
     onClose()
   }
 
-  // In den Ideen-Speicher: Alltags-Aktion (an canEdit gebunden, nicht editiermodus-gegatet).
+  // In den Ideen-Pool: Alltags-Aktion (an canEdit gebunden, nicht editiermodus-gegatet).
   const moveToIdeaStorage = async () => {
-    await cardsApi.moveToIdeaStorage(card.id)
-    onChanged?.()
-    onClose()
+    try {
+      await cardsApi.moveToIdeaStorage(card.id)
+      onChanged?.()
+      notify('In den Ideen-Pool verschoben — unter Ideen zu finden.', 'success')
+      onClose()
+    } catch {
+      // Bei einem Fehler bleibt der Dialog offen — die Karte verschwindet nicht.
+      notify('In den Ideen-Pool verschieben fehlgeschlagen.', 'error')
+    }
   }
 
   const [activities, setActivities] = useState<CardActivity[]>([])
@@ -957,7 +963,7 @@ export function CardDetailModal({
               <Button onClick={() => void restore()}>Wiederherstellen</Button>
             )}
             {canEdit && !card.archived && !card.ideaStored && !isEpic && (
-              <Button onClick={() => void moveToIdeaStorage()}>In Ideen-Speicher</Button>
+              <Button onClick={() => void moveToIdeaStorage()}>In den Ideen-Pool</Button>
             )}
             <Button onClick={onClose}>Schließen</Button>
           </>

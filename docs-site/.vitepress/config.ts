@@ -48,6 +48,7 @@ export default defineConfig({
           { text: "Labels", link: "/nutzung#labels" },
           { text: "Papierkorb", link: "/nutzung#papierkorb" },
           { text: "Listen-Ansicht", link: "/nutzung#listen-ansicht" },
+          { text: "Ideen-Pool", link: "/nutzung#ideen-pool" },
           { text: "Dashboard (Kennzahlen)", link: "/nutzung#dashboard-kennzahlen" },
           { text: "Epics", link: "/nutzung#epics" },
           { text: "Mitglieder", link: "/nutzung#mitglieder" },

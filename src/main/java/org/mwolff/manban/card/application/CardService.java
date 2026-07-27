@@ -512,16 +512,17 @@ public class CardService {
   }
 
   /**
-   * Verschiebt eine Karte in eine Spalte eines anderen Boards. Nur möglich, wenn der Benutzer im
-   * Quell- und im Zielprojekt OWNER (oder Plattform-Admin) ist; die Karte landet am Ende der
-   * Zielspalte. Richtungsabhängig:
+   * Verschiebt eine Karte in eine Spalte eines anderen Boards; die Karte landet am Ende der
+   * Zielspalte. Rechte und Nebenwirkungen sind richtungsabhängig:
    *
    * <ul>
-   *   <li><b>Selbes Projekt:</b> die Nummer bleibt erhalten (projektweit ohnehin eindeutig),
-   *       Abhängigkeiten und Zuständige wandern mit — so brechen Querverweise beim Board-Wechsel
-   *       nicht.
-   *   <li><b>Anderes Projekt:</b> die Karte erhält eine neue projekt-scoped Nummer; Abhängigkeiten
-   *       und Zuständige (projekt-lokal) werden entfernt.
+   *   <li><b>Selbes Projekt:</b> es genügt {@link Permission#CARD_MOVE} — dasselbe Recht wie für
+   *       das Verschieben innerhalb eines Boards und für den Rückweg aus dem Ideen-Pool. Die Nummer
+   *       bleibt erhalten (projektweit ohnehin eindeutig), Abhängigkeiten und Zuständige wandern
+   *       mit — so brechen Querverweise beim Board-Wechsel nicht.
+   *   <li><b>Anderes Projekt:</b> der Benutzer muss im Quell- <em>und</em> im Zielprojekt OWNER
+   *       (oder Plattform-Admin) sein. Die Karte erhält eine neue projekt-scoped Nummer;
+   *       Abhängigkeiten und Zuständige (projekt-lokal) werden entfernt.
    * </ul>
    *
    * <p>Die board-lokale Epic-Zuordnung wird in beiden Fällen entfernt (das Ziel-Board hat eigene
@@ -542,15 +543,22 @@ public class CardService {
     Board targetBoard = boards.findById(targetBoardId).orElseThrow(BoardNotFoundException::new);
     BoardColumn targetColumn = requireColumnInBoard(targetColumnId, targetBoardId);
 
-    permissions.requireOwner(userId, sourceBoard.projectId());
-    permissions.requireOwner(userId, targetBoard.projectId());
+    boolean sameProject = Objects.equals(sourceBoard.projectId(), targetBoard.projectId());
+    // Projektintern ist der Board-Wechsel nur ein Verschieben und verlangt daher CARD_MOVE — genau
+    // das Recht, das auch der Rückweg in den Ideen-Pool verlangt. Über Projektgrenzen bleibt es bei
+    // der strengen Eigentümer-Prüfung in beiden Projekten.
+    if (sameProject) {
+      permissions.require(userId, sourceBoard.projectId(), Permission.CARD_MOVE);
+    } else {
+      permissions.requireOwner(userId, sourceBoard.projectId());
+      permissions.requireOwner(userId, targetBoard.projectId());
+    }
 
     // Innerhalb desselben Projekts bleibt die Nummer erhalten (projektweit ohnehin eindeutig) und
     // Abhängigkeiten/Zuständige wandern mit — nur so bleiben Querverweise beim Board-Wechsel
     // stabil.
     // Nur über Projektgrenzen wird neu nummeriert und werden die projekt-lokalen Verknüpfungen
     // (Abhängigkeiten, Zuständige) entfernt.
-    boolean sameProject = Objects.equals(sourceBoard.projectId(), targetBoard.projectId());
     int newNumber =
         sameProject ? card.requireNumber() : cards.nextCardNumber(targetBoard.projectId());
     cards.transfer(cardId, targetBoardId, targetColumnId, newNumber);
@@ -575,8 +583,9 @@ public class CardService {
   /**
    * Verschiebt mehrere Karten in einer Transaktion auf dasselbe Zielboard und dieselbe Zielspalte
    * (alles-oder-nichts). Nutzt je Karte die Einzel-Logik von {@link #transfer(long, long, long,
-   * long)} inklusive Owner-Prüfung in Quell- und Zielprojekt sowie Epic-Ausschluss; scheitert eine
-   * Karte, rollt der gesamte Batch zurück. Die Karten landen in Eingabereihenfolge am Ende der
+   * long)} inklusive der richtungsabhängigen Rechteprüfung ({@link Permission#CARD_MOVE} innerhalb
+   * des Projekts, OWNER in Quell- und Zielprojekt darüber hinaus) sowie Epic-Ausschluss; scheitert
+   * eine Karte, rollt der gesamte Batch zurück. Die Karten landen in Eingabereihenfolge am Ende der
    * Zielspalte, jede Quellspalte wird dabei lückenlos nachgezogen.
    */
   @Transactional

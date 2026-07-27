@@ -4,101 +4,94 @@ import Button from '@mui/material/Button'
 import Link from '@mui/material/Link'
 import Paper from '@mui/material/Paper'
 import Stack from '@mui/material/Stack'
-import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator'
 import NorthOutlinedIcon from '@mui/icons-material/NorthOutlined'
 import SouthOutlinedIcon from '@mui/icons-material/SouthOutlined'
 import ViewListIcon from '@mui/icons-material/ViewList'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { boardsApi, type Board } from '../api/boards'
 import { cardsApi, type Card } from '../api/cards'
 import { ideasApi, type Idea } from '../api/ideas'
 import { membersApi, type Member } from '../api/members'
 import { CardDetailModal } from './CardDetailModal'
+import { useSnackbar } from './SnackbarProvider'
 import { useRefetchOnFocus } from '../lib/useRefetchOnFocus'
 
-/** Merkt das zuletzt im Planungs-Board gewählte Board je Projekt. */
-function boardStorageKey(projectId: number): string {
-  return `manban.ideaBoard.${projectId}`
+/** Erste Spalte eines Boards (kleinste Position); `null`, wenn das Board keine Spalte hat. */
+function firstColumnOf(board: Board): number | null {
+  if (board.columns.length === 0) return null
+  return [...board.columns].sort((a, b) => a.position - b.position)[0].id
 }
-
-function readSelectedBoard(projectId: number): number | null {
-  try {
-    const raw = localStorage.getItem(boardStorageKey(projectId))
-    return raw ? Number(raw) : null
-  } catch {
-    return null
-  }
-}
-
-function writeSelectedBoard(projectId: number, boardId: number): void {
-  try {
-    localStorage.setItem(boardStorageKey(projectId), String(boardId))
-  } catch {
-    // localStorage nicht verfügbar — kein Hard-Fail
-  }
-}
-
-/** Quelle eines laufenden Drags: aus dem Pool oder aus dem Backlog. */
-type DragSource = 'pool' | 'backlog'
 
 /**
- * Gestapeltes Sprint-Planning-Board (Jira-Stil): oben das Backlog (erste Spalte) des gewählten
- * Boards, unten der projektweite, board-lose Ideen-Pool. Ideen werden per Drag & Drop (oder per
- * Button) hoch ins Backlog eingeplant und Backlog-Karten runter in den Pool geholt. Das Umsortieren
- * innerhalb des Backlogs ist bewusst nicht Teil dieser Komponente (Folge-Issue).
+ * Quelle eines laufenden Drags: aus dem projektweiten Ideen-Pool oder aus einem konkreten Board
+ * (dann trägt der Drag die Herkunfts-Board-ID mit, um Quelle und Ziel unterscheiden zu können).
+ */
+type DragState =
+  | { source: 'pool'; id: number }
+  | { source: 'board'; boardId: number; id: number }
+
+// Ab diesem Zeiger-Abstand (px) zum oberen/unteren Fensterrand scrollt die Seite beim Ziehen mit.
+const EDGE_PX = 80
+const SCROLL_STEP_PX = 16
+
+/**
+ * Gestapelte Planungs-Ansicht (Jira-Stil): alle Boards des Projekts untereinander, je Board seine
+ * erste Spalte, darunter der projektweite, board-lose Ideen-Pool. Ideen werden per Drag & Drop (oder
+ * per Button) auf ein beliebiges Board eingeplant und Board-Karten zurück in den Pool geholt. Das
+ * Umsortieren innerhalb einer Board-Spalte ist möglich; eine bereits eingeplante Karte lässt sich
+ * per Drag von einem Board auf ein anderes verschieben (Transfer in dessen erste Spalte).
+ *
+ * `filter` grenzt die Anzeige des Pools nach Idee-Titel ein (Groß-/Kleinschreibung egal); die
+ * Backlog-Zonen der Boards bleiben davon unberührt. `refreshKey` ist ein Reload-Impuls von außen:
+ * Bei jeder Änderung werden Pool und Backlogs neu geladen (z. B. nach „Idee anlegen" auf der Seite).
  */
 export function IdeaPlanningBoard({
   projectId,
   canEdit,
-}: Readonly<{ projectId: number; canEdit: boolean }>) {
+  filter = '',
+  refreshKey,
+}: Readonly<{ projectId: number; canEdit: boolean; filter?: string; refreshKey?: number }>) {
   const [boards, setBoards] = useState<Board[]>([])
-  // 0 = noch kein Board gewählt/geladen; sobald Boards da sind, steht hier eine echte Board-ID.
-  const [selectedBoardId, setSelectedBoardId] = useState<number>(0)
-  const [backlog, setBacklog] = useState<Card[]>([])
+  // Backlog-Karten je Board-ID (erste Spalte, aktiv, keine Ideen), nach Position sortiert.
+  const [cardsByBoard, setCardsByBoard] = useState<Record<number, Card[]>>({})
   const [pool, setPool] = useState<Idea[]>([])
   const [members, setMembers] = useState<Member[]>([])
   // Board-lose Pool-Idee, die im Detail-Modal geöffnet ist (null = geschlossen).
   const [selectedIdea, setSelectedIdea] = useState<Idea | null>(null)
-  const [dragged, setDragged] = useState<{ source: DragSource; id: number } | null>(null)
+  const [dragged, setDragged] = useState<DragState | null>(null)
   const navigate = useNavigate()
+  const notify = useSnackbar()
 
   useEffect(() => {
     let active = true
     void boardsApi.list(projectId).then((bs) => {
       if (!active) return
       setBoards(bs)
-      const stored = readSelectedBoard(projectId)
-      const initial = stored !== null && bs.some((b) => b.id === stored) ? stored : (bs[0]?.id ?? 0)
-      setSelectedBoardId(initial)
     })
     return () => {
       active = false
     }
   }, [projectId])
 
-  const firstColumnId = useMemo(() => {
-    const cols = boards.find((b) => b.id === selectedBoardId)?.columns ?? []
-    if (cols.length === 0) return null
-    return [...cols].sort((a, b) => a.position - b.position)[0].id
-  }, [boards, selectedBoardId])
-
-  const loadBacklog = useCallback(() => {
-    if (firstColumnId === null) {
-      setBacklog([])
-      return Promise.resolve()
-    }
-    const columnId = firstColumnId
-    return cardsApi.list(selectedBoardId).then((cs) => {
-      setBacklog(
-        cs
-          .filter((c) => c.columnId === columnId && !c.archived && !c.ideaStored)
-          .sort((a, b) => a.positionInColumn - b.positionInColumn),
-      )
-    })
-  }, [selectedBoardId, firstColumnId])
+  const loadBacklogs = useCallback(async () => {
+    const entries = await Promise.all(
+      boards.map(async (board) => {
+        const columnId = firstColumnOf(board)
+        if (columnId === null) return [board.id, [] as Card[]] as const
+        const cs = await cardsApi.list(board.id)
+        return [
+          board.id,
+          cs
+            .filter((c) => c.columnId === columnId && !c.archived && !c.ideaStored)
+            .sort((a, b) => a.positionInColumn - b.positionInColumn),
+        ] as const
+      }),
+    )
+    setCardsByBoard(Object.fromEntries(entries))
+  }, [boards])
 
   const loadPool = useCallback(
     () => ideasApi.list(projectId).then((is) => setPool(is.filter((i) => i.boardId === null))),
@@ -106,8 +99,8 @@ export function IdeaPlanningBoard({
   )
 
   useEffect(() => {
-    void loadBacklog()
-  }, [loadBacklog])
+    void loadBacklogs()
+  }, [loadBacklogs])
   useEffect(() => {
     void loadPool()
   }, [loadPool])
@@ -118,21 +111,44 @@ export function IdeaPlanningBoard({
   }, [projectId])
 
   useRefetchOnFocus(() => {
-    void loadBacklog().catch(() => {})
+    void loadBacklogs().catch(() => {})
     void loadPool().catch(() => {})
   })
 
+  // Auto-Scroll: nähert sich der Zeiger während eines Drags dem oberen/unteren Fensterrand, scrollt
+  // die Seite mit. HTML5-Drag scrollt von sich aus nicht — ohne das ist die gestapelte Ansicht bei
+  // vielen Boards unbenutzbar (Pool unten, Zielboard womöglich weit oben).
+  useEffect(() => {
+    if (dragged === null) return
+    const onDragOver = (e: DragEvent) => {
+      if (e.clientY < EDGE_PX) window.scrollBy(0, -SCROLL_STEP_PX)
+      else if (e.clientY > window.innerHeight - EDGE_PX) window.scrollBy(0, SCROLL_STEP_PX)
+    }
+    window.addEventListener('dragover', onDragOver)
+    return () => window.removeEventListener('dragover', onDragOver)
+  }, [dragged])
+
   const reload = useCallback(
-    () => Promise.all([loadBacklog(), loadPool()]),
-    [loadBacklog, loadPool],
+    () => Promise.all([loadBacklogs(), loadPool()]),
+    [loadBacklogs, loadPool],
   )
 
+  // Externer Reload-Impuls (z. B. nach „Idee anlegen" auf der Seite): bei jeder Änderung von
+  // refreshKey Pool und Backlogs neu laden. Der erste Render und die verzögerte Board-Ladung
+  // (unveränderter refreshKey) lösen bewusst nichts aus.
+  const seenRefresh = useRef(refreshKey)
+  useEffect(() => {
+    if (seenRefresh.current === refreshKey) return
+    seenRefresh.current = refreshKey
+    void reload().catch(() => {})
+  }, [refreshKey, reload])
+
   const plan = useCallback(
-    async (cardId: number) => {
-      await ideasApi.planOntoBoard(cardId, selectedBoardId)
+    async (cardId: number, boardId: number) => {
+      await ideasApi.planOntoBoard(cardId, boardId)
       await reload()
     },
-    [selectedBoardId, reload],
+    [reload],
   )
 
   const toPool = useCallback(
@@ -143,36 +159,64 @@ export function IdeaPlanningBoard({
     [reload],
   )
 
-  const onSelectBoard = (value: number) => {
-    setSelectedBoardId(value)
-    writeSelectedBoard(projectId, value)
-  }
+  // Eine bereits eingeplante Karte von einem Board auf ein anderes verschieben: in die erste Spalte
+  // des Zielboards. Ohne optimistisches Entfernen — erst der Reload nach Erfolg ändert die Ansicht,
+  // scheitert der Transfer, bleibt sie unverändert und der Nutzer bekommt eine verständliche Meldung.
+  const transfer = useCallback(
+    async (cardId: number, target: Board) => {
+      const targetColumnId = firstColumnOf(target)
+      if (targetColumnId === null) return
+      try {
+        await cardsApi.transfer(cardId, target.id, targetColumnId)
+        await reload()
+      } catch {
+        notify('Verschieben auf das andere Board fehlgeschlagen.', 'error')
+      }
+    },
+    [reload, notify],
+  )
 
-  const startDrag = (source: DragSource, id: number) => (e: React.DragEvent) => {
+  const startPoolDrag = (id: number) => (e: React.DragEvent) => {
     e.dataTransfer.setData('text/plain', String(id))
-    setDragged({ source, id })
+    setDragged({ source: 'pool', id })
   }
 
-  const handleDrop = (zone: DragSource) => (e: React.DragEvent) => {
+  const startBoardDrag = (boardId: number, id: number) => (e: React.DragEvent) => {
+    e.dataTransfer.setData('text/plain', String(id))
+    setDragged({ source: 'board', boardId, id })
+  }
+
+  // Drop auf die Zone eines Boards: aus dem Pool → auf dieses Board einplanen; von einem anderen
+  // Board → dorthin verschieben (Transfer). Ein Drop auf das Herkunfts-Board tut nichts.
+  const handleBoardDrop = (board: Board) => (e: React.DragEvent) => {
     e.preventDefault()
     const d = dragged
     setDragged(null)
     if (d === null) return
-    if (zone === 'backlog' && d.source === 'pool') void plan(d.id)
-    else if (zone === 'pool' && d.source === 'backlog') void toPool(d.id)
+    if (d.source === 'pool') void plan(d.id, board.id)
+    else if (d.boardId !== board.id) void transfer(d.id, board)
+  }
+
+  // Drop auf die Pool-Zone: eine Board-Karte zurück in den board-losen Pool holen.
+  const handlePoolDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    const d = dragged
+    setDragged(null)
+    if (d === null) return
+    if (d.source === 'board') void toPool(d.id)
   }
 
   const reorder = async (cardId: number, columnId: number, position: number) => {
     await cardsApi.move(cardId, columnId, position)
-    await loadBacklog()
+    await loadBacklogs()
   }
 
-  // Drop einer Backlog-Karte auf eine andere: an deren Position einsortieren (gleiche Spalte).
-  // Andere Fälle (Pool-Quelle, Drop auf sich selbst, kein Drag) durchreichen — der Pool→Backlog-
-  // Drop wird dann von der Zonen-Ebene (handleDrop) verarbeitet.
-  const handleBacklogRowDrop = (target: Card) => (e: React.DragEvent) => {
+  // Drop einer Board-Karte auf eine andere Zeile DESSELBEN Boards: an deren Position einsortieren.
+  // Andere Fälle (Pool-Quelle, fremdes Board, Drop auf sich selbst, kein Drag) durchreichen — den
+  // Pool→Board-Drop verarbeitet dann die Zonen-Ebene (handleBoardDrop).
+  const handleBoardRowDrop = (boardId: number, target: Card) => (e: React.DragEvent) => {
     const d = dragged
-    if (d === null || d.source !== 'backlog' || d.id === target.id) return
+    if (d === null || d.source !== 'board' || d.boardId !== boardId || d.id === target.id) return
     e.preventDefault()
     e.stopPropagation()
     setDragged(null)
@@ -187,101 +231,98 @@ export function IdeaPlanningBoard({
     )
   }
 
+  // Suchfeld der Seite grenzt nur den Pool nach Titel ein; leeres Feld zeigt alles.
+  const query = filter.trim().toLowerCase()
+  const visiblePool = query ? pool.filter((idea) => idea.title.toLowerCase().includes(query)) : pool
+
   return (
     <Box>
-      <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 2 }}>
-        <TextField
-          select
-          size="small"
-          label="Board"
-          value={String(selectedBoardId)}
-          onChange={(e) => onSelectBoard(Number(e.target.value))}
-          slotProps={{ htmlInput: { 'aria-label': 'Board wählen' }, select: { native: true } }}
-          sx={{ minWidth: 220 }}
-        >
-          {boards.map((board) => (
-            <option key={board.id} value={board.id}>
-              {board.name}
-            </option>
-          ))}
-        </TextField>
-        {/* Direkt in die Listenansicht des Boards springen — das Planungstool mit allen Items,
-            statt über Projekte/Boards zu navigieren. */}
-        <Button
-          variant="outlined"
-          startIcon={<ViewListIcon />}
-          onClick={() => navigate(`/boards/${selectedBoardId}/list`)}
-        >
-          Board öffnen
-        </Button>
-      </Stack>
-
-      {/* Obere Zone: Backlog des gewählten Boards (Ziel beim Einplanen). */}
-      <Box
-        data-testid="backlog-zone"
-        onDragOver={(e) => e.preventDefault()}
-        onDrop={handleDrop('backlog')}
-        sx={{ minHeight: 80, borderRadius: 1.5, p: 1 }}
-      >
-        <Typography
-          variant="subtitle2"
-          sx={{ fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.03em', color: 'text.secondary', mb: 1 }}
-        >
-          Backlog
-        </Typography>
-        {backlog.length === 0 ? (
-          <Typography variant="body2" color="text.secondary" sx={{ py: 1 }}>
-            Kein Backlog — zieh eine Idee herauf.
-          </Typography>
-        ) : (
-          <Stack spacing={0.75}>
-            {backlog.map((card) => (
-              <Paper
-                key={card.id}
-                data-testid={`backlog-item-${card.id}`}
-                variant="outlined"
-                draggable={canEdit}
-                onDragStart={startDrag('backlog', card.id)}
-                onDragOver={(e) => e.preventDefault()}
-                onDrop={handleBacklogRowDrop(card)}
-                sx={{ px: 1.5, py: 1, display: 'flex', alignItems: 'center', gap: 1.5, cursor: canEdit ? 'grab' : 'default' }}
+      {/* Alle Boards des Projekts untereinander, je Board seine erste Spalte (Ziel beim Einplanen). */}
+      {boards.map((board) => {
+        const cards = cardsByBoard[board.id] ?? []
+        return (
+          <Box key={board.id} sx={{ mb: 3 }}>
+            <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
+              <Typography
+                variant="subtitle2"
+                sx={{ fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.03em', color: 'text.secondary', flex: 1, minWidth: 0 }}
               >
-                {canEdit && (
-                  <DragIndicatorIcon
-                    fontSize="small"
-                    aria-label="Ziehen"
-                    sx={{ flexShrink: 0, color: 'action.disabled' }}
-                  />
-                )}
-                <Typography variant="caption" color="text.secondary" sx={{ width: 48, flexShrink: 0 }}>
-                  #{card.number}
+                {board.name}
+              </Typography>
+              {/* Direkt in die Listenansicht dieses Boards springen. */}
+              <Button
+                size="small"
+                variant="outlined"
+                startIcon={<ViewListIcon />}
+                aria-label={`Board ${board.name} öffnen`}
+                onClick={() => navigate(`/boards/${board.id}/list`)}
+              >
+                Board öffnen
+              </Button>
+            </Stack>
+
+            <Box
+              data-testid={`board-zone-${board.id}`}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={handleBoardDrop(board)}
+              sx={{ minHeight: 64, borderRadius: 1.5, p: 1, bgcolor: 'background.default' }}
+            >
+              {cards.length === 0 ? (
+                <Typography variant="body2" color="text.secondary" sx={{ py: 1 }}>
+                  Kein Backlog — zieh eine Idee herauf.
                 </Typography>
-                <Typography variant="body2" noWrap sx={{ flex: 1, minWidth: 0, fontWeight: 500 }}>
-                  {card.title}
-                </Typography>
-                {canEdit && (
-                  <Button
-                    size="small"
-                    startIcon={<SouthOutlinedIcon />}
-                    aria-label={`Karte ${card.title} in den Pool`}
-                    onClick={() => void toPool(card.id)}
-                  >
-                    In den Pool
-                  </Button>
-                )}
-              </Paper>
-            ))}
-          </Stack>
-        )}
-      </Box>
+              ) : (
+                <Stack spacing={0.75}>
+                  {cards.map((cardItem) => (
+                    <Paper
+                      key={cardItem.id}
+                      data-testid={`board-item-${cardItem.id}`}
+                      variant="outlined"
+                      draggable={canEdit}
+                      onDragStart={startBoardDrag(board.id, cardItem.id)}
+                      onDragOver={(e) => e.preventDefault()}
+                      onDrop={handleBoardRowDrop(board.id, cardItem)}
+                      sx={{ px: 1.5, py: 1, display: 'flex', alignItems: 'center', gap: 1.5, cursor: canEdit ? 'grab' : 'default' }}
+                    >
+                      {canEdit && (
+                        <DragIndicatorIcon
+                          fontSize="small"
+                          aria-label="Ziehen"
+                          sx={{ flexShrink: 0, color: 'action.disabled' }}
+                        />
+                      )}
+                      <Typography variant="caption" color="text.secondary" sx={{ width: 48, flexShrink: 0 }}>
+                        #{cardItem.number}
+                      </Typography>
+                      <Typography variant="body2" noWrap sx={{ flex: 1, minWidth: 0, fontWeight: 500 }}>
+                        {cardItem.title}
+                      </Typography>
+                      {canEdit && (
+                        <Button
+                          size="small"
+                          startIcon={<SouthOutlinedIcon />}
+                          aria-label={`Karte ${cardItem.title} in den Pool`}
+                          onClick={() => void toPool(cardItem.id)}
+                        >
+                          In den Pool
+                        </Button>
+                      )}
+                    </Paper>
+                  ))}
+                </Stack>
+              )}
+            </Box>
+          </Box>
+        )
+      })}
 
       <Box sx={{ borderTop: '2px dashed', borderColor: 'divider', my: 2 }} />
 
-      {/* Untere Zone: projektweiter, board-loser Ideen-Pool (Quelle beim Einplanen). */}
+      {/* Projektweiter, board-loser Ideen-Pool (Quelle beim Einplanen). */}
       <Box
         data-testid="pool-zone"
         onDragOver={(e) => e.preventDefault()}
-        onDrop={handleDrop('pool')}
+        onDrop={handlePoolDrop}
         sx={{ minHeight: 80, borderRadius: 1.5, p: 1 }}
       >
         <Typography
@@ -294,15 +335,19 @@ export function IdeaPlanningBoard({
           <Typography variant="body2" color="text.secondary" sx={{ py: 1 }}>
             Keine Ideen im Pool.
           </Typography>
+        ) : visiblePool.length === 0 ? (
+          <Typography variant="body2" color="text.secondary" sx={{ py: 1 }}>
+            Keine Idee passt zur Suche.
+          </Typography>
         ) : (
           <Stack spacing={0.75}>
-            {pool.map((idea) => (
+            {visiblePool.map((idea) => (
               <Paper
                 key={idea.id}
                 data-testid={`pool-item-${idea.id}`}
                 variant="outlined"
                 draggable={canEdit}
-                onDragStart={startDrag('pool', idea.id)}
+                onDragStart={startPoolDrag(idea.id)}
                 sx={{ px: 1.5, py: 1, display: 'flex', alignItems: 'center', gap: 1.5, bgcolor: 'action.hover', cursor: canEdit ? 'grab' : 'default' }}
               >
                 {canEdit && (
@@ -320,7 +365,7 @@ export function IdeaPlanningBoard({
                   </Typography>
                 )}
                 {/* Dedizierte Öffnen-Affordanz: Klick auf den Titel öffnet das Detail-Modal. Der Drag
-                    bleibt am Ziehgriff (bzw. der Zeile) — ein Klick startet keinen Drag, kein Konflikt. */}
+                    bleibt an der Zeile — ein Klick startet keinen Drag, kein Konflikt. */}
                 <Link
                   component="button"
                   type="button"
@@ -337,7 +382,7 @@ export function IdeaPlanningBoard({
                     size="small"
                     startIcon={<NorthOutlinedIcon />}
                     aria-label={`Idee ${idea.title} einplanen`}
-                    onClick={() => void plan(idea.id)}
+                    onClick={() => void plan(idea.id, boards[0].id)}
                   >
                     Einplanen
                   </Button>

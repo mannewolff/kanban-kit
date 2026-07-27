@@ -453,6 +453,77 @@ class CardIT extends AbstractIntegrationTest {
         .andExpect(jsonPath("$.length()").value(2));
   }
 
+  /**
+   * Pinnt den Reihenfolge-Vertrag von {@code bulk-transfer}: die übergebenen Karten landen in
+   * Eingabereihenfolge als geschlossener Block am Ende der Zielspalte, die dort bereits liegenden
+   * Karten behalten ihre Reihenfolge und die Quellspalte wird lückenlos nachgezogen. Das Backend
+   * sortiert bewusst nicht selbst um — die Sichtreihenfolge herzustellen ist Sache des Aufrufers.
+   */
+  @Test
+  void bulkTransferAppendsInInputOrderToPopulatedTargetColumn() throws Exception {
+    Cookie alice = loginAs("bulk-xfer-order@example.com");
+    long p1 = createProject("bulk-xfer-order@example.com", "BulkXferOrder1");
+    long p2 = createProject("bulk-xfer-order@example.com", "BulkXferOrder2");
+    JsonNode boardA = createBoard(alice, p1);
+    JsonNode boardB = createBoard(alice, p2);
+    long boardIdA = boardA.get("id").asLong();
+    long colA = boardA.get("columns").get(0).get("id").asLong();
+    long boardIdB = boardB.get("id").asLong();
+    long colB = boardB.get("columns").get(0).get("id").asLong();
+    // Zielspalte ist bereits befüllt: der Block muss hinter diesen beiden landen.
+    long alt1 = createCard(alice, boardIdB, colB, "Alt1", null).get("id").asLong();
+    long alt2 = createCard(alice, boardIdB, colB, "Alt2", null).get("id").asLong();
+    long c1 = createCard(alice, boardIdA, colA, "Eins", null).get("id").asLong();
+    long c2 = createCard(alice, boardIdA, colA, "Zwei", null).get("id").asLong();
+    long c3 = createCard(alice, boardIdA, colA, "Drei", null).get("id").asLong();
+    long bleibt = createCard(alice, boardIdA, colA, "Bleibt", null).get("id").asLong();
+
+    // Eingabereihenfolge bewusst ungleich der Anlage-Reihenfolge.
+    mvc.perform(
+            post("/api/cards/bulk-transfer")
+                .cookie(alice)
+                .contentType("application/json")
+                .content(
+                    "{\"cardIds\":[%d,%d,%d],\"targetBoardId\":%d,\"targetColumnId\":%d}"
+                        .formatted(c3, c1, c2, boardIdB, colB)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.length()").value(3));
+
+    JsonNode target = boardCards(alice, boardIdB);
+    org.assertj.core.api.Assertions.assertThat(
+            new int[] {
+              positionOf(target, alt1),
+              positionOf(target, alt2),
+              positionOf(target, c3),
+              positionOf(target, c1),
+              positionOf(target, c2)
+            })
+        .containsExactly(0, 1, 2, 3, 4);
+
+    // Quellspalte lückenlos nachgezogen: die verbliebene Karte rutscht auf Position 0.
+    JsonNode source = boardCards(alice, boardIdA);
+    org.assertj.core.api.Assertions.assertThat(source.size()).isEqualTo(1);
+    org.assertj.core.api.Assertions.assertThat(positionOf(source, bleibt)).isZero();
+  }
+
+  private JsonNode boardCards(Cookie session, long boardId) throws Exception {
+    return json.readTree(
+        mvc.perform(get("/api/boards/" + boardId + "/cards").cookie(session))
+            .andExpect(status().isOk())
+            .andReturn()
+            .getResponse()
+            .getContentAsString());
+  }
+
+  private int positionOf(JsonNode cards, long cardId) {
+    for (JsonNode c : cards) {
+      if (c.get("id").asLong() == cardId) {
+        return c.get("positionInColumn").asInt();
+      }
+    }
+    throw new AssertionError("Karte " + cardId + " nicht in der Antwort");
+  }
+
   @Test
   void bulkTransferRollsBackWhenNotOwnerInTargetProject() throws Exception {
     Cookie alice = loginAs("bulk-xfer-rb-owner@example.com");
@@ -899,5 +970,185 @@ class CardIT extends AbstractIntegrationTest {
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.number").value(1))
         .andExpect(jsonPath("$.dependencies.length()").value(0));
+  }
+
+  private void addMember(long projectId, String email, ProjectRole role) {
+    memberships.save(new ProjectMembership(null, projectId, userId(email), role, Instant.now()));
+  }
+
+  private String transferBody(long boardId, long columnId) {
+    return "{\"targetBoardId\":%d,\"targetColumnId\":%d}".formatted(boardId, columnId);
+  }
+
+  private String bulkTransferBody(long cardId, long boardId, long columnId) {
+    return "{\"cardIds\":[%d],\"targetBoardId\":%d,\"targetColumnId\":%d}"
+        .formatted(cardId, boardId, columnId);
+  }
+
+  @Test
+  void transferWithinProjectAllowedForMemberWithCardMove() throws Exception {
+    Cookie alice = loginAs("xfer-move-owner@example.com");
+    Cookie bob = loginAs("xfer-move-member@example.com");
+    long projectId = createProject("xfer-move-owner@example.com", "XferMove");
+    JsonNode boardA = createBoard(alice, projectId);
+    JsonNode boardB = createBoard(alice, projectId);
+    long colA = boardA.get("columns").get(0).get("id").asLong();
+    long boardIdB = boardB.get("id").asLong();
+    long colB = boardB.get("columns").get(0).get("id").asLong();
+    long cardId =
+        createCard(alice, boardA.get("id").asLong(), colA, "Wanderkarte", null).get("id").asLong();
+    // MEMBER trägt CARD_MOVE, ist aber nicht Eigentümer.
+    addMember(projectId, "xfer-move-member@example.com", ProjectRole.MEMBER);
+
+    mvc.perform(
+            post("/api/cards/" + cardId + "/transfer")
+                .cookie(bob)
+                .contentType("application/json")
+                .content(transferBody(boardIdB, colB)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.boardId").value((int) boardIdB))
+        .andExpect(jsonPath("$.columnId").value((int) colB))
+        // Regression zu #386: selbes Projekt → Nummer bleibt erhalten.
+        .andExpect(jsonPath("$.number").value(1));
+  }
+
+  @Test
+  void transferWithinProjectGuardsMissingCardMoveAndNonMembers() throws Exception {
+    Cookie alice = loginAs("xfer-guard-owner@example.com");
+    Cookie viewer = loginAs("xfer-guard-viewer@example.com");
+    Cookie stranger = loginAs("xfer-guard-stranger@example.com");
+    long projectId = createProject("xfer-guard-owner@example.com", "XferGuard");
+    JsonNode boardA = createBoard(alice, projectId);
+    JsonNode boardB = createBoard(alice, projectId);
+    long colA = boardA.get("columns").get(0).get("id").asLong();
+    long boardIdB = boardB.get("id").asLong();
+    long colB = boardB.get("columns").get(0).get("id").asLong();
+    long cardId =
+        createCard(alice, boardA.get("id").asLong(), colA, "Karte", null).get("id").asLong();
+    // VIEWER ist Mitglied, hat aber kein CARD_MOVE.
+    addMember(projectId, "xfer-guard-viewer@example.com", ProjectRole.VIEWER);
+
+    mvc.perform(
+            post("/api/cards/" + cardId + "/transfer")
+                .cookie(viewer)
+                .contentType("application/json")
+                .content(transferBody(boardIdB, colB)))
+        .andExpect(status().isForbidden());
+
+    // Nichtmitglied: 404 statt 403 — kein Existenz-Leak.
+    mvc.perform(
+            post("/api/cards/" + cardId + "/transfer")
+                .cookie(stranger)
+                .contentType("application/json")
+                .content(transferBody(boardIdB, colB)))
+        .andExpect(status().isNotFound());
+  }
+
+  @Test
+  void transferAcrossProjectsStillRequiresOwnerDespiteCardMove() throws Exception {
+    Cookie alice = loginAs("xfer-cross-owner@example.com");
+    Cookie bob = loginAs("xfer-cross-member@example.com");
+    long p1 = createProject("xfer-cross-owner@example.com", "XferCross1");
+    long p2 = createProject("xfer-cross-owner@example.com", "XferCross2");
+    JsonNode boardA = createBoard(alice, p1);
+    JsonNode boardB = createBoard(alice, p2);
+    long colA = boardA.get("columns").get(0).get("id").asLong();
+    long boardIdB = boardB.get("id").asLong();
+    long colB = boardB.get("columns").get(0).get("id").asLong();
+    long cardId =
+        createCard(alice, boardA.get("id").asLong(), colA, "Karte", null).get("id").asLong();
+    // MEMBER in BEIDEN Projekten — CARD_MOVE reicht über Projektgrenzen weiterhin nicht.
+    addMember(p1, "xfer-cross-member@example.com", ProjectRole.MEMBER);
+    addMember(p2, "xfer-cross-member@example.com", ProjectRole.MEMBER);
+
+    mvc.perform(
+            post("/api/cards/" + cardId + "/transfer")
+                .cookie(bob)
+                .contentType("application/json")
+                .content(transferBody(boardIdB, colB)))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
+  void bulkTransferWithinProjectAllowedForMemberWithCardMove() throws Exception {
+    Cookie alice = loginAs("bulk-move-owner@example.com");
+    Cookie bob = loginAs("bulk-move-member@example.com");
+    long projectId = createProject("bulk-move-owner@example.com", "BulkMove");
+    JsonNode boardA = createBoard(alice, projectId);
+    JsonNode boardB = createBoard(alice, projectId);
+    long colA = boardA.get("columns").get(0).get("id").asLong();
+    long boardIdB = boardB.get("id").asLong();
+    long colB = boardB.get("columns").get(0).get("id").asLong();
+    long cardId =
+        createCard(alice, boardA.get("id").asLong(), colA, "Karte", null).get("id").asLong();
+    addMember(projectId, "bulk-move-member@example.com", ProjectRole.MEMBER);
+
+    mvc.perform(
+            post("/api/cards/bulk-transfer")
+                .cookie(bob)
+                .contentType("application/json")
+                .content(bulkTransferBody(cardId, boardIdB, colB)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.length()").value(1))
+        .andExpect(jsonPath("$[0].boardId").value((int) boardIdB))
+        .andExpect(jsonPath("$[0].number").value(1));
+  }
+
+  @Test
+  void bulkTransferWithinProjectGuardsMissingCardMoveAndNonMembers() throws Exception {
+    Cookie alice = loginAs("bulk-guard-owner@example.com");
+    Cookie viewer = loginAs("bulk-guard-viewer@example.com");
+    Cookie stranger = loginAs("bulk-guard-stranger@example.com");
+    long projectId = createProject("bulk-guard-owner@example.com", "BulkGuard");
+    JsonNode boardA = createBoard(alice, projectId);
+    JsonNode boardB = createBoard(alice, projectId);
+    long boardIdA = boardA.get("id").asLong();
+    long colA = boardA.get("columns").get(0).get("id").asLong();
+    long boardIdB = boardB.get("id").asLong();
+    long colB = boardB.get("columns").get(0).get("id").asLong();
+    long cardId = createCard(alice, boardIdA, colA, "Karte", null).get("id").asLong();
+    addMember(projectId, "bulk-guard-viewer@example.com", ProjectRole.VIEWER);
+
+    mvc.perform(
+            post("/api/cards/bulk-transfer")
+                .cookie(viewer)
+                .contentType("application/json")
+                .content(bulkTransferBody(cardId, boardIdB, colB)))
+        .andExpect(status().isForbidden());
+
+    mvc.perform(
+            post("/api/cards/bulk-transfer")
+                .cookie(stranger)
+                .contentType("application/json")
+                .content(bulkTransferBody(cardId, boardIdB, colB)))
+        .andExpect(status().isNotFound());
+
+    // Rollback: die Karte liegt weiterhin im Quellboard.
+    mvc.perform(get("/api/boards/" + boardIdA + "/cards").cookie(alice))
+        .andExpect(jsonPath("$.length()").value(1));
+  }
+
+  @Test
+  void bulkTransferAcrossProjectsStillRequiresOwnerDespiteCardMove() throws Exception {
+    Cookie alice = loginAs("bulk-cross-owner@example.com");
+    Cookie bob = loginAs("bulk-cross-member@example.com");
+    long p1 = createProject("bulk-cross-owner@example.com", "BulkCross1");
+    long p2 = createProject("bulk-cross-owner@example.com", "BulkCross2");
+    JsonNode boardA = createBoard(alice, p1);
+    JsonNode boardB = createBoard(alice, p2);
+    long colA = boardA.get("columns").get(0).get("id").asLong();
+    long boardIdB = boardB.get("id").asLong();
+    long colB = boardB.get("columns").get(0).get("id").asLong();
+    long cardId =
+        createCard(alice, boardA.get("id").asLong(), colA, "Karte", null).get("id").asLong();
+    addMember(p1, "bulk-cross-member@example.com", ProjectRole.MEMBER);
+    addMember(p2, "bulk-cross-member@example.com", ProjectRole.MEMBER);
+
+    mvc.perform(
+            post("/api/cards/bulk-transfer")
+                .cookie(bob)
+                .contentType("application/json")
+                .content(bulkTransferBody(cardId, boardIdB, colB)))
+        .andExpect(status().isForbidden());
   }
 }

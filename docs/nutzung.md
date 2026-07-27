@@ -20,19 +20,23 @@
 
 ## Boards & Spalten
 
-- Innerhalb eines Projekts **Boards** anlegen. Ein neues Board bekommt die Default-Spalten
+- Ein **neu angelegtes Projekt** enthält bereits ein Board namens **„default"** — du kannst also
+  sofort loslegen.
+- Innerhalb eines Projekts weitere **Boards** anlegen. Ein neues Board bekommt die Default-Spalten
   **Backlog · Ready · In Progress · In Review · Done**.
 - Spalten lassen sich anlegen, umbenennen, umsortieren und (wenn leer) löschen.
 
 ## Karten
 
-- **Anlegen:** „+" im Spaltenkopf (Karte direkt in dieser Spalte) oder der Button **„Neu anlegen"**
-  oben (legt in der ersten Spalte an). Titel + Markdown-Beschreibung.
-- **Verschieben:** per Drag & Drop zwischen den Spalten. Alternativ über das **⋮-Menü** der Karte
-  (Eintrag „Nach *Zielspalte*") — auch per Tastatur bedienbar.
+- **Anlegen:** über den Button **„Neu anlegen"** oben oder die Taste **`+`** — beide legen eine Karte
+  stets in der **ersten Spalte** (Backlog) an. Titel + Markdown-Beschreibung.
+- **Verschieben:** per Drag & Drop zwischen den Spalten. Alternativ über das **⋮-Menü** der Karte mit
+  den Einträgen „Nach links verschieben" und „Nach rechts verschieben" (jeweils genau eine Spalte
+  weit) — auch per Tastatur bedienbar. In der ersten bzw. letzten Spalte fehlt der jeweils sinnlose
+  Eintrag.
 - **⋮-Menü:** „Bearbeiten" (öffnet das Detail im Bearbeiten-Modus), „Duplizieren", „Archivieren",
-  „In Ideen-Speicher" (legt die Karte in den [Ideen-Speicher](#ideen-speicher)), „Nach *Zielspalte*"
-  und — mit Board-Recht — „Auf anderes Board verschieben…".
+  „In den Ideen-Pool" (legt die Karte in den [Ideen-Pool](#ideen-pool)), „Nach links/rechts
+  verschieben" und — mit Board-Recht — „Auf anderes Board verschieben…".
 - **Auf der Karte sichtbar:** farbige **Label**-Chips, eine gesetzte **Fälligkeit** („📅 *Datum*",
   überfällige rot und fett) sowie rechts unten die **Avatare der Zuständigen** (Initialen, bis zu vier).
 - **Done-Countdown:** Karten in einer Done-Spalte zeigen „wird in X Tagen archiviert"
@@ -44,7 +48,10 @@ Klick auf eine Karte öffnet das Detail:
 
 - **Beschreibung** als GitHub-Markdown (im Bearbeiten-Modus editierbar). **Task-Listen**
   (`- [ ]` / `- [x]`) werden als anklickbare Checkboxen gerendert; ein Klick schaltet sie um und
-  speichert sofort. Lasch geschriebene Marker (`[]`, `[ x ]`, `[X]`) werden dabei toleriert.
+  speichert sofort. Lasch geschriebene Marker (`[]`, `[ x ]`, `[X]`) werden dabei toleriert. Im
+  Editor gibt es eine **Kurzschreibweise**: am Zeilenanfang erzeugt `/` plus Leerzeichen eine leere,
+  `/x` plus Leerzeichen eine abgehakte Checkbox — die eckigen Klammern (`- [ ]` / `- [x]`) funktionieren
+  weiterhin.
 - **Bearbeiten-Formular:** Titel, Markdown, Epic-Zuordnung, „Fällig am", „Abhängig von (Nummern,
   kommagetrennt)" — alles in einem Speichern-Vorgang.
 - **Zuständige:** ein oder mehrere Projektmitglieder über das Feld „Zuständige" zuweisen (Mehrfachauswahl).
@@ -89,37 +96,49 @@ Papierkorb wird über den Button **„Papierkorb"** in der Board-Kopfzeile geöf
 
 Über den Sidebar-Eintrag „Liste" (im Board-Kontext):
 
-- **Filter-Chips** je Spalte + „Archiv" (blendet Status ein/aus; Auswahl bleibt erhalten).
+- **Filter-Chips** je Spalte + „Archiv" (blendet Status ein/aus; die Auswahl bleibt **pro Board**
+  erhalten).
 - **Label-Filter:** eine Reihe farbiger, umschaltbarer Label-Chips. Mehrere Labels sind kombinierbar
   (eine Karte bleibt sichtbar, wenn sie **eines** der aktiven Labels trägt). Der Label-Filter existiert
   nur in der Listen-Ansicht, nicht in der Board-Spaltenansicht.
 - Zeilen mit Drag-Handle, Nummer, Status, Epic-Badge, Titel, **Fälligkeit** (überfällige rot) und
   **Beschreibungs-Vorschau**.
 - **Spalten umsortieren:** die Spalten-Kopfzeile per Drag verschieben (z. B. „Beschreibung" nach vorne).
-- **Beschreibung verbreitern:** den Griff links der „Beschreibung"-Spalte ziehen.
+  Diese Reihenfolge gilt **global** für alle Boards.
+- **Beschreibung verbreitern:** den Griff links der „Beschreibung"-Spalte ziehen. Auch diese Breite
+  gilt **global** für alle Boards (nur der Spaltenfilter oben bleibt pro Board).
 - **Zeilen umsortieren:** über den Drag-Handle links (innerhalb derselben Spalte).
 
-## Ideen-Speicher
+## Ideen-Pool
 
-Der **Ideen-Speicher** ist ein Ablageort für Karten, die noch nicht auf dem Board sichtbar sein
-sollen — ein leichtgewichtiges Grooming, kein Löschen. Die Listen-Ansicht zeigt ihn als **zweite
-Zone** unterhalb der aktiven Karten (abgesetzt durch die Überschrift „Ideen-Speicher"):
+Der **Ideen-Pool** ist ein **projektweiter** Ablageort für Karten, die noch nicht auf einem Board
+sichtbar sein sollen — ein leichtgewichtiges Grooming, kein Löschen. Er ist nicht an ein einzelnes
+Board gebunden, sondern gilt für das ganze Projekt.
 
-- **Obere Zone:** die aktiven Karten wie gewohnt (mit Spalten- und Label-Filtern).
-- **Untere Zone:** alle Ideen des Boards, nach Kartennummer sortiert (nicht umsortierbar).
+Erreichbar über den Sidebar-Eintrag **„Ideen"** (sichtbar, sobald ein Projekt-Kontext offen ist). Die
+Seite zeigt die **Planen-Ansicht**:
 
-Ideen erscheinen **nicht** in der Board-Spaltenansicht und halten keine aktive Position — sie
-kollidieren also nicht mit den Karten der Spalten.
+- **Oben:** alle Boards des Projekts untereinander, je Board seine **erste Spalte**.
+- **Darunter:** der projektweite **Ideen-Pool** mit allen noch nicht eingeplanten Ideen.
+- **Suchfeld** über dem Pool: filtert die Ideen nach Titel.
 
-- **Idee anlegen:** Button **„Idee anlegen"** in der Ideen-Zone (Titel + Markdown-Beschreibung, wie
-  eine normale Karte, nur direkt als Idee).
-- **In den Ideen-Speicher legen (Demotion):** über das **⋮-Menü** einer Karte oder im Karten-Detail
-  den Eintrag **„In Ideen-Speicher"**. Die Karte verschwindet aus dem Board und taucht in der unteren
-  Zone auf.
-- **Ins Backlog holen (Promotion):** je Idee der Button **„→ Backlog"**. Die Idee wird zur normalen
-  Karte in der **ersten Spalte** (Backlog), ans Ende, und erscheint wieder auf dem Board.
+Einen Umschalter zwischen „Liste" und „Planen" gibt es nicht mehr — es bleibt bei der Planen-Ansicht.
+Ideen erscheinen **nicht** in der Board-Spaltenansicht und **nicht** in der Listen-Ansicht des Boards.
 
-Beide Richtungen zählen als normaler Arbeitsfluss und brauchen nur das Recht zum **Verschieben** von
+- **Idee anlegen:** Button **„Idee anlegen"** auf der Ideen-Seite legt direkt eine Idee im Pool an
+  (Titel + Markdown-Beschreibung, wie eine normale Karte).
+- **Einplanen (Idee → Board):** eine Idee per **Drag** aus dem Pool in die erste Spalte eines Boards
+  ziehen, oder über den Button **„Einplanen"**. Die Idee wird zur normalen Karte in der **ersten
+  Spalte** und erscheint wieder auf dem Board.
+- **Zurückholen (Board → Pool):** eine Karte per **Drag** aus der ersten Spalte in den Pool ziehen,
+  über den Button **„In den Pool"** oder im **⋮-Menü** der Karte über „In den Ideen-Pool". Die Karte
+  verschwindet vom Board.
+- **Zwischen Boards verschieben:** eine Karte per **Drag** direkt von der ersten Spalte eines Boards
+  in die eines anderen ziehen — sie landet in dessen erster Spalte.
+- **Projektweite Nummer bleibt erhalten:** Eine Karte behält beim Weg in den Pool ihre **projektweite
+  Nummer**; sie wird auch im Pool angezeigt und geht beim Einplanen nicht verloren.
+
+Alle Richtungen zählen als normaler Arbeitsfluss und brauchen nur das Recht zum **Verschieben** von
 Karten (kein Löschrecht). Auch der Ingest über die API (kanbancompat) kann eine Karte direkt als Idee
 anlegen.
 
@@ -163,5 +182,5 @@ Sidebar-Eintrag **„Administration"** ein- und ausgeschaltet:
 - **Ist er aktiv,** erscheinen die **Bearbeiten-/Umbenennen-Symbole** (Bleistifte) — etwa zum
   Umbenennen von Projekten, Boards und Spalten sowie zum Anlegen/Bearbeiten/Löschen von Spalten —,
   **sofern du die nötigen Rechte hast**.
-- **Der Alltag bleibt unberührt:** Karten anlegen, verschieben, archivieren und in den Ideen-Speicher
+- **Der Alltag bleibt unberührt:** Karten anlegen, verschieben, archivieren und in den Ideen-Pool
   legen funktioniert **unabhängig** vom Editiermodus.

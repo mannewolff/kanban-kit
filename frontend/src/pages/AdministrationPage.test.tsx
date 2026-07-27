@@ -77,6 +77,18 @@ describe('AdministrationPage', () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true)
   })
 
+  it('zeigt den Rechtliches-Abschnitt mit Copyright und MIT-Hinweis vor dem Editiermodus', () => {
+    renderPage()
+
+    expect(screen.getByRole('heading', { name: 'Rechtliches', level: 2 })).toBeInTheDocument()
+    expect(screen.getByText('© 2026 Manfred Wolff')).toBeInTheDocument()
+    expect(screen.getByText(/MIT-Lizenz/)).toBeInTheDocument()
+    expect(screen.getByText(/ohne Gewähr/)).toBeInTheDocument()
+
+    const headings = screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)
+    expect(headings.indexOf('Rechtliches')).toBeLessThan(headings.indexOf('Editiermodus'))
+  })
+
   it('rendert den Editiermodus-Schalter, Default aus', () => {
     renderPage()
     const toggle = screen.getByRole('checkbox', { name: 'Editiermodus aktivieren' })

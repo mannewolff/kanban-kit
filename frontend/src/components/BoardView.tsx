@@ -31,10 +31,12 @@ import { epicsApi as defaultEpicsApi, type Epic, type EpicsApi } from '../api/ep
 import type { Member } from '../api/members'
 import { activeCardsInColumn, applyMove } from '../lib/boardOps'
 import { cleanupCountdownLabel, cleanupDaysRemaining } from '../lib/cleanupCountdown'
+import { neighbourColumns } from '../lib/columnMeta'
 import { useEditMode } from '../lib/EditModeContext'
 import type { Label } from '../api/labels'
 import { formatDueDate, isOverdue } from '../lib/dueDate'
 import { epicColor, epicShortcode } from '../lib/epicMeta'
+import { useKeyboardShortcut } from '../lib/useKeyboardShortcut'
 import { COLUMN_SURFACE_BG, statusColors } from '../lib/statusColors'
 import { BulkActionBar } from './BulkActionBar'
 import { EpicBadge } from './EpicBadge'
@@ -143,7 +145,7 @@ interface Props {
 /**
  * Spaltenansicht mit Drag & Drop. Verschieben ist optimistisch (Revert bei Fehler). Karten tragen
  * Epic-Badge + farbigen Rand, ein ⋮-Menü (Bearbeiten/Archivieren/Verschieben) und auf Done einen
- * Archiv-Countdown. Karten werden über einen sichtbaren „+"-Dialog angelegt.
+ * Archiv-Countdown. Angelegt wird über „Neu anlegen“ oder die Taste „+“ — stets in der ersten Spalte.
  */
 export function BoardView({
   board,
@@ -193,6 +195,12 @@ export function BoardView({
   const sortColumns = (cols: BoardColumn[]) => [...cols].sort((a, b) => a.position - b.position)
   const [columns, setColumns] = useState<BoardColumn[]>(() => sortColumns(board.columns))
   useEffect(() => setColumns(sortColumns(board.columns)), [board.columns])
+
+  // Die Taste „+“ tut dasselbe wie der Button „Neu anlegen“: anlegen in der ersten Spalte. Ohne
+  // Bearbeitungsrecht oder ohne Spalte gibt es nichts anzulegen, dann bleibt das Kürzel stumm.
+  useKeyboardShortcut('+', canEdit && columns.length > 0, () =>
+    setModalColumn({ id: columns[0].id, name: columns[0].name }),
+  )
 
   // Spalten-Dialog: 'new' = anlegen, ein Column-Objekt = bearbeiten.
   const [columnDialog, setColumnDialog] = useState<'new' | BoardColumn | null>(null)
@@ -337,13 +345,19 @@ export function BoardView({
     try {
       await api.moveToIdeaStorage(card.id)
       onCardsChanged?.()
+      notify('In den Ideen-Pool verschoben — unter Ideen zu finden.', 'success')
     } catch {
       setCards(previous)
-      notify('In den Ideen-Speicher fehlgeschlagen.', 'error')
+      notify('In den Ideen-Pool verschieben fehlgeschlagen.', 'error')
     }
   }
 
   const closeMenu = () => setMenu(null)
+
+  // Ziele der beiden Verschieben-Einträge im ⋮-Menü: je genau eine Spalte weit.
+  const { left: moveLeft, right: moveRight } = menu
+    ? neighbourColumns(columns, menu.card.columnId)
+    : { left: null, right: null }
 
   const exitSelection = () => {
     setSelectionMode(false)
@@ -388,6 +402,19 @@ export function BoardView({
       notify('In den Papierkorb verschieben fehlgeschlagen.', 'error')
     }
   }
+
+  // Die Auswahl liegt als Set vor und gibt damit die Klick-Reihenfolge wieder. Für den Transfer
+  // zählt aber, was der Nutzer sieht: die API hängt die Karten in Eingabereihenfolge ans Ende der
+  // Zielspalte, also muss die Eingabe der Sichtreihenfolge des Quellboards folgen. Sortierschlüssel
+  // ist Spaltenposition (columns ist bereits danach sortiert), dann Position in der Spalte — dieselbe
+  // zweistufige Regel wie in der Listenansicht, nötig weil die Auswahl mehrere Spalten umfassen kann.
+  // Archivieren und Löschen brauchen das nicht; dort ist die Reihenfolge bedeutungslos.
+  const selectedIdsInViewOrder = () =>
+    columns.flatMap((column) =>
+      activeCardsInColumn(cards, column.id)
+        .filter((c) => selectedIds.has(c.id))
+        .map((c) => c.id),
+    )
 
   // Bulk-Verschieben: der Dialog erledigt den Transfer; danach die Karten aus der Ansicht nehmen.
   const onBulkTransferred = (movedIds: number[]) => {
@@ -501,14 +528,6 @@ export function BoardView({
                 <Typography variant="caption" sx={{ color: 'text.secondary', bgcolor: COLUMN_SURFACE_BG, border: 1, borderColor: 'divider', borderRadius: 10, px: 0.75, lineHeight: 1.6 }}>
                   {column.wipLimit != null ? `${count}/${column.wipLimit}` : count}
                 </Typography>
-                {canEdit && (
-                  <Tooltip title="Karte anlegen">
-                    <IconButton size="small" aria-label={`Karte in ${column.name} anlegen`}
-                      onClick={() => setModalColumn({ id: column.id, name: column.name })} sx={{ color: 'text.secondary' }}>
-                      <AddIcon fontSize="small" />
-                    </IconButton>
-                  </Tooltip>
-                )}
                 {showStructureEdit && (
                   <Tooltip title="Spalte bearbeiten">
                     <IconButton size="small" aria-label={`Spalte ${column.name} bearbeiten`}
@@ -698,7 +717,7 @@ export function BoardView({
             Archivieren
           </MenuItem>,
           <MenuItem key="idea-storage" onClick={() => { const c = menu.card; closeMenu(); void moveToIdeaStorageCard(c) }}>
-            In Ideen-Speicher
+            In den Ideen-Pool
           </MenuItem>,
           ...(canTransfer
             ? [
@@ -710,13 +729,24 @@ export function BoardView({
                 </MenuItem>,
               ]
             : []),
-          ...columns
-            .filter((col) => col.id !== menu.card.columnId)
-            .map((col) => (
-              <MenuItem key={`move-${col.id}`} onClick={() => { const c = menu.card; closeMenu(); void moveCard(c.id, col.id) }}>
-                Nach {col.name}
-              </MenuItem>
-            )),
+          // Genau eine Spalte weit nach links bzw. rechts — nicht ein Eintrag je Zielspalte, sonst
+          // wächst das Menü mit der Spaltenzahl. Am Rand fehlt die jeweilige Richtung.
+          moveLeft ? (
+            <MenuItem
+              key="move-left"
+              onClick={() => { const c = menu.card; closeMenu(); void moveCard(c.id, moveLeft.id) }}
+            >
+              Nach links verschieben
+            </MenuItem>
+          ) : null,
+          moveRight ? (
+            <MenuItem
+              key="move-right"
+              onClick={() => { const c = menu.card; closeMenu(); void moveCard(c.id, moveRight.id) }}
+            >
+              Nach rechts verschieben
+            </MenuItem>
+          ) : null,
         ]}
       </Menu>
 
@@ -750,11 +780,11 @@ export function BoardView({
 
       {bulkTransferOpen && (
         <TransferCardDialog
-          cardIds={[...selectedIds]}
+          cardIds={selectedIdsInViewOrder()}
           currentBoardId={board.id}
           platformAdmin={platformAdmin}
           onClose={() => setBulkTransferOpen(false)}
-          onTransferred={() => onBulkTransferred([...selectedIds])}
+          onTransferred={() => onBulkTransferred(selectedIdsInViewOrder())}
         />
       )}
 

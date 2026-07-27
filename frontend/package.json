@@ -1,7 +1,8 @@
 {
   "name": "manban-frontend",
-  "version": "1.9.0",
+  "version": "1.10.0",
   "private": true,
+  "license": "MIT",
   "type": "module",
   "scripts": {
     "dev": "vite",

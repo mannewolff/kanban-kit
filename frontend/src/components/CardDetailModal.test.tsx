@@ -88,25 +88,44 @@ describe('CardDetailModal', () => {
     expect(await screen.findByText('Neu')).toBeInTheDocument()
   })
 
-  it('legt eine aktive Karte über den Detail-Button in den Ideen-Speicher', async () => {
+  it('legt eine aktive Karte über den Detail-Button in den Ideen-Pool', async () => {
     const apis = makeApis()
     const onChanged = vi.fn()
     const onClose = vi.fn()
-    render(<CardDetailModal card={card} canEdit onChanged={onChanged} onClose={onClose} {...apis} />)
+    render(<CardDetailModal card={card} canEdit onChanged={onChanged} onClose={onClose} {...apis} />, {
+      wrapper: SnackbarProvider,
+    })
 
-    fireEvent.click(screen.getByRole('button', { name: 'In Ideen-Speicher' }))
+    fireEvent.click(screen.getByRole('button', { name: 'In den Ideen-Pool' }))
 
     await waitFor(() => expect(apis.cardsApi.moveToIdeaStorage).toHaveBeenCalledWith(100))
     expect(onChanged).toHaveBeenCalled()
     expect(onClose).toHaveBeenCalled()
+    // Erfolgs-Toast benennt den Zielort.
+    expect(await screen.findByText('In den Ideen-Pool verschoben — unter Ideen zu finden.')).toBeInTheDocument()
   })
 
-  it('zeigt „In Ideen-Speicher“ nicht für eine bereits gespeicherte Idee', () => {
+  it('zeigt bei Fehler einen Toast und lässt die Karte im Detail sichtbar', async () => {
+    const apis = makeApis()
+    apis.cardsApi.moveToIdeaStorage = vi.fn().mockRejectedValue(new Error('fail'))
+    const onClose = vi.fn()
+    render(<CardDetailModal card={card} canEdit onClose={onClose} {...apis} />, {
+      wrapper: SnackbarProvider,
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'In den Ideen-Pool' }))
+
+    expect(await screen.findByText('In den Ideen-Pool verschieben fehlgeschlagen.')).toBeInTheDocument()
+    // Bei einem Fehler bleibt der Dialog offen — die Karte verschwindet nicht.
+    expect(onClose).not.toHaveBeenCalled()
+  })
+
+  it('zeigt „In den Ideen-Pool“ nicht für eine bereits gespeicherte Idee', () => {
     const apis = makeApis()
     const idea: Card = { ...card, ideaStored: true }
     render(<CardDetailModal card={idea} canEdit onClose={vi.fn()} {...apis} />)
 
-    expect(screen.queryByRole('button', { name: 'In Ideen-Speicher' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'In den Ideen-Pool' })).not.toBeInTheDocument()
   })
 
   it('speichert Titel, Beschreibung, Abhängigkeiten und Epic in einem Update', async () => {

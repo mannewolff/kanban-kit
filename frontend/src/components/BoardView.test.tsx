@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Board } from '../api/boards'
 import { cardsApi } from '../api/cards'
@@ -97,29 +98,28 @@ describe('BoardView', () => {
     expect(within(screen.getByTestId('column-20')).queryByTestId('card-100')).not.toBeInTheDocument()
   })
 
-  it('legt über den +Dialog eine Karte mit Beschreibung an', async () => {
-    const created: Card = { ...card, id: 200, number: 2, title: 'Neu', columnId: 20 }
+  it('legt über den Anlage-Dialog eine Karte mit Beschreibung an', async () => {
+    const created: Card = { ...card, id: 200, number: 2, title: 'Neu' }
     const api = mkApi({ create: vi.fn().mockResolvedValue(created) })
     render(<BoardView board={board} initialCards={[card]} canEdit api={api} />)
 
-    fireEvent.click(screen.getByLabelText('Karte in Done anlegen'))
+    fireEvent.click(screen.getByRole('button', { name: 'Neu anlegen' }))
     fireEvent.change(screen.getByLabelText('Titel'), { target: { value: 'Neu' } })
     fireEvent.click(screen.getByRole('button', { name: 'Anlegen' }))
 
     await waitFor(() =>
-      expect(api.create).toHaveBeenCalledWith(1, 20, 'Neu', expect.stringContaining('## Kontext'), null, false, {
+      expect(api.create).toHaveBeenCalledWith(1, 10, 'Neu', expect.stringContaining('## Kontext'), null, false, {
         dependencies: [],
         dueDate: null,
         assigneeIds: [],
         labelIds: [],
       }),
     )
-    expect(within(screen.getByTestId('column-20')).getByTestId('card-200')).toBeInTheDocument()
+    expect(within(screen.getByTestId('column-10')).getByTestId('card-200')).toBeInTheDocument()
   })
 
-  it('blendet Anlege-Buttons für Nicht-Editoren aus', () => {
+  it('blendet den Anlege-Button für Nicht-Editoren aus', () => {
     render(<BoardView board={board} initialCards={[card]} canEdit={false} api={mkApi()} />)
-    expect(screen.queryByLabelText('Karte in Done anlegen')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Neu anlegen' })).not.toBeInTheDocument()
   })
 
@@ -132,7 +132,7 @@ describe('BoardView', () => {
         epicsApi={epicsApi} onEpicsChanged={onEpicsChanged} />,
     )
 
-    fireEvent.click(screen.getByLabelText('Karte in Backlog anlegen'))
+    fireEvent.click(screen.getByRole('button', { name: 'Neu anlegen' }))
     fireEvent.change(screen.getByLabelText('Typ'), { target: { value: 'EPIC' } })
     fireEvent.change(screen.getByLabelText('Kürzel'), { target: { value: 'AUT' } })
     fireEvent.change(screen.getByLabelText('Titel'), { target: { value: 'Auth' } })
@@ -161,7 +161,7 @@ describe('BoardView', () => {
     expect(onCardsChanged).toHaveBeenCalled()
 
     fireEvent.click(screen.getByLabelText('Menü Aufgabe'))
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Nach Done' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Nach rechts verschieben' }))
     await waitFor(() => expect(api.move).toHaveBeenCalledWith(100, 20, 0))
   })
 
@@ -173,34 +173,39 @@ describe('BoardView', () => {
     expect(within(screen.getByTestId('column-10')).queryByTestId('card-500')).not.toBeInTheDocument()
   })
 
-  it('legt eine Karte über das ⋮-Menü in den Ideen-Speicher und entfernt sie optimistisch', async () => {
+  it('legt eine Karte über das ⋮-Menü in den Ideen-Pool und entfernt sie optimistisch', async () => {
     const api = mkApi({ moveToIdeaStorage: vi.fn().mockResolvedValue({}) })
     const onCardsChanged = vi.fn()
     // Zweite Karte in derselben Spalte: der optimistische map bleibt für sie unverändert (: c-Zweig).
     const other: Card = { ...card, id: 101, number: 2, title: 'Andere' }
-    render(<BoardView board={board} initialCards={[card, other]} canEdit api={api} onCardsChanged={onCardsChanged} />)
+    render(
+      <BoardView board={board} initialCards={[card, other]} canEdit api={api} onCardsChanged={onCardsChanged} />,
+      { wrapper: SnackbarProvider },
+    )
 
     fireEvent.click(screen.getByLabelText('Menü Aufgabe'))
-    fireEvent.click(screen.getByRole('menuitem', { name: 'In Ideen-Speicher' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'In den Ideen-Pool' }))
 
     await waitFor(() => expect(api.moveToIdeaStorage).toHaveBeenCalledWith(100))
     expect(onCardsChanged).toHaveBeenCalled()
+    // Erfolgs-Toast benennt den Zielort.
+    expect(await screen.findByText('In den Ideen-Pool verschoben — unter Ideen zu finden.')).toBeInTheDocument()
     // Optimistisch aus dem Board entfernt (ideaStored filtert die Spaltenansicht).
     expect(within(screen.getByTestId('column-10')).queryByTestId('card-100')).not.toBeInTheDocument()
     // Die zweite Karte bleibt unangetastet sichtbar.
     expect(within(screen.getByTestId('column-10')).getByTestId('card-101')).toBeInTheDocument()
   })
 
-  it('rollt bei Fehler im Ideen-Speicher zurück und zeigt die Karte wieder', async () => {
+  it('rollt bei Fehler im Ideen-Pool zurück und zeigt die Karte wieder', async () => {
     const api = mkApi({ moveToIdeaStorage: vi.fn().mockRejectedValue(new Error('fail')) })
     render(<BoardView board={board} initialCards={[card]} canEdit api={api} />, {
       wrapper: SnackbarProvider,
     })
 
     fireEvent.click(screen.getByLabelText('Menü Aufgabe'))
-    fireEvent.click(screen.getByRole('menuitem', { name: 'In Ideen-Speicher' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'In den Ideen-Pool' }))
 
-    await screen.findByText('In den Ideen-Speicher fehlgeschlagen.')
+    await screen.findByText('In den Ideen-Pool verschieben fehlgeschlagen.')
     expect(within(screen.getByTestId('column-10')).getByTestId('card-100')).toBeInTheDocument()
   })
 
@@ -592,7 +597,7 @@ describe('BoardView', () => {
     render(<BoardView board={board} initialCards={[card]} canEdit api={api} />)
 
     fireEvent.click(screen.getByLabelText('Menü Aufgabe'))
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Nach Done' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Nach rechts verschieben' }))
 
     await waitFor(() => expect(api.move).toHaveBeenCalled())
     expect(within(screen.getByTestId('column-10')).getByTestId('card-100')).toBeInTheDocument()
@@ -651,6 +656,80 @@ describe('BoardView', () => {
     await waitFor(() => expect(screen.queryByTestId('card-100')).not.toBeInTheDocument())
     expect(screen.queryByText('1 ausgewählt')).not.toBeInTheDocument()
     expect(onCardsChanged).toHaveBeenCalled()
+  })
+
+  it('übergibt die Auswahl in Sichtreihenfolge, nicht in Klick-Reihenfolge', async () => {
+    const cards: Card[] = [
+      { ...card, id: 101, positionInColumn: 0, title: 'Eins' },
+      { ...card, id: 102, positionInColumn: 1, title: 'Zwei' },
+      { ...card, id: 103, positionInColumn: 2, title: 'Drei' },
+    ]
+    mProjects.list.mockResolvedValue([{ id: 2, name: 'Anderes Projekt', role: 'OWNER', createdAt: '' }])
+    mBoards.list.mockResolvedValue([
+      { id: 99, projectId: 2, name: 'Zielboard', createdAt: '',
+        columns: [{ id: 900, name: 'Backlog', position: 0, wipLimit: null }] },
+    ])
+    mCards.bulkTransfer.mockResolvedValue([])
+    render(<BoardView board={board} initialCards={cards} canEdit canTransfer api={mkApi()} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Auswählen' }))
+    // Von unten nach oben anhaken — genau der Fall, der ohne Sortierung verdreht im Ziel landet.
+    fireEvent.click(screen.getByTestId('card-103'))
+    fireEvent.click(screen.getByTestId('card-102'))
+    fireEvent.click(screen.getByTestId('card-101'))
+    fireEvent.click(screen.getByRole('button', { name: 'Verschieben' }))
+
+    fireEvent.change(await screen.findByLabelText('Zielprojekt'), { target: { value: '2' } })
+    fireEvent.change(await screen.findByLabelText('Zielboard'), { target: { value: '99' } })
+    fireEvent.change(await screen.findByLabelText('Zielspalte'), { target: { value: '900' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Verschieben' }))
+
+    await waitFor(() => expect(mCards.bulkTransfer).toHaveBeenCalledWith([101, 102, 103], 99, 900))
+  })
+
+  it('sortiert eine spaltenübergreifende Auswahl zuerst nach Spaltenposition', async () => {
+    const cards: Card[] = [
+      { ...card, id: 201, columnId: 20, positionInColumn: 0, title: 'Rechts oben' },
+      { ...card, id: 202, columnId: 10, positionInColumn: 5, title: 'Links unten' },
+    ]
+    mProjects.list.mockResolvedValue([{ id: 2, name: 'Anderes Projekt', role: 'OWNER', createdAt: '' }])
+    mBoards.list.mockResolvedValue([
+      { id: 99, projectId: 2, name: 'Zielboard', createdAt: '',
+        columns: [{ id: 900, name: 'Backlog', position: 0, wipLimit: null }] },
+    ])
+    mCards.bulkTransfer.mockResolvedValue([])
+    render(<BoardView board={board} initialCards={cards} canEdit canTransfer api={mkApi()} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Auswählen' }))
+    // Die Karte der hinteren Spalte zuerst anhaken: die Spaltenposition muss die kleinere
+    // Position-in-Spalte der anderen Karte schlagen.
+    fireEvent.click(screen.getByTestId('card-201'))
+    fireEvent.click(screen.getByTestId('card-202'))
+    fireEvent.click(screen.getByRole('button', { name: 'Verschieben' }))
+
+    fireEvent.change(await screen.findByLabelText('Zielprojekt'), { target: { value: '2' } })
+    fireEvent.change(await screen.findByLabelText('Zielboard'), { target: { value: '99' } })
+    fireEvent.change(await screen.findByLabelText('Zielspalte'), { target: { value: '900' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Verschieben' }))
+
+    await waitFor(() => expect(mCards.bulkTransfer).toHaveBeenCalledWith([202, 201], 99, 900))
+  })
+
+  it('lässt Archivieren und Papierkorb bei der Klick-Reihenfolge — dort ist sie bedeutungslos', async () => {
+    const cards: Card[] = [
+      { ...card, id: 101, positionInColumn: 0, title: 'Eins' },
+      { ...card, id: 102, positionInColumn: 1, title: 'Zwei' },
+    ]
+    const api = mkApi({ bulkArchive: vi.fn().mockResolvedValue([]) })
+    render(<BoardView board={board} initialCards={cards} canEdit api={api} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Auswählen' }))
+    fireEvent.click(screen.getByTestId('card-102'))
+    fireEvent.click(screen.getByTestId('card-101'))
+    fireEvent.click(screen.getByRole('button', { name: 'Archivieren' }))
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Archivieren' }))
+
+    await waitFor(() => expect(api.bulkArchive).toHaveBeenCalledWith([102, 101]))
   })
 
   it('öffnet den Anlage-Dialog für die erste Spalte über „Neu anlegen"', () => {
@@ -932,7 +1011,6 @@ describe('BoardView', () => {
       expect(screen.queryByRole('button', { name: 'Spalte' })).not.toBeInTheDocument()
 
       // ... der tägliche Kanban-Alltag bleibt erhalten.
-      expect(screen.getByLabelText('Karte in Backlog anlegen')).toBeInTheDocument()
       expect(screen.getByRole('button', { name: 'Neu anlegen' })).toBeInTheDocument()
       expect(screen.getByRole('button', { name: 'Menü Aufgabe' })).toBeInTheDocument()
     })
@@ -944,6 +1022,203 @@ describe('BoardView', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Menü Aufgabe' }))
       expect(screen.queryByRole('menuitem', { name: 'Bearbeiten' })).not.toBeInTheDocument()
       expect(screen.getByRole('menuitem', { name: 'Archivieren' })).toBeInTheDocument()
+    })
+  })
+
+  describe('Tastenkürzel „+“', () => {
+    const epics = [
+      { id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 0, total: 1 },
+    ]
+
+    it('trägt in keinem Spaltenkopf mehr ein „+“', () => {
+      render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} />)
+      expect(screen.queryByLabelText('Karte in Backlog anlegen')).not.toBeInTheDocument()
+      expect(screen.queryByLabelText('Karte in Done anlegen')).not.toBeInTheDocument()
+    })
+
+    it('öffnet den Anlage-Dialog für die erste Spalte', () => {
+      render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} />)
+
+      fireEvent.keyDown(document.body, { key: '+' })
+
+      expect(screen.getByRole('heading', { name: 'Neue Karte in „Backlog“' })).toBeInTheDocument()
+    })
+
+    it('legt die Karte in der ersten Spalte an', async () => {
+      const created: Card = { ...card, id: 200, number: 2, title: 'Neu' }
+      const api = mkApi({ create: vi.fn().mockResolvedValue(created) })
+      render(<BoardView board={board} initialCards={[card]} canEdit api={api} />)
+
+      fireEvent.keyDown(document.body, { key: '+' })
+      fireEvent.change(screen.getByLabelText('Titel'), { target: { value: 'Neu' } })
+      fireEvent.click(screen.getByRole('button', { name: 'Anlegen' }))
+
+      await waitFor(() =>
+        expect(api.create).toHaveBeenCalledWith(1, 10, 'Neu', expect.any(String), null, false, expect.any(Object)),
+      )
+      expect(within(screen.getByTestId('column-10')).getByTestId('card-200')).toBeInTheDocument()
+    })
+
+    it('greift nicht, solange der Fokus in einem Eingabefeld steht', () => {
+      render(<BoardView board={board} initialCards={[card]} canEdit epics={epics} api={mkApi()} />)
+
+      fireEvent.keyDown(screen.getByLabelText('Epic-Filter'), { key: '+' })
+
+      expect(screen.queryByRole('heading', { name: /Neue Karte/ })).not.toBeInTheDocument()
+    })
+
+    it('greift nicht, solange ein Dialog offen ist', () => {
+      render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} />)
+      fireEvent.click(screen.getByLabelText('Spalte Backlog bearbeiten'))
+
+      fireEvent.keyDown(screen.getByRole('dialog'), { key: '+' })
+
+      expect(screen.queryByRole('heading', { name: /Neue Karte/ })).not.toBeInTheDocument()
+      expect(screen.getByRole('heading', { name: 'Spalte bearbeiten' })).toBeInTheDocument()
+    })
+
+    it('greift nicht ohne Bearbeitungsrecht', () => {
+      render(<BoardView board={board} initialCards={[card]} canEdit={false} api={mkApi()} />)
+
+      fireEvent.keyDown(document.body, { key: '+' })
+
+      expect(screen.queryByRole('heading', { name: /Neue Karte/ })).not.toBeInTheDocument()
+    })
+
+    it('greift nicht, wenn das Board keine Spalten hat', () => {
+      const emptyBoard: Board = { ...board, columns: [] }
+      render(<BoardView board={emptyBoard} initialCards={[]} canEdit api={mkApi()} />)
+
+      fireEvent.keyDown(document.body, { key: '+' })
+
+      expect(screen.queryByRole('heading', { name: /Neue Karte/ })).not.toBeInTheDocument()
+    })
+
+    it('meldet den Tastatur-Listener beim Verlassen der Ansicht wieder ab', () => {
+      const add = vi.spyOn(document, 'addEventListener')
+      const remove = vi.spyOn(document, 'removeEventListener')
+      const { unmount } = render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} />)
+      const registered = add.mock.calls.filter(([type]) => type === 'keydown').map(([, fn]) => fn)
+
+      unmount()
+
+      const removed = remove.mock.calls.filter(([type]) => type === 'keydown').map(([, fn]) => fn)
+      expect(registered).toHaveLength(1)
+      expect(removed).toEqual(registered)
+      add.mockRestore()
+      remove.mockRestore()
+    })
+  })
+
+  describe('Verschieben im ⋮-Menü', () => {
+    // Drei Spalten, damit es eine echte Mitte mit beiden Nachbarn gibt.
+    const wideBoard: Board = {
+      ...board,
+      columns: [
+        { id: 10, name: 'Backlog', position: 0, wipLimit: null },
+        { id: 20, name: 'Doing', position: 1, wipLimit: null },
+        { id: 30, name: 'Done', position: 2, wipLimit: null },
+      ],
+    }
+    const middleCard: Card = { ...card, columnId: 20 }
+    const lastCard: Card = { ...card, columnId: 30 }
+    const moveItems = () =>
+      screen.getAllByRole('menuitem').filter((item) => item.textContent?.startsWith('Nach '))
+
+    it('zeigt in einer mittleren Spalte genau zwei Verschieben-Einträge', () => {
+      render(<BoardView board={wideBoard} initialCards={[middleCard]} canEdit api={mkApi()} />)
+
+      fireEvent.click(screen.getByLabelText('Menü Aufgabe'))
+
+      expect(moveItems().map((item) => item.textContent)).toEqual([
+        'Nach links verschieben',
+        'Nach rechts verschieben',
+      ])
+    })
+
+    it('verschiebt nach rechts in die Spalte mit der nächsthöheren Position', async () => {
+      const api = mkApi({ move: vi.fn().mockResolvedValue({}) })
+      render(<BoardView board={wideBoard} initialCards={[middleCard]} canEdit api={api} />)
+
+      fireEvent.click(screen.getByLabelText('Menü Aufgabe'))
+      fireEvent.click(screen.getByRole('menuitem', { name: 'Nach rechts verschieben' }))
+
+      await waitFor(() => expect(api.move).toHaveBeenCalledWith(100, 30, 0))
+      expect(within(screen.getByTestId('column-30')).getByTestId('card-100')).toBeInTheDocument()
+    })
+
+    it('verschiebt nach links in die Spalte mit der nächstniedrigeren Position', async () => {
+      const api = mkApi({ move: vi.fn().mockResolvedValue({}) })
+      render(<BoardView board={wideBoard} initialCards={[middleCard]} canEdit api={api} />)
+
+      fireEvent.click(screen.getByLabelText('Menü Aufgabe'))
+      fireEvent.click(screen.getByRole('menuitem', { name: 'Nach links verschieben' }))
+
+      await waitFor(() => expect(api.move).toHaveBeenCalledWith(100, 10, 0))
+      expect(within(screen.getByTestId('column-10')).getByTestId('card-100')).toBeInTheDocument()
+    })
+
+    it('lässt in der ersten Spalte „nach links“ weg', () => {
+      render(<BoardView board={wideBoard} initialCards={[card]} canEdit api={mkApi()} />)
+
+      fireEvent.click(screen.getByLabelText('Menü Aufgabe'))
+
+      expect(screen.getByRole('menuitem', { name: 'Nach rechts verschieben' })).toBeInTheDocument()
+      expect(screen.queryByRole('menuitem', { name: 'Nach links verschieben' })).not.toBeInTheDocument()
+    })
+
+    it('lässt in der letzten Spalte „nach rechts“ weg', () => {
+      render(<BoardView board={wideBoard} initialCards={[lastCard]} canEdit api={mkApi()} />)
+
+      fireEvent.click(screen.getByLabelText('Menü Aufgabe'))
+
+      expect(screen.getByRole('menuitem', { name: 'Nach links verschieben' })).toBeInTheDocument()
+      expect(screen.queryByRole('menuitem', { name: 'Nach rechts verschieben' })).not.toBeInTheDocument()
+    })
+
+    it('zeigt bei einem Board mit nur einer Spalte keinen Verschieben-Eintrag', () => {
+      const single: Board = { ...board, columns: [{ id: 10, name: 'Backlog', position: 0, wipLimit: null }] }
+      render(<BoardView board={single} initialCards={[card]} canEdit api={mkApi()} />)
+
+      fireEvent.click(screen.getByLabelText('Menü Aufgabe'))
+
+      expect(moveItems()).toHaveLength(0)
+    })
+
+    it('lässt die übrigen Menüeinträge unangetastet', () => {
+      render(<BoardView board={wideBoard} initialCards={[middleCard]} canEdit canTransfer
+        onEditCard={vi.fn()} api={mkApi()} />)
+
+      fireEvent.click(screen.getByLabelText('Menü Aufgabe'))
+
+      for (const name of ['Bearbeiten', 'Duplizieren', 'Archivieren', 'In den Ideen-Pool',
+        'Auf anderes Board verschieben…']) {
+        expect(screen.getByRole('menuitem', { name })).toBeInTheDocument()
+      }
+    })
+
+    it('ist ohne Maus bedienbar: Tab zum ⋮, Enter, Pfeiltasten, Enter', async () => {
+      const user = userEvent.setup()
+      const api = mkApi({ move: vi.fn().mockResolvedValue({}) })
+      render(<BoardView board={wideBoard} initialCards={[middleCard]} canEdit api={api} />)
+      const focused = (el: HTMLElement) => el.matches(':focus')
+      const menuButton = screen.getByLabelText('Menü Aufgabe')
+
+      // Tabben, bis der ⋮-Button den Fokus hat — er muss in der Tab-Reihenfolge liegen.
+      for (let i = 0; i < 40 && !focused(menuButton); i++) {
+        await user.tab()
+      }
+      expect(menuButton).toHaveFocus()
+
+      await user.keyboard('{Enter}')
+      const target = await screen.findByRole('menuitem', { name: 'Nach rechts verschieben' })
+      for (let i = 0; i < 10 && !focused(target); i++) {
+        await user.keyboard('{ArrowDown}')
+      }
+      expect(target).toHaveFocus()
+      await user.keyboard('{Enter}')
+
+      await waitFor(() => expect(api.move).toHaveBeenCalledWith(100, 30, 0))
     })
   })
 })

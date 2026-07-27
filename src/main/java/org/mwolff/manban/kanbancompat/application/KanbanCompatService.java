@@ -2,12 +2,14 @@ package org.mwolff.manban.kanbancompat.application;
 
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.accesstoken.application.KanbanPrincipal;
 import org.mwolff.manban.board.application.BoardColumnRepository;
@@ -15,12 +17,15 @@ import org.mwolff.manban.board.application.BoardNotFoundException;
 import org.mwolff.manban.board.application.BoardRepository;
 import org.mwolff.manban.board.domain.Board;
 import org.mwolff.manban.board.domain.BoardColumn;
+import org.mwolff.manban.card.application.CardLabelRepository;
 import org.mwolff.manban.card.application.CardNotFoundException;
 import org.mwolff.manban.card.application.CardRepository;
 import org.mwolff.manban.card.application.CardService;
 import org.mwolff.manban.card.application.CardService.CardView;
+import org.mwolff.manban.card.application.LabelRepository;
 import org.mwolff.manban.card.domain.Card;
 import org.mwolff.manban.card.domain.CardType;
+import org.mwolff.manban.card.domain.Label;
 import org.mwolff.manban.comment.application.CommentService;
 import org.mwolff.manban.project.application.PermissionChecker;
 import org.springframework.stereotype.Service;
@@ -36,6 +41,10 @@ import org.springframework.transaction.annotation.Transactional;
  * positionsbasiert (i-te Spalte → i-ter Kanban-Key). Das Dogfood-Board nutzt die
  * Standard-5-Spalten, für die das Mapping 1:1 ist.
  */
+// PMD.CouplingBetweenObjects: Compat-Facade über mehrere Ports (Karten, Boards/Spalten, Rechte,
+// Kommentare, Labels/Card-Labels) plus die gespiegelten Protokoll-Records; die Kopplung ist der
+// Fassaden-Rolle inhärent und kein God-Class-Smell (analog CardService).
+@SuppressWarnings("PMD.CouplingBetweenObjects")
 @Service
 public class KanbanCompatService {
 
@@ -52,6 +61,8 @@ public class KanbanCompatService {
   private final CardService cardService;
   private final CommentService commentService;
   private final PermissionChecker permissions;
+  private final LabelRepository labels;
+  private final CardLabelRepository cardLabels;
 
   public KanbanCompatService(
       CardRepository cards,
@@ -59,13 +70,17 @@ public class KanbanCompatService {
       BoardRepository boards,
       CardService cardService,
       CommentService commentService,
-      PermissionChecker permissions) {
+      PermissionChecker permissions,
+      LabelRepository labels,
+      CardLabelRepository cardLabels) {
     this.cards = cards;
     this.boardColumns = boardColumns;
     this.boards = boards;
     this.cardService = cardService;
     this.commentService = commentService;
     this.permissions = permissions;
+    this.labels = labels;
+    this.cardLabels = cardLabels;
   }
 
   /**
@@ -87,26 +102,55 @@ public class KanbanCompatService {
     for (String key : COLUMNS) {
       grouped.put(key, new ArrayList<>());
     }
-    cards.findByBoardId(boardId).stream()
-        .filter(c -> !c.archived() && !c.ideaStored())
-        .sorted(Comparator.comparingInt(Card::positionInColumn))
-        .forEach(
-            c -> {
-              String key = keyByColumn.getOrDefault(c.columnId(), BACKLOG);
-              // grouped ist mit allen COLUMNS-Keys vorbelegt und key stammt aus COLUMNS;
-              // requireNonNull macht das fuer NullAway explizit (Map.get liefert @Nullable).
-              Objects.requireNonNull(grouped.get(key))
-                  .add(
-                      new Item(
-                          c.requireId(),
-                          c.requireNumber(),
-                          c.title(),
-                          c.description(),
-                          key,
-                          c.positionInColumn(),
-                          c.type() == CardType.EPIC ? "epic" : "card"));
-            });
+
+    List<Card> visible =
+        cards.findByBoardId(boardId).stream()
+            .filter(c -> !c.archived() && !c.ideaStored())
+            .sorted(Comparator.comparingInt(Card::positionInColumn))
+            .toList();
+    Map<Long, List<String>> labelsByCard = labelNamesByCard(boardId, visible);
+
+    for (Card c : visible) {
+      String key = keyByColumn.getOrDefault(c.columnId(), BACKLOG);
+      // grouped ist mit allen COLUMNS-Keys vorbelegt und key stammt aus COLUMNS;
+      // requireNonNull macht das fuer NullAway explizit (Map.get liefert @Nullable).
+      Objects.requireNonNull(grouped.get(key))
+          .add(
+              new Item(
+                  c.requireId(),
+                  c.requireNumber(),
+                  c.title(),
+                  c.description(),
+                  key,
+                  c.positionInColumn(),
+                  c.type() == CardType.EPIC ? "epic" : "card",
+                  labelsByCard.getOrDefault(c.requireId(), List.of())));
+    }
     return grouped;
+  }
+
+  /**
+   * Baut je Karte die Liste der Label-<em>Namen</em> aus genau zwei Batch-Abfragen auf — {@link
+   * LabelRepository#findByBoardId} (Namen) und {@link CardLabelRepository#findByCardIds}
+   * (Zuordnung) — unabhängig von der Kartenzahl (kein N+1). Die Reihenfolge je Karte folgt der
+   * Board-Definitionsreihenfolge, nicht der Zuordnungsreihenfolge.
+   */
+  private Map<Long, List<String>> labelNamesByCard(long boardId, List<Card> visible) {
+    List<Label> boardLabels = labels.findByBoardId(boardId);
+    List<Long> cardIds = visible.stream().map(Card::requireId).toList();
+    Map<Long, List<Long>> labelIdsByCard = cardLabels.findByCardIds(cardIds);
+    Map<Long, List<String>> result = new LinkedHashMap<>();
+    for (Card c : visible) {
+      long cardId = c.requireId();
+      Set<Long> assigned = new HashSet<>(labelIdsByCard.getOrDefault(cardId, List.of()));
+      List<String> names =
+          boardLabels.stream()
+              .filter(l -> assigned.contains(l.requireId()))
+              .map(Label::name)
+              .toList();
+      result.put(cardId, names);
+    }
+    return result;
   }
 
   /**
@@ -236,7 +280,11 @@ public class KanbanCompatService {
 
   // --- Response-Formen (spiegeln das tbx.mjs-Protokoll) ---------------------
 
-  /** Board-Item; {@code column} ist der Kanban-Key, {@code type} ist "card" oder "epic". */
+  /**
+   * Board-Item; {@code column} ist der Kanban-Key, {@code type} ist "card" oder "epic". {@code
+   * labels} enthält die zugeordneten Label-Namen in Board-Definitionsreihenfolge (leer, wenn
+   * keine).
+   */
   public record Item(
       Long id,
       int number,
@@ -244,7 +292,8 @@ public class KanbanCompatService {
       @Nullable String body,
       String column,
       int position,
-      String type) {}
+      String type,
+      List<String> labels) {}
 
   public record Created(long id, int number) {}
 
