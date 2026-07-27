@@ -3,6 +3,7 @@ package org.mwolff.manban.card.infrastructure;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mwolff.manban.AbstractIntegrationTest;
@@ -22,6 +23,7 @@ class LabelPersistenceIT extends AbstractIntegrationTest {
   @Autowired private JdbcTemplate jdbc;
 
   private long boardId;
+  private long columnId;
   private long cardId;
 
   @BeforeEach
@@ -35,7 +37,7 @@ class LabelPersistenceIT extends AbstractIntegrationTest {
             "INSERT INTO project (name, owner_user_id) VALUES ('P', " + userId + ") RETURNING id");
     boardId =
         insert("INSERT INTO board (project_id, name) VALUES (" + projectId + ", 'B') RETURNING id");
-    long columnId =
+    columnId =
         insert(
             "INSERT INTO board_column (board_id, name, position) VALUES ("
                 + boardId
@@ -78,6 +80,44 @@ class LabelPersistenceIT extends AbstractIntegrationTest {
 
     cardLabels.replaceLabels(cardId, List.of(bug));
     assertThat(cardLabels.findByCardId(cardId)).containsExactly(bug);
+  }
+
+  @Test
+  void findByCardIdsBatchesMultipleCardsAndSkipsUnlabeled() {
+    long bug = labels.save(new Label(null, boardId, "Bug", "#f00")).requireId();
+    long ux = labels.save(new Label(null, boardId, "Ux", "#0f0")).requireId();
+    long second =
+        insert(
+            "INSERT INTO card (board_id, column_id, number, title, position_in_column) "
+                + "VALUES ("
+                + boardId
+                + ", "
+                + columnId
+                + ", 2, 'B', 1) RETURNING id");
+    long third =
+        insert(
+            "INSERT INTO card (board_id, column_id, number, title, position_in_column) "
+                + "VALUES ("
+                + boardId
+                + ", "
+                + columnId
+                + ", 3, 'C', 2) RETURNING id");
+
+    cardLabels.replaceLabels(cardId, List.of(ux, bug));
+    cardLabels.replaceLabels(second, List.of(bug));
+    // dritte Karte bleibt ohne Labels
+
+    Map<Long, List<Long>> byCard = cardLabels.findByCardIds(List.of(cardId, second, third));
+
+    // je Karte aufsteigend nach label_id; Karte ohne Labels fehlt in der Map
+    assertThat(byCard).containsOnlyKeys(cardId, second);
+    assertThat(byCard.get(cardId)).containsExactly(bug, ux);
+    assertThat(byCard.get(second)).containsExactly(bug);
+  }
+
+  @Test
+  void findByCardIdsReturnsEmptyMapForEmptyInput() {
+    assertThat(cardLabels.findByCardIds(List.of())).isEmpty();
   }
 
   @Test

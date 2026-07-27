@@ -286,6 +286,70 @@ class KanbanCompatIT extends AbstractIntegrationTest {
   }
 
   @Test
+  void itemsExposeAssignedLabelNamesInBoardOrder() throws Exception {
+    Cookie session = loginAs("kanban-labels@example.com");
+    long projectId = createProject("kanban-labels@example.com", "Label-Projekt");
+    long boardId = createBoard(session, projectId, "Label-Board");
+    long columnId = firstColumnId(session, boardId);
+    String token = boundToken(session, projectId, boardId);
+
+    long cardId = createCard(session, boardId, columnId, "Mit Labels");
+
+    // findByBoardId ordnet Labels aufsteigend nach Name -> Board-Reihenfolge (Alpha, Beta).
+    long alpha = createLabel(session, boardId, "Alpha");
+    long beta = createLabel(session, boardId, "Beta");
+    // Zuordnung bewusst in umgekehrter Reihenfolge (Beta, Alpha): das Ergebnis muss der
+    // Board-Definitionsreihenfolge folgen, nicht der Zuordnungsreihenfolge.
+    setCardLabels(session, cardId, beta, alpha);
+
+    // Eine zweite Karte ohne Labels: labels-Feld muss eine leere Liste sein.
+    createCard(session, boardId, columnId, "Ohne Labels");
+
+    JsonNode backlog = kanbanItems(token).get("BACKLOG");
+    JsonNode withLabels = itemById(backlog, cardId);
+    assertThat(withLabels.get("labels").isArray()).isTrue();
+    assertThat(withLabels.get("labels")).hasSize(2);
+    assertThat(withLabels.get("labels").get(0).asText()).isEqualTo("Alpha");
+    assertThat(withLabels.get("labels").get(1).asText()).isEqualTo("Beta");
+
+    JsonNode withoutLabels =
+        backlog.valueStream().filter(n -> n.get("id").asLong() != cardId).findFirst().orElseThrow();
+    assertThat(withoutLabels.get("labels").isArray()).isTrue();
+    assertThat(withoutLabels.get("labels")).isEmpty();
+  }
+
+  private long createLabel(Cookie session, long boardId, String name) throws Exception {
+    String body =
+        mvc.perform(
+                post("/api/boards/" + boardId + "/labels")
+                    .cookie(session)
+                    .contentType("application/json")
+                    .content("{\"name\":\"%s\",\"color\":\"#123456\"}".formatted(name)))
+            .andExpect(status().isCreated())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+    return json.readTree(body).get("id").asLong();
+  }
+
+  private void setCardLabels(Cookie session, long cardId, long... labelIds) throws Exception {
+    StringBuilder ids = new StringBuilder();
+    for (int i = 0; i < labelIds.length; i++) {
+      ids.append(i == 0 ? "" : ",").append(labelIds[i]);
+    }
+    mvc.perform(
+            put("/api/cards/" + cardId + "/labels")
+                .cookie(session)
+                .contentType("application/json")
+                .content("{\"labels\":[%s]}".formatted(ids)))
+        .andExpect(status().isOk());
+  }
+
+  private static JsonNode itemById(JsonNode items, long id) {
+    return items.valueStream().filter(n -> n.get("id").asLong() == id).findFirst().orElseThrow();
+  }
+
+  @Test
   void invalidTokenIsUnauthorized() throws Exception {
     mvc.perform(get("/api/kanban/items").header("X-Kanban-Token", "tk_bogus"))
         .andExpect(status().isUnauthorized());
