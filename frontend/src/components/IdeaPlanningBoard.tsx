@@ -16,6 +16,7 @@ import { cardsApi, type Card } from '../api/cards'
 import { ideasApi, type Idea } from '../api/ideas'
 import { membersApi, type Member } from '../api/members'
 import { CardDetailModal } from './CardDetailModal'
+import { useSnackbar } from './SnackbarProvider'
 import { useRefetchOnFocus } from '../lib/useRefetchOnFocus'
 
 /** Erste Spalte eines Boards (kleinste Position); `null`, wenn das Board keine Spalte hat. */
@@ -40,8 +41,8 @@ const SCROLL_STEP_PX = 16
  * Gestapelte Planungs-Ansicht (Jira-Stil): alle Boards des Projekts untereinander, je Board seine
  * erste Spalte, darunter der projektweite, board-lose Ideen-Pool. Ideen werden per Drag & Drop (oder
  * per Button) auf ein beliebiges Board eingeplant und Board-Karten zurück in den Pool geholt. Das
- * Umsortieren innerhalb einer Board-Spalte ist möglich; das Verschieben zwischen Boards ist ein
- * eigenes Folge-Issue.
+ * Umsortieren innerhalb einer Board-Spalte ist möglich; eine bereits eingeplante Karte lässt sich
+ * per Drag von einem Board auf ein anderes verschieben (Transfer in dessen erste Spalte).
  */
 export function IdeaPlanningBoard({
   projectId,
@@ -56,6 +57,7 @@ export function IdeaPlanningBoard({
   const [selectedIdea, setSelectedIdea] = useState<Idea | null>(null)
   const [dragged, setDragged] = useState<DragState | null>(null)
   const navigate = useNavigate()
+  const notify = useSnackbar()
 
   useEffect(() => {
     let active = true
@@ -141,6 +143,23 @@ export function IdeaPlanningBoard({
     [reload],
   )
 
+  // Eine bereits eingeplante Karte von einem Board auf ein anderes verschieben: in die erste Spalte
+  // des Zielboards. Ohne optimistisches Entfernen — erst der Reload nach Erfolg ändert die Ansicht,
+  // scheitert der Transfer, bleibt sie unverändert und der Nutzer bekommt eine verständliche Meldung.
+  const transfer = useCallback(
+    async (cardId: number, target: Board) => {
+      const targetColumnId = firstColumnOf(target)
+      if (targetColumnId === null) return
+      try {
+        await cardsApi.transfer(cardId, target.id, targetColumnId)
+        await reload()
+      } catch {
+        notify('Verschieben auf das andere Board fehlgeschlagen.', 'error')
+      }
+    },
+    [reload, notify],
+  )
+
   const startPoolDrag = (id: number) => (e: React.DragEvent) => {
     e.dataTransfer.setData('text/plain', String(id))
     setDragged({ source: 'pool', id })
@@ -151,14 +170,15 @@ export function IdeaPlanningBoard({
     setDragged({ source: 'board', boardId, id })
   }
 
-  // Drop auf die Zone eines Boards: aus dem Pool → auf dieses Board einplanen. Eine Board-Karte auf
-  // ein anderes Board zu ziehen (Transfer) ist ein eigenes Folge-Issue und passiert hier nicht.
-  const handleBoardDrop = (boardId: number) => (e: React.DragEvent) => {
+  // Drop auf die Zone eines Boards: aus dem Pool → auf dieses Board einplanen; von einem anderen
+  // Board → dorthin verschieben (Transfer). Ein Drop auf das Herkunfts-Board tut nichts.
+  const handleBoardDrop = (board: Board) => (e: React.DragEvent) => {
     e.preventDefault()
     const d = dragged
     setDragged(null)
     if (d === null) return
-    if (d.source === 'pool') void plan(d.id, boardId)
+    if (d.source === 'pool') void plan(d.id, board.id)
+    else if (d.boardId !== board.id) void transfer(d.id, board)
   }
 
   // Drop auf die Pool-Zone: eine Board-Karte zurück in den board-losen Pool holen.
@@ -224,7 +244,7 @@ export function IdeaPlanningBoard({
             <Box
               data-testid={`board-zone-${board.id}`}
               onDragOver={(e) => e.preventDefault()}
-              onDrop={handleBoardDrop(board.id)}
+              onDrop={handleBoardDrop(board)}
               sx={{ minHeight: 64, borderRadius: 1.5, p: 1, bgcolor: 'background.default' }}
             >
               {cards.length === 0 ? (

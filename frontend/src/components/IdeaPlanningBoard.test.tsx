@@ -9,11 +9,16 @@ import { ideasApi, type Idea } from '../api/ideas'
 import { membersApi } from '../api/members'
 import { IdeaPlanningBoard } from './IdeaPlanningBoard'
 
+// Toast-Weg: useSnackbar liefert im Test einen Spy (statt des No-op-Defaults ohne Provider).
+const { mNotify } = vi.hoisted(() => ({ mNotify: vi.fn() }))
+vi.mock('./SnackbarProvider', () => ({ useSnackbar: () => mNotify }))
+
 vi.mock('../api/boards', () => ({ boardsApi: { list: vi.fn() } }))
 vi.mock('../api/cards', () => ({
   cardsApi: {
     list: vi.fn(),
     move: vi.fn(),
+    transfer: vi.fn(),
     update: vi.fn(),
     setAssignees: vi.fn(),
     setLabels: vi.fn(),
@@ -42,6 +47,7 @@ const mBoards = boardsApi as unknown as { list: ReturnType<typeof vi.fn> }
 const mCards = cardsApi as unknown as {
   list: ReturnType<typeof vi.fn>
   move: ReturnType<typeof vi.fn>
+  transfer: ReturnType<typeof vi.fn>
   update: ReturnType<typeof vi.fn>
   getActivity: ReturnType<typeof vi.fn>
 }
@@ -129,6 +135,7 @@ function setup({
   mBoards.list.mockResolvedValue(boards)
   mCards.list.mockImplementation((boardId: number) => Promise.resolve(cardsByBoard[boardId] ?? []))
   mCards.move.mockResolvedValue({})
+  mCards.transfer.mockResolvedValue(card({ id: 1, columnId: 110, number: 7, title: 'Backlog A', positionInColumn: 0 }))
   mCards.update.mockResolvedValue(idea({ id: 20, title: 'x' }))
   mCards.getActivity.mockResolvedValue([])
   mIdeas.list.mockResolvedValue(ideas)
@@ -272,18 +279,62 @@ describe('IdeaPlanningBoard', () => {
     await waitFor(() => expect(mIdeas.moveBackToPool).toHaveBeenCalledWith(1))
   })
 
-  it('löst beim Drop einer Board-Karte auf ein anderes Board (noch) keinen Transfer aus', async () => {
-    // Board→Board-Verschieben ist Issue #426; hier passiert bewusst nichts.
+  it('verschiebt eine Board-Karte per Drag auf ein anderes Board in dessen erste Spalte und lädt beide Boards neu', async () => {
     setup()
+    renderBoard()
+    await screen.findByText('Backlog A')
+    mCards.list.mockClear()
+
+    // „Backlog A" (id 1, Board 10) auf Board Y (id 11) ziehen — dessen erste Spalte ist 110.
+    fireEvent.dragStart(screen.getByTestId('board-item-1'), dt())
+    fireEvent.dragOver(screen.getByTestId('board-zone-11'), dt())
+    fireEvent.drop(screen.getByTestId('board-zone-11'), dt())
+
+    await waitFor(() => expect(mCards.transfer).toHaveBeenCalledWith(1, 11, 110))
+    // Danach werden Quell- und Zielboard neu geladen.
+    await waitFor(() => expect(mCards.list).toHaveBeenCalledWith(10))
+    expect(mCards.list).toHaveBeenCalledWith(11)
+    expect(mIdeas.planOntoBoard).not.toHaveBeenCalled()
+    expect(mIdeas.moveBackToPool).not.toHaveBeenCalled()
+  })
+
+  it('verschiebt nicht, wenn eine Board-Karte auf ihr eigenes Board fällt (kein Netzaufruf)', async () => {
+    setup()
+    renderBoard()
+    await screen.findByText('Backlog A')
+
+    fireEvent.dragStart(screen.getByTestId('board-item-1'), dt())
+    fireEvent.drop(screen.getByTestId('board-zone-10'), dt())
+
+    expect(mCards.transfer).not.toHaveBeenCalled()
+  })
+
+  it('verschiebt nicht auf ein Board ohne Spalte (kein gültiges Ziel)', async () => {
+    const noCols = { id: 12, name: 'Board Leer', projectId: 5, createdAt: '', columns: [] }
+    setup({ boards: [...BOARDS, noCols] })
+    renderBoard()
+    await screen.findByText('Backlog A')
+
+    fireEvent.dragStart(screen.getByTestId('board-item-1'), dt())
+    fireEvent.drop(screen.getByTestId('board-zone-12'), dt())
+
+    expect(mCards.transfer).not.toHaveBeenCalled()
+  })
+
+  it('zeigt bei fehlgeschlagenem Transfer eine Meldung und behält die Karte in der Ansicht', async () => {
+    setup()
+    mCards.transfer.mockRejectedValueOnce(new Error('boom'))
     renderBoard()
     await screen.findByText('Backlog A')
 
     fireEvent.dragStart(screen.getByTestId('board-item-1'), dt())
     fireEvent.drop(screen.getByTestId('board-zone-11'), dt())
 
-    expect(mIdeas.planOntoBoard).not.toHaveBeenCalled()
-    expect(mIdeas.moveBackToPool).not.toHaveBeenCalled()
-    expect(mCards.move).not.toHaveBeenCalled()
+    await waitFor(() =>
+      expect(mNotify).toHaveBeenCalledWith(expect.stringMatching(/fehlgeschlagen/i), 'error'),
+    )
+    // Ansicht bleibt konsistent: die Karte ist weiterhin sichtbar (kein optimistisches Entfernen).
+    expect(screen.getByText('Backlog A')).toBeInTheDocument()
   })
 
   it('ignoriert einen Drop einer Pool-Idee zurück in den Pool', async () => {
