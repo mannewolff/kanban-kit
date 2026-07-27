@@ -653,6 +653,80 @@ describe('BoardView', () => {
     expect(onCardsChanged).toHaveBeenCalled()
   })
 
+  it('übergibt die Auswahl in Sichtreihenfolge, nicht in Klick-Reihenfolge', async () => {
+    const cards: Card[] = [
+      { ...card, id: 101, positionInColumn: 0, title: 'Eins' },
+      { ...card, id: 102, positionInColumn: 1, title: 'Zwei' },
+      { ...card, id: 103, positionInColumn: 2, title: 'Drei' },
+    ]
+    mProjects.list.mockResolvedValue([{ id: 2, name: 'Anderes Projekt', role: 'OWNER', createdAt: '' }])
+    mBoards.list.mockResolvedValue([
+      { id: 99, projectId: 2, name: 'Zielboard', createdAt: '',
+        columns: [{ id: 900, name: 'Backlog', position: 0, wipLimit: null }] },
+    ])
+    mCards.bulkTransfer.mockResolvedValue([])
+    render(<BoardView board={board} initialCards={cards} canEdit canTransfer api={mkApi()} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Auswählen' }))
+    // Von unten nach oben anhaken — genau der Fall, der ohne Sortierung verdreht im Ziel landet.
+    fireEvent.click(screen.getByTestId('card-103'))
+    fireEvent.click(screen.getByTestId('card-102'))
+    fireEvent.click(screen.getByTestId('card-101'))
+    fireEvent.click(screen.getByRole('button', { name: 'Verschieben' }))
+
+    fireEvent.change(await screen.findByLabelText('Zielprojekt'), { target: { value: '2' } })
+    fireEvent.change(await screen.findByLabelText('Zielboard'), { target: { value: '99' } })
+    fireEvent.change(await screen.findByLabelText('Zielspalte'), { target: { value: '900' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Verschieben' }))
+
+    await waitFor(() => expect(mCards.bulkTransfer).toHaveBeenCalledWith([101, 102, 103], 99, 900))
+  })
+
+  it('sortiert eine spaltenübergreifende Auswahl zuerst nach Spaltenposition', async () => {
+    const cards: Card[] = [
+      { ...card, id: 201, columnId: 20, positionInColumn: 0, title: 'Rechts oben' },
+      { ...card, id: 202, columnId: 10, positionInColumn: 5, title: 'Links unten' },
+    ]
+    mProjects.list.mockResolvedValue([{ id: 2, name: 'Anderes Projekt', role: 'OWNER', createdAt: '' }])
+    mBoards.list.mockResolvedValue([
+      { id: 99, projectId: 2, name: 'Zielboard', createdAt: '',
+        columns: [{ id: 900, name: 'Backlog', position: 0, wipLimit: null }] },
+    ])
+    mCards.bulkTransfer.mockResolvedValue([])
+    render(<BoardView board={board} initialCards={cards} canEdit canTransfer api={mkApi()} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Auswählen' }))
+    // Die Karte der hinteren Spalte zuerst anhaken: die Spaltenposition muss die kleinere
+    // Position-in-Spalte der anderen Karte schlagen.
+    fireEvent.click(screen.getByTestId('card-201'))
+    fireEvent.click(screen.getByTestId('card-202'))
+    fireEvent.click(screen.getByRole('button', { name: 'Verschieben' }))
+
+    fireEvent.change(await screen.findByLabelText('Zielprojekt'), { target: { value: '2' } })
+    fireEvent.change(await screen.findByLabelText('Zielboard'), { target: { value: '99' } })
+    fireEvent.change(await screen.findByLabelText('Zielspalte'), { target: { value: '900' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Verschieben' }))
+
+    await waitFor(() => expect(mCards.bulkTransfer).toHaveBeenCalledWith([202, 201], 99, 900))
+  })
+
+  it('lässt Archivieren und Papierkorb bei der Klick-Reihenfolge — dort ist sie bedeutungslos', async () => {
+    const cards: Card[] = [
+      { ...card, id: 101, positionInColumn: 0, title: 'Eins' },
+      { ...card, id: 102, positionInColumn: 1, title: 'Zwei' },
+    ]
+    const api = mkApi({ bulkArchive: vi.fn().mockResolvedValue([]) })
+    render(<BoardView board={board} initialCards={cards} canEdit api={api} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Auswählen' }))
+    fireEvent.click(screen.getByTestId('card-102'))
+    fireEvent.click(screen.getByTestId('card-101'))
+    fireEvent.click(screen.getByRole('button', { name: 'Archivieren' }))
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Archivieren' }))
+
+    await waitFor(() => expect(api.bulkArchive).toHaveBeenCalledWith([102, 101]))
+  })
+
   it('öffnet den Anlage-Dialog für die erste Spalte über „Neu anlegen"', () => {
     render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} />)
     fireEvent.click(screen.getByRole('button', { name: 'Neu anlegen' }))

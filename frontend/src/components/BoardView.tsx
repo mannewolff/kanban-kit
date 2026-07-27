@@ -389,6 +389,19 @@ export function BoardView({
     }
   }
 
+  // Die Auswahl liegt als Set vor und gibt damit die Klick-Reihenfolge wieder. Für den Transfer
+  // zählt aber, was der Nutzer sieht: die API hängt die Karten in Eingabereihenfolge ans Ende der
+  // Zielspalte, also muss die Eingabe der Sichtreihenfolge des Quellboards folgen. Sortierschlüssel
+  // ist Spaltenposition (columns ist bereits danach sortiert), dann Position in der Spalte — dieselbe
+  // zweistufige Regel wie in der Listenansicht, nötig weil die Auswahl mehrere Spalten umfassen kann.
+  // Archivieren und Löschen brauchen das nicht; dort ist die Reihenfolge bedeutungslos.
+  const selectedIdsInViewOrder = () =>
+    columns.flatMap((column) =>
+      activeCardsInColumn(cards, column.id)
+        .filter((c) => selectedIds.has(c.id))
+        .map((c) => c.id),
+    )
+
   // Bulk-Verschieben: der Dialog erledigt den Transfer; danach die Karten aus der Ansicht nehmen.
   const onBulkTransferred = (movedIds: number[]) => {
     const moved = new Set(movedIds)
@@ -750,11 +763,11 @@ export function BoardView({
 
       {bulkTransferOpen && (
         <TransferCardDialog
-          cardIds={[...selectedIds]}
+          cardIds={selectedIdsInViewOrder()}
           currentBoardId={board.id}
           platformAdmin={platformAdmin}
           onClose={() => setBulkTransferOpen(false)}
-          onTransferred={() => onBulkTransferred([...selectedIds])}
+          onTransferred={() => onBulkTransferred(selectedIdsInViewOrder())}
         />
       )}
 

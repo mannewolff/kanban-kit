@@ -453,6 +453,77 @@ class CardIT extends AbstractIntegrationTest {
         .andExpect(jsonPath("$.length()").value(2));
   }
 
+  /**
+   * Pinnt den Reihenfolge-Vertrag von {@code bulk-transfer}: die übergebenen Karten landen in
+   * Eingabereihenfolge als geschlossener Block am Ende der Zielspalte, die dort bereits liegenden
+   * Karten behalten ihre Reihenfolge und die Quellspalte wird lückenlos nachgezogen. Das Backend
+   * sortiert bewusst nicht selbst um — die Sichtreihenfolge herzustellen ist Sache des Aufrufers.
+   */
+  @Test
+  void bulkTransferAppendsInInputOrderToPopulatedTargetColumn() throws Exception {
+    Cookie alice = loginAs("bulk-xfer-order@example.com");
+    long p1 = createProject("bulk-xfer-order@example.com", "BulkXferOrder1");
+    long p2 = createProject("bulk-xfer-order@example.com", "BulkXferOrder2");
+    JsonNode boardA = createBoard(alice, p1);
+    JsonNode boardB = createBoard(alice, p2);
+    long boardIdA = boardA.get("id").asLong();
+    long colA = boardA.get("columns").get(0).get("id").asLong();
+    long boardIdB = boardB.get("id").asLong();
+    long colB = boardB.get("columns").get(0).get("id").asLong();
+    // Zielspalte ist bereits befüllt: der Block muss hinter diesen beiden landen.
+    long alt1 = createCard(alice, boardIdB, colB, "Alt1", null).get("id").asLong();
+    long alt2 = createCard(alice, boardIdB, colB, "Alt2", null).get("id").asLong();
+    long c1 = createCard(alice, boardIdA, colA, "Eins", null).get("id").asLong();
+    long c2 = createCard(alice, boardIdA, colA, "Zwei", null).get("id").asLong();
+    long c3 = createCard(alice, boardIdA, colA, "Drei", null).get("id").asLong();
+    long bleibt = createCard(alice, boardIdA, colA, "Bleibt", null).get("id").asLong();
+
+    // Eingabereihenfolge bewusst ungleich der Anlage-Reihenfolge.
+    mvc.perform(
+            post("/api/cards/bulk-transfer")
+                .cookie(alice)
+                .contentType("application/json")
+                .content(
+                    "{\"cardIds\":[%d,%d,%d],\"targetBoardId\":%d,\"targetColumnId\":%d}"
+                        .formatted(c3, c1, c2, boardIdB, colB)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.length()").value(3));
+
+    JsonNode target = boardCards(alice, boardIdB);
+    org.assertj.core.api.Assertions.assertThat(
+            new int[] {
+              positionOf(target, alt1),
+              positionOf(target, alt2),
+              positionOf(target, c3),
+              positionOf(target, c1),
+              positionOf(target, c2)
+            })
+        .containsExactly(0, 1, 2, 3, 4);
+
+    // Quellspalte lückenlos nachgezogen: die verbliebene Karte rutscht auf Position 0.
+    JsonNode source = boardCards(alice, boardIdA);
+    org.assertj.core.api.Assertions.assertThat(source.size()).isEqualTo(1);
+    org.assertj.core.api.Assertions.assertThat(positionOf(source, bleibt)).isZero();
+  }
+
+  private JsonNode boardCards(Cookie session, long boardId) throws Exception {
+    return json.readTree(
+        mvc.perform(get("/api/boards/" + boardId + "/cards").cookie(session))
+            .andExpect(status().isOk())
+            .andReturn()
+            .getResponse()
+            .getContentAsString());
+  }
+
+  private int positionOf(JsonNode cards, long cardId) {
+    for (JsonNode c : cards) {
+      if (c.get("id").asLong() == cardId) {
+        return c.get("positionInColumn").asInt();
+      }
+    }
+    throw new AssertionError("Karte " + cardId + " nicht in der Antwort");
+  }
+
   @Test
   void bulkTransferRollsBackWhenNotOwnerInTargetProject() throws Exception {
     Cookie alice = loginAs("bulk-xfer-rb-owner@example.com");
