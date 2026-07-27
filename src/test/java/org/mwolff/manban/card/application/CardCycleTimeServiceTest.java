@@ -11,15 +11,12 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.List;
-import java.util.Optional;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.mwolff.manban.board.application.BoardColumnRepository;
 import org.mwolff.manban.board.application.BoardNotFoundException;
-import org.mwolff.manban.board.application.BoardRepository;
-import org.mwolff.manban.board.domain.Board;
-import org.mwolff.manban.board.domain.BoardColumn;
+import org.mwolff.manban.board.application.BoardService;
+import org.mwolff.manban.board.application.BoardService.ColumnView;
 import org.mwolff.manban.card.domain.Card;
 import org.mwolff.manban.card.domain.CardColumnTransition;
 import org.mwolff.manban.card.domain.CardType;
@@ -36,8 +33,7 @@ class CardCycleTimeServiceTest {
 
   private CardRepository cards;
   private CardColumnTransitionRepository transitions;
-  private BoardColumnRepository columns;
-  private BoardRepository boards;
+  private BoardService boardService;
   private PermissionChecker permissions;
   private CardCycleTimeService service;
 
@@ -45,20 +41,19 @@ class CardCycleTimeServiceTest {
   void setUp() {
     cards = mock(CardRepository.class);
     transitions = mock(CardColumnTransitionRepository.class);
-    columns = mock(BoardColumnRepository.class);
-    boards = mock(BoardRepository.class);
+    boardService = mock(BoardService.class);
     permissions = mock(PermissionChecker.class);
     Clock clock = Clock.fixed(NOW, ZoneOffset.UTC);
-    service = new CardCycleTimeService(cards, transitions, columns, boards, permissions, clock);
-    when(boards.findById(BOARD)).thenReturn(Optional.of(new Board(BOARD, PROJECT, "B", NOW)));
+    service = new CardCycleTimeService(cards, transitions, boardService, permissions, clock);
+    when(boardService.requireProjectId(BOARD)).thenReturn(PROJECT);
     stub(List.of(), List.of(), List.of());
   }
 
   private void stub(
-      List<Card> boardCards, List<CardColumnTransition> trans, List<BoardColumn> cols) {
+      List<Card> boardCards, List<CardColumnTransition> trans, List<ColumnView> cols) {
     when(cards.findByBoardId(BOARD)).thenReturn(boardCards);
     when(transitions.findByBoardId(BOARD)).thenReturn(trans);
-    when(columns.findByBoardId(BOARD)).thenReturn(cols);
+    when(boardService.listColumns(BOARD)).thenReturn(cols);
   }
 
   private static Card card(
@@ -85,8 +80,8 @@ class CardCycleTimeServiceTest {
         null);
   }
 
-  private static BoardColumn col(long id, String name, int position) {
-    return new BoardColumn(id, BOARD, name, position, null);
+  private static ColumnView col(long id, String name, int position) {
+    return new ColumnView(id, name, position, null);
   }
 
   private static CardColumnTransition tr(
@@ -97,7 +92,7 @@ class CardCycleTimeServiceTest {
 
   @Test
   void dashboard_throwsBoardNotFound_whenBoardUnknown() {
-    when(boards.findById(BOARD)).thenReturn(Optional.empty());
+    when(boardService.requireProjectId(BOARD)).thenThrow(new BoardNotFoundException());
 
     assertThatThrownBy(() -> service.dashboard(5L, BOARD))
         .isInstanceOf(BoardNotFoundException.class);

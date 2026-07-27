@@ -6,6 +6,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import java.time.Clock;
@@ -22,6 +23,9 @@ import org.mwolff.manban.project.application.PermissionChecker;
 import org.mwolff.manban.project.domain.Permission;
 
 /** Verhaltenstests der Board- und Spalten-Use-Cases (Mockito an den Ports). */
+// PMD.TooManyMethods: umfassende Unit-Suite (Boards, Spalten und die modulfremde Fassade, je
+// Erfolgs- und Fehlerpfad). Viele kleine @Test-Methoden sind hier gewollt, kein God-Class-Smell.
+@SuppressWarnings("PMD.TooManyMethods")
 class BoardServiceTest {
 
   private static final Instant FIXED = Instant.parse("2026-01-02T03:04:05Z");
@@ -359,5 +363,126 @@ class BoardServiceTest {
     List<Long> mismatchedIds = List.of(1L, 99L);
     assertThatThrownBy(() -> service.reorderColumns(1L, 10L, mismatchedIds))
         .isInstanceOf(ColumnNotFoundException.class);
+  }
+
+  // --- Fassade fuer modulfremde Use-Cases (Issue #459) ---------------------
+
+  @Test
+  void requireProjectId_returnsProjectOfBoard() {
+    // Given
+    when(boards.findById(10L)).thenReturn(Optional.of(board()));
+
+    // When / Then
+    assertThat(service.requireProjectId(10L)).isEqualTo(1L);
+  }
+
+  @Test
+  void requireProjectId_throwsBoardNotFound_whenBoardUnknown() {
+    // Given: archivierte Boards liefert findById ebenfalls nicht
+    when(boards.findById(10L)).thenReturn(Optional.empty());
+
+    // When / Then
+    assertThatThrownBy(() -> service.requireProjectId(10L))
+        .isInstanceOf(BoardNotFoundException.class);
+  }
+
+  @Test
+  void requireProjectId_doesNotCheckPermissions() {
+    // Given: die Fassade loest nur auf — die Rechtepruefung bleibt beim aufrufenden Modul.
+    when(boards.findById(10L)).thenReturn(Optional.of(board()));
+
+    // When
+    service.requireProjectId(10L);
+
+    // Then
+    verifyNoInteractions(permissions);
+  }
+
+  @Test
+  void findProjectId_returnsProjectOfBoard() {
+    // Given
+    when(boards.findById(10L)).thenReturn(Optional.of(board()));
+
+    // When / Then
+    assertThat(service.findProjectId(10L)).contains(1L);
+  }
+
+  @Test
+  void findProjectId_returnsEmpty_whenBoardUnknown() {
+    // Given: kein 404 — der Aufrufer entscheidet, wie ein unbekanntes Board zu werten ist
+    when(boards.findById(10L)).thenReturn(Optional.empty());
+
+    // When / Then
+    assertThat(service.findProjectId(10L)).isEmpty();
+  }
+
+  @Test
+  void requireColumn_returnsViewOfColumn() {
+    // Given
+    when(columns.findById(1L)).thenReturn(Optional.of(new BoardColumn(1L, 10L, "Ready", 2, 5)));
+
+    // When / Then
+    assertThat(service.requireColumn(1L, 10L))
+        .isEqualTo(new BoardService.ColumnView(1L, "Ready", 2, 5));
+  }
+
+  @Test
+  void requireColumn_throwsColumnNotFound_whenColumnUnknown() {
+    // Given
+    when(columns.findById(1L)).thenReturn(Optional.empty());
+
+    // When / Then
+    assertThatThrownBy(() -> service.requireColumn(1L, 10L))
+        .isInstanceOf(ColumnNotFoundException.class);
+  }
+
+  @Test
+  void requireColumn_throwsColumnNotFound_whenColumnBelongsToOtherBoard() {
+    // Given: die Spalte existiert, gehoert aber zu einem fremden Board (kein Existenz-Leak)
+    when(columns.findById(1L)).thenReturn(Optional.of(new BoardColumn(1L, 99L, "Ready", 2, null)));
+
+    // When / Then
+    assertThatThrownBy(() -> service.requireColumn(1L, 10L))
+        .isInstanceOf(ColumnNotFoundException.class);
+  }
+
+  @Test
+  void listColumns_returnsColumnsSortedByPosition() {
+    // Given: die Rohdaten kommen bewusst unsortiert
+    when(columns.findByBoardId(10L))
+        .thenReturn(List.of(column(2L, "Ready", 1), column(1L, "Backlog", 0)));
+
+    // When / Then
+    assertThat(service.listColumns(10L))
+        .containsExactly(
+            new BoardService.ColumnView(1L, "Backlog", 0, null),
+            new BoardService.ColumnView(2L, "Ready", 1, null));
+  }
+
+  @Test
+  void listColumns_returnsEmptyList_whenBoardHasNoColumns() {
+    // Given (Default-Stub aus setUp: keine Spalten)
+
+    // When / Then
+    assertThat(service.listColumns(10L)).isEmpty();
+  }
+
+  @Test
+  void firstColumn_returnsColumnWithSmallestPosition() {
+    // Given: die Rohdaten kommen bewusst unsortiert
+    when(columns.findByBoardId(10L))
+        .thenReturn(List.of(column(2L, "Ready", 1), column(1L, "Backlog", 0)));
+
+    // When / Then
+    assertThat(service.firstColumn(10L))
+        .isEqualTo(new BoardService.ColumnView(1L, "Backlog", 0, null));
+  }
+
+  @Test
+  void firstColumn_throwsColumnNotFound_whenBoardHasNoColumns() {
+    // Given (Default-Stub aus setUp: keine Spalten)
+
+    // When / Then
+    assertThatThrownBy(() -> service.firstColumn(10L)).isInstanceOf(ColumnNotFoundException.class);
   }
 }

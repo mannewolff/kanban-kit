@@ -9,7 +9,6 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -17,8 +16,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mwolff.manban.board.application.BoardNotFoundException;
-import org.mwolff.manban.board.application.BoardRepository;
-import org.mwolff.manban.board.domain.Board;
+import org.mwolff.manban.board.application.BoardService;
 import org.mwolff.manban.card.domain.Label;
 import org.mwolff.manban.project.application.PermissionChecker;
 import org.mwolff.manban.project.domain.Permission;
@@ -31,7 +29,7 @@ class LabelServiceTest {
 
   private LabelRepository labels;
   private CardLabelRepository cardLabels;
-  private BoardRepository boards;
+  private BoardService boardService;
   private PermissionChecker permissions;
   private LabelService service;
 
@@ -39,11 +37,10 @@ class LabelServiceTest {
   void setUp() {
     labels = mock(LabelRepository.class);
     cardLabels = mock(CardLabelRepository.class);
-    boards = mock(BoardRepository.class);
+    boardService = mock(BoardService.class);
     permissions = mock(PermissionChecker.class);
-    service = new LabelService(labels, cardLabels, boards, permissions);
-    when(boards.findById(BOARD))
-        .thenReturn(Optional.of(new Board(BOARD, PROJECT, "B", Instant.EPOCH)));
+    service = new LabelService(labels, cardLabels, boardService, permissions);
+    when(boardService.requireProjectId(BOARD)).thenReturn(PROJECT);
     when(labels.save(any(Label.class))).thenAnswer(inv -> inv.getArgument(0));
   }
 
@@ -59,7 +56,7 @@ class LabelServiceTest {
 
   @Test
   void list_throwsBoardNotFound_whenBoardUnknown() {
-    when(boards.findById(BOARD)).thenReturn(Optional.empty());
+    when(boardService.requireProjectId(BOARD)).thenThrow(new BoardNotFoundException());
 
     assertThatThrownBy(() -> service.list(5L, BOARD)).isInstanceOf(BoardNotFoundException.class);
   }

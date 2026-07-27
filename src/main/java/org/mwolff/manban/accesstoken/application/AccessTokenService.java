@@ -7,8 +7,7 @@ import java.util.Optional;
 import java.util.OptionalLong;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.accesstoken.domain.AccessToken;
-import org.mwolff.manban.board.application.BoardRepository;
-import org.mwolff.manban.board.domain.Board;
+import org.mwolff.manban.board.application.BoardService;
 import org.mwolff.manban.common.token.TokenCryptoPort;
 import org.mwolff.manban.common.token.TokenCryptoPort.GeneratedToken;
 import org.mwolff.manban.project.application.PermissionChecker;
@@ -30,7 +29,7 @@ public class AccessTokenService {
 
   private final AccessTokenRepository tokens;
   private final TokenCryptoPort crypto;
-  private final BoardRepository boards;
+  private final BoardService boardService;
   private final PermissionChecker permissions;
   private final Clock clock;
   private final ObjectProvider<AccessTokenService> self;
@@ -38,13 +37,13 @@ public class AccessTokenService {
   public AccessTokenService(
       AccessTokenRepository tokens,
       TokenCryptoPort crypto,
-      BoardRepository boards,
+      BoardService boardService,
       PermissionChecker permissions,
       Clock clock,
       ObjectProvider<AccessTokenService> self) {
     this.tokens = tokens;
     this.crypto = crypto;
-    this.boards = boards;
+    this.boardService = boardService;
     this.permissions = permissions;
     this.clock = clock;
     this.self = self;
@@ -89,11 +88,13 @@ public class AccessTokenService {
       throw new InvalidTokenBindingException(
           "projectId und boardId müssen zusammen gesetzt sein (oder beide leer)");
     }
-    Board board =
-        boards
-            .findById(boardId)
+    // Bewusst die Optional-Variante der Board-Fassade: ein unbekanntes Board ist hier keine
+    // fehlende Ressource (404), sondern eine unschluessige Bindungsangabe (400).
+    Long boardProjectId =
+        boardService
+            .findProjectId(boardId)
             .orElseThrow(() -> new InvalidTokenBindingException("Board " + boardId + " unbekannt"));
-    if (!projectId.equals(board.projectId())) {
+    if (!projectId.equals(boardProjectId)) {
       throw new InvalidTokenBindingException(
           "Board " + boardId + " gehört nicht zu Projekt " + projectId);
     }

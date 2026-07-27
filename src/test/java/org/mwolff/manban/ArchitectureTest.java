@@ -109,6 +109,42 @@ class ArchitectureTest {
           .haveNameMatching("org\\.mwolff\\.manban\\.card\\.application\\..*Repository")
           .as("card-Repository-Ports sind modulintern (nur ueber CardService/LabelService)");
 
+  // --- Modul-Grenze: board-Fassade (Issue #459) -----------------------------------------------
+  // Board und Spalte sind modulintern. Fremde Module fragen die fachliche board.application-
+  // Fassade (BoardService: requireProjectId/requireColumn/listColumns/firstColumn) — sonst loest
+  // jeder fremde Use-Case die Projekt-Zugehoerigkeit selbst ueber das Aggregat und dessen
+  // Persistenz-Ports auf.
+  static final ArchRule BOARD_DOMAIN_IST_MODULINTERN =
+      noClasses()
+          .that()
+          .resideOutsideOfPackage("org.mwolff.manban.board..")
+          .should()
+          .dependOnClassesThat()
+          .resideInAPackage("org.mwolff.manban.board.domain..")
+          .as("board.domain ist modulintern (Zugriff nur ueber die board.application-Fassade)");
+
+  static final ArchRule BOARD_REPOSITORIES_SIND_MODULINTERN =
+      noClasses()
+          .that()
+          .resideOutsideOfPackage("org.mwolff.manban.board..")
+          .should()
+          .dependOnClassesThat()
+          .haveNameMatching("org\\.mwolff\\.manban\\.board\\.application\\..*Repository")
+          .as("board-Repository-Ports sind modulintern (nur ueber BoardService)");
+
+  // BoardChangedEvent ist der SSE-Vertrag des board-Moduls: fremde Module publizieren ihn nicht
+  // selbst, sondern ihr eigenes Event. Ausgenommen ist die Composition-Root org.mwolff.manban
+  // .config, die das fremde Event in den Board-Vertrag uebersetzt (analog zu SecurityConfig).
+  static final ArchRule BOARD_CHANGED_EVENT_IST_MODULINTERN =
+      noClasses()
+          .that()
+          .resideOutsideOfPackages("org.mwolff.manban.board..", "org.mwolff.manban.config..")
+          .should()
+          .dependOnClassesThat()
+          .haveNameMatching(
+              "org\\.mwolff\\.manban\\.board\\.application\\.BoardChangedEvent(\\$.*)?")
+          .as("BoardChangedEvent gehoert dem board-Modul (Uebersetzung in der Composition-Root)");
+
   // --- §6.1: Schichtzugriff (hexagonal, domain innerste Schicht) ------------------------------
   // consideringOnlyDependenciesInLayers() macht die Regel robust gegenueber Modulen, die nicht
   // alle vier Schichten besitzen (z. B. kanbancompat ohne domain/infrastructure): Abhaengigkeiten
@@ -202,6 +238,21 @@ class ArchitectureTest {
   @Test
   void cardRepositoriesSindModulintern() {
     CARD_REPOSITORIES_SIND_MODULINTERN.check(PRODUKTIONSKLASSEN);
+  }
+
+  @Test
+  void boardDomainIstModulintern() {
+    BOARD_DOMAIN_IST_MODULINTERN.check(PRODUKTIONSKLASSEN);
+  }
+
+  @Test
+  void boardRepositoriesSindModulintern() {
+    BOARD_REPOSITORIES_SIND_MODULINTERN.check(PRODUKTIONSKLASSEN);
+  }
+
+  @Test
+  void boardChangedEventIstModulintern() {
+    BOARD_CHANGED_EVENT_IST_MODULINTERN.check(PRODUKTIONSKLASSEN);
   }
 
   @Test

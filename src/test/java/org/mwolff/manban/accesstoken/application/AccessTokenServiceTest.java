@@ -18,8 +18,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mwolff.manban.accesstoken.domain.AccessToken;
-import org.mwolff.manban.board.application.BoardRepository;
-import org.mwolff.manban.board.domain.Board;
+import org.mwolff.manban.board.application.BoardService;
 import org.mwolff.manban.common.token.TokenCryptoPort;
 import org.mwolff.manban.common.token.TokenCryptoPort.GeneratedToken;
 import org.mwolff.manban.project.application.PermissionChecker;
@@ -34,7 +33,7 @@ class AccessTokenServiceTest {
 
   private AccessTokenRepository tokens;
   private TokenCryptoPort crypto;
-  private BoardRepository boards;
+  private BoardService boardService;
   private PermissionChecker permissions;
   private AccessTokenService service;
 
@@ -46,7 +45,7 @@ class AccessTokenServiceTest {
   void setUp() {
     tokens = mock(AccessTokenRepository.class);
     crypto = mock(TokenCryptoPort.class);
-    boards = mock(BoardRepository.class);
+    boardService = mock(BoardService.class);
     permissions = mock(PermissionChecker.class);
     Clock clock = Clock.fixed(FIXED, ZoneOffset.UTC);
     ObjectProvider<AccessTokenService> self =
@@ -56,7 +55,7 @@ class AccessTokenServiceTest {
             return service;
           }
         };
-    service = new AccessTokenService(tokens, crypto, boards, permissions, clock, self);
+    service = new AccessTokenService(tokens, crypto, boardService, permissions, clock, self);
   }
 
   @Test
@@ -90,7 +89,7 @@ class AccessTokenServiceTest {
   @Test
   void create_bindsTokenToBoard_whenBindingValid() {
     // Given
-    when(boards.findById(20L)).thenReturn(Optional.of(new Board(20L, 5L, "B", FIXED)));
+    when(boardService.findProjectId(20L)).thenReturn(Optional.of(5L));
     when(permissions.hasPermission(1L, 5L, Permission.TICKET_CREATE)).thenReturn(true);
     when(crypto.generate()).thenReturn(new GeneratedToken("tk_plain", "hash"));
     when(tokens.save(any(AccessToken.class))).thenAnswer(inv -> saved(inv.getArgument(0)));
@@ -110,7 +109,7 @@ class AccessTokenServiceTest {
     // Bedingung des Guards) abgewiesen werden. Ohne den Board-Stub würde ein Umgehen des
     // projectId==null-Zweigs (Mutant) über „Board unbekannt" dieselbe Ausnahme werfen und
     // unentdeckt bleiben.
-    when(boards.findById(20L)).thenReturn(Optional.of(new Board(20L, 5L, "B", FIXED)));
+    when(boardService.findProjectId(20L)).thenReturn(Optional.of(5L));
 
     // When / Then
     assertThatThrownBy(() -> service.create(1L, "CI", null, 20L))
@@ -127,7 +126,7 @@ class AccessTokenServiceTest {
   @Test
   void create_throwsInvalidBinding_whenBoardUnknown() {
     // Given
-    when(boards.findById(20L)).thenReturn(Optional.empty());
+    when(boardService.findProjectId(20L)).thenReturn(Optional.empty());
 
     // When / Then
     assertThatThrownBy(() -> service.create(1L, "CI", 5L, 20L))
@@ -137,7 +136,7 @@ class AccessTokenServiceTest {
   @Test
   void create_throwsInvalidBinding_whenBoardNotInProject() {
     // Given
-    when(boards.findById(20L)).thenReturn(Optional.of(new Board(20L, 99L, "B", FIXED)));
+    when(boardService.findProjectId(20L)).thenReturn(Optional.of(99L));
 
     // When / Then
     assertThatThrownBy(() -> service.create(1L, "CI", 5L, 20L))
@@ -147,7 +146,7 @@ class AccessTokenServiceTest {
   @Test
   void create_throwsAccessDenied_whenUserMayNotWorkOnBoard() {
     // Given
-    when(boards.findById(20L)).thenReturn(Optional.of(new Board(20L, 5L, "B", FIXED)));
+    when(boardService.findProjectId(20L)).thenReturn(Optional.of(5L));
     when(permissions.hasPermission(1L, 5L, Permission.TICKET_CREATE)).thenReturn(false);
 
     // When / Then

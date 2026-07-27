@@ -7,10 +7,8 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import java.time.Instant;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -18,11 +16,9 @@ import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.NullSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mwolff.manban.accesstoken.application.KanbanPrincipal;
-import org.mwolff.manban.board.application.BoardColumnRepository;
 import org.mwolff.manban.board.application.BoardNotFoundException;
-import org.mwolff.manban.board.application.BoardRepository;
-import org.mwolff.manban.board.domain.Board;
-import org.mwolff.manban.board.domain.BoardColumn;
+import org.mwolff.manban.board.application.BoardService;
+import org.mwolff.manban.board.application.BoardService.ColumnView;
 import org.mwolff.manban.card.application.CardNotFoundException;
 import org.mwolff.manban.card.application.CardService;
 import org.mwolff.manban.card.application.CardService.BoardItemView;
@@ -34,11 +30,9 @@ import org.mwolff.manban.comment.application.CommentService;
 /** Unit-Tests der Kanban-Compat-Schicht (Spaltennamen-Normalisierung + Verhalten an den Ports). */
 class KanbanCompatServiceTest {
 
-  private static final Instant FIXED = Instant.parse("2026-01-02T03:04:05Z");
   private static final long BOARD = 10L;
 
-  private BoardColumnRepository columns;
-  private BoardRepository boards;
+  private BoardService boardService;
   private CardService cardService;
   private LabelService labelService;
   private CommentService commentService;
@@ -48,21 +42,17 @@ class KanbanCompatServiceTest {
     return new KanbanPrincipal(1L, 2L, 5L, BOARD);
   }
 
-  private static List<BoardColumn> standardColumns() {
+  private static List<ColumnView> standardColumns() {
     return List.of(
-        new BoardColumn(100L, BOARD, "Backlog", 0, null),
-        new BoardColumn(101L, BOARD, "Ready", 1, null),
-        new BoardColumn(102L, BOARD, "In Progress", 2, null),
-        new BoardColumn(103L, BOARD, "In Review", 3, null),
-        new BoardColumn(104L, BOARD, "Done", 4, null));
+        new ColumnView(100L, "Backlog", 0, null),
+        new ColumnView(101L, "Ready", 1, null),
+        new ColumnView(102L, "In Progress", 2, null),
+        new ColumnView(103L, "In Review", 3, null),
+        new ColumnView(104L, "Done", 4, null));
   }
 
   private static BoardItemView item(long id, long columnId, int number) {
     return new BoardItemView(id, number, "T", "body", columnId, 0, false);
-  }
-
-  private static Board boardWithProject(long id, long projectId) {
-    return new Board(id, projectId, "B", FIXED);
   }
 
   private static CardView pooledIdea(long id) {
@@ -89,12 +79,11 @@ class KanbanCompatServiceTest {
 
   @BeforeEach
   void setUp() {
-    columns = mock(BoardColumnRepository.class);
-    boards = mock(BoardRepository.class);
+    boardService = mock(BoardService.class);
     cardService = mock(CardService.class);
     labelService = mock(LabelService.class);
     commentService = mock(CommentService.class);
-    service = new KanbanCompatService(columns, boards, cardService, labelService, commentService);
+    service = new KanbanCompatService(boardService, cardService, labelService, commentService);
   }
 
   @ParameterizedTest
@@ -123,7 +112,7 @@ class KanbanCompatServiceTest {
   @Test
   void items_groupsCardsByKanbanColumn() {
     // Given
-    when(columns.findByBoardId(BOARD)).thenReturn(standardColumns());
+    when(boardService.listColumns(BOARD)).thenReturn(standardColumns());
     when(cardService.listBoardItems(1L, BOARD)).thenReturn(List.of(item(1L, 100L, 1)));
 
     // When
@@ -138,7 +127,7 @@ class KanbanCompatServiceTest {
   @Test
   void items_marksEpicItemsAsEpicType() {
     // Given: ein Epic auf dem Board
-    when(columns.findByBoardId(BOARD)).thenReturn(standardColumns());
+    when(boardService.listColumns(BOARD)).thenReturn(standardColumns());
     when(cardService.listBoardItems(1L, BOARD))
         .thenReturn(List.of(new BoardItemView(3L, 3, "E", "body", 100L, 0, true)));
 
@@ -155,7 +144,7 @@ class KanbanCompatServiceTest {
   @Test
   void items_marksRegularCardsAsCardType() {
     // Given: eine gewöhnliche Karte (kein Epic)
-    when(columns.findByBoardId(BOARD)).thenReturn(standardColumns());
+    when(boardService.listColumns(BOARD)).thenReturn(standardColumns());
     when(cardService.listBoardItems(1L, BOARD)).thenReturn(List.of(item(1L, 100L, 1)));
 
     // When
@@ -173,7 +162,7 @@ class KanbanCompatServiceTest {
     // Der Ausschluss archivierter und im Ideen-Speicher liegender Karten (#434) liegt seit #458 im
     // card-Modul; die Compat-Schicht reicht die bereits gefilterte Liste unveraendert durch. Fiele
     // der Aufruf auf eine andere Quelle zurueck, waere hier nichts zu sehen.
-    when(columns.findByBoardId(BOARD)).thenReturn(standardColumns());
+    when(boardService.listColumns(BOARD)).thenReturn(standardColumns());
     when(cardService.listBoardItems(1L, BOARD)).thenReturn(List.of());
 
     Map<String, List<KanbanCompatService.Item>> grouped = service.items(bound());
@@ -187,15 +176,15 @@ class KanbanCompatServiceTest {
     // Given: sechs Spalten ohne kanonische Namen -> für jede greift der Positions-Fallback.
     // Ab der sechsten (Index 5) muss der Fallback-Index bei der letzten Kanban-Spalte (DONE)
     // gedeckelt werden (Math.min(i, size-1)); ein „size+1" (Mutant) liefe aus dem Index.
-    List<BoardColumn> sixColumns =
+    List<ColumnView> sixColumns =
         List.of(
-            new BoardColumn(100L, BOARD, "Alpha", 0, null),
-            new BoardColumn(101L, BOARD, "Beta", 1, null),
-            new BoardColumn(102L, BOARD, "Gamma", 2, null),
-            new BoardColumn(103L, BOARD, "Delta", 3, null),
-            new BoardColumn(104L, BOARD, "Epsilon", 4, null),
-            new BoardColumn(105L, BOARD, "Zeta", 5, null));
-    when(columns.findByBoardId(BOARD)).thenReturn(sixColumns);
+            new ColumnView(100L, "Alpha", 0, null),
+            new ColumnView(101L, "Beta", 1, null),
+            new ColumnView(102L, "Gamma", 2, null),
+            new ColumnView(103L, "Delta", 3, null),
+            new ColumnView(104L, "Epsilon", 4, null),
+            new ColumnView(105L, "Zeta", 5, null));
+    when(boardService.listColumns(BOARD)).thenReturn(sixColumns);
     when(cardService.listBoardItems(1L, BOARD)).thenReturn(List.of(item(1L, 105L, 1)));
 
     // When
@@ -224,7 +213,7 @@ class KanbanCompatServiceTest {
   void create_delegatesToCreateProjectIdea_asPoolIdea() {
     // Given: der board-gebundene Token liefert das Board; daraus wird das Projekt abgeleitet und
     // das Board nur noch als Zielboard (target_board_id) notiert.
-    when(boards.findById(BOARD)).thenReturn(Optional.of(boardWithProject(BOARD, 5L)));
+    when(boardService.requireProjectId(BOARD)).thenReturn(5L);
     when(cardService.createProjectIdea(1L, 5L, "Titel", "Body", BOARD)).thenReturn(pooledIdea(42L));
 
     // When
@@ -241,7 +230,7 @@ class KanbanCompatServiceTest {
   void create_ignoresColumnAndIdeaStored() {
     // Given: seit Entscheidung B sind column und ideaStored gegenstandslos — egal was reinkommt,
     // es entsteht dieselbe Pool-Idee (keine Spalten-Validierung, kein Ideen-Flag-Durchreichen).
-    when(boards.findById(BOARD)).thenReturn(Optional.of(boardWithProject(BOARD, 5L)));
+    when(boardService.requireProjectId(BOARD)).thenReturn(5L);
     when(cardService.createProjectIdea(1L, 5L, "Titel", "Body", BOARD)).thenReturn(pooledIdea(42L));
 
     // When: absichtlich eine (frueher unbekannte) Spalte + ideaStored=true
@@ -257,7 +246,7 @@ class KanbanCompatServiceTest {
   @Test
   void create_throwsBoardNotFound_whenBoardMissing() {
     // Given: der Token ist gebunden, aber das Board existiert nicht (mehr)
-    when(boards.findById(BOARD)).thenReturn(Optional.empty());
+    when(boardService.requireProjectId(BOARD)).thenThrow(new BoardNotFoundException());
 
     // When / Then
     KanbanPrincipal principal = bound();
@@ -270,8 +259,8 @@ class KanbanCompatServiceTest {
     // Given: gültiger Kanban-Key, aber das Board hat keine passende Spalte. Dieser
     // columnIdForKey-Guard ist seit Entscheidung B nur noch über move erreichbar (create wertet
     // keine Spalte mehr aus).
-    when(columns.findByBoardId(BOARD))
-        .thenReturn(List.of(new BoardColumn(100L, BOARD, "Backlog", 0, null)));
+    when(boardService.listColumns(BOARD))
+        .thenReturn(List.of(new ColumnView(100L, "Backlog", 0, null)));
 
     // When / Then
     KanbanPrincipal principal = bound();
@@ -282,7 +271,7 @@ class KanbanCompatServiceTest {
   @Test
   void move_delegatesToCardService() {
     // Given
-    when(columns.findByBoardId(BOARD)).thenReturn(standardColumns());
+    when(boardService.listColumns(BOARD)).thenReturn(standardColumns());
 
     // When
     service.move(bound(), 1L, "DONE", 2);
@@ -354,7 +343,7 @@ class KanbanCompatServiceTest {
   void items_exposesLabelNamesPerCard() {
     // Given: die Label-Namen kommen als Batch aus der card-Fassade, abgefragt fuer genau die
     // sichtbaren Karten-IDs.
-    when(columns.findByBoardId(BOARD)).thenReturn(standardColumns());
+    when(boardService.listColumns(BOARD)).thenReturn(standardColumns());
     when(cardService.listBoardItems(1L, BOARD)).thenReturn(List.of(item(1L, 100L, 1)));
     when(labelService.namesByCard(BOARD, List.of(1L))).thenReturn(Map.of(1L, List.of("Bug", "Ux")));
 
@@ -372,7 +361,7 @@ class KanbanCompatServiceTest {
   void items_returnsEmptyLabels_forCardMissingInLabelBatch() {
     // Given: die Batch-Antwort kennt die Karte nicht — die Ausgabe muss dennoch eine leere Liste
     // tragen (nicht null), damit der Adapter kein Sonderfall-Handling braucht.
-    when(columns.findByBoardId(BOARD)).thenReturn(standardColumns());
+    when(boardService.listColumns(BOARD)).thenReturn(standardColumns());
     when(cardService.listBoardItems(1L, BOARD)).thenReturn(List.of(item(1L, 100L, 1)));
     when(labelService.namesByCard(BOARD, List.of(1L))).thenReturn(Map.of());
 

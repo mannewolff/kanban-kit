@@ -1,7 +1,6 @@
 package org.mwolff.manban.kanbancompat.application;
 
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -10,11 +9,8 @@ import java.util.Objects;
 import java.util.Optional;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.accesstoken.application.KanbanPrincipal;
-import org.mwolff.manban.board.application.BoardColumnRepository;
-import org.mwolff.manban.board.application.BoardNotFoundException;
-import org.mwolff.manban.board.application.BoardRepository;
-import org.mwolff.manban.board.domain.Board;
-import org.mwolff.manban.board.domain.BoardColumn;
+import org.mwolff.manban.board.application.BoardService;
+import org.mwolff.manban.board.application.BoardService.ColumnView;
 import org.mwolff.manban.card.application.CardService;
 import org.mwolff.manban.card.application.CardService.BoardItemView;
 import org.mwolff.manban.card.application.CardService.CardView;
@@ -43,20 +39,17 @@ public class KanbanCompatService {
   public static final List<String> COLUMNS =
       List.of(BACKLOG, "READY", "IN_PROGRESS", "IN_REVIEW", "DONE");
 
-  private final BoardColumnRepository boardColumns;
-  private final BoardRepository boards;
+  private final BoardService boardService;
   private final CardService cardService;
   private final LabelService labelService;
   private final CommentService commentService;
 
   public KanbanCompatService(
-      BoardColumnRepository boardColumns,
-      BoardRepository boards,
+      BoardService boardService,
       CardService cardService,
       LabelService labelService,
       CommentService commentService) {
-    this.boardColumns = boardColumns;
-    this.boards = boards;
+    this.boardService = boardService;
     this.cardService = cardService;
     this.labelService = labelService;
     this.commentService = commentService;
@@ -125,9 +118,8 @@ public class KanbanCompatService {
       @Nullable String column,
       boolean ideaStored) {
     long boardId = requireBound(principal);
-    Board board = boards.findById(boardId).orElseThrow(BoardNotFoundException::new);
-    CardView v =
-        cardService.createProjectIdea(principal.userId(), board.projectId(), title, body, boardId);
+    long projectId = boardService.requireProjectId(boardId);
+    CardView v = cardService.createProjectIdea(principal.userId(), projectId, title, body, boardId);
     // Seit #402 vergibt createProjectIdea sofort eine Nummer; requireNonNull macht das fuer
     // NullAway explizit (CardView.number() ist @Nullable fuer Legacy-Ideen ohne Nummer).
     return new Created(v.id(), Objects.requireNonNull(v.number()));
@@ -171,15 +163,12 @@ public class KanbanCompatService {
 
   /** Bildet jede Board-Spalte auf einen Kanban-Key ab: Name zuerst, sonst Position. */
   private Map<Long, String> keyByColumn(long boardId) {
-    List<BoardColumn> ordered =
-        boardColumns.findByBoardId(boardId).stream()
-            .sorted(Comparator.comparingInt(BoardColumn::position))
-            .toList();
+    List<ColumnView> ordered = boardService.listColumns(boardId);
     Map<Long, String> map = new LinkedHashMap<>();
     for (int i = 0; i < ordered.size(); i++) {
-      BoardColumn c = ordered.get(i);
+      ColumnView c = ordered.get(i);
       String fallback = COLUMNS.get(Math.min(i, COLUMNS.size() - 1));
-      map.put(c.requireId(), canonicalKey(c.name()).orElse(fallback));
+      map.put(c.id(), canonicalKey(c.name()).orElse(fallback));
     }
     return map;
   }

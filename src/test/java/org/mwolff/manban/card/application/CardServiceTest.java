@@ -24,14 +24,11 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
-import org.mwolff.manban.board.application.BoardChangedEvent;
-import org.mwolff.manban.board.application.BoardChangedEvent.ChangeType;
-import org.mwolff.manban.board.application.BoardColumnRepository;
 import org.mwolff.manban.board.application.BoardNotFoundException;
-import org.mwolff.manban.board.application.BoardRepository;
+import org.mwolff.manban.board.application.BoardService;
+import org.mwolff.manban.board.application.BoardService.ColumnView;
 import org.mwolff.manban.board.application.ColumnNotFoundException;
-import org.mwolff.manban.board.domain.Board;
-import org.mwolff.manban.board.domain.BoardColumn;
+import org.mwolff.manban.card.application.CardBoardActivityEvent.ActivityType;
 import org.mwolff.manban.card.domain.Card;
 import org.mwolff.manban.card.domain.CardActivity;
 import org.mwolff.manban.card.domain.CardActivityType;
@@ -64,8 +61,7 @@ class CardServiceTest {
 
   private CardRepository cards;
   private CardDependencyRepository dependencies;
-  private BoardRepository boards;
-  private BoardColumnRepository columns;
+  private BoardService boardService;
   private PermissionChecker permissions;
   private CardColumnTransitionRepository transitions;
   private CardAssigneeRepository assignees;
@@ -90,16 +86,15 @@ class CardServiceTest {
         type, parentId, shortcode, null, PROJECT, null);
   }
 
-  private static BoardColumn column(long id, String name, int position) {
-    return new BoardColumn(id, BOARD, name, position, null);
+  private static ColumnView column(long id, String name, int position) {
+    return new ColumnView(id, name, position, null);
   }
 
   @BeforeEach
   void setUp() {
     cards = mock(CardRepository.class);
     dependencies = mock(CardDependencyRepository.class);
-    boards = mock(BoardRepository.class);
-    columns = mock(BoardColumnRepository.class);
+    boardService = mock(BoardService.class);
     permissions = mock(PermissionChecker.class);
     transitions = mock(CardColumnTransitionRepository.class);
     assignees = mock(CardAssigneeRepository.class);
@@ -113,8 +108,7 @@ class CardServiceTest {
         new CardService(
             cards,
             dependencies,
-            boards,
-            columns,
+            boardService,
             permissions,
             transitions,
             assignees,
@@ -124,7 +118,7 @@ class CardServiceTest {
             activity,
             events,
             clock);
-    when(boards.findById(BOARD)).thenReturn(Optional.of(new Board(BOARD, 1L, "B", FIXED)));
+    when(boardService.requireProjectId(BOARD)).thenReturn(PROJECT);
     when(cards.save(any(Card.class))).thenAnswer(inv -> withId(inv.getArgument(0)));
   }
 
@@ -156,7 +150,7 @@ class CardServiceTest {
   @Test
   void create_setsCreatedAtFromInjectedClock() {
     // Given
-    when(columns.findById(20L)).thenReturn(Optional.of(column(20L, "Backlog", 0)));
+    when(boardService.requireColumn(20L, BOARD)).thenReturn(column(20L, "Backlog", 0));
     when(cards.nextCardNumber(PROJECT)).thenReturn(1);
     when(cards.maxActivePositionInColumn(20L)).thenReturn(-1);
 
@@ -171,7 +165,7 @@ class CardServiceTest {
 
   @Test
   void create_setsDueDate_whenProvided() {
-    when(columns.findById(20L)).thenReturn(Optional.of(column(20L, "Backlog", 0)));
+    when(boardService.requireColumn(20L, BOARD)).thenReturn(column(20L, "Backlog", 0));
     when(cards.nextCardNumber(PROJECT)).thenReturn(1);
     when(cards.maxActivePositionInColumn(20L)).thenReturn(-1);
     Instant due = Instant.parse("2026-02-01T00:00:00Z");
@@ -189,7 +183,7 @@ class CardServiceTest {
 
   @Test
   void create_appliesAssignees_atomically_withSingleCreatedActivity() {
-    when(columns.findById(20L)).thenReturn(Optional.of(column(20L, "Backlog", 0)));
+    when(boardService.requireColumn(20L, BOARD)).thenReturn(column(20L, "Backlog", 0));
     when(cards.nextCardNumber(PROJECT)).thenReturn(1);
     when(cards.maxActivePositionInColumn(20L)).thenReturn(-1);
     when(memberships.findByProjectIdAndUserId(1L, 7L))
@@ -208,7 +202,7 @@ class CardServiceTest {
 
   @Test
   void create_ignoresEmptyAssignees() {
-    when(columns.findById(20L)).thenReturn(Optional.of(column(20L, "Backlog", 0)));
+    when(boardService.requireColumn(20L, BOARD)).thenReturn(column(20L, "Backlog", 0));
     when(cards.nextCardNumber(PROJECT)).thenReturn(1);
     when(cards.maxActivePositionInColumn(20L)).thenReturn(-1);
 
@@ -219,7 +213,7 @@ class CardServiceTest {
 
   @Test
   void create_rejectsForeignAssignee() {
-    when(columns.findById(20L)).thenReturn(Optional.of(column(20L, "Backlog", 0)));
+    when(boardService.requireColumn(20L, BOARD)).thenReturn(column(20L, "Backlog", 0));
     when(cards.nextCardNumber(PROJECT)).thenReturn(1);
     when(cards.maxActivePositionInColumn(20L)).thenReturn(-1);
     when(memberships.findByProjectIdAndUserId(1L, 9L)).thenReturn(Optional.empty());
@@ -234,7 +228,7 @@ class CardServiceTest {
 
   @Test
   void create_appliesLabels_whenProvided() {
-    when(columns.findById(20L)).thenReturn(Optional.of(column(20L, "Backlog", 0)));
+    when(boardService.requireColumn(20L, BOARD)).thenReturn(column(20L, "Backlog", 0));
     when(cards.nextCardNumber(PROJECT)).thenReturn(1);
     when(cards.maxActivePositionInColumn(20L)).thenReturn(-1);
     when(labels.findByBoardId(BOARD))
@@ -249,7 +243,7 @@ class CardServiceTest {
 
   @Test
   void create_ignoresEmptyLabels() {
-    when(columns.findById(20L)).thenReturn(Optional.of(column(20L, "Backlog", 0)));
+    when(boardService.requireColumn(20L, BOARD)).thenReturn(column(20L, "Backlog", 0));
     when(cards.nextCardNumber(PROJECT)).thenReturn(1);
     when(cards.maxActivePositionInColumn(20L)).thenReturn(-1);
 
@@ -260,7 +254,7 @@ class CardServiceTest {
 
   @Test
   void create_rejectsForeignLabel() {
-    when(columns.findById(20L)).thenReturn(Optional.of(column(20L, "Backlog", 0)));
+    when(boardService.requireColumn(20L, BOARD)).thenReturn(column(20L, "Backlog", 0));
     when(cards.nextCardNumber(PROJECT)).thenReturn(1);
     when(cards.maxActivePositionInColumn(20L)).thenReturn(-1);
     when(labels.findByBoardId(BOARD)).thenReturn(List.of(new Label(7L, BOARD, "Bug", "#f00")));
@@ -276,7 +270,7 @@ class CardServiceTest {
   @Test
   void create_assignsNextBoardNumber() {
     // Given
-    when(columns.findById(20L)).thenReturn(Optional.of(column(20L, "Backlog", 0)));
+    when(boardService.requireColumn(20L, BOARD)).thenReturn(column(20L, "Backlog", 0));
     when(cards.nextCardNumber(PROJECT)).thenReturn(8);
     when(cards.maxActivePositionInColumn(20L)).thenReturn(-1);
 
@@ -292,7 +286,7 @@ class CardServiceTest {
   @Test
   void create_appendsAtNextPositionInColumn() {
     // Given
-    when(columns.findById(20L)).thenReturn(Optional.of(column(20L, "Backlog", 0)));
+    when(boardService.requireColumn(20L, BOARD)).thenReturn(column(20L, "Backlog", 0));
     when(cards.nextCardNumber(PROJECT)).thenReturn(1);
     when(cards.maxActivePositionInColumn(20L)).thenReturn(4);
 
@@ -308,7 +302,7 @@ class CardServiceTest {
   @Test
   void create_trimsTitle() {
     // Given
-    when(columns.findById(20L)).thenReturn(Optional.of(column(20L, "Backlog", 0)));
+    when(boardService.requireColumn(20L, BOARD)).thenReturn(column(20L, "Backlog", 0));
 
     // When
     ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
@@ -322,7 +316,7 @@ class CardServiceTest {
   @Test
   void create_attachesToParentEpic() {
     // Given
-    when(columns.findById(20L)).thenReturn(Optional.of(column(20L, "Backlog", 0)));
+    when(boardService.requireColumn(20L, BOARD)).thenReturn(column(20L, "Backlog", 0));
     when(cards.findById(30L))
         .thenReturn(Optional.of(card(30L, 20L, 5, false, null, CardType.EPIC, null, "E")));
 
@@ -338,7 +332,7 @@ class CardServiceTest {
   @Test
   void create_setsDependencies_whenProvided() {
     // Given
-    when(columns.findById(20L)).thenReturn(Optional.of(column(20L, "Backlog", 0)));
+    when(boardService.requireColumn(20L, BOARD)).thenReturn(column(20L, "Backlog", 0));
     when(cards.nextCardNumber(PROJECT)).thenReturn(5);
     when(cards.findByProjectId(PROJECT))
         .thenReturn(List.of(card(2L, 20L, 3, false, null, CardType.CARD, null, null)));
@@ -353,7 +347,7 @@ class CardServiceTest {
   @Test
   void create_throwsBoardNotFound_whenBoardUnknown() {
     // Given
-    when(boards.findById(BOARD)).thenReturn(Optional.empty());
+    when(boardService.requireProjectId(BOARD)).thenThrow(new BoardNotFoundException());
 
     // When / Then
     assertThatThrownBy(() -> service.create(1L, BOARD, 20L, "Titel", null, null, null))
@@ -363,7 +357,7 @@ class CardServiceTest {
   @Test
   void create_throwsColumnNotFound_whenColumnUnknown() {
     // Given
-    when(columns.findById(20L)).thenReturn(Optional.empty());
+    when(boardService.requireColumn(20L, BOARD)).thenThrow(new ColumnNotFoundException());
 
     // When / Then
     assertThatThrownBy(() -> service.create(1L, BOARD, 20L, "Titel", null, null, null))
@@ -373,8 +367,7 @@ class CardServiceTest {
   @Test
   void create_throwsColumnNotFound_whenColumnOnOtherBoard() {
     // Given
-    when(columns.findById(20L))
-        .thenReturn(Optional.of(new BoardColumn(20L, 99L, "Backlog", 0, null)));
+    when(boardService.requireColumn(20L, BOARD)).thenThrow(new ColumnNotFoundException());
 
     // When / Then
     assertThatThrownBy(() -> service.create(1L, BOARD, 20L, "Titel", null, null, null))
@@ -384,7 +377,7 @@ class CardServiceTest {
   @Test
   void create_throwsInvalidDependency_whenParentIsNotEpic() {
     // Given
-    when(columns.findById(20L)).thenReturn(Optional.of(column(20L, "Backlog", 0)));
+    when(boardService.requireColumn(20L, BOARD)).thenReturn(column(20L, "Backlog", 0));
     when(cards.findById(30L))
         .thenReturn(Optional.of(card(30L, 20L, 5, false, null, CardType.CARD, null, null)));
 
@@ -396,7 +389,7 @@ class CardServiceTest {
   @Test
   void create_throwsCardNotFound_whenParentUnknown() {
     // Given
-    when(columns.findById(20L)).thenReturn(Optional.of(column(20L, "Backlog", 0)));
+    when(boardService.requireColumn(20L, BOARD)).thenReturn(column(20L, "Backlog", 0));
     when(cards.findById(30L)).thenReturn(Optional.empty());
 
     // When / Then
@@ -409,7 +402,7 @@ class CardServiceTest {
     // Given: die eigene Nummer 1 IST eine gültige Board-Nummer. So schlägt ein Umgehen des
     // Selbstbezug-Guards (Mutant) NICHT in „Unbekannte Nummer" um, sondern in einen Erfolg —
     // der Selbstbezug-Guard wird dadurch beweisbar geprüft.
-    when(columns.findById(20L)).thenReturn(Optional.of(column(20L, "Backlog", 0)));
+    when(boardService.requireColumn(20L, BOARD)).thenReturn(column(20L, "Backlog", 0));
     when(cards.nextCardNumber(PROJECT)).thenReturn(1);
     when(cards.findByProjectId(PROJECT))
         .thenReturn(List.of(card(9L, 20L, 1, false, null, CardType.CARD, null, null)));
@@ -423,7 +416,7 @@ class CardServiceTest {
   @Test
   void create_throwsInvalidDependency_onUnknownDependencyNumber() {
     // Given
-    when(columns.findById(20L)).thenReturn(Optional.of(column(20L, "Backlog", 0)));
+    when(boardService.requireColumn(20L, BOARD)).thenReturn(column(20L, "Backlog", 0));
     when(cards.nextCardNumber(PROJECT)).thenReturn(1);
     when(cards.findByProjectId(PROJECT)).thenReturn(List.of());
 
@@ -438,8 +431,7 @@ class CardServiceTest {
   @Test
   void createEpic_savesEpicType() {
     // Given
-    when(columns.findByBoardId(BOARD))
-        .thenReturn(List.of(column(20L, "Backlog", 0), column(21L, "Done", 1)));
+    when(boardService.firstColumn(BOARD)).thenReturn(column(20L, "Backlog", 0));
     when(cards.nextCardNumber(PROJECT)).thenReturn(1);
 
     // When
@@ -454,7 +446,7 @@ class CardServiceTest {
   @Test
   void createEpic_trimsBlankShortcodeToNull() {
     // Given
-    when(columns.findByBoardId(BOARD)).thenReturn(List.of(column(20L, "Backlog", 0)));
+    when(boardService.firstColumn(BOARD)).thenReturn(column(20L, "Backlog", 0));
     when(cards.nextCardNumber(PROJECT)).thenReturn(1);
 
     // When
@@ -469,7 +461,7 @@ class CardServiceTest {
   @Test
   void createEpic_throwsBoardNotFound_whenBoardUnknown() {
     // Given
-    when(boards.findById(BOARD)).thenReturn(Optional.empty());
+    when(boardService.requireProjectId(BOARD)).thenThrow(new BoardNotFoundException());
 
     // When / Then
     assertThatThrownBy(() -> service.createEpic(1L, BOARD, "Epic", null, null))
@@ -479,7 +471,7 @@ class CardServiceTest {
   @Test
   void createEpic_throwsColumnNotFound_whenBoardHasNoColumns() {
     // Given
-    when(columns.findByBoardId(BOARD)).thenReturn(List.of());
+    when(boardService.firstColumn(BOARD)).thenThrow(new ColumnNotFoundException());
 
     // When / Then
     assertThatThrownBy(() -> service.createEpic(1L, BOARD, "Epic", null, null))
@@ -507,7 +499,7 @@ class CardServiceTest {
   @Test
   void listByBoard_throwsBoardNotFound_whenBoardUnknown() {
     // Given
-    when(boards.findById(BOARD)).thenReturn(Optional.empty());
+    when(boardService.requireProjectId(BOARD)).thenThrow(new BoardNotFoundException());
 
     // When / Then
     assertThatThrownBy(() -> service.listByBoard(1L, BOARD))
@@ -517,7 +509,7 @@ class CardServiceTest {
   @Test
   void listEpics_countsDoneChildren() {
     // Given
-    when(columns.findByBoardId(BOARD))
+    when(boardService.listColumns(BOARD))
         .thenReturn(List.of(column(20L, "Backlog", 0), column(21L, "Done", 1)));
     when(cards.findByBoardId(BOARD))
         .thenReturn(
@@ -539,7 +531,7 @@ class CardServiceTest {
   @Test
   void listEpics_throwsBoardNotFound_whenBoardUnknown() {
     // Given
-    when(boards.findById(BOARD)).thenReturn(Optional.empty());
+    when(boardService.requireProjectId(BOARD)).thenThrow(new BoardNotFoundException());
 
     // When / Then
     assertThatThrownBy(() -> service.listEpics(1L, BOARD))
@@ -642,7 +634,7 @@ class CardServiceTest {
     // Given
     Card before = card(1L, 20L, 1, false, null, CardType.CARD, null, null);
     when(cards.findById(1L)).thenReturn(Optional.of(before));
-    when(columns.findById(21L)).thenReturn(Optional.of(column(21L, "Done", 4)));
+    when(boardService.requireColumn(21L, BOARD)).thenReturn(column(21L, "Done", 4));
 
     // When
     ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
@@ -658,7 +650,7 @@ class CardServiceTest {
     // Given
     Card before = card(1L, 21L, 1, false, FIXED.minusSeconds(10), CardType.CARD, null, null);
     when(cards.findById(1L)).thenReturn(Optional.of(before));
-    when(columns.findById(20L)).thenReturn(Optional.of(column(20L, "Backlog", 0)));
+    when(boardService.requireColumn(20L, BOARD)).thenReturn(column(20L, "Backlog", 0));
 
     // When
     ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
@@ -695,7 +687,7 @@ class CardServiceTest {
     // Given
     when(cards.findById(1L))
         .thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
-    when(columns.findById(21L)).thenReturn(Optional.empty());
+    when(boardService.requireColumn(21L, BOARD)).thenThrow(new ColumnNotFoundException());
 
     // When / Then
     assertThatThrownBy(() -> service.move(1L, 1L, 21L, 0))
@@ -707,7 +699,7 @@ class CardServiceTest {
     // Given
     when(cards.findById(1L))
         .thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
-    when(columns.findById(21L)).thenReturn(Optional.of(new BoardColumn(21L, 99L, "Done", 4, null)));
+    when(boardService.requireColumn(21L, BOARD)).thenThrow(new ColumnNotFoundException());
 
     // When / Then
     assertThatThrownBy(() -> service.move(1L, 1L, 21L, 0))
@@ -719,7 +711,7 @@ class CardServiceTest {
     // Given
     when(cards.findById(1L))
         .thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
-    when(boards.findById(BOARD)).thenReturn(Optional.empty());
+    when(boardService.requireProjectId(BOARD)).thenThrow(new BoardNotFoundException());
 
     // When / Then
     assertThatThrownBy(() -> service.move(1L, 1L, 21L, 0))
@@ -836,7 +828,7 @@ class CardServiceTest {
     // Given
     when(cards.findById(1L))
         .thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
-    when(boards.findById(BOARD)).thenReturn(Optional.empty());
+    when(boardService.requireProjectId(BOARD)).thenThrow(new BoardNotFoundException());
 
     // When / Then
     assertThatThrownBy(() -> service.moveToIdeaStorage(9L, 1L))
@@ -846,7 +838,7 @@ class CardServiceTest {
   @Test
   void create_asIdea_marksIdeaStoredAndSkipsTransition() {
     // Given
-    when(columns.findById(20L)).thenReturn(Optional.of(column(20L, "Backlog", 0)));
+    when(boardService.requireColumn(20L, BOARD)).thenReturn(column(20L, "Backlog", 0));
 
     // When: direkt als Idee angelegt
     ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
@@ -864,7 +856,7 @@ class CardServiceTest {
   @Test
   void create_normalCard_hasIdeaStoredFalseInView() {
     // Given
-    when(columns.findById(20L)).thenReturn(Optional.of(column(20L, "Backlog", 0)));
+    when(boardService.requireColumn(20L, BOARD)).thenReturn(column(20L, "Backlog", 0));
 
     // When
     CardService.CardView view = service.create(1L, BOARD, 20L, "Titel", null, null, null);
@@ -954,7 +946,7 @@ class CardServiceTest {
   @Test
   void listEpics_ignoresArchivedChildrenAndForeignChildren() {
     // Given: ein Epic mit einem gezählten Kind, einem archivierten Kind und einem fremden Kind
-    when(columns.findByBoardId(BOARD))
+    when(boardService.listColumns(BOARD))
         .thenReturn(List.of(column(20L, "Backlog", 0), column(21L, "Done", 1)));
     when(cards.findByBoardId(BOARD))
         .thenReturn(
@@ -989,7 +981,7 @@ class CardServiceTest {
   @Test
   void create_throwsInvalidDependency_whenParentEpicOnOtherBoard() {
     // Given: Parent ist ein Epic, liegt aber auf einem anderen Board
-    when(columns.findById(20L)).thenReturn(Optional.of(column(20L, "Backlog", 0)));
+    when(boardService.requireColumn(20L, BOARD)).thenReturn(column(20L, "Backlog", 0));
     Card epicOtherBoard =
         new Card(
             30L,
@@ -1021,7 +1013,7 @@ class CardServiceTest {
   @Test
   void create_clearsDependencies_whenEmptyList() {
     // Given
-    when(columns.findById(20L)).thenReturn(Optional.of(column(20L, "Backlog", 0)));
+    when(boardService.requireColumn(20L, BOARD)).thenReturn(column(20L, "Backlog", 0));
 
     // When
     service.create(1L, BOARD, 20L, "Titel", null, List.of(), null);
@@ -1037,7 +1029,7 @@ class CardServiceTest {
   void create_clearsDependencies_whenNullList() {
     // Given: dependsOn == null muss (wie leere Liste) die Abhängigkeiten leeren. Ein Umgehen
     // des null-Zweigs (Mutant) liefe in isEmpty() auf null und würde eine NPE werfen.
-    when(columns.findById(20L)).thenReturn(Optional.of(column(20L, "Backlog", 0)));
+    when(boardService.requireColumn(20L, BOARD)).thenReturn(column(20L, "Backlog", 0));
 
     // When
     service.create(1L, BOARD, 20L, "Titel", null, null, null);
@@ -1063,7 +1055,7 @@ class CardServiceTest {
   @Test
   void create_normalizesBlankDescriptionToNull() {
     // Given
-    when(columns.findById(20L)).thenReturn(Optional.of(column(20L, "Backlog", 0)));
+    when(boardService.requireColumn(20L, BOARD)).thenReturn(column(20L, "Backlog", 0));
 
     // When
     ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
@@ -1077,7 +1069,7 @@ class CardServiceTest {
   @Test
   void create_keepsNonBlankDescription() {
     // Given
-    when(columns.findById(20L)).thenReturn(Optional.of(column(20L, "Backlog", 0)));
+    when(boardService.requireColumn(20L, BOARD)).thenReturn(column(20L, "Backlog", 0));
 
     // When
     ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
@@ -1091,7 +1083,7 @@ class CardServiceTest {
   @Test
   void createEpic_allowsNullShortcode() {
     // Given
-    when(columns.findByBoardId(BOARD)).thenReturn(List.of(column(20L, "Backlog", 0)));
+    when(boardService.firstColumn(BOARD)).thenReturn(column(20L, "Backlog", 0));
 
     // When
     ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
@@ -1108,7 +1100,7 @@ class CardServiceTest {
     Instant earlier = FIXED.minusSeconds(10);
     Card before = card(1L, 104L, 1, false, earlier, CardType.CARD, null, null);
     when(cards.findById(1L)).thenReturn(Optional.of(before));
-    when(columns.findById(21L)).thenReturn(Optional.of(column(21L, "Done", 4)));
+    when(boardService.requireColumn(21L, BOARD)).thenReturn(column(21L, "Done", 4));
 
     // When
     ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
@@ -1124,7 +1116,7 @@ class CardServiceTest {
     // Given: Ziel-Spalte ohne Namen -> gilt nicht als Done
     Card before = card(1L, 20L, 1, false, null, CardType.CARD, null, null);
     when(cards.findById(1L)).thenReturn(Optional.of(before));
-    when(columns.findById(22L)).thenReturn(Optional.of(column(22L, null, 5)));
+    when(boardService.requireColumn(22L, BOARD)).thenReturn(column(22L, null, 5));
 
     // When
     ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
@@ -1140,7 +1132,7 @@ class CardServiceTest {
   @Test
   void create_returnsViewOfPersistedCard() {
     // Given
-    when(columns.findById(20L)).thenReturn(Optional.of(column(20L, "Backlog", 0)));
+    when(boardService.requireColumn(20L, BOARD)).thenReturn(column(20L, "Backlog", 0));
 
     // When
     CardService.CardView view = service.create(1L, BOARD, 20L, "Titel", null, null, null);
@@ -1152,7 +1144,7 @@ class CardServiceTest {
   @Test
   void createEpic_assignsNextBoardNumber() {
     // Given
-    when(columns.findByBoardId(BOARD)).thenReturn(List.of(column(20L, "Backlog", 0)));
+    when(boardService.firstColumn(BOARD)).thenReturn(column(20L, "Backlog", 0));
     when(cards.nextCardNumber(PROJECT)).thenReturn(5);
 
     // When
@@ -1167,7 +1159,7 @@ class CardServiceTest {
   @Test
   void createEpic_returnsViewOfPersistedEpic() {
     // Given
-    when(columns.findByBoardId(BOARD)).thenReturn(List.of(column(20L, "Backlog", 0)));
+    when(boardService.firstColumn(BOARD)).thenReturn(column(20L, "Backlog", 0));
 
     // When
     CardService.CardView view = service.createEpic(1L, BOARD, "Epic", null, "SHC");
@@ -1209,7 +1201,7 @@ class CardServiceTest {
     // Given
     Card before = card(1L, 20L, 1, false, null, CardType.CARD, null, null);
     when(cards.findById(1L)).thenReturn(Optional.of(before));
-    when(columns.findById(21L)).thenReturn(Optional.of(column(21L, "Done", 4)));
+    when(boardService.requireColumn(21L, BOARD)).thenReturn(column(21L, "Done", 4));
 
     // When
     service.move(1L, 1L, 21L, 3);
@@ -1223,7 +1215,7 @@ class CardServiceTest {
     // Given
     Card before = card(1L, 20L, 1, false, null, CardType.CARD, null, null);
     when(cards.findById(1L)).thenReturn(Optional.of(before));
-    when(columns.findById(21L)).thenReturn(Optional.of(column(21L, "Done", 4)));
+    when(boardService.requireColumn(21L, BOARD)).thenReturn(column(21L, "Done", 4));
 
     // When
     CardService.CardView view = service.move(1L, 1L, 21L, 0);
@@ -1344,9 +1336,8 @@ class CardServiceTest {
   private void stubTransferScenario(Long parentId) {
     when(cards.findById(100L))
         .thenReturn(Optional.of(card(100L, 50L, 3, false, FIXED, CardType.CARD, parentId, null)));
-    when(boards.findById(20L)).thenReturn(Optional.of(new Board(20L, 2L, "Ziel", FIXED)));
-    when(columns.findById(60L))
-        .thenReturn(Optional.of(new BoardColumn(60L, 20L, "Backlog", 0, null)));
+    when(boardService.requireProjectId(20L)).thenReturn(2L);
+    when(boardService.requireColumn(60L, 20L)).thenReturn(new ColumnView(60L, "Backlog", 0, null));
     when(cards.nextCardNumber(2L)).thenReturn(8);
   }
 
@@ -1385,9 +1376,8 @@ class CardServiceTest {
     // Given: Ziel-Board liegt im SELBEN Projekt (1) wie die Quelle (card 100 hat projectId 1).
     when(cards.findById(100L))
         .thenReturn(Optional.of(card(100L, 50L, 3, false, FIXED, CardType.CARD, 9L, null)));
-    when(boards.findById(20L)).thenReturn(Optional.of(new Board(20L, 1L, "Ziel", FIXED)));
-    when(columns.findById(60L))
-        .thenReturn(Optional.of(new BoardColumn(60L, 20L, "Backlog", 0, null)));
+    when(boardService.requireProjectId(20L)).thenReturn(1L);
+    when(boardService.requireColumn(60L, 20L)).thenReturn(new ColumnView(60L, "Backlog", 0, null));
 
     // When
     service.transfer(1L, 100L, 20L, 60L);
@@ -1419,9 +1409,8 @@ class CardServiceTest {
     // Given: Ziel-Board liegt im SELBEN Projekt (1) wie die Quelle.
     when(cards.findById(100L))
         .thenReturn(Optional.of(card(100L, 50L, 3, false, FIXED, CardType.CARD, null, null)));
-    when(boards.findById(20L)).thenReturn(Optional.of(new Board(20L, 1L, "Ziel", FIXED)));
-    when(columns.findById(60L))
-        .thenReturn(Optional.of(new BoardColumn(60L, 20L, "Backlog", 0, null)));
+    when(boardService.requireProjectId(20L)).thenReturn(1L);
+    when(boardService.requireColumn(60L, 20L)).thenReturn(new ColumnView(60L, "Backlog", 0, null));
 
     // When
     service.transfer(1L, 100L, 20L, 60L);
@@ -1460,9 +1449,8 @@ class CardServiceTest {
         .thenReturn(Optional.of(card(100L, 50L, 3, false, FIXED, CardType.CARD, null, null)));
     when(cards.findById(101L))
         .thenReturn(Optional.of(card(101L, 50L, 4, false, FIXED, CardType.CARD, null, null)));
-    when(boards.findById(20L)).thenReturn(Optional.of(new Board(20L, 2L, "Ziel", FIXED)));
-    when(columns.findById(60L))
-        .thenReturn(Optional.of(new BoardColumn(60L, 20L, "Backlog", 0, null)));
+    when(boardService.requireProjectId(20L)).thenReturn(2L);
+    when(boardService.requireColumn(60L, 20L)).thenReturn(new ColumnView(60L, "Backlog", 0, null));
     when(cards.nextCardNumber(2L)).thenReturn(8);
 
     // When
@@ -1491,7 +1479,7 @@ class CardServiceTest {
     // Given
     when(cards.findById(100L))
         .thenReturn(Optional.of(card(100L, 50L, 3, false, null, CardType.CARD, null, null)));
-    when(boards.findById(20L)).thenReturn(Optional.empty());
+    when(boardService.requireProjectId(20L)).thenThrow(new BoardNotFoundException());
 
     // When / Then
     assertThatThrownBy(() -> service.transfer(1L, 100L, 20L, 60L))
@@ -1503,9 +1491,8 @@ class CardServiceTest {
     // Given
     when(cards.findById(100L))
         .thenReturn(Optional.of(card(100L, 50L, 3, false, null, CardType.CARD, null, null)));
-    when(boards.findById(20L)).thenReturn(Optional.of(new Board(20L, 2L, "Ziel", FIXED)));
-    when(columns.findById(60L))
-        .thenReturn(Optional.of(new BoardColumn(60L, 99L, "Fremd", 0, null)));
+    when(boardService.requireProjectId(20L)).thenReturn(2L);
+    when(boardService.requireColumn(60L, 20L)).thenThrow(new ColumnNotFoundException());
 
     // When / Then
     assertThatThrownBy(() -> service.transfer(1L, 100L, 20L, 60L))
@@ -1655,7 +1642,7 @@ class CardServiceTest {
 
   @Test
   void create_recordsCreatedActivity() {
-    when(columns.findById(20L)).thenReturn(Optional.of(column(20L, "Backlog", 0)));
+    when(boardService.requireColumn(20L, BOARD)).thenReturn(column(20L, "Backlog", 0));
 
     service.create(1L, BOARD, 20L, "Titel", null, null, null);
 
@@ -1666,7 +1653,7 @@ class CardServiceTest {
   void move_recordsMovedActivity_whenColumnChanges() {
     when(cards.findById(1L))
         .thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
-    when(columns.findById(21L)).thenReturn(Optional.of(column(21L, "Done", 4)));
+    when(boardService.requireColumn(21L, BOARD)).thenReturn(column(21L, "Done", 4));
 
     service.move(9L, 1L, 21L, 0);
 
@@ -1730,7 +1717,7 @@ class CardServiceTest {
   @Test
   void create_opensColumnTransition() {
     // Given
-    when(columns.findById(20L)).thenReturn(Optional.of(column(20L, "Backlog", 0)));
+    when(boardService.requireColumn(20L, BOARD)).thenReturn(column(20L, "Backlog", 0));
     when(cards.nextCardNumber(PROJECT)).thenReturn(1);
     when(cards.maxActivePositionInColumn(20L)).thenReturn(-1);
 
@@ -1746,7 +1733,7 @@ class CardServiceTest {
     // Given
     Card before = card(1L, 20L, 1, false, null, CardType.CARD, null, null);
     when(cards.findById(1L)).thenReturn(Optional.of(before));
-    when(columns.findById(21L)).thenReturn(Optional.of(column(21L, "Done", 4)));
+    when(boardService.requireColumn(21L, BOARD)).thenReturn(column(21L, "Done", 4));
 
     // When
     service.move(1L, 1L, 21L, 0);
@@ -1762,7 +1749,7 @@ class CardServiceTest {
     // Given: Reindex innerhalb derselben Spalte (Ziel == aktuelle Spalte).
     Card before = card(1L, 20L, 1, false, null, CardType.CARD, null, null);
     when(cards.findById(1L)).thenReturn(Optional.of(before));
-    when(columns.findById(20L)).thenReturn(Optional.of(column(20L, "Backlog", 0)));
+    when(boardService.requireColumn(20L, BOARD)).thenReturn(column(20L, "Backlog", 0));
 
     // When
     service.move(1L, 1L, 20L, 2);
@@ -1788,30 +1775,31 @@ class CardServiceTest {
 
   // --- Live-Board-Events (#342): je board-relevanter Mutation ein BoardChangedEvent ------------
 
-  private BoardChangedEvent onlyPublishedEvent() {
-    ArgumentCaptor<BoardChangedEvent> captor = ArgumentCaptor.forClass(BoardChangedEvent.class);
+  private CardBoardActivityEvent onlyPublishedEvent() {
+    ArgumentCaptor<CardBoardActivityEvent> captor =
+        ArgumentCaptor.forClass(CardBoardActivityEvent.class);
     verify(events).publishEvent(captor.capture());
     return captor.getValue();
   }
 
   @Test
   void create_publishesCreatedEvent() {
-    when(columns.findById(20L)).thenReturn(Optional.of(column(20L, "Backlog", 0)));
+    when(boardService.requireColumn(20L, BOARD)).thenReturn(column(20L, "Backlog", 0));
 
     service.create(1L, BOARD, 20L, "Titel", null, null, null);
 
     assertThat(onlyPublishedEvent())
-        .isEqualTo(new BoardChangedEvent(BOARD, ChangeType.CREATED, 1L));
+        .isEqualTo(new CardBoardActivityEvent(BOARD, ActivityType.CREATED, 1L));
   }
 
   @Test
   void createEpic_publishesCreatedEvent() {
-    when(columns.findByBoardId(BOARD)).thenReturn(List.of(column(20L, "Backlog", 0)));
+    when(boardService.firstColumn(BOARD)).thenReturn(column(20L, "Backlog", 0));
 
     service.createEpic(1L, BOARD, "Epic", null, "E");
 
     assertThat(onlyPublishedEvent())
-        .isEqualTo(new BoardChangedEvent(BOARD, ChangeType.CREATED, 1L));
+        .isEqualTo(new CardBoardActivityEvent(BOARD, ActivityType.CREATED, 1L));
   }
 
   @Test
@@ -1822,7 +1810,7 @@ class CardServiceTest {
     service.update(1L, 1L, "Neu", null, null, null, null, null);
 
     assertThat(onlyPublishedEvent())
-        .isEqualTo(new BoardChangedEvent(BOARD, ChangeType.UPDATED, 1L));
+        .isEqualTo(new CardBoardActivityEvent(BOARD, ActivityType.UPDATED, 1L));
   }
 
   @Test
@@ -1833,7 +1821,7 @@ class CardServiceTest {
     service.setAssignees(3L, 1L, List.of());
 
     assertThat(onlyPublishedEvent())
-        .isEqualTo(new BoardChangedEvent(BOARD, ChangeType.UPDATED, 1L));
+        .isEqualTo(new CardBoardActivityEvent(BOARD, ActivityType.UPDATED, 1L));
   }
 
   @Test
@@ -1844,7 +1832,7 @@ class CardServiceTest {
     service.setLabels(3L, 1L, List.of());
 
     assertThat(onlyPublishedEvent())
-        .isEqualTo(new BoardChangedEvent(BOARD, ChangeType.UPDATED, 1L));
+        .isEqualTo(new CardBoardActivityEvent(BOARD, ActivityType.UPDATED, 1L));
   }
 
   @Test
@@ -1855,18 +1843,19 @@ class CardServiceTest {
     service.assignParent(1L, 1L, null);
 
     assertThat(onlyPublishedEvent())
-        .isEqualTo(new BoardChangedEvent(BOARD, ChangeType.UPDATED, 1L));
+        .isEqualTo(new CardBoardActivityEvent(BOARD, ActivityType.UPDATED, 1L));
   }
 
   @Test
   void move_publishesMovedEvent() {
     when(cards.findById(1L))
         .thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
-    when(columns.findById(21L)).thenReturn(Optional.of(column(21L, "Ready", 1)));
+    when(boardService.requireColumn(21L, BOARD)).thenReturn(column(21L, "Ready", 1));
 
     service.move(1L, 1L, 21L, 0);
 
-    assertThat(onlyPublishedEvent()).isEqualTo(new BoardChangedEvent(BOARD, ChangeType.MOVED, 1L));
+    assertThat(onlyPublishedEvent())
+        .isEqualTo(new CardBoardActivityEvent(BOARD, ActivityType.MOVED, 1L));
   }
 
   @Test
@@ -1877,7 +1866,7 @@ class CardServiceTest {
     service.archive(1L, 1L);
 
     assertThat(onlyPublishedEvent())
-        .isEqualTo(new BoardChangedEvent(BOARD, ChangeType.ARCHIVED, 1L));
+        .isEqualTo(new CardBoardActivityEvent(BOARD, ActivityType.ARCHIVED, 1L));
   }
 
   @Test
@@ -1888,7 +1877,7 @@ class CardServiceTest {
     service.restore(1L, 1L);
 
     assertThat(onlyPublishedEvent())
-        .isEqualTo(new BoardChangedEvent(BOARD, ChangeType.RESTORED, 1L));
+        .isEqualTo(new CardBoardActivityEvent(BOARD, ActivityType.RESTORED, 1L));
   }
 
   @Test
@@ -1901,7 +1890,7 @@ class CardServiceTest {
 
     service.moveToIdeaStorage(9L, 1L);
 
-    verify(events).publishEvent(new BoardChangedEvent(BOARD, ChangeType.MOVED, 1L));
+    verify(events).publishEvent(new CardBoardActivityEvent(BOARD, ActivityType.MOVED, 1L));
     verify(events).publishEvent(new ProjectIdeasChangedEvent(PROJECT));
   }
 
@@ -1913,7 +1902,7 @@ class CardServiceTest {
     service.delete(1L, 1L);
 
     assertThat(onlyPublishedEvent())
-        .isEqualTo(new BoardChangedEvent(BOARD, ChangeType.DELETED, 1L));
+        .isEqualTo(new CardBoardActivityEvent(BOARD, ActivityType.DELETED, 1L));
   }
 
   @Test
@@ -1924,7 +1913,7 @@ class CardServiceTest {
     service.restoreFromTrash(9L, 1L);
 
     assertThat(onlyPublishedEvent())
-        .isEqualTo(new BoardChangedEvent(BOARD, ChangeType.RESTORED, 1L));
+        .isEqualTo(new CardBoardActivityEvent(BOARD, ActivityType.RESTORED, 1L));
   }
 
   @Test
@@ -1935,7 +1924,7 @@ class CardServiceTest {
     service.purge(9L, 1L);
 
     assertThat(onlyPublishedEvent())
-        .isEqualTo(new BoardChangedEvent(BOARD, ChangeType.DELETED, 1L));
+        .isEqualTo(new CardBoardActivityEvent(BOARD, ActivityType.DELETED, 1L));
   }
 
   @Test
@@ -1944,12 +1933,13 @@ class CardServiceTest {
 
     service.transfer(1L, 100L, 20L, 60L);
 
-    ArgumentCaptor<BoardChangedEvent> captor = ArgumentCaptor.forClass(BoardChangedEvent.class);
+    ArgumentCaptor<CardBoardActivityEvent> captor =
+        ArgumentCaptor.forClass(CardBoardActivityEvent.class);
     verify(events, times(2)).publishEvent(captor.capture());
     assertThat(captor.getAllValues())
         .containsExactly(
-            new BoardChangedEvent(BOARD, ChangeType.MOVED, 100L),
-            new BoardChangedEvent(20L, ChangeType.MOVED, 100L));
+            new CardBoardActivityEvent(BOARD, ActivityType.MOVED, 100L),
+            new CardBoardActivityEvent(20L, ActivityType.MOVED, 100L));
   }
 
   @Test
@@ -2012,8 +2002,7 @@ class CardServiceTest {
   @Test
   void planOntoBoard_movesIdeaIntoBacklog_assignsNumberPosition_andPublishes() {
     when(cards.findById(1L)).thenReturn(Optional.of(poolIdea(1L)));
-    when(columns.findByBoardId(BOARD))
-        .thenReturn(List.of(column(21L, "Ready", 1), column(20L, "Backlog", 0)));
+    when(boardService.firstColumn(BOARD)).thenReturn(column(20L, "Backlog", 0));
     when(cards.nextCardNumber(PROJECT)).thenReturn(5);
     when(cards.maxActivePositionInColumn(20L)).thenReturn(2);
 
@@ -2029,7 +2018,7 @@ class CardServiceTest {
     assertThat(captor.getValue().ideaStored()).isFalse();
     verify(transitions).open(1L, 20L, "Backlog", FIXED);
     verify(activity).add(1L, 9L, CardActivityType.PROMOTED, "Auf Board eingeplant", FIXED);
-    verify(events).publishEvent(new BoardChangedEvent(BOARD, ChangeType.CREATED, 1L));
+    verify(events).publishEvent(new CardBoardActivityEvent(BOARD, ActivityType.CREATED, 1L));
     assertThat(result.boardId()).isEqualTo(BOARD);
     assertThat(result.ideaStored()).isFalse();
   }
@@ -2060,7 +2049,7 @@ class CardServiceTest {
             PROJECT,
             null);
     when(cards.findById(1L)).thenReturn(Optional.of(numbered));
-    when(columns.findByBoardId(BOARD)).thenReturn(List.of(column(20L, "Backlog", 0)));
+    when(boardService.firstColumn(BOARD)).thenReturn(column(20L, "Backlog", 0));
     when(cards.maxActivePositionInColumn(20L)).thenReturn(-1);
 
     ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
@@ -2074,7 +2063,7 @@ class CardServiceTest {
   @Test
   void planOntoBoard_rejectsBoardOfOtherProject() {
     when(cards.findById(1L)).thenReturn(Optional.of(poolIdea(1L)));
-    when(boards.findById(BOARD)).thenReturn(Optional.of(new Board(BOARD, 99L, "B", FIXED)));
+    when(boardService.requireProjectId(BOARD)).thenReturn(99L);
 
     assertThatThrownBy(() -> service.planOntoBoard(9L, 1L, BOARD))
         .isInstanceOf(BoardNotFoundException.class);
@@ -2095,7 +2084,7 @@ class CardServiceTest {
     assertThat(captor.getValue().ideaStored()).isTrue();
     assertThat(captor.getValue().targetBoardId()).isEqualTo(BOARD);
     verify(activity).add(1L, 9L, CardActivityType.IDEA_STORED, "Zurück in den Ideen-Pool", FIXED);
-    verify(events).publishEvent(new BoardChangedEvent(BOARD, ChangeType.MOVED, 1L));
+    verify(events).publishEvent(new CardBoardActivityEvent(BOARD, ActivityType.MOVED, 1L));
     assertThat(result.boardId()).isNull();
   }
 
@@ -2109,8 +2098,7 @@ class CardServiceTest {
   @Test
   void planOntoBoard_publishesIdeasChanged() {
     when(cards.findById(1L)).thenReturn(Optional.of(poolIdea(1L)));
-    when(columns.findByBoardId(BOARD))
-        .thenReturn(List.of(column(21L, "Ready", 1), column(20L, "Backlog", 0)));
+    when(boardService.firstColumn(BOARD)).thenReturn(column(20L, "Backlog", 0));
     when(cards.nextCardNumber(PROJECT)).thenReturn(5);
     when(cards.maxActivePositionInColumn(20L)).thenReturn(2);
 
@@ -2207,7 +2195,7 @@ class CardServiceTest {
 
     verify(permissions).require(9L, PROJECT, Permission.TICKET_UPDATE);
     verify(activity).add(1L, 9L, CardActivityType.UPDATED, "Karte bearbeitet", FIXED);
-    verify(events, never()).publishEvent(any(BoardChangedEvent.class));
+    verify(events, never()).publishEvent(any(CardBoardActivityEvent.class));
     assertThat(view.title()).isEqualTo("Neu");
     assertThat(view.boardId()).isNull();
   }
@@ -2236,7 +2224,7 @@ class CardServiceTest {
     verify(permissions).require(3L, PROJECT, Permission.TICKET_UPDATE);
     verify(assignees).replaceAssignees(1L, List.of(7L));
     verify(activity).add(1L, 3L, CardActivityType.ASSIGNED, "Zuständige geändert", FIXED);
-    verify(events, never()).publishEvent(any(BoardChangedEvent.class));
+    verify(events, never()).publishEvent(any(CardBoardActivityEvent.class));
   }
 
   @Test
@@ -2287,7 +2275,7 @@ class CardServiceTest {
 
   @Test
   void listBoardItems_throwsBoardNotFound_whenBoardUnknown() {
-    when(boards.findById(BOARD)).thenReturn(Optional.empty());
+    when(boardService.requireProjectId(BOARD)).thenThrow(new BoardNotFoundException());
 
     assertThatThrownBy(() -> service.listBoardItems(5L, BOARD))
         .isInstanceOf(BoardNotFoundException.class);

@@ -6,9 +6,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import org.mwolff.manban.board.application.BoardNotFoundException;
-import org.mwolff.manban.board.application.BoardRepository;
-import org.mwolff.manban.board.domain.Board;
+import org.mwolff.manban.board.application.BoardService;
 import org.mwolff.manban.card.domain.Label;
 import org.mwolff.manban.project.application.PermissionChecker;
 import org.mwolff.manban.project.domain.Permission;
@@ -24,17 +22,17 @@ public class LabelService {
 
   private final LabelRepository labels;
   private final CardLabelRepository cardLabels;
-  private final BoardRepository boards;
+  private final BoardService boardService;
   private final PermissionChecker permissions;
 
   public LabelService(
       LabelRepository labels,
       CardLabelRepository cardLabels,
-      BoardRepository boards,
+      BoardService boardService,
       PermissionChecker permissions) {
     this.labels = labels;
     this.cardLabels = cardLabels;
-    this.boards = boards;
+    this.boardService = boardService;
     this.permissions = permissions;
   }
 
@@ -67,15 +65,13 @@ public class LabelService {
 
   @Transactional(readOnly = true)
   public List<Label> list(long userId, long boardId) {
-    Board board = boards.findById(boardId).orElseThrow(BoardNotFoundException::new);
-    permissions.requireMembership(userId, board.projectId());
+    permissions.requireMembership(userId, boardService.requireProjectId(boardId));
     return labels.findByBoardId(boardId);
   }
 
   @Transactional
   public Label create(long userId, long boardId, String name, String color) {
-    Board board = boards.findById(boardId).orElseThrow(BoardNotFoundException::new);
-    permissions.require(userId, board.projectId(), Permission.BOARD_UPDATE);
+    permissions.require(userId, boardService.requireProjectId(boardId), Permission.BOARD_UPDATE);
     String trimmed = requireName(name);
     if (labels.existsByBoardIdAndName(boardId, trimmed)) {
       throw new InvalidLabelException("Label existiert bereits: " + trimmed);
@@ -86,8 +82,8 @@ public class LabelService {
   @Transactional
   public Label update(long userId, long labelId, String name, String color) {
     Label label = labels.findById(labelId).orElseThrow(LabelNotFoundException::new);
-    Board board = boards.findById(label.boardId()).orElseThrow(BoardNotFoundException::new);
-    permissions.require(userId, board.projectId(), Permission.BOARD_UPDATE);
+    permissions.require(
+        userId, boardService.requireProjectId(label.boardId()), Permission.BOARD_UPDATE);
     String trimmed = requireName(name);
     if (!trimmed.equals(label.name()) && labels.existsByBoardIdAndName(label.boardId(), trimmed)) {
       throw new InvalidLabelException("Label existiert bereits: " + trimmed);
@@ -98,8 +94,8 @@ public class LabelService {
   @Transactional
   public void delete(long userId, long labelId) {
     Label label = labels.findById(labelId).orElseThrow(LabelNotFoundException::new);
-    Board board = boards.findById(label.boardId()).orElseThrow(BoardNotFoundException::new);
-    permissions.require(userId, board.projectId(), Permission.BOARD_UPDATE);
+    permissions.require(
+        userId, boardService.requireProjectId(label.boardId()), Permission.BOARD_UPDATE);
     labels.deleteById(labelId);
   }
 
