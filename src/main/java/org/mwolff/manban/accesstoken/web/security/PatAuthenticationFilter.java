@@ -1,4 +1,4 @@
-package org.mwolff.manban.accesstoken.infrastructure.security;
+package org.mwolff.manban.accesstoken.web.security;
 
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;

@@ -44,6 +44,10 @@ export default tseslint.config(
       // wie inputProps) als harter Lint-Fehler im Pflicht-Gate — fängt genau die Klasse, die
       // zuvor erst spät als Sonar-Findings auffiel ("Leitplanke im Gate statt Doku").
       '@typescript-eslint/no-deprecated': 'error',
+      // Aktiviert (typed): `a && a.b`-Ketten statt `a?.b` — deckungsgleich mit Sonar S6582
+      // (#445). Als Gate-Regel statt reinem Einzelfix, damit dieselbe Klasse nicht wieder
+      // erst nach dem Push bei SonarCloud auffällt.
+      '@typescript-eslint/prefer-optional-chain': 'error',
     },
   },
   {

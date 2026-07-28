@@ -3,9 +3,11 @@ package org.mwolff.manban.board.application;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import org.jspecify.annotations.Nullable;
@@ -130,7 +132,7 @@ public class BoardService {
   @Transactional
   public ColumnView updateColumn(
       long userId, long columnId, String name, @Nullable Integer wipLimit) {
-    BoardColumn column = requireColumn(columnId);
+    BoardColumn column = loadColumn(columnId);
     Board board = requireBoard(column.boardId());
     permissions.require(userId, board.projectId(), Permission.BOARD_UPDATE);
     return toColumnView(columns.save(column.with(name.trim(), wipLimit)));
@@ -138,7 +140,7 @@ public class BoardService {
 
   @Transactional
   public void deleteColumn(long userId, long columnId) {
-    BoardColumn column = requireColumn(columnId);
+    BoardColumn column = loadColumn(columnId);
     Board board = requireBoard(column.boardId());
     permissions.require(userId, board.projectId(), Permission.BOARD_UPDATE);
     if (cardCounter.countByColumnId(columnId) > 0) {
@@ -175,6 +177,78 @@ public class BoardService {
     return result;
   }
 
+  // --- Fassade fuer modulfremde Use-Cases (Issue #459) ----------------------
+  // Die folgenden Methoden pruefen bewusst KEINE Rechte: sie loesen nur Board- und Spaltendaten
+  // auf, die der aufrufende fremde Use-Case fuer seine eigene Rechtepruefung erst braucht (z. B.
+  // die Projekt-ID). Die Autorisierung bleibt beim Aufrufer.
+
+  /**
+   * Projekt-ID des Boards — die Auflösung, die modulfremde Use-Cases für ihre Rechteprüfung
+   * brauchen, ohne das Board-Aggregat oder dessen Persistenz-Port zu kennen. Archivierte Boards
+   * gelten wie überall als nicht vorhanden.
+   *
+   * @throws BoardNotFoundException wenn das Board nicht existiert oder archiviert ist
+   */
+  @Transactional(readOnly = true)
+  public long requireProjectId(long boardId) {
+    return requireBoard(boardId).projectId();
+  }
+
+  /**
+   * Projekt-ID des Boards, sofern vorhanden — die Variante für Aufrufer, die ein unbekanntes Board
+   * fachlich anders behandeln als mit 404 (der {@code accesstoken}-Ingest wertet es als
+   * unschlüssige Bindung).
+   */
+  @Transactional(readOnly = true)
+  public Optional<Long> findProjectId(long boardId) {
+    return boards.findById(boardId).map(Board::projectId);
+  }
+
+  /**
+   * Spalte des Boards. Die Board-Zugehörigkeit ist Teil der Zusicherung: eine Spalte eines anderen
+   * Boards gilt wie eine unbekannte Spalte (kein Existenz-Leak fremder Boards).
+   *
+   * @throws ColumnNotFoundException wenn die Spalte nicht existiert oder zu einem anderen Board
+   *     gehört
+   */
+  @Transactional(readOnly = true)
+  public ColumnView requireColumn(long columnId, long boardId) {
+    BoardColumn column = loadColumn(columnId);
+    // column.boardId() ist ein Long, boardId ein long: Java entpackt hier und vergleicht die
+    // Zahlenwerte. Wird der Parameter je zu Long, vergleicht dieselbe Zeile stillschweigend
+    // Referenzen und liefert oberhalb des Long-Caches falsche Ergebnisse.
+    if (column.boardId() != boardId) {
+      throw new ColumnNotFoundException();
+    }
+    return toColumnView(column);
+  }
+
+  /** Spalten des Boards, aufsteigend nach Position (leer, wenn das Board keine Spalten hat). */
+  @Transactional(readOnly = true)
+  public List<ColumnView> listColumns(long boardId) {
+    return sortedColumns(boardId);
+  }
+
+  /**
+   * Erste Spalte des Boards (kleinste Position) — die Backlog-Spalte, in der neu eingeplante Karten
+   * und Epics landen.
+   *
+   * @throws ColumnNotFoundException wenn das Board keine Spalte hat
+   */
+  @Transactional(readOnly = true)
+  public ColumnView firstColumn(long boardId) {
+    return sortedColumns(boardId).stream().findFirst().orElseThrow(ColumnNotFoundException::new);
+  }
+
+  // Ohne eigenes @Transactional: wird von listColumns/firstColumn (je @Transactional) aufgerufen,
+  // ohne Self-Invocation über den Proxy (java:S6809).
+  private List<ColumnView> sortedColumns(long boardId) {
+    return columns.findByBoardId(boardId).stream()
+        .sorted(Comparator.comparingInt(BoardColumn::position))
+        .map(BoardService::toColumnView)
+        .toList();
+  }
+
   private Board requireBoard(long boardId) {
     return boards.findById(boardId).orElseThrow(BoardNotFoundException::new);
   }
@@ -183,7 +257,7 @@ public class BoardService {
     return boards.findByIdIncludingArchived(boardId).orElseThrow(BoardNotFoundException::new);
   }
 
-  private BoardColumn requireColumn(long columnId) {
+  private BoardColumn loadColumn(long columnId) {
     return columns.findById(columnId).orElseThrow(ColumnNotFoundException::new);
   }
 

@@ -6,12 +6,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 import org.mwolff.manban.attachment.domain.Attachment;
-import org.mwolff.manban.board.application.BoardNotFoundException;
-import org.mwolff.manban.board.application.BoardRepository;
-import org.mwolff.manban.board.domain.Board;
-import org.mwolff.manban.card.application.CardNotFoundException;
-import org.mwolff.manban.card.application.CardRepository;
-import org.mwolff.manban.card.domain.Card;
+import org.mwolff.manban.card.application.CardService;
 import org.mwolff.manban.project.application.PermissionChecker;
 import org.mwolff.manban.project.domain.Permission;
 import org.springframework.stereotype.Service;
@@ -21,6 +16,23 @@ import org.springframework.transaction.annotation.Transactional;
  * Anhang-Use-Cases. Der Blob wandert in den Objektspeicher (MinIO), nur Metadaten in die DB.
  * Content-Type wird aus den Magic-Bytes bestimmt (nicht dem Client vertraut). Upload erfordert
  * ATTACHMENT_CREATE, Löschen ATTACHMENT_DELETE, Lesen nur Mitgliedschaft.
+ *
+ * <p><b>Rechteprüfung ist projekt-basiert, nicht board-basiert</b> (Entscheidung aus #462). Die
+ * Projekt-ID kommt über {@link CardService#requireProjectId(long)} direkt von der Karte. Daraus
+ * folgt bewusst zweierlei — beides ist in {@code AttachmentIT} festgenagelt und darf beim nächsten
+ * Refactor nicht stillschweigend kippen:
+ *
+ * <ul>
+ *   <li>Anhänge an Karten eines <b>archivierten Boards</b> bleiben nutzbar. Das Archivieren
+ *       entzieht das Board-Aggregat (→ 404), nicht dessen Karten: die bleiben editierbar und tragen
+ *       weiterhin Kommentare. Anhänge folgen dieser Linie.
+ *   <li>Anhänge an <b>board-lose Pool-Ideen</b> (#405) funktionieren; sie haben kein Board, über
+ *       das sich eine Projekt-ID auflösen ließe.
+ * </ul>
+ *
+ * <p>Die frühere Auflösung über das Board (gelöschtes {@code projectIdOfCard}) lieferte in beiden
+ * Fällen 404 bzw. 500 und machte Anhänge zum einzigen Ausreißer gegenüber {@code CommentService},
+ * der schon immer projekt-basiert prüft.
  */
 @Service
 public class AttachmentService {
@@ -29,8 +41,7 @@ public class AttachmentService {
   private final ObjectStorage storage;
   private final ContentTypeDetector contentTypeDetector;
   private final ObjectStorageProperties properties;
-  private final CardRepository cards;
-  private final BoardRepository boards;
+  private final CardService cardService;
   private final PermissionChecker permissions;
   private final Clock clock;
 
@@ -39,23 +50,21 @@ public class AttachmentService {
       ObjectStorage storage,
       ContentTypeDetector contentTypeDetector,
       ObjectStorageProperties properties,
-      CardRepository cards,
-      BoardRepository boards,
+      CardService cardService,
       PermissionChecker permissions,
       Clock clock) {
     this.attachments = attachments;
     this.storage = storage;
     this.contentTypeDetector = contentTypeDetector;
     this.properties = properties;
-    this.cards = cards;
-    this.boards = boards;
+    this.cardService = cardService;
     this.permissions = permissions;
     this.clock = clock;
   }
 
   @Transactional
   public AttachmentView upload(long userId, long cardId, String filename, byte[] content) {
-    permissions.require(userId, projectIdOfCard(cardId), Permission.ATTACHMENT_CREATE);
+    permissions.require(userId, cardService.requireProjectId(cardId), Permission.ATTACHMENT_CREATE);
     if (attachments.countByCardId(cardId) >= properties.maxPerCard()) {
       throw new AttachmentLimitExceededException(properties.maxPerCard());
     }
@@ -71,7 +80,7 @@ public class AttachmentService {
 
   @Transactional(readOnly = true)
   public List<AttachmentView> list(long userId, long cardId) {
-    permissions.requireMembership(userId, projectIdOfCard(cardId));
+    permissions.requireMembership(userId, cardService.requireProjectId(cardId));
     return attachments.findByCardId(cardId).stream().map(AttachmentService::view).toList();
   }
 
@@ -79,7 +88,7 @@ public class AttachmentService {
   public Download download(long userId, long attachmentId) {
     Attachment attachment =
         attachments.findById(attachmentId).orElseThrow(AttachmentNotFoundException::new);
-    permissions.requireMembership(userId, projectIdOfCard(attachment.cardId()));
+    permissions.requireMembership(userId, cardService.requireProjectId(attachment.cardId()));
     return new Download(
         attachment.filename(),
         attachment.contentType(),
@@ -91,15 +100,10 @@ public class AttachmentService {
   public void delete(long userId, long attachmentId) {
     Attachment attachment =
         attachments.findById(attachmentId).orElseThrow(AttachmentNotFoundException::new);
-    permissions.require(userId, projectIdOfCard(attachment.cardId()), Permission.ATTACHMENT_DELETE);
+    permissions.require(
+        userId, cardService.requireProjectId(attachment.cardId()), Permission.ATTACHMENT_DELETE);
     storage.delete(attachment.objectKey());
     attachments.deleteById(attachment.requireId());
-  }
-
-  private long projectIdOfCard(long cardId) {
-    Card card = cards.findById(cardId).orElseThrow(CardNotFoundException::new);
-    Board board = boards.findById(card.requireBoardId()).orElseThrow(BoardNotFoundException::new);
-    return board.projectId();
   }
 
   private static AttachmentView view(Attachment a) {

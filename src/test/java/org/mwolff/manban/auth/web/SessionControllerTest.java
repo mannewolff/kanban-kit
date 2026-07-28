@@ -12,10 +12,10 @@ import org.junit.jupiter.api.Test;
 import org.mwolff.manban.auth.application.LoginService;
 import org.mwolff.manban.auth.application.MeService;
 import org.mwolff.manban.auth.application.MeService.MeView;
+import org.mwolff.manban.auth.application.SessionTokens;
 import org.mwolff.manban.auth.domain.AppUser;
 import org.mwolff.manban.auth.domain.PlatformRole;
-import org.mwolff.manban.auth.infrastructure.security.SessionCookieManager;
-import org.mwolff.manban.auth.infrastructure.security.SignedSessionTokens;
+import org.mwolff.manban.auth.web.security.SessionCookieManager;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseCookie;
 
@@ -24,7 +24,7 @@ class SessionControllerTest {
 
   private LoginService loginService;
   private MeService meService;
-  private SignedSessionTokens tokens;
+  private SessionTokens tokens;
   private SessionCookieManager cookies;
   private HttpServletResponse response;
   private SessionController controller;
@@ -33,7 +33,7 @@ class SessionControllerTest {
   void setUp() {
     loginService = mock(LoginService.class);
     meService = mock(MeService.class);
-    tokens = mock(SignedSessionTokens.class);
+    tokens = mock(SessionTokens.class);
     cookies = mock(SessionCookieManager.class);
     response = mock(HttpServletResponse.class);
     controller = new SessionController(loginService, meService, tokens, cookies);

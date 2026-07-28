@@ -2,6 +2,8 @@ package org.mwolff.manban.kanbancompat.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.tuple;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -9,7 +11,6 @@ import static org.mockito.Mockito.when;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -17,103 +18,44 @@ import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.NullSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mwolff.manban.accesstoken.application.KanbanPrincipal;
-import org.mwolff.manban.board.application.BoardColumnRepository;
 import org.mwolff.manban.board.application.BoardNotFoundException;
-import org.mwolff.manban.board.application.BoardRepository;
-import org.mwolff.manban.board.domain.Board;
-import org.mwolff.manban.board.domain.BoardColumn;
-import org.mwolff.manban.card.application.CardLabelRepository;
-import org.mwolff.manban.card.application.CardRepository;
+import org.mwolff.manban.board.application.BoardService;
+import org.mwolff.manban.board.application.BoardService.ColumnView;
+import org.mwolff.manban.card.application.CardNotFoundException;
 import org.mwolff.manban.card.application.CardService;
+import org.mwolff.manban.card.application.CardService.BoardItemView;
 import org.mwolff.manban.card.application.CardService.CardView;
-import org.mwolff.manban.card.application.LabelRepository;
-import org.mwolff.manban.card.domain.Card;
+import org.mwolff.manban.card.application.LabelService;
 import org.mwolff.manban.card.domain.CardType;
-import org.mwolff.manban.card.domain.Label;
 import org.mwolff.manban.comment.application.CommentService;
-import org.mwolff.manban.project.application.PermissionChecker;
+import org.mwolff.manban.comment.application.CommentService.CommentView;
 
 /** Unit-Tests der Kanban-Compat-Schicht (Spaltennamen-Normalisierung + Verhalten an den Ports). */
-// PMD.TooManyMethods: umfassende Unit-Suite (Spalten-Mapping, Items inkl. Labels, Create/Move/
-// Comment/Epics je Erfolgs- und Fehlerpfad); eine Aufspaltung zerrisse denselben Testkontext.
-@SuppressWarnings("PMD.TooManyMethods")
 class KanbanCompatServiceTest {
 
-  private static final Instant FIXED = Instant.parse("2026-01-02T03:04:05Z");
   private static final long BOARD = 10L;
 
-  private CardRepository cards;
-  private BoardColumnRepository columns;
-  private BoardRepository boards;
+  private BoardService boardService;
   private CardService cardService;
+  private LabelService labelService;
   private CommentService commentService;
-  private PermissionChecker permissions;
-  private LabelRepository labels;
-  private CardLabelRepository cardLabels;
   private KanbanCompatService service;
 
   private static KanbanPrincipal bound() {
     return new KanbanPrincipal(1L, 2L, 5L, BOARD);
   }
 
-  private static List<BoardColumn> standardColumns() {
+  private static List<ColumnView> standardColumns() {
     return List.of(
-        new BoardColumn(100L, BOARD, "Backlog", 0, null),
-        new BoardColumn(101L, BOARD, "Ready", 1, null),
-        new BoardColumn(102L, BOARD, "In Progress", 2, null),
-        new BoardColumn(103L, BOARD, "In Review", 3, null),
-        new BoardColumn(104L, BOARD, "Done", 4, null));
+        new ColumnView(100L, "Backlog", 0, null),
+        new ColumnView(101L, "Ready", 1, null),
+        new ColumnView(102L, "In Progress", 2, null),
+        new ColumnView(103L, "In Review", 3, null),
+        new ColumnView(104L, "Done", 4, null));
   }
 
-  /** Karte im Ideen-Speicher — auf dem gebundenen Board, aber in der Oberfläche ausgeblendet. */
-  private static Card ideaStoredCard(long id, long columnId) {
-    return new Card(
-        id,
-        BOARD,
-        columnId,
-        1,
-        "T",
-        null,
-        0,
-        false,
-        true,
-        null,
-        1L,
-        FIXED,
-        FIXED,
-        CardType.CARD,
-        null,
-        null,
-        null,
-        1L,
-        null);
-  }
-
-  private static Card card(long id, long columnId, int number) {
-    return new Card(
-        id,
-        BOARD,
-        columnId,
-        number,
-        "T",
-        "body",
-        0,
-        false,
-        false,
-        null,
-        1L,
-        FIXED,
-        FIXED,
-        CardType.CARD,
-        null,
-        null,
-        null,
-        1L,
-        null);
-  }
-
-  private static Board boardWithProject(long id, long projectId) {
-    return new Board(id, projectId, "B", FIXED);
+  private static BoardItemView item(long id, long columnId, int number) {
+    return new BoardItemView(id, number, "T", "body", columnId, 0, false);
   }
 
   private static CardView pooledIdea(long id) {
@@ -140,17 +82,11 @@ class KanbanCompatServiceTest {
 
   @BeforeEach
   void setUp() {
-    cards = mock(CardRepository.class);
-    columns = mock(BoardColumnRepository.class);
-    boards = mock(BoardRepository.class);
+    boardService = mock(BoardService.class);
     cardService = mock(CardService.class);
+    labelService = mock(LabelService.class);
     commentService = mock(CommentService.class);
-    permissions = mock(PermissionChecker.class);
-    labels = mock(LabelRepository.class);
-    cardLabels = mock(CardLabelRepository.class);
-    service =
-        new KanbanCompatService(
-            cards, columns, boards, cardService, commentService, permissions, labels, cardLabels);
+    service = new KanbanCompatService(boardService, cardService, labelService, commentService);
   }
 
   @ParameterizedTest
@@ -179,9 +115,8 @@ class KanbanCompatServiceTest {
   @Test
   void items_groupsCardsByKanbanColumn() {
     // Given
-    when(boards.findById(BOARD)).thenReturn(Optional.of(new Board(BOARD, 5L, "B", FIXED)));
-    when(columns.findByBoardId(BOARD)).thenReturn(standardColumns());
-    when(cards.findByBoardId(BOARD)).thenReturn(List.of(card(1L, 100L, 1)));
+    when(boardService.listColumns(BOARD)).thenReturn(standardColumns());
+    when(cardService.listBoardItems(1L, BOARD)).thenReturn(List.of(item(1L, 100L, 1)));
 
     // When
     Map<String, List<KanbanCompatService.Item>> grouped = service.items(bound());
@@ -193,67 +128,11 @@ class KanbanCompatServiceTest {
   }
 
   @Test
-  void items_skipsArchivedCards() {
-    // Given
-    Card archived =
-        new Card(
-            2L,
-            BOARD,
-            100L,
-            2,
-            "A",
-            null,
-            0,
-            true,
-            false,
-            null,
-            1L,
-            FIXED,
-            FIXED,
-            CardType.CARD,
-            null,
-            null,
-            null,
-            1L,
-            null);
-    when(boards.findById(BOARD)).thenReturn(Optional.of(new Board(BOARD, 5L, "B", FIXED)));
-    when(columns.findByBoardId(BOARD)).thenReturn(standardColumns());
-    when(cards.findByBoardId(BOARD)).thenReturn(List.of(archived));
-
-    // When
-    Map<String, List<KanbanCompatService.Item>> grouped = service.items(bound());
-
-    // Then
-    assertThat(grouped.get("BACKLOG")).isEmpty();
-  }
-
-  @Test
   void items_marksEpicItemsAsEpicType() {
     // Given: ein Epic auf dem Board
-    Card epic =
-        new Card(
-            3L,
-            BOARD,
-            100L,
-            3,
-            "E",
-            "body",
-            0,
-            false,
-            false,
-            null,
-            1L,
-            FIXED,
-            FIXED,
-            CardType.EPIC,
-            null,
-            "E",
-            null,
-            1L,
-            null);
-    when(boards.findById(BOARD)).thenReturn(Optional.of(new Board(BOARD, 5L, "B", FIXED)));
-    when(columns.findByBoardId(BOARD)).thenReturn(standardColumns());
-    when(cards.findByBoardId(BOARD)).thenReturn(List.of(epic));
+    when(boardService.listColumns(BOARD)).thenReturn(standardColumns());
+    when(cardService.listBoardItems(1L, BOARD))
+        .thenReturn(List.of(new BoardItemView(3L, 3, "E", "body", 100L, 0, true)));
 
     // When
     Map<String, List<KanbanCompatService.Item>> grouped = service.items(bound());
@@ -268,9 +147,8 @@ class KanbanCompatServiceTest {
   @Test
   void items_marksRegularCardsAsCardType() {
     // Given: eine gewöhnliche Karte (kein Epic)
-    when(boards.findById(BOARD)).thenReturn(Optional.of(new Board(BOARD, 5L, "B", FIXED)));
-    when(columns.findByBoardId(BOARD)).thenReturn(standardColumns());
-    when(cards.findByBoardId(BOARD)).thenReturn(List.of(card(1L, 100L, 1)));
+    when(boardService.listColumns(BOARD)).thenReturn(standardColumns());
+    when(cardService.listBoardItems(1L, BOARD)).thenReturn(List.of(item(1L, 100L, 1)));
 
     // When
     Map<String, List<KanbanCompatService.Item>> grouped = service.items(bound());
@@ -283,21 +161,34 @@ class KanbanCompatServiceTest {
   }
 
   @Test
+  void items_delegatesVisibilityFilterToCardFacade() {
+    // Der Ausschluss archivierter und im Ideen-Speicher liegender Karten (#434) liegt seit #458 im
+    // card-Modul; die Compat-Schicht reicht die bereits gefilterte Liste unveraendert durch. Fiele
+    // der Aufruf auf eine andere Quelle zurueck, waere hier nichts zu sehen.
+    when(boardService.listColumns(BOARD)).thenReturn(standardColumns());
+    when(cardService.listBoardItems(1L, BOARD)).thenReturn(List.of());
+
+    Map<String, List<KanbanCompatService.Item>> grouped = service.items(bound());
+
+    verify(cardService).listBoardItems(1L, BOARD);
+    assertThat(grouped.get("BACKLOG")).isEmpty();
+  }
+
+  @Test
   void items_saturatesFallbackKeyAtLastColumn_whenBoardHasMoreColumnsThanKeys() {
     // Given: sechs Spalten ohne kanonische Namen -> für jede greift der Positions-Fallback.
     // Ab der sechsten (Index 5) muss der Fallback-Index bei der letzten Kanban-Spalte (DONE)
     // gedeckelt werden (Math.min(i, size-1)); ein „size+1" (Mutant) liefe aus dem Index.
-    List<BoardColumn> sixColumns =
+    List<ColumnView> sixColumns =
         List.of(
-            new BoardColumn(100L, BOARD, "Alpha", 0, null),
-            new BoardColumn(101L, BOARD, "Beta", 1, null),
-            new BoardColumn(102L, BOARD, "Gamma", 2, null),
-            new BoardColumn(103L, BOARD, "Delta", 3, null),
-            new BoardColumn(104L, BOARD, "Epsilon", 4, null),
-            new BoardColumn(105L, BOARD, "Zeta", 5, null));
-    when(boards.findById(BOARD)).thenReturn(Optional.of(new Board(BOARD, 5L, "B", FIXED)));
-    when(columns.findByBoardId(BOARD)).thenReturn(sixColumns);
-    when(cards.findByBoardId(BOARD)).thenReturn(List.of(card(1L, 105L, 1)));
+            new ColumnView(100L, "Alpha", 0, null),
+            new ColumnView(101L, "Beta", 1, null),
+            new ColumnView(102L, "Gamma", 2, null),
+            new ColumnView(103L, "Delta", 3, null),
+            new ColumnView(104L, "Epsilon", 4, null),
+            new ColumnView(105L, "Zeta", 5, null));
+    when(boardService.listColumns(BOARD)).thenReturn(sixColumns);
+    when(cardService.listBoardItems(1L, BOARD)).thenReturn(List.of(item(1L, 105L, 1)));
 
     // When
     Map<String, List<KanbanCompatService.Item>> grouped = service.items(bound());
@@ -325,7 +216,7 @@ class KanbanCompatServiceTest {
   void create_delegatesToCreateProjectIdea_asPoolIdea() {
     // Given: der board-gebundene Token liefert das Board; daraus wird das Projekt abgeleitet und
     // das Board nur noch als Zielboard (target_board_id) notiert.
-    when(boards.findById(BOARD)).thenReturn(Optional.of(boardWithProject(BOARD, 5L)));
+    when(boardService.requireProjectId(BOARD)).thenReturn(5L);
     when(cardService.createProjectIdea(1L, 5L, "Titel", "Body", BOARD)).thenReturn(pooledIdea(42L));
 
     // When
@@ -342,7 +233,7 @@ class KanbanCompatServiceTest {
   void create_ignoresColumnAndIdeaStored() {
     // Given: seit Entscheidung B sind column und ideaStored gegenstandslos — egal was reinkommt,
     // es entsteht dieselbe Pool-Idee (keine Spalten-Validierung, kein Ideen-Flag-Durchreichen).
-    when(boards.findById(BOARD)).thenReturn(Optional.of(boardWithProject(BOARD, 5L)));
+    when(boardService.requireProjectId(BOARD)).thenReturn(5L);
     when(cardService.createProjectIdea(1L, 5L, "Titel", "Body", BOARD)).thenReturn(pooledIdea(42L));
 
     // When: absichtlich eine (frueher unbekannte) Spalte + ideaStored=true
@@ -358,7 +249,7 @@ class KanbanCompatServiceTest {
   @Test
   void create_throwsBoardNotFound_whenBoardMissing() {
     // Given: der Token ist gebunden, aber das Board existiert nicht (mehr)
-    when(boards.findById(BOARD)).thenReturn(Optional.empty());
+    when(boardService.requireProjectId(BOARD)).thenThrow(new BoardNotFoundException());
 
     // When / Then
     KanbanPrincipal principal = bound();
@@ -371,9 +262,8 @@ class KanbanCompatServiceTest {
     // Given: gültiger Kanban-Key, aber das Board hat keine passende Spalte. Dieser
     // columnIdForKey-Guard ist seit Entscheidung B nur noch über move erreichbar (create wertet
     // keine Spalte mehr aus).
-    when(cards.findById(1L)).thenReturn(Optional.of(card(1L, 100L, 1)));
-    when(columns.findByBoardId(BOARD))
-        .thenReturn(List.of(new BoardColumn(100L, BOARD, "Backlog", 0, null)));
+    when(boardService.listColumns(BOARD))
+        .thenReturn(List.of(new ColumnView(100L, "Backlog", 0, null)));
 
     // When / Then
     KanbanPrincipal principal = bound();
@@ -384,8 +274,7 @@ class KanbanCompatServiceTest {
   @Test
   void move_delegatesToCardService() {
     // Given
-    when(cards.findById(1L)).thenReturn(Optional.of(card(1L, 100L, 1)));
-    when(columns.findByBoardId(BOARD)).thenReturn(standardColumns());
+    when(boardService.listColumns(BOARD)).thenReturn(standardColumns());
 
     // When
     service.move(bound(), 1L, "DONE", 2);
@@ -396,39 +285,18 @@ class KanbanCompatServiceTest {
 
   @Test
   void move_throwsCardNotFound_whenCardNotOnBoard() {
-    // Given
-    Card otherBoard =
-        new Card(
-            1L,
-            99L,
-            100L,
-            1,
-            "T",
-            null,
-            0,
-            false,
-            false,
-            null,
-            1L,
-            FIXED,
-            FIXED,
-            CardType.CARD,
-            null,
-            null,
-            null,
-            1L,
-            null);
-    when(cards.findById(1L)).thenReturn(Optional.of(otherBoard));
+    // Given: der Board-Guard der card-Fassade schlaegt an (fremdes Board oder Ideen-Speicher).
+    // Fällt der requireOnBoard-Aufruf weg (Mutant), würde die Karte fälschlich verschoben.
+    doThrow(new CardNotFoundException()).when(cardService).requireOnBoard(1L, BOARD);
 
     // When / Then
     assertThatThrownBy(() -> service.move(bound(), 1L, "DONE", 0))
-        .isInstanceOf(org.mwolff.manban.card.application.CardNotFoundException.class);
+        .isInstanceOf(CardNotFoundException.class);
   }
 
   @Test
   void move_throwsInvalidKanbanColumn_whenColumnNull() {
     // Given: Karte liegt auf dem Board, aber die Ziel-Spalte ist null
-    when(cards.findById(1L)).thenReturn(Optional.of(card(1L, 100L, 1)));
 
     // When / Then: die Meldung muss aus dem COLUMNS-Guard stammen ("Unbekannte Kanban-Spalte"),
     // nicht aus dem späteren Board-Lookup — sonst bliebe ein Umgehen des Guards unentdeckt.
@@ -440,9 +308,6 @@ class KanbanCompatServiceTest {
 
   @Test
   void comment_delegatesToCommentService() {
-    // Given
-    when(cards.findById(1L)).thenReturn(Optional.of(card(1L, 100L, 1)));
-
     // When
     service.comment(bound(), 1L, "Hallo");
 
@@ -452,34 +317,56 @@ class KanbanCompatServiceTest {
 
   @Test
   void comment_throwsCardNotFound_whenCardNotOnBoard() {
-    // Given: die Karte liegt auf einem anderen Board — der Board-Guard muss greifen. Fällt der
-    // requireCardOnBoard-Aufruf weg (Mutant), würde der Kommentar fälschlich angelegt.
-    Card otherBoard =
-        new Card(
-            1L,
-            99L,
-            100L,
-            1,
-            "T",
-            null,
-            0,
-            false,
-            false,
-            null,
-            1L,
-            FIXED,
-            FIXED,
-            CardType.CARD,
-            null,
-            null,
-            null,
-            1L,
-            null);
-    when(cards.findById(1L)).thenReturn(Optional.of(otherBoard));
+    // Given: der Board-Guard der card-Fassade schlaegt an. Fällt der requireOnBoard-Aufruf weg
+    // (Mutant), würde der Kommentar fälschlich angelegt.
+    doThrow(new CardNotFoundException()).when(cardService).requireOnBoard(1L, BOARD);
 
     // When / Then
     assertThatThrownBy(() -> service.comment(bound(), 1L, "Hallo"))
-        .isInstanceOf(org.mwolff.manban.card.application.CardNotFoundException.class);
+        .isInstanceOf(CardNotFoundException.class);
+  }
+
+  @Test
+  void listComments_mapsAuthorBodyAndCreatedAt_inServiceOrder() {
+    // Given: die Kommentar-Fassade liefert bereits chronologisch sortiert
+    Instant first = Instant.parse("2026-01-01T10:00:00Z");
+    Instant second = Instant.parse("2026-01-01T11:00:00Z");
+    when(commentService.list(1L, 42L))
+        .thenReturn(
+            List.of(
+                new CommentView(9L, 42L, 3L, "Anna", "Erster", first, first),
+                new CommentView(10L, 42L, 4L, "Bert", "Zweiter", second, second)));
+
+    // When
+    List<KanbanCompatService.Comment> result = service.listComments(bound(), 42L);
+
+    // Then: Reihenfolge und Feldabbildung bleiben erhalten
+    assertThat(result)
+        .extracting(
+            KanbanCompatService.Comment::author,
+            KanbanCompatService.Comment::body,
+            KanbanCompatService.Comment::createdAt)
+        .containsExactly(tuple("Anna", "Erster", first), tuple("Bert", "Zweiter", second));
+  }
+
+  @Test
+  void listComments_returnsEmptyList_whenItemHasNoComments() {
+    // Given: keine Kommentare am Item
+
+    // When / Then: leere Liste statt null
+    assertThat(service.listComments(bound(), 42L)).isEmpty();
+  }
+
+  @Test
+  void listComments_throwsCardNotFound_whenCardNotOnBoard() {
+    // Given: der Board-Guard der card-Fassade schlaegt an. Fällt der requireOnBoard-Aufruf weg
+    // (Mutant), würden Kommentare fremder Karten lesbar.
+    doThrow(new CardNotFoundException()).when(cardService).requireOnBoard(42L, BOARD);
+
+    // When / Then
+    KanbanPrincipal principal = bound();
+    assertThatThrownBy(() -> service.listComments(principal, 42L))
+        .isInstanceOf(CardNotFoundException.class);
   }
 
   @Test
@@ -499,51 +386,12 @@ class KanbanCompatServiceTest {
   }
 
   @Test
-  void items_skipsIdeaStoredCards() {
-    // Given — Karte im Ideen-Speicher: nicht archiviert, aber ausgeblendet (#434).
-    when(boards.findById(BOARD)).thenReturn(Optional.of(new Board(BOARD, 5L, "B", FIXED)));
-    when(columns.findByBoardId(BOARD)).thenReturn(standardColumns());
-    when(cards.findByBoardId(BOARD)).thenReturn(List.of(ideaStoredCard(2L, 100L)));
-
-    // When
-    Map<String, List<KanbanCompatService.Item>> grouped = service.items(bound());
-
-    // Then
-    assertThat(grouped.get("BACKLOG")).isEmpty();
-  }
-
-  @Test
-  void move_throwsCardNotFound_whenCardIsIdeaStored() {
-    // Given — auf dem gebundenen Board, aber im Ideen-Speicher: für die Automatik nicht vorhanden.
-    when(cards.findById(1L)).thenReturn(Optional.of(ideaStoredCard(1L, 100L)));
-
-    // When / Then
-    assertThatThrownBy(() -> service.move(bound(), 1L, "DONE", 0))
-        .isInstanceOf(org.mwolff.manban.card.application.CardNotFoundException.class);
-  }
-
-  @Test
-  void comment_throwsCardNotFound_whenCardIsIdeaStored() {
-    // Given
-    when(cards.findById(1L)).thenReturn(Optional.of(ideaStoredCard(1L, 100L)));
-
-    // When / Then
-    assertThatThrownBy(() -> service.comment(bound(), 1L, "Kommentar"))
-        .isInstanceOf(org.mwolff.manban.card.application.CardNotFoundException.class);
-  }
-
-  private static Label label(long id, String name) {
-    return new Label(id, BOARD, name, "#000");
-  }
-
-  @Test
   void items_exposesLabelNamesPerCard() {
-    // Given: eine Karte mit zwei zugeordneten Labels (IDs), Namen kommen aus dem Board.
-    when(boards.findById(BOARD)).thenReturn(Optional.of(new Board(BOARD, 5L, "B", FIXED)));
-    when(columns.findByBoardId(BOARD)).thenReturn(standardColumns());
-    when(cards.findByBoardId(BOARD)).thenReturn(List.of(card(1L, 100L, 1)));
-    when(labels.findByBoardId(BOARD)).thenReturn(List.of(label(7L, "Bug"), label(8L, "Ux")));
-    when(cardLabels.findByCardIds(List.of(1L))).thenReturn(Map.of(1L, List.of(7L, 8L)));
+    // Given: die Label-Namen kommen als Batch aus der card-Fassade, abgefragt fuer genau die
+    // sichtbaren Karten-IDs.
+    when(boardService.listColumns(BOARD)).thenReturn(standardColumns());
+    when(cardService.listBoardItems(1L, BOARD)).thenReturn(List.of(item(1L, 100L, 1)));
+    when(labelService.namesByCard(BOARD, List.of(1L))).thenReturn(Map.of(1L, List.of("Bug", "Ux")));
 
     // When
     Map<String, List<KanbanCompatService.Item>> grouped = service.items(bound());
@@ -556,13 +404,12 @@ class KanbanCompatServiceTest {
   }
 
   @Test
-  void items_returnsEmptyLabels_forCardWithoutLabels() {
-    // Given: Board hat Labels, aber die Karte ist keinem zugeordnet.
-    when(boards.findById(BOARD)).thenReturn(Optional.of(new Board(BOARD, 5L, "B", FIXED)));
-    when(columns.findByBoardId(BOARD)).thenReturn(standardColumns());
-    when(cards.findByBoardId(BOARD)).thenReturn(List.of(card(1L, 100L, 1)));
-    when(labels.findByBoardId(BOARD)).thenReturn(List.of(label(7L, "Bug")));
-    when(cardLabels.findByCardIds(List.of(1L))).thenReturn(Map.of());
+  void items_returnsEmptyLabels_forCardMissingInLabelBatch() {
+    // Given: die Batch-Antwort kennt die Karte nicht — die Ausgabe muss dennoch eine leere Liste
+    // tragen (nicht null), damit der Adapter kein Sonderfall-Handling braucht.
+    when(boardService.listColumns(BOARD)).thenReturn(standardColumns());
+    when(cardService.listBoardItems(1L, BOARD)).thenReturn(List.of(item(1L, 100L, 1)));
+    when(labelService.namesByCard(BOARD, List.of(1L))).thenReturn(Map.of());
 
     // When
     Map<String, List<KanbanCompatService.Item>> grouped = service.items(bound());
@@ -572,25 +419,5 @@ class KanbanCompatServiceTest {
         .singleElement()
         .extracting(KanbanCompatService.Item::labels)
         .isEqualTo(List.of());
-  }
-
-  @Test
-  void items_ordersLabelsByBoardDefinition_notByAssignment() {
-    // Given: die Zuordnung nennt die Labels in umgekehrter Reihenfolge (8, 7), das Board definiert
-    // sie als (7 "Bug", 8 "Ux"). Ausschlaggebend ist die Board-Definitionsreihenfolge.
-    when(boards.findById(BOARD)).thenReturn(Optional.of(new Board(BOARD, 5L, "B", FIXED)));
-    when(columns.findByBoardId(BOARD)).thenReturn(standardColumns());
-    when(cards.findByBoardId(BOARD)).thenReturn(List.of(card(1L, 100L, 1)));
-    when(labels.findByBoardId(BOARD)).thenReturn(List.of(label(7L, "Bug"), label(8L, "Ux")));
-    when(cardLabels.findByCardIds(List.of(1L))).thenReturn(Map.of(1L, List.of(8L, 7L)));
-
-    // When
-    Map<String, List<KanbanCompatService.Item>> grouped = service.items(bound());
-
-    // Then: Board-Reihenfolge (Bug, Ux), nicht Zuordnungsreihenfolge (Ux, Bug)
-    assertThat(grouped.get("BACKLOG"))
-        .singleElement()
-        .extracting(KanbanCompatService.Item::labels)
-        .isEqualTo(List.of("Bug", "Ux"));
   }
 }

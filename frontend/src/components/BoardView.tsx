@@ -416,6 +416,16 @@ export function BoardView({
         .map((c) => c.id),
     )
 
+  // Ordnungsposition der Quellspalte für die Vorbelegung der Zielspalte im Verschieben-Dialog.
+  // Eindeutig nur, wenn alle zu verschiebenden Karten in derselben Spalte liegen — sonst null,
+  // dann bleibt das Feld im Dialog leer statt zu raten. `columns` ist bereits nach Position sortiert.
+  const sourceColumnPosition = (ids: number[]): number | null => {
+    const sourceColumnIds = new Set(cards.filter((c) => ids.includes(c.id)).map((c) => c.columnId))
+    return sourceColumnIds.size === 1
+      ? columns.findIndex((c) => c.id === [...sourceColumnIds][0])
+      : null
+  }
+
   // Bulk-Verschieben: der Dialog erledigt den Transfer; danach die Karten aus der Ansicht nehmen.
   const onBulkTransferred = (movedIds: number[]) => {
     const moved = new Set(movedIds)
@@ -767,6 +777,8 @@ export function BoardView({
         <TransferCardDialog
           cardIds={[transferCard.id]}
           currentBoardId={board.id}
+          currentProjectId={board.projectId}
+          sourceColumnPosition={sourceColumnPosition([transferCard.id])}
           platformAdmin={platformAdmin}
           onClose={() => setTransferCard(null)}
           onTransferred={() => {
@@ -782,6 +794,8 @@ export function BoardView({
         <TransferCardDialog
           cardIds={selectedIdsInViewOrder()}
           currentBoardId={board.id}
+          currentProjectId={board.projectId}
+          sourceColumnPosition={sourceColumnPosition(selectedIdsInViewOrder())}
           platformAdmin={platformAdmin}
           onClose={() => setBulkTransferOpen(false)}
           onTransferred={() => onBulkTransferred(selectedIdsInViewOrder())}

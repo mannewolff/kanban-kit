@@ -20,6 +20,7 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.ResultActions;
 
 /**
  * End-to-End-Test der Kanban-Compat-API (tbx.mjs/board.mjs-Kontrakt) über ein board-gebundenes PAT.
@@ -221,6 +222,121 @@ class KanbanCompatIT extends AbstractIntegrationTest {
                 .header("X-Kanban-Token", token)
                 .contentType("application/json")
                 .content("{\"body\":\"Ein Kommentar\"}"))
+        .andExpect(status().isCreated());
+  }
+
+  @Test
+  void comments_areReadable_inChronologicalOrder() throws Exception {
+    Cookie session = loginAs("kanban-comments@example.com");
+    long projectId = createProject("kanban-comments@example.com", "Comment-Dogfood");
+    long boardId = createBoard(session, projectId, "Comment-Board");
+    String token = boundToken(session, projectId, boardId);
+    long cardId = createCard(session, boardId, firstColumnId(session, boardId), "Karte");
+
+    // Ohne Kommentare: leeres Array, kein 404 und kein null.
+    mvc.perform(get("/api/kanban/items/" + cardId + "/comments").header("X-Kanban-Token", token))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.length()").value(0));
+
+    kanbanComment(token, cardId, "Erster");
+    kanbanComment(token, cardId, "Zweiter");
+
+    // Beide Kommentare sind lesbar, in Schreibreihenfolge, mit Autor und Zeitstempel.
+    mvc.perform(get("/api/kanban/items/" + cardId + "/comments").header("X-Kanban-Token", token))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.length()").value(2))
+        .andExpect(jsonPath("$[0].body").value("Erster"))
+        .andExpect(jsonPath("$[0].author").value("Person"))
+        .andExpect(jsonPath("$[0].createdAt").exists())
+        .andExpect(jsonPath("$[1].body").value("Zweiter"));
+
+    // Karte eines fremden Projekts (Token-Nutzer ist dort kein Mitglied): policy-konform 404,
+    // damit die Existenz fremder Karten nicht über den Statuscode durchsickert. Bewacht wird hier
+    // die Mitgliedschaftsprüfung der Kommentar-Fassade, nicht der Board-Guard — dieser Fall ist
+    // doppelt geschützt. Der Board-Guard hat mit listComments_isScopedToTheBoundBoard einen eigenen
+    // Test (#469).
+    Cookie stranger = loginAs("kanban-comments-stranger@example.com");
+    long foreignProject = createProject("kanban-comments-stranger@example.com", "Fremdprojekt");
+    long foreignBoard = createBoard(stranger, foreignProject, "Fremdboard");
+    long foreignCard =
+        createCard(stranger, foreignBoard, firstColumnId(stranger, foreignBoard), "FremdeKarte");
+    mvc.perform(
+            get("/api/kanban/items/" + foreignCard + "/comments").header("X-Kanban-Token", token))
+        .andExpect(status().isNotFound());
+  }
+
+  /**
+   * Der Scope-Fall, der den Board-Guard des Lesepfads wirklich bewacht: gleiches Projekt, anderes
+   * Board. Bei einer Karte aus einem <em>fremden</em> Projekt (siehe {@link
+   * #comments_areReadable_inChronologicalOrder}) greift zusätzlich die Mitgliedschaftsprüfung der
+   * Kommentar-Fassade — ein entfernter {@code requireOnBoard} bliebe dort unbemerkt (#469). Hier
+   * ist der Token-Nutzer Mitglied desselben Projekts, sodass allein die Board-Bindung des Tokens
+   * den Zugriff verhindert.
+   *
+   * <p>Der Schreibpfad ist für denselben Fall bereits durch die Gegenprobe am Ende von {@link
+   * #ideaStoredCardIsInvisibleAndUntouchableForTheAutomation} gepinnt (reguläre Karte auf einem
+   * zweiten Board desselben Projekts, POST → 404) und wird hier nicht dupliziert.
+   */
+  @Test
+  void listComments_isScopedToTheBoundBoard() throws Exception {
+    Cookie session = loginAs("kanban-comment-scope@example.com");
+    long projectId = createProject("kanban-comment-scope@example.com", "Comment-Scope");
+    long board1 = createBoard(session, projectId, "Scope-Board 1");
+    long board2 = createBoard(session, projectId, "Scope-Board 2");
+    String token1 = boundToken(session, projectId, board1);
+
+    // Karte auf board2 mit einem Kommentar über die Cookie-API: ohne Board-Guard würde der Lesepfad
+    // diesen fremden Inhalt herausgeben, nicht bloß eine leere Liste.
+    long foreignCard = createCard(session, board2, firstColumnId(session, board2), "Karte Board 2");
+    mvc.perform(
+            post("/api/cards/" + foreignCard + "/comments")
+                .cookie(session)
+                .contentType("application/json")
+                .content("{\"body\":\"Nur für Board 2\"}"))
+        .andExpect(status().isCreated());
+
+    // Gegenprobe, dass das Token grundsätzlich lesen darf: auf dem eigenen Board liefert es 200.
+    long ownCard = createCard(session, board1, firstColumnId(session, board1), "Karte Board 1");
+    mvc.perform(get("/api/kanban/items/" + ownCard + "/comments").header("X-Kanban-Token", token1))
+        .andExpect(status().isOk());
+
+    // board1-Token darf die Kommentare der board2-Karte nicht lesen (Scope): 404.
+    mvc.perform(
+            get("/api/kanban/items/" + foreignCard + "/comments").header("X-Kanban-Token", token1))
+        .andExpect(status().isNotFound());
+  }
+
+  @Test
+  void comment_rejectsBodyOverTheLengthLimit() throws Exception {
+    Cookie session = loginAs("kanban-comment-size@example.com");
+    long projectId = createProject("kanban-comment-size@example.com", "Comment-Size");
+    long boardId = createBoard(session, projectId, "Size-Board");
+    String token = boundToken(session, projectId, boardId);
+    long cardId = createCard(session, boardId, firstColumnId(session, boardId), "Karte");
+
+    // Ein Token ist für Automatik gedacht: ohne Grenze könnte es beliebig große Kommentare in die
+    // text-Spalte schreiben. Grenze und Wert sind identisch zum UI-Pfad (CommentController).
+    kanbanCommentRequest(token, cardId, "a".repeat(10_001)).andExpect(status().isBadRequest());
+
+    // Gegenprobe auf dem Grenzwert selbst: genau 10.000 Zeichen sind noch erlaubt.
+    kanbanCommentRequest(token, cardId, "a".repeat(10_000)).andExpect(status().isCreated());
+  }
+
+  private ResultActions kanbanCommentRequest(String token, long cardId, String body)
+      throws Exception {
+    return mvc.perform(
+        post("/api/kanban/items/" + cardId + "/comments")
+            .header("X-Kanban-Token", token)
+            .contentType("application/json")
+            .content("{\"body\":\"%s\"}".formatted(body)));
+  }
+
+  private void kanbanComment(String token, long cardId, String body) throws Exception {
+    mvc.perform(
+            post("/api/kanban/items/" + cardId + "/comments")
+                .header("X-Kanban-Token", token)
+                .contentType("application/json")
+                .content("{\"body\":\"%s\"}".formatted(body)))
         .andExpect(status().isCreated());
   }
 

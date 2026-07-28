@@ -11,11 +11,8 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
 import org.jspecify.annotations.Nullable;
-import org.mwolff.manban.board.application.BoardColumnRepository;
-import org.mwolff.manban.board.application.BoardNotFoundException;
-import org.mwolff.manban.board.application.BoardRepository;
-import org.mwolff.manban.board.domain.Board;
-import org.mwolff.manban.board.domain.BoardColumn;
+import org.mwolff.manban.board.application.BoardService;
+import org.mwolff.manban.board.application.BoardService.ColumnView;
 import org.mwolff.manban.card.application.BoardDashboardKpis.ColumnDwell;
 import org.mwolff.manban.card.application.BoardDashboardKpis.OutlierCard;
 import org.mwolff.manban.card.application.BoardDashboardKpis.WeeklyThroughput;
@@ -42,22 +39,19 @@ public class CardCycleTimeService {
 
   private final CardRepository cards;
   private final CardColumnTransitionRepository transitions;
-  private final BoardColumnRepository columns;
-  private final BoardRepository boards;
+  private final BoardService boardService;
   private final PermissionChecker permissions;
   private final Clock clock;
 
   public CardCycleTimeService(
       CardRepository cards,
       CardColumnTransitionRepository transitions,
-      BoardColumnRepository columns,
-      BoardRepository boards,
+      BoardService boardService,
       PermissionChecker permissions,
       Clock clock) {
     this.cards = cards;
     this.transitions = transitions;
-    this.columns = columns;
-    this.boards = boards;
+    this.boardService = boardService;
     this.permissions = permissions;
     this.clock = clock;
   }
@@ -68,13 +62,12 @@ public class CardCycleTimeService {
    */
   @Transactional(readOnly = true)
   public BoardDashboardKpis dashboard(long userId, long boardId) {
-    Board board = boards.findById(boardId).orElseThrow(BoardNotFoundException::new);
-    permissions.requireMembership(userId, board.projectId());
+    permissions.requireMembership(userId, boardService.requireProjectId(boardId));
 
     List<Card> workCards =
         cards.findByBoardId(boardId).stream().filter(c -> c.type() == CardType.CARD).toList();
     List<CardColumnTransition> trans = transitions.findByBoardId(boardId);
-    List<BoardColumn> boardColumns = columns.findByBoardId(boardId);
+    List<ColumnView> boardColumns = boardService.listColumns(boardId);
     Instant now = clock.instant();
 
     Map<Long, List<CardColumnTransition>> byCard =
@@ -89,7 +82,7 @@ public class CardCycleTimeService {
   }
 
   private static List<ColumnDwell> columnDwell(
-      List<BoardColumn> boardColumns, List<CardColumnTransition> trans) {
+      List<ColumnView> boardColumns, List<CardColumnTransition> trans) {
     return boardColumns.stream()
         .map(
             col -> {
@@ -100,8 +93,7 @@ public class CardCycleTimeService {
                       .filter(Objects::nonNull)
                       .mapToLong(Long::longValue)
                       .toArray();
-              return new ColumnDwell(
-                  col.requireId(), col.name(), average(durations), durations.length);
+              return new ColumnDwell(col.id(), col.name(), average(durations), durations.length);
             })
         .toList();
   }

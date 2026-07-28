@@ -35,7 +35,7 @@ Nutzung:
   tbx auth logout
 
   tbx issue create --title <text> [--body <text>]
-  tbx issue get <nummer>
+  tbx issue get <nummer>            (inkl. Kommentaren der Karte)
   tbx issue list [--status <status>]
   tbx issue move <nummer> <status>
   tbx issue comment <nummer> --text <text>
@@ -277,6 +277,28 @@ function toGenericIssue(item) {
   return { id: item.number, title: item.title, body: item.body, status: item.status };
 }
 
+/**
+ * Liest die Kommentare einer Karte (`GET /api/kanban/items/{id}/comments`).
+ *
+ * Bewusst ohne `ensureOk`: eine aeltere Instanz kennt den Endpoint noch nicht und
+ * antwortet mit 404/405 — das darf `issue get` nicht abbrechen lassen. Jede
+ * Nicht-2xx-Antwort und jeder unerwartete Body ergeben daher eine leere Liste.
+ * Ein ungueltiger Token faellt schon vorher beim Board-Abruf auf (401 dort).
+ * Die Felder werden explizit gemappt, damit die CLI-Ausgabe stabil bleibt, wenn
+ * das Backend das DTO spaeter erweitert.
+ */
+export async function fetchItemComments(itemId, io) {
+  const res = await apiFetch(
+    `/api/kanban/items/${itemId}/comments`,
+    {},
+    { fetchImpl: io.fetchImpl, baseDir: io.baseDir },
+  );
+  if (!res.ok) return [];
+  const body = await res.json().catch(() => null);
+  if (!Array.isArray(body)) return [];
+  return body.map((c) => ({ author: c.author, body: c.body, createdAt: c.createdAt }));
+}
+
 // --- Kommandos: issue -----------------------------------------------------------
 
 async function cmdIssueCreate(flags, io) {
@@ -299,7 +321,8 @@ async function cmdIssueCreate(flags, io) {
 async function cmdIssueGet(numberArg, io) {
   const number = parseIssueNumber(numberArg);
   const item = await resolveItemByNumber(number, io);
-  io.stdout(JSON.stringify(toGenericIssue(item), null, 2) + '\n');
+  const comments = await fetchItemComments(item.id, io);
+  io.stdout(JSON.stringify({ ...toGenericIssue(item), comments }, null, 2) + '\n');
 }
 
 async function cmdIssueList(flags, io) {

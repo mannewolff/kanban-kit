@@ -4,6 +4,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -46,6 +47,7 @@ class AttachmentIT extends AbstractIntegrationTest {
 
   private Cookie login;
   private long cardId;
+  private long boardId;
 
   private void setup(String email) throws Exception {
     String hash = passwordEncoder.encode(PASSWORD);
@@ -85,7 +87,7 @@ class AttachmentIT extends AbstractIntegrationTest {
                 .andReturn()
                 .getResponse()
                 .getContentAsString());
-    long boardId = board.get("id").asLong();
+    boardId = board.get("id").asLong();
     long columnId = board.get("columns").get(0).get("id").asLong();
     cardId =
         json.readTree(
@@ -184,5 +186,61 @@ class AttachmentIT extends AbstractIntegrationTest {
                 .file(new MockMultipartFile("file", "c.bin", "application/octet-stream", data))
                 .cookie(login))
         .andExpect(status().isConflict());
+  }
+
+  /**
+   * Nagelt die Entscheidung aus #462 fest: Das Archivieren eines Boards entzieht nur das Board
+   * selbst, nicht die Anhänge seiner Karten.
+   */
+  @Test
+  void attachmentsStayUsableWhenBoardIsArchived() throws Exception {
+    setup("att-archived-board@example.com");
+    byte[] data = {1, 2, 3, 4, 5};
+    long before = upload("vor-archiv.bin", "application/octet-stream", data);
+
+    mvc.perform(delete("/api/boards/" + boardId).cookie(login)).andExpect(status().isNoContent());
+    // Das Board selbst ist nach dem Archivieren nicht mehr auffindbar ...
+    mvc.perform(get("/api/boards/" + boardId).cookie(login)).andExpect(status().isNotFound());
+
+    // ... seine Karten und deren Anhänge bleiben es: die Rechte laufen über die Projekt-ID
+    // der Karte, nicht über das Board.
+    mvc.perform(get("/api/cards/" + cardId + "/attachments").cookie(login))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.length()").value(1));
+    var response =
+        mvc.perform(get("/api/attachments/" + before).cookie(login))
+            .andExpect(status().isOk())
+            .andReturn()
+            .getResponse();
+    Assertions.assertThat(response.getContentAsByteArray()).isEqualTo(data);
+
+    long after = upload("nach-archiv.bin", "application/octet-stream", data);
+    mvc.perform(delete("/api/attachments/" + after).cookie(login))
+        .andExpect(status().isNoContent());
+  }
+
+  /**
+   * Board-lose Pool-Ideen (#405) haben kein Board, über das sich eine Projekt-ID auflösen ließe —
+   * ihre Anhänge müssen trotzdem funktionieren (#462).
+   */
+  @Test
+  void attachmentsWorkForBoardlessPoolIdea() throws Exception {
+    setup("att-pool-idea@example.com");
+    byte[] data = {9, 8, 7};
+    mvc.perform(put("/api/cards/" + cardId + "/to-pool").cookie(login)).andExpect(status().isOk());
+
+    long id = upload("idee.bin", "application/octet-stream", data);
+
+    mvc.perform(get("/api/cards/" + cardId + "/attachments").cookie(login))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.length()").value(1));
+    var response =
+        mvc.perform(get("/api/attachments/" + id).cookie(login))
+            .andExpect(status().isOk())
+            .andReturn()
+            .getResponse();
+    Assertions.assertThat(response.getContentAsByteArray()).isEqualTo(data);
+
+    mvc.perform(delete("/api/attachments/" + id).cookie(login)).andExpect(status().isNoContent());
   }
 }

@@ -34,9 +34,12 @@
   den Einträgen „Nach links verschieben" und „Nach rechts verschieben" (jeweils genau eine Spalte
   weit) — auch per Tastatur bedienbar. In der ersten bzw. letzten Spalte fehlt der jeweils sinnlose
   Eintrag.
-- **⋮-Menü:** „Bearbeiten" (öffnet das Detail im Bearbeiten-Modus), „Duplizieren", „Archivieren",
-  „In den Ideen-Pool" (legt die Karte in den [Ideen-Pool](#ideen-pool)), „Nach links/rechts
-  verschieben" und — mit Board-Recht — „Auf anderes Board verschieben…".
+- **⋮-Menü:** „Duplizieren", „Archivieren", „In den Ideen-Pool" (legt die Karte in den
+  [Ideen-Pool](#ideen-pool)) — mit Board-Recht — „Auf anderes Board verschieben…" sowie „Nach
+  links/rechts verschieben". Der Eintrag **„Bearbeiten"** (öffnet das Detail im Bearbeiten-Modus)
+  erscheint nur bei aktivem [Editiermodus](#editiermodus); der Button „Bearbeiten" im Karten-Detail
+  steht dagegen immer zur Verfügung, sofern du Bearbeitungsrecht hast. Bei **archivierten** Karten
+  ist das Menü leer.
 - **Auf der Karte sichtbar:** farbige **Label**-Chips, eine gesetzte **Fälligkeit** („📅 *Datum*",
   überfällige rot und fett) sowie rechts unten die **Avatare der Zuständigen** (Initialen, bis zu vier).
 - **Done-Countdown:** Karten in einer Done-Spalte zeigen „wird in X Tagen archiviert"
@@ -118,23 +121,28 @@ Board gebunden, sondern gilt für das ganze Projekt.
 Erreichbar über den Sidebar-Eintrag **„Ideen"** (sichtbar, sobald ein Projekt-Kontext offen ist). Die
 Seite zeigt die **Planen-Ansicht**:
 
-- **Oben:** alle Boards des Projekts untereinander, je Board seine **erste Spalte**.
+- **Oben:** alle Boards des Projekts untereinander, je Board seine **erste Spalte** und ein Button
+  **„Board öffnen"** (springt in die Listen-Ansicht dieses Boards).
 - **Darunter:** der projektweite **Ideen-Pool** mit allen noch nicht eingeplanten Ideen.
-- **Suchfeld** über dem Pool: filtert die Ideen nach Titel.
+- **Suchfeld** oben auf der Seite (Label „Suche"): filtert **nur den Pool** nach Titel — die
+  Board-Zonen bleiben unverändert.
 
 Einen Umschalter zwischen „Liste" und „Planen" gibt es nicht mehr — es bleibt bei der Planen-Ansicht.
 Ideen erscheinen **nicht** in der Board-Spaltenansicht und **nicht** in der Listen-Ansicht des Boards.
 
 - **Idee anlegen:** Button **„Idee anlegen"** auf der Ideen-Seite legt direkt eine Idee im Pool an
   (Titel + Markdown-Beschreibung, wie eine normale Karte).
-- **Einplanen (Idee → Board):** eine Idee per **Drag** aus dem Pool in die erste Spalte eines Boards
-  ziehen, oder über den Button **„Einplanen"**. Die Idee wird zur normalen Karte in der **ersten
+- **Einplanen (Idee → Board):** eine Idee per **Drag** aus dem Pool in die erste Spalte des
+  gewünschten Boards ziehen. Der Button **„Einplanen"** ist die Abkürzung dafür und plant stets auf
+  das **erste Board** des Projekts. So oder so wird die Idee zur normalen Karte in der **ersten
   Spalte** und erscheint wieder auf dem Board.
 - **Zurückholen (Board → Pool):** eine Karte per **Drag** aus der ersten Spalte in den Pool ziehen,
   über den Button **„In den Pool"** oder im **⋮-Menü** der Karte über „In den Ideen-Pool". Die Karte
   verschwindet vom Board.
 - **Zwischen Boards verschieben:** eine Karte per **Drag** direkt von der ersten Spalte eines Boards
   in die eines anderen ziehen — sie landet in dessen erster Spalte.
+- **Reihenfolge innerhalb einer Board-Zone:** Karten per **Drag** auf eine andere Zeile derselben
+  Zone umsortieren.
 - **Projektweite Nummer bleibt erhalten:** Eine Karte behält beim Weg in den Pool ihre **projektweite
   Nummer**; sie wird auch im Pool angezeigt und geht beim Einplanen nicht verloren.
 

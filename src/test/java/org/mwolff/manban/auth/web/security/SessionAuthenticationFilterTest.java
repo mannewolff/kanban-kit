@@ -1,4 +1,4 @@
-package org.mwolff.manban.auth.infrastructure.security;
+package org.mwolff.manban.auth.web.security;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
@@ -15,6 +15,7 @@ import java.util.OptionalLong;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mwolff.manban.auth.application.SessionTokens;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
@@ -24,7 +25,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 class SessionAuthenticationFilterTest {
 
   private SessionCookieManager cookies;
-  private SignedSessionTokens tokens;
+  private SessionTokens tokens;
   private HttpServletRequest request;
   private HttpServletResponse response;
   private FilterChain chain;
@@ -33,7 +34,7 @@ class SessionAuthenticationFilterTest {
   @BeforeEach
   void setUp() {
     cookies = mock(SessionCookieManager.class);
-    tokens = mock(SignedSessionTokens.class);
+    tokens = mock(SessionTokens.class);
     request = mock(HttpServletRequest.class);
     response = mock(HttpServletResponse.class);
     chain = mock(FilterChain.class);

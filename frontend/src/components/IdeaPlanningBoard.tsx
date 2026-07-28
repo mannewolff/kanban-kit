@@ -26,6 +26,17 @@ function firstColumnOf(board: Board): number | null {
 }
 
 /**
+ * Leermeldung des Ideen-Pools, oder `null`, wenn stattdessen die Liste zu rendern ist. Die
+ * Reihenfolge ist bewusst: der leere Pool schlägt den Filter-Treffer, sonst stünde bei leerem Pool
+ * und gesetzter Suche die irreführende Meldung „Keine Idee passt zur Suche." (#474).
+ */
+function poolEmptyMessage(poolSize: number, visibleSize: number): string | null {
+  if (poolSize === 0) return 'Keine Ideen im Pool.'
+  if (visibleSize === 0) return 'Keine Idee passt zur Suche.'
+  return null
+}
+
+/**
  * Quelle eines laufenden Drags: aus dem projektweiten Ideen-Pool oder aus einem konkreten Board
  * (dann trägt der Drag die Herkunfts-Board-ID mit, um Quelle und Ziel unterscheiden zu können).
  */
@@ -216,13 +227,17 @@ export function IdeaPlanningBoard({
   // Pool→Board-Drop verarbeitet dann die Zonen-Ebene (handleBoardDrop).
   const handleBoardRowDrop = (boardId: number, target: Card) => (e: React.DragEvent) => {
     const d = dragged
-    if (d === null || d.source !== 'board' || d.boardId !== boardId || d.id === target.id) return
+    if (d?.source !== 'board' || d.boardId !== boardId || d.id === target.id) return
     e.preventDefault()
     e.stopPropagation()
     setDragged(null)
     void reorder(d.id, target.columnId, target.positionInColumn)
   }
 
+  // Leer-Guard vor allem Weiteren: solange die Board-Liste leer ist (board-loses Projekt, aber auch
+  // das Zeitfenster, in dem der Pool schon geladen und boardsApi.list noch offen ist), wird nur der
+  // Hinweis gerendert. Nur deshalb darf der „Einplanen"-Knopf weiter unten das erste Board ohne
+  // weitere Prüfung ansprechen (#467).
   if (boards.length === 0) {
     return (
       <Alert severity="info">
@@ -231,9 +246,14 @@ export function IdeaPlanningBoard({
     )
   }
 
+  // Standard-Zielboard beim Einplanen per Knopf (Drag & Drop wählt sein Ziel selbst). Durch den
+  // Guard oben ist die Liste hier garantiert nicht leer.
+  const [defaultBoard] = boards
+
   // Suchfeld der Seite grenzt nur den Pool nach Titel ein; leeres Feld zeigt alles.
   const query = filter.trim().toLowerCase()
   const visiblePool = query ? pool.filter((idea) => idea.title.toLowerCase().includes(query)) : pool
+  const emptyPoolMessage = poolEmptyMessage(pool.length, visiblePool.length)
 
   return (
     <Box>
@@ -331,13 +351,9 @@ export function IdeaPlanningBoard({
         >
           Ideen-Pool
         </Typography>
-        {pool.length === 0 ? (
+        {emptyPoolMessage !== null ? (
           <Typography variant="body2" color="text.secondary" sx={{ py: 1 }}>
-            Keine Ideen im Pool.
-          </Typography>
-        ) : visiblePool.length === 0 ? (
-          <Typography variant="body2" color="text.secondary" sx={{ py: 1 }}>
-            Keine Idee passt zur Suche.
+            {emptyPoolMessage}
           </Typography>
         ) : (
           <Stack spacing={0.75}>
@@ -382,7 +398,7 @@ export function IdeaPlanningBoard({
                     size="small"
                     startIcon={<NorthOutlinedIcon />}
                     aria-label={`Idee ${idea.title} einplanen`}
-                    onClick={() => void plan(idea.id, boards[0].id)}
+                    onClick={() => void plan(idea.id, defaultBoard.id)}
                   >
                     Einplanen
                   </Button>

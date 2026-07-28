@@ -1,9 +1,12 @@
 package org.mwolff.manban.card.application;
 
+import java.util.Collection;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
-import org.mwolff.manban.board.application.BoardNotFoundException;
-import org.mwolff.manban.board.application.BoardRepository;
-import org.mwolff.manban.board.domain.Board;
+import java.util.Map;
+import java.util.Set;
+import org.mwolff.manban.board.application.BoardService;
 import org.mwolff.manban.card.domain.Label;
 import org.mwolff.manban.project.application.PermissionChecker;
 import org.mwolff.manban.project.domain.Permission;
@@ -18,27 +21,63 @@ import org.springframework.transaction.annotation.Transactional;
 public class LabelService {
 
   private final LabelRepository labels;
-  private final BoardRepository boards;
+  private final CardLabelRepository cardLabels;
+  private final BoardService boardService;
   private final PermissionChecker permissions;
 
   public LabelService(
-      LabelRepository labels, BoardRepository boards, PermissionChecker permissions) {
+      LabelRepository labels,
+      CardLabelRepository cardLabels,
+      BoardService boardService,
+      PermissionChecker permissions) {
     this.labels = labels;
-    this.boards = boards;
+    this.cardLabels = cardLabels;
+    this.boardService = boardService;
     this.permissions = permissions;
+  }
+
+  /**
+   * Baut je Karte die Liste der Label-<em>Namen</em> aus genau zwei Batch-Abfragen auf — {@link
+   * LabelRepository#findByBoardId} (Namen) und {@link CardLabelRepository#findByCardIds}
+   * (Zuordnung) — unabhängig von der Kartenzahl (kein N+1). Die Reihenfolge je Karte folgt der
+   * Board-Definitionsreihenfolge, nicht der Zuordnungsreihenfolge; jede übergebene Karten-ID erhält
+   * einen Eintrag (leere Liste, wenn ihr kein Label zugeordnet ist).
+   *
+   * <p>Ohne eigene Rechteprüfung: die Karten-IDs stammen beim einzigen Aufrufer aus einer bereits
+   * rechtegeprüften Board-Abfrage ({@link CardService#listBoardItems}).
+   *
+   * <p>Auch die Board-Zugehörigkeit der {@code cardIds} wird bewusst nicht geprüft (#472): Die
+   * Namen kommen ausschließlich aus {@code labels.findByBoardId(boardId)}, das Ergebnis ist damit
+   * unabhängig von der Herkunft der IDs auf die Labels <em>dieses</em> Boards begrenzt. Eine
+   * board-fremde ID liefert höchstens eine leere Liste, nie fremde Namen. Wer die Methode für einen
+   * weiteren Aufrufer öffnet, prüft diese Zusicherung erneut.
+   */
+  @Transactional(readOnly = true)
+  public Map<Long, List<String>> namesByCard(long boardId, Collection<Long> cardIds) {
+    List<Label> boardLabels = labels.findByBoardId(boardId);
+    Map<Long, List<Long>> labelIdsByCard = cardLabels.findByCardIds(cardIds);
+    Map<Long, List<String>> result = new LinkedHashMap<>();
+    for (Long cardId : cardIds) {
+      Set<Long> assigned = new HashSet<>(labelIdsByCard.getOrDefault(cardId, List.of()));
+      result.put(
+          cardId,
+          boardLabels.stream()
+              .filter(l -> assigned.contains(l.requireId()))
+              .map(Label::name)
+              .toList());
+    }
+    return result;
   }
 
   @Transactional(readOnly = true)
   public List<Label> list(long userId, long boardId) {
-    Board board = boards.findById(boardId).orElseThrow(BoardNotFoundException::new);
-    permissions.requireMembership(userId, board.projectId());
+    permissions.requireMembership(userId, boardService.requireProjectId(boardId));
     return labels.findByBoardId(boardId);
   }
 
   @Transactional
   public Label create(long userId, long boardId, String name, String color) {
-    Board board = boards.findById(boardId).orElseThrow(BoardNotFoundException::new);
-    permissions.require(userId, board.projectId(), Permission.BOARD_UPDATE);
+    permissions.require(userId, boardService.requireProjectId(boardId), Permission.BOARD_UPDATE);
     String trimmed = requireName(name);
     if (labels.existsByBoardIdAndName(boardId, trimmed)) {
       throw new InvalidLabelException("Label existiert bereits: " + trimmed);
@@ -49,8 +88,8 @@ public class LabelService {
   @Transactional
   public Label update(long userId, long labelId, String name, String color) {
     Label label = labels.findById(labelId).orElseThrow(LabelNotFoundException::new);
-    Board board = boards.findById(label.boardId()).orElseThrow(BoardNotFoundException::new);
-    permissions.require(userId, board.projectId(), Permission.BOARD_UPDATE);
+    permissions.require(
+        userId, boardService.requireProjectId(label.boardId()), Permission.BOARD_UPDATE);
     String trimmed = requireName(name);
     if (!trimmed.equals(label.name()) && labels.existsByBoardIdAndName(label.boardId(), trimmed)) {
       throw new InvalidLabelException("Label existiert bereits: " + trimmed);
@@ -61,8 +100,8 @@ public class LabelService {
   @Transactional
   public void delete(long userId, long labelId) {
     Label label = labels.findById(labelId).orElseThrow(LabelNotFoundException::new);
-    Board board = boards.findById(label.boardId()).orElseThrow(BoardNotFoundException::new);
-    permissions.require(userId, board.projectId(), Permission.BOARD_UPDATE);
+    permissions.require(
+        userId, boardService.requireProjectId(label.boardId()), Permission.BOARD_UPDATE);
     labels.deleteById(labelId);
   }
 

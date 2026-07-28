@@ -4,11 +4,9 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
 import org.jspecify.annotations.Nullable;
-import org.mwolff.manban.auth.application.AppUserRepository;
-import org.mwolff.manban.auth.domain.AppUser;
-import org.mwolff.manban.card.application.CardNotFoundException;
-import org.mwolff.manban.card.application.CardRepository;
-import org.mwolff.manban.card.domain.Card;
+import org.mwolff.manban.auth.application.UserLookup;
+import org.mwolff.manban.auth.application.UserSummary;
+import org.mwolff.manban.card.application.CardService;
 import org.mwolff.manban.comment.domain.Comment;
 import org.mwolff.manban.project.application.PermissionChecker;
 import org.mwolff.manban.project.application.ProjectAccessDeniedException;
@@ -25,19 +23,19 @@ import org.springframework.transaction.annotation.Transactional;
 public class CommentService {
 
   private final CommentRepository comments;
-  private final CardRepository cards;
+  private final CardService cardService;
   private final PermissionChecker permissions;
-  private final AppUserRepository users;
+  private final UserLookup users;
   private final Clock clock;
 
   public CommentService(
       CommentRepository comments,
-      CardRepository cards,
+      CardService cardService,
       PermissionChecker permissions,
-      AppUserRepository users,
+      UserLookup users,
       Clock clock) {
     this.comments = comments;
-    this.cards = cards;
+    this.cardService = cardService;
     this.permissions = permissions;
     this.users = users;
     this.clock = clock;
@@ -45,9 +43,9 @@ public class CommentService {
 
   @Transactional
   public CommentView create(long userId, long cardId, String body) {
-    long projectId = projectIdOfCard(cardId);
+    long projectId = cardService.requireProjectId(cardId);
     permissions.require(userId, projectId, Permission.COMMENT_CREATE);
-    String authorName = users.findById(userId).map(AppUser::displayName).orElse("Unbekannt");
+    String authorName = users.findById(userId).map(UserSummary::displayName).orElse("Unbekannt");
     Instant now = clock.instant();
     Comment saved = comments.save(new Comment(null, cardId, userId, authorName, body, now, now));
     return view(saved);
@@ -55,14 +53,15 @@ public class CommentService {
 
   @Transactional(readOnly = true)
   public List<CommentView> list(long userId, long cardId) {
-    permissions.requireMembership(userId, projectIdOfCard(cardId));
+    permissions.requireMembership(userId, cardService.requireProjectId(cardId));
     return comments.findByCardId(cardId).stream().map(CommentService::view).toList();
   }
 
   @Transactional
   public CommentView update(long userId, long commentId, String body) {
     Comment comment = comments.findById(commentId).orElseThrow(CommentNotFoundException::new);
-    permissions.require(userId, projectIdOfCard(comment.cardId()), Permission.COMMENT_UPDATE);
+    permissions.require(
+        userId, cardService.requireProjectId(comment.cardId()), Permission.COMMENT_UPDATE);
     // Bearbeiten darf nur der Autor selbst — auch ein Admin/Owner nicht fremde Kommentare.
     Long author = comment.authorUserId();
     if (author == null || author != userId) {
@@ -75,15 +74,9 @@ public class CommentService {
   public void delete(long userId, long commentId) {
     Comment comment = comments.findById(commentId).orElseThrow(CommentNotFoundException::new);
     // Löschen ist Moderation: nur Projekt-ADMIN/OWNER (COMMENT_DELETE), nicht der Autor allein.
-    permissions.require(userId, projectIdOfCard(comment.cardId()), Permission.COMMENT_DELETE);
+    permissions.require(
+        userId, cardService.requireProjectId(comment.cardId()), Permission.COMMENT_DELETE);
     comments.deleteById(comment.requireId());
-  }
-
-  private long projectIdOfCard(long cardId) {
-    // Projekt-basiert über card.projectId() (immer gesetzt, V18) — nicht board-abgeleitet, damit
-    // Kommentare auch an board-losen Pool-Ideen funktionieren (#405).
-    Card card = cards.findById(cardId).orElseThrow(CardNotFoundException::new);
-    return card.projectId();
   }
 
   private static CommentView view(Comment c) {

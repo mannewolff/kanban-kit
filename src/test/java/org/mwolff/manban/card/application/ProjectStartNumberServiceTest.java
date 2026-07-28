@@ -11,8 +11,8 @@ import static org.mockito.Mockito.when;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mwolff.manban.project.application.NextCardNumberWriter;
 import org.mwolff.manban.project.application.PermissionChecker;
-import org.mwolff.manban.project.application.ProjectRepository;
 import org.mwolff.manban.project.domain.Permission;
 
 class ProjectStartNumberServiceTest {
@@ -21,14 +21,14 @@ class ProjectStartNumberServiceTest {
   private static final long PROJECT = 1L;
 
   private CardRepository cards;
-  private ProjectRepository projects;
+  private NextCardNumberWriter projects;
   private PermissionChecker permissions;
   private ProjectStartNumberService service;
 
   @BeforeEach
   void setUp() {
     cards = mock(CardRepository.class);
-    projects = mock(ProjectRepository.class);
+    projects = mock(NextCardNumberWriter.class);
     permissions = mock(PermissionChecker.class);
     service = new ProjectStartNumberService(cards, projects, permissions);
   }

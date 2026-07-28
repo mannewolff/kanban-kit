@@ -3,6 +3,7 @@ package org.mwolff.manban.project.application;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -19,10 +20,10 @@ import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
-import org.mwolff.manban.auth.application.AppUserRepository;
 import org.mwolff.manban.auth.application.AuthProperties;
-import org.mwolff.manban.auth.domain.AppUser;
-import org.mwolff.manban.auth.domain.PlatformRole;
+import org.mwolff.manban.auth.application.UserDisplayNameWriter;
+import org.mwolff.manban.auth.application.UserLookup;
+import org.mwolff.manban.auth.application.UserSummary;
 import org.mwolff.manban.project.domain.Permission;
 import org.mwolff.manban.project.domain.ProjectInvitation;
 import org.mwolff.manban.project.domain.ProjectMembership;
@@ -41,11 +42,12 @@ class MembershipServiceTest {
   private ProjectInvitationRepository invitations;
   private PermissionChecker permissions;
   private InvitationMailer mailer;
-  private AppUserRepository users;
+  private UserLookup users;
+  private UserDisplayNameWriter displayNames;
   private MembershipService service;
 
-  private static AppUser user(long id, String email) {
-    return new AppUser(id, email, "hash", "U" + id, true, PlatformRole.USER);
+  private static UserSummary user(long id, String email) {
+    return new UserSummary(id, email, "U" + id, true);
   }
 
   private static ProjectInvitation invitation(Instant expiresAt, Instant acceptedAt) {
@@ -64,7 +66,8 @@ class MembershipServiceTest {
     invitations = mock(ProjectInvitationRepository.class);
     permissions = mock(PermissionChecker.class);
     mailer = mock(InvitationMailer.class);
-    users = mock(AppUserRepository.class);
+    users = mock(UserLookup.class);
+    displayNames = mock(UserDisplayNameWriter.class);
     AuthProperties authProperties =
         new AuthProperties("https://app.example", null, null, null, null, null);
     ProjectProperties projectProperties = new ProjectProperties(Duration.ofDays(7));
@@ -77,6 +80,7 @@ class MembershipServiceTest {
             permissions,
             mailer,
             users,
+            displayNames,
             authProperties,
             projectProperties,
             clock);
@@ -530,25 +534,39 @@ class MembershipServiceTest {
   }
 
   @Test
-  void changeMemberDisplayName_trimsPersistsGlobalNameAndReturnsView() {
-    // Given
+  void changeMemberDisplayName_delegatesToWriterAndReturnsView() {
+    // Given: das Trimmen liegt seit Issue #460 im auth-Port — hier wird der Rohwert durchgereicht.
     when(memberships.findByProjectIdAndUserId(9L, 2L))
         .thenReturn(Optional.of(membership(2L, ProjectRole.MEMBER)));
-    when(users.findById(2L)).thenReturn(Optional.of(user(2, "guest@x.de")));
-    when(users.save(any(AppUser.class))).thenAnswer(inv -> inv.getArgument(0));
+    when(displayNames.updateDisplayName(2L, "  Neuer Name  "))
+        .thenReturn(Optional.of(new UserSummary(2L, "guest@x.de", "Neuer Name", true)));
 
     // When
     MembershipService.MemberView view =
         service.changeMemberDisplayName(1L, 9L, 2L, "  Neuer Name  ");
 
     // Then
+    assertThat(view.userId()).isEqualTo(2L);
     assertThat(view.displayName()).isEqualTo("Neuer Name");
     assertThat(view.email()).isEqualTo("guest@x.de");
     assertThat(view.role()).isEqualTo(ProjectRole.MEMBER);
     verify(permissions).require(1L, 9L, Permission.MEMBER_REMOVE);
-    ArgumentCaptor<AppUser> saved = ArgumentCaptor.forClass(AppUser.class);
-    verify(users).save(saved.capture());
-    assertThat(saved.getValue().displayName()).isEqualTo("Neuer Name");
+    verify(displayNames).updateDisplayName(2L, "  Neuer Name  ");
+    // Der Schreib-Port schlägt den Benutzer selbst nach; ein zweiter Lookup hier wäre ein
+    // zusätzliches Select ohne Erkenntnisgewinn (#472).
+    verify(users, never()).findById(anyLong());
+  }
+
+  @Test
+  void changeMemberDisplayName_doesNotWrite_whenMemberRemovePermissionMissing() {
+    // Verhaltens-Neutralitaet (Issue #460): Der auth-Port prueft bewusst keine Rechte — die
+    // Autorisierung bleibt vollstaendig hier. Fehlt MEMBER_REMOVE, wird nichts geschrieben.
+    when(permissions.require(1L, 9L, Permission.MEMBER_REMOVE))
+        .thenThrow(new ProjectAccessDeniedException());
+
+    assertThatThrownBy(() -> service.changeMemberDisplayName(1L, 9L, 2L, "Neuer Name"))
+        .isInstanceOf(ProjectAccessDeniedException.class);
+    verify(displayNames, never()).updateDisplayName(anyLong(), anyString());
   }
 
   @Test
@@ -561,9 +579,11 @@ class MembershipServiceTest {
 
   @Test
   void changeMemberDisplayName_throwsMemberNotFound_whenUserMissing() {
+    // Der Schreib-Port meldet den unbekannten Benutzer als leeres Optional; nach außen bleibt es
+    // ein fehlendes Mitglied (404) — kein auth-Vokabular im project-Modul (#472).
     when(memberships.findByProjectIdAndUserId(9L, 2L))
         .thenReturn(Optional.of(membership(2L, ProjectRole.MEMBER)));
-    when(users.findById(2L)).thenReturn(Optional.empty());
+    when(displayNames.updateDisplayName(2L, "X")).thenReturn(Optional.empty());
 
     assertThatThrownBy(() -> service.changeMemberDisplayName(1L, 9L, 2L, "X"))
         .isInstanceOf(MemberNotFoundException.class);

@@ -9,12 +9,14 @@ import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.auth.application.AuthProperties;
+import org.mwolff.manban.auth.application.SessionTokens;
 import org.mwolff.manban.common.ExcludeFromJacocoGeneratedReport;
 import org.springframework.stereotype.Component;
 
 /**
- * Zustandsloses, serverseitig prüfbares Session-Token: {@code base64url(payload).base64url(hmac)}
- * mit {@code payload = "<userId>:<expiryEpochMillis>"}, signiert per HMAC-SHA256.
+ * HMAC-Adapter für den Port {@link SessionTokens}: zustandsloses, serverseitig prüfbares
+ * Session-Token {@code base64url(payload).base64url(hmac)} mit {@code payload =
+ * "<userId>:<expiryEpochMillis>"}, signiert per HMAC-SHA256.
  *
  * <p>Kein Server-Session-Store nötig; die Gültigkeit ergibt sich aus Signatur + Ablauf. Der
  * Signaturschlüssel muss über Neustarts/Instanzen stabil sein (siehe AuthProperties).
@@ -25,7 +27,7 @@ import org.springframework.stereotype.Component;
 // garantiert vorhandenen HmacSHA256-Provider zu IllegalStateException. Beides ist Krypto-Plumbing.
 @SuppressWarnings("PMD.AvoidCatchingGenericException")
 @Component
-public class SignedSessionTokens {
+public class SignedSessionTokens implements SessionTokens {
 
   private static final String HMAC_ALGORITHM = "HmacSHA256";
   private static final Base64.Encoder ENCODER = Base64.getUrlEncoder().withoutPadding();
@@ -42,6 +44,7 @@ public class SignedSessionTokens {
   }
 
   /** Signiertes Token für den Benutzer, gültig für die konfigurierte TTL. */
+  @Override
   public String issue(long userId) {
     long expiry = clock.instant().plus(ttl).toEpochMilli();
     String payload = userId + ":" + expiry;
@@ -54,6 +57,7 @@ public class SignedSessionTokens {
    * ist bewusst {@code @Nullable}: der Verifizierer toleriert {@code null} defensiv (leeres
    * Ergebnis statt NPE), auch wenn der aktuelle Aufrufer stets non-null übergibt.
    */
+  @Override
   public OptionalLong verify(@Nullable String token) {
     if (token == null) {
       return OptionalLong.empty();

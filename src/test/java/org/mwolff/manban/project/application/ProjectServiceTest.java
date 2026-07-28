@@ -19,10 +19,9 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
-import org.mwolff.manban.auth.application.AppUserRepository;
 import org.mwolff.manban.auth.application.AuthProperties;
-import org.mwolff.manban.auth.domain.AppUser;
-import org.mwolff.manban.auth.domain.PlatformRole;
+import org.mwolff.manban.auth.application.UserLookup;
+import org.mwolff.manban.auth.application.UserSummary;
 import org.mwolff.manban.project.domain.Permission;
 import org.mwolff.manban.project.domain.Project;
 import org.mwolff.manban.project.domain.ProjectMembership;
@@ -37,7 +36,7 @@ class ProjectServiceTest {
   private ProjectRepository projects;
   private ProjectMembershipRepository memberships;
   private PermissionChecker permissions;
-  private AppUserRepository users;
+  private UserLookup users;
   private InvitationMailer mailer;
   private ApplicationEventPublisher events;
   private ProjectService service;
@@ -51,7 +50,7 @@ class ProjectServiceTest {
     projects = mock(ProjectRepository.class);
     memberships = mock(ProjectMembershipRepository.class);
     permissions = mock(PermissionChecker.class);
-    users = mock(AppUserRepository.class);
+    users = mock(UserLookup.class);
     mailer = mock(InvitationMailer.class);
     events = mock(ApplicationEventPublisher.class);
     AuthProperties authProperties =
@@ -67,8 +66,7 @@ class ProjectServiceTest {
     // Given
     when(permissions.isPlatformAdmin(1L)).thenReturn(true);
     when(users.findByEmail("owner@x.de"))
-        .thenReturn(
-            Optional.of(new AppUser(2L, "owner@x.de", "hash", "Owner", true, PlatformRole.USER)));
+        .thenReturn(Optional.of(new UserSummary(2L, "owner@x.de", "Owner", true)));
     when(projects.save(any(Project.class)))
         .thenAnswer(
             inv -> {
@@ -90,8 +88,7 @@ class ProjectServiceTest {
     // Given
     when(permissions.isPlatformAdmin(1L)).thenReturn(true);
     when(users.findByEmail("owner@x.de"))
-        .thenReturn(
-            Optional.of(new AppUser(2L, "owner@x.de", "hash", "Owner", true, PlatformRole.USER)));
+        .thenReturn(Optional.of(new UserSummary(2L, "owner@x.de", "Owner", true)));
     when(projects.save(any(Project.class)))
         .thenAnswer(
             inv -> {
@@ -113,8 +110,7 @@ class ProjectServiceTest {
     // Given
     when(permissions.isPlatformAdmin(1L)).thenReturn(true);
     when(users.findByEmail("owner@x.de"))
-        .thenReturn(
-            Optional.of(new AppUser(2L, "owner@x.de", "hash", "Owner", true, PlatformRole.USER)));
+        .thenReturn(Optional.of(new UserSummary(2L, "owner@x.de", "Owner", true)));
     when(projects.save(any(Project.class)))
         .thenAnswer(
             inv -> {
@@ -134,8 +130,7 @@ class ProjectServiceTest {
     // Given
     when(permissions.isPlatformAdmin(1L)).thenReturn(true);
     when(users.findByEmail("owner@x.de"))
-        .thenReturn(
-            Optional.of(new AppUser(2L, "owner@x.de", "hash", "Owner", true, PlatformRole.USER)));
+        .thenReturn(Optional.of(new UserSummary(2L, "owner@x.de", "Owner", true)));
     when(projects.save(any(Project.class)))
         .thenAnswer(
             inv -> {
@@ -156,8 +151,7 @@ class ProjectServiceTest {
     // Given
     when(permissions.isPlatformAdmin(1L)).thenReturn(true);
     when(users.findByEmail("owner@x.de"))
-        .thenReturn(
-            Optional.of(new AppUser(2L, "owner@x.de", "hash", "Owner", true, PlatformRole.USER)));
+        .thenReturn(Optional.of(new UserSummary(2L, "owner@x.de", "Owner", true)));
     when(projects.save(any(Project.class)))
         .thenAnswer(
             inv -> {
@@ -180,8 +174,7 @@ class ProjectServiceTest {
     // Given
     when(permissions.isPlatformAdmin(1L)).thenReturn(true);
     when(users.findByEmail("owner@x.de"))
-        .thenReturn(
-            Optional.of(new AppUser(2L, "owner@x.de", "hash", "Owner", true, PlatformRole.USER)));
+        .thenReturn(Optional.of(new UserSummary(2L, "owner@x.de", "Owner", true)));
     when(projects.save(any(Project.class)))
         .thenAnswer(
             inv -> {
@@ -205,8 +198,7 @@ class ProjectServiceTest {
     // Given: gespeicherte E-Mail ist lowercase; der Aufruf liefert sie gemischt/mit Rand.
     when(permissions.isPlatformAdmin(1L)).thenReturn(true);
     when(users.findByEmail("owner@x.de"))
-        .thenReturn(
-            Optional.of(new AppUser(2L, "owner@x.de", "hash", "Owner", true, PlatformRole.USER)));
+        .thenReturn(Optional.of(new UserSummary(2L, "owner@x.de", "Owner", true)));
     when(projects.save(any(Project.class)))
         .thenAnswer(
             inv -> {
@@ -223,13 +215,10 @@ class ProjectServiceTest {
 
   @Test
   void create_throwsMemberNotApproved_whenOwnerPending() {
-    // Given: Owner existiert, ist aber noch nicht freigegeben (approvedAt=null).
+    // Given: Owner existiert, ist aber noch nicht freigegeben.
     when(permissions.isPlatformAdmin(1L)).thenReturn(true);
     when(users.findByEmail("owner@x.de"))
-        .thenReturn(
-            Optional.of(
-                new AppUser(
-                    2L, "owner@x.de", "hash", "Owner", true, PlatformRole.USER, null, null)));
+        .thenReturn(Optional.of(new UserSummary(2L, "owner@x.de", "Owner", false)));
 
     // When / Then
     assertThatThrownBy(() -> service.create(1L, "Neu", "owner@x.de"))

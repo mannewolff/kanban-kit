@@ -1,33 +1,22 @@
 package org.mwolff.manban.kanbancompat.application;
 
+import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.Set;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.accesstoken.application.KanbanPrincipal;
-import org.mwolff.manban.board.application.BoardColumnRepository;
-import org.mwolff.manban.board.application.BoardNotFoundException;
-import org.mwolff.manban.board.application.BoardRepository;
-import org.mwolff.manban.board.domain.Board;
-import org.mwolff.manban.board.domain.BoardColumn;
-import org.mwolff.manban.card.application.CardLabelRepository;
-import org.mwolff.manban.card.application.CardNotFoundException;
-import org.mwolff.manban.card.application.CardRepository;
+import org.mwolff.manban.board.application.BoardService;
+import org.mwolff.manban.board.application.BoardService.ColumnView;
 import org.mwolff.manban.card.application.CardService;
+import org.mwolff.manban.card.application.CardService.BoardItemView;
 import org.mwolff.manban.card.application.CardService.CardView;
-import org.mwolff.manban.card.application.LabelRepository;
-import org.mwolff.manban.card.domain.Card;
-import org.mwolff.manban.card.domain.CardType;
-import org.mwolff.manban.card.domain.Label;
+import org.mwolff.manban.card.application.LabelService;
 import org.mwolff.manban.comment.application.CommentService;
-import org.mwolff.manban.project.application.PermissionChecker;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -41,10 +30,6 @@ import org.springframework.transaction.annotation.Transactional;
  * positionsbasiert (i-te Spalte → i-ter Kanban-Key). Das Dogfood-Board nutzt die
  * Standard-5-Spalten, für die das Mapping 1:1 ist.
  */
-// PMD.CouplingBetweenObjects: Compat-Facade über mehrere Ports (Karten, Boards/Spalten, Rechte,
-// Kommentare, Labels/Card-Labels) plus die gespiegelten Protokoll-Records; die Kopplung ist der
-// Fassaden-Rolle inhärent und kein God-Class-Smell (analog CardService).
-@SuppressWarnings("PMD.CouplingBetweenObjects")
 @Service
 public class KanbanCompatService {
 
@@ -55,32 +40,20 @@ public class KanbanCompatService {
   public static final List<String> COLUMNS =
       List.of(BACKLOG, "READY", "IN_PROGRESS", "IN_REVIEW", "DONE");
 
-  private final CardRepository cards;
-  private final BoardColumnRepository boardColumns;
-  private final BoardRepository boards;
+  private final BoardService boardService;
   private final CardService cardService;
+  private final LabelService labelService;
   private final CommentService commentService;
-  private final PermissionChecker permissions;
-  private final LabelRepository labels;
-  private final CardLabelRepository cardLabels;
 
   public KanbanCompatService(
-      CardRepository cards,
-      BoardColumnRepository boardColumns,
-      BoardRepository boards,
+      BoardService boardService,
       CardService cardService,
-      CommentService commentService,
-      PermissionChecker permissions,
-      LabelRepository labels,
-      CardLabelRepository cardLabels) {
-    this.cards = cards;
-    this.boardColumns = boardColumns;
-    this.boards = boards;
+      LabelService labelService,
+      CommentService commentService) {
+    this.boardService = boardService;
     this.cardService = cardService;
+    this.labelService = labelService;
     this.commentService = commentService;
-    this.permissions = permissions;
-    this.labels = labels;
-    this.cardLabels = cardLabels;
   }
 
   /**
@@ -94,8 +67,9 @@ public class KanbanCompatService {
   @Transactional(readOnly = true)
   public Map<String, List<Item>> items(KanbanPrincipal principal) {
     long boardId = requireBound(principal);
-    Board board = boards.findById(boardId).orElseThrow(BoardNotFoundException::new);
-    permissions.requireMembership(principal.userId(), board.projectId());
+    // listBoardItems prueft Board-Existenz und Projekt-Mitgliedschaft und filtert archivierte
+    // sowie im Ideen-Speicher liegende Karten bereits im card-Modul heraus.
+    List<BoardItemView> visible = cardService.listBoardItems(principal.userId(), boardId);
 
     Map<Long, String> keyByColumn = keyByColumn(boardId);
     Map<String, List<Item>> grouped = new LinkedHashMap<>();
@@ -103,54 +77,26 @@ public class KanbanCompatService {
       grouped.put(key, new ArrayList<>());
     }
 
-    List<Card> visible =
-        cards.findByBoardId(boardId).stream()
-            .filter(c -> !c.archived() && !c.ideaStored())
-            .sorted(Comparator.comparingInt(Card::positionInColumn))
-            .toList();
-    Map<Long, List<String>> labelsByCard = labelNamesByCard(boardId, visible);
+    Map<Long, List<String>> labelsByCard =
+        labelService.namesByCard(boardId, visible.stream().map(BoardItemView::id).toList());
 
-    for (Card c : visible) {
+    for (BoardItemView c : visible) {
       String key = keyByColumn.getOrDefault(c.columnId(), BACKLOG);
       // grouped ist mit allen COLUMNS-Keys vorbelegt und key stammt aus COLUMNS;
       // requireNonNull macht das fuer NullAway explizit (Map.get liefert @Nullable).
       Objects.requireNonNull(grouped.get(key))
           .add(
               new Item(
-                  c.requireId(),
-                  c.requireNumber(),
+                  c.id(),
+                  c.number(),
                   c.title(),
                   c.description(),
                   key,
                   c.positionInColumn(),
-                  c.type() == CardType.EPIC ? "epic" : "card",
-                  labelsByCard.getOrDefault(c.requireId(), List.of())));
+                  c.epic() ? "epic" : "card",
+                  labelsByCard.getOrDefault(c.id(), List.of())));
     }
     return grouped;
-  }
-
-  /**
-   * Baut je Karte die Liste der Label-<em>Namen</em> aus genau zwei Batch-Abfragen auf — {@link
-   * LabelRepository#findByBoardId} (Namen) und {@link CardLabelRepository#findByCardIds}
-   * (Zuordnung) — unabhängig von der Kartenzahl (kein N+1). Die Reihenfolge je Karte folgt der
-   * Board-Definitionsreihenfolge, nicht der Zuordnungsreihenfolge.
-   */
-  private Map<Long, List<String>> labelNamesByCard(long boardId, List<Card> visible) {
-    List<Label> boardLabels = labels.findByBoardId(boardId);
-    List<Long> cardIds = visible.stream().map(Card::requireId).toList();
-    Map<Long, List<Long>> labelIdsByCard = cardLabels.findByCardIds(cardIds);
-    Map<Long, List<String>> result = new LinkedHashMap<>();
-    for (Card c : visible) {
-      long cardId = c.requireId();
-      Set<Long> assigned = new HashSet<>(labelIdsByCard.getOrDefault(cardId, List.of()));
-      List<String> names =
-          boardLabels.stream()
-              .filter(l -> assigned.contains(l.requireId()))
-              .map(Label::name)
-              .toList();
-      result.put(cardId, names);
-    }
-    return result;
   }
 
   /**
@@ -164,6 +110,12 @@ public class KanbanCompatService {
    * werden hier aber ignoriert. Zurückgegeben werden {@code id} und die sofort vergebene
    * projektweite {@code number} der neuen Pool-Idee (#402), damit CLI/Adapter direkt {@code #N}
    * zeigen können.
+   *
+   * <p>Die zurückgegebene {@code id} taugt bewusst <em>nicht</em> als Kommentar-Ziel (#472): Eine
+   * board-lose Pool-Idee liegt auf keinem Board, {@code GET/POST /items/{id}/comments} verlangt
+   * aber genau das und antwortet für sie mit 404. Erst das Einplanen auf ein Board macht die Karte
+   * kommentierbar. Für Aufrufer ist das folgenlos, weil die IDs dort aus {@link #items} stammen —
+   * und die Liste enthält nur eingeplante Karten.
    */
   @Transactional
   public Created create(
@@ -173,9 +125,8 @@ public class KanbanCompatService {
       @Nullable String column,
       boolean ideaStored) {
     long boardId = requireBound(principal);
-    Board board = boards.findById(boardId).orElseThrow(BoardNotFoundException::new);
-    CardView v =
-        cardService.createProjectIdea(principal.userId(), board.projectId(), title, body, boardId);
+    long projectId = boardService.requireProjectId(boardId);
+    CardView v = cardService.createProjectIdea(principal.userId(), projectId, title, body, boardId);
     // Seit #402 vergibt createProjectIdea sofort eine Nummer; requireNonNull macht das fuer
     // NullAway explizit (CardView.number() ist @Nullable fuer Legacy-Ideen ohne Nummer).
     return new Created(v.id(), Objects.requireNonNull(v.number()));
@@ -185,7 +136,7 @@ public class KanbanCompatService {
   @Transactional
   public void move(KanbanPrincipal principal, long cardId, String column, int position) {
     long boardId = requireBound(principal);
-    requireCardOnBoard(cardId, boardId);
+    cardService.requireOnBoard(cardId, boardId);
     long columnId = columnIdForKey(boardId, column);
     cardService.move(principal.userId(), cardId, columnId, position);
   }
@@ -194,8 +145,26 @@ public class KanbanCompatService {
   @Transactional
   public void comment(KanbanPrincipal principal, long cardId, String body) {
     long boardId = requireBound(principal);
-    requireCardOnBoard(cardId, boardId);
+    cardService.requireOnBoard(cardId, boardId);
     commentService.create(principal.userId(), cardId, body);
+  }
+
+  /**
+   * Kommentare eines Items des gebundenen Boards in chronologischer Reihenfolge (#448).
+   *
+   * <p>Gegenstück zu {@link #comment}: Ohne diesen Lesepfad waren über die Schnittstelle
+   * geschriebene Kommentare (Abschlussberichte, Review-Befunde) für jedes Werkzeug unsichtbar, das
+   * ausschließlich über kanbancompat liest. Die Zugriffskontrolle läuft wie bei den übrigen
+   * Endpoints über den Board-Guard der card-Fassade und die Mitgliedschaftsprüfung der
+   * Kommentar-Fassade — ein Nichtmitglied bekommt dadurch 404 statt 403.
+   */
+  @Transactional(readOnly = true)
+  public List<Comment> listComments(KanbanPrincipal principal, long cardId) {
+    long boardId = requireBound(principal);
+    cardService.requireOnBoard(cardId, boardId);
+    return commentService.list(principal.userId(), cardId).stream()
+        .map(c -> new Comment(c.authorName(), c.body(), c.createdAt()))
+        .toList();
   }
 
   /** Epics des gebundenen Boards inkl. Fortschritt. */
@@ -217,31 +186,14 @@ public class KanbanCompatService {
     return Objects.requireNonNull(principal.boardId());
   }
 
-  /**
-   * Sichert die Token-Bindung ab: die Karte muss auf dem gebundenen Board liegen (sonst 404).
-   *
-   * <p>Eine Karte im Ideen-Speicher gilt hier als nicht vorhanden (#434) — sie ist für Menschen
-   * ausgeblendet, also darf die Automatik sie auch nicht bewegen oder kommentieren. Andernfalls
-   * entstünden Änderungen an einer Karte, die auf dem Board niemand sieht.
-   */
-  private void requireCardOnBoard(long cardId, long boardId) {
-    Card card = cards.findById(cardId).orElseThrow(CardNotFoundException::new);
-    if (!Long.valueOf(boardId).equals(card.boardId()) || card.ideaStored()) {
-      throw new CardNotFoundException();
-    }
-  }
-
   /** Bildet jede Board-Spalte auf einen Kanban-Key ab: Name zuerst, sonst Position. */
   private Map<Long, String> keyByColumn(long boardId) {
-    List<BoardColumn> ordered =
-        boardColumns.findByBoardId(boardId).stream()
-            .sorted(Comparator.comparingInt(BoardColumn::position))
-            .toList();
+    List<ColumnView> ordered = boardService.listColumns(boardId);
     Map<Long, String> map = new LinkedHashMap<>();
     for (int i = 0; i < ordered.size(); i++) {
-      BoardColumn c = ordered.get(i);
+      ColumnView c = ordered.get(i);
       String fallback = COLUMNS.get(Math.min(i, COLUMNS.size() - 1));
-      map.put(c.requireId(), canonicalKey(c.name()).orElse(fallback));
+      map.put(c.id(), canonicalKey(c.name()).orElse(fallback));
     }
     return map;
   }
@@ -294,6 +246,9 @@ public class KanbanCompatService {
       int position,
       String type,
       List<String> labels) {}
+
+  /** Kommentar eines Items; {@code author} ist der Anzeigename des Autors zur Schreibzeit. */
+  public record Comment(String author, String body, Instant createdAt) {}
 
   public record Created(long id, int number) {}
 

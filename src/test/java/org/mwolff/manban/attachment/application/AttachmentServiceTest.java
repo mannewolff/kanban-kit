@@ -18,13 +18,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mwolff.manban.attachment.domain.Attachment;
-import org.mwolff.manban.board.application.BoardNotFoundException;
-import org.mwolff.manban.board.application.BoardRepository;
-import org.mwolff.manban.board.domain.Board;
 import org.mwolff.manban.card.application.CardNotFoundException;
-import org.mwolff.manban.card.application.CardRepository;
-import org.mwolff.manban.card.domain.Card;
-import org.mwolff.manban.card.domain.CardType;
+import org.mwolff.manban.card.application.CardService;
 import org.mwolff.manban.project.application.PermissionChecker;
 import org.mwolff.manban.project.domain.Permission;
 
@@ -37,33 +32,9 @@ class AttachmentServiceTest {
   private ObjectStorage storage;
   private ContentTypeDetector detector;
   private ObjectStorageProperties properties;
-  private CardRepository cards;
-  private BoardRepository boards;
+  private CardService cardService;
   private PermissionChecker permissions;
   private AttachmentService service;
-
-  private static Card card() {
-    return new Card(
-        5L,
-        10L,
-        20L,
-        1,
-        "T",
-        null,
-        0,
-        false,
-        false,
-        null,
-        1L,
-        FIXED,
-        FIXED,
-        CardType.CARD,
-        null,
-        null,
-        null,
-        1L,
-        null);
-  }
 
   private static Attachment attachment() {
     return new Attachment(7L, 5L, "note.txt", "text/plain", 3, "cards/5/key", FIXED);
@@ -75,24 +46,22 @@ class AttachmentServiceTest {
     storage = mock(ObjectStorage.class);
     detector = mock(ContentTypeDetector.class);
     properties = new ObjectStorageProperties(null, null, null, null, 20);
-    cards = mock(CardRepository.class);
-    boards = mock(BoardRepository.class);
+    cardService = mock(CardService.class);
     permissions = mock(PermissionChecker.class);
     Clock clock = Clock.fixed(FIXED, ZoneOffset.UTC);
     service =
         new AttachmentService(
-            attachments, storage, detector, properties, cards, boards, permissions, clock);
+            attachments, storage, detector, properties, cardService, permissions, clock);
   }
 
-  private void cardAndBoardResolve() {
-    when(cards.findById(5L)).thenReturn(Optional.of(card()));
-    when(boards.findById(10L)).thenReturn(Optional.of(new Board(10L, 1L, "B", FIXED)));
+  private void cardResolves() {
+    when(cardService.requireProjectId(5L)).thenReturn(1L);
   }
 
   @Test
   void upload_setsCreatedAtFromInjectedClock() {
     // Given
-    cardAndBoardResolve();
+    cardResolves();
     when(attachments.countByCardId(5L)).thenReturn(0L);
     when(detector.detect(any(), any())).thenReturn("text/plain");
     when(attachments.save(any(Attachment.class))).thenAnswer(inv -> saved(inv.getArgument(0)));
@@ -109,7 +78,7 @@ class AttachmentServiceTest {
   @Test
   void upload_storesBlobWithDetectedContentType() {
     // Given
-    cardAndBoardResolve();
+    cardResolves();
     when(attachments.countByCardId(5L)).thenReturn(0L);
     when(detector.detect(any(), any())).thenReturn("image/png");
     when(attachments.save(any(Attachment.class))).thenAnswer(inv -> saved(inv.getArgument(0)));
@@ -126,7 +95,7 @@ class AttachmentServiceTest {
   @Test
   void upload_putsBlobIntoObjectStorage() {
     // Given
-    cardAndBoardResolve();
+    cardResolves();
     when(attachments.countByCardId(5L)).thenReturn(0L);
     when(detector.detect(any(), any())).thenReturn("text/plain");
     when(attachments.save(any(Attachment.class))).thenAnswer(inv -> saved(inv.getArgument(0)));
@@ -142,7 +111,7 @@ class AttachmentServiceTest {
   @Test
   void upload_returnsViewOfPersistedAttachment() {
     // Given
-    cardAndBoardResolve();
+    cardResolves();
     when(attachments.countByCardId(5L)).thenReturn(0L);
     when(detector.detect(any(), any())).thenReturn("text/plain");
     when(attachments.save(any(Attachment.class))).thenAnswer(inv -> saved(inv.getArgument(0)));
@@ -158,7 +127,7 @@ class AttachmentServiceTest {
   @Test
   void upload_requiresAttachmentCreatePermission() {
     // Given
-    cardAndBoardResolve();
+    cardResolves();
     when(attachments.countByCardId(5L)).thenReturn(0L);
     when(detector.detect(any(), any())).thenReturn("text/plain");
     when(attachments.save(any(Attachment.class))).thenAnswer(inv -> saved(inv.getArgument(0)));
@@ -180,11 +149,10 @@ class AttachmentServiceTest {
             storage,
             detector,
             properties,
-            cards,
-            boards,
+            cardService,
             permissions,
             Clock.fixed(FIXED, ZoneOffset.UTC));
-    cardAndBoardResolve();
+    cardResolves();
     when(attachments.countByCardId(5L)).thenReturn(1L);
 
     // When / Then
@@ -194,8 +162,8 @@ class AttachmentServiceTest {
 
   @Test
   void upload_throwsCardNotFound_whenCardUnknown() {
-    // Given
-    when(cards.findById(5L)).thenReturn(Optional.empty());
+    // Given: die card-Fassade meldet die unbekannte Karte — der Anhang-Service reicht sie durch.
+    when(cardService.requireProjectId(5L)).thenThrow(new CardNotFoundException());
 
     // When / Then
     assertThatThrownBy(() -> service.upload(1L, 5L, "note.txt", new byte[] {1}))
@@ -203,20 +171,27 @@ class AttachmentServiceTest {
   }
 
   @Test
-  void upload_throwsBoardNotFound_whenBoardUnknown() {
-    // Given
-    when(cards.findById(5L)).thenReturn(Optional.of(card()));
-    when(boards.findById(10L)).thenReturn(Optional.empty());
+  void upload_checksPermissionAgainstProjectFromCardFacade() {
+    // Given: die Projekt-ID kommt seit #458 ausschliesslich aus der card-Fassade (vorher aus dem
+    // Board der Karte). Eine abweichende ID belegt, dass sie wirklich durchgereicht und nicht
+    // anderweitig hergeleitet wird — und dass Anhaenge damit auch an board-losen Pool-Ideen
+    // (#405) rechtegeprueft werden koennen.
+    when(cardService.requireProjectId(5L)).thenReturn(42L);
+    when(attachments.countByCardId(5L)).thenReturn(0L);
+    when(detector.detect(any(), any())).thenReturn("text/plain");
+    when(attachments.save(any(Attachment.class))).thenAnswer(inv -> saved(inv.getArgument(0)));
 
-    // When / Then
-    assertThatThrownBy(() -> service.upload(1L, 5L, "note.txt", new byte[] {1}))
-        .isInstanceOf(BoardNotFoundException.class);
+    // When
+    service.upload(1L, 5L, "note.txt", new byte[] {1, 2, 3});
+
+    // Then
+    verify(permissions).require(1L, 42L, Permission.ATTACHMENT_CREATE);
   }
 
   @Test
   void list_mapsAttachmentsToViews() {
     // Given
-    cardAndBoardResolve();
+    cardResolves();
     when(attachments.findByCardId(5L)).thenReturn(List.of(attachment()));
 
     // When
@@ -233,7 +208,7 @@ class AttachmentServiceTest {
   void download_returnsMetadataAndStream() {
     // Given
     when(attachments.findById(7L)).thenReturn(Optional.of(attachment()));
-    cardAndBoardResolve();
+    cardResolves();
     when(storage.get("cards/5/key")).thenReturn(new ByteArrayInputStream(new byte[] {1}));
 
     // When
@@ -257,7 +232,7 @@ class AttachmentServiceTest {
   void delete_removesBlobAndMetadata() {
     // Given
     when(attachments.findById(7L)).thenReturn(Optional.of(attachment()));
-    cardAndBoardResolve();
+    cardResolves();
 
     // When
     service.delete(1L, 7L);
@@ -270,7 +245,7 @@ class AttachmentServiceTest {
   void delete_removesMetadataViaRepository() {
     // Given
     when(attachments.findById(7L)).thenReturn(Optional.of(attachment()));
-    cardAndBoardResolve();
+    cardResolves();
 
     // When
     service.delete(1L, 7L);
@@ -283,7 +258,7 @@ class AttachmentServiceTest {
   void delete_requiresAttachmentDeletePermission() {
     // Given
     when(attachments.findById(7L)).thenReturn(Optional.of(attachment()));
-    cardAndBoardResolve();
+    cardResolves();
 
     // When
     service.delete(1L, 7L);

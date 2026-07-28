@@ -7,6 +7,36 @@ Versionierung folgt der dreiteiligen Betriebsversion (siehe [RELEASING.md](RELEA
 Einträge je Version sind ein automatischer Auszug der Commit-Titel seit dem letzten Release,
 erzeugt von `scripts/gen-changelog.mjs`.
 
+## [1.11.0] – 2026-07-28
+
+- Release 1.10.2 (push main)
+- Verschachtelte Ternary im Ideen-Pool aufloesen ([#474](https://github.com/mannewolff/kanban-kit/issues/474))
+- JdbcCardLabelRepository auf NamedParameterJdbcTemplate umbauen ([#473](https://github.com/mannewolff/kanban-kit/issues/473))
+- Review-Nachlese zum Fassaden-Batch ([#472](https://github.com/mannewolff/kanban-kit/issues/472))
+- CLI: Kommentare in 'tbx issue get' ausgeben ([#471](https://github.com/mannewolff/kanban-kit/issues/471))
+- ArchUnit-Modulgrenzen: Fassaden-Whitelist und config-Regeln ([#470](https://github.com/mannewolff/kanban-kit/issues/470))
+- Kommentar-Lesepfad: Board-Scope-Negativfall schaerfen ([#469](https://github.com/mannewolff/kanban-kit/issues/469))
+- Startnummer-Endpoints: Web-Verdrahtung per MockMvc pinnen ([#468](https://github.com/mannewolff/kanban-kit/issues/468))
+- Ideen-Planungsboard: Leer-Guard fuer Einplanen-Knopf pinnen ([#467](https://github.com/mannewolff/kanban-kit/issues/467))
+- PAT-Kommentar-Body: Längenbegrenzung ergänzen ([#466](https://github.com/mannewolff/kanban-kit/issues/466))
+- PIT-Gate: config-Paket einbeziehen ([#465](https://github.com/mannewolff/kanban-kit/issues/465))
+- SSE-Event-Kette per Integrationstest absichern ([#464](https://github.com/mannewolff/kanban-kit/issues/464))
+- Ziel-Board-Dialog: Projekt und Spalte vorbelegen ([#450](https://github.com/mannewolff/kanban-kit/issues/450))
+- Ungeprüfte Schreib-Fassaden maschinell absichern
+- Anhänge: projekt-basierte Rechteprüfung festnageln ([#462](https://github.com/mannewolff/kanban-kit/issues/462))
+- Release 1.10.1 (push main)
+- kanbancompat: GET-Endpoint fuer Item-Kommentare ([#448](https://github.com/mannewolff/kanban-kit/issues/448))
+- Coverage: ProjectStartNumberControllerTest ergänzt ([#446](https://github.com/mannewolff/kanban-kit/issues/446))
+- Sonar S6582: optional chaining in IdeaPlanningBoard, ESLint-Gate ergänzt
+- Sonar S7467: ungenutztes catch-e durch Unnamed-Pattern ersetzen ([#444](https://github.com/mannewolff/kanban-kit/issues/444))
+- Sonar S2589: tote Bedingungen in BootstrapService entfernen
+- Doku: nutzung.md an tatsächlichen Code-Stand nachziehen
+- card→project-Restfassade: PermissionChecker.isMember + ProjectService.setNextCardNumber ([#461](https://github.com/mannewolff/kanban-kit/issues/461))
+- project→auth-Fassade: AppUserRepository-Zugriff aus project/comment kapseln ([#460](https://github.com/mannewolff/kanban-kit/issues/460))
+- board-Modul-Fassade: fremde Zugriffe auf BoardRepository/Board/BoardColumn kapseln ([#459](https://github.com/mannewolff/kanban-kit/issues/459))
+- card-Modul-Fassade: fremde Zugriffe auf CardRepository/Card/Label kapseln ([#458](https://github.com/mannewolff/kanban-kit/issues/458))
+- Security-Composition-Root aus dem Auth-Modul herausgelöst
+
 ## [1.10.0] – 2026-07-27
 
 - Release 1.9.1 (push main)

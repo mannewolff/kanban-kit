@@ -59,6 +59,17 @@ public class PermissionChecker {
   }
 
   /**
+   * Ob der Benutzer <em>echtes</em> Mitglied des Projekts ist — reine Mitgliedschaftsprüfung ohne
+   * Rechte-Matrix und bewusst <b>ohne</b> Plattform-Admin-Bypass. Gedacht für Prüfungen über eine
+   * dritte Person (z. B. „darf dieser Benutzer Zuständiger einer Karte sein?"), nicht für den
+   * Zugriff des Aufrufers — dafür {@link #requireMembership}, das den Super-User passieren lässt.
+   */
+  @Transactional(readOnly = true)
+  public boolean isRealProjectMember(long userId, long projectId) {
+    return memberships.findByProjectIdAndUserId(projectId, userId).isPresent();
+  }
+
+  /**
    * Stellt sicher, dass der Benutzer das Recht im Projekt hat.
    *
    * @return die Mitgliedschaft des Benutzers (u. a. für die Rolle in Responses); für einen

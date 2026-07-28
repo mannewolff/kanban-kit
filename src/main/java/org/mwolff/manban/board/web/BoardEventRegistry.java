@@ -57,10 +57,16 @@ public class BoardEventRegistry {
                 emitter -> trySend(boardId, emitter, SseEmitter.event().comment("ping"))));
   }
 
+  /**
+   * Sendet und räumt tote Verbindungen ab. Der Fehler wird bewusst nicht protokolliert (#472): Ein
+   * geschlossener Browser-Tab erzeugt hier eine Ausnahme pro Emitter und Heartbeat — das ist der
+   * Normalfall, kein Vorfall. Diagnostisch aussagekräftig ist die Zahl offener Verbindungen, nicht
+   * die einzelne Ausnahme; deshalb bleibt das Muster ohne Namen (Unnamed Pattern).
+   */
   private void trySend(long boardId, SseEmitter emitter, SseEventBuilder event) {
     try {
       emitter.send(event);
-    } catch (IOException | IllegalStateException e) {
+    } catch (IOException | IllegalStateException _) {
       // Verbindung ist tot (Client weg / bereits abgeschlossen) — aufräumen.
       remove(boardId, emitter);
     }

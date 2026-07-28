@@ -16,6 +16,15 @@ interface Props {
   /** Eine oder mehrere zu verschiebende Karten. */
   cardIds: number[]
   currentBoardId: number
+  /** Projekt des Quellboards: im Dialog vorausgewählt, bleibt frei änderbar. */
+  currentProjectId: number
+  /**
+   * Ordnungsposition der Quellspalte (Index in der nach `position` sortierten Spaltenliste des
+   * Quellboards) oder `null`, wenn die Auswahl mehrere Spalten umfasst. Die Zielspalte wird über
+   * diese Position vorbelegt, nicht über den Namen — hat das Zielboard dort keine Spalte, bleibt
+   * das Feld leer.
+   */
+  sourceColumnPosition: number | null
   /** Plattform-Admin darf in alle Projekte verschieben, sonst nur in eigene OWNER-Projekte. */
   platformAdmin: boolean
   onClose: () => void
@@ -30,13 +39,15 @@ interface Props {
 export function TransferCardDialog({
   cardIds,
   currentBoardId,
+  currentProjectId,
+  sourceColumnPosition,
   platformAdmin,
   onClose,
   onTransferred,
 }: Readonly<Props>) {
   const [projects, setProjects] = useState<Project[]>([])
   const [boards, setBoards] = useState<Board[]>([])
-  const [projectId, setProjectId] = useState<number | ''>('')
+  const [projectId, setProjectId] = useState<number | ''>(currentProjectId)
   const [boardId, setBoardId] = useState<number | ''>('')
   const [columnId, setColumnId] = useState<number | ''>('')
   const [busy, setBusy] = useState(false)
@@ -59,8 +70,9 @@ export function TransferCardDialog({
     void boardsApi.list(projectId).then((bs) => setBoards(bs.filter((b) => b.id !== currentBoardId)))
   }, [projectId, currentBoardId])
 
+  const sortedColumns = (b: Board) => [...b.columns].sort((x, y) => x.position - y.position)
   const selectedBoard = boards.find((b) => b.id === boardId)
-  const columns = selectedBoard ? [...selectedBoard.columns].sort((a, b) => a.position - b.position) : []
+  const columns = selectedBoard ? sortedColumns(selectedBoard) : []
 
   const submit = async () => {
     setBusy(true)
@@ -113,8 +125,17 @@ export function TransferCardDialog({
             value={boardId}
             disabled={projectId === ''}
             onChange={(e) => {
-              setBoardId(e.target.value === '' ? '' : Number(e.target.value))
-              setColumnId('')
+              const target = boards.find((b) => String(b.id) === e.target.value)
+              setBoardId(target?.id ?? '')
+              // Zielspalte über die Ordnungsposition der Quellspalte vorbelegen. Ist die
+              // Quellspalte nicht eindeutig oder hat das Zielboard dort keine Spalte, bleibt das
+              // Feld leer. Die Vorbelegung wird bei jedem Board-Wechsel neu bestimmt, damit eine
+              // zuvor manuell gewählte Spalte nicht auf das nächste Board durchschlägt.
+              setColumnId(
+                target && sourceColumnPosition !== null
+                  ? (sortedColumns(target)[sourceColumnPosition]?.id ?? '')
+                  : '',
+              )
             }}
             slotProps={{ htmlInput: { 'aria-label': 'Zielboard' } }}
           >

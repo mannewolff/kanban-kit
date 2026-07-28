@@ -19,10 +19,10 @@ import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
-import org.mwolff.manban.auth.application.AppUserRepository;
 import org.mwolff.manban.auth.application.AuthProperties;
-import org.mwolff.manban.auth.domain.AppUser;
-import org.mwolff.manban.auth.domain.PlatformRole;
+import org.mwolff.manban.auth.application.UserDisplayNameWriter;
+import org.mwolff.manban.auth.application.UserLookup;
+import org.mwolff.manban.auth.application.UserSummary;
 import org.mwolff.manban.project.domain.Project;
 import org.mwolff.manban.project.domain.ProjectInvitation;
 import org.mwolff.manban.project.domain.ProjectMembership;
@@ -39,7 +39,7 @@ class MembershipInvitationTest {
   private ProjectInvitationRepository invitations;
   private PermissionChecker permissions;
   private InvitationMailer mailer;
-  private AppUserRepository users;
+  private UserLookup users;
   private MembershipService service;
 
   @BeforeEach
@@ -49,7 +49,8 @@ class MembershipInvitationTest {
     invitations = mock(ProjectInvitationRepository.class);
     permissions = mock(PermissionChecker.class);
     mailer = mock(InvitationMailer.class);
-    users = mock(AppUserRepository.class);
+    users = mock(UserLookup.class);
+    UserDisplayNameWriter displayNames = mock(UserDisplayNameWriter.class);
     AuthProperties authProperties =
         new AuthProperties("https://app.example", null, null, null, null, null);
     ProjectProperties projectProperties = new ProjectProperties(Duration.ofDays(7));
@@ -62,6 +63,7 @@ class MembershipInvitationTest {
             permissions,
             mailer,
             users,
+            displayNames,
             authProperties,
             projectProperties,
             clock);
@@ -138,7 +140,7 @@ class MembershipInvitationTest {
     // Given: E-Mail gehört zu einem registrierten, freigegebenen Nutzer.
     when(projects.findById(9L)).thenReturn(Optional.of(new Project(9L, "P", 1L, FIXED)));
     when(users.findByEmail("bob@x.de"))
-        .thenReturn(Optional.of(new AppUser(7L, "bob@x.de", "h", "Bob", true, PlatformRole.USER)));
+        .thenReturn(Optional.of(new UserSummary(7L, "bob@x.de", "Bob", true)));
     when(memberships.findByProjectIdAndUserId(9L, 7L)).thenReturn(Optional.empty());
     when(memberships.save(any(ProjectMembership.class))).thenAnswer(inv -> inv.getArgument(0));
 
@@ -161,7 +163,7 @@ class MembershipInvitationTest {
     // Given: Nutzer ist bereits Mitglied (VIEWER) — invite mit ADMIN aktualisiert die Rolle.
     when(projects.findById(9L)).thenReturn(Optional.of(new Project(9L, "P", 1L, FIXED)));
     when(users.findByEmail("bob@x.de"))
-        .thenReturn(Optional.of(new AppUser(7L, "bob@x.de", "h", "Bob", true, PlatformRole.USER)));
+        .thenReturn(Optional.of(new UserSummary(7L, "bob@x.de", "Bob", true)));
     when(memberships.findByProjectIdAndUserId(9L, 7L))
         .thenReturn(Optional.of(new ProjectMembership(5L, 9L, 7L, ProjectRole.VIEWER, FIXED)));
     when(memberships.save(any(ProjectMembership.class))).thenAnswer(inv -> inv.getArgument(0));
@@ -179,12 +181,10 @@ class MembershipInvitationTest {
 
   @Test
   void invite_throwsMemberNotApproved_forRegisteredPendingUser() {
-    // Given: registrierter, aber nicht freigegebener Nutzer (approvedAt=null).
+    // Given: registrierter, aber nicht freigegebener Nutzer.
     when(projects.findById(9L)).thenReturn(Optional.of(new Project(9L, "P", 1L, FIXED)));
     when(users.findByEmail("bob@x.de"))
-        .thenReturn(
-            Optional.of(
-                new AppUser(7L, "bob@x.de", "h", "Bob", true, PlatformRole.USER, null, null)));
+        .thenReturn(Optional.of(new UserSummary(7L, "bob@x.de", "Bob", false)));
 
     // When / Then
     assertThatThrownBy(() -> service.invite(1L, 9L, "bob@x.de", ProjectRole.MEMBER))
@@ -202,7 +202,7 @@ class MembershipInvitationTest {
   void invite_addsMember_evenWhenAssignedMailFails() {
     // Bestehender, freigegebener Nutzer wird sofort Mitglied; die Info-Mail scheitert.
     when(projects.findById(9L)).thenReturn(Optional.of(new Project(9L, "P", 1L, FIXED)));
-    AppUser existing = new AppUser(5L, "guest@x.de", "hash", "Guest", true, PlatformRole.USER);
+    UserSummary existing = new UserSummary(5L, "guest@x.de", "Guest", true);
     when(users.findByEmail("guest@x.de")).thenReturn(Optional.of(existing));
     when(memberships.findByProjectIdAndUserId(9L, 5L)).thenReturn(Optional.empty());
     when(memberships.save(any(ProjectMembership.class))).thenAnswer(inv -> inv.getArgument(0));

@@ -658,6 +658,62 @@ describe('BoardView', () => {
     expect(onCardsChanged).toHaveBeenCalled()
   })
 
+  it('belegt im Verschieben-Dialog Projekt und Zielspalte der Einzelkarte vor', async () => {
+    mProjects.list.mockResolvedValue([{ id: 1, name: 'Eigenes Projekt', role: 'OWNER', createdAt: '' }])
+    mBoards.list.mockResolvedValue([
+      { id: 99, projectId: 1, name: 'Ziel', createdAt: '', columns: [
+        { id: 900, name: 'Backlog', position: 0, wipLimit: null },
+        { id: 901, name: 'Fertig', position: 1, wipLimit: null },
+      ] },
+    ])
+    // Karte liegt in der zweiten Spalte (Position 1) des Quellboards.
+    const inDone: Card = { ...card, id: 105, columnId: 20, title: 'Fertige Aufgabe' }
+    render(<BoardView board={board} initialCards={[inDone]} canEdit canTransfer api={mkApi()} />)
+
+    fireEvent.click(screen.getByLabelText('Menü Fertige Aufgabe'))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Auf anderes Board verschieben…' }))
+
+    await screen.findByRole('option', { name: 'Ziel' })
+    expect(screen.getByLabelText('Zielprojekt')).toHaveValue('1')
+    fireEvent.change(screen.getByLabelText('Zielboard'), { target: { value: '99' } })
+
+    expect(screen.getByLabelText('Zielspalte')).toHaveValue('901')
+  })
+
+  it('belegt die Zielspalte einer einspaltigen Bulk-Auswahl vor, bei mehrspaltiger nicht', async () => {
+    mProjects.list.mockResolvedValue([{ id: 1, name: 'Eigenes Projekt', role: 'OWNER', createdAt: '' }])
+    mBoards.list.mockResolvedValue([
+      { id: 99, projectId: 1, name: 'Ziel', createdAt: '', columns: [
+        { id: 900, name: 'Backlog', position: 0, wipLimit: null },
+        { id: 901, name: 'Fertig', position: 1, wipLimit: null },
+      ] },
+    ])
+    const cards: Card[] = [
+      { ...card, id: 301, columnId: 10, positionInColumn: 0, title: 'Links oben' },
+      { ...card, id: 302, columnId: 10, positionInColumn: 1, title: 'Links unten' },
+      { ...card, id: 303, columnId: 20, positionInColumn: 0, title: 'Rechts' },
+    ]
+    render(<BoardView board={board} initialCards={cards} canEdit canTransfer api={mkApi()} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Auswählen' }))
+    fireEvent.click(screen.getByTestId('card-301'))
+    fireEvent.click(screen.getByTestId('card-302'))
+    fireEvent.click(screen.getByRole('button', { name: 'Verschieben' }))
+
+    await screen.findByRole('option', { name: 'Ziel' })
+    fireEvent.change(screen.getByLabelText('Zielboard'), { target: { value: '99' } })
+    expect(screen.getByLabelText('Zielspalte')).toHaveValue('900')
+
+    // Dritte Karte aus der anderen Spalte dazunehmen: die Quellspalte ist nicht mehr eindeutig.
+    fireEvent.click(screen.getByRole('button', { name: 'Abbrechen' }))
+    fireEvent.click(screen.getByTestId('card-303'))
+    fireEvent.click(screen.getByRole('button', { name: 'Verschieben' }))
+
+    await screen.findByRole('option', { name: 'Ziel' })
+    fireEvent.change(screen.getByLabelText('Zielboard'), { target: { value: '99' } })
+    expect(screen.getByLabelText('Zielspalte')).toHaveValue('')
+  })
+
   it('übergibt die Auswahl in Sichtreihenfolge, nicht in Klick-Reihenfolge', async () => {
     const cards: Card[] = [
       { ...card, id: 101, positionInColumn: 0, title: 'Eins' },
