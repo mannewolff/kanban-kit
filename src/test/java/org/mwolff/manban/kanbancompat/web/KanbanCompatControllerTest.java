@@ -6,12 +6,14 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mwolff.manban.accesstoken.application.KanbanPrincipal;
 import org.mwolff.manban.kanbancompat.application.KanbanCompatService;
+import org.mwolff.manban.kanbancompat.application.KanbanCompatService.Comment;
 import org.mwolff.manban.kanbancompat.application.KanbanCompatService.Created;
 import org.mwolff.manban.kanbancompat.application.KanbanCompatService.Epic;
 import org.mwolff.manban.kanbancompat.application.KanbanCompatService.Item;
@@ -101,6 +103,20 @@ class KanbanCompatControllerTest {
 
     // Then
     verify(service).comment(PRINCIPAL, 8L, "hello");
+  }
+
+  @Test
+  void comments_withBoundPrincipal_delegates() {
+    // Given
+    List<Comment> comments =
+        List.of(new Comment("Anna", "Hallo", Instant.parse("2026-01-01T10:00:00Z")));
+    when(service.listComments(PRINCIPAL, 8L)).thenReturn(comments);
+
+    // When
+    List<Comment> result = controller.comments(boundAuthentication(), 8L);
+
+    // Then
+    assertThat(result).isSameAs(comments);
   }
 
   @Test

@@ -2,11 +2,13 @@ package org.mwolff.manban.kanbancompat.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
@@ -26,6 +28,7 @@ import org.mwolff.manban.card.application.CardService.CardView;
 import org.mwolff.manban.card.application.LabelService;
 import org.mwolff.manban.card.domain.CardType;
 import org.mwolff.manban.comment.application.CommentService;
+import org.mwolff.manban.comment.application.CommentService.CommentView;
 
 /** Unit-Tests der Kanban-Compat-Schicht (Spaltennamen-Normalisierung + Verhalten an den Ports). */
 class KanbanCompatServiceTest {
@@ -320,6 +323,49 @@ class KanbanCompatServiceTest {
 
     // When / Then
     assertThatThrownBy(() -> service.comment(bound(), 1L, "Hallo"))
+        .isInstanceOf(CardNotFoundException.class);
+  }
+
+  @Test
+  void listComments_mapsAuthorBodyAndCreatedAt_inServiceOrder() {
+    // Given: die Kommentar-Fassade liefert bereits chronologisch sortiert
+    Instant first = Instant.parse("2026-01-01T10:00:00Z");
+    Instant second = Instant.parse("2026-01-01T11:00:00Z");
+    when(commentService.list(1L, 42L))
+        .thenReturn(
+            List.of(
+                new CommentView(9L, 42L, 3L, "Anna", "Erster", first, first),
+                new CommentView(10L, 42L, 4L, "Bert", "Zweiter", second, second)));
+
+    // When
+    List<KanbanCompatService.Comment> result = service.listComments(bound(), 42L);
+
+    // Then: Reihenfolge und Feldabbildung bleiben erhalten
+    assertThat(result)
+        .extracting(
+            KanbanCompatService.Comment::author,
+            KanbanCompatService.Comment::body,
+            KanbanCompatService.Comment::createdAt)
+        .containsExactly(tuple("Anna", "Erster", first), tuple("Bert", "Zweiter", second));
+  }
+
+  @Test
+  void listComments_returnsEmptyList_whenItemHasNoComments() {
+    // Given: keine Kommentare am Item
+
+    // When / Then: leere Liste statt null
+    assertThat(service.listComments(bound(), 42L)).isEmpty();
+  }
+
+  @Test
+  void listComments_throwsCardNotFound_whenCardNotOnBoard() {
+    // Given: der Board-Guard der card-Fassade schlaegt an. Fällt der requireOnBoard-Aufruf weg
+    // (Mutant), würden Kommentare fremder Karten lesbar.
+    doThrow(new CardNotFoundException()).when(cardService).requireOnBoard(42L, BOARD);
+
+    // When / Then
+    KanbanPrincipal principal = bound();
+    assertThatThrownBy(() -> service.listComments(principal, 42L))
         .isInstanceOf(CardNotFoundException.class);
   }
 

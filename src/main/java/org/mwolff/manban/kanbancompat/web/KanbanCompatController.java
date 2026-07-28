@@ -9,6 +9,7 @@ import java.util.Map;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.accesstoken.application.KanbanPrincipal;
 import org.mwolff.manban.kanbancompat.application.KanbanCompatService;
+import org.mwolff.manban.kanbancompat.application.KanbanCompatService.Comment;
 import org.mwolff.manban.kanbancompat.application.KanbanCompatService.Created;
 import org.mwolff.manban.kanbancompat.application.KanbanCompatService.Epic;
 import org.mwolff.manban.kanbancompat.application.KanbanCompatService.Item;
@@ -72,6 +73,11 @@ class KanbanCompatController {
       @PathVariable long id,
       @Valid @RequestBody CommentRequest request) {
     service.comment(principal(authentication), id, request.body());
+  }
+
+  @GetMapping("/items/{id}/comments")
+  List<Comment> comments(@Nullable Authentication authentication, @PathVariable long id) {
+    return service.listComments(principal(authentication), id);
   }
 
   @GetMapping("/epics")

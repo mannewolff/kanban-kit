@@ -1,5 +1,6 @@
 package org.mwolff.manban.kanbancompat.application;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -142,6 +143,24 @@ public class KanbanCompatService {
     commentService.create(principal.userId(), cardId, body);
   }
 
+  /**
+   * Kommentare eines Items des gebundenen Boards in chronologischer Reihenfolge (#448).
+   *
+   * <p>Gegenstück zu {@link #comment}: Ohne diesen Lesepfad waren über die Schnittstelle
+   * geschriebene Kommentare (Abschlussberichte, Review-Befunde) für jedes Werkzeug unsichtbar, das
+   * ausschließlich über kanbancompat liest. Die Zugriffskontrolle läuft wie bei den übrigen
+   * Endpoints über den Board-Guard der card-Fassade und die Mitgliedschaftsprüfung der
+   * Kommentar-Fassade — ein Nichtmitglied bekommt dadurch 404 statt 403.
+   */
+  @Transactional(readOnly = true)
+  public List<Comment> listComments(KanbanPrincipal principal, long cardId) {
+    long boardId = requireBound(principal);
+    cardService.requireOnBoard(cardId, boardId);
+    return commentService.list(principal.userId(), cardId).stream()
+        .map(c -> new Comment(c.authorName(), c.body(), c.createdAt()))
+        .toList();
+  }
+
   /** Epics des gebundenen Boards inkl. Fortschritt. */
   @Transactional(readOnly = true)
   public List<Epic> epics(KanbanPrincipal principal) {
@@ -221,6 +240,9 @@ public class KanbanCompatService {
       int position,
       String type,
       List<String> labels) {}
+
+  /** Kommentar eines Items; {@code author} ist der Anzeigename des Autors zur Schreibzeit. */
+  public record Comment(String author, String body, Instant createdAt) {}
 
   public record Created(long id, int number) {}
 

@@ -225,6 +225,52 @@ class KanbanCompatIT extends AbstractIntegrationTest {
   }
 
   @Test
+  void comments_areReadable_inChronologicalOrder() throws Exception {
+    Cookie session = loginAs("kanban-comments@example.com");
+    long projectId = createProject("kanban-comments@example.com", "Comment-Dogfood");
+    long boardId = createBoard(session, projectId, "Comment-Board");
+    String token = boundToken(session, projectId, boardId);
+    long cardId = createCard(session, boardId, firstColumnId(session, boardId), "Karte");
+
+    // Ohne Kommentare: leeres Array, kein 404 und kein null.
+    mvc.perform(get("/api/kanban/items/" + cardId + "/comments").header("X-Kanban-Token", token))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.length()").value(0));
+
+    kanbanComment(token, cardId, "Erster");
+    kanbanComment(token, cardId, "Zweiter");
+
+    // Beide Kommentare sind lesbar, in Schreibreihenfolge, mit Autor und Zeitstempel.
+    mvc.perform(get("/api/kanban/items/" + cardId + "/comments").header("X-Kanban-Token", token))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.length()").value(2))
+        .andExpect(jsonPath("$[0].body").value("Erster"))
+        .andExpect(jsonPath("$[0].author").value("Person"))
+        .andExpect(jsonPath("$[0].createdAt").exists())
+        .andExpect(jsonPath("$[1].body").value("Zweiter"));
+
+    // Karte eines fremden Projekts (Token-Nutzer ist dort kein Mitglied): policy-konform 404,
+    // damit die Existenz fremder Karten nicht über den Statuscode durchsickert.
+    Cookie stranger = loginAs("kanban-comments-stranger@example.com");
+    long foreignProject = createProject("kanban-comments-stranger@example.com", "Fremdprojekt");
+    long foreignBoard = createBoard(stranger, foreignProject, "Fremdboard");
+    long foreignCard =
+        createCard(stranger, foreignBoard, firstColumnId(stranger, foreignBoard), "FremdeKarte");
+    mvc.perform(
+            get("/api/kanban/items/" + foreignCard + "/comments").header("X-Kanban-Token", token))
+        .andExpect(status().isNotFound());
+  }
+
+  private void kanbanComment(String token, long cardId, String body) throws Exception {
+    mvc.perform(
+            post("/api/kanban/items/" + cardId + "/comments")
+                .header("X-Kanban-Token", token)
+                .contentType("application/json")
+                .content("{\"body\":\"%s\"}".formatted(body)))
+        .andExpect(status().isCreated());
+  }
+
+  @Test
   void ingest_landsInProjectIdeaPool_notOnBoard() throws Exception {
     Cookie session = loginAs("kanban-idea@example.com");
     long projectId = createProject("kanban-idea@example.com", "Idea-Dogfood");
