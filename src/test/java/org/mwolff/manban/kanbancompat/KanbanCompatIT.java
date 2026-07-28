@@ -251,7 +251,10 @@ class KanbanCompatIT extends AbstractIntegrationTest {
         .andExpect(jsonPath("$[1].body").value("Zweiter"));
 
     // Karte eines fremden Projekts (Token-Nutzer ist dort kein Mitglied): policy-konform 404,
-    // damit die Existenz fremder Karten nicht über den Statuscode durchsickert.
+    // damit die Existenz fremder Karten nicht über den Statuscode durchsickert. Bewacht wird hier
+    // die Mitgliedschaftsprüfung der Kommentar-Fassade, nicht der Board-Guard — dieser Fall ist
+    // doppelt geschützt. Der Board-Guard hat mit listComments_isScopedToTheBoundBoard einen eigenen
+    // Test (#469).
     Cookie stranger = loginAs("kanban-comments-stranger@example.com");
     long foreignProject = createProject("kanban-comments-stranger@example.com", "Fremdprojekt");
     long foreignBoard = createBoard(stranger, foreignProject, "Fremdboard");
@@ -259,6 +262,47 @@ class KanbanCompatIT extends AbstractIntegrationTest {
         createCard(stranger, foreignBoard, firstColumnId(stranger, foreignBoard), "FremdeKarte");
     mvc.perform(
             get("/api/kanban/items/" + foreignCard + "/comments").header("X-Kanban-Token", token))
+        .andExpect(status().isNotFound());
+  }
+
+  /**
+   * Der Scope-Fall, der den Board-Guard des Lesepfads wirklich bewacht: gleiches Projekt, anderes
+   * Board. Bei einer Karte aus einem <em>fremden</em> Projekt (siehe {@link
+   * #comments_areReadable_inChronologicalOrder}) greift zusätzlich die Mitgliedschaftsprüfung der
+   * Kommentar-Fassade — ein entfernter {@code requireOnBoard} bliebe dort unbemerkt (#469). Hier
+   * ist der Token-Nutzer Mitglied desselben Projekts, sodass allein die Board-Bindung des Tokens
+   * den Zugriff verhindert.
+   *
+   * <p>Der Schreibpfad ist für denselben Fall bereits durch die Gegenprobe am Ende von {@link
+   * #ideaStoredCardIsInvisibleAndUntouchableForTheAutomation} gepinnt (reguläre Karte auf einem
+   * zweiten Board desselben Projekts, POST → 404) und wird hier nicht dupliziert.
+   */
+  @Test
+  void listComments_isScopedToTheBoundBoard() throws Exception {
+    Cookie session = loginAs("kanban-comment-scope@example.com");
+    long projectId = createProject("kanban-comment-scope@example.com", "Comment-Scope");
+    long board1 = createBoard(session, projectId, "Scope-Board 1");
+    long board2 = createBoard(session, projectId, "Scope-Board 2");
+    String token1 = boundToken(session, projectId, board1);
+
+    // Karte auf board2 mit einem Kommentar über die Cookie-API: ohne Board-Guard würde der Lesepfad
+    // diesen fremden Inhalt herausgeben, nicht bloß eine leere Liste.
+    long foreignCard = createCard(session, board2, firstColumnId(session, board2), "Karte Board 2");
+    mvc.perform(
+            post("/api/cards/" + foreignCard + "/comments")
+                .cookie(session)
+                .contentType("application/json")
+                .content("{\"body\":\"Nur für Board 2\"}"))
+        .andExpect(status().isCreated());
+
+    // Gegenprobe, dass das Token grundsätzlich lesen darf: auf dem eigenen Board liefert es 200.
+    long ownCard = createCard(session, board1, firstColumnId(session, board1), "Karte Board 1");
+    mvc.perform(get("/api/kanban/items/" + ownCard + "/comments").header("X-Kanban-Token", token1))
+        .andExpect(status().isOk());
+
+    // board1-Token darf die Kommentare der board2-Karte nicht lesen (Scope): 404.
+    mvc.perform(
+            get("/api/kanban/items/" + foreignCard + "/comments").header("X-Kanban-Token", token1))
         .andExpect(status().isNotFound());
   }
 
