@@ -185,6 +185,35 @@ describe('IdeaPlanningBoard', () => {
     expect(mCards.list).not.toHaveBeenCalled()
   })
 
+  // #467: Der „Einplanen"-Knopf greift auf das erste Board zu. Ohne den Leer-Guard vor dem Pool
+  // wäre dieser Zugriff bei leerer Board-Liste ein TypeError. Die beiden Fälle pinnen den Guard:
+  // dauerhaft board-loses Projekt und das Zeitfenster, in dem der Pool schon geladen ist.
+  it('rendert bei leerer Board-Liste keinen Pool und keinen Einplanen-Knopf', async () => {
+    setup({ boards: [], ideas: [poolIdea] })
+    renderBoard()
+    await screen.findByText(/kein Board/i)
+
+    expect(screen.queryByTestId('pool-item-20')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /einplanen/i })).not.toBeInTheDocument()
+  })
+
+  it('zeigt keinen Einplanen-Knopf, solange die Boards noch laden und der Pool schon da ist', async () => {
+    const d = deferred<Board[]>()
+    setup()
+    mBoards.list.mockReturnValue(d.promise)
+    renderBoard()
+
+    // Der Pool ist aufgelöst, boards steht noch auf [] — in diesem Fenster darf es keinen
+    // Bedienpfad geben, der auf das erste Board zugreift.
+    await waitFor(() => expect(mIdeas.list).toHaveBeenCalled())
+    expect(screen.queryByRole('button', { name: /einplanen/i })).not.toBeInTheDocument()
+
+    // Nach dem Laden der Boards erscheint der Knopf und plant auf das erste Board ein.
+    d.resolve(BOARDS)
+    fireEvent.click(await screen.findByRole('button', { name: 'Idee Pool 1 einplanen' }))
+    await waitFor(() => expect(mIdeas.planOntoBoard).toHaveBeenCalledWith(20, 10))
+  })
+
   it('rendert alle Boards untereinander mit ihrer ersten Spalte und den Pool darunter', async () => {
     setup()
     renderBoard()

@@ -223,6 +223,10 @@ export function IdeaPlanningBoard({
     void reorder(d.id, target.columnId, target.positionInColumn)
   }
 
+  // Leer-Guard vor allem Weiteren: solange die Board-Liste leer ist (board-loses Projekt, aber auch
+  // das Zeitfenster, in dem der Pool schon geladen und boardsApi.list noch offen ist), wird nur der
+  // Hinweis gerendert. Nur deshalb darf der „Einplanen"-Knopf weiter unten das erste Board ohne
+  // weitere Prüfung ansprechen (#467).
   if (boards.length === 0) {
     return (
       <Alert severity="info">
@@ -230,6 +234,10 @@ export function IdeaPlanningBoard({
       </Alert>
     )
   }
+
+  // Standard-Zielboard beim Einplanen per Knopf (Drag & Drop wählt sein Ziel selbst). Durch den
+  // Guard oben ist die Liste hier garantiert nicht leer.
+  const [defaultBoard] = boards
 
   // Suchfeld der Seite grenzt nur den Pool nach Titel ein; leeres Feld zeigt alles.
   const query = filter.trim().toLowerCase()
@@ -382,7 +390,7 @@ export function IdeaPlanningBoard({
                     size="small"
                     startIcon={<NorthOutlinedIcon />}
                     aria-label={`Idee ${idea.title} einplanen`}
-                    onClick={() => void plan(idea.id, boards[0].id)}
+                    onClick={() => void plan(idea.id, defaultBoard.id)}
                   >
                     Einplanen
                   </Button>
