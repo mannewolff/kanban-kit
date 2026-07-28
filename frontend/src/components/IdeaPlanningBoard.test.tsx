@@ -407,6 +407,27 @@ describe('IdeaPlanningBoard', () => {
     expect(screen.getByText('Keine Ideen im Pool.')).toBeInTheDocument()
   })
 
+  it('zeigt bei gefülltem Pool die Ideen und keine der beiden Leermeldungen', async () => {
+    setup()
+    renderBoard()
+
+    expect(await screen.findByText('Pool 1')).toBeInTheDocument()
+    expect(screen.queryByText('Keine Ideen im Pool.')).not.toBeInTheDocument()
+    expect(screen.queryByText('Keine Idee passt zur Suche.')).not.toBeInTheDocument()
+  })
+
+  it('meldet bei leerem Pool trotz gesetzter Suche den leeren Pool, nicht den Such-Leerzustand', async () => {
+    setup({ ideas: [] })
+    render(
+      <MemoryRouter>
+        <IdeaPlanningBoard projectId={5} canEdit filter="zzz" />
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByText('Keine Ideen im Pool.')).toBeInTheDocument()
+    expect(screen.queryByText('Keine Idee passt zur Suche.')).not.toBeInTheDocument()
+  })
+
   it('springt per „Board öffnen" in die Listenansicht des jeweiligen Boards', async () => {
     setup()
     renderBoard()

@@ -26,6 +26,17 @@ function firstColumnOf(board: Board): number | null {
 }
 
 /**
+ * Leermeldung des Ideen-Pools, oder `null`, wenn stattdessen die Liste zu rendern ist. Die
+ * Reihenfolge ist bewusst: der leere Pool schlägt den Filter-Treffer, sonst stünde bei leerem Pool
+ * und gesetzter Suche die irreführende Meldung „Keine Idee passt zur Suche." (#474).
+ */
+function poolEmptyMessage(poolSize: number, visibleSize: number): string | null {
+  if (poolSize === 0) return 'Keine Ideen im Pool.'
+  if (visibleSize === 0) return 'Keine Idee passt zur Suche.'
+  return null
+}
+
+/**
  * Quelle eines laufenden Drags: aus dem projektweiten Ideen-Pool oder aus einem konkreten Board
  * (dann trägt der Drag die Herkunfts-Board-ID mit, um Quelle und Ziel unterscheiden zu können).
  */
@@ -242,6 +253,7 @@ export function IdeaPlanningBoard({
   // Suchfeld der Seite grenzt nur den Pool nach Titel ein; leeres Feld zeigt alles.
   const query = filter.trim().toLowerCase()
   const visiblePool = query ? pool.filter((idea) => idea.title.toLowerCase().includes(query)) : pool
+  const emptyPoolMessage = poolEmptyMessage(pool.length, visiblePool.length)
 
   return (
     <Box>
@@ -339,13 +351,9 @@ export function IdeaPlanningBoard({
         >
           Ideen-Pool
         </Typography>
-        {pool.length === 0 ? (
+        {emptyPoolMessage !== null ? (
           <Typography variant="body2" color="text.secondary" sx={{ py: 1 }}>
-            Keine Ideen im Pool.
-          </Typography>
-        ) : visiblePool.length === 0 ? (
-          <Typography variant="body2" color="text.secondary" sx={{ py: 1 }}>
-            Keine Idee passt zur Suche.
+            {emptyPoolMessage}
           </Typography>
         ) : (
           <Stack spacing={0.75}>
