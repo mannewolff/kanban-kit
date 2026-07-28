@@ -14,6 +14,9 @@ import org.springframework.stereotype.Component;
 @Component
 class JdbcCardLabelRepository implements CardLabelRepository {
 
+  /** Name des benannten SQL-Parameters für die Karten-ID (Sonar java:S1192). */
+  private static final String P_CARD_ID = "cardId";
+
   private final NamedParameterJdbcTemplate jdbc;
 
   JdbcCardLabelRepository(NamedParameterJdbcTemplate jdbc) {
@@ -22,11 +25,11 @@ class JdbcCardLabelRepository implements CardLabelRepository {
 
   @Override
   public void replaceLabels(long cardId, List<Long> labelIds) {
-    jdbc.update("DELETE FROM card_label WHERE card_id = :cardId", Map.of("cardId", cardId));
+    jdbc.update("DELETE FROM card_label WHERE card_id = :cardId", Map.of(P_CARD_ID, cardId));
     for (Long labelId : labelIds) {
       jdbc.update(
           "INSERT INTO card_label (card_id, label_id) VALUES (:cardId, :labelId)",
-          Map.of("cardId", cardId, "labelId", labelId));
+          Map.of(P_CARD_ID, cardId, "labelId", labelId));
     }
   }
 
@@ -34,7 +37,7 @@ class JdbcCardLabelRepository implements CardLabelRepository {
   public List<Long> findByCardId(long cardId) {
     return jdbc.queryForList(
         "SELECT label_id FROM card_label WHERE card_id = :cardId ORDER BY label_id",
-        Map.of("cardId", cardId),
+        Map.of(P_CARD_ID, cardId),
         Long.class);
   }
 
