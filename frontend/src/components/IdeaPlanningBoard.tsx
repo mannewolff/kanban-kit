@@ -216,7 +216,7 @@ export function IdeaPlanningBoard({
   // Pool→Board-Drop verarbeitet dann die Zonen-Ebene (handleBoardDrop).
   const handleBoardRowDrop = (boardId: number, target: Card) => (e: React.DragEvent) => {
     const d = dragged
-    if (d === null || d.source !== 'board' || d.boardId !== boardId || d.id === target.id) return
+    if (d?.source !== 'board' || d.boardId !== boardId || d.id === target.id) return
     e.preventDefault()
     e.stopPropagation()
     setDragged(null)
