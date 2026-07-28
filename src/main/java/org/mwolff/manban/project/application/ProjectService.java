@@ -20,6 +20,10 @@ import org.springframework.transaction.annotation.Transactional;
  * ADMIN); beim Anlegen bestimmt der Admin den Owner per E-Mail. Umbenennen läuft über den {@link
  * PermissionChecker} (PROJECT_EDIT, i. d. R. Owner). Owner-Isolation beim Lesen über die
  * Mitgliedschaft: Nichtmitglieder bekommen 404.
+ *
+ * <p><strong>Jede</strong> öffentliche Methode dieser Fassade autorisiert selbst. Ein
+ * rechteprüfungsfreier Schreibweg gehört nicht hierher, sondern auf einen eigenen, im Typnamen
+ * kenntlichen Port — siehe {@link NextCardNumberWriter} (Issue #463).
  */
 @Service
 public class ProjectService {
@@ -136,17 +140,6 @@ public class ProjectService {
   public void delete(long adminUserId, long projectId) {
     requirePlatformAdmin(adminUserId);
     projects.deleteById(projectId);
-  }
-
-  /**
-   * Setzt {@code project.next_card_number}. Fassade für das card-Modul, dem die Kartennummerierung
-   * fachlich gehört: Der Rechte- und Plausibilitätscheck liegt beim Aufrufer ({@code
-   * ProjectStartNumberService}, PROJECT_EDIT plus Prüfung gegen die höchste vergebene Nummer) —
-   * diese Methode kapselt allein den Schreibzugriff auf das Projekt-Aggregat.
-   */
-  @Transactional
-  public void setNextCardNumber(long projectId, int value) {
-    projects.setNextCardNumber(projectId, value);
   }
 
   /** Stellt sicher, dass der Aufrufer System-Admin ist (sonst 403). */

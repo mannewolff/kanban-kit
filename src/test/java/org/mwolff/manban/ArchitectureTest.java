@@ -204,6 +204,37 @@ class ArchitectureTest {
               "project.domain ist modulintern (Zugriff nur ueber die project.application-Fassade; "
                   + "Ausnahme: Permission als Vokabular der Fassade)");
 
+  // --- Aufrufer-Whitelist der rechtepruefungsfreien Schreib-Ports (Issue #463) -----------------
+  // UserDisplayNameWriter und NextCardNumberWriter pruefen bewusst keine Rechte; die Autorisierung
+  // liegt beim Aufrufer. Diese Zusicherung stand bisher nur im Javadoc — jedes weitere Modul, das
+  // einen der Ports injiziert, umgeht damit stillschweigend die vorgelagerte Rechtepruefung.
+  // Deshalb ist der Aufruferkreis hier maschinell auf genau ein autorisierendes Modul begrenzt
+  // (plus das anbietende Modul selbst, in dem Port und Implementierung liegen). Ein neuer Aufrufer
+  // ist kein Versehen mehr, sondern eine bewusste Aenderung dieser Regel.
+  static final ArchRule USER_DISPLAY_NAME_WRITER_HAT_AUFRUFER_WHITELIST =
+      noClasses()
+          .that()
+          .resideOutsideOfPackages(
+              "org.mwolff.manban.auth.application..", "org.mwolff.manban.project.application..")
+          .should()
+          .dependOnClassesThat()
+          .haveNameMatching("org\\.mwolff\\.manban\\.auth\\.application\\.UserDisplayNameWriter")
+          .as(
+              "UserDisplayNameWriter prueft keine Rechte: Aufrufer nur project.application "
+                  + "(MembershipService, MEMBER_REMOVE)");
+
+  static final ArchRule NEXT_CARD_NUMBER_WRITER_HAT_AUFRUFER_WHITELIST =
+      noClasses()
+          .that()
+          .resideOutsideOfPackages(
+              "org.mwolff.manban.project.application..", "org.mwolff.manban.card.application..")
+          .should()
+          .dependOnClassesThat()
+          .haveNameMatching("org\\.mwolff\\.manban\\.project\\.application\\.NextCardNumberWriter")
+          .as(
+              "NextCardNumberWriter prueft keine Rechte: Aufrufer nur card.application "
+                  + "(ProjectStartNumberService, PROJECT_EDIT)");
+
   // --- §6.1: Schichtzugriff (hexagonal, domain innerste Schicht) ------------------------------
   // consideringOnlyDependenciesInLayers() macht die Regel robust gegenueber Modulen, die nicht
   // alle vier Schichten besitzen (z. B. kanbancompat ohne domain/infrastructure): Abhaengigkeiten
@@ -332,6 +363,16 @@ class ArchitectureTest {
   @Test
   void projectDomainIstModulintern() {
     PROJECT_DOMAIN_IST_MODULINTERN.check(PRODUKTIONSKLASSEN);
+  }
+
+  @Test
+  void userDisplayNameWriterHatAufruferWhitelist() {
+    USER_DISPLAY_NAME_WRITER_HAT_AUFRUFER_WHITELIST.check(PRODUKTIONSKLASSEN);
+  }
+
+  @Test
+  void nextCardNumberWriterHatAufruferWhitelist() {
+    NEXT_CARD_NUMBER_WRITER_HAT_AUFRUFER_WHITELIST.check(PRODUKTIONSKLASSEN);
   }
 
   @Test
