@@ -28,7 +28,7 @@ class CommentRepositoryAdapter implements CommentRepository {
 
   @Override
   public List<Comment> findByCardId(long cardId) {
-    return jpa.findByCardIdOrderByCreatedAt(cardId).stream()
+    return jpa.findByCardIdOrderByCreatedAtAscIdAsc(cardId).stream()
         .map(CommentRepositoryAdapter::toDomain)
         .toList();
   }

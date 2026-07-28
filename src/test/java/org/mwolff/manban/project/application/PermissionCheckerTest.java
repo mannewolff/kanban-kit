@@ -99,34 +99,34 @@ class PermissionCheckerTest {
   }
 
   @Test
-  void isMember_returnsTrue_forMember() {
+  void isRealProjectMember_returnsTrue_forMember() {
     // Given
     when(memberships.findByProjectIdAndUserId(7L, 2L))
         .thenReturn(Optional.of(membership(7L, 2L, ProjectRole.VIEWER)));
 
     // When / Then
-    assertThat(checker.isMember(2L, 7L)).isTrue();
+    assertThat(checker.isRealProjectMember(2L, 7L)).isTrue();
   }
 
   @Test
-  void isMember_returnsFalse_forNonMember() {
+  void isRealProjectMember_returnsFalse_forNonMember() {
     // Given
     when(memberships.findByProjectIdAndUserId(7L, 2L)).thenReturn(Optional.empty());
 
     // When / Then
-    assertThat(checker.isMember(2L, 7L)).isFalse();
+    assertThat(checker.isRealProjectMember(2L, 7L)).isFalse();
   }
 
   @Test
-  void isMember_returnsFalse_forPlatformAdmin_withoutMembership() {
-    // Given — bewusst ohne Super-User-Bypass: isMember beantwortet die Frage nach der echten
-    // Mitgliedschaft (z. B. „darf diese dritte Person Zuständige einer Karte sein?"), nicht die
-    // nach dem Zugriffsrecht des Aufrufers.
+  void isRealProjectMember_returnsFalse_forPlatformAdmin_withoutMembership() {
+    // Given — bewusst ohne Super-User-Bypass: isRealProjectMember beantwortet die Frage nach der
+    // echten Mitgliedschaft (z. B. „darf diese dritte Person Zuständige einer Karte sein?"), nicht
+    // die nach dem Zugriffsrecht des Aufrufers.
     when(platformAdminChecker.isPlatformAdmin(1L)).thenReturn(true);
     when(memberships.findByProjectIdAndUserId(7L, 1L)).thenReturn(Optional.empty());
 
     // When / Then
-    assertThat(checker.isMember(1L, 7L)).isFalse();
+    assertThat(checker.isRealProjectMember(1L, 7L)).isFalse();
   }
 
   @Test

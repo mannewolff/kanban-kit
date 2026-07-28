@@ -174,8 +174,8 @@ class CardServiceTest {
     when(boardService.requireColumn(20L, BOARD)).thenReturn(column(20L, "Backlog", 0));
     when(cards.nextCardNumber(PROJECT)).thenReturn(1);
     when(cards.maxActivePositionInColumn(20L)).thenReturn(-1);
-    when(permissions.isMember(7L, 1L)).thenReturn(true);
-    when(permissions.isMember(8L, 1L)).thenReturn(true);
+    when(permissions.isRealProjectMember(7L, 1L)).thenReturn(true);
+    when(permissions.isRealProjectMember(8L, 1L)).thenReturn(true);
 
     service.create(
         1L, BOARD, 20L, "Titel", null, null, null, false, null, List.of(7L, 8L, 7L), null);
@@ -202,7 +202,7 @@ class CardServiceTest {
     when(boardService.requireColumn(20L, BOARD)).thenReturn(column(20L, "Backlog", 0));
     when(cards.nextCardNumber(PROJECT)).thenReturn(1);
     when(cards.maxActivePositionInColumn(20L)).thenReturn(-1);
-    when(permissions.isMember(9L, 1L)).thenReturn(false);
+    when(permissions.isRealProjectMember(9L, 1L)).thenReturn(false);
 
     assertThatThrownBy(
             () ->
@@ -1505,8 +1505,8 @@ class CardServiceTest {
   void setAssignees_replacesWithDistinctMembers() {
     when(cards.findById(1L))
         .thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
-    when(permissions.isMember(7L, 1L)).thenReturn(true);
-    when(permissions.isMember(8L, 1L)).thenReturn(true);
+    when(permissions.isRealProjectMember(7L, 1L)).thenReturn(true);
+    when(permissions.isRealProjectMember(8L, 1L)).thenReturn(true);
     when(assignees.findByCardId(1L)).thenReturn(List.of(7L, 8L));
 
     CardService.CardView result = service.setAssignees(3L, 1L, List.of(7L, 8L, 7L));
@@ -1522,8 +1522,8 @@ class CardServiceTest {
   void setAssignees_rejectsNonMember() {
     when(cards.findById(1L))
         .thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
-    when(permissions.isMember(7L, 1L)).thenReturn(true);
-    when(permissions.isMember(8L, 1L)).thenReturn(false);
+    when(permissions.isRealProjectMember(7L, 1L)).thenReturn(true);
+    when(permissions.isRealProjectMember(8L, 1L)).thenReturn(false);
 
     assertThatThrownBy(() -> service.setAssignees(3L, 1L, List.of(7L, 8L)))
         .isInstanceOf(InvalidAssigneeException.class);
@@ -2199,7 +2199,7 @@ class CardServiceTest {
   @Test
   void setAssignees_onBoardlessPoolIdea_worksViaProjectRight_andSkipsBoardEvent() {
     when(cards.findById(1L)).thenReturn(Optional.of(poolIdea(1L)));
-    when(permissions.isMember(7L, PROJECT)).thenReturn(true);
+    when(permissions.isRealProjectMember(7L, PROJECT)).thenReturn(true);
 
     service.setAssignees(3L, 1L, List.of(7L));
 

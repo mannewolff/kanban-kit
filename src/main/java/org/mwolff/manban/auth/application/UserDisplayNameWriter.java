@@ -1,5 +1,7 @@
 package org.mwolff.manban.auth.application;
 
+import java.util.Optional;
+
 /**
  * Schreibender Port für den Anzeigenamen eines Benutzers (Issue #460). Damit ändert ein fremdes
  * Modul den globalen Anzeigenamen, ohne die Aggregat-Wurzel {@code auth.domain.AppUser} selbst zu
@@ -26,7 +28,13 @@ public interface UserDisplayNameWriter {
   /**
    * Setzt den Anzeigenamen (getrimmt) und liefert den aktualisierten Benutzer.
    *
-   * @throws UserNotFoundException wenn zur ID kein Benutzer existiert
+   * <p>Ein unbekannter Benutzer ist kein Fehler des Ports, sondern ein leeres Ergebnis (#472): Der
+   * Aufrufer bildet daraus sein eigenes 404-Vokabular ({@code MembershipService} meldet ein
+   * fehlendes <em>Mitglied</em>, nicht einen fehlenden Benutzer) und muss dafür weder eine
+   * auth-eigene Exception kennen noch den Benutzer vorab über {@link UserLookup} ein zweites Mal
+   * nachschlagen.
+   *
+   * @return den aktualisierten Benutzer; leer, wenn zur ID kein Benutzer existiert
    */
-  UserSummary updateDisplayName(long userId, String displayName);
+  Optional<UserSummary> updateDisplayName(long userId, String displayName);
 }

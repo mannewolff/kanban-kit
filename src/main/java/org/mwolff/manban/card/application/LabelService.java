@@ -45,6 +45,12 @@ public class LabelService {
    *
    * <p>Ohne eigene Rechteprüfung: die Karten-IDs stammen beim einzigen Aufrufer aus einer bereits
    * rechtegeprüften Board-Abfrage ({@link CardService#listBoardItems}).
+   *
+   * <p>Auch die Board-Zugehörigkeit der {@code cardIds} wird bewusst nicht geprüft (#472): Die
+   * Namen kommen ausschließlich aus {@code labels.findByBoardId(boardId)}, das Ergebnis ist damit
+   * unabhängig von der Herkunft der IDs auf die Labels <em>dieses</em> Boards begrenzt. Eine
+   * board-fremde ID liefert höchstens eine leere Liste, nie fremde Namen. Wer die Methode für einen
+   * weiteren Aufrufer öffnet, prüft diese Zusicherung erneut.
    */
   @Transactional(readOnly = true)
   public Map<Long, List<String>> namesByCard(long boardId, Collection<Long> cardIds) {

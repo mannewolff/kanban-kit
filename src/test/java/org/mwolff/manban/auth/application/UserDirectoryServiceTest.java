@@ -1,9 +1,9 @@
 package org.mwolff.manban.auth.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -127,20 +127,21 @@ class UserDirectoryServiceTest {
     when(users.save(any(AppUser.class))).thenAnswer(inv -> inv.getArgument(0));
 
     // When
-    UserSummary updated = service.updateDisplayName(7L, "  Neuer Name  ");
+    Optional<UserSummary> updated = service.updateDisplayName(7L, "  Neuer Name  ");
 
     // Then
-    assertThat(updated).isEqualTo(new UserSummary(7L, "ada@x.de", "Neuer Name", true));
+    assertThat(updated).contains(new UserSummary(7L, "ada@x.de", "Neuer Name", true));
   }
 
   @Test
-  void updateDisplayName_throwsUserNotFound_whenUnknown() {
-    // Given
+  void updateDisplayName_returnsEmpty_whenUnknown() {
+    // Given: der Port meldet den unbekannten Benutzer als leeres Optional — der Aufrufer setzt
+    // daraus sein eigenes 404-Vokabular (Issue #472), ohne eine auth-Exception zu kennen.
     when(users.findById(7L)).thenReturn(Optional.empty());
 
     // When / Then
-    assertThatThrownBy(() -> service.updateDisplayName(7L, "X"))
-        .isInstanceOf(UserNotFoundException.class);
+    assertThat(service.updateDisplayName(7L, "X")).isEmpty();
+    verify(users, never()).save(any(AppUser.class));
   }
 
   @Test
@@ -152,6 +153,8 @@ class UserDirectoryServiceTest {
     when(users.findById(7L)).thenReturn(Optional.of(user()));
     when(users.save(any(AppUser.class))).thenAnswer(inv -> inv.getArgument(0));
 
-    assertThat(service.updateDisplayName(7L, "Neuer Name").displayName()).isEqualTo("Neuer Name");
+    assertThat(service.updateDisplayName(7L, "Neuer Name"))
+        .map(UserSummary::displayName)
+        .contains("Neuer Name");
   }
 }

@@ -214,6 +214,9 @@ public class BoardService {
   @Transactional(readOnly = true)
   public ColumnView requireColumn(long columnId, long boardId) {
     BoardColumn column = loadColumn(columnId);
+    // column.boardId() ist ein Long, boardId ein long: Java entpackt hier und vergleicht die
+    // Zahlenwerte. Wird der Parameter je zu Long, vergleicht dieselbe Zeile stillschweigend
+    // Referenzen und liefert oberhalb des Long-Caches falsche Ergebnisse.
     if (column.boardId() != boardId) {
       throw new ColumnNotFoundException();
     }

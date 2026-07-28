@@ -220,10 +220,13 @@ public class MembershipService {
         memberships
             .findByProjectIdAndUserId(projectId, targetUserId)
             .orElseThrow(MemberNotFoundException::new);
-    // Erst nachschlagen: Ein unbekannter Benutzer ist hier ein fehlendes Mitglied (404), nicht die
-    // auth-eigene UserNotFoundException des Schreib-Ports.
-    UserSummary user = users.findById(targetUserId).orElseThrow(MemberNotFoundException::new);
-    UserSummary saved = displayNames.updateDisplayName(user.id(), displayName);
+    // Ein unbekannter Benutzer ist hier ein fehlendes Mitglied (404). Das leere Optional des
+    // Schreib-Ports liefert diese Unterscheidung ohne zweiten Lookup (#472) — vorher schlug erst
+    // dieser Aufrufer und dann der Port denselben Benutzer nach.
+    UserSummary saved =
+        displayNames
+            .updateDisplayName(targetUserId, displayName)
+            .orElseThrow(MemberNotFoundException::new);
     return new MemberView(saved.id(), saved.email(), saved.displayName(), target.role());
   }
 

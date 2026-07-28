@@ -11,6 +11,10 @@ public interface CommentRepository {
 
   Optional<Comment> findById(long id);
 
+  /**
+   * Kommentare der Karte in chronologischer Reihenfolge; bei identischem Erstellzeitpunkt
+   * entscheidet die ID (#472), damit die Reihenfolge auch dann festliegt.
+   */
   List<Comment> findByCardId(long cardId);
 
   void deleteById(long id);

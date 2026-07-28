@@ -11,13 +11,18 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * <p>Beide Ports sind bewusst rechteprüfungsfrei (siehe {@link UserDisplayNameWriter}); die
  * Autorisierung liegt beim aufrufenden Modul.
+ *
+ * <p>Die Klasse selbst ist paketprivat (#472): Sie vereint als einzige beide Ports und wäre als
+ * öffentlicher Typ von außen injizierbar — womit die Lese-/Schreib-Trennung, die der Zweck des
+ * Umbaus ist, mit einer einzigen Feld-Deklaration umgangen wäre. Fremde Module injizieren {@link
+ * UserLookup} oder {@link UserDisplayNameWriter}, nie beides in einem Typ.
  */
 @Service
-public class UserDirectoryService implements UserLookup, UserDisplayNameWriter {
+class UserDirectoryService implements UserLookup, UserDisplayNameWriter {
 
   private final AppUserRepository users;
 
-  public UserDirectoryService(AppUserRepository users) {
+  UserDirectoryService(AppUserRepository users) {
     this.users = users;
   }
 
@@ -35,9 +40,10 @@ public class UserDirectoryService implements UserLookup, UserDisplayNameWriter {
 
   @Override
   @Transactional
-  public UserSummary updateDisplayName(long userId, String displayName) {
-    AppUser user = users.findById(userId).orElseThrow(UserNotFoundException::new);
-    return toSummary(users.save(user.withDisplayName(displayName.trim())));
+  public Optional<UserSummary> updateDisplayName(long userId, String displayName) {
+    return users
+        .findById(userId)
+        .map(user -> toSummary(users.save(user.withDisplayName(displayName.trim()))));
   }
 
   private static UserSummary toSummary(AppUser user) {

@@ -538,9 +538,8 @@ class MembershipServiceTest {
     // Given: das Trimmen liegt seit Issue #460 im auth-Port — hier wird der Rohwert durchgereicht.
     when(memberships.findByProjectIdAndUserId(9L, 2L))
         .thenReturn(Optional.of(membership(2L, ProjectRole.MEMBER)));
-    when(users.findById(2L)).thenReturn(Optional.of(user(2, "guest@x.de")));
     when(displayNames.updateDisplayName(2L, "  Neuer Name  "))
-        .thenReturn(new UserSummary(2L, "guest@x.de", "Neuer Name", true));
+        .thenReturn(Optional.of(new UserSummary(2L, "guest@x.de", "Neuer Name", true)));
 
     // When
     MembershipService.MemberView view =
@@ -553,6 +552,9 @@ class MembershipServiceTest {
     assertThat(view.role()).isEqualTo(ProjectRole.MEMBER);
     verify(permissions).require(1L, 9L, Permission.MEMBER_REMOVE);
     verify(displayNames).updateDisplayName(2L, "  Neuer Name  ");
+    // Der Schreib-Port schlägt den Benutzer selbst nach; ein zweiter Lookup hier wäre ein
+    // zusätzliches Select ohne Erkenntnisgewinn (#472).
+    verify(users, never()).findById(anyLong());
   }
 
   @Test
@@ -577,12 +579,13 @@ class MembershipServiceTest {
 
   @Test
   void changeMemberDisplayName_throwsMemberNotFound_whenUserMissing() {
+    // Der Schreib-Port meldet den unbekannten Benutzer als leeres Optional; nach außen bleibt es
+    // ein fehlendes Mitglied (404) — kein auth-Vokabular im project-Modul (#472).
     when(memberships.findByProjectIdAndUserId(9L, 2L))
         .thenReturn(Optional.of(membership(2L, ProjectRole.MEMBER)));
-    when(users.findById(2L)).thenReturn(Optional.empty());
+    when(displayNames.updateDisplayName(2L, "X")).thenReturn(Optional.empty());
 
     assertThatThrownBy(() -> service.changeMemberDisplayName(1L, 9L, 2L, "X"))
         .isInstanceOf(MemberNotFoundException.class);
-    verify(displayNames, never()).updateDisplayName(anyLong(), anyString());
   }
 }

@@ -474,7 +474,7 @@ public class CardService {
   private void assignValidatedAssignees(long cardId, long projectId, List<Long> assigneeIds) {
     List<Long> distinct = assigneeIds.stream().distinct().toList();
     for (Long assignee : distinct) {
-      if (!permissions.isMember(assignee, projectId)) {
+      if (!permissions.isRealProjectMember(assignee, projectId)) {
         throw new InvalidAssigneeException("Kein Projektmitglied: " + assignee);
       }
     }
@@ -1022,7 +1022,7 @@ public class CardService {
    * card.domain} nach außen zu geben.
    */
   public record BoardItemView(
-      Long id,
+      long id,
       int number,
       String title,
       @Nullable String description,

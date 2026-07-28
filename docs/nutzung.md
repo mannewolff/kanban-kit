@@ -35,7 +35,7 @@
   weit) — auch per Tastatur bedienbar. In der ersten bzw. letzten Spalte fehlt der jeweils sinnlose
   Eintrag.
 - **⋮-Menü:** „Duplizieren", „Archivieren", „In den Ideen-Pool" (legt die Karte in den
-  [Ideen-Pool](#ideen-pool)), — mit Board-Recht — „Auf anderes Board verschieben…" sowie „Nach
+  [Ideen-Pool](#ideen-pool)) — mit Board-Recht — „Auf anderes Board verschieben…" sowie „Nach
   links/rechts verschieben". Der Eintrag **„Bearbeiten"** (öffnet das Detail im Bearbeiten-Modus)
   erscheint nur bei aktivem [Editiermodus](#editiermodus); der Button „Bearbeiten" im Karten-Detail
   steht dagegen immer zur Verfügung, sofern du Bearbeitungsrecht hast. Bei **archivierten** Karten

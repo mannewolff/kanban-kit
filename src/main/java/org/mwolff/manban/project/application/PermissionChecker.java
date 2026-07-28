@@ -65,7 +65,7 @@ public class PermissionChecker {
    * Zugriff des Aufrufers — dafür {@link #requireMembership}, das den Super-User passieren lässt.
    */
   @Transactional(readOnly = true)
-  public boolean isMember(long userId, long projectId) {
+  public boolean isRealProjectMember(long userId, long projectId) {
     return memberships.findByProjectIdAndUserId(projectId, userId).isPresent();
   }
 

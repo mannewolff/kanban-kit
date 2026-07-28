@@ -110,6 +110,12 @@ public class KanbanCompatService {
    * werden hier aber ignoriert. Zurückgegeben werden {@code id} und die sofort vergebene
    * projektweite {@code number} der neuen Pool-Idee (#402), damit CLI/Adapter direkt {@code #N}
    * zeigen können.
+   *
+   * <p>Die zurückgegebene {@code id} taugt bewusst <em>nicht</em> als Kommentar-Ziel (#472): Eine
+   * board-lose Pool-Idee liegt auf keinem Board, {@code GET/POST /items/{id}/comments} verlangt
+   * aber genau das und antwortet für sie mit 404. Erst das Einplanen auf ein Board macht die Karte
+   * kommentierbar. Für Aufrufer ist das folgenlos, weil die IDs dort aus {@link #items} stammen —
+   * und die Liste enthält nur eingeplante Karten.
    */
   @Transactional
   public Created create(

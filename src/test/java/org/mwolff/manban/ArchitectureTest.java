@@ -56,6 +56,16 @@ class ArchitectureTest {
    * Aufrufer-Whitelists (siehe {@link #USER_DISPLAY_NAME_WRITER_HAT_AUFRUFER_WHITELIST}) bleiben
    * davon unberührt: diese Regel sagt <em>was</em> Vertrag ist, jene <em>wer</em> ihn nutzen darf.
    *
+   * <p><strong>Bewusste Ausnahme vom Grundsatz „kein Fachmodul kennt Interna eines fremden Moduls":
+   * das Exception-Vokabular.</strong> Fremde Module werfen und fangen die 404-Exceptions der
+   * Fassade, die sie aufrufen — {@code card} wirft {@code board.application
+   * .BoardNotFoundException}, {@code card.web.CardController} fängt {@code ColumnNotFoundException}
+   * (#472). Das ist kein Leck, sondern die Kehrseite davon, dass diese Exceptions per
+   * {@code @ResponseStatus} den HTTP-Status tragen: Modul-eigene Duplikate müssten denselben Status
+   * tragen und an jeder Modulgrenze ineinander übersetzt werden — mehr Code, gleiche Kopplung. Die
+   * Regel deckt das ab, indem die Exceptions ausdrücklich auf der Whitelist stehen; ein Umbau auf
+   * modul-eigene Exceptions wäre ein eigenes Issue, keine Nebenbei-Änderung.
+   *
    * @param modul einfacher Modulname unterhalb von {@code org.mwolff.manban}
    * @param fassadenHinweis Kurzform der erlaubten Einstiegspunkte für die Fehlermeldung
    * @param erlaubteTypen einfache Klassennamen aus {@code <modul>.application}, die Vertrag sind

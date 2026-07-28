@@ -474,7 +474,9 @@
                         <!-- anonymer PathResourceResolver in SpaWebConfig (SPA-Forwarding, nur via IT). -->
                         <exclude>org/mwolff/manban/config/SpaWebConfig$1.class</exclude>
                         <exclude>org/mwolff/manban/auth/infrastructure/AuthConfig.class</exclude>
-                        <exclude>org/mwolff/manban/auth/infrastructure/security/SecurityConfig.class</exclude>
+                        <!-- config/SecurityConfig steht bewusst NICHT hier: seit dem Umzug aus
+                             auth/infrastructure/security (Issue #438) ist die Klasse vollstaendig
+                             durch Unit-Tests abgedeckt. Der alte Eintrag zeigte ins Leere. -->
                         <exclude>org/mwolff/manban/attachment/infrastructure/ObjectStorageConfig.class</exclude>
 
                         <!-- Reine Web-DTOs/Records ohne Logik (Request/Response/View), eigenständig. -->
