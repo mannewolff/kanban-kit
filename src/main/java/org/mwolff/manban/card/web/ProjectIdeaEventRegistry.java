@@ -60,7 +60,7 @@ public class ProjectIdeaEventRegistry {
   private void trySend(long projectId, SseEmitter emitter, SseEventBuilder event) {
     try {
       emitter.send(event);
-    } catch (IOException | IllegalStateException e) {
+    } catch (IOException | IllegalStateException _) {
       // Verbindung ist tot (Client weg / bereits abgeschlossen) — aufräumen.
       remove(projectId, emitter);
     }
