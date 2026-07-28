@@ -15,6 +15,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -177,6 +178,44 @@ class MembershipInvitationTest {
     verify(memberships).save(captor.capture());
     assertThat(captor.getValue().id()).isEqualTo(5L);
     assertThat(captor.getValue().role()).isEqualTo(ProjectRole.ADMIN);
+  }
+
+  @Test
+  void invite_throwsLastOwner_whenDowngradingSoleOwner() {
+    // Given: der bestehende Mitgliedseintrag ist der EINZIGE OWNER des Projekts. Eine Einladung
+    // mit geringerer Rolle aktualisiert die Rolle — und ist damit ein rollenändernder Pfad wie
+    // changeRole. Ohne Aussperr-Schutz bliebe das Projekt hier ownerlos zurück (Issue #498).
+    when(projects.findById(9L)).thenReturn(Optional.of(new Project(9L, "P", 1L, FIXED)));
+    when(users.findByEmail("bob@x.de"))
+        .thenReturn(Optional.of(new UserSummary(7L, "bob@x.de", "Bob", true)));
+    when(memberships.findByProjectIdAndUserId(9L, 7L))
+        .thenReturn(Optional.of(new ProjectMembership(5L, 9L, 7L, ProjectRole.OWNER, FIXED)));
+    when(memberships.lockOwnerUserIds(9L)).thenReturn(List.of(7L));
+
+    // When / Then
+    assertThatThrownBy(() -> service.invite(1L, 9L, "bob@x.de", ProjectRole.VIEWER))
+        .isInstanceOf(LastOwnerException.class);
+    verify(memberships, never()).save(any(ProjectMembership.class));
+  }
+
+  @Test
+  void invite_keepsSoleOwner_whenInvitedRoleIsOwner() {
+    // Given: derselbe einzige OWNER, aber die Einladung bestätigt die Rolle OWNER — die
+    // Owner-Menge schrumpft nicht, der Aussperr-Schutz darf nicht greifen.
+    when(projects.findById(9L)).thenReturn(Optional.of(new Project(9L, "P", 1L, FIXED)));
+    when(users.findByEmail("bob@x.de"))
+        .thenReturn(Optional.of(new UserSummary(7L, "bob@x.de", "Bob", true)));
+    when(memberships.findByProjectIdAndUserId(9L, 7L))
+        .thenReturn(Optional.of(new ProjectMembership(5L, 9L, 7L, ProjectRole.OWNER, FIXED)));
+    when(memberships.lockOwnerUserIds(9L)).thenReturn(List.of(7L));
+    when(memberships.save(any(ProjectMembership.class))).thenAnswer(inv -> inv.getArgument(0));
+
+    // When
+    InviteOutcome outcome = service.invite(1L, 9L, "bob@x.de", ProjectRole.OWNER);
+
+    // Then
+    assertThat(outcome).isEqualTo(InviteOutcome.ADDED);
+    verify(memberships).save(any(ProjectMembership.class));
   }
 
   @Test

@@ -263,10 +263,10 @@ class MembershipServiceTest {
 
   @Test
   void changeRole_throwsLastOwner_whenDemotingSoleOwner() {
-    // Given
+    // Given: die gesperrte Owner-Menge besteht nur aus dem Ziel selbst.
     when(memberships.findByProjectIdAndUserId(9L, 2L))
         .thenReturn(Optional.of(membership(2L, ProjectRole.OWNER)));
-    when(memberships.findByProjectId(9L)).thenReturn(List.of(membership(2L, ProjectRole.OWNER)));
+    when(memberships.lockOwnerUserIds(9L)).thenReturn(List.of(2L));
 
     // When / Then
     assertThatThrownBy(() -> service.changeRole(1L, 9L, 2L, ProjectRole.MEMBER))
@@ -275,16 +275,10 @@ class MembershipServiceTest {
 
   @Test
   void changeRole_demotesOwner_whenAnotherOwnerRemains() {
-    // Given: mehrere OWNER (neben einem MEMBER) -> Degradierung erlaubt, Filter trifft auch
-    // Nicht-OWNER
+    // Given: mehrere OWNER -> Degradierung erlaubt
     when(memberships.findByProjectIdAndUserId(9L, 2L))
         .thenReturn(Optional.of(membership(2L, ProjectRole.OWNER)));
-    when(memberships.findByProjectId(9L))
-        .thenReturn(
-            List.of(
-                membership(2L, ProjectRole.OWNER),
-                membership(5L, ProjectRole.OWNER),
-                membership(7L, ProjectRole.MEMBER)));
+    when(memberships.lockOwnerUserIds(9L)).thenReturn(List.of(2L, 5L));
     when(memberships.save(any(ProjectMembership.class))).thenAnswer(inv -> inv.getArgument(0));
 
     // When
@@ -301,7 +295,7 @@ class MembershipServiceTest {
     // Given: genau ein OWNER, aber nicht das Ziel -> Ziel ist nicht der letzte OWNER
     when(memberships.findByProjectIdAndUserId(9L, 2L))
         .thenReturn(Optional.of(membership(2L, ProjectRole.OWNER)));
-    when(memberships.findByProjectId(9L)).thenReturn(List.of(membership(5L, ProjectRole.OWNER)));
+    when(memberships.lockOwnerUserIds(9L)).thenReturn(List.of(5L));
     when(memberships.save(any(ProjectMembership.class))).thenAnswer(inv -> inv.getArgument(0));
 
     // When
@@ -317,10 +311,12 @@ class MembershipServiceTest {
   }
 
   @Test
-  void changeRole_keepsOwner_whenNewRoleAlsoOwner() {
-    // Given: OWNER bleibt OWNER -> Aussperr-Schutz greift nicht (zweite Bedingung false)
+  void changeRole_keepsSoleOwner_whenNewRoleAlsoOwner() {
+    // Given: der EINZIGE OWNER bleibt OWNER -> der Aussperr-Schutz darf nicht greifen, denn die
+    // Owner-Menge schrumpft nicht.
     when(memberships.findByProjectIdAndUserId(9L, 2L))
         .thenReturn(Optional.of(membership(2L, ProjectRole.OWNER)));
+    when(memberships.lockOwnerUserIds(9L)).thenReturn(List.of(2L));
     when(memberships.save(any(ProjectMembership.class))).thenAnswer(inv -> inv.getArgument(0));
 
     // When
@@ -333,51 +329,14 @@ class MembershipServiceTest {
   }
 
   @Test
-  void changeRole_appliesLastOwnerGuardOnlyWhenTargetIsOwner() {
-    // Given: das Ziel ist MEMBER (erste Guard-Bedingung false) — selbst wenn die Owner-Liste es
-    // (inkonsistent) als einzigen Owner führte, darf der Aussperr-Schutz NICHT greifen. Sichert,
-    // dass die „target ist OWNER"-Bedingung tatsächlich geprüft wird.
+  void changeRole_trustsLockedOwnerSet_notTheRoleOnTheLoadedMembership() {
+    // Given: die geladene Mitgliedschaft trägt noch MEMBER, die gesperrte Owner-Menge führt den
+    // Benutzer aber als einzigen OWNER — die Lage, wenn eine andere Transaktion ihn soeben
+    // befördert hat. Maßgeblich ist die gesperrte Menge, sonst liefe die Degradierung durch und
+    // das Projekt bliebe ownerlos (Issue #498).
     when(memberships.findByProjectIdAndUserId(9L, 2L))
         .thenReturn(Optional.of(membership(2L, ProjectRole.MEMBER)));
-    when(memberships.findByProjectId(9L)).thenReturn(List.of(membership(2L, ProjectRole.OWNER)));
-    when(memberships.save(any(ProjectMembership.class))).thenAnswer(inv -> inv.getArgument(0));
-
-    // When
-    ArgumentCaptor<ProjectMembership> captor = ArgumentCaptor.forClass(ProjectMembership.class);
-    service.changeRole(1L, 9L, 2L, ProjectRole.MEMBER);
-
-    // Then
-    verify(memberships).save(captor.capture());
-    assertThat(captor.getValue().role()).isEqualTo(ProjectRole.MEMBER);
-  }
-
-  @Test
-  void changeRole_keepsSoleOwner_whenNewRoleAlsoOwner() {
-    // Given: einziger OWNER bleibt OWNER -> zweite Guard-Bedingung (neue Rolle != OWNER) ist
-    // false; der Aussperr-Schutz darf trotz „letzter Owner" nicht greifen.
-    when(memberships.findByProjectIdAndUserId(9L, 2L))
-        .thenReturn(Optional.of(membership(2L, ProjectRole.OWNER)));
-    when(memberships.findByProjectId(9L)).thenReturn(List.of(membership(2L, ProjectRole.OWNER)));
-    when(memberships.save(any(ProjectMembership.class))).thenAnswer(inv -> inv.getArgument(0));
-
-    // When
-    ArgumentCaptor<ProjectMembership> captor = ArgumentCaptor.forClass(ProjectMembership.class);
-    service.changeRole(1L, 9L, 2L, ProjectRole.OWNER);
-
-    // Then
-    verify(memberships).save(captor.capture());
-    assertThat(captor.getValue().role()).isEqualTo(ProjectRole.OWNER);
-  }
-
-  @Test
-  void changeRole_throwsLastOwner_whenSoleOwnerAmongOtherMembers() {
-    // Given: genau EIN OWNER neben Nicht-OWNER-Mitgliedern. isLastOwner darf nur OWNER zählen —
-    // würden alle Mitglieder gezählt (Mutant am Filter-Prädikat), wäre size != 1 und die
-    // Degradierung liefe fälschlich durch.
-    when(memberships.findByProjectIdAndUserId(9L, 2L))
-        .thenReturn(Optional.of(membership(2L, ProjectRole.OWNER)));
-    when(memberships.findByProjectId(9L))
-        .thenReturn(List.of(membership(2L, ProjectRole.OWNER), membership(5L, ProjectRole.MEMBER)));
+    when(memberships.lockOwnerUserIds(9L)).thenReturn(List.of(2L));
 
     // When / Then
     assertThatThrownBy(() -> service.changeRole(1L, 9L, 2L, ProjectRole.MEMBER))
@@ -402,8 +361,7 @@ class MembershipServiceTest {
     // Given: OWNER, aber nicht der letzte -> Entfernen erlaubt
     when(memberships.findByProjectIdAndUserId(9L, 2L))
         .thenReturn(Optional.of(membership(2L, ProjectRole.OWNER)));
-    when(memberships.findByProjectId(9L))
-        .thenReturn(List.of(membership(2L, ProjectRole.OWNER), membership(5L, ProjectRole.OWNER)));
+    when(memberships.lockOwnerUserIds(9L)).thenReturn(List.of(2L, 5L));
 
     // When
     service.removeMember(1L, 9L, 2L);
@@ -413,12 +371,11 @@ class MembershipServiceTest {
   }
 
   @Test
-  void removeMember_appliesLastOwnerGuardOnlyWhenTargetIsOwner() {
-    // Given: das Ziel ist MEMBER (erste Guard-Bedingung false) — der Aussperr-Schutz darf nicht
-    // greifen, selbst wenn die Owner-Liste es (inkonsistent) als einzigen Owner führte.
+  void removeMember_removesMember_whenSoleOwnerIsSomeoneElse() {
+    // Given: es gibt genau einen OWNER, aber das ist nicht das Ziel -> Entfernen erlaubt.
     when(memberships.findByProjectIdAndUserId(9L, 2L))
         .thenReturn(Optional.of(membership(2L, ProjectRole.MEMBER)));
-    when(memberships.findByProjectId(9L)).thenReturn(List.of(membership(2L, ProjectRole.OWNER)));
+    when(memberships.lockOwnerUserIds(9L)).thenReturn(List.of(5L));
 
     // When
     service.removeMember(1L, 9L, 2L);
@@ -442,7 +399,7 @@ class MembershipServiceTest {
     // Given
     when(memberships.findByProjectIdAndUserId(9L, 2L))
         .thenReturn(Optional.of(membership(2L, ProjectRole.OWNER)));
-    when(memberships.findByProjectId(9L)).thenReturn(List.of(membership(2L, ProjectRole.OWNER)));
+    when(memberships.lockOwnerUserIds(9L)).thenReturn(List.of(2L));
 
     // When / Then
     assertThatThrownBy(() -> service.removeMember(1L, 9L, 2L))
@@ -451,11 +408,13 @@ class MembershipServiceTest {
 
   @Test
   void transferOwnership_makesTargetOwnerAndDemotesCaller() {
-    // Given
+    // Given: der Aufrufer ist der EINZIGE Owner. Der Transfer ist trotzdem zulässig, weil er
+    // bestandserhaltend ist — das Ziel wird Owner, während der Aufrufer es aufgibt (Issue #498).
     when(memberships.findByProjectIdAndUserId(9L, 2L))
         .thenReturn(Optional.of(membership(2L, ProjectRole.MEMBER)));
     when(memberships.findByProjectIdAndUserId(9L, 1L))
         .thenReturn(Optional.of(membership(1L, ProjectRole.OWNER)));
+    when(memberships.lockOwnerUserIds(9L)).thenReturn(List.of(1L));
 
     // When
     ArgumentCaptor<ProjectMembership> captor = ArgumentCaptor.forClass(ProjectMembership.class);
@@ -483,6 +442,7 @@ class MembershipServiceTest {
         .thenReturn(Optional.of(membership(2L, ProjectRole.MEMBER)));
     when(memberships.findByProjectIdAndUserId(9L, 1L))
         .thenReturn(Optional.of(membership(1L, ProjectRole.OWNER)));
+    when(memberships.lockOwnerUserIds(9L)).thenReturn(List.of(1L));
 
     // When
     service.transferOwnership(1L, 9L, 2L);
@@ -503,9 +463,10 @@ class MembershipServiceTest {
 
   @Test
   void transferOwnership_isNoOp_whenTargetAlreadyOwner() {
-    // Given
+    // Given: das Ziel steht bereits in der gesperrten Owner-Menge.
     when(memberships.findByProjectIdAndUserId(9L, 2L))
         .thenReturn(Optional.of(membership(2L, ProjectRole.OWNER)));
+    when(memberships.lockOwnerUserIds(9L)).thenReturn(List.of(1L, 2L));
 
     // When
     service.transferOwnership(1L, 9L, 2L);
@@ -522,6 +483,7 @@ class MembershipServiceTest {
         .thenReturn(Optional.of(membership(2L, ProjectRole.MEMBER)));
     when(memberships.findByProjectIdAndUserId(9L, 1L))
         .thenReturn(Optional.of(membership(1L, ProjectRole.ADMIN)));
+    when(memberships.lockOwnerUserIds(9L)).thenReturn(List.of(7L));
 
     // When
     ArgumentCaptor<ProjectMembership> captor = ArgumentCaptor.forClass(ProjectMembership.class);

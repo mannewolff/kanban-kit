@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.Optional;
 import org.mwolff.manban.project.application.ProjectMembershipRepository;
 import org.mwolff.manban.project.domain.ProjectMembership;
+import org.mwolff.manban.project.domain.ProjectRole;
 import org.springframework.stereotype.Component;
 
 /** Adapter des {@link ProjectMembershipRepository}-Ports auf Spring Data JPA. */
@@ -44,6 +45,14 @@ class ProjectMembershipRepositoryAdapter implements ProjectMembershipRepository 
   @Override
   public void deleteById(long membershipId) {
     jpa.deleteById(membershipId);
+  }
+
+  @Override
+  public List<Long> lockOwnerUserIds(long projectId) {
+    // Erst sperren, dann lesen: Die zweite Abfrage sieht damit garantiert den Stand, den keine
+    // gleichzeitige Transaktion mehr verändern kann, solange diese hier läuft.
+    jpa.lockIdsByProjectId(projectId);
+    return jpa.findUserIdsByProjectIdAndRole(projectId, ProjectRole.OWNER.name());
   }
 
   private static ProjectMembershipEntity toEntity(ProjectMembership m) {
