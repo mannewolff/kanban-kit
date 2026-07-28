@@ -448,9 +448,18 @@
             </plugin>
 
             <!-- Coverage-Gate (CLAUDE-java.md §5.1): 100 % Line + 100 % Branch auf Bundle-Ebene.
-                 prepare-agent instrumentiert Surefire (Unit-Tests), report an test-Phase,
-                 check an verify-Phase. IT-Coverage (Failsafe) fließt bewusst NICHT in jacoco.exec
-                 ein, daher werden IT-only-Klassen trotz voller IT-Abdeckung ausgeschlossen (§5.2).
+                 prepare-agent setzt die argLine, die Surefire UND Failsafe erben — beide Läufe
+                 schreiben (append=true) in dieselbe jacoco.exec. Das Gate (check, verify-Phase)
+                 liest sie deshalb nach den ITs und sieht auch deren Coverage.
+
+                 report läuft aus genau diesem Grund an post-integration-test, NICHT mehr an test
+                 (Issue #495): An test-Phase gebunden entstand das XML vor den ITs, und jede nur
+                 über einen Spring-Kontext abgedeckte Klasse stand darin mit 0 % — konkret
+                 config/SecurityConfig mit 25 ungedeckten Zeilen. Das Gate war grün (es liest die
+                 exec später), aber SonarCloud, das ausschließlich dieses XML importiert, meldete
+                 dauerhaft 99,8 % statt 100 %. Lokal fiel das nicht auf, weil die exec ohne `clean`
+                 die IT-Daten des Vorlaufs bereits enthielt. Wer report zurück an test bindet,
+                 stellt den Widerspruch wieder her.
 
                  Ausschlüsse stehen klassenweise (keine Paket-Wildcards, §5.2), ausschließlich
                  DAUERHAFT nach §5.2: main-Klasse, Config-/Bean-Wiring, reine DTO-/Record-Typen,
@@ -584,7 +593,9 @@
                     </execution>
                     <execution>
                         <id>jacoco-report</id>
-                        <phase>test</phase>
+                        <!-- Nach den Failsafe-ITs (Phase integration-test), vor dem Gate in
+                             verify — siehe Plugin-Kommentar oben (Issue #495). -->
+                        <phase>post-integration-test</phase>
                         <goals>
                             <goal>report</goal>
                         </goals>

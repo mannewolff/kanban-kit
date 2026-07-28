@@ -131,9 +131,11 @@ Ausgeschlossen werden **ausschließlich**:
 - **Infrastruktur-Adapter, Entities und Spring-Data-Repositories, die nur gegen echte
   Infrastruktur sinnvoll testbar sind** und dort per Testcontainers-`*IT` zu 100 % abgedeckt
   werden (real: die `*Entity`-Klassen, `*JpaRepository`, `*RepositoryAdapter`/`Jdbc*` sowie die
-  Mail-/S3-Adapter `JavaMail*`/`MinioObjectStorage`). Die JaCoCo-Prüfung wertet die Unit-Coverage
-  (surefire) aus; IT-Coverage fließt nicht in `jacoco.exec` ein, daher der Ausschluss trotz voller
-  IT-Abdeckung. **Nicht** ausgeschlossen werden Klassen, die mit gemockten Ports unit-testbar
+  Mail-/S3-Adapter `JavaMail*`/`MinioObjectStorage`). Sie bleiben ausgeschlossen, weil sie ohne
+  echte Infrastruktur nicht sinnvoll prüfbar sind — **nicht**, weil IT-Coverage technisch nicht
+  ankäme: Surefire und Failsafe erben dieselbe JaCoCo-`argLine` und schreiben beide in
+  `jacoco.exec` (die frühere Aussage an dieser Stelle war falsch, siehe Issue #495). **Nicht**
+  ausgeschlossen werden Klassen, die mit gemockten Ports unit-testbar
   sind — Controller, Security-Filter und `Sha256TokenCryptoAdapter` sind deshalb unit-getestet
   und **in** der Coverage.
 - **Krypto-Plumbing mit nachweislich nicht erreichbaren Zweigen** (Checked-Exceptions garantiert
