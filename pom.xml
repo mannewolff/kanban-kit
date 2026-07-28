@@ -548,6 +548,10 @@
                         <exclude>org/mwolff/manban/accesstoken/infrastructure/persistence/AccessTokenRepositoryAdapter.class</exclude>
                         <exclude>org/mwolff/manban/attachment/infrastructure/persistence/AttachmentRepositoryAdapter.class</exclude>
                         <exclude>org/mwolff/manban/auth/infrastructure/persistence/AppUserRepositoryAdapter.class</exclude>
+                        <!-- Gemeinsame Basis der beiden Token-Adapter (atomarer Verbrauch, #497):
+                             wie die erbenden Adapter DB-gebunden und nur via IT pruefbar
+                             (SingleUseTokenConcurrencyIT weist das Verhalten gegen Postgres nach). -->
+                        <exclude>org/mwolff/manban/auth/infrastructure/persistence/AbstractAuthTokenRepositoryAdapter.class</exclude>
                         <exclude>org/mwolff/manban/auth/infrastructure/persistence/EmailVerificationTokenRepositoryAdapter.class</exclude>
                         <exclude>org/mwolff/manban/auth/infrastructure/persistence/PasswordResetTokenRepositoryAdapter.class</exclude>
                         <exclude>org/mwolff/manban/board/infrastructure/persistence/BoardColumnRepositoryAdapter.class</exclude>

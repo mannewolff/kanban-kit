@@ -2,8 +2,10 @@ package org.mwolff.manban.auth.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -15,8 +17,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mwolff.manban.auth.domain.AppUser;
-import org.mwolff.manban.auth.domain.PasswordResetToken;
 import org.mwolff.manban.auth.domain.PlatformRole;
+import org.mwolff.manban.common.SecureTokens;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 /** Verhaltenstests des Passwort-Reset-Einlösens (Mockito an den Ports). */
@@ -28,10 +30,6 @@ class ResetPasswordServiceTest {
   private PasswordResetTokenRepository tokens;
   private PasswordEncoder encoder;
   private ResetPasswordService service;
-
-  private static PasswordResetToken token(Instant expiresAt, Instant usedAt) {
-    return new PasswordResetToken(1L, 2L, "hash", expiresAt, usedAt);
-  }
 
   private static AppUser user() {
     return new AppUser(2L, "a@x.de", "oldHash", "Ada", true, PlatformRole.USER);
@@ -47,27 +45,23 @@ class ResetPasswordServiceTest {
   }
 
   @Test
-  void reset_marksTokenUsedWithInjectedClock() {
+  void reset_consumesTokenByHashWithInjectedClock() {
     // Given
-    when(tokens.findByTokenHash(anyString()))
-        .thenReturn(Optional.of(token(FIXED.plusSeconds(3600), null)));
+    when(tokens.consume(anyString(), any(Instant.class))).thenReturn(Optional.of(2L));
     when(users.findById(2L)).thenReturn(Optional.of(user()));
     when(encoder.encode(anyString())).thenReturn("newHash");
 
     // When
-    ArgumentCaptor<PasswordResetToken> captor = ArgumentCaptor.forClass(PasswordResetToken.class);
     service.reset("plaintext", "newPw");
 
-    // Then
-    verify(tokens).save(captor.capture());
-    assertThat(captor.getValue().usedAt()).isEqualTo(FIXED);
+    // Then: der Verbrauch läuft über den Hash und die injizierte Uhr.
+    verify(tokens).consume(SecureTokens.sha256Hex("plaintext"), FIXED);
   }
 
   @Test
   void reset_persistsNewPasswordHash() {
     // Given
-    when(tokens.findByTokenHash(anyString()))
-        .thenReturn(Optional.of(token(FIXED.plusSeconds(3600), null)));
+    when(tokens.consume(anyString(), any(Instant.class))).thenReturn(Optional.of(2L));
     when(users.findById(2L)).thenReturn(Optional.of(user()));
     when(encoder.encode("newPw")).thenReturn("newHash");
 
@@ -81,9 +75,9 @@ class ResetPasswordServiceTest {
   }
 
   @Test
-  void reset_throwsInvalidToken_whenTokenUnknown() {
-    // Given
-    when(tokens.findByTokenHash(anyString())).thenReturn(Optional.empty());
+  void reset_throwsInvalidToken_whenTokenNotConsumable() {
+    // Given: unbekannt, abgelaufen oder bereits verbraucht — für den Aufrufer ununterscheidbar.
+    when(tokens.consume(anyString(), any(Instant.class))).thenReturn(Optional.empty());
 
     // When / Then
     assertThatThrownBy(() -> service.reset("plaintext", "newPw"))
@@ -91,37 +85,25 @@ class ResetPasswordServiceTest {
   }
 
   @Test
-  void reset_throwsInvalidToken_whenTokenAlreadyUsed() {
-    // Given: gültiger Nutzer + Encoder gestubbt, damit ein Umgehen des Used-Guards
-    // (Mutant) sichtbar in einen Erfolg (kein Wurf) umschlägt statt weiter unten zu werfen.
-    when(tokens.findByTokenHash(anyString()))
-        .thenReturn(Optional.of(token(FIXED.plusSeconds(3600), FIXED.minusSeconds(10))));
+  void reset_leavesPasswordUnchanged_whenTokenNotConsumable() {
+    // Given: Nutzer und Encoder gestubbt, damit ein Umgehen des Verbrauchs-Guards (Mutant)
+    // sichtbar in einen Passwortwechsel umschlägt statt weiter unten zu werfen.
+    when(tokens.consume(anyString(), any(Instant.class))).thenReturn(Optional.empty());
     when(users.findById(2L)).thenReturn(Optional.of(user()));
     when(encoder.encode(anyString())).thenReturn("newHash");
 
-    // When / Then
+    // When
     assertThatThrownBy(() -> service.reset("plaintext", "newPw"))
         .isInstanceOf(InvalidResetTokenException.class);
-  }
 
-  @Test
-  void reset_throwsInvalidToken_whenTokenExpired() {
-    // Given: gültiger Nutzer + Encoder gestubbt (s. o.).
-    when(tokens.findByTokenHash(anyString()))
-        .thenReturn(Optional.of(token(FIXED.minusSeconds(1), null)));
-    when(users.findById(2L)).thenReturn(Optional.of(user()));
-    when(encoder.encode(anyString())).thenReturn("newHash");
-
-    // When / Then
-    assertThatThrownBy(() -> service.reset("plaintext", "newPw"))
-        .isInstanceOf(InvalidResetTokenException.class);
+    // Then: der Verlierer des Rennens schreibt kein Passwort.
+    verify(users, never()).save(any(AppUser.class));
   }
 
   @Test
   void reset_throwsInvalidToken_whenUserUnknown() {
     // Given
-    when(tokens.findByTokenHash(anyString()))
-        .thenReturn(Optional.of(token(FIXED.plusSeconds(3600), null)));
+    when(tokens.consume(anyString(), any(Instant.class))).thenReturn(Optional.of(2L));
     when(users.findById(2L)).thenReturn(Optional.empty());
 
     // When / Then

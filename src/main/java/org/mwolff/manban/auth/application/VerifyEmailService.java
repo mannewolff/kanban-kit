@@ -3,16 +3,20 @@ package org.mwolff.manban.auth.application;
 import java.time.Clock;
 import java.time.Instant;
 import org.mwolff.manban.auth.domain.AppUser;
-import org.mwolff.manban.auth.domain.EmailVerificationToken;
 import org.mwolff.manban.auth.domain.PlatformRole;
 import org.mwolff.manban.common.SecureTokens;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Löst ein E-Mail-Verifikations-Token ein: prüft Gültigkeit, markiert die E-Mail des Benutzers als
- * bestätigt und verbraucht das Token (einmalig). Wartet der Benutzer danach noch auf Admin-Freigabe
- * (Issue #0097), werden alle Plattform-Admins per Mail benachrichtigt (Issue #0098).
+ * Löst ein E-Mail-Verifikations-Token ein: verbraucht das Token (einmalig) und markiert die E-Mail
+ * des Benutzers als bestätigt. Wartet der Benutzer danach noch auf Admin-Freigabe (Issue #0097),
+ * werden alle Plattform-Admins per Mail benachrichtigt (Issue #0098).
+ *
+ * <p>Der Verbrauch läuft über {@link SingleUseTokenRepository#consume} und damit atomar in der
+ * Datenbank. Verifikation <em>und</em> Admin-Benachrichtigung hängen daran: Bei gleichzeitigem
+ * Einlösen desselben Tokens gewinnt genau ein Aufruf, und die Admins werden genau einmal
+ * benachrichtigt (Issue #497).
  */
 @Service
 public class VerifyEmailService {
@@ -37,20 +41,14 @@ public class VerifyEmailService {
   public void verify(String plaintextToken) {
     Instant now = clock.instant();
 
-    EmailVerificationToken token =
+    Long userId =
         tokens
-            .findByTokenHash(SecureTokens.sha256Hex(plaintextToken))
+            .consume(SecureTokens.sha256Hex(plaintextToken), now)
             .orElseThrow(InvalidVerificationTokenException::new);
 
-    if (token.isUsed() || token.isExpired(now)) {
-      throw new InvalidVerificationTokenException();
-    }
-
-    AppUser user =
-        users.findById(token.userId()).orElseThrow(InvalidVerificationTokenException::new);
+    AppUser user = users.findById(userId).orElseThrow(InvalidVerificationTokenException::new);
 
     AppUser verified = users.save(user.withEmailVerified(true));
-    tokens.save(token.markUsed(now));
 
     if (!verified.approved()) {
       notifyAdminsOfPendingApproval(verified);
