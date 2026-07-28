@@ -839,19 +839,27 @@
                             </features>
 
                             <!-- Scope: gemutiert werden nur die unit-getesteten Klassen —
-                                 Application-Schicht (Services + Werte/Properties) und Domäne.
-                                 Analog zu den JaCoCo-<excludes> (web/infrastructure/config/main). -->
+                                 Application-Schicht (Services + Werte/Properties), Domäne und die
+                                 logiktragenden Composition-Root-Klassen aus config (#465).
+                                 Analog zu den JaCoCo-<excludes> (web/infrastructure/main). -->
                             <targetClasses>
                                 <param>org.mwolff.manban.*.application.*</param>
                                 <param>org.mwolff.manban.*.domain.*</param>
+                                <param>org.mwolff.manban.config.*</param>
                             </targetClasses>
                             <excludedClasses>
                                 <!-- Controller/DTOs (nur via IT abgedeckt). -->
                                 <param>org.mwolff.manban.*.web.*</param>
                                 <!-- Entities/Adapter/JpaRepos/Mail/S3/Security-Filter (nur via IT). -->
                                 <param>org.mwolff.manban.*.infrastructure.*</param>
-                                <!-- Bean-Wiring / Config ohne Fachlogik. -->
-                                <param>org.mwolff.manban.config.*</param>
+                                <!-- Reines Bean-Wiring in config: nur die *Config-Klassen selbst
+                                     (samt inneren/anonymen Typen wie SpaWebConfig$1) bleiben außen
+                                     vor. Klassen mit Verhalten — etwa CardBoardActivityBridge, die
+                                     Events zwischen zwei Modulen übersetzt — sind bewusst NICHT
+                                     ausgenommen, damit Fachlogik im Composition Root nicht am
+                                     Mutationsgate vorbeirutscht (#465). -->
+                                <param>org.mwolff.manban.config.*Config</param>
+                                <param>org.mwolff.manban.config.*Config$*</param>
                                 <!-- Spring-Boot-Application mit reiner main-Methode. -->
                                 <param>org.mwolff.manban.ManbanApplication</param>
                             </excludedClasses>
