@@ -37,6 +37,48 @@ class ArchitectureTest {
           .withImportOption(new ImportOption.DoNotIncludeTests())
           .importPackages("org.mwolff.manban");
 
+  /**
+   * Begrenzt {@code <modul>.application} für Fremdmodule auf die aufgezählte Fassade — alles andere
+   * im Paket ist modulintern.
+   *
+   * <p>Bewusst als Whitelist (default deny) statt als namensbasierte Blacklist auf {@code
+   * *Repository} (Issue #470): Ein Muster wie {@code haveNameMatching("..\\..*Repository")} erfasst
+   * nur Ports, die zufällig so heißen. Eine Umbenennung {@code CardRepository → CardStore} oder ein
+   * neuer Port {@code CardFinder} hätte die Regel <em>stumm</em> deaktiviert — und das Muster „Port
+   * ohne {@code Repository} im Namen" existiert im Projekt bereits ({@code
+   * board.application.ColumnCardCounter}, {@code auth.application.PlatformAdminChecker}).
+   * Invertiert ist jeder neue Typ in {@code application} zunächst modulintern; erst der Eintrag
+   * hier macht ihn zum Vertrag. Der Pflegeaufwand ist der Zweck: eine neue Fassade ist eine
+   * bewusste Entscheidung, kein Nebeneffekt einer Benennung.
+   *
+   * <p>Whitelist-Einträge gelten samt ihrer inneren Klassen ({@code CardService$BoardItemView}),
+   * denn die View-Records einer Fassadenmethode sind Teil ihrer Signatur. Ergänzende
+   * Aufrufer-Whitelists (siehe {@link #USER_DISPLAY_NAME_WRITER_HAT_AUFRUFER_WHITELIST}) bleiben
+   * davon unberührt: diese Regel sagt <em>was</em> Vertrag ist, jene <em>wer</em> ihn nutzen darf.
+   *
+   * @param modul einfacher Modulname unterhalb von {@code org.mwolff.manban}
+   * @param fassadenHinweis Kurzform der erlaubten Einstiegspunkte für die Fehlermeldung
+   * @param erlaubteTypen einfache Klassennamen aus {@code <modul>.application}, die Vertrag sind
+   */
+  private static ArchRule fassadeIstAufWhitelistBegrenzt(
+      String modul, String fassadenHinweis, String... erlaubteTypen) {
+    String paket = "org\\.mwolff\\.manban\\." + modul + "\\.application\\.";
+    // Negative Lookahead im Zielklassen-Prädikat (wie bei PROJECT_DOMAIN_IST_MODULINTERN):
+    // ArchUnit verknüpft should()-Bedingungen je Klasse, nicht je Abhängigkeit.
+    String nichtWhitelist = "(?!(?:" + String.join("|", erlaubteTypen) + ")(?:\\$.*)?$).*";
+    return noClasses()
+        .that()
+        .resideOutsideOfPackage("org.mwolff.manban." + modul + "..")
+        .should()
+        .dependOnClassesThat()
+        .haveNameMatching(paket + nichtWhitelist)
+        .as(
+            modul
+                + ".application ist ausserhalb der Fassade modulintern ("
+                + fassadenHinweis
+                + ")");
+  }
+
   // --- §6.1: Domänenmodell ist framework-frei ------------------------------------------------
 
   static final ArchRule DOMAIN_IST_FRAMEWORK_FREI =
@@ -87,10 +129,11 @@ class ArchitectureTest {
               "auth darf das accesstoken-Modul nicht kennen (Wiring gehoert in die "
                   + "Composition-Root)");
 
-  // --- Modul-Grenze: card-Fassade (Issue #458) ------------------------------------------------
-  // Das Kartenmodell und die Karten-/Label-Ports sind modulintern. Fremde Module gehen ueber die
-  // fachliche card.application-Fassade (CardService/LabelService) — sonst haengt jede fremde
-  // Rechtepruefung am Aggregat und an dessen Persistenz-Ports statt an einem Use-Case.
+  // --- Modul-Grenze: card-Fassade (Issue #458, Whitelist seit #470) ---------------------------
+  // Das Kartenmodell und alles in card.application ausserhalb der Whitelist sind modulintern.
+  // Fremde Module gehen ueber die fachliche Fassade (CardService/LabelService) — sonst haengt jede
+  // fremde Rechtepruefung am Aggregat und an dessen Persistenz-Ports statt an einem Use-Case.
+  // CardBoardActivityEvent ist Vertrag, weil die Composition-Root es in ein Board-Event uebersetzt.
   static final ArchRule CARD_DOMAIN_IST_MODULINTERN =
       noClasses()
           .that()
@@ -100,20 +143,20 @@ class ArchitectureTest {
           .resideInAPackage("org.mwolff.manban.card.domain..")
           .as("card.domain ist modulintern (Zugriff nur ueber die card.application-Fassade)");
 
-  static final ArchRule CARD_REPOSITORIES_SIND_MODULINTERN =
-      noClasses()
-          .that()
-          .resideOutsideOfPackage("org.mwolff.manban.card..")
-          .should()
-          .dependOnClassesThat()
-          .haveNameMatching("org\\.mwolff\\.manban\\.card\\.application\\..*Repository")
-          .as("card-Repository-Ports sind modulintern (nur ueber CardService/LabelService)");
+  static final ArchRule CARD_APPLICATION_IST_AUF_FASSADE_BEGRENZT =
+      fassadeIstAufWhitelistBegrenzt(
+          "card",
+          "nur ueber CardService/LabelService",
+          "CardService",
+          "LabelService",
+          "CardBoardActivityEvent");
 
-  // --- Modul-Grenze: board-Fassade (Issue #459) -----------------------------------------------
+  // --- Modul-Grenze: board-Fassade (Issue #459, Whitelist seit #470) --------------------------
   // Board und Spalte sind modulintern. Fremde Module fragen die fachliche board.application-
   // Fassade (BoardService: requireProjectId/requireColumn/listColumns/firstColumn) — sonst loest
   // jeder fremde Use-Case die Projekt-Zugehoerigkeit selbst ueber das Aggregat und dessen
-  // Persistenz-Ports auf.
+  // Persistenz-Ports auf. Board-/ColumnNotFoundException sind Vertrag, weil sie das 404-Vokabular
+  // der Fassade tragen (@ResponseStatus); BoardChangedEvent zusaetzlich per Regel unten begrenzt.
   static final ArchRule BOARD_DOMAIN_IST_MODULINTERN =
       noClasses()
           .that()
@@ -123,14 +166,14 @@ class ArchitectureTest {
           .resideInAPackage("org.mwolff.manban.board.domain..")
           .as("board.domain ist modulintern (Zugriff nur ueber die board.application-Fassade)");
 
-  static final ArchRule BOARD_REPOSITORIES_SIND_MODULINTERN =
-      noClasses()
-          .that()
-          .resideOutsideOfPackage("org.mwolff.manban.board..")
-          .should()
-          .dependOnClassesThat()
-          .haveNameMatching("org\\.mwolff\\.manban\\.board\\.application\\..*Repository")
-          .as("board-Repository-Ports sind modulintern (nur ueber BoardService)");
+  static final ArchRule BOARD_APPLICATION_IST_AUF_FASSADE_BEGRENZT =
+      fassadeIstAufWhitelistBegrenzt(
+          "board",
+          "nur ueber BoardService",
+          "BoardService",
+          "BoardChangedEvent",
+          "BoardNotFoundException",
+          "ColumnNotFoundException");
 
   // BoardChangedEvent ist der SSE-Vertrag des board-Moduls: fremde Module publizieren ihn nicht
   // selbst, sondern ihr eigenes Event. Ausgenommen ist die Composition-Root org.mwolff.manban
@@ -145,13 +188,15 @@ class ArchitectureTest {
               "org\\.mwolff\\.manban\\.board\\.application\\.BoardChangedEvent(\\$.*)?")
           .as("BoardChangedEvent gehoert dem board-Modul (Uebersetzung in der Composition-Root)");
 
-  // --- Modul-Grenze: auth-Fassade (Issue #460) ------------------------------------------------
+  // --- Modul-Grenze: auth-Fassade (Issue #460, Whitelist seit #470) ---------------------------
   // Gegenstueck zu AUTH_HAENGT_NICHT_VON_PROJECT_AB/..._ACCESSTOKEN_AB: Jene Regeln sichern die
   // Grenze aus Sicht des auth-Moduls (was auth nicht kennen darf), diese hier aus Anbieter-Sicht
   // (was fremde Module von auth nicht sehen duerfen). Das Benutzer-Aggregat und der
   // Benutzer-Persistenz-Port sind modulintern; project und comment gehen ueber die fachlichen
   // Ports UserLookup/UserDisplayNameWriter — sonst mutiert ein fremdes Modul eine fremde
   // Aggregat-Wurzel (MembershipService schrieb bisher direkt via AppUserRepository.save).
+  // UserSummary ist der Rueckgabetyp von UserLookup und damit Teil seiner Signatur; AuthProperties
+  // ist geteilte Konfiguration, RegistrationApprovalPolicy der von project implementierte Port.
   static final ArchRule AUTH_DOMAIN_IST_MODULINTERN =
       noClasses()
           .that()
@@ -161,30 +206,33 @@ class ArchitectureTest {
           .resideInAPackage("org.mwolff.manban.auth.domain..")
           .as("auth.domain ist modulintern (Zugriff nur ueber die auth.application-Ports)");
 
-  static final ArchRule AUTH_REPOSITORIES_SIND_MODULINTERN =
-      noClasses()
-          .that()
-          .resideOutsideOfPackage("org.mwolff.manban.auth..")
-          .should()
-          .dependOnClassesThat()
-          .haveNameMatching("org\\.mwolff\\.manban\\.auth\\.application\\..*Repository")
-          .as("auth-Repository-Ports sind modulintern (nur ueber die auth.application-Ports)");
+  static final ArchRule AUTH_APPLICATION_IST_AUF_FASSADE_BEGRENZT =
+      fassadeIstAufWhitelistBegrenzt(
+          "auth",
+          "nur ueber UserLookup/UserDisplayNameWriter/PlatformAdminChecker",
+          "UserLookup",
+          "UserSummary",
+          "UserDisplayNameWriter",
+          "PlatformAdminChecker",
+          "RegistrationApprovalPolicy",
+          "AuthProperties",
+          "AdminAccessDeniedException");
 
-  // --- Modul-Grenze: project-Fassade (Issue #461) ---------------------------------------------
+  // --- Modul-Grenze: project-Fassade (Issue #461, Whitelist seit #470) ------------------------
   // Die Projekt-/Mitgliedschafts-Persistenz-Ports sind modulintern. card darf vom project-Modul
   // abhaengen (die Umkehrung waere ein Zyklus), aber nur ueber die fachliche Fassade
   // PermissionChecker/ProjectService — sonst liest und schreibt ein fremdes Modul direkt am
-  // Projekt-Aggregat vorbei an jeder Rechte- und Konsistenzregel.
-  static final ArchRule PROJECT_REPOSITORIES_SIND_MODULINTERN =
-      noClasses()
-          .that()
-          .resideOutsideOfPackage("org.mwolff.manban.project..")
-          .should()
-          .dependOnClassesThat()
-          .haveNameMatching("org\\.mwolff\\.manban\\.project\\.application\\..*Repository")
-          .as(
-              "project-Repository-Ports sind modulintern (nur ueber PermissionChecker/"
-                  + "ProjectService)");
+  // Projekt-Aggregat vorbei an jeder Rechte- und Konsistenzregel. ProjectService steht bewusst
+  // nicht auf der Whitelist: kein Fremdmodul nutzt ihn heute, und default deny heisst, Vertrag
+  // erst zu eroeffnen, wenn ihn jemand braucht.
+  static final ArchRule PROJECT_APPLICATION_IST_AUF_FASSADE_BEGRENZT =
+      fassadeIstAufWhitelistBegrenzt(
+          "project",
+          "nur ueber PermissionChecker",
+          "PermissionChecker",
+          "NextCardNumberWriter",
+          "ProjectCreatedEvent",
+          "ProjectAccessDeniedException");
 
   // Gegenstueck zu CARD_/BOARD_/AUTH_DOMAIN_IST_MODULINTERN, mit einer bewussten Ausnahme:
   // Permission ist das Vokabular der Fassade selbst (Parametertyp von PermissionChecker.require/
@@ -234,6 +282,31 @@ class ArchitectureTest {
           .as(
               "NextCardNumberWriter prueft keine Rechte: Aufrufer nur card.application "
                   + "(ProjectStartNumberService, PROJECT_EDIT)");
+
+  // --- Composition-Root: verdrahten ja, Datenzugriff nein (Issue #470) ------------------------
+  // org.mwolff.manban.config ist der einzige Ort im Projekt, der aus BOARD_CHANGED_EVENT_IST_
+  // MODULINTERN und aus SCHICHTEN ausgenommen ist — und damit der wahrscheinlichste Landeplatz
+  // fuer kuenftige Abkuerzungen. Die Ausnahme deckt genau eine Aufgabe: Adapter und Fassaden
+  // verschiedener Module zusammenstecken (SecurityConfig, CardBoardActivityBridge). Sobald die
+  // Composition-Root selbst ein Repository oder einen Domaenentyp anfasst, ist sie kein Wiring
+  // mehr, sondern ein modulfreier Use-Case ohne Schichtregel.
+  static final ArchRule CONFIG_KENNT_KEINE_DOMAENE =
+      noClasses()
+          .that()
+          .resideInAPackage("org.mwolff.manban.config..")
+          .should()
+          .dependOnClassesThat()
+          .resideInAPackage("org.mwolff.manban..domain..")
+          .as("config verdrahtet nur: Domaenentypen gehoeren nicht in die Composition-Root");
+
+  static final ArchRule CONFIG_KENNT_KEINE_REPOSITORIES =
+      noClasses()
+          .that()
+          .resideInAPackage("org.mwolff.manban.config..")
+          .should()
+          .dependOnClassesThat()
+          .haveNameMatching("org\\.mwolff\\.manban\\..*Repository")
+          .as("config verdrahtet nur: Datenzugriff gehoert nicht in die Composition-Root");
 
   // --- §6.1: Schichtzugriff (hexagonal, domain innerste Schicht) ------------------------------
   // consideringOnlyDependenciesInLayers() macht die Regel robust gegenueber Modulen, die nicht
@@ -326,8 +399,8 @@ class ArchitectureTest {
   }
 
   @Test
-  void cardRepositoriesSindModulintern() {
-    CARD_REPOSITORIES_SIND_MODULINTERN.check(PRODUKTIONSKLASSEN);
+  void cardApplicationIstAufFassadeBegrenzt() {
+    CARD_APPLICATION_IST_AUF_FASSADE_BEGRENZT.check(PRODUKTIONSKLASSEN);
   }
 
   @Test
@@ -336,8 +409,8 @@ class ArchitectureTest {
   }
 
   @Test
-  void boardRepositoriesSindModulintern() {
-    BOARD_REPOSITORIES_SIND_MODULINTERN.check(PRODUKTIONSKLASSEN);
+  void boardApplicationIstAufFassadeBegrenzt() {
+    BOARD_APPLICATION_IST_AUF_FASSADE_BEGRENZT.check(PRODUKTIONSKLASSEN);
   }
 
   @Test
@@ -351,13 +424,13 @@ class ArchitectureTest {
   }
 
   @Test
-  void authRepositoriesSindModulintern() {
-    AUTH_REPOSITORIES_SIND_MODULINTERN.check(PRODUKTIONSKLASSEN);
+  void authApplicationIstAufFassadeBegrenzt() {
+    AUTH_APPLICATION_IST_AUF_FASSADE_BEGRENZT.check(PRODUKTIONSKLASSEN);
   }
 
   @Test
-  void projectRepositoriesSindModulintern() {
-    PROJECT_REPOSITORIES_SIND_MODULINTERN.check(PRODUKTIONSKLASSEN);
+  void projectApplicationIstAufFassadeBegrenzt() {
+    PROJECT_APPLICATION_IST_AUF_FASSADE_BEGRENZT.check(PRODUKTIONSKLASSEN);
   }
 
   @Test
@@ -373,6 +446,16 @@ class ArchitectureTest {
   @Test
   void nextCardNumberWriterHatAufruferWhitelist() {
     NEXT_CARD_NUMBER_WRITER_HAT_AUFRUFER_WHITELIST.check(PRODUKTIONSKLASSEN);
+  }
+
+  @Test
+  void configKenntKeineDomaene() {
+    CONFIG_KENNT_KEINE_DOMAENE.check(PRODUKTIONSKLASSEN);
+  }
+
+  @Test
+  void configKenntKeineRepositories() {
+    CONFIG_KENNT_KEINE_REPOSITORIES.check(PRODUKTIONSKLASSEN);
   }
 
   @Test
