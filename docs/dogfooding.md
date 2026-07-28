@@ -85,3 +85,28 @@ node .claude/kit/board.mjs issue move <nummer> in_progress
 Die Karten erscheinen live im Web-Board. Status ↔ Spalte werden abgebildet:
 `backlog↔Backlog`, `ready↔Ready`, `in_progress↔In Progress`, `in_review↔In Review`,
 `done↔Done`.
+
+## 5. Karte lesen — inklusive Kommentaren
+
+`tbx issue get` liefert die Karte samt ihrer Kommentare (Autor, Text, Zeitstempel):
+
+```
+node cli/tbx.mjs issue get 42
+```
+
+```json
+{
+  "id": 42,
+  "title": "Testkarte",
+  "body": "aus board.mjs",
+  "status": "in_progress",
+  "comments": [
+    { "author": "Manne", "body": "Abschlussbericht …", "createdAt": "2026-07-28T10:00:00Z" }
+  ]
+}
+```
+
+Kommentare schreibt man mit `node cli/tbx.mjs issue comment 42 --text "…"`.
+
+> Spricht die CLI gegen eine **ältere** Instanz, die den Kommentar-Endpoint noch nicht
+> kennt, bleibt `comments` leer — der Aufruf bricht nicht ab.

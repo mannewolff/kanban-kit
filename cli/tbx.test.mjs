@@ -21,6 +21,7 @@ import {
   toColumn,
   toStatus,
   findItemByNumber,
+  fetchItemComments,
   parseIssueNumber,
   CliError,
   resolveIsMainModule,
@@ -334,17 +335,67 @@ test('issue list: ungueltiger Status -> Exit 1', async () => {
   });
 });
 
-test('issue get: liefert generisches Issue', async () => {
+test('issue get: liefert generisches Issue inkl. Kommentaren', async () => {
   await withTempConfigDir(async (dir) => {
     seedLogin(dir);
-    const i = io({ baseDir: dir, fetchImpl: async () => jsonResponse(200, BOARD) });
+    const calls = [];
+    const fetchImpl = async (url) => {
+      calls.push(url);
+      if (url.endsWith('/comments')) {
+        return jsonResponse(200, [
+          { author: 'Manne', body: 'Erster', createdAt: '2026-07-28T10:00:00Z' },
+        ]);
+      }
+      return jsonResponse(200, BOARD);
+    };
+    const i = io({ baseDir: dir, fetchImpl });
     await main(['issue', 'get', '2'], i);
+    // Board-Nummer 2 -> DB-id 11
+    assert.ok(calls.some((u) => u.endsWith('/api/kanban/items/11/comments')));
     assert.deepEqual(JSON.parse(i.stdoutLines.join('')), {
       id: 2,
       title: 'B',
       body: 'b',
       status: 'ready',
+      comments: [{ author: 'Manne', body: 'Erster', createdAt: '2026-07-28T10:00:00Z' }],
     });
+  });
+});
+
+test('issue get: Backend ohne Kommentar-Endpoint (404) -> leere Liste, Exit 0', async () => {
+  await withTempConfigDir(async (dir) => {
+    seedLogin(dir);
+    const fetchImpl = async (url) =>
+      url.endsWith('/comments') ? jsonResponse(404, {}) : jsonResponse(200, BOARD);
+    const i = io({ baseDir: dir, fetchImpl });
+    assert.equal(await main(['issue', 'get', '2'], i), 0);
+    assert.deepEqual(JSON.parse(i.stdoutLines.join('')).comments, []);
+  });
+});
+
+test('issue get: unerwartete Kommentar-Antwort (kein Array) -> leere Liste', async () => {
+  await withTempConfigDir(async (dir) => {
+    seedLogin(dir);
+    const fetchImpl = async (url) =>
+      url.endsWith('/comments') ? jsonResponse(200, { unerwartet: true }) : jsonResponse(200, BOARD);
+    const i = io({ baseDir: dir, fetchImpl });
+    assert.equal(await main(['issue', 'get', '2'], i), 0);
+    assert.deepEqual(JSON.parse(i.stdoutLines.join('')).comments, []);
+  });
+});
+
+test('fetchItemComments: nicht parsebarer Body -> leere Liste', async () => {
+  await withTempConfigDir(async (dir) => {
+    seedLogin(dir);
+    const fetchImpl = async () => ({
+      ok: true,
+      status: 200,
+      json: async () => {
+        throw new Error('kein JSON');
+      },
+    });
+    const comments = await fetchItemComments(11, io({ baseDir: dir, fetchImpl }));
+    assert.deepEqual(comments, []);
   });
 });
 
