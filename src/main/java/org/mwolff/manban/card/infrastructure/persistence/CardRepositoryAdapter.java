@@ -2,8 +2,11 @@ package org.mwolff.manban.card.infrastructure.persistence;
 
 import jakarta.persistence.EntityManager;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
+import org.jspecify.annotations.Nullable;
+import org.mwolff.manban.card.application.CardMovedConcurrentlyException;
 import org.mwolff.manban.card.application.CardRepository;
 import org.mwolff.manban.card.domain.Card;
 import org.mwolff.manban.card.domain.CardType;
@@ -104,6 +107,20 @@ class CardRepositoryAdapter implements CardRepository {
   }
 
   @Override
+  public int allocateCardNumber(long projectId) {
+    // Dieselbe Rechnung wie nextCardNumber — nur unter Sperre auf der Projektzeile, damit zwei
+    // gleichzeitige Anlagen nicht dieselbe Nummer ausrechnen (Issue #499, Begründung am Port).
+    // Der Floor aus V20 bleibt dadurch unangetastet: Die Formel ändert sich nicht.
+    lockCardNumbers(projectId);
+    return nextCardNumber(projectId);
+  }
+
+  @Override
+  public void lockCardNumbers(long projectId) {
+    jdbc.queryForList("SELECT id FROM project WHERE id = ? FOR UPDATE", Long.class, projectId);
+  }
+
+  @Override
   public int highestNumberInProject(long projectId) {
     return java.util.Objects.requireNonNull(
         jdbc.queryForObject(
@@ -113,19 +130,43 @@ class CardRepositoryAdapter implements CardRepository {
   }
 
   @Override
-  public int maxActivePositionInColumn(long columnId) {
-    return jpa.maxActivePositionInColumn(columnId);
+  public int allocateActivePosition(long columnId) {
+    lockColumnPositions(List.of(columnId));
+    return jpa.maxActivePositionInColumn(columnId) + 1;
+  }
+
+  /**
+   * Sperrt die Spaltenzeilen aufsteigend nach ID (Issue #499, Begründung am Port). Erwartet
+   * mindestens eine ID — die Aufrufer kennen die betroffenen Spalten und übergeben sie vollständig.
+   *
+   * <p>Bewusst eine Skalar-Projektion per {@link JdbcTemplate}: Gäbe die Abfrage Spalten-Entities
+   * zurück, lieferte Hibernate für bereits im Persistenzkontext liegende Zeilen die
+   * zwischengespeicherte Instanz — und die Sperre bliebe wirkungslos für das, was danach gelesen
+   * wird.
+   */
+  @Override
+  public void lockColumnPositions(List<Long> columnIds) {
+    List<Long> ordered = columnIds.stream().distinct().sorted().toList();
+    String placeholders = String.join(", ", Collections.nCopies(ordered.size(), "?"));
+    jdbc.queryForList(
+        "SELECT id FROM board_column WHERE id IN (" + placeholders + ") ORDER BY id FOR UPDATE",
+        Long.class,
+        ordered.toArray());
   }
 
   @Override
   public void move(long cardId, long newColumnId, int newPosition) {
     entityManager.flush();
 
-    Long oldColumnId =
-        jdbc.queryForObject("SELECT column_id FROM card WHERE id = ?", Long.class, cardId);
+    Long oldColumnId = columnIdOf(cardId);
     if (oldColumnId == null) {
       return;
     }
+    // Quelle und Ziel in EINEM sortierten Aufruf sperren — erst danach steht der Reindex beider
+    // Spalten unter Kontrolle. Der Nachlesen-Schritt deckt den Fall ab, dass die Karte die
+    // Quellspalte verlassen hat, während wir auf die Sperren warteten.
+    lockColumnPositions(List.of(oldColumnId, newColumnId));
+    requireStillIn(cardId, oldColumnId);
 
     List<Long> targetActive = activeCardIds(newColumnId, cardId);
     int index = Math.clamp(newPosition, 0, targetActive.size());
@@ -164,11 +205,12 @@ class CardRepositoryAdapter implements CardRepository {
   public void transfer(long cardId, long targetBoardId, long targetColumnId, int newNumber) {
     entityManager.flush();
 
-    Long oldColumnId =
-        jdbc.queryForObject("SELECT column_id FROM card WHERE id = ?", Long.class, cardId);
+    Long oldColumnId = columnIdOf(cardId);
     if (oldColumnId == null) {
       return;
     }
+    lockColumnPositions(List.of(oldColumnId, targetColumnId));
+    requireStillIn(cardId, oldColumnId);
 
     // Ans Ende der Zielspalte (hinter deren aktive Karten) — kollisionsfrei zum
     // active_position-Unique.
@@ -190,6 +232,21 @@ class CardRepositoryAdapter implements CardRepository {
     assignPositions(activeCardIds(oldColumnId, cardId));
 
     entityManager.clear();
+  }
+
+  private @Nullable Long columnIdOf(long cardId) {
+    return jdbc.queryForObject("SELECT column_id FROM card WHERE id = ?", Long.class, cardId);
+  }
+
+  /**
+   * Stellt sicher, dass die Karte noch in der Spalte liegt, für die die Sperren genommen wurden.
+   * Andernfalls deckt die Sperrmenge den tatsächlichen Umzug nicht ab — nachträglich erweitern
+   * würde die Sortierordnung und damit die Deadlock-Freiheit brechen, also bricht der Aufruf ab.
+   */
+  private void requireStillIn(long cardId, long expectedColumnId) {
+    if (!Long.valueOf(expectedColumnId).equals(columnIdOf(cardId))) {
+      throw new CardMovedConcurrentlyException();
+    }
   }
 
   private List<Long> activeCardIds(long columnId, long excludeCardId) {

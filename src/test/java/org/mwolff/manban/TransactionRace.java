@@ -32,9 +32,15 @@ import org.springframework.transaction.support.TransactionTemplate;
  * blockiert B nie und der Lauf endet mit {@link IllegalStateException} statt mit einer stillen
  * Zufallsreihenfolge.
  *
+ * <p>{@link #runUnblocked} ist die Gegenrichtung: Dort muss der zweite Aufruf <em>durchlaufen</em>,
+ * während der erste seine Sperren hält — damit lässt sich nachweisen, dass eine Sperre
+ * <em>nicht</em> weiter greift als nötig (Issue #499: verschiedene Projekte bzw. Spalten dürfen
+ * sich nicht gegenseitig ausbremsen).
+ *
  * <p>Die Klasse wird von mehreren Nebenläufigkeits-ITs genutzt (Einmal-Tokens, Issue #497;
- * Rollen-Invarianten, Issue #498). Sie gehört bewusst in den Testbaum und nicht in die Produktion:
- * Sie stellt keine Nebenläufigkeits-Primitive bereit, sondern weist eine nach.
+ * Rollen-Invarianten, Issue #498; Nummern und Positionen, Issue #499). Sie gehört bewusst in den
+ * Testbaum und nicht in die Produktion: Sie stellt keine Nebenläufigkeits-Primitive bereit, sondern
+ * weist eine nach.
  */
 public final class TransactionRace {
 
@@ -55,11 +61,35 @@ public final class TransactionRace {
    */
   public record Result(@Nullable Throwable firstFailure, @Nullable Throwable secondFailure) {}
 
+  /** Was zwischen dem Abschluss von {@code first} und dessen Commit abgewartet wird. */
+  @FunctionalInterface
+  private interface Await {
+    void await(Thread secondThread) throws InterruptedException;
+  }
+
   /**
    * Führt {@code first} und {@code second} in zwei echten Transaktionen so aus, dass {@code second}
    * garantiert auf einer von {@code first} gehaltenen Sperre wartet, bevor {@code first} committet.
    */
   public Result run(Runnable first, Runnable second) throws InterruptedException {
+    return race(first, second, secondThread -> awaitBlockedOnLock());
+  }
+
+  /**
+   * Gegenrichtung zu {@link #run}: {@code second} muss vollständig durchlaufen, <em>während</em>
+   * {@code first} seine Transaktion — und damit seine Sperren — noch offen hält.
+   *
+   * <p>Damit wird nachgewiesen, dass eine Sperre nicht weiter greift als nötig: Wartet {@code
+   * second} doch, endet der Lauf mit {@link IllegalStateException} statt mit einem stillen
+   * Durchlauf. Das ist das Akzeptanzkriterium „parallele Änderungen verschiedener Projekte bzw.
+   * Spalten blockieren sich nicht gegenseitig" (Issue #499) als ausführbare Aussage.
+   */
+  public Result runUnblocked(Runnable first, Runnable second) throws InterruptedException {
+    return race(first, second, TransactionRace::requireFinishedWhileFirstHoldsLocks);
+  }
+
+  private Result race(Runnable first, Runnable second, Await awaitSecond)
+      throws InterruptedException {
     TransactionTemplate transactions = new TransactionTemplate(transactionManager);
     CountDownLatch firstDone = new CountDownLatch(1);
     CountDownLatch firstMayCommit = new CountDownLatch(1);
@@ -93,7 +123,7 @@ public final class TransactionRace {
       firstThread.start();
       awaitLatch(firstDone);
       secondThread.start();
-      awaitBlockedOnLock();
+      awaitSecond.await(secondThread);
     } finally {
       firstMayCommit.countDown();
     }
@@ -119,6 +149,21 @@ public final class TransactionRace {
     throw new IllegalStateException(
         "Die zweite Transaktion wartet auf keiner Sperre — der geprüfte Ablauf ist nicht"
             + " serialisiert.");
+  }
+
+  /**
+   * Wartet, bis die zweite Transaktion fertig ist — und besteht darauf, dass sie das schafft,
+   * solange die erste ihre Sperren noch hält. Bleibt sie hängen, greift eine Sperre weiter als
+   * nötig.
+   */
+  private static void requireFinishedWhileFirstHoldsLocks(Thread secondThread)
+      throws InterruptedException {
+    secondThread.join(TimeUnit.SECONDS.toMillis(DEADLINE_SECONDS));
+    if (secondThread.isAlive()) {
+      throw new IllegalStateException(
+          "Die zweite Transaktion wurde blockiert, obwohl sie eine andere Ressource betrifft — die"
+              + " Sperre greift weiter als nötig.");
+    }
   }
 
   private int sessionsWaitingOnLock() {

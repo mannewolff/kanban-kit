@@ -2,11 +2,13 @@ package org.mwolff.manban.card.application;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.stream.Collectors;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.board.application.BoardNotFoundException;
@@ -207,8 +209,8 @@ public class CardService {
     Long effectiveParent =
         parentId == null ? null : requireEpicInBoard(parentId, boardId).requireId();
 
-    int number = cards.nextCardNumber(projectId);
-    int position = cards.maxActivePositionInColumn(columnId) + 1;
+    int number = cards.allocateCardNumber(projectId);
+    int position = cards.allocateActivePosition(columnId);
     Instant now = clock.instant();
     Card saved =
         cards.save(
@@ -263,7 +265,7 @@ public class CardService {
 
     long columnId = boardService.firstColumn(boardId).id();
 
-    int number = cards.nextCardNumber(projectId);
+    int number = cards.allocateCardNumber(projectId);
     Instant now = clock.instant();
     Card saved =
         cards.save(
@@ -598,7 +600,7 @@ public class CardService {
     // stabil.
     // Nur über Projektgrenzen wird neu nummeriert und werden die projekt-lokalen Verknüpfungen
     // (Abhängigkeiten, Zuständige) entfernt.
-    int newNumber = sameProject ? card.requireNumber() : cards.nextCardNumber(targetProjectId);
+    int newNumber = sameProject ? card.requireNumber() : cards.allocateCardNumber(targetProjectId);
     cards.transfer(cardId, targetBoardId, targetColumnId, newNumber);
     if (!sameProject) {
       dependencies.deleteByCardId(cardId);
@@ -625,10 +627,31 @@ public class CardService {
    * des Projekts, OWNER in Quell- und Zielprojekt darüber hinaus) sowie Epic-Ausschluss; scheitert
    * eine Karte, rollt der gesamte Batch zurück. Die Karten landen in Eingabereihenfolge am Ende der
    * Zielspalte, jede Quellspalte wird dabei lückenlos nachgezogen.
+   *
+   * <p>Die Spaltensperren nimmt der Batch <strong>vorab in einem Zug</strong> (Issue #499): Nähme
+   * jeder Einzel-Umzug seine beiden Sperren für sich, könnten zwei gleichzeitige Sammel-Umzüge mit
+   * überlappenden Quellspalten dieselben Spalten in unterschiedlicher Reihenfolge greifen und
+   * verklemmen. Ein sortierter Aufruf über die Vereinigung schließt das aus; die Sperren der
+   * Einzel-Umzüge sind danach wirkungslose Wiederholungen.
+   *
+   * <p>Enthält der Batch eine Karte aus einem <em>anderen</em> Projekt, wird zuvor der
+   * Nummern-Namespace des Zielprojekts gesperrt: Nur so bleibt die Ordnung „Projekt vor Spalte"
+   * gewahrt, die jeder Einzel-Umzug einhält. Innerhalb eines Projekts entfällt diese Sperre — dort
+   * wird keine Nummer neu vergeben, und ein Sammel-Umzug soll die Karten-Anlage im selben Projekt
+   * nicht für die Dauer des Batches ausbremsen.
    */
   @Transactional
   public List<CardView> bulkTransfer(
       long userId, List<Long> cardIds, long targetBoardId, long targetColumnId) {
+    long targetProjectId = boardService.requireProjectId(targetBoardId);
+    List<Card> batch = cardIds.stream().map(cards::findById).flatMap(Optional::stream).toList();
+    if (batch.stream().anyMatch(card -> !Objects.equals(card.projectId(), targetProjectId))) {
+      cards.lockCardNumbers(targetProjectId);
+    }
+    List<Long> affectedColumns = new ArrayList<>();
+    affectedColumns.add(targetColumnId);
+    batch.forEach(card -> Optional.ofNullable(card.columnId()).ifPresent(affectedColumns::add));
+    cards.lockColumnPositions(affectedColumns);
     return cardIds.stream()
         .map(cardId -> doTransfer(userId, cardId, targetBoardId, targetColumnId))
         .toList();
@@ -662,7 +685,7 @@ public class CardService {
   @Transactional
   public CardView restore(long userId, long cardId) {
     Card card = requireCardOp(userId, cardId, Permission.TICKET_DELETE, Permission.EPIC_DELETE);
-    int position = cards.maxActivePositionInColumn(card.requireColumnId()) + 1;
+    int position = cards.allocateActivePosition(card.requireColumnId());
     activity.add(
         card.requireId(), userId, CardActivityType.RESTORED, "Wiederhergestellt", clock.instant());
     CardView result = view(cards.save(card.asRestored(position)));
@@ -714,7 +737,7 @@ public class CardService {
     Instant now = clock.instant();
     // #402: Pool-Ideen bekommen sofort eine projektweite Nummer (referenzierbar wie Board-Karten);
     // sie bleiben board-los und behalten die Nummer beim späteren Einplanen.
-    int number = cards.nextCardNumber(projectId);
+    int number = cards.allocateCardNumber(projectId);
     Card saved =
         cards.save(
             new Card(
@@ -761,8 +784,8 @@ public class CardService {
     // #402: eine bereits nummerierte Pool-Idee behält ihre Nummer; nur Legacy-Ideen ohne Nummer
     // bekommen beim Einplanen eine.
     int number =
-        card.number() != null ? card.requireNumber() : cards.nextCardNumber(card.projectId());
-    int position = cards.maxActivePositionInColumn(columnId) + 1;
+        card.number() != null ? card.requireNumber() : cards.allocateCardNumber(card.projectId());
+    int position = cards.allocateActivePosition(columnId);
     Instant now = clock.instant();
     Card planned = cards.save(card.withPlannedOnBoard(targetBoardId, columnId, number, position));
     transitions.open(cardId, columnId, backlog.name(), now);
@@ -866,7 +889,7 @@ public class CardService {
   @Transactional
   public CardView restoreFromTrash(long userId, long cardId) {
     Card card = requireCardOp(userId, cardId, Permission.TICKET_DELETE, Permission.EPIC_DELETE);
-    int position = cards.maxActivePositionInColumn(card.requireColumnId()) + 1;
+    int position = cards.allocateActivePosition(card.requireColumnId());
     cards.restoreFromTrash(card.requireId(), position);
     activity.add(
         card.requireId(),

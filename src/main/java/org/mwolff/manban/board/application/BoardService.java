@@ -122,6 +122,8 @@ public class BoardService {
   public ColumnView addColumn(long userId, long boardId, String name, @Nullable Integer wipLimit) {
     Board board = requireBoard(boardId);
     permissions.require(userId, board.projectId(), Permission.BOARD_UPDATE);
+    // Vor dem Lesen sperren: die neue Position entsteht aus dem gelesenen Bestand (#499).
+    columns.lockColumnOrder(boardId);
     int nextPosition =
         columns.findByBoardId(boardId).stream().mapToInt(BoardColumn::position).max().orElse(-1)
             + 1;
@@ -154,6 +156,10 @@ public class BoardService {
     Board board = requireBoard(boardId);
     permissions.require(userId, board.projectId(), Permission.BOARD_UPDATE);
 
+    // Vor dem Lesen sperren: gegen die gelesene Ordnung wird die Anfrage validiert, und aus ihr
+    // entstehen die neuen Positionen. Eine parallel angehängte Spalte bliebe sonst außerhalb der
+    // Neuvergabe zurück (#499).
+    columns.lockColumnOrder(boardId);
     List<BoardColumn> current = columns.findByBoardId(boardId);
     List<Long> existing = current.stream().map(BoardColumn::id).sorted().toList();
     List<Long> requested = orderedColumnIds.stream().sorted().toList();

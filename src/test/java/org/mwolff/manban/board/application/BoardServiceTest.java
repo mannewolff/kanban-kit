@@ -3,6 +3,7 @@ package org.mwolff.manban.board.application;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -17,6 +18,7 @@ import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mwolff.manban.board.domain.Board;
 import org.mwolff.manban.board.domain.BoardColumn;
 import org.mwolff.manban.project.application.PermissionChecker;
@@ -248,6 +250,38 @@ class BoardServiceTest {
     // Then
     verify(columns).save(captor.capture());
     assertThat(captor.getValue().position()).isZero();
+  }
+
+  @Test
+  void addColumn_locksTheColumnOrderBeforeReadingIt() {
+    // Given
+    when(boards.findById(10L)).thenReturn(Optional.of(board()));
+    when(columns.findByBoardId(10L)).thenReturn(List.of(column(1L, "A", 0)));
+
+    // When
+    service.addColumn(1L, 10L, "B", null);
+
+    // Then: die neue Position entsteht aus dem gelesenen Bestand — wird erst danach gesperrt,
+    // rechnen zwei gleichzeitige Aufrufe dieselbe aus und laufen in den Unique-Constraint (#499).
+    InOrder inOrder = inOrder(columns);
+    inOrder.verify(columns).lockColumnOrder(10L);
+    inOrder.verify(columns).findByBoardId(10L);
+  }
+
+  @Test
+  void reorderColumns_locksTheColumnOrderBeforeReadingIt() {
+    // Given
+    when(boards.findById(10L)).thenReturn(Optional.of(board()));
+    when(columns.findByBoardId(10L)).thenReturn(List.of(column(1L, "A", 0), column(2L, "B", 1)));
+
+    // When
+    service.reorderColumns(1L, 10L, List.of(2L, 1L));
+
+    // Then: gegen den gelesenen Bestand wird validiert und aus ihm entstehen die neuen
+    // Positionen — eine parallel angehängte Spalte bliebe sonst außerhalb der Neuvergabe (#499).
+    InOrder inOrder = inOrder(columns);
+    inOrder.verify(columns).lockColumnOrder(10L);
+    inOrder.verify(columns).findByBoardId(10L);
   }
 
   @Test
