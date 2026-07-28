@@ -101,5 +101,6 @@ class KanbanCompatController {
 
   record MoveRequest(@NotBlank String column, @PositiveOrZero int position) {}
 
-  record CommentRequest(@NotBlank String body) {}
+  /** Gleiche Längengrenze wie der UI-Pfad ({@code CommentController.CommentRequest}). */
+  record CommentRequest(@NotBlank @Size(max = 10_000) String body) {}
 }

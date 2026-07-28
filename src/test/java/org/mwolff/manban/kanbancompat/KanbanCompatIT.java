@@ -20,6 +20,7 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.ResultActions;
 
 /**
  * End-to-End-Test der Kanban-Compat-API (tbx.mjs/board.mjs-Kontrakt) über ein board-gebundenes PAT.
@@ -259,6 +260,31 @@ class KanbanCompatIT extends AbstractIntegrationTest {
     mvc.perform(
             get("/api/kanban/items/" + foreignCard + "/comments").header("X-Kanban-Token", token))
         .andExpect(status().isNotFound());
+  }
+
+  @Test
+  void comment_rejectsBodyOverTheLengthLimit() throws Exception {
+    Cookie session = loginAs("kanban-comment-size@example.com");
+    long projectId = createProject("kanban-comment-size@example.com", "Comment-Size");
+    long boardId = createBoard(session, projectId, "Size-Board");
+    String token = boundToken(session, projectId, boardId);
+    long cardId = createCard(session, boardId, firstColumnId(session, boardId), "Karte");
+
+    // Ein Token ist für Automatik gedacht: ohne Grenze könnte es beliebig große Kommentare in die
+    // text-Spalte schreiben. Grenze und Wert sind identisch zum UI-Pfad (CommentController).
+    kanbanCommentRequest(token, cardId, "a".repeat(10_001)).andExpect(status().isBadRequest());
+
+    // Gegenprobe auf dem Grenzwert selbst: genau 10.000 Zeichen sind noch erlaubt.
+    kanbanCommentRequest(token, cardId, "a".repeat(10_000)).andExpect(status().isCreated());
+  }
+
+  private ResultActions kanbanCommentRequest(String token, long cardId, String body)
+      throws Exception {
+    return mvc.perform(
+        post("/api/kanban/items/" + cardId + "/comments")
+            .header("X-Kanban-Token", token)
+            .contentType("application/json")
+            .content("{\"body\":\"%s\"}".formatted(body)));
   }
 
   private void kanbanComment(String token, long cardId, String body) throws Exception {
