@@ -1,7 +1,9 @@
-import { render, screen, within } from '@testing-library/react'
+import { act, render, screen, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { boardsApi } from '../api/boards'
+import { cardsApi, type Card, type CardDetail } from '../api/cards'
 import { dashboardApi, type BoardDashboardKpis } from '../api/dashboard'
 import { projectsApi } from '../api/projects'
 import { DashboardPage } from './DashboardPage'
@@ -42,12 +44,62 @@ vi.mock('@mui/x-charts/LineChart', () => ({
   MarkElement: ({ x, y }: MarkStubProps) => <circle cx={x} cy={y} r={3} />,
 }))
 vi.mock('../api/boards', () => ({ boardsApi: { get: vi.fn() } }))
+vi.mock('../api/cards', () => ({ cardsApi: { list: vi.fn() } }))
 vi.mock('../api/dashboard', () => ({ dashboardApi: { get: vi.fn() } }))
 vi.mock('../api/projects', () => ({ projectsApi: { list: vi.fn() } }))
 
+// Toast-Weg: useSnackbar liefert im Test einen Spy (statt des No-op-Defaults ohne Provider).
+const mNotify = vi.fn()
+vi.mock('../components/SnackbarProvider', () => ({ useSnackbar: () => mNotify }))
+
+// Das Detail-Modal ist eigenständig getestet; hier zählt nur, mit welcher Karte es geöffnet wird.
+vi.mock('../components/CardDetailModal', () => ({
+  CardDetailModal: ({
+    card,
+    canEdit,
+    columnName,
+    onClose,
+  }: Readonly<{
+    card: CardDetail
+    canEdit: boolean
+    columnName?: string
+    onClose: () => void
+  }>) => (
+    <div data-testid="card-detail">
+      <span data-testid="detail-title">{card.title}</span>
+      <span data-testid="detail-column">{columnName}</span>
+      <span data-testid="detail-can-edit">{String(canEdit)}</span>
+      <button type="button" onClick={onClose}>
+        Detail schließen
+      </button>
+    </div>
+  ),
+}))
+
 const mBoards = boardsApi as unknown as { get: ReturnType<typeof vi.fn> }
+const mCards = cardsApi as unknown as { list: ReturnType<typeof vi.fn> }
 const mDashboard = dashboardApi as unknown as { get: ReturnType<typeof vi.fn> }
 const mProjects = projectsApi as unknown as { list: ReturnType<typeof vi.fn> }
+
+const outlierCard: Card = {
+  id: 9,
+  boardId: 1,
+  columnId: 5,
+  number: 42,
+  title: 'Hängt fest',
+  description: null,
+  positionInColumn: 0,
+  archived: false,
+  ideaStored: false,
+  movedToDoneAt: null,
+  dependencies: [],
+  type: 'CARD',
+  parentId: null,
+  shortcode: null,
+  assignees: [],
+  dueDate: null,
+  labels: [],
+}
 
 const kpis: BoardDashboardKpis = {
   columnDwell: [
@@ -83,6 +135,7 @@ describe('DashboardPage', () => {
     mBoards.get.mockResolvedValue({ id: 1, projectId: 9, name: 'B', createdAt: '', columns: [] })
     mProjects.list.mockResolvedValue([{ id: 9, name: 'Projekt', role: 'VIEWER', createdAt: '' }])
     mDashboard.get.mockResolvedValue(kpis)
+    mCards.list.mockResolvedValue([outlierCard])
   })
 
   it('zeigt den Breadcrumb-Pfad ab Projekte', async () => {
@@ -237,6 +290,88 @@ describe('DashboardPage', () => {
     expect(await screen.findByText('Hängt fest')).toBeInTheDocument()
     expect(screen.getByText('Review')).toBeInTheDocument()
     expect(screen.getByText('8 T 2 Std')).toBeInTheDocument() // 700000 s
+  })
+
+  it('öffnet per Klick auf eine Ausreißer-Zeile die zugehörige Karte im Ansichtsmodus', async () => {
+    const user = userEvent.setup()
+    renderPage()
+    await user.click(await screen.findByRole('button', { name: 'Karte 42 öffnen: Hängt fest' }))
+    const detail = await screen.findByTestId('card-detail')
+    expect(mCards.list).toHaveBeenCalledWith(1)
+    expect(within(detail).getByTestId('detail-title')).toHaveTextContent('Hängt fest')
+    expect(within(detail).getByTestId('detail-column')).toHaveTextContent('Review')
+    expect(within(detail).getByTestId('detail-can-edit')).toHaveTextContent('false')
+  })
+
+  it('öffnet die Karte auch per Tastatur', async () => {
+    const user = userEvent.setup()
+    renderPage()
+    const trigger = await screen.findByRole('button', { name: 'Karte 42 öffnen: Hängt fest' })
+    // `focus()` löst im MUI-Link ein State-Update aus (focus-visible) — deshalb in act().
+    act(() => trigger.focus())
+    await user.keyboard('{Enter}')
+    expect(await screen.findByTestId('card-detail')).toBeInTheDocument()
+    // Der gebubbelte Klick des Auslösers darf die Zeile nicht ein zweites Mal auslösen.
+    expect(mCards.list).toHaveBeenCalledTimes(1)
+  })
+
+  it('öffnet die Karte auch bei einem Klick neben den Auslöser in dieselbe Zeile', async () => {
+    const user = userEvent.setup()
+    renderPage()
+    const table = await screen.findByRole('table', { name: 'Ausreißer-Karten' })
+    await user.click(within(table).getByText('Review'))
+    expect(await screen.findByTestId('card-detail')).toBeInTheDocument()
+  })
+
+  it('meldet eine nicht mehr vorhandene Karte, statt ein leeres Modal zu zeigen', async () => {
+    mCards.list.mockResolvedValue([])
+    const user = userEvent.setup()
+    renderPage()
+    await user.click(await screen.findByRole('button', { name: 'Karte 42 öffnen: Hängt fest' }))
+    await vi.waitFor(() =>
+      expect(mNotify).toHaveBeenCalledWith(expect.stringContaining('Karte 42'), 'warning'),
+    )
+    expect(screen.queryByTestId('card-detail')).not.toBeInTheDocument()
+  })
+
+  it('meldet einen Fehler, wenn die Kartenliste nicht geladen werden kann', async () => {
+    mCards.list.mockRejectedValue(new Error('offline'))
+    const user = userEvent.setup()
+    renderPage()
+    await user.click(await screen.findByRole('button', { name: 'Karte 42 öffnen: Hängt fest' }))
+    await vi.waitFor(() =>
+      expect(mNotify).toHaveBeenCalledWith('Karte konnte nicht geladen werden.', 'error'),
+    )
+    expect(screen.queryByTestId('card-detail')).not.toBeInTheDocument()
+  })
+
+  it('zeigt während des Ladens ein Zeichen in der geklickten Zeile', async () => {
+    let release: (cards: Card[]) => void = () => {}
+    mCards.list.mockReturnValue(
+      new Promise<Card[]>((resolve) => {
+        release = resolve
+      }),
+    )
+    const user = userEvent.setup()
+    renderPage()
+    await user.click(await screen.findByRole('button', { name: 'Karte 42 öffnen: Hängt fest' }))
+    const table = screen.getByRole('table', { name: 'Ausreißer-Karten' })
+    const row = within(table).getAllByRole('row')[1]
+    expect(row).toHaveAttribute('aria-busy', 'true')
+    expect(within(row).getByRole('progressbar')).toBeInTheDocument()
+    release([outlierCard])
+    expect(await screen.findByTestId('card-detail')).toBeInTheDocument()
+    expect(row).toHaveAttribute('aria-busy', 'false')
+  })
+
+  it('lädt die Kartenliste beim zweiten Öffnen nicht erneut', async () => {
+    const user = userEvent.setup()
+    renderPage()
+    await user.click(await screen.findByRole('button', { name: 'Karte 42 öffnen: Hängt fest' }))
+    await user.click(await screen.findByRole('button', { name: 'Detail schließen' }))
+    await user.click(screen.getByRole('button', { name: 'Karte 42 öffnen: Hängt fest' }))
+    expect(await screen.findByTestId('card-detail')).toBeInTheDocument()
+    expect(mCards.list).toHaveBeenCalledTimes(1)
   })
 
   it('zeigt „Keine Ausreißer." bei leerer Liste', async () => {

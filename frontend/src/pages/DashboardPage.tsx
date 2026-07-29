@@ -1,5 +1,7 @@
 import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
+import CircularProgress from '@mui/material/CircularProgress'
+import Link from '@mui/material/Link'
 import Paper from '@mui/material/Paper'
 import Stack from '@mui/material/Stack'
 import Table from '@mui/material/Table'
@@ -13,12 +15,16 @@ import { LineChart, MarkElement, type MarkElementProps } from '@mui/x-charts/Lin
 import { useEffect, useMemo, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { boardsApi, type Board } from '../api/boards'
+import { cardsApi, type Card } from '../api/cards'
 import { Breadcrumbs } from '../components/Breadcrumbs'
+import { CardDetailModal } from '../components/CardDetailModal'
 import { MetricTile } from '../components/MetricTile'
+import { useSnackbar } from '../components/SnackbarProvider'
 import {
   dashboardApi,
   type BoardDashboardKpis,
   type ColumnDwell,
+  type OutlierCard,
   type WeeklyThroughput,
 } from '../api/dashboard'
 import { formatDuration } from '../lib/formatDuration'
@@ -229,6 +235,123 @@ function ThroughputSection({ throughput }: Readonly<{ throughput: readonly Weekl
   )
 }
 
+/**
+ * Die Ausreißer-Tabelle — und der Weg von dort zur Karte. Wer hier eine klemmende Karte sieht,
+ * will sie ansehen, ohne sie sich zu merken und auf dem Board zu suchen.
+ *
+ * Ein Ausreißer trägt nur `cardId`, und es gibt keinen Endpoint, der eine einzelne Karte lädt
+ * (unter `/api/cards/{id}/…` liegen nur activity, comments, attachments). Deshalb wird beim ersten
+ * Klick die Kartenliste des Boards geholt und die Karte darin gesucht; danach bleibt sie für
+ * weitere Klicks liegen. Die Kennzahlen der Seite sind ohnehin eine Momentaufnahme — eine zweite
+ * Abfrage je Klick brächte keine frischere Aussage.
+ *
+ * Die Zeile trägt bewusst **kein** `role="button"`: Das nähme der Datentabelle ihre Semantik und
+ * damit Screenreadern die Zuordnung von Zelle zu Spaltenüberschrift. Fokussierbar ist stattdessen
+ * die Kartennummer in der ersten Zelle; die Maus darf weiterhin die ganze Zeile treffen.
+ */
+function OutlierSection({
+  boardId,
+  outliers,
+}: Readonly<{ boardId: number; outliers: readonly OutlierCard[] }>) {
+  const notify = useSnackbar()
+  const [cards, setCards] = useState<Card[] | null>(null)
+  const [busyCardId, setBusyCardId] = useState<number | null>(null)
+  const [detail, setDetail] = useState<{ card: Card; columnName: string } | null>(null)
+
+  const openCard = async (outlier: OutlierCard) => {
+    setBusyCardId(outlier.cardId)
+    try {
+      const list = cards ?? (await cardsApi.list(boardId))
+      setCards(list)
+      const card = list.find((c) => c.id === outlier.cardId)
+      if (card) {
+        setDetail({ card, columnName: outlier.columnName })
+      } else {
+        // Die Kennzahlen können älter sein als das Board: Die Karte kann inzwischen gelöscht,
+        // archiviert oder in den Ideen-Pool verschoben sein. Das zu sagen ist ehrlicher als ein
+        // leeres Modal — und nennt die Nummer, damit klar ist, welche Zeile gemeint war.
+        notify(
+          `Karte ${outlier.number} ist auf diesem Board nicht mehr zu finden — vermutlich gelöscht, archiviert oder in den Ideen-Pool verschoben.`,
+          'warning',
+        )
+      }
+    } catch {
+      notify('Karte konnte nicht geladen werden.', 'error')
+    } finally {
+      setBusyCardId(null)
+    }
+  }
+
+  return (
+    <Paper variant="outlined" sx={{ p: 2 }}>
+      <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1 }}>
+        Ausreißer (über 7 Tage in einer Spalte)
+      </Typography>
+      {outliers.length === 0 ? (
+        <Typography color="text.secondary">Keine Ausreißer.</Typography>
+      ) : (
+        <TableContainer>
+          <Table size="small" aria-label="Ausreißer-Karten">
+            <TableHead>
+              <TableRow>
+                <TableCell>#</TableCell>
+                <TableCell>Titel</TableCell>
+                <TableCell>Spalte</TableCell>
+                <TableCell align="right">Verweildauer</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {outliers.map((o) => {
+                const busy = busyCardId === o.cardId
+                return (
+                  <TableRow
+                    key={`${o.cardId}-${o.columnName}-${o.dwellSeconds}`}
+                    hover
+                    aria-busy={busy}
+                    onClick={() => void openCard(o)}
+                    sx={{ cursor: 'pointer' }}
+                  >
+                    <TableCell>
+                      <Stack direction="row" spacing={0.5} alignItems="center">
+                        <Link
+                          component="button"
+                          type="button"
+                          underline="hover"
+                          aria-label={`Karte ${o.number} öffnen: ${o.title}`}
+                          // Die Zeile hört auf denselben Klick — ohne Stopp öffnete der Auslöser
+                          // die Karte zweimal und lüde die Liste doppelt.
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            void openCard(o)
+                          }}
+                        >
+                          {o.number}
+                        </Link>
+                        {busy && <CircularProgress size={12} aria-label="Karte wird geladen" />}
+                      </Stack>
+                    </TableCell>
+                    <TableCell>{o.title}</TableCell>
+                    <TableCell>{o.columnName}</TableCell>
+                    <TableCell align="right">{formatDuration(o.dwellSeconds)}</TableCell>
+                  </TableRow>
+                )
+              })}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      )}
+      {detail && (
+        <CardDetailModal
+          card={detail.card}
+          canEdit={false}
+          columnName={detail.columnName}
+          onClose={() => setDetail(null)}
+        />
+      )}
+    </Paper>
+  )
+}
+
 export function DashboardPage() {
   const { boardId } = useParams()
   const id = Number.parseInt(boardId ?? '', 10)
@@ -299,37 +422,7 @@ export function DashboardPage() {
 
           <ThroughputSection throughput={kpis.throughput} />
 
-          <Paper variant="outlined" sx={{ p: 2 }}>
-            <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1 }}>
-              Ausreißer (über 7 Tage in einer Spalte)
-            </Typography>
-            {kpis.outliers.length === 0 ? (
-              <Typography color="text.secondary">Keine Ausreißer.</Typography>
-            ) : (
-              <TableContainer>
-                <Table size="small" aria-label="Ausreißer-Karten">
-                  <TableHead>
-                    <TableRow>
-                      <TableCell>#</TableCell>
-                      <TableCell>Titel</TableCell>
-                      <TableCell>Spalte</TableCell>
-                      <TableCell align="right">Verweildauer</TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {kpis.outliers.map((o) => (
-                      <TableRow key={`${o.cardId}-${o.columnName}-${o.dwellSeconds}`}>
-                        <TableCell>{o.number}</TableCell>
-                        <TableCell>{o.title}</TableCell>
-                        <TableCell>{o.columnName}</TableCell>
-                        <TableCell align="right">{formatDuration(o.dwellSeconds)}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </TableContainer>
-            )}
-          </Paper>
+          <OutlierSection boardId={id} outliers={kpis.outliers} />
         </Stack>
       )}
     </Box>
