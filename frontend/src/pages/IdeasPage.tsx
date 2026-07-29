@@ -10,6 +10,9 @@ import { projectsApi } from '../api/projects'
 import { Breadcrumbs } from '../components/Breadcrumbs'
 import { IdeaPlanningBoard } from '../components/IdeaPlanningBoard'
 import { NewCardModal, type NewItemInput } from '../components/NewCardModal'
+import { useSnackbar } from '../components/SnackbarProvider'
+import { SpecImportDialog, type SpecIdea } from '../components/SpecImportDialog'
+import { readTextFile } from '../lib/readTextFile'
 import { canEditCards } from '../lib/roles'
 import { useProjectIdeaEvents } from '../lib/useProjectIdeaEvents'
 
@@ -31,11 +34,15 @@ export function IdeasPage() {
   const [projectName, setProjectName] = useState<string>('')
   const [textFilter, setTextFilter] = useState('')
   const [createOpen, setCreateOpen] = useState(false)
+  // Im Browser gelesene Spezifikationsdatei (Name nur zur Anzeige). `null` = keine Vorschau offen;
+  // hochgeladen wird die Datei nie, sie existiert hier nur als Text.
+  const [spec, setSpec] = useState<{ fileName: string; markdown: string } | null>(null)
   // Reload-Impuls für die Planen-Ansicht: nach dem Anlegen einer Idee und bei Live-Events erhöht,
   // damit der vom IdeaPlanningBoard gehaltene Pool die neue bzw. geänderte Idee zeigt.
   const [refreshKey, setRefreshKey] = useState(0)
 
   const canEdit = canEditCards(role)
+  const notify = useSnackbar()
 
   // Veralteten Ansichts-Zustand einmalig entfernen (nicht nur ignorieren).
   useEffect(() => {
@@ -73,6 +80,22 @@ export function IdeasPage() {
     setRefreshKey((n) => n + 1)
   }
 
+  // Die Spezifikationsdatei wird ausschließlich im Browser gelesen — kein Upload, kein
+  // Objektspeicher, und die Quelldatei bleibt unangetastet (Issue #493).
+  const readSpecFile = async (file: File) => {
+    try {
+      setSpec({ fileName: file.name, markdown: await readTextFile(file) })
+    } catch {
+      notify('Die Datei konnte nicht gelesen werden.', 'error')
+    }
+  }
+
+  const handleSpecImport = async (ideas: SpecIdea[]) => {
+    const created = await ideasApi.createBatch(id, { ideas })
+    setRefreshKey((n) => n + 1)
+    notify(`${created.length} ${created.length === 1 ? 'Idee' : 'Ideen'} angelegt.`, 'success')
+  }
+
   if (!validId) {
     return <Alert severity="error">Ungültige Projekt-ID.</Alert>
   }
@@ -88,9 +111,29 @@ export function IdeasPage() {
           ]}
         />
         {canEdit && (
-          <Button variant="contained" onClick={() => setCreateOpen(true)}>
-            Idee anlegen
-          </Button>
+          <Stack direction="row" spacing={1}>
+            {/* Dateiauswahl wie beim Anhang-Upload (CardDetailModal): Button als <label> mit
+                verstecktem Input — hier zusätzlich auf Markdown eingeschränkt. */}
+            <Button variant="outlined" component="label">
+              Spezifikation einlesen
+              <input
+                hidden
+                type="file"
+                accept=".md,.markdown,text/markdown"
+                aria-label="Markdown-Datei auswählen"
+                onChange={(e) => {
+                  const file = e.target.files?.[0]
+                  // Zurücksetzen, damit dieselbe Datei erneut gewählt werden kann — sonst bleibt
+                  // `change` beim zweiten Mal aus, weil sich der Wert nicht ändert.
+                  e.target.value = ''
+                  if (file) void readSpecFile(file)
+                }}
+              />
+            </Button>
+            <Button variant="contained" onClick={() => setCreateOpen(true)}>
+              Idee anlegen
+            </Button>
+          </Stack>
         )}
       </Stack>
 
@@ -113,6 +156,14 @@ export function IdeasPage() {
         ideaOnly
         onClose={() => setCreateOpen(false)}
         onSubmit={handleCreate}
+      />
+
+      <SpecImportDialog
+        open={spec !== null}
+        fileName={spec?.fileName ?? ''}
+        markdown={spec?.markdown ?? ''}
+        onClose={() => setSpec(null)}
+        onImport={handleSpecImport}
       />
     </Box>
   )

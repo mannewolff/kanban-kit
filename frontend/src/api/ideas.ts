@@ -44,6 +44,23 @@ export const ideasApi = {
       method: 'POST',
       body: JSON.stringify(input),
     }),
+  /**
+   * Legt mehrere Pool-Ideen in einem Zug an (Batch-Endpoint aus #492) — Ziel des
+   * Spezifikations-Imports (#493). Alles-oder-nichts: Verletzt ein Element die Feldgrenzen des
+   * Servers (Titel > 300, Beschreibung > 10.000, mehr als 200 Elemente), entsteht keine einzige
+   * Idee. Antwort: die angelegten Ideen in Eingabereihenfolge, jeweils mit `id` und `number`.
+   */
+  createBatch: (
+    projectId: number,
+    input: {
+      ideas: Array<{ title: string; description?: string | null }>
+      targetBoardId?: number | null
+    },
+  ) =>
+    apiFetch<Idea[]>(`/api/projects/${projectId}/ideas/batch`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
   // Plant eine Pool-Idee auf ein Board ein (board-gebunden, nicht mehr Idee).
   planOntoBoard: (cardId: number, targetBoardId: number) =>
     apiFetch<Idea>(`/api/cards/${cardId}/plan`, {
