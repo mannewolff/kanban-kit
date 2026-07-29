@@ -124,6 +124,9 @@ describe('AppShell', () => {
     expect(screen.getByText('Projekte')).toBeInTheDocument()
     expect(screen.getByText('Manne')).toBeInTheDocument()
     expect(screen.getByLabelText('Abmelden')).toBeInTheDocument()
+    // Kartensuche der Kopfzeile (#490); ihr Verhalten ist in CardNumberSearch.test.tsx geprüft.
+    expect(screen.getByRole('search')).toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: 'Kartennummer suchen' })).toBeInTheDocument()
   })
 
   it('zeigt die aktuelle App-Version im Header', () => {
@@ -334,7 +337,10 @@ describe('AppShell', () => {
     renderShell()
     expect(screen.getByText('kanban-kit')).toBeInTheDocument()
     expect(screen.queryByLabelText('Abmelden')).not.toBeInTheDocument()
+    // Die Kartensuche läuft über die eigenen Projekte — ohne Session gibt es nichts zu durchsuchen.
+    expect(screen.queryByRole('search')).not.toBeInTheDocument()
   })
+
 
   it('ignoriert eine verspätet auflösende Board-Antwort nach dem Verlassen der Board-Route', async () => {
     let resolveGet: (b: { id: number; name: string; projectId: number; columns: never[] }) => void = () => {}

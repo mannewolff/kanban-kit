@@ -37,6 +37,25 @@ describe('cardsApi', () => {
     expect(result).toEqual(card)
   })
 
+  it('searchByNumber ruft GET /api/cards/search?number={n} und liefert die geparste Antwort', async () => {
+    const hits = [
+      {
+        card,
+        projectId: 2,
+        projectName: 'Projekt A',
+        boardId: 3,
+        boardName: 'Entwicklung',
+        boardArchived: false,
+        columnId: 10,
+        columnName: 'Backlog',
+      },
+    ]
+    const f = spyFetch(JSON.stringify(hits))
+    const result = await cardsApi.searchByNumber(345)
+    expect(lastCall(f).url).toBe('/api/cards/search?number=345')
+    expect(result).toEqual(hits)
+  })
+
   it('getActivity ruft GET /api/cards/{id}/activity und liefert die geparste Antwort', async () => {
     const activity = [{ id: 1, actorUserId: 5, type: 'MOVED', detail: 'Von A nach B', createdAt: '2026-01-01' }]
     spyFetch(JSON.stringify(activity))
