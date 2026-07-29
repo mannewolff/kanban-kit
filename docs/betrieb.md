@@ -53,6 +53,10 @@ geladen und ist per `.gitignore` ausgeschlossen).
 | `MANBAN_MAIL_ENABLED` | echten Mailversand aktivieren | `false` (Links werden geloggt) |
 | `MANBAN_CLEANUP_ENABLED` | geplante Aufräum-Jobs aktivieren (Done-Archivierung **und** Papierkorb-Leerung) | `true` |
 | `MANBAN_DONE_RETENTION_DAYS` | Tage bis Done-Karten automatisch archiviert werden | `30` |
+| `MANBAN_OUTBOX_ENABLED` | Outbox-Worker aktivieren (abgeschaltet bleiben Vorhaben liegen) | `true` |
+| `MANBAN_OUTBOX_POLL_INTERVAL_MS` | Abstand zwischen zwei Worker-Läufen in Millisekunden | `5000` |
+| `MANBAN_OUTBOX_MAX_ATTEMPTS` | Versuche, bevor ein Vorhaben als gescheitert gilt | `8` |
+| `MANBAN_OUTBOX_RETENTION_DAYS` | Tage, nach denen erledigte Outbox-Einträge gelöscht werden | `7` |
 | `MANBAN_SESSION_SECRET` | HMAC-Secret der Session-Cookies (in Produktion setzen!) | Dev-Default |
 | `MANBAN_COOKIE_SECURE` | Session-Cookie nur über HTTPS | `true` |
 | `POSTGRES_*`, `MINIO_*` | DB- und Objektspeicher-Zugangsdaten | siehe `docker-compose.yml` |
@@ -60,6 +64,18 @@ geladen und ist per `.gitignore` ausgeschlossen).
 > **Papierkorb-Aufbewahrung:** Karten im Papierkorb werden nach **30 Tagen** automatisch endgültig
 > gelöscht. Diese Frist ist derzeit fest eingestellt (nicht über eine Umgebungsvariable steuerbar);
 > abschalten lässt sich die Automatik nur global über `MANBAN_CLEANUP_ENABLED=false`.
+
+> **Outbox-Rückstand:** Seiteneffekte, die auch nach `MANBAN_OUTBOX_MAX_ATTEMPTS` Versuchen nicht
+> durchgehen, bleiben als Zeile mit `status = 'FAILED'` in der Tabelle `outbox_entry` stehen — samt
+> Ereignistyp, Versuchszahl und letzter Fehlermeldung. Der Aufräum-Job löscht **nur** erledigte
+> Einträge, damit ein nie ausgeführtes Vorhaben nicht lautlos verschwindet. Der Inhalt (`payload`)
+> ist bei erledigten wie gescheiterten Einträgen bewusst geleert, damit keine Klartext-Geheimnisse
+> dauerhaft in der Datenbank liegen. Prüfen mit:
+>
+> ```sql
+> SELECT id, event_type, idempotency_key, attempts, last_error FROM outbox_entry
+> WHERE status = 'FAILED' ORDER BY completed_at DESC;
+> ```
 
 ## E-Mail-Bestätigung (ohne Mailserver)
 

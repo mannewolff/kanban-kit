@@ -262,6 +262,31 @@ class ArchitectureTest {
               "project.domain ist modulintern (Zugriff nur ueber die project.application-Fassade; "
                   + "Ausnahme: Permission als Vokabular der Fassade)");
 
+  // --- Modul-Grenze: outbox-Fassade (Issue #501) ----------------------------------------------
+  // Die Outbox ist Querschnitt: Fachmodule planen Seiteneffekte ein (OutboxWriter/OutboxMessage)
+  // und liefern Handler (OutboxHandler). Alles andere — Repository-Port, Abarbeitung, Konfiguration
+  // — ist modulintern. Ohne diese Grenze koennte ein Fachmodul am Schreibweg vorbei direkt
+  // Eintraege manipulieren oder den Dispatcher selbst antreiben und damit die Zusage aushebeln,
+  // dass Vormerkung und fachliche Aenderung gemeinsam committen.
+  static final ArchRule OUTBOX_APPLICATION_IST_AUF_FASSADE_BEGRENZT =
+      fassadeIstAufWhitelistBegrenzt(
+          "outbox",
+          "nur ueber OutboxWriter/OutboxMessage/OutboxHandler",
+          "OutboxWriter",
+          "OutboxMessage",
+          "OutboxHandler");
+
+  // Gegenstueck zu CARD_/BOARD_/AUTH_DOMAIN_IST_MODULINTERN: Der Zustandsautomat des Eintrags
+  // gehoert der Outbox. Fachmodule sehen weder Status noch Versuchszaehler.
+  static final ArchRule OUTBOX_DOMAIN_IST_MODULINTERN =
+      noClasses()
+          .that()
+          .resideOutsideOfPackage("org.mwolff.manban.outbox..")
+          .should()
+          .dependOnClassesThat()
+          .resideInAPackage("org.mwolff.manban.outbox.domain..")
+          .as("outbox.domain ist modulintern (Zugriff nur ueber die outbox.application-Fassade)");
+
   // --- Aufrufer-Whitelist der rechtepruefungsfreien Schreib-Ports (Issue #463) -----------------
   // UserDisplayNameWriter und NextCardNumberWriter pruefen bewusst keine Rechte; die Autorisierung
   // liegt beim Aufrufer. Diese Zusicherung stand bisher nur im Javadoc — jedes weitere Modul, das
@@ -446,6 +471,16 @@ class ArchitectureTest {
   @Test
   void projectDomainIstModulintern() {
     PROJECT_DOMAIN_IST_MODULINTERN.check(PRODUKTIONSKLASSEN);
+  }
+
+  @Test
+  void outboxApplicationIstAufFassadeBegrenzt() {
+    OUTBOX_APPLICATION_IST_AUF_FASSADE_BEGRENZT.check(PRODUKTIONSKLASSEN);
+  }
+
+  @Test
+  void outboxDomainIstModulintern() {
+    OUTBOX_DOMAIN_IST_MODULINTERN.check(PRODUKTIONSKLASSEN);
   }
 
   @Test

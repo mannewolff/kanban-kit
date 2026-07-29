@@ -543,6 +543,7 @@
                         <exclude>org/mwolff/manban/project/infrastructure/persistence/ProjectEntity.class</exclude>
                         <exclude>org/mwolff/manban/project/infrastructure/persistence/ProjectInvitationEntity.class</exclude>
                         <exclude>org/mwolff/manban/project/infrastructure/persistence/ProjectMembershipEntity.class</exclude>
+                        <exclude>org/mwolff/manban/outbox/infrastructure/persistence/OutboxEntryEntity.class</exclude>
 
                         <!-- IT-only: DB-gebundene Repository-Adapter (JPA-Mapping, nur via IT, §5.2). -->
                         <exclude>org/mwolff/manban/accesstoken/infrastructure/persistence/AccessTokenRepositoryAdapter.class</exclude>
@@ -565,6 +566,10 @@
                         <exclude>org/mwolff/manban/project/infrastructure/persistence/ProjectInvitationRepositoryAdapter.class</exclude>
                         <exclude>org/mwolff/manban/project/infrastructure/persistence/ProjectMembershipRepositoryAdapter.class</exclude>
                         <exclude>org/mwolff/manban/project/infrastructure/persistence/ProjectRepositoryAdapter.class</exclude>
+                        <!-- Outbox-Adapter (#501): ON CONFLICT DO NOTHING und FOR UPDATE SKIP LOCKED
+                             sind reines Postgres-Verhalten und nur gegen die echte Datenbank
+                             pruefbar; OutboxIT deckt jeden Zweig ab. -->
+                        <exclude>org/mwolff/manban/outbox/infrastructure/persistence/OutboxRepositoryAdapter.class</exclude>
 
                         <!-- IT-only: JDBC-Reader/Repositories (echtes SQL, nur via IT, §5.2). -->
                         <exclude>org/mwolff/manban/auth/infrastructure/persistence/JdbcProjectMembershipReader.class</exclude>

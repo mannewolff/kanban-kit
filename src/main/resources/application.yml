@@ -63,6 +63,17 @@ manban:
     secret-key: ${MANBAN_MINIO_SECRET_KEY:manban-minio}
     bucket: ${MANBAN_MINIO_BUCKET:manban}
     max-per-card: 20
+  # Transaktionale Outbox (Issue #501): Seiteneffekte werden in der Fachtransaktion vorgemerkt und
+  # danach von einem Worker zugestellt. Abgeschaltet bleiben Einträge liegen, sie gehen nicht
+  # verloren. Aufgeräumt werden nur erledigte Einträge — endgültig gescheiterte bleiben sichtbar.
+  outbox:
+    enabled: ${MANBAN_OUTBOX_ENABLED:true}
+    poll-interval-ms: ${MANBAN_OUTBOX_POLL_INTERVAL_MS:5000}
+    batch-size: 50
+    max-attempts: ${MANBAN_OUTBOX_MAX_ATTEMPTS:8}
+    retry-base-delay: PT10S
+    retry-max-delay: PT1H
+    completed-retention-days: ${MANBAN_OUTBOX_RETENTION_DAYS:7}
   cleanup:
     enabled: ${MANBAN_CLEANUP_ENABLED:true}
     done-retention-days: ${MANBAN_DONE_RETENTION_DAYS:30}
