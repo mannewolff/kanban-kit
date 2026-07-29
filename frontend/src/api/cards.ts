@@ -90,6 +90,7 @@ export interface CardActivity {
 
 export const cardsApi = {
   list: (boardId: number) => apiFetch<Card[]>(`/api/boards/${boardId}/cards`),
+  get: (cardId: number) => apiFetch<Card>(`/api/cards/${cardId}`),
   getActivity: (cardId: number) => apiFetch<CardActivity[]>(`/api/cards/${cardId}/activity`),
   // Löst eine projektweite Kartennummer board-übergreifend zu ihrer Karte auf (404, wenn es sie
   // nicht gibt oder der Nutzer nicht Projektmitglied ist). Bewusst nicht `getByNumber`: dieser

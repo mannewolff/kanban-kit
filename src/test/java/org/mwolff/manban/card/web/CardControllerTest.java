@@ -174,6 +174,19 @@ class CardControllerTest {
   }
 
   @Test
+  void get_delegatesToService() {
+    // Given
+    CardView view = card();
+    when(service.getCard(3L, 1L)).thenReturn(view);
+
+    // When
+    CardView result = controller.get(3L, 1L);
+
+    // Then
+    assertThat(result).isSameAs(view);
+  }
+
+  @Test
   void update_delegatesToService() {
     // Given
     CardView view = card();

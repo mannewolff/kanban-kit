@@ -348,6 +348,21 @@ public class CardService {
   }
 
   /**
+   * Einzelne Karte für Stellen, die nur eine Karten-ID kennen (Dashboard-Ausreißer, #515) — ohne
+   * den Umweg über die komplette Board-Kartenliste. Leserecht wie bei den übrigen Lesepfaden:
+   * Projekt-Mitgliedschaft über die Projekt-ID der Karte; Nichtmitglied und unbekannte Karte sind
+   * nicht unterscheidbar (beide 404, kein Existenz-Leak).
+   *
+   * @throws CardNotFoundException wenn die Karte nicht existiert
+   */
+  @Transactional(readOnly = true)
+  public CardView getCard(long userId, long cardId) {
+    Card card = cards.findById(cardId).orElseThrow(CardNotFoundException::new);
+    permissions.requireMembership(userId, card.projectId());
+    return view(card);
+  }
+
+  /**
    * Sichert zu, dass die Karte auf dem angegebenen Board liegt — der Board-Guard des
    * token-gebundenen {@code kanbancompat}-Zugriffs (#44).
    *

@@ -2673,6 +2673,40 @@ class CardServiceTest {
         .isInstanceOf(CardNotFoundException.class);
   }
 
+  // --- getCard ---------------------------------------------------------
+
+  @Test
+  void getCard_returnsViewOfCard() {
+    when(cards.findById(1L)).thenReturn(Optional.of(boardCard(1L, 20L, 7, 0, false, false)));
+
+    assertThat(service.getCard(5L, 1L)).extracting(CardService.CardView::number).isEqualTo(7);
+  }
+
+  @Test
+  void getCard_requiresMembershipInCardsProject() {
+    when(cards.findById(1L)).thenReturn(Optional.of(boardCard(1L, 20L, 7, 0, false, false)));
+
+    service.getCard(5L, 1L);
+
+    verify(permissions).requireMembership(5L, PROJECT);
+  }
+
+  @Test
+  void getCard_throwsCardNotFound_whenCardUnknown() {
+    when(cards.findById(1L)).thenReturn(Optional.empty());
+
+    assertThatThrownBy(() -> service.getCard(5L, 1L)).isInstanceOf(CardNotFoundException.class);
+  }
+
+  @Test
+  void getCard_propagatesNotFound_whenCallerIsNoMember() {
+    // Nichtmitglied wie unbekannte Karte → 404, kein Existenz-Leak.
+    when(cards.findById(1L)).thenReturn(Optional.of(boardCard(1L, 20L, 7, 0, false, false)));
+    doThrow(new ProjectNotFoundException()).when(permissions).requireMembership(5L, PROJECT);
+
+    assertThatThrownBy(() -> service.getCard(5L, 1L)).isInstanceOf(ProjectNotFoundException.class);
+  }
+
   @Test
   void requireOnBoard_passes_whenCardIsOnBoard() {
     when(cards.findById(1L)).thenReturn(Optional.of(boardCard(1L, 20L, 1, 0, false, false)));

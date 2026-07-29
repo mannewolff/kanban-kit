@@ -30,6 +30,13 @@ describe('cardsApi', () => {
     expect(result).toEqual([card])
   })
 
+  it('get ruft GET /api/cards/{id} und liefert die geparste Antwort', async () => {
+    const f = spyFetch(JSON.stringify(card))
+    const result = await cardsApi.get(7)
+    expect(lastCall(f).url).toBe('/api/cards/7')
+    expect(result).toEqual(card)
+  })
+
   it('byNumber ruft GET /api/projects/{id}/cards/by-number/{n} und liefert die geparste Antwort', async () => {
     const f = spyFetch(JSON.stringify(card))
     const result = await cardsApi.byNumber(3, 5)

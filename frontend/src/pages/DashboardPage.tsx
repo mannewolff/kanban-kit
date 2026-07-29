@@ -16,6 +16,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { boardsApi, type Board } from '../api/boards'
 import { cardsApi, type Card } from '../api/cards'
+import { ApiError } from '../api/client'
 import { Breadcrumbs } from '../components/Breadcrumbs'
 import { CardDetailModal } from '../components/CardDetailModal'
 import { MetricTile } from '../components/MetricTile'
@@ -277,45 +278,37 @@ function ThroughputSection({ throughput }: Readonly<{ throughput: readonly Weekl
  * Die Ausreißer-Tabelle — und der Weg von dort zur Karte. Wer hier eine klemmende Karte sieht,
  * will sie ansehen, ohne sie sich zu merken und auf dem Board zu suchen.
  *
- * Ein Ausreißer trägt nur `cardId`, und es gibt keinen Endpoint, der eine einzelne Karte lädt
- * (unter `/api/cards/{id}/…` liegen nur activity, comments, attachments). Deshalb wird beim ersten
- * Klick die Kartenliste des Boards geholt und die Karte darin gesucht; danach bleibt sie für
- * weitere Klicks liegen. Die Kennzahlen der Seite sind ohnehin eine Momentaufnahme — eine zweite
- * Abfrage je Klick brächte keine frischere Aussage.
+ * Ein Klick lädt genau die eine Karte über `GET /api/cards/{id}` (#515) — der frühere Umweg über
+ * die komplette Board-Kartenliste samt Cache ist entfallen; auf großen Boards war er eine spürbare
+ * Antwortzeit für einen Klick. Jeder Klick fragt frisch nach: Die Karte kann sich seit der
+ * Kennzahlen-Momentaufnahme geändert haben.
  *
  * Die Zeile trägt bewusst **kein** `role="button"`: Das nähme der Datentabelle ihre Semantik und
  * damit Screenreadern die Zuordnung von Zelle zu Spaltenüberschrift. Fokussierbar ist stattdessen
  * die Kartennummer in der ersten Zelle; die Maus darf weiterhin die ganze Zeile treffen.
  */
 function OutlierSection({
-  boardId,
   projectId,
   outliers,
-}: Readonly<{ boardId: number; projectId?: number; outliers: readonly OutlierCard[] }>) {
+}: Readonly<{ projectId?: number; outliers: readonly OutlierCard[] }>) {
   const notify = useSnackbar()
-  const [cards, setCards] = useState<Card[] | null>(null)
   const [busyCardId, setBusyCardId] = useState<number | null>(null)
   const [detail, setDetail] = useState<{ card: Card; columnName: string } | null>(null)
 
   const openCard = async (outlier: OutlierCard) => {
     setBusyCardId(outlier.cardId)
     try {
-      const list = cards ?? (await cardsApi.list(boardId))
-      setCards(list)
-      const card = list.find((c) => c.id === outlier.cardId)
-      if (card) {
-        setDetail({ card, columnName: outlier.columnName })
+      const card = await cardsApi.get(outlier.cardId)
+      setDetail({ card, columnName: outlier.columnName })
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 404) {
+        // Die Kennzahlen können älter sein als das Board: Die Karte kann inzwischen endgültig
+        // gelöscht sein. Das zu sagen ist ehrlicher als ein leeres Modal — und nennt die Nummer,
+        // damit klar ist, welche Zeile gemeint war.
+        notify(`Karte ${outlier.number} nicht gefunden — gelöscht oder kein Zugriff.`, 'warning')
       } else {
-        // Die Kennzahlen können älter sein als das Board: Die Karte kann inzwischen gelöscht,
-        // archiviert oder in den Ideen-Pool verschoben sein. Das zu sagen ist ehrlicher als ein
-        // leeres Modal — und nennt die Nummer, damit klar ist, welche Zeile gemeint war.
-        notify(
-          `Karte ${outlier.number} ist auf diesem Board nicht mehr zu finden — vermutlich gelöscht, archiviert oder in den Ideen-Pool verschoben.`,
-          'warning',
-        )
+        notify('Karte konnte nicht geladen werden.', 'error')
       }
-    } catch {
-      notify('Karte konnte nicht geladen werden.', 'error')
     } finally {
       setBusyCardId(null)
     }
@@ -461,7 +454,7 @@ export function DashboardPage() {
 
           <ThroughputSection throughput={kpis.throughput} />
 
-          <OutlierSection boardId={id} projectId={board?.projectId} outliers={kpis.outliers} />
+          <OutlierSection projectId={board?.projectId} outliers={kpis.outliers} />
         </Stack>
       )}
     </Box>

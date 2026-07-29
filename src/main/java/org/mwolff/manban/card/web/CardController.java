@@ -87,6 +87,11 @@ class CardController {
     return cards.listEpics(userId, boardId);
   }
 
+  @GetMapping("/api/cards/{cardId}")
+  CardView get(@AuthenticationPrincipal Long userId, @PathVariable long cardId) {
+    return cards.getCard(userId, cardId);
+  }
+
   @PatchMapping("/api/cards/{cardId}")
   CardView update(
       @AuthenticationPrincipal Long userId,
