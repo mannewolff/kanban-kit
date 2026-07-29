@@ -286,6 +286,12 @@ function ThroughputSection({ throughput }: Readonly<{ throughput: readonly Weekl
  * Die Zeile trägt bewusst **kein** `role="button"`: Das nähme der Datentabelle ihre Semantik und
  * damit Screenreadern die Zuordnung von Zelle zu Spaltenüberschrift. Fokussierbar ist stattdessen
  * die Kartennummer in der ersten Zelle; die Maus darf weiterhin die ganze Zeile treffen.
+ *
+ * Das Modal rendert bewusst ohne `members`/`epics`/`boardLabels` des Boards: Zuständige und Labels
+ * erscheinen als ID-Chips statt mit Namen (bestehendes Fallback der Sektionen). Diese Kontextdaten
+ * zu laden hieße drei weitere Requests pro Klick für eine reine Lese-Ansicht — wer den vollen
+ * Kontext will, öffnet die Karte auf ihrem Board (dieselbe Entscheidung wie bei den
+ * Nummernverweisen, #488).
  */
 function OutlierSection({
   projectId,
@@ -296,6 +302,11 @@ function OutlierSection({
   const [detail, setDetail] = useState<{ card: Card; columnName: string } | null>(null)
 
   const openCard = async (outlier: OutlierCard) => {
+    // Läuft schon ein Abruf, verfällt der Klick: sonst spränge der Spinner zwischen Zeilen und
+    // derselbe ungeduldige Doppelklick löste zwei Requests aus.
+    if (busyCardId !== null) {
+      return
+    }
     setBusyCardId(outlier.cardId)
     try {
       const card = await cardsApi.get(outlier.cardId)

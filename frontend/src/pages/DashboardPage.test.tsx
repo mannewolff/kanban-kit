@@ -443,6 +443,23 @@ describe('DashboardPage', () => {
     expect(row).toHaveAttribute('aria-busy', 'false')
   })
 
+  it('ignoriert weitere Klicks, solange eine Karte lädt — kein Doppel-Request', async () => {
+    let release: (card: Card) => void = () => {}
+    mCards.get.mockReturnValue(
+      new Promise<Card>((resolve) => {
+        release = resolve
+      }),
+    )
+    const user = userEvent.setup()
+    renderPage()
+    const trigger = await screen.findByRole('button', { name: 'Karte 42 öffnen: Hängt fest' })
+    await user.click(trigger)
+    await user.click(trigger)
+    expect(mCards.get).toHaveBeenCalledTimes(1)
+    release(outlierCard)
+    expect(await screen.findByTestId('card-detail')).toBeInTheDocument()
+  })
+
   it('lädt die Karte beim zweiten Öffnen erneut — der Listen-Cache ist entfallen', async () => {
     const user = userEvent.setup()
     renderPage()
