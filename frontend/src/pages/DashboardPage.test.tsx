@@ -7,11 +7,6 @@ import { projectsApi } from '../api/projects'
 import { DashboardPage } from './DashboardPage'
 
 // Charts als schlanke Stubs — jsdom kann SVG-Größen nicht messen; hier zählt die Seitenlogik.
-vi.mock('@mui/x-charts/BarChart', () => ({
-  BarChart: ({ series }: { series: { data: number[] }[] }) => (
-    <div data-testid="bar-chart">{series[0].data.join(',')}</div>
-  ),
-}))
 vi.mock('@mui/x-charts/LineChart', () => ({
   LineChart: ({ series }: { series: { data: number[] }[] }) => (
     <div data-testid="line-chart">{series[0].data.join(',')}</div>
@@ -28,6 +23,7 @@ const mProjects = projectsApi as unknown as { list: ReturnType<typeof vi.fn> }
 const kpis: BoardDashboardKpis = {
   columnDwell: [
     { columnId: 1, columnName: 'Ready', avgDwellSeconds: 7200, sampleCount: 3 },
+    { columnId: 3, columnName: 'In progress', avgDwellSeconds: 480, sampleCount: 12 },
     { columnId: 2, columnName: 'Done', avgDwellSeconds: null, sampleCount: 0 },
   ],
   throughput: [
@@ -65,13 +61,46 @@ describe('DashboardPage', () => {
   it('zeigt Lead/Cycle-Time-Kacheln (Cycle null als n. v.)', async () => {
     renderPage()
     expect(await screen.findByText('2 T 3 Std')).toBeInTheDocument()
-    expect(screen.getByText('n. v.')).toBeInTheDocument()
+    // Zweimal „n. v.“: die Cycle Time ohne Datenbasis und die Spalte „Done“ ohne Messung.
+    expect(screen.getAllByText('n. v.')).toHaveLength(2)
   })
 
-  it('rendert das Balkendiagramm mit Verweildauer in Stunden (null -> 0)', async () => {
+  it('zeigt die Verweildauer je Spalte als lesbare Dauer statt als Dezimalstunden', async () => {
     renderPage()
-    // 7200 s = 2.0 Std; null -> 0
-    expect(await screen.findByTestId('bar-chart')).toHaveTextContent('2,0')
+    expect(await screen.findByText('2 Std 0 Min')).toBeInTheDocument()
+    expect(screen.getByText('8 Min')).toBeInTheDocument()
+    expect(screen.queryByText('2,0')).not.toBeInTheDocument()
+  })
+
+  it('zeigt für eine Spalte ohne Datenbasis „keine Messung“ und keine Null', async () => {
+    renderPage()
+    expect(await screen.findByText('keine Messung')).toBeInTheDocument()
+    expect(screen.queryByText('0')).not.toBeInTheDocument()
+    expect(screen.queryByText('0 Messungen')).not.toBeInTheDocument()
+  })
+
+  it('nennt die Stichprobengröße je Spalte', async () => {
+    renderPage()
+    expect(await screen.findByText('3 Messungen')).toBeInTheDocument()
+    expect(screen.getByText('12 Messungen')).toBeInTheDocument()
+  })
+
+  it('markiert die Spalte mit der längsten Verweildauer genau einmal', async () => {
+    renderPage()
+    expect(await screen.findAllByText('längste Spalte')).toHaveLength(1)
+  })
+
+  it('markiert keine Spalte, wenn nirgends gemessen wurde', async () => {
+    mDashboard.get.mockResolvedValue({
+      ...kpis,
+      columnDwell: [
+        { columnId: 1, columnName: 'Ready', avgDwellSeconds: null, sampleCount: 0 },
+        { columnId: 2, columnName: 'Done', avgDwellSeconds: null, sampleCount: 0 },
+      ],
+    })
+    renderPage()
+    expect(await screen.findAllByText('keine Messung')).toHaveLength(2)
+    expect(screen.queryByText('längste Spalte')).not.toBeInTheDocument()
   })
 
   it('rendert das Durchsatz-Liniendiagramm', async () => {

@@ -9,15 +9,33 @@ import TableContainer from '@mui/material/TableContainer'
 import TableHead from '@mui/material/TableHead'
 import TableRow from '@mui/material/TableRow'
 import Typography from '@mui/material/Typography'
-import { BarChart } from '@mui/x-charts/BarChart'
 import { LineChart } from '@mui/x-charts/LineChart'
 import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { boardsApi, type Board } from '../api/boards'
 import { Breadcrumbs } from '../components/Breadcrumbs'
-import { dashboardApi, type BoardDashboardKpis } from '../api/dashboard'
+import { MetricTile } from '../components/MetricTile'
+import { dashboardApi, type BoardDashboardKpis, type ColumnDwell } from '../api/dashboard'
 import { formatDuration } from '../lib/formatDuration'
 import { useProjectName } from '../lib/useProjectName'
+
+/**
+ * Spalte mit der längsten gemessenen Verweildauer — der Engpass, den die Kacheln markieren.
+ * `null`, solange keine Spalte eine Datenbasis hat: eine fehlende Messung ist kein Nullwert und
+ * darf deshalb auch nicht als „längste Spalte“ gewinnen.
+ */
+function longestDwellColumnId(columns: readonly ColumnDwell[]): number | null {
+  let bestId: number | null = null
+  let bestSeconds = -1
+  for (const column of columns) {
+    const seconds = column.avgDwellSeconds
+    if (seconds != null && seconds > bestSeconds) {
+      bestSeconds = seconds
+      bestId = column.columnId
+    }
+  }
+  return bestId
+}
 
 function KpiTile({ label, value }: Readonly<{ label: string; value: string }>) {
   return (
@@ -56,6 +74,7 @@ export function DashboardPage() {
   }, [id, validId])
 
   const projectName = useProjectName(board?.projectId ?? null)
+  const longestColumnId = kpis == null ? null : longestDwellColumnId(kpis.columnDwell)
 
   if (!validId) {
     return <Alert severity="error">Ungültige Board-ID.</Alert>
@@ -85,20 +104,21 @@ export function DashboardPage() {
 
           <Paper variant="outlined" sx={{ p: 2 }}>
             <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1 }}>
-              Ø Verweildauer je Spalte (Stunden)
+              Ø Verweildauer je Spalte
             </Typography>
-            <BarChart
-              height={260}
-              xAxis={[{ scaleType: 'band', data: kpis.columnDwell.map((c) => c.columnName) }]}
-              series={[
-                {
-                  data: kpis.columnDwell.map((c) =>
-                    c.avgDwellSeconds == null ? 0 : Math.round((c.avgDwellSeconds / 3600) * 10) / 10,
-                  ),
-                  label: 'Ø Stunden',
-                },
-              ]}
-            />
+            {/* Reihenfolge unverändert übernehmen: `columnDwell` kommt positionssortiert vom Backend. */}
+            <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
+              {kpis.columnDwell.map((c) => (
+                <MetricTile
+                  key={c.columnId}
+                  label={c.columnName}
+                  value={formatDuration(c.avgDwellSeconds)}
+                  sample={c.sampleCount}
+                  noMeasurement={c.avgDwellSeconds == null}
+                  emphasis={c.columnId === longestColumnId ? 'längste Spalte' : undefined}
+                />
+              ))}
+            </Box>
           </Paper>
 
           <Paper variant="outlined" sx={{ p: 2 }}>
