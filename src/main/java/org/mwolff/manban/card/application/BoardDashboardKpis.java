@@ -8,11 +8,16 @@ import org.jspecify.annotations.Nullable;
  * Kennzahlen eines Boards für das Zykluszeit-Dashboard. Dauern durchgängig in Sekunden; die
  * Formatierung übernimmt das Frontend. {@code null} bei einer Kennzahl bedeutet „keine Datenbasis"
  * (z. B. noch keine abgeschlossene Karte oder keine „Ready"-artige Spalte).
+ *
+ * <p>{@code leadTimeSampleCount} ist die Anzahl der Karten, aus denen {@code avgLeadTimeSeconds}
+ * gemittelt wurde — nicht die Anzahl aller Karten und nicht die Summe des Durchsatzes (der ist auf
+ * zwölf Wochen gefenstert). Ohne diese Zahl ließe sich der Durchschnitt nicht einordnen.
  */
 public record BoardDashboardKpis(
     List<ColumnDwell> columnDwell,
     List<WeeklyThroughput> throughput,
     @Nullable Long avgLeadTimeSeconds,
+    int leadTimeSampleCount,
     @Nullable Long avgCycleTimeSeconds,
     List<OutlierCard> outliers) {
 

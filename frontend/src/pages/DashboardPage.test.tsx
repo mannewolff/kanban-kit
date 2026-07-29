@@ -31,6 +31,7 @@ const kpis: BoardDashboardKpis = {
     { weekStart: '2026-06-08T00:00:00Z', doneCount: 5 },
   ],
   avgLeadTimeSeconds: 2 * 86_400 + 3 * 3600,
+  leadTimeSampleCount: 5,
   avgCycleTimeSeconds: null,
   outliers: [{ cardId: 9, number: 42, title: 'Hängt fest', columnName: 'Review', dwellSeconds: 700_000 }],
 }
@@ -58,11 +59,49 @@ describe('DashboardPage', () => {
     expect(await screen.findByRole('link', { name: 'Projekte' })).toHaveAttribute('href', '/')
   })
 
-  it('zeigt Lead/Cycle-Time-Kacheln (Cycle null als n. v.)', async () => {
+  it('zeigt Lead/Cycle-Time (Cycle null als n. v.)', async () => {
     renderPage()
     expect(await screen.findByText('2 T 3 Std')).toBeInTheDocument()
     // Zweimal „n. v.“: die Cycle Time ohne Datenbasis und die Spalte „Done“ ohne Messung.
     expect(screen.getAllByText('n. v.')).toHaveLength(2)
+  })
+
+  it('führt mit der Ø Lead Time als einziger Hero-Zahl', async () => {
+    renderPage()
+    expect(await screen.findByTestId('hero-metric')).toHaveTextContent('2 T 3 Std')
+    expect(screen.getAllByTestId('hero-metric')).toHaveLength(1)
+  })
+
+  it('nennt unter der Hero-Zahl ihre Bedeutung und ihre Datenbasis', async () => {
+    renderPage()
+    expect(await screen.findByText(/Durchschnitt aus 5 abgeschlossenen Karten/)).toBeInTheDocument()
+  })
+
+  it('nennt die Datenbasis im Singular, wenn nur eine Karte fertig ist', async () => {
+    mDashboard.get.mockResolvedValue({ ...kpis, leadTimeSampleCount: 1 })
+    renderPage()
+    expect(await screen.findByText(/Durchschnitt aus 1 abgeschlossenen Karte\./)).toBeInTheDocument()
+  })
+
+  it('zeigt die Cycle Time als zweite Kennzahl neben der Hero-Zahl, nicht als Hero-Zahl', async () => {
+    renderPage()
+    const hero = await screen.findByTestId('hero-metric')
+    expect(screen.getByText('Ø Cycle Time')).toBeInTheDocument()
+    expect(hero).not.toHaveTextContent('Ø Cycle Time')
+  })
+
+  it('fällt ohne abgeschlossene Karte auf einen ruhigen Hinweis statt einer Hero-Zahl zurück', async () => {
+    mDashboard.get.mockResolvedValue({
+      ...kpis,
+      avgLeadTimeSeconds: null,
+      leadTimeSampleCount: 0,
+      avgCycleTimeSeconds: null,
+    })
+    renderPage()
+    expect(await screen.findByText(/Noch keine abgeschlossene Karte/)).toBeInTheDocument()
+    expect(screen.queryByTestId('hero-metric')).not.toBeInTheDocument()
+    // Nur die Spalte „Done“ darf jetzt noch „n. v.“ zeigen — keine hervorgehobene Leerangabe.
+    expect(screen.getAllByText('n. v.')).toHaveLength(1)
   })
 
   it('zeigt die Verweildauer je Spalte als lesbare Dauer statt als Dezimalstunden', async () => {

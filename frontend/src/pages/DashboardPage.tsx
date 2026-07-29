@@ -37,15 +37,71 @@ function longestDwellColumnId(columns: readonly ColumnDwell[]): number | null {
   return bestId
 }
 
-function KpiTile({ label, value }: Readonly<{ label: string; value: string }>) {
+/**
+ * Datenbasis der Hero-Zahl als Satzteil — dieselbe Aussage wie die Stichprobengröße der
+ * Spalten-Kacheln, hier aber in Fließtext, weil sie unter der großen Zahl als Satz gelesen wird.
+ */
+function sampleBasis(sample: number): string {
+  return sample === 1 ? '1 abgeschlossenen Karte' : `${sample} abgeschlossenen Karten`
+}
+
+/**
+ * Der Kennzahlenkopf des Dashboards: **eine** Zahl führt, die zweite steht kleiner daneben.
+ * Zwei gleich große „wichtigste" Zahlen heben sich gegenseitig auf — deshalb ist die Hero-Zahl
+ * die Ø Lead Time (vom Anlegen der Karte bis fertig, die Sicht des Auftraggebers). Soll künftig
+ * die Cycle Time führen, werden hier die beiden Blöcke getauscht; die Darstellung bleibt.
+ *
+ * Ohne abgeschlossene Karte liefert das Backend `null` für beide Zeiten (die Cycle Time setzt eine
+ * fertige Karte ebenso voraus wie die Lead Time). Dann prangt hier keine Leerangabe in 48 px,
+ * sondern ein ruhiger Hinweis.
+ */
+function MetricHeadline({ kpis }: Readonly<{ kpis: BoardDashboardKpis }>) {
+  if (kpis.avgLeadTimeSeconds == null) {
+    return (
+      <Paper variant="outlined" sx={{ p: 3 }}>
+        <Typography color="text.secondary">
+          Noch keine abgeschlossene Karte — Lead und Cycle Time entstehen, sobald die erste Karte
+          fertig ist.
+        </Typography>
+      </Paper>
+    )
+  }
+
   return (
-    <Paper variant="outlined" sx={{ p: 2, flex: 1, minWidth: 160 }}>
-      <Typography variant="caption" color="text.secondary">
-        {label}
-      </Typography>
-      <Typography variant="h5" sx={{ fontWeight: 600 }}>
-        {value}
-      </Typography>
+    <Paper variant="outlined" sx={{ p: 3 }}>
+      <Stack
+        direction={{ xs: 'column', sm: 'row' }}
+        spacing={{ xs: 2, sm: 5 }}
+        alignItems={{ sm: 'baseline' }}
+      >
+        <Box>
+          <Typography variant="caption" color="text.secondary">
+            Ø Lead Time
+          </Typography>
+          {/*
+            Bewusst ohne `tabular-nums`: Tabellenziffern sind für untereinander stehende Zahlen
+            gedacht und lassen eine große Einzelzahl auseinanderfallen. Schriftfamilie bleibt die
+            des Themes — nur die Größe trägt die Hervorhebung.
+          */}
+          <Typography
+            component="p"
+            data-testid="hero-metric"
+            sx={{ fontSize: { xs: 48, sm: 56 }, fontWeight: 700, lineHeight: 1.1 }}
+          >
+            {formatDuration(kpis.avgLeadTimeSeconds)}
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+            Vom Anlegen der Karte bis fertig — Durchschnitt aus{' '}
+            {sampleBasis(kpis.leadTimeSampleCount)}.
+          </Typography>
+        </Box>
+        <Box>
+          <Typography variant="caption" color="text.secondary">
+            Ø Cycle Time
+          </Typography>
+          <Typography variant="h6">{formatDuration(kpis.avgCycleTimeSeconds)}</Typography>
+        </Box>
+      </Stack>
     </Paper>
   )
 }
@@ -97,10 +153,7 @@ export function DashboardPage() {
 
       {kpis && (
         <Stack spacing={3}>
-          <Stack direction="row" spacing={2} flexWrap="wrap">
-            <KpiTile label="Ø Lead Time" value={formatDuration(kpis.avgLeadTimeSeconds)} />
-            <KpiTile label="Ø Cycle Time" value={formatDuration(kpis.avgCycleTimeSeconds)} />
-          </Stack>
+          <MetricHeadline kpis={kpis} />
 
           <Paper variant="outlined" sx={{ p: 2 }}>
             <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1 }}>

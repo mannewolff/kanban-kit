@@ -106,6 +106,7 @@ class CardCycleTimeServiceTest {
     assertThat(kpis.columnDwell()).isEmpty();
     assertThat(kpis.outliers()).isEmpty();
     assertThat(kpis.avgLeadTimeSeconds()).isNull();
+    assertThat(kpis.leadTimeSampleCount()).isZero();
     assertThat(kpis.avgCycleTimeSeconds()).isNull();
     assertThat(kpis.throughput()).hasSize(12);
     assertThat(kpis.throughput()).allSatisfy(w -> assertThat(w.doneCount()).isZero());
@@ -190,6 +191,20 @@ class CardCycleTimeServiceTest {
 
     // Epic (Lead 500000) wird ausgefiltert -> Durchschnitt bleibt (100+300)/2.
     assertThat(service.dashboard(5L, BOARD).avgLeadTimeSeconds()).isEqualTo(200L);
+  }
+
+  @Test
+  void leadTimeSampleCount_countsExactlyTheCardsBehindTheAverage() {
+    stub(
+        List.of(
+            card(1L, 20L, 1, "a", NOW.minusSeconds(100), NOW),
+            card(2L, 20L, 2, "b", NOW.minusSeconds(300), NOW),
+            card(3L, 20L, 3, "open", NOW.minusSeconds(999), null)),
+        List.of(),
+        List.of());
+
+    // Die offene Karte geht nicht in den Durchschnitt ein und darf die Datenbasis nicht aufblähen.
+    assertThat(service.dashboard(5L, BOARD).leadTimeSampleCount()).isEqualTo(2);
   }
 
   @Test

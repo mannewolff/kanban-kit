@@ -9,6 +9,7 @@ describe('dashboardApi', () => {
       columnDwell: [],
       throughput: [],
       avgLeadTimeSeconds: 100,
+      leadTimeSampleCount: 3,
       avgCycleTimeSeconds: null,
       outliers: [],
     }
