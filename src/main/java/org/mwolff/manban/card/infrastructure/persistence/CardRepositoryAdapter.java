@@ -158,6 +158,14 @@ class CardRepositoryAdapter implements CardRepository {
    * zwischengespeicherte Instanz — und die Sperre bliebe wirkungslos für das, was danach gelesen
    * wird.
    */
+  // Sonar java:S2077 (Issue #508, GitHub #402): Der konkatenierte Teil ist ausschließlich
+  // "placeholders" — eine Aneinanderreihung des Literals "?" per Collections.nCopies, deren
+  // einzige variable Größe die Anzahl der IDs ist. Kein Zeichen der übergebenen Werte gelangt in
+  // den SQL-Text; die IDs selbst sind typisierte Long-Bindeparameter. Damit ist die Konkatenation
+  // injektionsfest — die Regel greift bereits auf die String-Verknüpfung, ohne den Datenfluss zu
+  // prüfen. Ein Umbau auf NamedParameterJdbcTemplate (wie in Issue #473) scheidet hier aus: er
+  // würde die Sperr-Abfrage auf ein zweites JDBC-Template umhängen, ohne etwas sicherer zu machen.
+  @SuppressWarnings("java:S2077")
   @Override
   public void lockColumnPositions(List<Long> columnIds) {
     List<Long> ordered = columnIds.stream().distinct().sorted().toList();
@@ -215,6 +223,14 @@ class CardRepositoryAdapter implements CardRepository {
     entityManager.clear();
   }
 
+  // Sonar java:S2077 (Issue #508): Konkateniert werden nur das Literal des Prädikats
+  // ACTIVE_NAMESPACE und das Ergebnis von orderKeyword — einer über das geschlossene Enum
+  // SortDirection erschöpfenden Abbildung auf genau zwei SQL-Schlüsselwörter. Es gibt keinen Pfad,
+  // auf dem ein Aufrufer eigene Zeichen in den SQL-Text bringt; Spalten-ID und Werte sind
+  // Bindeparameter. SQL kennt für ASC/DESC keine Bindung, ein Umbau auf Parameter scheidet daher
+  // aus. Der erschöpfende switch statt eines Ternärs macht die Vollständigkeit der Abbildung zur
+  // Compiler-Bedingung: Ein neuer Enum-Wert bricht den Build, statt still auf DESC zu fallen.
+  @SuppressWarnings("java:S2077")
   @Override
   public void sortActiveByNumber(long columnId, SortDirection direction) {
     entityManager.flush();
@@ -222,16 +238,12 @@ class CardRepositoryAdapter implements CardRepository {
     // Erst sperren, dann lesen: die neue Ordnung entsteht aus dem gelesenen Bestand (#499).
     lockColumnPositions(List.of(columnId));
 
-    // Die Richtung wird NICHT als Parameter gebunden, sondern aus dem Enum in feste SQL-Schlüssel-
-    // wörter übersetzt — SQL kennt keine Bindung für ASC/DESC, und ein durchgereichter String
-    // wäre eine Injektionsstelle.
-    String order = direction == SortDirection.ASC ? "ASC" : "DESC";
     List<Long> sorted =
         jdbc.queryForList(
             "SELECT id FROM card WHERE column_id = ? "
                 + ACTIVE_NAMESPACE
                 + " ORDER BY number "
-                + order,
+                + orderKeyword(direction),
             Long.class,
             columnId);
 
@@ -281,6 +293,19 @@ class CardRepositoryAdapter implements CardRepository {
     assignPositions(activeCardIds(oldColumnId, cardId));
 
     entityManager.clear();
+  }
+
+  /**
+   * Übersetzt die Sortierrichtung in das SQL-Schlüsselwort. Erschöpfender Switch über ein
+   * geschlossenes Enum: Der Compiler erzwingt für jede Richtung eine eigene, literale Entsprechung.
+   * Es gibt damit keinen Zweig, über den etwas anderes als die beiden Schlüsselwörter in den
+   * SQL-Text gelangen kann — Grundlage der S2077-Bewertung an {@link #sortActiveByNumber}.
+   */
+  private static String orderKeyword(SortDirection direction) {
+    return switch (direction) {
+      case ASC -> "ASC";
+      case DESC -> "DESC";
+    };
   }
 
   private @Nullable Long columnIdOf(long cardId) {
