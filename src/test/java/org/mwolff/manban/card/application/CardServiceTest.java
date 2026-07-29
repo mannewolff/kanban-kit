@@ -704,6 +704,72 @@ class CardServiceTest {
         .isInstanceOf(BoardNotFoundException.class);
   }
 
+  // --- sortColumnByNumber ------------------------------------------------
+
+  @Test
+  void sortColumnByNumber_requiresCardMove_andDelegatesAscending() {
+    // Given
+    when(boardService.requireColumnBoardId(20L)).thenReturn(BOARD);
+
+    // When
+    service.sortColumnByNumber(1L, 20L, SortDirection.ASC);
+
+    // Then
+    verify(permissions).require(1L, PROJECT, Permission.CARD_MOVE);
+    verify(cards).sortActiveByNumber(20L, SortDirection.ASC);
+  }
+
+  @Test
+  void sortColumnByNumber_delegatesDescending() {
+    // Given
+    when(boardService.requireColumnBoardId(20L)).thenReturn(BOARD);
+
+    // When
+    service.sortColumnByNumber(1L, 20L, SortDirection.DESC);
+
+    // Then
+    verify(cards).sortActiveByNumber(20L, SortDirection.DESC);
+  }
+
+  @Test
+  void sortColumnByNumber_publishesBoardChangedEvent() {
+    // Given
+    when(boardService.requireColumnBoardId(20L)).thenReturn(BOARD);
+
+    // When
+    service.sortColumnByNumber(1L, 20L, SortDirection.ASC);
+
+    // Then: offene Boards ziehen über SSE nach
+    verify(events).publishEvent(new CardBoardActivityEvent(BOARD, ActivityType.MOVED, null));
+  }
+
+  @Test
+  void sortColumnByNumber_throwsColumnNotFound_whenColumnUnknown() {
+    // Given
+    when(boardService.requireColumnBoardId(20L)).thenThrow(new ColumnNotFoundException());
+
+    // When / Then
+    assertThatThrownBy(() -> service.sortColumnByNumber(1L, 20L, SortDirection.ASC))
+        .isInstanceOf(ColumnNotFoundException.class);
+    verify(cards, never()).sortActiveByNumber(anyLong(), any(SortDirection.class));
+    verify(events, never()).publishEvent(any());
+  }
+
+  @Test
+  void sortColumnByNumber_propagatesPermissionDenied() {
+    // Given
+    when(boardService.requireColumnBoardId(20L)).thenReturn(BOARD);
+    doThrow(new ProjectAccessDeniedException())
+        .when(permissions)
+        .require(9L, PROJECT, Permission.CARD_MOVE);
+
+    // When / Then
+    assertThatThrownBy(() -> service.sortColumnByNumber(9L, 20L, SortDirection.ASC))
+        .isInstanceOf(ProjectAccessDeniedException.class);
+    verify(cards, never()).sortActiveByNumber(anyLong(), any(SortDirection.class));
+    verify(events, never()).publishEvent(any());
+  }
+
   // --- archive / restore / delete --------------------------------------
 
   @Test

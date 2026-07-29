@@ -554,6 +554,28 @@ public class CardService {
   }
 
   /**
+   * Ordnet die aktiven Karten einer Spalte nach ihrer Kartennummer — {@link SortDirection#ASC}
+   * kleinste zuerst, {@link SortDirection#DESC} größte zuerst. Gedacht für Spalten, in die mehrere
+   * Karten am Stück gezogen wurden und die deshalb ungeordnet dastehen.
+   *
+   * <p>Fachlich ist das ein <em>Massen-Verschieben innerhalb</em> der Spalte und keine
+   * Strukturänderung am Board, deshalb genügt {@link Permission#CARD_MOVE} — dasselbe Recht wie für
+   * das Verschieben einer einzelnen Karte. Karten außerhalb des aktiven Positions-Namespace
+   * (archiviert, Papierkorb, Ideen-Speicher) und Epics bleiben unberührt; Details am Port {@link
+   * CardRepository#sortActiveByNumber(long, SortDirection)}.
+   */
+  @Transactional
+  public void sortColumnByNumber(long userId, long columnId, SortDirection direction) {
+    long boardId = boardService.requireColumnBoardId(columnId);
+    permissions.require(userId, boardService.requireProjectId(boardId), Permission.CARD_MOVE);
+
+    cards.sortActiveByNumber(columnId, direction);
+
+    // Ohne Karten-Bezug: betroffen ist die ganze Spalte, offene Boards laden über SSE neu.
+    publishChanged(boardId, ActivityType.MOVED, null);
+  }
+
+  /**
    * Verschiebt eine Karte in eine Spalte eines anderen Boards; die Karte landet am Ende der
    * Zielspalte. Rechte und Nebenwirkungen sind richtungsabhängig:
    *

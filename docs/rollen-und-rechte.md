@@ -30,7 +30,7 @@ Recht). Der Schlüssel in der zweiten Spalte ist der technische Name des Rechts 
 | Karte anlegen, Idee aus dem Pool einplanen | `TICKET_CREATE` | – | ✓ | ✓ | ✓ |
 | Karte bearbeiten (Titel, Text, Zuständige, Fälligkeit, Labels) | `TICKET_UPDATE` | – | ✓ | ✓ | ✓ |
 | Karte archivieren, in den Papierkorb legen, wiederherstellen | `TICKET_DELETE` | – | ✓ | ✓ | ✓ |
-| Karte verschieben — Spalte, **anderes Board desselben Projekts**, Ideen-Pool | `CARD_MOVE` | – | ✓ | ✓ | ✓ |
+| Karte verschieben — Spalte, **anderes Board desselben Projekts**, Ideen-Pool; Spalte nach Kartennummer sortieren | `CARD_MOVE` | – | ✓ | ✓ | ✓ |
 | **Karte in ein anderes Projekt verschieben** | *(Projekt-Rolle `OWNER`)* | – | – | – | ✓ |
 | Kommentare lesen | `COMMENT_READ` | ✓ | ✓ | ✓ | ✓ |
 | Kommentar schreiben | `COMMENT_CREATE` | – | ✓ | ✓ | ✓ |

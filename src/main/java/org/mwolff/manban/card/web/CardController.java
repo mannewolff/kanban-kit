@@ -12,6 +12,7 @@ import org.mwolff.manban.board.application.ColumnNotFoundException;
 import org.mwolff.manban.card.application.CardService;
 import org.mwolff.manban.card.application.CardService.CardView;
 import org.mwolff.manban.card.application.CardService.EpicView;
+import org.mwolff.manban.card.application.SortDirection;
 import org.mwolff.manban.card.domain.CardActivity;
 import org.mwolff.manban.card.domain.CardType;
 import org.springframework.http.HttpStatus;
@@ -29,6 +30,12 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * Karten- und Epic-Verwaltung eines Boards (Anlegen, Bearbeiten, Zuordnen, Archivieren, Löschen).
  */
+// PMD.CouplingBetweenObjects: eingehender Adapter der gesamten Karten-/Epic-API. Die Kopplung
+// zählt im Wesentlichen die Request-/Response-Records der einzelnen Endpunkte plus die
+// Application-Typen, an die delegiert wird — jeder Endpunkt bringt sie zwangsläufig mit. Eine
+// Aufteilung würde eine zusammengehörige HTTP-Oberfläche über mehrere Controller zerreißen, ohne
+// dass ein einziger Endpunkt einfacher würde.
+@SuppressWarnings("PMD.CouplingBetweenObjects")
 @RestController
 class CardController {
 
@@ -114,6 +121,19 @@ class CardController {
       @PathVariable long cardId,
       @Valid @RequestBody MoveCardRequest request) {
     return cards.move(userId, cardId, request.columnId(), request.position());
+  }
+
+  /**
+   * Ordnet die aktiven Karten einer Spalte nach Kartennummer. Die Richtung kommt bei jedem Aufruf
+   * mit — das Backend merkt sich keinen Toggle-Zustand.
+   */
+  @PostMapping("/api/columns/{columnId}/cards/sort-by-number")
+  @ResponseStatus(HttpStatus.NO_CONTENT)
+  void sortByNumber(
+      @AuthenticationPrincipal Long userId,
+      @PathVariable long columnId,
+      @Valid @RequestBody SortByNumberRequest request) {
+    cards.sortColumnByNumber(userId, columnId, request.direction());
   }
 
   @PostMapping("/api/cards/{cardId}/transfer")
@@ -268,6 +288,8 @@ class CardController {
       @NotNull Long columnId, @jakarta.validation.constraints.PositiveOrZero int position) {}
 
   record TransferCardRequest(@NotNull Long targetBoardId, @NotNull Long targetColumnId) {}
+
+  record SortByNumberRequest(@NotNull SortDirection direction) {}
 
   record PlanRequest(@NotNull Long targetBoardId) {}
 

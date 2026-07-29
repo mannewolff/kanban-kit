@@ -237,6 +237,23 @@ public class BoardService {
     return toColumnView(column);
   }
 
+  /**
+   * Board-ID der Spalte — die Auflösung für modulfremde Use-Cases, die nur eine Spalten-ID kennen
+   * (das Sortieren einer Spalte spricht {@code /api/columns/{columnId}} an) und daraus erst Board
+   * und Projekt für ihre eigene Rechteprüfung ableiten müssen.
+   *
+   * <p>Bewusst ohne Board-Parameter und damit ohne die Zusicherung von {@link #requireColumn(long,
+   * long)}: Wer das Board noch gar nicht kennt, kann es nicht mitgeben. Die Rechteprüfung des
+   * Aufrufers findet danach auf dem hier aufgelösten Projekt statt — ein Existenz-Leak entsteht
+   * nicht, weil ohne Mitgliedschaft 404 folgt.
+   *
+   * @throws ColumnNotFoundException wenn die Spalte nicht existiert
+   */
+  @Transactional(readOnly = true)
+  public long requireColumnBoardId(long columnId) {
+    return loadColumn(columnId).boardId();
+  }
+
   /** Spalten des Boards, aufsteigend nach Position (leer, wenn das Board keine Spalten hat). */
   @Transactional(readOnly = true)
   public List<ColumnView> listColumns(long boardId) {

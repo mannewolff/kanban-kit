@@ -8,6 +8,7 @@ import java.util.Optional;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.card.application.CardMovedConcurrentlyException;
 import org.mwolff.manban.card.application.CardRepository;
+import org.mwolff.manban.card.application.SortDirection;
 import org.mwolff.manban.card.domain.Card;
 import org.mwolff.manban.card.domain.CardType;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -21,6 +22,14 @@ class CardRepositoryAdapter implements CardRepository {
   private static final int PARK_OFFSET = 100_000;
 
   private static final int PARK_MOVED_CARD = 999_999;
+
+  /**
+   * Prädikat des aktiven Positions-Namespace — dieselbe Bedingung, unter der die generierte Spalte
+   * {@code active_position} einen Wert trägt (V16). Als Konstante, damit Lesen und Schreiben beim
+   * Sortieren nachweislich dieselbe Menge treffen.
+   */
+  private static final String ACTIVE_NAMESPACE =
+      "AND archived = false AND idea_stored = false AND deleted_at IS NULL AND type <> 'EPIC' ";
 
   private final CardJpaRepository jpa;
   private final JdbcTemplate jdbc;
@@ -201,6 +210,41 @@ class CardRepositoryAdapter implements CardRepository {
       assignPositions(sourceOrder);
     }
     assignPositions(targetOrder);
+
+    // Direkt-SQL umging den JPA-Kontext -> Cache leeren, damit Folge-Reads frisch sind.
+    entityManager.clear();
+  }
+
+  @Override
+  public void sortActiveByNumber(long columnId, SortDirection direction) {
+    entityManager.flush();
+
+    // Erst sperren, dann lesen: die neue Ordnung entsteht aus dem gelesenen Bestand (#499).
+    lockColumnPositions(List.of(columnId));
+
+    // Die Richtung wird NICHT als Parameter gebunden, sondern aus dem Enum in feste SQL-Schlüssel-
+    // wörter übersetzt — SQL kennt keine Bindung für ASC/DESC, und ein durchgereichter String
+    // wäre eine Injektionsstelle.
+    String order = direction == SortDirection.ASC ? "ASC" : "DESC";
+    List<Long> sorted =
+        jdbc.queryForList(
+            "SELECT id FROM card WHERE column_id = ? "
+                + ACTIVE_NAMESPACE
+                + " ORDER BY number "
+                + order,
+            Long.class,
+            columnId);
+
+    // Phase 1 — parken: alle betroffenen Karten weit außerhalb des realen Bereichs, damit die
+    // finale Vergabe nicht transient mit einer noch belegten Position kollidiert.
+    jdbc.update(
+        "UPDATE card SET position_in_column = position_in_column + ? WHERE column_id = ? "
+            + ACTIVE_NAMESPACE,
+        PARK_OFFSET,
+        columnId);
+
+    // Phase 2 — finale, lückenlose Positionen 0..n-1 in der gewünschten Reihenfolge.
+    assignPositions(sorted);
 
     // Direkt-SQL umging den JPA-Kontext -> Cache leeren, damit Folge-Reads frisch sind.
     entityManager.clear();

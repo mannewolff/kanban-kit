@@ -136,6 +136,25 @@ public interface CardRepository {
   void move(long cardId, long newColumnId, int newPosition);
 
   /**
+   * Ordnet die aktiven Karten einer Spalte nach ihrer projektweiten Kartennummer und vergibt die
+   * Positionen lückenlos neu ({@code 0..n-1}); {@link SortDirection#ASC} setzt die kleinste Nummer
+   * nach vorn, {@link SortDirection#DESC} die größte.
+   *
+   * <p>Betroffen ist ausschließlich der <strong>aktive Positions-Namespace</strong> der Spalte
+   * ({@code archived = false}, {@code idea_stored = false}, {@code deleted_at IS NULL}, {@code type
+   * <> 'EPIC'}) — genau die Menge, für die {@code active_position} gesetzt ist. Archivierte,
+   * gelöschte und Ideen-Speicher-Karten sowie Epics behalten ihre Position: Sie halten keinen
+   * aktiven Anspruch, und eine Neuvergabe würde ihre Rückkehr-Position ohne Grund verwerfen.
+   *
+   * <p>Die Spaltenzeile wird gesperrt (siehe {@link #lockColumnPositions(List)}) — die neue Ordnung
+   * entsteht aus dem gelesenen Bestand, eine parallel angehängte Karte bliebe sonst außerhalb der
+   * Neuvergabe zurück. Vergeben wird in zwei Phasen (erst parken, dann final setzen), weil {@code
+   * uq_card_active_position} nicht deferrable ist: Eine direkte Neuvergabe kollidierte transient
+   * mit den noch belegten Positionen.
+   */
+  void sortActiveByNumber(long columnId, SortDirection direction);
+
+  /**
    * Hängt eine Karte board-/spaltenübergreifend um: setzt Board, Spalte und eine neue board-scoped
    * Nummer, hängt sie ans Ende der Zielspalte und reindiziert die Quellspalte lückenlos. Quell- und
    * Zielspalte werden dabei gesperrt (siehe {@link #lockColumnPositions(List)}).

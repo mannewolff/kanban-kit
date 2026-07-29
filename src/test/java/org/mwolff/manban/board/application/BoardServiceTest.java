@@ -484,6 +484,37 @@ class BoardServiceTest {
   }
 
   @Test
+  void requireColumnBoardId_returnsBoardOfColumn() {
+    // Given
+    when(columns.findById(1L)).thenReturn(Optional.of(new BoardColumn(1L, 10L, "Ready", 2, null)));
+
+    // When / Then
+    assertThat(service.requireColumnBoardId(1L)).isEqualTo(10L);
+  }
+
+  @Test
+  void requireColumnBoardId_throwsColumnNotFound_whenColumnUnknown() {
+    // Given
+    when(columns.findById(1L)).thenReturn(Optional.empty());
+
+    // When / Then
+    assertThatThrownBy(() -> service.requireColumnBoardId(1L))
+        .isInstanceOf(ColumnNotFoundException.class);
+  }
+
+  @Test
+  void requireColumnBoardId_doesNotCheckPermissions() {
+    // Given: die Fassade loest nur auf — die Rechtepruefung bleibt beim aufrufenden Modul.
+    when(columns.findById(1L)).thenReturn(Optional.of(new BoardColumn(1L, 10L, "Ready", 2, null)));
+
+    // When
+    service.requireColumnBoardId(1L);
+
+    // Then
+    verifyNoInteractions(permissions);
+  }
+
+  @Test
   void listColumns_returnsColumnsSortedByPosition() {
     // Given: die Rohdaten kommen bewusst unsortiert
     when(columns.findByBoardId(10L))
