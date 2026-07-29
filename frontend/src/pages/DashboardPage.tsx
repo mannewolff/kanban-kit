@@ -9,13 +9,18 @@ import TableContainer from '@mui/material/TableContainer'
 import TableHead from '@mui/material/TableHead'
 import TableRow from '@mui/material/TableRow'
 import Typography from '@mui/material/Typography'
-import { LineChart } from '@mui/x-charts/LineChart'
-import { useEffect, useState } from 'react'
+import { LineChart, MarkElement, type MarkElementProps } from '@mui/x-charts/LineChart'
+import { useEffect, useMemo, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { boardsApi, type Board } from '../api/boards'
 import { Breadcrumbs } from '../components/Breadcrumbs'
 import { MetricTile } from '../components/MetricTile'
-import { dashboardApi, type BoardDashboardKpis, type ColumnDwell } from '../api/dashboard'
+import {
+  dashboardApi,
+  type BoardDashboardKpis,
+  type ColumnDwell,
+  type WeeklyThroughput,
+} from '../api/dashboard'
 import { formatDuration } from '../lib/formatDuration'
 import { useProjectName } from '../lib/useProjectName'
 
@@ -106,6 +111,124 @@ function MetricHeadline({ kpis }: Readonly<{ kpis: BoardDashboardKpis }>) {
   )
 }
 
+/**
+ * Wochenbeginn als Datum **mit Jahr**, z. B. „01.06.26“. Ohne Jahr sind zwei Punkte über einen
+ * Jahreswechsel hinweg nicht unterscheidbar — „28.07.“ kann dann zwei verschiedene Wochen meinen.
+ * Zweistellig, weil dieselbe Zeichenkette auf der X-Achse zwölfmal nebeneinander steht.
+ */
+function formatWeekStart(weekStart: string): string {
+  return new Date(weekStart).toLocaleDateString('de-DE', {
+    day: '2-digit',
+    month: '2-digit',
+    year: '2-digit',
+  })
+}
+
+/**
+ * Indizes der Wochen, deren Wert direkt am Diagramm steht. Jeden der zwölf Punkte zu beschriften
+ * ergibt einen Zahlensalat, der die Linie überdeckt — beschriftet werden deshalb genau die drei
+ * Punkte, die man ohnehin abliest: der erste (Ausgangslage), der letzte (aktueller Stand) und das
+ * Maximum (die beste Woche). Bei Gleichstand gewinnt die frühere Woche: sonst wanderte die
+ * Markierung mit jeder neuen Woche gleichen Werts nach rechts und sähe aus wie eine Veränderung.
+ */
+function labeledWeekIndices(counts: readonly number[]): ReadonlySet<number> {
+  if (counts.length === 0) {
+    return new Set()
+  }
+  let maxIndex = 0
+  counts.forEach((count, index) => {
+    if (count > counts[maxIndex]) {
+      maxIndex = index
+    }
+  })
+  return new Set([0, maxIndex, counts.length - 1])
+}
+
+/**
+ * Erzeugt die `mark`-Slot-Komponente des Diagramms: ein Punkt wie gehabt, für die ausgewählten
+ * Wochen zusätzlich der Wert als Text darüber. Der Slot bekommt vom Chart nur den Index — die
+ * Werte kommen deshalb über den Abschluss herein, nicht über Props.
+ */
+function makeThroughputMark(counts: readonly number[]) {
+  const labeled = labeledWeekIndices(counts)
+  function ThroughputMark({ dataIndex, ...markProps }: Readonly<MarkElementProps>) {
+    return (
+      <g>
+        <MarkElement dataIndex={dataIndex} {...markProps} />
+        {labeled.has(dataIndex) && (
+          <text
+            data-testid="throughput-value"
+            x={markProps.x}
+            y={markProps.y}
+            dy={-10}
+            textAnchor="middle"
+            fontSize={12}
+            fontWeight={700}
+            fill="currentColor"
+          >
+            {counts[dataIndex]}
+          </text>
+        )}
+      </g>
+    )
+  }
+  return ThroughputMark
+}
+
+/**
+ * Der Durchsatz je Woche: Linie mit beschrifteten Eckpunkten und dieselbe Aussage als Tabelle.
+ * Die Tabelle ist dauerhaft sichtbar und nicht aufklappbar — sie bleibt mit zwölf Zeilen kurz,
+ * und ein eingeklapptes Element wäre für alle, die den Textzugang brauchen, eine zusätzliche
+ * Hürde statt einer Alternative.
+ */
+function ThroughputSection({ throughput }: Readonly<{ throughput: readonly WeeklyThroughput[] }>) {
+  const counts = useMemo(() => throughput.map((w) => w.doneCount), [throughput])
+  const Mark = useMemo(() => makeThroughputMark(counts), [counts])
+
+  return (
+    <Paper variant="outlined" sx={{ p: 2 }}>
+      <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1 }}>
+        Durchsatz je Woche (abgeschlossene Karten)
+      </Typography>
+      {throughput.length === 0 ? (
+        <Typography color="text.secondary">
+          Noch keine abgeschlossene Karte in den letzten Wochen.
+        </Typography>
+      ) : (
+        <>
+          <LineChart
+            height={260}
+            xAxis={[{ scaleType: 'point', data: throughput.map((w) => formatWeekStart(w.weekStart)) }]}
+            series={[{ data: counts, label: 'Fertig' }]}
+            slots={{ mark: Mark }}
+            // Legende aus: Sie benennt bei einer einzigen Serie nur, was die Überschrift schon
+            // sagt. Der Serienname bleibt trotzdem gesetzt — der Tooltip braucht ihn.
+            slotProps={{ legend: { hidden: true } }}
+          />
+          <TableContainer sx={{ mt: 1 }}>
+            <Table size="small" aria-label="Durchsatz je Woche">
+              <TableHead>
+                <TableRow>
+                  <TableCell>Woche ab</TableCell>
+                  <TableCell align="right">Fertige Karten</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {throughput.map((w) => (
+                  <TableRow key={w.weekStart}>
+                    <TableCell>{formatWeekStart(w.weekStart)}</TableCell>
+                    <TableCell align="right">{w.doneCount}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        </>
+      )}
+    </Paper>
+  )
+}
+
 export function DashboardPage() {
   const { boardId } = useParams()
   const id = Number.parseInt(boardId ?? '', 10)
@@ -174,23 +297,7 @@ export function DashboardPage() {
             </Box>
           </Paper>
 
-          <Paper variant="outlined" sx={{ p: 2 }}>
-            <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1 }}>
-              Durchsatz je Woche (abgeschlossene Karten)
-            </Typography>
-            <LineChart
-              height={260}
-              xAxis={[
-                {
-                  scaleType: 'point',
-                  data: kpis.throughput.map((w) =>
-                    new Date(w.weekStart).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' }),
-                  ),
-                },
-              ]}
-              series={[{ data: kpis.throughput.map((w) => w.doneCount), label: 'Fertig' }]}
-            />
-          </Paper>
+          <ThroughputSection throughput={kpis.throughput} />
 
           <Paper variant="outlined" sx={{ p: 2 }}>
             <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1 }}>

@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { boardsApi } from '../api/boards'
@@ -6,11 +6,40 @@ import { dashboardApi, type BoardDashboardKpis } from '../api/dashboard'
 import { projectsApi } from '../api/projects'
 import { DashboardPage } from './DashboardPage'
 
+interface MarkStubProps {
+  dataIndex: number
+  x: number
+  y: number
+}
+
+interface LineChartStubProps {
+  series: { data: number[]; label?: string }[]
+  xAxis?: { data?: string[] }[]
+  slots: { mark: (props: MarkStubProps) => React.ReactElement }
+  slotProps?: { legend?: { hidden?: boolean } }
+}
+
 // Charts als schlanke Stubs — jsdom kann SVG-Größen nicht messen; hier zählt die Seitenlogik.
+// Der Stub bildet genau den Vertrag ab, auf den sich die Seite verlässt: Achsenbeschriftungen,
+// Serienwerte, Sichtbarkeit der Legende und den `mark`-Slot, den MarkPlot je Datenpunkt mit
+// dessen Index rendert.
 vi.mock('@mui/x-charts/LineChart', () => ({
-  LineChart: ({ series }: { series: { data: number[] }[] }) => (
-    <div data-testid="line-chart">{series[0].data.join(',')}</div>
-  ),
+  LineChart: ({ series, xAxis, slots, slotProps }: LineChartStubProps) => {
+    const Mark = slots.mark
+    return (
+      <div data-testid="line-chart">
+        <span data-testid="x-labels">{(xAxis?.[0]?.data ?? []).join(' ')}</span>
+        <span data-testid="series-values">{series[0].data.join(',')}</span>
+        {slotProps?.legend?.hidden !== true && <span>{series[0].label}</span>}
+        <svg>
+          {series[0].data.map((_, index) => (
+            <Mark key={index} dataIndex={index} x={index * 20} y={40} />
+          ))}
+        </svg>
+      </div>
+    )
+  },
+  MarkElement: ({ x, y }: MarkStubProps) => <circle cx={x} cy={y} r={3} />,
 }))
 vi.mock('../api/boards', () => ({ boardsApi: { get: vi.fn() } }))
 vi.mock('../api/dashboard', () => ({ dashboardApi: { get: vi.fn() } }))
@@ -26,9 +55,11 @@ const kpis: BoardDashboardKpis = {
     { columnId: 3, columnName: 'In progress', avgDwellSeconds: 480, sampleCount: 12 },
     { columnId: 2, columnName: 'Done', avgDwellSeconds: null, sampleCount: 0 },
   ],
+  // Wochenbeginn bewusst mittags: `weekStart` ist ein Instant, die Anzeige rechnet in die lokale
+  // Zone um. Mit 09:00 UTC fällt der Kalendertag in jeder realistischen Testumgebung gleich aus.
   throughput: [
-    { weekStart: '2026-06-01T00:00:00Z', doneCount: 2 },
-    { weekStart: '2026-06-08T00:00:00Z', doneCount: 5 },
+    { weekStart: '2026-06-01T09:00:00Z', doneCount: 2 },
+    { weekStart: '2026-06-08T09:00:00Z', doneCount: 5 },
   ],
   avgLeadTimeSeconds: 2 * 86_400 + 3 * 3600,
   leadTimeSampleCount: 5,
@@ -144,7 +175,61 @@ describe('DashboardPage', () => {
 
   it('rendert das Durchsatz-Liniendiagramm', async () => {
     renderPage()
-    expect(await screen.findByTestId('line-chart')).toHaveTextContent('2,5')
+    expect(await screen.findByTestId('series-values')).toHaveTextContent('2,5')
+  })
+
+  it('zeigt die Durchsatzwerte ohne Hover direkt am Diagramm', async () => {
+    renderPage()
+    const labels = await screen.findAllByTestId('throughput-value')
+    expect(labels.map((l) => l.textContent)).toEqual(['2', '5'])
+  })
+
+  it('beschriftet bei vielen Wochen nur Anfang, Maximum und Ende', async () => {
+    mDashboard.get.mockResolvedValue({
+      ...kpis,
+      throughput: [
+        { weekStart: '2026-06-01T09:00:00Z', doneCount: 2 },
+        { weekStart: '2026-06-08T09:00:00Z', doneCount: 1 },
+        { weekStart: '2026-06-15T09:00:00Z', doneCount: 7 },
+        { weekStart: '2026-06-22T09:00:00Z', doneCount: 3 },
+      ],
+    })
+    renderPage()
+    const labels = await screen.findAllByTestId('throughput-value')
+    // Die zweite Woche (1) bleibt unbeschriftet: weder Rand noch Maximum.
+    expect(labels.map((l) => l.textContent)).toEqual(['2', '7', '3'])
+  })
+
+  it('nennt im Wochenlabel auch das Jahr', async () => {
+    renderPage()
+    const labels = await screen.findByTestId('x-labels')
+    expect(labels).toHaveTextContent(/^\d{2}\.\d{2}\.\d{2} \d{2}\.\d{2}\.\d{2}$/)
+    expect(labels).toHaveTextContent('01.06.26')
+  })
+
+  it('zeigt keine Legende für die einzige Serie', async () => {
+    renderPage()
+    await screen.findByTestId('line-chart')
+    expect(screen.queryByText('Fertig')).not.toBeInTheDocument()
+  })
+
+  it('listet den Durchsatz zusätzlich als Tabelle', async () => {
+    renderPage()
+    const table = await screen.findByRole('table', { name: 'Durchsatz je Woche' })
+    const rows = within(table).getAllByRole('row')
+    expect(rows).toHaveLength(3) // Kopfzeile + zwei Wochen
+    expect(within(table).getByText('08.06.26')).toBeInTheDocument()
+    expect(within(rows[2]).getByText('5')).toBeInTheDocument()
+  })
+
+  it('zeigt ohne Durchsatzdaten einen Hinweis statt eines leeren Achsenkreuzes', async () => {
+    mDashboard.get.mockResolvedValue({ ...kpis, throughput: [] })
+    renderPage()
+    expect(
+      await screen.findByText('Noch keine abgeschlossene Karte in den letzten Wochen.'),
+    ).toBeInTheDocument()
+    expect(screen.queryByTestId('line-chart')).not.toBeInTheDocument()
+    expect(screen.queryByRole('table', { name: 'Durchsatz je Woche' })).not.toBeInTheDocument()
   })
 
   it('listet Ausreißer-Karten mit formatierter Verweildauer', async () => {
