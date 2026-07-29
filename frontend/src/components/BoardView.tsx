@@ -252,6 +252,7 @@ export function BoardView({
     try {
       await columnsApi.sortByNumber(column.id, direction)
       setNextSortDirection((prev) => ({ ...prev, [column.id]: direction === 'ASC' ? 'DESC' : 'ASC' }))
+      onCardsChanged?.()
     } catch {
       notify('Sortieren fehlgeschlagen.', 'error')
     }

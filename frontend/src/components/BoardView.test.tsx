@@ -1349,5 +1349,42 @@ describe('BoardView', () => {
       expect(await screen.findByText('Sortieren fehlgeschlagen.')).toBeInTheDocument()
       expect(screen.getByLabelText(ascLabel('Backlog'))).toBeInTheDocument()
     })
+
+    it('lädt die Karten nach erfolgreichem Sortieren neu', async () => {
+      mColumns.sortByNumber.mockResolvedValue(undefined)
+      const onCardsChanged = vi.fn()
+      render(
+        <BoardView
+          board={board}
+          initialCards={[card]}
+          canEdit
+          api={mkApi()}
+          onCardsChanged={onCardsChanged} />,
+        { wrapper: SnackbarProvider },
+      )
+
+      fireEvent.click(screen.getByLabelText(ascLabel('Backlog')))
+
+      await waitFor(() => expect(onCardsChanged).toHaveBeenCalledTimes(1))
+    })
+
+    it('lädt die Karten nicht neu, wenn das Sortieren fehlschlägt', async () => {
+      mColumns.sortByNumber.mockRejectedValue(new Error('fail'))
+      const onCardsChanged = vi.fn()
+      render(
+        <BoardView
+          board={board}
+          initialCards={[card]}
+          canEdit
+          api={mkApi()}
+          onCardsChanged={onCardsChanged} />,
+        { wrapper: SnackbarProvider },
+      )
+
+      fireEvent.click(screen.getByLabelText(ascLabel('Backlog')))
+
+      expect(await screen.findByText('Sortieren fehlgeschlagen.')).toBeInTheDocument()
+      expect(onCardsChanged).not.toHaveBeenCalled()
+    })
   })
 })
