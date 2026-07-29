@@ -58,6 +58,15 @@ class CardRepositoryAdapter implements CardRepository {
   }
 
   @Override
+  public List<Card> findByNumberInProjects(int number, List<Long> projectIds) {
+    return jpa
+        .findByNumberAndProjectIdInAndDeletedAtIsNullOrderByProjectId(number, projectIds)
+        .stream()
+        .map(CardRepositoryAdapter::toDomain)
+        .toList();
+  }
+
+  @Override
   public List<Card> findByBoardId(long boardId) {
     return jpa.findByBoardIdAndDeletedAtIsNullOrderByNumber(boardId).stream()
         .map(CardRepositoryAdapter::toDomain)

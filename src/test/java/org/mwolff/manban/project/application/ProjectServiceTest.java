@@ -295,6 +295,40 @@ class ProjectServiceTest {
   }
 
   @Test
+  void listAccessible_returnsAllProjects_forPlatformAdmin() {
+    // Given: derselbe Sichtbarkeitsschnitt wie list — der Admin sieht alles (#489).
+    when(permissions.isPlatformAdmin(1L)).thenReturn(true);
+    when(projects.findAll()).thenReturn(List.of(new Project(9L, "P", 2L, FIXED)));
+
+    // When / Then
+    assertThat(service.listAccessible(1L))
+        .containsExactly(new ProjectService.AccessibleProject(9L, "P"));
+  }
+
+  @Test
+  void listAccessible_returnsOnlyMemberProjects_forRegularUser() {
+    // Given
+    when(permissions.isPlatformAdmin(2L)).thenReturn(false);
+    when(memberships.findByUserId(2L)).thenReturn(List.of(membership(9L, 2L, ProjectRole.MEMBER)));
+    when(projects.findById(9L)).thenReturn(Optional.of(new Project(9L, "P", 1L, FIXED)));
+
+    // When / Then
+    assertThat(service.listAccessible(2L))
+        .containsExactly(new ProjectService.AccessibleProject(9L, "P"));
+  }
+
+  @Test
+  void listAccessible_skipsProjectsThatCannotBeLoaded_forRegularUser() {
+    // Given
+    when(permissions.isPlatformAdmin(2L)).thenReturn(false);
+    when(memberships.findByUserId(2L)).thenReturn(List.of(membership(9L, 2L, ProjectRole.MEMBER)));
+    when(projects.findById(9L)).thenReturn(Optional.empty());
+
+    // When / Then
+    assertThat(service.listAccessible(2L)).isEmpty();
+  }
+
+  @Test
   void rename_trimsAndPersistsName() {
     // Given
     when(permissions.require(2L, 9L, Permission.PROJECT_EDIT))

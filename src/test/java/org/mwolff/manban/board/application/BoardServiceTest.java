@@ -454,6 +454,50 @@ class BoardServiceTest {
   }
 
   @Test
+  void requireBoardSummary_returnsNameOfActiveBoard() {
+    // Given
+    when(boards.findByIdIncludingArchived(10L)).thenReturn(Optional.of(board()));
+
+    // When / Then
+    assertThat(service.requireBoardSummary(10L))
+        .isEqualTo(new BoardService.BoardSummary(10L, "Board", false));
+  }
+
+  @Test
+  void requireBoardSummary_returnsNameAndFlagOfArchivedBoard() {
+    // Given: anders als requireProjectId/getBoard blendet die Ortsangabe archivierte Boards nicht
+    // aus — eine Karte darauf bleibt auffindbar und soll ihren Boardnamen behalten (#489).
+    when(boards.findByIdIncludingArchived(10L))
+        .thenReturn(Optional.of(new Board(10L, 1L, "Altes Board", FIXED, FIXED)));
+
+    // When / Then
+    assertThat(service.requireBoardSummary(10L))
+        .isEqualTo(new BoardService.BoardSummary(10L, "Altes Board", true));
+  }
+
+  @Test
+  void requireBoardSummary_throwsBoardNotFound_whenBoardUnknown() {
+    // Given
+    when(boards.findByIdIncludingArchived(10L)).thenReturn(Optional.empty());
+
+    // When / Then
+    assertThatThrownBy(() -> service.requireBoardSummary(10L))
+        .isInstanceOf(BoardNotFoundException.class);
+  }
+
+  @Test
+  void requireBoardSummary_doesNotCheckPermissions() {
+    // Given: Fassade — die Rechtepruefung bleibt beim aufrufenden Modul.
+    when(boards.findByIdIncludingArchived(10L)).thenReturn(Optional.of(board()));
+
+    // When
+    service.requireBoardSummary(10L);
+
+    // Then
+    verifyNoInteractions(permissions);
+  }
+
+  @Test
   void requireColumn_returnsViewOfColumn() {
     // Given
     when(columns.findById(1L)).thenReturn(Optional.of(new BoardColumn(1L, 10L, "Ready", 2, 5)));

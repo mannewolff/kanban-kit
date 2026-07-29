@@ -13,6 +13,7 @@ import java.util.stream.Collectors;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.board.application.BoardNotFoundException;
 import org.mwolff.manban.board.application.BoardService;
+import org.mwolff.manban.board.application.BoardService.BoardSummary;
 import org.mwolff.manban.board.application.BoardService.ColumnView;
 import org.mwolff.manban.card.application.CardBoardActivityEvent.ActivityType;
 import org.mwolff.manban.card.domain.Card;
@@ -21,6 +22,7 @@ import org.mwolff.manban.card.domain.CardActivityType;
 import org.mwolff.manban.card.domain.CardType;
 import org.mwolff.manban.card.domain.Label;
 import org.mwolff.manban.project.application.PermissionChecker;
+import org.mwolff.manban.project.application.ProjectService;
 import org.mwolff.manban.project.domain.Permission;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
@@ -48,6 +50,7 @@ public class CardService {
   private final CardDependencyRepository dependencies;
   private final BoardService boardService;
   private final PermissionChecker permissions;
+  private final ProjectService projects;
   private final CardColumnTransitionRepository transitions;
   private final CardAssigneeRepository assignees;
   private final LabelRepository labels;
@@ -61,6 +64,7 @@ public class CardService {
       CardDependencyRepository dependencies,
       BoardService boardService,
       PermissionChecker permissions,
+      ProjectService projects,
       CardColumnTransitionRepository transitions,
       CardAssigneeRepository assignees,
       LabelRepository labels,
@@ -72,6 +76,7 @@ public class CardService {
     this.dependencies = dependencies;
     this.boardService = boardService;
     this.permissions = permissions;
+    this.projects = projects;
     this.transitions = transitions;
     this.assignees = assignees;
     this.labels = labels;
@@ -862,6 +867,71 @@ public class CardService {
   }
 
   /**
+   * Sucht eine projektweite Kartennummer über <strong>alle Projekte, in denen der Benutzer lesen
+   * darf</strong>, und liefert je Treffer die Karte samt Ortsangabe (Projekt, Board, Spalte).
+   *
+   * <p><strong>Warum eine Liste:</strong> Kartennummern sind projektweit eindeutig, nicht global
+   * ({@code uq_card_number (project_id, number)}). Dass die Projekte hier faktisch disjunkte
+   * Nummernkreise haben (Startnummer-Floor aus V20), ist Konvention und keine Invariante — dieselbe
+   * Nummer kann in mehreren Projekten existieren, und dann sind alle Treffer gemeint.
+   *
+   * <p><strong>Sichtbarkeit:</strong> Gesucht wird ausschließlich in den Projekten des Benutzers.
+   * Ein fremdes Projekt macht sich in keiner Weise bemerkbar — kein 403, kein Zähler, kein
+   * Unterschied im Antwortverhalten. Die leere Liste ist die Antwort sowohl für „Nummer existiert
+   * nirgends" als auch für „Nummer existiert nur in fremden Projekten" (Prinzip aus {@link
+   * PermissionChecker}). Ein <b>Plattform-Admin</b> findet dagegen per Definition alles: Die
+   * Projektauswahl kommt von {@link ProjectService#listAccessible(long)}, das ihm wie überall sonst
+   * (Projektliste, {@code requireMembership}) alle Projekte zeigt. Das ist bewusst das
+   * Bestandsverhalten und keine Sonderregel dieser Suche.
+   *
+   * <p><strong>Was nicht gefunden wird:</strong> Karten im Papierkorb — ihre Nummer bleibt belegt
+   * (sie kann wiederhergestellt werden), per Suche sind sie unsichtbar. <b>Archivierte</b> Karten
+   * bleiben dagegen auffindbar, ebenso Karten auf einem <b>archivierten Board</b>: Deren Boardname
+   * wird über {@link BoardService#requireBoardSummary(long)} aufgelöst, das den Archiv-Filter
+   * bewusst nicht anwendet und den Zustand stattdessen mitliefert.
+   */
+  @Transactional(readOnly = true)
+  public List<CardSearchHit> searchByNumber(long userId, int number) {
+    Map<Long, String> projectNames =
+        projects.listAccessible(userId).stream()
+            .collect(
+                Collectors.toMap(
+                    ProjectService.AccessibleProject::id, ProjectService.AccessibleProject::name));
+    if (projectNames.isEmpty()) {
+      // Ohne Projekte gibt es nichts zu durchsuchen — und eine leere IN-Menge wäre keine sinnvolle
+      // Anfrage an die Datenbank (siehe Zusicherung an CardRepository.findByNumberInProjects).
+      return List.of();
+    }
+    return cards.findByNumberInProjects(number, List.copyOf(projectNames.keySet())).stream()
+        .map(c -> hit(c, Objects.requireNonNull(projectNames.get(c.projectId()))))
+        .toList();
+  }
+
+  /**
+   * Baut den Suchtreffer samt Ortsangabe. Eine board-lose Pool-Idee hat weder Board noch Spalte;
+   * eine board-gebundene Karte hat beides (die Datenbank lässt seit V18 nichts dazwischen zu), und
+   * beides wird über die board-Fassade aufgelöst — der Boardname auch dann, wenn das Board
+   * archiviert ist.
+   */
+  private CardSearchHit hit(Card c, String projectName) {
+    Long boardId = c.boardId();
+    if (boardId == null) {
+      return new CardSearchHit(view(c), c.projectId(), projectName, null, null, false, null, null);
+    }
+    BoardSummary board = boardService.requireBoardSummary(boardId);
+    ColumnView column = boardService.requireColumn(c.requireColumnId(), boardId);
+    return new CardSearchHit(
+        view(c),
+        c.projectId(),
+        projectName,
+        boardId,
+        board.name(),
+        board.archived(),
+        column.id(),
+        column.name());
+  }
+
+  /**
    * Aktivitätsverlauf einer Karte (chronologisch). Erfordert Projekt-Mitgliedschaft (Leserecht),
    * geprüft über {@code card.projectId()} — auch für board-lose Pool-Ideen (#405).
    */
@@ -1063,6 +1133,30 @@ public class CardService {
       @Nullable Instant dueDate,
       List<Long> labels,
       @Nullable Long targetBoardId) {}
+
+  /**
+   * Treffer der projektübergreifenden Nummernsuche: die Karte plus die Angabe, wo sie liegt.
+   *
+   * @param card die gefundene Karte
+   * @param projectId Projekt der Karte (immer gesetzt)
+   * @param projectName Name des Projekts — das unterscheidende Merkmal, wenn dieselbe Nummer in
+   *     mehreren Projekten existiert
+   * @param boardId Board der Karte; {@code null} bei einer board-losen Pool-Idee
+   * @param boardName Name des Boards; {@code null} bei einer board-losen Pool-Idee
+   * @param boardArchived ob das Board archiviert ist (die Karte bleibt auffindbar, das Board ist
+   *     über die normale Board-API aber nicht mehr ladbar); {@code false} ohne Board
+   * @param columnId Spalte der Karte; {@code null} bei einer board-losen Pool-Idee
+   * @param columnName Name der Spalte; {@code null} bei einer board-losen Pool-Idee
+   */
+  public record CardSearchHit(
+      CardView card,
+      Long projectId,
+      String projectName,
+      @Nullable Long boardId,
+      @Nullable String boardName,
+      boolean boardArchived,
+      @Nullable Long columnId,
+      @Nullable String columnName) {}
 
   /**
    * Schlanke Board-Projektion einer Karte oder eines Epics — ohne Abhängigkeiten, Zuständige und

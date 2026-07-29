@@ -238,14 +238,17 @@ class ArchitectureTest {
   // Die Projekt-/Mitgliedschafts-Persistenz-Ports sind modulintern. card darf vom project-Modul
   // abhaengen (die Umkehrung waere ein Zyklus), aber nur ueber die fachliche Fassade
   // PermissionChecker/ProjectService — sonst liest und schreibt ein fremdes Modul direkt am
-  // Projekt-Aggregat vorbei an jeder Rechte- und Konsistenzregel. ProjectService steht bewusst
-  // nicht auf der Whitelist: kein Fremdmodul nutzt ihn heute, und default deny heisst, Vertrag
-  // erst zu eroeffnen, wenn ihn jemand braucht.
+  // Projekt-Aggregat vorbei an jeder Rechte- und Konsistenzregel. ProjectService ist seit #489
+  // Vertrag: die projektuebergreifende Kartensuche braucht die Projekte, in denen der Aufrufer
+  // lesen darf, samt Namen fuer die Ortsangabe — und ProjectService.list ist genau diese Sicht,
+  // inklusive der Autorisierung, die jede seiner Methoden selbst vornimmt. Damit ist der Vertrag
+  // eroeffnet, weil ihn jemand braucht; nicht vorsorglich.
   static final ArchRule PROJECT_APPLICATION_IST_AUF_FASSADE_BEGRENZT =
       fassadeIstAufWhitelistBegrenzt(
           "project",
-          "nur ueber PermissionChecker",
+          "nur ueber PermissionChecker/ProjectService",
           "PermissionChecker",
+          "ProjectService",
           "NextCardNumberWriter",
           "ProjectCreatedEvent",
           "ProjectAccessDeniedException");
