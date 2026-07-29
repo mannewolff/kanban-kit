@@ -495,6 +495,7 @@ export function BoardListPage() {
           key={detailCard.id}
           card={detailCard}
           canEdit={canEdit}
+          projectId={board?.projectId}
           canModerateComments={canModerate}
           epics={epics}
           columnName={columnById.get(detailCard.columnId)?.name}

@@ -415,6 +415,7 @@ export function IdeaPlanningBoard({
         <CardDetailModal
           card={selectedIdea}
           canEdit={canEdit}
+          projectId={projectId}
           members={members}
           epics={[]}
           boardLabels={[]}

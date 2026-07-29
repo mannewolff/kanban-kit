@@ -247,6 +247,7 @@ export function BoardPage() {
           key={selectedCard.id}
           card={selectedCard}
           canEdit={canEdit}
+          projectId={board.projectId}
           canModerateComments={canModerate}
           epics={epics}
           members={members}

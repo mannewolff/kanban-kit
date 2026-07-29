@@ -251,8 +251,9 @@ function ThroughputSection({ throughput }: Readonly<{ throughput: readonly Weekl
  */
 function OutlierSection({
   boardId,
+  projectId,
   outliers,
-}: Readonly<{ boardId: number; outliers: readonly OutlierCard[] }>) {
+}: Readonly<{ boardId: number; projectId?: number; outliers: readonly OutlierCard[] }>) {
   const notify = useSnackbar()
   const [cards, setCards] = useState<Card[] | null>(null)
   const [busyCardId, setBusyCardId] = useState<number | null>(null)
@@ -344,6 +345,7 @@ function OutlierSection({
         <CardDetailModal
           card={detail.card}
           canEdit={false}
+          projectId={projectId}
           columnName={detail.columnName}
           onClose={() => setDetail(null)}
         />
@@ -422,7 +424,7 @@ export function DashboardPage() {
 
           <ThroughputSection throughput={kpis.throughput} />
 
-          <OutlierSection boardId={id} outliers={kpis.outliers} />
+          <OutlierSection boardId={id} projectId={board?.projectId} outliers={kpis.outliers} />
         </Stack>
       )}
     </Box>

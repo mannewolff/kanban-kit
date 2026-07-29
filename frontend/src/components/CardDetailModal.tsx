@@ -1,3 +1,4 @@
+import ArrowBackIcon from '@mui/icons-material/ArrowBack'
 import Alert from '@mui/material/Alert'
 import Autocomplete from '@mui/material/Autocomplete'
 import Box from '@mui/material/Box'
@@ -15,6 +16,7 @@ import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
 import {
   createContext,
+  Fragment,
   memo,
   useCallback,
   useContext,
@@ -29,8 +31,9 @@ import {
 import Markdown, { type Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { attachmentsApi as defaultAttachmentsApi, type Attachment, type AttachmentsApi } from '../api/attachments'
+import { boardsApi as defaultBoardsApi } from '../api/boards'
 import { cardsApi as defaultCardsApi } from '../api/cards'
-import type { Card, CardActivity, CardDetail } from '../api/cards'
+import type { Card, CardActivity, CardByNumber, CardDetail } from '../api/cards'
 import { commentsApi as defaultCommentsApi, type Comment, type CommentsApi } from '../api/comments'
 import type { Epic } from '../api/epics'
 import type { Label as BoardLabel } from '../api/labels'
@@ -504,12 +507,47 @@ function CardStatusChip({
   return <Chip label={columnName} size="small" sx={{ bgcolor: colors.bg, color: colors.text, fontWeight: 600 }} />
 }
 
+/**
+ * Abhängigkeits-Zeile im Lesemodus. Mit `onOpen` wird jede Nummer ein echter Button (Tastatur und
+ * sichtbarer Fokus kommen von MUIs `Link component="button"`), ohne bleibt es reiner Text — so
+ * entsteht ohne bekannte `projectId` kein Verweis, der nirgendwohin führen könnte.
+ */
+function DependencyList({
+  dependencies,
+  onOpen,
+}: Readonly<{ dependencies: number[]; onOpen?: (number: number) => void }>) {
+  return (
+    <Typography variant="body2" color="text.secondary" aria-label="Abhängigkeiten">
+      Abhängig von:{' '}
+      {dependencies.map((n, index) => (
+        <Fragment key={n}>
+          {index > 0 && ', '}
+          {onOpen ? (
+            <Link
+              component="button"
+              type="button"
+              variant="body2"
+              aria-label={`Karte #${n} öffnen`}
+              onClick={() => onOpen(n)}
+            >
+              #{n}
+            </Link>
+          ) : (
+            `#${n}`
+          )}
+        </Fragment>
+      ))}
+    </Typography>
+  )
+}
+
 /** View-Modus-Inhalt: Beschreibung (Markdown mit Task-Checkboxen), Abhängigkeiten, Fälligkeitsdatum. */
 function CardBodyView({
   body,
   canEdit,
   onToggleTask,
   dependencies,
+  onOpenDependency,
   isEpic,
   dueDate,
   dueOverdue,
@@ -518,6 +556,7 @@ function CardBodyView({
   canEdit: boolean
   onToggleTask: (index: number) => void
   dependencies: number[]
+  onOpenDependency?: (number: number) => void
   isEpic: boolean
   dueDate: string | null
   dueOverdue: boolean
@@ -532,9 +571,7 @@ function CardBodyView({
         )}
       </Box>
       {dependencies.length > 0 && (
-        <Typography variant="body2" color="text.secondary" aria-label="Abhängigkeiten">
-          Abhängig von: {dependencies.map((n) => `#${n}`).join(', ')}
-        </Typography>
+        <DependencyList dependencies={dependencies} onOpen={onOpenDependency} />
       )}
       {!isEpic && dueDate && (
         <Typography
@@ -554,6 +591,11 @@ function CardBodyView({
 interface Props {
   card: CardDetail
   canEdit: boolean
+  /**
+   * Projekt der Karte. Nur mit dieser Angabe sind die `#N`-Abhängigkeitsverweise anklickbar — die
+   * Nummer ist projektweit vergeben und wird über `cardsApi.byNumber` aufgelöst.
+   */
+  projectId?: number
   /** Ob der Nutzer Kommentare moderieren (löschen) darf — Projekt-ADMIN/OWNER oder Plattform-Admin. */
   canModerateComments?: boolean
   onClose: () => void
@@ -574,11 +616,29 @@ interface Props {
   attachmentsApi?: AttachmentsApi
   cardsApi?: Pick<
     typeof defaultCardsApi,
-    'update' | 'setAssignees' | 'setLabels' | 'getActivity' | 'restore' | 'moveToIdeaStorage'
+    | 'update'
+    | 'setAssignees'
+    | 'setLabels'
+    | 'getActivity'
+    | 'restore'
+    | 'moveToIdeaStorage'
+    | 'byNumber'
   >
+  boardsApi?: Pick<typeof defaultBoardsApi, 'get'>
 }
 
-export function CardDetailModal({
+/**
+ * Interne Props der Detail-Ansicht: Die Navigation über `#N`-Verweise steuert der `CardDetailModal`-
+ * Wrapper, die Ansicht selbst kennt nur die beiden Callbacks.
+ */
+type ViewProps = Props & {
+  /** Öffnet den Verweis auf die Kartennummer; fehlt, wenn keine Auflösung möglich ist. */
+  onOpenDependency?: (number: number) => void
+  /** Eine Ebene im Verweis-Stack zurück; fehlt auf der Ausgangskarte. */
+  onBack?: () => void
+}
+
+function CardDetailModalView({
   card,
   canEdit,
   canModerateComments = false,
@@ -593,7 +653,9 @@ export function CardDetailModal({
   commentsApi = defaultCommentsApi,
   attachmentsApi = defaultAttachmentsApi,
   cardsApi = defaultCardsApi,
-}: Readonly<Props>) {
+  onOpenDependency,
+  onBack,
+}: Readonly<ViewProps>) {
   const { user } = useAuth()
   const isEpic = card.type === 'EPIC'
   const [assigneeIds, setAssigneeIds] = useState<number[]>(card.assignees)
@@ -838,6 +900,11 @@ export function CardDetailModal({
     >
       <DialogTitle sx={{ borderBottom: `1px solid ${MODAL_BORDER}` }}>
         <Stack direction="row" alignItems="center" spacing={1} sx={{ flexWrap: 'wrap' }}>
+          {onBack && (
+            <IconButton size="small" aria-label="Zurück zur vorherigen Karte" onClick={onBack}>
+              <ArrowBackIcon fontSize="small" />
+            </IconButton>
+          )}
           <CardStatusChip isEpic={isEpic} columnName={columnName} colors={colors} />
           {/* Legacy-Pool-Ideen ohne projektweite Nummer zeigen kein nacktes „#". */}
           {card.number != null && (
@@ -886,6 +953,7 @@ export function CardDetailModal({
               canEdit={canEdit}
               onToggleTask={onToggleTask}
               dependencies={card.dependencies}
+              onOpenDependency={onOpenDependency}
               isEpic={isEpic}
               dueDate={card.dueDate}
               dueOverdue={dueOverdue}
@@ -981,5 +1049,80 @@ export function CardDetailModal({
       />
     )}
     </>
+  )
+}
+
+/** Eine über einen `#N`-Verweis geöffnete Karte samt aufgelöstem Spaltennamen für den Status-Chip. */
+interface LinkedCard {
+  card: CardByNumber
+  columnName?: string
+}
+
+/**
+ * Spaltenname der verknüpften Karte, aufgelöst über ihr eigenes Board — der Spaltenname der
+ * Ausgangskarte gilt nicht, weil der Verweis projektweit auf ein anderes Board zeigen kann. Eine
+ * board-lose Pool-Idee hat keine Spalte; scheitert der Board-Abruf, bleibt nur der Chip leer,
+ * statt die ganze Navigation abzubrechen.
+ */
+async function resolveColumnName(
+  linked: CardByNumber,
+  boardsApi: Pick<typeof defaultBoardsApi, 'get'>,
+): Promise<string | undefined> {
+  if (linked.boardId == null) return undefined
+  try {
+    const board = await boardsApi.get(linked.boardId)
+    return board.columns.find((c) => c.id === linked.columnId)?.name
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * Detail-Modal einer Karte mit Navigation über die `#N`-Abhängigkeitsverweise. Der Wrapper hält den
+ * Verweis-Stack und rendert immer genau eine Karte: die Ausgangskarte oder die zuletzt geöffnete
+ * verknüpfte Karte. Ein Stack (statt eines einstufigen Zurück) ist nötig, damit „Zurück“ nach
+ * mehreren Sprüngen dorthin führt, wo man tatsächlich herkam.
+ *
+ * Eine über einen Verweis geöffnete Karte wird bewusst **nur gelesen**: Ihr board-spezifischer
+ * Bearbeitungskontext (Epics, Labels, Spalten) gehört zum Board des Aufrufers und wäre für ein
+ * fremdes Board falsch. Zum Bearbeiten öffnet man die Karte auf ihrem eigenen Board.
+ */
+export function CardDetailModal(props: Readonly<Props>) {
+  const { projectId, cardsApi = defaultCardsApi, boardsApi = defaultBoardsApi } = props
+  const [stack, setStack] = useState<LinkedCard[]>([])
+  const notify = useSnackbar()
+  const top = stack.at(-1)
+
+  // Nicht auflösbar (gelöscht, kein Zugriff): Hinweis statt totem Sprung — die aktuelle Karte
+  // bleibt offen. Eine Vorab-Prüfung aller Verweise würde je geöffneter Karte N Requests kosten.
+  const openDependency = async (project: number, number: number) => {
+    try {
+      const linked = await cardsApi.byNumber(project, number)
+      const columnName = await resolveColumnName(linked, boardsApi)
+      setStack((s) => [...s, { card: linked, columnName }])
+    } catch {
+      notify(`Karte #${number} nicht gefunden — gelöscht oder kein Zugriff.`, 'error')
+    }
+  }
+  const onOpenDependency =
+    projectId == null ? undefined : (n: number) => void openDependency(projectId, n)
+
+  if (!top) return <CardDetailModalView {...props} onOpenDependency={onOpenDependency} />
+  return (
+    <CardDetailModalView
+      // Kartenwechsel remountet die Ansicht, damit ihr aus `card` abgeleiteter Zustand frisch ist.
+      key={top.card.id}
+      card={top.card}
+      canEdit={false}
+      canModerateComments={props.canModerateComments}
+      columnName={top.columnName}
+      members={props.members}
+      commentsApi={props.commentsApi}
+      attachmentsApi={props.attachmentsApi}
+      cardsApi={cardsApi}
+      onClose={props.onClose}
+      onOpenDependency={onOpenDependency}
+      onBack={() => setStack((s) => s.slice(0, -1))}
+    />
   )
 }

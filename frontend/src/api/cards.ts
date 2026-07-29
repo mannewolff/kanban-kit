@@ -45,6 +45,17 @@ export interface CardDetail {
   ideaStored: boolean
 }
 
+/**
+ * Ergebnis des projektweiten Nummer-Lookups: die Karte zu einer projektweit vergebenen `number` —
+ * board-gebunden oder als board-lose Pool-Idee. Deshalb sind `boardId`/`columnId` nullable. Mehr
+ * als die `CardDetail`-Felder plus Board-Bindung braucht das Detail-Modal für einen `#N`-Verweis
+ * nicht; die Bindung dient dort nur dazu, den Spaltennamen des fremden Boards aufzulösen.
+ */
+export interface CardByNumber extends CardDetail {
+  boardId: number | null
+  columnId: number | null
+}
+
 export interface CardActivity {
   id: number
   actorUserId: number | null
@@ -56,6 +67,11 @@ export interface CardActivity {
 export const cardsApi = {
   list: (boardId: number) => apiFetch<Card[]>(`/api/boards/${boardId}/cards`),
   getActivity: (cardId: number) => apiFetch<CardActivity[]>(`/api/cards/${cardId}/activity`),
+  // Löst eine projektweite Kartennummer board-übergreifend zu ihrer Karte auf (404, wenn es sie
+  // nicht gibt oder der Nutzer nicht Projektmitglied ist). Bewusst nicht `getByNumber`: dieser
+  // Name kollidiert in Tests mit der Testing-Library-Query-Konvention (`no-await-sync-queries`).
+  byNumber: (projectId: number, number: number) =>
+    apiFetch<CardByNumber>(`/api/projects/${projectId}/cards/by-number/${number}`),
   listTrash: (boardId: number) => apiFetch<Card[]>(`/api/boards/${boardId}/trash`),
   restoreDeleted: (cardId: number) =>
     apiFetch<Card>(`/api/cards/${cardId}/restore-deleted`, { method: 'POST' }),
