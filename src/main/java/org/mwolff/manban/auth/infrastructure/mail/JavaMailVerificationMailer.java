@@ -1,6 +1,5 @@
 package org.mwolff.manban.auth.infrastructure.mail;
 
-import org.mwolff.manban.auth.application.VerificationMailer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -11,12 +10,15 @@ import org.springframework.stereotype.Component;
 /**
  * Versendet die Verifikations-E-Mail per SMTP ({@link JavaMailSender}).
  *
+ * <p>Seit Issue #502 nicht mehr die Port-Implementierung, sondern die Zustell-Komponente hinter dem
+ * {@link VerificationMailHandler}: Der Aufruf kommt nach dem Commit aus dem Outbox-Worker.
+ *
  * <p>Der Versand ist über {@code manban.mail.enabled} schaltbar. In Dev/Test (Default: aus) wird
  * der Verifikations-Link nur geloggt, sodass kein SMTP-Server nötig ist — genau der Punkt, der in
  * der Toolbox (#262) blockierte.
  */
 @Component
-class JavaMailVerificationMailer implements VerificationMailer {
+class JavaMailVerificationMailer {
 
   private static final Logger log = LoggerFactory.getLogger(JavaMailVerificationMailer.class);
 
@@ -36,8 +38,7 @@ class JavaMailVerificationMailer implements VerificationMailer {
     this.productName = productName;
   }
 
-  @Override
-  public void sendVerificationEmail(String toEmail, String verificationUrl) {
+  void sendVerificationEmail(String toEmail, String verificationUrl) {
     if (!mailEnabled) {
       log.info("[DEV] Verifikations-Link für {}: {}", toEmail, verificationUrl);
       return;

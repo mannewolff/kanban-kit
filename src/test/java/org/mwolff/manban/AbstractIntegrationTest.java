@@ -11,6 +11,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.context.TestPropertySource;
 import org.testcontainers.containers.MinIOContainer;
 import org.testcontainers.containers.PostgreSQLContainer;
 
@@ -34,6 +35,13 @@ import org.testcontainers.containers.PostgreSQLContainer;
 // ist eine Infrastruktur-Basis (geteilte Container + DB-Reset) und darf nie selbst
 // instanziiert/ausgeführt werden.
 @SuppressWarnings("PMD.AbstractClassWithoutAbstractMethod")
+// Outbox-Worker in IT-Kontexten grundsätzlich aus (Issue #502): Spring cacht die Kontexte über
+// Klassen hinweg, und ein weiterlaufender @Scheduled-Worker eines FRÜHEREN Kontexts würde
+// Einträge in der geteilten Datenbank per SKIP LOCKED wegschnappen — Tests, die den Durchlauf
+// deterministisch selbst aufrufen, verlören dann sporadisch ihre Einträge. Bewusst per
+// @TestPropertySource statt @DynamicPropertySource: Nur hier überschreibt eine Subklassen-
+// Deklaration (SmtpMailIT testet den echten Worker-Pfad) verlässlich den Basiswert.
+@TestPropertySource(properties = "manban.outbox.enabled=false")
 public abstract class AbstractIntegrationTest {
 
   @ServiceConnection

@@ -1,6 +1,5 @@
 package org.mwolff.manban.auth.infrastructure.mail;
 
-import org.mwolff.manban.auth.application.PasswordResetMailer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -11,9 +10,12 @@ import org.springframework.stereotype.Component;
 /**
  * Versendet die Passwort-Reset-E-Mail per SMTP, schaltbar über {@code manban.mail.enabled}. In
  * Dev/Test (Default: aus) wird der Reset-Link nur geloggt.
+ *
+ * <p>Seit Issue #502 die Zustell-Komponente hinter dem {@link PasswordResetMailHandler}: Der Aufruf
+ * kommt nach dem Commit aus dem Outbox-Worker.
  */
 @Component
-class JavaMailPasswordResetMailer implements PasswordResetMailer {
+class JavaMailPasswordResetMailer {
 
   private static final Logger log = LoggerFactory.getLogger(JavaMailPasswordResetMailer.class);
 
@@ -33,8 +35,7 @@ class JavaMailPasswordResetMailer implements PasswordResetMailer {
     this.productName = productName;
   }
 
-  @Override
-  public void sendPasswordResetEmail(String toEmail, String resetUrl) {
+  void sendPasswordResetEmail(String toEmail, String resetUrl) {
     if (!mailEnabled) {
       log.info("[DEV] Passwort-Reset-Link für {}: {}", toEmail, resetUrl);
       return;

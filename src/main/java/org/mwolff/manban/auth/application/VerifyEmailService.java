@@ -17,6 +17,12 @@ import org.springframework.transaction.annotation.Transactional;
  * Datenbank. Verifikation <em>und</em> Admin-Benachrichtigung hängen daran: Bei gleichzeitigem
  * Einlösen desselben Tokens gewinnt genau ein Aufruf, und die Admins werden genau einmal
  * benachrichtigt (Issue #497).
+ *
+ * <p><strong>Fehlersemantik seit Issue #502:</strong> Die Admin-Benachrichtigung wird in derselben
+ * Transaktion in der Outbox vorgemerkt und nach dem Commit mit Wiederholungen versandt — ein
+ * HTTP-Erfolg bestätigt die Verifikation, nicht die Zustellung. Als zweite Verteidigungslinie neben
+ * dem atomaren Tokenverbrauch dedupliziert der Idempotenzschlüssel der Outbox (Admin, neuer Nutzer)
+ * eine doppelt eingeplante Benachrichtigung auf höchstens eine Zustellung.
  */
 @Service
 public class VerifyEmailService {

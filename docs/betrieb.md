@@ -77,6 +77,13 @@ geladen und ist per `.gitignore` ausgeschlossen).
 > WHERE status = 'FAILED' ORDER BY completed_at DESC;
 > ```
 
+> **E-Mail-Zustellung läuft über die Outbox:** Seit Issue #502 bestätigt eine erfolgreiche
+> HTTP-Antwort (Registrierung, Passwort-Reset, Einladung, Projektanlage) die **gespeicherte
+> fachliche Operation, nicht die Mail-Zustellung**. Die Mail wird in derselben Transaktion
+> vorgemerkt und nach dem Commit vom Worker mit Wiederholungen versandt. Ein SMTP-Ausfall rollt
+> also keine Registrierung oder Einladung mehr zurück (früherer 502 beim Einladen entfällt) —
+> hängengebliebene Mails erscheinen als `FAILED`-Einträge in der Abfrage oben.
+
 ## E-Mail-Bestätigung (ohne Mailserver)
 
 Im Standard ist der Mailversand **aus** (`MANBAN_MAIL_ENABLED=false`). Verifikations-, Passwort-Reset-

@@ -15,9 +15,6 @@ import org.mwolff.manban.project.domain.Project;
 import org.mwolff.manban.project.domain.ProjectInvitation;
 import org.mwolff.manban.project.domain.ProjectMembership;
 import org.mwolff.manban.project.domain.ProjectRole;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.mail.MailException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -26,18 +23,8 @@ import org.springframework.transaction.annotation.Transactional;
  * Entfernen. Rechteprüfung über den {@link PermissionChecker} (MEMBER_INVITE bzw. MEMBER_REMOVE).
  * Der letzte OWNER ist geschützt.
  */
-// PMD.CouplingBetweenObjects: Schwellwert um eins überschritten (21), seit der breite
-// AppUserRepository-Zugriff durch die getrennten auth-Ports UserLookup/UserDisplayNameWriter samt
-// UserSummary ersetzt ist (Issue #460). Die Trennung von Lesen und Schreiben ist genau der Gewinn
-// dieses Umbaus — sie hier wieder zu einem Kombi-Port zusammenzuziehen, nur um einen Zähler zu
-// senken, wäre eine Verschlechterung. Die verbleibende Kopplung ist fachlich begründet
-// (Projekte, Mitgliedschaften, Einladungen, Rechte, Mailversand, Benutzer) und kein
-// God-Class-Smell.
-@SuppressWarnings("PMD.CouplingBetweenObjects")
 @Service
 public class MembershipService {
-
-  private static final Logger log = LoggerFactory.getLogger(MembershipService.class);
 
   private final ProjectRepository projects;
   private final ProjectMembershipRepository memberships;
@@ -80,6 +67,15 @@ public class MembershipService {
    * Nicht freigegebene Nutzer werden abgelehnt ({@link MemberNotApprovedException}). Unbekannte
    * E-Mails durchlaufen den Einladungs-/Token-Pfad.
    *
+   * <p><strong>Fehlersemantik seit Issue #502:</strong> Ein HTTP-Erfolg bestätigt die persistierte
+   * Mitgliedschaft bzw. Einladung, <em>nicht</em> die Zustellung der Mail — die wird in derselben
+   * Transaktion in der Outbox vorgemerkt und nach dem Commit mit Wiederholungen versandt. Der
+   * frühere 502-Pfad bei gescheiterter Einladungs-Mail ist bewusst entfallen: Sein Zweck war, keine
+   * Invitation ohne versandten Link zu hinterlassen; mit der Outbox holt der Worker den Versand
+   * nach, statt dass die Einladung verworfen wird. Eine endgültig gescheiterte Zustellung bleibt
+   * als FAILED-Eintrag in der Outbox sichtbar (siehe Betriebs-Doku); ein erneutes Einladen erzeugt
+   * dann ein frisches Token samt neuer Mail.
+   *
    * @return {@link InviteOutcome#ADDED} bei direkter Mitgliedschaft, sonst {@link
    *     InviteOutcome#INVITED}
    */
@@ -95,17 +91,9 @@ public class MembershipService {
         throw new MemberNotApprovedException(normalizedEmail);
       }
       addOrUpdateMembership(projectId, existing.id(), role);
-      // Info-Mail ist ein Nebeneffekt: Ein Versandfehler darf die bereits gespeicherte
-      // Mitgliedschaft nicht zurückrollen — daher fangen und nur loggen (kein 500).
-      try {
-        mailer.sendProjectAssignedEmail(
-            normalizedEmail, project.name(), role, projectUrl(projectId));
-      } catch (MailException e) {
-        log.warn(
-            "Zuordnungs-Mail an {} fehlgeschlagen; Mitgliedschaft bleibt bestehen",
-            normalizedEmail,
-            e);
-      }
+      // Die Info-Mail wird in der Outbox vorgemerkt und erst nach dem Commit versandt — ein
+      // Versandfehler kann die gespeicherte Mitgliedschaft strukturell nicht mehr berühren.
+      mailer.sendProjectAssignedEmail(normalizedEmail, project.name(), role, projectUrl(projectId));
       return InviteOutcome.ADDED;
     }
 
@@ -122,14 +110,9 @@ public class MembershipService {
             inviterUserId));
 
     String url = authProperties.baseUrl() + "/invitations/accept?token=" + plaintext;
-    // Einladungs-Mail ist essenziell (der Link kommt nur per Mail): Bei Versandfehler klaren 502
-    // melden statt generischem 500; die Transaktion rollt zurück, sodass keine unbrauchbare
-    // Invitation ohne versandten Link zurückbleibt.
-    try {
-      mailer.sendInvitationEmail(normalizedEmail, project.name(), url);
-    } catch (MailException e) {
-      throw new MailDeliveryException(e);
-    }
+    // Vormerkung in derselben Transaktion: Rollt die Invitation zurück, verschwindet die Mail mit;
+    // committet sie, stellt der Outbox-Worker mit Wiederholungen zu (Fehlersemantik siehe Javadoc).
+    mailer.sendInvitationEmail(normalizedEmail, project.name(), url);
     return InviteOutcome.INVITED;
   }
 

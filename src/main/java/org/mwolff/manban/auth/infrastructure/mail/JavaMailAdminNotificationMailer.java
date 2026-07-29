@@ -1,6 +1,5 @@
 package org.mwolff.manban.auth.infrastructure.mail;
 
-import org.mwolff.manban.auth.application.AdminNotificationMailer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -11,9 +10,12 @@ import org.springframework.stereotype.Component;
 /**
  * Versendet die Admin-Benachrichtigung „neue Registrierung wartet auf Freigabe" per SMTP, schaltbar
  * über {@code manban.mail.enabled}. In Dev/Test (Default: aus) wird nur geloggt.
+ *
+ * <p>Seit Issue #502 die Zustell-Komponente hinter dem {@link AdminNotificationMailHandler}: Der
+ * Aufruf kommt nach dem Commit aus dem Outbox-Worker.
  */
 @Component
-class JavaMailAdminNotificationMailer implements AdminNotificationMailer {
+class JavaMailAdminNotificationMailer {
 
   private static final Logger log = LoggerFactory.getLogger(JavaMailAdminNotificationMailer.class);
 
@@ -33,8 +35,7 @@ class JavaMailAdminNotificationMailer implements AdminNotificationMailer {
     this.productName = productName;
   }
 
-  @Override
-  public void sendNewUserPendingApproval(
+  void sendNewUserPendingApproval(
       String adminEmail, String newUserEmail, String newUserDisplayName) {
     if (!mailEnabled) {
       log.info(
