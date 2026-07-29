@@ -300,6 +300,31 @@ describe('DashboardPage', () => {
     expect(labels.map((l) => l.textContent)).toEqual(['2', '7', '3'])
   })
 
+  it('blendet die Wert-Labels für Screenreader aus — die Tabelle trägt dieselben Zahlen', async () => {
+    renderPage()
+    const labels = await screen.findAllByTestId('throughput-value')
+    labels.forEach((label) => expect(label).toHaveAttribute('aria-hidden', 'true'))
+  })
+
+  it('setzt das Label des Maximums unter den Punkt, die übrigen darüber', async () => {
+    mDashboard.get.mockResolvedValue({
+      ...kpis,
+      throughput: [
+        { weekStart: '2026-06-01T09:00:00Z', doneCount: 2 },
+        { weekStart: '2026-06-08T09:00:00Z', doneCount: 7 },
+        { weekStart: '2026-06-15T09:00:00Z', doneCount: 3 },
+      ],
+    })
+    renderPage()
+    const labels = await screen.findAllByTestId('throughput-value')
+    // Das Maximum (7) liegt am oberen Plotrand — sein Label weicht nach unten aus. So ragt es
+    // nicht aus dem Plot und kollidiert nicht mit dem Label eines benachbarten Randpunkts.
+    expect(labels.map((l) => l.textContent)).toEqual(['2', '7', '3'])
+    expect(labels[0]).toHaveAttribute('dy', '-10')
+    expect(labels[1]).toHaveAttribute('dy', '20')
+    expect(labels[2]).toHaveAttribute('dy', '-10')
+  })
+
   it('nennt im Wochenlabel auch das Jahr', async () => {
     renderPage()
     const labels = await screen.findByTestId('x-labels')

@@ -163,22 +163,37 @@ function labeledWeekIndices(counts: readonly number[]): ReadonlySet<number> {
   if (counts.length === 0) {
     return new Set()
   }
+  return new Set([0, maxWeekIndex(counts), counts.length - 1])
+}
+
+/** Index des Wochen-Maximums; bei Gleichstand die frühere Woche (siehe labeledWeekIndices). */
+function maxWeekIndex(counts: readonly number[]): number {
   let maxIndex = 0
   counts.forEach((count, index) => {
     if (count > counts[maxIndex]) {
       maxIndex = index
     }
   })
-  return new Set([0, maxIndex, counts.length - 1])
+  return maxIndex
 }
 
 /**
  * Erzeugt die `mark`-Slot-Komponente des Diagramms: ein Punkt wie gehabt, für die ausgewählten
- * Wochen zusätzlich der Wert als Text darüber. Der Slot bekommt vom Chart nur den Index — die
+ * Wochen zusätzlich der Wert als Text daneben. Der Slot bekommt vom Chart nur den Index — die
  * Werte kommen deshalb über den Abschluss herein, nicht über Props.
+ *
+ * <p>Die Labels sind für Screenreader ausgeblendet: Die Tabelle unter dem Diagramm trägt dieselben
+ * Zahlen strukturiert, ohne `aria-hidden` würden sie doppelt vorgelesen. Das Label des Maximums
+ * steht unter statt über dem Punkt — der Maximum-Punkt liegt am oberen Plotrand, darüber wäre das
+ * Label abgeschnitten; zugleich kollidiert es so nicht mit dem Label eines benachbarten Randpunkts
+ * auf fast gleicher Höhe.
+ *
+ * Exportiert für den Smoke-Test gegen die echte Chart-Bibliothek
+ * (DashboardThroughputChart.smoke.test.tsx) — die übrigen Tests stubben @mui/x-charts.
  */
-function makeThroughputMark(counts: readonly number[]) {
+export function makeThroughputMark(counts: readonly number[]) {
   const labeled = labeledWeekIndices(counts)
+  const belowIndex = maxWeekIndex(counts)
   function ThroughputMark({ dataIndex, ...markProps }: Readonly<MarkElementProps>) {
     return (
       <g>
@@ -186,9 +201,10 @@ function makeThroughputMark(counts: readonly number[]) {
         {labeled.has(dataIndex) && (
           <text
             data-testid="throughput-value"
+            aria-hidden="true"
             x={markProps.x}
             y={markProps.y}
-            dy={-10}
+            dy={dataIndex === belowIndex ? 20 : -10}
             textAnchor="middle"
             fontSize={12}
             fontWeight={700}
