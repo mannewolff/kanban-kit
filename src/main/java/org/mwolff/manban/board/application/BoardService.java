@@ -262,14 +262,15 @@ public class BoardService {
    * und Projekt für ihre eigene Rechteprüfung ableiten müssen.
    *
    * <p>Bewusst ohne Board-Parameter und damit ohne die Zusicherung von {@link #requireColumn(long,
-   * long)}: Wer das Board noch gar nicht kennt, kann es nicht mitgeben. Die Rechteprüfung des
-   * Aufrufers findet danach auf dem hier aufgelösten Projekt statt — ein Existenz-Leak entsteht
-   * nicht, weil ohne Mitgliedschaft 404 folgt.
+   * long)}: Wer das Board noch gar nicht kennt, kann es nicht mitgeben. Deshalb auch bewusst ohne
+   * {@code require*}-Präfix — der verspricht im Bestand eine Zugehörigkeitsprüfung, die diese
+   * Methode nicht leistet. Die Rechteprüfung des Aufrufers findet danach auf dem hier aufgelösten
+   * Projekt statt — ein Existenz-Leak entsteht nicht, weil ohne Mitgliedschaft 404 folgt.
    *
    * @throws ColumnNotFoundException wenn die Spalte nicht existiert
    */
   @Transactional(readOnly = true)
-  public long requireColumnBoardId(long columnId) {
+  public long boardIdOfColumn(long columnId) {
     return loadColumn(columnId).boardId();
   }
 

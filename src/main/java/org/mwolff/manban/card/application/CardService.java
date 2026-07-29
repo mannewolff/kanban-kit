@@ -568,10 +568,15 @@ public class CardService {
    * das Verschieben einer einzelnen Karte. Karten außerhalb des aktiven Positions-Namespace
    * (archiviert, Papierkorb, Ideen-Speicher) und Epics bleiben unberührt; Details am Port {@link
    * CardRepository#sortActiveByNumber(long, SortDirection)}.
+   *
+   * <p>Bewusst ohne {@link CardActivity}-Eintrag: Die Umsortierung ändert nur die Anordnung
+   * innerhalb der Spalte, keine Karte wechselt Spalte oder Zustand — ein Audit-Eintrag pro
+   * betroffener Karte würde den Aktivitätsverlauf fluten, ohne eine fachliche Änderung zu
+   * dokumentieren. Offene Boards erfahren von der neuen Anordnung über das SSE-Event.
    */
   @Transactional
   public void sortColumnByNumber(long userId, long columnId, SortDirection direction) {
-    long boardId = boardService.requireColumnBoardId(columnId);
+    long boardId = boardService.boardIdOfColumn(columnId);
     permissions.require(userId, boardService.requireProjectId(boardId), Permission.CARD_MOVE);
 
     cards.sortActiveByNumber(columnId, direction);

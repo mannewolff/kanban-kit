@@ -716,7 +716,7 @@ class CardServiceTest {
   @Test
   void sortColumnByNumber_requiresCardMove_andDelegatesAscending() {
     // Given
-    when(boardService.requireColumnBoardId(20L)).thenReturn(BOARD);
+    when(boardService.boardIdOfColumn(20L)).thenReturn(BOARD);
 
     // When
     service.sortColumnByNumber(1L, 20L, SortDirection.ASC);
@@ -729,7 +729,7 @@ class CardServiceTest {
   @Test
   void sortColumnByNumber_delegatesDescending() {
     // Given
-    when(boardService.requireColumnBoardId(20L)).thenReturn(BOARD);
+    when(boardService.boardIdOfColumn(20L)).thenReturn(BOARD);
 
     // When
     service.sortColumnByNumber(1L, 20L, SortDirection.DESC);
@@ -741,7 +741,7 @@ class CardServiceTest {
   @Test
   void sortColumnByNumber_publishesBoardChangedEvent() {
     // Given
-    when(boardService.requireColumnBoardId(20L)).thenReturn(BOARD);
+    when(boardService.boardIdOfColumn(20L)).thenReturn(BOARD);
 
     // When
     service.sortColumnByNumber(1L, 20L, SortDirection.ASC);
@@ -753,7 +753,7 @@ class CardServiceTest {
   @Test
   void sortColumnByNumber_throwsColumnNotFound_whenColumnUnknown() {
     // Given
-    when(boardService.requireColumnBoardId(20L)).thenThrow(new ColumnNotFoundException());
+    when(boardService.boardIdOfColumn(20L)).thenThrow(new ColumnNotFoundException());
 
     // When / Then
     assertThatThrownBy(() -> service.sortColumnByNumber(1L, 20L, SortDirection.ASC))
@@ -765,7 +765,7 @@ class CardServiceTest {
   @Test
   void sortColumnByNumber_propagatesPermissionDenied() {
     // Given
-    when(boardService.requireColumnBoardId(20L)).thenReturn(BOARD);
+    when(boardService.boardIdOfColumn(20L)).thenReturn(BOARD);
     doThrow(new ProjectAccessDeniedException())
         .when(permissions)
         .require(9L, PROJECT, Permission.CARD_MOVE);

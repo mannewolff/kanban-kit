@@ -18,7 +18,12 @@ import org.springframework.stereotype.Component;
 @Component
 class CardRepositoryAdapter implements CardRepository {
 
-  /** Temporärer Offset weit außerhalb des realen Positionsbereichs für den Reindex. */
+  /**
+   * Temporärer Offset weit außerhalb des realen Positionsbereichs für den Reindex. Implizite
+   * Annahme wie bei {@link #PARK_MOVED_CARD}: Reale Positionen bleiben unter 100.000 — bei den
+   * Kartenzahlen einer Spalte praktisch garantiert, aber nicht erzwungen. Würde eine Spalte diese
+   * Grenze je erreichen, kollidierte der Park-Bereich mit echten Positionen.
+   */
   private static final int PARK_OFFSET = 100_000;
 
   private static final int PARK_MOVED_CARD = 999_999;
