@@ -12,7 +12,9 @@ import { BoardView } from './BoardView'
 import { SnackbarProvider } from './SnackbarProvider'
 
 vi.mock('../api/columns', () => ({
-  columnsApi: { create: vi.fn(), update: vi.fn(), remove: vi.fn(), reorder: vi.fn() },
+  columnsApi: {
+    create: vi.fn(), update: vi.fn(), remove: vi.fn(), reorder: vi.fn(), sortByNumber: vi.fn(),
+  },
 }))
 // Nur vom Transfer-Dialog zur Laufzeit genutzt; leere Listen genügen zum Öffnen, einzelne Tests
 // überschreiben sie mit echten Projekten/Boards, um den Verschieben-Flow bis zum Ende zu treiben.
@@ -30,6 +32,7 @@ const mColumns = columnsApi as unknown as {
   update: ReturnType<typeof vi.fn>
   remove: ReturnType<typeof vi.fn>
   reorder: ReturnType<typeof vi.fn>
+  sortByNumber: ReturnType<typeof vi.fn>
 }
 const mProjects = projectsApi as unknown as { list: ReturnType<typeof vi.fn> }
 const mBoards = boardsApi as unknown as { list: ReturnType<typeof vi.fn> }
@@ -76,6 +79,7 @@ describe('BoardView', () => {
     mColumns.update.mockReset()
     mColumns.remove.mockReset()
     mColumns.reorder.mockReset()
+    mColumns.sortByNumber.mockReset()
   })
 
   it('verschiebt die Karte optimistisch in die Zielspalte', async () => {
@@ -1275,6 +1279,75 @@ describe('BoardView', () => {
       await user.keyboard('{Enter}')
 
       await waitFor(() => expect(api.move).toHaveBeenCalledWith(100, 30, 0))
+    })
+  })
+
+  describe('Sortier-Toggle im Spaltenkopf', () => {
+    const ascLabel = (column: string) => `Spalte ${column} nach Nummer aufsteigend sortieren`
+    const descLabel = (column: string) => `Spalte ${column} nach Nummer absteigend sortieren`
+
+    it('wechselt bei jedem Klick die Richtung: ASC, DESC, ASC', async () => {
+      mColumns.sortByNumber.mockResolvedValue(undefined)
+      render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} />, {
+        wrapper: SnackbarProvider,
+      })
+
+      fireEvent.click(screen.getByLabelText(ascLabel('Backlog')))
+      await screen.findByLabelText(descLabel('Backlog'))
+      fireEvent.click(screen.getByLabelText(descLabel('Backlog')))
+      await screen.findByLabelText(ascLabel('Backlog'))
+      fireEvent.click(screen.getByLabelText(ascLabel('Backlog')))
+      await waitFor(() => expect(mColumns.sortByNumber).toHaveBeenCalledTimes(3))
+
+      expect(mColumns.sortByNumber.mock.calls).toEqual([[10, 'ASC'], [10, 'DESC'], [10, 'ASC']])
+    })
+
+    it('führt die Richtung je Spalte unabhängig', async () => {
+      mColumns.sortByNumber.mockResolvedValue(undefined)
+      render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} />, {
+        wrapper: SnackbarProvider,
+      })
+
+      fireEvent.click(screen.getByLabelText(ascLabel('Backlog')))
+      await screen.findByLabelText(descLabel('Backlog'))
+
+      // Die zweite Spalte startet trotzdem bei aufsteigend.
+      expect(screen.getByLabelText(ascLabel('Done'))).toBeInTheDocument()
+      fireEvent.click(screen.getByLabelText(ascLabel('Done')))
+      await waitFor(() => expect(mColumns.sortByNumber).toHaveBeenCalledTimes(2))
+
+      expect(mColumns.sortByNumber.mock.calls).toEqual([[10, 'ASC'], [20, 'ASC']])
+      expect(screen.getByLabelText(descLabel('Backlog'))).toBeInTheDocument()
+    })
+
+    it('zeigt den Button auf allen Spalten, auch ohne Editiermodus', () => {
+      editMode.value = false
+      render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} />, {
+        wrapper: SnackbarProvider,
+      })
+
+      expect(screen.getByLabelText(ascLabel('Backlog'))).toBeInTheDocument()
+      expect(screen.getByLabelText(ascLabel('Done'))).toBeInTheDocument()
+    })
+
+    it('zeigt den Button nicht ohne Verschieberecht', () => {
+      render(<BoardView board={board} initialCards={[card]} canEdit={false} api={mkApi()} />, {
+        wrapper: SnackbarProvider,
+      })
+
+      expect(screen.queryByLabelText(ascLabel('Backlog'))).not.toBeInTheDocument()
+    })
+
+    it('behält die Richtung bei, wenn das Sortieren fehlschlägt', async () => {
+      mColumns.sortByNumber.mockRejectedValue(new Error('fail'))
+      render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} />, {
+        wrapper: SnackbarProvider,
+      })
+
+      fireEvent.click(screen.getByLabelText(ascLabel('Backlog')))
+
+      expect(await screen.findByText('Sortieren fehlgeschlagen.')).toBeInTheDocument()
+      expect(screen.getByLabelText(ascLabel('Backlog'))).toBeInTheDocument()
     })
   })
 })

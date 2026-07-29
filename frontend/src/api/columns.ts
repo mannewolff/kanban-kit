@@ -1,6 +1,9 @@
 import type { BoardColumn } from './boards'
 import { apiFetch } from './client'
 
+/** Richtung beim Sortieren einer Spalte nach Kartennummer. */
+export type SortDirection = 'ASC' | 'DESC'
+
 /** Spalten-Verwaltung eines Boards (anlegen, umbenennen/WIP-Limit, löschen, neu ordnen). */
 export const columnsApi = {
   create: (boardId: number, name: string, wipLimit?: number | null) =>
@@ -20,6 +23,12 @@ export const columnsApi = {
     apiFetch<BoardColumn[]>(`/api/boards/${boardId}/columns/order`, {
       method: 'PUT',
       body: JSON.stringify({ columnIds }),
+    }),
+  // Die Richtung geht bei jedem Aufruf mit — das Backend merkt sich keinen Toggle-Zustand.
+  sortByNumber: (columnId: number, direction: SortDirection) =>
+    apiFetch<void>(`/api/columns/${columnId}/cards/sort-by-number`, {
+      method: 'POST',
+      body: JSON.stringify({ direction }),
     }),
 }
 
