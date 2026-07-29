@@ -506,6 +506,43 @@ class CardIT extends AbstractIntegrationTest {
     org.assertj.core.api.Assertions.assertThat(positionOf(source, bleibt)).isZero();
   }
 
+  /**
+   * Die Zielspalte trägt eine Lücke im aktiven Positionsband (Karte in der Mitte im Papierkorb).
+   * Die umgehängte Karte muss trotzdem hinter der höchsten belegten Position landen — hängte man
+   * sie an die bloße Anzahl aktiver Karten, träfe sie eine noch belegte Position und der
+   * active_position-Unique schlüge zu.
+   */
+  @Test
+  void transferAppendsBehindHighestPositionWhenTargetColumnHasGap() throws Exception {
+    Cookie alice = loginAs("xfer-gap@example.com");
+    long p1 = createProject("xfer-gap@example.com", "XferGap1");
+    long p2 = createProject("xfer-gap@example.com", "XferGap2");
+    JsonNode boardA = createBoard(alice, p1);
+    JsonNode boardB = createBoard(alice, p2);
+    long boardIdA = boardA.get("id").asLong();
+    long colA = boardA.get("columns").get(0).get("id").asLong();
+    long boardIdB = boardB.get("id").asLong();
+    long colB = boardB.get("columns").get(0).get("id").asLong();
+    long alt1 = createCard(alice, boardIdB, colB, "Alt1", null).get("id").asLong(); // pos 0
+    long alt2 = createCard(alice, boardIdB, colB, "Alt2", null).get("id").asLong(); // pos 1
+    long alt3 = createCard(alice, boardIdB, colB, "Alt3", null).get("id").asLong(); // pos 2
+    // Alt2 in den Papierkorb: aktiv belegt sind danach 0 und 2, Position 1 ist eine Lücke.
+    mvc.perform(delete("/api/cards/" + alt2).cookie(alice)).andExpect(status().isNoContent());
+    long c1 = createCard(alice, boardIdA, colA, "Eins", null).get("id").asLong();
+
+    mvc.perform(
+            post("/api/cards/" + c1 + "/transfer")
+                .cookie(alice)
+                .contentType("application/json")
+                .content("{\"targetBoardId\":%d,\"targetColumnId\":%d}".formatted(boardIdB, colB)))
+        .andExpect(status().isOk());
+
+    JsonNode target = boardCards(alice, boardIdB);
+    org.assertj.core.api.Assertions.assertThat(
+            new int[] {positionOf(target, alt1), positionOf(target, alt3), positionOf(target, c1)})
+        .containsExactly(0, 2, 3);
+  }
+
   private JsonNode boardCards(Cookie session, long boardId) throws Exception {
     return json.readTree(
         mvc.perform(get("/api/boards/" + boardId + "/cards").cookie(session))

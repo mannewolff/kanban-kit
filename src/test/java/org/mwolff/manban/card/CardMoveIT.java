@@ -141,6 +141,21 @@ class CardMoveIT extends AbstractIntegrationTest {
     return cardsByNumber().get(number).get("id").asLong();
   }
 
+  private int trashPosition(long cardId) throws Exception {
+    String body =
+        mvc.perform(get("/api/boards/" + boardId + "/trash").cookie(login))
+            .andExpect(status().isOk())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+    for (JsonNode c : json.readTree(body)) {
+      if (c.get("id").asLong() == cardId) {
+        return c.get("positionInColumn").asInt();
+      }
+    }
+    throw new AssertionError("Karte " + cardId + " nicht im Papierkorb");
+  }
+
   @Test
   void moveWithinColumnReindexes() throws Exception {
     setup("mv-within@example.com");
@@ -234,5 +249,43 @@ class CardMoveIT extends AbstractIntegrationTest {
 
     // Force-Delete der archivierten Karte -> kein Konflikt.
     mvc.perform(delete("/api/cards/" + cardId(1)).cookie(login)).andExpect(status().isNoContent());
+  }
+
+  @Test
+  void trashedCardKeepsItsPositionAndBlocksNoSlotOnMove() throws Exception {
+    setup("mv-trash@example.com");
+    createCard(backlog, "A"); // #1 pos0
+    createCard(backlog, "B"); // #2 pos1
+    createCard(backlog, "C"); // #3 pos2
+
+    long trashed = cardId(2);
+    mvc.perform(delete("/api/cards/" + trashed).cookie(login)).andExpect(status().isNoContent());
+
+    move(cardId(3), backlog, 0); // C an den Anfang
+
+    // Die aktiven Karten belegen lückenlos 0..n-1 — die Papierkorb-Karte hält keinen Slot.
+    Map<Integer, JsonNode> cards = cardsByNumber();
+    Assertions.assertThat(cards.get(3).get("positionInColumn").asInt()).isZero();
+    Assertions.assertThat(cards.get(1).get("positionInColumn").asInt()).isEqualTo(1);
+
+    // Der Reindex hat die Papierkorb-Karte nicht angefasst.
+    Assertions.assertThat(trashPosition(trashed)).isEqualTo(1);
+  }
+
+  @Test
+  void trashedCardKeepsItsPositionWhenSourceColumnIsReindexed() throws Exception {
+    setup("mv-trash-source@example.com");
+    createCard(backlog, "A"); // #1 pos0
+    createCard(backlog, "B"); // #2 pos1
+    createCard(backlog, "C"); // #3 pos2
+
+    long trashed = cardId(2);
+    mvc.perform(delete("/api/cards/" + trashed).cookie(login)).andExpect(status().isNoContent());
+
+    // A wandert innerhalb desselben Boards in eine andere Spalte -> Quellspalte wird nachgezogen.
+    move(cardId(1), inProgress, 0);
+
+    Assertions.assertThat(cardsByNumber().get(3).get("positionInColumn").asInt()).isZero();
+    Assertions.assertThat(trashPosition(trashed)).isEqualTo(1);
   }
 }
