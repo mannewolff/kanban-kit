@@ -12,6 +12,13 @@ interface CardJpaRepository extends JpaRepository<CardEntity, Long> {
   /** Aktive (nicht gelöschte) Karten des Boards. */
   List<CardEntity> findByBoardIdAndDeletedAtIsNullOrderByNumber(Long boardId);
 
+  /**
+   * IDs aller Karten des Boards — bewusst ohne jeden Filter (auch archivierte und
+   * Papierkorb-Karten), exakt der Umfang der Datenbank-Cascade (Issue #503).
+   */
+  @Query("select c.id from CardEntity c where c.boardId = ?1")
+  List<Long> findAllIdsByBoardId(long boardId);
+
   List<CardEntity> findByProjectIdAndDeletedAtIsNull(Long projectId);
 
   /** Nicht-gelöschte Karte eines Projekts nach projektweiter Nummer (projektweit eindeutig). */

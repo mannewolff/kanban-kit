@@ -1,6 +1,5 @@
 package org.mwolff.manban.project.infrastructure.mail;
 
-import org.mwolff.manban.project.application.InvitationMailer;
 import org.mwolff.manban.project.domain.ProjectRole;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -12,9 +11,12 @@ import org.springframework.stereotype.Component;
 /**
  * Versendet die Einladungs-E-Mail per SMTP, schaltbar über {@code manban.mail.enabled}. In Dev/Test
  * (Default: aus) wird der Einladungs-Link nur geloggt.
+ *
+ * <p>Seit Issue #502 die Zustell-Komponente hinter {@link InvitationMailHandler} und {@link
+ * ProjectAssignedMailHandler}: Der Aufruf kommt nach dem Commit aus dem Outbox-Worker.
  */
 @Component
-class JavaMailInvitationMailer implements InvitationMailer {
+class JavaMailInvitationMailer {
 
   private static final Logger log = LoggerFactory.getLogger(JavaMailInvitationMailer.class);
 
@@ -34,8 +36,7 @@ class JavaMailInvitationMailer implements InvitationMailer {
     this.productName = productName;
   }
 
-  @Override
-  public void sendInvitationEmail(String toEmail, String projectName, String invitationUrl) {
+  void sendInvitationEmail(String toEmail, String projectName, String invitationUrl) {
     if (!mailEnabled) {
       log.info("[DEV] Einladung ins Projekt '{}' für {}: {}", projectName, toEmail, invitationUrl);
       return;
@@ -60,8 +61,7 @@ class JavaMailInvitationMailer implements InvitationMailer {
     log.info("Einladungs-E-Mail an {} versandt", toEmail);
   }
 
-  @Override
-  public void sendProjectAssignedEmail(
+  void sendProjectAssignedEmail(
       String toEmail, String projectName, ProjectRole role, String projectUrl) {
     if (!mailEnabled) {
       log.info(

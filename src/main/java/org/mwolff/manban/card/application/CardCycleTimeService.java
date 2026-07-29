@@ -73,10 +73,15 @@ public class CardCycleTimeService {
     Map<Long, List<CardColumnTransition>> byCard =
         trans.stream().collect(Collectors.groupingBy(CardColumnTransition::cardId));
 
+    // Durchschnitt und Stichprobengröße stammen aus derselben Liste — die angezeigte Datenbasis
+    // kann damit nicht von der Zahl abweichen, die sie stützt.
+    long[] leads = leadTimes(workCards);
+
     return new BoardDashboardKpis(
         columnDwell(boardColumns, trans),
         throughput(workCards, now),
-        avgLeadTime(workCards),
+        average(leads),
+        leads.length,
         avgCycleTime(workCards, byCard),
         outliers(workCards, byCard, now));
   }
@@ -120,14 +125,13 @@ public class CardCycleTimeService {
     return result;
   }
 
-  private static @Nullable Long avgLeadTime(List<Card> workCards) {
-    long[] leads =
-        workCards.stream()
-            .map(CardCycleTimeService::leadSeconds)
-            .filter(Objects::nonNull)
-            .mapToLong(Long::longValue)
-            .toArray();
-    return average(leads);
+  /** Lead Times aller abgeschlossenen Karten — je Karte ein Wert, offene Karten fallen heraus. */
+  private static long[] leadTimes(List<Card> workCards) {
+    return workCards.stream()
+        .map(CardCycleTimeService::leadSeconds)
+        .filter(Objects::nonNull)
+        .mapToLong(Long::longValue)
+        .toArray();
   }
 
   private static @Nullable Long leadSeconds(Card card) {

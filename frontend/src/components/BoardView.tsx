@@ -2,6 +2,7 @@ import AddIcon from '@mui/icons-material/Add'
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline'
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined'
 import MoreVertIcon from '@mui/icons-material/MoreVert'
+import SortIcon from '@mui/icons-material/Sort'
 import Alert from '@mui/material/Alert'
 import Avatar from '@mui/material/Avatar'
 import AvatarGroup from '@mui/material/AvatarGroup'
@@ -26,7 +27,7 @@ import { useEffect, useState } from 'react'
 import type { Board, BoardColumn } from '../api/boards'
 import { cardsApi, type Card, type CardsApi } from '../api/cards'
 import { ApiError } from '../api/client'
-import { columnsApi } from '../api/columns'
+import { columnsApi, type SortDirection } from '../api/columns'
 import { epicsApi as defaultEpicsApi, type Epic, type EpicsApi } from '../api/epics'
 import type { Member } from '../api/members'
 import { activeCardsInColumn, applyMove } from '../lib/boardOps'
@@ -45,6 +46,10 @@ import { useSnackbar } from './SnackbarProvider'
 import { TransferCardDialog } from './TransferCardDialog'
 
 const isDoneColumn = (name: string) => name.toLowerCase().includes('done')
+
+/** Beschriftung des Sortier-Toggles: benennt die Richtung, die der nächste Klick auslöst. */
+const sortByNumberLabel = (columnName: string, next: SortDirection) =>
+  `Spalte ${columnName} nach Nummer ${next === 'ASC' ? 'aufsteigend' : 'absteigend'} sortieren`
 
 /** Initialen (max. 2 Zeichen) aus einem Anzeigenamen für Assignee-Avatare. */
 function initials(name: string): string {
@@ -235,6 +240,21 @@ export function BoardView({
       setColumns(sortColumns(updated))
     } catch {
       setColumns(previous)
+    }
+  }
+
+  // Sortier-Toggle je Spalte: die Richtung, die der nächste Klick auslöst. Nur im Frontend
+  // (keine Persistenz gefordert); nicht eingetragene Spalten starten bei ASC. Gewechselt wird
+  // erst nach erfolgreichem Aufruf, damit ein fehlgeschlagener Versuch dieselbe Richtung behält.
+  const [nextSortDirection, setNextSortDirection] = useState<Record<number, SortDirection>>({})
+  const sortColumnByNumber = async (column: BoardColumn) => {
+    const direction = nextSortDirection[column.id] ?? 'ASC'
+    try {
+      await columnsApi.sortByNumber(column.id, direction)
+      setNextSortDirection((prev) => ({ ...prev, [column.id]: direction === 'ASC' ? 'DESC' : 'ASC' }))
+      onCardsChanged?.()
+    } catch {
+      notify('Sortieren fehlgeschlagen.', 'error')
     }
   }
 
@@ -538,6 +558,15 @@ export function BoardView({
                 <Typography variant="caption" sx={{ color: 'text.secondary', bgcolor: COLUMN_SURFACE_BG, border: 1, borderColor: 'divider', borderRadius: 10, px: 0.75, lineHeight: 1.6 }}>
                   {column.wipLimit != null ? `${count}/${column.wipLimit}` : count}
                 </Typography>
+                {canEdit && (
+                  <Tooltip title={sortByNumberLabel(column.name, nextSortDirection[column.id] ?? 'ASC')}>
+                    <IconButton size="small"
+                      aria-label={sortByNumberLabel(column.name, nextSortDirection[column.id] ?? 'ASC')}
+                      onClick={() => void sortColumnByNumber(column)} sx={{ color: 'text.secondary' }}>
+                      <SortIcon fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                )}
                 {showStructureEdit && (
                   <Tooltip title="Spalte bearbeiten">
                     <IconButton size="small" aria-label={`Spalte ${column.name} bearbeiten`}

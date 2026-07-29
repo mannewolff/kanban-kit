@@ -53,6 +53,18 @@ describe('columnsApi', () => {
     expect(c.method).toBe('PUT')
     expect(JSON.parse(String(c.body))).toEqual({ columnIds: [2, 1] })
   })
+
+  it.each(['ASC', 'DESC'] as const)(
+    'sortByNumber ruft POST /api/columns/{id}/cards/sort-by-number mit %s',
+    async (direction) => {
+      const f = spyFetch()
+      await columnsApi.sortByNumber(7, direction)
+      const c = lastCall(f)
+      expect(c.url).toBe('/api/columns/7/cards/sort-by-number')
+      expect(c.method).toBe('POST')
+      expect(JSON.parse(String(c.body))).toEqual({ direction })
+    },
+  )
 })
 
 describe('boardsApi.rename', () => {

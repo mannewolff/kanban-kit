@@ -18,8 +18,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mwolff.manban.auth.domain.AppUser;
-import org.mwolff.manban.auth.domain.EmailVerificationToken;
 import org.mwolff.manban.auth.domain.PlatformRole;
+import org.mwolff.manban.common.SecureTokens;
 
 /** Verhaltenstests der E-Mail-Verifikation (Mockito an den Ports). */
 class VerifyEmailServiceTest {
@@ -31,13 +31,13 @@ class VerifyEmailServiceTest {
   private AdminNotificationMailer adminNotificationMailer;
   private VerifyEmailService service;
 
-  private static EmailVerificationToken token(Instant expiresAt, Instant usedAt) {
-    return new EmailVerificationToken(1L, 2L, "hash", expiresAt, usedAt);
-  }
-
   /** Noch nicht freigegebener Benutzer (kanonischer Konstruktor, {@code approvedAt=null}). */
   private static AppUser pendingUser() {
     return new AppUser(2L, "a@x.de", "hash", "Ada", false, PlatformRole.USER, null, null);
+  }
+
+  private static AppUser approvedUser() {
+    return new AppUser(2L, "a@x.de", "hash", "Ada", false, PlatformRole.USER);
   }
 
   @BeforeEach
@@ -52,32 +52,23 @@ class VerifyEmailServiceTest {
   }
 
   @Test
-  void verify_marksTokenUsedWithInjectedClock() {
+  void verify_consumesTokenByHashWithInjectedClock() {
     // Given
-    when(tokens.findByTokenHash(anyString()))
-        .thenReturn(Optional.of(token(FIXED.plusSeconds(3600), null)));
-    when(users.findById(2L))
-        .thenReturn(
-            Optional.of(new AppUser(2L, "a@x.de", "hash", "Ada", false, PlatformRole.USER)));
+    when(tokens.consume(anyString(), any(Instant.class))).thenReturn(Optional.of(2L));
+    when(users.findById(2L)).thenReturn(Optional.of(approvedUser()));
 
     // When
-    ArgumentCaptor<EmailVerificationToken> captor =
-        ArgumentCaptor.forClass(EmailVerificationToken.class);
     service.verify("plaintext");
 
-    // Then
-    verify(tokens).save(captor.capture());
-    assertThat(captor.getValue().usedAt()).isEqualTo(FIXED);
+    // Then: der Verbrauch läuft über den Hash und die injizierte Uhr.
+    verify(tokens).consume(SecureTokens.sha256Hex("plaintext"), FIXED);
   }
 
   @Test
   void verify_setsEmailVerifiedOnUser() {
     // Given
-    when(tokens.findByTokenHash(anyString()))
-        .thenReturn(Optional.of(token(FIXED.plusSeconds(3600), null)));
-    when(users.findById(2L))
-        .thenReturn(
-            Optional.of(new AppUser(2L, "a@x.de", "hash", "Ada", false, PlatformRole.USER)));
+    when(tokens.consume(anyString(), any(Instant.class))).thenReturn(Optional.of(2L));
+    when(users.findById(2L)).thenReturn(Optional.of(approvedUser()));
 
     // When
     ArgumentCaptor<AppUser> captor = ArgumentCaptor.forClass(AppUser.class);
@@ -89,9 +80,9 @@ class VerifyEmailServiceTest {
   }
 
   @Test
-  void verify_throwsInvalidToken_whenTokenUnknown() {
-    // Given
-    when(tokens.findByTokenHash(anyString())).thenReturn(Optional.empty());
+  void verify_throwsInvalidToken_whenTokenNotConsumable() {
+    // Given: unbekannt, abgelaufen oder bereits verbraucht — für den Aufrufer ununterscheidbar.
+    when(tokens.consume(anyString(), any(Instant.class))).thenReturn(Optional.empty());
 
     // When / Then
     assertThatThrownBy(() -> service.verify("plaintext"))
@@ -99,39 +90,29 @@ class VerifyEmailServiceTest {
   }
 
   @Test
-  void verify_throwsInvalidToken_whenTokenAlreadyUsed() {
-    // Given: gültiger Nutzer gestubbt, damit ein Umgehen des Used-Guards (Mutant) in
-    // einen Erfolg (kein Wurf) umschlägt statt unten am fehlenden Nutzer zu werfen.
-    when(tokens.findByTokenHash(anyString()))
-        .thenReturn(Optional.of(token(FIXED.plusSeconds(3600), FIXED.minusSeconds(10))));
-    when(users.findById(2L))
+  void verify_writesNothingAndNotifiesNobody_whenTokenNotConsumable() {
+    // Given: freigabepflichtiger Nutzer und Admins gestubbt, damit ein Umgehen des
+    // Verbrauchs-Guards (Mutant) sichtbar in Schreibzugriff und Mailversand umschlägt.
+    when(tokens.consume(anyString(), any(Instant.class))).thenReturn(Optional.empty());
+    when(users.findById(2L)).thenReturn(Optional.of(pendingUser()));
+    when(users.findByPlatformRole(PlatformRole.ADMIN))
         .thenReturn(
-            Optional.of(new AppUser(2L, "a@x.de", "hash", "Ada", false, PlatformRole.USER)));
+            List.of(new AppUser(10L, "admin@x.de", "h", "Admin", true, PlatformRole.ADMIN)));
 
-    // When / Then
+    // When
     assertThatThrownBy(() -> service.verify("plaintext"))
         .isInstanceOf(InvalidVerificationTokenException.class);
-  }
 
-  @Test
-  void verify_throwsInvalidToken_whenTokenExpired() {
-    // Given: gültiger Nutzer gestubbt (s. o.).
-    when(tokens.findByTokenHash(anyString()))
-        .thenReturn(Optional.of(token(FIXED.minusSeconds(1), null)));
-    when(users.findById(2L))
-        .thenReturn(
-            Optional.of(new AppUser(2L, "a@x.de", "hash", "Ada", false, PlatformRole.USER)));
-
-    // When / Then
-    assertThatThrownBy(() -> service.verify("plaintext"))
-        .isInstanceOf(InvalidVerificationTokenException.class);
+    // Then: der Verlierer des Rennens verifiziert nicht und benachrichtigt nicht.
+    verify(users, never()).save(any(AppUser.class));
+    verify(adminNotificationMailer, never())
+        .sendNewUserPendingApproval(anyString(), anyString(), anyString());
   }
 
   @Test
   void verify_throwsInvalidToken_whenUserUnknown() {
     // Given
-    when(tokens.findByTokenHash(anyString()))
-        .thenReturn(Optional.of(token(FIXED.plusSeconds(3600), null)));
+    when(tokens.consume(anyString(), any(Instant.class))).thenReturn(Optional.of(2L));
     when(users.findById(2L)).thenReturn(Optional.empty());
 
     // When / Then
@@ -142,8 +123,7 @@ class VerifyEmailServiceTest {
   @Test
   void verify_notifiesAllAdmins_whenUserStillPending() {
     // Given
-    when(tokens.findByTokenHash(anyString()))
-        .thenReturn(Optional.of(token(FIXED.plusSeconds(3600), null)));
+    when(tokens.consume(anyString(), any(Instant.class))).thenReturn(Optional.of(2L));
     when(users.findById(2L)).thenReturn(Optional.of(pendingUser()));
     AppUser admin1 = new AppUser(10L, "admin1@x.de", "h", "Admin1", true, PlatformRole.ADMIN);
     AppUser admin2 = new AppUser(11L, "admin2@x.de", "h", "Admin2", true, PlatformRole.ADMIN);
@@ -160,11 +140,8 @@ class VerifyEmailServiceTest {
   @Test
   void verify_sendsNoNotification_whenUserAlreadyApproved() {
     // Given: bereits freigegebener Nutzer (z. B. eingeladen, #0099) — Bequem-Konstruktor.
-    when(tokens.findByTokenHash(anyString()))
-        .thenReturn(Optional.of(token(FIXED.plusSeconds(3600), null)));
-    when(users.findById(2L))
-        .thenReturn(
-            Optional.of(new AppUser(2L, "a@x.de", "hash", "Ada", false, PlatformRole.USER)));
+    when(tokens.consume(anyString(), any(Instant.class))).thenReturn(Optional.of(2L));
+    when(users.findById(2L)).thenReturn(Optional.of(approvedUser()));
 
     // When
     service.verify("plaintext");

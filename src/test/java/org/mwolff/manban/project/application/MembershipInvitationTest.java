@@ -5,7 +5,6 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -15,6 +14,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -27,7 +27,6 @@ import org.mwolff.manban.project.domain.Project;
 import org.mwolff.manban.project.domain.ProjectInvitation;
 import org.mwolff.manban.project.domain.ProjectMembership;
 import org.mwolff.manban.project.domain.ProjectRole;
-import org.springframework.mail.MailSendException;
 
 /** Verhaltenstests des Einladens (invite) — Mockito an den Ports. */
 class MembershipInvitationTest {
@@ -180,6 +179,44 @@ class MembershipInvitationTest {
   }
 
   @Test
+  void invite_throwsLastOwner_whenDowngradingSoleOwner() {
+    // Given: der bestehende Mitgliedseintrag ist der EINZIGE OWNER des Projekts. Eine Einladung
+    // mit geringerer Rolle aktualisiert die Rolle — und ist damit ein rollenändernder Pfad wie
+    // changeRole. Ohne Aussperr-Schutz bliebe das Projekt hier ownerlos zurück (Issue #498).
+    when(projects.findById(9L)).thenReturn(Optional.of(new Project(9L, "P", 1L, FIXED)));
+    when(users.findByEmail("bob@x.de"))
+        .thenReturn(Optional.of(new UserSummary(7L, "bob@x.de", "Bob", true)));
+    when(memberships.findByProjectIdAndUserId(9L, 7L))
+        .thenReturn(Optional.of(new ProjectMembership(5L, 9L, 7L, ProjectRole.OWNER, FIXED)));
+    when(memberships.lockOwnerUserIds(9L)).thenReturn(List.of(7L));
+
+    // When / Then
+    assertThatThrownBy(() -> service.invite(1L, 9L, "bob@x.de", ProjectRole.VIEWER))
+        .isInstanceOf(LastOwnerException.class);
+    verify(memberships, never()).save(any(ProjectMembership.class));
+  }
+
+  @Test
+  void invite_keepsSoleOwner_whenInvitedRoleIsOwner() {
+    // Given: derselbe einzige OWNER, aber die Einladung bestätigt die Rolle OWNER — die
+    // Owner-Menge schrumpft nicht, der Aussperr-Schutz darf nicht greifen.
+    when(projects.findById(9L)).thenReturn(Optional.of(new Project(9L, "P", 1L, FIXED)));
+    when(users.findByEmail("bob@x.de"))
+        .thenReturn(Optional.of(new UserSummary(7L, "bob@x.de", "Bob", true)));
+    when(memberships.findByProjectIdAndUserId(9L, 7L))
+        .thenReturn(Optional.of(new ProjectMembership(5L, 9L, 7L, ProjectRole.OWNER, FIXED)));
+    when(memberships.lockOwnerUserIds(9L)).thenReturn(List.of(7L));
+    when(memberships.save(any(ProjectMembership.class))).thenAnswer(inv -> inv.getArgument(0));
+
+    // When
+    InviteOutcome outcome = service.invite(1L, 9L, "bob@x.de", ProjectRole.OWNER);
+
+    // Then
+    assertThat(outcome).isEqualTo(InviteOutcome.ADDED);
+    verify(memberships).save(any(ProjectMembership.class));
+  }
+
+  @Test
   void invite_throwsMemberNotApproved_forRegisteredPendingUser() {
     // Given: registrierter, aber nicht freigegebener Nutzer.
     when(projects.findById(9L)).thenReturn(Optional.of(new Project(9L, "P", 1L, FIXED)));
@@ -196,39 +233,5 @@ class MembershipInvitationTest {
     // Deckt die InviteOutcome.status()-Abbildung ab (added/invited).
     assertThat(InviteOutcome.ADDED.status()).isEqualTo("added");
     assertThat(InviteOutcome.INVITED.status()).isEqualTo("invited");
-  }
-
-  @Test
-  void invite_addsMember_evenWhenAssignedMailFails() {
-    // Bestehender, freigegebener Nutzer wird sofort Mitglied; die Info-Mail scheitert.
-    when(projects.findById(9L)).thenReturn(Optional.of(new Project(9L, "P", 1L, FIXED)));
-    UserSummary existing = new UserSummary(5L, "guest@x.de", "Guest", true);
-    when(users.findByEmail("guest@x.de")).thenReturn(Optional.of(existing));
-    when(memberships.findByProjectIdAndUserId(9L, 5L)).thenReturn(Optional.empty());
-    when(memberships.save(any(ProjectMembership.class))).thenAnswer(inv -> inv.getArgument(0));
-    doThrow(new MailSendException("smtp down"))
-        .when(mailer)
-        .sendProjectAssignedEmail(anyString(), anyString(), any(), anyString());
-
-    // When
-    InviteOutcome outcome = service.invite(1L, 9L, "guest@x.de", ProjectRole.MEMBER);
-
-    // Then: Mitgliedschaft ist gespeichert, kein Fehler nach außen.
-    assertThat(outcome).isEqualTo(InviteOutcome.ADDED);
-    verify(memberships).save(any(ProjectMembership.class));
-  }
-
-  @Test
-  void invite_throwsMailDelivery_whenInvitationMailFails() {
-    // Unbekannte E-Mail -> Token-Pfad; die essenzielle Einladungs-Mail scheitert.
-    when(projects.findById(9L)).thenReturn(Optional.of(new Project(9L, "P", 1L, FIXED)));
-    when(invitations.save(any(ProjectInvitation.class))).thenAnswer(inv -> inv.getArgument(0));
-    doThrow(new MailSendException("smtp down"))
-        .when(mailer)
-        .sendInvitationEmail(anyString(), anyString(), anyString());
-
-    // When / Then
-    assertThatThrownBy(() -> service.invite(1L, 9L, "guest@x.de", ProjectRole.MEMBER))
-        .isInstanceOf(MailDeliveryException.class);
   }
 }

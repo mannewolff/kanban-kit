@@ -13,9 +13,13 @@ import org.mwolff.manban.board.application.ColumnNotFoundException;
 import org.mwolff.manban.card.application.CardService;
 import org.mwolff.manban.card.application.CardService.CardView;
 import org.mwolff.manban.card.application.CardService.EpicView;
+import org.mwolff.manban.card.application.SortDirection;
 import org.mwolff.manban.card.domain.CardType;
 
 /** Unit-Tests des Karten-/Epic-Controllers (Service gemockt). */
+// PMD.TooManyMethods: je Endpunkt eine kleine Delegations-Prüfung — die Methodenzahl folgt der
+// Endpunktzahl des Controllers und ist kein Refactoring-Signal.
+@SuppressWarnings("PMD.TooManyMethods")
 class CardControllerTest {
 
   private static final java.time.Instant INSTANT = java.time.Instant.parse("2026-01-01T00:00:00Z");
@@ -208,6 +212,15 @@ class CardControllerTest {
 
     // Then
     assertThat(result).isSameAs(view);
+  }
+
+  @Test
+  void sortByNumber_delegatesToService() {
+    // When
+    controller.sortByNumber(3L, 8L, new CardController.SortByNumberRequest(SortDirection.DESC));
+
+    // Then
+    verify(service).sortColumnByNumber(3L, 8L, SortDirection.DESC);
   }
 
   @Test

@@ -37,6 +37,19 @@ jobs:
       - name: Backend Build + Tests (JaCoCo-Coverage)
         run: mvn -B verify dependency:copy-dependencies -DoutputDirectory=target/dependency
 
+      # Der Coverage-Report, den der Scanner unten importiert, als Artefakt sichern. Ohne ihn
+      # lässt sich eine Abweichung zwischen SonarCloud und der lokalen Messung nicht entscheiden
+      # — genau daran hing Issue #495 (die CI-Zahl war korrekt, die lokale verunreinigt).
+      # if: always(), damit der Report auch bei rotem Coverage-Gate greifbar ist.
+      - name: JaCoCo-Report als Artefakt sichern
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jacoco-xml
+          path: target/site/jacoco/jacoco.xml
+          if-no-files-found: warn
+          retention-days: 14
+
       - name: Set up Node 22
         uses: actions/setup-node@v4
         with:

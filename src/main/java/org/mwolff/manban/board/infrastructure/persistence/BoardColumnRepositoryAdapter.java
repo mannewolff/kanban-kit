@@ -42,6 +42,16 @@ class BoardColumnRepositoryAdapter implements BoardColumnRepository {
   }
 
   /**
+   * Sperrt die Board-Zeile als Träger des Spalten-Positions-Namespace (Issue #499, Begründung am
+   * Port). Skalar-Projektion per {@link JdbcTemplate}, damit die Sperre nicht an einer
+   * zwischengespeicherten Entity vorbeigeht.
+   */
+  @Override
+  public void lockColumnOrder(long boardId) {
+    jdbc.queryForList("SELECT id FROM board WHERE id = ? FOR UPDATE", Long.class, boardId);
+  }
+
+  /**
    * Zwei-Phasen-Reindex: erst alle Positionen weit nach oben verschieben (kollisionsfrei gegen den
    * Unique-Constraint), dann die Zielpositionen 0..n-1 setzen.
    */

@@ -24,8 +24,10 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.JavaMailSenderImpl;
+import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.context.TestPropertySource;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -33,12 +35,30 @@ import org.testcontainers.utility.DockerImageName;
 
 /**
  * End-to-End-Test des echten SMTP-Sendepfads (Issue #78): Registrierung und Passwort-Reset
- * versenden über {@code mailSender.send()} echte E-Mails an einen Mailpit-Container; ein
- * SMTP-Fehler rollt die Registrierung zurück. Anders als die übrigen Auth-ITs läuft hier KEIN
- * Mailer-Test-Double — geprüft wird der komplette Pfad API → JavaMail → SMTP → Mailpit-Postfach.
+ * versenden echte E-Mails an einen Mailpit-Container. Anders als die übrigen Auth-ITs läuft hier
+ * KEIN Mailer-Test-Double — geprüft wird der komplette Pfad API → Outbox → Worker → JavaMail → SMTP
+ * → Mailpit-Postfach.
+ *
+ * <p>Seit Issue #502 laufen die Mails über die Outbox: Der Worker ist hier bewusst <em>an</em> und
+ * eng getaktet (Poll und Retry-Basis je 200 ms), damit die asynchrone Zustellung innerhalb der
+ * {@code awaitMessage}-Frist liegt. Ein SMTP-Fehler rollt die Registrierung nicht mehr zurück — der
+ * Versand wird nachgeholt (siehe {@link #smtpFailureLeavesRegistrationIntactAndIsRetried}).
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @Testcontainers
+// Der einzige IT-Kontext mit laufendem Outbox-Worker (die Basisklasse schaltet ihn sonst ab):
+// Poll und Retry-Basis eng getaktet, damit die asynchrone Zustellung samt Wiederholung in die
+// awaitMessage-Frist passt.
+@TestPropertySource(
+    properties = {
+      "manban.outbox.enabled=true",
+      "manban.outbox.poll-interval-ms=200",
+      "manban.outbox.retry-base-delay=PT0.2S"
+    })
+// Nach der Klasse wird der Kontext bewusst entsorgt: Ein gecachter Kontext pollte sonst weiter
+// die geteilte Datenbank und schnappte späteren, deterministisch arbeitenden Outbox-Tests die
+// Einträge weg — gegen einen dann längst gestoppten Mailpit-Container.
+@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 class SmtpMailIT extends AbstractIntegrationTest {
 
   private static final int SMTP_PORT = 1025;
@@ -179,18 +199,24 @@ class SmtpMailIT extends AbstractIntegrationTest {
   }
 
   @Test
-  void smtpFailureFailsRegistrationWithoutUserZombie() throws Exception {
+  void smtpFailureLeavesRegistrationIntactAndIsRetried() throws Exception {
     String email = "smtp-dead@example.com";
     JavaMailSenderImpl sender = (JavaMailSenderImpl) mailSender;
     int mailpitPort = sender.getPort();
     sender.setPort(deadPort());
     try {
-      assertThat(post("/api/auth/register", registerBody(email)).statusCode()).isEqualTo(500);
+      // Neue Fehlersemantik (Issue #502): Der HTTP-Erfolg bestätigt die persistierte
+      // Registrierung, nicht die Zustellung — der tote SMTP-Server macht sie nicht kaputt.
+      assertThat(post("/api/auth/register", registerBody(email)).statusCode()).isEqualTo(201);
+      assertThat(users.findByEmail(email)).isPresent();
     } finally {
       sender.setPort(mailpitPort);
     }
-    // Rollback bewiesen: trotz angelegtem Datensatz vor dem Sendeversuch existiert kein User.
-    assertThat(users.findByEmail(email)).isEmpty();
+    // Der Outbox-Worker wiederholt den Versand über echtes SMTP, sobald der Server wieder da ist —
+    // ohne die fachliche Operation zu wiederholen (der Benutzer bleibt derselbe eine Datensatz).
+    String message = awaitMessage(email, VERIFY_SUBJECT);
+    assertThat(JsonPath.<String>read(message, "$.To[0].Address")).isEqualTo(email);
+    assertThat(users.findByEmail(email)).isPresent();
   }
 
   @Test

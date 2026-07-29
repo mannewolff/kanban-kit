@@ -50,6 +50,11 @@ class AppUserRepositoryAdapter implements AppUserRepository {
         .toList();
   }
 
+  @Override
+  public List<Long> lockPlatformAdminIds() {
+    return jpa.lockIdsByPlatformRole(PlatformRole.ADMIN.name());
+  }
+
   private static AppUserEntity toEntity(AppUser u) {
     return new AppUserEntity(u);
   }

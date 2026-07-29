@@ -39,15 +39,22 @@ public class AdminService {
     return users.findAll().stream().map(AdminService::toView).toList();
   }
 
+  /**
+   * Setzt die Plattform-Rolle eines Benutzers. Der letzte Admin kann nicht degradiert werden — und
+   * zwar auch dann nicht, wenn zwei Admins das gleichzeitig füreinander versuchen: {@link
+   * AppUserRepository#lockPlatformAdminIds()} sperrt die Admin-Zeilen, sodass der zweite Aufruf
+   * erst nach dem ersten prüft und dessen Degradierung bereits sieht (Issue #498).
+   */
   @Transactional
   public UserView changePlatformRole(long actorUserId, long targetUserId, PlatformRole newRole) {
     requirePlatformAdmin(actorUserId);
+    // Vor dem Lesen des Ziels: Wer gerade Admin ist, entscheidet die gesperrte Menge — nicht die
+    // (womöglich aus der Rechteprüfung zwischengespeicherte) Rolle am Benutzer selbst.
+    List<Long> adminIds = users.lockPlatformAdminIds();
     AppUser target = users.findById(targetUserId).orElseThrow(UserNotFoundException::new);
 
     // Letzten Admin nicht degradieren (Aussperr-Schutz).
-    if (target.platformRole() == PlatformRole.ADMIN
-        && newRole != PlatformRole.ADMIN
-        && adminCount() <= 1) {
+    if (newRole != PlatformRole.ADMIN && adminIds.size() <= 1 && adminIds.contains(targetUserId)) {
       throw new LastAdminException();
     }
 
@@ -111,10 +118,6 @@ public class AdminService {
     if (!platformAdminChecker.isPlatformAdmin(actorUserId)) {
       throw new AdminAccessDeniedException();
     }
-  }
-
-  private long adminCount() {
-    return users.findAll().stream().filter(u -> u.platformRole() == PlatformRole.ADMIN).count();
   }
 
   private static UserView toView(AppUser u) {

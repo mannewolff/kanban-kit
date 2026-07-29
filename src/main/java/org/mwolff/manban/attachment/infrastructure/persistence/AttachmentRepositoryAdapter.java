@@ -1,5 +1,6 @@
 package org.mwolff.manban.attachment.infrastructure.persistence;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import org.mwolff.manban.attachment.application.AttachmentRepository;
@@ -34,8 +35,18 @@ class AttachmentRepositoryAdapter implements AttachmentRepository {
   }
 
   @Override
+  public List<Attachment> findByCardIds(Collection<Long> cardIds) {
+    return jpa.findByCardIdIn(cardIds).stream().map(AttachmentRepositoryAdapter::toDomain).toList();
+  }
+
+  @Override
   public long countByCardId(long cardId) {
     return jpa.countByCardId(cardId);
+  }
+
+  @Override
+  public List<String> findAllObjectKeys() {
+    return jpa.findAllObjectKeys();
   }
 
   @Override

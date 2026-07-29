@@ -3,6 +3,7 @@ package org.mwolff.manban.board.application;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -17,10 +18,12 @@ import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mwolff.manban.board.domain.Board;
 import org.mwolff.manban.board.domain.BoardColumn;
 import org.mwolff.manban.project.application.PermissionChecker;
 import org.mwolff.manban.project.domain.Permission;
+import org.springframework.context.ApplicationEventPublisher;
 
 /** Verhaltenstests der Board- und Spalten-Use-Cases (Mockito an den Ports). */
 // PMD.TooManyMethods: umfassende Unit-Suite (Boards, Spalten und die modulfremde Fassade, je
@@ -34,6 +37,7 @@ class BoardServiceTest {
   private BoardColumnRepository columns;
   private ColumnCardCounter cardCounter;
   private PermissionChecker permissions;
+  private ApplicationEventPublisher events;
   private BoardService service;
 
   private static Board board() {
@@ -50,8 +54,9 @@ class BoardServiceTest {
     columns = mock(BoardColumnRepository.class);
     cardCounter = mock(ColumnCardCounter.class);
     permissions = mock(PermissionChecker.class);
+    events = mock(ApplicationEventPublisher.class);
     Clock clock = Clock.fixed(FIXED, ZoneOffset.UTC);
-    service = new BoardService(boards, columns, cardCounter, permissions, clock);
+    service = new BoardService(boards, columns, cardCounter, permissions, events, clock);
     when(boards.save(any(Board.class)))
         .thenAnswer(
             inv -> {
@@ -251,6 +256,38 @@ class BoardServiceTest {
   }
 
   @Test
+  void addColumn_locksTheColumnOrderBeforeReadingIt() {
+    // Given
+    when(boards.findById(10L)).thenReturn(Optional.of(board()));
+    when(columns.findByBoardId(10L)).thenReturn(List.of(column(1L, "A", 0)));
+
+    // When
+    service.addColumn(1L, 10L, "B", null);
+
+    // Then: die neue Position entsteht aus dem gelesenen Bestand — wird erst danach gesperrt,
+    // rechnen zwei gleichzeitige Aufrufe dieselbe aus und laufen in den Unique-Constraint (#499).
+    InOrder inOrder = inOrder(columns);
+    inOrder.verify(columns).lockColumnOrder(10L);
+    inOrder.verify(columns).findByBoardId(10L);
+  }
+
+  @Test
+  void reorderColumns_locksTheColumnOrderBeforeReadingIt() {
+    // Given
+    when(boards.findById(10L)).thenReturn(Optional.of(board()));
+    when(columns.findByBoardId(10L)).thenReturn(List.of(column(1L, "A", 0), column(2L, "B", 1)));
+
+    // When
+    service.reorderColumns(1L, 10L, List.of(2L, 1L));
+
+    // Then: gegen den gelesenen Bestand wird validiert und aus ihm entstehen die neuen
+    // Positionen — eine parallel angehängte Spalte bliebe sonst außerhalb der Neuvergabe (#499).
+    InOrder inOrder = inOrder(columns);
+    inOrder.verify(columns).lockColumnOrder(10L);
+    inOrder.verify(columns).findByBoardId(10L);
+  }
+
+  @Test
   void updateColumn_trimsNameAndPersists() {
     // Given
     when(columns.findById(2L)).thenReturn(Optional.of(column(2L, "Old", 1)));
@@ -444,6 +481,37 @@ class BoardServiceTest {
     // When / Then
     assertThatThrownBy(() -> service.requireColumn(1L, 10L))
         .isInstanceOf(ColumnNotFoundException.class);
+  }
+
+  @Test
+  void requireColumnBoardId_returnsBoardOfColumn() {
+    // Given
+    when(columns.findById(1L)).thenReturn(Optional.of(new BoardColumn(1L, 10L, "Ready", 2, null)));
+
+    // When / Then
+    assertThat(service.requireColumnBoardId(1L)).isEqualTo(10L);
+  }
+
+  @Test
+  void requireColumnBoardId_throwsColumnNotFound_whenColumnUnknown() {
+    // Given
+    when(columns.findById(1L)).thenReturn(Optional.empty());
+
+    // When / Then
+    assertThatThrownBy(() -> service.requireColumnBoardId(1L))
+        .isInstanceOf(ColumnNotFoundException.class);
+  }
+
+  @Test
+  void requireColumnBoardId_doesNotCheckPermissions() {
+    // Given: die Fassade loest nur auf — die Rechtepruefung bleibt beim aufrufenden Modul.
+    when(columns.findById(1L)).thenReturn(Optional.of(new BoardColumn(1L, 10L, "Ready", 2, null)));
+
+    // When
+    service.requireColumnBoardId(1L);
+
+    // Then
+    verifyNoInteractions(permissions);
   }
 
   @Test

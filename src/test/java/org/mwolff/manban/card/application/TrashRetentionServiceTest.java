@@ -1,8 +1,10 @@
 package org.mwolff.manban.card.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import java.time.Duration;
@@ -10,8 +12,10 @@ import java.time.Instant;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.InOrder;
 import org.mwolff.manban.card.domain.Card;
 import org.mwolff.manban.card.domain.CardType;
+import org.springframework.context.ApplicationEventPublisher;
 
 /** Verhaltenstests der Papierkorb-Retention (Ports gemockt). */
 class TrashRetentionServiceTest {
@@ -20,6 +24,7 @@ class TrashRetentionServiceTest {
 
   private CardRepository cards;
   private CardDependencyRepository dependencies;
+  private ApplicationEventPublisher events;
   private TrashRetentionService service;
 
   private static Card card(long id) {
@@ -49,7 +54,8 @@ class TrashRetentionServiceTest {
   void setUp() {
     cards = mock(CardRepository.class);
     dependencies = mock(CardDependencyRepository.class);
-    service = new TrashRetentionService(cards, dependencies);
+    events = mock(ApplicationEventPublisher.class);
+    service = new TrashRetentionService(cards, dependencies, events);
   }
 
   @Test
@@ -71,5 +77,28 @@ class TrashRetentionServiceTest {
     when(cards.findPurgeableTrash(NOW.minus(Duration.ofDays(30)))).thenReturn(List.of());
 
     assertThat(service.purgeExpiredTrash(NOW, 30)).isZero();
+  }
+
+  @Test
+  void purgeExpiredTrash_publishesCardsPurgedBeforeDeleting() {
+    Instant threshold = NOW.minus(Duration.ofDays(30));
+    when(cards.findPurgeableTrash(threshold)).thenReturn(List.of(card(1), card(2)));
+
+    service.purgeExpiredTrash(NOW, 30);
+
+    // Reihenfolge ist die Zusage aus #503: Erst publizieren (Anhänge planen ihre Blob-Löschung
+    // ein, solange die Metadaten existieren), dann löschen.
+    InOrder inOrder = inOrder(events, cards);
+    inOrder.verify(events).publishEvent(new CardsPurgedEvent(List.of(1L, 2L)));
+    inOrder.verify(cards).deleteById(1L);
+  }
+
+  @Test
+  void purgeExpiredTrash_publishesNothing_whenNothingExpired() {
+    when(cards.findPurgeableTrash(NOW.minus(Duration.ofDays(30)))).thenReturn(List.of());
+
+    service.purgeExpiredTrash(NOW, 30);
+
+    verifyNoInteractions(events);
   }
 }

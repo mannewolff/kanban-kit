@@ -197,8 +197,7 @@ class AdminServiceTest {
     // Given
     when(users.findById(1L)).thenReturn(Optional.of(user(1, PlatformRole.ADMIN)));
     when(users.findById(2L)).thenReturn(Optional.of(user(2, PlatformRole.ADMIN)));
-    when(users.findAll())
-        .thenReturn(List.of(user(1, PlatformRole.ADMIN), user(2, PlatformRole.ADMIN)));
+    when(users.lockPlatformAdminIds()).thenReturn(List.of(1L, 2L));
     when(users.save(any(AppUser.class))).thenAnswer(inv -> inv.getArgument(0));
 
     // When
@@ -233,9 +232,11 @@ class AdminServiceTest {
 
   @Test
   void changePlatformRole_keepsAdmin_whenNewRoleAlsoAdmin() {
-    // Given: Ziel ist Admin, neue Rolle ist ebenfalls Admin -> kein Aussperr-Schutz nötig
+    // Given: Ziel ist der EINZIGE Admin, die neue Rolle ist aber ebenfalls ADMIN -> der
+    // Aussperr-Schutz darf nicht greifen, denn die Admin-Menge schrumpft nicht.
     when(users.findById(1L)).thenReturn(Optional.of(user(1, PlatformRole.ADMIN)));
     when(users.findById(2L)).thenReturn(Optional.of(user(2, PlatformRole.ADMIN)));
+    when(users.lockPlatformAdminIds()).thenReturn(List.of(2L));
     when(users.save(any(AppUser.class))).thenAnswer(inv -> inv.getArgument(0));
 
     // When
@@ -247,15 +248,11 @@ class AdminServiceTest {
 
   @Test
   void changePlatformRole_demotesAdmin_whenAnotherAdminAmongNonAdmins() {
-    // Given: mehrere Admins (neben Nicht-Admins) -> Degradierung erlaubt
+    // Given: mehrere Admins -> Degradierung erlaubt. Die gesperrte Menge enthält genau die Admins;
+    // Nicht-Admins tauchen darin gar nicht erst auf (die Auswahl trifft die Datenbank).
     when(users.findById(1L)).thenReturn(Optional.of(user(1, PlatformRole.ADMIN)));
     when(users.findById(2L)).thenReturn(Optional.of(user(2, PlatformRole.ADMIN)));
-    when(users.findAll())
-        .thenReturn(
-            List.of(
-                user(1, PlatformRole.ADMIN),
-                user(2, PlatformRole.ADMIN),
-                user(3, PlatformRole.USER)));
+    when(users.lockPlatformAdminIds()).thenReturn(List.of(1L, 2L));
     when(users.save(any(AppUser.class))).thenAnswer(inv -> inv.getArgument(0));
 
     // When
@@ -267,9 +264,9 @@ class AdminServiceTest {
 
   @Test
   void changePlatformRole_throwsLastAdmin_whenDemotingSoleAdmin() {
-    // Given
+    // Given: die gesperrte Admin-Menge besteht nur aus dem Ziel selbst.
     when(users.findById(2L)).thenReturn(Optional.of(user(2, PlatformRole.ADMIN)));
-    when(users.findAll()).thenReturn(List.of(user(2, PlatformRole.ADMIN)));
+    when(users.lockPlatformAdminIds()).thenReturn(List.of(2L));
 
     // When / Then
     assertThatThrownBy(() -> service.changePlatformRole(2L, 2L, PlatformRole.USER))
@@ -277,14 +274,14 @@ class AdminServiceTest {
   }
 
   @Test
-  void changePlatformRole_succeeds_whenTargetIsNotAdmin_evenIfSoleAdminGuardWouldTrigger() {
-    // Given: Ziel ist KEIN Admin (erste Guard-Bedingung false); neue Rolle nicht Admin und
-    // nur ein Admin im System (die beiden anderen Bedingungen true). Der Aussperr-Schutz darf
-    // NICHT greifen — ein Umgehen der „target ist Admin"-Bedingung (Mutant) würde hier fälschlich
-    // LastAdmin werfen.
+  void changePlatformRole_succeeds_whenTargetIsNotAmongLockedAdmins() {
+    // Given: Ziel steht NICHT in der gesperrten Admin-Menge, obwohl es dort nur einen Admin gibt
+    // und die neue Rolle nicht ADMIN ist (die beiden anderen Bedingungen sind wahr). Der
+    // Aussperr-Schutz darf nicht greifen — das Degradieren eines Nicht-Admins nimmt niemandem
+    // die Admin-Rolle.
     when(users.findById(1L)).thenReturn(Optional.of(user(1, PlatformRole.ADMIN)));
     when(users.findById(2L)).thenReturn(Optional.of(user(2, PlatformRole.USER)));
-    when(users.findAll()).thenReturn(List.of(user(1, PlatformRole.ADMIN)));
+    when(users.lockPlatformAdminIds()).thenReturn(List.of(1L));
     when(users.save(any(AppUser.class))).thenAnswer(inv -> inv.getArgument(0));
 
     // When
@@ -295,21 +292,21 @@ class AdminServiceTest {
   }
 
   @Test
-  void changePlatformRole_throwsLastAdmin_whenSoleAdminAmongManyUsers() {
-    // Given: nur EIN Admin, aber mehrere Nutzer. adminCount() muss genau die Admins zählen —
-    // eine Zählung aller Nutzer (Mutant am Filter-Prädikat) ergäbe >1 und würde den
-    // Aussperr-Schutz fälschlich aushebeln.
+  void changePlatformRole_trustsLockedSet_notTheRoleOnTheLoadedUser() {
+    // Given: der geladene Benutzer trägt noch die Rolle ADMIN, die gesperrte Menge kennt ihn aber
+    // nicht mehr — genau die Lage, wenn eine andere Transaktion ihn soeben degradiert hat. Der
+    // Aussperr-Schutz muss der gesperrten Menge folgen, sonst würde hier fälschlich abgelehnt,
+    // obwohl Benutzer 1 als Admin bestehen bleibt (Issue #498).
+    when(users.findById(1L)).thenReturn(Optional.of(user(1, PlatformRole.ADMIN)));
     when(users.findById(2L)).thenReturn(Optional.of(user(2, PlatformRole.ADMIN)));
-    when(users.findAll())
-        .thenReturn(
-            List.of(
-                user(2, PlatformRole.ADMIN),
-                user(3, PlatformRole.USER),
-                user(4, PlatformRole.USER)));
+    when(users.lockPlatformAdminIds()).thenReturn(List.of(1L));
+    when(users.save(any(AppUser.class))).thenAnswer(inv -> inv.getArgument(0));
 
-    // When / Then
-    assertThatThrownBy(() -> service.changePlatformRole(2L, 2L, PlatformRole.USER))
-        .isInstanceOf(LastAdminException.class);
+    // When
+    AdminService.UserView view = service.changePlatformRole(1L, 2L, PlatformRole.USER);
+
+    // Then
+    assertThat(view.platformRole()).isEqualTo(PlatformRole.USER);
   }
 
   // --- disable / enable -------------------------------------------------

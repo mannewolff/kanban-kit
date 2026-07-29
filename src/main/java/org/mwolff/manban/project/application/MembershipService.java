@@ -15,9 +15,6 @@ import org.mwolff.manban.project.domain.Project;
 import org.mwolff.manban.project.domain.ProjectInvitation;
 import org.mwolff.manban.project.domain.ProjectMembership;
 import org.mwolff.manban.project.domain.ProjectRole;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.mail.MailException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -26,18 +23,8 @@ import org.springframework.transaction.annotation.Transactional;
  * Entfernen. Rechteprüfung über den {@link PermissionChecker} (MEMBER_INVITE bzw. MEMBER_REMOVE).
  * Der letzte OWNER ist geschützt.
  */
-// PMD.CouplingBetweenObjects: Schwellwert um eins überschritten (21), seit der breite
-// AppUserRepository-Zugriff durch die getrennten auth-Ports UserLookup/UserDisplayNameWriter samt
-// UserSummary ersetzt ist (Issue #460). Die Trennung von Lesen und Schreiben ist genau der Gewinn
-// dieses Umbaus — sie hier wieder zu einem Kombi-Port zusammenzuziehen, nur um einen Zähler zu
-// senken, wäre eine Verschlechterung. Die verbleibende Kopplung ist fachlich begründet
-// (Projekte, Mitgliedschaften, Einladungen, Rechte, Mailversand, Benutzer) und kein
-// God-Class-Smell.
-@SuppressWarnings("PMD.CouplingBetweenObjects")
 @Service
 public class MembershipService {
-
-  private static final Logger log = LoggerFactory.getLogger(MembershipService.class);
 
   private final ProjectRepository projects;
   private final ProjectMembershipRepository memberships;
@@ -80,6 +67,15 @@ public class MembershipService {
    * Nicht freigegebene Nutzer werden abgelehnt ({@link MemberNotApprovedException}). Unbekannte
    * E-Mails durchlaufen den Einladungs-/Token-Pfad.
    *
+   * <p><strong>Fehlersemantik seit Issue #502:</strong> Ein HTTP-Erfolg bestätigt die persistierte
+   * Mitgliedschaft bzw. Einladung, <em>nicht</em> die Zustellung der Mail — die wird in derselben
+   * Transaktion in der Outbox vorgemerkt und nach dem Commit mit Wiederholungen versandt. Der
+   * frühere 502-Pfad bei gescheiterter Einladungs-Mail ist bewusst entfallen: Sein Zweck war, keine
+   * Invitation ohne versandten Link zu hinterlassen; mit der Outbox holt der Worker den Versand
+   * nach, statt dass die Einladung verworfen wird. Eine endgültig gescheiterte Zustellung bleibt
+   * als FAILED-Eintrag in der Outbox sichtbar (siehe Betriebs-Doku); ein erneutes Einladen erzeugt
+   * dann ein frisches Token samt neuer Mail.
+   *
    * @return {@link InviteOutcome#ADDED} bei direkter Mitgliedschaft, sonst {@link
    *     InviteOutcome#INVITED}
    */
@@ -94,26 +90,10 @@ public class MembershipService {
       if (!existing.approved()) {
         throw new MemberNotApprovedException(normalizedEmail);
       }
-      long userId = existing.id();
-      @Nullable ProjectMembership current =
-          memberships.findByProjectIdAndUserId(projectId, userId).orElse(null);
-      if (current != null) {
-        // Idempotent: bestehende Mitgliedschaft auf die neue Rolle aktualisieren.
-        memberships.save(current.withRole(role));
-      } else {
-        memberships.save(new ProjectMembership(null, projectId, userId, role, clock.instant()));
-      }
-      // Info-Mail ist ein Nebeneffekt: Ein Versandfehler darf die bereits gespeicherte
-      // Mitgliedschaft nicht zurückrollen — daher fangen und nur loggen (kein 500).
-      try {
-        mailer.sendProjectAssignedEmail(
-            normalizedEmail, project.name(), role, projectUrl(projectId));
-      } catch (MailException e) {
-        log.warn(
-            "Zuordnungs-Mail an {} fehlgeschlagen; Mitgliedschaft bleibt bestehen",
-            normalizedEmail,
-            e);
-      }
+      addOrUpdateMembership(projectId, existing.id(), role);
+      // Die Info-Mail wird in der Outbox vorgemerkt und erst nach dem Commit versandt — ein
+      // Versandfehler kann die gespeicherte Mitgliedschaft strukturell nicht mehr berühren.
+      mailer.sendProjectAssignedEmail(normalizedEmail, project.name(), role, projectUrl(projectId));
       return InviteOutcome.ADDED;
     }
 
@@ -130,15 +110,33 @@ public class MembershipService {
             inviterUserId));
 
     String url = authProperties.baseUrl() + "/invitations/accept?token=" + plaintext;
-    // Einladungs-Mail ist essenziell (der Link kommt nur per Mail): Bei Versandfehler klaren 502
-    // melden statt generischem 500; die Transaktion rollt zurück, sodass keine unbrauchbare
-    // Invitation ohne versandten Link zurückbleibt.
-    try {
-      mailer.sendInvitationEmail(normalizedEmail, project.name(), url);
-    } catch (MailException e) {
-      throw new MailDeliveryException(e);
-    }
+    // Vormerkung in derselben Transaktion: Rollt die Invitation zurück, verschwindet die Mail mit;
+    // committet sie, stellt der Outbox-Worker mit Wiederholungen zu (Fehlersemantik siehe Javadoc).
+    mailer.sendInvitationEmail(normalizedEmail, project.name(), url);
     return InviteOutcome.INVITED;
+  }
+
+  /**
+   * Macht den Benutzer zum Mitglied des Projekts — idempotent: Eine bestehende Mitgliedschaft wird
+   * auf die übergebene Rolle aktualisiert.
+   *
+   * <p>Diese Aktualisierung ist ein vollwertiger rollenändernder Pfad und unterliegt daher
+   * demselben Aussperr-Schutz wie {@link #changeRole}: Ohne ihn degradierte eine Einladung des
+   * einzigen OWNER als VIEWER das Projekt still in die Ownerlosigkeit (Issue #498). Das Anlegen
+   * einer <em>neuen</em> Mitgliedschaft braucht keinen Schutz — es kann die Owner-Menge nur
+   * vergrößern.
+   */
+  private void addOrUpdateMembership(long projectId, long userId, ProjectRole role) {
+    @Nullable ProjectMembership current =
+        memberships.findByProjectIdAndUserId(projectId, userId).orElse(null);
+    if (current == null) {
+      memberships.save(new ProjectMembership(null, projectId, userId, role, clock.instant()));
+      return;
+    }
+    if (role != ProjectRole.OWNER) {
+      requireOwnerRemains(memberships.lockOwnerUserIds(projectId), userId);
+    }
+    memberships.save(current.withRole(role));
   }
 
   private String projectUrl(long projectId) {
@@ -187,19 +185,23 @@ public class MembershipService {
     return memberships.findByProjectId(projectId).stream().map(this::toView).toList();
   }
 
+  /**
+   * Setzt die Projekt-Rolle eines Mitglieds. Der letzte OWNER kann nicht degradiert werden — auch
+   * dann nicht, wenn zwei Owner das gleichzeitig füreinander versuchen (Issue #498, siehe {@link
+   * #requireOwnerRemains}).
+   */
   @Transactional
   public MemberView changeRole(
       long actorUserId, long projectId, long targetUserId, ProjectRole newRole) {
     permissions.require(actorUserId, projectId, Permission.MEMBER_REMOVE);
+    List<Long> owners = memberships.lockOwnerUserIds(projectId);
     ProjectMembership target =
         memberships
             .findByProjectIdAndUserId(projectId, targetUserId)
             .orElseThrow(MemberNotFoundException::new);
 
-    if (target.role() == ProjectRole.OWNER
-        && newRole != ProjectRole.OWNER
-        && isLastOwner(projectId, targetUserId)) {
-      throw new LastOwnerException();
+    if (newRole != ProjectRole.OWNER) {
+      requireOwnerRemains(owners, targetUserId);
     }
     return toView(memberships.save(target.withRole(newRole)));
   }
@@ -235,15 +237,26 @@ public class MembershipService {
    * der aufrufende (bisherige) Owner wird ADMIN. Nur der amtierende OWNER (Recht {@link
    * Permission#PROJECT_OWNER_TRANSFER}) darf übertragen — bewusst nicht ADMIN. Ist das Ziel bereits
    * OWNER, ist der Aufruf ein No-Op. Etwaige weitere (Alt-)Owner bleiben unangetastet.
+   *
+   * <p><strong>Warum hier kein Aussperr-Schutz steht (Issue #498):</strong> Der Transfer ist
+   * bestandserhaltend — er befördert genau eine Nicht-OWNER-Zeile (+1) und degradiert höchstens den
+   * Aufrufer (−1). Auch der Transfer des <em>einzigen</em> Owners ist deshalb zulässig: Das Projekt
+   * hat danach wieder genau einen Owner, nur einen anderen. Eine pauschale Ablehnung würde den
+   * Regelfall der Übergabe verbieten.
+   *
+   * <p>Die Sperre braucht der Transfer trotzdem: Ohne sie könnte ein gleichzeitiges {@code
+   * removeMember} auf das frisch beförderte Ziel zugreifen, während dieser Aufruf den Alt-Owner
+   * degradiert — beide Prüfungen sähen einen Owner zu viel, und das Projekt bliebe ownerlos zurück.
    */
   @Transactional
   public void transferOwnership(long callerUserId, long projectId, long newOwnerUserId) {
     permissions.require(callerUserId, projectId, Permission.PROJECT_OWNER_TRANSFER);
+    List<Long> owners = memberships.lockOwnerUserIds(projectId);
     ProjectMembership target =
         memberships
             .findByProjectIdAndUserId(projectId, newOwnerUserId)
             .orElseThrow(MemberNotFoundException::new);
-    if (target.role() == ProjectRole.OWNER) {
+    if (owners.contains(newOwnerUserId)) {
       return;
     }
     memberships.save(target.withRole(ProjectRole.OWNER));
@@ -251,30 +264,40 @@ public class MembershipService {
     // (ein Plattform-Admin ohne Mitgliedschaft hat keine Rolle im Projekt).
     memberships
         .findByProjectIdAndUserId(projectId, callerUserId)
-        .filter(m -> m.role() == ProjectRole.OWNER)
+        .filter(m -> owners.contains(m.userId()))
         .ifPresent(m -> memberships.save(m.withRole(ProjectRole.ADMIN)));
   }
 
+  /**
+   * Entfernt ein Mitglied. Der letzte OWNER kann nicht entfernt werden — auch nicht bei
+   * gleichzeitigen Aufrufen (Issue #498, siehe {@link #requireOwnerRemains}).
+   */
   @Transactional
   public void removeMember(long actorUserId, long projectId, long targetUserId) {
     permissions.require(actorUserId, projectId, Permission.MEMBER_REMOVE);
+    List<Long> owners = memberships.lockOwnerUserIds(projectId);
     ProjectMembership target =
         memberships
             .findByProjectIdAndUserId(projectId, targetUserId)
             .orElseThrow(MemberNotFoundException::new);
 
-    if (target.role() == ProjectRole.OWNER && isLastOwner(projectId, targetUserId)) {
-      throw new LastOwnerException();
-    }
+    requireOwnerRemains(owners, targetUserId);
     memberships.deleteById(target.requireId());
   }
 
-  private boolean isLastOwner(long projectId, long targetUserId) {
-    List<ProjectMembership> owners =
-        memberships.findByProjectId(projectId).stream()
-            .filter(m -> m.role() == ProjectRole.OWNER)
-            .toList();
-    return owners.size() == 1 && owners.get(0).userId() == targetUserId;
+  /**
+   * Wirft {@link LastOwnerException}, wenn der Benutzer der letzte OWNER des Projekts ist.
+   *
+   * <p>{@code ownerUserIds} muss aus {@link ProjectMembershipRepository#lockOwnerUserIds} stammen —
+   * dort liegt die Begründung, warum das Lesen der Owner-Menge die Mitgliedschaften des Projekts
+   * sperrt. Nur mit dieser Sperre ist die Prüfung mehr als eine Momentaufnahme: Sie gilt bis zum
+   * Commit. Die Rolle des Ziels wird bewusst <em>nicht</em> zusätzlich geprüft — die gesperrte
+   * Owner-Menge ist die verlässliche Auskunft darüber, wer OWNER ist.
+   */
+  private static void requireOwnerRemains(List<Long> ownerUserIds, long targetUserId) {
+    if (ownerUserIds.size() == 1 && ownerUserIds.get(0) == targetUserId) {
+      throw new LastOwnerException();
+    }
   }
 
   private MemberView toView(ProjectMembership m) {

@@ -24,7 +24,8 @@ class DashboardControllerTest {
 
   @Test
   void dashboard_delegatesToServiceWithUserAndBoard() {
-    BoardDashboardKpis kpis = new BoardDashboardKpis(List.of(), List.of(), 100L, 200L, List.of());
+    BoardDashboardKpis kpis =
+        new BoardDashboardKpis(List.of(), List.of(), 100L, 4, 200L, List.of());
     when(service.dashboard(3L, 7L)).thenReturn(kpis);
 
     BoardDashboardKpis result = controller.dashboard(3L, 7L);

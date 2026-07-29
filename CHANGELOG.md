@@ -7,6 +7,29 @@ Versionierung folgt der dreiteiligen Betriebsversion (siehe [RELEASING.md](RELEA
 Einträge je Version sind ein automatischer Auszug der Commit-Titel seit dem letzten Release,
 erzeugt von `scripts/gen-changelog.mjs`.
 
+## [1.12.0] – 2026-07-29
+
+- Betriebsversion auf 1.11.3 (push main)
+- S2077-Fundstellen im CardRepositoryAdapter bewertet und verankert ([#508](https://github.com/mannewolff/kanban-kit/issues/508))
+- Board nach erfolgreichem Sortier-Toggle sofort aktualisieren ([#507](https://github.com/mannewolff/kanban-kit/issues/507))
+- Ausreißer-Tabelle im Dashboard zur Karte verlinken ([#485](https://github.com/mannewolff/kanban-kit/issues/485))
+- Durchsatz-Diagramm ohne Hover lesbar ([#478](https://github.com/mannewolff/kanban-kit/issues/478))
+- Ø Lead Time als Hero-Zahl im Dashboard ([#477](https://github.com/mannewolff/kanban-kit/issues/477))
+- Verweildauer als lesbare Kacheln statt Balkenchart ([#476](https://github.com/mannewolff/kanban-kit/issues/476))
+- Sortier-Toggle im Spaltenkopf ([#505](https://github.com/mannewolff/kanban-kit/issues/505))
+- Spalte nach Kartennummer sortieren ([#504](https://github.com/mannewolff/kanban-kit/issues/504))
+- Betriebsversion auf 1.11.2 (push main)
+- Attachment-Metadaten und Objektspeicher konsistent halten ([#503](https://github.com/mannewolff/kanban-kit/issues/503))
+- E-Mail-Versand ueber die Outbox statt innerhalb der Transaktion ([#502](https://github.com/mannewolff/kanban-kit/issues/502))
+- Transaktionale Outbox als Fundament fuer Mail und Objektspeicher ([#501](https://github.com/mannewolff/kanban-kit/issues/501))
+- Kartennummern und Positionen konkurrenzfest vergeben ([#499](https://github.com/mannewolff/kanban-kit/issues/499))
+- Rollen-Invarianten serialisieren ([#498](https://github.com/mannewolff/kanban-kit/issues/498))
+- Einmal-Tokens atomar verbrauchen ([#497](https://github.com/mannewolff/kanban-kit/issues/497))
+- Unique-Kollisionen als 409 statt 500 ausliefern ([#496](https://github.com/mannewolff/kanban-kit/issues/496))
+- JaCoCo-Report nach den ITs erzeugen ([#495](https://github.com/mannewolff/kanban-kit/issues/495))
+- Release 1.11.1 (push main)
+- Sonar S1192: Parameternamen in JdbcCardLabelRepository als Konstante
+
 ## [1.11.0] – 2026-07-28
 
 - Release 1.10.2 (push main)

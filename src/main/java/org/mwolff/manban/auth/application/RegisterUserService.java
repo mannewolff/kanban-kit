@@ -14,6 +14,12 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * Registriert einen neuen Benutzer: legt ihn (unverifiziert) mit Argon2id-Passwort-Hash an, erzeugt
  * ein Verifikations-Token und stößt den Versand der Verifikations-E-Mail an.
+ *
+ * <p><strong>Fehlersemantik seit Issue #502:</strong> Ein HTTP-Erfolg bestätigt die persistierte
+ * Registrierung, <em>nicht</em> die Zustellung der Verifikations-Mail — die wird in derselben
+ * Transaktion in der Outbox vorgemerkt und nach dem Commit mit Wiederholungen versandt. Ein
+ * SMTP-Ausfall lässt die Registrierung also bestehen, statt sie (wie früher) mit zurückzurollen;
+ * eine endgültig gescheiterte Zustellung bleibt als FAILED-Eintrag in der Outbox sichtbar.
  */
 @Service
 public class RegisterUserService {

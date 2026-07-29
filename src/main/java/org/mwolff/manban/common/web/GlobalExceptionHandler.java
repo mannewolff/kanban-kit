@@ -1,11 +1,13 @@
 package org.mwolff.manban.common.web;
 
+import java.sql.SQLException;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.annotation.AnnotatedElementUtils;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
@@ -30,6 +32,9 @@ import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExcep
  *       kuratierte Exception-Message bzw. der {@code reason} der Annotation.
  *   <li>Bean-Validation-Fehler ({@link MethodArgumentNotValidException}) ergeben 400 mit einer
  *       {@code fieldErrors}-Extension (Feld → Meldung).
+ *   <li>Unique-Verletzungen der Datenbank ergeben 409 statt 500 (Issue #496) — die Anfrage war
+ *       fachlich gültig und kollidierte nur mit dem aktuellen Datenstand; ein erneuter Versuch kann
+ *       gelingen. Andere Integritätsverstöße bleiben 500.
  *   <li>Unerwartete Exceptions ergeben 500 mit generischem {@code detail} — keine Stacktraces oder
  *       internen Details nach außen (CLAUDE-security.md Grundprinzip 6); intern wird geloggt.
  *   <li>Framework-Fehler (405, 406, unlesbarer Body, …) behandelt die Basisklasse {@link
@@ -51,6 +56,13 @@ class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
   /** Fallback-Meldung für Feldfehler ohne eigene Message. */
   static final String FIELD_ERROR_FALLBACK = "Ungültiger Wert";
 
+  /** {@code detail} für Unique-Kollisionen — bewusst ohne Constraint-Namen oder Treibermeldung. */
+  static final String CONFLICT_DETAIL =
+      "Die Anfrage kollidierte mit dem aktuellen Datenstand. Bitte erneut versuchen.";
+
+  /** SQLState einer Unique-Verletzung ({@code unique_violation}, SQL-Standard-Klasse 23). */
+  private static final String SQLSTATE_UNIQUE_VIOLATION = "23505";
+
   /**
    * Mappt {@code @ResponseStatus}-annotierte Domänenexceptions generisch auf ihren annotierten
    * Statuscode; alles Unannotierte wird als unerwarteter Fehler mit 500 beantwortet.
@@ -66,6 +78,50 @@ class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     }
     HttpStatus status = responseStatus.code();
     return ProblemDetail.forStatusAndDetail(status, detailOf(ex, responseStatus, status));
+  }
+
+  /**
+   * Integritätsverstöße der Datenbank: Unique-Kollisionen ergeben 409, alles andere bleibt 500
+   * (Issue #496).
+   *
+   * <p>Hintergrund: Kartennummern ({@code uq_card_number}) und aktive Positionen ({@code
+   * uq_card_active_position}) werden ungesperrt gelesen und danach geschrieben. Zwei gleichzeitige,
+   * jeweils fachlich gültige Anfragen berechnen denselben Wert; eine verliert das Rennen. Sie als
+   * Serverfehler abzuweisen ist irreführend — 409 sagt zutreffend, dass die Anfrage mit dem
+   * aktuellen Stand kollidierte und ein erneuter Versuch gelingen kann. Das Rennen selbst beseitigt
+   * dieser Handler nicht (Issue #499).
+   *
+   * <p>Unterschieden wird über den {@link SQLException#getSQLState() SQLState} der Ursachenkette,
+   * nicht über den Constraint-Namen: Der Name kommt nur auf dem JPA-Pfad strukturiert an (Hibernate
+   * {@code ConstraintViolationException}); Positionskollisionen entstehen aber auch im
+   * JdbcTemplate-Pfad, wo er nur in der Fehlermeldung steht — und deren Detailzeile enthält bei
+   * PostgreSQL Nutzerdaten, taugt also nicht zum Parsen. Der SQLState ist dagegen ein
+   * SQL-Standardcode und trennt genau das Gewünschte: {@code 23505} (Unique-Kollision,
+   * wiederholbar) von {@code 23502}/{@code 23503}/{@code 23514} (NOT NULL, Fremdschlüssel, Check) —
+   * allesamt Programmfehler, die weiterhin als 500 geloggt und beantwortet werden.
+   */
+  @ExceptionHandler(DataIntegrityViolationException.class)
+  ProblemDetail handleDataIntegrityViolation(DataIntegrityViolationException ex) {
+    if (!isUniqueViolation(ex)) {
+      LOG.error("Integritätsverstoß ohne Wiederholungsaussicht", ex);
+      return ProblemDetail.forStatusAndDetail(
+          HttpStatus.INTERNAL_SERVER_ERROR, INTERNAL_ERROR_DETAIL);
+    }
+    LOG.warn("Unique-Kollision — als 409 beantwortet", ex);
+    return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, CONFLICT_DETAIL);
+  }
+
+  /**
+   * Sucht in der Ursachenkette eine {@link SQLException} mit dem SQLState einer Unique-Kollision.
+   */
+  private static boolean isUniqueViolation(Throwable ex) {
+    for (@Nullable Throwable cause = ex; cause != null; cause = cause.getCause()) {
+      if (cause instanceof SQLException sql
+          && SQLSTATE_UNIQUE_VIOLATION.equals(sql.getSQLState())) {
+        return true;
+      }
+    }
+    return false;
   }
 
   /**

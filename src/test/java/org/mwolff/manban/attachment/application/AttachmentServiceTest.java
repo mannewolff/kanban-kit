@@ -4,7 +4,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -17,6 +19,7 @@ import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mwolff.manban.attachment.domain.Attachment;
 import org.mwolff.manban.card.application.CardNotFoundException;
 import org.mwolff.manban.card.application.CardService;
@@ -34,6 +37,7 @@ class AttachmentServiceTest {
   private ObjectStorageProperties properties;
   private CardService cardService;
   private PermissionChecker permissions;
+  private BlobDeletionScheduler blobDeletion;
   private AttachmentService service;
 
   private static Attachment attachment() {
@@ -48,10 +52,18 @@ class AttachmentServiceTest {
     properties = new ObjectStorageProperties(null, null, null, null, 20);
     cardService = mock(CardService.class);
     permissions = mock(PermissionChecker.class);
+    blobDeletion = mock(BlobDeletionScheduler.class);
     Clock clock = Clock.fixed(FIXED, ZoneOffset.UTC);
     service =
         new AttachmentService(
-            attachments, storage, detector, properties, cardService, permissions, clock);
+            attachments,
+            storage,
+            detector,
+            properties,
+            cardService,
+            permissions,
+            blobDeletion,
+            clock);
   }
 
   private void cardResolves() {
@@ -109,6 +121,38 @@ class AttachmentServiceTest {
   }
 
   @Test
+  void upload_savesMetadataBeforePuttingTheBlob() {
+    // Given
+    cardResolves();
+    when(attachments.countByCardId(5L)).thenReturn(0L);
+    when(detector.detect(any(), any())).thenReturn("text/plain");
+    when(attachments.save(any(Attachment.class))).thenAnswer(inv -> saved(inv.getArgument(0)));
+
+    // When
+    service.upload(1L, 5L, "note.txt", new byte[] {1, 2, 3});
+
+    // Then — Reihenfolge ist die Kernzusage aus Issue #503: erst die Metadaten (rollbar), der
+    // Blob-Put als letzter Schritt vor dem Commit.
+    InOrder inOrder = inOrder(attachments, storage);
+    inOrder.verify(attachments).save(any(Attachment.class));
+    inOrder.verify(storage).put(any(), any(), any());
+  }
+
+  @Test
+  void upload_leavesNoBlobBehind_whenMetadataInsertFails() {
+    // Given — der Insert scheitert (z. B. Constraint).
+    cardResolves();
+    when(attachments.countByCardId(5L)).thenReturn(0L);
+    when(detector.detect(any(), any())).thenReturn("text/plain");
+    when(attachments.save(any(Attachment.class))).thenThrow(new IllegalStateException("insert"));
+
+    // When / Then — kein Blob wurde geschrieben, nichts verwaist (Issue #503).
+    assertThatThrownBy(() -> service.upload(1L, 5L, "note.txt", new byte[] {1}))
+        .isInstanceOf(IllegalStateException.class);
+    verify(storage, never()).put(any(), any(), any());
+  }
+
+  @Test
   void upload_returnsViewOfPersistedAttachment() {
     // Given
     cardResolves();
@@ -151,6 +195,7 @@ class AttachmentServiceTest {
             properties,
             cardService,
             permissions,
+            blobDeletion,
             Clock.fixed(FIXED, ZoneOffset.UTC));
     cardResolves();
     when(attachments.countByCardId(5L)).thenReturn(1L);
@@ -229,7 +274,7 @@ class AttachmentServiceTest {
   }
 
   @Test
-  void delete_removesBlobAndMetadata() {
+  void delete_schedulesBlobRemovalInsteadOfDeletingDirectly() {
     // Given
     when(attachments.findById(7L)).thenReturn(Optional.of(attachment()));
     cardResolves();
@@ -237,8 +282,10 @@ class AttachmentServiceTest {
     // When
     service.delete(1L, 7L);
 
-    // Then
-    verify(storage).delete("cards/5/key");
+    // Then — der Blob wird über die Outbox nach dem Commit entfernt (Issue #503): Ein direktes
+    // Löschen vor einem scheiternden DB-Teil hinterließe einen kaputten Download-Verweis.
+    verify(blobDeletion).scheduleDelete("cards/5/key");
+    verify(storage, never()).delete(any());
   }
 
   @Test

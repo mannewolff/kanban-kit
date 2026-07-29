@@ -60,6 +60,11 @@ public class ProjectService {
    * Legt ein Projekt an — nur für System-Admins. Der Owner wird per E-Mail bestimmt und als
    * OWNER-Mitglied eingetragen.
    *
+   * <p><strong>Fehlersemantik seit Issue #502:</strong> Ein HTTP-Erfolg bestätigt das persistierte
+   * Projekt samt Mitgliedschaft, <em>nicht</em> die Zustellung der Info-Mail an den Owner — die
+   * wird in derselben Transaktion in der Outbox vorgemerkt und nach dem Commit mit Wiederholungen
+   * versandt.
+   *
    * @throws ProjectAccessDeniedException wenn der Aufrufer kein System-Admin ist (403)
    * @throws ProjectOwnerNotFoundException wenn zur Owner-E-Mail kein Nutzer existiert (400)
    * @throws MemberNotApprovedException wenn der Owner noch nicht freigegeben ist (422)
@@ -81,7 +86,8 @@ public class ProjectService {
     memberships.save(
         new ProjectMembership(null, project.requireId(), owner.id(), ProjectRole.OWNER, now));
     // Synchron im selben Transaktions-Scope: der Board-seitige Listener legt das Default-Board an;
-    // scheitert das, rollt die Projektanlage (inkl. Mail-Auslösung) atomar mit zurück.
+    // scheitert das, rollt die Projektanlage (inkl. der in der Outbox vorgemerkten Mail) atomar
+    // mit zurück.
     events.publishEvent(new ProjectCreatedEvent(project.requireId(), owner.id()));
     mailer.sendProjectAssignedEmail(
         owner.email(),

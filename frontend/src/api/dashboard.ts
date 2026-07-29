@@ -28,6 +28,11 @@ export interface BoardDashboardKpis {
   columnDwell: ColumnDwell[]
   throughput: WeeklyThroughput[]
   avgLeadTimeSeconds: number | null
+  /**
+   * Anzahl der abgeschlossenen Karten hinter `avgLeadTimeSeconds` — nicht die Summe des Durchsatzes,
+   * die nur zwölf Wochen umfasst.
+   */
+  leadTimeSampleCount: number
   avgCycleTimeSeconds: number | null
   outliers: OutlierCard[]
 }

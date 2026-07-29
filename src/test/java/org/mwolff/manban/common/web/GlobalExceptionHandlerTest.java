@@ -9,6 +9,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
+import java.sql.SQLException;
 import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -16,6 +17,7 @@ import org.mwolff.manban.card.application.CardNotFoundException;
 import org.mwolff.manban.kanbancompat.application.TokenNotBoundException;
 import org.mwolff.manban.project.application.ProjectAccessDeniedException;
 import org.springframework.core.MethodParameter;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -119,6 +121,73 @@ class GlobalExceptionHandlerTest {
     assertThat(problem.getDetail()).doesNotContain("geheimer Zustand");
   }
 
+  // --- Constraint-Verletzungen: Unique → 409, alles andere → 500 (Issue #496) ------------------
+
+  @Test
+  void uniqueViolationMapsTo409AsProblemJson() throws Exception {
+    mvc.perform(get("/probe/unique-violation"))
+        .andExpect(status().isConflict())
+        .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
+        .andExpect(jsonPath("$.title").value("Conflict"))
+        .andExpect(jsonPath("$.status").value(409))
+        .andExpect(jsonPath("$.detail").value(GlobalExceptionHandler.CONFLICT_DETAIL));
+  }
+
+  @Test
+  void uniqueViolationDeepInTheCauseChainIsStillRecognized() {
+    // Given: Kette wie auf dem JPA-Pfad (Spring → ORM-Wrapper → SQLException)
+    var exception =
+        new DataIntegrityViolationException(
+            "could not execute statement",
+            new IllegalStateException(
+                "constraint [uq_card_number]", new SQLException("duplicate key", "23505")));
+
+    // When
+    ProblemDetail problem = handler.handleDataIntegrityViolation(exception);
+
+    // Then
+    assertThat(problem.getStatus()).isEqualTo(409);
+    assertThat(problem.getDetail()).isEqualTo(GlobalExceptionHandler.CONFLICT_DETAIL);
+  }
+
+  @Test
+  void uniqueViolationDetailLeaksNoConstraintName() {
+    // When
+    ProblemDetail problem =
+        handler.handleDataIntegrityViolation(
+            new DataIntegrityViolationException(
+                "insert into card …",
+                new SQLException(
+                    "duplicate key value violates unique constraint \"uq_card_number\"", "23505")));
+
+    // Then
+    assertThat(problem.getDetail()).doesNotContain("uq_card_number", "constraint");
+  }
+
+  @Test
+  void notNullViolationStaysAt500() {
+    // When: 23502 = not_null_violation — ein Programmfehler, kein wiederholbarer Konflikt
+    ProblemDetail problem =
+        handler.handleDataIntegrityViolation(
+            new DataIntegrityViolationException(
+                "null value in column", new SQLException("null value", "23502")));
+
+    // Then
+    assertThat(problem.getStatus()).isEqualTo(500);
+    assertThat(problem.getDetail()).isEqualTo(GlobalExceptionHandler.INTERNAL_ERROR_DETAIL);
+  }
+
+  @Test
+  void integrityViolationWithoutSqlExceptionStaysAt500() {
+    // When
+    ProblemDetail problem =
+        handler.handleDataIntegrityViolation(new DataIntegrityViolationException("ohne Ursache"));
+
+    // Then
+    assertThat(problem.getStatus()).isEqualTo(500);
+    assertThat(problem.getDetail()).isEqualTo(GlobalExceptionHandler.INTERNAL_ERROR_DETAIL);
+  }
+
   // --- Bean-Validation: 400 + fieldErrors-Extension -------------------------------------------
 
   @Test
@@ -184,6 +253,13 @@ class GlobalExceptionHandlerTest {
     @GetMapping("/probe/unexpected")
     String unexpected() {
       throw new IllegalStateException("geheim: interner Zustand");
+    }
+
+    @GetMapping("/probe/unique-violation")
+    String uniqueViolation() {
+      throw new DataIntegrityViolationException(
+          "insert into card …",
+          new SQLException("duplicate key value violates unique constraint", "23505"));
     }
 
     @PostMapping("/probe/validated")

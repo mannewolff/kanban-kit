@@ -12,6 +12,10 @@ import org.springframework.transaction.annotation.Transactional;
  * Startet einen Passwort-Reset: existiert der Benutzer, wird ein Reset-Token erzeugt und per E-Mail
  * zugestellt. Existiert er nicht, passiert nichts — nach außen ist der Ausgang identisch (keine
  * User-Enumeration).
+ *
+ * <p><strong>Fehlersemantik seit Issue #502:</strong> Ein HTTP-Erfolg bestätigt das persistierte
+ * Reset-Token, <em>nicht</em> die Zustellung der Mail — die wird in derselben Transaktion in der
+ * Outbox vorgemerkt und nach dem Commit mit Wiederholungen versandt.
  */
 @Service
 public class RequestPasswordResetService {

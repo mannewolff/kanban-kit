@@ -15,6 +15,7 @@ import org.mwolff.manban.board.domain.Board;
 import org.mwolff.manban.board.domain.BoardColumn;
 import org.mwolff.manban.project.application.PermissionChecker;
 import org.mwolff.manban.project.domain.Permission;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -33,6 +34,7 @@ public class BoardService {
   private final BoardColumnRepository columns;
   private final ColumnCardCounter cardCounter;
   private final PermissionChecker permissions;
+  private final ApplicationEventPublisher events;
   private final Clock clock;
 
   public BoardService(
@@ -40,11 +42,13 @@ public class BoardService {
       BoardColumnRepository columns,
       ColumnCardCounter cardCounter,
       PermissionChecker permissions,
+      ApplicationEventPublisher events,
       Clock clock) {
     this.boards = boards;
     this.columns = columns;
     this.cardCounter = cardCounter;
     this.permissions = permissions;
+    this.events = events;
     this.clock = clock;
   }
 
@@ -115,6 +119,10 @@ public class BoardService {
     if (!board.isArchived()) {
       throw new BoardNotArchivedException();
     }
+    // Vor dem Delete publizieren (Issue #503): Das card-Modul löst die betroffenen Karten auf und
+    // die Anhänge planen ihre Blob-Löschung ein, solange die Metadaten existieren — die Cascade
+    // board → card → attachment_meta nimmt sie gleich mit.
+    events.publishEvent(new BoardPurgedEvent(boardId));
     boards.deleteById(boardId);
   }
 
@@ -122,6 +130,8 @@ public class BoardService {
   public ColumnView addColumn(long userId, long boardId, String name, @Nullable Integer wipLimit) {
     Board board = requireBoard(boardId);
     permissions.require(userId, board.projectId(), Permission.BOARD_UPDATE);
+    // Vor dem Lesen sperren: die neue Position entsteht aus dem gelesenen Bestand (#499).
+    columns.lockColumnOrder(boardId);
     int nextPosition =
         columns.findByBoardId(boardId).stream().mapToInt(BoardColumn::position).max().orElse(-1)
             + 1;
@@ -154,6 +164,10 @@ public class BoardService {
     Board board = requireBoard(boardId);
     permissions.require(userId, board.projectId(), Permission.BOARD_UPDATE);
 
+    // Vor dem Lesen sperren: gegen die gelesene Ordnung wird die Anfrage validiert, und aus ihr
+    // entstehen die neuen Positionen. Eine parallel angehängte Spalte bliebe sonst außerhalb der
+    // Neuvergabe zurück (#499).
+    columns.lockColumnOrder(boardId);
     List<BoardColumn> current = columns.findByBoardId(boardId);
     List<Long> existing = current.stream().map(BoardColumn::id).sorted().toList();
     List<Long> requested = orderedColumnIds.stream().sorted().toList();
@@ -221,6 +235,23 @@ public class BoardService {
       throw new ColumnNotFoundException();
     }
     return toColumnView(column);
+  }
+
+  /**
+   * Board-ID der Spalte — die Auflösung für modulfremde Use-Cases, die nur eine Spalten-ID kennen
+   * (das Sortieren einer Spalte spricht {@code /api/columns/{columnId}} an) und daraus erst Board
+   * und Projekt für ihre eigene Rechteprüfung ableiten müssen.
+   *
+   * <p>Bewusst ohne Board-Parameter und damit ohne die Zusicherung von {@link #requireColumn(long,
+   * long)}: Wer das Board noch gar nicht kennt, kann es nicht mitgeben. Die Rechteprüfung des
+   * Aufrufers findet danach auf dem hier aufgelösten Projekt statt — ein Existenz-Leak entsteht
+   * nicht, weil ohne Mitgliedschaft 404 folgt.
+   *
+   * @throws ColumnNotFoundException wenn die Spalte nicht existiert
+   */
+  @Transactional(readOnly = true)
+  public long requireColumnBoardId(long columnId) {
+    return loadColumn(columnId).boardId();
   }
 
   /** Spalten des Boards, aufsteigend nach Position (leer, wenn das Board keine Spalten hat). */
