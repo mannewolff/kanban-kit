@@ -70,12 +70,17 @@ function sampleBasis(sample: number): string {
  * die Ø Lead Time (vom Anlegen der Karte bis fertig, die Sicht des Auftraggebers). Soll künftig
  * die Cycle Time führen, werden hier die beiden Blöcke getauscht; die Darstellung bleibt.
  *
- * Ohne abgeschlossene Karte liefert das Backend `null` für beide Zeiten (die Cycle Time setzt eine
- * fertige Karte ebenso voraus wie die Lead Time). Dann prangt hier keine Leerangabe in 48 px,
- * sondern ein ruhiger Hinweis.
+ * Der ruhige Hinweis statt der großen Zahl greift nur, wenn **beide** Zeiten ohne Datenbasis sind.
+ * Heute fallen sie zusammen (beide setzen eine fertige Karte voraus), aber die Cycle Time hängt
+ * zusätzlich an einer „Ready“-artigen Spalte — verschiebt sich diese Definition, darf ein
+ * vorhandener Wert nicht still hinter dem Hinweis verschwinden.
+ *
+ * Die Cycle Time nutzt dieselbe {@link MetricTile} wie die Spalten-Kacheln: der Leerwert-Zustand
+ * hängt damit auch hier allein an der Stichprobengröße und sieht überall gleich aus.
  */
 function MetricHeadline({ kpis }: Readonly<{ kpis: BoardDashboardKpis }>) {
-  if (kpis.avgLeadTimeSeconds == null) {
+  const noLeadTime = kpis.avgLeadTimeSeconds == null
+  if (noLeadTime && kpis.avgCycleTimeSeconds == null) {
     return (
       <Paper variant="outlined" sx={{ p: 3 }}>
         <Typography color="text.secondary">
@@ -88,10 +93,14 @@ function MetricHeadline({ kpis }: Readonly<{ kpis: BoardDashboardKpis }>) {
 
   return (
     <Paper variant="outlined" sx={{ p: 3 }}>
+      {/*
+        `flex-start` statt `baseline`: die Cycle Time steht als eigene Kachel mit Rahmen daneben,
+        und eine Kachel richtet sich an ihrer Oberkante aus, nicht an der Grundlinie der 56-px-Zahl.
+      */}
       <Stack
         direction={{ xs: 'column', sm: 'row' }}
         spacing={{ xs: 2, sm: 5 }}
-        alignItems={{ sm: 'baseline' }}
+        alignItems={{ sm: 'flex-start' }}
       >
         <Box>
           <Typography variant="caption" color="text.secondary">
@@ -105,21 +114,26 @@ function MetricHeadline({ kpis }: Readonly<{ kpis: BoardDashboardKpis }>) {
           <Typography
             component="p"
             data-testid="hero-metric"
-            sx={{ fontSize: { xs: 48, sm: 56 }, fontWeight: 700, lineHeight: 1.1 }}
+            sx={{
+              fontSize: { xs: 48, sm: 56 },
+              fontWeight: noLeadTime ? 400 : 700,
+              color: noLeadTime ? 'text.secondary' : 'text.primary',
+              lineHeight: 1.1,
+            }}
           >
             {formatDuration(kpis.avgLeadTimeSeconds)}
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-            Vom Anlegen der Karte bis fertig — Durchschnitt aus{' '}
-            {sampleBasis(kpis.leadTimeSampleCount)}.
+            {noLeadTime
+              ? 'Vom Anlegen der Karte bis fertig — noch keine abgeschlossene Karte.'
+              : `Vom Anlegen der Karte bis fertig — Durchschnitt aus ${sampleBasis(kpis.leadTimeSampleCount)}.`}
           </Typography>
         </Box>
-        <Box>
-          <Typography variant="caption" color="text.secondary">
-            Ø Cycle Time
-          </Typography>
-          <Typography variant="h6">{formatDuration(kpis.avgCycleTimeSeconds)}</Typography>
-        </Box>
+        <MetricTile
+          label="Ø Cycle Time"
+          value={formatDuration(kpis.avgCycleTimeSeconds)}
+          sample={kpis.cycleTimeSampleCount}
+        />
       </Stack>
     </Paper>
   )

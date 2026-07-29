@@ -34,6 +34,12 @@ export interface BoardDashboardKpis {
    */
   leadTimeSampleCount: number
   avgCycleTimeSeconds: number | null
+  /**
+   * Anzahl der Karten hinter `avgCycleTimeSeconds` — kleiner als `leadTimeSampleCount`, sobald eine
+   * fertige Karte nie in einer „Ready“-artigen Spalte lag. `0` heißt „keine Datenbasis“ und ist
+   * damit die eine Quelle für die Leerwert-Optik der Kennzahl.
+   */
+  cycleTimeSampleCount: number
   outliers: OutlierCard[]
 }
 

@@ -76,13 +76,15 @@ public class CardCycleTimeService {
     // Durchschnitt und Stichprobengröße stammen aus derselben Liste — die angezeigte Datenbasis
     // kann damit nicht von der Zahl abweichen, die sie stützt.
     long[] leads = leadTimes(workCards);
+    long[] cycles = cycleTimes(workCards, byCard);
 
     return new BoardDashboardKpis(
         columnDwell(boardColumns, trans),
         throughput(workCards, now),
         average(leads),
         leads.length,
-        avgCycleTime(workCards, byCard),
+        average(cycles),
+        cycles.length,
         outliers(workCards, byCard, now));
   }
 
@@ -139,15 +141,18 @@ public class CardCycleTimeService {
     return done == null ? null : Duration.between(card.createdAt(), done).toSeconds();
   }
 
-  private static @Nullable Long avgCycleTime(
+  /**
+   * Cycle Times aller abgeschlossenen Karten mit „Ready"-Eintritt — je Karte ein Wert. Die Zählung
+   * ist deshalb kleiner als die der Lead Times, sobald eine fertige Karte nie in einer „Ready"-
+   * artigen Spalte lag.
+   */
+  private static long[] cycleTimes(
       List<Card> workCards, Map<Long, List<CardColumnTransition>> byCard) {
-    long[] cycles =
-        workCards.stream()
-            .map(card -> cycleSeconds(card, byCard.getOrDefault(card.requireId(), List.of())))
-            .filter(Objects::nonNull)
-            .mapToLong(Long::longValue)
-            .toArray();
-    return average(cycles);
+    return workCards.stream()
+        .map(card -> cycleSeconds(card, byCard.getOrDefault(card.requireId(), List.of())))
+        .filter(Objects::nonNull)
+        .mapToLong(Long::longValue)
+        .toArray();
   }
 
   private static @Nullable Long cycleSeconds(Card card, List<CardColumnTransition> cardTrans) {

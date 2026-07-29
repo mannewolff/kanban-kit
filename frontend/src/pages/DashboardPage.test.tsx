@@ -115,7 +115,8 @@ const kpis: BoardDashboardKpis = {
   ],
   avgLeadTimeSeconds: 2 * 86_400 + 3 * 3600,
   leadTimeSampleCount: 5,
-  avgCycleTimeSeconds: null,
+  avgCycleTimeSeconds: 3600,
+  cycleTimeSampleCount: 4,
   outliers: [{ cardId: 9, number: 42, title: 'Hängt fest', columnName: 'Review', dwellSeconds: 700_000 }],
 }
 
@@ -143,10 +144,26 @@ describe('DashboardPage', () => {
     expect(await screen.findByRole('link', { name: 'Projekte' })).toHaveAttribute('href', '/')
   })
 
-  it('zeigt Lead/Cycle-Time (Cycle null als n. v.)', async () => {
+  it('zeigt Lead und Cycle Time als lesbare Dauern', async () => {
     renderPage()
     expect(await screen.findByText('2 T 3 Std')).toBeInTheDocument()
-    // Zweimal „n. v.“: die Cycle Time ohne Datenbasis und die Spalte „Done“ ohne Messung.
+    expect(screen.getByText('1 Std 0 Min')).toBeInTheDocument()
+    // Einmal „n. v.“: nur die Spalte „Done“ ohne Messung.
+    expect(screen.getAllByText('n. v.')).toHaveLength(1)
+  })
+
+  it('nennt die Datenbasis der Cycle Time neben ihrem Wert', async () => {
+    renderPage()
+    expect(await screen.findByText('4 Messungen')).toBeInTheDocument()
+  })
+
+  it('nimmt die Cycle Time ohne Datenbasis zurück wie eine Kachel ohne Messung', async () => {
+    mDashboard.get.mockResolvedValue({ ...kpis, avgCycleTimeSeconds: null, cycleTimeSampleCount: 0 })
+    renderPage()
+    // Die Hero-Zahl steht weiter, die Cycle Time sagt ausdrücklich, dass ihr die Messung fehlt —
+    // dieselbe Aussage wie bei den Spalten-Kacheln, nicht bloß ein zweites „n. v.“.
+    expect(await screen.findByTestId('hero-metric')).toHaveTextContent('2 T 3 Std')
+    expect(screen.getAllByText('keine Messung')).toHaveLength(2)
     expect(screen.getAllByText('n. v.')).toHaveLength(2)
   })
 
@@ -180,12 +197,29 @@ describe('DashboardPage', () => {
       avgLeadTimeSeconds: null,
       leadTimeSampleCount: 0,
       avgCycleTimeSeconds: null,
+      cycleTimeSampleCount: 0,
     })
     renderPage()
-    expect(await screen.findByText(/Noch keine abgeschlossene Karte/)).toBeInTheDocument()
+    expect(await screen.findByText(/Noch keine abgeschlossene Karte —/)).toBeInTheDocument()
     expect(screen.queryByTestId('hero-metric')).not.toBeInTheDocument()
     // Nur die Spalte „Done“ darf jetzt noch „n. v.“ zeigen — keine hervorgehobene Leerangabe.
     expect(screen.getAllByText('n. v.')).toHaveLength(1)
+  })
+
+  it('blendet eine vorhandene Cycle Time nicht hinter dem Leer-Hinweis aus', async () => {
+    // Nur die Lead Time fehlt: der Hinweis würde sonst eine gemessene Zahl still verschlucken.
+    mDashboard.get.mockResolvedValue({
+      ...kpis,
+      avgLeadTimeSeconds: null,
+      leadTimeSampleCount: 0,
+    })
+    renderPage()
+    expect(await screen.findByText('1 Std 0 Min')).toBeInTheDocument()
+    expect(screen.queryByText(/Noch keine abgeschlossene Karte —/)).not.toBeInTheDocument()
+    // Die leere Hero-Zahl steht zurückgenommen da und behauptet keinen Durchschnitt aus 0 Karten.
+    expect(screen.getByTestId('hero-metric')).toHaveTextContent('n. v.')
+    expect(screen.getByText(/noch keine abgeschlossene Karte\./)).toBeInTheDocument()
+    expect(screen.queryByText(/Durchschnitt aus 0/)).not.toBeInTheDocument()
   })
 
   it('zeigt die Verweildauer je Spalte als lesbare Dauer statt als Dezimalstunden', async () => {
