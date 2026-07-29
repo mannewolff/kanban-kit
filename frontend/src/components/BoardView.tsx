@@ -51,6 +51,14 @@ const isDoneColumn = (name: string) => name.toLowerCase().includes('done')
 const sortByNumberLabel = (columnName: string, next: SortDirection) =>
   `Spalte ${columnName} nach Nummer ${next === 'ASC' ? 'aufsteigend' : 'absteigend'} sortieren`
 
+/**
+ * Erfolgsmeldung nach dem Sortieren: benennt die Richtung, in der tatsächlich sortiert wurde.
+ * Läuft über den Toast-Stapel, dessen `Alert` als Live-Region vorgelesen wird — ohne die Meldung
+ * bliebe der Erfolg für Screenreader unsichtbar (die Kartenreihenfolge ändert sich nur visuell).
+ */
+const sortedByNumberMessage = (columnName: string, sorted: SortDirection) =>
+  `Spalte ${columnName} ${sorted === 'ASC' ? 'aufsteigend' : 'absteigend'} sortiert`
+
 /** Initialen (max. 2 Zeichen) aus einem Anzeigenamen für Assignee-Avatare. */
 function initials(name: string): string {
   const parts = name.trim().split(/\s+/).filter((p) => p.length > 0)
@@ -246,15 +254,29 @@ export function BoardView({
   // Sortier-Toggle je Spalte: die Richtung, die der nächste Klick auslöst. Nur im Frontend
   // (keine Persistenz gefordert); nicht eingetragene Spalten starten bei ASC. Gewechselt wird
   // erst nach erfolgreichem Aufruf, damit ein fehlgeschlagener Versuch dieselbe Richtung behält.
+  //
+  // Bewusste Entscheidung: der Zustand spiegelt die eigene Klickhistorie dieser Sitzung, nicht den
+  // Serverzustand. Sortiert ein anderer Nutzer dieselbe Spalte (oder wird die Seite neu geladen),
+  // weicht die angezeigte nächste Richtung von der zuletzt tatsächlich angewandten ab. Die Sortierung
+  // selbst bleibt korrekt — der Aufruf schickt die Richtung mit —, nur die Beschriftung kann dann
+  // eine Runde „hinterherhinken“. Für eine echte Spiegelung müsste die Richtung serverseitig je
+  // Spalte persistiert werden; das verlangt das Feature nicht.
   const [nextSortDirection, setNextSortDirection] = useState<Record<number, SortDirection>>({})
+  // Spalte mit gerade laufendem Sortier-Aufruf: sperrt genau deren Button gegen den zweiten Klick
+  // (Doppel-Request, springendes Feedback). Andere Spalten bleiben bedienbar.
+  const [sortingColumnId, setSortingColumnId] = useState<number | null>(null)
   const sortColumnByNumber = async (column: BoardColumn) => {
     const direction = nextSortDirection[column.id] ?? 'ASC'
+    setSortingColumnId(column.id)
     try {
       await columnsApi.sortByNumber(column.id, direction)
       setNextSortDirection((prev) => ({ ...prev, [column.id]: direction === 'ASC' ? 'DESC' : 'ASC' }))
+      notify(sortedByNumberMessage(column.name, direction), 'success')
       onCardsChanged?.()
     } catch {
       notify('Sortieren fehlgeschlagen.', 'error')
+    } finally {
+      setSortingColumnId(null)
     }
   }
 
@@ -560,8 +582,12 @@ export function BoardView({
                 </Typography>
                 {canEdit && (
                   <Tooltip title={sortByNumberLabel(column.name, nextSortDirection[column.id] ?? 'ASC')}>
+                    {/* Kein span-Wrapper um den Button: MUI legt den Tooltip-Titel als aria-label auf
+                        sein direktes Kind, ein Wrapper trüge den Namen also doppelt (span + Button).
+                        Preis dafür: während des laufenden Aufrufs (disabled) zeigt der Tooltip nicht. */}
                     <IconButton size="small"
                       aria-label={sortByNumberLabel(column.name, nextSortDirection[column.id] ?? 'ASC')}
+                      disabled={sortingColumnId === column.id}
                       onClick={() => void sortColumnByNumber(column)} sx={{ color: 'text.secondary' }}>
                       <SortIcon fontSize="small" />
                     </IconButton>
