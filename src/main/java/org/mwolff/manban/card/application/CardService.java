@@ -761,6 +761,56 @@ public class CardService {
       @Nullable String description,
       @Nullable Long targetBoardId) {
     permissions.require(userId, projectId, Permission.TICKET_CREATE);
+    CardView created = storeProjectIdea(userId, projectId, title, description, targetBoardId);
+    publishIdeasChanged(projectId);
+    return created;
+  }
+
+  /**
+   * Legt mehrere board-lose Ideen in einem Zug im projektweiten Pool an — der Backend-Teil des
+   * Spezifikations-Imports (#492). Recht: {@link Permission#TICKET_CREATE}, einmal für den ganzen
+   * Stapel geprüft; importieren ist fachlich dasselbe wie Ideen anlegen, nur in Menge, deshalb kein
+   * eigenes Recht. Das optionale {@code targetBoardId} gilt für alle Ideen des Stapels (Vorauswahl
+   * beim späteren Einplanen, wie beim Token-Ingest).
+   *
+   * <p><b>Alles-oder-nichts.</b> Die Methode läuft in einer Transaktion: schlägt eine Idee fehl,
+   * entsteht keine. Ein halb importierter Fachbereichs-Spec wäre schwerer aufzuräumen (welche
+   * Abschnitte fehlen?) als ein wiederholter Import. Feld- und Mengengrenzen prüft bereits die
+   * Bean-Validation am Endpoint, sodass ein ungültiges Element gar nicht bis hierher gelangt.
+   *
+   * <p><b>Ein Ereignis für den ganzen Stapel</b> statt eines je Karte: Der SSE-Vertrag des
+   * Ideen-Pools meldet nur „hat sich geändert", woraufhin ein offenes Ideen-Fenster die Liste
+   * komplett neu lädt — n Ereignisse lösten n identische Neuladungen aus.
+   *
+   * <p>Die Ideen landen bewusst im Pool und nicht in einer Board-Spalte (wie beim Token-Ingest, s.
+   * {@code KanbanCompatService}): Was von außen hereinkommt, plant ein Mensch bewusst ein.
+   */
+  @Transactional
+  public List<CardView> createProjectIdeas(
+      long userId, long projectId, List<NewIdea> ideas, @Nullable Long targetBoardId) {
+    permissions.require(userId, projectId, Permission.TICKET_CREATE);
+    List<CardView> created =
+        ideas.stream()
+            .map(
+                idea ->
+                    storeProjectIdea(
+                        userId, projectId, idea.title(), idea.description(), targetBoardId))
+            .toList();
+    publishIdeasChanged(projectId);
+    return created;
+  }
+
+  /**
+   * Schreibt eine einzelne Pool-Idee (ohne Rechteprüfung und ohne SSE-Ereignis) — gemeinsamer Kern
+   * von {@link #createProjectIdea} und {@link #createProjectIdeas}, damit der Stapel mit einer
+   * Rechteprüfung und einem Ereignis auskommt.
+   */
+  private CardView storeProjectIdea(
+      long userId,
+      long projectId,
+      String title,
+      @Nullable String description,
+      @Nullable Long targetBoardId) {
     Instant now = clock.instant();
     // #402: Pool-Ideen bekommen sofort eine projektweite Nummer (referenzierbar wie Board-Karten);
     // sie bleiben board-los und behalten die Nummer beim späteren Einplanen.
@@ -788,9 +838,14 @@ public class CardService {
                 projectId,
                 targetBoardId));
     activity.add(saved.requireId(), userId, CardActivityType.CREATED, "Idee angelegt", now);
-    publishIdeasChanged(projectId);
     return view(saved);
   }
+
+  /**
+   * Eine anzulegende Pool-Idee im Stapel: Titel und optionale Beschreibung. Das Zielboard steht
+   * bewusst nicht hier, sondern gilt für den ganzen Stapel (ein Import bedient ein Board).
+   */
+  public record NewIdea(String title, @Nullable String description) {}
 
   /**
    * Plant eine Idee ins Backlog (erste Spalte) eines Boards desselben Projekts ein: setzt

@@ -2210,6 +2210,62 @@ class CardServiceTest {
   }
 
   @Test
+  void createProjectIdeas_createsEveryIdea_withOwnNumberAndSharedTargetBoard() {
+    when(cards.allocateCardNumber(PROJECT)).thenReturn(3, 4);
+    ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
+
+    List<CardService.CardView> views =
+        service.createProjectIdeas(
+            1L,
+            PROJECT,
+            List.of(new CardService.NewIdea("Erste", "a"), new CardService.NewIdea("Zweite", null)),
+            7L);
+
+    verify(cards, times(2)).save(captor.capture());
+    assertThat(captor.getAllValues()).extracting(Card::title).containsExactly("Erste", "Zweite");
+    assertThat(captor.getAllValues()).extracting(Card::description).containsExactly("a", null);
+    assertThat(captor.getAllValues()).extracting(Card::number).containsExactly(3, 4);
+    assertThat(captor.getAllValues())
+        .allMatch(c -> c.ideaStored() && c.boardId() == null && c.targetBoardId() == 7L);
+    // Beide Speicherungen liefern im Mock dieselbe Id (1L) — je Idee entsteht ein CREATED-Eintrag.
+    verify(activity, times(2)).add(1L, 1L, CardActivityType.CREATED, "Idee angelegt", FIXED);
+    assertThat(views).hasSize(2).extracting(CardService.CardView::number).containsExactly(3, 4);
+  }
+
+  @Test
+  void createProjectIdeas_checksTicketCreateOnce_andPublishesOneIdeasChangedEvent() {
+    // Ein Ereignis fuer den ganzen Stapel genuegt: der Ideen-Pool laedt danach ohnehin komplett
+    // neu.
+    service.createProjectIdeas(
+        1L,
+        PROJECT,
+        List.of(
+            new CardService.NewIdea("Erste", null),
+            new CardService.NewIdea("Zweite", null),
+            new CardService.NewIdea("Dritte", null)),
+        null);
+
+    verify(permissions, times(1)).require(1L, PROJECT, Permission.TICKET_CREATE);
+    verify(events, times(1)).publishEvent(new ProjectIdeasChangedEvent(PROJECT));
+  }
+
+  @Test
+  void createProjectIdeas_withoutTicketCreate_createsNothing() {
+    doThrow(new ProjectAccessDeniedException())
+        .when(permissions)
+        .require(1L, PROJECT, Permission.TICKET_CREATE);
+
+    assertThatThrownBy(
+            () ->
+                service.createProjectIdeas(
+                    1L, PROJECT, List.of(new CardService.NewIdea("Erste", null)), null))
+        .isInstanceOf(ProjectAccessDeniedException.class);
+
+    verify(cards, never()).save(any(Card.class));
+    verify(events, never()).publishEvent(any(ProjectIdeasChangedEvent.class));
+  }
+
+  @Test
   void planOntoBoard_publishesIdeasChanged() {
     when(cards.findById(1L)).thenReturn(Optional.of(poolIdea(1L)));
     when(boardService.firstColumn(BOARD)).thenReturn(column(20L, "Backlog", 0));
