@@ -1945,8 +1945,27 @@ class CardServiceTest {
 
     service.purge(9L, 1L);
 
-    assertThat(onlyPublishedEvent())
-        .isEqualTo(new CardBoardActivityEvent(BOARD, ActivityType.DELETED, 1L));
+    // Seit #503 publiziert der Purge zusätzlich CardsPurgedEvent (Anhang-Aufräumkette).
+    ArgumentCaptor<Object> captor = ArgumentCaptor.forClass(Object.class);
+    verify(events, times(2)).publishEvent(captor.capture());
+    assertThat(captor.getAllValues())
+        .containsExactly(
+            new CardsPurgedEvent(List.of(1L)),
+            new CardBoardActivityEvent(BOARD, ActivityType.DELETED, 1L));
+  }
+
+  @Test
+  void purge_publishesCardsPurgedBeforeDeleting() {
+    when(cards.findById(1L))
+        .thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
+
+    service.purge(9L, 1L);
+
+    // Reihenfolge ist die Zusage aus #503: Erst publizieren (Anhänge planen ihre Blob-Löschung
+    // ein, solange die Metadaten existieren), dann löschen — die Cascade nimmt die Metadaten mit.
+    InOrder inOrder = inOrder(events, cards);
+    inOrder.verify(events).publishEvent(new CardsPurgedEvent(List.of(1L)));
+    inOrder.verify(cards).deleteById(1L);
   }
 
   @Test

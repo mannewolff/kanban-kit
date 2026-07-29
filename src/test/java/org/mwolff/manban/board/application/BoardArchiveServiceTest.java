@@ -4,9 +4,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import java.time.Clock;
@@ -17,9 +19,11 @@ import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mwolff.manban.board.domain.Board;
 import org.mwolff.manban.project.application.PermissionChecker;
 import org.mwolff.manban.project.domain.Permission;
+import org.springframework.context.ApplicationEventPublisher;
 
 /**
  * Verhaltenstests des Board-Archiv-Lebenszyklus (archivieren/wiederherstellen/endgültig löschen).
@@ -30,6 +34,7 @@ class BoardArchiveServiceTest {
 
   private BoardRepository boards;
   private PermissionChecker permissions;
+  private ApplicationEventPublisher events;
   private BoardService service;
 
   private static Board board() {
@@ -42,8 +47,9 @@ class BoardArchiveServiceTest {
     BoardColumnRepository columns = mock(BoardColumnRepository.class);
     ColumnCardCounter cardCounter = mock(ColumnCardCounter.class);
     permissions = mock(PermissionChecker.class);
+    events = mock(ApplicationEventPublisher.class);
     Clock clock = Clock.fixed(FIXED, ZoneOffset.UTC);
-    service = new BoardService(boards, columns, cardCounter, permissions, clock);
+    service = new BoardService(boards, columns, cardCounter, permissions, events, clock);
     when(boards.save(any(Board.class))).thenAnswer(inv -> inv.getArgument(0));
     when(columns.findByBoardId(10L)).thenReturn(List.of());
   }
@@ -137,6 +143,21 @@ class BoardArchiveServiceTest {
   }
 
   @Test
+  void purgeBoard_publishesBoardPurgedBeforeDeleting() {
+    // Given
+    when(boards.findByIdIncludingArchived(10L)).thenReturn(Optional.of(board().archivedAt(FIXED)));
+
+    // When
+    service.purgeBoard(1L, 10L);
+
+    // Then — Reihenfolge ist die Zusage aus #503: Das card-Modul (und dahinter die Anhänge)
+    // müssen die Metadaten noch sehen, bevor die Cascade sie entfernt.
+    InOrder inOrder = inOrder(events, boards);
+    inOrder.verify(events).publishEvent(new BoardPurgedEvent(10L));
+    inOrder.verify(boards).deleteById(10L);
+  }
+
+  @Test
   void purgeBoard_requiresBoardDeletePermission() {
     // Given
     when(boards.findByIdIncludingArchived(10L)).thenReturn(Optional.of(board().archivedAt(FIXED)));
@@ -157,6 +178,7 @@ class BoardArchiveServiceTest {
     assertThatThrownBy(() -> service.purgeBoard(1L, 10L))
         .isInstanceOf(BoardNotArchivedException.class);
     verify(boards, never()).deleteById(anyLong());
+    verifyNoInteractions(events);
   }
 
   @Test

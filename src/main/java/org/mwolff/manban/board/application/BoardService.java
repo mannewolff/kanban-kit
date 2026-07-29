@@ -15,6 +15,7 @@ import org.mwolff.manban.board.domain.Board;
 import org.mwolff.manban.board.domain.BoardColumn;
 import org.mwolff.manban.project.application.PermissionChecker;
 import org.mwolff.manban.project.domain.Permission;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -33,6 +34,7 @@ public class BoardService {
   private final BoardColumnRepository columns;
   private final ColumnCardCounter cardCounter;
   private final PermissionChecker permissions;
+  private final ApplicationEventPublisher events;
   private final Clock clock;
 
   public BoardService(
@@ -40,11 +42,13 @@ public class BoardService {
       BoardColumnRepository columns,
       ColumnCardCounter cardCounter,
       PermissionChecker permissions,
+      ApplicationEventPublisher events,
       Clock clock) {
     this.boards = boards;
     this.columns = columns;
     this.cardCounter = cardCounter;
     this.permissions = permissions;
+    this.events = events;
     this.clock = clock;
   }
 
@@ -115,6 +119,10 @@ public class BoardService {
     if (!board.isArchived()) {
       throw new BoardNotArchivedException();
     }
+    // Vor dem Delete publizieren (Issue #503): Das card-Modul löst die betroffenen Karten auf und
+    // die Anhänge planen ihre Blob-Löschung ein, solange die Metadaten existieren — die Cascade
+    // board → card → attachment_meta nimmt sie gleich mit.
+    events.publishEvent(new BoardPurgedEvent(boardId));
     boards.deleteById(boardId);
   }
 

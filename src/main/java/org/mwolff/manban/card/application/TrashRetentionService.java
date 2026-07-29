@@ -4,6 +4,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import org.mwolff.manban.card.domain.Card;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -16,10 +17,15 @@ public class TrashRetentionService {
 
   private final CardRepository cards;
   private final CardDependencyRepository dependencies;
+  private final ApplicationEventPublisher events;
 
-  public TrashRetentionService(CardRepository cards, CardDependencyRepository dependencies) {
+  public TrashRetentionService(
+      CardRepository cards,
+      CardDependencyRepository dependencies,
+      ApplicationEventPublisher events) {
     this.cards = cards;
     this.dependencies = dependencies;
+    this.events = events;
   }
 
   /**
@@ -32,6 +38,12 @@ public class TrashRetentionService {
   public int purgeExpiredTrash(Instant now, int retentionDays) {
     Instant threshold = now.minus(Duration.ofDays(retentionDays));
     List<Card> expired = cards.findPurgeableTrash(threshold);
+    if (expired.isEmpty()) {
+      return 0;
+    }
+    // Vor dem Delete publizieren (Issue #503): Anhänge planen ihre Blob-Löschung ein, solange die
+    // Metadaten existieren — die Cascade nimmt sie gleich mit.
+    events.publishEvent(new CardsPurgedEvent(expired.stream().map(Card::requireId).toList()));
     for (Card card : expired) {
       dependencies.deleteByCardId(card.requireId());
       cards.deleteById(card.requireId());

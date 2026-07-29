@@ -43,6 +43,7 @@ public class AttachmentService {
   private final ObjectStorageProperties properties;
   private final CardService cardService;
   private final PermissionChecker permissions;
+  private final BlobDeletionScheduler blobDeletion;
   private final Clock clock;
 
   public AttachmentService(
@@ -52,6 +53,7 @@ public class AttachmentService {
       ObjectStorageProperties properties,
       CardService cardService,
       PermissionChecker permissions,
+      BlobDeletionScheduler blobDeletion,
       Clock clock) {
     this.attachments = attachments;
     this.storage = storage;
@@ -59,6 +61,7 @@ public class AttachmentService {
     this.properties = properties;
     this.cardService = cardService;
     this.permissions = permissions;
+    this.blobDeletion = blobDeletion;
     this.clock = clock;
   }
 
@@ -70,11 +73,18 @@ public class AttachmentService {
     }
     String contentType = contentTypeDetector.detect(content, filename);
     String objectKey = "cards/" + cardId + "/" + UUID.randomUUID();
-    storage.put(objectKey, content, contentType);
+    // Metadaten zuerst, der Blob-Put als letzter Schritt vor dem Commit (Issue #503): Schlägt der
+    // Insert fehl (Constraint, Flush), existiert noch kein Blob — nichts verwaist. Scheitert der
+    // Put, rollt die Transaktion die Metadaten zurück. Das verbleibende Restfenster (Commit-
+    // Abbruch NACH erfolgreichem Put) hinterlässt eine unsichtbare Blob-Waise ohne kaputten
+    // Verweis; die findet der StorageReconciliationService. Die Alternative — Metadaten in einem
+    // Zwischenzustand plus zweiter Transaktion — kaufte für genau dieses Restfenster eine
+    // Statuslogik in jedem Lesepfad und bräuchte die Reconciliation (Altbestand!) trotzdem.
     Attachment saved =
         attachments.save(
             new Attachment(
                 null, cardId, filename, contentType, content.length, objectKey, clock.instant()));
+    storage.put(objectKey, content, contentType);
     return view(saved);
   }
 
@@ -102,7 +112,11 @@ public class AttachmentService {
         attachments.findById(attachmentId).orElseThrow(AttachmentNotFoundException::new);
     permissions.require(
         userId, cardService.requireProjectId(attachment.cardId()), Permission.ATTACHMENT_DELETE);
-    storage.delete(attachment.objectKey());
+    // Metadaten sofort, den Blob über die Outbox nachziehen (Issue #503): Löschte man den Blob
+    // direkt und bräche der DB-Teil danach ab, zeigte die verbliebene Metadaten-Zeile auf ein
+    // nicht mehr existierendes Objekt — der Download endete im Speicherfehler. So herum ist der
+    // schlimmste Fall ein kurzzeitig verwaister Blob, den der Worker nach dem Commit entfernt.
+    blobDeletion.scheduleDelete(attachment.objectKey());
     attachments.deleteById(attachment.requireId());
   }
 

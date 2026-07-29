@@ -56,6 +56,11 @@ class CardRepositoryAdapter implements CardRepository {
   }
 
   @Override
+  public List<Long> findAllIdsByBoardId(long boardId) {
+    return jpa.findAllIdsByBoardId(boardId);
+  }
+
+  @Override
   public List<Card> findByProjectId(long projectId) {
     return jpa.findByProjectIdAndDeletedAtIsNull(projectId).stream()
         .map(CardRepositoryAdapter::toDomain)

@@ -84,6 +84,18 @@ geladen und ist per `.gitignore` ausgeschlossen).
 > also keine Registrierung oder Einladung mehr zurück (früherer 502 beim Einladen entfällt) —
 > hängengebliebene Mails erscheinen als `FAILED`-Einträge in der Abfrage oben.
 
+> **Objektspeicher-Abgleich (Anhänge):** Blob-Löschungen (Anhang löschen, Karten-/Board-Purge)
+> laufen seit Issue #503 ebenfalls über die Outbox. Verwaiste Blobs (z. B. Altbestand aus Purges
+> vor #503) und fehlende Objekte findet der Admin-Abgleich:
+>
+> ```
+> GET /api/admin/storage/reconciliation   → { "orphanedObjects": [...], "missingObjects": [...] }
+> ```
+>
+> Der Abgleich **berichtet nur** und löscht nichts automatisch (ein laufender Upload hat kurzzeitig
+> ein Objekt ohne Metadaten). Verwaiste Objekte bei Bedarf gezielt über die MinIO-Konsole oder
+> `mc rm` entfernen.
+
 ## E-Mail-Bestätigung (ohne Mailserver)
 
 Im Standard ist der Mailversand **aus** (`MANBAN_MAIL_ENABLED=false`). Verifikations-, Passwort-Reset-

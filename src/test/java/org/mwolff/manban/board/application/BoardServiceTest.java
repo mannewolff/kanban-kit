@@ -23,6 +23,7 @@ import org.mwolff.manban.board.domain.Board;
 import org.mwolff.manban.board.domain.BoardColumn;
 import org.mwolff.manban.project.application.PermissionChecker;
 import org.mwolff.manban.project.domain.Permission;
+import org.springframework.context.ApplicationEventPublisher;
 
 /** Verhaltenstests der Board- und Spalten-Use-Cases (Mockito an den Ports). */
 // PMD.TooManyMethods: umfassende Unit-Suite (Boards, Spalten und die modulfremde Fassade, je
@@ -36,6 +37,7 @@ class BoardServiceTest {
   private BoardColumnRepository columns;
   private ColumnCardCounter cardCounter;
   private PermissionChecker permissions;
+  private ApplicationEventPublisher events;
   private BoardService service;
 
   private static Board board() {
@@ -52,8 +54,9 @@ class BoardServiceTest {
     columns = mock(BoardColumnRepository.class);
     cardCounter = mock(ColumnCardCounter.class);
     permissions = mock(PermissionChecker.class);
+    events = mock(ApplicationEventPublisher.class);
     Clock clock = Clock.fixed(FIXED, ZoneOffset.UTC);
-    service = new BoardService(boards, columns, cardCounter, permissions, clock);
+    service = new BoardService(boards, columns, cardCounter, permissions, events, clock);
     when(boards.save(any(Board.class)))
         .thenAnswer(
             inv -> {

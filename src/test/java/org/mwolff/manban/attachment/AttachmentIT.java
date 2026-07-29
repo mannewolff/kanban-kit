@@ -15,12 +15,17 @@ import java.nio.charset.StandardCharsets;
 import org.assertj.core.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.mwolff.manban.AbstractIntegrationTest;
+import org.mwolff.manban.attachment.application.ObjectStorage;
 import org.mwolff.manban.auth.application.AppUserRepository;
 import org.mwolff.manban.auth.domain.AppUser;
 import org.mwolff.manban.auth.domain.PlatformRole;
+import org.mwolff.manban.board.application.BoardService;
+import org.mwolff.manban.card.application.CardService;
+import org.mwolff.manban.outbox.application.OutboxDispatchService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -42,12 +47,18 @@ class AttachmentIT extends AbstractIntegrationTest {
   @Autowired private MockMvc mvc;
   @Autowired private AppUserRepository users;
   @Autowired private ObjectMapper json;
+  @Autowired private ObjectStorage objectStorage;
+  @Autowired private OutboxDispatchService outboxDispatch;
+  @Autowired private JdbcTemplate jdbc;
+  @Autowired private CardService cardService;
+  @Autowired private BoardService boardService;
 
   @Autowired private org.springframework.security.crypto.password.PasswordEncoder passwordEncoder;
 
   private Cookie login;
   private long cardId;
   private long boardId;
+  private long columnId;
 
   private void setup(String email) throws Exception {
     String hash = passwordEncoder.encode(PASSWORD);
@@ -88,7 +99,7 @@ class AttachmentIT extends AbstractIntegrationTest {
                 .getResponse()
                 .getContentAsString());
     boardId = board.get("id").asLong();
-    long columnId = board.get("columns").get(0).get("id").asLong();
+    columnId = board.get("columns").get(0).get("id").asLong();
     cardId =
         json.readTree(
                 mvc.perform(
@@ -101,6 +112,9 @@ class AttachmentIT extends AbstractIntegrationTest {
                     .getContentAsString())
             .get("id")
             .asLong();
+    // Die Projektanlage merkt seit #502 eine Zuordnungs-Mail in der Outbox vor — einmal zustellen
+    // (Log-Modus), damit die #503-Tests ausschließlich ihre eigenen Einträge zählen.
+    outboxDispatch.dispatchDue();
   }
 
   private long upload(String filename, String declaredType, byte[] content) throws Exception {
@@ -131,6 +145,29 @@ class AttachmentIT extends AbstractIntegrationTest {
         .andReturn()
         .getResponse()
         .getCookie("manban_session");
+  }
+
+  private String objectKeyOf(long attachmentId) {
+    return jdbc.queryForObject(
+        "SELECT object_key FROM attachment_meta WHERE id = ?", String.class, attachmentId);
+  }
+
+  private long userIdOf(String email) {
+    return users.findByEmail(email).orElseThrow().requireId();
+  }
+
+  private long createCard(String title) throws Exception {
+    return json.readTree(
+            mvc.perform(
+                    post("/api/boards/" + boardId + "/cards")
+                        .cookie(login)
+                        .contentType("application/json")
+                        .content("{\"columnId\":%d,\"title\":\"%s\"}".formatted(columnId, title)))
+                .andReturn()
+                .getResponse()
+                .getContentAsString())
+        .get("id")
+        .asLong();
   }
 
   @Test
@@ -242,5 +279,136 @@ class AttachmentIT extends AbstractIntegrationTest {
     Assertions.assertThat(response.getContentAsByteArray()).isEqualTo(data);
 
     mvc.perform(delete("/api/attachments/" + id).cookie(login)).andExpect(status().isNoContent());
+  }
+
+  // --- Konsistenz Metadaten ↔ Objektspeicher (Issue #503) --------------------------------------
+
+  @Test
+  void deleteRemovesTheBlobOnlyAfterOutboxDispatch() throws Exception {
+    setup("att-outbox-delete@example.com");
+    long id = upload("weg.bin", "application/octet-stream", new byte[] {1, 2, 3});
+    String key = objectKeyOf(id);
+
+    mvc.perform(delete("/api/attachments/" + id).cookie(login)).andExpect(status().isNoContent());
+
+    // Metadaten sofort weg — der Blob liegt noch (Worker ist in ITs aus), kein kaputter Verweis.
+    Assertions.assertThat(
+            jdbc.queryForObject(
+                "SELECT count(*) FROM attachment_meta WHERE id = ?", Integer.class, id))
+        .isZero();
+    try (var stream = objectStorage.get(key)) {
+      Assertions.assertThat(stream.readAllBytes()).isNotEmpty();
+    }
+
+    // Der Outbox-Durchlauf stellt den Löschauftrag zu — danach ist der Blob wirklich fort.
+    Assertions.assertThat(outboxDispatch.dispatchDue()).isEqualTo(1);
+    Assertions.assertThatThrownBy(() -> objectStorage.get(key))
+        .isInstanceOf(RuntimeException.class);
+  }
+
+  @Test
+  void deletingBlobThatIsAlreadyGoneIsNoError() throws Exception {
+    setup("att-idempotent@example.com");
+    long id = upload("schon-weg.bin", "application/octet-stream", new byte[] {1});
+    String key = objectKeyOf(id);
+    mvc.perform(delete("/api/attachments/" + id).cookie(login)).andExpect(status().isNoContent());
+
+    // Das Objekt verschwindet anderweitig, bevor der Auftrag läuft.
+    objectStorage.delete(key);
+
+    // Idempotenz (S3-Semantik): Der Auftrag endet als Erfolg, nicht als ewiger Fehlversuch.
+    Assertions.assertThat(outboxDispatch.dispatchDue()).isEqualTo(1);
+    Assertions.assertThat(
+            jdbc.queryForObject(
+                "SELECT status FROM outbox_entry WHERE event_type = 'attachment.blob-delete'",
+                String.class))
+        .isEqualTo("DONE");
+  }
+
+  @Test
+  void purgingCardRemovesItsBlobs() throws Exception {
+    setup("att-purge-card@example.com");
+    long first = upload("a.bin", "application/octet-stream", new byte[] {1});
+    long second = upload("b.bin", "application/octet-stream", new byte[] {2});
+    String firstKey = objectKeyOf(first);
+    String secondKey = objectKeyOf(second);
+
+    cardService.purge(userIdOf("att-purge-card@example.com"), cardId);
+
+    // Cascade hat die Metadaten entfernt; die Blob-Löschung war zuvor eingeplant.
+    Assertions.assertThat(
+            jdbc.queryForObject("SELECT count(*) FROM attachment_meta", Integer.class))
+        .isZero();
+    Assertions.assertThat(outboxDispatch.dispatchDue()).isEqualTo(2);
+    Assertions.assertThatThrownBy(() -> objectStorage.get(firstKey))
+        .isInstanceOf(RuntimeException.class);
+    Assertions.assertThatThrownBy(() -> objectStorage.get(secondKey))
+        .isInstanceOf(RuntimeException.class);
+  }
+
+  @Test
+  void purgingBoardRemovesAllBlobsIncludingTrashedCards() throws Exception {
+    setup("att-purge-board@example.com");
+    long activeAttachment = upload("aktiv.bin", "application/octet-stream", new byte[] {1});
+    String activeKey = objectKeyOf(activeAttachment);
+
+    // Zweite Karte mit Anhang, danach in den Papierkorb — die Cascade träfe auch sie.
+    long trashedCard = createCard("Papierkorb");
+    String body =
+        mvc.perform(
+                multipart("/api/cards/" + trashedCard + "/attachments")
+                    .file(
+                        new MockMultipartFile(
+                            "file", "trash.bin", "application/octet-stream", new byte[] {2}))
+                    .cookie(login))
+            .andExpect(status().isCreated())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+    String trashedKey = objectKeyOf(json.readTree(body).get("id").asLong());
+    mvc.perform(delete("/api/cards/" + trashedCard).cookie(login))
+        .andExpect(status().isNoContent());
+
+    // Board archivieren (HTTP-Delete) und endgültig löschen.
+    mvc.perform(delete("/api/boards/" + boardId).cookie(login)).andExpect(status().isNoContent());
+    boardService.purgeBoard(userIdOf("att-purge-board@example.com"), boardId);
+
+    Assertions.assertThat(
+            jdbc.queryForObject("SELECT count(*) FROM attachment_meta", Integer.class))
+        .isZero();
+    Assertions.assertThat(outboxDispatch.dispatchDue()).isEqualTo(2);
+    Assertions.assertThatThrownBy(() -> objectStorage.get(activeKey))
+        .isInstanceOf(RuntimeException.class);
+    Assertions.assertThatThrownBy(() -> objectStorage.get(trashedKey))
+        .isInstanceOf(RuntimeException.class);
+  }
+
+  @Test
+  void reconciliationReportsOrphanedAndMissingObjects() throws Exception {
+    setup("att-reconcile@example.com");
+    long id = upload("verliert-blob.bin", "application/octet-stream", new byte[] {1});
+    String missingKey = objectKeyOf(id);
+
+    // Waise: Objekt ohne Metadaten (simuliert Altbestand bzw. Commit-Abbruch nach dem Put).
+    objectStorage.put("reconcile-test/waise", new byte[] {9}, "application/octet-stream");
+    // Fehlendes Objekt: Metadaten bleiben, der Blob verschwindet.
+    objectStorage.delete(missingKey);
+
+    String report =
+        mvc.perform(get("/api/admin/storage/reconciliation").cookie(platformAdminSession()))
+            .andExpect(status().isOk())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+    // "contains" statt Gleichheit: Der geteilte Bucket enthält Blobs anderer Suite-Tests, deren
+    // Metadaten der DB-Reset entfernt hat — auch das sind (erwartete) Waisen.
+    JsonNode parsed = json.readTree(report);
+    Assertions.assertThat(parsed.get("orphanedObjects").toString())
+        .contains("reconcile-test/waise");
+    Assertions.assertThat(parsed.get("missingObjects").toString()).contains(missingKey);
+
+    // Kein Plattform-Admin → 403.
+    mvc.perform(get("/api/admin/storage/reconciliation").cookie(login))
+        .andExpect(status().isForbidden());
   }
 }

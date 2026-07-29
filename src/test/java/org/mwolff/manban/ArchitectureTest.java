@@ -153,13 +153,16 @@ class ArchitectureTest {
           .resideInAPackage("org.mwolff.manban.card.domain..")
           .as("card.domain ist modulintern (Zugriff nur ueber die card.application-Fassade)");
 
+  // CardsPurgedEvent ist Vertrag (Issue #503): das attachment-Modul plant beim Karten-Purge die
+  // Blob-Loeschung ein, solange die Metadaten existieren — analog zu CardBoardActivityEvent.
   static final ArchRule CARD_APPLICATION_IST_AUF_FASSADE_BEGRENZT =
       fassadeIstAufWhitelistBegrenzt(
           "card",
           "nur ueber CardService/LabelService",
           "CardService",
           "LabelService",
-          "CardBoardActivityEvent");
+          "CardBoardActivityEvent",
+          "CardsPurgedEvent");
 
   // --- Modul-Grenze: board-Fassade (Issue #459, Whitelist seit #470) --------------------------
   // Board und Spalte sind modulintern. Fremde Module fragen die fachliche board.application-
@@ -176,12 +179,15 @@ class ArchitectureTest {
           .resideInAPackage("org.mwolff.manban.board.domain..")
           .as("board.domain ist modulintern (Zugriff nur ueber die board.application-Fassade)");
 
+  // BoardPurgedEvent ist Vertrag (Issue #503): das card-Modul uebersetzt den Board-Purge in den
+  // Purge seiner Karten (Kette analog zur DB-Cascade board → card → attachment_meta).
   static final ArchRule BOARD_APPLICATION_IST_AUF_FASSADE_BEGRENZT =
       fassadeIstAufWhitelistBegrenzt(
           "board",
           "nur ueber BoardService",
           "BoardService",
           "BoardChangedEvent",
+          "BoardPurgedEvent",
           "BoardNotFoundException",
           "ColumnNotFoundException");
 

@@ -21,6 +21,13 @@ public interface CardRepository {
 
   List<Card> findByBoardId(long boardId);
 
+  /**
+   * IDs <strong>aller</strong> Karten des Boards — einschließlich archivierter und
+   * Papierkorb-Karten. Exakt der Umfang der Datenbank-Cascade beim Board-Hard-Delete; für die
+   * Purge-Kaskade (Issue #503), nicht für Anzeige-Pfade.
+   */
+  List<Long> findAllIdsByBoardId(long boardId);
+
   /** Alle nicht-gelöschten Karten eines Projekts (board-übergreifend, inkl. board-loser Ideen). */
   List<Card> findByProjectId(long projectId);
 

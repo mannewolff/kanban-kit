@@ -912,6 +912,9 @@ public class CardService {
     Card card = cards.findById(cardId).orElseThrow(CardNotFoundException::new);
     permissions.require(
         userId, boardService.requireProjectId(card.requireBoardId()), Permission.BOARD_DELETE);
+    // Vor dem Delete publizieren (Issue #503): Nachgelagerte Module (Anhänge) planen ihre
+    // Aufräum-Aufträge ein, solange die Metadaten existieren — die Cascade nimmt sie gleich mit.
+    events.publishEvent(new CardsPurgedEvent(List.of(card.requireId())));
     dependencies.deleteByCardId(card.requireId());
     cards.deleteById(card.requireId());
     publishChanged(card.requireBoardId(), ActivityType.DELETED, card.requireId());

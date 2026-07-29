@@ -2,12 +2,17 @@ package org.mwolff.manban.attachment.infrastructure;
 
 import io.minio.BucketExistsArgs;
 import io.minio.GetObjectArgs;
+import io.minio.ListObjectsArgs;
 import io.minio.MakeBucketArgs;
 import io.minio.MinioClient;
 import io.minio.PutObjectArgs;
 import io.minio.RemoveObjectArgs;
+import io.minio.Result;
+import io.minio.messages.Item;
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
+import java.util.ArrayList;
+import java.util.List;
 import org.mwolff.manban.attachment.application.ObjectStorage;
 import org.mwolff.manban.attachment.application.ObjectStorageProperties;
 import org.springframework.stereotype.Component;
@@ -61,6 +66,21 @@ class MinioObjectStorage implements ObjectStorage {
       client.removeObject(RemoveObjectArgs.builder().bucket(bucket).object(objectKey).build());
     } catch (Exception e) {
       throw new ObjectStorageException("Löschen fehlgeschlagen", e);
+    }
+  }
+
+  @Override
+  public List<String> listKeys() {
+    ensureBucket();
+    try {
+      List<String> keys = new ArrayList<>();
+      for (Result<Item> result :
+          client.listObjects(ListObjectsArgs.builder().bucket(bucket).recursive(true).build())) {
+        keys.add(result.get().objectName());
+      }
+      return keys;
+    } catch (Exception e) {
+      throw new ObjectStorageException("Auflisten fehlgeschlagen", e);
     }
   }
 
