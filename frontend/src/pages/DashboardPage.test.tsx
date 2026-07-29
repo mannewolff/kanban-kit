@@ -226,6 +226,19 @@ describe('DashboardPage', () => {
     expect(screen.queryByText('längste Spalte')).not.toBeInTheDocument()
   })
 
+  it('markiert keine Spalte, solange nur eine einzige Spalte gemessen wurde', async () => {
+    mDashboard.get.mockResolvedValue({
+      ...kpis,
+      columnDwell: [
+        { columnId: 1, columnName: 'Ready', avgDwellSeconds: 7200, sampleCount: 3 },
+        { columnId: 2, columnName: 'Done', avgDwellSeconds: null, sampleCount: 0 },
+      ],
+    })
+    renderPage()
+    expect(await screen.findByText('keine Messung')).toBeInTheDocument()
+    expect(screen.queryByText('längste Spalte')).not.toBeInTheDocument()
+  })
+
   it('rendert das Durchsatz-Liniendiagramm', async () => {
     renderPage()
     expect(await screen.findByTestId('series-values')).toHaveTextContent('2,5')

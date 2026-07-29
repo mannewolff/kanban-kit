@@ -7,7 +7,13 @@ interface Props {
   label: string
   /** Bereits formatierter Wert — die Kachel rechnet nicht und formatiert nicht selbst. */
   value: string
-  /** Anzahl der Messungen hinter dem Wert. Eine Zahl aus 3 Messungen liest sich anders als eine aus 34. */
+  /**
+   * Anzahl der Messungen hinter dem Wert. Eine Zahl aus 3 Messungen liest sich anders als eine
+   * aus 34. `0` heißt „keine Datenbasis": der Wert ist dann eine Leerangabe, die Kachel nimmt ihn
+   * optisch zurück und sagt es ausdrücklich. Der Leerwert-Zustand hat damit genau eine Quelle —
+   * eine zweite Prop daneben könnte der Stichprobengröße widersprechen, ohne dass es auffiele.
+   * `undefined` heißt dagegen „Datenbasis nicht angegeben": normale Optik, keine Messungszeile.
+   */
   sample?: number
   /**
    * Grund der Hervorhebung, z. B. „längste Spalte“. Farbe und Text hängen bewusst zusammen:
@@ -15,11 +21,6 @@ interface Props {
    * nicht allein an der Farbe hängt.
    */
   emphasis?: string
-  /**
-   * true = keine Datenbasis. Der Wert ist dann eine Leerangabe und darf nicht wie ein
-   * Messergebnis aussehen — die Kachel nimmt ihn optisch zurück und sagt es ausdrücklich.
-   */
-  noMeasurement?: boolean
 }
 
 /**
@@ -28,7 +29,8 @@ interface Props {
  * zwischen Minuten und Tagen, ein gemeinsamer Maßstab macht die kurzen Werte unsichtbar und
  * täuscht eine Vergleichbarkeit vor, die es nicht gibt.
  */
-export function MetricTile({ label, value, sample, emphasis, noMeasurement }: Readonly<Props>) {
+export function MetricTile({ label, value, sample, emphasis }: Readonly<Props>) {
+  const noMeasurement = sample === 0
   return (
     <Paper
       variant="outlined"

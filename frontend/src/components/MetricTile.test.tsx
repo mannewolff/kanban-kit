@@ -25,10 +25,20 @@ describe('MetricTile', () => {
   })
 
   it('weist einen Wert ohne Datenbasis als „keine Messung“ aus statt als Zahl', () => {
-    render(<MetricTile label="Done" value="n. v." sample={0} noMeasurement />)
+    render(<MetricTile label="Done" value="n. v." sample={0} />)
     expect(screen.getByText('n. v.')).toBeInTheDocument()
     expect(screen.getByText('keine Messung')).toBeInTheDocument()
     expect(screen.queryByText('0 Messungen')).not.toBeInTheDocument()
+  })
+
+  it('nimmt einen Wert ohne Datenbasis auch optisch zurück', () => {
+    render(<MetricTile label="Done" value="n. v." sample={0} />)
+    expect(screen.getByText('n. v.')).toHaveStyle({ fontWeight: '400' })
+  })
+
+  it('zeigt einen gemessenen Wert hervorgehoben', () => {
+    render(<MetricTile label="Review" value="8 Min" sample={4} />)
+    expect(screen.getByText('8 Min')).toHaveStyle({ fontWeight: '700' })
   })
 
   it('nennt den Grund der Hervorhebung im Text, nicht nur in der Farbe', () => {

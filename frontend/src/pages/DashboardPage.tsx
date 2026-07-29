@@ -34,18 +34,26 @@ import { useProjectName } from '../lib/useProjectName'
  * Spalte mit der längsten gemessenen Verweildauer — der Engpass, den die Kacheln markieren.
  * `null`, solange keine Spalte eine Datenbasis hat: eine fehlende Messung ist kein Nullwert und
  * darf deshalb auch nicht als „längste Spalte“ gewinnen.
+ *
+ * Ebenfalls `null` bei genau einer gemessenen Spalte: „längste“ ist ein Vergleich, und ein
+ * Vergleich braucht zwei Werte. Auf einem frischen Board wäre die einzige gemessene Spalte sonst
+ * automatisch der Engpass — eine Aussage ohne Inhalt, die zu falschen Schlüssen einlädt.
  */
 function longestDwellColumnId(columns: readonly ColumnDwell[]): number | null {
   let bestId: number | null = null
   let bestSeconds = -1
+  let measured = 0
   for (const column of columns) {
     const seconds = column.avgDwellSeconds
-    if (seconds != null && seconds > bestSeconds) {
-      bestSeconds = seconds
-      bestId = column.columnId
+    if (seconds != null) {
+      measured += 1
+      if (seconds > bestSeconds) {
+        bestSeconds = seconds
+        bestId = column.columnId
+      }
     }
   }
-  return bestId
+  return measured >= 2 ? bestId : null
 }
 
 /**
@@ -415,7 +423,6 @@ export function DashboardPage() {
                   label={c.columnName}
                   value={formatDuration(c.avgDwellSeconds)}
                   sample={c.sampleCount}
-                  noMeasurement={c.avgDwellSeconds == null}
                   emphasis={c.columnId === longestColumnId ? 'längste Spalte' : undefined}
                 />
               ))}
