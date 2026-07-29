@@ -38,7 +38,9 @@ import { commentsApi as defaultCommentsApi, type Comment, type CommentsApi } fro
 import type { Epic } from '../api/epics'
 import type { Label as BoardLabel } from '../api/labels'
 import type { Member } from '../api/members'
+import { Breadcrumbs } from './Breadcrumbs'
 import { CardFields } from './CardFields'
+import { cardLocationCrumbs, type CardLocation } from '../lib/cardLocation'
 import { dueInputToIso, formatDueDate, isOverdue } from '../lib/dueDate'
 import { normalizeTaskLists, toggleTaskAt } from '../lib/markdownTasks'
 import { CODE_BLOCK_BG, MODAL_BORDER, MODAL_TEXT_PRIMARY, statusColors } from '../lib/statusColors'
@@ -604,6 +606,13 @@ interface Props {
   initialEditing?: boolean
   /** Spaltenname für den Status-Chip (bei Karten). */
   columnName?: string
+  /**
+   * Ort der Karte (Projekt / Board / Spalte) für den Modal-Kopf. Optional: Aufrufer ohne diesen
+   * Kontext (Epics-Seite, Ideen-Planung) zeigen wie bisher keinen Pfad — ein leerer Platzhalter
+   * wäre schlechter als keine Angabe. `null` ist gleichbedeutend mit „nicht gesetzt", damit
+   * Aufrufer mit noch nicht geladenem Board den Wert direkt durchreichen können.
+   */
+  location?: CardLocation | null
   /** Board-Epics für das Epic-Dropdown. */
   epics?: Epic[]
   /** Kind-Karten eines Epics (nur bei type === 'EPIC'). */
@@ -646,6 +655,7 @@ function CardDetailModalView({
   onChanged,
   initialEditing = false,
   columnName,
+  location,
   epics = [],
   childCards = [],
   members = [],
@@ -922,6 +932,23 @@ function CardDetailModalView({
             </Button>
           )}
         </Stack>
+        {/*
+          Ortspfad unter dem Titel und klar untergeordnet (kleinere Schrift, sekundäre Farbe): Die
+          Hauptaussage bleibt die Karte, der Pfad beantwortet nur „wo liegt sie". Als `span` statt
+          als Überschrift — der `DialogTitle` ist bereits ein `h2` und nimmt nur Phrasing-Content
+          auf — und ohne `aria-current`: Die aktuelle Seite ist nicht die Spalte, sondern die
+          geöffnete Karte.
+        */}
+        {location && (
+          <Box component="span" sx={{ display: 'block', mt: 0.5 }}>
+            <Breadcrumbs
+              items={cardLocationCrumbs(location)}
+              variant="body2"
+              component="span"
+              currentPage={false}
+            />
+          </Box>
+        )}
       </DialogTitle>
 
       <DialogContent dividers sx={{ overflowY: 'auto' }}>
@@ -1085,7 +1112,9 @@ async function resolveColumnName(
  *
  * Eine über einen Verweis geöffnete Karte wird bewusst **nur gelesen**: Ihr board-spezifischer
  * Bearbeitungskontext (Epics, Labels, Spalten) gehört zum Board des Aufrufers und wäre für ein
- * fremdes Board falsch. Zum Bearbeiten öffnet man die Karte auf ihrem eigenen Board.
+ * fremdes Board falsch. Zum Bearbeiten öffnet man die Karte auf ihrem eigenen Board. Aus demselben
+ * Grund erbt sie auch den Ortspfad (`location`) der Ausgangskarte nicht — er zeigte sonst auf ein
+ * fremdes Board. Lieber kein Pfad als ein falscher; der Status-Chip nennt weiterhin ihre Spalte.
  */
 export function CardDetailModal(props: Readonly<Props>) {
   const { projectId, cardsApi = defaultCardsApi, boardsApi = defaultBoardsApi } = props

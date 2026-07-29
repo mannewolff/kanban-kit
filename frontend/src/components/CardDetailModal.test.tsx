@@ -1,10 +1,12 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AttachmentsApi } from '../api/attachments'
 import type { Board } from '../api/boards'
 import type { Card, CardByNumber } from '../api/cards'
 import type { CommentsApi } from '../api/comments'
+import type { CardLocation } from '../lib/cardLocation'
 import { CardDetailModal, parseDependencyInput } from './CardDetailModal'
 import { SnackbarProvider } from './SnackbarProvider'
 
@@ -956,5 +958,69 @@ describe('CardDetailModal', () => {
 
     expect(await screen.findByText('Vorbedingung')).toBeInTheDocument()
     expect(screen.queryByText('Done')).not.toBeInTheDocument()
+  })
+
+  const onBoard: CardLocation = {
+    projectId: 9,
+    projectName: 'IT-Bildungshaus',
+    board: { id: 1, name: 'Entwicklung', columnName: 'In Progress' },
+  }
+
+  it('zeigt den Ortspfad aus Projekt, Board und Spalte', () => {
+    const apis = makeApis()
+    render(
+      <MemoryRouter>
+        <CardDetailModal card={card} canEdit location={onBoard} onClose={vi.fn()} {...apis} />
+      </MemoryRouter>,
+    )
+
+    expect(screen.getByRole('link', { name: 'IT-Bildungshaus' })).toHaveAttribute('href', '/projects/9')
+    expect(screen.getByRole('link', { name: 'Entwicklung' })).toHaveAttribute('href', '/boards/1')
+    // Der Spaltenname steht im Pfad und (bei gesetztem columnName) zusätzlich im Status-Chip.
+    expect(screen.getAllByText('In Progress').length).toBeGreaterThan(0)
+  })
+
+  it('zeigt für eine board-lose Pool-Idee den verkürzten Pfad zu den Ideen', () => {
+    const apis = makeApis()
+    render(
+      <MemoryRouter>
+        <CardDetailModal
+          card={{ ...card, ideaStored: true }}
+          canEdit
+          location={{ projectId: 9, projectName: 'IT-Bildungshaus', board: null }}
+          onClose={vi.fn()}
+          {...apis}
+        />
+      </MemoryRouter>,
+    )
+
+    expect(screen.getByRole('link', { name: 'Ideen' })).toHaveAttribute('href', '/projects/9/ideas')
+    expect(screen.queryByRole('link', { name: 'Entwicklung' })).not.toBeInTheDocument()
+  })
+
+  it('zeigt ohne Ortsangabe keinen Pfad', () => {
+    const apis = makeApis()
+    render(
+      <MemoryRouter>
+        <CardDetailModal card={card} canEdit columnName="In Progress" onClose={vi.fn()} {...apis} />
+      </MemoryRouter>,
+    )
+
+    expect(screen.queryByRole('link', { name: 'IT-Bildungshaus' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link')).not.toBeInTheDocument()
+  })
+
+  it('überträgt den Ortspfad nicht auf eine über #N geöffnete Karte eines anderen Boards', async () => {
+    const apis = makeApis()
+    render(
+      <MemoryRouter>
+        <CardDetailModal card={card} canEdit projectId={9} location={onBoard} onClose={vi.fn()} {...apis} />
+      </MemoryRouter>,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Karte #3 öffnen' }))
+
+    expect(await screen.findByText('Vorbedingung')).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Entwicklung' })).not.toBeInTheDocument()
   })
 })

@@ -52,4 +52,53 @@ describe('Breadcrumbs', () => {
     expect(screen.queryByRole('link')).not.toBeInTheDocument()
     expect(screen.getByText('Allein')).toHaveAttribute('aria-current', 'page')
   })
+
+  it('ist ohne weitere Angaben die Seitenüberschrift', () => {
+    render(
+      <MemoryRouter>
+        <Breadcrumbs items={[{ label: 'Allein' }]} />
+      </MemoryRouter>,
+    )
+
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Allein')
+  })
+
+  it('rendert mit `component` ein anderes Element ohne Überschrift-Rolle', () => {
+    render(
+      <MemoryRouter>
+        <Breadcrumbs items={[{ label: 'Allein' }]} component="span" variant="body2" />
+      </MemoryRouter>,
+    )
+
+    expect(screen.queryByRole('heading')).not.toBeInTheDocument()
+    expect(screen.getByText('Allein')).toBeInTheDocument()
+  })
+
+  it('verlinkt bei `currentPage={false}` auch das letzte Segment und zeichnet keins als aktuelle Seite aus', () => {
+    render(
+      <MemoryRouter>
+        <Breadcrumbs
+          items={[{ label: 'IT-Bildungshaus', to: '/projects/9' }, { label: 'Ideen', to: '/projects/9/ideas' }]}
+          currentPage={false}
+        />
+      </MemoryRouter>,
+    )
+
+    expect(screen.getByRole('link', { name: 'Ideen' })).toHaveAttribute('href', '/projects/9/ideas')
+    expect(screen.queryByText('Ideen')).not.toHaveAttribute('aria-current', 'page')
+  })
+
+  it('lässt ein letztes Segment ohne `to` auch bei `currentPage={false}` als schlichten Text stehen', () => {
+    render(
+      <MemoryRouter>
+        <Breadcrumbs
+          items={[{ label: 'Entwicklung', to: '/boards/2' }, { label: 'In Progress' }]}
+          currentPage={false}
+        />
+      </MemoryRouter>,
+    )
+
+    expect(screen.queryByRole('link', { name: 'In Progress' })).not.toBeInTheDocument()
+    expect(screen.getByText('In Progress')).not.toHaveAttribute('aria-current', 'page')
+  })
 })

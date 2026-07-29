@@ -11,6 +11,7 @@ import SearchIcon from '@mui/icons-material/Search'
 import { alpha } from '@mui/material/styles'
 import { Suspense, lazy, useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
 import { cardsApi, type CardSearchHit } from '../api/cards'
+import { cardLocationLabel, type CardLocation } from '../lib/cardLocation'
 import { useKeyboardShortcut } from '../lib/useKeyboardShortcut'
 import { useSnackbar } from './SnackbarProvider'
 
@@ -41,13 +42,26 @@ function parseCardNumber(raw: string): number | null {
  * laut Backend stets beides (seit V18 lässt die Datenbank nichts dazwischen zu). Ein archiviertes
  * Board wird als solches gekennzeichnet — die Karte bleibt auffindbar, der Ort soll nicht so
  * aussehen wie ein aktives Board.
+ *
+ * Dieselbe Angabe trägt der Pfad im geöffneten Detail-Modal, deshalb eine gemeinsame Form
+ * (`CardLocation`) statt zweier Formulierungen derselben Sonderfälle.
  */
-function locationLabel(hit: CardSearchHit): string {
-  if (hit.boardName === null) {
-    return `${hit.projectName} / Ideen`
+function hitLocation(hit: CardSearchHit): CardLocation {
+  return {
+    projectId: hit.projectId,
+    projectName: hit.projectName,
+    // Board-ID und -Name sind im Vertrag der Suche stets gemeinsam gesetzt oder gemeinsam `null`;
+    // die Prüfung auf beide dient allein der Typverengung.
+    board:
+      hit.boardId === null || hit.boardName === null
+        ? null
+        : {
+            id: hit.boardId,
+            name: hit.boardName,
+            archived: hit.boardArchived,
+            columnName: hit.columnName,
+          },
   }
-  const board = hit.boardArchived ? `${hit.boardName} (archiviert)` : hit.boardName
-  return `${hit.projectName} / ${board} / ${hit.columnName}`
 }
 
 /**
@@ -219,7 +233,7 @@ export function CardNumberSearch() {
               setSelected(hit)
             }}
           >
-            <ListItemText primary={hit.card.title} secondary={locationLabel(hit)} />
+            <ListItemText primary={hit.card.title} secondary={cardLocationLabel(hitLocation(hit))} />
           </MenuItem>
         ))}
       </Menu>
@@ -233,6 +247,9 @@ export function CardNumberSearch() {
             canEdit={false}
             projectId={selected.projectId}
             columnName={selected.columnName ?? undefined}
+            // Aus der Suche heraus fehlt jeder Ortsbezug — hier ist der Pfad der einzige Hinweis,
+            // wo die Karte liegt (#491).
+            location={hitLocation(selected)}
             onClose={() => setSelected(null)}
           />
         </Suspense>

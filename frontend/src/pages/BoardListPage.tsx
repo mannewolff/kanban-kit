@@ -499,6 +499,15 @@ export function BoardListPage() {
           canModerateComments={canModerate}
           epics={epics}
           columnName={columnById.get(detailCard.columnId)?.name}
+          location={
+            // Ohne geladenes Board gibt es keinen Ort zu nennen; die Liste zeigt dann ohnehin
+            // keine Karten, aus denen sich das Modal öffnen ließe.
+            board && {
+              projectId: board.projectId,
+              projectName,
+              board: { id: board.id, name: board.name, columnName: columnById.get(detailCard.columnId)?.name },
+            }
+          }
           onClose={() => setDetailCard(null)}
           onChanged={() => { reloadCards(); void epicsApi.list(id).then(setEpics) }}
         />
