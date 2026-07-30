@@ -86,6 +86,12 @@ export interface CardActivity {
   type: string
   detail: string
   createdAt: string
+  /** Server-verifizierte Herkunft; null bei Alt-Einträgen vor der Erfassung (#517). */
+  origin: 'SESSION' | 'TOKEN' | null
+  /** Anzeigename des Tokens (verifiziert); nur bei origin=TOKEN gesetzt. */
+  tokenName: string | null
+  /** Modell-Selbstauskunft des Clients (X-Agent-Model) — Angabe, keine Tatsache. */
+  agent: string | null
 }
 
 export const cardsApi = {

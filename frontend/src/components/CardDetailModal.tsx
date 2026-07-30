@@ -13,6 +13,7 @@ import IconButton from '@mui/material/IconButton'
 import Link from '@mui/material/Link'
 import Stack from '@mui/material/Stack'
 import TextField from '@mui/material/TextField'
+import Tooltip from '@mui/material/Tooltip'
 import Typography from '@mui/material/Typography'
 import {
   createContext,
@@ -468,6 +469,13 @@ function CommentsSection({
 }
 
 /** Aktivitäts-Sektion: chronologische Ereignisliste (nur View-Modus). */
+/**
+ * Aktivitätsverlauf mit Herkunfts-Kennzeichnung (#518): Token-Einträge tragen einen gefüllten Chip
+ * mit dem server-verifizierten Token-Namen (Tatsache), eine vorhandene Modell-Angabe einen
+ * outlined-Chip in Kursivschrift (Client-Selbstauskunft) — die beiden Verlässlichkeitsklassen
+ * dürfen nicht gleich aussehen. Session- und Alt-Einträge bleiben unmarkiert: der Mensch ist der
+ * Default, der Verlauf bleibt ruhig.
+ */
 function ActivitySection({
   activities,
   actorName,
@@ -482,9 +490,33 @@ function ActivitySection({
       </Typography>
       <Stack spacing={0.5}>
         {activities.map((a) => (
-          <Typography key={a.id} variant="caption" color="text.secondary">
-            {new Date(a.createdAt).toLocaleString('de-DE')} · {actorName(a.actorUserId)} · {a.detail}
-          </Typography>
+          <Stack key={a.id} direction="row" spacing={0.5} alignItems="center" flexWrap="wrap">
+            <Typography variant="caption" color="text.secondary">
+              {new Date(a.createdAt).toLocaleString('de-DE')} · {actorName(a.actorUserId)} ·{' '}
+              {a.detail}
+            </Typography>
+            {a.origin === 'TOKEN' && (
+              <Chip
+                data-testid="activity-token"
+                size="small"
+                label={a.tokenName ?? 'Token'}
+                aria-label={`Über Access-Token: ${a.tokenName ?? 'unbenannt'}`}
+                sx={{ height: 18, fontSize: '0.65rem' }}
+              />
+            )}
+            {a.agent && (
+              <Tooltip title="Angabe des Clients, nicht verifiziert">
+                <Chip
+                  data-testid="activity-agent"
+                  size="small"
+                  variant="outlined"
+                  label={a.agent}
+                  aria-label={`Modell-Angabe des Clients, nicht verifiziert: ${a.agent}`}
+                  sx={{ height: 18, fontSize: '0.65rem', fontStyle: 'italic' }}
+                />
+              </Tooltip>
+            )}
+          </Stack>
         ))}
         {activities.length === 0 && (
           <Typography color="text.secondary">Keine Aktivität.</Typography>

@@ -390,6 +390,71 @@ describe('CardDetailModal', () => {
     expect(screen.getByText(/Max/)).toBeInTheDocument()
   })
 
+  it('lässt Alt-Einträge ohne Herkunft unmarkiert', async () => {
+    // Vor V23 gespeicherte Einträge tragen keine Herkunft — sie sehen aus wie bisher.
+    const apis = makeApis()
+    apis.cardsApi.getActivity = vi.fn().mockResolvedValue([
+      { id: 1, actorUserId: 5, type: 'MOVED', detail: 'Verschoben', createdAt: '2026-01-01T10:00:00Z', origin: null, tokenName: null, agent: null },
+    ])
+    render(<CardDetailModal card={card} canEdit onClose={vi.fn()} {...apis} />)
+
+    expect(await screen.findByText(/Verschoben/)).toBeInTheDocument()
+    expect(screen.queryByTestId('activity-token')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('activity-agent')).not.toBeInTheDocument()
+  })
+
+  it('lässt Session-Einträge unmarkiert — der Mensch ist der Default', async () => {
+    const apis = makeApis()
+    apis.cardsApi.getActivity = vi.fn().mockResolvedValue([
+      { id: 1, actorUserId: 5, type: 'CREATED', detail: 'Karte angelegt', createdAt: '2026-01-01T10:00:00Z', origin: 'SESSION', tokenName: null, agent: null },
+    ])
+    render(<CardDetailModal card={card} canEdit onClose={vi.fn()} {...apis} />)
+
+    expect(await screen.findByText(/Karte angelegt/)).toBeInTheDocument()
+    expect(screen.queryByTestId('activity-token')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('activity-agent')).not.toBeInTheDocument()
+  })
+
+  it('kennzeichnet Token-Einträge mit dem Token-Namen als Tatsache', async () => {
+    const apis = makeApis()
+    apis.cardsApi.getActivity = vi.fn().mockResolvedValue([
+      { id: 1, actorUserId: 5, type: 'CREATED', detail: 'Idee angelegt', createdAt: '2026-01-01T10:00:00Z', origin: 'TOKEN', tokenName: 'Nachtlauf', agent: null },
+    ])
+    render(<CardDetailModal card={card} canEdit onClose={vi.fn()} {...apis} />)
+
+    const token = await screen.findByTestId('activity-token')
+    expect(token).toHaveTextContent('Nachtlauf')
+    expect(screen.queryByTestId('activity-agent')).not.toBeInTheDocument()
+  })
+
+  it('zeigt die Modell-Angabe eines Token-Eintrags als unverifizierte Angabe', async () => {
+    const apis = makeApis()
+    apis.cardsApi.getActivity = vi.fn().mockResolvedValue([
+      { id: 1, actorUserId: 5, type: 'CREATED', detail: 'Idee angelegt', createdAt: '2026-01-01T10:00:00Z', origin: 'TOKEN', tokenName: 'Nachtlauf', agent: 'claude-opus-5' },
+    ])
+    render(<CardDetailModal card={card} canEdit onClose={vi.fn()} {...apis} />)
+
+    expect(await screen.findByTestId('activity-token')).toHaveTextContent('Nachtlauf')
+    const agent = screen.getByTestId('activity-agent')
+    expect(agent).toHaveTextContent('claude-opus-5')
+    // Selbstauskunft, keine Tatsache: für Screenreader explizit als unverifizierte Angabe benannt.
+    expect(agent).toHaveAttribute(
+      'aria-label',
+      'Modell-Angabe des Clients, nicht verifiziert: claude-opus-5',
+    )
+  })
+
+  it('zeigt einen Token-Eintrag ohne Namen mit neutraler Beschriftung', async () => {
+    // Defensiv: origin=TOKEN, aber kein Name überliefert.
+    const apis = makeApis()
+    apis.cardsApi.getActivity = vi.fn().mockResolvedValue([
+      { id: 1, actorUserId: 5, type: 'CREATED', detail: 'Idee angelegt', createdAt: '2026-01-01T10:00:00Z', origin: 'TOKEN', tokenName: null, agent: null },
+    ])
+    render(<CardDetailModal card={card} canEdit onClose={vi.fn()} {...apis} />)
+
+    expect(await screen.findByTestId('activity-token')).toHaveTextContent('Token')
+  })
+
   it('bietet bei archivierter Karte Wiederherstellen und ruft restore', async () => {
     const apis = makeApis()
     const onChanged = vi.fn()
