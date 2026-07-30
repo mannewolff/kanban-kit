@@ -14,11 +14,10 @@ on:
 
 jobs:
   sonarqube:
-    name: SonarQube-Analyse (inkl. Coverage) + GitHub-Sync
+    name: SonarQube-Analyse (inkl. Coverage) + Board-Sync
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      issues: write # für scripts/sync-sonar-issues-to-github.mjs (gh issue create)
     steps:
       - uses: actions/checkout@v4
         with:
@@ -66,7 +65,7 @@ jobs:
       # sonar.branch.name=main explizit gesetzt statt dem Auto-Erkennen des Scanners
       # überlassen: robust auch bei workflow_dispatch (kann von jedem Branch/Ref manuell
       # gestartet werden). Die kostenlose SonarCloud-Stufe kennt ohnehin nur den main-Branch
-      # (siehe auch fetchAllIssues in scripts/sync-sonar-issues-to-github.mjs, das ebenfalls
+      # (siehe auch fetchAllIssues in scripts/sync-sonar-issues-to-board.mjs, das ebenfalls
       # den main-Branch ausliest).
       - name: SonarQube-Scan
         uses: SonarSource/sonarqube-scan-action@713881670b6b3676cda39549040e2d88c70d582e # v8.2.0
@@ -76,10 +75,11 @@ jobs:
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
-      - name: Neue Findings nach GitHub synchronisieren
+      - name: Neue Findings aufs Sonar-Board synchronisieren
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-          # secrets.GITHUB_TOKEN kann keine GitHub-Projects-v2-Boards lesen/beschreiben
-          # (gh project list/item-add) — dafuer zwingend ein PAT mit repo+project-Scope.
-          GH_TOKEN: ${{ secrets.PROJECTS_PAT }}
-        run: node scripts/sync-sonar-issues-to-github.mjs
+          # kanban-kit-Access-Token, gebunden an Projekt + Sonar-Board (Issue #536).
+          # Der Server dedupliziert idempotent (externalKey, #534) und legt die Karten
+          # direkt im Board-Backlog an (direct-Routing, #535).
+          KANBAN_SONAR_TOKEN: ${{ secrets.KANBAN_SONAR_TOKEN }}
+        run: node scripts/sync-sonar-issues-to-board.mjs

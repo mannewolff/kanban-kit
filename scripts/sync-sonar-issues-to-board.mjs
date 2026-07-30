@@ -1,32 +1,33 @@
 #!/usr/bin/env node
 /**
- * sync-sonar-issues-to-github.mjs — Holt offene SonarCloud-Findings über die Web-API
- * und legt dafür GitHub Issues an.
+ * sync-sonar-issues-to-board.mjs — Holt offene SonarCloud-Findings über die Web-API und legt
+ * sie als Karten im Backlog des Sonar-Boards an (kanbancompat-Ingest, Issue #536).
  *
- * Idempotenz: Duplikat-Prüfung läuft gegen den echten GitHub-Zustand (alle Issues mit
- * Label "sonar", Marker `sonar-issue-key: <key>` im Body), NICHT gegen eine lokale
- * Datei — läuft dieses Skript in GitHub Actions (frischer Checkout pro Lauf, kein
- * persistenter lokaler Zustand), wäre eine dateibasierte Prüfung wirkungslos und
- * würde bei jedem Lauf alles neu anlegen. scripts/.sonar-issue-map.json wird trotzdem
- * geschrieben, aber nur als lokales Nachschlage-Log, nicht als Quelle der Wahrheit.
+ * Ablauf je Finding: POST /api/kanban/items mit `externalKey: "sonar:<issue-key>"` und
+ * `direct: true` — der Server routet die Karte in die erste Spalte des token-gebundenen
+ * Boards (#535) und dedupliziert idempotent über den Schlüssel (#534). Eine clientseitige
+ * Duplikat-Prüfung gibt es deshalb nicht mehr: `created: false` in der Antwort heißt
+ * "schon vorhanden" — auch wenn die Karte inzwischen verschoben, archiviert oder in den
+ * Papierkorb verworfen wurde. Erst endgültiges Löschen (purge) gibt den Schlüssel frei;
+ * ein danach noch offenes Finding wird beim nächsten Lauf erneut angelegt.
  *
- * Voraussetzung: SONAR_TOKEN (SonarCloud-User-Token, "My Account" -> "Security" ->
- * "Generate Token") als Umgebungsvariable, NICHT im Klartext hier oder im Chat.
+ * Voraussetzungen (beide als Umgebungsvariablen, NICHT im Klartext hier oder im Chat):
+ *   SONAR_TOKEN         SonarCloud-User-Token ("My Account" -> "Security" -> "Generate Token")
+ *   KANBAN_SONAR_TOKEN  kanban-kit-Access-Token, gebunden an Projekt + Sonar-Board
+ *                       (Administration -> API-Tokens; in GitHub Actions als Secret)
+ * Optional: KANBAN_HOST überschreibt die Ziel-Instanz (Default: https://kanban.mwolff.org).
  * Projekt-/Organisationsschlüssel werden aus sonar-project.properties gelesen.
- * gh muss authentifiziert sein (lokal: `gh auth login`; in Actions: GH_TOKEN aus
- * secrets.GITHUB_TOKEN, siehe .github/workflows/sonarqube.yml).
  *
- * Nutzung: SONAR_TOKEN=squ_... node scripts/sync-sonar-issues-to-github.mjs [--dry-run]
+ * Läuft ohne weiteren Repo-Kontext: nur node >= 18 (fetch) plus die zwei Variablen;
+ * lokaler Probelauf mit `--dry-run` (listet Findings, legt nichts an).
  */
 
-import { readFileSync, existsSync, writeFileSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { execFileSync } from 'node:child_process';
 
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const PROPERTIES_PATH = join(REPO_ROOT, 'sonar-project.properties');
-const MAP_PATH = join(REPO_ROOT, 'scripts', '.sonar-issue-map.json');
 // Der sonar-scanner schreibt die Analyse-Task-Referenz hierhin (projectBaseDir=. im Workflow).
 const REPORT_TASK_PATH = join(REPO_ROOT, '.scannerwork', 'report-task.txt');
 // SonarCloud verarbeitet den Report asynchron (Compute-Engine-Task) — vor dem Auslesen der
@@ -34,15 +35,8 @@ const REPORT_TASK_PATH = join(REPO_ROOT, '.scannerwork', 'report-task.txt');
 const CE_TASK_TIMEOUT_MS = 5 * 60 * 1000;
 const CE_TASK_POLL_START_MS = 2000;
 const CE_TASK_POLL_MAX_MS = 15000;
-const REPO = 'mannewolff/kanban-kit';
-const OWNER = 'mannewolff';
 const SONAR_HOST = 'https://sonarcloud.io';
-// GitHub-Project-Board "kanban-kit" (siehe Issue #112). Bewusst hier hart hinterlegt statt aus
-// .claude/workflow.config.json gelesen: die .claude/-Konfiguration ist gitignored und stünde
-// einem GitHub-Actions-Runner (frischer Checkout) gar nicht zur Verfügung. Aus demselben Grund
-// delegiert dieses Skript die Board-Zuordnung NICHT an .claude/kit/board.mjs, sondern erledigt
-// sie selbst (execJSON/exec unten) — self-contained, läuft überall.
-const PROJECT_NUMBER = 13;
+const KANBAN_HOST = process.env.KANBAN_HOST || 'https://kanban.mwolff.org';
 
 const DRY_RUN = process.argv.includes('--dry-run');
 
@@ -79,54 +73,7 @@ function excludeByExclusions(issues, exclusionsRaw) {
   });
 }
 
-function loadMap() {
-  if (!existsSync(MAP_PATH)) return {};
-  try {
-    return JSON.parse(readFileSync(MAP_PATH, 'utf-8'));
-  } catch {
-    return {};
-  }
-}
-
-function saveMap(map) {
-  writeFileSync(MAP_PATH, JSON.stringify(map, null, 2) + '\n');
-}
-
-/**
- * Baut die Menge bereits synchronisierter SonarCloud-Issue-Keys aus dem echten
- * GitHub-Zustand (alle "sonar"-gelabelten Issues, offen wie geschlossen — ein vom
- * Menschen geschlossenes Finding, das SonarCloud mangels neuem Scan noch als offen
- * führt, soll nicht erneut angelegt werden).
- */
-function fetchExistingSonarKeys() {
-  const output = gh(
-    ['issue', 'list', '--repo', REPO, '--label', 'sonar', '--state', 'all', '--json', 'body', '--limit', '1000'],
-  );
-  const issues = JSON.parse(output);
-  const keys = new Set();
-  for (const issue of issues) {
-    const match = issue.body?.match(/<!-- sonar-issue-key: (\S+) -->/);
-    if (match) keys.add(match[1]);
-  }
-  return keys;
-}
-
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
-/**
- * Ruft `gh` auf und wirft bei Fehlschlag eine Meldung mit dem echten Kommandotext und der
- * `gh`-stderr — nicht nur das nichtssagende "Command failed" von execFileSync. So ist z. B. ein
- * Token-Scope-Problem (`unknown owner type` bei `gh project list`) sofort im CI-Log lesbar, statt
- * dass die eigentliche Ursache verschluckt wird.
- */
-function gh(args, opts = { encoding: 'utf-8' }) {
-  try {
-    return execFileSync('gh', args, opts);
-  } catch (e) {
-    const stderr = e.stderr ? e.stderr.toString().trim() : '';
-    throw new Error(`gh ${args.join(' ')}\n  ${stderr || e.message}`);
-  }
-}
 
 /**
  * Liest die `ceTaskId` aus `.scannerwork/report-task.txt` (vom sonar-scanner geschrieben).
@@ -220,6 +167,11 @@ function buildTitle(issue) {
   return `${prefix} ${message}`;
 }
 
+/**
+ * Karten-Body im Vier-Abschnitt-Format des Workflows — eingeplante Findings sind damit direkt
+ * implement-ready-/nachtlauf-tauglich. Der `sonar-issue-key`-Marker bleibt zusätzlich zum
+ * serverseitigen externalKey im Body (menschenlesbar, Debug).
+ */
 function buildBody(issue, projectKey) {
   const file = issue.component?.split(':').slice(1).join(':') || issue.component;
   const line = issue.line ? `:${issue.line}` : '';
@@ -228,63 +180,55 @@ function buildBody(issue, projectKey) {
     `&issues=${encodeURIComponent(issue.key)}&open=${encodeURIComponent(issue.key)}`;
 
   return [
+    '## Kontext',
+    `SonarCloud-Finding (${issue.type}, Schweregrad ${severityLabel(issue)}), automatisch`,
+    `synchronisiert vom Sonar-Sync. [Auf SonarCloud ansehen](${link})`,
+    '',
+    '## Aufgabe',
     `**Datei:** \`${file}${line}\``,
-    `**Typ:** ${issue.type}  **Schweregrad:** ${severityLabel(issue)}  **Regel:** \`${issue.rule}\``,
+    `**Regel:** \`${issue.rule}\``,
     '',
     issue.message,
     '',
-    `[Auf SonarCloud ansehen](${link})`,
+    'Finding beheben oder — falls es ein begründeter Sonderfall ist — mit dokumentierter',
+    'Begründung auf SonarCloud als akzeptiert/False Positive markieren.',
+    '',
+    '## Akzeptanzkriterium',
+    'Das Finding erscheint im nächsten SonarCloud-Scan nicht mehr als offen; die Pflicht-Gates',
+    '(mvn verify, PIT, Frontend-Checks) bleiben grün.',
+    '',
+    '## Abhängigkeiten',
+    'Keine.',
     '',
     `<!-- sonar-issue-key: ${issue.key} -->`,
   ].join('\n');
 }
 
-function ensureLabel(name, color) {
-  if (DRY_RUN) return;
-  try {
-    gh(['label', 'create', name, '--color', color, '--repo', REPO, '--force']);
-  } catch (e) {
-    console.error(`[WARNUNG] Label '${name}' konnte nicht angelegt werden: ${e.message}`);
+/**
+ * Legt ein Finding als Karte im Backlog des token-gebundenen Sonar-Boards an. Der Server
+ * dedupliziert über den externalKey (#534) und routet direkt aufs Board (#535). HTTP 409
+ * (seltener Wettlauf zweier Läufe am Unique-Index) wird wie "schon vorhanden" behandelt.
+ */
+async function postToBoard(issue, projectKey, kanbanToken) {
+  const res = await fetch(`${KANBAN_HOST}/api/kanban/items`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Kanban-Token': kanbanToken },
+    body: JSON.stringify({
+      title: buildTitle(issue),
+      body: buildBody(issue, projectKey),
+      externalKey: `sonar:${issue.key}`,
+      direct: true,
+    }),
+  });
+  if (res.status === 409) {
+    return { created: false, conflict: true };
   }
-}
-
-function execJSON(args) {
-  return JSON.parse(gh(args));
-}
-
-/**
- * Löst Project-ID + "Backlog"-Option-ID des Status-Felds auf. Minimal-Variante der
- * Logik aus .claude/kit/board.mjs (GitHubIssueTracker) — hier bewusst dupliziert statt
- * importiert, siehe Kommentar bei PROJECT_NUMBER oben (kit ist gitignored, in CI nicht
- * verfügbar).
- */
-function resolveProjectMeta() {
-  const projects = execJSON(['project', 'list', '--owner', OWNER, '--format', 'json']).projects;
-  const project = projects.find((p) => p.number === PROJECT_NUMBER);
-  if (!project) throw new Error(`GitHub Project #${PROJECT_NUMBER} nicht gefunden für ${OWNER}`);
-
-  const fields = execJSON(['project', 'field-list', String(PROJECT_NUMBER), '--owner', OWNER, '--format', 'json']).fields;
-  const statusField = fields.find((f) => f.name === 'Status');
-  if (!statusField) throw new Error(`Kein 'Status'-Feld in GitHub Project #${PROJECT_NUMBER}`);
-  const backlogOption = statusField.options?.find((o) => o.name.toLowerCase() === 'backlog');
-  if (!backlogOption) throw new Error(`Keine 'Backlog'-Option im Status-Feld gefunden`);
-
-  return { projectId: project.id, statusFieldId: statusField.id, backlogOptionId: backlogOption.id };
-}
-
-/**
- * Hängt ein frisch erzeugtes Issue ans Project-Board und setzt Status explizit auf
- * "Backlog". Ohne diesen expliziten Schritt hat sich gezeigt, dass GitHubs eigene
- * "Auto-add to project"-Automatik neue Items beim schnellen Batch-Anlegen uneinheitlich
- * auf z. B. "Ready" statt "Backlog" setzt (nicht deterministisch nachvollzogen) — das
- * würde den Menschen um sein GO umgehen (Ready ist ausschließlich sein Schritt).
- */
-function assignToBacklog(issueUrl, meta) {
-  const itemId = execJSON(['project', 'item-add', String(PROJECT_NUMBER), '--owner', OWNER, '--url', issueUrl, '--format', 'json']).id;
-  gh([
-    'project', 'item-edit', '--id', itemId, '--project-id', meta.projectId,
-    '--field-id', meta.statusFieldId, '--single-select-option-id', meta.backlogOptionId,
-  ]);
+  if (!res.ok) {
+    throw new Error(
+      `kanban-Ingest-Fehler für ${issue.key} (HTTP ${res.status}): ${await res.text()}`,
+    );
+  }
+  return await res.json();
 }
 
 async function main() {
@@ -292,6 +236,15 @@ async function main() {
   if (!token) {
     console.error('Fehler: SONAR_TOKEN ist nicht gesetzt.');
     console.error('Erzeugen unter sonarcloud.io -> My Account -> Security -> Generate Token.');
+    process.exit(1);
+  }
+  const kanbanToken = process.env.KANBAN_SONAR_TOKEN;
+  if (!kanbanToken && !DRY_RUN) {
+    console.error('Fehler: KANBAN_SONAR_TOKEN ist nicht gesetzt.');
+    console.error(
+      'Access-Token (gebunden an Projekt + Sonar-Board) unter Administration -> API-Tokens ' +
+        'erzeugen und als Umgebungsvariable bzw. GitHub-Secret hinterlegen.',
+    );
     process.exit(1);
   }
 
@@ -332,55 +285,29 @@ async function main() {
   console.log(`Davon sicherheitskritisch (VULNERABILITY/SECURITY_HOTSPOT): ${securityCount}\n`);
 
   if (DRY_RUN) {
-    console.log('--dry-run: keine GitHub-Issues werden angelegt. Vorschau:\n');
+    console.log('--dry-run: keine Karten werden angelegt. Vorschau:\n');
     for (const issue of issues) {
       console.log(`  [${severityLabel(issue)}] ${buildTitle(issue)} (${issue.key})`);
     }
     return;
   }
 
-  ensureLabel('sonar', 'FBCA04');
-  ensureLabel('security', 'B60205');
-
-  const existingKeys = fetchExistingSonarKeys();
-  console.log(`${existingKeys.size} bereits auf GitHub synchronisierte Findings gefunden.\n`);
-
-  const toCreate = issues.filter((issue) => !existingKeys.has(issue.key));
-  const skipped = issues.length - toCreate.length;
-  const projectMeta = toCreate.length > 0 ? resolveProjectMeta() : null;
-
-  const map = loadMap();
   let created = 0;
+  let existing = 0;
 
-  for (const issue of toCreate) {
-    const labels = ['sonar'];
-    if (isSecurityIssue(issue)) labels.push('security');
-
-    const output = gh([
-      'issue', 'create', '--repo', REPO,
-      '--title', buildTitle(issue),
-      '--body', buildBody(issue, projectKey),
-      '--label', labels.join(','),
-    ]);
-    const match = output.match(/(https?:\/\/\S+\/issues\/(\d+))/);
-    const issueUrl = match ? match[1] : null;
-    const githubNumber = match ? match[2] : null;
-
-    if (issueUrl) {
-      try {
-        assignToBacklog(issueUrl, projectMeta);
-      } catch (e) {
-        console.error(`  [WARNUNG] Board-Zuordnung für #${githubNumber} fehlgeschlagen: ${e.message}`);
-      }
+  for (const issue of issues) {
+    const result = await postToBoard(issue, projectKey, kanbanToken);
+    if (result.created) {
+      created++;
+      console.log(`[ok]  ${issue.key} -> Karte #${result.number}`);
+    } else {
+      existing++;
+      const where = result.conflict ? 'Wettlauf (409)' : `Karte #${result.number ?? '?'}`;
+      console.log(`[alt] ${issue.key} schon vorhanden (${where}).`);
     }
-
-    map[issue.key] = { githubNumber, type: issue.type, severity: severityLabel(issue) };
-    saveMap(map);
-    created++;
-    console.log(`[ok] ${issue.key} -> GitHub #${githubNumber}`);
   }
 
-  console.log(`\nFertig. ${created} neu angelegt, ${skipped} bereits vorhanden (übersprungen).`);
+  console.log(`\nFertig. ${created} neu angelegt, ${existing} bereits vorhanden.`);
 }
 
 main().catch((e) => {
