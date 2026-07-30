@@ -33,16 +33,38 @@ class CardActivityEntity {
   @Column(name = "created_at", nullable = false)
   private Instant createdAt;
 
+  // Herkunft (Issue #517): origin/tokenName verifiziert, agent Selbstauskunft; alle drei
+  // nullable — Alt-Einträge tragen keine Herkunft (V23 ohne Backfill).
+  @Column(name = "origin")
+  private @Nullable String origin;
+
+  @Column(name = "token_name")
+  private @Nullable String tokenName;
+
+  @Column(name = "agent")
+  private @Nullable String agent;
+
   protected CardActivityEntity() {
     // für JPA
   }
 
-  CardActivityEntity(long cardId, long actorUserId, String type, String detail, Instant createdAt) {
+  CardActivityEntity(
+      long cardId,
+      long actorUserId,
+      String type,
+      String detail,
+      Instant createdAt,
+      @Nullable String origin,
+      @Nullable String tokenName,
+      @Nullable String agent) {
     this.cardId = cardId;
     this.actorUserId = actorUserId;
     this.type = type;
     this.detail = detail;
     this.createdAt = createdAt;
+    this.origin = origin;
+    this.tokenName = tokenName;
+    this.agent = agent;
   }
 
   @Nullable Long getId() {
@@ -67,5 +89,17 @@ class CardActivityEntity {
 
   Instant getCreatedAt() {
     return createdAt;
+  }
+
+  @Nullable String getOrigin() {
+    return origin;
+  }
+
+  @Nullable String getTokenName() {
+    return tokenName;
+  }
+
+  @Nullable String getAgent() {
+    return agent;
   }
 }

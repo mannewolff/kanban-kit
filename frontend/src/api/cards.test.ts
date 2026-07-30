@@ -30,6 +30,39 @@ describe('cardsApi', () => {
     expect(result).toEqual([card])
   })
 
+  it('get ruft GET /api/cards/{id} und liefert die geparste Antwort', async () => {
+    const f = spyFetch(JSON.stringify(card))
+    const result = await cardsApi.get(7)
+    expect(lastCall(f).url).toBe('/api/cards/7')
+    expect(result).toEqual(card)
+  })
+
+  it('byNumber ruft GET /api/projects/{id}/cards/by-number/{n} und liefert die geparste Antwort', async () => {
+    const f = spyFetch(JSON.stringify(card))
+    const result = await cardsApi.byNumber(3, 5)
+    expect(lastCall(f).url).toBe('/api/projects/3/cards/by-number/5')
+    expect(result).toEqual(card)
+  })
+
+  it('searchByNumber ruft GET /api/cards/search?number={n} und liefert die geparste Antwort', async () => {
+    const hits = [
+      {
+        card,
+        projectId: 2,
+        projectName: 'Projekt A',
+        boardId: 3,
+        boardName: 'Entwicklung',
+        boardArchived: false,
+        columnId: 10,
+        columnName: 'Backlog',
+      },
+    ]
+    const f = spyFetch(JSON.stringify(hits))
+    const result = await cardsApi.searchByNumber(345)
+    expect(lastCall(f).url).toBe('/api/cards/search?number=345')
+    expect(result).toEqual(hits)
+  })
+
   it('getActivity ruft GET /api/cards/{id}/activity und liefert die geparste Antwort', async () => {
     const activity = [{ id: 1, actorUserId: 5, type: 'MOVED', detail: 'Von A nach B', createdAt: '2026-01-01' }]
     spyFetch(JSON.stringify(activity))

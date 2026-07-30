@@ -13,6 +13,7 @@ import java.util.stream.Collectors;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.board.application.BoardNotFoundException;
 import org.mwolff.manban.board.application.BoardService;
+import org.mwolff.manban.board.application.BoardService.BoardSummary;
 import org.mwolff.manban.board.application.BoardService.ColumnView;
 import org.mwolff.manban.card.application.CardBoardActivityEvent.ActivityType;
 import org.mwolff.manban.card.domain.Card;
@@ -21,6 +22,7 @@ import org.mwolff.manban.card.domain.CardActivityType;
 import org.mwolff.manban.card.domain.CardType;
 import org.mwolff.manban.card.domain.Label;
 import org.mwolff.manban.project.application.PermissionChecker;
+import org.mwolff.manban.project.application.ProjectService;
 import org.mwolff.manban.project.domain.Permission;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
@@ -48,11 +50,13 @@ public class CardService {
   private final CardDependencyRepository dependencies;
   private final BoardService boardService;
   private final PermissionChecker permissions;
+  private final ProjectService projects;
   private final CardColumnTransitionRepository transitions;
   private final CardAssigneeRepository assignees;
   private final LabelRepository labels;
   private final CardLabelRepository cardLabels;
   private final CardActivityRepository activity;
+  private final ActorContext actor;
   private final ApplicationEventPublisher events;
   private final Clock clock;
 
@@ -61,22 +65,26 @@ public class CardService {
       CardDependencyRepository dependencies,
       BoardService boardService,
       PermissionChecker permissions,
+      ProjectService projects,
       CardColumnTransitionRepository transitions,
       CardAssigneeRepository assignees,
       LabelRepository labels,
       CardLabelRepository cardLabels,
       CardActivityRepository activity,
+      ActorContext actor,
       ApplicationEventPublisher events,
       Clock clock) {
     this.cards = cards;
     this.dependencies = dependencies;
     this.boardService = boardService;
     this.permissions = permissions;
+    this.projects = projects;
     this.transitions = transitions;
     this.assignees = assignees;
     this.labels = labels;
     this.cardLabels = cardLabels;
     this.activity = activity;
+    this.actor = actor;
     this.events = events;
     this.clock = clock;
   }
@@ -238,7 +246,13 @@ public class CardService {
     if (!ideaStored) {
       transitions.open(saved.requireId(), columnId, column.name(), now);
     }
-    activity.add(saved.requireId(), userId, CardActivityType.CREATED, "Karte angelegt", now);
+    activity.add(
+        saved.requireId(),
+        userId,
+        CardActivityType.CREATED,
+        "Karte angelegt",
+        now,
+        actor.current());
     setDependencies(saved, dependsOn);
     if (assigneeIds != null && !assigneeIds.isEmpty()) {
       assignValidatedAssignees(saved.requireId(), projectId, assigneeIds);
@@ -343,6 +357,21 @@ public class CardService {
   }
 
   /**
+   * Einzelne Karte für Stellen, die nur eine Karten-ID kennen (Dashboard-Ausreißer, #515) — ohne
+   * den Umweg über die komplette Board-Kartenliste. Leserecht wie bei den übrigen Lesepfaden:
+   * Projekt-Mitgliedschaft über die Projekt-ID der Karte; Nichtmitglied und unbekannte Karte sind
+   * nicht unterscheidbar (beide 404, kein Existenz-Leak).
+   *
+   * @throws CardNotFoundException wenn die Karte nicht existiert
+   */
+  @Transactional(readOnly = true)
+  public CardView getCard(long userId, long cardId) {
+    Card card = cards.findById(cardId).orElseThrow(CardNotFoundException::new);
+    permissions.requireMembership(userId, card.projectId());
+    return view(card);
+  }
+
+  /**
    * Sichert zu, dass die Karte auf dem angegebenen Board liegt — der Board-Guard des
    * token-gebundenen {@code kanbancompat}-Zugriffs (#44).
    *
@@ -421,7 +450,13 @@ public class CardService {
       updated = updated.withParent(effectiveParent).withDueDate(dueDate);
     }
     Card saved = cards.save(updated);
-    activity.add(cardId, userId, CardActivityType.UPDATED, "Karte bearbeitet", clock.instant());
+    activity.add(
+        cardId,
+        userId,
+        CardActivityType.UPDATED,
+        "Karte bearbeitet",
+        clock.instant(),
+        actor.current());
     if (dependsOn != null) {
       setDependencies(saved, dependsOn);
     }
@@ -444,7 +479,13 @@ public class CardService {
     permissions.require(userId, card.projectId(), Permission.TICKET_UPDATE);
 
     assignValidatedAssignees(cardId, card.projectId(), assigneeIds);
-    activity.add(cardId, userId, CardActivityType.ASSIGNED, "Zuständige geändert", clock.instant());
+    activity.add(
+        cardId,
+        userId,
+        CardActivityType.ASSIGNED,
+        "Zuständige geändert",
+        clock.instant(),
+        actor.current());
     publishChangedIfOnBoard(card.boardId(), ActivityType.UPDATED, cardId);
     return view(card);
   }
@@ -535,7 +576,12 @@ public class CardService {
       transitions.closeOpen(cardId, switchedAt);
       transitions.open(cardId, targetColumnId, target.name(), switchedAt);
       activity.add(
-          cardId, userId, CardActivityType.MOVED, "Verschoben nach " + target.name(), switchedAt);
+          cardId,
+          userId,
+          CardActivityType.MOVED,
+          "Verschoben nach " + target.name(),
+          switchedAt,
+          actor.current());
     }
 
     // moved_to_done_at: beim Eintritt in eine "Done"-Spalte setzen, beim Verlassen löschen.
@@ -563,10 +609,15 @@ public class CardService {
    * das Verschieben einer einzelnen Karte. Karten außerhalb des aktiven Positions-Namespace
    * (archiviert, Papierkorb, Ideen-Speicher) und Epics bleiben unberührt; Details am Port {@link
    * CardRepository#sortActiveByNumber(long, SortDirection)}.
+   *
+   * <p>Bewusst ohne {@link CardActivity}-Eintrag: Die Umsortierung ändert nur die Anordnung
+   * innerhalb der Spalte, keine Karte wechselt Spalte oder Zustand — ein Audit-Eintrag pro
+   * betroffener Karte würde den Aktivitätsverlauf fluten, ohne eine fachliche Änderung zu
+   * dokumentieren. Offene Boards erfahren von der neuen Anordnung über das SSE-Event.
    */
   @Transactional
   public void sortColumnByNumber(long userId, long columnId, SortDirection direction) {
-    long boardId = boardService.requireColumnBoardId(columnId);
+    long boardId = boardService.boardIdOfColumn(columnId);
     permissions.require(userId, boardService.requireProjectId(boardId), Permission.CARD_MOVE);
 
     cards.sortActiveByNumber(columnId, direction);
@@ -687,7 +738,12 @@ public class CardService {
   private CardView doArchive(long userId, long cardId) {
     Card card = requireCardOp(userId, cardId, Permission.TICKET_DELETE, Permission.EPIC_DELETE);
     activity.add(
-        card.requireId(), userId, CardActivityType.ARCHIVED, "Archiviert", clock.instant());
+        card.requireId(),
+        userId,
+        CardActivityType.ARCHIVED,
+        "Archiviert",
+        clock.instant(),
+        actor.current());
     CardView result = view(cards.save(card.asArchived()));
     publishChanged(card.requireBoardId(), ActivityType.ARCHIVED, card.requireId());
     return result;
@@ -709,7 +765,12 @@ public class CardService {
     Card card = requireCardOp(userId, cardId, Permission.TICKET_DELETE, Permission.EPIC_DELETE);
     int position = cards.allocateActivePosition(card.requireColumnId());
     activity.add(
-        card.requireId(), userId, CardActivityType.RESTORED, "Wiederhergestellt", clock.instant());
+        card.requireId(),
+        userId,
+        CardActivityType.RESTORED,
+        "Wiederhergestellt",
+        clock.instant(),
+        actor.current());
     CardView result = view(cards.save(card.asRestored(position)));
     publishChanged(card.requireBoardId(), ActivityType.RESTORED, card.requireId());
     return result;
@@ -736,7 +797,8 @@ public class CardService {
         userId,
         CardActivityType.IDEA_STORED,
         "In den Ideen-Speicher",
-        clock.instant());
+        clock.instant(),
+        actor.current());
     CardView result = view(cards.save(card.asPooledIdea(card.boardId())));
     publishChanged(card.requireBoardId(), ActivityType.MOVED, card.requireId());
     publishIdeasChanged(card.projectId());
@@ -756,6 +818,56 @@ public class CardService {
       @Nullable String description,
       @Nullable Long targetBoardId) {
     permissions.require(userId, projectId, Permission.TICKET_CREATE);
+    CardView created = storeProjectIdea(userId, projectId, title, description, targetBoardId);
+    publishIdeasChanged(projectId);
+    return created;
+  }
+
+  /**
+   * Legt mehrere board-lose Ideen in einem Zug im projektweiten Pool an — der Backend-Teil des
+   * Spezifikations-Imports (#492). Recht: {@link Permission#TICKET_CREATE}, einmal für den ganzen
+   * Stapel geprüft; importieren ist fachlich dasselbe wie Ideen anlegen, nur in Menge, deshalb kein
+   * eigenes Recht. Das optionale {@code targetBoardId} gilt für alle Ideen des Stapels (Vorauswahl
+   * beim späteren Einplanen, wie beim Token-Ingest).
+   *
+   * <p><b>Alles-oder-nichts.</b> Die Methode läuft in einer Transaktion: schlägt eine Idee fehl,
+   * entsteht keine. Ein halb importierter Fachbereichs-Spec wäre schwerer aufzuräumen (welche
+   * Abschnitte fehlen?) als ein wiederholter Import. Feld- und Mengengrenzen prüft bereits die
+   * Bean-Validation am Endpoint, sodass ein ungültiges Element gar nicht bis hierher gelangt.
+   *
+   * <p><b>Ein Ereignis für den ganzen Stapel</b> statt eines je Karte: Der SSE-Vertrag des
+   * Ideen-Pools meldet nur „hat sich geändert", woraufhin ein offenes Ideen-Fenster die Liste
+   * komplett neu lädt — n Ereignisse lösten n identische Neuladungen aus.
+   *
+   * <p>Die Ideen landen bewusst im Pool und nicht in einer Board-Spalte (wie beim Token-Ingest, s.
+   * {@code KanbanCompatService}): Was von außen hereinkommt, plant ein Mensch bewusst ein.
+   */
+  @Transactional
+  public List<CardView> createProjectIdeas(
+      long userId, long projectId, List<NewIdea> ideas, @Nullable Long targetBoardId) {
+    permissions.require(userId, projectId, Permission.TICKET_CREATE);
+    List<CardView> created =
+        ideas.stream()
+            .map(
+                idea ->
+                    storeProjectIdea(
+                        userId, projectId, idea.title(), idea.description(), targetBoardId))
+            .toList();
+    publishIdeasChanged(projectId);
+    return created;
+  }
+
+  /**
+   * Schreibt eine einzelne Pool-Idee (ohne Rechteprüfung und ohne SSE-Ereignis) — gemeinsamer Kern
+   * von {@link #createProjectIdea} und {@link #createProjectIdeas}, damit der Stapel mit einer
+   * Rechteprüfung und einem Ereignis auskommt.
+   */
+  private CardView storeProjectIdea(
+      long userId,
+      long projectId,
+      String title,
+      @Nullable String description,
+      @Nullable Long targetBoardId) {
     Instant now = clock.instant();
     // #402: Pool-Ideen bekommen sofort eine projektweite Nummer (referenzierbar wie Board-Karten);
     // sie bleiben board-los und behalten die Nummer beim späteren Einplanen.
@@ -782,10 +894,16 @@ public class CardService {
                 null,
                 projectId,
                 targetBoardId));
-    activity.add(saved.requireId(), userId, CardActivityType.CREATED, "Idee angelegt", now);
-    publishIdeasChanged(projectId);
+    activity.add(
+        saved.requireId(), userId, CardActivityType.CREATED, "Idee angelegt", now, actor.current());
     return view(saved);
   }
+
+  /**
+   * Eine anzulegende Pool-Idee im Stapel: Titel und optionale Beschreibung. Das Zielboard steht
+   * bewusst nicht hier, sondern gilt für den ganzen Stapel (ein Import bedient ein Board).
+   */
+  public record NewIdea(String title, @Nullable String description) {}
 
   /**
    * Plant eine Idee ins Backlog (erste Spalte) eines Boards desselben Projekts ein: setzt
@@ -811,7 +929,8 @@ public class CardService {
     Instant now = clock.instant();
     Card planned = cards.save(card.withPlannedOnBoard(targetBoardId, columnId, number, position));
     transitions.open(cardId, columnId, backlog.name(), now);
-    activity.add(cardId, userId, CardActivityType.PROMOTED, "Auf Board eingeplant", now);
+    activity.add(
+        cardId, userId, CardActivityType.PROMOTED, "Auf Board eingeplant", now, actor.current());
     publishChanged(targetBoardId, ActivityType.CREATED, cardId);
     publishIdeasChanged(card.projectId());
     return view(planned);
@@ -828,7 +947,12 @@ public class CardService {
         userId, boardService.requireProjectId(card.requireBoardId()), Permission.CARD_MOVE);
     Card pooled = cards.save(card.asPooledIdea(card.boardId()));
     activity.add(
-        cardId, userId, CardActivityType.IDEA_STORED, "Zurück in den Ideen-Pool", clock.instant());
+        cardId,
+        userId,
+        CardActivityType.IDEA_STORED,
+        "Zurück in den Ideen-Pool",
+        clock.instant(),
+        actor.current());
     publishChanged(card.requireBoardId(), ActivityType.MOVED, cardId);
     publishIdeasChanged(card.projectId());
     return view(pooled);
@@ -859,6 +983,71 @@ public class CardService {
     Card card =
         cards.findByProjectIdAndNumber(projectId, number).orElseThrow(CardNotFoundException::new);
     return view(card);
+  }
+
+  /**
+   * Sucht eine projektweite Kartennummer über <strong>alle Projekte, in denen der Benutzer lesen
+   * darf</strong>, und liefert je Treffer die Karte samt Ortsangabe (Projekt, Board, Spalte).
+   *
+   * <p><strong>Warum eine Liste:</strong> Kartennummern sind projektweit eindeutig, nicht global
+   * ({@code uq_card_number (project_id, number)}). Dass die Projekte hier faktisch disjunkte
+   * Nummernkreise haben (Startnummer-Floor aus V20), ist Konvention und keine Invariante — dieselbe
+   * Nummer kann in mehreren Projekten existieren, und dann sind alle Treffer gemeint.
+   *
+   * <p><strong>Sichtbarkeit:</strong> Gesucht wird ausschließlich in den Projekten des Benutzers.
+   * Ein fremdes Projekt macht sich in keiner Weise bemerkbar — kein 403, kein Zähler, kein
+   * Unterschied im Antwortverhalten. Die leere Liste ist die Antwort sowohl für „Nummer existiert
+   * nirgends" als auch für „Nummer existiert nur in fremden Projekten" (Prinzip aus {@link
+   * PermissionChecker}). Ein <b>Plattform-Admin</b> findet dagegen per Definition alles: Die
+   * Projektauswahl kommt von {@link ProjectService#listAccessible(long)}, das ihm wie überall sonst
+   * (Projektliste, {@code requireMembership}) alle Projekte zeigt. Das ist bewusst das
+   * Bestandsverhalten und keine Sonderregel dieser Suche.
+   *
+   * <p><strong>Was nicht gefunden wird:</strong> Karten im Papierkorb — ihre Nummer bleibt belegt
+   * (sie kann wiederhergestellt werden), per Suche sind sie unsichtbar. <b>Archivierte</b> Karten
+   * bleiben dagegen auffindbar, ebenso Karten auf einem <b>archivierten Board</b>: Deren Boardname
+   * wird über {@link BoardService#requireBoardSummary(long)} aufgelöst, das den Archiv-Filter
+   * bewusst nicht anwendet und den Zustand stattdessen mitliefert.
+   */
+  @Transactional(readOnly = true)
+  public List<CardSearchHit> searchByNumber(long userId, int number) {
+    Map<Long, String> projectNames =
+        projects.listAccessible(userId).stream()
+            .collect(
+                Collectors.toMap(
+                    ProjectService.AccessibleProject::id, ProjectService.AccessibleProject::name));
+    if (projectNames.isEmpty()) {
+      // Ohne Projekte gibt es nichts zu durchsuchen — und eine leere IN-Menge wäre keine sinnvolle
+      // Anfrage an die Datenbank (siehe Zusicherung an CardRepository.findByNumberInProjects).
+      return List.of();
+    }
+    return cards.findByNumberInProjects(number, List.copyOf(projectNames.keySet())).stream()
+        .map(c -> hit(c, Objects.requireNonNull(projectNames.get(c.projectId()))))
+        .toList();
+  }
+
+  /**
+   * Baut den Suchtreffer samt Ortsangabe. Eine board-lose Pool-Idee hat weder Board noch Spalte;
+   * eine board-gebundene Karte hat beides (die Datenbank lässt seit V18 nichts dazwischen zu), und
+   * beides wird über die board-Fassade aufgelöst — der Boardname auch dann, wenn das Board
+   * archiviert ist.
+   */
+  private CardSearchHit hit(Card c, String projectName) {
+    Long boardId = c.boardId();
+    if (boardId == null) {
+      return new CardSearchHit(view(c), c.projectId(), projectName, null, null, false, null, null);
+    }
+    BoardSummary board = boardService.requireBoardSummary(boardId);
+    ColumnView column = boardService.requireColumn(c.requireColumnId(), boardId);
+    return new CardSearchHit(
+        view(c),
+        c.projectId(),
+        projectName,
+        boardId,
+        board.name(),
+        board.archived(),
+        column.id(),
+        column.name());
   }
 
   /**
@@ -918,7 +1107,8 @@ public class CardService {
         userId,
         CardActivityType.RESTORED,
         "Aus Papierkorb wiederhergestellt",
-        clock.instant());
+        clock.instant(),
+        actor.current());
     publishChanged(card.requireBoardId(), ActivityType.RESTORED, card.requireId());
     // View aus der bereits geladenen Karte mit neuer Position — der JDBC-Restore hat die DB-Zeile
     // geändert; ein erneutes findById käme aus dem JPA-Cache noch mit dem alten Stand.
@@ -1063,6 +1253,30 @@ public class CardService {
       @Nullable Instant dueDate,
       List<Long> labels,
       @Nullable Long targetBoardId) {}
+
+  /**
+   * Treffer der projektübergreifenden Nummernsuche: die Karte plus die Angabe, wo sie liegt.
+   *
+   * @param card die gefundene Karte
+   * @param projectId Projekt der Karte (immer gesetzt)
+   * @param projectName Name des Projekts — das unterscheidende Merkmal, wenn dieselbe Nummer in
+   *     mehreren Projekten existiert
+   * @param boardId Board der Karte; {@code null} bei einer board-losen Pool-Idee
+   * @param boardName Name des Boards; {@code null} bei einer board-losen Pool-Idee
+   * @param boardArchived ob das Board archiviert ist (die Karte bleibt auffindbar, das Board ist
+   *     über die normale Board-API aber nicht mehr ladbar); {@code false} ohne Board
+   * @param columnId Spalte der Karte; {@code null} bei einer board-losen Pool-Idee
+   * @param columnName Name der Spalte; {@code null} bei einer board-losen Pool-Idee
+   */
+  public record CardSearchHit(
+      CardView card,
+      Long projectId,
+      String projectName,
+      @Nullable Long boardId,
+      @Nullable String boardName,
+      boolean boardArchived,
+      @Nullable Long columnId,
+      @Nullable String columnName) {}
 
   /**
    * Schlanke Board-Projektion einer Karte oder eines Epics — ohne Abhängigkeiten, Zuständige und

@@ -16,6 +16,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { boardsApi, type Board } from '../api/boards'
 import { cardsApi, type Card } from '../api/cards'
+import { ApiError } from '../api/client'
 import { Breadcrumbs } from '../components/Breadcrumbs'
 import { CardDetailModal } from '../components/CardDetailModal'
 import { MetricTile } from '../components/MetricTile'
@@ -34,18 +35,26 @@ import { useProjectName } from '../lib/useProjectName'
  * Spalte mit der längsten gemessenen Verweildauer — der Engpass, den die Kacheln markieren.
  * `null`, solange keine Spalte eine Datenbasis hat: eine fehlende Messung ist kein Nullwert und
  * darf deshalb auch nicht als „längste Spalte“ gewinnen.
+ *
+ * Ebenfalls `null` bei genau einer gemessenen Spalte: „längste“ ist ein Vergleich, und ein
+ * Vergleich braucht zwei Werte. Auf einem frischen Board wäre die einzige gemessene Spalte sonst
+ * automatisch der Engpass — eine Aussage ohne Inhalt, die zu falschen Schlüssen einlädt.
  */
 function longestDwellColumnId(columns: readonly ColumnDwell[]): number | null {
   let bestId: number | null = null
   let bestSeconds = -1
+  let measured = 0
   for (const column of columns) {
     const seconds = column.avgDwellSeconds
-    if (seconds != null && seconds > bestSeconds) {
-      bestSeconds = seconds
-      bestId = column.columnId
+    if (seconds != null) {
+      measured += 1
+      if (seconds > bestSeconds) {
+        bestSeconds = seconds
+        bestId = column.columnId
+      }
     }
   }
-  return bestId
+  return measured >= 2 ? bestId : null
 }
 
 /**
@@ -62,12 +71,17 @@ function sampleBasis(sample: number): string {
  * die Ø Lead Time (vom Anlegen der Karte bis fertig, die Sicht des Auftraggebers). Soll künftig
  * die Cycle Time führen, werden hier die beiden Blöcke getauscht; die Darstellung bleibt.
  *
- * Ohne abgeschlossene Karte liefert das Backend `null` für beide Zeiten (die Cycle Time setzt eine
- * fertige Karte ebenso voraus wie die Lead Time). Dann prangt hier keine Leerangabe in 48 px,
- * sondern ein ruhiger Hinweis.
+ * Der ruhige Hinweis statt der großen Zahl greift nur, wenn **beide** Zeiten ohne Datenbasis sind.
+ * Heute fallen sie zusammen (beide setzen eine fertige Karte voraus), aber die Cycle Time hängt
+ * zusätzlich an einer „Ready“-artigen Spalte — verschiebt sich diese Definition, darf ein
+ * vorhandener Wert nicht still hinter dem Hinweis verschwinden.
+ *
+ * Die Cycle Time nutzt dieselbe {@link MetricTile} wie die Spalten-Kacheln: der Leerwert-Zustand
+ * hängt damit auch hier allein an der Stichprobengröße und sieht überall gleich aus.
  */
 function MetricHeadline({ kpis }: Readonly<{ kpis: BoardDashboardKpis }>) {
-  if (kpis.avgLeadTimeSeconds == null) {
+  const noLeadTime = kpis.avgLeadTimeSeconds == null
+  if (noLeadTime && kpis.avgCycleTimeSeconds == null) {
     return (
       <Paper variant="outlined" sx={{ p: 3 }}>
         <Typography color="text.secondary">
@@ -80,10 +94,14 @@ function MetricHeadline({ kpis }: Readonly<{ kpis: BoardDashboardKpis }>) {
 
   return (
     <Paper variant="outlined" sx={{ p: 3 }}>
+      {/*
+        `flex-start` statt `baseline`: die Cycle Time steht als eigene Kachel mit Rahmen daneben,
+        und eine Kachel richtet sich an ihrer Oberkante aus, nicht an der Grundlinie der 56-px-Zahl.
+      */}
       <Stack
         direction={{ xs: 'column', sm: 'row' }}
         spacing={{ xs: 2, sm: 5 }}
-        alignItems={{ sm: 'baseline' }}
+        alignItems={{ sm: 'flex-start' }}
       >
         <Box>
           <Typography variant="caption" color="text.secondary">
@@ -97,21 +115,26 @@ function MetricHeadline({ kpis }: Readonly<{ kpis: BoardDashboardKpis }>) {
           <Typography
             component="p"
             data-testid="hero-metric"
-            sx={{ fontSize: { xs: 48, sm: 56 }, fontWeight: 700, lineHeight: 1.1 }}
+            sx={{
+              fontSize: { xs: 48, sm: 56 },
+              fontWeight: noLeadTime ? 400 : 700,
+              color: noLeadTime ? 'text.secondary' : 'text.primary',
+              lineHeight: 1.1,
+            }}
           >
             {formatDuration(kpis.avgLeadTimeSeconds)}
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-            Vom Anlegen der Karte bis fertig — Durchschnitt aus{' '}
-            {sampleBasis(kpis.leadTimeSampleCount)}.
+            {noLeadTime
+              ? 'Vom Anlegen der Karte bis fertig — noch keine abgeschlossene Karte.'
+              : `Vom Anlegen der Karte bis fertig — Durchschnitt aus ${sampleBasis(kpis.leadTimeSampleCount)}.`}
           </Typography>
         </Box>
-        <Box>
-          <Typography variant="caption" color="text.secondary">
-            Ø Cycle Time
-          </Typography>
-          <Typography variant="h6">{formatDuration(kpis.avgCycleTimeSeconds)}</Typography>
-        </Box>
+        <MetricTile
+          label="Ø Cycle Time"
+          value={formatDuration(kpis.avgCycleTimeSeconds)}
+          sample={kpis.cycleTimeSampleCount}
+        />
       </Stack>
     </Paper>
   )
@@ -141,22 +164,37 @@ function labeledWeekIndices(counts: readonly number[]): ReadonlySet<number> {
   if (counts.length === 0) {
     return new Set()
   }
+  return new Set([0, maxWeekIndex(counts), counts.length - 1])
+}
+
+/** Index des Wochen-Maximums; bei Gleichstand die frühere Woche (siehe labeledWeekIndices). */
+function maxWeekIndex(counts: readonly number[]): number {
   let maxIndex = 0
   counts.forEach((count, index) => {
     if (count > counts[maxIndex]) {
       maxIndex = index
     }
   })
-  return new Set([0, maxIndex, counts.length - 1])
+  return maxIndex
 }
 
 /**
  * Erzeugt die `mark`-Slot-Komponente des Diagramms: ein Punkt wie gehabt, für die ausgewählten
- * Wochen zusätzlich der Wert als Text darüber. Der Slot bekommt vom Chart nur den Index — die
+ * Wochen zusätzlich der Wert als Text daneben. Der Slot bekommt vom Chart nur den Index — die
  * Werte kommen deshalb über den Abschluss herein, nicht über Props.
+ *
+ * <p>Die Labels sind für Screenreader ausgeblendet: Die Tabelle unter dem Diagramm trägt dieselben
+ * Zahlen strukturiert, ohne `aria-hidden` würden sie doppelt vorgelesen. Das Label des Maximums
+ * steht unter statt über dem Punkt — der Maximum-Punkt liegt am oberen Plotrand, darüber wäre das
+ * Label abgeschnitten; zugleich kollidiert es so nicht mit dem Label eines benachbarten Randpunkts
+ * auf fast gleicher Höhe.
+ *
+ * Exportiert für den Smoke-Test gegen die echte Chart-Bibliothek
+ * (DashboardThroughputChart.smoke.test.tsx) — die übrigen Tests stubben @mui/x-charts.
  */
-function makeThroughputMark(counts: readonly number[]) {
+export function makeThroughputMark(counts: readonly number[]) {
   const labeled = labeledWeekIndices(counts)
+  const belowIndex = maxWeekIndex(counts)
   function ThroughputMark({ dataIndex, ...markProps }: Readonly<MarkElementProps>) {
     return (
       <g>
@@ -164,9 +202,10 @@ function makeThroughputMark(counts: readonly number[]) {
         {labeled.has(dataIndex) && (
           <text
             data-testid="throughput-value"
+            aria-hidden="true"
             x={markProps.x}
             y={markProps.y}
-            dy={-10}
+            dy={dataIndex === belowIndex ? 20 : -10}
             textAnchor="middle"
             fontSize={12}
             fontWeight={700}
@@ -239,44 +278,48 @@ function ThroughputSection({ throughput }: Readonly<{ throughput: readonly Weekl
  * Die Ausreißer-Tabelle — und der Weg von dort zur Karte. Wer hier eine klemmende Karte sieht,
  * will sie ansehen, ohne sie sich zu merken und auf dem Board zu suchen.
  *
- * Ein Ausreißer trägt nur `cardId`, und es gibt keinen Endpoint, der eine einzelne Karte lädt
- * (unter `/api/cards/{id}/…` liegen nur activity, comments, attachments). Deshalb wird beim ersten
- * Klick die Kartenliste des Boards geholt und die Karte darin gesucht; danach bleibt sie für
- * weitere Klicks liegen. Die Kennzahlen der Seite sind ohnehin eine Momentaufnahme — eine zweite
- * Abfrage je Klick brächte keine frischere Aussage.
+ * Ein Klick lädt genau die eine Karte über `GET /api/cards/{id}` (#515) — der frühere Umweg über
+ * die komplette Board-Kartenliste samt Cache ist entfallen; auf großen Boards war er eine spürbare
+ * Antwortzeit für einen Klick. Jeder Klick fragt frisch nach: Die Karte kann sich seit der
+ * Kennzahlen-Momentaufnahme geändert haben.
  *
  * Die Zeile trägt bewusst **kein** `role="button"`: Das nähme der Datentabelle ihre Semantik und
  * damit Screenreadern die Zuordnung von Zelle zu Spaltenüberschrift. Fokussierbar ist stattdessen
  * die Kartennummer in der ersten Zelle; die Maus darf weiterhin die ganze Zeile treffen.
+ *
+ * Das Modal rendert bewusst ohne `members`/`epics`/`boardLabels` des Boards: Zuständige und Labels
+ * erscheinen als ID-Chips statt mit Namen (bestehendes Fallback der Sektionen). Diese Kontextdaten
+ * zu laden hieße drei weitere Requests pro Klick für eine reine Lese-Ansicht — wer den vollen
+ * Kontext will, öffnet die Karte auf ihrem Board (dieselbe Entscheidung wie bei den
+ * Nummernverweisen, #488).
  */
 function OutlierSection({
-  boardId,
+  projectId,
   outliers,
-}: Readonly<{ boardId: number; outliers: readonly OutlierCard[] }>) {
+}: Readonly<{ projectId?: number; outliers: readonly OutlierCard[] }>) {
   const notify = useSnackbar()
-  const [cards, setCards] = useState<Card[] | null>(null)
   const [busyCardId, setBusyCardId] = useState<number | null>(null)
   const [detail, setDetail] = useState<{ card: Card; columnName: string } | null>(null)
 
   const openCard = async (outlier: OutlierCard) => {
+    // Läuft schon ein Abruf, verfällt der Klick: sonst spränge der Spinner zwischen Zeilen und
+    // derselbe ungeduldige Doppelklick löste zwei Requests aus.
+    if (busyCardId !== null) {
+      return
+    }
     setBusyCardId(outlier.cardId)
     try {
-      const list = cards ?? (await cardsApi.list(boardId))
-      setCards(list)
-      const card = list.find((c) => c.id === outlier.cardId)
-      if (card) {
-        setDetail({ card, columnName: outlier.columnName })
+      const card = await cardsApi.get(outlier.cardId)
+      setDetail({ card, columnName: outlier.columnName })
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 404) {
+        // Die Kennzahlen können älter sein als das Board: Die Karte kann inzwischen endgültig
+        // gelöscht sein. Das zu sagen ist ehrlicher als ein leeres Modal — und nennt die Nummer,
+        // damit klar ist, welche Zeile gemeint war.
+        notify(`Karte ${outlier.number} nicht gefunden — gelöscht oder kein Zugriff.`, 'warning')
       } else {
-        // Die Kennzahlen können älter sein als das Board: Die Karte kann inzwischen gelöscht,
-        // archiviert oder in den Ideen-Pool verschoben sein. Das zu sagen ist ehrlicher als ein
-        // leeres Modal — und nennt die Nummer, damit klar ist, welche Zeile gemeint war.
-        notify(
-          `Karte ${outlier.number} ist auf diesem Board nicht mehr zu finden — vermutlich gelöscht, archiviert oder in den Ideen-Pool verschoben.`,
-          'warning',
-        )
+        notify('Karte konnte nicht geladen werden.', 'error')
       }
-    } catch {
-      notify('Karte konnte nicht geladen werden.', 'error')
     } finally {
       setBusyCardId(null)
     }
@@ -344,6 +387,7 @@ function OutlierSection({
         <CardDetailModal
           card={detail.card}
           canEdit={false}
+          projectId={projectId}
           columnName={detail.columnName}
           onClose={() => setDetail(null)}
         />
@@ -413,7 +457,6 @@ export function DashboardPage() {
                   label={c.columnName}
                   value={formatDuration(c.avgDwellSeconds)}
                   sample={c.sampleCount}
-                  noMeasurement={c.avgDwellSeconds == null}
                   emphasis={c.columnId === longestColumnId ? 'längste Spalte' : undefined}
                 />
               ))}
@@ -422,7 +465,7 @@ export function DashboardPage() {
 
           <ThroughputSection throughput={kpis.throughput} />
 
-          <OutlierSection boardId={id} outliers={kpis.outliers} />
+          <OutlierSection projectId={board?.projectId} outliers={kpis.outliers} />
         </Stack>
       )}
     </Box>

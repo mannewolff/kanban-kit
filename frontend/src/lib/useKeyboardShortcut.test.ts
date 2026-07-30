@@ -23,6 +23,22 @@ describe('useKeyboardShortcut', () => {
     expect(onTrigger).toHaveBeenCalledTimes(1)
   })
 
+  it('unterdrückt die Standardwirkung der Taste, wenn das Kürzel greift', () => {
+    renderHook(() => useKeyboardShortcut('/', true, vi.fn()))
+
+    const handled = fireEvent.keyDown(document.body, { key: '/', cancelable: true })
+
+    // `fireEvent` liefert false, wenn preventDefault gerufen wurde — sonst tippte der Browser das
+    // Zeichen in das Feld, das der Handler gerade fokussiert hat.
+    expect(handled).toBe(false)
+  })
+
+  it('lässt die Standardwirkung unangetastet, wenn das Kürzel nicht greift', () => {
+    renderHook(() => useKeyboardShortcut('/', true, vi.fn()))
+
+    expect(fireEvent.keyDown(mount('input'), { key: '/', cancelable: true })).toBe(true)
+  })
+
   it('ignoriert eine andere Taste', () => {
     const onTrigger = vi.fn()
     renderHook(() => useKeyboardShortcut('+', true, onTrigger))

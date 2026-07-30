@@ -1,5 +1,5 @@
 .claude/
-
+.idea/
 # Maven / Java
 target/
 *.class

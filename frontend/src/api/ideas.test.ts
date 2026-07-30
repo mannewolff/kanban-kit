@@ -41,6 +41,17 @@ describe('ideasApi', () => {
     expect(JSON.parse(String(c.body))).toEqual({ title: 'T', description: 'd', targetBoardId: 9 })
   })
 
+  it('createBatch ruft POST /api/projects/{id}/ideas/batch mit der ganzen Liste', async () => {
+    const f = spyFetch('[]')
+    await ideasApi.createBatch(5, { ideas: [{ title: 'A', description: 'a' }, { title: 'B' }] })
+    const c = lastCall(f)
+    expect(c.url).toBe('/api/projects/5/ideas/batch')
+    expect(c.method).toBe('POST')
+    expect(JSON.parse(String(c.body))).toEqual({
+      ideas: [{ title: 'A', description: 'a' }, { title: 'B' }],
+    })
+  })
+
   it('planOntoBoard ruft PUT /api/cards/{id}/plan mit dem Zielboard', async () => {
     const f = spyFetch()
     await ideasApi.planOntoBoard(3, 9)

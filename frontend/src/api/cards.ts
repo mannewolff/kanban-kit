@@ -45,17 +45,67 @@ export interface CardDetail {
   ideaStored: boolean
 }
 
+/**
+ * Ergebnis des projektweiten Nummer-Lookups: die Karte zu einer projektweit vergebenen `number` —
+ * board-gebunden oder als board-lose Pool-Idee. Deshalb sind `boardId`/`columnId` nullable. Mehr
+ * als die `CardDetail`-Felder plus Board-Bindung braucht das Detail-Modal für einen `#N`-Verweis
+ * nicht; die Bindung dient dort nur dazu, den Spaltennamen des fremden Boards aufzulösen.
+ */
+export interface CardByNumber extends CardDetail {
+  boardId: number | null
+  columnId: number | null
+}
+
+/**
+ * Treffer der projektübergreifenden Nummernsuche (#489): die Karte plus die Angabe, wo sie liegt.
+ * Gesucht wird ausschließlich in den Projekten des Aufrufers; die leere Antwort steht sowohl für
+ * „Nummer existiert nirgends" als auch für „Nummer existiert nur in fremden Projekten" — sie ist
+ * deshalb kein Beleg dafür, dass es die Karte nicht gibt.
+ *
+ * Kartennummern sind projektweit eindeutig, nicht global — dieselbe Nummer kann also in mehreren
+ * Projekten liegen. Deshalb eine Liste und kein einzelner Treffer.
+ *
+ * Eine board-lose Pool-Idee hat weder Board noch Spalte; board-gebundene Karten haben stets beides.
+ * `boardArchived` unterscheidet ein archiviertes von einem aktiven Board — die Karte bleibt
+ * auffindbar, also soll ihr Ort auch dann benannt werden.
+ */
+export interface CardSearchHit {
+  card: CardByNumber
+  projectId: number
+  projectName: string
+  boardId: number | null
+  boardName: string | null
+  boardArchived: boolean
+  columnId: number | null
+  columnName: string | null
+}
+
 export interface CardActivity {
   id: number
   actorUserId: number | null
   type: string
   detail: string
   createdAt: string
+  /** Server-verifizierte Herkunft; null bei Alt-Einträgen vor der Erfassung (#517). */
+  origin: 'SESSION' | 'TOKEN' | null
+  /** Anzeigename des Tokens (verifiziert); nur bei origin=TOKEN gesetzt. */
+  tokenName: string | null
+  /** Modell-Selbstauskunft des Clients (X-Agent-Model) — Angabe, keine Tatsache. */
+  agent: string | null
 }
 
 export const cardsApi = {
   list: (boardId: number) => apiFetch<Card[]>(`/api/boards/${boardId}/cards`),
+  get: (cardId: number) => apiFetch<Card>(`/api/cards/${cardId}`),
   getActivity: (cardId: number) => apiFetch<CardActivity[]>(`/api/cards/${cardId}/activity`),
+  // Löst eine projektweite Kartennummer board-übergreifend zu ihrer Karte auf (404, wenn es sie
+  // nicht gibt oder der Nutzer nicht Projektmitglied ist). Bewusst nicht `getByNumber`: dieser
+  // Name kollidiert in Tests mit der Testing-Library-Query-Konvention (`no-await-sync-queries`).
+  byNumber: (projectId: number, number: number) =>
+    apiFetch<CardByNumber>(`/api/projects/${projectId}/cards/by-number/${number}`),
+  // Löst eine Kartennummer ohne Projektkontext auf — über alle Projekte, in denen der Aufrufer
+  // lesen darf (#489). Antwort ist stets eine Liste, auch leer.
+  searchByNumber: (number: number) => apiFetch<CardSearchHit[]>(`/api/cards/search?number=${number}`),
   listTrash: (boardId: number) => apiFetch<Card[]>(`/api/boards/${boardId}/trash`),
   restoreDeleted: (cardId: number) =>
     apiFetch<Card>(`/api/cards/${cardId}/restore-deleted`, { method: 'POST' }),

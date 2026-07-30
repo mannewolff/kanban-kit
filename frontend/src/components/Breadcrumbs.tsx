@@ -5,23 +5,55 @@ import { Link as RouterLink } from 'react-router-dom'
 
 export interface Crumb {
   label: string
-  /** Zielpfad; nur Vorsegmente (nicht das letzte) werden als Link gerendert. */
+  /**
+   * Zielpfad; als Link gerendert, solange das Segment nicht die aktuelle Seite ist — also alle
+   * Vorsegmente, und bei `currentPage={false}` zusätzlich das letzte.
+   */
   to?: string
 }
 
 interface Props {
   items: Crumb[]
+  /** Textgröße; Default `h5` wie in den Seitenüberschriften. */
+  variant?: 'h5' | 'body2'
+  /**
+   * Element des Containers; Default `h1` — der Pfad *ist* die Seitenüberschrift. Bewusst eine
+   * kleine Union statt `ElementType`: Ein zweites `h1` innerhalb eines Dialogs wäre ein
+   * A11y-Rückschritt, also stehen nur begründete Alternativen zur Wahl. `span` ist die Wahl für
+   * einen Pfad innerhalb einer Überschrift (MUI rendert `DialogTitle` als `h2`, das nur
+   * Phrasing-Content aufnehmen darf).
+   */
+  component?: 'h1' | 'span'
+  /**
+   * Ob das letzte Segment die aktuell angezeigte Seite ist (Default). Bei `false` beschreibt der
+   * Pfad nur einen Ort — dann ist auch das letzte Segment mit `to` ein Link und kein Segment als
+   * `aria-current` ausgezeichnet (z. B. der Ortspfad im Karten-Detail).
+   */
+  currentPage?: boolean
 }
 
 /**
  * Vollständiger Breadcrumb-Pfad in Überschrift-Optik: alle Segmente durch „/" getrennt, Vorsegmente
  * mit `to` als Links, nur das letzte Segment fett und als aktuelle Seite ausgezeichnet.
+ *
+ * Über `variant`/`component`/`currentPage` dient dieselbe Komponente auch als reiner Ortspfad
+ * innerhalb einer anderen Ansicht (Karten-Detail) — die Defaults bilden unverändert die
+ * Seitenüberschrift ab.
  */
-export function Breadcrumbs({ items }: Readonly<Props>) {
+export function Breadcrumbs({
+  items,
+  variant = 'h5',
+  component = 'h1',
+  currentPage = true,
+}: Readonly<Props>) {
   return (
-    <Typography variant="h5" component="h1" sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'baseline' }}>
+    <Typography
+      variant={variant}
+      component={component}
+      sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'baseline' }}
+    >
       {items.map((item, index) => {
-        const isLast = index === items.length - 1
+        const isLast = currentPage && index === items.length - 1
         // Stabiler key (nicht der Index): so bleibt ein Segment beim Nachladen eines vorgelagerten
         // Segments (z. B. des Projektnamens) dasselbe DOM-Element und wird nicht neu gemountet.
         return (

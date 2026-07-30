@@ -37,6 +37,7 @@ import org.mwolff.manban.card.domain.Label;
 import org.mwolff.manban.project.application.PermissionChecker;
 import org.mwolff.manban.project.application.ProjectAccessDeniedException;
 import org.mwolff.manban.project.application.ProjectNotFoundException;
+import org.mwolff.manban.project.application.ProjectService;
 import org.mwolff.manban.project.domain.Permission;
 import org.springframework.context.ApplicationEventPublisher;
 
@@ -49,16 +50,21 @@ class CardServiceTest {
   private static final Instant FIXED = Instant.parse("2026-01-02T03:04:05Z");
   private static final long BOARD = 10L;
   private static final long PROJECT = 1L;
+  // Zweites Projekt/Board fuer die projektuebergreifende Nummernsuche (#489).
+  private static final long PROJECT_B = 2L;
+  private static final long BOARD_B = 11L;
 
   private CardRepository cards;
   private CardDependencyRepository dependencies;
   private BoardService boardService;
   private PermissionChecker permissions;
+  private ProjectService projects;
   private CardColumnTransitionRepository transitions;
   private CardAssigneeRepository assignees;
   private LabelRepository labels;
   private CardLabelRepository cardLabels;
   private CardActivityRepository activity;
+  private ActorContext actor;
   private ApplicationEventPublisher events;
   private CardService service;
 
@@ -86,11 +92,14 @@ class CardServiceTest {
     dependencies = mock(CardDependencyRepository.class);
     boardService = mock(BoardService.class);
     permissions = mock(PermissionChecker.class);
+    projects = mock(ProjectService.class);
     transitions = mock(CardColumnTransitionRepository.class);
     assignees = mock(CardAssigneeRepository.class);
     labels = mock(LabelRepository.class);
     cardLabels = mock(CardLabelRepository.class);
     activity = mock(CardActivityRepository.class);
+    actor = mock(ActorContext.class);
+    when(actor.current()).thenReturn(ActorContext.ActorStamp.unknown());
     events = mock(ApplicationEventPublisher.class);
     Clock clock = Clock.fixed(FIXED, ZoneOffset.UTC);
     service =
@@ -99,11 +108,13 @@ class CardServiceTest {
             dependencies,
             boardService,
             permissions,
+            projects,
             transitions,
             assignees,
             labels,
             cardLabels,
             activity,
+            actor,
             events,
             clock);
     when(boardService.requireProjectId(BOARD)).thenReturn(PROJECT);
@@ -182,8 +193,31 @@ class CardServiceTest {
 
     verify(assignees).replaceAssignees(1L, List.of(7L, 8L));
     // Genau ein Aktivitätseintrag (CREATED) — kein zusätzlicher ASSIGNED beim atomaren Anlegen.
-    verify(activity).add(1L, 1L, CardActivityType.CREATED, "Karte angelegt", FIXED);
-    verify(activity, times(1)).add(anyLong(), anyLong(), any(), any(), any());
+    verify(activity)
+        .add(
+            1L,
+            1L,
+            CardActivityType.CREATED,
+            "Karte angelegt",
+            FIXED,
+            ActorContext.ActorStamp.unknown());
+  }
+
+  @Test
+  void create_stampsActivityWithActorContext() {
+    // Given — der Port liefert einen Token-Stempel; die Aktivität muss ihn unverändert tragen.
+    ActorContext.ActorStamp stamp =
+        new ActorContext.ActorStamp(
+            org.mwolff.manban.card.domain.CardActivityOrigin.TOKEN, "Nachtlauf", "claude-opus-5");
+    when(actor.current()).thenReturn(stamp);
+    when(boardService.requireColumn(20L, BOARD)).thenReturn(column(20L, "Backlog", 0));
+
+    // When
+    service.create(1L, BOARD, 20L, "Titel", null, null, null);
+
+    // Then
+    verify(activity).add(1L, 1L, CardActivityType.CREATED, "Karte angelegt", FIXED, stamp);
+    verify(activity, times(1)).add(anyLong(), anyLong(), any(), any(), any(), any());
   }
 
   @Test
@@ -709,7 +743,7 @@ class CardServiceTest {
   @Test
   void sortColumnByNumber_requiresCardMove_andDelegatesAscending() {
     // Given
-    when(boardService.requireColumnBoardId(20L)).thenReturn(BOARD);
+    when(boardService.boardIdOfColumn(20L)).thenReturn(BOARD);
 
     // When
     service.sortColumnByNumber(1L, 20L, SortDirection.ASC);
@@ -722,7 +756,7 @@ class CardServiceTest {
   @Test
   void sortColumnByNumber_delegatesDescending() {
     // Given
-    when(boardService.requireColumnBoardId(20L)).thenReturn(BOARD);
+    when(boardService.boardIdOfColumn(20L)).thenReturn(BOARD);
 
     // When
     service.sortColumnByNumber(1L, 20L, SortDirection.DESC);
@@ -734,7 +768,7 @@ class CardServiceTest {
   @Test
   void sortColumnByNumber_publishesBoardChangedEvent() {
     // Given
-    when(boardService.requireColumnBoardId(20L)).thenReturn(BOARD);
+    when(boardService.boardIdOfColumn(20L)).thenReturn(BOARD);
 
     // When
     service.sortColumnByNumber(1L, 20L, SortDirection.ASC);
@@ -746,7 +780,7 @@ class CardServiceTest {
   @Test
   void sortColumnByNumber_throwsColumnNotFound_whenColumnUnknown() {
     // Given
-    when(boardService.requireColumnBoardId(20L)).thenThrow(new ColumnNotFoundException());
+    when(boardService.boardIdOfColumn(20L)).thenThrow(new ColumnNotFoundException());
 
     // When / Then
     assertThatThrownBy(() -> service.sortColumnByNumber(1L, 20L, SortDirection.ASC))
@@ -758,7 +792,7 @@ class CardServiceTest {
   @Test
   void sortColumnByNumber_propagatesPermissionDenied() {
     // Given
-    when(boardService.requireColumnBoardId(20L)).thenReturn(BOARD);
+    when(boardService.boardIdOfColumn(20L)).thenReturn(BOARD);
     doThrow(new ProjectAccessDeniedException())
         .when(permissions)
         .require(9L, PROJECT, Permission.CARD_MOVE);
@@ -849,7 +883,14 @@ class CardServiceTest {
     assertThat(saved.number()).isEqualTo(7);
     assertThat(saved.targetBoardId()).isEqualTo(BOARD);
     assertThat(view.ideaStored()).isTrue();
-    verify(activity).add(1L, 9L, CardActivityType.IDEA_STORED, "In den Ideen-Speicher", FIXED);
+    verify(activity)
+        .add(
+            1L,
+            9L,
+            CardActivityType.IDEA_STORED,
+            "In den Ideen-Speicher",
+            FIXED,
+            ActorContext.ActorStamp.unknown());
     verify(events).publishEvent(new ProjectIdeasChangedEvent(PROJECT));
   }
 
@@ -902,7 +943,14 @@ class CardServiceTest {
     assertThat(captor.getValue().ideaStored()).isTrue();
     assertThat(view.ideaStored()).isTrue();
     verify(transitions, never()).open(anyLong(), anyLong(), any(), any());
-    verify(activity).add(1L, 1L, CardActivityType.CREATED, "Karte angelegt", FIXED);
+    verify(activity)
+        .add(
+            1L,
+            1L,
+            CardActivityType.CREATED,
+            "Karte angelegt",
+            FIXED,
+            ActorContext.ActorStamp.unknown());
   }
 
   @Test
@@ -1343,7 +1391,13 @@ class CardServiceTest {
 
     verify(cards).restoreFromTrash(1L, 5);
     verify(activity)
-        .add(1L, 9L, CardActivityType.RESTORED, "Aus Papierkorb wiederhergestellt", FIXED);
+        .add(
+            1L,
+            9L,
+            CardActivityType.RESTORED,
+            "Aus Papierkorb wiederhergestellt",
+            FIXED,
+            ActorContext.ActorStamp.unknown());
     assertThat(view.id()).isEqualTo(1L);
   }
 
@@ -1618,7 +1672,14 @@ class CardServiceTest {
 
     verify(permissions).require(3L, 1L, Permission.TICKET_UPDATE);
     verify(assignees).replaceAssignees(1L, List.of(7L, 8L));
-    verify(activity).add(1L, 3L, CardActivityType.ASSIGNED, "Zuständige geändert", FIXED);
+    verify(activity)
+        .add(
+            1L,
+            3L,
+            CardActivityType.ASSIGNED,
+            "Zuständige geändert",
+            FIXED,
+            ActorContext.ActorStamp.unknown());
     assertThat(result.id()).isEqualTo(1L);
     assertThat(result.assignees()).containsExactly(7L, 8L);
   }
@@ -1734,7 +1795,14 @@ class CardServiceTest {
 
     service.create(1L, BOARD, 20L, "Titel", null, null, null);
 
-    verify(activity).add(1L, 1L, CardActivityType.CREATED, "Karte angelegt", FIXED);
+    verify(activity)
+        .add(
+            1L,
+            1L,
+            CardActivityType.CREATED,
+            "Karte angelegt",
+            FIXED,
+            ActorContext.ActorStamp.unknown());
   }
 
   @Test
@@ -1745,7 +1813,14 @@ class CardServiceTest {
 
     service.move(9L, 1L, 21L, 0);
 
-    verify(activity).add(1L, 9L, CardActivityType.MOVED, "Verschoben nach Done", FIXED);
+    verify(activity)
+        .add(
+            1L,
+            9L,
+            CardActivityType.MOVED,
+            "Verschoben nach Done",
+            FIXED,
+            ActorContext.ActorStamp.unknown());
   }
 
   @Test
@@ -1755,7 +1830,14 @@ class CardServiceTest {
 
     service.update(9L, 1L, "Neu", null, null, null, null, null);
 
-    verify(activity).add(1L, 9L, CardActivityType.UPDATED, "Karte bearbeitet", FIXED);
+    verify(activity)
+        .add(
+            1L,
+            9L,
+            CardActivityType.UPDATED,
+            "Karte bearbeitet",
+            FIXED,
+            ActorContext.ActorStamp.unknown());
   }
 
   @Test
@@ -1765,7 +1847,14 @@ class CardServiceTest {
 
     service.archive(9L, 1L);
 
-    verify(activity).add(1L, 9L, CardActivityType.ARCHIVED, "Archiviert", FIXED);
+    verify(activity)
+        .add(
+            1L,
+            9L,
+            CardActivityType.ARCHIVED,
+            "Archiviert",
+            FIXED,
+            ActorContext.ActorStamp.unknown());
   }
 
   @Test
@@ -1775,7 +1864,14 @@ class CardServiceTest {
 
     service.restore(9L, 1L);
 
-    verify(activity).add(1L, 9L, CardActivityType.RESTORED, "Wiederhergestellt", FIXED);
+    verify(activity)
+        .add(
+            1L,
+            9L,
+            CardActivityType.RESTORED,
+            "Wiederhergestellt",
+            FIXED,
+            ActorContext.ActorStamp.unknown());
   }
 
   @Test
@@ -1783,7 +1879,8 @@ class CardServiceTest {
     when(cards.findById(1L))
         .thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
     CardActivity entry =
-        new CardActivity(3L, 1L, 9L, CardActivityType.CREATED, "Karte angelegt", FIXED);
+        new CardActivity(
+            3L, 1L, 9L, CardActivityType.CREATED, "Karte angelegt", FIXED, null, null, null);
     when(activity.findByCardId(1L)).thenReturn(List.of(entry));
 
     List<CardActivity> result = service.listActivity(5L, 1L);
@@ -2099,7 +2196,14 @@ class CardServiceTest {
     assertThat(captor.getValue().ideaStored()).isTrue();
     assertThat(captor.getValue().projectId()).isEqualTo(PROJECT);
     assertThat(captor.getValue().targetBoardId()).isEqualTo(7L);
-    verify(activity).add(1L, 1L, CardActivityType.CREATED, "Idee angelegt", FIXED);
+    verify(activity)
+        .add(
+            1L,
+            1L,
+            CardActivityType.CREATED,
+            "Idee angelegt",
+            FIXED,
+            ActorContext.ActorStamp.unknown());
     assertThat(view.boardId()).isNull();
     assertThat(view.number()).isEqualTo(3);
     // view() muss das notierte Zielboard durchreichen — das Frontend wählt es beim Einplanen vor.
@@ -2124,7 +2228,14 @@ class CardServiceTest {
     assertThat(captor.getValue().positionInColumn()).isEqualTo(3);
     assertThat(captor.getValue().ideaStored()).isFalse();
     verify(transitions).open(1L, 20L, "Backlog", FIXED);
-    verify(activity).add(1L, 9L, CardActivityType.PROMOTED, "Auf Board eingeplant", FIXED);
+    verify(activity)
+        .add(
+            1L,
+            9L,
+            CardActivityType.PROMOTED,
+            "Auf Board eingeplant",
+            FIXED,
+            ActorContext.ActorStamp.unknown());
     verify(events).publishEvent(new CardBoardActivityEvent(BOARD, ActivityType.CREATED, 1L));
     assertThat(result.boardId()).isEqualTo(BOARD);
     assertThat(result.ideaStored()).isFalse();
@@ -2190,7 +2301,14 @@ class CardServiceTest {
     assertThat(captor.getValue().boardId()).isNull();
     assertThat(captor.getValue().ideaStored()).isTrue();
     assertThat(captor.getValue().targetBoardId()).isEqualTo(BOARD);
-    verify(activity).add(1L, 9L, CardActivityType.IDEA_STORED, "Zurück in den Ideen-Pool", FIXED);
+    verify(activity)
+        .add(
+            1L,
+            9L,
+            CardActivityType.IDEA_STORED,
+            "Zurück in den Ideen-Pool",
+            FIXED,
+            ActorContext.ActorStamp.unknown());
     verify(events).publishEvent(new CardBoardActivityEvent(BOARD, ActivityType.MOVED, 1L));
     assertThat(result.boardId()).isNull();
   }
@@ -2200,6 +2318,69 @@ class CardServiceTest {
     service.createProjectIdea(1L, PROJECT, "Idee", "d", 7L);
 
     verify(events).publishEvent(new ProjectIdeasChangedEvent(PROJECT));
+  }
+
+  @Test
+  void createProjectIdeas_createsEveryIdea_withOwnNumberAndSharedTargetBoard() {
+    when(cards.allocateCardNumber(PROJECT)).thenReturn(3, 4);
+    ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
+
+    List<CardService.CardView> views =
+        service.createProjectIdeas(
+            1L,
+            PROJECT,
+            List.of(new CardService.NewIdea("Erste", "a"), new CardService.NewIdea("Zweite", null)),
+            7L);
+
+    verify(cards, times(2)).save(captor.capture());
+    assertThat(captor.getAllValues()).extracting(Card::title).containsExactly("Erste", "Zweite");
+    assertThat(captor.getAllValues()).extracting(Card::description).containsExactly("a", null);
+    assertThat(captor.getAllValues()).extracting(Card::number).containsExactly(3, 4);
+    assertThat(captor.getAllValues())
+        .allMatch(c -> c.ideaStored() && c.boardId() == null && c.targetBoardId() == 7L);
+    // Beide Speicherungen liefern im Mock dieselbe Id (1L) — je Idee entsteht ein CREATED-Eintrag.
+    verify(activity, times(2))
+        .add(
+            1L,
+            1L,
+            CardActivityType.CREATED,
+            "Idee angelegt",
+            FIXED,
+            ActorContext.ActorStamp.unknown());
+    assertThat(views).hasSize(2).extracting(CardService.CardView::number).containsExactly(3, 4);
+  }
+
+  @Test
+  void createProjectIdeas_checksTicketCreateOnce_andPublishesOneIdeasChangedEvent() {
+    // Ein Ereignis fuer den ganzen Stapel genuegt: der Ideen-Pool laedt danach ohnehin komplett
+    // neu.
+    service.createProjectIdeas(
+        1L,
+        PROJECT,
+        List.of(
+            new CardService.NewIdea("Erste", null),
+            new CardService.NewIdea("Zweite", null),
+            new CardService.NewIdea("Dritte", null)),
+        null);
+
+    verify(permissions, times(1)).require(1L, PROJECT, Permission.TICKET_CREATE);
+    verify(events, times(1)).publishEvent(new ProjectIdeasChangedEvent(PROJECT));
+  }
+
+  @Test
+  void createProjectIdeas_withoutTicketCreate_createsNothing() {
+    doThrow(new ProjectAccessDeniedException())
+        .when(permissions)
+        .require(1L, PROJECT, Permission.TICKET_CREATE);
+
+    assertThatThrownBy(
+            () ->
+                service.createProjectIdeas(
+                    1L, PROJECT, List.of(new CardService.NewIdea("Erste", null)), null))
+        .isInstanceOf(ProjectAccessDeniedException.class);
+
+    verify(cards, never()).save(any(Card.class));
+    verify(events, never()).publishEvent(any(ProjectIdeasChangedEvent.class));
   }
 
   @Test
@@ -2291,6 +2472,145 @@ class CardServiceTest {
         .isInstanceOf(CardNotFoundException.class);
   }
 
+  // --- searchByNumber: projektuebergreifende Nummernsuche (#489) --------
+
+  private static ProjectService.AccessibleProject accessible(long id, String name) {
+    return new ProjectService.AccessibleProject(id, name);
+  }
+
+  private static Card cardIn(long id, long projectId, long boardId, long columnId, int number) {
+    return new Card(
+        id,
+        boardId,
+        columnId,
+        number,
+        "Titel",
+        null,
+        0,
+        false,
+        false,
+        null,
+        1L,
+        FIXED,
+        FIXED,
+        CardType.CARD,
+        null,
+        null,
+        null,
+        projectId,
+        null);
+  }
+
+  @Test
+  void searchByNumber_returnsHitWithProjectBoardAndColumn() {
+    when(projects.listAccessible(5L)).thenReturn(List.of(accessible(PROJECT, "Projekt A")));
+    when(cards.findByNumberInProjects(42, List.of(PROJECT)))
+        .thenReturn(List.of(cardIn(1L, PROJECT, BOARD, 20L, 42)));
+    when(boardService.requireBoardSummary(BOARD))
+        .thenReturn(new BoardService.BoardSummary(BOARD, "Board A", false));
+    when(boardService.requireColumn(20L, BOARD)).thenReturn(column(20L, "Ready", 1));
+
+    List<CardService.CardSearchHit> hits = service.searchByNumber(5L, 42);
+
+    assertThat(hits)
+        .singleElement()
+        .isEqualTo(
+            new CardService.CardSearchHit(
+                hits.get(0).card(), PROJECT, "Projekt A", BOARD, "Board A", false, 20L, "Ready"));
+    assertThat(hits.get(0).card().id()).isEqualTo(1L);
+  }
+
+  @Test
+  void searchByNumber_returnsBothHits_whenNumberExistsInTwoOwnProjects() {
+    // Kartennummern sind projektweit eindeutig, nicht global: derselbe Wert kann in mehreren
+    // Projekten liegen, und dann sind alle Treffer gemeint (unterscheidbar am Projektnamen).
+    when(projects.listAccessible(5L))
+        .thenReturn(List.of(accessible(PROJECT, "Projekt A"), accessible(PROJECT_B, "Projekt B")));
+    when(cards.findByNumberInProjects(42, List.of(PROJECT, PROJECT_B)))
+        .thenReturn(
+            List.of(cardIn(1L, PROJECT, BOARD, 20L, 42), cardIn(2L, PROJECT_B, BOARD_B, 30L, 42)));
+    when(boardService.requireBoardSummary(BOARD))
+        .thenReturn(new BoardService.BoardSummary(BOARD, "Board A", false));
+    when(boardService.requireBoardSummary(BOARD_B))
+        .thenReturn(new BoardService.BoardSummary(BOARD_B, "Board B", false));
+    when(boardService.requireColumn(20L, BOARD)).thenReturn(column(20L, "Ready", 1));
+    when(boardService.requireColumn(30L, BOARD_B)).thenReturn(column(30L, "Done", 4));
+
+    List<CardService.CardSearchHit> hits = service.searchByNumber(5L, 42);
+
+    assertThat(hits)
+        .extracting(CardService.CardSearchHit::projectId)
+        .containsExactly(PROJECT, PROJECT_B);
+    assertThat(hits)
+        .extracting(CardService.CardSearchHit::projectName)
+        .containsExactly("Projekt A", "Projekt B");
+    assertThat(hits)
+        .extracting(CardService.CardSearchHit::boardName)
+        .containsExactly("Board A", "Board B");
+    assertThat(hits)
+        .extracting(CardService.CardSearchHit::columnName)
+        .containsExactly("Ready", "Done");
+  }
+
+  @Test
+  void searchByNumber_asksOnlyForProjectsOfCaller() {
+    // Sicherheitskern: gesucht wird ausschliesslich in den Projekten des Aufrufers. Eine Nummer,
+    // die nur in einem fremden Projekt existiert, kann deshalb gar nicht erst auftauchen — sie
+    // ist von einer nirgends existierenden Nummer nicht unterscheidbar.
+    when(projects.listAccessible(5L)).thenReturn(List.of(accessible(PROJECT, "Projekt A")));
+    when(cards.findByNumberInProjects(42, List.of(PROJECT))).thenReturn(List.of());
+
+    assertThat(service.searchByNumber(5L, 42)).isEmpty();
+
+    verify(cards).findByNumberInProjects(42, List.of(PROJECT));
+  }
+
+  @Test
+  void searchByNumber_returnsEmpty_withoutQuery_whenCallerHasNoProjects() {
+    when(projects.listAccessible(5L)).thenReturn(List.of());
+
+    assertThat(service.searchByNumber(5L, 42)).isEmpty();
+
+    verify(cards, never()).findByNumberInProjects(anyInt(), anyList());
+  }
+
+  @Test
+  void searchByNumber_returnsHitWithoutBoardAndColumn_forPoolIdea() {
+    when(projects.listAccessible(5L)).thenReturn(List.of(accessible(PROJECT, "Projekt A")));
+    when(cards.findByNumberInProjects(7, List.of(PROJECT))).thenReturn(List.of(poolIdea(1L)));
+
+    List<CardService.CardSearchHit> hits = service.searchByNumber(5L, 7);
+
+    assertThat(hits).singleElement().isNotNull();
+    CardService.CardSearchHit hit = hits.get(0);
+    assertThat(hit.projectName()).isEqualTo("Projekt A");
+    assertThat(hit.boardId()).isNull();
+    assertThat(hit.boardName()).isNull();
+    assertThat(hit.boardArchived()).isFalse();
+    assertThat(hit.columnId()).isNull();
+    assertThat(hit.columnName()).isNull();
+    // Eine board-lose Pool-Idee loest weder Board noch Spalte auf.
+    verify(boardService, never()).requireBoardSummary(anyLong());
+    verify(boardService, never()).requireColumn(anyLong(), anyLong());
+  }
+
+  @Test
+  void searchByNumber_reportsArchivedBoard_withName() {
+    // Die Karte bleibt auffindbar, obwohl das Board ueber die normale Board-API 404 liefert.
+    when(projects.listAccessible(5L)).thenReturn(List.of(accessible(PROJECT, "Projekt A")));
+    when(cards.findByNumberInProjects(42, List.of(PROJECT)))
+        .thenReturn(List.of(cardIn(1L, PROJECT, BOARD, 20L, 42)));
+    when(boardService.requireBoardSummary(BOARD))
+        .thenReturn(new BoardService.BoardSummary(BOARD, "Altes Board", true));
+    when(boardService.requireColumn(20L, BOARD)).thenReturn(column(20L, "Done", 4));
+
+    CardService.CardSearchHit hit = service.searchByNumber(5L, 42).get(0);
+
+    assertThat(hit.boardName()).isEqualTo("Altes Board");
+    assertThat(hit.boardArchived()).isTrue();
+    assertThat(hit.columnName()).isEqualTo("Done");
+  }
+
   // --- Board-lose Pool-Ideen editierbar (#405) --------------------------
 
   @Test
@@ -2301,7 +2621,14 @@ class CardServiceTest {
     CardService.CardView view = service.update(9L, 1L, "Neu", null, null, null, null, null);
 
     verify(permissions).require(9L, PROJECT, Permission.TICKET_UPDATE);
-    verify(activity).add(1L, 9L, CardActivityType.UPDATED, "Karte bearbeitet", FIXED);
+    verify(activity)
+        .add(
+            1L,
+            9L,
+            CardActivityType.UPDATED,
+            "Karte bearbeitet",
+            FIXED,
+            ActorContext.ActorStamp.unknown());
     verify(events, never()).publishEvent(any(CardBoardActivityEvent.class));
     assertThat(view.title()).isEqualTo("Neu");
     assertThat(view.boardId()).isNull();
@@ -2329,7 +2656,14 @@ class CardServiceTest {
 
     verify(permissions).require(3L, PROJECT, Permission.TICKET_UPDATE);
     verify(assignees).replaceAssignees(1L, List.of(7L));
-    verify(activity).add(1L, 3L, CardActivityType.ASSIGNED, "Zuständige geändert", FIXED);
+    verify(activity)
+        .add(
+            1L,
+            3L,
+            CardActivityType.ASSIGNED,
+            "Zuständige geändert",
+            FIXED,
+            ActorContext.ActorStamp.unknown());
     verify(events, never()).publishEvent(any(CardBoardActivityEvent.class));
   }
 
@@ -2469,6 +2803,40 @@ class CardServiceTest {
 
     assertThatThrownBy(() -> service.requireProjectId(1L))
         .isInstanceOf(CardNotFoundException.class);
+  }
+
+  // --- getCard ---------------------------------------------------------
+
+  @Test
+  void getCard_returnsViewOfCard() {
+    when(cards.findById(1L)).thenReturn(Optional.of(boardCard(1L, 20L, 7, 0, false, false)));
+
+    assertThat(service.getCard(5L, 1L)).extracting(CardService.CardView::number).isEqualTo(7);
+  }
+
+  @Test
+  void getCard_requiresMembershipInCardsProject() {
+    when(cards.findById(1L)).thenReturn(Optional.of(boardCard(1L, 20L, 7, 0, false, false)));
+
+    service.getCard(5L, 1L);
+
+    verify(permissions).requireMembership(5L, PROJECT);
+  }
+
+  @Test
+  void getCard_throwsCardNotFound_whenCardUnknown() {
+    when(cards.findById(1L)).thenReturn(Optional.empty());
+
+    assertThatThrownBy(() -> service.getCard(5L, 1L)).isInstanceOf(CardNotFoundException.class);
+  }
+
+  @Test
+  void getCard_propagatesNotFound_whenCallerIsNoMember() {
+    // Nichtmitglied wie unbekannte Karte → 404, kein Existenz-Leak.
+    when(cards.findById(1L)).thenReturn(Optional.of(boardCard(1L, 20L, 7, 0, false, false)));
+    doThrow(new ProjectNotFoundException()).when(permissions).requireMembership(5L, PROJECT);
+
+    assertThatThrownBy(() -> service.getCard(5L, 1L)).isInstanceOf(ProjectNotFoundException.class);
   }
 
   @Test

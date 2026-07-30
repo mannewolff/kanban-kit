@@ -108,6 +108,7 @@ class CardCycleTimeServiceTest {
     assertThat(kpis.avgLeadTimeSeconds()).isNull();
     assertThat(kpis.leadTimeSampleCount()).isZero();
     assertThat(kpis.avgCycleTimeSeconds()).isNull();
+    assertThat(kpis.cycleTimeSampleCount()).isZero();
     assertThat(kpis.throughput()).hasSize(12);
     assertThat(kpis.throughput()).allSatisfy(w -> assertThat(w.doneCount()).isZero());
   }
@@ -223,7 +224,10 @@ class CardCycleTimeServiceTest {
         List.of(col(20L, "Backlog", 0), col(21L, "Ready", 1)));
 
     // Nur die abgeschlossene Karte mit Ready-Eintritt zählt; frühester Ready-Eintritt = -500s.
-    assertThat(service.dashboard(5L, BOARD).avgCycleTimeSeconds()).isEqualTo(500L);
+    BoardDashboardKpis kpis = service.dashboard(5L, BOARD);
+    assertThat(kpis.avgCycleTimeSeconds()).isEqualTo(500L);
+    // Von drei Karten trägt genau eine zur Cycle Time bei — die Datenbasis nennt sie einzeln.
+    assertThat(kpis.cycleTimeSampleCount()).isEqualTo(1);
   }
 
   @Test
@@ -233,7 +237,9 @@ class CardCycleTimeServiceTest {
         List.of(tr(1L, 20L, "Backlog", NOW.minusSeconds(500), 500L)),
         List.of(col(20L, "Backlog", 0)));
 
-    assertThat(service.dashboard(5L, BOARD).avgCycleTimeSeconds()).isNull();
+    BoardDashboardKpis kpis = service.dashboard(5L, BOARD);
+    assertThat(kpis.avgCycleTimeSeconds()).isNull();
+    assertThat(kpis.cycleTimeSampleCount()).isZero();
   }
 
   @Test

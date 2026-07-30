@@ -219,6 +219,25 @@ public class BoardService {
   }
 
   /**
+   * Name und Archiv-Zustand des Boards — <strong>einschließlich archivierter Boards</strong>. Für
+   * modulfremde Use-Cases, die den Ort einer Sache benennen müssen, statt auf das Board zuzugreifen
+   * (die Kartensuche nennt Projekt/Board/Spalte eines Treffers, #489).
+   *
+   * <p>Bewusst anders als {@link #requireProjectId(long)} und {@link #getBoard(long, long)}: Dort
+   * gilt ein archiviertes Board wie nicht vorhanden, weil dort etwas mit ihm geschehen soll. Hier
+   * wird es nur benannt — eine Karte auf einem archivierten Board bleibt auffindbar, und ein
+   * Treffer ohne Boardnamen wäre für den Suchenden weniger nützlich, nicht sicherer. Der
+   * Archiv-Zustand wird deshalb mitgeliefert statt verschwiegen.
+   *
+   * @throws BoardNotFoundException wenn das Board nicht existiert
+   */
+  @Transactional(readOnly = true)
+  public BoardSummary requireBoardSummary(long boardId) {
+    Board board = requireBoardIncludingArchived(boardId);
+    return new BoardSummary(board.requireId(), board.name(), board.isArchived());
+  }
+
+  /**
    * Spalte des Boards. Die Board-Zugehörigkeit ist Teil der Zusicherung: eine Spalte eines anderen
    * Boards gilt wie eine unbekannte Spalte (kein Existenz-Leak fremder Boards).
    *
@@ -243,14 +262,15 @@ public class BoardService {
    * und Projekt für ihre eigene Rechteprüfung ableiten müssen.
    *
    * <p>Bewusst ohne Board-Parameter und damit ohne die Zusicherung von {@link #requireColumn(long,
-   * long)}: Wer das Board noch gar nicht kennt, kann es nicht mitgeben. Die Rechteprüfung des
-   * Aufrufers findet danach auf dem hier aufgelösten Projekt statt — ein Existenz-Leak entsteht
-   * nicht, weil ohne Mitgliedschaft 404 folgt.
+   * long)}: Wer das Board noch gar nicht kennt, kann es nicht mitgeben. Deshalb auch bewusst ohne
+   * {@code require*}-Präfix — der verspricht im Bestand eine Zugehörigkeitsprüfung, die diese
+   * Methode nicht leistet. Die Rechteprüfung des Aufrufers findet danach auf dem hier aufgelösten
+   * Projekt statt — ein Existenz-Leak entsteht nicht, weil ohne Mitgliedschaft 404 folgt.
    *
    * @throws ColumnNotFoundException wenn die Spalte nicht existiert
    */
   @Transactional(readOnly = true)
-  public long requireColumnBoardId(long columnId) {
+  public long boardIdOfColumn(long columnId) {
     return loadColumn(columnId).boardId();
   }
 
@@ -309,4 +329,7 @@ public class BoardService {
 
   /** Spaltendarstellung. */
   public record ColumnView(Long id, String name, int position, @Nullable Integer wipLimit) {}
+
+  /** Board-Kurzinfo für Ortsangaben: Name plus Archiv-Zustand (siehe requireBoardSummary). */
+  public record BoardSummary(Long id, String name, boolean archived) {}
 }

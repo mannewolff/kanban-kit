@@ -42,7 +42,7 @@ class KanbanCompatServiceTest {
   private KanbanCompatService service;
 
   private static KanbanPrincipal bound() {
-    return new KanbanPrincipal(1L, 2L, 5L, BOARD);
+    return new KanbanPrincipal(1L, 2L, 5L, BOARD, "Token");
   }
 
   private static List<ColumnView> standardColumns() {
@@ -200,7 +200,7 @@ class KanbanCompatServiceTest {
   @Test
   void items_throwsTokenNotBound_whenPrincipalUnbound() {
     // Given
-    KanbanPrincipal unbound = new KanbanPrincipal(1L, 2L, null, null);
+    KanbanPrincipal unbound = new KanbanPrincipal(1L, 2L, null, null, "Token");
 
     // When / Then
     assertThatThrownBy(() -> service.items(unbound)).isInstanceOf(TokenNotBoundException.class);

@@ -2,6 +2,8 @@ package org.mwolff.manban.card.web;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotEmpty;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import java.util.List;
 import org.jspecify.annotations.Nullable;
@@ -22,6 +24,29 @@ import org.springframework.web.bind.annotation.RestController;
  */
 @RestController
 class ProjectIdeaController {
+
+  /**
+   * Obergrenze für ein Stapel-Anlegen. Gewählt wie bei den bestehenden Bulk-Endpunkten ({@code
+   * bulk-archive}/{@code bulk-delete}, {@code CardController}), damit im Projekt genau eine
+   * Mengen-Obergrenze gilt statt zweier divergierender Zahlen. Für den Anwendungsfall
+   * „Spezifikation importieren" ist der Wert reichlich bemessen — realistische Dokumente haben
+   * Dutzende Abschnitte —, und er begrenzt die Verstärkung: Ein Aufruf kann nicht mehr Karten
+   * erzeugen, als ein Bulk-Aufruf heute schon verändern darf. (Ein allgemeines Rate Limiting
+   * existiert im Projekt bislang nirgends; diese Grenze ersetzt es nicht, sie deckelt nur diesen
+   * Endpoint.)
+   */
+  static final int MAX_IDEAS_PER_BATCH = 200;
+
+  /**
+   * Längengrenze der Beschreibung im Stapel-Import. Orientiert sich an der Kommentar-Grenze ({@code
+   * CommentController}: 10.000) — dieselbe Größenordnung „ein Block Fließtext". Der Import schreibt
+   * ganze Dokumentabschnitte in Beschreibungen; ohne Grenze wäre die Antwortgröße einer Anfrage
+   * allein durch die Body-Grenze des Servers bestimmt. Bewusst nur hier und nicht nachträglich an
+   * den Bestandswegen ({@code POST /ideas}, {@code POST /cards}), die weiterhin unbegrenzt annehmen
+   * — eine Verschärfung dort würde bestehende Karten-Bearbeitungen brechen und gehört in ein
+   * eigenes Issue.
+   */
+  static final int MAX_DESCRIPTION_LENGTH = 10_000;
 
   private final CardService cards;
 
@@ -44,8 +69,47 @@ class ProjectIdeaController {
         userId, projectId, request.title(), request.description(), request.targetBoardId());
   }
 
+  /**
+   * Legt mehrere Pool-Ideen in einem Zug an (#492) — Ziel des Spezifikations-Imports, der die
+   * Markdown-Datei im Browser auflöst und nur die fertigen Karten hierher schickt. Antwort: die
+   * angelegten Ideen in Eingabereihenfolge, jeweils mit {@code id} und vergebener {@code number}.
+   *
+   * <p>Alles-oder-nichts: Verletzt ein Element die Feldgrenzen, lehnt die Bean-Validation die ganze
+   * Anfrage mit 400 ab, bevor der Service läuft — es entsteht keine einzige Idee. Begründung der
+   * Entscheidung im Javadoc von {@link CardService#createProjectIdeas}.
+   */
+  @PostMapping("/api/projects/{projectId}/ideas/batch")
+  @ResponseStatus(HttpStatus.CREATED)
+  List<CardView> createBatch(
+      @AuthenticationPrincipal Long userId,
+      @PathVariable long projectId,
+      @Valid @RequestBody CreateIdeasBatchRequest request) {
+    List<CardService.NewIdea> ideas =
+        request.ideas().stream()
+            .map(i -> new CardService.NewIdea(i.title(), i.description()))
+            .toList();
+    return cards.createProjectIdeas(userId, projectId, ideas, request.targetBoardId());
+  }
+
   record CreateIdeaRequest(
       @NotBlank @Size(max = 300) String title,
       @Nullable String description,
+      @Nullable Long targetBoardId) {}
+
+  /**
+   * Ein Element des Stapels. Titelgrenze wie an allen anderen Anlegewegen (300); die
+   * Beschreibungsgrenze führt dieser Endpoint neu ein, siehe {@link #MAX_DESCRIPTION_LENGTH}.
+   */
+  record BatchIdeaItem(
+      @NotBlank @Size(max = 300) String title,
+      @Nullable @Size(max = MAX_DESCRIPTION_LENGTH) String description) {}
+
+  /**
+   * Eine leere Liste ist eine Fehleingabe und keine leere Erfolgsantwort ({@code @NotEmpty} → 400)
+   * — dasselbe Verhalten wie bei den bestehenden Bulk-Endpunkten. Das {@code targetBoardId} gilt
+   * für alle Elemente.
+   */
+  record CreateIdeasBatchRequest(
+      @NotEmpty @Size(max = MAX_IDEAS_PER_BATCH) List<@Valid @NotNull BatchIdeaItem> ideas,
       @Nullable Long targetBoardId) {}
 }

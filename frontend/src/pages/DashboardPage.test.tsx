@@ -4,6 +4,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { boardsApi } from '../api/boards'
 import { cardsApi, type Card, type CardDetail } from '../api/cards'
+import { ApiError } from '../api/client'
 import { dashboardApi, type BoardDashboardKpis } from '../api/dashboard'
 import { projectsApi } from '../api/projects'
 import { DashboardPage } from './DashboardPage'
@@ -44,7 +45,7 @@ vi.mock('@mui/x-charts/LineChart', () => ({
   MarkElement: ({ x, y }: MarkStubProps) => <circle cx={x} cy={y} r={3} />,
 }))
 vi.mock('../api/boards', () => ({ boardsApi: { get: vi.fn() } }))
-vi.mock('../api/cards', () => ({ cardsApi: { list: vi.fn() } }))
+vi.mock('../api/cards', () => ({ cardsApi: { get: vi.fn(), list: vi.fn() } }))
 vi.mock('../api/dashboard', () => ({ dashboardApi: { get: vi.fn() } }))
 vi.mock('../api/projects', () => ({ projectsApi: { list: vi.fn() } }))
 
@@ -77,7 +78,10 @@ vi.mock('../components/CardDetailModal', () => ({
 }))
 
 const mBoards = boardsApi as unknown as { get: ReturnType<typeof vi.fn> }
-const mCards = cardsApi as unknown as { list: ReturnType<typeof vi.fn> }
+const mCards = cardsApi as unknown as {
+  get: ReturnType<typeof vi.fn>
+  list: ReturnType<typeof vi.fn>
+}
 const mDashboard = dashboardApi as unknown as { get: ReturnType<typeof vi.fn> }
 const mProjects = projectsApi as unknown as { list: ReturnType<typeof vi.fn> }
 
@@ -115,7 +119,8 @@ const kpis: BoardDashboardKpis = {
   ],
   avgLeadTimeSeconds: 2 * 86_400 + 3 * 3600,
   leadTimeSampleCount: 5,
-  avgCycleTimeSeconds: null,
+  avgCycleTimeSeconds: 3600,
+  cycleTimeSampleCount: 4,
   outliers: [{ cardId: 9, number: 42, title: 'Hängt fest', columnName: 'Review', dwellSeconds: 700_000 }],
 }
 
@@ -135,7 +140,7 @@ describe('DashboardPage', () => {
     mBoards.get.mockResolvedValue({ id: 1, projectId: 9, name: 'B', createdAt: '', columns: [] })
     mProjects.list.mockResolvedValue([{ id: 9, name: 'Projekt', role: 'VIEWER', createdAt: '' }])
     mDashboard.get.mockResolvedValue(kpis)
-    mCards.list.mockResolvedValue([outlierCard])
+    mCards.get.mockResolvedValue(outlierCard)
   })
 
   it('zeigt den Breadcrumb-Pfad ab Projekte', async () => {
@@ -143,10 +148,26 @@ describe('DashboardPage', () => {
     expect(await screen.findByRole('link', { name: 'Projekte' })).toHaveAttribute('href', '/')
   })
 
-  it('zeigt Lead/Cycle-Time (Cycle null als n. v.)', async () => {
+  it('zeigt Lead und Cycle Time als lesbare Dauern', async () => {
     renderPage()
     expect(await screen.findByText('2 T 3 Std')).toBeInTheDocument()
-    // Zweimal „n. v.“: die Cycle Time ohne Datenbasis und die Spalte „Done“ ohne Messung.
+    expect(screen.getByText('1 Std 0 Min')).toBeInTheDocument()
+    // Einmal „n. v.“: nur die Spalte „Done“ ohne Messung.
+    expect(screen.getAllByText('n. v.')).toHaveLength(1)
+  })
+
+  it('nennt die Datenbasis der Cycle Time neben ihrem Wert', async () => {
+    renderPage()
+    expect(await screen.findByText('4 Messungen')).toBeInTheDocument()
+  })
+
+  it('nimmt die Cycle Time ohne Datenbasis zurück wie eine Kachel ohne Messung', async () => {
+    mDashboard.get.mockResolvedValue({ ...kpis, avgCycleTimeSeconds: null, cycleTimeSampleCount: 0 })
+    renderPage()
+    // Die Hero-Zahl steht weiter, die Cycle Time sagt ausdrücklich, dass ihr die Messung fehlt —
+    // dieselbe Aussage wie bei den Spalten-Kacheln, nicht bloß ein zweites „n. v.“.
+    expect(await screen.findByTestId('hero-metric')).toHaveTextContent('2 T 3 Std')
+    expect(screen.getAllByText('keine Messung')).toHaveLength(2)
     expect(screen.getAllByText('n. v.')).toHaveLength(2)
   })
 
@@ -180,12 +201,29 @@ describe('DashboardPage', () => {
       avgLeadTimeSeconds: null,
       leadTimeSampleCount: 0,
       avgCycleTimeSeconds: null,
+      cycleTimeSampleCount: 0,
     })
     renderPage()
-    expect(await screen.findByText(/Noch keine abgeschlossene Karte/)).toBeInTheDocument()
+    expect(await screen.findByText(/Noch keine abgeschlossene Karte —/)).toBeInTheDocument()
     expect(screen.queryByTestId('hero-metric')).not.toBeInTheDocument()
     // Nur die Spalte „Done“ darf jetzt noch „n. v.“ zeigen — keine hervorgehobene Leerangabe.
     expect(screen.getAllByText('n. v.')).toHaveLength(1)
+  })
+
+  it('blendet eine vorhandene Cycle Time nicht hinter dem Leer-Hinweis aus', async () => {
+    // Nur die Lead Time fehlt: der Hinweis würde sonst eine gemessene Zahl still verschlucken.
+    mDashboard.get.mockResolvedValue({
+      ...kpis,
+      avgLeadTimeSeconds: null,
+      leadTimeSampleCount: 0,
+    })
+    renderPage()
+    expect(await screen.findByText('1 Std 0 Min')).toBeInTheDocument()
+    expect(screen.queryByText(/Noch keine abgeschlossene Karte —/)).not.toBeInTheDocument()
+    // Die leere Hero-Zahl steht zurückgenommen da und behauptet keinen Durchschnitt aus 0 Karten.
+    expect(screen.getByTestId('hero-metric')).toHaveTextContent('n. v.')
+    expect(screen.getByText(/noch keine abgeschlossene Karte\./)).toBeInTheDocument()
+    expect(screen.queryByText(/Durchschnitt aus 0/)).not.toBeInTheDocument()
   })
 
   it('zeigt die Verweildauer je Spalte als lesbare Dauer statt als Dezimalstunden', async () => {
@@ -226,6 +264,19 @@ describe('DashboardPage', () => {
     expect(screen.queryByText('längste Spalte')).not.toBeInTheDocument()
   })
 
+  it('markiert keine Spalte, solange nur eine einzige Spalte gemessen wurde', async () => {
+    mDashboard.get.mockResolvedValue({
+      ...kpis,
+      columnDwell: [
+        { columnId: 1, columnName: 'Ready', avgDwellSeconds: 7200, sampleCount: 3 },
+        { columnId: 2, columnName: 'Done', avgDwellSeconds: null, sampleCount: 0 },
+      ],
+    })
+    renderPage()
+    expect(await screen.findByText('keine Messung')).toBeInTheDocument()
+    expect(screen.queryByText('längste Spalte')).not.toBeInTheDocument()
+  })
+
   it('rendert das Durchsatz-Liniendiagramm', async () => {
     renderPage()
     expect(await screen.findByTestId('series-values')).toHaveTextContent('2,5')
@@ -251,6 +302,31 @@ describe('DashboardPage', () => {
     const labels = await screen.findAllByTestId('throughput-value')
     // Die zweite Woche (1) bleibt unbeschriftet: weder Rand noch Maximum.
     expect(labels.map((l) => l.textContent)).toEqual(['2', '7', '3'])
+  })
+
+  it('blendet die Wert-Labels für Screenreader aus — die Tabelle trägt dieselben Zahlen', async () => {
+    renderPage()
+    const labels = await screen.findAllByTestId('throughput-value')
+    labels.forEach((label) => expect(label).toHaveAttribute('aria-hidden', 'true'))
+  })
+
+  it('setzt das Label des Maximums unter den Punkt, die übrigen darüber', async () => {
+    mDashboard.get.mockResolvedValue({
+      ...kpis,
+      throughput: [
+        { weekStart: '2026-06-01T09:00:00Z', doneCount: 2 },
+        { weekStart: '2026-06-08T09:00:00Z', doneCount: 7 },
+        { weekStart: '2026-06-15T09:00:00Z', doneCount: 3 },
+      ],
+    })
+    renderPage()
+    const labels = await screen.findAllByTestId('throughput-value')
+    // Das Maximum (7) liegt am oberen Plotrand — sein Label weicht nach unten aus. So ragt es
+    // nicht aus dem Plot und kollidiert nicht mit dem Label eines benachbarten Randpunkts.
+    expect(labels.map((l) => l.textContent)).toEqual(['2', '7', '3'])
+    expect(labels[0]).toHaveAttribute('dy', '-10')
+    expect(labels[1]).toHaveAttribute('dy', '20')
+    expect(labels[2]).toHaveAttribute('dy', '-10')
   })
 
   it('nennt im Wochenlabel auch das Jahr', async () => {
@@ -292,12 +368,15 @@ describe('DashboardPage', () => {
     expect(screen.getByText('8 T 2 Std')).toBeInTheDocument() // 700000 s
   })
 
-  it('öffnet per Klick auf eine Ausreißer-Zeile die zugehörige Karte im Ansichtsmodus', async () => {
+  it('öffnet per Klick auf eine Ausreißer-Zeile die Karte über den Einzelabruf', async () => {
     const user = userEvent.setup()
     renderPage()
     await user.click(await screen.findByRole('button', { name: 'Karte 42 öffnen: Hängt fest' }))
     const detail = await screen.findByTestId('card-detail')
-    expect(mCards.list).toHaveBeenCalledWith(1)
+    // Genau ein Einzelabruf — die Board-Kartenliste wird nicht mehr geladen (#515).
+    expect(mCards.get).toHaveBeenCalledTimes(1)
+    expect(mCards.get).toHaveBeenCalledWith(9)
+    expect(mCards.list).not.toHaveBeenCalled()
     expect(within(detail).getByTestId('detail-title')).toHaveTextContent('Hängt fest')
     expect(within(detail).getByTestId('detail-column')).toHaveTextContent('Review')
     expect(within(detail).getByTestId('detail-can-edit')).toHaveTextContent('false')
@@ -312,7 +391,7 @@ describe('DashboardPage', () => {
     await user.keyboard('{Enter}')
     expect(await screen.findByTestId('card-detail')).toBeInTheDocument()
     // Der gebubbelte Klick des Auslösers darf die Zeile nicht ein zweites Mal auslösen.
-    expect(mCards.list).toHaveBeenCalledTimes(1)
+    expect(mCards.get).toHaveBeenCalledTimes(1)
   })
 
   it('öffnet die Karte auch bei einem Klick neben den Auslöser in dieselbe Zeile', async () => {
@@ -324,7 +403,7 @@ describe('DashboardPage', () => {
   })
 
   it('meldet eine nicht mehr vorhandene Karte, statt ein leeres Modal zu zeigen', async () => {
-    mCards.list.mockResolvedValue([])
+    mCards.get.mockRejectedValue(new ApiError(404, 'Not found'))
     const user = userEvent.setup()
     renderPage()
     await user.click(await screen.findByRole('button', { name: 'Karte 42 öffnen: Hängt fest' }))
@@ -334,8 +413,8 @@ describe('DashboardPage', () => {
     expect(screen.queryByTestId('card-detail')).not.toBeInTheDocument()
   })
 
-  it('meldet einen Fehler, wenn die Kartenliste nicht geladen werden kann', async () => {
-    mCards.list.mockRejectedValue(new Error('offline'))
+  it('meldet einen Fehler, wenn die Karte nicht geladen werden kann', async () => {
+    mCards.get.mockRejectedValue(new Error('offline'))
     const user = userEvent.setup()
     renderPage()
     await user.click(await screen.findByRole('button', { name: 'Karte 42 öffnen: Hängt fest' }))
@@ -346,9 +425,9 @@ describe('DashboardPage', () => {
   })
 
   it('zeigt während des Ladens ein Zeichen in der geklickten Zeile', async () => {
-    let release: (cards: Card[]) => void = () => {}
-    mCards.list.mockReturnValue(
-      new Promise<Card[]>((resolve) => {
+    let release: (card: Card) => void = () => {}
+    mCards.get.mockReturnValue(
+      new Promise<Card>((resolve) => {
         release = resolve
       }),
     )
@@ -359,19 +438,36 @@ describe('DashboardPage', () => {
     const row = within(table).getAllByRole('row')[1]
     expect(row).toHaveAttribute('aria-busy', 'true')
     expect(within(row).getByRole('progressbar')).toBeInTheDocument()
-    release([outlierCard])
+    release(outlierCard)
     expect(await screen.findByTestId('card-detail')).toBeInTheDocument()
     expect(row).toHaveAttribute('aria-busy', 'false')
   })
 
-  it('lädt die Kartenliste beim zweiten Öffnen nicht erneut', async () => {
+  it('ignoriert weitere Klicks, solange eine Karte lädt — kein Doppel-Request', async () => {
+    let release: (card: Card) => void = () => {}
+    mCards.get.mockReturnValue(
+      new Promise<Card>((resolve) => {
+        release = resolve
+      }),
+    )
+    const user = userEvent.setup()
+    renderPage()
+    const trigger = await screen.findByRole('button', { name: 'Karte 42 öffnen: Hängt fest' })
+    await user.click(trigger)
+    await user.click(trigger)
+    expect(mCards.get).toHaveBeenCalledTimes(1)
+    release(outlierCard)
+    expect(await screen.findByTestId('card-detail')).toBeInTheDocument()
+  })
+
+  it('lädt die Karte beim zweiten Öffnen erneut — der Listen-Cache ist entfallen', async () => {
     const user = userEvent.setup()
     renderPage()
     await user.click(await screen.findByRole('button', { name: 'Karte 42 öffnen: Hängt fest' }))
     await user.click(await screen.findByRole('button', { name: 'Detail schließen' }))
     await user.click(screen.getByRole('button', { name: 'Karte 42 öffnen: Hängt fest' }))
     expect(await screen.findByTestId('card-detail')).toBeInTheDocument()
-    expect(mCards.list).toHaveBeenCalledTimes(1)
+    expect(mCards.get).toHaveBeenCalledTimes(2)
   })
 
   it('zeigt „Keine Ausreißer." bei leerer Liste', async () => {

@@ -7,8 +7,10 @@ import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mwolff.manban.AbstractIntegrationTest;
+import org.mwolff.manban.card.application.ActorContext.ActorStamp;
 import org.mwolff.manban.card.application.CardActivityRepository;
 import org.mwolff.manban.card.domain.CardActivity;
+import org.mwolff.manban.card.domain.CardActivityOrigin;
 import org.mwolff.manban.card.domain.CardActivityType;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -60,8 +62,10 @@ class CardActivityRepositoryIT extends AbstractIntegrationTest {
 
   @Test
   void addAndFindReturnsChronologicalHistory() {
-    activity.add(cardId, userId, CardActivityType.CREATED, "Karte angelegt", T1);
-    activity.add(cardId, userId, CardActivityType.MOVED, "Verschoben nach Done", T2);
+    activity.add(
+        cardId, userId, CardActivityType.CREATED, "Karte angelegt", T1, ActorStamp.unknown());
+    activity.add(
+        cardId, userId, CardActivityType.MOVED, "Verschoben nach Done", T2, ActorStamp.unknown());
 
     List<CardActivity> history = activity.findByCardId(cardId);
 
@@ -71,6 +75,37 @@ class CardActivityRepositoryIT extends AbstractIntegrationTest {
     assertThat(history.get(0).actorUserId()).isEqualTo(userId);
     assertThat(history.get(0).createdAt()).isEqualTo(T1);
     assertThat(history.get(1).type()).isEqualTo(CardActivityType.MOVED);
+  }
+
+  @Test
+  void addPersistsActorStampRoundTrip() {
+    // Voller Stempel (Token-Herkunft samt Selbstauskunft) übersteht den Persistenz-Roundtrip.
+    activity.add(
+        cardId,
+        userId,
+        CardActivityType.CREATED,
+        "Idee angelegt",
+        T1,
+        new ActorStamp(CardActivityOrigin.TOKEN, "Nachtlauf", "claude-opus-5"));
+
+    CardActivity entry = activity.findByCardId(cardId).get(0);
+
+    assertThat(entry.origin()).isEqualTo(CardActivityOrigin.TOKEN);
+    assertThat(entry.tokenName()).isEqualTo("Nachtlauf");
+    assertThat(entry.agent()).isEqualTo("claude-opus-5");
+  }
+
+  @Test
+  void addPersistsEmptyStampAsNulls() {
+    // Unbekannte Herkunft wird wie ein Alt-Eintrag gespeichert: alle drei Spalten NULL.
+    activity.add(
+        cardId, userId, CardActivityType.CREATED, "Karte angelegt", T1, ActorStamp.unknown());
+
+    CardActivity entry = activity.findByCardId(cardId).get(0);
+
+    assertThat(entry.origin()).isNull();
+    assertThat(entry.tokenName()).isNull();
+    assertThat(entry.agent()).isNull();
   }
 
   @Test

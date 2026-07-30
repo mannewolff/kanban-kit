@@ -33,6 +33,7 @@ import { buildNavItems, type BoardContext, type NavGroup, type NavLink, type Nav
 import { canManageBoards, isPlatformAdmin } from '../lib/roles'
 import { useEditMode } from '../lib/EditModeContext'
 import { useRefetchOnFocus } from '../lib/useRefetchOnFocus'
+import { CardNumberSearch } from './CardNumberSearch'
 import { EditModeBanner, EDIT_MODE_BANNER_HEIGHT } from './EditModeBanner'
 
 const DRAWER_WIDTH = 240
@@ -410,6 +411,7 @@ export function AppShell() {
           </Box>
           {user && (
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <CardNumberSearch />
               <Tooltip title="Profil bearbeiten">
                 <ButtonBase
                   onClick={() => navigate('/profil')}

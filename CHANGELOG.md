@@ -7,6 +7,30 @@ Versionierung folgt der dreiteiligen Betriebsversion (siehe [RELEASING.md](RELEA
 Einträge je Version sind ein automatischer Auszug der Commit-Titel seit dem letzten Release,
 erzeugt von `scripts/gen-changelog.mjs`.
 
+## [1.13.0] – 2026-07-30
+
+- chore: Version auf 1.12.3 (push main)
+- Aktivitaetsverlauf: Token-Herkunft als Tatsache, Modell als Angabe anzeigen ([#518](https://github.com/mannewolff/kanban-kit/issues/518))
+- Aktivitaetsverlauf: Herkunft (Session/Token) und Modell-Angabe erfassen ([#517](https://github.com/mannewolff/kanban-kit/issues/517))
+- chore: Version auf 1.12.2 (push main)
+- Ausreisser-Modal: Klick-Guard und dokumentierte Kontextdaten-Entscheidung ([#516](https://github.com/mannewolff/kanban-kit/issues/516))
+- Einzelkarten-Endpoint GET /api/cards/{id} ([#515](https://github.com/mannewolff/kanban-kit/issues/515))
+- Durchsatz-Chart: Vertrags-Smoke-Test, aria-hidden und Label-Randfaelle ([#514](https://github.com/mannewolff/kanban-kit/issues/514))
+- Sortier-Endpoint: Doku- und Naming-Nacharbeiten aus dem Review ([#510](https://github.com/mannewolff/kanban-kit/issues/510))
+- Hero-Kennzahl: Cycle-Time-Datenbasis, KPI-Invariante und robuster Leerfall ([#513](https://github.com/mannewolff/kanban-kit/issues/513))
+- Verweildauer-Kacheln: eine Leerwert-Quelle, Engpass erst ab zwei Messungen ([#512](https://github.com/mannewolff/kanban-kit/issues/512))
+- Sortier-Toggle: Erfolgsfeedback, Busy-Sperre und Zustands-Doku ([#511](https://github.com/mannewolff/kanban-kit/issues/511))
+- Aktiv-Praedikat im CardRepositoryAdapter vereinheitlichen ([#509](https://github.com/mannewolff/kanban-kit/issues/509))
+- Spezifikation aus Markdown-Datei einlesen und als Ideen anlegen ([#493](https://github.com/mannewolff/kanban-kit/issues/493))
+- Mehrere Ideen in einem Zug anlegen: Batch-Endpoint fuer den Spec-Import ([#492](https://github.com/mannewolff/kanban-kit/issues/492))
+- chore: Version auf 1.12.1 (push main)
+- Navigationspfad Projekt / Board / Spalte im Karten-Detail ([#491](https://github.com/mannewolff/kanban-kit/issues/491))
+- Suchfeld in der Kopfzeile: Kartennummer eingeben und Karte öffnen ([#490](https://github.com/mannewolff/kanban-kit/issues/490))
+- Kartensuche per Nummer über alle eigenen Projekte ([#489](https://github.com/mannewolff/kanban-kit/issues/489))
+- Abhängigkeits-Verweise im Detail-Modal anklickbar machen ([#488](https://github.com/mannewolff/kanban-kit/issues/488))
+- .idea/ ins gitignore überführt
+- startboard.sh entfernen
+
 ## [1.12.0] – 2026-07-29
 
 - Betriebsversion auf 1.11.3 (push main)

@@ -1,8 +1,12 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AttachmentsApi } from '../api/attachments'
-import type { Card } from '../api/cards'
+import type { Board } from '../api/boards'
+import type { Card, CardByNumber } from '../api/cards'
 import type { CommentsApi } from '../api/comments'
+import type { CardLocation } from '../lib/cardLocation'
 import { CardDetailModal, parseDependencyInput } from './CardDetailModal'
 import { SnackbarProvider } from './SnackbarProvider'
 
@@ -14,6 +18,18 @@ const card: Card = {
   id: 100, boardId: 1, columnId: 10, number: 5, title: 'Aufgabe', description: '# Titel\n\n- a\n- b',
   positionInColumn: 0, archived: false, ideaStored: false, movedToDoneAt: null, dependencies: [3, 4],
   type: 'CARD', parentId: null, shortcode: null, assignees: [], dueDate: null, labels: [],
+}
+
+/** Karte, auf die der Abhängigkeits-Verweis „#3“ zeigt — bewusst auf einem anderen Board. */
+const linkedCard: CardByNumber = {
+  id: 300, boardId: 2, columnId: 20, number: 3, title: 'Vorbedingung', description: 'Text der Vorbedingung',
+  archived: false, ideaStored: false, dependencies: [], type: 'CARD', parentId: null, shortcode: null,
+  assignees: [], dueDate: null, labels: [],
+}
+
+const linkedBoard: Board = {
+  id: 2, projectId: 9, name: 'Anderes Board', createdAt: '',
+  columns: [{ id: 20, name: 'Done', position: 0, wipLimit: null }],
 }
 
 function makeApis() {
@@ -40,8 +56,10 @@ function makeApis() {
     getActivity: vi.fn().mockResolvedValue([]),
     restore: vi.fn().mockResolvedValue({ ...card }),
     moveToIdeaStorage: vi.fn().mockResolvedValue({ ...card }),
+    byNumber: vi.fn().mockResolvedValue({ ...linkedCard }),
   }
-  return { commentsApi, attachmentsApi, cardsApi }
+  const boardsApi = { get: vi.fn().mockResolvedValue(linkedBoard) }
+  return { commentsApi, attachmentsApi, cardsApi, boardsApi }
 }
 
 describe('parseDependencyInput', () => {
@@ -370,6 +388,71 @@ describe('CardDetailModal', () => {
 
     expect(await screen.findByText(/Verschoben nach Done/)).toBeInTheDocument()
     expect(screen.getByText(/Max/)).toBeInTheDocument()
+  })
+
+  it('lässt Alt-Einträge ohne Herkunft unmarkiert', async () => {
+    // Vor V23 gespeicherte Einträge tragen keine Herkunft — sie sehen aus wie bisher.
+    const apis = makeApis()
+    apis.cardsApi.getActivity = vi.fn().mockResolvedValue([
+      { id: 1, actorUserId: 5, type: 'MOVED', detail: 'Verschoben', createdAt: '2026-01-01T10:00:00Z', origin: null, tokenName: null, agent: null },
+    ])
+    render(<CardDetailModal card={card} canEdit onClose={vi.fn()} {...apis} />)
+
+    expect(await screen.findByText(/Verschoben/)).toBeInTheDocument()
+    expect(screen.queryByTestId('activity-token')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('activity-agent')).not.toBeInTheDocument()
+  })
+
+  it('lässt Session-Einträge unmarkiert — der Mensch ist der Default', async () => {
+    const apis = makeApis()
+    apis.cardsApi.getActivity = vi.fn().mockResolvedValue([
+      { id: 1, actorUserId: 5, type: 'CREATED', detail: 'Karte angelegt', createdAt: '2026-01-01T10:00:00Z', origin: 'SESSION', tokenName: null, agent: null },
+    ])
+    render(<CardDetailModal card={card} canEdit onClose={vi.fn()} {...apis} />)
+
+    expect(await screen.findByText(/Karte angelegt/)).toBeInTheDocument()
+    expect(screen.queryByTestId('activity-token')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('activity-agent')).not.toBeInTheDocument()
+  })
+
+  it('kennzeichnet Token-Einträge mit dem Token-Namen als Tatsache', async () => {
+    const apis = makeApis()
+    apis.cardsApi.getActivity = vi.fn().mockResolvedValue([
+      { id: 1, actorUserId: 5, type: 'CREATED', detail: 'Idee angelegt', createdAt: '2026-01-01T10:00:00Z', origin: 'TOKEN', tokenName: 'Nachtlauf', agent: null },
+    ])
+    render(<CardDetailModal card={card} canEdit onClose={vi.fn()} {...apis} />)
+
+    const token = await screen.findByTestId('activity-token')
+    expect(token).toHaveTextContent('Nachtlauf')
+    expect(screen.queryByTestId('activity-agent')).not.toBeInTheDocument()
+  })
+
+  it('zeigt die Modell-Angabe eines Token-Eintrags als unverifizierte Angabe', async () => {
+    const apis = makeApis()
+    apis.cardsApi.getActivity = vi.fn().mockResolvedValue([
+      { id: 1, actorUserId: 5, type: 'CREATED', detail: 'Idee angelegt', createdAt: '2026-01-01T10:00:00Z', origin: 'TOKEN', tokenName: 'Nachtlauf', agent: 'claude-opus-5' },
+    ])
+    render(<CardDetailModal card={card} canEdit onClose={vi.fn()} {...apis} />)
+
+    expect(await screen.findByTestId('activity-token')).toHaveTextContent('Nachtlauf')
+    const agent = screen.getByTestId('activity-agent')
+    expect(agent).toHaveTextContent('claude-opus-5')
+    // Selbstauskunft, keine Tatsache: für Screenreader explizit als unverifizierte Angabe benannt.
+    expect(agent).toHaveAttribute(
+      'aria-label',
+      'Modell-Angabe des Clients, nicht verifiziert: claude-opus-5',
+    )
+  })
+
+  it('zeigt einen Token-Eintrag ohne Namen mit neutraler Beschriftung', async () => {
+    // Defensiv: origin=TOKEN, aber kein Name überliefert.
+    const apis = makeApis()
+    apis.cardsApi.getActivity = vi.fn().mockResolvedValue([
+      { id: 1, actorUserId: 5, type: 'CREATED', detail: 'Idee angelegt', createdAt: '2026-01-01T10:00:00Z', origin: 'TOKEN', tokenName: null, agent: null },
+    ])
+    render(<CardDetailModal card={card} canEdit onClose={vi.fn()} {...apis} />)
+
+    expect(await screen.findByTestId('activity-token')).toHaveTextContent('Token')
   })
 
   it('bietet bei archivierter Karte Wiederherstellen und ruft restore', async () => {
@@ -854,5 +937,155 @@ describe('CardDetailModal', () => {
 
     expect(await screen.findByRole('heading', { name: 'Titel' })).toBeInTheDocument()
     expect(onClose).not.toHaveBeenCalled()
+  })
+
+  // Abhängigkeits-Verweise (#488): #N führt projektweit zur verknüpften Karte.
+  it('stellt Abhängigkeits-Verweise ohne projectId als reinen Text dar', () => {
+    const apis = makeApis()
+    render(<CardDetailModal card={card} canEdit onClose={vi.fn()} {...apis} />)
+
+    expect(screen.getByLabelText('Abhängigkeiten')).toHaveTextContent('Abhängig von: #3, #4')
+    expect(screen.queryByRole('button', { name: 'Karte #3 öffnen' })).not.toBeInTheDocument()
+  })
+
+  it('öffnet beim Klick auf #3 die verknüpfte Karte samt Status ihres eigenen Boards', async () => {
+    const apis = makeApis()
+    render(<CardDetailModal card={card} canEdit projectId={9} columnName="In Progress" onClose={vi.fn()} {...apis} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Karte #3 öffnen' }))
+
+    expect(await screen.findByText('Vorbedingung')).toBeInTheDocument()
+    expect(apis.cardsApi.byNumber).toHaveBeenCalledWith(9, 3)
+    // Spaltenname stammt aus dem nachgeladenen fremden Board, nicht aus dem Kontext der Ausgangskarte.
+    expect(apis.boardsApi.get).toHaveBeenCalledWith(2)
+    expect(await screen.findByText('Done')).toBeInTheDocument()
+    // Der Board-Kontext der verknüpften Karte fehlt — sie wird deshalb nur gelesen.
+    expect(screen.queryByRole('button', { name: 'Bearbeiten' })).not.toBeInTheDocument()
+  })
+
+  it('führt von der verknüpften Karte per Zurück zur Ausgangskarte', async () => {
+    const apis = makeApis()
+    const onClose = vi.fn()
+    render(<CardDetailModal card={card} canEdit projectId={9} onClose={onClose} {...apis} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Karte #3 öffnen' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Zurück zur vorherigen Karte' }))
+
+    expect(await screen.findByText('Aufgabe')).toBeInTheDocument()
+    expect(screen.queryByText('Vorbedingung')).not.toBeInTheDocument()
+    // Zurück navigiert nur im Modal, es schließt es nicht.
+    expect(onClose).not.toHaveBeenCalled()
+  })
+
+  it('meldet einen nicht auflösbaren Verweis und bleibt bei der Ausgangskarte', async () => {
+    const apis = makeApis()
+    apis.cardsApi.byNumber = vi.fn().mockRejectedValue(new Error('404'))
+    render(<CardDetailModal card={card} canEdit projectId={9} onClose={vi.fn()} {...apis} />, {
+      wrapper: SnackbarProvider,
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Karte #4 öffnen' }))
+
+    expect(await screen.findByText('Karte #4 nicht gefunden — gelöscht oder kein Zugriff.')).toBeInTheDocument()
+    expect(screen.getByText('Aufgabe')).toBeInTheDocument()
+  })
+
+  it('öffnet einen Verweis per Tastatur', async () => {
+    const apis = makeApis()
+    render(<CardDetailModal card={card} canEdit projectId={9} onClose={vi.fn()} {...apis} />)
+
+    const link = screen.getByRole('button', { name: 'Karte #3 öffnen' })
+    link.focus()
+    expect(link).toHaveFocus()
+    await userEvent.keyboard('{Enter}')
+
+    expect(await screen.findByText('Vorbedingung')).toBeInTheDocument()
+  })
+
+  it('zeigt eine board-lose Pool-Idee ohne Status-Chip und ohne Board-Abruf', async () => {
+    const apis = makeApis()
+    apis.cardsApi.byNumber = vi.fn().mockResolvedValue({ ...linkedCard, boardId: null, columnId: null })
+    render(<CardDetailModal card={card} canEdit projectId={9} onClose={vi.fn()} {...apis} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Karte #3 öffnen' }))
+
+    expect(await screen.findByText('Vorbedingung')).toBeInTheDocument()
+    expect(apis.boardsApi.get).not.toHaveBeenCalled()
+    expect(screen.queryByText('Done')).not.toBeInTheDocument()
+  })
+
+  it('zeigt die verknüpfte Karte auch, wenn ihr Board nicht geladen werden kann', async () => {
+    const apis = makeApis()
+    apis.boardsApi.get = vi.fn().mockRejectedValue(new Error('403'))
+    render(<CardDetailModal card={card} canEdit projectId={9} onClose={vi.fn()} {...apis} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Karte #3 öffnen' }))
+
+    expect(await screen.findByText('Vorbedingung')).toBeInTheDocument()
+    expect(screen.queryByText('Done')).not.toBeInTheDocument()
+  })
+
+  const onBoard: CardLocation = {
+    projectId: 9,
+    projectName: 'IT-Bildungshaus',
+    board: { id: 1, name: 'Entwicklung', columnName: 'In Progress' },
+  }
+
+  it('zeigt den Ortspfad aus Projekt, Board und Spalte', () => {
+    const apis = makeApis()
+    render(
+      <MemoryRouter>
+        <CardDetailModal card={card} canEdit location={onBoard} onClose={vi.fn()} {...apis} />
+      </MemoryRouter>,
+    )
+
+    expect(screen.getByRole('link', { name: 'IT-Bildungshaus' })).toHaveAttribute('href', '/projects/9')
+    expect(screen.getByRole('link', { name: 'Entwicklung' })).toHaveAttribute('href', '/boards/1')
+    // Der Spaltenname steht im Pfad und (bei gesetztem columnName) zusätzlich im Status-Chip.
+    expect(screen.getAllByText('In Progress').length).toBeGreaterThan(0)
+  })
+
+  it('zeigt für eine board-lose Pool-Idee den verkürzten Pfad zu den Ideen', () => {
+    const apis = makeApis()
+    render(
+      <MemoryRouter>
+        <CardDetailModal
+          card={{ ...card, ideaStored: true }}
+          canEdit
+          location={{ projectId: 9, projectName: 'IT-Bildungshaus', board: null }}
+          onClose={vi.fn()}
+          {...apis}
+        />
+      </MemoryRouter>,
+    )
+
+    expect(screen.getByRole('link', { name: 'Ideen' })).toHaveAttribute('href', '/projects/9/ideas')
+    expect(screen.queryByRole('link', { name: 'Entwicklung' })).not.toBeInTheDocument()
+  })
+
+  it('zeigt ohne Ortsangabe keinen Pfad', () => {
+    const apis = makeApis()
+    render(
+      <MemoryRouter>
+        <CardDetailModal card={card} canEdit columnName="In Progress" onClose={vi.fn()} {...apis} />
+      </MemoryRouter>,
+    )
+
+    expect(screen.queryByRole('link', { name: 'IT-Bildungshaus' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link')).not.toBeInTheDocument()
+  })
+
+  it('überträgt den Ortspfad nicht auf eine über #N geöffnete Karte eines anderen Boards', async () => {
+    const apis = makeApis()
+    render(
+      <MemoryRouter>
+        <CardDetailModal card={card} canEdit projectId={9} location={onBoard} onClose={vi.fn()} {...apis} />
+      </MemoryRouter>,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Karte #3 öffnen' }))
+
+    expect(await screen.findByText('Vorbedingung')).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Entwicklung' })).not.toBeInTheDocument()
   })
 })

@@ -18,15 +18,25 @@ import org.springframework.stereotype.Component;
 @Component
 class CardRepositoryAdapter implements CardRepository {
 
-  /** Temporärer Offset weit außerhalb des realen Positionsbereichs für den Reindex. */
+  /**
+   * Temporärer Offset weit außerhalb des realen Positionsbereichs für den Reindex. Implizite
+   * Annahme wie bei {@link #PARK_MOVED_CARD}: Reale Positionen bleiben unter 100.000 — bei den
+   * Kartenzahlen einer Spalte praktisch garantiert, aber nicht erzwungen. Würde eine Spalte diese
+   * Grenze je erreichen, kollidierte der Park-Bereich mit echten Positionen.
+   */
   private static final int PARK_OFFSET = 100_000;
 
   private static final int PARK_MOVED_CARD = 999_999;
 
   /**
    * Prädikat des aktiven Positions-Namespace — dieselbe Bedingung, unter der die generierte Spalte
-   * {@code active_position} einen Wert trägt (V16). Als Konstante, damit Lesen und Schreiben beim
-   * Sortieren nachweislich dieselbe Menge treffen.
+   * {@code active_position} einen Wert trägt (V16). Die einzige Aktiv-Definition dieser Klasse:
+   * Jede Stelle, die Positionen liest oder neu vergibt (Move-Reindex, Transfer-Reindex, Sortieren),
+   * nutzt sie, damit alle nachweislich dieselbe Menge treffen. Karten außerhalb dieser Menge
+   * (archiviert, im Ideen-Speicher, im Papierkorb, Epics) halten keinen Slot und werden vom Reindex
+   * nicht angefasst — ihre {@code position_in_column} bleibt stehen, kollidiert aber nicht, weil
+   * ihre {@code active_position} NULL ist. Beim Zurückholen vergibt {@code allocateActivePosition}
+   * eine frische Position.
    */
   private static final String ACTIVE_NAMESPACE =
       "AND archived = false AND idea_stored = false AND deleted_at IS NULL AND type <> 'EPIC' ";
@@ -55,6 +65,15 @@ class CardRepositoryAdapter implements CardRepository {
   public Optional<Card> findByProjectIdAndNumber(long projectId, int number) {
     return jpa.findByProjectIdAndNumberAndDeletedAtIsNull(projectId, number)
         .map(CardRepositoryAdapter::toDomain);
+  }
+
+  @Override
+  public List<Card> findByNumberInProjects(int number, List<Long> projectIds) {
+    return jpa
+        .findByNumberAndProjectIdInAndDeletedAtIsNullOrderByProjectId(number, projectIds)
+        .stream()
+        .map(CardRepositoryAdapter::toDomain)
+        .toList();
   }
 
   @Override
@@ -206,8 +225,8 @@ class CardRepositoryAdapter implements CardRepository {
         cardId);
     jdbc.update(
         "UPDATE card SET position_in_column = position_in_column + ? "
-            + "WHERE archived = false AND idea_stored = false AND type <> 'EPIC' "
-            + "AND id <> ? AND column_id IN (?, ?)",
+            + "WHERE id <> ? AND column_id IN (?, ?) "
+            + ACTIVE_NAMESPACE,
         PARK_OFFSET,
         cardId,
         oldColumnId,
@@ -273,9 +292,11 @@ class CardRepositoryAdapter implements CardRepository {
     lockColumnPositions(List.of(oldColumnId, targetColumnId));
     requireStillIn(cardId, oldColumnId);
 
-    // Ans Ende der Zielspalte (hinter deren aktive Karten) — kollisionsfrei zum
-    // active_position-Unique.
-    int endPosition = activeCardIds(targetColumnId, cardId).size();
+    // Ans Ende der Zielspalte (hinter deren höchste aktive Position) — kollisionsfrei zum
+    // active_position-Unique. Bewusst max+1 statt der Anzahl aktiver Karten: Das aktive
+    // Positionsband darf Lücken haben (eine Karte in der Mitte wird archiviert oder gelöscht und
+    // gibt ihren Slot ohne Reindex frei), und die Anzahl träfe dann eine noch belegte Position.
+    int endPosition = jpa.maxActivePositionInColumn(targetColumnId) + 1;
     // project_id muss mit dem Ziel-Board wandern (bei board-/projektübergreifendem Umzug): sonst
     // bliebe project_id am Quellprojekt und die projektweite Nummer (uq (project_id, number)) würde
     // gegen die falsche Menge geprüft.
@@ -325,8 +346,9 @@ class CardRepositoryAdapter implements CardRepository {
 
   private List<Long> activeCardIds(long columnId, long excludeCardId) {
     return jdbc.queryForList(
-        "SELECT id FROM card WHERE column_id = ? AND archived = false AND idea_stored = false "
-            + "AND type <> 'EPIC' AND id <> ? ORDER BY position_in_column",
+        "SELECT id FROM card WHERE column_id = ? AND id <> ? "
+            + ACTIVE_NAMESPACE
+            + "ORDER BY position_in_column",
         Long.class,
         columnId,
         excludeCardId);

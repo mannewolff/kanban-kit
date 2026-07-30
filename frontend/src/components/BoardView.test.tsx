@@ -1386,5 +1386,66 @@ describe('BoardView', () => {
       expect(await screen.findByText('Sortieren fehlgeschlagen.')).toBeInTheDocument()
       expect(onCardsChanged).not.toHaveBeenCalled()
     })
+
+    it('meldet den Erfolg mit der tatsächlich sortierten Richtung', async () => {
+      mColumns.sortByNumber.mockResolvedValue(undefined)
+      render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} />, {
+        wrapper: SnackbarProvider,
+      })
+
+      fireEvent.click(screen.getByLabelText(ascLabel('Backlog')))
+      expect(await screen.findByText('Spalte Backlog aufsteigend sortiert')).toBeInTheDocument()
+
+      fireEvent.click(screen.getByLabelText(descLabel('Backlog')))
+      expect(await screen.findByText('Spalte Backlog absteigend sortiert')).toBeInTheDocument()
+    })
+
+    it('meldet keinen Erfolg, wenn das Sortieren fehlschlägt', async () => {
+      mColumns.sortByNumber.mockRejectedValue(new Error('fail'))
+      render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} />, {
+        wrapper: SnackbarProvider,
+      })
+
+      fireEvent.click(screen.getByLabelText(ascLabel('Backlog')))
+
+      expect(await screen.findByText('Sortieren fehlgeschlagen.')).toBeInTheDocument()
+      expect(screen.queryByText('Spalte Backlog aufsteigend sortiert')).not.toBeInTheDocument()
+    })
+
+    it('sperrt den Button der laufenden Spalte gegen den zweiten Klick', async () => {
+      let finish: () => void = () => {}
+      mColumns.sortByNumber.mockReturnValue(
+        new Promise<void>((resolve) => {
+          finish = () => resolve()
+        }),
+      )
+      render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} />, {
+        wrapper: SnackbarProvider,
+      })
+
+      fireEvent.click(screen.getByLabelText(ascLabel('Backlog')))
+      await waitFor(() => expect(screen.getByLabelText(ascLabel('Backlog'))).toBeDisabled())
+
+      // Der zweite Klick während des Aufrufs läuft ins Leere — kein Doppel-Request.
+      fireEvent.click(screen.getByLabelText(ascLabel('Backlog')))
+      expect(mColumns.sortByNumber).toHaveBeenCalledTimes(1)
+      // Andere Spalten bleiben bedienbar: gesperrt ist nur die laufende Spalte.
+      expect(screen.getByLabelText(ascLabel('Done'))).toBeEnabled()
+
+      finish()
+      expect(await screen.findByLabelText(descLabel('Backlog'))).toBeEnabled()
+    })
+
+    it('gibt den Button nach einem Fehlschlag wieder frei', async () => {
+      mColumns.sortByNumber.mockRejectedValue(new Error('fail'))
+      render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} />, {
+        wrapper: SnackbarProvider,
+      })
+
+      fireEvent.click(screen.getByLabelText(ascLabel('Backlog')))
+
+      expect(await screen.findByText('Sortieren fehlgeschlagen.')).toBeInTheDocument()
+      expect(screen.getByLabelText(ascLabel('Backlog'))).toBeEnabled()
+    })
   })
 })

@@ -30,6 +30,9 @@ function isTextEntry(target: EventTarget | null): boolean {
  * 3. **Keine Modifikatoren.** Strg/Alt/Meta gehören dem Browser bzw. dem Betriebssystem. Umschalt
  *    bleibt erlaubt — auf manchen Belegungen ist das Zeichen nur damit erreichbar.
  *
+ * Greift das Kürzel, wird die Standardwirkung der Taste unterdrückt — sonst tippte der Browser das
+ * Zeichen noch in das Feld, das der Handler gerade fokussiert hat.
+ *
  * `enabled` schaltet das Kürzel scharf; bei `false` hängt gar kein Listener am Dokument.
  */
 export function useKeyboardShortcut(key: string, enabled: boolean, onTrigger: () => void): void {
@@ -53,6 +56,10 @@ export function useKeyboardShortcut(key: string, enabled: boolean, onTrigger: ()
         isTextEntry(event.target) ||
         document.querySelector('[role="dialog"]') !== null
       if (!blocked) {
+        // Greift das Kürzel, darf das Zeichen nicht zusätzlich irgendwo landen: Der Handler setzt
+        // den Fokus mitunter in ein Eingabefeld (Suchfeld, Dialog), und der Browser tippte das
+        // Zeichen sonst genau dort ein, nachdem der Handler gelaufen ist.
+        event.preventDefault()
         handler.current()
       }
     }

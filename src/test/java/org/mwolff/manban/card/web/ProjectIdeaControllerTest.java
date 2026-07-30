@@ -66,4 +66,24 @@ class ProjectIdeaControllerTest {
     verify(service).createProjectIdea(7L, 3L, "T", "d", 9L);
     assertThat(result.id()).isEqualTo(1L);
   }
+
+  @Test
+  void createBatch_mapsRequestItemsToNewIdeas_andPassesSharedTargetBoard() {
+    List<CardService.NewIdea> expected =
+        List.of(new CardService.NewIdea("A", "a"), new CardService.NewIdea("B", null));
+    when(service.createProjectIdeas(7L, 3L, expected, 9L)).thenReturn(List.of(idea(), idea()));
+
+    List<CardView> result =
+        controller.createBatch(
+            7L,
+            3L,
+            new ProjectIdeaController.CreateIdeasBatchRequest(
+                List.of(
+                    new ProjectIdeaController.BatchIdeaItem("A", "a"),
+                    new ProjectIdeaController.BatchIdeaItem("B", null)),
+                9L));
+
+    verify(service).createProjectIdeas(7L, 3L, expected, 9L);
+    assertThat(result).hasSize(2);
+  }
 }

@@ -201,6 +201,9 @@ export function BoardPage() {
     return <Typography color="text.secondary">Board nicht gefunden.</Typography>
   }
 
+  // Spalte der geöffneten Karte — Status-Chip und Ortspfad im Detail-Modal lesen dieselbe Angabe.
+  const selectedColumnName = board.columns.find((c) => c.id === selectedCard?.columnId)?.name
+
   return (
     <Box>
       <Stack direction="row" alignItems="center" spacing={0.5} sx={{ mb: 2 }}>
@@ -247,12 +250,18 @@ export function BoardPage() {
           key={selectedCard.id}
           card={selectedCard}
           canEdit={canEdit}
+          projectId={board.projectId}
           canModerateComments={canModerate}
           epics={epics}
           members={members}
           boardLabels={labels}
           initialEditing={openEditing}
-          columnName={board.columns.find((c) => c.id === selectedCard.columnId)?.name}
+          columnName={selectedColumnName}
+          location={{
+            projectId: board.projectId,
+            projectName,
+            board: { id: board.id, name: board.name, columnName: selectedColumnName },
+          }}
           onClose={() => setSelectedCard(null)}
           onChanged={() => {
             reloadCards()

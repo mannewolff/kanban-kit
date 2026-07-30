@@ -100,30 +100,51 @@ public class ProjectService {
 
   @Transactional(readOnly = true)
   public List<ProjectView> list(long userId) {
-    // Plattform-Admin: alle Projekte. Rolle = eigene Mitgliedschaft, sonst OWNER (Vollzugriff).
+    // Rolle = eigene Mitgliedschaft, sonst OWNER — letzteres greift nur beim Plattform-Admin, der
+    // Projekte ohne eigene Mitgliedschaft sieht und darin Vollzugriff hat.
+    java.util.Map<Long, ProjectRole> ownRoles =
+        memberships.findByUserId(userId).stream()
+            .collect(
+                java.util.stream.Collectors.toMap(
+                    ProjectMembership::projectId, ProjectMembership::role));
+    return readableProjects(userId).stream()
+        .map(
+            p ->
+                new ProjectView(
+                    p.requireId(),
+                    p.name(),
+                    ownRoles.getOrDefault(p.id(), ProjectRole.OWNER),
+                    p.createdAt()))
+        .toList();
+  }
+
+  /**
+   * Projekte, in denen der Benutzer lesen darf — nur Id und Name. Für modulfremde Use-Cases, die
+   * über die Projekte des Aufrufers hinweg arbeiten und benennen müssen, aus welchem Projekt ein
+   * Ergebnis stammt (projektübergreifende Kartensuche, #489).
+   *
+   * <p>Dieselbe Sichtbarkeit wie {@link #list(long)}, ohne Rolle und Erstellzeitpunkt: Ein
+   * Plattform-Admin sieht alle Projekte, jeder andere genau seine Mitgliedschaften. Die Zusicherung
+   * für den Aufrufer lautet: Was hier nicht auftaucht, darf er auch nicht durchsuchen.
+   */
+  @Transactional(readOnly = true)
+  public List<AccessibleProject> listAccessible(long userId) {
+    return readableProjects(userId).stream()
+        .map(p -> new AccessibleProject(p.requireId(), p.name()))
+        .toList();
+  }
+
+  /**
+   * Die für den Benutzer lesbaren Projekte: alle für den Plattform-Admin, sonst die seiner
+   * Mitgliedschaften. Ohne eigenes {@code @Transactional} — die aufrufenden Use-Cases tragen es je
+   * selbst, und Self-Invocation über den Proxy gäbe es hier ohnehin nicht (java:S6809).
+   */
+  private List<Project> readableProjects(long userId) {
     if (permissions.isPlatformAdmin(userId)) {
-      java.util.Map<Long, ProjectRole> ownRoles =
-          memberships.findByUserId(userId).stream()
-              .collect(
-                  java.util.stream.Collectors.toMap(
-                      ProjectMembership::projectId, ProjectMembership::role));
-      return projects.findAll().stream()
-          .map(
-              p ->
-                  new ProjectView(
-                      p.requireId(),
-                      p.name(),
-                      ownRoles.getOrDefault(p.id(), ProjectRole.OWNER),
-                      p.createdAt()))
-          .toList();
+      return projects.findAll();
     }
     return memberships.findByUserId(userId).stream()
-        .map(
-            m ->
-                projects
-                    .findById(m.projectId())
-                    .map(p -> new ProjectView(p.requireId(), p.name(), m.role(), p.createdAt()))
-                    .orElse(null))
+        .map(m -> projects.findById(m.projectId()).orElse(null))
         .filter(java.util.Objects::nonNull)
         .toList();
   }
@@ -157,4 +178,7 @@ public class ProjectService {
 
   /** Projektdarstellung inkl. der Rolle des anfragenden Benutzers. */
   public record ProjectView(Long id, String name, ProjectRole role, Instant createdAt) {}
+
+  /** Projekt-Kurzinfo für modulfremde Aufrufer: Id und Name (siehe {@link #listAccessible}). */
+  public record AccessibleProject(Long id, String name) {}
 }

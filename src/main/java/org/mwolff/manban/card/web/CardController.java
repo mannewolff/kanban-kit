@@ -87,6 +87,11 @@ class CardController {
     return cards.listEpics(userId, boardId);
   }
 
+  @GetMapping("/api/cards/{cardId}")
+  CardView get(@AuthenticationPrincipal Long userId, @PathVariable long cardId) {
+    return cards.getCard(userId, cardId);
+  }
+
   @PatchMapping("/api/cards/{cardId}")
   CardView update(
       @AuthenticationPrincipal Long userId,
@@ -255,7 +260,15 @@ class CardController {
   }
 
   private static ActivityView activityView(CardActivity a) {
-    return new ActivityView(a.id(), a.actorUserId(), a.type().name(), a.detail(), a.createdAt());
+    return new ActivityView(
+        a.id(),
+        a.actorUserId(),
+        a.type().name(),
+        a.detail(),
+        a.createdAt(),
+        a.origin() == null ? null : a.origin().name(),
+        a.tokenName(),
+        a.agent());
   }
 
   // Nur `title` ist Pflicht. Die übrigen Felder sind optional: Jackson lässt sie bei fehlendem
@@ -306,10 +319,15 @@ class CardController {
 
   record LabelsRequest(@Nullable List<Long> labels) {}
 
+  // origin/tokenName sind server-verifiziert, agent ist Client-Selbstauskunft (Issue #517);
+  // alle drei null bei Alt-Einträgen vor V23.
   record ActivityView(
       @Nullable Long id,
       @Nullable Long actorUserId,
       String type,
       String detail,
-      Instant createdAt) {}
+      Instant createdAt,
+      @Nullable String origin,
+      @Nullable String tokenName,
+      @Nullable String agent) {}
 }

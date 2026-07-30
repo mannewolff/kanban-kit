@@ -3,6 +3,7 @@ import { MemoryRouter, Route, Routes, useNavigate } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ideasApi, type Idea } from '../api/ideas'
 import { projectsApi } from '../api/projects'
+import { SnackbarProvider } from '../components/SnackbarProvider'
 import { IdeasPage } from './IdeasPage'
 
 function deferred<T>() {
@@ -14,7 +15,13 @@ function deferred<T>() {
 }
 
 vi.mock('../api/ideas', () => ({
-  ideasApi: { list: vi.fn(), create: vi.fn(), planOntoBoard: vi.fn(), moveBackToPool: vi.fn() },
+  ideasApi: {
+    list: vi.fn(),
+    create: vi.fn(),
+    createBatch: vi.fn(),
+    planOntoBoard: vi.fn(),
+    moveBackToPool: vi.fn(),
+  },
 }))
 vi.mock('../api/projects', () => ({ projectsApi: { list: vi.fn() } }))
 
@@ -77,9 +84,50 @@ vi.mock('../components/NewCardModal', () => ({
     ) : null,
 }))
 
+// SpecImportDialog ist separat getestet (SpecImportDialog.test.tsx) — hier ein Stub, der die
+// durchgereichten Props sichtbar macht und den Import mit fester Auswahl auslöst.
+vi.mock('../components/SpecImportDialog', () => ({
+  SpecImportDialog: ({
+    open,
+    fileName,
+    markdown,
+    onClose,
+    onImport,
+  }: {
+    open: boolean
+    fileName: string
+    markdown: string
+    onClose: () => void
+    onImport: (ideas: Array<{ title: string; description: string | null }>) => Promise<void>
+  }) =>
+    open ? (
+      <div data-testid="spec-dialog">
+        datei [{fileName}] inhalt [{markdown}]
+        <button
+          type="button"
+          onClick={() =>
+            void onImport([
+              { title: 'A', description: 'a' },
+              { title: 'B', description: null },
+            ])
+          }
+        >
+          spec-import-zwei
+        </button>
+        <button type="button" onClick={() => void onImport([{ title: 'A', description: 'a' }])}>
+          spec-import-eine
+        </button>
+        <button type="button" onClick={onClose}>
+          spec-schliessen
+        </button>
+      </div>
+    ) : null,
+}))
+
 const mockedIdeas = ideasApi as unknown as {
   list: ReturnType<typeof vi.fn>
   create: ReturnType<typeof vi.fn>
+  createBatch: ReturnType<typeof vi.fn>
   planOntoBoard: ReturnType<typeof vi.fn>
   moveBackToPool: ReturnType<typeof vi.fn>
 }
@@ -120,14 +168,28 @@ function renderPage({
 }: RenderOptions = {}) {
   mockedProjects.list.mockResolvedValue(projects ?? [{ id: 5, name: 'Team', role, createdAt: '' }])
   mockedIdeas.create.mockResolvedValue(idea({ id: 99, title: 'x' }))
+  mockedIdeas.createBatch.mockResolvedValue([idea({ id: 98, title: 'A' }), idea({ id: 99, title: 'B' })])
   return render(
-    <MemoryRouter initialEntries={[path]}>
-      <Routes>
-        <Route path="/projects/:projectId/ideas" element={<IdeasPage />} />
-        <Route path="/boards/:boardId/list" element={<div>board-liste</div>} />
-      </Routes>
-    </MemoryRouter>,
+    <SnackbarProvider>
+      <MemoryRouter initialEntries={[path]}>
+        <Routes>
+          <Route path="/projects/:projectId/ideas" element={<IdeasPage />} />
+          <Route path="/boards/:boardId/list" element={<div>board-liste</div>} />
+        </Routes>
+      </MemoryRouter>
+    </SnackbarProvider>,
   )
+}
+
+/** Wählt eine Datei im versteckten Datei-Input der Schaltfläche „Spezifikation einlesen“ aus. */
+function chooseFile(file: File | null) {
+  const input = screen.getByLabelText('Markdown-Datei auswählen')
+  Object.defineProperty(input, 'files', { value: file === null ? null : [file], configurable: true })
+  fireEvent.change(input)
+}
+
+function specFile(content: string, name = 'spec.md') {
+  return new File([content], name, { type: 'text/markdown' })
 }
 
 function fakeStorage(seed: Record<string, string> = {}): Storage {
@@ -275,6 +337,100 @@ describe('IdeasPage', () => {
 
     expect(screen.queryByRole('button', { name: 'Idee anlegen' })).not.toBeInTheDocument()
     expect(board).toHaveTextContent('canEdit false')
+    expect(screen.queryByLabelText('Markdown-Datei auswählen')).not.toBeInTheDocument()
+  })
+
+  it('öffnet nach der Dateiauswahl die Vorschau mit Name und Inhalt der Datei', async () => {
+    renderPage()
+    await screen.findByTestId('planning-board')
+
+    chooseFile(specFile('## Anmeldung\nText', 'login.md'))
+
+    const dialog = await screen.findByTestId('spec-dialog')
+    expect(dialog).toHaveTextContent('datei [login.md]')
+    expect(dialog).toHaveTextContent('inhalt [## Anmeldung Text]')
+  })
+
+  it('setzt den Datei-Input zurück, damit dieselbe Datei erneut gewählt werden kann', async () => {
+    renderPage()
+    await screen.findByTestId('planning-board')
+
+    chooseFile(specFile('## A\nText'))
+    await screen.findByTestId('spec-dialog')
+
+    expect((screen.getByLabelText('Markdown-Datei auswählen') as HTMLInputElement).value).toBe('')
+  })
+
+  it('öffnet nichts, wenn die Auswahl abgebrochen wurde', async () => {
+    renderPage()
+    await screen.findByTestId('planning-board')
+
+    chooseFile(null)
+
+    expect(screen.queryByTestId('spec-dialog')).not.toBeInTheDocument()
+  })
+
+  it('meldet eine unlesbare Datei, statt die Vorschau zu öffnen', async () => {
+    renderPage()
+    await screen.findByTestId('planning-board')
+    class FailingReader {
+      onload: (() => void) | null = null
+      onerror: (() => void) | null = null
+      result: string | null = null
+      readAsText(): void {
+        this.onerror?.()
+      }
+    }
+    vi.stubGlobal('FileReader', FailingReader)
+
+    chooseFile(specFile('## A'))
+
+    expect(await screen.findByText('Die Datei konnte nicht gelesen werden.')).toBeInTheDocument()
+    expect(screen.queryByTestId('spec-dialog')).not.toBeInTheDocument()
+  })
+
+  it('legt die ausgewählten Ideen im Stapel an, meldet die Anzahl und lädt die Ansicht neu', async () => {
+    renderPage()
+    await screen.findByTestId('planning-board')
+    chooseFile(specFile('## A\na\n## B'))
+    await screen.findByTestId('spec-dialog')
+
+    fireEvent.click(screen.getByText('spec-import-zwei'))
+
+    await waitFor(() =>
+      expect(mockedIdeas.createBatch).toHaveBeenCalledWith(5, {
+        ideas: [
+          { title: 'A', description: 'a' },
+          { title: 'B', description: null },
+        ],
+      }),
+    )
+    expect(await screen.findByText('2 Ideen angelegt.')).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByTestId('planning-board')).toHaveTextContent('refresh 1'))
+  })
+
+  it('meldet eine einzelne angelegte Idee im Singular', async () => {
+    renderPage()
+    await screen.findByTestId('planning-board')
+    mockedIdeas.createBatch.mockResolvedValue([idea({ id: 98, title: 'A' })])
+    chooseFile(specFile('## A\na'))
+    await screen.findByTestId('spec-dialog')
+
+    fireEvent.click(screen.getByText('spec-import-eine'))
+
+    expect(await screen.findByText('1 Idee angelegt.')).toBeInTheDocument()
+  })
+
+  it('schließt die Vorschau ohne etwas anzulegen', async () => {
+    renderPage()
+    await screen.findByTestId('planning-board')
+    chooseFile(specFile('## A'))
+    await screen.findByTestId('spec-dialog')
+
+    fireEvent.click(screen.getByText('spec-schliessen'))
+
+    expect(screen.queryByTestId('spec-dialog')).not.toBeInTheDocument()
+    expect(mockedIdeas.createBatch).not.toHaveBeenCalled()
   })
 
   it('nutzt den Projekt-Fallback im Breadcrumb, wenn das Projekt nicht gefunden wird', async () => {

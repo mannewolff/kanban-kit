@@ -19,6 +19,18 @@ public interface CardRepository {
    */
   Optional<Card> findByProjectIdAndNumber(long projectId, int number);
 
+  /**
+   * Nicht-gelöschte Karten mit dieser projektweiten Nummer aus den angegebenen Projekten,
+   * aufsteigend nach Projekt-ID. Dieselbe Nummer kann in mehreren Projekten existieren ({@code
+   * uq_card_number (project_id, number)}), deshalb eine Liste; je Projekt kann höchstens eine Karte
+   * enthalten sein.
+   *
+   * <p>Die Projektmenge ist der <strong>Sichtbarkeitsschnitt des Aufrufers</strong> — die Suche
+   * über mehrere Projekte fragt nur die, in denen der Benutzer lesen darf (#489). Eine leere Menge
+   * ist deshalb nicht vorgesehen: Wer nichts sehen darf, fragt gar nicht erst.
+   */
+  List<Card> findByNumberInProjects(int number, List<Long> projectIds);
+
   List<Card> findByBoardId(long boardId);
 
   /**
