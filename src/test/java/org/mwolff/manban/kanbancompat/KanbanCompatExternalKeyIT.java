@@ -75,6 +75,66 @@ class KanbanCompatExternalKeyIT extends AbstractIntegrationTest {
   }
 
   @Test
+  void directIngestLandsInFirstColumnOfTokenBoard() throws Exception {
+    Cookie owner = session("direct-owner@example.com", PlatformRole.USER);
+    Cookie admin = session("direct-admin@example.com", PlatformRole.ADMIN);
+    long projectId = createProject(admin, "Projekt", "direct-owner@example.com");
+    JsonNode board = createBoard(owner, projectId, "Sonar");
+    String token = boundToken(owner, projectId, board.get("id").asLong());
+
+    // direct=true (#535): die Karte landet sofort in der ersten Spalte des Token-Boards …
+    String created =
+        mvc.perform(
+                post("/api/kanban/items")
+                    .header("X-Kanban-Token", token)
+                    .contentType("application/json")
+                    .content(
+                        "{\"title\":\"Finding\",\"externalKey\":\"sonar:DIRECT\",\"direct\":true}"))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.created").value(true))
+            .andExpect(jsonPath("$.number").isNumber())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+    long cardId = json.readTree(created).get("id").asLong();
+
+    // … und ist damit sofort in der Items-Liste sichtbar (BACKLOG) — anders als eine Pool-Idee.
+    mvc.perform(
+            org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get(
+                    "/api/kanban/items")
+                .header("X-Kanban-Token", token))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.BACKLOG[0].id").value(cardId))
+        .andExpect(jsonPath("$.BACKLOG[0].title").value("Finding"));
+
+    // Idempotenz gilt auch im direct-Routing: derselbe Schlüssel legt nichts Zweites an.
+    mvc.perform(
+            post("/api/kanban/items")
+                .header("X-Kanban-Token", token)
+                .contentType("application/json")
+                .content(
+                    "{\"title\":\"Finding\",\"externalKey\":\"sonar:DIRECT\",\"direct\":true}"))
+        .andExpect(status().isCreated())
+        .andExpect(jsonPath("$.created").value(false))
+        .andExpect(jsonPath("$.id").value(cardId));
+    assertThat(countByKey(projectId, "sonar:DIRECT")).isEqualTo(1);
+
+    // Ohne direct bleibt der Pool-Weg: die Karte erscheint NICHT in der Items-Liste.
+    mvc.perform(
+            post("/api/kanban/items")
+                .header("X-Kanban-Token", token)
+                .contentType("application/json")
+                .content("{\"title\":\"Pool-Idee\"}"))
+        .andExpect(status().isCreated());
+    mvc.perform(
+            org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get(
+                    "/api/kanban/items")
+                .header("X-Kanban-Token", token))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.BACKLOG.length()").value(1));
+  }
+
+  @Test
   void sameKeyInDifferentProjectsCreatesSeparateCards() throws Exception {
     Cookie owner = session("extkey2-owner@example.com", PlatformRole.USER);
     Cookie admin = session("extkey2-admin@example.com", PlatformRole.ADMIN);

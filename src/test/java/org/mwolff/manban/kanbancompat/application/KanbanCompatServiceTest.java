@@ -227,7 +227,7 @@ class KanbanCompatServiceTest {
 
     // When
     KanbanCompatService.Created created =
-        service.create(bound(), "Titel", "Body", null, false, null);
+        service.create(bound(), "Titel", "Body", null, false, null, false);
 
     // Then: kein board-gebundenes create mehr, sondern eine board-lose Pool-Idee; zurück kommt
     // deren id samt der projektweiten Nummer (#402), damit der Adapter sofort #N zeigen kann.
@@ -246,7 +246,7 @@ class KanbanCompatServiceTest {
 
     // When: absichtlich eine (frueher unbekannte) Spalte + ideaStored=true
     KanbanCompatService.Created created =
-        service.create(bound(), "Titel", "Body", "VOELLIG-UNBEKANNT", true, null);
+        service.create(bound(), "Titel", "Body", "VOELLIG-UNBEKANNT", true, null, false);
 
     // Then: keine InvalidKanbanColumnException, Delegation unveraendert
     verify(cardService).createProjectIdea(1L, 5L, "Titel", "Body", BOARD, null);
@@ -263,7 +263,7 @@ class KanbanCompatServiceTest {
 
     // When
     KanbanCompatService.Created created =
-        service.create(bound(), "Titel", "Body", null, false, "  sonar:abc  ");
+        service.create(bound(), "Titel", "Body", null, false, "  sonar:abc  ", false);
 
     // Then: getrimmt durchgereicht, Duplikat als created=false gemeldet.
     verify(cardService).createProjectIdea(1L, 5L, "Titel", "Body", BOARD, "sonar:abc");
@@ -279,12 +279,32 @@ class KanbanCompatServiceTest {
         .thenReturn(new CardService.IdeaCreation(pooledIdea(42L), true));
 
     // When: überlanger Schlüssel und blanker Schlüssel
-    service.create(bound(), "Titel", "Body", null, false, "x".repeat(150));
-    service.create(bound(), "Titel", "Body", null, false, "   ");
+    service.create(bound(), "Titel", "Body", null, false, "x".repeat(150), false);
+    service.create(bound(), "Titel", "Body", null, false, "   ", false);
 
     // Then: gekappt auf 100 bzw. null (kein Schlüssel)
     verify(cardService).createProjectIdea(1L, 5L, "Titel", "Body", BOARD, "x".repeat(100));
     verify(cardService).createProjectIdea(1L, 5L, "Titel", "Body", BOARD, null);
+  }
+
+  @Test
+  void create_withDirect_routesToFirstColumnOfTokenBoard() {
+    // Given (#535): direct=true umgeht den Pool und legt in der ersten Spalte des Token-Boards an.
+    when(boardService.requireProjectId(BOARD)).thenReturn(5L);
+    when(boardService.firstColumn(BOARD)).thenReturn(new ColumnView(100L, "Backlog", 0, null));
+    when(cardService.createDirect(1L, BOARD, 100L, "Titel", "Body", "sonar:abc"))
+        .thenReturn(new CardService.IdeaCreation(pooledIdea(42L), true));
+
+    // When
+    KanbanCompatService.Created created =
+        service.create(bound(), "Titel", "Body", null, false, "sonar:abc", true);
+
+    // Then: Board-Pfad statt Pool-Pfad, created durchgereicht.
+    verify(cardService).createDirect(1L, BOARD, 100L, "Titel", "Body", "sonar:abc");
+    verify(cardService, org.mockito.Mockito.never())
+        .createProjectIdea(anyLong(), anyLong(), any(), any(), any(), any());
+    assertThat(created.id()).isEqualTo(42L);
+    assertThat(created.created()).isTrue();
   }
 
   @Test
@@ -294,7 +314,7 @@ class KanbanCompatServiceTest {
 
     // When / Then
     KanbanPrincipal principal = bound();
-    assertThatThrownBy(() -> service.create(principal, "Titel", "Body", null, false, null))
+    assertThatThrownBy(() -> service.create(principal, "Titel", "Body", null, false, null, false))
         .isInstanceOf(BoardNotFoundException.class);
   }
 

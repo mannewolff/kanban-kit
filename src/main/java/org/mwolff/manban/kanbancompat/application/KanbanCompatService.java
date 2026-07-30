@@ -124,12 +124,22 @@ public class KanbanCompatService {
       @Nullable String body,
       @Nullable String column,
       boolean ideaStored,
-      @Nullable String externalKey) {
+      @Nullable String externalKey,
+      boolean direct) {
     long boardId = requireBound(principal);
     long projectId = boardService.requireProjectId(boardId);
-    CardService.IdeaCreation result =
-        cardService.createProjectIdea(
-            principal.userId(), projectId, title, body, boardId, normalizeExternalKey(externalKey));
+    String key = normalizeExternalKey(externalKey);
+    CardService.IdeaCreation result;
+    if (direct) {
+      // Opt-in-Board-Routing (#535): für dedizierte Sammel-Boards (z. B. Sonar-Findings) landet
+      // die Karte direkt in der ersten Spalte des Token-Boards. Die Pool-Leitplanke aus
+      // Entscheidung B bleibt der Default — was von außen kommt, plant sonst ein Mensch ein.
+      long columnId = boardService.firstColumn(boardId).id();
+      result = cardService.createDirect(principal.userId(), boardId, columnId, title, body, key);
+    } else {
+      result =
+          cardService.createProjectIdea(principal.userId(), projectId, title, body, boardId, key);
+    }
     CardView v = result.view();
     // Seit #402 vergibt createProjectIdea sofort eine Nummer; requireNonNull macht das fuer
     // NullAway explizit (CardView.number() ist @Nullable fuer Legacy-Ideen ohne Nummer).

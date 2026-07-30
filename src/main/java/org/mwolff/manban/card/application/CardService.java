@@ -129,6 +129,7 @@ public class CardService {
         false,
         null,
         null,
+        null,
         null);
   }
 
@@ -156,6 +157,7 @@ public class CardService {
         dependsOn,
         parentId,
         ideaStored,
+        null,
         null,
         null,
         null);
@@ -194,7 +196,8 @@ public class CardService {
         ideaStored,
         dueDate,
         assigneeIds,
-        labelIds);
+        labelIds,
+        null);
   }
 
   // Kern-Logik des Anlegens ohne eigene @Transactional: wird von den öffentlichen create-
@@ -210,7 +213,8 @@ public class CardService {
       boolean ideaStored,
       @Nullable Instant dueDate,
       @Nullable List<Long> assigneeIds,
-      @Nullable List<Long> labelIds) {
+      @Nullable List<Long> labelIds,
+      @Nullable String externalKey) {
     long projectId = boardService.requireProjectId(boardId);
     permissions.require(userId, projectId, Permission.TICKET_CREATE);
     ColumnView column = boardService.requireColumn(columnId, boardId);
@@ -242,7 +246,7 @@ public class CardService {
                 dueDate,
                 projectId,
                 null,
-                null));
+                externalKey));
 
     if (!ideaStored) {
       transitions.open(saved.requireId(), columnId, column.name(), now);
@@ -889,6 +893,47 @@ public class CardService {
             .toList();
     publishIdeasChanged(projectId);
     return created;
+  }
+
+  /**
+   * Legt eine Karte direkt in einer Spalte des Boards an — idempotent über den optionalen {@code
+   * externalKey} wie {@link #createProjectIdea(long, long, String, String, Long, String)}, nur mit
+   * Board- statt Pool-Routing (#535, direct-Ingest auf ein dediziertes Sammel-Board). Anlage,
+   * Nummern-/Positionsvergabe, Spalten-Transition und Rechteprüfung laufen über den normalen
+   * Anlege-Pfad; beim Duplikat entsteht nichts (kein Aktivitätseintrag, kein Event).
+   */
+  @Transactional
+  public IdeaCreation createDirect(
+      long userId,
+      long boardId,
+      long columnId,
+      String title,
+      @Nullable String description,
+      @Nullable String externalKey) {
+    long projectId = boardService.requireProjectId(boardId);
+    // Rechte VOR dem Duplikat-Check: der Rückgabepfad darf Unberechtigten keine Existenz leaken.
+    permissions.require(userId, projectId, Permission.TICKET_CREATE);
+    if (externalKey != null) {
+      Optional<Card> existing = cards.findByProjectIdAndExternalKey(projectId, externalKey);
+      if (existing.isPresent()) {
+        return new IdeaCreation(view(existing.get()), false);
+      }
+    }
+    CardView created =
+        doCreate(
+            userId,
+            boardId,
+            columnId,
+            title,
+            description,
+            null,
+            null,
+            false,
+            null,
+            null,
+            null,
+            externalKey);
+    return new IdeaCreation(created, true);
   }
 
   /**

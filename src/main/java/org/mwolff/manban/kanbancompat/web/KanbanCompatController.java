@@ -56,7 +56,8 @@ class KanbanCompatController {
         request.body(),
         request.column(),
         Boolean.TRUE.equals(request.ideaStored()),
-        request.externalKey());
+        request.externalKey(),
+        Boolean.TRUE.equals(request.direct()));
   }
 
   @PutMapping("/items/{id}/move")
@@ -100,7 +101,9 @@ class KanbanCompatController {
       String column,
       @Nullable Boolean ideaStored,
       // Idempotenz-Schlüssel (#534); Normalisierung (trim/Kappung) macht der Service.
-      @Nullable String externalKey) {}
+      @Nullable String externalKey,
+      // Opt-in-Board-Routing (#535): true = direkt in die erste Spalte des Token-Boards.
+      @Nullable Boolean direct) {}
 
   record MoveRequest(@NotBlank String column, @PositiveOrZero int position) {}
 
