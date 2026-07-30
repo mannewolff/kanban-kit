@@ -663,6 +663,47 @@ describe('CardDetailModal', () => {
     expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:preview')
   })
 
+  it('zeigt frisch gespeicherte Abhängigkeiten sofort im Lesemodus (#537)', async () => {
+    const apis = makeApis()
+    render(<CardDetailModal card={card} canEdit onClose={vi.fn()} {...apis} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Bearbeiten' }))
+    fireEvent.change(screen.getByLabelText('Abhängig von'), { target: { value: '12' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Speichern' }))
+
+    // Ohne Schließen/Neuöffnen: der Lesemodus zeigt den gespeicherten Stand, nicht die alte Prop.
+    expect(await screen.findByLabelText('Abhängigkeiten')).toHaveTextContent('Abhängig von: #12')
+
+    // Und erneutes Bearbeiten startet mit dem gespeicherten Stand im Eingabefeld.
+    fireEvent.click(screen.getByRole('button', { name: 'Bearbeiten' }))
+    expect(screen.getByLabelText('Abhängig von')).toHaveValue('12')
+  })
+
+  it('sendet beim Task-Toggle die zuletzt gespeicherten Abhängigkeiten mit (#537)', async () => {
+    // Ein Checkbox-Klick nach dem Abhängigkeits-Save darf den frischen Stand nicht mit der
+    // veralteten Prop überschreiben.
+    const apis = makeApis()
+    render(<CardDetailModal card={taskCard} canEdit onClose={vi.fn()} {...apis} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Bearbeiten' }))
+    fireEvent.change(screen.getByLabelText('Abhängig von'), { target: { value: '12' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Speichern' }))
+    await waitFor(() => expect(apis.cardsApi.update).toHaveBeenCalledTimes(1))
+
+    fireEvent.click(await screen.findByLabelText('Aufgabe 2'))
+
+    await waitFor(() => expect(apis.cardsApi.update).toHaveBeenCalledTimes(2))
+    expect(apis.cardsApi.update).toHaveBeenLastCalledWith(
+      100,
+      taskCard.title,
+      expect.any(String),
+      [12],
+      undefined,
+      null,
+      null,
+    )
+  })
+
   it('zeigt einen Fehler bei ungültiger Abhängigkeits-Eingabe und löscht ihn beim erneuten Tippen', async () => {
     const apis = makeApis()
     render(<CardDetailModal card={card} canEdit onClose={vi.fn()} {...apis} />)

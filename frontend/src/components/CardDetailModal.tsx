@@ -744,6 +744,12 @@ function CardDetailModalView({
   const [parentId, setParentId] = useState<number | null>(card.parentId)
   const [shortcode, setShortcode] = useState(card.shortcode ?? '')
   const [dueInput, setDueInput] = useState(card.dueDate ? card.dueDate.slice(0, 10) : '')
+  // Abhängigkeiten als lokaler Zustand wie Titel/Beschreibung (#537): Die `card`-Prop des Parents
+  // bleibt nach dem Speichern veraltet — ohne diesen State zeigte der Lesemodus die frisch
+  // gespeicherten Abhängigkeiten erst nach Schließen und Neuöffnen, und ein Task-Toggle hätte sie
+  // mit dem alten Prop-Stand überschrieben. Kein Sync-Effect nötig: der Wrapper remountet die View
+  // per `key` je Karte.
+  const [deps, setDeps] = useState(card.dependencies)
   const [depsInput, setDepsInput] = useState(card.dependencies.join(', '))
   const [depsError, setDepsError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
@@ -776,7 +782,9 @@ function CardDetailModalView({
     setParentId(card.parentId)
     setShortcode(card.shortcode ?? '')
     setDueInput(card.dueDate ? card.dueDate.slice(0, 10) : '')
-    setDepsInput(card.dependencies.join(', '))
+    // Aus dem lokalen Zustand, nicht aus der Prop — sonst verwürfe erneutes Bearbeiten nach
+    // einem Save die gerade gespeicherten Abhängigkeiten (#537).
+    setDepsInput(deps.join(', '))
     setDepsError(null)
     setEditing(true)
   }
@@ -784,7 +792,7 @@ function CardDetailModalView({
   const save = async () => {
     // Kein `!title.trim() || saving`-Guard nötig: der einzige Aufrufer ist der Speichern-Button,
     // der exakt unter diesen Bedingungen disabled ist (siehe DialogActions) — der Guard wäre tot.
-    const { deps, valid } = parseDependencyInput(depsInput)
+    const { deps: parsedDeps, valid } = parseDependencyInput(depsInput)
     if (!valid) {
       setDepsError('Nur positive Nummern, kommagetrennt (z. B. 12, 34).')
       return
@@ -795,11 +803,12 @@ function CardDetailModalView({
         card.id,
         title.trim(),
         body,
-        deps,
+        parsedDeps,
         isEpic ? shortcode.trim() || null : undefined,
         isEpic ? undefined : parentId,
         isEpic ? undefined : dueInputToIso(dueInput),
       )
+      setDeps(parsedDeps)
       setEditing(false)
       onChanged?.()
       notify('Karte gespeichert.', 'success')
@@ -826,7 +835,9 @@ function CardDetailModalView({
         card.id,
         card.title,
         next,
-        card.dependencies,
+        // Lokaler Abhängigkeits-Zustand statt Prop (#537): sonst rollte ein Checkbox-Klick nach
+        // einem Abhängigkeits-Save die frisch gespeicherten Werte auf den alten Stand zurück.
+        deps,
         isEpic ? (card.shortcode ?? null) : undefined,
         isEpic ? undefined : card.parentId,
         isEpic ? undefined : card.dueDate,
@@ -1011,7 +1022,7 @@ function CardDetailModalView({
               body={body}
               canEdit={canEdit}
               onToggleTask={onToggleTask}
-              dependencies={card.dependencies}
+              dependencies={deps}
               onOpenDependency={onOpenDependency}
               isEpic={isEpic}
               dueDate={card.dueDate}
