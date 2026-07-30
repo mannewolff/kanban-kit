@@ -64,6 +64,7 @@ class CardServiceTest {
   private LabelRepository labels;
   private CardLabelRepository cardLabels;
   private CardActivityRepository activity;
+  private ActorContext actor;
   private ApplicationEventPublisher events;
   private CardService service;
 
@@ -97,6 +98,8 @@ class CardServiceTest {
     labels = mock(LabelRepository.class);
     cardLabels = mock(CardLabelRepository.class);
     activity = mock(CardActivityRepository.class);
+    actor = mock(ActorContext.class);
+    when(actor.current()).thenReturn(ActorContext.ActorStamp.unknown());
     events = mock(ApplicationEventPublisher.class);
     Clock clock = Clock.fixed(FIXED, ZoneOffset.UTC);
     service =
@@ -111,6 +114,7 @@ class CardServiceTest {
             labels,
             cardLabels,
             activity,
+            actor,
             events,
             clock);
     when(boardService.requireProjectId(BOARD)).thenReturn(PROJECT);
@@ -189,8 +193,31 @@ class CardServiceTest {
 
     verify(assignees).replaceAssignees(1L, List.of(7L, 8L));
     // Genau ein Aktivitätseintrag (CREATED) — kein zusätzlicher ASSIGNED beim atomaren Anlegen.
-    verify(activity).add(1L, 1L, CardActivityType.CREATED, "Karte angelegt", FIXED);
-    verify(activity, times(1)).add(anyLong(), anyLong(), any(), any(), any());
+    verify(activity)
+        .add(
+            1L,
+            1L,
+            CardActivityType.CREATED,
+            "Karte angelegt",
+            FIXED,
+            ActorContext.ActorStamp.unknown());
+  }
+
+  @Test
+  void create_stampsActivityWithActorContext() {
+    // Given — der Port liefert einen Token-Stempel; die Aktivität muss ihn unverändert tragen.
+    ActorContext.ActorStamp stamp =
+        new ActorContext.ActorStamp(
+            org.mwolff.manban.card.domain.CardActivityOrigin.TOKEN, "Nachtlauf", "claude-opus-5");
+    when(actor.current()).thenReturn(stamp);
+    when(boardService.requireColumn(20L, BOARD)).thenReturn(column(20L, "Backlog", 0));
+
+    // When
+    service.create(1L, BOARD, 20L, "Titel", null, null, null);
+
+    // Then
+    verify(activity).add(1L, 1L, CardActivityType.CREATED, "Karte angelegt", FIXED, stamp);
+    verify(activity, times(1)).add(anyLong(), anyLong(), any(), any(), any(), any());
   }
 
   @Test
@@ -856,7 +883,14 @@ class CardServiceTest {
     assertThat(saved.number()).isEqualTo(7);
     assertThat(saved.targetBoardId()).isEqualTo(BOARD);
     assertThat(view.ideaStored()).isTrue();
-    verify(activity).add(1L, 9L, CardActivityType.IDEA_STORED, "In den Ideen-Speicher", FIXED);
+    verify(activity)
+        .add(
+            1L,
+            9L,
+            CardActivityType.IDEA_STORED,
+            "In den Ideen-Speicher",
+            FIXED,
+            ActorContext.ActorStamp.unknown());
     verify(events).publishEvent(new ProjectIdeasChangedEvent(PROJECT));
   }
 
@@ -909,7 +943,14 @@ class CardServiceTest {
     assertThat(captor.getValue().ideaStored()).isTrue();
     assertThat(view.ideaStored()).isTrue();
     verify(transitions, never()).open(anyLong(), anyLong(), any(), any());
-    verify(activity).add(1L, 1L, CardActivityType.CREATED, "Karte angelegt", FIXED);
+    verify(activity)
+        .add(
+            1L,
+            1L,
+            CardActivityType.CREATED,
+            "Karte angelegt",
+            FIXED,
+            ActorContext.ActorStamp.unknown());
   }
 
   @Test
@@ -1350,7 +1391,13 @@ class CardServiceTest {
 
     verify(cards).restoreFromTrash(1L, 5);
     verify(activity)
-        .add(1L, 9L, CardActivityType.RESTORED, "Aus Papierkorb wiederhergestellt", FIXED);
+        .add(
+            1L,
+            9L,
+            CardActivityType.RESTORED,
+            "Aus Papierkorb wiederhergestellt",
+            FIXED,
+            ActorContext.ActorStamp.unknown());
     assertThat(view.id()).isEqualTo(1L);
   }
 
@@ -1625,7 +1672,14 @@ class CardServiceTest {
 
     verify(permissions).require(3L, 1L, Permission.TICKET_UPDATE);
     verify(assignees).replaceAssignees(1L, List.of(7L, 8L));
-    verify(activity).add(1L, 3L, CardActivityType.ASSIGNED, "Zuständige geändert", FIXED);
+    verify(activity)
+        .add(
+            1L,
+            3L,
+            CardActivityType.ASSIGNED,
+            "Zuständige geändert",
+            FIXED,
+            ActorContext.ActorStamp.unknown());
     assertThat(result.id()).isEqualTo(1L);
     assertThat(result.assignees()).containsExactly(7L, 8L);
   }
@@ -1741,7 +1795,14 @@ class CardServiceTest {
 
     service.create(1L, BOARD, 20L, "Titel", null, null, null);
 
-    verify(activity).add(1L, 1L, CardActivityType.CREATED, "Karte angelegt", FIXED);
+    verify(activity)
+        .add(
+            1L,
+            1L,
+            CardActivityType.CREATED,
+            "Karte angelegt",
+            FIXED,
+            ActorContext.ActorStamp.unknown());
   }
 
   @Test
@@ -1752,7 +1813,14 @@ class CardServiceTest {
 
     service.move(9L, 1L, 21L, 0);
 
-    verify(activity).add(1L, 9L, CardActivityType.MOVED, "Verschoben nach Done", FIXED);
+    verify(activity)
+        .add(
+            1L,
+            9L,
+            CardActivityType.MOVED,
+            "Verschoben nach Done",
+            FIXED,
+            ActorContext.ActorStamp.unknown());
   }
 
   @Test
@@ -1762,7 +1830,14 @@ class CardServiceTest {
 
     service.update(9L, 1L, "Neu", null, null, null, null, null);
 
-    verify(activity).add(1L, 9L, CardActivityType.UPDATED, "Karte bearbeitet", FIXED);
+    verify(activity)
+        .add(
+            1L,
+            9L,
+            CardActivityType.UPDATED,
+            "Karte bearbeitet",
+            FIXED,
+            ActorContext.ActorStamp.unknown());
   }
 
   @Test
@@ -1772,7 +1847,14 @@ class CardServiceTest {
 
     service.archive(9L, 1L);
 
-    verify(activity).add(1L, 9L, CardActivityType.ARCHIVED, "Archiviert", FIXED);
+    verify(activity)
+        .add(
+            1L,
+            9L,
+            CardActivityType.ARCHIVED,
+            "Archiviert",
+            FIXED,
+            ActorContext.ActorStamp.unknown());
   }
 
   @Test
@@ -1782,7 +1864,14 @@ class CardServiceTest {
 
     service.restore(9L, 1L);
 
-    verify(activity).add(1L, 9L, CardActivityType.RESTORED, "Wiederhergestellt", FIXED);
+    verify(activity)
+        .add(
+            1L,
+            9L,
+            CardActivityType.RESTORED,
+            "Wiederhergestellt",
+            FIXED,
+            ActorContext.ActorStamp.unknown());
   }
 
   @Test
@@ -1790,7 +1879,8 @@ class CardServiceTest {
     when(cards.findById(1L))
         .thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
     CardActivity entry =
-        new CardActivity(3L, 1L, 9L, CardActivityType.CREATED, "Karte angelegt", FIXED);
+        new CardActivity(
+            3L, 1L, 9L, CardActivityType.CREATED, "Karte angelegt", FIXED, null, null, null);
     when(activity.findByCardId(1L)).thenReturn(List.of(entry));
 
     List<CardActivity> result = service.listActivity(5L, 1L);
@@ -2106,7 +2196,14 @@ class CardServiceTest {
     assertThat(captor.getValue().ideaStored()).isTrue();
     assertThat(captor.getValue().projectId()).isEqualTo(PROJECT);
     assertThat(captor.getValue().targetBoardId()).isEqualTo(7L);
-    verify(activity).add(1L, 1L, CardActivityType.CREATED, "Idee angelegt", FIXED);
+    verify(activity)
+        .add(
+            1L,
+            1L,
+            CardActivityType.CREATED,
+            "Idee angelegt",
+            FIXED,
+            ActorContext.ActorStamp.unknown());
     assertThat(view.boardId()).isNull();
     assertThat(view.number()).isEqualTo(3);
     // view() muss das notierte Zielboard durchreichen — das Frontend wählt es beim Einplanen vor.
@@ -2131,7 +2228,14 @@ class CardServiceTest {
     assertThat(captor.getValue().positionInColumn()).isEqualTo(3);
     assertThat(captor.getValue().ideaStored()).isFalse();
     verify(transitions).open(1L, 20L, "Backlog", FIXED);
-    verify(activity).add(1L, 9L, CardActivityType.PROMOTED, "Auf Board eingeplant", FIXED);
+    verify(activity)
+        .add(
+            1L,
+            9L,
+            CardActivityType.PROMOTED,
+            "Auf Board eingeplant",
+            FIXED,
+            ActorContext.ActorStamp.unknown());
     verify(events).publishEvent(new CardBoardActivityEvent(BOARD, ActivityType.CREATED, 1L));
     assertThat(result.boardId()).isEqualTo(BOARD);
     assertThat(result.ideaStored()).isFalse();
@@ -2197,7 +2301,14 @@ class CardServiceTest {
     assertThat(captor.getValue().boardId()).isNull();
     assertThat(captor.getValue().ideaStored()).isTrue();
     assertThat(captor.getValue().targetBoardId()).isEqualTo(BOARD);
-    verify(activity).add(1L, 9L, CardActivityType.IDEA_STORED, "Zurück in den Ideen-Pool", FIXED);
+    verify(activity)
+        .add(
+            1L,
+            9L,
+            CardActivityType.IDEA_STORED,
+            "Zurück in den Ideen-Pool",
+            FIXED,
+            ActorContext.ActorStamp.unknown());
     verify(events).publishEvent(new CardBoardActivityEvent(BOARD, ActivityType.MOVED, 1L));
     assertThat(result.boardId()).isNull();
   }
@@ -2228,7 +2339,14 @@ class CardServiceTest {
     assertThat(captor.getAllValues())
         .allMatch(c -> c.ideaStored() && c.boardId() == null && c.targetBoardId() == 7L);
     // Beide Speicherungen liefern im Mock dieselbe Id (1L) — je Idee entsteht ein CREATED-Eintrag.
-    verify(activity, times(2)).add(1L, 1L, CardActivityType.CREATED, "Idee angelegt", FIXED);
+    verify(activity, times(2))
+        .add(
+            1L,
+            1L,
+            CardActivityType.CREATED,
+            "Idee angelegt",
+            FIXED,
+            ActorContext.ActorStamp.unknown());
     assertThat(views).hasSize(2).extracting(CardService.CardView::number).containsExactly(3, 4);
   }
 
@@ -2503,7 +2621,14 @@ class CardServiceTest {
     CardService.CardView view = service.update(9L, 1L, "Neu", null, null, null, null, null);
 
     verify(permissions).require(9L, PROJECT, Permission.TICKET_UPDATE);
-    verify(activity).add(1L, 9L, CardActivityType.UPDATED, "Karte bearbeitet", FIXED);
+    verify(activity)
+        .add(
+            1L,
+            9L,
+            CardActivityType.UPDATED,
+            "Karte bearbeitet",
+            FIXED,
+            ActorContext.ActorStamp.unknown());
     verify(events, never()).publishEvent(any(CardBoardActivityEvent.class));
     assertThat(view.title()).isEqualTo("Neu");
     assertThat(view.boardId()).isNull();
@@ -2531,7 +2656,14 @@ class CardServiceTest {
 
     verify(permissions).require(3L, PROJECT, Permission.TICKET_UPDATE);
     verify(assignees).replaceAssignees(1L, List.of(7L));
-    verify(activity).add(1L, 3L, CardActivityType.ASSIGNED, "Zuständige geändert", FIXED);
+    verify(activity)
+        .add(
+            1L,
+            3L,
+            CardActivityType.ASSIGNED,
+            "Zuständige geändert",
+            FIXED,
+            ActorContext.ActorStamp.unknown());
     verify(events, never()).publishEvent(any(CardBoardActivityEvent.class));
   }
 

@@ -143,7 +143,8 @@ public class AccessTokenService {
         .map(
             t -> {
               tokens.save(t.withLastUsedAt(clock.instant()));
-              return new KanbanPrincipal(t.userId(), t.requireId(), t.projectId(), t.boardId());
+              return new KanbanPrincipal(
+                  t.userId(), t.requireId(), t.projectId(), t.boardId(), t.displayName());
             });
   }
 

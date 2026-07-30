@@ -56,6 +56,7 @@ public class CardService {
   private final LabelRepository labels;
   private final CardLabelRepository cardLabels;
   private final CardActivityRepository activity;
+  private final ActorContext actor;
   private final ApplicationEventPublisher events;
   private final Clock clock;
 
@@ -70,6 +71,7 @@ public class CardService {
       LabelRepository labels,
       CardLabelRepository cardLabels,
       CardActivityRepository activity,
+      ActorContext actor,
       ApplicationEventPublisher events,
       Clock clock) {
     this.cards = cards;
@@ -82,6 +84,7 @@ public class CardService {
     this.labels = labels;
     this.cardLabels = cardLabels;
     this.activity = activity;
+    this.actor = actor;
     this.events = events;
     this.clock = clock;
   }
@@ -243,7 +246,13 @@ public class CardService {
     if (!ideaStored) {
       transitions.open(saved.requireId(), columnId, column.name(), now);
     }
-    activity.add(saved.requireId(), userId, CardActivityType.CREATED, "Karte angelegt", now);
+    activity.add(
+        saved.requireId(),
+        userId,
+        CardActivityType.CREATED,
+        "Karte angelegt",
+        now,
+        actor.current());
     setDependencies(saved, dependsOn);
     if (assigneeIds != null && !assigneeIds.isEmpty()) {
       assignValidatedAssignees(saved.requireId(), projectId, assigneeIds);
@@ -441,7 +450,13 @@ public class CardService {
       updated = updated.withParent(effectiveParent).withDueDate(dueDate);
     }
     Card saved = cards.save(updated);
-    activity.add(cardId, userId, CardActivityType.UPDATED, "Karte bearbeitet", clock.instant());
+    activity.add(
+        cardId,
+        userId,
+        CardActivityType.UPDATED,
+        "Karte bearbeitet",
+        clock.instant(),
+        actor.current());
     if (dependsOn != null) {
       setDependencies(saved, dependsOn);
     }
@@ -464,7 +479,13 @@ public class CardService {
     permissions.require(userId, card.projectId(), Permission.TICKET_UPDATE);
 
     assignValidatedAssignees(cardId, card.projectId(), assigneeIds);
-    activity.add(cardId, userId, CardActivityType.ASSIGNED, "Zuständige geändert", clock.instant());
+    activity.add(
+        cardId,
+        userId,
+        CardActivityType.ASSIGNED,
+        "Zuständige geändert",
+        clock.instant(),
+        actor.current());
     publishChangedIfOnBoard(card.boardId(), ActivityType.UPDATED, cardId);
     return view(card);
   }
@@ -555,7 +576,12 @@ public class CardService {
       transitions.closeOpen(cardId, switchedAt);
       transitions.open(cardId, targetColumnId, target.name(), switchedAt);
       activity.add(
-          cardId, userId, CardActivityType.MOVED, "Verschoben nach " + target.name(), switchedAt);
+          cardId,
+          userId,
+          CardActivityType.MOVED,
+          "Verschoben nach " + target.name(),
+          switchedAt,
+          actor.current());
     }
 
     // moved_to_done_at: beim Eintritt in eine "Done"-Spalte setzen, beim Verlassen löschen.
@@ -712,7 +738,12 @@ public class CardService {
   private CardView doArchive(long userId, long cardId) {
     Card card = requireCardOp(userId, cardId, Permission.TICKET_DELETE, Permission.EPIC_DELETE);
     activity.add(
-        card.requireId(), userId, CardActivityType.ARCHIVED, "Archiviert", clock.instant());
+        card.requireId(),
+        userId,
+        CardActivityType.ARCHIVED,
+        "Archiviert",
+        clock.instant(),
+        actor.current());
     CardView result = view(cards.save(card.asArchived()));
     publishChanged(card.requireBoardId(), ActivityType.ARCHIVED, card.requireId());
     return result;
@@ -734,7 +765,12 @@ public class CardService {
     Card card = requireCardOp(userId, cardId, Permission.TICKET_DELETE, Permission.EPIC_DELETE);
     int position = cards.allocateActivePosition(card.requireColumnId());
     activity.add(
-        card.requireId(), userId, CardActivityType.RESTORED, "Wiederhergestellt", clock.instant());
+        card.requireId(),
+        userId,
+        CardActivityType.RESTORED,
+        "Wiederhergestellt",
+        clock.instant(),
+        actor.current());
     CardView result = view(cards.save(card.asRestored(position)));
     publishChanged(card.requireBoardId(), ActivityType.RESTORED, card.requireId());
     return result;
@@ -761,7 +797,8 @@ public class CardService {
         userId,
         CardActivityType.IDEA_STORED,
         "In den Ideen-Speicher",
-        clock.instant());
+        clock.instant(),
+        actor.current());
     CardView result = view(cards.save(card.asPooledIdea(card.boardId())));
     publishChanged(card.requireBoardId(), ActivityType.MOVED, card.requireId());
     publishIdeasChanged(card.projectId());
@@ -857,7 +894,8 @@ public class CardService {
                 null,
                 projectId,
                 targetBoardId));
-    activity.add(saved.requireId(), userId, CardActivityType.CREATED, "Idee angelegt", now);
+    activity.add(
+        saved.requireId(), userId, CardActivityType.CREATED, "Idee angelegt", now, actor.current());
     return view(saved);
   }
 
@@ -891,7 +929,8 @@ public class CardService {
     Instant now = clock.instant();
     Card planned = cards.save(card.withPlannedOnBoard(targetBoardId, columnId, number, position));
     transitions.open(cardId, columnId, backlog.name(), now);
-    activity.add(cardId, userId, CardActivityType.PROMOTED, "Auf Board eingeplant", now);
+    activity.add(
+        cardId, userId, CardActivityType.PROMOTED, "Auf Board eingeplant", now, actor.current());
     publishChanged(targetBoardId, ActivityType.CREATED, cardId);
     publishIdeasChanged(card.projectId());
     return view(planned);
@@ -908,7 +947,12 @@ public class CardService {
         userId, boardService.requireProjectId(card.requireBoardId()), Permission.CARD_MOVE);
     Card pooled = cards.save(card.asPooledIdea(card.boardId()));
     activity.add(
-        cardId, userId, CardActivityType.IDEA_STORED, "Zurück in den Ideen-Pool", clock.instant());
+        cardId,
+        userId,
+        CardActivityType.IDEA_STORED,
+        "Zurück in den Ideen-Pool",
+        clock.instant(),
+        actor.current());
     publishChanged(card.requireBoardId(), ActivityType.MOVED, cardId);
     publishIdeasChanged(card.projectId());
     return view(pooled);
@@ -1063,7 +1107,8 @@ public class CardService {
         userId,
         CardActivityType.RESTORED,
         "Aus Papierkorb wiederhergestellt",
-        clock.instant());
+        clock.instant(),
+        actor.current());
     publishChanged(card.requireBoardId(), ActivityType.RESTORED, card.requireId());
     // View aus der bereits geladenen Karte mit neuer Position — der JDBC-Restore hat die DB-Zeile
     // geändert; ein erneutes findById käme aus dem JPA-Cache noch mit dem alten Stand.

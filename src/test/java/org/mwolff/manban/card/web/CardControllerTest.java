@@ -419,7 +419,10 @@ class CardControllerTest {
             9L,
             org.mwolff.manban.card.domain.CardActivityType.MOVED,
             "Verschoben",
-            INSTANT);
+            INSTANT,
+            org.mwolff.manban.card.domain.CardActivityOrigin.TOKEN,
+            "Nachtlauf",
+            "claude-opus-5");
     when(service.listActivity(3L, 8L)).thenReturn(List.of(entry));
 
     List<CardController.ActivityView> result = controller.activity(3L, 8L);
@@ -433,6 +436,37 @@ class CardControllerTest {
               assertThat(v.type()).isEqualTo("MOVED");
               assertThat(v.detail()).isEqualTo("Verschoben");
               assertThat(v.createdAt()).isEqualTo(INSTANT);
+              assertThat(v.origin()).isEqualTo("TOKEN");
+              assertThat(v.tokenName()).isEqualTo("Nachtlauf");
+              assertThat(v.agent()).isEqualTo("claude-opus-5");
+            });
+  }
+
+  @Test
+  void activity_mapsLegacyEntryWithoutOrigin() {
+    // Alt-Eintrag vor V23: kein Herkunfts-Stempel — die View trägt null statt eines Platzhalters.
+    var entry =
+        new org.mwolff.manban.card.domain.CardActivity(
+            5L,
+            8L,
+            9L,
+            org.mwolff.manban.card.domain.CardActivityType.MOVED,
+            "Verschoben",
+            INSTANT,
+            null,
+            null,
+            null);
+    when(service.listActivity(3L, 8L)).thenReturn(List.of(entry));
+
+    List<CardController.ActivityView> result = controller.activity(3L, 8L);
+
+    assertThat(result)
+        .singleElement()
+        .satisfies(
+            v -> {
+              assertThat(v.origin()).isNull();
+              assertThat(v.tokenName()).isNull();
+              assertThat(v.agent()).isNull();
             });
   }
 

@@ -12,9 +12,11 @@ import org.jspecify.annotations.Nullable;
  * @param tokenId technische Token-ID
  * @param projectId gebundenes Projekt; {@code null} = ungebundenes Token
  * @param boardId gebundenes Board; {@code null} = ungebundenes Token
+ * @param tokenName Anzeigename des Tokens ({@code AccessToken.displayName}) — für die
+ *     Herkunfts-Kennzeichnung im Aktivitätsverlauf (Issue #517), ohne zweiten Token-Lookup
  */
 public record KanbanPrincipal(
-    long userId, long tokenId, @Nullable Long projectId, @Nullable Long boardId) {
+    long userId, long tokenId, @Nullable Long projectId, @Nullable Long boardId, String tokenName) {
 
   public boolean isBound() {
     return projectId != null && boardId != null;

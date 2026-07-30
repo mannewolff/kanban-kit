@@ -104,7 +104,7 @@ class PatAuthenticationFilterTest {
   @Test
   void doFilter_validToken_setsPatAuthenticationWithPrincipalDetails() throws Exception {
     // Given
-    var principal = new KanbanPrincipal(7L, 1L, 2L, 3L);
+    var principal = new KanbanPrincipal(7L, 1L, 2L, 3L, "Token");
     when(request.getHeader(PatAuthenticationFilter.HEADER)).thenReturn("tk_x");
     when(accessTokens.resolveBinding("tk_x")).thenReturn(Optional.of(principal));
 

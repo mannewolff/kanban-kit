@@ -23,7 +23,7 @@ import org.springframework.security.core.Authentication;
 /** Unit-Tests des Kanban-Compat-Controllers (Service + Authentication gemockt). */
 class KanbanCompatControllerTest {
 
-  private static final KanbanPrincipal PRINCIPAL = new KanbanPrincipal(7L, 1L, 2L, 3L);
+  private static final KanbanPrincipal PRINCIPAL = new KanbanPrincipal(7L, 1L, 2L, 3L, "Token");
 
   private KanbanCompatService service;
   private KanbanCompatController controller;
