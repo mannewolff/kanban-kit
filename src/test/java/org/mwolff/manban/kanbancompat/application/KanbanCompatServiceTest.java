@@ -3,6 +3,8 @@ package org.mwolff.manban.kanbancompat.application;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.tuple;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -31,6 +33,9 @@ import org.mwolff.manban.comment.application.CommentService;
 import org.mwolff.manban.comment.application.CommentService.CommentView;
 
 /** Unit-Tests der Kanban-Compat-Schicht (Spaltennamen-Normalisierung + Verhalten an den Ports). */
+// PMD.TooManyMethods: methodenreiche Testsuite — viele kleine @Test-Methoden je Erfolgs- und
+// Fehlerpfad sind hier gewollt, kein Refactoring-Signal.
+@SuppressWarnings("PMD.TooManyMethods")
 class KanbanCompatServiceTest {
 
   private static final long BOARD = 10L;
@@ -217,14 +222,16 @@ class KanbanCompatServiceTest {
     // Given: der board-gebundene Token liefert das Board; daraus wird das Projekt abgeleitet und
     // das Board nur noch als Zielboard (target_board_id) notiert.
     when(boardService.requireProjectId(BOARD)).thenReturn(5L);
-    when(cardService.createProjectIdea(1L, 5L, "Titel", "Body", BOARD)).thenReturn(pooledIdea(42L));
+    when(cardService.createProjectIdea(1L, 5L, "Titel", "Body", BOARD, null))
+        .thenReturn(new CardService.IdeaCreation(pooledIdea(42L), true));
 
     // When
-    KanbanCompatService.Created created = service.create(bound(), "Titel", "Body", null, false);
+    KanbanCompatService.Created created =
+        service.create(bound(), "Titel", "Body", null, false, null);
 
     // Then: kein board-gebundenes create mehr, sondern eine board-lose Pool-Idee; zurück kommt
     // deren id samt der projektweiten Nummer (#402), damit der Adapter sofort #N zeigen kann.
-    verify(cardService).createProjectIdea(1L, 5L, "Titel", "Body", BOARD);
+    verify(cardService).createProjectIdea(1L, 5L, "Titel", "Body", BOARD, null);
     assertThat(created.id()).isEqualTo(42L);
     assertThat(created.number()).isEqualTo(7);
   }
@@ -234,16 +241,50 @@ class KanbanCompatServiceTest {
     // Given: seit Entscheidung B sind column und ideaStored gegenstandslos — egal was reinkommt,
     // es entsteht dieselbe Pool-Idee (keine Spalten-Validierung, kein Ideen-Flag-Durchreichen).
     when(boardService.requireProjectId(BOARD)).thenReturn(5L);
-    when(cardService.createProjectIdea(1L, 5L, "Titel", "Body", BOARD)).thenReturn(pooledIdea(42L));
+    when(cardService.createProjectIdea(1L, 5L, "Titel", "Body", BOARD, null))
+        .thenReturn(new CardService.IdeaCreation(pooledIdea(42L), true));
 
     // When: absichtlich eine (frueher unbekannte) Spalte + ideaStored=true
     KanbanCompatService.Created created =
-        service.create(bound(), "Titel", "Body", "VOELLIG-UNBEKANNT", true);
+        service.create(bound(), "Titel", "Body", "VOELLIG-UNBEKANNT", true, null);
 
     // Then: keine InvalidKanbanColumnException, Delegation unveraendert
-    verify(cardService).createProjectIdea(1L, 5L, "Titel", "Body", BOARD);
+    verify(cardService).createProjectIdea(1L, 5L, "Titel", "Body", BOARD, null);
     assertThat(created.id()).isEqualTo(42L);
     assertThat(created.number()).isEqualTo(7);
+  }
+
+  @Test
+  void create_normalizesExternalKey_andReportsCreatedFlag() {
+    // Given: Schlüssel mit Rand-Whitespace; der Service traf ein Duplikat (created=false).
+    when(boardService.requireProjectId(BOARD)).thenReturn(5L);
+    when(cardService.createProjectIdea(1L, 5L, "Titel", "Body", BOARD, "sonar:abc"))
+        .thenReturn(new CardService.IdeaCreation(pooledIdea(42L), false));
+
+    // When
+    KanbanCompatService.Created created =
+        service.create(bound(), "Titel", "Body", null, false, "  sonar:abc  ");
+
+    // Then: getrimmt durchgereicht, Duplikat als created=false gemeldet.
+    verify(cardService).createProjectIdea(1L, 5L, "Titel", "Body", BOARD, "sonar:abc");
+    assertThat(created.created()).isFalse();
+    assertThat(created.id()).isEqualTo(42L);
+  }
+
+  @Test
+  void create_capsExternalKeyAt100Chars_andTreatsBlankAsMissing() {
+    // Given
+    when(boardService.requireProjectId(BOARD)).thenReturn(5L);
+    when(cardService.createProjectIdea(anyLong(), anyLong(), any(), any(), any(), any()))
+        .thenReturn(new CardService.IdeaCreation(pooledIdea(42L), true));
+
+    // When: überlanger Schlüssel und blanker Schlüssel
+    service.create(bound(), "Titel", "Body", null, false, "x".repeat(150));
+    service.create(bound(), "Titel", "Body", null, false, "   ");
+
+    // Then: gekappt auf 100 bzw. null (kein Schlüssel)
+    verify(cardService).createProjectIdea(1L, 5L, "Titel", "Body", BOARD, "x".repeat(100));
+    verify(cardService).createProjectIdea(1L, 5L, "Titel", "Body", BOARD, null);
   }
 
   @Test
@@ -253,7 +294,7 @@ class KanbanCompatServiceTest {
 
     // When / Then
     KanbanPrincipal principal = bound();
-    assertThatThrownBy(() -> service.create(principal, "Titel", "Body", null, false))
+    assertThatThrownBy(() -> service.create(principal, "Titel", "Body", null, false, null))
         .isInstanceOf(BoardNotFoundException.class);
   }
 

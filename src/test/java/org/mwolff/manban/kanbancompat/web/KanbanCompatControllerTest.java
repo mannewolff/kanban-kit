@@ -56,9 +56,9 @@ class KanbanCompatControllerTest {
   @Test
   void create_withBoundPrincipal_delegates_defaultsIdeaStoredToFalse() {
     // Given: fehlendes ideaStored (null) -> false an den Service
-    Created created = new Created(42L, 7);
-    var request = new KanbanCompatController.CreateItemRequest("Title", "Body", "todo", null);
-    when(service.create(PRINCIPAL, "Title", "Body", "todo", false)).thenReturn(created);
+    Created created = new Created(42L, 7, true);
+    var request = new KanbanCompatController.CreateItemRequest("Title", "Body", "todo", null, null);
+    when(service.create(PRINCIPAL, "Title", "Body", "todo", false, null)).thenReturn(created);
 
     // When
     Created result = controller.create(boundAuthentication(), request);
@@ -70,9 +70,9 @@ class KanbanCompatControllerTest {
   @Test
   void create_withIdeaStoredTrue_delegatesFlag() {
     // Given: ideaStored=true wird an den Service durchgereicht
-    Created created = new Created(43L, 8);
-    var request = new KanbanCompatController.CreateItemRequest("Idee", "Body", "todo", true);
-    when(service.create(PRINCIPAL, "Idee", "Body", "todo", true)).thenReturn(created);
+    Created created = new Created(43L, 8, true);
+    var request = new KanbanCompatController.CreateItemRequest("Idee", "Body", "todo", true, null);
+    when(service.create(PRINCIPAL, "Idee", "Body", "todo", true, null)).thenReturn(created);
 
     // When
     Created result = controller.create(boundAuthentication(), request);

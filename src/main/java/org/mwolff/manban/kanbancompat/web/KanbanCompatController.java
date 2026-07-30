@@ -55,7 +55,8 @@ class KanbanCompatController {
         request.title(),
         request.body(),
         request.column(),
-        Boolean.TRUE.equals(request.ideaStored()));
+        Boolean.TRUE.equals(request.ideaStored()),
+        request.externalKey());
   }
 
   @PutMapping("/items/{id}/move")
@@ -97,7 +98,9 @@ class KanbanCompatController {
       @NotBlank @Size(max = 300) String title,
       String body,
       String column,
-      @Nullable Boolean ideaStored) {}
+      @Nullable Boolean ideaStored,
+      // Idempotenz-Schlüssel (#534); Normalisierung (trim/Kappung) macht der Service.
+      @Nullable String externalKey) {}
 
   record MoveRequest(@NotBlank String column, @PositiveOrZero int position) {}
 

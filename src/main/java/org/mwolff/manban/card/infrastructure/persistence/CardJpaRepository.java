@@ -24,6 +24,9 @@ interface CardJpaRepository extends JpaRepository<CardEntity, Long> {
   /** Nicht-gelöschte Karte eines Projekts nach projektweiter Nummer (projektweit eindeutig). */
   Optional<CardEntity> findByProjectIdAndNumberAndDeletedAtIsNull(Long projectId, Integer number);
 
+  // Bewusst ohne DeletedAt-Filter: der Idempotenz-Check (#534) sieht auch Papierkorb-Karten.
+  Optional<CardEntity> findByProjectIdAndExternalKey(Long projectId, String externalKey);
+
   /**
    * Nicht-gelöschte Karten mit dieser Nummer aus den angegebenen Projekten, aufsteigend nach
    * Projekt-ID (stabile Trefferreihenfolge für die projektübergreifende Suche, #489).

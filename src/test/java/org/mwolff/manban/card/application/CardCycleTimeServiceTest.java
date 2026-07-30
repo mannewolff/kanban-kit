@@ -77,6 +77,7 @@ class CardCycleTimeServiceTest {
         null,
         null,
         1L,
+        null,
         null);
   }
 
@@ -180,6 +181,7 @@ class CardCycleTimeServiceTest {
             "EP",
             null,
             1L,
+            null,
             null);
     stub(
         List.of(
