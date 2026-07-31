@@ -29,3 +29,6 @@ install.mjs
 
 # Lokale Issue-Notlösung des Board-Adapters (Fallback bei Tracker-Ausfall) — Arbeitsdateien, kein Commit-Ziel
 issues/
+
+# JVM-Crash-Logs abstuerzender PIT-Minions (SIGSEGV auf OpenJDK/aarch64) — Build-Muell, kein Commit-Ziel
+hs_err_pid*.log
