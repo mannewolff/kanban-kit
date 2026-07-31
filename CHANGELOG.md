@@ -7,6 +7,26 @@ Versionierung folgt der dreiteiligen Betriebsversion (siehe [RELEASING.md](RELEA
 Einträge je Version sind ein automatischer Auszug der Commit-Titel seit dem letzten Release,
 erzeugt von `scripts/gen-changelog.mjs`.
 
+## [1.14.0] – 2026-07-31
+
+- chore: Version auf 1.13.3 (push main)
+- Sonar: Fence-Zeichenvergleich auf startsWith umstellen ([#546](https://github.com/mannewolff/kanban-kit/issues/546))
+- Sonar: Backtracking beim Abschneiden der Schlussrauten aufloesen ([#545](https://github.com/mannewolff/kanban-kit/issues/545))
+- Sonar: Backtracking in der Heading-Regex aufloesen ([#544](https://github.com/mannewolff/kanban-kit/issues/544))
+- Sonar: Backtracking in der Code-Fence-Regex aufloesen ([#543](https://github.com/mannewolff/kanban-kit/issues/543))
+- Sonar: Verschachtelte Ternary in der Leermeldung aufloesen ([#542](https://github.com/mannewolff/kanban-kit/issues/542))
+- Sonar: Mehrdeutigen Abstand vor verstecktem Input aufloesen ([#541](https://github.com/mannewolff/kanban-kit/issues/541))
+- Sonar: Kommentarblock an ActivityView als Javadoc formulieren ([#540](https://github.com/mannewolff/kanban-kit/issues/540))
+- Sonar: CardActivityEntity-Konstruktor auf sechs Parameter kuerzen ([#539](https://github.com/mannewolff/kanban-kit/issues/539))
+- Sonar: Self-Invocation bei createProjectIdea aufloesen ([#538](https://github.com/mannewolff/kanban-kit/issues/538))
+- chore: hs_err-Crash-Logs der PIT-Minions ignorieren
+- chore: Version auf 1.13.2 (push main)
+- Karten-Detail: gespeicherte Abhaengigkeiten sofort anzeigen ([#537](https://github.com/mannewolff/kanban-kit/issues/537))
+- chore: Version auf 1.13.1 (push main)
+- Sonar-Sync: Findings als Karten aufs Sonar-Board statt als GitHub-Issues ([#536](https://github.com/mannewolff/kanban-kit/issues/536))
+- kanbancompat-Ingest: direct-Routing aufs token-gebundene Board ([#535](https://github.com/mannewolff/kanban-kit/issues/535))
+- kanbancompat-Ingest: Idempotenz ueber externen Schluessel ([#534](https://github.com/mannewolff/kanban-kit/issues/534))
+
 ## [1.13.0] – 2026-07-30
 
 - chore: Version auf 1.12.3 (push main)
