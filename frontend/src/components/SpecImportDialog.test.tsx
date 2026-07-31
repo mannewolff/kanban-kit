@@ -181,6 +181,18 @@ describe('SpecImportDialog', () => {
     ).toBeInTheDocument()
   })
 
+  it('nennt umgekehrt H2 als Ausweg, wenn auf H1 umgeschaltet keine Überschrift bleibt', () => {
+    renderDialog({ markdown: '## Nur eine H2\nText dazu.' })
+
+    fireEvent.change(screen.getByLabelText('Trennende Überschriftenebene'), {
+      target: { value: '1' },
+    })
+
+    expect(
+      screen.getByText(/Keine Überschrift der Ebene H1 gefunden.*H2 umschalten/s),
+    ).toBeInTheDocument()
+  })
+
   it('markiert gekürzte Titel und Beschreibungen in der Vorschau', () => {
     const title = 'T'.repeat(MAX_TITLE_LENGTH + 5)
     const body = 'B'.repeat(MAX_DESCRIPTION_LENGTH + 5)
