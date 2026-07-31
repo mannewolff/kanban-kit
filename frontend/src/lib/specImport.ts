@@ -89,7 +89,7 @@ function nextFence(line: string, open: string | null): string | null {
     return marker
   }
   const info = line.slice(match[0].length)
-  const closes = marker[0] === open[0] && marker.length >= open.length && info.trim() === ''
+  const closes = marker.startsWith(open[0]) && marker.length >= open.length && info.trim() === ''
   return closes ? null : open
 }
 
