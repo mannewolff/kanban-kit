@@ -27,17 +27,7 @@ class CardActivityRepositoryAdapter implements CardActivityRepository {
       String detail,
       Instant createdAt,
       ActorStamp stamp) {
-    CardActivityOrigin origin = stamp.origin();
-    jpa.save(
-        new CardActivityEntity(
-            cardId,
-            actorUserId,
-            type.name(),
-            detail,
-            createdAt,
-            origin == null ? null : origin.name(),
-            stamp.tokenName(),
-            stamp.agent()));
+    jpa.save(new CardActivityEntity(cardId, actorUserId, type.name(), detail, createdAt, stamp));
   }
 
   @Override
