@@ -823,7 +823,7 @@ public class CardService {
       String title,
       @Nullable String description,
       @Nullable Long targetBoardId) {
-    return createProjectIdea(userId, projectId, title, description, targetBoardId, null).view();
+    return doCreateProjectIdea(userId, projectId, title, description, targetBoardId, null).view();
   }
 
   /**
@@ -842,6 +842,19 @@ public class CardService {
    */
   @Transactional
   public IdeaCreation createProjectIdea(
+      long userId,
+      long projectId,
+      String title,
+      @Nullable String description,
+      @Nullable Long targetBoardId,
+      @Nullable String externalKey) {
+    return doCreateProjectIdea(userId, projectId, title, description, targetBoardId, externalKey);
+  }
+
+  // Kern-Logik der Ideen-Anlage ohne eigene @Transactional: wird von beiden öffentlichen
+  // createProjectIdea-Überladungen (je @Transactional) aufgerufen, ohne Self-Invocation über den
+  // Proxy (java:S6809).
+  private IdeaCreation doCreateProjectIdea(
       long userId,
       long projectId,
       String title,
