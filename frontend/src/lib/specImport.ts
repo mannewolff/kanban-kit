@@ -47,8 +47,25 @@ const FENCE = /^ {0,3}(`{3,}|~{3,})/
  * trennende Leerzeichen im Treffer bleibt, beginnt der Rest genau dort, wo zuvor die Gruppe begann.
  */
 const HEADING = /^ {0,3}(#{1,6})(?:[ \t]+|$)/
-/** Optionale abschließende Rautenfolge einer ATX-Überschrift (`## Titel ##`). */
-const CLOSING_HASHES = /[ \t]+#+[ \t]*$/
+/**
+ * Schneidet die optionale abschließende Rautenfolge einer ATX-Überschrift ab (`## Titel ##`); ohne
+ * trennenden Leerraum davor gehören die Rauten zum Titel (`## Titel###`). Von hinten gelesen statt
+ * per Regex: ein Muster wie `[ \t]+#+[ \t]*$` hat keinen festen Startpunkt und wird deshalb an jeder
+ * Position der Zeile neu versucht — bei einem Fehlschlag ist die Laufzeit super-linear (Sonar
+ * S8786). Der Rückwärtslauf berührt jedes Zeichen höchstens einmal.
+ *
+ * `trimEnd` deckt zugleich den Fall ohne Rauten ab: das letzte Zeichen ist dann kein Leerraum, die
+ * Trennzeichenprüfung schlägt fehl und der Text bleibt unangetastet.
+ */
+function stripClosingHashes(text: string): string {
+  const trimmed = text.trimEnd()
+  let end = trimmed.length
+  while (end > 0 && trimmed[end - 1] === '#') {
+    end--
+  }
+  const separator = trimmed[end - 1]
+  return separator === ' ' || separator === '\t' ? trimmed.slice(0, end) : text
+}
 
 /** Abschnitt im Aufbau: Titel steht fest, die Beschreibung sammelt noch Zeilen. */
 interface OpenSection {
@@ -122,7 +139,7 @@ export function splitSpecIntoSections(markdown: string, level: HeadingLevel): Sp
     const heading = HEADING.exec(line)
     const title =
       heading?.[1].length === level
-        ? line.slice(heading[0].length).replace(CLOSING_HASHES, '').trim()
+        ? stripClosingHashes(line.slice(heading[0].length)).trim()
         : ''
     if (title !== '') {
       if (current !== null) {

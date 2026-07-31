@@ -170,6 +170,18 @@ describe('splitSpecIntoSections', () => {
     expect(splitSpecIntoSections('## Titel ##\nText', 2)[0].title).toBe('Titel')
   })
 
+  it('entfernt die abschließende Rautenfolge samt Leerraum davor und dahinter', () => {
+    expect(splitSpecIntoSections('## Titel \t##  \nText', 2)[0].title).toBe('Titel')
+  })
+
+  it('behält eine Rautenfolge ohne trennenden Leerraum im Titel', () => {
+    expect(splitSpecIntoSections('## Titel###\nText', 2)[0].title).toBe('Titel###')
+  })
+
+  it('behält Rauten mitten im Titel', () => {
+    expect(splitSpecIntoSections('## Titel ## Rest\nText', 2)[0].title).toBe('Titel ## Rest')
+  })
+
   it('startet keine Karte für eine Überschrift ohne Text', () => {
     const md = ['## Erstes', 'A', '##', 'B', '## ', 'C'].join('\n')
 
