@@ -76,6 +76,14 @@ describe('splitSpecIntoSections', () => {
     expect(splitSpecIntoSections(md, 2).map((s) => s.title)).toEqual(['A', 'B'])
   })
 
+  it('erkennt eingerückte Fences und schließt trotz Leerraum hinter der Markierung', () => {
+    const md = ['## A', '  ```js', '## Kein Titel', '  ``` ', '## B'].join('\n')
+
+    const sections = splitSpecIntoSections(md, 2)
+    expect(sections.map((s) => s.title)).toEqual(['A', 'B'])
+    expect(sections[0].description).toContain('## Kein Titel')
+  })
+
   it('lässt einen nicht geschlossenen Code-Block bis zum Dateiende offen', () => {
     const md = ['## A', '```', '## Kein Titel'].join('\n')
 

@@ -32,8 +32,13 @@ export interface SpecSection {
   descriptionTruncated: boolean
 }
 
-/** Code-Fence (CommonMark: bis zu drei Leerzeichen Einrückung, mindestens drei ` oder ~). */
-const FENCE = /^ {0,3}(`{3,}|~{3,})(.*)$/
+/**
+ * Code-Fence (CommonMark: bis zu drei Leerzeichen Einrückung, mindestens drei ` oder ~). Der
+ * Info-String dahinter wird nicht mitgematcht, sondern hinter dem Treffer abgeschnitten: ein
+ * abschließendes `(.*)$` konkurrierte mit dem `{3,}` um dieselben Zeichen und machte die Laufzeit
+ * bei einem Fehlschlag super-linear (Sonar S8786).
+ */
+const FENCE = /^ {0,3}(`{3,}|~{3,})/
 /** ATX-Überschrift: bis zu drei Leerzeichen, ein bis sechs #, danach Zeilenende oder Whitespace. */
 const HEADING = /^ {0,3}(#{1,6})(?:[ \t]+(.*))?$/
 /** Optionale abschließende Rautenfolge einer ATX-Überschrift (`## Titel ##`). */
@@ -56,10 +61,11 @@ function nextFence(line: string, open: string | null): string | null {
   if (match === null) {
     return open
   }
-  const [, marker, info] = match
+  const marker = match[1]
   if (open === null) {
     return marker
   }
+  const info = line.slice(match[0].length)
   const closes = marker[0] === open[0] && marker.length >= open.length && info.trim() === ''
   return closes ? null : open
 }
