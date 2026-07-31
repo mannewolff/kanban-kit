@@ -182,6 +182,14 @@ describe('splitSpecIntoSections', () => {
     expect(splitSpecIntoSections('##\n## Erstes\nA', 2).map((s) => s.title)).toEqual(['Erstes'])
   })
 
+  it('rechnet den Titel hinter dem gesamten Rautenblock inklusive Trennzeichen ab', () => {
+    const md = ['## ##', 'Text', '###### Tief genug', 'Mehr'].join('\n')
+
+    const sections = splitSpecIntoSections(md, 2)
+    expect(sections.map((s) => s.title)).toEqual(['##'])
+    expect(sections[0].description).toBe('Text\n###### Tief genug\nMehr')
+  })
+
   it('erkennt nur echte ATX-Überschriften (Leerzeichen nötig, höchstens drei Einrückungen)', () => {
     const md = ['## Erstes', '##kein Titel', '    ## eingerückt', '   ## Zweites'].join('\n')
 

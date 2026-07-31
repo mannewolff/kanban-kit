@@ -39,8 +39,14 @@ export interface SpecSection {
  * bei einem Fehlschlag super-linear (Sonar S8786).
  */
 const FENCE = /^ {0,3}(`{3,}|~{3,})/
-/** ATX-Überschrift: bis zu drei Leerzeichen, ein bis sechs #, danach Zeilenende oder Whitespace. */
-const HEADING = /^ {0,3}(#{1,6})(?:[ \t]+(.*))?$/
+/**
+ * ATX-Überschrift: bis zu drei Leerzeichen, ein bis sechs #, danach Zeilenende oder Whitespace. Der
+ * Titeltext dahinter wird — wie beim Fence — nicht mitgematcht, sondern hinter dem Treffer
+ * abgeschnitten: ein abschließendes `(.*)$` konkurrierte mit dem vorangehenden `[ \t]+` um dieselben
+ * Zeichen und machte die Laufzeit bei einem Fehlschlag super-linear (Sonar S8786). Weil das
+ * trennende Leerzeichen im Treffer bleibt, beginnt der Rest genau dort, wo zuvor die Gruppe begann.
+ */
+const HEADING = /^ {0,3}(#{1,6})(?:[ \t]+|$)/
 /** Optionale abschließende Rautenfolge einer ATX-Überschrift (`## Titel ##`). */
 const CLOSING_HASHES = /[ \t]+#+[ \t]*$/
 
@@ -114,7 +120,10 @@ export function splitSpecIntoSections(markdown: string, level: HeadingLevel): Sp
     }
 
     const heading = HEADING.exec(line)
-    const title = heading?.[1].length === level ? (heading[2] ?? '').replace(CLOSING_HASHES, '').trim() : ''
+    const title =
+      heading?.[1].length === level
+        ? line.slice(heading[0].length).replace(CLOSING_HASHES, '').trim()
+        : ''
     if (title !== '') {
       if (current !== null) {
         sections.push(finish(current))
