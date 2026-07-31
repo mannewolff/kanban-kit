@@ -48,6 +48,10 @@ export default tseslint.config(
       // (#445). Als Gate-Regel statt reinem Einzelfix, damit dieselbe Klasse nicht wieder
       // erst nach dem Push bei SonarCloud auffällt.
       '@typescript-eslint/prefer-optional-chain': 'error',
+      // Aktiviert: Textknoten, der nur durch einen Zeilenumbruch von einem Inline-Element
+      // getrennt ist — JSX verschluckt das Leerzeichen, die Absicht bleibt mehrdeutig.
+      // Deckungsgleich mit Sonar S6772 (#541); als Gate-Regel statt reinem Einzelfix.
+      'react/jsx-child-element-spacing': 'error',
     },
   },
   {
