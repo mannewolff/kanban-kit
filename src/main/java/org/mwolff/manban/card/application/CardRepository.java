@@ -20,6 +20,14 @@ public interface CardRepository {
   Optional<Card> findByProjectIdAndNumber(long projectId, int number);
 
   /**
+   * Karte eines Projekts nach ihrem externen Idempotenz-Schlüssel (Issue #534) — bewusst
+   * <strong>einschließlich</strong> archivierter und Papierkorb-Karten: Ein bewusst verworfenes
+   * Finding soll den wiederholten Ingest weiterhin unterdrücken. Nur endgültiges Löschen (purge)
+   * entfernt die Zeile und gibt den Schlüssel frei.
+   */
+  Optional<Card> findByProjectIdAndExternalKey(long projectId, String externalKey);
+
+  /**
    * Nicht-gelöschte Karten mit dieser projektweiten Nummer aus den angegebenen Projekten,
    * aufsteigend nach Projekt-ID. Dieselbe Nummer kann in mehreren Projekten existieren ({@code
    * uq_card_number (project_id, number)}), deshalb eine Liste; je Projekt kann höchstens eine Karte

@@ -31,6 +31,7 @@ class CardTest {
           null,
           null,
           1L,
+          null,
           null);
 
   @Test
@@ -89,6 +90,7 @@ class CardTest {
             null,
             null,
             1L,
+            null,
             null);
 
     assertThatExceptionOfType(IllegalStateException.class).isThrownBy(numberless::requireNumber);

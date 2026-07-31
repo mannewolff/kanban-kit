@@ -32,12 +32,40 @@ export interface SpecSection {
   descriptionTruncated: boolean
 }
 
-/** Code-Fence (CommonMark: bis zu drei Leerzeichen Einrückung, mindestens drei ` oder ~). */
-const FENCE = /^ {0,3}(`{3,}|~{3,})(.*)$/
-/** ATX-Überschrift: bis zu drei Leerzeichen, ein bis sechs #, danach Zeilenende oder Whitespace. */
-const HEADING = /^ {0,3}(#{1,6})(?:[ \t]+(.*))?$/
-/** Optionale abschließende Rautenfolge einer ATX-Überschrift (`## Titel ##`). */
-const CLOSING_HASHES = /[ \t]+#+[ \t]*$/
+/**
+ * Code-Fence (CommonMark: bis zu drei Leerzeichen Einrückung, mindestens drei ` oder ~). Der
+ * Info-String dahinter wird nicht mitgematcht, sondern hinter dem Treffer abgeschnitten: ein
+ * abschließendes `(.*)$` konkurrierte mit dem `{3,}` um dieselben Zeichen und machte die Laufzeit
+ * bei einem Fehlschlag super-linear (Sonar S8786).
+ */
+const FENCE = /^ {0,3}(`{3,}|~{3,})/
+/**
+ * ATX-Überschrift: bis zu drei Leerzeichen, ein bis sechs #, danach Zeilenende oder Whitespace. Der
+ * Titeltext dahinter wird — wie beim Fence — nicht mitgematcht, sondern hinter dem Treffer
+ * abgeschnitten: ein abschließendes `(.*)$` konkurrierte mit dem vorangehenden `[ \t]+` um dieselben
+ * Zeichen und machte die Laufzeit bei einem Fehlschlag super-linear (Sonar S8786). Weil das
+ * trennende Leerzeichen im Treffer bleibt, beginnt der Rest genau dort, wo zuvor die Gruppe begann.
+ */
+const HEADING = /^ {0,3}(#{1,6})(?:[ \t]+|$)/
+/**
+ * Schneidet die optionale abschließende Rautenfolge einer ATX-Überschrift ab (`## Titel ##`); ohne
+ * trennenden Leerraum davor gehören die Rauten zum Titel (`## Titel###`). Von hinten gelesen statt
+ * per Regex: ein Muster wie `[ \t]+#+[ \t]*$` hat keinen festen Startpunkt und wird deshalb an jeder
+ * Position der Zeile neu versucht — bei einem Fehlschlag ist die Laufzeit super-linear (Sonar
+ * S8786). Der Rückwärtslauf berührt jedes Zeichen höchstens einmal.
+ *
+ * `trimEnd` deckt zugleich den Fall ohne Rauten ab: das letzte Zeichen ist dann kein Leerraum, die
+ * Trennzeichenprüfung schlägt fehl und der Text bleibt unangetastet.
+ */
+function stripClosingHashes(text: string): string {
+  const trimmed = text.trimEnd()
+  let end = trimmed.length
+  while (end > 0 && trimmed[end - 1] === '#') {
+    end--
+  }
+  const separator = trimmed[end - 1]
+  return separator === ' ' || separator === '\t' ? trimmed.slice(0, end) : text
+}
 
 /** Abschnitt im Aufbau: Titel steht fest, die Beschreibung sammelt noch Zeilen. */
 interface OpenSection {
@@ -56,11 +84,12 @@ function nextFence(line: string, open: string | null): string | null {
   if (match === null) {
     return open
   }
-  const [, marker, info] = match
+  const marker = match[1]
   if (open === null) {
     return marker
   }
-  const closes = marker[0] === open[0] && marker.length >= open.length && info.trim() === ''
+  const info = line.slice(match[0].length)
+  const closes = marker.startsWith(open[0]) && marker.length >= open.length && info.trim() === ''
   return closes ? null : open
 }
 
@@ -108,7 +137,10 @@ export function splitSpecIntoSections(markdown: string, level: HeadingLevel): Sp
     }
 
     const heading = HEADING.exec(line)
-    const title = heading?.[1].length === level ? (heading[2] ?? '').replace(CLOSING_HASHES, '').trim() : ''
+    const title =
+      heading?.[1].length === level
+        ? stripClosingHashes(line.slice(heading[0].length)).trim()
+        : ''
     if (title !== '') {
       if (current !== null) {
         sections.push(finish(current))

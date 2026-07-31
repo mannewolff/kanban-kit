@@ -39,6 +39,11 @@ class CardEntity {
   @Column(name = "target_board_id")
   private @Nullable Long targetBoardId;
 
+  // Idempotenz-Schlüssel eines Automatik-Ingests (Issue #534); projekt-eindeutig via partiellem
+  // Unique-Index (V24).
+  @Column(name = "external_key")
+  private @Nullable String externalKey;
+
   @Column(name = "title", nullable = false)
   private String title;
 
@@ -96,6 +101,7 @@ class CardEntity {
     this.columnId = c.columnId();
     this.number = c.number();
     this.targetBoardId = c.targetBoardId();
+    this.externalKey = c.externalKey();
     this.title = c.title();
     this.description = c.description();
     this.positionInColumn = c.positionInColumn();
@@ -133,6 +139,10 @@ class CardEntity {
 
   @Nullable Long getTargetBoardId() {
     return targetBoardId;
+  }
+
+  @Nullable String getExternalKey() {
+    return externalKey;
   }
 
   String getTitle() {

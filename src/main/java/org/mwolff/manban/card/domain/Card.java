@@ -38,6 +38,9 @@ import org.mwolff.manban.common.Identifiable;
  * @param dueDate Fälligkeitsdatum (nullable; nur an CARD sinnvoll)
  * @param projectId zugehöriges Projekt (immer gesetzt)
  * @param targetBoardId notiertes Zielboard einer Pool-Idee (nullable)
+ * @param externalKey idempotenz-Schlüssel eines Automatik-Ingests (nullable, projekt-eindeutig, z.
+ *     B. {@code sonar:<issue-key>}; Issue #534) — verhindert Doppel-Anlage durch wiederholte Läufe,
+ *     solange die Karte existiert (auch archiviert/Papierkorb); purge gibt ihn frei
  */
 public record Card(
     @Nullable Long id,
@@ -58,7 +61,8 @@ public record Card(
     @Nullable String shortcode,
     @Nullable Instant dueDate,
     Long projectId,
-    @Nullable Long targetBoardId)
+    @Nullable Long targetBoardId,
+    @Nullable String externalKey)
     implements Identifiable {
 
   /** Board-ID einer board-gebundenen Karte; wirft bei einer board-losen Pool-Idee. */
@@ -105,7 +109,8 @@ public record Card(
         shortcode,
         dueDate,
         projectId,
-        targetBoardId);
+        targetBoardId,
+        externalKey);
   }
 
   public Card asArchived() {
@@ -128,7 +133,8 @@ public record Card(
         shortcode,
         dueDate,
         projectId,
-        targetBoardId);
+        targetBoardId,
+        externalKey);
   }
 
   /** Wiederherstellen an einer freien Position (append), um Positionskollisionen zu vermeiden. */
@@ -152,7 +158,8 @@ public record Card(
         shortcode,
         dueDate,
         projectId,
-        targetBoardId);
+        targetBoardId,
+        externalKey);
   }
 
   /**
@@ -181,7 +188,8 @@ public record Card(
         shortcode,
         dueDate,
         projectId,
-        newTargetBoardId);
+        newTargetBoardId,
+        externalKey);
   }
 
   /**
@@ -209,7 +217,8 @@ public record Card(
         shortcode,
         dueDate,
         projectId,
-        null);
+        null,
+        externalKey);
   }
 
   public Card withMovedToDoneAt(@Nullable Instant when) {
@@ -232,7 +241,8 @@ public record Card(
         shortcode,
         dueDate,
         projectId,
-        targetBoardId);
+        targetBoardId,
+        externalKey);
   }
 
   /** Setzt oder löscht ({@code null}) die Epic-Zuordnung. */
@@ -256,7 +266,8 @@ public record Card(
         shortcode,
         dueDate,
         projectId,
-        targetBoardId);
+        targetBoardId,
+        externalKey);
   }
 
   /** Setzt das Kürzel (nur für Epics sinnvoll). */
@@ -280,7 +291,8 @@ public record Card(
         newShortcode,
         dueDate,
         projectId,
-        targetBoardId);
+        targetBoardId,
+        externalKey);
   }
 
   /** Setzt oder löscht ({@code null}) das Fälligkeitsdatum. */
@@ -304,6 +316,7 @@ public record Card(
         shortcode,
         newDueDate,
         projectId,
-        targetBoardId);
+        targetBoardId,
+        externalKey);
   }
 }

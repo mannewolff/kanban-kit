@@ -65,7 +65,8 @@ class CardBoardOptionalIT extends AbstractIntegrationTest {
             null,
             null,
             projectId,
-            boardId);
+            boardId,
+            null);
 
     Card saved = cards.save(idea);
     Card reloaded = cards.findById(saved.requireId()).orElseThrow();

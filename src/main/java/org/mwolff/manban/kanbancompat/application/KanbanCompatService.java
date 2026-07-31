@@ -123,13 +123,41 @@ public class KanbanCompatService {
       String title,
       @Nullable String body,
       @Nullable String column,
-      boolean ideaStored) {
+      boolean ideaStored,
+      @Nullable String externalKey,
+      boolean direct) {
     long boardId = requireBound(principal);
     long projectId = boardService.requireProjectId(boardId);
-    CardView v = cardService.createProjectIdea(principal.userId(), projectId, title, body, boardId);
+    String key = normalizeExternalKey(externalKey);
+    CardService.IdeaCreation result;
+    if (direct) {
+      // Opt-in-Board-Routing (#535): für dedizierte Sammel-Boards (z. B. Sonar-Findings) landet
+      // die Karte direkt in der ersten Spalte des Token-Boards. Die Pool-Leitplanke aus
+      // Entscheidung B bleibt der Default — was von außen kommt, plant sonst ein Mensch ein.
+      long columnId = boardService.firstColumn(boardId).id();
+      result = cardService.createDirect(principal.userId(), boardId, columnId, title, body, key);
+    } else {
+      result =
+          cardService.createProjectIdea(principal.userId(), projectId, title, body, boardId, key);
+    }
+    CardView v = result.view();
     // Seit #402 vergibt createProjectIdea sofort eine Nummer; requireNonNull macht das fuer
     // NullAway explizit (CardView.number() ist @Nullable fuer Legacy-Ideen ohne Nummer).
-    return new Created(v.id(), Objects.requireNonNull(v.number()));
+    return new Created(v.id(), Objects.requireNonNull(v.number()), result.created());
+  }
+
+  /**
+   * Normalisiert den Idempotenz-Schlüssel (#534): getrimmt, auf die Spaltenlänge (100) gekappt,
+   * leer wird zu {@code null} (kein Schlüssel).
+   */
+  private static @Nullable String normalizeExternalKey(@Nullable String externalKey) {
+    if (externalKey == null || externalKey.isBlank()) {
+      return null;
+    }
+    String trimmed = externalKey.trim();
+    // Ohne Grenz-Verzweigung (substring(0, length) liefert this): eine <=-Bedingung wäre an der
+    // exakten Grenze ein äquivalenter, untötbarer PIT-Mutant.
+    return trimmed.substring(0, Math.min(trimmed.length(), 100));
   }
 
   /** Verschiebt ein Item des gebundenen Boards in die Ziel-Spalte an die Ziel-Position. */
@@ -250,7 +278,12 @@ public class KanbanCompatService {
   /** Kommentar eines Items; {@code author} ist der Anzeigename des Autors zur Schreibzeit. */
   public record Comment(String author, String body, Instant createdAt) {}
 
-  public record Created(long id, int number) {}
+  /**
+   * Ergebnis des Ingests: {@code created=false}, wenn ein {@code externalKey} auf eine bereits
+   * existierende Karte traf und nichts angelegt wurde (#534) — {@code id}/{@code number} zeigen
+   * dann die bestehende Karte.
+   */
+  public record Created(long id, int number, boolean created) {}
 
   public record Epic(int number, String title, @Nullable String shortcode, Progress progress) {}
 

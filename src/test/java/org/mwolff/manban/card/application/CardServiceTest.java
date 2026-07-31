@@ -79,7 +79,7 @@ class CardServiceTest {
       String shortcode) {
     return new Card(
         id, BOARD, columnId, number, "Titel", null, 0, archived, false, done, 1L, FIXED, FIXED,
-        type, parentId, shortcode, null, PROJECT, null);
+        type, parentId, shortcode, null, PROJECT, null, null);
   }
 
   private static ColumnView column(long id, String name, int position) {
@@ -141,7 +141,8 @@ class CardServiceTest {
         c.shortcode(),
         c.dueDate(),
         c.projectId(),
-        c.targetBoardId());
+        c.targetBoardId(),
+        c.externalKey());
   }
 
   // --- create -----------------------------------------------------------
@@ -1102,6 +1103,7 @@ class CardServiceTest {
             "E",
             null,
             PROJECT,
+            null,
             null);
     when(cards.findById(30L)).thenReturn(Optional.of(epicOtherBoard));
 
@@ -2177,6 +2179,7 @@ class CardServiceTest {
         null,
         null,
         PROJECT,
+        null,
         null);
   }
 
@@ -2265,6 +2268,7 @@ class CardServiceTest {
             null,
             null,
             PROJECT,
+            null,
             null);
     when(cards.findById(1L)).thenReturn(Optional.of(numbered));
     when(boardService.firstColumn(BOARD)).thenReturn(column(20L, "Backlog", 0));
@@ -2498,6 +2502,7 @@ class CardServiceTest {
         null,
         null,
         projectId,
+        null,
         null);
   }
 
@@ -2701,6 +2706,7 @@ class CardServiceTest {
         null,
         null,
         PROJECT,
+        null,
         null);
   }
 
@@ -2779,6 +2785,98 @@ class CardServiceTest {
         .singleElement()
         .extracting(CardService.BoardItemView::epic)
         .isEqualTo(true);
+  }
+
+  // --- createProjectIdea mit externalKey (#534) ------------------------
+
+  @Test
+  void createProjectIdea_withExternalKey_persistsKeyOnNewCard() {
+    when(cards.allocateCardNumber(PROJECT)).thenReturn(9);
+
+    CardService.IdeaCreation result =
+        service.createProjectIdea(1L, PROJECT, "Finding", null, BOARD, "sonar:abc");
+
+    ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
+    verify(cards).save(captor.capture());
+    assertThat(captor.getValue().externalKey()).isEqualTo("sonar:abc");
+    assertThat(result.created()).isTrue();
+  }
+
+  @Test
+  void createProjectIdea_withExistingExternalKey_returnsExistingWithoutCreating() {
+    // Duplikat: bestehende Karte zurück, nichts anlegen, kein Aktivitätseintrag, kein SSE-Event.
+    when(cards.findByProjectIdAndExternalKey(PROJECT, "sonar:abc"))
+        .thenReturn(Optional.of(boardCard(7L, 20L, 3, 0, false, false)));
+
+    CardService.IdeaCreation result =
+        service.createProjectIdea(1L, PROJECT, "Finding", null, BOARD, "sonar:abc");
+
+    assertThat(result.created()).isFalse();
+    assertThat(result.view().id()).isEqualTo(7L);
+    verify(cards, never()).save(any(Card.class));
+    verify(activity, never()).add(anyLong(), anyLong(), any(), any(), any(), any());
+    verify(events, never()).publishEvent(any(ProjectIdeasChangedEvent.class));
+  }
+
+  @Test
+  void createDirect_createsBoardCardWithExternalKey() {
+    // #535: direct-Ingest läuft über den normalen Anlege-Pfad und persistiert den Schlüssel.
+    when(boardService.requireColumn(20L, BOARD)).thenReturn(column(20L, "Backlog", 0));
+    when(cards.allocateCardNumber(PROJECT)).thenReturn(9);
+
+    CardService.IdeaCreation result =
+        service.createDirect(1L, BOARD, 20L, "Finding", null, "sonar:abc");
+
+    ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
+    verify(cards).save(captor.capture());
+    assertThat(captor.getValue().externalKey()).isEqualTo("sonar:abc");
+    assertThat(captor.getValue().boardId()).isEqualTo(BOARD);
+    assertThat(result.created()).isTrue();
+  }
+
+  @Test
+  void createDirect_withExistingExternalKey_returnsExistingWithoutCreating() {
+    when(cards.findByProjectIdAndExternalKey(PROJECT, "sonar:abc"))
+        .thenReturn(Optional.of(boardCard(7L, 20L, 3, 0, false, false)));
+
+    CardService.IdeaCreation result =
+        service.createDirect(1L, BOARD, 20L, "Finding", null, "sonar:abc");
+
+    assertThat(result.created()).isFalse();
+    assertThat(result.view().id()).isEqualTo(7L);
+    verify(cards, never()).save(any(Card.class));
+  }
+
+  @Test
+  void createDirect_withoutExternalKey_skipsLookup() {
+    when(boardService.requireColumn(20L, BOARD)).thenReturn(column(20L, "Backlog", 0));
+    when(cards.allocateCardNumber(PROJECT)).thenReturn(9);
+
+    CardService.IdeaCreation result = service.createDirect(1L, BOARD, 20L, "Karte", null, null);
+
+    assertThat(result.created()).isTrue();
+    verify(cards, never()).findByProjectIdAndExternalKey(anyLong(), any());
+  }
+
+  @Test
+  void createDirect_checksPermissionBeforeDuplicateLookup() {
+    // Rechte vor dem Duplikat-Check: kein Existenz-Leak an Unberechtigte.
+    doThrow(new ProjectNotFoundException())
+        .when(permissions)
+        .require(1L, PROJECT, Permission.TICKET_CREATE);
+
+    assertThatThrownBy(() -> service.createDirect(1L, BOARD, 20L, "F", null, "sonar:abc"))
+        .isInstanceOf(ProjectNotFoundException.class);
+    verify(cards, never()).findByProjectIdAndExternalKey(anyLong(), any());
+  }
+
+  @Test
+  void createProjectIdea_withoutExternalKey_skipsLookup() {
+    when(cards.allocateCardNumber(PROJECT)).thenReturn(9);
+
+    service.createProjectIdea(1L, PROJECT, "Idee", null, BOARD, null);
+
+    verify(cards, never()).findByProjectIdAndExternalKey(anyLong(), any());
   }
 
   @Test
@@ -2876,6 +2974,7 @@ class CardServiceTest {
             null,
             null,
             PROJECT,
+            null,
             null);
     when(cards.findById(1L)).thenReturn(Optional.of(otherBoard));
 
@@ -2926,6 +3025,7 @@ class CardServiceTest {
             null,
             null,
             PROJECT,
+            null,
             null);
     when(cards.findById(1L)).thenReturn(Optional.of(onLargeBoard));
 

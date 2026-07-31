@@ -76,6 +76,14 @@ describe('splitSpecIntoSections', () => {
     expect(splitSpecIntoSections(md, 2).map((s) => s.title)).toEqual(['A', 'B'])
   })
 
+  it('erkennt eingerückte Fences und schließt trotz Leerraum hinter der Markierung', () => {
+    const md = ['## A', '  ```js', '## Kein Titel', '  ``` ', '## B'].join('\n')
+
+    const sections = splitSpecIntoSections(md, 2)
+    expect(sections.map((s) => s.title)).toEqual(['A', 'B'])
+    expect(sections[0].description).toContain('## Kein Titel')
+  })
+
   it('lässt einen nicht geschlossenen Code-Block bis zum Dateiende offen', () => {
     const md = ['## A', '```', '## Kein Titel'].join('\n')
 
@@ -162,6 +170,18 @@ describe('splitSpecIntoSections', () => {
     expect(splitSpecIntoSections('## Titel ##\nText', 2)[0].title).toBe('Titel')
   })
 
+  it('entfernt die abschließende Rautenfolge samt Leerraum davor und dahinter', () => {
+    expect(splitSpecIntoSections('## Titel \t##  \nText', 2)[0].title).toBe('Titel')
+  })
+
+  it('behält eine Rautenfolge ohne trennenden Leerraum im Titel', () => {
+    expect(splitSpecIntoSections('## Titel###\nText', 2)[0].title).toBe('Titel###')
+  })
+
+  it('behält Rauten mitten im Titel', () => {
+    expect(splitSpecIntoSections('## Titel ## Rest\nText', 2)[0].title).toBe('Titel ## Rest')
+  })
+
   it('startet keine Karte für eine Überschrift ohne Text', () => {
     const md = ['## Erstes', 'A', '##', 'B', '## ', 'C'].join('\n')
 
@@ -172,6 +192,14 @@ describe('splitSpecIntoSections', () => {
 
   it('ignoriert eine Überschrift ohne Text auch vor der ersten echten Überschrift', () => {
     expect(splitSpecIntoSections('##\n## Erstes\nA', 2).map((s) => s.title)).toEqual(['Erstes'])
+  })
+
+  it('rechnet den Titel hinter dem gesamten Rautenblock inklusive Trennzeichen ab', () => {
+    const md = ['## ##', 'Text', '###### Tief genug', 'Mehr'].join('\n')
+
+    const sections = splitSpecIntoSections(md, 2)
+    expect(sections.map((s) => s.title)).toEqual(['##'])
+    expect(sections[0].description).toBe('Text\n###### Tief genug\nMehr')
   })
 
   it('erkennt nur echte ATX-Überschriften (Leerzeichen nötig, höchstens drei Einrückungen)', () => {

@@ -15,6 +15,9 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
 /** Adapter des {@link CardRepository}-Ports auf Spring Data JPA. */
+// PMD.TooManyMethods: 1:1-Implementierung des CardRepository-Ports — die Methodenzahl folgt dem
+// Port-Vertrag (je Lesepfad/Reindex eine kleine Methode), kein God-Class-Smell.
+@SuppressWarnings("PMD.TooManyMethods")
 @Component
 class CardRepositoryAdapter implements CardRepository {
 
@@ -64,6 +67,13 @@ class CardRepositoryAdapter implements CardRepository {
   @Override
   public Optional<Card> findByProjectIdAndNumber(long projectId, int number) {
     return jpa.findByProjectIdAndNumberAndDeletedAtIsNull(projectId, number)
+        .map(CardRepositoryAdapter::toDomain);
+  }
+
+  @Override
+  public Optional<Card> findByProjectIdAndExternalKey(long projectId, String externalKey) {
+    // Bewusst ohne DeletedAtIsNull: auch Papierkorb-Karten unterdrücken den Re-Ingest (#534).
+    return jpa.findByProjectIdAndExternalKey(projectId, externalKey)
         .map(CardRepositoryAdapter::toDomain);
   }
 
@@ -403,6 +413,7 @@ class CardRepositoryAdapter implements CardRepository {
         e.getShortcode(),
         e.getDueDate(),
         e.getProjectId(),
-        e.getTargetBoardId());
+        e.getTargetBoardId(),
+        e.getExternalKey());
   }
 }

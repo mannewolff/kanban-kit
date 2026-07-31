@@ -129,6 +129,7 @@ public class CardService {
         false,
         null,
         null,
+        null,
         null);
   }
 
@@ -156,6 +157,7 @@ public class CardService {
         dependsOn,
         parentId,
         ideaStored,
+        null,
         null,
         null,
         null);
@@ -194,7 +196,8 @@ public class CardService {
         ideaStored,
         dueDate,
         assigneeIds,
-        labelIds);
+        labelIds,
+        null);
   }
 
   // Kern-Logik des Anlegens ohne eigene @Transactional: wird von den öffentlichen create-
@@ -210,7 +213,8 @@ public class CardService {
       boolean ideaStored,
       @Nullable Instant dueDate,
       @Nullable List<Long> assigneeIds,
-      @Nullable List<Long> labelIds) {
+      @Nullable List<Long> labelIds,
+      @Nullable String externalKey) {
     long projectId = boardService.requireProjectId(boardId);
     permissions.require(userId, projectId, Permission.TICKET_CREATE);
     ColumnView column = boardService.requireColumn(columnId, boardId);
@@ -241,7 +245,8 @@ public class CardService {
                 null,
                 dueDate,
                 projectId,
-                null));
+                null,
+                externalKey));
 
     if (!ideaStored) {
       transitions.open(saved.requireId(), columnId, column.name(), now);
@@ -302,6 +307,7 @@ public class CardService {
                 trimToNull(shortcode),
                 null,
                 projectId,
+                null,
                 null));
     publishChanged(boardId, ActivityType.CREATED, saved.requireId());
     return view(saved);
@@ -817,10 +823,55 @@ public class CardService {
       String title,
       @Nullable String description,
       @Nullable Long targetBoardId) {
+    return doCreateProjectIdea(userId, projectId, title, description, targetBoardId, null).view();
+  }
+
+  /**
+   * Wie {@link #createProjectIdea(long, long, String, String, Long)}, aber idempotent über einen
+   * optionalen externen Schlüssel (Issue #534): Existiert im Projekt bereits eine Karte mit diesem
+   * Schlüssel — gleich ob Pool, Board, archiviert oder Papierkorb —, wird nichts angelegt und die
+   * bestehende Karte mit {@code created=false} zurückgegeben; es entsteht dann weder ein
+   * Aktivitätseintrag noch ein SSE-Ereignis. Erst endgültiges Löschen (purge) gibt den Schlüssel
+   * frei.
+   *
+   * <p>Nebenläufigkeit: bewusst SELECT-first statt Insert-and-catch — nach einer
+   * Constraint-Verletzung wäre die Transaktion rollback-only, ein Nachlesen in ihr unmöglich. Den
+   * seltenen Wettlauf zweier gleichzeitiger Erst-Ingests fängt der partielle Unique-Index (V24) als
+   * Backstop; er endet als 409 über die bestehende {@code DataIntegrityViolationException}-
+   * Behandlung (#496), und der Wiederholungs-Request trifft dann den SELECT.
+   */
+  @Transactional
+  public IdeaCreation createProjectIdea(
+      long userId,
+      long projectId,
+      String title,
+      @Nullable String description,
+      @Nullable Long targetBoardId,
+      @Nullable String externalKey) {
+    return doCreateProjectIdea(userId, projectId, title, description, targetBoardId, externalKey);
+  }
+
+  // Kern-Logik der Ideen-Anlage ohne eigene @Transactional: wird von beiden öffentlichen
+  // createProjectIdea-Überladungen (je @Transactional) aufgerufen, ohne Self-Invocation über den
+  // Proxy (java:S6809).
+  private IdeaCreation doCreateProjectIdea(
+      long userId,
+      long projectId,
+      String title,
+      @Nullable String description,
+      @Nullable Long targetBoardId,
+      @Nullable String externalKey) {
     permissions.require(userId, projectId, Permission.TICKET_CREATE);
-    CardView created = storeProjectIdea(userId, projectId, title, description, targetBoardId);
+    if (externalKey != null) {
+      Optional<Card> existing = cards.findByProjectIdAndExternalKey(projectId, externalKey);
+      if (existing.isPresent()) {
+        return new IdeaCreation(view(existing.get()), false);
+      }
+    }
+    CardView created =
+        storeProjectIdea(userId, projectId, title, description, targetBoardId, externalKey);
     publishIdeasChanged(projectId);
-    return created;
+    return new IdeaCreation(created, true);
   }
 
   /**
@@ -851,10 +902,51 @@ public class CardService {
             .map(
                 idea ->
                     storeProjectIdea(
-                        userId, projectId, idea.title(), idea.description(), targetBoardId))
+                        userId, projectId, idea.title(), idea.description(), targetBoardId, null))
             .toList();
     publishIdeasChanged(projectId);
     return created;
+  }
+
+  /**
+   * Legt eine Karte direkt in einer Spalte des Boards an — idempotent über den optionalen {@code
+   * externalKey} wie {@link #createProjectIdea(long, long, String, String, Long, String)}, nur mit
+   * Board- statt Pool-Routing (#535, direct-Ingest auf ein dediziertes Sammel-Board). Anlage,
+   * Nummern-/Positionsvergabe, Spalten-Transition und Rechteprüfung laufen über den normalen
+   * Anlege-Pfad; beim Duplikat entsteht nichts (kein Aktivitätseintrag, kein Event).
+   */
+  @Transactional
+  public IdeaCreation createDirect(
+      long userId,
+      long boardId,
+      long columnId,
+      String title,
+      @Nullable String description,
+      @Nullable String externalKey) {
+    long projectId = boardService.requireProjectId(boardId);
+    // Rechte VOR dem Duplikat-Check: der Rückgabepfad darf Unberechtigten keine Existenz leaken.
+    permissions.require(userId, projectId, Permission.TICKET_CREATE);
+    if (externalKey != null) {
+      Optional<Card> existing = cards.findByProjectIdAndExternalKey(projectId, externalKey);
+      if (existing.isPresent()) {
+        return new IdeaCreation(view(existing.get()), false);
+      }
+    }
+    CardView created =
+        doCreate(
+            userId,
+            boardId,
+            columnId,
+            title,
+            description,
+            null,
+            null,
+            false,
+            null,
+            null,
+            null,
+            externalKey);
+    return new IdeaCreation(created, true);
   }
 
   /**
@@ -867,7 +959,8 @@ public class CardService {
       long projectId,
       String title,
       @Nullable String description,
-      @Nullable Long targetBoardId) {
+      @Nullable Long targetBoardId,
+      @Nullable String externalKey) {
     Instant now = clock.instant();
     // #402: Pool-Ideen bekommen sofort eine projektweite Nummer (referenzierbar wie Board-Karten);
     // sie bleiben board-los und behalten die Nummer beim späteren Einplanen.
@@ -893,7 +986,8 @@ public class CardService {
                 null,
                 null,
                 projectId,
-                targetBoardId));
+                targetBoardId,
+                externalKey));
     activity.add(
         saved.requireId(), userId, CardActivityType.CREATED, "Idee angelegt", now, actor.current());
     return view(saved);
@@ -904,6 +998,9 @@ public class CardService {
    * bewusst nicht hier, sondern gilt für den ganzen Stapel (ein Import bedient ein Board).
    */
   public record NewIdea(String title, @Nullable String description) {}
+
+  /** Ergebnis eines idempotenten Ingests (#534): die Karte plus ob sie neu angelegt wurde. */
+  public record IdeaCreation(CardView view, boolean created) {}
 
   /**
    * Plant eine Idee ins Backlog (erste Spalte) eines Boards desselben Projekts ein: setzt

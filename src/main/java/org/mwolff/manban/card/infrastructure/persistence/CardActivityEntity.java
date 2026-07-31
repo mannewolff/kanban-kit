@@ -8,6 +8,8 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.time.Instant;
 import org.jspecify.annotations.Nullable;
+import org.mwolff.manban.card.application.ActorContext.ActorStamp;
+import org.mwolff.manban.card.domain.CardActivityOrigin;
 
 /** JPA-Abbildung der Tabelle {@code card_activity}. */
 @Entity
@@ -54,17 +56,16 @@ class CardActivityEntity {
       String type,
       String detail,
       Instant createdAt,
-      @Nullable String origin,
-      @Nullable String tokenName,
-      @Nullable String agent) {
+      ActorStamp stamp) {
     this.cardId = cardId;
     this.actorUserId = actorUserId;
     this.type = type;
     this.detail = detail;
     this.createdAt = createdAt;
-    this.origin = origin;
-    this.tokenName = tokenName;
-    this.agent = agent;
+    CardActivityOrigin stampOrigin = stamp.origin();
+    this.origin = stampOrigin == null ? null : stampOrigin.name();
+    this.tokenName = stamp.tokenName();
+    this.agent = stamp.agent();
   }
 
   @Nullable Long getId() {

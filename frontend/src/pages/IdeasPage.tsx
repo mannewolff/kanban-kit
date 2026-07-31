@@ -115,8 +115,7 @@ export function IdeasPage() {
             {/* Dateiauswahl wie beim Anhang-Upload (CardDetailModal): Button als <label> mit
                 verstecktem Input — hier zusätzlich auf Markdown eingeschränkt. */}
             <Button variant="outlined" component="label">
-              Spezifikation einlesen
-              <input
+              Spezifikation einlesen<input
                 hidden
                 type="file"
                 accept=".md,.markdown,text/markdown"

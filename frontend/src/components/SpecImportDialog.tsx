@@ -118,10 +118,12 @@ export function SpecImportDialog({ open, fileName, markdown, onClose, onImport }
     }
   }
 
+  // Die jeweils andere Ebene — sie wird in der Leermeldung als Ausweg angeboten.
+  const otherLevel: HeadingLevel = level === 2 ? 1 : 2
   const emptyMessage =
     markdown.trim() === ''
       ? 'Die Datei ist leer — es gibt nichts einzulesen.'
-      : `Keine Überschrift der Ebene H${level} gefunden — es wird nichts angelegt. Du kannst oben auf H${level === 2 ? 1 : 2} umschalten.`
+      : `Keine Überschrift der Ebene H${level} gefunden — es wird nichts angelegt. Du kannst oben auf H${otherLevel} umschalten.`
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth aria-labelledby="spec-import-title">

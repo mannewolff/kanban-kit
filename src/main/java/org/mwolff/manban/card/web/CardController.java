@@ -319,8 +319,11 @@ class CardController {
 
   record LabelsRequest(@Nullable List<Long> labels) {}
 
-  // origin/tokenName sind server-verifiziert, agent ist Client-Selbstauskunft (Issue #517);
-  // alle drei null bei Alt-Einträgen vor V23.
+  /**
+   * Ein Eintrag des Aktivitätsverlaufs. Die Felder {@code origin} und {@code tokenName} sind
+   * serverseitig verifiziert, {@code agent} ist dagegen eine Selbstauskunft des Clients — siehe
+   * Issue #517. Bei Alt-Einträgen aus der Zeit vor Migration V23 sind alle drei Felder null.
+   */
   record ActivityView(
       @Nullable Long id,
       @Nullable Long actorUserId,

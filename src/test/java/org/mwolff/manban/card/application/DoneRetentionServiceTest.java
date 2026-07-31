@@ -44,6 +44,7 @@ class DoneRetentionServiceTest {
         null,
         null,
         1L,
+        null,
         null);
   }
 
