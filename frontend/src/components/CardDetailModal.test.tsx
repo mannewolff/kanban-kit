@@ -315,6 +315,23 @@ describe('CardDetailModal', () => {
     expect(due).toHaveTextContent('überfällig')
   })
 
+  it('zeigt ein künftiges Datum im Lesemodus ohne Überfällig-Hervorhebung', () => {
+    const apis = makeApis()
+    render(
+      <CardDetailModal
+        card={{ ...card, dueDate: '2099-12-31T00:00:00Z' }}
+        canEdit={false}
+        columnName="In Progress"
+        onClose={vi.fn()}
+        {...apis}
+      />,
+    )
+
+    const due = screen.getByLabelText('Fälligkeitsdatum')
+    expect(due).not.toHaveTextContent('überfällig')
+    expect(due).toHaveTextContent('Fällig am')
+  })
+
   it('speichert ein gesetztes Fälligkeitsdatum als ISO-Zeitstempel', async () => {
     const apis = makeApis()
     render(<CardDetailModal card={card} canEdit onClose={vi.fn()} {...apis} />)
