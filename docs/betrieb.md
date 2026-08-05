@@ -112,9 +112,11 @@ Den geloggten Link (`https://localhost/verify?token=…`) im Browser öffnen →
 Alle registrierten Nutzer sind zunächst Plattform-**USER**. Es gibt kein vordefiniertes
 Admin-Konto — „Admin" ist eine Rolle, die einem echten (E-Mail-)Account verliehen wird.
 
-### Weg A — Bootstrap-Token (vorgesehen)
+### Weg A — Bootstrap-Token (empfohlen)
 
-Wirkt **nur, solange kein Admin existiert** (selbstheilend, kein Aussperren).
+Der vorgesehene Pfad: Er läuft über die reguläre Anwendungslogik und hinterlässt einen
+vollständig eingerichteten Admin. Wirkt **nur, solange kein Admin existiert** (selbstheilend,
+kein Aussperren).
 
 1. `MANBAN_BOOTSTRAP_ADMIN_TOKEN=DEIN_TOKEN` in der `.env` setzen und **neu bauen** (`docker compose up --build -d`).
 2. Normal **registrieren** und **einloggen** (E-Mail vorher bestätigen, s. o.).
@@ -124,14 +126,20 @@ Wirkt **nur, solange kein Admin existiert** (selbstheilend, kein Aussperren).
 eingeloggten* Nutzer hoch. Ohne Login leitet die Seite auf `/login`. Bei falschem Token → 403,
 wenn schon ein Admin existiert → 409. Token danach aus der `.env` entfernen.
 
-### Weg B — direkt in der Datenbank
+### Weg B — direkt in der Datenbank (Notweg)
 
-Registrieren, dann per SQL freischalten und zum Admin machen (spart Token + Verifikations-Link):
+Nur nehmen, wenn Weg A nicht in Frage kommt — etwa weil kein Neubau möglich ist. Der Weg
+umgeht jede Anwendungslogik, jedes Feld muss von Hand stimmen. Registrieren, dann per SQL
+freischalten und zum Admin machen (spart Token + Verifikations-Link):
 
 ```
 docker compose exec -T postgres psql -U manban -d manban \
-  -c "UPDATE app_user SET email_verified = true, platform_role = 'ADMIN' WHERE email = 'DEINE@MAIL';"
+  -c "UPDATE app_user SET email_verified = true, platform_role = 'ADMIN', approved_at = now() WHERE email = 'DEINE@MAIL';"
 ```
+
+`approved_at` gehört mit in den Befehl: Neue Konten durchlaufen ein Freigabe-Gate. Ein
+Plattform-Admin gilt zwar auch ohne Zeitstempel als freigegeben und kann sich anmelden — ohne
+`approved_at` führt die Benutzerübersicht ihn aber weiterhin als wartend.
 
 Danach **ab- und wieder anmelden** — das Frontend lädt die Rolle nur beim Login (`/api/me`).
 Anschließend erscheint **„Admin"** in der Seitenleiste.

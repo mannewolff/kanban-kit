@@ -43,14 +43,14 @@ Das Datenbank-Schema wird beim Start **automatisch per Flyway** migriert — kei
 ## Ersten Admin einrichten
 
 Alle registrierten Nutzer sind zunächst Plattform-**USER**; es gibt kein vordefiniertes
-Admin-Konto. Den ersten Admin richtet man per Bootstrap-Token oder direkt in der Datenbank
-ein — die vollständige Anleitung steht in [docs/betrieb.md](docs/betrieb.md#den-ersten-admin-einrichten).
+Admin-Konto. Empfohlen wird der Bootstrap-Token; der Datenbank-Weg ist der Notweg — die
+vollständige Anleitung steht in [docs/betrieb.md](docs/betrieb.md#den-ersten-admin-einrichten).
 
-Kurzfassung (Datenbank-Weg, nach dem Registrieren):
+Kurzfassung (Notweg über die Datenbank, nach dem Registrieren):
 
 ```
 docker compose exec -T postgres psql -U manban -d manban \
-  -c "UPDATE app_user SET email_verified = true, platform_role = 'ADMIN' WHERE email = 'DEINE@MAIL';"
+  -c "UPDATE app_user SET email_verified = true, platform_role = 'ADMIN', approved_at = now() WHERE email = 'DEINE@MAIL';"
 ```
 
 Danach ab- und wieder anmelden — die Rolle wird beim Login geladen.
