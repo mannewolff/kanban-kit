@@ -42,10 +42,16 @@ public class LoginService {
     if (!user.emailVerified()) {
       throw new EmailNotVerifiedException();
     }
-    // Freigabe-Gate (Issue #0097). Ausnahme: Solange noch kein Plattform-Admin existiert, darf sich
-    // der (noch nicht freigegebene) erste Nutzer einloggen, um sich per Bootstrap-Token zum ersten
-    // Admin zu erheben — sonst gäbe es niemanden, der freigeben könnte (kein Aussperren).
-    if (!user.approved() && anyAdminExists()) {
+    // Freigabe-Gate (Issue #0097). Zwei Ausnahmen, beide gegen das Aussperren:
+    // 1. Solange noch kein Plattform-Admin existiert, darf sich der (noch nicht freigegebene) erste
+    //    Nutzer einloggen, um sich per Bootstrap-Token zum ersten Admin zu erheben — sonst gäbe es
+    //    niemanden, der freigeben könnte.
+    // 2. Ein Plattform-Admin braucht keine Freigabe (Issue #556): ein „auf Freigabe wartender
+    //    Admin" ist sinnlos, weil niemand über ihm steht. Ohne diese Ausnahme kippt Ausnahme 1
+    //    genau in dem Moment, in dem der Nutzer selbst zum Admin wird — er blockierte damit seine
+    //    eigene Anmeldung. Die Prüfung sitzt hier und nicht nur im Rollenwechsel-Service, damit sie
+    //    auch beim rohen SQL-UPDATE greift, das jeden Service umgeht.
+    if (!user.approved() && user.platformRole() != PlatformRole.ADMIN && anyAdminExists()) {
       throw new UserNotApprovedException();
     }
     return user;

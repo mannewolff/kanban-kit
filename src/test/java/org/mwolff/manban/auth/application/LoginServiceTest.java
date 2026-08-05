@@ -30,6 +30,11 @@ class LoginServiceTest {
     return new AppUser(2L, "a@x.de", "storedHash", "Ada", true, PlatformRole.USER, null, null);
   }
 
+  /** Plattform-Admin ohne Freigabe-Zeitstempel — der Kundenfall aus Issue #556. */
+  private static AppUser pendingAdmin() {
+    return new AppUser(2L, "a@x.de", "storedHash", "Ada", true, PlatformRole.ADMIN, null, null);
+  }
+
   @BeforeEach
   void setUp() {
     users = mock(AppUserRepository.class);
@@ -147,6 +152,23 @@ class LoginServiceTest {
 
     // Then
     assertThat(result.id()).isEqualTo(2L);
+  }
+
+  @Test
+  void login_succeeds_forPendingPlatformAdmin_whenAdminExists() {
+    // Given: Der Nutzer ist selbst zum Plattform-Admin geworden, ohne freigegeben worden zu sein.
+    // Damit existiert ein Admin — er selbst — und die Bootstrap-Ausnahme kippt: das Gate sperrte
+    // ihn aus seiner eigenen Anmeldung aus. Ein Admin braucht keine Freigabe, es gibt niemanden
+    // über ihm, der freigeben könnte.
+    when(users.findByEmail("a@x.de")).thenReturn(Optional.of(pendingAdmin()));
+    when(passwordEncoder.matches("pw", "storedHash")).thenReturn(true);
+    when(users.findAll()).thenReturn(List.of(pendingAdmin()));
+
+    // When
+    AppUser result = service.login("a@x.de", "pw");
+
+    // Then
+    assertThat(result.platformRole()).isEqualTo(PlatformRole.ADMIN);
   }
 
   @Test

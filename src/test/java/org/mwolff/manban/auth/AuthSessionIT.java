@@ -16,6 +16,7 @@ import org.mwolff.manban.auth.domain.PlatformRole;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
@@ -35,6 +36,8 @@ class AuthSessionIT extends AbstractIntegrationTest {
   @Autowired private AppUserRepository users;
 
   @Autowired private PasswordEncoder passwordEncoder;
+
+  @Autowired private JdbcTemplate jdbc;
 
   @BeforeEach
   void seedUsers() {
@@ -106,6 +109,37 @@ class AuthSessionIT extends AbstractIntegrationTest {
                 .contentType("application/json")
                 .content(loginBody("unverified@example.com", PASSWORD)))
         .andExpect(status().isForbidden());
+  }
+
+  /**
+   * Kundenfall aus Issue #556: Nach der dokumentierten Erst-Admin-Einrichtung per SQL — verifiziert
+   * und ADMIN, aber ohne {@code approved_at} — muss die Anmeldung gelingen. Der Nutzer ist selbst
+   * der einzige Admin und sperrte sich sonst mit dem Freigabe-Gate aus.
+   */
+  @Test
+  void pendingPlatformAdminCanLogIn() throws Exception {
+    String email = "selfadmin@example.com";
+    mvc.perform(
+            post("/api/auth/register")
+                .contentType("application/json")
+                .content(
+                    """
+                    {"email":"%s","password":"%s","displayName":"Self Admin"}
+                    """
+                        .formatted(email, PASSWORD)))
+        .andExpect(status().isCreated());
+
+    // Exakt der dokumentierte Befehl: setzt Verifikation und Rolle, aber keine Freigabe.
+    jdbc.update(
+        "UPDATE app_user SET email_verified = true, platform_role = 'ADMIN' WHERE email = ?",
+        email);
+
+    mvc.perform(
+            post("/api/auth/login")
+                .contentType("application/json")
+                .content(loginBody(email, PASSWORD)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.platformRole").value("ADMIN"));
   }
 
   @Test
