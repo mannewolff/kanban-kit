@@ -1,5 +1,8 @@
 package org.mwolff.manban.auth;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.everyItem;
+import static org.hamcrest.Matchers.notNullValue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -125,6 +128,34 @@ class AdminUserIT extends AbstractIntegrationTest {
 
     // Jetzt gelingt der Login.
     attemptLogin("ap-pending@example.com").andExpect(status().isOk());
+  }
+
+  @Test
+  void promotingPendingUserToAdminAlsoApproves() throws Exception {
+    Cookie admin = login("pp-admin@example.com", PlatformRole.ADMIN);
+    long pendingId = ensurePendingUser("pp-pending@example.com");
+
+    // Vorher: der Nutzer wartet auf Freigabe.
+    assertThat(users.findById(pendingId).orElseThrow().approvedAt()).isNull();
+
+    // Beförderung zum Plattform-Admin.
+    mvc.perform(
+            patch("/api/admin/users/" + pendingId)
+                .cookie(admin)
+                .contentType("application/json")
+                .content("{\"platformRole\":\"ADMIN\"}"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.platformRole").value("ADMIN"))
+        .andExpect(jsonPath("$.approvedAt").isNotEmpty());
+
+    // Danach: die Admin-Liste zeigt ihn als freigegeben, der befördernde Admin ist hinterlegt.
+    mvc.perform(get("/api/admin/users").cookie(admin))
+        .andExpect(status().isOk())
+        .andExpect(
+            jsonPath("$[?(@.email=='pp-pending@example.com')].approvedAt")
+                .value(everyItem(notNullValue())));
+    long adminId = users.findByEmail("pp-admin@example.com").orElseThrow().id();
+    assertThat(users.findById(pendingId).orElseThrow().approvedBy()).isEqualTo(adminId);
   }
 
   @Test
