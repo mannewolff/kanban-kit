@@ -77,14 +77,16 @@ describe('LoginPage', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Anmelden' }))
   }
 
-  it('zeigt bei 403 die konkrete Backend-Meldung (Freigabe) statt der Verify-Meldung', async () => {
-    mockedApi.login.mockRejectedValue(
-      new ApiError(403, 'Benutzer ist noch nicht vom Administrator freigegeben'),
-    )
+  it('zeigt bei 403 die konkrete Backend-Meldung (Freigabe) samt Ausweg-Hinweis', async () => {
+    // Der Ausweg-Hinweis (Issue #560) kommt aus dem Backend und muss ungekürzt ankommen —
+    // sonst steht der Selbst-Hoster wieder vor einer Sackgasse ohne Handlungsanweisung.
+    const detail =
+      'Das Konto wartet auf die Freigabe durch einen Plattform-Admin.' +
+      ' Auf einer frisch aufgesetzten Instanz richten Sie den ersten Plattform-Admin' +
+      ' nach der Anleitung in docs/betrieb.md ein.'
+    mockedApi.login.mockRejectedValue(new ApiError(403, detail))
     await submitLogin()
-    expect(
-      await screen.findByText('Benutzer ist noch nicht vom Administrator freigegeben'),
-    ).toBeInTheDocument()
+    expect(await screen.findByText(detail)).toBeInTheDocument()
   })
 
   it('zeigt bei 403 die E-Mail-Bestätigungs-Meldung des Backends', async () => {
