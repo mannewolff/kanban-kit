@@ -78,12 +78,12 @@ describe('LoginPage', () => {
   }
 
   it('zeigt bei 403 die konkrete Backend-Meldung (Freigabe) samt Ausweg-Hinweis', async () => {
-    // Der Ausweg-Hinweis (Issue #560) kommt aus dem Backend und muss ungekürzt ankommen —
-    // sonst steht der Selbst-Hoster wieder vor einer Sackgasse ohne Handlungsanweisung.
+    // Der Ausweg-Hinweis kommt aus dem Backend und muss ungekürzt ankommen — sonst bleibt der
+    // Nutzer ohne Handlungsanweisung stehen. Er verweist an den Betreiber (Issue #562), weil die
+    // Meldung nur erscheint, wenn es bereits einen Plattform-Admin gibt.
     const detail =
       'Das Konto wartet auf die Freigabe durch einen Plattform-Admin.' +
-      ' Auf einer frisch aufgesetzten Instanz richten Sie den ersten Plattform-Admin' +
-      ' nach der Anleitung in docs/betrieb.md ein.'
+      ' Bitte wenden Sie sich an den Betreiber dieser Instanz.'
     mockedApi.login.mockRejectedValue(new ApiError(403, detail))
     await submitLogin()
     expect(await screen.findByText(detail)).toBeInTheDocument()

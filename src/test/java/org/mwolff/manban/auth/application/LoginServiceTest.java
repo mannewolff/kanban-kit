@@ -133,14 +133,14 @@ class LoginServiceTest {
             List.of(
                 new AppUser(1L, "admin@x.de", "h", "Ad", true, PlatformRole.ADMIN), pendingUser()));
 
-    // When / Then: die Meldung nennt neben dem Grund auch den Ausweg (Issue #560) und sagt dabei
+    // When / Then: die Meldung nennt neben dem Grund den Ausweg, der hier tatsächlich trägt
+    // (Issue #562) — ein Admin existiert ja, sonst gäbe es diese Meldung nicht. Sie sagt dabei
     // nichts darüber aus, ob die E-Mail-Adresse registriert ist.
     assertThatThrownBy(() -> service.login("a@x.de", "pw"))
         .isInstanceOf(UserNotApprovedException.class)
         .hasMessage(
             "Das Konto wartet auf die Freigabe durch einen Plattform-Admin."
-                + " Auf einer frisch aufgesetzten Instanz richten Sie den ersten Plattform-Admin"
-                + " nach der Anleitung in docs/betrieb.md ein.");
+                + " Bitte wenden Sie sich an den Betreiber dieser Instanz.");
   }
 
   @Test
