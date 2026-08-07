@@ -151,4 +151,25 @@ class VerifyEmailServiceTest {
     verify(adminNotificationMailer, never())
         .sendNewUserPendingApproval(anyString(), anyString(), anyString());
   }
+
+  @Test
+  void verify_sendsNoNotification_whenUserIsPlatformAdminWithoutApproval() {
+    // Given: ein Plattform-Admin ohne Freigabe-Zeitstempel (etwa per rohem SQL-UPDATE gesetzt).
+    // Er braucht keine Fremdfreigabe (Issue #556) und darf sich deshalb auch nicht selbst als
+    // wartender Nutzer bei den Admins melden.
+    when(tokens.consume(anyString(), any(Instant.class))).thenReturn(Optional.of(2L));
+    when(users.findById(2L))
+        .thenReturn(
+            Optional.of(
+                new AppUser(
+                    2L, "root@x.de", "hash", "Root", false, PlatformRole.ADMIN, null, null)));
+
+    // When
+    service.verify("plaintext");
+
+    // Then
+    verify(users, never()).findByPlatformRole(any(PlatformRole.class));
+    verify(adminNotificationMailer, never())
+        .sendNewUserPendingApproval(anyString(), anyString(), anyString());
+  }
 }

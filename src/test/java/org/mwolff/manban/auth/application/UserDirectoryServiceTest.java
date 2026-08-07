@@ -106,6 +106,33 @@ class UserDirectoryServiceTest {
   }
 
   @Test
+  void findById_reportsPendingPlatformAdminAsApproved() {
+    // Ein Plattform-Admin braucht keine Fremdfreigabe (Issue #556). Modulfremde Aufrufer fragen
+    // ueber diesen Port "darf mitwirken?" — die Rolle selbst bleibt im auth-Modul.
+    when(users.findById(7L))
+        .thenReturn(
+            Optional.of(
+                new AppUser(
+                    7L, "root@x.de", "hash", "Root", true, PlatformRole.ADMIN, null, null)));
+
+    // When / Then
+    assertThat(service.findById(7L)).map(UserSummary::approved).contains(true);
+  }
+
+  @Test
+  void findByEmail_reportsPendingPlatformAdminAsApproved() {
+    // Given
+    when(users.findByEmail("root@x.de"))
+        .thenReturn(
+            Optional.of(
+                new AppUser(
+                    7L, "root@x.de", "hash", "Root", true, PlatformRole.ADMIN, null, null)));
+
+    // When / Then
+    assertThat(service.findByEmail("root@x.de")).map(UserSummary::approved).contains(true);
+  }
+
+  @Test
   void updateDisplayName_trimsAndPersists() {
     // Given
     when(users.findById(7L)).thenReturn(Optional.of(user()));

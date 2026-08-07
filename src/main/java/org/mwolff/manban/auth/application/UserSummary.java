@@ -8,6 +8,9 @@ package org.mwolff.manban.auth.application;
  * @param id technische ID des (stets persistierten) Benutzers
  * @param email eindeutige E-Mail-Adresse
  * @param displayName Anzeigename
- * @param approved ob der Benutzer freigegeben ist
+ * @param approved ob der Benutzer mitwirken darf — die Freigabe durch einen Plattform-Admin, oder
+ *     die Plattform-Rolle ADMIN selbst (die keine Fremdfreigabe braucht, Issue #556). Bewusst die
+ *     fachliche Antwort statt des rohen Freigabe-Zeitstempels: Für den echten Zeitpunkt gibt es die
+ *     Admin-Verwaltung im auth-Modul.
  */
 public record UserSummary(long id, String email, String displayName, boolean approved) {}

@@ -49,9 +49,11 @@ public class LoginService {
     // 2. Ein Plattform-Admin braucht keine Freigabe (Issue #556): ein „auf Freigabe wartender
     //    Admin" ist sinnlos, weil niemand über ihm steht. Ohne diese Ausnahme kippt Ausnahme 1
     //    genau in dem Moment, in dem der Nutzer selbst zum Admin wird — er blockierte damit seine
-    //    eigene Anmeldung. Die Prüfung sitzt hier und nicht nur im Rollenwechsel-Service, damit sie
-    //    auch beim rohen SQL-UPDATE greift, das jeden Service umgeht.
-    if (!user.approved() && user.platformRole() != PlatformRole.ADMIN && anyAdminExists()) {
+    //    eigene Anmeldung. Die Regel steckt seit Issue #561 in AppUser.effectivelyApproved() und
+    //    gilt damit überall gleich, auch bei Projektanlage und Einladung; sie sitzt in der Domäne
+    //    und nicht nur im Rollenwechsel-Service, damit sie auch beim rohen SQL-UPDATE greift, das
+    //    jeden Service umgeht.
+    if (!user.effectivelyApproved() && anyAdminExists()) {
       throw new UserNotApprovedException();
     }
     return user;
