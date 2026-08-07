@@ -90,6 +90,23 @@ public record AppUser(
     return approvedAt != null;
   }
 
+  /**
+   * Ob der Benutzer mitwirken darf. Zusätzlich zu {@link #approved()} gilt jeder Plattform-Admin
+   * als freigegeben: Die Freigabe ist eine Entscheidung eines Plattform-Admins über einen anderen
+   * Benutzer, und über einem Plattform-Admin gibt es niemanden, der sie treffen könnte — ein „auf
+   * Freigabe wartender Admin" wäre eine Sackgasse (Issue #556).
+   *
+   * <p>Diese Prüfung gehört bewusst in die Domäne und nicht in die einzelnen Aufrufer: Sie muss
+   * auch dann greifen, wenn die Rolle per rohem SQL-{@code UPDATE} gesetzt wurde, das jeden Service
+   * umgeht — genau so entstand der Fall, der die Regel ausgelöst hat.
+   *
+   * <p>Nicht zu verwechseln mit {@link #approved()}: Dort geht es um den echten
+   * Freigabe-Zeitstempel (Admin-Übersicht, Freigabe-Verwaltung), hier um die Berechtigung.
+   */
+  public boolean effectivelyApproved() {
+    return approved() || platformRole == PlatformRole.ADMIN;
+  }
+
   /** Ob der Benutzer gesperrt (deaktiviert) ist. */
   public boolean disabled() {
     return disabledAt != null;

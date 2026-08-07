@@ -56,7 +56,10 @@ public class VerifyEmailService {
 
     AppUser verified = users.save(user.withEmailVerified(true));
 
-    if (!verified.approved()) {
+    // effectivelyApproved statt approved (Issue #561): Ein Plattform-Admin ohne
+    // Freigabe-Zeitstempel wartet auf niemanden und darf sich deshalb auch nicht selbst als
+    // freizugebenden Nutzer bei den Admins melden.
+    if (!verified.effectivelyApproved()) {
       notifyAdminsOfPendingApproval(verified);
     }
   }

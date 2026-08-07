@@ -36,8 +36,12 @@ class AdminServiceTest {
 
   /** Noch nicht freigegebener Benutzer (kanonischer Konstruktor, {@code approvedAt=null}). */
   private static AppUser pendingUser(long id) {
-    return new AppUser(
-        id, "u" + id + "@x.de", "hash", "U" + id, true, PlatformRole.USER, null, null);
+    return pendingUser(id, PlatformRole.USER);
+  }
+
+  /** Noch nicht freigegebener Benutzer mit frei wählbarer Plattform-Rolle. */
+  private static AppUser pendingUser(long id, PlatformRole role) {
+    return new AppUser(id, "u" + id + "@x.de", "hash", "U" + id, true, role, null, null);
   }
 
   @BeforeEach
@@ -307,6 +311,102 @@ class AdminServiceTest {
 
     // Then
     assertThat(view.platformRole()).isEqualTo(PlatformRole.USER);
+  }
+
+  @Test
+  void changePlatformRole_approvesTarget_whenPendingUserIsPromotedToAdmin() {
+    // Given: das Ziel wartet noch auf Freigabe.
+    when(users.findById(1L)).thenReturn(Optional.of(user(1, PlatformRole.ADMIN)));
+    when(users.findById(2L)).thenReturn(Optional.of(pendingUser(2)));
+    when(users.save(any(AppUser.class))).thenAnswer(inv -> inv.getArgument(0));
+
+    // When
+    ArgumentCaptor<AppUser> captor = ArgumentCaptor.forClass(AppUser.class);
+    AdminService.UserView view = service.changePlatformRole(1L, 2L, PlatformRole.ADMIN);
+
+    // Then: Rolle und Freigabe in einem einzigen Speichervorgang.
+    verify(users).save(captor.capture());
+    assertThat(captor.getValue().platformRole()).isEqualTo(PlatformRole.ADMIN);
+    assertThat(captor.getValue().approvedAt()).isEqualTo(NOW);
+    assertThat(captor.getValue().approvedBy()).isEqualTo(1L);
+    assertThat(view.approvedAt()).isEqualTo(NOW);
+  }
+
+  @Test
+  void changePlatformRole_keepsOriginalApproval_whenTargetAlreadyApproved() {
+    // Given: das Ziel ist bereits freigegeben (durch Admin 7, zu einem früheren Zeitpunkt).
+    Instant earlier = NOW.minusSeconds(3600);
+    AppUser approved =
+        new AppUser(2L, "u2@x.de", "hash", "U2", true, PlatformRole.USER, earlier, 7L);
+    when(users.findById(1L)).thenReturn(Optional.of(user(1, PlatformRole.ADMIN)));
+    when(users.findById(2L)).thenReturn(Optional.of(approved));
+    when(users.save(any(AppUser.class))).thenAnswer(inv -> inv.getArgument(0));
+
+    // When
+    ArgumentCaptor<AppUser> captor = ArgumentCaptor.forClass(AppUser.class);
+    service.changePlatformRole(1L, 2L, PlatformRole.ADMIN);
+
+    // Then: Zeitstempel und Freigebender bleiben unangetastet (idempotent, analog approve).
+    verify(users).save(captor.capture());
+    assertThat(captor.getValue().approvedAt()).isEqualTo(earlier);
+    assertThat(captor.getValue().approvedBy()).isEqualTo(7L);
+  }
+
+  @Test
+  void changePlatformRole_leavesApprovalUnset_whenPendingAdminIsDemoted() {
+    // Given: ein noch nicht freigegebener Admin wird degradiert; ein weiterer Admin bleibt übrig.
+    when(users.findById(1L)).thenReturn(Optional.of(user(1, PlatformRole.ADMIN)));
+    when(users.findById(2L)).thenReturn(Optional.of(pendingUser(2, PlatformRole.ADMIN)));
+    when(users.lockPlatformAdminIds()).thenReturn(List.of(1L, 2L));
+    when(users.save(any(AppUser.class))).thenAnswer(inv -> inv.getArgument(0));
+
+    // When
+    ArgumentCaptor<AppUser> captor = ArgumentCaptor.forClass(AppUser.class);
+    service.changePlatformRole(1L, 2L, PlatformRole.USER);
+
+    // Then: eine Degradierung gibt niemanden frei.
+    verify(users).save(captor.capture());
+    assertThat(captor.getValue().approvedAt()).isNull();
+    assertThat(captor.getValue().approvedBy()).isNull();
+  }
+
+  @Test
+  void changePlatformRole_keepsApproval_whenApprovedAdminIsDemoted() {
+    // Given: ein freigegebener Admin wird degradiert; ein weiterer Admin bleibt übrig.
+    Instant earlier = NOW.minusSeconds(3600);
+    AppUser approvedAdmin =
+        new AppUser(2L, "u2@x.de", "hash", "U2", true, PlatformRole.ADMIN, earlier, 7L);
+    when(users.findById(1L)).thenReturn(Optional.of(user(1, PlatformRole.ADMIN)));
+    when(users.findById(2L)).thenReturn(Optional.of(approvedAdmin));
+    when(users.lockPlatformAdminIds()).thenReturn(List.of(1L, 2L));
+    when(users.save(any(AppUser.class))).thenAnswer(inv -> inv.getArgument(0));
+
+    // When
+    ArgumentCaptor<AppUser> captor = ArgumentCaptor.forClass(AppUser.class);
+    service.changePlatformRole(1L, 2L, PlatformRole.USER);
+
+    // Then: die Degradierung nimmt die Freigabe nicht zurück.
+    verify(users).save(captor.capture());
+    assertThat(captor.getValue().approvedAt()).isEqualTo(earlier);
+    assertThat(captor.getValue().approvedBy()).isEqualTo(7L);
+  }
+
+  @Test
+  void changePlatformRole_doesNotApprove_whenNewRoleIsUser() {
+    // Given: ein wartender Nutzer bekommt (erneut) die Rolle USER zugewiesen.
+    when(users.findById(1L)).thenReturn(Optional.of(user(1, PlatformRole.ADMIN)));
+    when(users.findById(2L)).thenReturn(Optional.of(pendingUser(2)));
+    when(users.lockPlatformAdminIds()).thenReturn(List.of(1L));
+    when(users.save(any(AppUser.class))).thenAnswer(inv -> inv.getArgument(0));
+
+    // When
+    ArgumentCaptor<AppUser> captor = ArgumentCaptor.forClass(AppUser.class);
+    AdminService.UserView view = service.changePlatformRole(1L, 2L, PlatformRole.USER);
+
+    // Then: nur die Beförderung zum Plattform-Admin gibt frei, kein anderer Rollenwechsel.
+    verify(users).save(captor.capture());
+    assertThat(captor.getValue().approvedAt()).isNull();
+    assertThat(view.approvedAt()).isNull();
   }
 
   // --- disable / enable -------------------------------------------------

@@ -46,7 +46,15 @@ class UserDirectoryService implements UserLookup, UserDisplayNameWriter {
         .map(user -> toSummary(users.save(user.withDisplayName(displayName.trim()))));
   }
 
+  /**
+   * Bildet das Aggregat auf die modulfremde Sicht ab. Das Freigabe-Feld trägt bewusst {@link
+   * AppUser#effectivelyApproved()} und nicht {@link AppUser#approved()}: Fremde Module fragen „darf
+   * mitwirken?", und ein Plattform-Admin darf das auch ohne Freigabe-Zeitstempel (Issue #556). So
+   * bleibt die Plattform-Rolle im auth-Modul gekapselt, statt sie für diese eine Entscheidung nach
+   * außen zu reichen.
+   */
   private static UserSummary toSummary(AppUser user) {
-    return new UserSummary(user.requireId(), user.email(), user.displayName(), user.approved());
+    return new UserSummary(
+        user.requireId(), user.email(), user.displayName(), user.effectivelyApproved());
   }
 }

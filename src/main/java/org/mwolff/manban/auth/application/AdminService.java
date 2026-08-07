@@ -58,7 +58,16 @@ public class AdminService {
       throw new LastAdminException();
     }
 
-    AppUser saved = users.save(target.withPlatformRole(newRole));
+    // Wer zum Plattform-Admin befördert wird, ist damit zugleich freigegeben — sonst bliebe ein
+    // Admin in der Übersicht dauerhaft als „wartet auf Freigabe" stehen (Issue #557). Umgekehrt
+    // gilt das bewusst nicht: eine Degradierung nimmt die Freigabe nicht zurück. Bereits
+    // freigegebene Benutzer behalten Zeitpunkt und Freigebenden (idempotent, analog approve).
+    AppUser updated = target.withPlatformRole(newRole);
+    AppUser saved =
+        users.save(
+            newRole == PlatformRole.ADMIN && !updated.approved()
+                ? updated.withApproved(clock.instant(), actorUserId)
+                : updated);
     return toView(saved);
   }
 

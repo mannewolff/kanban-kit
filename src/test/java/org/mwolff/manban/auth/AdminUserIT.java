@@ -1,5 +1,10 @@
 package org.mwolff.manban.auth;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.everyItem;
+import static org.hamcrest.Matchers.not;
+import static org.hamcrest.Matchers.notNullValue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -110,8 +115,13 @@ class AdminUserIT extends AbstractIntegrationTest {
     Cookie admin = login("ap-admin@example.com", PlatformRole.ADMIN);
     long pendingId = ensurePendingUser("ap-pending@example.com");
 
-    // Nicht freigegebener Nutzer: Login abgelehnt (403).
-    attemptLogin("ap-pending@example.com").andExpect(status().isForbidden());
+    // Nicht freigegebener Nutzer: Login abgelehnt (403). Die ProblemDetail-Meldung trägt Grund
+    // und Ausweg-Hinweis nach außen (Issue #562): Verweis auf den Betreiber, kein Repo-Dokument.
+    attemptLogin("ap-pending@example.com")
+        .andExpect(status().isForbidden())
+        .andExpect(jsonPath("$.detail", containsString("Freigabe durch einen Plattform-Admin")))
+        .andExpect(jsonPath("$.detail", containsString("Betreiber dieser Instanz")))
+        .andExpect(jsonPath("$.detail", not(containsString("betrieb.md"))));
 
     // Nicht-Admin darf nicht freigeben (403).
     Cookie plain = login("ap-user@example.com", PlatformRole.USER);
@@ -125,6 +135,34 @@ class AdminUserIT extends AbstractIntegrationTest {
 
     // Jetzt gelingt der Login.
     attemptLogin("ap-pending@example.com").andExpect(status().isOk());
+  }
+
+  @Test
+  void promotingPendingUserToAdminAlsoApproves() throws Exception {
+    Cookie admin = login("pp-admin@example.com", PlatformRole.ADMIN);
+    long pendingId = ensurePendingUser("pp-pending@example.com");
+
+    // Vorher: der Nutzer wartet auf Freigabe.
+    assertThat(users.findById(pendingId).orElseThrow().approvedAt()).isNull();
+
+    // Beförderung zum Plattform-Admin.
+    mvc.perform(
+            patch("/api/admin/users/" + pendingId)
+                .cookie(admin)
+                .contentType("application/json")
+                .content("{\"platformRole\":\"ADMIN\"}"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.platformRole").value("ADMIN"))
+        .andExpect(jsonPath("$.approvedAt").isNotEmpty());
+
+    // Danach: die Admin-Liste zeigt ihn als freigegeben, der befördernde Admin ist hinterlegt.
+    mvc.perform(get("/api/admin/users").cookie(admin))
+        .andExpect(status().isOk())
+        .andExpect(
+            jsonPath("$[?(@.email=='pp-pending@example.com')].approvedAt")
+                .value(everyItem(notNullValue())));
+    long adminId = users.findByEmail("pp-admin@example.com").orElseThrow().id();
+    assertThat(users.findById(pendingId).orElseThrow().approvedBy()).isEqualTo(adminId);
   }
 
   @Test
