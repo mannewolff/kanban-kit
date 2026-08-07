@@ -7,6 +7,19 @@ Versionierung folgt der dreiteiligen Betriebsversion (siehe [RELEASING.md](RELEA
 Einträge je Version sind ein automatischer Auszug der Commit-Titel seit dem letzten Release,
 erzeugt von `scripts/gen-changelog.mjs`.
 
+## [1.15.0] – 2026-08-07
+
+- chore: Version auf 1.14.1 (push main)
+- Login-Meldung am Freigabe-Gate verweist an den Betreiber ([#562](https://github.com/mannewolff/kanban-kit/issues/562))
+- workflow.config.json ist nicht mehr teil von .gitignore
+- Freigabe-Regel fuer Plattform-Admins an allen Pruefstellen ([#561](https://github.com/mannewolff/kanban-kit/issues/561))
+- Zeitabhaengige Luecke im Faelligkeitsdatum-Test schliessen
+- Login-Meldung am Freigabe-Gate nennt den Ausweg ([#560](https://github.com/mannewolff/kanban-kit/issues/560))
+- Bestehende Plattform-Admins ohne Freigabe nachstempeln ([#558](https://github.com/mannewolff/kanban-kit/issues/558))
+- Doku: Erst-Admin per Datenbank setzt die Freigabe mit ([#559](https://github.com/mannewolff/kanban-kit/issues/559))
+- Befoerderung zum Plattform-Admin gibt implizit frei ([#557](https://github.com/mannewolff/kanban-kit/issues/557))
+- Login-Gate: Plattform-Admin braucht keine Freigabe ([#556](https://github.com/mannewolff/kanban-kit/issues/556))
+
 ## [1.14.0] – 2026-07-31
 
 - chore: Version auf 1.13.3 (push main)
