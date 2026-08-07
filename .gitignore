@@ -1,4 +1,9 @@
-.claude/
+# claude-workflow-kit (Issue #208): workflow.config.json gehoert ins Repo,
+# alles andere unter .claude/ ist lokaler Zustand.
+.claude/*
+!.claude/workflow.config.json
+.claude/workflow.config.local.json
+.claude/board-meta-cache.json
 .idea/
 # Maven / Java
 target/
