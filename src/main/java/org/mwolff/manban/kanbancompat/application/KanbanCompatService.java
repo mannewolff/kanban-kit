@@ -36,9 +36,12 @@ public class KanbanCompatService {
   /** Kanban-Key der Backlog-Spalte; auch Fallback bei unbekannter Spalten-Zuordnung. */
   private static final String BACKLOG = "BACKLOG";
 
+  /** Kanban-Key der Done-Spalte; beim direct-Ingest ausgeschlossen (#569). */
+  private static final String DONE = "DONE";
+
   /** Feste Reihenfolge der Kanban-Spalten-Keys (spiegelt das tbx.mjs-Protokoll). */
   public static final List<String> COLUMNS =
-      List.of(BACKLOG, "READY", "IN_PROGRESS", "IN_REVIEW", "DONE");
+      List.of(BACKLOG, "READY", "IN_PROGRESS", "IN_REVIEW", DONE);
 
   private final BoardService boardService;
   private final CardService cardService;
@@ -105,11 +108,12 @@ public class KanbanCompatService {
    *
    * <p>Entscheidung B: Jeder board-token-Ingest landet bewusst im Projekt-Ideen-Pool statt direkt
    * im Board-Backlog, damit der Night-Modus (der aus <em>Ready</em> zieht) nichts autonom
-   * abarbeitet, was nicht bewusst eingeplant wurde. Die Parameter {@code column} und {@code
-   * ideaStored} sind dadurch gegenstandslos — sie bleiben aus Rückwärtskompatibilität im Request,
-   * werden hier aber ignoriert. Zurückgegeben werden {@code id} und die sofort vergebene
-   * projektweite {@code number} der neuen Pool-Idee (#402), damit CLI/Adapter direkt {@code #N}
-   * zeigen können.
+   * abarbeitet, was nicht bewusst eingeplant wurde. Im Pool-Zweig sind {@code column} und {@code
+   * ideaStored} gegenstandslos — sie bleiben aus Rückwärtskompatibilität im Request, werden dort
+   * aber ignoriert. Mit {@code direct} bestimmt {@code column} seit #569 die Zielspalte; {@code
+   * ideaStored} bleibt auch dann wirkungslos. Zurückgegeben werden {@code id} und die sofort
+   * vergebene projektweite {@code number} der neuen Pool-Idee (#402), damit CLI/Adapter direkt
+   * {@code #N} zeigen können.
    *
    * <p>Die zurückgegebene {@code id} taugt bewusst <em>nicht</em> als Kommentar-Ziel (#472): Eine
    * board-lose Pool-Idee liegt auf keinem Board, {@code GET/POST /items/{id}/comments} verlangt
@@ -134,9 +138,14 @@ public class KanbanCompatService {
     CardService.IdeaCreation result;
     if (direct) {
       // Opt-in-Board-Routing (#535): für dedizierte Sammel-Boards (z. B. Sonar-Findings) landet
-      // die Karte direkt in der ersten Spalte des Token-Boards. Die Pool-Leitplanke aus
-      // Entscheidung B bleibt der Default — was von außen kommt, plant sonst ein Mensch ein.
-      long columnId = boardService.firstColumn(boardId).id();
+      // die Karte direkt auf dem Token-Board statt im Pool — seit #569 in der angeforderten
+      // Spalte, ohne Angabe weiterhin in der ersten. Die Pool-Leitplanke aus Entscheidung B
+      // bleibt der Default: was von außen kommt, plant sonst ein Mensch ein.
+      //
+      // Die Spalte wird VOR dem Duplikat-Check in createDirect aufgelöst. Damit meldet ein
+      // ungültiges `column` denselben Fehler, egal ob der Schlüssel schon eine Karte trifft —
+      // sonst hinge die Fehlermeldung davon ab, ob zufällig schon eine existiert.
+      long columnId = directColumnId(boardId, column);
       result =
           cardService.createDirect(principal.userId(), boardId, columnId, title, body, key, number);
     } else {
@@ -168,6 +177,33 @@ public class KanbanCompatService {
     long boardId = requireBound(principal);
     long projectId = boardService.requireProjectId(boardId);
     cardService.replaceDependenciesFromIngest(principal.userId(), cardId, projectId, dependsOn);
+  }
+
+  /**
+   * Zielspalte für den direct-Ingest (#569).
+   *
+   * <p>Fehlt {@code column} (oder ist es JSON-{@code null}), bleibt es bei der ersten Spalte — das
+   * ist das Verhalten seit #535, und bestehende Aufrufer wie der Sonar-Sync senden keines. Ein
+   * leerer oder nur aus Leerzeichen bestehender String ist dagegen ein <em>angegebener</em>,
+   * ungültiger Schlüssel und wird abgelehnt; {@link #columnIdForKey} erledigt das mit.
+   *
+   * <p><strong>DONE ist ausgeschlossen.</strong> {@code doCreate} setzt {@code movedToDoneAt} nicht
+   * — diesen Zeitstempel vergibt allein {@code CardService.move} beim Eintritt in eine Done-Spalte,
+   * und die Done-Retention archiviert ausschließlich darüber ({@code findArchivableDoneCards}
+   * verlangt {@code movedToDoneAt is not null}). Eine direkt in DONE angelegte Karte fiele
+   * dauerhaft aus der Aufbewahrung, ohne dass der Grund sichtbar wäre; außerdem umginge sie die
+   * Zykluszeit-Messung. Der reale Bedarf (Ready) ist davon nicht berührt.
+   */
+  private long directColumnId(long boardId, @Nullable String column) {
+    if (column == null) {
+      return boardService.firstColumn(boardId).id();
+    }
+    if (DONE.equals(column.trim().toUpperCase(Locale.ROOT))) {
+      throw new InvalidKanbanColumnException(
+          "Karten koennen nicht direkt in DONE angelegt werden — die Done-Aufbewahrung erfasst nur"
+              + " Karten, die dorthin verschoben wurden.");
+    }
+    return columnIdForKey(boardId, column);
   }
 
   /**
