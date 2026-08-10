@@ -116,7 +116,8 @@ class KanbanCompatController {
       @Nullable Boolean ideaStored,
       // Idempotenz-Schlüssel (#534); Normalisierung (trim/Kappung) macht der Service.
       @Nullable String externalKey,
-      // Opt-in-Board-Routing (#535): true = direkt in die erste Spalte des Token-Boards.
+      // Opt-in-Board-Routing (#535): true = direkt aufs Token-Board statt in den Ideen-Pool.
+      // Die Zielspalte kommt seit #569 aus `column` (ohne Angabe: erste Spalte, DONE abgelehnt).
       @Nullable Boolean direct,
       // Vorgegebene projektweite Nummer (#565), fuer den Import aus einem anderen Tracker.
       // Verlangt direct=true und einen externalKey; der Service lehnt beides sonst ab.

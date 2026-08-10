@@ -321,6 +321,113 @@ class KanbanCompatServiceTest {
   }
 
   @Test
+  void create_withDirectAndColumn_resolvesTheRequestedColumn() {
+    // #569: Der direct-Zweig respektiert die angeforderte Spalte, statt immer die erste zu nehmen.
+    when(boardService.requireProjectId(BOARD)).thenReturn(5L);
+    when(boardService.listColumns(BOARD)).thenReturn(standardColumns());
+    when(cardService.createDirect(1L, BOARD, 101L, "Titel", "Body", null, null))
+        .thenReturn(new CardService.IdeaCreation(pooledIdea(42L), true));
+
+    service.create(bound(), "Titel", "Body", "READY", false, null, true, null);
+
+    verify(cardService).createDirect(1L, BOARD, 101L, "Titel", "Body", null, null);
+    verify(boardService, org.mockito.Mockito.never()).firstColumn(anyLong());
+  }
+
+  @Test
+  void create_withDirectAndNullColumn_usesFirstColumn() {
+    // Fehlendes column bleibt beim heutigen Verhalten — der Sonar-Sync sendet keines.
+    when(boardService.requireProjectId(BOARD)).thenReturn(5L);
+    when(boardService.firstColumn(BOARD)).thenReturn(new ColumnView(100L, "Backlog", 0, null));
+    when(cardService.createDirect(1L, BOARD, 100L, "Titel", "Body", null, null))
+        .thenReturn(new CardService.IdeaCreation(pooledIdea(42L), true));
+
+    service.create(bound(), "Titel", "Body", null, false, null, true, null);
+
+    verify(cardService).createDirect(1L, BOARD, 100L, "Titel", "Body", null, null);
+  }
+
+  @Test
+  void create_withDirectAndBlankColumn_isRejected() {
+    // Ein leerer String ist ein angegebener, ungueltiger Key — nicht dasselbe wie „fehlt".
+    when(boardService.requireProjectId(BOARD)).thenReturn(5L);
+
+    assertThatThrownBy(
+            () -> service.create(bound(), "Titel", "Body", "   ", false, null, true, null))
+        .isInstanceOf(InvalidKanbanColumnException.class);
+    verify(cardService, org.mockito.Mockito.never())
+        .createDirect(anyLong(), anyLong(), anyLong(), any(), any(), any(), any());
+  }
+
+  @Test
+  void create_withDirectAndUnknownColumnKey_isRejected() {
+    when(boardService.requireProjectId(BOARD)).thenReturn(5L);
+
+    assertThatThrownBy(
+            () -> service.create(bound(), "Titel", "Body", "FOO", false, null, true, null))
+        .isInstanceOf(InvalidKanbanColumnException.class);
+    verify(cardService, org.mockito.Mockito.never())
+        .createDirect(anyLong(), anyLong(), anyLong(), any(), any(), any(), any());
+  }
+
+  @Test
+  void create_withDirectAndDoneColumn_isRejected() {
+    // Anlegen als „erledigt" umgeht Zykluszeit und Done-Retention: doCreate setzt movedToDoneAt
+    // nicht, und DoneRetentionService archiviert allein darueber. Die Karte laege dauerhaft fest.
+    //
+    // Das Board hat hier ausdruecklich eine Done-Spalte. Ohne sie wuerde schon columnIdForKey
+    // dieselbe Exception werfen, und der Test koennte nicht unterscheiden, ob die Ablehnung von
+    // dieser Regel kommt oder blosser Nebeneffekt eines Boards ohne Done ist.
+    when(boardService.requireProjectId(BOARD)).thenReturn(5L);
+    when(boardService.listColumns(BOARD)).thenReturn(standardColumns());
+
+    assertThatThrownBy(
+            () -> service.create(bound(), "Titel", "Body", "DONE", false, null, true, null))
+        .isInstanceOf(InvalidKanbanColumnException.class);
+    verify(cardService, org.mockito.Mockito.never())
+        .createDirect(anyLong(), anyLong(), anyLong(), any(), any(), any(), any());
+  }
+
+  @Test
+  void create_withDirectAndLowercaseDone_isRejected() {
+    // Die Ablehnung haengt am normalisierten Key, nicht an der Schreibweise des Aufrufers.
+    when(boardService.requireProjectId(BOARD)).thenReturn(5L);
+    when(boardService.listColumns(BOARD)).thenReturn(standardColumns());
+
+    assertThatThrownBy(
+            () -> service.create(bound(), "Titel", "Body", " done ", false, null, true, null))
+        .isInstanceOf(InvalidKanbanColumnException.class);
+  }
+
+  @Test
+  void create_withoutDirect_ignoresColumnEntirely() {
+    // Ohne direct bleibt column gegenstandslos — auch ein DONE fuehrt nicht zur Ablehnung.
+    when(boardService.requireProjectId(BOARD)).thenReturn(5L);
+    when(cardService.createProjectIdea(1L, 5L, "Titel", "Body", BOARD, null))
+        .thenReturn(new CardService.IdeaCreation(pooledIdea(42L), true));
+
+    KanbanCompatService.Created created =
+        service.create(bound(), "Titel", "Body", "DONE", false, null, false, null);
+
+    assertThat(created.id()).isEqualTo(42L);
+  }
+
+  @Test
+  void create_withDirectAndIdeaStored_behavesLikeDirectAlone() {
+    // Die konflikttraechtige Kombination: direct gewinnt, ideaStored bleibt wirkungslos.
+    when(boardService.requireProjectId(BOARD)).thenReturn(5L);
+    when(boardService.listColumns(BOARD)).thenReturn(standardColumns());
+    when(cardService.createDirect(1L, BOARD, 101L, "Titel", "Body", null, null))
+        .thenReturn(new CardService.IdeaCreation(pooledIdea(42L), true));
+
+    service.create(bound(), "Titel", "Body", "READY", true, null, true, null);
+
+    verify(cardService).createDirect(1L, BOARD, 101L, "Titel", "Body", null, null);
+    verify(cardService, org.mockito.Mockito.never())
+        .createProjectIdea(anyLong(), anyLong(), any(), any(), any(), any());
+  }
+
+  @Test
   void create_withNumber_passesItThroughToDirectPath() {
     // #565: Die vorgegebene Nummer erreicht den Anlage-Pfad unveraendert.
     when(boardService.requireProjectId(BOARD)).thenReturn(5L);
