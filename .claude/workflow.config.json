@@ -11,7 +11,8 @@
   "mainBranch": "main",
   "productionBranch": "production",
   "reviewScope": "diff",
-  "reviewModel": "claude-opus-5",
+  "reviewModel": "gpt-5.6-sol",
+  "reviewCommand": "codex exec --model gpt-5.6-sol -c model_reasoning_effort=\"high\"",
   "triggers": {
     "go": "GO",
     "push": "push main",
