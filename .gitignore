@@ -37,3 +37,10 @@ issues/
 
 # JVM-Crash-Logs abstuerzender PIT-Minions (SIGSEGV auf OpenJDK/aarch64) — Build-Muell, kein Commit-Ziel
 hs_err_pid*.log
+
+# Ad-hoc erhobene Code-Metriken (Praesentationsmaterial) — Momentaufnahme, veraltet sofort
+kanban-kit-metriken.md
+
+.agents/
+.codex/
+

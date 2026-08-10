@@ -125,17 +125,20 @@ public class KanbanCompatService {
       @Nullable String column,
       boolean ideaStored,
       @Nullable String externalKey,
-      boolean direct) {
+      boolean direct,
+      @Nullable Integer number) {
     long boardId = requireBound(principal);
     long projectId = boardService.requireProjectId(boardId);
     String key = normalizeExternalKey(externalKey);
+    requireImportPreconditions(number, key, direct);
     CardService.IdeaCreation result;
     if (direct) {
       // Opt-in-Board-Routing (#535): für dedizierte Sammel-Boards (z. B. Sonar-Findings) landet
       // die Karte direkt in der ersten Spalte des Token-Boards. Die Pool-Leitplanke aus
       // Entscheidung B bleibt der Default — was von außen kommt, plant sonst ein Mensch ein.
       long columnId = boardService.firstColumn(boardId).id();
-      result = cardService.createDirect(principal.userId(), boardId, columnId, title, body, key);
+      result =
+          cardService.createDirect(principal.userId(), boardId, columnId, title, body, key, number);
     } else {
       result =
           cardService.createProjectIdea(principal.userId(), projectId, title, body, boardId, key);
@@ -144,6 +147,57 @@ public class KanbanCompatService {
     // Seit #402 vergibt createProjectIdea sofort eine Nummer; requireNonNull macht das fuer
     // NullAway explizit (CardView.number() ist @Nullable fuer Legacy-Ideen ohne Nummer).
     return new Created(v.id(), Objects.requireNonNull(v.number()), result.created());
+  }
+
+  /**
+   * Ersetzt die Abhängigkeiten einer Karte des gebundenen Projekts (Issue #566) — der Weg, auf dem
+   * ein Migrations-Script die {@code Issue #N}-Verweise eines fremden Trackers überträgt.
+   *
+   * <p>Der Guard prüft das <em>Projekt</em> des gebundenen Boards, nicht das Board selbst. Ein
+   * Ingest ohne {@code direct} legt board-lose Pool-Ideen an (Entscheidung B); der board-bezogene
+   * Guard von {@link #move} und {@link #comment} antwortet für sie mit 404, und genau diese Karten
+   * will das Script gleich danach verknüpfen.
+   *
+   * <p>Ersetzen-Semantik: Die übergebene Liste tritt an die Stelle der vorhandenen Verweise. Damit
+   * ist ein wiederholter Aufruf mit derselben Liste folgenlos, ohne dass es eine Sonderbehandlung
+   * für Dubletten bräuchte.
+   */
+  @Transactional
+  public void replaceDependencies(
+      KanbanPrincipal principal, long cardId, @Nullable List<Integer> dependsOn) {
+    long boardId = requireBound(principal);
+    long projectId = boardService.requireProjectId(boardId);
+    cardService.replaceDependenciesFromIngest(principal.userId(), cardId, projectId, dependsOn);
+  }
+
+  /**
+   * Beide Pflichten, die an einer vorgegebenen Nummer hängen (#565).
+   *
+   * <p>{@code direct} ist Pflicht, weil der Ideen-Pool für ungesichtete Rohanforderungen gedacht
+   * ist — eine migrierte Karte hat ihren Platz bereits.
+   *
+   * <p>Der {@code externalKey} ist Pflicht, weil die Import-Vorbedingung („keine Karte ohne
+   * Schlüssel") sich sonst selbst aushebelt: Der erste Aufruf ohne Schlüssel legt eine
+   * schlüssellose Karte an, und ab dem zweiten lehnt die Vorbedingung denselben Import ab.
+   *
+   * <p>Beides sind Requestfehler (400), keine Zustandskonflikte — derselbe Aufruf ist zu keinem
+   * Zeitpunkt und gegen kein Projekt gültig.
+   */
+  private static void requireImportPreconditions(
+      @Nullable Integer number, @Nullable String normalizedKey, boolean direct) {
+    if (number == null) {
+      return;
+    }
+    if (!direct) {
+      throw new InvalidNumberedIngestException(
+          "Eine vorgegebene Nummer verlangt direct=true — Pool-Ideen werden nicht nummeriert"
+              + " uebernommen.");
+    }
+    if (normalizedKey == null) {
+      throw new InvalidNumberedIngestException(
+          "Eine vorgegebene Nummer verlangt einen externalKey — sonst blockiert der Import sich"
+              + " nach dem ersten Aufruf selbst.");
+    }
   }
 
   /**

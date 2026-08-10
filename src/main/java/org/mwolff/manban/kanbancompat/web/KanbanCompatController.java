@@ -1,13 +1,17 @@
 package org.mwolff.manban.kanbancompat.web;
 
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.PositiveOrZero;
 import jakarta.validation.constraints.Size;
 import java.util.List;
 import java.util.Map;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.accesstoken.application.KanbanPrincipal;
+import org.mwolff.manban.card.application.CardNumbers;
 import org.mwolff.manban.kanbancompat.application.KanbanCompatService;
 import org.mwolff.manban.kanbancompat.application.KanbanCompatService.Comment;
 import org.mwolff.manban.kanbancompat.application.KanbanCompatService.Created;
@@ -57,7 +61,8 @@ class KanbanCompatController {
         request.column(),
         Boolean.TRUE.equals(request.ideaStored()),
         request.externalKey(),
-        Boolean.TRUE.equals(request.direct()));
+        Boolean.TRUE.equals(request.direct()),
+        request.number());
   }
 
   @PutMapping("/items/{id}/move")
@@ -66,6 +71,15 @@ class KanbanCompatController {
       @PathVariable long id,
       @Valid @RequestBody MoveRequest request) {
     service.move(principal(authentication), id, request.column(), request.position());
+  }
+
+  @PutMapping("/items/{id}/dependencies")
+  @ResponseStatus(HttpStatus.NO_CONTENT)
+  void dependencies(
+      @Nullable Authentication authentication,
+      @PathVariable long id,
+      @Valid @RequestBody DependenciesRequest request) {
+    service.replaceDependencies(principal(authentication), id, request.dependsOn());
   }
 
   @PostMapping("/items/{id}/comments")
@@ -103,9 +117,26 @@ class KanbanCompatController {
       // Idempotenz-Schlüssel (#534); Normalisierung (trim/Kappung) macht der Service.
       @Nullable String externalKey,
       // Opt-in-Board-Routing (#535): true = direkt in die erste Spalte des Token-Boards.
-      @Nullable Boolean direct) {}
+      @Nullable Boolean direct,
+      // Vorgegebene projektweite Nummer (#565), fuer den Import aus einem anderen Tracker.
+      // Verlangt direct=true und einen externalKey; der Service lehnt beides sonst ab.
+      // Obergrenze: nextCardNumber rechnet MAX(number)+1 auf einer integer-Spalte — ohne Deckel
+      // legt ein einziger Import mit Integer.MAX_VALUE jede spaetere Anlage im Projekt lahm.
+      @Nullable @Positive @Max(CardNumbers.MAX) Integer number) {}
 
   record MoveRequest(@NotBlank String column, @PositiveOrZero int position) {}
+
+  /**
+   * Abhaengigkeiten als projektweite Kartennummern (#566). Ersetzen-Semantik: Die Liste tritt an
+   * die Stelle der vorhandenen Verweise, {@code null} oder leer loescht sie. Nummern duerfen auf
+   * noch nicht importierte Karten zeigen.
+   */
+  // @NotNull je Element: @Positive allein laesst null durch, und der Selbstverweis-Vergleich
+  // entpackt den Wert — {"dependsOn":[null]} endete sonst als NullPointerException in einem 500.
+  // @Size deckelt die Transaktionsgroesse; jedes Element ist ein eigenes INSERT.
+  record DependenciesRequest(
+      @Nullable @Size(max = 500)
+          List<@NotNull @Positive @Max(CardNumbers.MAX) Integer> dependsOn) {}
 
   /** Gleiche Längengrenze wie der UI-Pfad ({@code CommentController.CommentRequest}). */
   record CommentRequest(@NotBlank @Size(max = 10_000) String body) {}

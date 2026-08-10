@@ -2710,6 +2710,31 @@ class CardServiceTest {
         null);
   }
 
+  /** Legacy-Pool-Idee aus der Zeit vor #402: board-los und ohne projektweite Nummer. */
+  private static Card pooledIdeaWithoutNumber(long id) {
+    return new Card(
+        id,
+        null, // boardId
+        null, // columnId
+        null, // number
+        "Titel",
+        "Body",
+        0, // positionInColumn
+        false,
+        true,
+        null, // movedToDoneAt
+        1L, // createdBy
+        FIXED,
+        FIXED,
+        CardType.CARD,
+        null, // parentId
+        null, // shortcode
+        null, // dueDate
+        PROJECT,
+        null, // targetBoardId
+        null); // externalKey
+  }
+
   @Test
   void listBoardItems_requiresMembershipInBoardProject() {
     when(cards.findByBoardId(BOARD)).thenReturn(List.of());
@@ -2825,7 +2850,7 @@ class CardServiceTest {
     when(cards.allocateCardNumber(PROJECT)).thenReturn(9);
 
     CardService.IdeaCreation result =
-        service.createDirect(1L, BOARD, 20L, "Finding", null, "sonar:abc");
+        service.createDirect(1L, BOARD, 20L, "Finding", null, "sonar:abc", null);
 
     ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
     verify(cards).save(captor.capture());
@@ -2840,7 +2865,193 @@ class CardServiceTest {
         .thenReturn(Optional.of(boardCard(7L, 20L, 3, 0, false, false)));
 
     CardService.IdeaCreation result =
-        service.createDirect(1L, BOARD, 20L, "Finding", null, "sonar:abc");
+        service.createDirect(1L, BOARD, 20L, "Finding", null, "sonar:abc", null);
+
+    assertThat(result.created()).isFalse();
+    assertThat(result.view().id()).isEqualTo(7L);
+    verify(cards, never()).save(any(Card.class));
+  }
+
+  @Test
+  void replaceDependenciesFromIngest_storesUnknownNumbers() {
+    // #566: Der Import darf auf Karten verweisen, die noch nicht angekommen sind — sonst waere die
+    // Importreihenfolge bindend. Die DB traegt das (kein Fremdschluessel).
+    when(cards.findById(7L)).thenReturn(Optional.of(boardCard(7L, 20L, 3, 0, false, false)));
+
+    service.replaceDependenciesFromIngest(1L, 7L, PROJECT, List.of(99, 1234));
+
+    verify(dependencies).replaceDependencies(7L, List.of(99, 1234));
+  }
+
+  @Test
+  void replaceDependenciesFromIngest_rejectsSelfReference() {
+    // Die Selbstverweis-Pruefung bleibt geteilt: sie haengt nicht am Wissen ueber andere Karten.
+    when(cards.findById(7L)).thenReturn(Optional.of(boardCard(7L, 20L, 3, 0, false, false)));
+
+    assertThatThrownBy(() -> service.replaceDependenciesFromIngest(1L, 7L, PROJECT, List.of(3)))
+        .isInstanceOf(InvalidDependencyException.class);
+    verify(dependencies, never()).replaceDependencies(anyLong(), anyList());
+  }
+
+  @Test
+  void replaceDependenciesFromIngest_deduplicates() {
+    when(cards.findById(7L)).thenReturn(Optional.of(boardCard(7L, 20L, 3, 0, false, false)));
+
+    service.replaceDependenciesFromIngest(1L, 7L, PROJECT, List.of(99, 99, 100));
+
+    verify(dependencies).replaceDependencies(7L, List.of(99, 100));
+  }
+
+  @Test
+  void replaceDependenciesFromIngest_clearsOnEmptyList() {
+    when(cards.findById(7L)).thenReturn(Optional.of(boardCard(7L, 20L, 3, 0, false, false)));
+
+    service.replaceDependenciesFromIngest(1L, 7L, PROJECT, List.of());
+
+    verify(dependencies).replaceDependencies(7L, List.of());
+  }
+
+  @Test
+  void replaceDependenciesFromIngest_clearsOnNull() {
+    when(cards.findById(7L)).thenReturn(Optional.of(boardCard(7L, 20L, 3, 0, false, false)));
+
+    service.replaceDependenciesFromIngest(1L, 7L, PROJECT, null);
+
+    verify(dependencies).replaceDependencies(7L, List.of());
+  }
+
+  @Test
+  void replaceDependenciesFromIngest_rejectsCardWithoutNumber_alsoForEmptyList() {
+    // Die Nummern-Pruefung steht vor jeder Listenbehandlung (Code-Review Codex, Fund 1): Eine
+    // Karte ohne Nummer ist kein gueltiges Ziel, auch nicht zum Loeschen. Ein stilles 204
+    // verspraeche eine Operation, die es fuer sie nicht gibt.
+    when(cards.findById(7L)).thenReturn(Optional.of(pooledIdeaWithoutNumber(7L)));
+
+    assertThatThrownBy(() -> service.replaceDependenciesFromIngest(1L, 7L, PROJECT, List.of()))
+        .isInstanceOf(CardWithoutNumberException.class);
+    verify(dependencies, never()).replaceDependencies(anyLong(), anyList());
+  }
+
+  @Test
+  void replaceDependenciesFromIngest_rejectsCardWithoutNumber_alsoForNull() {
+    when(cards.findById(7L)).thenReturn(Optional.of(pooledIdeaWithoutNumber(7L)));
+
+    assertThatThrownBy(() -> service.replaceDependenciesFromIngest(1L, 7L, PROJECT, null))
+        .isInstanceOf(CardWithoutNumberException.class);
+    verify(dependencies, never()).replaceDependencies(anyLong(), anyList());
+  }
+
+  @Test
+  void replaceDependenciesFromIngest_rejectsCardWithoutNumber() {
+    // Legacy-Pool-Idee ohne Nummer: definierte Antwort statt Exception aus requireNumber().
+    when(cards.findById(7L)).thenReturn(Optional.of(pooledIdeaWithoutNumber(7L)));
+
+    assertThatThrownBy(() -> service.replaceDependenciesFromIngest(1L, 7L, PROJECT, List.of(99)))
+        .isInstanceOf(CardWithoutNumberException.class);
+    verify(dependencies, never()).replaceDependencies(anyLong(), anyList());
+  }
+
+  @Test
+  void replaceDependenciesFromIngest_rejectsCardOfOtherProject() {
+    // Der Token bindet an ein Projekt; eine Karte aus einem fremden bleibt unerreichbar.
+    when(cards.findById(7L)).thenReturn(Optional.of(boardCard(7L, 20L, 3, 0, false, false)));
+
+    assertThatThrownBy(
+            () -> service.replaceDependenciesFromIngest(1L, 7L, PROJECT + 1, List.of(99)))
+        .isInstanceOf(CardNotFoundException.class);
+    verify(dependencies, never()).replaceDependencies(anyLong(), anyList());
+  }
+
+  @Test
+  void replaceDependenciesFromIngest_throwsForUnknownCard() {
+    when(cards.findById(7L)).thenReturn(Optional.empty());
+
+    assertThatThrownBy(() -> service.replaceDependenciesFromIngest(1L, 7L, PROJECT, List.of(99)))
+        .isInstanceOf(CardNotFoundException.class);
+  }
+
+  @Test
+  void createDirect_withGivenNumber_usesItInsteadOfAllocating() {
+    // #565: Die vorgegebene Nummer ersetzt die Vergabe — die Identität der migrierten Karte
+    // bleibt erhalten.
+    when(boardService.requireColumn(20L, BOARD)).thenReturn(column(20L, "Backlog", 0));
+
+    CardService.IdeaCreation result =
+        service.createDirect(1L, BOARD, 20L, "Migriert", null, "github#278", 278);
+
+    ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
+    verify(cards).save(captor.capture());
+    assertThat(captor.getValue().number()).isEqualTo(278);
+    assertThat(result.created()).isTrue();
+    verify(cards, never()).allocateCardNumber(anyLong());
+  }
+
+  @Test
+  void createDirect_withGivenNumber_holdsLockBeforeChecking() {
+    // Die Sperre bleibt, obwohl die Berechnung entfällt: sonst kollidiert ein Import mit einer
+    // laufenden Anlage genau dann, wenn beide dieselbe Zahl treffen.
+    when(boardService.requireColumn(20L, BOARD)).thenReturn(column(20L, "Backlog", 0));
+
+    service.createDirect(1L, BOARD, 20L, "Migriert", null, "github#278", 278);
+
+    InOrder order = inOrder(cards);
+    order.verify(cards).lockCardNumbers(PROJECT);
+    order.verify(cards).hasCardWithoutExternalKey(PROJECT);
+    order.verify(cards).isNumberTaken(PROJECT, 278);
+    order.verify(cards).save(any(Card.class));
+  }
+
+  @Test
+  void createDirect_withTakenNumber_throwsConflict() {
+    when(cards.isNumberTaken(PROJECT, 278)).thenReturn(true);
+
+    assertThatThrownBy(() -> service.createDirect(1L, BOARD, 20L, "Migriert", null, "k", 278))
+        .isInstanceOf(CardNumberConflictException.class);
+    verify(cards, never()).save(any(Card.class));
+  }
+
+  @Test
+  void createDirect_withGivenNumber_throwsConflict_whenProjectHasImportForeignCard() {
+    // Vorbedingung: in ein gewachsenes Projekt wird nicht hineinimportiert.
+    when(cards.hasCardWithoutExternalKey(PROJECT)).thenReturn(true);
+
+    assertThatThrownBy(() -> service.createDirect(1L, BOARD, 20L, "Migriert", null, "k", 278))
+        .isInstanceOf(CardNumberConflictException.class);
+    verify(cards, never()).save(any(Card.class));
+  }
+
+  @Test
+  void createDirect_withoutGivenNumber_skipsPreconditionAndAllocates() {
+    // Ohne vorgegebene Nummer bleibt der Pfad unverändert — kein Vorbedingungs-Check.
+    when(boardService.requireColumn(20L, BOARD)).thenReturn(column(20L, "Backlog", 0));
+    when(cards.allocateCardNumber(PROJECT)).thenReturn(9);
+
+    service.createDirect(1L, BOARD, 20L, "Karte", null, null, null);
+
+    verify(cards).allocateCardNumber(PROJECT);
+    verify(cards, never()).hasCardWithoutExternalKey(anyLong());
+    verify(cards, never()).isNumberTaken(anyLong(), anyInt());
+  }
+
+  @Test
+  void createDirect_existingKeyWithDifferentNumber_throwsConflict() {
+    // Der Idempotenz-Treffer darf keine andere Identität zurückgeben als angefordert.
+    when(cards.findByProjectIdAndExternalKey(PROJECT, "github#278"))
+        .thenReturn(Optional.of(boardCard(7L, 20L, 3, 0, false, false)));
+
+    assertThatThrownBy(
+            () -> service.createDirect(1L, BOARD, 20L, "Migriert", null, "github#278", 278))
+        .isInstanceOf(CardNumberConflictException.class);
+    verify(cards, never()).save(any(Card.class));
+  }
+
+  @Test
+  void createDirect_existingKeyWithSameNumber_returnsExistingWithoutCreating() {
+    when(cards.findByProjectIdAndExternalKey(PROJECT, "github#3"))
+        .thenReturn(Optional.of(boardCard(7L, 20L, 3, 0, false, false)));
+
+    CardService.IdeaCreation result =
+        service.createDirect(1L, BOARD, 20L, "Migriert", null, "github#3", 3);
 
     assertThat(result.created()).isFalse();
     assertThat(result.view().id()).isEqualTo(7L);
@@ -2852,7 +3063,8 @@ class CardServiceTest {
     when(boardService.requireColumn(20L, BOARD)).thenReturn(column(20L, "Backlog", 0));
     when(cards.allocateCardNumber(PROJECT)).thenReturn(9);
 
-    CardService.IdeaCreation result = service.createDirect(1L, BOARD, 20L, "Karte", null, null);
+    CardService.IdeaCreation result =
+        service.createDirect(1L, BOARD, 20L, "Karte", null, null, null);
 
     assertThat(result.created()).isTrue();
     verify(cards, never()).findByProjectIdAndExternalKey(anyLong(), any());
@@ -2865,7 +3077,7 @@ class CardServiceTest {
         .when(permissions)
         .require(1L, PROJECT, Permission.TICKET_CREATE);
 
-    assertThatThrownBy(() -> service.createDirect(1L, BOARD, 20L, "F", null, "sonar:abc"))
+    assertThatThrownBy(() -> service.createDirect(1L, BOARD, 20L, "F", null, "sonar:abc", null))
         .isInstanceOf(ProjectNotFoundException.class);
     verify(cards, never()).findByProjectIdAndExternalKey(anyLong(), any());
   }

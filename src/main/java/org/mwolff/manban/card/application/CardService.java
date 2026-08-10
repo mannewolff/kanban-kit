@@ -42,7 +42,17 @@ import org.springframework.transaction.annotation.Transactional;
 // PMD.TooManyMethods: zentraler Karten-/Epic-Use-Case-Service — viele kleine, kohäsive Methoden
 // (Anlegen/Bearbeiten/Move/Archiv/Ideen-Speicher/Zuständige/Labels je Erfolgs- und Fehlerpfad);
 // eine Aufspaltung würde denselben Use-Case-Kontext künstlich zerreißen, kein God-Class-Smell.
-@SuppressWarnings({"PMD.CouplingBetweenObjects", "PMD.CyclomaticComplexity", "PMD.TooManyMethods"})
+// PMD.ExcessivePublicCount: dieselbe Familie wie TooManyMethods, nur über die öffentliche
+// Oberfläche gezählt — mit dem Ingest-Pfad für Abhängigkeiten (#566) ist die Grenze erreicht. Die
+// Klasse ist bewusst der einzige Zugang zum card-Modul (ArchUnit-Fassadenregel): Ein zweiter
+// öffentlicher Service würde die Regel brechen, statt den Umfang zu verringern. Wenn hier weiter
+// wächst, ist eine echte Aufteilung des Moduls fällig — nicht eine höhere Schwelle.
+@SuppressWarnings({
+  "PMD.CouplingBetweenObjects",
+  "PMD.CyclomaticComplexity",
+  "PMD.TooManyMethods",
+  "PMD.ExcessivePublicCount"
+})
 @Service
 public class CardService {
 
@@ -130,6 +140,7 @@ public class CardService {
         null,
         null,
         null,
+        null,
         null);
   }
 
@@ -157,6 +168,7 @@ public class CardService {
         dependsOn,
         parentId,
         ideaStored,
+        null,
         null,
         null,
         null,
@@ -197,6 +209,7 @@ public class CardService {
         dueDate,
         assigneeIds,
         labelIds,
+        null,
         null);
   }
 
@@ -214,14 +227,17 @@ public class CardService {
       @Nullable Instant dueDate,
       @Nullable List<Long> assigneeIds,
       @Nullable List<Long> labelIds,
-      @Nullable String externalKey) {
+      @Nullable String externalKey,
+      @Nullable Integer givenNumber) {
     long projectId = boardService.requireProjectId(boardId);
     permissions.require(userId, projectId, Permission.TICKET_CREATE);
     ColumnView column = boardService.requireColumn(columnId, boardId);
     Long effectiveParent =
         parentId == null ? null : requireEpicInBoard(parentId, boardId).requireId();
 
-    int number = cards.allocateCardNumber(projectId);
+    // Vorgegebene Nummer (#565) ersetzt die Vergabe, nicht die Sperre — die hat der Aufrufer
+    // bereits genommen und die Nummer unter ihr geprüft.
+    int number = givenNumber != null ? givenNumber : cards.allocateCardNumber(projectId);
     int position = cards.allocateActivePosition(columnId);
     Instant now = clock.instant();
     Card saved =
@@ -922,15 +938,20 @@ public class CardService {
       long columnId,
       String title,
       @Nullable String description,
-      @Nullable String externalKey) {
+      @Nullable String externalKey,
+      @Nullable Integer givenNumber) {
     long projectId = boardService.requireProjectId(boardId);
     // Rechte VOR dem Duplikat-Check: der Rückgabepfad darf Unberechtigten keine Existenz leaken.
     permissions.require(userId, projectId, Permission.TICKET_CREATE);
     if (externalKey != null) {
       Optional<Card> existing = cards.findByProjectIdAndExternalKey(projectId, externalKey);
       if (existing.isPresent()) {
+        requireMatchingNumber(existing.get(), givenNumber);
         return new IdeaCreation(view(existing.get()), false);
       }
+    }
+    if (givenNumber != null) {
+      requireNumberAvailable(projectId, givenNumber);
     }
     CardView created =
         doCreate(
@@ -945,8 +966,45 @@ public class CardService {
             null,
             null,
             null,
-            externalKey);
+            externalKey,
+            givenNumber);
     return new IdeaCreation(created, true);
+  }
+
+  /**
+   * Der Idempotenz-Treffer muss dieselbe Identität liefern, die angefordert wurde (#565). Eine
+   * abweichende Nummer stillschweigend zurückzugeben wäre das Gegenteil des Zwecks: Der Aufrufer
+   * bekäme eine fremde Identität und merkte es erst, wenn migrierte Abhängigkeiten ins Leere
+   * zeigen.
+   */
+  private static void requireMatchingNumber(Card existing, @Nullable Integer givenNumber) {
+    if (givenNumber != null && !givenNumber.equals(existing.number())) {
+      throw new CardNumberConflictException(
+          "Der Schluessel gehoert bereits zu Karte #"
+              + existing.number()
+              + ", angefordert war #"
+              + givenNumber
+              + ".");
+    }
+  }
+
+  /**
+   * Prüft unter der Nummern-Sperre, ob eine vorgegebene Nummer vergeben werden darf (#565).
+   *
+   * <p>Reihenfolge ist wesentlich: erst sperren, dann prüfen. Läuft die Prüfung vor der Sperre,
+   * rutscht eine gleichzeitige Anlage zwischen Prüfung und Schreiben — und genau diese Vorbedingung
+   * ist der einzige Schutz davor, in ein gewachsenes Projekt hineinzuimportieren.
+   */
+  private void requireNumberAvailable(long projectId, int number) {
+    cards.lockCardNumbers(projectId);
+    if (cards.hasCardWithoutExternalKey(projectId)) {
+      throw new CardNumberConflictException(
+          "Das Projekt enthaelt Karten ausserhalb eines Imports — eine vorgegebene Nummer wird nur"
+              + " in ein Projekt ohne importfremde Karten uebernommen.");
+    }
+    if (cards.isNumberTaken(projectId, number)) {
+      throw new CardNumberConflictException("Nummer #" + number + " ist bereits vergeben.");
+    }
   }
 
   /**
@@ -1269,6 +1327,49 @@ public class CardService {
       throw new InvalidDependencyException("Kein Epic dieses Boards: " + epicId);
     }
     return epic;
+  }
+
+  /**
+   * Ersetzt die Abhängigkeiten einer Karte, <strong>ohne</strong> die Zielnummern auf Existenz zu
+   * prüfen (Issue #566) — für den Import aus einem anderen Tracker.
+   *
+   * <p>Der Unterschied zum UI-Pfad ist Absicht und der Kern dieser Aufgabe: {@link
+   * #setDependencies(Card, List)} lehnt unbekannte Nummern hart ab, weil dort ein Tippfehler
+   * wahrscheinlicher ist als eine noch nicht angelegte Karte. Beim Import ist es umgekehrt — die
+   * Zielkarte kommt oft erst später an, und eine Reihenfolge zu erzwingen hieße, den Import über
+   * die Abhängigkeitsgraphen zu sortieren. Die Datenbank trägt das: {@code
+   * card_dependency.depends_on_card_number} ist eine Zahl ohne Fremdschlüssel, der Verweis heilt,
+   * sobald die Zielkarte existiert.
+   *
+   * <p>{@code expectedProjectId} bindet die Karte an das Projekt des Aufrufers und ist bewusst Teil
+   * dieser Methode statt eines eigenen Guards: Ein separater Aufruf ließe sich vergessen. Die
+   * Prüfung ist projekt- und nicht boardbezogen — {@link #requireOnBoard(long, long)} antwortet für
+   * board-lose Pool-Ideen mit 404, und genau die entstehen beim Ingest ohne {@code direct}.
+   *
+   * <p>Geteilt bleibt die Selbstverweis-Prüfung — sie hängt nicht am Wissen über andere Karten.
+   */
+  @Transactional
+  public void replaceDependenciesFromIngest(
+      long userId, long cardId, long expectedProjectId, @Nullable List<Integer> dependsOn) {
+    Card card = requireCardOp(userId, cardId, Permission.TICKET_UPDATE, Permission.EPIC_UPDATE);
+    if (card.projectId() != expectedProjectId) {
+      throw new CardNotFoundException();
+    }
+    // Vor jeder Listenbehandlung: Eine Karte ohne eigene Nummer ist kein gültiges Ziel, auch nicht
+    // zum Löschen. Sie kann per Konstruktion keine Verweise tragen (der Selbstverweis-Vergleich
+    // braucht die Nummer), und ein stilles 204 verspräche eine Operation, die es nicht gibt.
+    if (card.number() == null) {
+      throw new CardWithoutNumberException();
+    }
+    // Kein Sonderfall für „leer": Die Schleife läuft dann einfach nicht, und replaceDependencies
+    // bekommt eine leere Liste — dasselbe Ergebnis, ein Zweig weniger.
+    List<Integer> distinct = dependsOn == null ? List.of() : dependsOn.stream().distinct().toList();
+    for (Integer dep : distinct) {
+      if (dep == card.requireNumber()) {
+        throw new InvalidDependencyException("Karte kann nicht von sich selbst abhängen");
+      }
+    }
+    dependencies.replaceDependencies(card.requireId(), distinct);
   }
 
   private void setDependencies(Card card, @Nullable List<Integer> dependsOn) {

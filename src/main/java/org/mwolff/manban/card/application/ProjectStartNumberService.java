@@ -41,12 +41,16 @@ public class ProjectStartNumberService {
 
   /**
    * Setzt die Startnummer (Owner-/Edit-Recht). Der Wert muss über der höchsten bereits vergebenen
-   * Nummer liegen; sonst {@link InvalidCardNumberException} (400). Gibt die neue effektive nächste
-   * Nummer zurück.
+   * Nummer und innerhalb von {@link CardNumbers#MAX} liegen; sonst {@link
+   * InvalidCardNumberException} (400). Gibt die neue effektive nächste Nummer zurück.
    */
   @Transactional
   public int setNextCardNumber(long userId, long projectId, int value) {
     permissions.require(userId, projectId, Permission.PROJECT_EDIT);
+    if (value > CardNumbers.MAX) {
+      throw new InvalidCardNumberException(
+          "Nächste Nummer darf höchstens " + CardNumbers.MAX + " sein");
+    }
     int highest = cards.highestNumberInProject(projectId);
     if (value <= highest) {
       throw new InvalidCardNumberException(

@@ -227,7 +227,7 @@ class KanbanCompatServiceTest {
 
     // When
     KanbanCompatService.Created created =
-        service.create(bound(), "Titel", "Body", null, false, null, false);
+        service.create(bound(), "Titel", "Body", null, false, null, false, null);
 
     // Then: kein board-gebundenes create mehr, sondern eine board-lose Pool-Idee; zurück kommt
     // deren id samt der projektweiten Nummer (#402), damit der Adapter sofort #N zeigen kann.
@@ -246,7 +246,7 @@ class KanbanCompatServiceTest {
 
     // When: absichtlich eine (frueher unbekannte) Spalte + ideaStored=true
     KanbanCompatService.Created created =
-        service.create(bound(), "Titel", "Body", "VOELLIG-UNBEKANNT", true, null, false);
+        service.create(bound(), "Titel", "Body", "VOELLIG-UNBEKANNT", true, null, false, null);
 
     // Then: keine InvalidKanbanColumnException, Delegation unveraendert
     verify(cardService).createProjectIdea(1L, 5L, "Titel", "Body", BOARD, null);
@@ -263,7 +263,7 @@ class KanbanCompatServiceTest {
 
     // When
     KanbanCompatService.Created created =
-        service.create(bound(), "Titel", "Body", null, false, "  sonar:abc  ", false);
+        service.create(bound(), "Titel", "Body", null, false, "  sonar:abc  ", false, null);
 
     // Then: getrimmt durchgereicht, Duplikat als created=false gemeldet.
     verify(cardService).createProjectIdea(1L, 5L, "Titel", "Body", BOARD, "sonar:abc");
@@ -279,8 +279,8 @@ class KanbanCompatServiceTest {
         .thenReturn(new CardService.IdeaCreation(pooledIdea(42L), true));
 
     // When: überlanger Schlüssel und blanker Schlüssel
-    service.create(bound(), "Titel", "Body", null, false, "x".repeat(150), false);
-    service.create(bound(), "Titel", "Body", null, false, "   ", false);
+    service.create(bound(), "Titel", "Body", null, false, "x".repeat(150), false, null);
+    service.create(bound(), "Titel", "Body", null, false, "   ", false, null);
 
     // Then: gekappt auf 100 bzw. null (kein Schlüssel)
     verify(cardService).createProjectIdea(1L, 5L, "Titel", "Body", BOARD, "x".repeat(100));
@@ -288,19 +288,111 @@ class KanbanCompatServiceTest {
   }
 
   @Test
+  void replaceDependencies_delegatesWithProjectOfBoundBoard() {
+    // #566: Der Guard ist projekt- und nicht boardbezogen, damit auch board-lose Pool-Ideen
+    // erreichbar sind. Die Projekt-ID stammt aus dem gebundenen Board und wird durchgereicht.
+    when(boardService.requireProjectId(BOARD)).thenReturn(5L);
+
+    service.replaceDependencies(bound(), 42L, List.of(7, 8));
+
+    verify(cardService).replaceDependenciesFromIngest(1L, 42L, 5L, List.of(7, 8));
+  }
+
+  @Test
+  void replaceDependencies_passesNullThrough() {
+    // null loescht die Verweise — der Service reicht es unveraendert weiter statt es zu ersetzen.
+    when(boardService.requireProjectId(BOARD)).thenReturn(5L);
+
+    service.replaceDependencies(bound(), 42L, null);
+
+    verify(cardService).replaceDependenciesFromIngest(1L, 42L, 5L, null);
+  }
+
+  @Test
+  void replaceDependencies_requiresBoundToken() {
+    // Ohne Board-Bindung gibt es kein Projekt — der Aufruf darf das card-Modul nicht erreichen.
+    assertThatThrownBy(
+            () ->
+                service.replaceDependencies(
+                    new KanbanPrincipal(1L, 2L, 5L, null, "Token"), 42L, List.of(7)))
+        .isInstanceOf(TokenNotBoundException.class);
+    verify(cardService, org.mockito.Mockito.never())
+        .replaceDependenciesFromIngest(anyLong(), anyLong(), anyLong(), any());
+  }
+
+  @Test
+  void create_withNumber_passesItThroughToDirectPath() {
+    // #565: Die vorgegebene Nummer erreicht den Anlage-Pfad unveraendert.
+    when(boardService.requireProjectId(BOARD)).thenReturn(5L);
+    when(boardService.firstColumn(BOARD)).thenReturn(new ColumnView(100L, "Backlog", 0, null));
+    when(cardService.createDirect(1L, BOARD, 100L, "Titel", "Body", "github#278", 278))
+        .thenReturn(new CardService.IdeaCreation(pooledIdea(42L), true));
+
+    service.create(bound(), "Titel", "Body", null, false, "github#278", true, 278);
+
+    verify(cardService).createDirect(1L, BOARD, 100L, "Titel", "Body", "github#278", 278);
+  }
+
+  @Test
+  void create_withNumberWithoutDirect_isRejected() {
+    // Der Ideen-Pool ist fuer ungesichtete Rohanforderungen — eine migrierte Karte hat ihren
+    // Platz bereits. Requestfehler, kein Zustandskonflikt.
+    when(boardService.requireProjectId(BOARD)).thenReturn(5L);
+
+    assertThatThrownBy(
+            () -> service.create(bound(), "Titel", "Body", null, false, "github#278", false, 278))
+        .isInstanceOf(InvalidNumberedIngestException.class);
+    verify(cardService, org.mockito.Mockito.never())
+        .createProjectIdea(anyLong(), anyLong(), any(), any(), any(), any());
+  }
+
+  @Test
+  void create_withNumberWithoutExternalKey_isRejected() {
+    // Ohne Schluessel legte der erste Aufruf eine schluessellose Karte an — und die
+    // Import-Vorbedingung lehnte ab dem zweiten Aufruf denselben Import ab.
+    when(boardService.requireProjectId(BOARD)).thenReturn(5L);
+
+    assertThatThrownBy(() -> service.create(bound(), "Titel", "Body", null, false, null, true, 278))
+        .isInstanceOf(InvalidNumberedIngestException.class);
+  }
+
+  @Test
+  void create_withNumberAndBlankExternalKey_isRejected() {
+    // Ein leerer Schluessel normalisiert zu null und zaehlt damit als fehlend.
+    when(boardService.requireProjectId(BOARD)).thenReturn(5L);
+
+    assertThatThrownBy(
+            () -> service.create(bound(), "Titel", "Body", null, false, "   ", true, 278))
+        .isInstanceOf(InvalidNumberedIngestException.class);
+  }
+
+  @Test
+  void create_withoutNumber_skipsImportPreconditions() {
+    // Ohne Nummer bleibt der Pfad unveraendert: weder direct noch externalKey sind Pflicht.
+    when(boardService.requireProjectId(BOARD)).thenReturn(5L);
+    when(cardService.createProjectIdea(1L, 5L, "Titel", "Body", BOARD, null))
+        .thenReturn(new CardService.IdeaCreation(pooledIdea(42L), true));
+
+    KanbanCompatService.Created created =
+        service.create(bound(), "Titel", "Body", null, false, null, false, null);
+
+    assertThat(created.id()).isEqualTo(42L);
+  }
+
+  @Test
   void create_withDirect_routesToFirstColumnOfTokenBoard() {
     // Given (#535): direct=true umgeht den Pool und legt in der ersten Spalte des Token-Boards an.
     when(boardService.requireProjectId(BOARD)).thenReturn(5L);
     when(boardService.firstColumn(BOARD)).thenReturn(new ColumnView(100L, "Backlog", 0, null));
-    when(cardService.createDirect(1L, BOARD, 100L, "Titel", "Body", "sonar:abc"))
+    when(cardService.createDirect(1L, BOARD, 100L, "Titel", "Body", "sonar:abc", null))
         .thenReturn(new CardService.IdeaCreation(pooledIdea(42L), true));
 
     // When
     KanbanCompatService.Created created =
-        service.create(bound(), "Titel", "Body", null, false, "sonar:abc", true);
+        service.create(bound(), "Titel", "Body", null, false, "sonar:abc", true, null);
 
     // Then: Board-Pfad statt Pool-Pfad, created durchgereicht.
-    verify(cardService).createDirect(1L, BOARD, 100L, "Titel", "Body", "sonar:abc");
+    verify(cardService).createDirect(1L, BOARD, 100L, "Titel", "Body", "sonar:abc", null);
     verify(cardService, org.mockito.Mockito.never())
         .createProjectIdea(anyLong(), anyLong(), any(), any(), any(), any());
     assertThat(created.id()).isEqualTo(42L);
@@ -314,7 +406,8 @@ class KanbanCompatServiceTest {
 
     // When / Then
     KanbanPrincipal principal = bound();
-    assertThatThrownBy(() -> service.create(principal, "Titel", "Body", null, false, null, false))
+    assertThatThrownBy(
+            () -> service.create(principal, "Titel", "Body", null, false, null, false, null))
         .isInstanceOf(BoardNotFoundException.class);
   }
 
