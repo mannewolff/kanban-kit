@@ -7,6 +7,15 @@ Versionierung folgt der dreiteiligen Betriebsversion (siehe [RELEASING.md](RELEA
 Einträge je Version sind ein automatischer Auszug der Commit-Titel seit dem letzten Release,
 erzeugt von `scripts/gen-changelog.mjs`.
 
+## [1.16.0] – 2026-08-10
+
+- chore: Version auf 1.15.1 (push main)
+- Codex als Pflichtreviewer festgelegt
+- Befunde aus dem Codex-Review nachziehen (Issues #565, #566)
+- Anpassung für Codex durchgeführt
+- Abhaengigkeiten ueber den Ingest setzen ([#566](https://github.com/mannewolff/kanban-kit/issues/566))
+- Karte mit vorgegebener Nummer ueber den Ingest anlegen ([#565](https://github.com/mannewolff/kanban-kit/issues/565))
+
 ## [1.15.0] – 2026-08-07
 
 - chore: Version auf 1.14.1 (push main)
