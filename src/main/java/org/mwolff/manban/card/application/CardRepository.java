@@ -117,6 +117,31 @@ public interface CardRepository {
   int highestNumberInProject(long projectId);
 
   /**
+   * Ob die projektweite Nummer bereits vergeben ist — <strong>einschließlich archivierter und in
+   * den Papierkorb verschobener Karten</strong> (Issue #565).
+   *
+   * <p>Bewusst nicht über {@link #findByProjectIdAndNumber(long, int)} zu erledigen: Die filtert
+   * {@code deleted_at IS NULL} und übersieht damit genau die Karten, die den Unique-Constraint
+   * {@code uq_card_number (project_id, number)} trotzdem belegen. Dasselbe Muster wie beim
+   * Idempotenz-Check aus #534, der aus demselben Grund ohne Papierkorb-Filter arbeitet.
+   *
+   * <p>Aufrufer halten die Sperre aus {@link #lockCardNumbers(long)}, sonst kann zwischen Prüfung
+   * und Anlage eine zweite Anlage dieselbe Nummer belegen.
+   */
+  boolean isNumberTaken(long projectId, int number);
+
+  /**
+   * Ob das Projekt mindestens eine Karte enthält, die <em>nicht</em> aus einem Ingest-Import stammt
+   * (also ohne {@code external_key}) — einschließlich archivierter und Papierkorb-Karten.
+   *
+   * <p>Trägt die Vorbedingung für den Import mit vorgegebener Nummer (Issue #565): In ein
+   * gewachsenes Projekt wird nicht hineinimportiert. Bewusst nicht „Projekt ist leer": Der Import
+   * besteht aus vielen Aufrufen, nach dem ersten wäre das Projekt nicht mehr leer und der eigene
+   * Lauf blockierte sich selbst.
+   */
+  boolean hasCardWithoutExternalKey(long projectId);
+
+  /**
    * Vergibt die nächste freie aktive Position am Ende der Spalte (0 in einer leeren Spalte) und
    * sichert sie gegen gleichzeitige Vergabe ab.
    *

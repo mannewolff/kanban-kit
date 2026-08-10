@@ -2825,7 +2825,7 @@ class CardServiceTest {
     when(cards.allocateCardNumber(PROJECT)).thenReturn(9);
 
     CardService.IdeaCreation result =
-        service.createDirect(1L, BOARD, 20L, "Finding", null, "sonar:abc");
+        service.createDirect(1L, BOARD, 20L, "Finding", null, "sonar:abc", null);
 
     ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
     verify(cards).save(captor.capture());
@@ -2840,7 +2840,95 @@ class CardServiceTest {
         .thenReturn(Optional.of(boardCard(7L, 20L, 3, 0, false, false)));
 
     CardService.IdeaCreation result =
-        service.createDirect(1L, BOARD, 20L, "Finding", null, "sonar:abc");
+        service.createDirect(1L, BOARD, 20L, "Finding", null, "sonar:abc", null);
+
+    assertThat(result.created()).isFalse();
+    assertThat(result.view().id()).isEqualTo(7L);
+    verify(cards, never()).save(any(Card.class));
+  }
+
+  @Test
+  void createDirect_withGivenNumber_usesItInsteadOfAllocating() {
+    // #565: Die vorgegebene Nummer ersetzt die Vergabe — die Identität der migrierten Karte
+    // bleibt erhalten.
+    when(boardService.requireColumn(20L, BOARD)).thenReturn(column(20L, "Backlog", 0));
+
+    CardService.IdeaCreation result =
+        service.createDirect(1L, BOARD, 20L, "Migriert", null, "github#278", 278);
+
+    ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
+    verify(cards).save(captor.capture());
+    assertThat(captor.getValue().number()).isEqualTo(278);
+    assertThat(result.created()).isTrue();
+    verify(cards, never()).allocateCardNumber(anyLong());
+  }
+
+  @Test
+  void createDirect_withGivenNumber_holdsLockBeforeChecking() {
+    // Die Sperre bleibt, obwohl die Berechnung entfällt: sonst kollidiert ein Import mit einer
+    // laufenden Anlage genau dann, wenn beide dieselbe Zahl treffen.
+    when(boardService.requireColumn(20L, BOARD)).thenReturn(column(20L, "Backlog", 0));
+
+    service.createDirect(1L, BOARD, 20L, "Migriert", null, "github#278", 278);
+
+    InOrder order = inOrder(cards);
+    order.verify(cards).lockCardNumbers(PROJECT);
+    order.verify(cards).hasCardWithoutExternalKey(PROJECT);
+    order.verify(cards).isNumberTaken(PROJECT, 278);
+    order.verify(cards).save(any(Card.class));
+  }
+
+  @Test
+  void createDirect_withTakenNumber_throwsConflict() {
+    when(cards.isNumberTaken(PROJECT, 278)).thenReturn(true);
+
+    assertThatThrownBy(() -> service.createDirect(1L, BOARD, 20L, "Migriert", null, "k", 278))
+        .isInstanceOf(CardNumberConflictException.class);
+    verify(cards, never()).save(any(Card.class));
+  }
+
+  @Test
+  void createDirect_withGivenNumber_throwsConflict_whenProjectHasImportForeignCard() {
+    // Vorbedingung: in ein gewachsenes Projekt wird nicht hineinimportiert.
+    when(cards.hasCardWithoutExternalKey(PROJECT)).thenReturn(true);
+
+    assertThatThrownBy(() -> service.createDirect(1L, BOARD, 20L, "Migriert", null, "k", 278))
+        .isInstanceOf(CardNumberConflictException.class);
+    verify(cards, never()).save(any(Card.class));
+  }
+
+  @Test
+  void createDirect_withoutGivenNumber_skipsPreconditionAndAllocates() {
+    // Ohne vorgegebene Nummer bleibt der Pfad unverändert — kein Vorbedingungs-Check.
+    when(boardService.requireColumn(20L, BOARD)).thenReturn(column(20L, "Backlog", 0));
+    when(cards.allocateCardNumber(PROJECT)).thenReturn(9);
+
+    service.createDirect(1L, BOARD, 20L, "Karte", null, null, null);
+
+    verify(cards).allocateCardNumber(PROJECT);
+    verify(cards, never()).hasCardWithoutExternalKey(anyLong());
+    verify(cards, never()).isNumberTaken(anyLong(), anyInt());
+  }
+
+  @Test
+  void createDirect_existingKeyWithDifferentNumber_throwsConflict() {
+    // Der Idempotenz-Treffer darf keine andere Identität zurückgeben als angefordert.
+    when(cards.findByProjectIdAndExternalKey(PROJECT, "github#278"))
+        .thenReturn(Optional.of(boardCard(7L, 20L, 3, 0, false, false)));
+
+    assertThatThrownBy(
+            () -> service.createDirect(1L, BOARD, 20L, "Migriert", null, "github#278", 278))
+        .isInstanceOf(CardNumberConflictException.class);
+    verify(cards, never()).save(any(Card.class));
+  }
+
+  @Test
+  void createDirect_existingKeyWithSameNumber_returnsExistingWithoutCreating() {
+    when(cards.findByProjectIdAndExternalKey(PROJECT, "github#3"))
+        .thenReturn(Optional.of(boardCard(7L, 20L, 3, 0, false, false)));
+
+    CardService.IdeaCreation result =
+        service.createDirect(1L, BOARD, 20L, "Migriert", null, "github#3", 3);
 
     assertThat(result.created()).isFalse();
     assertThat(result.view().id()).isEqualTo(7L);
@@ -2852,7 +2940,8 @@ class CardServiceTest {
     when(boardService.requireColumn(20L, BOARD)).thenReturn(column(20L, "Backlog", 0));
     when(cards.allocateCardNumber(PROJECT)).thenReturn(9);
 
-    CardService.IdeaCreation result = service.createDirect(1L, BOARD, 20L, "Karte", null, null);
+    CardService.IdeaCreation result =
+        service.createDirect(1L, BOARD, 20L, "Karte", null, null, null);
 
     assertThat(result.created()).isTrue();
     verify(cards, never()).findByProjectIdAndExternalKey(anyLong(), any());
@@ -2865,7 +2954,7 @@ class CardServiceTest {
         .when(permissions)
         .require(1L, PROJECT, Permission.TICKET_CREATE);
 
-    assertThatThrownBy(() -> service.createDirect(1L, BOARD, 20L, "F", null, "sonar:abc"))
+    assertThatThrownBy(() -> service.createDirect(1L, BOARD, 20L, "F", null, "sonar:abc", null))
         .isInstanceOf(ProjectNotFoundException.class);
     verify(cards, never()).findByProjectIdAndExternalKey(anyLong(), any());
   }

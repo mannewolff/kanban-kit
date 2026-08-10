@@ -164,6 +164,31 @@ class CardRepositoryAdapter implements CardRepository {
   }
 
   @Override
+  public boolean isNumberTaken(long projectId, int number) {
+    // Bewusst ohne deleted_at-Filter (#565): Der Unique-Constraint uq_card_number kennt keinen
+    // Papierkorb, eine soft-gelöschte Karte belegt die Nummer weiterhin. Dieselbe Begründung wie
+    // beim Idempotenz-Check aus #534 — und der Grund, warum findByProjectIdAndNumber hier nicht
+    // taugt: die filtert deleted_at IS NULL.
+    return Boolean.TRUE.equals(
+        jdbc.queryForObject(
+            "SELECT EXISTS(SELECT 1 FROM card WHERE project_id = ? AND number = ?)",
+            Boolean.class,
+            projectId,
+            number));
+  }
+
+  @Override
+  public boolean hasCardWithoutExternalKey(long projectId) {
+    // Ebenfalls ohne deleted_at-Filter: Eine archivierte oder gelöschte Karte aus der Zeit vor dem
+    // Import macht das Projekt genauso zu einem gewachsenen Projekt wie eine sichtbare.
+    return Boolean.TRUE.equals(
+        jdbc.queryForObject(
+            "SELECT EXISTS(SELECT 1 FROM card WHERE project_id = ? AND external_key IS NULL)",
+            Boolean.class,
+            projectId));
+  }
+
+  @Override
   public int highestNumberInProject(long projectId) {
     return java.util.Objects.requireNonNull(
         jdbc.queryForObject(

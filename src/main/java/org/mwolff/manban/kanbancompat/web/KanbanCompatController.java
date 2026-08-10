@@ -2,6 +2,7 @@ package org.mwolff.manban.kanbancompat.web;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.PositiveOrZero;
 import jakarta.validation.constraints.Size;
 import java.util.List;
@@ -57,7 +58,8 @@ class KanbanCompatController {
         request.column(),
         Boolean.TRUE.equals(request.ideaStored()),
         request.externalKey(),
-        Boolean.TRUE.equals(request.direct()));
+        Boolean.TRUE.equals(request.direct()),
+        request.number());
   }
 
   @PutMapping("/items/{id}/move")
@@ -103,7 +105,10 @@ class KanbanCompatController {
       // Idempotenz-Schlüssel (#534); Normalisierung (trim/Kappung) macht der Service.
       @Nullable String externalKey,
       // Opt-in-Board-Routing (#535): true = direkt in die erste Spalte des Token-Boards.
-      @Nullable Boolean direct) {}
+      @Nullable Boolean direct,
+      // Vorgegebene projektweite Nummer (#565), fuer den Import aus einem anderen Tracker.
+      // Verlangt direct=true und einen externalKey; der Service lehnt beides sonst ab.
+      @Nullable @Positive Integer number) {}
 
   record MoveRequest(@NotBlank String column, @PositiveOrZero int position) {}
 

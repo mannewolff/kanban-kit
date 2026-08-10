@@ -130,6 +130,7 @@ public class CardService {
         null,
         null,
         null,
+        null,
         null);
   }
 
@@ -157,6 +158,7 @@ public class CardService {
         dependsOn,
         parentId,
         ideaStored,
+        null,
         null,
         null,
         null,
@@ -197,6 +199,7 @@ public class CardService {
         dueDate,
         assigneeIds,
         labelIds,
+        null,
         null);
   }
 
@@ -214,14 +217,17 @@ public class CardService {
       @Nullable Instant dueDate,
       @Nullable List<Long> assigneeIds,
       @Nullable List<Long> labelIds,
-      @Nullable String externalKey) {
+      @Nullable String externalKey,
+      @Nullable Integer givenNumber) {
     long projectId = boardService.requireProjectId(boardId);
     permissions.require(userId, projectId, Permission.TICKET_CREATE);
     ColumnView column = boardService.requireColumn(columnId, boardId);
     Long effectiveParent =
         parentId == null ? null : requireEpicInBoard(parentId, boardId).requireId();
 
-    int number = cards.allocateCardNumber(projectId);
+    // Vorgegebene Nummer (#565) ersetzt die Vergabe, nicht die Sperre — die hat der Aufrufer
+    // bereits genommen und die Nummer unter ihr geprüft.
+    int number = givenNumber != null ? givenNumber : cards.allocateCardNumber(projectId);
     int position = cards.allocateActivePosition(columnId);
     Instant now = clock.instant();
     Card saved =
@@ -922,15 +928,20 @@ public class CardService {
       long columnId,
       String title,
       @Nullable String description,
-      @Nullable String externalKey) {
+      @Nullable String externalKey,
+      @Nullable Integer givenNumber) {
     long projectId = boardService.requireProjectId(boardId);
     // Rechte VOR dem Duplikat-Check: der Rückgabepfad darf Unberechtigten keine Existenz leaken.
     permissions.require(userId, projectId, Permission.TICKET_CREATE);
     if (externalKey != null) {
       Optional<Card> existing = cards.findByProjectIdAndExternalKey(projectId, externalKey);
       if (existing.isPresent()) {
+        requireMatchingNumber(existing.get(), givenNumber);
         return new IdeaCreation(view(existing.get()), false);
       }
+    }
+    if (givenNumber != null) {
+      requireNumberAvailable(projectId, givenNumber);
     }
     CardView created =
         doCreate(
@@ -945,8 +956,45 @@ public class CardService {
             null,
             null,
             null,
-            externalKey);
+            externalKey,
+            givenNumber);
     return new IdeaCreation(created, true);
+  }
+
+  /**
+   * Der Idempotenz-Treffer muss dieselbe Identität liefern, die angefordert wurde (#565). Eine
+   * abweichende Nummer stillschweigend zurückzugeben wäre das Gegenteil des Zwecks: Der Aufrufer
+   * bekäme eine fremde Identität und merkte es erst, wenn migrierte Abhängigkeiten ins Leere
+   * zeigen.
+   */
+  private static void requireMatchingNumber(Card existing, @Nullable Integer givenNumber) {
+    if (givenNumber != null && !givenNumber.equals(existing.number())) {
+      throw new CardNumberConflictException(
+          "Der Schluessel gehoert bereits zu Karte #"
+              + existing.number()
+              + ", angefordert war #"
+              + givenNumber
+              + ".");
+    }
+  }
+
+  /**
+   * Prüft unter der Nummern-Sperre, ob eine vorgegebene Nummer vergeben werden darf (#565).
+   *
+   * <p>Reihenfolge ist wesentlich: erst sperren, dann prüfen. Läuft die Prüfung vor der Sperre,
+   * rutscht eine gleichzeitige Anlage zwischen Prüfung und Schreiben — und genau diese Vorbedingung
+   * ist der einzige Schutz davor, in ein gewachsenes Projekt hineinzuimportieren.
+   */
+  private void requireNumberAvailable(long projectId, int number) {
+    cards.lockCardNumbers(projectId);
+    if (cards.hasCardWithoutExternalKey(projectId)) {
+      throw new CardNumberConflictException(
+          "Das Projekt enthaelt Karten ausserhalb eines Imports — eine vorgegebene Nummer wird nur"
+              + " in ein Projekt ohne importfremde Karten uebernommen.");
+    }
+    if (cards.isNumberTaken(projectId, number)) {
+      throw new CardNumberConflictException("Nummer #" + number + " ist bereits vergeben.");
+    }
   }
 
   /**
