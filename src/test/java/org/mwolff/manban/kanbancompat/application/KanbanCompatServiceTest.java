@@ -288,6 +288,39 @@ class KanbanCompatServiceTest {
   }
 
   @Test
+  void replaceDependencies_delegatesWithProjectOfBoundBoard() {
+    // #566: Der Guard ist projekt- und nicht boardbezogen, damit auch board-lose Pool-Ideen
+    // erreichbar sind. Die Projekt-ID stammt aus dem gebundenen Board und wird durchgereicht.
+    when(boardService.requireProjectId(BOARD)).thenReturn(5L);
+
+    service.replaceDependencies(bound(), 42L, List.of(7, 8));
+
+    verify(cardService).replaceDependenciesFromIngest(1L, 42L, 5L, List.of(7, 8));
+  }
+
+  @Test
+  void replaceDependencies_passesNullThrough() {
+    // null loescht die Verweise — der Service reicht es unveraendert weiter statt es zu ersetzen.
+    when(boardService.requireProjectId(BOARD)).thenReturn(5L);
+
+    service.replaceDependencies(bound(), 42L, null);
+
+    verify(cardService).replaceDependenciesFromIngest(1L, 42L, 5L, null);
+  }
+
+  @Test
+  void replaceDependencies_requiresBoundToken() {
+    // Ohne Board-Bindung gibt es kein Projekt — der Aufruf darf das card-Modul nicht erreichen.
+    assertThatThrownBy(
+            () ->
+                service.replaceDependencies(
+                    new KanbanPrincipal(1L, 2L, 5L, null, "Token"), 42L, List.of(7)))
+        .isInstanceOf(TokenNotBoundException.class);
+    verify(cardService, org.mockito.Mockito.never())
+        .replaceDependenciesFromIngest(anyLong(), anyLong(), anyLong(), any());
+  }
+
+  @Test
   void create_withNumber_passesItThroughToDirectPath() {
     // #565: Die vorgegebene Nummer erreicht den Anlage-Pfad unveraendert.
     when(boardService.requireProjectId(BOARD)).thenReturn(5L);

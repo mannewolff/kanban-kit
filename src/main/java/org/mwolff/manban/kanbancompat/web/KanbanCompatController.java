@@ -70,6 +70,15 @@ class KanbanCompatController {
     service.move(principal(authentication), id, request.column(), request.position());
   }
 
+  @PutMapping("/items/{id}/dependencies")
+  @ResponseStatus(HttpStatus.NO_CONTENT)
+  void dependencies(
+      @Nullable Authentication authentication,
+      @PathVariable long id,
+      @Valid @RequestBody DependenciesRequest request) {
+    service.replaceDependencies(principal(authentication), id, request.dependsOn());
+  }
+
   @PostMapping("/items/{id}/comments")
   @ResponseStatus(HttpStatus.CREATED)
   void comment(
@@ -111,6 +120,13 @@ class KanbanCompatController {
       @Nullable @Positive Integer number) {}
 
   record MoveRequest(@NotBlank String column, @PositiveOrZero int position) {}
+
+  /**
+   * Abhaengigkeiten als projektweite Kartennummern (#566). Ersetzen-Semantik: Die Liste tritt an
+   * die Stelle der vorhandenen Verweise, {@code null} oder leer loescht sie. Nummern duerfen auf
+   * noch nicht importierte Karten zeigen.
+   */
+  record DependenciesRequest(@Nullable List<@Positive Integer> dependsOn) {}
 
   /** Gleiche Längengrenze wie der UI-Pfad ({@code CommentController.CommentRequest}). */
   record CommentRequest(@NotBlank @Size(max = 10_000) String body) {}

@@ -150,6 +150,27 @@ public class KanbanCompatService {
   }
 
   /**
+   * Ersetzt die Abhängigkeiten einer Karte des gebundenen Projekts (Issue #566) — der Weg, auf dem
+   * ein Migrations-Script die {@code Issue #N}-Verweise eines fremden Trackers überträgt.
+   *
+   * <p>Der Guard prüft das <em>Projekt</em> des gebundenen Boards, nicht das Board selbst. Ein
+   * Ingest ohne {@code direct} legt board-lose Pool-Ideen an (Entscheidung B); der board-bezogene
+   * Guard von {@link #move} und {@link #comment} antwortet für sie mit 404, und genau diese Karten
+   * will das Script gleich danach verknüpfen.
+   *
+   * <p>Ersetzen-Semantik: Die übergebene Liste tritt an die Stelle der vorhandenen Verweise. Damit
+   * ist ein wiederholter Aufruf mit derselben Liste folgenlos, ohne dass es eine Sonderbehandlung
+   * für Dubletten bräuchte.
+   */
+  @Transactional
+  public void replaceDependencies(
+      KanbanPrincipal principal, long cardId, @Nullable List<Integer> dependsOn) {
+    long boardId = requireBound(principal);
+    long projectId = boardService.requireProjectId(boardId);
+    cardService.replaceDependenciesFromIngest(principal.userId(), cardId, projectId, dependsOn);
+  }
+
+  /**
    * Beide Pflichten, die an einer vorgegebenen Nummer hängen (#565).
    *
    * <p>{@code direct} ist Pflicht, weil der Ideen-Pool für ungesichtete Rohanforderungen gedacht

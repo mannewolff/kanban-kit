@@ -42,7 +42,17 @@ import org.springframework.transaction.annotation.Transactional;
 // PMD.TooManyMethods: zentraler Karten-/Epic-Use-Case-Service — viele kleine, kohäsive Methoden
 // (Anlegen/Bearbeiten/Move/Archiv/Ideen-Speicher/Zuständige/Labels je Erfolgs- und Fehlerpfad);
 // eine Aufspaltung würde denselben Use-Case-Kontext künstlich zerreißen, kein God-Class-Smell.
-@SuppressWarnings({"PMD.CouplingBetweenObjects", "PMD.CyclomaticComplexity", "PMD.TooManyMethods"})
+// PMD.ExcessivePublicCount: dieselbe Familie wie TooManyMethods, nur über die öffentliche
+// Oberfläche gezählt — mit dem Ingest-Pfad für Abhängigkeiten (#566) ist die Grenze erreicht. Die
+// Klasse ist bewusst der einzige Zugang zum card-Modul (ArchUnit-Fassadenregel): Ein zweiter
+// öffentlicher Service würde die Regel brechen, statt den Umfang zu verringern. Wenn hier weiter
+// wächst, ist eine echte Aufteilung des Moduls fällig — nicht eine höhere Schwelle.
+@SuppressWarnings({
+  "PMD.CouplingBetweenObjects",
+  "PMD.CyclomaticComplexity",
+  "PMD.TooManyMethods",
+  "PMD.ExcessivePublicCount"
+})
 @Service
 public class CardService {
 
@@ -1317,6 +1327,48 @@ public class CardService {
       throw new InvalidDependencyException("Kein Epic dieses Boards: " + epicId);
     }
     return epic;
+  }
+
+  /**
+   * Ersetzt die Abhängigkeiten einer Karte, <strong>ohne</strong> die Zielnummern auf Existenz zu
+   * prüfen (Issue #566) — für den Import aus einem anderen Tracker.
+   *
+   * <p>Der Unterschied zum UI-Pfad ist Absicht und der Kern dieser Aufgabe: {@link
+   * #setDependencies(Card, List)} lehnt unbekannte Nummern hart ab, weil dort ein Tippfehler
+   * wahrscheinlicher ist als eine noch nicht angelegte Karte. Beim Import ist es umgekehrt — die
+   * Zielkarte kommt oft erst später an, und eine Reihenfolge zu erzwingen hieße, den Import über
+   * die Abhängigkeitsgraphen zu sortieren. Die Datenbank trägt das: {@code
+   * card_dependency.depends_on_card_number} ist eine Zahl ohne Fremdschlüssel, der Verweis heilt,
+   * sobald die Zielkarte existiert.
+   *
+   * <p>{@code expectedProjectId} bindet die Karte an das Projekt des Aufrufers und ist bewusst Teil
+   * dieser Methode statt eines eigenen Guards: Ein separater Aufruf ließe sich vergessen. Die
+   * Prüfung ist projekt- und nicht boardbezogen — {@link #requireOnBoard(long, long)} antwortet für
+   * board-lose Pool-Ideen mit 404, und genau die entstehen beim Ingest ohne {@code direct}.
+   *
+   * <p>Geteilt bleibt die Selbstverweis-Prüfung — sie hängt nicht am Wissen über andere Karten.
+   */
+  @Transactional
+  public void replaceDependenciesFromIngest(
+      long userId, long cardId, long expectedProjectId, @Nullable List<Integer> dependsOn) {
+    Card card = requireCardOp(userId, cardId, Permission.TICKET_UPDATE, Permission.EPIC_UPDATE);
+    if (card.projectId() != expectedProjectId) {
+      throw new CardNotFoundException();
+    }
+    if (dependsOn == null || dependsOn.isEmpty()) {
+      dependencies.replaceDependencies(card.requireId(), List.of());
+      return;
+    }
+    if (card.number() == null) {
+      throw new CardWithoutNumberException();
+    }
+    List<Integer> distinct = dependsOn.stream().distinct().toList();
+    for (Integer dep : distinct) {
+      if (dep == card.requireNumber()) {
+        throw new InvalidDependencyException("Karte kann nicht von sich selbst abhängen");
+      }
+    }
+    dependencies.replaceDependencies(card.requireId(), distinct);
   }
 
   private void setDependencies(Card card, @Nullable List<Integer> dependsOn) {

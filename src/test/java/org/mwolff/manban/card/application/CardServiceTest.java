@@ -2710,6 +2710,31 @@ class CardServiceTest {
         null);
   }
 
+  /** Legacy-Pool-Idee aus der Zeit vor #402: board-los und ohne projektweite Nummer. */
+  private static Card pooledIdeaWithoutNumber(long id) {
+    return new Card(
+        id,
+        null, // boardId
+        null, // columnId
+        null, // number
+        "Titel",
+        "Body",
+        0, // positionInColumn
+        false,
+        true,
+        null, // movedToDoneAt
+        1L, // createdBy
+        FIXED,
+        FIXED,
+        CardType.CARD,
+        null, // parentId
+        null, // shortcode
+        null, // dueDate
+        PROJECT,
+        null, // targetBoardId
+        null); // externalKey
+  }
+
   @Test
   void listBoardItems_requiresMembershipInBoardProject() {
     when(cards.findByBoardId(BOARD)).thenReturn(List.of());
@@ -2845,6 +2870,95 @@ class CardServiceTest {
     assertThat(result.created()).isFalse();
     assertThat(result.view().id()).isEqualTo(7L);
     verify(cards, never()).save(any(Card.class));
+  }
+
+  @Test
+  void replaceDependenciesFromIngest_storesUnknownNumbers() {
+    // #566: Der Import darf auf Karten verweisen, die noch nicht angekommen sind — sonst waere die
+    // Importreihenfolge bindend. Die DB traegt das (kein Fremdschluessel).
+    when(cards.findById(7L)).thenReturn(Optional.of(boardCard(7L, 20L, 3, 0, false, false)));
+
+    service.replaceDependenciesFromIngest(1L, 7L, PROJECT, List.of(99, 1234));
+
+    verify(dependencies).replaceDependencies(7L, List.of(99, 1234));
+  }
+
+  @Test
+  void replaceDependenciesFromIngest_rejectsSelfReference() {
+    // Die Selbstverweis-Pruefung bleibt geteilt: sie haengt nicht am Wissen ueber andere Karten.
+    when(cards.findById(7L)).thenReturn(Optional.of(boardCard(7L, 20L, 3, 0, false, false)));
+
+    assertThatThrownBy(() -> service.replaceDependenciesFromIngest(1L, 7L, PROJECT, List.of(3)))
+        .isInstanceOf(InvalidDependencyException.class);
+    verify(dependencies, never()).replaceDependencies(anyLong(), anyList());
+  }
+
+  @Test
+  void replaceDependenciesFromIngest_deduplicates() {
+    when(cards.findById(7L)).thenReturn(Optional.of(boardCard(7L, 20L, 3, 0, false, false)));
+
+    service.replaceDependenciesFromIngest(1L, 7L, PROJECT, List.of(99, 99, 100));
+
+    verify(dependencies).replaceDependencies(7L, List.of(99, 100));
+  }
+
+  @Test
+  void replaceDependenciesFromIngest_clearsOnEmptyList() {
+    when(cards.findById(7L)).thenReturn(Optional.of(boardCard(7L, 20L, 3, 0, false, false)));
+
+    service.replaceDependenciesFromIngest(1L, 7L, PROJECT, List.of());
+
+    verify(dependencies).replaceDependencies(7L, List.of());
+  }
+
+  @Test
+  void replaceDependenciesFromIngest_clearsOnNull() {
+    when(cards.findById(7L)).thenReturn(Optional.of(boardCard(7L, 20L, 3, 0, false, false)));
+
+    service.replaceDependenciesFromIngest(1L, 7L, PROJECT, null);
+
+    verify(dependencies).replaceDependencies(7L, List.of());
+  }
+
+  @Test
+  void replaceDependenciesFromIngest_clearsOnEmptyList_evenForCardWithoutNumber() {
+    // Loeschen braucht keine eigene Nummer: Die Nummern-Pruefung dient der
+    // Selbstverweis-Erkennung, und ohne Verweise gibt es nichts zu vergleichen. Ohne diesen Fall
+    // waere die Reihenfolge der beiden Pruefungen austauschbar, ohne dass ein Test es merkt.
+    when(cards.findById(7L)).thenReturn(Optional.of(pooledIdeaWithoutNumber(7L)));
+
+    service.replaceDependenciesFromIngest(1L, 7L, PROJECT, List.of());
+
+    verify(dependencies).replaceDependencies(7L, List.of());
+  }
+
+  @Test
+  void replaceDependenciesFromIngest_rejectsCardWithoutNumber() {
+    // Legacy-Pool-Idee ohne Nummer: definierte Antwort statt Exception aus requireNumber().
+    when(cards.findById(7L)).thenReturn(Optional.of(pooledIdeaWithoutNumber(7L)));
+
+    assertThatThrownBy(() -> service.replaceDependenciesFromIngest(1L, 7L, PROJECT, List.of(99)))
+        .isInstanceOf(CardWithoutNumberException.class);
+    verify(dependencies, never()).replaceDependencies(anyLong(), anyList());
+  }
+
+  @Test
+  void replaceDependenciesFromIngest_rejectsCardOfOtherProject() {
+    // Der Token bindet an ein Projekt; eine Karte aus einem fremden bleibt unerreichbar.
+    when(cards.findById(7L)).thenReturn(Optional.of(boardCard(7L, 20L, 3, 0, false, false)));
+
+    assertThatThrownBy(
+            () -> service.replaceDependenciesFromIngest(1L, 7L, PROJECT + 1, List.of(99)))
+        .isInstanceOf(CardNotFoundException.class);
+    verify(dependencies, never()).replaceDependencies(anyLong(), anyList());
+  }
+
+  @Test
+  void replaceDependenciesFromIngest_throwsForUnknownCard() {
+    when(cards.findById(7L)).thenReturn(Optional.empty());
+
+    assertThatThrownBy(() -> service.replaceDependenciesFromIngest(1L, 7L, PROJECT, List.of(99)))
+        .isInstanceOf(CardNotFoundException.class);
   }
 
   @Test
