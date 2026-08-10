@@ -2921,15 +2921,24 @@ class CardServiceTest {
   }
 
   @Test
-  void replaceDependenciesFromIngest_clearsOnEmptyList_evenForCardWithoutNumber() {
-    // Loeschen braucht keine eigene Nummer: Die Nummern-Pruefung dient der
-    // Selbstverweis-Erkennung, und ohne Verweise gibt es nichts zu vergleichen. Ohne diesen Fall
-    // waere die Reihenfolge der beiden Pruefungen austauschbar, ohne dass ein Test es merkt.
+  void replaceDependenciesFromIngest_rejectsCardWithoutNumber_alsoForEmptyList() {
+    // Die Nummern-Pruefung steht vor jeder Listenbehandlung (Code-Review Codex, Fund 1): Eine
+    // Karte ohne Nummer ist kein gueltiges Ziel, auch nicht zum Loeschen. Ein stilles 204
+    // verspraeche eine Operation, die es fuer sie nicht gibt.
     when(cards.findById(7L)).thenReturn(Optional.of(pooledIdeaWithoutNumber(7L)));
 
-    service.replaceDependenciesFromIngest(1L, 7L, PROJECT, List.of());
+    assertThatThrownBy(() -> service.replaceDependenciesFromIngest(1L, 7L, PROJECT, List.of()))
+        .isInstanceOf(CardWithoutNumberException.class);
+    verify(dependencies, never()).replaceDependencies(anyLong(), anyList());
+  }
 
-    verify(dependencies).replaceDependencies(7L, List.of());
+  @Test
+  void replaceDependenciesFromIngest_rejectsCardWithoutNumber_alsoForNull() {
+    when(cards.findById(7L)).thenReturn(Optional.of(pooledIdeaWithoutNumber(7L)));
+
+    assertThatThrownBy(() -> service.replaceDependenciesFromIngest(1L, 7L, PROJECT, null))
+        .isInstanceOf(CardWithoutNumberException.class);
+    verify(dependencies, never()).replaceDependencies(anyLong(), anyList());
   }
 
   @Test

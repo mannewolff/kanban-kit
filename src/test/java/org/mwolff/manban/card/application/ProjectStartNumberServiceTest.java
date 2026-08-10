@@ -64,4 +64,26 @@ class ProjectStartNumberServiceTest {
 
     verify(projects, never()).setNextCardNumber(anyLong(), anyInt());
   }
+
+  @Test
+  void setNextCardNumber_throws_whenAboveMaximum() {
+    // Ohne Obergrenze liesse sich der Zaehler auf Integer.MAX_VALUE setzen; jede folgende Anlage
+    // rechnete MAX(number)+1 auf einer integer-Spalte und endete mit einem Datenbankfehler.
+    assertThatThrownBy(() -> service.setNextCardNumber(USER, PROJECT, CardNumbers.MAX + 1))
+        .isInstanceOf(InvalidCardNumberException.class);
+
+    verify(projects, never()).setNextCardNumber(anyLong(), anyInt());
+  }
+
+  @Test
+  void setNextCardNumber_acceptsTheMaximumItself() {
+    // Grenzwert von der gueltigen Seite: MAX selbst ist erlaubt, erst darueber wird abgelehnt.
+    when(cards.highestNumberInProject(PROJECT)).thenReturn(0);
+    when(cards.nextCardNumber(PROJECT)).thenReturn(CardNumbers.MAX);
+
+    assertThat(service.setNextCardNumber(USER, PROJECT, CardNumbers.MAX))
+        .isEqualTo(CardNumbers.MAX);
+
+    verify(projects).setNextCardNumber(PROJECT, CardNumbers.MAX);
+  }
 }

@@ -18,15 +18,31 @@ class JdbcCardDependencyRepository implements CardDependencyRepository {
     this.jdbc = jdbc;
   }
 
+  /**
+   * Ersetzt die Verweise einer Karte vollständig.
+   *
+   * <p>Die Kartenzeile wird zuerst gesperrt. Ohne die Sperre ist die Ersetzen-Semantik bei
+   * gleichzeitigen Aufrufen nicht gewährleistet: Starten beide mit leerer Ausgangsmenge, sperrt das
+   * {@code DELETE} nichts (es gibt keine Zeilen zu sperren), und beide fügen anschließend ein — das
+   * Ergebnis ist die Vereinigung beider Listen statt einer der beiden. Bei überlappenden Listen
+   * kollidiert stattdessen der Primärschlüssel.
+   *
+   * <p>Gesperrt wird die <em>Karte</em> und nicht die Verweiszeilen, weil genau die fehlen können.
+   * Die Sperre gilt für beide Schreibwege (UI und Ingest), die diese Methode teilen.
+   *
+   * <p>Die {@code INSERT}s laufen als Batch — eine Migration setzt viele Verweise auf einmal, und
+   * jeder Einzelaufruf wäre ein eigener Roundtrip innerhalb derselben Transaktion.
+   */
   @Override
   public void replaceDependencies(long cardId, List<Integer> dependsOnNumbers) {
+    jdbc.queryForList("SELECT id FROM card WHERE id = ? FOR UPDATE", Long.class, cardId);
     jdbc.update("DELETE FROM card_dependency WHERE card_id = ?", cardId);
-    for (Integer number : dependsOnNumbers) {
-      jdbc.update(
-          "INSERT INTO card_dependency (card_id, depends_on_card_number) VALUES (?, ?)",
-          cardId,
-          number);
+    if (dependsOnNumbers.isEmpty()) {
+      return;
     }
+    jdbc.batchUpdate(
+        "INSERT INTO card_dependency (card_id, depends_on_card_number) VALUES (?, ?)",
+        dependsOnNumbers.stream().map(n -> new Object[] {cardId, n}).toList());
   }
 
   @Override

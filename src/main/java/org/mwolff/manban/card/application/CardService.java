@@ -1355,14 +1355,15 @@ public class CardService {
     if (card.projectId() != expectedProjectId) {
       throw new CardNotFoundException();
     }
-    if (dependsOn == null || dependsOn.isEmpty()) {
-      dependencies.replaceDependencies(card.requireId(), List.of());
-      return;
-    }
+    // Vor jeder Listenbehandlung: Eine Karte ohne eigene Nummer ist kein gültiges Ziel, auch nicht
+    // zum Löschen. Sie kann per Konstruktion keine Verweise tragen (der Selbstverweis-Vergleich
+    // braucht die Nummer), und ein stilles 204 verspräche eine Operation, die es nicht gibt.
     if (card.number() == null) {
       throw new CardWithoutNumberException();
     }
-    List<Integer> distinct = dependsOn.stream().distinct().toList();
+    // Kein Sonderfall für „leer": Die Schleife läuft dann einfach nicht, und replaceDependencies
+    // bekommt eine leere Liste — dasselbe Ergebnis, ein Zweig weniger.
+    List<Integer> distinct = dependsOn == null ? List.of() : dependsOn.stream().distinct().toList();
     for (Integer dep : distinct) {
       if (dep == card.requireNumber()) {
         throw new InvalidDependencyException("Karte kann nicht von sich selbst abhängen");

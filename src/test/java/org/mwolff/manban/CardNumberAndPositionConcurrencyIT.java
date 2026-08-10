@@ -12,7 +12,9 @@ import org.mwolff.manban.auth.domain.PlatformRole;
 import org.mwolff.manban.board.application.BoardColumnRepository;
 import org.mwolff.manban.board.application.BoardService;
 import org.mwolff.manban.board.domain.BoardColumn;
+import org.mwolff.manban.card.application.CardDependencyRepository;
 import org.mwolff.manban.card.application.CardMovedConcurrentlyException;
+import org.mwolff.manban.card.application.CardNumberConflictException;
 import org.mwolff.manban.card.application.CardRepository;
 import org.mwolff.manban.card.application.CardService;
 import org.mwolff.manban.card.application.ProjectStartNumberService;
@@ -51,6 +53,7 @@ class CardNumberAndPositionConcurrencyIT extends AbstractIntegrationTest {
   @Autowired private BoardService boardService;
   @Autowired private ProjectStartNumberService startNumbers;
   @Autowired private CardRepository cards;
+  @Autowired private CardDependencyRepository dependencies;
   @Autowired private BoardColumnRepository columns;
   @Autowired private AppUserRepository users;
   @Autowired private ProjectRepository projects;
@@ -309,6 +312,54 @@ class CardNumberAndPositionConcurrencyIT extends AbstractIntegrationTest {
     assertThat(race.firstFailure()).isNull();
     assertThat(race.secondFailure()).isNull();
     assertThat(columns.findByBoardId(boardB)).hasSize(6);
+  }
+
+  // --- Vorgegebene Nummern und Abhängigkeiten (#565/#566) ------------------
+
+  @Test
+  void concurrentImportOfTheSameGivenNumber_isSerialisedAndOnlyOneWins() throws Exception {
+    // Deterministische Fassung des Rennens aus #565: Der zweite Aufruf muss nachweislich auf der
+    // Sperre des ersten warten. Ohne sie entschiede der Unique-Constraint — und der liefert
+    // denselben Statuscode, weshalb ein Statusvergleich allein die Sperre nicht beweist.
+    long user = admin("race-given-number@example.com");
+    long projectId = project(user);
+    long boardId = board(user, projectId);
+    long backlog = column(boardId, 0);
+
+    TransactionRace.Result race =
+        race(
+            () -> cardService.createDirect(user, boardId, backlog, "A", null, "k-a", 900),
+            () -> cardService.createDirect(user, boardId, backlog, "B", null, "k-b", 900));
+
+    assertThat(race.firstFailure()).isNull();
+    assertThat(race.secondFailure()).isInstanceOf(CardNumberConflictException.class);
+    assertThat(numbers(projectId)).containsExactly(900);
+  }
+
+  @Test
+  void concurrentDependencyReplacement_endsWithOneCompleteList() throws Exception {
+    // Ersetzen-Semantik unter Nebenläufigkeit (#566): Ohne Sperre auf der Kartenzeile löschen
+    // beide Transaktionen nichts (es gibt keine Zeilen) und fügen anschließend beide ein — das
+    // Ergebnis wäre die Vereinigung statt einer der beiden Listen.
+    long user = admin("race-deps@example.com");
+    long projectId = project(user);
+    long boardId = board(user, projectId);
+    long backlog = column(boardId, 0);
+    long target = card(user, boardId, backlog, "Ziel");
+
+    TransactionRace.Result race =
+        race(
+            () ->
+                cardService.replaceDependenciesFromIngest(user, target, projectId, List.of(11, 12)),
+            () ->
+                cardService.replaceDependenciesFromIngest(
+                    user, target, projectId, List.of(21, 22)));
+
+    assertThat(race.firstFailure()).isNull();
+    assertThat(race.secondFailure()).isNull();
+    // Genau eine der beiden Listen — keine Vereinigung, keine Mischung.
+    List<Integer> deps = dependencies.findByCardId(target).stream().sorted().toList();
+    assertThat(deps).isIn(List.of(11, 12), List.of(21, 22));
   }
 
   // --- Fixtures ------------------------------------------------------------

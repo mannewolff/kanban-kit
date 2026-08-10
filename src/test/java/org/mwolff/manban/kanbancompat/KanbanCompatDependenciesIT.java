@@ -2,6 +2,7 @@ package org.mwolff.manban.kanbancompat;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -131,6 +132,52 @@ class KanbanCompatDependenciesIT extends AbstractIntegrationTest {
   }
 
   @Test
+  void tokenLosesAccessWhenTheRoleIsDowngraded() throws Exception {
+    // Die Rechte werden bei jedem Aufruf geprueft, nicht nur beim Anlegen des Tokens. Ein VIEWER
+    // bekommt gar keinen Token (die Erstellung verlangt selbst Schreibrecht) — der realistische
+    // Fall ist deshalb der Entzug danach: Der Token bleibt gueltig, das Recht ist weg.
+    Fixture f = fixture("dep-downgrade");
+    long card = ingest(f.token, "Ziel", "github#1", 1);
+    String email = "dep-downgrade-guest@example.com";
+    Cookie guest = session(email, PlatformRole.USER);
+    addMember(f.owner, f.projectId, email, "MEMBER");
+    long guestId = users.findByEmail(email).orElseThrow().requireId();
+    JsonNode board = boardOf(f.owner, f.projectId);
+    String guestToken = boundToken(guest, f.projectId, board.get("id").asLong());
+
+    // Mit MEMBER-Rechten traegt der Token noch.
+    setDependencies(guestToken, card, "[5]").andExpect(status().isNoContent());
+
+    mvc.perform(
+            patch("/api/projects/" + f.projectId + "/members/" + guestId)
+                .cookie(f.owner)
+                .contentType("application/json")
+                .content("{\"role\":\"VIEWER\"}"))
+        .andExpect(status().isOk());
+
+    setDependencies(guestToken, card, "[6]").andExpect(status().isForbidden());
+  }
+
+  @Test
+  void nullElementInTheListIsBadRequest() throws Exception {
+    // @Positive allein laesst null durch; der Selbstverweis-Vergleich entpackt den Wert und
+    // endete sonst als NullPointerException in einem 500.
+    Fixture f = fixture("dep-null");
+    long card = ingest(f.token, "Ziel", "github#1", 1);
+
+    setDependencies(f.token, card, "[null]").andExpect(status().isBadRequest());
+  }
+
+  @Test
+  void numberAboveMaximumIsBadRequest() throws Exception {
+    Fixture f = fixture("dep-max");
+    long card = ingest(f.token, "Ziel", "github#1", 1);
+
+    setDependencies(f.token, card, "[%d]".formatted(Integer.MAX_VALUE))
+        .andExpect(status().isBadRequest());
+  }
+
+  @Test
   void listReadPathIsUnchanged() throws Exception {
     // Bewusst keine Vertragserweiterung: GET /items liefert weiterhin keine Abhaengigkeiten.
     Fixture f = fixture("dep-contract");
@@ -194,6 +241,27 @@ class KanbanCompatDependenciesIT extends AbstractIntegrationTest {
             .getResponse()
             .getContentAsString();
     return json.readTree(body).get("id").asLong();
+  }
+
+  /** Nimmt einen bereits registrierten Nutzer mit der angegebenen Rolle ins Projekt auf. */
+  private void addMember(Cookie owner, long projectId, String email, String role) throws Exception {
+    mvc.perform(
+            post("/api/projects/" + projectId + "/invitations")
+                .cookie(owner)
+                .contentType("application/json")
+                .content("{\"email\":\"%s\",\"role\":\"%s\"}".formatted(email, role)))
+        .andExpect(status().isAccepted());
+  }
+
+  /** Erstes Board des Projekts — Ziel fuer das Token des eingeladenen Nutzers. */
+  private JsonNode boardOf(Cookie session, long projectId) throws Exception {
+    String body =
+        mvc.perform(get("/api/projects/" + projectId + "/boards").cookie(session))
+            .andExpect(status().isOk())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+    return json.readTree(body).get(0);
   }
 
   private Fixture fixture(String prefix) throws Exception {

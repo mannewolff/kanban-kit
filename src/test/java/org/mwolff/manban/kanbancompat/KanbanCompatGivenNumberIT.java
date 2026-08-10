@@ -123,6 +123,43 @@ class KanbanCompatGivenNumberIT extends AbstractIntegrationTest {
   }
 
   @Test
+  void archivedImportForeignCardStillBlocksTheImport() throws Exception {
+    // Die Vorbedingung muss archivierte Karten mitzaehlen. Ohne diesen Fall bliebe ein
+    // versehentliches `deleted_at IS NULL` in hasCardWithoutExternalKey unentdeckt — das Projekt
+    // saehe leer aus, obwohl es gewachsen ist.
+    Fixture f = fixture("gn-grown-archived");
+    long id = ingestAuto2(f.token, "Gewachsene Karte");
+    mvc.perform(post("/api/cards/" + id + "/archive").cookie(f.owner)).andExpect(status().isOk());
+
+    postNumbered(f.token, "Migriert", "github#1", 1).andExpect(status().isConflict());
+  }
+
+  @Test
+  void trashedImportForeignCardStillBlocksTheImport() throws Exception {
+    Fixture f = fixture("gn-grown-trashed");
+    long id = ingestAuto2(f.token, "Gewachsene Karte");
+    mvc.perform(delete("/api/cards/" + id).cookie(f.owner)).andExpect(status().isNoContent());
+
+    postNumbered(f.token, "Migriert", "github#1", 1).andExpect(status().isConflict());
+  }
+
+  @Test
+  void numberAboveMaximumIsBadRequest() throws Exception {
+    // Ohne Obergrenze liesse ein einziger Import mit Integer.MAX_VALUE jede spaetere automatische
+    // Anlage im Projekt an MAX(number)+1 scheitern.
+    Fixture f = fixture("gn-max");
+
+    mvc.perform(
+            post("/api/kanban/items")
+                .header("X-Kanban-Token", f.token)
+                .contentType("application/json")
+                .content(
+                    "{\"title\":\"X\",\"externalKey\":\"github#max\",\"number\":%d,\"direct\":true}"
+                        .formatted(Integer.MAX_VALUE)))
+        .andExpect(status().isBadRequest());
+  }
+
+  @Test
   void givenNumberWithoutDirectIsBadRequest() throws Exception {
     Fixture f = fixture("gn-nodirect");
 
@@ -246,6 +283,21 @@ class KanbanCompatGivenNumberIT extends AbstractIntegrationTest {
             .getResponse()
             .getContentAsString();
     return json.readTree(body).get("number").asInt();
+  }
+
+  /** Ingest ohne Schluessel und ohne Nummer — erzeugt eine importfremde Karte, liefert deren id. */
+  private long ingestAuto2(String token, String title) throws Exception {
+    String body =
+        mvc.perform(
+                post("/api/kanban/items")
+                    .header("X-Kanban-Token", token)
+                    .contentType("application/json")
+                    .content("{\"title\":\"%s\",\"direct\":true}".formatted(title)))
+            .andExpect(status().isCreated())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+    return json.readTree(body).get("id").asLong();
   }
 
   private int countByNumber(long projectId, int number) {
