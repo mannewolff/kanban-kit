@@ -1155,6 +1155,87 @@ class CardServiceTest {
   }
 
   @Test
+  void updateContent_keepsDescription_whenNull_andTrimsTitle() {
+    // Given: der schmale Schreibweg (#571). description == null heißt „nicht ändern" — ein
+    // umgedrehter Guard (Mutant) würde die vorhandene Beschreibung mit null überschreiben.
+    when(cards.findById(1L))
+        .thenReturn(
+            Optional.of(
+                card(1L, 20L, 1, false, null, CardType.CARD, null, null)
+                    .withContent("Titel", "Bestand")));
+
+    // When
+    ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
+    CardService.BoardItemView view = service.updateContent(1L, 1L, "  Neuer Titel  ", null);
+
+    // Then: Beschreibung steht, Titel ist getrimmt, Rückgabe trägt den neuen Stand.
+    verify(cards).save(captor.capture());
+    assertThat(captor.getValue().description()).isEqualTo("Bestand");
+    assertThat(captor.getValue().title()).isEqualTo("Neuer Titel");
+    assertThat(view.title()).isEqualTo("Neuer Titel");
+    assertThat(view.description()).isEqualTo("Bestand");
+    assertThat(view.epic()).isFalse();
+
+    // Audit und Live-Update laufen wie beim Voll-Update — sonst wäre dieser Weg ein Schlupfloch.
+    verify(activity)
+        .add(
+            1L,
+            1L,
+            CardActivityType.UPDATED,
+            "Karte bearbeitet",
+            FIXED,
+            ActorContext.ActorStamp.unknown());
+    assertThat(onlyPublishedEvent().type()).isEqualTo(ActivityType.UPDATED);
+  }
+
+  @Test
+  void updateContent_clearsDescription_whenBlank() {
+    // Given: ein blanker Body löscht die Beschreibung (normalize) — die Gegenprobe zum null-Fall.
+    when(cards.findById(1L))
+        .thenReturn(
+            Optional.of(
+                card(1L, 20L, 1, false, null, CardType.CARD, null, null)
+                    .withContent("Titel", "Bestand")));
+
+    // When
+    ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
+    service.updateContent(1L, 1L, "Titel", "   ");
+
+    // Then
+    verify(cards).save(captor.capture());
+    assertThat(captor.getValue().description()).isNull();
+  }
+
+  @Test
+  void updateContent_setsDescription_andMarksEpic() {
+    // Given: ein Epic — der Typ-Zweig der Rückgabe (epic=true) und der Setz-Fall der Beschreibung.
+    when(cards.findById(5L))
+        .thenReturn(Optional.of(card(5L, 20L, 5, false, null, CardType.EPIC, null, "EPX")));
+
+    // When
+    ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
+    CardService.BoardItemView view = service.updateContent(1L, 5L, "Neues Epic", "Neuer Rumpf");
+
+    // Then: Inhalt gesetzt, Kürzel unangetastet (anders als beim Voll-Update).
+    verify(cards).save(captor.capture());
+    assertThat(captor.getValue().description()).isEqualTo("Neuer Rumpf");
+    assertThat(captor.getValue().shortcode()).isEqualTo("EPX");
+    assertThat(view.epic()).isTrue();
+    assertThat(view.number()).isEqualTo(5);
+  }
+
+  @Test
+  void updateContent_throwsCardNotFound_whenCardUnknown() {
+    // Given: keine Karte -> requireCardOp wirft, nichts wird geschrieben.
+    when(cards.findById(99L)).thenReturn(Optional.empty());
+
+    // When / Then
+    assertThatThrownBy(() -> service.updateContent(1L, 99L, "Neu", "Neu"))
+        .isInstanceOf(CardNotFoundException.class);
+    verify(cards, never()).save(any());
+  }
+
+  @Test
   void create_normalizesBlankDescriptionToNull() {
     // Given
     when(boardService.requireColumn(20L, BOARD)).thenReturn(column(20L, "Backlog", 0));

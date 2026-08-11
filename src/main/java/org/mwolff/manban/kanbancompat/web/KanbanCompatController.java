@@ -65,6 +65,14 @@ class KanbanCompatController {
         request.number());
   }
 
+  @PutMapping("/items/{id}")
+  Item update(
+      @Nullable Authentication authentication,
+      @PathVariable long id,
+      @Valid @RequestBody UpdateRequest request) {
+    return service.update(principal(authentication), id, request.title(), request.body());
+  }
+
   @PutMapping("/items/{id}/move")
   void move(
       @Nullable Authentication authentication,
@@ -124,6 +132,16 @@ class KanbanCompatController {
       // Obergrenze: nextCardNumber rechnet MAX(number)+1 auf einer integer-Spalte — ohne Deckel
       // legt ein einziger Import mit Integer.MAX_VALUE jede spaetere Anlage im Projekt lahm.
       @Nullable @Positive @Max(CardNumbers.MAX) Integer number) {}
+
+  /**
+   * Titel und Rumpf einer bestehenden Karte (#571). Grenzen wie in {@link CreateItemRequest} —
+   * beide Schreibwege dürfen dieselbe Karte nicht unterschiedlich beschneiden.
+   *
+   * <p>{@code body} ist bewusst optional: Der Adapter sendet den Titel immer mit, auch wenn sich
+   * nur der Rumpf ändert. Ein fehlendes Feld (und JSON-{@code null}) lässt die Beschreibung
+   * unverändert, ein blanker Wert löscht sie — siehe {@code CardService.updateContent}.
+   */
+  record UpdateRequest(@NotBlank @Size(max = 300) String title, @Nullable String body) {}
 
   record MoveRequest(@NotBlank String column, @PositiveOrZero int position) {}
 

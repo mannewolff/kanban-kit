@@ -487,6 +487,50 @@ public class CardService {
   }
 
   /**
+   * Ersetzt ausschließlich Titel und Beschreibung — der schmale Schreibweg für den
+   * kanbancompat-Ingest (#571).
+   *
+   * <p>Abgrenzung zu {@link #update}: Jene Methode ist ein Voll-Update und löscht bei {@code null}
+   * die Epic-Zuordnung, das Fälligkeitsdatum und (bei Epics) das Kürzel. Ein Aufrufer, der nur
+   * Titel und Rumpf kennt, kann sie deshalb nicht gefahrlos benutzen. Hier bleibt alles andere
+   * stehen; Rechteprüfung, Aktivitätseintrag und Board-Ereignis sind identisch, damit dieser Weg
+   * kein Schlupfloch am Audit und an den Rechten vorbei öffnet.
+   *
+   * <p>{@code description == null} heißt „nicht ändern"; ein blanker Wert löscht die Beschreibung
+   * ({@link #normalize}). So vernichtet ein Aufrufer, der das Feld weglässt, keinen Inhalt.
+   *
+   * <p>Rückgabe ist die {@link BoardItemView} — dieselbe domain-freie Form, die {@link
+   * #listBoardItems} liefert. Ein {@link CardView} wäre hier unbrauchbar: Er trägt {@code CardType}
+   * aus {@code card.domain}, und das Modul ist außerhalb von {@code card} nicht sichtbar
+   * (ArchUnit-Regel {@code CARD_DOMAIN_IST_MODULINTERN}).
+   */
+  @Transactional
+  public BoardItemView updateContent(
+      long userId, long cardId, String title, @Nullable String description) {
+    Card card = requireCardOp(userId, cardId, Permission.TICKET_UPDATE, Permission.EPIC_UPDATE);
+    Card saved =
+        cards.save(
+            card.withContent(
+                title.trim(), description == null ? card.description() : normalize(description)));
+    activity.add(
+        cardId,
+        userId,
+        CardActivityType.UPDATED,
+        "Karte bearbeitet",
+        clock.instant(),
+        actor.current());
+    publishChangedIfOnBoard(saved.boardId(), ActivityType.UPDATED, cardId);
+    return new BoardItemView(
+        saved.requireId(),
+        saved.requireNumber(),
+        saved.title(),
+        saved.description(),
+        saved.columnId(),
+        saved.positionInColumn(),
+        saved.type() == CardType.EPIC);
+  }
+
+  /**
    * Ersetzt die Zuständigen einer Karte. Nur Karten (keine Epics); zugewiesen werden dürfen
    * ausschließlich Mitglieder des Projekts. Recht: {@link Permission#TICKET_UPDATE} (Member und
    * aufwärts).

@@ -14,7 +14,6 @@ import org.mwolff.manban.board.application.BoardService;
 import org.mwolff.manban.board.application.BoardService.ColumnView;
 import org.mwolff.manban.card.application.CardService;
 import org.mwolff.manban.card.application.CardService.BoardItemView;
-import org.mwolff.manban.card.application.CardService.CardView;
 import org.mwolff.manban.card.application.LabelService;
 import org.mwolff.manban.comment.application.CommentService;
 import org.springframework.stereotype.Service;
@@ -152,10 +151,10 @@ public class KanbanCompatService {
       result =
           cardService.createProjectIdea(principal.userId(), projectId, title, body, boardId, key);
     }
-    CardView v = result.view();
     // Seit #402 vergibt createProjectIdea sofort eine Nummer; requireNonNull macht das fuer
     // NullAway explizit (CardView.number() ist @Nullable fuer Legacy-Ideen ohne Nummer).
-    return new Created(v.id(), Objects.requireNonNull(v.number()), result.created());
+    return new Created(
+        result.view().id(), Objects.requireNonNull(result.view().number()), result.created());
   }
 
   /**
@@ -259,6 +258,25 @@ public class KanbanCompatService {
     cardService.move(principal.userId(), cardId, columnId, position);
   }
 
+  /**
+   * Ersetzt Titel und Rumpf eines Items des gebundenen Boards (#571) — der Schreibweg, über den das
+   * claude-workflow-kit den geschärften Issue-Text zurückschreibt.
+   *
+   * <p>Geht bewusst über {@link CardService#updateContent} statt über das Voll-Update: Sonst
+   * verlören Karten bei jedem Body-Update ihre Epic-Zuordnung und ihr Fälligkeitsdatum und Epics
+   * ihr Kürzel, weil dieser Aufrufer diese Felder gar nicht kennt.
+   *
+   * <p>Reichweite wie bei {@link #move} und {@link #comment}: nur Karten und Epics des gebundenen
+   * Boards. Board-lose Pool-Ideen und Karten im Ideen-Speicher sind über {@code requireOnBoard}
+   * ausgeschlossen und antworten mit 404.
+   */
+  @Transactional
+  public Item update(KanbanPrincipal principal, long cardId, String title, @Nullable String body) {
+    long boardId = requireBound(principal);
+    cardService.requireOnBoard(cardId, boardId);
+    return item(boardId, cardService.updateContent(principal.userId(), cardId, title, body));
+  }
+
   /** Kommentiert ein Item des gebundenen Boards. */
   @Transactional
   public void comment(KanbanPrincipal principal, long cardId, String body) {
@@ -295,6 +313,22 @@ public class KanbanCompatService {
   }
 
   // --- interne Helfer -------------------------------------------------------
+
+  /**
+   * Baut die Item-Form aus einer aktualisierten Karte — dieselben Felder wie in {@link #items},
+   * damit Schreib- und Leseantwort nicht auseinanderlaufen.
+   */
+  private Item item(long boardId, BoardItemView card) {
+    return new Item(
+        card.id(),
+        card.number(),
+        card.title(),
+        card.description(),
+        keyByColumn(boardId).getOrDefault(card.columnId(), BACKLOG),
+        card.positionInColumn(),
+        card.epic() ? "epic" : "card",
+        labelService.namesByCard(boardId, List.of(card.id())).getOrDefault(card.id(), List.of()));
+  }
 
   private long requireBound(@Nullable KanbanPrincipal principal) {
     if (principal == null || !principal.isBound()) {
