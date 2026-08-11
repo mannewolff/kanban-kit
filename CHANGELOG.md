@@ -7,6 +7,11 @@ Versionierung folgt der dreiteiligen Betriebsversion (siehe [RELEASING.md](RELEA
 Einträge je Version sind ein automatischer Auszug der Commit-Titel seit dem letzten Release,
 erzeugt von `scripts/gen-changelog.mjs`.
 
+## [1.19.0] – 2026-08-11
+
+- chore: Version auf 1.18.1 (push main)
+- Textgrenzen auf 50.000 Zeichen vereinheitlichen ([#572](https://github.com/mannewolff/kanban-kit/issues/572))
+
 ## [1.18.0] – 2026-08-11
 
 - chore: Version auf 1.17.1 (push main)
