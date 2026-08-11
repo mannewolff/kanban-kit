@@ -47,7 +47,7 @@ export const ideasApi = {
   /**
    * Legt mehrere Pool-Ideen in einem Zug an (Batch-Endpoint aus #492) — Ziel des
    * Spezifikations-Imports (#493). Alles-oder-nichts: Verletzt ein Element die Feldgrenzen des
-   * Servers (Titel > 300, Beschreibung > 10.000, mehr als 200 Elemente), entsteht keine einzige
+   * Servers (Titel > 300, Beschreibung > `MAX_TEXT_LENGTH`, mehr als 200 Elemente), entsteht keine einzige
    * Idee. Antwort: die angelegten Ideen in Eingabereihenfolge, jeweils mit `id` und `number`.
    */
   createBatch: (

@@ -15,6 +15,7 @@ import org.mwolff.manban.AbstractIntegrationTest;
 import org.mwolff.manban.auth.application.AppUserRepository;
 import org.mwolff.manban.auth.domain.AppUser;
 import org.mwolff.manban.auth.domain.PlatformRole;
+import org.mwolff.manban.common.TextLimits;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -316,10 +317,12 @@ class KanbanCompatIT extends AbstractIntegrationTest {
 
     // Ein Token ist für Automatik gedacht: ohne Grenze könnte es beliebig große Kommentare in die
     // text-Spalte schreiben. Grenze und Wert sind identisch zum UI-Pfad (CommentController).
-    kanbanCommentRequest(token, cardId, "a".repeat(10_001)).andExpect(status().isBadRequest());
+    kanbanCommentRequest(token, cardId, "a".repeat(TextLimits.MAX_TEXT + 1))
+        .andExpect(status().isBadRequest());
 
-    // Gegenprobe auf dem Grenzwert selbst: genau 10.000 Zeichen sind noch erlaubt.
-    kanbanCommentRequest(token, cardId, "a".repeat(10_000)).andExpect(status().isCreated());
+    // Gegenprobe auf dem Grenzwert selbst.
+    kanbanCommentRequest(token, cardId, "a".repeat(TextLimits.MAX_TEXT))
+        .andExpect(status().isCreated());
   }
 
   private ResultActions kanbanCommentRequest(String token, long cardId, String body)

@@ -15,6 +15,7 @@ import org.mwolff.manban.card.application.CardService.EpicView;
 import org.mwolff.manban.card.application.SortDirection;
 import org.mwolff.manban.card.domain.CardActivity;
 import org.mwolff.manban.card.domain.CardType;
+import org.mwolff.manban.common.TextLimits;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -277,7 +278,7 @@ class CardController {
   record CreateCardRequest(
       @Nullable Long columnId,
       @NotBlank @Size(max = 300) String title,
-      @Nullable String description,
+      @Nullable @Size(max = TextLimits.MAX_TEXT) String description,
       @Nullable List<Integer> dependencies,
       @Nullable CardType type,
       @Nullable Long parentId,
@@ -289,7 +290,7 @@ class CardController {
 
   record UpdateCardRequest(
       @NotBlank @Size(max = 300) String title,
-      String description,
+      @Size(max = TextLimits.MAX_TEXT) String description,
       List<Integer> dependencies,
       @Size(max = 16) String shortcode,
       Long parentId,

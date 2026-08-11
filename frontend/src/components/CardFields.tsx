@@ -3,6 +3,7 @@ import type { KeyboardEvent, Ref } from 'react'
 import type { Epic } from '../api/epics'
 import { epicShortcode } from '../lib/epicMeta'
 import { useCheckboxShortcut } from '../lib/useCheckboxShortcut'
+import { isTooLong, tooLongMessage } from '../lib/textLimits'
 
 /**
  * Kontrollierte, präsentationale Karten-Felder (Werte + onChange als Props, keine eigene
@@ -114,7 +115,9 @@ export function CardFields({
         multiline
         rows={8}
         fullWidth
-        slotProps={{ htmlInput: { maxLength: 10_000, 'aria-label': 'Markdown-Beschreibung' } }}
+        error={isTooLong(body)}
+        helperText={isTooLong(body) ? tooLongMessage(body.length) : undefined}
+        slotProps={{ htmlInput: { 'aria-label': 'Markdown-Beschreibung' } }}
         sx={{ '& textarea': { fontFamily: 'monospace', resize: 'vertical' } }}
       />
       {isEpic ? (

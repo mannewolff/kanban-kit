@@ -9,6 +9,7 @@ import type { CommentsApi } from '../api/comments'
 import type { CardLocation } from '../lib/cardLocation'
 import { CardDetailModal, parseDependencyInput } from './CardDetailModal'
 import { SnackbarProvider } from './SnackbarProvider'
+import { MAX_TEXT_LENGTH } from '../lib/textLimits'
 
 vi.mock('../auth/AuthContext', () => ({
   useAuth: () => ({ user: { userId: 7, email: 'a@b.c', displayName: 'A', platformRole: 'USER', memberships: [] } }),
@@ -1145,5 +1146,36 @@ describe('CardDetailModal', () => {
 
     expect(await screen.findByText('Vorbedingung')).toBeInTheDocument()
     expect(screen.queryByRole('link', { name: 'Entwicklung' })).not.toBeInTheDocument()
+  })
+
+  it('sperrt Senden und meldet die Ueberschreitung bei einem zu langen neuen Kommentar', () => {
+    // Der Text bleibt vollstaendig stehen; abgeschickt wird nichts (Issue #572).
+    const apis = makeApis()
+    const tooLong = 'a'.repeat(MAX_TEXT_LENGTH + 10_000)
+    render(<CardDetailModal card={card} canEdit onClose={vi.fn()} {...apis} />)
+
+    fireEvent.change(screen.getByLabelText('Kommentar schreiben'), { target: { value: tooLong } })
+
+    expect(screen.getByLabelText('Kommentar schreiben')).toHaveValue(tooLong)
+    expect(screen.getByText('60.000 / 50.000 Zeichen')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Senden' })).toBeDisabled()
+    fireEvent.click(screen.getByRole('button', { name: 'Senden' }))
+    expect(apis.commentsApi.create).not.toHaveBeenCalled()
+  })
+
+  it('sperrt Speichern beim Bearbeiten eines Kommentars ueber der Grenze', async () => {
+    const apis = makeApis()
+    const tooLong = 'a'.repeat(MAX_TEXT_LENGTH + 10_000)
+    render(<CardDetailModal card={card} canEdit onClose={vi.fn()} {...apis} />)
+    expect(await screen.findByText('Hallo')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Kommentar bearbeiten' }))
+    fireEvent.change(screen.getByLabelText('Kommentar bearbeiten'), { target: { value: tooLong } })
+
+    expect(screen.getByLabelText('Kommentar bearbeiten')).toHaveValue(tooLong)
+    expect(screen.getByText('60.000 / 50.000 Zeichen')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Speichern' })).toBeDisabled()
+    fireEvent.click(screen.getByRole('button', { name: 'Speichern' }))
+    expect(apis.commentsApi.update).not.toHaveBeenCalled()
   })
 })

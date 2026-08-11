@@ -40,6 +40,7 @@ import type { Epic } from '../api/epics'
 import type { Label as BoardLabel } from '../api/labels'
 import type { Member } from '../api/members'
 import { Breadcrumbs } from './Breadcrumbs'
+import { isTooLong, tooLongMessage } from '../lib/textLimits'
 import { CardFields } from './CardFields'
 import { cardLocationCrumbs, type CardLocation } from '../lib/cardLocation'
 import { dueInputToIso, formatDueDate, isOverdue } from '../lib/dueDate'
@@ -443,9 +444,11 @@ function CommentsSection({
                 <Stack spacing={1}>
                   <TextField multiline size="small" value={editingBody}
                     onChange={(e) => onEditingBodyChange(e.target.value)}
-                    slotProps={{ htmlInput: { maxLength: 10_000, 'aria-label': 'Kommentar bearbeiten' } }} />
+                    error={isTooLong(editingBody)}
+                    helperText={isTooLong(editingBody) ? tooLongMessage(editingBody.length) : undefined}
+                    slotProps={{ htmlInput: { 'aria-label': 'Kommentar bearbeiten' } }} />
                   <Stack direction="row" spacing={1}>
-                    <Button size="small" variant="contained" onClick={onSaveEdit}>Speichern</Button>
+                    <Button size="small" variant="contained" onClick={onSaveEdit} disabled={isTooLong(editingBody)}>Speichern</Button>
                     <Button size="small" onClick={onCancelEdit}>Abbrechen</Button>
                   </Stack>
                 </Stack>
@@ -459,8 +462,11 @@ function CommentsSection({
       </Stack>
       <Stack direction="row" spacing={1} sx={{ mt: 1 }}>
         <TextField size="small" fullWidth placeholder="Kommentar schreiben" value={newComment}
-          onChange={(e) => onNewCommentChange(e.target.value)} slotProps={{ htmlInput: { 'aria-label': 'Kommentar schreiben' } }} />
-        <Button variant="contained" size="small" onClick={onAdd}>
+          onChange={(e) => onNewCommentChange(e.target.value)}
+          error={isTooLong(newComment)}
+          helperText={isTooLong(newComment) ? tooLongMessage(newComment.length) : undefined}
+          slotProps={{ htmlInput: { 'aria-label': 'Kommentar schreiben' } }} />
+        <Button variant="contained" size="small" onClick={onAdd} disabled={isTooLong(newComment)}>
           Senden
         </Button>
       </Stack>
@@ -1091,7 +1097,11 @@ function CardDetailModalView({
         {editing ? (
           <>
             <Button onClick={() => setEditing(false)}>Abbrechen</Button>
-            <Button variant="contained" onClick={() => void save()} disabled={!title.trim() || saving}>
+            <Button
+              variant="contained"
+              onClick={() => void save()}
+              disabled={!title.trim() || saving || isTooLong(body)}
+            >
               Speichern
             </Button>
           </>

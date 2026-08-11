@@ -9,6 +9,7 @@ import java.util.List;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.card.application.CardService;
 import org.mwolff.manban.card.application.CardService.CardView;
+import org.mwolff.manban.common.TextLimits;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -36,17 +37,6 @@ class ProjectIdeaController {
    * Endpoint.)
    */
   static final int MAX_IDEAS_PER_BATCH = 200;
-
-  /**
-   * Längengrenze der Beschreibung im Stapel-Import. Orientiert sich an der Kommentar-Grenze ({@code
-   * CommentController}: 10.000) — dieselbe Größenordnung „ein Block Fließtext". Der Import schreibt
-   * ganze Dokumentabschnitte in Beschreibungen; ohne Grenze wäre die Antwortgröße einer Anfrage
-   * allein durch die Body-Grenze des Servers bestimmt. Bewusst nur hier und nicht nachträglich an
-   * den Bestandswegen ({@code POST /ideas}, {@code POST /cards}), die weiterhin unbegrenzt annehmen
-   * — eine Verschärfung dort würde bestehende Karten-Bearbeitungen brechen und gehört in ein
-   * eigenes Issue.
-   */
-  static final int MAX_DESCRIPTION_LENGTH = 10_000;
 
   private final CardService cards;
 
@@ -93,16 +83,17 @@ class ProjectIdeaController {
 
   record CreateIdeaRequest(
       @NotBlank @Size(max = 300) String title,
-      @Nullable String description,
+      @Nullable @Size(max = TextLimits.MAX_TEXT) String description,
       @Nullable Long targetBoardId) {}
 
   /**
    * Ein Element des Stapels. Titelgrenze wie an allen anderen Anlegewegen (300); die
-   * Beschreibungsgrenze führt dieser Endpoint neu ein, siehe {@link #MAX_DESCRIPTION_LENGTH}.
+   * Beschreibungsgrenze ist seit #572 dieselbe wie an allen anderen Textwegen ({@link
+   * TextLimits#MAX_TEXT}).
    */
   record BatchIdeaItem(
       @NotBlank @Size(max = 300) String title,
-      @Nullable @Size(max = MAX_DESCRIPTION_LENGTH) String description) {}
+      @Nullable @Size(max = TextLimits.MAX_TEXT) String description) {}
 
   /**
    * Eine leere Liste ist eine Fehleingabe und keine leere Erfolgsantwort ({@code @NotEmpty} → 400)
