@@ -7,6 +7,12 @@ Versionierung folgt der dreiteiligen Betriebsversion (siehe [RELEASING.md](RELEA
 Einträge je Version sind ein automatischer Auszug der Commit-Titel seit dem letzten Release,
 erzeugt von `scripts/gen-changelog.mjs`.
 
+## [1.18.0] – 2026-08-11
+
+- chore: Version auf 1.17.1 (push main)
+- kanbancompat: Titel und Body einer Karte ändern ([#571](https://github.com/mannewolff/kanban-kit/issues/571))
+- Löschen in das Karten-Kontextmenü aufnehmen ([#570](https://github.com/mannewolff/kanban-kit/issues/570))
+
 ## [1.17.0] – 2026-08-10
 
 - chore: Version auf 1.16.1 (push main)
