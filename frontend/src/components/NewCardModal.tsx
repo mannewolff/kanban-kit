@@ -13,6 +13,7 @@ import type { Member } from '../api/members'
 import { epicShortcode } from '../lib/epicMeta'
 import { dueInputToIso } from '../lib/dueDate'
 import { useCheckboxShortcut } from '../lib/useCheckboxShortcut'
+import { isTooLong, tooLongMessage } from '../lib/textLimits'
 import { CardFields } from './CardFields'
 import { AssigneeSection, LabelSection, parseDependencyInput } from './CardDetailModal'
 
@@ -109,7 +110,9 @@ export function NewCardModal({
     titleInputRef.current?.select()
   }, [open, epicOnly, initialValues])
 
-  const canSubmit = title.trim().length > 0 && !saving
+  // Die Laengensperre haengt am selben Praedikat wie die Feldmeldung: Was rot markiert ist,
+  // laesst sich nicht abschicken (Issue #572).
+  const canSubmit = title.trim().length > 0 && !saving && !isTooLong(body)
   // Voller Karten-Anlege-Modus: nur echte Karten (kein Epic) außerhalb des schlanken Ideen-Dialogs
   // bekommen Abhängigkeiten, Fälligkeit, Zuständige und Labels.
   const fullCard = type === 'CARD' && !ideaOnly
@@ -293,7 +296,9 @@ export function NewCardModal({
                 multiline
                 rows={8}
                 fullWidth
-                slotProps={{ htmlInput: { maxLength: 10_000, 'aria-label': 'Beschreibung' } }}
+                error={isTooLong(body)}
+                helperText={isTooLong(body) ? tooLongMessage(body.length) : undefined}
+                slotProps={{ htmlInput: { 'aria-label': 'Beschreibung' } }}
                 sx={{ '& textarea': { fontFamily: 'monospace', resize: 'vertical' } }}
               />
             </>

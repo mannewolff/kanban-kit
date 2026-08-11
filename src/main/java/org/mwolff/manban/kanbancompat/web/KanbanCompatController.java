@@ -12,6 +12,7 @@ import java.util.Map;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.accesstoken.application.KanbanPrincipal;
 import org.mwolff.manban.card.application.CardNumbers;
+import org.mwolff.manban.common.TextLimits;
 import org.mwolff.manban.kanbancompat.application.KanbanCompatService;
 import org.mwolff.manban.kanbancompat.application.KanbanCompatService.Comment;
 import org.mwolff.manban.kanbancompat.application.KanbanCompatService.Created;
@@ -119,7 +120,7 @@ class KanbanCompatController {
 
   record CreateItemRequest(
       @NotBlank @Size(max = 300) String title,
-      String body,
+      @Size(max = TextLimits.MAX_TEXT) String body,
       String column,
       @Nullable Boolean ideaStored,
       // Idempotenz-Schlüssel (#534); Normalisierung (trim/Kappung) macht der Service.
@@ -141,7 +142,9 @@ class KanbanCompatController {
    * nur der Rumpf ändert. Ein fehlendes Feld (und JSON-{@code null}) lässt die Beschreibung
    * unverändert, ein blanker Wert löscht sie — siehe {@code CardService.updateContent}.
    */
-  record UpdateRequest(@NotBlank @Size(max = 300) String title, @Nullable String body) {}
+  record UpdateRequest(
+      @NotBlank @Size(max = 300) String title,
+      @Nullable @Size(max = TextLimits.MAX_TEXT) String body) {}
 
   record MoveRequest(@NotBlank String column, @PositiveOrZero int position) {}
 
@@ -158,5 +161,5 @@ class KanbanCompatController {
           List<@NotNull @Positive @Max(CardNumbers.MAX) Integer> dependsOn) {}
 
   /** Gleiche Längengrenze wie der UI-Pfad ({@code CommentController.CommentRequest}). */
-  record CommentRequest(@NotBlank @Size(max = 10_000) String body) {}
+  record CommentRequest(@NotBlank @Size(max = TextLimits.MAX_TEXT) String body) {}
 }

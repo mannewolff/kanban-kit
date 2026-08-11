@@ -12,10 +12,15 @@
 // Zeile eine ATX-Überschrift der Ebene N?" — genügt die im Projekt etablierte zeilenweise
 // Behandlung mit Code-Fence-Schutz (siehe `markdownTasks.ts`).
 
+import { MAX_TEXT_LENGTH } from './textLimits'
+
 /** Titelgrenze des Backends (`BatchIdeaItem.title`, `@Size(max = 300)`). */
 export const MAX_TITLE_LENGTH = 300
-/** Beschreibungsgrenze des Batch-Endpoints (`ProjectIdeaController.MAX_DESCRIPTION_LENGTH`). */
-export const MAX_DESCRIPTION_LENGTH = 10_000
+/**
+ * Beschreibungsgrenze des Batch-Endpoints. Seit Issue #572 dieselbe wie an allen anderen
+ * Textwegen — der Wert steht im Frontend nur in `textLimits.ts`.
+ */
+export const MAX_DESCRIPTION_LENGTH = MAX_TEXT_LENGTH
 /** Elementgrenze eines Stapel-Aufrufs (`ProjectIdeaController.MAX_IDEAS_PER_BATCH`). */
 export const MAX_IDEAS_PER_IMPORT = 200
 

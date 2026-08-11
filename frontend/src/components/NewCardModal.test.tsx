@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { NewCardModal } from './NewCardModal'
+import { MAX_TEXT_LENGTH } from '../lib/textLimits'
 
 describe('NewCardModal', () => {
   it('legt per Cmd/Ctrl+Enter im Titel-Feld an', async () => {
@@ -231,5 +232,37 @@ describe('NewCardModal', () => {
     fireEvent.keyDown(titleField, { key: 'Enter' })
 
     expect(onSubmit).not.toHaveBeenCalled()
+  })
+
+  it('sperrt Anlegen bei einer zu langen Beschreibung, ohne Text zu verschlucken', () => {
+    const onSubmit = vi.fn().mockResolvedValue(undefined)
+    const tooLong = 'a'.repeat(MAX_TEXT_LENGTH + 10_000)
+    render(
+      <NewCardModal open ideaOnly columnName="Backlog" epics={[]} onClose={vi.fn()} onSubmit={onSubmit} />,
+    )
+
+    fireEvent.change(screen.getByLabelText('Titel'), { target: { value: 'Titel' } })
+    fireEvent.change(screen.getByLabelText('Beschreibung'), { target: { value: tooLong } })
+
+    expect(screen.getByLabelText('Beschreibung')).toHaveValue(tooLong)
+    expect(screen.getByText('60.000 / 50.000 Zeichen')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Anlegen' })).toBeDisabled()
+    fireEvent.click(screen.getByRole('button', { name: 'Anlegen' }))
+    expect(onSubmit).not.toHaveBeenCalled()
+  })
+
+  it('legt an der Grenze noch an und meldet nichts', () => {
+    const onSubmit = vi.fn().mockResolvedValue(undefined)
+    render(
+      <NewCardModal open ideaOnly columnName="Backlog" epics={[]} onClose={vi.fn()} onSubmit={onSubmit} />,
+    )
+
+    fireEvent.change(screen.getByLabelText('Titel'), { target: { value: 'Titel' } })
+    fireEvent.change(screen.getByLabelText('Beschreibung'), {
+      target: { value: 'a'.repeat(MAX_TEXT_LENGTH - 1) },
+    })
+
+    expect(screen.queryByText(/\/ 50\.000 Zeichen/)).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Anlegen' })).toBeEnabled()
   })
 })

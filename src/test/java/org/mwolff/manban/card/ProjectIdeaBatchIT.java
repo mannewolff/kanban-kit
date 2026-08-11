@@ -16,6 +16,7 @@ import org.mwolff.manban.AbstractIntegrationTest;
 import org.mwolff.manban.auth.application.AppUserRepository;
 import org.mwolff.manban.auth.domain.AppUser;
 import org.mwolff.manban.auth.domain.PlatformRole;
+import org.mwolff.manban.common.TextLimits;
 import org.mwolff.manban.project.application.ProjectMembershipRepository;
 import org.mwolff.manban.project.domain.ProjectMembership;
 import org.mwolff.manban.project.domain.ProjectRole;
@@ -35,9 +36,11 @@ class ProjectIdeaBatchIT extends AbstractIntegrationTest {
 
   private static final String PASSWORD = "sup3r-secret";
 
-  // Spiegelt die Grenzen aus ProjectIdeaController (dort package-private, hier nicht sichtbar).
+  // Spiegelt die Mengengrenze aus ProjectIdeaController (dort package-private, hier nicht
+  // sichtbar). Die Textgrenze kommt seit #572 aus der geteilten Konstante, damit dieser Test nicht
+  // gegen einen eigenen Zahlenwert prueft.
   private static final int MAX_IDEAS_PER_BATCH = 200;
-  private static final int MAX_DESCRIPTION_LENGTH = 10_000;
+  private static final int MAX_DESCRIPTION_LENGTH = TextLimits.MAX_TEXT;
 
   @Autowired private MockMvc mvc;
   @Autowired private AppUserRepository users;

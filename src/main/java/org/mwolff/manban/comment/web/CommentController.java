@@ -6,6 +6,7 @@ import jakarta.validation.constraints.Size;
 import java.util.List;
 import org.mwolff.manban.comment.application.CommentService;
 import org.mwolff.manban.comment.application.CommentService.CommentView;
+import org.mwolff.manban.common.TextLimits;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -55,5 +56,5 @@ class CommentController {
     comments.delete(userId, commentId);
   }
 
-  record CommentRequest(@NotBlank @Size(max = 10_000) String body) {}
+  record CommentRequest(@NotBlank @Size(max = TextLimits.MAX_TEXT) String body) {}
 }

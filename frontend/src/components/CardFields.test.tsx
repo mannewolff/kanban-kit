@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import { useState } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import type { Epic } from '../api/epics'
+import { MAX_TEXT_LENGTH } from '../lib/textLimits'
 import { CardFields } from './CardFields'
 
 const epics: Epic[] = [
@@ -212,5 +213,50 @@ describe('CardFields', () => {
     const field = screen.getByLabelText('Markdown-Beschreibung') as HTMLTextAreaElement
     fireEvent.keyDown(field, { key: 'Backspace' })
     expect(field).toHaveValue('Text')
+  })
+
+  it('haelt eine zu lange Beschreibung vollstaendig und meldet die Ueberschreitung', () => {
+    // Kein maxLength mehr: eingefuegter Text darf nicht lautlos verschwinden (Issue #572).
+    const h = handlers()
+    const tooLong = 'a'.repeat(MAX_TEXT_LENGTH + 10_000)
+    render(
+      <CardFields
+        isEpic={false}
+        title="T"
+        body={tooLong}
+        shortcode=""
+        parentId={null}
+        epics={epics}
+        depsInput=""
+        depsError={null}
+        dueInput=""
+        {...h}
+      />,
+    )
+
+    const field = screen.getByLabelText('Markdown-Beschreibung')
+    expect(field).toHaveValue(tooLong)
+    expect(field).not.toHaveAttribute('maxlength')
+    expect(screen.getByText('60.000 / 50.000 Zeichen')).toBeInTheDocument()
+  })
+
+  it('meldet an der Grenze nichts', () => {
+    const h = handlers()
+    render(
+      <CardFields
+        isEpic={false}
+        title="T"
+        body={'a'.repeat(MAX_TEXT_LENGTH)}
+        shortcode=""
+        parentId={null}
+        epics={epics}
+        depsInput=""
+        depsError={null}
+        dueInput=""
+        {...h}
+      />,
+    )
+
+    expect(screen.queryByText(/\/ 50\.000 Zeichen/)).not.toBeInTheDocument()
   })
 })
