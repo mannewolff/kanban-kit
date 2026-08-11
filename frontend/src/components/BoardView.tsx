@@ -190,7 +190,9 @@ export function BoardView({
   const [selectionMode, setSelectionMode] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<number>>(() => new Set())
   const [bulkArchiveConfirm, setBulkArchiveConfirm] = useState(false)
-  const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState(false)
+  // Zu löschende Karten-IDs; leer = Dialog zu. Ein Zustand für beide Wege (⋮-Menü einer einzelnen
+  // Karte und Auswahlmodus), damit die Zusage „wiederherstellbar" nur an einer Stelle steht.
+  const [deleteConfirm, setDeleteConfirm] = useState<number[]>([])
   const [bulkTransferOpen, setBulkTransferOpen] = useState(false)
   const notify = useSnackbar()
   const [epicFilter, setEpicFilter] = useState<number | null>(() => {
@@ -429,12 +431,14 @@ export function BoardView({
     }
   }
 
-  // Bulk-Löschen: nach Bestätigung optimistisch aus der Ansicht nehmen, bei Fehler zurückrollen.
-  const confirmBulkDelete = async () => {
-    const ids = [...selectedIds]
+  // Löschen (eine Karte aus dem ⋮-Menü oder die Auswahl): nach Bestätigung optimistisch aus der
+  // Ansicht nehmen, bei Fehler zurückrollen. Beide Wege laufen über bulk-delete — ein Endpunkt,
+  // eine Transaktion, eine Rechteprüfung.
+  const confirmDelete = async () => {
+    const ids = deleteConfirm
     const previous = cards
-    setCards(previous.filter((c) => !selectedIds.has(c.id)))
-    setBulkDeleteConfirm(false)
+    setCards(previous.filter((c) => !ids.includes(c.id)))
+    setDeleteConfirm([])
     exitSelection()
     try {
       await api.bulkDelete(ids)
@@ -812,6 +816,15 @@ export function BoardView({
               Nach rechts verschieben
             </MenuItem>
           ) : null,
+          // Ganz unten und rot abgesetzt: der einzige Eintrag, der Inhalt aus dem Board nimmt —
+          // er soll nicht neben „Nach rechts verschieben" versehentlich getroffen werden.
+          <MenuItem
+            key="delete"
+            sx={{ color: 'error.main' }}
+            onClick={() => { const c = menu.card; closeMenu(); setDeleteConfirm([c.id]) }}
+          >
+            Löschen
+          </MenuItem>,
         ]}
       </Menu>
 
@@ -876,19 +889,18 @@ export function BoardView({
         </DialogActions>
       </Dialog>
 
-      <Dialog open={bulkDeleteConfirm} onClose={() => setBulkDeleteConfirm(false)}>
+      <Dialog open={deleteConfirm.length > 0} onClose={() => setDeleteConfirm([])}>
         <DialogTitle>In den Papierkorb verschieben?</DialogTitle>
         <DialogContent>
           <DialogContentText>
-            {selectedIds.size === 1
-              ? 'Die ausgewählte Karte wird in den Papierkorb verschoben.'
-              : `${selectedIds.size} Karten werden in den Papierkorb verschoben.`}{' '}
-            Von dort lassen sie sich wiederherstellen oder endgültig löschen.
+            {deleteConfirm.length === 1
+              ? 'Die Karte wird in den Papierkorb verschoben. Von dort lässt sie sich wiederherstellen oder endgültig löschen.'
+              : `${deleteConfirm.length} Karten werden in den Papierkorb verschoben. Von dort lassen sie sich wiederherstellen oder endgültig löschen.`}
           </DialogContentText>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setBulkDeleteConfirm(false)}>Abbrechen</Button>
-          <Button color="error" onClick={() => void confirmBulkDelete()}>
+          <Button onClick={() => setDeleteConfirm([])}>Abbrechen</Button>
+          <Button color="error" onClick={() => void confirmDelete()}>
             In den Papierkorb
           </Button>
         </DialogActions>
@@ -900,7 +912,7 @@ export function BoardView({
           canMove={canTransfer}
           onArchive={() => setBulkArchiveConfirm(true)}
           onMove={() => setBulkTransferOpen(true)}
-          onDelete={() => setBulkDeleteConfirm(true)}
+          onDelete={() => setDeleteConfirm([...selectedIds])}
           onCancel={exitSelection}
         />
       )}

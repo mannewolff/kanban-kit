@@ -213,6 +213,59 @@ describe('BoardView', () => {
     expect(within(screen.getByTestId('column-10')).getByTestId('card-100')).toBeInTheDocument()
   })
 
+  it('verschiebt eine Karte über das ⋮-Menü nach Bestätigung in den Papierkorb', async () => {
+    const api = mkApi({ bulkDelete: vi.fn().mockResolvedValue(undefined) })
+    const onCardsChanged = vi.fn()
+    // Zweite Karte in derselben Spalte: sie darf vom optimistischen Filtern unberührt bleiben.
+    const other: Card = { ...card, id: 101, number: 2, title: 'Andere' }
+    render(
+      <BoardView board={board} initialCards={[card, other]} canEdit api={api} onCardsChanged={onCardsChanged} />,
+    )
+
+    fireEvent.click(screen.getByLabelText('Menü Aufgabe'))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Löschen' }))
+
+    // Erst die Bestätigung löst den Aufruf aus — das Menü allein löscht nichts.
+    expect(api.bulkDelete).not.toHaveBeenCalled()
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+    fireEvent.click(
+      within(screen.getByRole('dialog')).getByRole('button', { name: 'In den Papierkorb' }),
+    )
+
+    await waitFor(() => expect(api.bulkDelete).toHaveBeenCalledWith([100]))
+    await waitFor(() => expect(screen.queryByTestId('card-100')).not.toBeInTheDocument())
+    expect(screen.getByTestId('card-101')).toBeInTheDocument()
+    expect(onCardsChanged).toHaveBeenCalled()
+  })
+
+  it('löscht nichts, wenn der Papierkorb-Dialog aus dem ⋮-Menü abgebrochen wird', () => {
+    const api = mkApi()
+    render(<BoardView board={board} initialCards={[card]} canEdit api={api} />)
+
+    fireEvent.click(screen.getByLabelText('Menü Aufgabe'))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Löschen' }))
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Abbrechen' }))
+
+    expect(api.bulkDelete).not.toHaveBeenCalled()
+    expect(screen.getByTestId('card-100')).toBeInTheDocument()
+  })
+
+  it('rollt beim Fehler des Einzel-Papierkorbs zurück und meldet ihn', async () => {
+    const api = mkApi({ bulkDelete: vi.fn().mockRejectedValue(new Error('fail')) })
+    render(<BoardView board={board} initialCards={[card]} canEdit api={api} />, {
+      wrapper: SnackbarProvider,
+    })
+
+    fireEvent.click(screen.getByLabelText('Menü Aufgabe'))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Löschen' }))
+    fireEvent.click(
+      within(screen.getByRole('dialog')).getByRole('button', { name: 'In den Papierkorb' }),
+    )
+
+    expect(await screen.findByText('In den Papierkorb verschieben fehlgeschlagen.')).toBeInTheDocument()
+    expect(screen.getByTestId('card-100')).toBeInTheDocument()
+  })
+
   it('dupliziert eine Karte über das ⋮-Menü vorbefüllt, aber immer nach Backlog (erste Spalte)', async () => {
     // Quelle bewusst NICHT in der ersten Spalte (Backlog=10), sondern in Done=20 — die Kopie ist
     // ein neues Item und muss den kompletten Prozess durchlaufen, unabhängig davon, wo die

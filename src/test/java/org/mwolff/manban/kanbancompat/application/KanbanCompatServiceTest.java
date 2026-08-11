@@ -7,6 +7,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -39,6 +40,7 @@ import org.mwolff.manban.comment.application.CommentService.CommentView;
 class KanbanCompatServiceTest {
 
   private static final long BOARD = 10L;
+  private static final String BACKLOG_KEY = "BACKLOG";
 
   private BoardService boardService;
   private CardService cardService;
@@ -542,6 +544,63 @@ class KanbanCompatServiceTest {
 
     // Then
     verify(cardService).move(1L, 1L, 104L, 2);
+  }
+
+  @Test
+  void update_writesContentAndReturnsItemInBoardForm() {
+    // Given: die Karte liegt auf dem Board; die Fassade meldet den neuen Stand zurueck.
+    when(boardService.listColumns(BOARD)).thenReturn(standardColumns());
+    when(cardService.updateContent(1L, 7L, "Neuer Titel", "Neuer Rumpf"))
+        .thenReturn(new BoardItemView(7L, 42, "Neuer Titel", "Neuer Rumpf", 102L, 3, false));
+    when(labelService.namesByCard(BOARD, List.of(7L))).thenReturn(Map.of(7L, List.of("bug")));
+
+    // When
+    KanbanCompatService.Item updated = service.update(bound(), 7L, "Neuer Titel", "Neuer Rumpf");
+
+    // Then: Item traegt den neuen Inhalt und die Board-Einordnung der Karte.
+    assertThat(updated)
+        .extracting(
+            KanbanCompatService.Item::id,
+            KanbanCompatService.Item::number,
+            KanbanCompatService.Item::title,
+            KanbanCompatService.Item::body,
+            KanbanCompatService.Item::column,
+            KanbanCompatService.Item::position,
+            KanbanCompatService.Item::type,
+            KanbanCompatService.Item::labels)
+        .containsExactly(
+            7L, 42, "Neuer Titel", "Neuer Rumpf", "IN_PROGRESS", 3, "card", List.of("bug"));
+  }
+
+  @Test
+  void update_marksEpicsAsEpic_andFallsBackToBacklog_whenColumnUnknown() {
+    // Given: Epic ohne bekannte Spalte (columnId trifft keine Board-Spalte) und ohne Labels.
+    when(boardService.listColumns(BOARD)).thenReturn(standardColumns());
+    when(cardService.updateContent(1L, 8L, "Epic", null))
+        .thenReturn(new BoardItemView(8L, 43, "Epic", null, 999L, 0, true));
+    when(labelService.namesByCard(BOARD, List.of(8L))).thenReturn(Map.of());
+
+    // When
+    KanbanCompatService.Item updated = service.update(bound(), 8L, "Epic", null);
+
+    // Then: type spiegelt das Epic, die unbekannte Spalte faellt auf BACKLOG zurueck.
+    assertThat(updated.type()).isEqualTo("epic");
+    assertThat(updated.column()).isEqualTo(BACKLOG_KEY);
+    assertThat(updated.body()).isNull();
+    assertThat(updated.labels()).isEmpty();
+  }
+
+  @Test
+  void update_throwsCardNotFound_whenCardNotOnBoard() {
+    // Given: der Board-Guard schlaegt an. Faellt der requireOnBoard-Aufruf weg (Mutant), wuerde
+    // eine fremde oder im Ideen-Speicher liegende Karte ueberschrieben.
+    doThrow(new CardNotFoundException()).when(cardService).requireOnBoard(9L, BOARD);
+
+    // When / Then
+    KanbanPrincipal principal = bound();
+    assertThatThrownBy(() -> service.update(principal, 9L, "Neu", "Neu"))
+        .isInstanceOf(CardNotFoundException.class);
+    verify(cardService, never()).updateContent(anyLong(), anyLong(), any(), any());
   }
 
   @Test
