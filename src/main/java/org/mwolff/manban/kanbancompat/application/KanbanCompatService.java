@@ -96,7 +96,8 @@ public class KanbanCompatService {
                   key,
                   c.positionInColumn(),
                   c.epic() ? "epic" : "card",
-                  labelsByCard.getOrDefault(c.id(), List.of())));
+                  labelsByCard.getOrDefault(c.id(), List.of()),
+                  c.externalKey()));
     }
     return grouped;
   }
@@ -327,7 +328,8 @@ public class KanbanCompatService {
         keyByColumn(boardId).getOrDefault(card.columnId(), BACKLOG),
         card.positionInColumn(),
         card.epic() ? "epic" : "card",
-        labelService.namesByCard(boardId, List.of(card.id())).getOrDefault(card.id(), List.of()));
+        labelService.namesByCard(boardId, List.of(card.id())).getOrDefault(card.id(), List.of()),
+        card.externalKey());
   }
 
   private long requireBound(@Nullable KanbanPrincipal principal) {
@@ -397,7 +399,8 @@ public class KanbanCompatService {
       String column,
       int position,
       String type,
-      List<String> labels) {}
+      List<String> labels,
+      @Nullable String externalKey) {}
 
   /** Kommentar eines Items; {@code author} ist der Anzeigename des Autors zur Schreibzeit. */
   public record Comment(String author, String body, Instant createdAt) {}

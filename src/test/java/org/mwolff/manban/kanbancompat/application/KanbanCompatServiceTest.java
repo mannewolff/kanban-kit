@@ -62,7 +62,7 @@ class KanbanCompatServiceTest {
   }
 
   private static BoardItemView item(long id, long columnId, int number) {
-    return new BoardItemView(id, number, "T", "body", columnId, 0, false);
+    return new BoardItemView(id, number, "T", "body", columnId, 0, false, null);
   }
 
   private static CardView pooledIdea(long id) {
@@ -139,7 +139,7 @@ class KanbanCompatServiceTest {
     // Given: ein Epic auf dem Board
     when(boardService.listColumns(BOARD)).thenReturn(standardColumns());
     when(cardService.listBoardItems(1L, BOARD))
-        .thenReturn(List.of(new BoardItemView(3L, 3, "E", "body", 100L, 0, true)));
+        .thenReturn(List.of(new BoardItemView(3L, 3, "E", "body", 100L, 0, true, null)));
 
     // When
     Map<String, List<KanbanCompatService.Item>> grouped = service.items(bound());
@@ -551,7 +551,8 @@ class KanbanCompatServiceTest {
     // Given: die Karte liegt auf dem Board; die Fassade meldet den neuen Stand zurueck.
     when(boardService.listColumns(BOARD)).thenReturn(standardColumns());
     when(cardService.updateContent(1L, 7L, "Neuer Titel", "Neuer Rumpf"))
-        .thenReturn(new BoardItemView(7L, 42, "Neuer Titel", "Neuer Rumpf", 102L, 3, false));
+        .thenReturn(
+            new BoardItemView(7L, 42, "Neuer Titel", "Neuer Rumpf", 102L, 3, false, "github#7"));
     when(labelService.namesByCard(BOARD, List.of(7L))).thenReturn(Map.of(7L, List.of("bug")));
 
     // When
@@ -577,7 +578,7 @@ class KanbanCompatServiceTest {
     // Given: Epic ohne bekannte Spalte (columnId trifft keine Board-Spalte) und ohne Labels.
     when(boardService.listColumns(BOARD)).thenReturn(standardColumns());
     when(cardService.updateContent(1L, 8L, "Epic", null))
-        .thenReturn(new BoardItemView(8L, 43, "Epic", null, 999L, 0, true));
+        .thenReturn(new BoardItemView(8L, 43, "Epic", null, 999L, 0, true, null));
     when(labelService.namesByCard(BOARD, List.of(8L))).thenReturn(Map.of());
 
     // When

@@ -362,7 +362,8 @@ public class CardService {
                     c.description(),
                     c.columnId(),
                     c.positionInColumn(),
-                    c.type() == CardType.EPIC))
+                    c.type() == CardType.EPIC,
+                    c.externalKey()))
         .toList();
   }
 
@@ -527,7 +528,8 @@ public class CardService {
         saved.description(),
         saved.columnId(),
         saved.positionInColumn(),
-        saved.type() == CardType.EPIC);
+        saved.type() == CardType.EPIC,
+        saved.externalKey());
   }
 
   /**
@@ -1524,6 +1526,10 @@ public class CardService {
    * Schlanke Board-Projektion einer Karte oder eines Epics — ohne Abhängigkeiten, Zuständige und
    * Labels. {@code epic} unterscheidet die beiden Ausprägungen, ohne den Kartentyp aus {@code
    * card.domain} nach außen zu geben.
+   *
+   * <p>{@code externalKey} ist der Idempotenz-Schlüssel eines Automatik-Ingests (#534). Er wird
+   * seit #573 mitgeliefert, damit ein Importwerkzeug seine eigenen Karten wiedererkennt, ohne dafür
+   * schreiben zu müssen; {@code null} für alles, was nicht aus einem Ingest stammt.
    */
   public record BoardItemView(
       long id,
@@ -1532,7 +1538,8 @@ public class CardService {
       @Nullable String description,
       @Nullable Long columnId,
       int positionInColumn,
-      boolean epic) {}
+      boolean epic,
+      @Nullable String externalKey) {}
 
   /** Epic-Darstellung inkl. Fortschritt (Kinder gesamt / in Done). */
   public record EpicView(
