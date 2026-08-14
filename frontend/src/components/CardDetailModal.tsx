@@ -716,6 +716,15 @@ interface Props {
   location?: CardLocation | null
   /** Board-Epics für das Epic-Dropdown. */
   epics?: Epic[]
+  /**
+   * Ob die Epic-Zuordnung geändert werden darf (Default `true`). `false` heißt: Der Aufrufer konnte
+   * den Optionsvorrat nicht laden (archiviertes Board, board-lose Idee). Ein leeres Dropdown böte
+   * dann nur „(kein Epic)" an und löschte auf Klick eine bestehende Zuordnung, ohne sie je gezeigt
+   * zu haben — deshalb bleibt das Feld dort lesend, während die übrigen Felder bearbeitbar sind.
+   */
+  canEditEpic?: boolean
+  /** Ob die Labels geändert werden dürfen (Default `true`) — dieselbe Begründung wie {@link canEditEpic}. */
+  canEditLabels?: boolean
   /** Kind-Karten eines Epics (nur bei type === 'EPIC'). */
   childCards?: Card[]
   /** Projektmitglieder für die Zuständigen-Auswahl (Namen + Auswahlliste). */
@@ -758,6 +767,8 @@ function CardDetailModalView({
   columnName,
   location,
   epics = [],
+  canEditEpic = true,
+  canEditLabels = true,
   childCards = [],
   members = [],
   boardLabels = [],
@@ -1073,6 +1084,7 @@ function CardDetailModalView({
               shortcode={shortcode}
               parentId={parentId}
               epics={epics}
+              epicReadOnly={!canEditEpic}
               depsInput={depsInput}
               depsError={depsError}
               dueInput={dueInput}
@@ -1110,7 +1122,7 @@ function CardDetailModalView({
 
           {!isEpic && (
             <LabelSection
-              canEdit={canEdit}
+              canEdit={canEdit && canEditLabels}
               boardLabels={boardLabels}
               labelIds={labelIds}
               onChange={(ids) => void saveLabels(ids)}

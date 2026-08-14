@@ -558,6 +558,52 @@ describe('CardDetailModal', () => {
     )
   })
 
+  it('lässt eine gesetzte Epic-Zuordnung ohne ladbare Epic-Liste unangetastet', async () => {
+    const apis = makeApis()
+    render(
+      <CardDetailModal
+        card={{ ...card, parentId: 9 }}
+        canEdit
+        canEditEpic={false}
+        epics={[]}
+        onClose={vi.fn()}
+        {...apis}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Bearbeiten' }))
+
+    // Lesend statt Auswahl: Ein leerer Optionsvorrat böte nur „(kein Epic)" an — ein Klick darauf
+    // löschte die Zuordnung, ohne sie je gezeigt zu haben (#586).
+    const field = screen.getByLabelText('Epic')
+    expect(field).toHaveValue('#9')
+    expect(field).toHaveAttribute('readonly')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Speichern' }))
+    await waitFor(() =>
+      expect(apis.cardsApi.update).toHaveBeenCalledWith(100, 'Aufgabe', expect.any(String), [3, 4], undefined, 9, null),
+    )
+  })
+
+  it('zeigt die Label-Sektion ohne ladbare Label-Liste nur lesend', async () => {
+    const apis = makeApis()
+    render(
+      <CardDetailModal
+        card={{ ...card, labels: [6] }}
+        canEdit
+        canEditLabels={false}
+        boardLabels={[]}
+        onClose={vi.fn()}
+        {...apis}
+      />,
+    )
+
+    // Nummern-Fallback statt Name: Das Label ist gesetzt und bleibt sichtbar, auch ohne Vorrat.
+    expect(await screen.findByText('#6')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Labels')).not.toBeInTheDocument()
+    expect(apis.cardsApi.setLabels).not.toHaveBeenCalled()
+  })
+
   it('deaktiviert den Speichern-Button bei leerem Titel im Edit-Modus', async () => {
     const apis = makeApis()
     render(<CardDetailModal card={card} canEdit onClose={vi.fn()} {...apis} />)

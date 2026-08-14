@@ -18,6 +18,7 @@ export function CardFields({
   shortcode,
   parentId,
   epics,
+  epicReadOnly = false,
   depsInput,
   depsError,
   dueInput,
@@ -36,6 +37,13 @@ export function CardFields({
   shortcode: string
   parentId: number | null
   epics: Epic[]
+  /**
+   * Zeigt die Epic-Zuordnung nur an, statt sie zur Auswahl zu stellen. Für Aufrufer, die den
+   * Optionsvorrat nicht laden können (archiviertes Board, board-lose Idee): Das Dropdown böte dann
+   * ausschließlich „(kein Epic)" an, und ein Klick darauf löschte eine bestehende Zuordnung, ohne
+   * sie je gezeigt zu haben (#586).
+   */
+  epicReadOnly?: boolean
   depsInput: string
   depsError: string | null
   dueInput: string
@@ -53,25 +61,41 @@ export function CardFields({
   const bodyShortcut = useCheckboxShortcut(onBodyChange)
   const nonEpicFields = (
     <>
-      <TextField
-        select
-        label="Epic"
-        value={parentId ?? ''}
-        onChange={(e) => onParentIdChange(e.target.value === '' ? null : Number(e.target.value))}
-        slotProps={{
-          htmlInput: { 'aria-label': 'Epic' },
-          select: { native: true },
-          inputLabel: { shrink: true },
-        }}
-        fullWidth
-      >
-        <option value="">(kein Epic)</option>
-        {epics.map((epic) => (
-          <option key={epic.id} value={epic.id}>
-            {epicShortcode(epic.title, epic.shortcode)} – {epic.title}
-          </option>
-        ))}
-      </TextField>
+      {epicReadOnly ? (
+        // Ohne Epic-Liste bleibt nur die nackte ID: Sie belegt sichtbar, dass eine Zuordnung
+        // besteht, und hält sie zugleich außer Reichweite jeder versehentlichen Änderung.
+        <TextField
+          label="Epic"
+          value={parentId === null ? '(kein Epic)' : `#${parentId}`}
+          helperText="Epic-Liste hier nicht verfügbar — die Zuordnung bleibt unverändert."
+          slotProps={{
+            htmlInput: { 'aria-label': 'Epic' },
+            input: { readOnly: true },
+            inputLabel: { shrink: true },
+          }}
+          fullWidth
+        />
+      ) : (
+        <TextField
+          select
+          label="Epic"
+          value={parentId ?? ''}
+          onChange={(e) => onParentIdChange(e.target.value === '' ? null : Number(e.target.value))}
+          slotProps={{
+            htmlInput: { 'aria-label': 'Epic' },
+            select: { native: true },
+            inputLabel: { shrink: true },
+          }}
+          fullWidth
+        >
+          <option value="">(kein Epic)</option>
+          {epics.map((epic) => (
+            <option key={epic.id} value={epic.id}>
+              {epicShortcode(epic.title, epic.shortcode)} – {epic.title}
+            </option>
+          ))}
+        </TextField>
+      )}
       <TextField
         label="Abhängig von (Nummern, kommagetrennt)"
         value={depsInput}
