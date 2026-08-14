@@ -32,9 +32,32 @@
   "github": {
     "projectNumber": 13
   },
+  "reviewStufen": {
+    "fachlich": {
+      "reviewer": 2,
+      "rollen": [
+        "form-beobachtbarkeit",
+        "abgrenzung"
+      ]
+    },
+    "plan": {
+      "reviewer": 2,
+      "rollen": [
+        "architektur-bestand",
+        "schnitt-abhaengigkeiten"
+      ]
+    },
+    "issue": {
+      "reviewer": 1,
+      "rollen": [
+        "pruefbarkeit"
+      ]
+    }
+  },  
   "toolbox": {
     "host": "https://kanban.mwolff.org",
-    "tokenFile": ".claude/toolbox.cli/tbx.token"
+    "tokenFile": ".claude/toolbox.cli/tbx.token",
+    "ideaStored": false
   },
   "issueReview": {
     "rounds": 1,
