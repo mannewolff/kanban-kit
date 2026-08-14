@@ -86,16 +86,16 @@
     ],
     "pairs": {
       "opus": [
-        "codex",
-        "fable"
+        "fable",
+        "sonnet"
       ],
       "sonnet": [
-        "opus",
-        "codex"
+        "fable",
+        "opus"
       ],
       "fable": [
         "opus",
-        "codex"
+        "sonnet"
       ]
     }
   }
