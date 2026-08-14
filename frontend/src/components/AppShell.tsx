@@ -24,6 +24,7 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import LogoutIcon from '@mui/icons-material/Logout'
 import MenuBookIcon from '@mui/icons-material/MenuBook'
 import SettingsIcon from '@mui/icons-material/Settings'
+import SwapHorizIcon from '@mui/icons-material/SwapHoriz'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Outlet, useLocation, useMatch, useNavigate } from 'react-router-dom'
 import { boardsApi } from '../api/boards'
@@ -31,10 +32,14 @@ import { projectsApi, type Project } from '../api/projects'
 import { useAuth } from '../auth/AuthContext'
 import { buildNavItems, type BoardContext, type NavGroup, type NavLink, type NavNode } from '../layout/navItems'
 import { canManageBoards, isPlatformAdmin } from '../lib/roles'
+import { useBoardHistory, type BoardHistoryEntry } from '../lib/useBoardHistory'
 import { useEditMode } from '../lib/EditModeContext'
+import { useKeyboardShortcut } from '../lib/useKeyboardShortcut'
 import { useRefetchOnFocus } from '../lib/useRefetchOnFocus'
+import { BoardSwitcher } from './BoardSwitcher'
 import { CardNumberSearch } from './CardNumberSearch'
 import { EditModeBanner, EDIT_MODE_BANNER_HEIGHT } from './EditModeBanner'
+import { useSnackbar } from './SnackbarProvider'
 
 const DRAWER_WIDTH = 240
 const DRAWER_COLLAPSED_WIDTH = 56
@@ -178,6 +183,33 @@ export function AppShell() {
       }),
     [board, admin, projectCount, boardCount, canManageCurrentBoards, routeProjectId],
   )
+
+  // ---- Board-Wechsel (#587): Verlauf fortschreiben und das Overlay bedienen ----
+  const notify = useSnackbar()
+  const { history, recordVisit, remove } = useBoardHistory()
+  const [switcherOpen, setSwitcherOpen] = useState(false)
+
+  // Ein Verlaufseintrag entsteht nur aus kohärentem Kontext: Route, geladenes Board und zugeordnetes
+  // Projekt müssen dasselbe Board meinen. Beim Wechsel A→B hält `board` noch A, während `boardId`
+  // schon B ist — ohne den Abgleich landete A unter der ID von B. Der Projektname kommt aus der
+  // Projektliste, weil der `BoardContext` ihn nicht trägt.
+  const currentProjectName = currentProject?.name ?? null
+  const visit = useMemo<BoardHistoryEntry | null>(
+    () =>
+      board !== null && board.id === boardId && currentProjectName !== null
+        ? { id: board.id, name: board.name, projectName: currentProjectName }
+        : null,
+    [board, boardId, currentProjectName],
+  )
+  useEffect(() => {
+    if (visit !== null) {
+      recordVisit(visit)
+    }
+  }, [visit, recordVisit])
+
+  // Das Kürzel ist nur scharf, wenn es etwas zu wechseln gibt — bei leerem Verlauf bliebe das
+  // Overlay ohnehin unsichtbar (#584), und ein wirkungsloses Kürzel wäre nur verwirrend.
+  useKeyboardShortcut('b', history.length > 0, () => setSwitcherOpen(true))
 
   const [openGroups, setOpenGroups] = useState<Set<string>>(new Set())
   // Gruppe der aktiven Route automatisch aufklappen.
@@ -411,6 +443,22 @@ export function AppShell() {
           </Box>
           {user && (
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              {/* Ein unsichtbares Kürzel gibt es für die Hälfte der Nutzer nicht: Der Knopf ist der
+                  sichtbare Zugang und trägt zugleich die Beschriftung, über die `b` bekannt wird.
+                  Der Umschlag mit `span` ist nötig, damit der Tooltip auch am deaktivierten Knopf
+                  einen Ereignisempfänger hat. */}
+              <Tooltip title="Board wechseln (Taste b)">
+                <span>
+                  <IconButton
+                    color="inherit"
+                    aria-label="Board wechseln"
+                    disabled={history.length === 0}
+                    onClick={() => setSwitcherOpen(true)}
+                  >
+                    <SwapHorizIcon />
+                  </IconButton>
+                </span>
+              </Tooltip>
               <CardNumberSearch />
               <Tooltip title="Profil bearbeiten">
                 <ButtonBase
@@ -490,6 +538,18 @@ export function AppShell() {
         <Toolbar sx={{ mt: `${bannerOffset}px` }} />
         <Outlet />
       </Box>
+
+      {/* Auf einer Board-Route bestimmt die aktuelle Board-ID die Vorauswahl, sonst gibt es keine
+          — das weiß allein die Shell (`boardMatch`). Ein als 403/404 gemeldetes Ziel fliegt aus
+          dem Verlauf; der Fehler-Catch des Board-Abrufs oben bleibt davon unberührt. */}
+      <BoardSwitcher
+        open={switcherOpen}
+        entries={history}
+        currentBoardId={boardId}
+        onClose={() => setSwitcherOpen(false)}
+        onRemoveEntry={remove}
+        onNotify={notify}
+      />
     </Box>
   )
 }

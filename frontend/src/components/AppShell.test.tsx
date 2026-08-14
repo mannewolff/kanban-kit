@@ -1,8 +1,10 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import type { ReactNode } from 'react'
 import { MemoryRouter, useLocation, useNavigate } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import pkg from '../../package.json'
 import { boardsApi } from '../api/boards'
+import { ApiError } from '../api/client'
 import { projectsApi } from '../api/projects'
 import { AppShell } from './AppShell'
 
@@ -90,6 +92,76 @@ function renderShell(entry = '/') {
       <AppShell />
     </MemoryRouter>,
   )
+}
+
+type BoardId = 1 | 2 | 3
+
+interface TestBoard {
+  id: number
+  name: string
+  projectId: number
+  columns: never[]
+}
+
+/** Drei Boards aus zwei Projekten — nur so ist der Projektname im Verlaufseintrag unterscheidbar. */
+const BOARDS: Record<BoardId, TestBoard> = {
+  1: { id: 1, name: 'B', projectId: 5, columns: [] },
+  2: { id: 2, name: 'Zwei', projectId: 6, columns: [] },
+  3: { id: 3, name: 'Drei', projectId: 5, columns: [] },
+}
+
+/** Sprungbrett außerhalb der Shell: echte Routenwechsel statt neu gerenderter Einstiegspunkte. */
+function BoardNav() {
+  const navigate = useNavigate()
+  return (
+    <>
+      {([1, 2, 3] as BoardId[]).map((id) => (
+        <button key={id} onClick={() => navigate(`/boards/${id}`)}>{`zu ${id}`}</button>
+      ))}
+      <button onClick={() => navigate('/')}>zur Übersicht</button>
+    </>
+  )
+}
+
+function renderBoardShell(entry = '/', extra: ReactNode = null) {
+  return render(
+    <MemoryRouter initialEntries={[entry]}>
+      <LocationProbe />
+      <BoardNav />
+      <AppShell />
+      {extra}
+    </MemoryRouter>,
+  )
+}
+
+/** Board öffnen und warten, bis sein Kontext steht — erst dann darf ein Verlaufseintrag entstehen. */
+async function visitBoard(id: BoardId): Promise<void> {
+  fireEvent.click(screen.getByRole('button', { name: `zu ${id}` }))
+  await screen.findByRole('button', { name: BOARDS[id].name })
+}
+
+async function leaveBoard(): Promise<void> {
+  fireEvent.click(screen.getByRole('button', { name: 'zur Übersicht' }))
+  await waitFor(() => expect(screen.getByTestId('location').textContent).toBe('/'))
+}
+
+function openSwitcher(): void {
+  fireEvent.click(screen.getByRole('button', { name: 'Board wechseln' }))
+}
+
+/** Das Overlay rendert den Verlauf als `listbox` — daran hängt seine Sichtbarkeit im Test. */
+function switcherIsOpen(): boolean {
+  return screen.queryByRole('listbox', { name: 'Zuletzt besuchte Boards' }) !== null
+}
+
+/** Beschriftungen der Verlaufseinträge in Reihenfolge — Board- und Projektname aneinander. */
+function switcherEntries(): string[] {
+  return screen.getAllByRole('option').map((option) => option.textContent ?? '')
+}
+
+/** Der Verlaufseintrag an dieser Position; angesprochen wird er über die Reihenfolge. */
+function switcherEntry(position: number): HTMLElement {
+  return screen.getAllByRole('option')[position]
 }
 
 describe('AppShell', () => {
@@ -378,5 +450,189 @@ describe('AppShell', () => {
     fireEvent.click(ideen)
 
     await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/projects/5/ideas'))
+  })
+
+  describe('Board-Wechsel', () => {
+    beforeEach(() => {
+      mockedBoards.get.mockImplementation((id: number) => Promise.resolve(BOARDS[id as BoardId]))
+    })
+
+    it('führt den Verlauf absteigend nach letzter Benutzung', async () => {
+      renderBoardShell()
+      await visitBoard(1)
+      await visitBoard(2)
+      await visitBoard(3)
+
+      openSwitcher()
+
+      expect(switcherEntries()).toEqual(['DreiP1', 'ZweiP2', 'BP1'])
+    })
+
+    it('hebt einen wiederholten Besuch nach vorne, ohne ein Duplikat anzulegen', async () => {
+      renderBoardShell()
+      await visitBoard(1)
+      await visitBoard(2)
+      await visitBoard(1)
+
+      openSwitcher()
+
+      expect(switcherEntries()).toEqual(['BP1', 'ZweiP2'])
+    })
+
+    it('schreibt während eines Wechsels erst nach kohärentem Kontext einen Eintrag', async () => {
+      let resolveSecond: (board: TestBoard) => void = () => {}
+      mockedBoards.get.mockImplementation((id: number) =>
+        id === 2
+          ? new Promise<TestBoard>((resolve) => {
+              resolveSecond = resolve
+            })
+          : Promise.resolve(BOARDS[id as BoardId]),
+      )
+      renderBoardShell()
+      await visitBoard(1)
+
+      fireEvent.click(screen.getByRole('button', { name: 'zu 2' }))
+      await waitFor(() => expect(screen.getByTestId('location').textContent).toBe('/boards/2'))
+
+      // Die Route steht schon auf Board 2, geladen ist noch Board 1 — daraus entsteht nichts.
+      openSwitcher()
+      expect(switcherEntries()).toEqual(['BP1'])
+
+      resolveSecond(BOARDS[2])
+
+      await waitFor(() => expect(switcherEntries()).toEqual(['ZweiP2', 'BP1']))
+    })
+
+    it('trägt den Projektnamen in den Eintrag, obwohl der Board-Kontext ihn nicht liefert', async () => {
+      renderBoardShell()
+      await visitBoard(2)
+      await leaveBoard()
+
+      openSwitcher()
+
+      expect(switcherEntries()).toEqual(['ZweiP2'])
+    })
+
+    it('schreibt keinen Eintrag, solange das Projekt des Boards nicht zugeordnet ist', async () => {
+      mockedProjects.list.mockRejectedValue(new Error('500'))
+      renderBoardShell()
+      await visitBoard(1)
+      await leaveBoard()
+
+      expect(screen.getByRole('button', { name: 'Board wechseln' })).toBeDisabled()
+    })
+
+    it('stellt den Verlauf nach einem Remount aus dem Storage wieder her', async () => {
+      const { unmount } = renderBoardShell()
+      await visitBoard(1)
+      unmount()
+
+      renderBoardShell()
+      openSwitcher()
+
+      expect(switcherEntries()).toEqual(['BP1'])
+    })
+
+    it('öffnet das Overlay mit der Taste b', async () => {
+      renderBoardShell()
+      await visitBoard(1)
+      await leaveBoard()
+
+      fireEvent.keyDown(document, { key: 'b' })
+
+      expect(switcherIsOpen()).toBe(true)
+    })
+
+    it('löst die Taste b in einem Eingabefeld nicht aus', async () => {
+      renderBoardShell()
+      await visitBoard(1)
+      await leaveBoard()
+
+      fireEvent.keyDown(screen.getByRole('textbox', { name: 'Kartennummer suchen' }), { key: 'b' })
+
+      expect(switcherIsOpen()).toBe(false)
+    })
+
+    it('löst die Taste b bei einem fremden offenen Dialog nicht aus', async () => {
+      renderBoardShell('/', <div role="dialog" aria-label="Fremder Dialog" />)
+      await visitBoard(1)
+      await leaveBoard()
+
+      fireEvent.keyDown(document, { key: 'b' })
+
+      expect(switcherIsOpen()).toBe(false)
+    })
+
+    it('löst die Taste b bei leerem Verlauf nicht aus', () => {
+      renderBoardShell()
+
+      fireEvent.keyDown(document, { key: 'b' })
+
+      expect(switcherIsOpen()).toBe(false)
+    })
+
+    it('öffnet das Overlay über das Bedienelement der Kopfleiste', async () => {
+      renderBoardShell()
+      await visitBoard(1)
+      await leaveBoard()
+
+      openSwitcher()
+
+      expect(switcherIsOpen()).toBe(true)
+    })
+
+    it('deaktiviert das Bedienelement bei leerem Verlauf', () => {
+      renderBoardShell()
+
+      expect(screen.getByRole('button', { name: 'Board wechseln' })).toBeDisabled()
+    })
+
+    it('reicht auf einer Board-Route die aktuelle Board-ID durch', async () => {
+      renderBoardShell()
+      await visitBoard(1)
+      await visitBoard(2)
+
+      openSwitcher()
+
+      // Auf Board 2 vorausgewählt ist der zuletzt *andere* Eintrag.
+      expect(screen.getByRole('option', { selected: true }).textContent).toBe('BP1')
+    })
+
+    it('reicht außerhalb einer Board-Route null durch — dann steht der erste Eintrag vorne', async () => {
+      renderBoardShell()
+      await visitBoard(1)
+      await visitBoard(2)
+      await leaveBoard()
+
+      openSwitcher()
+
+      expect(screen.getByRole('option', { selected: true }).textContent).toBe('ZweiP2')
+    })
+
+    it('navigiert bei der Auswahl eines Eintrags zur Board-Route', async () => {
+      renderBoardShell()
+      await visitBoard(1)
+      await visitBoard(2)
+
+      openSwitcher()
+      fireEvent.click(screen.getByRole('option', { selected: true }))
+
+      await waitFor(() => expect(screen.getByTestId('location').textContent).toBe('/boards/1'))
+    })
+
+    it('entfernt ein vom Overlay als 404 gemeldetes Ziel aus dem Verlauf', async () => {
+      renderBoardShell()
+      await visitBoard(1)
+      await visitBoard(2)
+      await visitBoard(3)
+      mockedBoards.get.mockImplementation((id: number) =>
+        id === 1 ? Promise.reject(new ApiError(404, 'weg')) : Promise.resolve(BOARDS[id as BoardId]),
+      )
+
+      openSwitcher()
+      fireEvent.click(switcherEntry(2))
+
+      await waitFor(() => expect(switcherEntries()).toEqual(['DreiP1', 'ZweiP2']))
+    })
   })
 })
