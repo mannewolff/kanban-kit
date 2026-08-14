@@ -4,11 +4,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -17,31 +19,62 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mwolff.manban.board.application.BoardNotFoundException;
 import org.mwolff.manban.board.application.BoardService;
+import org.mwolff.manban.card.application.CardBoardActivityEvent.ActivityType;
+import org.mwolff.manban.card.domain.Card;
+import org.mwolff.manban.card.domain.CardType;
 import org.mwolff.manban.card.domain.Label;
 import org.mwolff.manban.project.application.PermissionChecker;
+import org.mwolff.manban.project.application.ProjectAccessDeniedException;
 import org.mwolff.manban.project.domain.Permission;
+import org.springframework.context.ApplicationEventPublisher;
 
 /** Verhaltenstests der Label-Verwaltung (Ports gemockt). */
+// PMD.TooManyMethods: methodenreiche Testsuite — viele kleine @Test-Methoden je Erfolgs- und
+// Fehlerpfad sind hier gewollt, kein Refactoring-Signal.
+@SuppressWarnings("PMD.TooManyMethods")
 class LabelServiceTest {
 
   private static final long BOARD = 10L;
+  private static final long OTHER_BOARD = 11L;
   private static final long PROJECT = 1L;
+  private static final long CARD_ID = 30L;
+  private static final long USER = 5L;
+  private static final Instant FIXED = Instant.parse("2026-01-01T00:00:00Z");
 
   private LabelRepository labels;
   private CardLabelRepository cardLabels;
+  private CardRepository cards;
   private BoardService boardService;
   private PermissionChecker permissions;
+  private ApplicationEventPublisher events;
   private LabelService service;
 
   @BeforeEach
   void setUp() {
     labels = mock(LabelRepository.class);
     cardLabels = mock(CardLabelRepository.class);
+    cards = mock(CardRepository.class);
     boardService = mock(BoardService.class);
     permissions = mock(PermissionChecker.class);
-    service = new LabelService(labels, cardLabels, boardService, permissions);
+    events = mock(ApplicationEventPublisher.class);
+    service = new LabelService(labels, cardLabels, cards, boardService, permissions, events);
     when(boardService.requireProjectId(BOARD)).thenReturn(PROJECT);
     when(labels.save(any(Label.class))).thenAnswer(inv -> inv.getArgument(0));
+  }
+
+  /** Karte des Boards {@link #BOARD} im Projekt {@link #PROJECT}. */
+  private static Card card(CardType type) {
+    return new Card(
+        CARD_ID, BOARD, 100L, 7, "Titel", null, 0, false, false, null, 1L, FIXED, FIXED, type, null,
+        null, null, PROJECT, null, null);
+  }
+
+  private void givenCard(CardType type) {
+    when(cards.findById(CARD_ID)).thenReturn(Optional.of(card(type)));
+  }
+
+  private void givenBoardLabel(long labelId, String name) {
+    when(labels.findByBoardId(BOARD)).thenReturn(List.of(new Label(labelId, BOARD, name, "#f00")));
   }
 
   @Test
@@ -213,5 +246,245 @@ class LabelServiceTest {
     when(cardLabels.findByCardIds(List.of())).thenReturn(Map.of());
 
     assertThat(service.namesByCard(BOARD, List.of())).isEmpty();
+  }
+
+  // --- addToCard / removeFromCard: atomare Einzel-Zuordnung (#574) ----------------------------
+
+  @Test
+  void addToCard_assignsResolvedLabelAndPublishesBoardEvent() {
+    givenCard(CardType.CARD);
+    givenBoardLabel(7L, "kit:nightrun");
+    when(cardLabels.addLabel(CARD_ID, 7L)).thenReturn(true);
+
+    service.addToCard(USER, CARD_ID, "kit:nightrun");
+
+    verify(permissions).require(USER, PROJECT, Permission.TICKET_UPDATE);
+    verify(cardLabels).addLabel(CARD_ID, 7L);
+    verify(events).publishEvent(new CardBoardActivityEvent(BOARD, ActivityType.UPDATED, CARD_ID));
+  }
+
+  @Test
+  void addToCard_neverReplacesTheWholeAssignment() {
+    // Der Kern der Aufgabe: replaceLabels würde fremde Labels stillschweigend löschen, sobald
+    // parallel am Board gearbeitet wird.
+    givenCard(CardType.CARD);
+    givenBoardLabel(7L, "kit:nightrun");
+    when(cardLabels.addLabel(CARD_ID, 7L)).thenReturn(true);
+
+    service.addToCard(USER, CARD_ID, "kit:nightrun");
+
+    verify(cardLabels, never()).replaceLabels(anyLong(), any());
+  }
+
+  @Test
+  void addToCard_publishesNoEvent_whenLabelWasAlreadyAssigned() {
+    // Idempotenz nach außen (Erfolg), aber ohne Ereignis: ein wiederholter Nachtlauf darf keine
+    // Änderung melden, die es nicht gab.
+    givenCard(CardType.CARD);
+    givenBoardLabel(7L, "kit:nightrun");
+    when(cardLabels.addLabel(CARD_ID, 7L)).thenReturn(false);
+
+    service.addToCard(USER, CARD_ID, "kit:nightrun");
+
+    verify(events, never()).publishEvent(any(CardBoardActivityEvent.class));
+  }
+
+  @Test
+  void addToCard_resolvesTheNameOnTheCardsBoard_notOnAnotherBoard() {
+    // Labelnamen sind nur boardweit eindeutig: dasselbe "Bug" existiert auf zwei Boards.
+    givenCard(CardType.CARD);
+    when(labels.findByBoardId(BOARD)).thenReturn(List.of(new Label(7L, BOARD, "Bug", "#f00")));
+    when(labels.findByBoardId(OTHER_BOARD))
+        .thenReturn(List.of(new Label(99L, OTHER_BOARD, "Bug", "#0f0")));
+    when(cardLabels.addLabel(CARD_ID, 7L)).thenReturn(true);
+
+    service.addToCard(USER, CARD_ID, "Bug");
+
+    verify(cardLabels).addLabel(CARD_ID, 7L);
+    verify(cardLabels, never()).addLabel(CARD_ID, 99L);
+  }
+
+  @Test
+  void addToCard_trimsTheName() {
+    givenCard(CardType.CARD);
+    givenBoardLabel(7L, "Bug");
+    when(cardLabels.addLabel(CARD_ID, 7L)).thenReturn(true);
+
+    service.addToCard(USER, CARD_ID, "  Bug  ");
+
+    verify(cardLabels).addLabel(CARD_ID, 7L);
+  }
+
+  @Test
+  void addToCard_comparesTheNameCaseSensitively() {
+    givenCard(CardType.CARD);
+    givenBoardLabel(7L, "Bug");
+
+    assertThatThrownBy(() -> service.addToCard(USER, CARD_ID, "bug"))
+        .isInstanceOf(LabelNotFoundException.class);
+    verify(cardLabels, never()).addLabel(anyLong(), anyLong());
+  }
+
+  @Test
+  void addToCard_rejectsBlankName() {
+    givenCard(CardType.CARD);
+
+    assertThatThrownBy(() -> service.addToCard(USER, CARD_ID, "   "))
+        .isInstanceOf(InvalidLabelException.class);
+    verify(cardLabels, never()).addLabel(anyLong(), anyLong());
+  }
+
+  @Test
+  void addToCard_throwsLabelNotFound_andCreatesNothing_whenNameUnknown() {
+    // Ein Tippfehler im Nachtlauf darf kein Label anlegen — sonst entsteht unbemerkt Label-Müll.
+    givenCard(CardType.CARD);
+    givenBoardLabel(7L, "Bug");
+
+    assertThatThrownBy(() -> service.addToCard(USER, CARD_ID, "Unbekannt"))
+        .isInstanceOf(LabelNotFoundException.class);
+    verify(labels, never()).save(any());
+    verify(cardLabels, never()).addLabel(anyLong(), anyLong());
+  }
+
+  @Test
+  void addToCard_throwsCardNotFound_whenCardUnknown() {
+    when(cards.findById(CARD_ID)).thenReturn(Optional.empty());
+
+    assertThatThrownBy(() -> service.addToCard(USER, CARD_ID, "Bug"))
+        .isInstanceOf(CardNotFoundException.class);
+    verify(cardLabels, never()).addLabel(anyLong(), anyLong());
+  }
+
+  @Test
+  void addToCard_rejectsEpics() {
+    givenCard(CardType.EPIC);
+
+    assertThatThrownBy(() -> service.addToCard(USER, CARD_ID, "Bug"))
+        .isInstanceOf(InvalidDependencyException.class)
+        .hasMessageContaining("Nur Karten haben Labels");
+    verify(cardLabels, never()).addLabel(anyLong(), anyLong());
+  }
+
+  @Test
+  void addToCard_requiresTicketUpdate() {
+    givenCard(CardType.CARD);
+    doThrow(new ProjectAccessDeniedException())
+        .when(permissions)
+        .require(USER, PROJECT, Permission.TICKET_UPDATE);
+
+    assertThatThrownBy(() -> service.addToCard(USER, CARD_ID, "Bug"))
+        .isInstanceOf(ProjectAccessDeniedException.class);
+    verify(cardLabels, never()).addLabel(anyLong(), anyLong());
+  }
+
+  @Test
+  void removeFromCard_removesResolvedLabelAndPublishesBoardEvent() {
+    givenCard(CardType.CARD);
+    givenBoardLabel(7L, "kit:nightrun");
+    when(cardLabels.removeLabel(CARD_ID, 7L)).thenReturn(true);
+
+    service.removeFromCard(USER, CARD_ID, "kit:nightrun");
+
+    verify(permissions).require(USER, PROJECT, Permission.TICKET_UPDATE);
+    verify(cardLabels).removeLabel(CARD_ID, 7L);
+    verify(events).publishEvent(new CardBoardActivityEvent(BOARD, ActivityType.UPDATED, CARD_ID));
+  }
+
+  @Test
+  void removeFromCard_neverReplacesTheWholeAssignment() {
+    givenCard(CardType.CARD);
+    givenBoardLabel(7L, "kit:nightrun");
+    when(cardLabels.removeLabel(CARD_ID, 7L)).thenReturn(true);
+
+    service.removeFromCard(USER, CARD_ID, "kit:nightrun");
+
+    verify(cardLabels, never()).replaceLabels(anyLong(), any());
+  }
+
+  @Test
+  void removeFromCard_publishesNoEvent_whenLabelWasNotAssigned() {
+    givenCard(CardType.CARD);
+    givenBoardLabel(7L, "kit:nightrun");
+    when(cardLabels.removeLabel(CARD_ID, 7L)).thenReturn(false);
+
+    service.removeFromCard(USER, CARD_ID, "kit:nightrun");
+
+    verify(events, never()).publishEvent(any(CardBoardActivityEvent.class));
+  }
+
+  @Test
+  void removeFromCard_resolvesTheNameOnTheCardsBoard_notOnAnotherBoard() {
+    givenCard(CardType.CARD);
+    when(labels.findByBoardId(BOARD)).thenReturn(List.of(new Label(7L, BOARD, "Bug", "#f00")));
+    when(labels.findByBoardId(OTHER_BOARD))
+        .thenReturn(List.of(new Label(99L, OTHER_BOARD, "Bug", "#0f0")));
+    when(cardLabels.removeLabel(CARD_ID, 7L)).thenReturn(true);
+
+    service.removeFromCard(USER, CARD_ID, "Bug");
+
+    verify(cardLabels).removeLabel(CARD_ID, 7L);
+    verify(cardLabels, never()).removeLabel(CARD_ID, 99L);
+  }
+
+  @Test
+  void removeFromCard_trimsTheName() {
+    givenCard(CardType.CARD);
+    givenBoardLabel(7L, "Bug");
+    when(cardLabels.removeLabel(CARD_ID, 7L)).thenReturn(true);
+
+    service.removeFromCard(USER, CARD_ID, "  Bug  ");
+
+    verify(cardLabels).removeLabel(CARD_ID, 7L);
+  }
+
+  @Test
+  void removeFromCard_rejectsBlankName() {
+    givenCard(CardType.CARD);
+
+    assertThatThrownBy(() -> service.removeFromCard(USER, CARD_ID, "   "))
+        .isInstanceOf(InvalidLabelException.class);
+    verify(cardLabels, never()).removeLabel(anyLong(), anyLong());
+  }
+
+  @Test
+  void removeFromCard_throwsLabelNotFound_andCreatesNothing_whenNameUnknown() {
+    givenCard(CardType.CARD);
+    givenBoardLabel(7L, "Bug");
+
+    assertThatThrownBy(() -> service.removeFromCard(USER, CARD_ID, "Unbekannt"))
+        .isInstanceOf(LabelNotFoundException.class);
+    verify(labels, never()).save(any());
+    verify(cardLabels, never()).removeLabel(anyLong(), anyLong());
+  }
+
+  @Test
+  void removeFromCard_throwsCardNotFound_whenCardUnknown() {
+    when(cards.findById(CARD_ID)).thenReturn(Optional.empty());
+
+    assertThatThrownBy(() -> service.removeFromCard(USER, CARD_ID, "Bug"))
+        .isInstanceOf(CardNotFoundException.class);
+    verify(cardLabels, never()).removeLabel(anyLong(), anyLong());
+  }
+
+  @Test
+  void removeFromCard_rejectsEpics() {
+    givenCard(CardType.EPIC);
+
+    assertThatThrownBy(() -> service.removeFromCard(USER, CARD_ID, "Bug"))
+        .isInstanceOf(InvalidDependencyException.class)
+        .hasMessageContaining("Nur Karten haben Labels");
+    verify(cardLabels, never()).removeLabel(anyLong(), anyLong());
+  }
+
+  @Test
+  void removeFromCard_requiresTicketUpdate() {
+    givenCard(CardType.CARD);
+    doThrow(new ProjectAccessDeniedException())
+        .when(permissions)
+        .require(USER, PROJECT, Permission.TICKET_UPDATE);
+
+    assertThatThrownBy(() -> service.removeFromCard(USER, CARD_ID, "Bug"))
+        .isInstanceOf(ProjectAccessDeniedException.class);
+    verify(cardLabels, never()).removeLabel(anyLong(), anyLong());
   }
 }

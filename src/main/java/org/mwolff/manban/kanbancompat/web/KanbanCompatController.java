@@ -21,12 +21,14 @@ import org.mwolff.manban.kanbancompat.application.KanbanCompatService.Item;
 import org.mwolff.manban.kanbancompat.application.TokenNotBoundException;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -39,6 +41,9 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/kanban")
 class KanbanCompatController {
+
+  /** Längengrenze eines Labelnamens; identisch mit {@code LabelController.LabelRequest}. */
+  private static final int MAX_LABEL_NAME = 60;
 
   private final KanbanCompatService service;
 
@@ -89,6 +94,36 @@ class KanbanCompatController {
       @PathVariable long id,
       @Valid @RequestBody DependenciesRequest request) {
     service.replaceDependencies(principal(authentication), id, request.dependsOn());
+  }
+
+  /**
+   * Ergänzt genau ein Label (#574). Adressierung über die interne Karten-ID, konsistent zu {@code
+   * /items/{id}/move} und {@code /items/{id}/comments}.
+   */
+  @PostMapping("/items/{id}/labels")
+  @ResponseStatus(HttpStatus.NO_CONTENT)
+  void addLabel(
+      @Nullable Authentication authentication,
+      @PathVariable long id,
+      @Valid @RequestBody LabelRequest request) {
+    service.addLabel(principal(authentication), id, request.name());
+  }
+
+  /**
+   * Entfernt genau ein Label (#574).
+   *
+   * <p>Der Name steht bewusst im <strong>Query-Parameter</strong> statt im Pfad: {@code
+   * LabelService} trimmt den Namen nur und lehnt Leerstrings ab — jedes andere Zeichen ist gültig,
+   * auch {@code /}. Ein Pfadsegment trüge das nicht, weil Spring/Tomcat kodierte Slashes per
+   * Default ablehnen.
+   */
+  @DeleteMapping("/items/{id}/labels")
+  @ResponseStatus(HttpStatus.NO_CONTENT)
+  void removeLabel(
+      @Nullable Authentication authentication,
+      @PathVariable long id,
+      @RequestParam @NotBlank @Size(max = MAX_LABEL_NAME) String name) {
+    service.removeLabel(principal(authentication), id, name);
   }
 
   @PostMapping("/items/{id}/comments")
@@ -162,4 +197,11 @@ class KanbanCompatController {
 
   /** Gleiche Längengrenze wie der UI-Pfad ({@code CommentController.CommentRequest}). */
   record CommentRequest(@NotBlank @Size(max = TextLimits.MAX_TEXT) String body) {}
+
+  /**
+   * Name genau eines Labels (#574). Gleiche Grenze wie der UI-Pfad ({@code
+   * LabelController.LabelRequest}) — beide Wege dürfen denselben Namen nicht unterschiedlich
+   * beschneiden.
+   */
+  record LabelRequest(@NotBlank @Size(max = MAX_LABEL_NAME) String name) {}
 }
