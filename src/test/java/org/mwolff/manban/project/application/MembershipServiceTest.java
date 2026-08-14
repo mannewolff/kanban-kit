@@ -19,12 +19,15 @@ import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.mockito.ArgumentCaptor;
 import org.mwolff.manban.auth.application.AuthProperties;
 import org.mwolff.manban.auth.application.UserDisplayNameWriter;
 import org.mwolff.manban.auth.application.UserLookup;
 import org.mwolff.manban.auth.application.UserSummary;
 import org.mwolff.manban.project.domain.Permission;
+import org.mwolff.manban.project.domain.Project;
 import org.mwolff.manban.project.domain.ProjectInvitation;
 import org.mwolff.manban.project.domain.ProjectMembership;
 import org.mwolff.manban.project.domain.ProjectRole;
@@ -32,7 +35,10 @@ import org.mwolff.manban.project.domain.ProjectRole;
 /** Verhaltenstests der Mitgliederverwaltung (Mockito an den Ports). */
 // PMD.TooManyMethods: umfassende Unit-Suite (Einladen/Annehmen/Rolle/Entfernen/Eigentümer-Transfer,
 // je Erfolgs- und Fehlerpfad). Viele kleine @Test-Methoden sind hier gewollt, kein God-Class-Smell.
-@SuppressWarnings("PMD.TooManyMethods")
+// PMD.CouplingBetweenObjects: Die Klasse testet einen Service mit zehn Konstruktor-Ports; jeder
+// gestubbte Port und jeder Domänentyp in einem Stub zählt mit (21 statt 20). Das misst hier die
+// Breite des getesteten Dienstes, nicht ein Design-Problem des Tests.
+@SuppressWarnings({"PMD.TooManyMethods", "PMD.CouplingBetweenObjects"})
 class MembershipServiceTest {
 
   private static final Instant FIXED = Instant.parse("2026-01-02T03:04:05Z");
@@ -57,6 +63,10 @@ class MembershipServiceTest {
 
   private static ProjectMembership membership(long userId, ProjectRole role) {
     return new ProjectMembership(3L, 9L, userId, role, FIXED);
+  }
+
+  private static Project project() {
+    return new Project(9L, "P", 1L, FIXED);
   }
 
   @BeforeEach
@@ -204,11 +214,35 @@ class MembershipServiceTest {
   }
 
   @Test
-  void listMembers_returnsMembers_forMember() {
-    // Given
-    when(memberships.findByProjectIdAndUserId(9L, 2L))
-        .thenReturn(Optional.of(membership(2L, ProjectRole.MEMBER)));
+  void listMembers_resolvesAccessViaPermissionChecker() {
+    // Given — ein Plattform-Admin ohne echte Mitgliedschaft passiert requireMembership mit einer
+    // synthetischen OWNER-Rolle; der Service darf nicht selbst auf eine reale Mitgliedschaft
+    // prüfen.
+    when(permissions.requireMembership(7L, 9L))
+        .thenReturn(new ProjectMembership(null, 9L, 7L, ProjectRole.OWNER, FIXED));
+    when(projects.findById(9L)).thenReturn(Optional.of(project()));
     when(memberships.findByProjectId(9L)).thenReturn(List.of(membership(2L, ProjectRole.MEMBER)));
+    when(users.findById(2L)).thenReturn(Optional.of(user(2, "guest@x.de")));
+
+    // When
+    List<MembershipService.MemberView> result = service.listMembers(7L, 9L);
+
+    // Then
+    verify(permissions).requireMembership(7L, 9L);
+    assertThat(result)
+        .singleElement()
+        .extracting(MembershipService.MemberView::email)
+        .isEqualTo("guest@x.de");
+  }
+
+  /** Jedes Mitglied darf die Liste sehen — auch der nur lesende VIEWER. */
+  @ParameterizedTest
+  @EnumSource(ProjectRole.class)
+  void listMembers_returnsMembers_forEveryProjectRole(ProjectRole role) {
+    // Given
+    when(permissions.requireMembership(2L, 9L)).thenReturn(membership(2L, role));
+    when(projects.findById(9L)).thenReturn(Optional.of(project()));
+    when(memberships.findByProjectId(9L)).thenReturn(List.of(membership(2L, role)));
     when(users.findById(2L)).thenReturn(Optional.of(user(2, "guest@x.de")));
 
     // When
@@ -223,12 +257,27 @@ class MembershipServiceTest {
 
   @Test
   void listMembers_throwsProjectNotFound_forNonMember() {
-    // Given
-    when(memberships.findByProjectIdAndUserId(9L, 2L)).thenReturn(Optional.empty());
+    // Given — PlatformRole.USER ohne Mitgliedschaft: der PermissionChecker wirft.
+    when(permissions.requireMembership(2L, 9L)).thenThrow(new ProjectNotFoundException());
 
     // When / Then
     assertThatThrownBy(() -> service.listMembers(2L, 9L))
         .isInstanceOf(ProjectNotFoundException.class);
+    verify(memberships, never()).findByProjectId(anyLong());
+  }
+
+  @Test
+  void listMembers_throwsProjectNotFound_forPlatformAdminOnUnknownProject() {
+    // Given — requireMembership erzeugt dem Admin eine synthetische Mitgliedschaft, ohne die
+    // Existenz des Projekts zu prüfen. Eine unbekannte projectId bleibt trotzdem 404, nie 200 [].
+    when(permissions.requireMembership(7L, 404L))
+        .thenReturn(new ProjectMembership(null, 404L, 7L, ProjectRole.OWNER, FIXED));
+    when(projects.findById(404L)).thenReturn(Optional.empty());
+
+    // When / Then
+    assertThatThrownBy(() -> service.listMembers(7L, 404L))
+        .isInstanceOf(ProjectNotFoundException.class);
+    verify(memberships, never()).findByProjectId(anyLong());
   }
 
   @Test

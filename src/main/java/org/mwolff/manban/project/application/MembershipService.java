@@ -176,10 +176,24 @@ public class MembershipService {
     return toView(membership);
   }
 
+  /**
+   * Liefert die Mitglieder des Projekts. Jedes Mitglied darf die Liste sehen; Nichtmitglieder
+   * erhalten 404 (kein Existenz-Leak).
+   *
+   * <p>Die Zugriffsprüfung liegt beim {@link PermissionChecker} — eine eigene Prüfung auf eine
+   * <em>reale</em> Mitgliedschaft umging hier als einzige Stelle den Plattform-Admin-Bypass und
+   * verweigerte dem Super-User den in {@code docs/rollen-und-rechte.md} zugesagten Vollzugriff
+   * (Issue #582).
+   *
+   * <p>Der Bypass gilt allerdings nur für <em>bestehende</em> Projekte: {@link
+   * PermissionChecker#requireMembership} stellt einem Plattform-Admin eine synthetische
+   * Mitgliedschaft aus, ohne das Projekt nachzuschlagen. Ohne die zusätzliche Existenzprüfung
+   * lieferte eine unbekannte {@code projectId} ihm deshalb {@code 200 []} statt {@code 404}.
+   */
   @Transactional(readOnly = true)
   public List<MemberView> listMembers(long userId, long projectId) {
-    // Jedes Mitglied darf die Mitgliederliste sehen; Nichtmitglieder erhalten 404.
-    if (memberships.findByProjectIdAndUserId(projectId, userId).isEmpty()) {
+    permissions.requireMembership(userId, projectId);
+    if (projects.findById(projectId).isEmpty()) {
       throw new ProjectNotFoundException();
     }
     return memberships.findByProjectId(projectId).stream().map(this::toView).toList();
