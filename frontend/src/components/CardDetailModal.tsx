@@ -45,6 +45,7 @@ import { CardFields } from './CardFields'
 import { cardLocationCrumbs, type CardLocation } from '../lib/cardLocation'
 import { dueInputToIso, formatDueDate, isOverdue } from '../lib/dueDate'
 import { normalizeTaskLists, toggleTaskAt } from '../lib/markdownTasks'
+import { safeImageSrc, safeLinkHref } from '../lib/markdownUrls'
 import { CODE_BLOCK_BG, MODAL_BORDER, MODAL_TEXT_PRIMARY, statusColors } from '../lib/statusColors'
 import { useAuth } from '../auth/AuthContext'
 import { AttachmentPreview } from './AttachmentPreview'
@@ -158,10 +159,15 @@ const TaskMarkdown = memo(function TaskMarkdown({
   )
 })
 
-const descriptionSx = {
-  border: `1px solid ${MODAL_BORDER}`,
-  borderRadius: 1,
-  p: 2,
+/**
+ * Markdown-Grundstil für Beschreibung und Kommentar-Body. Ohne ihn rendert `<Markdown>` die
+ * Browser-Defaults, und eine `##`-Überschrift im Text wirkte größer als der Modal-Titel — daher der
+ * Deckel auf den Überschriftsgrößen. Lange Tokens (URLs, Hashes) brechen um; Codeblöcke und breite
+ * GFM-Tabellen scrollen in ihrem eigenen Bereich, damit der Modal-Inhalt selbst keinen
+ * horizontalen Scrollbalken bekommt. Genau solche Inhalte stehen in Review-Kommentaren (#575).
+ */
+const markdownBodySx = {
+  overflowWrap: 'anywhere',
   '& :first-of-type': { mt: 0 },
   '& h1, & h2': { fontWeight: 600, fontSize: '1.15rem', mt: 2, pb: 0.5, borderBottom: `1px solid ${MODAL_BORDER}` },
   '& h3, & h4': { fontWeight: 600, fontSize: '1rem', mt: 1.5, mb: 0.5 },
@@ -170,7 +176,63 @@ const descriptionSx = {
   '& code': { backgroundColor: CODE_BLOCK_BG, px: 0.5, borderRadius: '3px', fontFamily: 'monospace', fontSize: '0.85em' },
   '& pre': { backgroundColor: CODE_BLOCK_BG, p: 1.5, borderRadius: 1, overflowX: 'auto' },
   '& pre code': { backgroundColor: 'transparent', px: 0 },
+  // `display: block` + `width: max-content` macht die Tabelle zum eigenen Scrollbereich; als
+  // echtes Table-Layout würde sie stattdessen auf die Modalbreite gestaucht.
+  '& table': { display: 'block', width: 'max-content', maxWidth: '100%', overflowX: 'auto' },
 } as const
+
+const descriptionSx = {
+  border: `1px solid ${MODAL_BORDER}`,
+  borderRadius: 1,
+  p: 2,
+  ...markdownBodySx,
+} as const
+
+/**
+ * `input`-Renderer für Kommentare: GFM-Task-Listen werden als Checkboxen angezeigt, aber gesperrt.
+ * `readOnly` zusätzlich zu `disabled`, damit React das kontrollierte `checked` ohne `onChange`
+ * akzeptiert.
+ */
+function CommentCheckbox(props: Readonly<ComponentPropsWithoutRef<'input'>>) {
+  return <input type="checkbox" checked={props.checked === true} disabled readOnly />
+}
+
+/** `a`-Renderer: `href` nur bei erlaubtem Schema — sonst bleibt der Linktext ohne Ziel stehen. */
+function CommentLink({ href, children }: Readonly<ComponentPropsWithoutRef<'a'>>) {
+  return <a href={safeLinkHref(href)}>{children}</a>
+}
+
+/** `img`-Renderer: `src` nur bei erlaubtem Schema — sonst wird nichts abgerufen. */
+function CommentImage({ src, alt }: Readonly<ComponentPropsWithoutRef<'img'>>) {
+  return <img src={safeImageSrc(src)} alt={alt} />
+}
+
+const commentComponents: Components = { input: CommentCheckbox, a: CommentLink, img: CommentImage }
+
+/**
+ * Kommentar-Body als Markdown (#575). Vorher stand er in einem `<Typography>`, das als `<p>` jede
+ * Folge von Whitespace zu einem Leerzeichen kollabiert — lange Berichte wurden so zur Textwand.
+ *
+ * Bewusst nicht `TaskMarkdown`: dessen Checkbox-Toggles schreiben über `cardsApi.update` in die
+ * Karten-**Beschreibung** zurück; für Kommentare gibt es keinen solchen Persistenzpfad, ein Klick
+ * liefe in die falsche Datenquelle. Task-Listen werden hier daher nur angezeigt. `normalizeTaskLists`
+ * läuft trotzdem mit, damit dieselbe Schreibweise in Beschreibung und Kommentar gleich rendert.
+ */
+function CommentBody({ body }: Readonly<{ body: string }>) {
+  return (
+    <Box data-testid="comment-body" sx={markdownBodySx}>
+      <Markdown remarkPlugins={[remarkGfm]} components={commentComponents}>
+        {normalizeTaskLists(body)}
+      </Markdown>
+    </Box>
+  )
+}
+
+/**
+ * Feld-Konfiguration für Kommentare: Verfassen und Bearbeiten teilen sie, damit beide Felder gleich
+ * aussehen und mehrzeilige Kommentare auch bequem entstehen können — nicht nur bearbeitbar sind.
+ */
+export const commentFieldProps = { multiline: true, minRows: 3 } as const
 
 /** Zuständige-Sektion: Autocomplete im Edit-Modus, sonst Chips oder Leer-Hinweis. */
 export function AssigneeSection({
@@ -442,7 +504,7 @@ function CommentsSection({
               </Stack>
               {editingCommentId === c.id ? (
                 <Stack spacing={1}>
-                  <TextField multiline size="small" value={editingBody}
+                  <TextField {...commentFieldProps} size="small" value={editingBody}
                     onChange={(e) => onEditingBodyChange(e.target.value)}
                     error={isTooLong(editingBody)}
                     helperText={isTooLong(editingBody) ? tooLongMessage(editingBody.length) : undefined}
@@ -453,15 +515,16 @@ function CommentsSection({
                   </Stack>
                 </Stack>
               ) : (
-                <Typography variant="body2">{c.body}</Typography>
+                <CommentBody body={c.body} />
               )}
             </Box>
           )
         })}
         {comments.length === 0 && <Typography color="text.secondary">Noch keine Kommentare.</Typography>}
       </Stack>
-      <Stack direction="row" spacing={1} sx={{ mt: 1 }}>
-        <TextField size="small" fullWidth placeholder="Kommentar schreiben" value={newComment}
+      {/* alignItems explizit: sonst zieht der Default `stretch` den Senden-Button auf Feldhöhe. */}
+      <Stack direction="row" spacing={1} alignItems="flex-start" sx={{ mt: 1 }}>
+        <TextField {...commentFieldProps} size="small" fullWidth placeholder="Kommentar schreiben" value={newComment}
           onChange={(e) => onNewCommentChange(e.target.value)}
           error={isTooLong(newComment)}
           helperText={isTooLong(newComment) ? tooLongMessage(newComment.length) : undefined}

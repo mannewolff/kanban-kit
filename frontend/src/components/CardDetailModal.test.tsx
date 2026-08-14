@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -7,7 +7,7 @@ import type { Board } from '../api/boards'
 import type { Card, CardByNumber } from '../api/cards'
 import type { CommentsApi } from '../api/comments'
 import type { CardLocation } from '../lib/cardLocation'
-import { CardDetailModal, parseDependencyInput } from './CardDetailModal'
+import { CardDetailModal, commentFieldProps, parseDependencyInput } from './CardDetailModal'
 import { SnackbarProvider } from './SnackbarProvider'
 import { MAX_TEXT_LENGTH } from '../lib/textLimits'
 
@@ -1177,5 +1177,122 @@ describe('CardDetailModal', () => {
     expect(screen.getByRole('button', { name: 'Speichern' })).toBeDisabled()
     fireEvent.click(screen.getByRole('button', { name: 'Speichern' }))
     expect(apis.commentsApi.update).not.toHaveBeenCalled()
+  })
+})
+
+/** Kommentar-Darstellung (Issue #575): Markdown statt einzeiliger Textwand. */
+describe('CardDetailModal — Kommentar-Body als Markdown', () => {
+  beforeEach(() => {
+    URL.createObjectURL = vi.fn(() => 'blob:preview')
+    URL.revokeObjectURL = vi.fn()
+  })
+
+  /** Apis mit genau einem Kommentar des angegebenen Bodys. */
+  function apisWithComment(body: string) {
+    const apis = makeApis()
+    apis.commentsApi.list = vi.fn().mockResolvedValue([
+      { id: 1, cardId: 100, authorUserId: 7, authorName: 'A', body, createdAt: '', updatedAt: '' },
+    ])
+    return apis
+  }
+
+  /** Rendert das Modal und liefert den Container des einzigen Kommentar-Bodys. */
+  async function renderComment(body: string) {
+    const apis = apisWithComment(body)
+    render(<CardDetailModal card={card} canEdit onClose={vi.fn()} {...apis} />)
+    return { apis, body: await screen.findByTestId('comment-body') }
+  }
+
+  it('rendert Ueberschrift, Aufzaehlung und Codeblock als eigene Elemente', async () => {
+    const { body } = await renderComment('## Befund\n\n- eins\n- zwei\n\n```\nnpm test\n```')
+
+    expect(within(body).getByRole('heading', { name: 'Befund' })).toBeInTheDocument()
+    expect(within(body).getAllByRole('listitem').map((li) => li.textContent)).toEqual(['eins', 'zwei'])
+    expect(within(body).getByText('npm test', { selector: 'pre code' })).toBeInTheDocument()
+  })
+
+  it('haelt zwei durch eine Leerzeile getrennte Absaetze getrennt', async () => {
+    // Der gemeldete Fehler: <Typography> kollabierte alles zu einer Textwand. Die beiden exakten
+    // Treffer je eigenem <p> gäbe es nicht mehr, wenn die Absätze zu einem Text zusammenfielen.
+    const { body } = await renderComment('Erster Absatz\n\nZweiter Absatz')
+
+    expect(within(body).getByText('Erster Absatz', { selector: 'p' })).toBeInTheDocument()
+    expect(within(body).getByText('Zweiter Absatz', { selector: 'p' })).toBeInTheDocument()
+  })
+
+  it('zeigt eingebettetes HTML als Text statt als Markup', async () => {
+    const { body } = await renderComment('<b>fett</b> und <img src="x" onerror="alert(1)">')
+
+    expect(within(body).queryByText('fett', { selector: 'b' })).toBeNull()
+    expect(within(body).queryByRole('img')).toBeNull()
+    expect(body).toHaveTextContent('<b>fett</b> und <img src="x" onerror="alert(1)">')
+  })
+
+  it('entfernt href/src bei nicht erlaubten Schemata und laesst https durch', async () => {
+    const { body } = await renderComment(
+      '[boese](javascript:alert(1)) [daten](data:text/html,x) [gut](https://example.org)\n\n' +
+        '![gefaehrlich](javascript:alert(1)) ![harmlos](https://example.org/b.png)',
+    )
+
+    expect(within(body).getByText('boese')).not.toHaveAttribute('href')
+    expect(within(body).getByText('daten')).not.toHaveAttribute('href')
+    expect(within(body).getByText('gut')).toHaveAttribute('href', 'https://example.org')
+    expect(within(body).getByAltText('gefaehrlich')).not.toHaveAttribute('src')
+    expect(within(body).getByAltText('harmlos')).toHaveAttribute('src', 'https://example.org/b.png')
+  })
+
+  it('rendert Task-Listen als gesperrte Checkboxen ohne Schreibpfad', async () => {
+    // Kommentare haben keinen Persistenzpfad für Toggles — die Beschreibung schon (TaskMarkdown).
+    const { apis, body } = await renderComment('- [ ] offen\n- [x] erledigt')
+
+    const boxes = within(body).getAllByRole('checkbox')
+    expect(boxes).toHaveLength(2)
+    expect(boxes[0]).toBeDisabled()
+    expect(boxes[1]).toBeDisabled()
+    expect(boxes[0]).not.toBeChecked()
+    expect(boxes[1]).toBeChecked()
+
+    fireEvent.click(boxes[0])
+    expect(apis.cardsApi.update).not.toHaveBeenCalled()
+    expect(apis.commentsApi.update).not.toHaveBeenCalled()
+  })
+
+  it('normalisiert Task-Marker wie die Beschreibung', async () => {
+    // Gleiche Schreibweise, gleiches Ergebnis in Beschreibung und Kommentar (normalizeTaskLists).
+    const { body } = await renderComment('[] roh\n\n- [ X ] erledigt')
+
+    const boxes = within(body).getAllByRole('checkbox')
+    expect(boxes).toHaveLength(2)
+    expect(boxes[1]).toBeChecked()
+  })
+
+  it('bricht lange Tokens um und scrollt Codebloecke und Tabellen im eigenen Bereich', async () => {
+    const { body } = await renderComment(
+      `${'x'.repeat(300)}\n\n\`\`\`\n${'y'.repeat(300)}\n\`\`\`\n\n| a | b |\n| - | - |\n| 1 | 2 |`,
+    )
+
+    // `pre` trägt keinen eigenen Textknoten (der Text steckt im `code`), daher der Element-Matcher.
+    const pre = within(body).getByText(
+      (_, el) => el?.tagName === 'PRE' && el.textContent === `${'y'.repeat(300)}\n`,
+    )
+
+    expect(getComputedStyle(body).overflowWrap).toBe('anywhere')
+    expect(getComputedStyle(pre).overflowX).toBe('auto')
+    expect(getComputedStyle(within(body).getByRole('table')).overflowX).toBe('auto')
+  })
+
+  it('verfasst und bearbeitet Kommentare in mehrzeiligen Feldern', async () => {
+    const apis = makeApis()
+    render(<CardDetailModal card={card} canEdit onClose={vi.fn()} {...apis} />)
+    expect(await screen.findByTestId('comment-body')).toBeInTheDocument()
+
+    expect(screen.getByLabelText('Kommentar schreiben').tagName).toBe('TEXTAREA')
+    fireEvent.click(screen.getByRole('button', { name: 'Kommentar bearbeiten' }))
+    expect(screen.getByLabelText('Kommentar bearbeiten').tagName).toBe('TEXTAREA')
+  })
+
+  it('konfiguriert beide Kommentar-Felder gleich', () => {
+    // Beide Felder spreaden dieselbe Konstante — sonst sehen Verfassen und Bearbeiten anders aus.
+    expect(commentFieldProps).toEqual({ multiline: true, minRows: 3 })
   })
 })
