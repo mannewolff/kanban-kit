@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -645,6 +646,67 @@ class KanbanCompatServiceTest {
     // When / Then
     assertThatThrownBy(() -> service.comment(bound(), 1L, "Hallo"))
         .isInstanceOf(CardNotFoundException.class);
+  }
+
+  @Test
+  void addLabel_delegatesToLabelService() {
+    // When
+    service.addLabel(bound(), 1L, "kit:nightrun");
+
+    // Then
+    verify(labelService).addToCard(1L, 1L, "kit:nightrun");
+  }
+
+  @Test
+  void addLabel_throwsCardNotFound_whenCardNotOnBoard() {
+    // Given: der Board-Guard der card-Fassade schlaegt an. Fällt der requireOnBoard-Aufruf weg
+    // (Mutant), bekäme eine Karte eines fremden Boards das Label.
+    doThrow(new CardNotFoundException()).when(cardService).requireOnBoard(1L, BOARD);
+
+    // When / Then
+    assertThatThrownBy(() -> service.addLabel(bound(), 1L, "kit:nightrun"))
+        .isInstanceOf(CardNotFoundException.class);
+    verify(labelService, never()).addToCard(anyLong(), anyLong(), anyString());
+  }
+
+  @Test
+  void addLabel_throwsTokenNotBound_whenPrincipalUnbound() {
+    // Given
+    KanbanPrincipal unbound = new KanbanPrincipal(1L, 2L, null, null, "Token");
+
+    // When / Then
+    assertThatThrownBy(() -> service.addLabel(unbound, 1L, "kit:nightrun"))
+        .isInstanceOf(TokenNotBoundException.class);
+  }
+
+  @Test
+  void removeLabel_delegatesToLabelService() {
+    // When
+    service.removeLabel(bound(), 1L, "kit:nightrun");
+
+    // Then
+    verify(labelService).removeFromCard(1L, 1L, "kit:nightrun");
+  }
+
+  @Test
+  void removeLabel_throwsCardNotFound_whenCardNotOnBoard() {
+    // Given: wie beim Hinzufuegen — ohne den Guard verlöre eine fremde Karte ihr Label.
+    doThrow(new CardNotFoundException()).when(cardService).requireOnBoard(1L, BOARD);
+
+    // When / Then
+    assertThatThrownBy(() -> service.removeLabel(bound(), 1L, "kit:nightrun"))
+        .isInstanceOf(CardNotFoundException.class);
+    verify(labelService, never()).removeFromCard(anyLong(), anyLong(), anyString());
+  }
+
+  @Test
+  void removeLabel_throwsTokenNotBound_whenPrincipalUnbound() {
+    // Given
+    KanbanPrincipal unbound = new KanbanPrincipal(1L, 2L, null, null, "Token");
+
+    // When / Then
+    assertThatThrownBy(() -> service.removeLabel(unbound, 1L, "kit:nightrun"))
+        .isInstanceOf(TokenNotBoundException.class);
   }
 
   @Test

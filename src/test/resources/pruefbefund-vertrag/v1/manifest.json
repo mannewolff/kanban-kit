@@ -1,0 +1,126 @@
+{
+  "hinweis": "Kanonische Testdatensaetze zum Vertrag Fassung 1 (docs/pruefbefund-vertrag-v1.md, Issue #585). Jede Datei unter 'faelle' ist ein vollstaendiger Kommentartext; 'zieltext' nennt die Beschreibung, gegen die sich die Zieladressierung aufloest. 'blockart' nennt den Block, auf den sich 'erwartet' bezieht — Protokollfaelle tragen zusaetzlich einen gueltigen Vorschlagsblock, damit sie ausschliesslich ihre eigene Regel verletzen. 'erwartet' ist GUELTIG, KEIN_VERTRAGSBLOCK oder ein Fehlercode aus der Fehlertabelle der Doku. Die Feldnamen sind bewusst deutsch: Das Manifest ist Testmaterial, nicht Teil des Vertrags.",
+  "formatVersion": 1,
+  "zieltexte": ["ziel-beschreibung.md", "ziel-beschreibung-doppelt.md"],
+  "faelle": [
+    {
+      "datei": "gueltig-vorschlagsblock.md",
+      "blockart": "VORSCHLAG",
+      "zieltext": "ziel-beschreibung.md",
+      "erwartet": "GUELTIG",
+      "notiz": "Kanonischer Vorschlagsblock: eine Adressierung je Zielart, beide loesen eindeutig auf."
+    },
+    {
+      "datei": "gueltig-protokollblock.md",
+      "blockart": "PROTOKOLL",
+      "zieltext": null,
+      "erwartet": "GUELTIG",
+      "notiz": "Kanonischer Protokollblock in einem anderen Kommentar als die Vorschlaege; verbunden allein ueber die Lauf-Kennung von gueltig-vorschlagsblock.md."
+    },
+    {
+      "datei": "fehler-unknown-format-version.md",
+      "blockart": "VORSCHLAG",
+      "zieltext": "ziel-beschreibung.md",
+      "erwartet": "UNKNOWN_FORMAT_VERSION",
+      "notiz": "formatVersion 2 wird als Block erkannt und abgewiesen, nicht als 'kein Block' behandelt."
+    },
+    {
+      "datei": "fehler-malformed-block.md",
+      "blockart": "VORSCHLAG",
+      "zieltext": null,
+      "erwartet": "MALFORMED_BLOCK",
+      "notiz": "Kennungspaar vollstaendig, Rumpf abgeschnitten und damit kein JSON-Objekt."
+    },
+    {
+      "datei": "fehler-duplicate-proposal-id.md",
+      "blockart": "VORSCHLAG",
+      "zieltext": "ziel-beschreibung.md",
+      "erwartet": "DUPLICATE_PROPOSAL_ID",
+      "notiz": "Zwei Vorschlaege desselben Laufs tragen die Kennung p1."
+    },
+    {
+      "datei": "fehler-target-missing.md",
+      "blockart": "VORSCHLAG",
+      "zieltext": "ziel-beschreibung.md",
+      "erwartet": "TARGET_MISSING",
+      "notiz": "Der Vorschlag nennt kein target."
+    },
+    {
+      "datei": "fehler-target-not-found.md",
+      "blockart": "VORSCHLAG",
+      "zieltext": "ziel-beschreibung.md",
+      "erwartet": "TARGET_NOT_FOUND",
+      "notiz": "expectedText 'der Sachbearbeiter' kommt im Zieltext nicht vor."
+    },
+    {
+      "datei": "fehler-target-ambiguous.md",
+      "blockart": "VORSCHLAG",
+      "zieltext": "ziel-beschreibung-doppelt.md",
+      "erwartet": "TARGET_AMBIGUOUS",
+      "notiz": "expectedText 'der Betreuer' kommt im Zieltext zweimal vor."
+    },
+    {
+      "datei": "fehler-expected-text-mismatch.md",
+      "blockart": "VORSCHLAG",
+      "zieltext": "ziel-beschreibung.md",
+      "erwartet": "EXPECTED_TEXT_MISMATCH",
+      "notiz": "Zielart SECTION: Der Ueberschriftenpfad loest eindeutig auf, der Abschnittsrumpf weicht ab."
+    },
+    {
+      "datei": "fehler-protected-marker-targeted.md",
+      "blockart": "VORSCHLAG",
+      "zieltext": "ziel-beschreibung.md",
+      "erwartet": "PROTECTED_MARKER_TARGETED",
+      "notiz": "Das aufgeloeste Ziel ist die geschuetzte Kennzeichnungszeile 'Autor-Modell:'."
+    },
+    {
+      "datei": "fehler-unknown-proposal-id.md",
+      "blockart": "PROTOKOLL",
+      "zieltext": "ziel-beschreibung.md",
+      "erwartet": "UNKNOWN_PROPOSAL_ID",
+      "notiz": "Der Lauf ist bekannt, die protokollierte Kennung p9 existiert in keinem Vorschlagsblock des Laufs."
+    },
+    {
+      "datei": "fehler-unknown-decision.md",
+      "blockart": "PROTOKOLL",
+      "zieltext": "ziel-beschreibung.md",
+      "erwartet": "UNKNOWN_DECISION",
+      "notiz": "decision traegt einen Wert ausserhalb von angenommen | abgelehnt."
+    },
+    {
+      "datei": "fehler-missing-reason.md",
+      "blockart": "PROTOKOLL",
+      "zieltext": "ziel-beschreibung.md",
+      "erwartet": "MISSING_REASON",
+      "notiz": "Ablehnung mit einer Begruendung, die nur aus Leerraum besteht."
+    },
+    {
+      "datei": "grenze-50000.md",
+      "blockart": "VORSCHLAG",
+      "zieltext": "ziel-beschreibung.md",
+      "erwartet": "GUELTIG",
+      "notiz": "Serialisierter Kommentar mit exakt 50.000 UTF-16-Codeeinheiten — die Obergrenze selbst ist gueltig."
+    },
+    {
+      "datei": "fehler-comment-too-long.md",
+      "blockart": "VORSCHLAG",
+      "zieltext": "ziel-beschreibung.md",
+      "erwartet": "COMMENT_TOO_LONG",
+      "notiz": "Serialisierter Kommentar mit 50.001 UTF-16-Codeeinheiten; der Block allein waere gueltig."
+    },
+    {
+      "datei": "kein-block-historischer-fliesstext.md",
+      "blockart": "KEINER",
+      "zieltext": null,
+      "erwartet": "KEIN_VERTRAGSBLOCK",
+      "notiz": "Historischer Befund als Fliesstext, ohne jede Kennzeichnung — bleibt unveraendert, kein Fehler."
+    },
+    {
+      "datei": "kein-block-kennzeichnung-im-codeblock.md",
+      "blockart": "KEINER",
+      "zieltext": null,
+      "erwartet": "KEIN_VERTRAGSBLOCK",
+      "notiz": "Die Kennzeichnung steht innerhalb eines umschliessenden Codeblocks und zaehlt deshalb nicht."
+    }
+  ]
+}

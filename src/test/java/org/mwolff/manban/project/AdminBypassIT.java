@@ -1,5 +1,6 @@
 package org.mwolff.manban.project;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -13,6 +14,7 @@ import org.mwolff.manban.AbstractIntegrationTest;
 import org.mwolff.manban.auth.application.AppUserRepository;
 import org.mwolff.manban.auth.domain.AppUser;
 import org.mwolff.manban.auth.domain.PlatformRole;
+import org.mwolff.manban.project.application.ProjectMembershipRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -28,6 +30,7 @@ class AdminBypassIT extends AbstractIntegrationTest {
 
   @Autowired private MockMvc mvc;
   @Autowired private AppUserRepository users;
+  @Autowired private ProjectMembershipRepository memberships;
   @Autowired private PasswordEncoder passwordEncoder;
   @Autowired private ObjectMapper json;
 
@@ -127,6 +130,40 @@ class AdminBypassIT extends AbstractIntegrationTest {
                 .contentType("application/json")
                 .content("{\"columnId\":%d,\"title\":\"Eve-Karte\"}".formatted(backlog)))
         .andExpect(status().isNotFound());
+  }
+
+  /**
+   * Der Plattform-Admin liest die Mitgliederliste eines fremden Projekts über die vollständige
+   * Session-Kette — ohne selbst je Mitglied zu werden (Issue #582).
+   */
+  @Test
+  void adminReadsMemberListOfForeignProjectWithoutOwnMembership() throws Exception {
+    login("members-alice@example.com", PlatformRole.USER);
+    long projectId = createProject("members-alice@example.com", "Alices Mitglieder");
+    long aliceId = users.findByEmail("members-alice@example.com").orElseThrow().requireId();
+
+    Cookie admin = login("members-admin@example.com", PlatformRole.ADMIN);
+    long adminId = users.findByEmail("members-admin@example.com").orElseThrow().requireId();
+    assertThat(memberships.findByProjectIdAndUserId(projectId, adminId)).isEmpty();
+
+    mvc.perform(get("/api/projects/" + projectId + "/members").cookie(admin))
+        .andExpect(status().isOk())
+        // Genau das persistierte Owner-Mitglied — der Admin selbst erscheint nicht.
+        .andExpect(jsonPath("$.length()").value(1))
+        .andExpect(jsonPath("$[0].userId").value(aliceId))
+        .andExpect(jsonPath("$[0].email").value("members-alice@example.com"))
+        .andExpect(jsonPath("$[0].role").value("OWNER"));
+
+    // Der Lesezugriff hat keine Mitgliedschaft angelegt.
+    assertThat(memberships.findByProjectIdAndUserId(projectId, adminId)).isEmpty();
+  }
+
+  /** Der Admin-Bypass gilt nur für bestehende Projekte: unbekannte ID bleibt 404, nie 200 []. */
+  @Test
+  void adminGetsNotFoundForMemberListOfUnknownProject() throws Exception {
+    Cookie admin = login("unknown-admin@example.com", PlatformRole.ADMIN);
+
+    mvc.perform(get("/api/projects/999999/members").cookie(admin)).andExpect(status().isNotFound());
   }
 
   @Test

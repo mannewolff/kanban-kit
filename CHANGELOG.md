@@ -7,6 +7,21 @@ Versionierung folgt der dreiteiligen Betriebsversion (siehe [RELEASING.md](RELEA
 Einträge je Version sind ein automatischer Auszug der Commit-Titel seit dem letzten Release,
 erzeugt von `scripts/gen-changelog.mjs`.
 
+## [1.21.0] – 2026-08-14
+
+- Version 1.20.1
+- Board-Wechsel in der App-Shell verdrahten ([#587](https://github.com/mannewolff/kanban-kit/issues/587))
+- Karten aus der Suche heraus bearbeitbar machen ([#586](https://github.com/mannewolff/kanban-kit/issues/586))
+- Vertrag fuer Vorschlags- und Protokollbloecke festlegen ([#585](https://github.com/mannewolff/kanban-kit/issues/585))
+- BoardSwitcher mit Tastaturfuehrung und Zielpruefung ([#584](https://github.com/mannewolff/kanban-kit/issues/584))
+- Board-Verlauf als Hook mit nutzerspezifischer Ablage ([#583](https://github.com/mannewolff/kanban-kit/issues/583))
+- Plattform-Admin-Bypass fuer die Mitgliederliste ([#582](https://github.com/mannewolff/kanban-kit/issues/582))
+- Rollenaufloesung in useProjectRole zentralisieren ([#581](https://github.com/mannewolff/kanban-kit/issues/581))
+- pairs gewechselt weil codex donw war2
+- Kommentare als Markdown rendern und mehrzeilig verfassen ([#575](https://github.com/mannewolff/kanban-kit/issues/575))
+- kanbancompat: Labels atomar zu Karten hinzufuegen und entfernen ([#574](https://github.com/mannewolff/kanban-kit/issues/574))
+- Karten sollen direkt im board landen
+
 ## [1.20.0] – 2026-08-11
 
 - chore: Version auf 1.19.1 (push main)

@@ -259,4 +259,51 @@ describe('CardFields', () => {
 
     expect(screen.queryByText(/\/ 50\.000 Zeichen/)).not.toBeInTheDocument()
   })
+
+  it('zeigt die Epic-Zuordnung ohne ladbare Epic-Liste nur lesend', () => {
+    const h = handlers()
+    render(
+      <CardFields
+        isEpic={false}
+        title="T"
+        body=""
+        shortcode=""
+        parentId={9}
+        epics={[]}
+        epicReadOnly
+        depsInput=""
+        depsError={null}
+        dueInput=""
+        {...h}
+      />,
+    )
+
+    const field = screen.getByLabelText('Epic')
+    expect(field).toHaveValue('#9')
+    expect(field).toHaveAttribute('readonly')
+    // Kein Auswahlvorrat: Es gibt nichts anzuklicken, was die Zuordnung löschen könnte.
+    expect(screen.queryByRole('option')).not.toBeInTheDocument()
+    expect(h.onParentIdChange).not.toHaveBeenCalled()
+  })
+
+  it('benennt die fehlende Epic-Zuordnung auch im Nur-Lese-Fall', () => {
+    const h = handlers()
+    render(
+      <CardFields
+        isEpic={false}
+        title="T"
+        body=""
+        shortcode=""
+        parentId={null}
+        epics={[]}
+        epicReadOnly
+        depsInput=""
+        depsError={null}
+        dueInput=""
+        {...h}
+      />,
+    )
+
+    expect(screen.getByLabelText('Epic')).toHaveValue('(kein Epic)')
+  })
 })

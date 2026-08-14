@@ -112,6 +112,27 @@ class KanbanCompatControllerTest {
   }
 
   @Test
+  void addLabel_withBoundPrincipal_delegates() {
+    // Given
+    var request = new KanbanCompatController.LabelRequest("kit:nightrun");
+
+    // When
+    controller.addLabel(boundAuthentication(), 8L, request);
+
+    // Then
+    verify(service).addLabel(PRINCIPAL, 8L, "kit:nightrun");
+  }
+
+  @Test
+  void removeLabel_withBoundPrincipal_delegates() {
+    // When: der Name steht im Query-Parameter, nicht im Pfad (er darf Slashes enthalten)
+    controller.removeLabel(boundAuthentication(), 8L, "kit:night/run");
+
+    // Then
+    verify(service).removeLabel(PRINCIPAL, 8L, "kit:night/run");
+  }
+
+  @Test
   void comments_withBoundPrincipal_delegates() {
     // Given
     List<Comment> comments =

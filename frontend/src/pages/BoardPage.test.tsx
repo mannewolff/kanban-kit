@@ -13,10 +13,11 @@ import { SnackbarProvider } from '../components/SnackbarProvider'
 import { BoardPage } from './BoardPage'
 
 let memberships: { projectId: number; role: string }[] = []
+let platformRole = 'USER'
 vi.mock('../auth/AuthContext', () => ({
-  useAuth: () => ({ user: { userId: 1, email: 'a@b.c', displayName: 'A', platformRole: 'USER', memberships } }),
+  useAuth: () => ({ user: { userId: 1, email: 'a@b.c', displayName: 'A', platformRole, memberships } }),
 }))
-vi.mock('../api/boards', () => ({ boardsApi: { get: vi.fn(), rename: vi.fn() } }))
+vi.mock('../api/boards', () => ({ boardsApi: { get: vi.fn(), rename: vi.fn(), list: vi.fn() } }))
 vi.mock('../api/cards', () => ({
   cardsApi: {
     list: vi.fn(),
@@ -56,11 +57,13 @@ vi.mock('../lib/EditModeContext', () => ({
 }))
 beforeEach(() => {
   editMode.value = true
+  platformRole = 'USER'
 })
 
 const mockedBoards = boardsApi as unknown as {
   get: ReturnType<typeof vi.fn>
   rename: ReturnType<typeof vi.fn>
+  list: ReturnType<typeof vi.fn>
 }
 const mockedCards = cardsApi as unknown as {
   list: ReturnType<typeof vi.fn>
@@ -502,5 +505,110 @@ describe('BoardPage weitere Orchestrierung', () => {
       </MemoryRouter>,
     )
     expect(screen.getByText('Ungültige Board-ID.')).toBeInTheDocument()
+  })
+})
+
+// Die drei Berechtigungspfade, die BoardPage selbst aus dem rohen effectiveRole bzw. dem
+// Plattform-Admin-Status bildet — sie liegen außerhalb von canEdit/canModerate und wären bei der
+// Zentralisierung der Rollenauflösung (Issue #581) sonst ungedeckt gebrochen.
+describe('BoardPage Berechtigungen aus Rolle und Plattform-Admin', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  const trashedCard = {
+    id: 200, boardId: 1, columnId: 10, number: 2, title: 'Weg', description: null,
+    positionInColumn: 0, archived: false, ideaStored: false, movedToDoneAt: null, dependencies: [],
+    type: 'CARD' as const, parentId: null, shortcode: null, assignees: [], dueDate: null, labels: [],
+  }
+  const openCard = { ...trashedCard, id: 100, number: 1, title: 'Aufgabe' }
+  const mockedTrash = cardsApi as unknown as { listTrash: ReturnType<typeof vi.fn> }
+
+  function renderBoardWithCard(projects: { id: number; name: string; role: string; createdAt: string }[]) {
+    mockedBoards.get.mockResolvedValue({
+      id: 1, projectId: 9, name: 'B', createdAt: '',
+      columns: [{ id: 10, name: 'Backlog', position: 0, wipLimit: null }],
+    })
+    mockedBoards.list.mockResolvedValue([])
+    mockedCards.list.mockResolvedValue([openCard])
+    mockedTrash.listTrash.mockResolvedValue([trashedCard])
+    mockedEpics.list.mockResolvedValue([])
+    mockedLabels.list.mockResolvedValue([])
+    mockedMembers.list.mockResolvedValue([])
+    mockedConfig.get.mockResolvedValue({ doneRetentionDays: 30 })
+    mockedProjects.list.mockResolvedValue(projects)
+    return render(
+      <MemoryRouter initialEntries={['/boards/1']}>
+        <Routes>
+          <Route path="/boards/:boardId" element={<BoardPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+  }
+
+  const ownProject = { id: 9, name: 'P', role: 'OWNER', createdAt: '' }
+  const foreignProject = { id: 77, name: 'Fremd', role: 'VIEWER', createdAt: '' }
+
+  it('bietet OWNER das Verschieben auf ein anderes Board an (canTransfer)', async () => {
+    memberships = [{ projectId: 9, role: 'OWNER' }]
+    renderBoardWithCard([ownProject])
+
+    fireEvent.click(await screen.findByLabelText('Menü Aufgabe'))
+    expect(
+      screen.getByRole('menuitem', { name: 'Auf anderes Board verschieben…' }),
+    ).toBeInTheDocument()
+  })
+
+  it('verbirgt das Verschieben für MEMBER (canTransfer)', async () => {
+    memberships = [{ projectId: 9, role: 'MEMBER' }]
+    renderBoardWithCard([ownProject])
+
+    fireEvent.click(await screen.findByLabelText('Menü Aufgabe'))
+    expect(
+      screen.queryByRole('menuitem', { name: 'Auf anderes Board verschieben…' }),
+    ).not.toBeInTheDocument()
+    expect(screen.getByRole('menuitem', { name: 'Bearbeiten' })).toBeInTheDocument()
+  })
+
+  it('erlaubt OWNER das endgültige Löschen im Papierkorb (canPurge)', async () => {
+    memberships = [{ projectId: 9, role: 'OWNER' }]
+    renderBoardWithCard([ownProject])
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Papierkorb' }))
+    expect(await screen.findByLabelText('Weg endgültig löschen')).toBeInTheDocument()
+  })
+
+  it('verwehrt MEMBER das endgültige Löschen im Papierkorb (canPurge)', async () => {
+    memberships = [{ projectId: 9, role: 'MEMBER' }]
+    renderBoardWithCard([ownProject])
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Papierkorb' }))
+    expect(await screen.findByLabelText('Weg wiederherstellen')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Weg endgültig löschen')).not.toBeInTheDocument()
+  })
+
+  it('reicht den Plattform-Admin an BoardView weiter: alle Projekte als Verschiebeziel (platformAdmin)', async () => {
+    // Rolle kommt hier über den Fallback-Fetch (keine Mitgliedschaft) — der Admin darf trotzdem
+    // verschieben, und der Zieldialog zeigt ihm auch Projekte ohne OWNER-Rolle.
+    memberships = []
+    platformRole = 'ADMIN'
+    renderBoardWithCard([{ ...ownProject, role: 'VIEWER' }, foreignProject])
+
+    fireEvent.click(await screen.findByLabelText('Menü Aufgabe'))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Auf anderes Board verschieben…' }))
+
+    const target = await screen.findByLabelText('Zielprojekt')
+    await waitFor(() => expect(target).toHaveTextContent('Fremd'))
+    expect(target).toHaveTextContent('P')
+  })
+
+  it('zeigt einem OWNER ohne Plattform-Admin nur eigene OWNER-Projekte als Ziel (platformAdmin)', async () => {
+    memberships = [{ projectId: 9, role: 'OWNER' }]
+    renderBoardWithCard([ownProject, foreignProject])
+
+    fireEvent.click(await screen.findByLabelText('Menü Aufgabe'))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Auf anderes Board verschieben…' }))
+
+    const target = await screen.findByLabelText('Zielprojekt')
+    await waitFor(() => expect(target).toHaveTextContent('P'))
+    expect(target).not.toHaveTextContent('Fremd')
   })
 })

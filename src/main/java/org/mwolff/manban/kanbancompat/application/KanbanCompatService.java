@@ -278,6 +278,32 @@ public class KanbanCompatService {
     return item(boardId, cardService.updateContent(principal.userId(), cardId, title, body));
   }
 
+  /**
+   * Ergänzt an einem Item des gebundenen Boards genau ein Label (#574) — der Weg, auf dem das
+   * claude-workflow-kit sein Routing-Label {@code kit:nightrun} setzt.
+   *
+   * <p>Reichweite wie bei {@link #move} und {@link #comment}: Der Board-Guard der card-Fassade
+   * schließt Karten anderer Boards, board-lose Pool-Ideen und den Ideen-Speicher mit 404 aus. Das
+   * gilt auch innerhalb desselben Projekts, wo die Projektberechtigung allein nicht schützt.
+   *
+   * <p>Alle übrigen Labels der Karte bleiben unverändert; ein bereits gesetztes Label erneut zu
+   * setzen ist Erfolg (Einzelheiten in {@code LabelService.addToCard}).
+   */
+  @Transactional
+  public void addLabel(KanbanPrincipal principal, long cardId, String name) {
+    long boardId = requireBound(principal);
+    cardService.requireOnBoard(cardId, boardId);
+    labelService.addToCard(principal.userId(), cardId, name);
+  }
+
+  /** Gegenstück zu {@link #addLabel}: entfernt genau ein Label, alle übrigen bleiben stehen. */
+  @Transactional
+  public void removeLabel(KanbanPrincipal principal, long cardId, String name) {
+    long boardId = requireBound(principal);
+    cardService.requireOnBoard(cardId, boardId);
+    labelService.removeFromCard(principal.userId(), cardId, name);
+  }
+
   /** Kommentiert ein Item des gebundenen Boards. */
   @Transactional
   public void comment(KanbanPrincipal principal, long cardId, String body) {

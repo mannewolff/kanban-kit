@@ -110,3 +110,51 @@ Kommentare schreibt man mit `node cli/tbx.mjs issue comment 42 --text "…"`.
 
 > Spricht die CLI gegen eine **ältere** Instanz, die den Kommentar-Endpoint noch nicht
 > kennt, bleibt `comments` leer — der Aufruf bricht nicht ab.
+
+## 6. Labels setzen und entfernen
+
+`GET /api/kanban/items` liefert je Item die zugeordneten Label-Namen (`"labels": ["kit:nightrun"]`).
+Geschrieben wird **je Label einzeln** — alle übrigen Labels der Karte bleiben dabei unangetastet.
+Genau daran hängt das Routing-Label `kit:nightrun`, über das der Nacht-Runner seine Ready-Issues
+filtert.
+
+Beide Endpunkte adressieren die Karte über ihre **interne Karten-ID** (das Feld `id` aus
+`GET /api/kanban/items`) — nicht über die projektweite Anzeigenummer `#N`. Das ist dieselbe
+Adressierung wie bei `/items/{id}/move` und `/items/{id}/comments`; `board.mjs` löst eine
+übergebene Board-Nummer intern in diese ID auf.
+
+```
+# Label hinzufügen
+curl -sk -X POST https://localhost/api/kanban/items/42/labels \
+  -H "X-Kanban-Token: tk_…" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"kit:nightrun"}'
+
+# Label entfernen (Name im Query-Parameter, URL-kodiert)
+curl -sk -X DELETE "https://localhost/api/kanban/items/42/labels?name=kit%3Anightrun" \
+  -H "X-Kanban-Token: tk_…"
+```
+
+Beide antworten mit **`204 No Content`** — auch dann, wenn sich nichts geändert hat: Ein bereits
+gesetztes Label erneut zu setzen und ein nicht gesetztes zu entfernen gelten als Erfolg, damit ein
+abgebrochener Nachtlauf ohne Sonderbehandlung wiederholbar ist.
+
+> **Der Labelname steht beim `DELETE` im Query-Parameter, nicht im Pfad**, und muss **URL-kodiert**
+> werden. Grund: Ein Labelname darf jedes Zeichen tragen, auch `/` — ein Pfadsegment trüge das
+> nicht, weil Spring/Tomcat kodierte Slashes per Default ablehnen. Der Parameter ist Pflicht.
+
+> **Ein unbekannter Labelname wird mit `404` abgelehnt und *nicht* angelegt.** Labels sind
+> boardweit definierte Objekte mit Farbe; ein Tippfehler in einem unbeaufsichtigten Lauf erzeugte
+> sonst dauerhaft Label-Müll, den niemand bemerkt. Labels legt man in der Web-UI am Board an.
+> Labelnamen sind nur **boardweit** eindeutig und werden nach dem Trimmen **case-sensitiv**
+> verglichen — aufgelöst wird immer am Board der Karte.
+
+Fehlercodes (jeder Fehler lässt Labels und Zuordnungen unverändert):
+
+| Code | Bedeutung |
+|---|---|
+| `400` | Name fehlt, ist leer oder länger als 60 Zeichen — oder die ID gehört zu einem **Epic** (Epics haben keine Labels) |
+| `401` | Token fehlt oder ist ungültig |
+| `403` | Der Token-Nutzer hat kein `TICKET_UPDATE` im Projekt (ein VIEWER darf nicht labeln, ein MEMBER schon) |
+| `404` | Karte unbekannt, Karte liegt auf einem **anderen** Board als dem gebundenen — oder das Board kennt kein Label dieses Namens |
+| `409` | Gültiges, aber an kein Board gebundenes Token |
