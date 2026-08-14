@@ -20,7 +20,6 @@ import { configApi } from '../api/config'
 import { epicsApi, type Epic } from '../api/epics'
 import { labelsApi, type Label } from '../api/labels'
 import { membersApi, type Member } from '../api/members'
-import { projectsApi } from '../api/projects'
 import { useAuth } from '../auth/AuthContext'
 import { BoardView } from '../components/BoardView'
 import { Breadcrumbs } from '../components/Breadcrumbs'
@@ -29,9 +28,10 @@ import { LabelManagerDialog } from '../components/LabelManagerDialog'
 import { TrashDialog } from '../components/TrashDialog'
 import { useSnackbar } from '../components/SnackbarProvider'
 import { useEditMode } from '../lib/EditModeContext'
-import { canEditCards, canManageProject, canModerateComments, isPlatformAdmin } from '../lib/roles'
+import { canManageProject, isPlatformAdmin } from '../lib/roles'
 import { useBoardEvents } from '../lib/useBoardEvents'
 import { useProjectName } from '../lib/useProjectName'
+import { useProjectRole } from '../lib/useProjectRole'
 import { useRefetchOnFocus } from '../lib/useRefetchOnFocus'
 
 export function BoardPage() {
@@ -44,7 +44,6 @@ export function BoardPage() {
   const [board, setBoard] = useState<Board | null>(null)
   const [cards, setCards] = useState<Card[]>([])
   const [epics, setEpics] = useState<Epic[]>([])
-  const [fetchedRole, setFetchedRole] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [selectedCard, setSelectedCard] = useState<Card | null>(null)
   const [openEditing, setOpenEditing] = useState(false)
@@ -134,40 +133,15 @@ export function BoardPage() {
     void labelsApi.list(id).then(setLabels).catch(() => setLabels([]))
   }, [id, validId])
 
-  // Rolle bevorzugt synchron aus den Memberships (kein Race). Ist das Projekt dort noch nicht
-  // bekannt (z. B. frisch in dieser Session angelegt), einmal frisch nachladen.
-  const membershipRole = board
-    ? user?.memberships.find((m) => m.projectId === board.projectId)?.role
-    : undefined
-
-  useEffect(() => {
-    if (!board || membershipRole) {
-      setFetchedRole(null)
-      return
-    }
-    let active = true
-    projectsApi
-      .list()
-      .then((projects) => {
-        if (active) {
-          setFetchedRole(projects.find((p) => p.id === board.projectId)?.role ?? 'VIEWER')
-        }
-      })
-      .catch(() => active && setFetchedRole('VIEWER'))
-    return () => {
-      active = false
-    }
-  }, [board, membershipRole])
-
   const projectName = useProjectName(board?.projectId ?? null)
+  // Plattform-Admin ist synchron aus dem Auth-Context ableitbar (kein Race) und bleibt deshalb hier;
+  // die Projektrolle kommt zentral aus useProjectRole.
   const admin = isPlatformAdmin(user)
-  const effectiveRole = membershipRole ?? fetchedRole ?? 'VIEWER'
+  const { effectiveRole, canEdit, canModerate } = useProjectRole(projectId ?? null)
   const { editMode } = useEditMode()
-  const canEdit = canEditCards(effectiveRole, admin)
   // Board-Verwaltung (Umbenennen, Label-Verwaltung) nur im Editiermodus sichtbar; der Papierkorb-
   // Zugang bleibt als operativer Alltag an canEdit.
   const canEditStructure = canEdit && editMode
-  const canModerate = canModerateComments(effectiveRole, admin)
   const canTransfer = canManageProject(effectiveRole, admin)
 
   const openRename = () => {
