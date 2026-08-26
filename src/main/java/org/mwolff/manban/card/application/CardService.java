@@ -262,7 +262,9 @@ public class CardService {
                 dueDate,
                 projectId,
                 null,
-                externalKey));
+                externalKey,
+                // Herkunft: kein Schreibpfad hier — der kommt in Issue #604.
+                null));
 
     if (!ideaStored) {
       transitions.open(saved.requireId(), columnId, column.name(), now);
@@ -325,6 +327,8 @@ public class CardService {
                 null,
                 projectId,
                 null,
+                null,
+                // Herkunft: kein Schreibpfad hier — der kommt in Issue #604.
                 null));
     publishChanged(boardId, ActivityType.CREATED, saved.requireId());
     return view(saved);
@@ -1094,7 +1098,9 @@ public class CardService {
                 null,
                 projectId,
                 targetBoardId,
-                externalKey));
+                externalKey,
+                // Herkunft: kein Schreibpfad hier — der kommt in Issue #604.
+                null));
     activity.add(
         saved.requireId(), userId, CardActivityType.CREATED, "Idee angelegt", now, actor.current());
     return view(saved);

@@ -44,6 +44,11 @@ class CardEntity {
   @Column(name = "external_key")
   private @Nullable String externalKey;
 
+  // Herkunft: ID der Karte, aus der diese entstanden ist (V26). ID statt Nummer, weil Nummern
+  // beim Projektwechsel neu vergeben werden.
+  @Column(name = "derived_from_card_id")
+  private @Nullable Long derivedFromCardId;
+
   @Column(name = "title", nullable = false)
   private String title;
 
@@ -102,6 +107,7 @@ class CardEntity {
     this.number = c.number();
     this.targetBoardId = c.targetBoardId();
     this.externalKey = c.externalKey();
+    this.derivedFromCardId = c.derivedFromCardId();
     this.title = c.title();
     this.description = c.description();
     this.positionInColumn = c.positionInColumn();
@@ -143,6 +149,10 @@ class CardEntity {
 
   @Nullable String getExternalKey() {
     return externalKey;
+  }
+
+  @Nullable Long getDerivedFromCardId() {
+    return derivedFromCardId;
   }
 
   String getTitle() {

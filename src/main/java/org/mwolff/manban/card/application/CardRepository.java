@@ -52,6 +52,16 @@ public interface CardRepository {
   List<Card> findByProjectId(long projectId);
 
   /**
+   * Karten, deren Herkunft auf {@code cardId} zeigt — die direkten Kinder im Herkunftsbaum.
+   *
+   * <p>Liefert <strong>alle</strong> Treffer, unabhängig von {@code archived}, {@code ideaStored}
+   * und Papierkorb; die Reihenfolge ist unspezifiziert. Eine gefilterte Abfrage wäre für das
+   * Aufräumen beim Projektwechsel ein stiller Fehler: Auch archivierte Kinder behielten sonst einen
+   * Verweis über die Projektgrenze.
+   */
+  List<Card> findByDerivedFrom(long cardId);
+
+  /**
    * Ideen-Karten eines Projekts (idea_stored), älteste zuerst — board-lose Pool-Ideen und
    * board-gebundene Legacy-Ideen. Papierkorb-Karten sind ausgenommen.
    */

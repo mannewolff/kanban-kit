@@ -79,7 +79,7 @@ class CardServiceTest {
       String shortcode) {
     return new Card(
         id, BOARD, columnId, number, "Titel", null, 0, archived, false, done, 1L, FIXED, FIXED,
-        type, parentId, shortcode, null, PROJECT, null, null);
+        type, parentId, shortcode, null, PROJECT, null, null, null);
   }
 
   private static ColumnView column(long id, String name, int position) {
@@ -142,7 +142,8 @@ class CardServiceTest {
         c.dueDate(),
         c.projectId(),
         c.targetBoardId(),
-        c.externalKey());
+        c.externalKey(),
+        null);
   }
 
   // --- create -----------------------------------------------------------
@@ -1103,6 +1104,7 @@ class CardServiceTest {
             "E",
             null,
             PROJECT,
+            null,
             null,
             null);
     when(cards.findById(30L)).thenReturn(Optional.of(epicOtherBoard));
@@ -2261,6 +2263,7 @@ class CardServiceTest {
         null,
         PROJECT,
         null,
+        null,
         null);
   }
 
@@ -2349,6 +2352,7 @@ class CardServiceTest {
             null,
             null,
             PROJECT,
+            null,
             null,
             null);
     when(cards.findById(1L)).thenReturn(Optional.of(numbered));
@@ -2584,6 +2588,7 @@ class CardServiceTest {
         null,
         projectId,
         null,
+        null,
         null);
   }
 
@@ -2788,6 +2793,7 @@ class CardServiceTest {
         null,
         PROJECT,
         null,
+        null,
         null);
   }
 
@@ -2813,6 +2819,7 @@ class CardServiceTest {
         null, // dueDate
         PROJECT,
         null, // targetBoardId
+        null,
         null); // externalKey
   }
 
@@ -3268,6 +3275,7 @@ class CardServiceTest {
             null,
             PROJECT,
             null,
+            null,
             null);
     when(cards.findById(1L)).thenReturn(Optional.of(otherBoard));
 
@@ -3318,6 +3326,7 @@ class CardServiceTest {
             null,
             null,
             PROJECT,
+            null,
             null,
             null);
     when(cards.findById(1L)).thenReturn(Optional.of(onLargeBoard));
