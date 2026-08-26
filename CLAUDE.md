@@ -28,7 +28,7 @@ Diese Datei ist der Einstiegspunkt für alle Engineering-Regeln in diesem Projek
 
 ## 🌐 Projektkontext
 
-**Ziel:** **kanban-kit** (Repo `manban`) — ein self-hostbares, mandantenfähiges Kanban-Board als schlanke Trello-Alternative zum Selbstbetreiben. Projekte, Boards mit konfigurierbaren Spalten, Karten mit Markdown, Epics, Datei-Anhänge (Bild-/PDF-Vorschau) und eine rollenbasierte Rechteverwaltung (Projekt- und Plattform-Rollen). UI im Stil eines Dashboards: linke Navigation, rechter Inhaltsbereich.
+**Ziel:** **kanban-kit** (Repo `manban`) — ein self-hostbares, mandantenfähiges Kanban-Board als schlanke Trello-Alternative zum Selbstbetreiben. Projekte, Boards mit konfigurierbaren Spalten, Karten mit Markdown, Vorhaben, Datei-Anhänge (Bild-/PDF-Vorschau) und eine rollenbasierte Rechteverwaltung (Projekt- und Plattform-Rollen). UI im Stil eines Dashboards: linke Navigation, rechter Inhaltsbereich.
 
 **Stack:**
 
@@ -71,7 +71,7 @@ Diese Datei ist der Einstiegspunkt für alle Engineering-Regeln in diesem Projek
 │   ├── auth/                           # Registrierung, Login, Session, Passwort-Reset, Bootstrap-Admin
 │   ├── project/                        # Projekte, Mitgliedschaften, RBAC (Projekt-Rollen)
 │   ├── board/                          # Boards + konfigurierbare Spalten
-│   ├── card/                           # Karten, Epics, Abhängigkeiten, Done-Retention-Job
+│   ├── card/                           # Karten, Vorhaben, Abhängigkeiten, Done-Retention-Job
 │   ├── comment/                        # Kommentare an Karten
 │   ├── attachment/                     # Datei-Anhänge (MinIO-Speicher, Bild-/PDF-Vorschau)
 │   ├── accesstoken/                    # Projektgebundene API-/Ingest-Tokens
@@ -89,7 +89,7 @@ Diese Datei ist der Einstiegspunkt für alle Engineering-Regeln in diesem Projek
         ├── auth/                       # AuthContext (Session-basiert)
         ├── layout/                     # AppShell, navItems
         ├── components/                 # geteilte UI-Bausteine (BoardView, Modals, …)
-        ├── pages/                      # Routen-Komponenten (Projects, Boards, Epics, Admin, Auth-Seiten)
+        ├── pages/                      # Routen-Komponenten (Projects, Boards, Vorhaben, Admin, Auth-Seiten)
         ├── routes/                     # ProtectedRoute
         ├── lib/                        # Frontend-Hilfsfunktionen (statusColors, boardOps, …)
         ├── api/                        # client.ts (fetch-Wrapper) + <domain>.ts
