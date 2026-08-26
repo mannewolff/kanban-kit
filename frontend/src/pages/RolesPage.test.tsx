@@ -8,17 +8,30 @@ const MATRIX: RoleMatrix = {
   permissions: [
     { key: 'BOARD_READ', resource: 'BOARD', operation: 'READ' },
     { key: 'BOARD_CREATE', resource: 'BOARD', operation: 'CREATE' },
+    { key: 'EPIC_CREATE', resource: 'EPIC', operation: 'CREATE' },
     { key: 'COMMENT_DELETE', resource: 'COMMENT', operation: 'DELETE' },
   ],
   grants: {
     VIEWER: ['BOARD_READ'],
     MEMBER: ['BOARD_READ'],
-    ADMIN: ['BOARD_READ', 'BOARD_CREATE', 'COMMENT_DELETE'],
-    OWNER: ['BOARD_READ', 'BOARD_CREATE', 'COMMENT_DELETE'],
+    ADMIN: ['BOARD_READ', 'BOARD_CREATE', 'EPIC_CREATE', 'COMMENT_DELETE'],
+    OWNER: ['BOARD_READ', 'BOARD_CREATE', 'EPIC_CREATE', 'COMMENT_DELETE'],
   },
 }
 
 describe('RolesPage', () => {
+  it('nennt die Ressource „Vorhaben" und laesst den Schluessel EPIC_* technisch stehen', async () => {
+    const api = { matrix: vi.fn().mockResolvedValue(MATRIX) } as unknown as RolesApi
+    render(<RolesPage api={api} />)
+
+    // Angezeigt wird der neue Begriff, nicht der gespeicherte Schluessel.
+    expect(await screen.findByText('Vorhaben')).toBeInTheDocument()
+    expect(screen.queryByText('Epic')).not.toBeInTheDocument()
+
+    // Der Schluessel bleibt unveraendert — Beleg, dass nur die Anzeige umbenannt wurde.
+    expect(screen.getByLabelText('EPIC_CREATE für ADMIN')).toBeInTheDocument()
+  })
+
   it('rendert das Rechte-Grid aus der Matrix mit festen (disabled) Haken', async () => {
     const api = { matrix: vi.fn().mockResolvedValue(MATRIX) } as unknown as RolesApi
     render(<RolesPage api={api} />)
