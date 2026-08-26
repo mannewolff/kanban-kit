@@ -36,10 +36,10 @@ class CardRepositoryAdapter implements CardRepository {
    * {@code active_position} einen Wert trägt (V16). Die einzige Aktiv-Definition dieser Klasse:
    * Jede Stelle, die Positionen liest oder neu vergibt (Move-Reindex, Transfer-Reindex, Sortieren),
    * nutzt sie, damit alle nachweislich dieselbe Menge treffen. Karten außerhalb dieser Menge
-   * (archiviert, im Ideen-Speicher, im Papierkorb, Epics) halten keinen Slot und werden vom Reindex
-   * nicht angefasst — ihre {@code position_in_column} bleibt stehen, kollidiert aber nicht, weil
-   * ihre {@code active_position} NULL ist. Beim Zurückholen vergibt {@code allocateActivePosition}
-   * eine frische Position.
+   * (archiviert, im Ideen-Speicher, im Papierkorb, Vorhaben) halten keinen Slot und werden vom
+   * Reindex nicht angefasst — ihre {@code position_in_column} bleibt stehen, kollidiert aber nicht,
+   * weil ihre {@code active_position} NULL ist. Beim Zurückholen vergibt {@code
+   * allocateActivePosition} eine frische Position.
    */
   private static final String ACTIVE_NAMESPACE =
       "AND archived = false AND idea_stored = false AND deleted_at IS NULL AND type <> 'EPIC' ";

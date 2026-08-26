@@ -29,9 +29,10 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Karten- und Epic-Verwaltung eines Boards (Anlegen, Bearbeiten, Zuordnen, Archivieren, Löschen).
+ * Karten- und Vorhaben-Verwaltung eines Boards (Anlegen, Bearbeiten, Zuordnen, Archivieren,
+ * Löschen).
  */
-// PMD.CouplingBetweenObjects: eingehender Adapter der gesamten Karten-/Epic-API. Die Kopplung
+// PMD.CouplingBetweenObjects: eingehender Adapter der gesamten Karten-/Vorhaben-API. Die Kopplung
 // zählt im Wesentlichen die Request-/Response-Records der einzelnen Endpunkte plus die
 // Application-Typen, an die delegiert wird — jeder Endpunkt bringt sie zwangsläufig mit. Eine
 // Aufteilung würde eine zusammengehörige HTTP-Oberfläche über mehrere Controller zerreißen, ohne
@@ -110,8 +111,8 @@ class CardController {
   }
 
   /**
-   * Ordnet eine Karte einem Epic zu ({@code parentId}) oder löst die Zuordnung ({@code parentId:
-   * null}).
+   * Ordnet eine Karte einem Vorhaben zu ({@code parentId}) oder löst die Zuordnung ({@code
+   * parentId: null}).
    */
   @PatchMapping("/api/cards/{cardId}/parent")
   CardView assignParent(

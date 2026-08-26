@@ -15,9 +15,9 @@ import org.mwolff.manban.common.Identifiable;
  * notiert das gewünschte Zielboard einer Pool-Idee (z. B. aus dem Ingest oder dem Ideen-Speicher),
  * ohne sie schon dort einzuplanen.
  *
- * <p>Ein Datensatz ist entweder eine normale Karte ({@link CardType#CARD}) oder ein Epic ({@link
- * CardType#EPIC}). Epics nehmen nicht am Spalten-Workflow teil (keine aktive Position) und können
- * Kinder gruppieren; eine Karte verweist über {@code parentId} auf ihr Epic.
+ * <p>Ein Datensatz ist entweder eine normale Karte ({@link CardType#CARD}) oder ein Vorhaben
+ * ({@link CardType#EPIC}). Vorhaben nehmen nicht am Spalten-Workflow teil (keine aktive Position)
+ * und können Kinder gruppieren; eine Karte verweist über {@code parentId} auf ihr Vorhaben.
  *
  * @param id technische ID; {@code null} vor der Persistierung
  * @param boardId zugehöriges Board; {@code null} bei einer board-losen Pool-Idee
@@ -32,9 +32,9 @@ import org.mwolff.manban.common.Identifiable;
  * @param createdBy Ersteller (nullable, z. B. bei PAT)
  * @param createdAt Erstellzeitpunkt
  * @param updatedAt letzte Änderung
- * @param type CARD oder EPIC
- * @param parentId zugeordnetes Epic (nullable; nur an CARD gesetzt)
- * @param shortcode Kürzel eines Epics (nullable; nur an EPIC)
+ * @param type CARD oder EPIC (gespeicherter Wert des Vorhabens, siehe {@link CardType})
+ * @param parentId zugeordnetes Vorhaben (nullable; nur an CARD gesetzt)
+ * @param shortcode Kürzel eines Vorhabens (nullable; nur an EPIC)
  * @param dueDate Fälligkeitsdatum (nullable; nur an CARD sinnvoll)
  * @param projectId zugehöriges Projekt (immer gesetzt)
  * @param targetBoardId notiertes Zielboard einer Pool-Idee (nullable)
@@ -245,7 +245,7 @@ public record Card(
         externalKey);
   }
 
-  /** Setzt oder löscht ({@code null}) die Epic-Zuordnung. */
+  /** Setzt oder löscht ({@code null}) die Vorhaben-Zuordnung. */
   public Card withParent(@Nullable Long newParentId) {
     return new Card(
         id,
@@ -270,7 +270,7 @@ public record Card(
         externalKey);
   }
 
-  /** Setzt das Kürzel (nur für Epics sinnvoll). */
+  /** Setzt das Kürzel (nur für Vorhaben sinnvoll). */
   public Card withShortcode(@Nullable String newShortcode) {
     return new Card(
         id,

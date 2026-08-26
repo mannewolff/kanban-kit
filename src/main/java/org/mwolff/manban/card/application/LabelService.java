@@ -132,7 +132,7 @@ public class LabelService {
    * einer tatsächlichen Änderung; sonst meldete ein wiederholter Lauf Änderungen, die es nicht gab.
    *
    * @throws CardNotFoundException wenn die Karte fehlt
-   * @throws InvalidDependencyException wenn das Item ein Epic ist (400)
+   * @throws InvalidDependencyException wenn das Item ein Vorhaben ist (400)
    * @throws LabelNotFoundException wenn das Board kein Label dieses Namens definiert (404) — ein
    *     unbekannter Name wird abgelehnt und <em>nicht</em> angelegt, sonst erzeugte ein Tippfehler
    *     im Nachtlauf dauerhaft Label-Müll

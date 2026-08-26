@@ -282,7 +282,7 @@ public class BoardService {
 
   /**
    * Erste Spalte des Boards (kleinste Position) — die Backlog-Spalte, in der neu eingeplante Karten
-   * und Epics landen.
+   * und Vorhaben landen.
    *
    * @throws ColumnNotFoundException wenn das Board keine Spalte hat
    */

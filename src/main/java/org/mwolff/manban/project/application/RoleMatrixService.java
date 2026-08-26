@@ -49,6 +49,12 @@ public class RoleMatrixService {
   /**
    * Leitet Ressource + Operation aus dem Permission-Key ab ({@code <RESSOURCE>_<OPERATION>}).
    *
+   * <p>Die Anzeige der Ressource entsteht ausschließlich hier und im Frontend — die Spalte {@code
+   * permission.description} wird nirgends in eine View gelesen. Deshalb bleiben die Seed-Texte in
+   * Migration {@code V4} („Epics anlegen" usw.) nach der Umbenennung auf „Vorhaben" bewusst
+   * unverändert stehen: Sie zu korrigieren kostete eine Flyway-Migration für Text, den kein Nutzer
+   * je sieht. Wer sie „repariert", zahlt genau diesen Preis ohne Gegenwert.
+   *
    * <p>Der {@code : ""}-Zweig fängt einen Permission-Key ohne {@code _} ab. Alle definierten {@link
    * Permission}-Werte folgen der Konvention {@code <RESSOURCE>_<OPERATION>}, sodass {@code split}
    * stets zwei Teile liefert; der Fallback ist damit ein nachweislich nicht erreichbarer, aber

@@ -29,17 +29,17 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Karten- und Epic-Use-Cases: Anlegen (projektweite Nummer, ans Spaltenende), Bearbeiten,
- * Archivieren/Wiederherstellen, Löschen, Move/Reindex und Abhängigkeiten. Epics sind Karten vom Typ
- * {@link CardType#EPIC}: sie erscheinen nicht auf dem Board, halten keine Position und gruppieren
- * Karten über {@code parentId}. Rechte über den {@link PermissionChecker}.
+ * Karten- und Vorhaben-Use-Cases: Anlegen (projektweite Nummer, ans Spaltenende), Bearbeiten,
+ * Archivieren/Wiederherstellen, Löschen, Move/Reindex und Abhängigkeiten. Vorhaben sind Karten vom
+ * Typ {@link CardType#EPIC}: sie erscheinen nicht auf dem Board, halten keine Position und
+ * gruppieren Karten über {@code parentId}. Rechte über den {@link PermissionChecker}.
  */
 // PMD.CouplingBetweenObjects: zentraler Karten-Use-Case-Service; die Kopplung an die Ports
 // (Karten, Abhängigkeiten, Boards/Spalten, Rechte, Zykluszeit, Zuständige, Labels)
 // ist fachlich begründet und kein God-Class-Smell.
 // PMD.CyclomaticComplexity: die Klassen-Gesamtkomplexität summiert viele kleine, je für sich
 // einfache Use-Case-Methoden (höchste Einzelmethode weit unter dem Schwellwert); kein Smell.
-// PMD.TooManyMethods: zentraler Karten-/Epic-Use-Case-Service — viele kleine, kohäsive Methoden
+// PMD.TooManyMethods: zentraler Karten-/Vorhaben-Use-Case-Service — viele kleine, kohäsive Methoden
 // (Anlegen/Bearbeiten/Move/Archiv/Ideen-Speicher/Zuständige/Labels je Erfolgs- und Fehlerpfad);
 // eine Aufspaltung würde denselben Use-Case-Kontext künstlich zerreißen, kein God-Class-Smell.
 // PMD.ExcessivePublicCount: dieselbe Familie wie TooManyMethods, nur über die öffentliche
@@ -286,7 +286,8 @@ public class CardService {
   }
 
   /**
-   * Legt ein Epic an. Epics halten keine Board-Position und liegen technisch in der ersten Spalte.
+   * Legt ein Vorhaben an. Vorhaben halten keine Board-Position und liegen technisch in der ersten
+   * Spalte.
    */
   @Transactional
   public CardView createEpic(
@@ -339,7 +340,7 @@ public class CardService {
   }
 
   /**
-   * Sichtbare Board-Items (Karten <em>und</em> Epics) als schlanke Projektion für modulfremde
+   * Sichtbare Board-Items (Karten <em>und</em> Vorhaben) als schlanke Projektion für modulfremde
    * Aufrufer: ohne archivierte und ohne im Ideen-Speicher liegende Karten, nach Position in der
    * Spalte sortiert. Erfordert Projekt-Mitgliedschaft (Leserecht).
    *
@@ -415,7 +416,7 @@ public class CardService {
     }
   }
 
-  /** Epics eines Boards inkl. Fortschritt (nicht-archivierte Kinder: gesamt / in Done). */
+  /** Vorhaben eines Boards inkl. Fortschritt (nicht-archivierte Kinder: gesamt / in Done). */
   @Transactional(readOnly = true)
   public List<EpicView> listEpics(long userId, long boardId) {
     permissions.requireMembership(userId, boardService.requireProjectId(boardId));
@@ -464,10 +465,10 @@ public class CardService {
     Card card = requireCardOp(userId, cardId, Permission.TICKET_UPDATE, Permission.EPIC_UPDATE);
     Card updated = card.withContent(title.trim(), normalize(description));
     if (card.type() == CardType.EPIC) {
-      // Epics tragen ein Kürzel, aber keinen Parent.
+      // Vorhaben tragen ein Kürzel, aber keinen Parent.
       updated = updated.withShortcode(trimToNull(shortcode));
     } else {
-      // Karten: Epic-Zuordnung im selben PUT setzen/lösen (parentId == null -> lösen).
+      // Karten: Vorhaben-Zuordnung im selben PUT setzen/lösen (parentId == null -> lösen).
       Long effectiveParent =
           parentId == null ? null : requireEpicInBoard(parentId, card.requireBoardId()).requireId();
       updated = updated.withParent(effectiveParent).withDueDate(dueDate);
@@ -492,8 +493,8 @@ public class CardService {
    * kanbancompat-Ingest (#571).
    *
    * <p>Abgrenzung zu {@link #update}: Jene Methode ist ein Voll-Update und löscht bei {@code null}
-   * die Epic-Zuordnung, das Fälligkeitsdatum und (bei Epics) das Kürzel. Ein Aufrufer, der nur
-   * Titel und Rumpf kennt, kann sie deshalb nicht gefahrlos benutzen. Hier bleibt alles andere
+   * die Vorhaben-Zuordnung, das Fälligkeitsdatum und (bei Vorhaben) das Kürzel. Ein Aufrufer, der
+   * nur Titel und Rumpf kennt, kann sie deshalb nicht gefahrlos benutzen. Hier bleibt alles andere
    * stehen; Rechteprüfung, Aktivitätseintrag und Board-Ereignis sind identisch, damit dieser Weg
    * kein Schlupfloch am Audit und an den Rechten vorbei öffnet.
    *
@@ -533,7 +534,7 @@ public class CardService {
   }
 
   /**
-   * Ersetzt die Zuständigen einer Karte. Nur Karten (keine Epics); zugewiesen werden dürfen
+   * Ersetzt die Zuständigen einer Karte. Nur Karten (keine Vorhaben); zugewiesen werden dürfen
    * ausschließlich Mitglieder des Projekts. Recht: {@link Permission#TICKET_UPDATE} (Member und
    * aufwärts).
    */
@@ -559,8 +560,8 @@ public class CardService {
   }
 
   /**
-   * Ersetzt die Labels einer Karte. Nur Karten (keine Epics); zugeordnet werden dürfen nur Labels
-   * desselben Boards. Recht: {@link Permission#TICKET_UPDATE} (Member und aufwärts).
+   * Ersetzt die Labels einer Karte. Nur Karten (keine Vorhaben); zugeordnet werden dürfen nur
+   * Labels desselben Boards. Recht: {@link Permission#TICKET_UPDATE} (Member und aufwärts).
    */
   @Transactional
   public CardView setLabels(long userId, long cardId, List<Long> labelIds) {
@@ -609,7 +610,9 @@ public class CardService {
     cardLabels.replaceLabels(cardId, distinct);
   }
 
-  /** Ordnet eine Karte einem Epic zu ({@code parentId}) oder löst die Zuordnung ({@code null}). */
+  /**
+   * Ordnet eine Karte einem Vorhaben zu ({@code parentId}) oder löst die Zuordnung ({@code null}).
+   */
   @Transactional
   public CardView assignParent(long userId, long cardId, @Nullable Long parentId) {
     Card card = requireCardOp(userId, cardId, Permission.TICKET_UPDATE, Permission.EPIC_UPDATE);
@@ -675,7 +678,7 @@ public class CardService {
    * <p>Fachlich ist das ein <em>Massen-Verschieben innerhalb</em> der Spalte und keine
    * Strukturänderung am Board, deshalb genügt {@link Permission#CARD_MOVE} — dasselbe Recht wie für
    * das Verschieben einer einzelnen Karte. Karten außerhalb des aktiven Positions-Namespace
-   * (archiviert, Papierkorb, Ideen-Speicher) und Epics bleiben unberührt; Details am Port {@link
+   * (archiviert, Papierkorb, Ideen-Speicher) und Vorhaben bleiben unberührt; Details am Port {@link
    * CardRepository#sortActiveByNumber(long, SortDirection)}.
    *
    * <p>Bewusst ohne {@link CardActivity}-Eintrag: Die Umsortierung ändert nur die Anordnung
@@ -708,8 +711,8 @@ public class CardService {
    *       Abhängigkeiten und Zuständige (projekt-lokal) werden entfernt.
    * </ul>
    *
-   * <p>Die board-lokale Epic-Zuordnung wird in beiden Fällen entfernt (das Ziel-Board hat eigene
-   * Epics). Kommentare und Anhänge wandern immer mit (an der Karten-ID).
+   * <p>Die board-lokale Vorhaben-Zuordnung wird in beiden Fällen entfernt (das Ziel-Board hat
+   * eigene Vorhaben). Kommentare und Anhänge wandern immer mit (an der Karten-ID).
    */
   @Transactional
   public CardView transfer(long userId, long cardId, long targetBoardId, long targetColumnId) {
@@ -765,9 +768,9 @@ public class CardService {
    * Verschiebt mehrere Karten in einer Transaktion auf dasselbe Zielboard und dieselbe Zielspalte
    * (alles-oder-nichts). Nutzt je Karte die Einzel-Logik von {@link #transfer(long, long, long,
    * long)} inklusive der richtungsabhängigen Rechteprüfung ({@link Permission#CARD_MOVE} innerhalb
-   * des Projekts, OWNER in Quell- und Zielprojekt darüber hinaus) sowie Epic-Ausschluss; scheitert
-   * eine Karte, rollt der gesamte Batch zurück. Die Karten landen in Eingabereihenfolge am Ende der
-   * Zielspalte, jede Quellspalte wird dabei lückenlos nachgezogen.
+   * des Projekts, OWNER in Quell- und Zielprojekt darüber hinaus) sowie Vorhaben-Ausschluss;
+   * scheitert eine Karte, rollt der gesamte Batch zurück. Die Karten landen in Eingabereihenfolge
+   * am Ende der Zielspalte, jede Quellspalte wird dabei lückenlos nachgezogen.
    *
    * <p>Die Spaltensperren nimmt der Batch <strong>vorab in einem Zug</strong> (Issue #499): Nähme
    * jeder Einzel-Umzug seine beiden Sperren für sich, könnten zwei gleichzeitige Sammel-Umzüge mit
@@ -850,7 +853,7 @@ public class CardService {
    * notiert (#433). Vorher blieb die Karte board-gebunden und war dadurch in keiner Ansicht mehr
    * sichtbar — ein unauffindbarer Zwischenzustand (#428). Ideen-Pflege ist normaler Arbeitsfluss,
    * kein Löschen — daher das Karten-Verschieberecht ({@link Permission#CARD_MOVE}), nicht das
-   * Archiv-/Lösch-Recht. Nur Karten, keine Epics.
+   * Archiv-/Lösch-Recht. Nur Karten, keine Vorhaben.
    */
   @Transactional
   public CardView moveToIdeaStorage(long userId, long cardId) {
@@ -1272,7 +1275,7 @@ public class CardService {
 
   private void doDelete(long userId, long cardId) {
     Card card = requireCardOp(userId, cardId, Permission.TICKET_DELETE, Permission.EPIC_DELETE);
-    // Beim Löschen eines Epics die Kinder lösen — die DB-„ON DELETE SET NULL"-Kaskade auf
+    // Beim Löschen eines Vorhabens die Kinder lösen — die DB-„ON DELETE SET NULL"-Kaskade auf
     // parent_id feuert nur beim Hard-Delete, nicht beim Soft-Delete.
     if (card.type() == CardType.EPIC) {
       cards.findByBoardId(card.requireBoardId()).stream()
@@ -1286,8 +1289,8 @@ public class CardService {
   /**
    * Verschiebt mehrere Karten in einer Transaktion in den Papierkorb (alles-oder-nichts). Nutzt je
    * Karte die Einzel-Logik von {@link #delete(long, long)} inklusive Rechteprüfung und Lösen der
-   * Epic-Kinder; fehlt an einer Karte das Recht oder existiert sie nicht, rollt der gesamte Batch
-   * zurück.
+   * Vorhaben-Kinder; fehlt an einer Karte das Recht oder existiert sie nicht, rollt der gesamte
+   * Batch zurück.
    */
   @Transactional
   public void bulkDelete(long userId, List<Long> cardIds) {
@@ -1344,9 +1347,9 @@ public class CardService {
   }
 
   /**
-   * Lädt die Karte und verlangt das je nach Kartentyp (Ticket/Epic) passende Recht. Die Rechte sind
-   * projekt-basiert und werden über {@code card.projectId()} (immer gesetzt, V18) geprüft — nicht
-   * über das Board. So sind auch board-lose Pool-Ideen (#405) editierbar; für board-gebundene
+   * Lädt die Karte und verlangt das je nach Kartentyp (Ticket/Vorhaben) passende Recht. Die Rechte
+   * sind projekt-basiert und werden über {@code card.projectId()} (immer gesetzt, V18) geprüft —
+   * nicht über das Board. So sind auch board-lose Pool-Ideen (#405) editierbar; für board-gebundene
    * Karten ist die Prüfung identisch (Projekt-ID stimmt mit dem Board-Projekt überein).
    */
   private Card requireCardOp(
@@ -1477,7 +1480,7 @@ public class CardService {
         c.targetBoardId());
   }
 
-  /** Kartendarstellung inkl. Abhängigkeits-Nummern, Typ und Epic-Zuordnung. */
+  /** Kartendarstellung inkl. Abhängigkeits-Nummern, Typ und Vorhaben-Zuordnung. */
   public record CardView(
       Long id,
       @Nullable Long boardId,
@@ -1523,8 +1526,8 @@ public class CardService {
       @Nullable String columnName) {}
 
   /**
-   * Schlanke Board-Projektion einer Karte oder eines Epics — ohne Abhängigkeiten, Zuständige und
-   * Labels. {@code epic} unterscheidet die beiden Ausprägungen, ohne den Kartentyp aus {@code
+   * Schlanke Board-Projektion einer Karte oder eines Vorhabens — ohne Abhängigkeiten, Zuständige
+   * und Labels. {@code epic} unterscheidet die beiden Ausprägungen, ohne den Kartentyp aus {@code
    * card.domain} nach außen zu geben.
    *
    * <p>{@code externalKey} ist der Idempotenz-Schlüssel eines Automatik-Ingests (#534). Er wird
@@ -1541,7 +1544,7 @@ public class CardService {
       boolean epic,
       @Nullable String externalKey) {}
 
-  /** Epic-Darstellung inkl. Fortschritt (Kinder gesamt / in Done). */
+  /** Vorhaben-Darstellung inkl. Fortschritt (Kinder gesamt / in Done). */
   public record EpicView(
       Long id,
       int number,

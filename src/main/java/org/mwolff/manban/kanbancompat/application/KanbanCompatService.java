@@ -59,7 +59,7 @@ public class KanbanCompatService {
   }
 
   /**
-   * Nach Kanban-Spalte gruppierte, nicht-archivierte Items des gebundenen Boards (inkl. Epics).
+   * Nach Kanban-Spalte gruppierte, nicht-archivierte Items des gebundenen Boards (inkl. Vorhaben).
    *
    * <p>Karten im Ideen-Speicher bleiben ausgeschlossen (#434): Sie tragen weiterhin Board und
    * Spalte, sind in der Oberfläche aber ausgeblendet. Ohne diesen Filter meldete die Schnittstelle
@@ -95,6 +95,10 @@ public class KanbanCompatService {
                   c.description(),
                   key,
                   c.positionInColumn(),
+                  // Protokoll, nicht Vokabular: Der Typ-Wert unten ist Teil der
+                  // kanbancompat-Schnittstelle. Der Board-Adapter board.mjs des
+                  // claude-workflow-kit filtert darauf und liest /api/kanban/epics; die
+                  // Umbenennung auf "Vorhaben" betrifft nur die Oberflaeche, nie den Draht.
                   c.epic() ? "epic" : "card",
                   labelsByCard.getOrDefault(c.id(), List.of()),
                   c.externalKey()));
@@ -264,12 +268,12 @@ public class KanbanCompatService {
    * claude-workflow-kit den geschärften Issue-Text zurückschreibt.
    *
    * <p>Geht bewusst über {@link CardService#updateContent} statt über das Voll-Update: Sonst
-   * verlören Karten bei jedem Body-Update ihre Epic-Zuordnung und ihr Fälligkeitsdatum und Epics
-   * ihr Kürzel, weil dieser Aufrufer diese Felder gar nicht kennt.
+   * verlören Karten bei jedem Body-Update ihre Vorhaben-Zuordnung und ihr Fälligkeitsdatum und
+   * Vorhaben ihr Kürzel, weil dieser Aufrufer diese Felder gar nicht kennt.
    *
-   * <p>Reichweite wie bei {@link #move} und {@link #comment}: nur Karten und Epics des gebundenen
-   * Boards. Board-lose Pool-Ideen und Karten im Ideen-Speicher sind über {@code requireOnBoard}
-   * ausgeschlossen und antworten mit 404.
+   * <p>Reichweite wie bei {@link #move} und {@link #comment}: nur Karten und Vorhaben des
+   * gebundenen Boards. Board-lose Pool-Ideen und Karten im Ideen-Speicher sind über {@code
+   * requireOnBoard} ausgeschlossen und antworten mit 404.
    */
   @Transactional
   public Item update(KanbanPrincipal principal, long cardId, String title, @Nullable String body) {
@@ -330,7 +334,7 @@ public class KanbanCompatService {
         .toList();
   }
 
-  /** Epics des gebundenen Boards inkl. Fortschritt. */
+  /** Vorhaben des gebundenen Boards inkl. Fortschritt. */
   @Transactional(readOnly = true)
   public List<Epic> epics(KanbanPrincipal principal) {
     long boardId = requireBound(principal);
@@ -353,6 +357,7 @@ public class KanbanCompatService {
         card.description(),
         keyByColumn(boardId).getOrDefault(card.columnId(), BACKLOG),
         card.positionInColumn(),
+        // Protokoll, nicht Vokabular — siehe die Erlaeuterung an der Board-Liste oben.
         card.epic() ? "epic" : "card",
         labelService.namesByCard(boardId, List.of(card.id())).getOrDefault(card.id(), List.of()),
         card.externalKey());
@@ -413,9 +418,9 @@ public class KanbanCompatService {
   // --- Response-Formen (spiegeln das tbx.mjs-Protokoll) ---------------------
 
   /**
-   * Board-Item; {@code column} ist der Kanban-Key, {@code type} ist "card" oder "epic". {@code
-   * labels} enthält die zugeordneten Label-Namen in Board-Definitionsreihenfolge (leer, wenn
-   * keine).
+   * Board-Item; {@code column} ist der Kanban-Key, {@code type} ist "card" oder "epic" — das
+   * Protokoll-Literal bleibt auch nach der Umbenennung auf „Vorhaben" unverändert. {@code labels}
+   * enthält die zugeordneten Label-Namen in Board-Definitionsreihenfolge (leer, wenn keine).
    */
   public record Item(
       Long id,

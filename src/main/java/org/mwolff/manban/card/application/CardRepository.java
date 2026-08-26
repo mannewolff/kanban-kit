@@ -188,7 +188,7 @@ public interface CardRepository {
    * <p>Betroffen ist ausschließlich der <strong>aktive Positions-Namespace</strong> der Spalte
    * ({@code archived = false}, {@code idea_stored = false}, {@code deleted_at IS NULL}, {@code type
    * <> 'EPIC'}) — genau die Menge, für die {@code active_position} gesetzt ist. Archivierte,
-   * gelöschte und Ideen-Speicher-Karten sowie Epics behalten ihre Position: Sie halten keinen
+   * gelöschte und Ideen-Speicher-Karten sowie Vorhaben behalten ihre Position: Sie halten keinen
    * aktiven Anspruch, und eine Neuvergabe würde ihre Rückkehr-Position ohne Grund verwerfen.
    *
    * <p>Die Spaltenzeile wird gesperrt (siehe {@link #lockColumnPositions(List)}) — die neue Ordnung
