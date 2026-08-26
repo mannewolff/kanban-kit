@@ -68,7 +68,8 @@ class KanbanCompatController {
         Boolean.TRUE.equals(request.ideaStored()),
         request.externalKey(),
         Boolean.TRUE.equals(request.direct()),
-        request.number());
+        request.number(),
+        request.derivedFrom());
   }
 
   @PutMapping("/items/{id}")
@@ -167,7 +168,10 @@ class KanbanCompatController {
       // Verlangt direct=true und einen externalKey; der Service lehnt beides sonst ab.
       // Obergrenze: nextCardNumber rechnet MAX(number)+1 auf einer integer-Spalte — ohne Deckel
       // legt ein einziger Import mit Integer.MAX_VALUE jede spaetere Anlage im Projekt lahm.
-      @Nullable @Positive @Max(CardNumbers.MAX) Integer number) {}
+      @Nullable @Positive @Max(CardNumbers.MAX) Integer number,
+      // Herkunft als projektweite Kartennummer (#601-#605). Dieselbe Obergrenze wie number,
+      // aus demselben Grund: Schutz der Nummernvergabe vor Ueberlauf (siehe CardNumbers).
+      @Nullable @Positive @Max(CardNumbers.MAX) Integer derivedFrom) {}
 
   /**
    * Titel und Rumpf einer bestehenden Karte (#571). Grenzen wie in {@link CreateItemRequest} —

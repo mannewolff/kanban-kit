@@ -141,6 +141,7 @@ public class CardService {
         null,
         null,
         null,
+        null,
         null);
   }
 
@@ -168,6 +169,7 @@ public class CardService {
         dependsOn,
         parentId,
         ideaStored,
+        null,
         null,
         null,
         null,
@@ -210,6 +212,7 @@ public class CardService {
         assigneeIds,
         labelIds,
         null,
+        null,
         null);
   }
 
@@ -228,9 +231,11 @@ public class CardService {
       @Nullable List<Long> assigneeIds,
       @Nullable List<Long> labelIds,
       @Nullable String externalKey,
-      @Nullable Integer givenNumber) {
+      @Nullable Integer givenNumber,
+      @Nullable Integer derivedFrom) {
     long projectId = boardService.requireProjectId(boardId);
     permissions.require(userId, projectId, Permission.TICKET_CREATE);
+    Long herkunft = DerivedFrom.resolve(cards, projectId, derivedFrom, null);
     ColumnView column = boardService.requireColumn(columnId, boardId);
     Long effectiveParent =
         parentId == null ? null : requireEpicInBoard(parentId, boardId).requireId();
@@ -263,8 +268,7 @@ public class CardService {
                 projectId,
                 null,
                 externalKey,
-                // Herkunft: kein Schreibpfad hier — der kommt in Issue #604.
-                null));
+                herkunft));
 
     if (!ideaStored) {
       transitions.open(saved.requireId(), columnId, column.name(), now);
@@ -909,7 +913,8 @@ public class CardService {
       String title,
       @Nullable String description,
       @Nullable Long targetBoardId) {
-    return doCreateProjectIdea(userId, projectId, title, description, targetBoardId, null).view();
+    return doCreateProjectIdea(userId, projectId, title, description, targetBoardId, null, null)
+        .view();
   }
 
   /**
@@ -933,8 +938,10 @@ public class CardService {
       String title,
       @Nullable String description,
       @Nullable Long targetBoardId,
-      @Nullable String externalKey) {
-    return doCreateProjectIdea(userId, projectId, title, description, targetBoardId, externalKey);
+      @Nullable String externalKey,
+      @Nullable Integer derivedFrom) {
+    return doCreateProjectIdea(
+        userId, projectId, title, description, targetBoardId, externalKey, derivedFrom);
   }
 
   // Kern-Logik der Ideen-Anlage ohne eigene @Transactional: wird von beiden öffentlichen
@@ -946,16 +953,20 @@ public class CardService {
       String title,
       @Nullable String description,
       @Nullable Long targetBoardId,
-      @Nullable String externalKey) {
+      @Nullable String externalKey,
+      @Nullable Integer derivedFrom) {
     permissions.require(userId, projectId, Permission.TICKET_CREATE);
     if (externalKey != null) {
       Optional<Card> existing = cards.findByProjectIdAndExternalKey(projectId, externalKey);
       if (existing.isPresent()) {
+        // Idempotenz-Treffer: derivedFrom wird ignoriert wie Titel und Rumpf auch. Anders als
+        // number, das als Identitaetsfeld gegen die bestehende Karte verifiziert wird (#565).
         return new IdeaCreation(view(existing.get()), false);
       }
     }
     CardView created =
-        storeProjectIdea(userId, projectId, title, description, targetBoardId, externalKey);
+        storeProjectIdea(
+            userId, projectId, title, description, targetBoardId, externalKey, derivedFrom);
     publishIdeasChanged(projectId);
     return new IdeaCreation(created, true);
   }
@@ -988,7 +999,13 @@ public class CardService {
             .map(
                 idea ->
                     storeProjectIdea(
-                        userId, projectId, idea.title(), idea.description(), targetBoardId, null))
+                        userId,
+                        projectId,
+                        idea.title(),
+                        idea.description(),
+                        targetBoardId,
+                        null,
+                        null))
             .toList();
     publishIdeasChanged(projectId);
     return created;
@@ -996,10 +1013,10 @@ public class CardService {
 
   /**
    * Legt eine Karte direkt in einer Spalte des Boards an — idempotent über den optionalen {@code
-   * externalKey} wie {@link #createProjectIdea(long, long, String, String, Long, String)}, nur mit
-   * Board- statt Pool-Routing (#535, direct-Ingest auf ein dediziertes Sammel-Board). Anlage,
-   * Nummern-/Positionsvergabe, Spalten-Transition und Rechteprüfung laufen über den normalen
-   * Anlege-Pfad; beim Duplikat entsteht nichts (kein Aktivitätseintrag, kein Event).
+   * externalKey} wie {@link #createProjectIdea(long, long, String, String, Long, String, Integer)},
+   * nur mit Board- statt Pool-Routing (#535, direct-Ingest auf ein dediziertes Sammel-Board).
+   * Anlage, Nummern-/Positionsvergabe, Spalten-Transition und Rechteprüfung laufen über den
+   * normalen Anlege-Pfad; beim Duplikat entsteht nichts (kein Aktivitätseintrag, kein Event).
    */
   @Transactional
   public IdeaCreation createDirect(
@@ -1009,7 +1026,8 @@ public class CardService {
       String title,
       @Nullable String description,
       @Nullable String externalKey,
-      @Nullable Integer givenNumber) {
+      @Nullable Integer givenNumber,
+      @Nullable Integer derivedFrom) {
     long projectId = boardService.requireProjectId(boardId);
     // Rechte VOR dem Duplikat-Check: der Rückgabepfad darf Unberechtigten keine Existenz leaken.
     permissions.require(userId, projectId, Permission.TICKET_CREATE);
@@ -1017,6 +1035,8 @@ public class CardService {
       Optional<Card> existing = cards.findByProjectIdAndExternalKey(projectId, externalKey);
       if (existing.isPresent()) {
         requireMatchingNumber(existing.get(), givenNumber);
+        // Idempotenz-Treffer: derivedFrom wird ignoriert wie Titel und Rumpf auch. Anders als
+        // number, das requireMatchingNumber als Identitaetsfeld verifiziert (#565).
         return new IdeaCreation(view(existing.get()), false);
       }
     }
@@ -1037,7 +1057,8 @@ public class CardService {
             null,
             null,
             externalKey,
-            givenNumber);
+            givenNumber,
+            derivedFrom);
     return new IdeaCreation(created, true);
   }
 
@@ -1088,7 +1109,9 @@ public class CardService {
       String title,
       @Nullable String description,
       @Nullable Long targetBoardId,
-      @Nullable String externalKey) {
+      @Nullable String externalKey,
+      @Nullable Integer derivedFrom) {
+    Long herkunft = DerivedFrom.resolve(cards, projectId, derivedFrom, null);
     Instant now = clock.instant();
     // #402: Pool-Ideen bekommen sofort eine projektweite Nummer (referenzierbar wie Board-Karten);
     // sie bleiben board-los und behalten die Nummer beim späteren Einplanen.
@@ -1116,8 +1139,7 @@ public class CardService {
                 projectId,
                 targetBoardId,
                 externalKey,
-                // Herkunft: kein Schreibpfad hier — der kommt in Issue #604.
-                null));
+                herkunft));
     activity.add(
         saved.requireId(), userId, CardActivityType.CREATED, "Idee angelegt", now, actor.current());
     return view(saved);

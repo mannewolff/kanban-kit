@@ -134,7 +134,8 @@ public class KanbanCompatService {
       boolean ideaStored,
       @Nullable String externalKey,
       boolean direct,
-      @Nullable Integer number) {
+      @Nullable Integer number,
+      @Nullable Integer derivedFrom) {
     long boardId = requireBound(principal);
     long projectId = boardService.requireProjectId(boardId);
     String key = normalizeExternalKey(externalKey);
@@ -151,10 +152,12 @@ public class KanbanCompatService {
       // sonst hinge die Fehlermeldung davon ab, ob zufällig schon eine existiert.
       long columnId = directColumnId(boardId, column);
       result =
-          cardService.createDirect(principal.userId(), boardId, columnId, title, body, key, number);
+          cardService.createDirect(
+              principal.userId(), boardId, columnId, title, body, key, number, derivedFrom);
     } else {
       result =
-          cardService.createProjectIdea(principal.userId(), projectId, title, body, boardId, key);
+          cardService.createProjectIdea(
+              principal.userId(), projectId, title, body, boardId, key, derivedFrom);
     }
     // Seit #402 vergibt createProjectIdea sofort eine Nummer; requireNonNull macht das fuer
     // NullAway explizit (CardView.number() ist @Nullable fuer Legacy-Ideen ohne Nummer).
