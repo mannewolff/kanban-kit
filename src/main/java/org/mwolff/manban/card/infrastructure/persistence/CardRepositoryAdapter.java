@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.StreamSupport;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.card.application.CardMovedConcurrentlyException;
 import org.mwolff.manban.card.application.CardRepository;
@@ -103,6 +104,15 @@ class CardRepositoryAdapter implements CardRepository {
     return jpa.findByProjectIdAndDeletedAtIsNull(projectId).stream()
         .map(CardRepositoryAdapter::toDomain)
         .toList();
+  }
+
+  @Override
+  public List<Card> findByIds(java.util.Collection<Long> ids) {
+    return ids.isEmpty()
+        ? List.of()
+        : StreamSupport.stream(jpa.findAllById(ids).spliterator(), false)
+            .map(CardRepositoryAdapter::toDomain)
+            .toList();
   }
 
   @Override

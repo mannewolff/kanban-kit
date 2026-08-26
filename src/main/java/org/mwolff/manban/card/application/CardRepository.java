@@ -1,6 +1,7 @@
 package org.mwolff.manban.card.application;
 
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import org.mwolff.manban.card.domain.Card;
@@ -60,6 +61,17 @@ public interface CardRepository {
    * Verweis über die Projektgrenze.
    */
   List<Card> findByDerivedFrom(long cardId);
+
+  /**
+   * Karten zu einer Menge von IDs — ein Sammelzugriff statt {@code findById} je Element.
+   *
+   * <p>Traegt die Aufloesung der Herkunft beim Zusammenbauen einer Board-Liste: Ohne ihn entstuende
+   * ein N+1-Zugriff auf einer Liste, die ein ganzes Board umfasst.
+   *
+   * <p>Filtert <strong>nicht</strong> nach {@code archived} oder Papierkorb: Ein Vorfahr im Archiv
+   * existiert noch, und seine Nummer ist stabil — die Sicht soll sie weiterhin liefern.
+   */
+  List<Card> findByIds(Collection<Long> ids);
 
   /**
    * Ideen-Karten eines Projekts (idea_stored), älteste zuerst — board-lose Pool-Ideen und

@@ -1546,6 +1546,90 @@ class CardServiceTest {
   }
 
   @Test
+  void listBoardItems_loestDieHerkunftMitEinemEinzigenSammelzugriffAuf() {
+    // Vier Karten mit drei VERSCHIEDENEN Vorfahren. Die Aufloesung darf genau einen
+    // zusaetzlichen Port-Aufruf ausloesen, nicht einen je Vorfahr — sonst entstuende ein N+1
+    // auf einer Liste, die ein ganzes Board umfasst.
+    when(boardService.requireProjectId(BOARD)).thenReturn(PROJECT);
+    when(cards.findByBoardId(BOARD))
+        .thenReturn(
+            List.of(
+                card(1L, 20L, 1, false, null, CardType.CARD, null, null).withDerivedFrom(91L),
+                card(2L, 20L, 2, false, null, CardType.CARD, null, null).withDerivedFrom(92L),
+                card(3L, 20L, 3, false, null, CardType.CARD, null, null).withDerivedFrom(93L),
+                card(4L, 20L, 4, false, null, CardType.CARD, null, null)));
+    when(cards.findByIds(any()))
+        .thenReturn(
+            List.of(
+                card(91L, 20L, 91, false, null, CardType.CARD, null, null),
+                card(92L, 20L, 92, false, null, CardType.CARD, null, null),
+                card(93L, 20L, 93, false, null, CardType.CARD, null, null)));
+
+    List<CardService.BoardItemView> items = service.listBoardItems(5L, BOARD);
+
+    verify(cards, times(1)).findByIds(any());
+    verify(cards, never()).findById(anyLong());
+    assertThat(items)
+        .extracting(CardService.BoardItemView::derivedFrom)
+        .containsExactly(91, 92, 93, null);
+  }
+
+  @Test
+  void listBoardItems_fragtGarNichtNach_wennKeineKarteEineHerkunftHat() {
+    // Der haeufige Fall auf einem Board ohne Herkunftsdaten: kein einziger Zugriff auf den Port.
+    // Ohne diese Zusage waere die Abkuerzung wirkungslos und niemand merkte es.
+    when(boardService.requireProjectId(BOARD)).thenReturn(PROJECT);
+    when(cards.findByBoardId(BOARD))
+        .thenReturn(
+            List.of(
+                card(1L, 20L, 1, false, null, CardType.CARD, null, null),
+                card(2L, 20L, 2, false, null, CardType.CARD, null, null)));
+
+    List<CardService.BoardItemView> items = service.listBoardItems(5L, BOARD);
+
+    verify(cards, never()).findByIds(any());
+    assertThat(items).extracting(CardService.BoardItemView::derivedFrom).containsOnlyNulls();
+  }
+
+  @Test
+  void listBoardItems_liefertNull_wennDerVorfahrKeineNummerHat() {
+    // Alt-Ideen von vor #402 haben number == null. Ein Verweis auf eine solche Karte liefert
+    // keine Nummer — die Sicht haelt das aus, statt zu scheitern.
+    Card ohneNummer =
+        new Card(
+            91L,
+            BOARD,
+            20L,
+            null,
+            "Alt",
+            null,
+            0,
+            false,
+            true,
+            null,
+            1L,
+            FIXED,
+            FIXED,
+            CardType.CARD,
+            null,
+            null,
+            null,
+            PROJECT,
+            null,
+            null,
+            null);
+    when(boardService.requireProjectId(BOARD)).thenReturn(PROJECT);
+    when(cards.findByBoardId(BOARD))
+        .thenReturn(
+            List.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null).withDerivedFrom(91L)));
+    when(cards.findByIds(any())).thenReturn(List.of(ohneNummer));
+
+    List<CardService.BoardItemView> items = service.listBoardItems(5L, BOARD);
+
+    assertThat(items).singleElement().extracting(CardService.BoardItemView::derivedFrom).isNull();
+  }
+
+  @Test
   void transfer_projektwechsel_loeschtDieHerkunftDerKarte() {
     stubTransferScenario(9L);
     when(cards.findById(100L))
@@ -3300,6 +3384,47 @@ class CardServiceTest {
     service.getCard(5L, 1L);
 
     verify(permissions).requireMembership(5L, PROJECT);
+  }
+
+  @Test
+  void getCard_liefertDieHerkunftAlsNummerDesVorfahren() {
+    when(cards.findById(1L))
+        .thenReturn(Optional.of(boardCard(1L, 20L, 7, 0, false, false).withDerivedFrom(91L)));
+    when(cards.findById(91L))
+        .thenReturn(Optional.of(card(91L, 20L, 42, false, null, CardType.CARD, null, null)));
+
+    assertThat(service.getCard(5L, 1L).derivedFrom()).isEqualTo(42);
+  }
+
+  @Test
+  void getCard_liefertNull_wennDerVorfahrNichtMehrExistiert() {
+    // Regulaer raeumt ON DELETE SET NULL das auf; die Sicht haelt den Zustand trotzdem aus.
+    when(cards.findById(1L))
+        .thenReturn(Optional.of(boardCard(1L, 20L, 7, 0, false, false).withDerivedFrom(91L)));
+    when(cards.findById(91L)).thenReturn(Optional.empty());
+
+    assertThat(service.getCard(5L, 1L).derivedFrom()).isNull();
+  }
+
+  @Test
+  void getCard_liefertNull_ohneHerkunft() {
+    when(cards.findById(1L)).thenReturn(Optional.of(boardCard(1L, 20L, 7, 0, false, false)));
+
+    assertThat(service.getCard(5L, 1L).derivedFrom()).isNull();
+  }
+
+  @Test
+  void listBoardItems_liefertNull_wennDerVorfahrNichtInDerSammelantwortSteht() {
+    when(boardService.requireProjectId(BOARD)).thenReturn(PROJECT);
+    when(cards.findByBoardId(BOARD))
+        .thenReturn(
+            List.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null).withDerivedFrom(91L)));
+    when(cards.findByIds(any())).thenReturn(List.of());
+
+    assertThat(service.listBoardItems(5L, BOARD))
+        .singleElement()
+        .extracting(CardService.BoardItemView::derivedFrom)
+        .isNull();
   }
 
   @Test

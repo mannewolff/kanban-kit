@@ -101,7 +101,8 @@ public class KanbanCompatService {
                   // Umbenennung auf "Vorhaben" betrifft nur die Oberflaeche, nie den Draht.
                   c.epic() ? "epic" : "card",
                   labelsByCard.getOrDefault(c.id(), List.of()),
-                  c.externalKey()));
+                  c.externalKey(),
+                  c.derivedFrom()));
     }
     return grouped;
   }
@@ -363,7 +364,8 @@ public class KanbanCompatService {
         // Protokoll, nicht Vokabular — siehe die Erlaeuterung an der Board-Liste oben.
         card.epic() ? "epic" : "card",
         labelService.namesByCard(boardId, List.of(card.id())).getOrDefault(card.id(), List.of()),
-        card.externalKey());
+        card.externalKey(),
+        card.derivedFrom());
   }
 
   private long requireBound(@Nullable KanbanPrincipal principal) {
@@ -434,7 +436,8 @@ public class KanbanCompatService {
       int position,
       String type,
       List<String> labels,
-      @Nullable String externalKey) {}
+      @Nullable String externalKey,
+      @Nullable Integer derivedFrom) {}
 
   /** Kommentar eines Items; {@code author} ist der Anzeigename des Autors zur Schreibzeit. */
   public record Comment(String author, String body, Instant createdAt) {}

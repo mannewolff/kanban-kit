@@ -4,11 +4,13 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.board.application.BoardNotFoundException;
@@ -359,9 +361,13 @@ public class CardService {
   @Transactional(readOnly = true)
   public List<BoardItemView> listBoardItems(long userId, long boardId) {
     permissions.requireMembership(userId, boardService.requireProjectId(boardId));
-    return cards.findByBoardId(boardId).stream()
-        .filter(c -> !c.archived() && !c.ideaStored())
-        .sorted(Comparator.comparingInt(Card::positionInColumn))
+    List<Card> sichtbar =
+        cards.findByBoardId(boardId).stream()
+            .filter(c -> !c.archived() && !c.ideaStored())
+            .sorted(Comparator.comparingInt(Card::positionInColumn))
+            .toList();
+    Map<Long, Integer> herkunftsnummern = herkunftsnummern(sichtbar);
+    return sichtbar.stream()
         .map(
             c ->
                 new BoardItemView(
@@ -372,7 +378,10 @@ public class CardService {
                     c.columnId(),
                     c.positionInColumn(),
                     c.type() == CardType.EPIC,
-                    c.externalKey()))
+                    c.externalKey(),
+                    c.derivedFromCardId() == null
+                        ? null
+                        : herkunftsnummern.get(c.derivedFromCardId())))
         .toList();
   }
 
@@ -538,7 +547,8 @@ public class CardService {
         saved.columnId(),
         saved.positionInColumn(),
         saved.type() == CardType.EPIC,
-        saved.externalKey());
+        saved.externalKey(),
+        herkunftsnummer(saved));
   }
 
   /**
@@ -1503,6 +1513,39 @@ public class CardService {
     return value == null || value.isBlank() ? null : value.trim();
   }
 
+  /**
+   * Herkunfts-Nummern zu einer Kartenliste — <strong>ein</strong> Sammelzugriff, unabhaengig von
+   * der Zahl verschiedener Vorfahren. Je Karte einzeln nachzuschlagen ergaebe ein N+1 auf einer
+   * Liste, die ein ganzes Board umfasst.
+   */
+  private Map<Long, Integer> herkunftsnummern(List<Card> karten) {
+    Set<Long> ids =
+        karten.stream()
+            .map(Card::derivedFromCardId)
+            .filter(Objects::nonNull)
+            .collect(Collectors.toSet());
+    if (ids.isEmpty()) {
+      return Map.of();
+    }
+    Map<Long, Integer> nummern = new HashMap<>();
+    for (Card vorfahr : cards.findByIds(ids)) {
+      // Ohne Null-Guard: Ein fehlender Eintrag und ein Eintrag mit Wert null liefern beim
+      // Nachschlagen dasselbe. Ein Guard waere hier wirkungslos — Alt-Ideen von vor #402 haben
+      // number == null und ergeben so oder so keine Herkunfts-Nummer.
+      nummern.put(vorfahr.requireId(), vorfahr.number());
+    }
+    return nummern;
+  }
+
+  /**
+   * Herkunfts-Nummer einer einzelnen Karte. Liefert {@code null}, wenn keine Herkunft gesetzt ist
+   * oder der Vorfahr nicht mehr existiert — die Sicht haelt den Zustand aus, statt zu scheitern.
+   */
+  private @Nullable Integer herkunftsnummer(Card c) {
+    Long id = c.derivedFromCardId();
+    return id == null ? null : cards.findById(id).map(Card::number).orElse(null);
+  }
+
   private CardView view(Card c) {
     return new CardView(
         c.requireId(),
@@ -1522,7 +1565,8 @@ public class CardService {
         assignees.findByCardId(c.requireId()),
         c.dueDate(),
         cardLabels.findByCardId(c.requireId()),
-        c.targetBoardId());
+        c.targetBoardId(),
+        herkunftsnummer(c));
   }
 
   /** Kartendarstellung inkl. Abhängigkeits-Nummern, Typ und Vorhaben-Zuordnung. */
@@ -1544,7 +1588,8 @@ public class CardService {
       List<Long> assignees,
       @Nullable Instant dueDate,
       List<Long> labels,
-      @Nullable Long targetBoardId) {}
+      @Nullable Long targetBoardId,
+      @Nullable Integer derivedFrom) {}
 
   /**
    * Treffer der projektübergreifenden Nummernsuche: die Karte plus die Angabe, wo sie liegt.
@@ -1587,7 +1632,8 @@ public class CardService {
       @Nullable Long columnId,
       int positionInColumn,
       boolean epic,
-      @Nullable String externalKey) {}
+      @Nullable String externalKey,
+      @Nullable Integer derivedFrom) {}
 
   /** Vorhaben-Darstellung inkl. Fortschritt (Kinder gesamt / in Done). */
   public record EpicView(

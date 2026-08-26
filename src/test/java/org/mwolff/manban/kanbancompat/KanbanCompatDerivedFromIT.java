@@ -99,16 +99,80 @@ class KanbanCompatDerivedFromIT extends AbstractIntegrationTest {
     ingestExpecting(f.token, "Zu gross", 1_000_001, null, false, status().isBadRequest());
   }
 
+  @Test
+  void ganzeKette_kommtInEinemLesezugriffZurueck() throws Exception {
+    // Drei gewoehnliche Karten A <- B <- C ueber derivedFrom (im Prozess: Fachplan -> Plan ->
+    // Arbeitspaket; CardType kennt nur CARD und EPIC). Ein Aufruf von GET /api/kanban/items
+    // liefert alle drei mit aufgeloesten Nummern — das belegt Item und die darunterliegende
+    // BoardItemView.
+    Fixture f = fixture("df-kette");
+    int a = numberOf(ingest(f.token, "A", null, null, true));
+    int b = numberOf(ingest(f.token, "B", a, null, true));
+    int c = numberOf(ingest(f.token, "C", b, null, true));
+
+    JsonNode items = json.readTree(itemsBody(f.token));
+
+    assertThat(derivedFromInItems(items, b)).isEqualTo(a);
+    assertThat(derivedFromInItems(items, c)).isEqualTo(b);
+    assertThat(derivedFromInItems(items, a)).isNull();
+  }
+
+  @Test
+  void vorfahrImArchiv_liefertWeiterhinSeineNummer() throws Exception {
+    Fixture f = fixture("df-archiv");
+    long vorfahrId = ingest(f.token, "Vorfahr", null, null, true);
+    int vorfahrNummer = numberOf(vorfahrId);
+    long kindId = ingest(f.token, "Kind", vorfahrNummer, null, true);
+
+    jdbc.update("UPDATE card SET archived = true WHERE id = ?", vorfahrId);
+
+    assertThat(derivedFromViaCardView(f, kindId)).isEqualTo(vorfahrNummer);
+  }
+
+  @Test
+  void endgueltigesLoeschenDesVorfahren_liefertNull() throws Exception {
+    Fixture f = fixture("df-purge");
+    long vorfahrId = ingest(f.token, "Vorfahr", null, null, true);
+    long kindId = ingest(f.token, "Kind", numberOf(vorfahrId), null, true);
+
+    jdbc.update("DELETE FROM card WHERE id = ?", vorfahrId);
+
+    assertThat(derivedFromViaCardView(f, kindId)).isNull();
+  }
+
+  @Test
+  void poolIdee_traegtDieHerkunftVorUndNachDemEinplanen() throws Exception {
+    Fixture f = fixture("df-plan");
+    int vorfahrNummer = numberOf(ingest(f.token, "Vorfahr", null, null, true));
+    long ideeId = ingest(f.token, "Idee", vorfahrNummer, null, false);
+
+    assertThat(derivedFromNumber(ideeId)).isEqualTo(vorfahrNummer);
+
+    // Einplanen: die Idee wandert auf das Board. Die Herkunft bleibt.
+    jdbc.update(
+        "UPDATE card SET idea_stored = false, board_id = (SELECT id FROM board WHERE project_id = ?"
+            + " LIMIT 1), column_id = (SELECT bc.id FROM board_column bc JOIN board b"
+            + " ON b.id = bc.board_id WHERE b.project_id = ? LIMIT 1) WHERE id = ?",
+        f.projectId(),
+        f.projectId(),
+        ideeId);
+
+    assertThat(derivedFromNumber(ideeId)).isEqualTo(vorfahrNummer);
+  }
+
   // --- Hilfen ---------------------------------------------------------------
 
-  private record Fixture(long projectId, String token) {}
+  private record Fixture(long projectId, String token, String ownerEmail) {}
 
   private Fixture fixture(String prefix) throws Exception {
     Cookie owner = session(prefix + "-owner@example.com", PlatformRole.USER);
     Cookie admin = session(prefix + "-admin@example.com", PlatformRole.ADMIN);
     long projectId = createProject(admin, "P-" + prefix, prefix + "-owner@example.com");
     JsonNode board = createBoard(owner, projectId, "B");
-    return new Fixture(projectId, boundToken(owner, projectId, board.get("id").asLong()));
+    return new Fixture(
+        projectId,
+        boundToken(owner, projectId, board.get("id").asLong()),
+        prefix + "-owner@example.com");
   }
 
   private long ingest(String token, String title, Integer derivedFrom, String key, boolean direct)
@@ -177,6 +241,47 @@ class KanbanCompatDerivedFromIT extends AbstractIntegrationTest {
       throw new IllegalStateException("Karte ohne Herkunft: " + cardId);
     }
     return n;
+  }
+
+  private String itemsBody(String token) throws Exception {
+    return mvc.perform(
+            org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get(
+                    "/api/kanban/items")
+                .header("X-Kanban-Token", token))
+        .andExpect(status().isOk())
+        .andReturn()
+        .getResponse()
+        .getContentAsString();
+  }
+
+  /** Sucht die Karte mit der Nummer im gruppierten Items-Baum und liefert ihr derivedFrom. */
+  private Integer derivedFromInItems(JsonNode items, int nummer) {
+    for (JsonNode spalte : items) {
+      for (JsonNode item : spalte) {
+        if (item.get("number").asInt() == nummer) {
+          JsonNode df = item.get("derivedFrom");
+          return df == null || df.isNull() ? null : df.asInt();
+        }
+      }
+    }
+    throw new IllegalStateException("Karte #" + nummer + " nicht in der Items-Antwort");
+  }
+
+  /** Liest die Herkunft ueber den CardView-Pfad (GET /api/cards/{id}). */
+  private Integer derivedFromViaCardView(Fixture f, long cardId) throws Exception {
+    Cookie owner = session(f.ownerEmail(), PlatformRole.USER);
+    JsonNode card =
+        json.readTree(
+            mvc.perform(
+                    org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get(
+                            "/api/cards/" + cardId)
+                        .cookie(owner))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString());
+    JsonNode df = card.get("derivedFrom");
+    return df == null || df.isNull() ? null : df.asInt();
   }
 
   private int countCards(long projectId) {

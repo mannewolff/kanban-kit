@@ -37,6 +37,7 @@ class ProjectCardControllerTest {
         List.of(),
         null,
         List.of(),
+        null,
         null);
   }
 

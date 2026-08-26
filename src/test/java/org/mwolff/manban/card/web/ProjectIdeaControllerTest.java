@@ -37,6 +37,7 @@ class ProjectIdeaControllerTest {
         List.of(),
         null,
         List.of(),
+        null,
         null);
   }
 
