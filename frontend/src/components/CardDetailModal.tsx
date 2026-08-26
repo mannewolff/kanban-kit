@@ -605,7 +605,7 @@ function CardStatusChip({
   columnName?: string
   colors: { bg: string; text: string } | null
 }>) {
-  if (isEpic) return <Chip label="Epic" size="small" color="secondary" />
+  if (isEpic) return <Chip label="Vorhaben" size="small" color="secondary" />
   if (!colors) return null
   return <Chip label={columnName} size="small" sx={{ bgcolor: colors.bg, color: colors.text, fontWeight: 600 }} />
 }

@@ -31,7 +31,7 @@ type ColumnKey = 'number' | 'status' | 'epic' | 'title' | 'excerpt'
 const COLUMN_META: Record<ColumnKey, { label: string; sx: SxProps<Theme> }> = {
   number: { label: 'Nr', sx: { flexShrink: 0, width: 48 } },
   status: { label: 'Status', sx: { flexShrink: 0, width: 108 } },
-  epic: { label: 'Epic', sx: { flexShrink: 0, width: 76 } },
+  epic: { label: 'Vorhaben', sx: { flexShrink: 0, width: 76 } },
   title: { label: 'Titel', sx: { flex: 1, minWidth: 0 } },
   excerpt: { label: 'Beschreibung', sx: { flex: '0 0 30%', minWidth: 0 } },
 }

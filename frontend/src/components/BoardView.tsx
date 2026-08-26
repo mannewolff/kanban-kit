@@ -489,17 +489,17 @@ export function BoardView({
             <TextField
               select
               size="small"
-              label="Epic-Filter"
+              label="Vorhaben-Filter"
               value={epicFilter ?? ''}
               onChange={(e) => changeEpicFilter(e.target.value === '' ? null : Number(e.target.value))}
               slotProps={{
-                htmlInput: { 'aria-label': 'Epic-Filter' },
+                htmlInput: { 'aria-label': 'Vorhaben-Filter' },
                 select: { native: true },
                 inputLabel: { shrink: true },
               }}
               sx={{ minWidth: 200 }}
             >
-              <option value="">Alle Epics</option>
+              <option value="">Alle Vorhaben</option>
               {epics.map((epic) => (
                 <option key={epic.id} value={epic.id}>
                   {epicShortcode(epic.title, epic.shortcode)} – {epic.title}

@@ -75,12 +75,12 @@ export function EpicsPage() {
             { label: 'Projekte', to: '/' },
             ...(board && projectName ? [{ label: projectName, to: `/projects/${board.projectId}` }] : []),
             ...(board ? [{ label: board.name, to: `/boards/${id}` }] : []),
-            { label: 'Epics' },
+            { label: 'Vorhaben' },
           ]}
         />
         {canEdit && (
           <Button variant="contained" size="small" startIcon={<AddIcon />} onClick={() => setCreating(true)}>
-            Neues Epic
+            Neues Vorhaben
           </Button>
         )}
       </Stack>
@@ -113,7 +113,7 @@ export function EpicsPage() {
             </Paper>
           )
         })}
-        {epics.length === 0 && <Typography color="text.secondary">Noch keine Epics.</Typography>}
+        {epics.length === 0 && <Typography color="text.secondary">Noch keine Vorhaben.</Typography>}
       </Stack>
 
       <NewCardModal

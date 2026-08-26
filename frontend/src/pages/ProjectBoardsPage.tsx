@@ -234,7 +234,7 @@ export function ProjectBoardsPage() {
         <DialogContent>
           <DialogContentText>
             Das Board „{confirmBoard?.name}&ldquo; wird archiviert. Es verschwindet aus der Liste,
-            bleibt aber mit allen Epics und Tickets erhalten und lässt sich im Archiv
+            bleibt aber mit allen Vorhaben und Tickets erhalten und lässt sich im Archiv
             wiederherstellen.
           </DialogContentText>
         </DialogContent>
@@ -250,7 +250,7 @@ export function ProjectBoardsPage() {
         <DialogTitle>Board endgültig löschen?</DialogTitle>
         <DialogContent>
           <DialogContentText sx={{ mb: 2 }}>
-            Das Board „{purgeBoard?.name}&ldquo; und alle zugehörigen Epics und Tickets werden
+            Das Board „{purgeBoard?.name}&ldquo; und alle zugehörigen Vorhaben und Tickets werden
             unwiderruflich gelöscht. Gib zur Bestätigung den Board-Namen ein.
           </DialogContentText>
           <TextField

@@ -29,10 +29,10 @@ describe('NewCardModal', () => {
     )
 
     fireEvent.change(screen.getByLabelText('Titel'), { target: { value: 'Karte' } })
-    fireEvent.change(screen.getByLabelText('Epic'), { target: { value: '9' } })
+    fireEvent.change(screen.getByLabelText('Vorhaben'), { target: { value: '9' } })
     // Wieder abwählen -> deckt den `? null`-Zweig der Epic-Auswahl ab.
-    fireEvent.change(screen.getByLabelText('Epic'), { target: { value: '' } })
-    fireEvent.change(screen.getByLabelText('Epic'), { target: { value: '9' } })
+    fireEvent.change(screen.getByLabelText('Vorhaben'), { target: { value: '' } })
+    fireEvent.change(screen.getByLabelText('Vorhaben'), { target: { value: '9' } })
     fireEvent.change(screen.getByLabelText('Markdown-Beschreibung'), { target: { value: 'Text' } })
     fireEvent.click(screen.getByRole('button', { name: 'Anlegen' }))
 
@@ -111,7 +111,7 @@ describe('NewCardModal', () => {
 
     expect(screen.getByLabelText('Titel')).toBeInTheDocument()
     expect(screen.getByLabelText('Beschreibung')).toBeInTheDocument()
-    expect(screen.getByLabelText('Epic')).toBeInTheDocument()
+    expect(screen.getByLabelText('Vorhaben')).toBeInTheDocument()
     expect(screen.queryByLabelText('Zuständige')).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Labels')).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Fällig am')).not.toBeInTheDocument()
@@ -120,8 +120,8 @@ describe('NewCardModal', () => {
     fireEvent.change(screen.getByLabelText('Titel'), { target: { value: 'Idee' } })
     fireEvent.change(screen.getByLabelText('Beschreibung'), { target: { value: 'Ideentext' } })
     // Epic-Auswahl im schlanken Zweig auslösen (deckt onChange + beide Ternary-Seiten ab).
-    fireEvent.change(screen.getByLabelText('Epic'), { target: { value: '9' } })
-    fireEvent.change(screen.getByLabelText('Epic'), { target: { value: '' } })
+    fireEvent.change(screen.getByLabelText('Vorhaben'), { target: { value: '9' } })
+    fireEvent.change(screen.getByLabelText('Vorhaben'), { target: { value: '' } })
     fireEvent.click(screen.getByRole('button', { name: 'Anlegen' }))
     expect(onSubmit).toHaveBeenCalledWith(
       expect.objectContaining({

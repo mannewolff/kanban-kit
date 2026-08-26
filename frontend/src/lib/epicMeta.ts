@@ -27,7 +27,7 @@ export function epicColor(id: number): string {
 
 /**
  * Kürzel eines Epics: ein explizit gesetztes Kürzel hat Vorrang; sonst die Initialen der
- * (max. drei ersten) Titelwörter in Großbuchstaben. Leerer Titel ohne Kürzel → „EPIC".
+ * (max. drei ersten) Titelwörter in Großbuchstaben. Leerer Titel ohne Kürzel → „VORH".
  */
 export function epicShortcode(title: string, explicit?: string | null): string {
   const trimmed = explicit?.trim()
@@ -39,5 +39,5 @@ export function epicShortcode(title: string, explicit?: string | null): string {
     .join('')
     .slice(0, 3)
     .toUpperCase()
-  return initials || 'EPIC'
+  return initials || 'VORH'
 }

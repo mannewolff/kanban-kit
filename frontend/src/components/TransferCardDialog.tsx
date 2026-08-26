@@ -96,7 +96,7 @@ export function TransferCardDialog({
       <DialogContent>
         <DialogContentText sx={{ mb: 2 }}>
           {cardIds.length === 1 ? 'Die Karte wird' : `Die ${cardIds.length} Karten werden`} in das
-          gewählte Board verschoben. Dabei gehen Epic-Zuordnung und Abhängigkeiten verloren;
+          gewählte Board verschoben. Dabei gehen Vorhaben-Zuordnung und Abhängigkeiten verloren;
           Kommentare und Anhänge bleiben erhalten.
         </DialogContentText>
         {error && (

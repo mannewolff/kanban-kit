@@ -355,7 +355,13 @@ describe('BoardListPage', () => {
     await screen.findByText('Aufgabe')
 
     const order = screen.getAllByLabelText(/^Spalte /).map((el) => el.getAttribute('aria-label'))
-    expect(order).toEqual(['Spalte Beschreibung', 'Spalte Titel', 'Spalte Nr', 'Spalte Status', 'Spalte Epic'])
+    expect(order).toEqual([
+      'Spalte Beschreibung',
+      'Spalte Titel',
+      'Spalte Nr',
+      'Spalte Status',
+      'Spalte Vorhaben',
+    ])
   })
 
   it('übernimmt einen gespeicherten Spalten-Filter aus localStorage', async () => {

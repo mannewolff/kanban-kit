@@ -52,7 +52,7 @@ describe('TransferCardDialog', () => {
     renderDialog(false)
     expect(await screen.findByRole('option', { name: 'Eigenes' })).toBeInTheDocument()
     expect(screen.queryByRole('option', { name: 'Fremdes' })).not.toBeInTheDocument()
-    expect(screen.getByText(/Epic-Zuordnung und Abhängigkeiten/)).toBeInTheDocument()
+    expect(screen.getByText(/Vorhaben-Zuordnung und Abhängigkeiten/)).toBeInTheDocument()
   })
 
   it('formuliert den Hinweis im Plural bei mehreren Karten', async () => {

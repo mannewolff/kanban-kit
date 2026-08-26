@@ -75,9 +75,9 @@ describe('EpicsPage', () => {
   it('legt über „Neues Epic" ein Epic an', async () => {
     mEpics.list.mockResolvedValue([])
     renderPage()
-    await screen.findByText('Epics')
+    await screen.findByText('Vorhaben')
 
-    fireEvent.click(screen.getByRole('button', { name: 'Neues Epic' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Neues Vorhaben' }))
     fireEvent.change(screen.getByLabelText('Titel'), { target: { value: 'Auth-Epic' } })
     fireEvent.click(screen.getByRole('button', { name: 'Anlegen' }))
 
@@ -139,9 +139,9 @@ describe('EpicsPage', () => {
     mProjects.list.mockResolvedValue([{ id: 42, name: 'Fremd', role: 'VIEWER', createdAt: '' }])
     renderPage()
 
-    await screen.findByText('Epics')
+    await screen.findByText('Vorhaben')
     await waitFor(() => expect(mProjects.list).toHaveBeenCalled())
-    expect(screen.queryByRole('button', { name: 'Neues Epic' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Neues Vorhaben' })).not.toBeInTheDocument()
   })
 
   it('behandelt einen fehlenden Board-Parameter als ungültig (boardId undefined)', () => {

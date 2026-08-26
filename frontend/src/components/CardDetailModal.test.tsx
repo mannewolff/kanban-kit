@@ -525,7 +525,7 @@ describe('CardDetailModal', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Bearbeiten' }))
 
     expect(screen.getByLabelText('Kürzel')).toHaveValue('AUT')
-    expect(screen.queryByLabelText('Epic')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Vorhaben')).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Fällig am')).not.toBeInTheDocument()
   })
 
@@ -535,7 +535,7 @@ describe('CardDetailModal', () => {
     render(<CardDetailModal card={card} canEdit epics={epics} onClose={vi.fn()} {...apis} />)
 
     fireEvent.click(screen.getByRole('button', { name: 'Bearbeiten' }))
-    fireEvent.change(screen.getByLabelText('Epic'), { target: { value: '9' } })
+    fireEvent.change(screen.getByLabelText('Vorhaben'), { target: { value: '9' } })
 
     fireEvent.click(screen.getByRole('button', { name: 'Speichern' }))
     await waitFor(() =>
@@ -550,7 +550,7 @@ describe('CardDetailModal', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Bearbeiten' }))
     // Auswahl auf „—" (leerer Wert) → onParentIdChange(null), deckt den `=== '' ? null`-Zweig ab.
-    fireEvent.change(screen.getByLabelText('Epic'), { target: { value: '' } })
+    fireEvent.change(screen.getByLabelText('Vorhaben'), { target: { value: '' } })
 
     fireEvent.click(screen.getByRole('button', { name: 'Speichern' }))
     await waitFor(() =>
@@ -575,7 +575,7 @@ describe('CardDetailModal', () => {
 
     // Lesend statt Auswahl: Ein leerer Optionsvorrat böte nur „(kein Epic)" an — ein Klick darauf
     // löschte die Zuordnung, ohne sie je gezeigt zu haben (#586).
-    const field = screen.getByLabelText('Epic')
+    const field = screen.getByLabelText('Vorhaben')
     expect(field).toHaveValue('#9')
     expect(field).toHaveAttribute('readonly')
 
@@ -853,7 +853,7 @@ describe('CardDetailModal', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Bearbeiten' }))
 
-    expect(screen.getByLabelText('Epic')).toHaveValue('9')
+    expect(screen.getByLabelText('Vorhaben')).toHaveValue('9')
   })
 
   it('speichert eine Epic-Karte mit geändertem Titel und Kürzel', async () => {

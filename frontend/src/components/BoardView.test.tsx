@@ -328,7 +328,7 @@ describe('BoardView', () => {
     expect(screen.getByTestId('card-100')).toBeInTheDocument()
     expect(screen.getByTestId('card-200')).toBeInTheDocument()
 
-    fireEvent.change(screen.getByLabelText('Epic-Filter'), { target: { value: '9' } })
+    fireEvent.change(screen.getByLabelText('Vorhaben-Filter'), { target: { value: '9' } })
     expect(screen.getByTestId('card-100')).toBeInTheDocument()
     expect(screen.queryByTestId('card-200')).not.toBeInTheDocument()
   })
@@ -1005,7 +1005,7 @@ describe('BoardView', () => {
       const epics = [{ id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 0, total: 1 }]
       const inEpic: Card = { ...card, parentId: 9 }
       render(<BoardView board={board} initialCards={[inEpic]} canEdit epics={epics} api={mkApi()} />)
-      fireEvent.change(screen.getByLabelText('Epic-Filter'), { target: { value: '9' } })
+      fireEvent.change(screen.getByLabelText('Vorhaben-Filter'), { target: { value: '9' } })
       // Filter greift trotz localStorage-Fehler (nur das Persistieren schlägt stumm fehl).
       expect(screen.getByTestId('card-100')).toBeInTheDocument()
     } finally {
@@ -1060,10 +1060,10 @@ describe('BoardView', () => {
     render(<BoardView board={board} initialCards={[inEpic, other]} canEdit epics={epics} api={mkApi()} />)
 
     // Erst filtern (setItem/Number-Zweig) ...
-    fireEvent.change(screen.getByLabelText('Epic-Filter'), { target: { value: '9' } })
+    fireEvent.change(screen.getByLabelText('Vorhaben-Filter'), { target: { value: '9' } })
     expect(screen.queryByTestId('card-200')).not.toBeInTheDocument()
     // ... dann auf leeren Wert zurück: onChange nimmt den null-Zweig, changeEpicFilter den removeItem-Zweig.
-    fireEvent.change(screen.getByLabelText('Epic-Filter'), { target: { value: '' } })
+    fireEvent.change(screen.getByLabelText('Vorhaben-Filter'), { target: { value: '' } })
     expect(screen.getByTestId('card-200')).toBeInTheDocument()
   })
 
@@ -1175,7 +1175,7 @@ describe('BoardView', () => {
     it('greift nicht, solange der Fokus in einem Eingabefeld steht', () => {
       render(<BoardView board={board} initialCards={[card]} canEdit epics={epics} api={mkApi()} />)
 
-      fireEvent.keyDown(screen.getByLabelText('Epic-Filter'), { key: '+' })
+      fireEvent.keyDown(screen.getByLabelText('Vorhaben-Filter'), { key: '+' })
 
       expect(screen.queryByRole('heading', { name: /Neue Karte/ })).not.toBeInTheDocument()
     })

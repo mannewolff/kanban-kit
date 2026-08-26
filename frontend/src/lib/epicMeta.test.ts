@@ -8,7 +8,7 @@ describe('epicShortcode', () => {
 
   it('leitet Initialen aus dem Titel ab (max. 3)', () => {
     expect(epicShortcode('Zehn Tage Workshop IT')).toBe('ZTW')
-    expect(epicShortcode('   ', null)).toBe('EPIC')
+    expect(epicShortcode('   ', null)).toBe('VORH')
   })
 })
 

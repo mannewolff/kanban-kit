@@ -65,11 +65,11 @@ export function CardFields({
         // Ohne Epic-Liste bleibt nur die nackte ID: Sie belegt sichtbar, dass eine Zuordnung
         // besteht, und hält sie zugleich außer Reichweite jeder versehentlichen Änderung.
         <TextField
-          label="Epic"
-          value={parentId === null ? '(kein Epic)' : `#${parentId}`}
-          helperText="Epic-Liste hier nicht verfügbar — die Zuordnung bleibt unverändert."
+          label="Vorhaben"
+          value={parentId === null ? '(kein Vorhaben)' : `#${parentId}`}
+          helperText="Vorhaben-Liste hier nicht verfügbar — die Zuordnung bleibt unverändert."
           slotProps={{
-            htmlInput: { 'aria-label': 'Epic' },
+            htmlInput: { 'aria-label': 'Vorhaben' },
             input: { readOnly: true },
             inputLabel: { shrink: true },
           }}
@@ -78,17 +78,17 @@ export function CardFields({
       ) : (
         <TextField
           select
-          label="Epic"
+          label="Vorhaben"
           value={parentId ?? ''}
           onChange={(e) => onParentIdChange(e.target.value === '' ? null : Number(e.target.value))}
           slotProps={{
-            htmlInput: { 'aria-label': 'Epic' },
+            htmlInput: { 'aria-label': 'Vorhaben' },
             select: { native: true },
             inputLabel: { shrink: true },
           }}
           fullWidth
         >
-          <option value="">(kein Epic)</option>
+          <option value="">(kein Vorhaben)</option>
           {epics.map((epic) => (
             <option key={epic.id} value={epic.id}>
               {epicShortcode(epic.title, epic.shortcode)} – {epic.title}
