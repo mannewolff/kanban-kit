@@ -12,6 +12,9 @@ gebaute Frontend ausliefert), **Postgres** und **MinIO** (Objektspeicher für An
   ```
   Symptom für „Docker läuft nicht": `docker ps` meldet „Cannot connect to the Docker daemon".
 
+  Wer das Projekt nicht nur betreibt, sondern auch **baut und testet**, braucht unter Colima
+  zusätzlich zwei Umgebungsvariablen — siehe [Testsuite lokal starten](#testsuite-lokal-starten).
+
 ## Starten
 
 Im Repo-Verzeichnis (dort liegt `docker-compose.yml`):
@@ -143,3 +146,42 @@ Plattform-Admin gilt zwar auch ohne Zeitstempel als freigegeben und kann sich an
 
 Danach **ab- und wieder anmelden** — das Frontend lädt die Rolle nur beim Login (`/api/me`).
 Anschließend erscheint **„Admin"** in der Seitenleiste.
+
+## Testsuite lokal starten
+
+Betrifft nur, wer das Repository klont und selbst baut — für den reinen Betrieb über
+`docker compose` ist nichts davon nötig.
+
+Die Integrationstests starten ihre eigene Postgres-Instanz über **Testcontainers**. Unter
+**Colima** findet Testcontainers die Docker-Laufzeit nicht von allein; nötig sind:
+
+```
+colima start
+export DOCKER_HOST="unix://$HOME/.colima/default/docker.sock"
+export TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE=/var/run/docker.sock
+```
+
+Danach laufen `mvn verify` und `mvn -Ppit -Dskip.frontend=true test` durch.
+
+**Die beiden Variablen beantworten zwei verschiedene Fragen — keine ersetzt die andere.**
+
+`DOCKER_HOST` sagt, **wo Testcontainers mit dem Daemon spricht**. Auf dem Mac existiert nur
+`~/.colima/default/docker.sock`; ein `/var/run/docker.sock` gibt es dort nicht. Der `docker`-Befehl
+findet den Daemon trotzdem, weil er dem Docker-*Context* folgt — Testcontainers tut das nicht,
+wenn `~/.testcontainers.properties` eine feste Strategie vorgibt (`UnixSocketClientProviderStrategy`
+sucht genau unter `/var/run/docker.sock`).
+
+`TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE` sagt, **welchen Pfad Testcontainers in den Container
+hineinreicht**. Der Aufräum-Container *Ryuk* bekommt den Docker-Socket als Bind-Mount, und dieser
+Pfad muss **innerhalb der VM** gültig sein — dort heißt der Socket `/var/run/docker.sock`.
+
+### Symptome
+
+| Fehlt | Symptom |
+|---|---|
+| Docker läuft nicht | Alle Integrationstests fallen mit `ExceptionInInitializerError` in `AbstractIntegrationTest` aus; im Log darunter `Could not find a valid Docker environment`. |
+| `DOCKER_HOST` | Dasselbe Bild — die Ursachenzeile nennt `NoSuchFileException (/var/run/docker.sock)`. |
+| `TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE` | Der Client verbindet, aber Ryuk startet nicht: `Status 500: error while creating mount source path '/Users/…/.colima/default/docker.sock': mkdir …: operation not supported`. |
+
+Der mittlere und der untere Fall sehen im Testbericht sehr ähnlich aus, haben aber verschiedene
+Ursachen — die Unterscheidung steht in der Zeile nach `Caused by`.
