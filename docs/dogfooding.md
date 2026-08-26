@@ -153,7 +153,7 @@ Fehlercodes (jeder Fehler lässt Labels und Zuordnungen unverändert):
 
 | Code | Bedeutung |
 |---|---|
-| `400` | Name fehlt, ist leer oder länger als 60 Zeichen — oder die ID gehört zu einem **Epic** (Epics haben keine Labels) |
+| `400` | Name fehlt, ist leer oder länger als 60 Zeichen — oder die ID gehört zu einem **Vorhaben** (Vorhaben haben keine Labels) |
 | `401` | Token fehlt oder ist ungültig |
 | `403` | Der Token-Nutzer hat kein `TICKET_UPDATE` im Projekt (ein VIEWER darf nicht labeln, ein MEMBER schon) |
 | `404` | Karte unbekannt, Karte liegt auf einem **anderen** Board als dem gebundenen — oder das Board kennt kein Label dieses Namens |
