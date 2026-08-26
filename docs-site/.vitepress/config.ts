@@ -37,6 +37,7 @@ export default defineConfig({
           { text: "Umgebungsvariablen", link: "/betrieb#umgebungsvariablen" },
           { text: "E-Mail-Bestätigung", link: "/betrieb#e-mail-bestatigung-ohne-mailserver" },
           { text: "Ersten Admin einrichten", link: "/betrieb#den-ersten-admin-einrichten" },
+          { text: "Testsuite lokal starten", link: "/betrieb#testsuite-lokal-starten" },
         ],
       },
       {
