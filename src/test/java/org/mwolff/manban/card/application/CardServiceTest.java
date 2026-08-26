@@ -1546,6 +1546,86 @@ class CardServiceTest {
   }
 
   @Test
+  void transfer_projektwechsel_loeschtDieHerkunftDerKarte() {
+    stubTransferScenario(9L);
+    when(cards.findById(100L))
+        .thenReturn(
+            Optional.of(
+                withHerkunft(card(100L, 50L, 3, false, FIXED, CardType.CARD, 9L, null), 77L)));
+
+    ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
+    service.transfer(1L, 100L, 20L, 60L);
+
+    verify(cards).save(captor.capture());
+    assertThat(captor.getValue().derivedFromCardId()).isNull();
+  }
+
+  @Test
+  void transfer_projektwechsel_loeschtDieHerkunftDerKinder() {
+    stubTransferScenario(9L);
+    Card kind = withHerkunft(card(200L, 50L, 4, false, null, CardType.CARD, null, null), 100L);
+    Card archiviertesKind =
+        withHerkunft(card(201L, 50L, 5, true, null, CardType.CARD, null, null), 100L);
+    when(cards.findByDerivedFrom(100L)).thenReturn(List.of(kind, archiviertesKind));
+
+    ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
+    service.transfer(1L, 100L, 20L, 60L);
+
+    verify(cards, times(3)).save(captor.capture());
+    assertThat(captor.getAllValues())
+        .filteredOn(c -> c.requireId() == 200L || c.requireId() == 201L)
+        .hasSize(2)
+        .allSatisfy(c -> assertThat(c.derivedFromCardId()).isNull());
+  }
+
+  @Test
+  void transfer_innerhalbDesProjekts_laesstDieHerkunftUnberuehrt() {
+    // Ziel-Board liegt im SELBEN Projekt: Die Kette ueberlebt den Board-Wechsel.
+    when(cards.findById(100L))
+        .thenReturn(
+            Optional.of(
+                withHerkunft(card(100L, 50L, 3, false, FIXED, CardType.CARD, 9L, null), 77L)));
+    when(boardService.requireProjectId(20L)).thenReturn(PROJECT);
+    when(boardService.requireColumn(60L, 20L)).thenReturn(new ColumnView(60L, "Backlog", 0, null));
+
+    ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
+    service.transfer(1L, 100L, 20L, 60L);
+
+    verify(cards).save(captor.capture());
+    assertThat(captor.getValue().derivedFromCardId()).isEqualTo(77L);
+    verify(cards, never()).findByDerivedFrom(anyLong());
+  }
+
+  /**
+   * Setzt die Herkunft auf einer Testkarte — der Record-Wither bleibt die einzige Schreibstelle.
+   */
+  private static Card withHerkunft(Card c, long herkunft) {
+    return c.withDerivedFrom(herkunft);
+  }
+
+  @Test
+  void bulkTransfer_loeschtDieHerkunftAuchWennVorfahrUndKindZusammenWandern() {
+    // Wandern Vorfahr (100) und Kind (200) im selben Batch ins selbe Zielprojekt, waere die
+    // Beziehung dort eigentlich weiter konsistent — sie wird trotzdem geloescht. Eine
+    // Batch-Ausnahme haette das Ergebnis von der Reihenfolge innerhalb des Batches abhaengig
+    // gemacht.
+    stubTransferScenario(null);
+    Card kind = withHerkunft(card(200L, 50L, 4, false, null, CardType.CARD, null, null), 100L);
+    when(cards.findById(200L)).thenReturn(Optional.of(kind));
+    when(cards.findByDerivedFrom(100L)).thenReturn(List.of(kind));
+    when(cards.allocateCardNumber(2L)).thenReturn(8, 9);
+
+    ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
+    service.bulkTransfer(1L, List.of(100L, 200L), 20L, 60L);
+
+    verify(cards, times(3)).save(captor.capture());
+    assertThat(captor.getAllValues())
+        .filteredOn(c -> c.requireId() == 200L)
+        .isNotEmpty()
+        .allSatisfy(c -> assertThat(c.derivedFromCardId()).isNull());
+  }
+
+  @Test
   void transfer_clearsParentAndDependencies() {
     // Given
     stubTransferScenario(9L);

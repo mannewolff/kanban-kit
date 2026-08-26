@@ -761,7 +761,24 @@ public class CardService {
     transitions.open(cardId, targetColumnId, targetColumn.name(), switchedAt);
 
     Card moved = cards.findById(cardId).orElseThrow(CardNotFoundException::new);
-    CardView result = view(cards.save(moved.withParent(null).withMovedToDoneAt(null)));
+    Card cleaned = moved.withParent(null).withMovedToDoneAt(null);
+    if (!sameProject) {
+      // Die Herkunft ist projekt-lokal: Der Vorfahr bleibt zurueck, und ein Verweis ueber die
+      // Projektgrenze zeigte auf eine Nummer, die dort einer anderen Karte gehoeren kann.
+      // Anders als withParent(null) gilt das NUR beim Projektwechsel — innerhalb des Projekts
+      // ueberlebt die Kette den Board-Wechsel.
+      cleaned = cleaned.withDerivedFrom(null);
+    }
+    CardView result = view(cards.save(cleaned));
+    if (!sameProject) {
+      // Gegenrichtung: Auch die Kinder verlieren ihren Verweis. Sonst zeigten sie auf die NEUE
+      // Nummer der abgewanderten Karte — im eigenen Projekt womoeglich eine fremde. Bewusst ohne
+      // Ausnahme fuer bulkTransfer: Wandern Vorfahr und Kind im selben Batch, haenge das Ergebnis
+      // sonst von der Reihenfolge innerhalb des Batches ab.
+      for (Card kind : cards.findByDerivedFrom(cardId)) {
+        cards.save(kind.withDerivedFrom(null));
+      }
+    }
     // Board-übergreifend: Quell- und Ziel-Board müssen beide live nachziehen.
     publishChanged(card.requireBoardId(), ActivityType.MOVED, cardId);
     publishChanged(targetBoardId, ActivityType.MOVED, cardId);
