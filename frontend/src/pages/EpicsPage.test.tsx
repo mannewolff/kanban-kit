@@ -37,9 +37,9 @@ const mProjects = projectsApi as unknown as { list: ReturnType<typeof vi.fn> }
 
 function renderPage() {
   return render(
-    <MemoryRouter initialEntries={['/boards/1/epics']}>
+    <MemoryRouter initialEntries={['/boards/1/vorhaben']}>
       <Routes>
-        <Route path="/boards/:boardId/epics" element={<EpicsPage />} />
+        <Route path="/boards/:boardId/vorhaben" element={<EpicsPage />} />
       </Routes>
     </MemoryRouter>,
   )
@@ -86,9 +86,9 @@ describe('EpicsPage', () => {
 
   it('zeigt bei ungültiger Board-ID einen Fehler und ruft keine API auf', async () => {
     render(
-      <MemoryRouter initialEntries={['/boards/abc/epics']}>
+      <MemoryRouter initialEntries={['/boards/abc/vorhaben']}>
         <Routes>
-          <Route path="/boards/:boardId/epics" element={<EpicsPage />} />
+          <Route path="/boards/:boardId/vorhaben" element={<EpicsPage />} />
         </Routes>
       </MemoryRouter>,
     )

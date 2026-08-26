@@ -97,7 +97,7 @@ export function AppShell() {
   }, [])
 
   // Board-Kontext für die Seitenleiste: auf einer Board-Route den Namen nachladen.
-  // Ein einzelnes Muster mit Splat matcht sowohl /boards/:id als auch /boards/:id/epics.
+  // Ein einzelnes Muster mit Splat matcht sowohl /boards/:id als auch /boards/:id/vorhaben.
   // (Kein `useMatch(a) ?? useMatch(b)` — der `??`-Short-Circuit würde den zweiten Hook
   // bedingt aufrufen und die Rules of Hooks verletzen.)
   const boardMatch = useMatch('/boards/:boardId/*')

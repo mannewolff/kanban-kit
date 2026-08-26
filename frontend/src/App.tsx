@@ -2,6 +2,7 @@ import { Suspense, lazy } from 'react'
 import { Route, Routes } from 'react-router-dom'
 import { Box, CircularProgress } from '@mui/material'
 import { AppShell } from './components/AppShell'
+import { LegacyEpicsRedirect } from './routes/LegacyEpicsRedirect'
 import { ProtectedRoute } from './routes/ProtectedRoute'
 
 // Route-Level Lazy Loading (CLAUDE-react.md Performance-Budget): jede Page wird als
@@ -75,7 +76,9 @@ export function App() {
             <Route path="/projects/:projectId/members" element={<ProjectMembersPage />} />
             <Route path="/boards/:boardId" element={<BoardPage />} />
             <Route path="/boards/:boardId/list" element={<BoardListPage />} />
-            <Route path="/boards/:boardId/epics" element={<EpicsPage />} />
+            <Route path="/boards/:boardId/vorhaben" element={<EpicsPage />} />
+            {/* Alter Pfad: leitet weiter, damit Lesezeichen und Doku-Verweise tragen. */}
+            <Route path="/boards/:boardId/epics" element={<LegacyEpicsRedirect />} />
             <Route path="/boards/:boardId/dashboard" element={<DashboardPage />} />
             <Route path="/admin" element={<AdminPage />} />
             <Route path="/admin/bootstrap" element={<BootstrapAdminPage />} />
