@@ -17,10 +17,12 @@ import org.mwolff.manban.card.domain.Card;
  * Prozess, wo der Vorfahr nachweislich schon existiert. Ein unbekannter Wert ist dort ein
  * Tippfehler — und ohne Existenz gäbe es ohnehin keine ID aufzulösen.
  *
- * <p><b>Selbstverweis und Zyklus sind über die API nicht erreichbar</b>, und das ist kein Grund,
- * sie wegzulassen: Die Herkunft wird nur beim Anlegen gesetzt, und ein Aufrufer kennt die Nummer
- * der neuen Karte vorher nicht. Beide Prüfungen schützen gegen Bestandskorruption — per SQL, aus
- * einer Migration oder aus einem späteren Änderungspfad.
+ * <p><b>Selbstverweis und Zyklus sind über die API erreichbar</b>, seit Issue #607 die Herkunft
+ * auch nachträglich änderbar macht ({@code PATCH /api/cards/{cardId}/derived-from}). Beim Anlegen
+ * war das noch anders — dort kennt ein Aufrufer die Nummer der neuen Karte vorher nicht —, weshalb
+ * eine frühere Fassung dieses Kommentars beide Prüfungen als reinen Bestandsschutz beschrieb. Sie
+ * sind jetzt <b>Erstverteidigung</b>: Der Änderungspfad muss die eigene Karten-ID als {@code
+ * selfCardId} durchreichen, sonst greift keine der beiden.
  */
 final class DerivedFrom {
 
@@ -54,11 +56,11 @@ final class DerivedFrom {
             .findByProjectIdAndNumber(projectId, derivedFrom)
             .orElseThrow(
                 () ->
-                    new InvalidDependencyException(
+                    new InvalidDerivedFromException(
                         "Unbekannte Kartennummer als Herkunft: " + derivedFrom));
     long vorfahrId = vorfahr.requireId();
     if (selfCardId != null && selfCardId == vorfahrId) {
-      throw new InvalidDependencyException("Eine Karte kann nicht von sich selbst abstammen");
+      throw new InvalidDerivedFromException("Eine Karte kann nicht von sich selbst abstammen");
     }
     requireNoCycle(cards, vorfahr, selfCardId);
     return vorfahrId;
@@ -71,11 +73,11 @@ final class DerivedFrom {
     while (cursor != null) {
       tiefe++;
       if (tiefe >= MAX_DEPTH) {
-        throw new InvalidDependencyException(
+        throw new InvalidDerivedFromException(
             "Herkunftskette erreicht " + MAX_DEPTH + " Glieder — vermutlich zyklisch");
       }
       if (selfCardId != null && cursor.longValue() == selfCardId.longValue()) {
-        throw new InvalidDependencyException("Herkunft wuerde einen Zyklus bilden");
+        throw new InvalidDerivedFromException("Herkunft wuerde einen Zyklus bilden");
       }
       Optional<Card> naechster = cards.findById(cursor);
       if (naechster.isEmpty()) {

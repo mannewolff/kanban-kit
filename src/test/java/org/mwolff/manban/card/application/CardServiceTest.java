@@ -175,7 +175,7 @@ class CardServiceTest {
     // Die zurückgegebene View der Voll-Signatur (11 Args) wird bewusst geprüft, damit der
     // @Transactional-Einstieg (der an den privaten Kern doCreate delegiert) nicht null zurückgibt.
     CardService.CardView result =
-        service.create(1L, BOARD, 20L, "Titel", null, null, null, false, due, null, null);
+        service.create(1L, BOARD, 20L, "Titel", null, null, null, false, due, null, null, null);
 
     verify(cards).save(captor.capture());
     assertThat(captor.getValue().dueDate()).isEqualTo(due);
@@ -191,7 +191,7 @@ class CardServiceTest {
     when(permissions.isRealProjectMember(8L, 1L)).thenReturn(true);
 
     service.create(
-        1L, BOARD, 20L, "Titel", null, null, null, false, null, List.of(7L, 8L, 7L), null);
+        1L, BOARD, 20L, "Titel", null, null, null, false, null, List.of(7L, 8L, 7L), null, null);
 
     verify(assignees).replaceAssignees(1L, List.of(7L, 8L));
     // Genau ein Aktivitätseintrag (CREATED) — kein zusätzlicher ASSIGNED beim atomaren Anlegen.
@@ -228,7 +228,7 @@ class CardServiceTest {
     when(cards.allocateCardNumber(PROJECT)).thenReturn(1);
     when(cards.allocateActivePosition(20L)).thenReturn(0);
 
-    service.create(1L, BOARD, 20L, "Titel", null, null, null, false, null, List.of(), null);
+    service.create(1L, BOARD, 20L, "Titel", null, null, null, false, null, List.of(), null, null);
 
     verify(assignees, never()).replaceAssignees(anyLong(), anyList());
   }
@@ -243,7 +243,18 @@ class CardServiceTest {
     assertThatThrownBy(
             () ->
                 service.create(
-                    1L, BOARD, 20L, "Titel", null, null, null, false, null, List.of(9L), null))
+                    1L,
+                    BOARD,
+                    20L,
+                    "Titel",
+                    null,
+                    null,
+                    null,
+                    false,
+                    null,
+                    List.of(9L),
+                    null,
+                    null))
         .isInstanceOf(InvalidAssigneeException.class);
     verify(assignees, never()).replaceAssignees(anyLong(), anyList());
   }
@@ -258,7 +269,7 @@ class CardServiceTest {
             List.of(new Label(7L, BOARD, "Bug", "#f00"), new Label(8L, BOARD, "Ux", "#0f0")));
 
     service.create(
-        1L, BOARD, 20L, "Titel", null, null, null, false, null, null, List.of(7L, 8L, 7L));
+        1L, BOARD, 20L, "Titel", null, null, null, false, null, null, List.of(7L, 8L, 7L), null);
 
     verify(cardLabels).replaceLabels(1L, List.of(7L, 8L));
   }
@@ -269,7 +280,7 @@ class CardServiceTest {
     when(cards.allocateCardNumber(PROJECT)).thenReturn(1);
     when(cards.allocateActivePosition(20L)).thenReturn(0);
 
-    service.create(1L, BOARD, 20L, "Titel", null, null, null, false, null, null, List.of());
+    service.create(1L, BOARD, 20L, "Titel", null, null, null, false, null, null, List.of(), null);
 
     verify(cardLabels, never()).replaceLabels(anyLong(), anyList());
   }
@@ -284,7 +295,18 @@ class CardServiceTest {
     assertThatThrownBy(
             () ->
                 service.create(
-                    1L, BOARD, 20L, "Titel", null, null, null, false, null, null, List.of(8L)))
+                    1L,
+                    BOARD,
+                    20L,
+                    "Titel",
+                    null,
+                    null,
+                    null,
+                    false,
+                    null,
+                    null,
+                    List.of(8L),
+                    null))
         .isInstanceOf(InvalidLabelException.class);
     verify(cardLabels, never()).replaceLabels(anyLong(), anyList());
   }
@@ -1678,6 +1700,74 @@ class CardServiceTest {
     verify(cards).save(captor.capture());
     assertThat(captor.getValue().derivedFromCardId()).isEqualTo(77L);
     verify(cards, never()).findByDerivedFrom(anyLong());
+  }
+
+  // --- assignDerivedFrom (Issue #607) --------------------------------------
+
+  /**
+   * Beleg fuer das mitgegebene {@code selfCardId}: Beim Aendern kennt die Aufloesung die eigene
+   * Karte nur, wenn der Aufrufer ihre ID durchreicht. Ohne sie liefe der Selbstbezug durch, und
+   * eine Karte koennte ihr eigener Vorfahr werden.
+   *
+   * <p>Ein Integrationstest allein genuegt hier nicht: PIT misst nur Unit-Tests (Befund aus Issue
+   * #605), eine ausschliesslich per IT belegte Stelle hinterlaesst also eine Mutationsluecke.
+   */
+  @Test
+  void assignDerivedFrom_selbstbezug_wirdAbgelehnt() {
+    Card selbst = card(1L, 20L, 7, false, null, CardType.CARD, null, null);
+    when(cards.findById(1L)).thenReturn(Optional.of(selbst));
+    when(cards.findByProjectIdAndNumber(PROJECT, 7)).thenReturn(Optional.of(selbst));
+
+    assertThatThrownBy(() -> service.assignDerivedFrom(1L, 1L, 7))
+        .isInstanceOf(InvalidDependencyException.class);
+
+    verify(cards, never()).save(any());
+  }
+
+  /**
+   * Gegenpol zum Selbstbezug: Eine fremde Nummer wird aufgeloest und gespeichert. Ohne diesen Test
+   * ueberlebt eine Mutation, die {@code selfCardId} als "immer gleich" behandelt — sie waere durch
+   * den Ablehnungstest allein nicht zu toeten.
+   */
+  @Test
+  void assignDerivedFrom_fremdeNummer_wirdAufgeloestUndGespeichert() {
+    when(cards.findById(1L))
+        .thenReturn(Optional.of(card(1L, 20L, 7, false, null, CardType.CARD, null, null)));
+    when(cards.findByProjectIdAndNumber(PROJECT, 4))
+        .thenReturn(Optional.of(card(9L, 20L, 4, false, null, CardType.CARD, null, null)));
+    // `save` gibt hier die gespeicherte Karte zurueck, damit die Sicht darauf gebaut werden kann.
+    // Die uebrigen Tests dieser Klasse pruefen nur den Captor und brauchen das nicht.
+    when(cards.save(any())).thenAnswer(inv -> inv.getArgument(0));
+    // Die Sicht loest die Herkunft ueber die ID zur Nummer auf (Issue #605).
+    when(cards.findById(9L))
+        .thenReturn(Optional.of(card(9L, 20L, 4, false, null, CardType.CARD, null, null)));
+
+    ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
+    CardService.CardView result = service.assignDerivedFrom(1L, 1L, 4);
+
+    verify(cards).save(captor.capture());
+    assertThat(captor.getValue().derivedFromCardId()).isEqualTo(9L);
+    // Die Sicht wird zurueckgegeben, nicht nur gespeichert: Der Aufrufer zeigt sie unmittelbar an.
+    assertThat(result).isNotNull();
+    assertThat(result.derivedFrom()).isEqualTo(4);
+    // Offene Boards ziehen ueber SSE nach — ohne das Ereignis sieht ein zweiter Betrachter die
+    // geaenderte Herkunft erst nach dem naechsten Laden.
+    verify(events).publishEvent(new CardBoardActivityEvent(BOARD, ActivityType.UPDATED, 1L));
+  }
+
+  /** {@code null} loescht die Herkunft — das Feld muss sich auch wieder leeren lassen. */
+  @Test
+  void assignDerivedFrom_null_loeschtDieHerkunft() {
+    when(cards.findById(1L))
+        .thenReturn(
+            Optional.of(
+                withHerkunft(card(1L, 20L, 7, false, null, CardType.CARD, null, null), 9L)));
+
+    ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
+    service.assignDerivedFrom(1L, 1L, null);
+
+    verify(cards).save(captor.capture());
+    assertThat(captor.getValue().derivedFromCardId()).isNull();
   }
 
   /**

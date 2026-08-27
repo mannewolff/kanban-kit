@@ -62,7 +62,7 @@ class CardControllerTest {
     CardView view = card();
     var request =
         new CardController.CreateCardRequest(
-            null, "Epic", "Desc", null, CardType.EPIC, null, "EP-1", null, null, null, null);
+            null, "Epic", "Desc", null, CardType.EPIC, null, "EP-1", null, null, null, null, null);
     when(service.createEpic(3L, 2L, "Epic", "Desc", "EP-1")).thenReturn(view);
 
     // When
@@ -79,8 +79,8 @@ class CardControllerTest {
     var deps = List.of(1, 2);
     var request =
         new CardController.CreateCardRequest(
-            7L, "Title", "Desc", deps, null, 9L, null, null, null, null, null);
-    when(service.create(3L, 2L, 7L, "Title", "Desc", deps, 9L, false, null, null, null))
+            7L, "Title", "Desc", deps, null, 9L, null, null, null, null, null, null);
+    when(service.create(3L, 2L, 7L, "Title", "Desc", deps, 9L, false, null, null, null, null))
         .thenReturn(view);
 
     // When
@@ -96,8 +96,8 @@ class CardControllerTest {
     CardView view = card();
     var request =
         new CardController.CreateCardRequest(
-            7L, "Idee", "Desc", null, CardType.CARD, null, null, true, null, null, null);
-    when(service.create(3L, 2L, 7L, "Idee", "Desc", null, null, true, null, null, null))
+            7L, "Idee", "Desc", null, CardType.CARD, null, null, true, null, null, null, null);
+    when(service.create(3L, 2L, 7L, "Idee", "Desc", null, null, true, null, null, null, null))
         .thenReturn(view);
 
     // When
@@ -112,7 +112,7 @@ class CardControllerTest {
     // Given
     var request =
         new CardController.CreateCardRequest(
-            null, "Title", "Desc", null, CardType.CARD, null, null, null, null, null, null);
+            null, "Title", "Desc", null, CardType.CARD, null, null, null, null, null, null, null);
 
     // When / Then
     assertThatThrownBy(() -> controller.create(3L, 2L, request))
@@ -136,9 +136,21 @@ class CardControllerTest {
             null,
             due,
             List.of(4L, 5L),
-            List.of(6L));
+            List.of(6L),
+            null);
     when(service.create(
-            3L, 2L, 7L, "Title", "Desc", null, null, false, due, List.of(4L, 5L), List.of(6L)))
+            3L,
+            2L,
+            7L,
+            "Title",
+            "Desc",
+            null,
+            null,
+            false,
+            due,
+            List.of(4L, 5L),
+            List.of(6L),
+            null))
         .thenReturn(view);
 
     // When

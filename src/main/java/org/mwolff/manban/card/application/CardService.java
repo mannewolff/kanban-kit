@@ -200,7 +200,8 @@ public class CardService {
       boolean ideaStored,
       @Nullable Instant dueDate,
       @Nullable List<Long> assigneeIds,
-      @Nullable List<Long> labelIds) {
+      @Nullable List<Long> labelIds,
+      @Nullable Integer derivedFrom) {
     return doCreate(
         userId,
         boardId,
@@ -215,7 +216,7 @@ public class CardService {
         labelIds,
         null,
         null,
-        null);
+        derivedFrom);
   }
 
   // Kern-Logik des Anlegens ohne eigene @Transactional: wird von den öffentlichen create-
@@ -641,6 +642,28 @@ public class CardService {
         parentId == null ? null : requireEpicInBoard(parentId, card.requireBoardId()).requireId();
     Card saved = cards.save(card.withParent(effective));
     publishChanged(card.requireBoardId(), ActivityType.UPDATED, cardId);
+    return view(saved);
+  }
+
+  /**
+   * Setzt die Herkunft einer Karte ({@code derivedFrom} als projektweite Kartennummer) oder löscht
+   * sie ({@code derivedFrom: null}).
+   *
+   * <p>Eigener schmaler Endpunkt statt eines Feldes in {@code updateContent}: Jene Methode ist ein
+   * Voll-Update und löscht bei {@code null}, was der Aufrufer nicht mitschickt. In einem
+   * Jackson-Record ist ein fehlendes JSON-Feld nicht von {@code null} zu unterscheiden — jeder
+   * bestehende Client hätte die Herkunft bei jedem Karten-Edit vernichtet (Issue #607).
+   *
+   * <p>{@code selfCardId} ist hier <strong>nicht</strong> optional: Beim Anlegen kennt niemand die
+   * Nummer der neuen Karte, beim Ändern schon. Ohne die eigene ID greift weder die Selbstbezugs-
+   * noch die Zyklusabwehr in {@link DerivedFrom#resolve}.
+   */
+  @Transactional
+  public CardView assignDerivedFrom(long userId, long cardId, @Nullable Integer derivedFrom) {
+    Card card = requireCardOp(userId, cardId, Permission.TICKET_UPDATE, Permission.EPIC_UPDATE);
+    Long herkunft = DerivedFrom.resolve(cards, card.projectId(), derivedFrom, cardId);
+    Card saved = cards.save(card.withDerivedFrom(herkunft));
+    publishChangedIfOnBoard(card.boardId(), ActivityType.UPDATED, cardId);
     return view(saved);
   }
 

@@ -1,17 +1,21 @@
 package org.mwolff.manban.card.web;
 
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 import java.time.Instant;
 import java.util.List;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.board.application.ColumnNotFoundException;
+import org.mwolff.manban.card.application.CardNumbers;
 import org.mwolff.manban.card.application.CardService;
 import org.mwolff.manban.card.application.CardService.CardView;
 import org.mwolff.manban.card.application.CardService.EpicView;
+import org.mwolff.manban.card.application.InvalidDerivedFromException;
 import org.mwolff.manban.card.application.SortDirection;
 import org.mwolff.manban.card.domain.CardActivity;
 import org.mwolff.manban.card.domain.CardType;
@@ -58,6 +62,13 @@ class CardController {
     CardType requestedType = request.type();
     CardType type = requestedType == null ? CardType.CARD : requestedType;
     if (type == CardType.EPIC) {
+      // Vorhaben tragen keine Herkunft: `parentId` (Mitgliedschaft) und `derivedFrom` (Abstammung)
+      // sind zwei getrennte Relationen (Plandokument #606, E9), und ein Vorhaben mit Herkunft
+      // haette im Herkunftsbaum kein definiertes Verhalten. Ohne diese Ablehnung wuerde
+      // `createEpic` das Feld still verschlucken.
+      if (request.derivedFrom() != null) {
+        throw new InvalidDerivedFromException("Ein Vorhaben kann keine Herkunft tragen");
+      }
       return cards.createEpic(
           userId, boardId, request.title(), request.description(), request.shortcode());
     }
@@ -76,7 +87,8 @@ class CardController {
         Boolean.TRUE.equals(request.ideaStored()),
         request.dueDate(),
         request.assigneeIds(),
-        request.labelIds());
+        request.labelIds(),
+        request.derivedFrom());
   }
 
   @GetMapping("/api/boards/{boardId}/cards")
@@ -120,6 +132,23 @@ class CardController {
       @PathVariable long cardId,
       @RequestBody AssignParentRequest request) {
     return cards.assignParent(userId, cardId, request.parentId());
+  }
+
+  /**
+   * Setzt die Herkunft einer Karte ({@code derivedFrom} als projektweite Kartennummer) oder löscht
+   * sie ({@code derivedFrom: null}).
+   *
+   * <p>Eigener Endpunkt statt eines Feldes in {@link UpdateCardRequest}: Jener Pfad ist ein
+   * Voll-Update, und ein fehlendes JSON-Feld ist in einem Jackson-Record nicht von {@code null} zu
+   * unterscheiden — jeder bestehende Client haette die Herkunft bei jedem Karten-Edit geloescht
+   * (Issue #607).
+   */
+  @PatchMapping("/api/cards/{cardId}/derived-from")
+  CardView assignDerivedFrom(
+      @AuthenticationPrincipal Long userId,
+      @PathVariable long cardId,
+      @Valid @RequestBody AssignDerivedFromRequest request) {
+    return cards.assignDerivedFrom(userId, cardId, request.derivedFrom());
   }
 
   @PostMapping("/api/cards/{cardId}/move")
@@ -287,7 +316,8 @@ class CardController {
       @Nullable Boolean ideaStored,
       @Nullable Instant dueDate,
       @Nullable List<Long> assigneeIds,
-      @Nullable List<Long> labelIds) {}
+      @Nullable List<Long> labelIds,
+      @Nullable @Positive @Max(CardNumbers.MAX) Integer derivedFrom) {}
 
   record UpdateCardRequest(
       @NotBlank @Size(max = 300) String title,
@@ -298,6 +328,10 @@ class CardController {
       @Nullable Instant dueDate) {}
 
   record AssignParentRequest(Long parentId) {}
+
+  // Dieselben Grenzen wie im kanbancompat-Ingest (`CreateItemRequest`), damit beide Schreibpfade
+  // dieselbe Nummer akzeptieren und dieselbe ablehnen.
+  record AssignDerivedFromRequest(@Nullable @Positive @Max(CardNumbers.MAX) Integer derivedFrom) {}
 
   record MoveCardRequest(
       @NotNull Long columnId, @jakarta.validation.constraints.PositiveOrZero int position) {}
