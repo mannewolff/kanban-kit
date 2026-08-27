@@ -7,6 +7,29 @@ Versionierung folgt der dreiteiligen Betriebsversion (siehe [RELEASING.md](RELEA
 Einträge je Version sind ein automatischer Auszug der Commit-Titel seit dem letzten Release,
 erzeugt von `scripts/gen-changelog.mjs`.
 
+## [1.22.0] – 2026-08-27
+
+- Version 1.21.3
+- Herkunftsfeld in der Kartenmaske ([#608](https://github.com/mannewolff/kanban-kit/issues/608))
+- Herkunft ueber die normale Karten-API schreibbar ([#607](https://github.com/mannewolff/kanban-kit/issues/607))
+- Version 1.21.2
+- Herkunft als Nummer ausgeliefert ([#605](https://github.com/mannewolff/kanban-kit/issues/605))
+- Ingest nimmt derivedFrom entgegen ([#604](https://github.com/mannewolff/kanban-kit/issues/604))
+- Herkunfts-Aufloesung und Transfer-Regel ([#603](https://github.com/mannewolff/kanban-kit/issues/603))
+- Herkunft in Domaene und Persistenz ([#602](https://github.com/mannewolff/kanban-kit/issues/602))
+- Spalte derived_from_card_id anlegen ([#601](https://github.com/mannewolff/kanban-kit/issues/601))
+- docs: Sidebar-Eintrag fuer die Testsuite-Doku
+- docs: Testcontainers-Setup unter Colima dokumentieren
+- Version 1.21.1
+- Doku-Site auf Vorhaben ziehen ([#599](https://github.com/mannewolff/kanban-kit/issues/599))
+- docs: Entwickler-Guides auf Vorhaben ziehen ([#598](https://github.com/mannewolff/kanban-kit/issues/598))
+- Dokumentation auf Vorhaben ziehen ([#597](https://github.com/mannewolff/kanban-kit/issues/597))
+- Rollen-Ansicht nennt die Ressource Vorhaben ([#596](https://github.com/mannewolff/kanban-kit/issues/596))
+- Route /vorhaben mit Weiterleitung und Navigationseintrag ([#595](https://github.com/mannewolff/kanban-kit/issues/595))
+- Oberflaechentexte auf Vorhaben ziehen ([#594](https://github.com/mannewolff/kanban-kit/issues/594))
+- Backend-Vokabel auf Vorhaben ziehen ([#593](https://github.com/mannewolff/kanban-kit/issues/593))
+- diffs von früher
+
 ## [1.21.0] – 2026-08-14
 
 - Version 1.20.1
