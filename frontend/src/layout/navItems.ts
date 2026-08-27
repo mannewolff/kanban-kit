@@ -101,7 +101,7 @@ export function buildNavItems(params: NavParams): NavNode[] {
     const children: NavLink[] = [
       { kind: 'link', label: 'Board', path: `/boards/${board.id}`, icon: ViewColumnIcon },
       { kind: 'link', label: 'Liste', path: `/boards/${board.id}/list`, icon: ViewListIcon },
-      { kind: 'link', label: 'Epics', path: `/boards/${board.id}/epics`, icon: AccountTreeIcon },
+      { kind: 'link', label: 'Vorhaben', path: `/boards/${board.id}/vorhaben`, icon: AccountTreeIcon },
       { kind: 'link', label: 'Dashboard', path: `/boards/${board.id}/dashboard`, icon: InsightsIcon },
     ]
     items.push({ kind: 'group', label: board.name, icon: ViewColumnIcon, children })

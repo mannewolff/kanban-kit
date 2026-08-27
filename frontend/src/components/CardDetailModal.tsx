@@ -33,6 +33,7 @@ import Markdown, { type Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { attachmentsApi as defaultAttachmentsApi, type Attachment, type AttachmentsApi } from '../api/attachments'
 import { boardsApi as defaultBoardsApi } from '../api/boards'
+import { ApiError } from '../api/client'
 import { cardsApi as defaultCardsApi } from '../api/cards'
 import type { Card, CardActivity, CardByNumber, CardDetail } from '../api/cards'
 import { commentsApi as defaultCommentsApi, type Comment, type CommentsApi } from '../api/comments'
@@ -86,6 +87,20 @@ export function parseDependencyInput(input: string): { deps: number[]; valid: bo
     if (!deps.includes(n)) deps.push(n)
   }
   return { deps, valid: true }
+}
+
+/**
+ * Liest die Herkunftseingabe. Leer bedeutet „keine Herkunft" und ist gültig; sonst muss eine
+ * positive ganze Zahl dastehen. Gegenstück zu {@link parseDependencyInput}, mit demselben Zweck:
+ * Was hier scheitert, geht gar nicht erst an den Server.
+ */
+export function parseHerkunftInput(input: string): { herkunft: number | null; valid: boolean } {
+  const token = input.trim()
+  if (token.length === 0) return { herkunft: null, valid: true }
+  if (!/^\d+$/.test(token)) return { herkunft: null, valid: false }
+  const n = Number(token)
+  if (n <= 0) return { herkunft: null, valid: false }
+  return { herkunft: n, valid: true }
 }
 
 /**
@@ -605,7 +620,7 @@ function CardStatusChip({
   columnName?: string
   colors: { bg: string; text: string } | null
 }>) {
-  if (isEpic) return <Chip label="Epic" size="small" color="secondary" />
+  if (isEpic) return <Chip label="Vorhaben" size="small" color="secondary" />
   if (!colors) return null
   return <Chip label={columnName} size="small" sx={{ bgcolor: colors.bg, color: colors.text, fontWeight: 600 }} />
 }
@@ -650,6 +665,7 @@ function CardBodyView({
   canEdit,
   onToggleTask,
   dependencies,
+  derivedFrom,
   onOpenDependency,
   isEpic,
   dueDate,
@@ -663,6 +679,7 @@ function CardBodyView({
   isEpic: boolean
   dueDate: string | null
   dueOverdue: boolean
+  derivedFrom: number | null
 }>) {
   return (
     <>
@@ -675,6 +692,11 @@ function CardBodyView({
       </Box>
       {dependencies.length > 0 && (
         <DependencyList dependencies={dependencies} onOpen={onOpenDependency} />
+      )}
+      {!isEpic && derivedFrom != null && (
+        <Typography variant="body2" color="text.secondary" aria-label="Herkunft">
+          Hervorgegangen aus: #{derivedFrom}
+        </Typography>
       )}
       {!isEpic && dueDate && (
         <Typography
@@ -742,6 +764,7 @@ interface Props {
     | 'restore'
     | 'moveToIdeaStorage'
     | 'byNumber'
+    | 'assignDerivedFrom'
   >
   boardsApi?: Pick<typeof defaultBoardsApi, 'get'>
 }
@@ -832,6 +855,10 @@ function CardDetailModalView({
   const [deps, setDeps] = useState(card.dependencies)
   const [depsInput, setDepsInput] = useState(card.dependencies.join(', '))
   const [depsError, setDepsError] = useState<string | null>(null)
+  const [herkunftInput, setHerkunftInput] = useState(
+    card.derivedFrom == null ? '' : String(card.derivedFrom),
+  )
+  const [herkunftError, setHerkunftError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const notify = useSnackbar()
 
@@ -877,8 +904,19 @@ function CardDetailModalView({
       setDepsError('Nur positive Nummern, kommagetrennt (z. B. 12, 34).')
       return
     }
+    const { herkunft, valid: herkunftValid } = parseHerkunftInput(herkunftInput)
+    if (!herkunftValid) {
+      setHerkunftError('Nur eine positive Kartennummer, oder leer.')
+      return
+    }
     setSaving(true)
     try {
+      // Herkunft zuerst und nur bei Aenderung: Sie laeuft ueber einen eigenen Endpunkt (#607),
+      // damit `update` sie nicht anfassen kann. Wird sie abgelehnt, bleibt die Maske im
+      // Editiermodus und der uebrige Speichervorgang unterbleibt.
+      if (!isEpic && herkunft !== (card.derivedFrom ?? null)) {
+        await cardsApi.assignDerivedFrom(card.id, herkunft)
+      }
       await cardsApi.update(
         card.id,
         title.trim(),
@@ -892,8 +930,16 @@ function CardDetailModalView({
       setEditing(false)
       onChanged?.()
       notify('Karte gespeichert.', 'success')
-    } catch {
-      notify('Speichern fehlgeschlagen.', 'error')
+    } catch (err) {
+      // Die drei Herkunfts-Ablehnungen kommen feldbezogen (#607). Sie gehoeren ans Feld, nicht in
+      // einen Toast: Im selben Aufruf entstehen fast wortgleiche Abhaengigkeits-Fehler, und die
+      // Eingabe darf nicht verlorengehen.
+      const feldmeldung = err instanceof ApiError ? err.fieldErrors?.derivedFrom : undefined
+      if (feldmeldung) {
+        setHerkunftError(feldmeldung)
+      } else {
+        notify('Speichern fehlgeschlagen.', 'error')
+      }
     } finally {
       setSaving(false)
     }
@@ -1092,14 +1138,21 @@ function CardDetailModalView({
               onBodyChange={setBody}
               onShortcodeChange={setShortcode}
               onParentIdChange={setParentId}
+              herkunftInput={herkunftInput}
+              herkunftError={herkunftError}
               onDepsInputChange={(value) => {
                 setDepsInput(value)
                 if (depsError) setDepsError(null)
+              }}
+              onHerkunftInputChange={(value) => {
+                setHerkunftInput(value)
+                if (herkunftError) setHerkunftError(null)
               }}
               onDueInputChange={setDueInput}
             />
           ) : (
             <CardBodyView
+              derivedFrom={card.derivedFrom}
               body={body}
               canEdit={canEdit}
               onToggleTask={onToggleTask}

@@ -4,11 +4,13 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.board.application.BoardNotFoundException;
@@ -29,17 +31,17 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Karten- und Epic-Use-Cases: Anlegen (projektweite Nummer, ans Spaltenende), Bearbeiten,
- * Archivieren/Wiederherstellen, Löschen, Move/Reindex und Abhängigkeiten. Epics sind Karten vom Typ
- * {@link CardType#EPIC}: sie erscheinen nicht auf dem Board, halten keine Position und gruppieren
- * Karten über {@code parentId}. Rechte über den {@link PermissionChecker}.
+ * Karten- und Vorhaben-Use-Cases: Anlegen (projektweite Nummer, ans Spaltenende), Bearbeiten,
+ * Archivieren/Wiederherstellen, Löschen, Move/Reindex und Abhängigkeiten. Vorhaben sind Karten vom
+ * Typ {@link CardType#EPIC}: sie erscheinen nicht auf dem Board, halten keine Position und
+ * gruppieren Karten über {@code parentId}. Rechte über den {@link PermissionChecker}.
  */
 // PMD.CouplingBetweenObjects: zentraler Karten-Use-Case-Service; die Kopplung an die Ports
 // (Karten, Abhängigkeiten, Boards/Spalten, Rechte, Zykluszeit, Zuständige, Labels)
 // ist fachlich begründet und kein God-Class-Smell.
 // PMD.CyclomaticComplexity: die Klassen-Gesamtkomplexität summiert viele kleine, je für sich
 // einfache Use-Case-Methoden (höchste Einzelmethode weit unter dem Schwellwert); kein Smell.
-// PMD.TooManyMethods: zentraler Karten-/Epic-Use-Case-Service — viele kleine, kohäsive Methoden
+// PMD.TooManyMethods: zentraler Karten-/Vorhaben-Use-Case-Service — viele kleine, kohäsive Methoden
 // (Anlegen/Bearbeiten/Move/Archiv/Ideen-Speicher/Zuständige/Labels je Erfolgs- und Fehlerpfad);
 // eine Aufspaltung würde denselben Use-Case-Kontext künstlich zerreißen, kein God-Class-Smell.
 // PMD.ExcessivePublicCount: dieselbe Familie wie TooManyMethods, nur über die öffentliche
@@ -141,6 +143,7 @@ public class CardService {
         null,
         null,
         null,
+        null,
         null);
   }
 
@@ -172,6 +175,7 @@ public class CardService {
         null,
         null,
         null,
+        null,
         null);
   }
 
@@ -196,7 +200,8 @@ public class CardService {
       boolean ideaStored,
       @Nullable Instant dueDate,
       @Nullable List<Long> assigneeIds,
-      @Nullable List<Long> labelIds) {
+      @Nullable List<Long> labelIds,
+      @Nullable Integer derivedFrom) {
     return doCreate(
         userId,
         boardId,
@@ -210,7 +215,8 @@ public class CardService {
         assigneeIds,
         labelIds,
         null,
-        null);
+        null,
+        derivedFrom);
   }
 
   // Kern-Logik des Anlegens ohne eigene @Transactional: wird von den öffentlichen create-
@@ -228,9 +234,11 @@ public class CardService {
       @Nullable List<Long> assigneeIds,
       @Nullable List<Long> labelIds,
       @Nullable String externalKey,
-      @Nullable Integer givenNumber) {
+      @Nullable Integer givenNumber,
+      @Nullable Integer derivedFrom) {
     long projectId = boardService.requireProjectId(boardId);
     permissions.require(userId, projectId, Permission.TICKET_CREATE);
+    Long herkunft = DerivedFrom.resolve(cards, projectId, derivedFrom, null);
     ColumnView column = boardService.requireColumn(columnId, boardId);
     Long effectiveParent =
         parentId == null ? null : requireEpicInBoard(parentId, boardId).requireId();
@@ -262,7 +270,8 @@ public class CardService {
                 dueDate,
                 projectId,
                 null,
-                externalKey));
+                externalKey,
+                herkunft));
 
     if (!ideaStored) {
       transitions.open(saved.requireId(), columnId, column.name(), now);
@@ -286,7 +295,8 @@ public class CardService {
   }
 
   /**
-   * Legt ein Epic an. Epics halten keine Board-Position und liegen technisch in der ersten Spalte.
+   * Legt ein Vorhaben an. Vorhaben halten keine Board-Position und liegen technisch in der ersten
+   * Spalte.
    */
   @Transactional
   public CardView createEpic(
@@ -324,6 +334,8 @@ public class CardService {
                 null,
                 projectId,
                 null,
+                null,
+                // Herkunft: kein Schreibpfad hier — der kommt in Issue #604.
                 null));
     publishChanged(boardId, ActivityType.CREATED, saved.requireId());
     return view(saved);
@@ -339,7 +351,7 @@ public class CardService {
   }
 
   /**
-   * Sichtbare Board-Items (Karten <em>und</em> Epics) als schlanke Projektion für modulfremde
+   * Sichtbare Board-Items (Karten <em>und</em> Vorhaben) als schlanke Projektion für modulfremde
    * Aufrufer: ohne archivierte und ohne im Ideen-Speicher liegende Karten, nach Position in der
    * Spalte sortiert. Erfordert Projekt-Mitgliedschaft (Leserecht).
    *
@@ -350,9 +362,13 @@ public class CardService {
   @Transactional(readOnly = true)
   public List<BoardItemView> listBoardItems(long userId, long boardId) {
     permissions.requireMembership(userId, boardService.requireProjectId(boardId));
-    return cards.findByBoardId(boardId).stream()
-        .filter(c -> !c.archived() && !c.ideaStored())
-        .sorted(Comparator.comparingInt(Card::positionInColumn))
+    List<Card> sichtbar =
+        cards.findByBoardId(boardId).stream()
+            .filter(c -> !c.archived() && !c.ideaStored())
+            .sorted(Comparator.comparingInt(Card::positionInColumn))
+            .toList();
+    Map<Long, Integer> herkunftsnummern = herkunftsnummern(sichtbar);
+    return sichtbar.stream()
         .map(
             c ->
                 new BoardItemView(
@@ -363,7 +379,10 @@ public class CardService {
                     c.columnId(),
                     c.positionInColumn(),
                     c.type() == CardType.EPIC,
-                    c.externalKey()))
+                    c.externalKey(),
+                    c.derivedFromCardId() == null
+                        ? null
+                        : herkunftsnummern.get(c.derivedFromCardId())))
         .toList();
   }
 
@@ -415,7 +434,7 @@ public class CardService {
     }
   }
 
-  /** Epics eines Boards inkl. Fortschritt (nicht-archivierte Kinder: gesamt / in Done). */
+  /** Vorhaben eines Boards inkl. Fortschritt (nicht-archivierte Kinder: gesamt / in Done). */
   @Transactional(readOnly = true)
   public List<EpicView> listEpics(long userId, long boardId) {
     permissions.requireMembership(userId, boardService.requireProjectId(boardId));
@@ -464,10 +483,10 @@ public class CardService {
     Card card = requireCardOp(userId, cardId, Permission.TICKET_UPDATE, Permission.EPIC_UPDATE);
     Card updated = card.withContent(title.trim(), normalize(description));
     if (card.type() == CardType.EPIC) {
-      // Epics tragen ein Kürzel, aber keinen Parent.
+      // Vorhaben tragen ein Kürzel, aber keinen Parent.
       updated = updated.withShortcode(trimToNull(shortcode));
     } else {
-      // Karten: Epic-Zuordnung im selben PUT setzen/lösen (parentId == null -> lösen).
+      // Karten: Vorhaben-Zuordnung im selben PUT setzen/lösen (parentId == null -> lösen).
       Long effectiveParent =
           parentId == null ? null : requireEpicInBoard(parentId, card.requireBoardId()).requireId();
       updated = updated.withParent(effectiveParent).withDueDate(dueDate);
@@ -492,8 +511,8 @@ public class CardService {
    * kanbancompat-Ingest (#571).
    *
    * <p>Abgrenzung zu {@link #update}: Jene Methode ist ein Voll-Update und löscht bei {@code null}
-   * die Epic-Zuordnung, das Fälligkeitsdatum und (bei Epics) das Kürzel. Ein Aufrufer, der nur
-   * Titel und Rumpf kennt, kann sie deshalb nicht gefahrlos benutzen. Hier bleibt alles andere
+   * die Vorhaben-Zuordnung, das Fälligkeitsdatum und (bei Vorhaben) das Kürzel. Ein Aufrufer, der
+   * nur Titel und Rumpf kennt, kann sie deshalb nicht gefahrlos benutzen. Hier bleibt alles andere
    * stehen; Rechteprüfung, Aktivitätseintrag und Board-Ereignis sind identisch, damit dieser Weg
    * kein Schlupfloch am Audit und an den Rechten vorbei öffnet.
    *
@@ -529,11 +548,12 @@ public class CardService {
         saved.columnId(),
         saved.positionInColumn(),
         saved.type() == CardType.EPIC,
-        saved.externalKey());
+        saved.externalKey(),
+        herkunftsnummer(saved));
   }
 
   /**
-   * Ersetzt die Zuständigen einer Karte. Nur Karten (keine Epics); zugewiesen werden dürfen
+   * Ersetzt die Zuständigen einer Karte. Nur Karten (keine Vorhaben); zugewiesen werden dürfen
    * ausschließlich Mitglieder des Projekts. Recht: {@link Permission#TICKET_UPDATE} (Member und
    * aufwärts).
    */
@@ -559,8 +579,8 @@ public class CardService {
   }
 
   /**
-   * Ersetzt die Labels einer Karte. Nur Karten (keine Epics); zugeordnet werden dürfen nur Labels
-   * desselben Boards. Recht: {@link Permission#TICKET_UPDATE} (Member und aufwärts).
+   * Ersetzt die Labels einer Karte. Nur Karten (keine Vorhaben); zugeordnet werden dürfen nur
+   * Labels desselben Boards. Recht: {@link Permission#TICKET_UPDATE} (Member und aufwärts).
    */
   @Transactional
   public CardView setLabels(long userId, long cardId, List<Long> labelIds) {
@@ -609,7 +629,9 @@ public class CardService {
     cardLabels.replaceLabels(cardId, distinct);
   }
 
-  /** Ordnet eine Karte einem Epic zu ({@code parentId}) oder löst die Zuordnung ({@code null}). */
+  /**
+   * Ordnet eine Karte einem Vorhaben zu ({@code parentId}) oder löst die Zuordnung ({@code null}).
+   */
   @Transactional
   public CardView assignParent(long userId, long cardId, @Nullable Long parentId) {
     Card card = requireCardOp(userId, cardId, Permission.TICKET_UPDATE, Permission.EPIC_UPDATE);
@@ -620,6 +642,28 @@ public class CardService {
         parentId == null ? null : requireEpicInBoard(parentId, card.requireBoardId()).requireId();
     Card saved = cards.save(card.withParent(effective));
     publishChanged(card.requireBoardId(), ActivityType.UPDATED, cardId);
+    return view(saved);
+  }
+
+  /**
+   * Setzt die Herkunft einer Karte ({@code derivedFrom} als projektweite Kartennummer) oder löscht
+   * sie ({@code derivedFrom: null}).
+   *
+   * <p>Eigener schmaler Endpunkt statt eines Feldes in {@code updateContent}: Jene Methode ist ein
+   * Voll-Update und löscht bei {@code null}, was der Aufrufer nicht mitschickt. In einem
+   * Jackson-Record ist ein fehlendes JSON-Feld nicht von {@code null} zu unterscheiden — jeder
+   * bestehende Client hätte die Herkunft bei jedem Karten-Edit vernichtet (Issue #607).
+   *
+   * <p>{@code selfCardId} ist hier <strong>nicht</strong> optional: Beim Anlegen kennt niemand die
+   * Nummer der neuen Karte, beim Ändern schon. Ohne die eigene ID greift weder die Selbstbezugs-
+   * noch die Zyklusabwehr in {@link DerivedFrom#resolve}.
+   */
+  @Transactional
+  public CardView assignDerivedFrom(long userId, long cardId, @Nullable Integer derivedFrom) {
+    Card card = requireCardOp(userId, cardId, Permission.TICKET_UPDATE, Permission.EPIC_UPDATE);
+    Long herkunft = DerivedFrom.resolve(cards, card.projectId(), derivedFrom, cardId);
+    Card saved = cards.save(card.withDerivedFrom(herkunft));
+    publishChangedIfOnBoard(card.boardId(), ActivityType.UPDATED, cardId);
     return view(saved);
   }
 
@@ -675,7 +719,7 @@ public class CardService {
    * <p>Fachlich ist das ein <em>Massen-Verschieben innerhalb</em> der Spalte und keine
    * Strukturänderung am Board, deshalb genügt {@link Permission#CARD_MOVE} — dasselbe Recht wie für
    * das Verschieben einer einzelnen Karte. Karten außerhalb des aktiven Positions-Namespace
-   * (archiviert, Papierkorb, Ideen-Speicher) und Epics bleiben unberührt; Details am Port {@link
+   * (archiviert, Papierkorb, Ideen-Speicher) und Vorhaben bleiben unberührt; Details am Port {@link
    * CardRepository#sortActiveByNumber(long, SortDirection)}.
    *
    * <p>Bewusst ohne {@link CardActivity}-Eintrag: Die Umsortierung ändert nur die Anordnung
@@ -708,8 +752,8 @@ public class CardService {
    *       Abhängigkeiten und Zuständige (projekt-lokal) werden entfernt.
    * </ul>
    *
-   * <p>Die board-lokale Epic-Zuordnung wird in beiden Fällen entfernt (das Ziel-Board hat eigene
-   * Epics). Kommentare und Anhänge wandern immer mit (an der Karten-ID).
+   * <p>Die board-lokale Vorhaben-Zuordnung wird in beiden Fällen entfernt (das Ziel-Board hat
+   * eigene Vorhaben). Kommentare und Anhänge wandern immer mit (an der Karten-ID).
    */
   @Transactional
   public CardView transfer(long userId, long cardId, long targetBoardId, long targetColumnId) {
@@ -754,7 +798,24 @@ public class CardService {
     transitions.open(cardId, targetColumnId, targetColumn.name(), switchedAt);
 
     Card moved = cards.findById(cardId).orElseThrow(CardNotFoundException::new);
-    CardView result = view(cards.save(moved.withParent(null).withMovedToDoneAt(null)));
+    Card cleaned = moved.withParent(null).withMovedToDoneAt(null);
+    if (!sameProject) {
+      // Die Herkunft ist projekt-lokal: Der Vorfahr bleibt zurueck, und ein Verweis ueber die
+      // Projektgrenze zeigte auf eine Nummer, die dort einer anderen Karte gehoeren kann.
+      // Anders als withParent(null) gilt das NUR beim Projektwechsel — innerhalb des Projekts
+      // ueberlebt die Kette den Board-Wechsel.
+      cleaned = cleaned.withDerivedFrom(null);
+    }
+    CardView result = view(cards.save(cleaned));
+    if (!sameProject) {
+      // Gegenrichtung: Auch die Kinder verlieren ihren Verweis. Sonst zeigten sie auf die NEUE
+      // Nummer der abgewanderten Karte — im eigenen Projekt womoeglich eine fremde. Bewusst ohne
+      // Ausnahme fuer bulkTransfer: Wandern Vorfahr und Kind im selben Batch, haenge das Ergebnis
+      // sonst von der Reihenfolge innerhalb des Batches ab.
+      for (Card kind : cards.findByDerivedFrom(cardId)) {
+        cards.save(kind.withDerivedFrom(null));
+      }
+    }
     // Board-übergreifend: Quell- und Ziel-Board müssen beide live nachziehen.
     publishChanged(card.requireBoardId(), ActivityType.MOVED, cardId);
     publishChanged(targetBoardId, ActivityType.MOVED, cardId);
@@ -765,9 +826,9 @@ public class CardService {
    * Verschiebt mehrere Karten in einer Transaktion auf dasselbe Zielboard und dieselbe Zielspalte
    * (alles-oder-nichts). Nutzt je Karte die Einzel-Logik von {@link #transfer(long, long, long,
    * long)} inklusive der richtungsabhängigen Rechteprüfung ({@link Permission#CARD_MOVE} innerhalb
-   * des Projekts, OWNER in Quell- und Zielprojekt darüber hinaus) sowie Epic-Ausschluss; scheitert
-   * eine Karte, rollt der gesamte Batch zurück. Die Karten landen in Eingabereihenfolge am Ende der
-   * Zielspalte, jede Quellspalte wird dabei lückenlos nachgezogen.
+   * des Projekts, OWNER in Quell- und Zielprojekt darüber hinaus) sowie Vorhaben-Ausschluss;
+   * scheitert eine Karte, rollt der gesamte Batch zurück. Die Karten landen in Eingabereihenfolge
+   * am Ende der Zielspalte, jede Quellspalte wird dabei lückenlos nachgezogen.
    *
    * <p>Die Spaltensperren nimmt der Batch <strong>vorab in einem Zug</strong> (Issue #499): Nähme
    * jeder Einzel-Umzug seine beiden Sperren für sich, könnten zwei gleichzeitige Sammel-Umzüge mit
@@ -850,7 +911,7 @@ public class CardService {
    * notiert (#433). Vorher blieb die Karte board-gebunden und war dadurch in keiner Ansicht mehr
    * sichtbar — ein unauffindbarer Zwischenzustand (#428). Ideen-Pflege ist normaler Arbeitsfluss,
    * kein Löschen — daher das Karten-Verschieberecht ({@link Permission#CARD_MOVE}), nicht das
-   * Archiv-/Lösch-Recht. Nur Karten, keine Epics.
+   * Archiv-/Lösch-Recht. Nur Karten, keine Vorhaben.
    */
   @Transactional
   public CardView moveToIdeaStorage(long userId, long cardId) {
@@ -885,7 +946,8 @@ public class CardService {
       String title,
       @Nullable String description,
       @Nullable Long targetBoardId) {
-    return doCreateProjectIdea(userId, projectId, title, description, targetBoardId, null).view();
+    return doCreateProjectIdea(userId, projectId, title, description, targetBoardId, null, null)
+        .view();
   }
 
   /**
@@ -909,8 +971,10 @@ public class CardService {
       String title,
       @Nullable String description,
       @Nullable Long targetBoardId,
-      @Nullable String externalKey) {
-    return doCreateProjectIdea(userId, projectId, title, description, targetBoardId, externalKey);
+      @Nullable String externalKey,
+      @Nullable Integer derivedFrom) {
+    return doCreateProjectIdea(
+        userId, projectId, title, description, targetBoardId, externalKey, derivedFrom);
   }
 
   // Kern-Logik der Ideen-Anlage ohne eigene @Transactional: wird von beiden öffentlichen
@@ -922,16 +986,20 @@ public class CardService {
       String title,
       @Nullable String description,
       @Nullable Long targetBoardId,
-      @Nullable String externalKey) {
+      @Nullable String externalKey,
+      @Nullable Integer derivedFrom) {
     permissions.require(userId, projectId, Permission.TICKET_CREATE);
     if (externalKey != null) {
       Optional<Card> existing = cards.findByProjectIdAndExternalKey(projectId, externalKey);
       if (existing.isPresent()) {
+        // Idempotenz-Treffer: derivedFrom wird ignoriert wie Titel und Rumpf auch. Anders als
+        // number, das als Identitaetsfeld gegen die bestehende Karte verifiziert wird (#565).
         return new IdeaCreation(view(existing.get()), false);
       }
     }
     CardView created =
-        storeProjectIdea(userId, projectId, title, description, targetBoardId, externalKey);
+        storeProjectIdea(
+            userId, projectId, title, description, targetBoardId, externalKey, derivedFrom);
     publishIdeasChanged(projectId);
     return new IdeaCreation(created, true);
   }
@@ -964,7 +1032,13 @@ public class CardService {
             .map(
                 idea ->
                     storeProjectIdea(
-                        userId, projectId, idea.title(), idea.description(), targetBoardId, null))
+                        userId,
+                        projectId,
+                        idea.title(),
+                        idea.description(),
+                        targetBoardId,
+                        null,
+                        null))
             .toList();
     publishIdeasChanged(projectId);
     return created;
@@ -972,10 +1046,10 @@ public class CardService {
 
   /**
    * Legt eine Karte direkt in einer Spalte des Boards an — idempotent über den optionalen {@code
-   * externalKey} wie {@link #createProjectIdea(long, long, String, String, Long, String)}, nur mit
-   * Board- statt Pool-Routing (#535, direct-Ingest auf ein dediziertes Sammel-Board). Anlage,
-   * Nummern-/Positionsvergabe, Spalten-Transition und Rechteprüfung laufen über den normalen
-   * Anlege-Pfad; beim Duplikat entsteht nichts (kein Aktivitätseintrag, kein Event).
+   * externalKey} wie {@link #createProjectIdea(long, long, String, String, Long, String, Integer)},
+   * nur mit Board- statt Pool-Routing (#535, direct-Ingest auf ein dediziertes Sammel-Board).
+   * Anlage, Nummern-/Positionsvergabe, Spalten-Transition und Rechteprüfung laufen über den
+   * normalen Anlege-Pfad; beim Duplikat entsteht nichts (kein Aktivitätseintrag, kein Event).
    */
   @Transactional
   public IdeaCreation createDirect(
@@ -985,7 +1059,8 @@ public class CardService {
       String title,
       @Nullable String description,
       @Nullable String externalKey,
-      @Nullable Integer givenNumber) {
+      @Nullable Integer givenNumber,
+      @Nullable Integer derivedFrom) {
     long projectId = boardService.requireProjectId(boardId);
     // Rechte VOR dem Duplikat-Check: der Rückgabepfad darf Unberechtigten keine Existenz leaken.
     permissions.require(userId, projectId, Permission.TICKET_CREATE);
@@ -993,6 +1068,8 @@ public class CardService {
       Optional<Card> existing = cards.findByProjectIdAndExternalKey(projectId, externalKey);
       if (existing.isPresent()) {
         requireMatchingNumber(existing.get(), givenNumber);
+        // Idempotenz-Treffer: derivedFrom wird ignoriert wie Titel und Rumpf auch. Anders als
+        // number, das requireMatchingNumber als Identitaetsfeld verifiziert (#565).
         return new IdeaCreation(view(existing.get()), false);
       }
     }
@@ -1013,7 +1090,8 @@ public class CardService {
             null,
             null,
             externalKey,
-            givenNumber);
+            givenNumber,
+            derivedFrom);
     return new IdeaCreation(created, true);
   }
 
@@ -1064,7 +1142,9 @@ public class CardService {
       String title,
       @Nullable String description,
       @Nullable Long targetBoardId,
-      @Nullable String externalKey) {
+      @Nullable String externalKey,
+      @Nullable Integer derivedFrom) {
+    Long herkunft = DerivedFrom.resolve(cards, projectId, derivedFrom, null);
     Instant now = clock.instant();
     // #402: Pool-Ideen bekommen sofort eine projektweite Nummer (referenzierbar wie Board-Karten);
     // sie bleiben board-los und behalten die Nummer beim späteren Einplanen.
@@ -1091,7 +1171,8 @@ public class CardService {
                 null,
                 projectId,
                 targetBoardId,
-                externalKey));
+                externalKey,
+                herkunft));
     activity.add(
         saved.requireId(), userId, CardActivityType.CREATED, "Idee angelegt", now, actor.current());
     return view(saved);
@@ -1272,7 +1353,7 @@ public class CardService {
 
   private void doDelete(long userId, long cardId) {
     Card card = requireCardOp(userId, cardId, Permission.TICKET_DELETE, Permission.EPIC_DELETE);
-    // Beim Löschen eines Epics die Kinder lösen — die DB-„ON DELETE SET NULL"-Kaskade auf
+    // Beim Löschen eines Vorhabens die Kinder lösen — die DB-„ON DELETE SET NULL"-Kaskade auf
     // parent_id feuert nur beim Hard-Delete, nicht beim Soft-Delete.
     if (card.type() == CardType.EPIC) {
       cards.findByBoardId(card.requireBoardId()).stream()
@@ -1286,8 +1367,8 @@ public class CardService {
   /**
    * Verschiebt mehrere Karten in einer Transaktion in den Papierkorb (alles-oder-nichts). Nutzt je
    * Karte die Einzel-Logik von {@link #delete(long, long)} inklusive Rechteprüfung und Lösen der
-   * Epic-Kinder; fehlt an einer Karte das Recht oder existiert sie nicht, rollt der gesamte Batch
-   * zurück.
+   * Vorhaben-Kinder; fehlt an einer Karte das Recht oder existiert sie nicht, rollt der gesamte
+   * Batch zurück.
    */
   @Transactional
   public void bulkDelete(long userId, List<Long> cardIds) {
@@ -1344,9 +1425,9 @@ public class CardService {
   }
 
   /**
-   * Lädt die Karte und verlangt das je nach Kartentyp (Ticket/Epic) passende Recht. Die Rechte sind
-   * projekt-basiert und werden über {@code card.projectId()} (immer gesetzt, V18) geprüft — nicht
-   * über das Board. So sind auch board-lose Pool-Ideen (#405) editierbar; für board-gebundene
+   * Lädt die Karte und verlangt das je nach Kartentyp (Ticket/Vorhaben) passende Recht. Die Rechte
+   * sind projekt-basiert und werden über {@code card.projectId()} (immer gesetzt, V18) geprüft —
+   * nicht über das Board. So sind auch board-lose Pool-Ideen (#405) editierbar; für board-gebundene
    * Karten ist die Prüfung identisch (Projekt-ID stimmt mit dem Board-Projekt überein).
    */
   private Card requireCardOp(
@@ -1455,6 +1536,39 @@ public class CardService {
     return value == null || value.isBlank() ? null : value.trim();
   }
 
+  /**
+   * Herkunfts-Nummern zu einer Kartenliste — <strong>ein</strong> Sammelzugriff, unabhaengig von
+   * der Zahl verschiedener Vorfahren. Je Karte einzeln nachzuschlagen ergaebe ein N+1 auf einer
+   * Liste, die ein ganzes Board umfasst.
+   */
+  private Map<Long, Integer> herkunftsnummern(List<Card> karten) {
+    Set<Long> ids =
+        karten.stream()
+            .map(Card::derivedFromCardId)
+            .filter(Objects::nonNull)
+            .collect(Collectors.toSet());
+    if (ids.isEmpty()) {
+      return Map.of();
+    }
+    Map<Long, Integer> nummern = new HashMap<>();
+    for (Card vorfahr : cards.findByIds(ids)) {
+      // Ohne Null-Guard: Ein fehlender Eintrag und ein Eintrag mit Wert null liefern beim
+      // Nachschlagen dasselbe. Ein Guard waere hier wirkungslos — Alt-Ideen von vor #402 haben
+      // number == null und ergeben so oder so keine Herkunfts-Nummer.
+      nummern.put(vorfahr.requireId(), vorfahr.number());
+    }
+    return nummern;
+  }
+
+  /**
+   * Herkunfts-Nummer einer einzelnen Karte. Liefert {@code null}, wenn keine Herkunft gesetzt ist
+   * oder der Vorfahr nicht mehr existiert — die Sicht haelt den Zustand aus, statt zu scheitern.
+   */
+  private @Nullable Integer herkunftsnummer(Card c) {
+    Long id = c.derivedFromCardId();
+    return id == null ? null : cards.findById(id).map(Card::number).orElse(null);
+  }
+
   private CardView view(Card c) {
     return new CardView(
         c.requireId(),
@@ -1474,10 +1588,11 @@ public class CardService {
         assignees.findByCardId(c.requireId()),
         c.dueDate(),
         cardLabels.findByCardId(c.requireId()),
-        c.targetBoardId());
+        c.targetBoardId(),
+        herkunftsnummer(c));
   }
 
-  /** Kartendarstellung inkl. Abhängigkeits-Nummern, Typ und Epic-Zuordnung. */
+  /** Kartendarstellung inkl. Abhängigkeits-Nummern, Typ und Vorhaben-Zuordnung. */
   public record CardView(
       Long id,
       @Nullable Long boardId,
@@ -1496,7 +1611,8 @@ public class CardService {
       List<Long> assignees,
       @Nullable Instant dueDate,
       List<Long> labels,
-      @Nullable Long targetBoardId) {}
+      @Nullable Long targetBoardId,
+      @Nullable Integer derivedFrom) {}
 
   /**
    * Treffer der projektübergreifenden Nummernsuche: die Karte plus die Angabe, wo sie liegt.
@@ -1523,8 +1639,8 @@ public class CardService {
       @Nullable String columnName) {}
 
   /**
-   * Schlanke Board-Projektion einer Karte oder eines Epics — ohne Abhängigkeiten, Zuständige und
-   * Labels. {@code epic} unterscheidet die beiden Ausprägungen, ohne den Kartentyp aus {@code
+   * Schlanke Board-Projektion einer Karte oder eines Vorhabens — ohne Abhängigkeiten, Zuständige
+   * und Labels. {@code epic} unterscheidet die beiden Ausprägungen, ohne den Kartentyp aus {@code
    * card.domain} nach außen zu geben.
    *
    * <p>{@code externalKey} ist der Idempotenz-Schlüssel eines Automatik-Ingests (#534). Er wird
@@ -1539,9 +1655,10 @@ public class CardService {
       @Nullable Long columnId,
       int positionInColumn,
       boolean epic,
-      @Nullable String externalKey) {}
+      @Nullable String externalKey,
+      @Nullable Integer derivedFrom) {}
 
-  /** Epic-Darstellung inkl. Fortschritt (Kinder gesamt / in Done). */
+  /** Vorhaben-Darstellung inkl. Fortschritt (Kinder gesamt / in Done). */
   public record EpicView(
       Long id,
       int number,

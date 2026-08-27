@@ -32,6 +32,7 @@ class CardTest {
           null,
           1L,
           null,
+          null,
           null);
 
   @Test
@@ -91,6 +92,7 @@ class CardTest {
             null,
             1L,
             null,
+            null,
             null);
 
     assertThatExceptionOfType(IllegalStateException.class).isThrownBy(numberless::requireNumber);
@@ -109,5 +111,34 @@ class CardTest {
     assertThat(planned.positionInColumn()).isEqualTo(3);
     assertThat(planned.targetBoardId()).isNull();
     assertThat(planned.projectId()).isEqualTo(1L);
+  }
+
+  /**
+   * Die Herkunft muss durch <strong>jede</strong> Konstruktionsstelle des Records wandern. Der
+   * Compiler erzwingt, dass jede Stelle angefasst wird — aber nicht, dass sie den Wert
+   * weiterreicht: Ein durchgereichtes {@code null} kompiliert anstandslos und faellt erst spaeter
+   * als Datenverlust auf. Deshalb wird hier jede der neun Stellen einzeln durchlaufen.
+   */
+  @Test
+  void derivedFrom_ueberlebt_jedeKonstruktionsstelleDesRecords() {
+    Card mitHerkunft = CARD.withDerivedFrom(99L);
+
+    assertThat(mitHerkunft.withContent("neu", "d").derivedFromCardId()).isEqualTo(99L);
+    assertThat(mitHerkunft.asArchived().derivedFromCardId()).isEqualTo(99L);
+    assertThat(mitHerkunft.asArchived().asRestored(0).derivedFromCardId()).isEqualTo(99L);
+    assertThat(mitHerkunft.asPooledIdea(42L).derivedFromCardId()).isEqualTo(99L);
+    assertThat(mitHerkunft.asPooledIdea(42L).withPlannedOnBoard(10L, 20L, 5, 0).derivedFromCardId())
+        .isEqualTo(99L);
+    assertThat(mitHerkunft.withMovedToDoneAt(FIXED).derivedFromCardId()).isEqualTo(99L);
+    assertThat(mitHerkunft.withParent(7L).derivedFromCardId()).isEqualTo(99L);
+    assertThat(mitHerkunft.withShortcode("K").derivedFromCardId()).isEqualTo(99L);
+    assertThat(mitHerkunft.withDueDate(FIXED).derivedFromCardId()).isEqualTo(99L);
+  }
+
+  @Test
+  void withDerivedFrom_setztUndLoescht() {
+    assertThat(CARD.derivedFromCardId()).isNull();
+    assertThat(CARD.withDerivedFrom(99L).derivedFromCardId()).isEqualTo(99L);
+    assertThat(CARD.withDerivedFrom(99L).withDerivedFrom(null).derivedFromCardId()).isNull();
   }
 }

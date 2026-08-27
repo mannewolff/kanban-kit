@@ -37,9 +37,9 @@ const mProjects = projectsApi as unknown as { list: ReturnType<typeof vi.fn> }
 
 function renderPage() {
   return render(
-    <MemoryRouter initialEntries={['/boards/1/epics']}>
+    <MemoryRouter initialEntries={['/boards/1/vorhaben']}>
       <Routes>
-        <Route path="/boards/:boardId/epics" element={<EpicsPage />} />
+        <Route path="/boards/:boardId/vorhaben" element={<EpicsPage />} />
       </Routes>
     </MemoryRouter>,
   )
@@ -75,9 +75,9 @@ describe('EpicsPage', () => {
   it('legt über „Neues Epic" ein Epic an', async () => {
     mEpics.list.mockResolvedValue([])
     renderPage()
-    await screen.findByText('Epics')
+    await screen.findByText('Vorhaben')
 
-    fireEvent.click(screen.getByRole('button', { name: 'Neues Epic' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Neues Vorhaben' }))
     fireEvent.change(screen.getByLabelText('Titel'), { target: { value: 'Auth-Epic' } })
     fireEvent.click(screen.getByRole('button', { name: 'Anlegen' }))
 
@@ -86,9 +86,9 @@ describe('EpicsPage', () => {
 
   it('zeigt bei ungültiger Board-ID einen Fehler und ruft keine API auf', async () => {
     render(
-      <MemoryRouter initialEntries={['/boards/abc/epics']}>
+      <MemoryRouter initialEntries={['/boards/abc/vorhaben']}>
         <Routes>
-          <Route path="/boards/:boardId/epics" element={<EpicsPage />} />
+          <Route path="/boards/:boardId/vorhaben" element={<EpicsPage />} />
         </Routes>
       </MemoryRouter>,
     )
@@ -139,9 +139,9 @@ describe('EpicsPage', () => {
     mProjects.list.mockResolvedValue([{ id: 42, name: 'Fremd', role: 'VIEWER', createdAt: '' }])
     renderPage()
 
-    await screen.findByText('Epics')
+    await screen.findByText('Vorhaben')
     await waitFor(() => expect(mProjects.list).toHaveBeenCalled())
-    expect(screen.queryByRole('button', { name: 'Neues Epic' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Neues Vorhaben' })).not.toBeInTheDocument()
   })
 
   it('behandelt einen fehlenden Board-Parameter als ungültig (boardId undefined)', () => {

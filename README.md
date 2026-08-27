@@ -2,7 +2,7 @@
 
 Self-hostbares Kanban-Board — eine schlanke, mandantenfähige Trello-Alternative zum
 selbst Betreiben. Projekte, Boards mit konfigurierbaren Spalten, Karten mit Markdown,
-Epics, Datei-Anhänge (Bild-/PDF-Vorschau) und eine rollenbasierte Rechteverwaltung
+Vorhaben, Datei-Anhänge (Bild-/PDF-Vorschau) und eine rollenbasierte Rechteverwaltung
 (Projekt- und Plattform-Rollen).
 
 Technik: Spring Boot (Java 21) + Postgres + MinIO im Backend, React + Vite im Frontend,
@@ -77,7 +77,7 @@ und [docs/betrieb.md](docs/betrieb.md).
 Die ausführliche Benutzer- und Betriebsdokumentation liegt unter [`docs/`](docs/):
 
 - [Betrieb & Installation](docs/betrieb.md) — Start, Umgebungsvariablen, E-Mail, erster Admin
-- [Nutzung](docs/nutzung.md) — Projekte, Boards, Karten, Listen-Ansicht, Epics, Mitglieder
+- [Nutzung](docs/nutzung.md) — Projekte, Boards, Karten, Listen-Ansicht, Vorhaben, Mitglieder
 - [Rollen & Rechte](docs/rollen-und-rechte.md) — Projekt- und Plattform-Rollen, Rechte-Matrix
 - [Dogfooding](docs/dogfooding.md) — kanban-kit als eigenes Board anbinden
 

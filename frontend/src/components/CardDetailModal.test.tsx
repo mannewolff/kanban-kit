@@ -4,10 +4,11 @@ import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AttachmentsApi } from '../api/attachments'
 import type { Board } from '../api/boards'
+import { ApiError } from '../api/client'
 import type { Card, CardByNumber } from '../api/cards'
 import type { CommentsApi } from '../api/comments'
 import type { CardLocation } from '../lib/cardLocation'
-import { CardDetailModal, commentFieldProps, parseDependencyInput } from './CardDetailModal'
+import { CardDetailModal, commentFieldProps, parseDependencyInput, parseHerkunftInput } from './CardDetailModal'
 import { SnackbarProvider } from './SnackbarProvider'
 import { MAX_TEXT_LENGTH } from '../lib/textLimits'
 
@@ -18,14 +19,14 @@ vi.mock('../auth/AuthContext', () => ({
 const card: Card = {
   id: 100, boardId: 1, columnId: 10, number: 5, title: 'Aufgabe', description: '# Titel\n\n- a\n- b',
   positionInColumn: 0, archived: false, ideaStored: false, movedToDoneAt: null, dependencies: [3, 4],
-  type: 'CARD', parentId: null, shortcode: null, assignees: [], dueDate: null, labels: [],
+  type: 'CARD', parentId: null, shortcode: null, assignees: [], dueDate: null, labels: [], derivedFrom: null,
 }
 
 /** Karte, auf die der Abhängigkeits-Verweis „#3“ zeigt — bewusst auf einem anderen Board. */
 const linkedCard: CardByNumber = {
   id: 300, boardId: 2, columnId: 20, number: 3, title: 'Vorbedingung', description: 'Text der Vorbedingung',
   archived: false, ideaStored: false, dependencies: [], type: 'CARD', parentId: null, shortcode: null,
-  assignees: [], dueDate: null, labels: [],
+  assignees: [], dueDate: null, labels: [], derivedFrom: null,
 }
 
 const linkedBoard: Board = {
@@ -58,6 +59,7 @@ function makeApis() {
     restore: vi.fn().mockResolvedValue({ ...card }),
     moveToIdeaStorage: vi.fn().mockResolvedValue({ ...card }),
     byNumber: vi.fn().mockResolvedValue({ ...linkedCard }),
+    assignDerivedFrom: vi.fn().mockResolvedValue({ ...card }),
   }
   const boardsApi = { get: vi.fn().mockResolvedValue(linkedBoard) }
   return { commentsApi, attachmentsApi, cardsApi, boardsApi }
@@ -70,6 +72,17 @@ describe('parseDependencyInput', () => {
   it('meldet ungültige Tokens', () => {
     expect(parseDependencyInput('12, x').valid).toBe(false)
     expect(parseDependencyInput('0').valid).toBe(false)
+  })
+})
+
+describe('parseHerkunftInput', () => {
+  it('nimmt eine positive Nummer und deutet leer als „keine Herkunft"', () => {
+    expect(parseHerkunftInput('42')).toEqual({ herkunft: 42, valid: true })
+    expect(parseHerkunftInput('  ')).toEqual({ herkunft: null, valid: true })
+  })
+  it('lehnt Nicht-Zahlen und die Null ab', () => {
+    expect(parseHerkunftInput('abc').valid).toBe(false)
+    expect(parseHerkunftInput('0').valid).toBe(false)
   })
 })
 
@@ -353,7 +366,7 @@ describe('CardDetailModal', () => {
     const boardLabels = [{ id: 5, boardId: 1, name: 'Bug', color: '#f00' }]
     render(
       <CardDetailModal
-        card={{ ...card, labels: [5] }}
+        card={{ ...card, labels: [5], derivedFrom: null }}
         canEdit={false}
         boardLabels={boardLabels}
         onClose={vi.fn()}
@@ -369,7 +382,7 @@ describe('CardDetailModal', () => {
     // Label 99 fehlt in boardLabels → find() undefined → Fallback `#99` und grey.500.
     render(
       <CardDetailModal
-        card={{ ...card, labels: [99] }}
+        card={{ ...card, labels: [99], derivedFrom: null }}
         canEdit={false}
         boardLabels={[{ id: 5, boardId: 1, name: 'Bug', color: '#f00' }]}
         onClose={vi.fn()}
@@ -525,7 +538,7 @@ describe('CardDetailModal', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Bearbeiten' }))
 
     expect(screen.getByLabelText('Kürzel')).toHaveValue('AUT')
-    expect(screen.queryByLabelText('Epic')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Vorhaben')).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Fällig am')).not.toBeInTheDocument()
   })
 
@@ -535,7 +548,7 @@ describe('CardDetailModal', () => {
     render(<CardDetailModal card={card} canEdit epics={epics} onClose={vi.fn()} {...apis} />)
 
     fireEvent.click(screen.getByRole('button', { name: 'Bearbeiten' }))
-    fireEvent.change(screen.getByLabelText('Epic'), { target: { value: '9' } })
+    fireEvent.change(screen.getByLabelText('Vorhaben'), { target: { value: '9' } })
 
     fireEvent.click(screen.getByRole('button', { name: 'Speichern' }))
     await waitFor(() =>
@@ -550,7 +563,7 @@ describe('CardDetailModal', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Bearbeiten' }))
     // Auswahl auf „—" (leerer Wert) → onParentIdChange(null), deckt den `=== '' ? null`-Zweig ab.
-    fireEvent.change(screen.getByLabelText('Epic'), { target: { value: '' } })
+    fireEvent.change(screen.getByLabelText('Vorhaben'), { target: { value: '' } })
 
     fireEvent.click(screen.getByRole('button', { name: 'Speichern' }))
     await waitFor(() =>
@@ -575,7 +588,7 @@ describe('CardDetailModal', () => {
 
     // Lesend statt Auswahl: Ein leerer Optionsvorrat böte nur „(kein Epic)" an — ein Klick darauf
     // löschte die Zuordnung, ohne sie je gezeigt zu haben (#586).
-    const field = screen.getByLabelText('Epic')
+    const field = screen.getByLabelText('Vorhaben')
     expect(field).toHaveValue('#9')
     expect(field).toHaveAttribute('readonly')
 
@@ -589,7 +602,7 @@ describe('CardDetailModal', () => {
     const apis = makeApis()
     render(
       <CardDetailModal
-        card={{ ...card, labels: [6] }}
+        card={{ ...card, labels: [6], derivedFrom: null }}
         canEdit
         canEditLabels={false}
         boardLabels={[]}
@@ -853,7 +866,7 @@ describe('CardDetailModal', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Bearbeiten' }))
 
-    expect(screen.getByLabelText('Epic')).toHaveValue('9')
+    expect(screen.getByLabelText('Vorhaben')).toHaveValue('9')
   })
 
   it('speichert eine Epic-Karte mit geändertem Titel und Kürzel', async () => {
@@ -958,7 +971,7 @@ describe('CardDetailModal', () => {
       { id: 6, boardId: 1, name: 'Ux', color: '#0f0' },
     ]
     render(
-      <CardDetailModal card={{ ...card, labels: [5] }} canEdit boardLabels={boardLabels} onClose={vi.fn()} {...apis} />,
+      <CardDetailModal card={{ ...card, labels: [5], derivedFrom: null }} canEdit boardLabels={boardLabels} onClose={vi.fn()} {...apis} />,
     )
 
     fireEvent.mouseDown(await screen.findByLabelText('Labels'))
@@ -1340,5 +1353,106 @@ describe('CardDetailModal — Kommentar-Body als Markdown', () => {
   it('konfiguriert beide Kommentar-Felder gleich', () => {
     // Beide Felder spreaden dieselbe Konstante — sonst sehen Verfassen und Bearbeiten anders aus.
     expect(commentFieldProps).toEqual({ multiline: true, minRows: 3 })
+  })
+})
+
+describe('CardDetailModal — Herkunft (#608)', () => {
+  beforeEach(() => {
+    URL.createObjectURL = vi.fn(() => 'blob:preview')
+    URL.revokeObjectURL = vi.fn()
+  })
+
+  const mitHerkunft: Card = { ...card, derivedFrom: 42 }
+  // Eigene Fixture mit echter Aufgabenliste: Die Standard-Beschreibung traegt eine
+  // gewoehnliche Liste, dort rendert MarkdownInput keine Checkbox.
+  const mitAufgabe: Card = { ...mitHerkunft, description: '- [ ] Schritt eins' }
+
+  it('zeigt eine gesetzte Herkunft im Feld', async () => {
+    const apis = makeApis()
+    render(<CardDetailModal card={mitHerkunft} canEdit columnName="In Progress" onClose={vi.fn()} {...apis} />)
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Bearbeiten' }))
+    expect(screen.getByRole('textbox', { name: 'Herkunft' })).toHaveValue('42')
+  })
+
+  it('schickt die eingetragene Nummer an den eigenen Endpunkt', async () => {
+    const apis = makeApis()
+    render(<CardDetailModal card={card} canEdit columnName="In Progress" onClose={vi.fn()} {...apis} />)
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Bearbeiten' }))
+    await userEvent.type(screen.getByRole('textbox', { name: 'Herkunft' }), '42')
+    await userEvent.click(screen.getByRole('button', { name: 'Speichern' }))
+
+    await waitFor(() => expect(apis.cardsApi.assignDerivedFrom).toHaveBeenCalledWith(100, 42))
+  })
+
+  it('loescht die Herkunft, wenn das Feld geleert wird', async () => {
+    const apis = makeApis()
+    render(<CardDetailModal card={mitHerkunft} canEdit columnName="In Progress" onClose={vi.fn()} {...apis} />)
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Bearbeiten' }))
+    await userEvent.clear(screen.getByRole('textbox', { name: 'Herkunft' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Speichern' }))
+
+    await waitFor(() => expect(apis.cardsApi.assignDerivedFrom).toHaveBeenCalledWith(100, null))
+  })
+
+  /**
+   * Der zweite, leicht uebersehene Schreibaufrufer: `toggleTask` persistiert ausserhalb des
+   * Editiermodus sofort. Wuerde `cardsApi.update` die Herkunft tragen, loeschte jeder
+   * Checkbox-Klick sie kommentarlos (Issue #607, Entscheidung D1a).
+   */
+  it('laesst die Herkunft beim Checkbox-Klick unberuehrt', async () => {
+    const apis = makeApis()
+    render(<CardDetailModal card={mitAufgabe} canEdit columnName="In Progress" onClose={vi.fn()} {...apis} />)
+
+    await userEvent.click((await screen.findAllByRole('checkbox'))[0])
+
+    await waitFor(() => expect(apis.cardsApi.update).toHaveBeenCalled())
+    // Kein Argument des Update-Aufrufs traegt die Herkunft — der Vertrag kennt sie gar nicht.
+    expect(apis.cardsApi.assignDerivedFrom).not.toHaveBeenCalled()
+    const args = apis.cardsApi.update.mock.calls[0]
+    expect(args).not.toContain(42)
+  })
+
+  it('faengt eine unparsebare Eingabe lokal ab, ohne zu schreiben', async () => {
+    const apis = makeApis()
+    render(<CardDetailModal card={card} canEdit columnName="In Progress" onClose={vi.fn()} {...apis} />)
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Bearbeiten' }))
+    await userEvent.type(screen.getByRole('textbox', { name: 'Herkunft' }), 'abc')
+    await userEvent.click(screen.getByRole('button', { name: 'Speichern' }))
+
+    expect(apis.cardsApi.assignDerivedFrom).not.toHaveBeenCalled()
+    expect(apis.cardsApi.update).not.toHaveBeenCalled()
+    expect(screen.getByRole('textbox', { name: 'Herkunft' })).toBeInvalid()
+  })
+
+  it('zeigt die Server-Meldung am Feld und laesst die Maske offen', async () => {
+    const apis = makeApis()
+    apis.cardsApi.assignDerivedFrom = vi.fn().mockRejectedValue(
+      new ApiError(400, 'Ablehnung', { derivedFrom: 'Unbekannte Kartennummer als Herkunft: 99999' }),
+    )
+    render(<CardDetailModal card={card} canEdit columnName="In Progress" onClose={vi.fn()} {...apis} />)
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Bearbeiten' }))
+    await userEvent.type(screen.getByRole('textbox', { name: 'Herkunft' }), '99999')
+    await userEvent.click(screen.getByRole('button', { name: 'Speichern' }))
+
+    expect(await screen.findByText('Unbekannte Kartennummer als Herkunft: 99999')).toBeInTheDocument()
+    // Die Maske bleibt im Editiermodus, die Eingabe steht noch da.
+    expect(screen.getByRole('textbox', { name: 'Herkunft' })).toHaveValue('99999')
+
+    // Weitertippen raeumt die Meldung weg — sonst bliebe sie neben einer laengst geaenderten Eingabe stehen.
+    await userEvent.type(screen.getByRole('textbox', { name: 'Herkunft' }), '1')
+    expect(screen.queryByText('Unbekannte Kartennummer als Herkunft: 99999')).toBeNull()
+  })
+
+  it('zeigt die Herkunft ohne Schreibrecht schreibgeschuetzt an', async () => {
+    const apis = makeApis()
+    render(<CardDetailModal card={mitHerkunft} canEdit={false} columnName="In Progress" onClose={vi.fn()} {...apis} />)
+
+    expect(await screen.findByLabelText('Herkunft')).toHaveTextContent('#42')
+    expect(screen.queryByRole('textbox', { name: 'Herkunft' })).toBeNull()
   })
 })

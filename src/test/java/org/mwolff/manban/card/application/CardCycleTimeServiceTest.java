@@ -78,6 +78,7 @@ class CardCycleTimeServiceTest {
         null,
         1L,
         null,
+        null,
         null);
   }
 
@@ -181,6 +182,7 @@ class CardCycleTimeServiceTest {
             "EP",
             null,
             1L,
+            null,
             null,
             null);
     stub(

@@ -5,7 +5,7 @@ import { defineConfig } from "vitepress";
 export default defineConfig({
   title: "kanban-kit",
   description:
-    "Selbst-hostbares Kanban-Board mit Projekten, Boards, Epics, Anhängen und rollenbasierter Rechteverwaltung — Benutzer- und Betriebsdokumentation.",
+    "Selbst-hostbares Kanban-Board mit Projekten, Boards, Vorhaben, Anhängen und rollenbasierter Rechteverwaltung — Benutzer- und Betriebsdokumentation.",
   appearance: false,
   // Ausgeliefert von Spring Boot unter /docs/ (in die App gebündelt, #314); alle Asset-Pfade
   // müssen deshalb unter /docs/ auflösen.
@@ -37,6 +37,7 @@ export default defineConfig({
           { text: "Umgebungsvariablen", link: "/betrieb#umgebungsvariablen" },
           { text: "E-Mail-Bestätigung", link: "/betrieb#e-mail-bestatigung-ohne-mailserver" },
           { text: "Ersten Admin einrichten", link: "/betrieb#den-ersten-admin-einrichten" },
+          { text: "Testsuite lokal starten", link: "/betrieb#testsuite-lokal-starten" },
         ],
       },
       {
@@ -50,7 +51,7 @@ export default defineConfig({
           { text: "Listen-Ansicht", link: "/nutzung#listen-ansicht" },
           { text: "Ideen-Pool", link: "/nutzung#ideen-pool" },
           { text: "Dashboard (Kennzahlen)", link: "/nutzung#dashboard-kennzahlen" },
-          { text: "Epics", link: "/nutzung#epics" },
+          { text: "Vorhaben", link: "/nutzung#vorhaben" },
           { text: "Mitglieder", link: "/nutzung#mitglieder" },
         ],
       },

@@ -4,7 +4,7 @@ import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.common.Identifiable;
 
 /**
- * Board-scoped Label (Tag) mit Name und Farbe. Labels kategorisieren Karten quer zu den Epics.
+ * Board-scoped Label (Tag) mit Name und Farbe. Labels kategorisieren Karten quer zu den Vorhaben.
  *
  * @param id technische ID; {@code null} vor der Persistierung
  * @param boardId zugehöriges Board

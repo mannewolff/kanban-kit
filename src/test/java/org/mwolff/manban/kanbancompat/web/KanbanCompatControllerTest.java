@@ -59,8 +59,8 @@ class KanbanCompatControllerTest {
     Created created = new Created(42L, 7, true);
     var request =
         new KanbanCompatController.CreateItemRequest(
-            "Title", "Body", "todo", null, null, null, null);
-    when(service.create(PRINCIPAL, "Title", "Body", "todo", false, null, false, null))
+            "Title", "Body", "todo", null, null, null, null, null);
+    when(service.create(PRINCIPAL, "Title", "Body", "todo", false, null, false, null, null))
         .thenReturn(created);
 
     // When
@@ -76,8 +76,8 @@ class KanbanCompatControllerTest {
     Created created = new Created(43L, 8, true);
     var request =
         new KanbanCompatController.CreateItemRequest(
-            "Idee", "Body", "todo", true, null, null, null);
-    when(service.create(PRINCIPAL, "Idee", "Body", "todo", true, null, false, null))
+            "Idee", "Body", "todo", true, null, null, null, null);
+    when(service.create(PRINCIPAL, "Idee", "Body", "todo", true, null, false, null, null))
         .thenReturn(created);
 
     // When

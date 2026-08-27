@@ -86,6 +86,7 @@ const mDashboard = dashboardApi as unknown as { get: ReturnType<typeof vi.fn> }
 const mProjects = projectsApi as unknown as { list: ReturnType<typeof vi.fn> }
 
 const outlierCard: Card = {
+  derivedFrom: null,
   id: 9,
   boardId: 1,
   columnId: 5,

@@ -8,6 +8,7 @@ const base = {
   dependencies: [] as number[], type: 'CARD' as const, parentId: null as number | null,
   shortcode: null as string | null, assignees: [] as number[], dueDate: null as string | null,
   labels: [] as number[],
+  derivedFrom: null as number | null,
 }
 const card: Card = { ...base, id: 100, number: 5, title: 'Gelöscht', description: null }
 

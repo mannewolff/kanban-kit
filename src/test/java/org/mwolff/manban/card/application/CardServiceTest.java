@@ -79,7 +79,7 @@ class CardServiceTest {
       String shortcode) {
     return new Card(
         id, BOARD, columnId, number, "Titel", null, 0, archived, false, done, 1L, FIXED, FIXED,
-        type, parentId, shortcode, null, PROJECT, null, null);
+        type, parentId, shortcode, null, PROJECT, null, null, null);
   }
 
   private static ColumnView column(long id, String name, int position) {
@@ -142,7 +142,8 @@ class CardServiceTest {
         c.dueDate(),
         c.projectId(),
         c.targetBoardId(),
-        c.externalKey());
+        c.externalKey(),
+        null);
   }
 
   // --- create -----------------------------------------------------------
@@ -174,7 +175,7 @@ class CardServiceTest {
     // Die zurückgegebene View der Voll-Signatur (11 Args) wird bewusst geprüft, damit der
     // @Transactional-Einstieg (der an den privaten Kern doCreate delegiert) nicht null zurückgibt.
     CardService.CardView result =
-        service.create(1L, BOARD, 20L, "Titel", null, null, null, false, due, null, null);
+        service.create(1L, BOARD, 20L, "Titel", null, null, null, false, due, null, null, null);
 
     verify(cards).save(captor.capture());
     assertThat(captor.getValue().dueDate()).isEqualTo(due);
@@ -190,7 +191,7 @@ class CardServiceTest {
     when(permissions.isRealProjectMember(8L, 1L)).thenReturn(true);
 
     service.create(
-        1L, BOARD, 20L, "Titel", null, null, null, false, null, List.of(7L, 8L, 7L), null);
+        1L, BOARD, 20L, "Titel", null, null, null, false, null, List.of(7L, 8L, 7L), null, null);
 
     verify(assignees).replaceAssignees(1L, List.of(7L, 8L));
     // Genau ein Aktivitätseintrag (CREATED) — kein zusätzlicher ASSIGNED beim atomaren Anlegen.
@@ -227,7 +228,7 @@ class CardServiceTest {
     when(cards.allocateCardNumber(PROJECT)).thenReturn(1);
     when(cards.allocateActivePosition(20L)).thenReturn(0);
 
-    service.create(1L, BOARD, 20L, "Titel", null, null, null, false, null, List.of(), null);
+    service.create(1L, BOARD, 20L, "Titel", null, null, null, false, null, List.of(), null, null);
 
     verify(assignees, never()).replaceAssignees(anyLong(), anyList());
   }
@@ -242,7 +243,18 @@ class CardServiceTest {
     assertThatThrownBy(
             () ->
                 service.create(
-                    1L, BOARD, 20L, "Titel", null, null, null, false, null, List.of(9L), null))
+                    1L,
+                    BOARD,
+                    20L,
+                    "Titel",
+                    null,
+                    null,
+                    null,
+                    false,
+                    null,
+                    List.of(9L),
+                    null,
+                    null))
         .isInstanceOf(InvalidAssigneeException.class);
     verify(assignees, never()).replaceAssignees(anyLong(), anyList());
   }
@@ -257,7 +269,7 @@ class CardServiceTest {
             List.of(new Label(7L, BOARD, "Bug", "#f00"), new Label(8L, BOARD, "Ux", "#0f0")));
 
     service.create(
-        1L, BOARD, 20L, "Titel", null, null, null, false, null, null, List.of(7L, 8L, 7L));
+        1L, BOARD, 20L, "Titel", null, null, null, false, null, null, List.of(7L, 8L, 7L), null);
 
     verify(cardLabels).replaceLabels(1L, List.of(7L, 8L));
   }
@@ -268,7 +280,7 @@ class CardServiceTest {
     when(cards.allocateCardNumber(PROJECT)).thenReturn(1);
     when(cards.allocateActivePosition(20L)).thenReturn(0);
 
-    service.create(1L, BOARD, 20L, "Titel", null, null, null, false, null, null, List.of());
+    service.create(1L, BOARD, 20L, "Titel", null, null, null, false, null, null, List.of(), null);
 
     verify(cardLabels, never()).replaceLabels(anyLong(), anyList());
   }
@@ -283,7 +295,18 @@ class CardServiceTest {
     assertThatThrownBy(
             () ->
                 service.create(
-                    1L, BOARD, 20L, "Titel", null, null, null, false, null, null, List.of(8L)))
+                    1L,
+                    BOARD,
+                    20L,
+                    "Titel",
+                    null,
+                    null,
+                    null,
+                    false,
+                    null,
+                    null,
+                    List.of(8L),
+                    null))
         .isInstanceOf(InvalidLabelException.class);
     verify(cardLabels, never()).replaceLabels(anyLong(), anyList());
   }
@@ -1104,6 +1127,7 @@ class CardServiceTest {
             null,
             PROJECT,
             null,
+            null,
             null);
     when(cards.findById(30L)).thenReturn(Optional.of(epicOtherBoard));
 
@@ -1541,6 +1565,238 @@ class CardServiceTest {
     // Then
     verify(cards).transfer(100L, 20L, 60L, 8);
     assertThat(view.id()).isEqualTo(100L);
+  }
+
+  @Test
+  void listBoardItems_loestDieHerkunftMitEinemEinzigenSammelzugriffAuf() {
+    // Vier Karten mit drei VERSCHIEDENEN Vorfahren. Die Aufloesung darf genau einen
+    // zusaetzlichen Port-Aufruf ausloesen, nicht einen je Vorfahr — sonst entstuende ein N+1
+    // auf einer Liste, die ein ganzes Board umfasst.
+    when(boardService.requireProjectId(BOARD)).thenReturn(PROJECT);
+    when(cards.findByBoardId(BOARD))
+        .thenReturn(
+            List.of(
+                card(1L, 20L, 1, false, null, CardType.CARD, null, null).withDerivedFrom(91L),
+                card(2L, 20L, 2, false, null, CardType.CARD, null, null).withDerivedFrom(92L),
+                card(3L, 20L, 3, false, null, CardType.CARD, null, null).withDerivedFrom(93L),
+                card(4L, 20L, 4, false, null, CardType.CARD, null, null)));
+    when(cards.findByIds(any()))
+        .thenReturn(
+            List.of(
+                card(91L, 20L, 91, false, null, CardType.CARD, null, null),
+                card(92L, 20L, 92, false, null, CardType.CARD, null, null),
+                card(93L, 20L, 93, false, null, CardType.CARD, null, null)));
+
+    List<CardService.BoardItemView> items = service.listBoardItems(5L, BOARD);
+
+    verify(cards, times(1)).findByIds(any());
+    verify(cards, never()).findById(anyLong());
+    assertThat(items)
+        .extracting(CardService.BoardItemView::derivedFrom)
+        .containsExactly(91, 92, 93, null);
+  }
+
+  @Test
+  void listBoardItems_fragtGarNichtNach_wennKeineKarteEineHerkunftHat() {
+    // Der haeufige Fall auf einem Board ohne Herkunftsdaten: kein einziger Zugriff auf den Port.
+    // Ohne diese Zusage waere die Abkuerzung wirkungslos und niemand merkte es.
+    when(boardService.requireProjectId(BOARD)).thenReturn(PROJECT);
+    when(cards.findByBoardId(BOARD))
+        .thenReturn(
+            List.of(
+                card(1L, 20L, 1, false, null, CardType.CARD, null, null),
+                card(2L, 20L, 2, false, null, CardType.CARD, null, null)));
+
+    List<CardService.BoardItemView> items = service.listBoardItems(5L, BOARD);
+
+    verify(cards, never()).findByIds(any());
+    assertThat(items).extracting(CardService.BoardItemView::derivedFrom).containsOnlyNulls();
+  }
+
+  @Test
+  void listBoardItems_liefertNull_wennDerVorfahrKeineNummerHat() {
+    // Alt-Ideen von vor #402 haben number == null. Ein Verweis auf eine solche Karte liefert
+    // keine Nummer — die Sicht haelt das aus, statt zu scheitern.
+    Card ohneNummer =
+        new Card(
+            91L,
+            BOARD,
+            20L,
+            null,
+            "Alt",
+            null,
+            0,
+            false,
+            true,
+            null,
+            1L,
+            FIXED,
+            FIXED,
+            CardType.CARD,
+            null,
+            null,
+            null,
+            PROJECT,
+            null,
+            null,
+            null);
+    when(boardService.requireProjectId(BOARD)).thenReturn(PROJECT);
+    when(cards.findByBoardId(BOARD))
+        .thenReturn(
+            List.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null).withDerivedFrom(91L)));
+    when(cards.findByIds(any())).thenReturn(List.of(ohneNummer));
+
+    List<CardService.BoardItemView> items = service.listBoardItems(5L, BOARD);
+
+    assertThat(items).singleElement().extracting(CardService.BoardItemView::derivedFrom).isNull();
+  }
+
+  @Test
+  void transfer_projektwechsel_loeschtDieHerkunftDerKarte() {
+    stubTransferScenario(9L);
+    when(cards.findById(100L))
+        .thenReturn(
+            Optional.of(
+                withHerkunft(card(100L, 50L, 3, false, FIXED, CardType.CARD, 9L, null), 77L)));
+
+    ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
+    service.transfer(1L, 100L, 20L, 60L);
+
+    verify(cards).save(captor.capture());
+    assertThat(captor.getValue().derivedFromCardId()).isNull();
+  }
+
+  @Test
+  void transfer_projektwechsel_loeschtDieHerkunftDerKinder() {
+    stubTransferScenario(9L);
+    Card kind = withHerkunft(card(200L, 50L, 4, false, null, CardType.CARD, null, null), 100L);
+    Card archiviertesKind =
+        withHerkunft(card(201L, 50L, 5, true, null, CardType.CARD, null, null), 100L);
+    when(cards.findByDerivedFrom(100L)).thenReturn(List.of(kind, archiviertesKind));
+
+    ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
+    service.transfer(1L, 100L, 20L, 60L);
+
+    verify(cards, times(3)).save(captor.capture());
+    assertThat(captor.getAllValues())
+        .filteredOn(c -> c.requireId() == 200L || c.requireId() == 201L)
+        .hasSize(2)
+        .allSatisfy(c -> assertThat(c.derivedFromCardId()).isNull());
+  }
+
+  @Test
+  void transfer_innerhalbDesProjekts_laesstDieHerkunftUnberuehrt() {
+    // Ziel-Board liegt im SELBEN Projekt: Die Kette ueberlebt den Board-Wechsel.
+    when(cards.findById(100L))
+        .thenReturn(
+            Optional.of(
+                withHerkunft(card(100L, 50L, 3, false, FIXED, CardType.CARD, 9L, null), 77L)));
+    when(boardService.requireProjectId(20L)).thenReturn(PROJECT);
+    when(boardService.requireColumn(60L, 20L)).thenReturn(new ColumnView(60L, "Backlog", 0, null));
+
+    ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
+    service.transfer(1L, 100L, 20L, 60L);
+
+    verify(cards).save(captor.capture());
+    assertThat(captor.getValue().derivedFromCardId()).isEqualTo(77L);
+    verify(cards, never()).findByDerivedFrom(anyLong());
+  }
+
+  // --- assignDerivedFrom (Issue #607) --------------------------------------
+
+  /**
+   * Beleg fuer das mitgegebene {@code selfCardId}: Beim Aendern kennt die Aufloesung die eigene
+   * Karte nur, wenn der Aufrufer ihre ID durchreicht. Ohne sie liefe der Selbstbezug durch, und
+   * eine Karte koennte ihr eigener Vorfahr werden.
+   *
+   * <p>Ein Integrationstest allein genuegt hier nicht: PIT misst nur Unit-Tests (Befund aus Issue
+   * #605), eine ausschliesslich per IT belegte Stelle hinterlaesst also eine Mutationsluecke.
+   */
+  @Test
+  void assignDerivedFrom_selbstbezug_wirdAbgelehnt() {
+    Card selbst = card(1L, 20L, 7, false, null, CardType.CARD, null, null);
+    when(cards.findById(1L)).thenReturn(Optional.of(selbst));
+    when(cards.findByProjectIdAndNumber(PROJECT, 7)).thenReturn(Optional.of(selbst));
+
+    assertThatThrownBy(() -> service.assignDerivedFrom(1L, 1L, 7))
+        .isInstanceOf(InvalidDependencyException.class);
+
+    verify(cards, never()).save(any());
+  }
+
+  /**
+   * Gegenpol zum Selbstbezug: Eine fremde Nummer wird aufgeloest und gespeichert. Ohne diesen Test
+   * ueberlebt eine Mutation, die {@code selfCardId} als "immer gleich" behandelt — sie waere durch
+   * den Ablehnungstest allein nicht zu toeten.
+   */
+  @Test
+  void assignDerivedFrom_fremdeNummer_wirdAufgeloestUndGespeichert() {
+    when(cards.findById(1L))
+        .thenReturn(Optional.of(card(1L, 20L, 7, false, null, CardType.CARD, null, null)));
+    when(cards.findByProjectIdAndNumber(PROJECT, 4))
+        .thenReturn(Optional.of(card(9L, 20L, 4, false, null, CardType.CARD, null, null)));
+    // `save` gibt hier die gespeicherte Karte zurueck, damit die Sicht darauf gebaut werden kann.
+    // Die uebrigen Tests dieser Klasse pruefen nur den Captor und brauchen das nicht.
+    when(cards.save(any())).thenAnswer(inv -> inv.getArgument(0));
+    // Die Sicht loest die Herkunft ueber die ID zur Nummer auf (Issue #605).
+    when(cards.findById(9L))
+        .thenReturn(Optional.of(card(9L, 20L, 4, false, null, CardType.CARD, null, null)));
+
+    ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
+    CardService.CardView result = service.assignDerivedFrom(1L, 1L, 4);
+
+    verify(cards).save(captor.capture());
+    assertThat(captor.getValue().derivedFromCardId()).isEqualTo(9L);
+    // Die Sicht wird zurueckgegeben, nicht nur gespeichert: Der Aufrufer zeigt sie unmittelbar an.
+    assertThat(result).isNotNull();
+    assertThat(result.derivedFrom()).isEqualTo(4);
+    // Offene Boards ziehen ueber SSE nach — ohne das Ereignis sieht ein zweiter Betrachter die
+    // geaenderte Herkunft erst nach dem naechsten Laden.
+    verify(events).publishEvent(new CardBoardActivityEvent(BOARD, ActivityType.UPDATED, 1L));
+  }
+
+  /** {@code null} loescht die Herkunft — das Feld muss sich auch wieder leeren lassen. */
+  @Test
+  void assignDerivedFrom_null_loeschtDieHerkunft() {
+    when(cards.findById(1L))
+        .thenReturn(
+            Optional.of(
+                withHerkunft(card(1L, 20L, 7, false, null, CardType.CARD, null, null), 9L)));
+
+    ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
+    service.assignDerivedFrom(1L, 1L, null);
+
+    verify(cards).save(captor.capture());
+    assertThat(captor.getValue().derivedFromCardId()).isNull();
+  }
+
+  /**
+   * Setzt die Herkunft auf einer Testkarte — der Record-Wither bleibt die einzige Schreibstelle.
+   */
+  private static Card withHerkunft(Card c, long herkunft) {
+    return c.withDerivedFrom(herkunft);
+  }
+
+  @Test
+  void bulkTransfer_loeschtDieHerkunftAuchWennVorfahrUndKindZusammenWandern() {
+    // Wandern Vorfahr (100) und Kind (200) im selben Batch ins selbe Zielprojekt, waere die
+    // Beziehung dort eigentlich weiter konsistent — sie wird trotzdem geloescht. Eine
+    // Batch-Ausnahme haette das Ergebnis von der Reihenfolge innerhalb des Batches abhaengig
+    // gemacht.
+    stubTransferScenario(null);
+    Card kind = withHerkunft(card(200L, 50L, 4, false, null, CardType.CARD, null, null), 100L);
+    when(cards.findById(200L)).thenReturn(Optional.of(kind));
+    when(cards.findByDerivedFrom(100L)).thenReturn(List.of(kind));
+    when(cards.allocateCardNumber(2L)).thenReturn(8, 9);
+
+    ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
+    service.bulkTransfer(1L, List.of(100L, 200L), 20L, 60L);
+
+    verify(cards, times(3)).save(captor.capture());
+    assertThat(captor.getAllValues())
+        .filteredOn(c -> c.requireId() == 200L)
+        .isNotEmpty()
+        .allSatisfy(c -> assertThat(c.derivedFromCardId()).isNull());
   }
 
   @Test
@@ -2261,6 +2517,7 @@ class CardServiceTest {
         null,
         PROJECT,
         null,
+        null,
         null);
   }
 
@@ -2349,6 +2606,7 @@ class CardServiceTest {
             null,
             null,
             PROJECT,
+            null,
             null,
             null);
     when(cards.findById(1L)).thenReturn(Optional.of(numbered));
@@ -2584,6 +2842,7 @@ class CardServiceTest {
         null,
         projectId,
         null,
+        null,
         null);
   }
 
@@ -2788,6 +3047,7 @@ class CardServiceTest {
         null,
         PROJECT,
         null,
+        null,
         null);
   }
 
@@ -2813,6 +3073,7 @@ class CardServiceTest {
         null, // dueDate
         PROJECT,
         null, // targetBoardId
+        null,
         null); // externalKey
   }
 
@@ -2900,7 +3161,7 @@ class CardServiceTest {
     when(cards.allocateCardNumber(PROJECT)).thenReturn(9);
 
     CardService.IdeaCreation result =
-        service.createProjectIdea(1L, PROJECT, "Finding", null, BOARD, "sonar:abc");
+        service.createProjectIdea(1L, PROJECT, "Finding", null, BOARD, "sonar:abc", null);
 
     ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
     verify(cards).save(captor.capture());
@@ -2915,7 +3176,7 @@ class CardServiceTest {
         .thenReturn(Optional.of(boardCard(7L, 20L, 3, 0, false, false)));
 
     CardService.IdeaCreation result =
-        service.createProjectIdea(1L, PROJECT, "Finding", null, BOARD, "sonar:abc");
+        service.createProjectIdea(1L, PROJECT, "Finding", null, BOARD, "sonar:abc", null);
 
     assertThat(result.created()).isFalse();
     assertThat(result.view().id()).isEqualTo(7L);
@@ -2931,7 +3192,7 @@ class CardServiceTest {
     when(cards.allocateCardNumber(PROJECT)).thenReturn(9);
 
     CardService.IdeaCreation result =
-        service.createDirect(1L, BOARD, 20L, "Finding", null, "sonar:abc", null);
+        service.createDirect(1L, BOARD, 20L, "Finding", null, "sonar:abc", null, null);
 
     ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
     verify(cards).save(captor.capture());
@@ -2946,7 +3207,7 @@ class CardServiceTest {
         .thenReturn(Optional.of(boardCard(7L, 20L, 3, 0, false, false)));
 
     CardService.IdeaCreation result =
-        service.createDirect(1L, BOARD, 20L, "Finding", null, "sonar:abc", null);
+        service.createDirect(1L, BOARD, 20L, "Finding", null, "sonar:abc", null, null);
 
     assertThat(result.created()).isFalse();
     assertThat(result.view().id()).isEqualTo(7L);
@@ -3058,7 +3319,7 @@ class CardServiceTest {
     when(boardService.requireColumn(20L, BOARD)).thenReturn(column(20L, "Backlog", 0));
 
     CardService.IdeaCreation result =
-        service.createDirect(1L, BOARD, 20L, "Migriert", null, "github#278", 278);
+        service.createDirect(1L, BOARD, 20L, "Migriert", null, "github#278", 278, null);
 
     ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
     verify(cards).save(captor.capture());
@@ -3073,7 +3334,7 @@ class CardServiceTest {
     // laufenden Anlage genau dann, wenn beide dieselbe Zahl treffen.
     when(boardService.requireColumn(20L, BOARD)).thenReturn(column(20L, "Backlog", 0));
 
-    service.createDirect(1L, BOARD, 20L, "Migriert", null, "github#278", 278);
+    service.createDirect(1L, BOARD, 20L, "Migriert", null, "github#278", 278, null);
 
     InOrder order = inOrder(cards);
     order.verify(cards).lockCardNumbers(PROJECT);
@@ -3086,7 +3347,7 @@ class CardServiceTest {
   void createDirect_withTakenNumber_throwsConflict() {
     when(cards.isNumberTaken(PROJECT, 278)).thenReturn(true);
 
-    assertThatThrownBy(() -> service.createDirect(1L, BOARD, 20L, "Migriert", null, "k", 278))
+    assertThatThrownBy(() -> service.createDirect(1L, BOARD, 20L, "Migriert", null, "k", 278, null))
         .isInstanceOf(CardNumberConflictException.class);
     verify(cards, never()).save(any(Card.class));
   }
@@ -3096,7 +3357,7 @@ class CardServiceTest {
     // Vorbedingung: in ein gewachsenes Projekt wird nicht hineinimportiert.
     when(cards.hasCardWithoutExternalKey(PROJECT)).thenReturn(true);
 
-    assertThatThrownBy(() -> service.createDirect(1L, BOARD, 20L, "Migriert", null, "k", 278))
+    assertThatThrownBy(() -> service.createDirect(1L, BOARD, 20L, "Migriert", null, "k", 278, null))
         .isInstanceOf(CardNumberConflictException.class);
     verify(cards, never()).save(any(Card.class));
   }
@@ -3107,7 +3368,7 @@ class CardServiceTest {
     when(boardService.requireColumn(20L, BOARD)).thenReturn(column(20L, "Backlog", 0));
     when(cards.allocateCardNumber(PROJECT)).thenReturn(9);
 
-    service.createDirect(1L, BOARD, 20L, "Karte", null, null, null);
+    service.createDirect(1L, BOARD, 20L, "Karte", null, null, null, null);
 
     verify(cards).allocateCardNumber(PROJECT);
     verify(cards, never()).hasCardWithoutExternalKey(anyLong());
@@ -3121,7 +3382,7 @@ class CardServiceTest {
         .thenReturn(Optional.of(boardCard(7L, 20L, 3, 0, false, false)));
 
     assertThatThrownBy(
-            () -> service.createDirect(1L, BOARD, 20L, "Migriert", null, "github#278", 278))
+            () -> service.createDirect(1L, BOARD, 20L, "Migriert", null, "github#278", 278, null))
         .isInstanceOf(CardNumberConflictException.class);
     verify(cards, never()).save(any(Card.class));
   }
@@ -3132,7 +3393,7 @@ class CardServiceTest {
         .thenReturn(Optional.of(boardCard(7L, 20L, 3, 0, false, false)));
 
     CardService.IdeaCreation result =
-        service.createDirect(1L, BOARD, 20L, "Migriert", null, "github#3", 3);
+        service.createDirect(1L, BOARD, 20L, "Migriert", null, "github#3", 3, null);
 
     assertThat(result.created()).isFalse();
     assertThat(result.view().id()).isEqualTo(7L);
@@ -3145,7 +3406,7 @@ class CardServiceTest {
     when(cards.allocateCardNumber(PROJECT)).thenReturn(9);
 
     CardService.IdeaCreation result =
-        service.createDirect(1L, BOARD, 20L, "Karte", null, null, null);
+        service.createDirect(1L, BOARD, 20L, "Karte", null, null, null, null);
 
     assertThat(result.created()).isTrue();
     verify(cards, never()).findByProjectIdAndExternalKey(anyLong(), any());
@@ -3158,7 +3419,8 @@ class CardServiceTest {
         .when(permissions)
         .require(1L, PROJECT, Permission.TICKET_CREATE);
 
-    assertThatThrownBy(() -> service.createDirect(1L, BOARD, 20L, "F", null, "sonar:abc", null))
+    assertThatThrownBy(
+            () -> service.createDirect(1L, BOARD, 20L, "F", null, "sonar:abc", null, null))
         .isInstanceOf(ProjectNotFoundException.class);
     verify(cards, never()).findByProjectIdAndExternalKey(anyLong(), any());
   }
@@ -3167,7 +3429,7 @@ class CardServiceTest {
   void createProjectIdea_withoutExternalKey_skipsLookup() {
     when(cards.allocateCardNumber(PROJECT)).thenReturn(9);
 
-    service.createProjectIdea(1L, PROJECT, "Idee", null, BOARD, null);
+    service.createProjectIdea(1L, PROJECT, "Idee", null, BOARD, null, null);
 
     verify(cards, never()).findByProjectIdAndExternalKey(anyLong(), any());
   }
@@ -3212,6 +3474,47 @@ class CardServiceTest {
     service.getCard(5L, 1L);
 
     verify(permissions).requireMembership(5L, PROJECT);
+  }
+
+  @Test
+  void getCard_liefertDieHerkunftAlsNummerDesVorfahren() {
+    when(cards.findById(1L))
+        .thenReturn(Optional.of(boardCard(1L, 20L, 7, 0, false, false).withDerivedFrom(91L)));
+    when(cards.findById(91L))
+        .thenReturn(Optional.of(card(91L, 20L, 42, false, null, CardType.CARD, null, null)));
+
+    assertThat(service.getCard(5L, 1L).derivedFrom()).isEqualTo(42);
+  }
+
+  @Test
+  void getCard_liefertNull_wennDerVorfahrNichtMehrExistiert() {
+    // Regulaer raeumt ON DELETE SET NULL das auf; die Sicht haelt den Zustand trotzdem aus.
+    when(cards.findById(1L))
+        .thenReturn(Optional.of(boardCard(1L, 20L, 7, 0, false, false).withDerivedFrom(91L)));
+    when(cards.findById(91L)).thenReturn(Optional.empty());
+
+    assertThat(service.getCard(5L, 1L).derivedFrom()).isNull();
+  }
+
+  @Test
+  void getCard_liefertNull_ohneHerkunft() {
+    when(cards.findById(1L)).thenReturn(Optional.of(boardCard(1L, 20L, 7, 0, false, false)));
+
+    assertThat(service.getCard(5L, 1L).derivedFrom()).isNull();
+  }
+
+  @Test
+  void listBoardItems_liefertNull_wennDerVorfahrNichtInDerSammelantwortSteht() {
+    when(boardService.requireProjectId(BOARD)).thenReturn(PROJECT);
+    when(cards.findByBoardId(BOARD))
+        .thenReturn(
+            List.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null).withDerivedFrom(91L)));
+    when(cards.findByIds(any())).thenReturn(List.of());
+
+    assertThat(service.listBoardItems(5L, BOARD))
+        .singleElement()
+        .extracting(CardService.BoardItemView::derivedFrom)
+        .isNull();
   }
 
   @Test
@@ -3268,6 +3571,7 @@ class CardServiceTest {
             null,
             PROJECT,
             null,
+            null,
             null);
     when(cards.findById(1L)).thenReturn(Optional.of(otherBoard));
 
@@ -3318,6 +3622,7 @@ class CardServiceTest {
             null,
             null,
             PROJECT,
+            null,
             null,
             null);
     when(cards.findById(1L)).thenReturn(Optional.of(onLargeBoard));

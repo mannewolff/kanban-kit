@@ -13,7 +13,9 @@ import { rolesApi as defaultRolesApi, type PermissionDef, type RoleMatrix, type 
 
 const RESOURCE_LABEL: Record<string, string> = {
   BOARD: 'Board',
-  EPIC: 'Epic',
+  // Anzeige Vorhaben; der gespeicherte Schluessel bleibt EPIC_* (V4-Seed, siehe
+  // RoleMatrixService) — umbenannt wird nur, was der Nutzer sieht.
+  EPIC: 'Vorhaben',
   TICKET: 'Ticket',
   COMMENT: 'Kommentar',
   ATTACHMENT: 'Anhang',

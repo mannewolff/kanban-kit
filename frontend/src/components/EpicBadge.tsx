@@ -21,7 +21,7 @@ export function EpicBadge({ epicId, title, shortcode, sx }: Readonly<Props>) {
       alignItems="center"
       spacing={0.5}
       title={title}
-      aria-label={`Epic ${label}`}
+      aria-label={`Vorhaben ${label}`}
       sx={{ width: 'fit-content', px: 0.75, py: 0.25, borderRadius: 1, bgcolor: `${hue}22`, flexShrink: 0, ...sx }}
     >
       <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: hue, flexShrink: 0 }} />

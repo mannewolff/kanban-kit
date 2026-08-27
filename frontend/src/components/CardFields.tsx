@@ -21,12 +21,15 @@ export function CardFields({
   epicReadOnly = false,
   depsInput,
   depsError,
+  herkunftInput = '',
+  herkunftError = null,
   dueInput,
   onTitleChange,
   onBodyChange,
   onShortcodeChange,
   onParentIdChange,
   onDepsInputChange,
+  onHerkunftInputChange,
   onDueInputChange,
   titleInputRef,
   onTitleKeyDown,
@@ -46,12 +49,20 @@ export function CardFields({
   epicReadOnly?: boolean
   depsInput: string
   depsError: string | null
+  /**
+   * Herkunftsnummer als Rohtext; leer bedeutet „keine Herkunft" (Issue #608). Optional, weil der
+   * Anlege-Dialog die Herkunft bewusst nicht anbietet — sie wird nachträglich gepflegt. Ohne
+   * `onHerkunftInputChange` erscheint das Feld gar nicht.
+   */
+  herkunftInput?: string
+  herkunftError?: string | null
   dueInput: string
   onTitleChange: (value: string) => void
   onBodyChange: (value: string) => void
   onShortcodeChange: (value: string) => void
   onParentIdChange: (value: number | null) => void
   onDepsInputChange: (value: string) => void
+  onHerkunftInputChange?: (value: string) => void
   onDueInputChange: (value: string) => void
   /** Optionaler Ref auf das Titel-Input (Anlege-Dialog selektiert den Titel beim Öffnen). */
   titleInputRef?: Ref<HTMLInputElement>
@@ -65,11 +76,11 @@ export function CardFields({
         // Ohne Epic-Liste bleibt nur die nackte ID: Sie belegt sichtbar, dass eine Zuordnung
         // besteht, und hält sie zugleich außer Reichweite jeder versehentlichen Änderung.
         <TextField
-          label="Epic"
-          value={parentId === null ? '(kein Epic)' : `#${parentId}`}
-          helperText="Epic-Liste hier nicht verfügbar — die Zuordnung bleibt unverändert."
+          label="Vorhaben"
+          value={parentId === null ? '(kein Vorhaben)' : `#${parentId}`}
+          helperText="Vorhaben-Liste hier nicht verfügbar — die Zuordnung bleibt unverändert."
           slotProps={{
-            htmlInput: { 'aria-label': 'Epic' },
+            htmlInput: { 'aria-label': 'Vorhaben' },
             input: { readOnly: true },
             inputLabel: { shrink: true },
           }}
@@ -78,17 +89,17 @@ export function CardFields({
       ) : (
         <TextField
           select
-          label="Epic"
+          label="Vorhaben"
           value={parentId ?? ''}
           onChange={(e) => onParentIdChange(e.target.value === '' ? null : Number(e.target.value))}
           slotProps={{
-            htmlInput: { 'aria-label': 'Epic' },
+            htmlInput: { 'aria-label': 'Vorhaben' },
             select: { native: true },
             inputLabel: { shrink: true },
           }}
           fullWidth
         >
-          <option value="">(kein Epic)</option>
+          <option value="">(kein Vorhaben)</option>
           {epics.map((epic) => (
             <option key={epic.id} value={epic.id}>
               {epicShortcode(epic.title, epic.shortcode)} – {epic.title}
@@ -105,6 +116,17 @@ export function CardFields({
         slotProps={{ htmlInput: { 'aria-label': 'Abhängig von' } }}
         fullWidth
       />
+      {!isEpic && onHerkunftInputChange && (
+        <TextField
+          label="Herkunft (Kartennummer)"
+          value={herkunftInput}
+          onChange={(e) => onHerkunftInputChange(e.target.value)}
+          error={herkunftError != null}
+          helperText={herkunftError ?? 'Nummer der Karte, aus der diese hervorging — leer = keine'}
+          slotProps={{ htmlInput: { 'aria-label': 'Herkunft' } }}
+          fullWidth
+        />
+      )}
       <TextField
         type="date"
         label="Fällig am"

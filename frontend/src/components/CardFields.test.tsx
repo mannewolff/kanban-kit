@@ -40,7 +40,7 @@ describe('CardFields', () => {
 
     expect(screen.getByLabelText('Titel')).toHaveValue('T')
     expect(screen.getByLabelText('Markdown-Beschreibung')).toHaveValue('B')
-    expect(screen.getByLabelText('Epic')).toBeInTheDocument()
+    expect(screen.getByLabelText('Vorhaben')).toBeInTheDocument()
     expect(screen.getByLabelText('Abhängig von')).toHaveValue('12')
     expect(screen.getByLabelText('Fällig am')).toHaveValue('2026-02-01')
     expect(screen.queryByLabelText('Kürzel')).not.toBeInTheDocument()
@@ -65,8 +65,8 @@ describe('CardFields', () => {
 
     fireEvent.change(screen.getByLabelText('Titel'), { target: { value: 'Neu' } })
     fireEvent.change(screen.getByLabelText('Markdown-Beschreibung'), { target: { value: 'Text' } })
-    fireEvent.change(screen.getByLabelText('Epic'), { target: { value: '9' } })
-    fireEvent.change(screen.getByLabelText('Epic'), { target: { value: '' } })
+    fireEvent.change(screen.getByLabelText('Vorhaben'), { target: { value: '9' } })
+    fireEvent.change(screen.getByLabelText('Vorhaben'), { target: { value: '' } })
     fireEvent.change(screen.getByLabelText('Abhängig von'), { target: { value: '3' } })
     fireEvent.change(screen.getByLabelText('Fällig am'), { target: { value: '2026-03-01' } })
 
@@ -94,7 +94,7 @@ describe('CardFields', () => {
       />,
     )
 
-    expect(screen.getByLabelText('Epic')).toHaveValue('9')
+    expect(screen.getByLabelText('Vorhaben')).toHaveValue('9')
   })
 
   it('zeigt einen Abhängigkeits-Fehler als helperText', () => {
@@ -138,7 +138,7 @@ describe('CardFields', () => {
     fireEvent.change(shortcode, { target: { value: 'XY' } })
     expect(h.onShortcodeChange).toHaveBeenCalledWith('XY')
 
-    expect(screen.queryByLabelText('Epic')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Vorhaben')).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Abhängig von')).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Fällig am')).not.toBeInTheDocument()
   })
@@ -278,7 +278,7 @@ describe('CardFields', () => {
       />,
     )
 
-    const field = screen.getByLabelText('Epic')
+    const field = screen.getByLabelText('Vorhaben')
     expect(field).toHaveValue('#9')
     expect(field).toHaveAttribute('readonly')
     // Kein Auswahlvorrat: Es gibt nichts anzuklicken, was die Zuordnung löschen könnte.
@@ -304,6 +304,6 @@ describe('CardFields', () => {
       />,
     )
 
-    expect(screen.getByLabelText('Epic')).toHaveValue('(kein Epic)')
+    expect(screen.getByLabelText('Vorhaben')).toHaveValue('(kein Vorhaben)')
   })
 })

@@ -1,6 +1,7 @@
 package org.mwolff.manban.card.application;
 
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import org.mwolff.manban.card.domain.Card;
@@ -50,6 +51,27 @@ public interface CardRepository {
 
   /** Alle nicht-gelöschten Karten eines Projekts (board-übergreifend, inkl. board-loser Ideen). */
   List<Card> findByProjectId(long projectId);
+
+  /**
+   * Karten, deren Herkunft auf {@code cardId} zeigt — die direkten Kinder im Herkunftsbaum.
+   *
+   * <p>Liefert <strong>alle</strong> Treffer, unabhängig von {@code archived}, {@code ideaStored}
+   * und Papierkorb; die Reihenfolge ist unspezifiziert. Eine gefilterte Abfrage wäre für das
+   * Aufräumen beim Projektwechsel ein stiller Fehler: Auch archivierte Kinder behielten sonst einen
+   * Verweis über die Projektgrenze.
+   */
+  List<Card> findByDerivedFrom(long cardId);
+
+  /**
+   * Karten zu einer Menge von IDs — ein Sammelzugriff statt {@code findById} je Element.
+   *
+   * <p>Traegt die Aufloesung der Herkunft beim Zusammenbauen einer Board-Liste: Ohne ihn entstuende
+   * ein N+1-Zugriff auf einer Liste, die ein ganzes Board umfasst.
+   *
+   * <p>Filtert <strong>nicht</strong> nach {@code archived} oder Papierkorb: Ein Vorfahr im Archiv
+   * existiert noch, und seine Nummer ist stabil — die Sicht soll sie weiterhin liefern.
+   */
+  List<Card> findByIds(Collection<Long> ids);
 
   /**
    * Ideen-Karten eines Projekts (idea_stored), älteste zuerst — board-lose Pool-Ideen und
@@ -188,7 +210,7 @@ public interface CardRepository {
    * <p>Betroffen ist ausschließlich der <strong>aktive Positions-Namespace</strong> der Spalte
    * ({@code archived = false}, {@code idea_stored = false}, {@code deleted_at IS NULL}, {@code type
    * <> 'EPIC'}) — genau die Menge, für die {@code active_position} gesetzt ist. Archivierte,
-   * gelöschte und Ideen-Speicher-Karten sowie Epics behalten ihre Position: Sie halten keinen
+   * gelöschte und Ideen-Speicher-Karten sowie Vorhaben behalten ihre Position: Sie halten keinen
    * aktiven Anspruch, und eine Neuvergabe würde ihre Rückkehr-Position ohne Grund verwerfen.
    *
    * <p>Die Spaltenzeile wird gesperrt (siehe {@link #lockColumnPositions(List)}) — die neue Ordnung

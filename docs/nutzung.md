@@ -55,7 +55,7 @@ Klick auf eine Karte öffnet das Detail:
   Editor gibt es eine **Kurzschreibweise**: am Zeilenanfang erzeugt `/` plus Leerzeichen eine leere,
   `/x` plus Leerzeichen eine abgehakte Checkbox — die eckigen Klammern (`- [ ]` / `- [x]`) funktionieren
   weiterhin.
-- **Bearbeiten-Formular:** Titel, Markdown, Epic-Zuordnung, „Fällig am", „Abhängig von (Nummern,
+- **Bearbeiten-Formular:** Titel, Markdown, Vorhaben-Zuordnung, „Fällig am", „Abhängig von (Nummern,
   kommagetrennt)" — alles in einem Speichern-Vorgang.
 - **Zuständige:** ein oder mehrere Projektmitglieder über das Feld „Zuständige" zuweisen (Mehrfachauswahl).
   Ohne Bearbeitungsrecht werden die Zuständigen nur als Chips angezeigt.
@@ -104,7 +104,7 @@ Papierkorb wird über den Button **„Papierkorb"** in der Board-Kopfzeile geöf
 - **Label-Filter:** eine Reihe farbiger, umschaltbarer Label-Chips. Mehrere Labels sind kombinierbar
   (eine Karte bleibt sichtbar, wenn sie **eines** der aktiven Labels trägt). Der Label-Filter existiert
   nur in der Listen-Ansicht, nicht in der Board-Spaltenansicht.
-- Zeilen mit Drag-Handle, Nummer, Status, Epic-Badge, Titel, **Fälligkeit** (überfällige rot) und
+- Zeilen mit Drag-Handle, Nummer, Status, Vorhaben-Badge, Titel, **Fälligkeit** (überfällige rot) und
   **Beschreibungs-Vorschau**.
 - **Spalten umsortieren:** die Spalten-Kopfzeile per Drag verschieben (z. B. „Beschreibung" nach vorne).
   Diese Reihenfolge gilt **global** für alle Boards.
@@ -163,15 +163,17 @@ gemessen bei **jedem** Spaltenwechsel, egal ob per Drag & Drop, ⋮-Menü oder �
 
 Das Dashboard ist für jeden sichtbar, der das Board öffnen darf (auch VIEWER).
 
-## Epics
+## Vorhaben
 
-- **Neues Epic:** in der Epics-Ansicht (Sidebar „Epics") über den Button „Neues Epic", oder im
-  Anlege-Dialog Typ „Epic" wählen. Optional ein Kürzel; sonst aus dem Titel abgeleitet.
-- **Zuordnen:** eine Karte im Anlege-Dialog oder im Detail einem Epic zuordnen. Zugeordnete Karten
-  tragen ein **Epic-Badge** und einen farbigen linken Rand.
-- **Epics-Übersicht:** Liste mit **Fortschrittsbalken** („X/Y Stories fertig"). Klick öffnet das
-  Epic-Detail (Kürzel + Kinderliste).
-- **Board-Epic-Filter:** auf dem Board über das Dropdown „Epic-Filter" nur die Karten eines Epics anzeigen.
+- **Neues Vorhaben:** in der Vorhaben-Ansicht (Sidebar „Vorhaben") über den Button „Neues
+  Vorhaben", oder im Anlege-Dialog Typ „Vorhaben" wählen. Optional ein Kürzel; sonst aus dem
+  Titel abgeleitet.
+- **Zuordnen:** eine Karte im Anlege-Dialog oder im Detail einem Vorhaben zuordnen. Zugeordnete
+  Karten tragen ein **Vorhaben-Badge** und einen farbigen linken Rand.
+- **Vorhaben-Übersicht:** Liste mit **Fortschrittsbalken** („X/Y Stories fertig"). Klick öffnet
+  das Vorhaben-Detail (Kürzel + Kinderliste).
+- **Board-Vorhaben-Filter:** auf dem Board über das Dropdown „Vorhaben-Filter" nur die Karten
+  eines Vorhabens anzeigen.
 
 ## Mitglieder
 

@@ -120,7 +120,7 @@ export function NewCardModal({
   // Kein verschachteltes Ternary im JSX (Sonar S3358): der Titel richtet sich nach dem Modus.
   let dialogTitle
   if (type === 'EPIC') {
-    dialogTitle = 'Neues Epic'
+    dialogTitle = 'Neues Vorhaben'
   } else if (ideaOnly) {
     dialogTitle = 'Neue Idee'
   } else {
@@ -198,7 +198,7 @@ export function NewCardModal({
               fullWidth
             >
               <option value="CARD">Karte</option>
-              <option value="EPIC">Epic</option>
+              <option value="EPIC">Vorhaben</option>
             </TextField>
           )}
 
@@ -258,17 +258,17 @@ export function NewCardModal({
               ) : (
                 <TextField
                   select
-                  label="Epic"
+                  label="Vorhaben"
                   value={parentId ?? ''}
                   onChange={(e) => setParentId(e.target.value === '' ? null : Number(e.target.value))}
                   slotProps={{
-                    htmlInput: { 'aria-label': 'Epic' },
+                    htmlInput: { 'aria-label': 'Vorhaben' },
                     select: { native: true },
                     inputLabel: { shrink: true },
                   }}
                   fullWidth
                 >
-                  <option value="">(kein Epic)</option>
+                  <option value="">(kein Vorhaben)</option>
                   {epics.map((epic) => (
                     <option key={epic.id} value={epic.id}>
                       {epicShortcode(epic.title, epic.shortcode)} – {epic.title}

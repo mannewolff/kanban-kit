@@ -59,7 +59,7 @@ public class KanbanCompatService {
   }
 
   /**
-   * Nach Kanban-Spalte gruppierte, nicht-archivierte Items des gebundenen Boards (inkl. Epics).
+   * Nach Kanban-Spalte gruppierte, nicht-archivierte Items des gebundenen Boards (inkl. Vorhaben).
    *
    * <p>Karten im Ideen-Speicher bleiben ausgeschlossen (#434): Sie tragen weiterhin Board und
    * Spalte, sind in der Oberfläche aber ausgeblendet. Ohne diesen Filter meldete die Schnittstelle
@@ -95,9 +95,14 @@ public class KanbanCompatService {
                   c.description(),
                   key,
                   c.positionInColumn(),
+                  // Protokoll, nicht Vokabular: Der Typ-Wert unten ist Teil der
+                  // kanbancompat-Schnittstelle. Der Board-Adapter board.mjs des
+                  // claude-workflow-kit filtert darauf und liest /api/kanban/epics; die
+                  // Umbenennung auf "Vorhaben" betrifft nur die Oberflaeche, nie den Draht.
                   c.epic() ? "epic" : "card",
                   labelsByCard.getOrDefault(c.id(), List.of()),
-                  c.externalKey()));
+                  c.externalKey(),
+                  c.derivedFrom()));
     }
     return grouped;
   }
@@ -130,7 +135,8 @@ public class KanbanCompatService {
       boolean ideaStored,
       @Nullable String externalKey,
       boolean direct,
-      @Nullable Integer number) {
+      @Nullable Integer number,
+      @Nullable Integer derivedFrom) {
     long boardId = requireBound(principal);
     long projectId = boardService.requireProjectId(boardId);
     String key = normalizeExternalKey(externalKey);
@@ -147,10 +153,12 @@ public class KanbanCompatService {
       // sonst hinge die Fehlermeldung davon ab, ob zufällig schon eine existiert.
       long columnId = directColumnId(boardId, column);
       result =
-          cardService.createDirect(principal.userId(), boardId, columnId, title, body, key, number);
+          cardService.createDirect(
+              principal.userId(), boardId, columnId, title, body, key, number, derivedFrom);
     } else {
       result =
-          cardService.createProjectIdea(principal.userId(), projectId, title, body, boardId, key);
+          cardService.createProjectIdea(
+              principal.userId(), projectId, title, body, boardId, key, derivedFrom);
     }
     // Seit #402 vergibt createProjectIdea sofort eine Nummer; requireNonNull macht das fuer
     // NullAway explizit (CardView.number() ist @Nullable fuer Legacy-Ideen ohne Nummer).
@@ -264,12 +272,12 @@ public class KanbanCompatService {
    * claude-workflow-kit den geschärften Issue-Text zurückschreibt.
    *
    * <p>Geht bewusst über {@link CardService#updateContent} statt über das Voll-Update: Sonst
-   * verlören Karten bei jedem Body-Update ihre Epic-Zuordnung und ihr Fälligkeitsdatum und Epics
-   * ihr Kürzel, weil dieser Aufrufer diese Felder gar nicht kennt.
+   * verlören Karten bei jedem Body-Update ihre Vorhaben-Zuordnung und ihr Fälligkeitsdatum und
+   * Vorhaben ihr Kürzel, weil dieser Aufrufer diese Felder gar nicht kennt.
    *
-   * <p>Reichweite wie bei {@link #move} und {@link #comment}: nur Karten und Epics des gebundenen
-   * Boards. Board-lose Pool-Ideen und Karten im Ideen-Speicher sind über {@code requireOnBoard}
-   * ausgeschlossen und antworten mit 404.
+   * <p>Reichweite wie bei {@link #move} und {@link #comment}: nur Karten und Vorhaben des
+   * gebundenen Boards. Board-lose Pool-Ideen und Karten im Ideen-Speicher sind über {@code
+   * requireOnBoard} ausgeschlossen und antworten mit 404.
    */
   @Transactional
   public Item update(KanbanPrincipal principal, long cardId, String title, @Nullable String body) {
@@ -330,7 +338,7 @@ public class KanbanCompatService {
         .toList();
   }
 
-  /** Epics des gebundenen Boards inkl. Fortschritt. */
+  /** Vorhaben des gebundenen Boards inkl. Fortschritt. */
   @Transactional(readOnly = true)
   public List<Epic> epics(KanbanPrincipal principal) {
     long boardId = requireBound(principal);
@@ -353,9 +361,11 @@ public class KanbanCompatService {
         card.description(),
         keyByColumn(boardId).getOrDefault(card.columnId(), BACKLOG),
         card.positionInColumn(),
+        // Protokoll, nicht Vokabular — siehe die Erlaeuterung an der Board-Liste oben.
         card.epic() ? "epic" : "card",
         labelService.namesByCard(boardId, List.of(card.id())).getOrDefault(card.id(), List.of()),
-        card.externalKey());
+        card.externalKey(),
+        card.derivedFrom());
   }
 
   private long requireBound(@Nullable KanbanPrincipal principal) {
@@ -413,9 +423,9 @@ public class KanbanCompatService {
   // --- Response-Formen (spiegeln das tbx.mjs-Protokoll) ---------------------
 
   /**
-   * Board-Item; {@code column} ist der Kanban-Key, {@code type} ist "card" oder "epic". {@code
-   * labels} enthält die zugeordneten Label-Namen in Board-Definitionsreihenfolge (leer, wenn
-   * keine).
+   * Board-Item; {@code column} ist der Kanban-Key, {@code type} ist "card" oder "epic" — das
+   * Protokoll-Literal bleibt auch nach der Umbenennung auf „Vorhaben" unverändert. {@code labels}
+   * enthält die zugeordneten Label-Namen in Board-Definitionsreihenfolge (leer, wenn keine).
    */
   public record Item(
       Long id,
@@ -426,7 +436,8 @@ public class KanbanCompatService {
       int position,
       String type,
       List<String> labels,
-      @Nullable String externalKey) {}
+      @Nullable String externalKey,
+      @Nullable Integer derivedFrom) {}
 
   /** Kommentar eines Items; {@code author} ist der Anzeigename des Autors zur Schreibzeit. */
   public record Comment(String author, String body, Instant createdAt) {}

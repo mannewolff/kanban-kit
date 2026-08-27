@@ -135,6 +135,7 @@ const mockedProjects = projectsApi as unknown as { list: ReturnType<typeof vi.fn
 
 function idea(partial: Partial<Idea> & { id: number; title: string }): Idea {
   return {
+    derivedFrom: null,
     boardId: null,
     columnId: null,
     number: null,

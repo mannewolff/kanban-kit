@@ -60,6 +60,7 @@ const mLabels = labelsApi as unknown as { list: ReturnType<typeof vi.fn> }
 const base = {
   boardId: 1, positionInColumn: 0, ideaStored: false, movedToDoneAt: null as string | null,
   dependencies: [] as number[], type: 'CARD' as const, parentId: null as number | null, shortcode: null as string | null, assignees: [] as number[], dueDate: null as string | null, labels: [] as number[],
+  derivedFrom: null as number | null,
 }
 const active: Card = { ...base, id: 100, columnId: 10, number: 1, title: 'Aufgabe', description: '# Titel\nText **fett**', archived: false }
 const archived: Card = { ...base, id: 101, columnId: 20, number: 2, title: 'AlteKarte', description: 'x', archived: true }
@@ -355,7 +356,13 @@ describe('BoardListPage', () => {
     await screen.findByText('Aufgabe')
 
     const order = screen.getAllByLabelText(/^Spalte /).map((el) => el.getAttribute('aria-label'))
-    expect(order).toEqual(['Spalte Beschreibung', 'Spalte Titel', 'Spalte Nr', 'Spalte Status', 'Spalte Epic'])
+    expect(order).toEqual([
+      'Spalte Beschreibung',
+      'Spalte Titel',
+      'Spalte Nr',
+      'Spalte Status',
+      'Spalte Vorhaben',
+    ])
   })
 
   it('übernimmt einen gespeicherten Spalten-Filter aus localStorage', async () => {

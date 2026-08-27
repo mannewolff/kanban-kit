@@ -86,6 +86,7 @@ function card(overrides: Partial<CardByNumber> = {}): CardByNumber {
     number: 345,
     title: 'Fehlerbild klären',
     description: null,
+    derivedFrom: null,
     type: 'CARD',
     dependencies: [],
     assignees: [],

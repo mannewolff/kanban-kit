@@ -22,10 +22,10 @@ Recht). Der Schlüssel in der zweiten Spalte ist der technische Name des Rechts 
 | Board anlegen | `BOARD_CREATE` | – | – | ✓ | ✓ |
 | Board umbenennen, Spalten und Board-Labels verwalten | `BOARD_UPDATE` | – | – | ✓ | ✓ |
 | Board archivieren / löschen, Karte endgültig löschen | `BOARD_DELETE` | – | – | ✓ | ✓ |
-| Epics lesen | `EPIC_READ` | ✓ | ✓ | ✓ | ✓ |
-| Epic anlegen | `EPIC_CREATE` | – | ✓ | ✓ | ✓ |
-| Epic bearbeiten | `EPIC_UPDATE` | – | ✓ | ✓ | ✓ |
-| Epic archivieren / in den Papierkorb legen | `EPIC_DELETE` | – | ✓ | ✓ | ✓ |
+| Vorhaben lesen | `EPIC_READ` | ✓ | ✓ | ✓ | ✓ |
+| Vorhaben anlegen | `EPIC_CREATE` | – | ✓ | ✓ | ✓ |
+| Vorhaben bearbeiten | `EPIC_UPDATE` | – | ✓ | ✓ | ✓ |
+| Vorhaben archivieren / in den Papierkorb legen | `EPIC_DELETE` | – | ✓ | ✓ | ✓ |
 | Karten lesen (inkl. Dashboard, Papierkorb, Ideen-Pool) | `TICKET_READ` | ✓ | ✓ | ✓ | ✓ |
 | Karte anlegen, Idee aus dem Pool einplanen | `TICKET_CREATE` | – | ✓ | ✓ | ✓ |
 | Karte bearbeiten (Titel, Text, Zuständige, Fälligkeit, Labels) | `TICKET_UPDATE` | – | ✓ | ✓ | ✓ |
@@ -69,8 +69,8 @@ Einige Aktionen folgen nicht allein dem Recht aus der Tabelle:
 
 ### Rollen im Detail
 
-- **VIEWER:** darf ausschließlich lesen — Boards, Spalten, Epics, Karten, Kommentare, Anhänge.
-- **MEMBER:** zusätzlich Karten und Epics anlegen, bearbeiten, verschieben und in den Papierkorb legen,
+- **VIEWER:** darf ausschließlich lesen — Boards, Spalten, Vorhaben, Karten, Kommentare, Anhänge.
+- **MEMBER:** zusätzlich Karten und Vorhaben anlegen, bearbeiten, verschieben und in den Papierkorb legen,
   Kommentare schreiben (und eigene bearbeiten) sowie Anhänge hochladen und löschen.
 - **ADMIN:** zusätzlich Boards, Spalten und Board-Labels verwalten, Karten endgültig löschen,
   Kommentare löschen (Moderation) und Mitglieder einladen/entfernen.
@@ -86,8 +86,8 @@ Einige Aktionen folgen nicht allein dem Recht aus der Tabelle:
 
 **Projekte legt ausschließlich der Plattform-Admin an und löscht sie auch nur er.** Beim Anlegen
 bestimmt er den **Owner** per E-Mail; dadurch wird er selbst nicht Mitglied, hat als Plattform-Admin
-aber ohnehin Vollzugriff. Beim Löschen gibt es eine Sicherheitsabfrage — Boards, Epics und Karten des
-Projekts werden mitgelöscht (Kaskade). Dasselbe gilt beim Löschen eines Boards für dessen Epics und
+aber ohnehin Vollzugriff. Beim Löschen gibt es eine Sicherheitsabfrage — Boards, Vorhaben und Karten des
+Projekts werden mitgelöscht (Kaskade). Dasselbe gilt beim Löschen eines Boards für dessen Vorhaben und
 Karten.
 
 ## Admin-Bereich (`/admin`)

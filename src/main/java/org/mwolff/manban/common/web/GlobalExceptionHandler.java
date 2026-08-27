@@ -4,6 +4,7 @@ import java.sql.SQLException;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import org.jspecify.annotations.Nullable;
+import org.mwolff.manban.common.FieldScopedException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.annotation.AnnotatedElementUtils;
@@ -77,7 +78,18 @@ class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
           HttpStatus.INTERNAL_SERVER_ERROR, INTERNAL_ERROR_DETAIL);
     }
     HttpStatus status = responseStatus.code();
-    return ProblemDetail.forStatusAndDetail(status, detailOf(ex, responseStatus, status));
+    // Detail einmal berechnen und wiederverwenden: `detailOf` behandelt den Fall einer fehlenden
+    // Exception-Meldung bereits (Rueckfall auf die Statusbezeichnung) und liefert garantiert einen
+    // Wert. Ein zweiter Null-Guard an der Feldmeldung waere unerreichbar.
+    String detail = detailOf(ex, responseStatus, status);
+    ProblemDetail problem = ProblemDetail.forStatusAndDetail(status, detail);
+    // Feldbezogene Domaenenexceptions bekommen dieselbe `fieldErrors`-Form wie Bean-Validation.
+    // Ohne sie traegt die Antwort nur `detail`, und ein Client kann zwei Ablehnungen desselben
+    // Aufrufs nicht auseinanderhalten (Issue #607).
+    if (ex instanceof FieldScopedException scoped) {
+      problem.setProperty("fieldErrors", Map.of(scoped.field(), detail));
+    }
+    return problem;
   }
 
   /**

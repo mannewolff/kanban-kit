@@ -8,6 +8,10 @@ package org.mwolff.manban.project.domain;
  * <p>Konvention: {@code <RESSOURCE>_<OPERATION>} — daraus lassen sich Ressource und Operation
  * ableiten (z. B. für die Matrix-Anzeige). {@code CARD_MOVE} ist die Operation „Karten
  * verschieben".
+ *
+ * <p>Die Ressource {@code EPIC_*} heißt in der Oberfläche <b>Vorhaben</b>. Die Schlüssel bleiben
+ * unverändert, weil sie die gespeicherten {@code key}-Werte aus {@code V4} sind; umbenannt wird
+ * allein die Anzeige (siehe {@code RoleMatrixService} und die Rollen-Ansicht im Frontend).
  */
 public enum Permission {
   BOARD_CREATE,

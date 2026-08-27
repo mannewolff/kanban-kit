@@ -46,7 +46,14 @@ describe('buildNavItems Sichtbarkeit', () => {
   })
 
   it('führt in der Board-Gruppe nur die vier Ansichten (kein „Boards")', () => {
-    expect(groupChildren({ board, boardCount: 2 })).toEqual(['Board', 'Liste', 'Epics', 'Dashboard'])
+    expect(groupChildren({ board, boardCount: 2 })).toEqual(['Board', 'Liste', 'Vorhaben', 'Dashboard'])
+  })
+
+  it('verlinkt „Vorhaben" auf die neue Route — Beschriftung und Pfad zusammen', () => {
+    const group = buildNavItems({ board, boardCount: 2 }).find((n) => n.label === 'B')
+    const child = group?.kind === 'group' ? group.children.find((c) => c.label === 'Vorhaben') : undefined
+
+    expect(child).toEqual(expect.objectContaining({ label: 'Vorhaben', path: '/boards/1/vorhaben' }))
   })
 
   it('verlinkt „Boards" auf die existierende Projekt-Route (nicht /projects/:id/boards)', () => {

@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.StreamSupport;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.card.application.CardMovedConcurrentlyException;
 import org.mwolff.manban.card.application.CardRepository;
@@ -36,10 +37,10 @@ class CardRepositoryAdapter implements CardRepository {
    * {@code active_position} einen Wert trägt (V16). Die einzige Aktiv-Definition dieser Klasse:
    * Jede Stelle, die Positionen liest oder neu vergibt (Move-Reindex, Transfer-Reindex, Sortieren),
    * nutzt sie, damit alle nachweislich dieselbe Menge treffen. Karten außerhalb dieser Menge
-   * (archiviert, im Ideen-Speicher, im Papierkorb, Epics) halten keinen Slot und werden vom Reindex
-   * nicht angefasst — ihre {@code position_in_column} bleibt stehen, kollidiert aber nicht, weil
-   * ihre {@code active_position} NULL ist. Beim Zurückholen vergibt {@code allocateActivePosition}
-   * eine frische Position.
+   * (archiviert, im Ideen-Speicher, im Papierkorb, Vorhaben) halten keinen Slot und werden vom
+   * Reindex nicht angefasst — ihre {@code position_in_column} bleibt stehen, kollidiert aber nicht,
+   * weil ihre {@code active_position} NULL ist. Beim Zurückholen vergibt {@code
+   * allocateActivePosition} eine frische Position.
    */
   private static final String ACTIVE_NAMESPACE =
       "AND archived = false AND idea_stored = false AND deleted_at IS NULL AND type <> 'EPIC' ";
@@ -101,6 +102,22 @@ class CardRepositoryAdapter implements CardRepository {
   @Override
   public List<Card> findByProjectId(long projectId) {
     return jpa.findByProjectIdAndDeletedAtIsNull(projectId).stream()
+        .map(CardRepositoryAdapter::toDomain)
+        .toList();
+  }
+
+  @Override
+  public List<Card> findByIds(java.util.Collection<Long> ids) {
+    return ids.isEmpty()
+        ? List.of()
+        : StreamSupport.stream(jpa.findAllById(ids).spliterator(), false)
+            .map(CardRepositoryAdapter::toDomain)
+            .toList();
+  }
+
+  @Override
+  public List<Card> findByDerivedFrom(long cardId) {
+    return jpa.findByDerivedFromCardId(cardId).stream()
         .map(CardRepositoryAdapter::toDomain)
         .toList();
   }
@@ -439,6 +456,7 @@ class CardRepositoryAdapter implements CardRepository {
         e.getDueDate(),
         e.getProjectId(),
         e.getTargetBoardId(),
-        e.getExternalKey());
+        e.getExternalKey(),
+        e.getDerivedFromCardId());
   }
 }

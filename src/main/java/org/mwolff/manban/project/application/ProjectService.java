@@ -159,7 +159,7 @@ public class ProjectService {
   }
 
   /**
-   * Löscht ein Projekt (kaskadiert Boards/Epics/Tickets über die DB) — nur für System-Admins.
+   * Löscht ein Projekt (kaskadiert Boards/Vorhaben/Tickets über die DB) — nur für System-Admins.
    *
    * @throws ProjectAccessDeniedException wenn der Aufrufer kein System-Admin ist (403)
    */

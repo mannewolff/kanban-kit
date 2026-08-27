@@ -21,6 +21,10 @@ interface CardJpaRepository extends JpaRepository<CardEntity, Long> {
 
   List<CardEntity> findByProjectIdAndDeletedAtIsNull(Long projectId);
 
+  // Herkunfts-Kinder: bewusst OHNE DeletedAtIsNull-Filter. Beim Aufraeumen des
+  // Projektwechsels muessen auch archivierte und geloeschte Kinder ihren Verweis verlieren.
+  List<CardEntity> findByDerivedFromCardId(Long cardId);
+
   /** Nicht-gelöschte Karte eines Projekts nach projektweiter Nummer (projektweit eindeutig). */
   Optional<CardEntity> findByProjectIdAndNumberAndDeletedAtIsNull(Long projectId, Integer number);
 

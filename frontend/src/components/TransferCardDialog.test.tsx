@@ -17,6 +17,7 @@ const card: Card = {
   id: 7, boardId: 99, columnId: 1, number: 3, title: 'Karte', description: null,
   positionInColumn: 0, archived: false, ideaStored: false, movedToDoneAt: null, dependencies: [],
   type: 'CARD', parentId: null, shortcode: null, assignees: [], dueDate: null, labels: [],
+  derivedFrom: null,
 }
 
 function renderDialog(platformAdmin = false, sourceColumnPosition: number | null = null) {
@@ -52,7 +53,7 @@ describe('TransferCardDialog', () => {
     renderDialog(false)
     expect(await screen.findByRole('option', { name: 'Eigenes' })).toBeInTheDocument()
     expect(screen.queryByRole('option', { name: 'Fremdes' })).not.toBeInTheDocument()
-    expect(screen.getByText(/Epic-Zuordnung und Abhängigkeiten/)).toBeInTheDocument()
+    expect(screen.getByText(/Vorhaben-Zuordnung und Abhängigkeiten/)).toBeInTheDocument()
   })
 
   it('formuliert den Hinweis im Plural bei mehreren Karten', async () => {
