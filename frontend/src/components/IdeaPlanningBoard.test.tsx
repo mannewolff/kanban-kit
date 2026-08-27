@@ -81,6 +81,7 @@ const cardBase = {
   assignees: [] as number[],
   dueDate: null as string | null,
   labels: [] as number[],
+  derivedFrom: null as number | null,
 }
 function card(partial: Partial<Card> & { id: number; columnId: number; number: number; title: string; positionInColumn: number }): Card {
   return { ...cardBase, ...partial }
@@ -88,6 +89,7 @@ function card(partial: Partial<Card> & { id: number; columnId: number; number: n
 
 function idea(partial: Partial<Idea> & { id: number; title: string }): Idea {
   return {
+    derivedFrom: null,
     boardId: null,
     columnId: null,
     number: null,

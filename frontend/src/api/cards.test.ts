@@ -225,4 +225,19 @@ describe('cardsApi', () => {
       shortcode: undefined, parentId: undefined, dueDate: undefined,
     })
   })
+
+  it('assignDerivedFrom ruft den eigenen Endpunkt, nicht den Voll-Update-Pfad (#607)', async () => {
+    const f = spyFetch()
+    await cardsApi.assignDerivedFrom(1, 42)
+    const c = lastCall(f)
+    expect(c.url).toBe('/api/cards/1/derived-from')
+    expect(c.method).toBe('PATCH')
+    expect(JSON.parse(String(c.body))).toEqual({ derivedFrom: 42 })
+  })
+
+  it('assignDerivedFrom loescht die Herkunft mit null', async () => {
+    const f = spyFetch()
+    await cardsApi.assignDerivedFrom(1, null)
+    expect(JSON.parse(String(lastCall(f).body))).toEqual({ derivedFrom: null })
+  })
 })

@@ -32,6 +32,8 @@ export interface Idea {
   assignees: number[]
   dueDate: string | null
   labels: number[]
+  /** Pflichtfeld, nicht optional: sonst erfüllt die Idee das strukturelle `CardDetail` nicht mehr. */
+  derivedFrom: number | null
 }
 
 export const ideasApi = {

@@ -20,6 +20,8 @@ export interface Card {
   assignees: number[]
   dueDate: string | null
   labels: number[]
+  /** Projektweite Nummer der Karte, aus der diese hervorgegangen ist (Issue #601 ff.). */
+  derivedFrom: number | null
 }
 
 /**
@@ -43,6 +45,7 @@ export interface CardDetail {
   dueDate: string | null
   archived: boolean
   ideaStored: boolean
+  derivedFrom: number | null
 }
 
 /**
@@ -172,6 +175,19 @@ export const cardsApi = {
     apiFetch<Card>(`/api/cards/${cardId}`, {
       method: 'PATCH',
       body: JSON.stringify({ title, description, dependencies, shortcode, parentId, dueDate }),
+    }),
+
+  /**
+   * Setzt die Herkunft einer Karte oder löscht sie (`null`).
+   *
+   * Eigener Endpunkt statt eines Feldes in `update`: Jener Pfad ist ein Voll-Update, und ein
+   * fehlendes Feld ist dort nicht von `null` zu unterscheiden — jeder bestehende Aufrufer hätte
+   * die Herkunft gelöscht, `toggleTask` bei jedem Checkbox-Klick (Issue #607, Entscheidung D1a).
+   */
+  assignDerivedFrom: (cardId: number, derivedFrom: number | null) =>
+    apiFetch<Card>(`/api/cards/${cardId}/derived-from`, {
+      method: 'PATCH',
+      body: JSON.stringify({ derivedFrom }),
     }),
 }
 

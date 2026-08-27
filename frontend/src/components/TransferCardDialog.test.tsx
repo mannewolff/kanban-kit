@@ -17,6 +17,7 @@ const card: Card = {
   id: 7, boardId: 99, columnId: 1, number: 3, title: 'Karte', description: null,
   positionInColumn: 0, archived: false, ideaStored: false, movedToDoneAt: null, dependencies: [],
   type: 'CARD', parentId: null, shortcode: null, assignees: [], dueDate: null, labels: [],
+  derivedFrom: null,
 }
 
 function renderDialog(platformAdmin = false, sourceColumnPosition: number | null = null) {
