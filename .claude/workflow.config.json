@@ -11,8 +11,7 @@
   "mainBranch": "main",
   "productionBranch": "production",
   "reviewScope": "diff",
-  "reviewModel": "gpt-5.6-sol",
-  "reviewCommand": "codex exec --model gpt-5.6-sol -c model_reasoning_effort=\"high\"",
+  "reviewModel": "claude-opus-5",
   "triggers": {
     "go": "GO",
     "push": "push main",
@@ -28,6 +27,7 @@
     "in_review": "In review",
     "done": "Done"
   },
+  "reviewCommand": "codex exec --model gpt-5.6-sol -c model_reasoning_effort=\"high\"",
   "formatFixCommand": "mvn spotless:apply",
   "github": {
     "projectNumber": 13
@@ -53,7 +53,7 @@
         "pruefbarkeit"
       ]
     }
-  },  
+  },
   "toolbox": {
     "host": "https://kanban.mwolff.org",
     "tokenFile": ".claude/toolbox.cli/tbx.token",
@@ -78,7 +78,7 @@
         "kind": "claude",
         "model": "claude-fable-5"
       },
-      {    
+      {
         "name": "codex",
         "kind": "command",
         "command": "codex exec --model gpt-5.6-sol -c model_reasoning_effort=\"high\""
