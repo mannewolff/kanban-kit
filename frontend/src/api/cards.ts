@@ -97,7 +97,32 @@ export interface CardActivity {
   agent: string | null
 }
 
+/**
+ * Eine Zeile des Herkunftsbaums (Backend #609). Die Liste kommt flach in Praeorder — jede Wurzel
+ * unmittelbar gefolgt von ihrem Teilbaum —, damit sich der Baum allein aus `depth` rekonstruieren
+ * laesst. `depth` ist 0-basiert; ARIA zaehlt ab 1, `aria-level` ist also `depth + 1`.
+ */
+export interface DerivationNode {
+  number: number
+  title: string
+  type: CardType
+  /** Nummer des Vorfahren; `null` ohne Herkunft. Bei `broken` bleibt sie gesetzt. */
+  derivedFrom: number | null
+  depth: number
+  done: boolean
+  /** Eine board-interne Abhaengigkeit liegt noch nicht in Done. Abgeleitet, nie gepflegt. */
+  blocked: boolean
+  dependencies: number[]
+  /** Nummern, die keine Karte dieses Boards traegt — bewusst nicht aufgeloest. */
+  externalDependencies: number[]
+  externalOrigin: boolean
+  /** Die Zeile haengt an einem Herkunftsring, der nur an der API vorbei entstehen kann. */
+  broken: boolean
+}
+
 export const cardsApi = {
+  derivationTree: (boardId: number) =>
+    apiFetch<DerivationNode[]>(`/api/boards/${boardId}/derivation-tree`),
   list: (boardId: number) => apiFetch<Card[]>(`/api/boards/${boardId}/cards`),
   get: (cardId: number) => apiFetch<Card>(`/api/cards/${cardId}`),
   getActivity: (cardId: number) => apiFetch<CardActivity[]>(`/api/cards/${cardId}/activity`),
