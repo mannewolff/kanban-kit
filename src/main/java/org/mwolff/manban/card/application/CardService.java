@@ -387,6 +387,48 @@ public class CardService {
   }
 
   /**
+   * Herkunftsbaum eines Boards als flache Liste in Präorder mit Tiefe (Issue #609, Plan #606
+   * E1/E2).
+   *
+   * <p>Flach statt verschachtelt: Verschachteltes JSON zwängt eine Baumtiefe ins Schema und ist
+   * schwer zu diffen. Der Server liefert Kanten, Tiefe und die Reihenfolge; das Einrücken ist
+   * Darstellungsfrage.
+   *
+   * <p><b>Board-gebunden</b> als Zuschnittsentscheidung (Plan #606 E3): Kanten über die
+   * Board-Grenze werden als extern ausgewiesen statt aufgelöst — für Herkunft und Abhängigkeiten
+   * gleichermaßen.
+   *
+   * <p>Der Lesepfad ist gegen Zyklen wehrhaft, obwohl der Schreibpfad sie ausschließt: {@link
+   * DerivedFrom} schützt nur, was durch diese Anwendung geht, und ein Zyklus wäre hier eine
+   * Endlosschleife im Server.
+   *
+   * <p>Drei Abfragen, unabhängig von der Kartenzahl: die Board-Menge, die Nummern board-fremder
+   * Vorfahren und die Abhängigkeitskanten. Ein Nachladen je Karte oder je Kante wäre N+1.
+   */
+  @Transactional(readOnly = true)
+  public List<DerivationNodeView> derivationTree(long userId, long boardId) {
+    permissions.requireMembership(userId, boardService.requireProjectId(boardId));
+    // ideaStored heißt „noch nicht eingeplant" und gehört nicht auf das Board — anders als das
+    // Archiv, das ein Zustand ist. Der Papierkorb ist in findByBoardId bereits gefiltert.
+    List<Card> boardCards =
+        cards.findByBoardId(boardId).stream().filter(c -> !c.ideaStored()).toList();
+    Set<Long> imBoard = boardCards.stream().map(Card::requireId).collect(Collectors.toSet());
+    Set<Long> fremdeVorfahren =
+        boardCards.stream()
+            .map(Card::derivedFromCardId)
+            .filter(Objects::nonNull)
+            .filter(id -> !imBoard.contains(id))
+            .collect(Collectors.toSet());
+    Map<Long, Integer> fremdeNummern = new HashMap<>();
+    if (!fremdeVorfahren.isEmpty()) {
+      for (Card vorfahr : cards.findByIds(fremdeVorfahren)) {
+        fremdeNummern.put(vorfahr.requireId(), vorfahr.number());
+      }
+    }
+    return DerivationTree.build(boardCards, dependencies.findByCardIds(imBoard), fremdeNummern);
+  }
+
+  /**
    * Projekt-ID der Karte — die Auflösung, die modulfremde Rechteprüfungen (Anhänge, Kommentare)
    * brauchen, ohne das Kartenaggregat oder dessen Port zu kennen. Projekt-basiert über {@code
    * card.projectId()} (immer gesetzt, V18), daher auch für board-lose Pool-Ideen (#405) korrekt.
@@ -1657,6 +1699,36 @@ public class CardService {
       boolean epic,
       @Nullable String externalKey,
       @Nullable Integer derivedFrom) {}
+
+  /**
+   * Eine Zeile des Herkunftsbaums (Issue #609). Die Liste kommt in Präorder — jede Wurzel
+   * unmittelbar gefolgt von ihrem vollständigen Teilbaum —, damit sich der Baum allein aus {@code
+   * depth} rekonstruieren lässt.
+   *
+   * @param derivedFrom Nummer des Vorfahren; {@code null} ohne Herkunft. Bei {@code broken} bleibt
+   *     die Nummer gesetzt: Sie beschreibt den gespeicherten Zustand, nicht die Baumposition
+   * @param depth 0-basiert; Wurzeln tragen 0
+   * @param blocked eine board-interne Abhängigkeit liegt noch nicht in Done. Abgeleitet, nie
+   *     gepflegt — externe Abhängigkeiten gehen nicht ein
+   * @param dependencies board-interne Abhängigkeits-Nummern
+   * @param externalDependencies Abhängigkeits-Nummern, die keine Karte dieses Boards trägt. Jede
+   *     gespeicherte Nummer erscheint in genau einer der beiden Listen
+   * @param externalOrigin die Herkunft zeigt auf eine Karte außerhalb dieses Boards; die Zeile
+   *     erscheint dann als Wurzel, auch ohne Nachfahren
+   * @param broken die Zeile hängt an einem Herkunftsring, der nur an der API vorbei entstehen kann
+   */
+  public record DerivationNodeView(
+      int number,
+      String title,
+      CardType type,
+      @Nullable Integer derivedFrom,
+      int depth,
+      boolean done,
+      boolean blocked,
+      List<Integer> dependencies,
+      List<Integer> externalDependencies,
+      boolean externalOrigin,
+      boolean broken) {}
 
   /** Vorhaben-Darstellung inkl. Fortschritt (Kinder gesamt / in Done). */
   public record EpicView(

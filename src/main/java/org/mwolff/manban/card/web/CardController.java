@@ -14,6 +14,7 @@ import org.mwolff.manban.board.application.ColumnNotFoundException;
 import org.mwolff.manban.card.application.CardNumbers;
 import org.mwolff.manban.card.application.CardService;
 import org.mwolff.manban.card.application.CardService.CardView;
+import org.mwolff.manban.card.application.CardService.DerivationNodeView;
 import org.mwolff.manban.card.application.CardService.EpicView;
 import org.mwolff.manban.card.application.InvalidDerivedFromException;
 import org.mwolff.manban.card.application.SortDirection;
@@ -99,6 +100,17 @@ class CardController {
   @GetMapping("/api/boards/{boardId}/epics")
   List<EpicView> epics(@AuthenticationPrincipal Long userId, @PathVariable long boardId) {
     return cards.listEpics(userId, boardId);
+  }
+
+  /**
+   * Herkunftsbaum des Boards — reiner Lesepfad, geschützt wie die übrigen Board-Leseendpunkte
+   * (Projekt-Mitgliedschaft). Kein Schreibpfad: Der Baum wird bei jedem Lesen berechnet und nie
+   * gespeichert, es gibt also keinen Synchronisationszustand, der auseinanderlaufen könnte.
+   */
+  @GetMapping("/api/boards/{boardId}/derivation-tree")
+  List<DerivationNodeView> derivationTree(
+      @AuthenticationPrincipal Long userId, @PathVariable long boardId) {
+    return cards.derivationTree(userId, boardId);
   }
 
   @GetMapping("/api/cards/{cardId}")
