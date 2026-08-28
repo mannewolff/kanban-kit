@@ -62,7 +62,22 @@ export function DerivationTree({ boardId, onOpenCard }: Readonly<Props>) {
   const [error, setError] = useState<string | null>(null)
   const [collapsed, setCollapsed] = useState<ReadonlySet<number>>(() => new Set())
   const [focused, setFocused] = useState<number | undefined>(undefined)
+  // Getrennt vom Fokus: Das Ziel eines Sprungs kann beim Ausloesen noch eingeklappt und damit gar
+  // nicht gerendert sein. Fokus und Scrollen muessen deshalb einen Rendervorgang spaeter laufen.
+  const [sprungZiel, setSprungZiel] = useState<number | undefined>(undefined)
+  const [hervorgehoben, setHervorgehoben] = useState<number | undefined>(undefined)
   const zeilenRefs = useRef(new Map<number, HTMLElement>())
+
+  useEffect(() => {
+    const el = sprungZiel === undefined ? undefined : zeilenRefs.current.get(sprungZiel)
+    if (el === undefined) {
+      return
+    }
+    el.scrollIntoView({ block: 'nearest' })
+    el.focus()
+    // Zuruecksetzen, damit ein zweiter Sprung auf dasselbe Ziel wieder wirkt.
+    setSprungZiel(undefined)
+  }, [sprungZiel])
 
   useEffect(() => {
     let aktiv = true
@@ -71,6 +86,8 @@ export function DerivationTree({ boardId, onOpenCard }: Readonly<Props>) {
     // Der Fokus wird mit den Daten zurückgesetzt: Er zeigt auf eine Kartennummer, und nach einem
     // Boardwechsel gibt es die womöglich nicht mehr.
     setFocused(undefined)
+    setSprungZiel(undefined)
+    setHervorgehoben(undefined)
     void cardsApi
       .derivationTree(boardId)
       .then(
@@ -133,7 +150,33 @@ export function DerivationTree({ boardId, onOpenCard }: Readonly<Props>) {
       return
     }
     setFocused(nummer)
+    // Die Sprung-Hervorhebung ist voruebergehend und erlischt beim naechsten Fokuswechsel. Ein
+    // Zeitablauf waere die Alternative gewesen, braucht aber eine willkuerliche Dauer.
+    setHervorgehoben(undefined)
     el.focus()
+  }
+
+  /**
+   * Sprung von einer Abhängigkeitsmarke zur Zielzeile (Issue #612). Ein Ziel ausserhalb des Baums
+   * ist der Normalfall und kein Fehler: `dependencies` enthält board-interne Nummern, aufgelöst
+   * gegen alle Karten des Boards — eine Karte ohne Herkunftsbezug steht dort aber nicht.
+   */
+  const springe = (nummer: number) => {
+    const index = rows.findIndex((zeile) => zeile.number === nummer)
+    if (index < 0) {
+      return
+    }
+    // Den ganzen Pfad aufklappen, sonst spraenge die Ansicht ins Leere.
+    setCollapsed((vorher) => {
+      const naechste = new Set(vorher)
+      for (let p = parentIndex(rows, index); p >= 0; p = parentIndex(rows, p)) {
+        naechste.delete(rows[p].number)
+      }
+      return naechste
+    })
+    setFocused(nummer)
+    setHervorgehoben(nummer)
+    setSprungZiel(nummer)
   }
 
   const umschalten = (nummer: number, zuklappen: boolean) =>
@@ -210,6 +253,11 @@ export function DerivationTree({ boardId, onOpenCard }: Readonly<Props>) {
             aria-level={zeile.depth + 1}
             aria-expanded={kinderDa ? !collapsed.has(zeile.number) : undefined}
             tabIndex={zeile.number === effektivFokus ? 0 : -1}
+            data-jump-target={zeile.number === hervorgehoben ? 'true' : undefined}
+            // Der Roving-Tabindex folgt dem tatsaechlichen Fokus. Ohne diese Kopplung liefen die
+            // beiden auseinander, sobald der Fokus von aussen kommt — dann traege die aktive Zeile
+            // den Tab-Stopp, und die Sprungmarke einer anderen Zeile waere unerreichbar.
+            onFocus={() => setFocused(zeile.number)}
             onKeyDown={(event) => beiTaste(event, index)}
             sx={{
               display: 'flex',
@@ -221,6 +269,7 @@ export function DerivationTree({ boardId, onOpenCard }: Readonly<Props>) {
               borderRadius: 1,
               cursor: 'default',
               opacity: zeile.blocked ? 0.6 : 1,
+              bgcolor: zeile.number === hervorgehoben ? 'action.selected' : undefined,
               '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main' },
             }}
           >
@@ -236,7 +285,12 @@ export function DerivationTree({ boardId, onOpenCard }: Readonly<Props>) {
             {zeile.broken && <Marke text="Herkunftskette unterbrochen" />}
             {zeile.externalOrigin && <Marke text={`Herkunft extern: #${zeile.derivedFrom}`} />}
             {zeile.dependencies.map((nummer) => (
-              <Marke key={`i${nummer}`} text={`⇠ #${nummer}`} />
+              <Sprungmarke
+                key={`i${nummer}`}
+                nummer={nummer}
+                aktiv={zeile.number === effektivFokus}
+                onSpringen={springe}
+              />
             ))}
             {zeile.externalDependencies.map((nummer) => (
               <Marke key={`e${nummer}`} text={`⇠ extern #${nummer}`} />
@@ -244,6 +298,48 @@ export function DerivationTree({ boardId, onOpenCard }: Readonly<Props>) {
           </Box>
         )
       })}
+    </Box>
+  )
+}
+
+/**
+ * Bedienbare Marke einer board-internen Abhängigkeit (Issue #612): springt zur Zielzeile.
+ *
+ * <p>Der Tab-Stopp folgt dem Roving Tabindex des Baums — erreichbar ist nur die Marke der gerade
+ * aktiven Zeile. Ohne diese Kopplung wäre jede Marke jeder Zeile ein eigener Tab-Stopp, und der
+ * Baum verlöre die Eigenschaft, als Ganzes ein einziger Tab-Stopp zu sein.
+ *
+ * <p>`stopPropagation` auf jedem Tastendruck: Sonst behandelte die Zeile denselben Anschlag noch
+ * einmal — Enter auf der Marke spränge und öffnete zugleich die Karte.
+ */
+function Sprungmarke({
+  nummer,
+  aktiv,
+  onSpringen,
+}: Readonly<{ nummer: number; aktiv: boolean; onSpringen: (nummer: number) => void }>) {
+  return (
+    <Box
+      component="button"
+      type="button"
+      tabIndex={aktiv ? 0 : -1}
+      aria-label={`Zur Karte #${nummer} springen`}
+      onClick={() => onSpringen(nummer)}
+      onKeyDown={(event: KeyboardEvent<HTMLElement>) => event.stopPropagation()}
+      sx={{
+        px: 0.75,
+        borderRadius: 10,
+        border: 1,
+        borderColor: 'divider',
+        bgcolor: 'transparent',
+        color: 'text.secondary',
+        font: 'inherit',
+        fontSize: '0.75rem',
+        whiteSpace: 'nowrap',
+        cursor: 'pointer',
+        '&:hover': { borderColor: 'text.secondary' },
+      }}
+    >
+      ⇠ #{nummer}
     </Box>
   )
 }
