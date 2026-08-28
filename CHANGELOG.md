@@ -7,6 +7,15 @@ Versionierung folgt der dreiteiligen Betriebsversion (siehe [RELEASING.md](RELEA
 Einträge je Version sind ein automatischer Auszug der Commit-Titel seit dem letzten Release,
 erzeugt von `scripts/gen-changelog.mjs`.
 
+## [1.23.0] – 2026-08-28
+
+- chore: v1.22.1
+- Reiter Fortschritt und Herkunft auf der Vorhaben-Seite ([#613](https://github.com/mannewolff/kanban-kit/issues/613))
+- Sprungziel an der Abhaengigkeitsmarke ([#612](https://github.com/mannewolff/kanban-kit/issues/612))
+- Baumkomponente mit Tastaturfuehrung und Screenreader-Auszeichnung ([#611](https://github.com/mannewolff/kanban-kit/issues/611))
+- Herkunftsbaum als Endpunkt berechnen ([#609](https://github.com/mannewolff/kanban-kit/issues/609))
+- md Dateien in Tickets überführt.
+
 ## [1.22.0] – 2026-08-27
 
 - Version 1.21.3
