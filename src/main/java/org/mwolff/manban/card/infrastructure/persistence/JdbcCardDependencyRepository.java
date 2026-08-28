@@ -1,6 +1,11 @@
 package org.mwolff.manban.card.infrastructure.persistence;
 
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import org.mwolff.manban.card.application.CardDependencyRepository;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
@@ -52,6 +57,32 @@ class JdbcCardDependencyRepository implements CardDependencyRepository {
             + "ORDER BY depends_on_card_number",
         Integer.class,
         cardId);
+  }
+
+  /**
+   * Sammelzugriff für den Herkunftsbaum (Issue #609): eine Abfrage statt einer je Karte.
+   *
+   * <p>Die leere Eingabe wird ohne Abfrage beantwortet — {@code IN ()} ist kein gültiges SQL, und
+   * ein Roundtrip für eine Antwort, die feststeht, wäre ohnehin verschenkt.
+   */
+  @Override
+  public Map<Long, List<Integer>> findByCardIds(Collection<Long> cardIds) {
+    if (cardIds.isEmpty()) {
+      return Map.of();
+    }
+    String platzhalter = String.join(",", Collections.nCopies(cardIds.size(), "?"));
+    Map<Long, List<Integer>> ergebnis = new HashMap<>();
+    jdbc.query(
+        "SELECT card_id, depends_on_card_number FROM card_dependency WHERE card_id IN ("
+            + platzhalter
+            + ") ORDER BY card_id, depends_on_card_number",
+        rs -> {
+          ergebnis
+              .computeIfAbsent(rs.getLong("card_id"), k -> new ArrayList<>())
+              .add(rs.getInt("depends_on_card_number"));
+        },
+        cardIds.toArray());
+    return ergebnis;
   }
 
   @Override
