@@ -5,6 +5,8 @@ import Button from '@mui/material/Button'
 import LinearProgress from '@mui/material/LinearProgress'
 import Paper from '@mui/material/Paper'
 import Stack from '@mui/material/Stack'
+import Tab from '@mui/material/Tab'
+import Tabs from '@mui/material/Tabs'
 import Typography from '@mui/material/Typography'
 import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
@@ -13,6 +15,7 @@ import { Breadcrumbs } from '../components/Breadcrumbs'
 import { cardsApi, type Card } from '../api/cards'
 import { epicsApi, type Epic } from '../api/epics'
 import { CardDetailModal } from '../components/CardDetailModal'
+import { DerivationTree } from '../components/DerivationTree'
 import { EpicBadge } from '../components/EpicBadge'
 import { NewCardModal } from '../components/NewCardModal'
 import { useBoardRole } from '../lib/useBoardRole'
@@ -35,8 +38,9 @@ export function EpicsPage() {
   const [board, setBoard] = useState<Board | null>(null)
   const [epics, setEpics] = useState<Epic[]>([])
   const [cards, setCards] = useState<Card[]>([])
-  const [selected, setSelected] = useState<Epic | null>(null)
+  const [selected, setSelected] = useState<Card | null>(null)
   const [creating, setCreating] = useState(false)
+  const [tab, setTab] = useState(0)
 
   const reload = () => {
     void epicsApi.list(id).then(setEpics)
@@ -62,6 +66,24 @@ export function EpicsPage() {
     }
   }, [id, validId])
 
+  /**
+   * Öffnet die Karte zu einer Nummer aus dem Herkunftsbaum. Erst gegen `epics`, dann gegen `cards`:
+   * `cardsApi.list` filtert serverseitig auf `type == CARD`, ein Vorhaben steht dort also nicht.
+   * Eine Nummer, die in keiner geladenen Liste vorkommt — etwa eine frisch per Ingest entstandene
+   * Karte —, öffnet nichts. Das ist kein Fehler, nur ein Stand, den diese Seite nicht kennt.
+   */
+  const oeffneKarte = (nummer: number) => {
+    const vorhaben = epics.find((e) => e.number === nummer)
+    if (vorhaben) {
+      setSelected(epicToCard(vorhaben, id))
+      return
+    }
+    const karte = cards.find((c) => c.number === nummer)
+    if (karte) {
+      setSelected(karte)
+    }
+  }
+
   const { canEdit, canModerate } = useBoardRole(board)
   const projectName = useProjectName(board?.projectId ?? null)
 
@@ -80,13 +102,41 @@ export function EpicsPage() {
             { label: 'Vorhaben' },
           ]}
         />
-        {canEdit && (
+        {canEdit && tab === 0 && (
           <Button variant="contained" size="small" startIcon={<AddIcon />} onClick={() => setCreating(true)}>
             Neues Vorhaben
           </Button>
         )}
       </Stack>
 
+      {/* Die Reiter heissen nach der Relation, nicht nach der Darstellung: „Fortschritt" ist die
+          gepflegte Zuordnung über parentId, „Herkunft" die abgeleitete Kette über derivedFrom. Die
+          beiden können einander nicht ausdrücken (Plan #606, E9), deshalb zwei Reiter statt eines
+          Umbaus. Beschriftungen deutsch — sie sind Nutzertext. */}
+      {/* selectionFollowsFocus: MUI aktiviert einen Reiter standardmäßig erst mit Enter oder
+          Leertaste, die Pfeiltasten bewegen nur den Fokus. Hier soll der Pfeil den Reiter
+          wechseln, deshalb ausdrücklich gesetzt. */}
+      <Tabs
+        value={tab}
+        onChange={(_, gewaehlt: number) => setTab(gewaehlt)}
+        aria-label="Ansicht"
+        selectionFollowsFocus
+        sx={{ mb: 2 }}
+      >
+        <Tab label="Fortschritt" id="vorhaben-tab-fortschritt" aria-controls="vorhaben-panel-fortschritt" />
+        <Tab label="Herkunft" id="vorhaben-tab-herkunft" aria-controls="vorhaben-panel-herkunft" />
+      </Tabs>
+
+      {tab === 1 && (
+        // Erst beim Wählen eingehängt, und beim Verlassen wieder ausgehängt: Der erneute Wechsel
+        // baut die Komponente neu auf, die dann selbst lädt — die Daten sind so nie veraltet.
+        <Box role="tabpanel" id="vorhaben-panel-herkunft" aria-labelledby="vorhaben-tab-herkunft">
+          <DerivationTree boardId={id} onOpenCard={oeffneKarte} />
+        </Box>
+      )}
+
+      {tab === 0 && (
+      <Box role="tabpanel" id="vorhaben-panel-fortschritt" aria-labelledby="vorhaben-tab-fortschritt">
       <Stack spacing={1.5}>
         {epics.map((epic) => {
           const pct = epic.total > 0 ? (epic.done / epic.total) * 100 : 0
@@ -94,7 +144,7 @@ export function EpicsPage() {
             <Paper
               key={epic.id}
               variant="outlined"
-              onClick={() => setSelected(epic)}
+              onClick={() => setSelected(epicToCard(epic, id))}
               sx={{ p: 2, cursor: 'pointer', '&:hover': { boxShadow: 2 } }}
             >
               <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
@@ -117,6 +167,8 @@ export function EpicsPage() {
         })}
         {epics.length === 0 && <Typography color="text.secondary">Noch keine Vorhaben.</Typography>}
       </Stack>
+      </Box>
+      )}
 
       <NewCardModal
         open={creating}
@@ -132,7 +184,7 @@ export function EpicsPage() {
 
       {selected && (
         <CardDetailModal
-          card={epicToCard(selected, id)}
+          card={selected}
           canEdit={canEdit}
           canModerateComments={canModerate}
           childCards={cards.filter((c) => c.parentId === selected.id)}

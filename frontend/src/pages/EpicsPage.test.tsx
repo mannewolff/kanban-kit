@@ -14,6 +14,7 @@ vi.mock('../api/boards', () => ({ boardsApi: { get: vi.fn() } }))
 vi.mock('../api/cards', () => ({
   cardsApi: {
     list: vi.fn(),
+    derivationTree: vi.fn(),
     getActivity: vi.fn().mockResolvedValue([]),
     update: vi.fn(),
     setAssignees: vi.fn(),
@@ -34,6 +35,26 @@ const mBoards = boardsApi as unknown as { get: ReturnType<typeof vi.fn> }
 const mCards = cardsApi as unknown as { list: ReturnType<typeof vi.fn> }
 const mEpics = epicsApi as unknown as { list: ReturnType<typeof vi.fn>; create: ReturnType<typeof vi.fn> }
 const mProjects = projectsApi as unknown as { list: ReturnType<typeof vi.fn> }
+const mDerivation = cardsApi as unknown as { derivationTree: ReturnType<typeof vi.fn> }
+
+/** Eine Baumzeile, wie sie GET /api/boards/{id}/derivation-tree liefert (Issue #609). */
+function baumZeile(overrides: { number: number; depth?: number; type?: 'CARD' | 'EPIC' }) {
+  return {
+    title: `Zeile ${overrides.number}`,
+    type: 'CARD' as const,
+    derivedFrom: null,
+    depth: 0,
+    done: false,
+    blocked: false,
+    dependencies: [],
+    externalDependencies: [],
+    externalOrigin: false,
+    broken: false,
+    ...overrides,
+  }
+}
+
+const reiter = (name: string) => screen.getByRole('tab', { name })
 
 function renderPage() {
   return render(
@@ -52,6 +73,7 @@ describe('EpicsPage', () => {
     mCards.list.mockResolvedValue([])
     mEpics.create.mockResolvedValue({})
     mProjects.list.mockResolvedValue([{ id: 9, name: 'Projekt', role: 'OWNER', createdAt: '' }])
+    mDerivation.derivationTree.mockResolvedValue([])
   })
 
   it('zeigt den Breadcrumb-Pfad ab Projekte', async () => {
@@ -153,5 +175,161 @@ describe('EpicsPage', () => {
       </MemoryRouter>,
     )
     expect(screen.getByText('Ungültige Board-ID.')).toBeInTheDocument()
+  })
+
+  it('startet im Reiter Fortschritt und ruft den Herkunftsbaum nicht ab', async () => {
+    mEpics.list.mockResolvedValue([
+      { id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 1, total: 2 },
+    ])
+    renderPage()
+
+    expect(await screen.findByText('Auth')).toBeInTheDocument()
+    expect(reiter('Fortschritt')).toHaveAttribute('aria-selected', 'true')
+    expect(reiter('Herkunft')).toHaveAttribute('aria-selected', 'false')
+    expect(screen.getByRole('tabpanel')).toHaveTextContent('Auth')
+    // Der Herkunfts-Reiter wird erst beim Waehlen eingehaengt.
+    expect(mDerivation.derivationTree).not.toHaveBeenCalled()
+  })
+
+  it('hängt beim Wechsel auf Herkunft den Baum ein', async () => {
+    mEpics.list.mockResolvedValue([])
+    mDerivation.derivationTree.mockResolvedValue([baumZeile({ number: 4 }), baumZeile({ number: 5, depth: 1 })])
+    renderPage()
+    await screen.findByText('Vorhaben')
+
+    fireEvent.click(reiter('Herkunft'))
+
+    expect(await screen.findByRole('tree')).toBeInTheDocument()
+    expect(mDerivation.derivationTree).toHaveBeenCalledWith(1)
+    expect(screen.getAllByRole('treeitem')).toHaveLength(2)
+  })
+
+  it('lädt den Baum bei einem erneuten Wechsel neu', async () => {
+    mEpics.list.mockResolvedValue([])
+    renderPage()
+    await screen.findByText('Vorhaben')
+
+    fireEvent.click(reiter('Herkunft'))
+    await waitFor(() => expect(mDerivation.derivationTree).toHaveBeenCalledTimes(1))
+    fireEvent.click(reiter('Fortschritt'))
+    fireEvent.click(reiter('Herkunft'))
+
+    await waitFor(() => expect(mDerivation.derivationTree).toHaveBeenCalledTimes(2))
+    await screen.findByText(/keine herkunft/i)
+  })
+
+  it('zeigt „Neues Vorhaben" nur im Reiter Fortschritt', async () => {
+    mEpics.list.mockResolvedValue([])
+    renderPage()
+    await screen.findByText('Vorhaben')
+    expect(screen.getByRole('button', { name: 'Neues Vorhaben' })).toBeInTheDocument()
+
+    fireEvent.click(reiter('Herkunft'))
+    await screen.findByText(/keine herkunft/i)
+
+    // Der Herkunfts-Reiter ist reines Lesen — dort waere der Anlegen-Knopf fehl am Platz.
+    expect(screen.queryByRole('button', { name: 'Neues Vorhaben' })).not.toBeInTheDocument()
+  })
+
+  it('lässt den Reiter Fortschritt bedienbar, wenn der Herkunftsbaum scheitert', async () => {
+    mEpics.list.mockResolvedValue([
+      { id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 1, total: 2 },
+    ])
+    mDerivation.derivationTree.mockRejectedValue(new Error('kaputt'))
+    renderPage()
+    await screen.findByText('Auth')
+
+    fireEvent.click(reiter('Herkunft'))
+    expect(await screen.findByText(/konnte nicht geladen werden/i)).toBeInTheDocument()
+
+    fireEvent.click(reiter('Fortschritt'))
+
+    expect(await screen.findByText('Auth')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Neues Vorhaben' })).toBeInTheDocument()
+  })
+
+  it('öffnet aus dem Baum heraus eine gewöhnliche Karte im Detail-Modal', async () => {
+    mEpics.list.mockResolvedValue([])
+    mCards.list.mockResolvedValue([
+      {
+        id: 30, boardId: 1, columnId: 10, number: 3, title: 'Arbeitspaket', description: null,
+        positionInColumn: 0, archived: false, ideaStored: false, movedToDoneAt: null, dependencies: [],
+        type: 'CARD', parentId: null, shortcode: null, assignees: [], dueDate: null, labels: [],
+        derivedFrom: null,
+      },
+    ])
+    mDerivation.derivationTree.mockResolvedValue([baumZeile({ number: 3 })])
+    renderPage()
+    await screen.findByText('Vorhaben')
+    fireEvent.click(reiter('Herkunft'))
+    await screen.findByRole('tree')
+
+    fireEvent.keyDown(screen.getAllByRole('treeitem')[0], { key: 'Enter' })
+
+    expect(await screen.findByText('Arbeitspaket')).toBeInTheDocument()
+  })
+
+  it('öffnet aus dem Baum heraus ein Vorhaben, das nur über epics auflösbar ist', async () => {
+    // cardsApi.list filtert serverseitig auf type == CARD — ein Vorhaben steht dort nicht.
+    mEpics.list.mockResolvedValue([
+      { id: 9, number: 2, title: 'Grosses Vorhaben', description: null, shortcode: 'GRO', done: 0, total: 0 },
+    ])
+    mCards.list.mockResolvedValue([])
+    mDerivation.derivationTree.mockResolvedValue([baumZeile({ number: 2, type: 'EPIC' })])
+    renderPage()
+    await screen.findByText('Vorhaben')
+    fireEvent.click(reiter('Herkunft'))
+    await screen.findByRole('tree')
+
+    fireEvent.keyDown(screen.getAllByRole('treeitem')[0], { key: 'Enter' })
+
+    expect(await screen.findByText('Karten (0)')).toBeInTheDocument()
+  })
+
+  it('öffnet kein Modal, wenn die Nummer in keiner geladenen Liste steht', async () => {
+    mEpics.list.mockResolvedValue([])
+    mCards.list.mockResolvedValue([])
+    mDerivation.derivationTree.mockResolvedValue([baumZeile({ number: 999 })])
+    renderPage()
+    await screen.findByText('Vorhaben')
+    fireEvent.click(reiter('Herkunft'))
+    await screen.findByRole('tree')
+
+    fireEvent.keyDown(screen.getAllByRole('treeitem')[0], { key: 'Enter' })
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.getByRole('tree')).toBeInTheDocument()
+  })
+
+  it('wechselt den Reiter mit den Pfeiltasten', async () => {
+    mEpics.list.mockResolvedValue([])
+    mDerivation.derivationTree.mockResolvedValue([baumZeile({ number: 4 })])
+    renderPage()
+    await screen.findByText('Vorhaben')
+
+    reiter('Fortschritt').focus()
+    fireEvent.keyDown(reiter('Fortschritt'), { key: 'ArrowRight' })
+
+    await waitFor(() => expect(reiter('Herkunft')).toHaveAttribute('aria-selected', 'true'))
+    expect(await screen.findByRole('tree')).toBeInTheDocument()
+
+    fireEvent.keyDown(reiter('Herkunft'), { key: 'ArrowLeft' })
+
+    await waitFor(() => expect(reiter('Fortschritt')).toHaveAttribute('aria-selected', 'true'))
+  })
+
+  it('nennt im gerenderten Reiter nirgends „Epic"', async () => {
+    mEpics.list.mockResolvedValue([
+      { id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 1, total: 2 },
+    ])
+    renderPage()
+    await screen.findByText('Auth')
+
+    expect(screen.queryByText(/epic/i)).toBeNull()
+
+    fireEvent.click(reiter('Herkunft'))
+    await screen.findByText(/keine herkunft/i)
+
+    expect(screen.queryByText(/epic/i)).toBeNull()
   })
 })
