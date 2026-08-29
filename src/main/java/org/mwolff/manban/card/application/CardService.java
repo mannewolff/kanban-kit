@@ -476,7 +476,16 @@ public class CardService {
     }
   }
 
-  /** Vorhaben eines Boards inkl. Fortschritt (nicht-archivierte Kinder: gesamt / in Done). */
+  /**
+   * Vorhaben eines Boards inkl. Fortschritt.
+   *
+   * <p><b>Gezählt wird der Nachfahrenbaum, nicht nur die direkte Zuordnung</b> (Issue #633): Wer
+   * dem Vorhaben über {@code parentId} zugeordnet ist, bringt alles mit, was über {@code
+   * derivedFromCardId} aus ihm entstanden ist. Das wirkt rückwirkend auf den Bestand — die
+   * Zugehörigkeit wird gerechnet und nirgends gespeichert (Plan #631, E1). Die Rechnung steht in
+   * {@link EpicMembership}; sie filtert Archiviertes, den Ideen-Speicher und Vorhaben selbst
+   * heraus, ohne die Kette an ihnen zu kappen.
+   */
   @Transactional(readOnly = true)
   public List<EpicView> listEpics(long userId, long boardId) {
     permissions.requireMembership(userId, boardService.requireProjectId(boardId));
@@ -485,21 +494,29 @@ public class CardService {
     Map<Long, String> columnNames =
         boardService.listColumns(boardId).stream()
             .collect(Collectors.toMap(ColumnView::id, ColumnView::name));
+    Map<Long, Set<Card>> membership = EpicMembership.compute(all);
 
     return all.stream()
         .filter(c -> c.type() == CardType.EPIC)
         .map(
             epic -> {
-              List<Card> children =
-                  all.stream()
-                      .filter(c -> epic.requireId().equals(c.parentId()) && !c.archived())
-                      .toList();
-              int total = children.size();
+              Set<Card> members = membership.getOrDefault(epic.requireId(), Set.of());
+              int total = members.size();
               int done =
                   (int)
-                      children.stream()
+                      members.stream()
                           .filter(c -> isDoneColumn(columnNames.get(c.columnId())))
                           .count();
+              // Wurzeln aus den Mitgliedern heraus, nicht neu aus `all`: So gelten für sie
+              // dieselben Filter, und die Invariante rootNumbers ⊆ memberNumbers hält von selbst.
+              // Das ist kein Zugehörigkeitsfilter mehr — die Zugehörigkeit steht schon fest —,
+              // sondern nur die Kennzeichnung, wer von Hand zugeordnet wurde.
+              List<Integer> rootNumbers =
+                  members.stream()
+                      .filter(c -> Objects.equals(c.parentId(), epic.requireId()))
+                      .map(Card::requireNumber)
+                      .sorted()
+                      .toList();
               return new EpicView(
                   epic.requireId(),
                   epic.requireNumber(),
@@ -507,7 +524,9 @@ public class CardService {
                   epic.description(),
                   epic.shortcode(),
                   done,
-                  total);
+                  total,
+                  members.stream().map(Card::requireNumber).sorted().toList(),
+                  rootNumbers);
             })
         .toList();
   }
@@ -1730,7 +1749,21 @@ public class CardService {
       boolean externalOrigin,
       boolean broken) {}
 
-  /** Vorhaben-Darstellung inkl. Fortschritt (Kinder gesamt / in Done). */
+  /**
+   * Vorhaben-Darstellung inkl. Fortschritt (zugehörige Karten gesamt / in Done).
+   *
+   * <p>Die beiden Nummern-Listen machen die gezählte Menge nachprüfbar: Ohne sie wäre eine
+   * gestiegene Zahl für den Nutzer nicht nachvollziehbar, weil er die geerbten Karten nirgends
+   * sieht (Issue #634 baut die Anzeige darauf).
+   *
+   * @param done Anzahl zugehöriger Karten in einer Done-Spalte
+   * @param total Anzahl zugehöriger Karten; stets {@code memberNumbers.size()}
+   * @param memberNumbers Nummern aller zugehörigen Karten, aufsteigend — direkt zugeordnete und
+   *     über die Herkunft geerbte gemeinsam
+   * @param rootNumbers Nummern der direkt über {@code parentId} zugeordneten Karten, aufsteigend.
+   *     Stets eine Teilmenge von {@code memberNumbers}: Sie werden aus derselben Menge gefiltert
+   *     und unterliegen damit denselben Regeln
+   */
   public record EpicView(
       Long id,
       int number,
@@ -1738,5 +1771,7 @@ public class CardService {
       @Nullable String description,
       @Nullable String shortcode,
       int done,
-      int total) {}
+      int total,
+      List<Integer> memberNumbers,
+      List<Integer> rootNumbers) {}
 }

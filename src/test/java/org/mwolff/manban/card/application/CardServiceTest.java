@@ -572,6 +572,109 @@ class CardServiceTest {
         .containsExactly(1, 2);
   }
 
+  /**
+   * Karte mit Herkunft und optionalem Ideen-Speicher-Kennzeichen — für die Zugehörigkeit über die
+   * Kette (Issue #633).
+   */
+  private static Card kette(
+      long id,
+      long columnId,
+      int number,
+      CardType type,
+      Long parentId,
+      Long derivedFrom,
+      boolean ideaStored) {
+    return new Card(
+        id,
+        BOARD,
+        columnId,
+        number,
+        "Titel",
+        null,
+        0,
+        false,
+        ideaStored,
+        null,
+        1L,
+        FIXED,
+        FIXED,
+        type,
+        parentId,
+        null,
+        null,
+        PROJECT,
+        null,
+        null,
+        derivedFrom);
+  }
+
+  @Test
+  void listEpics_zaehltNachfahrenDerZugeordnetenKarteMit() {
+    // Given: Kette Wurzel -> Kind -> Enkel, nur die Wurzel ist dem Vorhaben zugeordnet.
+    when(boardService.listColumns(BOARD))
+        .thenReturn(List.of(column(20L, "Backlog", 0), column(21L, "Done", 1)));
+    when(cards.findByBoardId(BOARD))
+        .thenReturn(
+            List.of(
+                kette(5L, 20L, 1, CardType.EPIC, null, null, false),
+                kette(6L, 20L, 2, CardType.CARD, 5L, null, false),
+                kette(7L, 21L, 3, CardType.CARD, null, 6L, false),
+                kette(8L, 20L, 4, CardType.CARD, null, 7L, false),
+                kette(9L, 20L, 5, CardType.CARD, null, null, false)));
+
+    // When
+    List<CardService.EpicView> result = service.listEpics(1L, BOARD);
+
+    // Then: drei statt einer Karte, die unbeteiligte Nummer 5 bleibt draußen.
+    assertThat(result)
+        .singleElement()
+        .extracting(CardService.EpicView::done, CardService.EpicView::total)
+        .containsExactly(1, 3);
+    assertThat(result.getFirst().memberNumbers()).containsExactly(2, 3, 4);
+    assertThat(result.getFirst().memberNumbers()).doesNotContain(5);
+  }
+
+  @Test
+  void listEpics_liefertWurzelnAlsTeilmengeDerMitglieder() {
+    // Given
+    when(boardService.listColumns(BOARD)).thenReturn(List.of(column(20L, "Backlog", 0)));
+    when(cards.findByBoardId(BOARD))
+        .thenReturn(
+            List.of(
+                kette(5L, 20L, 1, CardType.EPIC, null, null, false),
+                kette(6L, 20L, 2, CardType.CARD, 5L, null, false),
+                kette(7L, 20L, 3, CardType.CARD, null, 6L, false)));
+
+    // When
+    CardService.EpicView view = service.listEpics(1L, BOARD).getFirst();
+
+    // Then: Invariante — Wurzeln ⊆ Mitglieder, und total zählt die Mitglieder.
+    assertThat(view.rootNumbers()).containsExactly(2);
+    assertThat(view.memberNumbers()).containsExactly(2, 3);
+    assertThat(view.memberNumbers()).containsAll(view.rootNumbers());
+    assertThat(view.total()).isEqualTo(view.memberNumbers().size());
+  }
+
+  @Test
+  void listEpics_zaehltKarteImIdeenSpeicherNichtMit() {
+    // Given: eine board-gebundene Karte im Ideen-Speicher, direkt zugeordnet (Entscheidung E6).
+    when(boardService.listColumns(BOARD)).thenReturn(List.of(column(20L, "Backlog", 0)));
+    when(cards.findByBoardId(BOARD))
+        .thenReturn(
+            List.of(
+                kette(5L, 20L, 1, CardType.EPIC, null, null, false),
+                kette(6L, 20L, 2, CardType.CARD, 5L, null, false),
+                kette(7L, 20L, 3, CardType.CARD, 5L, null, true)));
+
+    // When
+    CardService.EpicView view = service.listEpics(1L, BOARD).getFirst();
+
+    // Then
+    assertThat(view.total()).isEqualTo(1);
+    assertThat(view.memberNumbers()).containsExactly(2);
+    assertThat(view.memberNumbers()).doesNotContain(3);
+  }
+
   @Test
   void listEpics_throwsBoardNotFound_whenBoardUnknown() {
     // Given

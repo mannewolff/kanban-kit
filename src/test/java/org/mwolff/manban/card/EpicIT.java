@@ -304,4 +304,89 @@ class EpicIT extends AbstractIntegrationTest {
                 .content("{\"columnId\":%d,\"position\":0}".formatted(done)))
         .andExpect(status().isBadRequest());
   }
+
+  /** Kartennummer einer angelegten Karte — {@code derivedFrom} wird als Nummer übergeben. */
+  private int cardNumber(Cookie session, long cardId) throws Exception {
+    return json.readTree(
+            mvc.perform(get("/api/cards/" + cardId).cookie(session))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString())
+        .get("number")
+        .asInt();
+  }
+
+  private void assignDerivedFrom(Cookie session, long cardId, int ancestorNumber) throws Exception {
+    mvc.perform(
+            patch("/api/cards/" + cardId + "/derived-from")
+                .cookie(session)
+                .contentType("application/json")
+                .content("{\"derivedFrom\":%d}".formatted(ancestorNumber)))
+        .andExpect(status().isOk());
+  }
+
+  /**
+   * Kern von Issue #633: Eine dreistufige Kette hängt vollständig am Vorhaben, sobald ihre Wurzel
+   * zugeordnet ist — und zwar rückwirkend, ohne dass an Kind oder Enkel etwas geschrieben wird.
+   */
+  @Test
+  void epicProgressCountsDerivedDescendants() throws Exception {
+    Cookie alice = loginAs("epic-derived@example.com");
+    long projectId = createProject("epic-derived@example.com", "P");
+    JsonNode board = createBoard(alice, projectId);
+    long boardId = board.get("id").asLong();
+    long backlog = board.get("columns").get(0).get("id").asLong();
+
+    long epic = createEpic(alice, boardId, "Vorhaben", "V");
+    long wurzel = createCard(alice, boardId, backlog, "Anforderung");
+    long kind = createCard(alice, boardId, backlog, "Plan");
+    long enkel = createCard(alice, boardId, backlog, "Arbeitspaket");
+
+    // Die Kette entsteht, bevor irgendetwas zugeordnet ist.
+    assignDerivedFrom(alice, kind, cardNumber(alice, wurzel));
+    assignDerivedFrom(alice, enkel, cardNumber(alice, kind));
+
+    // Vorher: nichts zugeordnet, das Vorhaben ist leer.
+    JsonNode vorher = epics(alice, boardId).get(0);
+    org.assertj.core.api.Assertions.assertThat(vorher.get("total").asInt()).isZero();
+
+    // Nachher: nur die Wurzel wird zugeordnet — Kind und Enkel kommen von selbst dazu.
+    assignParent(alice, wurzel, epic);
+
+    JsonNode nachher = epics(alice, boardId).get(0);
+    org.assertj.core.api.Assertions.assertThat(nachher.get("total").asInt()).isEqualTo(3);
+    org.assertj.core.api.Assertions.assertThat(nachher.get("memberNumbers")).hasSize(3);
+    org.assertj.core.api.Assertions.assertThat(nachher.get("rootNumbers")).hasSize(1);
+    org.assertj.core.api.Assertions.assertThat(nachher.get("rootNumbers").get(0).asInt())
+        .isEqualTo(cardNumber(alice, wurzel));
+  }
+
+  /**
+   * Gegenprobe zur Rückwirkung: Das Lösen der einen Zuordnung nimmt den ganzen Teilbaum wieder
+   * heraus. Es bleibt nichts zurück, was von Hand aufzuräumen wäre.
+   */
+  @Test
+  void releasingTheRootRemovesTheWholeSubtree() throws Exception {
+    Cookie alice = loginAs("epic-release@example.com");
+    long projectId = createProject("epic-release@example.com", "P");
+    JsonNode board = createBoard(alice, projectId);
+    long boardId = board.get("id").asLong();
+    long backlog = board.get("columns").get(0).get("id").asLong();
+
+    long epic = createEpic(alice, boardId, "Vorhaben", "V");
+    long wurzel = createCard(alice, boardId, backlog, "Anforderung");
+    long kind = createCard(alice, boardId, backlog, "Plan");
+    assignDerivedFrom(alice, kind, cardNumber(alice, wurzel));
+    assignParent(alice, wurzel, epic);
+
+    org.assertj.core.api.Assertions.assertThat(epics(alice, boardId).get(0).get("total").asInt())
+        .isEqualTo(2);
+
+    assignParent(alice, wurzel, null);
+
+    JsonNode danach = epics(alice, boardId).get(0);
+    org.assertj.core.api.Assertions.assertThat(danach.get("total").asInt()).isZero();
+    org.assertj.core.api.Assertions.assertThat(danach.get("memberNumbers")).isEmpty();
+  }
 }
