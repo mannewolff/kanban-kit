@@ -1,7 +1,10 @@
 import AddIcon from '@mui/icons-material/Add'
+import ExpandLessIcon from '@mui/icons-material/ExpandLess'
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
+import IconButton from '@mui/material/IconButton'
 import LinearProgress from '@mui/material/LinearProgress'
 import Paper from '@mui/material/Paper'
 import Stack from '@mui/material/Stack'
@@ -41,11 +44,21 @@ export function EpicsPage() {
   const [selected, setSelected] = useState<Card | null>(null)
   const [creating, setCreating] = useState(false)
   const [tab, setTab] = useState(0)
+  // Genau ein Vorhaben ist aufgeklappt: Die Liste soll den Ueberblick nicht ersetzen.
+  const [offen, setOffen] = useState<number | null>(null)
 
   const reload = () => {
     void epicsApi.list(id).then(setEpics)
     void cardsApi.list(id).then(setCards)
   }
+
+  /**
+   * Titel zur Kartennummer. Der Server liefert nur Nummern (Issue #633); die Titel stehen in der
+   * ohnehin geladenen Kartenliste. Der Rückfall greift, solange beide Abrufe noch nicht beide
+   * beantwortet sind — die Nummer allein bleibt dann sichtbar und die Zeile springt nicht.
+   */
+  const titelZuNummer = (nummer: number) =>
+    cards.find((c) => c.number === nummer)?.title ?? 'noch nicht geladen'
 
   useEffect(() => {
     if (!validId) {
@@ -155,6 +168,22 @@ export function EpicsPage() {
                 <Typography variant="caption" color="text.secondary">
                   {epic.done}/{epic.total} Stories fertig
                 </Typography>
+                {/* Disclosure, kein Baum: Die Karten darunter sind eine Liste, keine Hierarchie —
+                    die Tree-Rollen aus #611 gehoeren hierher ausdruecklich nicht. Die eigene
+                    Schaltflaeche haelt das Aufklappen vom Kachel-Klick getrennt, der den
+                    Karten-Dialog oeffnet; ohne stopPropagation traefe ein Klick beides. */}
+                <IconButton
+                  size="small"
+                  aria-label={`Karten von ${epic.title}`}
+                  aria-expanded={offen === epic.id}
+                  aria-controls={`vorhaben-karten-${epic.id}`}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setOffen(offen === epic.id ? null : epic.id)
+                  }}
+                >
+                  {offen === epic.id ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+                </IconButton>
               </Stack>
               <LinearProgress
                 variant="determinate"
@@ -162,6 +191,25 @@ export function EpicsPage() {
                 aria-label={`Fortschritt ${epic.title}`}
                 sx={{ height: 8, borderRadius: 1 }}
               />
+              {offen === epic.id && (
+                <Box id={`vorhaben-karten-${epic.id}`} sx={{ mt: 1.5 }} onClick={(e) => e.stopPropagation()}>
+                  {epic.memberNumbers.length === 0 ? (
+                    <Typography variant="body2" color="text.secondary">
+                      Keine Karten zugeordnet.
+                    </Typography>
+                  ) : (
+                    <Stack component="ul" spacing={0.5} sx={{ listStyle: 'none', pl: 0, m: 0 }}>
+                      {epic.memberNumbers.map((nummer) => (
+                        <Typography component="li" variant="body2" key={nummer} color="text.secondary">
+                          {`#${nummer} · ${titelZuNummer(nummer)} ${
+                            epic.rootNumbers.includes(nummer) ? '(zugeordnet)' : '(über Herkunft)'
+                          }`}
+                        </Typography>
+                      ))}
+                    </Stack>
+                  )}
+                </Box>
+              )}
             </Paper>
           )
         })}

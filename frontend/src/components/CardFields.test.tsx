@@ -6,7 +6,7 @@ import { MAX_TEXT_LENGTH } from '../lib/textLimits'
 import { CardFields } from './CardFields'
 
 const epics: Epic[] = [
-  { id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 0, total: 1 },
+  { id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 0, total: 1, memberNumbers: [], rootNumbers: [] },
 ]
 
 function handlers() {

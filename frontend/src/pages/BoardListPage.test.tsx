@@ -65,7 +65,7 @@ const base = {
 const active: Card = { ...base, id: 100, columnId: 10, number: 1, title: 'Aufgabe', description: '# Titel\nText **fett**', archived: false }
 const archived: Card = { ...base, id: 101, columnId: 20, number: 2, title: 'AlteKarte', description: 'x', archived: true }
 const idea: Card = { ...base, id: 102, columnId: 10, number: 3, title: 'MeineIdee', description: 'Idee-Text', archived: false, ideaStored: true }
-const epic: Epic = { id: 7, number: 1, title: 'Mein Epic', description: null, shortcode: 'EP1', done: 0, total: 1 }
+const epic: Epic = { id: 7, number: 1, title: 'Mein Epic', description: null, shortcode: 'EP1', done: 0, total: 1, memberNumbers: [], rootNumbers: [] }
 
 function renderPage(cards: Card[] = [active, archived]) {
   mBoards.get.mockResolvedValue({

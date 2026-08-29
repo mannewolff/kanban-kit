@@ -142,6 +142,8 @@ const epic: Epic = {
   shortcode: 'AUT',
   done: 0,
   total: 1,
+  memberNumbers: [],
+  rootNumbers: [],
 }
 
 const label: Label = { id: 5, boardId: 1, name: 'Bug', color: '#f00' }
