@@ -113,6 +113,20 @@ class CardController {
     return cards.derivationTree(userId, boardId);
   }
 
+  /**
+   * Herkunftsbaum eines Vorhabens — dieselbe Rechnung wie beim board-weiten Baum, angewandt auf die
+   * Mitglieder dieses Vorhabens (Issue #643).
+   *
+   * <p>Der Pfad endet bewusst auf {@code /tree} und wiederholt den Pfadbestandteil des board-weiten
+   * Endpunkts darüber nicht: Der kommt im Controller genau einmal vor, und daran bleibt sein
+   * Rückbau maschinell prüfbar.
+   */
+  @GetMapping("/api/boards/{boardId}/epics/{epicId}/tree")
+  List<DerivationNodeView> epicTree(
+      @AuthenticationPrincipal Long userId, @PathVariable long boardId, @PathVariable long epicId) {
+    return cards.epicDerivationTree(userId, boardId, epicId);
+  }
+
   @GetMapping("/api/cards/{cardId}")
   CardView get(@AuthenticationPrincipal Long userId, @PathVariable long cardId) {
     return cards.getCard(userId, cardId);

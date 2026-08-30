@@ -417,19 +417,75 @@ public class CardService {
     List<Card> boardCards =
         cards.findByBoardId(boardId).stream().filter(c -> !c.ideaStored()).toList();
     Set<Long> imBoard = boardCards.stream().map(Card::requireId).collect(Collectors.toSet());
-    Set<Long> fremdeVorfahren =
+    return DerivationTree.build(
+        boardCards, dependencies.findByCardIds(imBoard), fremdeVorfahrenNummern(boardCards));
+  }
+
+  /**
+   * Herkunftsbaum <b>eines Vorhabens</b> als flache Liste in Präorder mit Tiefe (Issue #643).
+   *
+   * <p>Der board-weite Baum aus {@link #derivationTree} beantwortet die Frage „was gehört zu diesem
+   * Vorhaben" nicht — er stellt alle Ketten des Boards nebeneinander. Hier wird dieselbe Rechnung
+   * auf die Mitglieder <em>eines</em> Vorhabens angewandt: die Zugehörigkeit aus {@link
+   * EpicMembership} (#632), der Baum aus {@link DerivationTree} (#609). Eine zweite Graphenrechnung
+   * wäre ein zweiter Ort für denselben Fehler.
+   *
+   * <p><b>Was durch die Einschränkung anders wird:</b> {@code build} weist alles als extern aus,
+   * was nicht in der übergebenen Menge liegt. Ein Vorfahr, der auf dem Board liegt, aber kein
+   * Mitglied ist — archiviert, im Ideen-Speicher oder selbst ein Vorhaben —, ist damit extern
+   * <em>ohne</em> Nummer, und sein Kind wird zur Wurzel. Ebenso gilt eine Abhängigkeit auf eine
+   * Board-Karte ausserhalb des Vorhabens als extern und setzt {@code blocked} nicht. Beides ist
+   * gewollt: Was das Vorhaben nicht enthält, kann sein Baum nicht als offen behaupten.
+   *
+   * @throws CardNotFoundException wenn {@code epicId} kein Vorhaben dieses Boards bezeichnet.
+   *     Bewusst nicht als leere Liste: Sonst könnte der Client „existiert nicht" nicht vom
+   *     legitimen Leer-Fall unterscheiden. Nicht-Existenz und Fremdzugriff bleiben ununterscheidbar
+   *     wie bei {@link #getCard}.
+   */
+  @Transactional(readOnly = true)
+  public List<DerivationNodeView> epicDerivationTree(long userId, long boardId, long epicId) {
+    permissions.requireMembership(userId, boardService.requireProjectId(boardId));
+
+    // Ungefiltert in die Zugehörigkeitsrechnung — genau wie in listEpics: EpicMembership filtert
+    // den Ideen-Speicher selbst heraus, kappt die Kette aber nicht an ihm. Ein Vorfilter hier
+    // ergäbe eine andere Mitgliedermenge als auf der Kachel, und beide Zahlen stammen aus
+    // derselben Ansicht.
+    List<Card> alle = cards.findByBoardId(boardId);
+    Set<Card> mitglieder = EpicMembership.compute(alle).get(epicId);
+    if (mitglieder == null) {
+      throw new CardNotFoundException();
+    }
+
+    List<Card> baumKarten =
+        mitglieder.stream().sorted(Comparator.comparingInt(Card::requireNumber)).toList();
+    Set<Long> ids = baumKarten.stream().map(Card::requireId).collect(Collectors.toSet());
+    return DerivationTree.build(
+        baumKarten, dependencies.findByCardIds(ids), fremdeVorfahrenNummern(alle));
+  }
+
+  /**
+   * Nummern der Vorfahren, die nicht auf diesem Board liegen — ein Sammelzugriff statt einer
+   * Abfrage je Kante.
+   *
+   * <p>Bezugsmenge ist bewusst das <b>Board</b> und nicht die jeweils übergebene Teilmenge: Nur so
+   * behält eine board-fremde Herkunft im Vorhaben-Baum ihre Nummer, während board-interne
+   * Nicht-Mitglieder ohne Nummer extern bleiben.
+   */
+  private Map<Long, Integer> fremdeVorfahrenNummern(List<Card> boardCards) {
+    Set<Long> imBoard = boardCards.stream().map(Card::requireId).collect(Collectors.toSet());
+    Set<Long> fremde =
         boardCards.stream()
             .map(Card::derivedFromCardId)
             .filter(Objects::nonNull)
             .filter(id -> !imBoard.contains(id))
             .collect(Collectors.toSet());
-    Map<Long, Integer> fremdeNummern = new HashMap<>();
-    if (!fremdeVorfahren.isEmpty()) {
-      for (Card vorfahr : cards.findByIds(fremdeVorfahren)) {
-        fremdeNummern.put(vorfahr.requireId(), vorfahr.number());
+    Map<Long, Integer> nummern = new HashMap<>();
+    if (!fremde.isEmpty()) {
+      for (Card vorfahr : cards.findByIds(fremde)) {
+        nummern.put(vorfahr.requireId(), vorfahr.number());
       }
     }
-    return DerivationTree.build(boardCards, dependencies.findByCardIds(imBoard), fremdeNummern);
+    return nummern;
   }
 
   /**
