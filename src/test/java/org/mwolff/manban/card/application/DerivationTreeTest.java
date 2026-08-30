@@ -146,10 +146,36 @@ class DerivationTreeTest {
     assertThat(baum).noneMatch(DerivationNodeView::broken);
   }
 
+  /**
+   * Seit Issue #642 ist jede Karte ohne board-interne Herkunft eine Wurzel — auch die isolierte.
+   * Der Baum wird je Vorhaben gebaut, und dessen Mitglieder sind bereits ausgewaehlt; eine manuell
+   * zugeordnete Karte ohne Herkunft und ohne Nachfahren fiele sonst still heraus, und genau so
+   * sieht eine Gruppierung ohne Herkunftskette aus (PO-Entscheidung in #636).
+   */
   @Test
-  void karte_ohne_herkunft_und_ohne_nachfahren_erscheint_nicht() {
-    // Eine einzelne herkunftslose Karte ist kein Vorhaben (E6).
-    assertThat(tree(List.of(card(1L, 1, null)))).isEmpty();
+  void karte_ohne_herkunft_und_ohne_nachfahren_ist_eine_eigene_wurzel() {
+    List<DerivationNodeView> baum = tree(List.of(card(1L, 1, null)));
+
+    // Beide Seiten: Sie ist da, sie steht auf Wurzelhoehe, und sie traegt keine Herkunft. Ohne die
+    // zweite und dritte Zusicherung bliebe eine Fassung gruen, die sie als Kind irgendwo einhaengt.
+    assertThat(baum).extracting(DerivationNodeView::number).containsExactly(1);
+    assertThat(baum.get(0).depth()).isZero();
+    assertThat(baum.get(0).derivedFrom()).isNull();
+  }
+
+  /**
+   * Gegenprobe zur gelockerten Regel: Die erste Filterbedingung bleibt. Wer einen Vorfahren in der
+   * Menge hat, erscheint unter ihm — nicht zusaetzlich als Wurzel. Ohne diesen Test waere eine
+   * Fassung gruen, die nach dem Wegfall der zweiten Bedingung pauschal jede Karte zur Wurzel macht.
+   */
+  @Test
+  void karte_mit_board_interner_herkunft_ist_keine_wurzel_sondern_steht_unter_ihrem_vorfahren() {
+    List<DerivationNodeView> baum = tree(List.of(card(1L, 1, null), card(2L, 2, 1L)));
+
+    assertThat(baum).extracting(DerivationNodeView::number).containsExactly(1, 2);
+    assertThat(baum).extracting(DerivationNodeView::depth).containsExactly(0, 1);
+    // Die Karte erscheint genau einmal — nicht zusaetzlich als eigene Wurzel.
+    assertThat(baum).filteredOn(z -> z.number() == 2).hasSize(1);
   }
 
   @Test
@@ -163,7 +189,9 @@ class DerivationTreeTest {
 
   @Test
   void fremde_herkunft_macht_die_karte_zur_wurzel_auch_ohne_kinder() {
-    // Sie traegt eine Herkunftsgeschichte, anders als die herkunftslose Einzelkarte aus E6.
+    // Board-fremde Herkunft: Der Vorfahr liegt nicht in der Menge, die Karte ist also Wurzel und
+    // wird als externalOrigin ausgewiesen. Seit #642 waere sie das auch ohne jede Herkunft — hier
+    // geht es um die Kennzeichnung, nicht mehr um die Wurzeleigenschaft.
     when(cards.findByIds(any())).thenReturn(List.of(fremd(77L, 42)));
 
     List<DerivationNodeView> baum = tree(List.of(card(1L, 1, 77L)));

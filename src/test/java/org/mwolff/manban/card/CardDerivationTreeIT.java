@@ -71,12 +71,21 @@ class CardDerivationTreeIT extends AbstractIntegrationTest {
     assertThat(tiefen(baum)).containsExactly(0, 1);
   }
 
+  /**
+   * Seit Issue #642 ist jede Karte ohne board-interne Herkunft eine Wurzel — auch die isolierte.
+   * Die frühere Bedingung (Nachfahren oder board-fremde Herkunft) schützte den board-weiten Baum;
+   * sie fiel weg, weil sie im Baum je Vorhaben schädlich ist: Dort sind die Mitglieder bereits
+   * ausgewählt, und eine manuell zugeordnete Karte ohne Herkunft fiele still heraus.
+   */
   @Test
-  void karteOhneHerkunftUndOhneNachfahren_erscheintNicht() throws Exception {
+  void karteOhneHerkunftUndOhneNachfahren_istEineEigeneWurzel() throws Exception {
     Fixture f = fixture("dt-einzeln");
-    karte(f, "Allein", null);
+    int allein = number(karte(f, "Allein", null));
 
-    assertThat(baum(f)).isEmpty();
+    JsonNode baum = baum(f);
+
+    assertThat(nummern(baum)).containsExactly(allein);
+    assertThat(tiefen(baum)).containsExactly(0);
   }
 
   @Test
@@ -188,19 +197,23 @@ class CardDerivationTreeIT extends AbstractIntegrationTest {
   }
 
   /**
-   * Der Normalfall einer Abhängigkeit: Die Zielkarte liegt auf dem Board, aber ohne Herkunftsbezug
-   * und damit außerhalb des Baums. Aufgelöst wird gegen die Board-Menge — gegen die Baummenge wäre
-   * sie fälschlich extern.
+   * Der Normalfall einer Abhängigkeit: Die Zielkarte liegt auf dem Board, aber in einem anderen
+   * Zweig. Aufgelöst wird gegen die Board-Menge — gegen die Menge des eigenen Zweigs wäre sie
+   * fälschlich extern.
    */
   @Test
-  void abhaengigkeitAufBoardKarteAusserhalbDesBaums_blocktUndIstNichtExtern() throws Exception {
+  void abhaengigkeitAufBoardKarteAusserhalbDesZweigs_blocktUndIstNichtExtern() throws Exception {
     Fixture f = fixture("dt-dep-ausserhalb");
     int fremdImBoard = number(karte(f, "Ohne Herkunft", null));
     int a = number(karte(f, "A", null));
     JsonNode b = karte(f, "B", a);
     setzeAbhaengigkeiten(f.session, id(b), List.of(fremdImBoard));
 
-    JsonNode kind = baum(f).get(1);
+    // Position ueber den vorhandenen `nummern`-Helfer bestimmt statt fest verdrahtet: Seit
+    // Issue #642 ist die herkunftslose Zielkarte selbst eine Wurzel und steht vor dem geprueften
+    // Zweig, ein fester Index zeigte danach auf die falsche Zeile.
+    JsonNode baum = baum(f);
+    JsonNode kind = baum.get(nummern(baum).indexOf(number(b)));
     assertThat(kind.get("dependencies").get(0).asInt()).isEqualTo(fremdImBoard);
     assertThat(kind.get("externalDependencies")).isEmpty();
     assertThat(kind.get("blocked").asBoolean()).isTrue();
