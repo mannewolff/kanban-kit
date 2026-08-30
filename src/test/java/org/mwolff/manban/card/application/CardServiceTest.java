@@ -1884,6 +1884,177 @@ class CardServiceTest {
     return c.withDerivedFrom(herkunft);
   }
 
+  // --- openEpicFromCard (Issue #640) ---------------------------------------
+
+  /**
+   * Der Ablauf in einem Zug: Vorhaben entsteht, traegt die Quellkarte als Anforderung, und die
+   * Quellkarte traegt das Vorhaben als {@code parentId}. Alle drei Wirkungen zusammen — eine
+   * Fassung, die nur zwei davon herstellt, laesst genau den halben Zustand zurueck, den die
+   * Anforderung abschaffen soll.
+   */
+  @Test
+  void openEpicFromCard_legtVorhabenAn_setztAnforderungUndZuordnung() {
+    Card quelle = card(1L, 20L, 7, false, null, CardType.CARD, null, null);
+    when(cards.findById(1L)).thenReturn(Optional.of(quelle));
+    when(boardService.requireProjectId(BOARD)).thenReturn(PROJECT);
+    when(boardService.firstColumn(BOARD)).thenReturn(column(20L, "Backlog", 0));
+    when(cards.allocateCardNumber(PROJECT)).thenReturn(8);
+    when(cards.findByProjectIdAndNumber(PROJECT, 7)).thenReturn(Optional.of(quelle));
+    Card angelegtesEpic = card(50L, 20L, 8, false, null, CardType.EPIC, null, null);
+    // Das Anlegen liefert die Karte MIT vergebener ID zurueck — ohne sie scheitert `requireId`
+    // im weiteren Ablauf, so wie es auch in der Datenbank waere.
+    when(cards.save(any()))
+        .thenAnswer(
+            inv -> {
+              Card c = inv.getArgument(0);
+              return c.id() == null ? angelegtesEpic : c;
+            });
+    when(cards.findById(50L)).thenReturn(Optional.of(angelegtesEpic));
+
+    ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
+    CardService.CardView ergebnis = service.openEpicFromCard(1L, 1L, "EP-1", "Vorhaben");
+
+    verify(cards, times(3)).save(captor.capture());
+    // 1. Das Vorhaben entsteht — auf dem Board der Quellkarte, ohne Beschreibung.
+    Card epic =
+        captor.getAllValues().stream()
+            .filter(c -> c.type() == CardType.EPIC)
+            .findFirst()
+            .orElseThrow();
+    assertThat(epic.boardId()).isEqualTo(BOARD);
+    assertThat(epic.description()).isNull();
+    assertThat(epic.shortcode()).isEqualTo("EP-1");
+    // 2. Die Quellkarte wird seine Anforderung.
+    assertThat(
+            captor.getAllValues().stream()
+                .filter(c -> c.requirementCardId() != null)
+                .map(Card::requirementCardId))
+        .containsExactly(1L);
+    // 3. Und ist ihm zugeordnet.
+    // `id()` statt `requireId()`: Im Captor liegt auch die frisch angelegte Karte ohne ID —
+    // `requireId` wuerde an ihr scheitern, bevor der Filter greift.
+    assertThat(
+            captor.getAllValues().stream()
+                .filter(c -> c.id() != null && c.id().longValue() == 1L)
+                .map(Card::parentId))
+        .containsExactly(50L);
+    // Zurueck kommt die Sicht des neuen Vorhabens, nicht die der Quellkarte.
+    assertThat(ergebnis.id()).isEqualTo(50L);
+  }
+
+  /** Das Kuerzel ist optional — wie bei {@code createEpic}. */
+  @Test
+  void openEpicFromCard_ohneKuerzel_istZulaessig() {
+    Card quelle = card(1L, 20L, 7, false, null, CardType.CARD, null, null);
+    when(cards.findById(1L)).thenReturn(Optional.of(quelle));
+    when(boardService.requireProjectId(BOARD)).thenReturn(PROJECT);
+    when(boardService.firstColumn(BOARD)).thenReturn(column(20L, "Backlog", 0));
+    when(cards.allocateCardNumber(PROJECT)).thenReturn(8);
+    when(cards.findByProjectIdAndNumber(PROJECT, 7)).thenReturn(Optional.of(quelle));
+    Card angelegtesEpic = card(50L, 20L, 8, false, null, CardType.EPIC, null, null);
+    when(cards.save(any()))
+        .thenAnswer(
+            inv -> {
+              Card c = inv.getArgument(0);
+              return c.id() == null ? angelegtesEpic : c;
+            });
+    when(cards.findById(50L)).thenReturn(Optional.of(angelegtesEpic));
+
+    ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
+    service.openEpicFromCard(1L, 1L, null, "Vorhaben");
+
+    verify(cards, times(3)).save(captor.capture());
+    assertThat(captor.getAllValues())
+        .filteredOn(c -> c.type() == CardType.EPIC)
+        .allSatisfy(c -> assertThat(c.shortcode()).isNull());
+  }
+
+  /**
+   * Jeder Ablehnungstest isoliert <b>genau eine</b> Bedingung: Die uebrigen sind so gestubbt, dass
+   * sie nicht greifen, und die Meldung wird festgenagelt. Ohne diese Schaerfe blieben Fassungen
+   * gruen, in denen die geprueft geglaubte Bedingung fehlt und eine andere die Ablehnung traegt —
+   * genau das haben die PIT-Ueberlebenden dieses Pakets gezeigt.
+   */
+  @Test
+  void openEpicFromCard_quelleIstVorhaben_wirdAbgelehnt() {
+    Card quelle = card(1L, 20L, 7, false, null, CardType.EPIC, null, null);
+    when(cards.findById(1L)).thenReturn(Optional.of(quelle));
+    when(cards.findByProjectIdAndNumber(PROJECT, 7)).thenReturn(Optional.of(quelle));
+
+    assertThatThrownBy(() -> service.openEpicFromCard(1L, 1L, null, "V"))
+        .isExactlyInstanceOf(InvalidDependencyException.class)
+        .hasMessageContaining("aus sich selbst");
+
+    verify(cards, never()).save(any());
+  }
+
+  @Test
+  void openEpicFromCard_archivierteQuelle_wirdAbgelehnt() {
+    Card quelle = card(1L, 20L, 7, true, null, CardType.CARD, null, null);
+    when(cards.findById(1L)).thenReturn(Optional.of(quelle));
+    when(cards.findByProjectIdAndNumber(PROJECT, 7)).thenReturn(Optional.of(quelle));
+
+    assertThatThrownBy(() -> service.openEpicFromCard(1L, 1L, null, "V"))
+        .isExactlyInstanceOf(InvalidDependencyException.class)
+        .hasMessageContaining("ruhende Karte");
+
+    verify(cards, never()).save(any());
+  }
+
+  @Test
+  void openEpicFromCard_quelleImIdeenSpeicher_wirdAbgelehnt() {
+    Card quelle = kette(1L, 20L, 7, CardType.CARD, null, null, true);
+    when(cards.findById(1L)).thenReturn(Optional.of(quelle));
+    when(cards.findByProjectIdAndNumber(PROJECT, 7)).thenReturn(Optional.of(quelle));
+
+    assertThatThrownBy(() -> service.openEpicFromCard(1L, 1L, null, "V"))
+        .isExactlyInstanceOf(InvalidDependencyException.class)
+        .hasMessageContaining("ruhende Karte");
+
+    verify(cards, never()).save(any());
+  }
+
+  /**
+   * Der Papierkorb ist im Domain-Record nicht abgebildet: {@code findById} liefert geloeschte
+   * Karten, die Nummernsuche filtert sie. Findet die Suche nichts, liegt die Karte im Papierkorb.
+   */
+  @Test
+  void openEpicFromCard_quelleImPapierkorb_wirdAbgelehnt() {
+    when(cards.findById(1L))
+        .thenReturn(Optional.of(card(1L, 20L, 7, false, null, CardType.CARD, null, null)));
+    when(cards.findByProjectIdAndNumber(PROJECT, 7)).thenReturn(Optional.empty());
+
+    // `isExactlyInstanceOf`: Faellt die Papierkorb-Pruefung weg, laeuft der Ablauf weiter und
+    // scheitert spaeter an derselben leeren Nummernsuche — dann aber mit der erbenden
+    // InvalidRequirementCardException. Ein Test auf die Oberklasse bliebe dabei gruen.
+    assertThatThrownBy(() -> service.openEpicFromCard(1L, 1L, null, "V"))
+        .isExactlyInstanceOf(InvalidDependencyException.class)
+        .hasMessageContaining("ruhende Karte");
+
+    verify(cards, never()).save(any());
+  }
+
+  @Test
+  void openEpicFromCard_quelleBereitsZugeordnet_wirdAbgelehnt() {
+    Card quelle = card(1L, 20L, 7, false, null, CardType.CARD, 42L, null);
+    when(cards.findById(1L)).thenReturn(Optional.of(quelle));
+    when(cards.findByProjectIdAndNumber(PROJECT, 7)).thenReturn(Optional.of(quelle));
+
+    assertThatThrownBy(() -> service.openEpicFromCard(1L, 1L, null, "V"))
+        .isExactlyInstanceOf(InvalidDependencyException.class)
+        .hasMessageContaining("bereits einem Vorhaben zugeordnet");
+
+    verify(cards, never()).save(any());
+  }
+
+  @Test
+  void openEpicFromCard_unbekannteKarte_wirdAbgelehnt() {
+    when(cards.findById(1L)).thenReturn(Optional.empty());
+
+    assertThatThrownBy(() -> service.openEpicFromCard(1L, 1L, null, "V"))
+        .isInstanceOf(CardNotFoundException.class);
+  }
+
   // --- assignRequirement und Anforderung im EpicView (Issue #639) -----------
 
   /**

@@ -736,6 +736,78 @@ public class CardService {
   }
 
   /**
+   * Eröffnet einen Vorgang: legt ein Vorhaben an, macht die übergebene Karte zu seiner Anforderung
+   * und ordnet sie ihm zu — in <b>einem</b> Schritt.
+   *
+   * <p>Bisher entstand das Vorhaben an einer anderen Stelle als die Anforderung, zu der es gehört:
+   * anlegen, dann von Hand zuordnen. Der zweite Schritt ging im Arbeitsfluss unter (Anforderung
+   * #636).
+   *
+   * <p><b>Warum eine Transaktion:</b> Getrennte Aufrufe hinterliessen bei einem Abbruch ein
+   * Vorhaben ohne Anforderung — also genau den Zustand, den diese Methode abschaffen soll (Plan
+   * #637, E2).
+   *
+   * <p>Das Vorhaben entsteht auf dem Board der Quellkarte und <b>ohne Beschreibung</b>: Den Inhalt
+   * trägt die Anforderungskarte, eine Kopie liefe sofort auseinander.
+   *
+   * @param shortcode optional, wie bei {@link #createEpic}
+   */
+  @Transactional
+  public CardView openEpicFromCard(
+      long userId, long cardId, @Nullable String shortcode, String title) {
+    Card quelle = cards.findById(cardId).orElseThrow(CardNotFoundException::new);
+    permissions.require(userId, quelle.projectId(), Permission.EPIC_CREATE);
+    requireVorgangEroeffenbar(quelle);
+
+    // Bestehenden Weg wiederverwenden statt nachbauen: Nummernvergabe, erste Spalte, Rechte und
+    // das Board-Ereignis haengen alle daran.
+    CardView vorhaben = createEpic(userId, quelle.requireBoardId(), title, null, shortcode);
+
+    Card epic = cards.findById(vorhaben.id()).orElseThrow(CardNotFoundException::new);
+    Long anforderung = RequirementCard.resolve(cards, epic, quelle.requireNumber());
+    Card gespeichert = cards.save(epic.withRequirement(anforderung));
+    cards.save(quelle.withParent(epic.requireId()));
+
+    return view(gespeichert);
+  }
+
+  /**
+   * Die Ablehnungen des Vorgangs-Eröffnens, alle mit Status 400.
+   *
+   * <p>Sie stehen <b>vor</b> dem Anlegen: Eine Ablehnung danach liefe zwar auch sauber zurueck,
+   * verbrauchte aber eine Kartennummer — die Sequenz rollt nicht mit.
+   */
+  private void requireVorgangEroeffenbar(Card quelle) {
+    if (quelle.type() == CardType.EPIC) {
+      throw new InvalidDependencyException(
+          "Ein Vorhaben eroeffnet keinen Vorgang aus sich selbst: " + quelle.requireNumber());
+    }
+    // Drei Ruhezustaende, eine Regel: Eine ruhende Karte eroeffnet keinen Vorgang. Der Papierkorb
+    // ist im Domain-Record nicht abgebildet — die Nummernsuche filtert ihn, findById nicht.
+    if (quelle.archived() || quelle.ideaStored() || liegtImPapierkorb(quelle)) {
+      throw new InvalidDependencyException(
+          "Eine ruhende Karte eroeffnet keinen Vorgang: " + quelle.requireNumber());
+    }
+    if (quelle.parentId() != null) {
+      // Stillschweigendes Umhaengen entzoege einer bestehenden Gruppierung eine Karte, ohne dass
+      // jemand es merkt. Erst loesen, dann eroeffnen.
+      throw new InvalidDependencyException(
+          "Die Karte ist bereits einem Vorhaben zugeordnet: " + quelle.requireNumber());
+    }
+  }
+
+  /**
+   * Ob die Karte im Papierkorb liegt.
+   *
+   * <p>{@code deletedAt} ist keine Komponente von {@link Card}; die Nummernsuche filtert den
+   * Papierkorb dagegen (Port-Zusage von {@code findByProjectIdAndNumber}), {@code findById} nicht.
+   * Findet die Suche unter derselben Nummer nichts, ist die Karte geloescht.
+   */
+  private boolean liegtImPapierkorb(Card karte) {
+    return cards.findByProjectIdAndNumber(karte.projectId(), karte.requireNumber()).isEmpty();
+  }
+
+  /**
    * Setzt oder löscht ({@code null}) die Anforderungskarte eines Vorhabens.
    *
    * <p>Übergeben wird die projektweite <b>Kartennummer</b>, gespeichert die ID — die Nummer ändert

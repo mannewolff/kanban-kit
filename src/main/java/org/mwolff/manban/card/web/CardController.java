@@ -164,6 +164,20 @@ class CardController {
   }
 
   /**
+   * Eröffnet einen Vorgang an dieser Karte: Vorhaben anlegen, Karte als Anforderung setzen und ihr
+   * zuordnen — in einem Aufruf. Kartenzentriert wie {@code move}, {@code transfer} und {@code
+   * archive}; die Antwort ist die Sicht des <b>neuen Vorhabens</b>.
+   */
+  @PostMapping("/api/cards/{cardId}/open-epic")
+  @ResponseStatus(HttpStatus.CREATED)
+  CardView openEpic(
+      @AuthenticationPrincipal Long userId,
+      @PathVariable long cardId,
+      @Valid @RequestBody OpenEpicRequest request) {
+    return cards.openEpicFromCard(userId, cardId, request.kuerzel(), request.name());
+  }
+
+  /**
    * Setzt oder löscht die Anforderungskarte eines Vorhabens.
    *
    * <p>Schmaler Endpunkt wie {@code derived-from} (#607): Ein Voll-Update kann ein fehlendes Feld
@@ -362,6 +376,8 @@ class CardController {
 
   record AssignRequirementRequest(
       @Nullable @Positive @Max(CardNumbers.MAX) Integer requirementCardNumber) {}
+
+  record OpenEpicRequest(@Nullable String kuerzel, @NotBlank String name) {}
 
   record MoveCardRequest(
       @NotNull Long columnId, @jakarta.validation.constraints.PositiveOrZero int position) {}
