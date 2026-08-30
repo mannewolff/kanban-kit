@@ -19,9 +19,17 @@ afterEach(() => vi.restoreAllMocks())
 
 describe('epicsApi', () => {
   it('list ruft GET /api/boards/{id}/epics und liefert die geparste Antwort', async () => {
-    spyFetch(JSON.stringify([{ id: 1, number: 5, title: 'Epic', description: null, shortcode: 'EPC', done: 1, total: 3 }]))
+    // memberNumbers und rootNumbers werden unveraendert durchgereicht (Issue #634); rootNumbers
+    // ist dabei stets eine Teilmenge von memberNumbers.
+    const epic = {
+      id: 1, number: 5, title: 'Epic', description: null, shortcode: 'EPC', done: 1, total: 3,
+      memberNumbers: [7, 8, 9], rootNumbers: [7],
+    }
+    spyFetch(JSON.stringify([epic]))
     const result = await epicsApi.list(3)
-    expect(result).toEqual([{ id: 1, number: 5, title: 'Epic', description: null, shortcode: 'EPC', done: 1, total: 3 }])
+    expect(result).toEqual([epic])
+    expect(result[0].memberNumbers).toEqual([7, 8, 9])
+    expect(result[0].rootNumbers).toEqual([7])
   })
 
   it('create ruft POST /api/boards/{id}/cards mit type EPIC', async () => {

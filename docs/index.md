@@ -22,4 +22,4 @@ Funktionsstand nachgezogen.
 |------|-----------|----|
 | **Plattform-Rolle** | USER, ADMIN (Super-User) | instanzweit, `app_user.platform_role` |
 | **Projekt-Rolle** | OWNER, ADMIN, MEMBER, VIEWER | pro Projekt, Mitgliedschaft |
-| **Struktur** | Projekt → Board → Spalte → Karte | Karten können einem **Vorhaben** zugeordnet sein |
+| **Struktur** | Projekt → Board → Spalte → Karte | Karten können einem **Vorhaben** zugeordnet sein; was aus einer zugeordneten Karte entsteht, gehört automatisch dazu |

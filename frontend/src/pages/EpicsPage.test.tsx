@@ -84,7 +84,7 @@ describe('EpicsPage', () => {
 
   it('listet Epics mit Kürzel und Fortschritt', async () => {
     mEpics.list.mockResolvedValue([
-      { id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 1, total: 2 },
+      { id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 1, total: 2, memberNumbers: [], rootNumbers: [] },
     ])
     renderPage()
 
@@ -122,7 +122,7 @@ describe('EpicsPage', () => {
 
   it('öffnet ein Epic per Klick im Detail-Modal mit seinen Kind-Karten', async () => {
     mEpics.list.mockResolvedValue([
-      { id: 9, number: 2, title: 'Auth', description: 'Text', shortcode: 'AUT', done: 1, total: 2 },
+      { id: 9, number: 2, title: 'Auth', description: 'Text', shortcode: 'AUT', done: 1, total: 2, memberNumbers: [], rootNumbers: [] },
     ])
     mCards.list.mockResolvedValue([
       {
@@ -141,7 +141,7 @@ describe('EpicsPage', () => {
 
   it('zeigt 0 % Fortschritt für ein Epic ohne Stories und schließt das Detail-Modal', async () => {
     mEpics.list.mockResolvedValue([
-      { id: 9, number: 2, title: 'Leer', description: 'X', shortcode: 'LEE', done: 0, total: 0 },
+      { id: 9, number: 2, title: 'Leer', description: 'X', shortcode: 'LEE', done: 0, total: 0, memberNumbers: [], rootNumbers: [] },
     ])
     renderPage()
 
@@ -179,7 +179,7 @@ describe('EpicsPage', () => {
 
   it('startet im Reiter Fortschritt und ruft den Herkunftsbaum nicht ab', async () => {
     mEpics.list.mockResolvedValue([
-      { id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 1, total: 2 },
+      { id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 1, total: 2, memberNumbers: [], rootNumbers: [] },
     ])
     renderPage()
 
@@ -233,7 +233,7 @@ describe('EpicsPage', () => {
 
   it('lässt den Reiter Fortschritt bedienbar, wenn der Herkunftsbaum scheitert', async () => {
     mEpics.list.mockResolvedValue([
-      { id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 1, total: 2 },
+      { id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 1, total: 2, memberNumbers: [], rootNumbers: [] },
     ])
     mDerivation.derivationTree.mockRejectedValue(new Error('kaputt'))
     renderPage()
@@ -272,7 +272,7 @@ describe('EpicsPage', () => {
   it('öffnet aus dem Baum heraus ein Vorhaben, das nur über epics auflösbar ist', async () => {
     // cardsApi.list filtert serverseitig auf type == CARD — ein Vorhaben steht dort nicht.
     mEpics.list.mockResolvedValue([
-      { id: 9, number: 2, title: 'Grosses Vorhaben', description: null, shortcode: 'GRO', done: 0, total: 0 },
+      { id: 9, number: 2, title: 'Grosses Vorhaben', description: null, shortcode: 'GRO', done: 0, total: 0, memberNumbers: [], rootNumbers: [] },
     ])
     mCards.list.mockResolvedValue([])
     mDerivation.derivationTree.mockResolvedValue([baumZeile({ number: 2, type: 'EPIC' })])
@@ -320,7 +320,7 @@ describe('EpicsPage', () => {
 
   it('nennt im gerenderten Reiter nirgends „Epic"', async () => {
     mEpics.list.mockResolvedValue([
-      { id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 1, total: 2 },
+      { id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 1, total: 2, memberNumbers: [], rootNumbers: [] },
     ])
     renderPage()
     await screen.findByText('Auth')
@@ -331,5 +331,130 @@ describe('EpicsPage', () => {
     await screen.findByText(/keine herkunft/i)
 
     expect(screen.queryByText(/epic/i)).toBeNull()
+  })
+
+  // --- aufklappbare Vorhaben-Kachel (Issue #634) ------------------------
+
+  /** Vorhaben mit drei zugehörigen Karten, davon eine direkt zugeordnet. */
+  function vorhabenMitKarten() {
+    mEpics.list.mockResolvedValue([
+      {
+        id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 1, total: 3,
+        memberNumbers: [3, 4, 5], rootNumbers: [3],
+      },
+    ])
+    mCards.list.mockResolvedValue(
+      [3, 4, 5].map((n) => ({
+        id: 30 + n, boardId: 1, columnId: 10, number: n, title: `Karte ${n}`, description: null,
+        positionInColumn: 0, archived: false, ideaStored: false, movedToDoneAt: null, dependencies: [],
+        type: 'CARD', parentId: n === 3 ? 9 : null, shortcode: null, assignees: [], dueDate: null, labels: [],
+      })),
+    )
+  }
+
+  const aufklappen = () => screen.getByRole('button', { name: /karten von auth/i })
+
+  it('klappt die zugehörigen Karten per Klick auf und wieder zu', async () => {
+    vorhabenMitKarten()
+    renderPage()
+    await screen.findByText('Auth')
+
+    expect(aufklappen()).toHaveAttribute('aria-expanded', 'false')
+
+    fireEvent.click(aufklappen())
+    expect(aufklappen()).toHaveAttribute('aria-expanded', 'true')
+    expect(await screen.findByText(/#4/)).toBeInTheDocument()
+
+    fireEvent.click(aufklappen())
+    expect(aufklappen()).toHaveAttribute('aria-expanded', 'false')
+    await waitFor(() => expect(screen.queryByText(/#4/)).not.toBeInTheDocument())
+  })
+
+  it('klappt die zugehörigen Karten per Tastatur auf und wieder zu', async () => {
+    vorhabenMitKarten()
+    renderPage()
+    await screen.findByText('Auth')
+
+    aufklappen().focus()
+    fireEvent.keyDown(aufklappen(), { key: 'Enter' })
+    fireEvent.click(aufklappen())
+    expect(aufklappen()).toHaveAttribute('aria-expanded', 'true')
+
+    fireEvent.click(aufklappen())
+    expect(aufklappen()).toHaveAttribute('aria-expanded', 'false')
+  })
+
+  it('öffnet beim Klick auf die Aufklapp-Schaltfläche nicht den Karten-Dialog', async () => {
+    vorhabenMitKarten()
+    renderPage()
+    await screen.findByText('Auth')
+
+    fireEvent.click(aufklappen())
+
+    await screen.findByText(/#4/)
+    // Der Detail-Dialog zeigt „Karten (n)" — er darf hier nicht erscheinen.
+    expect(screen.queryByText(/^Karten \(\d+\)$/)).not.toBeInTheDocument()
+  })
+
+  it('öffnet beim Klick auf die Kachelfläche weiterhin den Karten-Dialog', async () => {
+    vorhabenMitKarten()
+    renderPage()
+
+    fireEvent.click(await screen.findByText('Auth'))
+
+    expect(await screen.findByText(/^Karten \(\d+\)$/)).toBeInTheDocument()
+  })
+
+  it('unterscheidet direkt zugeordnete Karten von den über die Herkunft geerbten', async () => {
+    vorhabenMitKarten()
+    renderPage()
+    await screen.findByText('Auth')
+
+    fireEvent.click(aufklappen())
+
+    expect(await screen.findByText(/#3 · Karte 3 \(zugeordnet\)/)).toBeInTheDocument()
+    expect(screen.getByText(/#4 · Karte 4 \(über Herkunft\)/)).toBeInTheDocument()
+    expect(screen.queryByText(/#4 · Karte 4 \(zugeordnet\)/)).not.toBeInTheDocument()
+  })
+
+  it('öffnet beim Klick in die aufgeklappte Kartenliste nicht den Karten-Dialog', async () => {
+    vorhabenMitKarten()
+    renderPage()
+    await screen.findByText('Auth')
+
+    fireEvent.click(aufklappen())
+    fireEvent.click(await screen.findByText(/#4 · Karte 4/))
+
+    // Die Liste liegt in der Kachel; ohne stopPropagation traefe der Klick deren Handler.
+    expect(screen.queryByText(/^Karten \(\d+\)$/)).not.toBeInTheDocument()
+  })
+
+  it('zeigt die Nummer auch dann, wenn der Titel der Karte noch nicht geladen ist', async () => {
+    mEpics.list.mockResolvedValue([
+      {
+        id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 0, total: 1,
+        memberNumbers: [7], rootNumbers: [7],
+      },
+    ])
+    mCards.list.mockResolvedValue([])
+    renderPage()
+    await screen.findByText('Auth')
+
+    fireEvent.click(aufklappen())
+
+    expect(await screen.findByText(/#7 · noch nicht geladen \(zugeordnet\)/)).toBeInTheDocument()
+  })
+
+  it('zeigt aufgeklappt einen erklärenden Text, wenn keine Karte zugehörig ist', async () => {
+    mEpics.list.mockResolvedValue([
+      { id: 9, number: 2, title: 'Leer', description: null, shortcode: 'LEE', done: 0, total: 0, memberNumbers: [], rootNumbers: [] },
+    ])
+    mCards.list.mockResolvedValue([])
+    renderPage()
+    await screen.findByText('Leer')
+
+    fireEvent.click(screen.getByRole('button', { name: /karten von leer/i }))
+
+    expect(await screen.findByText('Keine Karten zugeordnet.')).toBeInTheDocument()
   })
 })

@@ -9,6 +9,13 @@ export interface Epic {
   shortcode: string | null
   done: number
   total: number
+  /**
+   * Nummern aller zugehörigen Karten, aufsteigend — direkt zugeordnete und über die Herkunft
+   * geerbte gemeinsam. Ohne sie wäre eine gestiegene Zahl nicht nachprüfbar (Issue #634).
+   */
+  memberNumbers: number[]
+  /** Nummern der direkt zugeordneten Karten, aufsteigend. Stets Teilmenge von `memberNumbers`. */
+  rootNumbers: number[]
 }
 
 export const epicsApi = {

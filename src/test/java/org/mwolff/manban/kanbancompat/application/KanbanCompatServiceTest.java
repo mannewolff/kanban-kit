@@ -762,7 +762,10 @@ class KanbanCompatServiceTest {
   void epics_mapsProgressFromCardService() {
     // Given
     when(cardService.listEpics(1L, BOARD))
-        .thenReturn(List.of(new CardService.EpicView(5L, 3, "Epic", "desc", "E", 2, 4)));
+        .thenReturn(
+            List.of(
+                new CardService.EpicView(
+                    5L, 3, "Epic", "desc", "E", 2, 4, List.of(1, 2, 3, 4), List.of(1))));
 
     // When
     List<KanbanCompatService.Epic> result = service.epics(bound());

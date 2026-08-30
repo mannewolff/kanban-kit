@@ -7,6 +7,14 @@ Versionierung folgt der dreiteiligen Betriebsversion (siehe [RELEASING.md](RELEA
 Einträge je Version sind ein automatischer Auszug der Commit-Titel seit dem letzten Release,
 erzeugt von `scripts/gen-changelog.mjs`.
 
+## [1.24.0] – 2026-08-30
+
+- chore: v1.23.1
+- Dokumentation der Vorhaben-Zugehoerigkeit nachziehen ([#635](https://github.com/mannewolff/kanban-kit/issues/635))
+- Vorhaben-Kachel klappt die gezaehlten Karten auf ([#634](https://github.com/mannewolff/kanban-kit/issues/634))
+- listEpics zaehlt den Nachfahrenbaum, EpicView traegt Mitglieder und Wurzeln ([#633](https://github.com/mannewolff/kanban-kit/issues/633))
+- Zugehoerigkeit eines Vorhabens als Herkunftsabstieg berechnen ([#632](https://github.com/mannewolff/kanban-kit/issues/632))
+
 ## [1.23.0] – 2026-08-28
 
 - chore: v1.22.1

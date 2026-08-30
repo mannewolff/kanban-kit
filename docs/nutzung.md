@@ -170,10 +170,26 @@ Das Dashboard ist für jeden sichtbar, der das Board öffnen darf (auch VIEWER).
   Titel abgeleitet.
 - **Zuordnen:** eine Karte im Anlege-Dialog oder im Detail einem Vorhaben zuordnen. Zugeordnete
   Karten tragen ein **Vorhaben-Badge** und einen farbigen linken Rand.
-- **Vorhaben-Übersicht:** Liste mit **Fortschrittsbalken** („X/Y Stories fertig"). Klick öffnet
-  das Vorhaben-Detail (Kürzel + Kinderliste).
+- **Abgeleitete Zugehörigkeit:** Eine zugeordnete Karte bringt ihren **Nachfahrenbaum** mit —
+  alles, was aus ihr entstanden ist, gehört ohne weiteres Zutun zum selben Vorhaben, über
+  beliebig viele Stufen. Wer eine Anforderung zuordnet, aus der ein Plan und daraus
+  Arbeitspakete entstanden sind, ordnet damit die ganze Kette zu. Das wirkt **rückwirkend auf
+  den Bestand**: Karten, die lange vorher entstanden sind, erscheinen genauso, ohne Stichtag und
+  ohne Nachpflege. Wird die Zuordnung wieder gelöst, verschwindet der ganze Teilbaum; es bleibt
+  nichts zurück, was von Hand aufzuräumen wäre.
+- **Grenze:** Die Zugehörigkeit endet an der Board-Grenze. Die zugeordnete Karte muss auf
+  **demselben Board** liegen wie das Vorhaben, und eine Kette, die auf ein anderes Board führt,
+  endet dort. Karten im Ideen-Speicher und archivierte Karten zählen nicht mit; sie
+  unterbrechen die Kette aber auch nicht — ihre Nachfahren bleiben zugehörig.
+- **Vorhaben-Übersicht:** Liste mit **Fortschrittsbalken** („X/Y Stories fertig"). Über das
+  Pfeilsymbol klappt die Kachel auf und zeigt alle gezählten Karten; dabei ist an jeder Zeile
+  vermerkt, ob sie **direkt zugeordnet** oder über die Herkunft geerbt ist. Ein Klick auf die
+  Kachel öffnet weiterhin das Vorhaben-Detail (Kürzel + Kinderliste).
 - **Board-Vorhaben-Filter:** auf dem Board über das Dropdown „Vorhaben-Filter" nur die Karten
-  eines Vorhabens anzeigen.
+  eines Vorhabens anzeigen. Dieser Filter arbeitet **nur auf den direkt zugeordneten** Karten.
+  Eine geerbte Karte kann deshalb im Fortschritt mitzählen und beim Filtern trotzdem fehlen —
+  das ist so gewollt: Der Filter beantwortet „was liegt hier auf dem Board unter diesem
+  Vorhaben", die Zählung „was gehört zu diesem Vorhaben".
 
 ## Mitglieder
 

@@ -176,7 +176,8 @@ class CardControllerTest {
   @Test
   void epics_delegatesToService() {
     // Given
-    List<EpicView> views = List.of(new EpicView(1L, 4, "Epic", "Desc", "EP-1", 1, 3));
+    List<EpicView> views =
+        List.of(new EpicView(1L, 4, "Epic", "Desc", "EP-1", 1, 3, List.of(7, 8, 9), List.of(7)));
     when(service.listEpics(3L, 2L)).thenReturn(views);
 
     // When
