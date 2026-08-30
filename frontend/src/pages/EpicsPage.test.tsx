@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { boardsApi } from '../api/boards'
@@ -84,13 +85,13 @@ describe('EpicsPage', () => {
 
   it('listet Epics mit Kürzel und Fortschritt', async () => {
     mEpics.list.mockResolvedValue([
-      { id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 1, total: 2, memberNumbers: [], rootNumbers: [] },
+      { id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 1, total: 2, memberNumbers: [], rootNumbers: [], requirementCardNumber: null },
     ])
     renderPage()
 
     expect(await screen.findByText('Auth')).toBeInTheDocument()
     expect(screen.getByText('AUT')).toBeInTheDocument()
-    expect(screen.getByText('1/2 Stories fertig')).toBeInTheDocument()
+    expect(screen.getByText('1/2 Arbeitspakete fertig')).toBeInTheDocument()
     expect(await screen.findByLabelText('Fortschritt Auth')).toBeInTheDocument()
   })
 
@@ -122,7 +123,7 @@ describe('EpicsPage', () => {
 
   it('öffnet ein Epic per Klick im Detail-Modal mit seinen Kind-Karten', async () => {
     mEpics.list.mockResolvedValue([
-      { id: 9, number: 2, title: 'Auth', description: 'Text', shortcode: 'AUT', done: 1, total: 2, memberNumbers: [], rootNumbers: [] },
+      { id: 9, number: 2, title: 'Auth', description: 'Text', shortcode: 'AUT', done: 1, total: 2, memberNumbers: [], rootNumbers: [], requirementCardNumber: null },
     ])
     mCards.list.mockResolvedValue([
       {
@@ -141,7 +142,7 @@ describe('EpicsPage', () => {
 
   it('zeigt 0 % Fortschritt für ein Epic ohne Stories und schließt das Detail-Modal', async () => {
     mEpics.list.mockResolvedValue([
-      { id: 9, number: 2, title: 'Leer', description: 'X', shortcode: 'LEE', done: 0, total: 0, memberNumbers: [], rootNumbers: [] },
+      { id: 9, number: 2, title: 'Leer', description: 'X', shortcode: 'LEE', done: 0, total: 0, memberNumbers: [], rootNumbers: [], requirementCardNumber: null },
     ])
     renderPage()
 
@@ -179,7 +180,7 @@ describe('EpicsPage', () => {
 
   it('startet im Reiter Fortschritt und ruft den Herkunftsbaum nicht ab', async () => {
     mEpics.list.mockResolvedValue([
-      { id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 1, total: 2, memberNumbers: [], rootNumbers: [] },
+      { id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 1, total: 2, memberNumbers: [], rootNumbers: [], requirementCardNumber: null },
     ])
     renderPage()
 
@@ -233,7 +234,7 @@ describe('EpicsPage', () => {
 
   it('lässt den Reiter Fortschritt bedienbar, wenn der Herkunftsbaum scheitert', async () => {
     mEpics.list.mockResolvedValue([
-      { id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 1, total: 2, memberNumbers: [], rootNumbers: [] },
+      { id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 1, total: 2, memberNumbers: [], rootNumbers: [], requirementCardNumber: null },
     ])
     mDerivation.derivationTree.mockRejectedValue(new Error('kaputt'))
     renderPage()
@@ -272,7 +273,7 @@ describe('EpicsPage', () => {
   it('öffnet aus dem Baum heraus ein Vorhaben, das nur über epics auflösbar ist', async () => {
     // cardsApi.list filtert serverseitig auf type == CARD — ein Vorhaben steht dort nicht.
     mEpics.list.mockResolvedValue([
-      { id: 9, number: 2, title: 'Grosses Vorhaben', description: null, shortcode: 'GRO', done: 0, total: 0, memberNumbers: [], rootNumbers: [] },
+      { id: 9, number: 2, title: 'Grosses Vorhaben', description: null, shortcode: 'GRO', done: 0, total: 0, memberNumbers: [], rootNumbers: [], requirementCardNumber: null },
     ])
     mCards.list.mockResolvedValue([])
     mDerivation.derivationTree.mockResolvedValue([baumZeile({ number: 2, type: 'EPIC' })])
@@ -320,7 +321,7 @@ describe('EpicsPage', () => {
 
   it('nennt im gerenderten Reiter nirgends „Epic"', async () => {
     mEpics.list.mockResolvedValue([
-      { id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 1, total: 2, memberNumbers: [], rootNumbers: [] },
+      { id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 1, total: 2, memberNumbers: [], rootNumbers: [], requirementCardNumber: null },
     ])
     renderPage()
     await screen.findByText('Auth')
@@ -445,9 +446,116 @@ describe('EpicsPage', () => {
     expect(await screen.findByText(/#7 · noch nicht geladen \(zugeordnet\)/)).toBeInTheDocument()
   })
 
+  // --- Anforderung auf der Kachel (Issue #641) ------------------------------
+
+  /** Ein Vorhaben mit Anforderung, dazu die passende Karte in der Kartenliste. */
+  function mitAnforderung(nummer: number | null) {
+    mEpics.list.mockResolvedValue([
+      {
+        id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 1, total: 2,
+        memberNumbers: [], rootNumbers: [], requirementCardNumber: nummer,
+      },
+    ])
+    mCards.list.mockResolvedValue([
+      {
+        id: 30, boardId: 1, columnId: 10, number: 7, title: 'Anforderungskarte', description: null,
+        positionInColumn: 0, archived: false, ideaStored: false, movedToDoneAt: null, dependencies: [],
+        type: 'CARD', parentId: null, shortcode: null, assignees: [], dueDate: null, labels: [],
+      },
+    ])
+  }
+
+  const anforderungsVerweis = () => screen.getByRole('button', { name: '#7 · Anforderungskarte' })
+
+  it('nennt auf der Kachel die Anforderung mit Nummer und Titel', async () => {
+    mitAnforderung(7)
+    renderPage()
+
+    expect(await screen.findByText('Anforderung:')).toBeInTheDocument()
+    expect(anforderungsVerweis()).toBeInTheDocument()
+  })
+
+  it('zeigt ohne Anforderung an dieser Stelle nichts', async () => {
+    mitAnforderung(null)
+    renderPage()
+    await screen.findByText('Auth')
+
+    // Ueber die Abwesenheit geprueft, nicht ueber einen Platzhaltertext: Ein Vorhaben ohne
+    // Anforderung bekommt keine Ersatzanzeige (Plan #637, E6).
+    expect(screen.queryByText('Anforderung:')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^#\d+ · / })).not.toBeInTheDocument()
+  })
+
+  it('öffnet die Anforderungskarte per Klick auf den Verweis', async () => {
+    mitAnforderung(7)
+    renderPage()
+    await screen.findByText('Auth')
+
+    fireEvent.click(anforderungsVerweis())
+
+    expect(await screen.findByRole('heading', { name: /Anforderungskarte/ })).toBeInTheDocument()
+  })
+
+  /**
+   * Der Verweis muss per Tastatur bedienbar sein. Ein Test, der nur klickt, belegt das nicht:
+   * jsx-a11y prueft ausschliesslich DOM-Elemente in Kleinschreibung, ein onClick auf einer
+   * MUI-Anzeigekomponente kaeme also durch alle Gates und waere trotzdem unerreichbar.
+   */
+  it('öffnet die Anforderungskarte auch per Tastatur (Enter)', async () => {
+    mitAnforderung(7)
+    renderPage()
+    await screen.findByText('Auth')
+
+    anforderungsVerweis().focus()
+    expect(anforderungsVerweis()).toHaveFocus()
+    await userEvent.keyboard('{Enter}')
+
+    expect(await screen.findByRole('heading', { name: /Anforderungskarte/ })).toBeInTheDocument()
+  })
+
+  it('öffnet beim Klick auf den Verweis nicht zusätzlich das Vorhaben-Detail', async () => {
+    mitAnforderung(7)
+    renderPage()
+    await screen.findByText('Auth')
+
+    fireEvent.click(anforderungsVerweis())
+
+    await screen.findByRole('heading', { name: /Anforderungskarte/ })
+    // Das Vorhaben-Detail zeigt seine zugeordneten Karten an — ohne stopPropagation stuende hier
+    // der Dialog des Vorhabens statt der Anforderung.
+    expect(screen.queryByText(/^Karten \(/)).not.toBeInTheDocument()
+  })
+
+  it('öffnet beim Klick auf die Kachelfläche weiterhin das Vorhaben-Detail', async () => {
+    mitAnforderung(7)
+    renderPage()
+
+    fireEvent.click(await screen.findByText('Auth'))
+
+    expect(await screen.findByText(/^Karten \(/)).toBeInTheDocument()
+  })
+
+  it('zeigt eine nicht auflösbare Anforderungsnummer an und öffnet beim Klick nichts', async () => {
+    // Dauerzustand, kein Ladezustand: `cardsApi.list` filtert auf `type == CARD` und liefert
+    // archivierte Karten nicht.
+    mEpics.list.mockResolvedValue([
+      {
+        id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 0, total: 0,
+        memberNumbers: [], rootNumbers: [], requirementCardNumber: 42,
+      },
+    ])
+    mCards.list.mockResolvedValue([])
+    renderPage()
+
+    const verweis = await screen.findByRole('button', { name: '#42 · noch nicht geladen' })
+    fireEvent.click(verweis)
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
   it('zeigt aufgeklappt einen erklärenden Text, wenn keine Karte zugehörig ist', async () => {
     mEpics.list.mockResolvedValue([
-      { id: 9, number: 2, title: 'Leer', description: null, shortcode: 'LEE', done: 0, total: 0, memberNumbers: [], rootNumbers: [] },
+      { id: 9, number: 2, title: 'Leer', description: null, shortcode: 'LEE', done: 0, total: 0, memberNumbers: [], rootNumbers: [], requirementCardNumber: null },
     ])
     mCards.list.mockResolvedValue([])
     renderPage()

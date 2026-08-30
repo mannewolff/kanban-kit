@@ -6,6 +6,7 @@ import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import IconButton from '@mui/material/IconButton'
 import LinearProgress from '@mui/material/LinearProgress'
+import Link from '@mui/material/Link'
 import Paper from '@mui/material/Paper'
 import Stack from '@mui/material/Stack'
 import Tab from '@mui/material/Tab'
@@ -166,7 +167,7 @@ export function EpicsPage() {
                   {epic.title}
                 </Typography>
                 <Typography variant="caption" color="text.secondary">
-                  {epic.done}/{epic.total} Stories fertig
+                  {epic.done}/{epic.total} Arbeitspakete fertig
                 </Typography>
                 {/* Disclosure, kein Baum: Die Karten darunter sind eine Liste, keine Hierarchie —
                     die Tree-Rollen aus #611 gehoeren hierher ausdruecklich nicht. Die eigene
@@ -185,6 +186,34 @@ export function EpicsPage() {
                   {offen === epic.id ? <ExpandLessIcon /> : <ExpandMoreIcon />}
                 </IconButton>
               </Stack>
+              {/* Woraus das Vorhaben entstanden ist. Traegt es keine Anforderung, steht hier
+                  nichts — kein Platzhalter und keine Ersatzanzeige aus den Wurzeln (Plan #637, E6).
+                  `component="button"` rendert ein echtes <button>: per Tab erreichbar und per Enter
+                  ausloesbar. Ein onClick auf einer Anzeigekomponente kaeme durch alle Gates —
+                  jsx-a11y prueft nur DOM-Elemente in Kleinschreibung, keine MUI-Komponenten — und
+                  waere per Tastatur trotzdem unerreichbar. */}
+              {epic.requirementCardNumber !== null && (
+                <Stack direction="row" spacing={0.5} alignItems="baseline" sx={{ mb: 1 }}>
+                  <Typography variant="caption" color="text.secondary">
+                    Anforderung:
+                  </Typography>
+                  <Link
+                    component="button"
+                    type="button"
+                    variant="caption"
+                    underline="hover"
+                    textAlign="left"
+                    onClick={(e) => {
+                      // Ohne stopPropagation oeffnete derselbe Klick zusaetzlich das
+                      // Vorhaben-Detail — der Kachel-Klick liegt eine Ebene darueber.
+                      e.stopPropagation()
+                      oeffneKarte(epic.requirementCardNumber as number)
+                    }}
+                  >
+                    {`#${epic.requirementCardNumber} · ${titelZuNummer(epic.requirementCardNumber)}`}
+                  </Link>
+                </Stack>
+              )}
               <LinearProgress
                 variant="determinate"
                 value={pct}

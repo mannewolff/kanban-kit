@@ -544,7 +544,7 @@ describe('CardDetailModal', () => {
 
   it('bietet im Edit-Modus einer Nicht-Epic-Karte die Epic-Zuordnung an', async () => {
     const apis = makeApis()
-    const epics = [{ id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 0, total: 1, memberNumbers: [], rootNumbers: [] }]
+    const epics = [{ id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 0, total: 1, memberNumbers: [], rootNumbers: [], requirementCardNumber: null }]
     render(<CardDetailModal card={card} canEdit epics={epics} onClose={vi.fn()} {...apis} />)
 
     fireEvent.click(screen.getByRole('button', { name: 'Bearbeiten' }))
@@ -558,7 +558,7 @@ describe('CardDetailModal', () => {
 
   it('setzt die Epic-Zuordnung über die leere Auswahl wieder auf null', async () => {
     const apis = makeApis()
-    const epics = [{ id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 0, total: 1, memberNumbers: [], rootNumbers: [] }]
+    const epics = [{ id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 0, total: 1, memberNumbers: [], rootNumbers: [], requirementCardNumber: null }]
     render(<CardDetailModal card={{ ...card, parentId: 9 }} canEdit epics={epics} onClose={vi.fn()} {...apis} />)
 
     fireEvent.click(screen.getByRole('button', { name: 'Bearbeiten' }))
@@ -860,7 +860,7 @@ describe('CardDetailModal', () => {
 
   it('bietet im Edit-Modus die bereits gesetzte Epic-Zuordnung an', async () => {
     const apis = makeApis()
-    const epics = [{ id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 0, total: 1, memberNumbers: [], rootNumbers: [] }]
+    const epics = [{ id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 0, total: 1, memberNumbers: [], rootNumbers: [], requirementCardNumber: null }]
     const linked: Card = { ...card, parentId: 9 }
     render(<CardDetailModal card={linked} canEdit epics={epics} onClose={vi.fn()} {...apis} />)
 

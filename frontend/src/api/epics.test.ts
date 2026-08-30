@@ -23,13 +23,30 @@ describe('epicsApi', () => {
     // ist dabei stets eine Teilmenge von memberNumbers.
     const epic = {
       id: 1, number: 5, title: 'Epic', description: null, shortcode: 'EPC', done: 1, total: 3,
-      memberNumbers: [7, 8, 9], rootNumbers: [7],
+      memberNumbers: [7, 8, 9], rootNumbers: [7], requirementCardNumber: 7,
     }
     spyFetch(JSON.stringify([epic]))
     const result = await epicsApi.list(3)
     expect(result).toEqual([epic])
     expect(result[0].memberNumbers).toEqual([7, 8, 9])
     expect(result[0].rootNumbers).toEqual([7])
+    // Die Anforderungsnummer wird unveraendert durchgereicht (Issue #641).
+    expect(result[0].requirementCardNumber).toBe(7)
+  })
+
+  it('list reicht eine fehlende Anforderung als null durch', async () => {
+    // Gegenprobe: `null` ist ein gueltiger Dauerzustand, kein Ladezustand — es darf weder zu 0
+    // noch zu undefined werden.
+    spyFetch(
+      JSON.stringify([
+        {
+          id: 1, number: 5, title: 'Epic', description: null, shortcode: null, done: 0, total: 0,
+          memberNumbers: [], rootNumbers: [], requirementCardNumber: null,
+        },
+      ]),
+    )
+    const result = await epicsApi.list(3)
+    expect(result[0].requirementCardNumber).toBeNull()
   })
 
   it('create ruft POST /api/boards/{id}/cards mit type EPIC', async () => {

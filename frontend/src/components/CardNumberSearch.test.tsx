@@ -144,6 +144,7 @@ const epic: Epic = {
   total: 1,
   memberNumbers: [],
   rootNumbers: [],
+  requirementCardNumber: null,
 }
 
 const label: Label = { id: 5, boardId: 1, name: 'Bug', color: '#f00' }
