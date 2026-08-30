@@ -60,6 +60,7 @@ function makeApis() {
     moveToIdeaStorage: vi.fn().mockResolvedValue({ ...card }),
     byNumber: vi.fn().mockResolvedValue({ ...linkedCard }),
     assignDerivedFrom: vi.fn().mockResolvedValue({ ...card }),
+    epicTree: vi.fn().mockResolvedValue([]),
   }
   const boardsApi = { get: vi.fn().mockResolvedValue(linkedBoard) }
   return { commentsApi, attachmentsApi, cardsApi, boardsApi }
@@ -529,6 +530,121 @@ describe('CardDetailModal', () => {
     render(<CardDetailModal card={epicCard} canEdit childCards={[]} onClose={vi.fn()} {...apis} />)
 
     expect(await screen.findByText('Keine zugeordneten Karten.')).toBeInTheDocument()
+  })
+
+  // --- Herkunftsbaum im Vorhaben-Dialog (Issue #644) ------------------------
+
+  /** Eine Baumzeile, wie sie GET /api/boards/{id}/epics/{epicId}/tree liefert. */
+  function baumZeile(nummer: number, depth = 0) {
+    return {
+      number: nummer, title: `Karte ${nummer}`, type: 'CARD' as const, derivedFrom: null, depth,
+      done: false, blocked: false, dependencies: [], externalDependencies: [],
+      externalOrigin: false, broken: false,
+    }
+  }
+
+  it('zeigt im Detail-Dialog eines Vorhabens den Baum', async () => {
+    const apis = makeApis()
+    apis.cardsApi.epicTree.mockResolvedValue([baumZeile(7), baumZeile(8, 1)])
+    render(<CardDetailModal card={epicCard} canEdit onClose={vi.fn()} {...apis} />)
+
+    expect(await screen.findByRole('tree')).toBeInTheDocument()
+    expect(screen.getAllByRole('treeitem')).toHaveLength(2)
+    expect(apis.cardsApi.epicTree).toHaveBeenCalledWith(1, 200)
+  })
+
+  it('zeigt bei einer gewöhnlichen Karte keinen Baum und ruft den Endpunkt nicht auf', async () => {
+    const apis = makeApis()
+    render(<CardDetailModal card={card} canEdit onClose={vi.fn()} {...apis} />)
+
+    await screen.findByText('Aufgabe')
+    expect(screen.queryByRole('tree')).toBeNull()
+    expect(apis.cardsApi.epicTree).not.toHaveBeenCalled()
+  })
+
+  it('zeigt für ein Vorhaben ohne zugeordnete Karten den vorhabenbezogenen Hinweis', async () => {
+    const apis = makeApis()
+    apis.cardsApi.epicTree.mockResolvedValue([])
+    render(<CardDetailModal card={epicCard} canEdit onClose={vi.fn()} {...apis} />)
+
+    expect(
+      await screen.findByText(/diesem vorhaben sind noch keine karten zugeordnet/i),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('tree')).toBeNull()
+  })
+
+  it('zeigt während des Ladens einen Platzhalter', () => {
+    const apis = makeApis()
+    apis.cardsApi.epicTree.mockReturnValue(new Promise(() => {}))
+    render(<CardDetailModal card={epicCard} canEdit onClose={vi.fn()} {...apis} />)
+
+    expect(screen.getByRole('progressbar')).toBeInTheDocument()
+  })
+
+  /**
+   * Scheitert der Abruf, bleibt der Rest des Dialogs bedienbar: Der Baum ist ein Bereich neben
+   * Beschreibung, Anhaengen und Kommentaren, nicht an ihrer Stelle.
+   */
+  it('zeigt bei fehlgeschlagenem Baum-Abruf eine Meldung und lässt den Dialog bedienbar', async () => {
+    const apis = makeApis()
+    apis.cardsApi.epicTree.mockRejectedValue(new ApiError(403, 'Kein Zugriff auf dieses Board.'))
+    render(<CardDetailModal card={epicCard} canEdit onClose={vi.fn()} {...apis} />)
+
+    expect(await screen.findByText(/kein zugriff auf dieses board/i)).toBeInTheDocument()
+    expect(screen.queryByRole('tree')).toBeNull()
+    // Die uebrigen Bereiche stehen weiterhin da.
+    expect(screen.getByText(/Karten \(/)).toBeInTheDocument()
+  })
+
+  it('meldet auch einen Fehler ohne API-Kontext', async () => {
+    const apis = makeApis()
+    apis.cardsApi.epicTree.mockRejectedValue(new Error('Netzwerk weg'))
+    render(<CardDetailModal card={epicCard} canEdit onClose={vi.fn()} {...apis} />)
+
+    expect(await screen.findByText(/herkunftsbaum konnte nicht geladen werden/i)).toBeInTheDocument()
+  })
+
+  /**
+   * Enter auf einer Baumzeile laedt die Karte in denselben Dialog — ueber denselben Verweis-Stack
+   * wie die `#N`-Spruenge (Entscheidung 2026-08-30). Damit behaelt die Enter-Bedienung aus #611
+   * ein Ziel.
+   */
+  it('lädt per Enter auf einer Baumzeile die Karte in denselben Dialog', async () => {
+    const apis = makeApis()
+    apis.cardsApi.epicTree.mockResolvedValue([baumZeile(3)])
+    render(
+      <CardDetailModal card={epicCard} canEdit projectId={9} onClose={vi.fn()} {...apis} />,
+    )
+    const zeile = (await screen.findAllByRole('treeitem'))[0]
+
+    fireEvent.keyDown(zeile, { key: 'Enter' })
+
+    // `byNumber` liefert die Vorbedingung — sie ersetzt die Vorhaben-Ansicht im selben Dialog.
+    expect(await screen.findByText('Vorbedingung')).toBeInTheDocument()
+    expect(apis.cardsApi.byNumber).toHaveBeenCalledWith(9, 3)
+  })
+
+  /**
+   * Ohne diesen Schutz schriebe eine langsame Antwort in einen Dialog, den es nicht mehr gibt.
+   * Der Test ist aus `DerivationTree.test.tsx` hierher gewandert: Dort lag frueher das Laden.
+   */
+  it('verwirft eine Baum-Antwort, die erst nach dem Schliessen eintrifft', async () => {
+    const apis = makeApis()
+    let aufloesen: (zeilen: unknown[]) => void = () => {}
+    apis.cardsApi.epicTree.mockReturnValue(
+      new Promise<unknown[]>((r) => {
+        aufloesen = r
+      }),
+    )
+    const { unmount } = render(
+      <CardDetailModal card={epicCard} canEdit onClose={vi.fn()} {...apis} />,
+    )
+    unmount()
+
+    aufloesen([baumZeile(7)])
+    await Promise.resolve()
+
+    expect(screen.queryByRole('tree')).toBeNull()
   })
 
   it('zeigt im Edit-Modus eines Epics nur das Kürzel-Feld', async () => {

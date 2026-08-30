@@ -1,14 +1,17 @@
-import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
-import CircularProgress from '@mui/material/CircularProgress'
 import Typography from '@mui/material/Typography'
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
-import { cardsApi, type DerivationNode } from '../api/cards'
-import { ApiError } from '../api/client'
+import { type DerivationNode } from '../api/cards'
 
 interface Props {
-  boardId: number
-  /** Enter auf einer Zeile. Es gibt keine Karten-Route — die Seite öffnet das Detail-Modal. */
+  /**
+   * Die Zeilen in Präorder, bereits geladen. Seit Issue #644 lädt die Komponente nicht mehr
+   * selbst: Sie hängt im Vorhaben-Dialog, der die Karte ohnehin kennt und die Lade-, Fehler- und
+   * Leerzustände für alle seine Bereiche gemeinsam führt. Reine Darstellung heisst auch: ohne
+   * Netzwerk testbar.
+   */
+  rows: readonly DerivationNode[]
+  /** Enter auf einer Zeile. Es gibt keine Karten-Route — der Aufrufer öffnet die Karte. */
   onOpenCard: (number: number) => void
 }
 
@@ -45,7 +48,8 @@ function isVisible(
 }
 
 /**
- * Herkunftsbaum eines Boards (Issue #611) auf Basis der flachen Präorder-Liste aus Issue #609.
+ * Herkunftsbaum (Issue #611) auf Basis der flachen Präorder-Liste aus Issue #609 — seit Issue
+ * #644 der Baum eines Vorhabens, dargestellt im Detail-Dialog.
  *
  * <p>Reines Lesen: Die Zugehörigkeit berechnet der Server, diese Ansicht stellt sie nur dar. Wer
  * umhängen will, ändert die Herkunft an der Karte.
@@ -57,9 +61,7 @@ function isVisible(
  * mit den Pfeiltasten. Accessibility steht in CLAUDE.md über Optik und Wartbarkeit, deshalb hat
  * jede farbliche Unterscheidung eine textliche Entsprechung.
  */
-export function DerivationTree({ boardId, onOpenCard }: Readonly<Props>) {
-  const [rows, setRows] = useState<DerivationNode[] | null>(null)
-  const [error, setError] = useState<string | null>(null)
+export function DerivationTree({ rows, onOpenCard }: Readonly<Props>) {
   const [collapsed, setCollapsed] = useState<ReadonlySet<number>>(() => new Set())
   const [focused, setFocused] = useState<number | undefined>(undefined)
   // Getrennt vom Fokus: Das Ziel eines Sprungs kann beim Ausloesen noch eingeklappt und damit gar
@@ -79,55 +81,13 @@ export function DerivationTree({ boardId, onOpenCard }: Readonly<Props>) {
     setSprungZiel(undefined)
   }, [sprungZiel])
 
-  useEffect(() => {
-    let aktiv = true
-    setRows(null)
-    setError(null)
-    // Der Fokus wird mit den Daten zurückgesetzt: Er zeigt auf eine Kartennummer, und nach einem
-    // Boardwechsel gibt es die womöglich nicht mehr.
-    setFocused(undefined)
-    setSprungZiel(undefined)
-    setHervorgehoben(undefined)
-    void cardsApi
-      .derivationTree(boardId)
-      .then(
-        (daten) => ({ daten, fehler: null as string | null }),
-        (grund: unknown) => ({
-          daten: null,
-          fehler:
-            grund instanceof ApiError
-              ? grund.message
-              : 'Der Herkunftsbaum konnte nicht geladen werden.',
-        }),
-      )
-      .then((ergebnis) => {
-        if (!aktiv) {
-          return
-        }
-        setRows(ergebnis.daten)
-        setError(ergebnis.fehler)
-      })
-    return () => {
-      aktiv = false
-    }
-  }, [boardId])
-
-  if (error !== null) {
-    return <Alert severity="error">{error}</Alert>
-  }
-  if (rows === null) {
-    return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
-        <CircularProgress size={24} />
-      </Box>
-    )
-  }
   if (rows.length === 0) {
-    // Der Normalfall bis zur Nachpflege über Issue #608 — kein Fehler, deshalb auch keine Meldung.
+    // Vorhabenbezogen, nicht boardbezogen: Diese Ansicht haengt im Dialog EINES Vorhabens, ein
+    // Satz ueber das Board waere hier die falsche Aussage. Kein Fehler — ein Vorhaben ohne
+    // zugeordnete Karten ist ein gueltiger Zustand.
     return (
       <Typography color="text.secondary">
-        Für dieses Board ist keine Herkunft hinterlegt. Sie entsteht, sobald Karten einen Vorfahren
-        tragen.
+        Diesem Vorhaben sind noch keine Karten zugeordnet.
       </Typography>
     )
   }
