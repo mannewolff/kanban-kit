@@ -7,6 +7,11 @@ Versionierung folgt der dreiteiligen Betriebsversion (siehe [RELEASING.md](RELEA
 Einträge je Version sind ein automatischer Auszug der Commit-Titel seit dem letzten Release,
 erzeugt von `scripts/gen-changelog.mjs`.
 
+## [1.25.0] – 2026-08-30
+
+- chore: v1.24.1
+- Sonar-Fehlalarm java:S2077 an findByCardIds unterdruecken ([#625](https://github.com/mannewolff/kanban-kit/issues/625))
+
 ## [1.24.0] – 2026-08-30
 
 - chore: v1.23.1

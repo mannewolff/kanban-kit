@@ -65,6 +65,15 @@ class JdbcCardDependencyRepository implements CardDependencyRepository {
    * <p>Die leere Eingabe wird ohne Abfrage beantwortet — {@code IN ()} ist kein gültiges SQL, und
    * ein Roundtrip für eine Antwort, die feststeht, wäre ohnehin verschenkt.
    */
+  // Sonar java:S2077 (Issue #625): Der konkatenierte Teil ist ausschließlich "platzhalter" — eine
+  // Aneinanderreihung des Literals "?" per Collections.nCopies, deren einzige variable Größe die
+  // Anzahl der IDs ist. Kein Zeichen der übergebenen Werte gelangt in den SQL-Text; die IDs selbst
+  // sind typisierte Long-Bindeparameter (cardIds.toArray()). Damit ist die Konkatenation
+  // injektionsfest — die Regel greift bereits auf die String-Verknüpfung, ohne den Datenfluss zu
+  // prüfen. Derselbe Fall und dieselbe Begründung wie bei CardRepositoryAdapter#lockColumnPositions
+  // (Issue #508). Ein Umbau auf NamedParameterJdbcTemplate scheidet aus: Er hängte diesen
+  // Sammelzugriff auf ein zweites JDBC-Template um, ohne etwas sicherer zu machen.
+  @SuppressWarnings("java:S2077")
   @Override
   public Map<Long, List<Integer>> findByCardIds(Collection<Long> cardIds) {
     if (cardIds.isEmpty()) {
