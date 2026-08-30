@@ -181,10 +181,21 @@ Das Dashboard ist für jeden sichtbar, der das Board öffnen darf (auch VIEWER).
   **demselben Board** liegen wie das Vorhaben, und eine Kette, die auf ein anderes Board führt,
   endet dort. Karten im Ideen-Speicher und archivierte Karten zählen nicht mit; sie
   unterbrechen die Kette aber auch nicht — ihre Nachfahren bleiben zugehörig.
-- **Vorhaben-Übersicht:** Liste mit **Fortschrittsbalken** („X/Y Stories fertig"). Über das
-  Pfeilsymbol klappt die Kachel auf und zeigt alle gezählten Karten; dabei ist an jeder Zeile
-  vermerkt, ob sie **direkt zugeordnet** oder über die Herkunft geerbt ist. Ein Klick auf die
-  Kachel öffnet weiterhin das Vorhaben-Detail (Kürzel + Kinderliste).
+- **Vorgang eröffnen:** An einer fachlichen Anforderung oder einem Plandokument entsteht das
+  Vorhaben in einem Schritt: im Detail der Karte auf **„Vorgang eröffnen"**, Name (vorbelegt mit
+  dem Kartentitel) und optional ein Kürzel eingeben. Das Vorhaben wird angelegt, die Karte wird
+  seine Anforderung und ist ihm zugeordnet — ohne zweiten Handgriff. Der Knopf erscheint nur,
+  wo das möglich ist: nicht an einem Vorhaben, nicht an einer archivierten Karte, nicht im
+  Ideen-Speicher und nicht an einer Karte, die schon einem Vorhaben zugeordnet ist.
+- **Vorhaben-Übersicht:** Kacheln mit **Fortschrittsbalken** („X/Y Arbeitspakete fertig"). Die
+  Kachel nennt die **Anforderung**, aus der der Vorgang eröffnet wurde; der Verweis ist
+  **anklickbar** und öffnet die Karte. Trägt das Vorhaben keine Anforderung — etwa weil es von
+  Hand zum Gruppieren angelegt wurde —, steht dort nichts.
+- **Baum im Detail:** Ein Klick auf die Kachel öffnet das Vorhaben-Detail, und darin steht der
+  **Baum** dieses Vorhabens: die Anforderung an der Wurzel, darunter die Pläne, darunter die
+  Arbeitspakete. Der Baum ist mit den Pfeiltasten bedienbar; Eingabe auf einer Zeile öffnet die
+  jeweilige Karte im selben Dialog. Ist dem Vorhaben noch nichts zugeordnet, sagt das Detail
+  genau das.
 - **Board-Vorhaben-Filter:** auf dem Board über das Dropdown „Vorhaben-Filter" nur die Karten
   eines Vorhabens anzeigen. Dieser Filter arbeitet **nur auf den direkt zugeordneten** Karten.
   Eine geerbte Karte kann deshalb im Fortschritt mitzählen und beim Filtern trotzdem fehlen —
