@@ -64,7 +64,8 @@ class DerivedFromResolutionTest {
             PROJEKT,
             null,
             null,
-            herkunft);
+            herkunft,
+            null);
     nachId.put(id, c);
     nachNummer.put(nummer, c);
     return c;

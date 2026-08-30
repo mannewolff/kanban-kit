@@ -66,7 +66,7 @@ class LabelServiceTest {
   private static Card card(CardType type) {
     return new Card(
         CARD_ID, BOARD, 100L, 7, "Titel", null, 0, false, false, null, 1L, FIXED, FIXED, type, null,
-        null, null, PROJECT, null, null, null);
+        null, null, PROJECT, null, null, null, null);
   }
 
   private void givenCard(CardType type) {

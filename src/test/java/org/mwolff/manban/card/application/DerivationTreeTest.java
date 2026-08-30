@@ -68,7 +68,8 @@ class DerivationTreeTest {
         PROJECT,
         null,
         null,
-        derivedFrom);
+        derivedFrom,
+        null);
   }
 
   /** Karte eines fremden Boards — nur als Vorfahr ueber {@code findByIds} erreichbar. */
@@ -92,6 +93,7 @@ class DerivationTreeTest {
         null,
         null,
         PROJECT,
+        null,
         null,
         null,
         null);

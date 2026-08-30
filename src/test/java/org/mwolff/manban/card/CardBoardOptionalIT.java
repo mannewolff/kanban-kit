@@ -67,6 +67,7 @@ class CardBoardOptionalIT extends AbstractIntegrationTest {
             projectId,
             boardId,
             null,
+            null,
             null);
 
     Card saved = cards.save(idea);

@@ -457,6 +457,7 @@ class CardRepositoryAdapter implements CardRepository {
         e.getProjectId(),
         e.getTargetBoardId(),
         e.getExternalKey(),
-        e.getDerivedFromCardId());
+        e.getDerivedFromCardId(),
+        e.getRequirementCardId());
   }
 }

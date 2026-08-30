@@ -79,7 +79,7 @@ class CardServiceTest {
       String shortcode) {
     return new Card(
         id, BOARD, columnId, number, "Titel", null, 0, archived, false, done, 1L, FIXED, FIXED,
-        type, parentId, shortcode, null, PROJECT, null, null, null);
+        type, parentId, shortcode, null, PROJECT, null, null, null, null);
   }
 
   private static ColumnView column(long id, String name, int position) {
@@ -143,6 +143,7 @@ class CardServiceTest {
         c.projectId(),
         c.targetBoardId(),
         c.externalKey(),
+        null,
         null);
   }
 
@@ -605,7 +606,8 @@ class CardServiceTest {
         PROJECT,
         null,
         null,
-        derivedFrom);
+        derivedFrom,
+        null);
   }
 
   @Test
@@ -1231,6 +1233,7 @@ class CardServiceTest {
             PROJECT,
             null,
             null,
+            null,
             null);
     when(cards.findById(30L)).thenReturn(Optional.of(epicOtherBoard));
 
@@ -1740,6 +1743,7 @@ class CardServiceTest {
             null,
             null,
             PROJECT,
+            null,
             null,
             null,
             null);
@@ -2621,6 +2625,7 @@ class CardServiceTest {
         PROJECT,
         null,
         null,
+        null,
         null);
   }
 
@@ -2709,6 +2714,7 @@ class CardServiceTest {
             null,
             null,
             PROJECT,
+            null,
             null,
             null,
             null);
@@ -2946,6 +2952,7 @@ class CardServiceTest {
         projectId,
         null,
         null,
+        null,
         null);
   }
 
@@ -3151,6 +3158,7 @@ class CardServiceTest {
         PROJECT,
         null,
         null,
+        null,
         null);
   }
 
@@ -3176,6 +3184,7 @@ class CardServiceTest {
         null, // dueDate
         PROJECT,
         null, // targetBoardId
+        null,
         null,
         null); // externalKey
   }
@@ -3675,6 +3684,7 @@ class CardServiceTest {
             PROJECT,
             null,
             null,
+            null,
             null);
     when(cards.findById(1L)).thenReturn(Optional.of(otherBoard));
 
@@ -3725,6 +3735,7 @@ class CardServiceTest {
             null,
             null,
             PROJECT,
+            null,
             null,
             null,
             null);

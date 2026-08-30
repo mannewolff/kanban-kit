@@ -49,6 +49,7 @@ class TrashRetentionServiceTest {
         1L,
         null,
         null,
+        null,
         null);
   }
 

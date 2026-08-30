@@ -113,7 +113,8 @@ class CardDerivedFromPersistenceIT extends AbstractIntegrationTest {
         projectId,
         null,
         null,
-        herkunft);
+        herkunft,
+        null);
   }
 
   private long insert(String sql) {
