@@ -97,6 +97,7 @@
         "opus",
         "sonnet"
       ]
-    }
+    },
+    "statusLabels": true
   }
 }
