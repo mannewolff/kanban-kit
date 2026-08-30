@@ -121,6 +121,15 @@ export interface DerivationNode {
 }
 
 export const cardsApi = {
+  /**
+   * Eröffnet an dieser Karte einen Vorgang (Issue #640): Das Vorhaben entsteht, die Karte wird
+   * seine Anforderung und ist ihm zugeordnet — in einem Aufruf. Zurück kommt das neue Vorhaben.
+   */
+  openEpic: (cardId: number, name: string, kuerzel: string | null) =>
+    apiFetch<Card>(`/api/cards/${cardId}/open-epic`, {
+      method: 'POST',
+      body: JSON.stringify({ name, kuerzel }),
+    }),
   /** Herkunftsbaum eines Vorhabens (Issue #643). */
   epicTree: (boardId: number, epicId: number) =>
     apiFetch<DerivationNode[]>(`/api/boards/${boardId}/epics/${epicId}/tree`),
