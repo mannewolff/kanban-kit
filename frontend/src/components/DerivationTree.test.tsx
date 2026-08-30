@@ -6,7 +6,7 @@ import type { DerivationNode } from '../api/cards'
 
 vi.mock('../api/cards', async (original) => {
   const actual = await original<typeof import('../api/cards')>()
-  return { ...actual, cardsApi: { derivationTree: vi.fn(), epicTree: vi.fn() } }
+  return { ...actual, cardsApi: { epicTree: vi.fn() } }
 })
 
 // jsdom implementiert scrollIntoView nicht. Der Stub ist zugleich der Spy fuer Issue #612 — mehr
@@ -15,7 +15,6 @@ const scrollIntoView = vi.fn()
 Element.prototype.scrollIntoView = scrollIntoView
 
 const { cardsApi } = await import('../api/cards')
-const derivationTree = cardsApi.derivationTree as unknown as ReturnType<typeof vi.fn>
 const epicTree = cardsApi.epicTree as unknown as ReturnType<typeof vi.fn>
 
 function node(overrides: Partial<DerivationNode> & { number: number }): DerivationNode {
@@ -416,7 +415,6 @@ describe('DerivationTree', () => {
     await user.keyboard('{ArrowLeft}{ArrowRight}{ArrowDown}{Enter}')
 
     expect(zeilen()).not.toHaveLength(0)
-    expect(derivationTree).not.toHaveBeenCalled()
     expect(epicTree).not.toHaveBeenCalled()
   })
 

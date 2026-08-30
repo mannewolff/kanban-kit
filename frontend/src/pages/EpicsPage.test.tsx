@@ -15,7 +15,6 @@ vi.mock('../api/boards', () => ({ boardsApi: { get: vi.fn() } }))
 vi.mock('../api/cards', () => ({
   cardsApi: {
     list: vi.fn(),
-    derivationTree: vi.fn(),
     epicTree: vi.fn(),
     getActivity: vi.fn().mockResolvedValue([]),
     update: vi.fn(),
@@ -37,7 +36,6 @@ const mBoards = boardsApi as unknown as { get: ReturnType<typeof vi.fn> }
 const mCards = cardsApi as unknown as { list: ReturnType<typeof vi.fn> }
 const mEpics = epicsApi as unknown as { list: ReturnType<typeof vi.fn>; create: ReturnType<typeof vi.fn> }
 const mProjects = projectsApi as unknown as { list: ReturnType<typeof vi.fn> }
-const mDerivation = cardsApi as unknown as { derivationTree: ReturnType<typeof vi.fn> }
 const mEpicTree = cardsApi as unknown as { epicTree: ReturnType<typeof vi.fn> }
 
 
@@ -58,7 +56,6 @@ describe('EpicsPage', () => {
     mCards.list.mockResolvedValue([])
     mEpics.create.mockResolvedValue({})
     mProjects.list.mockResolvedValue([{ id: 9, name: 'Projekt', role: 'OWNER', createdAt: '' }])
-    mDerivation.derivationTree.mockResolvedValue([])
     mEpicTree.epicTree.mockResolvedValue([])
   })
 

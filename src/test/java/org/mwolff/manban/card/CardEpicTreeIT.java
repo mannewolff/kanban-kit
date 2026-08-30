@@ -19,6 +19,7 @@ import org.mwolff.manban.auth.domain.PlatformRole;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -43,6 +44,7 @@ class CardEpicTreeIT extends AbstractIntegrationTest {
   @Autowired private AppUserRepository users;
   @Autowired private PasswordEncoder passwordEncoder;
   @Autowired private ObjectMapper json;
+  @Autowired private JdbcTemplate jdbc;
 
   @Test
   void dreistufigeKette_kommtAlsBaumDesVorhabens() throws Exception {
@@ -93,6 +95,83 @@ class CardEpicTreeIT extends AbstractIntegrationTest {
     mvc.perform(get(pfad(f, epic)).cookie(fremd)).andExpect(status().isNotFound());
     // Gegenprobe: Fuer das Mitglied liefert derselbe Aufruf den Baum.
     mvc.perform(get(pfad(f, epic)).cookie(f.session)).andExpect(status().isOk());
+  }
+
+  /**
+   * Der Papierkorb ist in {@code findByBoardId} gefiltert — eine geloeschte Karte des Vorhabens
+   * verschwindet aus dem Baum. Gewandert aus {@code CardDerivationTreeIT} (Issue #645): Die Aussage
+   * haengt am Datenbank-Filter und ist im Unit-Test nicht zu belegen.
+   */
+  @Test
+  void karteImPapierkorb_erscheintNicht() throws Exception {
+    Fixture f = fixture("et-papierkorb");
+    long epic = id(vorhaben(f, "Vorhaben"));
+    JsonNode a = karte(f, "A", null);
+    ordneZu(f, id(a), epic);
+    JsonNode b = karte(f, "B", number(a));
+
+    mvc.perform(
+            org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete(
+                    "/api/cards/" + id(b))
+                .cookie(f.session))
+        .andExpect(status().isNoContent());
+
+    assertThat(nummern(baum(f, epic))).containsExactly(number(a));
+  }
+
+  /**
+   * {@code ON DELETE SET NULL} aus V26 an echten Daten: Der Vorfahr verschwindet endgueltig, das
+   * Kind verliert die Herkunft. Es bleibt Mitglied, weil es dem Vorhaben direkt zugeordnet ist —
+   * und steht als eigene Wurzel da. Gewandert aus {@code CardDerivationTreeIT} (Issue #645).
+   */
+  @Test
+  void endgueltigGeloeschterVorfahr_machtDasKindZurWurzel() throws Exception {
+    Fixture f = fixture("et-purge");
+    long epic = id(vorhaben(f, "Vorhaben"));
+    JsonNode a = karte(f, "A", null);
+    ordneZu(f, id(a), epic);
+    JsonNode b = karte(f, "B", number(a));
+    ordneZu(f, id(b), epic);
+
+    mvc.perform(
+            org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete(
+                    "/api/cards/" + id(a))
+                .cookie(f.session))
+        .andExpect(status().isNoContent());
+    mvc.perform(
+            org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete(
+                    "/api/cards/" + id(a) + "/purge")
+                .cookie(f.session))
+        .andExpect(status().isNoContent());
+
+    JsonNode baum = baum(f, epic);
+    assertThat(nummern(baum)).containsExactly(number(b));
+    assertThat(tiefen(baum)).containsExactly(0);
+    assertThat(baum.get(0).get("derivedFrom").isNull()).isTrue();
+  }
+
+  /**
+   * Ein Herkunftsring ist ueber die API nicht erzeugbar; in der Spalte kann trotzdem stehen, was
+   * nie durch diese Anwendung ging. Der Lesepfad muss ihn aushalten — sonst waere er eine
+   * Endlosschleife im Server. Gewandert aus {@code CardDerivationTreeIT} (Issue #645): Der Ring
+   * entsteht nur am Schreibpfad vorbei, also per JDBC.
+   */
+  @Test
+  void herkunftszyklusAusDerDatenbank_wirdVollstaendigUndAlsBrokenGeliefert() throws Exception {
+    Fixture f = fixture("et-zyklus");
+    long epic = id(vorhaben(f, "Vorhaben"));
+    JsonNode x = karte(f, "X", null);
+    ordneZu(f, id(x), epic);
+    JsonNode y = karte(f, "Y", number(x));
+    jdbc.update("UPDATE card SET derived_from_card_id = ? WHERE id = ?", id(y), id(x));
+
+    JsonNode baum = baum(f, epic);
+
+    assertThat(nummern(baum)).containsExactly(number(x), number(y));
+    assertThat(tiefen(baum)).containsExactly(0, 1);
+    for (JsonNode zeile : baum) {
+      assertThat(zeile.get("broken").asBoolean()).isTrue();
+    }
   }
 
   // --- Helfer ---------------------------------------------------------------

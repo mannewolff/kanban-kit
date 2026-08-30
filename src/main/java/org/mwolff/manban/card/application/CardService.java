@@ -391,44 +391,14 @@ public class CardService {
   }
 
   /**
-   * Herkunftsbaum eines Boards als flache Liste in Präorder mit Tiefe (Issue #609, Plan #606
-   * E1/E2).
-   *
-   * <p>Flach statt verschachtelt: Verschachteltes JSON zwängt eine Baumtiefe ins Schema und ist
-   * schwer zu diffen. Der Server liefert Kanten, Tiefe und die Reihenfolge; das Einrücken ist
-   * Darstellungsfrage.
-   *
-   * <p><b>Board-gebunden</b> als Zuschnittsentscheidung (Plan #606 E3): Kanten über die
-   * Board-Grenze werden als extern ausgewiesen statt aufgelöst — für Herkunft und Abhängigkeiten
-   * gleichermaßen.
-   *
-   * <p>Der Lesepfad ist gegen Zyklen wehrhaft, obwohl der Schreibpfad sie ausschließt: {@link
-   * DerivedFrom} schützt nur, was durch diese Anwendung geht, und ein Zyklus wäre hier eine
-   * Endlosschleife im Server.
-   *
-   * <p>Drei Abfragen, unabhängig von der Kartenzahl: die Board-Menge, die Nummern board-fremder
-   * Vorfahren und die Abhängigkeitskanten. Ein Nachladen je Karte oder je Kante wäre N+1.
-   */
-  @Transactional(readOnly = true)
-  public List<DerivationNodeView> derivationTree(long userId, long boardId) {
-    permissions.requireMembership(userId, boardService.requireProjectId(boardId));
-    // ideaStored heißt „noch nicht eingeplant" und gehört nicht auf das Board — anders als das
-    // Archiv, das ein Zustand ist. Der Papierkorb ist in findByBoardId bereits gefiltert.
-    List<Card> boardCards =
-        cards.findByBoardId(boardId).stream().filter(c -> !c.ideaStored()).toList();
-    Set<Long> imBoard = boardCards.stream().map(Card::requireId).collect(Collectors.toSet());
-    return DerivationTree.build(
-        boardCards, dependencies.findByCardIds(imBoard), fremdeVorfahrenNummern(boardCards));
-  }
-
-  /**
    * Herkunftsbaum <b>eines Vorhabens</b> als flache Liste in Präorder mit Tiefe (Issue #643).
    *
-   * <p>Der board-weite Baum aus {@link #derivationTree} beantwortet die Frage „was gehört zu diesem
-   * Vorhaben" nicht — er stellt alle Ketten des Boards nebeneinander. Hier wird dieselbe Rechnung
-   * auf die Mitglieder <em>eines</em> Vorhabens angewandt: die Zugehörigkeit aus {@link
-   * EpicMembership} (#632), der Baum aus {@link DerivationTree} (#609). Eine zweite Graphenrechnung
-   * wäre ein zweiter Ort für denselben Fehler.
+   * <p>Bis Issue #645 gab es daneben einen board-weiten Baum. Er stellte alle Ketten des Boards
+   * nebeneinander und beantwortete die Frage „was gehört zu diesem Vorhaben" damit nicht; der PO
+   * hat ihn abbestellt. Geblieben ist diese Sicht: dieselbe Rechnung auf den Mitgliedern
+   * <em>eines</em> Vorhabens — die Zugehörigkeit aus {@link EpicMembership} (#632), der Baum aus
+   * {@link DerivationTree} (#609). Eine zweite Graphenrechnung wäre ein zweiter Ort für denselben
+   * Fehler.
    *
    * <p><b>Was durch die Einschränkung anders wird:</b> {@code build} weist alles als extern aus,
    * was nicht in der übergebenen Menge liegt. Ein Vorfahr, der auf dem Board liegt, aber kein
@@ -456,8 +426,11 @@ public class CardService {
       throw new CardNotFoundException();
     }
 
-    List<Card> baumKarten =
-        mitglieder.stream().sorted(Comparator.comparingInt(Card::requireNumber)).toList();
+    // Bewusst UNSORTIERT weitergereicht: `DerivationTree.build` ordnet Geschwister selbst —
+    // topologisch, bei Gleichstand nach Nummer. Eine Vorsortierung hier waere nicht nur doppelt,
+    // sie verdeckte die eigentliche Ordnung: Mit vorsortierter Eingabe faellt ein Ausfall der
+    // Sortierung in `build` nicht mehr auf (PIT-Befund zu Issue #645).
+    List<Card> baumKarten = List.copyOf(mitglieder);
     Set<Long> ids = baumKarten.stream().map(Card::requireId).collect(Collectors.toSet());
     return DerivationTree.build(
         baumKarten, dependencies.findByCardIds(ids), fremdeVorfahrenNummern(alle));

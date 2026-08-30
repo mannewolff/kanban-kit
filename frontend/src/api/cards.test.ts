@@ -30,20 +30,6 @@ describe('cardsApi', () => {
     expect(result).toEqual([card])
   })
 
-  it('derivationTree ruft GET /api/boards/{id}/derivation-tree und liefert die geparste Antwort', async () => {
-    const zeile = {
-      number: 5, title: 'Karte', type: 'CARD' as const, derivedFrom: null, depth: 0,
-      done: false, blocked: false, dependencies: [], externalDependencies: [],
-      externalOrigin: false, broken: false,
-    }
-    const f = spyFetch(JSON.stringify([zeile]))
-    const result = await cardsApi.derivationTree(3)
-    expect(lastCall(f).url).toBe('/api/boards/3/derivation-tree')
-    // Reiner Lesepfad: kein Verb ausser GET (apiFetch laesst die Methode dafuer weg).
-    expect(lastCall(f).method).toBeUndefined()
-    expect(result).toEqual([zeile])
-  })
-
   it('epicTree ruft GET /api/boards/{id}/epics/{epicId}/tree und liefert die geparste Antwort', async () => {
     const zeile = {
       number: 5, title: 'Karte', type: 'CARD' as const, derivedFrom: null, depth: 0,

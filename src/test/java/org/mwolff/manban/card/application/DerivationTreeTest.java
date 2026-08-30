@@ -127,9 +127,51 @@ class DerivationTreeTest {
     when(cards.findByIds(any())).thenReturn(List.of());
   }
 
+  /** ID des Vorhabens, ueber das der Baum seit Issue #645 abgerufen wird. */
+  private static final long VORHABEN = 999L;
+
+  /**
+   * Baut den Baum ueber {@code epicDerivationTree}.
+   *
+   * <p>Seit Issue #645 gibt es keinen board-weiten Einstieg mehr. Diese Klasse traegt aber die
+   * <b>Mutationsabdeckung</b> von {@link DerivationTree} — PIT misst nur Unit-Tests (Befund aus
+   * Issue #605) —, und die Rechnung selbst ist unveraendert geblieben. Sie wird deshalb
+   * umverdrahtet statt geloescht.
+   *
+   * <p>Damit jede uebergebene Karte Mitglied des Vorhabens ist, wird ihr {@code parentId} darauf
+   * gesetzt: {@link EpicMembership} nimmt jede direkt zugeordnete Karte auf und steigt von dort
+   * ueber die Herkunft ab. Die Testfaelle darunter bleiben dadurch unveraendert — sie beschreiben
+   * die Rechnung, nicht den Einstieg.
+   */
   private List<DerivationNodeView> tree(List<Card> boardCards) {
-    when(cards.findByBoardId(BOARD)).thenReturn(boardCards);
-    return service.derivationTree(1L, BOARD);
+    List<Card> mitgliederUndVorhaben = new java.util.ArrayList<>();
+    mitgliederUndVorhaben.add(
+        new Card(
+            VORHABEN,
+            BOARD,
+            100L,
+            9_999,
+            "Vorhaben",
+            null,
+            0,
+            false,
+            false,
+            null,
+            1L,
+            FIXED,
+            FIXED,
+            CardType.EPIC,
+            null,
+            null,
+            null,
+            PROJECT,
+            null,
+            null,
+            null,
+            null));
+    boardCards.forEach(c -> mitgliederUndVorhaben.add(c.withParent(VORHABEN)));
+    when(cards.findByBoardId(BOARD)).thenReturn(List.copyOf(mitgliederUndVorhaben));
+    return service.epicDerivationTree(1L, BOARD, VORHABEN);
   }
 
   @Test

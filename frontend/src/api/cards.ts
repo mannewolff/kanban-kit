@@ -121,12 +121,7 @@ export interface DerivationNode {
 }
 
 export const cardsApi = {
-  derivationTree: (boardId: number) =>
-    apiFetch<DerivationNode[]>(`/api/boards/${boardId}/derivation-tree`),
-  /**
-   * Herkunftsbaum eines Vorhabens (Issue #643). Der Name meidet bewusst jede Schreibweise des
-   * board-weiten Pendants, damit dessen Rückbau maschinell eindeutig prüfbar bleibt.
-   */
+  /** Herkunftsbaum eines Vorhabens (Issue #643). */
   epicTree: (boardId: number, epicId: number) =>
     apiFetch<DerivationNode[]>(`/api/boards/${boardId}/epics/${epicId}/tree`),
   list: (boardId: number) => apiFetch<Card[]>(`/api/boards/${boardId}/cards`),

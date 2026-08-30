@@ -103,17 +103,6 @@ class CardController {
   }
 
   /**
-   * Herkunftsbaum des Boards — reiner Lesepfad, geschützt wie die übrigen Board-Leseendpunkte
-   * (Projekt-Mitgliedschaft). Kein Schreibpfad: Der Baum wird bei jedem Lesen berechnet und nie
-   * gespeichert, es gibt also keinen Synchronisationszustand, der auseinanderlaufen könnte.
-   */
-  @GetMapping("/api/boards/{boardId}/derivation-tree")
-  List<DerivationNodeView> derivationTree(
-      @AuthenticationPrincipal Long userId, @PathVariable long boardId) {
-    return cards.derivationTree(userId, boardId);
-  }
-
-  /**
    * Herkunftsbaum eines Vorhabens — dieselbe Rechnung wie beim board-weiten Baum, angewandt auf die
    * Mitglieder dieses Vorhabens (Issue #643).
    *
