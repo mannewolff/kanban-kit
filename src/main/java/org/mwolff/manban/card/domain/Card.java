@@ -361,6 +361,40 @@ public record Card(
   }
 
   /**
+   * Setzt oder löscht ({@code null}) die Anforderungskarte des Vorhabens.
+   *
+   * <p>Gelöscht wird sie an zwei Stellen: auf ausdrückliche Übergabe von {@code null} — ein
+   * Vorhaben ohne Anforderung ist ein gültiger Zustand — und beim Projektwechsel, in beide
+   * Richtungen: am abgewanderten Vorhaben und an jedem Vorhaben, das auf die abgewanderte
+   * Anforderung zeigt.
+   */
+  public Card withRequirement(@Nullable Long newRequirementCardId) {
+    return new Card(
+        id,
+        boardId,
+        columnId,
+        number,
+        title,
+        description,
+        positionInColumn,
+        archived,
+        ideaStored,
+        movedToDoneAt,
+        createdBy,
+        createdAt,
+        updatedAt,
+        type,
+        parentId,
+        shortcode,
+        dueDate,
+        projectId,
+        targetBoardId,
+        externalKey,
+        derivedFromCardId,
+        newRequirementCardId);
+  }
+
+  /**
    * Setzt oder löscht ({@code null}) die Herkunft.
    *
    * <p>Wird von {@code CardService.doTransfer} zum Aufräumen beim Projektwechsel gebraucht: Die

@@ -87,6 +87,26 @@ class CardRequirementPersistenceIT extends AbstractIntegrationTest {
     assertThat(cards.findById(anforderung.requireId())).isEmpty();
   }
 
+  @Test
+  void findByRequirementCard_liefertDasZeigendeVorhaben_undNurDieses() {
+    Card anforderung = cards.save(karte("Anforderung", 1, CardType.CARD, null));
+    Card vorhaben = cards.save(karte("Vorhaben", 2, CardType.EPIC, anforderung.requireId()));
+    cards.save(karte("Fremdes Vorhaben", 3, CardType.EPIC, null));
+
+    // Beide Seiten: Das zeigende Vorhaben ist dabei, das fremde nicht. Ein zu weites WHERE im
+    // Adapter loeschte beim Projektwechsel fremde Zuordnungen mit.
+    assertThat(cards.findByRequirementCard(anforderung.requireId()))
+        .extracting(Card::requireId)
+        .containsExactly(vorhaben.requireId());
+  }
+
+  @Test
+  void findByRequirementCard_liefertLeer_wennNiemandZeigt() {
+    Card einsam = cards.save(karte("Einsam", 1, CardType.CARD, null));
+
+    assertThat(cards.findByRequirementCard(einsam.requireId())).isEmpty();
+  }
+
   private Card karte(String titel, int nummer, CardType typ, @Nullable Long anforderung) {
     return new Card(
         null,

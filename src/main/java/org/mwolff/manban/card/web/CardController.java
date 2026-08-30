@@ -163,6 +163,21 @@ class CardController {
     return cards.assignDerivedFrom(userId, cardId, request.derivedFrom());
   }
 
+  /**
+   * Setzt oder löscht die Anforderungskarte eines Vorhabens.
+   *
+   * <p>Schmaler Endpunkt wie {@code derived-from} (#607): Ein Voll-Update kann ein fehlendes Feld
+   * nicht von {@code null} unterscheiden und löschte die Zuordnung bei jedem Karten-Edit. Übergabe
+   * von {@code null} löscht sie ausdrücklich.
+   */
+  @PatchMapping("/api/cards/{cardId}/requirement")
+  CardView assignRequirement(
+      @AuthenticationPrincipal Long userId,
+      @PathVariable long cardId,
+      @Valid @RequestBody AssignRequirementRequest request) {
+    return cards.assignRequirement(userId, cardId, request.requirementCardNumber());
+  }
+
   @PostMapping("/api/cards/{cardId}/move")
   CardView move(
       @AuthenticationPrincipal Long userId,
@@ -344,6 +359,9 @@ class CardController {
   // Dieselben Grenzen wie im kanbancompat-Ingest (`CreateItemRequest`), damit beide Schreibpfade
   // dieselbe Nummer akzeptieren und dieselbe ablehnen.
   record AssignDerivedFromRequest(@Nullable @Positive @Max(CardNumbers.MAX) Integer derivedFrom) {}
+
+  record AssignRequirementRequest(
+      @Nullable @Positive @Max(CardNumbers.MAX) Integer requirementCardNumber) {}
 
   record MoveCardRequest(
       @NotNull Long columnId, @jakarta.validation.constraints.PositiveOrZero int position) {}

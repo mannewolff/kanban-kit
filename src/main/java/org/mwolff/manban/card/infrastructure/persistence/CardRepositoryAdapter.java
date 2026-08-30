@@ -123,6 +123,13 @@ class CardRepositoryAdapter implements CardRepository {
   }
 
   @Override
+  public List<Card> findByRequirementCard(long cardId) {
+    return jpa.findByRequirementCardId(cardId).stream()
+        .map(CardRepositoryAdapter::toDomain)
+        .toList();
+  }
+
+  @Override
   public List<Card> findIdeasByProjectId(long projectId) {
     return jpa
         .findByProjectIdAndIdeaStoredTrueAndDeletedAtIsNullOrderByCreatedAtAsc(projectId)

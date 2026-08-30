@@ -1884,6 +1884,154 @@ class CardServiceTest {
     return c.withDerivedFrom(herkunft);
   }
 
+  // --- assignRequirement und Anforderung im EpicView (Issue #639) -----------
+
+  /**
+   * Der gueltige Fall: Uebergeben wird die Nummer, gespeichert die ID. Ohne diesen Test ueberlebt
+   * eine Mutation, die die Nummer unaufgeloest durchreicht — sie waere durch die Ablehnungstests
+   * allein nicht zu toeten.
+   */
+  @Test
+  void assignRequirement_nummerWirdZurIdAufgeloestUndGespeichert() {
+    when(cards.findById(1L))
+        .thenReturn(Optional.of(card(1L, 20L, 7, false, null, CardType.EPIC, null, null)));
+    when(cards.findByProjectIdAndNumber(PROJECT, 4))
+        .thenReturn(Optional.of(card(9L, 20L, 4, false, null, CardType.CARD, null, null)));
+    when(cards.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+    ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
+    CardService.CardView result = service.assignRequirement(1L, 1L, 4);
+
+    verify(cards).save(captor.capture());
+    assertThat(captor.getValue().requirementCardId()).isEqualTo(9L);
+    // Die Sicht wird zurueckgegeben, nicht nur gespeichert: Der Aufrufer zeigt sie unmittelbar an.
+    assertThat(result).isNotNull();
+    assertThat(result.id()).isEqualTo(1L);
+    // Offene Boards ziehen ueber SSE nach, wie beim Setzen der Herkunft.
+    verify(events).publishEvent(new CardBoardActivityEvent(BOARD, ActivityType.UPDATED, 1L));
+  }
+
+  /** {@code null} loescht die Zuordnung — ein Vorhaben ohne Anforderung ist gueltig (#636). */
+  @Test
+  void assignRequirement_null_loeschtDieZuordnung() {
+    when(cards.findById(1L))
+        .thenReturn(
+            Optional.of(
+                card(1L, 20L, 7, false, null, CardType.EPIC, null, null).withRequirement(9L)));
+    when(cards.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+    ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
+    service.assignRequirement(1L, 1L, null);
+
+    verify(cards).save(captor.capture());
+    assertThat(captor.getValue().requirementCardId()).isNull();
+  }
+
+  @Test
+  void listEpics_mitAnforderung_liefertDerenNummer() {
+    when(boardService.listColumns(BOARD)).thenReturn(List.of(column(20L, "Backlog", 0)));
+    when(cards.findByBoardId(BOARD))
+        .thenReturn(
+            List.of(
+                kette(5L, 20L, 1, CardType.EPIC, null, null, false).withRequirement(6L),
+                kette(6L, 20L, 2, CardType.CARD, 5L, null, false)));
+
+    CardService.EpicView view = service.listEpics(1L, BOARD).getFirst();
+
+    assertThat(view.requirementCardNumber()).isEqualTo(2);
+  }
+
+  /**
+   * Gegenstueck: ohne Anforderung {@code null} — nicht 0 und kein Platzhalter. 0 waere eine
+   * gueltige Kartennummer, und die Kachel unterscheidet "keine Anforderung" von "Anforderung Nummer
+   * 0" nur ueber diesen Wert.
+   */
+  @Test
+  void listEpics_ohneAnforderung_liefertNull() {
+    when(boardService.listColumns(BOARD)).thenReturn(List.of(column(20L, "Backlog", 0)));
+    when(cards.findByBoardId(BOARD))
+        .thenReturn(
+            List.of(
+                kette(5L, 20L, 1, CardType.EPIC, null, null, false),
+                kette(6L, 20L, 2, CardType.CARD, 5L, null, false)));
+
+    CardService.EpicView view = service.listEpics(1L, BOARD).getFirst();
+
+    assertThat(view.requirementCardNumber()).isNull();
+  }
+
+  /**
+   * Zeigt der Verweis auf eine Karte, die nicht mehr auf dem Board liegt (Papierkorb), ist {@code
+   * null} die ehrliche Antwort. Eine Fassung, die hier die ID als Nummer ausgibt, waere gruen,
+   * solange beide zufaellig gleich sind — hier sind sie es bewusst nicht.
+   */
+  @Test
+  void listEpics_anforderungNichtMehrAufDemBoard_liefertNull() {
+    when(boardService.listColumns(BOARD)).thenReturn(List.of(column(20L, "Backlog", 0)));
+    when(cards.findByBoardId(BOARD))
+        .thenReturn(
+            List.of(kette(5L, 20L, 1, CardType.EPIC, null, null, false).withRequirement(99L)));
+
+    CardService.EpicView view = service.listEpics(1L, BOARD).getFirst();
+
+    assertThat(view.requirementCardNumber()).isNull();
+  }
+
+  @Test
+  void transfer_projektwechsel_loeschtDieAnforderungDerKarte() {
+    stubTransferScenario(9L);
+    when(cards.findById(100L))
+        .thenReturn(
+            Optional.of(
+                card(100L, 50L, 3, false, FIXED, CardType.CARD, 9L, null).withRequirement(77L)));
+
+    ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
+    service.transfer(1L, 100L, 20L, 60L);
+
+    verify(cards).save(captor.capture());
+    assertThat(captor.getValue().requirementCardId()).isNull();
+  }
+
+  /**
+   * Gegenrichtung: Wandert die Anforderungskarte ab, verliert das zurueckbleibende Vorhaben seinen
+   * Verweis. Ohne das zeigte er ueber die Projektgrenze auf eine Nummer, die dort einer anderen
+   * Karte gehoert.
+   */
+  @Test
+  void transfer_projektwechsel_loeschtDenVerweisDerZeigendenVorhaben() {
+    stubTransferScenario(9L);
+    Card vorhaben =
+        card(300L, 50L, 6, false, null, CardType.EPIC, null, null).withRequirement(100L);
+    when(cards.findByRequirementCard(100L)).thenReturn(List.of(vorhaben));
+
+    ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
+    service.transfer(1L, 100L, 20L, 60L);
+
+    verify(cards, times(2)).save(captor.capture());
+    assertThat(captor.getAllValues())
+        .filteredOn(c -> c.requireId() == 300L)
+        .singleElement()
+        .satisfies(c -> assertThat(c.requirementCardId()).isNull());
+  }
+
+  @Test
+  void transfer_innerhalbDesProjekts_laesstDieAnforderungUnberuehrt() {
+    // Ziel-Board im SELBEN Projekt: Die Zuordnung ueberlebt den Board-Wechsel.
+    when(cards.findById(100L))
+        .thenReturn(
+            Optional.of(
+                card(100L, 50L, 3, false, FIXED, CardType.CARD, 9L, null).withRequirement(77L)));
+    when(boardService.requireProjectId(20L)).thenReturn(PROJECT);
+    when(boardService.requireColumn(60L, 20L)).thenReturn(new ColumnView(60L, "Backlog", 0, null));
+
+    ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
+    service.transfer(1L, 100L, 20L, 60L);
+
+    verify(cards).save(captor.capture());
+    assertThat(captor.getValue().requirementCardId()).isEqualTo(77L);
+    verify(cards, never()).findByRequirementCard(anyLong());
+  }
+
   @Test
   void bulkTransfer_loeschtDieHerkunftAuchWennVorfahrUndKindZusammenWandern() {
     // Wandern Vorfahr (100) und Kind (200) im selben Batch ins selbe Zielprojekt, waere die

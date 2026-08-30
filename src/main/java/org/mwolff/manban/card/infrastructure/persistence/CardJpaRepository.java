@@ -25,6 +25,8 @@ interface CardJpaRepository extends JpaRepository<CardEntity, Long> {
   // Projektwechsels muessen auch archivierte und geloeschte Kinder ihren Verweis verlieren.
   List<CardEntity> findByDerivedFromCardId(Long cardId);
 
+  List<CardEntity> findByRequirementCardId(Long cardId);
+
   /** Nicht-gelöschte Karte eines Projekts nach projektweiter Nummer (projektweit eindeutig). */
   Optional<CardEntity> findByProjectIdAndNumberAndDeletedAtIsNull(Long projectId, Integer number);
 

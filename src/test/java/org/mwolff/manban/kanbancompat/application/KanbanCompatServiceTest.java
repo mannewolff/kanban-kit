@@ -765,7 +765,7 @@ class KanbanCompatServiceTest {
         .thenReturn(
             List.of(
                 new CardService.EpicView(
-                    5L, 3, "Epic", "desc", "E", 2, 4, List.of(1, 2, 3, 4), List.of(1))));
+                    5L, 3, "Epic", "desc", "E", 2, 4, List.of(1, 2, 3, 4), List.of(1), 1)));
 
     // When
     List<KanbanCompatService.Epic> result = service.epics(bound());

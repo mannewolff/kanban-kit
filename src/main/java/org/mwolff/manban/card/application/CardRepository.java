@@ -63,6 +63,18 @@ public interface CardRepository {
   List<Card> findByDerivedFrom(long cardId);
 
   /**
+   * Alle Vorhaben, die diese Karte als Anforderung führen — die Gegenrichtung zu {@code
+   * Card#requirementCardId}.
+   *
+   * <p>Gebraucht beim Projektwechsel: Wandert die Anforderungskarte ab, muss das zurückbleibende
+   * Vorhaben seinen Verweis verlieren, sonst zeigt er über die Projektgrenze. Fachlich ist es
+   * höchstens ein Vorhaben je Karte; der Rückgabetyp bleibt trotzdem eine Liste, weil die Datenbank
+   * das nicht erzwingt und ein stillschweigend verworfener Zweitverweis genau der verwaiste Zeiger
+   * wäre, den das Aufräumen verhindern soll.
+   */
+  List<Card> findByRequirementCard(long cardId);
+
+  /**
    * Karten zu einer Menge von IDs — ein Sammelzugriff statt {@code findById} je Element.
    *
    * <p>Traegt die Aufloesung der Herkunft beim Zusammenbauen einer Board-Liste: Ohne ihn entstuende

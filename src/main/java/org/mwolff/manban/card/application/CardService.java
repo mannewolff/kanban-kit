@@ -11,6 +11,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.board.application.BoardNotFoundException;
@@ -498,6 +499,8 @@ public class CardService {
         boardService.listColumns(boardId).stream()
             .collect(Collectors.toMap(ColumnView::id, ColumnView::name));
     Map<Long, Set<Card>> membership = EpicMembership.compute(all);
+    Map<Long, Card> nachId =
+        all.stream().collect(Collectors.toMap(Card::requireId, Function.identity()));
 
     return all.stream()
         .filter(c -> c.type() == CardType.EPIC)
@@ -529,7 +532,8 @@ public class CardService {
                   done,
                   total,
                   members.stream().map(Card::requireNumber).sorted().toList(),
-                  rootNumbers);
+                  rootNumbers,
+                  anforderungsNummer(epic, nachId));
             })
         .toList();
   }
@@ -731,6 +735,26 @@ public class CardService {
     return view(saved);
   }
 
+  /**
+   * Setzt oder löscht ({@code null}) die Anforderungskarte eines Vorhabens.
+   *
+   * <p>Übergeben wird die projektweite <b>Kartennummer</b>, gespeichert die ID — die Nummer ändert
+   * sich beim Projektwechsel. Die vier Ablehnungen stehen in {@link RequirementCard}.
+   *
+   * <p>Eigener schmaler Endpunkt statt eines Feldes im Voll-Update, aus demselben Grund wie bei der
+   * Herkunft (#607): Ein Voll-Update kann ein fehlendes Feld nicht von {@code null} unterscheiden
+   * und löschte die Zuordnung bei jedem Karten-Edit.
+   */
+  @Transactional
+  public CardView assignRequirement(
+      long userId, long cardId, @Nullable Integer requirementCardNumber) {
+    Card card = requireCardOp(userId, cardId, Permission.TICKET_UPDATE, Permission.EPIC_UPDATE);
+    Long anforderung = RequirementCard.resolve(cards, card, requirementCardNumber);
+    Card saved = cards.save(card.withRequirement(anforderung));
+    publishChangedIfOnBoard(card.boardId(), ActivityType.UPDATED, cardId);
+    return view(saved);
+  }
+
   @Transactional
   public CardView move(long userId, long cardId, long targetColumnId, int targetPosition) {
     Card card = cards.findById(cardId).orElseThrow(CardNotFoundException::new);
@@ -869,6 +893,8 @@ public class CardService {
       // Anders als withParent(null) gilt das NUR beim Projektwechsel — innerhalb des Projekts
       // ueberlebt die Kette den Board-Wechsel.
       cleaned = cleaned.withDerivedFrom(null);
+      // Dieselbe Begruendung fuer die Anforderung: Sie ist board- und damit projekt-lokal.
+      cleaned = cleaned.withRequirement(null);
     }
     CardView result = view(cards.save(cleaned));
     if (!sameProject) {
@@ -878,6 +904,11 @@ public class CardService {
       // sonst von der Reihenfolge innerhalb des Batches ab.
       for (Card kind : cards.findByDerivedFrom(cardId)) {
         cards.save(kind.withDerivedFrom(null));
+      }
+      // Gegenrichtung der Anforderung: Wandert die Anforderungskarte ab, verliert das
+      // zurueckbleibende Vorhaben seinen Verweis — sonst zeigte er ueber die Projektgrenze.
+      for (Card vorhaben : cards.findByRequirementCard(cardId)) {
+        cards.save(vorhaben.withRequirement(null));
       }
     }
     // Board-übergreifend: Quell- und Ziel-Board müssen beide live nachziehen.
@@ -1513,6 +1544,24 @@ public class CardService {
     }
   }
 
+  /**
+   * Nummer der Anforderungskarte eines Vorhabens, oder {@code null}.
+   *
+   * <p>Aufgelöst wird ausschliesslich innerhalb der Board-Karten. Das ist keine Einschränkung,
+   * sondern die Grenze, die {@link RequirementCard} beim Setzen zieht: Die Anforderung liegt immer
+   * auf dem Board des Vorhabens. Fehlt sie hier trotzdem, liegt sie im Papierkorb — dann ist {@code
+   * null} die ehrliche Antwort und keine erfundene Nummer.
+   */
+  private static @Nullable Integer anforderungsNummer(Card epic, Map<Long, Card> nachId) {
+    // Optional-Kette statt zweier Null-Vergleiche: Ein vorgeschaltetes `id == null` waere hier
+    // redundant — die Map liefert fuer eine unbekannte ID ohnehin nichts —, und PIT kann eine
+    // redundante Bedingung nicht toeten, weil beide Zweige dasselbe Ergebnis liefern.
+    return Optional.ofNullable(epic.requirementCardId())
+        .map(nachId::get)
+        .map(Card::requireNumber)
+        .orElse(null);
+  }
+
   private Card requireEpicInBoard(long epicId, long boardId) {
     Card epic = cards.findById(epicId).orElseThrow(CardNotFoundException::new);
     if (epic.type() != CardType.EPIC || epic.requireBoardId() != boardId) {
@@ -1767,6 +1816,10 @@ public class CardService {
    * @param rootNumbers Nummern der direkt über {@code parentId} zugeordneten Karten, aufsteigend.
    *     Stets eine Teilmenge von {@code memberNumbers}: Sie werden aus derselben Menge gefiltert
    *     und unterliegen damit denselben Regeln
+   * @param requirementCardNumber Nummer der Anforderungskarte, oder {@code null}. Nullable, weil
+   *     ein Vorhaben auch ohne Herkunftskette zum Gruppieren dienen darf (PO-Entscheidung in #636)
+   *     — und weil eine zugeordnete Anforderung im Papierkorb liegen kann, dann ist sie hier nicht
+   *     auflösbar. Ausdrücklich <b>nicht</b> 0 oder ein Platzhalter: 0 wäre eine gültige Nummer
    */
   public record EpicView(
       Long id,
@@ -1777,5 +1830,6 @@ public class CardService {
       int done,
       int total,
       List<Integer> memberNumbers,
-      List<Integer> rootNumbers) {}
+      List<Integer> rootNumbers,
+      @Nullable Integer requirementCardNumber) {}
 }
