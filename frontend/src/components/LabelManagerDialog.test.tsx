@@ -174,6 +174,36 @@ describe('LabelManagerDialog', () => {
     await waitFor(() => expect(api.update).toHaveBeenCalledWith(1, 'Bug', '#ff0000', false))
   })
 
+  /**
+   * Bei mehreren Labels traegt jede Zeile ein Haekchen. Ohne den Labelnamen im zugaenglichen Namen
+   * hiessen sie alle gleich, und wer per Screenreader navigiert, koennte nicht erkennen, welches
+   * Haekchen zu welchem Label gehoert (Review-Fund codex/gpt-5.6-sol zu #664).
+   */
+  it('unterscheidet die Häkchen mehrerer Labels über den Labelnamen', () => {
+    const api = mkApi()
+    const zwei: Label[] = [
+      { id: 1, boardId: 9, name: 'Bug', color: '#ff0000', countOnEpicTile: false },
+      { id: 2, boardId: 9, name: 'Ux', color: '#00ff00', countOnEpicTile: true },
+    ]
+    render(
+      <LabelManagerDialog open boardId={9} labels={zwei} onClose={vi.fn()} onChanged={vi.fn()} api={api} />,
+    )
+
+    expect(screen.getByRole('checkbox', { name: /Bug.*auf der Vorhaben-Kachel zählen/i })).not.toBeChecked()
+    expect(screen.getByRole('checkbox', { name: /Ux.*auf der Vorhaben-Kachel zählen/i })).toBeChecked()
+  })
+
+  /** Der sichtbare Text bleibt kurz — er wiederholte sich sonst in jeder Zeile. */
+  it('schreibt den Labelnamen nicht in den sichtbaren Beschriftungstext', () => {
+    const api = mkApi()
+    render(
+      <LabelManagerDialog open boardId={9} labels={labels} onClose={vi.fn()} onChanged={vi.fn()} api={api} />,
+    )
+
+    expect(screen.getByText('auf der Vorhaben-Kachel zählen')).toBeInTheDocument()
+    expect(screen.queryByText('Bug: auf der Vorhaben-Kachel zählen')).not.toBeInTheDocument()
+  })
+
   it('lässt die Anlege-Zeile unverändert (kein neues Feld an create)', async () => {
     const api = mkApi()
     render(

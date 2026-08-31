@@ -169,11 +169,24 @@ function LabelRow({
         </IconButton>
       </Stack>
       {/* `FormControlLabel` verknuepft die Beschriftung ueber ein echtes <label> mit der Box: der
-          Text steht sichtbar im DOM und traegt zugleich den zugaenglichen Namen. Ein blosses
-          `aria-label` waere unsichtbar, und `jsx-a11y` prueft MUI-Kompositionen nicht
-          zuverlaessig — der gruene Lint belegte die Beschriftung also nicht. */}
+          Text steht sichtbar im DOM. Ein blosses `aria-label` waere unsichtbar, und `jsx-a11y`
+          prueft MUI-Kompositionen nicht zuverlaessig — der gruene Lint belegte die Beschriftung
+          also nicht.
+
+          Der zugaengliche Name traegt zusaetzlich den Labelnamen: Ohne ihn hiessen bei mehreren
+          Labels alle Haekchen gleich, und wer per Screenreader navigiert, koennte sie nicht
+          auseinanderhalten. Der sichtbare Text bleibt kurz — er wiederholte sich sonst in jeder
+          Zeile, obwohl die Zeile den Bezug optisch ohnehin herstellt. Der sichtbare Text ist
+          Teilstring des zugaenglichen Namens, WCAG 2.5.3 (Label in Name) bleibt gewahrt. */}
       <FormControlLabel
-        control={<Checkbox size="small" checked={zaehlt} onChange={(e) => setZaehlt(e.target.checked)} />}
+        control={
+          <Checkbox
+            size="small"
+            checked={zaehlt}
+            onChange={(e) => setZaehlt(e.target.checked)}
+            slotProps={{ input: { 'aria-label': `${label.name}: auf der Vorhaben-Kachel zählen` } }}
+          />
+        }
         label="auf der Vorhaben-Kachel zählen"
         slotProps={{ typography: { variant: 'caption', color: 'text.secondary' } }}
       />
