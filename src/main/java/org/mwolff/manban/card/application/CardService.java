@@ -11,6 +11,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.board.application.BoardNotFoundException;
@@ -271,7 +272,8 @@ public class CardService {
                 projectId,
                 null,
                 externalKey,
-                herkunft));
+                herkunft,
+                null));
 
     if (!ideaStored) {
       transitions.open(saved.requireId(), columnId, column.name(), now);
@@ -336,6 +338,8 @@ public class CardService {
                 null,
                 null,
                 // Herkunft: kein Schreibpfad hier — der kommt in Issue #604.
+                null,
+                // Anforderungskarte: kein Schreibpfad hier — der kommt in Issue #639.
                 null));
     publishChanged(boardId, ActivityType.CREATED, saved.requireId());
     return view(saved);
@@ -387,45 +391,74 @@ public class CardService {
   }
 
   /**
-   * Herkunftsbaum eines Boards als flache Liste in Präorder mit Tiefe (Issue #609, Plan #606
-   * E1/E2).
+   * Herkunftsbaum <b>eines Vorhabens</b> als flache Liste in Präorder mit Tiefe (Issue #643).
    *
-   * <p>Flach statt verschachtelt: Verschachteltes JSON zwängt eine Baumtiefe ins Schema und ist
-   * schwer zu diffen. Der Server liefert Kanten, Tiefe und die Reihenfolge; das Einrücken ist
-   * Darstellungsfrage.
+   * <p>Bis Issue #645 gab es daneben einen board-weiten Baum. Er stellte alle Ketten des Boards
+   * nebeneinander und beantwortete die Frage „was gehört zu diesem Vorhaben" damit nicht; der PO
+   * hat ihn abbestellt. Geblieben ist diese Sicht: dieselbe Rechnung auf den Mitgliedern
+   * <em>eines</em> Vorhabens — die Zugehörigkeit aus {@link EpicMembership} (#632), der Baum aus
+   * {@link DerivationTree} (#609). Eine zweite Graphenrechnung wäre ein zweiter Ort für denselben
+   * Fehler.
    *
-   * <p><b>Board-gebunden</b> als Zuschnittsentscheidung (Plan #606 E3): Kanten über die
-   * Board-Grenze werden als extern ausgewiesen statt aufgelöst — für Herkunft und Abhängigkeiten
-   * gleichermaßen.
+   * <p><b>Was durch die Einschränkung anders wird:</b> {@code build} weist alles als extern aus,
+   * was nicht in der übergebenen Menge liegt. Ein Vorfahr, der auf dem Board liegt, aber kein
+   * Mitglied ist — archiviert, im Ideen-Speicher oder selbst ein Vorhaben —, ist damit extern
+   * <em>ohne</em> Nummer, und sein Kind wird zur Wurzel. Ebenso gilt eine Abhängigkeit auf eine
+   * Board-Karte ausserhalb des Vorhabens als extern und setzt {@code blocked} nicht. Beides ist
+   * gewollt: Was das Vorhaben nicht enthält, kann sein Baum nicht als offen behaupten.
    *
-   * <p>Der Lesepfad ist gegen Zyklen wehrhaft, obwohl der Schreibpfad sie ausschließt: {@link
-   * DerivedFrom} schützt nur, was durch diese Anwendung geht, und ein Zyklus wäre hier eine
-   * Endlosschleife im Server.
-   *
-   * <p>Drei Abfragen, unabhängig von der Kartenzahl: die Board-Menge, die Nummern board-fremder
-   * Vorfahren und die Abhängigkeitskanten. Ein Nachladen je Karte oder je Kante wäre N+1.
+   * @throws CardNotFoundException wenn {@code epicId} kein Vorhaben dieses Boards bezeichnet.
+   *     Bewusst nicht als leere Liste: Sonst könnte der Client „existiert nicht" nicht vom
+   *     legitimen Leer-Fall unterscheiden. Nicht-Existenz und Fremdzugriff bleiben ununterscheidbar
+   *     wie bei {@link #getCard}.
    */
   @Transactional(readOnly = true)
-  public List<DerivationNodeView> derivationTree(long userId, long boardId) {
+  public List<DerivationNodeView> epicDerivationTree(long userId, long boardId, long epicId) {
     permissions.requireMembership(userId, boardService.requireProjectId(boardId));
-    // ideaStored heißt „noch nicht eingeplant" und gehört nicht auf das Board — anders als das
-    // Archiv, das ein Zustand ist. Der Papierkorb ist in findByBoardId bereits gefiltert.
-    List<Card> boardCards =
-        cards.findByBoardId(boardId).stream().filter(c -> !c.ideaStored()).toList();
+
+    // Ungefiltert in die Zugehörigkeitsrechnung — genau wie in listEpics: EpicMembership filtert
+    // den Ideen-Speicher selbst heraus, kappt die Kette aber nicht an ihm. Ein Vorfilter hier
+    // ergäbe eine andere Mitgliedermenge als auf der Kachel, und beide Zahlen stammen aus
+    // derselben Ansicht.
+    List<Card> alle = cards.findByBoardId(boardId);
+    Set<Card> mitglieder = EpicMembership.compute(alle).get(epicId);
+    if (mitglieder == null) {
+      throw new CardNotFoundException();
+    }
+
+    // Bewusst UNSORTIERT weitergereicht: `DerivationTree.build` ordnet Geschwister selbst —
+    // topologisch, bei Gleichstand nach Nummer. Eine Vorsortierung hier waere nicht nur doppelt,
+    // sie verdeckte die eigentliche Ordnung: Mit vorsortierter Eingabe faellt ein Ausfall der
+    // Sortierung in `build` nicht mehr auf (PIT-Befund zu Issue #645).
+    List<Card> baumKarten = List.copyOf(mitglieder);
+    Set<Long> ids = baumKarten.stream().map(Card::requireId).collect(Collectors.toSet());
+    return DerivationTree.build(
+        baumKarten, dependencies.findByCardIds(ids), fremdeVorfahrenNummern(alle));
+  }
+
+  /**
+   * Nummern der Vorfahren, die nicht auf diesem Board liegen — ein Sammelzugriff statt einer
+   * Abfrage je Kante.
+   *
+   * <p>Bezugsmenge ist bewusst das <b>Board</b> und nicht die jeweils übergebene Teilmenge: Nur so
+   * behält eine board-fremde Herkunft im Vorhaben-Baum ihre Nummer, während board-interne
+   * Nicht-Mitglieder ohne Nummer extern bleiben.
+   */
+  private Map<Long, Integer> fremdeVorfahrenNummern(List<Card> boardCards) {
     Set<Long> imBoard = boardCards.stream().map(Card::requireId).collect(Collectors.toSet());
-    Set<Long> fremdeVorfahren =
+    Set<Long> fremde =
         boardCards.stream()
             .map(Card::derivedFromCardId)
             .filter(Objects::nonNull)
             .filter(id -> !imBoard.contains(id))
             .collect(Collectors.toSet());
-    Map<Long, Integer> fremdeNummern = new HashMap<>();
-    if (!fremdeVorfahren.isEmpty()) {
-      for (Card vorfahr : cards.findByIds(fremdeVorfahren)) {
-        fremdeNummern.put(vorfahr.requireId(), vorfahr.number());
+    Map<Long, Integer> nummern = new HashMap<>();
+    if (!fremde.isEmpty()) {
+      for (Card vorfahr : cards.findByIds(fremde)) {
+        nummern.put(vorfahr.requireId(), vorfahr.number());
       }
     }
-    return DerivationTree.build(boardCards, dependencies.findByCardIds(imBoard), fremdeNummern);
+    return nummern;
   }
 
   /**
@@ -495,6 +528,8 @@ public class CardService {
         boardService.listColumns(boardId).stream()
             .collect(Collectors.toMap(ColumnView::id, ColumnView::name));
     Map<Long, Set<Card>> membership = EpicMembership.compute(all);
+    Map<Long, Card> nachId =
+        all.stream().collect(Collectors.toMap(Card::requireId, Function.identity()));
 
     return all.stream()
         .filter(c -> c.type() == CardType.EPIC)
@@ -526,7 +561,8 @@ public class CardService {
                   done,
                   total,
                   members.stream().map(Card::requireNumber).sorted().toList(),
-                  rootNumbers);
+                  rootNumbers,
+                  anforderungsNummer(epic, nachId));
             })
         .toList();
   }
@@ -728,6 +764,98 @@ public class CardService {
     return view(saved);
   }
 
+  /**
+   * Eröffnet einen Vorgang: legt ein Vorhaben an, macht die übergebene Karte zu seiner Anforderung
+   * und ordnet sie ihm zu — in <b>einem</b> Schritt.
+   *
+   * <p>Bisher entstand das Vorhaben an einer anderen Stelle als die Anforderung, zu der es gehört:
+   * anlegen, dann von Hand zuordnen. Der zweite Schritt ging im Arbeitsfluss unter (Anforderung
+   * #636).
+   *
+   * <p><b>Warum eine Transaktion:</b> Getrennte Aufrufe hinterliessen bei einem Abbruch ein
+   * Vorhaben ohne Anforderung — also genau den Zustand, den diese Methode abschaffen soll (Plan
+   * #637, E2).
+   *
+   * <p>Das Vorhaben entsteht auf dem Board der Quellkarte und <b>ohne Beschreibung</b>: Den Inhalt
+   * trägt die Anforderungskarte, eine Kopie liefe sofort auseinander.
+   *
+   * @param shortcode optional, wie bei {@link #createEpic}
+   */
+  @Transactional
+  public CardView openEpicFromCard(
+      long userId, long cardId, @Nullable String shortcode, String title) {
+    Card quelle = cards.findById(cardId).orElseThrow(CardNotFoundException::new);
+    permissions.require(userId, quelle.projectId(), Permission.EPIC_CREATE);
+    requireVorgangEroeffenbar(quelle);
+
+    // Bestehenden Weg wiederverwenden statt nachbauen: Nummernvergabe, erste Spalte, Rechte und
+    // das Board-Ereignis haengen alle daran.
+    CardView vorhaben = createEpic(userId, quelle.requireBoardId(), title, null, shortcode);
+
+    Card epic = cards.findById(vorhaben.id()).orElseThrow(CardNotFoundException::new);
+    Long anforderung = RequirementCard.resolve(cards, epic, quelle.requireNumber());
+    Card gespeichert = cards.save(epic.withRequirement(anforderung));
+    cards.save(quelle.withParent(epic.requireId()));
+
+    return view(gespeichert);
+  }
+
+  /**
+   * Die Ablehnungen des Vorgangs-Eröffnens, alle mit Status 400.
+   *
+   * <p>Sie stehen <b>vor</b> dem Anlegen: Eine Ablehnung danach liefe zwar auch sauber zurueck,
+   * verbrauchte aber eine Kartennummer — die Sequenz rollt nicht mit.
+   */
+  private void requireVorgangEroeffenbar(Card quelle) {
+    if (quelle.type() == CardType.EPIC) {
+      throw new InvalidDependencyException(
+          "Ein Vorhaben eroeffnet keinen Vorgang aus sich selbst: " + quelle.requireNumber());
+    }
+    // Drei Ruhezustaende, eine Regel: Eine ruhende Karte eroeffnet keinen Vorgang. Der Papierkorb
+    // ist im Domain-Record nicht abgebildet — die Nummernsuche filtert ihn, findById nicht.
+    if (quelle.archived() || quelle.ideaStored() || liegtImPapierkorb(quelle)) {
+      throw new InvalidDependencyException(
+          "Eine ruhende Karte eroeffnet keinen Vorgang: " + quelle.requireNumber());
+    }
+    if (quelle.parentId() != null) {
+      // Stillschweigendes Umhaengen entzoege einer bestehenden Gruppierung eine Karte, ohne dass
+      // jemand es merkt. Erst loesen, dann eroeffnen.
+      throw new InvalidDependencyException(
+          "Die Karte ist bereits einem Vorhaben zugeordnet: " + quelle.requireNumber());
+    }
+  }
+
+  /**
+   * Ob die Karte im Papierkorb liegt.
+   *
+   * <p>{@code deletedAt} ist keine Komponente von {@link Card}; die Nummernsuche filtert den
+   * Papierkorb dagegen (Port-Zusage von {@code findByProjectIdAndNumber}), {@code findById} nicht.
+   * Findet die Suche unter derselben Nummer nichts, ist die Karte geloescht.
+   */
+  private boolean liegtImPapierkorb(Card karte) {
+    return cards.findByProjectIdAndNumber(karte.projectId(), karte.requireNumber()).isEmpty();
+  }
+
+  /**
+   * Setzt oder löscht ({@code null}) die Anforderungskarte eines Vorhabens.
+   *
+   * <p>Übergeben wird die projektweite <b>Kartennummer</b>, gespeichert die ID — die Nummer ändert
+   * sich beim Projektwechsel. Die vier Ablehnungen stehen in {@link RequirementCard}.
+   *
+   * <p>Eigener schmaler Endpunkt statt eines Feldes im Voll-Update, aus demselben Grund wie bei der
+   * Herkunft (#607): Ein Voll-Update kann ein fehlendes Feld nicht von {@code null} unterscheiden
+   * und löschte die Zuordnung bei jedem Karten-Edit.
+   */
+  @Transactional
+  public CardView assignRequirement(
+      long userId, long cardId, @Nullable Integer requirementCardNumber) {
+    Card card = requireCardOp(userId, cardId, Permission.TICKET_UPDATE, Permission.EPIC_UPDATE);
+    Long anforderung = RequirementCard.resolve(cards, card, requirementCardNumber);
+    Card saved = cards.save(card.withRequirement(anforderung));
+    publishChangedIfOnBoard(card.boardId(), ActivityType.UPDATED, cardId);
+    return view(saved);
+  }
+
   @Transactional
   public CardView move(long userId, long cardId, long targetColumnId, int targetPosition) {
     Card card = cards.findById(cardId).orElseThrow(CardNotFoundException::new);
@@ -866,6 +994,8 @@ public class CardService {
       // Anders als withParent(null) gilt das NUR beim Projektwechsel — innerhalb des Projekts
       // ueberlebt die Kette den Board-Wechsel.
       cleaned = cleaned.withDerivedFrom(null);
+      // Dieselbe Begruendung fuer die Anforderung: Sie ist board- und damit projekt-lokal.
+      cleaned = cleaned.withRequirement(null);
     }
     CardView result = view(cards.save(cleaned));
     if (!sameProject) {
@@ -875,6 +1005,11 @@ public class CardService {
       // sonst von der Reihenfolge innerhalb des Batches ab.
       for (Card kind : cards.findByDerivedFrom(cardId)) {
         cards.save(kind.withDerivedFrom(null));
+      }
+      // Gegenrichtung der Anforderung: Wandert die Anforderungskarte ab, verliert das
+      // zurueckbleibende Vorhaben seinen Verweis — sonst zeigte er ueber die Projektgrenze.
+      for (Card vorhaben : cards.findByRequirementCard(cardId)) {
+        cards.save(vorhaben.withRequirement(null));
       }
     }
     // Board-übergreifend: Quell- und Ziel-Board müssen beide live nachziehen.
@@ -1233,7 +1368,8 @@ public class CardService {
                 projectId,
                 targetBoardId,
                 externalKey,
-                herkunft));
+                herkunft,
+                null));
     activity.add(
         saved.requireId(), userId, CardActivityType.CREATED, "Idee angelegt", now, actor.current());
     return view(saved);
@@ -1509,6 +1645,24 @@ public class CardService {
     }
   }
 
+  /**
+   * Nummer der Anforderungskarte eines Vorhabens, oder {@code null}.
+   *
+   * <p>Aufgelöst wird ausschliesslich innerhalb der Board-Karten. Das ist keine Einschränkung,
+   * sondern die Grenze, die {@link RequirementCard} beim Setzen zieht: Die Anforderung liegt immer
+   * auf dem Board des Vorhabens. Fehlt sie hier trotzdem, liegt sie im Papierkorb — dann ist {@code
+   * null} die ehrliche Antwort und keine erfundene Nummer.
+   */
+  private static @Nullable Integer anforderungsNummer(Card epic, Map<Long, Card> nachId) {
+    // Optional-Kette statt zweier Null-Vergleiche: Ein vorgeschaltetes `id == null` waere hier
+    // redundant — die Map liefert fuer eine unbekannte ID ohnehin nichts —, und PIT kann eine
+    // redundante Bedingung nicht toeten, weil beide Zweige dasselbe Ergebnis liefern.
+    return Optional.ofNullable(epic.requirementCardId())
+        .map(nachId::get)
+        .map(Card::requireNumber)
+        .orElse(null);
+  }
+
   private Card requireEpicInBoard(long epicId, long boardId) {
     Card epic = cards.findById(epicId).orElseThrow(CardNotFoundException::new);
     if (epic.type() != CardType.EPIC || epic.requireBoardId() != boardId) {
@@ -1763,6 +1917,10 @@ public class CardService {
    * @param rootNumbers Nummern der direkt über {@code parentId} zugeordneten Karten, aufsteigend.
    *     Stets eine Teilmenge von {@code memberNumbers}: Sie werden aus derselben Menge gefiltert
    *     und unterliegen damit denselben Regeln
+   * @param requirementCardNumber Nummer der Anforderungskarte, oder {@code null}. Nullable, weil
+   *     ein Vorhaben auch ohne Herkunftskette zum Gruppieren dienen darf (PO-Entscheidung in #636)
+   *     — und weil eine zugeordnete Anforderung im Papierkorb liegen kann, dann ist sie hier nicht
+   *     auflösbar. Ausdrücklich <b>nicht</b> 0 oder ein Platzhalter: 0 wäre eine gültige Nummer
    */
   public record EpicView(
       Long id,
@@ -1773,5 +1931,6 @@ public class CardService {
       int done,
       int total,
       List<Integer> memberNumbers,
-      List<Integer> rootNumbers) {}
+      List<Integer> rootNumbers,
+      @Nullable Integer requirementCardNumber) {}
 }

@@ -1,15 +1,11 @@
 import AddIcon from '@mui/icons-material/Add'
-import ExpandLessIcon from '@mui/icons-material/ExpandLess'
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
-import IconButton from '@mui/material/IconButton'
 import LinearProgress from '@mui/material/LinearProgress'
+import Link from '@mui/material/Link'
 import Paper from '@mui/material/Paper'
 import Stack from '@mui/material/Stack'
-import Tab from '@mui/material/Tab'
-import Tabs from '@mui/material/Tabs'
 import Typography from '@mui/material/Typography'
 import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
@@ -18,7 +14,6 @@ import { Breadcrumbs } from '../components/Breadcrumbs'
 import { cardsApi, type Card } from '../api/cards'
 import { epicsApi, type Epic } from '../api/epics'
 import { CardDetailModal } from '../components/CardDetailModal'
-import { DerivationTree } from '../components/DerivationTree'
 import { EpicBadge } from '../components/EpicBadge'
 import { NewCardModal } from '../components/NewCardModal'
 import { useBoardRole } from '../lib/useBoardRole'
@@ -43,9 +38,6 @@ export function EpicsPage() {
   const [cards, setCards] = useState<Card[]>([])
   const [selected, setSelected] = useState<Card | null>(null)
   const [creating, setCreating] = useState(false)
-  const [tab, setTab] = useState(0)
-  // Genau ein Vorhaben ist aufgeklappt: Die Liste soll den Ueberblick nicht ersetzen.
-  const [offen, setOffen] = useState<number | null>(null)
 
   const reload = () => {
     void epicsApi.list(id).then(setEpics)
@@ -115,41 +107,13 @@ export function EpicsPage() {
             { label: 'Vorhaben' },
           ]}
         />
-        {canEdit && tab === 0 && (
+        {canEdit && (
           <Button variant="contained" size="small" startIcon={<AddIcon />} onClick={() => setCreating(true)}>
             Neues Vorhaben
           </Button>
         )}
       </Stack>
 
-      {/* Die Reiter heissen nach der Relation, nicht nach der Darstellung: „Fortschritt" ist die
-          gepflegte Zuordnung über parentId, „Herkunft" die abgeleitete Kette über derivedFrom. Die
-          beiden können einander nicht ausdrücken (Plan #606, E9), deshalb zwei Reiter statt eines
-          Umbaus. Beschriftungen deutsch — sie sind Nutzertext. */}
-      {/* selectionFollowsFocus: MUI aktiviert einen Reiter standardmäßig erst mit Enter oder
-          Leertaste, die Pfeiltasten bewegen nur den Fokus. Hier soll der Pfeil den Reiter
-          wechseln, deshalb ausdrücklich gesetzt. */}
-      <Tabs
-        value={tab}
-        onChange={(_, gewaehlt: number) => setTab(gewaehlt)}
-        aria-label="Ansicht"
-        selectionFollowsFocus
-        sx={{ mb: 2 }}
-      >
-        <Tab label="Fortschritt" id="vorhaben-tab-fortschritt" aria-controls="vorhaben-panel-fortschritt" />
-        <Tab label="Herkunft" id="vorhaben-tab-herkunft" aria-controls="vorhaben-panel-herkunft" />
-      </Tabs>
-
-      {tab === 1 && (
-        // Erst beim Wählen eingehängt, und beim Verlassen wieder ausgehängt: Der erneute Wechsel
-        // baut die Komponente neu auf, die dann selbst lädt — die Daten sind so nie veraltet.
-        <Box role="tabpanel" id="vorhaben-panel-herkunft" aria-labelledby="vorhaben-tab-herkunft">
-          <DerivationTree boardId={id} onOpenCard={oeffneKarte} />
-        </Box>
-      )}
-
-      {tab === 0 && (
-      <Box role="tabpanel" id="vorhaben-panel-fortschritt" aria-labelledby="vorhaben-tab-fortschritt">
       <Stack spacing={1.5}>
         {epics.map((epic) => {
           const pct = epic.total > 0 ? (epic.done / epic.total) * 100 : 0
@@ -166,57 +130,48 @@ export function EpicsPage() {
                   {epic.title}
                 </Typography>
                 <Typography variant="caption" color="text.secondary">
-                  {epic.done}/{epic.total} Stories fertig
+                  {epic.done}/{epic.total} Arbeitspakete fertig
                 </Typography>
-                {/* Disclosure, kein Baum: Die Karten darunter sind eine Liste, keine Hierarchie —
-                    die Tree-Rollen aus #611 gehoeren hierher ausdruecklich nicht. Die eigene
-                    Schaltflaeche haelt das Aufklappen vom Kachel-Klick getrennt, der den
-                    Karten-Dialog oeffnet; ohne stopPropagation traefe ein Klick beides. */}
-                <IconButton
-                  size="small"
-                  aria-label={`Karten von ${epic.title}`}
-                  aria-expanded={offen === epic.id}
-                  aria-controls={`vorhaben-karten-${epic.id}`}
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    setOffen(offen === epic.id ? null : epic.id)
-                  }}
-                >
-                  {offen === epic.id ? <ExpandLessIcon /> : <ExpandMoreIcon />}
-                </IconButton>
               </Stack>
+              {/* Woraus das Vorhaben entstanden ist. Traegt es keine Anforderung, steht hier
+                  nichts — kein Platzhalter und keine Ersatzanzeige aus den Wurzeln (Plan #637, E6).
+                  `component="button"` rendert ein echtes <button>: per Tab erreichbar und per Enter
+                  ausloesbar. Ein onClick auf einer Anzeigekomponente kaeme durch alle Gates —
+                  jsx-a11y prueft nur DOM-Elemente in Kleinschreibung, keine MUI-Komponenten — und
+                  waere per Tastatur trotzdem unerreichbar. */}
+              {epic.requirementCardNumber !== null && (
+                <Stack direction="row" spacing={0.5} alignItems="baseline" sx={{ mb: 1 }}>
+                  <Typography variant="caption" color="text.secondary">
+                    Anforderung:
+                  </Typography>
+                  <Link
+                    component="button"
+                    type="button"
+                    variant="caption"
+                    underline="hover"
+                    textAlign="left"
+                    onClick={(e) => {
+                      // Ohne stopPropagation oeffnete derselbe Klick zusaetzlich das
+                      // Vorhaben-Detail — der Kachel-Klick liegt eine Ebene darueber.
+                      e.stopPropagation()
+                      oeffneKarte(epic.requirementCardNumber as number)
+                    }}
+                  >
+                    {`#${epic.requirementCardNumber} · ${titelZuNummer(epic.requirementCardNumber)}`}
+                  </Link>
+                </Stack>
+              )}
               <LinearProgress
                 variant="determinate"
                 value={pct}
                 aria-label={`Fortschritt ${epic.title}`}
                 sx={{ height: 8, borderRadius: 1 }}
               />
-              {offen === epic.id && (
-                <Box id={`vorhaben-karten-${epic.id}`} sx={{ mt: 1.5 }} onClick={(e) => e.stopPropagation()}>
-                  {epic.memberNumbers.length === 0 ? (
-                    <Typography variant="body2" color="text.secondary">
-                      Keine Karten zugeordnet.
-                    </Typography>
-                  ) : (
-                    <Stack component="ul" spacing={0.5} sx={{ listStyle: 'none', pl: 0, m: 0 }}>
-                      {epic.memberNumbers.map((nummer) => (
-                        <Typography component="li" variant="body2" key={nummer} color="text.secondary">
-                          {`#${nummer} · ${titelZuNummer(nummer)} ${
-                            epic.rootNumbers.includes(nummer) ? '(zugeordnet)' : '(über Herkunft)'
-                          }`}
-                        </Typography>
-                      ))}
-                    </Stack>
-                  )}
-                </Box>
-              )}
             </Paper>
           )
         })}
         {epics.length === 0 && <Typography color="text.secondary">Noch keine Vorhaben.</Typography>}
       </Stack>
-      </Box>
-      )}
 
       <NewCardModal
         open={creating}

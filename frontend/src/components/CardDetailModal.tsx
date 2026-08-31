@@ -33,8 +33,10 @@ import Markdown, { type Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { attachmentsApi as defaultAttachmentsApi, type Attachment, type AttachmentsApi } from '../api/attachments'
 import { boardsApi as defaultBoardsApi } from '../api/boards'
+import CircularProgress from '@mui/material/CircularProgress'
 import { ApiError } from '../api/client'
-import { cardsApi as defaultCardsApi } from '../api/cards'
+import { DerivationTree } from './DerivationTree'
+import { cardsApi as defaultCardsApi , type DerivationNode } from '../api/cards'
 import type { Card, CardActivity, CardByNumber, CardDetail } from '../api/cards'
 import { commentsApi as defaultCommentsApi, type Comment, type CommentsApi } from '../api/comments'
 import type { Epic } from '../api/epics'
@@ -765,6 +767,8 @@ interface Props {
     | 'moveToIdeaStorage'
     | 'byNumber'
     | 'assignDerivedFrom'
+    | 'epicTree'
+    | 'openEpic'
   >
   boardsApi?: Pick<typeof defaultBoardsApi, 'get'>
 }
@@ -830,6 +834,39 @@ function CardDetailModalView({
     }
   }
 
+  // Vorgang eroeffnen (Issue #647). Der Name ist mit dem Kartentitel vorbelegt und
+  // ueberschreibbar; das Kuerzel ist optional wie beim Anlegen eines Vorhabens.
+  const [eroeffnen, setEroeffnen] = useState(false)
+  const [vorgangName, setVorgangName] = useState('')
+  const [vorgangKuerzel, setVorgangKuerzel] = useState('')
+
+  /**
+   * Ob an dieser Karte ein Vorgang eroeffnet werden kann — dieselben Bedingungen, die das Backend
+   * in #640 prueft. Die Oberflaeche zeigt den Weg gar nicht erst an, statt ihn in einen Fehler
+   * laufen zu lassen.
+   */
+  const kannVorgangEroeffnen =
+    canEdit && !isEpic && !card.archived && !card.ideaStored && card.parentId === null
+
+  const eroeffneVorgang = async () => {
+    try {
+      const vorhaben = await cardsApi.openEpic(card.id, vorgangName.trim(), (vorgangKuerzel.trim() === '' ? null : vorgangKuerzel.trim()))
+      setEroeffnen(false)
+      onChanged?.()
+      notify(`Vorgang eröffnet: ${vorhaben.title}`, 'success')
+      // Zum neuen Vorhaben: ueber denselben Verweis-Stack wie die `#N`-Spruenge. Fehlt die
+      // Projekt-ID, gibt es keine Aufloesung — dann bleibt es bei der Meldung.
+      onOpenDependency?.(vorhaben.number)
+    } catch (grund: unknown) {
+      // Die Meldung des Servers, nicht eine eigene: Die Ablehnungen aus #640 tragen einen
+      // Feldbezug, und ein verschluckter Text liesse den Nutzer raten.
+      notify(
+        grund instanceof ApiError ? grund.message : 'Vorgang eröffnen fehlgeschlagen.',
+        'error',
+      )
+    }
+  }
+
   const [activities, setActivities] = useState<CardActivity[]>([])
   const actorName = (userId: number | null) =>
     members.find((m) => m.userId === userId)?.displayName ?? 'System'
@@ -870,6 +907,8 @@ function CardDetailModalView({
   const [previews, setPreviews] = useState<Record<number, string>>({})
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [preview, setPreview] = useState<{ attachment: Attachment; url: string } | null>(null)
+  const [baum, setBaum] = useState<DerivationNode[] | null>(null)
+  const [baumFehler, setBaumFehler] = useState<string | null>(null)
 
   useEffect(() => {
     void commentsApi.list(card.id).then(setComments)
@@ -882,6 +921,46 @@ function CardDetailModalView({
   useEffect(() => {
     void cardsApi.getActivity(card.id).then(setActivities).catch(() => setActivities([]))
   }, [card.id, cardsApi])
+
+  // Der Baum eines Vorhabens (Issue #644). Das Laden liegt hier und nicht mehr in
+  // `DerivationTree`: Der Dialog kennt die Karte ohnehin, und Lade-, Fehler- und Leerzustand
+  // gehoeren zu ihm — die uebrigen Bereiche bleiben in jedem dieser Faelle bedienbar.
+  // Nur board-gebundene Karten tragen eine `boardId`: `CardDetail` — der Typ, den ein ueber einen
+  // `#N`-Verweis nachgeladener Eintrag hat — kennt sie nicht. Ohne Board gibt es keinen Baum
+  // abzurufen; der Dialog bleibt dann ohne diesen Bereich, statt zu raten.
+  const baumBoardId: number | null =
+    'boardId' in card && typeof card.boardId === 'number' ? card.boardId : null
+
+  useEffect(() => {
+    if (!isEpic || baumBoardId === null) {
+      return undefined
+    }
+    let aktiv = true
+    setBaum(null)
+    setBaumFehler(null)
+    void cardsApi
+      .epicTree(baumBoardId, card.id)
+      .then(
+        (zeilen) => ({ zeilen, fehler: null as string | null }),
+        (grund: unknown) => ({
+          zeilen: null,
+          fehler:
+            grund instanceof ApiError
+              ? grund.message
+              : 'Der Herkunftsbaum konnte nicht geladen werden.',
+        }),
+      )
+      .then((ergebnis) => {
+        if (!aktiv) {
+          return
+        }
+        setBaum(ergebnis.zeilen)
+        setBaumFehler(ergebnis.fehler)
+      })
+    return () => {
+      aktiv = false
+    }
+  }, [isEpic, baumBoardId, card.id, cardsApi])
 
   const startEditing = () => {
     setTitle(card.title)
@@ -1184,6 +1263,32 @@ function CardDetailModalView({
 
           {!editing && isEpic && <ChildCardsSection childCards={childCards} />}
 
+          {!editing && isEpic && baumBoardId !== null && (
+            <>
+              <Divider />
+              <Box>
+                <Typography variant="subtitle2" gutterBottom>
+                  Herkunft
+                </Typography>
+                {baumFehler !== null && <Alert severity="error">{baumFehler}</Alert>}
+                {baumFehler === null && baum === null && (
+                  <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
+                    <CircularProgress size={24} />
+                  </Box>
+                )}
+                {baum !== null && (
+                  <DerivationTree
+                    rows={baum}
+                    // Enter auf einer Zeile laedt die Karte in denselben Dialog — ueber denselben
+                    // Verweis-Stack wie die `#N`-Spruenge. Ohne `projectId` gibt es keine
+                    // Aufloesung; dann bleibt die Zeile ohne Ziel, wie eine Abhaengigkeitsmarke.
+                    onOpenCard={(nummer) => onOpenDependency?.(nummer)}
+                  />
+                )}
+              </Box>
+            </>
+          )}
+
           {!editing && (
             <>
               <Divider />
@@ -1241,9 +1346,53 @@ function CardDetailModalView({
             {canEdit && !card.archived && !card.ideaStored && !isEpic && (
               <Button onClick={() => void moveToIdeaStorage()}>In den Ideen-Pool</Button>
             )}
+            {kannVorgangEroeffnen && (
+              <Button
+                onClick={() => {
+                  setVorgangName(card.title)
+                  setVorgangKuerzel('')
+                  setEroeffnen(true)
+                }}
+              >
+                Vorgang eröffnen
+              </Button>
+            )}
             <Button onClick={onClose}>Schließen</Button>
           </>
         )}
+      </DialogActions>
+    </Dialog>
+
+    {/* Vorgang eroeffnen: Name und Kuerzel. Eigener Dialog statt Inline-Feldern, damit die
+        Kartenmaske im Lesemodus nicht zwei Eingabefelder traegt, die fast nie gebraucht werden. */}
+    <Dialog open={eroeffnen} onClose={() => setEroeffnen(false)} fullWidth maxWidth="xs">
+      <DialogTitle>Vorgang eröffnen</DialogTitle>
+      <DialogContent>
+        <Stack spacing={2} sx={{ mt: 1 }}>
+          <TextField
+            label="Name des Vorhabens"
+            value={vorgangName}
+            onChange={(e) => setVorgangName(e.target.value)}
+            fullWidth
+            autoFocus
+          />
+          <TextField
+            label="Kürzel (optional)"
+            value={vorgangKuerzel}
+            onChange={(e) => setVorgangKuerzel(e.target.value)}
+            fullWidth
+          />
+        </Stack>
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={() => setEroeffnen(false)}>Abbrechen</Button>
+        <Button
+          variant="contained"
+          onClick={() => void eroeffneVorgang()}
+          disabled={vorgangName.trim() === ''}
+        >
+          Eröffnen
+        </Button>
       </DialogActions>
     </Dialog>
 

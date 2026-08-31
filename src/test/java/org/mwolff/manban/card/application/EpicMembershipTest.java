@@ -68,7 +68,8 @@ class EpicMembershipTest {
         PROJECT,
         null,
         null,
-        derivedFrom);
+        derivedFrom,
+        null);
   }
 
   private static Set<Integer> nummern(Map<Long, Set<Card>> ergebnis, long epicId) {

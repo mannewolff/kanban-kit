@@ -60,6 +60,8 @@ function makeApis() {
     moveToIdeaStorage: vi.fn().mockResolvedValue({ ...card }),
     byNumber: vi.fn().mockResolvedValue({ ...linkedCard }),
     assignDerivedFrom: vi.fn().mockResolvedValue({ ...card }),
+    epicTree: vi.fn().mockResolvedValue([]),
+    openEpic: vi.fn().mockResolvedValue({ ...card, id: 400, number: 9, title: 'Neues Vorhaben', type: 'EPIC' }),
   }
   const boardsApi = { get: vi.fn().mockResolvedValue(linkedBoard) }
   return { commentsApi, attachmentsApi, cardsApi, boardsApi }
@@ -531,6 +533,314 @@ describe('CardDetailModal', () => {
     expect(await screen.findByText('Keine zugeordneten Karten.')).toBeInTheDocument()
   })
 
+  // --- Herkunftsbaum im Vorhaben-Dialog (Issue #644) ------------------------
+
+  /** Eine Baumzeile, wie sie GET /api/boards/{id}/epics/{epicId}/tree liefert. */
+  function baumZeile(nummer: number, depth = 0) {
+    return {
+      number: nummer, title: `Karte ${nummer}`, type: 'CARD' as const, derivedFrom: null, depth,
+      done: false, blocked: false, dependencies: [], externalDependencies: [],
+      externalOrigin: false, broken: false,
+    }
+  }
+
+  it('zeigt im Detail-Dialog eines Vorhabens den Baum', async () => {
+    const apis = makeApis()
+    apis.cardsApi.epicTree.mockResolvedValue([baumZeile(7), baumZeile(8, 1)])
+    render(<CardDetailModal card={epicCard} canEdit onClose={vi.fn()} {...apis} />)
+
+    expect(await screen.findByRole('tree')).toBeInTheDocument()
+    expect(screen.getAllByRole('treeitem')).toHaveLength(2)
+    expect(apis.cardsApi.epicTree).toHaveBeenCalledWith(1, 200)
+  })
+
+  it('zeigt bei einer gewöhnlichen Karte keinen Baum und ruft den Endpunkt nicht auf', async () => {
+    const apis = makeApis()
+    render(<CardDetailModal card={card} canEdit onClose={vi.fn()} {...apis} />)
+
+    await screen.findByText('Aufgabe')
+    expect(screen.queryByRole('tree')).toBeNull()
+    expect(apis.cardsApi.epicTree).not.toHaveBeenCalled()
+  })
+
+  it('zeigt für ein Vorhaben ohne zugeordnete Karten den vorhabenbezogenen Hinweis', async () => {
+    const apis = makeApis()
+    apis.cardsApi.epicTree.mockResolvedValue([])
+    render(<CardDetailModal card={epicCard} canEdit onClose={vi.fn()} {...apis} />)
+
+    expect(
+      await screen.findByText(/diesem vorhaben sind noch keine karten zugeordnet/i),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('tree')).toBeNull()
+  })
+
+  it('zeigt während des Ladens einen Platzhalter', () => {
+    const apis = makeApis()
+    apis.cardsApi.epicTree.mockReturnValue(new Promise(() => {}))
+    render(<CardDetailModal card={epicCard} canEdit onClose={vi.fn()} {...apis} />)
+
+    expect(screen.getByRole('progressbar')).toBeInTheDocument()
+  })
+
+  /**
+   * Scheitert der Abruf, bleibt der Rest des Dialogs bedienbar: Der Baum ist ein Bereich neben
+   * Beschreibung, Anhaengen und Kommentaren, nicht an ihrer Stelle.
+   */
+  it('zeigt bei fehlgeschlagenem Baum-Abruf eine Meldung und lässt den Dialog bedienbar', async () => {
+    const apis = makeApis()
+    apis.cardsApi.epicTree.mockRejectedValue(new ApiError(403, 'Kein Zugriff auf dieses Board.'))
+    render(<CardDetailModal card={epicCard} canEdit onClose={vi.fn()} {...apis} />)
+
+    expect(await screen.findByText(/kein zugriff auf dieses board/i)).toBeInTheDocument()
+    expect(screen.queryByRole('tree')).toBeNull()
+    // Die uebrigen Bereiche stehen weiterhin da.
+    expect(screen.getByText(/Karten \(/)).toBeInTheDocument()
+  })
+
+  it('meldet auch einen Fehler ohne API-Kontext', async () => {
+    const apis = makeApis()
+    apis.cardsApi.epicTree.mockRejectedValue(new Error('Netzwerk weg'))
+    render(<CardDetailModal card={epicCard} canEdit onClose={vi.fn()} {...apis} />)
+
+    expect(await screen.findByText(/herkunftsbaum konnte nicht geladen werden/i)).toBeInTheDocument()
+  })
+
+  /**
+   * Enter auf einer Baumzeile laedt die Karte in denselben Dialog — ueber denselben Verweis-Stack
+   * wie die `#N`-Spruenge (Entscheidung 2026-08-30). Damit behaelt die Enter-Bedienung aus #611
+   * ein Ziel.
+   */
+  it('lädt per Enter auf einer Baumzeile die Karte in denselben Dialog', async () => {
+    const apis = makeApis()
+    apis.cardsApi.epicTree.mockResolvedValue([baumZeile(3)])
+    render(
+      <CardDetailModal card={epicCard} canEdit projectId={9} onClose={vi.fn()} {...apis} />,
+    )
+    const zeile = (await screen.findAllByRole('treeitem'))[0]
+
+    fireEvent.keyDown(zeile, { key: 'Enter' })
+
+    // `byNumber` liefert die Vorbedingung — sie ersetzt die Vorhaben-Ansicht im selben Dialog.
+    expect(await screen.findByText('Vorbedingung')).toBeInTheDocument()
+    expect(apis.cardsApi.byNumber).toHaveBeenCalledWith(9, 3)
+  })
+
+  /**
+   * Ohne diesen Schutz schriebe eine langsame Antwort in einen Dialog, den es nicht mehr gibt.
+   * Der Test ist aus `DerivationTree.test.tsx` hierher gewandert: Dort lag frueher das Laden.
+   */
+  it('verwirft eine Baum-Antwort, die erst nach dem Schliessen eintrifft', async () => {
+    const apis = makeApis()
+    let aufloesen: (zeilen: unknown[]) => void = () => {}
+    apis.cardsApi.epicTree.mockReturnValue(
+      new Promise<unknown[]>((r) => {
+        aufloesen = r
+      }),
+    )
+    const { unmount } = render(
+      <CardDetailModal card={epicCard} canEdit onClose={vi.fn()} {...apis} />,
+    )
+    unmount()
+
+    aufloesen([baumZeile(7)])
+    await Promise.resolve()
+
+    expect(screen.queryByRole('tree')).toBeNull()
+  })
+
+  // --- Vorgang eröffnen (Issue #647) ----------------------------------------
+
+  const vorgangKnopf = () => screen.getByRole('button', { name: 'Vorgang eröffnen' })
+
+  async function oeffneVorgangsDialog(apis: ReturnType<typeof makeApis>, karte = card) {
+    const onChanged = vi.fn()
+    render(
+      <CardDetailModal
+        card={karte}
+        canEdit
+        projectId={9}
+        onClose={vi.fn()}
+        onChanged={onChanged}
+        {...apis}
+      />,
+      { wrapper: SnackbarProvider },
+    )
+    await screen.findByText(karte.title)
+    fireEvent.click(vorgangKnopf())
+    return onChanged
+  }
+
+  it('zeigt an einer gewöhnlichen Karte ohne Vorhaben den Knopf „Vorgang eröffnen"', async () => {
+    const apis = makeApis()
+    render(<CardDetailModal card={card} canEdit onClose={vi.fn()} {...apis} />, {
+      wrapper: SnackbarProvider,
+    })
+
+    await screen.findByText('Aufgabe')
+    expect(vorgangKnopf()).toBeInTheDocument()
+  })
+
+  it('zeigt den Knopf an einem Vorhaben nicht', async () => {
+    const apis = makeApis()
+    render(<CardDetailModal card={epicCard} canEdit onClose={vi.fn()} {...apis} />, {
+      wrapper: SnackbarProvider,
+    })
+
+    await screen.findByText('Aufgabe')
+    expect(screen.queryByRole('button', { name: 'Vorgang eröffnen' })).toBeNull()
+  })
+
+  it('zeigt den Knopf an einer bereits zugeordneten Karte nicht', async () => {
+    // Stillschweigendes Umhaengen entzoege einer bestehenden Gruppierung eine Karte (#640).
+    const apis = makeApis()
+    render(
+      <CardDetailModal card={{ ...card, parentId: 200 }} canEdit onClose={vi.fn()} {...apis} />,
+      { wrapper: SnackbarProvider },
+    )
+
+    await screen.findByText('Aufgabe')
+    expect(screen.queryByRole('button', { name: 'Vorgang eröffnen' })).toBeNull()
+  })
+
+  it('schlägt den Kartentitel als Namen vor', async () => {
+    const apis = makeApis()
+    await oeffneVorgangsDialog(apis)
+
+    expect(screen.getByLabelText('Name des Vorhabens')).toHaveValue('Aufgabe')
+  })
+
+  it('eröffnet auch ohne Kürzel', async () => {
+    const apis = makeApis()
+    await oeffneVorgangsDialog(apis)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Eröffnen' }))
+
+    await waitFor(() => expect(apis.cardsApi.openEpic).toHaveBeenCalledWith(100, 'Aufgabe', null))
+  })
+
+  it('macht den Erfolg sichtbar und führt zum neuen Vorhaben', async () => {
+    const apis = makeApis()
+    const onChanged = await oeffneVorgangsDialog(apis)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Eröffnen' }))
+
+    expect(await screen.findByText('Vorgang eröffnet: Neues Vorhaben')).toBeInTheDocument()
+    // Der Aufrufer laedt nach: Die Karte traegt jetzt eine Vorhaben-Zuordnung.
+    await waitFor(() => expect(onChanged).toHaveBeenCalled())
+    // Der Weg zum neuen Vorhaben laeuft ueber denselben Verweis-Stack wie die `#N`-Spruenge.
+    await waitFor(() => expect(apis.cardsApi.byNumber).toHaveBeenCalledWith(9, 9))
+  })
+
+  /**
+   * Die Ablehnungen aus #640 tragen einen Feldbezug; eine eigene Ersatzmeldung liesse den Nutzer
+   * raten, woran es lag.
+   */
+  it('zeigt bei einem Fehler die Meldung des Servers und lässt den Dialog bedienbar', async () => {
+    const apis = makeApis()
+    apis.cardsApi.openEpic.mockRejectedValue(
+      new ApiError(400, 'Die Karte ist bereits einem Vorhaben zugeordnet: 5'),
+    )
+    await oeffneVorgangsDialog(apis)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Eröffnen' }))
+
+    expect(
+      await screen.findByText('Die Karte ist bereits einem Vorhaben zugeordnet: 5'),
+    ).toBeInTheDocument()
+    // Der Dialog bleibt offen und bedienbar.
+    expect(screen.getByRole('button', { name: 'Eröffnen' })).toBeInTheDocument()
+  })
+
+  it('lässt den vorgeschlagenen Namen überschreiben', async () => {
+    const apis = makeApis()
+    await oeffneVorgangsDialog(apis)
+
+    fireEvent.change(screen.getByLabelText('Name des Vorhabens'), {
+      target: { value: 'Eigener Name' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Eröffnen' }))
+
+    await waitFor(() =>
+      expect(apis.cardsApi.openEpic).toHaveBeenCalledWith(100, 'Eigener Name', null),
+    )
+  })
+
+  it('bricht ohne Aufruf ab', async () => {
+    const apis = makeApis()
+    await oeffneVorgangsDialog(apis)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Abbrechen' }))
+
+    expect(apis.cardsApi.openEpic).not.toHaveBeenCalled()
+  })
+
+  it('schließt den Dialog auch per Escape, ohne zu eröffnen', async () => {
+    const apis = makeApis()
+    await oeffneVorgangsDialog(apis)
+
+    fireEvent.keyDown(screen.getByRole('dialog', { name: 'Vorgang eröffnen' }), { key: 'Escape' })
+
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: 'Vorgang eröffnen' })).toBeNull(),
+    )
+    expect(apis.cardsApi.openEpic).not.toHaveBeenCalled()
+  })
+
+  it('gibt ein eingegebenes Kürzel mit', async () => {
+    const apis = makeApis()
+    await oeffneVorgangsDialog(apis)
+
+    fireEvent.change(screen.getByLabelText('Kürzel (optional)'), { target: { value: 'VOR' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Eröffnen' }))
+
+    await waitFor(() => expect(apis.cardsApi.openEpic).toHaveBeenCalledWith(100, 'Aufgabe', 'VOR'))
+  })
+
+  /**
+   * Ohne `projectId` gibt es keine Aufloesung von Kartennummern — dann bleibt es bei der Meldung,
+   * statt ins Leere zu springen. Dieselbe Semantik wie bei den `#N`-Verweisen.
+   */
+  it('meldet den Erfolg auch ohne Projekt-ID, führt dann aber nicht weiter', async () => {
+    const apis = makeApis()
+    render(<CardDetailModal card={card} canEdit onClose={vi.fn()} {...apis} />, {
+      wrapper: SnackbarProvider,
+    })
+    await screen.findByText('Aufgabe')
+    fireEvent.click(vorgangKnopf())
+    fireEvent.click(screen.getByRole('button', { name: 'Eröffnen' }))
+
+    expect(await screen.findByText('Vorgang eröffnet: Neues Vorhaben')).toBeInTheDocument()
+    expect(apis.cardsApi.byNumber).not.toHaveBeenCalled()
+  })
+
+  it('meldet auch einen Fehler ohne API-Kontext', async () => {
+    const apis = makeApis()
+    apis.cardsApi.openEpic.mockRejectedValue(new Error('Netzwerk weg'))
+    await oeffneVorgangsDialog(apis)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Eröffnen' }))
+
+    expect(await screen.findByText('Vorgang eröffnen fehlgeschlagen.')).toBeInTheDocument()
+  })
+
+  /**
+   * Der Knopf muss per Tastatur ausloesbar sein. Ein Test, der nur klickt, belegt das nicht:
+   * jsx-a11y prueft nur DOM-Elemente in Kleinschreibung, keine MUI-Komponenten.
+   */
+  it('löst den Knopf auch per Tastatur aus', async () => {
+    const apis = makeApis()
+    render(<CardDetailModal card={card} canEdit onClose={vi.fn()} {...apis} />, {
+      wrapper: SnackbarProvider,
+    })
+    await screen.findByText('Aufgabe')
+
+    vorgangKnopf().focus()
+    expect(vorgangKnopf()).toHaveFocus()
+    await userEvent.keyboard('{Enter}')
+
+    expect(screen.getByRole('dialog', { name: 'Vorgang eröffnen' })).toBeInTheDocument()
+  })
+
   it('zeigt im Edit-Modus eines Epics nur das Kürzel-Feld', async () => {
     const apis = makeApis()
     render(<CardDetailModal card={epicCard} canEdit onClose={vi.fn()} {...apis} />)
@@ -544,7 +854,7 @@ describe('CardDetailModal', () => {
 
   it('bietet im Edit-Modus einer Nicht-Epic-Karte die Epic-Zuordnung an', async () => {
     const apis = makeApis()
-    const epics = [{ id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 0, total: 1, memberNumbers: [], rootNumbers: [] }]
+    const epics = [{ id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 0, total: 1, memberNumbers: [], rootNumbers: [], requirementCardNumber: null }]
     render(<CardDetailModal card={card} canEdit epics={epics} onClose={vi.fn()} {...apis} />)
 
     fireEvent.click(screen.getByRole('button', { name: 'Bearbeiten' }))
@@ -558,7 +868,7 @@ describe('CardDetailModal', () => {
 
   it('setzt die Epic-Zuordnung über die leere Auswahl wieder auf null', async () => {
     const apis = makeApis()
-    const epics = [{ id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 0, total: 1, memberNumbers: [], rootNumbers: [] }]
+    const epics = [{ id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 0, total: 1, memberNumbers: [], rootNumbers: [], requirementCardNumber: null }]
     render(<CardDetailModal card={{ ...card, parentId: 9 }} canEdit epics={epics} onClose={vi.fn()} {...apis} />)
 
     fireEvent.click(screen.getByRole('button', { name: 'Bearbeiten' }))
@@ -860,7 +1170,7 @@ describe('CardDetailModal', () => {
 
   it('bietet im Edit-Modus die bereits gesetzte Epic-Zuordnung an', async () => {
     const apis = makeApis()
-    const epics = [{ id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 0, total: 1, memberNumbers: [], rootNumbers: [] }]
+    const epics = [{ id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 0, total: 1, memberNumbers: [], rootNumbers: [], requirementCardNumber: null }]
     const linked: Card = { ...card, parentId: 9 }
     render(<CardDetailModal card={linked} canEdit epics={epics} onClose={vi.fn()} {...apis} />)
 

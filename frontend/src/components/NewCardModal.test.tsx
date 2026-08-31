@@ -23,7 +23,7 @@ describe('NewCardModal', () => {
 
   it('reicht Epic-Zuordnung und Beschreibung durch', async () => {
     const onSubmit = vi.fn().mockResolvedValue(undefined)
-    const epics = [{ id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 0, total: 1, memberNumbers: [], rootNumbers: [] }]
+    const epics = [{ id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 0, total: 1, memberNumbers: [], rootNumbers: [], requirementCardNumber: null }]
     render(
       <NewCardModal open columnName="Backlog" epics={epics} onClose={vi.fn()} onSubmit={onSubmit} />,
     )
@@ -104,7 +104,7 @@ describe('NewCardModal', () => {
 
   it('zeigt im Ideen-Modus nur den schlanken Feldsatz und legt ohne Zusatzfelder an', async () => {
     const onSubmit = vi.fn().mockResolvedValue(undefined)
-    const epics = [{ id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 0, total: 1, memberNumbers: [], rootNumbers: [] }]
+    const epics = [{ id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 0, total: 1, memberNumbers: [], rootNumbers: [], requirementCardNumber: null }]
     render(
       <NewCardModal open ideaOnly columnName="" epics={epics} onClose={vi.fn()} onSubmit={onSubmit} />,
     )

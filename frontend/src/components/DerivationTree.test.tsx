@@ -1,13 +1,12 @@
-import { act, render, screen, waitFor } from '@testing-library/react'
+import { act, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { DerivationTree } from './DerivationTree'
-import { ApiError } from '../api/client'
 import type { DerivationNode } from '../api/cards'
 
 vi.mock('../api/cards', async (original) => {
   const actual = await original<typeof import('../api/cards')>()
-  return { ...actual, cardsApi: { derivationTree: vi.fn() } }
+  return { ...actual, cardsApi: { epicTree: vi.fn() } }
 })
 
 // jsdom implementiert scrollIntoView nicht. Der Stub ist zugleich der Spy fuer Issue #612 — mehr
@@ -16,7 +15,7 @@ const scrollIntoView = vi.fn()
 Element.prototype.scrollIntoView = scrollIntoView
 
 const { cardsApi } = await import('../api/cards')
-const derivationTree = cardsApi.derivationTree as unknown as ReturnType<typeof vi.fn>
+const epicTree = cardsApi.epicTree as unknown as ReturnType<typeof vi.fn>
 
 function node(overrides: Partial<DerivationNode> & { number: number }): DerivationNode {
   return {
@@ -50,9 +49,13 @@ const mitAbhaengigkeit: DerivationNode[] = [
 
 const marke = (nummer: number) => screen.getByRole('button', { name: `Zur Karte #${nummer} springen` })
 
+/**
+ * Seit Issue #644 bekommt die Komponente ihre Zeilen als Eigenschaft; das Laden liegt im
+ * aufrufenden Dialog. Die Signatur bleibt `async`, damit die Testfaelle darunter unveraendert
+ * bleiben — geaendert hat sich nur der Arrange-Teil.
+ */
 async function zeigeBaum(daten: DerivationNode[], onOpenCard = vi.fn()) {
-  derivationTree.mockResolvedValue(daten)
-  render(<DerivationTree boardId={7} onOpenCard={onOpenCard} />)
+  render(<DerivationTree rows={daten} onOpenCard={onOpenCard} />)
   await screen.findByRole('tree')
   return onOpenCard
 }
@@ -393,47 +396,26 @@ describe('DerivationTree', () => {
     expect(onOpenCard).toHaveBeenCalledWith(2)
   })
 
-  it('zeigt bei leerer Liste einen Hinweis statt eines leeren Baums', async () => {
-    derivationTree.mockResolvedValue([])
-    render(<DerivationTree boardId={7} onOpenCard={vi.fn()} />)
+  it('zeigt bei leerer Liste einen vorhabenbezogenen Hinweis statt eines leeren Baums', () => {
+    // Vorhabenbezogen, nicht boardbezogen: Die Ansicht haengt im Dialog EINES Vorhabens (#644),
+    // ein Satz ueber das Board waere hier die falsche Aussage.
+    render(<DerivationTree rows={[]} onOpenCard={vi.fn()} />)
 
-    expect(await screen.findByText(/keine herkunft/i)).toBeInTheDocument()
+    expect(screen.getByText(/diesem vorhaben sind noch keine karten zugeordnet/i)).toBeInTheDocument()
     expect(screen.queryByRole('tree')).toBeNull()
   })
 
-  it('zeigt während des Ladens einen Platzhalter', () => {
-    derivationTree.mockReturnValue(new Promise(() => {}))
-    render(<DerivationTree boardId={7} onOpenCard={vi.fn()} />)
-
-    expect(screen.getByRole('progressbar')).toBeInTheDocument()
-  })
-
-  it('zeigt bei fehlgeschlagenem Abruf eine Fehlermeldung', async () => {
-    derivationTree.mockRejectedValue(new ApiError(403, 'Kein Zugriff auf dieses Board.'))
-    render(<DerivationTree boardId={7} onOpenCard={vi.fn()} />)
-
-    expect(await screen.findByText(/kein zugriff auf dieses board/i)).toBeInTheDocument()
-    expect(screen.queryByRole('tree')).toBeNull()
-  })
-
-  it('zeigt auch bei einem Fehler ohne API-Kontext eine Meldung', async () => {
-    derivationTree.mockRejectedValue(new Error('Netzwerk weg'))
-    render(<DerivationTree boardId={7} onOpenCard={vi.fn()} />)
-
-    expect(await screen.findByText(/herkunftsbaum/i)).toBeInTheDocument()
-    expect(screen.queryByRole('tree')).toBeNull()
-  })
-
-  it('löst keinen Schreibaufruf aus', async () => {
+  it('rendert die übergebenen Zeilen ohne jeden Netzwerkaufruf', async () => {
+    // Seit #644 ist die Komponente reine Darstellung. Gezaehlt wird deshalb "nie" und nicht mehr
+    // "genau ein Lesezugriff": Auch das Bedienen loest keinen Abruf aus.
     const user = userEvent.setup()
     await zeigeBaum(kette)
 
     await fokusAuf(zeilen()[0])
     await user.keyboard('{ArrowLeft}{ArrowRight}{ArrowDown}{Enter}')
 
-    // Gelesen wird ueber denselben Client — gezaehlt wird deshalb der Lesezugriff, nicht "nie".
-    expect(derivationTree).toHaveBeenCalledTimes(1)
-    expect(derivationTree).toHaveBeenCalledWith(7)
+    expect(zeilen()).not.toHaveLength(0)
+    expect(epicTree).not.toHaveBeenCalled()
   })
 
   it('nennt Vorhaben im gerenderten Baum nicht „Epic"', async () => {
@@ -458,32 +440,4 @@ describe('DerivationTree', () => {
     expect(onOpenCard).not.toHaveBeenCalled()
   })
 
-  it('verwirft eine Antwort, die erst nach dem Verlassen der Ansicht eintrifft', async () => {
-    // Ohne diesen Schutz schriebe eine langsame Antwort in eine Ansicht, die es nicht mehr gibt —
-    // beim Boardwechsel waere das der Baum des vorigen Boards.
-    let aufloesen: (daten: DerivationNode[]) => void = () => {}
-    derivationTree.mockReturnValue(
-      new Promise<DerivationNode[]>((r) => {
-        aufloesen = r
-      }),
-    )
-    const { unmount } = render(<DerivationTree boardId={7} onOpenCard={vi.fn()} />)
-    unmount()
-
-    aufloesen(kette)
-    await Promise.resolve()
-
-    expect(screen.queryByRole('tree')).toBeNull()
-  })
-
-  it('lädt neu, wenn sich das Board ändert', async () => {
-    derivationTree.mockResolvedValue(kette)
-    const { rerender } = render(<DerivationTree boardId={7} onOpenCard={vi.fn()} />)
-    await screen.findByRole('tree')
-
-    rerender(<DerivationTree boardId={8} onOpenCard={vi.fn()} />)
-
-    await waitFor(() => expect(derivationTree).toHaveBeenCalledTimes(2))
-    expect(derivationTree).toHaveBeenLastCalledWith(8)
-  })
 })

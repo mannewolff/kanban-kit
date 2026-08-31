@@ -49,6 +49,9 @@ class CardEntity {
   @Column(name = "derived_from_card_id")
   private @Nullable Long derivedFromCardId;
 
+  @Column(name = "requirement_card_id")
+  private @Nullable Long requirementCardId;
+
   @Column(name = "title", nullable = false)
   private String title;
 
@@ -108,6 +111,7 @@ class CardEntity {
     this.targetBoardId = c.targetBoardId();
     this.externalKey = c.externalKey();
     this.derivedFromCardId = c.derivedFromCardId();
+    this.requirementCardId = c.requirementCardId();
     this.title = c.title();
     this.description = c.description();
     this.positionInColumn = c.positionInColumn();
@@ -153,6 +157,10 @@ class CardEntity {
 
   @Nullable Long getDerivedFromCardId() {
     return derivedFromCardId;
+  }
+
+  @Nullable Long getRequirementCardId() {
+    return requirementCardId;
   }
 
   String getTitle() {

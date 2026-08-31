@@ -103,14 +103,17 @@ class CardController {
   }
 
   /**
-   * Herkunftsbaum des Boards — reiner Lesepfad, geschützt wie die übrigen Board-Leseendpunkte
-   * (Projekt-Mitgliedschaft). Kein Schreibpfad: Der Baum wird bei jedem Lesen berechnet und nie
-   * gespeichert, es gibt also keinen Synchronisationszustand, der auseinanderlaufen könnte.
+   * Herkunftsbaum eines Vorhabens — dieselbe Rechnung wie beim board-weiten Baum, angewandt auf die
+   * Mitglieder dieses Vorhabens (Issue #643).
+   *
+   * <p>Der Pfad endet bewusst auf {@code /tree} und wiederholt den Pfadbestandteil des board-weiten
+   * Endpunkts darüber nicht: Der kommt im Controller genau einmal vor, und daran bleibt sein
+   * Rückbau maschinell prüfbar.
    */
-  @GetMapping("/api/boards/{boardId}/derivation-tree")
-  List<DerivationNodeView> derivationTree(
-      @AuthenticationPrincipal Long userId, @PathVariable long boardId) {
-    return cards.derivationTree(userId, boardId);
+  @GetMapping("/api/boards/{boardId}/epics/{epicId}/tree")
+  List<DerivationNodeView> epicTree(
+      @AuthenticationPrincipal Long userId, @PathVariable long boardId, @PathVariable long epicId) {
+    return cards.epicDerivationTree(userId, boardId, epicId);
   }
 
   @GetMapping("/api/cards/{cardId}")
@@ -161,6 +164,35 @@ class CardController {
       @PathVariable long cardId,
       @Valid @RequestBody AssignDerivedFromRequest request) {
     return cards.assignDerivedFrom(userId, cardId, request.derivedFrom());
+  }
+
+  /**
+   * Eröffnet einen Vorgang an dieser Karte: Vorhaben anlegen, Karte als Anforderung setzen und ihr
+   * zuordnen — in einem Aufruf. Kartenzentriert wie {@code move}, {@code transfer} und {@code
+   * archive}; die Antwort ist die Sicht des <b>neuen Vorhabens</b>.
+   */
+  @PostMapping("/api/cards/{cardId}/open-epic")
+  @ResponseStatus(HttpStatus.CREATED)
+  CardView openEpic(
+      @AuthenticationPrincipal Long userId,
+      @PathVariable long cardId,
+      @Valid @RequestBody OpenEpicRequest request) {
+    return cards.openEpicFromCard(userId, cardId, request.kuerzel(), request.name());
+  }
+
+  /**
+   * Setzt oder löscht die Anforderungskarte eines Vorhabens.
+   *
+   * <p>Schmaler Endpunkt wie {@code derived-from} (#607): Ein Voll-Update kann ein fehlendes Feld
+   * nicht von {@code null} unterscheiden und löschte die Zuordnung bei jedem Karten-Edit. Übergabe
+   * von {@code null} löscht sie ausdrücklich.
+   */
+  @PatchMapping("/api/cards/{cardId}/requirement")
+  CardView assignRequirement(
+      @AuthenticationPrincipal Long userId,
+      @PathVariable long cardId,
+      @Valid @RequestBody AssignRequirementRequest request) {
+    return cards.assignRequirement(userId, cardId, request.requirementCardNumber());
   }
 
   @PostMapping("/api/cards/{cardId}/move")
@@ -344,6 +376,11 @@ class CardController {
   // Dieselben Grenzen wie im kanbancompat-Ingest (`CreateItemRequest`), damit beide Schreibpfade
   // dieselbe Nummer akzeptieren und dieselbe ablehnen.
   record AssignDerivedFromRequest(@Nullable @Positive @Max(CardNumbers.MAX) Integer derivedFrom) {}
+
+  record AssignRequirementRequest(
+      @Nullable @Positive @Max(CardNumbers.MAX) Integer requirementCardNumber) {}
+
+  record OpenEpicRequest(@Nullable String kuerzel, @NotBlank String name) {}
 
   record MoveCardRequest(
       @NotNull Long columnId, @jakarta.validation.constraints.PositiveOrZero int position) {}

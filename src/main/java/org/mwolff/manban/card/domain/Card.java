@@ -46,6 +46,21 @@ import org.mwolff.manban.common.Identifiable;
  *     <strong>ID</strong> und nicht die projektweite Nummer: Beim Verschieben in ein anderes
  *     Projekt vergibt {@code CardService.doTransfer} eine neue Nummer, eine gespeicherte Nummer
  *     zeigte danach im Projekt des Kindes auf eine fremde Karte. Die ID bleibt stabil.
+ * @param requirementCardId fachliche Anforderung, aus der dieses Vorhaben eröffnet wurde (nullable;
+ *     nur an EPIC gesetzt). <strong>Drei Relationen liegen hier nebeneinander und beantworten drei
+ *     verschiedene Fragen</strong> — sie auseinanderzuhalten ist wesentlich:
+ *     <ul>
+ *       <li>{@code parentId} — „wozu gehört diese Karte": Zugehörigkeit, flach, eine Ebene, gesetzt
+ *           an der CARD.
+ *       <li>{@code derivedFromCardId} — „woraus ist sie entstanden": Abstammung, beliebig tief, an
+ *           jeder Karte möglich.
+ *       <li>{@code requirementCardId} — „welche Anforderung trägt dieses Vorhaben": genau eine, von
+ *           Hand gelegt, nur am EPIC.
+ *     </ul>
+ *     Warum gespeichert statt gerechnet: Die Zugehörigkeit aller Karten wird abgeleitet, weil sie
+ *     ableitbar ist. Welche der zugeordneten Karten die Anforderung ist, ist es nicht — manuelles
+ *     Zuordnen bleibt möglich, ein Vorhaben kann also mehrere Wurzeln haben. Wie bei {@code
+ *     derivedFromCardId} wird die <strong>ID</strong> gespeichert, nicht die Nummer.
  */
 public record Card(
     @Nullable Long id,
@@ -68,7 +83,8 @@ public record Card(
     Long projectId,
     @Nullable Long targetBoardId,
     @Nullable String externalKey,
-    @Nullable Long derivedFromCardId)
+    @Nullable Long derivedFromCardId,
+    @Nullable Long requirementCardId)
     implements Identifiable {
 
   /** Board-ID einer board-gebundenen Karte; wirft bei einer board-losen Pool-Idee. */
@@ -117,7 +133,8 @@ public record Card(
         projectId,
         targetBoardId,
         externalKey,
-        derivedFromCardId);
+        derivedFromCardId,
+        requirementCardId);
   }
 
   public Card asArchived() {
@@ -142,7 +159,8 @@ public record Card(
         projectId,
         targetBoardId,
         externalKey,
-        derivedFromCardId);
+        derivedFromCardId,
+        requirementCardId);
   }
 
   /** Wiederherstellen an einer freien Position (append), um Positionskollisionen zu vermeiden. */
@@ -168,7 +186,8 @@ public record Card(
         projectId,
         targetBoardId,
         externalKey,
-        derivedFromCardId);
+        derivedFromCardId,
+        requirementCardId);
   }
 
   /**
@@ -199,7 +218,8 @@ public record Card(
         projectId,
         newTargetBoardId,
         externalKey,
-        derivedFromCardId);
+        derivedFromCardId,
+        requirementCardId);
   }
 
   /**
@@ -229,7 +249,8 @@ public record Card(
         projectId,
         null,
         externalKey,
-        derivedFromCardId);
+        derivedFromCardId,
+        requirementCardId);
   }
 
   public Card withMovedToDoneAt(@Nullable Instant when) {
@@ -254,7 +275,8 @@ public record Card(
         projectId,
         targetBoardId,
         externalKey,
-        derivedFromCardId);
+        derivedFromCardId,
+        requirementCardId);
   }
 
   /** Setzt oder löscht ({@code null}) die Vorhaben-Zuordnung. */
@@ -280,7 +302,8 @@ public record Card(
         projectId,
         targetBoardId,
         externalKey,
-        derivedFromCardId);
+        derivedFromCardId,
+        requirementCardId);
   }
 
   /** Setzt das Kürzel (nur für Vorhaben sinnvoll). */
@@ -306,7 +329,8 @@ public record Card(
         projectId,
         targetBoardId,
         externalKey,
-        derivedFromCardId);
+        derivedFromCardId,
+        requirementCardId);
   }
 
   /** Setzt oder löscht ({@code null}) das Fälligkeitsdatum. */
@@ -332,7 +356,42 @@ public record Card(
         projectId,
         targetBoardId,
         externalKey,
-        derivedFromCardId);
+        derivedFromCardId,
+        requirementCardId);
+  }
+
+  /**
+   * Setzt oder löscht ({@code null}) die Anforderungskarte des Vorhabens.
+   *
+   * <p>Gelöscht wird sie an zwei Stellen: auf ausdrückliche Übergabe von {@code null} — ein
+   * Vorhaben ohne Anforderung ist ein gültiger Zustand — und beim Projektwechsel, in beide
+   * Richtungen: am abgewanderten Vorhaben und an jedem Vorhaben, das auf die abgewanderte
+   * Anforderung zeigt.
+   */
+  public Card withRequirement(@Nullable Long newRequirementCardId) {
+    return new Card(
+        id,
+        boardId,
+        columnId,
+        number,
+        title,
+        description,
+        positionInColumn,
+        archived,
+        ideaStored,
+        movedToDoneAt,
+        createdBy,
+        createdAt,
+        updatedAt,
+        type,
+        parentId,
+        shortcode,
+        dueDate,
+        projectId,
+        targetBoardId,
+        externalKey,
+        derivedFromCardId,
+        newRequirementCardId);
   }
 
   /**
@@ -364,6 +423,7 @@ public record Card(
         projectId,
         targetBoardId,
         externalKey,
-        newDerivedFromCardId);
+        newDerivedFromCardId,
+        requirementCardId);
   }
 }

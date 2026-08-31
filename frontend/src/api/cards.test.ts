@@ -30,15 +30,32 @@ describe('cardsApi', () => {
     expect(result).toEqual([card])
   })
 
-  it('derivationTree ruft GET /api/boards/{id}/derivation-tree und liefert die geparste Antwort', async () => {
+  it('openEpic ruft POST /api/cards/{id}/open-epic mit Name und Kürzel', async () => {
+    const f = spyFetch(JSON.stringify({ ...card, id: 400, number: 9, title: 'Vorhaben', type: 'EPIC' }))
+    const result = await cardsApi.openEpic(7, 'Vorhaben', 'VOR')
+    const c = lastCall(f)
+    expect(c.url).toBe('/api/cards/7/open-epic')
+    expect(c.method).toBe('POST')
+    expect(JSON.parse(String(c.body))).toEqual({ name: 'Vorhaben', kuerzel: 'VOR' })
+    expect(result.type).toBe('EPIC')
+  })
+
+  it('openEpic reicht ein fehlendes Kürzel als null durch', async () => {
+    // Gegenprobe: Das Kuerzel ist optional (#640) — es darf weder zu '' noch zu undefined werden.
+    const f = spyFetch(JSON.stringify(card))
+    await cardsApi.openEpic(7, 'Vorhaben', null)
+    expect(JSON.parse(String(lastCall(f).body))).toEqual({ name: 'Vorhaben', kuerzel: null })
+  })
+
+  it('epicTree ruft GET /api/boards/{id}/epics/{epicId}/tree und liefert die geparste Antwort', async () => {
     const zeile = {
       number: 5, title: 'Karte', type: 'CARD' as const, derivedFrom: null, depth: 0,
       done: false, blocked: false, dependencies: [], externalDependencies: [],
       externalOrigin: false, broken: false,
     }
     const f = spyFetch(JSON.stringify([zeile]))
-    const result = await cardsApi.derivationTree(3)
-    expect(lastCall(f).url).toBe('/api/boards/3/derivation-tree')
+    const result = await cardsApi.epicTree(3, 42)
+    expect(lastCall(f).url).toBe('/api/boards/3/epics/42/tree')
     // Reiner Lesepfad: kein Verb ausser GET (apiFetch laesst die Methode dafuer weg).
     expect(lastCall(f).method).toBeUndefined()
     expect(result).toEqual([zeile])

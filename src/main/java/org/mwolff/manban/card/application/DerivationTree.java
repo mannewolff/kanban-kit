@@ -63,13 +63,17 @@ final class DerivationTree {
 
     Kontext ctx = new Kontext(byId, byNumber, kinder, depsByCardId, externalAncestorNumbers);
 
-    // Wurzeln (E6): keine board-interne Herkunft, und entweder mit Nachfahren auf diesem Board
-    // oder mit board-fremder Herkunft. Die herkunftslose Einzelkarte ist kein Vorhaben.
+    // Wurzel ist jede Karte ohne board-interne Herkunft — mehr nicht.
+    //
+    // Bis Issue #642 kam eine zweite Bedingung dazu: Nachfahren in der Menge oder board-fremde
+    // Herkunft. Sie schuetzte den board-weiten Baum, in dem sonst jede unverbundene Karte des
+    // Boards eine eigene Wurzel gewesen waere. Dieser Aufrufer verschwindet mit dem Rueckbau des
+    // board-weiten Baums; was bleibt, ist der Baum je Vorhaben — und dort ist die Bedingung
+    // schaedlich: Die Mitglieder sind schon ausgewaehlt, eine manuell zugeordnete Karte ohne
+    // Herkunft und ohne Nachfahren fiele still heraus. Genau so sieht eine Gruppierung ohne
+    // Herkunftskette aus, die der PO in #636 ausdruecklich vorgesehen hat; der Baum waere leer.
     List<Card> wurzeln =
-        boardCards.stream()
-            .filter(c -> !hatBoardInterneHerkunft(c, byId))
-            .filter(c -> kinder.containsKey(c.requireId()) || istExtern(c, byId))
-            .toList();
+        boardCards.stream().filter(c -> !hatBoardInterneHerkunft(c, byId)).toList();
 
     List<DerivationNodeView> zeilen = new ArrayList<>();
     for (Card w : sortiereGeschwister(wurzeln, ctx)) {
@@ -146,13 +150,17 @@ final class DerivationTree {
   private static DerivationNodeView zeile(Card c, int tiefe, boolean broken, Kontext ctx) {
     List<Integer> intern = new ArrayList<>();
     List<Integer> extern = new ArrayList<>();
-    // Blockiert, solange eine board-interne Abhängigkeit nicht in Done liegt. Externe gehen nicht
-    // ein: Was dieses Board nicht auflösen kann, kann es nicht als offen behaupten.
+    // Blockiert, solange eine Abhängigkeit innerhalb der übergebenen Menge nicht in Done liegt.
+    // Externe gehen nicht ein: Was diese Menge nicht auflösen kann, kann sie nicht als offen
+    // behaupten.
     boolean blocked = false;
     for (Integer nummer : ctx.depsByCardId.getOrDefault(c.requireId(), List.of())) {
-      // Extern ist eine Nummer genau dann, wenn keine Karte dieses Boards sie trägt — aufgelöst
-      // gegen die Board-Menge, nicht gegen die Baummenge. Eine Abhängigkeit auf eine gewöhnliche
-      // Board-Karte ohne Herkunftsbezug ist der Normalfall und wäre sonst fälschlich extern.
+      // Extern ist eine Nummer genau dann, wenn keine Karte der ÜBERGEBENEN Menge sie trägt.
+      // Welche Menge das ist, entscheidet der Aufrufer, und beide Aufrufer meinen es so:
+      // board-weit ist es die Board-Menge — eine Abhängigkeit auf eine gewöhnliche Board-Karte
+      // ohne Herkunftsbezug ist der Normalfall und wäre sonst fälschlich extern. Im Baum je
+      // Vorhaben (#643) ist es dessen Mitgliedermenge — eine Abhängigkeit auf eine Board-Karte
+      // ausserhalb des Vorhabens gilt dort als extern und setzt `blocked` nicht.
       Card ziel = ctx.byNumber.get(nummer);
       if (ziel == null) {
         extern.add(nummer);

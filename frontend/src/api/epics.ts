@@ -16,6 +16,14 @@ export interface Epic {
   memberNumbers: number[]
   /** Nummern der direkt zugeordneten Karten, aufsteigend. Stets Teilmenge von `memberNumbers`. */
   rootNumbers: number[]
+  /**
+   * Nummer der Anforderungskarte, aus der dieses Vorhaben eröffnet wurde, oder `null`.
+   *
+   * `null` ist ein gültiger Dauerzustand, kein Ladezustand: Ein Vorhaben darf auch ohne
+   * Herkunftskette zum Gruppieren dienen (Issue #636). Derselbe Name wie in `EpicView` und der
+   * JSON-Antwort — ID im Inneren, Nummer nach außen (festgelegt in Issue #638).
+   */
+  requirementCardNumber: number | null
 }
 
 export const epicsApi = {

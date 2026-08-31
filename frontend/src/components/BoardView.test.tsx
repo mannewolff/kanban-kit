@@ -150,7 +150,7 @@ describe('BoardView', () => {
 
   it('zeigt ein Epic-Badge auf zugeordneten Karten', () => {
     const assigned: Card = { ...card, parentId: 9 }
-    const epics = [{ id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 0, total: 1, memberNumbers: [], rootNumbers: [] }]
+    const epics = [{ id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 0, total: 1, memberNumbers: [], rootNumbers: [], requirementCardNumber: null }]
     render(<BoardView board={board} initialCards={[assigned]} canEdit epics={epics} api={mkApi()} />)
     expect(screen.getByText('AUT')).toBeInTheDocument()
   })
@@ -321,7 +321,7 @@ describe('BoardView', () => {
   })
 
   it('filtert das Board nach Epic', () => {
-    const epics = [{ id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 0, total: 1, memberNumbers: [], rootNumbers: [] }]
+    const epics = [{ id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 0, total: 1, memberNumbers: [], rootNumbers: [], requirementCardNumber: null }]
     const inEpic: Card = { ...card, id: 100, parentId: 9 }
     const other: Card = { ...card, id: 200, number: 2, parentId: null }
     render(<BoardView board={board} initialCards={[inEpic, other]} canEdit epics={epics} api={mkApi()} />)
@@ -1003,7 +1003,7 @@ describe('BoardView', () => {
       clear: () => {}, key: () => null, length: 0,
     })
     try {
-      const epics = [{ id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 0, total: 1, memberNumbers: [], rootNumbers: [] }]
+      const epics = [{ id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 0, total: 1, memberNumbers: [], rootNumbers: [], requirementCardNumber: null }]
       const inEpic: Card = { ...card, parentId: 9 }
       render(<BoardView board={board} initialCards={[inEpic]} canEdit epics={epics} api={mkApi()} />)
       fireEvent.change(screen.getByLabelText('Vorhaben-Filter'), { target: { value: '9' } })
@@ -1025,7 +1025,7 @@ describe('BoardView', () => {
       clear: () => store.clear(), key: () => null, length: 0,
     })
     try {
-      const epics = [{ id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 0, total: 1, memberNumbers: [], rootNumbers: [] }]
+      const epics = [{ id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 0, total: 1, memberNumbers: [], rootNumbers: [], requirementCardNumber: null }]
       const inEpic: Card = { ...card, id: 100, parentId: 9 }
       const other: Card = { ...card, id: 200, number: 2, parentId: null }
       render(<BoardView board={board} initialCards={[inEpic, other]} canEdit epics={epics} api={mkApi()} />)
@@ -1055,7 +1055,7 @@ describe('BoardView', () => {
   })
 
   it('setzt den Epic-Filter auf „Alle" zurück und entfernt den gespeicherten Wert', () => {
-    const epics = [{ id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 0, total: 1, memberNumbers: [], rootNumbers: [] }]
+    const epics = [{ id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 0, total: 1, memberNumbers: [], rootNumbers: [], requirementCardNumber: null }]
     const inEpic: Card = { ...card, id: 100, parentId: 9 }
     const other: Card = { ...card, id: 200, number: 2, parentId: null }
     render(<BoardView board={board} initialCards={[inEpic, other]} canEdit epics={epics} api={mkApi()} />)
@@ -1141,7 +1141,7 @@ describe('BoardView', () => {
 
   describe('Tastenkürzel „+“', () => {
     const epics = [
-      { id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 0, total: 1, memberNumbers: [], rootNumbers: [] },
+      { id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 0, total: 1, memberNumbers: [], rootNumbers: [], requirementCardNumber: null },
     ]
 
     it('trägt in keinem Spaltenkopf mehr ein „+“', () => {

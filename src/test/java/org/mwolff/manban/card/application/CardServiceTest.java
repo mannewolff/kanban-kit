@@ -79,7 +79,7 @@ class CardServiceTest {
       String shortcode) {
     return new Card(
         id, BOARD, columnId, number, "Titel", null, 0, archived, false, done, 1L, FIXED, FIXED,
-        type, parentId, shortcode, null, PROJECT, null, null, null);
+        type, parentId, shortcode, null, PROJECT, null, null, null, null);
   }
 
   private static ColumnView column(long id, String name, int position) {
@@ -143,6 +143,7 @@ class CardServiceTest {
         c.projectId(),
         c.targetBoardId(),
         c.externalKey(),
+        null,
         null);
   }
 
@@ -605,7 +606,8 @@ class CardServiceTest {
         PROJECT,
         null,
         null,
-        derivedFrom);
+        derivedFrom,
+        null);
   }
 
   @Test
@@ -1231,6 +1233,7 @@ class CardServiceTest {
             PROJECT,
             null,
             null,
+            null,
             null);
     when(cards.findById(30L)).thenReturn(Optional.of(epicOtherBoard));
 
@@ -1742,6 +1745,7 @@ class CardServiceTest {
             PROJECT,
             null,
             null,
+            null,
             null);
     when(boardService.requireProjectId(BOARD)).thenReturn(PROJECT);
     when(cards.findByBoardId(BOARD))
@@ -1878,6 +1882,325 @@ class CardServiceTest {
    */
   private static Card withHerkunft(Card c, long herkunft) {
     return c.withDerivedFrom(herkunft);
+  }
+
+  // --- openEpicFromCard (Issue #640) ---------------------------------------
+
+  /**
+   * Der Ablauf in einem Zug: Vorhaben entsteht, traegt die Quellkarte als Anforderung, und die
+   * Quellkarte traegt das Vorhaben als {@code parentId}. Alle drei Wirkungen zusammen — eine
+   * Fassung, die nur zwei davon herstellt, laesst genau den halben Zustand zurueck, den die
+   * Anforderung abschaffen soll.
+   */
+  @Test
+  void openEpicFromCard_legtVorhabenAn_setztAnforderungUndZuordnung() {
+    Card quelle = card(1L, 20L, 7, false, null, CardType.CARD, null, null);
+    when(cards.findById(1L)).thenReturn(Optional.of(quelle));
+    when(boardService.requireProjectId(BOARD)).thenReturn(PROJECT);
+    when(boardService.firstColumn(BOARD)).thenReturn(column(20L, "Backlog", 0));
+    when(cards.allocateCardNumber(PROJECT)).thenReturn(8);
+    when(cards.findByProjectIdAndNumber(PROJECT, 7)).thenReturn(Optional.of(quelle));
+    Card angelegtesEpic = card(50L, 20L, 8, false, null, CardType.EPIC, null, null);
+    // Das Anlegen liefert die Karte MIT vergebener ID zurueck — ohne sie scheitert `requireId`
+    // im weiteren Ablauf, so wie es auch in der Datenbank waere.
+    when(cards.save(any()))
+        .thenAnswer(
+            inv -> {
+              Card c = inv.getArgument(0);
+              return c.id() == null ? angelegtesEpic : c;
+            });
+    when(cards.findById(50L)).thenReturn(Optional.of(angelegtesEpic));
+
+    ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
+    CardService.CardView ergebnis = service.openEpicFromCard(1L, 1L, "EP-1", "Vorhaben");
+
+    verify(cards, times(3)).save(captor.capture());
+    // 1. Das Vorhaben entsteht — auf dem Board der Quellkarte, ohne Beschreibung.
+    Card epic =
+        captor.getAllValues().stream()
+            .filter(c -> c.type() == CardType.EPIC)
+            .findFirst()
+            .orElseThrow();
+    assertThat(epic.boardId()).isEqualTo(BOARD);
+    assertThat(epic.description()).isNull();
+    assertThat(epic.shortcode()).isEqualTo("EP-1");
+    // 2. Die Quellkarte wird seine Anforderung.
+    assertThat(
+            captor.getAllValues().stream()
+                .filter(c -> c.requirementCardId() != null)
+                .map(Card::requirementCardId))
+        .containsExactly(1L);
+    // 3. Und ist ihm zugeordnet.
+    // `id()` statt `requireId()`: Im Captor liegt auch die frisch angelegte Karte ohne ID —
+    // `requireId` wuerde an ihr scheitern, bevor der Filter greift.
+    assertThat(
+            captor.getAllValues().stream()
+                .filter(c -> c.id() != null && c.id().longValue() == 1L)
+                .map(Card::parentId))
+        .containsExactly(50L);
+    // Zurueck kommt die Sicht des neuen Vorhabens, nicht die der Quellkarte.
+    assertThat(ergebnis.id()).isEqualTo(50L);
+  }
+
+  /** Das Kuerzel ist optional — wie bei {@code createEpic}. */
+  @Test
+  void openEpicFromCard_ohneKuerzel_istZulaessig() {
+    Card quelle = card(1L, 20L, 7, false, null, CardType.CARD, null, null);
+    when(cards.findById(1L)).thenReturn(Optional.of(quelle));
+    when(boardService.requireProjectId(BOARD)).thenReturn(PROJECT);
+    when(boardService.firstColumn(BOARD)).thenReturn(column(20L, "Backlog", 0));
+    when(cards.allocateCardNumber(PROJECT)).thenReturn(8);
+    when(cards.findByProjectIdAndNumber(PROJECT, 7)).thenReturn(Optional.of(quelle));
+    Card angelegtesEpic = card(50L, 20L, 8, false, null, CardType.EPIC, null, null);
+    when(cards.save(any()))
+        .thenAnswer(
+            inv -> {
+              Card c = inv.getArgument(0);
+              return c.id() == null ? angelegtesEpic : c;
+            });
+    when(cards.findById(50L)).thenReturn(Optional.of(angelegtesEpic));
+
+    ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
+    service.openEpicFromCard(1L, 1L, null, "Vorhaben");
+
+    verify(cards, times(3)).save(captor.capture());
+    assertThat(captor.getAllValues())
+        .filteredOn(c -> c.type() == CardType.EPIC)
+        .allSatisfy(c -> assertThat(c.shortcode()).isNull());
+  }
+
+  /**
+   * Jeder Ablehnungstest isoliert <b>genau eine</b> Bedingung: Die uebrigen sind so gestubbt, dass
+   * sie nicht greifen, und die Meldung wird festgenagelt. Ohne diese Schaerfe blieben Fassungen
+   * gruen, in denen die geprueft geglaubte Bedingung fehlt und eine andere die Ablehnung traegt —
+   * genau das haben die PIT-Ueberlebenden dieses Pakets gezeigt.
+   */
+  @Test
+  void openEpicFromCard_quelleIstVorhaben_wirdAbgelehnt() {
+    Card quelle = card(1L, 20L, 7, false, null, CardType.EPIC, null, null);
+    when(cards.findById(1L)).thenReturn(Optional.of(quelle));
+    when(cards.findByProjectIdAndNumber(PROJECT, 7)).thenReturn(Optional.of(quelle));
+
+    assertThatThrownBy(() -> service.openEpicFromCard(1L, 1L, null, "V"))
+        .isExactlyInstanceOf(InvalidDependencyException.class)
+        .hasMessageContaining("aus sich selbst");
+
+    verify(cards, never()).save(any());
+  }
+
+  @Test
+  void openEpicFromCard_archivierteQuelle_wirdAbgelehnt() {
+    Card quelle = card(1L, 20L, 7, true, null, CardType.CARD, null, null);
+    when(cards.findById(1L)).thenReturn(Optional.of(quelle));
+    when(cards.findByProjectIdAndNumber(PROJECT, 7)).thenReturn(Optional.of(quelle));
+
+    assertThatThrownBy(() -> service.openEpicFromCard(1L, 1L, null, "V"))
+        .isExactlyInstanceOf(InvalidDependencyException.class)
+        .hasMessageContaining("ruhende Karte");
+
+    verify(cards, never()).save(any());
+  }
+
+  @Test
+  void openEpicFromCard_quelleImIdeenSpeicher_wirdAbgelehnt() {
+    Card quelle = kette(1L, 20L, 7, CardType.CARD, null, null, true);
+    when(cards.findById(1L)).thenReturn(Optional.of(quelle));
+    when(cards.findByProjectIdAndNumber(PROJECT, 7)).thenReturn(Optional.of(quelle));
+
+    assertThatThrownBy(() -> service.openEpicFromCard(1L, 1L, null, "V"))
+        .isExactlyInstanceOf(InvalidDependencyException.class)
+        .hasMessageContaining("ruhende Karte");
+
+    verify(cards, never()).save(any());
+  }
+
+  /**
+   * Der Papierkorb ist im Domain-Record nicht abgebildet: {@code findById} liefert geloeschte
+   * Karten, die Nummernsuche filtert sie. Findet die Suche nichts, liegt die Karte im Papierkorb.
+   */
+  @Test
+  void openEpicFromCard_quelleImPapierkorb_wirdAbgelehnt() {
+    when(cards.findById(1L))
+        .thenReturn(Optional.of(card(1L, 20L, 7, false, null, CardType.CARD, null, null)));
+    when(cards.findByProjectIdAndNumber(PROJECT, 7)).thenReturn(Optional.empty());
+
+    // `isExactlyInstanceOf`: Faellt die Papierkorb-Pruefung weg, laeuft der Ablauf weiter und
+    // scheitert spaeter an derselben leeren Nummernsuche — dann aber mit der erbenden
+    // InvalidRequirementCardException. Ein Test auf die Oberklasse bliebe dabei gruen.
+    assertThatThrownBy(() -> service.openEpicFromCard(1L, 1L, null, "V"))
+        .isExactlyInstanceOf(InvalidDependencyException.class)
+        .hasMessageContaining("ruhende Karte");
+
+    verify(cards, never()).save(any());
+  }
+
+  @Test
+  void openEpicFromCard_quelleBereitsZugeordnet_wirdAbgelehnt() {
+    Card quelle = card(1L, 20L, 7, false, null, CardType.CARD, 42L, null);
+    when(cards.findById(1L)).thenReturn(Optional.of(quelle));
+    when(cards.findByProjectIdAndNumber(PROJECT, 7)).thenReturn(Optional.of(quelle));
+
+    assertThatThrownBy(() -> service.openEpicFromCard(1L, 1L, null, "V"))
+        .isExactlyInstanceOf(InvalidDependencyException.class)
+        .hasMessageContaining("bereits einem Vorhaben zugeordnet");
+
+    verify(cards, never()).save(any());
+  }
+
+  @Test
+  void openEpicFromCard_unbekannteKarte_wirdAbgelehnt() {
+    when(cards.findById(1L)).thenReturn(Optional.empty());
+
+    assertThatThrownBy(() -> service.openEpicFromCard(1L, 1L, null, "V"))
+        .isInstanceOf(CardNotFoundException.class);
+  }
+
+  // --- assignRequirement und Anforderung im EpicView (Issue #639) -----------
+
+  /**
+   * Der gueltige Fall: Uebergeben wird die Nummer, gespeichert die ID. Ohne diesen Test ueberlebt
+   * eine Mutation, die die Nummer unaufgeloest durchreicht — sie waere durch die Ablehnungstests
+   * allein nicht zu toeten.
+   */
+  @Test
+  void assignRequirement_nummerWirdZurIdAufgeloestUndGespeichert() {
+    when(cards.findById(1L))
+        .thenReturn(Optional.of(card(1L, 20L, 7, false, null, CardType.EPIC, null, null)));
+    when(cards.findByProjectIdAndNumber(PROJECT, 4))
+        .thenReturn(Optional.of(card(9L, 20L, 4, false, null, CardType.CARD, null, null)));
+    when(cards.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+    ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
+    CardService.CardView result = service.assignRequirement(1L, 1L, 4);
+
+    verify(cards).save(captor.capture());
+    assertThat(captor.getValue().requirementCardId()).isEqualTo(9L);
+    // Die Sicht wird zurueckgegeben, nicht nur gespeichert: Der Aufrufer zeigt sie unmittelbar an.
+    assertThat(result).isNotNull();
+    assertThat(result.id()).isEqualTo(1L);
+    // Offene Boards ziehen ueber SSE nach, wie beim Setzen der Herkunft.
+    verify(events).publishEvent(new CardBoardActivityEvent(BOARD, ActivityType.UPDATED, 1L));
+  }
+
+  /** {@code null} loescht die Zuordnung — ein Vorhaben ohne Anforderung ist gueltig (#636). */
+  @Test
+  void assignRequirement_null_loeschtDieZuordnung() {
+    when(cards.findById(1L))
+        .thenReturn(
+            Optional.of(
+                card(1L, 20L, 7, false, null, CardType.EPIC, null, null).withRequirement(9L)));
+    when(cards.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+    ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
+    service.assignRequirement(1L, 1L, null);
+
+    verify(cards).save(captor.capture());
+    assertThat(captor.getValue().requirementCardId()).isNull();
+  }
+
+  @Test
+  void listEpics_mitAnforderung_liefertDerenNummer() {
+    when(boardService.listColumns(BOARD)).thenReturn(List.of(column(20L, "Backlog", 0)));
+    when(cards.findByBoardId(BOARD))
+        .thenReturn(
+            List.of(
+                kette(5L, 20L, 1, CardType.EPIC, null, null, false).withRequirement(6L),
+                kette(6L, 20L, 2, CardType.CARD, 5L, null, false)));
+
+    CardService.EpicView view = service.listEpics(1L, BOARD).getFirst();
+
+    assertThat(view.requirementCardNumber()).isEqualTo(2);
+  }
+
+  /**
+   * Gegenstueck: ohne Anforderung {@code null} — nicht 0 und kein Platzhalter. 0 waere eine
+   * gueltige Kartennummer, und die Kachel unterscheidet "keine Anforderung" von "Anforderung Nummer
+   * 0" nur ueber diesen Wert.
+   */
+  @Test
+  void listEpics_ohneAnforderung_liefertNull() {
+    when(boardService.listColumns(BOARD)).thenReturn(List.of(column(20L, "Backlog", 0)));
+    when(cards.findByBoardId(BOARD))
+        .thenReturn(
+            List.of(
+                kette(5L, 20L, 1, CardType.EPIC, null, null, false),
+                kette(6L, 20L, 2, CardType.CARD, 5L, null, false)));
+
+    CardService.EpicView view = service.listEpics(1L, BOARD).getFirst();
+
+    assertThat(view.requirementCardNumber()).isNull();
+  }
+
+  /**
+   * Zeigt der Verweis auf eine Karte, die nicht mehr auf dem Board liegt (Papierkorb), ist {@code
+   * null} die ehrliche Antwort. Eine Fassung, die hier die ID als Nummer ausgibt, waere gruen,
+   * solange beide zufaellig gleich sind — hier sind sie es bewusst nicht.
+   */
+  @Test
+  void listEpics_anforderungNichtMehrAufDemBoard_liefertNull() {
+    when(boardService.listColumns(BOARD)).thenReturn(List.of(column(20L, "Backlog", 0)));
+    when(cards.findByBoardId(BOARD))
+        .thenReturn(
+            List.of(kette(5L, 20L, 1, CardType.EPIC, null, null, false).withRequirement(99L)));
+
+    CardService.EpicView view = service.listEpics(1L, BOARD).getFirst();
+
+    assertThat(view.requirementCardNumber()).isNull();
+  }
+
+  @Test
+  void transfer_projektwechsel_loeschtDieAnforderungDerKarte() {
+    stubTransferScenario(9L);
+    when(cards.findById(100L))
+        .thenReturn(
+            Optional.of(
+                card(100L, 50L, 3, false, FIXED, CardType.CARD, 9L, null).withRequirement(77L)));
+
+    ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
+    service.transfer(1L, 100L, 20L, 60L);
+
+    verify(cards).save(captor.capture());
+    assertThat(captor.getValue().requirementCardId()).isNull();
+  }
+
+  /**
+   * Gegenrichtung: Wandert die Anforderungskarte ab, verliert das zurueckbleibende Vorhaben seinen
+   * Verweis. Ohne das zeigte er ueber die Projektgrenze auf eine Nummer, die dort einer anderen
+   * Karte gehoert.
+   */
+  @Test
+  void transfer_projektwechsel_loeschtDenVerweisDerZeigendenVorhaben() {
+    stubTransferScenario(9L);
+    Card vorhaben =
+        card(300L, 50L, 6, false, null, CardType.EPIC, null, null).withRequirement(100L);
+    when(cards.findByRequirementCard(100L)).thenReturn(List.of(vorhaben));
+
+    ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
+    service.transfer(1L, 100L, 20L, 60L);
+
+    verify(cards, times(2)).save(captor.capture());
+    assertThat(captor.getAllValues())
+        .filteredOn(c -> c.requireId() == 300L)
+        .singleElement()
+        .satisfies(c -> assertThat(c.requirementCardId()).isNull());
+  }
+
+  @Test
+  void transfer_innerhalbDesProjekts_laesstDieAnforderungUnberuehrt() {
+    // Ziel-Board im SELBEN Projekt: Die Zuordnung ueberlebt den Board-Wechsel.
+    when(cards.findById(100L))
+        .thenReturn(
+            Optional.of(
+                card(100L, 50L, 3, false, FIXED, CardType.CARD, 9L, null).withRequirement(77L)));
+    when(boardService.requireProjectId(20L)).thenReturn(PROJECT);
+    when(boardService.requireColumn(60L, 20L)).thenReturn(new ColumnView(60L, "Backlog", 0, null));
+
+    ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
+    service.transfer(1L, 100L, 20L, 60L);
+
+    verify(cards).save(captor.capture());
+    assertThat(captor.getValue().requirementCardId()).isEqualTo(77L);
+    verify(cards, never()).findByRequirementCard(anyLong());
   }
 
   @Test
@@ -2621,6 +2944,7 @@ class CardServiceTest {
         PROJECT,
         null,
         null,
+        null,
         null);
   }
 
@@ -2709,6 +3033,7 @@ class CardServiceTest {
             null,
             null,
             PROJECT,
+            null,
             null,
             null,
             null);
@@ -2946,6 +3271,7 @@ class CardServiceTest {
         projectId,
         null,
         null,
+        null,
         null);
   }
 
@@ -3151,6 +3477,7 @@ class CardServiceTest {
         PROJECT,
         null,
         null,
+        null,
         null);
   }
 
@@ -3176,6 +3503,7 @@ class CardServiceTest {
         null, // dueDate
         PROJECT,
         null, // targetBoardId
+        null,
         null,
         null); // externalKey
   }
@@ -3675,6 +4003,7 @@ class CardServiceTest {
             PROJECT,
             null,
             null,
+            null,
             null);
     when(cards.findById(1L)).thenReturn(Optional.of(otherBoard));
 
@@ -3725,6 +4054,7 @@ class CardServiceTest {
             null,
             null,
             PROJECT,
+            null,
             null,
             null,
             null);

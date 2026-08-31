@@ -33,6 +33,7 @@ class CardTest {
           1L,
           null,
           null,
+          null,
           null);
 
   @Test
@@ -91,6 +92,7 @@ class CardTest {
             null,
             null,
             1L,
+            null,
             null,
             null,
             null);
