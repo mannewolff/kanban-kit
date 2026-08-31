@@ -30,6 +30,7 @@ import { ApiError } from '../api/client'
 import { columnsApi, type SortDirection } from '../api/columns'
 import { epicsApi as defaultEpicsApi, type Epic, type EpicsApi } from '../api/epics'
 import type { Member } from '../api/members'
+import { hiddenEpicsStorageKey } from '../lib/boardHiddenEpics'
 import { activeCardsInColumn, applyMove } from '../lib/boardOps'
 import { cleanupCountdownLabel, cleanupDaysRemaining } from '../lib/cleanupCountdown'
 import { neighbourColumns } from '../lib/columnMeta'
@@ -222,7 +223,7 @@ export function BoardView({
   // localStorage greift die Ausblendung trotzdem, nur das Merken fällt aus (E8).
   const [hiddenEpics, setHiddenEpics] = useState<ReadonlySet<number>>(() => {
     try {
-      const raw = localStorage.getItem(`manban.boardHiddenEpics.${board.id}`)
+      const raw = localStorage.getItem(hiddenEpicsStorageKey(board.id))
       return raw ? new Set<number>(JSON.parse(raw) as number[]) : new Set<number>()
     } catch {
       return new Set<number>()
@@ -383,7 +384,7 @@ export function BoardView({
     setHiddenEpics(new Set())
     setEpicFilter(null)
     try {
-      localStorage.removeItem(`manban.boardHiddenEpics.${board.id}`)
+      localStorage.removeItem(hiddenEpicsStorageKey(board.id))
       localStorage.removeItem(`manban.boardEpicFilter.${board.id}`)
     } catch {
       // localStorage nicht verfügbar — aufgehoben ist die Ausblendung trotzdem.
