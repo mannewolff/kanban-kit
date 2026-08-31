@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter, Route, Routes, useNavigate } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { boardsApi } from '../api/boards'
@@ -7,6 +7,8 @@ import { labelsApi } from '../api/labels'
 import { projectsApi } from '../api/projects'
 import { epicsApi, type Epic } from '../api/epics'
 import { BoardListPage } from './BoardListPage'
+import { ARCHIVED_STATUS_COLOR, statusColors } from '../lib/statusColors'
+import { STATUS_EDGE_WIDTH } from '../theme'
 
 function deferred<T>() {
   let resolve!: (value: T) => void
@@ -120,6 +122,34 @@ describe('BoardListPage', () => {
 
     fireEvent.click(screen.getByLabelText('Filter Archiv'))
     expect(await screen.findByText('AlteKarte')).toBeInTheDocument()
+  })
+
+  it('trägt den Status an der linken Kante der Zeile, archivierte in ihrer eigenen Farbe', async () => {
+    // Kanten-Semantik (#650, E5): In der Liste gibt es keine Oberkante, an die der Status könnte —
+    // deshalb trägt hier die linke Kante den Status, nicht die Vorhaben-Zugehörigkeit.
+    renderPage()
+    fireEvent.click(await screen.findByLabelText('Filter Archiv'))
+
+    expect(await screen.findByLabelText('Detail öffnen: Aufgabe')).toHaveStyle({
+      borderLeftColor: statusColors('Backlog').dot,
+      borderLeftWidth: `${STATUS_EDGE_WIDTH}px`,
+    })
+    expect(screen.getByLabelText('Detail öffnen: AlteKarte')).toHaveStyle({
+      borderLeftColor: ARCHIVED_STATUS_COLOR.dot,
+      borderLeftWidth: `${STATUS_EDGE_WIDTH}px`,
+    })
+  })
+
+  it('lässt dem Status-Chip den Text, nimmt ihm aber die Farbfläche', async () => {
+    renderPage()
+    await screen.findByText('Aufgabe')
+
+    // Innerhalb der Zeile suchen: der gleichnamige Status-Filter-Chip steht ausserhalb.
+    const row = screen.getByLabelText('Detail öffnen: Aufgabe')
+    const chip = within(row).getByText((_content, element) =>
+      element?.classList.contains('MuiChip-root') === true && element.textContent === 'Backlog')
+
+    expect(chip).not.toHaveStyle({ backgroundColor: statusColors('Backlog').bg })
   })
 
   it('stellt eine archivierte Karte über die Zeilen-Aktion wieder her', async () => {

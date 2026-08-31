@@ -291,7 +291,7 @@ function ApiTokensSection() {
                   gap: 1.5,
                   border: '1px solid',
                   borderColor: 'divider',
-                  borderRadius: 1.5,
+                  borderRadius: (t) => `${t.shape.borderRadius}px`,
                   px: 1.5,
                   py: 1,
                   opacity: t.revoked ? 0.5 : 1,
