@@ -17,6 +17,7 @@ import {
   type HeadingLevel,
   type SpecSection,
 } from '../lib/specImport'
+import { dialogTitleSx } from './dialogChromeSx'
 
 /** Eine anzulegende Idee, wie sie der Batch-Endpoint erwartet (#492). */
 export interface SpecIdea {
@@ -127,7 +128,7 @@ export function SpecImportDialog({ open, fileName, markdown, onClose, onImport }
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth aria-labelledby="spec-import-title">
-      <DialogTitle id="spec-import-title">Spezifikation einlesen</DialogTitle>
+      <DialogTitle id="spec-import-title" sx={dialogTitleSx}>Spezifikation einlesen</DialogTitle>
       <DialogContent dividers>
         <Stack spacing={2}>
           <Stack direction="row" spacing={2} alignItems="center" flexWrap="wrap">

@@ -31,10 +31,7 @@ interface Violation {
  * 2026-08-30 und dienen nur dem Wiederfinden.
  */
 const ALLOWLIST: ReadonlyArray<{ file: string; rule: Rule; resolvedIn: string }> = [
-  { file: 'components/SnackbarProvider.tsx', rule: 'boxShadow', resolvedIn: 'Paket 5, #652' }, // 101
-  { file: 'components/BulkActionBar.tsx', rule: 'elevation', resolvedIn: 'Paket 5, #652' }, // 26
   { file: 'components/AuthCard.tsx', rule: 'elevation', resolvedIn: 'Paket 6, #653' }, // 9
-  { file: 'components/CardDetailModal.tsx', rule: 'hex', resolvedIn: 'Paket 5, #652' }, // 325, 354
 ]
 
 /**

@@ -11,6 +11,7 @@ import {
   useState,
   type ReactNode,
 } from 'react'
+import { SURFACE_HOVER_SHADOW } from '../theme'
 
 /** Auslöser für eine Toast-Meldung. */
 export type Notify = (message: string, severity?: AlertColor) => void
@@ -98,7 +99,10 @@ export function SnackbarProvider({ children }: Readonly<{ children: ReactNode }>
               severity={toast.severity}
               variant="filled"
               onClose={() => remove(toast.id)}
-              sx={{ pointerEvents: 'auto', boxShadow: 3, minWidth: 288, maxWidth: 480 }}
+              // E3, Auslegung „schwebende Ebene": Der Toast liegt ueber beliebigem Inhalt, seine
+              // Abhebung ist Funktion und nicht Dekoration. Er behaelt deshalb einen Schatten --
+              // aber den Marken-Schatten, nicht den schwarzen MUI-Standardschatten.
+              sx={{ pointerEvents: 'auto', boxShadow: SURFACE_HOVER_SHADOW, minWidth: 288, maxWidth: 480 }}
             >
               {toast.message}
             </Alert>

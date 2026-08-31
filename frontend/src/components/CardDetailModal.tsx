@@ -54,6 +54,13 @@ import { CODE_BG, theme } from '../theme'
 import { useAuth } from '../auth/AuthContext'
 import { AttachmentPreview } from './AttachmentPreview'
 import { useSnackbar } from './SnackbarProvider'
+import { dialogTitleSx } from './dialogChromeSx'
+
+/**
+ * Flaeche eines Label-Chips. Labelfarben sind nutzerdefiniert; ohne Label greift der Grauton der
+ * Palette. Der Wert muss eine echte CSS-Farbe sein, weil `getContrastText` darauf rechnet.
+ */
+const chipBg = (color?: string) => color ?? theme.palette.grey[500]
 
 /** Bilder und PDF werden in der Lightbox angezeigt; andere Typen nur heruntergeladen. */
 const isPreviewable = (contentType: string) =>
@@ -191,7 +198,7 @@ const markdownBodySx = {
   '& h3, & h4': { fontWeight: 600, fontSize: '1rem', mt: 1.5, mb: 0.5 },
   '& p, & li': { lineHeight: 1.6, color: theme.palette.text.primary },
   '& ul, & ol': { pl: 3, my: 1 },
-  '& code': { backgroundColor: CODE_BG, px: 0.5, borderRadius: '3px', fontFamily: 'monospace', fontSize: '0.85em' },
+  '& code': { backgroundColor: CODE_BG, px: 0.5, borderRadius: 1, fontFamily: 'monospace', fontSize: '0.85em' },
   '& pre': { backgroundColor: CODE_BG, p: 1.5, borderRadius: 1, overflowX: 'auto' },
   '& pre code': { backgroundColor: 'transparent', px: 0 },
   // `display: block` + `width: max-content` macht die Tabelle zum eigenen Scrollbereich; als
@@ -323,7 +330,7 @@ export function LabelSection({
               key={id}
               size="small"
               label={l?.name ?? `#${id}`}
-              sx={{ bgcolor: l?.color ?? 'grey.500', color: '#fff' }}
+              sx={{ bgcolor: chipBg(l?.color), color: theme.palette.getContrastText(chipBg(l?.color)) }}
             />
           )
         })}
@@ -352,7 +359,7 @@ export function LabelSection({
                 key={l.id}
                 size="small"
                 label={l.name}
-                sx={{ bgcolor: l.color, color: '#fff' }}
+                sx={{ bgcolor: l.color, color: theme.palette.getContrastText(l.color) }}
               />
             ))
           }
@@ -1157,7 +1164,7 @@ function CardDetailModalView({
         paper: { sx: { width: '90%', maxWidth: '90%', height: '90%', maxHeight: '90%', m: 0 } },
       }}
     >
-      <DialogTitle sx={{ borderBottom: `1px solid ${theme.palette.divider}` }}>
+      <DialogTitle sx={dialogTitleSx}>
         <Stack direction="row" alignItems="center" spacing={1} sx={{ flexWrap: 'wrap' }}>
           {onBack && (
             <IconButton size="small" aria-label="Zurück zur vorherigen Karte" onClick={onBack}>
@@ -1367,7 +1374,7 @@ function CardDetailModalView({
     {/* Vorgang eroeffnen: Name und Kuerzel. Eigener Dialog statt Inline-Feldern, damit die
         Kartenmaske im Lesemodus nicht zwei Eingabefelder traegt, die fast nie gebraucht werden. */}
     <Dialog open={eroeffnen} onClose={() => setEroeffnen(false)} fullWidth maxWidth="xs">
-      <DialogTitle>Vorgang eröffnen</DialogTitle>
+      <DialogTitle sx={dialogTitleSx}>Vorgang eröffnen</DialogTitle>
       <DialogContent>
         <Stack spacing={2} sx={{ mt: 1 }}>
           <TextField

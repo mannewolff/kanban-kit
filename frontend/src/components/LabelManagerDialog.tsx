@@ -10,6 +10,7 @@ import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
 import { useState } from 'react'
 import { labelsApi as defaultLabelsApi, type Label, type LabelsApi } from '../api/labels'
+import { dialogTitleSx } from './dialogChromeSx'
 
 interface Props {
   open: boolean
@@ -60,7 +61,7 @@ export function LabelManagerDialog({
 
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
-      <DialogTitle>Labels verwalten</DialogTitle>
+      <DialogTitle sx={dialogTitleSx}>Labels verwalten</DialogTitle>
       <DialogContent>
         <Stack spacing={1.5} sx={{ mt: 1 }}>
           {labels.map((label) => (

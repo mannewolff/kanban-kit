@@ -7,6 +7,7 @@ import Stack from '@mui/material/Stack'
 import Typography from '@mui/material/Typography'
 import { useEffect, useState } from 'react'
 import { cardsApi as defaultCardsApi, type Card } from '../api/cards'
+import { dialogTitleSx } from './dialogChromeSx'
 
 interface Props {
   open: boolean
@@ -53,7 +54,7 @@ export function TrashDialog({
 
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
-      <DialogTitle>Papierkorb</DialogTitle>
+      <DialogTitle sx={dialogTitleSx}>Papierkorb</DialogTitle>
       <DialogContent>
         <Stack spacing={1} sx={{ mt: 1 }}>
           {cards.map((card) => (
