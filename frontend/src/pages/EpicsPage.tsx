@@ -2,10 +2,12 @@ import AddIcon from '@mui/icons-material/Add'
 import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
+import FormControlLabel from '@mui/material/FormControlLabel'
 import LinearProgress from '@mui/material/LinearProgress'
 import Link from '@mui/material/Link'
 import Paper from '@mui/material/Paper'
 import Stack from '@mui/material/Stack'
+import Switch from '@mui/material/Switch'
 import Typography from '@mui/material/Typography'
 import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
@@ -18,6 +20,7 @@ import { CardDetailModal } from '../components/CardDetailModal'
 import { EpicBadge } from '../components/EpicBadge'
 import { labelChipSx } from '../components/labelChipSx'
 import { NewCardModal } from '../components/NewCardModal'
+import { hiddenEpicsStorageKey } from '../lib/boardHiddenEpics'
 import { aggregateMarks, countKinds, sortEpics } from '../lib/epicTiles'
 import { useBoardRole } from '../lib/useBoardRole'
 import { useProjectName } from '../lib/useProjectName'
@@ -55,6 +58,34 @@ export function EpicsPage() {
   const [labels, setLabels] = useState<Label[]>([])
   const [selected, setSelected] = useState<Card | null>(null)
   const [creating, setCreating] = useState(false)
+  // Auf dem Board ausgeblendete Vorhaben (Plan #620). Derselbe Zustand, den `BoardView` liest —
+  // Schlüssel und Wertformat kommen deshalb aus `lib/boardHiddenEpics`. Reine Darstellung: kein
+  // Archivieren, keine Position, nichts an der Karte, deshalb liegt der Wert nur lokal.
+  const [hiddenEpics, setHiddenEpics] = useState<ReadonlySet<number>>(() => {
+    try {
+      const raw = localStorage.getItem(hiddenEpicsStorageKey(id))
+      return raw ? new Set<number>(JSON.parse(raw) as number[]) : new Set<number>()
+    } catch {
+      return new Set<number>()
+    }
+  })
+
+  // Ohne funktionierendes localStorage wirkt das Umlegen trotzdem — nur das Merken über den
+  // Seitenwechsel hinaus fällt aus (E8).
+  const setzeAusgeblendet = (epicId: number, ausblenden: boolean) => {
+    const next = new Set(hiddenEpics)
+    if (ausblenden) {
+      next.add(epicId)
+    } else {
+      next.delete(epicId)
+    }
+    setHiddenEpics(next)
+    try {
+      localStorage.setItem(hiddenEpicsStorageKey(id), JSON.stringify([...next]))
+    } catch {
+      // localStorage nicht verfügbar
+    }
+  }
 
   const reload = () => {
     void epicsApi.list(id).then(setEpics)
@@ -268,6 +299,31 @@ export function EpicsPage() {
                 value={pct}
                 aria-label={`Fortschritt ${epic.title}`}
                 sx={{ height: 8, borderRadius: 1, mt: 'auto' }}
+              />
+              {/* Der Schalter sitzt hier, weil die Kachel der Ort ist, an dem man ein Vorhaben in
+                  der Hand hat (Plan #620, E9). Der Rückweg liegt am Board an der Spaltenmarke, ein
+                  zweites Setz-Element dort entfällt bewusst. `Switch` ist ein echtes
+                  <input type="checkbox">: per Tab erreichbar und mit der Leertaste auslösbar. Ein
+                  onClick auf einer Anzeigekomponente käme durch alle Gates — jsx-a11y prüft nur
+                  DOM-Elemente in Kleinschreibung, keine MUI-Komponenten — und wäre per Tastatur
+                  trotzdem unerreichbar. */}
+              <FormControlLabel
+                sx={{ mt: 1, mr: 0 }}
+                // Ohne stopPropagation öffnete derselbe Klick zusätzlich das Vorhaben-Detail — der
+                // Kachel-Klick liegt eine Ebene darüber (E11).
+                onClick={(e) => e.stopPropagation()}
+                control={
+                  <Switch
+                    size="small"
+                    checked={hiddenEpics.has(epic.id)}
+                    onChange={(e) => setzeAusgeblendet(epic.id, e.target.checked)}
+                  />
+                }
+                label={
+                  <Typography variant="caption" color="text.secondary">
+                    Auf dem Board ausblenden
+                  </Typography>
+                }
               />
             </Paper>
           )

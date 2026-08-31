@@ -7,6 +7,15 @@ Versionierung folgt der dreiteiligen Betriebsversion (siehe [RELEASING.md](RELEA
 Einträge je Version sind ein automatischer Auszug der Commit-Titel seit dem letzten Release,
 erzeugt von `scripts/gen-changelog.mjs`.
 
+## [1.28.0] – 2026-08-31
+
+- chore: v1.27.1
+- Schalter "Auf dem Board ausblenden" an der Vorhaben-Kachel ([#669](https://github.com/mannewolff/kanban-kit/issues/669))
+- Board blendet ausgeblendete Vorhaben aus ([#668](https://github.com/mannewolff/kanban-kit/issues/668))
+- Reine Hilfsfunktion für verdeckte Kartennummern ([#667](https://github.com/mannewolff/kanban-kit/issues/667))
+- Massenaktionen treffen nur noch sichtbare Karten ([#621](https://github.com/mannewolff/kanban-kit/issues/621))
+- Tests: Massenaktionen nur auf sichtbaren Karten (Issue #621, rot)
+
 ## [1.27.0] – 2026-08-31
 
 - Reviewer neu eingestellt

@@ -30,6 +30,7 @@ import { ApiError } from '../api/client'
 import { columnsApi, type SortDirection } from '../api/columns'
 import { epicsApi as defaultEpicsApi, type Epic, type EpicsApi } from '../api/epics'
 import type { Member } from '../api/members'
+import { hiddenEpicsStorageKey } from '../lib/boardHiddenEpics'
 import { activeCardsInColumn, applyMove } from '../lib/boardOps'
 import { cleanupCountdownLabel, cleanupDaysRemaining } from '../lib/cleanupCountdown'
 import { neighbourColumns } from '../lib/columnMeta'
@@ -37,6 +38,7 @@ import { useEditMode } from '../lib/EditModeContext'
 import type { Label } from '../api/labels'
 import { formatDueDate, isOverdue } from '../lib/dueDate'
 import { epicShortcode } from '../lib/epicMeta'
+import { hiddenCardNumbers } from '../lib/hiddenCards'
 import { useKeyboardShortcut } from '../lib/useKeyboardShortcut'
 import { statusColors } from '../lib/statusColors'
 import { BOARD_GRADIENT, PANEL_HEAD_GRADIENT, PANEL_SHADOW, PANEL_RADIUS, STATUS_EDGE_WIDTH, SURFACE_TINT } from '../theme'
@@ -61,6 +63,14 @@ const sortByNumberLabel = (columnName: string, next: SortDirection) =>
  */
 const sortedByNumberMessage = (columnName: string, sorted: SortDirection) =>
   `Spalte ${columnName} ${sorted === 'ASC' ? 'aufsteigend' : 'absteigend'} sortiert`
+
+/**
+ * Zugänglicher Name der Spaltenmarke: Zahl, Objekt und Rückweg in einem. Achsenneutral formuliert,
+ * denn gezählt wird die Vereinigung aus ausgeblendeten Vorhaben und Vorhaben-Filter (Plan #620,
+ * E4/E9) — eine Spalte meldet eine Zahl, nicht zwei Ursachen.
+ */
+const hiddenBadgeLabel = (count: number) =>
+  `${count} ${count === 1 ? 'Karte' : 'Karten'} ausgeblendet, einblenden`
 
 /** Initialen (max. 2 Zeichen) aus einem Anzeigenamen für Assignee-Avatare. */
 function initials(name: string): string {
@@ -206,6 +216,19 @@ export function BoardView({
       return null
     }
   })
+  // Auf dem Board ausgeblendete Vorhaben (Plan #620). Reine Darstellung: kein Archivieren, keine
+  // Position, kein Zustand an der Karte — deshalb liegt der Wert nur lokal, im bestehenden
+  // `manban.`-Namensraum neben dem Vorhaben-Filter. Gesetzt wird er an der Vorhaben-Kachel
+  // (Issue #669); hier entsteht der Rückweg an der Spaltenmarke. Ohne funktionierendes
+  // localStorage greift die Ausblendung trotzdem, nur das Merken fällt aus (E8).
+  const [hiddenEpics, setHiddenEpics] = useState<ReadonlySet<number>>(() => {
+    try {
+      const raw = localStorage.getItem(hiddenEpicsStorageKey(board.id))
+      return raw ? new Set<number>(JSON.parse(raw) as number[]) : new Set<number>()
+    } catch {
+      return new Set<number>()
+    }
+  })
 
   useEffect(() => setCards(initialCards), [initialCards])
 
@@ -328,8 +351,21 @@ export function BoardView({
     }
     closeColumnDialog()
   }
-  // Anzeige-Filter nach Epic (nur Darstellung; Move/Anlegen arbeiten auf dem vollen Bestand).
-  const filteredCards = epicFilter == null ? cards : cards.filter((c) => c.parentId === epicFilter)
+  // Verdeckte Karten beider Achsen — ausgeblendete Vorhaben und Vorhaben-Filter — als eine Menge.
+  // Nur Darstellung: Move/Anlegen arbeiten weiter auf dem vollen Bestand (`cards`).
+  const hiddenNumbers = hiddenCardNumbers(cards, epics, hiddenEpics, epicFilter)
+  const filteredCards = cards.filter((c) => !hiddenNumbers.has(c.number))
+
+  // Wirksame Auswahl für Massenaktionen: die Schnittmenge aus der Auswahl und dem, was der
+  // Anzeige-Filter gerade zeigt. Jede Bulk-Stelle (Zählung, Dialogtexte, Verschieben, Archivieren,
+  // Löschen) liest ausschließlich diese Menge — so kann keine Aktion eine Karte treffen, die der
+  // Nutzer nicht sieht. Abgeleitet, statt die Auswahl beim Filterwechsel zu beschneiden: sie kommt
+  // zurück, sobald die Karten wieder sichtbar sind, statt unwiderruflich zu verschwinden. Die
+  // Reihenfolge folgt weiter der Klickhistorie (Iteration über die Auswahl, nicht über die Karten).
+  // Nicht hierüber läuft der Haken an der Karte selbst (`selected` in der Render-Schleife): der
+  // steht ohnehin nur an sichtbaren Karten und müsste sonst nach dem Filterwechsel verschwinden.
+  const visibleCardIds = new Set(filteredCards.map((c) => c.id))
+  const effectiveSelectedIds = new Set([...selectedIds].filter((id) => visibleCardIds.has(id)))
 
   const changeEpicFilter = (value: number | null) => {
     setEpicFilter(value)
@@ -338,6 +374,20 @@ export function BoardView({
       else localStorage.setItem(`manban.boardEpicFilter.${board.id}`, String(value))
     } catch {
       // localStorage nicht verfügbar
+    }
+  }
+
+  // Rückweg an der Spaltenmarke: hebt beide Achsen zusammen auf und vergisst beide Schlüssel. Ohne
+  // das Löschen wäre nach dem nächsten Reload alles wieder ausgeblendet. Getrennte Rückwege gäbe es
+  // nicht zu bedienen — die Marke nennt eine Zahl, nicht zwei Ursachen (E4).
+  const showAllHidden = () => {
+    setHiddenEpics(new Set())
+    setEpicFilter(null)
+    try {
+      localStorage.removeItem(hiddenEpicsStorageKey(board.id))
+      localStorage.removeItem(`manban.boardEpicFilter.${board.id}`)
+    } catch {
+      // localStorage nicht verfügbar — aufgehoben ist die Ausblendung trotzdem.
     }
   }
 
@@ -420,9 +470,9 @@ export function BoardView({
     })
   // Bulk-Archivieren: nach Bestätigung optimistisch aus der Ansicht nehmen, bei Fehler zurückrollen.
   const confirmBulkArchive = async () => {
-    const ids = [...selectedIds]
+    const ids = [...effectiveSelectedIds]
     const previous = cards
-    setCards(previous.filter((c) => !selectedIds.has(c.id)))
+    setCards(previous.filter((c) => !effectiveSelectedIds.has(c.id)))
     setBulkArchiveConfirm(false)
     exitSelection()
     try {
@@ -461,7 +511,7 @@ export function BoardView({
   const selectedIdsInViewOrder = () =>
     columns.flatMap((column) =>
       activeCardsInColumn(cards, column.id)
-        .filter((c) => selectedIds.has(c.id))
+        .filter((c) => effectiveSelectedIds.has(c.id))
         .map((c) => c.id),
     )
 
@@ -549,7 +599,13 @@ export function BoardView({
       >
         {columns.map((column) => {
           const colors = statusColors(column.name)
-          const count = activeCardsInColumn(filteredCards, column.id).length
+          // Voller Bestand, nicht der gefilterte: Der Zähler trägt die WIP-Grenze. Zählte er
+          // filteredCards, meldete er bei gesetztem Vorhaben-Filter eine eingehaltene Grenze,
+          // die tatsächlich verletzt ist. Dargestellt wird weiterhin filteredCards.
+          const columnCards = activeCardsInColumn(cards, column.id)
+          const count = columnCards.length
+          // Eine Zahl je Spalte: die Vereinigung beider Achsen, keine zwei Zählungen (E4).
+          const hiddenCount = columnCards.filter((c) => hiddenNumbers.has(c.number)).length
           const done = isDoneColumn(column.name)
           return (
             <Paper
@@ -598,6 +654,31 @@ export function BoardView({
                 <Typography variant="caption" sx={{ color: 'text.secondary', bgcolor: SURFACE_TINT, border: 1, borderColor: 'divider', borderRadius: 10, px: 0.75, lineHeight: 1.6 }}>
                   {column.wipLimit != null ? `${count}/${column.wipLimit}` : count}
                 </Typography>
+                {hiddenCount > 0 && (
+                  // Ausgeblendet heißt sichtbar ausgeblendet: Jede Spalte, aus der etwas
+                  // verschwunden ist, sagt es an und trägt den Rückweg an Ort und Stelle. Ein
+                  // echter Button, damit der Rückweg auch mit der Tastatur erreichbar ist.
+                  <Button
+                    size="small"
+                    onClick={showAllHidden}
+                    aria-label={hiddenBadgeLabel(hiddenCount)}
+                    sx={{
+                      minWidth: 0,
+                      px: 0.75,
+                      py: 0,
+                      textTransform: 'none',
+                      fontSize: '0.75rem',
+                      lineHeight: 1.6,
+                      color: 'text.secondary',
+                      bgcolor: SURFACE_TINT,
+                      border: 1,
+                      borderColor: 'divider',
+                      borderRadius: 10,
+                    }}
+                  >
+                    {`${hiddenCount} ausgeblendet`}
+                  </Button>
+                )}
                 {canEdit && (
                   <Tooltip title={sortByNumberLabel(column.name, nextSortDirection[column.id] ?? 'ASC')}>
                     {/* Kein span-Wrapper um den Button: MUI legt den Tooltip-Titel als aria-label auf
@@ -886,9 +967,9 @@ export function BoardView({
         <DialogTitle>Karten archivieren?</DialogTitle>
         <DialogContent>
           <DialogContentText>
-            {selectedIds.size === 1
+            {effectiveSelectedIds.size === 1
               ? 'Die ausgewählte Karte wird archiviert.'
-              : `${selectedIds.size} Karten werden archiviert.`}{' '}
+              : `${effectiveSelectedIds.size} Karten werden archiviert.`}{' '}
             Sie verschwinden aus dem Board, bleiben aber erhalten und lassen sich einzeln
             wiederherstellen.
           </DialogContentText>
@@ -918,13 +999,13 @@ export function BoardView({
         </DialogActions>
       </Dialog>
 
-      {selectionMode && selectedIds.size > 0 && (
+      {selectionMode && effectiveSelectedIds.size > 0 && (
         <BulkActionBar
-          count={selectedIds.size}
+          count={effectiveSelectedIds.size}
           canMove={canTransfer}
           onArchive={() => setBulkArchiveConfirm(true)}
           onMove={() => setBulkTransferOpen(true)}
-          onDelete={() => setDeleteConfirm([...selectedIds])}
+          onDelete={() => setDeleteConfirm([...effectiveSelectedIds])}
           onCancel={exitSelection}
         />
       )}

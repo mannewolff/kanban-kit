@@ -1,12 +1,13 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { boardsApi } from '../api/boards'
 import { cardsApi } from '../api/cards'
 import { epicsApi } from '../api/epics'
 import { labelsApi } from '../api/labels'
 import { projectsApi } from '../api/projects'
+import { hiddenEpicsStorageKey } from '../lib/boardHiddenEpics'
 import { EpicsPage } from './EpicsPage'
 
 vi.mock('../auth/AuthContext', () => ({
@@ -475,5 +476,131 @@ describe('EpicsPage', () => {
       'vorhaben-kachel-2',
       'vorhaben-kachel-1',
     ])
+  })
+
+  // --- Ausblenden an der Kachel (Issue #669) ---------------------------------
+
+  describe('Schalter „Auf dem Board ausblenden"', () => {
+    const vorhaben = [
+      {
+        id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 0, total: 1,
+        memberNumbers: [1], rootNumbers: [1], requirementCardNumber: null,
+      },
+    ]
+
+    /**
+     * localStorage-Stub über eine echte Map — vorbelegbar und nach dem Test auslesbar. Nötig statt
+     * des nativen `localStorage`: Unter Node 26 ist es deaktiviert (siehe `src/test/setup.ts`),
+     * ein Test gegen das globale Objekt wäre „grün lokal, rot in CI".
+     */
+    const stubStore = (entries: [string, string][]) => {
+      const store = new Map<string, string>(entries)
+      vi.stubGlobal('localStorage', {
+        getItem: (k: string) => store.get(k) ?? null,
+        setItem: (k: string, v: string) => { store.set(k, v) },
+        removeItem: (k: string) => { store.delete(k) },
+        clear: () => store.clear(), key: () => null, length: 0,
+      })
+      return store
+    }
+
+    afterEach(() => vi.unstubAllGlobals())
+
+    /** Der Schalter genau dieser Kachel — der Label-Text steht an jeder Kachel einmal. */
+    const schalter = async (epicId = 9) =>
+      within(await screen.findByTestId(`vorhaben-kachel-${epicId}`)).getByLabelText(
+        'Auf dem Board ausblenden',
+      )
+
+    it('öffnet beim Umlegen nicht das Vorhaben-Detail', async () => {
+      stubStore([])
+      mEpics.list.mockResolvedValue(vorhaben)
+      renderPage()
+
+      fireEvent.click(await schalter())
+
+      // Ohne stopPropagation träfe derselbe Klick den Kachel-Handler eine Ebene darüber.
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+      expect(await schalter()).toBeChecked()
+    })
+
+    it('schreibt beim Umlegen denselben Schlüssel und dasselbe Format, die das Board liest', async () => {
+      const store = stubStore([])
+      mEpics.list.mockResolvedValue(vorhaben)
+      renderPage()
+
+      fireEvent.click(await schalter())
+
+      // Gegen die geteilte Funktion geprüft, nicht gegen ein Literal: ein zweiter Schlüsselname
+      // wäre ein zweiter Zustand und fiele hier sonst nicht auf.
+      expect(JSON.parse(store.get(hiddenEpicsStorageKey(1)) as string)).toEqual([9])
+    })
+
+    it('nimmt das Vorhaben beim Zurücklegen wieder aus dem gespeicherten Stand', async () => {
+      const store = stubStore([[hiddenEpicsStorageKey(1), JSON.stringify([9])]])
+      mEpics.list.mockResolvedValue(vorhaben)
+      renderPage()
+
+      fireEvent.click(await schalter())
+
+      expect(await schalter()).not.toBeChecked()
+      expect(JSON.parse(store.get(hiddenEpicsStorageKey(1)) as string)).toEqual([])
+    })
+
+    it('zeigt beim Mount den gespeicherten Stand an', async () => {
+      stubStore([[hiddenEpicsStorageKey(1), JSON.stringify([9])]])
+      mEpics.list.mockResolvedValue(vorhaben)
+      renderPage()
+
+      expect(await schalter()).toBeChecked()
+    })
+
+    it('blendet auch dann aus, wenn das Schreiben in localStorage fehlschlägt', async () => {
+      vi.stubGlobal('localStorage', {
+        getItem: () => null,
+        setItem: () => { throw new Error('localStorage nicht verfügbar') },
+        removeItem: () => { throw new Error('localStorage nicht verfügbar') },
+        clear: () => {}, key: () => null, length: 0,
+      })
+      mEpics.list.mockResolvedValue(vorhaben)
+      renderPage()
+
+      fireEvent.click(await schalter())
+
+      // Der Zustand wirkt in dieser Sitzung — nur das Merken fällt aus (E8).
+      expect(await schalter()).toBeChecked()
+    })
+
+    it('startet unmarkiert, wenn das Lesen aus localStorage wirft', async () => {
+      vi.stubGlobal('localStorage', {
+        getItem: () => { throw new Error('localStorage nicht verfügbar') },
+        setItem: () => { throw new Error('localStorage nicht verfügbar') },
+        removeItem: () => { throw new Error('localStorage nicht verfügbar') },
+        clear: () => {}, key: () => null, length: 0,
+      })
+      mEpics.list.mockResolvedValue(vorhaben)
+      renderPage()
+
+      expect(await schalter()).not.toBeChecked()
+    })
+
+    it('ist per Tastatur erreichbar und auslösbar', async () => {
+      stubStore([])
+      mEpics.list.mockResolvedValue(vorhaben)
+      const user = userEvent.setup()
+      renderPage()
+      const s = await schalter()
+
+      // Vom letzten Bedienelement vor dem Raster einen Tab weiter: Dieses Vorhaben trägt keine
+      // Anforderung, die Kachel enthält vor dem Schalter also nichts Fokussierbares. Das belegt,
+      // dass der Schalter in der Tab-Reihenfolge liegt und nicht bloß per Maus zu treffen ist.
+      screen.getByRole('button', { name: 'Neues Vorhaben' }).focus()
+      await user.tab()
+      expect(s).toHaveFocus()
+
+      await user.keyboard(' ')
+
+      expect(await schalter()).toBeChecked()
+    })
   })
 })
