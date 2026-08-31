@@ -518,19 +518,19 @@ describe('CardDetailModal', () => {
 
   const epicCard: Card = { ...card, id: 200, type: 'EPIC', shortcode: 'AUT' }
 
-  it('zeigt Kind-Karten eines Epics im Lesemodus', async () => {
+  /**
+   * Die flache Kartenliste ist entfallen (Issue #660): Sie zeigte die per `parentId` zugeordneten
+   * Karten -- und genau die sind im Herkunftsbaum die Wurzeln. Zwei Darstellungen desselben
+   * Bestands untereinander, von denen die obere nichts beitraegt.
+   */
+  it('zeigt im Vorhaben keine flache Kartenliste mehr, sondern nur den Herkunftsbaum', async () => {
     const apis = makeApis()
-    const childCards: Card[] = [{ ...card, id: 300, number: 6, title: 'Kind' }]
-    render(<CardDetailModal card={epicCard} canEdit childCards={childCards} onClose={vi.fn()} {...apis} />)
+    apis.cardsApi.epicTree.mockResolvedValue([baumZeile(7)])
+    render(<CardDetailModal card={epicCard} canEdit onClose={vi.fn()} {...apis} />)
 
-    expect(await screen.findByText('#6 · Kind')).toBeInTheDocument()
-  })
-
-  it('zeigt einen Leer-Hinweis ohne Kind-Karten', async () => {
-    const apis = makeApis()
-    render(<CardDetailModal card={epicCard} canEdit childCards={[]} onClose={vi.fn()} {...apis} />)
-
-    expect(await screen.findByText('Keine zugeordneten Karten.')).toBeInTheDocument()
+    expect(await screen.findByRole('tree')).toBeInTheDocument()
+    expect(screen.queryByText(/^Karten \(/)).toBeNull()
+    expect(screen.queryByText('Keine zugeordneten Karten.')).toBeNull()
   })
 
   // --- Herkunftsbaum im Vorhaben-Dialog (Issue #644) ------------------------
@@ -594,7 +594,7 @@ describe('CardDetailModal', () => {
     expect(await screen.findByText(/kein zugriff auf dieses board/i)).toBeInTheDocument()
     expect(screen.queryByRole('tree')).toBeNull()
     // Die uebrigen Bereiche stehen weiterhin da.
-    expect(screen.getByText(/Karten \(/)).toBeInTheDocument()
+    expect(screen.getByText('Kommentare')).toBeInTheDocument()
   })
 
   it('meldet auch einen Fehler ohne API-Kontext', async () => {

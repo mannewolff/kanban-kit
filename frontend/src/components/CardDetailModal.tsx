@@ -37,7 +37,7 @@ import CircularProgress from '@mui/material/CircularProgress'
 import { ApiError } from '../api/client'
 import { DerivationTree } from './DerivationTree'
 import { cardsApi as defaultCardsApi , type DerivationNode } from '../api/cards'
-import type { Card, CardActivity, CardByNumber, CardDetail } from '../api/cards'
+import type { CardActivity, CardByNumber, CardDetail } from '../api/cards'
 import { commentsApi as defaultCommentsApi, type Comment, type CommentsApi } from '../api/comments'
 import type { Epic } from '../api/epics'
 import type { Label as BoardLabel } from '../api/labels'
@@ -366,30 +366,6 @@ export function LabelSection({
         readOnly
       )}
     </Box>
-  )
-}
-
-/** Kind-Karten eines Epics (nur View-Modus). */
-function ChildCardsSection({ childCards }: Readonly<{ childCards: Card[] }>) {
-  return (
-    <>
-      <Divider />
-      <Box>
-        <Typography variant="subtitle2" gutterBottom>
-          Karten ({childCards.length})
-        </Typography>
-        <Stack spacing={0.5}>
-          {childCards.map((c) => (
-            <Typography key={c.id} variant="body2">
-              #{c.number} · {c.title}
-            </Typography>
-          ))}
-          {childCards.length === 0 && (
-            <Typography color="text.secondary">Keine zugeordneten Karten.</Typography>
-          )}
-        </Stack>
-      </Box>
-    </>
   )
 }
 
@@ -752,8 +728,6 @@ interface Props {
   canEditEpic?: boolean
   /** Ob die Labels geändert werden dürfen (Default `true`) — dieselbe Begründung wie {@link canEditEpic}. */
   canEditLabels?: boolean
-  /** Kind-Karten eines Epics (nur bei type === 'EPIC'). */
-  childCards?: Card[]
   /** Projektmitglieder für die Zuständigen-Auswahl (Namen + Auswahlliste). */
   members?: Member[]
   /** Board-Labels für die Label-Auswahl (Name + Farbe). */
@@ -799,7 +773,6 @@ function CardDetailModalView({
   epics = [],
   canEditEpic = true,
   canEditLabels = true,
-  childCards = [],
   members = [],
   boardLabels = [],
   commentsApi = defaultCommentsApi,
@@ -1263,8 +1236,6 @@ function CardDetailModalView({
               onChange={(ids) => void saveLabels(ids)}
             />
           )}
-
-          {!editing && isEpic && <ChildCardsSection childCards={childCards} />}
 
           {!editing && isEpic && baumBoardId !== null && (
             <>

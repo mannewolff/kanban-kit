@@ -137,12 +137,19 @@ describe('EpicsPage', () => {
         type: 'CARD', parentId: 9, shortcode: null, assignees: [], dueDate: null, labels: [],
       },
     ])
+    mEpicTree.epicTree.mockResolvedValue([
+      {
+        number: 3, title: 'Kind', type: 'CARD', derivedFrom: null, depth: 0, done: false,
+        blocked: false, dependencies: [], externalDependencies: [], externalOrigin: false,
+        broken: false,
+      },
+    ])
     renderPage()
 
     fireEvent.click(await screen.findByText('Auth'))
 
-    expect(await screen.findByText('Karten (1)')).toBeInTheDocument()
-    expect(screen.getByText('#3 · Kind')).toBeInTheDocument()
+    expect(await screen.findByRole('tree')).toBeInTheDocument()
+    expect(screen.getByText('Kind')).toBeInTheDocument()
   })
 
   it('zeigt 0 % Fortschritt für ein Epic ohne Stories und schließt das Detail-Modal', async () => {
@@ -155,10 +162,10 @@ describe('EpicsPage', () => {
     expect(progress).toHaveAttribute('aria-valuenow', '0')
 
     fireEvent.click(screen.getByText('Leer'))
-    expect(await screen.findByText('Karten (0)')).toBeInTheDocument()
+    expect(await screen.findByRole('dialog')).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Schließen' }))
-    await waitFor(() => expect(screen.queryByText('Karten (0)')).not.toBeInTheDocument())
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
   })
 
   it('lädt die Rolle nach, wenn sie nicht in den Memberships steht', async () => {
@@ -202,7 +209,7 @@ describe('EpicsPage', () => {
     // die Aufloesung ist also unabhaengig davon, ob der Titel angezeigt werden konnte.
     fireEvent.click(screen.getByRole('button', { name: '#4 · noch nicht geladen' }))
 
-    expect(await screen.findByText('Karten (0)')).toBeInTheDocument()
+    expect(await screen.findByRole('dialog')).toBeInTheDocument()
   })
 
   it('nennt auf der gerenderten Seite nirgends „Epic"', async () => {
@@ -322,7 +329,7 @@ describe('EpicsPage', () => {
 
     fireEvent.click(await screen.findByText('Auth'))
 
-    expect(await screen.findByText(/^Karten \(/)).toBeInTheDocument()
+    expect(await screen.findByRole('dialog')).toBeInTheDocument()
   })
 
   it('zeigt eine nicht auflösbare Anforderungsnummer an und öffnet beim Klick nichts', async () => {

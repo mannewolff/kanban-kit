@@ -222,7 +222,6 @@ export function EpicsPage() {
           card={selected}
           canEdit={canEdit}
           canModerateComments={canModerate}
-          childCards={cards.filter((c) => c.parentId === selected.id)}
           onClose={() => setSelected(null)}
           onChanged={reload}
         />
