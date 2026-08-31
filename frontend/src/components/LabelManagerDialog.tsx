@@ -1,9 +1,11 @@
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
+import Checkbox from '@mui/material/Checkbox'
 import Dialog from '@mui/material/Dialog'
 import DialogActions from '@mui/material/DialogActions'
 import DialogContent from '@mui/material/DialogContent'
 import DialogTitle from '@mui/material/DialogTitle'
+import FormControlLabel from '@mui/material/FormControlLabel'
 import IconButton from '@mui/material/IconButton'
 import Stack from '@mui/material/Stack'
 import TextField from '@mui/material/TextField'
@@ -23,7 +25,15 @@ interface Props {
 
 const DEFAULT_COLOR = '#1976d2'
 
-/** Verwaltung der Board-Labels: anlegen, umbenennen/umfärben, löschen. */
+/**
+ * Verwaltung der Board-Labels: anlegen, umbenennen/umfärben, löschen — und je Bestands-Label das
+ * Häkchen „auf der Vorhaben-Kachel zählen" (#664). Genau dieser eine Handgriff ist der Grund, aus
+ * dem die Einstellung am Label sitzt und nicht am Board (Entscheidung PO, #656 Frage 5).
+ *
+ * <p>Die **Anlege-Zeile bleibt bewusst ohne Häkchen**: Neue Labels starten mit dem Standard
+ * `false` (Plan #657, E2) und werden anschließend über ihre Bestandszeile markiert; `POST` nimmt
+ * das Feld ohnehin nicht an (#659).
+ */
 export function LabelManagerDialog({
   open,
   boardId,
@@ -49,8 +59,16 @@ export function LabelManagerDialog({
     }
   }
 
-  const save = async (label: Label, name: string, color: string) => {
-    await api.update(label.id, name.trim(), color)
+  /**
+   * `countOnEpicTile` wird nur uebergeben, wenn das Haekchen umgeschaltet wurde -- beim blossen
+   * Umbenennen bleibt es aus dem Aufruf heraus (Entscheidung Manne, 2026-08-31). Dass der
+   * gespeicherte Wert dabei erhalten bleibt, leistet das Backend ueber "fehlend = unveraendert"
+   * (#659); ein immer mitgesendetes Feld unterliefe genau diese Semantik.
+   */
+  const save = async (label: Label, name: string, color: string, countOnEpicTile?: boolean) => {
+    await (countOnEpicTile === undefined
+      ? api.update(label.id, name.trim(), color)
+      : api.update(label.id, name.trim(), color, countOnEpicTile))
     onChanged()
   }
 
@@ -111,35 +129,54 @@ function LabelRow({
   onDelete,
 }: Readonly<{
   label: Label
-  onSave: (label: Label, name: string, color: string) => Promise<void>
+  onSave: (label: Label, name: string, color: string, countOnEpicTile?: boolean) => Promise<void>
   onDelete: (label: Label) => Promise<void>
 }>) {
   const [name, setName] = useState(label.name)
   const [color, setColor] = useState(label.color)
-  const dirty = name !== label.name || color !== label.color
+  const [zaehlt, setZaehlt] = useState(label.countOnEpicTile)
+  const zaehltGeaendert = zaehlt !== label.countOnEpicTile
+  // Dieselbe `dirty`-Erkennung wie bei Name und Farbe: Ein versehentlicher Klick auf das Haekchen
+  // schreibt nichts, erst "Speichern" wirkt.
+  const dirty = name !== label.name || color !== label.color || zaehltGeaendert
 
   return (
-    <Stack direction="row" spacing={1} alignItems="center">
-      <TextField
-        size="small"
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-        slotProps={{ htmlInput: { maxLength: 60, 'aria-label': `Label ${label.name}` } }}
+    <Stack spacing={0.5}>
+      <Stack direction="row" spacing={1} alignItems="center">
+        <TextField
+          size="small"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          slotProps={{ htmlInput: { maxLength: 60, 'aria-label': `Label ${label.name}` } }}
+        />
+        <Box
+          component="input"
+          type="color"
+          aria-label={`Farbe ${label.name}`}
+          value={color}
+          onChange={(e) => setColor((e.target as HTMLInputElement).value)}
+          sx={{ width: 40, height: 36, border: 'none', background: 'none' }}
+        />
+        <Button
+          size="small"
+          disabled={!dirty || !name.trim()}
+          onClick={() => void onSave(label, name, color, zaehltGeaendert ? zaehlt : undefined)}
+        >
+          Speichern
+        </Button>
+        <IconButton size="small" aria-label={`Label ${label.name} löschen`} onClick={() => void onDelete(label)}>
+          ✕
+        </IconButton>
+      </Stack>
+      {/* `FormControlLabel` verknuepft die Beschriftung ueber ein echtes <label> mit der Box: der
+          Text steht sichtbar im DOM und traegt zugleich den zugaenglichen Namen. Ein blosses
+          `aria-label` waere unsichtbar, und `jsx-a11y` prueft MUI-Kompositionen nicht
+          zuverlaessig — der gruene Lint belegte die Beschriftung also nicht. */}
+      <FormControlLabel
+        control={<Checkbox size="small" checked={zaehlt} onChange={(e) => setZaehlt(e.target.checked)} />}
+        label="auf der Vorhaben-Kachel zählen"
+        slotProps={{ typography: { variant: 'caption', color: 'text.secondary' } }}
       />
-      <Box
-        component="input"
-        type="color"
-        aria-label={`Farbe ${label.name}`}
-        value={color}
-        onChange={(e) => setColor((e.target as HTMLInputElement).value)}
-        sx={{ width: 40, height: 36, border: 'none', background: 'none' }}
-      />
-      <Button size="small" disabled={!dirty || !name.trim()} onClick={() => void onSave(label, name, color)}>
-        Speichern
-      </Button>
-      <IconButton size="small" aria-label={`Label ${label.name} löschen`} onClick={() => void onDelete(label)}>
-        ✕
-      </IconButton>
     </Stack>
   )
 }
