@@ -1157,6 +1157,45 @@ describe('BoardView', () => {
     expect(screen.getByLabelText('WIP-Limit')).toHaveValue(5)
   })
 
+  it('zeigt im WIP-Zähler den vollen Bestand der Spalte', () => {
+    // Regressionsschutz: ohne gesetzten Vorhaben-Filter sind voller und gefilterter Bestand gleich.
+    const boardWithWip: Board = {
+      ...board,
+      columns: [{ id: 10, name: 'Backlog', position: 0, wipLimit: 5 }, board.columns[1]],
+    }
+    const cards: Card[] = [
+      { ...card, id: 100, number: 1, parentId: 9, positionInColumn: 0 },
+      { ...card, id: 200, number: 2, parentId: 9, positionInColumn: 1 },
+      { ...card, id: 300, number: 3, parentId: null, positionInColumn: 2 },
+    ]
+    render(<BoardView board={boardWithWip} initialCards={cards} canEdit api={mkApi()} />)
+
+    expect(within(screen.getByTestId('column-header-10')).getByText('3/5')).toBeInTheDocument()
+  })
+
+  it('zeigt im WIP-Zähler den vollen Bestand auch bei gesetztem Vorhaben-Filter', () => {
+    // Verhaltensänderung: der Zähler misst die WIP-Grenze, nicht den Filterstand. Sichtbar sind
+    // nur die gefilterten Karten, gezählt wird der volle Bestand.
+    const boardWithWip: Board = {
+      ...board,
+      columns: [{ id: 10, name: 'Backlog', position: 0, wipLimit: 5 }, board.columns[1]],
+    }
+    const epics = [{ id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 0, total: 1, memberNumbers: [], rootNumbers: [], requirementCardNumber: null }]
+    const cards: Card[] = [
+      { ...card, id: 100, number: 1, parentId: 9, positionInColumn: 0 },
+      { ...card, id: 200, number: 2, parentId: 9, positionInColumn: 1 },
+      { ...card, id: 300, number: 3, parentId: null, positionInColumn: 2 },
+    ]
+    render(<BoardView board={boardWithWip} initialCards={cards} canEdit epics={epics} api={mkApi()} />)
+
+    fireEvent.change(screen.getByLabelText('Vorhaben-Filter'), { target: { value: '9' } })
+
+    // Dargestellt wird gefiltert ...
+    expect(screen.queryByTestId('card-300')).not.toBeInTheDocument()
+    // ... gezählt wird der volle Bestand.
+    expect(within(screen.getByTestId('column-header-10')).getByText('3/5')).toBeInTheDocument()
+  })
+
   it('deaktiviert „Speichern" bei ungültigem WIP-Limit', () => {
     render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} />)
 
@@ -1577,6 +1616,141 @@ describe('BoardView', () => {
 
       expect(await screen.findByText('Sortieren fehlgeschlagen.')).toBeInTheDocument()
       expect(screen.getByLabelText(ascLabel('Backlog'))).toBeEnabled()
+    })
+  })
+
+  describe('Massenaktionen bei gesetztem Vorhaben-Filter', () => {
+    // Massenaktionen dürfen nur treffen, was der Nutzer sieht: Wer auswählt und danach den
+    // Vorhaben-Filter setzt, würde sonst Karten verschieben/archivieren/löschen, die nicht auf
+    // dem Board stehen — und die Aktionsleiste nennte eine Zahl, die dazu nicht passt.
+    const epics = [{ id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 0, total: 1, memberNumbers: [], rootNumbers: [], requirementCardNumber: null }]
+    const epicA: Card = { ...card, id: 100, number: 1, title: 'Vorhaben A', parentId: 9, positionInColumn: 0 }
+    const epicB: Card = { ...card, id: 101, number: 3, title: 'Vorhaben B', parentId: 9, positionInColumn: 1 }
+    const frei: Card = { ...card, id: 200, number: 2, title: 'Ohne Vorhaben', parentId: null, positionInColumn: 2 }
+
+    /** Auswahlmodus starten, die genannten Karten anhaken, danach auf Vorhaben 9 filtern. */
+    const selectThenFilter = (ids: number[]) => {
+      fireEvent.click(screen.getByRole('button', { name: 'Auswählen' }))
+      ids.forEach((id) => fireEvent.click(screen.getByTestId(`card-${id}`)))
+      fireEvent.change(screen.getByLabelText('Vorhaben-Filter'), { target: { value: '9' } })
+    }
+
+    const clearFilter = () =>
+      fireEvent.change(screen.getByLabelText('Vorhaben-Filter'), { target: { value: '' } })
+
+    it('zählt in der Aktionsleiste nur die sichtbaren Karten', () => {
+      render(<BoardView board={board} initialCards={[epicA, frei]} canEdit epics={epics} api={mkApi()} />)
+
+      selectThenFilter([100, 200])
+
+      expect(screen.getByText('1 ausgewählt')).toBeInTheDocument()
+    })
+
+    it('übergibt dem Verschieben-Dialog nur die sichtbaren Karten', async () => {
+      mProjects.list.mockResolvedValue([{ id: 2, name: 'Anderes Projekt', role: 'OWNER', createdAt: '' }])
+      mBoards.list.mockResolvedValue([
+        { id: 99, projectId: 2, name: 'Zielboard', createdAt: '',
+          columns: [{ id: 900, name: 'Backlog', position: 0, wipLimit: null }] },
+      ])
+      mCards.bulkTransfer.mockResolvedValue([])
+      render(
+        <BoardView board={board} initialCards={[epicA, frei]} canEdit canTransfer epics={epics}
+          api={mkApi()} />,
+      )
+
+      selectThenFilter([100, 200])
+      fireEvent.click(screen.getByRole('button', { name: 'Verschieben' }))
+
+      fireEvent.change(await screen.findByLabelText('Zielprojekt'), { target: { value: '2' } })
+      fireEvent.change(await screen.findByLabelText('Zielboard'), { target: { value: '99' } })
+      fireEvent.change(await screen.findByLabelText('Zielspalte'), { target: { value: '900' } })
+      fireEvent.click(screen.getByRole('button', { name: 'Verschieben' }))
+
+      await waitFor(() => expect(mCards.bulkTransfer).toHaveBeenCalledWith([100], 99, 900))
+    })
+
+    it('archiviert nur die sichtbaren Karten und nimmt nur diese aus der Ansicht', async () => {
+      const api = mkApi({ bulkArchive: vi.fn().mockResolvedValue([]) })
+      render(<BoardView board={board} initialCards={[epicA, frei]} canEdit epics={epics} api={api} />)
+
+      selectThenFilter([100, 200])
+      fireEvent.click(screen.getByRole('button', { name: 'Archivieren' }))
+      fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Archivieren' }))
+
+      await waitFor(() => expect(api.bulkArchive).toHaveBeenCalledWith([100]))
+      // Die verborgene Karte hat das optimistische Entfernen nicht mitgemacht: Filter weg, Karte da.
+      clearFilter()
+      expect(screen.getByTestId('card-200')).toBeInTheDocument()
+      expect(screen.queryByTestId('card-100')).not.toBeInTheDocument()
+    })
+
+    it('verschiebt nur die sichtbaren Karten in den Papierkorb', async () => {
+      const api = mkApi({ bulkDelete: vi.fn().mockResolvedValue(undefined) })
+      render(<BoardView board={board} initialCards={[epicA, frei]} canEdit epics={epics} api={api} />)
+
+      selectThenFilter([100, 200])
+      fireEvent.click(screen.getByRole('button', { name: 'In den Papierkorb' }))
+      fireEvent.click(
+        within(screen.getByRole('dialog')).getByRole('button', { name: 'In den Papierkorb' }),
+      )
+
+      await waitFor(() => expect(api.bulkDelete).toHaveBeenCalledWith([100]))
+    })
+
+    it('nennt in beiden Bestätigungsdialogen die Zahl der sichtbaren Karten', async () => {
+      render(
+        <BoardView board={board} initialCards={[epicA, epicB, frei]} canEdit epics={epics}
+          api={mkApi()} />,
+      )
+
+      // Drei ausgewählt, zwei davon sichtbar — die Dialoge müssen von zweien sprechen.
+      selectThenFilter([100, 101, 200])
+
+      fireEvent.click(screen.getByRole('button', { name: 'Archivieren' }))
+      expect(screen.getByText(/2 Karten werden archiviert\./)).toBeInTheDocument()
+      fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape', code: 'Escape' })
+      await waitFor(() => expect(screen.queryByText('Karten archivieren?')).not.toBeInTheDocument())
+
+      fireEvent.click(screen.getByRole('button', { name: 'In den Papierkorb' }))
+      expect(screen.getByText(/2 Karten werden in den Papierkorb verschoben\./)).toBeInTheDocument()
+    })
+
+    it('blendet die Aktionsleiste aus, wenn alle ausgewählten Karten verborgen sind', () => {
+      render(<BoardView board={board} initialCards={[epicA, frei]} canEdit epics={epics} api={mkApi()} />)
+
+      selectThenFilter([200])
+
+      // Nicht „0 ausgewählt", sondern gar keine Leiste.
+      expect(screen.queryByRole('region', { name: 'Massenaktionen' })).not.toBeInTheDocument()
+    })
+
+    it('macht die verborgene Auswahl nach Aufheben des Filters wieder wirksam', () => {
+      render(<BoardView board={board} initialCards={[epicA, frei]} canEdit epics={epics} api={mkApi()} />)
+
+      selectThenFilter([100, 200])
+      expect(screen.getByText('1 ausgewählt')).toBeInTheDocument()
+
+      // Belegt, dass die wirksame Menge abgeleitet und die Auswahl nicht beschnitten wird.
+      clearFilter()
+      expect(screen.getByText('2 ausgewählt')).toBeInTheDocument()
+    })
+
+    it('beendet mit einer ausgeführten Massenaktion auch die verborgene Rest-Auswahl', async () => {
+      const api = mkApi({ bulkArchive: vi.fn().mockResolvedValue([]) })
+      render(<BoardView board={board} initialCards={[epicA, frei]} canEdit epics={epics} api={api} />)
+
+      selectThenFilter([100, 200])
+      fireEvent.click(screen.getByRole('button', { name: 'Archivieren' }))
+      fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Archivieren' }))
+      await waitFor(() => expect(api.bulkArchive).toHaveBeenCalledWith([100]))
+
+      clearFilter()
+
+      // Die Karte ist unversehrt zurück — aber exitSelection hat den Auswahlmodus samt der
+      // verborgenen Rest-Auswahl beendet. Das Rückkehr-Versprechen gilt nur ohne Aktion dazwischen.
+      expect(screen.getByTestId('card-200')).toBeInTheDocument()
+      expect(screen.queryByRole('region', { name: 'Massenaktionen' })).not.toBeInTheDocument()
+      expect(screen.queryByLabelText('Karte Ohne Vorhaben auswählen')).not.toBeInTheDocument()
     })
   })
 })
