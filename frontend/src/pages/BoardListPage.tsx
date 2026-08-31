@@ -23,6 +23,8 @@ import { useBoardRole } from '../lib/useBoardRole'
 import { useProjectName } from '../lib/useProjectName'
 import { formatDueDate, isOverdue } from '../lib/dueDate'
 import { ARCHIVED_STATUS_COLOR, statusColors } from '../lib/statusColors'
+import { STATUS_EDGE_WIDTH, SURFACE_HOVER_SHADOW } from '../theme'
+import { labelChipSx } from '../components/labelChipSx'
 
 const ARCHIVED = 'archived'
 type FilterKey = number | typeof ARCHIVED
@@ -277,15 +279,20 @@ export function BoardListPage() {
     reloadCards()
   }
 
+  /** Statusfarbe einer Zeile; archiviert schlaegt die Spaltenfarbe. */
+  const rowStatusColor = (card: Card) =>
+    (card.archived ? ARCHIVED_STATUS_COLOR : statusColors(columnById.get(card.columnId)?.name ?? '')).dot
+
   const renderCell = (key: ColumnKey, card: Card) => {
     const col = columnById.get(card.columnId)
     switch (key) {
       case 'number':
         return <Typography variant="caption" color="text.secondary">#{card.number}</Typography>
       case 'status': {
-        const colors = card.archived ? ARCHIVED_STATUS_COLOR : statusColors(col?.name ?? '')
+        // Die Farbe traegt allein die linke Zeilenkante; der Text bleibt, weil Farbe nie
+        // alleiniger Informationstraeger sein darf (#650).
         const label = card.archived ? 'Archiv' : col?.name ?? ''
-        return <Chip label={label} size="small" sx={{ bgcolor: colors.bg, color: colors.text, fontWeight: 600 }} />
+        return <Chip label={label} size="small" variant="outlined" sx={{ fontWeight: 600 }} />
       }
       case 'epic': {
         const epic = card.parentId != null ? epicById.get(card.parentId) : undefined
@@ -358,7 +365,7 @@ export function BoardListPage() {
                 onClick={() => toggleLabel(label.id)}
                 size="small"
                 variant={active ? 'filled' : 'outlined'}
-                sx={active ? { bgcolor: label.color, color: '#fff' } : { borderColor: label.color, color: label.color }}
+                sx={active ? labelChipSx(label.color) : { borderColor: label.color, color: label.color }}
               />
             )
           })}
@@ -448,13 +455,19 @@ export function BoardListPage() {
                   borderColor: 'divider',
                   borderTopColor: rowOver === card.id ? 'primary.main' : 'divider',
                   borderTopWidth: rowOver === card.id ? 2 : 1,
-                  borderRadius: 1.5,
+                  // Abweichung von E5 mit Grund: Am Board bedeutet die linke Kante die
+                  // Zugehoerigkeit zu einem Vorhaben. Eine Listenzeile hat keine Oberkante, an die
+                  // der Status koennte — hier traegt die linke Kante deshalb den Status. Soll in
+                  // derselben Zeile einmal die Vorhaben-Zugehoerigkeit erscheinen, darf sie diese
+                  // Kante nicht belegen.
+                  borderLeft: `${STATUS_EDGE_WIDTH}px solid ${rowStatusColor(card)}`,
+                  borderRadius: (t) => `${t.shape.borderRadius}px`,
                   px: 1.5,
                   py: 1,
                   cursor: 'pointer',
                   userSelect: 'none',
                   transition: 'box-shadow 150ms',
-                  '&:hover': { boxShadow: 2 },
+                  '&:hover': { boxShadow: SURFACE_HOVER_SHADOW },
                 }}
               >
                 {sortable && (

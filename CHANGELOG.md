@@ -7,6 +7,33 @@ Versionierung folgt der dreiteiligen Betriebsversion (siehe [RELEASING.md](RELEA
 Einträge je Version sind ein automatischer Auszug der Commit-Titel seit dem letzten Release,
 erzeugt von `scripts/gen-changelog.mjs`.
 
+## [1.27.0] – 2026-08-31
+
+- Reviewer neu eingestellt
+- Reviewer neu eingestellt
+- chore: v1.26.2
+- Codex reviewer hinzugefügt
+- Haekchen je Label unterscheidbar benennen (Review zu #664)
+- Haekchen "auf der Vorhaben-Kachel zaehlen" im Label-Dialog ([#664](https://github.com/mannewolff/kanban-kit/issues/664))
+- Vorhaben-Kachel zeigt Zusammensetzung und Zustaende ([#663](https://github.com/mannewolff/kanban-kit/issues/663))
+- Reine Hilfsfunktion fuer die Vorhaben-Kachel ([#662](https://github.com/mannewolff/kanban-kit/issues/662))
+- Zustand je Zeile im Herkunftsbaum ([#661](https://github.com/mannewolff/kanban-kit/issues/661))
+- docs: Praesentations-Verzeichnis ohne Umlaut benennen
+- docs: Factsheet-Unterlagen unter präsentationen/ ablegen
+- Doppelte Kartenliste aus dem Vorhaben-Dialog entfernen ([#660](https://github.com/mannewolff/kanban-kit/issues/660))
+- Label traegt "auf der Vorhaben-Kachel zaehlen" ([#659](https://github.com/mannewolff/kanban-kit/issues/659))
+- chore: v1.26.1
+- Anzeigename "Leitstand" und farbige Kopfleiste
+- Designsprache von "Kante" auf "Panel" umstellen
+- Struktur-Leitplanke schaerfen und pruefbar machen (Review zu #648)
+- Label-Chips stuerzen nicht mehr an unbrauchbaren Farben ab (Review zu #649/#650/#652)
+- Redesign Kante, Paket 6: Shell und Auth ([#653](https://github.com/mannewolff/kanban-kit/issues/653))
+- Redesign Kante, Paket 5: Modale und Dialoge ([#652](https://github.com/mannewolff/kanban-kit/issues/652))
+- Redesign Kante, Paket 4: Kacheln und Kennzahlen ([#651](https://github.com/mannewolff/kanban-kit/issues/651))
+- Redesign Kante, Paket 3: Listen und Tabellen ([#650](https://github.com/mannewolff/kanban-kit/issues/650))
+- Redesign Kante, Paket 2: Board und Ideen-Board ([#649](https://github.com/mannewolff/kanban-kit/issues/649))
+- Redesign Kante, Paket 1: Token-Ebene ([#648](https://github.com/mannewolff/kanban-kit/issues/648))
+
 ## [1.26.0] – 2026-08-31
 
 - chore: v1.25.1

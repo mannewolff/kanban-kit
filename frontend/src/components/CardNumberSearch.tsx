@@ -285,10 +285,9 @@ export function CardNumberSearch() {
     <>
       <Tooltip title="Karte suchen">
         <IconButton
-          color="inherit"
           aria-label="Karte suchen"
           onClick={() => setExpanded(true)}
-          sx={{ display: expanded ? 'none' : { xs: 'inline-flex', sm: 'none' } }}
+          sx={{ color: 'text.primary', display: expanded ? 'none' : { xs: 'inline-flex', sm: 'none' } }}
         >
           <SearchIcon />
         </IconButton>
@@ -315,7 +314,7 @@ export function CardNumberSearch() {
               endAdornment: (
                 <InputAdornment position="end">
                   {busy ? (
-                    <CircularProgress size={14} color="inherit" aria-label="Suche läuft" />
+                    <CircularProgress size={14} sx={{ color: 'text.primary' }} aria-label="Suche läuft" />
                   ) : (
                     <SearchIcon fontSize="small" aria-hidden />
                   )}

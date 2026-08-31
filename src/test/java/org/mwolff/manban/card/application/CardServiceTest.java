@@ -267,7 +267,9 @@ class CardServiceTest {
     when(cards.allocateActivePosition(20L)).thenReturn(0);
     when(labels.findByBoardId(BOARD))
         .thenReturn(
-            List.of(new Label(7L, BOARD, "Bug", "#f00"), new Label(8L, BOARD, "Ux", "#0f0")));
+            List.of(
+                new Label(7L, BOARD, "Bug", "#f00", false),
+                new Label(8L, BOARD, "Ux", "#0f0", false)));
 
     service.create(
         1L, BOARD, 20L, "Titel", null, null, null, false, null, null, List.of(7L, 8L, 7L), null);
@@ -291,7 +293,8 @@ class CardServiceTest {
     when(boardService.requireColumn(20L, BOARD)).thenReturn(column(20L, "Backlog", 0));
     when(cards.allocateCardNumber(PROJECT)).thenReturn(1);
     when(cards.allocateActivePosition(20L)).thenReturn(0);
-    when(labels.findByBoardId(BOARD)).thenReturn(List.of(new Label(7L, BOARD, "Bug", "#f00")));
+    when(labels.findByBoardId(BOARD))
+        .thenReturn(List.of(new Label(7L, BOARD, "Bug", "#f00", false)));
 
     assertThatThrownBy(
             () ->
@@ -2500,7 +2503,9 @@ class CardServiceTest {
         .thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
     when(labels.findByBoardId(BOARD))
         .thenReturn(
-            List.of(new Label(7L, BOARD, "Bug", "#f00"), new Label(8L, BOARD, "Ux", "#0f0")));
+            List.of(
+                new Label(7L, BOARD, "Bug", "#f00", false),
+                new Label(8L, BOARD, "Ux", "#0f0", false)));
     when(cardLabels.findByCardId(1L)).thenReturn(List.of(7L, 8L));
 
     CardService.CardView view = service.setLabels(3L, 1L, List.of(7L, 8L, 7L));
@@ -2514,7 +2519,8 @@ class CardServiceTest {
   void setLabels_rejectsForeignLabel() {
     when(cards.findById(1L))
         .thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
-    when(labels.findByBoardId(BOARD)).thenReturn(List.of(new Label(7L, BOARD, "Bug", "#f00")));
+    when(labels.findByBoardId(BOARD))
+        .thenReturn(List.of(new Label(7L, BOARD, "Bug", "#f00", false)));
 
     assertThatThrownBy(() -> service.setLabels(3L, 1L, List.of(7L, 8L)))
         .isInstanceOf(InvalidLabelException.class);

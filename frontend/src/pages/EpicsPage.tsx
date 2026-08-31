@@ -13,11 +13,15 @@ import { boardsApi, type Board } from '../api/boards'
 import { Breadcrumbs } from '../components/Breadcrumbs'
 import { cardsApi, type Card } from '../api/cards'
 import { epicsApi, type Epic } from '../api/epics'
+import { labelsApi, type Label } from '../api/labels'
 import { CardDetailModal } from '../components/CardDetailModal'
 import { EpicBadge } from '../components/EpicBadge'
+import { labelChipSx } from '../components/labelChipSx'
 import { NewCardModal } from '../components/NewCardModal'
+import { aggregateMarks, countKinds, sortEpics } from '../lib/epicTiles'
 import { useBoardRole } from '../lib/useBoardRole'
 import { useProjectName } from '../lib/useProjectName'
+import { CARD_LIFT, CARD_SHADOW, CARD_SHADOW_HOVER, PANEL_RADIUS } from '../theme'
 
 function epicToCard(epic: Epic, boardId: number): Card {
   return {
@@ -29,6 +33,18 @@ function epicToCard(epic: Epic, boardId: number): Card {
   }
 }
 
+/**
+ * Eine Art in der Zusammensetzung, mit Singular- und Pluralform. Die Anzahl steht als Text neben
+ * der Bezeichnung, nicht als blosse Zahl — sonst waere "1 2 5" auf der Kachel nicht lesbar.
+ */
+function Art({ anzahl, eins, viele }: Readonly<{ anzahl: number; eins: string; viele: string }>) {
+  return (
+    <Typography variant="caption" color="text.secondary">
+      {`${anzahl} ${anzahl === 1 ? eins : viele}`}
+    </Typography>
+  )
+}
+
 export function EpicsPage() {
   const { boardId } = useParams()
   const id = Number.parseInt(boardId ?? '', 10)
@@ -36,12 +52,14 @@ export function EpicsPage() {
   const [board, setBoard] = useState<Board | null>(null)
   const [epics, setEpics] = useState<Epic[]>([])
   const [cards, setCards] = useState<Card[]>([])
+  const [labels, setLabels] = useState<Label[]>([])
   const [selected, setSelected] = useState<Card | null>(null)
   const [creating, setCreating] = useState(false)
 
   const reload = () => {
     void epicsApi.list(id).then(setEpics)
     void cardsApi.list(id).then(setCards)
+    void labelsApi.list(id).then(setLabels)
   }
 
   /**
@@ -65,6 +83,11 @@ export function EpicsPage() {
     })
     void cardsApi.list(id).then((cs) => {
       if (active) setCards(cs)
+    })
+    // `cardsApi.list` liefert nur `labels: number[]` (IDs) — ohne die Definitionen gibt es weder
+    // Namen noch `countOnEpicTile`.
+    void labelsApi.list(id).then((ls) => {
+      if (active) setLabels(ls)
     })
     return () => {
       active = false
@@ -114,23 +137,60 @@ export function EpicsPage() {
         )}
       </Stack>
 
-      <Stack spacing={1.5}>
-        {epics.map((epic) => {
+      {/* Kachelraster statt gestapelter Zeilen: Ein Vorhaben ist ein Gegenstand, den man
+          überblickt, keine Tabellenzeile. Die Kacheln sind quadratisch (`aspectRatio: '1'`) und
+          brechen um, die Seite wird bei vielen Vorhaben länger — beides Nutzerentscheidung
+          (#656). `minmax(min(240px, 100%), 1fr)` klemmt die Spalte: Mit `240px` allein liefe das
+          Raster auf schmalen Fenstern über den Rand hinaus. */}
+      <Box
+        data-testid="vorhaben-raster"
+        sx={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fill, minmax(min(240px, 100%), 1fr))',
+          gap: 2,
+        }}
+      >
+        {sortEpics(epics, cards, labels).map((epic) => {
           const pct = epic.total > 0 ? (epic.done / epic.total) * 100 : 0
+          const arten = countKinds(epic, cards)
+          const marken = aggregateMarks(epic, cards, labels)
+          // Leer heisst wie in #662: keine Mitglieder UND keine Anforderung. Ein Vorhaben mit
+          // Anforderung, aber ohne Karten ist eroeffnet, nicht leer.
+          const leer = epic.total === 0 && epic.requirementCardNumber === null
           return (
             <Paper
               key={epic.id}
+              data-testid={`vorhaben-kachel-${epic.id}`}
               variant="outlined"
               onClick={() => setSelected(epicToCard(epic, id))}
-              sx={{ p: 2, cursor: 'pointer', '&:hover': { boxShadow: 2 } }}
+              sx={{
+                p: 2,
+                cursor: 'pointer',
+                minWidth: 0,
+                aspectRatio: '1',
+                display: 'flex',
+                flexDirection: 'column',
+                borderRadius: `${PANEL_RADIUS}px`,
+                boxShadow: CARD_SHADOW,
+                transition: 'box-shadow .2s ease, transform .2s ease',
+                '&:hover': { boxShadow: CARD_SHADOW_HOVER, transform: `translateY(${CARD_LIFT}px)` },
+                '@media (prefers-reduced-motion: reduce)': {
+                  transition: 'none',
+                  '&:hover': { boxShadow: CARD_SHADOW_HOVER, transform: 'none' },
+                },
+              }}
             >
               <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
                 <EpicBadge epicId={epic.id} title={epic.title} shortcode={epic.shortcode} />
                 <Typography variant="subtitle1" sx={{ fontWeight: 600, flexGrow: 1 }}>
                   {epic.title}
                 </Typography>
+                {/* Immer neutral, auch bei sortenreinen Vorhaben: `total` zaehlt ALLE
+                    Mitglieder, und sobald dieselbe Kachel Anforderungen und Plaene ausweist, waere
+                    "n Arbeitspakete fertig" schlicht falsch. Eine nur bedingte Umbenennung waere
+                    kein Fortschritt — sie liesse die Bestandstests gruen. */}
                 <Typography variant="caption" color="text.secondary">
-                  {epic.done}/{epic.total} Arbeitspakete fertig
+                  {epic.done} von {epic.total} fertig
                 </Typography>
               </Stack>
               {/* Woraus das Vorhaben entstanden ist. Traegt es keine Anforderung, steht hier
@@ -161,17 +221,59 @@ export function EpicsPage() {
                   </Link>
                 </Stack>
               )}
+              {/* Traegt ein Vorhaben keine Anforderung, steht das ausdruecklich da. Das revidiert
+                  bewusst Plan #637 (E6), der keinen Platzhalter wollte: Dort zaehlte Sparsamkeit,
+                  hier Unterscheidbarkeit — eine leere Stelle waere nicht von einem Ladefehler zu
+                  unterscheiden. */}
+              {epic.requirementCardNumber === null && (
+                <Typography variant="caption" color="text.secondary" sx={{ mb: 1 }}>
+                  Keine Anforderung hinterlegt.
+                </Typography>
+              )}
+
+              {/* Woraus das Vorhaben besteht und was daran liegen geblieben ist (#656) — die
+                  Rechnung dazu steht in `lib/epicTiles.ts` (#662). Eine Art mit null Karten wird
+                  nicht genannt: "0 Plaene" ist keine Aussage, nur Rauschen. */}
+              {leer ? (
+                <Typography variant="caption" color="text.secondary">
+                  Noch keine Karten zugeordnet.
+                </Typography>
+              ) : (
+                <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" sx={{ mb: 1 }}>
+                  {arten.requirements > 0 && <Art anzahl={arten.requirements} eins="Anforderung" viele="Anforderungen" />}
+                  {arten.plans > 0 && <Art anzahl={arten.plans} eins="Plan" viele="Pläne" />}
+                  {arten.workItems > 0 && <Art anzahl={arten.workItems} eins="Arbeitspaket" viele="Arbeitspakete" />}
+                </Stack>
+              )}
+
+              {marken.length > 0 && (
+                <Stack direction="row" spacing={0.5} useFlexGap flexWrap="wrap" sx={{ mb: 1 }}>
+                  {marken.map((marke) => (
+                    <Typography
+                      key={marke.name}
+                      variant="caption"
+                      component="span"
+                      sx={{ ...labelChipSx(marke.color), px: 0.75, borderRadius: 10, whiteSpace: 'nowrap' }}
+                    >
+                      {`${marke.name} ${marke.count}`}
+                    </Typography>
+                  ))}
+                </Stack>
+              )}
+              {/* `mt: auto` schiebt den Balken an den Fuß der Kachel. In der quadratischen Fläche
+                  bleibt Luft zwischen Kopf und Fuß; ohne das klebte der Balken am Titel und die
+                  untere Hälfte wäre leer. */}
               <LinearProgress
                 variant="determinate"
                 value={pct}
                 aria-label={`Fortschritt ${epic.title}`}
-                sx={{ height: 8, borderRadius: 1 }}
+                sx={{ height: 8, borderRadius: 1, mt: 'auto' }}
               />
             </Paper>
           )
         })}
-        {epics.length === 0 && <Typography color="text.secondary">Noch keine Vorhaben.</Typography>}
-      </Stack>
+      </Box>
+      {epics.length === 0 && <Typography color="text.secondary">Noch keine Vorhaben.</Typography>}
 
       <NewCardModal
         open={creating}
@@ -190,7 +292,6 @@ export function EpicsPage() {
           card={selected}
           canEdit={canEdit}
           canModerateComments={canModerate}
-          childCards={cards.filter((c) => c.parentId === selected.id)}
           onClose={() => setSelected(null)}
           onChanged={reload}
         />

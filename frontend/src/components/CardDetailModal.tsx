@@ -37,7 +37,7 @@ import CircularProgress from '@mui/material/CircularProgress'
 import { ApiError } from '../api/client'
 import { DerivationTree } from './DerivationTree'
 import { cardsApi as defaultCardsApi , type DerivationNode } from '../api/cards'
-import type { Card, CardActivity, CardByNumber, CardDetail } from '../api/cards'
+import type { CardActivity, CardByNumber, CardDetail } from '../api/cards'
 import { commentsApi as defaultCommentsApi, type Comment, type CommentsApi } from '../api/comments'
 import type { Epic } from '../api/epics'
 import type { Label as BoardLabel } from '../api/labels'
@@ -49,10 +49,13 @@ import { cardLocationCrumbs, type CardLocation } from '../lib/cardLocation'
 import { dueInputToIso, formatDueDate, isOverdue } from '../lib/dueDate'
 import { normalizeTaskLists, toggleTaskAt } from '../lib/markdownTasks'
 import { safeImageSrc, safeLinkHref } from '../lib/markdownUrls'
-import { CODE_BLOCK_BG, MODAL_BORDER, MODAL_TEXT_PRIMARY, statusColors } from '../lib/statusColors'
+import { statusColors } from '../lib/statusColors'
+import { CODE_BG, theme } from '../theme'
+import { labelChipSx } from './labelChipSx'
 import { useAuth } from '../auth/AuthContext'
 import { AttachmentPreview } from './AttachmentPreview'
 import { useSnackbar } from './SnackbarProvider'
+import { dialogTitleSx } from './dialogChromeSx'
 
 /** Bilder und PDF werden in der Lightbox angezeigt; andere Typen nur heruntergeladen. */
 const isPreviewable = (contentType: string) =>
@@ -186,12 +189,12 @@ const TaskMarkdown = memo(function TaskMarkdown({
 const markdownBodySx = {
   overflowWrap: 'anywhere',
   '& :first-of-type': { mt: 0 },
-  '& h1, & h2': { fontWeight: 600, fontSize: '1.15rem', mt: 2, pb: 0.5, borderBottom: `1px solid ${MODAL_BORDER}` },
+  '& h1, & h2': { fontWeight: 600, fontSize: '1.15rem', mt: 2, pb: 0.5, borderBottom: `1px solid ${theme.palette.divider}` },
   '& h3, & h4': { fontWeight: 600, fontSize: '1rem', mt: 1.5, mb: 0.5 },
-  '& p, & li': { lineHeight: 1.6, color: MODAL_TEXT_PRIMARY },
+  '& p, & li': { lineHeight: 1.6, color: theme.palette.text.primary },
   '& ul, & ol': { pl: 3, my: 1 },
-  '& code': { backgroundColor: CODE_BLOCK_BG, px: 0.5, borderRadius: '3px', fontFamily: 'monospace', fontSize: '0.85em' },
-  '& pre': { backgroundColor: CODE_BLOCK_BG, p: 1.5, borderRadius: 1, overflowX: 'auto' },
+  '& code': { backgroundColor: CODE_BG, px: 0.5, borderRadius: 1, fontFamily: 'monospace', fontSize: '0.85em' },
+  '& pre': { backgroundColor: CODE_BG, p: 1.5, borderRadius: 1, overflowX: 'auto' },
   '& pre code': { backgroundColor: 'transparent', px: 0 },
   // `display: block` + `width: max-content` macht die Tabelle zum eigenen Scrollbereich; als
   // echtes Table-Layout würde sie stattdessen auf die Modalbreite gestaucht.
@@ -199,7 +202,7 @@ const markdownBodySx = {
 } as const
 
 const descriptionSx = {
-  border: `1px solid ${MODAL_BORDER}`,
+  border: `1px solid ${theme.palette.divider}`,
   borderRadius: 1,
   p: 2,
   ...markdownBodySx,
@@ -322,7 +325,7 @@ export function LabelSection({
               key={id}
               size="small"
               label={l?.name ?? `#${id}`}
-              sx={{ bgcolor: l?.color ?? 'grey.500', color: '#fff' }}
+              sx={labelChipSx(l?.color)}
             />
           )
         })}
@@ -351,7 +354,7 @@ export function LabelSection({
                 key={l.id}
                 size="small"
                 label={l.name}
-                sx={{ bgcolor: l.color, color: '#fff' }}
+                sx={labelChipSx(l.color)}
               />
             ))
           }
@@ -363,30 +366,6 @@ export function LabelSection({
         readOnly
       )}
     </Box>
-  )
-}
-
-/** Kind-Karten eines Epics (nur View-Modus). */
-function ChildCardsSection({ childCards }: Readonly<{ childCards: Card[] }>) {
-  return (
-    <>
-      <Divider />
-      <Box>
-        <Typography variant="subtitle2" gutterBottom>
-          Karten ({childCards.length})
-        </Typography>
-        <Stack spacing={0.5}>
-          {childCards.map((c) => (
-            <Typography key={c.id} variant="body2">
-              #{c.number} · {c.title}
-            </Typography>
-          ))}
-          {childCards.length === 0 && (
-            <Typography color="text.secondary">Keine zugeordneten Karten.</Typography>
-          )}
-        </Stack>
-      </Box>
-    </>
   )
 }
 
@@ -749,8 +728,6 @@ interface Props {
   canEditEpic?: boolean
   /** Ob die Labels geändert werden dürfen (Default `true`) — dieselbe Begründung wie {@link canEditEpic}. */
   canEditLabels?: boolean
-  /** Kind-Karten eines Epics (nur bei type === 'EPIC'). */
-  childCards?: Card[]
   /** Projektmitglieder für die Zuständigen-Auswahl (Namen + Auswahlliste). */
   members?: Member[]
   /** Board-Labels für die Label-Auswahl (Name + Farbe). */
@@ -796,7 +773,6 @@ function CardDetailModalView({
   epics = [],
   canEditEpic = true,
   canEditLabels = true,
-  childCards = [],
   members = [],
   boardLabels = [],
   commentsApi = defaultCommentsApi,
@@ -1156,7 +1132,7 @@ function CardDetailModalView({
         paper: { sx: { width: '90%', maxWidth: '90%', height: '90%', maxHeight: '90%', m: 0 } },
       }}
     >
-      <DialogTitle sx={{ borderBottom: `1px solid ${MODAL_BORDER}` }}>
+      <DialogTitle sx={dialogTitleSx}>
         <Stack direction="row" alignItems="center" spacing={1} sx={{ flexWrap: 'wrap' }}>
           {onBack && (
             <IconButton size="small" aria-label="Zurück zur vorherigen Karte" onClick={onBack}>
@@ -1261,8 +1237,6 @@ function CardDetailModalView({
             />
           )}
 
-          {!editing && isEpic && <ChildCardsSection childCards={childCards} />}
-
           {!editing && isEpic && baumBoardId !== null && (
             <>
               <Divider />
@@ -1366,7 +1340,7 @@ function CardDetailModalView({
     {/* Vorgang eroeffnen: Name und Kuerzel. Eigener Dialog statt Inline-Feldern, damit die
         Kartenmaske im Lesemodus nicht zwei Eingabefelder traegt, die fast nie gebraucht werden. */}
     <Dialog open={eroeffnen} onClose={() => setEroeffnen(false)} fullWidth maxWidth="xs">
-      <DialogTitle>Vorgang eröffnen</DialogTitle>
+      <DialogTitle sx={dialogTitleSx}>Vorgang eröffnen</DialogTitle>
       <DialogContent>
         <Stack spacing={2} sx={{ mt: 1 }}>
           <TextField

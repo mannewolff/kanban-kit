@@ -42,6 +42,28 @@ describe('labelsApi', () => {
     expect(JSON.parse(String(c.body))).toEqual({ name: 'Defekt', color: '#00f' })
   })
 
+  it('update sendet countOnEpicTile nur, wenn es übergeben wurde', async () => {
+    const f = spyFetch()
+    await labelsApi.update(7, 'Bug', '#f00', true)
+    expect(JSON.parse(String(lastCall(f).body))).toEqual({
+      name: 'Bug',
+      color: '#f00',
+      countOnEpicTile: true,
+    })
+  })
+
+  // Dreiwertig: explizites false muss im Body landen. Würde es wie "fehlend" behandelt, ließe
+  // sich ein einmal gesetztes Label nie wieder abschalten.
+  it('update sendet ein ausdrückliches false mit', async () => {
+    const f = spyFetch()
+    await labelsApi.update(7, 'Bug', '#f00', false)
+    expect(JSON.parse(String(lastCall(f).body))).toEqual({
+      name: 'Bug',
+      color: '#f00',
+      countOnEpicTile: false,
+    })
+  })
+
   it('remove ruft DELETE /api/labels/{id}', async () => {
     const f = spyFetch()
     await labelsApi.remove(7)

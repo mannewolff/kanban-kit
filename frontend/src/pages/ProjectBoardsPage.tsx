@@ -21,6 +21,7 @@ import { projectsApi } from '../api/projects'
 import { Breadcrumbs } from '../components/Breadcrumbs'
 import { canManageBoards, canManageMembers } from '../lib/roles'
 import { useRefetchOnFocus } from '../lib/useRefetchOnFocus'
+import { SURFACE_HOVER_SHADOW } from '../theme'
 
 export function ProjectBoardsPage() {
   const { projectId } = useParams()
@@ -171,7 +172,7 @@ export function ProjectBoardsPage() {
                 alignItems: 'center',
                 gap: 1.5,
                 transition: 'box-shadow 150ms, border-color 150ms',
-                '&:hover': { boxShadow: 3, borderColor: 'primary.main' },
+                '&:hover': { boxShadow: SURFACE_HOVER_SHADOW, borderColor: 'primary.main' },
               }}
             >
               <Typography variant="subtitle1" sx={{ fontWeight: 600, flexGrow: 1, minWidth: 0 }}>

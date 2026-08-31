@@ -29,6 +29,7 @@ function node(overrides: Partial<DerivationNode> & { number: number }): Derivati
     externalDependencies: [],
     externalOrigin: false,
     broken: false,
+    labels: [],
     ...overrides,
   }
 }
@@ -440,4 +441,51 @@ describe('DerivationTree', () => {
     expect(onOpenCard).not.toHaveBeenCalled()
   })
 
+  // --- Gezaehlte Label-Marken je Zeile (Issue #661) -------------------------
+
+  it('zeigt die gezählten Labels einer Zeile als Marken', async () => {
+    await zeigeBaum([node({ number: 1, labels: [{ name: 'bereit', color: '#00ff00' }] })])
+
+    expect(screen.getByText('bereit')).toBeInTheDocument()
+  })
+
+  /**
+   * Die Unterscheidung darf nicht allein an der Farbe haengen: Der Name steht als Text im DOM,
+   * die Farbe ist Zusatz.
+   */
+  it('nennt den Label-Namen als Text, nicht nur als Fläche', async () => {
+    await zeigeBaum([
+      node({
+        number: 1,
+        labels: [
+          { name: 'bereit', color: '#00ff00' },
+          { name: 'blockiert von aussen', color: '#ff0000' },
+        ],
+      }),
+    ])
+
+    expect(screen.getByText('bereit')).toBeInTheDocument()
+    expect(screen.getByText('blockiert von aussen')).toBeInTheDocument()
+  })
+
+  it('zeigt an einer Zeile ohne gezählte Labels keine Marke', async () => {
+    await zeigeBaum([node({ number: 1, labels: [] }), node({ number: 2, labels: [{ name: 'bereit', color: '#0f0' }] })])
+
+    const zeilen = screen.getAllByRole('treeitem')
+    expect(zeilen[0]).not.toHaveTextContent('bereit')
+    expect(zeilen[1]).toHaveTextContent('bereit')
+  })
+
+  /**
+   * Der Baum ist ein Roving Tabindex mit genau einem Tab-Stopp. Eine Label-Marke ist reine
+   * Anzeige — bekaeme sie Rolle oder `tabIndex`, staende ein zweites, konkurrierendes
+   * Fokusmodell daneben.
+   */
+  it('macht die Label-Marke nicht bedienbar', async () => {
+    await zeigeBaum([node({ number: 1, labels: [{ name: 'bereit', color: '#0f0' }] })])
+
+    const marke = screen.getByText('bereit')
+    expect(marke).not.toHaveAttribute('tabindex')
+    expect(marke).not.toHaveAttribute('role')
+  })
 })

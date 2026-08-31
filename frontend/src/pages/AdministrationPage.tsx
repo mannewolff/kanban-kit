@@ -17,6 +17,7 @@ import Typography from '@mui/material/Typography'
 import ContentCopyIcon from '@mui/icons-material/ContentCopy'
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline'
 import { useEffect, useState } from 'react'
+import { APP_NAME } from '../appMeta'
 import { accessTokensApi, type AccessToken, type CreatedAccessToken } from '../api/accessTokens'
 import { boardsApi, type Board } from '../api/boards'
 import { ApiError } from '../api/client'
@@ -87,7 +88,7 @@ function LegalSection() {
         </Typography>
         <Typography variant="body2">© 2026 Manfred Wolff</Typography>
         <Typography variant="body2" color="text.secondary">
-          kanban-kit steht unter der MIT-Lizenz. Nutzung, Änderung und Weitergabe sind gestattet,
+          {APP_NAME} steht unter der MIT-Lizenz. Nutzung, Änderung und Weitergabe sind gestattet,
           sofern Copyright-Vermerk und Lizenztext erhalten bleiben. Die Software wird ohne Gewähr
           bereitgestellt.
         </Typography>
@@ -291,7 +292,7 @@ function ApiTokensSection() {
                   gap: 1.5,
                   border: '1px solid',
                   borderColor: 'divider',
-                  borderRadius: 1.5,
+                  borderRadius: (t) => `${t.shape.borderRadius}px`,
                   px: 1.5,
                   py: 1,
                   opacity: t.revoked ? 0.5 : 1,

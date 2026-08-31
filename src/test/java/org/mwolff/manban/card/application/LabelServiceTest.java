@@ -74,12 +74,14 @@ class LabelServiceTest {
   }
 
   private void givenBoardLabel(long labelId, String name) {
-    when(labels.findByBoardId(BOARD)).thenReturn(List.of(new Label(labelId, BOARD, name, "#f00")));
+    when(labels.findByBoardId(BOARD))
+        .thenReturn(List.of(new Label(labelId, BOARD, name, "#f00", false)));
   }
 
   @Test
   void list_requiresMembershipAndReturnsLabels() {
-    when(labels.findByBoardId(BOARD)).thenReturn(List.of(new Label(1L, BOARD, "Bug", "#f00")));
+    when(labels.findByBoardId(BOARD))
+        .thenReturn(List.of(new Label(1L, BOARD, "Bug", "#f00", false)));
 
     List<Label> result = service.list(5L, BOARD);
 
@@ -126,10 +128,10 @@ class LabelServiceTest {
 
   @Test
   void update_changesNameAndColor() {
-    when(labels.findById(1L)).thenReturn(Optional.of(new Label(1L, BOARD, "Bug", "#f00")));
+    when(labels.findById(1L)).thenReturn(Optional.of(new Label(1L, BOARD, "Bug", "#f00", false)));
 
     ArgumentCaptor<Label> captor = ArgumentCaptor.forClass(Label.class);
-    Label result = service.update(5L, 1L, "Defekt", "#00f");
+    Label result = service.update(5L, 1L, "Defekt", "#00f", null);
 
     verify(permissions).require(5L, PROJECT, Permission.BOARD_UPDATE);
     verify(labels).save(captor.capture());
@@ -140,22 +142,22 @@ class LabelServiceTest {
 
   @Test
   void update_allowsSameNameUnchanged() {
-    when(labels.findById(1L)).thenReturn(Optional.of(new Label(1L, BOARD, "Bug", "#f00")));
+    when(labels.findById(1L)).thenReturn(Optional.of(new Label(1L, BOARD, "Bug", "#f00", false)));
     // Der eigene Name existiert (per Definition) — der Gleichheits-Kurzschluss muss den
     // Duplikat-Check überspringen, sonst würde das Umfärben fälschlich scheitern.
     when(labels.existsByBoardIdAndName(BOARD, "Bug")).thenReturn(true);
 
-    service.update(5L, 1L, "Bug", "#0f0");
+    service.update(5L, 1L, "Bug", "#0f0", null);
 
     verify(labels).save(any(Label.class));
   }
 
   @Test
   void update_rejectsRenameToExistingName() {
-    when(labels.findById(1L)).thenReturn(Optional.of(new Label(1L, BOARD, "Bug", "#f00")));
+    when(labels.findById(1L)).thenReturn(Optional.of(new Label(1L, BOARD, "Bug", "#f00", false)));
     when(labels.existsByBoardIdAndName(BOARD, "Ux")).thenReturn(true);
 
-    assertThatThrownBy(() -> service.update(5L, 1L, "Ux", "#0f0"))
+    assertThatThrownBy(() -> service.update(5L, 1L, "Ux", "#0f0", null))
         .isInstanceOf(InvalidLabelException.class);
     verify(labels, never()).save(any());
   }
@@ -164,13 +166,65 @@ class LabelServiceTest {
   void update_throwsLabelNotFound_whenUnknown() {
     when(labels.findById(1L)).thenReturn(Optional.empty());
 
-    assertThatThrownBy(() -> service.update(5L, 1L, "X", "#0f0"))
+    assertThatThrownBy(() -> service.update(5L, 1L, "X", "#0f0", null))
         .isInstanceOf(LabelNotFoundException.class);
   }
 
   @Test
+  void create_startsWithCountOnEpicTileFalse() {
+    when(labels.existsByBoardIdAndName(BOARD, "Bug")).thenReturn(false);
+
+    ArgumentCaptor<Label> captor = ArgumentCaptor.forClass(Label.class);
+    service.create(5L, BOARD, "Bug", "#f00");
+
+    verify(labels).save(captor.capture());
+    assertThat(captor.getValue().countOnEpicTile()).isFalse();
+  }
+
+  @Test
+  void update_setsCountOnEpicTile_whenGiven() {
+    when(labels.findById(1L)).thenReturn(Optional.of(new Label(1L, BOARD, "Bug", "#f00", false)));
+
+    ArgumentCaptor<Label> captor = ArgumentCaptor.forClass(Label.class);
+    Label result = service.update(5L, 1L, "Bug", "#f00", true);
+
+    verify(labels).save(captor.capture());
+    assertThat(captor.getValue().countOnEpicTile()).isTrue();
+    assertThat(result.countOnEpicTile()).isTrue();
+  }
+
+  /**
+   * Fehlt das Feld im Request, bleibt der gespeicherte Wert stehen — Umbenennen setzt nichts
+   * zurück.
+   */
+  @Test
+  void update_keepsCountOnEpicTile_whenAbsent() {
+    when(labels.findById(1L)).thenReturn(Optional.of(new Label(1L, BOARD, "Bug", "#f00", true)));
+
+    ArgumentCaptor<Label> captor = ArgumentCaptor.forClass(Label.class);
+    service.update(5L, 1L, "Defekt", "#00f", null);
+
+    verify(labels).save(captor.capture());
+    assertThat(captor.getValue().countOnEpicTile()).isTrue();
+  }
+
+  /**
+   * Explizites {@code false} schaltet ab — sonst wäre ein einmal gesetztes Label nicht mehr lösbar.
+   */
+  @Test
+  void update_clearsCountOnEpicTile_whenExplicitlyFalse() {
+    when(labels.findById(1L)).thenReturn(Optional.of(new Label(1L, BOARD, "Bug", "#f00", true)));
+
+    ArgumentCaptor<Label> captor = ArgumentCaptor.forClass(Label.class);
+    service.update(5L, 1L, "Bug", "#f00", false);
+
+    verify(labels).save(captor.capture());
+    assertThat(captor.getValue().countOnEpicTile()).isFalse();
+  }
+
+  @Test
   void delete_removesLabel() {
-    when(labels.findById(1L)).thenReturn(Optional.of(new Label(1L, BOARD, "Bug", "#f00")));
+    when(labels.findById(1L)).thenReturn(Optional.of(new Label(1L, BOARD, "Bug", "#f00", false)));
 
     service.delete(5L, 1L);
 
@@ -192,7 +246,9 @@ class LabelServiceTest {
   void namesByCard_mapsAssignedLabelIdsToNames() {
     when(labels.findByBoardId(BOARD))
         .thenReturn(
-            List.of(new Label(7L, BOARD, "Bug", "#f00"), new Label(8L, BOARD, "Ux", "#0f0")));
+            List.of(
+                new Label(7L, BOARD, "Bug", "#f00", false),
+                new Label(8L, BOARD, "Ux", "#0f0", false)));
     when(cardLabels.findByCardIds(List.of(1L))).thenReturn(Map.of(1L, List.of(7L, 8L)));
 
     Map<Long, List<String>> result = service.namesByCard(BOARD, List.of(1L));
@@ -204,7 +260,8 @@ class LabelServiceTest {
   void namesByCard_returnsEmptyList_forCardWithoutLabels() {
     // Karten ohne Zuordnung fehlen in der Batch-Antwort — sie müssen dennoch als Eintrag mit
     // leerer Liste erscheinen, sonst müsste jeder Aufrufer den Null-Fall behandeln.
-    when(labels.findByBoardId(BOARD)).thenReturn(List.of(new Label(7L, BOARD, "Bug", "#f00")));
+    when(labels.findByBoardId(BOARD))
+        .thenReturn(List.of(new Label(7L, BOARD, "Bug", "#f00", false)));
     when(cardLabels.findByCardIds(List.of(1L))).thenReturn(Map.of());
 
     Map<Long, List<String>> result = service.namesByCard(BOARD, List.of(1L));
@@ -218,7 +275,9 @@ class LabelServiceTest {
     // gewinnt, damit die Ausgabe unabhängig von der Zuordnungsreihenfolge stabil bleibt.
     when(labels.findByBoardId(BOARD))
         .thenReturn(
-            List.of(new Label(7L, BOARD, "Bug", "#f00"), new Label(8L, BOARD, "Ux", "#0f0")));
+            List.of(
+                new Label(7L, BOARD, "Bug", "#f00", false),
+                new Label(8L, BOARD, "Ux", "#0f0", false)));
     when(cardLabels.findByCardIds(List.of(1L))).thenReturn(Map.of(1L, List.of(8L, 7L)));
 
     Map<Long, List<String>> result = service.namesByCard(BOARD, List.of(1L));
@@ -231,7 +290,9 @@ class LabelServiceTest {
     // Zwei Karten, jede mit eigener Zuordnung: die Namen dürfen nicht über Karten hinweg verlaufen.
     when(labels.findByBoardId(BOARD))
         .thenReturn(
-            List.of(new Label(7L, BOARD, "Bug", "#f00"), new Label(8L, BOARD, "Ux", "#0f0")));
+            List.of(
+                new Label(7L, BOARD, "Bug", "#f00", false),
+                new Label(8L, BOARD, "Ux", "#0f0", false)));
     when(cardLabels.findByCardIds(List.of(1L, 2L)))
         .thenReturn(Map.of(1L, List.of(7L), 2L, List.of(8L)));
 
@@ -242,7 +303,8 @@ class LabelServiceTest {
 
   @Test
   void namesByCard_returnsEmptyMap_forNoCards() {
-    when(labels.findByBoardId(BOARD)).thenReturn(List.of(new Label(7L, BOARD, "Bug", "#f00")));
+    when(labels.findByBoardId(BOARD))
+        .thenReturn(List.of(new Label(7L, BOARD, "Bug", "#f00", false)));
     when(cardLabels.findByCardIds(List.of())).thenReturn(Map.of());
 
     assertThat(service.namesByCard(BOARD, List.of())).isEmpty();
@@ -293,9 +355,10 @@ class LabelServiceTest {
   void addToCard_resolvesTheNameOnTheCardsBoard_notOnAnotherBoard() {
     // Labelnamen sind nur boardweit eindeutig: dasselbe "Bug" existiert auf zwei Boards.
     givenCard(CardType.CARD);
-    when(labels.findByBoardId(BOARD)).thenReturn(List.of(new Label(7L, BOARD, "Bug", "#f00")));
+    when(labels.findByBoardId(BOARD))
+        .thenReturn(List.of(new Label(7L, BOARD, "Bug", "#f00", false)));
     when(labels.findByBoardId(OTHER_BOARD))
-        .thenReturn(List.of(new Label(99L, OTHER_BOARD, "Bug", "#0f0")));
+        .thenReturn(List.of(new Label(99L, OTHER_BOARD, "Bug", "#0f0", false)));
     when(cardLabels.addLabel(CARD_ID, 7L)).thenReturn(true);
 
     service.addToCard(USER, CARD_ID, "Bug");
@@ -415,9 +478,10 @@ class LabelServiceTest {
   @Test
   void removeFromCard_resolvesTheNameOnTheCardsBoard_notOnAnotherBoard() {
     givenCard(CardType.CARD);
-    when(labels.findByBoardId(BOARD)).thenReturn(List.of(new Label(7L, BOARD, "Bug", "#f00")));
+    when(labels.findByBoardId(BOARD))
+        .thenReturn(List.of(new Label(7L, BOARD, "Bug", "#f00", false)));
     when(labels.findByBoardId(OTHER_BOARD))
-        .thenReturn(List.of(new Label(99L, OTHER_BOARD, "Bug", "#0f0")));
+        .thenReturn(List.of(new Label(99L, OTHER_BOARD, "Bug", "#0f0", false)));
     when(cardLabels.removeLabel(CARD_ID, 7L)).thenReturn(true);
 
     service.removeFromCard(USER, CARD_ID, "Bug");

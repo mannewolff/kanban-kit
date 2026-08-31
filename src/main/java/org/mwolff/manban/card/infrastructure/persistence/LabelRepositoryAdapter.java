@@ -44,6 +44,6 @@ class LabelRepositoryAdapter implements LabelRepository {
   }
 
   private static Label toDomain(LabelEntity e) {
-    return new Label(e.getId(), e.getBoardId(), e.getName(), e.getColor());
+    return new Label(e.getId(), e.getBoardId(), e.getName(), e.getColor(), e.isCountOnEpicTile());
   }
 }

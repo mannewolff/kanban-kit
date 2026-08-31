@@ -28,7 +28,10 @@ export function EditModeBanner() {
         height: EDIT_MODE_BANNER_HEIGHT,
         zIndex: (t) => t.zIndex.drawer + 2,
         bgcolor: 'warning.main',
-        color: 'warning.contrastText',
+        // Nicht `warning.contrastText`: MUI waehlt dort Weiss (Schwelle 3:1), das ergibt auf
+        // Amber nur 3,11:1 und verfehlt die AA-Schwelle 4,5:1 fuer Fliesstext. Schwarz auf Amber
+        // kommt auf 6,75:1 und ist zugleich die gelaeufige Warnfarbkombination (#653, E6).
+        color: 'common.black',
         display: 'flex',
         alignItems: 'center',
         gap: 1,

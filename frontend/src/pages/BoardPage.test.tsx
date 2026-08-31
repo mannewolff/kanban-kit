@@ -330,7 +330,7 @@ describe('BoardPage weitere Orchestrierung', () => {
   it('legt ein Label über den Label-Manager an und lädt Labels und Karten neu', async () => {
     memberships = [{ projectId: 9, role: 'OWNER' }]
     renderPage()
-    mockedLabels.create.mockResolvedValue({ id: 5, boardId: 1, name: 'Bug', color: '#1976d2' })
+    mockedLabels.create.mockResolvedValue({ id: 5, boardId: 1, name: 'Bug', color: '#1976d2', countOnEpicTile: false })
     expect(await screen.findByRole('button', { name: 'Neu anlegen' })).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Labels' }))

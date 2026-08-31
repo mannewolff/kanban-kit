@@ -4,6 +4,7 @@ import Typography from '@mui/material/Typography'
 import ArchiveOutlinedIcon from '@mui/icons-material/ArchiveOutlined'
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline'
 import DriveFileMoveOutlinedIcon from '@mui/icons-material/DriveFileMoveOutlined'
+import { SURFACE_HOVER_SHADOW } from '../theme'
 
 interface Props {
   /** Anzahl der aktuell ausgewählten Karten. */
@@ -23,10 +24,13 @@ interface Props {
 export function BulkActionBar({ count, canMove, onArchive, onMove, onDelete, onCancel }: Readonly<Props>) {
   return (
     <Paper
-      elevation={6}
+      elevation={0}
       role="region"
       aria-label="Massenaktionen"
       sx={{
+        // E3, Auslegung „schwebende Ebene": Die Aktionsleiste liegt ueber beliebigem Inhalt, ihre
+        // Abhebung ist Funktion und nicht Dekoration. Marken-Schatten statt MUI-Standardschatten.
+        boxShadow: SURFACE_HOVER_SHADOW,
         position: 'fixed',
         bottom: 24,
         left: '50%',
@@ -36,7 +40,7 @@ export function BulkActionBar({ count, canMove, onArchive, onMove, onDelete, onC
         display: 'flex',
         alignItems: 'center',
         gap: 2,
-        borderRadius: 2,
+        borderRadius: 1,
         zIndex: (theme) => theme.zIndex.appBar,
       }}
     >

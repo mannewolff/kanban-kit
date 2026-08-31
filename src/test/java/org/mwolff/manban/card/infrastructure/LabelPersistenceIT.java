@@ -59,7 +59,7 @@ class LabelPersistenceIT extends AbstractIntegrationTest {
 
   @Test
   void saveFindAndDeleteLabels() {
-    Label saved = labels.save(new Label(null, boardId, "Bug", "#f00"));
+    Label saved = labels.save(new Label(null, boardId, "Bug", "#f00", false));
     assertThat(saved.id()).isNotNull();
     assertThat(labels.findById(saved.requireId())).isPresent();
     assertThat(labels.existsByBoardIdAndName(boardId, "Bug")).isTrue();
@@ -70,10 +70,40 @@ class LabelPersistenceIT extends AbstractIntegrationTest {
     assertThat(labels.findByBoardId(boardId)).isEmpty();
   }
 
+  /**
+   * Die Migration V28 ist rein additiv: Ein Label, das ohne die neue Spalte angelegt wird — wie
+   * jeder Bestand, den die Migration vorfand —, steht auf {@code false}. Der Standard "nicht
+   * zählen" verhindert, dass eine Migration auf jedem Bestandsboard stillschweigend alle Labels auf
+   * die Kacheln holt.
+   */
+  @Test
+  void existingLabelsDefaultToNotCountingOnEpicTile() {
+    long legacy =
+        insert(
+            "INSERT INTO label (board_id, name, color) VALUES ("
+                + boardId
+                + ", 'Bestand', '#ccc') RETURNING id");
+
+    assertThat(labels.findById(legacy)).get().extracting(Label::countOnEpicTile).isEqualTo(false);
+  }
+
+  @Test
+  void countOnEpicTileSurvivesRoundTrip() {
+    Label saved = labels.save(new Label(null, boardId, "Zaehlt", "#0f0", true));
+
+    assertThat(labels.findById(saved.requireId()))
+        .get()
+        .extracting(Label::countOnEpicTile)
+        .isEqualTo(true);
+    assertThat(labels.findByBoardId(boardId))
+        .extracting(Label::countOnEpicTile)
+        .containsExactly(true);
+  }
+
   @Test
   void replaceAndFindCardLabels() {
-    long bug = labels.save(new Label(null, boardId, "Bug", "#f00")).requireId();
-    long ux = labels.save(new Label(null, boardId, "Ux", "#0f0")).requireId();
+    long bug = labels.save(new Label(null, boardId, "Bug", "#f00", false)).requireId();
+    long ux = labels.save(new Label(null, boardId, "Ux", "#0f0", false)).requireId();
 
     cardLabels.replaceLabels(cardId, List.of(ux, bug));
     assertThat(cardLabels.findByCardId(cardId)).containsExactly(bug, ux); // sortiert nach id
@@ -84,8 +114,8 @@ class LabelPersistenceIT extends AbstractIntegrationTest {
 
   @Test
   void findByCardIdsBatchesMultipleCardsAndSkipsUnlabeled() {
-    long bug = labels.save(new Label(null, boardId, "Bug", "#f00")).requireId();
-    long ux = labels.save(new Label(null, boardId, "Ux", "#0f0")).requireId();
+    long bug = labels.save(new Label(null, boardId, "Bug", "#f00", false)).requireId();
+    long ux = labels.save(new Label(null, boardId, "Ux", "#0f0", false)).requireId();
     long second =
         insert(
             "INSERT INTO card (board_id, column_id, number, title, position_in_column) "
@@ -122,7 +152,7 @@ class LabelPersistenceIT extends AbstractIntegrationTest {
 
   @Test
   void deletingLabelCascadesToCardLabel() {
-    long bug = labels.save(new Label(null, boardId, "Bug", "#f00")).requireId();
+    long bug = labels.save(new Label(null, boardId, "Bug", "#f00", false)).requireId();
     cardLabels.replaceLabels(cardId, List.of(bug));
 
     labels.deleteById(bug);

@@ -10,6 +10,8 @@ import { boardsApi } from '../api/boards'
 import { projectsApi } from '../api/projects'
 import { BoardView } from './BoardView'
 import { SnackbarProvider } from './SnackbarProvider'
+import { statusColors } from '../lib/statusColors'
+import { STATUS_EDGE_WIDTH } from '../theme'
 
 vi.mock('../api/columns', () => ({
   columnsApi: {
@@ -465,7 +467,7 @@ describe('BoardView', () => {
 
   it('zeigt farbige Label-Chips auf der Karte', () => {
     const labelled: Card = { ...card, labels: [5] }
-    const boardLabels = [{ id: 5, boardId: 1, name: 'Bug', color: '#f00' }]
+    const boardLabels = [{ id: 5, boardId: 1, name: 'Bug', color: '#f00', countOnEpicTile: false }]
     render(
       <BoardView board={board} initialCards={[labelled]} canEdit boardLabels={boardLabels} api={mkApi()} />,
     )
@@ -493,6 +495,81 @@ describe('BoardView', () => {
     expect(within(group).getByText('C')).toBeInTheDocument()
     expect(within(group).getByText('?')).toBeInTheDocument()
     expect(within(group).getByText('#')).toBeInTheDocument()
+  })
+
+  it('trägt den Status der Spalte an ihrer Oberkante', () => {
+    // Kanten-Semantik (#649): oben = Status. Der frühere Farbpunkt im Spaltenkopf entfällt dafür.
+    render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} />)
+
+    expect(screen.getByTestId('column-10')).toHaveStyle({
+      borderTopColor: statusColors('Backlog').dot,
+      borderTopWidth: `${STATUS_EDGE_WIDTH}px`,
+    })
+    expect(screen.getByTestId('column-20')).toHaveStyle({ borderTopColor: statusColors('Done').dot })
+  })
+
+  it('trägt den Status an der linken Kante der Karte', () => {
+    render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} />)
+
+    expect(screen.getByTestId('card-100')).toHaveStyle({
+      borderLeftColor: statusColors('Backlog').dot,
+      borderLeftWidth: `${STATUS_EDGE_WIDTH}px`,
+    })
+  })
+
+  // Die Oberkante gehört dem Panel, nicht der Karte: Bis 2026-08-31 trug die Karte den Status oben,
+  // und die Spalte trug ihn ebenfalls — dieselbe Farbe zweimal übereinander, zwei Pixel auseinander.
+  it('trägt den Status an der Spalte oben und an der Karte nicht doppelt', () => {
+    render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} />)
+
+    expect(screen.getByTestId('column-10')).toHaveStyle({
+      borderTopColor: statusColors('Backlog').dot,
+      borderTopWidth: `${STATUS_EDGE_WIDTH}px`,
+    })
+    expect(screen.getByTestId('card-100')).not.toHaveStyle({
+      borderTopWidth: `${STATUS_EDGE_WIDTH}px`,
+    })
+  })
+
+  it('färbt den Label-Chip-Text nach Kontrast, auf hellem Label also nicht weiß', () => {
+    const labelled: Card = { ...card, labels: [5, 6] }
+    const boardLabels = [
+      { id: 5, boardId: 1, name: 'Hell', color: '#FFF59D', countOnEpicTile: false },
+      { id: 6, boardId: 1, name: 'Dunkel', color: '#1E5F68', countOnEpicTile: false },
+    ]
+    render(
+      <BoardView board={board} initialCards={[labelled]} canEdit boardLabels={boardLabels} api={mkApi()} />,
+    )
+
+    // Der Chip-Rumpf traegt die Textfarbe, nicht das Label-Element darin: gesucht wird deshalb
+    // ueber den Textinhalt des Rumpfes statt ueber einen Aufstieg im DOM.
+    const chip = (name: string) =>
+      screen.getByText((_content, element) =>
+        element?.classList.contains('MuiChip-root') === true && element.textContent === name)
+
+    // Erwartete Werte ausgeschrieben statt `getContrastText` gespiegelt: sonst prueft der Test
+    // denselben Mechanismus, den er absichern soll, und bliebe auch bei falscher Wahl gruen.
+    expect(chip('Hell')).toHaveStyle({ color: 'rgba(0, 0, 0, 0.87)' })
+    expect(chip('Dunkel')).toHaveStyle({ color: 'rgb(255, 255, 255)' })
+  })
+
+  it('rendert weiter, wenn eine Labelfarbe keine CSS-Farbe ist', () => {
+    // Die Labelfarbe ist serverseitig nur laengenbegrenzt, das Domain-Modell erlaubt ausdruecklich
+    // auch Theme-Token. `getContrastText` wirft darauf, und es gibt keine ErrorBoundary — ohne
+    // Fangnetz nimmt ein einziges solches Label den ganzen Board-Baum mit.
+    const labelled: Card = { ...card, labels: [7, 8] }
+    const boardLabels = [
+      { id: 7, boardId: 1, name: 'Pfad', color: 'primary.main', countOnEpicTile: false },
+      { id: 8, boardId: 1, name: 'Wort', color: 'red', countOnEpicTile: false },
+    ]
+
+    expect(() =>
+      render(
+        <BoardView board={board} initialCards={[labelled]} canEdit boardLabels={boardLabels} api={mkApi()} />,
+      ),
+    ).not.toThrow()
+    expect(screen.getByText('Pfad')).toBeInTheDocument()
+    expect(screen.getByText('Wort')).toBeInTheDocument()
   })
 
   it('zeigt für ein unbekanntes Label die Id als grauen Fallback-Chip', () => {

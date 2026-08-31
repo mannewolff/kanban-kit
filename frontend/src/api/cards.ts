@@ -118,6 +118,17 @@ export interface DerivationNode {
   externalOrigin: boolean
   /** Die Zeile haengt an einem Herkunftsring, der nur an der API vorbei entstehen kann. */
   broken: boolean
+  /**
+   * Die Labels dieser Karte, die auf der Vorhaben-Kachel gezaehlt werden (`countOnEpicTile`,
+   * Issue #659) — aufsteigend nach Label-ID. Nur gezaehlte reisen mit.
+   */
+  labels: LabelMark[]
+}
+
+/** Ein Label als Marke im Herkunftsbaum: Name als Text, Farbe als Chip-Flaeche (Issue #661). */
+export interface LabelMark {
+  name: string
+  color: string
 }
 
 export const cardsApi = {

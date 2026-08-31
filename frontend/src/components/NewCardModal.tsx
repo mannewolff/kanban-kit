@@ -16,6 +16,7 @@ import { useCheckboxShortcut } from '../lib/useCheckboxShortcut'
 import { isTooLong, tooLongMessage } from '../lib/textLimits'
 import { CardFields } from './CardFields'
 import { AssigneeSection, LabelSection, parseDependencyInput } from './CardDetailModal'
+import { dialogTitleSx } from './dialogChromeSx'
 
 const BODY_TEMPLATE = '## Kontext\n\n## Aufgabe\n\n## Akzeptanzkriterium\n\n## Abhängigkeiten\n'
 
@@ -185,7 +186,7 @@ export function NewCardModal({
         paper: { sx: { width: '90%', maxWidth: '90%', height: '90%', maxHeight: '90%', m: 0 } },
       }}
     >
-      <DialogTitle id="new-card-title">{dialogTitle}</DialogTitle>
+      <DialogTitle id="new-card-title" sx={dialogTitleSx}>{dialogTitle}</DialogTitle>
       <DialogContent>
         <Stack spacing={2} sx={{ mt: 0.5 }}>
           {!epicOnly && !ideaOnly && (
