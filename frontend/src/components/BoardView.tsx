@@ -331,6 +331,17 @@ export function BoardView({
   // Anzeige-Filter nach Epic (nur Darstellung; Move/Anlegen arbeiten auf dem vollen Bestand).
   const filteredCards = epicFilter == null ? cards : cards.filter((c) => c.parentId === epicFilter)
 
+  // Wirksame Auswahl für Massenaktionen: die Schnittmenge aus der Auswahl und dem, was der
+  // Anzeige-Filter gerade zeigt. Jede Bulk-Stelle (Zählung, Dialogtexte, Verschieben, Archivieren,
+  // Löschen) liest ausschließlich diese Menge — so kann keine Aktion eine Karte treffen, die der
+  // Nutzer nicht sieht. Abgeleitet, statt die Auswahl beim Filterwechsel zu beschneiden: sie kommt
+  // zurück, sobald die Karten wieder sichtbar sind, statt unwiderruflich zu verschwinden. Die
+  // Reihenfolge folgt weiter der Klickhistorie (Iteration über die Auswahl, nicht über die Karten).
+  // Nicht hierüber läuft der Haken an der Karte selbst (`selected` in der Render-Schleife): der
+  // steht ohnehin nur an sichtbaren Karten und müsste sonst nach dem Filterwechsel verschwinden.
+  const visibleCardIds = new Set(filteredCards.map((c) => c.id))
+  const effectiveSelectedIds = new Set([...selectedIds].filter((id) => visibleCardIds.has(id)))
+
   const changeEpicFilter = (value: number | null) => {
     setEpicFilter(value)
     try {
@@ -420,9 +431,9 @@ export function BoardView({
     })
   // Bulk-Archivieren: nach Bestätigung optimistisch aus der Ansicht nehmen, bei Fehler zurückrollen.
   const confirmBulkArchive = async () => {
-    const ids = [...selectedIds]
+    const ids = [...effectiveSelectedIds]
     const previous = cards
-    setCards(previous.filter((c) => !selectedIds.has(c.id)))
+    setCards(previous.filter((c) => !effectiveSelectedIds.has(c.id)))
     setBulkArchiveConfirm(false)
     exitSelection()
     try {
@@ -461,7 +472,7 @@ export function BoardView({
   const selectedIdsInViewOrder = () =>
     columns.flatMap((column) =>
       activeCardsInColumn(cards, column.id)
-        .filter((c) => selectedIds.has(c.id))
+        .filter((c) => effectiveSelectedIds.has(c.id))
         .map((c) => c.id),
     )
 
@@ -549,7 +560,10 @@ export function BoardView({
       >
         {columns.map((column) => {
           const colors = statusColors(column.name)
-          const count = activeCardsInColumn(filteredCards, column.id).length
+          // Voller Bestand, nicht der gefilterte: Der Zähler trägt die WIP-Grenze. Zählte er
+          // filteredCards, meldete er bei gesetztem Vorhaben-Filter eine eingehaltene Grenze,
+          // die tatsächlich verletzt ist. Dargestellt wird weiterhin filteredCards.
+          const count = activeCardsInColumn(cards, column.id).length
           const done = isDoneColumn(column.name)
           return (
             <Paper
@@ -886,9 +900,9 @@ export function BoardView({
         <DialogTitle>Karten archivieren?</DialogTitle>
         <DialogContent>
           <DialogContentText>
-            {selectedIds.size === 1
+            {effectiveSelectedIds.size === 1
               ? 'Die ausgewählte Karte wird archiviert.'
-              : `${selectedIds.size} Karten werden archiviert.`}{' '}
+              : `${effectiveSelectedIds.size} Karten werden archiviert.`}{' '}
             Sie verschwinden aus dem Board, bleiben aber erhalten und lassen sich einzeln
             wiederherstellen.
           </DialogContentText>
@@ -918,13 +932,13 @@ export function BoardView({
         </DialogActions>
       </Dialog>
 
-      {selectionMode && selectedIds.size > 0 && (
+      {selectionMode && effectiveSelectedIds.size > 0 && (
         <BulkActionBar
-          count={selectedIds.size}
+          count={effectiveSelectedIds.size}
           canMove={canTransfer}
           onArchive={() => setBulkArchiveConfirm(true)}
           onMove={() => setBulkTransferOpen(true)}
-          onDelete={() => setDeleteConfirm([...selectedIds])}
+          onDelete={() => setDeleteConfirm([...effectiveSelectedIds])}
           onCancel={exitSelection}
         />
       )}
