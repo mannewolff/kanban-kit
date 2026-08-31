@@ -23,7 +23,8 @@ import { useBoardRole } from '../lib/useBoardRole'
 import { useProjectName } from '../lib/useProjectName'
 import { formatDueDate, isOverdue } from '../lib/dueDate'
 import { ARCHIVED_STATUS_COLOR, statusColors } from '../lib/statusColors'
-import { STATUS_EDGE_WIDTH, SURFACE_HOVER_SHADOW, theme } from '../theme'
+import { STATUS_EDGE_WIDTH, SURFACE_HOVER_SHADOW } from '../theme'
+import { labelChipSx } from '../components/labelChipSx'
 
 const ARCHIVED = 'archived'
 type FilterKey = number | typeof ARCHIVED
@@ -364,9 +365,7 @@ export function BoardListPage() {
                 onClick={() => toggleLabel(label.id)}
                 size="small"
                 variant={active ? 'filled' : 'outlined'}
-                sx={active
-                  ? { bgcolor: label.color, color: theme.palette.getContrastText(label.color) }
-                  : { borderColor: label.color, color: label.color }}
+                sx={active ? labelChipSx(label.color) : { borderColor: label.color, color: label.color }}
               />
             )
           })}

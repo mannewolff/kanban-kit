@@ -51,16 +51,11 @@ import { normalizeTaskLists, toggleTaskAt } from '../lib/markdownTasks'
 import { safeImageSrc, safeLinkHref } from '../lib/markdownUrls'
 import { statusColors } from '../lib/statusColors'
 import { CODE_BG, theme } from '../theme'
+import { labelChipSx } from './labelChipSx'
 import { useAuth } from '../auth/AuthContext'
 import { AttachmentPreview } from './AttachmentPreview'
 import { useSnackbar } from './SnackbarProvider'
 import { dialogTitleSx } from './dialogChromeSx'
-
-/**
- * Flaeche eines Label-Chips. Labelfarben sind nutzerdefiniert; ohne Label greift der Grauton der
- * Palette. Der Wert muss eine echte CSS-Farbe sein, weil `getContrastText` darauf rechnet.
- */
-const chipBg = (color?: string) => color ?? theme.palette.grey[500]
 
 /** Bilder und PDF werden in der Lightbox angezeigt; andere Typen nur heruntergeladen. */
 const isPreviewable = (contentType: string) =>
@@ -330,7 +325,7 @@ export function LabelSection({
               key={id}
               size="small"
               label={l?.name ?? `#${id}`}
-              sx={{ bgcolor: chipBg(l?.color), color: theme.palette.getContrastText(chipBg(l?.color)) }}
+              sx={labelChipSx(l?.color)}
             />
           )
         })}
@@ -359,7 +354,7 @@ export function LabelSection({
                 key={l.id}
                 size="small"
                 label={l.name}
-                sx={{ bgcolor: l.color, color: theme.palette.getContrastText(l.color) }}
+                sx={labelChipSx(l.color)}
               />
             ))
           }

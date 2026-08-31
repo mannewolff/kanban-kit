@@ -896,6 +896,31 @@ describe('BoardListPage', () => {
     expect(await screen.findByText('OhneLabel')).toBeInTheDocument()
   })
 
+  it('rendert den aktiven Label-Filter auch bei einer Farbe, die keine CSS-Farbe ist', async () => {
+    // Der aktive Filter-Chip rechnet seine Textfarbe aus der Labelfarbe. Die ist serverseitig nur
+    // laengenbegrenzt, und `getContrastText` wirft auf allem, was keine CSS-Farbe ist — ohne
+    // ErrorBoundary nimmt ein Klick dann die ganze Seite mit.
+    const labelled: Card = { ...base, id: 100, columnId: 10, number: 1, title: 'MitLabel', description: '', archived: false, labels: [5] }
+    mBoards.get.mockResolvedValue({
+      id: 1, projectId: 9, name: 'B', createdAt: '',
+      columns: [{ id: 10, name: 'Backlog', position: 0, wipLimit: null }],
+    })
+    mCards.list.mockResolvedValue([labelled])
+    mEpics.list.mockResolvedValue([])
+    mLabels.list.mockResolvedValue([{ id: 5, boardId: 1, name: 'Bug', color: 'primary.main' }])
+    render(
+      <MemoryRouter initialEntries={['/boards/1/list']}>
+        <Routes>
+          <Route path="/boards/:boardId/list" element={<BoardListPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const chip = await screen.findByLabelText('Label-Filter Bug')
+    expect(() => fireEvent.click(chip)).not.toThrow()
+    expect(screen.getByText('MitLabel')).toBeInTheDocument()
+  })
+
   it('ignoriert einen Spalten-Drop auf dieselbe Spalte (keine Umsortierung)', async () => {
     renderPage()
     await screen.findByText('Aufgabe')

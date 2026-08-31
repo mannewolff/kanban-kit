@@ -11,7 +11,7 @@ import { projectsApi } from '../api/projects'
 import { BoardView } from './BoardView'
 import { SnackbarProvider } from './SnackbarProvider'
 import { statusColors } from '../lib/statusColors'
-import { STATUS_EDGE_WIDTH, theme } from '../theme'
+import { STATUS_EDGE_WIDTH } from '../theme'
 
 vi.mock('../api/columns', () => ({
   columnsApi: {
@@ -533,9 +533,29 @@ describe('BoardView', () => {
       screen.getByText((_content, element) =>
         element?.classList.contains('MuiChip-root') === true && element.textContent === name)
 
-    expect(chip('Hell')).toHaveStyle({ color: theme.palette.getContrastText('#FFF59D') })
-    expect(chip('Hell')).not.toHaveStyle({ color: 'rgb(255, 255, 255)' })
-    expect(chip('Dunkel')).toHaveStyle({ color: theme.palette.getContrastText('#1E5F68') })
+    // Erwartete Werte ausgeschrieben statt `getContrastText` gespiegelt: sonst prueft der Test
+    // denselben Mechanismus, den er absichern soll, und bliebe auch bei falscher Wahl gruen.
+    expect(chip('Hell')).toHaveStyle({ color: 'rgba(0, 0, 0, 0.87)' })
+    expect(chip('Dunkel')).toHaveStyle({ color: 'rgb(255, 255, 255)' })
+  })
+
+  it('rendert weiter, wenn eine Labelfarbe keine CSS-Farbe ist', () => {
+    // Die Labelfarbe ist serverseitig nur laengenbegrenzt, das Domain-Modell erlaubt ausdruecklich
+    // auch Theme-Token. `getContrastText` wirft darauf, und es gibt keine ErrorBoundary — ohne
+    // Fangnetz nimmt ein einziges solches Label den ganzen Board-Baum mit.
+    const labelled: Card = { ...card, labels: [7, 8] }
+    const boardLabels = [
+      { id: 7, boardId: 1, name: 'Pfad', color: 'primary.main' },
+      { id: 8, boardId: 1, name: 'Wort', color: 'red' },
+    ]
+
+    expect(() =>
+      render(
+        <BoardView board={board} initialCards={[labelled]} canEdit boardLabels={boardLabels} api={mkApi()} />,
+      ),
+    ).not.toThrow()
+    expect(screen.getByText('Pfad')).toBeInTheDocument()
+    expect(screen.getByText('Wort')).toBeInTheDocument()
   })
 
   it('zeigt für ein unbekanntes Label die Id als grauen Fallback-Chip', () => {

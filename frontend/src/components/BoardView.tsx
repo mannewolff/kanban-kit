@@ -39,7 +39,8 @@ import { formatDueDate, isOverdue } from '../lib/dueDate'
 import { epicColor, epicShortcode } from '../lib/epicMeta'
 import { useKeyboardShortcut } from '../lib/useKeyboardShortcut'
 import { statusColors } from '../lib/statusColors'
-import { STATUS_EDGE_WIDTH, SURFACE_TINT, theme } from '../theme'
+import { STATUS_EDGE_WIDTH, SURFACE_TINT } from '../theme'
+import { labelChipSx } from './labelChipSx'
 import { edgeSurfaceSx } from './boardSurfaceSx'
 import { BulkActionBar } from './BulkActionBar'
 import { EpicBadge } from './EpicBadge'
@@ -84,15 +85,12 @@ function CardLabels({ labelIds, boardLabels, cardTitle }: Readonly<{ labelIds: n
     <Stack direction="row" spacing={0.5} sx={{ flexWrap: 'wrap', mb: 0.5 }} aria-label={`Labels ${cardTitle}`}>
       {labelIds.map((labelId) => {
         const l = boardLabels.find((b) => b.id === labelId)
-        // Labelfarben sind nutzerdefiniert: auf einem hellen Label waere weisser Text unlesbar.
-        // getContrastText waehlt die lesbare Seite (Accessibility vor visueller Praeferenz).
-        const bg = l?.color ?? theme.palette.grey[500]
         return (
           <Chip
             key={labelId}
             size="small"
             label={l?.name ?? `#${labelId}`}
-            sx={{ bgcolor: bg, color: theme.palette.getContrastText(bg), height: 18, '& .MuiChip-label': { px: 0.75, fontSize: '0.65rem' } }}
+            sx={{ ...labelChipSx(l?.color), height: 18, '& .MuiChip-label': { px: 0.75, fontSize: '0.65rem' } }}
           />
         )
       })}
