@@ -92,15 +92,15 @@
     "pairs": {
       "opus": [
         "fable",
-        "gpt"
+        "sonnet"
       ],
       "sonnet": [
-        "opus",
-        "gpt"
+        "fable",
+        "opus"
       ],
       "fable": [
         "opus",
-        "gpt-sol"
+        "sonnet"
       ]
     },
     "statusLabels": true
