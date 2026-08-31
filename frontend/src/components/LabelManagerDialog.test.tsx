@@ -3,12 +3,12 @@ import { describe, expect, it, vi } from 'vitest'
 import type { Label } from '../api/labels'
 import { LabelManagerDialog } from './LabelManagerDialog'
 
-const labels: Label[] = [{ id: 1, boardId: 9, name: 'Bug', color: '#ff0000' }]
+const labels: Label[] = [{ id: 1, boardId: 9, name: 'Bug', color: '#ff0000', countOnEpicTile: false }]
 
 function mkApi() {
   return {
-    create: vi.fn().mockResolvedValue({ id: 2, boardId: 9, name: 'Ux', color: '#00ff00' }),
-    update: vi.fn().mockResolvedValue({ id: 1, boardId: 9, name: 'Defekt', color: '#ff0000' }),
+    create: vi.fn().mockResolvedValue({ id: 2, boardId: 9, name: 'Ux', color: '#00ff00', countOnEpicTile: false }),
+    update: vi.fn().mockResolvedValue({ id: 1, boardId: 9, name: 'Defekt', color: '#ff0000', countOnEpicTile: false }),
     remove: vi.fn().mockResolvedValue(undefined),
   }
 }

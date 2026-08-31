@@ -147,7 +147,7 @@ const epic: Epic = {
   requirementCardNumber: null,
 }
 
-const label: Label = { id: 5, boardId: 1, name: 'Bug', color: '#f00' }
+const label: Label = { id: 5, boardId: 1, name: 'Bug', color: '#f00', countOnEpicTile: false }
 
 /** Setzt den eingeloggten Nutzer mit einer Projektrolle für Projekt 5. */
 function loginAs(role: string, platformRole = 'USER'): void {

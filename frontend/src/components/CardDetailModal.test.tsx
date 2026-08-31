@@ -365,7 +365,7 @@ describe('CardDetailModal', () => {
 
   it('zeigt Labels als farbige Chips im Lesemodus', () => {
     const apis = makeApis()
-    const boardLabels = [{ id: 5, boardId: 1, name: 'Bug', color: '#f00' }]
+    const boardLabels = [{ id: 5, boardId: 1, name: 'Bug', color: '#f00', countOnEpicTile: false }]
     render(
       <CardDetailModal
         card={{ ...card, labels: [5], derivedFrom: null }}
@@ -386,7 +386,7 @@ describe('CardDetailModal', () => {
       <CardDetailModal
         card={{ ...card, labels: [99], derivedFrom: null }}
         canEdit={false}
-        boardLabels={[{ id: 5, boardId: 1, name: 'Bug', color: '#f00' }]}
+        boardLabels={[{ id: 5, boardId: 1, name: 'Bug', color: '#f00', countOnEpicTile: false }]}
         onClose={vi.fn()}
         {...apis}
       />,
@@ -398,8 +398,8 @@ describe('CardDetailModal', () => {
   it('setzt Labels über die Mehrfachauswahl', async () => {
     const apis = makeApis()
     const boardLabels = [
-      { id: 5, boardId: 1, name: 'Bug', color: '#f00' },
-      { id: 6, boardId: 1, name: 'Ux', color: '#0f0' },
+      { id: 5, boardId: 1, name: 'Bug', color: '#f00', countOnEpicTile: false },
+      { id: 6, boardId: 1, name: 'Ux', color: '#0f0', countOnEpicTile: false },
     ]
     render(
       <CardDetailModal card={card} canEdit boardLabels={boardLabels} onClose={vi.fn()} {...apis} />,
@@ -1145,7 +1145,7 @@ describe('CardDetailModal', () => {
   it('ruft onChanged nach dem Setzen von Labels auf', async () => {
     const apis = makeApis()
     const onChanged = vi.fn()
-    const boardLabels = [{ id: 5, boardId: 1, name: 'Bug', color: '#f00' }]
+    const boardLabels = [{ id: 5, boardId: 1, name: 'Bug', color: '#f00', countOnEpicTile: false }]
     render(
       <CardDetailModal card={card} canEdit boardLabels={boardLabels} onChanged={onChanged} onClose={vi.fn()} {...apis} />,
     )
@@ -1277,8 +1277,8 @@ describe('CardDetailModal', () => {
   it('vergleicht bereits gesetzte Labels beim Öffnen der Auswahl', async () => {
     const apis = makeApis()
     const boardLabels = [
-      { id: 5, boardId: 1, name: 'Bug', color: '#f00' },
-      { id: 6, boardId: 1, name: 'Ux', color: '#0f0' },
+      { id: 5, boardId: 1, name: 'Bug', color: '#f00', countOnEpicTile: false },
+      { id: 6, boardId: 1, name: 'Ux', color: '#0f0', countOnEpicTile: false },
     ]
     render(
       <CardDetailModal card={{ ...card, labels: [5], derivedFrom: null }} canEdit boardLabels={boardLabels} onClose={vi.fn()} {...apis} />,

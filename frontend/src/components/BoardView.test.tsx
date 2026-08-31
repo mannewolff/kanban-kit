@@ -467,7 +467,7 @@ describe('BoardView', () => {
 
   it('zeigt farbige Label-Chips auf der Karte', () => {
     const labelled: Card = { ...card, labels: [5] }
-    const boardLabels = [{ id: 5, boardId: 1, name: 'Bug', color: '#f00' }]
+    const boardLabels = [{ id: 5, boardId: 1, name: 'Bug', color: '#f00', countOnEpicTile: false }]
     render(
       <BoardView board={board} initialCards={[labelled]} canEdit boardLabels={boardLabels} api={mkApi()} />,
     )
@@ -534,8 +534,8 @@ describe('BoardView', () => {
   it('färbt den Label-Chip-Text nach Kontrast, auf hellem Label also nicht weiß', () => {
     const labelled: Card = { ...card, labels: [5, 6] }
     const boardLabels = [
-      { id: 5, boardId: 1, name: 'Hell', color: '#FFF59D' },
-      { id: 6, boardId: 1, name: 'Dunkel', color: '#1E5F68' },
+      { id: 5, boardId: 1, name: 'Hell', color: '#FFF59D', countOnEpicTile: false },
+      { id: 6, boardId: 1, name: 'Dunkel', color: '#1E5F68', countOnEpicTile: false },
     ]
     render(
       <BoardView board={board} initialCards={[labelled]} canEdit boardLabels={boardLabels} api={mkApi()} />,
@@ -559,8 +559,8 @@ describe('BoardView', () => {
     // Fangnetz nimmt ein einziges solches Label den ganzen Board-Baum mit.
     const labelled: Card = { ...card, labels: [7, 8] }
     const boardLabels = [
-      { id: 7, boardId: 1, name: 'Pfad', color: 'primary.main' },
-      { id: 8, boardId: 1, name: 'Wort', color: 'red' },
+      { id: 7, boardId: 1, name: 'Pfad', color: 'primary.main', countOnEpicTile: false },
+      { id: 8, boardId: 1, name: 'Wort', color: 'red', countOnEpicTile: false },
     ]
 
     expect(() =>

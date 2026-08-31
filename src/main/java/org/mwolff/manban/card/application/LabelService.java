@@ -6,6 +6,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.board.application.BoardService;
 import org.mwolff.manban.card.application.CardBoardActivityEvent.ActivityType;
 import org.mwolff.manban.card.domain.Card;
@@ -96,11 +97,20 @@ public class LabelService {
     if (labels.existsByBoardIdAndName(boardId, trimmed)) {
       throw new InvalidLabelException("Label existiert bereits: " + trimmed);
     }
-    return labels.save(new Label(null, boardId, trimmed, color));
+    return labels.save(new Label(null, boardId, trimmed, color, false));
   }
 
+  /**
+   * Ändert Name, Farbe und optional die Zähl-Eigenschaft eines Labels.
+   *
+   * @param countOnEpicTile {@code null} lässt den gespeicherten Wert unverändert — ein Umbenennen
+   *     darf die Einstellung nicht zurücksetzen. {@code Boolean.FALSE} schaltet dagegen
+   *     ausdrücklich ab; ohne diese Unterscheidung wäre ein einmal gesetztes Label nicht mehr
+   *     abschaltbar (Issue #659).
+   */
   @Transactional
-  public Label update(long userId, long labelId, String name, String color) {
+  public Label update(
+      long userId, long labelId, String name, String color, @Nullable Boolean countOnEpicTile) {
     Label label = labels.findById(labelId).orElseThrow(LabelNotFoundException::new);
     permissions.require(
         userId, boardService.requireProjectId(label.boardId()), Permission.BOARD_UPDATE);
@@ -108,7 +118,8 @@ public class LabelService {
     if (!trimmed.equals(label.name()) && labels.existsByBoardIdAndName(label.boardId(), trimmed)) {
       throw new InvalidLabelException("Label existiert bereits: " + trimmed);
     }
-    return labels.save(label.withContent(trimmed, color));
+    boolean counts = countOnEpicTile == null ? label.countOnEpicTile() : countOnEpicTile;
+    return labels.save(label.withContent(trimmed, color, counts));
   }
 
   @Transactional

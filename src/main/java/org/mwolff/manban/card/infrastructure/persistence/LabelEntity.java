@@ -27,6 +27,9 @@ class LabelEntity {
   @Column(name = "color", nullable = false)
   private String color;
 
+  @Column(name = "count_on_epic_tile", nullable = false)
+  private boolean countOnEpicTile;
+
   protected LabelEntity() {
     // für JPA
   }
@@ -36,6 +39,7 @@ class LabelEntity {
     this.boardId = l.boardId();
     this.name = l.name();
     this.color = l.color();
+    this.countOnEpicTile = l.countOnEpicTile();
   }
 
   @Nullable Long getId() {
@@ -52,5 +56,9 @@ class LabelEntity {
 
   String getColor() {
     return color;
+  }
+
+  boolean isCountOnEpicTile() {
+    return countOnEpicTile;
   }
 }

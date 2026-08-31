@@ -351,7 +351,7 @@ describe('BoardListPage', () => {
     mCards.list.mockResolvedValue([labelled, other])
     mEpics.list.mockResolvedValue([])
     mProjects.list.mockResolvedValue([{ id: 9, name: 'Projekt', role: 'OWNER', createdAt: '' }])
-    mLabels.list.mockResolvedValue([{ id: 5, boardId: 1, name: 'Bug', color: '#f00' }])
+    mLabels.list.mockResolvedValue([{ id: 5, boardId: 1, name: 'Bug', color: '#f00', countOnEpicTile: false }])
 
     render(
       <MemoryRouter initialEntries={['/boards/1/list']}>
@@ -880,7 +880,7 @@ describe('BoardListPage', () => {
     })
     mCards.list.mockResolvedValue([labelled, other])
     mEpics.list.mockResolvedValue([])
-    mLabels.list.mockResolvedValue([{ id: 5, boardId: 1, name: 'Bug', color: '#f00' }])
+    mLabels.list.mockResolvedValue([{ id: 5, boardId: 1, name: 'Bug', color: '#f00', countOnEpicTile: false }])
     render(
       <MemoryRouter initialEntries={['/boards/1/list']}>
         <Routes>

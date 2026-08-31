@@ -45,7 +45,7 @@ describe('NewCardModal', () => {
   it('legt eine Karte mit Zuständigen, Fälligkeit, Abhängigkeiten und Labels in einem Schritt an', async () => {
     const onSubmit = vi.fn().mockResolvedValue(undefined)
     const members = [{ userId: 7, email: 'a@x.de', displayName: 'Alice', role: 'MEMBER' as const }]
-    const boardLabels = [{ id: 5, boardId: 1, name: 'Bug', color: '#f00' }]
+    const boardLabels = [{ id: 5, boardId: 1, name: 'Bug', color: '#f00', countOnEpicTile: false }]
     render(
       <NewCardModal
         open
