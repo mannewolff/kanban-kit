@@ -77,6 +77,29 @@ describe('EpicsPage', () => {
     expect(await screen.findByLabelText('Fortschritt Auth')).toBeInTheDocument()
   })
 
+  // Die Gestalt ist hier keine Geschmacksfrage, sondern eine ausdrückliche Nutzerentscheidung
+  // (#656): Vorhaben sind quadratische Kacheln in einem umbrechenden Raster, keine Zeilen über die
+  // volle Breite. Sie war zuvor zweimal verloren gegangen, weil kein Test sie festgehalten hat.
+  it('stellt die Vorhaben als quadratische Kacheln in einem Raster dar', async () => {
+    mEpics.list.mockResolvedValue([
+      { id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 1, total: 2, memberNumbers: [], rootNumbers: [], requirementCardNumber: null },
+    ])
+    renderPage()
+    await screen.findByText('Auth')
+
+    const raster = screen.getByTestId('vorhaben-raster')
+    expect(raster).toHaveStyle({ display: 'grid' })
+    // `auto-fill` bricht um und füllt die Breite; `auto-fit` würde eine einzelne Kachel über die
+    // ganze Zeile strecken und damit das Quadrat aufgeben.
+    expect(raster).toHaveStyle({
+      gridTemplateColumns: 'repeat(auto-fill, minmax(min(240px, 100%), 1fr))',
+    })
+
+    const kachel = screen.getByTestId('vorhaben-kachel-9')
+    expect(kachel).toHaveStyle({ aspectRatio: '1' })
+    expect(kachel).toContainElement(screen.getByLabelText('Fortschritt Auth'))
+  })
+
   it('legt über „Neues Epic" ein Epic an', async () => {
     mEpics.list.mockResolvedValue([])
     renderPage()

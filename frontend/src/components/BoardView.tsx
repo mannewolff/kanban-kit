@@ -36,10 +36,10 @@ import { neighbourColumns } from '../lib/columnMeta'
 import { useEditMode } from '../lib/EditModeContext'
 import type { Label } from '../api/labels'
 import { formatDueDate, isOverdue } from '../lib/dueDate'
-import { epicColor, epicShortcode } from '../lib/epicMeta'
+import { epicShortcode } from '../lib/epicMeta'
 import { useKeyboardShortcut } from '../lib/useKeyboardShortcut'
 import { statusColors } from '../lib/statusColors'
-import { STATUS_EDGE_WIDTH, SURFACE_TINT } from '../theme'
+import { BOARD_GRADIENT, PANEL_HEAD_GRADIENT, PANEL_SHADOW, PANEL_RADIUS, STATUS_EDGE_WIDTH, SURFACE_TINT } from '../theme'
 import { labelChipSx } from './labelChipSx'
 import { edgeSurfaceSx } from './boardSurfaceSx'
 import { BulkActionBar } from './BulkActionBar'
@@ -535,10 +535,16 @@ export function BoardView({
         sx={{
           overflowX: 'auto',
           pb: 2,
+          pt: 1,
+          px: 1,
           width: '100%',
           alignItems: 'stretch',
           // Spalten füllen die Höhe bis nahe an den Viewport-Rand (Offset ≈ AppBar + Header).
           minHeight: 'calc(100vh - 210px)',
+          // Fläche, auf der die Panels schweben. Ohne sie stünde Weiß auf Weiß, und die
+          // Schattenebenen der Spalten hätten keinen Grund, gegen den sie wirken.
+          background: BOARD_GRADIENT,
+          borderRadius: `${PANEL_RADIUS}px`,
         }}
       >
         {columns.map((column) => {
@@ -566,7 +572,11 @@ export function BoardView({
                 bgcolor: 'background.paper',
                 border: 1,
                 borderColor: 'divider',
+                // Die Spalte trägt den Status weiterhin oben: Sie ist das Panel, und an ihm ist die
+                // Oberkante frei — die Karten darin führen ihn links (edgeSurfaceSx).
                 borderTop: `${STATUS_EDGE_WIDTH}px solid ${colors.dot}`,
+                borderRadius: `${PANEL_RADIUS}px`,
+                boxShadow: PANEL_SHADOW,
                 overflow: 'hidden',
               }}
             >
@@ -580,7 +590,7 @@ export function BoardView({
                   setColDrag(null)
                 } : undefined}
                 onDragEnd={() => setColDrag(null)}
-                sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 1.5, py: 1, bgcolor: 'background.paper', borderBottom: 1, borderColor: 'divider', cursor: showStructureEdit ? 'grab' : undefined }}
+                sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 1.5, py: 1, background: PANEL_HEAD_GRADIENT, borderBottom: 1, borderColor: 'divider', cursor: showStructureEdit ? 'grab' : undefined }}
               >
                 <Typography variant="caption" sx={{ fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.08em', color: 'text.secondary', flexGrow: 1 }}>
                   {column.name}
@@ -641,7 +651,6 @@ export function BoardView({
                         bgcolor: selected ? 'action.selected' : 'background.paper',
                         ...edgeSurfaceSx({
                           statusColor: colors.dot,
-                          epicColor: epic ? epicColor(epic.id) : undefined,
                           hairlineColor: selected ? 'primary.main' : undefined,
                         }),
                         cursor: grabbable ? 'grab' : 'pointer',

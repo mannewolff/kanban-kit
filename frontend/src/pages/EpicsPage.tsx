@@ -18,7 +18,7 @@ import { EpicBadge } from '../components/EpicBadge'
 import { NewCardModal } from '../components/NewCardModal'
 import { useBoardRole } from '../lib/useBoardRole'
 import { useProjectName } from '../lib/useProjectName'
-import { SURFACE_HOVER_SHADOW } from '../theme'
+import { CARD_LIFT, CARD_SHADOW, CARD_SHADOW_HOVER, PANEL_RADIUS } from '../theme'
 
 function epicToCard(epic: Epic, boardId: number): Card {
   return {
@@ -115,15 +115,43 @@ export function EpicsPage() {
         )}
       </Stack>
 
-      <Stack spacing={1.5}>
+      {/* Kachelraster statt gestapelter Zeilen: Ein Vorhaben ist ein Gegenstand, den man
+          überblickt, keine Tabellenzeile. Die Kacheln sind quadratisch (`aspectRatio: '1'`) und
+          brechen um, die Seite wird bei vielen Vorhaben länger — beides Nutzerentscheidung
+          (#656). `minmax(min(240px, 100%), 1fr)` klemmt die Spalte: Mit `240px` allein liefe das
+          Raster auf schmalen Fenstern über den Rand hinaus. */}
+      <Box
+        data-testid="vorhaben-raster"
+        sx={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fill, minmax(min(240px, 100%), 1fr))',
+          gap: 2,
+        }}
+      >
         {epics.map((epic) => {
           const pct = epic.total > 0 ? (epic.done / epic.total) * 100 : 0
           return (
             <Paper
               key={epic.id}
+              data-testid={`vorhaben-kachel-${epic.id}`}
               variant="outlined"
               onClick={() => setSelected(epicToCard(epic, id))}
-              sx={{ p: 2, cursor: 'pointer', '&:hover': { boxShadow: SURFACE_HOVER_SHADOW } }}
+              sx={{
+                p: 2,
+                cursor: 'pointer',
+                minWidth: 0,
+                aspectRatio: '1',
+                display: 'flex',
+                flexDirection: 'column',
+                borderRadius: `${PANEL_RADIUS}px`,
+                boxShadow: CARD_SHADOW,
+                transition: 'box-shadow .2s ease, transform .2s ease',
+                '&:hover': { boxShadow: CARD_SHADOW_HOVER, transform: `translateY(${CARD_LIFT}px)` },
+                '@media (prefers-reduced-motion: reduce)': {
+                  transition: 'none',
+                  '&:hover': { boxShadow: CARD_SHADOW_HOVER, transform: 'none' },
+                },
+              }}
             >
               <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
                 <EpicBadge epicId={epic.id} title={epic.title} shortcode={epic.shortcode} />
@@ -162,17 +190,20 @@ export function EpicsPage() {
                   </Link>
                 </Stack>
               )}
+              {/* `mt: auto` schiebt den Balken an den Fuß der Kachel. In der quadratischen Fläche
+                  bleibt Luft zwischen Kopf und Fuß; ohne das klebte der Balken am Titel und die
+                  untere Hälfte wäre leer. */}
               <LinearProgress
                 variant="determinate"
                 value={pct}
                 aria-label={`Fortschritt ${epic.title}`}
-                sx={{ height: 8, borderRadius: 1 }}
+                sx={{ height: 8, borderRadius: 1, mt: 'auto' }}
               />
             </Paper>
           )
         })}
-        {epics.length === 0 && <Typography color="text.secondary">Noch keine Vorhaben.</Typography>}
-      </Stack>
+      </Box>
+      {epics.length === 0 && <Typography color="text.secondary">Noch keine Vorhaben.</Typography>}
 
       <NewCardModal
         open={creating}

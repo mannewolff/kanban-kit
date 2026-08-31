@@ -508,11 +508,25 @@ describe('BoardView', () => {
     expect(screen.getByTestId('column-20')).toHaveStyle({ borderTopColor: statusColors('Done').dot })
   })
 
-  it('trägt den Status auch an der Oberkante der Karte', () => {
+  it('trägt den Status an der linken Kante der Karte', () => {
     render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} />)
 
     expect(screen.getByTestId('card-100')).toHaveStyle({
+      borderLeftColor: statusColors('Backlog').dot,
+      borderLeftWidth: `${STATUS_EDGE_WIDTH}px`,
+    })
+  })
+
+  // Die Oberkante gehört dem Panel, nicht der Karte: Bis 2026-08-31 trug die Karte den Status oben,
+  // und die Spalte trug ihn ebenfalls — dieselbe Farbe zweimal übereinander, zwei Pixel auseinander.
+  it('trägt den Status an der Spalte oben und an der Karte nicht doppelt', () => {
+    render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} />)
+
+    expect(screen.getByTestId('column-10')).toHaveStyle({
       borderTopColor: statusColors('Backlog').dot,
+      borderTopWidth: `${STATUS_EDGE_WIDTH}px`,
+    })
+    expect(screen.getByTestId('card-100')).not.toHaveStyle({
       borderTopWidth: `${STATUS_EDGE_WIDTH}px`,
     })
   })
