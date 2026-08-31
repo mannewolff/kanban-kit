@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>kanban-kit Factsheet</title>
+<style>
+  @page {
+    size: A4;
+    margin: 0;
+  }
+  :root {
+    --bg: #FFFFFF;
+    --title: #243539;
+    --teal: #2F8C97;
+    --eyebrow: #5BABB5;
+    --deep: #1E5F68;
+    --card-bg: #F6FAFB;
+    --card-border: #D8ECEE;
+    --muted: #5F7A7F;
+    --footer-line: #C0D8DB;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    font-family: Calibri, Carlito, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    color: var(--title);
+  }
+  .page {
+    position: relative;
+    width: 210mm;
+    height: 297mm;
+    padding: 15mm 15mm 14mm 22mm;
+    background: var(--bg);
+  }
+  /* Schmale Teal-Leiste links */
+  .rail {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 7mm;
+    height: 297mm;
+    background: var(--teal);
+  }
+  .eyebrow {
+    font-size: 10pt;
+    font-weight: bold;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--eyebrow);
+    margin: 0 0 3mm 0;
+  }
+  h1 {
+    font-size: 36pt;
+    font-weight: bold;
+    color: var(--title);
+    margin: 0 0 3mm 0;
+    letter-spacing: -0.01em;
+  }
+  .sub {
+    font-size: 14pt;
+    color: var(--title);
+    margin: 0 0 6mm 0;
+  }
+  .lead {
+    font-size: 11.5pt;
+    line-height: 1.45;
+    color: var(--title);
+    margin: 0 0 6mm 0;
+  }
+
+  /* Kennzahlen-Kacheln */
+  .kpis {
+    display: flex;
+    gap: 4mm;
+    margin-bottom: 4mm;
+  }
+  .kpi {
+    flex: 1 1 0;
+    min-width: 0;
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-top: 2.5pt solid var(--teal);
+    border-radius: 7px;
+    padding: 3.5mm 3.5mm 4mm 3.5mm;
+  }
+  .kpi .num.tight {
+    font-size: 16.5pt;
+  }
+  .kpi .num {
+    font-size: 19pt;
+    font-weight: bold;
+    color: var(--deep);
+    line-height: 1.15;
+    margin-bottom: 2mm;
+    white-space: nowrap;
+    min-height: 8.5mm;
+  }
+  .kpi .cap {
+    font-size: 9pt;
+    line-height: 1.35;
+    color: var(--muted);
+  }
+
+  .section-label {
+    font-size: 10pt;
+    font-weight: bold;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--eyebrow);
+    margin: 0 0 2.5mm 0;
+  }
+  .cols {
+    display: flex;
+    gap: 5mm;
+    margin-bottom: 4mm;
+  }
+  .card {
+    flex: 1 1 0;
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 7px;
+    padding: 3.5mm 4.5mm 2mm 4.5mm;
+  }
+  .card h2 {
+    font-size: 13pt;
+    font-weight: bold;
+    color: var(--title);
+    margin: 0 0 2.5mm 0;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  td {
+    font-size: 9.5pt;
+    line-height: 1.35;
+    padding: 1.6mm 0;
+    border-bottom: 1px solid var(--card-border);
+    vertical-align: top;
+  }
+  tr:last-child td { border-bottom: none; }
+  td.k {
+    color: var(--muted);
+    width: 34%;
+    padding-right: 3mm;
+  }
+  td.v { color: var(--title); }
+  td.v b { font-weight: bold; }
+
+  .note {
+    font-size: 9.5pt;
+    line-height: 1.4;
+    color: var(--muted);
+    margin: -1mm 0 3.5mm 0;
+  }
+
+  .quote {
+    border-left: 3pt solid var(--teal);
+    padding: 1mm 0 1mm 5mm;
+    font-size: 11pt;
+    line-height: 1.45;
+    color: var(--title);
+    margin-top: 1mm;
+  }
+
+  .footer {
+    position: absolute;
+    left: 22mm;
+    right: 15mm;
+    bottom: 10mm;
+    border-top: 1px solid var(--footer-line);
+    padding-top: 3mm;
+    font-size: 9pt;
+    color: var(--muted);
+    display: flex;
+    justify-content: space-between;
+  }
+  .footer b { color: var(--teal); font-weight: bold; }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="rail"></div>
+
+  <p class="eyebrow">Factsheet &middot; Stand August 2026 &middot; Version 1.26.1</p>
+  <h1>kanban-kit</h1>
+  <p class="sub">Selbst-hostbares Kanban-Board. Entwickelt mit KI. Geführt von einem Menschen.</p>
+
+  <p class="lead">
+    Ich habe kanban-kit gebaut, um zu zeigen, was KI-gestützte Entwicklung leisten kann, wenn harte
+    Leitplanken den Takt vorgeben. Jede Zeile ist durch Tests, Mutationstests und statische Analysen
+    abgesichert. Wenn eine Regel verletzt wird, bricht der Build. Das Ergebnis ist kein Prototyp,
+    sondern ein Produkt im täglichen Einsatz.
+  </p>
+
+  <div class="kpis">
+    <div class="kpi">
+      <div class="num">~95.800</div>
+      <div class="cap">Zeilen im Repository, geschrieben von der KI, verantwortet von mir</div>
+    </div>
+    <div class="kpi">
+      <div class="num">&gt; 2.600</div>
+      <div class="cap">Tests, davon 375 Integrationstests gegen echtes Postgres und MinIO</div>
+    </div>
+    <div class="kpi">
+      <div class="num">100 %</div>
+      <div class="cap">Line- und Branch-Coverage, Backend und Frontend, als hartes Build-Gate</div>
+    </div>
+    <div class="kpi">
+      <div class="num tight">1.308 / 1.308</div>
+      <div class="cap">Mutationen getötet: 100 % Mutation Score (PIT)</div>
+    </div>
+  </div>
+
+  <p class="section-label">Codebasis</p>
+  <div class="cols">
+    <div class="card">
+      <h2>Backend (Java)</h2>
+      <table>
+        <tr><td class="k">Produktivcode</td><td class="v"><b>351 Klassen</b>, ~18.400 Zeilen</td></tr>
+        <tr><td class="k">Architektur</td><td class="v">9 Fachmodule, hexagonal geschnitten</td></tr>
+        <tr><td class="k">Testcode</td><td class="v"><b>~36.800 Zeilen</b>, das Doppelte des Produktivcodes</td></tr>
+        <tr><td class="k">Testläufe</td><td class="v"><b>1.509</b> (1.134 Unit/Slice, 375 Integration via Testcontainers)</td></tr>
+      </table>
+    </div>
+    <div class="card">
+      <h2>Frontend (TypeScript/React)</h2>
+      <table>
+        <tr><td class="k">Produktivcode</td><td class="v"><b>99 Dateien</b>, ~13.100 Zeilen</td></tr>
+        <tr><td class="k">Testcode</td><td class="v"><b>~17.200 Zeilen</b>, auch hier mehr Test als Code</td></tr>
+        <tr><td class="k">Tests</td><td class="v"><b>1.184</b> (Vitest und Testing Library)</td></tr>
+        <tr><td class="k">Coverage</td><td class="v">100 % Line und Branch (v8), Build-Gate</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <p class="note">Dazu Datenbank-Migrationen, Build- und Infrastruktur-Konfiguration, Werkzeug-Skripte und Dokumentation. Zusammen ~95.800 Zeilen im Repository.</p>
+
+  <p class="section-label">Leitplanken</p>
+  <div class="cols">
+    <div class="card">
+      <h2>Qualität, gemessen</h2>
+      <table>
+        <tr><td class="k">Mutationstests</td><td class="v"><b>1.308 von 1.308</b> Mutationen getötet (PIT)</td></tr>
+        <tr><td class="k">SonarCloud</td><td class="v">Quality Gate grün, <b>0 Bugs, 0 Vulnerabilities</b>, 0 % Duplikate</td></tr>
+      </table>
+    </div>
+    <div class="card">
+      <h2>Regeln, die den Build brechen</h2>
+      <table>
+        <tr><td class="k">Statisch</td><td class="v">ArchUnit, Checkstyle, PMD, SpotBugs, Error Prone, NullAway/JSpecify, Spotless</td></tr>
+        <tr><td class="k">Prinzip</td><td class="v">Leitplanken argumentieren nicht. Sie scheitern.</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <p class="quote">
+    Wer KI unkontrolliert arbeiten lässt, produziert schneller schlechten Code. Wer gelernt hat, sie
+    zu führen, arbeitet schneller und besser. kanban-kit ist mein Beleg dafür.
+  </p>
+
+  <div class="footer">
+    <span><b>Manfred Wolff</b> &middot; Berater für KI-Entwicklung &middot; Der Mensch bleibt am Steuer</span>
+    <span>mwolff.org &middot; kanban.mwolff.org</span>
+  </div>
+</div>
+</body>
+</html>
