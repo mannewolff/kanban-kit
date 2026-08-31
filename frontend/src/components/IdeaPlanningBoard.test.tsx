@@ -9,6 +9,8 @@ import { commentsApi } from '../api/comments'
 import { ideasApi, type Idea } from '../api/ideas'
 import { membersApi } from '../api/members'
 import { IdeaPlanningBoard } from './IdeaPlanningBoard'
+import { statusColors } from '../lib/statusColors'
+import { EPIC_EDGE_WIDTH, STATUS_EDGE_WIDTH } from '../theme'
 
 // Toast-Weg: useSnackbar liefert im Test einen Spy (statt des No-op-Defaults ohne Provider).
 const { mNotify } = vi.hoisted(() => ({ mNotify: vi.fn() }))
@@ -297,6 +299,22 @@ describe('IdeaPlanningBoard', () => {
     fireEvent.drop(screen.getByTestId('board-zone-11'), dt())
 
     await waitFor(() => expect(mIdeas.planOntoBoard).toHaveBeenCalledWith(20, 11))
+  })
+
+  it('trägt an Pool- und Board-Zonen-Item dieselbe Status-Oberkante wie die Board-Karte', async () => {
+    // E5 (#649): Die Kante bedeutet auf beiden Seiten dasselbe. Eine Idee liegt vor der
+    // Spaltenzuordnung, ihr Status ist deshalb Backlog. Die linke Kante bleibt hier unbelegt.
+    setup()
+    renderBoard()
+    await screen.findByText('Pool 1')
+
+    const erwartet = {
+      borderTopColor: statusColors('Backlog').dot,
+      borderTopWidth: `${STATUS_EDGE_WIDTH}px`,
+    }
+    expect(screen.getByTestId('pool-item-20')).toHaveStyle(erwartet)
+    expect(screen.getByTestId('board-item-1')).toHaveStyle(erwartet)
+    expect(screen.getByTestId('pool-item-20')).not.toHaveStyle({ borderLeftWidth: `${EPIC_EDGE_WIDTH}px` })
   })
 
   it('holt per Drag von einem Board in den Pool', async () => {

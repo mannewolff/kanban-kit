@@ -39,7 +39,8 @@ import { formatDueDate, isOverdue } from '../lib/dueDate'
 import { epicColor, epicShortcode } from '../lib/epicMeta'
 import { useKeyboardShortcut } from '../lib/useKeyboardShortcut'
 import { statusColors } from '../lib/statusColors'
-import { SURFACE_TINT } from '../theme'
+import { STATUS_EDGE_WIDTH, SURFACE_TINT, theme } from '../theme'
+import { edgeSurfaceSx } from './boardSurfaceSx'
 import { BulkActionBar } from './BulkActionBar'
 import { EpicBadge } from './EpicBadge'
 import { NewCardModal, type NewCardInitialValues, type NewItemInput } from './NewCardModal'
@@ -83,12 +84,15 @@ function CardLabels({ labelIds, boardLabels, cardTitle }: Readonly<{ labelIds: n
     <Stack direction="row" spacing={0.5} sx={{ flexWrap: 'wrap', mb: 0.5 }} aria-label={`Labels ${cardTitle}`}>
       {labelIds.map((labelId) => {
         const l = boardLabels.find((b) => b.id === labelId)
+        // Labelfarben sind nutzerdefiniert: auf einem hellen Label waere weisser Text unlesbar.
+        // getContrastText waehlt die lesbare Seite (Accessibility vor visueller Praeferenz).
+        const bg = l?.color ?? theme.palette.grey[500]
         return (
           <Chip
             key={labelId}
             size="small"
             label={l?.name ?? `#${labelId}`}
-            sx={{ bgcolor: l?.color ?? 'grey.500', color: '#fff', height: 18, '& .MuiChip-label': { px: 0.75, fontSize: '0.65rem' } }}
+            sx={{ bgcolor: bg, color: theme.palette.getContrastText(bg), height: 18, '& .MuiChip-label': { px: 0.75, fontSize: '0.65rem' } }}
           />
         )
       })}
@@ -561,8 +565,10 @@ export function BoardView({
                 minWidth: 240,
                 display: 'flex',
                 flexDirection: 'column',
-                bgcolor: SURFACE_TINT,
-                borderRadius: 2,
+                bgcolor: 'background.paper',
+                border: 1,
+                borderColor: 'divider',
+                borderTop: `${STATUS_EDGE_WIDTH}px solid ${colors.dot}`,
                 overflow: 'hidden',
               }}
             >
@@ -578,7 +584,6 @@ export function BoardView({
                 onDragEnd={() => setColDrag(null)}
                 sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 1.5, py: 1, bgcolor: 'background.paper', borderBottom: 1, borderColor: 'divider', cursor: showStructureEdit ? 'grab' : undefined }}
               >
-                <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: colors.dot, flexShrink: 0 }} />
                 <Typography variant="caption" sx={{ fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.08em', color: 'text.secondary', flexGrow: 1 }}>
                   {column.name}
                 </Typography>
@@ -635,14 +640,13 @@ export function BoardView({
                       elevation={0}
                       sx={{
                         p: 1.25,
-                        borderRadius: 1.5,
                         bgcolor: selected ? 'action.selected' : 'background.paper',
-                        border: 1,
-                        borderColor: selected ? 'primary.main' : 'divider',
-                        borderLeft: epic ? `4px solid ${epicColor(epic.id)}` : undefined,
+                        ...edgeSurfaceSx({
+                          statusColor: colors.dot,
+                          epicColor: epic ? epicColor(epic.id) : undefined,
+                          hairlineColor: selected ? 'primary.main' : undefined,
+                        }),
                         cursor: grabbable ? 'grab' : 'pointer',
-                        transition: 'border-color .15s',
-                        '&:hover': { borderColor: 'primary.light' },
                         '&:active': { cursor: grabbable ? 'grabbing' : 'pointer' },
                       }}
                     >

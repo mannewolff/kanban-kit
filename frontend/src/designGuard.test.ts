@@ -38,7 +38,6 @@ const ALLOWLIST: ReadonlyArray<{ file: string; rule: Rule; resolvedIn: string }>
   { file: 'pages/ProjectBoardsPage.tsx', rule: 'boxShadow', resolvedIn: 'Paket 4, #651' }, // 174
   { file: 'pages/EpicsPage.tsx', rule: 'boxShadow', resolvedIn: 'Paket 4, #651' }, // 125
   { file: 'pages/BoardListPage.tsx', rule: 'boxShadow', resolvedIn: 'Paket 3, #650' }, // 457
-  { file: 'components/BoardView.tsx', rule: 'hex', resolvedIn: 'Paket 2, #649' }, // 90
   { file: 'components/CardDetailModal.tsx', rule: 'hex', resolvedIn: 'Paket 5, #652' }, // 325, 354
   { file: 'pages/BoardListPage.tsx', rule: 'hex', resolvedIn: 'Paket 3, #650' }, // 361
 ]

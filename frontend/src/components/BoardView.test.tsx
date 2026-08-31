@@ -10,6 +10,8 @@ import { boardsApi } from '../api/boards'
 import { projectsApi } from '../api/projects'
 import { BoardView } from './BoardView'
 import { SnackbarProvider } from './SnackbarProvider'
+import { statusColors } from '../lib/statusColors'
+import { STATUS_EDGE_WIDTH, theme } from '../theme'
 
 vi.mock('../api/columns', () => ({
   columnsApi: {
@@ -493,6 +495,47 @@ describe('BoardView', () => {
     expect(within(group).getByText('C')).toBeInTheDocument()
     expect(within(group).getByText('?')).toBeInTheDocument()
     expect(within(group).getByText('#')).toBeInTheDocument()
+  })
+
+  it('trägt den Status der Spalte an ihrer Oberkante', () => {
+    // Kanten-Semantik (#649): oben = Status. Der frühere Farbpunkt im Spaltenkopf entfällt dafür.
+    render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} />)
+
+    expect(screen.getByTestId('column-10')).toHaveStyle({
+      borderTopColor: statusColors('Backlog').dot,
+      borderTopWidth: `${STATUS_EDGE_WIDTH}px`,
+    })
+    expect(screen.getByTestId('column-20')).toHaveStyle({ borderTopColor: statusColors('Done').dot })
+  })
+
+  it('trägt den Status auch an der Oberkante der Karte', () => {
+    render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} />)
+
+    expect(screen.getByTestId('card-100')).toHaveStyle({
+      borderTopColor: statusColors('Backlog').dot,
+      borderTopWidth: `${STATUS_EDGE_WIDTH}px`,
+    })
+  })
+
+  it('färbt den Label-Chip-Text nach Kontrast, auf hellem Label also nicht weiß', () => {
+    const labelled: Card = { ...card, labels: [5, 6] }
+    const boardLabels = [
+      { id: 5, boardId: 1, name: 'Hell', color: '#FFF59D' },
+      { id: 6, boardId: 1, name: 'Dunkel', color: '#1E5F68' },
+    ]
+    render(
+      <BoardView board={board} initialCards={[labelled]} canEdit boardLabels={boardLabels} api={mkApi()} />,
+    )
+
+    // Der Chip-Rumpf traegt die Textfarbe, nicht das Label-Element darin: gesucht wird deshalb
+    // ueber den Textinhalt des Rumpfes statt ueber einen Aufstieg im DOM.
+    const chip = (name: string) =>
+      screen.getByText((_content, element) =>
+        element?.classList.contains('MuiChip-root') === true && element.textContent === name)
+
+    expect(chip('Hell')).toHaveStyle({ color: theme.palette.getContrastText('#FFF59D') })
+    expect(chip('Hell')).not.toHaveStyle({ color: 'rgb(255, 255, 255)' })
+    expect(chip('Dunkel')).toHaveStyle({ color: theme.palette.getContrastText('#1E5F68') })
   })
 
   it('zeigt für ein unbekanntes Label die Id als grauen Fallback-Chip', () => {

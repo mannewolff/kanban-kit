@@ -18,6 +18,8 @@ import { membersApi, type Member } from '../api/members'
 import { CardDetailModal } from './CardDetailModal'
 import { useSnackbar } from './SnackbarProvider'
 import { useRefetchOnFocus } from '../lib/useRefetchOnFocus'
+import { statusColors } from '../lib/statusColors'
+import { edgeSurfaceSx } from './boardSurfaceSx'
 
 /** Erste Spalte eines Boards (kleinste Position); `null`, wenn das Board keine Spalte hat. */
 function firstColumnOf(board: Board): number | null {
@@ -59,6 +61,14 @@ const SCROLL_STEP_PX = 16
  * Backlog-Zonen der Boards bleiben davon unberührt. `refreshKey` ist ein Reload-Impuls von außen:
  * Bei jeder Änderung werden Pool und Backlogs neu geladen (z. B. nach „Idee anlegen" auf der Seite).
  */
+/**
+ * Kanten-Semantik im Ideen-Board (#649, E5): dieselben Token wie die Board-Karte. Eine Idee liegt
+ * vor der Spaltenzuordnung, ihr Status ist deshalb fest `Backlog`. Eine linke Kante entfaellt hier,
+ * weil die Ansicht keine Vorhaben-Zuordnung kennt — sie bleibt unbelegt und bedeutet nie etwas
+ * anderes als auf dem Board.
+ */
+const IDEA_EDGE_SX = edgeSurfaceSx({ statusColor: statusColors('Backlog').dot })
+
 export function IdeaPlanningBoard({
   projectId,
   canEdit,
@@ -285,7 +295,7 @@ export function IdeaPlanningBoard({
               data-testid={`board-zone-${board.id}`}
               onDragOver={(e) => e.preventDefault()}
               onDrop={handleBoardDrop(board)}
-              sx={{ minHeight: 64, borderRadius: 1.5, p: 1, bgcolor: 'background.default' }}
+              sx={{ minHeight: 64, borderRadius: 1, p: 1, bgcolor: 'background.default' }}
             >
               {cards.length === 0 ? (
                 <Typography variant="body2" color="text.secondary" sx={{ py: 1 }}>
@@ -302,7 +312,7 @@ export function IdeaPlanningBoard({
                       onDragStart={startBoardDrag(board.id, cardItem.id)}
                       onDragOver={(e) => e.preventDefault()}
                       onDrop={handleBoardRowDrop(board.id, cardItem)}
-                      sx={{ px: 1.5, py: 1, display: 'flex', alignItems: 'center', gap: 1.5, cursor: canEdit ? 'grab' : 'default' }}
+                      sx={{ px: 1.5, py: 1, display: 'flex', alignItems: 'center', gap: 1.5, ...IDEA_EDGE_SX, cursor: canEdit ? 'grab' : 'default' }}
                     >
                       {canEdit && (
                         <DragIndicatorIcon
@@ -336,6 +346,8 @@ export function IdeaPlanningBoard({
         )
       })}
 
+      {/* Gliederung, keine Bedeutungs-Kante: der gestrichelte Trenner sagt „hier beginnt der Pool"
+          und traegt keinen Status. Er bleibt deshalb als benannte Ausnahme ein Literal (#649). */}
       <Box sx={{ borderTop: '2px dashed', borderColor: 'divider', my: 2 }} />
 
       {/* Projektweiter, board-loser Ideen-Pool (Quelle beim Einplanen). */}
@@ -343,7 +355,7 @@ export function IdeaPlanningBoard({
         data-testid="pool-zone"
         onDragOver={(e) => e.preventDefault()}
         onDrop={handlePoolDrop}
-        sx={{ minHeight: 80, borderRadius: 1.5, p: 1 }}
+        sx={{ minHeight: 80, borderRadius: 1, p: 1 }}
       >
         <Typography
           variant="subtitle2"
@@ -364,7 +376,7 @@ export function IdeaPlanningBoard({
                 variant="outlined"
                 draggable={canEdit}
                 onDragStart={startPoolDrag(idea.id)}
-                sx={{ px: 1.5, py: 1, display: 'flex', alignItems: 'center', gap: 1.5, bgcolor: 'action.hover', cursor: canEdit ? 'grab' : 'default' }}
+                sx={{ px: 1.5, py: 1, display: 'flex', alignItems: 'center', gap: 1.5, bgcolor: 'action.hover', ...IDEA_EDGE_SX, cursor: canEdit ? 'grab' : 'default' }}
               >
                 {canEdit && (
                   <DragIndicatorIcon
