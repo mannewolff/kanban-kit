@@ -4,13 +4,16 @@
  * ein zentraler Ort statt verstreuter Hex-Werte. Entsättigt auf die Marken-Familie
  * (brand.md): weiche, helle Tints als Pill-Flächen, dunkler Text derselben Familie, ein
  * ruhiger Akzent-Punkt.
+ *
+ * Das Modul trägt ausschließlich Status-Farben (#648, E2). Jedes andere Token gehört ins Theme —
+ * zwei Farbquellen laufen auseinander, ohne dass ein Test es merkt.
  */
 export interface StatusColorSet {
   /** Weiche Tint-Fläche (Pills/Badges). */
   bg: string
   /** Textfarbe auf {@link bg}. */
   text: string
-  /** Farbe des Status-Punkts im Header. */
+  /** Akzentfarbe des Status: Oberkante von Spalte und Karte, Punkt in Listenansichten. */
   dot: string
 }
 
@@ -36,16 +39,5 @@ export function statusColors(name: string): StatusColorSet {
   return NEUTRAL
 }
 
-/** Neutrale Spaltenfläche (hell, Marken-Ton). */
-export const COLUMN_SURFACE_BG = '#F6FAFB'
-
 /** Farbe für archivierte Karten (Badges/Listen). */
 export const ARCHIVED_STATUS_COLOR: StatusColorSet = { bg: '#F0F2F2', text: '#5F7A7F', dot: '#9FB0B4' }
-
-/** Chrome-Farben des Detail-Modals (Marken-Töne). */
-export const MODAL_BORDER = '#D8ECEE'
-export const MODAL_HEADER_BG = '#F6FAFB'
-export const MODAL_TEXT_PRIMARY = '#243539'
-export const MODAL_TEXT_SECONDARY = '#5F7A7F'
-/** Neutraler Hintergrund für Inline-Code/Codeblöcke im Karten-Detail (wertgleich zentralisiert). */
-export const CODE_BLOCK_BG = '#f4f5f7'

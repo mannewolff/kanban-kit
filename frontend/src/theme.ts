@@ -12,8 +12,29 @@ const TEAL_LIGHT = '#5BABB5'
 const TITLE = '#243539'
 const MUTED = '#5F7A7F'
 const BORDER = '#D8ECEE'
-const CARD_BG = '#F6FAFB'
 const ICE = '#EDF5F6'
+
+/**
+ * Design-Tokens der Designsprache „Kante" (#648, Plandokument #617). Sie liegen hier und nicht in
+ * einem Lib-Modul, weil `src/theme.ts` als Token-Objekt ohne Logik von der Coverage ausgenommen
+ * ist: Tokens in `lib/` verlangten Tests für Werte, die niemand sinnvoll testen kann. Ihre
+ * Existenz und ihre Werte sichert stattdessen `theme.test.ts` ab.
+ */
+
+/** Anheben einer Fläche beim Hover — Teal der Palette, kein schwarzer Farbanteil. */
+export const SURFACE_HOVER_SHADOW = '0 2px 8px rgba(47,140,151,0.18)'
+
+/** Breite der Status-Oberkante an Spalte und Karte (px). */
+export const STATUS_EDGE_WIDTH = 3
+
+/** Breite der linken Vorhaben-Kante (px). */
+export const EPIC_EDGE_WIDTH = 4
+
+/** Neutral getönte Fläche (Spalten, Zebra-Zeilen, Menü-Hover). */
+export const SURFACE_TINT = '#F6FAFB'
+
+/** Hintergrund für Inline-Code und Codeblöcke; ohne Entsprechung in der Marken-Palette. */
+export const CODE_BG = '#f4f5f7'
 
 export const theme = createTheme({
   palette: {
@@ -24,7 +45,7 @@ export const theme = createTheme({
     background: { default: '#FFFFFF', paper: '#FFFFFF' },
     divider: BORDER,
   },
-  shape: { borderRadius: 6 },
+  shape: { borderRadius: 4 },
   typography: {
     fontFamily: 'Carlito, Calibri, "Segoe UI", system-ui, -apple-system, sans-serif',
     // Titel Bold, Fließtext Regular (brand.md).
@@ -36,6 +57,18 @@ export const theme = createTheme({
     button: { textTransform: 'none', fontWeight: 700 },
   },
   components: {
+    // Kopfleiste: weiße Fläche aus der Palette statt `primary`, Haarlinie statt Elevation. Der
+    // eigene `elevation: 0` ist nötig, weil MuiAppBar seinen Default 4 selbst setzt und der
+    // MuiPaper-Default darauf nicht durchgreift.
+    MuiAppBar: {
+      defaultProps: { elevation: 0 },
+      styleOverrides: {
+        root: ({ theme: t }) => ({
+          backgroundColor: t.palette.background.paper,
+          borderBottom: `1px solid ${t.palette.divider}`,
+        }),
+      },
+    },
     // Flach: keine Schlagschatten, Haarlinien-Ränder.
     MuiPaper: {
       defaultProps: { elevation: 0 },
@@ -60,7 +93,7 @@ export const theme = createTheme({
         root: {
           fontSize: 14,
           minHeight: 36,
-          '&:hover': { backgroundColor: CARD_BG },
+          '&:hover': { backgroundColor: SURFACE_TINT },
           '&.Mui-selected': { backgroundColor: ICE },
           '&.Mui-selected:hover': { backgroundColor: ICE },
         },
@@ -85,7 +118,7 @@ export const theme = createTheme({
       styleOverrides: {
         root: {
           '& .MuiTableBody-root .MuiTableRow-root:nth-of-type(even)': {
-            backgroundColor: CARD_BG,
+            backgroundColor: SURFACE_TINT,
           },
         },
       },

@@ -20,7 +20,10 @@ function hashId(id: number): number {
   return h
 }
 
-/** Farbe eines Epics: stabil aus der Palette anhand seiner ID. */
+/**
+ * Farbe eines Vorhabens: stabil aus der Palette anhand seiner ID. Sie färbt die **linke Kante**
+ * der zugehörigen Karten (Designsprache „Kante", #648); die Oberkante trägt den Status.
+ */
 export function epicColor(id: number): string {
   return EPIC_PALETTE[hashId(id) % EPIC_PALETTE.length]
 }

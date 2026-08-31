@@ -38,7 +38,8 @@ import type { Label } from '../api/labels'
 import { formatDueDate, isOverdue } from '../lib/dueDate'
 import { epicColor, epicShortcode } from '../lib/epicMeta'
 import { useKeyboardShortcut } from '../lib/useKeyboardShortcut'
-import { COLUMN_SURFACE_BG, statusColors } from '../lib/statusColors'
+import { statusColors } from '../lib/statusColors'
+import { SURFACE_TINT } from '../theme'
 import { BulkActionBar } from './BulkActionBar'
 import { EpicBadge } from './EpicBadge'
 import { NewCardModal, type NewCardInitialValues, type NewItemInput } from './NewCardModal'
@@ -560,7 +561,7 @@ export function BoardView({
                 minWidth: 240,
                 display: 'flex',
                 flexDirection: 'column',
-                bgcolor: COLUMN_SURFACE_BG,
+                bgcolor: SURFACE_TINT,
                 borderRadius: 2,
                 overflow: 'hidden',
               }}
@@ -581,7 +582,7 @@ export function BoardView({
                 <Typography variant="caption" sx={{ fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.08em', color: 'text.secondary', flexGrow: 1 }}>
                   {column.name}
                 </Typography>
-                <Typography variant="caption" sx={{ color: 'text.secondary', bgcolor: COLUMN_SURFACE_BG, border: 1, borderColor: 'divider', borderRadius: 10, px: 0.75, lineHeight: 1.6 }}>
+                <Typography variant="caption" sx={{ color: 'text.secondary', bgcolor: SURFACE_TINT, border: 1, borderColor: 'divider', borderRadius: 10, px: 0.75, lineHeight: 1.6 }}>
                   {column.wipLimit != null ? `${count}/${column.wipLimit}` : count}
                 </Typography>
                 {canEdit && (

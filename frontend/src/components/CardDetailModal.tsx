@@ -49,7 +49,8 @@ import { cardLocationCrumbs, type CardLocation } from '../lib/cardLocation'
 import { dueInputToIso, formatDueDate, isOverdue } from '../lib/dueDate'
 import { normalizeTaskLists, toggleTaskAt } from '../lib/markdownTasks'
 import { safeImageSrc, safeLinkHref } from '../lib/markdownUrls'
-import { CODE_BLOCK_BG, MODAL_BORDER, MODAL_TEXT_PRIMARY, statusColors } from '../lib/statusColors'
+import { statusColors } from '../lib/statusColors'
+import { CODE_BG, theme } from '../theme'
 import { useAuth } from '../auth/AuthContext'
 import { AttachmentPreview } from './AttachmentPreview'
 import { useSnackbar } from './SnackbarProvider'
@@ -186,12 +187,12 @@ const TaskMarkdown = memo(function TaskMarkdown({
 const markdownBodySx = {
   overflowWrap: 'anywhere',
   '& :first-of-type': { mt: 0 },
-  '& h1, & h2': { fontWeight: 600, fontSize: '1.15rem', mt: 2, pb: 0.5, borderBottom: `1px solid ${MODAL_BORDER}` },
+  '& h1, & h2': { fontWeight: 600, fontSize: '1.15rem', mt: 2, pb: 0.5, borderBottom: `1px solid ${theme.palette.divider}` },
   '& h3, & h4': { fontWeight: 600, fontSize: '1rem', mt: 1.5, mb: 0.5 },
-  '& p, & li': { lineHeight: 1.6, color: MODAL_TEXT_PRIMARY },
+  '& p, & li': { lineHeight: 1.6, color: theme.palette.text.primary },
   '& ul, & ol': { pl: 3, my: 1 },
-  '& code': { backgroundColor: CODE_BLOCK_BG, px: 0.5, borderRadius: '3px', fontFamily: 'monospace', fontSize: '0.85em' },
-  '& pre': { backgroundColor: CODE_BLOCK_BG, p: 1.5, borderRadius: 1, overflowX: 'auto' },
+  '& code': { backgroundColor: CODE_BG, px: 0.5, borderRadius: '3px', fontFamily: 'monospace', fontSize: '0.85em' },
+  '& pre': { backgroundColor: CODE_BG, p: 1.5, borderRadius: 1, overflowX: 'auto' },
   '& pre code': { backgroundColor: 'transparent', px: 0 },
   // `display: block` + `width: max-content` macht die Tabelle zum eigenen Scrollbereich; als
   // echtes Table-Layout würde sie stattdessen auf die Modalbreite gestaucht.
@@ -199,7 +200,7 @@ const markdownBodySx = {
 } as const
 
 const descriptionSx = {
-  border: `1px solid ${MODAL_BORDER}`,
+  border: `1px solid ${theme.palette.divider}`,
   borderRadius: 1,
   p: 2,
   ...markdownBodySx,
@@ -1156,7 +1157,7 @@ function CardDetailModalView({
         paper: { sx: { width: '90%', maxWidth: '90%', height: '90%', maxHeight: '90%', m: 0 } },
       }}
     >
-      <DialogTitle sx={{ borderBottom: `1px solid ${MODAL_BORDER}` }}>
+      <DialogTitle sx={{ borderBottom: `1px solid ${theme.palette.divider}` }}>
         <Stack direction="row" alignItems="center" spacing={1} sx={{ flexWrap: 'wrap' }}>
           {onBack && (
             <IconButton size="small" aria-label="Zurück zur vorherigen Karte" onClick={onBack}>
