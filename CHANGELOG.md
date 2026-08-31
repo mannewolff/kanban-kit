@@ -7,6 +7,21 @@ Versionierung folgt der dreiteiligen Betriebsversion (siehe [RELEASING.md](RELEA
 Einträge je Version sind ein automatischer Auszug der Commit-Titel seit dem letzten Release,
 erzeugt von `scripts/gen-changelog.mjs`.
 
+## [1.26.0] – 2026-08-31
+
+- chore: v1.25.1
+- Dokumentation der Vorhaben-Kachel und des Baums nachziehen ([#646](https://github.com/mannewolff/kanban-kit/issues/646))
+- Vorgang eroeffnen an der Kartenmaske ([#647](https://github.com/mannewolff/kanban-kit/issues/647))
+- Board-weiten Herkunftsbaum zurueckbauen ([#645](https://github.com/mannewolff/kanban-kit/issues/645))
+- Baum in die Vorhaben-Detailansicht, Reiter und Aufklapp-Liste entfallen ([#644](https://github.com/mannewolff/kanban-kit/issues/644))
+- Herkunftsbaum je Vorhaben als Endpunkt ([#643](https://github.com/mannewolff/kanban-kit/issues/643))
+- Wurzelfilter im Herkunftsbaum lockern ([#642](https://github.com/mannewolff/kanban-kit/issues/642))
+- Vorhaben-Kachel nennt ihre Anforderung und zaehlt Arbeitspakete ([#641](https://github.com/mannewolff/kanban-kit/issues/641))
+- Vorgang eroeffnen: Vorhaben aus einer Karte anlegen ([#640](https://github.com/mannewolff/kanban-kit/issues/640))
+- Anforderungskarte setzen, lesen und beim Projektwechsel aufraeumen ([#639](https://github.com/mannewolff/kanban-kit/issues/639))
+- Anforderungskarte am Vorhaben persistieren ([#638](https://github.com/mannewolff/kanban-kit/issues/638))
+- Zustandslabels des Reviews einschalten
+
 ## [1.25.0] – 2026-08-30
 
 - chore: v1.24.1
