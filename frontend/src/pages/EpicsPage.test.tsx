@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { boardsApi } from '../api/boards'
 import { cardsApi } from '../api/cards'
 import { epicsApi } from '../api/epics'
+import { labelsApi } from '../api/labels'
 import { projectsApi } from '../api/projects'
 import { EpicsPage } from './EpicsPage'
 
@@ -25,6 +26,7 @@ vi.mock('../api/cards', () => ({
 }))
 vi.mock('../api/epics', () => ({ epicsApi: { list: vi.fn(), assign: vi.fn(), create: vi.fn() } }))
 vi.mock('../api/projects', () => ({ projectsApi: { list: vi.fn() } }))
+vi.mock('../api/labels', () => ({ labelsApi: { list: vi.fn() } }))
 vi.mock('../api/comments', () => ({
   commentsApi: { list: vi.fn().mockResolvedValue([]), create: vi.fn(), update: vi.fn(), remove: vi.fn() },
 }))
@@ -36,6 +38,7 @@ const mBoards = boardsApi as unknown as { get: ReturnType<typeof vi.fn> }
 const mCards = cardsApi as unknown as { list: ReturnType<typeof vi.fn> }
 const mEpics = epicsApi as unknown as { list: ReturnType<typeof vi.fn>; create: ReturnType<typeof vi.fn> }
 const mProjects = projectsApi as unknown as { list: ReturnType<typeof vi.fn> }
+const mLabels = labelsApi as unknown as { list: ReturnType<typeof vi.fn> }
 const mEpicTree = cardsApi as unknown as { epicTree: ReturnType<typeof vi.fn> }
 
 
@@ -57,6 +60,7 @@ describe('EpicsPage', () => {
     mEpics.create.mockResolvedValue({})
     mProjects.list.mockResolvedValue([{ id: 9, name: 'Projekt', role: 'OWNER', createdAt: '' }])
     mEpicTree.epicTree.mockResolvedValue([])
+    mLabels.list.mockResolvedValue([])
   })
 
   it('zeigt den Breadcrumb-Pfad ab Projekte', async () => {
@@ -73,7 +77,7 @@ describe('EpicsPage', () => {
 
     expect(await screen.findByText('Auth')).toBeInTheDocument()
     expect(screen.getByText('AUT')).toBeInTheDocument()
-    expect(screen.getByText('1/2 Arbeitspakete fertig')).toBeInTheDocument()
+    expect(screen.getByText('1 von 2 fertig')).toBeInTheDocument()
     expect(await screen.findByLabelText('Fortschritt Auth')).toBeInTheDocument()
   })
 
@@ -272,13 +276,17 @@ describe('EpicsPage', () => {
     expect(anforderungsVerweis()).toBeInTheDocument()
   })
 
-  it('zeigt ohne Anforderung an dieser Stelle nichts', async () => {
+  /**
+   * Revidiert Plan #637 (E6) bewusst: Dort wollte man keinen Platzhalter, hier gewinnt die
+   * Unterscheidbarkeit — eine leere Stelle waere nicht von einem Ladefehler zu unterscheiden.
+   */
+  it('sagt ausdrücklich, wenn ein Vorhaben keine Anforderung trägt', async () => {
     mitAnforderung(null)
     renderPage()
     await screen.findByText('Auth')
 
-    // Ueber die Abwesenheit geprueft, nicht ueber einen Platzhaltertext: Ein Vorhaben ohne
-    // Anforderung bekommt keine Ersatzanzeige (Plan #637, E6).
+    expect(screen.getByText('Keine Anforderung hinterlegt.')).toBeInTheDocument()
+    // Der Verweis selbst bleibt aus: Es gibt nichts zu oeffnen.
     expect(screen.queryByText('Anforderung:')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /^#\d+ · / })).not.toBeInTheDocument()
   })
@@ -350,4 +358,122 @@ describe('EpicsPage', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
+  // --- Zusammensetzung, Zustaende und Leer-Aussagen (Issue #663) -------------
+
+  function karte(number: number, title: string, labels: number[] = []) {
+    return {
+      id: number * 10, boardId: 1, columnId: 10, number, title, description: null,
+      positionInColumn: 0, archived: false, ideaStored: false, movedToDoneAt: null,
+      dependencies: [], type: 'CARD', parentId: null, shortcode: null, assignees: [],
+      dueDate: null, labels,
+    }
+  }
+
+  it('zeigt die Zusammensetzung nach Art getrennt', async () => {
+    mEpics.list.mockResolvedValue([
+      {
+        id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 0, total: 8,
+        memberNumbers: [1, 2, 3, 4, 5, 6, 7, 8], rootNumbers: [], requirementCardNumber: null,
+      },
+    ])
+    mCards.list.mockResolvedValue([
+      karte(1, '[Fachlich] Anforderung'),
+      karte(2, '[Plan] Weg A'),
+      karte(3, '[Plan] Weg B'),
+      ...[4, 5, 6, 7, 8].map((n) => karte(n, `Paket ${n}`)),
+    ])
+    renderPage()
+
+    expect(await screen.findByText('1 Anforderung')).toBeInTheDocument()
+    expect(screen.getByText('2 Pläne')).toBeInTheDocument()
+    expect(screen.getByText('5 Arbeitspakete')).toBeInTheDocument()
+  })
+
+  it('zeigt je gezähltem Label eine Marke mit Anzahl als Text', async () => {
+    mEpics.list.mockResolvedValue([
+      {
+        id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 0, total: 2,
+        memberNumbers: [1, 2], rootNumbers: [], requirementCardNumber: null,
+      },
+    ])
+    mCards.list.mockResolvedValue([karte(1, 'A', [70]), karte(2, 'B', [70, 71])])
+    mLabels.list.mockResolvedValue([
+      { id: 70, boardId: 1, name: 'stockt', color: '#f00', countOnEpicTile: true },
+      { id: 71, boardId: 1, name: 'intern', color: '#ccc', countOnEpicTile: false },
+    ])
+    renderPage()
+
+    expect(await screen.findByText('stockt 2')).toBeInTheDocument()
+    // Beide Seiten: Das nicht gezaehlte Label erscheint nicht.
+    expect(screen.queryByText(/intern/)).not.toBeInTheDocument()
+  })
+
+  it('sagt bei einem leeren Vorhaben, dass es leer ist — und zeigt trotzdem den Balken', async () => {
+    mEpics.list.mockResolvedValue([
+      {
+        id: 9, number: 2, title: 'Leer', description: null, shortcode: 'LEE', done: 0, total: 0,
+        memberNumbers: [], rootNumbers: [], requirementCardNumber: null,
+      },
+    ])
+    renderPage()
+
+    expect(await screen.findByText('Noch keine Karten zugeordnet.')).toBeInTheDocument()
+    // Der Balken steht an JEDER Kachel (#656, Frage 4) — auch an der leeren.
+    expect(screen.getByLabelText('Fortschritt Leer')).toBeInTheDocument()
+    expect(screen.getByText('0 von 0 fertig')).toBeInTheDocument()
+  })
+
+  /**
+   * `total` zaehlt ALLE Mitglieder. Sobald dieselbe Kachel "1 Anforderung, 2 Plaene, 5
+   * Arbeitspakete" ausweist, waere "8 Arbeitspakete fertig" falsch. Die Beschriftung ist deshalb
+   * IMMER neutral, auch bei sortenreinen Vorhaben — eine nur bedingte Umbenennung haette die
+   * Bestandstests gruen gelassen und waere kein Fortschritt gewesen.
+   */
+  it('nennt in der Fortschrittszeile nie „Arbeitspakete", auch nicht bei sortenreinen Vorhaben', async () => {
+    mEpics.list.mockResolvedValue([
+      {
+        id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 1, total: 2,
+        memberNumbers: [1, 2], rootNumbers: [], requirementCardNumber: null,
+      },
+    ])
+    mCards.list.mockResolvedValue([karte(1, 'Paket A'), karte(2, 'Paket B')])
+    renderPage()
+
+    await screen.findByText('Auth')
+    expect(screen.getByText('1 von 2 fertig')).toBeInTheDocument()
+    // Die Zusammensetzung nennt die Art sehr wohl -- die Fortschrittszeile nicht.
+    expect(screen.getByText('2 Arbeitspakete')).toBeInTheDocument()
+    expect(screen.queryByText(/\d+ von \d+ Arbeitspakete/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Arbeitspakete fertig/)).not.toBeInTheDocument()
+  })
+
+  it('ordnet die Kacheln nach Handlungsbedarf, leere ans Ende', async () => {
+    mEpics.list.mockResolvedValue([
+      {
+        id: 1, number: 1, title: 'Leer', description: null, shortcode: 'LEE', done: 0, total: 0,
+        memberNumbers: [], rootNumbers: [], requirementCardNumber: null,
+      },
+      {
+        id: 2, number: 2, title: 'Wenig', description: null, shortcode: 'WEN', done: 0, total: 1,
+        memberNumbers: [1], rootNumbers: [], requirementCardNumber: null,
+      },
+      {
+        id: 3, number: 3, title: 'Viel', description: null, shortcode: 'VIE', done: 0, total: 2,
+        memberNumbers: [2, 3], rootNumbers: [], requirementCardNumber: null,
+      },
+    ])
+    mCards.list.mockResolvedValue([karte(1, 'A', [70]), karte(2, 'B', [70]), karte(3, 'C', [70])])
+    mLabels.list.mockResolvedValue([
+      { id: 70, boardId: 1, name: 'stockt', color: '#f00', countOnEpicTile: true },
+    ])
+    renderPage()
+
+    await screen.findByText('Viel')
+    // `getAllByTestId` liefert in DOM-Reihenfolge -- also genau der Reihenfolge auf dem Raster.
+    expect(screen.getAllByTestId(/^vorhaben-kachel-/).map((k) => k.dataset.testid)).toEqual([
+      'vorhaben-kachel-3',
+      'vorhaben-kachel-2',
+      'vorhaben-kachel-1',
+    ])
+  })
 })
