@@ -29,6 +29,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Outlet, useLocation, useMatch, useNavigate } from 'react-router-dom'
 import { boardsApi } from '../api/boards'
 import { projectsApi, type Project } from '../api/projects'
+import { APP_NAME } from '../appMeta'
 import { useAuth } from '../auth/AuthContext'
 import { buildNavItems, type BoardContext, type NavGroup, type NavLink, type NavNode } from '../layout/navItems'
 import { canManageBoards, isPlatformAdmin } from '../lib/roles'
@@ -443,7 +444,10 @@ export function AppShell() {
                 width: 22,
                 height: 22,
                 flexShrink: 0,
-                bgcolor: 'primary.main',
+                // Dieselbe dunkle Tinte wie die Schrift daneben. Der Marken-Teal `primary.main`
+                // stand auf der weissen Leiste gut, auf dem hellen Teal der Leiste waere es Teal
+                // auf Teal.
+                bgcolor: 'text.primary',
                 maskImage: 'url(/knight.svg)',
                 maskSize: 'contain',
                 maskRepeat: 'no-repeat',
@@ -455,11 +459,11 @@ export function AppShell() {
               }}
             />
             <Typography variant="h6" noWrap component="div" sx={{ fontWeight: 700, color: 'text.primary' }}>
-              kanban-kit
+              {APP_NAME}
             </Typography>
-            {/* Kein `opacity` mehr: Auf der weissen Leiste haette die Abschwaechung den
-                Kontrast unter die AA-Schwelle gedrueckt. Die Zuruecknahme traegt jetzt die
-                sekundaere Textfarbe der Palette nicht -- die Angabe steht in text.primary. */}
+            {/* Kein `opacity`: Die Abschwaechung druecke den Kontrast unter die AA-Schwelle. Auch
+                die sekundaere Textfarbe entfaellt -- auf dem hellen Teal der Leiste traegt die
+                Versionsangabe dieselbe dunkle Tinte wie der Name. */}
             <Typography variant="body1" noWrap sx={{ color: 'text.primary' }}>
               v{__APP_VERSION__}
             </Typography>

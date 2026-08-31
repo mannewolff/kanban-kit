@@ -3,6 +3,7 @@ import type { ReactNode } from 'react'
 import { MemoryRouter, useLocation, useNavigate } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import pkg from '../../package.json'
+import { APP_NAME } from '../appMeta'
 import { boardsApi } from '../api/boards'
 import { ApiError } from '../api/client'
 import { projectsApi } from '../api/projects'
@@ -205,7 +206,7 @@ describe('AppShell', () => {
 
   it('rendert Marke, Projekte-Navigation und den angemeldeten Nutzer', () => {
     renderShell()
-    expect(screen.getByText('kanban-kit')).toBeInTheDocument()
+    expect(screen.getByText(APP_NAME)).toBeInTheDocument()
     expect(screen.getByText('Projekte')).toBeInTheDocument()
     expect(screen.getByText('Manne')).toBeInTheDocument()
     expect(screen.getByLabelText('Abmelden')).toBeInTheDocument()
@@ -420,7 +421,7 @@ describe('AppShell', () => {
   it('zeigt ohne angemeldeten Nutzer weder Avatar noch Abmelden-Button', () => {
     useAuthMock.mockReturnValue({ user: null, logout: logoutMock })
     renderShell()
-    expect(screen.getByText('kanban-kit')).toBeInTheDocument()
+    expect(screen.getByText(APP_NAME)).toBeInTheDocument()
     expect(screen.queryByLabelText('Abmelden')).not.toBeInTheDocument()
     // Die Kartensuche läuft über die eigenen Projekte — ohne Session gibt es nichts zu durchsuchen.
     expect(screen.queryByRole('search')).not.toBeInTheDocument()

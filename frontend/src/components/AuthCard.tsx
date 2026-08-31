@@ -1,6 +1,7 @@
 import Box from '@mui/material/Box'
 import Paper from '@mui/material/Paper'
 import Typography from '@mui/material/Typography'
+import { APP_NAME } from '../appMeta'
 import { EPIC_EDGE_WIDTH } from '../theme'
 
 /** Zentrierte Karte für Auth-Screens. */
@@ -19,7 +20,7 @@ export function AuthCard({ title, children }: Readonly<{ title: string; children
         }}
       >
         <Typography variant="h4" component="h1" gutterBottom>
-          kanban-kit
+          {APP_NAME}
         </Typography>
         <Typography variant="h6" component="h2" sx={{ mb: 2 }} color="text.secondary">
           {title}
