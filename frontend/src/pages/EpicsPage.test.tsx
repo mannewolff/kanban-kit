@@ -141,7 +141,7 @@ describe('EpicsPage', () => {
       {
         number: 3, title: 'Kind', type: 'CARD', derivedFrom: null, depth: 0, done: false,
         blocked: false, dependencies: [], externalDependencies: [], externalOrigin: false,
-        broken: false,
+        broken: false, labels: [],
       },
     ])
     renderPage()

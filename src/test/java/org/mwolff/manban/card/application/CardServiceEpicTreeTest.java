@@ -18,6 +18,7 @@ import org.mwolff.manban.board.application.BoardService;
 import org.mwolff.manban.card.application.CardService.DerivationNodeView;
 import org.mwolff.manban.card.domain.Card;
 import org.mwolff.manban.card.domain.CardType;
+import org.mwolff.manban.card.domain.Label;
 import org.mwolff.manban.project.application.PermissionChecker;
 import org.mwolff.manban.project.application.ProjectService;
 import org.springframework.context.ApplicationEventPublisher;
@@ -44,6 +45,8 @@ class CardServiceEpicTreeTest {
   private CardRepository cards;
   private CardDependencyRepository dependencies;
   private BoardService boardService;
+  private LabelRepository labels;
+  private CardLabelRepository cardLabels;
   private CardService service;
 
   @BeforeEach
@@ -51,6 +54,8 @@ class CardServiceEpicTreeTest {
     cards = mock(CardRepository.class);
     dependencies = mock(CardDependencyRepository.class);
     boardService = mock(BoardService.class);
+    labels = mock(LabelRepository.class);
+    cardLabels = mock(CardLabelRepository.class);
     ActorContext actor = mock(ActorContext.class);
     when(actor.current()).thenReturn(ActorContext.ActorStamp.unknown());
     service =
@@ -62,8 +67,8 @@ class CardServiceEpicTreeTest {
             mock(ProjectService.class),
             mock(CardColumnTransitionRepository.class),
             mock(CardAssigneeRepository.class),
-            mock(LabelRepository.class),
-            mock(CardLabelRepository.class),
+            labels,
+            cardLabels,
             mock(CardActivityRepository.class),
             actor,
             mock(ApplicationEventPublisher.class),
@@ -295,5 +300,60 @@ class CardServiceEpicTreeTest {
     assertThat(enkel.depth()).isZero();
     assertThat(enkel.externalOrigin()).isTrue();
     assertThat(enkel.derivedFrom()).isNull();
+  }
+
+  // --- Gezaehlte Label-Marken je Zeile (Issue #661) -------------------------
+
+  private static Label label(long id, String name, String color, boolean zaehlt) {
+    return new Label(id, BOARD, name, color, zaehlt);
+  }
+
+  @Test
+  void nurGezaehlteLabelsReisenMit() {
+    stub(List.of(vorhaben(EPIC, 1), mitglied(6L, 2, EPIC, null)));
+    when(labels.findByBoardId(BOARD))
+        .thenReturn(
+            List.of(label(70L, "bereit", "#0f0", true), label(71L, "intern", "#ccc", false)));
+    when(cardLabels.findByCardIds(any())).thenReturn(Map.of(6L, List.of(70L, 71L)));
+
+    DerivationNodeView z = zeile(baum(), 2);
+
+    assertThat(z.labels())
+        .singleElement()
+        .satisfies(
+            m -> {
+              assertThat(m.name()).isEqualTo("bereit");
+              assertThat(m.color()).isEqualTo("#0f0");
+            });
+    // Beide Seiten: Das nicht gezaehlte Label taucht nirgends auf.
+    assertThat(z.labels()).extracting(CardService.LabelMarkView::name).doesNotContain("intern");
+  }
+
+  /**
+   * Ohne feste Reihenfolge waere die Anzeige nicht deterministisch testbar. {@code findByCardIds}
+   * liefert je Karte aufsteigend nach Label-ID; genau diese Ordnung reicht der Baum durch.
+   */
+  @Test
+  void mehrereGezaehlteLabels_erscheinenNachLabelIdAufsteigend() {
+    stub(List.of(vorhaben(EPIC, 1), mitglied(6L, 2, EPIC, null)));
+    when(labels.findByBoardId(BOARD))
+        .thenReturn(
+            List.of(label(80L, "zuerst", "#00f", true), label(90L, "danach", "#f00", true)));
+    when(cardLabels.findByCardIds(any())).thenReturn(Map.of(6L, List.of(80L, 90L)));
+
+    assertThat(zeile(baum(), 2).labels())
+        .extracting(CardService.LabelMarkView::name)
+        .containsExactly("zuerst", "danach");
+  }
+
+  @Test
+  void karteOhneGezaehlteLabels_traegtEineLeereListe() {
+    stub(List.of(vorhaben(EPIC, 1), mitglied(6L, 2, EPIC, null), mitglied(7L, 3, EPIC, null)));
+    when(labels.findByBoardId(BOARD)).thenReturn(List.of(label(70L, "bereit", "#0f0", true)));
+    // Nur Karte 6 traegt ein Label; Karte 7 fehlt in der Map, wie `findByCardIds` es liefert.
+    when(cardLabels.findByCardIds(any())).thenReturn(Map.of(6L, List.of(70L)));
+
+    assertThat(zeile(baum(), 2).labels()).hasSize(1);
+    assertThat(zeile(baum(), 3).labels()).isEmpty();
   }
 }

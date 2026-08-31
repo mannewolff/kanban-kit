@@ -9,6 +9,7 @@ import java.util.Map;
 import java.util.Set;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.card.application.CardService.DerivationNodeView;
+import org.mwolff.manban.card.application.CardService.LabelMarkView;
 import org.mwolff.manban.card.domain.Card;
 
 /**
@@ -36,11 +37,14 @@ final class DerivationTree {
    * @param depsByCardId Abhängigkeits-Nummern je Karten-ID (ein Sammelzugriff)
    * @param externalAncestorNumbers Nummern der Vorfahren, die <em>nicht</em> auf diesem Board
    *     liegen
+   * @param markenByCardId gezählte Label-Marken je Karten-ID (ein Sammelzugriff); eine Karte ohne
+   *     gezählte Labels fehlt darin und bekommt eine leere Liste
    */
   static List<DerivationNodeView> build(
       List<Card> boardCards,
       Map<Long, List<Integer>> depsByCardId,
-      Map<Long, Integer> externalAncestorNumbers) {
+      Map<Long, Integer> externalAncestorNumbers,
+      Map<Long, List<LabelMarkView>> markenByCardId) {
 
     Map<Long, Card> byId = new HashMap<>();
     Map<Integer, Card> byNumber = new HashMap<>();
@@ -61,7 +65,8 @@ final class DerivationTree {
       }
     }
 
-    Kontext ctx = new Kontext(byId, byNumber, kinder, depsByCardId, externalAncestorNumbers);
+    Kontext ctx =
+        new Kontext(byId, byNumber, kinder, depsByCardId, externalAncestorNumbers, markenByCardId);
 
     // Wurzel ist jede Karte ohne board-interne Herkunft — mehr nicht.
     //
@@ -182,7 +187,8 @@ final class DerivationTree {
         List.copyOf(intern),
         List.copyOf(extern),
         istExtern(c, ctx.byId),
-        broken);
+        broken,
+        ctx.markenByCardId.getOrDefault(c.requireId(), List.of()));
   }
 
   private static @Nullable Integer herkunftsnummer(Card c, Kontext ctx) {
@@ -250,6 +256,7 @@ final class DerivationTree {
     private final Map<Long, List<Card>> kinder;
     private final Map<Long, List<Integer>> depsByCardId;
     private final Map<Long, Integer> externalAncestorNumbers;
+    private final Map<Long, List<LabelMarkView>> markenByCardId;
     private final Set<Long> besucht = new HashSet<>();
 
     private Kontext(
@@ -257,12 +264,14 @@ final class DerivationTree {
         Map<Integer, Card> byNumber,
         Map<Long, List<Card>> kinder,
         Map<Long, List<Integer>> depsByCardId,
-        Map<Long, Integer> externalAncestorNumbers) {
+        Map<Long, Integer> externalAncestorNumbers,
+        Map<Long, List<LabelMarkView>> markenByCardId) {
       this.byId = byId;
       this.byNumber = byNumber;
       this.kinder = kinder;
       this.depsByCardId = depsByCardId;
       this.externalAncestorNumbers = externalAncestorNumbers;
+      this.markenByCardId = markenByCardId;
     }
   }
 }

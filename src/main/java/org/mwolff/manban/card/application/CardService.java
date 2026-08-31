@@ -433,7 +433,45 @@ public class CardService {
     List<Card> baumKarten = List.copyOf(mitglieder);
     Set<Long> ids = baumKarten.stream().map(Card::requireId).collect(Collectors.toSet());
     return DerivationTree.build(
-        baumKarten, dependencies.findByCardIds(ids), fremdeVorfahrenNummern(alle));
+        baumKarten,
+        dependencies.findByCardIds(ids),
+        fremdeVorfahrenNummern(alle),
+        gezaehlteMarken(boardId, ids));
+  }
+
+  /**
+   * Die gezählten Label-Marken je Karten-ID — zwei Sammelzugriffe, unabhängig von der Kartenzahl
+   * (kein N+1), analog zu {@code depsByCardId}.
+   *
+   * <p>Vom Server und nicht aus der Kartenliste durchgereicht (Plan #657, E5): Ein Karten-Array
+   * durch drei Ebenen zu fädeln, um Namen nachzuschlagen, baute eine zweite Wahrheit über den
+   * Zustand neben der ersten.
+   *
+   * <p>Die Reihenfolge je Karte ist die von {@link CardLabelRepository#findByCardIds} — aufsteigend
+   * nach Label-ID. Ohne diese Festlegung wäre die Anzeige nicht deterministisch testbar. Karten
+   * ohne gezählte Labels fehlen in der Map; {@code DerivationTree} liest sie mit einer leeren Liste
+   * als Vorgabe.
+   */
+  private Map<Long, List<LabelMarkView>> gezaehlteMarken(long boardId, Set<Long> cardIds) {
+    Map<Long, Label> gezaehlt = new HashMap<>();
+    for (Label l : labels.findByBoardId(boardId)) {
+      if (l.countOnEpicTile()) {
+        gezaehlt.put(l.requireId(), l);
+      }
+    }
+    Map<Long, List<LabelMarkView>> marken = new HashMap<>();
+    cardLabels
+        .findByCardIds(cardIds)
+        .forEach(
+            (cardId, labelIds) ->
+                marken.put(
+                    cardId,
+                    labelIds.stream()
+                        .map(gezaehlt::get)
+                        .filter(Objects::nonNull)
+                        .map(l -> new LabelMarkView(l.name(), l.color()))
+                        .toList()));
+    return marken;
   }
 
   /**
@@ -1889,6 +1927,9 @@ public class CardService {
    * @param externalOrigin die Herkunft zeigt auf eine Karte außerhalb dieses Boards; die Zeile
    *     erscheint dann als Wurzel, auch ohne Nachfahren
    * @param broken die Zeile hängt an einem Herkunftsring, der nur an der API vorbei entstehen kann
+   * @param labels die Labels dieser Karte, die auf der Vorhaben-Kachel gezählt werden ({@code
+   *     Label.countOnEpicTile}, Issue #659) — in der Reihenfolge aufsteigender Label-ID. Nur
+   *     gezählte reisen mit: Was nicht gezählt wird, muss auch nicht übertragen werden
    */
   public record DerivationNodeView(
       int number,
@@ -1901,7 +1942,16 @@ public class CardService {
       List<Integer> dependencies,
       List<Integer> externalDependencies,
       boolean externalOrigin,
-      boolean broken) {}
+      boolean broken,
+      List<LabelMarkView> labels) {}
+
+  /**
+   * Ein Label als Marke im Herkunftsbaum: Name als Text, Farbe als Chip-Fläche.
+   *
+   * <p>Beides und nicht nur der Name (Entscheidung Manne, 2026-08-31): Nur Namen zu übertragen wäre
+   * schmaler, ließe aber Baum und Vorhaben-Kachel unterschiedlich aussehen.
+   */
+  public record LabelMarkView(String name, String color) {}
 
   /**
    * Vorhaben-Darstellung inkl. Fortschritt (zugehörige Karten gesamt / in Done).

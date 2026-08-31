@@ -540,7 +540,7 @@ describe('CardDetailModal', () => {
     return {
       number: nummer, title: `Karte ${nummer}`, type: 'CARD' as const, derivedFrom: null, depth,
       done: false, blocked: false, dependencies: [], externalDependencies: [],
-      externalOrigin: false, broken: false,
+      externalOrigin: false, broken: false, labels: [],
     }
   }
 

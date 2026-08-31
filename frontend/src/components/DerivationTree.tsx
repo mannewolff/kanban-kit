@@ -2,6 +2,7 @@ import Box from '@mui/material/Box'
 import Typography from '@mui/material/Typography'
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { type DerivationNode } from '../api/cards'
+import { labelChipSx } from './labelChipSx'
 
 interface Props {
   /**
@@ -255,6 +256,9 @@ export function DerivationTree({ rows, onOpenCard }: Readonly<Props>) {
             {zeile.externalDependencies.map((nummer) => (
               <Marke key={`e${nummer}`} text={`⇠ extern #${nummer}`} />
             ))}
+            {zeile.labels.map((label) => (
+              <LabelMarke key={`l${label.name}`} name={label.name} farbe={label.color} />
+            ))}
           </Box>
         )
       })}
@@ -324,6 +328,33 @@ function Marke({ text }: Readonly<{ text: string }>) {
       }}
     >
       {text}
+    </Typography>
+  )
+}
+
+/**
+ * Label-Marke einer Zeile (Issue #661): Name als Text, die Labelfarbe als Chip-Flaeche.
+ *
+ * <p>Wie {@link Marke} ausdruecklich ohne Rolle und ohne `tabIndex` — der Baum ist ein Roving
+ * Tabindex mit genau einem Tab-Stopp und vertraegt kein zweites Fokusmodell daneben.
+ *
+ * <p>Flaeche und Textfarbe kommen aus `labelChipSx`, derselben Quelle wie an den vier
+ * Chip-Stellen: Labelfarben sind nutzerdefiniert und duerfen ein Theme-Token sein, an dem
+ * `getContrastText` wirft (#649).
+ */
+function LabelMarke({ name, farbe }: Readonly<{ name: string; farbe: string }>) {
+  return (
+    <Typography
+      variant="caption"
+      component="span"
+      sx={{
+        ...labelChipSx(farbe),
+        px: 0.75,
+        borderRadius: 10,
+        whiteSpace: 'nowrap',
+      }}
+    >
+      {name}
     </Typography>
   )
 }
