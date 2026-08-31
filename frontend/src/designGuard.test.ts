@@ -34,9 +34,6 @@ const ALLOWLIST: ReadonlyArray<{ file: string; rule: Rule; resolvedIn: string }>
   { file: 'components/SnackbarProvider.tsx', rule: 'boxShadow', resolvedIn: 'Paket 5, #652' }, // 101
   { file: 'components/BulkActionBar.tsx', rule: 'elevation', resolvedIn: 'Paket 5, #652' }, // 26
   { file: 'components/AuthCard.tsx', rule: 'elevation', resolvedIn: 'Paket 6, #653' }, // 9
-  { file: 'pages/ProjectsPage.tsx', rule: 'boxShadow', resolvedIn: 'Paket 4, #651' }, // 184
-  { file: 'pages/ProjectBoardsPage.tsx', rule: 'boxShadow', resolvedIn: 'Paket 4, #651' }, // 174
-  { file: 'pages/EpicsPage.tsx', rule: 'boxShadow', resolvedIn: 'Paket 4, #651' }, // 125
   { file: 'components/CardDetailModal.tsx', rule: 'hex', resolvedIn: 'Paket 5, #652' }, // 325, 354
 ]
 

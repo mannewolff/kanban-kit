@@ -18,6 +18,7 @@ import { EpicBadge } from '../components/EpicBadge'
 import { NewCardModal } from '../components/NewCardModal'
 import { useBoardRole } from '../lib/useBoardRole'
 import { useProjectName } from '../lib/useProjectName'
+import { SURFACE_HOVER_SHADOW } from '../theme'
 
 function epicToCard(epic: Epic, boardId: number): Card {
   return {
@@ -122,7 +123,7 @@ export function EpicsPage() {
               key={epic.id}
               variant="outlined"
               onClick={() => setSelected(epicToCard(epic, id))}
-              sx={{ p: 2, cursor: 'pointer', '&:hover': { boxShadow: 2 } }}
+              sx={{ p: 2, cursor: 'pointer', '&:hover': { boxShadow: SURFACE_HOVER_SHADOW } }}
             >
               <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
                 <EpicBadge epicId={epic.id} title={epic.title} shortcode={epic.shortcode} />

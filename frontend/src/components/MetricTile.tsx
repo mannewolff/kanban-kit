@@ -1,6 +1,7 @@
 import Paper from '@mui/material/Paper'
 import Stack from '@mui/material/Stack'
 import Typography from '@mui/material/Typography'
+import { EPIC_EDGE_WIDTH } from '../theme'
 
 interface Props {
   /** Beschriftung der Kennzahl, z. B. der Spaltenname. */
@@ -36,7 +37,9 @@ export function MetricTile({ label, value, sample, emphasis }: Readonly<Props>) 
       variant="outlined"
       sx={{
         p: 2,
-        ...(emphasis ? { borderColor: 'primary.main', bgcolor: 'action.hover' } : {}),
+        // Betonung an der Kante statt auf der Flaeche (#651, E3/E7): die Flaeche bleibt weiss,
+        // die linke Teal-Kante hebt hervor -- dieselbe Breite wie die Vorhaben-Kante am Board.
+        ...(emphasis ? { borderLeft: `${EPIC_EDGE_WIDTH}px solid`, borderLeftColor: 'primary.main' } : {}),
       }}
     >
       <Stack spacing={0.25}>

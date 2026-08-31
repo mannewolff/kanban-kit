@@ -22,6 +22,7 @@ import { canManageProject, isPlatformAdmin } from '../lib/roles'
 import { useAuth } from '../auth/AuthContext'
 import { useSnackbar } from '../components/SnackbarProvider'
 import { useEditMode } from '../lib/EditModeContext'
+import { SURFACE_HOVER_SHADOW } from '../theme'
 
 const ROLE_CHIP: Record<string, 'primary' | 'info' | 'default'> = {
   OWNER: 'primary',
@@ -181,7 +182,7 @@ export function ProjectsPage() {
                 alignItems: 'center',
                 gap: 1.5,
                 transition: 'box-shadow 150ms, border-color 150ms',
-                '&:hover': { boxShadow: 3, borderColor: 'primary.main' },
+                '&:hover': { boxShadow: SURFACE_HOVER_SHADOW, borderColor: 'primary.main' },
               }}
             >
               <Typography variant="subtitle1" sx={{ fontWeight: 600, flexGrow: 1, minWidth: 0 }}>
