@@ -27,4 +27,14 @@ describe('EditModeBanner', () => {
     fireEvent.click(screen.getByLabelText('Editiermodus verlassen'))
     expect(state.setEditMode).toHaveBeenCalledWith(false)
   })
+
+  it('schreibt den Warnhinweis in der kontrastreichen Variante auf das Amber', () => {
+    // Weiss auf warning.main ergaebe 3,11:1 und verfehlte AA fuer Fliesstext (#653, E6).
+    state.editMode = true
+    render(<EditModeBanner />)
+
+    expect(screen.getByRole('region', { name: 'Editiermodus-Hinweis' })).toHaveStyle({
+      color: 'rgb(0, 0, 0)',
+    })
+  })
 })

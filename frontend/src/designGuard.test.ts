@@ -31,7 +31,6 @@ interface Violation {
  * 2026-08-30 und dienen nur dem Wiederfinden.
  */
 const ALLOWLIST: ReadonlyArray<{ file: string; rule: Rule; resolvedIn: string }> = [
-  { file: 'components/AuthCard.tsx', rule: 'elevation', resolvedIn: 'Paket 6, #653' }, // 9
 ]
 
 /**

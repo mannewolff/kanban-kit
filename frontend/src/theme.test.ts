@@ -49,6 +49,16 @@ describe('theme AppBar-Override', () => {
     expect(style.backgroundColor).not.toBe(theme.palette.primary.main)
   })
 
+  it('gibt der Kopfleiste seit #653 auch ihre Textfarbe', () => {
+    const root = theme.components?.MuiAppBar?.styleOverrides?.root
+    const style = (typeof root === 'function'
+      ? (root as (props: { theme: Theme }) => Record<string, unknown>)({ theme })
+      : (root as Record<string, unknown>))
+
+    // Geerbtes Weiss aus primary.contrastText waere auf der weissen Flaeche unsichtbar.
+    expect(style.color).toBe(theme.palette.text.primary)
+  })
+
   it('trennt die Kopfleiste mit einer Haarlinie statt mit einer Elevation', () => {
     const root = theme.components?.MuiAppBar?.styleOverrides?.root
     const style = (typeof root === 'function'

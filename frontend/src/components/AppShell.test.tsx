@@ -1,12 +1,14 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { MemoryRouter, useLocation, useNavigate } from 'react-router-dom'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import pkg from '../../package.json'
 import { boardsApi } from '../api/boards'
 import { ApiError } from '../api/client'
 import { projectsApi } from '../api/projects'
 import { AppShell } from './AppShell'
+import { ThemeProvider } from '@mui/material/styles'
+import { theme } from '../theme'
 
 const logoutMock = vi.fn().mockResolvedValue(undefined)
 const useAuthMock = vi.fn()
@@ -91,6 +93,17 @@ function renderShell(entry = '/') {
       <LocationProbe />
       <AppShell />
     </MemoryRouter>,
+  )
+}
+
+/** Wie {@link renderShell}, aber im echten Theme — nur so ist `text.primary` der eigene Wert. */
+function renderShellThemed(entry = '/') {
+  return render(
+    <ThemeProvider theme={theme}>
+      <MemoryRouter initialEntries={[entry]}>
+        <AppShell />
+      </MemoryRouter>
+    </ThemeProvider>,
   )
 }
 
@@ -634,5 +647,37 @@ describe('AppShell', () => {
 
       await waitFor(() => expect(switcherEntries()).toEqual(['DreiP1', 'ZweiP2']))
     })
+  })
+})
+
+describe('AppShell auf der weissen Kopfleiste', () => {
+  beforeEach(() => {
+    useAuthMock.mockReturnValue({ user: loggedInUser, logout: logoutMock })
+    // Ein Verlaufseintrag aktiviert den Board-Wechsel-Knopf. Ohne ihn ist er deaktiviert und
+    // traegt MUIs Disabled-Farbe — die Zusicherung liefe an der Umstellung vorbei.
+    window.localStorage.setItem(
+      `manban.boardHistory.v1.${loggedInUser.userId}`,
+      JSON.stringify([{ id: 1, name: 'B', projectName: 'P1' }]),
+    )
+  })
+
+  afterEach(() => window.localStorage.clear())
+
+  // Die Kopfleiste ist seit #653 weiss. Ohne diese Umstellung stuenden die Bedienelemente weiss
+  // auf weiss — geprueft wird deshalb die BERECHNETE Farbe, nicht die Abwesenheit von
+  // color="inherit": zwei der Elemente trugen nie ein color-Attribut.
+  it.each([
+    ['Board wechseln', 'Board wechseln'],
+    ['Abmelden', 'Abmelden'],
+    ['Profil-Knopf', 'Profil von Manne bearbeiten'],
+    ['Kartensuche', 'Karte suchen'],
+  ])('faerbt %s in der Kopfleiste mit text.primary', (_name, label) => {
+    renderShellThemed()
+    expect(screen.getByLabelText(label)).toHaveStyle({ color: theme.palette.text.primary })
+  })
+
+  it('faerbt auch die Versionsangabe mit text.primary', () => {
+    renderShellThemed()
+    expect(screen.getByText(`v${pkg.version}`)).toHaveStyle({ color: theme.palette.text.primary })
   })
 })

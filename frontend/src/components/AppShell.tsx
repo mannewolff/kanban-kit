@@ -433,11 +433,34 @@ export function AppShell() {
       <AppBar position="fixed" sx={{ zIndex: (t) => t.zIndex.drawer + 1, top: `${bannerOffset}px` }}>
         <Toolbar>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexGrow: 1 }}>
-            <Box component="img" src="/knight.svg" alt="" sx={{ width: 22, height: 22, filter: 'brightness(0) invert(1)' }} />
-            <Typography variant="h6" noWrap component="div" sx={{ fontWeight: 700 }}>
+            {/* Teal-Einfaerbung als Marken-Echo zur Leiste am Drawer (#653): `knight.svg` traegt
+                keinen eigenen Fill und waere auf der jetzt weissen Leiste schwarz. Als Maske
+                gerendert nimmt es die Palettenfarbe an. Rein dekorativ, daher aria-hidden. */}
+            <Box
+              component="span"
+              aria-hidden
+              sx={{
+                width: 22,
+                height: 22,
+                flexShrink: 0,
+                bgcolor: 'primary.main',
+                maskImage: 'url(/knight.svg)',
+                maskSize: 'contain',
+                maskRepeat: 'no-repeat',
+                maskPosition: 'center',
+                WebkitMaskImage: 'url(/knight.svg)',
+                WebkitMaskSize: 'contain',
+                WebkitMaskRepeat: 'no-repeat',
+                WebkitMaskPosition: 'center',
+              }}
+            />
+            <Typography variant="h6" noWrap component="div" sx={{ fontWeight: 700, color: 'text.primary' }}>
               kanban-kit
             </Typography>
-            <Typography variant="body1" noWrap sx={{ opacity: 0.85 }}>
+            {/* Kein `opacity` mehr: Auf der weissen Leiste haette die Abschwaechung den
+                Kontrast unter die AA-Schwelle gedrueckt. Die Zuruecknahme traegt jetzt die
+                sekundaere Textfarbe der Palette nicht -- die Angabe steht in text.primary. */}
+            <Typography variant="body1" noWrap sx={{ color: 'text.primary' }}>
               v{__APP_VERSION__}
             </Typography>
           </Box>
@@ -450,7 +473,7 @@ export function AppShell() {
               <Tooltip title="Board wechseln (Taste b)">
                 <span>
                   <IconButton
-                    color="inherit"
+                    sx={{ color: 'text.primary' }}
                     aria-label="Board wechseln"
                     disabled={history.length === 0}
                     onClick={() => setSwitcherOpen(true)}
@@ -464,7 +487,14 @@ export function AppShell() {
                 <ButtonBase
                   onClick={() => navigate('/profil')}
                   aria-label={`Profil von ${user.displayName} bearbeiten`}
-                  sx={{ display: 'flex', alignItems: 'center', gap: 1, borderRadius: 1, p: 0.5 }}
+                  sx={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 1,
+                    borderRadius: (t) => `${t.shape.borderRadius}px`,
+                    p: 0.5,
+                    color: 'text.primary',
+                  }}
                 >
                   <Avatar
                     sx={{ bgcolor: 'primary.dark', width: 32, height: 32, fontSize: '0.875rem' }}
@@ -476,7 +506,7 @@ export function AppShell() {
                   </Typography>
                 </ButtonBase>
               </Tooltip>
-              <Button color="inherit" startIcon={<LogoutIcon />} onClick={handleLogout} aria-label="Abmelden">
+              <Button sx={{ color: 'text.primary' }} startIcon={<LogoutIcon />} onClick={handleLogout} aria-label="Abmelden">
                 Abmelden
               </Button>
             </Box>

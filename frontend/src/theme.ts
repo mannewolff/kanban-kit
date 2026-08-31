@@ -65,6 +65,9 @@ export const theme = createTheme({
       styleOverrides: {
         root: ({ theme: t }) => ({
           backgroundColor: t.palette.background.paper,
+          // Seit #653 traegt die Leiste auch ihre Textfarbe: geerbtes Weiss aus primary.contrastText
+          // waere auf der weissen Flaeche unsichtbar.
+          color: t.palette.text.primary,
           borderBottom: `1px solid ${t.palette.divider}`,
         }),
       },
