@@ -16,25 +16,17 @@ import { Breadcrumbs } from '../components/Breadcrumbs'
 import { cardsApi, type Card } from '../api/cards'
 import { epicsApi, type Epic } from '../api/epics'
 import { labelsApi, type Label } from '../api/labels'
+import { membersApi, type Member } from '../api/members'
 import { CardDetailModal } from '../components/CardDetailModal'
 import { EpicBadge } from '../components/EpicBadge'
 import { labelChipSx } from '../components/labelChipSx'
 import { NewCardModal } from '../components/NewCardModal'
 import { hiddenEpicsStorageKey } from '../lib/boardHiddenEpics'
+import { epicToCard } from '../lib/epicToCard'
 import { aggregateMarks, countKinds, sortEpics } from '../lib/epicTiles'
 import { useBoardRole } from '../lib/useBoardRole'
 import { useProjectName } from '../lib/useProjectName'
 import { CARD_LIFT, CARD_SHADOW, CARD_SHADOW_HOVER, PANEL_RADIUS } from '../theme'
-
-function epicToCard(epic: Epic, boardId: number): Card {
-  return {
-    id: epic.id, boardId, columnId: 0, number: epic.number, title: epic.title,
-    description: epic.description, positionInColumn: 0, archived: false, ideaStored: false, movedToDoneAt: null,
-    dependencies: [], type: 'EPIC', parentId: null, shortcode: epic.shortcode, assignees: [], dueDate: null, labels: [],
-    // Vorhaben tragen keine Herkunft (Issue #607): der Anlege-Endpunkt lehnt sie fuer EPIC ab.
-    derivedFrom: null,
-  }
-}
 
 /**
  * Eine Art in der Zusammensetzung, mit Singular- und Pluralform. Die Anzahl steht als Text neben
@@ -56,6 +48,7 @@ export function EpicsPage() {
   const [epics, setEpics] = useState<Epic[]>([])
   const [cards, setCards] = useState<Card[]>([])
   const [labels, setLabels] = useState<Label[]>([])
+  const [members, setMembers] = useState<Member[]>([])
   const [selected, setSelected] = useState<Card | null>(null)
   const [creating, setCreating] = useState(false)
   // Auf dem Board ausgeblendete Vorhaben (Plan #620). Derselbe Zustand, den `BoardView` liest —
@@ -124,6 +117,17 @@ export function EpicsPage() {
       active = false
     }
   }, [id, validId])
+
+  // Projektmitglieder für die Zuständigen an der geöffneten Karte, sobald das Projekt bekannt ist —
+  // dasselbe Muster wie auf dem Board. Ein Fehlschlag lässt die Liste leer, statt die Seite
+  // scheitern zu lassen: Die Vorhaben-Übersicht selbst braucht die Mitglieder nicht.
+  const projectId = board?.projectId
+  useEffect(() => {
+    if (projectId == null) {
+      return
+    }
+    void membersApi.list(projectId).then(setMembers).catch(() => setMembers([]))
+  }, [projectId])
 
   /**
    * Öffnet die Karte zu einer Nummer aus dem Herkunftsbaum. Erst gegen `epics`, dann gegen `cards`:
@@ -348,6 +352,12 @@ export function EpicsPage() {
           card={selected}
           canEdit={canEdit}
           canModerateComments={canModerate}
+          // Ohne `projectId` baut der Dialog keinen Sprung-Handler: Die Zeilen des Herkunftsbaums
+          // und die `#N`-Verweise blieben ohne Ziel (Issue #687).
+          projectId={projectId}
+          members={members}
+          boardLabels={labels}
+          epics={epics}
           onClose={() => setSelected(null)}
           onChanged={reload}
         />

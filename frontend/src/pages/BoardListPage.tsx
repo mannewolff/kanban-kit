@@ -17,6 +17,8 @@ import { epicsApi, type Epic } from '../api/epics'
 import { labelsApi, type Label } from '../api/labels'
 import { CardDetailModal } from '../components/CardDetailModal'
 import { EpicBadge } from '../components/EpicBadge'
+import { epicOfCard } from '../lib/cardEpic'
+import { epicToCard } from '../lib/epicToCard'
 import { clampExcerptWidth, EXCERPT_DEFAULT_PCT, stripMarkdown } from '../lib/listExcerpt'
 import { useBoardEvents } from '../lib/useBoardEvents'
 import { useBoardRole } from '../lib/useBoardRole'
@@ -203,7 +205,6 @@ export function BoardListPage() {
 
   const columns = useMemo(() => [...(board?.columns ?? [])].sort((a, b) => a.position - b.position), [board])
   const columnById = useMemo(() => new Map(columns.map((c) => [c.id, c])), [columns])
-  const epicById = useMemo(() => new Map(epics.map((e) => [e.id, e])), [epics])
 
   const toggleFilter = (key: FilterKey) => {
     setFilters((prev) => {
@@ -295,8 +296,17 @@ export function BoardListPage() {
         return <Chip label={label} size="small" variant="outlined" sx={{ fontWeight: 600 }} />
       }
       case 'epic': {
-        const epic = card.parentId != null ? epicById.get(card.parentId) : undefined
-        return epic ? <EpicBadge epicId={epic.id} title={epic.title} shortcode={epic.shortcode} /> : null
+        const epic = epicOfCard(card, epics)
+        return epic ? (
+          <EpicBadge
+            epicId={epic.id}
+            title={epic.title}
+            shortcode={epic.shortcode}
+            // Der Sprung öffnet das Vorhaben an Ort und Stelle im vorhandenen Detail-Dialog
+            // (Plan #682, E4) — derselbe Zustand, über den die Liste auch Karten öffnet.
+            onOpen={() => setDetailCard(epicToCard(epic, id))}
+          />
+        ) : null
       }
       case 'title': {
         const overdue = isOverdue(card.dueDate, (col?.name ?? '').toLowerCase().includes('done'))

@@ -28,6 +28,7 @@ import { LabelManagerDialog } from '../components/LabelManagerDialog'
 import { TrashDialog } from '../components/TrashDialog'
 import { useSnackbar } from '../components/SnackbarProvider'
 import { useEditMode } from '../lib/EditModeContext'
+import { epicToCard } from '../lib/epicToCard'
 import { canManageProject, isPlatformAdmin } from '../lib/roles'
 import { useBoardEvents } from '../lib/useBoardEvents'
 import { useProjectName } from '../lib/useProjectName'
@@ -214,6 +215,9 @@ export function BoardPage() {
         boardLabels={labels}
         onCardClick={(card) => { setOpenEditing(false); setSelectedCard(card) }}
         onEditCard={(card) => { setOpenEditing(true); setSelectedCard(card) }}
+        // Der Sprung vom Kürzel öffnet das Vorhaben an Ort und Stelle im vorhandenen Detail-Dialog
+        // (Plan #682, E4) — eine Deep-Link-Route auf ein einzelnes Vorhaben gibt es nicht.
+        onEpicOpen={(epic) => { setOpenEditing(false); setSelectedCard(epicToCard(epic, id)) }}
         onEpicsChanged={reloadEpics}
         onCardsChanged={reloadCards}
         canTransfer={canTransfer}

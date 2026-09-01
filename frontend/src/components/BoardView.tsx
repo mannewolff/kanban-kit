@@ -32,6 +32,7 @@ import { epicsApi as defaultEpicsApi, type Epic, type EpicsApi } from '../api/ep
 import type { Member } from '../api/members'
 import { hiddenEpicsStorageKey } from '../lib/boardHiddenEpics'
 import { activeCardsInColumn, applyMove } from '../lib/boardOps'
+import { epicOfCard } from '../lib/cardEpic'
 import { cleanupCountdownLabel, cleanupDaysRemaining } from '../lib/cleanupCountdown'
 import { neighbourColumns } from '../lib/columnMeta'
 import { useEditMode } from '../lib/EditModeContext'
@@ -146,6 +147,11 @@ interface Props {
   boardLabels?: Label[]
   onCardClick?: (card: Card) => void
   onEditCard?: (card: Card) => void
+  /**
+   * Gesetzt: Das Kürzel auf der Karte wird ein Bedienelement, das zu seinem Vorhaben führt.
+   * Fehlt sie: reine Anzeige. Wohin der Sprung führt, entscheidet die Seite (Issue #688).
+   */
+  onEpicOpen?: (epic: Epic) => void
   onEpicsChanged?: () => void
   onCardsChanged?: () => void
   /** Ob der Nutzer Karten board-/projektübergreifend verschieben darf (OWNER/Plattform-Admin). */
@@ -183,6 +189,7 @@ export function BoardView({
   boardLabels = [],
   onCardClick,
   onEditCard,
+  onEpicOpen,
   onEpicsChanged,
   onCardsChanged,
   canTransfer = false,
@@ -232,7 +239,6 @@ export function BoardView({
 
   useEffect(() => setCards(initialCards), [initialCards])
 
-  const epicById = new Map(epics.map((e) => [e.id, e]))
   const sortColumns = (cols: BoardColumn[]) => [...cols].sort((a, b) => a.position - b.position)
   const [columns, setColumns] = useState<BoardColumn[]>(() => sortColumns(board.columns))
   useEffect(() => setColumns(sortColumns(board.columns)), [board.columns])
@@ -712,7 +718,7 @@ export function BoardView({
 
               <Stack spacing={1} sx={{ p: 1, flex: 1 }}>
                 {activeCardsInColumn(filteredCards, column.id).map((card) => {
-                  const epic = card.parentId != null ? epicById.get(card.parentId) : undefined
+                  const epic = epicOfCard(card, epics)
                   const doneAt = done ? card.movedToDoneAt : null
                   const overdue = isOverdue(card.dueDate, done)
                   const selected = selectedIds.has(card.id)
@@ -738,7 +744,10 @@ export function BoardView({
                         '&:active': { cursor: grabbable ? 'grabbing' : 'pointer' },
                       }}
                     >
-                      {epic && <EpicBadge epicId={epic.id} title={epic.title} shortcode={epic.shortcode} sx={{ mb: 0.5 }} />}
+                      {epic && (
+                        <EpicBadge epicId={epic.id} title={epic.title} shortcode={epic.shortcode} sx={{ mb: 0.5 }}
+                          onOpen={onEpicOpen ? () => onEpicOpen(epic) : undefined} />
+                      )}
                       <CardLabels labelIds={card.labels} boardLabels={boardLabels} cardTitle={card.title} />
                       <Stack direction="row" alignItems="flex-start" spacing={0.5}>
                         {selectionMode && (

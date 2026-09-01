@@ -6,6 +6,7 @@ import { boardsApi } from '../api/boards'
 import { cardsApi } from '../api/cards'
 import { epicsApi } from '../api/epics'
 import { labelsApi } from '../api/labels'
+import { membersApi } from '../api/members'
 import { projectsApi } from '../api/projects'
 import { hiddenEpicsStorageKey } from '../lib/boardHiddenEpics'
 import { EpicsPage } from './EpicsPage'
@@ -18,6 +19,7 @@ vi.mock('../api/cards', () => ({
   cardsApi: {
     list: vi.fn(),
     epicTree: vi.fn(),
+    byNumber: vi.fn(),
     getActivity: vi.fn().mockResolvedValue([]),
     update: vi.fn(),
     setAssignees: vi.fn(),
@@ -25,6 +27,7 @@ vi.mock('../api/cards', () => ({
     restore: vi.fn(),
   },
 }))
+vi.mock('../api/members', () => ({ membersApi: { list: vi.fn() } }))
 vi.mock('../api/epics', () => ({ epicsApi: { list: vi.fn(), assign: vi.fn(), create: vi.fn() } }))
 vi.mock('../api/projects', () => ({ projectsApi: { list: vi.fn() } }))
 vi.mock('../api/labels', () => ({ labelsApi: { list: vi.fn() } }))
@@ -36,7 +39,8 @@ vi.mock('../api/attachments', () => ({
 }))
 
 const mBoards = boardsApi as unknown as { get: ReturnType<typeof vi.fn> }
-const mCards = cardsApi as unknown as { list: ReturnType<typeof vi.fn> }
+const mCards = cardsApi as unknown as { list: ReturnType<typeof vi.fn>; byNumber: ReturnType<typeof vi.fn> }
+const mMembers = membersApi as unknown as { list: ReturnType<typeof vi.fn> }
 const mEpics = epicsApi as unknown as { list: ReturnType<typeof vi.fn>; create: ReturnType<typeof vi.fn> }
 const mProjects = projectsApi as unknown as { list: ReturnType<typeof vi.fn> }
 const mLabels = labelsApi as unknown as { list: ReturnType<typeof vi.fn> }
@@ -62,6 +66,7 @@ describe('EpicsPage', () => {
     mProjects.list.mockResolvedValue([{ id: 9, name: 'Projekt', role: 'OWNER', createdAt: '' }])
     mEpicTree.epicTree.mockResolvedValue([])
     mLabels.list.mockResolvedValue([])
+    mMembers.list.mockResolvedValue([])
   })
 
   it('zeigt den Breadcrumb-Pfad ab Projekte', async () => {
@@ -601,6 +606,96 @@ describe('EpicsPage', () => {
       await user.keyboard(' ')
 
       expect(await schalter()).toBeChecked()
+    })
+  })
+
+  /**
+   * Der Detail-Dialog bekommt von dieser Seite denselben Kontext wie von den übrigen Aufrufstellen
+   * (Issue #687). Ohne ihn verpuffte der Klick auf eine Baumzeile lautlos, und die Karte zeigte
+   * Zuständige und Labels als nackte IDs.
+   */
+  describe('Kontext des Detail-Dialogs', () => {
+    const vorhabenAuth = {
+      id: 9, number: 2, title: 'Auth', description: 'Text', shortcode: 'AUT', done: 0, total: 1,
+      memberNumbers: [3], rootNumbers: [3], requirementCardNumber: null,
+    }
+    const baumZeile = {
+      number: 3, title: 'Kind', type: 'CARD', derivedFrom: null, depth: 0, done: false,
+      blocked: false, dependencies: [], externalDependencies: [], externalOrigin: false,
+      broken: false, labels: [],
+    }
+    const verknuepfteKarte = (assignees: number[]) => ({
+      id: 30, boardId: 1, columnId: 10, number: 3, title: 'Kind aus dem Baum', description: null,
+      type: 'CARD', dependencies: [], assignees, labels: [], parentId: null, shortcode: null,
+      dueDate: null, archived: false, ideaStored: false, derivedFrom: null,
+    })
+
+    /** Öffnet das Vorhaben und löst Enter auf der ersten Baumzeile aus. */
+    const oeffneBaumzeile = async () => {
+      fireEvent.click(await screen.findByText('Auth'))
+      const zeile = await screen.findByRole('treeitem', { name: /Kind/ })
+      fireEvent.keyDown(zeile, { key: 'Enter' })
+    }
+
+    it('lädt die Karte einer Baumzeile in denselben Dialog', async () => {
+      mEpics.list.mockResolvedValue([vorhabenAuth])
+      mEpicTree.epicTree.mockResolvedValue([baumZeile])
+      mCards.byNumber.mockResolvedValue(verknuepfteKarte([]))
+      renderPage()
+
+      await oeffneBaumzeile()
+
+      // Über die `projectId` des Boards aufgelöst — ohne sie baut der Dialog den Handler nicht.
+      await waitFor(() => expect(mCards.byNumber).toHaveBeenCalledWith(9, 3))
+      expect(await screen.findByText('Kind aus dem Baum')).toBeInTheDocument()
+    })
+
+    it('zeigt an der Karte aus dem Baum die Namen der Zuständigen statt der IDs', async () => {
+      mEpics.list.mockResolvedValue([vorhabenAuth])
+      mEpicTree.epicTree.mockResolvedValue([baumZeile])
+      mCards.byNumber.mockResolvedValue(verknuepfteKarte([7]))
+      mMembers.list.mockResolvedValue([
+        { userId: 7, email: 'anna@example.org', displayName: 'Anna Arbeit', role: 'MEMBER' },
+      ])
+      renderPage()
+
+      await oeffneBaumzeile()
+
+      expect(await screen.findByText('Anna Arbeit')).toBeInTheDocument()
+      expect(screen.queryByText('#7')).toBeNull()
+    })
+
+    it('bietet im Edit-Modus die Board-Labels mit Namen und die geladenen Vorhaben an', async () => {
+      mEpics.list.mockResolvedValue([
+        { ...vorhabenAuth, requirementCardNumber: 3, memberNumbers: [], rootNumbers: [] },
+      ])
+      mCards.list.mockResolvedValue([
+        {
+          id: 30, boardId: 1, columnId: 10, number: 3, title: 'Anforderung', description: null,
+          positionInColumn: 0, archived: false, ideaStored: false, movedToDoneAt: null,
+          dependencies: [], type: 'CARD', parentId: null, shortcode: null, assignees: [],
+          dueDate: null, labels: [5],
+        },
+      ])
+      mLabels.list.mockResolvedValue([{ id: 5, name: 'Fehler', color: '#ff0000' }])
+      renderPage()
+      await screen.findByText('Auth')
+
+      fireEvent.click(screen.getByRole('button', { name: '#3 · Anforderung' }))
+      fireEvent.click(await screen.findByRole('button', { name: 'Bearbeiten' }))
+
+      // Ohne `boardLabels` bliebe nur die ID `#5`, ohne `epics` nur „(kein Vorhaben)".
+      expect(await screen.findByText('Fehler')).toBeInTheDocument()
+      expect(screen.getByRole('option', { name: 'AUT – Auth' })).toBeInTheDocument()
+    })
+
+    it('lässt einen fehlgeschlagenen Mitglieder-Abruf die Seite nicht scheitern', async () => {
+      mMembers.list.mockRejectedValue(new Error('kein Zugriff'))
+      mEpics.list.mockResolvedValue([vorhabenAuth])
+      renderPage()
+
+      expect(await screen.findByText('Auth')).toBeInTheDocument()
+      await waitFor(() => expect(mMembers.list).toHaveBeenCalledWith(9))
     })
   })
 })
