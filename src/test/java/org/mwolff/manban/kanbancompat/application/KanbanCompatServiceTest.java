@@ -184,10 +184,11 @@ class KanbanCompatServiceTest {
   }
 
   @Test
-  void items_saturatesFallbackKeyAtLastColumn_whenBoardHasMoreColumnsThanKeys() {
-    // Given: sechs Spalten ohne kanonische Namen -> für jede greift der Positions-Fallback.
-    // Ab der sechsten (Index 5) muss der Fallback-Index bei der letzten Kanban-Spalte (DONE)
-    // gedeckelt werden (Math.min(i, size-1)); ein „size+1" (Mutant) liefe aus dem Index.
+  void items_groupsCardsInNonCanonicalColumnsUnderBacklog_whenBoardHasMoreColumnsThanKeys() {
+    // Given: sechs Spalten ohne kanonische Namen. Der Aufbau haelt die Spur zur frueheren
+    // Positions-Deckelung fest: Damals bekam die sechste Spalte (Index 5) ueber
+    // Math.min(i, size-1) den Key „DONE" — eine bloss eigene Spalte meldete „fertig".
+    // Seither traegt eine Spalte ohne kanonischen Namen gar keinen Key mehr.
     List<ColumnView> sixColumns =
         List.of(
             new ColumnView(100L, "Alpha", 0, null),
@@ -202,8 +203,59 @@ class KanbanCompatServiceTest {
     // When
     Map<String, List<KanbanCompatService.Item>> grouped = service.items(bound());
 
-    // Then: die Karte in der sechsten Spalte landet unter dem gedeckelten Key „DONE"
-    assertThat(grouped.get("DONE")).extracting(KanbanCompatService.Item::number).containsExactly(1);
+    // Then: die Karte in der sechsten Spalte landet unter „BACKLOG", nicht unter „DONE"
+    assertThat(grouped.get(BACKLOG_KEY))
+        .extracting(KanbanCompatService.Item::number)
+        .containsExactly(1);
+    assertThat(grouped.get("DONE")).isEmpty();
+  }
+
+  @Test
+  void items_groupsCardInOwnColumnBetweenBacklogAndReady_underBacklog() {
+    // Given: eine eigene Spalte „Anstehend" zwischen Backlog und Ready. Positionsbasiert waere
+    // sie READY gewesen — wer dort eine Karte parkt, haette sie fuer die Automatisierung
+    // freigegeben.
+    when(boardService.listColumns(BOARD))
+        .thenReturn(
+            List.of(
+                new ColumnView(100L, "Backlog", 0, null),
+                new ColumnView(101L, "Anstehend", 1, null),
+                new ColumnView(102L, "Ready", 2, null)));
+    when(cardService.listBoardItems(1L, BOARD)).thenReturn(List.of(item(1L, 101L, 1)));
+
+    // When
+    Map<String, List<KanbanCompatService.Item>> grouped = service.items(bound());
+
+    // Then
+    assertThat(grouped.get(BACKLOG_KEY))
+        .extracting(KanbanCompatService.Item::number)
+        .containsExactly(1);
+    assertThat(grouped.get("READY")).isEmpty();
+  }
+
+  @Test
+  void items_groupsCardInOwnColumnAfterDone_underBacklog() {
+    // Given: eine eigene Spalte „Zurueckgestellt" hinter Done. Positionsbasiert meldete sie
+    // (gedeckelt) DONE — der Nacht-Runner haette die Karte als erfuellte Voraussetzung gelesen.
+    when(boardService.listColumns(BOARD))
+        .thenReturn(
+            List.of(
+                new ColumnView(100L, "Backlog", 0, null),
+                new ColumnView(101L, "Ready", 1, null),
+                new ColumnView(102L, "In Progress", 2, null),
+                new ColumnView(103L, "In Review", 3, null),
+                new ColumnView(104L, "Done", 4, null),
+                new ColumnView(105L, "Zurückgestellt", 5, null)));
+    when(cardService.listBoardItems(1L, BOARD)).thenReturn(List.of(item(1L, 105L, 1)));
+
+    // When
+    Map<String, List<KanbanCompatService.Item>> grouped = service.items(bound());
+
+    // Then
+    assertThat(grouped.get(BACKLOG_KEY))
+        .extracting(KanbanCompatService.Item::number)
+        .containsExactly(1);
+    assertThat(grouped.get("DONE")).isEmpty();
   }
 
   @Test
@@ -541,6 +593,43 @@ class KanbanCompatServiceTest {
   }
 
   @Test
+  void move_throwsInvalidKanbanColumn_whenBoardHasOnlyNonCanonicalColumns() {
+    // Given: mehrere Spalten, keine mit kanonischem Namen. Frueher bekam ein solches Board ueber
+    // den Positions-Fallback fuer jeden Key eine Spalte zugewiesen; der Schreibauftrag loeste
+    // still in eine falsche Spalte auf. Genau das ist jetzt eine Ausnahme (Gegenprobe zum
+    // einspaltigen Bestandstest oben, der schon vorher warf).
+    when(boardService.listColumns(BOARD))
+        .thenReturn(
+            List.of(
+                new ColumnView(100L, "Alpha", 0, null),
+                new ColumnView(101L, "Beta", 1, null),
+                new ColumnView(102L, "Gamma", 2, null)));
+
+    // When / Then
+    KanbanPrincipal principal = bound();
+    assertThatThrownBy(() -> service.move(principal, 1L, "READY", 0))
+        .isInstanceOf(InvalidKanbanColumnException.class);
+  }
+
+  @Test
+  void move_resolvesToLeftmostColumn_whenTwoColumnsCarryTheSameName() {
+    // Given: zwei Spalten heissen „Ready". Die Map wird in Board-Reihenfolge gefuellt, der
+    // Lookup nimmt den ersten Treffer — die weiter links stehende Spalte gewinnt.
+    when(boardService.listColumns(BOARD))
+        .thenReturn(
+            List.of(
+                new ColumnView(100L, "Backlog", 0, null),
+                new ColumnView(101L, "Ready", 1, null),
+                new ColumnView(102L, "Ready", 2, null)));
+
+    // When
+    service.move(bound(), 1L, "READY", 0);
+
+    // Then
+    verify(cardService).move(1L, 1L, 101L, 0);
+  }
+
+  @Test
   void move_delegatesToCardService() {
     // Given
     when(boardService.listColumns(BOARD)).thenReturn(standardColumns());
@@ -596,6 +685,30 @@ class KanbanCompatServiceTest {
     assertThat(updated.column()).isEqualTo(BACKLOG_KEY);
     assertThat(updated.body()).isNull();
     assertThat(updated.labels()).isEmpty();
+  }
+
+  @Test
+  void update_reportsBacklog_whenCardSitsInNonCanonicalColumn() {
+    // Given: die Karte liegt in einer existierenden, aber eigenen Spalte „Anstehend". Deckt den
+    // zweiten Leser der Map ab: item(...) baut die Schreibantwort von updateContent, und sein
+    // getOrDefault(..., BACKLOG) ist erst seit dieser Aenderung semantisch erreichbar — vorher
+    // trug jede Spalte einen Key.
+    when(boardService.listColumns(BOARD))
+        .thenReturn(
+            List.of(
+                new ColumnView(100L, "Backlog", 0, null),
+                new ColumnView(101L, "Anstehend", 1, null),
+                new ColumnView(102L, "Ready", 2, null)));
+    when(cardService.updateContent(1L, 7L, "Neuer Titel", "Neuer Rumpf"))
+        .thenReturn(
+            new BoardItemView(7L, 42, "Neuer Titel", "Neuer Rumpf", 101L, 0, false, null, null));
+    when(labelService.namesByCard(BOARD, List.of(7L))).thenReturn(Map.of());
+
+    // When
+    KanbanCompatService.Item updated = service.update(bound(), 7L, "Neuer Titel", "Neuer Rumpf");
+
+    // Then: die Antwort meldet BACKLOG — nicht READY, wie es die Position hergegeben haette.
+    assertThat(updated.column()).isEqualTo(BACKLOG_KEY);
   }
 
   @Test

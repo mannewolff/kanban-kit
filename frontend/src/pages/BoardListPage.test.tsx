@@ -115,6 +115,55 @@ function renderEpicPage() {
   )
 }
 
+/**
+ * Der Hinweis, der zum Umordnen von Karten per Drag anleitet. Er spricht bewusst nicht vom
+ * „Sortieren" — das heißt seit Issue #700 nur noch das Sortieren nach Spalteninhalt.
+ */
+const UMORDNEN_HINWEIS =
+  'Kartenreihenfolge ändern: dazu genau einen Status-Filter wählen und den Archiv-Filter abwählen.'
+
+/** Board mit genau einer Spalte: der Zustand, in dem Umordnen per Drag möglich ist. */
+function einspaltigesBoard(boardId: number, projectId = 9) {
+  return {
+    id: boardId, projectId, name: 'B', createdAt: '',
+    columns: [{ id: 10, name: 'Backlog', position: 0, wipLimit: null }],
+  }
+}
+
+// Board-Reihenfolge (positionInColumn): Beta, Zebra, Anton. Weder nach Titel noch nach Nr fällt sie
+// mit einer der beiden Sortierrichtungen zusammen — nur so belegt ein Test, welcher Zustand gilt.
+const beta: Card = { ...base, id: 100, columnId: 10, number: 3, title: 'Beta', description: '', archived: false, positionInColumn: 0 }
+const zebra: Card = { ...base, id: 101, columnId: 10, number: 1, title: 'Zebra', description: '', archived: false, positionInColumn: 1 }
+const anton: Card = { ...base, id: 102, columnId: 10, number: 2, title: 'Anton', description: '', archived: false, positionInColumn: 2 }
+
+function renderSortPage(cards: Card[] = [beta, zebra, anton], projectId = 9) {
+  mBoards.get.mockImplementation((bid: number) => Promise.resolve(einspaltigesBoard(bid, projectId)))
+  mCards.list.mockResolvedValue(cards)
+  mEpics.list.mockResolvedValue([])
+  mCards.move.mockResolvedValue({})
+  return render(
+    <MemoryRouter initialEntries={['/boards/1/list']}>
+      <BoardWechsler />
+      <Routes>
+        <Route path="/boards/:boardId/list" element={<BoardListPage />} />
+      </Routes>
+    </MemoryRouter>,
+  )
+}
+
+/** Wechselt den Routen-Parameter, ohne die Seite neu zu montieren. */
+function BoardWechsler() {
+  const navigate = useNavigate()
+  return <button onClick={() => navigate('/boards/2/list')}>Board wechseln</button>
+}
+
+/** Die Titel der Zeilen in ihrer angezeigten Reihenfolge. */
+function zeilenTitel(): string[] {
+  return screen
+    .getAllByLabelText(/^Detail öffnen: /)
+    .map((el) => el.getAttribute('aria-label')!.replace('Detail öffnen: ', ''))
+}
+
 function fakeStorage(): Storage {
   const map = new Map<string, string>()
   return {
@@ -554,13 +603,13 @@ describe('BoardListPage', () => {
     await waitFor(() => expect(mCards.move).toHaveBeenCalledWith(100, 10, 1))
   })
 
-  it('zeigt in der Mehrspalt-Ansicht keine Ziehgriffe, aber einen Sortier-Hinweis', async () => {
-    // Default-Board: zwei Spalten (Backlog + Done), beide gefiltert-sichtbar -> nicht sortierbar.
+  it('zeigt in der Mehrspalt-Ansicht keine Ziehgriffe, aber einen Umordnen-Hinweis', async () => {
+    // Default-Board: zwei Spalten (Backlog + Done), beide gefiltert-sichtbar -> nicht umsortierbar.
     renderPage()
     await screen.findByText('Aufgabe')
 
     expect(screen.queryByLabelText('Reihenfolge ändern')).not.toBeInTheDocument()
-    expect(screen.getByText('Zum Sortieren eine einzelne Spalte auswählen.')).toBeInTheDocument()
+    expect(screen.getByText(UMORDNEN_HINWEIS)).toBeInTheDocument()
     expect(screen.getByLabelText('Detail öffnen: Aufgabe')).not.toHaveAttribute('draggable', 'true')
   })
 
@@ -579,7 +628,7 @@ describe('BoardListPage', () => {
     expect(mCards.move).not.toHaveBeenCalled()
   })
 
-  it('aktiviert das Sortieren, sobald nur noch eine Spalte gefiltert ist', async () => {
+  it('aktiviert das Umsortieren, sobald nur noch eine Spalte gefiltert ist', async () => {
     const first: Card = { ...base, id: 100, columnId: 10, number: 1, title: 'Erste', description: '', archived: false }
     const second: Card = { ...base, id: 103, columnId: 10, number: 4, title: 'Zweite', description: '', archived: false, positionInColumn: 1 }
     mCards.move.mockResolvedValue({})
@@ -587,13 +636,13 @@ describe('BoardListPage', () => {
     await screen.findByText('Erste')
     // Mehrspalt: kein Griff, Hinweis da.
     expect(screen.queryByLabelText('Reihenfolge ändern')).not.toBeInTheDocument()
-    expect(screen.getByText('Zum Sortieren eine einzelne Spalte auswählen.')).toBeInTheDocument()
+    expect(screen.getByText(UMORDNEN_HINWEIS)).toBeInTheDocument()
 
-    // „Done" abwählen -> nur noch Backlog aktiv -> sortierbar: Ziehgriffe erscheinen, Hinweis weg.
+    // „Done" abwählen -> nur noch Backlog aktiv -> umsortierbar: Ziehgriffe erscheinen, Hinweis weg.
     fireEvent.click(screen.getByLabelText('Filter Done'))
 
     await waitFor(() => expect(screen.getAllByLabelText('Reihenfolge ändern').length).toBeGreaterThan(0))
-    expect(screen.queryByText('Zum Sortieren eine einzelne Spalte auswählen.')).not.toBeInTheDocument()
+    expect(screen.queryByText(UMORDNEN_HINWEIS)).not.toBeInTheDocument()
   })
 
   it('sortiert nicht, wenn eine Karte auf sich selbst fällt (Einzelspalt)', async () => {
@@ -1018,5 +1067,144 @@ describe('BoardListPage', () => {
 
     fireEvent.keyDown(screen.getByLabelText('Detail öffnen: Aufgabe'), { key: ' ' })
     expect(await screen.findByRole('button', { name: 'Schließen' })).toBeInTheDocument()
+  })
+
+  describe('Sortierung nach Spalteninhalt', () => {
+    it('sortiert per Klick auf den Spaltenkopf auf, dann ab, dann zurück in die Board-Reihenfolge', async () => {
+      renderSortPage()
+      await screen.findByText('Beta')
+      expect(zeilenTitel()).toEqual(['Beta', 'Zebra', 'Anton'])
+
+      fireEvent.click(screen.getByLabelText('Spalte Titel'))
+      expect(zeilenTitel()).toEqual(['Anton', 'Beta', 'Zebra'])
+
+      fireEvent.click(screen.getByLabelText('Spalte Titel, aufsteigend sortiert'))
+      expect(zeilenTitel()).toEqual(['Zebra', 'Beta', 'Anton'])
+
+      fireEvent.click(screen.getByLabelText('Spalte Titel, absteigend sortiert'))
+      expect(zeilenTitel()).toEqual(['Beta', 'Zebra', 'Anton'])
+      expect(screen.getByLabelText('Spalte Titel')).toBeInTheDocument()
+    })
+
+    it('nennt im Hinweis die tatsächlich sortierte Spalte, nicht einen festen Text', async () => {
+      renderSortPage()
+      await screen.findByText('Beta')
+
+      fireEvent.click(screen.getByLabelText('Spalte Nr'))
+
+      expect(zeilenTitel()).toEqual(['Zebra', 'Anton', 'Beta'])
+      expect(screen.getByText(/^Sortiert nach Nr\./)).toBeInTheDocument()
+      expect(screen.queryByText(/Sortiert nach Titel/)).not.toBeInTheDocument()
+    })
+
+    it('nimmt bei aktiver Sortierung die Ziehgriffe weg und verschiebt keine Karte per Drop', async () => {
+      renderSortPage()
+      await screen.findByText('Beta')
+      // Einspaltiges Board: vor der Sortierung ist das Umordnen per Drag möglich.
+      expect(screen.getAllByLabelText('Reihenfolge ändern').length).toBe(3)
+
+      fireEvent.click(screen.getByLabelText('Spalte Titel'))
+
+      expect(screen.queryByLabelText('Reihenfolge ändern')).not.toBeInTheDocument()
+      expect(screen.getByLabelText('Detail öffnen: Anton')).not.toHaveAttribute('draggable', 'true')
+      const dataTransfer = { setData: vi.fn() }
+      fireEvent.dragStart(screen.getByLabelText('Detail öffnen: Anton'), { dataTransfer })
+      fireEvent.dragOver(screen.getByLabelText('Detail öffnen: Zebra'), { dataTransfer })
+      fireEvent.drop(screen.getByLabelText('Detail öffnen: Zebra'), { dataTransfer })
+
+      expect(mCards.move).not.toHaveBeenCalled()
+    })
+
+    it('weist bei aktiver Sortierung auf das Aufheben hin, um wieder umordnen zu können', async () => {
+      renderSortPage()
+      await screen.findByText('Beta')
+
+      fireEvent.click(screen.getByLabelText('Spalte Titel'))
+
+      expect(
+        screen.getByText('Sortiert nach Titel. Zum Ändern der Kartenreihenfolge die Sortierung aufheben.'),
+      ).toBeInTheDocument()
+      expect(screen.queryByText(UMORDNEN_HINWEIS)).not.toBeInTheDocument()
+    })
+
+    it('sortiert per Enter und per Leertaste auf dem Spaltenkopf, andere Tasten nicht', async () => {
+      renderSortPage()
+      await screen.findByText('Beta')
+
+      fireEvent.keyDown(screen.getByLabelText('Spalte Titel'), { key: 'Enter' })
+      expect(zeilenTitel()).toEqual(['Anton', 'Beta', 'Zebra'])
+
+      fireEvent.keyDown(screen.getByLabelText('Spalte Titel, aufsteigend sortiert'), { key: ' ' })
+      expect(zeilenTitel()).toEqual(['Zebra', 'Beta', 'Anton'])
+
+      // Eine beliebige andere Taste lässt den Zustand, wo er ist.
+      fireEvent.keyDown(screen.getByLabelText('Spalte Titel, absteigend sortiert'), { key: 'a' })
+      expect(zeilenTitel()).toEqual(['Zebra', 'Beta', 'Anton'])
+    })
+
+    it('löst mit einem Drag der Kopfzelle keine Sortierung aus', async () => {
+      renderSortPage()
+      await screen.findByText('Beta')
+
+      // Spalten-Umordnen per Drag: der abschließende Click darf nicht als Sortierklick zählen.
+      fireEvent.dragStart(screen.getByLabelText('Spalte Titel'))
+      fireEvent.dragOver(screen.getByLabelText('Spalte Nr'))
+      fireEvent.drop(screen.getByLabelText('Spalte Nr'))
+      fireEvent.dragEnd(screen.getByLabelText('Spalte Nr'))
+      fireEvent.click(screen.getByLabelText('Spalte Nr'))
+
+      expect(zeilenTitel()).toEqual(['Beta', 'Zebra', 'Anton'])
+      expect(screen.queryByText(/^Sortiert nach/)).not.toBeInTheDocument()
+    })
+
+    it('löst mit einem Klick auf den Resize-Griff keine Sortierung aus', async () => {
+      renderSortPage()
+      await screen.findByText('Beta')
+
+      fireEvent.click(screen.getByLabelText('Beschreibung-Spalte breiter ziehen'))
+
+      expect(screen.getByLabelText('Spalte Beschreibung')).toBeInTheDocument()
+      expect(screen.queryByText(/^Sortiert nach/)).not.toBeInTheDocument()
+    })
+
+    it('verweist bei genau einem Status-Filter plus Archiv trotzdem auf das Umordnen', async () => {
+      // `sortable` ist auch dann false, wenn genau eine Spalte gefiltert ist und das Archiv dazukommt.
+      renderPage()
+      await screen.findByText('Aufgabe')
+
+      fireEvent.click(screen.getByLabelText('Filter Done'))
+      fireEvent.click(screen.getByLabelText('Filter Archiv'))
+
+      expect(await screen.findByText('AlteKarte')).toBeInTheDocument()
+      expect(screen.getByText(UMORDNEN_HINWEIS)).toBeInTheDocument()
+      expect(screen.queryByLabelText('Reihenfolge ändern')).not.toBeInTheDocument()
+    })
+
+    it('setzt die Sortierung beim Board-Wechsel ohne Remount zurück', async () => {
+      renderSortPage()
+      await screen.findByText('Beta')
+      fireEvent.click(screen.getByLabelText('Spalte Titel'))
+      expect(zeilenTitel()).toEqual(['Anton', 'Beta', 'Zebra'])
+
+      fireEvent.click(screen.getByText('Board wechseln'))
+
+      await waitFor(() => expect(zeilenTitel()).toEqual(['Beta', 'Zebra', 'Anton']))
+      expect(screen.getByLabelText('Spalte Titel')).toBeInTheDocument()
+      expect(screen.queryByText(/^Sortiert nach/)).not.toBeInTheDocument()
+    })
+
+    it('lässt einen Nur-Leser sortieren, ohne ihm ein Umordnen anzubieten', async () => {
+      mProjects.list.mockResolvedValue([{ id: 42, name: 'Fremd', role: 'VIEWER', createdAt: '' }])
+      renderSortPage([beta, zebra, anton], 42)
+      await screen.findByText('Beta')
+      await waitFor(() => expect(mProjects.list).toHaveBeenCalled())
+      expect(screen.queryByLabelText('Reihenfolge ändern')).not.toBeInTheDocument()
+      expect(screen.queryByText(UMORDNEN_HINWEIS)).not.toBeInTheDocument()
+
+      fireEvent.click(screen.getByLabelText('Spalte Titel'))
+
+      expect(zeilenTitel()).toEqual(['Anton', 'Beta', 'Zebra'])
+      expect(screen.getByText('Sortiert nach Titel.')).toBeInTheDocument()
+    })
   })
 })

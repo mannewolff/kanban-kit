@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { MemoryRouter, Route, Routes, useNavigate } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { boardsApi } from '../api/boards'
 import { cardsApi } from '../api/cards'
@@ -483,15 +483,18 @@ describe('EpicsPage', () => {
     ])
   })
 
-  // --- Ausblenden an der Kachel (Issue #669) ---------------------------------
+  // --- Ausblenden über das ⋮-Menü (Issue #705, zuvor #669) -------------------
 
-  describe('Schalter „Auf dem Board ausblenden"', () => {
-    const vorhaben = [
-      {
-        id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 0, total: 1,
-        memberNumbers: [1], rootNumbers: [1], requirementCardNumber: null,
-      },
-    ]
+  describe('⋮-Menü „Ausblenden"', () => {
+    const auth = {
+      id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 0, total: 1,
+      memberNumbers: [1], rootNumbers: [1], requirementCardNumber: null,
+    }
+    const zahlung = {
+      id: 10, number: 3, title: 'Zahlung', description: null, shortcode: 'ZAH', done: 0, total: 1,
+      memberNumbers: [2], rootNumbers: [2], requirementCardNumber: null,
+    }
+    const vorhaben = [auth]
 
     /**
      * localStorage-Stub über eine echte Map — vorbelegbar und nach dem Test auslesbar. Nötig statt
@@ -511,53 +514,202 @@ describe('EpicsPage', () => {
 
     afterEach(() => vi.unstubAllGlobals())
 
-    /** Der Schalter genau dieser Kachel — der Label-Text steht an jeder Kachel einmal. */
-    const schalter = async (epicId = 9) =>
-      within(await screen.findByTestId(`vorhaben-kachel-${epicId}`)).getByLabelText(
-        'Auf dem Board ausblenden',
+    /** Wechselt den Routen-Parameter, ohne die Seite neu zu montieren. */
+    function BoardWechsler() {
+      const navigate = useNavigate()
+      return <button onClick={() => navigate('/boards/2/vorhaben')}>Board wechseln</button>
+    }
+
+    /** Rendert die Seite auf einem beliebigen Board, wahlweise mit Wechsel-Knopf davor. */
+    const renderAufBoard = (pfad: string, mitWechsler = false) =>
+      render(
+        <MemoryRouter initialEntries={[pfad]}>
+          {mitWechsler && <BoardWechsler />}
+          <Routes>
+            <Route path="/boards/:boardId/vorhaben" element={<EpicsPage />} />
+          </Routes>
+        </MemoryRouter>,
       )
 
-    it('öffnet beim Umlegen nicht das Vorhaben-Detail', async () => {
+    /** Öffnet das ⋮-Menü genau dieser Kachel. */
+    const oeffneMenue = async (epic = auth) => {
+      const kachel = await screen.findByTestId(`vorhaben-kachel-${epic.id}`)
+      fireEvent.click(within(kachel).getByLabelText(`Menü ${epic.title}`))
+    }
+
+    /** Die IDs der Kacheln im Raster, in angezeigter Reihenfolge. */
+    const kachelIds = () =>
+      screen.queryAllByTestId(/^vorhaben-kachel-/).map((k) => k.dataset.testid)
+
+    const umschalter = () => screen.getByLabelText(/^Ausgeblendete zeigen/)
+
+    it('nimmt die Kachel über „Ausblenden" aus dem Raster', async () => {
+      stubStore([])
+      mEpics.list.mockResolvedValue([auth, zahlung])
+      renderAufBoard('/boards/1/vorhaben')
+
+      await oeffneMenue()
+      fireEvent.click(screen.getByRole('menuitem', { name: 'Ausblenden' }))
+
+      await waitFor(() => expect(kachelIds()).toEqual(['vorhaben-kachel-10']))
+    })
+
+    it('öffnet mit dem Klick auf das Menü nicht das Vorhaben-Detail', async () => {
       stubStore([])
       mEpics.list.mockResolvedValue(vorhaben)
-      renderPage()
+      renderAufBoard('/boards/1/vorhaben')
 
-      fireEvent.click(await schalter())
+      await oeffneMenue()
 
       // Ohne stopPropagation träfe derselbe Klick den Kachel-Handler eine Ebene darüber.
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-      expect(await schalter()).toBeChecked()
+      expect(screen.getByRole('menuitem', { name: 'Ausblenden' })).toBeInTheDocument()
     })
 
-    it('schreibt beim Umlegen denselben Schlüssel und dasselbe Format, die das Board liest', async () => {
+    it('lässt ein per Escape geschlossenes Menü die Kachel stehen', async () => {
+      const store = stubStore([])
+      mEpics.list.mockResolvedValue([auth, zahlung])
+      renderAufBoard('/boards/1/vorhaben')
+
+      await oeffneMenue()
+      fireEvent.keyDown(screen.getByRole('menuitem', { name: 'Ausblenden' }), { key: 'Escape' })
+
+      // Das Menü zu öffnen ist noch keine Entscheidung — es wieder zu schließen darf weder das
+      // Raster ändern noch etwas festhalten.
+      await waitFor(() => expect(screen.queryByRole('menuitem')).toBeNull())
+      expect(kachelIds()).toEqual(['vorhaben-kachel-9', 'vorhaben-kachel-10'])
+      expect(store.has(hiddenEpicsStorageKey(1))).toBe(false)
+    })
+
+    it('holt Ausgeblendete über den Umschalter zurück, gekennzeichnet, und blendet sie wieder ein', async () => {
+      const store = stubStore([[hiddenEpicsStorageKey(1), JSON.stringify([9])]])
+      mEpics.list.mockResolvedValue([auth, zahlung])
+      renderAufBoard('/boards/1/vorhaben')
+
+      await screen.findByTestId('vorhaben-kachel-10')
+      expect(kachelIds()).toEqual(['vorhaben-kachel-10'])
+
+      fireEvent.click(umschalter())
+
+      const kachel = await screen.findByTestId('vorhaben-kachel-9')
+      // Ein sichtbarer Text, keine bloße Dimmung: Nur so ist der Zustand für Screenreader
+      // wahrnehmbar und im Test ohne geratenen Stilwert greifbar.
+      expect(within(kachel).getByText('Ausgeblendet')).toBeInTheDocument()
+
+      await oeffneMenue()
+      fireEvent.click(screen.getByRole('menuitem', { name: 'Einblenden' }))
+
+      await waitFor(() => expect(JSON.parse(store.get(hiddenEpicsStorageKey(1)) as string)).toEqual([]))
+      expect(within(screen.getByTestId('vorhaben-kachel-9')).queryByText('Ausgeblendet')).toBeNull()
+      // Mit dem letzten eingeblendeten Vorhaben verschwindet der Umschalter — und damit der
+      // Zeige-Modus, der nun nichts mehr zu zeigen hätte.
+      expect(screen.queryByLabelText(/^Ausgeblendete zeigen/)).toBeNull()
+    })
+
+    it('zählt am Umschalter keine verwaiste ID mit, zu der kein Vorhaben existiert', async () => {
+      // Eine ID im Schlüssel überlebt das Löschen ihres Vorhabens (Issue #704). Zählte sie mit,
+      // stünde am Umschalter eine Zahl, hinter der im Zeige-Modus weniger Kacheln erscheinen.
+      stubStore([[hiddenEpicsStorageKey(1), JSON.stringify([9, 4711])]])
+      mEpics.list.mockResolvedValue([auth, zahlung])
+      renderAufBoard('/boards/1/vorhaben')
+
+      expect(await screen.findByLabelText('Ausgeblendete zeigen (1)')).toBeInTheDocument()
+    })
+
+    it('zeigt den Umschalter nicht, solange nichts ausgeblendet ist', async () => {
+      stubStore([])
+      mEpics.list.mockResolvedValue([auth, zahlung])
+      renderAufBoard('/boards/1/vorhaben')
+
+      await screen.findByTestId('vorhaben-kachel-9')
+      expect(screen.queryByLabelText(/^Ausgeblendete zeigen/)).toBeNull()
+    })
+
+    it('filtert ohne gespeicherten Schlüssel keine einzige Kachel', async () => {
+      // Die Seiten-Hälfte des Belegs, dass `showAllHidden` am Board (es löscht den Schlüssel)
+      // auch die Ausblendung im Kachelraster aufhebt.
+      stubStore([])
+      mEpics.list.mockResolvedValue([auth, zahlung])
+      renderAufBoard('/boards/1/vorhaben')
+
+      await screen.findByTestId('vorhaben-kachel-9')
+      expect(kachelIds()).toEqual(['vorhaben-kachel-9', 'vorhaben-kachel-10'])
+    })
+
+    it('schreibt beim Ausblenden denselben Schlüssel und dasselbe Format, die das Board liest', async () => {
       const store = stubStore([])
       mEpics.list.mockResolvedValue(vorhaben)
-      renderPage()
+      renderAufBoard('/boards/1/vorhaben')
 
-      fireEvent.click(await schalter())
+      await oeffneMenue()
+      fireEvent.click(screen.getByRole('menuitem', { name: 'Ausblenden' }))
 
       // Gegen die geteilte Funktion geprüft, nicht gegen ein Literal: ein zweiter Schlüsselname
       // wäre ein zweiter Zustand und fiele hier sonst nicht auf.
-      expect(JSON.parse(store.get(hiddenEpicsStorageKey(1)) as string)).toEqual([9])
+      await waitFor(() =>
+        expect(JSON.parse(store.get(hiddenEpicsStorageKey(1)) as string)).toEqual([9]),
+      )
     })
 
-    it('nimmt das Vorhaben beim Zurücklegen wieder aus dem gespeicherten Stand', async () => {
-      const store = stubStore([[hiddenEpicsStorageKey(1), JSON.stringify([9])]])
-      mEpics.list.mockResolvedValue(vorhaben)
-      renderPage()
+    it('behält den Stand über einen Reload und bindet ihn an das Board', async () => {
+      const store = stubStore([])
+      mEpics.list.mockResolvedValue([auth, zahlung])
+      const { unmount: verlasseErsteSitzung } = renderAufBoard('/boards/1/vorhaben')
 
-      fireEvent.click(await schalter())
+      await oeffneMenue()
+      fireEvent.click(screen.getByRole('menuitem', { name: 'Ausblenden' }))
+      await waitFor(() => expect(store.has(hiddenEpicsStorageKey(1))).toBe(true))
+      verlasseErsteSitzung()
 
-      expect(await schalter()).not.toBeChecked()
-      expect(JSON.parse(store.get(hiddenEpicsStorageKey(1)) as string)).toEqual([])
+      // Frischer Mount auf demselben Board: der Stand kommt aus localStorage zurück.
+      const { unmount: verlasseZweiteSitzung } = renderAufBoard('/boards/1/vorhaben')
+      await screen.findByTestId('vorhaben-kachel-10')
+      expect(kachelIds()).toEqual(['vorhaben-kachel-10'])
+      verlasseZweiteSitzung()
+
+      // Ein anderes Board hat einen eigenen Schlüssel und ist von der Ausblendung unberührt.
+      renderAufBoard('/boards/2/vorhaben')
+      await screen.findByTestId('vorhaben-kachel-9')
+      expect(kachelIds()).toEqual(['vorhaben-kachel-9', 'vorhaben-kachel-10'])
     })
 
-    it('zeigt beim Mount den gespeicherten Stand an', async () => {
-      stubStore([[hiddenEpicsStorageKey(1), JSON.stringify([9])]])
-      mEpics.list.mockResolvedValue(vorhaben)
-      renderPage()
+    it('liest den Stand beim Board-Wechsel ohne Remount neu und setzt den Umschalter zurück', async () => {
+      // Die Route hält die Komponente bei einem reinen Parameterwechsel gemountet (E11). Ohne
+      // Nachlesen filterte Board 2 mit dem Zustand von Board 1.
+      stubStore([
+        [hiddenEpicsStorageKey(1), JSON.stringify([9])],
+        [hiddenEpicsStorageKey(2), JSON.stringify([10])],
+      ])
+      mBoards.get.mockImplementation((bid: number) =>
+        Promise.resolve({ id: bid, projectId: 9, name: `B${bid}`, createdAt: '', columns: [] }),
+      )
+      mEpics.list.mockResolvedValue([auth, zahlung])
+      renderAufBoard('/boards/1/vorhaben', true)
 
-      expect(await schalter()).toBeChecked()
+      await screen.findByTestId('vorhaben-kachel-10')
+      fireEvent.click(umschalter())
+      expect(umschalter()).toBeChecked()
+
+      fireEvent.click(screen.getByText('Board wechseln'))
+
+      await waitFor(() => expect(kachelIds()).toEqual(['vorhaben-kachel-9']))
+      expect(umschalter()).not.toBeChecked()
+    })
+
+    it('bietet den Menüeintrag auch einem Nur-Leser an', async () => {
+      // Ausblenden verändert nichts am Server (E8) — es einem VIEWER zu verwehren, hieße ihm zu
+      // verbieten, seine eigene Ansicht aufzuräumen.
+      stubStore([])
+      mBoards.get.mockResolvedValue({ id: 1, projectId: 42, name: 'B', createdAt: '', columns: [] })
+      mProjects.list.mockResolvedValue([{ id: 42, name: 'Fremd', role: 'VIEWER', createdAt: '' }])
+      mEpics.list.mockResolvedValue(vorhaben)
+      renderAufBoard('/boards/1/vorhaben')
+
+      await waitFor(() => expect(mProjects.list).toHaveBeenCalled())
+      expect(screen.queryByRole('button', { name: 'Neues Vorhaben' })).not.toBeInTheDocument()
+
+      await oeffneMenue()
+      expect(screen.getByRole('menuitem', { name: 'Ausblenden' })).toBeInTheDocument()
     })
 
     it('blendet auch dann aus, wenn das Schreiben in localStorage fehlschlägt', async () => {
@@ -567,26 +719,29 @@ describe('EpicsPage', () => {
         removeItem: () => { throw new Error('localStorage nicht verfügbar') },
         clear: () => {}, key: () => null, length: 0,
       })
-      mEpics.list.mockResolvedValue(vorhaben)
-      renderPage()
+      mEpics.list.mockResolvedValue([auth, zahlung])
+      renderAufBoard('/boards/1/vorhaben')
 
-      fireEvent.click(await schalter())
+      await oeffneMenue()
+      fireEvent.click(screen.getByRole('menuitem', { name: 'Ausblenden' }))
 
       // Der Zustand wirkt in dieser Sitzung — nur das Merken fällt aus (E8).
-      expect(await schalter()).toBeChecked()
+      await waitFor(() => expect(kachelIds()).toEqual(['vorhaben-kachel-10']))
     })
 
-    it('startet unmarkiert, wenn das Lesen aus localStorage wirft', async () => {
+    it('blendet nichts aus, wenn das Lesen aus localStorage wirft', async () => {
       vi.stubGlobal('localStorage', {
         getItem: () => { throw new Error('localStorage nicht verfügbar') },
         setItem: () => { throw new Error('localStorage nicht verfügbar') },
         removeItem: () => { throw new Error('localStorage nicht verfügbar') },
         clear: () => {}, key: () => null, length: 0,
       })
-      mEpics.list.mockResolvedValue(vorhaben)
-      renderPage()
+      mEpics.list.mockResolvedValue([auth, zahlung])
+      renderAufBoard('/boards/1/vorhaben')
 
-      expect(await schalter()).not.toBeChecked()
+      await screen.findByTestId('vorhaben-kachel-9')
+      expect(kachelIds()).toEqual(['vorhaben-kachel-9', 'vorhaben-kachel-10'])
+      expect(screen.queryByLabelText(/^Ausgeblendete zeigen/)).toBeNull()
     })
 
     it('ist per Tastatur erreichbar und auslösbar', async () => {
@@ -594,18 +749,19 @@ describe('EpicsPage', () => {
       mEpics.list.mockResolvedValue(vorhaben)
       const user = userEvent.setup()
       renderPage()
-      const s = await schalter()
+      const knopf = within(await screen.findByTestId('vorhaben-kachel-9')).getByLabelText('Menü Auth')
 
       // Vom letzten Bedienelement vor dem Raster einen Tab weiter: Dieses Vorhaben trägt keine
-      // Anforderung, die Kachel enthält vor dem Schalter also nichts Fokussierbares. Das belegt,
-      // dass der Schalter in der Tab-Reihenfolge liegt und nicht bloß per Maus zu treffen ist.
+      // Anforderung, die Kachel enthält vor dem ⋮-Knopf also nichts Fokussierbares. Das belegt,
+      // dass er in der Tab-Reihenfolge liegt und nicht bloß per Maus zu treffen ist.
       screen.getByRole('button', { name: 'Neues Vorhaben' }).focus()
       await user.tab()
-      expect(s).toHaveFocus()
+      expect(knopf).toHaveFocus()
 
-      await user.keyboard(' ')
+      await user.keyboard('{Enter}')
+      await user.click(await screen.findByRole('menuitem', { name: 'Ausblenden' }))
 
-      expect(await schalter()).toBeChecked()
+      await waitFor(() => expect(kachelIds()).toEqual([]))
     })
   })
 

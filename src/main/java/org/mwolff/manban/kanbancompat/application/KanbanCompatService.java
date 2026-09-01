@@ -25,9 +25,11 @@ import org.springframework.transaction.annotation.Transactional;
  * operiert ausschließlich auf dem an das Token gebundenen Board (#44). Rechte laufen über die
  * bestehenden Services (CardService/CommentService → PermissionChecker).
  *
- * <p>Spalten-Mapping: primär per Namensabgleich (Backlog/Ready/In Progress/In Review/Done), sonst
- * positionsbasiert (i-te Spalte → i-ter Kanban-Key). Das Dogfood-Board nutzt die
- * Standard-5-Spalten, für die das Mapping 1:1 ist.
+ * <p>Spalten-Mapping ausschließlich per Namensabgleich (Backlog/Ready/In Progress/In Review/Done).
+ * Eine Spalte ohne kanonischen Namen trägt <em>keinen</em> Kanban-Key: Ihre Karten gelten als
+ * „nicht bereit, nicht fertig" und werden unter BACKLOG gemeldet. Sonst würde eine eigene Spalte
+ * allein durch ihre Position einen Zustand behaupten, den ihr niemand gegeben hat — eine Karte in
+ * „Anstehend" wäre für die Automatisierung freigegeben, eine in „Zurückgestellt" erledigt (#697).
  */
 @Service
 public class KanbanCompatService {
@@ -376,14 +378,11 @@ public class KanbanCompatService {
     return Objects.requireNonNull(principal.boardId());
   }
 
-  /** Bildet jede Board-Spalte auf einen Kanban-Key ab: Name zuerst, sonst Position. */
+  /** Bildet Board-Spalten mit kanonischem Namen auf ihren Kanban-Key ab. */
   private Map<Long, String> keyByColumn(long boardId) {
-    List<ColumnView> ordered = boardService.listColumns(boardId);
     Map<Long, String> map = new LinkedHashMap<>();
-    for (int i = 0; i < ordered.size(); i++) {
-      ColumnView c = ordered.get(i);
-      String fallback = COLUMNS.get(Math.min(i, COLUMNS.size() - 1));
-      map.put(c.id(), canonicalKey(c.name()).orElse(fallback));
+    for (ColumnView c : boardService.listColumns(boardId)) {
+      canonicalKey(c.name()).ifPresent(key -> map.put(c.id(), key));
     }
     return map;
   }

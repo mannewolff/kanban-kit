@@ -123,3 +123,31 @@ export function sortEpics(epics: Epic[], cards: Card[], labels: Label[]): Epic[]
     return epicShortcode(a.title, a.shortcode).localeCompare(epicShortcode(b.title, b.shortcode))
   })
 }
+
+/**
+ * Die im Kachelraster sichtbaren Vorhaben (Plan #703, E5). Dasselbe Muster wie
+ * `hiddenCardNumbers` in `hiddenCards.ts`: Die Sichtbarkeitsregel liegt hier testbar, ohne dass
+ * eine Seite gerendert werden muss.
+ *
+ * Gefiltert wird über `Epic.id`, **nicht** über `Epic.number` — so ist der Zustand geschlüsselt
+ * (`boardHiddenEpics.ts`), und so liest ihn das Board. Eine zweite Schlüsselung wäre ein stiller
+ * Bruch mit der Board-Wirkung desselben Zustands.
+ *
+ * Eine ID in `hidden` ohne zugehöriges Vorhaben wird übergangen: Der `localStorage`-Zustand
+ * überlebt das Löschen eines Vorhabens, der Fall ist der Regelfall und kein Fehler.
+ *
+ * Aufgerufen wird **nach** `sortEpics` — `visibleEpics(sortEpics(...), …)`. Reine Funktion: Das
+ * Eingabe-Array bleibt unverändert und wird in keinem Zweig durchgereicht.
+ *
+ * @param epics Vorhaben des Boards, bereits sortiert
+ * @param hidden IDs der ausgeblendeten Vorhaben (`Epic.id`)
+ * @param zeigeAusgeblendete `true` blendet nichts aus — der Zeige-Modus der Seite
+ */
+export function visibleEpics(
+  epics: readonly Epic[],
+  hidden: ReadonlySet<number>,
+  zeigeAusgeblendete: boolean,
+): Epic[] {
+  if (zeigeAusgeblendete) return [...epics]
+  return epics.filter((epic) => !hidden.has(epic.id))
+}

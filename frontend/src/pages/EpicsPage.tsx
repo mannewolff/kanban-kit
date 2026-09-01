@@ -1,10 +1,14 @@
 import AddIcon from '@mui/icons-material/Add'
+import MoreVertIcon from '@mui/icons-material/MoreVert'
 import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import FormControlLabel from '@mui/material/FormControlLabel'
+import IconButton from '@mui/material/IconButton'
 import LinearProgress from '@mui/material/LinearProgress'
 import Link from '@mui/material/Link'
+import Menu from '@mui/material/Menu'
+import MenuItem from '@mui/material/MenuItem'
 import Paper from '@mui/material/Paper'
 import Stack from '@mui/material/Stack'
 import Switch from '@mui/material/Switch'
@@ -23,7 +27,7 @@ import { labelChipSx } from '../components/labelChipSx'
 import { NewCardModal } from '../components/NewCardModal'
 import { hiddenEpicsStorageKey } from '../lib/boardHiddenEpics'
 import { epicToCard } from '../lib/epicToCard'
-import { aggregateMarks, countKinds, sortEpics } from '../lib/epicTiles'
+import { aggregateMarks, countKinds, sortEpics, visibleEpics } from '../lib/epicTiles'
 import { useBoardRole } from '../lib/useBoardRole'
 import { useProjectName } from '../lib/useProjectName'
 import { CARD_LIFT, CARD_SHADOW, CARD_SHADOW_HOVER, PANEL_RADIUS } from '../theme'
@@ -40,6 +44,24 @@ function Art({ anzahl, eins, viele }: Readonly<{ anzahl: number; eins: string; v
   )
 }
 
+/**
+ * Der gespeicherte Stand der ausgeblendeten Vorhaben eines Boards. Steht als eigene Funktion da,
+ * weil er an zwei Stellen gebraucht wird — beim ersten Mount und nach jedem Board-Wechsel (Plan
+ * #703, E11). Zwei Abschriften desselben Lesevorgangs wären zwei Gelegenheiten, das Wertformat
+ * auseinanderlaufen zu lassen.
+ *
+ * Ein defektes oder gesperrtes `localStorage` liefert „nichts ausgeblendet" statt die Seite
+ * scheitern zu lassen: Die Ausblendung ist reine Darstellung, ihr Verlust kostet keine Daten.
+ */
+function leseAusgeblendet(boardId: number): ReadonlySet<number> {
+  try {
+    const raw = localStorage.getItem(hiddenEpicsStorageKey(boardId))
+    return raw ? new Set<number>(JSON.parse(raw) as number[]) : new Set<number>()
+  } catch {
+    return new Set<number>()
+  }
+}
+
 export function EpicsPage() {
   const { boardId } = useParams()
   const id = Number.parseInt(boardId ?? '', 10)
@@ -51,17 +73,24 @@ export function EpicsPage() {
   const [members, setMembers] = useState<Member[]>([])
   const [selected, setSelected] = useState<Card | null>(null)
   const [creating, setCreating] = useState(false)
-  // Auf dem Board ausgeblendete Vorhaben (Plan #620). Derselbe Zustand, den `BoardView` liest —
-  // Schlüssel und Wertformat kommen deshalb aus `lib/boardHiddenEpics`. Reine Darstellung: kein
-  // Archivieren, keine Position, nichts an der Karte, deshalb liegt der Wert nur lokal.
-  const [hiddenEpics, setHiddenEpics] = useState<ReadonlySet<number>>(() => {
-    try {
-      const raw = localStorage.getItem(hiddenEpicsStorageKey(id))
-      return raw ? new Set<number>(JSON.parse(raw) as number[]) : new Set<number>()
-    } catch {
-      return new Set<number>()
-    }
-  })
+  // Ausgeblendete Vorhaben (Plan #620, Wirkung im Kachelraster aus Plan #703, E1). Derselbe
+  // Zustand, den `BoardView` liest — Schlüssel und Wertformat kommen deshalb aus
+  // `lib/boardHiddenEpics`. Reine Darstellung: kein Archivieren, keine Position, nichts an der
+  // Karte, deshalb liegt der Wert nur lokal.
+  const [hiddenEpics, setHiddenEpics] = useState<ReadonlySet<number>>(() => leseAusgeblendet(id))
+  // Der Zeige-Modus gehört zur Sitzung, nicht zum Board: Er wird nicht gespeichert und startet
+  // auf jedem Board aus.
+  const [zeigeAusgeblendete, setZeigeAusgeblendete] = useState(false)
+  const [menu, setMenu] = useState<{ epic: Epic; anchor: HTMLElement } | null>(null)
+
+  // Die Route `/boards/:boardId/vorhaben` hält die Komponente bei einem reinen Parameterwechsel
+  // gemountet — der `useState`-Initializer läuft dann nicht erneut (Plan #703, E11). Ohne dieses
+  // Nachlesen filterte das neue Board mit dem Stand des vorigen. Der Umschalter geht dabei aus:
+  // Sonst startete das neue Board in einem Zeige-Modus, in den dort niemand geschaltet hat.
+  useEffect(() => {
+    setHiddenEpics(leseAusgeblendet(id))
+    setZeigeAusgeblendete(false)
+  }, [id])
 
   // Ohne funktionierendes localStorage wirkt das Umlegen trotzdem — nur das Merken über den
   // Seitenwechsel hinaus fällt aus (E8).
@@ -150,6 +179,11 @@ export function EpicsPage() {
   const { canEdit, canModerate } = useBoardRole(board)
   const projectName = useProjectName(board?.projectId ?? null)
 
+  // Gezählt wird die Schnittmenge mit den Vorhaben dieses Boards, nicht die Größe des
+  // gespeicherten Satzes: Eine ID überlebt dort das Löschen ihres Vorhabens (Issue #704), und
+  // eine Zahl, hinter der im Zeige-Modus weniger Kacheln stehen, wäre ein sichtbarer Widerspruch.
+  const ausgeblendeteAnzahl = epics.filter((epic) => hiddenEpics.has(epic.id)).length
+
   if (!validId) {
     return <Alert severity="error">Ungültige Board-ID.</Alert>
   }
@@ -172,6 +206,27 @@ export function EpicsPage() {
         )}
       </Stack>
 
+      {/* Ist nichts ausgeblendet, erscheint der Umschalter gar nicht — er böte nichts zu zeigen
+          (Plan #703, E3). Er verschwindet auch wieder, sobald das letzte Vorhaben im Zeige-Modus
+          eingeblendet wird; der Zeige-Modus ist damit gegenstandslos. */}
+      {ausgeblendeteAnzahl > 0 && (
+        <FormControlLabel
+          sx={{ mb: 2 }}
+          control={
+            <Switch
+              size="small"
+              checked={zeigeAusgeblendete}
+              onChange={(e) => setZeigeAusgeblendete(e.target.checked)}
+            />
+          }
+          label={
+            <Typography variant="caption" color="text.secondary">
+              {`Ausgeblendete zeigen (${ausgeblendeteAnzahl})`}
+            </Typography>
+          }
+        />
+      )}
+
       {/* Kachelraster statt gestapelter Zeilen: Ein Vorhaben ist ein Gegenstand, den man
           überblickt, keine Tabellenzeile. Die Kacheln sind quadratisch (`aspectRatio: '1'`) und
           brechen um, die Seite wird bei vielen Vorhaben länger — beides Nutzerentscheidung
@@ -185,13 +240,15 @@ export function EpicsPage() {
           gap: 2,
         }}
       >
-        {sortEpics(epics, cards, labels).map((epic) => {
+        {visibleEpics(sortEpics(epics, cards, labels), hiddenEpics, zeigeAusgeblendete).map((epic) => {
           const pct = epic.total > 0 ? (epic.done / epic.total) * 100 : 0
           const arten = countKinds(epic, cards)
           const marken = aggregateMarks(epic, cards, labels)
           // Leer heisst wie in #662: keine Mitglieder UND keine Anforderung. Ein Vorhaben mit
           // Anforderung, aber ohne Karten ist eroeffnet, nicht leer.
           const leer = epic.total === 0 && epic.requirementCardNumber === null
+          // Nur im Zeige-Modus wahr — sonst stünde die Kachel gar nicht im Raster.
+          const istAusgeblendet = hiddenEpics.has(epic.id)
           return (
             <Paper
               key={epic.id}
@@ -203,6 +260,9 @@ export function EpicsPage() {
                 cursor: 'pointer',
                 minWidth: 0,
                 aspectRatio: '1',
+                // Die Dämpfung hängt an derselben Bedingung wie der Text „Ausgeblendet" unten:
+                // Sie unterstützt ihn, sie ersetzt ihn nicht.
+                opacity: istAusgeblendet ? 0.55 : 1,
                 display: 'flex',
                 flexDirection: 'column',
                 borderRadius: `${PANEL_RADIUS}px`,
@@ -227,6 +287,31 @@ export function EpicsPage() {
                 <Typography variant="caption" color="text.secondary">
                   {epic.done} von {epic.total} fertig
                 </Typography>
+                {/* Der Zustand steht als Text da, nicht nur als blassere Fläche: Eine reine
+                    Opacity-Änderung wäre für Screenreader gar nicht wahrnehmbar (Accessibility,
+                    Priorität 4 in CLAUDE.md) und im Test nur über einen geratenen Stilwert
+                    greifbar. */}
+                {istAusgeblendet && (
+                  <Typography variant="caption" color="text.secondary" sx={{ fontStyle: 'italic' }}>
+                    Ausgeblendet
+                  </Typography>
+                )}
+                {/* Kein Rechte-Check (Plan #703, E8): Ausblenden verändert nichts am Server, und
+                    einem Nur-Leser zu verbieten, seine eigene Ansicht aufzuräumen, wäre keine
+                    Schutzwirkung. */}
+                <IconButton
+                  size="small"
+                  aria-label={`Menü ${epic.title}`}
+                  onClick={(e) => {
+                    // Ohne stopPropagation öffnete derselbe Klick zusätzlich das Vorhaben-Detail —
+                    // der Kachel-Klick liegt eine Ebene darüber (E11 aus Plan #620).
+                    e.stopPropagation()
+                    setMenu({ epic, anchor: e.currentTarget })
+                  }}
+                  sx={{ mt: -0.5, mr: -0.5 }}
+                >
+                  <MoreVertIcon fontSize="small" />
+                </IconButton>
               </Stack>
               {/* Woraus das Vorhaben entstanden ist. Traegt es keine Anforderung, steht hier
                   nichts — kein Platzhalter und keine Ersatzanzeige aus den Wurzeln (Plan #637, E6).
@@ -304,36 +389,29 @@ export function EpicsPage() {
                 aria-label={`Fortschritt ${epic.title}`}
                 sx={{ height: 8, borderRadius: 1, mt: 'auto' }}
               />
-              {/* Der Schalter sitzt hier, weil die Kachel der Ort ist, an dem man ein Vorhaben in
-                  der Hand hat (Plan #620, E9). Der Rückweg liegt am Board an der Spaltenmarke, ein
-                  zweites Setz-Element dort entfällt bewusst. `Switch` ist ein echtes
-                  <input type="checkbox">: per Tab erreichbar und mit der Leertaste auslösbar. Ein
-                  onClick auf einer Anzeigekomponente käme durch alle Gates — jsx-a11y prüft nur
-                  DOM-Elemente in Kleinschreibung, keine MUI-Komponenten — und wäre per Tastatur
-                  trotzdem unerreichbar. */}
-              <FormControlLabel
-                sx={{ mt: 1, mr: 0 }}
-                // Ohne stopPropagation öffnete derselbe Klick zusätzlich das Vorhaben-Detail — der
-                // Kachel-Klick liegt eine Ebene darüber (E11).
-                onClick={(e) => e.stopPropagation()}
-                control={
-                  <Switch
-                    size="small"
-                    checked={hiddenEpics.has(epic.id)}
-                    onChange={(e) => setzeAusgeblendet(epic.id, e.target.checked)}
-                  />
-                }
-                label={
-                  <Typography variant="caption" color="text.secondary">
-                    Auf dem Board ausblenden
-                  </Typography>
-                }
-              />
             </Paper>
           )
         })}
       </Box>
       {epics.length === 0 && <Typography color="text.secondary">Noch keine Vorhaben.</Typography>}
+
+      {/* Ein Menü statt eines Schalters an der Kachel (Plan #703, E2): Ein Schalter, der die
+          Kachel verschwinden lässt, auf der er sitzt, ist nach dem Umlegen selbst weg — und damit
+          unbedienbar. Keine Sicherheitsabfrage (E4): Beim Ausblenden geht nichts verloren, der
+          Vorgang ist mit einem Klick umkehrbar. */}
+      <Menu anchorEl={menu?.anchor ?? null} open={menu != null} onClose={() => setMenu(null)}>
+        {menu && (
+          <MenuItem
+            onClick={() => {
+              const gewaehlt = menu.epic
+              setMenu(null)
+              setzeAusgeblendet(gewaehlt.id, !hiddenEpics.has(gewaehlt.id))
+            }}
+          >
+            {hiddenEpics.has(menu.epic.id) ? 'Einblenden' : 'Ausblenden'}
+          </MenuItem>
+        )}
+      </Menu>
 
       <NewCardModal
         open={creating}
