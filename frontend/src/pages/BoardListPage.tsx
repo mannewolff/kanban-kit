@@ -6,6 +6,8 @@ import Stack from '@mui/material/Stack'
 import Tooltip from '@mui/material/Tooltip'
 import Typography from '@mui/material/Typography'
 import type { SxProps, Theme } from '@mui/material/styles'
+import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward'
+import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward'
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator'
 import RestoreOutlinedIcon from '@mui/icons-material/RestoreOutlined'
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -20,7 +22,7 @@ import { EpicBadge } from '../components/EpicBadge'
 import { epicOfCard } from '../lib/cardEpic'
 import { epicToCard } from '../lib/epicToCard'
 import { clampExcerptWidth, EXCERPT_DEFAULT_PCT, stripMarkdown } from '../lib/listExcerpt'
-import type { ColumnKey } from '../lib/listSort'
+import { nextSortState, sortCards, type ColumnKey, type SortState } from '../lib/listSort'
 import { useBoardEvents } from '../lib/useBoardEvents'
 import { useBoardRole } from '../lib/useBoardRole'
 import { useProjectName } from '../lib/useProjectName'
@@ -109,8 +111,12 @@ export function BoardListPage() {
   const [colDrag, setColDrag] = useState<ColumnKey | null>(null)
   const [colOver, setColOver] = useState<ColumnKey | null>(null)
   const [excerptWidth, setExcerptWidth] = useState<number>(() => readExcerptWidth())
+  // Die Sortierung nach Spalteninhalt ist ein Blick, keine Einrichtung: Sie wird bewusst nicht in
+  // localStorage gehalten und beim Board-Wechsel zurückgesetzt (Issue #700).
+  const [sort, setSort] = useState<SortState>(null)
   const viewRef = useRef<HTMLDivElement>(null)
   const resizingRef = useRef(false)
+  const headerDragRef = useRef(false)
   const resizeCleanupRef = useRef<(() => void) | null>(null)
 
   const reloadCards = () => {
@@ -159,6 +165,13 @@ export function BoardListPage() {
   // Alt-Schlüssel aus der Pro-Board-Zeit einmalig aufräumen (Issue #432).
   useEffect(purgeLegacyViewKeys, [])
 
+  // Beim Board-Wechsel bleibt die Komponente gemountet (Route `/boards/:boardId/list`) — ohne
+  // dieses Zurücksetzen wirkte die Sortierung des vorigen Boards weiter und blockierte dort still
+  // das Umordnen per Drag.
+  useEffect(() => {
+    setSort(null)
+  }, [id])
+
   // Laufenden Resize-Drag bei Unmount abräumen.
   useEffect(() => () => resizeCleanupRef.current?.(), [])
 
@@ -196,6 +209,19 @@ export function BoardListPage() {
     document.addEventListener('mouseup', onUp)
     resizeCleanupRef.current = detach
   }
+
+  /**
+   * Beschriftung einer Kopfzelle. Das Präfix `Spalte <Label>` bleibt unangetastet und der
+   * Sortierzustand hängt hinten an — `aria-sort` scheidet aus, weil es eine
+   * `role="columnheader"`-Struktur voraussetzt, die den Zeilen ihre eigene Button-Rolle nähme.
+   */
+  const headerLabel = (key: ColumnKey): string => {
+    const label = `Spalte ${COLUMN_META[key].label}`
+    if (sort?.key !== key) return label
+    return `${label}, ${sort.dir === 'asc' ? 'aufsteigend' : 'absteigend'} sortiert`
+  }
+
+  const toggleSort = (key: ColumnKey) => setSort((prev) => nextSortState(prev, key))
 
   const cellSx = (key: ColumnKey): SxProps<Theme> =>
     key === 'excerpt' ? { ...COLUMN_META.excerpt.sx, flex: `0 0 ${excerptWidth}%` } : COLUMN_META[key].sx
@@ -250,7 +276,7 @@ export function BoardListPage() {
   const archiveActive = activeFilters.has(ARCHIVED)
   // Die Liste zeigt nur aktive Karten. Board-lose bzw. board-gebundene Ideen (ideaStored) leben
   // jetzt in der projektweiten Ideen-Seite und sind hier ausgeblendet.
-  const visible = cards
+  const inBoardOrder = cards
     .filter((c) => !c.ideaStored && (c.archived ? archiveActive : activeFilters.has(c.columnId)))
     .filter((c) => labelFilter.size === 0 || c.labels.some((l) => labelFilter.has(l)))
     .sort((a, b) => {
@@ -258,12 +284,18 @@ export function BoardListPage() {
       const pb = columnById.get(b.columnId)?.position ?? 0
       return pa - pb || a.positionInColumn - b.positionInColumn
     })
+  // Die Board-Reihenfolge bleibt der Grundzustand und der Gleichstand-Anker; die Sortierung nach
+  // Spalteninhalt legt sich darüber.
+  const visible = sortCards(inBoardOrder, sort, { columnById, epics })
 
   // Umsortieren per Drag nur, wenn genau eine echte Spalte gefiltert ist: die Liste zeigt sonst
   // mehrere Spalten gemischt und ein Cross-Spalten-Drop wäre mehrdeutig (und würde den Status
-  // ändern). Archiv zählt nicht (archivierte Karten haben keine aktive Position).
+  // ändern). Archiv zählt nicht (archivierte Karten haben keine aktive Position). Unter einer
+  // aktiven Sortierung ebenfalls nicht: Der Zeilen-Drop schreibt `target.positionInColumn` und
+  // verlässt sich damit darauf, dass die angezeigte Reihenfolge die gespeicherte ist — sonst
+  // landete die Karte woanders als dort, wohin gezogen wurde.
   const activeColumns = columns.filter((c) => activeFilters.has(c.id))
-  const sortable = canEdit && !archiveActive && activeColumns.length === 1
+  const sortable = canEdit && !archiveActive && activeColumns.length === 1 && sort === null
 
   // Nur im sortierbaren Zustand (genau eine echte Spalte) ist ein Zeilen-Drop gültig. Dort liegen
   // alle sichtbaren Karten in derselben, nicht-archivierten Spalte — die frühere Spalten-/Archiv-
@@ -382,11 +414,20 @@ export function BoardListPage() {
         </Stack>
       )}
 
-      {canEdit && !sortable && (
+      {sort !== null ? (
         <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
-          Zum Sortieren eine einzelne Spalte auswählen.
+          {/* Die Richtung trägt das Pfeil-Icon und das aria-label der Kopfzelle, nicht dieser Satz.
+              Das Umordnen kommt nur zur Sprache, wo es überhaupt zusteht: Sortieren ist eine
+              Ansichtsfunktion und steht auch Nur-Lesern offen. */}
+          {`Sortiert nach ${COLUMN_META[sort.key].label}.${
+            canEdit ? ' Zum Ändern der Kartenreihenfolge die Sortierung aufheben.' : ''
+          }`}
         </Typography>
-      )}
+      ) : canEdit && !sortable ? (
+        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+          Kartenreihenfolge ändern: dazu genau einen Status-Filter wählen und den Archiv-Filter abwählen.
+        </Typography>
+      ) : null}
 
       {visible.length === 0 ? (
         <Typography variant="body2" color="text.secondary" sx={{ py: 2 }}>
@@ -394,18 +435,30 @@ export function BoardListPage() {
         </Typography>
       ) : (
         <>
-          {/* Kopfzeile: Spalten per Drag umsortierbar (Excel-artig). */}
+          {/* Kopfzeile: Spalten per Drag umsortierbar (Excel-artig), per Klick nach Inhalt sortierbar. */}
           <Box data-testid="list-header" sx={{ display: 'flex', alignItems: 'center', gap: 1.5, px: 1.5, py: 0.5 }}>
             <Box sx={{ width: 20, flexShrink: 0 }} />
             {order.map((key) => (
               <Box
                 key={key}
                 draggable
-                aria-label={`Spalte ${COLUMN_META[key].label}`}
-                onDragStart={(e) => { e.stopPropagation(); setColDrag(key) }}
+                role="button"
+                tabIndex={0}
+                aria-label={headerLabel(key)}
+                // Der Guard entspricht dem `resizingRef` beim Breiten-Ziehen (siehe `startResize`):
+                // Ein HTML5-Drag löst zwar üblicherweise keinen Click aus, aber die Sortierung soll
+                // sich darauf nicht verlassen. Kein zweites Muster für dasselbe Problem.
+                onClick={() => { if (!headerDragRef.current) toggleSort(key) }}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleSort(key) } }}
+                onDragStart={(e) => { e.stopPropagation(); headerDragRef.current = true; setColDrag(key) }}
                 onDragOver={(e) => { if (colDrag && colDrag !== key) { e.preventDefault(); setColOver(key) } }}
                 onDrop={(e) => { e.preventDefault(); if (colDrag) { reorderColumns(colDrag, key) } setColDrag(null); setColOver(null) }}
-                onDragEnd={() => { setColDrag(null); setColOver(null) }}
+                onDragEnd={() => {
+                  setColDrag(null)
+                  setColOver(null)
+                  // Flag erst nach einem etwaigen Click-Event zurücksetzen — wie beim Resize.
+                  setTimeout(() => { headerDragRef.current = false }, 0)
+                }}
                 sx={{
                   ...cellSx(key),
                   display: 'flex',
@@ -438,6 +491,10 @@ export function BoardListPage() {
                 <Typography variant="caption" sx={{ fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.03em', color: 'text.secondary' }}>
                   {COLUMN_META[key].label}
                 </Typography>
+                {sort?.key === key &&
+                  (sort.dir === 'asc'
+                    ? <ArrowUpwardIcon fontSize="inherit" sx={{ ml: 0.5, color: 'text.secondary' }} />
+                    : <ArrowDownwardIcon fontSize="inherit" sx={{ ml: 0.5, color: 'text.secondary' }} />)}
               </Box>
             ))}
           </Box>
