@@ -12,4 +12,4 @@
  * eigenes Literal; ein späterer Rename hätte sie einzeln finden müssen. Der Titel in
  * `index.html` bleibt als Literal bestehen — statisches HTML kann kein Modul lesen.
  */
-export const APP_NAME = 'Leitstand'
+export const APP_NAME = 'KI-Leitstand'
