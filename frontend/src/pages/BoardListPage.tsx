@@ -20,6 +20,7 @@ import { EpicBadge } from '../components/EpicBadge'
 import { epicOfCard } from '../lib/cardEpic'
 import { epicToCard } from '../lib/epicToCard'
 import { clampExcerptWidth, EXCERPT_DEFAULT_PCT, stripMarkdown } from '../lib/listExcerpt'
+import type { ColumnKey } from '../lib/listSort'
 import { useBoardEvents } from '../lib/useBoardEvents'
 import { useBoardRole } from '../lib/useBoardRole'
 import { useProjectName } from '../lib/useProjectName'
@@ -31,7 +32,6 @@ import { labelChipSx } from '../components/labelChipSx'
 const ARCHIVED = 'archived'
 type FilterKey = number | typeof ARCHIVED
 
-type ColumnKey = 'number' | 'status' | 'epic' | 'title' | 'excerpt'
 const COLUMN_META: Record<ColumnKey, { label: string; sx: SxProps<Theme> }> = {
   number: { label: 'Nr', sx: { flexShrink: 0, width: 48 } },
   status: { label: 'Status', sx: { flexShrink: 0, width: 108 } },
