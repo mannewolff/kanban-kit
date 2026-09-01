@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { Card } from '../api/cards'
 import type { Epic } from '../api/epics'
 import type { Label } from '../api/labels'
-import { aggregateMarks, countKinds, sortEpics } from './epicTiles'
+import { aggregateMarks, countKinds, sortEpics, visibleEpics } from './epicTiles'
 
 function karte(number: number, title: string, labels: number[] = []): Card {
   return {
@@ -219,6 +219,50 @@ describe('sortEpics', () => {
 
     sortEpics(eingabe, cards, labels)
 
+    expect(eingabe.map((e) => e.id)).toEqual([1, 2])
+  })
+})
+
+describe('visibleEpics', () => {
+  const drei = [vorhaben({ id: 1 }), vorhaben({ id: 2 }), vorhaben({ id: 3 })]
+
+  it('liefert bei leerem Ausblende-Zustand alle Vorhaben in unveränderter Reihenfolge', () => {
+    expect(visibleEpics(drei, new Set(), false).map((e) => e.id)).toEqual([1, 2, 3])
+  })
+
+  it('lässt ein ausgeblendetes Vorhaben weg und behält die Reihenfolge der übrigen', () => {
+    expect(visibleEpics(drei, new Set([2]), false).map((e) => e.id)).toEqual([1, 3])
+  })
+
+  /**
+   * Der Durchreich-Zweig gibt ebenfalls eine neue Liste zurück: Gäbe er das Eingabe-Array selbst
+   * heraus, könnte die Seite den Zustand des Aufrufers durch ein `sort` an der Rückgabe verändern.
+   */
+  it('liefert im Zeige-Modus alle Vorhaben als neue Liste, auch die ausgeblendeten', () => {
+    const ergebnis = visibleEpics(drei, new Set([2]), true)
+
+    expect(ergebnis.map((e) => e.id)).toEqual([1, 2, 3])
+    expect(ergebnis).not.toBe(drei)
+  })
+
+  /**
+   * Der `localStorage`-Zustand überlebt das Löschen eines Vorhabens — eine ID ohne Vorhaben ist
+   * daher der Regelfall, kein Fehler.
+   */
+  it('ignoriert eine ausgeblendete ID, zu der es kein Vorhaben gibt', () => {
+    expect(visibleEpics(drei, new Set([42]), false).map((e) => e.id)).toEqual([1, 2, 3])
+  })
+
+  it('liefert eine leere Liste, wenn alle Vorhaben ausgeblendet sind', () => {
+    expect(visibleEpics(drei, new Set([1, 2, 3]), false)).toEqual([])
+  })
+
+  it('lässt das Eingabe-Array unverändert', () => {
+    const eingabe = [vorhaben({ id: 1 }), vorhaben({ id: 2 })]
+
+    const ergebnis = visibleEpics(eingabe, new Set([1]), false)
+
+    expect(ergebnis).not.toBe(eingabe)
     expect(eingabe.map((e) => e.id)).toEqual([1, 2])
   })
 })
