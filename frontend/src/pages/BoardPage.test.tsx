@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '../api/client'
@@ -33,6 +33,8 @@ vi.mock('../api/cards', () => ({
     bulkArchive: vi.fn(),
     bulkTransfer: vi.fn(),
     bulkDelete: vi.fn(),
+    // Der Detail-Dialog eines Vorhabens lädt seinen Herkunftsbaum nach (Issue #686).
+    epicTree: vi.fn().mockResolvedValue([]),
     listTrash: vi.fn().mockResolvedValue([]),
     restoreDeleted: vi.fn(),
     purge: vi.fn(),
@@ -384,6 +386,46 @@ describe('BoardPage weitere Orchestrierung', () => {
     expect(mockedEpics.list).toHaveBeenCalled()
     // onChanged ruft reloadCards + reloadEpics; deren nachgelagerte setState-Microtasks
     // deterministisch settlen lassen (siehe Kommentar beim Epic-Test).
+    await act(async () => { await Promise.resolve() })
+  })
+
+  it('öffnet über das Kürzel auf der Karte das Vorhaben im Detail-Dialog, nicht die Karte', async () => {
+    memberships = [{ projectId: 9, role: 'OWNER' }]
+    // Karte ohne parentId, die allein über die Herkunft zum Vorhaben gehört (memberNumbers).
+    const memberCard = {
+      id: 100, boardId: 1, columnId: 10, number: 1, title: 'Aufgabe', description: null,
+      positionInColumn: 0, archived: false, ideaStored: false, movedToDoneAt: null, dependencies: [],
+      type: 'CARD' as const, parentId: null, shortcode: null, assignees: [], dueDate: null, labels: [],
+      derivedFrom: null,
+    }
+    mockedBoards.get.mockResolvedValue({
+      id: 1, projectId: 9, name: 'B', createdAt: '',
+      columns: [{ id: 10, name: 'Backlog', position: 0, wipLimit: null }],
+    })
+    mockedCards.list.mockResolvedValue([memberCard])
+    mockedEpics.list.mockResolvedValue([{
+      id: 20, number: 2, title: 'Auth-Vorhaben', description: null, shortcode: 'AUT',
+      done: 0, total: 1, memberNumbers: [1], rootNumbers: [], requirementCardNumber: null,
+    }])
+    mockedLabels.list.mockResolvedValue([])
+    mockedMembers.list.mockResolvedValue([])
+    mockedConfig.get.mockResolvedValue({ doneRetentionDays: 30 })
+    mockedProjects.list.mockResolvedValue([{ id: 9, name: 'P', role: 'OWNER', createdAt: '' }])
+    render(
+      <MemoryRouter initialEntries={['/boards/1']}>
+        <Routes>
+          <Route path="/boards/:boardId" element={<BoardPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Vorhaben AUT öffnen' }))
+
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByText('Auth-Vorhaben')).toBeInTheDocument()
+    // Der Klick auf das Kürzel öffnet ausschließlich das Vorhaben, nicht zusätzlich die Karte.
+    expect(within(dialog).queryByText('Aufgabe')).not.toBeInTheDocument()
+    // Der Dialog lädt Kommentare/Anhänge nach; die Microtasks deterministisch settlen lassen.
     await act(async () => { await Promise.resolve() })
   })
 

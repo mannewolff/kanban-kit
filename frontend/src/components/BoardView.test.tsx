@@ -152,9 +152,33 @@ describe('BoardView', () => {
 
   it('zeigt ein Epic-Badge auf zugeordneten Karten', () => {
     const assigned: Card = { ...card, parentId: 9 }
-    const epics = [{ id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 0, total: 1, memberNumbers: [], rootNumbers: [], requirementCardNumber: null }]
+    const epics = [{ id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 0, total: 1, memberNumbers: [1], rootNumbers: [1], requirementCardNumber: null }]
     render(<BoardView board={board} initialCards={[assigned]} canEdit epics={epics} api={mkApi()} />)
     expect(screen.getByText('AUT')).toBeInTheDocument()
+  })
+
+  it('zeigt ein Epic-Badge auch auf einer über die Herkunft zugeordneten Karte', () => {
+    // parentId bleibt null: Die Zugehörigkeit steht allein in memberNumbers, wo der Server beide
+    // Wege zusammenführt (Issue #684). Genau diese Karte trug auf dem Board bisher kein Kürzel.
+    const epics = [{ id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 0, total: 1, memberNumbers: [card.number], rootNumbers: [], requirementCardNumber: null }]
+    render(<BoardView board={board} initialCards={[card]} canEdit epics={epics} api={mkApi()} />)
+    expect(screen.getByText('AUT')).toBeInTheDocument()
+  })
+
+  it('meldet über onEpicOpen das Vorhaben des angeklickten Kürzels, ohne die Karte zu öffnen', () => {
+    const epics = [{ id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 0, total: 1, memberNumbers: [card.number], rootNumbers: [], requirementCardNumber: null }]
+    const onEpicOpen = vi.fn()
+    const onCardClick = vi.fn()
+    render(
+      <BoardView board={board} initialCards={[card]} canEdit epics={epics} api={mkApi()}
+        onEpicOpen={onEpicOpen} onCardClick={onCardClick} />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Vorhaben AUT öffnen' }))
+
+    expect(onEpicOpen).toHaveBeenCalledWith(epics[0])
+    // Der Badge stoppt das Bubbling — sonst öffneten sich Vorhaben und Karte zugleich.
+    expect(onCardClick).not.toHaveBeenCalled()
   })
 
   it('archiviert und verschiebt über das ⋮-Menü', async () => {
