@@ -7,6 +7,17 @@ Versionierung folgt der dreiteiligen Betriebsversion (siehe [RELEASING.md](RELEA
 Einträge je Version sind ein automatischer Auszug der Commit-Titel seit dem letzten Release,
 erzeugt von `scripts/gen-changelog.mjs`.
 
+## [1.29.0] – 2026-09-01
+
+- chore: v1.28.1
+- Listenansicht: Kürzel über die Herkunft zuordnen und zum Vorhaben springen ([#689](https://github.com/mannewolff/kanban-kit/issues/689))
+- Board: Kürzel über die Herkunft zuordnen und zum Vorhaben springen ([#688](https://github.com/mannewolff/kanban-kit/issues/688))
+- epicToCard nach lib extrahieren ([#691](https://github.com/mannewolff/kanban-kit/issues/691))
+- Vorhaben-Seite reicht die fehlenden Props an den Detail-Dialog ([#687](https://github.com/mannewolff/kanban-kit/issues/687))
+- Vorhaben-Dialog zeigt den Fortschritt ([#686](https://github.com/mannewolff/kanban-kit/issues/686))
+- EpicBadge wird ein Bedienelement ([#685](https://github.com/mannewolff/kanban-kit/issues/685))
+- Zuordnungsfunktion Karte zu Vorhaben als reines Modul ([#684](https://github.com/mannewolff/kanban-kit/issues/684))
+
 ## [1.28.0] – 2026-08-31
 
 - chore: v1.27.1
