@@ -22,20 +22,11 @@ import { EpicBadge } from '../components/EpicBadge'
 import { labelChipSx } from '../components/labelChipSx'
 import { NewCardModal } from '../components/NewCardModal'
 import { hiddenEpicsStorageKey } from '../lib/boardHiddenEpics'
+import { epicToCard } from '../lib/epicToCard'
 import { aggregateMarks, countKinds, sortEpics } from '../lib/epicTiles'
 import { useBoardRole } from '../lib/useBoardRole'
 import { useProjectName } from '../lib/useProjectName'
 import { CARD_LIFT, CARD_SHADOW, CARD_SHADOW_HOVER, PANEL_RADIUS } from '../theme'
-
-function epicToCard(epic: Epic, boardId: number): Card {
-  return {
-    id: epic.id, boardId, columnId: 0, number: epic.number, title: epic.title,
-    description: epic.description, positionInColumn: 0, archived: false, ideaStored: false, movedToDoneAt: null,
-    dependencies: [], type: 'EPIC', parentId: null, shortcode: epic.shortcode, assignees: [], dueDate: null, labels: [],
-    // Vorhaben tragen keine Herkunft (Issue #607): der Anlege-Endpunkt lehnt sie fuer EPIC ab.
-    derivedFrom: null,
-  }
-}
 
 /**
  * Eine Art in der Zusammensetzung, mit Singular- und Pluralform. Die Anzahl steht als Text neben
