@@ -46,4 +46,35 @@ describe('EpicBadge', () => {
 
     expect(onOpen).toHaveBeenCalledTimes(1)
   })
+
+  it.each(['{Enter}', '{ }'])('hält den auslösenden Tastendruck %s von der Ebene ringsum fern', async (taste) => {
+    const onOpen = vi.fn()
+    const aussen = vi.fn()
+    const user = userEvent.setup()
+    render(
+      <div role="presentation" onKeyDown={aussen}>
+        <EpicBadge epicId={9} title="Authentifizierung" shortcode="AUT" onOpen={onOpen} />
+      </div>,
+    )
+
+    await user.tab()
+    await user.keyboard(taste)
+
+    expect(aussen).not.toHaveBeenCalled()
+  })
+
+  it('lässt andere Tasten zur Ebene ringsum durch', async () => {
+    const aussen = vi.fn()
+    const user = userEvent.setup()
+    render(
+      <div role="presentation" onKeyDown={aussen}>
+        <EpicBadge epicId={9} title="Authentifizierung" shortcode="AUT" onOpen={vi.fn()} />
+      </div>,
+    )
+
+    await user.tab()
+    await user.keyboard('{Escape}')
+
+    expect(aussen).toHaveBeenCalledTimes(1)
+  })
 })

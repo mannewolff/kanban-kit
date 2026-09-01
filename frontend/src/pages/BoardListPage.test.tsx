@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes, useNavigate } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { boardsApi } from '../api/boards'
@@ -30,6 +31,8 @@ vi.mock('../api/cards', () => ({
     moveToIdeaStorage: vi.fn(),
     create: vi.fn(),
     getActivity: vi.fn().mockResolvedValue([]),
+    // Der Detail-Dialog eines Vorhabens lädt seinen Herkunftsbaum nach (Issue #644).
+    epicTree: vi.fn().mockResolvedValue([]),
     update: vi.fn(),
     setAssignees: vi.fn(),
     setLabels: vi.fn(),
@@ -67,7 +70,10 @@ const base = {
 const active: Card = { ...base, id: 100, columnId: 10, number: 1, title: 'Aufgabe', description: '# Titel\nText **fett**', archived: false }
 const archived: Card = { ...base, id: 101, columnId: 20, number: 2, title: 'AlteKarte', description: 'x', archived: true }
 const idea: Card = { ...base, id: 102, columnId: 10, number: 3, title: 'MeineIdee', description: 'Idee-Text', archived: false, ideaStored: true }
-const epic: Epic = { id: 7, number: 1, title: 'Mein Epic', description: null, shortcode: 'EP1', done: 0, total: 1, memberNumbers: [], rootNumbers: [], requirementCardNumber: null }
+// `memberNumbers: [1]` fasst die Zugehörigkeit der Karte #1: Die Zuordnung rechnet über die
+// Vorhaben-Liste, nicht über `parentId` (Issue #689) — das Muster „parentId gesetzt,
+// memberNumbers leer" gibt es real nicht.
+const epic: Epic = { id: 7, number: 1, title: 'Mein Epic', description: null, shortcode: 'EP1', done: 0, total: 1, memberNumbers: [1], rootNumbers: [], requirementCardNumber: null }
 
 function renderPage(cards: Card[] = [active, archived]) {
   mBoards.get.mockResolvedValue({
@@ -80,6 +86,26 @@ function renderPage(cards: Card[] = [active, archived]) {
   mCards.list.mockResolvedValue(cards)
   mEpics.list.mockResolvedValue([])
   mProjects.list.mockResolvedValue([{ id: 9, name: 'Projekt', role: 'OWNER', createdAt: '' }])
+  return render(
+    <MemoryRouter initialEntries={['/boards/1/list']}>
+      <Routes>
+        <Route path="/boards/:boardId/list" element={<BoardListPage />} />
+      </Routes>
+    </MemoryRouter>,
+  )
+}
+
+/**
+ * Eine Liste mit genau einer Karte (`active`, Nummer 1) und dem Vorhaben `epic`, das sie über
+ * `memberNumbers` führt — ohne `parentId` an der Karte (Issue #689).
+ */
+function renderEpicPage() {
+  mBoards.get.mockResolvedValue({
+    id: 1, projectId: 9, name: 'B', createdAt: '',
+    columns: [{ id: 10, name: 'Backlog', position: 0, wipLimit: null }],
+  })
+  mCards.list.mockResolvedValue([active])
+  mEpics.list.mockResolvedValue([epic])
   return render(
     <MemoryRouter initialEntries={['/boards/1/list']}>
       <Routes>
@@ -726,6 +752,39 @@ describe('BoardListPage', () => {
 
     await screen.findByText('Aufgabe')
     expect(screen.getByText('EP1')).toBeInTheDocument()
+  })
+
+  it('zeigt das Kürzel auch an einer Karte, die allein über ihre Herkunft zum Vorhaben gehört', async () => {
+    // Keine `parentId` — die Zugehörigkeit steht nur in `memberNumbers` des Vorhabens, wo der
+    // Server den ausdrücklich zugeordneten und den geerbten Weg zusammenführt.
+    renderEpicPage()
+
+    await screen.findByText('Aufgabe')
+    expect(screen.getByText('EP1')).toBeInTheDocument()
+  })
+
+  it('öffnet über das Kürzel den Detail-Dialog des Vorhabens, nicht zusätzlich die Karte', async () => {
+    renderEpicPage()
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Vorhaben EP1 öffnen' }))
+
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByText('Mein Epic')).toBeInTheDocument()
+    expect(within(dialog).queryByText('Aufgabe')).not.toBeInTheDocument()
+  })
+
+  it('öffnet über Enter auf dem Kürzel den Dialog des Vorhabens, nicht zusätzlich die Karte', async () => {
+    const user = userEvent.setup()
+    renderEpicPage()
+
+    // Die Listenzeile öffnet auf Enter selbst die Karte; der Badge muss den Tastendruck deshalb
+    // vor ihr abfangen, sonst gingen Vorhaben und Karte zugleich auf.
+    ;(await screen.findByRole('button', { name: 'Vorhaben EP1 öffnen' })).focus()
+    await user.keyboard('{Enter}')
+
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByText('Mein Epic')).toBeInTheDocument()
+    expect(within(dialog).queryByText('Aufgabe')).not.toBeInTheDocument()
   })
 
   it('rendert die Beschreibungs-Spalte auch bei fehlender Beschreibung ohne Fehler', async () => {

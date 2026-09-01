@@ -13,6 +13,14 @@ interface Props {
   onOpen?: () => void
 }
 
+/**
+ * Tasten, die ein Bedienelement auslösen. Nur sie hält der Badge von der Ebene ringsum fern
+ * (Issue #689): Auch eine Listenzeile öffnet auf Enter/Leertaste ihre Karte, und ohne diesen Stopp
+ * gingen Vorhaben und Karte zugleich auf. Andere Tasten laufen weiter — sonst wären globale
+ * Tastenkürzel taub, solange der Badge den Fokus hält.
+ */
+const AKTIVIERUNGSTASTEN = new Set(['Enter', ' '])
+
 /** Kürzel-Badge eines Epics: farbiger Punkt + Kürzel auf zartem Grund in der Epic-Farbe (Toolbox-Stil). */
 export function EpicBadge({ epicId, title, shortcode, sx, onOpen }: Readonly<Props>) {
   const hue = epicColor(epicId)
@@ -46,6 +54,11 @@ export function EpicBadge({ epicId, title, shortcode, sx, onOpen }: Readonly<Pro
           // (Kachel, Listenzeile) und oeffnete Vorhaben und Karte zugleich.
           e.stopPropagation()
           onOpen()
+        }}
+        // Die Auslösung per Tastatur macht der Browser selbst (natives <button>); hier wird nur
+        // verhindert, dass derselbe Tastendruck zusätzlich die Ebene ringsum auslöst.
+        onKeyDown={(e) => {
+          if (AKTIVIERUNGSTASTEN.has(e.key)) e.stopPropagation()
         }}
         // Ein natives <button> braechte Rahmen, Schrift und Hintergrund des Browsers mit; ohne
         // diese Neutralisierung saehe der Badge mit onOpen anders aus als ohne.
