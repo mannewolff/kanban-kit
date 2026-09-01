@@ -7,6 +7,16 @@ Versionierung folgt der dreiteiligen Betriebsversion (siehe [RELEASING.md](RELEA
 Einträge je Version sind ein automatischer Auszug der Commit-Titel seit dem letzten Release,
 erzeugt von `scripts/gen-changelog.mjs`.
 
+## [1.30.0] – 2026-09-01
+
+- Vorhaben-Ansicht: Ausblenden über ⋮-Menü und Umschalter ([#705](https://github.com/mannewolff/kanban-kit/issues/705))
+- Vorhaben-Ansicht: Sichtbarkeitsfilter visibleEpics ([#704](https://github.com/mannewolff/kanban-kit/issues/704))
+- Listen-Sortierung: Kopfzeile, Zustand und Hinweistexte ([#700](https://github.com/mannewolff/kanban-kit/issues/700))
+- Listen-Sortierung: reine Sortierlogik in lib/listSort.ts ([#699](https://github.com/mannewolff/kanban-kit/issues/699))
+- Compat-API: eigene Board-Spalten tragen keinen Kanban-Zustand mehr ([#697](https://github.com/mannewolff/kanban-kit/issues/697))
+- chore: v1.29.1
+- Anzeigename auf "KI-Leitstand" ändern
+
 ## [1.29.0] – 2026-09-01
 
 - chore: v1.28.1
