@@ -907,6 +907,13 @@ function CardDetailModalView({
   const baumBoardId: number | null =
     'boardId' in card && typeof card.boardId === 'number' ? card.boardId : null
 
+  // Der Fortschritt eines Vorhabens (Issue #686), derselbe Wortlaut wie auf der Kachel der
+  // Vorhaben-Seite. Die Zahlen stehen nur in der `epics`-Prop: Der `Card`-Typ traegt kein
+  // `done`/`total`. Fehlt der Eintrag, gibt es keinen Wert — und ein erfundenes „0 von 0" waere
+  // eine Falschaussage. Anders als der Baum haengt die Anzeige nicht an der `boardId`: Ein ueber
+  // einen `#N`-Verweis nachgeladenes Vorhaben hat keine, die Zahlen liegen trotzdem vor.
+  const fortschritt = isEpic ? (epics.find((e) => e.id === card.id) ?? null) : null
+
   useEffect(() => {
     if (!isEpic || baumBoardId === null) {
       return undefined
@@ -1235,6 +1242,20 @@ function CardDetailModalView({
               labelIds={labelIds}
               onChange={(ids) => void saveLabels(ids)}
             />
+          )}
+
+          {!editing && fortschritt !== null && (
+            <>
+              <Divider />
+              <Box>
+                <Typography variant="subtitle2" gutterBottom>
+                  Fortschritt
+                </Typography>
+                <Typography variant="body2" color="text.secondary" aria-label="Fortschritt">
+                  {`${fortschritt.done} von ${fortschritt.total} fertig`}
+                </Typography>
+              </Box>
+            </>
           )}
 
           {!editing && isEpic && baumBoardId !== null && (

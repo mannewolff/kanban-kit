@@ -648,6 +648,87 @@ describe('CardDetailModal', () => {
     expect(screen.queryByRole('tree')).toBeNull()
   })
 
+  // --- Fortschritt im Vorhaben-Dialog (Issue #686) --------------------------
+
+  /** Ein Vorhaben, wie es die `epics`-Prop traegt — die ID trifft die geoeffnete Karte. */
+  function epicEintrag(id: number, done: number, total: number) {
+    return {
+      id, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done, total,
+      memberNumbers: [], rootNumbers: [], requirementCardNumber: null,
+    }
+  }
+
+  const fortschrittText = () => screen.queryByText(/\d+ von \d+ fertig/)
+
+  it('zeigt im Vorhaben-Dialog den Fortschritt aus der epics-Prop', async () => {
+    const apis = makeApis()
+    render(
+      <CardDetailModal
+        card={epicCard} canEdit epics={[epicEintrag(200, 2, 5)]} onClose={vi.fn()} {...apis} />,
+    )
+
+    expect(await screen.findByText('2 von 5 fertig')).toBeInTheDocument()
+  })
+
+  /** Die echte Null ist eine Aussage („noch nichts fertig"), kein fehlender Wert. */
+  it('zeigt „0 von 0 fertig" für ein Vorhaben, das mit Nullen in der Prop liegt', async () => {
+    const apis = makeApis()
+    render(
+      <CardDetailModal
+        card={epicCard} canEdit epics={[epicEintrag(200, 0, 0)]} onClose={vi.fn()} {...apis} />,
+    )
+
+    expect(await screen.findByText('0 von 0 fertig')).toBeInTheDocument()
+  })
+
+  /** Fehlt der Eintrag, gibt es keinen Wert — und ein erfundenes „0 von 0" waere eine Falschaussage. */
+  it('zeigt keinen Fortschritt, wenn das Vorhaben nicht in der epics-Prop liegt', async () => {
+    const apis = makeApis()
+    render(<CardDetailModal card={epicCard} canEdit epics={[]} onClose={vi.fn()} {...apis} />)
+
+    await screen.findByText('Kommentare')
+    expect(fortschrittText()).toBeNull()
+  })
+
+  /**
+   * Der Fortschritt haengt an der Prop, nicht am Board: Ein ueber einen `#N`-Verweis nachgeladenes
+   * Vorhaben traegt keine `boardId` und damit keinen Herkunftsbaum — die Zahlen liegen trotzdem vor.
+   */
+  it('zeigt den Fortschritt auch für ein Vorhaben ohne boardId', async () => {
+    const apis = makeApis()
+    const ohneBoard: CardByNumber = { ...epicCard, boardId: null, columnId: null }
+    render(
+      <CardDetailModal
+        card={ohneBoard} canEdit epics={[epicEintrag(200, 3, 4)]} onClose={vi.fn()} {...apis} />,
+    )
+
+    expect(await screen.findByText('3 von 4 fertig')).toBeInTheDocument()
+    expect(screen.queryByRole('tree')).toBeNull()
+  })
+
+  it('zeigt bei einer gewöhnlichen Karte keinen Fortschritt', async () => {
+    const apis = makeApis()
+    render(
+      <CardDetailModal
+        card={card} canEdit epics={[epicEintrag(100, 2, 5)]} onClose={vi.fn()} {...apis} />,
+    )
+
+    await screen.findByText('Kommentare')
+    expect(fortschrittText()).toBeNull()
+  })
+
+  it('blendet den Fortschritt im Edit-Modus aus', async () => {
+    const apis = makeApis()
+    render(
+      <CardDetailModal
+        card={epicCard} canEdit initialEditing epics={[epicEintrag(200, 2, 5)]}
+        onClose={vi.fn()} {...apis} />,
+    )
+
+    await screen.findByRole('button', { name: 'Speichern' })
+    expect(fortschrittText()).toBeNull()
+  })
+
   // --- Vorgang eröffnen (Issue #647) ----------------------------------------
 
   const vorgangKnopf = () => screen.getByRole('button', { name: 'Vorgang eröffnen' })
