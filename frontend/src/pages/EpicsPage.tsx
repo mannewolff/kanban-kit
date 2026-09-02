@@ -33,6 +33,15 @@ import { useProjectName } from '../lib/useProjectName'
 import { CARD_LIFT, CARD_SHADOW, CARD_SHADOW_HOVER, PANEL_RADIUS } from '../theme'
 
 /**
+ * Zeilenhöhe eines Marken-Chips auf der Vorhaben-Kachel.
+ *
+ * Fest gesetzt und nicht aus dem Theme abgeleitet, weil daraus die Obergrenze des Marken-Bereichs
+ * gerechnet wird (zwei Zeilen). Hinge die Zeilenhöhe an der Schriftgröße des Themes, wäre die
+ * Kachelhöhe von einer Theme-Änderung abhängig, ohne dass das hier sichtbar wäre.
+ */
+const MARKE_ZEILENHOEHE = '1.5rem'
+
+/**
  * Eine Art in der Zusammensetzung, mit Singular- und Pluralform. Die Anzahl steht als Text neben
  * der Bezeichnung, nicht als blosse Zahl — sonst waere "1 2 5" auf der Kachel nicht lesbar.
  */
@@ -260,6 +269,12 @@ export function EpicsPage() {
                 cursor: 'pointer',
                 minWidth: 0,
                 aspectRatio: '1',
+                // `aspectRatio` allein hält die Höhe nicht: Ein Flex-Container hat `min-height:
+                // auto`, sein Inhalt dehnt ihn also über das Quadrat hinaus — genau daher kamen
+                // die unterschiedlich hohen Kacheln. `hidden` zieht die Grenze, die drei
+                // Begrenzungen darunter (Titel, Anforderung, Mittelteil) sorgen dafür, dass sie
+                // nichts Sinntragendes abschneidet.
+                overflow: 'hidden',
                 // Die Dämpfung hängt an derselben Bedingung wie der Text „Ausgeblendet" unten:
                 // Sie unterstützt ihn, sie ersetzt ihn nicht.
                 opacity: istAusgeblendet ? 0.55 : 1,
@@ -277,7 +292,22 @@ export function EpicsPage() {
             >
               <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
                 <EpicBadge epicId={epic.id} title={epic.title} shortcode={epic.shortcode} />
-                <Typography variant="subtitle1" sx={{ fontWeight: 600, flexGrow: 1 }}>
+                {/* Höchstens zwei Zeilen. Einzeilig wie sonst im Bestand (`noWrap`) wäre hier zu
+                    wenig — Vorhaben-Titel sind ganze Sätze und wären fast immer beschnitten.
+                    `minWidth: 0` erlaubt dem Flex-Kind zu schrumpfen; ohne das greift die
+                    Kürzung nicht, weil der Text seine eigene Mindestbreite erzwingt. */}
+                <Typography
+                  variant="subtitle1"
+                  sx={{
+                    fontWeight: 600,
+                    flexGrow: 1,
+                    minWidth: 0,
+                    display: '-webkit-box',
+                    WebkitBoxOrient: 'vertical',
+                    WebkitLineClamp: 2,
+                    overflow: 'hidden',
+                  }}
+                >
                   {epic.title}
                 </Typography>
                 {/* Immer neutral, auch bei sortenreinen Vorhaben: `total` zaehlt ALLE
@@ -313,6 +343,14 @@ export function EpicsPage() {
                   <MoreVertIcon fontSize="small" />
                 </IconButton>
               </Stack>
+              {/* Der veränderliche Teil der Kachel in einem eigenen, schrumpffähigen Kasten:
+                  `flex: 1` füllt den Raum zwischen Kopf und Fortschrittsbalken, `minHeight: 0`
+                  erlaubt das Unterschreiten der Inhaltshöhe (ohne das griffe `overflow` nicht),
+                  und was dann noch nicht passt, wird abgeschnitten statt die Kachel zu dehnen.
+                  Damit ist die gleiche Höhe aller Kacheln garantiert und nicht bloß wahrscheinlich
+                  — die Begrenzungen an Titel, Anforderung und Marken sorgen dafür, dass der Schnitt
+                  in der Praxis gar nicht erst nötig wird. */}
+              <Box sx={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
               {/* Woraus das Vorhaben entstanden ist. Traegt es keine Anforderung, steht hier
                   nichts — kein Platzhalter und keine Ersatzanzeige aus den Wurzeln (Plan #637, E6).
                   `component="button"` rendert ein echtes <button>: per Tab erreichbar und per Enter
@@ -320,16 +358,26 @@ export function EpicsPage() {
                   jsx-a11y prueft nur DOM-Elemente in Kleinschreibung, keine MUI-Komponenten — und
                   waere per Tastatur trotzdem unerreichbar. */}
               {epic.requirementCardNumber !== null && (
-                <Stack direction="row" spacing={0.5} alignItems="baseline" sx={{ mb: 1 }}>
-                  <Typography variant="caption" color="text.secondary">
+                <Stack direction="row" spacing={0.5} alignItems="baseline" sx={{ mb: 1, minWidth: 0 }}>
+                  <Typography variant="caption" color="text.secondary" sx={{ flexShrink: 0 }}>
                     Anforderung:
                   </Typography>
+                  {/* Eine Zeile mit Auslassungspunkten — das Muster aus `BoardListPage`. Der
+                      Kartentitel hängt hier ungekürzt dran und war der zweite Grund, aus dem
+                      Kacheln unterschiedlich hoch wurden. */}
                   <Link
                     component="button"
                     type="button"
                     variant="caption"
                     underline="hover"
                     textAlign="left"
+                    sx={{
+                      minWidth: 0,
+                      display: 'block',
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                    }}
                     onClick={(e) => {
                       // Ohne stopPropagation oeffnete derselbe Klick zusaetzlich das
                       // Vorhaben-Detail — der Kachel-Klick liegt eine Ebene darueber.
@@ -366,28 +414,45 @@ export function EpicsPage() {
                 </Stack>
               )}
 
+              {/* Höchstens zwei Zeilen Marken. Ein Vorhaben mit vielen verschiedenen Labels trieb
+                  die Kachel sonst beliebig in die Höhe — `flexWrap` kennt keine Obergrenze. Die
+                  Zeilenhöhe steht am Chip fest, damit die Rechnung nicht von der Schriftgröße des
+                  Themes abhängt; der Zuschlag ist der Zeilenabstand (`spacing={0.5}` = 4px). */}
               {marken.length > 0 && (
-                <Stack direction="row" spacing={0.5} useFlexGap flexWrap="wrap" sx={{ mb: 1 }}>
+                <Stack
+                  direction="row"
+                  spacing={0.5}
+                  useFlexGap
+                  flexWrap="wrap"
+                  sx={{ mb: 1, maxHeight: `calc(2 * ${MARKE_ZEILENHOEHE} + 4px)`, overflow: 'hidden' }}
+                >
                   {marken.map((marke) => (
                     <Typography
                       key={marke.name}
                       variant="caption"
                       component="span"
-                      sx={{ ...labelChipSx(marke.color), px: 0.75, borderRadius: 10, whiteSpace: 'nowrap' }}
+                      sx={{
+                        ...labelChipSx(marke.color),
+                        px: 0.75,
+                        borderRadius: 10,
+                        whiteSpace: 'nowrap',
+                        lineHeight: MARKE_ZEILENHOEHE,
+                      }}
                     >
                       {`${marke.name} ${marke.count}`}
                     </Typography>
                   ))}
                 </Stack>
               )}
-              {/* `mt: auto` schiebt den Balken an den Fuß der Kachel. In der quadratischen Fläche
-                  bleibt Luft zwischen Kopf und Fuß; ohne das klebte der Balken am Titel und die
-                  untere Hälfte wäre leer. */}
+              </Box>
+              {/* Der Balken steht am Fuß der Kachel, weil der Kasten darüber den freien Raum füllt
+                  (`flex: 1`). Früher tat das ein `mt: 'auto'` am Balken selbst — das schob ihn zwar
+                  ebenso nach unten, ließ den Inhalt darüber aber ungebremst wachsen. */}
               <LinearProgress
                 variant="determinate"
                 value={pct}
                 aria-label={`Fortschritt ${epic.title}`}
-                sx={{ height: 8, borderRadius: 1, mt: 'auto' }}
+                sx={{ height: 8, borderRadius: 1 }}
               />
             </Paper>
           )
