@@ -9,7 +9,9 @@ import Divider from '@mui/material/Divider'
 import Link from '@mui/material/Link'
 import Paper from '@mui/material/Paper'
 import Stack from '@mui/material/Stack'
+import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
+import ContentCopyIcon from '@mui/icons-material/ContentCopy'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import { useEffect, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
@@ -25,11 +27,12 @@ import { CardDetailModal } from '../components/CardDetailModal'
 import { useSnackbar } from '../components/SnackbarProvider'
 import { formatDuration } from '../lib/formatDuration'
 import {
-  parseNightRunLog,
-  type NightRun,
-  type NightRunErrorClass,
-  type NightRunState,
-} from '../lib/nightRunLog'
+  buildHandoffText,
+  NIGHT_RUN_ERROR_CLASS_TEXT,
+  NIGHT_RUN_STATE_TEXT,
+  type NightRunHandoffItem,
+} from '../lib/nightRunHandoff'
+import { parseNightRunLog, type NightRun, type NightRunState } from '../lib/nightRunLog'
 import { readTextFile } from '../lib/readTextFile'
 import { useProjectName } from '../lib/useProjectName'
 
@@ -46,14 +49,15 @@ import { useProjectName } from '../lib/useProjectName'
  * Kettenschritten wären mehrere hundert Anfragen bei jedem Seitenaufruf.
  */
 
-/** Ein Arbeitspaket in der Anzeigeform — frisch geparst und aufbewahrt sehen gleich aus. */
-interface AnzeigeItem {
-  cardNumber: number
-  title: string
-  state: NightRunState
-  errorClass: NightRunErrorClass | undefined
+/**
+ * Ein Arbeitspaket in der Anzeigeform — frisch geparst und aufbewahrt sehen gleich aus.
+ *
+ * Es **erweitert** den Typ des Übernahmetexts (#727), statt seine Felder zu wiederholen: So ist an
+ * der Deklaration ablesbar, dass hier genau das Arbeitspaket steht, aus dem `buildHandoffText` den
+ * Text erzeugt — und ein fehlendes Feld bräche den Build, statt eine zweite Wahrheit anzulegen.
+ */
+interface AnzeigeItem extends NightRunHandoffItem {
   durationMs: number | undefined
-  excerpt: string | undefined
 }
 
 /** Ein Lauf in der Anzeigeform. */
@@ -85,29 +89,6 @@ type Haeufigkeiten = NightRunErrorClassCounts | null
 interface Kettenglied {
   nummer: number
   karte: CardByNumber | null
-}
-
-const ZUSTAND_TEXT: Record<NightRunState, string> = {
-  GREEN: 'Erfolg',
-  YELLOW: 'Erfolg, Prüfung rot',
-  RED: 'gescheitert',
-  GREY: 'nicht bearbeitet',
-}
-
-/**
- * Die Beschriftung je Fehlerklasse. Der Typ ist `Record<NightRunErrorClass, string>` und **nicht**
- * `Partial`: Die Liste der Klassen ist abgeschlossen und lebt in `lib/nightRunLog.ts` (A13); käme
- * dort eine hinzu, bräche hier der Build, statt dass eine Häufigkeit stumm ohne Beschriftung
- * erschiene. Deshalb zählt diese Datei die Klassen auch nirgends selbst auf.
- */
-const FEHLERKLASSE_TEXT: Record<NightRunErrorClass, string> = {
-  CHECKS_RED: 'Prüfungen rot',
-  CHECKS_NOT_STARTED: 'Prüfungen nicht gelaufen',
-  DEPENDENCY_UNMET: 'Abhängigkeit offen',
-  UNEXPECTED_STATE: 'Unerwarteter Zustand',
-  HARD_ABORT: 'Harter Abbruch',
-  AWAITING_DECISION: 'Wartet auf Entscheidung',
-  REVIEWER_FAILED: 'Prüf-Session gescheitert',
 }
 
 /**
@@ -283,7 +264,7 @@ function haeufigkeitsText(
   if (item.state !== 'YELLOW' && item.state !== 'RED') {
     return null
   }
-  const beschriftung = FEHLERKLASSE_TEXT[item.errorClass]
+  const beschriftung = NIGHT_RUN_ERROR_CLASS_TEXT[item.errorClass]
   if (zaehler === null) {
     return `${beschriftung}: Häufigkeit nicht abrufbar`
   }
@@ -299,7 +280,24 @@ function haeufigkeitsText(
     : `${beschriftung}: ${anzahl} von ${aufbewahrteLaeufe} aufbewahrten Läufen`
 }
 
-/** Ein Arbeitspaket samt Zustand, Dauer, Auszug, Häufigkeit und Herkunftskette. */
+/**
+ * Legt den Übernahmetext in die Zwischenablage (#727).
+ *
+ * Schlägt der Zugriff fehl — Clipboard-API nicht verfügbar, Berechtigung verweigert, unsicherer
+ * Kontext —, bleibt es dabei: Der Text steht sichtbar im Feld und ist von Hand markierbar. Eine
+ * zusätzliche Fehlermeldung wäre Lärm über etwas, das der Betreiber vor sich sieht. Der `try`
+ * umfasst auch den Zugriff auf `navigator.clipboard` selbst: In einem unsicheren Kontext fehlt die
+ * Eigenschaft, und das wirft synchron statt abzulehnen.
+ */
+async function inDieZwischenablage(text: string): Promise<void> {
+  try {
+    await navigator.clipboard.writeText(text)
+  } catch {
+    // Absichtlich still — siehe oben.
+  }
+}
+
+/** Ein Arbeitspaket samt Zustand, Dauer, Auszug, Häufigkeit, Herkunftskette und Übernahmetext. */
 function Arbeitspaket({
   item,
   katalog,
@@ -316,6 +314,8 @@ function Arbeitspaket({
   // `undefined` = noch nicht aufgelöst (die Kette lädt), `null` = nicht auflösbar.
   const wurzel = katalog.get(item.cardNumber)
   const beschriftung = `#${item.cardNumber} ${item.title}`
+  // `null` an einem grünen oder grauen Arbeitspaket — dort erscheint weder Feld noch Knopf.
+  const uebernahme = buildHandoffText(item)
 
   return (
     <Box sx={{ py: 1 }}>
@@ -324,7 +324,7 @@ function Arbeitspaket({
           size="small"
           variant="outlined"
           data-testid={`zustand-${item.cardNumber}`}
-          label={ZUSTAND_TEXT[item.state]}
+          label={NIGHT_RUN_STATE_TEXT[item.state]}
           sx={{ color: ZUSTAND_FARBE[item.state], borderColor: ZUSTAND_FARBE[item.state] }}
         />
         {wurzel === null && (
@@ -367,6 +367,38 @@ function Arbeitspaket({
             {stufenText(stufe, kette(item.cardNumber, katalog), istRot)}
           </Typography>
         ))}
+
+      {uebernahme !== null && (
+        // Der Text steht **immer** offen da, nie in einem eingeklappten Bereich: Er speist sich aus
+        // Protokollauszügen, also aus Fremdtext (Claude-Ausgaben, Ergebnisse fremder Werkzeuge).
+        // Ein unsichtbar kopierter Text wäre ein Weg von fremdem Text in die eigene
+        // Entwicklungssitzung. Als reiner Wert eines Textfelds, nie über den Markdown-Renderer
+        // (CLAUDE-security.md) — und ungekürzt: keine `maxRows`, kein `noWrap`.
+        <Stack direction="row" spacing={1} alignItems="flex-start" sx={{ mt: 1 }}>
+          <TextField
+            fullWidth
+            multiline
+            minRows={3}
+            size="small"
+            value={uebernahme}
+            slotProps={{
+              htmlInput: {
+                readOnly: true,
+                'aria-label': `Übernahmetext zu Karte #${item.cardNumber}`,
+              },
+            }}
+          />
+          <Button
+            size="small"
+            variant="outlined"
+            startIcon={<ContentCopyIcon fontSize="small" />}
+            aria-label={`Übernahmetext zu Karte #${item.cardNumber} kopieren`}
+            onClick={() => void inDieZwischenablage(uebernahme)}
+          >
+            Kopieren
+          </Button>
+        </Stack>
+      )}
     </Box>
   )
 }

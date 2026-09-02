@@ -1,10 +1,18 @@
 import { ThemeProvider } from '@mui/material/styles'
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import {
+  fireEvent,
+  getDefaultNormalizer,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { CardByNumber } from '../api/cards'
 import type { NightRunErrorClassCounts, NightRunResult, NightRunView } from '../api/nightRuns'
 import { SnackbarProvider } from '../components/SnackbarProvider'
+import { buildHandoffText, type NightRunHandoffItem } from '../lib/nightRunHandoff'
 import { parseNightRunLog } from '../lib/nightRunLog'
 import { theme } from '../theme'
 import { NightRunPage } from './NightRunPage'
@@ -964,5 +972,157 @@ describe('NightRunPage — Häufigkeit einer Fehlerklasse', () => {
 
     expect(await within(lauf(30)).findByTestId('zustand-700')).toBeInTheDocument()
     expect(haeufigkeit(700)).toBeNull()
+  })
+})
+
+describe('NightRunPage — Übernahmetext für die Entwicklungsumgebung', () => {
+  /** Ein Auszug mit Markdown-Zeichen — er ist Fremdtext und wird nie gedeutet. */
+  const AUSZUG_GELB =
+    '  Issue #700: gelaufen: *fett* `npm test` -> rot (Frontend) | ausgelassen: keine'
+
+  const GELB: NightRunHandoffItem = {
+    cardNumber: 700,
+    title: 'Paket A',
+    state: 'YELLOW',
+    errorClass: 'CHECKS_RED',
+    excerpt: AUSZUG_GELB,
+  }
+
+  const ROT: NightRunHandoffItem = {
+    cardNumber: 701,
+    title: 'Paket B',
+    state: 'RED',
+    errorClass: 'HARD_ABORT',
+    excerpt: '  HARTER STOPP: erfolgreiche Runde zu Issue #701 hinterlaesst einen dirty Tree',
+  }
+
+  const GRUEN: NightRunHandoffItem = {
+    cardNumber: 702,
+    title: 'Paket C',
+    state: 'GREEN',
+    errorClass: undefined,
+    excerpt: '  Erfolg nach 7 min, Commit c3d4e5f, Issue #702 in In review.',
+  }
+
+  const GRAU: NightRunHandoffItem = {
+    cardNumber: 703,
+    title: 'Paket D',
+    state: 'GREY',
+    errorClass: 'DEPENDENCY_UNMET',
+    excerpt: '  #703 Paket D -> uebersprungen (Abhaengigkeit #999 liegt nicht in Done)',
+  }
+
+  const BEFUNDE: NightRunView[] = [
+    aufbewahrt({
+      id: 1,
+      startedAt: startedAt(0),
+      items: [GELB, ROT, GRUEN, GRAU].map((item, position) => ({ id: position + 1, ...item })),
+    }),
+  ]
+
+  /** Das schreibgeschützte Feld eines Arbeitspakets; `null`, wenn keines gerendert wird. */
+  const feld = (cardNumber: number) =>
+    within(lauf(0)).queryByLabelText(`Übernahmetext zu Karte #${cardNumber}`) as
+      | HTMLTextAreaElement
+      | null
+
+  const kopierKnopf = (cardNumber: number) =>
+    within(lauf(0)).queryByRole('button', {
+      name: `Übernahmetext zu Karte #${cardNumber} kopieren`,
+    })
+
+  let writeText: ReturnType<typeof vi.fn>
+
+  beforeEach(() => {
+    writeText = vi.fn().mockResolvedValue(undefined)
+    Object.assign(navigator, { clipboard: { writeText } })
+  })
+
+  /** Rendert die Seite mit den vier Befunden und klappt den Lauf auf. */
+  async function befundeZeigen() {
+    renderPage({ listen: [BEFUNDE] })
+    await screen.findByTestId(`lauf-${startedAt(0)}`)
+    aufklappen(0)
+    await within(lauf(0)).findByTestId('zustand-700')
+  }
+
+  it('zeigt zu einem gelben und einem roten Arbeitspaket den vollständigen Text, bevor kopiert wird', async () => {
+    await befundeZeigen()
+
+    // `getByDisplayValue` mit dem **ganzen** String: Ein gekürzter Wert fände nichts. Der
+    // Normalisierer bleibt aus, sonst faltete Testing Library die Zeilenumbrüche des Werts zu
+    // Leerzeichen zusammen und der Vergleich prüfte weniger, als er behauptet.
+    const woertlich = getDefaultNormalizer({ trim: false, collapseWhitespace: false })
+    expect(
+      within(lauf(0)).getByDisplayValue(buildHandoffText(GELB) as string, { normalizer: woertlich }),
+    ).toBeInTheDocument()
+    expect(
+      within(lauf(0)).getByDisplayValue(buildHandoffText(ROT) as string, { normalizer: woertlich }),
+    ).toBeInTheDocument()
+    expect(feld(700)?.value).toContain(AUSZUG_GELB)
+    expect(writeText).not.toHaveBeenCalled()
+  })
+
+  it('zeigt zu einem grünen und einem grauen Arbeitspaket weder Feld noch Knopf', async () => {
+    await befundeZeigen()
+
+    expect(feld(702)).toBeNull()
+    expect(kopierKnopf(702)).toBeNull()
+    expect(feld(703)).toBeNull()
+    expect(kopierKnopf(703)).toBeNull()
+  })
+
+  it('legt exakt den String des sichtbaren Feldes in die Zwischenablage', async () => {
+    await befundeZeigen()
+    const sichtbar = feld(700)?.value
+
+    fireEvent.click(kopierKnopf(700) as HTMLElement)
+
+    await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1))
+    expect(writeText).toHaveBeenCalledWith(sichtbar)
+  })
+
+  it('gibt den Auszug wörtlich wieder, statt seine Markdown-Zeichen zu deuten', async () => {
+    await befundeZeigen()
+
+    // Der Wert einer `textarea` trägt kein Markup — geprüft wird beides: der wörtliche Inhalt und
+    // dass daneben nichts vom Markdown-Renderer Erzeugtes steht.
+    expect(feld(700)?.value).toContain('*fett*')
+    expect(feld(700)?.value).toContain('`npm test`')
+    expect(within(lauf(0)).queryByText('fett', { selector: 'em' })).toBeNull()
+    expect(within(lauf(0)).queryByText('npm test', { selector: 'code' })).toBeNull()
+  })
+
+  it('lässt den Text sichtbar, wenn die Zwischenablage nicht verfügbar ist', async () => {
+    writeText.mockRejectedValue(new Error('Clipboard nicht verfügbar'))
+    await befundeZeigen()
+    const sichtbar = feld(700)?.value
+
+    fireEvent.click(kopierKnopf(700) as HTMLElement)
+
+    await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1))
+    // Der Text bleibt stehen und ist von Hand markierbar; eine Fehlermeldung ist nicht nötig.
+    expect(feld(700)?.value).toBe(sichtbar)
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  it('zeigt zu einem Befund ohne Auszug einen Text ohne `undefined`', async () => {
+    renderPage({
+      listen: [
+        [
+          aufbewahrt({
+            id: 1,
+            startedAt: startedAt(0),
+            items: [{ id: 1, cardNumber: 700, title: 'Paket A', state: 'RED', errorClass: 'HARD_ABORT' }],
+          }),
+        ],
+      ],
+    })
+    await screen.findByTestId(`lauf-${startedAt(0)}`)
+    aufklappen(0)
+    await within(lauf(0)).findByTestId('zustand-700')
+
+    expect(feld(700)?.value).not.toContain('undefined')
+    expect(feld(700)?.value).toContain('Harter Abbruch')
   })
 })
