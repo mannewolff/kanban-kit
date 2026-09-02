@@ -89,8 +89,8 @@ Diese Datei ist der Einstiegspunkt für alle Engineering-Regeln in diesem Projek
     └── src/
         ├── main.tsx, App.tsx, theme.ts
         ├── auth/                       # AuthContext (Session-basiert)
-        ├── layout/                     # AppShell, navItems
-        ├── components/                 # geteilte UI-Bausteine (BoardView, Modals, …)
+        ├── layout/                     # navItems
+        ├── components/                 # geteilte UI-Bausteine (AppShell, BoardView, Modals, …)
         ├── pages/                      # Routen-Komponenten (Projects, Boards, Vorhaben, Admin, Auth-Seiten)
         ├── routes/                     # ProtectedRoute
         ├── lib/                        # Frontend-Hilfsfunktionen (statusColors, boardOps, …)

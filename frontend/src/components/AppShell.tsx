@@ -32,7 +32,7 @@ import { projectsApi, type Project } from '../api/projects'
 import { APP_NAME } from '../appMeta'
 import { useAuth } from '../auth/AuthContext'
 import { buildNavItems, type BoardContext, type NavGroup, type NavLink, type NavNode } from '../layout/navItems'
-import { canManageBoards, isPlatformAdmin } from '../lib/roles'
+import { canManageBoards, canManageProject, isPlatformAdmin } from '../lib/roles'
 import { useBoardHistory, type BoardHistoryEntry } from '../lib/useBoardHistory'
 import { useEditMode } from '../lib/EditModeContext'
 import { useKeyboardShortcut } from '../lib/useKeyboardShortcut'
@@ -172,6 +172,15 @@ export function AppShell() {
   const projectCount = projects?.length ?? null
   const currentProject = board ? projects?.find((p) => p.id === board.projectId) : undefined
   const canManageCurrentBoards = canManageBoards(currentProject?.role ?? 'VIEWER', admin)
+  // Der Nachtlauf-Bereich ist projektweit, nicht board-gebunden: Bezug ist das Projekt der Route,
+  // sobald kein Board offen ist (`currentProject` ist dann undefined — der Eintrag verschwände
+  // genau nach dem Klick auf ihn). `canManageProject` ist die Semantik von `requireOwner`:
+  // Owner *oder* Plattform-Admin (Plan #718, A6).
+  const nightRunProjectId = board?.projectId ?? routeProjectId
+  const canViewNightRun = canManageProject(
+    projects?.find((p) => p.id === nightRunProjectId)?.role ?? 'VIEWER',
+    admin,
+  )
   const navItems = useMemo(
     () =>
       buildNavItems({
@@ -181,8 +190,9 @@ export function AppShell() {
         boardCount,
         canManageBoards: canManageCurrentBoards,
         projectId: routeProjectId,
+        canViewNightRun,
       }),
-    [board, admin, projectCount, boardCount, canManageCurrentBoards, routeProjectId],
+    [board, admin, projectCount, boardCount, canManageCurrentBoards, routeProjectId, canViewNightRun],
   )
 
   // ---- Board-Wechsel (#587): Verlauf fortschreiben und das Overlay bedienen ----

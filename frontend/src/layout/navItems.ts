@@ -5,6 +5,7 @@ import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings'
 import FolderIcon from '@mui/icons-material/Folder'
 import InsightsIcon from '@mui/icons-material/Insights'
 import LightbulbIcon from '@mui/icons-material/Lightbulb'
+import NightsStayIcon from '@mui/icons-material/NightsStay'
 import ViewColumnIcon from '@mui/icons-material/ViewColumn'
 import ViewListIcon from '@mui/icons-material/ViewList'
 
@@ -52,6 +53,12 @@ export interface NavParams {
    * Vorrang; {@code null} = kein Projekt-Kontext (dann kein „Ideen"-Link).
    */
   projectId?: number | null
+  /**
+   * Ob der „Nachtlauf"-Bereich des aktuellen Projekts sichtbar ist. Der fertige Boolesche Wert
+   * kommt von außen (Rolle und Plattform-Admin bleiben Sache der Shell); hier zählt nur, dass er
+   * gesetzt ist und ein Projekt-Kontext besteht.
+   */
+  canViewNightRun?: boolean
 }
 
 /**
@@ -69,6 +76,7 @@ export function buildNavItems(params: NavParams): NavNode[] {
     boardCount = null,
     canManageBoards = false,
     projectId = null,
+    canViewNightRun = false,
   } = params
   const items: NavNode[] = []
 
@@ -94,6 +102,17 @@ export function buildNavItems(params: NavParams): NavNode[] {
       label: 'Ideen',
       path: `/projects/${currentProjectId}/ideas`,
       icon: LightbulbIcon,
+    })
+  }
+
+  // „Nachtlauf" ist ebenfalls projektweit und liegt hinter einem eigenen Recht (Owner bzw.
+  // Plattform-Admin) — die Entscheidung darüber trifft die Shell, hier zählt nur der Wert.
+  if (canViewNightRun && currentProjectId !== null) {
+    items.push({
+      kind: 'link',
+      label: 'Nachtlauf',
+      path: `/projects/${currentProjectId}/nachtlauf`,
+      icon: NightsStayIcon,
     })
   }
 

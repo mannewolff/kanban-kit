@@ -30,6 +30,7 @@ const ForgotPasswordPage = lazy(() =>
   import('./pages/ForgotPasswordPage').then((m) => ({ default: m.ForgotPasswordPage })),
 )
 const LoginPage = lazy(() => import('./pages/LoginPage').then((m) => ({ default: m.LoginPage })))
+const NightRunPage = lazy(() => import('./pages/NightRunPage').then((m) => ({ default: m.NightRunPage })))
 const ProjectBoardsPage = lazy(() =>
   import('./pages/ProjectBoardsPage').then((m) => ({ default: m.ProjectBoardsPage })),
 )
@@ -74,6 +75,7 @@ export function App() {
             <Route path="/projects/:projectId" element={<ProjectBoardsPage />} />
             <Route path="/projects/:projectId/ideas" element={<IdeasPage />} />
             <Route path="/projects/:projectId/members" element={<ProjectMembersPage />} />
+            <Route path="/projects/:projectId/nachtlauf" element={<NightRunPage />} />
             <Route path="/boards/:boardId" element={<BoardPage />} />
             <Route path="/boards/:boardId/list" element={<BoardListPage />} />
             <Route path="/boards/:boardId/vorhaben" element={<EpicsPage />} />

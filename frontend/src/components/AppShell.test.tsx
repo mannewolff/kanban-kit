@@ -466,6 +466,66 @@ describe('AppShell', () => {
     await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/projects/5/ideas'))
   })
 
+  describe('Nachtlauf-Eintrag', () => {
+    /**
+     * Anker für „Kontext vollständig geladen": Der Verlaufseintrag — und damit der aktivierte
+     * Wechsel-Knopf — entsteht erst, wenn Board *und* Projektliste da sind. Ohne ihn prüften die
+     * negativen Fälle womöglich einen Zwischenstand, in dem die Rolle noch gar nicht vorlag.
+     */
+    async function waitForLoadedBoardContext(): Promise<void> {
+      await waitFor(() =>
+        expect(screen.getByRole('button', { name: 'Board wechseln' })).toBeEnabled(),
+      )
+    }
+
+    it('zeigt „Nachtlauf" auf einer Board-Route, wenn man Owner des Projekts ist', async () => {
+      renderShell('/boards/1')
+
+      fireEvent.click(await screen.findByText('Nachtlauf'))
+
+      await waitFor(() =>
+        expect(screen.getByTestId('location')).toHaveTextContent('/projects/5/nachtlauf'),
+      )
+    })
+
+    it('blendet „Nachtlauf" für eine Rolle unterhalb OWNER aus', async () => {
+      mockedProjects.list.mockResolvedValue([
+        { id: 5, name: 'P1', role: 'MEMBER', createdAt: '' },
+        { id: 6, name: 'P2', role: 'MEMBER', createdAt: '' },
+      ])
+      renderShell('/boards/1')
+      await waitForLoadedBoardContext()
+
+      expect(screen.queryByText('Nachtlauf')).not.toBeInTheDocument()
+    })
+
+    it('zeigt „Nachtlauf" auf einer Projekt-Route ohne offenes Board (routeProjectId)', async () => {
+      renderShell('/projects/5')
+
+      fireEvent.click(await screen.findByText('Nachtlauf'))
+
+      await waitFor(() =>
+        expect(screen.getByTestId('location')).toHaveTextContent('/projects/5/nachtlauf'),
+      )
+    })
+
+    it('zeigt „Nachtlauf" dem Plattform-Admin trotz Rolle unterhalb OWNER', async () => {
+      // Plan-Entscheidung A6: `PermissionChecker.requireOwner` lässt den Plattform-Admin passieren —
+      // ein eigenes `isOwner` in der Shell blendete ihm den Bereich aus, den der Server ihm öffnet.
+      useAuthMock.mockReturnValue({
+        user: { ...loggedInUser, platformRole: 'ADMIN' as const },
+        logout: logoutMock,
+      })
+      mockedProjects.list.mockResolvedValue([
+        { id: 5, name: 'P1', role: 'MEMBER', createdAt: '' },
+        { id: 6, name: 'P2', role: 'MEMBER', createdAt: '' },
+      ])
+      renderShell('/boards/1')
+
+      expect(await screen.findByText('Nachtlauf')).toBeInTheDocument()
+    })
+  })
+
   describe('Board-Wechsel', () => {
     beforeEach(() => {
       mockedBoards.get.mockImplementation((id: number) => Promise.resolve(BOARDS[id as BoardId]))
