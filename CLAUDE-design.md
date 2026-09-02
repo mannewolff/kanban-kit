@@ -16,7 +16,7 @@ Sieben Farben, übernommen aus der persönlichen Marke des Autors, die für Ver�
 | Teal dunkel | `#1E5F68` | Sekundärfarbe, dunkle Akzente |
 | Teal hell | `#5BABB5` | Fläche der Kopfleiste |
 | Tinte | `#243539` | Fließtext (`text.primary`), Grundton aller Schatten |
-| Gedämpft | `#5F7A7F` | Sekundärtext (`text.secondary`) |
+| Gedämpft | `#54696E` | Sekundärtext (`text.secondary`) |
 | Rand | `#D8ECEE` | Haarlinien, Divider |
 | Eis | `#EDF5F6` | hellste getönte Fläche, Panel-Köpfe |
 
@@ -49,7 +49,7 @@ Der Grundradius liegt bewusst zwischen den beiden anderen: rund genug, dass Scha
 
 **Alle Schatten führen die Marken-Tinte `rgba(36,53,57,…)`, nie Schwarz.** Ein Schatten in der Grundfarbe wirkt wie Licht, ein schwarzer wie Schmutz.
 
-**Getönter Grund, weiße Inhaltsflächen.** Der Grund der Anwendung ist leicht getönt, Karten und Panels sind weiß — nur so haben die Schattenebenen etwas, wogegen sie wirken. *Zielzustand, noch nicht umgesetzt (Stand 2026-09-02: `background.default` ist Weiß); Umsetzung in Issue #713.*
+**Getönter Grund, weiße Inhaltsflächen.** Der Grund der Anwendung ist leicht getönt, Karten und Panels sind weiß — nur so haben die Schattenebenen etwas, wogegen sie wirken. Umgesetzt in Issue #713: Der Grund ist `APP_BACKGROUND` — zwei radiale Verläufe aus dem Eis der Palette an den oberen Ecken, auslaufend nach Weiß. Er liegt auf einer fixierten eigenen Schicht (`body::before`) und gilt damit für die ganze Anwendung, auch für die Anmeldeseiten außerhalb der Shell. **Nicht** über `background-attachment: fixed`: iOS Safari ignoriert das und fällt auf `scroll` zurück.
 
 ---
 
@@ -61,7 +61,7 @@ Der Grundradius liegt bewusst zwischen den beiden anderen: rund genug, dass Scha
 
 ## 🔢 Weitere Tokens
 
-**Einzige Wertequelle für alle übrigen Design-Tokens ist [`frontend/src/theme.ts`](frontend/src/theme.ts).** Dort stehen unter anderem `STATUS_EDGE_WIDTH`, `EPIC_EDGE_WIDTH`, `SURFACE_TINT`, `CODE_BG`, `BOARD_GRADIENT` sowie die Schatten `CARD_SHADOW`, `CARD_SHADOW_HOVER` und `PANEL_SHADOW`. Diese Datei nennt ihre Werte **absichtlich nicht**: Zwei Wertequellen laufen auseinander, ohne dass ein Test es merkt.
+**Einzige Wertequelle für alle übrigen Design-Tokens ist [`frontend/src/theme.ts`](frontend/src/theme.ts).** Dort stehen unter anderem `STATUS_EDGE_WIDTH`, `EPIC_EDGE_WIDTH`, `SURFACE_TINT`, `CODE_BG`, `APP_BACKGROUND` sowie die Schatten `CARD_SHADOW`, `CARD_SHADOW_HOVER` und `PANEL_SHADOW`. Diese Datei nennt ihre Werte **absichtlich nicht**: Zwei Wertequellen laufen auseinander, ohne dass ein Test es merkt.
 
 Statusfarben der Spalten sind eine eigene, bewusste Ausnahme und liegen in [`frontend/src/lib/statusColors.ts`](frontend/src/lib/statusColors.ts).
 

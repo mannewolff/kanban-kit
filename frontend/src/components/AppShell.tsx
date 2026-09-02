@@ -568,7 +568,9 @@ export function AppShell() {
         </Box>
       </Drawer>
 
-      <Box component="main" sx={{ flexGrow: 1, p: 3, bgcolor: 'background.default', minWidth: 0 }}>
+      {/* Ohne eigenen Grund: der getönte Grund der Anwendung (theme.ts, `body::before`) scheint
+          durch. Ein `bgcolor` deckte ihn innerhalb der Shell wieder mit Weiß zu. */}
+      <Box component="main" sx={{ flexGrow: 1, p: 3, minWidth: 0 }}>
         <Toolbar sx={{ mt: `${bannerOffset}px` }} />
         <Outlet />
       </Box>

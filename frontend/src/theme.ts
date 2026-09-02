@@ -9,6 +9,10 @@ import { createTheme } from '@mui/material/styles'
  * bleiben flach mit Haarlinie. Die frühere Regel „Haarlinien statt Schatten" galt ausnahmslos und
  * ließ das Board flach wirken — die Tiefe ist jetzt auf die tragenden Flächen beschränkt, statt
  * überall zu fehlen.
+ *
+ * **Getönter Grund, weiße Inhaltsflächen.** Der Grund der ganzen Anwendung ({@link APP_BACKGROUND})
+ * liegt am `body`; Karten und Panels sind weiß. Bis #713 trug allein das Board einen eigenen
+ * Verlauf, alles daneben stand weiß auf weiß.
  */
 
 // Tokens der Designsprache (siehe CLAUDE-design.md).
@@ -16,7 +20,9 @@ const TEAL = '#2F8C97'
 const TEAL_DEEP = '#1E5F68'
 const TEAL_LIGHT = '#5BABB5'
 const TITLE = '#243539'
-const MUTED = '#5F7A7F'
+// Sekundärtext, abgedunkelt in #713. Der Vorgängerton hielt AA nur auf reinem Weiß (4,59:1) und
+// verfehlte sie schon im Bestand auf SURFACE_TINT (4,37:1); auf dem getönten Grund läge er tiefer.
+const MUTED = '#54696E'
 const BORDER = '#D8ECEE'
 const ICE = '#EDF5F6'
 
@@ -78,8 +84,17 @@ export const CARD_SHADOW_HOVER =
 /** Panel (Spalte, Kachel): schwebt über der Board-Fläche, ohne selbst Licht zu tragen. */
 export const PANEL_SHADOW = '0 1px 2px rgba(36,53,57,0.04), 0 6px 20px rgba(36,53,57,0.07)'
 
-/** Board-Fläche: gibt den Panels etwas, worauf sie schweben können. */
-export const BOARD_GRADIENT = 'linear-gradient(180deg,#F4FAFB 0%,#FFFFFF 60%)'
+/**
+ * Grund der ganzen Anwendung: zwei weit ausgelaufene Verläufe aus {@link ICE} an den oberen Ecken.
+ * Ohne ihn stünde Weiß auf Weiß, und die Schattenebenen der Panels hätten keinen Grund, gegen den
+ * sie wirken. Er gilt für Board, Listen, Vorhaben, Dashboard, Administration und die Anmeldeseiten
+ * gleichermaßen — bis #713 trug ihn allein das Board.
+ */
+export const APP_BACKGROUND = [
+  `radial-gradient(1200px 800px at 0% 0%,   ${ICE} 0%, rgba(255,255,255,0) 55%)`,
+  `radial-gradient(1000px 700px at 100% 0%, ${ICE} 0%, rgba(255,255,255,0) 50%)`,
+  '#FFFFFF',
+].join(', ')
 
 /** Kopf eines Panels: sehr flacher Verlauf nach Weiß, trennt ohne einen Kasten zu bauen. */
 export const PANEL_HEAD_GRADIENT = `linear-gradient(180deg,${ICE} 0%,#FFFFFF 100%)`
@@ -117,6 +132,20 @@ export const theme = createTheme({
     button: { textTransform: 'none', fontWeight: 700 },
   },
   components: {
+    // Der Grund liegt auf einer eigenen, fixierten Schicht hinter dem Inhalt — nicht als
+    // `background-attachment: fixed` am `body`: iOS Safari ignoriert das und fällt auf `scroll`
+    // zurück, womit auf einem langen Board die Mitte des Verlaufs in den Scrollbereich rutschte.
+    MuiCssBaseline: {
+      styleOverrides: {
+        'body::before': {
+          content: '""',
+          position: 'fixed',
+          inset: 0,
+          zIndex: -1,
+          background: APP_BACKGROUND,
+        },
+      },
+    },
     // Kopfleiste: weiße Fläche aus der Palette statt `primary`, Haarlinie statt Elevation. Der
     // eigene `elevation: 0` ist nötig, weil MuiAppBar seinen Default 4 selbst setzt und der
     // MuiPaper-Default darauf nicht durchgreift.

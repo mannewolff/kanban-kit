@@ -682,3 +682,15 @@ describe('AppShell auf der weissen Kopfleiste', () => {
     expect(screen.getByText(`v${pkg.version}`)).toHaveStyle({ color: theme.palette.text.primary })
   })
 })
+
+describe('AppShell Inhaltsbereich', () => {
+  beforeEach(() => useAuthMock.mockReturnValue({ user: loggedInUser, logout: logoutMock }))
+
+  // Der Grund der Anwendung liegt am `body` (theme.ts, `body::before`). Ein `main` mit eigenem
+  // Hintergrund deckte ihn ab — genau das tat die Shell bis #713 mit `bgcolor: background.default`.
+  it('laesst den Grund der Anwendung durchscheinen, statt ihn zu ueberdecken', () => {
+    renderShellThemed()
+
+    expect(screen.getByRole('main')).not.toHaveStyle({ backgroundColor: 'rgb(255, 255, 255)' })
+  })
+})

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { Theme } from '@mui/material/styles'
 import {
-  BOARD_GRADIENT,
+  APP_BACKGROUND,
   CARD_LIFT,
   CARD_RADIUS,
   CARD_SHADOW,
@@ -78,11 +78,8 @@ describe('theme Design-Tokens (Panel)', () => {
     }
   })
 
-  it('gibt der Board-Fläche einen Verlauf, damit die Panels nicht auf Weiß stehen', () => {
-    expect(BOARD_GRADIENT).toContain('linear-gradient')
-    expect(BOARD_GRADIENT).toContain('#F4FAFB')
+  it('lässt den Panel-Kopf auf Weiß auslaufen, damit er kein eigener Kasten wird', () => {
     expect(PANEL_HEAD_GRADIENT).toContain('linear-gradient')
-    // Der Kopf läuft auf Weiß aus — sonst wirkt er als eigener Kasten.
     expect(PANEL_HEAD_GRADIENT).toContain('#FFFFFF')
   })
 
@@ -91,24 +88,24 @@ describe('theme Design-Tokens (Panel)', () => {
   })
 })
 
+/** Relative Luminanz nach WCAG 2.1, aus einem `#rrggbb`-Wert. */
+const luminanz = (hex: string): number => {
+  const kanal = (paar: string): number => {
+    const v = Number.parseInt(paar, 16) / 255
+    return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4
+  }
+  const r = kanal(hex.slice(1, 3))
+  const g = kanal(hex.slice(3, 5))
+  const b = kanal(hex.slice(5, 7))
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b
+}
+
+const kontrast = (a: string, b: string): number => {
+  const [hell, dunkel] = [luminanz(a), luminanz(b)].sort((x, y) => y - x)
+  return (hell + 0.05) / (dunkel + 0.05)
+}
+
 describe('theme Kopfleiste', () => {
-  /** Relative Luminanz nach WCAG 2.1, aus einem `#rrggbb`-Wert. */
-  const luminanz = (hex: string): number => {
-    const kanal = (paar: string): number => {
-      const v = Number.parseInt(paar, 16) / 255
-      return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4
-    }
-    const r = kanal(hex.slice(1, 3))
-    const g = kanal(hex.slice(3, 5))
-    const b = kanal(hex.slice(5, 7))
-    return 0.2126 * r + 0.7152 * g + 0.0722 * b
-  }
-
-  const kontrast = (a: string, b: string): number => {
-    const [hell, dunkel] = [luminanz(a), luminanz(b)].sort((x, y) => y - x)
-    return (hell + 0.05) / (dunkel + 0.05)
-  }
-
   // Die Leiste war vor #653 mittleres Teal mit weißer Schrift (3,85:1, AA verfehlt) und danach
   // weiß. Diese Zusicherung hält den Weg zurück zur Farbe offen, ohne den alten Fehler zu
   // wiederholen: Farbe ja, aber nur mit einem Kontrast, der die AA-Schwelle hält.
@@ -155,5 +152,60 @@ describe('theme AppBar-Override', () => {
     expect(style.borderBottom).toBe(`1px solid ${theme.palette.divider}`)
     // MUI setzt am AppBar eine eigene Elevation von 4; der MuiPaper-Default 0 greift dort nicht.
     expect(theme.components?.MuiAppBar?.defaultProps?.elevation).toBe(0)
+  })
+})
+
+describe('theme Grund der Anwendung', () => {
+  it('tönt den Grund aus dem Eis der Palette, ohne eine neue Hexfarbe einzuführen', () => {
+    // Zwei radiale Verläufe, beide aus ICE — der Grund trägt keinen Ton, den die Palette nicht kennt.
+    expect(APP_BACKGROUND.match(/#EDF5F6/g)).toHaveLength(2)
+    expect(APP_BACKGROUND.match(/radial-gradient/g)).toHaveLength(2)
+    expect(APP_BACKGROUND).toContain('#FFFFFF')
+  })
+
+  it('legt den Grund auf eine fixierte eigene Schicht hinter dem Inhalt', () => {
+    const vorSatz = theme.components?.MuiCssBaseline?.styleOverrides as
+      | Record<string, unknown>
+      | undefined
+    const schicht = vorSatz?.['body::before'] as Record<string, unknown> | undefined
+
+    expect(schicht).toBeDefined()
+    // Fixiert und hinter allem: eine eigene Schicht, damit der Grund beim Scrollen stehenbleibt.
+    expect(schicht).toMatchObject({
+      content: '""',
+      position: 'fixed',
+      inset: 0,
+      zIndex: -1,
+      background: APP_BACKGROUND,
+    })
+  })
+
+  it('fixiert den Grund über eine eigene Schicht statt über background-attachment', () => {
+    // iOS Safari ignoriert `background-attachment: fixed` und fällt auf `scroll` zurück; auf einem
+    // langen Board läge die Mitte des Verlaufs dann im Scrollbereich.
+    expect(APP_BACKGROUND).not.toContain('background-attachment')
+    expect(JSON.stringify(theme.components?.MuiCssBaseline?.styleOverrides)).not.toContain(
+      'attachment',
+    )
+  })
+
+  it('hält background.default als Farbwert, nicht als Verlaufsstring', () => {
+    // MUI leitet aus diesem Feld Kontraste ab; ein Verlauf bräche die Komponenten, die das tun.
+    expect(theme.palette.background.default).toMatch(/^#[0-9A-Fa-f]{6}$/)
+    expect(theme.palette.background.default).not.toContain('gradient')
+  })
+})
+
+describe('theme Textkontrast auf den Flächen des Leitstands', () => {
+  // Kontrast wird gegen die Fläche gerechnet, auf der der Text steht (CLAUDE-design.md). Seit der
+  // Grund getönt ist, sind das drei Flächen — Weiß allein genügt als Nachweis nicht mehr.
+  const flaechen = ['#EDF5F6', '#F6FAFB', '#FFFFFF']
+
+  it.each(flaechen)('hält Fließtext auf %s die AA-Schwelle', (flaeche) => {
+    expect(kontrast(flaeche, theme.palette.text.primary)).toBeGreaterThanOrEqual(4.5)
+  })
+
+  it.each(flaechen)('hält Sekundärtext auf %s die AA-Schwelle', (flaeche) => {
+    expect(kontrast(flaeche, theme.palette.text.secondary)).toBeGreaterThanOrEqual(4.5)
   })
 })
