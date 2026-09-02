@@ -116,6 +116,45 @@ export const CARD_LIFT = -3
 /** Hintergrund für Inline-Code und Codeblöcke; ohne Entsprechung in der Marken-Palette. */
 export const CODE_BG = '#f4f5f7'
 
+/**
+ * Die vier Zustandsfarben der Nachtlauf-Auswertung (Plan #718, A15).
+ *
+ * **Warum ein eigener Palette-Eintrag und nicht `success`/`warning`/`error`:** Diese Namen sind im
+ * Frontend an Dutzenden Nicht-Test-Stellen in Gebrauch — `color="error"` an Lösch-Buttons,
+ * `severity` an Alerts, Feldfehler in Formularen. Sie umzudefinieren färbte all das mit um, und MUI
+ * leitet `light`, `dark` und `contrastText` aus `main` ab; aus einem Markengrün könnte dabei weiße
+ * Schrift unter 4,5:1 entstehen.
+ *
+ * **Alle vier Töne sind Textfarben**, keine Flächen: Der Zustands-Chip trägt Schrift und Rand in
+ * der Farbe auf heller Fläche. Damit gilt die strengere der beiden Schwellen aus `CLAUDE-design.md`
+ * (Zeile 58) — 4,5:1 für den Text — und deckt die 3:1 des Farbfelds mit ab. Gemessen gegen die drei
+ * tatsächlichen Flächen des Leitstands (Weiß, {@link SURFACE_TINT}, {@link ICE}); `theme.test.ts`
+ * rechnet sie nach.
+ *
+ * **Grau ist der Sekundärtext** {@link MUTED} und nicht `text.disabled`: Letzteres ist hier gar
+ * nicht gesetzt, es gälte der MUI-Default `rgba(0,0,0,0.38)` mit rund 2,8:1 — und „vom Lauf nicht
+ * bearbeitet" ist ein bedeutungstragender Zustand, kein deaktiviertes Bedienelement.
+ */
+export interface NightRunPalette {
+  green: string
+  yellow: string
+  red: string
+  grey: string
+}
+
+const NIGHT_RUN_GREEN = '#1F6B4A'
+const NIGHT_RUN_YELLOW = '#8A5A00'
+const NIGHT_RUN_RED = '#A32B22'
+
+declare module '@mui/material/styles' {
+  interface Palette {
+    nightRun: NightRunPalette
+  }
+  interface PaletteOptions {
+    nightRun?: NightRunPalette
+  }
+}
+
 export const theme = createTheme({
   palette: {
     mode: 'light',
@@ -124,6 +163,12 @@ export const theme = createTheme({
     text: { primary: TITLE, secondary: MUTED },
     background: { default: '#FFFFFF', paper: '#FFFFFF' },
     divider: BORDER,
+    nightRun: {
+      green: NIGHT_RUN_GREEN,
+      yellow: NIGHT_RUN_YELLOW,
+      red: NIGHT_RUN_RED,
+      grey: MUTED,
+    },
   },
   // Grundradius der Bedienelemente. Karten und Panels setzen ihren eigenen (CARD_RADIUS,
   // PANEL_RADIUS); 8 ist der Kompromiss dazwischen — deutlich runder als die 4 der Variante

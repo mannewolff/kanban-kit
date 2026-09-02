@@ -223,3 +223,40 @@ describe('theme Textkontrast auf den Flächen des Leitstands', () => {
     expect(kontrast(flaeche, theme.palette.text.secondary)).toBeGreaterThanOrEqual(4.5)
   })
 })
+
+describe('theme Nachtlauf-Zustandsfarben (Plan #718, A15)', () => {
+  // Dieselben drei Flächen wie oben: Die Zustands-Chips der Nachtlauf-Auswertung stehen auf der
+  // weißen Karte, auf der getönten Grundfläche und auf dem Eis-Ton der Panel-Köpfe.
+  const flaechen = ['#EDF5F6', '#F6FAFB', '#FFFFFF']
+  const zustaende = ['green', 'yellow', 'red', 'grey'] as const
+  const paare = zustaende.flatMap((zustand) => flaechen.map((flaeche) => [zustand, flaeche] as const))
+
+  it('legt für alle vier Zustände einen eigenen Palette-Eintrag an', () => {
+    for (const zustand of zustaende) {
+      expect(theme.palette.nightRun[zustand]).toMatch(/^#[0-9A-Fa-f]{6}$/)
+    }
+  })
+
+  it('führt Grau auf den Sekundärtext zurück, nicht auf text.disabled', () => {
+    // `text.disabled` ist in theme.ts gar nicht gesetzt; es gälte der MUI-Default
+    // rgba(0,0,0,0.38) mit rund 2,8:1. Grau ist hier aber ein bedeutungstragender Zustand
+    // („vom Lauf nicht bearbeitet"), kein deaktiviertes Bedienelement.
+    expect(theme.palette.nightRun.grey).toBe(theme.palette.text.secondary)
+  })
+
+  it.each(paare)('hält %s auf %s die AA-Schwelle für Text (4,5:1)', (zustand, flaeche) => {
+    expect(kontrast(flaeche, theme.palette.nightRun[zustand])).toBeGreaterThanOrEqual(4.5)
+  })
+
+  it.each(paare)('hält %s auf %s die Schwelle für das Farbfeld (3:1)', (zustand, flaeche) => {
+    expect(kontrast(flaeche, theme.palette.nightRun[zustand])).toBeGreaterThanOrEqual(3)
+  })
+
+  it('lässt die MUI-Semantikfarben unberührt', () => {
+    // `success`/`warning`/`error` sind im Frontend an Dutzenden Nicht-Test-Stellen in Gebrauch
+    // (Lösch-Buttons, Alert-`severity`, Feldfehler). Sie umzudefinieren färbte all das mit um.
+    expect(theme.palette.nightRun.green).not.toBe(theme.palette.success.main)
+    expect(theme.palette.nightRun.yellow).not.toBe(theme.palette.warning.main)
+    expect(theme.palette.nightRun.red).not.toBe(theme.palette.error.main)
+  })
+})
