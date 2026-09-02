@@ -544,6 +544,8 @@
                         <exclude>org/mwolff/manban/project/infrastructure/persistence/ProjectInvitationEntity.class</exclude>
                         <exclude>org/mwolff/manban/project/infrastructure/persistence/ProjectMembershipEntity.class</exclude>
                         <exclude>org/mwolff/manban/outbox/infrastructure/persistence/OutboxEntryEntity.class</exclude>
+                        <exclude>org/mwolff/manban/nightrun/infrastructure/persistence/NightRunEntity.class</exclude>
+                        <exclude>org/mwolff/manban/nightrun/infrastructure/persistence/NightRunItemEntity.class</exclude>
 
                         <!-- IT-only: DB-gebundene Repository-Adapter (JPA-Mapping, nur via IT, §5.2). -->
                         <exclude>org/mwolff/manban/accesstoken/infrastructure/persistence/AccessTokenRepositoryAdapter.class</exclude>
@@ -570,6 +572,11 @@
                              sind reines Postgres-Verhalten und nur gegen die echte Datenbank
                              pruefbar; OutboxIT deckt jeden Zweig ab. -->
                         <exclude>org/mwolff/manban/outbox/infrastructure/persistence/OutboxRepositoryAdapter.class</exclude>
+                        <!-- Nachtlauf-Adapter (#721): ON CONFLICT DO NOTHING RETURNING id und die
+                             LIMIT-Unterabfrage der Verdraengung sind reines Postgres-Verhalten und
+                             nur gegen die echte Datenbank pruefbar; NightRunRepositoryIT deckt
+                             jeden Zweig ab. -->
+                        <exclude>org/mwolff/manban/nightrun/infrastructure/persistence/NightRunRepositoryAdapter.class</exclude>
 
                         <!-- IT-only: JDBC-Reader/Repositories (echtes SQL, nur via IT, §5.2). -->
                         <exclude>org/mwolff/manban/auth/infrastructure/persistence/JdbcProjectMembershipReader.class</exclude>

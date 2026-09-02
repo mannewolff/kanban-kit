@@ -37,6 +37,18 @@ export const NIGHT_RUN_ERROR_CLASSES = [
 
 export type NightRunErrorClass = (typeof NIGHT_RUN_ERROR_CLASSES)[number]
 
+/**
+ * Obergrenze fuer gespeicherte Auszuege — `excerpt` je Arbeitspaket und `unparsedSample` je Lauf
+ * (Plan #718, A16). Die Zahl lebt je Sprache an genau einem Ort: hier und in
+ * `NightRunLimits.EXCERPT_MAX`; ein JUnit-Test (`NightRunErrorClassSyncTest`) haelt beide samt der
+ * Spaltenlaenge in `V29__night_run.sql` gleich. Liefen sie auseinander, antwortete ein Auszug knapp
+ * ueber der Spaltengrenze mit 500 statt 400.
+ *
+ * <p>Gezaehlt wird in UTF-16-Codeeinheiten wie bei `TextLimits`; Postgres zaehlt Codepoints und ist
+ * damit nie enger.
+ */
+export const NIGHT_RUN_EXCERPT_MAX = 4000
+
 export type NightRunState = 'GREEN' | 'YELLOW' | 'RED' | 'GREY'
 
 export type NightRunMode = 'IMPLEMENTATION' | 'REVIEW'
