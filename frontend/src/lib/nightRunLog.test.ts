@@ -327,6 +327,64 @@ describe('parseNightRunLog — Pruef-Lauf', () => {
   })
 })
 
+/**
+ * Diese vier Faelle stammen aus der manuellen Pruefung des Issues: zehn echte Protokolle
+ * (August bis September, sieben Runner-Fassungen, rund 30 MB) durch den Parser gegeben.
+ * Alle vier waren mit den urspruenglichen Fixtures unsichtbar — sie pruefen die Musterliste
+ * gegen die Wirklichkeit statt gegen sich selbst.
+ */
+describe('parseNightRunLog — an echten Protokollen gefundene Muster', () => {
+  it('versteht Minutenangaben mit Nachkommastelle', () => {
+    // Der Runner schreibt `nach 8.8 min`, nicht `nach 8 min`. Ohne diesen Fall blieb
+    // jedes erfolgreiche Arbeitspaket im Eroeffnungszustand — 19 gruene Pakete eines
+    // echten Laufs erschienen als RED/HARD_ABORT.
+    const text = [
+      START(0),
+      z(1, 'Session 1/5: Issue #100 — Paket 1'),
+      z(10, '  Erfolg nach 8.8 min, Commit a1b2c3d, Issue #100 in In review.'),
+      ENDE(11),
+    ].join('\n')
+    const run = parseNightRunLog(text).runs[0]
+    expect(run.unparsedCount).toBe(0)
+    expect(run.items[0]).toMatchObject({ state: 'GREEN', durationMs: 528_000 })
+  })
+
+  it('deutet jede Gate-Ablehnung, nicht nur den Review-Marker-Fall', () => {
+    const text = [
+      START(0),
+      z(1, '#411 uebersprungen: Idee ([Idee]), wird nicht implementiert.'),
+      z(1, '#431 uebersprungen: fachliches Issue ([Fachlich]), wird nicht implementiert.'),
+      z(2, '#269 uebersprungen: ungeprueft (kein Issue-Review-Marker im Body).'),
+      ENDE(3),
+    ].join('\n')
+    const run = parseNightRunLog(text).runs[0]
+    expect(run.unparsedCount).toBe(0)
+    expect(run.items.map((i) => i.state)).toEqual(['GREY', 'GREY', 'GREY'])
+  })
+
+  it('deutet die Reviewer-Zeile auch mit Bindestrich in der Umgebung', () => {
+    const text = [
+      START(0, 'Review'),
+      z(1, '  Reviewer opus (claude) in review-session: verfuegbar'),
+      z(1, '  Reviewer codex (command) in review-session: NICHT verfuegbar — Befehl benoetigte Genehmigung'),
+      z(1, '  Reviewer fable (claude): verfuegbar'),
+      z(2, 'Nacht-Review beendet (Stufe issue): 0 ohne Befund, 0 mit Befund, 0 Schaerfung fehlt.'),
+    ].join('\n')
+    expect(parseNightRunLog(text).runs[0].unparsedCount).toBe(0)
+  })
+
+  it('deutet beide Praepositionen der Label-Zeile', () => {
+    // Der Runner schreibt „In Ready", aber „Im Backlog".
+    const text = [
+      START(0),
+      z(1, '  In Ready vorhandene Labels: keine'),
+      z(1, '  Im Backlog vorhandene Labels: Aktuell, review:offen'),
+      ENDE(2),
+    ].join('\n')
+    expect(parseNightRunLog(text).runs[0].unparsedCount).toBe(0)
+  })
+})
+
 describe('parseNightRunLog — was als ungedeutet zaehlt', () => {
   it('zaehlt Sitzungsstrom-Zeilen ohne Praefix nicht', () => {
     const text = [

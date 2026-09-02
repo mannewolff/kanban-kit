@@ -113,8 +113,11 @@ const ABSCHLUSS = /^(Nacht-Runner beendet|Nacht-Review beendet|Dry-Run beendet)/
 const DRY_RUN = /^Dry-Run beendet/
 const STUFE = /beendet \(Stufe ([^)]+)\)/
 
-/** Minuten aus einer Regex-Gruppe in Millisekunden. */
-const minuten = (wert: string): number => Number(wert) * 60_000
+/**
+ * Minuten aus einer Regex-Gruppe in Millisekunden. Der Runner schreibt sie mit
+ * Nachkommastelle (`nach 8.8 min`) — an echten Protokollen belegt, nicht an Fixtures.
+ */
+const minuten = (wert: string): number => Math.round(Number(wert) * 60_000)
 
 /** Was ein Muster ueber eine Zeile aussagt. */
 interface Treffer {
@@ -137,7 +140,7 @@ interface Treffer {
 const MUSTER: ReadonlyArray<{ re: RegExp; deute: (m: RegExpExecArray) => Treffer }> = [
   // --- Implementierungs-Lauf, Ausgaenge je Arbeitspaket
   {
-    re: /^ {2}Erfolg nach (\d+) min, Commit ([0-9a-f]{7,40}), Issue #(\d+) in In review\./,
+    re: /^ {2}Erfolg nach (\d+(?:\.\d+)?) min, Commit ([0-9a-f]{7,40}), Issue #(\d+) in In review\./,
     deute: (m) => ({ cardNumber: Number(m[3]), state: "GREEN", durationMs: minuten(m[1]), commit: m[2] }),
   },
   {
@@ -145,19 +148,19 @@ const MUSTER: ReadonlyArray<{ re: RegExp; deute: (m: RegExpExecArray) => Treffer
     deute: (m) => ({ cardNumber: Number(m[2]), state: "GREEN", commit: m[1] }),
   },
   {
-    re: /^ {2}FEHLSCHLAG nach (\d+) min: Issue #(\d+) nicht in In review UND Working Tree dirty/,
+    re: /^ {2}FEHLSCHLAG nach (\d+(?:\.\d+)?) min: Issue #(\d+) nicht in In review UND Working Tree dirty/,
     deute: (m) => ({ cardNumber: Number(m[2]), state: "RED", errorClass: "HARD_ABORT", durationMs: minuten(m[1]) }),
   },
   {
-    re: /^ {2}Fehlschlag nach (\d+) min: Issue #(\d+) — die Session hat nichts hinterlassen/,
+    re: /^ {2}Fehlschlag nach (\d+(?:\.\d+)?) min: Issue #(\d+) — die Session hat nichts hinterlassen/,
     deute: (m) => ({ cardNumber: Number(m[2]), state: "RED", errorClass: "CHECKS_NOT_STARTED", durationMs: minuten(m[1]) }),
   },
   {
-    re: /^ {2}Fehlschlag nach (\d+) min: Issue #(\d+) nicht in In review, Tree sauber/,
+    re: /^ {2}Fehlschlag nach (\d+(?:\.\d+)?) min: Issue #(\d+) nicht in In review, Tree sauber/,
     deute: (m) => ({ cardNumber: Number(m[2]), state: "RED", errorClass: "UNEXPECTED_STATE", durationMs: minuten(m[1]) }),
   },
   {
-    re: /^ {2}INFRASTRUKTUR-FEHLSCHLAG nach (\d+) min .*Issue #(\d+) bleibt unangetastet\./,
+    re: /^ {2}INFRASTRUKTUR-FEHLSCHLAG nach (\d+(?:\.\d+)?) min .*Issue #(\d+) bleibt unangetastet\./,
     deute: (m) => ({ cardNumber: Number(m[2]), state: "RED", errorClass: "HARD_ABORT", durationMs: minuten(m[1]) }),
   },
   {
@@ -171,11 +174,11 @@ const MUSTER: ReadonlyArray<{ re: RegExp; deute: (m: RegExpExecArray) => Treffer
 
   // --- Pruef-Lauf, Ausgaenge je Arbeitspaket
   {
-    re: /^ {2}Erfolg nach (\d+) min: Issue #(\d+) geprueft (?:ohne|mit) Befund/,
+    re: /^ {2}Erfolg nach (\d+(?:\.\d+)?) min: Issue #(\d+) geprueft (?:ohne|mit) Befund/,
     deute: (m) => ({ cardNumber: Number(m[2]), state: "GREEN", durationMs: minuten(m[1]) }),
   },
   {
-    re: /^ {2}Nach (\d+) min: Issue #(\d+) — Befunde vorhanden, aber kein Body-Vorschlag/,
+    re: /^ {2}Nach (\d+(?:\.\d+)?) min: Issue #(\d+) — Befunde vorhanden, aber kein Body-Vorschlag/,
     deute: (m) => ({ cardNumber: Number(m[2]), state: "YELLOW", errorClass: "CHECKS_NOT_STARTED", durationMs: minuten(m[1]) }),
   },
 
@@ -198,7 +201,7 @@ const MUSTER: ReadonlyArray<{ re: RegExp; deute: (m: RegExpExecArray) => Treffer
     deute: (m) => ({ cardNumber: Number(m[1]), state: "GREY", errorClass: "DEPENDENCY_UNMET" }),
   },
   {
-    re: /^#(\d+) uebersprungen: traegt bereits einen Issue-Review-Marker\./,
+    re: /^#(\d+) uebersprungen: /,
     deute: (m) => ({ cardNumber: Number(m[1]), state: "GREY" }),
   },
 
@@ -218,7 +221,7 @@ const STUMME_MUSTER: readonly RegExp[] = [
   /^ {2}#\d+ > /, // Sitzungsecho — liefert die Zuordnung Zeile → Arbeitspaket
   /^#\d+ bewusst ohne Pruefung freigegeben/,
   /^ {2}Vorflug-Session (?:startet|nicht auswertbar)/,
-  /^ {2}Reviewer .* in \w+: /,
+  /^ {2}Reviewer .*: /,
   /^ {2}Kein Reviewer konfiguriert: /,
   /^ {2}Tracker \(.*\): /,
   /^ {2}buildChecks rot — einmaliger Format-Fix/,
@@ -227,7 +230,7 @@ const STUMME_MUSTER: readonly RegExp[] = [
   /^ {2}Salvage nicht moeglich: /,
   /^ {2}Hinweis: die vorherige Pruef-Zusammenfassung/,
   /^ {2}CLI-Meldung: /,
-  /^ {2}In (?:Ready|Backlog) vorhandene Labels: /,
+  /^ {2}I[nm] (?:Ready|Backlog) vorhandene Labels: /,
   /^ {2}Tippfehler im --(?:review-)?label-Wert\?/,
   /^WARNUNG: /,
   /^Ready ist leer — nichts zu tun\./,
