@@ -16,6 +16,7 @@ import { useParams } from 'react-router-dom'
 import { cardsApi, type CardByNumber } from '../api/cards'
 import {
   nightRunsApi,
+  type NightRunErrorClassCounts,
   type NightRunSubmission,
   type NightRunView,
 } from '../api/nightRuns'
@@ -57,6 +58,13 @@ interface AnzeigeItem {
 
 /** Ein Lauf in der Anzeigeform. */
 interface AnzeigeLauf {
+  /**
+   * `true` = vom Server geladen und damit Teil der aufbewahrten Läufe, `false` = eben erst im
+   * Browser geparst. Nur ein aufbewahrter Lauf zeigt Häufigkeiten (#726): Der Endpunkt zählt
+   * einschließlich des angezeigten Laufs, also stünde dieselbe Fehlerklasse einmal mit N und
+   * einmal mit N-1 auf der Seite, wenn das Senden gescheitert ist.
+   */
+  gespeichert: boolean
   startedAt: string
   mode: NightRun['mode']
   durationMs: number
@@ -70,6 +78,9 @@ interface AnzeigeLauf {
 /** Was zu einer projektweiten Kartennummer bekannt ist; `null` = nicht auflösbar (404). */
 type Kartenkatalog = ReadonlyMap<number, CardByNumber | null>
 
+/** Je Fehlerklasse die Zahl der aufbewahrten Läufe, in denen sie vorkam; `null` = nicht abrufbar. */
+type Haeufigkeiten = NightRunErrorClassCounts | null
+
 /** Ein Schritt der Herkunftskette oberhalb des Arbeitspakets. */
 interface Kettenglied {
   nummer: number
@@ -81,6 +92,22 @@ const ZUSTAND_TEXT: Record<NightRunState, string> = {
   YELLOW: 'Erfolg, Prüfung rot',
   RED: 'gescheitert',
   GREY: 'nicht bearbeitet',
+}
+
+/**
+ * Die Beschriftung je Fehlerklasse. Der Typ ist `Record<NightRunErrorClass, string>` und **nicht**
+ * `Partial`: Die Liste der Klassen ist abgeschlossen und lebt in `lib/nightRunLog.ts` (A13); käme
+ * dort eine hinzu, bräche hier der Build, statt dass eine Häufigkeit stumm ohne Beschriftung
+ * erschiene. Deshalb zählt diese Datei die Klassen auch nirgends selbst auf.
+ */
+const FEHLERKLASSE_TEXT: Record<NightRunErrorClass, string> = {
+  CHECKS_RED: 'Prüfungen rot',
+  CHECKS_NOT_STARTED: 'Prüfungen nicht gelaufen',
+  DEPENDENCY_UNMET: 'Abhängigkeit offen',
+  UNEXPECTED_STATE: 'Unerwarteter Zustand',
+  HARD_ABORT: 'Harter Abbruch',
+  AWAITING_DECISION: 'Wartet auf Entscheidung',
+  REVIEWER_FAILED: 'Prüf-Session gescheitert',
 }
 
 /**
@@ -108,9 +135,20 @@ const STUFEN: ReadonlyArray<{ label: string; praefix: string }> = [
 
 const KEIN_PROTOKOLL = 'Kein Nachtlauf-Protokoll erkannt'
 
+/**
+ * Holt die Häufigkeiten vom Server; ein Fehlschlag ergibt `null` statt einer Ausnahme. Die Zahlen
+ * kommen bewusst vom Endpunkt und werden **nicht** aus den geladenen Läufen gerechnet (#726): Der
+ * Ringpuffer liegt am Server, eine zweite Rechenstelle liefe auseinander. Scheitert der Abruf,
+ * bleiben Läufe und Befunde sichtbar — deshalb hier kein `notify`, sondern ein Hinweis an der
+ * Stelle, an der sonst die Zahl stünde.
+ */
+const zaehlerLaden = (projektId: number): Promise<Haeufigkeiten> =>
+  nightRunsApi.errorClassCounts(projektId).catch(() => null)
+
 const nachStartAbsteigend = (a: AnzeigeLauf, b: AnzeigeLauf) => b.startedAt.localeCompare(a.startedAt)
 
 const ausParser = (run: NightRun): AnzeigeLauf => ({
+  gespeichert: false,
   startedAt: run.startedAt,
   mode: run.mode,
   durationMs: run.durationMs,
@@ -129,6 +167,7 @@ const ausParser = (run: NightRun): AnzeigeLauf => ({
 })
 
 const ausSicht = (view: NightRunView): AnzeigeLauf => ({
+  gespeichert: true,
   startedAt: view.startedAt,
   mode: view.mode,
   durationMs: view.durationMs,
@@ -221,15 +260,56 @@ function stufenText(
   return glieder.length === 0 ? `${stufe.label}: ohne` : `${stufe.label}: noch nicht erreicht`
 }
 
-/** Ein Arbeitspaket samt Zustand, Dauer, Auszug und Herkunftskette. */
+/**
+ * Die Häufigkeitszeile eines Arbeitspakets — `null`, wenn keine erscheint (Issue #726).
+ *
+ * Sie steht nur an einem **gelben oder roten** Befund eines **aufbewahrten** Laufs: Ein graues
+ * Arbeitspaket trägt zwar eine Fehlerklasse (`DEPENDENCY_UNMET`), ist aber kein Befund, und ein
+ * noch nicht gespeicherter Lauf ist in der Zählung des Servers noch nicht enthalten.
+ *
+ * Gezählt wird **einschließlich** des angezeigten Laufs, ein erstes Vorkommen ergibt also `1` —
+ * dafür steht der verbindliche Wortlaut „zum ersten Mal" statt „1 von M", der sonst so klänge, als
+ * sei der angezeigte Lauf nicht mitgezählt.
+ */
+function haeufigkeitsText(
+  item: AnzeigeItem,
+  gespeichert: boolean,
+  zaehler: Haeufigkeiten,
+  aufbewahrteLaeufe: number,
+): string | null {
+  if (!gespeichert || item.errorClass === undefined) {
+    return null
+  }
+  if (item.state !== 'YELLOW' && item.state !== 'RED') {
+    return null
+  }
+  const beschriftung = FEHLERKLASSE_TEXT[item.errorClass]
+  if (zaehler === null) {
+    return `${beschriftung}: Häufigkeit nicht abrufbar`
+  }
+  // Eine Klasse, die der Server nicht nennt, kam nie vor — hier also: er weiß von diesem Lauf noch
+  // nichts. Eine „0" zu einem sichtbaren Befund wäre ein Widerspruch, „zum ersten Mal" eine
+  // Behauptung über eine Zählung, die es nicht gibt.
+  const anzahl = zaehler[item.errorClass]
+  if (anzahl === undefined) {
+    return null
+  }
+  return anzahl === 1
+    ? `${beschriftung}: zum ersten Mal`
+    : `${beschriftung}: ${anzahl} von ${aufbewahrteLaeufe} aufbewahrten Läufen`
+}
+
+/** Ein Arbeitspaket samt Zustand, Dauer, Auszug, Häufigkeit und Herkunftskette. */
 function Arbeitspaket({
   item,
   katalog,
+  haeufigkeit,
   istRot,
   onOeffnen,
 }: Readonly<{
   item: AnzeigeItem
   katalog: Kartenkatalog
+  haeufigkeit: string | null
   istRot: (nummer: number) => boolean
   onOeffnen: (karte: CardByNumber) => void
 }>) {
@@ -271,6 +351,16 @@ function Arbeitspaket({
         </Typography>
       )}
 
+      {haeufigkeit !== null && (
+        <Typography
+          variant="body2"
+          color="text.secondary"
+          data-testid={`haeufigkeit-${item.cardNumber}`}
+        >
+          {haeufigkeit}
+        </Typography>
+      )}
+
       {wurzel != null &&
         STUFEN.map((stufe) => (
           <Typography key={stufe.label} variant="body2" color="text.secondary">
@@ -286,6 +376,8 @@ function LaufPanel({
   lauf,
   ergebnis,
   katalog,
+  zaehler,
+  aufbewahrteLaeufe,
   onAufklappen,
   onOeffnen,
 }: Readonly<{
@@ -293,6 +385,9 @@ function LaufPanel({
   /** `true` = in dieser Sitzung neu angelegt, `false` = lag schon vor, `undefined` = nicht gesendet. */
   ergebnis: boolean | undefined
   katalog: Kartenkatalog
+  zaehler: Haeufigkeiten
+  /** Das „M" in „N von M aufbewahrten Läufen" — die Länge der zuletzt geladenen Liste. */
+  aufbewahrteLaeufe: number
   onAufklappen: () => void
   onOeffnen: (karte: CardByNumber) => void
 }>) {
@@ -347,6 +442,7 @@ function LaufPanel({
             key={`${item.cardNumber}-${position}`}
             item={item}
             katalog={katalog}
+            haeufigkeit={haeufigkeitsText(item, lauf.gespeichert, zaehler, aufbewahrteLaeufe)}
             istRot={(nummer) => rot.has(nummer)}
             onOeffnen={onOeffnen}
           />
@@ -366,6 +462,10 @@ export function NightRunPage() {
   const [laeufe, setLaeufe] = useState<AnzeigeLauf[]>([])
   const [ergebnisse, setErgebnisse] = useState<ReadonlyMap<string, boolean>>(() => new Map())
   const [katalog, setKatalog] = useState<Kartenkatalog>(() => new Map())
+  // Leer heißt „zu keiner Klasse ist etwas bekannt" — der Zustand vor dem ersten Abruf und der
+  // eines leeren Ringpuffers sind derselbe. `null` heißt dagegen: der Abruf ist gescheitert.
+  const [zaehler, setZaehler] = useState<Haeufigkeiten>({})
+  const [aufbewahrteLaeufe, setAufbewahrteLaeufe] = useState(0)
   const [meldung, setMeldung] = useState<string | null>(null)
   const [detail, setDetail] = useState<CardByNumber | null>(null)
 
@@ -382,11 +482,19 @@ export function NightRunPage() {
     void nightRunsApi
       .list(id)
       .then((views) => {
-        if (aktiv) setLaeufe(views.map(ausSicht).sort(nachStartAbsteigend))
+        if (aktiv) {
+          setLaeufe(views.map(ausSicht).sort(nachStartAbsteigend))
+          setAufbewahrteLaeufe(views.length)
+        }
       })
       .catch((fehler: Error) => {
         if (aktiv) notify(fehler.message, 'error')
       })
+    // Ein Abruf beim Öffnen der Seite, ein weiterer nach erfolgreichem Senden — die Zahl ist
+    // projektweit, ein Abruf je Lauf oder je Arbeitspaket wäre die Anfragelawine aus A8.
+    void zaehlerLaden(id).then((stand) => {
+      if (aktiv) setZaehler(stand)
+    })
     return () => {
       aktiv = false
     }
@@ -458,6 +566,8 @@ export function NightRunPage() {
       setErgebnisse(new Map(antwort.map((eintrag) => [eintrag.startedAt, eintrag.created])))
       const views = await nightRunsApi.list(id)
       setLaeufe(views.map(ausSicht).sort(nachStartAbsteigend))
+      setAufbewahrteLaeufe(views.length)
+      setZaehler(await zaehlerLaden(id))
     } catch (fehler) {
       // `apiFetch` wirft `ApiError`, ein Netzwerkabbruch einen `TypeError` — beides `Error`.
       notify((fehler as Error).message, 'error')
@@ -509,6 +619,8 @@ export function NightRunPage() {
           lauf={lauf}
           ergebnis={ergebnisse.get(lauf.startedAt)}
           katalog={katalog}
+          zaehler={zaehler}
+          aufbewahrteLaeufe={aufbewahrteLaeufe}
           onAufklappen={() => aufklappen(lauf)}
           onOeffnen={setDetail}
         />

@@ -3,7 +3,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { CardByNumber } from '../api/cards'
-import type { NightRunResult, NightRunView } from '../api/nightRuns'
+import type { NightRunErrorClassCounts, NightRunResult, NightRunView } from '../api/nightRuns'
 import { SnackbarProvider } from '../components/SnackbarProvider'
 import { parseNightRunLog } from '../lib/nightRunLog'
 import { theme } from '../theme'
@@ -197,6 +197,10 @@ interface Antworten {
   listenFehler?: string
   /** Ergebnis des `POST`; `fehler` erzeugt stattdessen eine 400-Antwort. */
   submit?: { ergebnis?: NightRunResult[]; fehler?: string }
+  /** Je `GET /night-runs/error-class-counts` eine Antwort; die letzte gilt für alle weiteren Aufrufe. */
+  zaehler?: NightRunErrorClassCounts[]
+  /** Statt der Häufigkeiten eine Fehlerantwort — der Fehlerpfad aus Issue #726. */
+  zaehlerFehler?: string
   /** Karten je projektweiter Nummer; ein fehlender Eintrag antwortet mit 404. */
   karten?: Record<number, CardByNumber>
 }
@@ -220,6 +224,7 @@ const antwortFehler = (detail: string, status = 400) => ({
 
 function stubFetch(antworten: Antworten) {
   let listenIndex = 0
+  let zaehlerIndex = 0
   vi.stubGlobal(
     'fetch',
     vi.fn((url: string, init?: RequestInit) => {
@@ -236,6 +241,15 @@ function stubFetch(antworten: Antworten) {
         const listen = antworten.listen ?? [[]]
         const daten = listen[Math.min(listenIndex, listen.length - 1)]
         listenIndex += 1
+        return Promise.resolve(antwortOk(daten))
+      }
+      if (url === '/api/projects/5/night-runs/error-class-counts') {
+        if (antworten.zaehlerFehler !== undefined) {
+          return Promise.resolve(antwortFehler(antworten.zaehlerFehler, 403))
+        }
+        const staende = antworten.zaehler ?? [{}]
+        const daten = staende[Math.min(zaehlerIndex, staende.length - 1)]
+        zaehlerIndex += 1
         return Promise.resolve(antwortOk(daten))
       }
       if (url === '/api/projects/5/night-runs' && method === 'POST') {
@@ -289,6 +303,8 @@ function aufklappen(minute: number) {
 }
 
 const byNumberAufrufe = () => anfragen.filter((a) => a.url.includes('/cards/by-number/'))
+
+const zaehlerAufrufe = () => anfragen.filter((a) => a.url.endsWith('/night-runs/error-class-counts'))
 
 beforeEach(() => {
   anfragen = []
@@ -793,5 +809,160 @@ describe('NightRunPage — Herkunftskette', () => {
     fireEvent.click(screen.getByText('detail-schliessen'))
 
     expect(screen.queryByTestId('karten-detail')).not.toBeInTheDocument()
+  })
+})
+
+describe('NightRunPage — Häufigkeit einer Fehlerklasse', () => {
+  /**
+   * Drei aufbewahrte Läufe, nur der neueste trägt Befunde. `M` ist die Länge **dieser** Liste (3),
+   * nicht die Zahl der Läufe mit einer bestimmten Fehlerklasse.
+   */
+  const DREI_LAEUFE: NightRunView[] = [
+    aufbewahrt({
+      id: 3,
+      startedAt: startedAt(30),
+      items: [
+        { id: 11, cardNumber: 700, title: 'Paket A', state: 'YELLOW', errorClass: 'CHECKS_RED' },
+        { id: 12, cardNumber: 701, title: 'Paket B', state: 'RED', errorClass: 'HARD_ABORT' },
+        { id: 13, cardNumber: 702, title: 'Paket C', state: 'GREEN' },
+        { id: 14, cardNumber: 703, title: 'Paket D', state: 'GREY', errorClass: 'DEPENDENCY_UNMET' },
+      ],
+    }),
+    aufbewahrt({ id: 2, startedAt: startedAt(10) }),
+    aufbewahrt({ id: 1, startedAt: startedAt(0) }),
+  ]
+
+  /** Die Häufigkeitszeile eines Arbeitspakets im Lauf von Minute 30; `null`, wenn keine erscheint. */
+  const haeufigkeit = (cardNumber: number) =>
+    within(lauf(30)).queryByTestId(`haeufigkeit-${cardNumber}`)
+
+  it('zeigt zu einem gelben und einem roten Befund die Häufigkeit seiner Fehlerklasse', async () => {
+    renderPage({ listen: [DREI_LAEUFE], zaehler: [{ CHECKS_RED: 3, HARD_ABORT: 2 }] })
+    await screen.findByTestId(`lauf-${startedAt(30)}`)
+
+    aufklappen(30)
+
+    expect(await within(lauf(30)).findByTestId('haeufigkeit-700')).toHaveTextContent(
+      'Prüfungen rot: 3 von 3 aufbewahrten Läufen',
+    )
+    expect(haeufigkeit(701)).toHaveTextContent('Harter Abbruch: 2 von 3 aufbewahrten Läufen')
+  })
+
+  it('nennt ein erstes Vorkommen „zum ersten Mal", nicht „0" und nicht „1 von M"', async () => {
+    renderPage({ listen: [DREI_LAEUFE], zaehler: [{ CHECKS_RED: 1 }] })
+    await screen.findByTestId(`lauf-${startedAt(30)}`)
+
+    aufklappen(30)
+
+    const zeile = await within(lauf(30)).findByTestId('haeufigkeit-700')
+    expect(zeile).toHaveTextContent('Prüfungen rot: zum ersten Mal')
+    expect(zeile).not.toHaveTextContent('0')
+    expect(zeile).not.toHaveTextContent('1 von')
+  })
+
+  it('zeigt zu einem grünen und einem grauen Arbeitspaket keine Häufigkeit', async () => {
+    renderPage({
+      listen: [DREI_LAEUFE],
+      zaehler: [{ CHECKS_RED: 3, HARD_ABORT: 2, DEPENDENCY_UNMET: 2 }],
+    })
+    await screen.findByTestId(`lauf-${startedAt(30)}`)
+
+    aufklappen(30)
+
+    await within(lauf(30)).findByTestId('haeufigkeit-700')
+    expect(haeufigkeit(702)).toBeNull()
+    // Grau trägt eine Fehlerklasse (offene Abhängigkeit) — trotzdem ist es kein Befund.
+    expect(haeufigkeit(703)).toBeNull()
+  })
+
+  it('zeigt die Zahl des Endpunkts, nicht die aus den geladenen Läufen gerechnete', async () => {
+    // Genau **ein** geladener Lauf trägt CHECKS_RED; der Endpunkt meldet 3. Erschiene die 1, wäre
+    // im Browser gerechnet worden.
+    renderPage({ listen: [DREI_LAEUFE], zaehler: [{ CHECKS_RED: 3 }] })
+    await screen.findByTestId(`lauf-${startedAt(30)}`)
+
+    aufklappen(30)
+
+    expect(await within(lauf(30)).findByTestId('haeufigkeit-700')).toHaveTextContent(
+      'Prüfungen rot: 3 von 3 aufbewahrten Läufen',
+    )
+    expect(zaehlerAufrufe()).toHaveLength(1)
+  })
+
+  it('lädt die Häufigkeit nach erfolgreichem Senden neu', async () => {
+    renderPage({
+      submit: { ergebnis: alleNeu(PROTOKOLL_GELB) },
+      listen: [[], wieAufbewahrt(PROTOKOLL_GELB)],
+      zaehler: [{}, { CHECKS_RED: 1 }],
+    })
+    await screen.findByText('Noch keine Auswertung vorhanden.')
+
+    protokollWaehlen(PROTOKOLL_GELB)
+    await screen.findByTestId(`lauf-${startedAt(0)}`)
+    aufklappen(0)
+
+    expect(await within(lauf(0)).findByTestId('haeufigkeit-700')).toHaveTextContent(
+      'Prüfungen rot: zum ersten Mal',
+    )
+    expect(zaehlerAufrufe()).toHaveLength(2)
+  })
+
+  it('hält Läufe und Befunde sichtbar, wenn der Abruf der Häufigkeit scheitert', async () => {
+    renderPage({ listen: [DREI_LAEUFE], zaehlerFehler: 'Nur der Owner darf die Auswertung sehen.' })
+    await screen.findByTestId(`lauf-${startedAt(30)}`)
+
+    aufklappen(30)
+
+    expect(await within(lauf(30)).findByTestId('haeufigkeit-700')).toHaveTextContent(
+      'Prüfungen rot: Häufigkeit nicht abrufbar',
+    )
+    // Unterscheidbar von einem ersten Vorkommen — und die Seite bleibt vollständig.
+    expect(within(lauf(30)).queryByText(/zum ersten Mal/)).not.toBeInTheDocument()
+    expect(within(lauf(30)).getByTestId('zustand-700')).toBeInTheDocument()
+    expect(within(lauf(30)).getByTestId('zustand-701')).toBeInTheDocument()
+  })
+
+  it('zeigt zu einer noch nicht gespeicherten Auswertung keine Häufigkeit', async () => {
+    // Das Senden scheitert: Der Lauf steht auf der Seite, zählt aber nicht zu den aufbewahrten.
+    renderPage({ submit: { fehler: 'Auszug zu lang' }, zaehler: [{ CHECKS_RED: 4 }] })
+    await screen.findByText('Noch keine Auswertung vorhanden.')
+
+    protokollWaehlen(PROTOKOLL_GELB)
+    await screen.findByTestId(`lauf-${startedAt(0)}`)
+    aufklappen(0)
+
+    expect(await within(lauf(0)).findByTestId('zustand-700')).toBeInTheDocument()
+    expect(within(lauf(0)).queryByTestId('haeufigkeit-700')).toBeNull()
+  })
+
+  it('zeigt keine Häufigkeit, wenn der Endpunkt die Fehlerklasse nicht kennt', async () => {
+    renderPage({ listen: [DREI_LAEUFE], zaehler: [{ HARD_ABORT: 2 }] })
+    await screen.findByTestId(`lauf-${startedAt(30)}`)
+
+    aufklappen(30)
+
+    expect(await within(lauf(30)).findByTestId('haeufigkeit-701')).toBeInTheDocument()
+    expect(haeufigkeit(700)).toBeNull()
+  })
+
+  it('zeigt keine Häufigkeit zu einem Befund ohne Fehlerklasse', async () => {
+    renderPage({
+      listen: [
+        [
+          aufbewahrt({
+            id: 3,
+            startedAt: startedAt(30),
+            items: [{ id: 11, cardNumber: 700, title: 'Paket A', state: 'RED' }],
+          }),
+        ],
+      ],
+      zaehler: [{ CHECKS_RED: 3 }],
+    })
+    await screen.findByTestId(`lauf-${startedAt(30)}`)
+
+    aufklappen(30)
+
+    expect(await within(lauf(30)).findByTestId('zustand-700')).toBeInTheDocument()
+    expect(haeufigkeit(700)).toBeNull()
   })
 })
