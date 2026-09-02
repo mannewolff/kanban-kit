@@ -2,7 +2,7 @@
  * Statusfarben je Spalte, aus dem Spaltennamen abgeleitet. Bewusste Ausnahme von
  * "Farben nur über das Theme": Board-Status ist eine feste, kleine, semantische Menge —
  * ein zentraler Ort statt verstreuter Hex-Werte. Entsättigt auf die Marken-Familie
- * (brand.md): weiche, helle Tints als Pill-Flächen, dunkler Text derselben Familie, ein
+ * (CLAUDE-design.md): weiche, helle Tints als Pill-Flächen, dunkler Text derselben Familie, ein
  * ruhiger Akzent-Punkt.
  *
  * Das Modul trägt ausschließlich Status-Farben (#648, E2). Jedes andere Token gehört ins Theme —

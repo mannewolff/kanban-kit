@@ -80,7 +80,7 @@ Aktuelle Struktur unter `frontend/src/`:
 - `auth/` — `AuthContext` (Session-basierter Auth-State).
 - `api/` — Typisierte API-Aufrufe (`client.ts` als fetch-Wrapper, je Domäne eine eigene Datei: `auth`, `projects`, `boards`, `cards`, `epics`, `comments`, `attachments`, `members`, `roles`, `admin`, `config`).
 - `lib/` — Frontend-Hilfslogik (`statusColors`, `boardOps`, `roles`, `epicMeta`, …) — reine, gut testbare Module.
-- `theme.ts` — MUI-Theme zentral (Marken-Tokens).
+- `theme.ts` — MUI-Theme zentral (Tokens laut CLAUDE-design.md).
 - `main.tsx` — React-Root, `BrowserRouter`, `ThemeProvider`, `CssBaseline`.
 - `App.tsx` — `<Routes>` mit `React.lazy`-Pages in `<Suspense>`.
 - `test/` — Vitest-Setup.

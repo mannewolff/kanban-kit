@@ -1,7 +1,7 @@
 import { createTheme } from '@mui/material/styles'
 
 /**
- * kanban-kit im Markenstil von Manfred Wolff: fein, Teal-Familie, Carlito
+ * Designsprache des Leitstands (siehe CLAUDE-design.md): fein, Teal-Familie, Carlito
  * (Calibri-metrik-gleich), zwei Gewichte (400/700).
  *
  * **Flächen tragen Tiefe, Bedienelemente nicht.** Karten und Panels stehen auf zwei Schattenebenen
@@ -11,7 +11,7 @@ import { createTheme } from '@mui/material/styles'
  * überall zu fehlen.
  */
 
-// Marken-Tokens (brand.md).
+// Tokens der Designsprache (siehe CLAUDE-design.md).
 const TEAL = '#2F8C97'
 const TEAL_DEEP = '#1E5F68'
 const TEAL_LIGHT = '#5BABB5'
@@ -108,7 +108,7 @@ export const theme = createTheme({
   shape: { borderRadius: 8 },
   typography: {
     fontFamily: 'Carlito, Calibri, "Segoe UI", system-ui, -apple-system, sans-serif',
-    // Titel Bold, Fließtext Regular (brand.md).
+    // Titel Bold, Fließtext Regular (CLAUDE-design.md).
     h4: { fontWeight: 700 },
     h5: { fontWeight: 700 },
     h6: { fontWeight: 700 },
