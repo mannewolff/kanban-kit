@@ -150,6 +150,59 @@ Alle Richtungen zählen als normaler Arbeitsfluss und brauchen nur das Recht zum
 Karten (kein Löschrecht). Auch der Ingest über die API (kanbancompat) kann eine Karte direkt als Idee
 anlegen.
 
+## Nachtlauf
+
+Der **Nachtlauf-Bereich** wertet die Protokolle des Nacht-Runners aus: Er zeigt je Lauf, welche
+Arbeitspakete durchliefen, welche stehenblieben und woran es lag. Er ist **projektweit**, nicht an
+ein Board gebunden.
+
+Erreichbar über den Sidebar-Eintrag **„Nachtlauf"** (Route `/projects/:projectId/nachtlauf`).
+Sichtbar ist er nur für den **Owner** des Projekts und für **Plattform-Admins** — siehe
+[Rollen & Rechte](rollen-und-rechte.md#projekt-rollen-rechte-matrix).
+
+**Protokoll hineingeben:** Button **„Protokoll einlesen"** oben rechts, dann die Protokolldatei
+(`.log` oder `.txt`) wählen. Die **Datei wird im Browser ausgewertet und nicht hochgeladen** — an
+den Server geht allein die verdichtete Auswertung (Kennzahlen, Zustände, Kartennummern,
+Fehlerklassen und kurze Auszüge). Protokolle sind mehrere Megabyte groß und tragen Quelltext,
+Sitzungs-IDs und Pfade; die bleiben, wo sie sind. Dieselbe Datei lässt sich erneut wählen, ohne die
+Seite neu zu laden.
+
+Jeder Lauf steht als aufklappbare Zeile da — Startzeitpunkt, Art des Laufs („Umsetzungs-Lauf" bzw.
+„Prüf-Lauf"), Dauer sowie „N bearbeitet, M übergangen". Aufgeklappt zeigt er seine Arbeitspakete,
+jedes mit einem der **vier Zustände**:
+
+- **grün — „Erfolg":** das Arbeitspaket ist durchgelaufen.
+- **gelb — „Erfolg, Prüfung rot":** umgesetzt, aber eine Prüfung schlug fehl.
+- **rot — „gescheitert":** der Lauf kam an diesem Arbeitspaket nicht durch.
+- **grau — „nicht bearbeitet":** übergangen, etwa weil eine Abhängigkeit noch offen war.
+
+Zu jedem Arbeitspaket stehen darunter der Auszug aus dem Protokoll (bei grau der Grund) und die
+Herkunftskette — die fachliche Anforderung und der Plan, aus denen es entstanden ist. Die
+Kartennummer ist ein Link und öffnet die Karte zum Lesen.
+
+**Häufigkeit einer Fehlerklasse:** An einem gelben oder roten Befund eines aufbewahrten Laufs steht,
+in wie vielen der aufbewahrten Läufe dieselbe Fehlerklasse vorkam — „Prüfungen rot: 4 von 30
+aufbewahrten Läufen" bzw. „zum ersten Mal" beim ersten Vorkommen. Gezählt wird **einschließlich** des
+angezeigten Laufs. So ist ein einmaliger Ausrutscher von einem wiederkehrenden Muster zu
+unterscheiden.
+
+**Übernahmetext:** Unter jedem gelben und roten Arbeitspaket steht ein fertiger Text zum Übernehmen
+in die eigene Entwicklungssitzung (Karte, Zustand, Fehlerklasse, Auszug). Er steht **vollständig
+sichtbar** in einem Textfeld, bevor der Button **„Kopieren"** ihn in die **Zwischenablage** legt —
+der Text enthält Fremdtext aus dem Protokoll, und was in die eigene Sitzung wandert, soll man vorher
+gesehen haben. Legt der Browser die Zwischenablage nicht frei, bleibt es beim sichtbaren Feld: von
+Hand markieren und kopieren.
+
+**Aufbewahrung:** Je Projekt bleiben die **letzten 30 Läufe** erhalten; ältere fallen heraus, sobald
+neue hinzukommen.
+
+Drei Sonderfälle, die keine Fehler sind: Ein **Probelauf** (`DRY-RUN`) wird nicht aufbewahrt — ein
+Protokoll aus lauter Probeläufen erzeugt darum nur die Meldung, dass es nichts auszuwerten gibt. Ein
+Lauf, der bereits ausgewertet wurde, wird als **„lag schon vor"** gemeldet und bleibt unangetastet;
+die übrigen Läufe derselben Datei entstehen trotzdem. Und ein **nachgereichter Lauf**, der älter ist
+als alle 30 aufbewahrten, verdrängt keinen neueren — er wird angelegt und sogleich wieder verdrängt,
+erscheint also nach dem Einlesen nicht in der Liste.
+
 ## Dashboard (Kennzahlen)
 
 Über den Sidebar-Eintrag **„Dashboard"** (im Board-Kontext) zeigt eine KPI-Seite, wie schnell Karten
