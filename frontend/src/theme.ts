@@ -84,16 +84,27 @@ export const CARD_SHADOW_HOVER =
 /** Panel (Spalte, Kachel): schwebt über der Board-Fläche, ohne selbst Licht zu tragen. */
 export const PANEL_SHADOW = '0 1px 2px rgba(36,53,57,0.04), 0 6px 20px rgba(36,53,57,0.07)'
 
+/** Neutral getönte Fläche (Spalten, Zebra-Zeilen, Menü-Hover, Grundfläche der Anwendung). */
+export const SURFACE_TINT = '#F6FAFB'
+
 /**
- * Grund der ganzen Anwendung: zwei weit ausgelaufene Verläufe aus {@link ICE} an den oberen Ecken.
- * Ohne ihn stünde Weiß auf Weiß, und die Schattenebenen der Panels hätten keinen Grund, gegen den
- * sie wirken. Er gilt für Board, Listen, Vorhaben, Dashboard, Administration und die Anmeldeseiten
- * gleichermaßen — bis #713 trug ihn allein das Board.
+ * Grund der ganzen Anwendung: eine durchgehend getönte Fläche aus {@link SURFACE_TINT}, darüber
+ * zwei weit ausgelaufene Verläufe aus {@link ICE} an den oberen Ecken. Ohne ihn stünde Weiß auf
+ * Weiß, und die Schattenebenen der Panels hätten keinen Grund, gegen den sie wirken. Er gilt für
+ * Board, Listen, Vorhaben, Dashboard, Administration und die Anmeldeseiten gleichermaßen — bis
+ * #713 trug ihn allein das Board.
+ *
+ * **Die Grundfläche ist getönt und nicht weiß, und das ist der tragende Teil.** In der ersten
+ * Fassung aus #713 stand dort `#FFFFFF`; getönt war die Fläche dann nur, soweit die Verläufe
+ * reichten — bei 1920px Breite deckten sie ab etwa 660px gar nichts mehr, und die Mitte, der
+ * ganze untere Bereich und beide unteren Ecken blieben reines Weiß. Auf einem breiten Bildschirm
+ * war von der Tönung nichts zu sehen. Die Radien sind aus demselben Grund gewachsen: Ein Verlauf,
+ * der auf einem Drittel der Fläche ausläuft, trägt keinen Grund, er setzt einen Akzent.
  */
 export const APP_BACKGROUND = [
-  `radial-gradient(1200px 800px at 0% 0%,   ${ICE} 0%, rgba(255,255,255,0) 55%)`,
-  `radial-gradient(1000px 700px at 100% 0%, ${ICE} 0%, rgba(255,255,255,0) 50%)`,
-  '#FFFFFF',
+  `radial-gradient(1600px 1100px at 0% 0%,   ${ICE} 0%, rgba(255,255,255,0) 70%)`,
+  `radial-gradient(1400px 1000px at 100% 0%, ${ICE} 0%, rgba(255,255,255,0) 65%)`,
+  SURFACE_TINT,
 ].join(', ')
 
 /** Kopf eines Panels: sehr flacher Verlauf nach Weiß, trennt ohne einen Kasten zu bauen. */
@@ -101,9 +112,6 @@ export const PANEL_HEAD_GRADIENT = `linear-gradient(180deg,${ICE} 0%,#FFFFFF 100
 
 /** Anheben einer Karte unter dem Zeiger (px, negativ = nach oben). */
 export const CARD_LIFT = -3
-
-/** Neutral getönte Fläche (Spalten, Zebra-Zeilen, Menü-Hover). */
-export const SURFACE_TINT = '#F6FAFB'
 
 /** Hintergrund für Inline-Code und Codeblöcke; ohne Entsprechung in der Marken-Palette. */
 export const CODE_BG = '#f4f5f7'

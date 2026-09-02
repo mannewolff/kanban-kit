@@ -160,7 +160,21 @@ describe('theme Grund der Anwendung', () => {
     // Zwei radiale Verläufe, beide aus ICE — der Grund trägt keinen Ton, den die Palette nicht kennt.
     expect(APP_BACKGROUND.match(/#EDF5F6/g)).toHaveLength(2)
     expect(APP_BACKGROUND.match(/radial-gradient/g)).toHaveLength(2)
-    expect(APP_BACKGROUND).toContain('#FFFFFF')
+  })
+
+  it('legt eine getönte Grundfläche unter die Verläufe, kein Weiß', () => {
+    // Der tragende Teil der Tönung. Mit `#FFFFFF` als Grundfläche war der Grund nur dort getönt,
+    // wo die Verläufe reichten — bei 1920px Breite blieben Mitte, unterer Bereich und beide
+    // unteren Ecken reines Weiß, die Tönung war auf einem breiten Bildschirm unsichtbar.
+    expect(APP_BACKGROUND).toContain(SURFACE_TINT)
+    expect(APP_BACKGROUND).not.toContain('#FFFFFF')
+  })
+
+  it('lässt die Verläufe weit genug auslaufen, um Fläche zu tragen', () => {
+    // Die erste Fassung lief bei 55 % von 1200px aus und deckte damit ab etwa 660px nichts mehr.
+    // Ein Verlauf, der auf einem Drittel der Fläche endet, setzt einen Akzent statt einen Grund.
+    const radien = [...APP_BACKGROUND.matchAll(/(\d+)px (\d+)px at/g)].map((m) => Number(m[1]))
+    expect(radien.every((r) => r >= 1400)).toBe(true)
   })
 
   it('legt den Grund auf eine fixierte eigene Schicht hinter dem Inhalt', () => {
