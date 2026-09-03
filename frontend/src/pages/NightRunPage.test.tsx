@@ -10,7 +10,12 @@ import {
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { CardByNumber } from '../api/cards'
-import type { NightRunErrorClassCounts, NightRunResult, NightRunView } from '../api/nightRuns'
+import type {
+  NightRunErrorClassCounts,
+  NightRunItemView,
+  NightRunResult,
+  NightRunView,
+} from '../api/nightRuns'
 import { SnackbarProvider } from '../components/SnackbarProvider'
 import { buildHandoffText, type NightRunHandoffItem } from '../lib/nightRunHandoff'
 import { parseNightRunLog } from '../lib/nightRunLog'
@@ -167,34 +172,57 @@ function wieAufbewahrt(protokoll: string): NightRunView[] {
     processedCount: run.processedCount,
     skippedCount: run.skippedCount,
     unparsedCount: run.unparsedCount,
-    ...(run.unparsedSample.length === 0 ? {} : { unparsedSample: run.unparsedSample.join('\n') }),
+    unparsedSample: run.unparsedSample.length === 0 ? null : run.unparsedSample.join('\n'),
     createdAt: '2026-09-02T06:00:00.000Z',
-    items: run.items.map((item, position) => ({
-      id: position + 1,
-      cardNumber: item.cardNumber,
-      title: item.title,
-      state: item.state,
-      ...(item.errorClass === undefined ? {} : { errorClass: item.errorClass }),
-      ...(item.durationMs === undefined ? {} : { durationMs: item.durationMs }),
-      excerpt: item.excerpt,
-    })),
+    items: run.items.map((item, position) => wieAufbewahrtesItem({ id: position + 1, ...item })),
   }))
+}
+
+/** Ein Arbeitspaket in der Kurzform der Tests: Was nichts zur Sache tut, bleibt weg. */
+type ItemVorgabe = Partial<NightRunItemView> &
+  Pick<NightRunItemView, 'id' | 'cardNumber' | 'title' | 'state'>
+
+/**
+ * Ein Arbeitspaket so, wie der Server es schickt: Was der Lauf nicht wusste, steht als `null` im
+ * JSON — nicht als fehlender Schlüssel (Issue #734). Die Helfer nehmen die Angaben in der
+ * Frontend-Schreibweise (`undefined`) entgegen und übersetzen sie hier einmal, damit kein Test
+ * versehentlich eine Antwortform nachbildet, die es nicht gibt.
+ */
+function wieAufbewahrtesItem(item: ItemVorgabe): NightRunItemView {
+  return {
+    id: item.id,
+    cardNumber: item.cardNumber,
+    title: item.title,
+    state: item.state,
+    errorClass: item.errorClass ?? null,
+    durationMs: item.durationMs ?? null,
+    commitHash: item.commitHash ?? null,
+    excerpt: item.excerpt ?? null,
+  }
 }
 
 /** Die Einlieferungs-Antwort zu einem Protokoll, in dem jeder Lauf neu ist. */
 const alleNeu = (protokoll: string): NightRunResult[] =>
   parseNightRunLog(protokoll).runs.map((run) => ({ startedAt: run.startedAt, created: true }))
 
-function aufbewahrt(partial: Partial<NightRunView> & { id: number; startedAt: string }): NightRunView {
+function aufbewahrt(
+  partial: Omit<Partial<NightRunView>, 'items'> & {
+    id: number
+    startedAt: string
+    items?: ItemVorgabe[]
+  },
+): NightRunView {
+  const { items, ...rest } = partial
   return {
     mode: 'IMPLEMENTATION',
     durationMs: 10 * 60_000,
     processedCount: 1,
     skippedCount: 0,
     unparsedCount: 0,
+    unparsedSample: null,
     createdAt: '2026-09-02T06:00:00.000Z',
-    items: [],
-    ...partial,
+    ...rest,
+    items: (items ?? []).map(wieAufbewahrtesItem),
   }
 }
 
@@ -651,7 +679,7 @@ describe('NightRunPage — Zustände, Kennzahlen und Auszüge', () => {
 })
 
 describe('NightRunPage — Herkunftskette', () => {
-  const lauf700 = (items: NightRunView['items']) => [
+  const lauf700 = (items: ItemVorgabe[]) => [
     [aufbewahrt({ id: 1, startedAt: startedAt(0), items })],
   ]
 
@@ -1124,5 +1152,72 @@ describe('NightRunPage — Übernahmetext für die Entwicklungsumgebung', () => 
 
     expect(feld(700)?.value).not.toContain('undefined')
     expect(feld(700)?.value).toContain('Harter Abbruch')
+  })
+})
+
+describe('NightRunPage — null aus der API (#734)', () => {
+  /**
+   * So schickt der Server einen Lauf ohne Befunde: Fehlende Werte stehen als `null` im JSON, nicht
+   * als fehlendes Feld — weder `@JsonInclude(NON_NULL)` noch `default-property-inclusion` sind
+   * gesetzt. Die Anzeigeform kennt für „fehlt" nur `undefined`; wer das nicht übersetzt, rechnet
+   * mit `null` weiter (`null / 1000` ist `0`) und schreibt es in Texte.
+   */
+  const MIT_NULL: NightRunView[] = [
+    aufbewahrt({
+      id: 1,
+      startedAt: startedAt(0),
+      unparsedSample: null,
+      items: [
+        {
+          id: 11,
+          cardNumber: 700,
+          title: 'Paket A',
+          state: 'RED',
+          errorClass: null,
+          durationMs: null,
+          commitHash: null,
+          excerpt: null,
+        },
+      ],
+    }),
+  ]
+
+  /** Das schreibgeschützte Feld des Übernahmetexts; `null`, wenn keines gerendert wird. */
+  const feld = (cardNumber: number) =>
+    within(lauf(0)).queryByLabelText(`Übernahmetext zu Karte #${cardNumber}`) as
+      | HTMLTextAreaElement
+      | null
+
+  async function nullLaufZeigen() {
+    renderPage({
+      listen: [MIT_NULL],
+      zaehler: [{ HARD_ABORT: 2 }],
+      karten: { 700: karte({ id: 1, number: 700, title: 'Paket A' }) },
+    })
+    await screen.findByTestId(`lauf-${startedAt(0)}`)
+    aufklappen(0)
+    await within(lauf(0)).findByTestId('zustand-700')
+  }
+
+  it('zeigt den Lauf an, statt an einem null-Feld abzustürzen', async () => {
+    await nullLaufZeigen()
+
+    expect(await within(lauf(0)).findByRole('button', { name: /#700 Paket A/ })).toBeInTheDocument()
+    expect(lauf(0).textContent).not.toContain('null')
+    expect(lauf(0).textContent).not.toContain('undefined')
+  })
+
+  it('lässt Dauer und Auszug weg, statt „0 s" und „Auszug: null" zu behaupten', async () => {
+    await nullLaufZeigen()
+
+    expect(lauf(0).textContent).not.toContain('0 s')
+    expect(lauf(0).textContent).not.toContain('Auszug:')
+    expect(within(lauf(0)).queryByTestId('haeufigkeit-700')).toBeNull()
+  })
+
+  it('lässt die Fehlerklasse aus dem Übernahmetext weg, statt „undefined" hineinzuschreiben', async () => {
+    await nullLaufZeigen()
+
+    expect(feld(700)?.value).toBe('Nachtlauf-Befund zu Karte #700 Paket A\nZustand: gescheitert')
   })
 })

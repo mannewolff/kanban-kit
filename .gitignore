@@ -44,3 +44,4 @@ kanban-kit-metriken.md
 .agents/
 .codex/
 
+frontend/.stryker-tmp/
