@@ -147,6 +147,16 @@ const ausParser = (run: NightRun): AnzeigeLauf => ({
   })),
 })
 
+/**
+ * Der Lauf vom Server in der Anzeigeform (#725).
+ *
+ * **Hier wird `null` zu `undefined`** (Issue #734): Der Server schickt ein fehlendes Feld als
+ * `null`, die Anzeigeform kennt dafür nur `undefined` — und `ausSicht` ist die einzige Stelle, an
+ * der Server-Daten hereinkommen. Die Übersetzung gehört deshalb hierher und nicht in die
+ * Renderpfade: `null` weiterzureichen ergäbe `null / 1000 === 0` als Dauer, `Auszug: null` im
+ * Auszug und `Fehlerklasse: undefined` im Übernahmetext — drei stille Falschaussagen, die jeder
+ * neue Leser des Anzeigemodells erneut abfangen müsste.
+ */
 const ausSicht = (view: NightRunView): AnzeigeLauf => ({
   gespeichert: true,
   startedAt: view.startedAt,
@@ -155,14 +165,14 @@ const ausSicht = (view: NightRunView): AnzeigeLauf => ({
   processedCount: view.processedCount,
   skippedCount: view.skippedCount,
   unparsedCount: view.unparsedCount,
-  unparsedSample: view.unparsedSample === undefined ? [] : view.unparsedSample.split('\n'),
+  unparsedSample: view.unparsedSample == null ? [] : view.unparsedSample.split('\n'),
   items: view.items.map((item) => ({
     cardNumber: item.cardNumber,
     title: item.title,
     state: item.state,
-    errorClass: item.errorClass,
-    durationMs: item.durationMs,
-    excerpt: item.excerpt,
+    errorClass: item.errorClass ?? undefined,
+    durationMs: item.durationMs ?? undefined,
+    excerpt: item.excerpt ?? undefined,
   })),
 })
 

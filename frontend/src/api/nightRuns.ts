@@ -38,16 +38,24 @@ export interface NightRunResult {
   created: boolean
 }
 
-/** Ein aufbewahrtes Arbeitspaket. */
+/**
+ * Ein aufbewahrtes Arbeitspaket.
+ *
+ * Die Felder ohne Wert kommen als `null` und nicht als fehlender Schlüssel: Das Backend hält sie
+ * `@Nullable`, und weder `@JsonInclude(NON_NULL)` noch `default-property-inclusion` sind gesetzt.
+ * Sie deshalb als `?:` zu deklarieren beschriebe eine Antwort, die es nicht gibt — und weil die
+ * Antwort ungeprüft als dieser Typ gilt, bemerkt das niemand, bis eine Seite `.split()` darauf ruft
+ * (Issue #734).
+ */
 export interface NightRunItemView {
   id: number
   cardNumber: number
   title: string
   state: NightRunState
-  errorClass?: NightRunErrorClass
-  durationMs?: number
-  commitHash?: string
-  excerpt?: string
+  errorClass: NightRunErrorClass | null
+  durationMs: number | null
+  commitHash: string | null
+  excerpt: string | null
 }
 
 /** Ein aufbewahrter Lauf samt seiner Arbeitspakete. */
@@ -59,7 +67,8 @@ export interface NightRunView {
   processedCount: number
   skippedCount: number
   unparsedCount: number
-  unparsedSample?: string
+  /** Auszug der ungedeuteten Zeilen; `null`, wenn es keine gab — siehe {@link NightRunItemView}. */
+  unparsedSample: string | null
   createdAt: string
   items: NightRunItemView[]
 }
