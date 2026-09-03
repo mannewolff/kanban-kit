@@ -238,22 +238,26 @@ describe('DerivationTree', () => {
 
   it('springt per Tastatur mit Enter genauso wie per Maus', async () => {
     const user = userEvent.setup()
-    await zeigeBaum(mitAbhaengigkeit)
+    const onOpenCard = await zeigeBaum(mitAbhaengigkeit)
 
     await fokusAuf(marke(2))
     await user.keyboard('{Enter}')
 
     expect(zeilen()[1]).toHaveFocus()
+    // Enter auf einem <button> loest zusaetzlich zum Keydown ein synthetisches click aus — ohne
+    // stopPropagation im onClick der Sprungmarke oeffnete das zugleich die eigene Karte der Zeile.
+    expect(onOpenCard).not.toHaveBeenCalled()
   })
 
   it('springt auch mit der Leertaste', async () => {
     const user = userEvent.setup()
-    await zeigeBaum(mitAbhaengigkeit)
+    const onOpenCard = await zeigeBaum(mitAbhaengigkeit)
 
     await fokusAuf(marke(2))
     await user.keyboard('[Space]')
 
     expect(zeilen()[1]).toHaveFocus()
+    expect(onOpenCard).not.toHaveBeenCalled()
   })
 
   it('öffnet mit Enter auf der Zeile weiterhin die Karte, statt zu springen', async () => {
@@ -350,7 +354,10 @@ describe('DerivationTree', () => {
     const fehler = vi.spyOn(console, 'error').mockImplementation(() => {})
     // Der Normalfall aus #609: die Zielkarte liegt auf dem Board, aber ohne Herkunftsbezug — und
     // steht deshalb nicht im Baum.
-    await zeigeBaum([node({ number: 1 }), node({ number: 2, depth: 1, dependencies: [77] })])
+    const onOpenCard = await zeigeBaum([
+      node({ number: 1 }),
+      node({ number: 2, depth: 1, dependencies: [77] }),
+    ])
 
     // Ueber die Tastatur geprueft: Ein Klick fokussiert den Button schon von sich aus, auch im
     // echten Browser — er koennte "der Fokus bleibt, wo er war" also gar nicht belegen.
@@ -363,6 +370,7 @@ describe('DerivationTree', () => {
     // Kein Sprung: keine Zeile ist als Sprungziel hervorgehoben.
     expect(zeilen().filter((z) => z.hasAttribute('data-jump-target'))).toHaveLength(0)
     expect(fehler).not.toHaveBeenCalled()
+    expect(onOpenCard).not.toHaveBeenCalled()
     fehler.mockRestore()
   })
 
@@ -395,6 +403,42 @@ describe('DerivationTree', () => {
 
     expect(onOpenCard).toHaveBeenCalledTimes(1)
     expect(onOpenCard).toHaveBeenCalledWith(2)
+  })
+
+  it('öffnet mit einem Klick auf die Kartennummer die Karte der Zeile (Issue #739)', async () => {
+    const user = userEvent.setup()
+    const onOpenCard = await zeigeBaum(kette)
+
+    await user.click(screen.getByText('#2'))
+
+    expect(onOpenCard).toHaveBeenCalledTimes(1)
+    expect(onOpenCard).toHaveBeenCalledWith(2)
+  })
+
+  it('öffnet mit einem Klick auf den Titel die Karte der Zeile (Issue #739)', async () => {
+    const user = userEvent.setup()
+    const onOpenCard = await zeigeBaum(kette)
+
+    await user.click(screen.getByText('Karte 2'))
+
+    expect(onOpenCard).toHaveBeenCalledTimes(1)
+    expect(onOpenCard).toHaveBeenCalledWith(2)
+  })
+
+  it('öffnet mit einem Klick auf die Sprungmarke nicht zugleich die eigene Karte der Zeile (Issue #739)', async () => {
+    const user = userEvent.setup()
+    const onOpenCard = await zeigeBaum(mitAbhaengigkeit)
+
+    await user.click(marke(2))
+
+    expect(zeilen()[1]).toHaveFocus()
+    expect(onOpenCard).not.toHaveBeenCalled()
+  })
+
+  it('zeigt den Zeiger-Cursor als Hinweis auf die Klickbarkeit (Issue #739)', async () => {
+    await zeigeBaum(kette)
+
+    expect(zeilen()[0]).toHaveStyle({ cursor: 'pointer' })
   })
 
   it('zeigt bei leerer Liste einen vorhabenbezogenen Hinweis statt eines leeren Baums', () => {
