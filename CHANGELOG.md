@@ -7,6 +7,12 @@ Versionierung folgt der dreiteiligen Betriebsversion (siehe [RELEASING.md](RELEA
 Einträge je Version sind ein automatischer Auszug der Commit-Titel seit dem letzten Release,
 erzeugt von `scripts/gen-changelog.mjs`.
 
+## [1.32.0] – 2026-09-03
+
+- chore: v1.31.1
+- Stryker installiert und konfiguriert
+- Nachtlauf-Auswertung deutet null aus der API ([#734](https://github.com/mannewolff/kanban-kit/issues/734))
+
 ## [1.31.0] – 2026-09-02
 
 - chore: v1.30.2
