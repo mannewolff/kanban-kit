@@ -7,6 +7,25 @@ Versionierung folgt der dreiteiligen Betriebsversion (siehe [RELEASING.md](RELEA
 Einträge je Version sind ein automatischer Auszug der Commit-Titel seit dem letzten Release,
 erzeugt von `scripts/gen-changelog.mjs`.
 
+## [1.31.0] – 2026-09-02
+
+- chore: v1.30.2
+- Parser deutet echte Protokolle vollstaendig ([#720](https://github.com/mannewolff/kanban-kit/issues/720))
+- Rollen- und Nutzungsdokumentation der Nachtlauf-Auswertung ([#728](https://github.com/mannewolff/kanban-kit/issues/728))
+- Uebernahmetext der Nachtlauf-Auswertung ([#727](https://github.com/mannewolff/kanban-kit/issues/727))
+- Haeufigkeit einer Fehlerklasse in der Nachtlauf-Auswertung ([#726](https://github.com/mannewolff/kanban-kit/issues/726))
+- Navigationseintrag und Route der Nachtlauf-Auswertung ([#724](https://github.com/mannewolff/kanban-kit/issues/724))
+- Grunddarstellung der Nachtlauf-Auswertung ([#725](https://github.com/mannewolff/kanban-kit/issues/725))
+- Endpunkte und Frontend-Anbindung der Nachtlauf-Auswertung ([#723](https://github.com/mannewolff/kanban-kit/issues/723))
+- Nachtlauf-Service mit Owner-Recht, Ringpuffer und Duplikaten ([#722](https://github.com/mannewolff/kanban-kit/issues/722))
+- Persistenzschicht fuer die Nachtlauf-Auswertung ([#721](https://github.com/mannewolff/kanban-kit/issues/721))
+- chore: v1.30.1
+- Nachtlauf-Protokoll als reines Modul parsen ([#720](https://github.com/mannewolff/kanban-kit/issues/720))
+- Getoenter Grund traegt jetzt die ganze Flaeche (Bahn 1)
+- Vorhaben-Kacheln haben alle dieselbe Hoehe (Bahn 1)
+- Getoenter Grund fuer die gesamte Anwendung ([#713](https://github.com/mannewolff/kanban-kit/issues/713))
+- Designsprache des Leitstands als CLAUDE-design.md verankern ([#712](https://github.com/mannewolff/kanban-kit/issues/712))
+
 ## [1.30.0] – 2026-09-01
 
 - Vorhaben-Ansicht: Ausblenden über ⋮-Menü und Umschalter ([#705](https://github.com/mannewolff/kanban-kit/issues/705))
