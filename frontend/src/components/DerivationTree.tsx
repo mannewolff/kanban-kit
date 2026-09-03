@@ -238,6 +238,9 @@ export function DerivationTree({ rows, onOpenCard }: Readonly<Props>) {
             <Typography variant="body2" component="span" sx={{ color: 'text.secondary' }}>
               #{zeile.number}
             </Typography>
+            {zeile.labels.map((label) => (
+              <LabelMarke key={`l${label.name}`} name={label.name} farbe={label.color} />
+            ))}
             <Typography variant="body2" component="span" sx={{ flexGrow: 1 }}>
               {zeile.title}
             </Typography>
@@ -256,9 +259,6 @@ export function DerivationTree({ rows, onOpenCard }: Readonly<Props>) {
             ))}
             {zeile.externalDependencies.map((nummer) => (
               <Marke key={`e${nummer}`} text={`⇠ extern #${nummer}`} />
-            ))}
-            {zeile.labels.map((label) => (
-              <LabelMarke key={`l${label.name}`} name={label.name} farbe={label.color} />
             ))}
           </Box>
         )

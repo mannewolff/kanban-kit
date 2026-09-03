@@ -532,4 +532,26 @@ describe('DerivationTree', () => {
     expect(marke).not.toHaveAttribute('tabindex')
     expect(marke).not.toHaveAttribute('role')
   })
+
+  it('zeigt die Label-Chips nach der Kartennummer und vor dem Titel (Issue #740)', async () => {
+    await zeigeBaum([
+      node({
+        number: 1,
+        title: 'Ein langer Titel, der sonst ans Zeilenende ablenkt',
+        labels: [
+          { name: 'eins', color: '#0f0' },
+          { name: 'zwei', color: '#00f' },
+        ],
+      }),
+    ])
+
+    const nummer = screen.getByText('#1')
+    const erstesLabel = screen.getByText('eins')
+    const zweitesLabel = screen.getByText('zwei')
+    const titel = screen.getByText('Ein langer Titel, der sonst ans Zeilenende ablenkt')
+
+    expect(nummer.compareDocumentPosition(erstesLabel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(erstesLabel.compareDocumentPosition(zweitesLabel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(zweitesLabel.compareDocumentPosition(titel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
 })
