@@ -1,6 +1,6 @@
 import Box from '@mui/material/Box'
 import Typography from '@mui/material/Typography'
-import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
+import { useEffect, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react'
 import { type DerivationNode } from '../api/cards'
 import { labelChipSx } from './labelChipSx'
 
@@ -220,6 +220,7 @@ export function DerivationTree({ rows, onOpenCard }: Readonly<Props>) {
             // den Tab-Stopp, und die Sprungmarke einer anderen Zeile waere unerreichbar.
             onFocus={() => setFocused(zeile.number)}
             onKeyDown={(event) => beiTaste(event, index)}
+            onClick={() => onOpenCard(zeile.number)}
             sx={{
               display: 'flex',
               alignItems: 'baseline',
@@ -228,7 +229,7 @@ export function DerivationTree({ rows, onOpenCard }: Readonly<Props>) {
               pr: 1,
               pl: zeile.depth * 2.5 + 1,
               borderRadius: 1,
-              cursor: 'default',
+              cursor: 'pointer',
               opacity: zeile.blocked ? 0.6 : 1,
               bgcolor: zeile.number === hervorgehoben ? 'action.selected' : undefined,
               '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main' },
@@ -237,6 +238,9 @@ export function DerivationTree({ rows, onOpenCard }: Readonly<Props>) {
             <Typography variant="body2" component="span" sx={{ color: 'text.secondary' }}>
               #{zeile.number}
             </Typography>
+            {zeile.labels.map((label) => (
+              <LabelMarke key={`l${label.name}`} name={label.name} farbe={label.color} />
+            ))}
             <Typography variant="body2" component="span" sx={{ flexGrow: 1 }}>
               {zeile.title}
             </Typography>
@@ -256,9 +260,6 @@ export function DerivationTree({ rows, onOpenCard }: Readonly<Props>) {
             {zeile.externalDependencies.map((nummer) => (
               <Marke key={`e${nummer}`} text={`⇠ extern #${nummer}`} />
             ))}
-            {zeile.labels.map((label) => (
-              <LabelMarke key={`l${label.name}`} name={label.name} farbe={label.color} />
-            ))}
           </Box>
         )
       })}
@@ -274,7 +275,10 @@ export function DerivationTree({ rows, onOpenCard }: Readonly<Props>) {
  * Baum verlöre die Eigenschaft, als Ganzes ein einziger Tab-Stopp zu sein.
  *
  * <p>`stopPropagation` auf jedem Tastendruck: Sonst behandelte die Zeile denselben Anschlag noch
- * einmal — Enter auf der Marke spränge und öffnete zugleich die Karte.
+ * einmal — Enter auf der Marke spränge und öffnete zugleich die Karte. Dasselbe gilt fuer den
+ * Klick (Issue #739): Enter/Space auf einem `<button>` loesen zusaetzlich zum Tastendruck ein
+ * synthetisches `click`-Ereignis aus, seit die Zeile selbst einen `onClick` traegt — ohne
+ * `stopPropagation` hier oeffnete das zugleich die eigene Karte der Zeile.
  */
 function Sprungmarke({
   nummer,
@@ -287,7 +291,10 @@ function Sprungmarke({
       type="button"
       tabIndex={aktiv ? 0 : -1}
       aria-label={`Zur Karte #${nummer} springen`}
-      onClick={() => onSpringen(nummer)}
+      onClick={(event: MouseEvent<HTMLElement>) => {
+        event.stopPropagation()
+        onSpringen(nummer)
+      }}
       onKeyDown={(event: KeyboardEvent<HTMLElement>) => event.stopPropagation()}
       sx={{
         px: 0.75,
