@@ -1,7 +1,7 @@
 import { createTheme } from '@mui/material/styles'
 
 /**
- * kanban-kit im Markenstil von Manfred Wolff: fein, Teal-Familie, Carlito
+ * Designsprache des Leitstands (siehe CLAUDE-design.md): fein, Teal-Familie, Carlito
  * (Calibri-metrik-gleich), zwei Gewichte (400/700).
  *
  * **Flächen tragen Tiefe, Bedienelemente nicht.** Karten und Panels stehen auf zwei Schattenebenen
@@ -9,14 +9,20 @@ import { createTheme } from '@mui/material/styles'
  * bleiben flach mit Haarlinie. Die frühere Regel „Haarlinien statt Schatten" galt ausnahmslos und
  * ließ das Board flach wirken — die Tiefe ist jetzt auf die tragenden Flächen beschränkt, statt
  * überall zu fehlen.
+ *
+ * **Getönter Grund, weiße Inhaltsflächen.** Der Grund der ganzen Anwendung ({@link APP_BACKGROUND})
+ * liegt am `body`; Karten und Panels sind weiß. Bis #713 trug allein das Board einen eigenen
+ * Verlauf, alles daneben stand weiß auf weiß.
  */
 
-// Marken-Tokens (brand.md).
+// Tokens der Designsprache (siehe CLAUDE-design.md).
 const TEAL = '#2F8C97'
 const TEAL_DEEP = '#1E5F68'
 const TEAL_LIGHT = '#5BABB5'
 const TITLE = '#243539'
-const MUTED = '#5F7A7F'
+// Sekundärtext, abgedunkelt in #713. Der Vorgängerton hielt AA nur auf reinem Weiß (4,59:1) und
+// verfehlte sie schon im Bestand auf SURFACE_TINT (4,37:1); auf dem getönten Grund läge er tiefer.
+const MUTED = '#54696E'
 const BORDER = '#D8ECEE'
 const ICE = '#EDF5F6'
 
@@ -78,8 +84,28 @@ export const CARD_SHADOW_HOVER =
 /** Panel (Spalte, Kachel): schwebt über der Board-Fläche, ohne selbst Licht zu tragen. */
 export const PANEL_SHADOW = '0 1px 2px rgba(36,53,57,0.04), 0 6px 20px rgba(36,53,57,0.07)'
 
-/** Board-Fläche: gibt den Panels etwas, worauf sie schweben können. */
-export const BOARD_GRADIENT = 'linear-gradient(180deg,#F4FAFB 0%,#FFFFFF 60%)'
+/** Neutral getönte Fläche (Spalten, Zebra-Zeilen, Menü-Hover, Grundfläche der Anwendung). */
+export const SURFACE_TINT = '#F6FAFB'
+
+/**
+ * Grund der ganzen Anwendung: eine durchgehend getönte Fläche aus {@link SURFACE_TINT}, darüber
+ * zwei weit ausgelaufene Verläufe aus {@link ICE} an den oberen Ecken. Ohne ihn stünde Weiß auf
+ * Weiß, und die Schattenebenen der Panels hätten keinen Grund, gegen den sie wirken. Er gilt für
+ * Board, Listen, Vorhaben, Dashboard, Administration und die Anmeldeseiten gleichermaßen — bis
+ * #713 trug ihn allein das Board.
+ *
+ * **Die Grundfläche ist getönt und nicht weiß, und das ist der tragende Teil.** In der ersten
+ * Fassung aus #713 stand dort `#FFFFFF`; getönt war die Fläche dann nur, soweit die Verläufe
+ * reichten — bei 1920px Breite deckten sie ab etwa 660px gar nichts mehr, und die Mitte, der
+ * ganze untere Bereich und beide unteren Ecken blieben reines Weiß. Auf einem breiten Bildschirm
+ * war von der Tönung nichts zu sehen. Die Radien sind aus demselben Grund gewachsen: Ein Verlauf,
+ * der auf einem Drittel der Fläche ausläuft, trägt keinen Grund, er setzt einen Akzent.
+ */
+export const APP_BACKGROUND = [
+  `radial-gradient(1600px 1100px at 0% 0%,   ${ICE} 0%, rgba(255,255,255,0) 70%)`,
+  `radial-gradient(1400px 1000px at 100% 0%, ${ICE} 0%, rgba(255,255,255,0) 65%)`,
+  SURFACE_TINT,
+].join(', ')
 
 /** Kopf eines Panels: sehr flacher Verlauf nach Weiß, trennt ohne einen Kasten zu bauen. */
 export const PANEL_HEAD_GRADIENT = `linear-gradient(180deg,${ICE} 0%,#FFFFFF 100%)`
@@ -87,11 +113,47 @@ export const PANEL_HEAD_GRADIENT = `linear-gradient(180deg,${ICE} 0%,#FFFFFF 100
 /** Anheben einer Karte unter dem Zeiger (px, negativ = nach oben). */
 export const CARD_LIFT = -3
 
-/** Neutral getönte Fläche (Spalten, Zebra-Zeilen, Menü-Hover). */
-export const SURFACE_TINT = '#F6FAFB'
-
 /** Hintergrund für Inline-Code und Codeblöcke; ohne Entsprechung in der Marken-Palette. */
 export const CODE_BG = '#f4f5f7'
+
+/**
+ * Die vier Zustandsfarben der Nachtlauf-Auswertung (Plan #718, A15).
+ *
+ * **Warum ein eigener Palette-Eintrag und nicht `success`/`warning`/`error`:** Diese Namen sind im
+ * Frontend an Dutzenden Nicht-Test-Stellen in Gebrauch — `color="error"` an Lösch-Buttons,
+ * `severity` an Alerts, Feldfehler in Formularen. Sie umzudefinieren färbte all das mit um, und MUI
+ * leitet `light`, `dark` und `contrastText` aus `main` ab; aus einem Markengrün könnte dabei weiße
+ * Schrift unter 4,5:1 entstehen.
+ *
+ * **Alle vier Töne sind Textfarben**, keine Flächen: Der Zustands-Chip trägt Schrift und Rand in
+ * der Farbe auf heller Fläche. Damit gilt die strengere der beiden Schwellen aus `CLAUDE-design.md`
+ * (Zeile 58) — 4,5:1 für den Text — und deckt die 3:1 des Farbfelds mit ab. Gemessen gegen die drei
+ * tatsächlichen Flächen des Leitstands (Weiß, {@link SURFACE_TINT}, {@link ICE}); `theme.test.ts`
+ * rechnet sie nach.
+ *
+ * **Grau ist der Sekundärtext** {@link MUTED} und nicht `text.disabled`: Letzteres ist hier gar
+ * nicht gesetzt, es gälte der MUI-Default `rgba(0,0,0,0.38)` mit rund 2,8:1 — und „vom Lauf nicht
+ * bearbeitet" ist ein bedeutungstragender Zustand, kein deaktiviertes Bedienelement.
+ */
+export interface NightRunPalette {
+  green: string
+  yellow: string
+  red: string
+  grey: string
+}
+
+const NIGHT_RUN_GREEN = '#1F6B4A'
+const NIGHT_RUN_YELLOW = '#8A5A00'
+const NIGHT_RUN_RED = '#A32B22'
+
+declare module '@mui/material/styles' {
+  interface Palette {
+    nightRun: NightRunPalette
+  }
+  interface PaletteOptions {
+    nightRun?: NightRunPalette
+  }
+}
 
 export const theme = createTheme({
   palette: {
@@ -101,6 +163,12 @@ export const theme = createTheme({
     text: { primary: TITLE, secondary: MUTED },
     background: { default: '#FFFFFF', paper: '#FFFFFF' },
     divider: BORDER,
+    nightRun: {
+      green: NIGHT_RUN_GREEN,
+      yellow: NIGHT_RUN_YELLOW,
+      red: NIGHT_RUN_RED,
+      grey: MUTED,
+    },
   },
   // Grundradius der Bedienelemente. Karten und Panels setzen ihren eigenen (CARD_RADIUS,
   // PANEL_RADIUS); 8 ist der Kompromiss dazwischen — deutlich runder als die 4 der Variante
@@ -108,7 +176,7 @@ export const theme = createTheme({
   shape: { borderRadius: 8 },
   typography: {
     fontFamily: 'Carlito, Calibri, "Segoe UI", system-ui, -apple-system, sans-serif',
-    // Titel Bold, Fließtext Regular (brand.md).
+    // Titel Bold, Fließtext Regular (CLAUDE-design.md).
     h4: { fontWeight: 700 },
     h5: { fontWeight: 700 },
     h6: { fontWeight: 700 },
@@ -117,6 +185,20 @@ export const theme = createTheme({
     button: { textTransform: 'none', fontWeight: 700 },
   },
   components: {
+    // Der Grund liegt auf einer eigenen, fixierten Schicht hinter dem Inhalt — nicht als
+    // `background-attachment: fixed` am `body`: iOS Safari ignoriert das und fällt auf `scroll`
+    // zurück, womit auf einem langen Board die Mitte des Verlaufs in den Scrollbereich rutschte.
+    MuiCssBaseline: {
+      styleOverrides: {
+        'body::before': {
+          content: '""',
+          position: 'fixed',
+          inset: 0,
+          zIndex: -1,
+          background: APP_BACKGROUND,
+        },
+      },
+    },
     // Kopfleiste: weiße Fläche aus der Palette statt `primary`, Haarlinie statt Elevation. Der
     // eigene `elevation: 0` ist nötig, weil MuiAppBar seinen Default 4 selbst setzt und der
     // MuiPaper-Default darauf nicht durchgreift.

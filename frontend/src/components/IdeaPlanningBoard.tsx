@@ -295,7 +295,7 @@ export function IdeaPlanningBoard({
               data-testid={`board-zone-${board.id}`}
               onDragOver={(e) => e.preventDefault()}
               onDrop={handleBoardDrop(board)}
-              sx={{ minHeight: 64, borderRadius: 1, p: 1, bgcolor: 'background.default' }}
+              sx={{ minHeight: 64, borderRadius: 1, p: 1, bgcolor: 'background.paper' }}
             >
               {cards.length === 0 ? (
                 <Typography variant="body2" color="text.secondary" sx={{ py: 1 }}>

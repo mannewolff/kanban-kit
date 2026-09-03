@@ -42,7 +42,7 @@ import { epicShortcode } from '../lib/epicMeta'
 import { hiddenCardNumbers } from '../lib/hiddenCards'
 import { useKeyboardShortcut } from '../lib/useKeyboardShortcut'
 import { statusColors } from '../lib/statusColors'
-import { BOARD_GRADIENT, PANEL_HEAD_GRADIENT, PANEL_SHADOW, PANEL_RADIUS, STATUS_EDGE_WIDTH, SURFACE_TINT } from '../theme'
+import { PANEL_HEAD_GRADIENT, PANEL_SHADOW, PANEL_RADIUS, STATUS_EDGE_WIDTH, SURFACE_TINT } from '../theme'
 import { labelChipSx } from './labelChipSx'
 import { edgeSurfaceSx } from './boardSurfaceSx'
 import { BulkActionBar } from './BulkActionBar'
@@ -585,7 +585,10 @@ export function BoardView({
         </Box>
       )}
 
+      {/* Ohne eigenen Grund und ohne eigenen Radius: Die Fläche, auf der die Panels schweben, ist
+          seit #713 der Grund der ganzen Anwendung (theme.ts, APP_BACKGROUND). */}
       <Stack
+        data-testid="board-surface"
         direction="row"
         spacing={2}
         sx={{
@@ -597,10 +600,6 @@ export function BoardView({
           alignItems: 'stretch',
           // Spalten füllen die Höhe bis nahe an den Viewport-Rand (Offset ≈ AppBar + Header).
           minHeight: 'calc(100vh - 210px)',
-          // Fläche, auf der die Panels schweben. Ohne sie stünde Weiß auf Weiß, und die
-          // Schattenebenen der Spalten hätten keinen Grund, gegen den sie wirken.
-          background: BOARD_GRADIENT,
-          borderRadius: `${PANEL_RADIUS}px`,
         }}
       >
         {columns.map((column) => {

@@ -11,7 +11,7 @@ import { projectsApi } from '../api/projects'
 import { BoardView } from './BoardView'
 import { SnackbarProvider } from './SnackbarProvider'
 import { statusColors } from '../lib/statusColors'
-import { STATUS_EDGE_WIDTH } from '../theme'
+import { PANEL_RADIUS, STATUS_EDGE_WIDTH } from '../theme'
 
 vi.mock('../api/columns', () => ({
   columnsApi: {
@@ -553,6 +553,18 @@ describe('BoardView', () => {
     expect(screen.getByTestId('card-100')).not.toHaveStyle({
       borderTopWidth: `${STATUS_EDGE_WIDTH}px`,
     })
+  })
+
+  // Der getönte Grund liegt seit #713 an der Anwendung (theme.ts, `body::before`) und nicht mehr
+  // am Board. Trüge die Board-Fläche weiterhin einen eigenen Verlauf, stünde ein Verlauf auf einem
+  // Verlauf; der eigene Radius rundete dann eine Fläche, die es als Fläche nicht mehr gibt.
+  it('trägt keinen eigenen Verlauf und keinen eigenen Panel-Radius mehr', () => {
+    render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} />)
+
+    const surface = screen.getByTestId('board-surface')
+    expect(getComputedStyle(surface).backgroundImage).not.toContain('gradient')
+    // 14px ist PANEL_RADIUS — der gehört den Spalten, nicht der Fläche, auf der sie stehen.
+    expect(surface).not.toHaveStyle({ borderRadius: `${PANEL_RADIUS}px` })
   })
 
   it('färbt den Label-Chip-Text nach Kontrast, auf hellem Label also nicht weiß', () => {

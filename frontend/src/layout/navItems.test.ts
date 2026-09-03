@@ -100,3 +100,37 @@ describe('buildNavItems Ideen-Link', () => {
     expect(labels.indexOf('Ideen')).toBeLessThan(labels.indexOf('B'))
   })
 })
+
+describe('buildNavItems Nachtlauf-Link', () => {
+  // Reine Parameterprüfung: buildNavItems bekommt den fertigen Booleschen Wert, nicht Rolle und
+  // Admin-Status. Wie er entsteht (canManageProject, also auch für den Plattform-Admin), gehört
+  // in die AppShell und ist dort geprüft.
+  const nightRunLink = (params: NavParams) => {
+    const node = buildNavItems(params).find((n) => n.label === 'Nachtlauf')
+    return node?.kind === 'link' ? node : undefined
+  }
+
+  it('zeigt „Nachtlauf" bei gesetztem Sichtbarkeitswert und offenem Board', () => {
+    expect(nightRunLink({ board, canViewNightRun: true })?.path).toBe(
+      `/projects/${board.projectId}/nachtlauf`,
+    )
+  })
+
+  it('zeigt „Nachtlauf" auf einer Projekt-Route ohne offenes Board', () => {
+    expect(nightRunLink({ board: null, projectId: 7, canViewNightRun: true })?.path).toBe(
+      '/projects/7/nachtlauf',
+    )
+  })
+
+  it('blendet „Nachtlauf" ohne Projekt-Kontext aus (kein Board, keine projectId)', () => {
+    expect(nightRunLink({ board: null, canViewNightRun: true })).toBeUndefined()
+  })
+
+  it('blendet „Nachtlauf" ohne gesetzten Sichtbarkeitswert aus', () => {
+    expect(nightRunLink({ board, canViewNightRun: false })).toBeUndefined()
+  })
+
+  it('blendet „Nachtlauf" auch dann aus, wenn der Sichtbarkeitswert fehlt (Default)', () => {
+    expect(nightRunLink({ board })).toBeUndefined()
+  })
+})

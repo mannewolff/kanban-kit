@@ -74,6 +74,10 @@ manban:
     retry-base-delay: PT10S
     retry-max-delay: PT1H
     completed-retention-days: ${MANBAN_OUTBOX_RETENTION_DAYS:7}
+  # Nachtlauf-Auswertung (Issue #722): Ringpuffer je Projekt. Der aelteste Lauf nach started_at
+  # wird verdraengt, sobald die Grenze ueberschritten ist.
+  nightrun:
+    max-per-project: 30
   cleanup:
     enabled: ${MANBAN_CLEANUP_ENABLED:true}
     done-retention-days: ${MANBAN_DONE_RETENTION_DAYS:30}

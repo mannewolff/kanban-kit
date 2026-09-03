@@ -9,6 +9,7 @@ Diese Datei ist der Einstiegspunkt für alle Engineering-Regeln in diesem Projek
 - **Neu im Projekt?** Lies diese Datei + [CLAUDE-workflow.md](.claude/CLAUDE-workflow.md).
 - **Java/Spring-Backend arbeiten?** → [CLAUDE-java.md](CLAUDE-java.md)
 - **React-Frontend arbeiten?** → [CLAUDE-react.md](CLAUDE-react.md)
+- **Farben, Radien, Tiefe im Frontend?** → [CLAUDE-design.md](CLAUDE-design.md)
 - **Security?** → [CLAUDE-security.md](CLAUDE-security.md)
 - **Plan-Mode / Git / Issue-Workflow?** → [CLAUDE-workflow.md](.claude/CLAUDE-workflow.md)
 
@@ -21,6 +22,7 @@ Diese Datei ist der Einstiegspunkt für alle Engineering-Regeln in diesem Projek
 | **CLAUDE.md** (diese Datei) | Projekt-Übersicht + Pflichtchecks | ❌ Projekt |
 | [CLAUDE-java.md](CLAUDE-java.md) | Java 21, Spring Boot 3, TDD, Coverage, Mutationstests | ✅ Allgemein |
 | [CLAUDE-react.md](CLAUDE-react.md) | React 18, Vite, TypeScript, MUI, Lazy Loading, ESLint/A11y | ✅ Allgemein |
+| [CLAUDE-design.md](CLAUDE-design.md) | Palette, Font, Radien, Tiefe, Kontrast des Leitstands | ❌ Projekt |
 | [CLAUDE-security.md](CLAUDE-security.md) | Spring Security, JPA, Frontend-XSS, Secrets, Session-/Token-Handling | ✅ Allgemein |
 | [CLAUDE-workflow.md](.claude/CLAUDE-workflow.md) | 9-Schritte-Workflow, Issues, Git, Pflichtchecks | ✅ Allgemein |
 
@@ -87,8 +89,8 @@ Diese Datei ist der Einstiegspunkt für alle Engineering-Regeln in diesem Projek
     └── src/
         ├── main.tsx, App.tsx, theme.ts
         ├── auth/                       # AuthContext (Session-basiert)
-        ├── layout/                     # AppShell, navItems
-        ├── components/                 # geteilte UI-Bausteine (BoardView, Modals, …)
+        ├── layout/                     # navItems
+        ├── components/                 # geteilte UI-Bausteine (AppShell, BoardView, Modals, …)
         ├── pages/                      # Routen-Komponenten (Projects, Boards, Vorhaben, Admin, Auth-Seiten)
         ├── routes/                     # ProtectedRoute
         ├── lib/                        # Frontend-Hilfsfunktionen (statusColors, boardOps, …)
@@ -134,6 +136,7 @@ Keine kurzfristige Bequemlichkeit rechtfertigt unsicheren, untypisierten oder sc
 
 - **CLAUDE.md** ist die Übersicht. Konflikte zwischen den Sub-Guides werden hier geklärt.
 - **CLAUDE-java.md** und **CLAUDE-react.md** beschreiben die schichtspezifischen Engineering-Regeln. Bei Widerspruch zur Sicherheit gewinnt [CLAUDE-security.md](CLAUDE-security.md).
+- **CLAUDE-design.md** und **CLAUDE-react.md** teilen sich die Oberfläche: [CLAUDE-design.md](CLAUDE-design.md) regelt das *Was* (Farben, Radien, Tiefen, Kontrast), [CLAUDE-react.md](CLAUDE-react.md) das *Wie* (Theme-zentral, `sx`-Prop, keine hartcodierten Werte).
 - **CLAUDE-security.md** hat in allen Sicherheitsfragen Vorrang.
 - **CLAUDE-workflow.md** beschreibt das Prozess-Drumherum (Plan-Mode, Issues, Commits, GO-Freigabe, Tests). Wer Code schreibt ohne den Workflow zu befolgen, hat die Aufgabe nicht abgeschlossen.
 
