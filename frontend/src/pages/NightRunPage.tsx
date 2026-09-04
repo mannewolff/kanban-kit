@@ -330,13 +330,24 @@ function Arbeitspaket({
   return (
     <Box sx={{ py: 1 }}>
       <Stack direction="row" spacing={1} alignItems="center" sx={{ flexWrap: 'wrap' }}>
-        <Chip
-          size="small"
-          variant="outlined"
+        <Stack
+          direction="row"
+          alignItems="center"
+          spacing={0.5}
           data-testid={`zustand-${item.cardNumber}`}
-          label={NIGHT_RUN_STATE_TEXT[item.state]}
-          sx={{ color: ZUSTAND_FARBE[item.state], borderColor: ZUSTAND_FARBE[item.state] }}
-        />
+        >
+          {/* Ampel-Fläche (#738): fixe Größe, unabhängig von der Länge des Zustandstexts daneben —
+              wirkt als Signal statt als weitere Textzeile. Dekorativ und redundant zum Text, deshalb
+              `aria-hidden` (CLAUDE-react.md Zeile 142: Farbe trägt die Aussage nie allein). */}
+          <Box
+            aria-hidden="true"
+            data-testid={`ampel-${item.cardNumber}`}
+            sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: ZUSTAND_FARBE[item.state], flexShrink: 0 }}
+          />
+          <Typography component="span" variant="body2">
+            {NIGHT_RUN_STATE_TEXT[item.state]}
+          </Typography>
+        </Stack>
         {wurzel === null && (
           <Typography component="span">Karte #{item.cardNumber} nicht gefunden</Typography>
         )}

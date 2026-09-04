@@ -590,10 +590,34 @@ describe('NightRunPage — Zustände, Kennzahlen und Auszüge', () => {
 
     expect(await within(lauf(0)).findByText('Erfolg, Prüfung rot')).toBeInTheDocument()
     // Text **und** Farbe tragen die Aussage (CLAUDE-react.md Zeile 142); die Farbe kommt aus der
-    // Palette, nicht aus `success`/`warning`/`error` (A15).
-    expect(within(lauf(0)).getByTestId('zustand-700')).toHaveStyle({
-      color: theme.palette.nightRun.yellow,
+    // Palette, nicht aus `success`/`warning`/`error` (A15) — als ausgefüllte Ampel-Fläche (#738),
+    // nicht mehr als Textfarbe.
+    expect(within(lauf(0)).getByTestId('ampel-700')).toHaveStyle({
+      backgroundColor: theme.palette.nightRun.yellow,
     })
+  })
+
+  it('zeigt den Zustand als ausgefuellte, gleich grosse Flaeche — unabhaengig von der Textlaenge (#738)', async () => {
+    renderPage({
+      submit: { ergebnis: alleNeu(PROTOKOLL_VIER_ZUSTAENDE) },
+      listen: [[], wieAufbewahrt(PROTOKOLL_VIER_ZUSTAENDE)],
+    })
+    await screen.findByText('Noch keine Auswertung vorhanden.')
+
+    protokollWaehlen(PROTOKOLL_VIER_ZUSTAENDE)
+    await screen.findByTestId(`lauf-${startedAt(0)}`)
+    aufklappen(0)
+
+    const panel = within(lauf(0))
+    await panel.findByText('Erfolg')
+
+    // Vier unterschiedlich lange Zustandstexte ("Erfolg" bis "Erfolg, Prüfung rot"), dieselbe
+    // Flächengröße — die Fläche wirkt als Signal, nicht als weitere Textzeile (AC3).
+    const groesse = { width: '8px', height: '8px' }
+    expect(panel.getByTestId('ampel-700')).toHaveStyle({ ...groesse, backgroundColor: theme.palette.nightRun.green })
+    expect(panel.getByTestId('ampel-701')).toHaveStyle({ ...groesse, backgroundColor: theme.palette.nightRun.yellow })
+    expect(panel.getByTestId('ampel-702')).toHaveStyle({ ...groesse, backgroundColor: theme.palette.nightRun.red })
+    expect(panel.getByTestId('ampel-703')).toHaveStyle({ ...groesse, backgroundColor: theme.palette.nightRun.grey })
   })
 
   it('zeigt bei einem grauen Arbeitspaket seinen Grund', async () => {
