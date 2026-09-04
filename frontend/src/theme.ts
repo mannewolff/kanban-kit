@@ -125,11 +125,13 @@ export const CODE_BG = '#f4f5f7'
  * leitet `light`, `dark` und `contrastText` aus `main` ab; aus einem Markengrün könnte dabei weiße
  * Schrift unter 4,5:1 entstehen.
  *
- * **Alle vier Töne sind gegen die strengere der beiden Schwellen aus `CLAUDE-design.md` (Zeile 58)
- * geprüft** — 4,5:1, wie für Text — und decken damit die 3:1 eines Farbfelds mit ab. Das trägt
- * beide heutigen Verwendungen: als Textfarbe (Herkunftskette, Übernahmetext) und als ausgefüllte
- * Ampel-Fläche am Arbeitspaket (#738). Gemessen gegen die drei tatsächlichen Flächen des Leitstands
- * (Weiß, {@link SURFACE_TINT}, {@link ICE}); `theme.test.ts` rechnet sie nach.
+ * **Alle vier Töne dienen ausschließlich als ausgefüllte Ampel-Fläche am Arbeitspaket** (#738),
+ * nicht als Text- oder Randfarbe. Damit gilt die schwächere der beiden Schwellen aus
+ * `CLAUDE-design.md` (Zeile 58) — 3:1 für bedeutungstragende Grafikelemente, nicht 4,5:1 für Text.
+ * **Rot ist deshalb bewusst kräftiger als grün/gelb** (PO-Entscheidung 2026-09-04, direkt am
+ * Livesystem: „wirklich rot" statt des ursprünglich für Textkontrast gewählten Tons) — es hält 3:1
+ * gegen alle drei Flächen des Leitstands, aber nicht mehr 4,5:1. Gemessen gegen die drei
+ * tatsächlichen Flächen (Weiß, {@link SURFACE_TINT}, {@link ICE}); `theme.test.ts` rechnet sie nach.
  *
  * **Grau ist der Sekundärtext** {@link MUTED} und nicht `text.disabled`: Letzteres ist hier gar
  * nicht gesetzt, es gälte der MUI-Default `rgba(0,0,0,0.38)` mit rund 2,8:1 — und „vom Lauf nicht
@@ -144,7 +146,7 @@ export interface NightRunPalette {
 
 const NIGHT_RUN_GREEN = '#1F6B4A'
 const NIGHT_RUN_YELLOW = '#8A5A00'
-const NIGHT_RUN_RED = '#A32B22'
+const NIGHT_RUN_RED = '#FF0000'
 
 declare module '@mui/material/styles' {
   interface Palette {
