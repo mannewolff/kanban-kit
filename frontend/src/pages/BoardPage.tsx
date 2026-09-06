@@ -27,6 +27,7 @@ import { CardDetailModal } from '../components/CardDetailModal'
 import { LabelManagerDialog } from '../components/LabelManagerDialog'
 import { TrashDialog } from '../components/TrashDialog'
 import { useSnackbar } from '../components/SnackbarProvider'
+import { leseAusgeblendet, schreibeAusgeblendet } from '../lib/boardHiddenEpics'
 import { activeCardsInColumn, applyMove } from '../lib/boardOps'
 import { useEditMode } from '../lib/EditModeContext'
 import { epicToCard } from '../lib/epicToCard'
@@ -56,6 +57,23 @@ export function BoardPage() {
   const [labels, setLabels] = useState<Label[]>([])
   const [labelManagerOpen, setLabelManagerOpen] = useState(false)
   const [trashOpen, setTrashOpen] = useState(false)
+  // Ausgeblendete Vorhaben (Plan #620, Zustand hier seit Plan #717, A3): Das Board bekommt sie als
+  // Prop, das Detail-Modal braucht sie im Folgepaket ebenfalls. Ein zweiter, unabhängiger Leser
+  // desselben Schlüssels wären zwei Stände, die auseinanderlaufen können.
+  const [hiddenEpics, setHiddenEpics] = useState<ReadonlySet<number>>(() => leseAusgeblendet(id))
+
+  // Die Route `/boards/:boardId` hält die Komponente bei einem reinen Parameterwechsel gemountet —
+  // der `useState`-Initializer läuft dann nicht erneut. Bewusst nicht in `load`: Das läuft auch bei
+  // Fokus-Refetch und Board-Events und setzte die Ausblendung dann jedes Mal auf den gespeicherten
+  // Stand zurück, obwohl sie inzwischen aufgehoben sein kann.
+  useEffect(() => setHiddenEpics(leseAusgeblendet(id)), [id])
+
+  // Setzen und Fortschreiben in einem Schritt: Getrennt könnte der eine Aufruf ohne den anderen
+  // stehen, und der Bildschirm zeigte etwas anderes als der nächste Seitenaufruf.
+  const changeHiddenEpics = (next: ReadonlySet<number>) => {
+    setHiddenEpics(next)
+    schreibeAusgeblendet(id, next)
+  }
 
   const reloadLabels = () => {
     void labelsApi.list(id).then(setLabels).catch(() => {})
@@ -255,6 +273,8 @@ export function BoardPage() {
         initialCards={cards}
         canEdit={canEdit}
         epics={epics}
+        hiddenEpics={hiddenEpics}
+        onHiddenEpicsChange={changeHiddenEpics}
         retentionDays={retentionDays}
         members={members}
         boardLabels={labels}

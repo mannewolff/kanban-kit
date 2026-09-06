@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { MemoryRouter, Route, Routes } from 'react-router-dom'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { Link, MemoryRouter, Route, Routes } from 'react-router-dom'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '../api/client'
 import { boardsApi } from '../api/boards'
 import { cardsApi } from '../api/cards'
@@ -817,5 +817,137 @@ describe('BoardPage Statuswechsel aus dem Detail-Modal', () => {
     expect(await screen.findByText('Statuswechsel fehlgeschlagen.')).toBeInTheDocument()
     expect(screen.getByRole('combobox', { name: 'Zustand' })).toHaveTextContent('Backlog')
     expect(mockedCards.list).not.toHaveBeenCalled()
+  })
+})
+
+// Ausgeblendete Vorhaben (Plan #717, A3): Der Zustand liegt seit diesem Paket in BoardPage — das
+// Board bekommt ihn als Prop. Deshalb belegen diese Tests ihn hier und nicht mehr an `BoardView`.
+describe('BoardPage ausgeblendete Vorhaben', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  const hiddenKey = (boardId: number) => `manban.boardHiddenEpics.${boardId}`
+  const filterKey = (boardId: number) => `manban.boardEpicFilter.${boardId}`
+
+  const mkEpic = (id: number, titel: string, memberNumbers: number[]) => ({
+    id, number: id, title: titel, description: null, shortcode: titel.slice(0, 3).toUpperCase(),
+    done: 0, total: memberNumbers.length, memberNumbers, rootNumbers: memberNumbers,
+    requirementCardNumber: null,
+  })
+  const mkKarte = (id: number, nummer: number, parentId: number | null) => ({
+    id, boardId: 1, columnId: 10, number: nummer, title: `Karte ${nummer}`, description: null,
+    positionInColumn: 0, archived: false, ideaStored: false, movedToDoneAt: null, dependencies: [],
+    type: 'CARD' as const, parentId, shortcode: null, assignees: [], dueDate: null, labels: [],
+  })
+
+  /**
+   * localStorage-Stub über eine echte Map — vorbelegbar und nach dem Test wieder auslesbar. Nötig
+   * statt des nativen `localStorage`: Unter Node 26 ist es deaktiviert (siehe `src/test/setup.ts`),
+   * ein Test gegen das globale Objekt wäre „grün lokal, rot in CI".
+   */
+  const stubStore = (entries: [string, string][]) => {
+    const store = new Map<string, string>(entries)
+    vi.stubGlobal('localStorage', {
+      getItem: (k: string) => store.get(k) ?? null,
+      setItem: (k: string, v: string) => { store.set(k, v) },
+      removeItem: (k: string) => { store.delete(k) },
+      clear: () => store.clear(), key: () => null, length: 0,
+    })
+    return store
+  }
+
+  // `unstubAllGlobals` nimmt auch den EventSource-Stub aus `src/test/setup.ts` mit — ohne ihn
+  // scheiterte der jeweils nächste Test am SSE-Stream von `useBoardEvents`. Deshalb wird er nach
+  // dem Aufräumen wieder gesetzt.
+  const eventSourceStub = globalThis.EventSource
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    vi.stubGlobal('EventSource', eventSourceStub)
+  })
+
+  function renderBoard(epics: ReturnType<typeof mkEpic>[], karten: ReturnType<typeof mkKarte>[]) {
+    memberships = [{ projectId: 9, role: 'OWNER' }]
+    mockedBoards.get.mockResolvedValue({
+      id: 1, projectId: 9, name: 'B', createdAt: '',
+      columns: [{ id: 10, name: 'Backlog', position: 0, wipLimit: null }],
+    })
+    mockedCards.list.mockResolvedValue(karten)
+    mockedEpics.list.mockResolvedValue(epics)
+    mockedLabels.list.mockResolvedValue([])
+    mockedMembers.list.mockResolvedValue([])
+    mockedConfig.get.mockResolvedValue({ doneRetentionDays: 30 })
+    mockedProjects.list.mockResolvedValue([{ id: 9, name: 'P', role: 'OWNER', createdAt: '' }])
+    return render(
+      <MemoryRouter initialEntries={['/boards/1']}>
+        <Routes>
+          <Route path="/boards/:boardId" element={<BoardPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+  }
+
+  it('liest die ausgeblendeten Vorhaben beim Mount aus localStorage', async () => {
+    stubStore([[hiddenKey(1), JSON.stringify([9])]])
+    renderBoard([mkEpic(9, 'Auth', [1])], [mkKarte(100, 1, 9), mkKarte(300, 4, null)])
+
+    expect(await screen.findByTestId('card-300')).toBeInTheDocument()
+    expect(screen.queryByTestId('card-100')).not.toBeInTheDocument()
+  })
+
+  it('vergisst beim Einblenden beide gespeicherten Schlüssel', async () => {
+    const store = stubStore([[hiddenKey(1), JSON.stringify([9])]])
+    renderBoard([mkEpic(9, 'Auth', [1])], [mkKarte(100, 1, 9), mkKarte(300, 4, null)])
+
+    expect(await screen.findByTestId('card-300')).toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('Vorhaben-Filter'), { target: { value: '9' } })
+    fireEvent.click(screen.getAllByRole('button', { name: /ausgeblendet/ })[0])
+
+    expect(store.has(hiddenKey(1))).toBe(false)
+    expect(store.has(filterKey(1))).toBe(false)
+    // Und die Karte ist wieder da — das Löschen ist kein Ersatz für das Aufheben im Zustand.
+    expect(screen.getByTestId('card-100')).toBeInTheDocument()
+  })
+
+  it('liest den Stand beim Board-Wechsel ohne Remount neu', async () => {
+    // Die Route hält BoardPage bei einem reinen Parameterwechsel gemountet — der useState-
+    // Initializer läuft dann nicht erneut. Ohne das Nachlesen filterte Board 2 mit dem Stand von
+    // Board 1: seine eigene Ausblendung griffe nicht, die fremde weiter.
+    stubStore([
+      [hiddenKey(1), JSON.stringify([9])],
+      [hiddenKey(2), JSON.stringify([8])],
+    ])
+    memberships = [{ projectId: 9, role: 'OWNER' }]
+    mockedBoards.get.mockImplementation((id: number) => Promise.resolve({
+      id, projectId: 9, name: `Board ${id}`, createdAt: '',
+      columns: [{ id: 10, name: 'Backlog', position: 0, wipLimit: null }],
+    }))
+    mockedCards.list.mockImplementation((id: number) => Promise.resolve(
+      id === 1 ? [mkKarte(100, 1, 9), mkKarte(300, 4, null)] : [mkKarte(200, 3, 8), mkKarte(400, 5, null)],
+    ))
+    mockedEpics.list.mockImplementation((id: number) => Promise.resolve(
+      id === 1 ? [mkEpic(9, 'Auth', [1])] : [mkEpic(8, 'Suche', [3])],
+    ))
+    mockedLabels.list.mockResolvedValue([])
+    mockedMembers.list.mockResolvedValue([])
+    mockedConfig.get.mockResolvedValue({ doneRetentionDays: 30 })
+    mockedProjects.list.mockResolvedValue([{ id: 9, name: 'P', role: 'OWNER', createdAt: '' }])
+    render(
+      <MemoryRouter initialEntries={['/boards/1']}>
+        <Link to="/boards/2">Zu Board 2</Link>
+        <Routes>
+          <Route path="/boards/:boardId" element={<BoardPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByTestId('card-300')).toBeInTheDocument()
+    expect(screen.queryByTestId('card-100')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('link', { name: 'Zu Board 2' }))
+
+    expect(await screen.findByTestId('card-400')).toBeInTheDocument()
+    // Board 2 blendet sein eigenes Vorhaben aus …
+    expect(screen.queryByTestId('card-200')).not.toBeInTheDocument()
+    // … und nicht mehr das von Board 1: dessen Vorhaben gibt es hier gar nicht.
+    expect(screen.getByText('Board 2')).toBeInTheDocument()
   })
 })
