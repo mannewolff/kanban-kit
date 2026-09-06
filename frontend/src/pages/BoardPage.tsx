@@ -31,6 +31,7 @@ import { leseAusgeblendet, schreibeAusgeblendet } from '../lib/boardHiddenEpics'
 import { activeCardsInColumn, applyMove } from '../lib/boardOps'
 import { useEditMode } from '../lib/EditModeContext'
 import { epicToCard } from '../lib/epicToCard'
+import { selectableEpics } from '../lib/epicTiles'
 import { canManageProject, isPlatformAdmin } from '../lib/roles'
 import { useBoardEvents } from '../lib/useBoardEvents'
 import { useProjectName } from '../lib/useProjectName'
@@ -295,7 +296,10 @@ export function BoardPage() {
           canEdit={canEdit}
           projectId={board.projectId}
           canModerateComments={canModerate}
+          // Volle Liste für Titel und Fortschritt, gefilterter Vorrat für die Auswahl (Plan #717,
+          // A2): Ein ausgeblendetes Vorhaben steht nicht mehr zur Wahl, behält aber seinen Namen.
           epics={epics}
+          selectableEpics={selectableEpics(epics, hiddenEpics)}
           members={members}
           boardLabels={labels}
           initialEditing={openEditing}

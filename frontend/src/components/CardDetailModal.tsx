@@ -50,6 +50,7 @@ import { CardFields } from './CardFields'
 import { cardLocationCrumbs, type CardLocation } from '../lib/cardLocation'
 import { canonicalColumnKey, otherCanonicalColumns } from '../lib/columnMeta'
 import { dueInputToIso, formatDueDate, isOverdue } from '../lib/dueDate'
+import { epicShortcode } from '../lib/epicMeta'
 import { normalizeTaskLists, toggleTaskAt } from '../lib/markdownTasks'
 import { safeImageSrc, safeLinkHref } from '../lib/markdownUrls'
 import { statusColors } from '../lib/statusColors'
@@ -852,8 +853,18 @@ interface Props {
    * Aufrufer mit noch nicht geladenem Board den Wert direkt durchreichen können.
    */
   location?: CardLocation | null
-  /** Board-Epics für das Epic-Dropdown. */
+  /**
+   * Board-Epics: Datenquelle für Titelanzeige und Fortschritt eines Vorhabens — und, ohne
+   * {@link selectableEpics}, zugleich der Optionsvorrat des Auswahlfelds.
+   */
   epics?: Epic[]
+  /**
+   * Die im Auswahlfeld anzubietenden Vorhaben (Default: {@link epics}). Trägt ausschließlich den
+   * Optionsvorrat; die Anzeige bleibt an `epics` gebunden. Getrennt, weil ein auf dem Board
+   * ausgeblendetes Vorhaben zwar nicht mehr zur Auswahl steht, seinen Titel aber weiterhin hat
+   * (Plan #717, A2) — es aus `epics` zu streichen kostete Titel und Fortschritt gleich mit.
+   */
+  selectableEpics?: Epic[]
   /**
    * Ob die Epic-Zuordnung geändert werden darf (Default `true`). `false` heißt: Der Aufrufer konnte
    * den Optionsvorrat nicht laden (archiviertes Board, board-lose Idee). Ein leeres Dropdown böte
@@ -909,6 +920,7 @@ function CardDetailModalView({
   onMove,
   location,
   epics = [],
+  selectableEpics,
   canEditEpic = true,
   canEditLabels = true,
   members = [],
@@ -1236,6 +1248,21 @@ function CardDetailModalView({
     })
   }
 
+  // Optionsvorrat des Auswahlfelds. Ohne eigene Angabe ist er die volle `epics`-Liste — Aufrufer
+  // ohne ausgeblendete Vorhaben ändern sich dadurch nicht.
+  const epicOptionen = selectableEpics ?? epics
+  // Zeigt die Karte auf ein Vorhaben, das nicht zur Auswahl steht (ausgeblendet, fehlende Liste,
+  // fremdes oder gelöschtes Vorhaben), bleibt das Feld lesend: Ein Dropdown ohne diesen Eintrag
+  // böte nur an, die Zuordnung zu löschen, ohne sie je gezeigt zu haben (#586, Plan #717 A2).
+  const epicLesend =
+    !canEditEpic || (parentId !== null && !epicOptionen.some((e) => e.id === parentId))
+  // Der Titel kommt aus der vollen `epics`-Liste, nicht aus dem Optionsvorrat: Nur sie kennt das
+  // ausgeblendete Vorhaben. Fehlt es auch dort, bleibt es bei der nackten Nummer.
+  const zugeordnetesVorhaben = epics.find((e) => e.id === parentId)
+  const epicLesendText = zugeordnetesVorhaben
+    ? `${epicShortcode(zugeordnetesVorhaben.title, zugeordnetesVorhaben.shortcode)} – ${zugeordnetesVorhaben.title}`
+    : undefined
+
   const colors = columnName ? statusColors(columnName) : null
   const dueOverdue =
     !isEpic && isOverdue(card.dueDate, (columnName ?? '').toLowerCase().includes('done'))
@@ -1340,8 +1367,9 @@ function CardDetailModalView({
               body={body}
               shortcode={shortcode}
               parentId={parentId}
-              epics={epics}
-              epicReadOnly={!canEditEpic}
+              epics={epicOptionen}
+              epicReadOnly={epicLesend}
+              epicReadOnlyLabel={epicLesendText}
               depsInput={depsInput}
               depsError={depsError}
               dueInput={dueInput}

@@ -990,6 +990,53 @@ describe('CardDetailModal', () => {
     )
   })
 
+  it('schaltet die Vorhaben-Auswahl bei ausgeblendetem Vorhaben lesend', async () => {
+    const apis = makeApis()
+    // `epics` kennt das Vorhaben (Titelanzeige, Fortschritt), `selectableEpics` nicht: genau der
+    // Zustand eines auf dem Board ausgeblendeten Vorhabens (Plan #717, A2).
+    const epics = [{ id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 0, total: 1, memberNumbers: [], rootNumbers: [], requirementCardNumber: null }]
+    render(
+      <CardDetailModal
+        card={{ ...card, parentId: 9 }}
+        canEdit
+        epics={epics}
+        selectableEpics={[]}
+        onClose={vi.fn()}
+        {...apis}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Bearbeiten' }))
+
+    const field = screen.getByLabelText('Vorhaben')
+    expect(field).toHaveAttribute('readonly')
+    expect(field).toHaveValue('AUT – Auth')
+    expect(
+      screen.getByText(
+        'Vorhaben hier nicht auswählbar (ausgeblendet oder Liste nicht verfügbar) — die Zuordnung bleibt unverändert.',
+      ),
+    ).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Speichern' }))
+    await waitFor(() =>
+      expect(apis.cardsApi.update).toHaveBeenCalledWith(100, 'Aufgabe', expect.any(String), [3, 4], undefined, 9, null),
+    )
+  })
+
+  it('zeigt die nackte Nummer, wenn auch die Vorhaben-Liste das Vorhaben nicht kennt', () => {
+    const apis = makeApis()
+    // Wie `IdeaPlanningBoard`: `epics=[]` ohne `canEditEpic` (Plan #717, A6). Ohne Eintrag in
+    // `epics` gibt es keinen Titel zu zeigen — die Nummer belegt trotzdem, dass eine Zuordnung
+    // besteht.
+    render(<CardDetailModal card={{ ...card, parentId: 9 }} canEdit epics={[]} onClose={vi.fn()} {...apis} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Bearbeiten' }))
+
+    const field = screen.getByLabelText('Vorhaben')
+    expect(field).toHaveAttribute('readonly')
+    expect(field).toHaveValue('#9')
+  })
+
   it('zeigt die Label-Sektion ohne ladbare Label-Liste nur lesend', async () => {
     const apis = makeApis()
     render(
