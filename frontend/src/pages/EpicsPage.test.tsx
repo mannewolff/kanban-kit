@@ -69,6 +69,27 @@ describe('EpicsPage', () => {
     mMembers.list.mockResolvedValue([])
   })
 
+  /**
+   * localStorage-Stub über eine echte Map — vorbelegbar und nach dem Test auslesbar. Nötig statt
+   * des nativen `localStorage`: Unter Node 26 ist es deaktiviert (siehe `src/test/setup.ts`),
+   * ein Test gegen das globale Objekt wäre „grün lokal, rot in CI".
+   *
+   * Steht auf der äußeren Ebene, weil ihn zwei Blöcke brauchen — das ⋮-Menü und die
+   * Vorhaben-Auswahl im Detail-Dialog (Issue #756).
+   */
+  const stubStore = (entries: [string, string][]) => {
+    const store = new Map<string, string>(entries)
+    vi.stubGlobal('localStorage', {
+      getItem: (k: string) => store.get(k) ?? null,
+      setItem: (k: string, v: string) => { store.set(k, v) },
+      removeItem: (k: string) => { store.delete(k) },
+      clear: () => store.clear(), key: () => null, length: 0,
+    })
+    return store
+  }
+
+  afterEach(() => vi.unstubAllGlobals())
+
   it('zeigt den Breadcrumb-Pfad ab Projekte', async () => {
     mEpics.list.mockResolvedValue([])
     renderPage()
@@ -496,24 +517,6 @@ describe('EpicsPage', () => {
     }
     const vorhaben = [auth]
 
-    /**
-     * localStorage-Stub über eine echte Map — vorbelegbar und nach dem Test auslesbar. Nötig statt
-     * des nativen `localStorage`: Unter Node 26 ist es deaktiviert (siehe `src/test/setup.ts`),
-     * ein Test gegen das globale Objekt wäre „grün lokal, rot in CI".
-     */
-    const stubStore = (entries: [string, string][]) => {
-      const store = new Map<string, string>(entries)
-      vi.stubGlobal('localStorage', {
-        getItem: (k: string) => store.get(k) ?? null,
-        setItem: (k: string, v: string) => { store.set(k, v) },
-        removeItem: (k: string) => { store.delete(k) },
-        clear: () => store.clear(), key: () => null, length: 0,
-      })
-      return store
-    }
-
-    afterEach(() => vi.unstubAllGlobals())
-
     /** Wechselt den Routen-Parameter, ohne die Seite neu zu montieren. */
     function BoardWechsler() {
       const navigate = useNavigate()
@@ -762,6 +765,77 @@ describe('EpicsPage', () => {
       await user.click(await screen.findByRole('menuitem', { name: 'Ausblenden' }))
 
       await waitFor(() => expect(kachelIds()).toEqual([]))
+    })
+  })
+
+  // --- Vorhaben-Auswahl im Detail-Dialog (Issue #756, Plan #717 A1/A2) -------
+
+  /**
+   * Der Optionsvorrat des Kartenformulars folgt der Ausblendung des Boards, die Anzeige nicht:
+   * `epics` bleibt die volle Liste (Titel, Fortschritt), `selectableEpics` trägt die Auswahl.
+   */
+  describe('Vorhaben-Auswahl im Detail-Dialog', () => {
+    const auth = {
+      id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 0, total: 1,
+      memberNumbers: [], rootNumbers: [], requirementCardNumber: null,
+    }
+    const zahlung = {
+      id: 10, number: 3, title: 'Zahlung', description: null, shortcode: 'ZAH', done: 0, total: 1,
+      memberNumbers: [], rootNumbers: [], requirementCardNumber: 4,
+    }
+
+    /** Die Anforderungskarte von `zahlung`, wahlweise dem ausgeblendeten `auth` zugeordnet. */
+    const anforderung = (parentId: number | null) => ({
+      id: 40, boardId: 1, columnId: 10, number: 4, title: 'Anforderung', description: null,
+      positionInColumn: 0, archived: false, ideaStored: false, movedToDoneAt: null,
+      dependencies: [], type: 'CARD', parentId, shortcode: null, assignees: [], dueDate: null,
+      labels: [],
+    })
+
+    it('lässt den Umschalter „Ausgeblendete zeigen" den Optionsvorrat des Formulars unberührt', async () => {
+      // Der Umschalter steuert das Kachelraster dieser Seite. Zöge er hier mit, entschiede eine
+      // Ansichtseinstellung darüber, was man einer Karte zuordnen kann (Plan #717, A1).
+      stubStore([[hiddenEpicsStorageKey(1), JSON.stringify([9])]])
+      mEpics.list.mockResolvedValue([auth, zahlung])
+      mCards.list.mockResolvedValue([anforderung(null)])
+      renderPage()
+
+      fireEvent.click(await screen.findByLabelText(/^Ausgeblendete zeigen/))
+      await screen.findByTestId('vorhaben-kachel-9')
+
+      fireEvent.click(screen.getByRole('button', { name: '#4 · Anforderung' }))
+      fireEvent.click(await screen.findByRole('button', { name: 'Bearbeiten' }))
+
+      expect(await screen.findByRole('option', { name: 'ZAH – Zahlung' })).toBeInTheDocument()
+      expect(screen.queryByRole('option', { name: 'AUT – Auth' })).toBeNull()
+    })
+
+    it('bietet ein ausgeblendetes Vorhaben nicht zur Auswahl an, zeigt seinen Titel aber weiter', async () => {
+      stubStore([[hiddenEpicsStorageKey(1), JSON.stringify([9])]])
+      mEpics.list.mockResolvedValue([auth, zahlung])
+      mCards.list.mockResolvedValue([anforderung(9)])
+      renderPage()
+
+      fireEvent.click(await screen.findByRole('button', { name: '#4 · Anforderung' }))
+      fireEvent.click(await screen.findByRole('button', { name: 'Bearbeiten' }))
+
+      // Der Titel stammt aus der vollen `epics`-Liste; im Optionsvorrat steht das Vorhaben nicht
+      // mehr, das Feld bleibt deshalb lesend statt nur „(kein Vorhaben)" anzubieten.
+      expect(await screen.findByLabelText('Vorhaben')).toHaveValue('AUT – Auth')
+      expect(screen.queryByRole('option', { name: 'AUT – Auth' })).toBeNull()
+    })
+
+    it('zeigt am ausgeblendeten Vorhaben im Zeige-Modus weiterhin seinen Fortschritt', async () => {
+      stubStore([[hiddenEpicsStorageKey(1), JSON.stringify([9])]])
+      mEpics.list.mockResolvedValue([auth, zahlung])
+      renderPage()
+
+      fireEvent.click(await screen.findByLabelText(/^Ausgeblendete zeigen/))
+      fireEvent.click(await screen.findByTestId('vorhaben-kachel-9'))
+
+      // Fortschritt und Titel kommen aus `epics` — die Filterung trifft nur den Optionsvorrat.
+      const dialog = await screen.findByRole('dialog')
+      expect(within(dialog).getByLabelText('Fortschritt')).toHaveTextContent('0 von 1 fertig')
     })
   })
 
