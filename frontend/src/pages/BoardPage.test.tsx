@@ -654,3 +654,168 @@ describe('BoardPage Berechtigungen aus Rolle und Plattform-Admin', () => {
     expect(target).not.toHaveTextContent('Fremd')
   })
 })
+
+// Statuswechsel über den interaktiven Chip des Detail-Modals (Issue #752): BoardPage ist der
+// einzige Integrationspunkt — sie berechnet die Zielposition, schreibt optimistisch und rollt
+// jeden Fehlschlag zurück.
+describe('BoardPage Statuswechsel aus dem Detail-Modal', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  const spalten = [
+    { id: 10, name: 'Backlog', position: 0, wipLimit: null },
+    { id: 11, name: 'Ready', position: 1, wipLimit: null },
+    { id: 12, name: 'In Progress', position: 2, wipLimit: null },
+  ]
+  const offeneKarte = {
+    id: 100, boardId: 1, columnId: 10, number: 1, title: 'Aufgabe', description: null,
+    positionInColumn: 0, archived: false, ideaStored: false, movedToDoneAt: null, dependencies: [],
+    type: 'CARD' as const, parentId: null, shortcode: null, assignees: [], dueDate: null, labels: [],
+  }
+  // Zwei Karten liegen bereits in „In Progress" — die verschobene Karte gehört also an Position 2.
+  const belegt1 = { ...offeneKarte, id: 101, number: 2, title: 'Läuft', columnId: 12, positionInColumn: 0 }
+  const belegt2 = { ...offeneKarte, id: 102, number: 3, title: 'Läuft auch', columnId: 12, positionInColumn: 1 }
+
+  const mockedMove = cardsApi as unknown as { move: ReturnType<typeof vi.fn> }
+
+  function renderStatus(karten: (typeof offeneKarte)[]) {
+    memberships = [{ projectId: 9, role: 'OWNER' }]
+    mockedBoards.get.mockResolvedValue({ id: 1, projectId: 9, name: 'B', createdAt: '', columns: spalten })
+    mockedCards.list.mockResolvedValue(karten)
+    mockedEpics.list.mockResolvedValue([])
+    mockedLabels.list.mockResolvedValue([])
+    mockedMembers.list.mockResolvedValue([])
+    mockedConfig.get.mockResolvedValue({ doneRetentionDays: 30 })
+    mockedProjects.list.mockResolvedValue([{ id: 9, name: 'P', role: 'OWNER', createdAt: '' }])
+    return render(
+      <SnackbarProvider>
+        <MemoryRouter initialEntries={['/boards/1']}>
+          <Routes>
+            <Route path="/boards/:boardId" element={<BoardPage />} />
+          </Routes>
+        </MemoryRouter>
+      </SnackbarProvider>,
+    )
+  }
+
+  /** Öffnet die Karte im Detail-Modal und wählt im Status-Chip die Zielspalte. */
+  async function waehleZustand(ziel: string) {
+    fireEvent.click(await screen.findByTestId('card-100'))
+    fireEvent.mouseDown(await screen.findByRole('combobox', { name: 'Zustand' }))
+    fireEvent.click(await screen.findByRole('option', { name: ziel }))
+  }
+
+  it('verschiebt ans Ende der Zielspalte und aktualisiert Board und Modal optimistisch', async () => {
+    mockedMove.move.mockResolvedValue(belegt1)
+    renderStatus([offeneKarte, belegt1, belegt2])
+
+    await waehleZustand('In Progress')
+
+    await waitFor(() => expect(mockedMove.move).toHaveBeenCalledWith(100, 12, 2))
+    // Modal (selectedCard) und Board (cards) ziehen ohne Serverantwort nach.
+    await waitFor(() =>
+      expect(screen.getByRole('combobox', { name: 'Zustand' })).toHaveTextContent('In Progress'),
+    )
+    expect(within(screen.getByTestId('column-12')).getByTestId('card-100')).toBeInTheDocument()
+  })
+
+  it('verschiebt nicht, wenn die Zielspalte inzwischen die aktuelle Spalte ist', async () => {
+    // Race: Die Rückfrage vor „Ready" steht offen, während ein Refetch die Karte bereits in Ready
+    // zeigt (jemand anders hat sie dorthin gezogen). Der Guard verhindert den Zug ins Leere.
+    renderStatus([offeneKarte])
+
+    await waehleZustand('Ready')
+    expect(await screen.findByText('Nach Ready verschieben?')).toBeInTheDocument()
+
+    mockedCards.list.mockResolvedValue([{ ...offeneKarte, columnId: 11 }])
+    act(() => window.dispatchEvent(new Event('focus')))
+    await waitFor(() =>
+      expect(within(screen.getByTestId('column-11')).getByTestId('card-100')).toBeInTheDocument(),
+    )
+    // Erneuter Klick auf die Karte zieht den geöffneten Kartenstand nach (Modal bleibt montiert).
+    // Die offene Rückfrage macht den Rest der Seite aria-hidden — das Auswahlfeld ist deshalb hier
+    // nur noch über sein Label erreichbar, nicht mehr über die Rolle.
+    fireEvent.click(screen.getByTestId('card-100'))
+    await waitFor(() => expect(screen.getByLabelText('Zustand')).toHaveTextContent('Ready'))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Nach Ready verschieben' }))
+
+    await waitFor(() => expect(screen.queryByText('Nach Ready verschieben?')).toBeNull())
+    expect(mockedMove.move).not.toHaveBeenCalled()
+  })
+
+  it('rollt bei einem Konflikt zurück, meldet ihn und übernimmt den frischen Serverstand', async () => {
+    mockedMove.move.mockRejectedValue(new ApiError(409, 'Karte wurde zwischenzeitlich verschoben.'))
+    renderStatus([offeneKarte, belegt1, belegt2])
+
+    fireEvent.click(await screen.findByTestId('card-100'))
+    mockedCards.list.mockClear()
+    mockedCards.list.mockResolvedValue([{ ...offeneKarte, columnId: 11 }, belegt1, belegt2])
+    fireEvent.mouseDown(await screen.findByRole('combobox', { name: 'Zustand' }))
+    fireEvent.click(await screen.findByRole('option', { name: 'In Progress' }))
+
+    expect(await screen.findByText('Karte wurde zwischenzeitlich verschoben.')).toBeInTheDocument()
+    // Genau ein Nachladen — der Serverstand kommt aus dieser einen frischen Liste.
+    await waitFor(() => expect(mockedCards.list).toHaveBeenCalledTimes(1))
+    await waitFor(() =>
+      expect(screen.getByRole('combobox', { name: 'Zustand' })).toHaveTextContent('Ready'),
+    )
+    expect(within(screen.getByTestId('column-11')).getByTestId('card-100')).toBeInTheDocument()
+  })
+
+  it('schließt das Detail, wenn die Karte nach dem Konflikt nicht mehr in der frischen Liste steht', async () => {
+    mockedMove.move.mockRejectedValue(new ApiError(409, 'Karte ist weg.'))
+    renderStatus([offeneKarte, belegt1, belegt2])
+
+    fireEvent.click(await screen.findByTestId('card-100'))
+    mockedCards.list.mockResolvedValue([belegt1, belegt2])
+    fireEvent.mouseDown(await screen.findByRole('combobox', { name: 'Zustand' }))
+    fireEvent.click(await screen.findByRole('option', { name: 'In Progress' }))
+
+    expect(await screen.findByText('Karte ist weg.')).toBeInTheDocument()
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+  })
+
+  it('meldet ein gescheitertes Nachladen nach dem Konflikt und lässt den zurückgerollten Stand stehen', async () => {
+    mockedMove.move.mockRejectedValue(new ApiError(409, 'Konflikt.'))
+    renderStatus([offeneKarte, belegt1, belegt2])
+
+    fireEvent.click(await screen.findByTestId('card-100'))
+    mockedCards.list.mockRejectedValue(new Error('offline'))
+    fireEvent.mouseDown(await screen.findByRole('combobox', { name: 'Zustand' }))
+    fireEvent.click(await screen.findByRole('option', { name: 'In Progress' }))
+
+    expect(await screen.findByText('Neu laden fehlgeschlagen.')).toBeInTheDocument()
+    // Zurückgerollter Stand: Karte wieder in Backlog, Modal offen.
+    expect(screen.getByRole('combobox', { name: 'Zustand' })).toHaveTextContent('Backlog')
+    expect(within(screen.getByTestId('column-10')).getByTestId('card-100')).toBeInTheDocument()
+  })
+
+  it('rollt bei einem Serverfehler zurück und lädt die Karten nicht erneut', async () => {
+    mockedMove.move.mockRejectedValue(new ApiError(500, 'kaputt'))
+    renderStatus([offeneKarte, belegt1, belegt2])
+
+    fireEvent.click(await screen.findByTestId('card-100'))
+    mockedCards.list.mockClear()
+    fireEvent.mouseDown(await screen.findByRole('combobox', { name: 'Zustand' }))
+    fireEvent.click(await screen.findByRole('option', { name: 'In Progress' }))
+
+    expect(await screen.findByText('Statuswechsel fehlgeschlagen.')).toBeInTheDocument()
+    expect(screen.getByRole('combobox', { name: 'Zustand' })).toHaveTextContent('Backlog')
+    expect(within(screen.getByTestId('column-10')).getByTestId('card-100')).toBeInTheDocument()
+    expect(mockedCards.list).not.toHaveBeenCalled()
+  })
+
+  it('rollt auch bei einem Wurf ohne ApiError zurück', async () => {
+    mockedMove.move.mockRejectedValue(new Error('Netzwerk weg'))
+    renderStatus([offeneKarte, belegt1, belegt2])
+
+    fireEvent.click(await screen.findByTestId('card-100'))
+    mockedCards.list.mockClear()
+    fireEvent.mouseDown(await screen.findByRole('combobox', { name: 'Zustand' }))
+    fireEvent.click(await screen.findByRole('option', { name: 'In Progress' }))
+
+    expect(await screen.findByText('Statuswechsel fehlgeschlagen.')).toBeInTheDocument()
+    expect(screen.getByRole('combobox', { name: 'Zustand' })).toHaveTextContent('Backlog')
+    expect(mockedCards.list).not.toHaveBeenCalled()
+  })
+})

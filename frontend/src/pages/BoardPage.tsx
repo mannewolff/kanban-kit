@@ -27,6 +27,7 @@ import { CardDetailModal } from '../components/CardDetailModal'
 import { LabelManagerDialog } from '../components/LabelManagerDialog'
 import { TrashDialog } from '../components/TrashDialog'
 import { useSnackbar } from '../components/SnackbarProvider'
+import { activeCardsInColumn, applyMove } from '../lib/boardOps'
 import { useEditMode } from '../lib/EditModeContext'
 import { epicToCard } from '../lib/epicToCard'
 import { canManageProject, isPlatformAdmin } from '../lib/roles'
@@ -65,9 +66,12 @@ export function BoardPage() {
   const projectIdRef = useRef<number | null>(null)
   const goneRef = useRef(false)
 
-  const reloadCards = () => {
-    void cardsApi.list(id).then(setCards)
-  }
+  // Liefert die frische Liste zurück, damit ein Aufrufer den Serverstand direkt weiterverwenden
+  // kann (Konflikt-Nachladen im Statuswechsel). Aufrufer ohne Interesse daran rufen `void`.
+  const reloadCards = () => cardsApi.list(id).then((list) => {
+    setCards(list)
+    return list
+  })
   const reloadEpics = () => {
     void epicsApi.list(id).then(setEpics)
   }
@@ -160,6 +164,47 @@ export function BoardPage() {
     setRenameOpen(false)
   }
 
+  /**
+   * Statuswechsel aus dem Detail-Modal (Issue #752): schreibt optimistisch und rollt jeden
+   * Fehlschlag vollständig zurück. Der Serverstand kommt danach über den SSE-Reload — außer bei
+   * einem Konflikt (409): Dort hat jemand anders die Karte bewegt, und der tatsächliche Stand
+   * wird sofort nachgeladen, damit das offene Modal nicht die falsche Spalte zeigt.
+   *
+   * `card` kommt aus dem Render-Zweig mit gesetztem `selectedCard` — deshalb kein Null-Guard.
+   */
+  const handleMove = async (card: Card, toColumnId: number) => {
+    // Gleiche Spalte: nichts zu tun. Das Auswahlfeld bietet die aktuelle Spalte zwar nicht an,
+    // ein zwischenzeitlicher Refetch kann sie aber zur aktuellen gemacht haben (offene Rückfrage
+    // vor „Ready"), und ein Zug ins Leere wäre eine überflüssige Server-Anfrage.
+    if (toColumnId === card.columnId) {
+      return
+    }
+    const previousCards = cards
+    const previousSelected = card
+    const position = activeCardsInColumn(previousCards, toColumnId).length
+    setCards(applyMove(previousCards, card.id, toColumnId))
+    setSelectedCard({ ...card, columnId: toColumnId, positionInColumn: position })
+    try {
+      // Die Antwort wird verworfen (wie BoardView.moveCard) — der Serverstand kommt über SSE.
+      await cardsApi.move(card.id, toColumnId, position)
+    } catch (e: unknown) {
+      setCards(previousCards)
+      setSelectedCard(previousSelected)
+      if (e instanceof ApiError && e.status === 409) {
+        notify(e.message, 'error')
+        try {
+          const fresh = await reloadCards()
+          setSelectedCard(fresh.find((c) => c.id === card.id) ?? null)
+        } catch {
+          // Auch das Nachladen scheitert: Der zurückgerollte Stand bleibt stehen.
+          notify('Neu laden fehlgeschlagen.', 'error')
+        }
+        return
+      }
+      notify('Statuswechsel fehlgeschlagen.', 'error')
+    }
+  }
+
   if (!validId) {
     return <Alert severity="error">Ungültige Board-ID.</Alert>
   }
@@ -235,6 +280,9 @@ export function BoardPage() {
           boardLabels={labels}
           initialEditing={openEditing}
           columnName={selectedColumnName}
+          columns={board.columns}
+          columnId={selectedCard.columnId}
+          onMove={(toColumnId) => handleMove(selectedCard, toColumnId)}
           location={{
             projectId: board.projectId,
             projectName,
