@@ -1,9 +1,10 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import type { ComponentProps } from 'react'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AttachmentsApi } from '../api/attachments'
-import type { Board } from '../api/boards'
+import type { Board, BoardColumn } from '../api/boards'
 import { ApiError } from '../api/client'
 import type { Card, CardByNumber } from '../api/cards'
 import type { CommentsApi } from '../api/comments'
@@ -989,6 +990,53 @@ describe('CardDetailModal', () => {
     )
   })
 
+  it('schaltet die Vorhaben-Auswahl bei ausgeblendetem Vorhaben lesend', async () => {
+    const apis = makeApis()
+    // `epics` kennt das Vorhaben (Titelanzeige, Fortschritt), `selectableEpics` nicht: genau der
+    // Zustand eines auf dem Board ausgeblendeten Vorhabens (Plan #717, A2).
+    const epics = [{ id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 0, total: 1, memberNumbers: [], rootNumbers: [], requirementCardNumber: null }]
+    render(
+      <CardDetailModal
+        card={{ ...card, parentId: 9 }}
+        canEdit
+        epics={epics}
+        selectableEpics={[]}
+        onClose={vi.fn()}
+        {...apis}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Bearbeiten' }))
+
+    const field = screen.getByLabelText('Vorhaben')
+    expect(field).toHaveAttribute('readonly')
+    expect(field).toHaveValue('AUT – Auth')
+    expect(
+      screen.getByText(
+        'Vorhaben hier nicht auswählbar (ausgeblendet oder Liste nicht verfügbar) — die Zuordnung bleibt unverändert.',
+      ),
+    ).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Speichern' }))
+    await waitFor(() =>
+      expect(apis.cardsApi.update).toHaveBeenCalledWith(100, 'Aufgabe', expect.any(String), [3, 4], undefined, 9, null),
+    )
+  })
+
+  it('zeigt die nackte Nummer, wenn auch die Vorhaben-Liste das Vorhaben nicht kennt', () => {
+    const apis = makeApis()
+    // Wie `IdeaPlanningBoard`: `epics=[]` ohne `canEditEpic` (Plan #717, A6). Ohne Eintrag in
+    // `epics` gibt es keinen Titel zu zeigen — die Nummer belegt trotzdem, dass eine Zuordnung
+    // besteht.
+    render(<CardDetailModal card={{ ...card, parentId: 9 }} canEdit epics={[]} onClose={vi.fn()} {...apis} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Bearbeiten' }))
+
+    const field = screen.getByLabelText('Vorhaben')
+    expect(field).toHaveAttribute('readonly')
+    expect(field).toHaveValue('#9')
+  })
+
   it('zeigt die Label-Sektion ohne ladbare Label-Liste nur lesend', async () => {
     const apis = makeApis()
     render(
@@ -1845,5 +1893,230 @@ describe('CardDetailModal — Herkunft (#608)', () => {
 
     expect(await screen.findByLabelText('Herkunft')).toHaveTextContent('#42')
     expect(screen.queryByRole('textbox', { name: 'Herkunft' })).toBeNull()
+  })
+})
+
+// --- Interaktiver Status-Chip (Issue #751) ----------------------------------
+
+/**
+ * Board-Spalten des interaktiven Kontexts: drei kanonische und eine frei benannte. Die Karte liegt
+ * in „Backlog" (ID 10) — dieselbe `columnId`, die die Test-Karte oben trägt.
+ */
+const spalten: BoardColumn[] = [
+  { id: 10, name: 'Backlog', position: 0, wipLimit: null },
+  { id: 11, name: 'Ready', position: 1, wipLimit: null },
+  { id: 12, name: 'In Progress', position: 2, wipLimit: null },
+  { id: 13, name: 'Wartet auf Zulieferung', position: 3, wipLimit: null },
+]
+
+describe('CardDetailModal — interaktiver Status-Chip', () => {
+  /**
+   * Rendert das Modal im interaktiven Kontext (alle drei neuen Props gesetzt). `columnName` trägt
+   * bewusst einen anderen Wert als die Spalte 10 — im interaktiven Kontext gilt der Name aus
+   * `columns`, nicht die Prop.
+   */
+  function renderInteraktiv(props: Partial<ComponentProps<typeof CardDetailModal>> = {}) {
+    render(
+      <CardDetailModal
+        card={card}
+        canEdit
+        columnName="Alter Name"
+        columns={spalten}
+        columnId={10}
+        onMove={vi.fn().mockResolvedValue(undefined)}
+        onClose={vi.fn()}
+        {...makeApis()}
+        {...props}
+      />,
+    )
+  }
+
+  /** Öffnet die Auswahlliste des Status-Selects. */
+  async function oeffneZustand() {
+    fireEvent.mouseDown(await screen.findByRole('combobox', { name: 'Zustand' }))
+  }
+
+  it('zeigt an einer archivierten Karte den farbigen Chip ohne Steuerelement', async () => {
+    renderInteraktiv({ card: { ...card, archived: true } })
+
+    expect(await screen.findByText('Backlog')).toBeInTheDocument()
+    expect(screen.queryByRole('combobox', { name: 'Zustand' })).toBeNull()
+  })
+
+  it('zeigt an einem Vorhaben weiterhin den Chip „Vorhaben"', async () => {
+    renderInteraktiv({ card: { ...card, type: 'EPIC' } })
+
+    expect(await screen.findByText('Vorhaben')).toBeInTheDocument()
+    expect(screen.queryByRole('combobox', { name: 'Zustand' })).toBeNull()
+  })
+
+  it('zeigt an einer Pool-Idee den Chip „Noch nicht eingeplant"', async () => {
+    renderInteraktiv({ card: { ...card, ideaStored: true } })
+
+    expect(await screen.findByText('Noch nicht eingeplant')).toBeInTheDocument()
+    expect(screen.queryByRole('combobox', { name: 'Zustand' })).toBeNull()
+  })
+
+  it('zeigt keinen Chip, wenn die Spalte der Karte nicht zum Board gehört', async () => {
+    renderInteraktiv({ columnId: 99 })
+
+    expect(await screen.findByRole('button', { name: 'Bearbeiten' })).toBeInTheDocument()
+    expect(screen.queryByRole('combobox', { name: 'Zustand' })).toBeNull()
+    // Weder der Name aus `columns` (unbekannt) noch die alte `columnName`-Prop erscheinen.
+    expect(screen.queryByText('Alter Name')).toBeNull()
+  })
+
+  it('bietet in einer kanonischen Spalte die übrigen kanonischen Spalten an', async () => {
+    renderInteraktiv()
+
+    const select = await screen.findByRole('combobox', { name: 'Zustand' })
+    expect(select).toHaveTextContent('Backlog')
+
+    await oeffneZustand()
+    const optionen = await screen.findAllByRole('option')
+    // Erster Eintrag ist die aktuelle Spalte (nicht wählbar); „Wartet auf Zulieferung" ist
+    // nicht kanonisch und fehlt deshalb.
+    expect(optionen.map((o) => o.textContent)).toEqual(['Backlog', 'Ready', 'In Progress'])
+    expect(optionen[0]).toHaveAttribute('aria-disabled', 'true')
+  })
+
+  it('zeigt ohne Schreibrecht den Spaltennamen statt des Steuerelements', async () => {
+    renderInteraktiv({ canEdit: false })
+
+    expect(await screen.findByText('Backlog')).toBeInTheDocument()
+    expect(screen.queryByRole('combobox', { name: 'Zustand' })).toBeNull()
+  })
+
+  it('zeigt in einer nicht-kanonischen Spalte den Chip statt des Steuerelements', async () => {
+    renderInteraktiv({ columnId: 13 })
+
+    expect(await screen.findByText('Wartet auf Zulieferung')).toBeInTheDocument()
+    expect(screen.queryByRole('combobox', { name: 'Zustand' })).toBeNull()
+  })
+
+  it('deaktiviert das Steuerelement im Editiermodus', async () => {
+    renderInteraktiv({ initialEditing: true })
+
+    expect(await screen.findByRole('combobox', { name: 'Zustand' })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    )
+  })
+
+  it('verschiebt in eine Nicht-Ready-Spalte ohne Rückfrage', async () => {
+    const onMove = vi.fn().mockResolvedValue(undefined)
+    renderInteraktiv({ onMove })
+
+    await oeffneZustand()
+    fireEvent.click(await screen.findByRole('option', { name: 'In Progress' }))
+
+    await waitFor(() => expect(onMove).toHaveBeenCalledWith(12))
+    expect(screen.queryByText('Nach Ready verschieben?')).toBeNull()
+  })
+
+  it('fragt vor dem Wechsel nach Ready nach und verschiebt bei Abbruch nicht', async () => {
+    const onMove = vi.fn().mockResolvedValue(undefined)
+    renderInteraktiv({ onMove })
+
+    await oeffneZustand()
+    fireEvent.click(await screen.findByRole('option', { name: 'Ready' }))
+
+    expect(await screen.findByText('Nach Ready verschieben?')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Abbrechen' }))
+
+    expect(onMove).not.toHaveBeenCalled()
+    await waitFor(() => expect(screen.queryByText('Nach Ready verschieben?')).toBeNull())
+    // Die Auswahl steht wieder auf der bisherigen Spalte.
+    expect(screen.getByRole('combobox', { name: 'Zustand' })).toHaveTextContent('Backlog')
+  })
+
+  it('schließt die Rückfrage per Escape, ohne zu verschieben', async () => {
+    const onMove = vi.fn().mockResolvedValue(undefined)
+    renderInteraktiv({ onMove })
+
+    await oeffneZustand()
+    fireEvent.click(await screen.findByRole('option', { name: 'Ready' }))
+    expect(await screen.findByText('Nach Ready verschieben?')).toBeInTheDocument()
+
+    await userEvent.keyboard('{Escape}')
+
+    await waitFor(() => expect(screen.queryByText('Nach Ready verschieben?')).toBeNull())
+    expect(onMove).not.toHaveBeenCalled()
+  })
+
+  it('verschiebt nach Ready, sobald bestätigt wurde', async () => {
+    const onMove = vi.fn().mockResolvedValue(undefined)
+    renderInteraktiv({ onMove })
+
+    await oeffneZustand()
+    fireEvent.click(await screen.findByRole('option', { name: 'Ready' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Nach Ready verschieben' }))
+
+    await waitFor(() => expect(onMove).toHaveBeenCalledWith(11))
+  })
+
+  it('deaktiviert das Steuerelement, solange der Wechsel läuft', async () => {
+    let aufloesen = () => {}
+    const onMove = vi.fn().mockReturnValue(
+      new Promise<void>((resolve) => {
+        aufloesen = resolve
+      }),
+    )
+    renderInteraktiv({ onMove })
+
+    await oeffneZustand()
+    fireEvent.click(await screen.findByRole('option', { name: 'In Progress' }))
+
+    await waitFor(() =>
+      expect(screen.getByRole('combobox', { name: 'Zustand' })).toHaveAttribute(
+        'aria-disabled',
+        'true',
+      ),
+    )
+
+    aufloesen()
+    await waitFor(() =>
+      expect(screen.getByRole('combobox', { name: 'Zustand' })).not.toHaveAttribute('aria-disabled'),
+    )
+  })
+
+  it('reaktiviert das Steuerelement bei abgewiesenem Wechsel und lässt die Spalte stehen', async () => {
+    const onMove = vi.fn().mockRejectedValue(new Error('boom'))
+    renderInteraktiv({ onMove })
+
+    await oeffneZustand()
+    fireEvent.click(await screen.findByRole('option', { name: 'In Progress' }))
+
+    await waitFor(() => expect(onMove).toHaveBeenCalledWith(12))
+    const select = await screen.findByRole('combobox', { name: 'Zustand' })
+    await waitFor(() => expect(select).not.toHaveAttribute('aria-disabled'))
+    // Die Fehlermeldung ist Sache des Aufrufers; der Chip zeigt weiter die bisherige Spalte.
+    expect(select).toHaveTextContent('Backlog')
+  })
+
+  it('bleibt beim heutigen Chip, sobald eine der drei Props fehlt', async () => {
+    const gemeinsam = {
+      card,
+      canEdit: true,
+      columnName: 'In Progress',
+      onClose: vi.fn(),
+      ...makeApis(),
+    }
+    const erwarteAltesVerhalten = () => {
+      expect(screen.getByText('In Progress')).toBeInTheDocument()
+      expect(screen.queryByRole('combobox', { name: 'Zustand' })).toBeNull()
+    }
+
+    const { rerender } = render(
+      <CardDetailModal {...gemeinsam} columnId={10} onMove={vi.fn()} />,
+    )
+    expect(await screen.findByText('In Progress')).toBeInTheDocument()
+    erwarteAltesVerhalten()
+
+    rerender(<CardDetailModal {...gemeinsam} columns={spalten} onMove={vi.fn()} />)
+    erwarteAltesVerhalten()
+
+    rerender(<CardDetailModal {...gemeinsam} columns={spalten} columnId={10} />)
+    erwarteAltesVerhalten()
   })
 })

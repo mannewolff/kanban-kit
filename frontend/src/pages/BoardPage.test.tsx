@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { MemoryRouter, Route, Routes } from 'react-router-dom'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { Link, MemoryRouter, Route, Routes } from 'react-router-dom'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '../api/client'
 import { boardsApi } from '../api/boards'
 import { cardsApi } from '../api/cards'
@@ -652,5 +652,302 @@ describe('BoardPage Berechtigungen aus Rolle und Plattform-Admin', () => {
     const target = await screen.findByLabelText('Zielprojekt')
     await waitFor(() => expect(target).toHaveTextContent('P'))
     expect(target).not.toHaveTextContent('Fremd')
+  })
+})
+
+// Statuswechsel über den interaktiven Chip des Detail-Modals (Issue #752): BoardPage ist der
+// einzige Integrationspunkt — sie berechnet die Zielposition, schreibt optimistisch und rollt
+// jeden Fehlschlag zurück.
+describe('BoardPage Statuswechsel aus dem Detail-Modal', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  const spalten = [
+    { id: 10, name: 'Backlog', position: 0, wipLimit: null },
+    { id: 11, name: 'Ready', position: 1, wipLimit: null },
+    { id: 12, name: 'In Progress', position: 2, wipLimit: null },
+  ]
+  const offeneKarte = {
+    id: 100, boardId: 1, columnId: 10, number: 1, title: 'Aufgabe', description: null,
+    positionInColumn: 0, archived: false, ideaStored: false, movedToDoneAt: null, dependencies: [],
+    type: 'CARD' as const, parentId: null, shortcode: null, assignees: [], dueDate: null, labels: [],
+  }
+  // Zwei Karten liegen bereits in „In Progress" — die verschobene Karte gehört also an Position 2.
+  const belegt1 = { ...offeneKarte, id: 101, number: 2, title: 'Läuft', columnId: 12, positionInColumn: 0 }
+  const belegt2 = { ...offeneKarte, id: 102, number: 3, title: 'Läuft auch', columnId: 12, positionInColumn: 1 }
+
+  const mockedMove = cardsApi as unknown as { move: ReturnType<typeof vi.fn> }
+
+  function renderStatus(karten: (typeof offeneKarte)[]) {
+    memberships = [{ projectId: 9, role: 'OWNER' }]
+    mockedBoards.get.mockResolvedValue({ id: 1, projectId: 9, name: 'B', createdAt: '', columns: spalten })
+    mockedCards.list.mockResolvedValue(karten)
+    mockedEpics.list.mockResolvedValue([])
+    mockedLabels.list.mockResolvedValue([])
+    mockedMembers.list.mockResolvedValue([])
+    mockedConfig.get.mockResolvedValue({ doneRetentionDays: 30 })
+    mockedProjects.list.mockResolvedValue([{ id: 9, name: 'P', role: 'OWNER', createdAt: '' }])
+    return render(
+      <SnackbarProvider>
+        <MemoryRouter initialEntries={['/boards/1']}>
+          <Routes>
+            <Route path="/boards/:boardId" element={<BoardPage />} />
+          </Routes>
+        </MemoryRouter>
+      </SnackbarProvider>,
+    )
+  }
+
+  /** Öffnet die Karte im Detail-Modal und wählt im Status-Chip die Zielspalte. */
+  async function waehleZustand(ziel: string) {
+    fireEvent.click(await screen.findByTestId('card-100'))
+    fireEvent.mouseDown(await screen.findByRole('combobox', { name: 'Zustand' }))
+    fireEvent.click(await screen.findByRole('option', { name: ziel }))
+  }
+
+  it('verschiebt ans Ende der Zielspalte und aktualisiert Board und Modal optimistisch', async () => {
+    mockedMove.move.mockResolvedValue(belegt1)
+    renderStatus([offeneKarte, belegt1, belegt2])
+
+    await waehleZustand('In Progress')
+
+    await waitFor(() => expect(mockedMove.move).toHaveBeenCalledWith(100, 12, 2))
+    // Modal (selectedCard) und Board (cards) ziehen ohne Serverantwort nach.
+    await waitFor(() =>
+      expect(screen.getByRole('combobox', { name: 'Zustand' })).toHaveTextContent('In Progress'),
+    )
+    expect(within(screen.getByTestId('column-12')).getByTestId('card-100')).toBeInTheDocument()
+  })
+
+  it('verschiebt nicht, wenn die Zielspalte inzwischen die aktuelle Spalte ist', async () => {
+    // Race: Die Rückfrage vor „Ready" steht offen, während ein Refetch die Karte bereits in Ready
+    // zeigt (jemand anders hat sie dorthin gezogen). Der Guard verhindert den Zug ins Leere.
+    renderStatus([offeneKarte])
+
+    await waehleZustand('Ready')
+    expect(await screen.findByText('Nach Ready verschieben?')).toBeInTheDocument()
+
+    mockedCards.list.mockResolvedValue([{ ...offeneKarte, columnId: 11 }])
+    act(() => window.dispatchEvent(new Event('focus')))
+    await waitFor(() =>
+      expect(within(screen.getByTestId('column-11')).getByTestId('card-100')).toBeInTheDocument(),
+    )
+    // Erneuter Klick auf die Karte zieht den geöffneten Kartenstand nach (Modal bleibt montiert).
+    // Die offene Rückfrage macht den Rest der Seite aria-hidden — das Auswahlfeld ist deshalb hier
+    // nur noch über sein Label erreichbar, nicht mehr über die Rolle.
+    fireEvent.click(screen.getByTestId('card-100'))
+    await waitFor(() => expect(screen.getByLabelText('Zustand')).toHaveTextContent('Ready'))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Nach Ready verschieben' }))
+
+    await waitFor(() => expect(screen.queryByText('Nach Ready verschieben?')).toBeNull())
+    expect(mockedMove.move).not.toHaveBeenCalled()
+  })
+
+  it('rollt bei einem Konflikt zurück, meldet ihn und übernimmt den frischen Serverstand', async () => {
+    mockedMove.move.mockRejectedValue(new ApiError(409, 'Karte wurde zwischenzeitlich verschoben.'))
+    renderStatus([offeneKarte, belegt1, belegt2])
+
+    fireEvent.click(await screen.findByTestId('card-100'))
+    mockedCards.list.mockClear()
+    mockedCards.list.mockResolvedValue([{ ...offeneKarte, columnId: 11 }, belegt1, belegt2])
+    fireEvent.mouseDown(await screen.findByRole('combobox', { name: 'Zustand' }))
+    fireEvent.click(await screen.findByRole('option', { name: 'In Progress' }))
+
+    expect(await screen.findByText('Karte wurde zwischenzeitlich verschoben.')).toBeInTheDocument()
+    // Genau ein Nachladen — der Serverstand kommt aus dieser einen frischen Liste.
+    await waitFor(() => expect(mockedCards.list).toHaveBeenCalledTimes(1))
+    await waitFor(() =>
+      expect(screen.getByRole('combobox', { name: 'Zustand' })).toHaveTextContent('Ready'),
+    )
+    expect(within(screen.getByTestId('column-11')).getByTestId('card-100')).toBeInTheDocument()
+  })
+
+  it('schließt das Detail, wenn die Karte nach dem Konflikt nicht mehr in der frischen Liste steht', async () => {
+    mockedMove.move.mockRejectedValue(new ApiError(409, 'Karte ist weg.'))
+    renderStatus([offeneKarte, belegt1, belegt2])
+
+    fireEvent.click(await screen.findByTestId('card-100'))
+    mockedCards.list.mockResolvedValue([belegt1, belegt2])
+    fireEvent.mouseDown(await screen.findByRole('combobox', { name: 'Zustand' }))
+    fireEvent.click(await screen.findByRole('option', { name: 'In Progress' }))
+
+    expect(await screen.findByText('Karte ist weg.')).toBeInTheDocument()
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+  })
+
+  it('meldet ein gescheitertes Nachladen nach dem Konflikt und lässt den zurückgerollten Stand stehen', async () => {
+    mockedMove.move.mockRejectedValue(new ApiError(409, 'Konflikt.'))
+    renderStatus([offeneKarte, belegt1, belegt2])
+
+    fireEvent.click(await screen.findByTestId('card-100'))
+    mockedCards.list.mockRejectedValue(new Error('offline'))
+    fireEvent.mouseDown(await screen.findByRole('combobox', { name: 'Zustand' }))
+    fireEvent.click(await screen.findByRole('option', { name: 'In Progress' }))
+
+    expect(await screen.findByText('Neu laden fehlgeschlagen.')).toBeInTheDocument()
+    // Zurückgerollter Stand: Karte wieder in Backlog, Modal offen.
+    expect(screen.getByRole('combobox', { name: 'Zustand' })).toHaveTextContent('Backlog')
+    expect(within(screen.getByTestId('column-10')).getByTestId('card-100')).toBeInTheDocument()
+  })
+
+  it('rollt bei einem Serverfehler zurück und lädt die Karten nicht erneut', async () => {
+    mockedMove.move.mockRejectedValue(new ApiError(500, 'kaputt'))
+    renderStatus([offeneKarte, belegt1, belegt2])
+
+    fireEvent.click(await screen.findByTestId('card-100'))
+    mockedCards.list.mockClear()
+    fireEvent.mouseDown(await screen.findByRole('combobox', { name: 'Zustand' }))
+    fireEvent.click(await screen.findByRole('option', { name: 'In Progress' }))
+
+    expect(await screen.findByText('Statuswechsel fehlgeschlagen.')).toBeInTheDocument()
+    expect(screen.getByRole('combobox', { name: 'Zustand' })).toHaveTextContent('Backlog')
+    expect(within(screen.getByTestId('column-10')).getByTestId('card-100')).toBeInTheDocument()
+    expect(mockedCards.list).not.toHaveBeenCalled()
+  })
+
+  it('rollt auch bei einem Wurf ohne ApiError zurück', async () => {
+    mockedMove.move.mockRejectedValue(new Error('Netzwerk weg'))
+    renderStatus([offeneKarte, belegt1, belegt2])
+
+    fireEvent.click(await screen.findByTestId('card-100'))
+    mockedCards.list.mockClear()
+    fireEvent.mouseDown(await screen.findByRole('combobox', { name: 'Zustand' }))
+    fireEvent.click(await screen.findByRole('option', { name: 'In Progress' }))
+
+    expect(await screen.findByText('Statuswechsel fehlgeschlagen.')).toBeInTheDocument()
+    expect(screen.getByRole('combobox', { name: 'Zustand' })).toHaveTextContent('Backlog')
+    expect(mockedCards.list).not.toHaveBeenCalled()
+  })
+})
+
+// Ausgeblendete Vorhaben (Plan #717, A3): Der Zustand liegt seit diesem Paket in BoardPage — das
+// Board bekommt ihn als Prop. Deshalb belegen diese Tests ihn hier und nicht mehr an `BoardView`.
+describe('BoardPage ausgeblendete Vorhaben', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  const hiddenKey = (boardId: number) => `manban.boardHiddenEpics.${boardId}`
+  const filterKey = (boardId: number) => `manban.boardEpicFilter.${boardId}`
+
+  const mkEpic = (id: number, titel: string, memberNumbers: number[]) => ({
+    id, number: id, title: titel, description: null, shortcode: titel.slice(0, 3).toUpperCase(),
+    done: 0, total: memberNumbers.length, memberNumbers, rootNumbers: memberNumbers,
+    requirementCardNumber: null,
+  })
+  const mkKarte = (id: number, nummer: number, parentId: number | null) => ({
+    id, boardId: 1, columnId: 10, number: nummer, title: `Karte ${nummer}`, description: null,
+    positionInColumn: 0, archived: false, ideaStored: false, movedToDoneAt: null, dependencies: [],
+    type: 'CARD' as const, parentId, shortcode: null, assignees: [], dueDate: null, labels: [],
+  })
+
+  /**
+   * localStorage-Stub über eine echte Map — vorbelegbar und nach dem Test wieder auslesbar. Nötig
+   * statt des nativen `localStorage`: Unter Node 26 ist es deaktiviert (siehe `src/test/setup.ts`),
+   * ein Test gegen das globale Objekt wäre „grün lokal, rot in CI".
+   */
+  const stubStore = (entries: [string, string][]) => {
+    const store = new Map<string, string>(entries)
+    vi.stubGlobal('localStorage', {
+      getItem: (k: string) => store.get(k) ?? null,
+      setItem: (k: string, v: string) => { store.set(k, v) },
+      removeItem: (k: string) => { store.delete(k) },
+      clear: () => store.clear(), key: () => null, length: 0,
+    })
+    return store
+  }
+
+  // `unstubAllGlobals` nimmt auch den EventSource-Stub aus `src/test/setup.ts` mit — ohne ihn
+  // scheiterte der jeweils nächste Test am SSE-Stream von `useBoardEvents`. Deshalb wird er nach
+  // dem Aufräumen wieder gesetzt.
+  const eventSourceStub = globalThis.EventSource
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    vi.stubGlobal('EventSource', eventSourceStub)
+  })
+
+  function renderBoard(epics: ReturnType<typeof mkEpic>[], karten: ReturnType<typeof mkKarte>[]) {
+    memberships = [{ projectId: 9, role: 'OWNER' }]
+    mockedBoards.get.mockResolvedValue({
+      id: 1, projectId: 9, name: 'B', createdAt: '',
+      columns: [{ id: 10, name: 'Backlog', position: 0, wipLimit: null }],
+    })
+    mockedCards.list.mockResolvedValue(karten)
+    mockedEpics.list.mockResolvedValue(epics)
+    mockedLabels.list.mockResolvedValue([])
+    mockedMembers.list.mockResolvedValue([])
+    mockedConfig.get.mockResolvedValue({ doneRetentionDays: 30 })
+    mockedProjects.list.mockResolvedValue([{ id: 9, name: 'P', role: 'OWNER', createdAt: '' }])
+    return render(
+      <MemoryRouter initialEntries={['/boards/1']}>
+        <Routes>
+          <Route path="/boards/:boardId" element={<BoardPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+  }
+
+  it('liest die ausgeblendeten Vorhaben beim Mount aus localStorage', async () => {
+    stubStore([[hiddenKey(1), JSON.stringify([9])]])
+    renderBoard([mkEpic(9, 'Auth', [1])], [mkKarte(100, 1, 9), mkKarte(300, 4, null)])
+
+    expect(await screen.findByTestId('card-300')).toBeInTheDocument()
+    expect(screen.queryByTestId('card-100')).not.toBeInTheDocument()
+  })
+
+  it('vergisst beim Einblenden beide gespeicherten Schlüssel', async () => {
+    const store = stubStore([[hiddenKey(1), JSON.stringify([9])]])
+    renderBoard([mkEpic(9, 'Auth', [1])], [mkKarte(100, 1, 9), mkKarte(300, 4, null)])
+
+    expect(await screen.findByTestId('card-300')).toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('Vorhaben-Filter'), { target: { value: '9' } })
+    fireEvent.click(screen.getAllByRole('button', { name: /ausgeblendet/ })[0])
+
+    expect(store.has(hiddenKey(1))).toBe(false)
+    expect(store.has(filterKey(1))).toBe(false)
+    // Und die Karte ist wieder da — das Löschen ist kein Ersatz für das Aufheben im Zustand.
+    expect(screen.getByTestId('card-100')).toBeInTheDocument()
+  })
+
+  it('liest den Stand beim Board-Wechsel ohne Remount neu', async () => {
+    // Die Route hält BoardPage bei einem reinen Parameterwechsel gemountet — der useState-
+    // Initializer läuft dann nicht erneut. Ohne das Nachlesen filterte Board 2 mit dem Stand von
+    // Board 1: seine eigene Ausblendung griffe nicht, die fremde weiter.
+    stubStore([
+      [hiddenKey(1), JSON.stringify([9])],
+      [hiddenKey(2), JSON.stringify([8])],
+    ])
+    memberships = [{ projectId: 9, role: 'OWNER' }]
+    mockedBoards.get.mockImplementation((id: number) => Promise.resolve({
+      id, projectId: 9, name: `Board ${id}`, createdAt: '',
+      columns: [{ id: 10, name: 'Backlog', position: 0, wipLimit: null }],
+    }))
+    mockedCards.list.mockImplementation((id: number) => Promise.resolve(
+      id === 1 ? [mkKarte(100, 1, 9), mkKarte(300, 4, null)] : [mkKarte(200, 3, 8), mkKarte(400, 5, null)],
+    ))
+    mockedEpics.list.mockImplementation((id: number) => Promise.resolve(
+      id === 1 ? [mkEpic(9, 'Auth', [1])] : [mkEpic(8, 'Suche', [3])],
+    ))
+    mockedLabels.list.mockResolvedValue([])
+    mockedMembers.list.mockResolvedValue([])
+    mockedConfig.get.mockResolvedValue({ doneRetentionDays: 30 })
+    mockedProjects.list.mockResolvedValue([{ id: 9, name: 'P', role: 'OWNER', createdAt: '' }])
+    render(
+      <MemoryRouter initialEntries={['/boards/1']}>
+        <Link to="/boards/2">Zu Board 2</Link>
+        <Routes>
+          <Route path="/boards/:boardId" element={<BoardPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByTestId('card-300')).toBeInTheDocument()
+    expect(screen.queryByTestId('card-100')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('link', { name: 'Zu Board 2' }))
+
+    expect(await screen.findByTestId('card-400')).toBeInTheDocument()
+    // Board 2 blendet sein eigenes Vorhaben aus …
+    expect(screen.queryByTestId('card-200')).not.toBeInTheDocument()
+    // … und nicht mehr das von Board 1: dessen Vorhaben gibt es hier gar nicht.
+    expect(screen.getByText('Board 2')).toBeInTheDocument()
   })
 })

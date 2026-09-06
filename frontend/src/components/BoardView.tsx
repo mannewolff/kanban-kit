@@ -30,7 +30,6 @@ import { ApiError } from '../api/client'
 import { columnsApi, type SortDirection } from '../api/columns'
 import { epicsApi as defaultEpicsApi, type Epic, type EpicsApi } from '../api/epics'
 import type { Member } from '../api/members'
-import { hiddenEpicsStorageKey } from '../lib/boardHiddenEpics'
 import { activeCardsInColumn, applyMove } from '../lib/boardOps'
 import { epicOfCard } from '../lib/cardEpic'
 import { cleanupCountdownLabel, cleanupDaysRemaining } from '../lib/cleanupCountdown'
@@ -39,6 +38,7 @@ import { useEditMode } from '../lib/EditModeContext'
 import type { Label } from '../api/labels'
 import { formatDueDate, isOverdue } from '../lib/dueDate'
 import { epicShortcode } from '../lib/epicMeta'
+import { selectableEpics } from '../lib/epicTiles'
 import { hiddenCardNumbers } from '../lib/hiddenCards'
 import { useKeyboardShortcut } from '../lib/useKeyboardShortcut'
 import { statusColors } from '../lib/statusColors'
@@ -52,6 +52,13 @@ import { useSnackbar } from './SnackbarProvider'
 import { TransferCardDialog } from './TransferCardDialog'
 
 const isDoneColumn = (name: string) => name.toLowerCase().includes('done')
+
+/**
+ * Default der `hiddenEpics`-Prop. Steht als Konstante da und nicht als `new Set()` in der
+ * Parameterliste: Ein bei jedem Render frisch erzeugtes Set wäre eine neue Identität und triebe
+ * jede abgeleitete Berechnung unnötig neu an.
+ */
+const LEERE_AUSBLENDUNG: ReadonlySet<number> = new Set<number>()
 
 /** Beschriftung des Sortier-Toggles: benennt die Richtung, die der nächste Klick auslöst. */
 const sortByNumberLabel = (columnName: string, next: SortDirection) =>
@@ -140,6 +147,17 @@ interface Props {
   initialCards: Card[]
   canEdit: boolean
   epics?: Epic[]
+  /**
+   * Auf diesem Board ausgeblendete Vorhaben (`Epic.id`). Der Zustand liegt bei `BoardPage`, weil
+   * ihn dort auch das Detail-Modal braucht (Plan #717, A3) — das Board kennt weder den
+   * Speicherort noch den Schlüssel.
+   */
+  hiddenEpics?: ReadonlySet<number>
+  /**
+   * Meldet die neue Menge; der Aufrufer setzt seinen Zustand und schreibt sie fort. Ein roher
+   * State-Setter reichte nicht: Das Fortschreiben gehört zur Änderung, nicht daneben.
+   */
+  onHiddenEpicsChange?: (next: ReadonlySet<number>) => void
   retentionDays?: number
   /** Projektmitglieder für die Zuständigen-Avatare auf den Karten. */
   members?: Member[]
@@ -184,6 +202,8 @@ export function BoardView({
   initialCards,
   canEdit,
   epics = [],
+  hiddenEpics = LEERE_AUSBLENDUNG,
+  onHiddenEpicsChange = () => {},
   retentionDays = 30,
   members = [],
   boardLabels = [],
@@ -221,19 +241,6 @@ export function BoardView({
       return raw ? Number(raw) : null
     } catch {
       return null
-    }
-  })
-  // Auf dem Board ausgeblendete Vorhaben (Plan #620). Reine Darstellung: kein Archivieren, keine
-  // Position, kein Zustand an der Karte — deshalb liegt der Wert nur lokal, im bestehenden
-  // `manban.`-Namensraum neben dem Vorhaben-Filter. Gesetzt wird er an der Vorhaben-Kachel
-  // (Issue #669); hier entsteht der Rückweg an der Spaltenmarke. Ohne funktionierendes
-  // localStorage greift die Ausblendung trotzdem, nur das Merken fällt aus (E8).
-  const [hiddenEpics, setHiddenEpics] = useState<ReadonlySet<number>>(() => {
-    try {
-      const raw = localStorage.getItem(hiddenEpicsStorageKey(board.id))
-      return raw ? new Set<number>(JSON.parse(raw) as number[]) : new Set<number>()
-    } catch {
-      return new Set<number>()
     }
   })
 
@@ -383,14 +390,14 @@ export function BoardView({
     }
   }
 
-  // Rückweg an der Spaltenmarke: hebt beide Achsen zusammen auf und vergisst beide Schlüssel. Ohne
-  // das Löschen wäre nach dem nächsten Reload alles wieder ausgeblendet. Getrennte Rückwege gäbe es
-  // nicht zu bedienen — die Marke nennt eine Zahl, nicht zwei Ursachen (E4).
+  // Rückweg an der Spaltenmarke: hebt beide Achsen zusammen auf. Getrennte Rückwege gäbe es nicht
+  // zu bedienen — die Marke nennt eine Zahl, nicht zwei Ursachen (E4). Das Vergessen der
+  // Vorhaben-Ausblendung erledigt der Aufrufer in `onHiddenEpicsChange`; ohne das Löschen dort wäre
+  // nach dem nächsten Reload alles wieder ausgeblendet.
   const showAllHidden = () => {
-    setHiddenEpics(new Set())
+    onHiddenEpicsChange(new Set())
     setEpicFilter(null)
     try {
-      localStorage.removeItem(hiddenEpicsStorageKey(board.id))
       localStorage.removeItem(`manban.boardEpicFilter.${board.id}`)
     } catch {
       // localStorage nicht verfügbar — aufgehoben ist die Ausblendung trotzdem.
@@ -931,10 +938,13 @@ export function BoardView({
 
       {/* modalColumn ist beim Submit immer gesetzt: NewCardModal ist nur offen, solange
           open={modalColumn !== null} — der Anlegen-Button existiert also nur in diesem Zustand. */}
+      {/* Nur der Anlege-Dialog filtert (Plan #717, A4): Eine neue Karte kann keine bestehende
+          Zuordnung verlieren, und was auf dem Board unsichtbar ist, soll man ihr nicht geben.
+          Vorhaben-Filter und Karten-Kürzel bleiben an der vollen Liste (A7). */}
       <NewCardModal
         open={modalColumn !== null}
         columnName={modalColumn?.name ?? ''}
-        epics={epics}
+        epics={selectableEpics(epics, hiddenEpics)}
         members={members}
         boardLabels={boardLabels}
         initialValues={duplicateValues ?? undefined}

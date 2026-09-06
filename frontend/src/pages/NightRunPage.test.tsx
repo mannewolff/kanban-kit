@@ -136,6 +136,28 @@ const PROTOKOLL_UNGEDEUTET = [
   ENDE(10),
 ].join('\n')
 
+/**
+ * Eine Sitzungsstrom-Zeile ohne Zeitstempel-Präfix, mit Markdown-Zeichen im Text (Issue #748). Sie
+ * gehört zum Rohprotokoll des offenen Arbeitspakets und ist Fremdtext — sie wird nie gedeutet.
+ */
+const ROHZEILE_SITZUNG = '{"type":"assistant","text":"Pruefung *fett* mit `npm test`"}'
+
+/** Alle vier Zustände in einem Lauf, dazu ein Sitzungsstrom im Rohprotokoll des ersten Pakets. */
+const PROTOKOLL_ROH = [
+  START(0),
+  z(1, 'Session 1/5: Issue #700 — Paket A'),
+  ROHZEILE_SITZUNG,
+  z(8, '  Erfolg nach 7 min, Commit a1b2c3d, Issue #700 in In review.'),
+  z(9, 'Session 2/5: Issue #701 — Paket B'),
+  z(16, '  Fehlschlag nach 7 min: Issue #701 nicht in In review, Tree sauber — Issue ins Backlog, weiter.'),
+  z(17, 'Session 3/5: Issue #702 — Paket C'),
+  z(24, '  Erfolg nach 7 min, Commit c3d4e5f, Issue #702 in In review.'),
+  z(25, '  #703 Paket D -> uebersprungen (Abhaengigkeit #999 liegt nicht in Done)'),
+  z(26, 'Pruefungen der Sessions:'),
+  z(26, '  Issue #700: gelaufen: npm test -> rot (Frontend) | ausgelassen: keine'),
+  ENDE(30),
+].join('\n')
+
 function karte(
   partial: Partial<CardByNumber> & { id: number; number: number; title: string },
 ): CardByNumber {
@@ -590,10 +612,34 @@ describe('NightRunPage — Zustände, Kennzahlen und Auszüge', () => {
 
     expect(await within(lauf(0)).findByText('Erfolg, Prüfung rot')).toBeInTheDocument()
     // Text **und** Farbe tragen die Aussage (CLAUDE-react.md Zeile 142); die Farbe kommt aus der
-    // Palette, nicht aus `success`/`warning`/`error` (A15).
-    expect(within(lauf(0)).getByTestId('zustand-700')).toHaveStyle({
-      color: theme.palette.nightRun.yellow,
+    // Palette, nicht aus `success`/`warning`/`error` (A15) — als ausgefüllte Ampel-Fläche (#738),
+    // nicht mehr als Textfarbe.
+    expect(within(lauf(0)).getByTestId('ampel-700')).toHaveStyle({
+      backgroundColor: theme.palette.nightRun.yellow,
     })
+  })
+
+  it('zeigt den Zustand als ausgefuellte, gleich grosse Flaeche — unabhaengig von der Textlaenge (#738)', async () => {
+    renderPage({
+      submit: { ergebnis: alleNeu(PROTOKOLL_VIER_ZUSTAENDE) },
+      listen: [[], wieAufbewahrt(PROTOKOLL_VIER_ZUSTAENDE)],
+    })
+    await screen.findByText('Noch keine Auswertung vorhanden.')
+
+    protokollWaehlen(PROTOKOLL_VIER_ZUSTAENDE)
+    await screen.findByTestId(`lauf-${startedAt(0)}`)
+    aufklappen(0)
+
+    const panel = within(lauf(0))
+    await panel.findByText('Erfolg')
+
+    // Vier unterschiedlich lange Zustandstexte ("Erfolg" bis "Erfolg, Prüfung rot"), dieselbe
+    // Flächengröße — die Fläche wirkt als Signal, nicht als weitere Textzeile (AC3).
+    const groesse = { width: '8px', height: '8px' }
+    expect(panel.getByTestId('ampel-700')).toHaveStyle({ ...groesse, backgroundColor: theme.palette.nightRun.green })
+    expect(panel.getByTestId('ampel-701')).toHaveStyle({ ...groesse, backgroundColor: theme.palette.nightRun.yellow })
+    expect(panel.getByTestId('ampel-702')).toHaveStyle({ ...groesse, backgroundColor: theme.palette.nightRun.red })
+    expect(panel.getByTestId('ampel-703')).toHaveStyle({ ...groesse, backgroundColor: theme.palette.nightRun.grey })
   })
 
   it('zeigt bei einem grauen Arbeitspaket seinen Grund', async () => {
@@ -1219,5 +1265,199 @@ describe('NightRunPage — null aus der API (#734)', () => {
     await nullLaufZeigen()
 
     expect(feld(700)?.value).toBe('Nachtlauf-Befund zu Karte #700 Paket A\nZustand: gescheitert')
+  })
+})
+
+describe('NightRunPage — Rohprotokoll je Arbeitspaket (#748)', () => {
+  /** Ein älterer aufbewahrter Lauf, der neben dem eingelieferten steht. */
+  const FRUEHER = '2026-08-30T22:00:00.000Z'
+
+  const frueherLauf = () =>
+    aufbewahrt({
+      id: 9,
+      startedAt: FRUEHER,
+      items: [{ id: 91, cardNumber: 700, title: 'Paket A', state: 'RED', errorClass: 'HARD_ABORT' }],
+    })
+
+  /**
+   * Die Rohzeilen eines Arbeitspakets, wie der Parser sie schneidet — nicht von Hand
+   * nachgebaut: Ein selbstgeschriebenes Erwartungs-Array prüfte die eigene Annahme über den
+   * Schnitt, nicht die Anzeige.
+   */
+  const rohzeilen = (cardNumber: number): readonly string[] =>
+    parseNightRunLog(PROTOKOLL_ROH).runs[0].items.find((item) => item.cardNumber === cardNumber)
+      ?.rawLines ?? []
+
+  const knopf = (cardNumber: number, geoeffnet = false) =>
+    within(lauf(0)).queryByRole('button', {
+      name: `Rohprotokoll zu Karte #${cardNumber} ${geoeffnet ? 'ausblenden' : 'anzeigen'}`,
+    })
+
+  const bereich = (cardNumber: number) =>
+    within(lauf(0)).queryByTestId(`rohprotokoll-${cardNumber}`)
+
+  const feld = (cardNumber: number) =>
+    within(lauf(0)).queryByLabelText(`Übernahmetext zu Karte #${cardNumber}`) as
+      | HTMLTextAreaElement
+      | null
+
+  let writeText: ReturnType<typeof vi.fn>
+
+  beforeEach(() => {
+    writeText = vi.fn().mockResolvedValue(undefined)
+    Object.assign(navigator, { clipboard: { writeText } })
+  })
+
+  /**
+   * Liest das Protokoll ein, lässt es einliefern und wartet den Neuladevorgang ab — erst danach
+   * zeigt die Seite den **vom Server** geladenen Lauf. Genau dort müssen die Rohzeilen aus dem
+   * sitzungsgebundenen Zwischenspeicher wieder auftauchen (Plan #744, A4).
+   */
+  async function eingeliefertUndNeugeladen(zusatz: NightRunView[] = []) {
+    renderPage({
+      submit: { ergebnis: alleNeu(PROTOKOLL_ROH) },
+      listen: [zusatz, [...zusatz, ...wieAufbewahrt(PROTOKOLL_ROH)]],
+      zaehler: [{}, { CHECKS_RED: 1 }],
+    })
+    // Erst das Laden beim Öffnen der Seite abwarten: Löste es später auf, überschriebe es die
+    // eben geparste Auswertung wieder.
+    if (zusatz.length === 0) {
+      await screen.findByText('Noch keine Auswertung vorhanden.')
+    } else {
+      await screen.findByTestId(`lauf-${zusatz[0].startedAt}`)
+    }
+
+    protokollWaehlen(PROTOKOLL_ROH)
+
+    await screen.findByTestId(`lauf-${startedAt(0)}`)
+    await within(lauf(0)).findByText('neu angelegt')
+    aufklappen(0)
+    await within(lauf(0)).findByTestId('zustand-700')
+  }
+
+  it('blendet das Rohprotokoll eines gelben Arbeitspakets ein und wieder aus', async () => {
+    await eingeliefertUndNeugeladen()
+    expect(bereich(700)).toBeNull()
+    expect(knopf(700)).toHaveAttribute('aria-expanded', 'false')
+
+    fireEvent.click(knopf(700) as HTMLElement)
+
+    expect(bereich(700)).toBeInTheDocument()
+    expect(knopf(700, true)).toHaveAttribute('aria-expanded', 'true')
+    expect(knopf(700, true)).toHaveAttribute('aria-controls', 'rohprotokoll-700')
+
+    fireEvent.click(knopf(700, true) as HTMLElement)
+
+    expect(bereich(700)).toBeNull()
+  })
+
+  it('zeigt die Rohzeilen eines roten Arbeitspakets, sobald sein Knopf gedrückt wird', async () => {
+    await eingeliefertUndNeugeladen()
+
+    fireEvent.click(knopf(701) as HTMLElement)
+
+    expect(bereich(701)?.textContent).toBe(rohzeilen(701).join('\n'))
+    expect(bereich(700)).toBeNull()
+  })
+
+  it('gibt die Rohzeilen wörtlich wieder, statt ihre Markdown-Zeichen zu deuten', async () => {
+    await eingeliefertUndNeugeladen()
+
+    fireEvent.click(knopf(700) as HTMLElement)
+
+    const gezeigt = bereich(700) as HTMLElement
+    // Ein Textknoten, kein Markup: Das Rohprotokoll ist Fremdtext und geht nie durch den
+    // Markdown-Renderer (CLAUDE-security.md).
+    expect(gezeigt.textContent).toBe(rohzeilen(700).join('\n'))
+    expect(gezeigt.textContent).toContain(ROHZEILE_SITZUNG)
+    expect(within(gezeigt).queryByText('fett', { selector: 'em' })).toBeNull()
+    expect(within(gezeigt).queryByText('fett', { selector: 'strong' })).toBeNull()
+    expect(within(gezeigt).queryByText('npm test', { selector: 'code' })).toBeNull()
+  })
+
+  it('zeigt das Rohprotokoll an einem Lauf, den der Server bereits kennt (A4)', async () => {
+    await eingeliefertUndNeugeladen()
+
+    // Die Häufigkeitszeile erscheint nur an einem aufbewahrten Lauf (#726) — der angezeigte
+    // Lauf kommt also vom Server, und die Rohzeilen sind trotzdem da.
+    expect(within(lauf(0)).getByTestId('haeufigkeit-700')).toBeInTheDocument()
+    fireEvent.click(knopf(700) as HTMLElement)
+    expect(bereich(700)?.textContent).toBe(rohzeilen(700).join('\n'))
+  })
+
+  it('führt die Rohzeilen im sichtbaren Übernahmetext', async () => {
+    await eingeliefertUndNeugeladen()
+
+    expect(feld(700)?.value).toContain('Rohprotokoll:')
+    expect(feld(700)?.value).toContain(rohzeilen(700).join('\n'))
+  })
+
+  it('legt den Übernahmetext samt Rohzeilen in die Zwischenablage', async () => {
+    await eingeliefertUndNeugeladen()
+
+    fireEvent.click(
+      within(lauf(0)).getByRole('button', { name: 'Übernahmetext zu Karte #700 kopieren' }),
+    )
+
+    await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1))
+    expect(writeText).toHaveBeenCalledWith(feld(700)?.value)
+    expect(String(writeText.mock.calls[0][0])).toContain(rohzeilen(700).join('\n'))
+  })
+
+  it('zeigt zu einem grünen und einem übersprungenen Arbeitspaket keinen Knopf', async () => {
+    await eingeliefertUndNeugeladen()
+
+    // 702 ist grün — es gibt nichts zu vertiefen; 703 wurde übersprungen und hat gar kein
+    // Rohprotokoll (Plan #744, A3).
+    expect(knopf(702)).toBeNull()
+    expect(knopf(703)).toBeNull()
+    expect(rohzeilen(703)).toEqual([])
+  })
+
+  it('lässt Knopf und Rohzeilen stehen, wenn das Senden scheitert', async () => {
+    renderPage({ submit: { fehler: 'Auszug zu lang' } })
+    await screen.findByText('Noch keine Auswertung vorhanden.')
+
+    protokollWaehlen(PROTOKOLL_ROH)
+
+    expect(await screen.findByText('Auszug zu lang')).toBeInTheDocument()
+    aufklappen(0)
+    await within(lauf(0)).findByTestId('zustand-700')
+    fireEvent.click(knopf(700) as HTMLElement)
+    expect(bereich(700)?.textContent).toBe(rohzeilen(700).join('\n'))
+  })
+
+  it('zeigt an einem nur geladenen Lauf kein Rohprotokoll', async () => {
+    renderPage({ listen: [wieAufbewahrt(PROTOKOLL_ROH)] })
+    await screen.findByTestId(`lauf-${startedAt(0)}`)
+    aufklappen(0)
+    await within(lauf(0)).findByTestId('zustand-700')
+
+    expect(knopf(700)).toBeNull()
+    expect(knopf(701)).toBeNull()
+    expect(feld(700)?.value).not.toContain('Rohprotokoll:')
+  })
+
+  it('reicht die Rohzeilen nicht an einen gleichnummerigen Lauf eines anderen Zeitpunkts weiter', async () => {
+    await eingeliefertUndNeugeladen([frueherLauf()])
+    const frueher = screen.getByTestId(`lauf-${FRUEHER}`)
+    fireEvent.click(within(frueher).getByRole('button', { expanded: false }))
+
+    await within(frueher).findByTestId('zustand-700')
+    expect(
+      within(frueher).queryByRole('button', { name: /^Rohprotokoll zu Karte #700/ }),
+    ).toBeNull()
+  })
+
+  it('schickt die Rohzeilen nicht an den Server (A5)', async () => {
+    await eingeliefertUndNeugeladen()
+
+    const gesendet = anfragen.find((a) => a.method === 'POST')
+    expect(gesendet?.body).toContain('"cardNumber":700')
+    expect(gesendet?.body).not.toContain('rawLines')
+    expect(gesendet?.body).not.toContain('*fett*')
+    for (const anfrage of anfragen) {
+      expect(anfrage.body).not.toContain(ROHZEILE_SITZUNG)
+    }
   })
 })

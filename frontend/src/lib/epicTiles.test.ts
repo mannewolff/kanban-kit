@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { Card } from '../api/cards'
 import type { Epic } from '../api/epics'
 import type { Label } from '../api/labels'
-import { aggregateMarks, countKinds, sortEpics, visibleEpics } from './epicTiles'
+import { aggregateMarks, countKinds, selectableEpics, sortEpics, visibleEpics } from './epicTiles'
 
 function karte(number: number, title: string, labels: number[] = []): Card {
   return {
@@ -261,6 +261,39 @@ describe('visibleEpics', () => {
     const eingabe = [vorhaben({ id: 1 }), vorhaben({ id: 2 })]
 
     const ergebnis = visibleEpics(eingabe, new Set([1]), false)
+
+    expect(ergebnis).not.toBe(eingabe)
+    expect(eingabe.map((e) => e.id)).toEqual([1, 2])
+  })
+})
+
+describe('selectableEpics', () => {
+  const drei = [vorhaben({ id: 1 }), vorhaben({ id: 2 }), vorhaben({ id: 3 })]
+
+  it('liefert bei leerem Ausblende-Zustand alle Vorhaben in unveränderter Reihenfolge', () => {
+    expect(selectableEpics(drei, new Set()).map((e) => e.id)).toEqual([1, 2, 3])
+  })
+
+  it('lässt ein ausgeblendetes Vorhaben weg und behält die Reihenfolge der übrigen', () => {
+    expect(selectableEpics(drei, new Set([2])).map((e) => e.id)).toEqual([1, 3])
+  })
+
+  /**
+   * Der `localStorage`-Zustand überlebt das Löschen eines Vorhabens — eine ID ohne Vorhaben ist
+   * daher der Regelfall, kein Fehler.
+   */
+  it('ignoriert eine ausgeblendete ID, zu der es kein Vorhaben gibt', () => {
+    expect(selectableEpics(drei, new Set([42])).map((e) => e.id)).toEqual([1, 2, 3])
+  })
+
+  it('liefert eine leere Liste, wenn alle Vorhaben ausgeblendet sind', () => {
+    expect(selectableEpics(drei, new Set([1, 2, 3]))).toEqual([])
+  })
+
+  it('lässt das Eingabe-Array unverändert', () => {
+    const eingabe = [vorhaben({ id: 1 }), vorhaben({ id: 2 })]
+
+    const ergebnis = selectableEpics(eingabe, new Set([1]))
 
     expect(ergebnis).not.toBe(eingabe)
     expect(eingabe.map((e) => e.id)).toEqual([1, 2])

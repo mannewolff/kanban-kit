@@ -432,6 +432,176 @@ describe('parseNightRunLog — Zaehlungen', () => {
   })
 })
 
+/**
+ * Das Rohprotokoll je Arbeitspaket (Issue #746, Plan #744 A1–A3). Es traegt den
+ * Sitzungsstrom und bleibt damit im Browser — `zurEinlieferung` pickt seine Felder
+ * einzeln, `rawLines` ist nicht darunter (Plan #718, A1).
+ */
+describe('parseNightRunLog — Rohprotokoll je Arbeitspaket', () => {
+  it('nimmt die Session-Oeffnungszeile mit Zeitstempel-Praefix als erste Zeile auf', () => {
+    const text = [START(0), z(1, 'Session 1/5: Issue #100 — Paket 1'), ENDE(2)].join('\n')
+    const item = parseNightRunLog(text).runs[0].items[0]
+    expect(item.rawLines[0]).toBe(z(1, 'Session 1/5: Issue #100 — Paket 1'))
+  })
+
+  it('trennt die Rohprotokolle mehrerer Arbeitspakete', () => {
+    const text = [
+      START(0),
+      z(1, 'Session 1/5: Issue #100 — Paket 1'),
+      z(6, '  Erfolg nach 5 min, Commit a1b2c3d, Issue #100 in In review.'),
+      z(7, 'Session 2/5: Issue #101 — Paket 2'),
+      z(9, '  Fehlschlag nach 2 min: Issue #101 nicht in In review, Tree sauber — Issue ins Backlog, weiter.'),
+      ENDE(10),
+    ].join('\n')
+    const [erstes, zweites] = parseNightRunLog(text).runs[0].items
+    expect(erstes.rawLines).toEqual([
+      z(1, 'Session 1/5: Issue #100 — Paket 1'),
+      z(6, '  Erfolg nach 5 min, Commit a1b2c3d, Issue #100 in In review.'),
+    ])
+    expect(zweites.rawLines).toEqual([
+      z(7, 'Session 2/5: Issue #101 — Paket 2'),
+      z(9, '  Fehlschlag nach 2 min: Issue #101 nicht in In review, Tree sauber — Issue ins Backlog, weiter.'),
+    ])
+  })
+
+  it('haelt Sitzungsecho und Salvage-Zwischenzeilen beim selben Arbeitspaket', () => {
+    // Alle drei Zeilen nennen #106 oder gar keine Nummer — keine schliesst das Paket.
+    const text = [
+      START(0),
+      z(1, 'Session 1/5: Issue #106 — Paket 6'),
+      z(2, '  #106 > Bash: npm test'),
+      z(3, '  SALVAGE-VERSUCH gestartet (Checks extern verifiziert gruen): Issue #106 — Zwischenstand wird gegen das Issue geprueft.'),
+      z(4, '  Salvage erfolgreich, Commit d4e5f6a, Issue #106 in In review.'),
+      ENDE(5),
+    ].join('\n')
+    expect(parseNightRunLog(text).runs[0].items[0].rawLines).toHaveLength(4)
+  })
+
+  it('ordnet eine Pruefblock-Zeile dem per Nummer referenzierten Paket zu, nicht dem zuletzt offenen', () => {
+    const text = [
+      START(0),
+      z(1, 'Session 1/5: Issue #100 — Paket 1'),
+      z(6, '  Erfolg nach 5 min, Commit a1b2c3d, Issue #100 in In review.'),
+      z(7, 'Session 2/5: Issue #101 — Paket 2'),
+      z(8, '  Issue #100: gelaufen: npm test -> gruen (Frontend) | ausgelassen: keine'),
+    ].join('\n')
+    const [erstes, zweites] = parseNightRunLog(text).runs[0].items
+    expect(erstes.rawLines).toContain(
+      z(8, '  Issue #100: gelaufen: npm test -> gruen (Frontend) | ausgelassen: keine'),
+    )
+    expect(zweites.rawLines).toEqual([z(7, 'Session 2/5: Issue #101 — Paket 2')])
+  })
+
+  it('verwirft eine Pruefzeile zu einer unbekannten Nummer', () => {
+    const text = [
+      START(0),
+      z(1, 'Session 1/5: Issue #100 — Paket 1'),
+      z(9, 'Pruefungen der Sessions:'),
+      z(9, '  Issue #999: gelaufen: npm test -> gruen (Frontend) | ausgelassen: keine'),
+      z(9, '  Issue #998: ungeprueft — die Session hat keine Pruefung gefahren.'),
+      z(9, '  Issue #997: leeres Paket — keine Pruefung, weil nichts veraendert wurde.'),
+      ENDE(10),
+    ].join('\n')
+    const run = parseNightRunLog(text).runs[0]
+    expect(run.unparsedCount).toBe(0)
+    expect(run.items).toHaveLength(1)
+    expect(run.items[0].rawLines).toEqual([z(1, 'Session 1/5: Issue #100 — Paket 1')])
+  })
+
+  it('nimmt Pruefblock-Kopf, Summe und Abschlusszeile in kein Rohprotokoll auf', () => {
+    const text = [
+      START(0),
+      z(1, 'Session 1/5: Issue #100 — Paket 1'),
+      z(6, '  Erfolg nach 5 min, Commit a1b2c3d, Issue #100 in In review.'),
+      z(9, 'Pruefungen der Sessions:'),
+      z(9, '  Issue #100: gelaufen: npm test -> gruen (Frontend) | ausgelassen: keine'),
+      z(9, '  Summe: 1 Session(s) — 1 mit Pruefung, 0 ohne Aenderung, 0 ungeprueft; 1 Pruefung(en) gelaufen (davon 0 rot), 0 ausgelassen.'),
+      ENDE(10),
+    ].join('\n')
+    expect(parseNightRunLog(text).runs[0].items[0].rawLines).toEqual([
+      z(1, 'Session 1/5: Issue #100 — Paket 1'),
+      z(6, '  Erfolg nach 5 min, Commit a1b2c3d, Issue #100 in In review.'),
+      z(9, '  Issue #100: gelaufen: npm test -> gruen (Frontend) | ausgelassen: keine'),
+    ])
+  })
+
+  it('laesst das Rohprotokoll uebergangener Arbeitspakete leer', () => {
+    // Sie durchlaufen keine Session-Oeffnungszeile (A3).
+    const text = [
+      START(0),
+      z(1, '  #100 Paket 1 -> uebersprungen (ungeprueft (kein Issue-Review-Marker im Body))'),
+      z(2, '#101 zurueckgestellt: Abhaengigkeit #99 nicht erfuellt.'),
+      ENDE(3),
+    ].join('\n')
+    expect(parseNightRunLog(text).runs[0].items.map((i) => i.rawLines)).toEqual([[], []])
+  })
+
+  it('nimmt eine Gate-Zeile des naechsten Kandidaten nicht ins Rohprotokoll des vorigen Pakets', () => {
+    const text = [
+      START(0),
+      z(1, 'Session 1/5: Issue #100 — Paket 1'),
+      z(6, '  Erfolg nach 5 min, Commit a1b2c3d, Issue #100 in In review.'),
+      z(7, '#102 uebersprungen: Idee ([Idee]), wird nicht implementiert.'),
+      ENDE(8),
+    ].join('\n')
+    const [erstes, zweites] = parseNightRunLog(text).runs[0].items
+    expect(erstes.rawLines).toHaveLength(2)
+    expect(zweites.rawLines).toEqual([])
+  })
+
+  it('schliesst das Paket auch bei einer stummen Gate-Zeile mit fremder Nummer', () => {
+    // `#104 bewusst ohne Pruefung freigegeben …` traegt keinen Zustand, aber eine
+    // fremde Nummer — sie gehoert zum naechsten Kandidaten, nicht zu #100.
+    const text = [
+      START(0),
+      z(1, 'Session 1/5: Issue #100 — Paket 1'),
+      z(6, '  Erfolg nach 5 min, Commit a1b2c3d, Issue #100 in In review.'),
+      z(7, '#104 bewusst ohne Pruefung freigegeben (Pruefung: Verzicht), wird implementiert.'),
+      z(8, 'Morgen-Ritual: /review -> Test -> push main. Protokoll: <PFAD>'),
+      ENDE(9),
+    ].join('\n')
+    expect(parseNightRunLog(text).runs[0].items[0].rawLines).toHaveLength(2)
+  })
+
+  it('behaelt bei fehlender Abschlusszeile alle Zeilen bis zum Dateiende, inklusive Sitzungsstrom', () => {
+    const text = [
+      START(0),
+      z(1, 'Session 1/5: Issue #100 — Paket 1'),
+      '{"type":"assistant","message":{"role":"assistant"}}',
+      z(2, '  #100 > Bash: npm test'),
+      '{"type":"user"}',
+    ].join('\n')
+    const run = parseNightRunLog(text).runs[0]
+    expect(run.incomplete).toBe(true)
+    expect(run.items[0].rawLines).toEqual([
+      z(1, 'Session 1/5: Issue #100 — Paket 1'),
+      '{"type":"assistant","message":{"role":"assistant"}}',
+      z(2, '  #100 > Bash: npm test'),
+      '{"type":"user"}',
+    ])
+  })
+
+  it('haengt die praefixlose Fehler-Zeile noch an und schliesst das Paket danach', () => {
+    const text = [
+      START(0),
+      z(1, 'Session 1/5: Issue #100 — Paket 1'),
+      'Fehler: Working Tree ist nicht sauber.',
+      '{"type":"user"}',
+    ].join('\n')
+    expect(parseNightRunLog(text).runs[0].items[0].rawLines).toEqual([
+      z(1, 'Session 1/5: Issue #100 — Paket 1'),
+      'Fehler: Working Tree ist nicht sauber.',
+    ])
+  })
+
+  it('entfernt nur das Wagenruecklauf-Zeichen am Zeilenende', () => {
+    const text = [START(0), z(1, 'Session 1/5: Issue #100 — Paket 1'), ENDE(2)].join('\r\n')
+    expect(parseNightRunLog(text).runs[0].items[0].rawLines).toEqual([
+      z(1, 'Session 1/5: Issue #100 — Paket 1'),
+    ])
+  })
+})
+
 describe('parseNightRunLog — Fixture "vollstaendiger Lauf"', () => {
   /**
    * Je eine anonymisierte Zeile pro `log(`-Aufruf der heutigen `night.mjs`. Daran wird

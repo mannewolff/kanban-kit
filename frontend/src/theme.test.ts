@@ -225,8 +225,10 @@ describe('theme Textkontrast auf den Flächen des Leitstands', () => {
 })
 
 describe('theme Nachtlauf-Zustandsfarben (Plan #718, A15)', () => {
-  // Dieselben drei Flächen wie oben: Die Zustands-Chips der Nachtlauf-Auswertung stehen auf der
-  // weißen Karte, auf der getönten Grundfläche und auf dem Eis-Ton der Panel-Köpfe.
+  // Dieselben drei Flächen wie oben: Die Ampel-Flächen (#738) der Nachtlauf-Auswertung stehen auf
+  // der weißen Karte, auf der getönten Grundfläche und auf dem Eis-Ton der Panel-Köpfe. Alle vier
+  // Zustände dienen ausschließlich als ausgefüllte Fläche, nicht als Text — deshalb gilt hier nur
+  // die 3:1-Schwelle für bedeutungstragende Grafikelemente, nicht die 4,5:1 für Text.
   const flaechen = ['#EDF5F6', '#F6FAFB', '#FFFFFF']
   const zustaende = ['green', 'yellow', 'red', 'grey'] as const
   const paare = zustaende.flatMap((zustand) => flaechen.map((flaeche) => [zustand, flaeche] as const))
@@ -242,10 +244,6 @@ describe('theme Nachtlauf-Zustandsfarben (Plan #718, A15)', () => {
     // rgba(0,0,0,0.38) mit rund 2,8:1. Grau ist hier aber ein bedeutungstragender Zustand
     // („vom Lauf nicht bearbeitet"), kein deaktiviertes Bedienelement.
     expect(theme.palette.nightRun.grey).toBe(theme.palette.text.secondary)
-  })
-
-  it.each(paare)('hält %s auf %s die AA-Schwelle für Text (4,5:1)', (zustand, flaeche) => {
-    expect(kontrast(flaeche, theme.palette.nightRun[zustand])).toBeGreaterThanOrEqual(4.5)
   })
 
   it.each(paare)('hält %s auf %s die Schwelle für das Farbfeld (3:1)', (zustand, flaeche) => {

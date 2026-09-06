@@ -66,6 +66,16 @@ export interface NightRunItem {
   excerpt: string
   /** Reihenfolge im Lauf, bei 0 beginnend. */
   position: number
+  /**
+   * Das Rohprotokoll genau dieses Arbeitspakets — jede Zeile so, wie sie in der Datei
+   * steht, samt Zeitstempel-Praefix und Sitzungsstrom (Plan #744, A1–A3). Leer, wenn das
+   * Paket keine Session durchlaufen hat.
+   *
+   * <p><b>Diese Zeilen verlassen den Browser nicht.</b> Sie tragen Projekt-Quelltext,
+   * Pfade und Sitzungs-IDs; `NightRunItemSubmission` und `zurEinlieferung` picken ihre
+   * Felder einzeln und kennen `rawLines` nicht (Plan #718, A1).
+   */
+  rawLines: string[]
 }
 
 export interface NightRun {
@@ -213,6 +223,21 @@ const MUSTER: ReadonlyArray<{ re: RegExp; deute: (m: RegExpExecArray) => Treffer
 ]
 
 /**
+ * Beginn des Pruefblocks. Er schliesst das zuletzt offene Arbeitspaket (Plan #744, A1):
+ * Ab hier ordnet die Nummer in der Zeile zu, nicht mehr der offene Puffer.
+ */
+const PRUEFBLOCK = /^Pruefungen der Sessions:$/
+
+/**
+ * Die fuehrende Kartennummer einer stummen Zeile — Sitzungsecho `  #100 > …` und die
+ * Freigabezeile `#104 bewusst ohne Pruefung freigegeben …`. Sie entscheidet, ob die
+ * Zeile noch zum offenen Arbeitspaket gehoert oder schon den naechsten Kandidaten
+ * betrifft; ohne sie landete der Grund fuer das Uebergehen von #104 im Rohprotokoll
+ * von #100.
+ */
+const STUMME_NUMMER = /^ {0,2}#(\d+) /
+
+/**
  * Zeilen, die gedeutet sind, aber keinen Zustand tragen — Fortschrittsmeldungen des
  * Runners. Bewusst eine reine Musterliste ohne Deutungsfunktionen: Sie sind die
  * Mehrheit der Runner-Zeilen, und je eine leere Funktion waere Ballast ohne Aussage.
@@ -236,7 +261,7 @@ const STUMME_MUSTER: readonly RegExp[] = [
   /^Ready ist leer — nichts zu tun\./,
   /^Keine Review-Kandidaten im Backlog/,
   /^Morgen-Ritual: /,
-  /^Pruefungen der Sessions:$/,
+  PRUEFBLOCK,
   /^Pruefungen: keine Implementierungs-Runde gelaufen\.$/,
   /^ {2}Summe: \d+ Session\(s\)/,
   ABSCHLUSS,
@@ -259,6 +284,8 @@ interface Aufbau {
   unparsedSample: string[]
   items: NightRunItem[]
   nachNummer: Map<number, NightRunItem>
+  /** Das Arbeitspaket, dessen Rohprotokoll gerade mitgeschrieben wird. */
+  aktuellesPaket: NightRunItem | null
   runState?: NightRunState
   runErrorClass?: NightRunErrorClass
   runExcerpt?: string
@@ -274,6 +301,7 @@ const neuerAufbau = (startedAt: string, modus: string): Aufbau => ({
   unparsedSample: [],
   items: [],
   nachNummer: new Map(),
+  aktuellesPaket: null,
 })
 
 /** Legt ein Arbeitspaket an oder liefert das vorhandene — je Nummer genau eines. */
@@ -289,63 +317,120 @@ function paket(a: Aufbau, nummer: number, zeile: string): NightRunItem {
     errorClass: 'HARD_ABORT',
     excerpt: zeile,
     position: a.items.length,
+    rawLines: [],
   }
   a.items.push(neu)
   a.nachNummer.set(nummer, neu)
   return neu
 }
 
-/** Wendet den Pruefblock auf ein bereits bekanntes Arbeitspaket an. */
-function deutePruefzeile(a: Aufbau, zeile: string): boolean {
-  const gelaufen = PRUEF_GELAUFEN.exec(zeile)
+/**
+ * Wendet den Pruefblock auf ein bereits bekanntes Arbeitspaket an. Alle drei Muster
+ * haengen die Rohzeile an das **per Nummer** referenzierte Paket an — unabhaengig davon,
+ * ob sein Zustand kippt (Plan #744, A2). Eine Zeile zu einer unbekannten Nummer wird
+ * verworfen.
+ */
+function deutePruefzeile(a: Aufbau, inhalt: string, roh: string): boolean {
+  const gelaufen = PRUEF_GELAUFEN.exec(inhalt)
   if (gelaufen) {
     const item = a.nachNummer.get(Number(gelaufen[1]))
+    item?.rawLines.push(roh)
     // Nur ein als erfolgreich gemeldetes Paket kippt auf gelb — ein rotes bleibt rot.
     if (item?.state === 'GREEN' && / -> rot /.test(gelaufen[2])) {
       item.state = 'YELLOW'
       item.errorClass = 'CHECKS_RED'
-      item.excerpt = zeile
+      item.excerpt = inhalt
     }
     return true
   }
-  const ungeprueft = PRUEF_UNGEPRUEFT.exec(zeile)
+  const ungeprueft = PRUEF_UNGEPRUEFT.exec(inhalt)
   if (ungeprueft) {
     const item = a.nachNummer.get(Number(ungeprueft[1]))
+    item?.rawLines.push(roh)
     if (item?.state === 'GREEN') {
       item.state = 'YELLOW'
       item.errorClass = 'CHECKS_NOT_STARTED'
-      item.excerpt = zeile
+      item.excerpt = inhalt
     }
     return true
   }
+  const leer = PRUEF_LEER.exec(inhalt)
+  if (!leer) return false
   // Ein leeres Paket gilt als geprueft: Es gab nichts zu pruefen, und die
   // Erfolgszeile liegt vor. Der Zustand bleibt, wie er ist.
-  return PRUEF_LEER.test(zeile)
+  a.nachNummer.get(Number(leer[1]))?.rawLines.push(roh)
+  return true
 }
 
-/** Deutet eine Runner-Zeile; liefert `false`, wenn kein Muster greift. */
-function deuteZeile(a: Aufbau, zeile: string): boolean {
-  if (deutePruefzeile(a, zeile)) return true
-  if (STUMME_MUSTER.some((re) => re.test(zeile))) return true
+/** Was die Deutung einer Zeile ueber ihre Zugehoerigkeit zu einem Arbeitspaket sagt. */
+interface Deutung {
+  /** Ein Muster griff. */
+  gedeutet: boolean
+  /** Die Kartennummer, die die Zeile nennt. */
+  cardNumber?: number
+  /** Das Arbeitspaket, das die Zeile eroeffnet. */
+  eroeffnet?: NightRunItem
+  /** Die Zeile ist bereits zugeordnet (Pruefblock) — nicht erneut anhaengen. */
+  eigenzuordnung?: boolean
+}
+
+/**
+ * Deutet eine Runner-Zeile.
+ *
+ * @param inhalt die Zeile ohne Zeitstempel-Praefix — daran greifen die Muster
+ * @param roh die Zeile, wie sie in der Datei steht — sie geht ins Rohprotokoll
+ */
+function deuteZeile(a: Aufbau, inhalt: string, roh: string): Deutung {
+  if (deutePruefzeile(a, inhalt, roh)) return { gedeutet: true, eigenzuordnung: true }
+  if (STUMME_MUSTER.some((re) => re.test(inhalt))) {
+    const nummer = STUMME_NUMMER.exec(inhalt)
+    return { gedeutet: true, cardNumber: nummer ? Number(nummer[1]) : undefined }
+  }
   for (const { re, deute } of MUSTER) {
-    const m = re.exec(zeile)
+    const m = re.exec(inhalt)
     if (!m) continue
     const t = deute(m)
+    let eroeffnet: NightRunItem | undefined
     if (t.cardNumber !== undefined) {
-      const item = paket(a, t.cardNumber, zeile)
+      const item = paket(a, t.cardNumber, inhalt)
       if (t.title) item.title = t.title
-      if (t.eroeffnet) return true
-      if (t.state) {
+      if (t.eroeffnet) eroeffnet = item
+      else if (t.state) {
         item.state = t.state
         item.errorClass = t.errorClass
-        item.excerpt = zeile
+        item.excerpt = inhalt
         if (t.durationMs !== undefined) item.durationMs = t.durationMs
         if (t.commit !== undefined) item.commit = t.commit
       }
     }
-    return true
+    return { gedeutet: true, cardNumber: t.cardNumber, eroeffnet }
   }
-  return false
+  return { gedeutet: false }
+}
+
+/**
+ * Schreibt die Rohzeile ins Protokoll des offenen Arbeitspakets — oder schliesst es.
+ *
+ * <p>Geschlossen wird bei einer neuen Session-Oeffnungszeile und bei jeder gedeuteten
+ * Zeile mit **fremder** Kartennummer: Zwischen dem Ausgang eines Pakets und der
+ * Oeffnungszeile des naechsten schreibt der Runner die Gate-Zeilen der uebergangenen
+ * Kandidaten. Zeilen mit derselben Nummer — Sitzungsecho, Salvage, `HARTER STOPP`,
+ * `CLI-Meldung` — bleiben beim Paket (Plan #744, A1).
+ */
+function uebernimm(a: Aufbau, roh: string, d: Deutung): void {
+  if (d.eroeffnet) {
+    a.aktuellesPaket = d.eroeffnet
+    d.eroeffnet.rawLines.push(roh)
+    return
+  }
+  const offen = a.aktuellesPaket
+  if (!offen) return
+  if (d.eigenzuordnung) return
+  if (d.cardNumber !== undefined && d.cardNumber !== offen.cardNumber) {
+    a.aktuellesPaket = null
+    return
+  }
+  offen.rawLines.push(roh)
 }
 
 /** Schliesst einen Lauf ab und bringt ihn in die Ausgabeform. */
@@ -393,12 +478,19 @@ export function parseNightRunLog(text: string): NightRunLog {
     if (!m) {
       // Der zweite Schreiber: `fail()` haengt kein Praefix an und beendet den Lauf.
       if (a && FAIL.test(zeile)) {
+        // Bei einem harten Abbruch ist genau diese Zeile die, die man im Rohprotokoll
+        // sehen will — sie gehoert noch zum Paket und schliesst es danach.
+        a.aktuellesPaket?.rawLines.push(zeile)
+        a.aktuellesPaket = null
         a.runState = 'RED'
         a.runErrorClass = 'HARD_ABORT'
         a.runExcerpt = zeile
         a.abgeschlossen = true
+        continue
       }
-      // Alles andere ohne Praefix ist Sitzungsstrom — weder gedeutet noch gezaehlt.
+      // Alles andere ohne Praefix ist Sitzungsstrom — weder gedeutet noch gezaehlt,
+      // aber Teil des Rohprotokolls des offenen Arbeitspakets.
+      a?.aktuellesPaket?.rawLines.push(zeile)
       continue
     }
 
@@ -412,16 +504,22 @@ export function parseNightRunLog(text: string): NightRunLog {
     if (!a) continue // Runner-Zeilen vor dem ersten Start gehoeren zu keinem Lauf.
 
     a.letzterZeitstempel = zeitstempel
+    // Abschlusszeile und Pruefblock-Kopf schliessen das offene Arbeitspaket und
+    // gehoeren selbst keinem mehr an (Plan #744, A1).
     if (ABSCHLUSS.test(inhalt)) {
       a.abgeschlossen = true
       if (DRY_RUN.test(inhalt)) a.dryRun = true
       a.stage = STUFE.exec(inhalt)?.[1] ?? a.stage
+      a.aktuellesPaket = null
     }
+    if (PRUEFBLOCK.test(inhalt)) a.aktuellesPaket = null
 
-    if (!deuteZeile(a, inhalt)) {
+    const deutung = deuteZeile(a, inhalt, zeile)
+    if (!deutung.gedeutet) {
       a.unparsedCount++
       if (a.unparsedSample.length < 5) a.unparsedSample.push(inhalt)
     }
+    uebernimm(a, zeile, deutung)
   }
   schliesse()
 

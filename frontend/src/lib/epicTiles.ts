@@ -151,3 +151,22 @@ export function visibleEpics(
   if (zeigeAusgeblendete) return [...epics]
   return epics.filter((epic) => !hidden.has(epic.id))
 }
+
+/**
+ * Die in einem Formular auswählbaren Vorhaben (Plan #717, A1). Filtert nach derselben Regel und
+ * über denselben Schlüssel wie `visibleEpics` — aber **ohne** dessen dritten Parameter
+ * `zeigeAusgeblendete`.
+ *
+ * Das ist Absicht und kein übersehener Parameter: Der Umschalter „Ausgeblendete zeigen" der
+ * Vorhaben-Seite steuert deren Kachelraster. Zöge er hier mit, entschiede eine Ansichtseinstellung
+ * darüber, was man einer Karte zuordnen kann.
+ *
+ * Eine ID in `hidden` ohne zugehöriges Vorhaben wird übergangen (siehe `visibleEpics`). Reine
+ * Funktion: Das Eingabe-Array bleibt unverändert.
+ *
+ * @param epics Vorhaben des Boards, bereits sortiert
+ * @param hidden IDs der ausgeblendeten Vorhaben (`Epic.id`)
+ */
+export function selectableEpics(epics: readonly Epic[], hidden: ReadonlySet<number>): Epic[] {
+  return epics.filter((epic) => !hidden.has(epic.id))
+}

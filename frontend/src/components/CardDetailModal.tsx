@@ -11,6 +11,8 @@ import DialogTitle from '@mui/material/DialogTitle'
 import Divider from '@mui/material/Divider'
 import IconButton from '@mui/material/IconButton'
 import Link from '@mui/material/Link'
+import MenuItem from '@mui/material/MenuItem'
+import Select from '@mui/material/Select'
 import Stack from '@mui/material/Stack'
 import TextField from '@mui/material/TextField'
 import Tooltip from '@mui/material/Tooltip'
@@ -32,7 +34,7 @@ import {
 import Markdown, { type Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { attachmentsApi as defaultAttachmentsApi, type Attachment, type AttachmentsApi } from '../api/attachments'
-import { boardsApi as defaultBoardsApi } from '../api/boards'
+import { boardsApi as defaultBoardsApi, type BoardColumn } from '../api/boards'
 import CircularProgress from '@mui/material/CircularProgress'
 import { ApiError } from '../api/client'
 import { DerivationTree } from './DerivationTree'
@@ -46,7 +48,9 @@ import { Breadcrumbs } from './Breadcrumbs'
 import { isTooLong, tooLongMessage } from '../lib/textLimits'
 import { CardFields } from './CardFields'
 import { cardLocationCrumbs, type CardLocation } from '../lib/cardLocation'
+import { canonicalColumnKey, otherCanonicalColumns } from '../lib/columnMeta'
 import { dueInputToIso, formatDueDate, isOverdue } from '../lib/dueDate'
+import { epicShortcode } from '../lib/epicMeta'
 import { normalizeTaskLists, toggleTaskAt } from '../lib/markdownTasks'
 import { safeImageSrc, safeLinkHref } from '../lib/markdownUrls'
 import { statusColors } from '../lib/statusColors'
@@ -591,19 +595,133 @@ function ActivitySection({
   )
 }
 
-/** Status-Chip in der Kopfleiste: „Epic" bei Epics, sonst der Spalten-Chip (falls bekannt). */
+/** Aussehen des farbigen Spalten-Chips — eine Quelle für den lesenden und den interaktiven Fall. */
+const statusChipSx = (colors: { bg: string; text: string }) => ({
+  bgcolor: colors.bg,
+  color: colors.text,
+  fontWeight: 600,
+})
+
+/**
+ * Status-Chip in der Kopfleiste: „Vorhaben" bei Epics, sonst der Spalten-Chip (falls bekannt).
+ *
+ * Sind `columns`, `columnId` und `onMove` gesetzt (interaktiver Kontext), wird der Chip in einer
+ * kanonischen Spalte zum Steuerelement für den Statuswechsel. Fehlt auch nur eine der drei
+ * Angaben, bleibt es beim rein lesenden Chip — so bleiben alle Aufrufer ohne Board-Kontext
+ * (Kartensuche, Ideen-Planung, Dashboard, Nachtlauf, Vorhaben-Seite, Listenansicht) unberührt.
+ */
 function CardStatusChip({
   isEpic,
   columnName,
   colors,
+  archived,
+  ideaStored,
+  canEdit,
+  editing,
+  columns,
+  columnId,
+  onMove,
 }: Readonly<{
   isEpic: boolean
   columnName?: string
   colors: { bg: string; text: string } | null
+  archived: boolean
+  ideaStored: boolean
+  canEdit: boolean
+  editing: boolean
+  columns?: BoardColumn[]
+  columnId?: number
+  onMove?: (toColumnId: number) => Promise<void>
 }>) {
+  // Läuft ein Wechsel, ist die Auswahl gesperrt; der Bestätigungsdialog gilt nur für „Ready".
+  const [pending, setPending] = useState(false)
+  const [confirmTarget, setConfirmTarget] = useState<BoardColumn | null>(null)
+
+  if (columns === undefined || columnId === undefined || onMove === undefined) {
+    if (isEpic) return <Chip label="Vorhaben" size="small" color="secondary" />
+    if (!colors) return null
+    return <Chip label={columnName} size="small" sx={statusChipSx(colors)} />
+  }
+
+  // Im interaktiven Kontext ist die Spalte aus `columns` maßgeblich, nicht die `columnName`-Prop:
+  // Nur sie zieht bei einem Wechsel mit, ohne dass der Aufrufer eine zweite Prop nachführen muss.
+  const current = columns.find((c) => c.id === columnId)
+  const spaltenChip = current ? (
+    <Chip label={current.name} size="small" sx={statusChipSx(statusColors(current.name))} />
+  ) : null
+
+  if (archived) return spaltenChip
   if (isEpic) return <Chip label="Vorhaben" size="small" color="secondary" />
-  if (!colors) return null
-  return <Chip label={columnName} size="small" sx={{ bgcolor: colors.bg, color: colors.text, fontWeight: 600 }} />
+  if (ideaStored) return <Chip label="Noch nicht eingeplant" size="small" />
+  if (!current) return null
+  if (canonicalColumnKey(current.name) === undefined || !canEdit) return spaltenChip
+
+  const ziele = otherCanonicalColumns(columns, columnId)
+
+  const verschiebe = async (target: BoardColumn) => {
+    setPending(true)
+    try {
+      await onMove(target.id)
+    } catch {
+      // Die Fehlermeldung ist Sache des Aufrufers; hier zählt nur, dass die Auswahl wieder
+      // bedienbar wird. Sie zeigt weiter `columnId` — also die unveränderte Spalte.
+    } finally {
+      setPending(false)
+    }
+  }
+
+  return (
+    <>
+      <Select
+        size="small"
+        variant="standard"
+        value={columnId}
+        disabled={pending || editing}
+        SelectDisplayProps={{ 'aria-label': 'Zustand' }}
+        onChange={(e) => {
+          // Nur die Zielspalten lösen `onChange` aus — der Eintrag der aktuellen Spalte ist
+          // `disabled`. Deshalb ohne Nicht-gefunden-Zweig.
+          const [target] = ziele.filter((c) => c.id === Number(e.target.value))
+          if (canonicalColumnKey(target.name) === 'READY') {
+            setConfirmTarget(target)
+            return
+          }
+          void verschiebe(target)
+        }}
+      >
+        <MenuItem value={columnId} disabled>
+          {current.name}
+        </MenuItem>
+        {ziele.map((c) => (
+          <MenuItem key={c.id} value={c.id}>
+            {c.name}
+          </MenuItem>
+        ))}
+      </Select>
+
+      {/*
+        Rückfrage nur vor „Ready": Dort übergibt man die Karte an die Umsetzung — ein Zug, der
+        andernorts eine Freigabe ist. Alle anderen Wechsel laufen ohne Zwischenschritt.
+      */}
+      {confirmTarget !== null && (
+        <Dialog open onClose={() => setConfirmTarget(null)}>
+          <DialogTitle sx={dialogTitleSx}>Nach Ready verschieben?</DialogTitle>
+          <DialogActions>
+            <Button onClick={() => setConfirmTarget(null)}>Abbrechen</Button>
+            <Button
+              variant="contained"
+              onClick={() => {
+                setConfirmTarget(null)
+                void verschiebe(confirmTarget)
+              }}
+            >
+              Nach Ready verschieben
+            </Button>
+          </DialogActions>
+        </Dialog>
+      )}
+    </>
+  )
 }
 
 /**
@@ -711,14 +829,42 @@ interface Props {
   /** Spaltenname für den Status-Chip (bei Karten). */
   columnName?: string
   /**
+   * Spalten des Boards für den interaktiven Statuswechsel. Erst zusammen mit {@link columnId} und
+   * {@link onMove} wird der Status-Chip zum Steuerelement; fehlt eine der drei Angaben, bleibt er
+   * rein lesend. Aufrufer ohne Board-Kontext (Kartensuche, Ideen-Planung, Dashboard, Nachtlauf,
+   * Vorhaben-Seite, Listenansicht) bleiben so unverändert.
+   */
+  columns?: BoardColumn[]
+  /**
+   * Aktuelle Spalte der Karte. Im interaktiven Kontext ist sie — nicht {@link columnName} — die
+   * Quelle des angezeigten Spaltennamens, damit ein Wechsel ohne zweite nachgeführte Prop wirkt.
+   */
+  columnId?: number
+  /**
+   * Verschiebt die Karte in die gewählte Spalte. Solange das Promise offen ist, bleibt die Auswahl
+   * gesperrt; bei Ablehnung wird sie wieder bedienbar und zeigt weiter {@link columnId} — die
+   * Fehlermeldung gehört dem Aufrufer, der den Fehler kennt.
+   */
+  onMove?: (toColumnId: number) => Promise<void>
+  /**
    * Ort der Karte (Projekt / Board / Spalte) für den Modal-Kopf. Optional: Aufrufer ohne diesen
    * Kontext (Epics-Seite, Ideen-Planung) zeigen wie bisher keinen Pfad — ein leerer Platzhalter
    * wäre schlechter als keine Angabe. `null` ist gleichbedeutend mit „nicht gesetzt", damit
    * Aufrufer mit noch nicht geladenem Board den Wert direkt durchreichen können.
    */
   location?: CardLocation | null
-  /** Board-Epics für das Epic-Dropdown. */
+  /**
+   * Board-Epics: Datenquelle für Titelanzeige und Fortschritt eines Vorhabens — und, ohne
+   * {@link selectableEpics}, zugleich der Optionsvorrat des Auswahlfelds.
+   */
   epics?: Epic[]
+  /**
+   * Die im Auswahlfeld anzubietenden Vorhaben (Default: {@link epics}). Trägt ausschließlich den
+   * Optionsvorrat; die Anzeige bleibt an `epics` gebunden. Getrennt, weil ein auf dem Board
+   * ausgeblendetes Vorhaben zwar nicht mehr zur Auswahl steht, seinen Titel aber weiterhin hat
+   * (Plan #717, A2) — es aus `epics` zu streichen kostete Titel und Fortschritt gleich mit.
+   */
+  selectableEpics?: Epic[]
   /**
    * Ob die Epic-Zuordnung geändert werden darf (Default `true`). `false` heißt: Der Aufrufer konnte
    * den Optionsvorrat nicht laden (archiviertes Board, board-lose Idee). Ein leeres Dropdown böte
@@ -769,8 +915,12 @@ function CardDetailModalView({
   onChanged,
   initialEditing = false,
   columnName,
+  columns,
+  columnId,
+  onMove,
   location,
   epics = [],
+  selectableEpics,
   canEditEpic = true,
   canEditLabels = true,
   members = [],
@@ -1098,6 +1248,21 @@ function CardDetailModalView({
     })
   }
 
+  // Optionsvorrat des Auswahlfelds. Ohne eigene Angabe ist er die volle `epics`-Liste — Aufrufer
+  // ohne ausgeblendete Vorhaben ändern sich dadurch nicht.
+  const epicOptionen = selectableEpics ?? epics
+  // Zeigt die Karte auf ein Vorhaben, das nicht zur Auswahl steht (ausgeblendet, fehlende Liste,
+  // fremdes oder gelöschtes Vorhaben), bleibt das Feld lesend: Ein Dropdown ohne diesen Eintrag
+  // böte nur an, die Zuordnung zu löschen, ohne sie je gezeigt zu haben (#586, Plan #717 A2).
+  const epicLesend =
+    !canEditEpic || (parentId !== null && !epicOptionen.some((e) => e.id === parentId))
+  // Der Titel kommt aus der vollen `epics`-Liste, nicht aus dem Optionsvorrat: Nur sie kennt das
+  // ausgeblendete Vorhaben. Fehlt es auch dort, bleibt es bei der nackten Nummer.
+  const zugeordnetesVorhaben = epics.find((e) => e.id === parentId)
+  const epicLesendText = zugeordnetesVorhaben
+    ? `${epicShortcode(zugeordnetesVorhaben.title, zugeordnetesVorhaben.shortcode)} – ${zugeordnetesVorhaben.title}`
+    : undefined
+
   const colors = columnName ? statusColors(columnName) : null
   const dueOverdue =
     !isEpic && isOverdue(card.dueDate, (columnName ?? '').toLowerCase().includes('done'))
@@ -1146,7 +1311,18 @@ function CardDetailModalView({
               <ArrowBackIcon fontSize="small" />
             </IconButton>
           )}
-          <CardStatusChip isEpic={isEpic} columnName={columnName} colors={colors} />
+          <CardStatusChip
+            isEpic={isEpic}
+            columnName={columnName}
+            colors={colors}
+            archived={card.archived}
+            ideaStored={card.ideaStored}
+            canEdit={canEdit}
+            editing={editing}
+            columns={columns}
+            columnId={columnId}
+            onMove={onMove}
+          />
           {/* Legacy-Pool-Ideen ohne projektweite Nummer zeigen kein nacktes „#". */}
           {card.number != null && (
             <Typography component="span" variant="body2" color="text.secondary">
@@ -1191,8 +1367,9 @@ function CardDetailModalView({
               body={body}
               shortcode={shortcode}
               parentId={parentId}
-              epics={epics}
-              epicReadOnly={!canEditEpic}
+              epics={epicOptionen}
+              epicReadOnly={epicLesend}
+              epicReadOnlyLabel={epicLesendText}
               depsInput={depsInput}
               depsError={depsError}
               dueInput={dueInput}

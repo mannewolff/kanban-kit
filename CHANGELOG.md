@@ -7,6 +7,24 @@ Versionierung folgt der dreiteiligen Betriebsversion (siehe [RELEASING.md](RELEA
 Einträge je Version sind ein automatischer Auszug der Commit-Titel seit dem letzten Release,
 erzeugt von `scripts/gen-changelog.mjs`.
 
+## [1.34.0] – 2026-09-06
+
+- chore: Version-Bump 1.33.2 (push main)
+- Nachtlauf-Rohprotokoll: Zwischenspeicher, Anzeige und Verdrahtung ([#748](https://github.com/mannewolff/kanban-kit/issues/748))
+- Vorhaben-Seite auf gemeinsame Lesefunktion und gefilterten Optionsvorrat ([#756](https://github.com/mannewolff/kanban-kit/issues/756))
+- Lesende Vorhaben-Auswahl bei ausgeblendetem Vorhaben ([#755](https://github.com/mannewolff/kanban-kit/issues/755))
+- Zustands-Lift hiddenEpics nach BoardPage ([#754](https://github.com/mannewolff/kanban-kit/issues/754))
+- Reine Filterfunktion selectableEpics ([#753](https://github.com/mannewolff/kanban-kit/issues/753))
+- Kartenstatus in BoardPage verdrahtet ([#752](https://github.com/mannewolff/kanban-kit/issues/752))
+- Interaktiver Status-Chip in CardDetailModal ([#751](https://github.com/mannewolff/kanban-kit/issues/751))
+- Kanonische Spalten-Erkennung in columnMeta.ts ([#750](https://github.com/mannewolff/kanban-kit/issues/750))
+- Rohprotokoll-Abschnitt im Nachtlauf-Uebernahmetext ([#747](https://github.com/mannewolff/kanban-kit/issues/747))
+- Nachtlauf-Rohprotokoll je Arbeitspaket im Parser sammeln ([#746](https://github.com/mannewolff/kanban-kit/issues/746))
+- Workflow geändert
+- chore: v1.33.1
+- Ampel-Rot kraeftiger machen: FF0000 statt des textkontrast-optimierten Tons
+- Nachtlauf-Auswertung: Zustand als ausgefuellte Ampel-Flaeche statt Rand ([#738](https://github.com/mannewolff/kanban-kit/issues/738))
+
 ## [1.33.0] – 2026-09-03
 
 - chore: v1.32.1

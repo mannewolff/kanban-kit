@@ -25,9 +25,9 @@ import { CardDetailModal } from '../components/CardDetailModal'
 import { EpicBadge } from '../components/EpicBadge'
 import { labelChipSx } from '../components/labelChipSx'
 import { NewCardModal } from '../components/NewCardModal'
-import { hiddenEpicsStorageKey } from '../lib/boardHiddenEpics'
+import { hiddenEpicsStorageKey, leseAusgeblendet } from '../lib/boardHiddenEpics'
 import { epicToCard } from '../lib/epicToCard'
-import { aggregateMarks, countKinds, sortEpics, visibleEpics } from '../lib/epicTiles'
+import { aggregateMarks, countKinds, selectableEpics, sortEpics, visibleEpics } from '../lib/epicTiles'
 import { useBoardRole } from '../lib/useBoardRole'
 import { useProjectName } from '../lib/useProjectName'
 import { CARD_LIFT, CARD_SHADOW, CARD_SHADOW_HOVER, PANEL_RADIUS } from '../theme'
@@ -51,24 +51,6 @@ function Art({ anzahl, eins, viele }: Readonly<{ anzahl: number; eins: string; v
       {`${anzahl} ${anzahl === 1 ? eins : viele}`}
     </Typography>
   )
-}
-
-/**
- * Der gespeicherte Stand der ausgeblendeten Vorhaben eines Boards. Steht als eigene Funktion da,
- * weil er an zwei Stellen gebraucht wird — beim ersten Mount und nach jedem Board-Wechsel (Plan
- * #703, E11). Zwei Abschriften desselben Lesevorgangs wären zwei Gelegenheiten, das Wertformat
- * auseinanderlaufen zu lassen.
- *
- * Ein defektes oder gesperrtes `localStorage` liefert „nichts ausgeblendet" statt die Seite
- * scheitern zu lassen: Die Ausblendung ist reine Darstellung, ihr Verlust kostet keine Daten.
- */
-function leseAusgeblendet(boardId: number): ReadonlySet<number> {
-  try {
-    const raw = localStorage.getItem(hiddenEpicsStorageKey(boardId))
-    return raw ? new Set<number>(JSON.parse(raw) as number[]) : new Set<number>()
-  } catch {
-    return new Set<number>()
-  }
 }
 
 export function EpicsPage() {
@@ -500,7 +482,11 @@ export function EpicsPage() {
           projectId={projectId}
           members={members}
           boardLabels={labels}
+          // Volle Liste für Titel und Fortschritt, gefilterter Vorrat für die Auswahl (Plan #717,
+          // A2) — derselbe Vertrag wie am Board. Der Umschalter „Ausgeblendete zeigen" dieser Seite
+          // zieht ausdrücklich nicht mit (A1): Er steuert das Kachelraster, nicht die Zuordnung.
           epics={epics}
+          selectableEpics={selectableEpics(epics, hiddenEpics)}
           onClose={() => setSelected(null)}
           onChanged={reload}
         />

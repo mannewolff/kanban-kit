@@ -19,6 +19,7 @@ export function CardFields({
   parentId,
   epics,
   epicReadOnly = false,
+  epicReadOnlyLabel,
   depsInput,
   depsError,
   herkunftInput = '',
@@ -42,11 +43,18 @@ export function CardFields({
   epics: Epic[]
   /**
    * Zeigt die Epic-Zuordnung nur an, statt sie zur Auswahl zu stellen. Für Aufrufer, die den
-   * Optionsvorrat nicht laden können (archiviertes Board, board-lose Idee): Das Dropdown böte dann
+   * Optionsvorrat nicht laden können (archiviertes Board, board-lose Idee) oder deren Zuordnung
+   * nicht darin vorkommt (ausgeblendetes Vorhaben, Plan #717): Das Dropdown böte dann
    * ausschließlich „(kein Epic)" an, und ein Klick darauf löschte eine bestehende Zuordnung, ohne
    * sie je gezeigt zu haben (#586).
    */
   epicReadOnly?: boolean
+  /**
+   * Anzeigetext des lesenden Felds, wenn der Aufrufer die Zuordnung benennen kann. Ohne ihn bleibt
+   * es bei der nackten Nummer: Wer den Titel nicht kennt, soll ihn nicht erfinden. Auflösen kann
+   * ihn nur der Aufrufer — er hält die volle Vorhaben-Liste, dieses Formular nur den Optionsvorrat.
+   */
+  epicReadOnlyLabel?: string
   depsInput: string
   depsError: string | null
   /**
@@ -73,12 +81,13 @@ export function CardFields({
   const nonEpicFields = (
     <>
       {epicReadOnly ? (
-        // Ohne Epic-Liste bleibt nur die nackte ID: Sie belegt sichtbar, dass eine Zuordnung
-        // besteht, und hält sie zugleich außer Reichweite jeder versehentlichen Änderung.
+        // Nennt der Aufrufer die Zuordnung, steht sie hier; sonst bleibt die nackte ID. Beides
+        // belegt sichtbar, dass eine Zuordnung besteht, und hält sie zugleich außer Reichweite
+        // jeder versehentlichen Änderung.
         <TextField
           label="Vorhaben"
-          value={parentId === null ? '(kein Vorhaben)' : `#${parentId}`}
-          helperText="Vorhaben-Liste hier nicht verfügbar — die Zuordnung bleibt unverändert."
+          value={parentId === null ? '(kein Vorhaben)' : (epicReadOnlyLabel ?? `#${parentId}`)}
+          helperText="Vorhaben hier nicht auswählbar (ausgeblendet oder Liste nicht verfügbar) — die Zuordnung bleibt unverändert."
           slotProps={{
             htmlInput: { 'aria-label': 'Vorhaben' },
             input: { readOnly: true },
