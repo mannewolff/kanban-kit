@@ -58,6 +58,12 @@ import { useProjectName } from '../lib/useProjectName'
  */
 interface AnzeigeItem extends NightRunHandoffItem {
   durationMs: number | undefined
+  /**
+   * Immer ein Array, ggf. leer — anders als im Übernahmetext, wo das Feld optional ist. Die Anzeige
+   * fragt es an mehreren Stellen ab; ein `undefined` hätte dort keine eigene Bedeutung („keine
+   * Rohzeilen" und „leere Rohzeilen" sind derselbe Fall) und zöge nur `?.`-Ketten nach sich.
+   */
+  rawLines: readonly string[]
 }
 
 /** Ein Lauf in der Anzeigeform. */
@@ -144,6 +150,7 @@ const ausParser = (run: NightRun): AnzeigeLauf => ({
     errorClass: item.errorClass,
     durationMs: item.durationMs,
     excerpt: item.excerpt,
+    rawLines: item.rawLines,
   })),
 })
 
@@ -173,8 +180,39 @@ const ausSicht = (view: NightRunView): AnzeigeLauf => ({
     errorClass: item.errorClass ?? undefined,
     durationMs: item.durationMs ?? undefined,
     excerpt: item.excerpt ?? undefined,
+    // Der Server kennt keine Rohzeilen (Plan #744, A5) — was diese Sitzung selbst geparst hat,
+    // trägt {@link mitRohzeilen} nach.
+    rawLines: [],
   })),
 })
+
+/**
+ * Der Zwischenspeicher der Rohzeilen (Plan #744, A4).
+ *
+ * Der Schlüssel ist `startedAt::cardNumber`: Dieselbe Kartennummer kommt in mehreren Läufen vor,
+ * der Startzeitpunkt allein reicht also nicht. Innerhalb eines Laufs legt der Parser je Nummer
+ * genau ein Arbeitspaket an — mehrere Server-Items mit derselben Nummer teilen sich den Eintrag.
+ */
+type Rohprotokolle = ReadonlyMap<string, readonly string[]>
+
+const schluessel = (startedAt: string, cardNumber: number) => `${startedAt}::${cardNumber}`
+
+/**
+ * Legt die aufbewahrten Rohzeilen zurück auf die vom Server geladenen Läufe.
+ *
+ * Nötig, weil `protokollLesen` die Läufe nach dem Einliefern sofort neu lädt, damit „neu angelegt"
+ * und die Häufigkeiten stimmen. Ohne diesen Schritt verschwänden die Rohzeilen Sekunden nach dem
+ * Hochladen — noch bevor sie jemand ansehen konnte. Ein Lauf ohne Eintrag bleibt ohne Rohzeilen:
+ * genau das ist der in einer früheren Sitzung eingelieferte Lauf.
+ */
+const mitRohzeilen = (laeufe: AnzeigeLauf[], speicher: Rohprotokolle): AnzeigeLauf[] =>
+  laeufe.map((lauf) => ({
+    ...lauf,
+    items: lauf.items.map((item) => ({
+      ...item,
+      rawLines: speicher.get(schluessel(lauf.startedAt, item.cardNumber)) ?? item.rawLines,
+    })),
+  }))
 
 /**
  * Ein Lauf, wie er an den Server geht: Kennzahlen, Zustände, Kartennummern, Fehlerklassen und die
@@ -321,11 +359,19 @@ function Arbeitspaket({
   istRot: (nummer: number) => boolean
   onOeffnen: (karte: CardByNumber) => void
 }>) {
+  const [rohOffen, setRohOffen] = useState(false)
   // `undefined` = noch nicht aufgelöst (die Kette lädt), `null` = nicht auflösbar.
   const wurzel = katalog.get(item.cardNumber)
   const beschriftung = `#${item.cardNumber} ${item.title}`
   // `null` an einem grünen oder grauen Arbeitspaket — dort erscheint weder Feld noch Knopf.
   const uebernahme = buildHandoffText(item)
+  // Das Rohprotokoll steht dort, wo es einen Übernahmetext gibt — also an einem gelben oder roten
+  // Arbeitspaket (Plan #744, A7). Die Bedingung wird bewusst nicht ein zweites Mal ausgeschrieben:
+  // Zwei Regeln für dieselbe Frage liefen auseinander, und dann trüge ein Befund einen Knopf ohne
+  // Feld daneben. Leer bleibt es bei einem übersprungenen Paket (A3) und bei jedem Lauf, den diese
+  // Sitzung nicht selbst geparst hat (A4).
+  const rohprotokoll = uebernahme === null || item.rawLines.length === 0 ? null : item.rawLines.join('\n')
+  const rohBereichId = `rohprotokoll-${item.cardNumber}`
 
   return (
     <Box sx={{ py: 1 }}>
@@ -389,17 +435,48 @@ function Arbeitspaket({
           </Typography>
         ))}
 
+      {rohprotokoll !== null && (
+        <Box sx={{ mt: 1 }}>
+          <Button
+            size="small"
+            aria-label={`Rohprotokoll zu Karte #${item.cardNumber} ${rohOffen ? 'ausblenden' : 'anzeigen'}`}
+            aria-expanded={rohOffen}
+            aria-controls={rohBereichId}
+            onClick={() => setRohOffen((bisher) => !bisher)}
+          >
+            {rohOffen ? 'Rohprotokoll ausblenden' : 'Rohprotokoll anzeigen'}
+          </Button>
+          {rohOffen && (
+            // Ein einziger Textknoten, nie über den Markdown-Renderer (CLAUDE-security.md): Der
+            // Sitzungsstrom ist Fremdtext und trägt Sternchen, Backticks und Klammern zuhauf.
+            // `pre` erhält die Einrückung, `pre-wrap` bricht lange Zeilen trotzdem um.
+            <Typography
+              id={rohBereichId}
+              data-testid={rohBereichId}
+              component="pre"
+              variant="body2"
+              color="text.secondary"
+              sx={{ mt: 0.5, mb: 0, whiteSpace: 'pre-wrap', maxHeight: 320, overflow: 'auto' }}
+            >
+              {rohprotokoll}
+            </Typography>
+          )}
+        </Box>
+      )}
+
       {uebernahme !== null && (
         // Der Text steht **immer** offen da, nie in einem eingeklappten Bereich: Er speist sich aus
         // Protokollauszügen, also aus Fremdtext (Claude-Ausgaben, Ergebnisse fremder Werkzeuge).
         // Ein unsichtbar kopierter Text wäre ein Weg von fremdem Text in die eigene
         // Entwicklungssitzung. Als reiner Wert eines Textfelds, nie über den Markdown-Renderer
-        // (CLAUDE-security.md) — und ungekürzt: keine `maxRows`, kein `noWrap`.
+        // (CLAUDE-security.md). `maxRows` begrenzt nur die Höhe — das Feld scrollt, der Wert
+        // bleibt ungekürzt, sonst wanderte ein halbes Rohprotokoll in die Zwischenablage.
         <Stack direction="row" spacing={1} alignItems="flex-start" sx={{ mt: 1 }}>
           <TextField
             fullWidth
             multiline
             minRows={3}
+            maxRows={12}
             size="small"
             value={uebernahme}
             slotProps={{
@@ -526,6 +603,10 @@ export function NightRunPage() {
   // So wird jede Kartennummer je Seitenaufruf genau einmal geladen.
   const katalogRef = useRef(new Map<number, CardByNumber | null>())
   const geladeneLaeufe = useRef(new Set<string>())
+  // Die Rohzeilen der in dieser Sitzung geparsten Läufe. Sie leben mit der Seitenkomponente: Ein
+  // Reload oder ein Wechsel auf eine andere Seite räumt sie zwangsläufig weg — genau die Grenze
+  // aus Plan #744 (A4), ohne dass es dafür eine eigene Bedingung braucht.
+  const rohprotokolle = useRef(new Map<string, readonly string[]>())
 
   useEffect(() => {
     if (!validId) {
@@ -607,6 +688,12 @@ export function NightRunPage() {
       return
     }
 
+    for (const run of runs) {
+      for (const item of run.items) {
+        rohprotokolle.current.set(schluessel(run.startedAt, item.cardNumber), item.rawLines)
+      }
+    }
+
     const geparst = runs.map(ausParser)
     setLaeufe((bisher) =>
       [...geparst, ...bisher.filter((alt) => !geparst.some((neu) => neu.startedAt === alt.startedAt))].sort(
@@ -618,7 +705,7 @@ export function NightRunPage() {
       const antwort = await nightRunsApi.submit(id, runs.map(zurEinlieferung))
       setErgebnisse(new Map(antwort.map((eintrag) => [eintrag.startedAt, eintrag.created])))
       const views = await nightRunsApi.list(id)
-      setLaeufe(views.map(ausSicht).sort(nachStartAbsteigend))
+      setLaeufe(mitRohzeilen(views.map(ausSicht), rohprotokolle.current).sort(nachStartAbsteigend))
       setAufbewahrteLaeufe(views.length)
       setZaehler(await zaehlerLaden(id))
     } catch (fehler) {
