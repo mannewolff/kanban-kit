@@ -1375,18 +1375,15 @@ public class CardService {
    * normalen Anlege-Pfad; beim Duplikat entsteht nichts (kein Aktivitätseintrag, kein Event).
    */
   @Transactional
-  public IdeaCreation createDirect(
-      long userId,
-      long boardId,
-      long columnId,
-      String title,
-      @Nullable String description,
-      @Nullable String externalKey,
-      @Nullable Integer givenNumber,
-      @Nullable Integer derivedFrom) {
+  public IdeaCreation createDirect(long userId, long boardId, long columnId, DirectCard card) {
     long projectId = boardService.requireProjectId(boardId);
     // Rechte VOR dem Duplikat-Check: der Rückgabepfad darf Unberechtigten keine Existenz leaken.
     permissions.require(userId, projectId, Permission.TICKET_CREATE);
+    // Die beiden Identitaetsfelder einmal in lokale Variablen: die Null-Pruefungen unten gelten
+    // sonst nur fuer den jeweiligen Aufruf, nicht fuer den danach (SpotBugs
+    // NP_NULL_ON_SOME_PATH_FROM_RETURN_VALUE).
+    String externalKey = card.externalKey();
+    Integer givenNumber = card.givenNumber();
     if (externalKey != null) {
       Optional<Card> existing = cards.findByProjectIdAndExternalKey(projectId, externalKey);
       if (existing.isPresent()) {
@@ -1404,8 +1401,8 @@ public class CardService {
             userId,
             boardId,
             columnId,
-            title,
-            description,
+            card.title(),
+            card.description(),
             null,
             null,
             false,
@@ -1414,7 +1411,7 @@ public class CardService {
             null,
             externalKey,
             givenNumber,
-            derivedFrom);
+            card.derivedFrom());
     return new IdeaCreation(created, true);
   }
 
@@ -1510,6 +1507,23 @@ public class CardService {
 
   /** Ergebnis eines idempotenten Ingests (#534): die Karte plus ob sie neu angelegt wurde. */
   public record IdeaCreation(CardView view, boolean created) {}
+
+  /**
+   * Die Nutzdaten einer direkt in einer Board-Spalte anzulegenden Karte (#535). Das Routing —
+   * Benutzer, Board, Spalte — steht bewusst nicht hier, sondern bleibt skalar an {@link
+   * #createDirect}, damit die Rechteprüfung vor dem Duplikat-Check lesbar bleibt.
+   *
+   * <p>{@code externalKey} und {@code givenNumber} sind Identitätsfelder (#565): Der Schlüssel
+   * entscheidet über den Idempotenz-Treffer, und eine vorgegebene Nummer wird gegen die bestehende
+   * Karte verifiziert. {@code derivedFrom} dagegen wird beim Idempotenz-Treffer ignoriert — wie
+   * Titel und Rumpf auch.
+   */
+  public record DirectCard(
+      String title,
+      @Nullable String description,
+      @Nullable String externalKey,
+      @Nullable Integer givenNumber,
+      @Nullable Integer derivedFrom) {}
 
   /**
    * Plant eine Idee ins Backlog (erste Spalte) eines Boards desselben Projekts ein: setzt

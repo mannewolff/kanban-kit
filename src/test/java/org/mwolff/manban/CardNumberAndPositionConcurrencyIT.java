@@ -328,8 +328,18 @@ class CardNumberAndPositionConcurrencyIT extends AbstractIntegrationTest {
 
     TransactionRace.Result race =
         race(
-            () -> cardService.createDirect(user, boardId, backlog, "A", null, "k-a", 900, null),
-            () -> cardService.createDirect(user, boardId, backlog, "B", null, "k-b", 900, null));
+            () ->
+                cardService.createDirect(
+                    user,
+                    boardId,
+                    backlog,
+                    new CardService.DirectCard("A", null, "k-a", 900, null)),
+            () ->
+                cardService.createDirect(
+                    user,
+                    boardId,
+                    backlog,
+                    new CardService.DirectCard("B", null, "k-b", 900, null)));
 
     assertThat(race.firstFailure()).isNull();
     assertThat(race.secondFailure()).isInstanceOf(CardNumberConflictException.class);
