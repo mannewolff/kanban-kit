@@ -679,8 +679,8 @@ function CardStatusChip({
         SelectDisplayProps={{ 'aria-label': 'Zustand' }}
         onChange={(e) => {
           // Nur die Zielspalten lösen `onChange` aus — der Eintrag der aktuellen Spalte ist
-          // `disabled`. Deshalb ohne Nicht-gefunden-Zweig.
-          const [target] = ziele.filter((c) => c.id === Number(e.target.value))
+          // `disabled`. Deshalb ohne Nicht-gefunden-Zweig; das `!` ist dadurch gedeckt.
+          const target = ziele.find((c) => c.id === Number(e.target.value))!
           if (canonicalColumnKey(target.name) === 'READY') {
             setConfirmTarget(target)
             return
