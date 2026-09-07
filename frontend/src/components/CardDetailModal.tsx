@@ -758,9 +758,17 @@ function DependencyList({
   )
 }
 
+/**
+ * Ladezustand der beim Öffnen nachgeladenen Beschreibung (Issue #769). Die Listen-Antwort trägt den
+ * Volltext nicht mehr; bis der Einzelabruf da ist, steht weder „Keine Beschreibung." noch ein
+ * bearbeitbares Feld zur Verfügung — beides wäre eine Aussage über einen noch unbekannten Text.
+ */
+type BeschreibungStatus = 'laedt' | 'geladen' | 'fehler'
+
 /** View-Modus-Inhalt: Beschreibung (Markdown mit Task-Checkboxen), Abhängigkeiten, Fälligkeitsdatum. */
 function CardBodyView({
   body,
+  beschreibungStatus,
   canEdit,
   onToggleTask,
   dependencies,
@@ -771,6 +779,7 @@ function CardBodyView({
   dueOverdue,
 }: Readonly<{
   body: string
+  beschreibungStatus: BeschreibungStatus
   canEdit: boolean
   onToggleTask: (index: number) => void
   dependencies: number[]
@@ -783,11 +792,20 @@ function CardBodyView({
   return (
     <>
       <Box aria-label="Beschreibung" data-testid="description-view" sx={descriptionSx}>
-        {body ? (
-          <TaskMarkdown body={body} canEdit={canEdit} onToggle={onToggleTask} />
-        ) : (
-          <Typography color="text.secondary">Keine Beschreibung.</Typography>
+        {beschreibungStatus === 'laedt' && (
+          <Typography role="status" color="text.secondary">
+            Beschreibung wird geladen…
+          </Typography>
         )}
+        {beschreibungStatus === 'fehler' && (
+          <Alert severity="error">Beschreibung konnte nicht geladen werden.</Alert>
+        )}
+        {beschreibungStatus === 'geladen' &&
+          (body ? (
+            <TaskMarkdown body={body} canEdit={canEdit} onToggle={onToggleTask} />
+          ) : (
+            <Typography color="text.secondary">Keine Beschreibung.</Typography>
+          ))}
       </Box>
       {dependencies.length > 0 && (
         <DependencyList dependencies={dependencies} onOpen={onOpenDependency} />
@@ -882,6 +900,7 @@ interface Props {
   attachmentsApi?: AttachmentsApi
   cardsApi?: Pick<
     typeof defaultCardsApi,
+    | 'get'
     | 'update'
     | 'setAssignees'
     | 'setLabels'
@@ -1004,9 +1023,17 @@ function CardDetailModalView({
     onChanged?.()
   }
 
-  const [editing, setEditing] = useState(initialEditing)
+  // `editing` startet immer im Lesemodus: `initialEditing` greift erst, wenn die Beschreibung da
+  // ist (siehe Nachlade-Effekt) — sonst öffnete die Maske mit einem leeren Feld, dessen Speichern
+  // den Volltext löschte.
+  const [editing, setEditing] = useState(false)
   const [title, setTitle] = useState(card.title)
-  const [body, setBody] = useState(card.description ?? '')
+  // Der Volltext kommt nicht mehr aus der `card`-Prop: Die Board-Liste liefert ihn nicht (#771),
+  // und die synthetischen Vorhaben-Karten aus `epicToCard` haben ihn nie getragen.
+  const [body, setBody] = useState('')
+  // Zuletzt bekannter Server-Stand der Beschreibung — Ausgangspunkt jedes Bearbeiten-Klicks.
+  const [beschreibung, setBeschreibung] = useState('')
+  const [beschreibungStatus, setBeschreibungStatus] = useState<BeschreibungStatus>('laedt')
   const [parentId, setParentId] = useState<number | null>(card.parentId)
   const [shortcode, setShortcode] = useState(card.shortcode ?? '')
   const [dueInput, setDueInput] = useState(card.dueDate ? card.dueDate.slice(0, 10) : '')
@@ -1047,6 +1074,36 @@ function CardDetailModalView({
   useEffect(() => {
     void cardsApi.getActivity(card.id).then(setActivities).catch(() => setActivities([]))
   }, [card.id, cardsApi])
+
+  // Die volle Beschreibung beim Öffnen nachladen (Issue #769) — nach dem `aktiv`-Muster des
+  // Herkunftsbaum-Effekts: Der Cleanup verwirft späte Antworten, ein Kartenwechsel setzt auf
+  // „lädt" zurück. Aus der Antwort wird ausschließlich `description` übernommen; die übrigen
+  // Felder der `card`-Prop sind bei synthetischen Vorhaben-Karten (`epicToCard`) bewusst gesetzte
+  // Ersatzwerte und dürfen nicht überschrieben werden.
+  useEffect(() => {
+    let aktiv = true
+    setBeschreibungStatus('laedt')
+    void cardsApi.get(card.id).then(
+      (voll) => {
+        if (!aktiv) return
+        const text = voll.description ?? ''
+        setBeschreibung(text)
+        // `body` ohne Editier-Guard: Bis hierhin ist der Bearbeiten-Button gesperrt und `editing`
+        // startet mit `false` — es gibt keinen Weg, während des Ladens in den Editiermodus zu
+        // kommen, dessen Eingabe hier überschrieben werden könnte.
+        setBody(text)
+        setBeschreibungStatus('geladen')
+        if (initialEditing) setEditing(true)
+      },
+      () => {
+        if (!aktiv) return
+        setBeschreibungStatus('fehler')
+      },
+    )
+    return () => {
+      aktiv = false
+    }
+  }, [card.id, cardsApi, initialEditing])
 
   // Der Baum eines Vorhabens (Issue #644). Das Laden liegt hier und nicht mehr in
   // `DerivationTree`: Der Dialog kennt die Karte ohnehin, und Lade-, Fehler- und Leerzustand
@@ -1097,7 +1154,10 @@ function CardDetailModalView({
 
   const startEditing = () => {
     setTitle(card.title)
-    setBody(card.description ?? '')
+    // Aus dem nachgeladenen Zustand, nicht aus der Prop — dieselbe Begründung wie bei `deps`
+    // unten: Sonst überschriebe ein zweites Bearbeiten die eigene Änderung mit dem zuerst
+    // geladenen Text.
+    setBody(beschreibung)
     setParentId(card.parentId)
     setShortcode(card.shortcode ?? '')
     setDueInput(card.dueDate ? card.dueDate.slice(0, 10) : '')
@@ -1139,6 +1199,7 @@ function CardDetailModalView({
         isEpic ? undefined : dueInputToIso(dueInput),
       )
       setDeps(parsedDeps)
+      setBeschreibung(body)
       setEditing(false)
       onChanged?.()
       notify('Karte gespeichert.', 'success')
@@ -1180,6 +1241,9 @@ function CardDetailModalView({
         isEpic ? undefined : card.parentId,
         isEpic ? undefined : card.dueDate,
       )
+      // Erst nach der Zusage des Servers: Sonst startete ein anschließendes Bearbeiten von einem
+      // Text aus, den die Karte gar nicht trägt.
+      setBeschreibung(next)
       onChanged?.()
     } catch {
       setBody(previous)
@@ -1334,7 +1398,14 @@ function CardDetailModalView({
           </Typography>
           <Box sx={{ flexGrow: 1 }} />
           {canEdit && !editing && (
-            <Button size="small" variant="outlined" onClick={startEditing}>
+            <Button
+              size="small"
+              variant="outlined"
+              // Bis die Beschreibung da ist (oder ihr Abruf gescheitert ist), führte Bearbeiten in
+              // ein leeres Feld, dessen Speichern den Volltext löschte.
+              disabled={beschreibungStatus !== 'geladen'}
+              onClick={startEditing}
+            >
               Bearbeiten
             </Button>
           )}
@@ -1393,6 +1464,7 @@ function CardDetailModalView({
             <CardBodyView
               derivedFrom={card.derivedFrom}
               body={body}
+              beschreibungStatus={beschreibungStatus}
               canEdit={canEdit}
               onToggleTask={onToggleTask}
               dependencies={deps}

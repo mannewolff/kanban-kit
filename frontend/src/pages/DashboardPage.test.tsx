@@ -93,6 +93,7 @@ const outlierCard: Card = {
   number: 42,
   title: 'Hängt fest',
   description: null,
+  excerpt: null,
   positionInColumn: 0,
   archived: false,
   ideaStored: false,

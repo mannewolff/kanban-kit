@@ -359,7 +359,7 @@ export function BoardListPage() {
         )
       }
       case 'excerpt':
-        return <Typography variant="caption" color="text.secondary" noWrap sx={{ display: 'block' }}>{stripMarkdown(card.description ?? '')}</Typography>
+        return <Typography variant="caption" color="text.secondary" noWrap sx={{ display: 'block' }}>{stripMarkdown(card.excerpt ?? '')}</Typography>
     }
   }
 

@@ -12,6 +12,7 @@ function karte(number: number, title: string, labels: number[] = []): Card {
     number,
     title,
     description: null,
+    excerpt: null,
     positionInColumn: 0,
     archived: false,
     ideaStored: false,

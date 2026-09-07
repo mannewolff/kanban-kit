@@ -544,6 +544,9 @@ class CardServiceTest {
     assertThat(result).singleElement().extracting(CardService.CardView::id).isEqualTo(1L);
   }
 
+  // Die Sammelzugriffe von listByBoard (Issue #768) stehen in CardServiceListByBoardTest —
+  // diese Klasse steht an ihren PMD-Grenzen (Groesse und Import-Zahl).
+
   @Test
   void listByBoard_throwsBoardNotFound_whenBoardUnknown() {
     // Given
@@ -3902,6 +3905,18 @@ class CardServiceTest {
     when(cards.findById(1L)).thenReturn(Optional.of(boardCard(1L, 20L, 7, 0, false, false)));
 
     assertThat(service.getCard(5L, 1L)).extracting(CardService.CardView::number).isEqualTo(7);
+  }
+
+  @Test
+  void getCard_liefertDieVolleBeschreibungOhneAuszug() {
+    // Issue #771: Der Auszug gehoert der Board-Liste; der Einzelabruf bleibt die Quelle des
+    // Volltexts. Waere hier beides gesetzt, gaebe es zwei Wahrheiten fuer denselben Text.
+    when(cards.findById(1L)).thenReturn(Optional.of(boardCard(1L, 20L, 7, 0, false, false)));
+
+    CardService.CardView sicht = service.getCard(5L, 1L);
+
+    assertThat(sicht.description()).isEqualTo("Body");
+    assertThat(sicht.excerpt()).isNull();
   }
 
   @Test

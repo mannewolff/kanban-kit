@@ -10,7 +10,7 @@ function card(
   ideaStored = false,
 ): Card {
   return {
-    id, boardId: 1, columnId, number: id, title: `#${id}`, description: null,
+    id, boardId: 1, columnId, number: id, title: `#${id}`, description: null, excerpt: null,
     positionInColumn: position, archived, ideaStored, movedToDoneAt: null, dependencies: [],
     type: 'CARD', parentId: null, shortcode: null, assignees: [], dueDate: null, labels: [],
     derivedFrom: null,

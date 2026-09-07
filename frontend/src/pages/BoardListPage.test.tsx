@@ -26,6 +26,8 @@ vi.mock('../api/boards', () => ({ boardsApi: { get: vi.fn() } }))
 vi.mock('../api/cards', () => ({
   cardsApi: {
     list: vi.fn(),
+    // Das CardDetailModal lädt die volle Beschreibung beim Öffnen nach (Issue #769).
+    get: vi.fn().mockResolvedValue({ description: null }),
     move: vi.fn(),
     restore: vi.fn(),
     moveToIdeaStorage: vi.fn(),
@@ -66,8 +68,11 @@ const base = {
   boardId: 1, positionInColumn: 0, ideaStored: false, movedToDoneAt: null as string | null,
   dependencies: [] as number[], type: 'CARD' as const, parentId: null as number | null, shortcode: null as string | null, assignees: [] as number[], dueDate: null as string | null, labels: [] as number[],
   derivedFrom: null as number | null,
+  // Die Listen-Antwort liefert die Beschreibung nur noch als Auszug (Issue #771); `description`
+  // ist dort immer `null`. Die Fixturen tragen den Vorschautext deshalb in `excerpt`.
+  excerpt: null as string | null,
 }
-const active: Card = { ...base, id: 100, columnId: 10, number: 1, title: 'Aufgabe', description: '# Titel\nText **fett**', archived: false }
+const active: Card = { ...base, id: 100, columnId: 10, number: 1, title: 'Aufgabe', description: '# Titel\nText **fett**', excerpt: '# Titel\nText **fett**', archived: false }
 const archived: Card = { ...base, id: 101, columnId: 20, number: 2, title: 'AlteKarte', description: 'x', archived: true }
 const idea: Card = { ...base, id: 102, columnId: 10, number: 3, title: 'MeineIdee', description: 'Idee-Text', archived: false, ideaStored: true }
 // `memberNumbers: [1]` fasst die Zugehörigkeit der Karte #1: Die Zuordnung rechnet über die

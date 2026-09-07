@@ -12,6 +12,7 @@ function card(number: number, over: Partial<Card> = {}): Card {
     number,
     title: `Karte ${number}`,
     description: null,
+    excerpt: null,
     positionInColumn: 0,
     archived: false,
     ideaStored: false,
@@ -171,26 +172,28 @@ describe('sortCards — Titel', () => {
 })
 
 describe('sortCards — Beschreibung', () => {
+  // Sortiert wird über den Auszug, nicht über `description`: In der Board-Liste ist die volle
+  // Beschreibung gar nicht mehr dabei (Issue #771).
   it('sortiert nach dem gestrippten Text, nicht nach den Markdown-Zeichen', () => {
-    const cards = [card(1, { description: '## Zebra' }), card(2, { description: 'Alpha' })]
+    const cards = [card(1, { excerpt: '## Zebra' }), card(2, { excerpt: 'Alpha' })]
     expect(nummern(sortCards(cards, { key: 'excerpt', dir: 'asc' }, ctxVon()))).toEqual([2, 1])
   })
 
   it('behandelt eine Beschreibung, die nur aus Markdown-Zeichen besteht, als leer', () => {
     // Belegt den gestrippten Text als Vergleichswert: roh ist „## " nicht leer, die Zelle zeigt
     // aber nichts — die Karte gehört ans Ende.
-    const cards = [card(1, { description: '## ' }), card(2, { description: 'Alpha' })]
+    const cards = [card(1, { excerpt: '## ' }), card(2, { excerpt: 'Alpha' })]
     expect(nummern(sortCards(cards, { key: 'excerpt', dir: 'asc' }, ctxVon()))).toEqual([2, 1])
   })
 
   it('stellt eine fehlende Beschreibung (null) in beiden Richtungen ans Ende', () => {
-    const cards = [card(1, { description: null }), card(2, { description: 'Zebra' }), card(3, { description: 'Alpha' })]
+    const cards = [card(1, { excerpt: null }), card(2, { excerpt: 'Zebra' }), card(3, { excerpt: 'Alpha' })]
     expect(nummern(sortCards(cards, { key: 'excerpt', dir: 'asc' }, ctxVon()))).toEqual([3, 2, 1])
     expect(nummern(sortCards(cards, { key: 'excerpt', dir: 'desc' }, ctxVon()))).toEqual([2, 3, 1])
   })
 
   it('stellt eine leere Beschreibung ("") in beiden Richtungen ans Ende', () => {
-    const cards = [card(1, { description: '' }), card(2, { description: 'Zebra' }), card(3, { description: 'Alpha' })]
+    const cards = [card(1, { excerpt: '' }), card(2, { excerpt: 'Zebra' }), card(3, { excerpt: 'Alpha' })]
     expect(nummern(sortCards(cards, { key: 'excerpt', dir: 'asc' }, ctxVon()))).toEqual([3, 2, 1])
     expect(nummern(sortCards(cards, { key: 'excerpt', dir: 'desc' }, ctxVon()))).toEqual([2, 3, 1])
   })

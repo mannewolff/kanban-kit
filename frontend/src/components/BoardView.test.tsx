@@ -53,7 +53,7 @@ const board: Board = {
 }
 
 const card: Card = {
-  id: 100, boardId: 1, columnId: 10, number: 1, title: 'Aufgabe', description: null,
+  id: 100, boardId: 1, columnId: 10, number: 1, title: 'Aufgabe', description: null, excerpt: null,
   positionInColumn: 0, archived: false, ideaStored: false, movedToDoneAt: null, dependencies: [],
   type: 'CARD', parentId: null, shortcode: null, assignees: [], dueDate: null, labels: [],
   derivedFrom: null,
@@ -62,7 +62,7 @@ const card: Card = {
 function mkApi(over: Record<string, unknown> = {}) {
   return {
     create: vi.fn(), move: vi.fn(), archive: vi.fn(), moveToIdeaStorage: vi.fn(),
-    restore: vi.fn(), remove: vi.fn(),
+    restore: vi.fn(), remove: vi.fn(), get: vi.fn().mockResolvedValue(card),
     bulkArchive: vi.fn(), bulkTransfer: vi.fn(), bulkDelete: vi.fn(), ...over,
   }
 }
@@ -300,20 +300,25 @@ describe('BoardView', () => {
     // Quellkarte gerade steht.
     const source: Card = { ...card, columnId: 20, title: 'Original', description: 'Original-Text', parentId: 9 }
     const created: Card = { ...card, id: 300, number: 3, columnId: 10, title: 'Original' }
-    const api = mkApi({ create: vi.fn().mockResolvedValue(created) })
+    // Die Listen-Antwort trägt die Beschreibung nicht mehr; der Volltext kommt aus dem Einzelabruf.
+    const api = mkApi({
+      create: vi.fn().mockResolvedValue(created),
+      get: vi.fn().mockResolvedValue({ ...source, description: 'Volltext aus get' }),
+    })
     render(<BoardView board={board} initialCards={[source]} canEdit api={api} />)
 
     fireEvent.click(screen.getByLabelText('Menü Original'))
     fireEvent.click(screen.getByRole('menuitem', { name: 'Duplizieren' }))
 
-    expect(screen.getByRole('heading', { name: 'Neue Karte in „Backlog“' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Neue Karte in „Backlog“' })).toBeInTheDocument()
+    expect(api.get).toHaveBeenCalledWith(100)
     expect(screen.getByLabelText('Titel')).toHaveValue('Original')
-    expect(screen.getByLabelText('Markdown-Beschreibung')).toHaveValue('Original-Text')
+    expect(screen.getByLabelText('Markdown-Beschreibung')).toHaveValue('Volltext aus get')
 
     fireEvent.click(screen.getByRole('button', { name: 'Anlegen' }))
 
     await waitFor(() =>
-      expect(api.create).toHaveBeenCalledWith(1, 10, 'Original', 'Original-Text', 9, false, {
+      expect(api.create).toHaveBeenCalledWith(1, 10, 'Original', 'Volltext aus get', 9, false, {
         dependencies: [],
         dueDate: null,
         assigneeIds: [],
@@ -324,14 +329,28 @@ describe('BoardView', () => {
     expect(within(screen.getByTestId('column-20')).getByTestId('card-100')).toBeInTheDocument()
   })
 
-  it('legt beim Abbrechen des Duplizieren-Dialogs keine neue Karte an', () => {
+  it('legt beim Abbrechen des Duplizieren-Dialogs keine neue Karte an', async () => {
     const api = mkApi()
     render(<BoardView board={board} initialCards={[card]} canEdit api={api} />)
 
     fireEvent.click(screen.getByLabelText('Menü Aufgabe'))
     fireEvent.click(screen.getByRole('menuitem', { name: 'Duplizieren' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Abbrechen' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Abbrechen' }))
 
+    expect(api.create).not.toHaveBeenCalled()
+  })
+
+  it('öffnet den Duplizieren-Dialog nicht, wenn die Karte nicht geladen werden kann', async () => {
+    const api = mkApi({ get: vi.fn().mockRejectedValue(new Error('fail')) })
+    render(<BoardView board={board} initialCards={[card]} canEdit api={api} />, {
+      wrapper: SnackbarProvider,
+    })
+
+    fireEvent.click(screen.getByLabelText('Menü Aufgabe'))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Duplizieren' }))
+
+    await screen.findByText('Karte konnte nicht geladen werden.')
+    expect(screen.queryByRole('heading', { name: /Neue Karte/ })).not.toBeInTheDocument()
     expect(api.create).not.toHaveBeenCalled()
   })
 
@@ -1262,8 +1281,9 @@ describe('BoardView', () => {
     rerender(<BoardView board={emptyBoard} initialCards={[card]} canEdit api={api} />)
 
     fireEvent.click(screen.getByRole('menuitem', { name: 'Duplizieren' }))
-    // Guard columns.length === 0 greift: kein Anlage-Dialog, kein create.
+    // Guard columns.length === 0 greift: kein Nachladen, kein Anlage-Dialog, kein create.
     expect(screen.queryByRole('heading', { name: /Neue Karte/ })).not.toBeInTheDocument()
+    expect(api.get).not.toHaveBeenCalled()
     expect(api.create).not.toHaveBeenCalled()
   })
 

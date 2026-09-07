@@ -28,6 +28,7 @@ class CardSearchControllerTest {
             42,
             "Karte",
             null,
+            null,
             0,
             false,
             false,

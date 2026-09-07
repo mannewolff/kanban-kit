@@ -21,6 +21,8 @@ vi.mock('../api/boards', () => ({ boardsApi: { get: vi.fn(), rename: vi.fn(), li
 vi.mock('../api/cards', () => ({
   cardsApi: {
     list: vi.fn(),
+    // Das CardDetailModal lädt die volle Beschreibung beim Öffnen nach (Issue #769).
+    get: vi.fn().mockResolvedValue({ description: null }),
     getActivity: vi.fn().mockResolvedValue([]),
     update: vi.fn(),
     setAssignees: vi.fn(),

@@ -20,6 +20,8 @@ vi.mock('../api/boards', () => ({ boardsApi: { list: vi.fn() } }))
 vi.mock('../api/cards', () => ({
   cardsApi: {
     list: vi.fn(),
+    // Das CardDetailModal lädt die volle Beschreibung beim Öffnen nach (Issue #769).
+    get: vi.fn().mockResolvedValue({ description: null }),
     move: vi.fn(),
     transfer: vi.fn(),
     update: vi.fn(),
@@ -49,6 +51,7 @@ vi.mock('../auth/AuthContext', () => ({
 const mBoards = boardsApi as unknown as { list: ReturnType<typeof vi.fn> }
 const mCards = cardsApi as unknown as {
   list: ReturnType<typeof vi.fn>
+  get: ReturnType<typeof vi.fn>
   move: ReturnType<typeof vi.fn>
   transfer: ReturnType<typeof vi.fn>
   update: ReturnType<typeof vi.fn>
@@ -73,6 +76,7 @@ const BOARDS = [
 const cardBase = {
   boardId: 10,
   description: null as string | null,
+  excerpt: null as string | null,
   archived: false,
   ideaStored: false,
   movedToDoneAt: null as string | null,
@@ -139,6 +143,11 @@ function setup({
 }: { boards?: Board[]; cardsByBoard?: Record<number, Card[]>; ideas?: Idea[] } = {}) {
   mBoards.list.mockResolvedValue(boards)
   mCards.list.mockImplementation((boardId: number) => Promise.resolve(cardsByBoard[boardId] ?? []))
+  // Das CardDetailModal lädt die volle Beschreibung beim Öffnen nach (Issue #769) — der
+  // Einzelabruf liefert dieselbe Idee, die auch in der Liste steht.
+  mCards.get.mockImplementation((cardId: number) =>
+    Promise.resolve(ideas.find((i) => i.id === cardId) ?? { description: null }),
+  )
   mCards.move.mockResolvedValue({})
   mCards.transfer.mockResolvedValue(card({ id: 1, columnId: 110, number: 7, title: 'Backlog A', positionInColumn: 0 }))
   mCards.update.mockResolvedValue(idea({ id: 20, title: 'x' }))
