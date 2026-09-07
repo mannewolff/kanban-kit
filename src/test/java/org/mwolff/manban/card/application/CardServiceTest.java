@@ -3908,6 +3908,18 @@ class CardServiceTest {
   }
 
   @Test
+  void getCard_liefertDieVolleBeschreibungOhneAuszug() {
+    // Issue #771: Der Auszug gehoert der Board-Liste; der Einzelabruf bleibt die Quelle des
+    // Volltexts. Waere hier beides gesetzt, gaebe es zwei Wahrheiten fuer denselben Text.
+    when(cards.findById(1L)).thenReturn(Optional.of(boardCard(1L, 20L, 7, 0, false, false)));
+
+    CardService.CardView sicht = service.getCard(5L, 1L);
+
+    assertThat(sicht.description()).isEqualTo("Body");
+    assertThat(sicht.excerpt()).isNull();
+  }
+
+  @Test
   void getCard_requiresMembershipInCardsProject() {
     when(cards.findById(1L)).thenReturn(Optional.of(boardCard(1L, 20L, 7, 0, false, false)));
 

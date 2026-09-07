@@ -151,4 +151,66 @@ class CardServiceListByBoardTest {
     assertThat(service.listByBoard(1L, BOARD)).isEmpty();
     verify(cards, never()).findByIds(any());
   }
+
+  // --- Auszug statt voller Beschreibung (Issue #771) --------------------
+
+  private static Card karteMit(long id, @Nullable String beschreibung) {
+    return karte(id, (int) id, CardType.CARD, null).withContent("Titel", beschreibung);
+  }
+
+  @Test
+  void kuerztEineLangeBeschreibungAufZweihundertZeichen() {
+    // Given: eine Beschreibung, die die Auszugsgrenze um genau ein Zeichen ueberschreitet.
+    String lang = "a".repeat(201);
+    when(cards.findByBoardId(BOARD)).thenReturn(List.of(karteMit(1L, lang)));
+
+    // When
+    CardService.CardView sicht = service.listByBoard(1L, BOARD).getFirst();
+
+    // Then: der Auszug traegt die Vorschau, die volle Beschreibung bleibt der Einzelabfrage.
+    assertThat(sicht.excerpt()).hasSize(200).isEqualTo(lang.substring(0, 200));
+    assertThat(sicht.description()).isNull();
+  }
+
+  @Test
+  void schneidetKeinEmojiInDerMitteDurch() {
+    // Given: 201 Emojis — jedes belegt zwei char, aber nur einen Codepoint. Wer auf char-Ebene
+    // schneidet, liefert am Ende ein halbes Surrogatpaar und damit ein kaputtes Zeichen.
+    String emojis = "🚀".repeat(201);
+    when(cards.findByBoardId(BOARD)).thenReturn(List.of(karteMit(1L, emojis)));
+
+    // When
+    String auszug = service.listByBoard(1L, BOARD).getFirst().excerpt();
+
+    // Then
+    assertThat(auszug).isNotNull();
+    assertThat(auszug.codePointCount(0, auszug.length())).isEqualTo(200);
+    assertThat(emojis).startsWith(auszug);
+  }
+
+  @Test
+  void laesstEineKurzeBeschreibungUnveraendert() {
+    // Given: eine kurze Beschreibung und eine, die die Grenze genau ausschoepft.
+    String genauGrenze = "b".repeat(200);
+    when(cards.findByBoardId(BOARD))
+        .thenReturn(List.of(karteMit(1L, "Kurz und knapp"), karteMit(2L, genauGrenze)));
+
+    // When
+    List<CardService.CardView> sichten = service.listByBoard(1L, BOARD);
+
+    // Then
+    assertThat(sichten)
+        .extracting(CardService.CardView::excerpt)
+        .containsExactly("Kurz und knapp", genauGrenze);
+    assertThat(sichten).extracting(CardService.CardView::description).containsOnlyNulls();
+  }
+
+  @Test
+  void ohneBeschreibungBleibtDerAuszugLeer() {
+    // Given
+    when(cards.findByBoardId(BOARD)).thenReturn(List.of(karteMit(1L, null)));
+
+    // When / Then
+    assertThat(service.listByBoard(1L, BOARD).getFirst().excerpt()).isNull();
+  }
 }

@@ -53,7 +53,7 @@ const board: Board = {
 }
 
 const card: Card = {
-  id: 100, boardId: 1, columnId: 10, number: 1, title: 'Aufgabe', description: null,
+  id: 100, boardId: 1, columnId: 10, number: 1, title: 'Aufgabe', description: null, excerpt: null,
   positionInColumn: 0, archived: false, ideaStored: false, movedToDoneAt: null, dependencies: [],
   type: 'CARD', parentId: null, shortcode: null, assignees: [], dueDate: null, labels: [],
   derivedFrom: null,

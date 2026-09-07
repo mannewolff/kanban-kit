@@ -74,6 +74,7 @@ class KanbanCompatServiceTest {
         7,
         "Titel",
         "Body",
+        null,
         0,
         false,
         true,

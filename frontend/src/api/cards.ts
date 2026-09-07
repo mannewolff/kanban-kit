@@ -8,7 +8,15 @@ export interface Card {
   columnId: number
   number: number
   title: string
+  /**
+   * Volle Markdown-Beschreibung. Aus `GET /boards/{id}/cards` immer `null`; den Volltext liefert
+   * nur der Einzelabruf (`GET /cards/{id}`).
+   */
   description: string | null
+  /**
+   * Erste 200 Zeichen der rohen Beschreibung, nur in der Board-Liste gesetzt, sonst `null`.
+   */
+  excerpt: string | null
   positionInColumn: number
   archived: boolean
   ideaStored: boolean

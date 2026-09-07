@@ -76,6 +76,7 @@ const BOARDS = [
 const cardBase = {
   boardId: 10,
   description: null as string | null,
+  excerpt: null as string | null,
   archived: false,
   ideaStored: false,
   movedToDoneAt: null as string | null,

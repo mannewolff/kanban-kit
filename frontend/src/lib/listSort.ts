@@ -75,7 +75,7 @@ const SCHLUESSEL: Record<ColumnKey, (card: Card, ctx: SortContext) => Schluessel
   excerpt: (card) => {
     // Sortiert wird über den angezeigten, gestrippten Text — über den rohen Markdown zu sortieren
     // trüge führende `#`/`*` in die Reihenfolge.
-    const text = stripMarkdown(card.description ?? '')
+    const text = stripMarkdown(card.excerpt ?? '')
     return { ende: text === '', zahl: 0, text }
   },
 }

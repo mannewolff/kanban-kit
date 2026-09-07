@@ -59,6 +59,12 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class CardService {
 
+  /**
+   * Länge des Listen-Auszugs in Codepoints (Issue #771). Reicht für die einzeilige, ohnehin
+   * abgeschnittene Vorschau der Listenansicht — mehr Text käme nie auf den Bildschirm.
+   */
+  private static final int AUSZUG_CODEPOINTS = 200;
+
   private final CardRepository cards;
   private final CardDependencyRepository dependencies;
   private final BoardService boardService;
@@ -358,6 +364,10 @@ public class CardService {
    * <p>Gefiltert wird wie bisher <b>nur</b> nach {@link CardType#CARD}: Archivierte und im
    * Ideen-Speicher liegende Karten bleiben enthalten, die Reihenfolge ist die von {@link
    * CardRepository#findByBoardId}.
+   *
+   * <p>Die Beschreibung kommt hier <b>nicht</b> mit (Issue #771): {@code description} ist immer
+   * {@code null}, gesetzt ist stattdessen {@code excerpt} — die ersten {@value #AUSZUG_CODEPOINTS}
+   * Codepoints. Den Volltext holt der Einzelabruf.
    */
   @Transactional(readOnly = true)
   public List<CardView> listByBoard(long userId, long boardId) {
@@ -380,7 +390,11 @@ public class CardService {
                     c.columnId(),
                     c.number(),
                     c.title(),
-                    c.description(),
+                    // Die Board-Liste zeigt die Beschreibung nirgends ganz: Kacheln gar nicht, die
+                    // Listenansicht nur einzeilig abgeschnitten. Der Volltext kommt über den
+                    // Einzelabruf (Issue #771).
+                    null,
+                    auszug(c.description()),
                     c.positionInColumn(),
                     c.archived(),
                     c.ideaStored(),
@@ -395,6 +409,26 @@ public class CardService {
                     c.targetBoardId(),
                     c.derivedFromCardId() == null ? null : nummern.get(c.derivedFromCardId())))
         .toList();
+  }
+
+  /**
+   * Vorschautext einer Karte: die ersten {@value #AUSZUG_CODEPOINTS} Codepoints der <b>rohen</b>,
+   * ungestrippten Beschreibung. Roh, weil das Strippen der Markdown-Syntax im Frontend sitzt und
+   * dort auch für die Sortierung gebraucht wird.
+   *
+   * <p>Geschnitten wird über {@link String#offsetByCodePoints(int, int)} und nicht über den
+   * char-Index: Ein Emoji belegt zwei {@code char}, und ein Schnitt mitten hinein hinterließe ein
+   * halbes Surrogatpaar — im Browser ein Ersatzzeichen.
+   *
+   * @return {@code null}, wenn keine Beschreibung gesetzt ist
+   */
+  private static @Nullable String auszug(@Nullable String beschreibung) {
+    if (beschreibung == null) {
+      return null;
+    }
+    int codepoints =
+        Math.min(beschreibung.codePointCount(0, beschreibung.length()), AUSZUG_CODEPOINTS);
+    return beschreibung.substring(0, beschreibung.offsetByCodePoints(0, codepoints));
   }
 
   /**
@@ -1873,6 +1907,8 @@ public class CardService {
         c.number(),
         c.title(),
         c.description(),
+        // Einzelkarte: der Volltext steht schon in description, ein Auszug daneben wäre redundant.
+        null,
         c.positionInColumn(),
         c.archived(),
         c.ideaStored(),
@@ -1888,7 +1924,19 @@ public class CardService {
         herkunftsnummer(c));
   }
 
-  /** Kartendarstellung inkl. Abhängigkeits-Nummern, Typ und Vorhaben-Zuordnung. */
+  /**
+   * Kartendarstellung inkl. Abhängigkeits-Nummern, Typ und Vorhaben-Zuordnung.
+   *
+   * <p>{@code description} und {@code excerpt} schließen einander aus (Issue #771): Die
+   * Einzelkarten-Pfade liefern den Volltext in {@code description} und lassen {@code excerpt} leer,
+   * die Board-Liste genau umgekehrt. Zwei Felder mit demselben Text nebeneinander wären zwei
+   * Wahrheiten über dieselbe Beschreibung.
+   *
+   * @param description volle Markdown-Beschreibung; {@code null} in der Antwort von {@link
+   *     #listByBoard(long, long)}
+   * @param excerpt erste 200 Codepoints der rohen Beschreibung, nur in der Board-Liste gesetzt;
+   *     sonst {@code null}
+   */
   public record CardView(
       Long id,
       @Nullable Long boardId,
@@ -1896,6 +1944,7 @@ public class CardService {
       @Nullable Integer number,
       String title,
       @Nullable String description,
+      @Nullable String excerpt,
       int positionInColumn,
       boolean archived,
       boolean ideaStored,

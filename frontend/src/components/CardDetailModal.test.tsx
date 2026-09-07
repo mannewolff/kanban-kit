@@ -19,7 +19,7 @@ vi.mock('../auth/AuthContext', () => ({
 
 const card: Card = {
   id: 100, boardId: 1, columnId: 10, number: 5, title: 'Aufgabe', description: '# Titel\n\n- a\n- b',
-  positionInColumn: 0, archived: false, ideaStored: false, movedToDoneAt: null, dependencies: [3, 4],
+  excerpt: null, positionInColumn: 0, archived: false, ideaStored: false, movedToDoneAt: null, dependencies: [3, 4],
   type: 'CARD', parentId: null, shortcode: null, assignees: [], dueDate: null, labels: [], derivedFrom: null,
 }
 

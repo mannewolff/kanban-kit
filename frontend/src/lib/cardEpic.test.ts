@@ -11,6 +11,7 @@ function card(number: number, parentId: number | null = null): Card {
     number,
     title: `Karte ${number}`,
     description: null,
+    excerpt: null,
     positionInColumn: 0,
     archived: false,
     ideaStored: false,
