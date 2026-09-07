@@ -53,6 +53,8 @@ function makeApis() {
     fetchBlob: vi.fn(),
   } satisfies AttachmentsApi
   const cardsApi = {
+    // Das Modal lädt die volle Beschreibung beim Öffnen nach (Issue #769).
+    get: vi.fn().mockResolvedValue({ ...card }),
     update: vi.fn().mockResolvedValue({ ...card }),
     setAssignees: vi.fn().mockResolvedValue({ ...card }),
     setLabels: vi.fn().mockResolvedValue({ ...card }),
@@ -66,6 +68,16 @@ function makeApis() {
   }
   const boardsApi = { get: vi.fn().mockResolvedValue(linkedBoard) }
   return { commentsApi, attachmentsApi, cardsApi, boardsApi }
+}
+
+/**
+ * Klickt „Bearbeiten", sobald die beim Öffnen nachgeladene Beschreibung da ist (Issue #769). Bis
+ * dahin ist der Knopf gesperrt — ein synchroner Klick verpuffte, ohne den Editiermodus zu öffnen.
+ */
+async function klickeBearbeiten() {
+  const knopf = await screen.findByRole('button', { name: 'Bearbeiten' })
+  await waitFor(() => expect(knopf).toBeEnabled())
+  fireEvent.click(knopf)
 }
 
 describe('parseDependencyInput', () => {
@@ -107,7 +119,8 @@ describe('CardDetailModal', () => {
     const apis = makeApis()
     render(<CardDetailModal card={card} canEdit columnName="In Progress" onClose={vi.fn()} {...apis} />)
 
-    expect(screen.getByRole('heading', { name: 'Titel' })).toBeInTheDocument()
+    // Die Beschreibung steht erst nach dem Einzelabruf (Issue #769).
+    expect(await screen.findByRole('heading', { name: 'Titel' })).toBeInTheDocument()
     expect(screen.getByLabelText('Abhängigkeiten')).toHaveTextContent('Abhängig von: #3, #4')
     expect(await screen.findByText('Hallo')).toBeInTheDocument()
   })
@@ -168,7 +181,7 @@ describe('CardDetailModal', () => {
     const onChanged = vi.fn()
     render(<CardDetailModal card={card} canEdit onChanged={onChanged} onClose={vi.fn()} {...apis} />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Bearbeiten' }))
+    await klickeBearbeiten()
     fireEvent.change(screen.getByLabelText('Markdown-Beschreibung'), { target: { value: 'Neuer Text' } })
     fireEvent.click(screen.getByRole('button', { name: 'Speichern' }))
 
@@ -185,7 +198,7 @@ describe('CardDetailModal', () => {
       wrapper: SnackbarProvider,
     })
 
-    fireEvent.click(screen.getByRole('button', { name: 'Bearbeiten' }))
+    await klickeBearbeiten()
     fireEvent.change(screen.getByLabelText('Markdown-Beschreibung'), { target: { value: 'X' } })
     fireEvent.click(screen.getByRole('button', { name: 'Speichern' }))
 
@@ -239,8 +252,16 @@ describe('CardDetailModal', () => {
 
   const taskCard: Card = { ...card, description: '[ ] eins\n[ ] zwei' }
 
+  /**
+   * Der Einzelabruf liefert die Beschreibung dieser Karte (Issue #769) — der Default aus
+   * `makeApis()` kennt nur die Fixture `card`.
+   */
+  const liefert = (apis: ReturnType<typeof makeApis>, c: Card) =>
+    apis.cardsApi.get.mockResolvedValue({ ...c })
+
   it('rendert auch nackte [ ] als Checkbox', async () => {
     const apis = makeApis()
+    liefert(apis, taskCard)
     render(<CardDetailModal card={taskCard} canEdit onClose={vi.fn()} {...apis} />)
 
     expect(await screen.findByLabelText('Aufgabe 1')).toBeInTheDocument()
@@ -250,9 +271,10 @@ describe('CardDetailModal', () => {
   it('persistiert den Klick auf die n-te Checkbox mit geflipptem Marker', async () => {
     const apis = makeApis()
     const onChanged = vi.fn()
+    liefert(apis, taskCard)
     render(<CardDetailModal card={taskCard} canEdit onChanged={onChanged} onClose={vi.fn()} {...apis} />)
 
-    fireEvent.click(screen.getByLabelText('Aufgabe 2'))
+    fireEvent.click(await screen.findByLabelText('Aufgabe 2'))
 
     await waitFor(() =>
       expect(apis.cardsApi.update).toHaveBeenCalledWith(
@@ -264,6 +286,7 @@ describe('CardDetailModal', () => {
 
   it('lässt Checkboxen ohne Bearbeiten-Recht deaktiviert', async () => {
     const apis = makeApis()
+    liefert(apis, taskCard)
     render(<CardDetailModal card={taskCard} canEdit={false} onClose={vi.fn()} {...apis} />)
 
     const box = await screen.findByLabelText('Aufgabe 1')
@@ -353,7 +376,7 @@ describe('CardDetailModal', () => {
     const apis = makeApis()
     render(<CardDetailModal card={card} canEdit onClose={vi.fn()} {...apis} />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Bearbeiten' }))
+    await klickeBearbeiten()
     fireEvent.change(screen.getByLabelText('Fällig am'), { target: { value: '2026-08-01' } })
     fireEvent.click(screen.getByRole('button', { name: 'Speichern' }))
 
@@ -927,7 +950,7 @@ describe('CardDetailModal', () => {
     const apis = makeApis()
     render(<CardDetailModal card={epicCard} canEdit onClose={vi.fn()} {...apis} />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Bearbeiten' }))
+    await klickeBearbeiten()
 
     expect(screen.getByLabelText('Kürzel')).toHaveValue('AUT')
     expect(screen.queryByLabelText('Vorhaben')).not.toBeInTheDocument()
@@ -939,7 +962,7 @@ describe('CardDetailModal', () => {
     const epics = [{ id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 0, total: 1, memberNumbers: [], rootNumbers: [], requirementCardNumber: null }]
     render(<CardDetailModal card={card} canEdit epics={epics} onClose={vi.fn()} {...apis} />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Bearbeiten' }))
+    await klickeBearbeiten()
     fireEvent.change(screen.getByLabelText('Vorhaben'), { target: { value: '9' } })
 
     fireEvent.click(screen.getByRole('button', { name: 'Speichern' }))
@@ -953,7 +976,7 @@ describe('CardDetailModal', () => {
     const epics = [{ id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 0, total: 1, memberNumbers: [], rootNumbers: [], requirementCardNumber: null }]
     render(<CardDetailModal card={{ ...card, parentId: 9 }} canEdit epics={epics} onClose={vi.fn()} {...apis} />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Bearbeiten' }))
+    await klickeBearbeiten()
     // Auswahl auf „—" (leerer Wert) → onParentIdChange(null), deckt den `=== '' ? null`-Zweig ab.
     fireEvent.change(screen.getByLabelText('Vorhaben'), { target: { value: '' } })
 
@@ -976,7 +999,7 @@ describe('CardDetailModal', () => {
       />,
     )
 
-    fireEvent.click(screen.getByRole('button', { name: 'Bearbeiten' }))
+    await klickeBearbeiten()
 
     // Lesend statt Auswahl: Ein leerer Optionsvorrat böte nur „(kein Epic)" an — ein Klick darauf
     // löschte die Zuordnung, ohne sie je gezeigt zu haben (#586).
@@ -1006,7 +1029,7 @@ describe('CardDetailModal', () => {
       />,
     )
 
-    fireEvent.click(screen.getByRole('button', { name: 'Bearbeiten' }))
+    await klickeBearbeiten()
 
     const field = screen.getByLabelText('Vorhaben')
     expect(field).toHaveAttribute('readonly')
@@ -1023,14 +1046,14 @@ describe('CardDetailModal', () => {
     )
   })
 
-  it('zeigt die nackte Nummer, wenn auch die Vorhaben-Liste das Vorhaben nicht kennt', () => {
+  it('zeigt die nackte Nummer, wenn auch die Vorhaben-Liste das Vorhaben nicht kennt', async () => {
     const apis = makeApis()
     // Wie `IdeaPlanningBoard`: `epics=[]` ohne `canEditEpic` (Plan #717, A6). Ohne Eintrag in
     // `epics` gibt es keinen Titel zu zeigen — die Nummer belegt trotzdem, dass eine Zuordnung
     // besteht.
     render(<CardDetailModal card={{ ...card, parentId: 9 }} canEdit epics={[]} onClose={vi.fn()} {...apis} />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Bearbeiten' }))
+    await klickeBearbeiten()
 
     const field = screen.getByLabelText('Vorhaben')
     expect(field).toHaveAttribute('readonly')
@@ -1060,18 +1083,82 @@ describe('CardDetailModal', () => {
     const apis = makeApis()
     render(<CardDetailModal card={card} canEdit onClose={vi.fn()} {...apis} />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Bearbeiten' }))
+    await klickeBearbeiten()
     fireEvent.change(screen.getByLabelText('Titel'), { target: { value: '   ' } })
 
     // Der Button ist die Gatung (kein redundanter Guard in save()): leerer Titel → disabled.
     expect(screen.getByRole('button', { name: 'Speichern' })).toBeDisabled()
   })
 
-  it('zeigt „Keine Beschreibung.“ bei leerem Beschreibungstext', () => {
+  it('zeigt „Keine Beschreibung.“ bei leerem Beschreibungstext', async () => {
     const apis = makeApis()
+    liefert(apis, { ...card, description: null })
     render(<CardDetailModal card={{ ...card, description: null }} canEdit={false} onClose={vi.fn()} {...apis} />)
 
-    expect(screen.getByText('Keine Beschreibung.')).toBeInTheDocument()
+    expect(await screen.findByText('Keine Beschreibung.')).toBeInTheDocument()
+  })
+
+  it('lädt die volle Beschreibung beim Öffnen nach (#769)', async () => {
+    const apis = makeApis()
+    // Die Listen-Antwort trägt den Volltext nicht mehr (#771) — die Prop kommt hier ohne ihn.
+    apis.cardsApi.get.mockResolvedValue({ ...card, description: 'Voller Text aus dem Einzelabruf' })
+    render(<CardDetailModal card={{ ...card, description: null }} canEdit onClose={vi.fn()} {...apis} />)
+
+    expect(await screen.findByText('Voller Text aus dem Einzelabruf')).toBeInTheDocument()
+    expect(apis.cardsApi.get).toHaveBeenCalledWith(100)
+    expect(screen.queryByText('Keine Beschreibung.')).toBeNull()
+  })
+
+  it('sperrt Bearbeiten und zeigt einen Lade-Hinweis, solange die Beschreibung fehlt (#769)', async () => {
+    const apis = makeApis()
+    apis.cardsApi.get.mockReturnValue(new Promise(() => {}))
+    render(<CardDetailModal card={{ ...card, description: null }} canEdit onClose={vi.fn()} {...apis} />)
+
+    expect(await screen.findByRole('button', { name: 'Bearbeiten' })).toBeDisabled()
+    expect(screen.getByRole('status')).toHaveTextContent('Beschreibung wird geladen…')
+    // Kein vorschnelles „Keine Beschreibung." — der Text ist noch unbekannt, nicht leer.
+    expect(screen.queryByText('Keine Beschreibung.')).toBeNull()
+  })
+
+  it('meldet einen fehlgeschlagenen Nachladeversuch und lässt Bearbeiten gesperrt (#769)', async () => {
+    const apis = makeApis()
+    apis.cardsApi.get.mockRejectedValue(new Error('fail'))
+    render(<CardDetailModal card={card} canEdit onClose={vi.fn()} {...apis} />)
+
+    expect(await screen.findByText('Beschreibung konnte nicht geladen werden.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Bearbeiten' })).toBeDisabled()
+    expect(apis.cardsApi.update).not.toHaveBeenCalled()
+  })
+
+  it('verwirft einen fehlgeschlagenen Nachladeversuch, der erst nach dem Schließen eintrifft (#769)', async () => {
+    const apis = makeApis()
+    let ablehnen: (grund: unknown) => void = () => {}
+    apis.cardsApi.get.mockReturnValue(
+      new Promise((_, r) => {
+        ablehnen = r
+      }),
+    )
+    const { unmount } = render(<CardDetailModal card={card} canEdit onClose={vi.fn()} {...apis} />)
+    unmount()
+
+    ablehnen(new Error('fail'))
+    await Promise.resolve()
+
+    expect(screen.queryByText('Beschreibung konnte nicht geladen werden.')).toBeNull()
+  })
+
+  it('startet ein zweites Bearbeiten mit dem gespeicherten Text, nicht mit dem geladenen (#769)', async () => {
+    const apis = makeApis()
+    apis.cardsApi.get.mockResolvedValue({ ...card, description: 'Zuerst geladen' })
+    render(<CardDetailModal card={card} canEdit onClose={vi.fn()} {...apis} />)
+
+    await klickeBearbeiten()
+    fireEvent.change(screen.getByLabelText('Markdown-Beschreibung'), { target: { value: 'Gespeicherter Text' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Speichern' }))
+    await waitFor(() => expect(apis.cardsApi.update).toHaveBeenCalled())
+
+    await klickeBearbeiten()
+    expect(screen.getByLabelText('Markdown-Beschreibung')).toHaveValue('Gespeicherter Text')
   })
 
   it('zeigt einen nicht-vorschaubaren Anhang als Download-Link', async () => {
@@ -1183,7 +1270,7 @@ describe('CardDetailModal', () => {
     const apis = makeApis()
     render(<CardDetailModal card={card} canEdit onClose={vi.fn()} {...apis} />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Bearbeiten' }))
+    await klickeBearbeiten()
     fireEvent.change(screen.getByLabelText('Abhängig von'), { target: { value: '12' } })
     fireEvent.click(screen.getByRole('button', { name: 'Speichern' }))
 
@@ -1191,7 +1278,7 @@ describe('CardDetailModal', () => {
     expect(await screen.findByLabelText('Abhängigkeiten')).toHaveTextContent('Abhängig von: #12')
 
     // Und erneutes Bearbeiten startet mit dem gespeicherten Stand im Eingabefeld.
-    fireEvent.click(screen.getByRole('button', { name: 'Bearbeiten' }))
+    await klickeBearbeiten()
     expect(screen.getByLabelText('Abhängig von')).toHaveValue('12')
   })
 
@@ -1199,9 +1286,10 @@ describe('CardDetailModal', () => {
     // Ein Checkbox-Klick nach dem Abhängigkeits-Save darf den frischen Stand nicht mit der
     // veralteten Prop überschreiben.
     const apis = makeApis()
+    liefert(apis, taskCard)
     render(<CardDetailModal card={taskCard} canEdit onClose={vi.fn()} {...apis} />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Bearbeiten' }))
+    await klickeBearbeiten()
     fireEvent.change(screen.getByLabelText('Abhängig von'), { target: { value: '12' } })
     fireEvent.click(screen.getByRole('button', { name: 'Speichern' }))
     await waitFor(() => expect(apis.cardsApi.update).toHaveBeenCalledTimes(1))
@@ -1224,7 +1312,7 @@ describe('CardDetailModal', () => {
     const apis = makeApis()
     render(<CardDetailModal card={card} canEdit onClose={vi.fn()} {...apis} />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Bearbeiten' }))
+    await klickeBearbeiten()
     fireEvent.change(screen.getByLabelText('Abhängig von'), { target: { value: '12, x' } })
     fireEvent.click(screen.getByRole('button', { name: 'Speichern' }))
 
@@ -1242,6 +1330,7 @@ describe('CardDetailModal', () => {
   it('rollt die Checkbox zurück, wenn das Persistieren fehlschlägt', async () => {
     const apis = makeApis()
     apis.cardsApi.update = vi.fn().mockRejectedValue(new Error('boom'))
+    liefert(apis, taskCard)
     render(<CardDetailModal card={taskCard} canEdit onClose={vi.fn()} {...apis} />)
 
     fireEvent.click(await screen.findByLabelText('Aufgabe 2'))
@@ -1289,9 +1378,10 @@ describe('CardDetailModal', () => {
   it('übernimmt vorhandene Beschreibung und Fälligkeitsdatum beim Öffnen des Edit-Modus', async () => {
     const apis = makeApis()
     const filled: Card = { ...card, description: 'Vorhandener Text', dueDate: '2026-08-01T00:00:00Z' }
+    liefert(apis, filled)
     render(<CardDetailModal card={filled} canEdit onClose={vi.fn()} {...apis} />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Bearbeiten' }))
+    await klickeBearbeiten()
 
     expect(screen.getByLabelText('Markdown-Beschreibung')).toHaveValue('Vorhandener Text')
     expect(screen.getByLabelText('Fällig am')).toHaveValue('2026-08-01')
@@ -1303,7 +1393,7 @@ describe('CardDetailModal', () => {
     const linked: Card = { ...card, parentId: 9 }
     render(<CardDetailModal card={linked} canEdit epics={epics} onClose={vi.fn()} {...apis} />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Bearbeiten' }))
+    await klickeBearbeiten()
 
     expect(screen.getByLabelText('Vorhaben')).toHaveValue('9')
   })
@@ -1312,7 +1402,7 @@ describe('CardDetailModal', () => {
     const apis = makeApis()
     render(<CardDetailModal card={epicCard} canEdit onClose={vi.fn()} {...apis} />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Bearbeiten' }))
+    await klickeBearbeiten()
     fireEvent.change(screen.getByLabelText('Titel'), { target: { value: 'Neuer Titel' } })
     fireEvent.change(screen.getByLabelText('Kürzel'), { target: { value: 'NEU' } })
     fireEvent.click(screen.getByRole('button', { name: 'Speichern' }))
@@ -1327,6 +1417,7 @@ describe('CardDetailModal', () => {
   it('persistiert einen Checkbox-Klick auf einer Epic-Karte mit Epic-typischen Update-Feldern', async () => {
     const apis = makeApis()
     const epicTaskCard: Card = { ...epicCard, description: '[ ] eins\n[ ] zwei' }
+    liefert(apis, epicTaskCard)
     render(<CardDetailModal card={epicTaskCard} canEdit onClose={vi.fn()} {...apis} />)
 
     fireEvent.click(await screen.findByLabelText('Aufgabe 2'))
@@ -1375,7 +1466,7 @@ describe('CardDetailModal', () => {
     const apis = makeApis()
     render(<CardDetailModal card={card} canEdit onClose={vi.fn()} {...apis} />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Bearbeiten' }))
+    await klickeBearbeiten()
     fireEvent.change(screen.getByLabelText('Titel'), { target: { value: 'Verworfen' } })
     fireEvent.click(screen.getByRole('button', { name: 'Abbrechen' }))
 
@@ -1428,9 +1519,10 @@ describe('CardDetailModal', () => {
 
   it('übernimmt eine leere Beschreibung beim Öffnen des Edit-Modus', async () => {
     const apis = makeApis()
+    liefert(apis, { ...card, description: null })
     render(<CardDetailModal card={{ ...card, description: null }} canEdit onClose={vi.fn()} {...apis} />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Bearbeiten' }))
+    await klickeBearbeiten()
     expect(screen.getByLabelText('Markdown-Beschreibung')).toHaveValue('')
   })
 
@@ -1438,7 +1530,7 @@ describe('CardDetailModal', () => {
     const apis = makeApis()
     render(<CardDetailModal card={epicCard} canEdit onClose={vi.fn()} {...apis} />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Bearbeiten' }))
+    await klickeBearbeiten()
     fireEvent.change(screen.getByLabelText('Kürzel'), { target: { value: '   ' } })
     fireEvent.click(screen.getByRole('button', { name: 'Speichern' }))
 
@@ -1452,6 +1544,7 @@ describe('CardDetailModal', () => {
   it('persistiert einen Checkbox-Klick auf einer Epic-Karte ohne Kürzel als null', async () => {
     const apis = makeApis()
     const epicTaskCardNoShortcode: Card = { ...epicCard, shortcode: null, description: '[ ] eins\n[ ] zwei' }
+    liefert(apis, epicTaskCardNoShortcode)
     render(<CardDetailModal card={epicTaskCardNoShortcode} canEdit onClose={vi.fn()} {...apis} />)
 
     fireEvent.click(await screen.findByLabelText('Aufgabe 2'))
@@ -1489,7 +1582,7 @@ describe('CardDetailModal', () => {
     const apis = makeApis()
     render(<CardDetailModal card={card} canEdit onClose={onClose} {...apis} />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Bearbeiten' }))
+    await klickeBearbeiten()
     fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape', code: 'Escape' })
 
     expect(await screen.findByRole('heading', { name: 'Titel' })).toBeInTheDocument()
@@ -1810,7 +1903,7 @@ describe('CardDetailModal — Herkunft (#608)', () => {
     const apis = makeApis()
     render(<CardDetailModal card={mitHerkunft} canEdit columnName="In Progress" onClose={vi.fn()} {...apis} />)
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Bearbeiten' }))
+    await klickeBearbeiten()
     expect(screen.getByRole('textbox', { name: 'Herkunft' })).toHaveValue('42')
   })
 
@@ -1818,7 +1911,7 @@ describe('CardDetailModal — Herkunft (#608)', () => {
     const apis = makeApis()
     render(<CardDetailModal card={card} canEdit columnName="In Progress" onClose={vi.fn()} {...apis} />)
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Bearbeiten' }))
+    await klickeBearbeiten()
     await userEvent.type(screen.getByRole('textbox', { name: 'Herkunft' }), '42')
     await userEvent.click(screen.getByRole('button', { name: 'Speichern' }))
 
@@ -1829,7 +1922,7 @@ describe('CardDetailModal — Herkunft (#608)', () => {
     const apis = makeApis()
     render(<CardDetailModal card={mitHerkunft} canEdit columnName="In Progress" onClose={vi.fn()} {...apis} />)
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Bearbeiten' }))
+    await klickeBearbeiten()
     await userEvent.clear(screen.getByRole('textbox', { name: 'Herkunft' }))
     await userEvent.click(screen.getByRole('button', { name: 'Speichern' }))
 
@@ -1843,6 +1936,7 @@ describe('CardDetailModal — Herkunft (#608)', () => {
    */
   it('laesst die Herkunft beim Checkbox-Klick unberuehrt', async () => {
     const apis = makeApis()
+    apis.cardsApi.get.mockResolvedValue({ ...mitAufgabe })
     render(<CardDetailModal card={mitAufgabe} canEdit columnName="In Progress" onClose={vi.fn()} {...apis} />)
 
     await userEvent.click((await screen.findAllByRole('checkbox'))[0])
@@ -1858,7 +1952,7 @@ describe('CardDetailModal — Herkunft (#608)', () => {
     const apis = makeApis()
     render(<CardDetailModal card={card} canEdit columnName="In Progress" onClose={vi.fn()} {...apis} />)
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Bearbeiten' }))
+    await klickeBearbeiten()
     await userEvent.type(screen.getByRole('textbox', { name: 'Herkunft' }), 'abc')
     await userEvent.click(screen.getByRole('button', { name: 'Speichern' }))
 
@@ -1874,7 +1968,7 @@ describe('CardDetailModal — Herkunft (#608)', () => {
     )
     render(<CardDetailModal card={card} canEdit columnName="In Progress" onClose={vi.fn()} {...apis} />)
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Bearbeiten' }))
+    await klickeBearbeiten()
     await userEvent.type(screen.getByRole('textbox', { name: 'Herkunft' }), '99999')
     await userEvent.click(screen.getByRole('button', { name: 'Speichern' }))
 
