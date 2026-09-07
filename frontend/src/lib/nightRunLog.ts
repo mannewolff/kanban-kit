@@ -113,14 +113,14 @@ export interface NightRunLog {
 const PRAEFIX = /^\[(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z)\] (.*)$/
 
 /** Der zweite Schreiber: `fail()` schreibt ohne Praefix und beendet den Lauf. */
-const FAIL = /^Fehler: /
+const FAIL = 'Fehler: '
 
 /** Ein Lauf beginnt hier — **unmittelbar** nach dem Praefix, nie als Teilzeichenkette. */
 const START = /^Nacht-Runner startet \(Modus (\w+)/
 
 /** Abschluss eines Laufs; `Dry-Run beendet` markiert ihn zugleich als Probelauf. */
 const ABSCHLUSS = /^(Nacht-Runner beendet|Nacht-Review beendet|Dry-Run beendet)/
-const DRY_RUN = /^Dry-Run beendet/
+const DRY_RUN = 'Dry-Run beendet'
 const STUFE = /beendet \(Stufe ([^)]+)\)/
 
 /**
@@ -477,7 +477,7 @@ export function parseNightRunLog(text: string): NightRunLog {
 
     if (!m) {
       // Der zweite Schreiber: `fail()` haengt kein Praefix an und beendet den Lauf.
-      if (a && FAIL.test(zeile)) {
+      if (a && zeile.startsWith(FAIL)) {
         // Bei einem harten Abbruch ist genau diese Zeile die, die man im Rohprotokoll
         // sehen will — sie gehoert noch zum Paket und schliesst es danach.
         a.aktuellesPaket?.rawLines.push(zeile)
@@ -508,7 +508,7 @@ export function parseNightRunLog(text: string): NightRunLog {
     // gehoeren selbst keinem mehr an (Plan #744, A1).
     if (ABSCHLUSS.test(inhalt)) {
       a.abgeschlossen = true
-      if (DRY_RUN.test(inhalt)) a.dryRun = true
+      if (inhalt.startsWith(DRY_RUN)) a.dryRun = true
       a.stage = STUFE.exec(inhalt)?.[1] ?? a.stage
       a.aktuellesPaket = null
     }
