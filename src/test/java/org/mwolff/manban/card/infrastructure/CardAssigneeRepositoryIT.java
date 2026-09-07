@@ -3,6 +3,7 @@ package org.mwolff.manban.card.infrastructure;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mwolff.manban.AbstractIntegrationTest;
@@ -19,6 +20,8 @@ class CardAssigneeRepositoryIT extends AbstractIntegrationTest {
   @Autowired private JdbcTemplate jdbc;
 
   private long cardId;
+  private long boardId;
+  private long columnId;
   private long userA;
   private long userB;
 
@@ -35,9 +38,9 @@ class CardAssigneeRepositoryIT extends AbstractIntegrationTest {
     long projectId =
         insert(
             "INSERT INTO project (name, owner_user_id) VALUES ('P', " + userA + ") RETURNING id");
-    long boardId =
+    boardId =
         insert("INSERT INTO board (project_id, name) VALUES (" + projectId + ", 'B') RETURNING id");
-    long columnId =
+    columnId =
         insert(
             "INSERT INTO board_column (board_id, name, position) VALUES ("
                 + boardId
@@ -55,6 +58,22 @@ class CardAssigneeRepositoryIT extends AbstractIntegrationTest {
   private long insert(String sql) {
     Long id = jdbc.queryForObject(sql, Long.class);
     return id == null ? 0L : id;
+  }
+
+  private long insertCard(int number, String title) {
+    return insert(
+        "INSERT INTO card (board_id, column_id, number, title, position_in_column) "
+            + "VALUES ("
+            + boardId
+            + ", "
+            + columnId
+            + ", "
+            + number
+            + ", '"
+            + title
+            + "', "
+            + number
+            + ") RETURNING id");
   }
 
   @Test
@@ -86,5 +105,24 @@ class CardAssigneeRepositoryIT extends AbstractIntegrationTest {
     assignees.deleteByCardId(cardId);
 
     assertThat(assignees.findByCardId(cardId)).isEmpty();
+  }
+
+  @Test
+  void findByCardIdsBatchesMultipleCardsAndSkipsUnassigned() {
+    long zweite = insertCard(2, "B");
+    long ohne = insertCard(3, "C");
+    assignees.replaceAssignees(cardId, List.of(userB, userA)); // absteigend eingefügt
+    assignees.replaceAssignees(zweite, List.of(userB));
+
+    Map<Long, List<Long>> ergebnis = assignees.findByCardIds(List.of(cardId, zweite, ohne));
+
+    assertThat(ergebnis).containsOnlyKeys(cardId, zweite);
+    assertThat(ergebnis.get(cardId)).containsExactly(userA, userB); // sortiert nach user_id
+    assertThat(ergebnis.get(zweite)).containsExactly(userB);
+  }
+
+  @Test
+  void findByCardIdsReturnsEmptyMapForEmptyInput() {
+    assertThat(assignees.findByCardIds(List.of())).isEmpty();
   }
 }
