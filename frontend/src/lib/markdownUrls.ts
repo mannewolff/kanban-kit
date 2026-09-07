@@ -6,9 +6,9 @@
 // auf der Whitelist steht (auch relative und nicht parsebare URLs), erzeugt gar kein Attribut.
 
 /** Erlaubte Schemata für Links: verschlüsselter Abruf oder E-Mail. */
-const LINK_SCHEMES = ['https:', 'mailto:']
+const LINK_SCHEMES: ReadonlySet<string> = new Set(['https:', 'mailto:'])
 /** Erlaubte Schemata für Bilder: nur verschlüsselter Abruf (kein `data:`, kein `mailto:`). */
-const IMAGE_SCHEMES = ['https:']
+const IMAGE_SCHEMES: ReadonlySet<string> = new Set(['https:'])
 
 /** Schema der URL oder `null`, wenn sie relativ oder nicht parsebar ist. */
 function scheme(url: string): string | null {
@@ -21,10 +21,10 @@ function scheme(url: string): string | null {
 
 /** Der `href`-Wert, wenn das Schema erlaubt ist — sonst `undefined` (kein aktiver Link). */
 export function safeLinkHref(href: string | undefined): string | undefined {
-  return href && LINK_SCHEMES.includes(scheme(href) ?? '') ? href : undefined
+  return href && LINK_SCHEMES.has(scheme(href) ?? '') ? href : undefined
 }
 
 /** Der `src`-Wert, wenn das Schema erlaubt ist — sonst `undefined` (kein Abruf). */
 export function safeImageSrc(src: string | undefined): string | undefined {
-  return src && IMAGE_SCHEMES.includes(scheme(src) ?? '') ? src : undefined
+  return src && IMAGE_SCHEMES.has(scheme(src) ?? '') ? src : undefined
 }
