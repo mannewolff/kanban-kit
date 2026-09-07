@@ -1,0 +1,172 @@
+{
+  "schemaFassung": 1,
+  "erzeugtVon": "1.47.0",
+  "start": "2026-09-07T08:52:29.532Z",
+  "art": "implementierung",
+  "modell": "claude-opus-5",
+  "max": 10,
+  "label": null,
+  "einheiten": [
+    {
+      "id": "767",
+      "titel": "Sammelzugriff für Zuständige: CardAssigneeRepository#findByCardIds (BE)",
+      "ausgang": "erfolg",
+      "dauerMs": 244427,
+      "commit": "917b6a3",
+      "endStatus": "in_review",
+      "pruefung": {
+        "id": "767",
+        "zustand": "ungeprueft"
+      },
+      "kennzahlen": {
+        "kostenUsd": 2.1366104999999997,
+        "apiDauerMs": 180563,
+        "zuege": 38
+      }
+    },
+    {
+      "id": "768",
+      "titel": "listByBoard ohne N+1: Sammelzugriffe für Abhängigkeiten, Zuständige, Labels und Herkunft (BE)",
+      "ausgang": "fehlschlag",
+      "dauerMs": 769668,
+      "commit": "0d3e39e",
+      "endStatus": "in_review",
+      "pruefung": {
+        "id": "768",
+        "zustand": "rot",
+        "rotesKommando": "mvn verify",
+        "rotesErgebnis": "rot",
+        "laufen": [
+          {
+            "cmd": "mvn verify",
+            "grund": "voller Umfang: 'src/main/java/org/mwolff/manban/card/application/CardService.java' trifft kein Muster",
+            "ergebnis": "rot"
+          },
+          {
+            "cmd": "npm --prefix frontend run build",
+            "grund": "voller Umfang: 'src/main/java/org/mwolff/manban/card/application/CardService.java' trifft kein Muster",
+            "ergebnis": "nicht gestartet"
+          },
+          {
+            "cmd": "npm --prefix frontend run lint",
+            "grund": "voller Umfang: 'src/main/java/org/mwolff/manban/card/application/CardService.java' trifft kein Muster",
+            "ergebnis": "nicht gestartet"
+          },
+          {
+            "cmd": "npm --prefix frontend run test:coverage",
+            "grund": "voller Umfang: 'src/main/java/org/mwolff/manban/card/application/CardService.java' trifft kein Muster",
+            "ergebnis": "nicht gestartet"
+          }
+        ],
+        "ausgelassen": []
+      },
+      "kennzahlen": {
+        "kostenUsd": 5.134166000000001,
+        "apiDauerMs": 380034,
+        "zuege": 63
+      }
+    },
+    {
+      "id": "769",
+      "titel": "CardDetailModal lädt beim Öffnen die volle Karte nach (FE)",
+      "ausgang": "fehlschlag",
+      "dauerMs": 980483,
+      "commit": "f7c8a2d",
+      "endStatus": "in_review",
+      "pruefung": {
+        "id": "769",
+        "zustand": "rot",
+        "rotesKommando": "mvn verify",
+        "rotesErgebnis": "rot",
+        "laufen": [
+          {
+            "cmd": "mvn verify",
+            "grund": "voller Umfang: 'frontend/src/components/CardDetailModal.test.tsx' trifft kein Muster",
+            "ergebnis": "rot"
+          },
+          {
+            "cmd": "npm --prefix frontend run build",
+            "grund": "voller Umfang: 'frontend/src/components/CardDetailModal.test.tsx' trifft kein Muster",
+            "ergebnis": "nicht gestartet"
+          },
+          {
+            "cmd": "npm --prefix frontend run lint",
+            "grund": "voller Umfang: 'frontend/src/components/CardDetailModal.test.tsx' trifft kein Muster",
+            "ergebnis": "nicht gestartet"
+          },
+          {
+            "cmd": "npm --prefix frontend run test:coverage",
+            "grund": "voller Umfang: 'frontend/src/components/CardDetailModal.test.tsx' trifft kein Muster",
+            "ergebnis": "nicht gestartet"
+          }
+        ],
+        "ausgelassen": []
+      },
+      "kennzahlen": {
+        "kostenUsd": 10.86053,
+        "apiDauerMs": 567294,
+        "zuege": 123
+      }
+    },
+    {
+      "id": "770",
+      "titel": "Duplizieren-Aktion lädt die volle Karte vor dem Öffnen des Dialogs nach (FE)",
+      "ausgang": "erfolg",
+      "dauerMs": 167015,
+      "commit": "063bf31",
+      "endStatus": "in_review",
+      "pruefung": {
+        "id": "770",
+        "zustand": "ungeprueft"
+      },
+      "kennzahlen": {
+        "kostenUsd": 1.6051234999999997,
+        "apiDauerMs": 138818,
+        "zuege": 33
+      }
+    },
+    {
+      "id": "771",
+      "titel": "Listen-Antwort ohne volle Beschreibung: excerpt statt description (BE+FE)",
+      "ausgang": "fehlschlag",
+      "dauerMs": 926467,
+      "commit": "ab37aeb",
+      "endStatus": "in_review",
+      "pruefung": {
+        "id": "771",
+        "zustand": "rot",
+        "rotesKommando": "mvn verify",
+        "rotesErgebnis": "rot",
+        "laufen": [
+          {
+            "cmd": "mvn verify",
+            "grund": "voller Umfang: 'frontend/src/api/cards.ts' trifft kein Muster",
+            "ergebnis": "rot"
+          },
+          {
+            "cmd": "npm --prefix frontend run build",
+            "grund": "voller Umfang: 'frontend/src/api/cards.ts' trifft kein Muster",
+            "ergebnis": "nicht gestartet"
+          },
+          {
+            "cmd": "npm --prefix frontend run lint",
+            "grund": "voller Umfang: 'frontend/src/api/cards.ts' trifft kein Muster",
+            "ergebnis": "nicht gestartet"
+          },
+          {
+            "cmd": "npm --prefix frontend run test:coverage",
+            "grund": "voller Umfang: 'frontend/src/api/cards.ts' trifft kein Muster",
+            "ergebnis": "nicht gestartet"
+          }
+        ],
+        "ausgelassen": []
+      },
+      "kennzahlen": {
+        "kostenUsd": 8.1324195,
+        "apiDauerMs": 592769,
+        "zuege": 121
+      }
+    }
+  ],
+  "abschluss": "regulaer"
+}
