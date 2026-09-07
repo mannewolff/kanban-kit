@@ -367,6 +367,21 @@ export function BoardListPage() {
     return <Alert severity="error">Ungültige Board-ID.</Alert>
   }
 
+  // Der Hinweis unter den Filtern: bei aktiver Sortierung erklärt er sie, sonst — und nur, wo das
+  // Umordnen überhaupt zusteht — wie man die Kartenreihenfolge ändert. Die Reihenfolge der Prüfung
+  // bleibt: unter einer Sortierung kommt der Umordnen-Hinweis nie zusätzlich.
+  // Die Richtung trägt das Pfeil-Icon und das aria-label der Kopfzelle, nicht dieser Satz.
+  // Das Umordnen kommt nur zur Sprache, wo es überhaupt zusteht: Sortieren ist eine
+  // Ansichtsfunktion und steht auch Nur-Lesern offen.
+  let listHint: string | null = null
+  if (sort !== null) {
+    listHint = `Sortiert nach ${COLUMN_META[sort.key].label}.${
+      canEdit ? ' Zum Ändern der Kartenreihenfolge die Sortierung aufheben.' : ''
+    }`
+  } else if (canEdit && !sortable) {
+    listHint = 'Kartenreihenfolge ändern: dazu genau einen Status-Filter wählen und den Archiv-Filter abwählen.'
+  }
+
   return (
     <Box ref={viewRef}>
       <Box sx={{ mb: 2 }}>
@@ -414,20 +429,11 @@ export function BoardListPage() {
         </Stack>
       )}
 
-      {sort !== null ? (
+      {listHint !== null && (
         <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
-          {/* Die Richtung trägt das Pfeil-Icon und das aria-label der Kopfzelle, nicht dieser Satz.
-              Das Umordnen kommt nur zur Sprache, wo es überhaupt zusteht: Sortieren ist eine
-              Ansichtsfunktion und steht auch Nur-Lesern offen. */}
-          {`Sortiert nach ${COLUMN_META[sort.key].label}.${
-            canEdit ? ' Zum Ändern der Kartenreihenfolge die Sortierung aufheben.' : ''
-          }`}
+          {listHint}
         </Typography>
-      ) : canEdit && !sortable ? (
-        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
-          Kartenreihenfolge ändern: dazu genau einen Status-Filter wählen und den Archiv-Filter abwählen.
-        </Typography>
-      ) : null}
+      )}
 
       {visible.length === 0 ? (
         <Typography variant="body2" color="text.secondary" sx={{ py: 2 }}>
