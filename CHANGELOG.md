@@ -7,6 +7,21 @@ Versionierung folgt der dreiteiligen Betriebsversion (siehe [RELEASING.md](RELEA
 Einträge je Version sind ein automatischer Auszug der Commit-Titel seit dem letzten Release,
 erzeugt von `scripts/gen-changelog.mjs`.
 
+## [1.36.0] – 2026-09-07
+
+- chore: Version-Bump 1.35.1 (push main)
+- Herkunfts-Kennzeichnung je Nachtlauf im Leitstand ([#775](https://github.com/mannewolff/kanban-kit/issues/775))
+- Ergebnisstand als Standardquelle in NightRunPage ([#774](https://github.com/mannewolff/kanban-kit/issues/774))
+- Ergebnisstand-Parser: nightRunErgebnisstand.ts ([#773](https://github.com/mannewolff/kanban-kit/issues/773))
+- chore: v1.35.0
+- chore: Version-Bump 1.34.1 (push main)
+- Listen-Antwort ohne volle Beschreibung: excerpt statt description ([#771](https://github.com/mannewolff/kanban-kit/issues/771))
+- Duplizieren laedt die volle Karte vor dem Dialog nach ([#770](https://github.com/mannewolff/kanban-kit/issues/770))
+- CardDetailModal laedt die volle Beschreibung beim Oeffnen nach ([#769](https://github.com/mannewolff/kanban-kit/issues/769))
+- listByBoard ohne N+1: Sammelzugriffe statt view() je Karte ([#768](https://github.com/mannewolff/kanban-kit/issues/768))
+- Sammelzugriff für Zuständige: CardAssigneeRepository#findByCardIds ([#767](https://github.com/mannewolff/kanban-kit/issues/767))
+- Neue config
+
 ## [1.35.0] – 2026-09-07
 
 - chore: Version-Bump 1.34.1 (push main)
