@@ -464,6 +464,7 @@ function Arbeitspaket({
 function LaufPanel({
   lauf,
   ergebnis,
+  ausErgebnisstand,
   katalog,
   zaehler,
   aufbewahrteLaeufe,
@@ -473,6 +474,8 @@ function LaufPanel({
   lauf: AnzeigeLauf
   /** `true` = in dieser Sitzung neu angelegt, `false` = lag schon vor, `undefined` = nicht gesendet. */
   ergebnis: boolean | undefined
+  /** Die Startzeitpunkte der Läufe, die in dieser Sitzung aus einem Ergebnisstand entstanden sind. */
+  ausErgebnisstand: ReadonlySet<string>
   katalog: Kartenkatalog
   zaehler: Haeufigkeiten
   /** Das „M" in „N von M aufbewahrten Läufen" — die Länge der zuletzt geladenen Liste. */
@@ -497,6 +500,15 @@ function LaufPanel({
             size="small"
             label={lauf.mode === 'REVIEW' ? 'Prüf-Lauf' : 'Umsetzungs-Lauf'}
             variant="outlined"
+          />
+          {/* Die Herkunft wird **hier** aus dem Zwischenspeicher gelesen, nicht in `AnzeigeLauf`
+              mitgeführt: Der Server kennt die Unterscheidung nicht, ein Feld am Anzeigemodell
+              müsste also in jedem Ladepfad einzeln gesetzt werden — und der nächste vergessene
+              Pfad zeigte still die falsche Herkunft. */}
+          <Chip
+            size="small"
+            variant="outlined"
+            label={ausErgebnisstand.has(lauf.startedAt) ? 'Ergebnisstand' : 'Herkunft unbekannt'}
           />
           <Typography component="span" color="text.secondary">
             {formatDuration(lauf.durationMs / 1000)}
@@ -550,6 +562,18 @@ export function NightRunPage() {
 
   const [laeufe, setLaeufe] = useState<AnzeigeLauf[]>([])
   const [ergebnisse, setErgebnisse] = useState<ReadonlyMap<string, boolean>>(() => new Map())
+  /**
+   * Die Startzeitpunkte der Läufe, die in **dieser Sitzung** aus einem Ergebnisstand gedeutet
+   * wurden (#775). Der Server trägt kein Herkunftsfeld, und die Seite lädt nach jedem Einliefern
+   * sofort neu — ohne diesen Vermerk wäre die Kennzeichnung Sekunden nach dem Hochladen falsch.
+   *
+   * Sitzungslokal und nicht dauerhaft (Plan #772, Entscheidung 6): Nach einem Neuladen der Seite
+   * ist der Speicher leer, auch ein eben erst eingelieferter Lauf zeigt dann „Herkunft unbekannt".
+   *
+   * State statt Ref — wie das benachbarte {@link ergebnisse}: Der Wert wird **zur Renderzeit**
+   * gelesen, und ein Ref darf das nicht (`react-hooks/refs`, ein Ref-Wert löst kein Rendern aus).
+   */
+  const [ausErgebnisstand, setAusErgebnisstand] = useState<ReadonlySet<string>>(() => new Set())
   const [katalog, setKatalog] = useState<Kartenkatalog>(() => new Map())
   // Leer heißt „zu keiner Klasse ist etwas bekannt" — der Zustand vor dem ersten Abruf und der
   // eines leeren Ringpuffers sind derselbe. `null` heißt dagegen: der Abruf ist gescheitert.
@@ -641,6 +665,9 @@ export function NightRunPage() {
 
     // Ein Ergebnisstand ist genau ein Lauf; ein zweiter Stand desselben Laufs ersetzt den ersten.
     const run = ergebnis.run
+    // Vermerkt **vor** dem Senden: Der Lauf ist aus dem Ergebnisstand entstanden, unabhängig davon,
+    // ob die Einlieferung gleich gelingt.
+    setAusErgebnisstand((bisher) => new Set(bisher).add(run.startedAt))
     setLaeufe((bisher) =>
       [ausParser(run), ...bisher.filter((alt) => alt.startedAt !== run.startedAt)].sort(
         nachStartAbsteigend,
@@ -709,6 +736,7 @@ export function NightRunPage() {
           key={lauf.startedAt}
           lauf={lauf}
           ergebnis={ergebnisse.get(lauf.startedAt)}
+          ausErgebnisstand={ausErgebnisstand}
           katalog={katalog}
           zaehler={zaehler}
           aufbewahrteLaeufe={aufbewahrteLaeufe}

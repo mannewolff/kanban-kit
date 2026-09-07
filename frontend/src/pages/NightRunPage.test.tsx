@@ -611,8 +611,45 @@ describe('NightRunPage — Ergebnisstand hineingeben', () => {
 
     expect(await screen.findByText('Auszug zu lang')).toBeInTheDocument()
     expect(lauf(0)).toBeInTheDocument()
+    // Der Zwischenspeicher wird **vor** dem Senden gefüllt (#775): Auch ein Lauf, dessen
+    // Einlieferung scheitert, ist aus dem Ergebnisstand entstanden und sagt das.
+    expect(within(lauf(0)).getByText('Ergebnisstand')).toBeInTheDocument()
     aufklappen(0)
     expect(await within(lauf(0)).findByRole('button', { name: /#700 Paket A/ })).toBeInTheDocument()
+  })
+})
+
+describe('NightRunPage — Herkunft eines Laufs (#775)', () => {
+  /**
+   * Derselbe Lauf, wie der Server ihn nach dem Einliefern zurückgibt — nur mit abweichender
+   * Stückzahl. Sie ist der Beleg dafür, dass der sichtbare Lauf wirklich der **neu geladene** ist
+   * und nicht mehr der eben im Browser gedeutete: Ohne diesen Unterschied stünde nach dem Upload
+   * derselbe Text auf der Seite, und der Test wäre schon vor dem Neuladen grün.
+   */
+  const VOM_SERVER = wieAufbewahrt(EIN_LAUF).map((view) => ({ ...view, processedCount: 42 }))
+
+  it('kennzeichnet einen aus dem Ergebnisstand eingelieferten Lauf auch nach dem Neuladen', async () => {
+    renderPage({ submit: { ergebnis: alleNeu(EIN_LAUF) }, listen: [[], VOM_SERVER] })
+    await screen.findByText('Noch keine Auswertung vorhanden.')
+
+    protokollWaehlen(EIN_LAUF)
+
+    await screen.findByTestId(`lauf-${startedAt(0)}`)
+    // Erst wenn die Stückzahl des Servers dasteht, ist das Neuladen durch.
+    expect(await within(lauf(0)).findByText('42 bearbeitet, 0 übergangen')).toBeInTheDocument()
+    expect(within(lauf(0)).getByText('Ergebnisstand')).toBeInTheDocument()
+    expect(within(lauf(0)).queryByText('Herkunft unbekannt')).not.toBeInTheDocument()
+  })
+
+  it('nennt einen aufbewahrten Lauf ohne Upload in dieser Sitzung „Herkunft unbekannt"', async () => {
+    // Der Server kennt die Unterscheidung nicht; die Kennzeichnung ist sitzungslokal (Plan #772,
+    // Entscheidung 6). Nach einem Neuladen der Seite gilt das auch für einen eben erst
+    // eingelieferten Lauf.
+    renderPage({ listen: [VOM_SERVER] })
+
+    await screen.findByTestId(`lauf-${startedAt(0)}`)
+    expect(within(lauf(0)).getByText('Herkunft unbekannt')).toBeInTheDocument()
+    expect(within(lauf(0)).queryByText('Ergebnisstand')).not.toBeInTheDocument()
   })
 })
 
