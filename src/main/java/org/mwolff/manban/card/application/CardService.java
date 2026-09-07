@@ -313,6 +313,18 @@ public class CardService {
       String title,
       @Nullable String description,
       @Nullable String shortcode) {
+    return doCreateEpic(userId, boardId, title, description, shortcode);
+  }
+
+  // Kern-Logik der Vorhaben-Anlage ohne eigene @Transactional: wird von createEpic und
+  // openEpicFromCard (je @Transactional) aufgerufen, ohne Self-Invocation über den Proxy
+  // (java:S6809).
+  private CardView doCreateEpic(
+      long userId,
+      long boardId,
+      String title,
+      @Nullable String description,
+      @Nullable String shortcode) {
     long projectId = boardService.requireProjectId(boardId);
     permissions.require(userId, projectId, Permission.EPIC_CREATE);
 
@@ -905,7 +917,7 @@ public class CardService {
 
     // Bestehenden Weg wiederverwenden statt nachbauen: Nummernvergabe, erste Spalte, Rechte und
     // das Board-Ereignis haengen alle daran.
-    CardView vorhaben = createEpic(userId, quelle.requireBoardId(), title, null, shortcode);
+    CardView vorhaben = doCreateEpic(userId, quelle.requireBoardId(), title, null, shortcode);
 
     Card epic = cards.findById(vorhaben.id()).orElseThrow(CardNotFoundException::new);
     Long anforderung = RequirementCard.resolve(cards, epic, quelle.requireNumber());
