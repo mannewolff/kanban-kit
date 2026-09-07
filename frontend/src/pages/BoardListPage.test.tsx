@@ -1106,7 +1106,7 @@ describe('BoardListPage', () => {
       renderSortPage()
       await screen.findByText('Beta')
       // Einspaltiges Board: vor der Sortierung ist das Umordnen per Drag möglich.
-      expect(screen.getAllByLabelText('Reihenfolge ändern').length).toBe(3)
+      expect(screen.getAllByLabelText('Reihenfolge ändern')).toHaveLength(3)
 
       fireEvent.click(screen.getByLabelText('Spalte Titel'))
 

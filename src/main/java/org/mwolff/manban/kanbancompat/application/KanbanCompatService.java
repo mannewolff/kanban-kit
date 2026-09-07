@@ -156,7 +156,10 @@ public class KanbanCompatService {
       long columnId = directColumnId(boardId, column);
       result =
           cardService.createDirect(
-              principal.userId(), boardId, columnId, title, body, key, number, derivedFrom);
+              principal.userId(),
+              boardId,
+              columnId,
+              new CardService.DirectCard(title, body, key, number, derivedFrom));
     } else {
       result =
           cardService.createProjectIdea(

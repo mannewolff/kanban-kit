@@ -167,7 +167,7 @@ export function DerivationTree({ rows, onOpenCard }: Readonly<Props>) {
         fokussiere(nummerBei(sichtbareIndizes[0]))
         break
       case 'End':
-        fokussiere(nummerBei(sichtbareIndizes[sichtbareIndizes.length - 1]))
+        fokussiere(nummerBei(sichtbareIndizes.at(-1)))
         break
       case 'ArrowRight':
         // APG: erst aufklappen, beim zweiten Druck zum ersten Kind — das in Präorder unmittelbar

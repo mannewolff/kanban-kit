@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.Map;
 import org.mwolff.manban.card.application.CardAssigneeRepository;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.RowCallbackHandler;
 import org.springframework.stereotype.Component;
 
 /** Verwaltet die Tabelle {@code card_assignee} (zusammengesetzter Schlüssel ohne ID) per SQL. */
@@ -61,11 +62,11 @@ class JdbcCardAssigneeRepository implements CardAssigneeRepository {
         "SELECT card_id, user_id FROM card_assignee WHERE card_id IN ("
             + platzhalter
             + ") ORDER BY card_id, user_id",
-        rs -> {
-          ergebnis
-              .computeIfAbsent(rs.getLong("card_id"), k -> new ArrayList<>())
-              .add(rs.getLong("user_id"));
-        },
+        (RowCallbackHandler)
+            rs ->
+                ergebnis
+                    .computeIfAbsent(rs.getLong("card_id"), k -> new ArrayList<>())
+                    .add(rs.getLong("user_id")),
         cardIds.toArray());
     return ergebnis;
   }

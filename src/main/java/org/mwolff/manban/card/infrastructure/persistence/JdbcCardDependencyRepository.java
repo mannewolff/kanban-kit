@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.Map;
 import org.mwolff.manban.card.application.CardDependencyRepository;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.RowCallbackHandler;
 import org.springframework.stereotype.Component;
 
 /**
@@ -85,11 +86,11 @@ class JdbcCardDependencyRepository implements CardDependencyRepository {
         "SELECT card_id, depends_on_card_number FROM card_dependency WHERE card_id IN ("
             + platzhalter
             + ") ORDER BY card_id, depends_on_card_number",
-        rs -> {
-          ergebnis
-              .computeIfAbsent(rs.getLong("card_id"), k -> new ArrayList<>())
-              .add(rs.getInt("depends_on_card_number"));
-        },
+        (RowCallbackHandler)
+            rs ->
+                ergebnis
+                    .computeIfAbsent(rs.getLong("card_id"), k -> new ArrayList<>())
+                    .add(rs.getInt("depends_on_card_number")),
         cardIds.toArray());
     return ergebnis;
   }

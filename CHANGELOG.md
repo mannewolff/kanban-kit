@@ -7,6 +7,19 @@ Versionierung folgt der dreiteiligen Betriebsversion (siehe [RELEASING.md](RELEA
 Einträge je Version sind ein automatischer Auszug der Commit-Titel seit dem letzten Release,
 erzeugt von `scripts/gen-changelog.mjs`.
 
+## [1.37.0] – 2026-09-07
+
+- chore: Version-Bump 1.36.1 (push main)
+- Verschachtelte Ternary im Listen-Hinweis in if/else extrahieren ([#707](https://github.com/mannewolff/kanban-kit/issues/707))
+- sort in eigene Anweisung extrahieren in epicOfCard ([#694](https://github.com/mannewolff/kanban-kit/issues/694))
+- Restpaket: .at(-1) in DerivationTree, Catch-Parameter in BoardSwitcher ([#779](https://github.com/mannewolff/kanban-kit/issues/779))
+- LINK_SCHEMES/IMAGE_SCHEMES als ReadonlySet statt Array ([#778](https://github.com/mannewolff/kanban-kit/issues/778))
+- Block-Lambdas in Jdbc*Repository durch Ausdrucks-Lambdas ersetzen ([#777](https://github.com/mannewolff/kanban-kit/issues/777))
+- Nutzdaten von createDirect in Record DirectCard buendeln ([#616](https://github.com/mannewolff/kanban-kit/issues/616))
+- Self-Invocation von createEpic aufloesen ([#655](https://github.com/mannewolff/kanban-kit/issues/655))
+- stripComments in Modus-Funktionen zerlegen ([#658](https://github.com/mannewolff/kanban-kit/issues/658))
+- Praefix-Pruefungen in nightRunLog.ts auf startsWith ([#731](https://github.com/mannewolff/kanban-kit/issues/731))
+
 ## [1.36.0] – 2026-09-07
 
 - chore: Version-Bump 1.35.1 (push main)

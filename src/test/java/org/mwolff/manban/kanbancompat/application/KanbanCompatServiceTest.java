@@ -383,12 +383,15 @@ class KanbanCompatServiceTest {
     // #569: Der direct-Zweig respektiert die angeforderte Spalte, statt immer die erste zu nehmen.
     when(boardService.requireProjectId(BOARD)).thenReturn(5L);
     when(boardService.listColumns(BOARD)).thenReturn(standardColumns());
-    when(cardService.createDirect(1L, BOARD, 101L, "Titel", "Body", null, null, null))
+    when(cardService.createDirect(
+            1L, BOARD, 101L, new CardService.DirectCard("Titel", "Body", null, null, null)))
         .thenReturn(new CardService.IdeaCreation(pooledIdea(42L), true));
 
     service.create(bound(), "Titel", "Body", "READY", false, null, true, null, null);
 
-    verify(cardService).createDirect(1L, BOARD, 101L, "Titel", "Body", null, null, null);
+    verify(cardService)
+        .createDirect(
+            1L, BOARD, 101L, new CardService.DirectCard("Titel", "Body", null, null, null));
     verify(boardService, org.mockito.Mockito.never()).firstColumn(anyLong());
   }
 
@@ -397,12 +400,15 @@ class KanbanCompatServiceTest {
     // Fehlendes column bleibt beim heutigen Verhalten — der Sonar-Sync sendet keines.
     when(boardService.requireProjectId(BOARD)).thenReturn(5L);
     when(boardService.firstColumn(BOARD)).thenReturn(new ColumnView(100L, "Backlog", 0, null));
-    when(cardService.createDirect(1L, BOARD, 100L, "Titel", "Body", null, null, null))
+    when(cardService.createDirect(
+            1L, BOARD, 100L, new CardService.DirectCard("Titel", "Body", null, null, null)))
         .thenReturn(new CardService.IdeaCreation(pooledIdea(42L), true));
 
     service.create(bound(), "Titel", "Body", null, false, null, true, null, null);
 
-    verify(cardService).createDirect(1L, BOARD, 100L, "Titel", "Body", null, null, null);
+    verify(cardService)
+        .createDirect(
+            1L, BOARD, 100L, new CardService.DirectCard("Titel", "Body", null, null, null));
   }
 
   @Test
@@ -414,7 +420,7 @@ class KanbanCompatServiceTest {
             () -> service.create(bound(), "Titel", "Body", "   ", false, null, true, null, null))
         .isInstanceOf(InvalidKanbanColumnException.class);
     verify(cardService, org.mockito.Mockito.never())
-        .createDirect(anyLong(), anyLong(), anyLong(), any(), any(), any(), any(), any());
+        .createDirect(anyLong(), anyLong(), anyLong(), any());
   }
 
   @Test
@@ -425,7 +431,7 @@ class KanbanCompatServiceTest {
             () -> service.create(bound(), "Titel", "Body", "FOO", false, null, true, null, null))
         .isInstanceOf(InvalidKanbanColumnException.class);
     verify(cardService, org.mockito.Mockito.never())
-        .createDirect(anyLong(), anyLong(), anyLong(), any(), any(), any(), any(), any());
+        .createDirect(anyLong(), anyLong(), anyLong(), any());
   }
 
   @Test
@@ -443,7 +449,7 @@ class KanbanCompatServiceTest {
             () -> service.create(bound(), "Titel", "Body", "DONE", false, null, true, null, null))
         .isInstanceOf(InvalidKanbanColumnException.class);
     verify(cardService, org.mockito.Mockito.never())
-        .createDirect(anyLong(), anyLong(), anyLong(), any(), any(), any(), any(), any());
+        .createDirect(anyLong(), anyLong(), anyLong(), any());
   }
 
   @Test
@@ -475,12 +481,15 @@ class KanbanCompatServiceTest {
     // Die konflikttraechtige Kombination: direct gewinnt, ideaStored bleibt wirkungslos.
     when(boardService.requireProjectId(BOARD)).thenReturn(5L);
     when(boardService.listColumns(BOARD)).thenReturn(standardColumns());
-    when(cardService.createDirect(1L, BOARD, 101L, "Titel", "Body", null, null, null))
+    when(cardService.createDirect(
+            1L, BOARD, 101L, new CardService.DirectCard("Titel", "Body", null, null, null)))
         .thenReturn(new CardService.IdeaCreation(pooledIdea(42L), true));
 
     service.create(bound(), "Titel", "Body", "READY", true, null, true, null, null);
 
-    verify(cardService).createDirect(1L, BOARD, 101L, "Titel", "Body", null, null, null);
+    verify(cardService)
+        .createDirect(
+            1L, BOARD, 101L, new CardService.DirectCard("Titel", "Body", null, null, null));
     verify(cardService, org.mockito.Mockito.never())
         .createProjectIdea(anyLong(), anyLong(), any(), any(), any(), any(), any());
   }
@@ -490,12 +499,15 @@ class KanbanCompatServiceTest {
     // #565: Die vorgegebene Nummer erreicht den Anlage-Pfad unveraendert.
     when(boardService.requireProjectId(BOARD)).thenReturn(5L);
     when(boardService.firstColumn(BOARD)).thenReturn(new ColumnView(100L, "Backlog", 0, null));
-    when(cardService.createDirect(1L, BOARD, 100L, "Titel", "Body", "github#278", 278, null))
+    when(cardService.createDirect(
+            1L, BOARD, 100L, new CardService.DirectCard("Titel", "Body", "github#278", 278, null)))
         .thenReturn(new CardService.IdeaCreation(pooledIdea(42L), true));
 
     service.create(bound(), "Titel", "Body", null, false, "github#278", true, 278, null);
 
-    verify(cardService).createDirect(1L, BOARD, 100L, "Titel", "Body", "github#278", 278, null);
+    verify(cardService)
+        .createDirect(
+            1L, BOARD, 100L, new CardService.DirectCard("Titel", "Body", "github#278", 278, null));
   }
 
   @Test
@@ -552,7 +564,8 @@ class KanbanCompatServiceTest {
     // Given (#535): direct=true umgeht den Pool und legt in der ersten Spalte des Token-Boards an.
     when(boardService.requireProjectId(BOARD)).thenReturn(5L);
     when(boardService.firstColumn(BOARD)).thenReturn(new ColumnView(100L, "Backlog", 0, null));
-    when(cardService.createDirect(1L, BOARD, 100L, "Titel", "Body", "sonar:abc", null, null))
+    when(cardService.createDirect(
+            1L, BOARD, 100L, new CardService.DirectCard("Titel", "Body", "sonar:abc", null, null)))
         .thenReturn(new CardService.IdeaCreation(pooledIdea(42L), true));
 
     // When
@@ -560,7 +573,9 @@ class KanbanCompatServiceTest {
         service.create(bound(), "Titel", "Body", null, false, "sonar:abc", true, null, null);
 
     // Then: Board-Pfad statt Pool-Pfad, created durchgereicht.
-    verify(cardService).createDirect(1L, BOARD, 100L, "Titel", "Body", "sonar:abc", null, null);
+    verify(cardService)
+        .createDirect(
+            1L, BOARD, 100L, new CardService.DirectCard("Titel", "Body", "sonar:abc", null, null));
     verify(cardService, org.mockito.Mockito.never())
         .createProjectIdea(anyLong(), anyLong(), any(), any(), any(), any(), any());
     assertThat(created.id()).isEqualTo(42L);

@@ -26,5 +26,6 @@ export function epicOfCard(card: Card, epics: readonly Epic[]): Epic | undefined
   const kandidaten = epics.filter((epic) => epic.memberNumbers.includes(card.number))
   // 0 = über die Herkunft erreicht, 1 = ausdrücklich zugeordnet; kleinerer Rang gewinnt.
   const rang = (epic: Epic) => (epic.rootNumbers.includes(card.number) ? 1 : 0)
-  return kandidaten.sort((a, b) => rang(a) - rang(b) || a.number - b.number)[0]
+  kandidaten.sort((a, b) => rang(a) - rang(b) || a.number - b.number)
+  return kandidaten[0]
 }
