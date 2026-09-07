@@ -125,13 +125,13 @@ export function BoardSwitcher({
           close()
         }
       })
-      .catch((failure: unknown) => {
+      .catch((error_: unknown) => {
         if (run.current !== started) {
           return
         }
         // Nach jedem Fehlschlag ist die Auswahl wieder frei — ein zweiter Versuch muss möglich sein.
         setPending(false)
-        if (failure instanceof ApiError && (failure.status === 403 || failure.status === 404)) {
+        if (error_ instanceof ApiError && (error_.status === 403 || error_.status === 404)) {
           setError(UNAVAILABLE)
           onRemoveEntry(entry.id)
           return
