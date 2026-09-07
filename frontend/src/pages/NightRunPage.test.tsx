@@ -17,19 +17,22 @@ import type {
   NightRunView,
 } from '../api/nightRuns'
 import { SnackbarProvider } from '../components/SnackbarProvider'
+import echterLauf from '../lib/__fixtures__/night-run-2026-09-07-085229.json'
+import { parseNightRunErgebnisstand } from '../lib/nightRunErgebnisstand'
 import { buildHandoffText, type NightRunHandoffItem } from '../lib/nightRunHandoff'
-import { parseNightRunLog } from '../lib/nightRunLog'
 import { theme } from '../theme'
 import { NightRunPage } from './NightRunPage'
 
 /**
  * Die Seite wird gegen einen **`fetch`-Stub** getestet, nicht gegen gemockte API-Module. Nur so
- * ist das Kriterium aus Issue #725 überhaupt prüfbar, dass beim Hineingeben eines Protokolls
+ * ist das Kriterium aus Issue #725 überhaupt prüfbar, dass beim Hineingeben eines Ergebnisstands
  * **kein** Request seinen Inhalt trägt: Ein gemocktes `nightRunsApi` erzeugte gar keine Requests,
  * und der Test wäre grün, ohne etwas zu belegen.
  *
- * Fixtures sind anonymisiert (wie in `lib/nightRunLog.test.ts`, Issue #720): Titel nach dem Schema
- * `Paket N`, keine Pfade, keine Sitzungs-IDs.
+ * Eingelesen wird seit Issue #774 ausschließlich der **Ergebnisstand** (`night-run-<datum>.json`);
+ * das Textprotokoll ist kein Weg mehr. Die selbstgebauten Stände sind anonymisiert (Titel nach dem
+ * Schema `Paket N`, keine Pfade) — daneben steht der echte Lauf vom 2026-09-07 aus
+ * `lib/__fixtures__/`, damit die Seite mindestens einmal gegen echte Daten läuft.
  */
 
 // Das Karten-Detail ist separat getestet (CardDetailModal.test.tsx) — hier ein Stub, der die
@@ -45,118 +48,90 @@ vi.mock('../components/CardDetailModal', () => ({
   ),
 }))
 
-/** Runner-Zeile mit Zeitstempel-Präfix, wie `log()` in `night.mjs` sie schreibt. */
-const z = (minute: number, text: string) =>
-  `[2026-09-01T22:${String(minute).padStart(2, '0')}:00.000Z] ${text}`
-
-const START = (minute: number, modus = 'Implementierung') =>
-  z(minute, `Nacht-Runner startet (Modus ${modus}, max 5 Sessions, Modell claude-opus-5, Label none)`)
-
-const ENDE = (minute: number) =>
-  z(minute, 'Nacht-Runner beendet: 1 erfolgreich, 0 zurueckgestellt, 1 Session(s) gestartet.')
-
-/** Startzeitpunkt eines mit {@link START} eröffneten Laufs — der Schlüssel der Auswertung. */
+/** Startzeitpunkt eines Laufs — der Schlüssel der Auswertung (Plan #718, A4). */
 const startedAt = (minute: number) => `2026-09-01T22:${String(minute).padStart(2, '0')}:00.000Z`
 
+/** Die Dauer einer Session im Ergebnisstand; die Laufdauer ist ihre Summe. */
+const SIEBEN_MIN = 7 * 60_000
+
 /**
- * Markierungstext in einer Sitzungsstrom-Zeile (ohne Zeitstempel-Präfix). Er darf in keinem
- * Request auftauchen — weder in einer URL noch in einem Body.
+ * Ein Ergebnisstand der Fassung 1, wie `night.mjs` ihn schreibt. Jedes Feld ist einzeln
+ * überschreibbar — dieselbe Bauform wie in `lib/nightRunErgebnisstand.test.ts`.
+ */
+const stand = (felder: Record<string, unknown> = {}): string =>
+  JSON.stringify({
+    schemaFassung: 1,
+    erzeugtVon: '1.47.0',
+    start: startedAt(0),
+    art: 'implementierung',
+    modell: 'claude-opus-5',
+    max: 5,
+    label: null,
+    einheiten: [],
+    abschluss: 'regulaer',
+    ...felder,
+  })
+
+/** Eine Einheit des Ergebnisstands — ein Arbeitspaket der Runde. */
+const einheit = (felder: Record<string, unknown>): Record<string, unknown> => ({
+  id: '700',
+  titel: 'Paket A',
+  dauerMs: SIEBEN_MIN,
+  ...felder,
+})
+
+/**
+ * Markierungstext in einem Feld, das der Parser nicht deutet. Der Ergebnisstand führt in
+ * `pruefung.laufen[].grund` die Pfade der geänderten Dateien — sie dürfen in keinem Request
+ * auftauchen, weder in einer URL noch in einem Body.
  */
 const GEHEIM = 'GEHEIM-NICHT-SENDEN'
 
-const PROTOKOLL_EIN_LAUF = [
-  START(0),
-  z(1, 'Session 1/5: Issue #700 — Paket A'),
-  `{"type":"assistant","text":"${GEHEIM}"}`,
-  z(8, '  Erfolg nach 7 min, Commit a1b2c3d, Issue #700 in In review.'),
-  ENDE(10),
-].join('\n')
+/** Ein grüner Nachweis, samt der Felder, die die Auswertung nicht braucht. */
+const GEPRUEFT = {
+  zustand: 'geprueft',
+  laufen: [{ cmd: 'npm test', grund: GEHEIM, ergebnis: 'gruen' }],
+  ausgelassen: [],
+}
 
-/** Zwei echte Läufe, dazwischen ein Probelauf — er erzeugt keine Auswertung. */
-const PROTOKOLL_ZWEI_LAEUFE_UND_PROBELAUF = [
-  START(0),
-  z(1, 'Session 1/5: Issue #700 — Paket A'),
-  z(8, '  Erfolg nach 7 min, Commit a1b2c3d, Issue #700 in In review.'),
-  ENDE(10),
-  START(20),
-  z(21, 'Dry-Run beendet: 2 Session(s) wuerden starten.'),
-  START(30),
-  z(31, 'Session 1/5: Issue #701 — Paket B'),
-  z(38, '  Erfolg nach 7 min, Commit b2c3d4e, Issue #701 in In review.'),
-  ENDE(40),
-].join('\n')
+/** Ein roter Nachweis — der Fall, für den es die Auswertung gibt. */
+const NACHWEIS_ROT = {
+  zustand: 'rot',
+  rotesKommando: 'npm test',
+  rotesErgebnis: 'rot',
+  laufen: [{ cmd: 'npm test', grund: GEHEIM, ergebnis: 'rot' }],
+  ausgelassen: [],
+}
 
-const PROTOKOLL_NUR_PROBELAEUFE = [
-  START(0),
-  z(1, 'Dry-Run beendet: 2 Session(s) wuerden starten.'),
-  START(10),
-  z(11, 'Dry-Run beendet: 1 Session(s) wuerden starten.'),
-].join('\n')
+const EIN_LAUF = stand({
+  einheiten: [einheit({ ausgang: 'erfolg', commit: 'a1b2c3d', pruefung: GEPRUEFT })],
+})
 
-/** Erfolgsmeldung, aber roter Prüfblock — der Fall, für den es die Auswertung gibt. */
-const PROTOKOLL_GELB = [
-  START(0),
-  z(1, 'Session 1/5: Issue #700 — Paket A'),
-  z(8, '  Erfolg nach 7 min, Commit a1b2c3d, Issue #700 in In review.'),
-  z(9, 'Pruefungen der Sessions:'),
-  z(9, '  Issue #700: gelaufen: npm test -> rot (Frontend) | ausgelassen: keine'),
-  ENDE(10),
-].join('\n')
+/** Erfolgreiche Session, aber roter Nachweis → gelb. */
+const GELB = stand({
+  einheiten: [einheit({ ausgang: 'erfolg', commit: 'a1b2c3d', pruefung: NACHWEIS_ROT })],
+})
+
+/** Der Grund eines zurückgestellten Pakets, wie `night.mjs` ihn schreibt. */
+const GRUND_ZURUECKGESTELLT = 'Abhaengigkeit #999 liegt nicht in Done.'
 
 /** Alle vier Zustände in einem Lauf. */
-const PROTOKOLL_VIER_ZUSTAENDE = [
-  START(0),
-  z(1, 'Session 1/5: Issue #700 — Paket A'),
-  z(8, '  Erfolg nach 7 min, Commit a1b2c3d, Issue #700 in In review.'),
-  z(9, 'Session 2/5: Issue #701 — Paket B'),
-  z(16, '  Erfolg nach 7 min, Commit b2c3d4e, Issue #701 in In review.'),
-  z(17, 'Session 3/5: Issue #702 — Paket C'),
-  z(24, '  Fehlschlag nach 7 min: Issue #702 nicht in In review, Tree sauber — Issue ins Backlog, weiter.'),
-  z(25, '  #703 Paket D -> uebersprungen (Abhaengigkeit #999 liegt nicht in Done)'),
-  z(26, 'Pruefungen der Sessions:'),
-  z(26, '  Issue #701: gelaufen: npm test -> rot (Frontend) | ausgelassen: keine'),
-  ENDE(30),
-].join('\n')
+const VIER_ZUSTAENDE = stand({
+  einheiten: [
+    einheit({ ausgang: 'erfolg', commit: 'a1b2c3d', pruefung: GEPRUEFT }),
+    einheit({ id: '701', titel: 'Paket B', ausgang: 'erfolg', commit: 'b2c3d4e', pruefung: NACHWEIS_ROT }),
+    einheit({ id: '702', titel: 'Paket C', ausgang: 'fehlschlag', pruefung: { zustand: 'ungeprueft' } }),
+    // Ein zurückgestelltes Paket lief nie, also trägt es auch keine Dauer.
+    einheit({ id: '703', titel: 'Paket D', ausgang: 'zurueckgestellt', grund: GRUND_ZURUECKGESTELLT, dauerMs: undefined }),
+  ],
+})
 
-const PROTOKOLL_PRUEF_LAUF = [
-  START(0, 'Review'),
-  z(1, 'Review-Session 1/5: Issue #700 — Paket A'),
-  z(8, '  Erfolg nach 7 min: Issue #700 geprueft mit Befund.'),
-  z(10, 'Nacht-Review beendet (Stufe issue): 1 geprueft.'),
-].join('\n')
+/** Der echte Lauf vom 2026-09-07 (Issue #773) — unverändert, wie der Runner ihn schrieb. */
+const ECHTER_STAND = JSON.stringify(echterLauf)
+const ECHTER_START = '2026-09-07T08:52:29.532Z'
 
-/** Eine Runner-Zeile, die kein Muster deutet — mit Markdown-Zeichen im Text. */
+/** Eine Runner-Zeile, die kein Muster deutete — mit Markdown-Zeichen im Text. */
 const UNGEDEUTET = 'Voellig unbekannte Runner-Zeile mit *Sternchen* und `Backticks`'
-
-const PROTOKOLL_UNGEDEUTET = [
-  START(0),
-  z(1, 'Session 1/5: Issue #700 — Paket A'),
-  z(2, UNGEDEUTET),
-  z(8, '  Erfolg nach 7 min, Commit a1b2c3d, Issue #700 in In review.'),
-  ENDE(10),
-].join('\n')
-
-/**
- * Eine Sitzungsstrom-Zeile ohne Zeitstempel-Präfix, mit Markdown-Zeichen im Text (Issue #748). Sie
- * gehört zum Rohprotokoll des offenen Arbeitspakets und ist Fremdtext — sie wird nie gedeutet.
- */
-const ROHZEILE_SITZUNG = '{"type":"assistant","text":"Pruefung *fett* mit `npm test`"}'
-
-/** Alle vier Zustände in einem Lauf, dazu ein Sitzungsstrom im Rohprotokoll des ersten Pakets. */
-const PROTOKOLL_ROH = [
-  START(0),
-  z(1, 'Session 1/5: Issue #700 — Paket A'),
-  ROHZEILE_SITZUNG,
-  z(8, '  Erfolg nach 7 min, Commit a1b2c3d, Issue #700 in In review.'),
-  z(9, 'Session 2/5: Issue #701 — Paket B'),
-  z(16, '  Fehlschlag nach 7 min: Issue #701 nicht in In review, Tree sauber — Issue ins Backlog, weiter.'),
-  z(17, 'Session 3/5: Issue #702 — Paket C'),
-  z(24, '  Erfolg nach 7 min, Commit c3d4e5f, Issue #702 in In review.'),
-  z(25, '  #703 Paket D -> uebersprungen (Abhaengigkeit #999 liegt nicht in Done)'),
-  z(26, 'Pruefungen der Sessions:'),
-  z(26, '  Issue #700: gelaufen: npm test -> rot (Frontend) | ausgelassen: keine'),
-  ENDE(30),
-].join('\n')
 
 function karte(
   partial: Partial<CardByNumber> & { id: number; number: number; title: string },
@@ -179,25 +154,38 @@ function karte(
   }
 }
 
+/** Der Lauf eines Ergebnisstands; wirft, wenn er gar nicht deutbar ist — dann taugt das Fixture nicht. */
+function gedeutet(ergebnisstand: string) {
+  const ergebnis = parseNightRunErgebnisstand(ergebnisstand)
+  if (!ergebnis.ok) throw new Error(`Fixture nicht deutbar: ${ergebnis.grund}`)
+  return ergebnis.run
+}
+
 /**
- * Die Läufe eines Protokolls so, wie der Server sie nach dem Einliefern zurückgibt. Die Seite lädt
- * nach erfolgreichem Senden die Liste neu — ohne diese Nachbildung zeigte jeder Sendetest danach
- * eine leere Seite. Der Helfer bildet nur die Feldabbildung des Servers nach; **welchen** Zustand
- * ein Arbeitspaket trägt, prüfen die Tests weiterhin am sichtbaren Text.
+ * Der Lauf eines Ergebnisstands so, wie der Server ihn nach dem Einliefern zurückgibt. Die Seite
+ * lädt nach erfolgreichem Senden die Liste neu — ohne diese Nachbildung zeigte jeder Sendetest
+ * danach eine leere Seite. Der Helfer bildet nur die Feldabbildung des Servers nach; **welchen**
+ * Zustand ein Arbeitspaket trägt, prüfen die Tests weiterhin am sichtbaren Text.
  */
-function wieAufbewahrt(protokoll: string): NightRunView[] {
-  return parseNightRunLog(protokoll).runs.map((run, index) => ({
-    id: index + 1,
-    startedAt: run.startedAt,
-    mode: run.mode,
-    durationMs: run.durationMs,
-    processedCount: run.processedCount,
-    skippedCount: run.skippedCount,
-    unparsedCount: run.unparsedCount,
-    unparsedSample: run.unparsedSample.length === 0 ? null : run.unparsedSample.join('\n'),
-    createdAt: '2026-09-02T06:00:00.000Z',
-    items: run.items.map((item, position) => wieAufbewahrtesItem({ id: position + 1, ...item })),
-  }))
+function wieAufbewahrt(ergebnisstand: string): NightRunView[] {
+  const run = gedeutet(ergebnisstand)
+  return [
+    {
+      id: 1,
+      startedAt: run.startedAt,
+      mode: run.mode,
+      durationMs: run.durationMs,
+      processedCount: run.processedCount,
+      skippedCount: run.skippedCount,
+      unparsedCount: run.unparsedCount,
+      // Der Ergebnisstand kennt keine ungedeuteten Zeilen (#773), also schickt der Server auch
+      // keinen Auszug zurück. Ein aufbewahrter Lauf aus der Zeit der Protokolldeutung schon —
+      // dafür steht {@link aufbewahrt} mit ausdrücklicher Vorgabe.
+      unparsedSample: null,
+      createdAt: '2026-09-02T06:00:00.000Z',
+      items: run.items.map((item, position) => wieAufbewahrtesItem({ id: position + 1, ...item })),
+    },
+  ]
 }
 
 /** Ein Arbeitspaket in der Kurzform der Tests: Was nichts zur Sache tut, bleibt weg. */
@@ -223,9 +211,10 @@ function wieAufbewahrtesItem(item: ItemVorgabe): NightRunItemView {
   }
 }
 
-/** Die Einlieferungs-Antwort zu einem Protokoll, in dem jeder Lauf neu ist. */
-const alleNeu = (protokoll: string): NightRunResult[] =>
-  parseNightRunLog(protokoll).runs.map((run) => ({ startedAt: run.startedAt, created: true }))
+/** Die Einlieferungs-Antwort zu einem Ergebnisstand, dessen Lauf neu ist. */
+const alleNeu = (ergebnisstand: string): NightRunResult[] => [
+  { startedAt: gedeutet(ergebnisstand).startedAt, created: true },
+]
 
 function aufbewahrt(
   partial: Omit<Partial<NightRunView>, 'items'> & {
@@ -344,10 +333,10 @@ function renderPage(antworten: Antworten = {}, pfad = '/projects/5/nachtlauf') {
   )
 }
 
-/** Wählt eine Protokolldatei im versteckten Datei-Input aus. */
-function protokollWaehlen(inhalt: string, name = 'nacht.log') {
+/** Wählt eine Datei im versteckten Datei-Input aus — im Regelfall den Ergebnisstand eines Laufs. */
+function protokollWaehlen(inhalt: string, name = 'night-run.json', typ = 'application/json') {
   const input = screen.getByLabelText('Protokolldatei auswählen')
-  const datei = new File([inhalt], name, { type: 'text/plain' })
+  const datei = new File([inhalt], name, { type: typ })
   Object.defineProperty(input, 'files', { value: [datei], configurable: true })
   fireEvent.change(input)
 }
@@ -359,6 +348,11 @@ const lauf = (minute: number) => screen.getByTestId(`lauf-${startedAt(minute)}`)
 function aufklappen(minute: number) {
   fireEvent.click(within(lauf(minute)).getByRole('button', { expanded: false }))
 }
+
+/** Der Wert des schreibgeschützten Übernahmetext-Feldes eines Arbeitspakets im Panel eines Laufs. */
+const uebernahmetext = (panel: HTMLElement, cardNumber: number) =>
+  (within(panel).getByLabelText(`Übernahmetext zu Karte #${cardNumber}`) as HTMLTextAreaElement)
+    .value
 
 const byNumberAufrufe = () => anfragen.filter((a) => a.url.includes('/cards/by-number/'))
 
@@ -439,43 +433,29 @@ describe('NightRunPage — aufbewahrte Läufe beim Öffnen', () => {
   })
 })
 
-describe('NightRunPage — Protokoll hineingeben', () => {
-  it('erzeugt aus mehreren Läufen mehrere Auswertungen und überspringt Probeläufe', async () => {
-    renderPage({
-      submit: { ergebnis: alleNeu(PROTOKOLL_ZWEI_LAEUFE_UND_PROBELAUF) },
-      listen: [[], wieAufbewahrt(PROTOKOLL_ZWEI_LAEUFE_UND_PROBELAUF)],
-    })
-    await screen.findByText('Noch keine Auswertung vorhanden.')
-
-    protokollWaehlen(PROTOKOLL_ZWEI_LAEUFE_UND_PROBELAUF)
-
-    await waitFor(() => expect(screen.getAllByTestId(/^lauf-/)).toHaveLength(2))
-    // Der Probelauf zwischen den beiden echten Läufen erzeugt keine Auswertung.
-    expect(screen.queryByTestId(`lauf-${startedAt(20)}`)).not.toBeInTheDocument()
-  })
-
+describe('NightRunPage — Ergebnisstand hineingeben', () => {
   it('sendet die Auswertung und stellt den neuen Lauf nach oben', async () => {
     renderPage({
-      submit: { ergebnis: alleNeu(PROTOKOLL_EIN_LAUF) },
+      submit: { ergebnis: alleNeu(EIN_LAUF) },
       listen: [
         [aufbewahrt({ id: 9, startedAt: '2026-08-30T22:00:00.000Z' })],
-        [aufbewahrt({ id: 9, startedAt: '2026-08-30T22:00:00.000Z' }), ...wieAufbewahrt(PROTOKOLL_EIN_LAUF)],
+        [aufbewahrt({ id: 9, startedAt: '2026-08-30T22:00:00.000Z' }), ...wieAufbewahrt(EIN_LAUF)],
       ],
     })
     await screen.findByTestId('lauf-2026-08-30T22:00:00.000Z')
 
-    protokollWaehlen(PROTOKOLL_EIN_LAUF)
+    protokollWaehlen(EIN_LAUF)
 
     await waitFor(() => expect(screen.getAllByTestId(/^lauf-/)).toHaveLength(2))
     expect(screen.getAllByTestId(/^lauf-/)[0].dataset.testid).toBe(`lauf-${startedAt(0)}`)
     expect(within(lauf(0)).getByText('neu angelegt')).toBeInTheDocument()
   })
 
-  it('schickt die Auswertung hinaus, nie das Protokoll selbst', async () => {
+  it('schickt die Auswertung hinaus, nie den Ergebnisstand selbst', async () => {
     renderPage({ submit: { ergebnis: [{ startedAt: startedAt(0), created: true }] } })
     await screen.findByText('Noch keine Auswertung vorhanden.')
 
-    protokollWaehlen(PROTOKOLL_EIN_LAUF)
+    protokollWaehlen(EIN_LAUF)
 
     await waitFor(() => expect(anfragen.some((a) => a.method === 'POST')).toBe(true))
     for (const anfrage of anfragen) {
@@ -489,12 +469,12 @@ describe('NightRunPage — Protokoll hineingeben', () => {
   it('stellt einen bereits bekannten Lauf vollständig dar und kennzeichnet ihn', async () => {
     renderPage({
       submit: { ergebnis: [{ startedAt: startedAt(0), created: false }] },
-      listen: [[], wieAufbewahrt(PROTOKOLL_EIN_LAUF)],
+      listen: [[], wieAufbewahrt(EIN_LAUF)],
       karten: { 700: karte({ id: 1, number: 700, title: 'Paket A' }) },
     })
     await screen.findByText('Noch keine Auswertung vorhanden.')
 
-    protokollWaehlen(PROTOKOLL_EIN_LAUF)
+    protokollWaehlen(EIN_LAUF)
 
     await screen.findByTestId(`lauf-${startedAt(0)}`)
     expect(within(lauf(0)).getByText('lag schon vor')).toBeInTheDocument()
@@ -502,26 +482,82 @@ describe('NightRunPage — Protokoll hineingeben', () => {
     expect(await within(lauf(0)).findByRole('button', { name: /#700 Paket A/ })).toBeInTheDocument()
   })
 
-  it('meldet ein Protokoll aus lauter Probeläufen, statt eine Auswertung zu erzeugen', async () => {
+  it('deutet den echten Ergebnisstand eines Laufs Paket für Paket', async () => {
+    renderPage({
+      submit: { ergebnis: alleNeu(ECHTER_STAND) },
+      listen: [[], wieAufbewahrt(ECHTER_STAND)],
+    })
+    await screen.findByText('Noch keine Auswertung vorhanden.')
+
+    protokollWaehlen(ECHTER_STAND, 'night-run-2026-09-07-085229.json')
+
+    const panelEl = await screen.findByTestId(`lauf-${ECHTER_START}`)
+    const panel = within(panelEl)
+    fireEvent.click(panel.getByRole('button', { expanded: false }))
+    await panel.findByTestId('zustand-767')
+    // Zwei erfolgreiche, aber ungeprüfte Sessions (gelb) und drei mit rotem Nachweis (rot) —
+    // Zustand und Fehlerklasse stehen beide sichtbar auf der Seite.
+    for (const nummer of [767, 770]) {
+      expect(within(panel.getByTestId(`zustand-${nummer}`)).getByText('Erfolg, Prüfung rot')).toBeInTheDocument()
+      expect(uebernahmetext(panelEl, nummer)).toContain('Fehlerklasse: Prüfungen nicht gelaufen')
+    }
+    for (const nummer of [768, 769, 771]) {
+      expect(within(panel.getByTestId(`zustand-${nummer}`)).getByText('gescheitert')).toBeInTheDocument()
+      expect(uebernahmetext(panelEl, nummer)).toContain('Fehlerklasse: Prüfungen rot')
+    }
+  })
+
+  it('meldet eine Textdatei als nicht auswertbar, statt sie zu deuten', async () => {
     renderPage()
     await screen.findByText('Noch keine Auswertung vorhanden.')
 
-    protokollWaehlen(PROTOKOLL_NUR_PROBELAEUFE)
+    protokollWaehlen(
+      '[2026-09-01T22:00:00.000Z] Nacht-Runner startet (Modus Implementierung)',
+      'nacht.log',
+      'text/plain',
+    )
 
-    expect(
-      await screen.findByText('Das Protokoll enthält nur Probeläufe (2) — keine Auswertung.'),
-    ).toBeInTheDocument()
+    expect(await screen.findByText('Nicht auswertbar')).toBeInTheDocument()
     expect(screen.queryAllByTestId(/^lauf-/)).toHaveLength(0)
     expect(anfragen.some((a) => a.method === 'POST')).toBe(false)
   })
 
-  it('meldet ein Protokoll ohne jeden Lauf', async () => {
+  it('meldet eine unbekannte Fassung, statt sie zu deuten', async () => {
     renderPage()
     await screen.findByText('Noch keine Auswertung vorhanden.')
 
-    protokollWaehlen('irgendein Text ohne eine einzige Startzeile')
+    protokollWaehlen(stand({ schemaFassung: 2 }))
 
-    expect(await screen.findByText('Kein Nachtlauf-Protokoll erkannt')).toBeInTheDocument()
+    expect(await screen.findByText('Fassung nicht unterstützt')).toBeInTheDocument()
+    expect(screen.queryAllByTestId(/^lauf-/)).toHaveLength(0)
+    expect(anfragen.some((a) => a.method === 'POST')).toBe(false)
+  })
+
+  it('meldet einen Prüf-Lauf als nicht unterstützte Lauf-Art', async () => {
+    renderPage()
+    await screen.findByText('Noch keine Auswertung vorhanden.')
+
+    protokollWaehlen(stand({ art: 'review' }))
+
+    expect(await screen.findByText('Lauf-Art oder Vokabular nicht unterstützt')).toBeInTheDocument()
+    expect(screen.queryAllByTestId(/^lauf-/)).toHaveLength(0)
+    expect(anfragen.some((a) => a.method === 'POST')).toBe(false)
+  })
+
+  it('zeigt einen noch nicht abgeschlossenen Lauf an, liefert ihn aber nicht ein', async () => {
+    // Der Server legt je (Projekt, Startzeit) nur einmal an — ein unvollständiger Stand blockierte
+    // den späteren vollständigen dauerhaft.
+    renderPage({ karten: { 700: karte({ id: 1, number: 700, title: 'Paket A' }) } })
+    await screen.findByText('Noch keine Auswertung vorhanden.')
+
+    protokollWaehlen(stand({ abschluss: null, einheiten: [einheit({ ausgang: 'erfolg', pruefung: GEPRUEFT })] }))
+
+    expect(
+      await screen.findByText('Lauf noch nicht abgeschlossen — nicht gespeichert'),
+    ).toBeInTheDocument()
+    expect(lauf(0)).toBeInTheDocument()
+    aufklappen(0)
+    expect(await within(lauf(0)).findByRole('button', { name: /#700 Paket A/ })).toBeInTheDocument()
     expect(anfragen.some((a) => a.method === 'POST')).toBe(false)
   })
 
@@ -538,7 +574,7 @@ describe('NightRunPage — Protokoll hineingeben', () => {
     }
     vi.stubGlobal('FileReader', FailingReader)
 
-    protokollWaehlen(PROTOKOLL_EIN_LAUF)
+    protokollWaehlen(EIN_LAUF)
 
     expect(await screen.findByText('Die Datei konnte nicht gelesen werden.')).toBeInTheDocument()
     expect(screen.queryAllByTestId(/^lauf-/)).toHaveLength(0)
@@ -555,11 +591,11 @@ describe('NightRunPage — Protokoll hineingeben', () => {
     expect(anfragen.some((a) => a.method === 'POST')).toBe(false)
   })
 
-  it('setzt den Datei-Input zurück, damit dasselbe Protokoll erneut gewählt werden kann', async () => {
+  it('setzt den Datei-Input zurück, damit derselbe Stand erneut gewählt werden kann', async () => {
     renderPage({ submit: { ergebnis: [{ startedAt: startedAt(0), created: true }] } })
     await screen.findByText('Noch keine Auswertung vorhanden.')
 
-    protokollWaehlen(PROTOKOLL_EIN_LAUF)
+    protokollWaehlen(EIN_LAUF)
 
     expect((screen.getByLabelText('Protokolldatei auswählen') as HTMLInputElement).value).toBe('')
   })
@@ -571,24 +607,61 @@ describe('NightRunPage — Protokoll hineingeben', () => {
     })
     await screen.findByText('Noch keine Auswertung vorhanden.')
 
-    protokollWaehlen(PROTOKOLL_EIN_LAUF)
+    protokollWaehlen(EIN_LAUF)
 
     expect(await screen.findByText('Auszug zu lang')).toBeInTheDocument()
     expect(lauf(0)).toBeInTheDocument()
+    // Der Zwischenspeicher wird **vor** dem Senden gefüllt (#775): Auch ein Lauf, dessen
+    // Einlieferung scheitert, ist aus dem Ergebnisstand entstanden und sagt das.
+    expect(within(lauf(0)).getByText('Ergebnisstand')).toBeInTheDocument()
     aufklappen(0)
     expect(await within(lauf(0)).findByRole('button', { name: /#700 Paket A/ })).toBeInTheDocument()
+  })
+})
+
+describe('NightRunPage — Herkunft eines Laufs (#775)', () => {
+  /**
+   * Derselbe Lauf, wie der Server ihn nach dem Einliefern zurückgibt — nur mit abweichender
+   * Stückzahl. Sie ist der Beleg dafür, dass der sichtbare Lauf wirklich der **neu geladene** ist
+   * und nicht mehr der eben im Browser gedeutete: Ohne diesen Unterschied stünde nach dem Upload
+   * derselbe Text auf der Seite, und der Test wäre schon vor dem Neuladen grün.
+   */
+  const VOM_SERVER = wieAufbewahrt(EIN_LAUF).map((view) => ({ ...view, processedCount: 42 }))
+
+  it('kennzeichnet einen aus dem Ergebnisstand eingelieferten Lauf auch nach dem Neuladen', async () => {
+    renderPage({ submit: { ergebnis: alleNeu(EIN_LAUF) }, listen: [[], VOM_SERVER] })
+    await screen.findByText('Noch keine Auswertung vorhanden.')
+
+    protokollWaehlen(EIN_LAUF)
+
+    await screen.findByTestId(`lauf-${startedAt(0)}`)
+    // Erst wenn die Stückzahl des Servers dasteht, ist das Neuladen durch.
+    expect(await within(lauf(0)).findByText('42 bearbeitet, 0 übergangen')).toBeInTheDocument()
+    expect(within(lauf(0)).getByText('Ergebnisstand')).toBeInTheDocument()
+    expect(within(lauf(0)).queryByText('Herkunft unbekannt')).not.toBeInTheDocument()
+  })
+
+  it('nennt einen aufbewahrten Lauf ohne Upload in dieser Sitzung „Herkunft unbekannt"', async () => {
+    // Der Server kennt die Unterscheidung nicht; die Kennzeichnung ist sitzungslokal (Plan #772,
+    // Entscheidung 6). Nach einem Neuladen der Seite gilt das auch für einen eben erst
+    // eingelieferten Lauf.
+    renderPage({ listen: [VOM_SERVER] })
+
+    await screen.findByTestId(`lauf-${startedAt(0)}`)
+    expect(within(lauf(0)).getByText('Herkunft unbekannt')).toBeInTheDocument()
+    expect(within(lauf(0)).queryByText('Ergebnisstand')).not.toBeInTheDocument()
   })
 })
 
 describe('NightRunPage — Zustände, Kennzahlen und Auszüge', () => {
   it('macht jeden der vier Zustände am Text erkennbar, nicht nur an der Farbe', async () => {
     renderPage({
-      submit: { ergebnis: alleNeu(PROTOKOLL_VIER_ZUSTAENDE) },
-      listen: [[], wieAufbewahrt(PROTOKOLL_VIER_ZUSTAENDE)],
+      submit: { ergebnis: alleNeu(VIER_ZUSTAENDE) },
+      listen: [[], wieAufbewahrt(VIER_ZUSTAENDE)],
     })
     await screen.findByText('Noch keine Auswertung vorhanden.')
 
-    protokollWaehlen(PROTOKOLL_VIER_ZUSTAENDE)
+    protokollWaehlen(VIER_ZUSTAENDE)
     await screen.findByTestId(`lauf-${startedAt(0)}`)
     aufklappen(0)
 
@@ -601,12 +674,12 @@ describe('NightRunPage — Zustände, Kennzahlen und Auszüge', () => {
 
   it('macht eine Erfolgsmeldung mit roter Prüfung gelb', async () => {
     renderPage({
-      submit: { ergebnis: alleNeu(PROTOKOLL_GELB) },
-      listen: [[], wieAufbewahrt(PROTOKOLL_GELB)],
+      submit: { ergebnis: alleNeu(GELB) },
+      listen: [[], wieAufbewahrt(GELB)],
     })
     await screen.findByText('Noch keine Auswertung vorhanden.')
 
-    protokollWaehlen(PROTOKOLL_GELB)
+    protokollWaehlen(GELB)
     await screen.findByTestId(`lauf-${startedAt(0)}`)
     aufklappen(0)
 
@@ -621,12 +694,12 @@ describe('NightRunPage — Zustände, Kennzahlen und Auszüge', () => {
 
   it('zeigt den Zustand als ausgefuellte, gleich grosse Flaeche — unabhaengig von der Textlaenge (#738)', async () => {
     renderPage({
-      submit: { ergebnis: alleNeu(PROTOKOLL_VIER_ZUSTAENDE) },
-      listen: [[], wieAufbewahrt(PROTOKOLL_VIER_ZUSTAENDE)],
+      submit: { ergebnis: alleNeu(VIER_ZUSTAENDE) },
+      listen: [[], wieAufbewahrt(VIER_ZUSTAENDE)],
     })
     await screen.findByText('Noch keine Auswertung vorhanden.')
 
-    protokollWaehlen(PROTOKOLL_VIER_ZUSTAENDE)
+    protokollWaehlen(VIER_ZUSTAENDE)
     await screen.findByTestId(`lauf-${startedAt(0)}`)
     aufklappen(0)
 
@@ -644,28 +717,25 @@ describe('NightRunPage — Zustände, Kennzahlen und Auszüge', () => {
 
   it('zeigt bei einem grauen Arbeitspaket seinen Grund', async () => {
     renderPage({
-      submit: { ergebnis: alleNeu(PROTOKOLL_VIER_ZUSTAENDE) },
-      listen: [[], wieAufbewahrt(PROTOKOLL_VIER_ZUSTAENDE)],
+      submit: { ergebnis: alleNeu(VIER_ZUSTAENDE) },
+      listen: [[], wieAufbewahrt(VIER_ZUSTAENDE)],
     })
     await screen.findByText('Noch keine Auswertung vorhanden.')
 
-    protokollWaehlen(PROTOKOLL_VIER_ZUSTAENDE)
+    protokollWaehlen(VIER_ZUSTAENDE)
     await screen.findByTestId(`lauf-${startedAt(0)}`)
     aufklappen(0)
 
+    // Der Ergebnisstand nennt den Grund wörtlich (#773) — die Anzeige stellt ihn als solchen voran.
     expect(
-      await within(lauf(0)).findByText(/Grund:.*#703 Paket D -> uebersprungen \(Abhaengigkeit #999/),
+      await within(lauf(0)).findByText(`Grund: ${GRUND_ZURUECKGESTELLT}`),
     ).toBeInTheDocument()
   })
 
   it('kennzeichnet einen Prüf-Lauf als solchen', async () => {
-    renderPage({
-      submit: { ergebnis: alleNeu(PROTOKOLL_PRUEF_LAUF) },
-      listen: [[], wieAufbewahrt(PROTOKOLL_PRUEF_LAUF)],
-    })
-    await screen.findByText('Noch keine Auswertung vorhanden.')
-
-    protokollWaehlen(PROTOKOLL_PRUEF_LAUF)
+    // Prüf-Läufe kommen nicht mehr über den Upload herein (der Ergebnisstand-Parser lehnt sie ab),
+    // wohl aber vom Server: aus einem Lauf, den ein früherer Stand eingeliefert hat.
+    renderPage({ listen: [[aufbewahrt({ id: 1, startedAt: startedAt(0), mode: 'REVIEW' })]] })
 
     await screen.findByTestId(`lauf-${startedAt(0)}`)
     expect(within(lauf(0)).getByText('Prüf-Lauf')).toBeInTheDocument()
@@ -674,12 +744,12 @@ describe('NightRunPage — Zustände, Kennzahlen und Auszüge', () => {
 
   it('kennzeichnet einen Umsetzungs-Lauf als solchen', async () => {
     renderPage({
-      submit: { ergebnis: alleNeu(PROTOKOLL_EIN_LAUF) },
-      listen: [[], wieAufbewahrt(PROTOKOLL_EIN_LAUF)],
+      submit: { ergebnis: alleNeu(EIN_LAUF) },
+      listen: [[], wieAufbewahrt(EIN_LAUF)],
     })
     await screen.findByText('Noch keine Auswertung vorhanden.')
 
-    protokollWaehlen(PROTOKOLL_EIN_LAUF)
+    protokollWaehlen(EIN_LAUF)
 
     await screen.findByTestId(`lauf-${startedAt(0)}`)
     expect(within(lauf(0)).getByText('Umsetzungs-Lauf')).toBeInTheDocument()
@@ -687,31 +757,40 @@ describe('NightRunPage — Zustände, Kennzahlen und Auszüge', () => {
 
   it('zeigt Dauer und Stückzahlen je Lauf sowie die Dauer je Arbeitspaket, aber keine Kosten', async () => {
     renderPage({
-      submit: { ergebnis: alleNeu(PROTOKOLL_VIER_ZUSTAENDE) },
-      listen: [[], wieAufbewahrt(PROTOKOLL_VIER_ZUSTAENDE)],
+      submit: { ergebnis: alleNeu(VIER_ZUSTAENDE) },
+      listen: [[], wieAufbewahrt(VIER_ZUSTAENDE)],
     })
     await screen.findByText('Noch keine Auswertung vorhanden.')
 
-    protokollWaehlen(PROTOKOLL_VIER_ZUSTAENDE)
+    protokollWaehlen(VIER_ZUSTAENDE)
     await screen.findByTestId(`lauf-${startedAt(0)}`)
     aufklappen(0)
 
     const panel = within(lauf(0))
-    expect(panel.getByText('30 Min')).toBeInTheDocument()
+    // Die Laufdauer ist die Summe der drei gelaufenen Sessions; das zurückgestellte Paket trägt keine.
+    expect(panel.getByText('21 Min')).toBeInTheDocument()
     expect(panel.getByText('3 bearbeitet, 1 übergangen')).toBeInTheDocument()
     expect((await panel.findAllByText('7 Min')).length).toBeGreaterThan(0)
-    // Kosten sind ein Nicht-Ziel aus #715 — sie stehen im Protokoll, aber nicht in der Auswertung.
+    // Kosten sind ein Nicht-Ziel aus #715 — sie stehen im Ergebnisstand, aber nicht in der Auswertung.
     expect(screen.queryByText(/Kosten|USD|\$/)).not.toBeInTheDocument()
   })
 
   it('weist ungedeutete Zeilen mit Anzahl und Auszug aus, wörtlich statt gerendert', async () => {
+    // Ein Ergebnisstand kennt keine ungedeuteten Zeilen (#773) — ein vom Server geladener Lauf aus
+    // der Zeit der Protokolldeutung schon.
     renderPage({
-      submit: { ergebnis: alleNeu(PROTOKOLL_UNGEDEUTET) },
-      listen: [[], wieAufbewahrt(PROTOKOLL_UNGEDEUTET)],
+      listen: [
+        [
+          aufbewahrt({
+            id: 1,
+            startedAt: startedAt(0),
+            unparsedCount: 1,
+            unparsedSample: UNGEDEUTET,
+            items: [{ id: 11, cardNumber: 700, title: 'Paket A', state: 'GREEN' }],
+          }),
+        ],
+      ],
     })
-    await screen.findByText('Noch keine Auswertung vorhanden.')
-
-    protokollWaehlen(PROTOKOLL_UNGEDEUTET)
     await screen.findByTestId(`lauf-${startedAt(0)}`)
 
     expect(within(lauf(0)).getByText('Ungedeutete Zeilen: 1')).toBeInTheDocument()
@@ -973,13 +1052,13 @@ describe('NightRunPage — Häufigkeit einer Fehlerklasse', () => {
 
   it('lädt die Häufigkeit nach erfolgreichem Senden neu', async () => {
     renderPage({
-      submit: { ergebnis: alleNeu(PROTOKOLL_GELB) },
-      listen: [[], wieAufbewahrt(PROTOKOLL_GELB)],
+      submit: { ergebnis: alleNeu(GELB) },
+      listen: [[], wieAufbewahrt(GELB)],
       zaehler: [{}, { CHECKS_RED: 1 }],
     })
     await screen.findByText('Noch keine Auswertung vorhanden.')
 
-    protokollWaehlen(PROTOKOLL_GELB)
+    protokollWaehlen(GELB)
     await screen.findByTestId(`lauf-${startedAt(0)}`)
     aufklappen(0)
 
@@ -1009,7 +1088,7 @@ describe('NightRunPage — Häufigkeit einer Fehlerklasse', () => {
     renderPage({ submit: { fehler: 'Auszug zu lang' }, zaehler: [{ CHECKS_RED: 4 }] })
     await screen.findByText('Noch keine Auswertung vorhanden.')
 
-    protokollWaehlen(PROTOKOLL_GELB)
+    protokollWaehlen(GELB)
     await screen.findByTestId(`lauf-${startedAt(0)}`)
     aufklappen(0)
 
@@ -1265,199 +1344,5 @@ describe('NightRunPage — null aus der API (#734)', () => {
     await nullLaufZeigen()
 
     expect(feld(700)?.value).toBe('Nachtlauf-Befund zu Karte #700 Paket A\nZustand: gescheitert')
-  })
-})
-
-describe('NightRunPage — Rohprotokoll je Arbeitspaket (#748)', () => {
-  /** Ein älterer aufbewahrter Lauf, der neben dem eingelieferten steht. */
-  const FRUEHER = '2026-08-30T22:00:00.000Z'
-
-  const frueherLauf = () =>
-    aufbewahrt({
-      id: 9,
-      startedAt: FRUEHER,
-      items: [{ id: 91, cardNumber: 700, title: 'Paket A', state: 'RED', errorClass: 'HARD_ABORT' }],
-    })
-
-  /**
-   * Die Rohzeilen eines Arbeitspakets, wie der Parser sie schneidet — nicht von Hand
-   * nachgebaut: Ein selbstgeschriebenes Erwartungs-Array prüfte die eigene Annahme über den
-   * Schnitt, nicht die Anzeige.
-   */
-  const rohzeilen = (cardNumber: number): readonly string[] =>
-    parseNightRunLog(PROTOKOLL_ROH).runs[0].items.find((item) => item.cardNumber === cardNumber)
-      ?.rawLines ?? []
-
-  const knopf = (cardNumber: number, geoeffnet = false) =>
-    within(lauf(0)).queryByRole('button', {
-      name: `Rohprotokoll zu Karte #${cardNumber} ${geoeffnet ? 'ausblenden' : 'anzeigen'}`,
-    })
-
-  const bereich = (cardNumber: number) =>
-    within(lauf(0)).queryByTestId(`rohprotokoll-${cardNumber}`)
-
-  const feld = (cardNumber: number) =>
-    within(lauf(0)).queryByLabelText(`Übernahmetext zu Karte #${cardNumber}`) as
-      | HTMLTextAreaElement
-      | null
-
-  let writeText: ReturnType<typeof vi.fn>
-
-  beforeEach(() => {
-    writeText = vi.fn().mockResolvedValue(undefined)
-    Object.assign(navigator, { clipboard: { writeText } })
-  })
-
-  /**
-   * Liest das Protokoll ein, lässt es einliefern und wartet den Neuladevorgang ab — erst danach
-   * zeigt die Seite den **vom Server** geladenen Lauf. Genau dort müssen die Rohzeilen aus dem
-   * sitzungsgebundenen Zwischenspeicher wieder auftauchen (Plan #744, A4).
-   */
-  async function eingeliefertUndNeugeladen(zusatz: NightRunView[] = []) {
-    renderPage({
-      submit: { ergebnis: alleNeu(PROTOKOLL_ROH) },
-      listen: [zusatz, [...zusatz, ...wieAufbewahrt(PROTOKOLL_ROH)]],
-      zaehler: [{}, { CHECKS_RED: 1 }],
-    })
-    // Erst das Laden beim Öffnen der Seite abwarten: Löste es später auf, überschriebe es die
-    // eben geparste Auswertung wieder.
-    if (zusatz.length === 0) {
-      await screen.findByText('Noch keine Auswertung vorhanden.')
-    } else {
-      await screen.findByTestId(`lauf-${zusatz[0].startedAt}`)
-    }
-
-    protokollWaehlen(PROTOKOLL_ROH)
-
-    await screen.findByTestId(`lauf-${startedAt(0)}`)
-    await within(lauf(0)).findByText('neu angelegt')
-    aufklappen(0)
-    await within(lauf(0)).findByTestId('zustand-700')
-  }
-
-  it('blendet das Rohprotokoll eines gelben Arbeitspakets ein und wieder aus', async () => {
-    await eingeliefertUndNeugeladen()
-    expect(bereich(700)).toBeNull()
-    expect(knopf(700)).toHaveAttribute('aria-expanded', 'false')
-
-    fireEvent.click(knopf(700) as HTMLElement)
-
-    expect(bereich(700)).toBeInTheDocument()
-    expect(knopf(700, true)).toHaveAttribute('aria-expanded', 'true')
-    expect(knopf(700, true)).toHaveAttribute('aria-controls', 'rohprotokoll-700')
-
-    fireEvent.click(knopf(700, true) as HTMLElement)
-
-    expect(bereich(700)).toBeNull()
-  })
-
-  it('zeigt die Rohzeilen eines roten Arbeitspakets, sobald sein Knopf gedrückt wird', async () => {
-    await eingeliefertUndNeugeladen()
-
-    fireEvent.click(knopf(701) as HTMLElement)
-
-    expect(bereich(701)?.textContent).toBe(rohzeilen(701).join('\n'))
-    expect(bereich(700)).toBeNull()
-  })
-
-  it('gibt die Rohzeilen wörtlich wieder, statt ihre Markdown-Zeichen zu deuten', async () => {
-    await eingeliefertUndNeugeladen()
-
-    fireEvent.click(knopf(700) as HTMLElement)
-
-    const gezeigt = bereich(700) as HTMLElement
-    // Ein Textknoten, kein Markup: Das Rohprotokoll ist Fremdtext und geht nie durch den
-    // Markdown-Renderer (CLAUDE-security.md).
-    expect(gezeigt.textContent).toBe(rohzeilen(700).join('\n'))
-    expect(gezeigt.textContent).toContain(ROHZEILE_SITZUNG)
-    expect(within(gezeigt).queryByText('fett', { selector: 'em' })).toBeNull()
-    expect(within(gezeigt).queryByText('fett', { selector: 'strong' })).toBeNull()
-    expect(within(gezeigt).queryByText('npm test', { selector: 'code' })).toBeNull()
-  })
-
-  it('zeigt das Rohprotokoll an einem Lauf, den der Server bereits kennt (A4)', async () => {
-    await eingeliefertUndNeugeladen()
-
-    // Die Häufigkeitszeile erscheint nur an einem aufbewahrten Lauf (#726) — der angezeigte
-    // Lauf kommt also vom Server, und die Rohzeilen sind trotzdem da.
-    expect(within(lauf(0)).getByTestId('haeufigkeit-700')).toBeInTheDocument()
-    fireEvent.click(knopf(700) as HTMLElement)
-    expect(bereich(700)?.textContent).toBe(rohzeilen(700).join('\n'))
-  })
-
-  it('führt die Rohzeilen im sichtbaren Übernahmetext', async () => {
-    await eingeliefertUndNeugeladen()
-
-    expect(feld(700)?.value).toContain('Rohprotokoll:')
-    expect(feld(700)?.value).toContain(rohzeilen(700).join('\n'))
-  })
-
-  it('legt den Übernahmetext samt Rohzeilen in die Zwischenablage', async () => {
-    await eingeliefertUndNeugeladen()
-
-    fireEvent.click(
-      within(lauf(0)).getByRole('button', { name: 'Übernahmetext zu Karte #700 kopieren' }),
-    )
-
-    await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1))
-    expect(writeText).toHaveBeenCalledWith(feld(700)?.value)
-    expect(String(writeText.mock.calls[0][0])).toContain(rohzeilen(700).join('\n'))
-  })
-
-  it('zeigt zu einem grünen und einem übersprungenen Arbeitspaket keinen Knopf', async () => {
-    await eingeliefertUndNeugeladen()
-
-    // 702 ist grün — es gibt nichts zu vertiefen; 703 wurde übersprungen und hat gar kein
-    // Rohprotokoll (Plan #744, A3).
-    expect(knopf(702)).toBeNull()
-    expect(knopf(703)).toBeNull()
-    expect(rohzeilen(703)).toEqual([])
-  })
-
-  it('lässt Knopf und Rohzeilen stehen, wenn das Senden scheitert', async () => {
-    renderPage({ submit: { fehler: 'Auszug zu lang' } })
-    await screen.findByText('Noch keine Auswertung vorhanden.')
-
-    protokollWaehlen(PROTOKOLL_ROH)
-
-    expect(await screen.findByText('Auszug zu lang')).toBeInTheDocument()
-    aufklappen(0)
-    await within(lauf(0)).findByTestId('zustand-700')
-    fireEvent.click(knopf(700) as HTMLElement)
-    expect(bereich(700)?.textContent).toBe(rohzeilen(700).join('\n'))
-  })
-
-  it('zeigt an einem nur geladenen Lauf kein Rohprotokoll', async () => {
-    renderPage({ listen: [wieAufbewahrt(PROTOKOLL_ROH)] })
-    await screen.findByTestId(`lauf-${startedAt(0)}`)
-    aufklappen(0)
-    await within(lauf(0)).findByTestId('zustand-700')
-
-    expect(knopf(700)).toBeNull()
-    expect(knopf(701)).toBeNull()
-    expect(feld(700)?.value).not.toContain('Rohprotokoll:')
-  })
-
-  it('reicht die Rohzeilen nicht an einen gleichnummerigen Lauf eines anderen Zeitpunkts weiter', async () => {
-    await eingeliefertUndNeugeladen([frueherLauf()])
-    const frueher = screen.getByTestId(`lauf-${FRUEHER}`)
-    fireEvent.click(within(frueher).getByRole('button', { expanded: false }))
-
-    await within(frueher).findByTestId('zustand-700')
-    expect(
-      within(frueher).queryByRole('button', { name: /^Rohprotokoll zu Karte #700/ }),
-    ).toBeNull()
-  })
-
-  it('schickt die Rohzeilen nicht an den Server (A5)', async () => {
-    await eingeliefertUndNeugeladen()
-
-    const gesendet = anfragen.find((a) => a.method === 'POST')
-    expect(gesendet?.body).toContain('"cardNumber":700')
-    expect(gesendet?.body).not.toContain('rawLines')
-    expect(gesendet?.body).not.toContain('*fett*')
-    for (const anfrage of anfragen) {
-      expect(anfrage.body).not.toContain(ROHZEILE_SITZUNG)
-    }
   })
 })
