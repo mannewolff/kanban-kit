@@ -345,12 +345,55 @@ public class CardService {
     return view(saved);
   }
 
+  /**
+   * Karten eines Boards (ohne Vorhaben) mit ihren Zusatzdaten — vier Sammelzugriffe statt vier
+   * Abfragen <em>je Karte</em> (Issue #768).
+   *
+   * <p>Bewusst nicht über {@link #view(Card)}: Der baut eine einzelne Karte und lädt
+   * Abhängigkeiten, Zuständige, Labels und Herkunft je Aufruf einzeln nach. Auf einer ganzen
+   * Board-Liste ergibt das ein N+1 mit vier Abfragen pro Karte; hier sind es vier für die gesamte
+   * Liste. Für die Einzelkarten-Pfade bleibt {@code view(...)} unverändert — dort ist die
+   * Kartenzahl 1, und ein Sammelzugriff brächte nichts.
+   *
+   * <p>Gefiltert wird wie bisher <b>nur</b> nach {@link CardType#CARD}: Archivierte und im
+   * Ideen-Speicher liegende Karten bleiben enthalten, die Reihenfolge ist die von {@link
+   * CardRepository#findByBoardId}.
+   */
   @Transactional(readOnly = true)
   public List<CardView> listByBoard(long userId, long boardId) {
     permissions.requireMembership(userId, boardService.requireProjectId(boardId));
-    return cards.findByBoardId(boardId).stream()
-        .filter(c -> c.type() == CardType.CARD)
-        .map(this::view)
+    List<Card> karten =
+        cards.findByBoardId(boardId).stream().filter(c -> c.type() == CardType.CARD).toList();
+    Set<Long> ids = karten.stream().map(Card::requireId).collect(Collectors.toSet());
+    // Karten ohne Eintrag fehlen in den Maps (Vertrag der drei findByCardIds) — die Sicht setzt
+    // dort eine leere Liste, nie null.
+    Map<Long, List<Integer>> abhaengigkeiten = dependencies.findByCardIds(ids);
+    Map<Long, List<Long>> zustaendige = assignees.findByCardIds(ids);
+    Map<Long, List<Long>> labelIds = cardLabels.findByCardIds(ids);
+    Map<Long, Integer> nummern = herkunftsnummern(karten);
+    return karten.stream()
+        .map(
+            c ->
+                new CardView(
+                    c.requireId(),
+                    c.boardId(),
+                    c.columnId(),
+                    c.number(),
+                    c.title(),
+                    c.description(),
+                    c.positionInColumn(),
+                    c.archived(),
+                    c.ideaStored(),
+                    c.movedToDoneAt(),
+                    abhaengigkeiten.getOrDefault(c.requireId(), List.of()),
+                    c.type(),
+                    c.parentId(),
+                    c.shortcode(),
+                    zustaendige.getOrDefault(c.requireId(), List.of()),
+                    c.dueDate(),
+                    labelIds.getOrDefault(c.requireId(), List.of()),
+                    c.targetBoardId(),
+                    c.derivedFromCardId() == null ? null : nummern.get(c.derivedFromCardId())))
         .toList();
   }
 

@@ -544,6 +544,9 @@ class CardServiceTest {
     assertThat(result).singleElement().extracting(CardService.CardView::id).isEqualTo(1L);
   }
 
+  // Die Sammelzugriffe von listByBoard (Issue #768) stehen in CardServiceListByBoardTest —
+  // diese Klasse steht an ihren PMD-Grenzen (Groesse und Import-Zahl).
+
   @Test
   void listByBoard_throwsBoardNotFound_whenBoardUnknown() {
     // Given
