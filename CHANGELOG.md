@@ -7,6 +7,16 @@ Versionierung folgt der dreiteiligen Betriebsversion (siehe [RELEASING.md](RELEA
 Einträge je Version sind ein automatischer Auszug der Commit-Titel seit dem letzten Release,
 erzeugt von `scripts/gen-changelog.mjs`.
 
+## [1.35.0] – 2026-09-07
+
+- chore: Version-Bump 1.34.1 (push main)
+- Listen-Antwort ohne volle Beschreibung: excerpt statt description ([#771](https://github.com/mannewolff/kanban-kit/issues/771))
+- Duplizieren laedt die volle Karte vor dem Dialog nach ([#770](https://github.com/mannewolff/kanban-kit/issues/770))
+- CardDetailModal laedt die volle Beschreibung beim Oeffnen nach ([#769](https://github.com/mannewolff/kanban-kit/issues/769))
+- listByBoard ohne N+1: Sammelzugriffe statt view() je Karte ([#768](https://github.com/mannewolff/kanban-kit/issues/768))
+- Sammelzugriff für Zuständige: CardAssigneeRepository#findByCardIds ([#767](https://github.com/mannewolff/kanban-kit/issues/767))
+- Neue config
+
 ## [1.34.0] – 2026-09-06
 
 - chore: Version-Bump 1.33.2 (push main)
