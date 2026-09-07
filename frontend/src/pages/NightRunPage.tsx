@@ -32,17 +32,27 @@ import {
   NIGHT_RUN_STATE_TEXT,
   type NightRunHandoffItem,
 } from '../lib/nightRunHandoff'
-import { parseNightRunLog, type NightRun, type NightRunState } from '../lib/nightRunLog'
+import {
+  parseNightRunErgebnisstand,
+  type NightRunErgebnisstandGrund,
+} from '../lib/nightRunErgebnisstand'
+import { type NightRun, type NightRunState } from '../lib/nightRunLog'
 import { readTextFile } from '../lib/readTextFile'
 import { useProjectName } from '../lib/useProjectName'
 
 /**
  * Auswertung der Nachtläufe eines Projekts (Issue #725, Plan #718).
  *
- * **Das Protokoll verlässt den Browser nicht** (Entscheidung A1, Präzedenzfall `lib/specImport.ts`):
- * Die Datei wird über {@link readTextFile} eingelesen, mit {@link parseNightRunLog} hier geparst,
- * und an den Server geht allein die verdichtete Auswertung. Protokolle sind mehrere Megabyte groß
- * und tragen Projekt-Quelltext, Sitzungs-IDs und Pfade.
+ * **Gelesen wird der Ergebnisstand des Runners** (`night-run-<datum>-<uhrzeit>.json`, Issue #774),
+ * nicht mehr das Textprotokoll: Der Stand sagt strukturiert, was die Deutung von rund 55
+ * Meldungsformen zuvor erraten musste. Ein Lauf ohne Ergebnisstand ist damit nicht mehr
+ * einlieferbar — das ist gewollt, eine geratene Farbe wäre im Leitstand schlimmer als ein
+ * ehrliches „nicht auswertbar".
+ *
+ * **Die Datei verlässt den Browser nicht** (Entscheidung A1, Präzedenzfall `lib/specImport.ts`):
+ * Sie wird über {@link readTextFile} eingelesen, mit {@link parseNightRunErgebnisstand} hier
+ * gedeutet, und an den Server geht allein die verdichtete Auswertung. Der Stand trägt Pfade der
+ * geänderten Dateien und die Kennzahlen der Sessions.
  *
  * **Die Herkunftskette wird erst beim Aufklappen eines Laufs aufgelöst** (A8). `cardsApi.byNumber`
  * liefert genau eine Karte; 30 aufbewahrte Läufe mit je 10 bis 15 Arbeitspaketen und zwei
@@ -50,20 +60,17 @@ import { useProjectName } from '../lib/useProjectName'
  */
 
 /**
- * Ein Arbeitspaket in der Anzeigeform — frisch geparst und aufbewahrt sehen gleich aus.
+ * Ein Arbeitspaket in der Anzeigeform — frisch gedeutet und aufbewahrt sehen gleich aus.
  *
  * Es **erweitert** den Typ des Übernahmetexts (#727), statt seine Felder zu wiederholen: So ist an
  * der Deklaration ablesbar, dass hier genau das Arbeitspaket steht, aus dem `buildHandoffText` den
  * Text erzeugt — und ein fehlendes Feld bräche den Build, statt eine zweite Wahrheit anzulegen.
+ *
+ * `rawLines` bleibt unbesetzt: Der Ergebnisstand trägt kein Rohprotokoll (#773), also gibt es hier
+ * keins mehr zu zeigen (#774).
  */
 interface AnzeigeItem extends NightRunHandoffItem {
   durationMs: number | undefined
-  /**
-   * Immer ein Array, ggf. leer — anders als im Übernahmetext, wo das Feld optional ist. Die Anzeige
-   * fragt es an mehreren Stellen ab; ein `undefined` hätte dort keine eigene Bedeutung („keine
-   * Rohzeilen" und „leere Rohzeilen" sind derselbe Fall) und zöge nur `?.`-Ketten nach sich.
-   */
-  rawLines: readonly string[]
 }
 
 /** Ein Lauf in der Anzeigeform. */
@@ -120,7 +127,24 @@ const STUFEN: ReadonlyArray<{ label: string; praefix: string }> = [
   { label: 'Plan', praefix: '[Plan]' },
 ]
 
-const KEIN_PROTOKOLL = 'Kein Nachtlauf-Protokoll erkannt'
+/**
+ * Was die Seite zu einem nicht deutbaren Stand sagt — eine Zeile je Grund aus
+ * {@link parseNightRunErgebnisstand}. Die drei sind bewusst unterschieden: Sie verlangen vom
+ * Betreiber verschiedene Handgriffe (die falsche Datei gewählt, ein neueres Kit, oder ein Lauf,
+ * den der Leitstand nicht auswertet).
+ */
+const NICHT_DEUTBAR: Record<NightRunErgebnisstandGrund, string> = {
+  'kein-json': 'Nicht auswertbar',
+  'unbekannte-fassung': 'Fassung nicht unterstützt',
+  'nicht-unterstuetzt': 'Lauf-Art oder Vokabular nicht unterstützt',
+}
+
+/**
+ * Ein Lauf ohne Abschluss wird **angezeigt, aber nicht eingeliefert**: Der Server legt je
+ * `(projectId, startedAt)` nur einmal an, ein unvollständiger Stand blockierte den späteren
+ * vollständigen dauerhaft.
+ */
+const UNVOLLSTAENDIG = 'Lauf noch nicht abgeschlossen — nicht gespeichert'
 
 /**
  * Holt die Häufigkeiten vom Server; ein Fehlschlag ergibt `null` statt einer Ausnahme. Die Zahlen
@@ -150,7 +174,6 @@ const ausParser = (run: NightRun): AnzeigeLauf => ({
     errorClass: item.errorClass,
     durationMs: item.durationMs,
     excerpt: item.excerpt,
-    rawLines: item.rawLines,
   })),
 })
 
@@ -180,44 +203,18 @@ const ausSicht = (view: NightRunView): AnzeigeLauf => ({
     errorClass: item.errorClass ?? undefined,
     durationMs: item.durationMs ?? undefined,
     excerpt: item.excerpt ?? undefined,
-    // Der Server kennt keine Rohzeilen (Plan #744, A5) — was diese Sitzung selbst geparst hat,
-    // trägt {@link mitRohzeilen} nach.
-    rawLines: [],
   })),
 })
 
 /**
- * Der Zwischenspeicher der Rohzeilen (Plan #744, A4).
- *
- * Der Schlüssel ist `startedAt::cardNumber`: Dieselbe Kartennummer kommt in mehreren Läufen vor,
- * der Startzeitpunkt allein reicht also nicht. Innerhalb eines Laufs legt der Parser je Nummer
- * genau ein Arbeitspaket an — mehrere Server-Items mit derselben Nummer teilen sich den Eintrag.
- */
-type Rohprotokolle = ReadonlyMap<string, readonly string[]>
-
-const schluessel = (startedAt: string, cardNumber: number) => `${startedAt}::${cardNumber}`
-
-/**
- * Legt die aufbewahrten Rohzeilen zurück auf die vom Server geladenen Läufe.
- *
- * Nötig, weil `protokollLesen` die Läufe nach dem Einliefern sofort neu lädt, damit „neu angelegt"
- * und die Häufigkeiten stimmen. Ohne diesen Schritt verschwänden die Rohzeilen Sekunden nach dem
- * Hochladen — noch bevor sie jemand ansehen konnte. Ein Lauf ohne Eintrag bleibt ohne Rohzeilen:
- * genau das ist der in einer früheren Sitzung eingelieferte Lauf.
- */
-const mitRohzeilen = (laeufe: AnzeigeLauf[], speicher: Rohprotokolle): AnzeigeLauf[] =>
-  laeufe.map((lauf) => ({
-    ...lauf,
-    items: lauf.items.map((item) => ({
-      ...item,
-      rawLines: speicher.get(schluessel(lauf.startedAt, item.cardNumber)) ?? item.rawLines,
-    })),
-  }))
-
-/**
  * Ein Lauf, wie er an den Server geht: Kennzahlen, Zustände, Kartennummern, Fehlerklassen und die
- * kurzen Auszüge — nie das Protokoll. Optionale Felder werden weggelassen statt auf `undefined`
+ * kurzen Auszüge — nie die Datei. Optionale Felder werden weggelassen statt auf `undefined`
  * gesetzt, damit der Request-Body keine leeren Schlüssel trägt.
+ *
+ * `unparsedSample` geht seit Issue #774 gar nicht mehr hinaus: Der Ergebnisstand ist strukturiert
+ * und kennt keine ungedeuteten Zeilen (#773) — was nicht ins Vokabular passt, lehnt der Parser als
+ * Ganzes ab. Ein Zweig für einen Auszug, den es nicht geben kann, wäre unerreichbar. Aufbewahrte
+ * Läufe aus der Zeit der Protokolldeutung tragen ihn weiterhin und zeigen ihn auch an.
  */
 const zurEinlieferung = (run: NightRun): NightRunSubmission => ({
   startedAt: run.startedAt,
@@ -226,7 +223,6 @@ const zurEinlieferung = (run: NightRun): NightRunSubmission => ({
   processedCount: run.processedCount,
   skippedCount: run.skippedCount,
   unparsedCount: run.unparsedCount,
-  ...(run.unparsedSample.length === 0 ? {} : { unparsedSample: run.unparsedSample.join('\n') }),
   items: run.items.map((item) => ({
     cardNumber: item.cardNumber,
     title: item.title,
@@ -359,19 +355,11 @@ function Arbeitspaket({
   istRot: (nummer: number) => boolean
   onOeffnen: (karte: CardByNumber) => void
 }>) {
-  const [rohOffen, setRohOffen] = useState(false)
   // `undefined` = noch nicht aufgelöst (die Kette lädt), `null` = nicht auflösbar.
   const wurzel = katalog.get(item.cardNumber)
   const beschriftung = `#${item.cardNumber} ${item.title}`
   // `null` an einem grünen oder grauen Arbeitspaket — dort erscheint weder Feld noch Knopf.
   const uebernahme = buildHandoffText(item)
-  // Das Rohprotokoll steht dort, wo es einen Übernahmetext gibt — also an einem gelben oder roten
-  // Arbeitspaket (Plan #744, A7). Die Bedingung wird bewusst nicht ein zweites Mal ausgeschrieben:
-  // Zwei Regeln für dieselbe Frage liefen auseinander, und dann trüge ein Befund einen Knopf ohne
-  // Feld daneben. Leer bleibt es bei einem übersprungenen Paket (A3) und bei jedem Lauf, den diese
-  // Sitzung nicht selbst geparst hat (A4).
-  const rohprotokoll = uebernahme === null || item.rawLines.length === 0 ? null : item.rawLines.join('\n')
-  const rohBereichId = `rohprotokoll-${item.cardNumber}`
 
   return (
     <Box sx={{ py: 1 }}>
@@ -434,35 +422,6 @@ function Arbeitspaket({
             {stufenText(stufe, kette(item.cardNumber, katalog), istRot)}
           </Typography>
         ))}
-
-      {rohprotokoll !== null && (
-        <Box sx={{ mt: 1 }}>
-          <Button
-            size="small"
-            aria-label={`Rohprotokoll zu Karte #${item.cardNumber} ${rohOffen ? 'ausblenden' : 'anzeigen'}`}
-            aria-expanded={rohOffen}
-            aria-controls={rohBereichId}
-            onClick={() => setRohOffen((bisher) => !bisher)}
-          >
-            {rohOffen ? 'Rohprotokoll ausblenden' : 'Rohprotokoll anzeigen'}
-          </Button>
-          {rohOffen && (
-            // Ein einziger Textknoten, nie über den Markdown-Renderer (CLAUDE-security.md): Der
-            // Sitzungsstrom ist Fremdtext und trägt Sternchen, Backticks und Klammern zuhauf.
-            // `pre` erhält die Einrückung, `pre-wrap` bricht lange Zeilen trotzdem um.
-            <Typography
-              id={rohBereichId}
-              data-testid={rohBereichId}
-              component="pre"
-              variant="body2"
-              color="text.secondary"
-              sx={{ mt: 0.5, mb: 0, whiteSpace: 'pre-wrap', maxHeight: 320, overflow: 'auto' }}
-            >
-              {rohprotokoll}
-            </Typography>
-          )}
-        </Box>
-      )}
 
       {uebernahme !== null && (
         // Der Text steht **immer** offen da, nie in einem eingeklappten Bereich: Er speist sich aus
@@ -603,10 +562,6 @@ export function NightRunPage() {
   // So wird jede Kartennummer je Seitenaufruf genau einmal geladen.
   const katalogRef = useRef(new Map<number, CardByNumber | null>())
   const geladeneLaeufe = useRef(new Set<string>())
-  // Die Rohzeilen der in dieser Sitzung geparsten Läufe. Sie leben mit der Seitenkomponente: Ein
-  // Reload oder ein Wechsel auf eine andere Seite räumt sie zwangsläufig weg — genau die Grenze
-  // aus Plan #744 (A4), ohne dass es dafür eine eigene Bedingung braucht.
-  const rohprotokolle = useRef(new Map<string, readonly string[]>())
 
   useEffect(() => {
     if (!validId) {
@@ -664,7 +619,7 @@ export function NightRunPage() {
   }
 
   /**
-   * Liest das Protokoll im Browser, zeigt die Auswertung und liefert sie ein. Die geparste
+   * Liest den Ergebnisstand im Browser, zeigt die Auswertung und liefert sie ein. Die gedeutete
    * Auswertung steht **vor** dem Senden auf der Seite: Scheitert das Einliefern, bleibt sie
    * sichtbar, und die Meldung nennt den Grund.
    */
@@ -678,34 +633,30 @@ export function NightRunPage() {
       return
     }
 
-    const { runs, dryRunCount } = parseNightRunLog(text)
-    if (runs.length === 0) {
-      setMeldung(
-        dryRunCount === 0
-          ? KEIN_PROTOKOLL
-          : `Das Protokoll enthält nur Probeläufe (${dryRunCount}) — keine Auswertung.`,
-      )
+    const ergebnis = parseNightRunErgebnisstand(text)
+    if (!ergebnis.ok) {
+      setMeldung(NICHT_DEUTBAR[ergebnis.grund])
       return
     }
 
-    for (const run of runs) {
-      for (const item of run.items) {
-        rohprotokolle.current.set(schluessel(run.startedAt, item.cardNumber), item.rawLines)
-      }
-    }
-
-    const geparst = runs.map(ausParser)
+    // Ein Ergebnisstand ist genau ein Lauf; ein zweiter Stand desselben Laufs ersetzt den ersten.
+    const run = ergebnis.run
     setLaeufe((bisher) =>
-      [...geparst, ...bisher.filter((alt) => !geparst.some((neu) => neu.startedAt === alt.startedAt))].sort(
+      [ausParser(run), ...bisher.filter((alt) => alt.startedAt !== run.startedAt)].sort(
         nachStartAbsteigend,
       ),
     )
 
+    if (run.incomplete) {
+      setMeldung(UNVOLLSTAENDIG)
+      return
+    }
+
     try {
-      const antwort = await nightRunsApi.submit(id, runs.map(zurEinlieferung))
+      const antwort = await nightRunsApi.submit(id, [zurEinlieferung(run)])
       setErgebnisse(new Map(antwort.map((eintrag) => [eintrag.startedAt, eintrag.created])))
       const views = await nightRunsApi.list(id)
-      setLaeufe(mitRohzeilen(views.map(ausSicht), rohprotokolle.current).sort(nachStartAbsteigend))
+      setLaeufe(views.map(ausSicht).sort(nachStartAbsteigend))
       setAufbewahrteLaeufe(views.length)
       setZaehler(await zaehlerLaden(id))
     } catch (fehler) {
@@ -733,7 +684,7 @@ export function NightRunPage() {
           Protokoll einlesen<input
             hidden
             type="file"
-            accept=".log,.txt,text/plain"
+            accept=".json,application/json"
             aria-label="Protokolldatei auswählen"
             onChange={(e) => {
               const datei = e.target.files?.[0]
