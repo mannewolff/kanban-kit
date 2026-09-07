@@ -180,6 +180,7 @@ interface Props {
   api?: Pick<
     CardsApi,
     | 'create'
+    | 'get'
     | 'move'
     | 'archive'
     | 'moveToIdeaStorage'
@@ -460,6 +461,25 @@ export function BoardView({
       setCards(previous)
       notify('In den Ideen-Pool verschieben fehlgeschlagen.', 'error')
     }
+  }
+
+  // Duplizieren: Die Board-Liste liefert die Beschreibung nicht mehr mit (Issue #771), deshalb
+  // wird die Quellkarte vor dem Öffnen des Dialogs einzeln nachgeladen. Schlägt das fehl, geht
+  // kein Dialog auf — sonst entstünde eine Kopie mit leerer Beschreibung.
+  const duplicateCard = async (c: Card) => {
+    if (columns.length === 0) return
+    let full: Card
+    try {
+      full = await api.get(c.id)
+    } catch {
+      notify('Karte konnte nicht geladen werden.', 'error')
+      return
+    }
+    // Die Kopie ist eine neue Karte und soll den kompletten Prozess durchlaufen — deshalb immer
+    // in die erste Spalte ("Backlog"), nicht in die Spalte der Quellkarte (analog zum
+    // board-weiten "+"-Button, der ebenfalls columns[0] nutzt).
+    setDuplicateValues({ title: c.title, description: full.description ?? '', parentId: c.parentId })
+    setModalColumn({ id: columns[0].id, name: columns[0].name })
   }
 
   const closeMenu = () => setMenu(null)
@@ -877,16 +897,7 @@ export function BoardView({
           ) : null,
           <MenuItem
             key="duplicate"
-            onClick={() => {
-              const c = menu.card
-              closeMenu()
-              if (columns.length === 0) return
-              // Die Kopie ist eine neue Karte und soll den kompletten Prozess durchlaufen —
-              // deshalb immer in die erste Spalte ("Backlog"), nicht in die Spalte der
-              // Quellkarte (analog zum board-weiten "+"-Button, der ebenfalls columns[0] nutzt).
-              setDuplicateValues({ title: c.title, description: c.description ?? '', parentId: c.parentId })
-              setModalColumn({ id: columns[0].id, name: columns[0].name })
-            }}
+            onClick={() => { const c = menu.card; closeMenu(); void duplicateCard(c) }}
           >
             Duplizieren
           </MenuItem>,
