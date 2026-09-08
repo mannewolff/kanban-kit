@@ -918,7 +918,7 @@ describe('CardDetailModal', () => {
     expect(apis.cardsApi.byNumber).not.toHaveBeenCalled()
   })
 
-  it('meldet auch einen Fehler ohne API-Kontext', async () => {
+  it('meldet beim Eröffnen auch einen Fehler ohne API-Kontext', async () => {
     const apis = makeApis()
     apis.cardsApi.openEpic.mockRejectedValue(new Error('Netzwerk weg'))
     await oeffneVorgangsDialog(apis)

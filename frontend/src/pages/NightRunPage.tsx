@@ -531,7 +531,8 @@ function LaufPanel({
             {lauf.unparsedSample.map((zeile, position) => (
               // Der Index als Schlüssel: Zwei ungedeutete Zeilen können wörtlich gleich sein, und
               // die Liste ist unveränderlich — sie wird weder sortiert noch gefiltert.
-              <Typography key={position} variant="body2" color="text.secondary">
+              // Sonar S6479 ist deshalb an der Schlüssel-Zeile unterdrückt (Plan #776, Entscheidung 3).
+              <Typography key={position /* NOSONAR */} variant="body2" color="text.secondary">
                 {zeile}
               </Typography>
             ))}
@@ -600,8 +601,8 @@ export function NightRunPage() {
           setAufbewahrteLaeufe(views.length)
         }
       })
-      .catch((fehler: Error) => {
-        if (aktiv) notify(fehler.message, 'error')
+      .catch((error_: Error) => {
+        if (aktiv) notify(error_.message, 'error')
       })
     // Ein Abruf beim Öffnen der Seite, ein weiterer nach erfolgreichem Senden — die Zahl ist
     // projektweit, ein Abruf je Lauf oder je Arbeitspaket wäre die Anfragelawine aus A8.
@@ -686,9 +687,9 @@ export function NightRunPage() {
       setLaeufe(views.map(ausSicht).sort(nachStartAbsteigend))
       setAufbewahrteLaeufe(views.length)
       setZaehler(await zaehlerLaden(id))
-    } catch (fehler) {
+    } catch (error_) {
       // `apiFetch` wirft `ApiError`, ein Netzwerkabbruch einen `TypeError` — beides `Error`.
-      notify((fehler as Error).message, 'error')
+      notify((error_ as Error).message, 'error')
     }
   }
 

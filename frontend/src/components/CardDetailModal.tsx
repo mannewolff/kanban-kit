@@ -38,8 +38,7 @@ import { boardsApi as defaultBoardsApi, type BoardColumn } from '../api/boards'
 import CircularProgress from '@mui/material/CircularProgress'
 import { ApiError } from '../api/client'
 import { DerivationTree } from './DerivationTree'
-import { cardsApi as defaultCardsApi , type DerivationNode } from '../api/cards'
-import type { CardActivity, CardByNumber, CardDetail } from '../api/cards'
+import { cardsApi as defaultCardsApi, type CardActivity, type CardByNumber, type CardDetail, type DerivationNode } from '../api/cards'
 import { commentsApi as defaultCommentsApi, type Comment, type CommentsApi } from '../api/comments'
 import type { Epic } from '../api/epics'
 import type { Label as BoardLabel } from '../api/labels'
@@ -680,8 +679,8 @@ function CardStatusChip({
         SelectDisplayProps={{ 'aria-label': 'Zustand' }}
         onChange={(e) => {
           // Nur die Zielspalten lösen `onChange` aus — der Eintrag der aktuellen Spalte ist
-          // `disabled`. Deshalb ohne Nicht-gefunden-Zweig.
-          const [target] = ziele.filter((c) => c.id === Number(e.target.value))
+          // `disabled`. Deshalb ohne Nicht-gefunden-Zweig; das `!` ist dadurch gedeckt.
+          const target = ziele.find((c) => c.id === Number(e.target.value))!
           if (canonicalColumnKey(target.name) === 'READY') {
             setConfirmTarget(target)
             return
@@ -1002,11 +1001,11 @@ function CardDetailModalView({
       // Zum neuen Vorhaben: ueber denselben Verweis-Stack wie die `#N`-Spruenge. Fehlt die
       // Projekt-ID, gibt es keine Aufloesung — dann bleibt es bei der Meldung.
       onOpenDependency?.(vorhaben.number)
-    } catch (grund: unknown) {
+    } catch (error_: unknown) {
       // Die Meldung des Servers, nicht eine eigene: Die Ablehnungen aus #640 tragen einen
       // Feldbezug, und ein verschluckter Text liesse den Nutzer raten.
       notify(
-        grund instanceof ApiError ? grund.message : 'Vorgang eröffnen fehlgeschlagen.',
+        error_ instanceof ApiError ? error_.message : 'Vorgang eröffnen fehlgeschlagen.',
         'error',
       )
     }
@@ -1132,11 +1131,11 @@ function CardDetailModalView({
       .epicTree(baumBoardId, card.id)
       .then(
         (zeilen) => ({ zeilen, fehler: null as string | null }),
-        (grund: unknown) => ({
+        (error_: unknown) => ({
           zeilen: null,
           fehler:
-            grund instanceof ApiError
-              ? grund.message
+            error_ instanceof ApiError
+              ? error_.message
               : 'Der Herkunftsbaum konnte nicht geladen werden.',
         }),
       )

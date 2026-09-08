@@ -375,6 +375,32 @@ interface Deutung {
 }
 
 /**
+ * Wendet einen Treffer aus {@link MUSTER} auf sein Arbeitspaket an — legt es bei
+ * Bedarf an, uebernimmt Titel und, falls die Zeile keine Eroeffnung ist, den neuen
+ * Zustand. Als eigene Funktion herausgeloest, weil sie den groessten Teil der
+ * Verschachtelung von {@link deuteZeile} trug (Sonar S3776); die Verzweigungen
+ * selbst bleiben unveraendert (keine neue, keine entfernte).
+ *
+ * @returns das Arbeitspaket, falls die Zeile es eroeffnet — sonst `undefined`
+ */
+function verarbeiteTreffer(a: Aufbau, t: Treffer, inhalt: string): NightRunItem | undefined {
+  let eroeffnet: NightRunItem | undefined
+  if (t.cardNumber !== undefined) {
+    const item = paket(a, t.cardNumber, inhalt)
+    if (t.title) item.title = t.title
+    if (t.eroeffnet) eroeffnet = item
+    else if (t.state) {
+      item.state = t.state
+      item.errorClass = t.errorClass
+      item.excerpt = inhalt
+      if (t.durationMs !== undefined) item.durationMs = t.durationMs
+      if (t.commit !== undefined) item.commit = t.commit
+    }
+  }
+  return eroeffnet
+}
+
+/**
  * Deutet eine Runner-Zeile.
  *
  * @param inhalt die Zeile ohne Zeitstempel-Praefix — daran greifen die Muster
@@ -390,19 +416,7 @@ function deuteZeile(a: Aufbau, inhalt: string, roh: string): Deutung {
     const m = re.exec(inhalt)
     if (!m) continue
     const t = deute(m)
-    let eroeffnet: NightRunItem | undefined
-    if (t.cardNumber !== undefined) {
-      const item = paket(a, t.cardNumber, inhalt)
-      if (t.title) item.title = t.title
-      if (t.eroeffnet) eroeffnet = item
-      else if (t.state) {
-        item.state = t.state
-        item.errorClass = t.errorClass
-        item.excerpt = inhalt
-        if (t.durationMs !== undefined) item.durationMs = t.durationMs
-        if (t.commit !== undefined) item.commit = t.commit
-      }
-    }
+    const eroeffnet = verarbeiteTreffer(a, t, inhalt)
     return { gedeutet: true, cardNumber: t.cardNumber, eroeffnet }
   }
   return { gedeutet: false }
@@ -455,73 +469,100 @@ function fertig(a: Aufbau): NightRun {
 }
 
 /**
+ * Beendet den offenen Aufbau und schreibt ihn ins Protokoll: Probelaeufe werden
+ * nur gezaehlt, echte Laeufe in die Ausgabeform gebracht. Ohne offenen Aufbau
+ * geschieht nichts.
+ */
+function schliesseAufbau(a: Aufbau | null, log: NightRunLog): void {
+  if (!a) return
+  if (a.dryRun) log.dryRunCount++
+  else log.runs.push(fertig(a))
+}
+
+/**
+ * Nimmt eine Zeile **ohne** Zeitstempel-Praefix auf.
+ *
+ * <p>Der zweite Schreiber: `fail()` haengt kein Praefix an und beendet den Lauf.
+ * Alles andere ohne Praefix ist Sitzungsstrom — weder gedeutet noch gezaehlt,
+ * aber Teil des Rohprotokolls des offenen Arbeitspakets. Ohne offenen Aufbau
+ * gehoert die Zeile zu keinem Lauf.
+ */
+function deutePraefixlos(a: Aufbau | null, zeile: string): void {
+  if (!a) return
+  // Auch bei einem harten Abbruch ist genau diese Zeile die, die man im Rohprotokoll
+  // sehen will — sie gehoert noch zum Paket und schliesst es erst danach.
+  a.aktuellesPaket?.rawLines.push(zeile)
+  if (!zeile.startsWith(FAIL)) return
+  a.aktuellesPaket = null
+  a.runState = 'RED'
+  a.runErrorClass = 'HARD_ABORT'
+  a.runExcerpt = zeile
+  a.abgeschlossen = true
+}
+
+/**
+ * Wertet Abschlusszeile und Pruefblock-Kopf aus. Beide schliessen das offene
+ * Arbeitspaket und gehoeren selbst keinem mehr an (Plan #744, A1).
+ */
+function markiereAbschluss(a: Aufbau, inhalt: string): void {
+  if (ABSCHLUSS.test(inhalt)) {
+    a.abgeschlossen = true
+    if (inhalt.startsWith(DRY_RUN)) a.dryRun = true
+    a.stage = STUFE.exec(inhalt)?.[1] ?? a.stage
+    a.aktuellesPaket = null
+  }
+  if (PRUEFBLOCK.test(inhalt)) a.aktuellesPaket = null
+}
+
+/**
+ * Nimmt eine Zeile **mit** Zeitstempel-Praefix in den offenen Aufbau auf:
+ * Abschluss markieren, deuten, Ungedeutetes zaehlen, Rohzeile zuordnen.
+ *
+ * @param inhalt die Zeile ohne Zeitstempel-Praefix — daran greifen die Muster
+ * @param zeile die Zeile, wie sie in der Datei steht — sie geht ins Rohprotokoll
+ */
+function deuteMitPraefix(a: Aufbau, inhalt: string, zeile: string): void {
+  markiereAbschluss(a, inhalt)
+
+  const deutung = deuteZeile(a, inhalt, zeile)
+  if (!deutung.gedeutet) {
+    a.unparsedCount++
+    if (a.unparsedSample.length < 5) a.unparsedSample.push(inhalt)
+  }
+  uebernimm(a, zeile, deutung)
+}
+
+/**
  * Zerlegt ein Nachtlauf-Protokoll in Auswertungen je Lauf.
  *
  * @param text der vollstaendige Dateiinhalt; Text vor der ersten Startzeile wird ignoriert
  */
 export function parseNightRunLog(text: string): NightRunLog {
-  const runs: NightRun[] = []
-  let dryRunCount = 0
+  const log: NightRunLog = { runs: [], dryRunCount: 0 }
   let a: Aufbau | null = null
-
-  const schliesse = () => {
-    if (!a) return
-    if (a.dryRun) dryRunCount++
-    else runs.push(fertig(a))
-    a = null
-  }
 
   for (const rohzeile of text.split('\n')) {
     const zeile = rohzeile.replace(/\r$/, '')
     const m = PRAEFIX.exec(zeile)
 
     if (!m) {
-      // Der zweite Schreiber: `fail()` haengt kein Praefix an und beendet den Lauf.
-      if (a && zeile.startsWith(FAIL)) {
-        // Bei einem harten Abbruch ist genau diese Zeile die, die man im Rohprotokoll
-        // sehen will — sie gehoert noch zum Paket und schliesst es danach.
-        a.aktuellesPaket?.rawLines.push(zeile)
-        a.aktuellesPaket = null
-        a.runState = 'RED'
-        a.runErrorClass = 'HARD_ABORT'
-        a.runExcerpt = zeile
-        a.abgeschlossen = true
-        continue
-      }
-      // Alles andere ohne Praefix ist Sitzungsstrom — weder gedeutet noch gezaehlt,
-      // aber Teil des Rohprotokolls des offenen Arbeitspakets.
-      a?.aktuellesPaket?.rawLines.push(zeile)
+      deutePraefixlos(a, zeile)
       continue
     }
 
     const [, zeitstempel, inhalt] = m
     const start = START.exec(inhalt)
     if (start) {
-      schliesse()
+      schliesseAufbau(a, log)
       a = neuerAufbau(zeitstempel, start[1])
       continue
     }
     if (!a) continue // Runner-Zeilen vor dem ersten Start gehoeren zu keinem Lauf.
 
     a.letzterZeitstempel = zeitstempel
-    // Abschlusszeile und Pruefblock-Kopf schliessen das offene Arbeitspaket und
-    // gehoeren selbst keinem mehr an (Plan #744, A1).
-    if (ABSCHLUSS.test(inhalt)) {
-      a.abgeschlossen = true
-      if (inhalt.startsWith(DRY_RUN)) a.dryRun = true
-      a.stage = STUFE.exec(inhalt)?.[1] ?? a.stage
-      a.aktuellesPaket = null
-    }
-    if (PRUEFBLOCK.test(inhalt)) a.aktuellesPaket = null
-
-    const deutung = deuteZeile(a, inhalt, zeile)
-    if (!deutung.gedeutet) {
-      a.unparsedCount++
-      if (a.unparsedSample.length < 5) a.unparsedSample.push(inhalt)
-    }
-    uebernimm(a, zeile, deutung)
+    deuteMitPraefix(a, inhalt, zeile)
   }
-  schliesse()
+  schliesseAufbau(a, log)
 
-  return { runs, dryRunCount }
+  return log
 }
