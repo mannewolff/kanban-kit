@@ -26,7 +26,7 @@
     "in_review": "In review",
     "done": "Done"
   },
-  "reviewCommand": "codex exec --model gpt-6.0-astra -c model_reasoning_effort=\"high\"",
+  "reviewCommand": "codex exec --model gpt-6-astra -c model_reasoning_effort=\"high\"",
   "formatFixCommand": "mvn spotless:apply",
   "github": {
     "projectNumber": 13
@@ -85,7 +85,7 @@
       {
         "name": "gpt-astra",
         "kind": "command",
-        "command": "codex exec --model gpt-6.0-astra -c model_reasoning_effort=\"high\""
+        "command": "codex exec --model gpt-6-astra -c model_reasoning_effort=\"high\""
       }
     ],
     "pairs": {
