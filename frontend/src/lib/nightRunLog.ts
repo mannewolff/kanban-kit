@@ -375,6 +375,32 @@ interface Deutung {
 }
 
 /**
+ * Wendet einen Treffer aus {@link MUSTER} auf sein Arbeitspaket an — legt es bei
+ * Bedarf an, uebernimmt Titel und, falls die Zeile keine Eroeffnung ist, den neuen
+ * Zustand. Als eigene Funktion herausgeloest, weil sie den groessten Teil der
+ * Verschachtelung von {@link deuteZeile} trug (Sonar S3776); die Verzweigungen
+ * selbst bleiben unveraendert (keine neue, keine entfernte).
+ *
+ * @returns das Arbeitspaket, falls die Zeile es eroeffnet — sonst `undefined`
+ */
+function verarbeiteTreffer(a: Aufbau, t: Treffer, inhalt: string): NightRunItem | undefined {
+  let eroeffnet: NightRunItem | undefined
+  if (t.cardNumber !== undefined) {
+    const item = paket(a, t.cardNumber, inhalt)
+    if (t.title) item.title = t.title
+    if (t.eroeffnet) eroeffnet = item
+    else if (t.state) {
+      item.state = t.state
+      item.errorClass = t.errorClass
+      item.excerpt = inhalt
+      if (t.durationMs !== undefined) item.durationMs = t.durationMs
+      if (t.commit !== undefined) item.commit = t.commit
+    }
+  }
+  return eroeffnet
+}
+
+/**
  * Deutet eine Runner-Zeile.
  *
  * @param inhalt die Zeile ohne Zeitstempel-Praefix — daran greifen die Muster
@@ -390,19 +416,7 @@ function deuteZeile(a: Aufbau, inhalt: string, roh: string): Deutung {
     const m = re.exec(inhalt)
     if (!m) continue
     const t = deute(m)
-    let eroeffnet: NightRunItem | undefined
-    if (t.cardNumber !== undefined) {
-      const item = paket(a, t.cardNumber, inhalt)
-      if (t.title) item.title = t.title
-      if (t.eroeffnet) eroeffnet = item
-      else if (t.state) {
-        item.state = t.state
-        item.errorClass = t.errorClass
-        item.excerpt = inhalt
-        if (t.durationMs !== undefined) item.durationMs = t.durationMs
-        if (t.commit !== undefined) item.commit = t.commit
-      }
-    }
+    const eroeffnet = verarbeiteTreffer(a, t, inhalt)
     return { gedeutet: true, cardNumber: t.cardNumber, eroeffnet }
   }
   return { gedeutet: false }
