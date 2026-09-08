@@ -6,6 +6,43 @@ import { useCheckboxShortcut } from '../lib/useCheckboxShortcut'
 import { isTooLong, tooLongMessage } from '../lib/textLimits'
 
 /**
+ * Native Vorhaben-Auswahl: „(kein Vorhaben)" plus alle übergebenen Vorhaben mit Kürzel. Eigene
+ * Komponente, weil neben dieser Feldbasis auch der schlanke Anlege-Zweig des `NewCardModal`
+ * (Idee/Karte ohne Zusatzfelder) dieselbe Auswahl braucht — vorher zwei wortgleiche Kopien (#781).
+ */
+export function EpicSelectField({
+  parentId,
+  epics,
+  onParentIdChange,
+}: Readonly<{
+  parentId: number | null
+  epics: Epic[]
+  onParentIdChange: (value: number | null) => void
+}>) {
+  return (
+    <TextField
+      select
+      label="Vorhaben"
+      value={parentId ?? ''}
+      onChange={(e) => onParentIdChange(e.target.value === '' ? null : Number(e.target.value))}
+      slotProps={{
+        htmlInput: { 'aria-label': 'Vorhaben' },
+        select: { native: true },
+        inputLabel: { shrink: true },
+      }}
+      fullWidth
+    >
+      <option value="">(kein Vorhaben)</option>
+      {epics.map((epic) => (
+        <option key={epic.id} value={epic.id}>
+          {epicShortcode(epic.title, epic.shortcode)} – {epic.title}
+        </option>
+      ))}
+    </TextField>
+  )
+}
+
+/**
  * Kontrollierte, präsentationale Karten-Felder (Werte + onChange als Props, keine eigene
  * Persistenz). Für `EPIC` das Kürzel, für `CARD` Epic-Zuordnung/Abhängigkeiten/Fälligkeit — jeweils
  * plus Titel und Beschreibung. Gemeinsame Basis von Anlege- und Bearbeiten-Formular, damit beide
@@ -96,25 +133,7 @@ export function CardFields({
           fullWidth
         />
       ) : (
-        <TextField
-          select
-          label="Vorhaben"
-          value={parentId ?? ''}
-          onChange={(e) => onParentIdChange(e.target.value === '' ? null : Number(e.target.value))}
-          slotProps={{
-            htmlInput: { 'aria-label': 'Vorhaben' },
-            select: { native: true },
-            inputLabel: { shrink: true },
-          }}
-          fullWidth
-        >
-          <option value="">(kein Vorhaben)</option>
-          {epics.map((epic) => (
-            <option key={epic.id} value={epic.id}>
-              {epicShortcode(epic.title, epic.shortcode)} – {epic.title}
-            </option>
-          ))}
-        </TextField>
+        <EpicSelectField parentId={parentId} epics={epics} onParentIdChange={onParentIdChange} />
       )}
       <TextField
         label="Abhängig von (Nummern, kommagetrennt)"
