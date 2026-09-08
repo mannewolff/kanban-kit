@@ -1915,18 +1915,56 @@ describe('BoardView', () => {
       expect(screen.queryByRole('button', { name: /ausgeblendet/ })).not.toBeInTheDocument()
     })
 
-    it('bietet ausgeblendete Vorhaben im Anlege-Dialog nicht an, im Vorhaben-Filter aber schon', () => {
-      // Zwei Achsen mit gegenläufigem Zweck (Plan #717, A4/A7): Der Anlege-Dialog soll nichts
-      // anbieten, was auf dem Board unsichtbar wäre; der Filter muss ein ausgeblendetes Vorhaben
-      // weiter nennen, sonst käme man an dessen Karten nicht mehr heran.
+    it('bietet ausgeblendete Vorhaben weder im Anlege-Dialog noch im Vorhaben-Filter an', () => {
+      // Beide Bedienstellen zeigen seit Issue #785 nur einblendbare Vorhaben — vorher galt das nur
+      // für den Anlege-Dialog (Plan #717, A4/A7): Ein ausgeblendetes Vorhaben zeigte über den
+      // Filter ohnehin nie eine Karte, weil dessen Karten auf dem Board grundsätzlich verdeckt
+      // bleiben; der Filter täuschte damit eine Erreichbarkeit vor, die es nie gab.
       render(<BoardMitAusblendung initial={[8]} cards={[aBacklog, bBacklog, frei]} />)
 
-      expect(within(screen.getByLabelText('Vorhaben-Filter')).getByRole('option', { name: /Suche/ })).toBeInTheDocument()
+      expect(within(screen.getByLabelText('Vorhaben-Filter')).queryByRole('option', { name: /Suche/ })).not.toBeInTheDocument()
 
       fireEvent.click(screen.getByRole('button', { name: 'Neu anlegen' }))
       const auswahl = within(screen.getByLabelText('Vorhaben'))
       expect(auswahl.getByRole('option', { name: /Auth/ })).toBeInTheDocument()
       expect(auswahl.queryByRole('option', { name: /Suche/ })).not.toBeInTheDocument()
+    })
+
+    it('setzt einen per localStorage gemerkten Filter zurück, wenn das Vorhaben inzwischen ausgeblendet ist', () => {
+      // Der Filter merkt sich seine Auswahl unabhängig vom Ausblenden-Zustand: Zeigte er beim Laden
+      // weiter auf ein inzwischen ausgeblendetes Vorhaben, bliebe das Board dauerhaft leer, ohne
+      // dass der Dropdown das gewählte Vorhaben überhaupt noch als Option führte (Issue #785).
+      // Funktionaler localStorage-Stub mit vorbelegtem Wert, analog zum Mount-Test oben im File.
+      const store = new Map<string, string>([['manban.boardEpicFilter.1', '8']])
+      vi.stubGlobal('localStorage', {
+        getItem: (k: string) => store.get(k) ?? null,
+        setItem: (k: string, v: string) => { store.set(k, v) },
+        removeItem: (k: string) => { store.delete(k) },
+        clear: () => store.clear(), key: () => null, length: 0,
+      })
+
+      render(<BoardMitAusblendung initial={[8]} cards={[aBacklog, bBacklog, frei]} />)
+
+      expect(screen.getByLabelText('Vorhaben-Filter')).toHaveValue('')
+      expect(store.has('manban.boardEpicFilter.1')).toBe(false)
+      expect(screen.getByTestId('card-100')).toBeInTheDocument()
+      expect(screen.getByTestId('card-300')).toBeInTheDocument()
+    })
+
+    it('setzt den Filter-Zustand trotz scheiterndem localStorage zurück, wenn das Vorhaben ausgeblendet ist', () => {
+      // Deckt den catch-Zweig des Abgleichs ab: Das Zurücksetzen im State darf nicht an einem
+      // scheiternden removeItem hängen — nur das Merken schlägt dann stumm fehl.
+      vi.stubGlobal('localStorage', {
+        getItem: () => '8',
+        setItem: () => {},
+        removeItem: () => { throw new Error('storage disabled') },
+        clear: () => {}, key: () => null, length: 0,
+      })
+
+      render(<BoardMitAusblendung initial={[8]} cards={[aBacklog, bBacklog, frei]} />)
+
+      expect(screen.getByLabelText('Vorhaben-Filter')).toHaveValue('')
+      expect(screen.getByTestId('card-100')).toBeInTheDocument()
     })
 
     it('bleibt ohne die beiden Ausblendungs-Props bedienbar', () => {

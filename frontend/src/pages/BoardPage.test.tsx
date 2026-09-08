@@ -896,11 +896,17 @@ describe('BoardPage ausgeblendete Vorhaben', () => {
   })
 
   it('vergisst beim Einblenden beide gespeicherten Schlüssel', async () => {
+    // Zweites, eingeblendetes Vorhaben nötig (Issue #785): Der Filter bietet seither nur noch
+    // eingeblendete Vorhaben an — mit nur dem ausgeblendeten Auth existierte kein Dropdown mehr,
+    // in das sich ein Wert wählen ließe.
     const store = stubStore([[hiddenKey(1), JSON.stringify([9])]])
-    renderBoard([mkEpic(9, 'Auth', [1])], [mkKarte(100, 1, 9), mkKarte(300, 4, null)])
+    renderBoard(
+      [mkEpic(9, 'Auth', [1]), mkEpic(8, 'Suche', [2])],
+      [mkKarte(100, 1, 9), mkKarte(200, 2, 8), mkKarte(300, 4, null)],
+    )
 
     expect(await screen.findByTestId('card-300')).toBeInTheDocument()
-    fireEvent.change(screen.getByLabelText('Vorhaben-Filter'), { target: { value: '9' } })
+    fireEvent.change(screen.getByLabelText('Vorhaben-Filter'), { target: { value: '8' } })
     fireEvent.click(screen.getAllByRole('button', { name: /ausgeblendet/ })[0])
 
     expect(store.has(hiddenKey(1))).toBe(false)

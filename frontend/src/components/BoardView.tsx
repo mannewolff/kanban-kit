@@ -245,6 +245,19 @@ export function BoardView({
     }
   })
 
+  // Ein per localStorage gemerkter Filter kann auf ein Vorhaben zeigen, das seither ausgeblendet
+  // wurde — die beiden Achsen kennen sich sonst nicht. Ohne diesen Abgleich bliebe das Board nach
+  // jedem Laden leer, ohne dass der Dropdown das gewählte Vorhaben überhaupt noch als Option führt.
+  useEffect(() => {
+    if (epicFilter === null || !hiddenEpics.has(epicFilter)) return
+    setEpicFilter(null)
+    try {
+      localStorage.removeItem(`manban.boardEpicFilter.${board.id}`)
+    } catch {
+      // localStorage nicht verfügbar — der State-Reset wirkt trotzdem.
+    }
+  }, [epicFilter, hiddenEpics, board.id])
+
   useEffect(() => setCards(initialCards), [initialCards])
 
   const sortColumns = (cols: BoardColumn[]) => [...cols].sort((a, b) => a.position - b.position)
@@ -369,6 +382,10 @@ export function BoardView({
   // Nur Darstellung: Move/Anlegen arbeiten weiter auf dem vollen Bestand (`cards`).
   const hiddenNumbers = hiddenCardNumbers(cards, epics, hiddenEpics, epicFilter)
   const filteredCards = cards.filter((c) => !hiddenNumbers.has(c.number))
+  // Einblendbare Vorhaben (weder ausgeblendet). Sowohl Vorhaben-Filter als auch Anlege-Dialog
+  // bieten seit Issue #785 nur noch daraus an — ein ausgeblendetes Vorhaben zeigte über den
+  // Filter ohnehin nie etwas an, weil seine Karten auf dem Board grundsätzlich verdeckt bleiben.
+  const sichtbareEpics = selectableEpics(epics, hiddenEpics)
 
   // Wirksame Auswahl für Massenaktionen: die Schnittmenge aus der Auswahl und dem, was der
   // Anzeige-Filter gerade zeigt. Jede Bulk-Stelle (Zählung, Dialogtexte, Verschieben, Archivieren,
@@ -569,9 +586,9 @@ export function BoardView({
 
   return (
     <Box>
-      {(epics.length > 0 || (canEdit && columns.length > 0)) && (
+      {(sichtbareEpics.length > 0 || (canEdit && columns.length > 0)) && (
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-          {epics.length > 0 && (
+          {sichtbareEpics.length > 0 && (
             <TextField
               select
               size="small"
@@ -586,7 +603,7 @@ export function BoardView({
               sx={{ minWidth: 200 }}
             >
               <option value="">Alle Vorhaben</option>
-              {epics.map((epic) => (
+              {sichtbareEpics.map((epic) => (
                 <option key={epic.id} value={epic.id}>
                   {epicShortcode(epic.title, epic.shortcode)} – {epic.title}
                 </option>
@@ -949,13 +966,16 @@ export function BoardView({
 
       {/* modalColumn ist beim Submit immer gesetzt: NewCardModal ist nur offen, solange
           open={modalColumn !== null} — der Anlegen-Button existiert also nur in diesem Zustand. */}
-      {/* Nur der Anlege-Dialog filtert (Plan #717, A4): Eine neue Karte kann keine bestehende
-          Zuordnung verlieren, und was auf dem Board unsichtbar ist, soll man ihr nicht geben.
-          Vorhaben-Filter und Karten-Kürzel bleiben an der vollen Liste (A7). */}
+      {/* Anlege-Dialog und Vorhaben-Filter bieten seit Issue #785 beide nur einblendbare Vorhaben an
+          (Plan #717, A4 galt bisher nur hier): Eine neue Karte kann keine bestehende Zuordnung
+          verlieren, und was auf dem Board unsichtbar ist, soll man ihr nicht geben — dasselbe gilt
+          jetzt für den Filter, dessen Auswahl sonst ein dauerhaft leeres Board zeigte. Das
+          Karten-Kürzel (EpicBadge) bleibt bewusst an der vollen Liste `epics`: Eine Karte behält
+          ihre Zuordnung sichtbar, auch wenn das Vorhaben inzwischen ausgeblendet wurde. */}
       <NewCardModal
         open={modalColumn !== null}
         columnName={modalColumn?.name ?? ''}
-        epics={selectableEpics(epics, hiddenEpics)}
+        epics={sichtbareEpics}
         members={members}
         boardLabels={boardLabels}
         initialValues={duplicateValues ?? undefined}
