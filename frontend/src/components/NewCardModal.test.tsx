@@ -112,6 +112,9 @@ describe('NewCardModal', () => {
     expect(screen.getByLabelText('Titel')).toBeInTheDocument()
     expect(screen.getByLabelText('Beschreibung')).toBeInTheDocument()
     expect(screen.getByLabelText('Vorhaben')).toBeInTheDocument()
+    // Optionsvorrat wie in der gemeinsamen Feldbasis: „(kein Vorhaben)" plus Kürzel + Titel (#781).
+    expect(screen.getByRole('option', { name: '(kein Vorhaben)' })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: 'AUT – Auth' })).toBeInTheDocument()
     expect(screen.queryByLabelText('Zuständige')).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Labels')).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Fällig am')).not.toBeInTheDocument()

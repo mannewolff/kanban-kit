@@ -14,7 +14,7 @@ import { epicShortcode } from '../lib/epicMeta'
 import { dueInputToIso } from '../lib/dueDate'
 import { useCheckboxShortcut } from '../lib/useCheckboxShortcut'
 import { isTooLong, tooLongMessage } from '../lib/textLimits'
-import { CardFields } from './CardFields'
+import { CardFields, EpicSelectField } from './CardFields'
 import { AssigneeSection, LabelSection, parseDependencyInput } from './CardDetailModal'
 import { dialogTitleSx } from './dialogChromeSx'
 
@@ -257,25 +257,7 @@ export function NewCardModal({
                   fullWidth
                 />
               ) : (
-                <TextField
-                  select
-                  label="Vorhaben"
-                  value={parentId ?? ''}
-                  onChange={(e) => setParentId(e.target.value === '' ? null : Number(e.target.value))}
-                  slotProps={{
-                    htmlInput: { 'aria-label': 'Vorhaben' },
-                    select: { native: true },
-                    inputLabel: { shrink: true },
-                  }}
-                  fullWidth
-                >
-                  <option value="">(kein Vorhaben)</option>
-                  {epics.map((epic) => (
-                    <option key={epic.id} value={epic.id}>
-                      {epicShortcode(epic.title, epic.shortcode)} – {epic.title}
-                    </option>
-                  ))}
-                </TextField>
+                <EpicSelectField parentId={parentId} epics={epics} onParentIdChange={setParentId} />
               )}
 
               <TextField
