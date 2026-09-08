@@ -7,6 +7,15 @@ Versionierung folgt der dreiteiligen Betriebsversion (siehe [RELEASING.md](RELEA
 Einträge je Version sind ein automatischer Auszug der Commit-Titel seit dem letzten Release,
 erzeugt von `scripts/gen-changelog.mjs`.
 
+## [1.38.0] – 2026-09-08
+
+- chore: v1.37.1
+- Cognitive Complexity von deuteZeile senken ([#761](https://github.com/mannewolff/kanban-kit/issues/761))
+- Cognitive Complexity von parseNightRunLog senken ([#730](https://github.com/mannewolff/kanban-kit/issues/730))
+- .find() statt Destructuring+filter im Zustands-Select ([#780](https://github.com/mannewolff/kanban-kit/issues/780))
+- Drei Sonar-Findings in NightRunPage bereinigen ([#733](https://github.com/mannewolff/kanban-kit/issues/733))
+- Vier Sonar-Findings in CardDetailModal bereinigen ([#654](https://github.com/mannewolff/kanban-kit/issues/654))
+
 ## [1.37.0] – 2026-09-07
 
 - chore: Version-Bump 1.36.1 (push main)
