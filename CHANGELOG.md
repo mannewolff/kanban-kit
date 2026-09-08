@@ -7,6 +7,15 @@ Versionierung folgt der dreiteiligen Betriebsversion (siehe [RELEASING.md](RELEA
 Einträge je Version sind ein automatischer Auszug der Commit-Titel seit dem letzten Release,
 erzeugt von `scripts/gen-changelog.mjs`.
 
+## [1.39.0] – 2026-09-08
+
+- chore: v1.38.1
+- Syntaxfehler in workflow.config.json beheben (fehlende Anführung bei gpt-sol)
+- Fehler in der Zuordnung codex behoben
+- gpt 6.0 astra als reviewer eingefügt
+- gpt 6.0 astra als reviewer eingefügt
+- Duplizierte Vorhaben-Auswahl zusammenfuehren ([#781](https://github.com/mannewolff/kanban-kit/issues/781))
+
 ## [1.38.0] – 2026-09-08
 
 - chore: v1.37.1
