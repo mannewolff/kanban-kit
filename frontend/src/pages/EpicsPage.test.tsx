@@ -159,6 +159,35 @@ describe('EpicsPage', () => {
     expect(mCards.list).not.toHaveBeenCalled()
   })
 
+  // --- Ladezustand und Fehlschlag beim Erstladen (Issue #783) ----------------
+
+  it('zeigt einen Ladeindikator, solange die Ladeanfragen noch nicht beantwortet sind', async () => {
+    let resolveEpics: (epics: unknown[]) => void = () => {}
+    mEpics.list.mockReturnValue(new Promise((resolve) => { resolveEpics = resolve }))
+    renderPage()
+
+    expect(screen.getByRole('progressbar')).toBeInTheDocument()
+    expect(screen.queryByText('Noch keine Vorhaben.')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('vorhaben-raster')).not.toBeInTheDocument()
+
+    resolveEpics([])
+    await waitFor(() => expect(screen.queryByRole('progressbar')).not.toBeInTheDocument())
+    expect(await screen.findByText('Noch keine Vorhaben.')).toBeInTheDocument()
+  })
+
+  /**
+   * Vorher: eine unbehandelte Promise-Ablehnung, `epics` blieb dauerhaft bei `[]` — nicht von
+   * einem echten leeren Board zu unterscheiden. Welcher der vier Ladeaufrufe scheitert, ist
+   * beliebig; hier stellvertretend `epicsApi.list`.
+   */
+  it('zeigt eine Fehlermeldung, wenn eine der vier Ladeanfragen beim ersten Versuch fehlschlägt', async () => {
+    mEpics.list.mockRejectedValue(new Error('kaputt'))
+    renderPage()
+
+    expect(await screen.findByText('Vorhaben konnten nicht geladen werden.')).toBeInTheDocument()
+    expect(screen.queryByText('Noch keine Vorhaben.')).not.toBeInTheDocument()
+  })
+
   it('öffnet ein Epic per Klick im Detail-Modal mit seinen Kind-Karten', async () => {
     mEpics.list.mockResolvedValue([
       { id: 9, number: 2, title: 'Auth', description: 'Text', shortcode: 'AUT', done: 1, total: 2, memberNumbers: [], rootNumbers: [], requirementCardNumber: null },

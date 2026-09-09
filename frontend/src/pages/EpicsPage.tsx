@@ -3,6 +3,7 @@ import MoreVertIcon from '@mui/icons-material/MoreVert'
 import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
+import CircularProgress from '@mui/material/CircularProgress'
 import FormControlLabel from '@mui/material/FormControlLabel'
 import IconButton from '@mui/material/IconButton'
 import LinearProgress from '@mui/material/LinearProgress'
@@ -13,7 +14,7 @@ import Paper from '@mui/material/Paper'
 import Stack from '@mui/material/Stack'
 import Switch from '@mui/material/Switch'
 import Typography from '@mui/material/Typography'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { boardsApi, type Board } from '../api/boards'
 import { Breadcrumbs } from '../components/Breadcrumbs'
@@ -30,6 +31,7 @@ import { epicToCard } from '../lib/epicToCard'
 import { aggregateMarks, countKinds, selectableEpics, sortEpics, visibleEpics } from '../lib/epicTiles'
 import { useBoardRole } from '../lib/useBoardRole'
 import { useProjectName } from '../lib/useProjectName'
+import { useRefetchOnFocus } from '../lib/useRefetchOnFocus'
 import { CARD_LIFT, CARD_SHADOW, CARD_SHADOW_HOVER, PANEL_RADIUS } from '../theme'
 
 /**
@@ -62,6 +64,11 @@ export function EpicsPage() {
   const [cards, setCards] = useState<Card[]>([])
   const [labels, setLabels] = useState<Label[]>([])
   const [members, setMembers] = useState<Member[]>([])
+  // Bis der erste Ladeversuch (alle vier Requests) abgeschlossen ist — erfolgreich oder
+  // fehlgeschlagen —, zeigt die Seite weder das (anfangs leere) Kachelraster noch "Noch keine
+  // Vorhaben.": Beides waere von einem echten leeren Board nicht zu unterscheiden (Issue #783).
+  const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState(false)
   const [selected, setSelected] = useState<Card | null>(null)
   const [creating, setCreating] = useState(false)
   // Ausgeblendete Vorhaben (Plan #620, Wirkung im Kachelraster aus Plan #703, E1). Derselbe
@@ -114,29 +121,35 @@ export function EpicsPage() {
   const titelZuNummer = (nummer: number) =>
     cards.find((c) => c.number === nummer)?.title ?? 'noch nicht geladen'
 
-  useEffect(() => {
+  // Jeder der vier Ladeaufrufe traegt sein eigenes `.catch` (statt eines gemeinsamen ueber
+  // `Promise.all`): Ein Fehlschlag eines einzelnen Aufrufs darf die anderen drei nicht verwerfen,
+  // und `loadError` markiert den Erstladeversuch als gescheitert, sobald einer von ihnen scheitert
+  // (Issue #783 — zuvor unhandled promise rejection, `epics` blieb dauerhaft bei `[]`).
+  const load = useCallback(() => {
     if (!validId) {
       return
     }
-    let active = true
-    void boardsApi.get(id).then((b) => {
-      if (active) setBoard(b)
-    })
-    void epicsApi.list(id).then((es) => {
-      if (active) setEpics(es)
-    })
-    void cardsApi.list(id).then((cs) => {
-      if (active) setCards(cs)
-    })
+    setLoadError(false)
+    const boardDone = boardsApi.get(id).then(setBoard).catch(() => setLoadError(true))
+    const epicsDone = epicsApi.list(id).then(setEpics).catch(() => setLoadError(true))
+    const cardsDone = cardsApi.list(id).then(setCards).catch(() => setLoadError(true))
     // `cardsApi.list` liefert nur `labels: number[]` (IDs) — ohne die Definitionen gibt es weder
     // Namen noch `countOnEpicTile`.
-    void labelsApi.list(id).then((ls) => {
-      if (active) setLabels(ls)
-    })
-    return () => {
-      active = false
-    }
+    const labelsDone = labelsApi.list(id).then(setLabels).catch(() => setLoadError(true))
+    void Promise.all([boardDone, epicsDone, cardsDone, labelsDone]).then(() => setLoading(false))
   }, [id, validId])
+
+  useEffect(() => {
+    setLoading(true)
+    load()
+  }, [load])
+
+  // Heilt einen fehlgeschlagenen oder leeren Erstladeversuch beim naechsten Fokuswechsel
+  // selbststaendig, ohne dass ein manueller Reload noetig ist (analog `BoardPage.tsx`).
+  // Live-Updates per SSE (`useBoardEvents`) bleiben bewusst aussen vor: Das gemeldete Symptom war
+  // ein gescheiterter Erstladeversuch, kein veralteter Stand durch fremde Aenderungen — SSE waere
+  // ein eigenstaendiges Feature ueber den Rahmen dieses Issues hinaus.
+  useRefetchOnFocus(load)
 
   // Projektmitglieder für die Zuständigen an der geöffneten Karte, sobald das Projekt bekannt ist —
   // dasselbe Muster wie auf dem Board. Ein Fehlschlag lässt die Liste leer, statt die Seite
@@ -179,14 +192,30 @@ export function EpicsPage() {
     return <Alert severity="error">Ungültige Board-ID.</Alert>
   }
 
+  if (loading) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', mt: 8 }}>
+        <CircularProgress />
+      </Box>
+    )
+  }
+
+  if (loadError) {
+    return <Alert severity="error">Vorhaben konnten nicht geladen werden.</Alert>
+  }
+
   return (
     <Box>
       <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
         <Breadcrumbs
           items={[
             { label: 'Projekte', to: '/' },
-            ...(board && projectName ? [{ label: projectName, to: `/projects/${board.projectId}` }] : []),
-            ...(board ? [{ label: board.name, to: `/boards/${id}` }] : []),
+            // `board` ist ab hier immer gesetzt: Dieser Zweig wird nur erreicht, wenn `load()`
+            // erfolgreich war (weder `loading` noch `loadError`, siehe die Returns oben) — die
+            // Zusicherung dient nur der Typverengung, die TypeScript ueber die fruehen Returns
+            // hinweg nicht selbst zieht (Issue #783 machte `board` hier erstmals verlaesslich).
+            ...(projectName ? [{ label: projectName, to: `/projects/${board!.projectId}` }] : []),
+            { label: board!.name, to: `/boards/${id}` },
             { label: 'Vorhaben' },
           ]}
         />
