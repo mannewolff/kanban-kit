@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { apiFetch, ApiError } from './client'
+import { apiFetch, ApiError, apiErrorMessage } from './client'
 
 function mockErrorResponse(status: number, body: string, statusText = 'Error') {
   vi.spyOn(globalThis, 'fetch').mockResolvedValue({
@@ -111,5 +111,68 @@ describe('apiFetch – ApiError aus RFC-9457 Problem Details', () => {
     const error = await failingFetch()
 
     expect(error.message).toBe('Internal Server Error')
+  })
+})
+
+describe('ApiError.detail – nur aus einem gelesenen Problem-Body', () => {
+  it('übernimmt detail aus dem Problem-Body', async () => {
+    mockErrorResponse(
+      409,
+      JSON.stringify({ title: 'Conflict', status: 409, detail: 'Spalte ist nicht leer' }),
+    )
+
+    const error = await failingFetch()
+
+    expect(error.detail).toBe('Spalte ist nicht leer')
+    expect(apiErrorMessage(error, 'Fallback')).toBe('Spalte ist nicht leer')
+  })
+
+  it('nutzt ohne detail den title als detail', async () => {
+    mockErrorResponse(409, JSON.stringify({ title: 'Conflict', status: 409 }))
+
+    const error = await failingFetch()
+
+    expect(error.detail).toBe('Conflict')
+    expect(apiErrorMessage(error, 'Fallback')).toBe('Conflict')
+  })
+
+  it.each([
+    ['Nicht-JSON-Body', 'Unauthorized-Seite'],
+    ['leerer Body', ''],
+    ['JSON ohne detail/title (Spring-Default)', JSON.stringify({ timestamp: '2026-07-11', status: 401, error: 'Unauthorized' })],
+  ])('lässt detail bei %s undefiniert und meldet den Fallback', async (_fall, body) => {
+    mockErrorResponse(401, body, 'Unauthorized')
+
+    const error = await failingFetch()
+
+    expect(error.detail).toBeUndefined()
+    expect(apiErrorMessage(error, 'Fallback')).toBe('Fallback')
+    expect(apiErrorMessage(error, 'Fallback')).not.toBe(error.message)
+  })
+
+  it('lässt detail bei einem Body nur mit fieldErrors undefiniert', async () => {
+    mockErrorResponse(400, JSON.stringify({ fieldErrors: { title: 'darf nicht leer sein' } }))
+
+    const error = await failingFetch()
+
+    expect(error.detail).toBeUndefined()
+    expect(error.fieldErrors).toEqual({ title: 'darf nicht leer sein' })
+    expect(apiErrorMessage(error, 'Fallback')).toBe('Fallback')
+  })
+})
+
+describe('apiErrorMessage', () => {
+  it('meldet den Fallback bei einem leeren detail', () => {
+    expect(apiErrorMessage(new ApiError(500, 'Roher Servertext', undefined, ''), 'Fallback')).toBe(
+      'Fallback',
+    )
+  })
+
+  it.each([
+    ['undefined', undefined],
+    ['null', null],
+    ['String', 'Irgendein Text'],
+  ])('meldet den Fallback bei %s als Fehler', (_fall, error) => {
+    expect(apiErrorMessage(error, 'Fallback')).toBe('Fallback')
   })
 })
