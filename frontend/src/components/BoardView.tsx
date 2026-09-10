@@ -26,7 +26,7 @@ import Typography from '@mui/material/Typography'
 import { useEffect, useState } from 'react'
 import type { Board, BoardColumn } from '../api/boards'
 import { cardsApi, type Card, type CardsApi } from '../api/cards'
-import { ApiError } from '../api/client'
+import { ApiError, apiErrorMessage } from '../api/client'
 import { columnsApi, type SortDirection } from '../api/columns'
 import { epicsApi as defaultEpicsApi, type Epic, type EpicsApi } from '../api/epics'
 import type { Member } from '../api/members'
@@ -301,8 +301,10 @@ export function BoardView({
     try {
       const updated = await columnsApi.reorder(board.id, next.map((c) => c.id))
       setColumns(sortColumns(updated))
-    } catch {
+    } catch (e) {
+      // Der Rollback allein bliebe stumm: die zurückspringende Reihenfolge erklärt nicht, warum.
       setColumns(previous)
+      notify(apiErrorMessage(e, 'Spalten umsortieren fehlgeschlagen.'), 'error')
     }
   }
 
@@ -328,8 +330,8 @@ export function BoardView({
       setNextSortDirection((prev) => ({ ...prev, [column.id]: direction === 'ASC' ? 'DESC' : 'ASC' }))
       notify(sortedByNumberMessage(column.name, direction), 'success')
       onCardsChanged?.()
-    } catch {
-      notify('Sortieren fehlgeschlagen.', 'error')
+    } catch (e) {
+      notify(apiErrorMessage(e, 'Sortieren fehlgeschlagen.'), 'error')
     } finally {
       setSortingColumnId(null)
     }
@@ -367,14 +369,21 @@ export function BoardView({
     // solange die Eingabe ungültig ist — saveColumn läuft also nur mit gültigem Zustand.
     const name = columnName.trim()
     const wip = parsedWip()
-    if (columnDialog === 'new') {
-      const created = await columnsApi.create(board.id, name, wip)
-      setColumns((cs) => sortColumns([...cs, created]))
-      notify('Spalte angelegt.', 'success')
-    } else if (columnDialog) {
-      const updated = await columnsApi.update(columnDialog.id, name, wip)
-      setColumns((cs) => sortColumns(cs.map((c) => (c.id === updated.id ? updated : c))))
-      notify('Spalte gespeichert.', 'success')
+    try {
+      if (columnDialog === 'new') {
+        const created = await columnsApi.create(board.id, name, wip)
+        setColumns((cs) => sortColumns([...cs, created]))
+        notify('Spalte angelegt.', 'success')
+      } else if (columnDialog) {
+        const updated = await columnsApi.update(columnDialog.id, name, wip)
+        setColumns((cs) => sortColumns(cs.map((c) => (c.id === updated.id ? updated : c))))
+        notify('Spalte gespeichert.', 'success')
+      }
+    } catch (e) {
+      // Nur der Erfolg schließt: Bei einem Fehlschlag bliebe die getippte Eingabe sonst verloren
+      // und der Nutzer müsste Name und WIP-Limit erneut eintippen, um es nochmal zu versuchen.
+      notify(apiErrorMessage(e, 'Spalte speichern fehlgeschlagen.'), 'error')
+      return
     }
     closeColumnDialog()
   }
@@ -432,11 +441,16 @@ export function BoardView({
     setCards(applyMove(previous, cardId, toColumnId))
     try {
       await api.move(cardId, toColumnId, endIndex)
-    } catch {
+    } catch (e) {
+      // Die zurückspringende Karte allein erklärt nichts — die Meldung benennt den Fehlschlag.
       setCards(previous)
+      notify(apiErrorMessage(e, 'Verschieben fehlgeschlagen.'), 'error')
     }
   }
 
+  // Bewusst ohne eigenes try/catch: Ein hier geschluckter Fehler ließe `onSubmit` erfolgreich
+  // erscheinen, und `NewCardModal` schlösse trotz Fehlschlag — die getippte Eingabe wäre weg.
+  // Der Fehler propagiert stattdessen an den Dialog, der ihn seit Issue #808 selbst anzeigt.
   const createItem = async (columnId: number, input: NewItemInput) => {
     if (input.type === 'EPIC') {
       await epicsApi.create(board.id, input.title, input.description, input.shortcode)
@@ -461,8 +475,12 @@ export function BoardView({
   }
 
   const archiveCard = async (card: Card) => {
-    await api.archive(card.id)
-    onCardsChanged?.()
+    try {
+      await api.archive(card.id)
+      onCardsChanged?.()
+    } catch (e) {
+      notify(apiErrorMessage(e, 'Archivieren fehlgeschlagen.'), 'error')
+    }
   }
 
   // In den Ideen-Speicher: Alltags-Aktion (nicht editiermodus-gegatet). Optimistisch aus der
@@ -474,9 +492,9 @@ export function BoardView({
       await api.moveToIdeaStorage(card.id)
       onCardsChanged?.()
       notify('In den Ideen-Pool verschoben — unter Ideen zu finden.', 'success')
-    } catch {
+    } catch (e) {
       setCards(previous)
-      notify('In den Ideen-Pool verschieben fehlgeschlagen.', 'error')
+      notify(apiErrorMessage(e, 'In den Ideen-Pool verschieben fehlgeschlagen.'), 'error')
     }
   }
 
@@ -488,8 +506,8 @@ export function BoardView({
     let full: Card
     try {
       full = await api.get(c.id)
-    } catch {
-      notify('Karte konnte nicht geladen werden.', 'error')
+    } catch (e) {
+      notify(apiErrorMessage(e, 'Karte konnte nicht geladen werden.'), 'error')
       return
     }
     // Die Kopie ist eine neue Karte und soll den kompletten Prozess durchlaufen — deshalb immer
@@ -528,9 +546,9 @@ export function BoardView({
     try {
       await api.bulkArchive(ids)
       onCardsChanged?.()
-    } catch {
+    } catch (e) {
       setCards(previous)
-      notify('Archivieren fehlgeschlagen.', 'error')
+      notify(apiErrorMessage(e, 'Archivieren fehlgeschlagen.'), 'error')
     }
   }
 
@@ -546,9 +564,9 @@ export function BoardView({
     try {
       await api.bulkDelete(ids)
       onCardsChanged?.()
-    } catch {
+    } catch (e) {
       setCards(previous)
-      notify('In den Papierkorb verschieben fehlgeschlagen.', 'error')
+      notify(apiErrorMessage(e, 'In den Papierkorb verschieben fehlgeschlagen.'), 'error')
     }
   }
 

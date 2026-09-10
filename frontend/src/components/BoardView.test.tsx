@@ -73,6 +73,21 @@ function dropOnColumn(columnId: number, cardId: number) {
   })
 }
 
+/** Server-Ablehnung mit einer für den Nutzer formulierten Meldung in `detail` (RFC 9457). */
+const serverfehler = (text: string) => new ApiError(409, 'Conflict', undefined, text)
+
+/**
+ * Prüft den Fehler-Toast: Der Text steht dort, und der Alert trägt die Severity `error`.
+ *
+ * `hidden: true`: Ein offener MUI-Dialog (Spalten-Dialog, Bestätigungsdialoge) stellt alles
+ * außerhalb seines Portals auf `aria-hidden` — der Toast trägt seine Rolle, wird von der
+ * Standardabfrage aber übergangen.
+ */
+async function erwarteFehlerToast(text: string) {
+  expect(await screen.findByText(text)).toBeInTheDocument()
+  expect(await screen.findByRole('alert', { hidden: true })).toHaveClass('MuiAlert-filledError')
+}
+
 describe('BoardView', () => {
   beforeEach(() => {
     editMode.value = true
@@ -479,7 +494,9 @@ describe('BoardView', () => {
 
   it('stellt die Spalten-Reihenfolge bei einem Fehler wieder her', async () => {
     mColumns.reorder.mockRejectedValue(new Error('kaputt'))
-    render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} />)
+    render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} />, {
+      wrapper: SnackbarProvider,
+    })
 
     fireEvent.dragStart(screen.getByTestId('column-header-20'))
     fireEvent.drop(screen.getByTestId('column-header-10'))
@@ -489,6 +506,9 @@ describe('BoardView', () => {
     const headers = screen.getAllByTestId(/^column-header-/)
     expect(headers[0]).toHaveAttribute('data-testid', 'column-header-10')
     expect(headers[1]).toHaveAttribute('data-testid', 'column-header-20')
+    // Der Rollback allein bliebe stumm: die zurückspringende Reihenfolge sagt nicht, dass etwas
+    // schiefging. Deshalb zusätzlich die Meldung (Issue #810).
+    await erwarteFehlerToast('Spalten umsortieren fehlgeschlagen.')
   })
 
   it('macht Spalten ohne canEdit nicht draggable', () => {
@@ -785,7 +805,9 @@ describe('BoardView', () => {
 
   it('rollt eine fehlgeschlagene Kartenverschiebung zurück', async () => {
     const api = mkApi({ move: vi.fn().mockRejectedValue(new Error('fail')) })
-    render(<BoardView board={board} initialCards={[card]} canEdit api={api} />)
+    render(<BoardView board={board} initialCards={[card]} canEdit api={api} />, {
+      wrapper: SnackbarProvider,
+    })
 
     fireEvent.click(screen.getByLabelText('Menü Aufgabe'))
     fireEvent.click(screen.getByRole('menuitem', { name: 'Nach rechts verschieben' }))
@@ -793,6 +815,8 @@ describe('BoardView', () => {
     await waitFor(() => expect(api.move).toHaveBeenCalled())
     expect(within(screen.getByTestId('column-10')).getByTestId('card-100')).toBeInTheDocument()
     expect(within(screen.getByTestId('column-20')).queryByTestId('card-100')).not.toBeInTheDocument()
+    // Die zurückspringende Karte allein erklärt nichts — die Meldung benennt den Fehlschlag (#810).
+    await erwarteFehlerToast('Verschieben fehlgeschlagen.')
   })
 
   it('verschiebt eine einzelne Karte über das Menü auf ein anderes Board', async () => {
@@ -2022,6 +2046,262 @@ describe('BoardView', () => {
       expect(within(screen.getByTestId('column-10')).getByTestId('card-100')).toBeInTheDocument()
       expect(within(screen.getByTestId('column-20')).getByTestId('card-101')).toBeInTheDocument()
       expect(within(screen.getByTestId('column-20')).getByTestId('card-200')).toBeInTheDocument()
+    })
+  })
+
+  /**
+   * Jeder mutierende Handler zeigt die Meldung des Servers (`ApiError.detail`) statt eines eigenen
+   * Ersatztexts — sonst rät der Nutzer, woran es lag. Der Fallback greift nur, wo gar keine
+   * Server-Meldung vorliegt (Netzfehler). Issue #810.
+   */
+  describe('Fehlermeldungen der mutierenden Handler', () => {
+    const ascLabel = (column: string) => `Spalte ${column} nach Nummer aufsteigend sortieren`
+
+    it('saveColumn: meldet den Serverfehler beim Anlegen und lässt den Dialog mit der Eingabe offen', async () => {
+      mColumns.create.mockRejectedValue(serverfehler('Eine Spalte mit diesem Namen gibt es schon.'))
+      render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} />, {
+        wrapper: SnackbarProvider,
+      })
+
+      fireEvent.click(screen.getByRole('button', { name: 'Spalte' }))
+      fireEvent.change(screen.getByLabelText('Spaltenname'), { target: { value: 'Neu' } })
+      fireEvent.change(screen.getByLabelText('WIP-Limit'), { target: { value: '5' } })
+      fireEvent.click(screen.getByRole('button', { name: 'Speichern' }))
+
+      await erwarteFehlerToast('Eine Spalte mit diesem Namen gibt es schon.')
+      // Der Dialog bleibt offen und behält Name und WIP-Limit — die Eingabe geht nicht verloren.
+      expect(screen.getByLabelText('Spaltenname')).toHaveValue('Neu')
+      expect(screen.getByLabelText('WIP-Limit')).toHaveValue(5)
+      // Keine Spalte hinzugefügt: es bleiben die beiden des Boards.
+      expect(screen.getAllByTestId(/^column-header-/)).toHaveLength(2)
+    })
+
+    it('saveColumn: meldet den Serverfehler beim Bearbeiten und ändert die Spalte nicht', async () => {
+      mColumns.update.mockRejectedValue(serverfehler('Der Name ist schon vergeben.'))
+      render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} />, {
+        wrapper: SnackbarProvider,
+      })
+
+      fireEvent.click(screen.getByLabelText('Spalte Backlog bearbeiten'))
+      fireEvent.change(screen.getByLabelText('Spaltenname'), { target: { value: 'Todo' } })
+      fireEvent.click(screen.getByRole('button', { name: 'Speichern' }))
+
+      await erwarteFehlerToast('Der Name ist schon vergeben.')
+      expect(screen.getByLabelText('Spaltenname')).toHaveValue('Todo')
+      // Die Spalte im Board heißt unverändert Backlog.
+      expect(within(screen.getByTestId('column-header-10')).getByText('Backlog')).toBeInTheDocument()
+    })
+
+    it('saveColumn: fällt ohne Server-Meldung auf den eigenen Text zurück', async () => {
+      mColumns.create.mockRejectedValue(new TypeError('Failed to fetch'))
+      render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} />, {
+        wrapper: SnackbarProvider,
+      })
+
+      fireEvent.click(screen.getByRole('button', { name: 'Spalte' }))
+      fireEvent.change(screen.getByLabelText('Spaltenname'), { target: { value: 'Neu' } })
+      fireEvent.click(screen.getByRole('button', { name: 'Speichern' }))
+
+      await erwarteFehlerToast('Spalte speichern fehlgeschlagen.')
+    })
+
+    it('archiveCard: meldet den Serverfehler des Archivierens', async () => {
+      const api = mkApi({ archive: vi.fn().mockRejectedValue(serverfehler('Die Karte ist gesperrt.')) })
+      const onCardsChanged = vi.fn()
+      render(
+        <BoardView board={board} initialCards={[card]} canEdit api={api} onCardsChanged={onCardsChanged} />,
+        { wrapper: SnackbarProvider },
+      )
+
+      fireEvent.click(screen.getByLabelText('Menü Aufgabe'))
+      fireEvent.click(screen.getByRole('menuitem', { name: 'Archivieren' }))
+
+      await erwarteFehlerToast('Die Karte ist gesperrt.')
+      // Ein Fehlschlag löst kein Nachladen aus — sonst verschwände die Karte scheinbar doch.
+      expect(onCardsChanged).not.toHaveBeenCalled()
+    })
+
+    it('archiveCard: fällt ohne Server-Meldung auf den eigenen Text zurück', async () => {
+      const api = mkApi({ archive: vi.fn().mockRejectedValue(new TypeError('Failed to fetch')) })
+      render(<BoardView board={board} initialCards={[card]} canEdit api={api} />, {
+        wrapper: SnackbarProvider,
+      })
+
+      fireEvent.click(screen.getByLabelText('Menü Aufgabe'))
+      fireEvent.click(screen.getByRole('menuitem', { name: 'Archivieren' }))
+
+      await erwarteFehlerToast('Archivieren fehlgeschlagen.')
+    })
+
+    it('reorderColumn: meldet den Serverfehler und stellt die Reihenfolge wieder her', async () => {
+      mColumns.reorder.mockRejectedValue(serverfehler('Die Spaltenreihenfolge ist veraltet.'))
+      render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} />, {
+        wrapper: SnackbarProvider,
+      })
+
+      fireEvent.dragStart(screen.getByTestId('column-header-20'))
+      fireEvent.drop(screen.getByTestId('column-header-10'))
+
+      await erwarteFehlerToast('Die Spaltenreihenfolge ist veraltet.')
+      const headers = screen.getAllByTestId(/^column-header-/)
+      expect(headers[0]).toHaveAttribute('data-testid', 'column-header-10')
+      expect(headers[1]).toHaveAttribute('data-testid', 'column-header-20')
+    })
+
+    it('reorderColumn: fällt ohne Server-Meldung auf den eigenen Text zurück', async () => {
+      mColumns.reorder.mockRejectedValue(new TypeError('Failed to fetch'))
+      render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} />, {
+        wrapper: SnackbarProvider,
+      })
+
+      fireEvent.dragStart(screen.getByTestId('column-header-20'))
+      fireEvent.drop(screen.getByTestId('column-header-10'))
+
+      await erwarteFehlerToast('Spalten umsortieren fehlgeschlagen.')
+    })
+
+    it('moveCard: meldet den Serverfehler und rollt die Verschiebung zurück', async () => {
+      const api = mkApi({ move: vi.fn().mockRejectedValue(serverfehler('WIP-Limit der Zielspalte erreicht.')) })
+      render(<BoardView board={board} initialCards={[card]} canEdit api={api} />, {
+        wrapper: SnackbarProvider,
+      })
+
+      dropOnColumn(20, 100)
+
+      await erwarteFehlerToast('WIP-Limit der Zielspalte erreicht.')
+      expect(within(screen.getByTestId('column-10')).getByTestId('card-100')).toBeInTheDocument()
+      expect(within(screen.getByTestId('column-20')).queryByTestId('card-100')).not.toBeInTheDocument()
+    })
+
+    it('moveCard: fällt ohne Server-Meldung auf den eigenen Text zurück', async () => {
+      const api = mkApi({ move: vi.fn().mockRejectedValue(new TypeError('Failed to fetch')) })
+      render(<BoardView board={board} initialCards={[card]} canEdit api={api} />, {
+        wrapper: SnackbarProvider,
+      })
+
+      dropOnColumn(20, 100)
+
+      await erwarteFehlerToast('Verschieben fehlgeschlagen.')
+    })
+
+    it('sortColumnByNumber: meldet den Serverfehler des Sortierens', async () => {
+      mColumns.sortByNumber.mockRejectedValue(serverfehler('Sortieren ist auf diesem Board gesperrt.'))
+      render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} />, {
+        wrapper: SnackbarProvider,
+      })
+
+      fireEvent.click(screen.getByLabelText(ascLabel('Backlog')))
+
+      await erwarteFehlerToast('Sortieren ist auf diesem Board gesperrt.')
+      // Die Richtung wechselt nicht: der nächste Klick versucht dieselbe erneut.
+      expect(screen.getByLabelText(ascLabel('Backlog'))).toBeInTheDocument()
+    })
+
+    it('moveToIdeaStorageCard: meldet den Serverfehler und zeigt die Karte wieder', async () => {
+      const api = mkApi({
+        moveToIdeaStorage: vi.fn().mockRejectedValue(serverfehler('Der Ideen-Pool ist gesperrt.')),
+      })
+      render(<BoardView board={board} initialCards={[card]} canEdit api={api} />, {
+        wrapper: SnackbarProvider,
+      })
+
+      fireEvent.click(screen.getByLabelText('Menü Aufgabe'))
+      fireEvent.click(screen.getByRole('menuitem', { name: 'In den Ideen-Pool' }))
+
+      await erwarteFehlerToast('Der Ideen-Pool ist gesperrt.')
+      expect(within(screen.getByTestId('column-10')).getByTestId('card-100')).toBeInTheDocument()
+    })
+
+    it('duplicateCard: meldet den Serverfehler des Ladens und öffnet keinen Dialog', async () => {
+      const api = mkApi({ get: vi.fn().mockRejectedValue(serverfehler('Die Karte gibt es nicht mehr.')) })
+      render(<BoardView board={board} initialCards={[card]} canEdit api={api} />, {
+        wrapper: SnackbarProvider,
+      })
+
+      fireEvent.click(screen.getByLabelText('Menü Aufgabe'))
+      fireEvent.click(screen.getByRole('menuitem', { name: 'Duplizieren' }))
+
+      await erwarteFehlerToast('Die Karte gibt es nicht mehr.')
+      expect(screen.queryByRole('heading', { name: /Neue Karte/ })).not.toBeInTheDocument()
+      expect(api.create).not.toHaveBeenCalled()
+    })
+
+    it('confirmBulkArchive: meldet den Serverfehler und rollt die Auswahl zurück', async () => {
+      const api = mkApi({
+        bulkArchive: vi.fn().mockRejectedValue(serverfehler('Eine der Karten ist gesperrt.')),
+      })
+      render(<BoardView board={board} initialCards={[card]} canEdit api={api} />, {
+        wrapper: SnackbarProvider,
+      })
+
+      fireEvent.click(screen.getByRole('button', { name: 'Auswählen' }))
+      fireEvent.click(screen.getByTestId('card-100'))
+      fireEvent.click(screen.getByRole('button', { name: 'Archivieren' }))
+      fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Archivieren' }))
+
+      await erwarteFehlerToast('Eine der Karten ist gesperrt.')
+      expect(screen.getByTestId('card-100')).toBeInTheDocument()
+    })
+
+    it('confirmDelete: meldet den Serverfehler und rollt die Löschung zurück', async () => {
+      const api = mkApi({
+        bulkDelete: vi.fn().mockRejectedValue(serverfehler('Die Karte hängt an einem Vorhaben.')),
+      })
+      render(<BoardView board={board} initialCards={[card]} canEdit api={api} />, {
+        wrapper: SnackbarProvider,
+      })
+
+      fireEvent.click(screen.getByLabelText('Menü Aufgabe'))
+      fireEvent.click(screen.getByRole('menuitem', { name: 'Löschen' }))
+      fireEvent.click(
+        within(screen.getByRole('dialog')).getByRole('button', { name: 'In den Papierkorb' }),
+      )
+
+      await erwarteFehlerToast('Die Karte hängt an einem Vorhaben.')
+      expect(screen.getByTestId('card-100')).toBeInTheDocument()
+    })
+
+    /**
+     * `createItem` fängt bewusst nicht selbst: Ein hier geschluckter Fehler ließe `onSubmit`
+     * erfolgreich erscheinen und `NewCardModal` schlösse trotz Fehlschlag. Der Fehler propagiert
+     * stattdessen an den Dialog, der ihn seit #808 selbst anzeigt und offen bleibt.
+     */
+    it('createItem: lässt den Anlege-Dialog bei einem Serverfehler offen (Karte)', async () => {
+      const api = mkApi({ create: vi.fn().mockRejectedValue(serverfehler('Der Titel ist schon vergeben.')) })
+      render(<BoardView board={board} initialCards={[card]} canEdit api={api} />, {
+        wrapper: SnackbarProvider,
+      })
+
+      fireEvent.click(screen.getByRole('button', { name: 'Neu anlegen' }))
+      fireEvent.change(screen.getByLabelText('Titel'), { target: { value: 'Neu' } })
+      fireEvent.click(screen.getByRole('button', { name: 'Anlegen' }))
+
+      // Die Meldung steht im Dialog, nicht im Toast: BoardView reicht den Fehler durch.
+      expect(await screen.findByText('Der Titel ist schon vergeben.')).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Anlegen' })).toBeInTheDocument()
+      expect(screen.getByLabelText('Titel')).toHaveValue('Neu')
+      // Kein Item im Board: es bleibt die eine Bestandskarte.
+      expect(screen.getAllByTestId(/^card-\d+$/)).toHaveLength(1)
+    })
+
+    it('createItem: lässt den Anlege-Dialog bei einem Serverfehler offen (Vorhaben)', async () => {
+      const epicsApi = { create: vi.fn().mockRejectedValue(serverfehler('Das Kürzel ist schon vergeben.')) }
+      const onEpicsChanged = vi.fn()
+      render(
+        <BoardView board={board} initialCards={[card]} canEdit api={mkApi()}
+          epicsApi={epicsApi} onEpicsChanged={onEpicsChanged} />,
+        { wrapper: SnackbarProvider },
+      )
+
+      fireEvent.click(screen.getByRole('button', { name: 'Neu anlegen' }))
+      fireEvent.change(screen.getByLabelText('Typ'), { target: { value: 'EPIC' } })
+      fireEvent.change(screen.getByLabelText('Kürzel'), { target: { value: 'AUT' } })
+      fireEvent.change(screen.getByLabelText('Titel'), { target: { value: 'Auth' } })
+      fireEvent.click(screen.getByRole('button', { name: 'Anlegen' }))
+
+      expect(await screen.findByText('Das Kürzel ist schon vergeben.')).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Anlegen' })).toBeInTheDocument()
+      expect(onEpicsChanged).not.toHaveBeenCalled()
     })
   })
 })
