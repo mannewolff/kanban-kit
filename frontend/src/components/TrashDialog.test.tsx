@@ -1,6 +1,8 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
+import { ApiError } from '../api/client'
 import type { Card } from '../api/cards'
+import { SnackbarProvider } from './SnackbarProvider'
 import { TrashDialog } from './TrashDialog'
 
 const base = {
@@ -44,6 +46,71 @@ describe('TrashDialog', () => {
 
     fireEvent.click(await screen.findByLabelText('Gelöscht endgültig löschen'))
     await waitFor(() => expect(api.purge).toHaveBeenCalledWith(100))
+  })
+
+  it('restore: meldet den Serverfehler und lädt nicht neu', async () => {
+    const api = mkApi()
+    api.restoreDeleted = vi.fn().mockRejectedValue(new ApiError(409, 'Konflikt', undefined, 'Die Spalte ist voll.'))
+    const onChanged = vi.fn()
+    render(
+      <TrashDialog open boardId={1} canPurge={false} onClose={vi.fn()} onChanged={onChanged} api={api} />,
+      { wrapper: SnackbarProvider },
+    )
+
+    fireEvent.click(await screen.findByLabelText('Gelöscht wiederherstellen'))
+
+    // `hidden: true`: Der offene MUI-Dialog stellt alles außerhalb seines Portals auf
+    // `aria-hidden` — der Toast trägt seine Rolle, wird von der Standardabfrage aber übergangen.
+    const toast = await screen.findByRole('alert', { hidden: true })
+    expect(toast).toHaveTextContent('Die Spalte ist voll.')
+    expect(toast).toHaveClass('MuiAlert-filledError')
+    // Ein Fehlschlag ändert nichts: kein zweiter Ladelauf, kein Signal an den Aufrufer.
+    expect(api.listTrash).toHaveBeenCalledTimes(1)
+    expect(onChanged).not.toHaveBeenCalled()
+  })
+
+  it('restore: fällt ohne API-Kontext auf den eigenen Text zurück', async () => {
+    const api = mkApi()
+    api.restoreDeleted = vi.fn().mockRejectedValue(new TypeError('Failed to fetch'))
+    render(
+      <TrashDialog open boardId={1} canPurge={false} onClose={vi.fn()} onChanged={vi.fn()} api={api} />,
+      { wrapper: SnackbarProvider },
+    )
+
+    fireEvent.click(await screen.findByLabelText('Gelöscht wiederherstellen'))
+
+    expect(await screen.findByText('Wiederherstellen fehlgeschlagen.')).toBeInTheDocument()
+  })
+
+  it('purge: meldet den Serverfehler und lädt nicht neu', async () => {
+    const api = mkApi()
+    api.purge = vi.fn().mockRejectedValue(new ApiError(403, 'Verboten', undefined, 'Keine Berechtigung zum Löschen.'))
+    const onChanged = vi.fn()
+    render(
+      <TrashDialog open boardId={1} canPurge onClose={vi.fn()} onChanged={onChanged} api={api} />,
+      { wrapper: SnackbarProvider },
+    )
+
+    fireEvent.click(await screen.findByLabelText('Gelöscht endgültig löschen'))
+
+    const toast = await screen.findByRole('alert', { hidden: true })
+    expect(toast).toHaveTextContent('Keine Berechtigung zum Löschen.')
+    expect(toast).toHaveClass('MuiAlert-filledError')
+    expect(api.listTrash).toHaveBeenCalledTimes(1)
+    expect(onChanged).not.toHaveBeenCalled()
+  })
+
+  it('purge: fällt ohne API-Kontext auf den eigenen Text zurück', async () => {
+    const api = mkApi()
+    api.purge = vi.fn().mockRejectedValue(new TypeError('Failed to fetch'))
+    render(
+      <TrashDialog open boardId={1} canPurge onClose={vi.fn()} onChanged={vi.fn()} api={api} />,
+      { wrapper: SnackbarProvider },
+    )
+
+    fireEvent.click(await screen.findByLabelText('Gelöscht endgültig löschen'))
+
+    expect(await screen.findByText('Endgültiges Löschen fehlgeschlagen.')).toBeInTheDocument()
   })
 
   it('zeigt einen Hinweis bei leerem Papierkorb', async () => {

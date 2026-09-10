@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { boardsApi } from '../api/boards'
 import { cardsApi, type Card } from '../api/cards'
+import { ApiError } from '../api/client'
 import { projectsApi } from '../api/projects'
 import { TransferCardDialog } from './TransferCardDialog'
 
@@ -131,6 +132,22 @@ describe('TransferCardDialog', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Verschieben' }))
 
     expect(await screen.findByText('Verschieben fehlgeschlagen.')).toBeInTheDocument()
+  })
+
+  it('submit: zeigt die Meldung des Servers statt des eigenen Ersatztextes', async () => {
+    mockedCards.bulkTransfer.mockRejectedValue(
+      new ApiError(409, 'Konflikt', undefined, 'Die Zielspalte hat ihr WIP-Limit erreicht.'),
+    )
+    renderDialog(false)
+
+    fireEvent.change(await screen.findByLabelText('Zielprojekt'), { target: { value: '1' } })
+    fireEvent.change(await screen.findByLabelText('Zielboard'), { target: { value: '10' } })
+    fireEvent.change(await screen.findByLabelText('Zielspalte'), { target: { value: '100' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Verschieben' }))
+
+    expect(
+      await screen.findByText('Die Zielspalte hat ihr WIP-Limit erreicht.'),
+    ).toBeInTheDocument()
   })
 
   it('öffnet mit dem Projekt des Quellboards bereits ausgewählt', async () => {

@@ -11,8 +11,10 @@ import Stack from '@mui/material/Stack'
 import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
 import { useState } from 'react'
+import { apiErrorMessage } from '../api/client'
 import { labelsApi as defaultLabelsApi, type Label, type LabelsApi } from '../api/labels'
 import { dialogTitleSx } from './dialogChromeSx'
+import { useSnackbar } from './SnackbarProvider'
 
 interface Props {
   open: boolean
@@ -45,7 +47,11 @@ export function LabelManagerDialog({
   const [newName, setNewName] = useState('')
   const [newColor, setNewColor] = useState(DEFAULT_COLOR)
   const [error, setError] = useState<string | null>(null)
+  const notify = useSnackbar()
 
+  // Zwei Fehlerkanäle mit Absicht: Die Anlege-Zeile ist ein Formular, ihre Meldung gehört neben
+  // die Eingabe. Die Zeilen-Aktionen sind keins — dort gibt es kein Formular, an dem eine Meldung
+  // hängen könnte, also der Toast.
   const create = async () => {
     if (!newName.trim()) return
     try {
@@ -54,8 +60,8 @@ export function LabelManagerDialog({
       setNewColor(DEFAULT_COLOR)
       setError(null)
       onChanged()
-    } catch {
-      setError('Label konnte nicht angelegt werden (evtl. Name bereits vergeben).')
+    } catch (e) {
+      setError(apiErrorMessage(e, 'Label konnte nicht angelegt werden.'))
     }
   }
 
@@ -66,15 +72,23 @@ export function LabelManagerDialog({
    * (#659); ein immer mitgesendetes Feld unterliefe genau diese Semantik.
    */
   const save = async (label: Label, name: string, color: string, countOnEpicTile?: boolean) => {
-    await (countOnEpicTile === undefined
-      ? api.update(label.id, name.trim(), color)
-      : api.update(label.id, name.trim(), color, countOnEpicTile))
-    onChanged()
+    try {
+      await (countOnEpicTile === undefined
+        ? api.update(label.id, name.trim(), color)
+        : api.update(label.id, name.trim(), color, countOnEpicTile))
+      onChanged()
+    } catch (e) {
+      notify(apiErrorMessage(e, 'Label konnte nicht gespeichert werden.'), 'error')
+    }
   }
 
   const remove = async (label: Label) => {
-    await api.remove(label.id)
-    onChanged()
+    try {
+      await api.remove(label.id)
+      onChanged()
+    } catch (e) {
+      notify(apiErrorMessage(e, 'Label konnte nicht gelöscht werden.'), 'error')
+    }
   }
 
   return (

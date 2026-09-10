@@ -46,6 +46,48 @@ describe('CardFields', () => {
     expect(screen.queryByLabelText('Kürzel')).not.toBeInTheDocument()
   })
 
+  it('lässt das Titel-Feld ohne titleError fehlerfrei', () => {
+    const h = handlers()
+    render(
+      <CardFields
+        isEpic={false}
+        title="T"
+        body="B"
+        shortcode=""
+        parentId={null}
+        epics={epics}
+        depsInput=""
+        depsError={null}
+        dueInput=""
+        {...h}
+      />,
+    )
+
+    expect(screen.getByLabelText('Titel')).toHaveAttribute('aria-invalid', 'false')
+  })
+
+  it('zeigt titleError als Feldmeldung am Titel', () => {
+    const h = handlers()
+    render(
+      <CardFields
+        isEpic={false}
+        title="T"
+        body="B"
+        shortcode=""
+        parentId={null}
+        epics={epics}
+        depsInput=""
+        depsError={null}
+        dueInput=""
+        titleError="Titel ist bereits vergeben."
+        {...h}
+      />,
+    )
+
+    expect(screen.getByLabelText('Titel')).toHaveAttribute('aria-invalid', 'true')
+    expect(screen.getByText('Titel ist bereits vergeben.')).toBeInTheDocument()
+  })
+
   it('feuert die onChange-Callbacks der Kartenfelder', () => {
     const h = handlers()
     render(

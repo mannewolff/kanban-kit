@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
+import { ApiError } from '../api/client'
 import { MAX_DESCRIPTION_LENGTH, MAX_IDEAS_PER_IMPORT, MAX_TITLE_LENGTH } from '../lib/specImport'
 import { SpecImportDialog } from './SpecImportDialog'
 
@@ -163,6 +164,25 @@ describe('SpecImportDialog', () => {
     fireEvent.click(screen.getByRole('button', { name: '2 Ideen anlegen' }))
 
     expect(await screen.findByText(/konnten nicht angelegt werden/)).toBeInTheDocument()
+    expect(onClose).not.toHaveBeenCalled()
+  })
+
+  it('handleImport: zeigt die Meldung des Servers statt des eigenen Ersatztextes', async () => {
+    const onClose = vi.fn()
+    renderDialog(
+      {},
+      () =>
+        Promise.reject(
+          new ApiError(400, 'Ungültig', undefined, 'Höchstens 200 Ideen auf einmal — 340 gewählt.'),
+        ),
+      onClose,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: '2 Ideen anlegen' }))
+
+    expect(
+      await screen.findByText('Höchstens 200 Ideen auf einmal — 340 gewählt.'),
+    ).toBeInTheDocument()
     expect(onClose).not.toHaveBeenCalled()
   })
 

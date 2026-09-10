@@ -10,6 +10,7 @@ import TextField from '@mui/material/TextField'
 import { useEffect, useState } from 'react'
 import { boardsApi, type Board } from '../api/boards'
 import { cardsApi } from '../api/cards'
+import { apiErrorMessage } from '../api/client'
 import { projectsApi, type Project } from '../api/projects'
 import { dialogTitleSx } from './dialogChromeSx'
 
@@ -83,8 +84,8 @@ export function TransferCardDialog({
       // Auswahl disabled); Number(...) verengt number|'' ohne toten Guard-Zweig.
       await cardsApi.bulkTransfer(cardIds, Number(boardId), Number(columnId))
       onTransferred()
-    } catch {
-      setError('Verschieben fehlgeschlagen.')
+    } catch (e) {
+      setError(apiErrorMessage(e, 'Verschieben fehlgeschlagen.'))
       setBusy(false)
     }
   }
