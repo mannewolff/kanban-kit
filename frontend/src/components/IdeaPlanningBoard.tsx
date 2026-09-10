@@ -13,6 +13,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { boardsApi, type Board } from '../api/boards'
 import { cardsApi, type Card } from '../api/cards'
+import { apiErrorMessage } from '../api/client'
 import { ideasApi, type Idea } from '../api/ideas'
 import { membersApi, type Member } from '../api/members'
 import { CardDetailModal } from './CardDetailModal'
@@ -164,20 +165,33 @@ export function IdeaPlanningBoard({
     void reload().catch(() => {})
   }, [refreshKey, reload])
 
+  // Die mutierenden Aufrufe tragen dasselbe Muster: try/catch nur um die Mutation, damit ein
+  // fehlgeschlagener Reload nicht als abgewiesene Aktion gemeldet wird. Scheitert die Mutation,
+  // bleibt die Ansicht unverändert (kein Reload) und der Nutzer bekommt die Meldung des Servers.
   const plan = useCallback(
     async (cardId: number, boardId: number) => {
-      await ideasApi.planOntoBoard(cardId, boardId)
-      await reload()
+      try {
+        await ideasApi.planOntoBoard(cardId, boardId)
+      } catch (e) {
+        notify(apiErrorMessage(e, 'Einplanen fehlgeschlagen.'), 'error')
+        return
+      }
+      await reload().catch(() => {})
     },
-    [reload],
+    [reload, notify],
   )
 
   const toPool = useCallback(
     async (cardId: number) => {
-      await ideasApi.moveBackToPool(cardId)
-      await reload()
+      try {
+        await ideasApi.moveBackToPool(cardId)
+      } catch (e) {
+        notify(apiErrorMessage(e, 'Zurück in den Pool fehlgeschlagen.'), 'error')
+        return
+      }
+      await reload().catch(() => {})
     },
-    [reload],
+    [reload, notify],
   )
 
   // Eine bereits eingeplante Karte von einem Board auf ein anderes verschieben: in die erste Spalte
@@ -189,10 +203,11 @@ export function IdeaPlanningBoard({
       if (targetColumnId === null) return
       try {
         await cardsApi.transfer(cardId, target.id, targetColumnId)
-        await reload()
-      } catch {
-        notify('Verschieben auf das andere Board fehlgeschlagen.', 'error')
+      } catch (e) {
+        notify(apiErrorMessage(e, 'Verschieben auf das andere Board fehlgeschlagen.'), 'error')
+        return
       }
+      await reload().catch(() => {})
     },
     [reload, notify],
   )
@@ -228,8 +243,13 @@ export function IdeaPlanningBoard({
   }
 
   const reorder = async (cardId: number, columnId: number, position: number) => {
-    await cardsApi.move(cardId, columnId, position)
-    await loadBacklogs()
+    try {
+      await cardsApi.move(cardId, columnId, position)
+    } catch (e) {
+      notify(apiErrorMessage(e, 'Umsortieren fehlgeschlagen.'), 'error')
+      return
+    }
+    await loadBacklogs().catch(() => {})
   }
 
   // Drop einer Board-Karte auf eine andere Zeile DESSELBEN Boards: an deren Position einsortieren.
