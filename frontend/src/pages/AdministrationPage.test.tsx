@@ -56,6 +56,12 @@ function renderPage() {
   )
 }
 
+/** Prüft den Fehler-Toast: Der Text steht dort, und der Alert trägt die Severity `error`. */
+async function erwarteFehlerToast(text: string) {
+  expect(await screen.findByText(text)).toBeInTheDocument()
+  expect(await screen.findByRole('alert', { hidden: true })).toHaveClass('MuiAlert-filledError')
+}
+
 // Spiegelt den Editiermodus, damit der Test den Context-Effekt des Schalters beobachten kann.
 function ModeProbe() {
   const { editMode } = useEditMode()
@@ -192,6 +198,29 @@ describe('AdministrationPage', () => {
     await waitFor(() => expect(mTokens.revoke).toHaveBeenCalledWith(1))
   })
 
+  it('zeigt die Server-Meldung, wenn das Widerrufen abgelehnt wird', async () => {
+    mTokens.list.mockResolvedValue([boundToken])
+    // Server-Ablehnung mit einer für den Nutzer formulierten Meldung in `detail` (RFC 9457).
+    mTokens.revoke.mockRejectedValue(
+      new ApiError(409, 'Conflict', undefined, 'Das Token wurde bereits widerrufen.'),
+    )
+    renderPage()
+
+    fireEvent.click(await screen.findByLabelText('Token board-cli widerrufen'))
+
+    await erwarteFehlerToast('Das Token wurde bereits widerrufen.')
+  })
+
+  it('fällt beim Widerrufen ohne Server-Meldung auf den eigenen Text zurück', async () => {
+    mTokens.list.mockResolvedValue([boundToken])
+    mTokens.revoke.mockRejectedValue(new TypeError('Failed to fetch'))
+    renderPage()
+
+    fireEvent.click(await screen.findByLabelText('Token board-cli widerrufen'))
+
+    await erwarteFehlerToast('Widerrufen fehlgeschlagen.')
+  })
+
   it('deaktiviert „Token erzeugen", wenn kein berechtigtes Projekt existiert', async () => {
     mProjects.list.mockResolvedValue([viewerProject])
     renderPage()
@@ -201,10 +230,29 @@ describe('AdministrationPage', () => {
     )
   })
 
-  it('zeigt eine Fehlermeldung, wenn das Anlegen scheitert (z. B. 403)', async () => {
+  it('zeigt die Server-Meldung, wenn das Anlegen eines Tokens abgelehnt wird', async () => {
     mProjects.list.mockResolvedValue([memberProject])
     mBoards.list.mockResolvedValue([boardA])
-    mTokens.create.mockRejectedValue(new Error('403'))
+    mTokens.create.mockRejectedValue(
+      new ApiError(403, 'Forbidden', undefined, 'Auf Board A darfst du keine Karten anlegen.'),
+    )
+    renderPage()
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Token erzeugen' }))
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'x' } })
+    fireEvent.change(screen.getByLabelText('Projekt'), { target: { value: '3' } })
+    await screen.findByRole('option', { name: 'Board A' })
+    fireEvent.change(screen.getByLabelText('Board'), { target: { value: '7' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Erzeugen' }))
+
+    // Der Darstellungsort bleibt der Inline-Alert im Dialog; nur der Text kommt vom Server.
+    expect(await screen.findByText('Auf Board A darfst du keine Karten anlegen.')).toBeInTheDocument()
+  })
+
+  it('zeigt ohne Server-Meldung den eigenen Text zum fehlgeschlagenen Anlegen', async () => {
+    mProjects.list.mockResolvedValue([memberProject])
+    mBoards.list.mockResolvedValue([boardA])
+    mTokens.create.mockRejectedValue(new TypeError('Failed to fetch'))
     renderPage()
 
     fireEvent.click(await screen.findByRole('button', { name: 'Token erzeugen' }))

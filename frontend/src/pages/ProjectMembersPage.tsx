@@ -19,7 +19,7 @@ import { membersApi as defaultMembersApi, type Member, type MembersApi } from '.
 import { Breadcrumbs } from '../components/Breadcrumbs'
 import { DataTable, type DataTableColumn } from '../components/DataTable'
 import { projectsApi } from '../api/projects'
-import { ApiError } from '../api/client'
+import { ApiError, apiErrorMessage } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
 import { useEditMode } from '../lib/EditModeContext'
 import { canManageMembers, type ProjectRole } from '../lib/roles'
@@ -91,8 +91,8 @@ export function ProjectMembersPage({ api = defaultMembersApi, loadRole }: Readon
       // Der Aufrufer verliert die Owner-Rechte und wird Admin (Backend-Semantik).
       setRole('ADMIN')
       await reload()
-    } catch {
-      setTransferError('Eigentümer-Wechsel fehlgeschlagen.')
+    } catch (e) {
+      setTransferError(apiErrorMessage(e, 'Eigentümer-Wechsel fehlgeschlagen.'))
     }
   }
 

@@ -13,7 +13,7 @@ import Typography from '@mui/material/Typography'
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ApiError } from '../api/client'
+import { ApiError, apiErrorMessage } from '../api/client'
 import { boardsApi, type Board } from '../api/boards'
 import { cardsApi, type Card } from '../api/cards'
 import { configApi } from '../api/config'
@@ -177,10 +177,16 @@ export function BoardPage() {
   // Kein Nullable-Guard nötig: der einzige Aufrufer ist der Speichern-Button im Umbenennen-Dialog,
   // der nur bei gesetztem board sichtbar ist (siehe die frühen Returns oben) und bei leerem
   // renameValue bereits disabled ist.
+  // Der Dialog schließt erst nach dem erfolgreichen Zug — bei einem Namenskonflikt bliebe die
+  // Eingabe sonst verloren, und der Fehlschlag sähe aus wie ein Erfolg.
   const handleRename = async (currentBoard: Board) => {
-    const updated = await boardsApi.rename(currentBoard.id, renameValue.trim())
-    setBoard(updated)
-    setRenameOpen(false)
+    try {
+      const updated = await boardsApi.rename(currentBoard.id, renameValue.trim())
+      setBoard(updated)
+      setRenameOpen(false)
+    } catch (e) {
+      notify(apiErrorMessage(e, 'Umbenennen fehlgeschlagen.'), 'error')
+    }
   }
 
   /**

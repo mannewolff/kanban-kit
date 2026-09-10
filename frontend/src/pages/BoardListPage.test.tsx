@@ -4,9 +4,11 @@ import { MemoryRouter, Route, Routes, useNavigate } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { boardsApi } from '../api/boards'
 import { cardsApi, type Card } from '../api/cards'
+import { ApiError } from '../api/client'
 import { labelsApi } from '../api/labels'
 import { projectsApi } from '../api/projects'
 import { epicsApi, type Epic } from '../api/epics'
+import { SnackbarProvider } from '../components/SnackbarProvider'
 import { BoardListPage } from './BoardListPage'
 import { ARCHIVED_STATUS_COLOR, statusColors } from '../lib/statusColors'
 import { STATUS_EDGE_WIDTH } from '../theme'
@@ -92,12 +94,23 @@ function renderPage(cards: Card[] = [active, archived]) {
   mEpics.list.mockResolvedValue([])
   mProjects.list.mockResolvedValue([{ id: 9, name: 'Projekt', role: 'OWNER', createdAt: '' }])
   return render(
-    <MemoryRouter initialEntries={['/boards/1/list']}>
-      <Routes>
-        <Route path="/boards/:boardId/list" element={<BoardListPage />} />
-      </Routes>
-    </MemoryRouter>,
+    <SnackbarProvider>
+      <MemoryRouter initialEntries={['/boards/1/list']}>
+        <Routes>
+          <Route path="/boards/:boardId/list" element={<BoardListPage />} />
+        </Routes>
+      </MemoryRouter>
+    </SnackbarProvider>,
   )
+}
+
+/** Server-Ablehnung mit einer für den Nutzer formulierten Meldung in `detail` (RFC 9457). */
+const serverfehler = (text: string) => new ApiError(409, 'Conflict', undefined, text)
+
+/** Prüft den Fehler-Toast: Der Text steht dort, und der Alert trägt die Severity `error`. */
+async function erwarteFehlerToast(text: string) {
+  expect(await screen.findByText(text)).toBeInTheDocument()
+  expect(await screen.findByRole('alert', { hidden: true })).toHaveClass('MuiAlert-filledError')
 }
 
 /**
@@ -243,6 +256,62 @@ describe('BoardListPage', () => {
     fireEvent.click(screen.getByLabelText('Karte AlteKarte wiederherstellen'))
 
     await waitFor(() => expect(mCards.restore).toHaveBeenCalledWith(101))
+  })
+
+  it('zeigt die Server-Meldung, wenn das Wiederherstellen scheitert, und lädt den Serverstand nach', async () => {
+    mCards.restore.mockRejectedValue(serverfehler('Die Karte wurde inzwischen gelöscht.'))
+    renderPage()
+    fireEvent.click(await screen.findByLabelText('Filter Archiv'))
+    await screen.findByText('AlteKarte')
+    mCards.list.mockClear()
+
+    fireEvent.click(screen.getByLabelText('Karte AlteKarte wiederherstellen'))
+
+    await erwarteFehlerToast('Die Karte wurde inzwischen gelöscht.')
+    // Nach einem Konflikt zeigt die Liste den Serverstand — der Nachladeschritt läuft im `finally`.
+    await waitFor(() => expect(mCards.list).toHaveBeenCalled())
+  })
+
+  it('fällt beim Wiederherstellen ohne Server-Meldung auf den eigenen Text zurück', async () => {
+    mCards.restore.mockRejectedValue(new TypeError('Failed to fetch'))
+    renderPage()
+    fireEvent.click(await screen.findByLabelText('Filter Archiv'))
+    await screen.findByText('AlteKarte')
+
+    fireEvent.click(screen.getByLabelText('Karte AlteKarte wiederherstellen'))
+
+    await erwarteFehlerToast('Karte wiederherstellen fehlgeschlagen.')
+  })
+
+  it('zeigt die Server-Meldung, wenn ein Zeilen-Drop scheitert, und lädt den Serverstand nach', async () => {
+    const first: Card = { ...base, id: 100, columnId: 10, number: 1, title: 'Erste', description: '', archived: false }
+    const second: Card = { ...base, id: 103, columnId: 10, number: 4, title: 'Zweite', description: '', archived: false, positionInColumn: 1 }
+    mBoards.get.mockResolvedValue({
+      id: 1, projectId: 9, name: 'B', createdAt: '',
+      columns: [{ id: 10, name: 'Backlog', position: 0, wipLimit: null }],
+    })
+    mCards.list.mockResolvedValue([first, second])
+    mEpics.list.mockResolvedValue([])
+    mCards.move.mockRejectedValue(serverfehler('Die Karte liegt inzwischen woanders.'))
+    render(
+      <SnackbarProvider>
+        <MemoryRouter initialEntries={['/boards/1/list']}>
+          <Routes>
+            <Route path="/boards/:boardId/list" element={<BoardListPage />} />
+          </Routes>
+        </MemoryRouter>
+      </SnackbarProvider>,
+    )
+    await screen.findByText('Erste')
+    mCards.list.mockClear()
+
+    const dataTransfer = { setData: vi.fn() }
+    fireEvent.dragStart(screen.getByText('Erste'), { dataTransfer })
+    fireEvent.dragOver(screen.getByText('Zweite'), { dataTransfer })
+    fireEvent.drop(screen.getByText('Zweite'), { dataTransfer })
+
+    await erwarteFehlerToast('Die Karte liegt inzwischen woanders.')
+    await waitFor(() => expect(mCards.list).toHaveBeenCalled())
   })
 
   it('öffnet das Detail-Modal beim Klick auf eine Zeile', async () => {

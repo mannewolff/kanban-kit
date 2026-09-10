@@ -147,9 +147,23 @@ describe('AdminPage', () => {
     expect(await screen.findByText('Rollenänderung fehlgeschlagen.')).toBeInTheDocument()
   })
 
-  it('zeigt eine Fehlermeldung, wenn die Freigabe fehlschlägt', async () => {
+  it('zeigt die Server-Meldung, wenn die Freigabe abgelehnt wird', async () => {
     const api = makeApi()
-    api.approve = vi.fn().mockRejectedValue(new Error('boom'))
+    // Server-Ablehnung mit einer für den Nutzer formulierten Meldung in `detail` (RFC 9457).
+    api.approve = vi
+      .fn()
+      .mockRejectedValue(new ApiError(409, 'Conflict', undefined, 'Carol ist bereits freigegeben.'))
+    render(<AdminPage api={api} />)
+    await screen.findByText('Carol')
+
+    fireEvent.click(screen.getByLabelText('Carol freigeben'))
+    // Der Darstellungsort bleibt der Inline-Alert der Seite; nur der Text kommt vom Server.
+    expect(await screen.findByText('Carol ist bereits freigegeben.')).toBeInTheDocument()
+  })
+
+  it('zeigt ohne Server-Meldung den eigenen Text zur Freigabe', async () => {
+    const api = makeApi()
+    api.approve = vi.fn().mockRejectedValue(new TypeError('Failed to fetch'))
     render(<AdminPage api={api} />)
     await screen.findByText('Carol')
 
@@ -202,10 +216,24 @@ describe('AdminPage', () => {
     expect(screen.queryByLabelText('Anzeigename von a@x.de')).not.toBeInTheDocument()
   })
 
-  it('zeigt eine Fehlermeldung, wenn das Sperren/Entsperren fehlschlägt', async () => {
+  it('zeigt die Server-Meldung, wenn das Sperren abgelehnt wird', async () => {
     const api = makeApi()
-    api.disable = vi.fn().mockRejectedValue(new Error('boom'))
-    api.enable = vi.fn().mockRejectedValue(new Error('boom'))
+    api.disable = vi
+      .fn()
+      .mockRejectedValue(
+        new ApiError(409, 'Conflict', undefined, 'Der letzte Admin kann nicht gesperrt werden.'),
+      )
+    render(<AdminPage api={api} />)
+    await screen.findByText('Alice')
+
+    fireEvent.click(screen.getByLabelText('Alice sperren'))
+    expect(await screen.findByText('Der letzte Admin kann nicht gesperrt werden.')).toBeInTheDocument()
+  })
+
+  it('zeigt ohne Server-Meldung den eigenen Text zum Sperren/Entsperren', async () => {
+    const api = makeApi()
+    api.disable = vi.fn().mockRejectedValue(new TypeError('Failed to fetch'))
+    api.enable = vi.fn().mockRejectedValue(new TypeError('Failed to fetch'))
     render(<AdminPage api={api} />)
     await screen.findByText('Alice')
 

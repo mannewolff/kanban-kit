@@ -262,8 +262,14 @@ interface Antworten {
   listen?: NightRunView[][]
   /** Statt einer Liste eine Fehlerantwort — der Ladepfad beim Öffnen der Seite. */
   listenFehler?: string
-  /** Ergebnis des `POST`; `fehler` erzeugt stattdessen eine 400-Antwort. */
-  submit?: { ergebnis?: NightRunResult[]; fehler?: string }
+  /**
+   * Ergebnis des `POST`; `fehler` erzeugt stattdessen eine 400-Antwort mit `detail`.
+   *
+   * `rohText` antwortet mit einem Body **ohne** RFC-9457-`detail` (etwa die HTML-Fehlerseite eines
+   * Reverse-Proxys), `netzfehler` lässt `fetch` selbst scheitern — beides Fälle, in denen es keine
+   * für den Nutzer formulierte Server-Meldung gibt.
+   */
+  submit?: { ergebnis?: NightRunResult[]; fehler?: string; rohText?: string; netzfehler?: boolean }
   /** Je `GET /night-runs/error-class-counts` eine Antwort; die letzte gilt für alle weiteren Aufrufe. */
   zaehler?: NightRunErrorClassCounts[]
   /** Statt der Häufigkeiten eine Fehlerantwort — der Fehlerpfad aus Issue #726. */
@@ -287,6 +293,14 @@ const antwortFehler = (detail: string, status = 400) => ({
   status,
   statusText: 'Bad Request',
   text: () => Promise.resolve(JSON.stringify({ detail })),
+})
+
+/** Fehlerantwort ohne RFC-9457-Problem im Body — der Roh-Body gehört nicht vor den Nutzer. */
+const antwortOhneDetail = (body: string, status = 502) => ({
+  ok: false,
+  status,
+  statusText: 'Bad Gateway',
+  text: () => Promise.resolve(body),
 })
 
 function stubFetch(antworten: Antworten) {
@@ -320,6 +334,12 @@ function stubFetch(antworten: Antworten) {
         return Promise.resolve(antwortOk(daten))
       }
       if (url === '/api/projects/5/night-runs' && method === 'POST') {
+        if (antworten.submit?.netzfehler === true) {
+          return Promise.reject(new TypeError('Failed to fetch'))
+        }
+        if (antworten.submit?.rohText !== undefined) {
+          return Promise.resolve(antwortOhneDetail(antworten.submit.rohText))
+        }
         return Promise.resolve(
           antworten.submit?.fehler === undefined
             ? antwortOk(antworten.submit?.ergebnis ?? [])
@@ -636,6 +656,27 @@ describe('NightRunPage — Ergebnisstand hineingeben', () => {
     expect(within(lauf(0)).getByText('Ergebnisstand')).toBeInTheDocument()
     aufklappen(0)
     expect(await within(lauf(0)).findByRole('button', { name: /#700 Paket A/ })).toBeInTheDocument()
+  })
+
+  it('zeigt statt eines Roh-Bodys ohne Server-Meldung den eigenen Text', async () => {
+    // 502 vom Reverse-Proxy: Der Body ist eine HTML-Seite, keine für den Nutzer formulierte
+    // Meldung — sie gehört nicht in den Toast (Issue #812).
+    renderPage({ submit: { rohText: '<html><body>502 Bad Gateway</body></html>' } })
+    await screen.findByText('Noch keine Auswertung vorhanden.')
+
+    protokollWaehlen(EIN_LAUF)
+
+    expect(await screen.findByText('Einliefern fehlgeschlagen.')).toBeInTheDocument()
+    expect(screen.queryByText(/502 Bad Gateway/)).not.toBeInTheDocument()
+  })
+
+  it('nennt bei einem Netzwerkabbruch den eigenen Text', async () => {
+    renderPage({ submit: { netzfehler: true } })
+    await screen.findByText('Noch keine Auswertung vorhanden.')
+
+    protokollWaehlen(EIN_LAUF)
+
+    expect(await screen.findByText('Einliefern fehlgeschlagen.')).toBeInTheDocument()
   })
 })
 

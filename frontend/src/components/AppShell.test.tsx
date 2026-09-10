@@ -8,6 +8,7 @@ import { boardsApi } from '../api/boards'
 import { ApiError } from '../api/client'
 import { projectsApi } from '../api/projects'
 import { AppShell } from './AppShell'
+import { SnackbarProvider } from './SnackbarProvider'
 import { ThemeProvider } from '@mui/material/styles'
 import { theme } from '../theme'
 
@@ -90,11 +91,22 @@ function LocationProbe() {
 
 function renderShell(entry = '/') {
   return render(
-    <MemoryRouter initialEntries={[entry]}>
-      <LocationProbe />
-      <AppShell />
-    </MemoryRouter>,
+    <SnackbarProvider>
+      <MemoryRouter initialEntries={[entry]}>
+        <LocationProbe />
+        <AppShell />
+      </MemoryRouter>
+    </SnackbarProvider>,
   )
+}
+
+/** Server-Ablehnung mit einer für den Nutzer formulierten Meldung in `detail` (RFC 9457). */
+const serverfehler = (text: string) => new ApiError(409, 'Conflict', undefined, text)
+
+/** Prüft den Fehler-Toast: Der Text steht dort, und der Alert trägt die Severity `error`. */
+async function erwarteFehlerToast(text: string) {
+  expect(await screen.findByText(text)).toBeInTheDocument()
+  expect(await screen.findByRole('alert', { hidden: true })).toHaveClass('MuiAlert-filledError')
 }
 
 /** Wie {@link renderShell}, aber im echten Theme — nur so ist `text.primary` der eigene Wert. */
@@ -337,6 +349,27 @@ describe('AppShell', () => {
     fireEvent.click(screen.getByLabelText('Abmelden'))
     expect(logoutMock).toHaveBeenCalled()
     await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/login'))
+  })
+
+  it('zeigt die Server-Meldung, wenn das Abmelden scheitert, und bleibt angemeldet auf der Seite', async () => {
+    logoutMock.mockRejectedValue(serverfehler('Die Sitzung wurde bereits beendet.'))
+    renderShell()
+
+    fireEvent.click(screen.getByLabelText('Abmelden'))
+
+    await erwarteFehlerToast('Die Sitzung wurde bereits beendet.')
+    // Der Sprung auf /login gehört zum Erfolgsfall: Scheitert der Logout, bleibt der Nutzer
+    // angemeldet auf der Seite, statt vor eine Login-Maske gestellt zu werden.
+    expect(screen.getByTestId('location')).toHaveTextContent('/')
+  })
+
+  it('fällt beim Abmelden ohne Server-Meldung auf den eigenen Text zurück', async () => {
+    logoutMock.mockRejectedValue(new TypeError('Failed to fetch'))
+    renderShell()
+
+    fireEvent.click(screen.getByLabelText('Abmelden'))
+
+    await erwarteFehlerToast('Abmelden fehlgeschlagen.')
   })
 
   it('klappt eine Nav-Gruppe bei ausgeklappter Sidebar zu und wieder auf', async () => {

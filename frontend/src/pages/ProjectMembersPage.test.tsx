@@ -265,8 +265,23 @@ describe('ProjectMembersPage', () => {
     expect(screen.queryByLabelText('Mika Member zum Eigentümer machen')).not.toBeInTheDocument()
   })
 
-  it('zeigt einen Fehler, wenn die Eigentümer-Übertragung fehlschlägt', async () => {
-    mProjects.transferOwner.mockRejectedValue(new Error('boom'))
+  it('zeigt die Server-Meldung, wenn die Eigentümer-Übertragung abgelehnt wird', async () => {
+    // Server-Ablehnung mit einer für den Nutzer formulierten Meldung in `detail` (RFC 9457).
+    mProjects.transferOwner.mockRejectedValue(
+      new ApiError(409, 'Conflict', undefined, 'Mika Member ist im Projekt gesperrt.'),
+    )
+    renderPage(makeApi(), 'OWNER')
+    expect(await screen.findByText('Mika Member')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByLabelText('Mika Member zum Eigentümer machen'))
+    fireEvent.click(screen.getByRole('button', { name: 'Übertragen' }))
+
+    // Der Darstellungsort bleibt der Inline-Alert im Dialog; nur der Text kommt vom Server.
+    expect(await screen.findByText('Mika Member ist im Projekt gesperrt.')).toBeInTheDocument()
+  })
+
+  it('zeigt ohne Server-Meldung den eigenen Text zur Eigentümer-Übertragung', async () => {
+    mProjects.transferOwner.mockRejectedValue(new TypeError('Failed to fetch'))
     renderPage(makeApi(), 'OWNER')
     expect(await screen.findByText('Mika Member')).toBeInTheDocument()
 

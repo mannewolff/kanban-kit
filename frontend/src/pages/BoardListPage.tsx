@@ -15,9 +15,11 @@ import { useParams } from 'react-router-dom'
 import { boardsApi, type Board } from '../api/boards'
 import { Breadcrumbs } from '../components/Breadcrumbs'
 import { cardsApi, type Card } from '../api/cards'
+import { apiErrorMessage } from '../api/client'
 import { epicsApi, type Epic } from '../api/epics'
 import { labelsApi, type Label } from '../api/labels'
 import { CardDetailModal } from '../components/CardDetailModal'
+import { useSnackbar } from '../components/SnackbarProvider'
 import { EpicBadge } from '../components/EpicBadge'
 import { epicOfCard } from '../lib/cardEpic'
 import { epicToCard } from '../lib/epicToCard'
@@ -98,6 +100,7 @@ export function BoardListPage() {
   const { boardId } = useParams()
   const id = Number.parseInt(boardId ?? '', 10)
   const validId = Number.isInteger(id) && id > 0
+  const notify = useSnackbar()
   const [board, setBoard] = useState<Board | null>(null)
   const [cards, setCards] = useState<Card[]>([])
   const [epics, setEpics] = useState<Epic[]>([])
@@ -126,9 +129,16 @@ export function BoardListPage() {
   // Live-Updates: bei einer Änderung durch andere die Kartenliste neu laden.
   useBoardEvents(id, reloadCards)
 
+  // `reloadCards()` läuft im `finally`: Nach einem Konflikt zeigt die Liste sonst weiter den Stand
+  // von vor dem Fehlschlag, obwohl der Server einen anderen hält.
   const restoreCard = async (cardId: number) => {
-    await cardsApi.restore(cardId)
-    reloadCards()
+    try {
+      await cardsApi.restore(cardId)
+    } catch (e) {
+      notify(apiErrorMessage(e, 'Karte wiederherstellen fehlgeschlagen.'), 'error')
+    } finally {
+      reloadCards()
+    }
   }
 
   useEffect(() => {
@@ -308,8 +318,13 @@ export function BoardListPage() {
     const ok = validRowDrop(target)
     setRowOver(null)
     if (!ok || dragId == null) return
-    await cardsApi.move(dragId, target.columnId, target.positionInColumn)
-    reloadCards()
+    try {
+      await cardsApi.move(dragId, target.columnId, target.positionInColumn)
+    } catch (e) {
+      notify(apiErrorMessage(e, 'Verschieben fehlgeschlagen.'), 'error')
+    } finally {
+      reloadCards()
+    }
   }
 
   /** Statusfarbe einer Zeile; archiviert schlaegt die Spaltenfarbe. */

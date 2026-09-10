@@ -16,6 +16,7 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import { useEffect, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { cardsApi, type CardByNumber } from '../api/cards'
+import { apiErrorMessage } from '../api/client'
 import {
   nightRunsApi,
   type NightRunErrorClassCounts,
@@ -711,8 +712,7 @@ export function NightRunPage() {
       setAufbewahrteLaeufe(views.length)
       setZaehler(await zaehlerLaden(id))
     } catch (error_) {
-      // `apiFetch` wirft `ApiError`, ein Netzwerkabbruch einen `TypeError` — beides `Error`.
-      notify((error_ as Error).message, 'error')
+      notify(apiErrorMessage(error_, 'Einliefern fehlgeschlagen.'), 'error')
     }
   }
 
