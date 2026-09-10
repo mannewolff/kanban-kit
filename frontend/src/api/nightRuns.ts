@@ -9,6 +9,14 @@ import { apiFetch } from './client'
  * Union-Typ waere eine dritte Kopie, die der Abgleichtest nicht sieht.
  */
 
+/**
+ * Die Modi, die der Server kennt — `NIGHTPLAN` bleibt bewusst browser-only (Plan #803,
+ * Architektonische Entscheidung 8): Backend-Enum und `ck_night_run_mode` kennen weiterhin nur
+ * `IMPLEMENTATION`/`REVIEW`. Diese Verengung erzwingt den Compiler-Schutz in `NightRunPage.tsx`
+ * (`istEinlieferbar`) — ein Cast an `mode` hebelte ihn aus.
+ */
+export type NightRunServerMode = Exclude<NightRunMode, 'NIGHTPLAN'>
+
 /** Ein Arbeitspaket, wie es an den Server geht — der Ausschnitt des Parser-Ergebnisses, den der Server kennt. */
 export interface NightRunItemSubmission {
   cardNumber: number
@@ -23,7 +31,7 @@ export interface NightRunItemSubmission {
 /** Ein einzuliefernder Lauf. */
 export interface NightRunSubmission {
   startedAt: string
-  mode: NightRunMode
+  mode: NightRunServerMode
   durationMs: number
   processedCount: number
   skippedCount: number
@@ -62,7 +70,7 @@ export interface NightRunItemView {
 export interface NightRunView {
   id: number
   startedAt: string
-  mode: NightRunMode
+  mode: NightRunServerMode
   durationMs: number
   processedCount: number
   skippedCount: number
