@@ -35,6 +35,12 @@ const linkedBoard: Board = {
   columns: [{ id: 20, name: 'Done', position: 0, wipLimit: null }],
 }
 
+/**
+ * Abweisung mit einer Meldung, die das Backend bewusst für den Nutzer formuliert hat: Nur `detail`
+ * wird angezeigt (Issue #807), `message` ist der nicht anzeigbare Roh-Fallback.
+ */
+const serverfehler = (text: string) => new ApiError(409, 'Conflict', undefined, text)
+
 function makeApis() {
   const commentsApi = {
     list: vi.fn().mockResolvedValue([
@@ -612,7 +618,7 @@ describe('CardDetailModal', () => {
    */
   it('zeigt bei fehlgeschlagenem Baum-Abruf eine Meldung und lässt den Dialog bedienbar', async () => {
     const apis = makeApis()
-    apis.cardsApi.epicTree.mockRejectedValue(new ApiError(403, 'Kein Zugriff auf dieses Board.'))
+    apis.cardsApi.epicTree.mockRejectedValue(serverfehler('Kein Zugriff auf dieses Board.'))
     render(<CardDetailModal card={epicCard} canEdit onClose={vi.fn()} {...apis} />)
 
     expect(await screen.findByText(/kein zugriff auf dieses board/i)).toBeInTheDocument()
@@ -843,7 +849,7 @@ describe('CardDetailModal', () => {
   it('zeigt bei einem Fehler die Meldung des Servers und lässt den Dialog bedienbar', async () => {
     const apis = makeApis()
     apis.cardsApi.openEpic.mockRejectedValue(
-      new ApiError(400, 'Die Karte ist bereits einem Vorhaben zugeordnet: 5'),
+      serverfehler('Die Karte ist bereits einem Vorhaben zugeordnet: 5'),
     )
     await oeffneVorgangsDialog(apis)
 
@@ -1768,6 +1774,255 @@ describe('CardDetailModal', () => {
     expect(screen.getByRole('button', { name: 'Speichern' })).toBeDisabled()
     fireEvent.click(screen.getByRole('button', { name: 'Speichern' }))
     expect(apis.commentsApi.update).not.toHaveBeenCalled()
+  })
+
+  /**
+   * Fehlerbehandlung aller schreibenden Wege des Dialogs (Issue #809): Was der Server als `detail`
+   * mitgibt, steht wörtlich in der Meldung — der bisherige Ersatztext bleibt nur der Fallback für
+   * Fehler ohne API-Kontext (dafür stehen die bestehenden Tests weiter oben).
+   */
+  describe('Meldung des Servers (#809)', () => {
+    const members = [
+      { userId: 5, email: 'm@x.de', displayName: 'Max', role: 'MEMBER' as const },
+      { userId: 6, email: 'e@x.de', displayName: 'Eva', role: 'MEMBER' as const },
+    ]
+    const boardLabels = [
+      { id: 5, boardId: 1, name: 'Bug', color: '#f00', countOnEpicTile: false },
+      { id: 6, boardId: 1, name: 'Ux', color: '#0f0', countOnEpicTile: false },
+    ]
+
+    it('meldet den Servertext beim Speichern der Zuständigen', async () => {
+      const apis = makeApis()
+      apis.cardsApi.setAssignees = vi.fn().mockRejectedValue(serverfehler('Eva ist kein Mitglied mehr.'))
+      render(
+        <CardDetailModal card={card} canEdit members={members} onClose={vi.fn()} {...apis} />,
+        { wrapper: SnackbarProvider },
+      )
+
+      fireEvent.mouseDown(await screen.findByLabelText('Zuständige'))
+      fireEvent.click(await screen.findByText('Eva'))
+
+      expect(await screen.findByText('Eva ist kein Mitglied mehr.')).toBeInTheDocument()
+    })
+
+    it('stellt die Zuständigen nach einem Fehlschlag auf den Ausgangsstand zurück', async () => {
+      // Der State wird vor dem Await gesetzt; ohne Rollback bliebe eine nie gespeicherte Zuweisung
+      // stehen und der Dialog behauptete einen Stand, den der Server nicht hat.
+      const apis = makeApis()
+      apis.cardsApi.setAssignees = vi.fn().mockRejectedValue(serverfehler('Zuweisung abgelehnt.'))
+      const onChanged = vi.fn()
+      render(
+        <CardDetailModal
+          card={{ ...card, assignees: [5] }}
+          canEdit
+          members={members}
+          onChanged={onChanged}
+          onClose={vi.fn()}
+          {...apis}
+        />,
+        { wrapper: SnackbarProvider },
+      )
+
+      fireEvent.mouseDown(await screen.findByLabelText('Zuständige'))
+      fireEvent.click(await screen.findByText('Eva'))
+
+      expect(await screen.findByText('Zuweisung abgelehnt.')).toBeInTheDocument()
+      await waitFor(() => expect(screen.queryByText('Eva')).toBeNull())
+      expect(screen.getByText('Max')).toBeInTheDocument()
+      expect(onChanged).not.toHaveBeenCalled()
+    })
+
+    it('meldet den Servertext beim Speichern der Labels', async () => {
+      const apis = makeApis()
+      apis.cardsApi.setLabels = vi.fn().mockRejectedValue(serverfehler('Label gehört zu einem anderen Board.'))
+      render(
+        <CardDetailModal card={card} canEdit boardLabels={boardLabels} onClose={vi.fn()} {...apis} />,
+        { wrapper: SnackbarProvider },
+      )
+
+      fireEvent.mouseDown(await screen.findByLabelText('Labels'))
+      fireEvent.click(await screen.findByText('Ux'))
+
+      expect(await screen.findByText('Label gehört zu einem anderen Board.')).toBeInTheDocument()
+    })
+
+    it('stellt die Labels nach einem Fehlschlag auf den Ausgangsstand zurück', async () => {
+      const apis = makeApis()
+      apis.cardsApi.setLabels = vi.fn().mockRejectedValue(serverfehler('Label abgelehnt.'))
+      const onChanged = vi.fn()
+      render(
+        <CardDetailModal
+          card={{ ...card, labels: [5] }}
+          canEdit
+          boardLabels={boardLabels}
+          onChanged={onChanged}
+          onClose={vi.fn()}
+          {...apis}
+        />,
+        { wrapper: SnackbarProvider },
+      )
+
+      fireEvent.mouseDown(await screen.findByLabelText('Labels'))
+      fireEvent.click(await screen.findByText('Ux'))
+
+      expect(await screen.findByText('Label abgelehnt.')).toBeInTheDocument()
+      await waitFor(() => expect(screen.queryByText('Ux')).toBeNull())
+      expect(screen.getByText('Bug')).toBeInTheDocument()
+      expect(onChanged).not.toHaveBeenCalled()
+    })
+
+    it('meldet den Servertext beim Wiederherstellen und lässt den Dialog offen', async () => {
+      const apis = makeApis()
+      apis.cardsApi.restore = vi.fn().mockRejectedValue(serverfehler('Das Board ist archiviert.'))
+      const onChanged = vi.fn()
+      const onClose = vi.fn()
+      render(
+        <CardDetailModal
+          card={{ ...card, archived: true }}
+          canEdit
+          onChanged={onChanged}
+          onClose={onClose}
+          {...apis}
+        />,
+        { wrapper: SnackbarProvider },
+      )
+
+      fireEvent.click(await screen.findByRole('button', { name: 'Wiederherstellen' }))
+
+      expect(await screen.findByText('Das Board ist archiviert.')).toBeInTheDocument()
+      expect(onClose).not.toHaveBeenCalled()
+      expect(onChanged).not.toHaveBeenCalled()
+    })
+
+    it('meldet den Servertext beim Anlegen eines Kommentars und behält den Text', async () => {
+      const apis = makeApis()
+      apis.commentsApi.create = vi.fn().mockRejectedValue(serverfehler('Kommentare sind gesperrt.'))
+      render(<CardDetailModal card={card} canEdit onClose={vi.fn()} {...apis} />, {
+        wrapper: SnackbarProvider,
+      })
+
+      fireEvent.change(screen.getByLabelText('Kommentar schreiben'), { target: { value: 'Neu' } })
+      fireEvent.click(screen.getByRole('button', { name: 'Senden' }))
+
+      expect(await screen.findByText('Kommentare sind gesperrt.')).toBeInTheDocument()
+      // Der Text bleibt stehen — ein geleertes Feld hätte den Kommentar verloren.
+      expect(screen.getByLabelText('Kommentar schreiben')).toHaveValue('Neu')
+    })
+
+    it('meldet den Servertext beim Löschen eines Kommentars und lässt ihn stehen', async () => {
+      const apis = makeApis()
+      apis.commentsApi.remove = vi.fn().mockRejectedValue(serverfehler('Kommentar ist gesperrt.'))
+      render(
+        <CardDetailModal card={card} canEdit canModerateComments onClose={vi.fn()} {...apis} />,
+        { wrapper: SnackbarProvider },
+      )
+      expect(await screen.findByText('Hallo')).toBeInTheDocument()
+
+      fireEvent.click(screen.getByRole('button', { name: 'Kommentar löschen' }))
+
+      expect(await screen.findByText('Kommentar ist gesperrt.')).toBeInTheDocument()
+      expect(screen.getByText('Hallo')).toBeInTheDocument()
+    })
+
+    it('meldet den Servertext beim Speichern eines bearbeiteten Kommentars', async () => {
+      const apis = makeApis()
+      apis.commentsApi.update = vi.fn().mockRejectedValue(serverfehler('Kommentar ist zu alt.'))
+      render(<CardDetailModal card={card} canEdit onClose={vi.fn()} {...apis} />, {
+        wrapper: SnackbarProvider,
+      })
+      expect(await screen.findByText('Hallo')).toBeInTheDocument()
+
+      fireEvent.click(screen.getByRole('button', { name: 'Kommentar bearbeiten' }))
+      fireEvent.change(screen.getByLabelText('Kommentar bearbeiten'), { target: { value: 'Geändert' } })
+      fireEvent.click(screen.getByRole('button', { name: 'Speichern' }))
+
+      expect(await screen.findByText('Kommentar ist zu alt.')).toBeInTheDocument()
+      // Das Bearbeitungsfeld bleibt mit dem Inhalt stehen.
+      expect(screen.getByLabelText('Kommentar bearbeiten')).toHaveValue('Geändert')
+    })
+
+    it('meldet den Servertext beim Löschen eines Anhangs und lässt ihn in der Liste', async () => {
+      const apis = makeApis()
+      apis.attachmentsApi.list = vi.fn().mockResolvedValue([
+        { id: 6, cardId: 100, filename: 'notiz.txt', contentType: 'text/plain', size: 512, createdAt: '' },
+      ])
+      apis.attachmentsApi.remove = vi.fn().mockRejectedValue(serverfehler('Anhang ist gesperrt.'))
+      render(<CardDetailModal card={card} canEdit onClose={vi.fn()} {...apis} />, {
+        wrapper: SnackbarProvider,
+      })
+
+      fireEvent.click(await screen.findByLabelText('Anhang notiz.txt löschen'))
+
+      expect(await screen.findByText('Anhang ist gesperrt.')).toBeInTheDocument()
+      expect(screen.getByText('notiz.txt')).toBeInTheDocument()
+    })
+
+    it('meldet den Servertext beim Abhaken einer Aufgabe und rollt die Checkbox zurück', async () => {
+      const apis = makeApis()
+      apis.cardsApi.update = vi.fn().mockRejectedValue(serverfehler('Die Karte ist gesperrt.'))
+      liefert(apis, taskCard)
+      render(<CardDetailModal card={taskCard} canEdit onClose={vi.fn()} {...apis} />, {
+        wrapper: SnackbarProvider,
+      })
+
+      fireEvent.click(await screen.findByLabelText('Aufgabe 2'))
+
+      expect(await screen.findByText('Die Karte ist gesperrt.')).toBeInTheDocument()
+      await waitFor(() => expect(screen.getByLabelText('Aufgabe 2')).not.toBeChecked())
+    })
+
+    it('meldet den Servertext beim Verschieben in den Ideen-Pool', async () => {
+      const apis = makeApis()
+      apis.cardsApi.moveToIdeaStorage = vi.fn().mockRejectedValue(
+        serverfehler('Die Karte hängt an einem Vorhaben.'),
+      )
+      render(<CardDetailModal card={card} canEdit onClose={vi.fn()} {...apis} />, {
+        wrapper: SnackbarProvider,
+      })
+
+      fireEvent.click(screen.getByRole('button', { name: 'In den Ideen-Pool' }))
+
+      expect(await screen.findByText('Die Karte hängt an einem Vorhaben.')).toBeInTheDocument()
+    })
+
+    it('meldet den Servertext beim Hochladen im Anhänge-Bereich', async () => {
+      // Anzeigeort bleibt der Inline-Alert der Anhänge-Sektion, nur der Text kommt vom Server.
+      const apis = makeApis()
+      apis.attachmentsApi.upload = vi.fn().mockRejectedValue(serverfehler('Datei ist zu groß (max. 5 MB).'))
+      render(<CardDetailModal card={card} canEdit onClose={vi.fn()} {...apis} />)
+
+      const file = new File(['x'], 'neu.pdf', { type: 'application/pdf' })
+      fireEvent.change(screen.getByLabelText('Datei anhängen'), { target: { files: [file] } })
+
+      expect(await screen.findByText('Datei ist zu groß (max. 5 MB).')).toBeInTheDocument()
+    })
+
+    it('meldet den Servertext beim Öffnen einer Anhangs-Vorschau', async () => {
+      const apis = makeApis()
+      apis.attachmentsApi.list = vi.fn().mockResolvedValue([
+        { id: 5, cardId: 100, filename: 'doc.pdf', contentType: 'application/pdf', size: 2048, createdAt: '' },
+      ])
+      apis.attachmentsApi.fetchBlob = vi.fn().mockRejectedValue(serverfehler('Der Objektspeicher antwortet nicht.'))
+      render(<CardDetailModal card={card} canEdit onClose={vi.fn()} {...apis} />)
+
+      fireEvent.click(await screen.findByRole('button', { name: 'doc.pdf' }))
+
+      expect(await screen.findByText('Der Objektspeicher antwortet nicht.')).toBeInTheDocument()
+    })
+
+    it('meldet den Servertext beim Speichern der Karte', async () => {
+      const apis = makeApis()
+      apis.cardsApi.update = vi.fn().mockRejectedValue(serverfehler('Abhängigkeit #99 gibt es nicht.'))
+      render(<CardDetailModal card={card} canEdit onClose={vi.fn()} {...apis} />, {
+        wrapper: SnackbarProvider,
+      })
+
+      await klickeBearbeiten()
+      fireEvent.change(screen.getByLabelText('Markdown-Beschreibung'), { target: { value: 'X' } })
+      fireEvent.click(screen.getByRole('button', { name: 'Speichern' }))
+
+      expect(await screen.findByText('Abhängigkeit #99 gibt es nicht.')).toBeInTheDocument()
+    })
   })
 })
 
