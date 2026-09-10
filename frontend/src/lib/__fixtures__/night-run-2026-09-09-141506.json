@@ -1,0 +1,233 @@
+{
+  "schemaFassung": 1,
+  "erzeugtVon": "1.51.0",
+  "start": "2026-09-09T14:15:06.165Z",
+  "art": "erzeugung",
+  "modell": "claude-opus-5",
+  "max": 4,
+  "label": "kit:nightplan",
+  "stufe": "plan",
+  "einheiten": [
+    {
+      "id": "164",
+      "titel": "[Konzept] Jira als Issue-Tracker anbinden — Vormerkung, Feinplanung auf Kundenanforderung",
+      "ausgang": "uebersprungen",
+      "grund": "kein Label 'kit:nightplan'"
+    },
+    {
+      "id": "311",
+      "titel": "[Fachlich] Von der Fehlerbeobachtung zur klemmenden Stelle",
+      "ausgang": "uebersprungen",
+      "grund": "kein Label 'kit:nightplan'"
+    },
+    {
+      "id": "247",
+      "titel": "Salvage: Herkunft der Dateien aus einem Baseline-Snapshot statt aus git log",
+      "ausgang": "uebersprungen",
+      "grund": "kein Label 'kit:nightplan'"
+    },
+    {
+      "id": "316",
+      "titel": "merge-production prueft den CI-Status, bevor es den Release-PR erstellt",
+      "ausgang": "uebersprungen",
+      "grund": "kein Label 'kit:nightplan'"
+    },
+    {
+      "id": "248",
+      "titel": "Salvage bewegt das Board erst nach der Sauberkeitspruefung",
+      "ausgang": "uebersprungen",
+      "grund": "kein Label 'kit:nightplan'"
+    },
+    {
+      "id": "350",
+      "titel": "night.mjs: der Vorflug kippt den Lauf an Reviewern, die er gar nicht braucht",
+      "ausgang": "uebersprungen",
+      "grund": "kein Label 'kit:nightplan'"
+    },
+    {
+      "id": "317",
+      "titel": "[Plan] Bezeichner durchgaengig auf Englisch",
+      "ausgang": "uebersprungen",
+      "grund": "kein Label 'kit:nightplan'"
+    },
+    {
+      "id": "351",
+      "titel": "[Fachplan] Änderung aller Vorkommnisse von GO in Ready",
+      "ausgang": "uebersprungen",
+      "grund": "kein Label 'kit:nightplan'"
+    },
+    {
+      "id": "326",
+      "titel": "[Plan] Implementierungsdauer und -modell am Arbeitspaket festhalten",
+      "ausgang": "uebersprungen",
+      "grund": "kein Label 'kit:nightplan'"
+    },
+    {
+      "id": "372",
+      "titel": "[Idee] board.mjs kann Vorhaben schreiben, nicht nur lesen",
+      "ausgang": "uebersprungen",
+      "grund": "kein Label 'kit:nightplan'"
+    },
+    {
+      "id": "562",
+      "titel": "[Plan] Zwischen Kleinigkeit und Vorhaben fehlt ein Weg",
+      "ausgang": "uebersprungen",
+      "grund": "kein Label 'kit:nightplan'"
+    },
+    {
+      "id": "373",
+      "titel": "[Idee] Label-Definitionen anlegen statt Handarbeit je Board",
+      "ausgang": "uebersprungen",
+      "grund": "kein Label 'kit:nightplan'"
+    },
+    {
+      "id": "414",
+      "titel": "[Idee] Der Fachplan nennt die Idee, aus der er entstand — und ist damit nicht mehr die Wurzel",
+      "ausgang": "uebersprungen",
+      "grund": "kein Label 'kit:nightplan'"
+    },
+    {
+      "id": "561",
+      "titel": "Installer-Probe: abgelegte CLAUDE-workflow.md bytegleich zur Vorlage pruefen",
+      "ausgang": "uebersprungen",
+      "grund": "kein Label 'kit:nightplan'"
+    },
+    {
+      "id": "300",
+      "titel": "[Plan] Prüfumfang je Dokument bestimmen, bis hin zum Verzicht",
+      "ausgang": "uebersprungen",
+      "grund": "kein Label 'kit:nightplan'"
+    },
+    {
+      "id": "390",
+      "titel": "[Plan] Die Release-Anfrage zeigt, was im Release steckt",
+      "ausgang": "uebersprungen",
+      "grund": "kein Label 'kit:nightplan'"
+    },
+    {
+      "id": "564",
+      "titel": "[Plan] Naechtliche Laeufe behindern sich nicht gegenseitig",
+      "ausgang": "uebersprungen",
+      "grund": "kein Label 'kit:nightplan'"
+    },
+    {
+      "id": "400",
+      "titel": "ESLint auf die recommended-Sets ausweiten",
+      "ausgang": "uebersprungen",
+      "grund": "kein Label 'kit:nightplan'"
+    },
+    {
+      "id": "475",
+      "titel": "[Idee] Ein gruener lokaler Lauf sagt nichts ueber einen frischen Clone",
+      "ausgang": "uebersprungen",
+      "grund": "kein Label 'kit:nightplan'"
+    },
+    {
+      "id": "412",
+      "titel": "[Idee] Routing-Label des Nacht-Runners je Projekt konfigurierbar machen",
+      "ausgang": "uebersprungen",
+      "grund": "kein Label 'kit:nightplan'"
+    },
+    {
+      "id": "459",
+      "titel": "[Idee] parseDeps liest Prosa als Abhaengigkeit — der Satz gegen den Zyklus erzeugt ihn",
+      "ausgang": "uebersprungen",
+      "grund": "kein Label 'kit:nightplan'"
+    },
+    {
+      "id": "465",
+      "titel": "Umbenennung: beschriebenes Verhalten wird Spec-Driven Development",
+      "ausgang": "uebersprungen",
+      "grund": "kein Label 'kit:nightplan'"
+    },
+    {
+      "id": "540",
+      "titel": "[Fachlich] Was der Mensch in der Sitzung entschieden hat, gilt als entschieden",
+      "ausgang": "uebersprungen",
+      "grund": "kein Label 'kit:nightplan'"
+    },
+    {
+      "id": "543",
+      "titel": "[Fachlich] Eine Pruefvorgabe gilt an jedem Dokument, nicht nur am Arbeitspaket",
+      "ausgang": "uebersprungen",
+      "grund": "kein Label 'kit:nightplan'"
+    },
+    {
+      "id": "544",
+      "titel": "[Fachlich] Was ueber ein Dokument bekannt ist, steht an einer Stelle",
+      "ausgang": "uebersprungen",
+      "grund": "kein Label 'kit:nightplan'"
+    },
+    {
+      "id": "349",
+      "titel": "night.mjs: der harte Stopp verwirft die Bewertung der bereits fertigen Session",
+      "ausgang": "uebersprungen",
+      "grund": "kein Label 'kit:nightplan'"
+    },
+    {
+      "id": "455",
+      "titel": "[Idee] Buchkapitel zum beschriebenen Verhalten (SDD) vorschlagen",
+      "ausgang": "uebersprungen",
+      "grund": "kein Label 'kit:nightplan'"
+    },
+    {
+      "id": "458",
+      "titel": "[Idee] issue-review roles kennt den vorigen Reviewer nicht — Runde 2 prueft die eigene Arbeit",
+      "ausgang": "uebersprungen",
+      "grund": "kein Label 'kit:nightplan'"
+    },
+    {
+      "id": "510",
+      "titel": "[Plan] /techplan benennt Widersprüche zwischen Beschreibung und Bestand",
+      "ausgang": "uebersprungen",
+      "grund": "kein Label 'kit:nightplan'"
+    },
+    {
+      "id": "528",
+      "titel": "[Fachlich] Die geschnittenen Arbeitspakete werden gegen die fachliche Anforderung gehalten",
+      "ausgang": "uebersprungen",
+      "grund": "kein Label 'kit:nightplan'"
+    },
+    {
+      "id": "534",
+      "titel": "[Fachlich] Die Beschreibung des Nachtbetriebs sagt, was gilt",
+      "ausgang": "uebersprungen",
+      "grund": "kein Label 'kit:nightplan'"
+    },
+    {
+      "id": "555",
+      "titel": "[Idee] Eine kaputte settings.json schaltet still alles ab",
+      "ausgang": "uebersprungen",
+      "grund": "kein Label 'kit:nightplan'"
+    },
+    {
+      "id": "556",
+      "titel": "[Fachlich] Nachtlauf liefert nicht zuverlässig ein Protokoll für die Nachtlauf-Auswertung",
+      "ausgang": "uebersprungen",
+      "grund": "kein Label 'kit:nightplan'"
+    },
+    {
+      "id": "479",
+      "titel": "[Fachlich] Zwischen Kleinigkeit und Vorhaben fehlt ein Weg",
+      "ausgang": "unbekannt",
+      "erzeugt": [
+        {
+          "id": "562",
+          "zustand": null,
+          "runden": null,
+          "sessions": []
+        }
+      ],
+      "fortgesetzt": true,
+      "dauerMs": 0,
+      "kennzahlen": null
+    },
+    {
+      "id": "549",
+      "titel": "[Fachlich] Ein Nachweis kann keine Zusage belegen, die es nicht gibt",
+      "ausgang": "unbekannt"
+    }
+  ],
+  "abschluss": "harterStopp",
+  "fehlerklasse": "harterStopp"
+}

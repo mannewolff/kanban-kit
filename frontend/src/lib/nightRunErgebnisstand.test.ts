@@ -3,6 +3,8 @@ import { NIGHT_RUN_EXCERPT_MAX, parseNightRunLog } from './nightRunLog'
 import type { NightRun, NightRunItem } from './nightRunLog'
 import { parseNightRunErgebnisstand } from './nightRunErgebnisstand'
 import echterLauf from './__fixtures__/night-run-2026-09-07-085229.json'
+import echterNachtplanHarterStopp from './__fixtures__/night-run-2026-09-09-141506.json'
+import echterNachtplanRegulaer from './__fixtures__/night-run-2026-09-09-125621.json'
 
 /**
  * Die Fixtures dieser Datei sind — anders als in `nightRunLog.test.ts` — nicht
@@ -85,6 +87,19 @@ describe('parseNightRunErgebnisstand — Ablehnungen', () => {
 
   it('lehnt einen Pruef-Lauf als nicht unterstuetzt ab', () => {
     expect(parseNightRunErgebnisstand(stand({ art: 'review' }))).toEqual({
+      ok: false,
+      grund: 'nicht-unterstuetzt',
+    })
+  })
+
+  it.each([
+    ['erzeugung', undefined],
+    ['erzeugung', null],
+    ['erzeugung', 'issue'],
+    [undefined, 'plan'],
+    ['implementierung', 'plan'],
+  ] as const)('lehnt die Kombination art=%s/stufe=%s ab — nur (erzeugung,plan) ist Nachtplan', (art, stufe) => {
+    expect(parseNightRunErgebnisstand(stand({ art, stufe }))).toEqual({
       ok: false,
       grund: 'nicht-unterstuetzt',
     })
@@ -274,6 +289,56 @@ describe('parseNightRunErgebnisstand — Zustand je Arbeitspaket', () => {
     expect(item.excerpt).toBe('Harter Stopp')
   })
 
+  it('macht `verbraucht` gruen ohne Fehlerklasse', () => {
+    const item = einziges(mitEinheit({ ausgang: 'verbraucht' }, { art: 'erzeugung', stufe: 'plan' }))
+    expect(item.state).toBe('GREEN')
+    expect(item.errorClass).toBeUndefined()
+    expect(item.excerpt).toBe('Dokument(e) erzeugt und geprüft — Label entfernt')
+  })
+
+  it('macht `liegengeblieben` grau ohne Fehlerklasse', () => {
+    const item = einziges(mitEinheit({ ausgang: 'liegengeblieben' }, { art: 'erzeugung', stufe: 'plan' }))
+    expect(item.state).toBe('GREY')
+    expect(item.errorClass).toBeUndefined()
+    expect(item.excerpt).toBe('Über die Obergrenze (--max) hinaus — bleibt liegen')
+  })
+
+  // `offen` kommt in keinem der beiden echten Fixtures vor (Plan #803, #805) — dieser
+  // Test ist bewusst synthetisch, nicht gegen echte Daten belegt.
+  it('macht das synthetische `offen` grau ohne Fehlerklasse', () => {
+    const item = einziges(mitEinheit({ ausgang: 'offen' }, { art: 'erzeugung', stufe: 'plan' }))
+    expect(item.state).toBe('GREY')
+    expect(item.errorClass).toBeUndefined()
+    expect(item.excerpt).toBe('Noch nicht jedes erzeugte Dokument hat einen Endzustand — Label bleibt stehen')
+  })
+
+  it('macht `ohneErgebnis` rot ohne Fehlerklasse', () => {
+    const item = einziges(mitEinheit({ ausgang: 'ohneErgebnis' }, { art: 'erzeugung', stufe: 'plan' }))
+    expect(item.state).toBe('RED')
+    expect(item.errorClass).toBeUndefined()
+    expect(item.excerpt).toBe('Keine verwertbare Erzeugung — Session ohne Dokument oder Prüfrunde ohne Anker')
+  })
+
+  it('macht `uebersprungen` grau mit Freitext aus grund, unabhaengig vom Lauf-Modus', () => {
+    const item = einziges(mitEinheit({ ausgang: 'uebersprungen', grund: "kein Label 'kit:nightplan'" }))
+    expect(item.state).toBe('GREY')
+    expect(item.errorClass).toBeUndefined()
+    expect(item.excerpt).toBe("kein Label 'kit:nightplan'")
+  })
+
+  it('macht `uebersprungen` ohne grund grau mit leerem Auszug', () => {
+    const item = einziges(mitEinheit({ ausgang: 'uebersprungen' }))
+    expect(item.state).toBe('GREY')
+    expect(item.errorClass).toBeUndefined()
+    expect(item.excerpt).toBe('')
+  })
+
+  it('macht `uebersprungen` mit nicht-string grund grau mit leerem Auszug', () => {
+    const item = einziges(mitEinheit({ ausgang: 'uebersprungen', grund: 7 }))
+    expect(item.state).toBe('GREY')
+    expect(item.excerpt).toBe('')
+  })
+
   it('kuerzt einen ueberlangen Auszug auf die gemeinsame Obergrenze', () => {
     const grund = 'x'.repeat(NIGHT_RUN_EXCERPT_MAX + 100)
     expect(einziges(mitEinheit({ ausgang: 'zurueckgestellt', grund })).excerpt).toHaveLength(
@@ -332,6 +397,22 @@ describe('parseNightRunErgebnisstand — uebernommene Felder', () => {
 
   it('deutet einen Implementierungs-Lauf als IMPLEMENTATION', () => {
     expect(lauf(stand()).mode).toBe('IMPLEMENTATION')
+  })
+
+  it('deutet einen Implementierungs-Lauf mit stufe:null (Kit ab 1.51.0) weiterhin als IMPLEMENTATION', () => {
+    expect(lauf(stand({ stufe: null })).mode).toBe('IMPLEMENTATION')
+  })
+
+  it('deutet einen Bestand ganz ohne art-Feld (aelter als 1.47.0) als IMPLEMENTATION', () => {
+    expect(lauf(stand({ art: undefined })).mode).toBe('IMPLEMENTATION')
+  })
+
+  it('deutet art=erzeugung/stufe=plan als NIGHTPLAN', () => {
+    const text = mitEinheit(
+      { ausgang: 'uebersprungen', grund: "kein Label 'kit:nightplan'" },
+      { art: 'erzeugung', stufe: 'plan' },
+    )
+    expect(lauf(text).mode).toBe('NIGHTPLAN')
   })
 
   it('zaehlt bearbeitete und uebergangene Pakete getrennt', () => {
@@ -434,6 +515,73 @@ describe('parseNightRunErgebnisstand — echter Lauf vom 2026-09-07', () => {
   })
 })
 
+describe('parseNightRunErgebnisstand — echter Nachtplan-Lauf, hart gestoppt (2026-09-09-141506)', () => {
+  const r = lauf(JSON.stringify(echterNachtplanHarterStopp))
+  const nach = (nummer: number) => r.items.find((i) => i.cardNumber === nummer)
+
+  it('deutet den Lauf als NIGHTPLAN, unvollstaendig-Flag false trotz Hart-Stopp', () => {
+    expect(r.mode).toBe('NIGHTPLAN')
+    expect(r.incomplete).toBe(false)
+  })
+
+  it('zaehlt 2 bearbeitete und 33 uebergangene Pakete', () => {
+    expect(r.processedCount).toBe(2)
+    expect(r.skippedCount).toBe(33)
+  })
+
+  it('setzt Lauf-Zustand und -Fehlerklasse auf den harten Stopp', () => {
+    expect(r.runState).toBe('RED')
+    expect(r.runErrorClass).toBe('HARD_ABORT')
+    expect(r.runExcerpt).toBe('Harter Stopp (harterStopp)')
+  })
+
+  it('deutet die beiden abgebrochenen Pakete #479 und #549 rot mit HARD_ABORT', () => {
+    for (const nummer of [479, 549]) {
+      expect(nach(nummer)?.state).toBe('RED')
+      expect(nach(nummer)?.errorClass).toBe('HARD_ABORT')
+    }
+  })
+})
+
+describe('parseNightRunErgebnisstand — echter Nachtplan-Lauf, regulaer beendet (2026-09-09-125621)', () => {
+  const r = lauf(JSON.stringify(echterNachtplanRegulaer))
+  const nach = (nummer: number) => r.items.find((i) => i.cardNumber === nummer)
+
+  it('deutet den Lauf als NIGHTPLAN, vollstaendig, ohne Lauf-Zustand', () => {
+    expect(r.mode).toBe('NIGHTPLAN')
+    expect(r.incomplete).toBe(false)
+    expect(r).not.toHaveProperty('runState')
+  })
+
+  it('zaehlt 3 bearbeitete und 35 uebergangene Pakete', () => {
+    expect(r.processedCount).toBe(3)
+    expect(r.skippedCount).toBe(35)
+  })
+
+  it('summiert die Laufdauer aus den Einheiten mit dauerMs', () => {
+    expect(r.durationMs).toBe(1858420 + 1976663 + 0)
+  })
+
+  it('deutet die beiden `verbraucht`-Pakete #533 und #535 gruen ohne Fehlerklasse', () => {
+    for (const nummer of [533, 535]) {
+      expect(nach(nummer)?.state).toBe('GREEN')
+      expect(nach(nummer)?.errorClass).toBeUndefined()
+    }
+  })
+
+  it('deutet das `ohneErgebnis`-Paket #479 rot ohne Fehlerklasse', () => {
+    expect(nach(479)?.state).toBe('RED')
+    expect(nach(479)?.errorClass).toBeUndefined()
+  })
+
+  it('deutet die `liegengeblieben`-Pakete #541/#549/#551 grau ohne Fehlerklasse', () => {
+    for (const nummer of [541, 549, 551]) {
+      expect(nach(nummer)?.state).toBe('GREY')
+      expect(nach(nummer)?.errorClass).toBeUndefined()
+    }
+  })
+})
+
 /**
  * Beide Wege muessen dieselbe Lage gleich benennen — sonst hiesse derselbe Lauf im
  * Leitstand je nach Quelle anders. Verglichen wird nur, was der Ergebnisstand
@@ -489,6 +637,14 @@ describe('parseNightRunErgebnisstand gegen parseNightRunLog', () => {
         ausgang: 'zurueckgestellt',
         grund:
           'Nachtlauf: Fachliches Issue — wird nicht implementiert, bitte per /plan #100 in technische Issues ueberfuehren.',
+      },
+    },
+    {
+      name: 'Nachtplan ohne Label',
+      zeile: "#100 uebersprungen: kein Label 'kit:nightplan'.",
+      einheit: {
+        ausgang: 'uebersprungen',
+        grund: "kein Label 'kit:nightplan'",
       },
     },
   ]

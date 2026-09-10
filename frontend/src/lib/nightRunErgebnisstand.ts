@@ -26,6 +26,7 @@ import {
   type NightRun,
   type NightRunErrorClass,
   type NightRunItem,
+  type NightRunMode,
   type NightRunState,
 } from './nightRunLog'
 
@@ -76,6 +77,13 @@ interface RohLauf {
   schemaFassung?: unknown
   start: string
   art?: string
+  /**
+   * Nur bei `art: "erzeugung"` bedeutungstragend. `night.mjs` schreibt sie additiv seit
+   * Version 1.51.0 in JEDEN Lauf (`stufe: args.stufe ?? null`) — ein Implementierungslauf
+   * traegt sie deshalb als `null`, nicht als fehlendes Feld; nur Bestaende vor 1.51.0
+   * (z. B. die Fixture vom 2026-09-07) kennen das Feld gar nicht.
+   */
+  stufe?: string | null
   einheiten?: unknown
   abschluss?: unknown
   fehlerklasse?: string
@@ -155,7 +163,13 @@ const ZURUECKGESTELLT: ReadonlyArray<{ trifft: (grund: string) => boolean } & Fa
  */
 const ZURUECKGESTELLT_SONST: Farbe = { state: 'GREY' }
 
-/** Was ein Ausgang ohne Pruefblock ueber das Paket sagt. */
+/**
+ * Was ein Ausgang ohne Pruefblock ueber das Paket sagt — die beiden Implementierungslauf-
+ * Faelle `unbekannt`/`harterStopp` und, seit Plan #803, die vier festen Ausgaenge eines
+ * Nachtplan-Laufs (`night.mjs` ab 1.51.0, Erzeugungsmodus). Alle vier tragen einen festen
+ * Text ohne Laufzeit-Eingabe; nur `uebersprungen` braucht wegen seines dynamischen
+ * Freitexts (`grund`) einen eigenen Zweig in {@link deuteEinheit}.
+ */
 const OHNE_PRUEFUNG = new Map<string, Farbe & { excerpt: string }>([
   [
     'unbekannt',
@@ -166,7 +180,48 @@ const OHNE_PRUEFUNG = new Map<string, Farbe & { excerpt: string }>([
     },
   ],
   ['harterStopp', { state: 'RED', errorClass: 'HARD_ABORT', excerpt: 'Harter Stopp' }],
+  [
+    'verbraucht',
+    { state: 'GREEN', excerpt: 'Dokument(e) erzeugt und geprüft — Label entfernt' },
+  ],
+  [
+    'liegengeblieben',
+    { state: 'GREY', excerpt: 'Über die Obergrenze (--max) hinaus — bleibt liegen' },
+  ],
+  [
+    'offen',
+    {
+      state: 'GREY',
+      excerpt: 'Noch nicht jedes erzeugte Dokument hat einen Endzustand — Label bleibt stehen',
+    },
+  ],
+  [
+    'ohneErgebnis',
+    {
+      state: 'RED',
+      excerpt: 'Keine verwertbare Erzeugung — Session ohne Dokument oder Prüfrunde ohne Anker',
+    },
+  ],
 ])
+
+/**
+ * Bestimmt den Lauf-Modus aus `(art, stufe)` — eine Tupel-Tabelle statt einer
+ * Bedingungskette, weil nur so ablesbar ist, dass jede Kombination genau einmal
+ * entschieden wird (Plan #803, Architektonische Entscheidung 3/5). `null` liefert sie
+ * fuer jede nicht ausdruecklich gelistete Kombination: Der Aufrufer lehnt dann ab, statt
+ * zu raten (Praemisse aus Issue #773).
+ *
+ * <p>Nur `("erzeugung", "plan")` ist Nachtplan — auch der Geschwisterlauf
+ * `("erzeugung", "issue")` (`kit:nightissues`, Arbeitspaket-Stufe desselben Runners)
+ * bleibt bewusst aussen vor: eine generelle Oeffnung fuer jede `erzeugung`-Stufe waere
+ * genau die Oeffnung, die Issue #802 als Nicht-Ziel ausschliesst.
+ */
+function bestimmeModus(art: string | undefined, stufe: string | null | undefined): NightRunMode | null {
+  if (art === 'erzeugung' && stufe === 'plan') return 'NIGHTPLAN'
+  if (art === 'implementierung' && (stufe === undefined || stufe === null)) return 'IMPLEMENTATION'
+  if (art === undefined && (stufe === undefined || stufe === null)) return 'IMPLEMENTATION'
+  return null
+}
 
 /** Auszuege gehen an den Server und teilen sich die Spaltengrenze mit dem Protokoll-Parser. */
 const gekuerzt = (text: string): string => text.slice(0, NIGHT_RUN_EXCERPT_MAX)
@@ -180,6 +235,15 @@ function deuteEinheit(e: RohEinheit): (Farbe & { excerpt: string }) | null {
     const grund = typeof e.grund === 'string' ? e.grund : ''
     const farbe = ZURUECKGESTELLT.find((z) => z.trifft(grund)) ?? ZURUECKGESTELLT_SONST
     return { state: farbe.state, errorClass: farbe.errorClass, excerpt: gekuerzt(grund) }
+  }
+
+  // Modus-unabhaengig (Plan #803, Entscheidung 7): derselbe Ausgang kennt bereits der
+  // Text-Protokoll-Parser (`nightRunLog.ts`, Muster `^#(\d+) uebersprungen: `). Fallback
+  // `''` bei fehlendem/nicht-stringartigem `grund` spiegelt das Muster von `zurueckgestellt`
+  // oben — kein Befund, deshalb keine Fehlerklasse.
+  if (e.ausgang === 'uebersprungen') {
+    const grund = typeof e.grund === 'string' ? e.grund : ''
+    return { state: 'GREY', excerpt: gekuerzt(grund) }
   }
 
   if (e.ausgang !== 'erfolg' && e.ausgang !== 'fehlschlag') return null
@@ -240,8 +304,13 @@ export function parseNightRunErgebnisstand(text: string): NightRunErgebnisstandR
   if (lauf.schemaFassung !== FASSUNG) return { ok: false, grund: 'unbekannte-fassung' }
 
   // Ein Pruef-Lauf traegt andere Ausgaenge und eine Stufe; ihn hier zu deuten hiesse,
-  // ein zweites Vokabular zu erraten (Issue #773 grenzt ihn ausdruecklich aus).
+  // ein zweites Vokabular zu erraten (Issue #773 grenzt ihn ausdruecklich aus). Diese
+  // Ablehnung bleibt vor der Tupel-Tabelle stehen, weil `bestimmeModus` `art: "review"`
+  // gar nicht kennt und sie sonst genauso als `null` ablehnen wuerde — hier aber bewusst
+  // unbenannt bleiben soll, dass es sich um den ausgeschlossenen Pruef-Lauf handelt.
   if (lauf.art === 'review') return { ok: false, grund: 'nicht-unterstuetzt' }
+  const modus = bestimmeModus(lauf.art, lauf.stufe)
+  if (modus === null) return { ok: false, grund: 'nicht-unterstuetzt' }
   if (!Array.isArray(lauf.einheiten)) return { ok: false, grund: 'nicht-unterstuetzt' }
   if (lauf.abschluss !== null && typeof lauf.abschluss !== 'string') {
     return { ok: false, grund: 'nicht-unterstuetzt' }
@@ -260,7 +329,7 @@ export function parseNightRunErgebnisstand(text: string): NightRunErgebnisstandR
     ok: true,
     run: {
       startedAt: lauf.start,
-      mode: 'IMPLEMENTATION',
+      mode: modus,
       // Dokumentierte Untergrenze: die Summe der Runden, ohne die Zeit zwischen ihnen
       // (Board-Aufrufe, Gates). Der Stand traegt keinen Endzeitstempel.
       durationMs: einheiten.reduce((summe, e) => summe + (e.dauerMs ?? 0), 0),
