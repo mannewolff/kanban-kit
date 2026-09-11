@@ -11,6 +11,7 @@ import Stack from '@mui/material/Stack'
 import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
 import { useEffect, useMemo, useState } from 'react'
+import { apiErrorMessage } from '../api/client'
 import {
   MAX_IDEAS_PER_IMPORT,
   splitSpecIntoSections,
@@ -112,8 +113,8 @@ export function SpecImportDialog({ open, fileName, markdown, onClose, onImport }
         })),
       )
       onClose()
-    } catch {
-      setError('Die Ideen konnten nicht angelegt werden. Bitte erneut versuchen.')
+    } catch (e) {
+      setError(apiErrorMessage(e, 'Die Ideen konnten nicht angelegt werden. Bitte erneut versuchen.'))
     } finally {
       setBusy(false)
     }

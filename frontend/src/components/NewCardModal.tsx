@@ -1,3 +1,4 @@
+import Alert from '@mui/material/Alert'
 import Button from '@mui/material/Button'
 import Dialog from '@mui/material/Dialog'
 import DialogActions from '@mui/material/DialogActions'
@@ -7,6 +8,7 @@ import Stack from '@mui/material/Stack'
 import TextField from '@mui/material/TextField'
 import { type KeyboardEvent, useEffect, useRef, useState } from 'react'
 import type { CardType } from '../api/cards'
+import { ApiError, apiErrorMessage } from '../api/client'
 import type { Epic } from '../api/epics'
 import type { Label as BoardLabel } from '../api/labels'
 import type { Member } from '../api/members'
@@ -19,6 +21,9 @@ import { AssigneeSection, LabelSection, parseDependencyInput } from './CardDetai
 import { dialogTitleSx } from './dialogChromeSx'
 
 const BODY_TEMPLATE = '## Kontext\n\n## Aufgabe\n\n## Akzeptanzkriterium\n\n## Abhängigkeiten\n'
+
+/** Feldschlüssel, für die dieser Dialog ein eigenes Feld hat und die Meldung dort anzeigt. */
+const GEBUNDENE_FELDER = new Set(['title', 'shortcode', 'dependencies'])
 
 export interface NewItemInput {
   type: CardType
@@ -86,6 +91,9 @@ export function NewCardModal({
   const [shortcode, setShortcode] = useState('')
   const [depsInput, setDepsInput] = useState('')
   const [depsError, setDepsError] = useState<string | null>(null)
+  const [titleError, setTitleError] = useState<string | null>(null)
+  const [shortcodeError, setShortcodeError] = useState<string | null>(null)
+  const [formError, setFormError] = useState<string | null>(null)
   const [dueInput, setDueInput] = useState('')
   const [assigneeIds, setAssigneeIds] = useState<number[]>([])
   const [labelIds, setLabelIds] = useState<number[]>([])
@@ -101,6 +109,9 @@ export function NewCardModal({
     setShortcode('')
     setDepsInput('')
     setDepsError(null)
+    setTitleError(null)
+    setShortcodeError(null)
+    setFormError(null)
     setDueInput('')
     setAssigneeIds([])
     setLabelIds([])
@@ -128,8 +139,31 @@ export function NewCardModal({
     dialogTitle = `Neue Karte in „${columnName}“`
   }
 
+  /**
+   * Verteilt einen Fehlschlag des Anlegens auf die Anzeigeorte des Dialogs: Feldmeldungen zu
+   * `title`/`shortcode`/`dependencies` an ihr Feld, alles Übrige in den Alert. Feldmeldungen ohne
+   * eigenes Feld hängen hinten an der allgemeinen Meldung — sonst verschwänden sie spurlos und der
+   * Nutzer sähe nur „Anlegen fehlgeschlagen.", ohne zu erfahren, was der Server beanstandet.
+   */
+  const zeigeFehler = (error: unknown) => {
+    const felder = error instanceof ApiError ? (error.fieldErrors ?? {}) : {}
+    setTitleError(felder.title ?? null)
+    setShortcodeError(felder.shortcode ?? null)
+    if (felder.dependencies !== undefined) setDepsError(felder.dependencies)
+    const ungebunden = Object.entries(felder)
+      .filter(([key]) => !GEBUNDENE_FELDER.has(key))
+      .map(([, message]) => message)
+    setFormError([apiErrorMessage(error, 'Anlegen fehlgeschlagen.'), ...ungebunden].join(' '))
+  }
+
   const handleCreate = async () => {
     if (!canSubmit) return
+    // Jeder Versuch startet fehlerfrei: Eine Meldung des vorigen Laufs stünde sonst neben dem
+    // Ergebnis des neuen und wäre von ihm nicht zu unterscheiden.
+    setTitleError(null)
+    setShortcodeError(null)
+    setFormError(null)
+    setDepsError(null)
     let dependencies: number[] = []
     let dueDate: string | null = null
     if (fullCard) {
@@ -154,7 +188,10 @@ export function NewCardModal({
         assigneeIds: fullCard ? assigneeIds : [],
         labelIds: fullCard ? labelIds : [],
       })
+      // Nur der Erfolg schließt: Bei einem Fehlschlag bliebe die getippte Eingabe sonst verloren.
       onClose()
+    } catch (e) {
+      zeigeFehler(e)
     } finally {
       setSaving(false)
     }
@@ -189,6 +226,8 @@ export function NewCardModal({
       <DialogTitle id="new-card-title" sx={dialogTitleSx}>{dialogTitle}</DialogTitle>
       <DialogContent>
         <Stack spacing={2} sx={{ mt: 0.5 }}>
+          {formError !== null && <Alert severity="error">{formError}</Alert>}
+
           {!epicOnly && !ideaOnly && (
             <TextField
               select
@@ -214,10 +253,14 @@ export function NewCardModal({
                 shortcode={shortcode}
                 parentId={parentId}
                 epics={epics}
+                titleError={titleError}
                 depsInput={depsInput}
                 depsError={depsError}
                 dueInput={dueInput}
-                onTitleChange={setTitle}
+                onTitleChange={(value) => {
+                  setTitle(value)
+                  if (titleError) setTitleError(null)
+                }}
                 onBodyChange={setBody}
                 onShortcodeChange={setShortcode}
                 onParentIdChange={setParentId}
@@ -250,9 +293,13 @@ export function NewCardModal({
                 <TextField
                   label="Kürzel (optional)"
                   value={shortcode}
-                  onChange={(e) => setShortcode(e.target.value)}
+                  onChange={(e) => {
+                    setShortcode(e.target.value)
+                    if (shortcodeError) setShortcodeError(null)
+                  }}
                   placeholder={epicShortcode(title)}
-                  helperText="Leer lassen, um es aus dem Titel abzuleiten."
+                  error={shortcodeError != null}
+                  helperText={shortcodeError ?? 'Leer lassen, um es aus dem Titel abzuleiten.'}
                   slotProps={{ htmlInput: { maxLength: 16, 'aria-label': 'Kürzel' } }}
                   fullWidth
                 />
@@ -263,11 +310,16 @@ export function NewCardModal({
               <TextField
                 label="Titel"
                 value={title}
-                onChange={(e) => setTitle(e.target.value)}
+                onChange={(e) => {
+                  setTitle(e.target.value)
+                  if (titleError) setTitleError(null)
+                }}
                 required
                 autoFocus
                 fullWidth
                 inputRef={titleInputRef}
+                error={titleError != null}
+                helperText={titleError ?? undefined}
                 slotProps={{ htmlInput: { maxLength: 300, 'aria-label': 'Titel' } }}
                 onKeyDown={handleTitleKeyDown}
               />

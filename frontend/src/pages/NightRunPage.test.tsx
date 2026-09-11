@@ -18,6 +18,7 @@ import type {
 } from '../api/nightRuns'
 import { SnackbarProvider } from '../components/SnackbarProvider'
 import echterLauf from '../lib/__fixtures__/night-run-2026-09-07-085229.json'
+import echterNachtplanHarterStopp from '../lib/__fixtures__/night-run-2026-09-09-141506.json'
 import { parseNightRunErgebnisstand } from '../lib/nightRunErgebnisstand'
 import { buildHandoffText, type NightRunHandoffItem } from '../lib/nightRunHandoff'
 import { theme } from '../theme'
@@ -130,6 +131,14 @@ const VIER_ZUSTAENDE = stand({
 const ECHTER_STAND = JSON.stringify(echterLauf)
 const ECHTER_START = '2026-09-07T08:52:29.532Z'
 
+/**
+ * Der echte, hart gestoppte Nachtplan-Lauf vom 2026-09-09 (Issue #805/#806) — unverändert, aus
+ * `claude-workflow-kit`. 33 übersprungene Pakete (kein Label `kit:nightplan`), zwei abgebrochene
+ * (#479, #549).
+ */
+const ECHTER_NACHTPLAN_STAND = JSON.stringify(echterNachtplanHarterStopp)
+const ECHTER_NACHTPLAN_START = '2026-09-09T14:15:06.165Z'
+
 /** Eine Runner-Zeile, die kein Muster deutete — mit Markdown-Zeichen im Text. */
 const UNGEDEUTET = 'Voellig unbekannte Runner-Zeile mit *Sternchen* und `Backticks`'
 
@@ -162,6 +171,17 @@ function gedeutet(ergebnisstand: string) {
 }
 
 /**
+ * Engt einen Modus auf das ein, was der Server kennt — `wieAufbewahrt`/`aufbewahrt` bilden nur
+ * seine Antwort nach, und ein Nachtplan-Lauf kommt dort nie an (Plan #803, Entscheidung 8). Ein
+ * Wurf statt eines Casts: Ein Test, der versehentlich einen Nachtplan-Ergebnisstand hier hineingibt,
+ * soll das laut sagen, nicht still eine falsche Server-Antwort simulieren.
+ */
+function alsServerModus(mode: NightRunView['mode'] | 'NIGHTPLAN'): NightRunView['mode'] {
+  if (mode === 'NIGHTPLAN') throw new Error('Der Server liefert nie NIGHTPLAN — falsches Fixture?')
+  return mode
+}
+
+/**
  * Der Lauf eines Ergebnisstands so, wie der Server ihn nach dem Einliefern zurückgibt. Die Seite
  * lädt nach erfolgreichem Senden die Liste neu — ohne diese Nachbildung zeigte jeder Sendetest
  * danach eine leere Seite. Der Helfer bildet nur die Feldabbildung des Servers nach; **welchen**
@@ -173,7 +193,7 @@ function wieAufbewahrt(ergebnisstand: string): NightRunView[] {
     {
       id: 1,
       startedAt: run.startedAt,
-      mode: run.mode,
+      mode: alsServerModus(run.mode),
       durationMs: run.durationMs,
       processedCount: run.processedCount,
       skippedCount: run.skippedCount,
@@ -242,8 +262,14 @@ interface Antworten {
   listen?: NightRunView[][]
   /** Statt einer Liste eine Fehlerantwort — der Ladepfad beim Öffnen der Seite. */
   listenFehler?: string
-  /** Ergebnis des `POST`; `fehler` erzeugt stattdessen eine 400-Antwort. */
-  submit?: { ergebnis?: NightRunResult[]; fehler?: string }
+  /**
+   * Ergebnis des `POST`; `fehler` erzeugt stattdessen eine 400-Antwort mit `detail`.
+   *
+   * `rohText` antwortet mit einem Body **ohne** RFC-9457-`detail` (etwa die HTML-Fehlerseite eines
+   * Reverse-Proxys), `netzfehler` lässt `fetch` selbst scheitern — beides Fälle, in denen es keine
+   * für den Nutzer formulierte Server-Meldung gibt.
+   */
+  submit?: { ergebnis?: NightRunResult[]; fehler?: string; rohText?: string; netzfehler?: boolean }
   /** Je `GET /night-runs/error-class-counts` eine Antwort; die letzte gilt für alle weiteren Aufrufe. */
   zaehler?: NightRunErrorClassCounts[]
   /** Statt der Häufigkeiten eine Fehlerantwort — der Fehlerpfad aus Issue #726. */
@@ -267,6 +293,14 @@ const antwortFehler = (detail: string, status = 400) => ({
   status,
   statusText: 'Bad Request',
   text: () => Promise.resolve(JSON.stringify({ detail })),
+})
+
+/** Fehlerantwort ohne RFC-9457-Problem im Body — der Roh-Body gehört nicht vor den Nutzer. */
+const antwortOhneDetail = (body: string, status = 502) => ({
+  ok: false,
+  status,
+  statusText: 'Bad Gateway',
+  text: () => Promise.resolve(body),
 })
 
 function stubFetch(antworten: Antworten) {
@@ -300,6 +334,12 @@ function stubFetch(antworten: Antworten) {
         return Promise.resolve(antwortOk(daten))
       }
       if (url === '/api/projects/5/night-runs' && method === 'POST') {
+        if (antworten.submit?.netzfehler === true) {
+          return Promise.reject(new TypeError('Failed to fetch'))
+        }
+        if (antworten.submit?.rohText !== undefined) {
+          return Promise.resolve(antwortOhneDetail(antworten.submit.rohText))
+        }
         return Promise.resolve(
           antworten.submit?.fehler === undefined
             ? antwortOk(antworten.submit?.ergebnis ?? [])
@@ -616,6 +656,123 @@ describe('NightRunPage — Ergebnisstand hineingeben', () => {
     expect(within(lauf(0)).getByText('Ergebnisstand')).toBeInTheDocument()
     aufklappen(0)
     expect(await within(lauf(0)).findByRole('button', { name: /#700 Paket A/ })).toBeInTheDocument()
+  })
+
+  it('zeigt statt eines Roh-Bodys ohne Server-Meldung den eigenen Text', async () => {
+    // 502 vom Reverse-Proxy: Der Body ist eine HTML-Seite, keine für den Nutzer formulierte
+    // Meldung — sie gehört nicht in den Toast (Issue #812).
+    renderPage({ submit: { rohText: '<html><body>502 Bad Gateway</body></html>' } })
+    await screen.findByText('Noch keine Auswertung vorhanden.')
+
+    protokollWaehlen(EIN_LAUF)
+
+    expect(await screen.findByText('Einliefern fehlgeschlagen.')).toBeInTheDocument()
+    expect(screen.queryByText(/502 Bad Gateway/)).not.toBeInTheDocument()
+  })
+
+  it('nennt bei einem Netzwerkabbruch den eigenen Text', async () => {
+    renderPage({ submit: { netzfehler: true } })
+    await screen.findByText('Noch keine Auswertung vorhanden.')
+
+    protokollWaehlen(EIN_LAUF)
+
+    expect(await screen.findByText('Einliefern fehlgeschlagen.')).toBeInTheDocument()
+  })
+
+  /**
+   * Review-Fund (Code-Review Schritt 7, #807-#812-Batch): Einliefern und das anschließende
+   * Nachladen der Liste (plus Zähler) standen im selben try/catch. Scheitert nur das Nachladen,
+   * ist die Einlieferung trotzdem durch — „Einliefern fehlgeschlagen" wäre dann falsch.
+   */
+  it('meldet ein gescheitertes Nachladen getrennt vom Einliefern, wenn die Einlieferung erfolgreich war', async () => {
+    let listRufe = 0
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string, init?: RequestInit) => {
+        const method = init?.method ?? 'GET'
+        anfragen.push({ url, method, body: String(init?.body ?? '') })
+        if (url === '/api/projects') {
+          return Promise.resolve(antwortOk([{ id: 5, name: 'Team', role: 'OWNER', createdAt: '' }]))
+        }
+        if (url === '/api/projects/5/night-runs' && method === 'GET') {
+          listRufe += 1
+          // Erster Aufruf (Erstladen) klappt, der zweite (Nachladen nach dem Einliefern) scheitert.
+          if (listRufe === 1) return Promise.resolve(antwortOk([]))
+          return Promise.reject(new TypeError('Failed to fetch'))
+        }
+        if (url === '/api/projects/5/night-runs' && method === 'POST') {
+          return Promise.resolve(antwortOk(alleNeu(EIN_LAUF)))
+        }
+        return Promise.reject(new Error(`unerwartete Anfrage: ${method} ${url}`))
+      }),
+    )
+
+    render(
+      <ThemeProvider theme={theme}>
+        <SnackbarProvider>
+          <MemoryRouter initialEntries={['/projects/5/nachtlauf']}>
+            <Routes>
+              <Route path="/projects/:projectId/nachtlauf" element={<NightRunPage />} />
+            </Routes>
+          </MemoryRouter>
+        </SnackbarProvider>
+      </ThemeProvider>,
+    )
+    await screen.findByText('Noch keine Auswertung vorhanden.')
+
+    protokollWaehlen(EIN_LAUF)
+
+    expect(
+      await screen.findByText('Eingeliefert, Liste konnte nicht aktualisiert werden.'),
+    ).toBeInTheDocument()
+    // Der lokal aus dem Ergebnisstand erzeugte Lauf-Eintrag bleibt trotzdem sichtbar.
+    expect(lauf(0)).toBeInTheDocument()
+  })
+})
+
+describe('NightRunPage — Nachtplan-Lauf (#806)', () => {
+  it('zeigt den echten Nachtplan-Lauf mit eigenem Chip und den erwarteten Zuständen, liefert ihn aber nicht ein', async () => {
+    renderPage()
+    await screen.findByText('Noch keine Auswertung vorhanden.')
+
+    protokollWaehlen(ECHTER_NACHTPLAN_STAND, 'night-run-2026-09-09-141506.json')
+
+    const panelEl = await screen.findByTestId(`lauf-${ECHTER_NACHTPLAN_START}`)
+    expect(within(panelEl).getByText('Nachtplan-Lauf')).toBeInTheDocument()
+    expect(within(panelEl).getByText('2 bearbeitet, 33 übergangen')).toBeInTheDocument()
+
+    fireEvent.click(within(panelEl).getByRole('button', { expanded: false }))
+    const panel = within(panelEl)
+    await panel.findByTestId('zustand-479')
+    for (const nummer of [479, 549]) {
+      expect(within(panel.getByTestId(`zustand-${nummer}`)).getByText('gescheitert')).toBeInTheDocument()
+    }
+    expect(panel.getAllByText("Grund: kein Label 'kit:nightplan'")).toHaveLength(33)
+
+    // Kein Einliefern: weder ein POST noch die Kennzeichnung "neu angelegt"/"lag schon vor".
+    expect(anfragen.some((a) => a.method === 'POST')).toBe(false)
+    expect(within(panelEl).queryByText('neu angelegt')).not.toBeInTheDocument()
+    expect(within(panelEl).queryByText('lag schon vor')).not.toBeInTheDocument()
+  })
+
+  it('zeigt einen unvollständigen Nachtplan-Lauf an, liefert ihn aber ebenfalls nicht ein', async () => {
+    renderPage()
+    await screen.findByText('Noch keine Auswertung vorhanden.')
+
+    protokollWaehlen(
+      stand({
+        art: 'erzeugung',
+        stufe: 'plan',
+        abschluss: null,
+        einheiten: [einheit({ ausgang: 'uebersprungen', grund: "kein Label 'kit:nightplan'" })],
+      }),
+    )
+
+    expect(
+      await screen.findByText('Lauf noch nicht abgeschlossen — nicht gespeichert'),
+    ).toBeInTheDocument()
+    expect(lauf(0)).toBeInTheDocument()
+    expect(anfragen.some((a) => a.method === 'POST')).toBe(false)
   })
 })
 

@@ -28,6 +28,7 @@ import SwapHorizIcon from '@mui/icons-material/SwapHoriz'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Outlet, useLocation, useMatch, useNavigate } from 'react-router-dom'
 import { boardsApi } from '../api/boards'
+import { apiErrorMessage } from '../api/client'
 import { projectsApi, type Project } from '../api/projects'
 import { APP_NAME } from '../appMeta'
 import { useAuth } from '../auth/AuthContext'
@@ -236,9 +237,15 @@ export function AppShell() {
     })
   }, [navItems, location.pathname])
 
+  // `navigate` bleibt im Erfolgszweig: Scheitert das Abmelden, ist der Nutzer weiter angemeldet und
+  // bleibt auf der Seite, statt vor eine Login-Maske gestellt zu werden.
   const handleLogout = async () => {
-    await logout()
-    navigate('/login')
+    try {
+      await logout()
+      navigate('/login')
+    } catch (e) {
+      notify(apiErrorMessage(e, 'Abmelden fehlgeschlagen.'), 'error')
+    }
   }
 
   const toggleCollapsed = () => {

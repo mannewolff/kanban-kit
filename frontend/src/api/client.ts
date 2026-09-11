@@ -1,12 +1,21 @@
 /** Feld → Meldung aus der `fieldErrors`-Extension einer RFC-9457-Fehlerantwort. */
 export type FieldErrors = Readonly<Record<string, string>>
 
-/** Fehler einer API-Antwort mit HTTP-Status; message stammt aus `detail`/`title` (RFC 9457). */
+/**
+ * Fehler einer API-Antwort mit HTTP-Status; message stammt aus `detail`/`title` (RFC 9457).
+ *
+ * `detail` ist nur gesetzt, wenn der Response-Body erfolgreich als RFC-9457-Problem gelesen
+ * wurde und dort `detail` oder `title` stand — also nur bei einer Meldung, die das Backend
+ * bewusst für den Nutzer formuliert hat. `message` behält daneben den bisherigen Fallback
+ * auf den Roh-Body bzw. `statusText` und ist damit nicht ohne Prüfung anzeigbar.
+ * Anzuzeigende Texte kommen aus {@link apiErrorMessage}.
+ */
 export class ApiError extends Error {
   constructor(
     public readonly status: number,
     message: string,
     public readonly fieldErrors?: FieldErrors,
+    public readonly detail?: string,
   ) {
     super(message)
     this.name = 'ApiError'
@@ -14,10 +23,24 @@ export class ApiError extends Error {
 }
 
 /**
+ * Anzeigbarer Text zu einem Fehler: die Server-Meldung aus {@link ApiError.detail}, sonst der
+ * übergebene Fallback. Liest ausschließlich `detail` — nie `message`, das bei einem nicht
+ * lesbaren Body auf den Roh-Body oder `statusText` zurückfällt (z. B. die HTML-Fehlerseite
+ * eines Reverse-Proxys bei 502/504) und deshalb nicht nach außen gehört.
+ */
+export function apiErrorMessage(error: unknown, fallback: string): string {
+  if (!(error instanceof ApiError)) return fallback
+  return error.detail !== undefined && error.detail !== '' ? error.detail : fallback
+}
+
+/**
  * Liest `detail`/`title` und `fieldErrors` aus einem RFC-9457-Problem-Body
  * (`application/problem+json`). Tolerant gegenüber Nicht-JSON- und Fremdformat-Bodies
  * (z. B. 401 aus der Security-Filterkette): dann bleibt das Ergebnis leer und der
  * Aufrufer fällt auf den Roh-Body zurück.
+ *
+ * Nur ein hier gefundenes `message` wird zu {@link ApiError.detail} — der Fallback auf
+ * den Roh-Body bleibt allein in `message` und wird nie als Server-Meldung ausgegeben.
  */
 function parseProblem(body: string): { message?: string; fieldErrors?: FieldErrors } {
   let data: unknown
@@ -68,6 +91,7 @@ export async function apiFetch<T>(
       response.status,
       problem.message ?? (body || response.statusText),
       problem.fieldErrors,
+      problem.message,
     )
   }
 

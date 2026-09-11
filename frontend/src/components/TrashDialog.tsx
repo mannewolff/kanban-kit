@@ -7,7 +7,9 @@ import Stack from '@mui/material/Stack'
 import Typography from '@mui/material/Typography'
 import { useEffect, useState } from 'react'
 import { cardsApi as defaultCardsApi, type Card } from '../api/cards'
+import { apiErrorMessage } from '../api/client'
 import { dialogTitleSx } from './dialogChromeSx'
+import { useSnackbar } from './SnackbarProvider'
 
 interface Props {
   open: boolean
@@ -30,6 +32,7 @@ export function TrashDialog({
   api = defaultCardsApi,
 }: Readonly<Props>) {
   const [cards, setCards] = useState<Card[]>([])
+  const notify = useSnackbar()
 
   const reload = () => {
     void api.listTrash(boardId).then(setCards).catch(() => setCards([]))
@@ -40,16 +43,27 @@ export function TrashDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, boardId])
 
+  // Nach einem Fehlschlag wird bewusst nicht neu geladen: Der Papierkorb steht unverändert da,
+  // und `onChanged` bliebe aus — der Aufrufer soll ein Board nicht wegen eines Fehlschlags neu
+  // laden, bei dem sich nichts geändert hat.
   const restore = async (card: Card) => {
-    await api.restoreDeleted(card.id)
-    reload()
-    onChanged()
+    try {
+      await api.restoreDeleted(card.id)
+      reload()
+      onChanged()
+    } catch (e) {
+      notify(apiErrorMessage(e, 'Wiederherstellen fehlgeschlagen.'), 'error')
+    }
   }
 
   const purge = async (card: Card) => {
-    await api.purge(card.id)
-    reload()
-    onChanged()
+    try {
+      await api.purge(card.id)
+      reload()
+      onChanged()
+    } catch (e) {
+      notify(apiErrorMessage(e, 'Endgültiges Löschen fehlgeschlagen.'), 'error')
+    }
   }
 
   return (

@@ -17,8 +17,10 @@ import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline'
 import { useEffect, useState } from 'react'
 import { Link as RouterLink, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { boardsApi, type Board } from '../api/boards'
+import { apiErrorMessage } from '../api/client'
 import { projectsApi } from '../api/projects'
 import { Breadcrumbs } from '../components/Breadcrumbs'
+import { useSnackbar } from '../components/SnackbarProvider'
 import { canManageBoards, canManageMembers } from '../lib/roles'
 import { useRefetchOnFocus } from '../lib/useRefetchOnFocus'
 import { SURFACE_HOVER_SHADOW } from '../theme'
@@ -29,6 +31,7 @@ export function ProjectBoardsPage() {
   const validId = Number.isInteger(id) && id > 0
   const navigate = useNavigate()
   const location = useLocation()
+  const notify = useSnackbar()
   const [boards, setBoards] = useState<Board[]>([])
   const [archived, setArchived] = useState<Board[]>([])
   const [role, setRole] = useState<string>('VIEWER')
@@ -103,20 +106,40 @@ export function ProjectBoardsPage() {
     if (!name.trim()) {
       return
     }
-    await boardsApi.create(id, name.trim())
+    try {
+      await boardsApi.create(id, name.trim())
+    } catch (e) {
+      notify(apiErrorMessage(e, 'Board anlegen fehlgeschlagen.'), 'error')
+      return
+    }
     setName('')
-    await reload()
+    try {
+      await reload()
+    } catch (e) {
+      // Das Board wurde angelegt — nur das Nachladen der Liste ist gescheitert.
+      notify(apiErrorMessage(e, 'Board angelegt, Liste konnte nicht aktualisiert werden.'), 'error')
+    }
   }
 
+  // Der Bestätigungsdialog schließt erst nach dem erfolgreichen Zug: Bliebe er auch bei einem
+  // Fehlschlag zu, sähe das Scheitern aus wie ein Erfolg.
   const handleArchiveBoard = async (boardId: number) => {
-    await boardsApi.remove(boardId)
-    setConfirmBoard(null)
-    await reload()
+    try {
+      await boardsApi.remove(boardId)
+      setConfirmBoard(null)
+      await reload()
+    } catch (e) {
+      notify(apiErrorMessage(e, 'Archivieren fehlgeschlagen.'), 'error')
+    }
   }
 
   const handleRestoreBoard = async (boardId: number) => {
-    await boardsApi.restore(boardId)
-    await reload()
+    try {
+      await boardsApi.restore(boardId)
+      await reload()
+    } catch (e) {
+      notify(apiErrorMessage(e, 'Wiederherstellen fehlgeschlagen.'), 'error')
+    }
   }
 
   const closePurge = () => {
@@ -125,9 +148,13 @@ export function ProjectBoardsPage() {
   }
 
   const handlePurgeBoard = async (boardId: number) => {
-    await boardsApi.purge(boardId)
-    closePurge()
-    await reload()
+    try {
+      await boardsApi.purge(boardId)
+      closePurge()
+      await reload()
+    } catch (e) {
+      notify(apiErrorMessage(e, 'Endgültig löschen fehlgeschlagen.'), 'error')
+    }
   }
 
   if (!validId) {

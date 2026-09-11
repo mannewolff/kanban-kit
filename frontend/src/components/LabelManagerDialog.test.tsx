@@ -1,7 +1,9 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
+import { ApiError } from '../api/client'
 import type { Label } from '../api/labels'
 import { LabelManagerDialog } from './LabelManagerDialog'
+import { SnackbarProvider } from './SnackbarProvider'
 
 const labels: Label[] = [{ id: 1, boardId: 9, name: 'Bug', color: '#ff0000', countOnEpicTile: false }]
 
@@ -89,6 +91,84 @@ describe('LabelManagerDialog', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Anlegen' }))
 
     expect(await screen.findByText(/konnte nicht angelegt/)).toBeInTheDocument()
+  })
+
+  it('create: zeigt die Meldung des Servers inline statt der eigenen Vermutung', async () => {
+    const api = mkApi()
+    api.create = vi.fn().mockRejectedValue(new ApiError(409, 'Konflikt', undefined, 'Name „Bug" ist bereits vergeben.'))
+    render(
+      <LabelManagerDialog open boardId={9} labels={labels} onClose={vi.fn()} onChanged={vi.fn()} api={api} />,
+      { wrapper: SnackbarProvider },
+    )
+
+    fireEvent.change(screen.getByLabelText('Neues Label'), { target: { value: 'Bug' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Anlegen' }))
+
+    expect(await screen.findByText('Name „Bug" ist bereits vergeben.')).toBeInTheDocument()
+  })
+
+  it('save: meldet den Serverfehler als Toast', async () => {
+    const api = mkApi()
+    api.update = vi.fn().mockRejectedValue(new ApiError(409, 'Konflikt', undefined, 'Name kollidiert mit „Defekt".'))
+    const onChanged = vi.fn()
+    render(
+      <LabelManagerDialog open boardId={9} labels={labels} onClose={vi.fn()} onChanged={onChanged} api={api} />,
+      { wrapper: SnackbarProvider },
+    )
+
+    fireEvent.change(screen.getByLabelText('Label Bug'), { target: { value: 'Defekt' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Speichern' }))
+
+    // `hidden: true`: Der offene MUI-Dialog stellt alles außerhalb seines Portals auf
+    // `aria-hidden` — der Toast trägt seine Rolle, wird von der Standardabfrage aber übergangen.
+    const toast = await screen.findByRole('alert', { hidden: true })
+    expect(toast).toHaveTextContent('Name kollidiert mit „Defekt".')
+    expect(toast).toHaveClass('MuiAlert-filledError')
+    expect(onChanged).not.toHaveBeenCalled()
+  })
+
+  it('save: fällt ohne API-Kontext auf den eigenen Text zurück', async () => {
+    const api = mkApi()
+    api.update = vi.fn().mockRejectedValue(new TypeError('Failed to fetch'))
+    render(
+      <LabelManagerDialog open boardId={9} labels={labels} onClose={vi.fn()} onChanged={vi.fn()} api={api} />,
+      { wrapper: SnackbarProvider },
+    )
+
+    fireEvent.change(screen.getByLabelText('Label Bug'), { target: { value: 'Defekt' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Speichern' }))
+
+    expect(await screen.findByText('Label konnte nicht gespeichert werden.')).toBeInTheDocument()
+  })
+
+  it('remove: meldet den Serverfehler als Toast', async () => {
+    const api = mkApi()
+    api.remove = vi.fn().mockRejectedValue(new ApiError(409, 'Konflikt', undefined, 'Label hängt noch an 3 Karten.'))
+    const onChanged = vi.fn()
+    render(
+      <LabelManagerDialog open boardId={9} labels={labels} onClose={vi.fn()} onChanged={onChanged} api={api} />,
+      { wrapper: SnackbarProvider },
+    )
+
+    fireEvent.click(screen.getByLabelText('Label Bug löschen'))
+
+    const toast = await screen.findByRole('alert', { hidden: true })
+    expect(toast).toHaveTextContent('Label hängt noch an 3 Karten.')
+    expect(toast).toHaveClass('MuiAlert-filledError')
+    expect(onChanged).not.toHaveBeenCalled()
+  })
+
+  it('remove: fällt ohne API-Kontext auf den eigenen Text zurück', async () => {
+    const api = mkApi()
+    api.remove = vi.fn().mockRejectedValue(new TypeError('Failed to fetch'))
+    render(
+      <LabelManagerDialog open boardId={9} labels={labels} onClose={vi.fn()} onChanged={vi.fn()} api={api} />,
+      { wrapper: SnackbarProvider },
+    )
+
+    fireEvent.click(screen.getByLabelText('Label Bug löschen'))
+
+    expect(await screen.findByText('Label konnte nicht gelöscht werden.')).toBeInTheDocument()
   })
 
   // --- Haekchen "auf der Vorhaben-Kachel zaehlen" (Issue #664) ---------------

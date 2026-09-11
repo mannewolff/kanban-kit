@@ -36,7 +36,7 @@ import remarkGfm from 'remark-gfm'
 import { attachmentsApi as defaultAttachmentsApi, type Attachment, type AttachmentsApi } from '../api/attachments'
 import { boardsApi as defaultBoardsApi, type BoardColumn } from '../api/boards'
 import CircularProgress from '@mui/material/CircularProgress'
-import { ApiError } from '../api/client'
+import { ApiError, apiErrorMessage } from '../api/client'
 import { DerivationTree } from './DerivationTree'
 import { cardsApi as defaultCardsApi, type CardActivity, type CardByNumber, type CardDetail, type DerivationNode } from '../api/cards'
 import { commentsApi as defaultCommentsApi, type Comment, type CommentsApi } from '../api/comments'
@@ -952,17 +952,37 @@ function CardDetailModalView({
   const { user } = useAuth()
   const isEpic = card.type === 'EPIC'
   const [assigneeIds, setAssigneeIds] = useState<number[]>(card.assignees)
+  // Zaehlt Aufrufe von saveAssignees: Loest ein spaeter gestarteter Request seinen Rollback vor
+  // einem frueher gestarteten aus, darf Letzterer den inzwischen aktuelleren Stand nicht mehr
+  // ueberschreiben — nur der jeweils juengste Aufruf darf zuruecksetzen.
+  const assigneesRequestSeq = useRef(0)
 
   const saveAssignees = async (ids: number[]) => {
+    // Der Stand vor dem optimistischen Setzen: Ohne ihn bliebe eine abgelehnte Zuweisung im
+    // Auswahlfeld stehen und behauptete einen Stand, den der Server nicht hat.
+    const vorher = assigneeIds
+    const requestId = ++assigneesRequestSeq.current
     setAssigneeIds(ids)
-    await cardsApi.setAssignees(card.id, ids)
-    onChanged?.()
+    try {
+      await cardsApi.setAssignees(card.id, ids)
+      onChanged?.()
+    } catch (error_: unknown) {
+      if (assigneesRequestSeq.current === requestId) {
+        setAssigneeIds(vorher)
+      }
+      notify(apiErrorMessage(error_, 'Zuständige speichern fehlgeschlagen.'), 'error')
+    }
   }
 
   const restore = async () => {
-    await cardsApi.restore(card.id)
-    onChanged?.()
-    onClose()
+    try {
+      await cardsApi.restore(card.id)
+      onChanged?.()
+      onClose()
+    } catch (error_: unknown) {
+      // Bei einem Fehler bleibt der Dialog offen — die Karte bleibt sichtbar, wie sie ist.
+      notify(apiErrorMessage(error_, 'Wiederherstellen fehlgeschlagen.'), 'error')
+    }
   }
 
   // In den Ideen-Pool: Alltags-Aktion (an canEdit gebunden, nicht editiermodus-gegatet).
@@ -972,9 +992,9 @@ function CardDetailModalView({
       onChanged?.()
       notify('In den Ideen-Pool verschoben — unter Ideen zu finden.', 'success')
       onClose()
-    } catch {
+    } catch (error_: unknown) {
       // Bei einem Fehler bleibt der Dialog offen — die Karte verschwindet nicht.
-      notify('In den Ideen-Pool verschieben fehlgeschlagen.', 'error')
+      notify(apiErrorMessage(error_, 'In den Ideen-Pool verschieben fehlgeschlagen.'), 'error')
     }
   }
 
@@ -1004,10 +1024,7 @@ function CardDetailModalView({
     } catch (error_: unknown) {
       // Die Meldung des Servers, nicht eine eigene: Die Ablehnungen aus #640 tragen einen
       // Feldbezug, und ein verschluckter Text liesse den Nutzer raten.
-      notify(
-        error_ instanceof ApiError ? error_.message : 'Vorgang eröffnen fehlgeschlagen.',
-        'error',
-      )
+      notify(apiErrorMessage(error_, 'Vorgang eröffnen fehlgeschlagen.'), 'error')
     }
   }
 
@@ -1016,10 +1033,22 @@ function CardDetailModalView({
     members.find((m) => m.userId === userId)?.displayName ?? 'System'
 
   const [labelIds, setLabelIds] = useState<number[]>(card.labels)
+  // Gleiche Race wie bei den Zuständigen: nur der juengste Aufruf darf zuruecksetzen.
+  const labelsRequestSeq = useRef(0)
   const saveLabels = async (ids: number[]) => {
+    // Rollback wie bei den Zuständigen: der State steht vor der Zusage des Servers.
+    const vorher = labelIds
+    const requestId = ++labelsRequestSeq.current
     setLabelIds(ids)
-    await cardsApi.setLabels(card.id, ids)
-    onChanged?.()
+    try {
+      await cardsApi.setLabels(card.id, ids)
+      onChanged?.()
+    } catch (error_: unknown) {
+      if (labelsRequestSeq.current === requestId) {
+        setLabelIds(vorher)
+      }
+      notify(apiErrorMessage(error_, 'Labels speichern fehlgeschlagen.'), 'error')
+    }
   }
 
   // `editing` startet immer im Lesemodus: `initialEditing` greift erst, wenn die Beschreibung da
@@ -1133,10 +1162,7 @@ function CardDetailModalView({
         (zeilen) => ({ zeilen, fehler: null as string | null }),
         (error_: unknown) => ({
           zeilen: null,
-          fehler:
-            error_ instanceof ApiError
-              ? error_.message
-              : 'Der Herkunftsbaum konnte nicht geladen werden.',
+          fehler: apiErrorMessage(error_, 'Der Herkunftsbaum konnte nicht geladen werden.'),
         }),
       )
       .then((ergebnis) => {
@@ -1210,7 +1236,7 @@ function CardDetailModalView({
       if (feldmeldung) {
         setHerkunftError(feldmeldung)
       } else {
-        notify('Speichern fehlgeschlagen.', 'error')
+        notify(apiErrorMessage(err, 'Speichern fehlgeschlagen.'), 'error')
       }
     } finally {
       setSaving(false)
@@ -1244,8 +1270,9 @@ function CardDetailModalView({
       // Text aus, den die Karte gar nicht trägt.
       setBeschreibung(next)
       onChanged?.()
-    } catch {
+    } catch (error_: unknown) {
       setBody(previous)
+      notify(apiErrorMessage(error_, 'Aufgabe speichern fehlgeschlagen.'), 'error')
     } finally {
       setSaving(false)
     }
@@ -1253,14 +1280,24 @@ function CardDetailModalView({
 
   const addComment = async () => {
     if (!newComment.trim()) return
-    const created = await commentsApi.create(card.id, newComment.trim())
-    setComments((c) => [...c, created])
-    setNewComment('')
+    try {
+      const created = await commentsApi.create(card.id, newComment.trim())
+      setComments((c) => [...c, created])
+      // Erst nach der Zusage des Servers leeren: Sonst wäre der verfasste Text weg, ohne dass er
+      // irgendwo läge.
+      setNewComment('')
+    } catch (error_: unknown) {
+      notify(apiErrorMessage(error_, 'Kommentar anlegen fehlgeschlagen.'), 'error')
+    }
   }
 
   const deleteComment = async (id: number) => {
-    await commentsApi.remove(id)
-    setComments((c) => c.filter((x) => x.id !== id))
+    try {
+      await commentsApi.remove(id)
+      setComments((c) => c.filter((x) => x.id !== id))
+    } catch (error_: unknown) {
+      notify(apiErrorMessage(error_, 'Kommentar löschen fehlgeschlagen.'), 'error')
+    }
   }
 
   const startEditComment = (c: Comment) => {
@@ -1270,28 +1307,45 @@ function CardDetailModalView({
 
   const saveEditComment = async () => {
     if (editingCommentId == null || !editingBody.trim()) return
-    const updated = await commentsApi.update(editingCommentId, editingBody.trim())
-    setComments((cs) => cs.map((x) => (x.id === updated.id ? updated : x)))
-    setEditingCommentId(null)
+    try {
+      const updated = await commentsApi.update(editingCommentId, editingBody.trim())
+      setComments((cs) => cs.map((x) => (x.id === updated.id ? updated : x)))
+      // Das Bearbeitungsfeld schließt erst nach der Zusage — sonst wäre die Änderung verloren.
+      setEditingCommentId(null)
+    } catch (error_: unknown) {
+      notify(apiErrorMessage(error_, 'Kommentar speichern fehlgeschlagen.'), 'error')
+    }
   }
 
   const uploadFile = async (file: File) => {
     setUploadError(null)
+    let created: Attachment
     try {
-      const created = await attachmentsApi.upload(card.id, file)
-      setAttachments((a) => [...a, created])
-      if (created.contentType.startsWith('image/')) {
+      created = await attachmentsApi.upload(card.id, file)
+    } catch (error_: unknown) {
+      setUploadError(apiErrorMessage(error_, 'Upload fehlgeschlagen (evtl. Anhangslimit erreicht).'))
+      return
+    }
+    setAttachments((a) => [...a, created])
+    // Vorschau separat: Scheitert nur ihr Abruf, ist der Anhang trotzdem angekommen — ein erneuter
+    // Upload-Versuch waere hier ein zusaetzlicher, unnoetiger Anhang.
+    if (created.contentType.startsWith('image/')) {
+      try {
         const blob = await attachmentsApi.fetchBlob(created.id)
         setPreviews((p) => ({ ...p, [created.id]: URL.createObjectURL(blob) }))
+      } catch (error_: unknown) {
+        setUploadError(apiErrorMessage(error_, 'Anhang hochgeladen, Vorschau konnte nicht geladen werden.'))
       }
-    } catch {
-      setUploadError('Upload fehlgeschlagen (evtl. Anhangslimit erreicht).')
     }
   }
 
   const deleteAttachment = async (id: number) => {
-    await attachmentsApi.remove(id)
-    setAttachments((a) => a.filter((x) => x.id !== id))
+    try {
+      await attachmentsApi.remove(id)
+      setAttachments((a) => a.filter((x) => x.id !== id))
+    } catch (error_: unknown) {
+      notify(apiErrorMessage(error_, 'Anhang löschen fehlgeschlagen.'), 'error')
+    }
   }
 
   const openPreview = async (attachment: Attachment) => {
@@ -1299,8 +1353,8 @@ function CardDetailModalView({
     try {
       const blob = await attachmentsApi.fetchBlob(attachment.id)
       setPreview({ attachment, url: URL.createObjectURL(blob) })
-    } catch {
-      setUploadError('Vorschau konnte nicht geladen werden.')
+    } catch (error_: unknown) {
+      setUploadError(apiErrorMessage(error_, 'Vorschau konnte nicht geladen werden.'))
     }
   }
 

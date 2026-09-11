@@ -16,7 +16,7 @@ import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline'
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined'
 import { useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { ApiError } from '../api/client'
+import { ApiError, apiErrorMessage } from '../api/client'
 import { projectsApi, type Project } from '../api/projects'
 import { canManageProject, isPlatformAdmin } from '../lib/roles'
 import { useAuth } from '../auth/AuthContext'
@@ -85,8 +85,10 @@ export function ProjectsPage() {
     if (nextValue.trim() !== nextOriginal && Number(nextValue) >= 1) {
       try {
         await projectsApi.setNextCardNumber(project.id, Number(nextValue))
-      } catch {
-        setRenameError('Nächste Nummer muss größer als die höchste vergebene Nummer sein.')
+      } catch (e) {
+        setRenameError(
+          apiErrorMessage(e, 'Nächste Nummer muss größer als die höchste vergebene Nummer sein.'),
+        )
         return
       }
     }
@@ -133,9 +135,19 @@ export function ProjectsPage() {
   }
 
   const handleDelete = async (id: number) => {
-    await projectsApi.remove(id)
+    try {
+      await projectsApi.remove(id)
+    } catch (e) {
+      notify(apiErrorMessage(e, 'Löschen fehlgeschlagen.'), 'error')
+      return
+    }
     setConfirmDelete(null)
-    await reload()
+    try {
+      await reload()
+    } catch (e) {
+      // Geloescht ist geloescht — nur das Nachladen der Liste ist gescheitert.
+      notify(apiErrorMessage(e, 'Projekt gelöscht, Liste konnte nicht aktualisiert werden.'), 'error')
+    }
   }
 
   return (

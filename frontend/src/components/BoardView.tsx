@@ -26,7 +26,7 @@ import Typography from '@mui/material/Typography'
 import { useEffect, useState } from 'react'
 import type { Board, BoardColumn } from '../api/boards'
 import { cardsApi, type Card, type CardsApi } from '../api/cards'
-import { ApiError } from '../api/client'
+import { ApiError, apiErrorMessage } from '../api/client'
 import { columnsApi, type SortDirection } from '../api/columns'
 import { epicsApi as defaultEpicsApi, type Epic, type EpicsApi } from '../api/epics'
 import type { Member } from '../api/members'
@@ -245,6 +245,19 @@ export function BoardView({
     }
   })
 
+  // Ein per localStorage gemerkter Filter kann auf ein Vorhaben zeigen, das seither ausgeblendet
+  // wurde — die beiden Achsen kennen sich sonst nicht. Ohne diesen Abgleich bliebe das Board nach
+  // jedem Laden leer, ohne dass der Dropdown das gewählte Vorhaben überhaupt noch als Option führt.
+  useEffect(() => {
+    if (epicFilter === null || !hiddenEpics.has(epicFilter)) return
+    setEpicFilter(null)
+    try {
+      localStorage.removeItem(`manban.boardEpicFilter.${board.id}`)
+    } catch {
+      // localStorage nicht verfügbar — der State-Reset wirkt trotzdem.
+    }
+  }, [epicFilter, hiddenEpics, board.id])
+
   useEffect(() => setCards(initialCards), [initialCards])
 
   const sortColumns = (cols: BoardColumn[]) => [...cols].sort((a, b) => a.position - b.position)
@@ -288,8 +301,10 @@ export function BoardView({
     try {
       const updated = await columnsApi.reorder(board.id, next.map((c) => c.id))
       setColumns(sortColumns(updated))
-    } catch {
+    } catch (e) {
+      // Der Rollback allein bliebe stumm: die zurückspringende Reihenfolge erklärt nicht, warum.
       setColumns(previous)
+      notify(apiErrorMessage(e, 'Spalten umsortieren fehlgeschlagen.'), 'error')
     }
   }
 
@@ -315,8 +330,8 @@ export function BoardView({
       setNextSortDirection((prev) => ({ ...prev, [column.id]: direction === 'ASC' ? 'DESC' : 'ASC' }))
       notify(sortedByNumberMessage(column.name, direction), 'success')
       onCardsChanged?.()
-    } catch {
-      notify('Sortieren fehlgeschlagen.', 'error')
+    } catch (e) {
+      notify(apiErrorMessage(e, 'Sortieren fehlgeschlagen.'), 'error')
     } finally {
       setSortingColumnId(null)
     }
@@ -354,14 +369,21 @@ export function BoardView({
     // solange die Eingabe ungültig ist — saveColumn läuft also nur mit gültigem Zustand.
     const name = columnName.trim()
     const wip = parsedWip()
-    if (columnDialog === 'new') {
-      const created = await columnsApi.create(board.id, name, wip)
-      setColumns((cs) => sortColumns([...cs, created]))
-      notify('Spalte angelegt.', 'success')
-    } else if (columnDialog) {
-      const updated = await columnsApi.update(columnDialog.id, name, wip)
-      setColumns((cs) => sortColumns(cs.map((c) => (c.id === updated.id ? updated : c))))
-      notify('Spalte gespeichert.', 'success')
+    try {
+      if (columnDialog === 'new') {
+        const created = await columnsApi.create(board.id, name, wip)
+        setColumns((cs) => sortColumns([...cs, created]))
+        notify('Spalte angelegt.', 'success')
+      } else if (columnDialog) {
+        const updated = await columnsApi.update(columnDialog.id, name, wip)
+        setColumns((cs) => sortColumns(cs.map((c) => (c.id === updated.id ? updated : c))))
+        notify('Spalte gespeichert.', 'success')
+      }
+    } catch (e) {
+      // Nur der Erfolg schließt: Bei einem Fehlschlag bliebe die getippte Eingabe sonst verloren
+      // und der Nutzer müsste Name und WIP-Limit erneut eintippen, um es nochmal zu versuchen.
+      notify(apiErrorMessage(e, 'Spalte speichern fehlgeschlagen.'), 'error')
+      return
     }
     closeColumnDialog()
   }
@@ -369,6 +391,10 @@ export function BoardView({
   // Nur Darstellung: Move/Anlegen arbeiten weiter auf dem vollen Bestand (`cards`).
   const hiddenNumbers = hiddenCardNumbers(cards, epics, hiddenEpics, epicFilter)
   const filteredCards = cards.filter((c) => !hiddenNumbers.has(c.number))
+  // Einblendbare Vorhaben (weder ausgeblendet). Sowohl Vorhaben-Filter als auch Anlege-Dialog
+  // bieten seit Issue #785 nur noch daraus an — ein ausgeblendetes Vorhaben zeigte über den
+  // Filter ohnehin nie etwas an, weil seine Karten auf dem Board grundsätzlich verdeckt bleiben.
+  const sichtbareEpics = selectableEpics(epics, hiddenEpics)
 
   // Wirksame Auswahl für Massenaktionen: die Schnittmenge aus der Auswahl und dem, was der
   // Anzeige-Filter gerade zeigt. Jede Bulk-Stelle (Zählung, Dialogtexte, Verschieben, Archivieren,
@@ -415,11 +441,16 @@ export function BoardView({
     setCards(applyMove(previous, cardId, toColumnId))
     try {
       await api.move(cardId, toColumnId, endIndex)
-    } catch {
+    } catch (e) {
+      // Die zurückspringende Karte allein erklärt nichts — die Meldung benennt den Fehlschlag.
       setCards(previous)
+      notify(apiErrorMessage(e, 'Verschieben fehlgeschlagen.'), 'error')
     }
   }
 
+  // Bewusst ohne eigenes try/catch: Ein hier geschluckter Fehler ließe `onSubmit` erfolgreich
+  // erscheinen, und `NewCardModal` schlösse trotz Fehlschlag — die getippte Eingabe wäre weg.
+  // Der Fehler propagiert stattdessen an den Dialog, der ihn seit Issue #808 selbst anzeigt.
   const createItem = async (columnId: number, input: NewItemInput) => {
     if (input.type === 'EPIC') {
       await epicsApi.create(board.id, input.title, input.description, input.shortcode)
@@ -444,8 +475,12 @@ export function BoardView({
   }
 
   const archiveCard = async (card: Card) => {
-    await api.archive(card.id)
-    onCardsChanged?.()
+    try {
+      await api.archive(card.id)
+      onCardsChanged?.()
+    } catch (e) {
+      notify(apiErrorMessage(e, 'Archivieren fehlgeschlagen.'), 'error')
+    }
   }
 
   // In den Ideen-Speicher: Alltags-Aktion (nicht editiermodus-gegatet). Optimistisch aus der
@@ -457,9 +492,9 @@ export function BoardView({
       await api.moveToIdeaStorage(card.id)
       onCardsChanged?.()
       notify('In den Ideen-Pool verschoben — unter Ideen zu finden.', 'success')
-    } catch {
+    } catch (e) {
       setCards(previous)
-      notify('In den Ideen-Pool verschieben fehlgeschlagen.', 'error')
+      notify(apiErrorMessage(e, 'In den Ideen-Pool verschieben fehlgeschlagen.'), 'error')
     }
   }
 
@@ -471,8 +506,8 @@ export function BoardView({
     let full: Card
     try {
       full = await api.get(c.id)
-    } catch {
-      notify('Karte konnte nicht geladen werden.', 'error')
+    } catch (e) {
+      notify(apiErrorMessage(e, 'Karte konnte nicht geladen werden.'), 'error')
       return
     }
     // Die Kopie ist eine neue Karte und soll den kompletten Prozess durchlaufen — deshalb immer
@@ -511,9 +546,9 @@ export function BoardView({
     try {
       await api.bulkArchive(ids)
       onCardsChanged?.()
-    } catch {
+    } catch (e) {
       setCards(previous)
-      notify('Archivieren fehlgeschlagen.', 'error')
+      notify(apiErrorMessage(e, 'Archivieren fehlgeschlagen.'), 'error')
     }
   }
 
@@ -529,9 +564,9 @@ export function BoardView({
     try {
       await api.bulkDelete(ids)
       onCardsChanged?.()
-    } catch {
+    } catch (e) {
       setCards(previous)
-      notify('In den Papierkorb verschieben fehlgeschlagen.', 'error')
+      notify(apiErrorMessage(e, 'In den Papierkorb verschieben fehlgeschlagen.'), 'error')
     }
   }
 
@@ -569,9 +604,9 @@ export function BoardView({
 
   return (
     <Box>
-      {(epics.length > 0 || (canEdit && columns.length > 0)) && (
+      {(sichtbareEpics.length > 0 || (canEdit && columns.length > 0)) && (
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-          {epics.length > 0 && (
+          {sichtbareEpics.length > 0 && (
             <TextField
               select
               size="small"
@@ -586,7 +621,7 @@ export function BoardView({
               sx={{ minWidth: 200 }}
             >
               <option value="">Alle Vorhaben</option>
-              {epics.map((epic) => (
+              {sichtbareEpics.map((epic) => (
                 <option key={epic.id} value={epic.id}>
                   {epicShortcode(epic.title, epic.shortcode)} – {epic.title}
                 </option>
@@ -949,13 +984,16 @@ export function BoardView({
 
       {/* modalColumn ist beim Submit immer gesetzt: NewCardModal ist nur offen, solange
           open={modalColumn !== null} — der Anlegen-Button existiert also nur in diesem Zustand. */}
-      {/* Nur der Anlege-Dialog filtert (Plan #717, A4): Eine neue Karte kann keine bestehende
-          Zuordnung verlieren, und was auf dem Board unsichtbar ist, soll man ihr nicht geben.
-          Vorhaben-Filter und Karten-Kürzel bleiben an der vollen Liste (A7). */}
+      {/* Anlege-Dialog und Vorhaben-Filter bieten seit Issue #785 beide nur einblendbare Vorhaben an
+          (Plan #717, A4 galt bisher nur hier): Eine neue Karte kann keine bestehende Zuordnung
+          verlieren, und was auf dem Board unsichtbar ist, soll man ihr nicht geben — dasselbe gilt
+          jetzt für den Filter, dessen Auswahl sonst ein dauerhaft leeres Board zeigte. Das
+          Karten-Kürzel (EpicBadge) bleibt bewusst an der vollen Liste `epics`: Eine Karte behält
+          ihre Zuordnung sichtbar, auch wenn das Vorhaben inzwischen ausgeblendet wurde. */}
       <NewCardModal
         open={modalColumn !== null}
         columnName={modalColumn?.name ?? ''}
-        epics={selectableEpics(epics, hiddenEpics)}
+        epics={sichtbareEpics}
         members={members}
         boardLabels={boardLabels}
         initialValues={duplicateValues ?? undefined}

@@ -8,7 +8,7 @@ import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
 import { useCallback, useEffect, useState } from 'react'
 import { adminApi as defaultAdminApi, type AdminApi, type AdminUser } from '../api/admin'
-import { ApiError } from '../api/client'
+import { ApiError, apiErrorMessage } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
 import { DataTable, type DataTableColumn } from '../components/DataTable'
 import { useEditMode } from '../lib/EditModeContext'
@@ -55,8 +55,8 @@ export function AdminPage({ api = defaultAdminApi }: Readonly<Props>) {
     try {
       await api.approve(u.id)
       reload()
-    } catch {
-      setError('Freigabe fehlgeschlagen.')
+    } catch (e) {
+      setError(apiErrorMessage(e, 'Freigabe fehlgeschlagen.'))
     }
   }
 
@@ -79,8 +79,8 @@ export function AdminPage({ api = defaultAdminApi }: Readonly<Props>) {
     try {
       await (u.disabled ? api.enable(u.id) : api.disable(u.id))
       reload()
-    } catch {
-      setError(u.disabled ? 'Entsperren fehlgeschlagen.' : 'Sperren fehlgeschlagen.')
+    } catch (e) {
+      setError(apiErrorMessage(e, u.disabled ? 'Entsperren fehlgeschlagen.' : 'Sperren fehlgeschlagen.'))
     }
   }
 

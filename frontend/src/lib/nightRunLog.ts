@@ -51,7 +51,13 @@ export const NIGHT_RUN_EXCERPT_MAX = 4000
 
 export type NightRunState = 'GREEN' | 'YELLOW' | 'RED' | 'GREY'
 
-export type NightRunMode = 'IMPLEMENTATION' | 'REVIEW'
+/**
+ * `NIGHTPLAN` entsteht ausschliesslich ueber den Ergebnisstand-Parser
+ * (`nightRunErgebnisstand.ts`, Plan #803): Ein Nachtplan-Textprotokoll traegt in seiner
+ * Startzeile keine Stufe und wird von diesem Datei-Parser hier weiterhin als
+ * `IMPLEMENTATION` gedeutet.
+ */
+export type NightRunMode = 'IMPLEMENTATION' | 'REVIEW' | 'NIGHTPLAN'
 
 export interface NightRunItem {
   /** Projektweite Kartennummer des Arbeitspakets. */

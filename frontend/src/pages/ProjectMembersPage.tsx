@@ -19,10 +19,11 @@ import { membersApi as defaultMembersApi, type Member, type MembersApi } from '.
 import { Breadcrumbs } from '../components/Breadcrumbs'
 import { DataTable, type DataTableColumn } from '../components/DataTable'
 import { projectsApi } from '../api/projects'
-import { ApiError } from '../api/client'
+import { ApiError, apiErrorMessage } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
 import { useEditMode } from '../lib/EditModeContext'
 import { canManageMembers, type ProjectRole } from '../lib/roles'
+import { useSnackbar } from '../components/SnackbarProvider'
 
 const ROLES: ProjectRole[] = ['OWNER', 'ADMIN', 'MEMBER', 'VIEWER']
 
@@ -36,6 +37,7 @@ export function ProjectMembersPage({ api = defaultMembersApi, loadRole }: Readon
   const id = Number.parseInt(projectId ?? '', 10)
   const validId = Number.isInteger(id) && id > 0
   const { user } = useAuth()
+  const notify = useSnackbar()
   const [members, setMembers] = useState<Member[]>([])
   const [role, setRole] = useState<string>('VIEWER')
   const [projectName, setProjectName] = useState<string | null>(null)
@@ -87,12 +89,19 @@ export function ProjectMembersPage({ api = defaultMembersApi, loadRole }: Readon
     setTransferError(null)
     try {
       await projectsApi.transferOwner(id, target.userId)
-      setTransferTarget(null)
-      // Der Aufrufer verliert die Owner-Rechte und wird Admin (Backend-Semantik).
-      setRole('ADMIN')
+    } catch (e) {
+      setTransferError(apiErrorMessage(e, 'Eigentümer-Wechsel fehlgeschlagen.'))
+      return
+    }
+    setTransferTarget(null)
+    // Der Aufrufer verliert die Owner-Rechte und wird Admin (Backend-Semantik).
+    setRole('ADMIN')
+    try {
       await reload()
-    } catch {
-      setTransferError('Eigentümer-Wechsel fehlgeschlagen.')
+    } catch (e) {
+      // Der Wechsel ist durch — der Dialog ist schon zu, daher ueber den Snackbar statt
+      // transferError (das nur im Dialog sichtbar ist).
+      notify(apiErrorMessage(e, 'Eigentümer gewechselt, Mitgliederliste konnte nicht aktualisiert werden.'), 'error')
     }
   }
 

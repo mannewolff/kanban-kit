@@ -3,7 +3,28 @@ import { MemoryRouter, Route, Routes, useLocation, useNavigate } from 'react-rou
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '../api/client'
 import { projectsApi } from '../api/projects'
+import { SnackbarProvider } from '../components/SnackbarProvider'
 import { ProjectsPage } from './ProjectsPage'
+
+/** Server-Ablehnung mit einer für den Nutzer formulierten Meldung in `detail` (RFC 9457). */
+const serverfehler = (text: string) => new ApiError(409, 'Conflict', undefined, text)
+
+/** Prüft den Fehler-Toast: Der Text steht dort, und der Alert trägt die Severity `error`. */
+async function erwarteFehlerToast(text: string) {
+  expect(await screen.findByText(text)).toBeInTheDocument()
+  expect(await screen.findByRole('alert', { hidden: true })).toHaveClass('MuiAlert-filledError')
+}
+
+/** Die Seite im Snackbar-Kontext — sonst liefe `notify(...)` als No-op ins Leere. */
+function renderMitToasts() {
+  return render(
+    <SnackbarProvider>
+      <MemoryRouter>
+        <ProjectsPage />
+      </MemoryRouter>
+    </SnackbarProvider>,
+  )
+}
 
 vi.mock('../api/projects', () => ({
   projectsApi: {
@@ -90,6 +111,53 @@ describe('ProjectsPage', () => {
     fireEvent.click(screen.getByLabelText('Projekt Meins löschen'))
     fireEvent.click(await screen.findByRole('button', { name: 'Löschen' }))
     await waitFor(() => expect(mocked.remove).toHaveBeenCalledWith(1))
+  })
+
+  it('zeigt die Server-Meldung, wenn das Löschen scheitert, und lässt den Dialog offen', async () => {
+    mockUser = { platformRole: 'ADMIN' }
+    mocked.list.mockResolvedValue([{ id: 1, name: 'Meins', role: 'OWNER', createdAt: '' }])
+    mocked.remove.mockRejectedValue(serverfehler('Das Projekt hat noch aktive Boards.'))
+    renderMitToasts()
+
+    fireEvent.click(await screen.findByLabelText('Projekt Meins löschen'))
+    fireEvent.click(await screen.findByRole('button', { name: 'Löschen' }))
+
+    await erwarteFehlerToast('Das Projekt hat noch aktive Boards.')
+    expect(screen.getByText('Projekt löschen?')).toBeInTheDocument()
+  })
+
+  it('fällt beim Löschen ohne Server-Meldung auf den eigenen Text zurück', async () => {
+    mockUser = { platformRole: 'ADMIN' }
+    mocked.list.mockResolvedValue([{ id: 1, name: 'Meins', role: 'OWNER', createdAt: '' }])
+    mocked.remove.mockRejectedValue(new TypeError('Failed to fetch'))
+    renderMitToasts()
+
+    fireEvent.click(await screen.findByLabelText('Projekt Meins löschen'))
+    fireEvent.click(await screen.findByRole('button', { name: 'Löschen' }))
+
+    await erwarteFehlerToast('Löschen fehlgeschlagen.')
+  })
+
+  /**
+   * Review-Fund (Code-Review Schritt 7, #807-#812-Batch): Loeschen und Nachladen waren im selben
+   * try/catch. Scheitert nur das Nachladen, ist das Projekt trotzdem geloescht — die Meldung darf
+   * das nicht als Fehlschlag des Loeschens selbst ausgeben.
+   */
+  it('meldet ein gescheitertes Nachladen getrennt vom Löschen, wenn das Projekt gelöscht wurde', async () => {
+    mockUser = { platformRole: 'ADMIN' }
+    mocked.list.mockResolvedValue([{ id: 1, name: 'Meins', role: 'OWNER', createdAt: '' }])
+    mocked.remove.mockResolvedValue(undefined)
+    renderMitToasts()
+
+    fireEvent.click(await screen.findByLabelText('Projekt Meins löschen'))
+    // Nur der naechste list()-Aufruf (das Nachladen nach dem Löschen) scheitert.
+    mocked.list.mockRejectedValueOnce(new TypeError('Failed to fetch'))
+    fireEvent.click(await screen.findByRole('button', { name: 'Löschen' }))
+
+    await erwarteFehlerToast('Projekt gelöscht, Liste konnte nicht aktualisiert werden.')
+    expect(mocked.remove).toHaveBeenCalledWith(1)
+    // Der Dialog schliesst trotzdem — geloescht ist geloescht.
+    await waitFor(() => expect(screen.queryByText('Projekt löschen?')).not.toBeInTheDocument())
   })
 
   it('schließt den Löschen-Dialog per Escape', async () => {
@@ -215,10 +283,26 @@ describe('ProjectsPage', () => {
     await waitFor(() => expect(mocked.setNextCardNumber).toHaveBeenCalledWith(1, 13457))
   })
 
-  it('zeigt eine Fehlermeldung, wenn die Startnummer zu klein ist', async () => {
+  it('zeigt die Server-Meldung, wenn die Startnummer abgelehnt wird', async () => {
     mocked.list.mockResolvedValue([{ id: 1, name: 'Meins', role: 'OWNER', createdAt: '' }])
     mocked.rename.mockResolvedValue({ id: 1, name: 'Meins', role: 'OWNER', createdAt: '' })
-    mocked.setNextCardNumber.mockRejectedValue(new Error('boom'))
+    mocked.setNextCardNumber.mockRejectedValue(serverfehler('Nummer 3 ist bereits vergeben.'))
+    render(<MemoryRouter><ProjectsPage /></MemoryRouter>)
+
+    fireEvent.click(await screen.findByLabelText('Projekt Meins umbenennen'))
+    const field = await screen.findByLabelText('Nächste Kartennummer')
+    await waitFor(() => expect(field).toHaveValue(5))
+    fireEvent.change(field, { target: { value: '3' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Speichern' }))
+
+    // Der Darstellungsort bleibt der Inline-Alert im Dialog; nur der Text kommt vom Server.
+    expect(await screen.findByText('Nummer 3 ist bereits vergeben.')).toBeInTheDocument()
+  })
+
+  it('zeigt ohne Server-Meldung den eigenen Text zur zu kleinen Startnummer', async () => {
+    mocked.list.mockResolvedValue([{ id: 1, name: 'Meins', role: 'OWNER', createdAt: '' }])
+    mocked.rename.mockResolvedValue({ id: 1, name: 'Meins', role: 'OWNER', createdAt: '' })
+    mocked.setNextCardNumber.mockRejectedValue(new TypeError('Failed to fetch'))
     render(<MemoryRouter><ProjectsPage /></MemoryRouter>)
 
     fireEvent.click(await screen.findByLabelText('Projekt Meins umbenennen'))

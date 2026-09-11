@@ -94,12 +94,28 @@ function renderPage() {
   mockedConfig.get.mockResolvedValue({ doneRetentionDays: 30 })
   mockedProjects.list.mockResolvedValue([{ id: 9, name: 'P', role: 'OWNER', createdAt: '' }])
   return render(
-    <MemoryRouter initialEntries={['/boards/1']}>
-      <Routes>
-        <Route path="/boards/:boardId" element={<BoardPage />} />
-      </Routes>
-    </MemoryRouter>,
+    <SnackbarProvider>
+      <MemoryRouter initialEntries={['/boards/1']}>
+        <Routes>
+          <Route path="/boards/:boardId" element={<BoardPage />} />
+        </Routes>
+      </MemoryRouter>
+    </SnackbarProvider>,
   )
+}
+
+/** Server-Ablehnung mit einer für den Nutzer formulierten Meldung in `detail` (RFC 9457). */
+const serverfehler = (text: string) => new ApiError(409, 'Conflict', undefined, text)
+
+/**
+ * Prüft den Fehler-Toast: Der Text steht dort, und der Alert trägt die Severity `error`.
+ *
+ * `hidden: true`: Der offene Umbenennen-Dialog stellt alles außerhalb seines Portals auf
+ * `aria-hidden` — der Toast trägt seine Rolle, wird von der Standardabfrage aber übergangen.
+ */
+async function erwarteFehlerToast(text: string) {
+  expect(await screen.findByText(text)).toBeInTheDocument()
+  expect(await screen.findByRole('alert', { hidden: true })).toHaveClass('MuiAlert-filledError')
 }
 
 describe('BoardPage canEdit aus Membership', () => {
@@ -135,6 +151,33 @@ describe('BoardPage canEdit aus Membership', () => {
 
     await waitFor(() => expect(mockedBoards.rename).toHaveBeenCalledWith(1, 'Neu'))
     expect(await screen.findByText('Neu')).toBeInTheDocument()
+  })
+
+  it('zeigt die Server-Meldung, wenn das Umbenennen scheitert', async () => {
+    memberships = [{ projectId: 9, role: 'OWNER' }]
+    mockedBoards.rename.mockRejectedValue(serverfehler('Ein Board mit diesem Namen existiert bereits.'))
+    renderPage()
+
+    fireEvent.click(await screen.findByLabelText('Board umbenennen'))
+    fireEvent.change(screen.getByLabelText('Neuer Board-Name'), { target: { value: 'Neu' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Speichern' }))
+
+    // Ein Namenskonflikt blieb bisher stumm (Issue #812).
+    await erwarteFehlerToast('Ein Board mit diesem Namen existiert bereits.')
+    // Der Dialog schließt nur bei Erfolg — sonst wäre die Eingabe verloren.
+    expect(screen.getByLabelText('Neuer Board-Name')).toBeInTheDocument()
+  })
+
+  it('fällt beim Umbenennen ohne Server-Meldung auf den eigenen Text zurück', async () => {
+    memberships = [{ projectId: 9, role: 'OWNER' }]
+    mockedBoards.rename.mockRejectedValue(new TypeError('Failed to fetch'))
+    renderPage()
+
+    fireEvent.click(await screen.findByLabelText('Board umbenennen'))
+    fireEvent.change(screen.getByLabelText('Neuer Board-Name'), { target: { value: 'Neu' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Speichern' }))
+
+    await erwarteFehlerToast('Umbenennen fehlgeschlagen.')
   })
 
   it('blendet das Board-Umbenennen für VIEWER aus', async () => {
@@ -896,11 +939,17 @@ describe('BoardPage ausgeblendete Vorhaben', () => {
   })
 
   it('vergisst beim Einblenden beide gespeicherten Schlüssel', async () => {
+    // Zweites, eingeblendetes Vorhaben nötig (Issue #785): Der Filter bietet seither nur noch
+    // eingeblendete Vorhaben an — mit nur dem ausgeblendeten Auth existierte kein Dropdown mehr,
+    // in das sich ein Wert wählen ließe.
     const store = stubStore([[hiddenKey(1), JSON.stringify([9])]])
-    renderBoard([mkEpic(9, 'Auth', [1])], [mkKarte(100, 1, 9), mkKarte(300, 4, null)])
+    renderBoard(
+      [mkEpic(9, 'Auth', [1]), mkEpic(8, 'Suche', [2])],
+      [mkKarte(100, 1, 9), mkKarte(200, 2, 8), mkKarte(300, 4, null)],
+    )
 
     expect(await screen.findByTestId('card-300')).toBeInTheDocument()
-    fireEvent.change(screen.getByLabelText('Vorhaben-Filter'), { target: { value: '9' } })
+    fireEvent.change(screen.getByLabelText('Vorhaben-Filter'), { target: { value: '8' } })
     fireEvent.click(screen.getAllByRole('button', { name: /ausgeblendet/ })[0])
 
     expect(store.has(hiddenKey(1))).toBe(false)

@@ -16,9 +16,11 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import { useEffect, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { cardsApi, type CardByNumber } from '../api/cards'
+import { apiErrorMessage } from '../api/client'
 import {
   nightRunsApi,
   type NightRunErrorClassCounts,
+  type NightRunServerMode,
   type NightRunSubmission,
   type NightRunView,
 } from '../api/nightRuns'
@@ -36,7 +38,7 @@ import {
   parseNightRunErgebnisstand,
   type NightRunErgebnisstandGrund,
 } from '../lib/nightRunErgebnisstand'
-import { type NightRun, type NightRunState } from '../lib/nightRunLog'
+import { type NightRun, type NightRunMode, type NightRunState } from '../lib/nightRunLog'
 import { readTextFile } from '../lib/readTextFile'
 import { useProjectName } from '../lib/useProjectName'
 
@@ -114,6 +116,17 @@ const ZUSTAND_FARBE: Record<NightRunState, string> = {
   YELLOW: 'nightRun.yellow',
   RED: 'nightRun.red',
   GREY: 'nightRun.grey',
+}
+
+/**
+ * Die Chip-Beschriftung je Lauf-Modus (Plan #803). Als `Record` über alle drei Werte, nicht als
+ * Inline-Bedingung: Ein vierter Modus bricht den Build, statt still auf „Umsetzungs-Lauf" zu
+ * fallen — dieselbe Absicherung wie bei {@link ZUSTAND_FARBE}.
+ */
+const MODUS_TEXT: Record<NightRunMode, string> = {
+  IMPLEMENTATION: 'Umsetzungs-Lauf',
+  REVIEW: 'Prüf-Lauf',
+  NIGHTPLAN: 'Nachtplan-Lauf',
 }
 
 /**
@@ -216,7 +229,16 @@ const ausSicht = (view: NightRunView): AnzeigeLauf => ({
  * Ganzes ab. Ein Zweig für einen Auszug, den es nicht geben kann, wäre unerreichbar. Aufbewahrte
  * Läufe aus der Zeit der Protokolldeutung tragen ihn weiterhin und zeigen ihn auch an.
  */
-const zurEinlieferung = (run: NightRun): NightRunSubmission => ({
+/**
+ * Grenzt einen einlieferbaren Lauf typseitig ein (Plan #803, Entscheidung 8): `NIGHTPLAN` bleibt
+ * browser-only, und dieser Type-Guard ist der einzige Weg, `zurEinlieferung` überhaupt aufzurufen —
+ * kein Cast an `mode`, der hebelte den Schutz aus.
+ */
+function istEinlieferbar(run: NightRun): run is NightRun & { mode: NightRunServerMode } {
+  return run.mode !== 'NIGHTPLAN'
+}
+
+const zurEinlieferung = (run: NightRun & { mode: NightRunServerMode }): NightRunSubmission => ({
   startedAt: run.startedAt,
   mode: run.mode,
   durationMs: run.durationMs,
@@ -496,11 +518,7 @@ function LaufPanel({
       <AccordionSummary expandIcon={<ExpandMoreIcon />}>
         <Stack direction="row" spacing={1} alignItems="center" sx={{ flexWrap: 'wrap' }}>
           <Typography variant="subtitle1">{new Date(lauf.startedAt).toLocaleString('de-DE')}</Typography>
-          <Chip
-            size="small"
-            label={lauf.mode === 'REVIEW' ? 'Prüf-Lauf' : 'Umsetzungs-Lauf'}
-            variant="outlined"
-          />
+          <Chip size="small" label={MODUS_TEXT[lauf.mode]} variant="outlined" />
           {/* Die Herkunft wird **hier** aus dem Zwischenspeicher gelesen, nicht in `AnzeigeLauf`
               mitgeführt: Der Server kennt die Unterscheidung nicht, ein Feld am Anzeigemodell
               müsste also in jedem Ladepfad einzeln gesetzt werden — und der nächste vergessene
@@ -680,16 +698,29 @@ export function NightRunPage() {
       return
     }
 
+    // Nachtplan-Läufe bleiben browser-only (Plan #803, Entscheidung 8): kein Einliefern, keine
+    // Kennzeichnung „neu angelegt"/„lag schon vor", kein Neuladen der Liste.
+    if (!istEinlieferbar(run)) {
+      return
+    }
+
+    let antwort: Awaited<ReturnType<typeof nightRunsApi.submit>>
     try {
-      const antwort = await nightRunsApi.submit(id, [zurEinlieferung(run)])
-      setErgebnisse(new Map(antwort.map((eintrag) => [eintrag.startedAt, eintrag.created])))
+      antwort = await nightRunsApi.submit(id, [zurEinlieferung(run)])
+    } catch (error_) {
+      notify(apiErrorMessage(error_, 'Einliefern fehlgeschlagen.'), 'error')
+      return
+    }
+    setErgebnisse(new Map(antwort.map((eintrag) => [eintrag.startedAt, eintrag.created])))
+    // Eingeliefert ist eingeliefert — scheitert nur das Nachladen der Liste, bleibt die
+    // Einlieferung bestehen; ein erneuter Versuch waere hier ein unnoetiges Duplikat.
+    try {
       const views = await nightRunsApi.list(id)
       setLaeufe(views.map(ausSicht).sort(nachStartAbsteigend))
       setAufbewahrteLaeufe(views.length)
       setZaehler(await zaehlerLaden(id))
     } catch (error_) {
-      // `apiFetch` wirft `ApiError`, ein Netzwerkabbruch einen `TypeError` — beides `Error`.
-      notify((error_ as Error).message, 'error')
+      notify(apiErrorMessage(error_, 'Eingeliefert, Liste konnte nicht aktualisiert werden.'), 'error')
     }
   }
 

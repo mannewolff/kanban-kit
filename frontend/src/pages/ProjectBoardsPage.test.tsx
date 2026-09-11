@@ -2,8 +2,24 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter, Route, Routes, useNavigate } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { boardsApi, type Board } from '../api/boards'
+import { ApiError } from '../api/client'
 import { projectsApi } from '../api/projects'
+import { SnackbarProvider } from '../components/SnackbarProvider'
 import { ProjectBoardsPage } from './ProjectBoardsPage'
+
+/** Server-Ablehnung mit einer für den Nutzer formulierten Meldung in `detail` (RFC 9457). */
+const serverfehler = (text: string) => new ApiError(409, 'Conflict', undefined, text)
+
+/**
+ * Prüft den Fehler-Toast: Der Text steht dort, und der Alert trägt die Severity `error`.
+ *
+ * `hidden: true`: Ein offener MUI-Dialog stellt alles außerhalb seines Portals auf `aria-hidden` —
+ * der Toast trägt seine Rolle, wird von der Standardabfrage aber übergangen.
+ */
+async function erwarteFehlerToast(text: string) {
+  expect(await screen.findByText(text)).toBeInTheDocument()
+  expect(await screen.findByRole('alert', { hidden: true })).toHaveClass('MuiAlert-filledError')
+}
 
 function deferred<T>() {
   let resolve!: (value: T) => void
@@ -46,11 +62,13 @@ function renderAt(role: string, boards: Array<{ id: number; name: string }>) {
   )
   mockedBoards.listArchived.mockResolvedValue([])
   return render(
-    <MemoryRouter initialEntries={['/projects/5']}>
-      <Routes>
-        <Route path="/projects/:projectId" element={<ProjectBoardsPage />} />
-      </Routes>
-    </MemoryRouter>,
+    <SnackbarProvider>
+      <MemoryRouter initialEntries={['/projects/5']}>
+        <Routes>
+          <Route path="/projects/:projectId" element={<ProjectBoardsPage />} />
+        </Routes>
+      </MemoryRouter>
+    </SnackbarProvider>,
   )
 }
 
@@ -59,11 +77,34 @@ function renderPage(role: string) {
   mockedBoards.list.mockResolvedValue([])
   mockedBoards.listArchived.mockResolvedValue([])
   return render(
-    <MemoryRouter initialEntries={['/projects/5']}>
-      <Routes>
-        <Route path="/projects/:projectId" element={<ProjectBoardsPage />} />
-      </Routes>
-    </MemoryRouter>,
+    <SnackbarProvider>
+      <MemoryRouter initialEntries={['/projects/5']}>
+        <Routes>
+          <Route path="/projects/:projectId" element={<ProjectBoardsPage />} />
+        </Routes>
+      </MemoryRouter>
+    </SnackbarProvider>,
+  )
+}
+
+/** Zwei aktive Boards (kein Auto-Routing) plus ein archiviertes — Grundlage der Archiv-Aktionen. */
+function renderMitArchiv() {
+  mockedProjects.list.mockResolvedValue([{ id: 5, name: 'Team', role: 'OWNER', createdAt: '' }])
+  mockedBoards.list.mockResolvedValue([
+    { id: 9, name: 'Aktiv', projectId: 5, createdAt: '', columns: [] },
+    { id: 10, name: 'Aktiv2', projectId: 5, createdAt: '', columns: [] },
+  ])
+  mockedBoards.listArchived.mockResolvedValue([
+    { id: 20, name: 'Altes Board', projectId: 5, createdAt: '', columns: [] },
+  ])
+  return render(
+    <SnackbarProvider>
+      <MemoryRouter initialEntries={['/projects/5']}>
+        <Routes>
+          <Route path="/projects/:projectId" element={<ProjectBoardsPage />} />
+        </Routes>
+      </MemoryRouter>
+    </SnackbarProvider>,
   )
 }
 
@@ -326,6 +367,83 @@ describe('ProjectBoardsPage RBAC', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Abbrechen' }))
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
     expect(mockedBoards.remove).not.toHaveBeenCalled()
+  })
+
+  it('zeigt die Server-Meldung, wenn das Anlegen eines Boards scheitert', async () => {
+    mockedBoards.create.mockRejectedValue(serverfehler('Ein Board mit diesem Namen existiert bereits.'))
+    renderAt('OWNER', [{ id: 9, name: 'Board A' }, { id: 10, name: 'Board B' }])
+    await screen.findByText('Board A')
+
+    fireEvent.change(screen.getByLabelText(/Neues Board/), { target: { value: 'Board A' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Anlegen' }))
+
+    await erwarteFehlerToast('Ein Board mit diesem Namen existiert bereits.')
+  })
+
+  it('fällt beim Anlegen ohne Server-Meldung auf den eigenen Text zurück', async () => {
+    mockedBoards.create.mockRejectedValue(new TypeError('Failed to fetch'))
+    renderAt('OWNER', [{ id: 9, name: 'Board A' }, { id: 10, name: 'Board B' }])
+    await screen.findByText('Board A')
+
+    fireEvent.change(screen.getByLabelText(/Neues Board/), { target: { value: 'Neu' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Anlegen' }))
+
+    await erwarteFehlerToast('Board anlegen fehlgeschlagen.')
+  })
+
+  /**
+   * Review-Fund (Code-Review Schritt 7, #807-#812-Batch): Mutation und Nachladen waren im selben
+   * try/catch. Scheitert nur das Nachladen, war das angelegte Board trotzdem da — die Meldung darf
+   * das nicht als Fehlschlag der Aktion selbst ausgeben.
+   */
+  it('meldet ein gescheitertes Nachladen getrennt vom Anlegen, wenn das Board angelegt wurde', async () => {
+    mockedBoards.create.mockResolvedValue({ id: 99, name: 'Neu', projectId: 5, createdAt: '', columns: [] })
+    renderAt('OWNER', [{ id: 9, name: 'Board A' }, { id: 10, name: 'Board B' }])
+    await screen.findByText('Board A')
+
+    // Nur der naechste list()-Aufruf (das Nachladen nach dem Anlegen) scheitert.
+    mockedBoards.list.mockRejectedValueOnce(new Error('boom'))
+
+    fireEvent.change(screen.getByLabelText(/Neues Board/), { target: { value: 'Neu' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Anlegen' }))
+
+    await erwarteFehlerToast('Board angelegt, Liste konnte nicht aktualisiert werden.')
+    expect(mockedBoards.create).toHaveBeenCalledWith(5, 'Neu')
+  })
+
+  it('zeigt die Server-Meldung, wenn das Archivieren scheitert, und lässt den Dialog offen', async () => {
+    mockedBoards.remove.mockRejectedValue(serverfehler('Board ist gesperrt.'))
+    renderAt('OWNER', [{ id: 9, name: 'Board A' }, { id: 10, name: 'Board B' }])
+
+    fireEvent.click(await screen.findByLabelText('Board Board A archivieren'))
+    fireEvent.click(await screen.findByRole('button', { name: 'Archivieren' }))
+
+    await erwarteFehlerToast('Board ist gesperrt.')
+    // Der Bestätigungsdialog schließt nur bei Erfolg — sonst sähe der Fehlschlag wie ein Erfolg aus.
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+  })
+
+  it('zeigt die Server-Meldung, wenn das Wiederherstellen scheitert', async () => {
+    mockedBoards.restore.mockRejectedValue(serverfehler('Board lässt sich nicht wiederherstellen.'))
+    renderMitArchiv()
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Wiederherstellen' }))
+
+    await erwarteFehlerToast('Board lässt sich nicht wiederherstellen.')
+  })
+
+  it('zeigt die Server-Meldung, wenn das endgültige Löschen scheitert, und lässt den Dialog offen', async () => {
+    mockedBoards.purge.mockRejectedValue(serverfehler('Board hat noch Anhänge.'))
+    renderMitArchiv()
+
+    fireEvent.click(await screen.findByLabelText('Board Altes Board endgültig löschen'))
+    fireEvent.change(screen.getByLabelText('Board-Name zur Bestätigung'), {
+      target: { value: 'Altes Board' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Endgültig löschen' }))
+
+    await erwarteFehlerToast('Board hat noch Anhänge.')
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
   })
 
   it('behandelt einen fehlenden Projekt-Parameter als ungültig (projectId undefined)', () => {

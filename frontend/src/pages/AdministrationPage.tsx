@@ -20,7 +20,7 @@ import { useEffect, useState } from 'react'
 import { APP_NAME } from '../appMeta'
 import { accessTokensApi, type AccessToken, type CreatedAccessToken } from '../api/accessTokens'
 import { boardsApi, type Board } from '../api/boards'
-import { ApiError } from '../api/client'
+import { ApiError, apiErrorMessage } from '../api/client'
 import { configApi } from '../api/config'
 import { projectsApi, type Project } from '../api/projects'
 import { useAuth } from '../auth/AuthContext'
@@ -176,6 +176,7 @@ function DoneRetentionSection() {
 function ApiTokensSection() {
   const { user } = useAuth()
   const platformAdmin = isPlatformAdmin(user)
+  const notify = useSnackbar()
 
   const [tokens, setTokens] = useState<AccessToken[]>([])
   const [projects, setProjects] = useState<Project[]>([])
@@ -213,8 +214,12 @@ function ApiTokensSection() {
     if (!window.confirm('Dieses Token widerrufen? Clients, die es nutzen, verlieren den Zugriff.')) {
       return
     }
-    await accessTokensApi.revoke(id)
-    reloadTokens()
+    try {
+      await accessTokensApi.revoke(id)
+      reloadTokens()
+    } catch (e) {
+      notify(apiErrorMessage(e, 'Widerrufen fehlgeschlagen.'), 'error')
+    }
   }
 
   return (
@@ -391,10 +396,13 @@ function CreateTokenDialog({
       // Number(...) verengt number|'' ohne toten Guard-Zweig.
       const res = await accessTokensApi.create(name.trim(), Number(projectId), Number(boardId))
       onCreated(res)
-    } catch {
+    } catch (e) {
       setError(
-        'Token konnte nicht erzeugt werden. Für ein board-gebundenes Token brauchst du das Recht, ' +
-          'auf diesem Board Karten anzulegen.',
+        apiErrorMessage(
+          e,
+          'Token konnte nicht erzeugt werden. Für ein board-gebundenes Token brauchst du das Recht, ' +
+            'auf diesem Board Karten anzulegen.',
+        ),
       )
       setSaving(false)
     }

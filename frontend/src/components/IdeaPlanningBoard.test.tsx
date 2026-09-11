@@ -4,6 +4,7 @@ import { MemoryRouter, useLocation } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { attachmentsApi } from '../api/attachments'
 import { boardsApi, type Board } from '../api/boards'
+import { ApiError } from '../api/client'
 import { cardsApi, type Card } from '../api/cards'
 import { commentsApi } from '../api/comments'
 import { ideasApi, type Idea } from '../api/ideas'
@@ -176,6 +177,9 @@ function renderBoard(canEdit = true) {
 
 const dt = () => ({ dataTransfer: { setData: vi.fn() } })
 
+/** Abweisung des Servers mit einer für den Nutzer formulierten Meldung (RFC-9457-`detail`, #807). */
+const serverfehler = (text: string) => new ApiError(409, 'Conflict', undefined, text)
+
 function deferred<T>() {
   let resolve!: (value: T) => void
   const promise = new Promise<T>((r) => {
@@ -287,6 +291,29 @@ describe('IdeaPlanningBoard', () => {
     await waitFor(() => expect(mIdeas.planOntoBoard).toHaveBeenCalledWith(20, 10))
   })
 
+  /**
+   * Review-Fund (Code-Review Schritt 7, #807-#812-Batch): Ein gescheitertes Nachladen nach einer
+   * erfolgreichen Mutation wurde bislang komplett verschluckt (`reload().catch(() => {})`) — die
+   * Ansicht blieb unbemerkt veraltet. Jetzt meldet der Snackbar das explizit.
+   */
+  it('meldet ein gescheitertes Nachladen getrennt vom Einplanen, wenn das Einplanen erfolgreich war', async () => {
+    setup()
+    renderBoard()
+    await screen.findByText('Pool 1')
+
+    // Nur der naechste cardsApi.list-Aufruf (im Nachladen nach dem Einplanen) scheitert.
+    mCards.list.mockRejectedValueOnce(new Error('boom'))
+    fireEvent.click(screen.getByRole('button', { name: 'Idee Pool 1 einplanen' }))
+
+    await waitFor(() => expect(mIdeas.planOntoBoard).toHaveBeenCalledWith(20, 10))
+    await waitFor(() =>
+      expect(mNotify).toHaveBeenCalledWith(
+        'Änderung gespeichert, Ansicht konnte nicht aktualisiert werden. Bitte Seite neu laden.',
+        'error',
+      ),
+    )
+  })
+
   it('holt eine Board-Karte per Button in den Pool', async () => {
     setup()
     renderBoard()
@@ -393,6 +420,71 @@ describe('IdeaPlanningBoard', () => {
     )
     // Ansicht bleibt konsistent: die Karte ist weiterhin sichtbar (kein optimistisches Entfernen).
     expect(screen.getByText('Backlog A')).toBeInTheDocument()
+  })
+
+  // #811: Weist der Server eine Aktion mit einer eigenen Begründung ab (RFC-9457-`detail`), steht
+  // genau diese im Toast — eine pauschale Ersatzmeldung ließe den Nutzer raten, woran es lag.
+  describe('Meldung des Servers statt Pauschaltext', () => {
+    it('zeigt beim Einplanen die Meldung des Servers', async () => {
+      setup()
+      mIdeas.planOntoBoard.mockRejectedValueOnce(serverfehler('Das Zielboard ist archiviert.'))
+      renderBoard()
+      await screen.findByText('Pool 1')
+
+      fireEvent.click(screen.getByRole('button', { name: 'Idee Pool 1 einplanen' }))
+
+      await waitFor(() =>
+        expect(mNotify).toHaveBeenCalledWith('Das Zielboard ist archiviert.', 'error'),
+      )
+      // Ohne Erfolg kein Reload: die Ansicht bleibt auf dem Stand von vor der Aktion.
+      expect(screen.getByText('Pool 1')).toBeInTheDocument()
+    })
+
+    it('zeigt beim Zurückholen in den Pool die Meldung des Servers', async () => {
+      setup()
+      mIdeas.moveBackToPool.mockRejectedValueOnce(
+        serverfehler('Die Karte hängt an einem Vorhaben.'),
+      )
+      renderBoard()
+      await screen.findByText('Backlog A')
+
+      fireEvent.click(screen.getByRole('button', { name: 'Karte Backlog A in den Pool' }))
+
+      await waitFor(() =>
+        expect(mNotify).toHaveBeenCalledWith('Die Karte hängt an einem Vorhaben.', 'error'),
+      )
+      expect(screen.getByText('Backlog A')).toBeInTheDocument()
+    })
+
+    it('zeigt beim Umsortieren die Meldung des Servers', async () => {
+      setup()
+      mCards.move.mockRejectedValueOnce(serverfehler('Die Spalte hat ihr WIP-Limit erreicht.'))
+      renderBoard()
+      await screen.findByText('Backlog A')
+
+      fireEvent.dragStart(screen.getByTestId('board-item-1'), dt())
+      fireEvent.drop(screen.getByTestId('board-item-5'), dt())
+
+      await waitFor(() =>
+        expect(mNotify).toHaveBeenCalledWith('Die Spalte hat ihr WIP-Limit erreicht.', 'error'),
+      )
+      expect(screen.getByText('Backlog A')).toBeInTheDocument()
+    })
+
+    it('zeigt beim Verschieben auf ein anderes Board die Meldung des Servers', async () => {
+      setup()
+      mCards.transfer.mockRejectedValueOnce(serverfehler('Kein Zugriff auf das Zielboard.'))
+      renderBoard()
+      await screen.findByText('Backlog A')
+
+      fireEvent.dragStart(screen.getByTestId('board-item-1'), dt())
+      fireEvent.drop(screen.getByTestId('board-zone-11'), dt())
+
+      await waitFor(() =>
+        expect(mNotify).toHaveBeenCalledWith('Kein Zugriff auf das Zielboard.', 'error'),
+      )
+      expect(screen.getByText('Backlog A')).toBeInTheDocument()
+    })
   })
 
   it('ignoriert einen Drop einer Pool-Idee zurück in den Pool', async () => {

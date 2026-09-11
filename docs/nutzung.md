@@ -167,9 +167,10 @@ Fehlerklassen und kurze Auszüge). Protokolle sind mehrere Megabyte groß und tr
 Sitzungs-IDs und Pfade; die bleiben, wo sie sind. Dieselbe Datei lässt sich erneut wählen, ohne die
 Seite neu zu laden.
 
-Jeder Lauf steht als aufklappbare Zeile da — Startzeitpunkt, Art des Laufs („Umsetzungs-Lauf" bzw.
-„Prüf-Lauf"), Dauer sowie „N bearbeitet, M übergangen". Aufgeklappt zeigt er seine Arbeitspakete,
-jedes mit einem der **vier Zustände**:
+Jeder Lauf steht als aufklappbare Zeile da — Startzeitpunkt, Art des Laufs („Umsetzungs-Lauf",
+„Prüf-Lauf" oder „Nachtplan-Lauf"), Dauer sowie „N bearbeitet, M übergangen". Ein Nachtplan-Lauf
+wird angezeigt, aber nicht aufbewahrt — er verschwindet nach einem Neuladen der Seite wieder.
+Aufgeklappt zeigt er seine Arbeitspakete, jedes mit einem der **vier Zustände**:
 
 - **grün — „Erfolg":** das Arbeitspaket ist durchgelaufen.
 - **gelb — „Erfolg, Prüfung rot":** umgesetzt, aber eine Prüfung schlug fehl.

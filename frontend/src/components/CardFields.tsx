@@ -57,6 +57,7 @@ export function CardFields({
   epics,
   epicReadOnly = false,
   epicReadOnlyLabel,
+  titleError = null,
   depsInput,
   depsError,
   herkunftInput = '',
@@ -92,6 +93,12 @@ export function CardFields({
    * ihn nur der Aufrufer — er hält die volle Vorhaben-Liste, dieses Formular nur den Optionsvorrat.
    */
   epicReadOnlyLabel?: string
+  /**
+   * Serverseitige Feldmeldung zum Titel; ohne sie bleibt das Feld fehlerfrei. Optional, weil nur
+   * Aufrufer mit eigener Fehlerbehandlung sie füllen können — das Bearbeiten-Formular meldet
+   * anders (Issue #808).
+   */
+  titleError?: string | null
   depsInput: string
   depsError: string | null
   /**
@@ -179,6 +186,8 @@ export function CardFields({
         fullWidth
         inputRef={titleInputRef}
         onKeyDown={onTitleKeyDown}
+        error={titleError != null}
+        helperText={titleError ?? undefined}
         slotProps={{ htmlInput: { maxLength: 300, 'aria-label': 'Titel' } }}
       />
       <TextField
