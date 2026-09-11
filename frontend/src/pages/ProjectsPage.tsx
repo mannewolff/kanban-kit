@@ -137,10 +137,16 @@ export function ProjectsPage() {
   const handleDelete = async (id: number) => {
     try {
       await projectsApi.remove(id)
-      setConfirmDelete(null)
-      await reload()
     } catch (e) {
       notify(apiErrorMessage(e, 'Löschen fehlgeschlagen.'), 'error')
+      return
+    }
+    setConfirmDelete(null)
+    try {
+      await reload()
+    } catch (e) {
+      // Geloescht ist geloescht — nur das Nachladen der Liste ist gescheitert.
+      notify(apiErrorMessage(e, 'Projekt gelöscht, Liste konnte nicht aktualisiert werden.'), 'error')
     }
   }
 

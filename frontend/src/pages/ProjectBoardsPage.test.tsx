@@ -391,6 +391,26 @@ describe('ProjectBoardsPage RBAC', () => {
     await erwarteFehlerToast('Board anlegen fehlgeschlagen.')
   })
 
+  /**
+   * Review-Fund (Code-Review Schritt 7, #807-#812-Batch): Mutation und Nachladen waren im selben
+   * try/catch. Scheitert nur das Nachladen, war das angelegte Board trotzdem da — die Meldung darf
+   * das nicht als Fehlschlag der Aktion selbst ausgeben.
+   */
+  it('meldet ein gescheitertes Nachladen getrennt vom Anlegen, wenn das Board angelegt wurde', async () => {
+    mockedBoards.create.mockResolvedValue({ id: 99, name: 'Neu', projectId: 5, createdAt: '', columns: [] })
+    renderAt('OWNER', [{ id: 9, name: 'Board A' }, { id: 10, name: 'Board B' }])
+    await screen.findByText('Board A')
+
+    // Nur der naechste list()-Aufruf (das Nachladen nach dem Anlegen) scheitert.
+    mockedBoards.list.mockRejectedValueOnce(new Error('boom'))
+
+    fireEvent.change(screen.getByLabelText(/Neues Board/), { target: { value: 'Neu' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Anlegen' }))
+
+    await erwarteFehlerToast('Board angelegt, Liste konnte nicht aktualisiert werden.')
+    expect(mockedBoards.create).toHaveBeenCalledWith(5, 'Neu')
+  })
+
   it('zeigt die Server-Meldung, wenn das Archivieren scheitert, und lässt den Dialog offen', async () => {
     mockedBoards.remove.mockRejectedValue(serverfehler('Board ist gesperrt.'))
     renderAt('OWNER', [{ id: 9, name: 'Board A' }, { id: 10, name: 'Board B' }])

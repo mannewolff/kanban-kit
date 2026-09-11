@@ -1230,6 +1230,30 @@ describe('CardDetailModal', () => {
     expect(await screen.findByText(/Upload fehlgeschlagen/)).toBeInTheDocument()
   })
 
+  /**
+   * Review-Fund (Code-Review Schritt 7, #807-#812-Batch): Upload und Vorschau-Abruf sind zwei
+   * getrennte Netzwerkaufrufe. Scheitert nur die Vorschau, ist der Anhang trotzdem angekommen —
+   * das darf nicht als „Upload fehlgeschlagen" erscheinen, sonst laedt ein erneuter Versuch einen
+   * zweiten, ueberfluessigen Anhang hoch.
+   */
+  it('meldet einen gescheiterten Vorschau-Abruf getrennt vom Uploaderfolg', async () => {
+    const apis = makeApis()
+    const created = { id: 9, cardId: 100, filename: 'foto.png', contentType: 'image/png', size: 100, createdAt: '' }
+    apis.attachmentsApi.upload = vi.fn().mockResolvedValue(created)
+    apis.attachmentsApi.fetchBlob = vi.fn().mockRejectedValue(new Error('boom'))
+    render(<CardDetailModal card={card} canEdit onClose={vi.fn()} {...apis} />)
+
+    const file = new File(['x'], 'foto.png', { type: 'image/png' })
+    fireEvent.change(screen.getByLabelText('Datei anhängen'), { target: { files: [file] } })
+
+    // Der Anhang steht in der Liste — der Upload selbst war erfolgreich.
+    expect(await screen.findByRole('button', { name: 'foto.png' })).toBeInTheDocument()
+    expect(
+      await screen.findByText('Anhang hochgeladen, Vorschau konnte nicht geladen werden.'),
+    ).toBeInTheDocument()
+    expect(screen.queryByText(/^Upload fehlgeschlagen/)).not.toBeInTheDocument()
+  })
+
   it('löscht einen Anhang', async () => {
     const apis = makeApis()
     apis.attachmentsApi.list = vi.fn().mockResolvedValue([
@@ -1830,6 +1854,59 @@ describe('CardDetailModal', () => {
       await waitFor(() => expect(screen.queryByText('Eva')).toBeNull())
       expect(screen.getByText('Max')).toBeInTheDocument()
       expect(onChanged).not.toHaveBeenCalled()
+    })
+
+    /**
+     * Review-Fund (Code-Review Schritt 7, #807-#812-Batch): `saveAssignees` erlaubt parallele
+     * Requests. Loest ein aelterer Request seinen Rollback nach einem bereits erfolgreichen
+     * neueren aus, darf der veraltete Stand den aktuellen nicht ueberschreiben.
+     */
+    it('verwirft einen veralteten Rollback, wenn zwischenzeitlich ein neuerer Request erfolgreich war', async () => {
+      const apis = makeApis()
+      const raceMembers = [
+        { userId: 5, email: 'm@x.de', displayName: 'Max', role: 'MEMBER' as const },
+        { userId: 6, email: 'e@x.de', displayName: 'Eva', role: 'MEMBER' as const },
+        { userId: 7, email: 't@x.de', displayName: 'Tom', role: 'MEMBER' as const },
+      ]
+      let rejectFirst: (error: unknown) => void = () => {}
+      const firstRequest = new Promise((_resolve, reject) => {
+        rejectFirst = reject
+      })
+      apis.cardsApi.setAssignees = vi
+        .fn()
+        .mockImplementationOnce(() => firstRequest)
+        .mockResolvedValueOnce({ ...card })
+      const onChanged = vi.fn()
+      render(
+        <CardDetailModal
+          card={{ ...card, assignees: [5] }}
+          canEdit
+          members={raceMembers}
+          onChanged={onChanged}
+          onClose={vi.fn()}
+          {...apis}
+        />,
+        { wrapper: SnackbarProvider },
+      )
+
+      // Erster Request (wird spaeter abgelehnt): Eva dazu.
+      fireEvent.mouseDown(await screen.findByLabelText('Zuständige'))
+      fireEvent.click(await screen.findByText('Eva'))
+      await waitFor(() => expect(apis.cardsApi.setAssignees).toHaveBeenNthCalledWith(1, 100, [5, 6]))
+
+      // Zweiter Request, bevor der erste beantwortet ist — und der als Erstes durchkommt: Tom dazu.
+      fireEvent.mouseDown(await screen.findByLabelText('Zuständige'))
+      fireEvent.click(await screen.findByText('Tom'))
+      await waitFor(() => expect(apis.cardsApi.setAssignees).toHaveBeenNthCalledWith(2, 100, [5, 6, 7]))
+      await waitFor(() => expect(onChanged).toHaveBeenCalled())
+
+      // Erst jetzt scheitert der laengst ueberholte erste Request.
+      rejectFirst(serverfehler('Zuweisung abgelehnt.'))
+      await screen.findByText('Zuweisung abgelehnt.')
+
+      // Der neuere, bereits bestaetigte Stand bleibt stehen statt auf [Max] zurueckzufallen.
+      expect(screen.getByText('Eva')).toBeInTheDocument()
+      expect(screen.getByText('Tom')).toBeInTheDocument()
     })
 
     it('meldet den Servertext beim Speichern der Labels', async () => {

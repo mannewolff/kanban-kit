@@ -678,6 +678,56 @@ describe('NightRunPage — Ergebnisstand hineingeben', () => {
 
     expect(await screen.findByText('Einliefern fehlgeschlagen.')).toBeInTheDocument()
   })
+
+  /**
+   * Review-Fund (Code-Review Schritt 7, #807-#812-Batch): Einliefern und das anschließende
+   * Nachladen der Liste (plus Zähler) standen im selben try/catch. Scheitert nur das Nachladen,
+   * ist die Einlieferung trotzdem durch — „Einliefern fehlgeschlagen" wäre dann falsch.
+   */
+  it('meldet ein gescheitertes Nachladen getrennt vom Einliefern, wenn die Einlieferung erfolgreich war', async () => {
+    let listRufe = 0
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string, init?: RequestInit) => {
+        const method = init?.method ?? 'GET'
+        anfragen.push({ url, method, body: String(init?.body ?? '') })
+        if (url === '/api/projects') {
+          return Promise.resolve(antwortOk([{ id: 5, name: 'Team', role: 'OWNER', createdAt: '' }]))
+        }
+        if (url === '/api/projects/5/night-runs' && method === 'GET') {
+          listRufe += 1
+          // Erster Aufruf (Erstladen) klappt, der zweite (Nachladen nach dem Einliefern) scheitert.
+          if (listRufe === 1) return Promise.resolve(antwortOk([]))
+          return Promise.reject(new TypeError('Failed to fetch'))
+        }
+        if (url === '/api/projects/5/night-runs' && method === 'POST') {
+          return Promise.resolve(antwortOk(alleNeu(EIN_LAUF)))
+        }
+        return Promise.reject(new Error(`unerwartete Anfrage: ${method} ${url}`))
+      }),
+    )
+
+    render(
+      <ThemeProvider theme={theme}>
+        <SnackbarProvider>
+          <MemoryRouter initialEntries={['/projects/5/nachtlauf']}>
+            <Routes>
+              <Route path="/projects/:projectId/nachtlauf" element={<NightRunPage />} />
+            </Routes>
+          </MemoryRouter>
+        </SnackbarProvider>
+      </ThemeProvider>,
+    )
+    await screen.findByText('Noch keine Auswertung vorhanden.')
+
+    protokollWaehlen(EIN_LAUF)
+
+    expect(
+      await screen.findByText('Eingeliefert, Liste konnte nicht aktualisiert werden.'),
+    ).toBeInTheDocument()
+    // Der lokal aus dem Ergebnisstand erzeugte Lauf-Eintrag bleibt trotzdem sichtbar.
+    expect(lauf(0)).toBeInTheDocument()
+  })
 })
 
 describe('NightRunPage — Nachtplan-Lauf (#806)', () => {

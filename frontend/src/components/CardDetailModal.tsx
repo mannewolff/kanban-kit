@@ -952,17 +952,24 @@ function CardDetailModalView({
   const { user } = useAuth()
   const isEpic = card.type === 'EPIC'
   const [assigneeIds, setAssigneeIds] = useState<number[]>(card.assignees)
+  // Zaehlt Aufrufe von saveAssignees: Loest ein spaeter gestarteter Request seinen Rollback vor
+  // einem frueher gestarteten aus, darf Letzterer den inzwischen aktuelleren Stand nicht mehr
+  // ueberschreiben — nur der jeweils juengste Aufruf darf zuruecksetzen.
+  const assigneesRequestSeq = useRef(0)
 
   const saveAssignees = async (ids: number[]) => {
     // Der Stand vor dem optimistischen Setzen: Ohne ihn bliebe eine abgelehnte Zuweisung im
     // Auswahlfeld stehen und behauptete einen Stand, den der Server nicht hat.
     const vorher = assigneeIds
+    const requestId = ++assigneesRequestSeq.current
     setAssigneeIds(ids)
     try {
       await cardsApi.setAssignees(card.id, ids)
       onChanged?.()
     } catch (error_: unknown) {
-      setAssigneeIds(vorher)
+      if (assigneesRequestSeq.current === requestId) {
+        setAssigneeIds(vorher)
+      }
       notify(apiErrorMessage(error_, 'Zuständige speichern fehlgeschlagen.'), 'error')
     }
   }
@@ -1026,15 +1033,20 @@ function CardDetailModalView({
     members.find((m) => m.userId === userId)?.displayName ?? 'System'
 
   const [labelIds, setLabelIds] = useState<number[]>(card.labels)
+  // Gleiche Race wie bei den Zuständigen: nur der juengste Aufruf darf zuruecksetzen.
+  const labelsRequestSeq = useRef(0)
   const saveLabels = async (ids: number[]) => {
     // Rollback wie bei den Zuständigen: der State steht vor der Zusage des Servers.
     const vorher = labelIds
+    const requestId = ++labelsRequestSeq.current
     setLabelIds(ids)
     try {
       await cardsApi.setLabels(card.id, ids)
       onChanged?.()
     } catch (error_: unknown) {
-      setLabelIds(vorher)
+      if (labelsRequestSeq.current === requestId) {
+        setLabelIds(vorher)
+      }
       notify(apiErrorMessage(error_, 'Labels speichern fehlgeschlagen.'), 'error')
     }
   }
@@ -1307,15 +1319,23 @@ function CardDetailModalView({
 
   const uploadFile = async (file: File) => {
     setUploadError(null)
+    let created: Attachment
     try {
-      const created = await attachmentsApi.upload(card.id, file)
-      setAttachments((a) => [...a, created])
-      if (created.contentType.startsWith('image/')) {
-        const blob = await attachmentsApi.fetchBlob(created.id)
-        setPreviews((p) => ({ ...p, [created.id]: URL.createObjectURL(blob) }))
-      }
+      created = await attachmentsApi.upload(card.id, file)
     } catch (error_: unknown) {
       setUploadError(apiErrorMessage(error_, 'Upload fehlgeschlagen (evtl. Anhangslimit erreicht).'))
+      return
+    }
+    setAttachments((a) => [...a, created])
+    // Vorschau separat: Scheitert nur ihr Abruf, ist der Anhang trotzdem angekommen — ein erneuter
+    // Upload-Versuch waere hier ein zusaetzlicher, unnoetiger Anhang.
+    if (created.contentType.startsWith('image/')) {
+      try {
+        const blob = await attachmentsApi.fetchBlob(created.id)
+        setPreviews((p) => ({ ...p, [created.id]: URL.createObjectURL(blob) }))
+      } catch (error_: unknown) {
+        setUploadError(apiErrorMessage(error_, 'Anhang hochgeladen, Vorschau konnte nicht geladen werden.'))
+      }
     }
   }
 

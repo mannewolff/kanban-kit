@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '../api/client'
 import type { Member, MembersApi } from '../api/members'
 import { projectsApi } from '../api/projects'
+import { SnackbarProvider } from '../components/SnackbarProvider'
 import { ProjectMembersPage } from './ProjectMembersPage'
 
 vi.mock('../api/projects', () => ({ projectsApi: { list: vi.fn(), transferOwner: vi.fn() } }))
@@ -278,6 +279,43 @@ describe('ProjectMembersPage', () => {
 
     // Der Darstellungsort bleibt der Inline-Alert im Dialog; nur der Text kommt vom Server.
     expect(await screen.findByText('Mika Member ist im Projekt gesperrt.')).toBeInTheDocument()
+  })
+
+  /**
+   * Review-Fund (Code-Review Schritt 7, #807-#812-Batch): Uebertragung und Nachladen waren im
+   * selben try/catch, dessen Meldung nur im (nach Erfolg bereits geschlossenen) Dialog sichtbar
+   * war. Scheitert nur das Nachladen, ist der Wechsel trotzdem durch — das muss ueber den Snackbar
+   * gemeldet werden, nicht in einem verschwundenen Dialog verpuffen.
+   */
+  it('meldet ein gescheitertes Nachladen getrennt vom Eigentümer-Wechsel über den Snackbar', async () => {
+    mProjects.transferOwner.mockResolvedValue(undefined)
+    const list = vi.fn().mockResolvedValue(members)
+    const api = makeApi({ list })
+    render(
+      <SnackbarProvider>
+        <MemoryRouter initialEntries={['/projects/5/members']}>
+          <Routes>
+            <Route
+              path="/projects/:projectId/members"
+              element={<ProjectMembersPage api={api} loadRole={() => Promise.resolve('OWNER')} />}
+            />
+          </Routes>
+        </MemoryRouter>
+      </SnackbarProvider>,
+    )
+    expect(await screen.findByText('Mika Member')).toBeInTheDocument()
+
+    // Nur der naechste list()-Aufruf (das Nachladen nach der Uebertragung) scheitert.
+    list.mockRejectedValueOnce(new TypeError('Failed to fetch'))
+    fireEvent.click(screen.getByLabelText('Mika Member zum Eigentümer machen'))
+    fireEvent.click(screen.getByRole('button', { name: 'Übertragen' }))
+
+    expect(
+      await screen.findByText('Eigentümer gewechselt, Mitgliederliste konnte nicht aktualisiert werden.'),
+    ).toBeInTheDocument()
+    expect(mProjects.transferOwner).toHaveBeenCalledWith(5, 2)
+    // Der Dialog schliesst trotzdem — der Wechsel selbst war erfolgreich.
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Übertragen' })).not.toBeInTheDocument())
   })
 
   it('zeigt ohne Server-Meldung den eigenen Text zur Eigentümer-Übertragung', async () => {

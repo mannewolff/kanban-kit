@@ -704,15 +704,23 @@ export function NightRunPage() {
       return
     }
 
+    let antwort: Awaited<ReturnType<typeof nightRunsApi.submit>>
     try {
-      const antwort = await nightRunsApi.submit(id, [zurEinlieferung(run)])
-      setErgebnisse(new Map(antwort.map((eintrag) => [eintrag.startedAt, eintrag.created])))
+      antwort = await nightRunsApi.submit(id, [zurEinlieferung(run)])
+    } catch (error_) {
+      notify(apiErrorMessage(error_, 'Einliefern fehlgeschlagen.'), 'error')
+      return
+    }
+    setErgebnisse(new Map(antwort.map((eintrag) => [eintrag.startedAt, eintrag.created])))
+    // Eingeliefert ist eingeliefert — scheitert nur das Nachladen der Liste, bleibt die
+    // Einlieferung bestehen; ein erneuter Versuch waere hier ein unnoetiges Duplikat.
+    try {
       const views = await nightRunsApi.list(id)
       setLaeufe(views.map(ausSicht).sort(nachStartAbsteigend))
       setAufbewahrteLaeufe(views.length)
       setZaehler(await zaehlerLaden(id))
     } catch (error_) {
-      notify(apiErrorMessage(error_, 'Einliefern fehlgeschlagen.'), 'error')
+      notify(apiErrorMessage(error_, 'Eingeliefert, Liste konnte nicht aktualisiert werden.'), 'error')
     }
   }
 

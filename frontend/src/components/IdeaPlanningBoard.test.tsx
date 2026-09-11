@@ -291,6 +291,29 @@ describe('IdeaPlanningBoard', () => {
     await waitFor(() => expect(mIdeas.planOntoBoard).toHaveBeenCalledWith(20, 10))
   })
 
+  /**
+   * Review-Fund (Code-Review Schritt 7, #807-#812-Batch): Ein gescheitertes Nachladen nach einer
+   * erfolgreichen Mutation wurde bislang komplett verschluckt (`reload().catch(() => {})`) — die
+   * Ansicht blieb unbemerkt veraltet. Jetzt meldet der Snackbar das explizit.
+   */
+  it('meldet ein gescheitertes Nachladen getrennt vom Einplanen, wenn das Einplanen erfolgreich war', async () => {
+    setup()
+    renderBoard()
+    await screen.findByText('Pool 1')
+
+    // Nur der naechste cardsApi.list-Aufruf (im Nachladen nach dem Einplanen) scheitert.
+    mCards.list.mockRejectedValueOnce(new Error('boom'))
+    fireEvent.click(screen.getByRole('button', { name: 'Idee Pool 1 einplanen' }))
+
+    await waitFor(() => expect(mIdeas.planOntoBoard).toHaveBeenCalledWith(20, 10))
+    await waitFor(() =>
+      expect(mNotify).toHaveBeenCalledWith(
+        'Änderung gespeichert, Ansicht konnte nicht aktualisiert werden. Bitte Seite neu laden.',
+        'error',
+      ),
+    )
+  })
+
   it('holt eine Board-Karte per Button in den Pool', async () => {
     setup()
     renderBoard()

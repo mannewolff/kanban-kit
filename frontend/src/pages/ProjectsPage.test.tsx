@@ -138,6 +138,28 @@ describe('ProjectsPage', () => {
     await erwarteFehlerToast('Löschen fehlgeschlagen.')
   })
 
+  /**
+   * Review-Fund (Code-Review Schritt 7, #807-#812-Batch): Loeschen und Nachladen waren im selben
+   * try/catch. Scheitert nur das Nachladen, ist das Projekt trotzdem geloescht — die Meldung darf
+   * das nicht als Fehlschlag des Loeschens selbst ausgeben.
+   */
+  it('meldet ein gescheitertes Nachladen getrennt vom Löschen, wenn das Projekt gelöscht wurde', async () => {
+    mockUser = { platformRole: 'ADMIN' }
+    mocked.list.mockResolvedValue([{ id: 1, name: 'Meins', role: 'OWNER', createdAt: '' }])
+    mocked.remove.mockResolvedValue(undefined)
+    renderMitToasts()
+
+    fireEvent.click(await screen.findByLabelText('Projekt Meins löschen'))
+    // Nur der naechste list()-Aufruf (das Nachladen nach dem Löschen) scheitert.
+    mocked.list.mockRejectedValueOnce(new TypeError('Failed to fetch'))
+    fireEvent.click(await screen.findByRole('button', { name: 'Löschen' }))
+
+    await erwarteFehlerToast('Projekt gelöscht, Liste konnte nicht aktualisiert werden.')
+    expect(mocked.remove).toHaveBeenCalledWith(1)
+    // Der Dialog schliesst trotzdem — geloescht ist geloescht.
+    await waitFor(() => expect(screen.queryByText('Projekt löschen?')).not.toBeInTheDocument())
+  })
+
   it('schließt den Löschen-Dialog per Escape', async () => {
     mockUser = { platformRole: 'ADMIN' }
     mocked.list.mockResolvedValue([{ id: 1, name: 'Meins', role: 'OWNER', createdAt: '2026-01-01T00:00:00Z' }])

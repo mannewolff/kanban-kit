@@ -108,10 +108,16 @@ export function ProjectBoardsPage() {
     }
     try {
       await boardsApi.create(id, name.trim())
-      setName('')
-      await reload()
     } catch (e) {
       notify(apiErrorMessage(e, 'Board anlegen fehlgeschlagen.'), 'error')
+      return
+    }
+    setName('')
+    try {
+      await reload()
+    } catch (e) {
+      // Das Board wurde angelegt — nur das Nachladen der Liste ist gescheitert.
+      notify(apiErrorMessage(e, 'Board angelegt, Liste konnte nicht aktualisiert werden.'), 'error')
     }
   }
 

@@ -155,6 +155,16 @@ export function IdeaPlanningBoard({
     [loadBacklogs, loadPool],
   )
 
+  // Nach einer bereits bestaetigten Mutation: Scheitert nur das Nachladen, bleibt die Aenderung
+  // bestehen — die Ansicht ist lediglich veraltet, statt wie zuvor ganz stillschweigend.
+  const reloadOrNotify = useCallback(async () => {
+    try {
+      await reload()
+    } catch {
+      notify('Änderung gespeichert, Ansicht konnte nicht aktualisiert werden. Bitte Seite neu laden.', 'error')
+    }
+  }, [reload, notify])
+
   // Externer Reload-Impuls (z. B. nach „Idee anlegen" auf der Seite): bei jeder Änderung von
   // refreshKey Pool und Backlogs neu laden. Der erste Render und die verzögerte Board-Ladung
   // (unveränderter refreshKey) lösen bewusst nichts aus.
@@ -176,9 +186,9 @@ export function IdeaPlanningBoard({
         notify(apiErrorMessage(e, 'Einplanen fehlgeschlagen.'), 'error')
         return
       }
-      await reload().catch(() => {})
+      await reloadOrNotify()
     },
-    [reload, notify],
+    [reloadOrNotify, notify],
   )
 
   const toPool = useCallback(
@@ -189,9 +199,9 @@ export function IdeaPlanningBoard({
         notify(apiErrorMessage(e, 'Zurück in den Pool fehlgeschlagen.'), 'error')
         return
       }
-      await reload().catch(() => {})
+      await reloadOrNotify()
     },
-    [reload, notify],
+    [reloadOrNotify, notify],
   )
 
   // Eine bereits eingeplante Karte von einem Board auf ein anderes verschieben: in die erste Spalte
@@ -207,9 +217,9 @@ export function IdeaPlanningBoard({
         notify(apiErrorMessage(e, 'Verschieben auf das andere Board fehlgeschlagen.'), 'error')
         return
       }
-      await reload().catch(() => {})
+      await reloadOrNotify()
     },
-    [reload, notify],
+    [reloadOrNotify, notify],
   )
 
   const startPoolDrag = (id: number) => (e: React.DragEvent) => {
