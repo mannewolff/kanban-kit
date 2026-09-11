@@ -7,6 +7,22 @@ Versionierung folgt der dreiteiligen Betriebsversion (siehe [RELEASING.md](RELEA
 Einträge je Version sind ein automatischer Auszug der Commit-Titel seit dem letzten Release,
 erzeugt von `scripts/gen-changelog.mjs`.
 
+## [1.40.0] – 2026-09-11
+
+- chore: Version 1.39.1
+- Code-Review-Befunde 1 und 4 beheben: Race-Condition und Mutation/Reload trennen
+- Fehlerbehandlung in Einzelseiten vervollständigen ([#812](https://github.com/mannewolff/kanban-kit/issues/812))
+- Fehlerbehandlung in IdeaPlanningBoard.tsx vervollständigen ([#811](https://github.com/mannewolff/kanban-kit/issues/811))
+- Fehlerbehandlung in BoardView.tsx vervollständigen ([#810](https://github.com/mannewolff/kanban-kit/issues/810))
+- Fehlerbehandlung in CardDetailModal.tsx vervollständigen ([#809](https://github.com/mannewolff/kanban-kit/issues/809))
+- Fehlerbehandlung in gemeinsamen Dialogen nachrüsten ([#808](https://github.com/mannewolff/kanban-kit/issues/808))
+- Fehlervertrag: ApiError.detail und apiErrorMessage ([#807](https://github.com/mannewolff/kanban-kit/issues/807))
+- Nachtplan-Lauf im Leitstand anzeigen, ohne ihn einzuliefern ([#806](https://github.com/mannewolff/kanban-kit/issues/806))
+- Nachtplan-Vokabular im Ergebnisstand-Parser deuten ([#805](https://github.com/mannewolff/kanban-kit/issues/805))
+- EpicsPage: Ladezustand und Fehlerbehandlung beim Erstladen ([#783](https://github.com/mannewolff/kanban-kit/issues/783))
+- Reviewbefunden von Codex am 09. September
+- Vorhaben-Filter zeigt nur eingeblendete Vorhaben ([#785](https://github.com/mannewolff/kanban-kit/issues/785))
+
 ## [1.39.0] – 2026-09-08
 
 - chore: v1.38.1
