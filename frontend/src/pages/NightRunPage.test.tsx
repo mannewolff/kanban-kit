@@ -573,11 +573,13 @@ describe('NightRunPage — Ergebnisstand hineingeben', () => {
     expect(anfragen.some((a) => a.method === 'POST')).toBe(false)
   })
 
-  it('meldet einen Prüf-Lauf als nicht unterstützte Lauf-Art', async () => {
+  // Der Prüf-Lauf selbst ist seit Issue #816 deutbar; nicht unterstützt bleibt eine
+  // Kombination, die der Runner nie schreibt — hier eine unbekannte Prüfstufe.
+  it('meldet eine unbekannte Lauf-Art/Stufe als nicht unterstützt', async () => {
     renderPage()
     await screen.findByText('Noch keine Auswertung vorhanden.')
 
-    protokollWaehlen(stand({ art: 'review' }))
+    protokollWaehlen(stand({ art: 'review', stufe: 'sonstwas' }))
 
     expect(await screen.findByText('Lauf-Art oder Vokabular nicht unterstützt')).toBeInTheDocument()
     expect(screen.queryAllByTestId(/^lauf-/)).toHaveLength(0)

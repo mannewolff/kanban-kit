@@ -5,6 +5,7 @@ import { parseNightRunErgebnisstand } from './nightRunErgebnisstand'
 import echterLauf from './__fixtures__/night-run-2026-09-07-085229.json'
 import echterNachtplanHarterStopp from './__fixtures__/night-run-2026-09-09-141506.json'
 import echterNachtplanRegulaer from './__fixtures__/night-run-2026-09-09-125621.json'
+import echterPrueflauf from './__fixtures__/night-run-2026-09-11-103116.json'
 
 /**
  * Die Fixtures dieser Datei sind — anders als in `nightRunLog.test.ts` — nicht
@@ -40,6 +41,10 @@ const einheit = (felder: Record<string, unknown>): Record<string, unknown> => ({
 /** Ein Ergebnisstand mit genau einer Einheit — der Regelfall dieser Tests. */
 const mitEinheit = (felder: Record<string, unknown>, laufFelder: Record<string, unknown> = {}): string =>
   stand({ einheiten: [einheit(felder)], ...laufFelder })
+
+/** Dieselbe Einheit in einem Pruef-Lauf — `art`/`stufe`, wie `night.mjs --review` sie schreibt. */
+const imPrueflauf = (felder: Record<string, unknown>, laufFelder: Record<string, unknown> = {}): string =>
+  mitEinheit(felder, { art: 'review', stufe: 'plan', ...laufFelder })
 
 /** Den Lauf holen und dabei sicherstellen, dass die Deutung ueberhaupt gelang. */
 function lauf(text: string): NightRun {
@@ -85,8 +90,43 @@ describe('parseNightRunErgebnisstand — Ablehnungen', () => {
     })
   })
 
-  it('lehnt einen Pruef-Lauf als nicht unterstuetzt ab', () => {
-    expect(parseNightRunErgebnisstand(stand({ art: 'review' }))).toEqual({
+  it('lehnt einen Pruef-Lauf mit unbekannter Stufe ab', () => {
+    expect(parseNightRunErgebnisstand(stand({ art: 'review', stufe: 'sonstwas' }))).toEqual({
+      ok: false,
+      grund: 'nicht-unterstuetzt',
+    })
+  })
+
+  it.each([
+    ['mitBefund'],
+    ['ohneBefund'],
+    ['schaerfungFehlt'],
+    ['syntheseOhneBeleg'],
+  ])('lehnt den Pruef-Ausgang %s in einem Implementierungs-Lauf ab', (ausgang) => {
+    expect(parseNightRunErgebnisstand(mitEinheit({ ausgang }))).toEqual({
+      ok: false,
+      grund: 'nicht-unterstuetzt',
+    })
+  })
+
+  it('lehnt einen Pruef-Ausgang in einem Nachtplan-Lauf ab', () => {
+    const text = mitEinheit({ ausgang: 'mitBefund' }, { art: 'erzeugung', stufe: 'plan' })
+    expect(parseNightRunErgebnisstand(text)).toEqual({ ok: false, grund: 'nicht-unterstuetzt' })
+  })
+
+  // Die Einheiten tragen jeweils genau das, was den Ausgang in seinem eigenen Modus
+  // deutbar machte — sonst schluege schon die alte Pruefung zu und die Ablehnung waere
+  // nicht belegt.
+  it.each([
+    ['verbraucht', {}],
+    ['offen', {}],
+    ['erfolg', { pruefung: { id: '100', zustand: 'geprueft' } }],
+    ['fehlschlag', { pruefung: { id: '100', zustand: 'rot', rotesKommando: 'mvn verify', rotesErgebnis: 'rot' } }],
+    ['zurueckgestellt', { grund: 'Nachtlauf: Idee ([Idee]).' }],
+  ] as const)('lehnt den Ausgang %s eines anderen Modus in einem Pruef-Lauf ab', (ausgang, felder) => {
+    // Ein Pruef-Lauf schreibt sie nie; eine geratene Farbe waere fuer eine kaputte
+    // oder fremde Datei die falsche Aussage.
+    expect(parseNightRunErgebnisstand(imPrueflauf({ ausgang, ...felder }))).toEqual({
       ok: false,
       grund: 'nicht-unterstuetzt',
     })
@@ -347,6 +387,100 @@ describe('parseNightRunErgebnisstand — Zustand je Arbeitspaket', () => {
   })
 })
 
+describe('parseNightRunErgebnisstand — Pruef-Lauf (Issue #816)', () => {
+  it.each([['fachlich'], ['plan'], ['issue']])('deutet art=review/stufe=%s als REVIEW', (stufe) => {
+    const r = lauf(imPrueflauf({ ausgang: 'ohneBefund' }, { stufe }))
+    expect(r.mode).toBe('REVIEW')
+    expect(r.stage).toBe(stufe)
+  })
+
+  it.each([
+    ['stufe: null', { stufe: null }],
+    ['fehlende Stufe (Bestand vor 1.51.0)', { stufe: undefined }],
+  ])('setzt bei %s die wirksame Stufe "issue" — so laeuft runReviewLoop', (_name, laufFelder) => {
+    const r = lauf(imPrueflauf({ ausgang: 'ohneBefund' }, laufFelder))
+    expect(r.mode).toBe('REVIEW')
+    expect(r.stage).toBe('issue')
+  })
+
+  it('laesst die Stufe in den uebrigen Modi unbesetzt — wie der Text-Parser', () => {
+    expect(lauf(stand())).not.toHaveProperty('stage')
+    expect(lauf(mitEinheit({ ausgang: 'verbraucht' }, { art: 'erzeugung', stufe: 'plan' }))).not.toHaveProperty('stage')
+  })
+
+  it('macht `ohneBefund` gruen ohne Fehlerklasse', () => {
+    const item = einziges(imPrueflauf({ ausgang: 'ohneBefund' }))
+    expect(item.state).toBe('GREEN')
+    expect(item.errorClass).toBeUndefined()
+    expect(item.excerpt).toBe('geprüft ohne Befund — Marker gesetzt')
+  })
+
+  it('macht `mitBefund` gruen ohne Fehlerklasse — der Review hat sich gelohnt', () => {
+    const item = einziges(imPrueflauf({ ausgang: 'mitBefund' }))
+    expect(item.state).toBe('GREEN')
+    expect(item.errorClass).toBeUndefined()
+    expect(item.excerpt).toBe('geprüft mit Befund — kein Marker, wartet auf dich')
+  })
+
+  it('macht `schaerfungFehlt` gelb mit CHECKS_NOT_STARTED', () => {
+    const item = einziges(imPrueflauf({ ausgang: 'schaerfungFehlt' }))
+    expect(item.state).toBe('YELLOW')
+    expect(item.errorClass).toBe('CHECKS_NOT_STARTED')
+    expect(item.excerpt).toBe('Befunde vorhanden, aber kein Body-Vorschlag — Schärfung fehlt')
+  })
+
+  it('macht `syntheseOhneBeleg` rot mit AWAITING_DECISION und uebernimmt den grund', () => {
+    const grund = 'sonnet: „Der Abschnitt fehlt" — steht nicht im Body-Vorschlag.'
+    const item = einziges(imPrueflauf({ ausgang: 'syntheseOhneBeleg', grund }))
+    expect(item.state).toBe('RED')
+    expect(item.errorClass).toBe('AWAITING_DECISION')
+    expect(item.excerpt).toBe(grund)
+  })
+
+  it('kuerzt einen ueberlangen syntheseOhneBeleg-Grund auf die gemeinsame Obergrenze', () => {
+    const grund = 'x'.repeat(NIGHT_RUN_EXCERPT_MAX + 100)
+    expect(einziges(imPrueflauf({ ausgang: 'syntheseOhneBeleg', grund })).excerpt).toHaveLength(
+      NIGHT_RUN_EXCERPT_MAX,
+    )
+  })
+
+  it.each([
+    ['ohne grund', {}],
+    ['mit nicht-string grund', { grund: 7 }],
+  ])('laesst den Auszug von `syntheseOhneBeleg` %s leer', (_name, felder) => {
+    const item = einziges(imPrueflauf({ ausgang: 'syntheseOhneBeleg', ...felder }))
+    expect(item.state).toBe('RED')
+    expect(item.errorClass).toBe('AWAITING_DECISION')
+    expect(item.excerpt).toBe('')
+  })
+
+  // Derselbe Ausgang, zwei Bedeutungen: Im Pruef-Lauf hat die Session nichts
+  // hinterlassen, im Nachtplan-Lauf ist nichts Verwertbares entstanden.
+  it('macht `ohneErgebnis` im Pruef-Lauf rot mit CHECKS_NOT_STARTED', () => {
+    const item = einziges(imPrueflauf({ ausgang: 'ohneErgebnis' }))
+    expect(item.state).toBe('RED')
+    expect(item.errorClass).toBe('CHECKS_NOT_STARTED')
+    expect(item.excerpt).toBe('Die Review-Session hat nichts hinterlassen — weder Marker noch Befunde')
+  })
+
+  it('laesst `ohneErgebnis` im Nachtplan-Lauf unveraendert rot ohne Fehlerklasse', () => {
+    const item = einziges(mitEinheit({ ausgang: 'ohneErgebnis' }, { art: 'erzeugung', stufe: 'plan' }))
+    expect(item.state).toBe('RED')
+    expect(item.errorClass).toBeUndefined()
+    expect(item.excerpt).toBe('Keine verwertbare Erzeugung — Session ohne Dokument oder Prüfrunde ohne Anker')
+  })
+
+  it.each([
+    ['uebersprungen', 'GREY' as const, "kein Label 'review:offen'"],
+    ['liegengeblieben', 'GREY' as const, 'Über die Obergrenze (--max) hinaus — bleibt liegen'],
+    ['unbekannt', 'RED' as const, 'Lauf mitten in der Runde abgebrochen — kein Ausgang'],
+  ])('deutet den modus-unabhaengigen Ausgang %s auch im Pruef-Lauf', (ausgang, state, auszug) => {
+    const item = einziges(imPrueflauf({ ausgang, grund: auszug }))
+    expect(item.state).toBe(state)
+    expect(item.excerpt).toBe(auszug)
+  })
+})
+
 describe('parseNightRunErgebnisstand — uebernommene Felder', () => {
   const vollstaendig = mitEinheit({
     id: '767',
@@ -582,6 +716,33 @@ describe('parseNightRunErgebnisstand — echter Nachtplan-Lauf, regulaer beendet
   })
 })
 
+describe('parseNightRunErgebnisstand — echter Pruef-Lauf (2026-09-11-103116)', () => {
+  const r = lauf(JSON.stringify(echterPrueflauf))
+  const nach = (nummer: number) => r.items.find((i) => i.cardNumber === nummer)
+
+  it('deutet den Lauf als REVIEW auf Stufe plan, vollstaendig, ohne Lauf-Zustand', () => {
+    expect(r.mode).toBe('REVIEW')
+    expect(r.stage).toBe('plan')
+    expect(r.incomplete).toBe(false)
+    expect(r).not.toHaveProperty('runState')
+  })
+
+  it('zaehlt ein bearbeitetes und 34 uebergangene Pakete, nichts ungedeutet', () => {
+    expect(r.processedCount).toBe(1)
+    expect(r.skippedCount).toBe(34)
+    expect(r.unparsedCount).toBe(0)
+  })
+
+  it('summiert die Laufdauer aus der einzigen Einheit mit dauerMs', () => {
+    expect(r.durationMs).toBe(879763)
+  })
+
+  it('deutet das `mitBefund`-Paket #782 gruen ohne Fehlerklasse', () => {
+    expect(nach(782)?.state).toBe('GREEN')
+    expect(nach(782)?.errorClass).toBeUndefined()
+  })
+})
+
 /**
  * Beide Wege muessen dieselbe Lage gleich benennen — sonst hiesse derselbe Lauf im
  * Leitstand je nach Quelle anders. Verglichen wird nur, was der Ergebnisstand
@@ -648,6 +809,67 @@ describe('parseNightRunErgebnisstand gegen parseNightRunLog', () => {
       },
     },
   ]
+
+  /**
+   * Derselbe Vergleich fuer den Pruef-Lauf (Issue #816). Eigener Kopf und eigener
+   * Abschluss, weil der Text-Parser Modus und Stufe genau aus diesen beiden Zeilen
+   * liest; die Ausgangszeilen stehen woertlich wie in `werteReviewSession`.
+   */
+  const pruefProtokoll = (zeile: string) =>
+    [
+      z(0, 'Nacht-Runner startet (Modus Review, Stufe plan, max 5 Sessions, Modell claude-opus-5, Label review:offen)'),
+      z(1, 'Review-Session 1/5: Issue #100 — Paket 1'),
+      z(4, zeile),
+      z(
+        9,
+        'Nacht-Review beendet (Stufe plan): 1 ohne Befund, 0 mit Befund, 0 Schaerfung fehlt, '
+          + '0 Synthese ohne Beleg, 0 uebersprungen, 0 ohne Ergebnis, 1 Session(s) gestartet.',
+      ),
+    ].join('\n')
+
+  const prueflagen: ReadonlyArray<{ name: string; zeile: string; einheit: Record<string, unknown> }> = [
+    {
+      name: 'ohneBefund',
+      zeile: '  Erfolg nach 3 min: Issue #100 geprueft ohne Befund, Marker gesetzt.',
+      einheit: { ausgang: 'ohneBefund' },
+    },
+    {
+      name: 'mitBefund',
+      zeile: '  Erfolg nach 3 min: Issue #100 geprueft mit Befund — kein Marker, wartet auf dich.',
+      einheit: { ausgang: 'mitBefund' },
+    },
+    {
+      name: 'schaerfungFehlt',
+      zeile: '  Nach 3 min: Issue #100 — Befunde vorhanden, aber kein Body-Vorschlag — Schaerfung fehlt.',
+      einheit: { ausgang: 'schaerfungFehlt' },
+    },
+    {
+      name: 'syntheseOhneBeleg',
+      zeile:
+        '  Nach 3 min: Issue #100 — Synthese ohne Beleg: 2 als uebernommen bezeichnete Funde stehen nicht im Body-Vorschlag.',
+      einheit: {
+        ausgang: 'syntheseOhneBeleg',
+        grund: 'sonnet: „Der Abschnitt fehlt" — steht nicht im Body-Vorschlag.',
+      },
+    },
+    {
+      name: 'ohneErgebnis',
+      zeile: '  Fehlschlag nach 3 min: Issue #100 — die Session hat nichts hinterlassen, weiter mit dem naechsten.',
+      einheit: { ausgang: 'ohneErgebnis' },
+    },
+  ]
+
+  it.each(prueflagen)('deutet $name im Pruef-Lauf aus beiden Quellen gleich', ({ zeile, einheit: felder }) => {
+    const protokollLauf = parseNightRunLog(pruefProtokoll(zeile)).runs[0]
+    const standLauf = lauf(imPrueflauf(felder))
+    expect([standLauf.mode, standLauf.stage]).toEqual([protokollLauf.mode, protokollLauf.stage])
+    const ausProtokoll = protokollLauf.items[0]
+    const ausStand = standLauf.items[0]
+    expect([ausStand.state, ausStand.errorClass]).toEqual([
+      ausProtokoll.state,
+      ausProtokoll.errorClass,
+    ])
+  })
 
   it.each(lagen)('deutet $name aus beiden Quellen gleich', ({ zeile, einheit: felder }) => {
     const ausProtokoll = parseNightRunLog(protokoll(zeile)).runs[0].items[0]

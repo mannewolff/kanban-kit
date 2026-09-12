@@ -193,6 +193,13 @@ const MUSTER: ReadonlyArray<{ re: RegExp; deute: (m: RegExpExecArray) => Treffer
     re: /^ {2}Erfolg nach (\d+(?:\.\d+)?) min: Issue #(\d+) geprueft (?:ohne|mit) Befund/,
     deute: (m) => ({ cardNumber: Number(m[2]), state: "GREEN", durationMs: minuten(m[1]) }),
   },
+  // Vor dem Schaerfungs-Muster: Beide Zeilen beginnen mit `  Nach <X> min: Issue #<N> — `,
+  // und die Synthese ohne Beleg ist der schwerere Fall — das Kit setzt dabei
+  // `kit:klaeren`, es wartet also eine Entscheidung auf einen Menschen (Issue #816).
+  {
+    re: /^ {2}Nach (\d+(?:\.\d+)?) min: Issue #(\d+) — Synthese ohne Beleg: /,
+    deute: (m) => ({ cardNumber: Number(m[2]), state: "RED", errorClass: "AWAITING_DECISION", durationMs: minuten(m[1]) }),
+  },
   {
     re: /^ {2}Nach (\d+(?:\.\d+)?) min: Issue #(\d+) — Befunde vorhanden, aber kein Body-Vorschlag/,
     deute: (m) => ({ cardNumber: Number(m[2]), state: "YELLOW", errorClass: "CHECKS_NOT_STARTED", durationMs: minuten(m[1]) }),
