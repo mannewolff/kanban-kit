@@ -9,7 +9,7 @@ import {
 } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { CardByNumber } from '../api/cards'
+import type { Card, CardByNumber } from '../api/cards'
 import type {
   NightRunErrorClassCounts,
   NightRunItemView,
@@ -163,6 +163,33 @@ function karte(
   }
 }
 
+/**
+ * Ein Vorhaben, wie `GET /api/cards/{id}` es liefert — die volle `Card`, nicht die `CardByNumber`
+ * des Nummer-Lookups. `id` und `number` sind in den Tests bewusst verschieden: Der Abruf läuft über
+ * die `parentId` (eine Karten-ID), angezeigt wird die projektweite Nummer.
+ */
+function vorhaben(partial: Partial<Card> & { id: number; number: number; title: string }): Card {
+  return {
+    boardId: 1,
+    columnId: 2,
+    description: null,
+    excerpt: null,
+    positionInColumn: 0,
+    archived: false,
+    ideaStored: false,
+    movedToDoneAt: null,
+    dependencies: [],
+    type: 'EPIC',
+    parentId: null,
+    shortcode: null,
+    assignees: [],
+    dueDate: null,
+    labels: [],
+    derivedFrom: null,
+    ...partial,
+  }
+}
+
 /** Der Lauf eines Ergebnisstands; wirft, wenn er gar nicht deutbar ist — dann taugt das Fixture nicht. */
 function gedeutet(ergebnisstand: string) {
   const ergebnis = parseNightRunErgebnisstand(ergebnisstand)
@@ -276,6 +303,13 @@ interface Antworten {
   zaehlerFehler?: string
   /** Karten je projektweiter Nummer; ein fehlender Eintrag antwortet mit 404. */
   karten?: Record<number, CardByNumber>
+  /** Karten je Karten-ID (`GET /api/cards/{id}`) — die Vorhaben; fehlender Eintrag = 404. */
+  kartenNachId?: Record<number, Card>
+  /**
+   * Hält den Einzelabruf einer Karte an, bis dieses Promise auflöst. So ist der Zustand „der
+   * Vorhaben-Abruf läuft noch" prüfbar, den zwei nebenläufige `ladeKetten()`-Aufrufe erzeugen.
+   */
+  kartenNachIdVerzoegert?: Promise<void>
 }
 
 /** Alle Anfragen dieses Tests, in Reihenfolge — Grundlage der Sende- und Ladepfad-Prüfungen. */
@@ -353,6 +387,15 @@ function stubFetch(antworten: Antworten) {
           gefunden === undefined ? antwortFehler('Karte nicht gefunden', 404) : antwortOk(gefunden),
         )
       }
+      const kartenId = /^\/api\/cards\/(\d+)$/.exec(url)
+      if (kartenId) {
+        const gefunden = antworten.kartenNachId?.[Number(kartenId[1])]
+        const antwort = () =>
+          gefunden === undefined ? antwortFehler('Karte nicht gefunden', 404) : antwortOk(gefunden)
+        return antworten.kartenNachIdVerzoegert === undefined
+          ? Promise.resolve(antwort())
+          : antworten.kartenNachIdVerzoegert.then(antwort)
+      }
       return Promise.reject(new Error(`unerwartete Anfrage: ${method} ${url}`))
     }),
   )
@@ -395,6 +438,9 @@ const uebernahmetext = (panel: HTMLElement, cardNumber: number) =>
     .value
 
 const byNumberAufrufe = () => anfragen.filter((a) => a.url.includes('/cards/by-number/'))
+
+/** Die Einzelabrufe einer Karte über ihre ID — in dieser Seite ausschließlich die Vorhaben. */
+const vorhabenAufrufe = () => anfragen.filter((a) => /^\/api\/cards\/\d+$/.test(a.url))
 
 const zaehlerAufrufe = () => anfragen.filter((a) => a.url.endsWith('/night-runs/error-class-counts'))
 
@@ -984,9 +1030,17 @@ describe('NightRunPage — Herkunftskette', () => {
 
     aufklappen(0)
 
-    // Beide Arbeitspakete nennen dieselbe Karte, also erscheint die Kette zweimal.
-    expect(await within(lauf(0)).findAllByText(/Plan: #718 \[Plan\] Nachtlauf/)).toHaveLength(2)
-    expect(within(lauf(0)).getAllByText(/Fachliche Anforderung: #715 \[Fachlich\] Nachtlauf/)).toHaveLength(2)
+    // Beide Arbeitspakete nennen dieselbe Karte, also erscheint die Kette zweimal. Die Stufe ist
+    // seit #818 ein Knopf; ihr Name trägt die Stufe, ihr sichtbarer Text nur Nummer und Titel.
+    expect(
+      await within(lauf(0)).findAllByRole('button', { name: 'Plan #718 [Plan] Nachtlauf' }),
+    ).toHaveLength(2)
+    expect(
+      within(lauf(0)).getAllByRole('button', {
+        name: 'Fachliche Anforderung #715 [Fachlich] Nachtlauf',
+      }),
+    ).toHaveLength(2)
+    expect(within(lauf(0)).getAllByText('#718 [Plan] Nachtlauf')).toHaveLength(2)
     // Die doppelt genannte Karte 700 wird genau einmal geladen.
     expect(byNumberAufrufe().filter((a) => a.url.endsWith('/700'))).toHaveLength(1)
   })
@@ -1018,7 +1072,9 @@ describe('NightRunPage — Herkunftskette', () => {
     aufklappen(0)
 
     expect(await within(lauf(0)).findByText('Plan: noch nicht erreicht')).toBeInTheDocument()
-    expect(within(lauf(0)).getByText(/Fachliche Anforderung: #715/)).toBeInTheDocument()
+    expect(
+      within(lauf(0)).getByRole('button', { name: 'Fachliche Anforderung #715 [Fachlich] Nachtlauf' }),
+    ).toBeInTheDocument()
   })
 
   it('kennzeichnet eine Stufe als abgerissen, wenn der Lauf sie rot meldet', async () => {
@@ -1036,7 +1092,12 @@ describe('NightRunPage — Herkunftskette', () => {
 
     aufklappen(0)
 
-    expect(await within(lauf(0)).findByText(/#718 \[Plan\] Nachtlauf — abgerissen/)).toBeInTheDocument()
+    // Der Abriss-Vermerk steht außerhalb des Links: Ein Klick öffnet die Karte, der Zusatz bleibt
+    // Fließtext (WCAG 2.5.3 — der sichtbare Linktext ist Teilstring des Namens).
+    expect(
+      await within(lauf(0)).findByRole('button', { name: 'Plan #718 [Plan] Nachtlauf' }),
+    ).toBeInTheDocument()
+    expect(within(lauf(0)).getByText(/— abgerissen/)).toBeInTheDocument()
   })
 
   it('meldet eine nicht auflösbare Kartennummer und bleibt bedienbar', async () => {
@@ -1098,7 +1159,9 @@ describe('NightRunPage — Herkunftskette', () => {
 
     aufklappen(0)
 
-    expect(await within(lauf(0)).findByText(/Plan: #718 \[Plan\] Nachtlauf/)).toBeInTheDocument()
+    expect(
+      await within(lauf(0)).findByRole('button', { name: 'Plan #718 [Plan] Nachtlauf' }),
+    ).toBeInTheDocument()
     expect(within(lauf(0)).getByText('Fachliche Anforderung: noch nicht erreicht')).toBeInTheDocument()
     expect(byNumberAufrufe()).toHaveLength(2)
   })
@@ -1116,6 +1179,46 @@ describe('NightRunPage — Herkunftskette', () => {
     expect(await screen.findByTestId('karten-detail')).toHaveTextContent('Karte 700')
   })
 
+  it('öffnet die Karte des Plans aus der Stufenzeile (#818)', async () => {
+    renderPage({
+      listen: lauf700([{ id: 11, cardNumber: 700, title: 'Paket A', state: 'GREEN' }]),
+      karten: {
+        700: karte({ id: 1, number: 700, title: 'Paket A', derivedFrom: 718 }),
+        718: karte({ id: 2, number: 718, title: '[Plan] Nachtlauf', derivedFrom: 715 }),
+        715: karte({ id: 3, number: 715, title: '[Fachlich] Nachtlauf' }),
+      },
+    })
+    await screen.findByTestId(`lauf-${startedAt(0)}`)
+    aufklappen(0)
+
+    fireEvent.click(
+      await within(lauf(0)).findByRole('button', { name: 'Plan #718 [Plan] Nachtlauf' }),
+    )
+
+    expect(await screen.findByTestId('karten-detail')).toHaveTextContent('Karte 718')
+  })
+
+  it('öffnet die Karte der fachlichen Anforderung aus der Stufenzeile (#818)', async () => {
+    renderPage({
+      listen: lauf700([{ id: 11, cardNumber: 700, title: 'Paket A', state: 'GREEN' }]),
+      karten: {
+        700: karte({ id: 1, number: 700, title: 'Paket A', derivedFrom: 718 }),
+        718: karte({ id: 2, number: 718, title: '[Plan] Nachtlauf', derivedFrom: 715 }),
+        715: karte({ id: 3, number: 715, title: '[Fachlich] Nachtlauf' }),
+      },
+    })
+    await screen.findByTestId(`lauf-${startedAt(0)}`)
+    aufklappen(0)
+
+    fireEvent.click(
+      await within(lauf(0)).findByRole('button', {
+        name: 'Fachliche Anforderung #715 [Fachlich] Nachtlauf',
+      }),
+    )
+
+    expect(await screen.findByTestId('karten-detail')).toHaveTextContent('Karte 715')
+  })
+
   it('schließt die Karte wieder', async () => {
     renderPage({
       listen: lauf700([{ id: 11, cardNumber: 700, title: 'Paket A', state: 'GREEN' }]),
@@ -1129,6 +1232,149 @@ describe('NightRunPage — Herkunftskette', () => {
     fireEvent.click(screen.getByText('detail-schliessen'))
 
     expect(screen.queryByTestId('karten-detail')).not.toBeInTheDocument()
+  })
+})
+
+describe('NightRunPage — Vorhaben eines Arbeitspakets (#818)', () => {
+  const lauf700 = (items: ItemVorgabe[]) => [
+    [aufbewahrt({ id: 1, startedAt: startedAt(0), items })],
+  ]
+
+  /** Zwei aufbewahrte Läufe — die Grundlage der Tests zu nebenläufigen `ladeKetten()`-Aufrufen. */
+  const zweiLaeufe = (itemsA: ItemVorgabe[], itemsB: ItemVorgabe[]) => [
+    [
+      aufbewahrt({ id: 1, startedAt: startedAt(0), items: itemsA }),
+      aufbewahrt({ id: 2, startedAt: startedAt(30), items: itemsB }),
+    ],
+  ]
+
+  /** Ein Stub, der die Vorhaben-Abrufe anhält, bis {@link freigeben} gerufen wird. */
+  function angehalten() {
+    let freigeben = () => {}
+    const verzoegert = new Promise<void>((resolve) => {
+      freigeben = resolve
+    })
+    return { verzoegert, freigeben: () => freigeben() }
+  }
+
+  it('zeigt „ohne", wenn das Arbeitspaket keinem Vorhaben zugeordnet ist', async () => {
+    renderPage({
+      listen: lauf700([{ id: 11, cardNumber: 700, title: 'Paket A', state: 'GREEN' }]),
+      karten: { 700: karte({ id: 1, number: 700, title: 'Paket A' }) },
+    })
+    await screen.findByTestId(`lauf-${startedAt(0)}`)
+
+    aufklappen(0)
+
+    expect(await within(lauf(0)).findByText('Vorhaben: ohne')).toBeInTheDocument()
+    // Ohne Zuordnung wird auch nichts nachgeladen.
+    expect(vorhabenAufrufe()).toHaveLength(0)
+  })
+
+  it('öffnet das zugeordnete Vorhaben über seine projektweite Nummer', async () => {
+    renderPage({
+      listen: lauf700([{ id: 11, cardNumber: 700, title: 'Paket A', state: 'GREEN' }]),
+      karten: { 700: karte({ id: 1, number: 700, title: 'Paket A', parentId: 42 }) },
+      kartenNachId: { 42: vorhaben({ id: 42, number: 5, title: 'Leitstand ausbauen' }) },
+    })
+    await screen.findByTestId(`lauf-${startedAt(0)}`)
+
+    aufklappen(0)
+
+    // Abgerufen wird über die Karten-ID, angezeigt die projektweite Nummer.
+    fireEvent.click(await within(lauf(0)).findByRole('button', { name: /^Vorhaben #5 / }))
+    expect(await screen.findByTestId('karten-detail')).toHaveTextContent('Karte 5')
+    expect(vorhabenAufrufe().map((a) => a.url)).toEqual(['/api/cards/42'])
+  })
+
+  it('meldet ein nicht abrufbares Vorhaben und bleibt bedienbar', async () => {
+    renderPage({
+      listen: lauf700([{ id: 11, cardNumber: 700, title: 'Paket A', state: 'GREEN' }]),
+      karten: { 700: karte({ id: 1, number: 700, title: 'Paket A', parentId: 42 }) },
+      kartenNachId: {},
+    })
+    await screen.findByTestId(`lauf-${startedAt(0)}`)
+
+    aufklappen(0)
+
+    expect(await within(lauf(0)).findByText('Vorhaben: nicht auflösbar')).toBeInTheDocument()
+    // Die Wurzelkarte bleibt öffenbar, und der Lauf lässt sich weiterhin zu- und aufklappen.
+    expect(within(lauf(0)).getByRole('button', { name: '#700 Paket A' })).toBeInTheDocument()
+    fireEvent.click(within(lauf(0)).getByRole('button', { expanded: true }))
+    fireEvent.click(within(lauf(0)).getByRole('button', { expanded: false }))
+    await waitFor(() =>
+      expect(within(lauf(0)).getByText('Vorhaben: nicht auflösbar')).toBeInTheDocument(),
+    )
+  })
+
+  it('zeigt keine Vorhaben-Zeile, wenn schon die Wurzelkarte nicht auflösbar ist', async () => {
+    renderPage({
+      listen: lauf700([{ id: 11, cardNumber: 700, title: 'Paket A', state: 'GREEN' }]),
+      karten: {},
+    })
+    await screen.findByTestId(`lauf-${startedAt(0)}`)
+
+    aufklappen(0)
+
+    expect(await within(lauf(0)).findByText('Karte #700 nicht gefunden')).toBeInTheDocument()
+    expect(within(lauf(0)).queryByText(/^Vorhaben:/)).toBeNull()
+    expect(vorhabenAufrufe()).toHaveLength(0)
+  })
+
+  it('zeigt keine Vorhaben-Zeile, solange der Abruf des Vorhabens noch läuft', async () => {
+    const { verzoegert, freigeben } = angehalten()
+    renderPage({
+      listen: zweiLaeufe(
+        [{ id: 11, cardNumber: 700, title: 'Paket A', state: 'GREEN' }],
+        [{ id: 12, cardNumber: 701, title: 'Paket B', state: 'GREEN' }],
+      ),
+      karten: {
+        700: karte({ id: 1, number: 700, title: 'Paket A', parentId: 5 }),
+        701: karte({ id: 2, number: 701, title: 'Paket B' }),
+      },
+      kartenNachId: { 5: vorhaben({ id: 5, number: 9, title: 'Leitstand ausbauen' }) },
+      kartenNachIdVerzoegert: verzoegert,
+    })
+    await screen.findByTestId(`lauf-${startedAt(0)}`)
+
+    aufklappen(0)
+    await waitFor(() => expect(vorhabenAufrufe()).toHaveLength(1))
+    aufklappen(30)
+
+    // Lauf B veröffentlicht den geteilten Katalog — Karte 700 ist damit aufgelöst, ihr Vorhaben
+    // aber noch nicht. Dann steht dort keine Zeile, nicht etwa „ohne" oder „nicht auflösbar".
+    await within(lauf(30)).findByText('Vorhaben: ohne')
+    expect(within(lauf(0)).getByRole('button', { name: '#700 Paket A' })).toBeInTheDocument()
+    expect(within(lauf(0)).queryByText(/^Vorhaben:/)).toBeNull()
+
+    freigeben()
+    expect(await within(lauf(0)).findByRole('button', { name: /^Vorhaben #9 / })).toBeInTheDocument()
+  })
+
+  it('ruft ein Vorhaben auch bei zwei gleichzeitig aufgeklappten Läufen nur einmal ab', async () => {
+    const { verzoegert, freigeben } = angehalten()
+    renderPage({
+      listen: zweiLaeufe(
+        [{ id: 11, cardNumber: 700, title: 'Paket A', state: 'GREEN' }],
+        [{ id: 12, cardNumber: 701, title: 'Paket B', state: 'GREEN' }],
+      ),
+      karten: {
+        700: karte({ id: 1, number: 700, title: 'Paket A', parentId: 42 }),
+        701: karte({ id: 2, number: 701, title: 'Paket B', parentId: 42 }),
+      },
+      kartenNachId: { 42: vorhaben({ id: 42, number: 9, title: 'Leitstand ausbauen' }) },
+      kartenNachIdVerzoegert: verzoegert,
+    })
+    await screen.findByTestId(`lauf-${startedAt(0)}`)
+
+    aufklappen(0)
+    await waitFor(() => expect(vorhabenAufrufe()).toHaveLength(1))
+    aufklappen(30)
+    freigeben()
+
+    expect(await within(lauf(0)).findByRole('button', { name: /^Vorhaben #9 / })).toBeInTheDocument()
+    expect(await within(lauf(30)).findByRole('button', { name: /^Vorhaben #9 / })).toBeInTheDocument()
+    expect(vorhabenAufrufe()).toHaveLength(1)
   })
 })
 
