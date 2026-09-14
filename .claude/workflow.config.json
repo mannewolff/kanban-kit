@@ -40,10 +40,9 @@
       ]
     },
     "plan": {
-      "reviewer": 2,
+      "reviewer": 1,
       "rollen": [
-        "architektur-bestand",
-        "schnitt-abhaengigkeiten"
+        "architektur-bestand"
       ]
     },
     "issue": {
@@ -52,7 +51,7 @@
         "pruefbarkeit"
       ]
     }
-  },
+  }, 
   "toolbox": {
     "host": "https://kanban.mwolff.org",
     "tokenFile": ".claude/toolbox.cli/tbx.token",
