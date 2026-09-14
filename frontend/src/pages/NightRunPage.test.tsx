@@ -3221,3 +3221,208 @@ describe('NightRunPage — Aufschlüsselung der gesichteten Karten (#873)', () =
     expect(within(panelEl).queryByTestId('aufschluesselung')).not.toBeInTheDocument()
   })
 })
+
+describe('NightRunPage — Kennzahlenzeile je Lauf-Art (#874)', () => {
+  /**
+   * Der Hinweis, den `night.mjs` genau dann an den Lauf-Kopf schreibt, wenn weder `--verbose`
+   * noch `--kette` gesetzt war — wörtlich wie dort und wie in `nightRunErgebnisstand.test.ts`.
+   */
+  const KENNZAHLEN_HINWEIS =
+    'Ohne --verbose fordert der Runner die Stream-Ausgabe der Session nicht an; die Session-Kennzahlen fehlen darum in allen Einheiten.'
+
+  /**
+   * Klappt einen frisch eingelesenen Lauf auf und gibt sein Panel zurück. Die Kennzahlenzeile
+   * steht **nur** am Ergebnisstand dieser Sitzung — Kosten und Züge verlassen den Browser nie
+   * (Plan #718, A1), der Server bewahrt sie nicht auf.
+   */
+  async function eingelesen(
+    ergebnisstand: string,
+    start: string,
+    dateiname: string,
+    antworten: Antworten,
+  ) {
+    renderPage(antworten)
+    await screen.findByText('Noch keine Auswertung vorhanden.')
+
+    protokollWaehlen(ergebnisstand, dateiname)
+
+    const panelEl = await screen.findByTestId(`lauf-${start}`)
+    fireEvent.click(within(panelEl).getByRole('button', { expanded: false }))
+    await within(panelEl).findByTestId('lauf-kennzahlen')
+    return panelEl
+  }
+
+  /** Die Kennzahlenzeile eines aufgeklappten Laufs. */
+  const zeile = (panelEl: HTMLElement) => within(within(panelEl).getByTestId('lauf-kennzahlen'))
+
+  const echterUmsetzungslauf = () =>
+    eingelesen(ECHTER_STAND, ECHTER_START, 'night-run-2026-09-07-085229.json', {
+      submit: { ergebnis: alleNeu(ECHTER_STAND) },
+      listen: [[], wieAufbewahrt(ECHTER_STAND)],
+    })
+
+  it('zählt den grünen und den gelben Vorgang als erledigt (Punkt 7)', async () => {
+    const panelEl = await echterUmsetzungslauf()
+
+    // #767 und #770 sind erfolgreich beendet, tragen aber `pruefung.zustand: "ungeprueft"` und
+    // werden dadurch **gelb**. Engt man „erledigt" auf den grünen Zustand ein, steht hier
+    // „0 von 5", obwohl zwei Pakete fertig wurden — die Gegenprobe zu Plan #864, E6.
+    expect(zeile(panelEl).getByText('2 von 5')).toBeInTheDocument()
+    expect(zeile(panelEl).getByText('Vorgänge erledigt')).toBeInTheDocument()
+  })
+
+  it('rechnet die Kosten der Nacht aus den fünf Einzelwerten und kennzeichnet sie (Punkt 8)', async () => {
+    const panelEl = await echterUmsetzungslauf()
+
+    // 2,1366 + 5,1342 + 10,8605 + 1,6051 + 8,1324 = 27,8688 US-Dollar. Der Stand selbst führt
+    // keine Summe — nur die Kette schreibt eine (Plan #864, E9).
+    expect(zeile(panelEl).getByText('27,87 $')).toBeInTheDocument()
+    expect(zeile(panelEl).getByText('Kosten der Nacht')).toBeInTheDocument()
+    expect(zeile(panelEl).getByText('gerechnet, nicht im Protokoll')).toBeInTheDocument()
+    // 38 + 63 + 123 + 33 + 121 Züge, dazu die Summe der fünf Vorgangsdauern.
+    expect(zeile(panelEl).getByText('378')).toBeInTheDocument()
+    expect(zeile(panelEl).getByText('51,5 min')).toBeInTheDocument()
+  })
+
+  it('nennt am Prüf-Lauf gesichtete zu bearbeiteten Karten und keine erledigten (Punkt 9)', async () => {
+    const panelEl = await eingelesen(
+      ECHTER_PRUEFLAUF_STAND,
+      ECHTER_PRUEFLAUF_START,
+      'night-run-2026-09-11-103116.json',
+      {
+        submit: { ergebnis: alleNeu(ECHTER_PRUEFLAUF_STAND) },
+        listen: [[], wieAufbewahrt(ECHTER_PRUEFLAUF_STAND)],
+      },
+    )
+
+    expect(zeile(panelEl).getByText('1 von 35')).toBeInTheDocument()
+    expect(zeile(panelEl).getByText('Karten bearbeitet')).toBeInTheDocument()
+    // „Erledigt" ergibt für einen Prüf-Lauf keinen Sinn — er erledigt keine Vorgänge, er sichtet
+    // Karten. Die Kennzahl erscheint nicht und bekommt auch keinen Platzhalter.
+    expect(zeile(panelEl).queryByText(/erledigt/)).not.toBeInTheDocument()
+  })
+
+  it('nennt am Erzeugungs-Lauf die entstandenen Dokumente (Punkt 10)', async () => {
+    const panelEl = await eingelesen(
+      ECHTE_ERZEUGUNG_STAND,
+      ECHTE_ERZEUGUNG_START,
+      'night-run-2026-09-09-125621.json',
+      { listen: [[]] },
+    )
+
+    // #479, #533 und #535 haben je ein Dokument hinterlassen; die 35 aussortierten Karten keines.
+    expect(zeile(panelEl).getByText('3')).toBeInTheDocument()
+    expect(zeile(panelEl).getByText('Dokumente entstanden')).toBeInTheDocument()
+    expect(zeile(panelEl).queryByText(/erledigt/)).not.toBeInTheDocument()
+    // #535 wurde in einer früheren Nacht fortgesetzt und meldet gar keine Kennzahlen — die Summe
+    // der beiden übrigen stimmt, sie ist nur unvollständig (Punkt 12 an echten Daten).
+    expect(zeile(panelEl).getByText('14,88 $')).toBeInTheDocument()
+    expect(
+      zeile(panelEl).getByText('gerechnet, unvollständig — ein Vorgang ohne Kostenmeldung'),
+    ).toBeInTheDocument()
+  })
+
+  it('zeigt den Kennzahlen-Hinweis einmal am Lauf statt jeder Fehlanzeige (Punkt 11)', async () => {
+    // Konstruiert: Keines der fünf Protokolle stammt aus einem Lauf ohne die ausführliche Ausgabe
+    // — dabei ist genau das der Regelfall eines Umsetzungs-Laufs (Plan #864, E8).
+    const MIT_HINWEIS = stand({
+      kennzahlenHinweis: KENNZAHLEN_HINWEIS,
+      einheiten: [
+        einheit({ ausgang: 'erfolg', commit: 'a1b2c3d', pruefung: GEPRUEFT }),
+        einheit({ id: '701', titel: 'Paket B', ausgang: 'fehlschlag', pruefung: NACHWEIS_ROT }),
+      ],
+    })
+    const panelEl = await eingelesen(MIT_HINWEIS, startedAt(0), 'night-run.json', {
+      submit: { ergebnis: alleNeu(MIT_HINWEIS) },
+      listen: [[], wieAufbewahrt(MIT_HINWEIS)],
+    })
+
+    expect(screen.getAllByText(KENNZAHLEN_HINWEIS)).toHaveLength(1)
+    expect(within(panelEl).queryByText('Kosten unbekannt')).not.toBeInTheDocument()
+    expect(within(panelEl).queryByText('Züge unbekannt')).not.toBeInTheDocument()
+    // Je Vorgang bleibt die gemessene Dauer stehen; die drei Fehlanzeigen für die nicht
+    // angeforderten Kennzahlen entfallen.
+    for (const nummer of [700, 701]) {
+      const vorgang = within(panelEl).getByTestId(`kennzahlen-${nummer}`)
+      expect(vorgang).toHaveTextContent('7 Min')
+      expect(vorgang.textContent).not.toContain('nicht gemeldet')
+    }
+  })
+
+  it('weist eine unvollständige Summe aus und kennt keine Null (Punkt 12)', async () => {
+    // Konstruiert: Ein Umsetzungs-Lauf, in dem ein Vorgang Kennzahlen meldet und der andere nicht.
+    const TEILWEISE = stand({
+      einheiten: [
+        einheit({ ausgang: 'erfolg', pruefung: GEPRUEFT, kennzahlen: { kostenUsd: 1.5, zuege: 7 } }),
+        einheit({ id: '701', titel: 'Paket B', ausgang: 'fehlschlag', pruefung: NACHWEIS_ROT }),
+      ],
+    })
+    const panelEl = await eingelesen(TEILWEISE, startedAt(0), 'night-run.json', {
+      submit: { ergebnis: alleNeu(TEILWEISE) },
+      listen: [[], wieAufbewahrt(TEILWEISE)],
+    })
+
+    expect(zeile(panelEl).getByText('1,50 $')).toBeInTheDocument()
+    expect(
+      zeile(panelEl).getByText('gerechnet, unvollständig — ein Vorgang ohne Kostenmeldung'),
+    ).toBeInTheDocument()
+  })
+
+  it('sagt ohne jede Kostenangabe und ohne Hinweis „Kosten unbekannt" (Punkt 12)', async () => {
+    const panelEl = await eingelesen(VIER_ZUSTAENDE, startedAt(0), 'night-run.json', {
+      submit: { ergebnis: alleNeu(VIER_ZUSTAENDE) },
+      listen: [[], wieAufbewahrt(VIER_ZUSTAENDE)],
+    })
+
+    // „0,00 $" behauptete eine Nacht ohne Kosten; gemeldet wurde nur nichts.
+    expect(zeile(panelEl).getByText('Kosten unbekannt')).toBeInTheDocument()
+    expect(zeile(panelEl).getByText('Züge unbekannt')).toBeInTheDocument()
+    expect(zeile(panelEl).queryByText(/0,00 \$/)).not.toBeInTheDocument()
+    expect(zeile(panelEl).queryByText(/gerechnet/)).not.toBeInTheDocument()
+    // Ohne den Kopf-Hinweis bleiben die Fehlanzeigen je Vorgang stehen: Hier fehlen die
+    // Kennzahlen wirklich, statt gar nicht erst angefordert worden zu sein.
+    expect(within(panelEl).getByTestId('kennzahlen-700')).toHaveTextContent('Kosten nicht gemeldet')
+  })
+
+  it('zeigt an einem Ketten-Lauf keine Kennzahlenzeile, sondern die Übersicht', async () => {
+    renderPage({
+      submit: { ergebnis: alleNeu(ECHTE_KETTE_STAND) },
+      listen: [[], wieAufbewahrt(ECHTE_KETTE_STAND)],
+    })
+    await screen.findByText('Noch keine Auswertung vorhanden.')
+
+    protokollWaehlen(ECHTE_KETTE_STAND, 'night-run-2026-09-14-131200.json')
+
+    const panelEl = await screen.findByTestId(`lauf-${ECHTE_KETTE_START}`)
+    fireEvent.click(within(panelEl).getByRole('button', { expanded: false }))
+    await within(panelEl).findByTestId('ketten-uebersicht')
+
+    // Die Kette führt ihre Kennzahlen bereits in der Übersicht (#866) — und ihre Kostensumme
+    // steht im Stand, statt gerechnet zu werden.
+    expect(within(panelEl).queryByTestId('lauf-kennzahlen')).not.toBeInTheDocument()
+  })
+
+  it('zeigt an einem aufbewahrten Lauf ohne Ergebnisstand keine Kennzahlenzeile', async () => {
+    renderPage({
+      listen: [
+        [
+          aufbewahrt({
+            id: 1,
+            startedAt: startedAt(0),
+            items: [
+              { id: 11, cardNumber: 700, title: 'Paket A', state: 'GREEN', durationMs: SIEBEN_MIN },
+            ],
+          }),
+        ],
+      ],
+      karten: { 700: karte({ id: 1, number: 700, title: 'Paket A' }) },
+    })
+    await screen.findByTestId(`lauf-${startedAt(0)}`)
+    aufklappen(0)
+    await within(lauf(0)).findByText('Vorhaben: ohne')
+
+    // Kosten und Züge bewahrt der Server nicht auf — eine Zeile aus lauter Fehlanzeigen wäre
+    // dieselbe Wand, die der Kennzahlen-Hinweis vermeidet.
+    expect(within(lauf(0)).queryByTestId('lauf-kennzahlen')).not.toBeInTheDocument()
+  })
+})

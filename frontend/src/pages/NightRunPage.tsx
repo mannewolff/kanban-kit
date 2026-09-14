@@ -769,14 +769,20 @@ const betrag = (wert: number | undefined): string =>
  * Der Vermerk fehlender Kostenmeldungen (AK 3 und AK 11 aus #859); `null`, wo nichts fehlt. Er
  * steht als Einschränkung neben der Summe, nicht als eigene Fehlermeldung: Die Summe stimmt, sie
  * ist nur unvollständig.
+ *
+ * <p>`eins` und `viele` benennen, **was** fehlt: Am Ketten-Lauf sind es die Arbeitsschritte einer
+ * Kette, an den drei übrigen Lauf-Arten die Vorgänge der Nacht (#874). Eine zweite Funktion mit
+ * derselben Pluralregel liefe beim nächsten Wortwechsel auseinander.
  */
-function ohneKostenmeldung(anzahl: number | undefined): string | null {
+function ohneKostenmeldung(
+  anzahl: number | undefined,
+  eins: string,
+  viele: string,
+): string | null {
   if (anzahl === undefined || anzahl === 0) {
     return null
   }
-  return anzahl === 1
-    ? 'ein Arbeitsschritt ohne Kostenmeldung'
-    : `${anzahl} Arbeitsschritte ohne Kostenmeldung`
+  return anzahl === 1 ? `${eins} ohne Kostenmeldung` : `${anzahl} ${viele} ohne Kostenmeldung`
 }
 
 /** Die Dokumente eines Arbeitsschritts — leer, wo der Vorgang ihn nicht mehr erreicht hat. */
@@ -933,10 +939,20 @@ function modellzeitText(dauerMs: number | undefined, kennzahlen: NightRunKennzah
  * <p>Eine **gemessene Null** ist dabei ein Wert: Der fortgesetzte Vorgang #535 der Nacht vom
  * 9. September trägt die Dauer null, weil in dieser Nacht keine Sitzung mehr lief. „0 s" ist dort
  * die Wahrheit, „nicht gemeldet" wäre die Lüge in die andere Richtung.
+ *
+ * <p><b>`ohneKennzahlen`</b> sagt, dass der Lauf die Sitzungs-Kennzahlen gar nicht erst angefordert
+ * hat (Issue #874, Plan #864 E8). Dann bleibt allein die Dauer stehen — sie stammt aus dem Lauf
+ * selbst und ist davon unberührt. Die drei Fehlanzeigen entfielen sonst nicht, obwohl der Lauf
+ * ihren Grund bereits einmal an seinem Kopf nennt.
  */
-function vorgangszeile(item: NightRunItem): string {
+function vorgangszeile(item: NightRunItem, ohneKennzahlen: boolean): string {
+  const dauer =
+    item.durationMs === undefined ? 'Dauer nicht gemeldet' : formatDuration(item.durationMs / 1000)
+  if (ohneKennzahlen) {
+    return dauer
+  }
   return [
-    item.durationMs === undefined ? 'Dauer nicht gemeldet' : formatDuration(item.durationMs / 1000),
+    dauer,
     item.kennzahlen?.kostenUsd === undefined
       ? 'Kosten nicht gemeldet'
       : betrag(item.kennzahlen.kostenUsd),
@@ -947,12 +963,98 @@ function vorgangszeile(item: NightRunItem): string {
 
 /** Kosten und Züge eines Vorgangs, dazu der Vermerk fehlender Kostenmeldungen (AK 11). */
 function vorgangsKennzahlen(kennzahlen: NightRunKennzahlen | undefined): string {
-  const vermerk = ohneKostenmeldung(kennzahlen?.kostenUnbekannt)
+  const vermerk = ohneKostenmeldung(
+    kennzahlen?.kostenUnbekannt,
+    'ein Arbeitsschritt',
+    'Arbeitsschritte',
+  )
   return [
     kennzahlen?.kostenUsd === undefined ? 'Kosten nicht gemeldet' : betrag(kennzahlen.kostenUsd),
     ...(kennzahlen?.zuege === undefined ? [] : [`${kennzahlen.zuege} Züge`]),
     ...(vermerk === null ? [] : [vermerk]),
   ].join(' · ')
+}
+
+/**
+ * Die Kosten der Nacht für einen Umsetzungs-, Erzeugungs- oder Prüf-Lauf (Issue #874): die Summe
+ * über die bearbeiteten Vorgänge, dazu der Zusatz, mit dem sie gekennzeichnet ist.
+ *
+ * <p><b>Immer gerechnet</b> (Plan #864, E9): Eine ausgewiesene Summe (`stand.kostenSumme`) schreibt
+ * allein die Kette; für diese drei Arten liegt nie eine vor. Der Zusatz steht deshalb beiläufig an
+ * der Zahl und nicht als Warnung — es ist dieselbe Addition, die der Runner selbst vornähme.
+ *
+ * <p><b>Bezugsgröße sind die bearbeiteten Vorgänge</b>, nicht alle gesichteten: Ein Prüf-Lauf
+ * sichtet 35 Karten und bearbeitet eine. Die 34 übergangenen zu den fehlenden Kostenmeldungen zu
+ * zählen, machte aus der Auswahlregel des Laufs einen Mangel.
+ *
+ * <p><b>Ohne jede Meldung steht kein Betrag</b>: „0,00 $" behauptete eine Nacht ohne Kosten, wo nur
+ * nichts gemeldet wurde.
+ */
+function laufkosten(bearbeitet: readonly NightRunItem[]): { wert: string; hinweis: string | null } {
+  const gemeldet = bearbeitet.flatMap((item) =>
+    item.kennzahlen?.kostenUsd === undefined ? [] : [item.kennzahlen.kostenUsd],
+  )
+  if (gemeldet.length === 0) {
+    return { wert: 'Kosten unbekannt', hinweis: null }
+  }
+  const fehlend = ohneKostenmeldung(
+    bearbeitet.length - gemeldet.length,
+    'ein Vorgang',
+    'Vorgänge',
+  )
+  return {
+    wert: KOSTEN_FORMAT.format(gemeldet.reduce((summe, wert) => summe + wert, 0)),
+    hinweis:
+      fehlend === null ? 'gerechnet, nicht im Protokoll' : `gerechnet, unvollständig — ${fehlend}`,
+  }
+}
+
+/**
+ * Die Züge des Modells über alle bearbeiteten Vorgänge — dieselbe Bezugsgröße und dieselbe
+ * Unterscheidung wie bei {@link laufkosten}: Eine Null wäre eine Behauptung über eine Nacht, die
+ * gar keine Zahl gemeldet hat.
+ */
+function laufZuege(bearbeitet: readonly NightRunItem[]): string {
+  const gemeldet = bearbeitet.flatMap((item) =>
+    item.kennzahlen?.zuege === undefined ? [] : [item.kennzahlen.zuege],
+  )
+  return gemeldet.length === 0
+    ? 'Züge unbekannt'
+    : ZAHL_FORMAT.format(gemeldet.reduce((summe, wert) => summe + wert, 0))
+}
+
+/**
+ * Die Kennzahl, die allein zu dieser Lauf-Art gehört (Issue #874, AK 2): „Karten entstanden" ergibt
+ * für einen Umsetzungs-Lauf keinen Sinn — er erledigt Vorgänge und erzeugt keine Karten —, und
+ * „erledigt" ergibt für einen Erzeugungs-Lauf keinen Sinn. Eine Kennzahl ohne Sinn für ihre Art
+ * erscheint deshalb gar nicht und bekommt auch keinen Platzhalter.
+ *
+ * <p><b>„Erledigt" ist grün oder gelb</b> (Plan #864, E6): Die Session hat das Paket abgeschlossen;
+ * ob die Prüfung grün war, entscheidet über die Farbe, nicht über „erledigt". Die beiden
+ * erfolgreichen Vorgänge der Nacht vom 7. September sind „ungeprüft" und damit gelb — „nur grün"
+ * ergäbe dort null von fünf, obwohl zwei Pakete fertig wurden.
+ *
+ * <p><b>„Bearbeitet" ist jeder nicht graue Vorgang</b> — dieselbe Grenze, die `processedCount` in
+ * der Kopfzeile des Laufs zieht und die die Aufschlüsselung darunter benutzt (E5).
+ *
+ * <p>Ein Ketten-Lauf erreicht diese Funktion nicht: Er trägt seine eigene Übersicht
+ * ({@link KettenUebersicht}), und die Kennzahlenzeile steht nur an den drei übrigen Arten.
+ */
+function artKennzahl(
+  run: NightRun,
+  bearbeitet: readonly NightRunItem[],
+): { wert: string; label: string } {
+  if (run.mode === 'IMPLEMENTATION') {
+    const erledigt = run.items.filter(
+      (item) => item.state === 'GREEN' || item.state === 'YELLOW',
+    ).length
+    return { wert: `${erledigt} von ${run.items.length}`, label: 'Vorgänge erledigt' }
+  }
+  if (run.mode === 'NIGHTPLAN') {
+    const dokumente = run.items.reduce((summe, item) => summe + (item.dokumenteAnzahl ?? 0), 0)
+    return { wert: `${dokumente}`, label: 'Dokumente entstanden' }
+  }
+  return { wert: `${bearbeitet.length} von ${run.items.length}`, label: 'Karten bearbeitet' }
 }
 
 /** Der Kopf der Übersicht: Modell, Label und Abschluss — jede Angabe nur, wo der Stand sie führt. */
@@ -1351,7 +1453,7 @@ function KettenUebersicht({
         <Kennzahl
           wert={betrag(stand?.kostenSumme)}
           label="Kosten der Nacht"
-          hinweis={ohneKostenmeldung(stand?.kostenUnbekannt)}
+          hinweis={ohneKostenmeldung(stand?.kostenUnbekannt, 'ein Arbeitsschritt', 'Arbeitsschritte')}
         />
       </Stack>
 
@@ -1395,6 +1497,64 @@ function KettenUebersicht({
 }
 
 /**
+ * Die Kennzahlen der Nacht für einen Umsetzungs-, Erzeugungs- oder Prüf-Lauf (Issue #874) — eine
+ * Zeile unter der Kopfzeile des Laufs, mit der art-eigenen Kennzahl vorneweg, dann Laufzeit, Kosten
+ * und Züge.
+ *
+ * <p><b>Sie liest den Ergebnisstand dieser Sitzung</b>, dieselbe Linie wie {@link KettenUebersicht}
+ * (Plan #863, E1) und {@link VorgangsKennzahlen}: Kosten und Züge verlassen den Browser nie
+ * (Plan #718, A1), der Server bewahrt sie nicht auf. Nach einem Neuladen der Seite fällt der Lauf
+ * auf Band bzw. Aufschlüsselung zurück — eine Zeile aus lauter Fehlanzeigen wäre dieselbe Wand,
+ * die der Kennzahlen-Hinweis unten vermeidet.
+ *
+ * <p><b>Die Laufzeit steht mit einer Nachkommastelle</b> und damit feiner als die grobkörnige
+ * Angabe der Kopfzeile darüber ({@link formatDuration} rundet auf ganze Minuten). Das ist die Form
+ * der Vorlage `docs/mockup-leitstand-laufarten.html` und hält die beiden Angaben auseinander,
+ * obwohl sie dieselbe Größe messen: Die Laufdauer eines Ergebnisstands **ist** die Summe der
+ * Vorgangsdauern (`parseNightRunErgebnisstand`), eine eigene Addition wäre eine zweite Rechenstelle.
+ *
+ * <p><b>Der Kennzahlen-Hinweis des Lauf-Kopfs verdrängt Kosten und Züge</b> (Plan #864, E8): Ohne
+ * die ausführliche Ausgabe fordert der Runner den Kennzahlen-Strom gar nicht erst an und schreibt
+ * den Grund einmal an den Lauf — das ist der Regelfall eines Umsetzungs-Laufs. „Kosten unbekannt"
+ * daneben behauptete ein Fehlen, wo nichts fehlt; es wurde nur nichts angefordert.
+ */
+function Laufkennzahlen({ run }: Readonly<{ run: NightRun }>) {
+  const bearbeitet = run.items.filter((item) => item.state !== 'GREY')
+  const art = artKennzahl(run, bearbeitet)
+  const hinweis = run.stand?.kennzahlenHinweis
+  const kosten = laufkosten(bearbeitet)
+
+  return (
+    <Box data-testid="lauf-kennzahlen" sx={{ mb: 2 }}>
+      <Stack direction="row" spacing={3} sx={{ flexWrap: 'wrap' }}>
+        <Kennzahl wert={art.wert} label={art.label} hinweis={null} />
+        <Kennzahl
+          wert={`${MINUTEN_FORMAT.format(run.durationMs / MINUTE_MS)} min`}
+          label="Laufzeit über alle Vorgänge"
+          hinweis={null}
+        />
+        {hinweis === undefined && (
+          <>
+            <Kennzahl wert={kosten.wert} label="Kosten der Nacht" hinweis={kosten.hinweis} />
+            <Kennzahl wert={laufZuege(bearbeitet)} label="Züge des Modells" hinweis={null} />
+          </>
+        )}
+      </Stack>
+      {hinweis !== undefined && (
+        <Typography
+          variant="body2"
+          color="text.secondary"
+          data-testid="lauf-kennzahlen-hinweis"
+          sx={{ mt: 1 }}
+        >
+          {hinweis}
+        </Typography>
+      )}
+    </Box>
+  )
+}
+
+/**
  * Die Kennzahlen je bearbeitetem Vorgang eines Umsetzungs-, Erzeugungs- oder Prüf-Laufs
  * (Issue #872): Dauer, Kosten, Züge und der Anteil der Modellarbeit an der Dauer.
  *
@@ -1419,6 +1579,9 @@ function VorgangsKennzahlen({ run }: Readonly<{ run: NightRun }>) {
   if (bearbeitet.length === 0) {
     return null
   }
+  // Hat der Lauf die Sitzungs-Kennzahlen gar nicht angefordert, nennt er den Grund einmal an
+  // seinem Kopf ({@link Laufkennzahlen}); je Vorgang stünde dann dreimal „fehlt" (#874).
+  const ohneKennzahlen = run.stand?.kennzahlenHinweis !== undefined
 
   return (
     <Stack spacing={1} data-testid="vorgangs-kennzahlen" sx={{ mb: 2 }}>
@@ -1430,7 +1593,7 @@ function VorgangsKennzahlen({ run }: Readonly<{ run: NightRun }>) {
             color="text.secondary"
             data-testid={`kennzahlen-${item.cardNumber}`}
           >
-            {vorgangszeile(item)}
+            {vorgangszeile(item, ohneKennzahlen)}
           </Typography>
         </Box>
       ))}
@@ -1840,6 +2003,9 @@ function LaufPanel({
         {stand !== undefined && lauf.mode === 'CHAIN' && (
           <KettenUebersicht run={stand} katalog={katalog} onOeffnen={onOeffnen} />
         )}
+        {/* Die Kennzahlen der Nacht stehen unter der Kopfzeile des Laufs und über allen
+            Einzelangaben (#874); die Kette trägt ihre eigenen in der Übersicht darüber. */}
+        {stand !== undefined && lauf.mode !== 'CHAIN' && <Laufkennzahlen run={stand} />}
         {/* Die drei Nicht-Ketten-Arten bekommen ihre Kennzahlen je Vorgang; die Kette führt sie
             bereits in ihrer Übersicht (#872, siehe `VorgangsKennzahlen`). */}
         {stand !== undefined && lauf.mode !== 'CHAIN' && <VorgangsKennzahlen run={stand} />}
