@@ -68,18 +68,25 @@ interface RohPruefung {
   fehler?: string
 }
 
+/** Was jede Stufe eines Ketten-Vorgangs traegt, unabhaengig von ihrer Art: ihre Dauer. */
+interface RohStufe {
+  dauerMs?: number
+}
+
 /**
- * Die Stufen eines Ketten-Vorgangs, so wie `stufenDerKette` in `night.mjs` sie schreibt.
- * Nur die beiden Stufen stehen hier, die ein **Dokument** hinterlassen — Plan und Pakete;
- * `review` und `abdeckung` erzeugen keines und entscheiden deshalb nichts.
+ * Die Stufen eines Ketten-Vorgangs, so wie `stufenDerKette` in `night.mjs` sie schreibt —
+ * in genau dieser Reihenfolge, siehe {@link KETTEN_STUFEN}. Ein eigenes Feld tragen nur die
+ * beiden Stufen, die ein **Dokument** hinterlassen: Plan und Pakete.
  *
  * <p>`plan.id` ist `string | null`, weil `stufePlan` den Block **vor** der Session anlegt
  * (`{ id: null, dauerMs: 0, … }`). Ein vorhandener Block sagt also nur, dass die Stufe
  * begonnen hat — ob ein Plan entstand, sagt allein die ID.
  */
 interface RohStufen {
-  plan?: { id: string | null }
-  pakete?: { ids: string[] }
+  plan?: RohStufe & { id: string | null }
+  review?: RohStufe
+  pakete?: RohStufe & { ids: string[] }
+  abdeckung?: RohStufe & { grund?: string }
 }
 
 /**
@@ -433,6 +440,101 @@ function deuteKettenAusgang(e: RohEinheit): (Farbe & { excerpt: string }) | null
   return { state, errorClass: 'TIME_BUDGET_EXCEEDED', excerpt: gekuerzt(grund) }
 }
 
+/** Eine erreichte Stufe, so wie ihre Zeile sie braucht: Name, Dokumente, eigener Grund. */
+interface ErreichteStufe {
+  name: string
+  dokumente: string
+  grund?: string
+}
+
+/**
+ * Die erreichten Stufen in der Reihenfolge, in der `stufenDerKette` sie laeuft — aus ihr
+ * allein folgt, wie jede ausging (siehe {@link stufenText}); der Stand fuehrt je Stufe
+ * keinen eigenen Ausgang.
+ *
+ * <p>Dokumente nennen nur Plan und Pakete; Pruefung und Abdeckung hinterlassen einen Marker
+ * beziehungsweise einen Text und haben nichts zu nennen. Einen eigenen `grund` traegt nur
+ * die Abdeckung.
+ */
+function erreichteStufen(stufen: RohStufen): ErreichteStufe[] {
+  const { plan, review, pakete, abdeckung } = stufen
+  return [
+    ...(plan === undefined
+      ? []
+      : [{ name: 'plan', dokumente: typeof plan.id === 'string' ? ` #${plan.id}` : '' }]),
+    ...(review === undefined ? [] : [{ name: 'review', dokumente: '' }]),
+    ...(pakete === undefined
+      ? []
+      : [
+          {
+            name: 'pakete',
+            dokumente:
+              pakete.ids.length === 0 ? '' : ` ${pakete.ids.map((id) => `#${id}`).join(', ')}`,
+          },
+        ]),
+    ...(abdeckung === undefined
+      ? []
+      : [{ name: 'abdeckung', dokumente: '', grund: abdeckung.grund }]),
+  ]
+}
+
+/** Der Ausgang der Einheit, wie ihn die letzte erreichte Stufe traegt — samt `grund`. */
+function ausgangDerEinheit(e: RohEinheit): string {
+  return typeof e.grund === 'string' ? `${e.ausgang} — ${e.grund}` : e.ausgang
+}
+
+/**
+ * Welche Stufen der Vorgang durchlaufen hat und wie jede ausging (AK 2 aus Issue #842) —
+ * als mehrzeiliger Text unter dem Auszug des Ausgangs, den der Leitstand mit
+ * `whiteSpace: 'pre-wrap'` rendert (Plan #849, E2).
+ *
+ * <p><b>Die Ableitung (E3):</b> `stufenDerKette` laeuft die vier Stufen streng sequenziell
+ * und bricht bei der ersten nicht fertigen ab; jede Stufenfunktion haengt ihren Stand
+ * **vor** der Session ein. Eine Stufe, die im Stand steht, hat also begonnen, alle ausser
+ * der letzten sind gelungen, und die letzte traegt den Ausgang der Einheit — bei `fertig`
+ * ebenfalls „gelungen".
+ *
+ * <p><b>Die Ausnahme Abdeckung (E3):</b> Sie ist eine Auskunft, kein Tor — `stufeAbdeckung`
+ * gibt auch bei Zeitbudget, Fehlstart oder fehlendem Text `{ ausgang: "fertig" }` zurueck
+ * und legt den Grund an der Stufe ab. Ein vorhandener `grund` bestimmt deshalb ihre Zeile,
+ * auch wenn die Einheit `fertig` ist; sonst hiesse eine gescheiterte Abdeckung „gelungen".
+ *
+ * @param kopf der Auszug des Ausgangs — er benennt Ausgang und `grund` der Einheit bereits
+ *   ausformuliert und steht dem Stufenblock deshalb voran
+ */
+function stufenText(e: RohEinheit, kopf: string): string {
+  if (e.stufen === undefined) return gekuerzt(kopf)
+  const erreicht = erreichteStufen(e.stufen)
+  const zeilen = erreicht.map((stufe, i) => {
+    const letzte = i === erreicht.length - 1
+    const ergebnis =
+      typeof stufe.grund === 'string'
+        ? stufe.grund
+        : !letzte || e.ausgang === 'fertig'
+          ? 'gelungen'
+          : ausgangDerEinheit(e)
+    return `${stufe.name}${stufe.dokumente}: ${ergebnis}`
+  })
+  return gekuerzt([kopf, ...zeilen].join('\n'))
+}
+
+/**
+ * Die Dauer einer Einheit (Plan #849, E12): ihr eigenes `dauerMs`, sonst die Summe ueber
+ * ihre Stufen — eine Ketten-Einheit traegt kein eigenes, jede ihrer Stufen eines.
+ *
+ * <p>`undefined` und nicht 0, wenn weder das eine noch das andere vorliegt: An einem
+ * zurueckgestellten oder uebersprungenen Paket stuende sonst ploetzlich „0s", wo heute gar
+ * keine Dauer steht (AK 9 aus Issue #842).
+ */
+function dauerDerEinheit(e: RohEinheit): number | undefined {
+  if (typeof e.dauerMs === 'number') return e.dauerMs
+  if (e.stufen === undefined) return undefined
+  return Object.values(e.stufen).reduce<number>(
+    (summe, stufe) => summe + (typeof stufe?.dauerMs === 'number' ? stufe.dauerMs : 0),
+    0,
+  )
+}
+
 /** Die Deutung einer Einheit; `null` heisst: Vokabular unbekannt, also nicht unterstuetzt. */
 function deuteEinheit(e: RohEinheit, modus: NightRunMode): (Farbe & { excerpt: string }) | null {
   if (modus === 'REVIEW') {
@@ -479,14 +581,16 @@ function deuteEinheit(e: RohEinheit, modus: NightRunMode): (Farbe & { excerpt: s
 function baueItem(e: RohEinheit, position: number, modus: NightRunMode): NightRunItem | null {
   const deutung = deuteEinheit(e, modus)
   if (!deutung) return null
+  const dauer = dauerDerEinheit(e)
   return {
     cardNumber: Number(e.id),
     title: e.titel,
     state: deutung.state,
     ...(deutung.errorClass === undefined ? {} : { errorClass: deutung.errorClass }),
-    ...(typeof e.dauerMs === 'number' ? { durationMs: e.dauerMs } : {}),
+    ...(dauer === undefined ? {} : { durationMs: dauer }),
     ...(typeof e.commit === 'string' ? { commit: e.commit } : {}),
-    excerpt: deutung.excerpt,
+    // Die Stufen stehen nur im Ketten-Stand; jeder andere Modus behaelt seinen Auszug.
+    excerpt: modus === 'CHAIN' ? stufenText(e, deutung.excerpt) : deutung.excerpt,
     position,
     // Der Ergebnisstand traegt kein Rohprotokoll — anders als das Textprotokoll, aus
     // dem `nightRunLog.ts` die Zeilen je Paket mitschreibt.
@@ -545,8 +649,10 @@ export function parseNightRunErgebnisstand(text: string): NightRunErgebnisstandR
       // Abschlusszeile `Nacht-Review beendet (Stufe …)` liest.
       ...(modus === 'REVIEW' ? { stage: lauf.stufe ?? REVIEW_STUFE_DEFAULT } : {}),
       // Dokumentierte Untergrenze: die Summe der Runden, ohne die Zeit zwischen ihnen
-      // (Board-Aufrufe, Gates). Der Stand traegt keinen Endzeitstempel.
-      durationMs: einheiten.reduce((summe, e) => summe + (e.dauerMs ?? 0), 0),
+      // (Board-Aufrufe, Gates). Der Stand traegt keinen Endzeitstempel. Dieselbe Rechnung
+      // wie am Arbeitspaket, damit Vorgangs- und Laufdauer per Konstruktion zusammenpassen;
+      // eine Einheit ohne jede Dauer zaehlt hier wie bisher als 0 (E12).
+      durationMs: einheiten.reduce((summe, e) => summe + (dauerDerEinheit(e) ?? 0), 0),
       processedCount: items.filter((i) => i.state !== 'GREY').length,
       skippedCount: items.filter((i) => i.state === 'GREY').length,
       // Es gibt nichts Ungedeutetes: Was nicht ins Vokabular passt, hat den ganzen

@@ -588,7 +588,8 @@ describe('parseNightRunErgebnisstand — Ketten-Lauf (Issue #854)', () => {
     )
     expect(item.state).toBe('RED')
     expect(item.errorClass).toBe('HARD_ABORT')
-    expect(item.excerpt).toBe(grund)
+    // Erste Zeile: Seit Issue #855 folgt dem Ausgang der Stufenblock der Einheit.
+    expect(item.excerpt.split('\n')[0]).toBe(grund)
   })
 
   it.each([
@@ -616,6 +617,110 @@ describe('parseNightRunErgebnisstand — Ketten-Lauf (Issue #854)', () => {
     const item = einziges(inKette({ ausgang, grund: auszug }))
     expect(item.state).toBe(state)
     expect(item.excerpt).toBe(auszug)
+  })
+})
+
+describe('parseNightRunErgebnisstand — Stufen und Dauer eines Ketten-Vorgangs (Issue #855)', () => {
+  /**
+   * Die Ausnahme aus E3: `stufeAbdeckung` laesst die Kette auch bei Zeitbudget, Fehlstart
+   * oder fehlendem Text `fertig` enden und legt den Grund an der Stufe ab. Ohne diese
+   * Ausnahme hiesse eine gescheiterte Abdeckung „gelungen" — genau die Falschaussage, die
+   * der Leitstand nicht machen darf. Konstruiert, weil der erste echte Ketten-Lauf keine
+   * Abdeckung mit `grund` enthaelt.
+   */
+  it('zeigt bei der Abdeckung ihren `grund` statt „gelungen", auch wenn die Einheit fertig ist', () => {
+    const item = einziges(
+      inKette({
+        ausgang: 'fertig',
+        stufen: {
+          plan: { id: '849' },
+          review: {},
+          pakete: { ids: ['855'] },
+          abdeckung: { grund: 'die Abdeckungs-Session lieferte keinen Text' },
+        },
+      }),
+    )
+    expect(item.excerpt.split('\n')).toEqual([
+      'Kette vollständig durchlaufen — Plan, Prüfung, Pakete, Abdeckung',
+      'plan #849: gelungen',
+      'review: gelungen',
+      'pakete #855: gelungen',
+      'abdeckung: die Abdeckungs-Session lieferte keinen Text',
+    ])
+  })
+
+  it('nennt nur die Stufen, die der Vorgang erreicht hat, und haengt den Ausgang an die letzte', () => {
+    const item = einziges(
+      inKette({
+        ausgang: 'angehalten',
+        grund: 'Stopp-Frage im Plan #849',
+        stufen: { plan: { id: '849' }, review: {} },
+      }),
+    )
+    expect(item.excerpt.split('\n')).toEqual([
+      'Stopp-Frage am Fachplan — die Kette wartet auf eine Entscheidung',
+      'plan #849: gelungen',
+      'review: angehalten — Stopp-Frage im Plan #849',
+    ])
+  })
+
+  // Denselben Rueckfall kennt die Ausgangs-Deutung (`grund`-Fallback `''`): Der Ausgang
+  // steht auch ohne Grund fest, und die Stufenzeile nennt dann eben nur ihn.
+  it('nennt an der letzten Stufe nur den Ausgang, wenn die Einheit keinen grund traegt', () => {
+    const item = einziges(inKette({ ausgang: 'abgebrochen', stufen: { plan: { id: '849' } } }))
+    expect(item.excerpt.split('\n')[1]).toBe('plan #849: abgebrochen')
+  })
+
+  it('nennt eine begonnene Plan-Stufe ohne Dokument ohne Nummer', () => {
+    const item = einziges(inKette({ ausgang: 'fertig', stufen: { plan: { id: null } } }))
+    expect(item.excerpt.split('\n')[1]).toBe('plan: gelungen')
+  })
+
+  it('nennt jede Paketnummer der Paket-Stufe', () => {
+    const item = einziges(
+      inKette({ ausgang: 'fertig', stufen: { pakete: { ids: ['847', '848'] } } }),
+    )
+    expect(item.excerpt.split('\n')[1]).toBe('pakete #847, #848: gelungen')
+  })
+
+  it('laesst den Auszug einer Einheit ohne Stufen-Block unveraendert', () => {
+    expect(einziges(inKette({ ausgang: 'fertig' })).excerpt).toBe(
+      'Kette vollständig durchlaufen — Plan, Prüfung, Pakete, Abdeckung',
+    )
+  })
+
+  it('kuerzt auch den Stufen-Text auf die gemeinsame Obergrenze', () => {
+    const grund = 'x'.repeat(NIGHT_RUN_EXCERPT_MAX)
+    const item = einziges(
+      inKette({ ausgang: 'fertig', stufen: { abdeckung: { grund } } }),
+    )
+    expect(item.excerpt).toHaveLength(NIGHT_RUN_EXCERPT_MAX)
+  })
+
+  it('summiert die Dauer eines Ketten-Vorgangs aus seinen Stufen', () => {
+    const item = einziges(
+      inKette({
+        ausgang: 'fertig',
+        stufen: { plan: { id: '849', dauerMs: 1000 }, review: { dauerMs: 2000 } },
+      }),
+    )
+    expect(item.durationMs).toBe(3000)
+  })
+
+  it('bevorzugt ein vorhandenes dauerMs der Einheit vor der Summe ihrer Stufen', () => {
+    const item = einziges(
+      inKette({ ausgang: 'fertig', dauerMs: 42, stufen: { plan: { id: '849', dauerMs: 1000 } } }),
+    )
+    expect(item.durationMs).toBe(42)
+  })
+
+  /**
+   * AK 9 aus #842: Ein zurueckgestelltes oder uebersprungenes Paket ohne `dauerMs` und ohne
+   * Stufen zeigt heute **keine** Dauer — eine leere Summe duerfte daraus kein „0s" machen.
+   */
+  it('erzeugt ohne dauerMs und ohne Stufen-Block keine Dauer am Arbeitspaket', () => {
+    const item = einziges(inKette({ ausgang: 'uebersprungen', grund: "kein Label 'kit:night'" }))
+    expect(item).not.toHaveProperty('durationMs')
   })
 })
 
@@ -914,9 +1019,35 @@ describe('parseNightRunErgebnisstand — echter Ketten-Lauf (2026-09-14-131200)'
   it('deutet den Zeitbudget-Abbruch #842 gelb — der Plan #849 ist trotzdem entstanden', () => {
     expect(nach(842)?.state).toBe('YELLOW')
     expect(nach(842)?.errorClass).toBe('TIME_BUDGET_EXCEEDED')
-    expect(nach(842)?.excerpt).toBe(
+    expect(nach(842)?.excerpt.split('\n')[0]).toBe(
       'Zeitbudget review: die Session wurde nach 15.0 min am Limit beendet',
     )
+  })
+
+  it('nennt im Auszug der fertigen Kette #791 alle vier Stufen mit ihren Dokumenten (AK 2)', () => {
+    expect(nach(791)?.excerpt.split('\n')).toEqual([
+      'Kette vollständig durchlaufen — Plan, Prüfung, Pakete, Abdeckung',
+      'plan #844: gelungen',
+      'review: gelungen',
+      'pakete #845: gelungen',
+      'abdeckung: gelungen',
+    ])
+  })
+
+  it('nennt im Auszug des Abbruchs #842 nur die erreichten Stufen — Plan gelungen, Review am Limit (AK 2)', () => {
+    expect(nach(842)?.excerpt.split('\n')).toEqual([
+      'Zeitbudget review: die Session wurde nach 15.0 min am Limit beendet',
+      'plan #849: gelungen',
+      'review: abgebrochen — Zeitbudget review: die Session wurde nach 15.0 min am Limit beendet',
+    ])
+  })
+
+  it('summiert die Dauer des Vorgangs #842 aus seinen beiden Stufen (AK 6)', () => {
+    expect(nach(842)?.durationMs).toBe(439741 + 900484)
+  })
+
+  it('summiert die Laufdauer ueber alle drei Vorgaenge (AK 6)', () => {
+    expect(r.durationMs).toBe(1533322 + 1274784 + 1340225)
   })
 })
 
