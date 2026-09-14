@@ -125,9 +125,8 @@ export function sortEpics(epics: Epic[], cards: Card[], labels: Label[]): Epic[]
 }
 
 /**
- * Die im Kachelraster sichtbaren Vorhaben (Plan #703, E5). Dasselbe Muster wie
- * `hiddenCardNumbers` in `hiddenCards.ts`: Die Sichtbarkeitsregel liegt hier testbar, ohne dass
- * eine Seite gerendert werden muss.
+ * Die Filterregel hinter `visibleEpics` und `selectableEpics` — beide beantworten verschiedene
+ * Fragen, rechnen aber gleich (Plan #846, E7).
  *
  * Gefiltert wird über `Epic.id`, **nicht** über `Epic.number` — so ist der Zustand geschlüsselt
  * (`boardHiddenEpics.ts`), und so liest ihn das Board. Eine zweite Schlüsselung wäre ein stiller
@@ -135,38 +134,42 @@ export function sortEpics(epics: Epic[], cards: Card[], labels: Label[]): Epic[]
  *
  * Eine ID in `hidden` ohne zugehöriges Vorhaben wird übergangen: Der `localStorage`-Zustand
  * überlebt das Löschen eines Vorhabens, der Fall ist der Regelfall und kein Fehler.
- *
- * Aufgerufen wird **nach** `sortEpics` — `visibleEpics(sortEpics(...), …)`. Reine Funktion: Das
- * Eingabe-Array bleibt unverändert und wird in keinem Zweig durchgereicht.
- *
- * @param epics Vorhaben des Boards, bereits sortiert
- * @param hidden IDs der ausgeblendeten Vorhaben (`Epic.id`)
- * @param zeigeAusgeblendete `true` blendet nichts aus — der Zeige-Modus der Seite
  */
-export function visibleEpics(
-  epics: readonly Epic[],
-  hidden: ReadonlySet<number>,
-  zeigeAusgeblendete: boolean,
-): Epic[] {
-  if (zeigeAusgeblendete) return [...epics]
+function ohneAusgeblendete(epics: readonly Epic[], hidden: ReadonlySet<number>): Epic[] {
   return epics.filter((epic) => !hidden.has(epic.id))
 }
 
 /**
- * Die in einem Formular auswählbaren Vorhaben (Plan #717, A1). Filtert nach derselben Regel und
- * über denselben Schlüssel wie `visibleEpics` — aber **ohne** dessen dritten Parameter
- * `zeigeAusgeblendete`.
+ * Die im Kachelraster sichtbaren Vorhaben (Plan #703, E5). Dasselbe Muster wie
+ * `hiddenCardNumbers` in `hiddenCards.ts`: Die Sichtbarkeitsregel liegt hier testbar, ohne dass
+ * eine Seite gerendert werden muss.
  *
- * Das ist Absicht und kein übersehener Parameter: Der Umschalter „Ausgeblendete zeigen" der
- * Vorhaben-Seite steuert deren Kachelraster. Zöge er hier mit, entschiede eine Ansichtseinstellung
- * darüber, was man einer Karte zuordnen kann.
+ * Filtert **immer**. Der frühere dritte Parameter für den Zeige-Modus der Seite ist entfallen: Seit
+ * Issue #848 zeigt die Vorhaben-Seite im Zeige-Modus gar kein Raster mehr, sondern eine Liste — ein
+ * Durchreich-Zweig wäre toter Code (Plan #846, E6).
  *
- * Eine ID in `hidden` ohne zugehöriges Vorhaben wird übergangen (siehe `visibleEpics`). Reine
- * Funktion: Das Eingabe-Array bleibt unverändert.
+ * Aufgerufen wird **nach** `sortEpics` — `visibleEpics(sortEpics(...), …)`. Reine Funktion: Das
+ * Eingabe-Array bleibt unverändert.
+ *
+ * @param epics Vorhaben des Boards, bereits sortiert
+ * @param hidden IDs der ausgeblendeten Vorhaben (`Epic.id`)
+ */
+export function visibleEpics(epics: readonly Epic[], hidden: ReadonlySet<number>): Epic[] {
+  return ohneAusgeblendete(epics, hidden)
+}
+
+/**
+ * Die in einem Formular auswählbaren Vorhaben (Plan #717, A1). Rechnet dasselbe wie
+ * `visibleEpics` und beantwortet doch eine andere Frage: „was ist einer Karte zuordenbar" gegen
+ * „was steht im Raster".
+ *
+ * Beide Namen bleiben deshalb bestehen, obwohl sie an dieselbe Hilfsfunktion delegieren
+ * (Plan #846, E7): Zusammengelegt zöge eine spätere Änderung an der Rasteransicht stillschweigend
+ * den Optionsvorrat des Karten-Dialogs mit.
  *
  * @param epics Vorhaben des Boards, bereits sortiert
  * @param hidden IDs der ausgeblendeten Vorhaben (`Epic.id`)
  */
 export function selectableEpics(epics: readonly Epic[], hidden: ReadonlySet<number>): Epic[] {
-  return epics.filter((epic) => !hidden.has(epic.id))
+  return ohneAusgeblendete(epics, hidden)
 }

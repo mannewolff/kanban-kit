@@ -112,6 +112,17 @@ describe('EpicsPage', () => {
   const kachelIds = () =>
     screen.queryAllByTestId(/^vorhaben-kachel-/).map((k) => k.dataset.testid)
 
+  /** Die IDs der Zeilen in der Liste, in angezeigter Reihenfolge. */
+  const zeilenIds = () =>
+    screen.queryAllByTestId(/^vorhaben-zeile-/).map((z) => z.dataset.testid)
+
+  /**
+   * Der Umschalter zwischen Kachel- und Listenansicht. Steht auf der äußeren Ebene, weil ihn seit
+   * Issue #848 drei Blöcke brauchen — das ⋮-Menü, die Listenansicht und die Vorhaben-Auswahl im
+   * Detail-Dialog.
+   */
+  const umschalter = () => screen.getByLabelText(/^Ausgeblendete zeigen/)
+
   it('zeigt den Breadcrumb-Pfad ab Projekte', async () => {
     mEpics.list.mockResolvedValue([])
     renderPage()
@@ -585,8 +596,6 @@ describe('EpicsPage', () => {
         </MemoryRouter>,
       )
 
-    const umschalter = () => screen.getByLabelText(/^Ausgeblendete zeigen/)
-
     it('nimmt die Kachel über „Ausblenden" aus dem Raster', async () => {
       stubStore([])
       mEpics.list.mockResolvedValue([auth, zahlung])
@@ -625,7 +634,7 @@ describe('EpicsPage', () => {
       expect(store.has(hiddenEpicsStorageKey(1))).toBe(false)
     })
 
-    it('holt Ausgeblendete über den Umschalter zurück, gekennzeichnet, und blendet sie wieder ein', async () => {
+    it('holt Ausgeblendete über den Umschalter in die Liste und blendet sie dort wieder ein', async () => {
       const store = stubStore([[hiddenEpicsStorageKey(1), JSON.stringify([9])]])
       mEpics.list.mockResolvedValue([auth, zahlung])
       renderAufBoard('/boards/1/vorhaben')
@@ -635,19 +644,22 @@ describe('EpicsPage', () => {
 
       fireEvent.click(umschalter())
 
-      const kachel = await screen.findByTestId('vorhaben-kachel-9')
+      const zeile = await screen.findByTestId('vorhaben-zeile-9')
       // Ein sichtbarer Text, keine bloße Dimmung: Nur so ist der Zustand für Screenreader
       // wahrnehmbar und im Test ohne geratenen Stilwert greifbar.
-      expect(within(kachel).getByText('Ausgeblendet')).toBeInTheDocument()
+      expect(within(zeile).getByText('Ausgeblendet')).toBeInTheDocument()
 
-      await oeffneMenue(auth)
-      fireEvent.click(screen.getByRole('menuitem', { name: 'Einblenden' }))
+      // Eingeblendet wird in der Liste, nicht über das Kachel-Menü: Im Raster steht ein
+      // ausgeblendetes Vorhaben nicht mehr, sein Menü wäre unerreichbar (fachlich #814, AK 9).
+      fireEvent.click(within(zeile).getByLabelText('Vorhaben AUT einblenden'))
 
-      await waitFor(() => expect(JSON.parse(store.get(hiddenEpicsStorageKey(1)) as string)).toEqual([]))
-      expect(within(screen.getByTestId('vorhaben-kachel-9')).queryByText('Ausgeblendet')).toBeNull()
-      // Mit dem letzten eingeblendeten Vorhaben verschwindet der Umschalter — und damit der
-      // Zeige-Modus, der nun nichts mehr zu zeigen hätte.
-      expect(screen.queryByLabelText(/^Ausgeblendete zeigen/)).toBeNull()
+      // Die leere Menge löscht den Schlüssel, statt ein aussageloses `[]` zu hinterlassen — mit der
+      // Liste ist das Leeren der Menge der Regelfall (Plan #846, E8).
+      await waitFor(() => expect(store.has(hiddenEpicsStorageKey(1))).toBe(false))
+      expect(within(screen.getByTestId('vorhaben-zeile-9')).queryByText('Ausgeblendet')).toBeNull()
+      // Der Umschalter bleibt, und die Seite bleibt in der Liste: Sie zeigt jetzt alle Vorhaben,
+      // von denen keines mehr ausgeblendet ist.
+      expect(umschalter()).toBeChecked()
     })
 
     it('zählt am Umschalter keine verwaiste ID mit, zu der kein Vorhaben existiert', async () => {
@@ -660,13 +672,15 @@ describe('EpicsPage', () => {
       expect(await screen.findByLabelText('Ausgeblendete zeigen (1)')).toBeInTheDocument()
     })
 
-    it('zeigt den Umschalter nicht, solange nichts ausgeblendet ist', async () => {
+    it('zeigt den Umschalter auch dann, wenn nichts ausgeblendet ist', async () => {
       stubStore([])
       mEpics.list.mockResolvedValue([auth, zahlung])
       renderAufBoard('/boards/1/vorhaben')
 
       await screen.findByTestId('vorhaben-kachel-9')
-      expect(screen.queryByLabelText(/^Ausgeblendete zeigen/)).toBeNull()
+      // Er schaltet zwischen Raster und Liste — und die Liste ist auch dann etwas wert, wenn noch
+      // nichts ausgeblendet ist (fachlich #814, AK 1).
+      expect(screen.getByLabelText('Ausgeblendete zeigen (0)')).toBeInTheDocument()
     })
 
     it('filtert ohne gespeicherten Schlüssel keine einzige Kachel', async () => {
@@ -785,7 +799,9 @@ describe('EpicsPage', () => {
 
       await screen.findByTestId('vorhaben-kachel-9')
       expect(kachelIds()).toEqual(['vorhaben-kachel-9', 'vorhaben-kachel-10'])
-      expect(screen.queryByLabelText(/^Ausgeblendete zeigen/)).toBeNull()
+      // Der Umschalter hängt an den Vorhaben, nicht am Ausblende-Zustand — ein defektes
+      // `localStorage` nimmt ihn deshalb nicht weg, es lässt nur die Zahl bei „0".
+      expect(screen.getByLabelText('Ausgeblendete zeigen (0)')).toBeInTheDocument()
     })
 
     it('ist per Tastatur erreichbar und auslösbar', async () => {
@@ -795,10 +811,13 @@ describe('EpicsPage', () => {
       renderPage()
       const knopf = within(await screen.findByTestId('vorhaben-kachel-9')).getByLabelText('Menü Auth')
 
-      // Vom letzten Bedienelement vor dem Raster einen Tab weiter: Dieses Vorhaben trägt keine
-      // Anforderung, die Kachel enthält vor dem ⋮-Knopf also nichts Fokussierbares. Das belegt,
-      // dass er in der Tab-Reihenfolge liegt und nicht bloß per Maus zu treffen ist.
+      // Vom letzten Bedienelement vor dem Raster über den stets sichtbaren Umschalter zum
+      // ⋮-Knopf: Dieses Vorhaben trägt keine Anforderung, die Kachel enthält vor dem ⋮-Knopf also
+      // nichts Fokussierbares. Das belegt, dass er in der Tab-Reihenfolge liegt und nicht bloß per
+      // Maus zu treffen ist.
       screen.getByRole('button', { name: 'Neues Vorhaben' }).focus()
+      await user.tab()
+      expect(umschalter()).toHaveFocus()
       await user.tab()
       expect(knopf).toHaveFocus()
 
@@ -806,6 +825,200 @@ describe('EpicsPage', () => {
       await user.click(await screen.findByRole('menuitem', { name: 'Ausblenden' }))
 
       await waitFor(() => expect(kachelIds()).toEqual([]))
+    })
+  })
+
+  // --- Listenansicht statt Kachelraster (Issue #848, fachlich #814) ----------
+
+  /**
+   * Die zehn Kriterien AK 1 bis AK 10 aus Issue #814 — je ein Testfall. AK 11 (Tastatur und
+   * Wahrnehmbarkeit der Schalterstellung) liegt an der Komponente selbst und ist in
+   * `EpicVisibilityList.test.tsx` belegt.
+   */
+  describe('Listenansicht', () => {
+    const auth = {
+      id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 0, total: 1,
+      memberNumbers: [1], rootNumbers: [1], requirementCardNumber: null,
+    }
+    const pflege = {
+      id: 11, number: 4, title: 'Pflege', description: null, shortcode: 'PFL', done: 0, total: 1,
+      memberNumbers: [3], rootNumbers: [3], requirementCardNumber: null,
+    }
+    const zahlung = {
+      id: 10, number: 3, title: 'Zahlung', description: null, shortcode: 'ZAH', done: 0, total: 1,
+      memberNumbers: [2], rootNumbers: [2], requirementCardNumber: null,
+    }
+    /** Absichtlich unsortiert übergeben: `sortEpics` ordnet nach Kürzel zu AUT, PFL, ZAH. */
+    const drei = [zahlung, auth, pflege]
+
+    const zeilenSchalter = (zeile: HTMLElement, kuerzel: string, aktion: string) =>
+      within(zeile).getByLabelText(`Vorhaben ${kuerzel} ${aktion}`)
+
+    it('AK 1: zeigt den Umschalter mit „(0)", sobald das Board ein Vorhaben hat', async () => {
+      stubStore([])
+      mEpics.list.mockResolvedValue(drei)
+      renderPage()
+
+      expect(await screen.findByLabelText('Ausgeblendete zeigen (0)')).toBeInTheDocument()
+      expect(umschalter()).not.toBeChecked()
+    })
+
+    it('AK 1: lässt den Umschalter bei einem Board ohne Vorhaben aus', async () => {
+      stubStore([])
+      mEpics.list.mockResolvedValue([])
+      renderPage()
+
+      await screen.findByText('Noch keine Vorhaben.')
+      expect(screen.queryByLabelText(/^Ausgeblendete zeigen/)).toBeNull()
+    })
+
+    it('AK 2: zeigt bei ausgeschaltetem Umschalter das Raster ohne die Ausgeblendeten', async () => {
+      stubStore([[hiddenEpicsStorageKey(1), JSON.stringify([11])]])
+      mEpics.list.mockResolvedValue(drei)
+      renderPage()
+
+      await screen.findByTestId('vorhaben-kachel-9')
+      expect(kachelIds()).toEqual(['vorhaben-kachel-9', 'vorhaben-kachel-10'])
+      expect(screen.queryByTestId('vorhaben-liste')).toBeNull()
+    })
+
+    it('AK 3: zeigt im Zeige-Modus kein Raster, sondern eine Zeile je Vorhaben', async () => {
+      stubStore([[hiddenEpicsStorageKey(1), JSON.stringify([11])]])
+      mEpics.list.mockResolvedValue(drei)
+      renderPage()
+
+      fireEvent.click(await screen.findByLabelText(/^Ausgeblendete zeigen/))
+
+      expect(await screen.findByTestId('vorhaben-liste')).toBeInTheDocument()
+      // Kein dritter Zustand: Das Raster ist fort, nicht bloß um die Liste ergänzt.
+      expect(screen.queryByTestId('vorhaben-raster')).toBeNull()
+      expect(kachelIds()).toEqual([])
+      // Eingeblendete und Ausgeblendete gemeinsam, jedes genau einmal.
+      expect(zeilenIds()).toEqual(['vorhaben-zeile-9', 'vorhaben-zeile-11', 'vorhaben-zeile-10'])
+      // Kopf, „Neues Vorhaben" und Umschalter stehen ausserhalb der Verzweigung.
+      expect(screen.getByRole('button', { name: 'Neues Vorhaben' })).toBeInTheDocument()
+      expect(screen.getByRole('link', { name: 'Projekte' })).toBeInTheDocument()
+    })
+
+    it('AK 4: hält die Reihenfolge vor dem Ausfiltern und verschiebt beim Schalten nichts', async () => {
+      stubStore([[hiddenEpicsStorageKey(1), JSON.stringify([11])]])
+      mEpics.list.mockResolvedValue(drei)
+      renderPage()
+
+      // Die Kachelansicht lässt PFL aus, die Liste führt es an derselben Stelle wie ohne Filter.
+      await screen.findByTestId('vorhaben-kachel-9')
+      expect(kachelIds()).toEqual(['vorhaben-kachel-9', 'vorhaben-kachel-10'])
+
+      fireEvent.click(umschalter())
+      const vorher = zeilenIds()
+      expect(vorher).toEqual(['vorhaben-zeile-9', 'vorhaben-zeile-11', 'vorhaben-zeile-10'])
+
+      fireEvent.click(zeilenSchalter(screen.getByTestId('vorhaben-zeile-11'), 'PFL', 'einblenden'))
+
+      await waitFor(() =>
+        expect(zeilenSchalter(screen.getByTestId('vorhaben-zeile-11'), 'PFL', 'ausblenden')).toBeChecked(),
+      )
+      expect(zeilenIds()).toEqual(vorher)
+    })
+
+    it('AK 5: schreibt ein Umlegen in der Liste sofort fort und filtert danach das Raster', async () => {
+      const store = stubStore([])
+      mEpics.list.mockResolvedValue(drei)
+      renderPage()
+
+      fireEvent.click(await screen.findByLabelText(/^Ausgeblendete zeigen/))
+      fireEvent.click(zeilenSchalter(await screen.findByTestId('vorhaben-zeile-9'), 'AUT', 'ausblenden'))
+
+      // Derselbe Schlüssel und dasselbe Format, die das Board liest (`lib/boardHiddenEpics`).
+      await waitFor(() =>
+        expect(JSON.parse(store.get(hiddenEpicsStorageKey(1)) as string)).toEqual([9]),
+      )
+
+      fireEvent.click(umschalter())
+
+      await waitFor(() => expect(kachelIds()).toEqual(['vorhaben-kachel-11', 'vorhaben-kachel-10']))
+    })
+
+    it('AK 6: zieht die Zahl am Umschalter jedem Umlegen in der Liste sofort nach', async () => {
+      stubStore([])
+      mEpics.list.mockResolvedValue(drei)
+      renderPage()
+
+      fireEvent.click(await screen.findByLabelText('Ausgeblendete zeigen (0)'))
+      fireEvent.click(zeilenSchalter(await screen.findByTestId('vorhaben-zeile-9'), 'AUT', 'ausblenden'))
+
+      expect(await screen.findByLabelText('Ausgeblendete zeigen (1)')).toBeInTheDocument()
+
+      fireEvent.click(zeilenSchalter(screen.getByTestId('vorhaben-zeile-10'), 'ZAH', 'ausblenden'))
+
+      expect(await screen.findByLabelText('Ausgeblendete zeigen (2)')).toBeInTheDocument()
+    })
+
+    it('AK 7: lässt die Liste beim Ausblenden und beim letzten Einblenden stehen', async () => {
+      stubStore([[hiddenEpicsStorageKey(1), JSON.stringify([9])]])
+      mEpics.list.mockResolvedValue(drei)
+      renderPage()
+
+      fireEvent.click(await screen.findByLabelText(/^Ausgeblendete zeigen/))
+
+      // Ausblenden nimmt die Zeile nicht aus der Liste — anders als im Raster.
+      fireEvent.click(zeilenSchalter(await screen.findByTestId('vorhaben-zeile-10'), 'ZAH', 'ausblenden'))
+      await waitFor(() =>
+        expect(zeilenSchalter(screen.getByTestId('vorhaben-zeile-10'), 'ZAH', 'einblenden')).toBeInTheDocument(),
+      )
+      expect(zeilenIds()).toHaveLength(3)
+
+      // Und die Seite bleibt in der Liste, auch wenn nichts mehr ausgeblendet ist.
+      fireEvent.click(zeilenSchalter(screen.getByTestId('vorhaben-zeile-9'), 'AUT', 'einblenden'))
+      fireEvent.click(zeilenSchalter(screen.getByTestId('vorhaben-zeile-10'), 'ZAH', 'einblenden'))
+
+      expect(await screen.findByLabelText('Ausgeblendete zeigen (0)')).toBeInTheDocument()
+      expect(screen.getByTestId('vorhaben-liste')).toBeInTheDocument()
+      expect(screen.queryByTestId('vorhaben-raster')).toBeNull()
+    })
+
+    it('AK 8: öffnet ein Vorhaben aus der Liste im Detail-Dialog', async () => {
+      stubStore([])
+      mEpics.list.mockResolvedValue(drei)
+      renderPage()
+
+      fireEvent.click(await screen.findByLabelText(/^Ausgeblendete zeigen/))
+      fireEvent.click(within(await screen.findByTestId('vorhaben-zeile-9')).getByText('Auth'))
+
+      const dialog = await screen.findByRole('dialog')
+      expect(within(dialog).getByLabelText('Fortschritt')).toHaveTextContent('0 von 1 fertig')
+    })
+
+    it('AK 9: blendet in der Kachelansicht weiterhin über das ⋮-Menü aus', async () => {
+      const store = stubStore([])
+      mEpics.list.mockResolvedValue(drei)
+      renderPage()
+
+      await oeffneMenue(auth)
+      fireEvent.click(screen.getByRole('menuitem', { name: 'Ausblenden' }))
+
+      await waitFor(() => expect(kachelIds()).toEqual(['vorhaben-kachel-11', 'vorhaben-kachel-10']))
+      expect(JSON.parse(store.get(hiddenEpicsStorageKey(1)) as string)).toEqual([9])
+    })
+
+    it('AK 10: lässt einen Nur-Leser in der Liste schalten', async () => {
+      // Ausblenden verändert nichts am Server — einem VIEWER zu verbieten, seine eigene Ansicht
+      // aufzuräumen, wäre keine Schutzwirkung (Plan #846, E12).
+      const store = stubStore([])
+      mBoards.get.mockResolvedValue({ id: 1, projectId: 42, name: 'B', createdAt: '', columns: [] })
+      mProjects.list.mockResolvedValue([{ id: 42, name: 'Fremd', role: 'VIEWER', createdAt: '' }])
+      mEpics.list.mockResolvedValue(drei)
+      renderPage()
+
+      await waitFor(() => expect(mProjects.list).toHaveBeenCalled())
+      expect(screen.queryByRole('button', { name: 'Neues Vorhaben' })).not.toBeInTheDocument()
+
+      fireEvent.click(umschalter())
+      fireEvent.click(zeilenSchalter(await screen.findByTestId('vorhaben-zeile-9'), 'AUT', 'ausblenden'))
+
+      await waitFor(() =>
+        expect(JSON.parse(store.get(hiddenEpicsStorageKey(1)) as string)).toEqual([9]),
+      )
     })
   })
 
@@ -841,10 +1054,13 @@ describe('EpicsPage', () => {
       mCards.list.mockResolvedValue([anforderung(null)])
       renderPage()
 
-      fireEvent.click(await screen.findByLabelText(/^Ausgeblendete zeigen/))
-      await screen.findByTestId('vorhaben-kachel-9')
+      // Die Karte wird VOR dem Umschalten aus dem Raster geöffnet: Den Anforderungs-Verweis gibt es
+      // nur auf der Kachel, nicht in der Liste. Der Dialog steht ausserhalb der Verzweigung und
+      // bleibt beim Umschalten offen.
+      fireEvent.click(await screen.findByRole('button', { name: '#4 · Anforderung' }))
+      await screen.findByRole('dialog')
+      fireEvent.click(umschalter())
 
-      fireEvent.click(screen.getByRole('button', { name: '#4 · Anforderung' }))
       fireEvent.click(await screen.findByRole('button', { name: 'Bearbeiten' }))
 
       expect(await screen.findByRole('option', { name: 'ZAH – Zahlung' })).toBeInTheDocument()
@@ -866,13 +1082,14 @@ describe('EpicsPage', () => {
       expect(screen.queryByRole('option', { name: 'AUT – Auth' })).toBeNull()
     })
 
-    it('zeigt am ausgeblendeten Vorhaben im Zeige-Modus weiterhin seinen Fortschritt', async () => {
+    it('zeigt am ausgeblendeten Vorhaben aus der Liste weiterhin seinen Fortschritt', async () => {
       stubStore([[hiddenEpicsStorageKey(1), JSON.stringify([9])]])
       mEpics.list.mockResolvedValue([auth, zahlung])
       renderPage()
 
       fireEvent.click(await screen.findByLabelText(/^Ausgeblendete zeigen/))
-      fireEvent.click(await screen.findByTestId('vorhaben-kachel-9'))
+      const zeile = await screen.findByTestId('vorhaben-zeile-9')
+      fireEvent.click(within(zeile).getByText('Auth'))
 
       // Fortschritt und Titel kommen aus `epics` — die Filterung trifft nur den Optionsvorrat.
       const dialog = await screen.findByRole('dialog')
