@@ -659,4 +659,20 @@ describe('parseNightRunLog — Fixture "vollstaendiger Lauf"', () => {
     const run = parseNightRunLog(vollstaendig).runs[0]
     expect(run.items.map((i) => i.cardNumber)).toEqual([100, 101, 102, 103, 105, 106])
   })
+
+  /**
+   * Die Grenze zwischen den beiden Parsern (Issue #865): `stand`, `kennzahlen` und
+   * `kettenStufen` stammen ausschliesslich aus einem Ergebnisstand. Der Test belegt
+   * heute, dass Code, der nichts setzt, nichts setzt — er sichert aber die Grenze, und
+   * genau die ist beim naechsten Umbau der gefaehrdete Punkt (Plan #863, abgelehnter
+   * Hinweis 15 des Reviews).
+   */
+  it('setzt weder die Lauf-Angaben noch die Kennzahlen eines Ergebnisstands', () => {
+    const run = parseNightRunLog(vollstaendig).runs[0]
+    expect(run).not.toHaveProperty('stand')
+    for (const item of run.items) {
+      expect(item).not.toHaveProperty('kennzahlen')
+      expect(item).not.toHaveProperty('kettenStufen')
+    }
+  })
 })

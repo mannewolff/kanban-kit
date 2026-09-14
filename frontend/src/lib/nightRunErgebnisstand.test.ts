@@ -1085,6 +1085,116 @@ describe('parseNightRunErgebnisstand — echter Ketten-Lauf (2026-09-14-131200)'
 })
 
 /**
+ * Die Angaben, die der Stand seit je fuehrt und der Parser bis Issue #865 verworfen hat:
+ * am Lauf die Zeitvorgaben je Arbeitsschritt, das Kostenbudget und die Lauf-Identitaet,
+ * am Vorgang seine Kennzahlen und die Werte je Arbeitsschritt.
+ *
+ * <p>Geprueft ueberwiegend gegen die echten Fixtures — an der Kette die vollen Angaben,
+ * am Implementierungs-Lauf die Lage ohne Budget und ohne Stufen. Die konstruierten
+ * Staende decken nur, was kein echter Lauf hergibt: das durchgehende Fehlen.
+ */
+describe('parseNightRunErgebnisstand — Angaben des Ergebnisstands (Issue #865)', () => {
+  const kette = lauf(JSON.stringify(echteKette))
+  const vorgang = (nummer: number) => kette.items.find((i) => i.cardNumber === nummer)
+  const implementierung = lauf(JSON.stringify(echterLauf))
+
+  /** Ein Stand ohne jede der uebernommenen Kopfangaben — `label: null` wie im Bestand. */
+  const ohneKopfangaben = (felder: Record<string, unknown> = {}): string =>
+    stand({ modell: undefined, label: null, abschluss: null, ...felder })
+
+  it('uebernimmt die Zeitvorgaben je Arbeitsschritt aus dem Budget des Laufs', () => {
+    expect(kette.stand?.vorgabenMin).toEqual({ plan: 20, review: 15, pakete: 15, abdeckung: 10 })
+  })
+
+  it('uebernimmt Kostenbudget, Modell, Label, Abschlussart, Kostensumme und fehlende Kostenmeldungen', () => {
+    expect(kette.stand).toMatchObject({
+      kostenBudgetUsd: 50,
+      modell: 'claude-opus-5',
+      label: 'kit:night',
+      abschluss: 'regulaer',
+      kostenSumme: 25.983292999999996,
+      kostenUnbekannt: 1,
+    })
+  })
+
+  it('traegt am Vorgang #842 seine Kosten, die Summe seiner Zuege und die eine fehlende Kostenmeldung', () => {
+    expect(vorgang(842)?.kennzahlen).toEqual({
+      kostenUsd: 4.093616499999999,
+      zuege: 37,
+      kostenUnbekannt: 1,
+    })
+  })
+
+  it('traegt je erreichtem Arbeitsschritt des Vorgangs #842 Dauer, Kosten, Zuege und Dokumente', () => {
+    expect(vorgang(842)?.kettenStufen).toEqual({
+      plan: { dauerMs: 439741, kostenUsd: 4.093616499999999, zuege: 37, dokumente: ['849'] },
+      // `kennzahlen: null` an der Pruefstufe — die Session endete am Zeitbudget, ohne zu melden.
+      review: { dauerMs: 900484, dokumente: [] },
+    })
+  })
+
+  it('fuehrt am vollstaendig durchlaufenen Vorgang #791 alle vier Arbeitsschritte', () => {
+    expect(Object.keys(vorgang(791)?.kettenStufen ?? {})).toEqual([
+      'plan',
+      'review',
+      'pakete',
+      'abdeckung',
+    ])
+  })
+
+  it('nennt an der Paket-Stufe des Vorgangs #791 jedes dort entstandene Paket', () => {
+    expect(vorgang(791)?.kettenStufen?.pakete?.dokumente).toEqual(['845'])
+  })
+
+  it('traegt am Arbeitspaket eines Implementierungs-Laufs Kosten und Zuege, aber keine Stufen', () => {
+    expect(implementierung.items[0].kennzahlen).toEqual({
+      kostenUsd: 2.1366104999999997,
+      zuege: 38,
+    })
+    expect(implementierung.items[0]).not.toHaveProperty('kettenStufen')
+  })
+
+  it('laesst am Lauf ohne Budget die Zeitvorgaben und das Kostenbudget weg', () => {
+    expect(implementierung.stand).toEqual({ modell: 'claude-opus-5', abschluss: 'regulaer' })
+  })
+
+  it('laesst `stand` ganz ungesetzt, wenn der Lauf keine dieser Angaben fuehrt', () => {
+    expect(lauf(ohneKopfangaben())).not.toHaveProperty('stand')
+  })
+
+  it('laesst `stand` auch bei einem Budget ohne jede Vorgabe ungesetzt — kein Feld traegt null', () => {
+    expect(lauf(ohneKopfangaben({ budget: {} }))).not.toHaveProperty('stand')
+  })
+
+  it('laesst `kennzahlen` und `kettenStufen` an einer Einheit ohne diese Angaben ungesetzt', () => {
+    const item = einziges(mitEinheit({ ausgang: 'unbekannt' }))
+    expect(item).not.toHaveProperty('kennzahlen')
+    expect(item).not.toHaveProperty('kettenStufen')
+  })
+
+  it('laesst `kennzahlen` ungesetzt, wenn die Einheit sie als null fuehrt', () => {
+    expect(einziges(mitEinheit({ ausgang: 'unbekannt', kennzahlen: null }))).not.toHaveProperty(
+      'kennzahlen',
+    )
+  })
+
+  it('laesst `kettenStufen` ungesetzt, wenn der Vorgang keinen Arbeitsschritt erreicht hat', () => {
+    expect(einziges(inKette({ ausgang: 'fertig', stufen: {} }))).not.toHaveProperty('kettenStufen')
+  })
+
+  it('nennt eine begonnene Plan-Stufe ohne Dokument mit leerer Dokumentenliste', () => {
+    const item = einziges(inKette({ ausgang: 'fertig', stufen: { plan: { id: null } } }))
+    expect(item.kettenStufen?.plan).toEqual({ dokumente: [] })
+  })
+
+  it('traegt an einem Arbeitsschritt ohne Kennzahlen weder Kosten noch Zuege', () => {
+    const item = einziges(inKette({ ausgang: 'fertig', stufen: { review: { dauerMs: 1000 } } }))
+    expect(item.kettenStufen?.review).toEqual({ dauerMs: 1000, dokumente: [] })
+    expect(item).not.toHaveProperty('kennzahlen')
+  })
+})
+
+/**
  * Beide Wege muessen dieselbe Lage gleich benennen — sonst hiesse derselbe Lauf im
  * Leitstand je nach Quelle anders. Verglichen wird nur, was der Ergebnisstand
  * tatsaechlich erzeugen kann.
