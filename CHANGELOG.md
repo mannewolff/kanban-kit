@@ -7,6 +7,14 @@ Versionierung folgt der dreiteiligen Betriebsversion (siehe [RELEASING.md](RELEA
 Einträge je Version sind ein automatischer Auszug der Commit-Titel seit dem letzten Release,
 erzeugt von `scripts/gen-changelog.mjs`.
 
+## [1.41.0] – 2026-09-14
+
+- chore: Version 1.40.1
+- Vorhaben über das ⋮-Menü der Kachel löschen ([#820](https://github.com/mannewolff/kanban-kit/issues/820))
+- Neuer Prozess, dadurch sind die Reviewer in Plan und Issues reduziert worden
+- Herkunft und Vorhaben in der Nachtlauf-Auswertung anklickbar machen ([#818](https://github.com/mannewolff/kanban-kit/issues/818))
+- Ergebnisstand eines Pruef-Laufs im Leitstand deuten ([#816](https://github.com/mannewolff/kanban-kit/issues/816))
+
 ## [1.40.0] – 2026-09-11
 
 - chore: Version 1.39.1
