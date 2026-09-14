@@ -149,16 +149,42 @@ const STUFEN: ReadonlyArray<{ label: string; praefix: string }> = [
 ]
 
 /**
- * Was die Seite zu einem nicht deutbaren Stand sagt — eine Zeile je Grund aus
+ * Der Grundsatz zu einem nicht deutbaren Stand — eine Zeile je Grund aus
  * {@link parseNightRunErgebnisstand}. Die drei sind bewusst unterschieden: Sie verlangen vom
  * Betreiber verschiedene Handgriffe (die falsche Datei gewählt, ein neueres Kit, oder ein Lauf,
  * den der Leitstand nicht auswertet).
+ *
+ * <p>„Fassung" bezeichnet hier den **Aufbau** des Protokolls und nichts sonst; die erzeugende
+ * Ausgabe des Nachtlaufs heißt in der Meldung „erzeugt von" (AK 10 aus Issue #842).
  */
-const NICHT_DEUTBAR: Record<NightRunErgebnisstandGrund, string> = {
+const GRUNDSATZ: Record<NightRunErgebnisstandGrund, string> = {
   'kein-json': 'Nicht auswertbar',
   'unbekannte-fassung': 'Fassung nicht unterstützt',
   'nicht-unterstuetzt': 'Lauf-Art oder Vokabular nicht unterstützt',
 }
+
+/**
+ * Was die Seite zu einem nicht deutbaren Stand sagt: der Grundsatz, das nicht gedeutete Wort —
+ * sofern es eines gibt — und die Herkunft. Wer entscheiden will, ob er ein neueres Werkzeug
+ * braucht, soll das aus der Meldung erfahren, statt dafür in die Datei zu sehen (AK 10 aus
+ * Issue #842).
+ *
+ * <p>Die fehlende Herkunft wird **benannt** statt weggelassen: Eine Meldung, der man die
+ * Auslassung nicht ansieht, ließe offen, ob der Leitstand nicht nachgesehen hat oder der Stand
+ * nichts hergab.
+ */
+const nichtDeutbar = (ergebnis: {
+  grund: NightRunErgebnisstandGrund
+  wort?: string
+  erzeugtVon?: string
+}): string =>
+  [
+    GRUNDSATZ[ergebnis.grund],
+    ...(ergebnis.wort === undefined ? [] : [`nicht gedeutet: ${ergebnis.wort}`]),
+    ergebnis.erzeugtVon === undefined
+      ? 'Herkunft nicht angegeben'
+      : `erzeugt von ${ergebnis.erzeugtVon}`,
+  ].join(' — ')
 
 /**
  * Ein Lauf ohne Abschluss wird **angezeigt, aber nicht eingeliefert**: Der Server legt je
@@ -854,7 +880,7 @@ export function NightRunPage() {
 
     const ergebnis = parseNightRunErgebnisstand(text)
     if (!ergebnis.ok) {
-      setMeldung(NICHT_DEUTBAR[ergebnis.grund])
+      setMeldung(nichtDeutbar(ergebnis))
       return
     }
 

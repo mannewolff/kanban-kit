@@ -612,7 +612,11 @@ describe('NightRunPage — Ergebnisstand hineingeben', () => {
       'text/plain',
     )
 
-    expect(await screen.findByText('Nicht auswertbar')).toBeInTheDocument()
+    // Ohne geparstes Objekt gibt es weder ein Wort noch eine Herkunft — der Grundsatz steht
+    // allein, die fehlende Herkunft wird benannt statt verschwiegen.
+    expect(
+      await screen.findByText('Nicht auswertbar — Herkunft nicht angegeben'),
+    ).toBeInTheDocument()
     expect(screen.queryAllByTestId(/^lauf-/)).toHaveLength(0)
     expect(anfragen.some((a) => a.method === 'POST')).toBe(false)
   })
@@ -623,7 +627,11 @@ describe('NightRunPage — Ergebnisstand hineingeben', () => {
 
     protokollWaehlen(stand({ schemaFassung: 2 }))
 
-    expect(await screen.findByText('Fassung nicht unterstützt')).toBeInTheDocument()
+    // „Fassung" bezeichnet hier den Aufbau des Protokolls; die Herkunft steht daneben als
+    // „erzeugt von" und übernimmt das Wort nicht (AK 10 aus #842, E11 aus Plan #849).
+    expect(
+      await screen.findByText('Fassung nicht unterstützt — erzeugt von 1.47.0'),
+    ).toBeInTheDocument()
     expect(screen.queryAllByTestId(/^lauf-/)).toHaveLength(0)
     expect(anfragen.some((a) => a.method === 'POST')).toBe(false)
   })
@@ -636,8 +644,50 @@ describe('NightRunPage — Ergebnisstand hineingeben', () => {
 
     protokollWaehlen(stand({ art: 'review', stufe: 'sonstwas' }))
 
-    expect(await screen.findByText('Lauf-Art oder Vokabular nicht unterstützt')).toBeInTheDocument()
+    expect(
+      await screen.findByText(
+        'Lauf-Art oder Vokabular nicht unterstützt — nicht gedeutet: art=review/stufe=sonstwas'
+          + ' — erzeugt von 1.47.0',
+      ),
+    ).toBeInTheDocument()
     expect(screen.queryAllByTestId(/^lauf-/)).toHaveLength(0)
+    expect(anfragen.some((a) => a.method === 'POST')).toBe(false)
+  })
+
+  // AK 10 aus #842: Die Meldung nennt das unbekannte Wort selbst — hier den Ausgang einer
+  // Einheit, nicht die Lauf-Art.
+  it('nennt den nicht gedeuteten Ausgang einer Einheit in der Meldung', async () => {
+    renderPage()
+    await screen.findByText('Noch keine Auswertung vorhanden.')
+
+    protokollWaehlen(stand({ einheiten: [einheit({ ausgang: 'halbfertig' })] }))
+
+    expect(
+      await screen.findByText(
+        'Lauf-Art oder Vokabular nicht unterstützt — nicht gedeutet: halbfertig'
+          + ' — erzeugt von 1.47.0',
+      ),
+    ).toBeInTheDocument()
+    expect(anfragen.some((a) => a.method === 'POST')).toBe(false)
+  })
+
+  it('sagt „Herkunft nicht angegeben", wenn der Stand kein erzeugtVon führt', async () => {
+    renderPage()
+    await screen.findByText('Noch keine Auswertung vorhanden.')
+
+    const ohneHerkunft = JSON.parse(stand({ art: 'review', stufe: 'sonstwas' })) as Record<
+      string,
+      unknown
+    >
+    delete ohneHerkunft.erzeugtVon
+    protokollWaehlen(JSON.stringify(ohneHerkunft))
+
+    expect(
+      await screen.findByText(
+        'Lauf-Art oder Vokabular nicht unterstützt — nicht gedeutet: art=review/stufe=sonstwas'
+          + ' — Herkunft nicht angegeben',
+      ),
+    ).toBeInTheDocument()
     expect(anfragen.some((a) => a.method === 'POST')).toBe(false)
   })
 

@@ -48,9 +48,20 @@ import {
  */
 export type NightRunErgebnisstandGrund = 'kein-json' | 'unbekannte-fassung' | 'nicht-unterstuetzt'
 
+/**
+ * Eine Ablehnung sagt seit Issue #857 mehr als nur ihren Grund: **welches Wort** nicht
+ * gedeutet werden konnte und **welche Ausgabe** des Nachtlaufs die Datei geschrieben hat
+ * (AK 10 aus Issue #842). Wer entscheiden will, ob er ein neueres Werkzeug braucht, muss
+ * dafuer sonst in die Datei sehen.
+ *
+ * <p>Beide Felder sind optional, weil es Lagen ohne sie gibt und ein Platzhalter eine
+ * Auskunft vortaeuschte: `wort` fehlt, wo gar kein Wort im Spiel ist (`einheiten` ist kein
+ * Array, `abschluss` hat den falschen Typ), `erzeugtVon` fehlt, solange nichts geparst ist
+ * oder das Kopffeld keine Zeichenkette traegt.
+ */
 export type NightRunErgebnisstandResult =
   | { ok: true; run: NightRun }
-  | { ok: false; grund: NightRunErgebnisstandGrund }
+  | { ok: false; grund: NightRunErgebnisstandGrund; wort?: string; erzeugtVon?: string }
 
 /** Die einzige Fassung, die dieser Parser deutet. */
 const FASSUNG = 1
@@ -109,6 +120,12 @@ interface RohEinheit {
 /** Der Lauf als Ganzes. */
 interface RohLauf {
   schemaFassung?: unknown
+  /**
+   * Die Kit-Ausgabe, die den Stand geschrieben hat (`night.mjs` schreibt sie in jeden Kopf).
+   * `unknown` und nicht `string`: Der Wert geht nur in eine Meldung, und eine fremde Datei
+   * darf dort nichts anderes als eine Zeichenkette einschleusen.
+   */
+  erzeugtVon?: unknown
   start: string
   art?: string
   /**
@@ -598,6 +615,37 @@ function baueItem(e: RohEinheit, position: number, modus: NightRunMode): NightRu
   }
 }
 
+/**
+ * Eine Ablehnung, die beides mitnimmt, was AK 10 aus Issue #842 verlangt: das nicht gedeutete
+ * Wort — sofern es an dieser Stelle ueberhaupt eines gibt — und die erzeugende Ausgabe des
+ * Nachtlaufs, sofern der Stand sie als Zeichenkette fuehrt.
+ *
+ * <p>Ueber sie laeuft jede Ablehnung **nach** dem Parsen, einschliesslich der unbekannten
+ * Aufbaufassung (E11 aus Plan #849): Gerade dort ist die Frage nach dem neueren Werkzeug am
+ * dringendsten. Ohne geparstes Objekt (`kein-json`) gibt es nichts mitzunehmen; diese beiden
+ * Rueckgaben stehen deshalb als einzige fuer sich.
+ */
+function abgelehnt(
+  lauf: RohLauf,
+  grund: NightRunErgebnisstandGrund,
+  wort?: string,
+): NightRunErgebnisstandResult {
+  return {
+    ok: false,
+    grund,
+    ...(wort === undefined ? {} : { wort }),
+    ...(typeof lauf.erzeugtVon === 'string' ? { erzeugtVon: lauf.erzeugtVon } : {}),
+  }
+}
+
+/**
+ * Das Wort einer Modus-Ablehnung: nicht ein einzelnes Feld, sondern das Paar — erst beide
+ * zusammen entscheiden ueber den Modus, und eines allein benannte die falsche Stelle.
+ * Ein fehlendes oder leeres Feld heisst „ohne"; `undefined` und `null` sind fuer die
+ * Modus-Bestimmung dasselbe und lesen sich hier deshalb auch gleich.
+ */
+const artUndStufe = (l: RohLauf): string => `art=${l.art ?? 'ohne'}/stufe=${l.stufe ?? 'ohne'}`
+
 /** Der Auszug eines Laufs, der hart gestoppt wurde. */
 function laufAuszug(l: RohLauf): string {
   if (l.fehlerText !== undefined) return l.fehlerText
@@ -622,20 +670,21 @@ export function parseNightRunErgebnisstand(text: string): NightRunErgebnisstandR
   }
 
   const lauf = roh as unknown as RohLauf
-  if (lauf.schemaFassung !== FASSUNG) return { ok: false, grund: 'unbekannte-fassung' }
+  if (lauf.schemaFassung !== FASSUNG) return abgelehnt(lauf, 'unbekannte-fassung')
 
   const modus = bestimmeModus(lauf.art, lauf.stufe)
-  if (modus === null) return { ok: false, grund: 'nicht-unterstuetzt' }
-  if (!Array.isArray(lauf.einheiten)) return { ok: false, grund: 'nicht-unterstuetzt' }
+  if (modus === null) return abgelehnt(lauf, 'nicht-unterstuetzt', artUndStufe(lauf))
+  // Kein Wort: Was hier nicht stimmt, ist die Form des Felds, nicht eine Vokabel darin.
+  if (!Array.isArray(lauf.einheiten)) return abgelehnt(lauf, 'nicht-unterstuetzt')
   if (lauf.abschluss !== null && typeof lauf.abschluss !== 'string') {
-    return { ok: false, grund: 'nicht-unterstuetzt' }
+    return abgelehnt(lauf, 'nicht-unterstuetzt')
   }
 
   const einheiten = lauf.einheiten as RohEinheit[]
   const items: NightRunItem[] = []
   for (const [position, e] of einheiten.entries()) {
     const item = baueItem(e, position, modus)
-    if (!item) return { ok: false, grund: 'nicht-unterstuetzt' }
+    if (!item) return abgelehnt(lauf, 'nicht-unterstuetzt', e.ausgang)
     items.push(item)
   }
 

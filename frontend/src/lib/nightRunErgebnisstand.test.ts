@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { NIGHT_RUN_EXCERPT_MAX, parseNightRunLog } from './nightRunLog'
 import type { NightRun, NightRunItem } from './nightRunLog'
 import { parseNightRunErgebnisstand } from './nightRunErgebnisstand'
+import type { NightRunErgebnisstandResult } from './nightRunErgebnisstand'
 import echterLauf from './__fixtures__/night-run-2026-09-07-085229.json'
 import echterNachtplanHarterStopp from './__fixtures__/night-run-2026-09-09-141506.json'
 import echterNachtplanRegulaer from './__fixtures__/night-run-2026-09-09-125621.json'
@@ -64,45 +65,47 @@ function lauf(text: string): NightRun {
 /** Das einzige Arbeitspaket eines Laufs. */
 const einziges = (text: string): NightRunItem => lauf(text).items[0]
 
+/**
+ * Die Ablehnung eines Stands — wirft, wenn er wider Erwarten deutbar war.
+ *
+ * <p>Seit Issue #857 traegt eine Ablehnung neben dem Grund auch das nicht gedeutete Wort
+ * und die erzeugende Ausgabe des Nachtlaufs. Die Bestandsfaelle pruefen deshalb `.grund`
+ * statt der vollstaendigen Form mit `toEqual`: Ihre Aussage ist unveraendert die, welcher
+ * der drei Gruende zutrifft.
+ */
+function ablehnung(text: string): Extract<NightRunErgebnisstandResult, { ok: false }> {
+  const ergebnis = parseNightRunErgebnisstand(text)
+  if (ergebnis.ok) throw new Error('unerwartet deutbar')
+  return ergebnis
+}
+
 describe('parseNightRunErgebnisstand — Ablehnungen', () => {
   it('lehnt eine Datei ab, die kein JSON ist', () => {
-    expect(parseNightRunErgebnisstand('[2026-09-07T08:52:29.532Z] Nacht-Runner startet')).toEqual({
-      ok: false,
-      grund: 'kein-json',
-    })
+    expect(ablehnung('[2026-09-07T08:52:29.532Z] Nacht-Runner startet').grund).toBe('kein-json')
   })
 
   it('lehnt `null` ab — gueltiges JSON, aber kein Objekt', () => {
-    expect(parseNightRunErgebnisstand('null')).toEqual({ ok: false, grund: 'kein-json' })
+    expect(ablehnung('null').grund).toBe('kein-json')
   })
 
   it('lehnt ein Array ab', () => {
-    expect(parseNightRunErgebnisstand('[]')).toEqual({ ok: false, grund: 'kein-json' })
+    expect(ablehnung('[]').grund).toBe('kein-json')
   })
 
   it('lehnt eine blosse Zahl ab', () => {
-    expect(parseNightRunErgebnisstand('42')).toEqual({ ok: false, grund: 'kein-json' })
+    expect(ablehnung('42').grund).toBe('kein-json')
   })
 
   it('lehnt ein Objekt ohne schemaFassung ab — es ist kein Ergebnisstand', () => {
-    expect(parseNightRunErgebnisstand('{"art":"implementierung"}')).toEqual({
-      ok: false,
-      grund: 'kein-json',
-    })
+    expect(ablehnung('{"art":"implementierung"}').grund).toBe('kein-json')
   })
 
   it('meldet eine unbekannte Fassung getrennt vom Formfehler', () => {
-    expect(parseNightRunErgebnisstand(stand({ schemaFassung: 2 }))).toEqual({
-      ok: false,
-      grund: 'unbekannte-fassung',
-    })
+    expect(ablehnung(stand({ schemaFassung: 2 })).grund).toBe('unbekannte-fassung')
   })
 
   it('lehnt einen Pruef-Lauf mit unbekannter Stufe ab', () => {
-    expect(parseNightRunErgebnisstand(stand({ art: 'review', stufe: 'sonstwas' }))).toEqual({
-      ok: false,
-      grund: 'nicht-unterstuetzt',
-    })
+    expect(ablehnung(stand({ art: 'review', stufe: 'sonstwas' })).grund).toBe('nicht-unterstuetzt')
   })
 
   it.each([
@@ -111,15 +114,12 @@ describe('parseNightRunErgebnisstand — Ablehnungen', () => {
     ['schaerfungFehlt'],
     ['syntheseOhneBeleg'],
   ])('lehnt den Pruef-Ausgang %s in einem Implementierungs-Lauf ab', (ausgang) => {
-    expect(parseNightRunErgebnisstand(mitEinheit({ ausgang }))).toEqual({
-      ok: false,
-      grund: 'nicht-unterstuetzt',
-    })
+    expect(ablehnung(mitEinheit({ ausgang })).grund).toBe('nicht-unterstuetzt')
   })
 
   it('lehnt einen Pruef-Ausgang in einem Nachtplan-Lauf ab', () => {
     const text = mitEinheit({ ausgang: 'mitBefund' }, { art: 'erzeugung', stufe: 'plan' })
-    expect(parseNightRunErgebnisstand(text)).toEqual({ ok: false, grund: 'nicht-unterstuetzt' })
+    expect(ablehnung(text).grund).toBe('nicht-unterstuetzt')
   })
 
   // Die Einheiten tragen jeweils genau das, was den Ausgang in seinem eigenen Modus
@@ -134,10 +134,7 @@ describe('parseNightRunErgebnisstand — Ablehnungen', () => {
   ] as const)('lehnt den Ausgang %s eines anderen Modus in einem Pruef-Lauf ab', (ausgang, felder) => {
     // Ein Pruef-Lauf schreibt sie nie; eine geratene Farbe waere fuer eine kaputte
     // oder fremde Datei die falsche Aussage.
-    expect(parseNightRunErgebnisstand(imPrueflauf({ ausgang, ...felder }))).toEqual({
-      ok: false,
-      grund: 'nicht-unterstuetzt',
-    })
+    expect(ablehnung(imPrueflauf({ ausgang, ...felder })).grund).toBe('nicht-unterstuetzt')
   })
 
   // Wie bei den Pruef-Lagen tragen die Einheiten genau das, was ihren Ausgang im eigenen
@@ -157,27 +154,18 @@ describe('parseNightRunErgebnisstand — Ablehnungen', () => {
   ] as const)('lehnt den Ausgang %s eines anderen Modus in einem Ketten-Lauf ab', (ausgang, felder) => {
     // `erfolg` steht hier ausdruecklich mit drin: Er fiele sonst auf das modus-unabhaengige
     // Vokabular durch und bekaeme in einer Kette eine geratene Farbe.
-    expect(parseNightRunErgebnisstand(inKette({ ausgang, ...felder }))).toEqual({
-      ok: false,
-      grund: 'nicht-unterstuetzt',
-    })
+    expect(ablehnung(inKette({ ausgang, ...felder })).grund).toBe('nicht-unterstuetzt')
   })
 
   it.each([['fertig'], ['angehalten'], ['abgebrochen']])(
     'lehnt den Ketten-Ausgang %s in einem Implementierungs-Lauf ab',
     (ausgang) => {
-      expect(parseNightRunErgebnisstand(mitEinheit({ ausgang, grund: 'Kostenbudget: 55.00 $' }))).toEqual({
-        ok: false,
-        grund: 'nicht-unterstuetzt',
-      })
+      expect(ablehnung(mitEinheit({ ausgang, grund: 'Kostenbudget: 55.00 $' })).grund).toBe('nicht-unterstuetzt')
     },
   )
 
   it('lehnt einen Ketten-Stand mit gesetzter Stufe ab — der Runner schreibt dort immer null', () => {
-    expect(parseNightRunErgebnisstand(stand({ art: 'kette', stufe: 'plan' }))).toEqual({
-      ok: false,
-      grund: 'nicht-unterstuetzt',
-    })
+    expect(ablehnung(stand({ art: 'kette', stufe: 'plan' })).grund).toBe('nicht-unterstuetzt')
   })
 
   it.each([
@@ -187,59 +175,104 @@ describe('parseNightRunErgebnisstand — Ablehnungen', () => {
     [undefined, 'plan'],
     ['implementierung', 'plan'],
   ] as const)('lehnt die Kombination art=%s/stufe=%s ab — nur (erzeugung,plan) ist Nachtplan', (art, stufe) => {
-    expect(parseNightRunErgebnisstand(stand({ art, stufe }))).toEqual({
-      ok: false,
-      grund: 'nicht-unterstuetzt',
-    })
+    expect(ablehnung(stand({ art, stufe })).grund).toBe('nicht-unterstuetzt')
   })
 
   it('lehnt einen Stand ohne Feld `einheiten` ab', () => {
     const ohne = JSON.parse(stand()) as Record<string, unknown>
     delete ohne.einheiten
-    expect(parseNightRunErgebnisstand(JSON.stringify(ohne))).toEqual({
-      ok: false,
-      grund: 'nicht-unterstuetzt',
-    })
+    expect(ablehnung(JSON.stringify(ohne)).grund).toBe('nicht-unterstuetzt')
   })
 
   it('lehnt `einheiten` ab, wenn es kein Array ist', () => {
-    expect(parseNightRunErgebnisstand(stand({ einheiten: {} }))).toEqual({
-      ok: false,
-      grund: 'nicht-unterstuetzt',
-    })
+    expect(ablehnung(stand({ einheiten: {} })).grund).toBe('nicht-unterstuetzt')
   })
 
   it('lehnt einen `abschluss` ab, der weder null noch ein String ist', () => {
-    expect(parseNightRunErgebnisstand(stand({ abschluss: 7 }))).toEqual({
-      ok: false,
-      grund: 'nicht-unterstuetzt',
-    })
+    expect(ablehnung(stand({ abschluss: 7 })).grund).toBe('nicht-unterstuetzt')
   })
 
   it('lehnt einen unbekannten `ausgang` ab', () => {
-    expect(parseNightRunErgebnisstand(mitEinheit({ ausgang: 'halbfertig' }))).toEqual({
-      ok: false,
-      grund: 'nicht-unterstuetzt',
-    })
+    expect(ablehnung(mitEinheit({ ausgang: 'halbfertig' })).grund).toBe('nicht-unterstuetzt')
   })
 
   it('lehnt `erfolg` ohne Pruefblock ab — das Paar ist unvollstaendig', () => {
-    expect(parseNightRunErgebnisstand(mitEinheit({ ausgang: 'erfolg' }))).toEqual({
-      ok: false,
-      grund: 'nicht-unterstuetzt',
-    })
+    expect(ablehnung(mitEinheit({ ausgang: 'erfolg' })).grund).toBe('nicht-unterstuetzt')
   })
 
   it('lehnt `erfolg` mit unbekanntem Pruefzustand ab', () => {
     const text = mitEinheit({ ausgang: 'erfolg', pruefung: { id: '100', zustand: 'grau' } })
-    expect(parseNightRunErgebnisstand(text)).toEqual({ ok: false, grund: 'nicht-unterstuetzt' })
+    expect(ablehnung(text).grund).toBe('nicht-unterstuetzt')
   })
 
   it('lehnt `fehlschlag` mit einem Pruefzustand ab, den die Tabelle dort nicht kennt', () => {
     // `geprueft` ist bei einem Fehlschlag kein Widerspruch, den dieser Parser aufloest —
     // der Runner erzeugt das Paar nicht, und raten waere schlimmer als ablehnen.
     const text = mitEinheit({ ausgang: 'fehlschlag', pruefung: { id: '100', zustand: 'geprueft' } })
-    expect(parseNightRunErgebnisstand(text)).toEqual({ ok: false, grund: 'nicht-unterstuetzt' })
+    expect(ablehnung(text).grund).toBe('nicht-unterstuetzt')
+  })
+})
+
+/**
+ * AK 10 aus Issue #842: Wer entscheiden will, ob er ein neueres Werkzeug braucht, soll das
+ * aus der Meldung erfahren — welches Wort nicht gedeutet werden konnte und welche Ausgabe
+ * des Nachtlaufs die Datei geschrieben hat. Beides steht an der Ablehnung selbst; den Satz
+ * daraus baut die Seite.
+ */
+describe('parseNightRunErgebnisstand — Wort und Herkunft einer Ablehnung (Issue #857)', () => {
+  it('nennt bei unbekannter Lauf-Art das Paar art/stufe und die erzeugende Ausgabe', () => {
+    const ergebnis = ablehnung(stand({ art: 'erfindung', stufe: 'plan' }))
+    expect(ergebnis.grund).toBe('nicht-unterstuetzt')
+    expect(ergebnis.wort).toBe('art=erfindung/stufe=plan')
+    expect(ergebnis.erzeugtVon).toBe('1.47.0')
+  })
+
+  it('nennt eine fehlende Stufe im Wort ausdruecklich als „ohne"', () => {
+    expect(ablehnung(stand({ art: 'erfindung' })).wort).toBe('art=erfindung/stufe=ohne')
+  })
+
+  it('nennt bei einem Ausgang, den eine Kette nie schreibt, genau diesen Ausgang', () => {
+    const ergebnis = ablehnung(inKette({ ausgang: 'verbraucht' }))
+    expect(ergebnis.grund).toBe('nicht-unterstuetzt')
+    expect(ergebnis.wort).toBe('verbraucht')
+    expect(ergebnis.erzeugtVon).toBe('1.47.0')
+  })
+
+  it('nennt auch den unbekannten Ausgang eines Implementierungs-Laufs', () => {
+    expect(ablehnung(mitEinheit({ ausgang: 'halbfertig' })).wort).toBe('halbfertig')
+  })
+
+  it('laesst `wort` leer, wo es keines gibt — `einheiten` ist kein Array', () => {
+    const ergebnis = ablehnung(stand({ einheiten: {} }))
+    expect(ergebnis).not.toHaveProperty('wort')
+    expect(ergebnis.erzeugtVon).toBe('1.47.0')
+  })
+
+  it('laesst `wort` auch bei falsch getyptem `abschluss` leer', () => {
+    expect(ablehnung(stand({ abschluss: 7 }))).not.toHaveProperty('wort')
+  })
+
+  it('laesst Wort und Herkunft leer, wenn die Datei gar kein JSON ist', () => {
+    const ergebnis = ablehnung('[2026-09-07T08:52:29.532Z] Nacht-Runner startet')
+    expect(ergebnis).not.toHaveProperty('wort')
+    expect(ergebnis).not.toHaveProperty('erzeugtVon')
+  })
+
+  it('laesst die Herkunft leer, wenn der Stand sie nicht als Zeichenkette fuehrt', () => {
+    expect(ablehnung(stand({ art: 'erfindung', erzeugtVon: 7 }))).not.toHaveProperty('erzeugtVon')
+  })
+
+  /**
+   * E11 des Plans #849: AK 10 verlangt die Herkunft woertlich nur fuer „Art oder Vokabular
+   * unbekannt". Gerade bei unbekanntem **Aufbau** ist die Frage nach dem neueren Werkzeug
+   * aber am dringendsten — sie dort als einzige auszulassen waere der eine Fall, in dem der
+   * Betreiber doch in die Datei sehen muesste.
+   */
+  it('nennt die Herkunft auch bei unbekannter Aufbaufassung', () => {
+    const ergebnis = ablehnung(stand({ schemaFassung: 2, erzeugtVon: '2.0.0' }))
+    expect(ergebnis.grund).toBe('unbekannte-fassung')
+    expect(ergebnis.erzeugtVon).toBe('2.0.0')
+    expect(ergebnis).not.toHaveProperty('wort')
   })
 })
 
