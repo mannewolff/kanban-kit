@@ -51,6 +51,7 @@ import {
 } from '../lib/nightRunLog'
 import { readTextFile } from '../lib/readTextFile'
 import { useProjectName } from '../lib/useProjectName'
+import { SURFACE_TINT } from '../theme'
 
 /**
  * Auswertung der Nachtläufe eines Projekts (Issue #725, Plan #718).
@@ -725,6 +726,23 @@ const abschlussText = (abschluss: string | undefined): string =>
     ? 'noch nicht abgeschlossen'
     : (ABSCHLUSS_TEXT.get(abschluss) ?? 'Abschluss nicht deutbar')
 
+/** Eine Minute in Millisekunden — die Zeitvorgaben stehen im Stand in Minuten, die Zeiten in ms. */
+const MINUTE_MS = 60_000
+
+/**
+ * Minuten mit einer Nachkommastelle — die Schreibweise des Entwurfs
+ * `docs/mockup-leitstand-nachtlauf.html` („7,8 / 20 min"). Nicht {@link formatDuration}: Die rundet
+ * grobkörnig auf ganze Minuten, und ein Stufenband, dessen Zahlen alle gleich aussehen, sagt über
+ * das Verhältnis zur Vorgabe nichts mehr.
+ */
+const MINUTEN_FORMAT = new Intl.NumberFormat('de-DE', {
+  minimumFractionDigits: 1,
+  maximumFractionDigits: 1,
+})
+
+/** Die Zeitvorgaben stehen ohne Nachkommastelle da, aber in deutscher Schreibweise. */
+const ZAHL_FORMAT = new Intl.NumberFormat('de-DE')
+
 /** Die Kosten des Nachtlaufs stehen im Ergebnisstand in US-Dollar. */
 const KOSTEN_FORMAT = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'USD' })
 
@@ -761,11 +779,41 @@ const dokumenteDerStufe = (
  * doppelt gezählt wäre die Zahl größer als das, was am Board steht.
  */
 function entstandeneDokumente(items: readonly NightRunItem[]): ReadonlySet<string> {
-  return new Set(
-    items.flatMap((item) =>
-      KETTEN_STUFEN.flatMap(({ schluessel }) => dokumenteDerStufe(item.kettenStufen, schluessel)),
-    ),
-  )
+  return new Set(items.flatMap((item) => dokumenteDesVorgangs(item)))
+}
+
+/** Die Dokumente eines einzelnen Vorgangs, in der Reihenfolge der Kette. */
+const dokumenteDesVorgangs = (item: NightRunItem): readonly string[] =>
+  KETTEN_STUFEN.flatMap(({ schluessel }) => dokumenteDerStufe(item.kettenStufen, schluessel))
+
+/**
+ * Der letzte Arbeitsschritt, den ein Vorgang erreicht hat; `undefined`, wenn er gar keinen erreichte
+ * — ein übersprungener Vorgang etwa. **An ihm endete die Kette**, und nur dort steht der Vermerk,
+ * wie sie endete: `stufenDerKette` in `night.mjs` läuft die vier streng der Reihe nach und bricht
+ * beim ersten nicht fertigen ab.
+ */
+const letzteErreichteStufe = (
+  stufen: NightRunKettenStufen | undefined,
+): NightRunKettenStufe | undefined =>
+  KETTEN_STUFEN.filter(({ schluessel }) => stufen?.[schluessel] !== undefined).at(-1)?.schluessel
+
+/**
+ * Der Grund, mit dem ein Vorgang endete: die **erste Zeile** seines Auszugs. Im Modus `CHAIN` setzt
+ * `stufenText` (`lib/nightRunErgebnisstand.ts`) den gedeuteten Ausgang als Kopf vor den
+ * Stufenblock; der rohe `grund` des Stands erreicht `NightRunItem` dagegen nie.
+ */
+const grundDesVorgangs = (item: NightRunItem): string => item.excerpt.split('\n')[0]
+
+/**
+ * Der Satz über dem Band eines Vorgangs, der nicht regulär endete: sein Grund und die Nummern der
+ * bis dahin entstandenen Dokumente. Dass keine entstanden, wird **benannt** statt weggelassen —
+ * eine Aufzählung, der man die Leere nicht ansieht, ließe offen, ob nichts entstand oder nichts
+ * nachgesehen wurde.
+ */
+function abbruchSatz(item: NightRunItem): string {
+  const nummern = dokumenteDesVorgangs(item).map((id) => `#${id}`)
+  const entstanden = nummern.length === 0 ? 'keine Karten' : nummern.join(', ')
+  return `${grundDesVorgangs(item)} — bis dahin entstanden: ${entstanden}`
 }
 
 /**
@@ -812,6 +860,178 @@ const kopfText = (stand: NightRunStand | undefined): string =>
     ...(stand?.label === undefined ? [] : [`Label ${stand.label}`]),
     abschlussText(stand?.abschluss),
   ].join(' · ')
+
+/** Ein Abschnitt des Stufenbands — alles, was seine Darstellung und seine Ansage brauchen. */
+interface Bandabschnitt {
+  schluessel: NightRunKettenStufe
+  label: string
+  /** Der Breitenanteil: die Zeitvorgabe in Minuten; ohne Vorgabe {@link ANTEIL_OHNE_VORGABE}. */
+  anteil: number
+  /** Die Füllung in Prozent, **bei 100 gekappt** — der tatsächliche Wert steht in {@link zahlen}. */
+  fuellung: number
+  /** Ob der Vorgang diesen Arbeitsschritt überhaupt erreicht hat. */
+  erreicht: boolean
+  /** Verbrauch und Vorgabe als Zahlen. */
+  zahlen: string
+  /** Der Vermerk unter dem Abschnitt; `null`, wo keiner steht. */
+  vermerk: string | null
+  /** Die Füllfarbe — der Ampelton nur an dem Abschnitt, an dem der Vorgang endete. */
+  farbe: string
+}
+
+/** Der Breitenanteil eines Schritts ohne Zeitvorgabe: derselbe wie der jedes anderen ohne Vorgabe. */
+const ANTEIL_OHNE_VORGABE = 1
+
+/**
+ * Ein Prozentwert, **bei 100 gekappt** und auf eine Nachkommastelle gerundet. Die Kappung ist die
+ * Aussage: Die Füllung endet bei voller Länge und läuft nie über ihren Abschnitt hinaus; ein
+ * Überlauf bleibt an den Zahlen darunter ablesbar.
+ */
+const gekappt = (prozent: number): number => Math.round(Math.min(100, prozent) * 10) / 10
+
+/**
+ * Der Vermerk an dem Abschnitt, an dem ein Vorgang endete — `null` an jedem anderen.
+ *
+ * <p>Als **zeitbedingt** gilt er allein bei der Fehlerklasse des Zeitbudgets. Sie entsteht in
+ * `deuteKettenAusgang` genau dann, wenn der Grund der Einheit das Präfix `Zeitbudget ` trägt; ein
+ * hoher Verbrauch allein genügt nicht — eine Kette kann auch weit unter ihrer Vorgabe an einem
+ * Fehler zerbrechen.
+ */
+function vermerkAmEnde(istEnde: boolean, item: NightRunItem): string | null {
+  if (!istEnde) {
+    return null
+  }
+  return item.errorClass === 'TIME_BUDGET_EXCEEDED' ? 'am Zeitbudget beendet' : 'hier abgebrochen'
+}
+
+/** Ein Abschnitt des Bands: sein Anteil an der Breite, seine Füllung, seine Zahlen, sein Vermerk. */
+function bandabschnitt(
+  { schluessel, label }: { schluessel: NightRunKettenStufe; label: string },
+  item: NightRunItem,
+  vorgaben: NightRunStufenvorgaben | undefined,
+  letzte: NightRunKettenStufe | undefined,
+): Bandabschnitt {
+  const stufe = item.kettenStufen?.[schluessel]
+  const erreicht = stufe !== undefined
+  const verbrauchMs = stufe?.dauerMs ?? 0
+  // Eine Vorgabe von null Minuten zählt wie gar keine: Sie ergäbe kein Verhältnis, sondern eine
+  // Division durch null. Deshalb der Blick auf den Wert und nicht nur auf sein Vorhandensein.
+  const vorgabeMin = vorgaben?.[schluessel] ?? 0
+  const mitVorgabe = vorgabeMin > 0
+  const istEnde = erreicht && schluessel === letzte && item.state !== 'GREEN'
+  const verbrauch = erreicht ? MINUTEN_FORMAT.format(verbrauchMs / MINUTE_MS) : '–'
+
+  return {
+    schluessel,
+    label,
+    anteil: mitVorgabe ? vorgabeMin : ANTEIL_OHNE_VORGABE,
+    fuellung: mitVorgabe ? gekappt((verbrauchMs / (vorgabeMin * MINUTE_MS)) * 100) : 0,
+    erreicht,
+    zahlen: mitVorgabe
+      ? `${verbrauch} / ${ZAHL_FORMAT.format(vorgabeMin)} min`
+      : `${verbrauch} min · ohne Vorgabe`,
+    vermerk: erreicht ? vermerkAmEnde(istEnde, item) : 'nicht erreicht',
+    farbe: istEnde ? ZUSTAND_FARBE[item.state] : 'primary.main',
+  }
+}
+
+/**
+ * Die Beschriftung des Bands für Vorlesewerkzeuge: alle vier Schritte mit Verbrauch, Vorgabe und
+ * Vermerk. Sie ist der Grund, warum das Band `role="img"` trägt — die Zahlen darunter werden damit
+ * nicht ein zweites Mal einzeln vorgelesen, sondern genau einmal in dieser Reihenfolge.
+ */
+const bandAnsage = (abschnitte: readonly Bandabschnitt[]): string =>
+  `Stufenband: ${abschnitte
+    .map((a) => `${a.label} ${a.zahlen}${a.vermerk === null ? '' : `, ${a.vermerk}`}`)
+    .join(' · ')}`
+
+/**
+ * Das Stufenband eines Ketten-Vorgangs (Issue #867): die vier Arbeitsschritte in der Breite ihrer
+ * Zeitvorgaben, jeder gefüllt, soweit er seine Zeit verbraucht hat, darunter Verbrauch und Vorgabe
+ * als Zahlen. Wer hinsieht, erkennt ohne Zahlenlesen, an welchem Schritt eine Kette riss.
+ *
+ * <p><b>Die Aussage hängt nie an der Farbe</b> (`CLAUDE-react.md`, Zeile 142): „nicht erreicht",
+ * „am Zeitbudget beendet" und „hier abgebrochen" stehen unter dem betroffenen Abschnitt in Worten,
+ * und die Beschriftung des Bands nennt alle vier Schritte. Die Schraffur für „nicht erreicht" ist
+ * die zweite, nicht die einzige Unterscheidung von einem leeren Balken.
+ *
+ * <p><b>Alle Töne kommen aus dem Theme</b> (E9 aus Plan #863): Schiene und Schraffur aus der
+ * Trennlinienfarbe und der hellsten getönten Fläche, die Füllung aus `primary` — und am Abschnitt,
+ * an dem der Vorgang endete, aus {@link ZUSTAND_FARBE}, also demselben Ampelton, den die Zeile des
+ * Arbeitspakets trägt. Neue Töne in `palette.nightRun` hätten den dortigen Kopfkommentar falsch
+ * gemacht.
+ */
+function Vorgangsband({
+  item,
+  vorgaben,
+}: Readonly<{ item: NightRunItem; vorgaben: NightRunStufenvorgaben | undefined }>) {
+  const letzte = letzteErreichteStufe(item.kettenStufen)
+  const abschnitte = KETTEN_STUFEN.map((stufe) => bandabschnitt(stufe, item, vorgaben, letzte))
+  // Ein Vorgang, der keinen Schritt erreicht hat, endete an keinem — über ihm steht kein Satz.
+  const abgebrochen = letzte !== undefined && item.state !== 'GREEN'
+
+  return (
+    <>
+      {abgebrochen && (
+        <Typography
+          variant="body2"
+          color="text.secondary"
+          data-testid={`abbruch-${item.cardNumber}`}
+        >
+          {abbruchSatz(item)}
+        </Typography>
+      )}
+      <Stack
+        direction="row"
+        spacing={0.5}
+        role="img"
+        aria-label={bandAnsage(abschnitte)}
+        data-testid={`stufenband-${item.cardNumber}`}
+        sx={{ mt: 0.5 }}
+      >
+        {abschnitte.map((abschnitt) => (
+          <Box
+            key={abschnitt.schluessel}
+            data-testid={`stufe-${item.cardNumber}-${abschnitt.schluessel}`}
+            data-anteil={abschnitt.anteil}
+            data-fuellung={abschnitt.fuellung}
+            data-erreicht={abschnitt.erreicht ? 'ja' : 'nein'}
+            sx={{ flexGrow: abschnitt.anteil, flexBasis: 0, minWidth: 0 }}
+          >
+            <Box
+              sx={(t) => ({
+                height: 8,
+                borderRadius: 1,
+                overflow: 'hidden',
+                bgcolor: t.palette.divider,
+                ...(abschnitt.erreicht
+                  ? {}
+                  : {
+                      backgroundImage: `repeating-linear-gradient(45deg, ${t.palette.divider} 0 3px, ${SURFACE_TINT} 3px 6px)`,
+                    }),
+              })}
+            >
+              {abschnitt.erreicht && (
+                <Box sx={{ height: '100%', width: `${abschnitt.fuellung}%`, bgcolor: abschnitt.farbe }} />
+              )}
+            </Box>
+            <Typography variant="caption" component="div">
+              {abschnitt.label}
+            </Typography>
+            <Typography variant="caption" component="div" color="text.secondary">
+              {abschnitt.zahlen}
+            </Typography>
+            {abschnitt.vermerk !== null && (
+              <Typography variant="caption" component="div" color="text.secondary">
+                {abschnitt.vermerk}
+              </Typography>
+            )}
+          </Box>
+        ))}
+      </Stack>
+    </>
+  )
+}
 
 /** Eine Kennzahl der Nacht: der Wert, darunter seine Benennung und ein etwaiger Vorbehalt. */
 function Kennzahl({
@@ -912,6 +1132,7 @@ function KettenUebersicht({ run }: Readonly<{ run: NightRun }>) {
             <Typography variant="body2" color="text.secondary">
               {vorgangsKennzahlen(item.kennzahlen)}
             </Typography>
+            <Vorgangsband item={item} vorgaben={stand?.vorgabenMin} />
           </Box>
         ))}
       </Stack>

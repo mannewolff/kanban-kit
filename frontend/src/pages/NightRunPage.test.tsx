@@ -1023,6 +1023,44 @@ describe('NightRunPage — Zeitbudget als eigener Grund (#856)', () => {
   })
 })
 
+/**
+ * Ein Ketten-Ergebnisstand ohne jede Kopfangabe — kein Modell, kein Label, kein Budget, keine
+ * Kostensumme, ein Vorgang ohne Arbeitsschritte. Er ist die Gegenprobe zur echten Fixture: Jede
+ * Angabe der Übersicht muss auch dann eine Auskunft ergeben, wenn der Stand sie nicht führt.
+ */
+const kettenStand = (felder: Record<string, unknown> = {}): string =>
+  JSON.stringify({
+    schemaFassung: 1,
+    erzeugtVon: '1.53.0',
+    start: startedAt(0),
+    art: 'kette',
+    stufe: null,
+    einheiten: [{ id: '900', titel: 'Anforderung ohne Angaben', ausgang: 'fertig' }],
+    abschluss: 'regulaer',
+    ...felder,
+  })
+
+/** Liest einen Ketten-Stand ein, wartet auf `warten` und klappt den Lauf auf. */
+async function uebersichtZu(ergebnisstand: string, warten: string, start = startedAt(0)) {
+  renderPage({
+    submit: { ergebnis: alleNeu(ergebnisstand) },
+    listen: [[], wieAufbewahrt(ergebnisstand)],
+  })
+  await screen.findByText('Noch keine Auswertung vorhanden.')
+
+  protokollWaehlen(ergebnisstand)
+
+  const panelEl = await screen.findByTestId(`lauf-${start}`)
+  // Auf `screen` und nicht im Panel: Der Hinweis auf einen unabgeschlossenen Lauf steht als
+  // Meldung über der Liste, die Kennzeichnung „neu angelegt" dagegen im Panel.
+  await screen.findByText(warten)
+  fireEvent.click(within(panelEl).getByRole('button', { expanded: false }))
+  return within(panelEl).findByTestId('ketten-uebersicht')
+}
+
+/** Die Übersicht des echten Ketten-Laufs, nach dem Einliefern und dem Neuladen der Liste. */
+const echteUebersicht = () => uebersichtZu(ECHTE_KETTE_STAND, 'neu angelegt', ECHTE_KETTE_START)
+
 describe('NightRunPage — Ketten-Übersicht (#866)', () => {
   /**
    * Der Kopf nennt Datum und Uhrzeit des Starts. Beide werden hier mit denselben `Intl`-Angaben
@@ -1033,45 +1071,6 @@ describe('NightRunPage — Ketten-Übersicht (#866)', () => {
     const start = new Date(iso)
     return `Nacht vom ${start.toLocaleDateString('de-DE', { dateStyle: 'full' })}, ${start.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })} Uhr`
   }
-
-  /**
-   * Ein Ketten-Ergebnisstand ohne jede Kopfangabe — kein Modell, kein Label, kein Budget, keine
-   * Kostensumme, ein Vorgang ohne Arbeitsschritte. Er ist die Gegenprobe zur echten Fixture: Jede
-   * Angabe der Übersicht muss auch dann eine Auskunft ergeben, wenn der Stand sie nicht führt.
-   */
-  const kettenStand = (felder: Record<string, unknown> = {}): string =>
-    JSON.stringify({
-      schemaFassung: 1,
-      erzeugtVon: '1.53.0',
-      start: startedAt(0),
-      art: 'kette',
-      stufe: null,
-      einheiten: [{ id: '900', titel: 'Anforderung ohne Angaben', ausgang: 'fertig' }],
-      abschluss: 'regulaer',
-      ...felder,
-    })
-
-  /** Liest einen Ketten-Stand ein, wartet auf `warten` und klappt den Lauf auf. */
-  async function uebersichtZu(ergebnisstand: string, warten: string, start = startedAt(0)) {
-    renderPage({
-      submit: { ergebnis: alleNeu(ergebnisstand) },
-      listen: [[], wieAufbewahrt(ergebnisstand)],
-    })
-    await screen.findByText('Noch keine Auswertung vorhanden.')
-
-    protokollWaehlen(ergebnisstand)
-
-    const panelEl = await screen.findByTestId(`lauf-${start}`)
-    // Auf `screen` und nicht im Panel: Der Hinweis auf einen unabgeschlossenen Lauf steht als
-    // Meldung über der Liste, die Kennzeichnung „neu angelegt" dagegen im Panel.
-    await screen.findByText(warten)
-    fireEvent.click(within(panelEl).getByRole('button', { expanded: false }))
-    return within(panelEl).findByTestId('ketten-uebersicht')
-  }
-
-  /** Die Übersicht des echten Ketten-Laufs, nach dem Einliefern und dem Neuladen der Liste. */
-  const echteUebersicht = () =>
-    uebersichtZu(ECHTE_KETTE_STAND, 'neu angelegt', ECHTE_KETTE_START)
 
   it('zeigt die Übersicht auch nach dem Einliefern und dem Neuladen der Liste (Gegenprobe zu E1)', async () => {
     // Die abweichende Stückzahl belegt, dass der sichtbare Lauf der **neu geladene** ist. Erst
@@ -1192,6 +1191,147 @@ describe('NightRunPage — Ketten-Übersicht (#866)', () => {
 
     expect(await within(panelEl).findByTestId('zustand-700')).toBeInTheDocument()
     expect(within(panelEl).queryByTestId('ketten-uebersicht')).not.toBeInTheDocument()
+  })
+})
+
+describe('NightRunPage — Stufenband je Vorgang (#867)', () => {
+  /** Die vier Arbeitsschritte in der Reihenfolge, in der die Kette sie läuft. */
+  const SCHRITTE = ['plan', 'review', 'pakete', 'abdeckung'] as const
+
+  const abschnitt = (uebersicht: HTMLElement, cardNumber: number, schritt: string) =>
+    within(uebersicht).getByTestId(`stufe-${cardNumber}-${schritt}`)
+
+  /** Ein Datenfeld aller vier Abschnitte eines Vorgangs, in der Reihenfolge der Kette. */
+  const bandwerte = (
+    uebersicht: HTMLElement,
+    cardNumber: number,
+    feld: 'anteil' | 'fuellung' | 'erreicht',
+  ) => SCHRITTE.map((schritt) => abschnitt(uebersicht, cardNumber, schritt).dataset[feld])
+
+  /** Der Grund eines Abbruchs, der **nicht** am Zeitbudget lag. */
+  const GRUND_KOSTEN = 'Kostenbudget erschöpft: 52,10 $ über 50,00 $'
+
+  it('zeichnet das Band der Einheit 791 in den Verhältnissen der Zeitvorgaben (Punkt 8)', async () => {
+    const uebersicht = await echteUebersicht()
+
+    // Geprüft an der Beschriftung und an den Datenfeldern, nicht an berechneten Stilwerten: In
+    // jsdom rechnet kein Browser ein Layout aus, ein Test auf `flex`-Anteile prüfte dort die
+    // Zeichenkette, die man selbst geschrieben hat.
+    expect(within(uebersicht).getByTestId('stufenband-791')).toHaveAttribute(
+      'aria-label',
+      'Stufenband: Plan 7,8 / 20 min · Prüfung 11,8 / 15 min · Pakete 3,7 / 15 min · Abdeckung 2,2 / 10 min',
+    )
+    expect(bandwerte(uebersicht, 791, 'anteil')).toEqual(['20', '15', '15', '10'])
+    expect(bandwerte(uebersicht, 791, 'fuellung')).toEqual(['39.1', '78.6', '24.6', '22.4'])
+    expect(bandwerte(uebersicht, 791, 'erreicht')).toEqual(['ja', 'ja', 'ja', 'ja'])
+  })
+
+  it('kennzeichnet Pakete und Abdeckung der Einheit 842 als nicht erreicht (Punkt 9)', async () => {
+    const uebersicht = await echteUebersicht()
+
+    expect(bandwerte(uebersicht, 842, 'erreicht')).toEqual(['ja', 'ja', 'nein', 'nein'])
+    expect(abschnitt(uebersicht, 842, 'pakete')).toHaveTextContent('nicht erreicht')
+    expect(abschnitt(uebersicht, 842, 'abdeckung')).toHaveTextContent('nicht erreicht')
+
+    // Der Plan-Schritt lief mit 36,6 % seiner Vorgabe — wenig, aber gelaufen. Er trägt den Vermerk
+    // nicht, und daran ist „nicht erreicht" von „wenig verbraucht" unterscheidbar.
+    const plan = abschnitt(uebersicht, 842, 'plan')
+    expect(plan).not.toHaveTextContent('nicht erreicht')
+    expect(plan.dataset.fuellung).toBe('36.6')
+  })
+
+  it('kappt die übergelaufene Prüfstufe der Einheit 842 bei voller Länge (Punkt 10)', async () => {
+    const uebersicht = await echteUebersicht()
+    const pruefung = abschnitt(uebersicht, 842, 'review')
+
+    // 900 484 ms gegen eine Vorgabe von 900 000 ms: Ohne Kappung stünde hier 100.1.
+    expect(pruefung.dataset.fuellung).toBe('100')
+    expect(pruefung).toHaveTextContent('15,0 / 15 min')
+  })
+
+  it('kappt auch einen Schritt mit doppelter Vorgabe (Punkt 11)', async () => {
+    const uebersicht = await uebersichtZu(
+      kettenStand({
+        budget: { planMin: 10 },
+        einheiten: [
+          {
+            id: '900',
+            titel: 'Doppelte Vorgabe',
+            ausgang: 'fertig',
+            stufen: { plan: { id: '901', dauerMs: 20 * 60_000 } },
+          },
+        ],
+      }),
+      'neu angelegt',
+    )
+    const plan = abschnitt(uebersicht, 900, 'plan')
+
+    expect(plan.dataset.fuellung).toBe('100')
+    expect(plan).toHaveTextContent('20,0 / 10 min')
+  })
+
+  it('nennt über dem Band der Einheit 842 den Zeitbudget-Grund samt Dokumentnummer (Punkt 12)', async () => {
+    const uebersicht = await echteUebersicht()
+
+    const satz = within(uebersicht).getByTestId('abbruch-842')
+    expect(satz).toHaveTextContent(
+      'Zeitbudget review: die Session wurde nach 15.0 min am Limit beendet',
+    )
+    expect(satz).toHaveTextContent('#849')
+    expect(abschnitt(uebersicht, 842, 'review')).toHaveTextContent('am Zeitbudget beendet')
+
+    // Ein regulär durchgelaufener Vorgang trägt weder Satz noch Vermerk.
+    expect(within(uebersicht).queryByTestId('abbruch-791')).not.toBeInTheDocument()
+    expect(abschnitt(uebersicht, 791, 'abdeckung')).not.toHaveTextContent('beendet')
+  })
+
+  it('trägt an einem anders begründeten Abbruch „hier abgebrochen" (Punkt 13)', async () => {
+    const uebersicht = await uebersichtZu(
+      kettenStand({
+        budget: { planMin: 20, reviewMin: 15, paketeMin: 15, abdeckungMin: 10 },
+        einheiten: [
+          {
+            id: '900',
+            titel: 'Abbruch ohne Zeitbezug',
+            ausgang: 'abgebrochen',
+            grund: GRUND_KOSTEN,
+            // `id: null` heißt: Die Stufe hat begonnen, ein Plan entstand aber nicht.
+            stufen: { plan: { id: null, dauerMs: 5 * 60_000 } },
+          },
+        ],
+      }),
+      'neu angelegt',
+    )
+
+    expect(abschnitt(uebersicht, 900, 'plan')).toHaveTextContent('hier abgebrochen')
+    expect(uebersicht).not.toHaveTextContent('am Zeitbudget beendet')
+
+    const satz = within(uebersicht).getByTestId('abbruch-900')
+    expect(satz).toHaveTextContent(GRUND_KOSTEN)
+    expect(satz).toHaveTextContent('keine Karten')
+  })
+
+  it('sagt an einem Schritt ohne Zeitvorgabe ausdrücklich „ohne Vorgabe"', async () => {
+    const uebersicht = await uebersichtZu(
+      kettenStand({
+        einheiten: [
+          {
+            id: '900',
+            titel: 'Ohne Budget',
+            ausgang: 'fertig',
+            stufen: { plan: { id: '901' } },
+          },
+        ],
+      }),
+      'neu angelegt',
+    )
+    const plan = abschnitt(uebersicht, 900, 'plan')
+
+    // Ohne Vorgabe gibt es kein Verhältnis: Der Schritt bekommt denselben Anteil wie die übrigen,
+    // und die Füllung bleibt leer statt eine Quote zu behaupten, die niemand gemeldet hat.
+    expect(plan).toHaveTextContent('0,0 min · ohne Vorgabe')
+    expect(plan.dataset.anteil).toBe('1')
+    expect(plan.dataset.fuellung).toBe('0')
   })
 })
 
