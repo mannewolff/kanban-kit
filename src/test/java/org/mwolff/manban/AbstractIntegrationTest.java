@@ -14,6 +14,7 @@ import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.TestPropertySource;
 import org.testcontainers.containers.MinIOContainer;
 import org.testcontainers.containers.PostgreSQLContainer;
+import org.testcontainers.utility.DockerImageName;
 
 /**
  * Gemeinsame Basis aller {@code *IT}: eine geteilte Postgres- und MinIO-Instanz für die gesamte
@@ -47,7 +48,15 @@ public abstract class AbstractIntegrationTest {
   @ServiceConnection
   static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16");
 
-  static final MinIOContainer MINIO = new MinIOContainer("minio/minio");
+  // Das Image kommt von quay.io, nicht von Docker Hub: `minio/minio` existiert dort nicht mehr
+  // (404 beim Pull), was die gesamte IT-Suite lahmlegte. Der Tag steht fest — ein beweglicher
+  // `latest` war genau das, was hier ohne Vorwarnung verschwunden ist.
+  // `asCompatibleSubstituteFor` ist nötig, weil MinIOContainer den Namen im Konstruktor gegen
+  // `minio/minio` prüft (assertCompatibleWith) und eine fremde Registry sonst ablehnt.
+  static final MinIOContainer MINIO =
+      new MinIOContainer(
+          DockerImageName.parse("quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z")
+              .asCompatibleSubstituteFor("minio/minio"));
 
   static {
     POSTGRES.start();
