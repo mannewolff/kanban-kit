@@ -31,5 +31,8 @@ public enum NightRunErrorClass {
   AWAITING_DECISION,
 
   /** Die Prüf-Session ist gescheitert, ohne ein verwertbares Ergebnis zu hinterlassen. */
-  REVIEWER_FAILED
+  REVIEWER_FAILED,
+
+  /** Die Stufe wurde am Zeitbudget beendet, bevor sie ihr Ergebnis hatte (Issue #842). */
+  TIME_BUDGET_EXCEEDED
 }

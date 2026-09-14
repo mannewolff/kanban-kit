@@ -33,6 +33,7 @@ export const NIGHT_RUN_ERROR_CLASSES = [
   'HARD_ABORT',
   'AWAITING_DECISION',
   'REVIEWER_FAILED',
+  'TIME_BUDGET_EXCEEDED',
 ] as const
 
 export type NightRunErrorClass = (typeof NIGHT_RUN_ERROR_CLASSES)[number]
@@ -52,12 +53,94 @@ export const NIGHT_RUN_EXCERPT_MAX = 4000
 export type NightRunState = 'GREEN' | 'YELLOW' | 'RED' | 'GREY'
 
 /**
- * `NIGHTPLAN` entsteht ausschliesslich ueber den Ergebnisstand-Parser
- * (`nightRunErgebnisstand.ts`, Plan #803): Ein Nachtplan-Textprotokoll traegt in seiner
- * Startzeile keine Stufe und wird von diesem Datei-Parser hier weiterhin als
- * `IMPLEMENTATION` gedeutet.
+ * `NIGHTPLAN` und `CHAIN` entstehen ausschliesslich ueber den Ergebnisstand-Parser
+ * (`nightRunErgebnisstand.ts`, Plan #803 bzw. #849): Ein Nachtplan- oder Ketten-Protokoll
+ * traegt in seiner Startzeile keine Stufe und wird von diesem Datei-Parser hier weiterhin
+ * als `IMPLEMENTATION` gedeutet. `parseNightRunLog` kennt die beiden nicht — am
+ * Textprotokoll-Parser aendert sich durch sie nichts.
  */
-export type NightRunMode = 'IMPLEMENTATION' | 'REVIEW' | 'NIGHTPLAN'
+export type NightRunMode = 'IMPLEMENTATION' | 'REVIEW' | 'NIGHTPLAN' | 'CHAIN'
+
+/**
+ * Die vier Arbeitsschritte, die ein Ketten-Vorgang durchlaeuft — dieselbe Reihenfolge, in
+ * der `stufenDerKette` in `night.mjs` sie laeuft. Schluesselraum von
+ * {@link NightRunStufenvorgaben} und {@link NightRunKettenStufen}: Vorgabe und Verbrauch
+ * eines Schritts finden sich damit unter demselben Namen.
+ */
+export type NightRunKettenStufe = 'plan' | 'review' | 'pakete' | 'abdeckung'
+
+/** Zeitvorgabe je Arbeitsschritt in Minuten; ein Schritt ohne Vorgabe fehlt. */
+export type NightRunStufenvorgaben = Partial<Record<NightRunKettenStufe, number>>
+
+/**
+ * Die Kopfangaben eines Ergebnisstands, die der Lauf selbst traegt (Issue #865).
+ *
+ * <p><b>Nur aus einem Ergebnisstand</b>, dieselbe Linie wie {@link NightRunItem.rawLines}:
+ * `parseNightRunErgebnisstand` fuellt sie, der Textprotokoll-Parser `parseNightRunLog`
+ * setzt sie nie — sein Protokoll fuehrt sie gar nicht. Sie verlassen den Browser nicht;
+ * `NightRunSubmission` und `zurEinlieferung` kennen sie nicht (Plan #718, A1).
+ *
+ * <p>Jedes Feld fehlt, wo der Stand die Angabe nicht fuehrt; keines traegt `null`. Der
+ * Bestand unterscheidet an dieser Stelle bereits „nicht vorhanden" von „vorhanden und
+ * leer" — ein durchgereichtes `null` zwaenge jede Anzeigestelle zu einer zweiten
+ * Fallunterscheidung.
+ */
+export interface NightRunStand {
+  vorgabenMin?: NightRunStufenvorgaben
+  /** Kostenbudget der Nacht in US-Dollar. */
+  kostenBudgetUsd?: number
+  modell?: string
+  /** Das Label, nach dem der Lauf seine Kandidaten gesucht hat. */
+  label?: string
+  /** Wie der Lauf endete (`regulaer`, `harterStopp`); fehlt, solange er nicht abgeschlossen ist. */
+  abschluss?: string
+  /** Summe der gemeldeten Kosten ueber alle Sitzungen des Laufs, in US-Dollar. */
+  kostenSumme?: number
+  /** Zahl der Sitzungen, die keine Kosten gemeldet haben. */
+  kostenUnbekannt?: number
+  /**
+   * Warum der Lauf ueberhaupt keine Sitzungs-Kennzahlen fuehrt (Issue #870). Fehlt der
+   * Runner-Aufruf die ausfuehrliche Ausgabe, fordert er den Kennzahlen-Strom nicht an und
+   * schreibt den Grund einmal an den Lauf-Kopf, nicht je Vorgang — das ist der **Regelfall**
+   * eines Umsetzungs-Laufs. Ohne dieses Feld stuende an jedem seiner Vorgaenge eine
+   * Fehlanzeige fuer etwas, das nicht fehlt, sondern nicht angefordert wurde.
+   */
+  kennzahlenHinweis?: string
+}
+
+/** Kosten und Aufwand eines Vorgangs — dieselbe Herkunft wie {@link NightRunStand}. */
+export interface NightRunKennzahlen {
+  kostenUsd?: number
+  /** Zuege der Sitzungen des Vorgangs; bei einer Kette die Summe ueber ihre Arbeitsschritte. */
+  zuege?: number
+  /** Zahl der Sitzungen dieses Vorgangs ohne Kostenmeldung. */
+  kostenUnbekannt?: number
+  /**
+   * Die Zeit, die das Modell selbst gearbeitet hat (Issue #872) — im Stand `apiDauerMs`. Ihr
+   * Verhaeltnis zu {@link NightRunItem.durationMs} sagt, ob eine Sitzung denkt oder wartet.
+   *
+   * <p>Sie kann die Dauer **uebersteigen**: Ein Pruef-Lauf startet mehrere Pruefer zugleich,
+   * und ihre Zeiten summieren sich ueber die Wanduhr hinaus. Wer aus ihr einen Anteil
+   * rechnet, muss diesen Fall unterscheiden, statt bei voller Laenge zu kappen.
+   */
+  arbeitszeitMs?: number
+}
+
+/** Was ein einzelner Arbeitsschritt einer Kette verbraucht und hinterlassen hat. */
+export interface NightRunKettenStufenwert {
+  dauerMs?: number
+  kostenUsd?: number
+  zuege?: number
+  /**
+   * Nummern der in diesem Schritt entstandenen Dokumente — Plan und Pakete hinterlassen
+   * welche, Pruefung und Abdeckung nie. **Leer statt fehlend**, weil „hier entstand
+   * nichts" eine Aussage des Stands ist und nicht das Fehlen einer Angabe.
+   */
+  dokumente: string[]
+}
+
+/** Die erreichten Arbeitsschritte eines Ketten-Vorgangs; ein nicht erreichter fehlt. */
+export type NightRunKettenStufen = Partial<Record<NightRunKettenStufe, NightRunKettenStufenwert>>
 
 export interface NightRunItem {
   /** Projektweite Kartennummer des Arbeitspakets. */
@@ -82,6 +165,35 @@ export interface NightRunItem {
    * Felder einzeln und kennen `rawLines` nicht (Plan #718, A1).
    */
   rawLines: string[]
+  /** Kosten und Aufwand — nur aus einem Ergebnisstand, siehe {@link NightRunStand}. */
+  kennzahlen?: NightRunKennzahlen
+  /**
+   * Wie viele Dokumente in diesem Vorgang entstanden sind — nur aus einem Ergebnisstand,
+   * siehe {@link NightRunStand}. Die **Zahl** und nicht die Nummernliste: Die
+   * Kennzahlenzeile eines Erzeugungs-Laufs nennt nur, wie viele Dokumente entstanden sind;
+   * die Nummern brauchen allein Ketten-Vorgaenge, und dort stehen sie bereits an den
+   * Arbeitsschritten ({@link NightRunKettenStufenwert.dokumente}).
+   */
+  dokumenteAnzahl?: number
+  /**
+   * Die Arbeitsschritte eines Ketten-Vorgangs — nur aus einem Ergebnisstand, siehe
+   * {@link NightRunStand}. Der Name traegt das Praefix, weil `NightRunPage.tsx` „Stufe"
+   * bereits fuer die Herkunftskette einer Karte fuehrt (Plan #863, E3).
+   */
+  kettenStufen?: NightRunKettenStufen
+  /**
+   * Das rohe Ausgangswort der Einheit (`uebersprungen`, `liegengeblieben`, `erfolg`, …) — nur
+   * aus einem Ergebnisstand, siehe {@link NightRunStand}. Es sagt genau das, was aus Zustand,
+   * Fehlerklasse und Auszug nur noch erraten werden koennte: `uebersprungen` und
+   * `liegengeblieben` sind beide grau ohne Fehlerklasse, `unbekannt` und ein harter Abbruch
+   * beide rot mit derselben Klasse (Plan #864, E2).
+   *
+   * <p><b>Es verlaesst den Browser nicht</b> — `NightRunItemSubmission` und `zurEinlieferung`
+   * picken ihre Felder einzeln und kennen es nicht. Ein aufbewahrter Lauf traegt es deshalb
+   * nie; wer es braucht, faellt dort auf eine ausdrueckliche Ableitung zurueck, statt eine
+   * zweite Wahrheit in den Einlieferungs-Vertrag zu legen (E2, ausdruecklich verworfen).
+   */
+  ausgang?: string
 }
 
 export interface NightRun {
@@ -99,6 +211,8 @@ export interface NightRun {
   /** Kein Abschluss gefunden — der Lauf laeuft noch oder wurde abgebrochen. */
   incomplete: boolean
   items: NightRunItem[]
+  /** Die Kopfangaben des Ergebnisstands; fehlt am Textprotokoll-Lauf. */
+  stand?: NightRunStand
   /**
    * Zustand auf Lauf-Ebene. Ein Lauf ohne Arbeitspaket traegt seinen Zustand hier —
    * etwa nach einem harten Abbruch durch `fail()`. Bleibt `undefined`, wenn die

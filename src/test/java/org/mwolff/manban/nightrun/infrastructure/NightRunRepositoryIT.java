@@ -128,6 +128,30 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
         .containsExactly("Paket 721", null, 60_000L, "4c9f42a", "  #721 -> GREEN");
   }
 
+  /**
+   * Belegt, dass {@code ck_night_run_mode} und {@code ck_night_run_item_error_class} nach {@code
+   * V30__night_run_kette.sql} die beiden neuen Werte tatsächlich zulassen (Issue #853). Nur die
+   * echte Datenbank kann das einlösen: Ein fehlender {@code CHECK}-Wert fällt weder beim Übersetzen
+   * noch im Service auf, sondern erst hier — und ohne diesen Test erst nachts am hochgeladenen
+   * Auszug.
+   */
+  @Test
+  void einKettenLaufMitZeitbudgetAbbruchWirdAngenommenUndZurueckgelesen() {
+    NightRun kette =
+        new NightRun(null, projectId, T1, NightRunMode.CHAIN, 3_600_000L, 1, 0, 0, null, ANGELEGT);
+
+    long id =
+        runs.insertIfAbsent(kette, List.of(mitKlasse(853, NightRunErrorClass.TIME_BUDGET_EXCEEDED)))
+            .orElseThrow();
+
+    assertThat(runs.findByProjectOrderByStartedAtDesc(projectId))
+        .extracting(NightRun::mode)
+        .containsExactly(NightRunMode.CHAIN);
+    assertThat(runs.findItemsByRunIds(List.of(id)))
+        .extracting(NightRunItem::errorClass)
+        .containsExactly(NightRunErrorClass.TIME_BUDGET_EXCEEDED);
+  }
+
   @Test
   void findByProjectOrderByStartedAtDescLiefertDenJuengstenLaufZuerst() {
     anlegen(T1, List.of());
@@ -265,7 +289,7 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
   // --- Korrelation Zustand <-> Fehlerklasse ---------------------------------------------------
 
   @Test
-  void gruenTraegtKeineFehlerklasse_jederAndereZustandGenauEineDerSieben() {
+  void gruenTraegtKeineFehlerklasse_jederAndereZustandGenauEineDerAcht() {
     long id =
         anlegen(
             T1,

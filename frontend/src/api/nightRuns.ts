@@ -11,9 +11,11 @@ import { apiFetch } from './client'
 
 /**
  * Die Modi, die der Server kennt — `NIGHTPLAN` bleibt bewusst browser-only (Plan #803,
- * Architektonische Entscheidung 8): Backend-Enum und `ck_night_run_mode` kennen weiterhin nur
- * `IMPLEMENTATION`/`REVIEW`. Diese Verengung erzwingt den Compiler-Schutz in `NightRunPage.tsx`
- * (`istEinlieferbar`) — ein Cast an `mode` hebelte ihn aus.
+ * Architektonische Entscheidung 8): Backend-Enum und `ck_night_run_mode` kennen
+ * `IMPLEMENTATION`, `REVIEW` und seit Issue #853 `CHAIN`; `NIGHTPLAN` ist der einzige Ausschluss.
+ * Diese Verengung erzwingt den Compiler-Schutz in `NightRunPage.tsx` (`istEinlieferbar`) — ein Cast
+ * an `mode` hebelte ihn aus. Der Ausschluss ist der einzige Ort, der gepflegt wird: Ein neuer
+ * einlieferbarer Modus weitet diesen Typ von selbst.
  */
 export type NightRunServerMode = Exclude<NightRunMode, 'NIGHTPLAN'>
 

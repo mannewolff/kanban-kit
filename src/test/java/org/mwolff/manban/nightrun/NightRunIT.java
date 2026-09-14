@@ -159,6 +159,37 @@ class NightRunIT extends AbstractIntegrationTest {
         .andExpect(jsonPath("$[0].created").value(true));
   }
 
+  /**
+   * Der Ketten-Lauf samt Abbruch am Zeitbudget geht durch die ganze Kette — Bindung, Service und
+   * die {@code CHECK}-Constraints aus {@code V30__night_run_kette.sql} (Issue #853). Fehlte einer
+   * der beiden Werte in der Migration, käme hier ein 500 an der Spaltenzusicherung statt eines 200.
+   */
+  @Test
+  void submit_acceptsChainRunWithTimeBudgetExceeded_andListsItBack() throws Exception {
+    Cookie owner = session("nr-chain-owner@example.com", PlatformRole.USER);
+    long projectId = projectOf("nr-chain-owner@example.com", "nr-chain-admin@example.com");
+
+    mvc.perform(
+            post(path(projectId))
+                .cookie(owner)
+                .contentType("application/json")
+                .content(
+                    """
+                    {"runs":[{"startedAt":"%s","mode":"CHAIN","durationMs":1234,
+                              "processedCount":1,"skippedCount":0,"unparsedCount":0,
+                              "items":[{"cardNumber":853,"title":"Kette","state":"RED",
+                                        "errorClass":"TIME_BUDGET_EXCEEDED","excerpt":"Auszug"}]}]}
+                    """
+                        .formatted(ERSTER)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$[0].created").value(true));
+
+    mvc.perform(get(path(projectId)).cookie(owner))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$[0].mode").value("CHAIN"))
+        .andExpect(jsonPath("$[0].items[0].errorClass").value("TIME_BUDGET_EXCEEDED"));
+  }
+
   @Test
   void list_returnsRunsNewestFirst_withTheirItems() throws Exception {
     Cookie owner = session("nr-list-owner@example.com", PlatformRole.USER);

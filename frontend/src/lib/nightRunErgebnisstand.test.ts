@@ -2,10 +2,12 @@ import { describe, expect, it } from 'vitest'
 import { NIGHT_RUN_EXCERPT_MAX, parseNightRunLog } from './nightRunLog'
 import type { NightRun, NightRunItem } from './nightRunLog'
 import { parseNightRunErgebnisstand } from './nightRunErgebnisstand'
+import type { NightRunErgebnisstandResult } from './nightRunErgebnisstand'
 import echterLauf from './__fixtures__/night-run-2026-09-07-085229.json'
 import echterNachtplanHarterStopp from './__fixtures__/night-run-2026-09-09-141506.json'
 import echterNachtplanRegulaer from './__fixtures__/night-run-2026-09-09-125621.json'
 import echterPrueflauf from './__fixtures__/night-run-2026-09-11-103116.json'
+import echteKette from './__fixtures__/night-run-2026-09-14-131200.json'
 
 /**
  * Die Fixtures dieser Datei sind — anders als in `nightRunLog.test.ts` — nicht
@@ -46,6 +48,13 @@ const mitEinheit = (felder: Record<string, unknown>, laufFelder: Record<string, 
 const imPrueflauf = (felder: Record<string, unknown>, laufFelder: Record<string, unknown> = {}): string =>
   mitEinheit(felder, { art: 'review', stufe: 'plan', ...laufFelder })
 
+/**
+ * Dieselbe Einheit in einem Ketten-Lauf. `stufe: null` schreibt `night.mjs --kette` in jeden
+ * Ketten-Stand — die Stufen liegen dort innerhalb der Einheit, nicht am Lauf.
+ */
+const inKette = (felder: Record<string, unknown>, laufFelder: Record<string, unknown> = {}): string =>
+  mitEinheit(felder, { art: 'kette', stufe: null, ...laufFelder })
+
 /** Den Lauf holen und dabei sicherstellen, dass die Deutung ueberhaupt gelang. */
 function lauf(text: string): NightRun {
   const ergebnis = parseNightRunErgebnisstand(text)
@@ -56,45 +65,47 @@ function lauf(text: string): NightRun {
 /** Das einzige Arbeitspaket eines Laufs. */
 const einziges = (text: string): NightRunItem => lauf(text).items[0]
 
+/**
+ * Die Ablehnung eines Stands — wirft, wenn er wider Erwarten deutbar war.
+ *
+ * <p>Seit Issue #857 traegt eine Ablehnung neben dem Grund auch das nicht gedeutete Wort
+ * und die erzeugende Ausgabe des Nachtlaufs. Die Bestandsfaelle pruefen deshalb `.grund`
+ * statt der vollstaendigen Form mit `toEqual`: Ihre Aussage ist unveraendert die, welcher
+ * der drei Gruende zutrifft.
+ */
+function ablehnung(text: string): Extract<NightRunErgebnisstandResult, { ok: false }> {
+  const ergebnis = parseNightRunErgebnisstand(text)
+  if (ergebnis.ok) throw new Error('unerwartet deutbar')
+  return ergebnis
+}
+
 describe('parseNightRunErgebnisstand — Ablehnungen', () => {
   it('lehnt eine Datei ab, die kein JSON ist', () => {
-    expect(parseNightRunErgebnisstand('[2026-09-07T08:52:29.532Z] Nacht-Runner startet')).toEqual({
-      ok: false,
-      grund: 'kein-json',
-    })
+    expect(ablehnung('[2026-09-07T08:52:29.532Z] Nacht-Runner startet').grund).toBe('kein-json')
   })
 
   it('lehnt `null` ab — gueltiges JSON, aber kein Objekt', () => {
-    expect(parseNightRunErgebnisstand('null')).toEqual({ ok: false, grund: 'kein-json' })
+    expect(ablehnung('null').grund).toBe('kein-json')
   })
 
   it('lehnt ein Array ab', () => {
-    expect(parseNightRunErgebnisstand('[]')).toEqual({ ok: false, grund: 'kein-json' })
+    expect(ablehnung('[]').grund).toBe('kein-json')
   })
 
   it('lehnt eine blosse Zahl ab', () => {
-    expect(parseNightRunErgebnisstand('42')).toEqual({ ok: false, grund: 'kein-json' })
+    expect(ablehnung('42').grund).toBe('kein-json')
   })
 
   it('lehnt ein Objekt ohne schemaFassung ab — es ist kein Ergebnisstand', () => {
-    expect(parseNightRunErgebnisstand('{"art":"implementierung"}')).toEqual({
-      ok: false,
-      grund: 'kein-json',
-    })
+    expect(ablehnung('{"art":"implementierung"}').grund).toBe('kein-json')
   })
 
   it('meldet eine unbekannte Fassung getrennt vom Formfehler', () => {
-    expect(parseNightRunErgebnisstand(stand({ schemaFassung: 2 }))).toEqual({
-      ok: false,
-      grund: 'unbekannte-fassung',
-    })
+    expect(ablehnung(stand({ schemaFassung: 2 })).grund).toBe('unbekannte-fassung')
   })
 
   it('lehnt einen Pruef-Lauf mit unbekannter Stufe ab', () => {
-    expect(parseNightRunErgebnisstand(stand({ art: 'review', stufe: 'sonstwas' }))).toEqual({
-      ok: false,
-      grund: 'nicht-unterstuetzt',
-    })
+    expect(ablehnung(stand({ art: 'review', stufe: 'sonstwas' })).grund).toBe('nicht-unterstuetzt')
   })
 
   it.each([
@@ -103,15 +114,12 @@ describe('parseNightRunErgebnisstand — Ablehnungen', () => {
     ['schaerfungFehlt'],
     ['syntheseOhneBeleg'],
   ])('lehnt den Pruef-Ausgang %s in einem Implementierungs-Lauf ab', (ausgang) => {
-    expect(parseNightRunErgebnisstand(mitEinheit({ ausgang }))).toEqual({
-      ok: false,
-      grund: 'nicht-unterstuetzt',
-    })
+    expect(ablehnung(mitEinheit({ ausgang })).grund).toBe('nicht-unterstuetzt')
   })
 
   it('lehnt einen Pruef-Ausgang in einem Nachtplan-Lauf ab', () => {
     const text = mitEinheit({ ausgang: 'mitBefund' }, { art: 'erzeugung', stufe: 'plan' })
-    expect(parseNightRunErgebnisstand(text)).toEqual({ ok: false, grund: 'nicht-unterstuetzt' })
+    expect(ablehnung(text).grund).toBe('nicht-unterstuetzt')
   })
 
   // Die Einheiten tragen jeweils genau das, was den Ausgang in seinem eigenen Modus
@@ -126,10 +134,38 @@ describe('parseNightRunErgebnisstand — Ablehnungen', () => {
   ] as const)('lehnt den Ausgang %s eines anderen Modus in einem Pruef-Lauf ab', (ausgang, felder) => {
     // Ein Pruef-Lauf schreibt sie nie; eine geratene Farbe waere fuer eine kaputte
     // oder fremde Datei die falsche Aussage.
-    expect(parseNightRunErgebnisstand(imPrueflauf({ ausgang, ...felder }))).toEqual({
-      ok: false,
-      grund: 'nicht-unterstuetzt',
-    })
+    expect(ablehnung(imPrueflauf({ ausgang, ...felder })).grund).toBe('nicht-unterstuetzt')
+  })
+
+  // Wie bei den Pruef-Lagen tragen die Einheiten genau das, was ihren Ausgang im eigenen
+  // Modus deutbar machte — sonst schluege schon die alte Pruefung zu.
+  it.each([
+    ['verbraucht', {}],
+    ['offen', {}],
+    ['ohneErgebnis', {}],
+    ['ohneBefund', {}],
+    ['mitBefund', {}],
+    ['schaerfungFehlt', {}],
+    ['syntheseOhneBeleg', { grund: 'sonnet: „Der Abschnitt fehlt" — steht nicht im Body-Vorschlag.' }],
+    ['erfolg', { pruefung: { id: '100', zustand: 'geprueft' } }],
+    ['fehlschlag', { pruefung: { id: '100', zustand: 'rot', rotesKommando: 'mvn verify', rotesErgebnis: 'rot' } }],
+    ['zurueckgestellt', { grund: 'Nachtlauf: Idee ([Idee]).' }],
+    ['harterStopp', {}],
+  ] as const)('lehnt den Ausgang %s eines anderen Modus in einem Ketten-Lauf ab', (ausgang, felder) => {
+    // `erfolg` steht hier ausdruecklich mit drin: Er fiele sonst auf das modus-unabhaengige
+    // Vokabular durch und bekaeme in einer Kette eine geratene Farbe.
+    expect(ablehnung(inKette({ ausgang, ...felder })).grund).toBe('nicht-unterstuetzt')
+  })
+
+  it.each([['fertig'], ['angehalten'], ['abgebrochen']])(
+    'lehnt den Ketten-Ausgang %s in einem Implementierungs-Lauf ab',
+    (ausgang) => {
+      expect(ablehnung(mitEinheit({ ausgang, grund: 'Kostenbudget: 55.00 $' })).grund).toBe('nicht-unterstuetzt')
+    },
+  )
+
+  it('lehnt einen Ketten-Stand mit gesetzter Stufe ab — der Runner schreibt dort immer null', () => {
+    expect(ablehnung(stand({ art: 'kette', stufe: 'plan' })).grund).toBe('nicht-unterstuetzt')
   })
 
   it.each([
@@ -139,59 +175,104 @@ describe('parseNightRunErgebnisstand — Ablehnungen', () => {
     [undefined, 'plan'],
     ['implementierung', 'plan'],
   ] as const)('lehnt die Kombination art=%s/stufe=%s ab — nur (erzeugung,plan) ist Nachtplan', (art, stufe) => {
-    expect(parseNightRunErgebnisstand(stand({ art, stufe }))).toEqual({
-      ok: false,
-      grund: 'nicht-unterstuetzt',
-    })
+    expect(ablehnung(stand({ art, stufe })).grund).toBe('nicht-unterstuetzt')
   })
 
   it('lehnt einen Stand ohne Feld `einheiten` ab', () => {
     const ohne = JSON.parse(stand()) as Record<string, unknown>
     delete ohne.einheiten
-    expect(parseNightRunErgebnisstand(JSON.stringify(ohne))).toEqual({
-      ok: false,
-      grund: 'nicht-unterstuetzt',
-    })
+    expect(ablehnung(JSON.stringify(ohne)).grund).toBe('nicht-unterstuetzt')
   })
 
   it('lehnt `einheiten` ab, wenn es kein Array ist', () => {
-    expect(parseNightRunErgebnisstand(stand({ einheiten: {} }))).toEqual({
-      ok: false,
-      grund: 'nicht-unterstuetzt',
-    })
+    expect(ablehnung(stand({ einheiten: {} })).grund).toBe('nicht-unterstuetzt')
   })
 
   it('lehnt einen `abschluss` ab, der weder null noch ein String ist', () => {
-    expect(parseNightRunErgebnisstand(stand({ abschluss: 7 }))).toEqual({
-      ok: false,
-      grund: 'nicht-unterstuetzt',
-    })
+    expect(ablehnung(stand({ abschluss: 7 })).grund).toBe('nicht-unterstuetzt')
   })
 
   it('lehnt einen unbekannten `ausgang` ab', () => {
-    expect(parseNightRunErgebnisstand(mitEinheit({ ausgang: 'halbfertig' }))).toEqual({
-      ok: false,
-      grund: 'nicht-unterstuetzt',
-    })
+    expect(ablehnung(mitEinheit({ ausgang: 'halbfertig' })).grund).toBe('nicht-unterstuetzt')
   })
 
   it('lehnt `erfolg` ohne Pruefblock ab — das Paar ist unvollstaendig', () => {
-    expect(parseNightRunErgebnisstand(mitEinheit({ ausgang: 'erfolg' }))).toEqual({
-      ok: false,
-      grund: 'nicht-unterstuetzt',
-    })
+    expect(ablehnung(mitEinheit({ ausgang: 'erfolg' })).grund).toBe('nicht-unterstuetzt')
   })
 
   it('lehnt `erfolg` mit unbekanntem Pruefzustand ab', () => {
     const text = mitEinheit({ ausgang: 'erfolg', pruefung: { id: '100', zustand: 'grau' } })
-    expect(parseNightRunErgebnisstand(text)).toEqual({ ok: false, grund: 'nicht-unterstuetzt' })
+    expect(ablehnung(text).grund).toBe('nicht-unterstuetzt')
   })
 
   it('lehnt `fehlschlag` mit einem Pruefzustand ab, den die Tabelle dort nicht kennt', () => {
     // `geprueft` ist bei einem Fehlschlag kein Widerspruch, den dieser Parser aufloest —
     // der Runner erzeugt das Paar nicht, und raten waere schlimmer als ablehnen.
     const text = mitEinheit({ ausgang: 'fehlschlag', pruefung: { id: '100', zustand: 'geprueft' } })
-    expect(parseNightRunErgebnisstand(text)).toEqual({ ok: false, grund: 'nicht-unterstuetzt' })
+    expect(ablehnung(text).grund).toBe('nicht-unterstuetzt')
+  })
+})
+
+/**
+ * AK 10 aus Issue #842: Wer entscheiden will, ob er ein neueres Werkzeug braucht, soll das
+ * aus der Meldung erfahren — welches Wort nicht gedeutet werden konnte und welche Ausgabe
+ * des Nachtlaufs die Datei geschrieben hat. Beides steht an der Ablehnung selbst; den Satz
+ * daraus baut die Seite.
+ */
+describe('parseNightRunErgebnisstand — Wort und Herkunft einer Ablehnung (Issue #857)', () => {
+  it('nennt bei unbekannter Lauf-Art das Paar art/stufe und die erzeugende Ausgabe', () => {
+    const ergebnis = ablehnung(stand({ art: 'erfindung', stufe: 'plan' }))
+    expect(ergebnis.grund).toBe('nicht-unterstuetzt')
+    expect(ergebnis.wort).toBe('art=erfindung/stufe=plan')
+    expect(ergebnis.erzeugtVon).toBe('1.47.0')
+  })
+
+  it('nennt eine fehlende Stufe im Wort ausdruecklich als „ohne"', () => {
+    expect(ablehnung(stand({ art: 'erfindung' })).wort).toBe('art=erfindung/stufe=ohne')
+  })
+
+  it('nennt bei einem Ausgang, den eine Kette nie schreibt, genau diesen Ausgang', () => {
+    const ergebnis = ablehnung(inKette({ ausgang: 'verbraucht' }))
+    expect(ergebnis.grund).toBe('nicht-unterstuetzt')
+    expect(ergebnis.wort).toBe('verbraucht')
+    expect(ergebnis.erzeugtVon).toBe('1.47.0')
+  })
+
+  it('nennt auch den unbekannten Ausgang eines Implementierungs-Laufs', () => {
+    expect(ablehnung(mitEinheit({ ausgang: 'halbfertig' })).wort).toBe('halbfertig')
+  })
+
+  it('laesst `wort` leer, wo es keines gibt — `einheiten` ist kein Array', () => {
+    const ergebnis = ablehnung(stand({ einheiten: {} }))
+    expect(ergebnis).not.toHaveProperty('wort')
+    expect(ergebnis.erzeugtVon).toBe('1.47.0')
+  })
+
+  it('laesst `wort` auch bei falsch getyptem `abschluss` leer', () => {
+    expect(ablehnung(stand({ abschluss: 7 }))).not.toHaveProperty('wort')
+  })
+
+  it('laesst Wort und Herkunft leer, wenn die Datei gar kein JSON ist', () => {
+    const ergebnis = ablehnung('[2026-09-07T08:52:29.532Z] Nacht-Runner startet')
+    expect(ergebnis).not.toHaveProperty('wort')
+    expect(ergebnis).not.toHaveProperty('erzeugtVon')
+  })
+
+  it('laesst die Herkunft leer, wenn der Stand sie nicht als Zeichenkette fuehrt', () => {
+    expect(ablehnung(stand({ art: 'erfindung', erzeugtVon: 7 }))).not.toHaveProperty('erzeugtVon')
+  })
+
+  /**
+   * E11 des Plans #849: AK 10 verlangt die Herkunft woertlich nur fuer „Art oder Vokabular
+   * unbekannt". Gerade bei unbekanntem **Aufbau** ist die Frage nach dem neueren Werkzeug
+   * aber am dringendsten — sie dort als einzige auszulassen waere der eine Fall, in dem der
+   * Betreiber doch in die Datei sehen muesste.
+   */
+  it('nennt die Herkunft auch bei unbekannter Aufbaufassung', () => {
+    const ergebnis = ablehnung(stand({ schemaFassung: 2, erzeugtVon: '2.0.0' }))
+    expect(ergebnis.grund).toBe('unbekannte-fassung')
+    expect(ergebnis.erzeugtVon).toBe('2.0.0')
+    expect(ergebnis).not.toHaveProperty('wort')
   })
 })
 
@@ -481,6 +562,201 @@ describe('parseNightRunErgebnisstand — Pruef-Lauf (Issue #816)', () => {
   })
 })
 
+describe('parseNightRunErgebnisstand — Ketten-Lauf (Issue #854)', () => {
+  /** Der Grund eines Zeitbudget-Abbruchs, wie `ketteSession` ihn schreibt. */
+  const ZEITBUDGET = 'Zeitbudget review: die Session wurde nach 15.0 min am Limit beendet'
+
+  it('deutet art=kette/stufe=null als CHAIN und laesst die Stufe unbesetzt', () => {
+    const r = lauf(inKette({ ausgang: 'fertig' }))
+    expect(r.mode).toBe('CHAIN')
+    expect(r).not.toHaveProperty('stage')
+  })
+
+  it('macht `fertig` gruen ohne Fehlerklasse', () => {
+    const item = einziges(inKette({ ausgang: 'fertig' }))
+    expect(item.state).toBe('GREEN')
+    expect(item.errorClass).toBeUndefined()
+    expect(item.excerpt).toBe('Kette vollständig durchlaufen — Plan, Prüfung, Pakete, Abdeckung')
+  })
+
+  it('macht `angehalten` rot mit AWAITING_DECISION — eine Stopp-Frage wartet auf einen Menschen', () => {
+    const item = einziges(inKette({ ausgang: 'angehalten', grund: 'Stopp-Frage im Plan #849' }))
+    expect(item.state).toBe('RED')
+    expect(item.errorClass).toBe('AWAITING_DECISION')
+    expect(item.excerpt).toBe('Stopp-Frage am Fachplan — die Kette wartet auf eine Entscheidung')
+  })
+
+  it('macht einen Zeitbudget-Abbruch ohne erzeugtes Dokument rot mit TIME_BUDGET_EXCEEDED', () => {
+    const item = einziges(inKette({ ausgang: 'abgebrochen', grund: ZEITBUDGET }))
+    expect(item.state).toBe('RED')
+    expect(item.errorClass).toBe('TIME_BUDGET_EXCEEDED')
+    expect(item.excerpt).toBe(ZEITBUDGET)
+  })
+
+  // Die Stufen-Blöcke entstehen VOR ihrem Ergebnis (`stufePlan` legt `{ id: null, … }` an,
+  // bevor die Session laeuft). Deshalb entscheidet `plan.id`, nicht die blosse Anwesenheit
+  // des Blocks, und ein leeres `pakete.ids` zaehlt nicht als Dokument.
+  it.each([
+    ['ohne Stufen-Block', {}, 'RED' as const],
+    ['mit begonnener, aber ergebnisloser Plan-Stufe', { stufen: { plan: { id: null } } }, 'RED' as const],
+    ['mit leerem Stufen-Block', { stufen: {} }, 'RED' as const],
+    ['mit leerer Paket-Liste', { stufen: { pakete: { ids: [] } } }, 'RED' as const],
+    ['mit erzeugtem Plan', { stufen: { plan: { id: '849' } } }, 'YELLOW' as const],
+    ['mit erzeugten Paketen', { stufen: { pakete: { ids: ['845'] } } }, 'YELLOW' as const],
+  ])('faerbt einen Zeitbudget-Abbruch %s als %s', (_name, felder, state) => {
+    const item = einziges(inKette({ ausgang: 'abgebrochen', grund: ZEITBUDGET, ...felder }))
+    expect(item.state).toBe(state)
+    expect(item.errorClass).toBe('TIME_BUDGET_EXCEEDED')
+  })
+
+  // E16: Kostenbudget und technischer Fehler sind harte Abbrueche — ein nebenbei erzeugtes
+  // Dokument macht sie nicht gelb, anders als beim Zeitbudget.
+  it.each([
+    ['Kostenbudget: 55.00 $ von 50 $ nach der Stufe review'],
+    ['technischer Fehler: die Session der Stufe plan endete mit exit 1'],
+    ['kein Plan entstanden — die Session hat kein [Plan]-Dokument mit der Herkunftszeile angelegt'],
+  ])('macht den Abbruch "%s" rot mit HARD_ABORT, auch mit erzeugtem Dokument', (grund) => {
+    const item = einziges(
+      inKette({ ausgang: 'abgebrochen', grund, stufen: { plan: { id: '849' } } }),
+    )
+    expect(item.state).toBe('RED')
+    expect(item.errorClass).toBe('HARD_ABORT')
+    // Erste Zeile: Seit Issue #855 folgt dem Ausgang der Stufenblock der Einheit.
+    expect(item.excerpt.split('\n')[0]).toBe(grund)
+  })
+
+  it.each([
+    ['ohne grund', {}],
+    ['mit nicht-string grund', { grund: 7 }],
+  ])('behandelt einen Abbruch %s als harten Abbruch mit leerem Auszug', (_name, felder) => {
+    const item = einziges(inKette({ ausgang: 'abgebrochen', ...felder }))
+    expect(item.state).toBe('RED')
+    expect(item.errorClass).toBe('HARD_ABORT')
+    expect(item.excerpt).toBe('')
+  })
+
+  it('kuerzt einen ueberlangen Abbruch-Grund auf die gemeinsame Obergrenze', () => {
+    const grund = 'x'.repeat(NIGHT_RUN_EXCERPT_MAX + 100)
+    expect(einziges(inKette({ ausgang: 'abgebrochen', grund })).excerpt).toHaveLength(
+      NIGHT_RUN_EXCERPT_MAX,
+    )
+  })
+
+  it.each([
+    ['uebersprungen', 'GREY' as const, "kein Label 'kit:night'"],
+    ['liegengeblieben', 'GREY' as const, 'Über die Obergrenze (--max) hinaus — bleibt liegen'],
+    ['unbekannt', 'RED' as const, 'Lauf mitten in der Runde abgebrochen — kein Ausgang'],
+  ])('deutet den modus-unabhaengigen Ausgang %s auch im Ketten-Lauf', (ausgang, state, auszug) => {
+    const item = einziges(inKette({ ausgang, grund: auszug }))
+    expect(item.state).toBe(state)
+    expect(item.excerpt).toBe(auszug)
+  })
+})
+
+describe('parseNightRunErgebnisstand — Stufen und Dauer eines Ketten-Vorgangs (Issue #855)', () => {
+  /**
+   * Die Ausnahme aus E3: `stufeAbdeckung` laesst die Kette auch bei Zeitbudget, Fehlstart
+   * oder fehlendem Text `fertig` enden und legt den Grund an der Stufe ab. Ohne diese
+   * Ausnahme hiesse eine gescheiterte Abdeckung „gelungen" — genau die Falschaussage, die
+   * der Leitstand nicht machen darf. Konstruiert, weil der erste echte Ketten-Lauf keine
+   * Abdeckung mit `grund` enthaelt.
+   */
+  it('zeigt bei der Abdeckung ihren `grund` statt „gelungen", auch wenn die Einheit fertig ist', () => {
+    const item = einziges(
+      inKette({
+        ausgang: 'fertig',
+        stufen: {
+          plan: { id: '849' },
+          review: {},
+          pakete: { ids: ['855'] },
+          abdeckung: { grund: 'die Abdeckungs-Session lieferte keinen Text' },
+        },
+      }),
+    )
+    expect(item.excerpt.split('\n')).toEqual([
+      'Kette vollständig durchlaufen — Plan, Prüfung, Pakete, Abdeckung',
+      'plan #849: gelungen',
+      'review: gelungen',
+      'pakete #855: gelungen',
+      'abdeckung: die Abdeckungs-Session lieferte keinen Text',
+    ])
+  })
+
+  it('nennt nur die Stufen, die der Vorgang erreicht hat, und haengt den Ausgang an die letzte', () => {
+    const item = einziges(
+      inKette({
+        ausgang: 'angehalten',
+        grund: 'Stopp-Frage im Plan #849',
+        stufen: { plan: { id: '849' }, review: {} },
+      }),
+    )
+    expect(item.excerpt.split('\n')).toEqual([
+      'Stopp-Frage am Fachplan — die Kette wartet auf eine Entscheidung',
+      'plan #849: gelungen',
+      'review: angehalten — Stopp-Frage im Plan #849',
+    ])
+  })
+
+  // Denselben Rueckfall kennt die Ausgangs-Deutung (`grund`-Fallback `''`): Der Ausgang
+  // steht auch ohne Grund fest, und die Stufenzeile nennt dann eben nur ihn.
+  it('nennt an der letzten Stufe nur den Ausgang, wenn die Einheit keinen grund traegt', () => {
+    const item = einziges(inKette({ ausgang: 'abgebrochen', stufen: { plan: { id: '849' } } }))
+    expect(item.excerpt.split('\n')[1]).toBe('plan #849: abgebrochen')
+  })
+
+  it('nennt eine begonnene Plan-Stufe ohne Dokument ohne Nummer', () => {
+    const item = einziges(inKette({ ausgang: 'fertig', stufen: { plan: { id: null } } }))
+    expect(item.excerpt.split('\n')[1]).toBe('plan: gelungen')
+  })
+
+  it('nennt jede Paketnummer der Paket-Stufe', () => {
+    const item = einziges(
+      inKette({ ausgang: 'fertig', stufen: { pakete: { ids: ['847', '848'] } } }),
+    )
+    expect(item.excerpt.split('\n')[1]).toBe('pakete #847, #848: gelungen')
+  })
+
+  it('laesst den Auszug einer Einheit ohne Stufen-Block unveraendert', () => {
+    expect(einziges(inKette({ ausgang: 'fertig' })).excerpt).toBe(
+      'Kette vollständig durchlaufen — Plan, Prüfung, Pakete, Abdeckung',
+    )
+  })
+
+  it('kuerzt auch den Stufen-Text auf die gemeinsame Obergrenze', () => {
+    const grund = 'x'.repeat(NIGHT_RUN_EXCERPT_MAX)
+    const item = einziges(
+      inKette({ ausgang: 'fertig', stufen: { abdeckung: { grund } } }),
+    )
+    expect(item.excerpt).toHaveLength(NIGHT_RUN_EXCERPT_MAX)
+  })
+
+  it('summiert die Dauer eines Ketten-Vorgangs aus seinen Stufen', () => {
+    const item = einziges(
+      inKette({
+        ausgang: 'fertig',
+        stufen: { plan: { id: '849', dauerMs: 1000 }, review: { dauerMs: 2000 } },
+      }),
+    )
+    expect(item.durationMs).toBe(3000)
+  })
+
+  it('bevorzugt ein vorhandenes dauerMs der Einheit vor der Summe ihrer Stufen', () => {
+    const item = einziges(
+      inKette({ ausgang: 'fertig', dauerMs: 42, stufen: { plan: { id: '849', dauerMs: 1000 } } }),
+    )
+    expect(item.durationMs).toBe(42)
+  })
+
+  /**
+   * AK 9 aus #842: Ein zurueckgestelltes oder uebersprungenes Paket ohne `dauerMs` und ohne
+   * Stufen zeigt heute **keine** Dauer — eine leere Summe duerfte daraus kein „0s" machen.
+   */
+  it('erzeugt ohne dauerMs und ohne Stufen-Block keine Dauer am Arbeitspaket', () => {
+    const item = einziges(inKette({ ausgang: 'uebersprungen', grund: "kein Label 'kit:night'" }))
+    expect(item).not.toHaveProperty('durationMs')
+  })
+})
+
 describe('parseNightRunErgebnisstand — uebernommene Felder', () => {
   const vollstaendig = mitEinheit({
     id: '767',
@@ -740,6 +1016,288 @@ describe('parseNightRunErgebnisstand — echter Pruef-Lauf (2026-09-11-103116)',
   it('deutet das `mitBefund`-Paket #782 gruen ohne Fehlerklasse', () => {
     expect(nach(782)?.state).toBe('GREEN')
     expect(nach(782)?.errorClass).toBeUndefined()
+  })
+})
+
+/**
+ * Der erste echte Ketten-Lauf (Issue #854). Er traegt genau die drei Lagen, um die es geht:
+ * zwei vollstaendig durchlaufene Ketten und einen Zeitbudget-Abbruch, bei dem trotzdem ein
+ * Plan-Dokument entstanden ist — der Gelb-Fall. Ein Test gegen selbstgebaute Daten prueft
+ * die eigene Annahme, nicht das Format.
+ */
+describe('parseNightRunErgebnisstand — echter Ketten-Lauf (2026-09-14-131200)', () => {
+  const r = lauf(JSON.stringify(echteKette))
+  const nach = (nummer: number) => r.items.find((i) => i.cardNumber === nummer)
+
+  it('deutet den Lauf als CHAIN, vollstaendig, ohne Lauf-Zustand und ohne Stufe', () => {
+    expect(r.mode).toBe('CHAIN')
+    expect(r.incomplete).toBe(false)
+    expect(r).not.toHaveProperty('runState')
+    expect(r).not.toHaveProperty('stage')
+  })
+
+  it('zaehlt drei bearbeitete Vorgaenge, keinen uebergangen, nichts ungedeutet', () => {
+    expect(r.processedCount).toBe(3)
+    expect(r.skippedCount).toBe(0)
+    expect(r.unparsedCount).toBe(0)
+  })
+
+  it('deutet die beiden fertigen Ketten #791 und #814 gruen ohne Fehlerklasse', () => {
+    for (const nummer of [791, 814]) {
+      expect(nach(nummer)?.state).toBe('GREEN')
+      expect(nach(nummer)?.errorClass).toBeUndefined()
+    }
+  })
+
+  it('deutet den Zeitbudget-Abbruch #842 gelb — der Plan #849 ist trotzdem entstanden', () => {
+    expect(nach(842)?.state).toBe('YELLOW')
+    expect(nach(842)?.errorClass).toBe('TIME_BUDGET_EXCEEDED')
+    expect(nach(842)?.excerpt.split('\n')[0]).toBe(
+      'Zeitbudget review: die Session wurde nach 15.0 min am Limit beendet',
+    )
+  })
+
+  it('nennt im Auszug der fertigen Kette #791 alle vier Stufen mit ihren Dokumenten (AK 2)', () => {
+    expect(nach(791)?.excerpt.split('\n')).toEqual([
+      'Kette vollständig durchlaufen — Plan, Prüfung, Pakete, Abdeckung',
+      'plan #844: gelungen',
+      'review: gelungen',
+      'pakete #845: gelungen',
+      'abdeckung: gelungen',
+    ])
+  })
+
+  it('nennt im Auszug des Abbruchs #842 nur die erreichten Stufen — Plan gelungen, Review am Limit (AK 2)', () => {
+    expect(nach(842)?.excerpt.split('\n')).toEqual([
+      'Zeitbudget review: die Session wurde nach 15.0 min am Limit beendet',
+      'plan #849: gelungen',
+      'review: abgebrochen — Zeitbudget review: die Session wurde nach 15.0 min am Limit beendet',
+    ])
+  })
+
+  it('summiert die Dauer des Vorgangs #842 aus seinen beiden Stufen (AK 6)', () => {
+    expect(nach(842)?.durationMs).toBe(439741 + 900484)
+  })
+
+  it('summiert die Laufdauer ueber alle drei Vorgaenge (AK 6)', () => {
+    expect(r.durationMs).toBe(1533322 + 1274784 + 1340225)
+  })
+})
+
+/**
+ * Die Angaben, die der Stand seit je fuehrt und der Parser bis Issue #865 verworfen hat:
+ * am Lauf die Zeitvorgaben je Arbeitsschritt, das Kostenbudget und die Lauf-Identitaet,
+ * am Vorgang seine Kennzahlen und die Werte je Arbeitsschritt.
+ *
+ * <p>Geprueft ueberwiegend gegen die echten Fixtures — an der Kette die vollen Angaben,
+ * am Implementierungs-Lauf die Lage ohne Budget und ohne Stufen. Die konstruierten
+ * Staende decken nur, was kein echter Lauf hergibt: das durchgehende Fehlen.
+ */
+describe('parseNightRunErgebnisstand — Angaben des Ergebnisstands (Issue #865)', () => {
+  const kette = lauf(JSON.stringify(echteKette))
+  const vorgang = (nummer: number) => kette.items.find((i) => i.cardNumber === nummer)
+  const implementierung = lauf(JSON.stringify(echterLauf))
+
+  /** Ein Stand ohne jede der uebernommenen Kopfangaben — `label: null` wie im Bestand. */
+  const ohneKopfangaben = (felder: Record<string, unknown> = {}): string =>
+    stand({ modell: undefined, label: null, abschluss: null, ...felder })
+
+  it('uebernimmt die Zeitvorgaben je Arbeitsschritt aus dem Budget des Laufs', () => {
+    expect(kette.stand?.vorgabenMin).toEqual({ plan: 20, review: 15, pakete: 15, abdeckung: 10 })
+  })
+
+  it('uebernimmt Kostenbudget, Modell, Label, Abschlussart, Kostensumme und fehlende Kostenmeldungen', () => {
+    expect(kette.stand).toMatchObject({
+      kostenBudgetUsd: 50,
+      modell: 'claude-opus-5',
+      label: 'kit:night',
+      abschluss: 'regulaer',
+      kostenSumme: 25.983292999999996,
+      kostenUnbekannt: 1,
+    })
+  })
+
+  it('traegt am Vorgang #842 seine Kosten, die Summe seiner Zuege und die eine fehlende Kostenmeldung', () => {
+    expect(vorgang(842)?.kennzahlen).toEqual({
+      kostenUsd: 4.093616499999999,
+      zuege: 37,
+      kostenUnbekannt: 1,
+    })
+  })
+
+  it('traegt je erreichtem Arbeitsschritt des Vorgangs #842 Dauer, Kosten, Zuege und Dokumente', () => {
+    expect(vorgang(842)?.kettenStufen).toEqual({
+      plan: { dauerMs: 439741, kostenUsd: 4.093616499999999, zuege: 37, dokumente: ['849'] },
+      // `kennzahlen: null` an der Pruefstufe — die Session endete am Zeitbudget, ohne zu melden.
+      review: { dauerMs: 900484, dokumente: [] },
+    })
+  })
+
+  it('fuehrt am vollstaendig durchlaufenen Vorgang #791 alle vier Arbeitsschritte', () => {
+    expect(Object.keys(vorgang(791)?.kettenStufen ?? {})).toEqual([
+      'plan',
+      'review',
+      'pakete',
+      'abdeckung',
+    ])
+  })
+
+  it('nennt an der Paket-Stufe des Vorgangs #791 jedes dort entstandene Paket', () => {
+    expect(vorgang(791)?.kettenStufen?.pakete?.dokumente).toEqual(['845'])
+  })
+
+  it('traegt am Arbeitspaket eines Implementierungs-Laufs die Kennzahlen, aber keine Stufen', () => {
+    // Die Arbeitszeit kam mit Issue #872 dazu; sie stand schon immer im Stand.
+    expect(implementierung.items[0].kennzahlen).toEqual({
+      kostenUsd: 2.1366104999999997,
+      zuege: 38,
+      arbeitszeitMs: 180563,
+    })
+    expect(implementierung.items[0]).not.toHaveProperty('kettenStufen')
+  })
+
+  it('laesst am Lauf ohne Budget die Zeitvorgaben und das Kostenbudget weg', () => {
+    expect(implementierung.stand).toEqual({ modell: 'claude-opus-5', abschluss: 'regulaer' })
+  })
+
+  it('laesst `stand` ganz ungesetzt, wenn der Lauf keine dieser Angaben fuehrt', () => {
+    expect(lauf(ohneKopfangaben())).not.toHaveProperty('stand')
+  })
+
+  it('laesst `stand` auch bei einem Budget ohne jede Vorgabe ungesetzt — kein Feld traegt null', () => {
+    expect(lauf(ohneKopfangaben({ budget: {} }))).not.toHaveProperty('stand')
+  })
+
+  it('laesst `kennzahlen` und `kettenStufen` an einer Einheit ohne diese Angaben ungesetzt', () => {
+    const item = einziges(mitEinheit({ ausgang: 'unbekannt' }))
+    expect(item).not.toHaveProperty('kennzahlen')
+    expect(item).not.toHaveProperty('kettenStufen')
+  })
+
+  it('laesst `kennzahlen` ungesetzt, wenn die Einheit sie als null fuehrt', () => {
+    expect(einziges(mitEinheit({ ausgang: 'unbekannt', kennzahlen: null }))).not.toHaveProperty(
+      'kennzahlen',
+    )
+  })
+
+  it('laesst `kettenStufen` ungesetzt, wenn der Vorgang keinen Arbeitsschritt erreicht hat', () => {
+    expect(einziges(inKette({ ausgang: 'fertig', stufen: {} }))).not.toHaveProperty('kettenStufen')
+  })
+
+  it('nennt eine begonnene Plan-Stufe ohne Dokument mit leerer Dokumentenliste', () => {
+    const item = einziges(inKette({ ausgang: 'fertig', stufen: { plan: { id: null } } }))
+    expect(item.kettenStufen?.plan).toEqual({ dokumente: [] })
+  })
+
+  it('traegt an einem Arbeitsschritt ohne Kennzahlen weder Kosten noch Zuege', () => {
+    const item = einziges(inKette({ ausgang: 'fertig', stufen: { review: { dauerMs: 1000 } } }))
+    expect(item.kettenStufen?.review).toEqual({ dauerMs: 1000, dokumente: [] })
+    expect(item).not.toHaveProperty('kennzahlen')
+  })
+})
+
+/**
+ * Der Hinweis, den `ergebnisstandAnlegen` in `night.mjs` genau dann an den Lauf-Kopf
+ * schreibt, wenn weder `--verbose` noch `--kette` gesetzt war — woertlich wie dort.
+ */
+const KENNZAHLEN_HINWEIS =
+  'Ohne --verbose fordert der Runner die Stream-Ausgabe der Session nicht an; die Session-Kennzahlen fehlen darum in allen Einheiten.'
+
+/**
+ * Die Kennzahlen aus Issue #865 gelten fuer **jede** Lauf-Art, nicht nur fuer die Kette
+ * (Issue #870). Dazu kommen zwei Angaben, die der Stand seit je fuehrt und der Parser
+ * bislang verwarf: die Zahl der in einem Vorgang erzeugten Dokumente und der Hinweis am
+ * Lauf-Kopf, wenn der Runner die Session-Kennzahlen gar nicht erst angefordert hat.
+ *
+ * <p>Der Hinweis ist als einziger konstruiert geprueft: Keine der fuenf Fixtures traegt
+ * ihn — sie stammen alle aus Laeufen mit `--verbose` oder `--kette`, und genau dort laesst
+ * `ergebnisstandAnlegen` das Feld weg.
+ */
+describe('parseNightRunErgebnisstand — Kennzahlen aller Lauf-Arten (Issue #870)', () => {
+  const umsetzung = lauf(JSON.stringify(echterLauf))
+  const pruefung = lauf(JSON.stringify(echterPrueflauf))
+  const erzeugung = lauf(JSON.stringify(echterNachtplanRegulaer))
+  const nach = (r: NightRun, nummer: number) => r.items.find((i) => i.cardNumber === nummer)
+
+  it('traegt an jedem der fuenf Vorgaenge des Umsetzungs-Laufs Kosten und Zuege', () => {
+    const werte = umsetzung.items.map((i) => [i.cardNumber, i.kennzahlen?.kostenUsd, i.kennzahlen?.zuege])
+    expect(werte).toEqual([
+      [767, 2.1366104999999997, 38],
+      [768, 5.134166000000001, 63],
+      [769, 10.86053, 123],
+      [770, 1.6051234999999997, 33],
+      [771, 8.1324195, 121],
+    ])
+  })
+
+  it('traegt am bearbeiteten Vorgang des Pruef-Laufs Kosten, Zuege und Arbeitszeit', () => {
+    expect(nach(pruefung, 782)?.kennzahlen).toEqual({
+      kostenUsd: 21.94563399999999,
+      zuege: 252,
+      arbeitszeitMs: 1084627,
+    })
+  })
+
+  it('nennt am Vorgang eines Erzeugungs-Laufs die Zahl der dort entstandenen Dokumente', () => {
+    expect(nach(erzeugung, 479)?.dokumenteAnzahl).toBe(1)
+  })
+
+  it('nennt die Dokumentenzahl auch an einem Vorgang, dessen Sitzung nichts gemeldet hat', () => {
+    expect(nach(erzeugung, 535)?.dokumenteAnzahl).toBe(1)
+    expect(nach(erzeugung, 535)).not.toHaveProperty('kennzahlen')
+  })
+
+  it('laesst die Dokumentenzahl an einem uebergangenen Vorgang ungesetzt', () => {
+    expect(nach(erzeugung, 164)).not.toHaveProperty('dokumenteAnzahl')
+  })
+
+  it('reicht den Kennzahlen-Hinweis des Lauf-Kopfs durch', () => {
+    expect(lauf(stand({ kennzahlenHinweis: KENNZAHLEN_HINWEIS })).stand?.kennzahlenHinweis).toBe(
+      KENNZAHLEN_HINWEIS,
+    )
+  })
+
+  it('laesst den Kennzahlen-Hinweis weg, wenn der Lauf-Kopf ihn nicht fuehrt', () => {
+    expect(lauf(stand()).stand).not.toHaveProperty('kennzahlenHinweis')
+  })
+
+  it('laesst an einer Einheit ohne Kennzahlen und ohne Dokumente beide Felder ungesetzt', () => {
+    const item = einziges(mitEinheit({ ausgang: 'unbekannt', kennzahlen: null }))
+    expect(item).not.toHaveProperty('kennzahlen')
+    expect(item).not.toHaveProperty('dokumenteAnzahl')
+  })
+})
+
+/**
+ * Die Zeit, die das Modell selbst gearbeitet hat (Issue #872). Der Stand fuehrt sie je
+ * Sitzung als `apiDauerMs`; der Parser reichte sie bislang als einzige der drei
+ * Sitzungs-Kennzahlen nicht durch.
+ *
+ * <p>Gelesen wird **nur** das Feld der Einheit, nicht die Summe ueber die Arbeitsschritte
+ * einer Kette — anders als bei den Zuegen ({@link zuegeDerEinheit}). Die Anzeige, fuer die
+ * sie entsteht, gilt den drei Nicht-Ketten-Arten; eine summierte Ketten-Arbeitszeit haette
+ * heute keinen Leser und waere unbelegt.
+ */
+describe('parseNightRunErgebnisstand — Arbeitszeit des Modells (Issue #872)', () => {
+  const umsetzung = lauf(JSON.stringify(echterLauf))
+  const erzeugung = lauf(JSON.stringify(echterNachtplanRegulaer))
+  const nach = (r: NightRun, nummer: number) => r.items.find((i) => i.cardNumber === nummer)
+
+  it('traegt an jedem der fuenf Vorgaenge des Umsetzungs-Laufs die Arbeitszeit', () => {
+    expect(umsetzung.items.map((i) => i.kennzahlen?.arbeitszeitMs)).toEqual([
+      180563, 380034, 567294, 138818, 592769,
+    ])
+  })
+
+  it('traegt sie auch am Vorgang eines Erzeugungs-Laufs', () => {
+    expect(nach(erzeugung, 479)?.kennzahlen?.arbeitszeitMs).toBe(949907)
+  })
+
+  it('laesst sie weg, wo die Kennzahlen sie nicht fuehren', () => {
+    const item = einziges(
+      mitEinheit({ ausgang: 'unbekannt', kennzahlen: { kostenUsd: 1.5, zuege: 7 } }),
+    )
+    expect(item.kennzahlen).toEqual({ kostenUsd: 1.5, zuege: 7 })
   })
 })
 

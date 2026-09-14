@@ -150,6 +150,54 @@ class NightRunControllerTest {
         .isEqualTo(new NewNightRun(ZWEITER, NightRunMode.REVIEW, 10L, 0, 0, 0, null, List.of()));
   }
 
+  /**
+   * Der Ketten-Lauf und der Abbruch am Zeitbudget kommen durch die Bindung (Issue #853): Beides
+   * sind Enum-Werte am Request-Body, und ein fehlender Enum-Wert wäre hier ein 400 statt einer
+   * Weitergabe an den Service.
+   */
+  @Test
+  // Siehe submit_passesEveryFieldToService_andAnswersInRequestOrder: derselbe Grund.
+  @SuppressWarnings("unchecked")
+  void submit_passesChainRunWithTimeBudgetExceeded_toService() throws Exception {
+    when(service.submit(eq(USER), eq(PROJECT), anyList()))
+        .thenReturn(List.of(new NightRunResult(ERSTER, true)));
+
+    mvc.perform(
+            post(PATH)
+                .contentType(JSON)
+                .content(
+                    """
+                    {"runs":[{"startedAt":"2026-08-31T22:00:00Z","mode":"CHAIN","durationMs":1,
+                              "processedCount":1,"skippedCount":0,"unparsedCount":0,
+                              "items":[{"cardNumber":853,"title":"Kette","state":"RED",
+                                        "errorClass":"TIME_BUDGET_EXCEEDED"}]}]}
+                    """))
+        .andExpect(status().isOk());
+
+    ArgumentCaptor<List<NewNightRun>> captor = ArgumentCaptor.forClass(List.class);
+    verify(service).submit(eq(USER), eq(PROJECT), captor.capture());
+    assertThat(captor.getValue())
+        .singleElement()
+        .isEqualTo(
+            new NewNightRun(
+                ERSTER,
+                NightRunMode.CHAIN,
+                1L,
+                1,
+                0,
+                0,
+                null,
+                List.of(
+                    new NewNightRunItem(
+                        853,
+                        "Kette",
+                        NightRunState.RED,
+                        NightRunErrorClass.TIME_BUDGET_EXCEEDED,
+                        null,
+                        null,
+                        null))));
+  }
+
   @Test
   void submit_rejectsEmptyList_beforeReachingService() throws Exception {
     mvc.perform(post(PATH).contentType(JSON).content("{\"runs\":[]}"))
@@ -344,6 +392,41 @@ class NightRunControllerTest {
         .andExpect(jsonPath("$[0].items[0].errorClass").value("CHECKS_RED"));
 
     verify(service).list(USER, PROJECT);
+  }
+
+  /**
+   * Die Ausgabeseite der beiden neuen Werte (Issue #853) — als Enum-Name, nicht als Ordinalzahl.
+   */
+  @Test
+  void list_returnsChainRunWithTimeBudgetExceeded() throws Exception {
+    when(service.list(USER, PROJECT))
+        .thenReturn(
+            List.of(
+                new NightRunView(
+                    12L,
+                    ERSTER,
+                    NightRunMode.CHAIN,
+                    1L,
+                    1,
+                    0,
+                    0,
+                    null,
+                    Instant.parse("2026-09-01T06:00:00Z"),
+                    List.of(
+                        new NightRunItemView(
+                            22L,
+                            853,
+                            "Kette",
+                            NightRunState.RED,
+                            NightRunErrorClass.TIME_BUDGET_EXCEEDED,
+                            null,
+                            null,
+                            null)))));
+
+    mvc.perform(get(PATH))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$[0].mode").value("CHAIN"))
+        .andExpect(jsonPath("$[0].items[0].errorClass").value("TIME_BUDGET_EXCEEDED"));
   }
 
   @Test

@@ -51,7 +51,18 @@
         "pruefbarkeit"
       ]
     }
-  }, 
+  },
+  "night": {
+    "kette": {
+      "label": "kit:night",
+      "planMin": 30,
+      "paketeMin": 25,
+      "reviewMin": 30,
+      "abdeckungMin": 10,
+      "kostenUsd": 50,
+      "korrekturrunden": 2
+    }
+  },
   "toolbox": {
     "host": "https://kanban.mwolff.org",
     "tokenFile": ".claude/toolbox.cli/tbx.token",

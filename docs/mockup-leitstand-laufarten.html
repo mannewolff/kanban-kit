@@ -1,0 +1,272 @@
+<title>Zwei Muster</title>
+<style>
+  :root {
+    --teal: #2F8C97;
+    --teal-dunkel: #1E5F68;
+    --teal-hell: #5BABB5;
+    --tinte: #243539;
+    --gedaempft: #54696E;
+    --rand: #D8ECEE;
+    --eis: #EDF5F6;
+    --gruen: #1F6B4A;
+    --gelb: #8A5A00;
+    --rot: #FF0000;
+    --grau: #54696E;
+    --flaeche: #FFFFFF;
+    --grund: #F7FAFB;
+    --karte: 10px;
+    --panel: 14px;
+    --font: Carlito, Calibri, "Segoe UI", system-ui, sans-serif;
+  }
+  body {
+    font-family: var(--font);
+    background: var(--grund);
+    color: var(--tinte);
+    line-height: 1.5;
+    padding-block: 32px;
+    padding-left: 24px;
+    padding-right: 24px;
+    max-width: 920px;
+    margin: 0 auto;
+  }
+  h1 { font-size: 1.55rem; font-weight: 700; margin: 0 0 4px; }
+  h2 {
+    font-size: 1.15rem; font-weight: 700; margin: 0 0 2px;
+    display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
+  }
+  .muster-nr {
+    font-size: .72rem; font-weight: 700; letter-spacing: .09em; text-transform: uppercase;
+    color: var(--teal-dunkel); background: var(--eis);
+    border: 1px solid var(--rand); border-radius: var(--karte);
+    padding: 2px 9px;
+  }
+  .frage { color: var(--gedaempft); font-size: .95rem; margin: 0 0 20px; }
+  .kopfzeile { color: var(--gedaempft); font-size: .84rem; margin: 0 0 24px; }
+  section {
+    background: var(--flaeche); border: 1px solid var(--rand);
+    border-radius: var(--panel); padding: 22px; margin-bottom: 26px;
+  }
+  .lauf-kopf {
+    border-bottom: 1px solid var(--rand); padding-bottom: 14px; margin-bottom: 18px;
+  }
+  .lauf-kopf .titel { font-weight: 700; font-size: 1.02rem; }
+  .lauf-kopf .meta { color: var(--gedaempft); font-size: .8rem; }
+  .kennzahlen { display: flex; gap: 34px; flex-wrap: wrap; margin-bottom: 22px; }
+  .kennzahl .wert { font-size: 1.3rem; font-weight: 700; }
+  .kennzahl .bez { font-size: .76rem; color: var(--gedaempft); }
+  .kennzahl .fuss { font-size: .72rem; color: var(--gelb); }
+
+  .band { display: flex; width: 100%; height: 30px; border-radius: 6px; overflow: hidden; gap: 2px; }
+  .band > div {
+    display: flex; align-items: center; justify-content: center;
+    color: #fff; font-size: .72rem; font-weight: 700; min-width: 0;
+  }
+  .band-achse {
+    display: flex; margin-top: 5px; gap: 2px;
+    font-size: .7rem; color: var(--gedaempft);
+  }
+  .band-achse > div { text-align: center; min-width: 0; overflow: hidden; }
+
+  table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: .84rem; }
+  th {
+    text-align: left; font-weight: 700; font-size: .72rem; text-transform: uppercase;
+    letter-spacing: .06em; color: var(--gedaempft);
+    border-bottom: 1px solid var(--rand); padding: 0 8px 7px 0;
+  }
+  td { padding: 9px 8px 9px 0; border-bottom: 1px solid var(--eis); vertical-align: middle; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .nr { font-weight: 700; color: var(--teal-dunkel); white-space: nowrap; }
+  .aus { font-size: .74rem; font-weight: 700; white-space: nowrap; }
+  .aus.g { color: var(--gruen); }
+  .aus.r { color: var(--rot); }
+  .aus.y { color: var(--gelb); }
+
+  .anteil { display: flex; align-items: center; gap: 8px; }
+  .anteil .schiene {
+    flex: 1; height: 7px; background: var(--eis); border-radius: 4px; overflow: hidden; min-width: 56px;
+  }
+  .anteil .fuell { height: 100%; border-radius: 4px; }
+
+  .trichter { display: flex; flex-direction: column; gap: 3px; margin-bottom: 8px; }
+  .stufe-zeile { display: flex; align-items: center; gap: 12px; }
+  .stufe-zeile .balken {
+    height: 34px; border-radius: 6px; display: flex; align-items: center;
+    padding-left: 12px; color: #fff; font-weight: 700; font-size: .82rem;
+    min-width: 0; white-space: nowrap; overflow: hidden;
+  }
+  .stufe-zeile .label { font-size: .84rem; color: var(--gedaempft); }
+  .stufe-zeile .label b { color: var(--tinte); }
+
+  .hinweis {
+    background: var(--eis); border-left: 3px solid var(--teal);
+    border-radius: 0 var(--karte) var(--karte) 0;
+    padding: 12px 16px; margin-top: 20px; font-size: .86rem;
+  }
+  .hinweis b { font-weight: 700; }
+  .warn { border-left-color: var(--gelb); }
+  code {
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: .88em; background: var(--eis); padding: 1px 4px; border-radius: 4px;
+  }
+  .fuss-note {
+    font-size: .8rem; color: var(--gedaempft);
+    border-top: 1px solid var(--rand); padding-top: 14px; margin-top: 6px;
+  }
+</style>
+
+<h1>Zwei Muster neben dem Stufenband</h1>
+<p class="kopfzeile">
+  Skizze für kanban-kit, in der Palette des Leitstands (Teal, Carlito, Ampelfarben aus
+  <code>theme.ts</code>). Alle Zahlen stammen aus den vier echten Fixtures unter
+  <code>frontend/src/lib/__fixtures__/</code> — keine erfundenen Werte.
+</p>
+
+<section>
+  <h2><span class="muster-nr">Muster A</span> Umsetzungs-Lauf: das Laufband</h2>
+  <p class="frage">Frage: <b>Wohin ging die Nacht?</b> — Bezugsgröße ist die Nacht selbst, nicht ein Budget.</p>
+
+  <div class="lauf-kopf">
+    <div class="titel">Nacht vom 7. September</div>
+    <div class="meta">2026-09-07-085229 · claude-opus-5 · Umsetzungs-Lauf · ohne Label · regulär beendet</div>
+  </div>
+
+  <div class="kennzahlen">
+    <div class="kennzahl"><div class="wert">2 von 5</div><div class="bez">Vorgänge erledigt</div></div>
+    <div class="kennzahl"><div class="wert">51,5 min</div><div class="bez">Laufzeit über alle Vorgänge</div></div>
+    <div class="kennzahl"><div class="wert">27,87 $</div><div class="bez">Kosten der Nacht</div><div class="fuss">gerechnet, nicht im Protokoll</div></div>
+    <div class="kennzahl"><div class="wert">378</div><div class="bez">Züge des Modells</div></div>
+  </div>
+
+  <div class="band">
+    <div style="width:7.92%;background:var(--gruen)" title="#767">#767</div>
+    <div style="width:24.92%;background:var(--rot)" title="#768">#768</div>
+    <div style="width:31.75%;background:var(--rot)" title="#769">#769</div>
+    <div style="width:5.41%;background:var(--gruen)" title="#770"></div>
+    <div style="width:30.00%;background:var(--rot)" title="#771">#771</div>
+  </div>
+  <div class="band-achse">
+    <div style="width:7.92%">4,1</div>
+    <div style="width:24.92%">12,8</div>
+    <div style="width:31.75%">16,3 min</div>
+    <div style="width:5.41%">2,8</div>
+    <div style="width:30.00%">15,4</div>
+  </div>
+
+  <div class="hinweis">
+    <b>Das ist die Aussage des Bands:</b> #769 und #771 verbrauchen zusammen
+    <b>61,8 % der Nacht — und beide sind Fehlschläge.</b> Die Nacht steckte ihre Zeit
+    überwiegend in das, was nicht gelang. In der heutigen Zeilendarstellung steht diese
+    Auskunft nirgends; man müsste fünf Dauern von Hand addieren und ins Verhältnis setzen.
+  </div>
+
+  <table>
+    <tr>
+      <th style="width:3.2rem">Vorgang</th><th>Titel</th><th style="width:5.5rem">Ausgang</th>
+      <th style="width:9rem">Modellzeit</th><th class="num" style="width:4.2rem">Dauer</th>
+      <th class="num" style="width:4.5rem">Kosten</th><th class="num" style="width:3.2rem">Züge</th>
+    </tr>
+    <tr>
+      <td class="nr">#767</td><td>Sammelzugriff für Zuständige</td><td class="aus g">erfolg</td>
+      <td><div class="anteil"><div class="schiene"><div class="fuell" style="width:73.9%;background:var(--teal)"></div></div><span>74 %</span></div></td>
+      <td class="num">4,1 min</td><td class="num">2,14 $</td><td class="num">38</td>
+    </tr>
+    <tr>
+      <td class="nr">#768</td><td>listByBoard ohne N+1</td><td class="aus r">fehlschlag</td>
+      <td><div class="anteil"><div class="schiene"><div class="fuell" style="width:49.4%;background:var(--teal)"></div></div><span>49 %</span></div></td>
+      <td class="num">12,8 min</td><td class="num">5,13 $</td><td class="num">63</td>
+    </tr>
+    <tr>
+      <td class="nr">#769</td><td>CardDetailModal lädt die volle Karte nach</td><td class="aus r">fehlschlag</td>
+      <td><div class="anteil"><div class="schiene"><div class="fuell" style="width:57.9%;background:var(--teal)"></div></div><span>58 %</span></div></td>
+      <td class="num">16,3 min</td><td class="num">10,86 $</td><td class="num">123</td>
+    </tr>
+    <tr>
+      <td class="nr">#770</td><td>Duplizieren-Aktion lädt die volle Karte nach</td><td class="aus g">erfolg</td>
+      <td><div class="anteil"><div class="schiene"><div class="fuell" style="width:83.1%;background:var(--teal)"></div></div><span>83 %</span></div></td>
+      <td class="num">2,8 min</td><td class="num">1,61 $</td><td class="num">33</td>
+    </tr>
+    <tr>
+      <td class="nr">#771</td><td>Listen-Antwort ohne volle Beschreibung</td><td class="aus r">fehlschlag</td>
+      <td><div class="anteil"><div class="schiene"><div class="fuell" style="width:64.0%;background:var(--teal)"></div></div><span>64 %</span></div></td>
+      <td class="num">15,4 min</td><td class="num">8,13 $</td><td class="num">121</td>
+    </tr>
+  </table>
+
+  <div class="hinweis">
+    <b>Die zweite Bezugsgröße steckt in der Spalte „Modellzeit":</b> der Anteil von
+    <code>apiDauerMs</code> an <code>dauerMs</code>. Der Rest ist Wartezeit auf Werkzeuge —
+    Builds, Tests, git. Bei #768 denkt die Session nur die Hälfte der Zeit, bei #770 zu vier
+    Fünfteln. Das ist die Zahl, die man für Optimierung braucht, und sie steht heute in keiner Ansicht.
+  </div>
+</section>
+
+<section>
+  <h2><span class="muster-nr">Muster B</span> Erzeugungs- und Prüfläufe: der Trichter</h2>
+  <p class="frage">Frage: <b>Was hat der Lauf überhaupt angefasst?</b> — Bezugsgröße ist die Zahl der gesichteten Karten.</p>
+
+  <div class="lauf-kopf">
+    <div class="titel">Nacht vom 11. September</div>
+    <div class="meta">2026-09-11-103116 · claude-opus-5 · Prüf-Lauf · Label review:offen · regulär beendet</div>
+  </div>
+
+  <div class="trichter">
+    <div class="stufe-zeile">
+      <div class="balken" style="width:100%;background:var(--teal-dunkel)">35 Karten gesichtet</div>
+    </div>
+    <div class="stufe-zeile">
+      <div class="balken" style="width:48.6%;background:var(--grau)">17</div>
+      <div class="label">übersprungen — <b>kein Plan-Dokument ([Plan])</b></div>
+    </div>
+    <div class="stufe-zeile">
+      <div class="balken" style="width:42.9%;background:var(--grau)">15</div>
+      <div class="label">übersprungen — <b>kein Label „review:offen"</b></div>
+    </div>
+    <div class="stufe-zeile">
+      <div class="balken" style="width:5.7%;background:var(--grau)">2</div>
+      <div class="label">übersprungen — <b>Idee ([Idee])</b></div>
+    </div>
+    <div class="stufe-zeile">
+      <div class="balken" style="width:2.9%;background:var(--gelb);padding-left:6px">1</div>
+      <div class="label"><b>bearbeitet</b></div>
+    </div>
+  </div>
+
+  <table>
+    <tr>
+      <th style="width:3.2rem">Vorgang</th><th>Titel</th><th style="width:5.5rem">Ausgang</th>
+      <th class="num" style="width:4.2rem">Dauer</th><th class="num" style="width:4.5rem">Kosten</th>
+      <th class="num" style="width:3.2rem">Züge</th>
+    </tr>
+    <tr>
+      <td class="nr">#782</td>
+      <td>[Plan] Vorhaben und referenzierte Tickets anklickbar machen</td>
+      <td class="aus y">mit Befund</td>
+      <td class="num">14,7 min</td><td class="num">21,95 $</td><td class="num">252</td>
+    </tr>
+  </table>
+
+  <div class="hinweis">
+    <b>Warum hier kein Band je Vorgang taugt:</b> 34 der 35 Karten wurden nur angesehen und
+    aussortiert. Ein Balken je Vorgang ergäbe eine Wand aus 34 leeren Zeilen und einer gefüllten.
+    Der Trichter dreht die Aussage um: Er zeigt, <b>warum</b> der Lauf so wenig angefasst hat —
+    und macht damit sichtbar, ob die Auswahlregel greift oder zu eng steht. Im Erzeugungs-Lauf
+    vom 9. September ist das Bild dasselbe: 38 gesichtet, 32 übersprungen, 2 bearbeitet.
+  </div>
+
+  <div class="hinweis warn">
+    <b>Ein Befund aus den Daten, der Muster A einschränkt:</b> Bei #782 ist
+    <code>apiDauerMs</code> (18,1 min) <b>größer</b> als <code>dauerMs</code> (14,7 min) —
+    ein Prüflauf startet mehrere Reviewer parallel, und ihre API-Zeiten summieren sich über
+    die Wanduhr hinaus. Die Zweiteilung „Modellzeit gegen Wartezeit" ergibt dort einen
+    negativen Rest. Sie trägt also nur, wo eine Session seriell arbeitet; bei parallelen
+    Läufen muss die Darstellung entweder auf 100 % begrenzen und das kennzeichnen, oder die
+    Spalte entfallen lassen. Das ist eine fachliche Entscheidung, keine Formatfrage.
+  </div>
+</section>
+
+<p class="fuss-note">
+  Entwurf, kein Umsetzungsstand. Quellen: <code>night-run-2026-09-07-085229.json</code> (Muster A),
+  <code>night-run-2026-09-11-103116.json</code> und <code>night-run-2026-09-09-125621.json</code> (Muster B).
+  Die Kostensumme in Muster A ist gerechnet — anders als beim Ketten-Lauf trägt das Protokoll
+  eines Umsetzungs-Laufs kein <code>kostenSumme</code>-Feld.
+</p>

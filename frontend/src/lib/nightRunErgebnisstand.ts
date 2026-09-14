@@ -25,6 +25,11 @@
  * im Modus `REVIEW`: Die vier Pruef-only-Ausgaenge sagen in einem Implementierungs- oder
  * Nachtplan-Lauf nichts, und umgekehrt erzeugt ein Pruef-Lauf die Ausgaenge der anderen
  * Modi nie. Beide Richtungen lehnen deshalb ab, statt modus-unabhaengig weiterzudeuten.
+ *
+ * <p><b>Der Ketten-Lauf ist seit Issue #854 deutbar.</b> Eine Einheit ist dort kein
+ * Arbeitspaket, sondern ein ganzer Vorgang (Plan, Pruefung, Pakete, Abdeckung zu einer
+ * fachlichen Anforderung). Sein Vokabular ist nach denselben beiden Richtungen abgegrenzt
+ * wie das des Pruef-Laufs ({@link NUR_KETTE}, {@link NIE_IN_KETTE}).
  */
 
 import {
@@ -32,8 +37,13 @@ import {
   type NightRun,
   type NightRunErrorClass,
   type NightRunItem,
+  type NightRunKennzahlen,
+  type NightRunKettenStufen,
+  type NightRunKettenStufenwert,
   type NightRunMode,
+  type NightRunStand,
   type NightRunState,
+  type NightRunStufenvorgaben,
 } from './nightRunLog'
 
 /**
@@ -43,9 +53,20 @@ import {
  */
 export type NightRunErgebnisstandGrund = 'kein-json' | 'unbekannte-fassung' | 'nicht-unterstuetzt'
 
+/**
+ * Eine Ablehnung sagt seit Issue #857 mehr als nur ihren Grund: **welches Wort** nicht
+ * gedeutet werden konnte und **welche Ausgabe** des Nachtlaufs die Datei geschrieben hat
+ * (AK 10 aus Issue #842). Wer entscheiden will, ob er ein neueres Werkzeug braucht, muss
+ * dafuer sonst in die Datei sehen.
+ *
+ * <p>Beide Felder sind optional, weil es Lagen ohne sie gibt und ein Platzhalter eine
+ * Auskunft vortaeuschte: `wort` fehlt, wo gar kein Wort im Spiel ist (`einheiten` ist kein
+ * Array, `abschluss` hat den falschen Typ), `erzeugtVon` fehlt, solange nichts geparst ist
+ * oder das Kopffeld keine Zeichenkette traegt.
+ */
 export type NightRunErgebnisstandResult =
   | { ok: true; run: NightRun }
-  | { ok: false; grund: NightRunErgebnisstandGrund }
+  | { ok: false; grund: NightRunErgebnisstandGrund; wort?: string; erzeugtVon?: string }
 
 /** Die einzige Fassung, die dieser Parser deutet. */
 const FASSUNG = 1
@@ -64,9 +85,43 @@ interface RohPruefung {
 }
 
 /**
- * Eine Einheit des Ergebnisstands — ein Arbeitspaket der Runde. `ausgang` ist aus
- * demselben Grund wie `RohPruefung.zustand` nicht optional: `einheitAnlegen` setzt ihn
- * vor der Session auf `"unbekannt"`, noch bevor die Einheit erstmals geschrieben wird.
+ * Kosten und Aufwand einer Sitzung, so wie `kennzahlenDerSession` in `night.mjs` sie
+ * schreibt. `null` steht dort, wo die Sitzung nichts gemeldet hat — die Einheit zaehlt
+ * das getrennt in `kostenUnbekannt`.
+ */
+interface RohKennzahlen {
+  kostenUsd?: number
+  apiDauerMs?: number
+  zuege?: number
+}
+
+/** Was jede Stufe eines Ketten-Vorgangs traegt, unabhaengig von ihrer Art: Dauer und Aufwand. */
+interface RohStufe {
+  dauerMs?: number
+  kennzahlen?: RohKennzahlen | null
+}
+
+/**
+ * Die Stufen eines Ketten-Vorgangs, so wie `stufenDerKette` in `night.mjs` sie schreibt —
+ * in genau dieser Reihenfolge, siehe {@link KETTEN_STUFEN}. Ein eigenes Feld tragen nur die
+ * beiden Stufen, die ein **Dokument** hinterlassen: Plan und Pakete.
+ *
+ * <p>`plan.id` ist `string | null`, weil `stufePlan` den Block **vor** der Session anlegt
+ * (`{ id: null, dauerMs: 0, … }`). Ein vorhandener Block sagt also nur, dass die Stufe
+ * begonnen hat — ob ein Plan entstand, sagt allein die ID.
+ */
+interface RohStufen {
+  plan?: RohStufe & { id: string | null }
+  review?: RohStufe
+  pakete?: RohStufe & { ids: string[] }
+  abdeckung?: RohStufe & { grund?: string }
+}
+
+/**
+ * Eine Einheit des Ergebnisstands — ein Arbeitspaket der Runde, in einem Ketten-Lauf ein
+ * ganzer Vorgang. `ausgang` ist aus demselben Grund wie `RohPruefung.zustand` nicht
+ * optional: `einheitAnlegen` setzt ihn vor der Session auf `"unbekannt"`, noch bevor die
+ * Einheit erstmals geschrieben wird.
  */
 interface RohEinheit {
   id: string
@@ -76,11 +131,43 @@ interface RohEinheit {
   dauerMs?: number
   commit?: string | null
   pruefung?: RohPruefung
+  stufen?: RohStufen
+  /**
+   * Der Aufwand der Einheit. Ein Ketten-Vorgang fuehrt ihn nicht hier, sondern je Stufe
+   * und — bereits summiert — in {@link RohEinheit.kostenUsd}; jede andere Lauf-Art
+   * schreibt genau eine Sitzung je Einheit und legt sie hier ab.
+   */
+  kennzahlen?: RohKennzahlen | null
+  /** Summe der Kosten eines Ketten-Vorgangs ueber seine Stufen, in US-Dollar. */
+  kostenUsd?: number
+  /** Zahl der Sitzungen dieses Vorgangs ohne Kostenmeldung. */
+  kostenUnbekannt?: number
+  /**
+   * Die Dokumente, die ein Erzeugungs-Lauf aus dieser Einheit hervorgebracht hat.
+   * `unknown[]` und nicht der Eintragstyp: Ausgewertet wird allein die Laenge, und was in
+   * den Eintraegen steht, geht diesen Parser nichts an.
+   */
+  erzeugt?: unknown[]
+}
+
+/** Die Vorgaben eines Ketten-Laufs, so wie `--kette` sie aus der Config uebernimmt. */
+interface RohBudget {
+  planMin?: number
+  reviewMin?: number
+  paketeMin?: number
+  abdeckungMin?: number
+  kostenUsd?: number
 }
 
 /** Der Lauf als Ganzes. */
 interface RohLauf {
   schemaFassung?: unknown
+  /**
+   * Die Kit-Ausgabe, die den Stand geschrieben hat (`night.mjs` schreibt sie in jeden Kopf).
+   * `unknown` und nicht `string`: Der Wert geht nur in eine Meldung, und eine fremde Datei
+   * darf dort nichts anderes als eine Zeichenkette einschleusen.
+   */
+  erzeugtVon?: unknown
   start: string
   art?: string
   /**
@@ -98,6 +185,20 @@ interface RohLauf {
   abschluss?: unknown
   fehlerklasse?: string
   fehlerText?: string
+  /** Das Modell, mit dem der Lauf seine Sitzungen gefahren hat. */
+  modell?: string
+  /** Das Label, nach dem er seine Kandidaten gesucht hat; `null` bei einem Lauf ohne Filter. */
+  label?: string | null
+  /** Nur ein Ketten-Lauf fuehrt Zeitvorgaben und ein Kostenbudget. */
+  budget?: RohBudget
+  kostenSumme?: number
+  kostenUnbekannt?: number
+  /**
+   * Der Grund, warum der Lauf keine Sitzungs-Kennzahlen angefordert hat. `unknown` wie
+   * {@link RohLauf.erzeugtVon}: Der Wert geht unveraendert in die Anzeige, und eine fremde
+   * Datei darf dort nichts anderes als eine Zeichenkette einschleusen.
+   */
+  kennzahlenHinweis?: unknown
 }
 
 /** Zustand und Fehlerklasse eines Arbeitspakets — der Kern der Deutung. */
@@ -180,6 +281,15 @@ const ZURUECKGESTELLT_SONST: Farbe = { state: 'GREY' }
  * Text ohne Laufzeit-Eingabe; nur `uebersprungen` braucht wegen seines dynamischen
  * Freitexts (`grund`) einen eigenen Zweig in {@link deuteEinheit}.
  */
+/**
+ * Der Auszug eines liegengebliebenen Vorgangs. Als **exportierte Konstante**, weil die
+ * Aufschluesselung im Leitstand ihn an einem aufbewahrten Lauf wiedererkennen muss — dort
+ * fehlt das Ausgangswort, und `liegengeblieben` ist von `uebersprungen` nur noch an diesem
+ * Text zu unterscheiden (Plan #864, E2). Zwei Literale liefen auseinander, sobald der Satz
+ * hier einmal umformuliert wird.
+ */
+export const NIGHT_RUN_AUSZUG_LIEGENGEBLIEBEN = 'Über die Obergrenze (--max) hinaus — bleibt liegen'
+
 const OHNE_PRUEFUNG = new Map<string, Farbe & { excerpt: string }>([
   [
     'unbekannt',
@@ -194,10 +304,7 @@ const OHNE_PRUEFUNG = new Map<string, Farbe & { excerpt: string }>([
     'verbraucht',
     { state: 'GREEN', excerpt: 'Dokument(e) erzeugt und geprüft — Label entfernt' },
   ],
-  [
-    'liegengeblieben',
-    { state: 'GREY', excerpt: 'Über die Obergrenze (--max) hinaus — bleibt liegen' },
-  ],
+  ['liegengeblieben', { state: 'GREY', excerpt: NIGHT_RUN_AUSZUG_LIEGENGEBLIEBEN }],
   [
     'offen',
     {
@@ -269,6 +376,62 @@ const NIE_IM_PRUEFLAUF: ReadonlySet<string> = new Set([
   'offen',
 ])
 
+/**
+ * Die Ausgaenge eines Ketten-Laufs mit festem Text — `laufeEineKette` in `night.mjs`
+ * (Plan #638). `abgebrochen` fehlt hier, weil Farbe und Auszug an seinem dynamischen
+ * `grund` haengen; er bekommt einen eigenen Zweig in {@link deuteKettenAusgang} —
+ * dasselbe Muster wie `syntheseOhneBeleg` im Pruef-Lauf.
+ *
+ * <p>`angehalten` ist rot mit `AWAITING_DECISION`: Die Kette hat genau eine Stopp-Frage
+ * am Fachplan hinterlassen und wartet damit auf einen Menschen — dieselbe Lage wie ein
+ * wegen `kit:klaeren` zurueckgestelltes Paket.
+ */
+const KETTEN_AUSGAENGE = new Map<string, Farbe & { excerpt: string }>([
+  [
+    'fertig',
+    { state: 'GREEN', excerpt: 'Kette vollständig durchlaufen — Plan, Prüfung, Pakete, Abdeckung' },
+  ],
+  [
+    'angehalten',
+    {
+      state: 'RED',
+      errorClass: 'AWAITING_DECISION',
+      excerpt: 'Stopp-Frage am Fachplan — die Kette wartet auf eine Entscheidung',
+    },
+  ],
+])
+
+/** Der Grund-Praefix, an dem `ketteSession` einen Zeitbudget-Abbruch erkennbar macht. */
+const ZEITBUDGET_PRAEFIX = 'Zeitbudget '
+
+/**
+ * Die Ausgaenge, die **nur** ein Ketten-Lauf schreibt — analog {@link NUR_PRUEFLAUF}. In
+ * jedem anderen Modus sagen sie nichts und bleiben dort nicht unterstuetzt.
+ */
+const NUR_KETTE: ReadonlySet<string> = new Set(['fertig', 'angehalten', 'abgebrochen'])
+
+/**
+ * Umgekehrt: Eine Kette erzeugt diese Ausgaenge nie — die vier Nachtplan-Ausgaenge, die
+ * vier Pruef-Ausgaenge und das Vokabular des Implementierungslaufs. Sie modus-unabhaengig
+ * weiterzudeuten hiesse, fuer eine kaputte oder fremde Datei eine Farbe zu raten; bei
+ * `erfolg` faellt das besonders ins Gewicht, weil er sonst auf das bestehende Vokabular
+ * durchfiele. `uebersprungen`, `liegengeblieben` und `unbekannt` fehlen bewusst: Die
+ * schreibt der Kandidaten-Durchlauf der Kette genauso wie der jedes anderen Modus.
+ */
+const NIE_IN_KETTE: ReadonlySet<string> = new Set([
+  'verbraucht',
+  'offen',
+  'ohneErgebnis',
+  'ohneBefund',
+  'mitBefund',
+  'schaerfungFehlt',
+  'syntheseOhneBeleg',
+  'erfolg',
+  'fehlschlag',
+  'zurueckgestellt',
+  'harterStopp',
+])
+
 /** Die Stufen, auf denen `night.mjs --review` laeuft. */
 const REVIEW_STUFEN: ReadonlySet<string> = new Set(['fachlich', 'plan', 'issue'])
 
@@ -290,9 +453,15 @@ const REVIEW_STUFE_DEFAULT = 'issue'
  * <p>`("review", <Stufe>)` ist seit Issue #816 der Pruef-Lauf — der Ausschluss aus
  * Issue #773 ist damit aufgehoben. Anders als beim Nachtplan zaehlt hier jede Stufe, auf
  * der der Runner tatsaechlich laeuft; eine unbekannte bleibt `null`.
+ *
+ * <p>`("kette", null)` ist seit Issue #854 der Ketten-Lauf. Die Kette traegt ihre Stufen
+ * **in der Einheit** und schreibt am Lauf deshalb immer `stufe: null` (`--kette` kennt
+ * kein `--stufe`); ein gesetzter Wert waere eine Kombination, die kein Runner erzeugt.
  */
 function bestimmeModus(art: string | undefined, stufe: string | null | undefined): NightRunMode | null {
   if (art === 'erzeugung' && stufe === 'plan') return 'NIGHTPLAN'
+  // Lose Gleichheit mit Bedacht: fehlendes und ausdruecklich leeres Feld sind hier dasselbe.
+  if (art === 'kette' && stufe == null) return 'CHAIN'
   if (art === 'review' && (stufe === undefined || stufe === null || REVIEW_STUFEN.has(stufe))) return 'REVIEW'
   if (art === 'implementierung' && (stufe === undefined || stufe === null)) return 'IMPLEMENTATION'
   if (art === undefined && (stufe === undefined || stufe === null)) return 'IMPLEMENTATION'
@@ -316,13 +485,280 @@ function deutePruefAusgang(e: RohEinheit): (Farbe & { excerpt: string }) | null 
   return { state: 'RED', errorClass: 'AWAITING_DECISION', excerpt: gekuerzt(grund) }
 }
 
+/**
+ * Ob die Kette bis zu ihrem Abbruch ein Dokument hinterlassen hat — die Frage, die beim
+ * Zeitbudget ueber Gelb und Rot entscheidet: Ein Plan oder ein Arbeitspaket ist ein
+ * verwertbares Ergebnis, das der Mensch weiterfuehren kann; ohne beides war die Nacht an
+ * dieser Stelle umsonst.
+ */
+function dokumentEntstanden(stufen: RohStufen | undefined): boolean {
+  if (stufen === undefined) return false
+  // `plan.id` und nicht der blosse Block: Den legt `stufePlan` schon vor der Session an.
+  if (typeof stufen.plan?.id === 'string') return true
+  return stufen.pakete !== undefined && stufen.pakete.ids.length > 0
+}
+
+/**
+ * Die Ausgaenge eines Ketten-Laufs, soweit sie nur dort vorkommen; `null` heisst: kein
+ * Ketten-Ausgang, es gilt das modus-unabhaengige Vokabular weiter unten.
+ */
+function deuteKettenAusgang(e: RohEinheit): (Farbe & { excerpt: string }) | null {
+  const fest = KETTEN_AUSGAENGE.get(e.ausgang)
+  if (fest) return fest
+  if (e.ausgang !== 'abgebrochen') return null
+  // Fallback `''` wie bei `zurueckgestellt`/`syntheseOhneBeleg`: Der Ausgang steht auch
+  // ohne Grund fest, und ohne Zeitbudget-Praefix ist er ein harter Abbruch.
+  const grund = typeof e.grund === 'string' ? e.grund : ''
+  if (!grund.startsWith(ZEITBUDGET_PRAEFIX)) {
+    return { state: 'RED', errorClass: 'HARD_ABORT', excerpt: gekuerzt(grund) }
+  }
+  // Nur beim Zeitbudget rettet ein erzeugtes Dokument die Farbe. Kostenbudget und
+  // technischer Fehler bleiben rot, auch wenn nebenbei etwas entstanden ist: Dort ist die
+  // Kette nicht an ihrer Uhr, sondern an einem Befund gescheitert.
+  const state = dokumentEntstanden(e.stufen) ? 'YELLOW' : 'RED'
+  return { state, errorClass: 'TIME_BUDGET_EXCEEDED', excerpt: gekuerzt(grund) }
+}
+
+/** Eine erreichte Stufe, so wie ihre Zeile sie braucht: Name, Dokumente, eigener Grund. */
+interface ErreichteStufe {
+  name: string
+  dokumente: string
+  grund?: string
+}
+
+/**
+ * Die erreichten Stufen in der Reihenfolge, in der `stufenDerKette` sie laeuft — aus ihr
+ * allein folgt, wie jede ausging (siehe {@link stufenText}); der Stand fuehrt je Stufe
+ * keinen eigenen Ausgang.
+ *
+ * <p>Dokumente nennen nur Plan und Pakete; Pruefung und Abdeckung hinterlassen einen Marker
+ * beziehungsweise einen Text und haben nichts zu nennen. Einen eigenen `grund` traegt nur
+ * die Abdeckung.
+ */
+function erreichteStufen(stufen: RohStufen): ErreichteStufe[] {
+  const { plan, review, pakete, abdeckung } = stufen
+  return [
+    ...(plan === undefined
+      ? []
+      : [{ name: 'plan', dokumente: typeof plan.id === 'string' ? ` #${plan.id}` : '' }]),
+    ...(review === undefined ? [] : [{ name: 'review', dokumente: '' }]),
+    ...(pakete === undefined
+      ? []
+      : [
+          {
+            name: 'pakete',
+            dokumente:
+              pakete.ids.length === 0 ? '' : ` ${pakete.ids.map((id) => `#${id}`).join(', ')}`,
+          },
+        ]),
+    ...(abdeckung === undefined
+      ? []
+      : [{ name: 'abdeckung', dokumente: '', grund: abdeckung.grund }]),
+  ]
+}
+
+/** Der Ausgang der Einheit, wie ihn die letzte erreichte Stufe traegt — samt `grund`. */
+function ausgangDerEinheit(e: RohEinheit): string {
+  return typeof e.grund === 'string' ? `${e.ausgang} — ${e.grund}` : e.ausgang
+}
+
+/**
+ * Welche Stufen der Vorgang durchlaufen hat und wie jede ausging (AK 2 aus Issue #842) —
+ * als mehrzeiliger Text unter dem Auszug des Ausgangs, den der Leitstand mit
+ * `whiteSpace: 'pre-wrap'` rendert (Plan #849, E2).
+ *
+ * <p><b>Die Ableitung (E3):</b> `stufenDerKette` laeuft die vier Stufen streng sequenziell
+ * und bricht bei der ersten nicht fertigen ab; jede Stufenfunktion haengt ihren Stand
+ * **vor** der Session ein. Eine Stufe, die im Stand steht, hat also begonnen, alle ausser
+ * der letzten sind gelungen, und die letzte traegt den Ausgang der Einheit — bei `fertig`
+ * ebenfalls „gelungen".
+ *
+ * <p><b>Die Ausnahme Abdeckung (E3):</b> Sie ist eine Auskunft, kein Tor — `stufeAbdeckung`
+ * gibt auch bei Zeitbudget, Fehlstart oder fehlendem Text `{ ausgang: "fertig" }` zurueck
+ * und legt den Grund an der Stufe ab. Ein vorhandener `grund` bestimmt deshalb ihre Zeile,
+ * auch wenn die Einheit `fertig` ist; sonst hiesse eine gescheiterte Abdeckung „gelungen".
+ *
+ * @param kopf der Auszug des Ausgangs — er benennt Ausgang und `grund` der Einheit bereits
+ *   ausformuliert und steht dem Stufenblock deshalb voran
+ */
+function stufenText(e: RohEinheit, kopf: string): string {
+  if (e.stufen === undefined) return gekuerzt(kopf)
+  const erreicht = erreichteStufen(e.stufen)
+  const zeilen = erreicht.map((stufe, i) => {
+    const letzte = i === erreicht.length - 1
+    const ergebnis =
+      typeof stufe.grund === 'string'
+        ? stufe.grund
+        : !letzte || e.ausgang === 'fertig'
+          ? 'gelungen'
+          : ausgangDerEinheit(e)
+    return `${stufe.name}${stufe.dokumente}: ${ergebnis}`
+  })
+  return gekuerzt([kopf, ...zeilen].join('\n'))
+}
+
+/**
+ * Die Dauer einer Einheit (Plan #849, E12): ihr eigenes `dauerMs`, sonst die Summe ueber
+ * ihre Stufen — eine Ketten-Einheit traegt kein eigenes, jede ihrer Stufen eines.
+ *
+ * <p>`undefined` und nicht 0, wenn weder das eine noch das andere vorliegt: An einem
+ * zurueckgestellten oder uebersprungenen Paket stuende sonst ploetzlich „0s", wo heute gar
+ * keine Dauer steht (AK 9 aus Issue #842).
+ */
+function dauerDerEinheit(e: RohEinheit): number | undefined {
+  if (typeof e.dauerMs === 'number') return e.dauerMs
+  if (e.stufen === undefined) return undefined
+  return Object.values(e.stufen).reduce<number>(
+    (summe, stufe) => summe + (typeof stufe?.dauerMs === 'number' ? stufe.dauerMs : 0),
+    0,
+  )
+}
+
+/**
+ * Ein Zahlenfeld, das nur entsteht, wo der Stand an dieser Stelle wirklich eine Zahl
+ * fuehrt (Issue #865): Der Bestand unterscheidet „nicht vorhanden" von „vorhanden und
+ * leer", und ein durchgereichtes `null` zwaenge jede Anzeigestelle zu einer zweiten
+ * Fallunterscheidung. Als ein Helfer statt als dreizehn Ternaere an den Aufrufstellen —
+ * die Regel steht damit an genau einem Ort.
+ */
+function zahlenfeld<N extends string>(name: N, wert: unknown): Partial<Record<N, number>> {
+  const feld: Partial<Record<N, number>> = {}
+  if (typeof wert === 'number') feld[name] = wert
+  return feld
+}
+
+/** Dasselbe fuer eine Zeichenkette — `label` und `abschluss` stehen im Stand auch als `null`. */
+function textfeld<N extends string>(name: N, wert: unknown): Partial<Record<N, string>> {
+  const feld: Partial<Record<N, string>> = {}
+  if (typeof wert === 'string') feld[name] = wert
+  return feld
+}
+
+/** Ein zusammengesetztes Feld gibt es nur, wenn wenigstens eine seiner Angaben vorlag. */
+function leerOderWert<T extends object>(wert: T): T | undefined {
+  return Object.keys(wert).length === 0 ? undefined : wert
+}
+
+/**
+ * Die Zeitvorgaben je Arbeitsschritt; `undefined`, wo der Lauf keine fuehrt — ein Budget
+ * hat nur die Kette, und auch dort ist jede einzelne Vorgabe optional.
+ */
+function vorgabenDesLaufs(budget: RohBudget | undefined): NightRunStufenvorgaben | undefined {
+  if (budget === undefined) return undefined
+  return leerOderWert<NightRunStufenvorgaben>({
+    ...zahlenfeld('plan', budget.planMin),
+    ...zahlenfeld('review', budget.reviewMin),
+    ...zahlenfeld('pakete', budget.paketeMin),
+    ...zahlenfeld('abdeckung', budget.abdeckungMin),
+  })
+}
+
+/** Die Kopfangaben eines Ergebnisstands — jede nur, wo der Stand sie fuehrt. */
+function standDesLaufs(l: RohLauf): NightRunStand | undefined {
+  const vorgaben = vorgabenDesLaufs(l.budget)
+  return leerOderWert<NightRunStand>({
+    ...(vorgaben === undefined ? {} : { vorgabenMin: vorgaben }),
+    ...zahlenfeld('kostenBudgetUsd', l.budget?.kostenUsd),
+    ...textfeld('modell', l.modell),
+    ...textfeld('label', l.label),
+    // Ein Lauf ohne Abschluss laeuft noch oder wurde abgebrochen — `incomplete` sagt das
+    // bereits, und eine Abschlussart, die es nicht gibt, wird hier nicht erfunden.
+    ...textfeld('abschluss', l.abschluss),
+    ...zahlenfeld('kostenSumme', l.kostenSumme),
+    ...zahlenfeld('kostenUnbekannt', l.kostenUnbekannt),
+    // Nur, wo der Kopf ihn fuehrt: Ein Lauf mit ausfuehrlicher Ausgabe laesst das Feld weg,
+    // weil es dort nichts zu erklaeren gibt (`ergebnisstandAnlegen` in `night.mjs`).
+    ...textfeld('kennzahlenHinweis', l.kennzahlenHinweis),
+  })
+}
+
+/** Was ein erreichter Arbeitsschritt verbraucht und hinterlassen hat. */
+function stufenwert(stufe: RohStufe, dokumente: string[]): NightRunKettenStufenwert {
+  return {
+    ...zahlenfeld('dauerMs', stufe.dauerMs),
+    ...zahlenfeld('kostenUsd', stufe.kennzahlen?.kostenUsd),
+    ...zahlenfeld('zuege', stufe.kennzahlen?.zuege),
+    dokumente,
+  }
+}
+
+/**
+ * Die erreichten Arbeitsschritte eines Ketten-Vorgangs als Zahlenwerk — dieselbe Quelle
+ * wie {@link erreichteStufen}, die daraus den Text baut. Dokumente hinterlassen nur Plan
+ * und Pakete; bei den beiden anderen bleibt die Liste leer, weil „hier entstand nichts"
+ * eine Aussage ist und nicht das Fehlen einer Angabe.
+ */
+function kettenStufenDerEinheit(stufen: RohStufen | undefined): NightRunKettenStufen | undefined {
+  if (stufen === undefined) return undefined
+  const { plan, review, pakete, abdeckung } = stufen
+  return leerOderWert<NightRunKettenStufen>({
+    // `plan.id` ist `string | null`: Der Block entsteht vor der Session, das Dokument erst mit ihr.
+    ...(plan === undefined
+      ? {}
+      : { plan: stufenwert(plan, typeof plan.id === 'string' ? [plan.id] : []) }),
+    ...(review === undefined ? {} : { review: stufenwert(review, []) }),
+    ...(pakete === undefined ? {} : { pakete: stufenwert(pakete, pakete.ids) }),
+    ...(abdeckung === undefined ? {} : { abdeckung: stufenwert(abdeckung, []) }),
+  })
+}
+
+/**
+ * Die Zuege eines Vorgangs: seine eigenen, sonst die Summe ueber seine Arbeitsschritte —
+ * dieselbe Rechnung wie {@link dauerDerEinheit} und aus demselben Grund: Ein Ketten-Vorgang
+ * traegt keine eigenen Kennzahlen, jeder seiner Schritte aber welche.
+ *
+ * <p>`undefined`, wo weder das eine noch das andere gemeldet wurde: Eine leere Summe
+ * stuende sonst als „0 Zuege" da, wo in Wahrheit nichts gemeldet ist — und genau diesen
+ * Unterschied zaehlt `kostenUnbekannt` getrennt mit.
+ */
+function zuegeDerEinheit(e: RohEinheit): number | undefined {
+  if (typeof e.kennzahlen?.zuege === 'number') return e.kennzahlen.zuege
+  if (e.stufen === undefined) return undefined
+  const gemeldet = Object.values(e.stufen)
+    .map((stufe) => stufe?.kennzahlen?.zuege)
+    .filter((zuege): zuege is number => typeof zuege === 'number')
+  return gemeldet.length === 0 ? undefined : gemeldet.reduce((summe, zuege) => summe + zuege, 0)
+}
+
+/** Kosten und Aufwand eines Vorgangs — jede Angabe nur, wo der Stand sie fuehrt. */
+function kennzahlenDerEinheit(e: RohEinheit): NightRunKennzahlen | undefined {
+  // Die Kette fuehrt die bereits summierten Kosten an der Einheit; jede andere Lauf-Art
+  // schreibt genau eine Sitzung je Einheit und legt sie in `kennzahlen` ab.
+  const kosten = typeof e.kostenUsd === 'number' ? e.kostenUsd : e.kennzahlen?.kostenUsd
+  return leerOderWert<NightRunKennzahlen>({
+    ...zahlenfeld('kostenUsd', kosten),
+    ...zahlenfeld('zuege', zuegeDerEinheit(e)),
+    ...zahlenfeld('kostenUnbekannt', e.kostenUnbekannt),
+    // Die Arbeitszeit kommt **allein** aus dem Feld der Einheit, anders als die Zuege oben
+    // (Issue #872): Sie wird fuer die drei Nicht-Ketten-Arten angezeigt, und eine ueber die
+    // Arbeitsschritte summierte Ketten-Arbeitszeit haette heute keinen Leser.
+    ...zahlenfeld('arbeitszeitMs', e.kennzahlen?.apiDauerMs),
+  })
+}
+
+/**
+ * Wie viele Dokumente die Einheit hervorgebracht hat; `undefined`, wo der Stand die Liste
+ * gar nicht fuehrt — ein uebersprungener oder liegengebliebener Vorgang hat nie eine
+ * Session gesehen, und „0 Dokumente" behauptete dort einen Versuch, den es nicht gab.
+ *
+ * <p>Eine **vorhandene, leere** Liste ergibt dagegen 0: Sie ist eine Aussage des Stands,
+ * kein Fehlen einer Angabe — dieselbe Linie wie {@link NightRunKettenStufenwert.dokumente}.
+ */
+function dokumenteDerEinheit(e: RohEinheit): number | undefined {
+  return Array.isArray(e.erzeugt) ? e.erzeugt.length : undefined
+}
+
 /** Die Deutung einer Einheit; `null` heisst: Vokabular unbekannt, also nicht unterstuetzt. */
 function deuteEinheit(e: RohEinheit, modus: NightRunMode): (Farbe & { excerpt: string }) | null {
   if (modus === 'REVIEW') {
     if (NIE_IM_PRUEFLAUF.has(e.ausgang)) return null
     const pruef = deutePruefAusgang(e)
     if (pruef) return pruef
-  } else if (NUR_PRUEFLAUF.has(e.ausgang)) return null
+  } else if (modus === 'CHAIN') {
+    if (NIE_IN_KETTE.has(e.ausgang)) return null
+    const ketten = deuteKettenAusgang(e)
+    if (ketten) return ketten
+  } else if (NUR_PRUEFLAUF.has(e.ausgang) || NUR_KETTE.has(e.ausgang)) return null
 
   const ohnePruefung = OHNE_PRUEFUNG.get(e.ausgang)
   if (ohnePruefung) return ohnePruefung
@@ -358,20 +794,61 @@ function deuteEinheit(e: RohEinheit, modus: NightRunMode): (Farbe & { excerpt: s
 function baueItem(e: RohEinheit, position: number, modus: NightRunMode): NightRunItem | null {
   const deutung = deuteEinheit(e, modus)
   if (!deutung) return null
+  const dauer = dauerDerEinheit(e)
+  const kennzahlen = kennzahlenDerEinheit(e)
+  const kettenStufen = kettenStufenDerEinheit(e.stufen)
   return {
     cardNumber: Number(e.id),
     title: e.titel,
     state: deutung.state,
     ...(deutung.errorClass === undefined ? {} : { errorClass: deutung.errorClass }),
-    ...(typeof e.dauerMs === 'number' ? { durationMs: e.dauerMs } : {}),
+    ...(dauer === undefined ? {} : { durationMs: dauer }),
     ...(typeof e.commit === 'string' ? { commit: e.commit } : {}),
-    excerpt: deutung.excerpt,
+    // Die Stufen stehen nur im Ketten-Stand; jeder andere Modus behaelt seinen Auszug.
+    excerpt: modus === 'CHAIN' ? stufenText(e, deutung.excerpt) : deutung.excerpt,
     position,
     // Der Ergebnisstand traegt kein Rohprotokoll — anders als das Textprotokoll, aus
     // dem `nightRunLog.ts` die Zeilen je Paket mitschreibt.
     rawLines: [],
+    ...(kennzahlen === undefined ? {} : { kennzahlen }),
+    ...zahlenfeld('dokumenteAnzahl', dokumenteDerEinheit(e)),
+    ...(kettenStufen === undefined ? {} : { kettenStufen }),
+    // Unbedingt, nicht optional: `ausgang` ist in Fassung 1 zugesagt und steht an jeder
+    // Einheit, noch bevor sie erstmals geschrieben wird (siehe {@link RohEinheit}).
+    ausgang: e.ausgang,
   }
 }
+
+/**
+ * Eine Ablehnung, die beides mitnimmt, was AK 10 aus Issue #842 verlangt: das nicht gedeutete
+ * Wort — sofern es an dieser Stelle ueberhaupt eines gibt — und die erzeugende Ausgabe des
+ * Nachtlaufs, sofern der Stand sie als Zeichenkette fuehrt.
+ *
+ * <p>Ueber sie laeuft jede Ablehnung **nach** dem Parsen, einschliesslich der unbekannten
+ * Aufbaufassung (E11 aus Plan #849): Gerade dort ist die Frage nach dem neueren Werkzeug am
+ * dringendsten. Ohne geparstes Objekt (`kein-json`) gibt es nichts mitzunehmen; diese beiden
+ * Rueckgaben stehen deshalb als einzige fuer sich.
+ */
+function abgelehnt(
+  lauf: RohLauf,
+  grund: NightRunErgebnisstandGrund,
+  wort?: string,
+): NightRunErgebnisstandResult {
+  return {
+    ok: false,
+    grund,
+    ...(wort === undefined ? {} : { wort }),
+    ...(typeof lauf.erzeugtVon === 'string' ? { erzeugtVon: lauf.erzeugtVon } : {}),
+  }
+}
+
+/**
+ * Das Wort einer Modus-Ablehnung: nicht ein einzelnes Feld, sondern das Paar — erst beide
+ * zusammen entscheiden ueber den Modus, und eines allein benannte die falsche Stelle.
+ * Ein fehlendes oder leeres Feld heisst „ohne"; `undefined` und `null` sind fuer die
+ * Modus-Bestimmung dasselbe und lesen sich hier deshalb auch gleich.
+ */
+const artUndStufe = (l: RohLauf): string => `art=${l.art ?? 'ohne'}/stufe=${l.stufe ?? 'ohne'}`
 
 /** Der Auszug eines Laufs, der hart gestoppt wurde. */
 function laufAuszug(l: RohLauf): string {
@@ -397,24 +874,26 @@ export function parseNightRunErgebnisstand(text: string): NightRunErgebnisstandR
   }
 
   const lauf = roh as unknown as RohLauf
-  if (lauf.schemaFassung !== FASSUNG) return { ok: false, grund: 'unbekannte-fassung' }
+  if (lauf.schemaFassung !== FASSUNG) return abgelehnt(lauf, 'unbekannte-fassung')
 
   const modus = bestimmeModus(lauf.art, lauf.stufe)
-  if (modus === null) return { ok: false, grund: 'nicht-unterstuetzt' }
-  if (!Array.isArray(lauf.einheiten)) return { ok: false, grund: 'nicht-unterstuetzt' }
+  if (modus === null) return abgelehnt(lauf, 'nicht-unterstuetzt', artUndStufe(lauf))
+  // Kein Wort: Was hier nicht stimmt, ist die Form des Felds, nicht eine Vokabel darin.
+  if (!Array.isArray(lauf.einheiten)) return abgelehnt(lauf, 'nicht-unterstuetzt')
   if (lauf.abschluss !== null && typeof lauf.abschluss !== 'string') {
-    return { ok: false, grund: 'nicht-unterstuetzt' }
+    return abgelehnt(lauf, 'nicht-unterstuetzt')
   }
 
   const einheiten = lauf.einheiten as RohEinheit[]
   const items: NightRunItem[] = []
   for (const [position, e] of einheiten.entries()) {
     const item = baueItem(e, position, modus)
-    if (!item) return { ok: false, grund: 'nicht-unterstuetzt' }
+    if (!item) return abgelehnt(lauf, 'nicht-unterstuetzt', e.ausgang)
     items.push(item)
   }
 
   const harterStopp = lauf.abschluss === 'harterStopp'
+  const kopfangaben = standDesLaufs(lauf)
   return {
     ok: true,
     run: {
@@ -424,8 +903,10 @@ export function parseNightRunErgebnisstand(text: string): NightRunErgebnisstandR
       // Abschlusszeile `Nacht-Review beendet (Stufe …)` liest.
       ...(modus === 'REVIEW' ? { stage: lauf.stufe ?? REVIEW_STUFE_DEFAULT } : {}),
       // Dokumentierte Untergrenze: die Summe der Runden, ohne die Zeit zwischen ihnen
-      // (Board-Aufrufe, Gates). Der Stand traegt keinen Endzeitstempel.
-      durationMs: einheiten.reduce((summe, e) => summe + (e.dauerMs ?? 0), 0),
+      // (Board-Aufrufe, Gates). Der Stand traegt keinen Endzeitstempel. Dieselbe Rechnung
+      // wie am Arbeitspaket, damit Vorgangs- und Laufdauer per Konstruktion zusammenpassen;
+      // eine Einheit ohne jede Dauer zaehlt hier wie bisher als 0 (E12).
+      durationMs: einheiten.reduce((summe, e) => summe + (dauerDerEinheit(e) ?? 0), 0),
       processedCount: items.filter((i) => i.state !== 'GREY').length,
       skippedCount: items.filter((i) => i.state === 'GREY').length,
       // Es gibt nichts Ungedeutetes: Was nicht ins Vokabular passt, hat den ganzen
@@ -434,6 +915,7 @@ export function parseNightRunErgebnisstand(text: string): NightRunErgebnisstandR
       unparsedSample: [],
       incomplete: lauf.abschluss === null,
       items,
+      ...(kopfangaben === undefined ? {} : { stand: kopfangaben }),
       ...(harterStopp
         ? { runState: 'RED' as const, runErrorClass: 'HARD_ABORT' as const, runExcerpt: gekuerzt(laufAuszug(lauf)) }
         : {}),

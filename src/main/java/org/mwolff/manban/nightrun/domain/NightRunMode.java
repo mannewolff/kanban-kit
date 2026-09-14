@@ -12,5 +12,11 @@ public enum NightRunMode {
   IMPLEMENTATION,
 
   /** Prüf-Lauf: Kandidaten aus dem Backlog werden begutachtet. */
-  REVIEW
+  REVIEW,
+
+  /**
+   * Ketten-Lauf ({@code night.mjs --kette}): eine Kette je fachlichem Issue, die Plan, Review,
+   * Arbeitspakete und Abdeckung nacheinander durchläuft (Issue #842).
+   */
+  CHAIN
 }

@@ -1,0 +1,483 @@
+<title>Nachtlauf-Leitstand</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chivo:wght@600;800&family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+  :root {
+    --ground: #F7F8FA;
+    --surface: #FFFFFF;
+    --ink: #0F1319;
+    --ink-2: #4A515C;
+    --ink-3: #767D89;
+    --line: #DFE3E9;
+    --line-2: #EDEFF3;
+    --akzent: #4655C4;
+    --gut: #2F7D54;
+    --gut-fill: #D9EDE2;
+    --budget: #B8770F;
+    --budget-fill: #F7E7C6;
+    --leer: #A8342A;
+    --nie: #A5ABB5;
+    --nie-fill: #E9EBEF;
+    --rail: #E4E7EC;
+    --font-display: "Chivo", "Helvetica Neue", Arial, sans-serif;
+    --font-body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+    --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #0E1116;
+      --surface: #161A21;
+      --ink: #EDEFF3;
+      --ink-2: #A8AEB9;
+      --ink-3: #7C838F;
+      --line: #272C35;
+      --line-2: #1E232B;
+      --akzent: #8B97F0;
+      --gut: #5FB587;
+      --gut-fill: #1C3A2B;
+      --budget: #E0A33E;
+      --budget-fill: #3D2F14;
+      --leer: #E0685C;
+      --nie: #666D78;
+      --nie-fill: #20252D;
+      --rail: #242932;
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground: #0E1116;
+    --surface: #161A21;
+    --ink: #EDEFF3;
+    --ink-2: #A8AEB9;
+    --ink-3: #7C838F;
+    --line: #272C35;
+    --line-2: #1E232B;
+    --akzent: #8B97F0;
+    --gut: #5FB587;
+    --gut-fill: #1C3A2B;
+    --budget: #E0A33E;
+    --budget-fill: #3D2F14;
+    --leer: #E0685C;
+    --nie: #666D78;
+    --nie-fill: #20252D;
+    --rail: #242932;
+  }
+
+  body {
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--font-body);
+    font-size: 15px;
+    line-height: 1.55;
+  }
+  .wrap {
+    max-width: 960px;
+    margin: 0 auto;
+    padding-inline: 20px;
+    padding-block: 40px 64px;
+  }
+
+  .eyebrow {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    margin: 0 0 10px;
+  }
+  h1 {
+    font-family: var(--font-display);
+    font-weight: 800;
+    font-size: clamp(28px, 5vw, 40px);
+    line-height: 1.1;
+    letter-spacing: -0.02em;
+    text-wrap: balance;
+    margin: 0 0 6px;
+  }
+  .kopf-meta {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--ink-2);
+    margin: 0;
+  }
+
+  .kennzahlen {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 28px;
+    margin-top: 26px;
+    padding: 18px 0 20px;
+    border-top: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+  }
+  .kz-wert {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 24px;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.1;
+  }
+  .kz-label {
+    font-size: 12px;
+    color: var(--ink-3);
+    letter-spacing: 0.04em;
+  }
+  .kz-note { color: var(--budget); }
+
+  h2 {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 13px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    margin: 36px 0 14px;
+  }
+
+  .vorgaenge { display: flex; flex-direction: column; gap: 14px; }
+
+  .vorgang {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 18px 20px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .v-kopf { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: baseline; }
+  .v-nr {
+    font-family: var(--font-mono);
+    font-weight: 600;
+    font-size: 14px;
+    color: var(--ink-3);
+  }
+  .v-titel {
+    font-weight: 500;
+    flex: 1 1 260px;
+    min-width: 0;
+    text-wrap: balance;
+  }
+
+  .ampel {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    padding: 3px 10px 3px 8px;
+    border-radius: 999px;
+    white-space: nowrap;
+  }
+  .ampel::before {
+    content: "";
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: currentColor;
+  }
+  .a-fertig { color: var(--gut); background: var(--gut-fill); }
+  .a-budget { color: var(--budget); background: var(--budget-fill); }
+
+  .grund {
+    font-size: 13px;
+    color: var(--budget);
+    margin: -4px 0 0;
+  }
+
+  /* Stufenband: die vier Stufen im Verhaeltnis ihrer Budgets, 60 Minuten gesamt */
+  .band { display: flex; gap: 3px; }
+  .stufe { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+  .s-plan { flex: 20; }
+  .s-review { flex: 15; }
+  .s-pakete { flex: 15; }
+  .s-abdeckung { flex: 10; }
+
+  .s-rail {
+    height: 26px;
+    background: var(--rail);
+    border-radius: 3px;
+    overflow: hidden;
+    position: relative;
+  }
+  .s-fill { height: 100%; }
+  .f-gut { background: var(--gut); }
+  .f-budget { background: var(--budget); }
+  .s-rail.nie {
+    background: repeating-linear-gradient(135deg, var(--nie-fill) 0 6px, transparent 6px 12px);
+    box-shadow: inset 0 0 0 1px var(--line);
+  }
+
+  .s-label {
+    font-size: 11px;
+    letter-spacing: 0.04em;
+    color: var(--ink-3);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .s-zeit {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+    color: var(--ink-2);
+    white-space: nowrap;
+  }
+  .s-zeit.voll { color: var(--budget); font-weight: 600; }
+  .s-zeit.nie { color: var(--nie); }
+
+  .ergebnis {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    padding-top: 14px;
+    border-top: 1px solid var(--line-2);
+  }
+  .e-label {
+    font-size: 12px;
+    color: var(--ink-3);
+    margin-right: 2px;
+  }
+  .chip {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 7px;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--ink);
+    background: var(--ground);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 4px 10px;
+    text-decoration: none;
+  }
+  .chip:hover { border-color: var(--akzent); color: var(--akzent); }
+  .chip:focus-visible { outline: 2px solid var(--akzent); outline-offset: 2px; }
+  .chip .art {
+    font-family: var(--font-body);
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    color: var(--ink-3);
+  }
+  .chip:hover .art { color: var(--akzent); }
+  .keine {
+    font-size: 13px;
+    color: var(--budget);
+    font-style: italic;
+  }
+  .kosten {
+    margin-left: auto;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
+    color: var(--ink-3);
+    white-space: nowrap;
+  }
+
+  .fuss {
+    margin-top: 34px;
+    padding-top: 18px;
+    border-top: 1px solid var(--line);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 26px;
+    font-size: 13px;
+    color: var(--ink-2);
+  }
+  .fuss dt {
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+  }
+  .fuss dd {
+    margin: 2px 0 0;
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+  }
+  .warn { color: var(--budget); }
+
+  .hinweis {
+    margin-top: 26px;
+    padding: 14px 16px;
+    border-left: 3px solid var(--akzent);
+    background: var(--surface);
+    border-radius: 0 8px 8px 0;
+    font-size: 13.5px;
+    color: var(--ink-2);
+  }
+  .hinweis strong { color: var(--ink); font-weight: 600; }
+
+  @media (max-width: 560px) {
+    .band { flex-wrap: wrap; gap: 10px; }
+    .stufe { flex: 1 1 calc(50% - 5px); }
+    .kosten { margin-left: 0; width: 100%; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; }
+  }
+</style>
+
+<div class="wrap">
+  <p class="eyebrow">Nachtlauf · Kette</p>
+  <h1>Nacht vom 14. September</h1>
+  <p class="kopf-meta">2026-09-14-131200 · claude-opus-5 · Label kit:night · regulär beendet</p>
+
+  <div class="kennzahlen">
+    <div>
+      <div class="kz-wert">2 von 3</div>
+      <div class="kz-label">Ketten durchgelaufen</div>
+    </div>
+    <div>
+      <div class="kz-wert">4</div>
+      <div class="kz-label">Karten entstanden</div>
+    </div>
+    <div>
+      <div class="kz-wert">1:16 h</div>
+      <div class="kz-label">Laufzeit über alle Stufen</div>
+    </div>
+    <div>
+      <div class="kz-wert">25,98 $</div>
+      <div class="kz-label kz-note">eine Session ohne Kostenmeldung</div>
+    </div>
+  </div>
+
+  <h2>Vorgänge</h2>
+  <div class="vorgaenge">
+
+    <article class="vorgang">
+      <div class="v-kopf">
+        <span class="v-nr">#791</span>
+        <span class="v-titel">Zugriff und Konten bleiben nach Widerruf, Sperrung und Passwort-Reset wirklich abgesichert</span>
+        <span class="ampel a-fertig">fertig</span>
+      </div>
+      <div class="band">
+        <div class="stufe s-plan">
+          <div class="s-rail"><div class="s-fill f-gut" style="width:39%"></div></div>
+          <div class="s-label">Plan</div>
+          <div class="s-zeit">7,8 / 20 min</div>
+        </div>
+        <div class="stufe s-review">
+          <div class="s-rail"><div class="s-fill f-gut" style="width:79%"></div></div>
+          <div class="s-label">Review</div>
+          <div class="s-zeit">11,8 / 15 min</div>
+        </div>
+        <div class="stufe s-pakete">
+          <div class="s-rail"><div class="s-fill f-gut" style="width:25%"></div></div>
+          <div class="s-label">Pakete</div>
+          <div class="s-zeit">3,7 / 15 min</div>
+        </div>
+        <div class="stufe s-abdeckung">
+          <div class="s-rail"><div class="s-fill f-gut" style="width:22%"></div></div>
+          <div class="s-label">Abdeckung</div>
+          <div class="s-zeit">2,2 / 10 min</div>
+        </div>
+      </div>
+      <div class="ergebnis">
+        <span class="e-label">Entstanden</span>
+        <a class="chip" href="#791-844"><span class="art">Plan</span>#844</a>
+        <a class="chip" href="#791-845"><span class="art">Paket</span>#845</a>
+        <span class="kosten">11,52 $ · 41+23+16+9 Züge</span>
+      </div>
+    </article>
+
+    <article class="vorgang">
+      <div class="v-kopf">
+        <span class="v-nr">#814</span>
+        <span class="v-titel">Vorhaben in einer Liste ein- und ausblenden</span>
+        <span class="ampel a-fertig">fertig</span>
+      </div>
+      <div class="band">
+        <div class="stufe s-plan">
+          <div class="s-rail"><div class="s-fill f-gut" style="width:22%"></div></div>
+          <div class="s-label">Plan</div>
+          <div class="s-zeit">4,4 / 20 min</div>
+        </div>
+        <div class="stufe s-review">
+          <div class="s-rail"><div class="s-fill f-gut" style="width:75%"></div></div>
+          <div class="s-label">Review</div>
+          <div class="s-zeit">11,3 / 15 min</div>
+        </div>
+        <div class="stufe s-pakete">
+          <div class="s-rail"><div class="s-fill f-gut" style="width:21%"></div></div>
+          <div class="s-label">Pakete</div>
+          <div class="s-zeit">3,1 / 15 min</div>
+        </div>
+        <div class="stufe s-abdeckung">
+          <div class="s-rail"><div class="s-fill f-gut" style="width:25%"></div></div>
+          <div class="s-label">Abdeckung</div>
+          <div class="s-zeit">2,5 / 10 min</div>
+        </div>
+      </div>
+      <div class="ergebnis">
+        <span class="e-label">Entstanden</span>
+        <a class="chip" href="#814-846"><span class="art">Plan</span>#846</a>
+        <a class="chip" href="#814-847"><span class="art">Paket</span>#847</a>
+        <a class="chip" href="#814-848"><span class="art">Paket</span>#848</a>
+        <span class="kosten">10,37 $ · 27+31+19+10 Züge</span>
+      </div>
+    </article>
+
+    <article class="vorgang">
+      <div class="v-kopf">
+        <span class="v-nr">#842</span>
+        <span class="v-titel">Der Leitstand zeigt auch Nachtläufe mit mehrstufigen Vorgängen</span>
+        <span class="ampel a-budget">Zeitbudget</span>
+      </div>
+      <p class="grund">Die Review-Session wurde nach 15,0 min am Limit beendet. Der Plan steht, die Einarbeitung der Befunde fehlt.</p>
+      <div class="band">
+        <div class="stufe s-plan">
+          <div class="s-rail"><div class="s-fill f-gut" style="width:37%"></div></div>
+          <div class="s-label">Plan</div>
+          <div class="s-zeit">7,3 / 20 min</div>
+        </div>
+        <div class="stufe s-review">
+          <div class="s-rail"><div class="s-fill f-budget" style="width:100%"></div></div>
+          <div class="s-label">Review</div>
+          <div class="s-zeit voll">15,0 / 15 min</div>
+        </div>
+        <div class="stufe s-pakete">
+          <div class="s-rail nie"></div>
+          <div class="s-label">Pakete</div>
+          <div class="s-zeit nie">nicht erreicht</div>
+        </div>
+        <div class="stufe s-abdeckung">
+          <div class="s-rail nie"></div>
+          <div class="s-label">Abdeckung</div>
+          <div class="s-zeit nie">nicht erreicht</div>
+        </div>
+      </div>
+      <div class="ergebnis">
+        <span class="e-label">Entstanden</span>
+        <a class="chip" href="#842-849"><span class="art">Plan</span>#849</a>
+        <span class="keine">keine Pakete</span>
+        <span class="kosten">4,09 $ · 37 Züge · Review ohne Kostenmeldung</span>
+      </div>
+    </article>
+
+  </div>
+
+  <dl class="fuss">
+    <div>
+      <dt>Budget je Kette</dt>
+      <dd>Plan 20 · Review 15 · Pakete 15 · Abdeckung 10 min</dd>
+    </div>
+    <div>
+      <dt>Kostenbudget</dt>
+      <dd>50 $ je Kette · höchste 11,52 $</dd>
+    </div>
+    <div>
+      <dt>Herkunft der Budgets</dt>
+      <dd class="warn">Vorgabewerte, night.kette fehlt in der Config</dd>
+    </div>
+  </dl>
+
+  <p class="hinweis">
+    <strong>Entwurf für kanban-kit.</strong> Die Zahlen stammen aus dem Ergebnisstand
+    <span style="font-family:var(--font-mono)">night-run-2026-09-14-131200.json</span>, nicht aus Beispieldaten.
+    Das Stufenband zeigt alle vier Stufen im Verhältnis ihrer Zeitbudgets, zusammen 60 Minuten je Kette,
+    und füllt jede Stufe mit ihrem Verbrauch. Wo eine Kette riss, ist der Balken voll und die übrigen Stufen
+    bleiben schraffiert. Die Chips unter jedem Vorgang führen zu den Karten, die in dieser Nacht entstanden sind.
+  </p>
+</div>
