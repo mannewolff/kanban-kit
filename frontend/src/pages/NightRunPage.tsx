@@ -13,7 +13,7 @@ import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
 import ContentCopyIcon from '@mui/icons-material/ContentCopy'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
-import { Fragment, useEffect, useRef, useState } from 'react'
+import { Fragment, useEffect, useId, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { cardsApi, type Card, type CardByNumber } from '../api/cards'
 import { apiErrorMessage } from '../api/client'
@@ -36,10 +36,12 @@ import {
 } from '../lib/nightRunHandoff'
 import {
   parseNightRunErgebnisstand,
+  NIGHT_RUN_AUSZUG_LIEGENGEBLIEBEN,
   type NightRunErgebnisstandGrund,
 } from '../lib/nightRunErgebnisstand'
 import {
   type NightRun,
+  type NightRunErrorClass,
   type NightRunItem,
   type NightRunKennzahlen,
   type NightRunKettenStufe,
@@ -1527,6 +1529,245 @@ function Laufband({ items }: Readonly<{ items: readonly AnzeigeItem[] }>) {
   )
 }
 
+/**
+ * Eine gesichtete Karte, so weit die Aufschlüsselung sie braucht. Beide Quellen erfüllen diese
+ * Form: der frisch gedeutete Lauf ({@link NightRunItem}, mit `ausgang`) und die Server-Sicht
+ * ({@link AnzeigeItem}, ohne ihn).
+ */
+type Sichtung = Pick<NightRunItem, 'cardNumber' | 'title' | 'state' | 'errorClass' | 'ausgang'> & {
+  excerpt?: string
+}
+
+/**
+ * Wohin eine gesichtete Karte in der Aufschlüsselung zählt — die vier Ausgänge aus Issue #873.
+ * **Jede Karte bekommt genau einen**, sodass die Teilmengen die Gesamtzahl ergeben.
+ *
+ * <p>„bearbeitet" ist jeder **nicht graue** Vorgang (Plan #864, E5) — dieselbe Grenze, die
+ * `processedCount` zieht und die die Kopfzeile des Laufs zeigt. Eine zweite, abweichende
+ * Zählung daneben wäre ein Widerspruch auf derselben Seite.
+ */
+type Sichtungsausgang =
+  | { art: 'bearbeitet' }
+  | { art: 'uebersprungen'; grund: string }
+  | { art: 'liegengeblieben' }
+  | { art: 'unbekannt' }
+
+/** Der Ersatz für einen übersprungenen Vorgang, dessen Stand keinen Grund nennt. */
+const OHNE_GENANNTEN_GRUND = 'ohne genannten Grund'
+
+/**
+ * Der Ausgang aus dem **Ausgangswort** des Ergebnisstands — der sichere Weg, den nur ein frisch
+ * gedeuteter Lauf gehen kann. Jedes Wort außer den beiden benannten zählt unter „ohne bekannten
+ * Ausgang": Ein grauer Vorgang, der weder übersprungen noch liegengeblieben ist (`offen`, ein
+ * zurückgestelltes Paket), gehört in keine der Grund-Zeilen, und ihn einer zuzuschlagen wäre
+ * genau das Raten, das E2 ausschließt.
+ */
+function ausgangAusWort(ausgang: string, auszug: string): Sichtungsausgang {
+  if (ausgang === 'uebersprungen') {
+    return { art: 'uebersprungen', grund: auszug === '' ? OHNE_GENANNTEN_GRUND : auszug }
+  }
+  return ausgang === 'liegengeblieben' ? { art: 'liegengeblieben' } : { art: 'unbekannt' }
+}
+
+/**
+ * Die **Ableitungstabelle** für einen aufbewahrten Lauf (Plan #864, E2): Seine Sicht trägt kein
+ * Ausgangswort, und von den grauen Ausgängen eines Prüf-Laufs bleiben nur zwei zu unterscheiden.
+ * Die Tabelle liest in dieser Reihenfolge:
+ *
+ * - **eine Fehlerklasse** — weder ein übersprungener noch ein liegengebliebener Vorgang trägt
+ *   eine; was hier steht, ist ein anderer Ausgang und bleibt unbenannt.
+ * - **der Anfang des Auszugs** ist der feste Satz eines liegengebliebenen Vorgangs
+ *   ({@link NIGHT_RUN_AUSZUG_LIEGENGEBLIEBEN}).
+ * - **ein sonstiger Auszug** ist der Grundtext, mit dem der Lauf das Überspringen begründet hat.
+ * - **kein Auszug** — dann sagt allein die graue Farbe noch etwas, und die sagt nicht, warum.
+ *
+ * <p><b>Sie ist unscharf, und das steht in der Anzeige</b>: Was sie nicht sicher zuordnen kann,
+ * zählt unter „ohne bekannten Ausgang" statt geraten zu werden.
+ */
+function ausgangAusSicht(
+  errorClass: NightRunErrorClass | undefined,
+  auszug: string,
+): Sichtungsausgang {
+  if (errorClass !== undefined) {
+    return { art: 'unbekannt' }
+  }
+  if (auszug.startsWith(NIGHT_RUN_AUSZUG_LIEGENGEBLIEBEN)) {
+    return { art: 'liegengeblieben' }
+  }
+  return auszug === '' ? { art: 'unbekannt' } : { art: 'uebersprungen', grund: auszug }
+}
+
+/**
+ * Der Ausgang einer gesichteten Karte — mit dem Ausgangswort, wo es vorliegt, sonst über die
+ * Ableitung. Der fehlende Auszug wird **einmal** hier zur leeren Zeichenkette: Ein aufbewahrter
+ * Vorgang kann ohne ihn ankommen, ein frisch gedeuteter trägt immer einen ({@link NightRunItem}
+ * führt ihn als Pflichtfeld), und zwei Auffangstellen hätten eine davon als toten Zweig.
+ */
+function sichtungsausgang(eintrag: Sichtung): Sichtungsausgang {
+  if (eintrag.state !== 'GREY') {
+    return { art: 'bearbeitet' }
+  }
+  const auszug = eintrag.excerpt ?? ''
+  return eintrag.ausgang === undefined
+    ? ausgangAusSicht(eintrag.errorClass, auszug)
+    : ausgangAusWort(eintrag.ausgang, auszug)
+}
+
+/** Eine Zeile der Aufschlüsselung: ihr Text und die Karten, die sie zusammenfasst. */
+interface Ausgangszeile {
+  testId: string
+  text: string
+  karten: readonly Sichtung[]
+}
+
+/** Eine Zeile, die es nur gibt, wo sie wenigstens eine Karte zusammenfasst. */
+const zeileWennBesetzt = (
+  testId: string,
+  label: string,
+  karten: readonly Sichtung[],
+): Ausgangszeile[] =>
+  karten.length === 0 ? [] : [{ testId, text: `${karten.length} ${label}`, karten }]
+
+/**
+ * Die Aufschlüsselung eines Laufs: die Zahl der gesichteten und der bearbeiteten Karten und die
+ * Zeilen der aussortierten. Die Überspringgründe stehen **nach Häufigkeit** — die Aussage ist,
+ * welche Regel am meisten weggefiltert hat; `sort` ist stabil, gleich häufige Gründe behalten
+ * also die Reihenfolge des Laufs.
+ */
+function aufschluesselung(items: readonly Sichtung[]): {
+  bearbeitet: number
+  zeilen: Ausgangszeile[]
+} {
+  let bearbeitet = 0
+  const gruende = new Map<string, Sichtung[]>()
+  const liegengeblieben: Sichtung[] = []
+  const unbekannt: Sichtung[] = []
+
+  for (const eintrag of items) {
+    const ausgang = sichtungsausgang(eintrag)
+    if (ausgang.art === 'bearbeitet') {
+      bearbeitet += 1
+    } else if (ausgang.art === 'liegengeblieben') {
+      liegengeblieben.push(eintrag)
+    } else if (ausgang.art === 'unbekannt') {
+      unbekannt.push(eintrag)
+    } else {
+      const bisher = gruende.get(ausgang.grund)
+      if (bisher === undefined) {
+        gruende.set(ausgang.grund, [eintrag])
+      } else {
+        bisher.push(eintrag)
+      }
+    }
+  }
+
+  return {
+    bearbeitet,
+    zeilen: [
+      ...[...gruende]
+        .sort(([, a], [, b]) => b.length - a.length)
+        .map(([grund, karten], position) => ({
+          testId: `aufschluesselung-grund-${position}`,
+          text: `${karten.length} übersprungen: ${grund}`,
+          karten,
+        })),
+      ...zeileWennBesetzt('aufschluesselung-liegengeblieben', 'liegengeblieben', liegengeblieben),
+      ...zeileWennBesetzt('aufschluesselung-unbekannt', 'ohne bekannten Ausgang', unbekannt),
+    ],
+  }
+}
+
+/**
+ * Eine Zeile der Aufschlüsselung, aufklappbar zu den Karten, die sie zusammenfasst (#873). Der
+ * Knopf trägt den ganzen Zeilentext als zugänglichen Namen, und `aria-expanded` sagt, ob die
+ * Karten darunter stehen — die Liste wird erst beim Aufklappen gerendert, wie beim Lauf-Panel
+ * darüber. `aria-controls` steht nur dann, wenn es auch ein Ziel gibt.
+ */
+function Ausgangsgruppe({ zeile }: Readonly<{ zeile: Ausgangszeile }>) {
+  const [offen, setOffen] = useState(false)
+  const bereichId = useId()
+
+  return (
+    <Box data-testid={zeile.testId}>
+      <Button
+        size="small"
+        color="inherit"
+        aria-expanded={offen}
+        aria-controls={offen ? bereichId : undefined}
+        onClick={() => setOffen((wert) => !wert)}
+        startIcon={
+          <ExpandMoreIcon
+            fontSize="small"
+            sx={{ transform: offen ? 'rotate(180deg)' : 'none' }}
+          />
+        }
+        sx={{ textTransform: 'none', justifyContent: 'flex-start' }}
+      >
+        {zeile.text}
+      </Button>
+      {offen && (
+        <Box id={bereichId} sx={{ pl: 4 }}>
+          {zeile.karten.map((karte, position) => (
+            // Zwei Vorgänge können dieselbe Karte betreffen — wie in der Zeilenliste trägt der
+            // Schlüssel deshalb die Position dazu.
+            <Typography
+              key={`${karte.cardNumber}-${position}`}
+              variant="body2"
+              color="text.secondary"
+            >
+              {`#${karte.cardNumber} ${karte.title}`}
+            </Typography>
+          ))}
+        </Box>
+      )}
+    </Box>
+  )
+}
+
+/**
+ * Die Aufschlüsselung der gesichteten Karten eines Erzeugungs- oder Prüf-Laufs (Issue #873).
+ *
+ * <p><b>Warum hier kein Band steht:</b> In diesen beiden Lauf-Arten werden neun von zehn Karten
+ * nur angesehen und aussortiert — der echte Prüf-Lauf vom 11. September sichtet 35 und bearbeitet
+ * **eine**. Ein Balken je Vorgang wäre dort eine Wand aus leeren Zeilen; die Aufschlüsselung
+ * dreht die Aussage um und zeigt, **warum** so wenig übrig blieb. Daran erkennt der Betreiber, ob
+ * die Auswahlregel greift oder zu eng steht.
+ *
+ * <p><b>Sie bedient Altbestand</b> (Plan #864, E1): `laufArt` in `night.mjs` liefert seit Kit
+ * 1.53.0 nur noch `kette` oder `implementierung`, und die Routing-Labels der beiden anderen
+ * Betriebsarten sind dort als entfallen vermerkt. Manne hat am 2026-09-14 entschieden, die
+ * Darstellung trotzdem zu bauen: Aufbewahrte Läufe dieser Arten liegen weiterhin im Leitstand und
+ * sollen lesbar bleiben. Wer diese Komponente später für toten Code hält, findet hier den Grund,
+ * warum sie steht.
+ *
+ * <p><b>Gesichtete und bearbeitete Zahl stehen immer da</b>, auch mit dem Wert null: Ein Lauf,
+ * der nichts fand, ist eine Auskunft — ein leerer Platz ließe offen, ob nichts gesichtet wurde
+ * oder nichts nachgesehen. Gründe, die nicht vorkamen, erscheinen dagegen nicht; sie zählten
+ * nichts zur Summe bei.
+ */
+function Aufschluesselung({ items }: Readonly<{ items: readonly Sichtung[] }>) {
+  const { bearbeitet, zeilen } = aufschluesselung(items)
+
+  return (
+    <Box data-testid="aufschluesselung" sx={{ mb: 2 }}>
+      <Typography variant="subtitle2" data-testid="aufschluesselung-gesichtet">
+        {`${items.length} Karten gesichtet`}
+      </Typography>
+      <Typography
+        variant="body2"
+        color="text.secondary"
+        data-testid="aufschluesselung-bearbeitet"
+        sx={{ pl: 1 }}
+      >
+        {`${bearbeitet} bearbeitet`}
+      </Typography>
+      {zeilen.map((zeile) => (
+        <Ausgangsgruppe key={zeile.testId} zeile={zeile} />
+      ))}
+    </Box>
+  )
+}
+
 /** Ein Lauf als aufklappbares Panel; die Kette wird erst beim Aufklappen geladen (A8). */
 function LaufPanel({
   lauf,
@@ -1607,6 +1848,13 @@ function LaufPanel({
             Ketten-Lauf hat mit dem Stufenband je Vorgang bereits ein Band, und ein zweites daneben
             bezöge sich auf eine andere Größe. */}
         {lauf.mode === 'IMPLEMENTATION' && <Laufband items={lauf.items} />}
+        {/* Statt eines Bandes (#873): Der Erzeugungs- und der Prüf-Lauf sortieren die große
+            Mehrheit ihrer Karten aus, und die Aufschlüsselung sagt, warum. Sie liest den
+            Ergebnisstand dieser Sitzung, wo er vorliegt — allein er trägt das Ausgangswort;
+            sonst leitet sie aus der Server-Sicht ab (Plan #864, E2). */}
+        {(lauf.mode === 'REVIEW' || lauf.mode === 'NIGHTPLAN') && (
+          <Aufschluesselung items={stand?.items ?? lauf.items} />
+        )}
         {lauf.unparsedSample.length > 0 && (
           <Box sx={{ mb: 1 }}>
             <Typography variant="subtitle2">Nicht gedeutete Zeilen (Auszug)</Typography>

@@ -2986,3 +2986,238 @@ describe('NightRunPage — null aus der API (#734)', () => {
     expect(feld(700)?.value).toBe('Nachtlauf-Befund zu Karte #700 Paket A\nZustand: gescheitert')
   })
 })
+
+describe('NightRunPage — Aufschlüsselung der gesichteten Karten (#873)', () => {
+  /** Die Zahl der gesichteten Karten, wie sie über der Aufschlüsselung steht. */
+  const gesichtet = (panelEl: HTMLElement) =>
+    within(panelEl).getByTestId('aufschluesselung-gesichtet')
+
+  const bearbeitet = (panelEl: HTMLElement) =>
+    within(panelEl).getByTestId('aufschluesselung-bearbeitet')
+
+  /** Die Zeilen der Überspringgründe, in der Reihenfolge ihrer Häufigkeit. */
+  const grundzeilen = (panelEl: HTMLElement) =>
+    within(panelEl)
+      .getAllByTestId(/^aufschluesselung-grund-\d+$/)
+      .map((zeile) => zeile.textContent)
+
+  /**
+   * Der frisch eingelesene Prüf-Lauf vom 11. September: 35 gesichtete Karten, eine bearbeitete
+   * (#782, „geprüft mit Befund"), 34 übersprungene aus drei Gründen.
+   */
+  async function frischGeparsterPrueflauf() {
+    renderPage({
+      submit: { ergebnis: alleNeu(ECHTER_PRUEFLAUF_STAND) },
+      listen: [[], wieAufbewahrt(ECHTER_PRUEFLAUF_STAND)],
+    })
+    await screen.findByText('Noch keine Auswertung vorhanden.')
+
+    protokollWaehlen(ECHTER_PRUEFLAUF_STAND, 'night-run-2026-09-11-103116.json')
+
+    const panelEl = await screen.findByTestId(`lauf-${ECHTER_PRUEFLAUF_START}`)
+    fireEvent.click(within(panelEl).getByRole('button', { expanded: false }))
+    await within(panelEl).findByTestId('aufschluesselung')
+    return panelEl
+  }
+
+  /**
+   * Derselbe Lauf **ohne** den Ergebnisstand dieser Sitzung — so, wie ihn die Seite nach einem
+   * Neuladen vom Server bekommt. Das Ausgangswort fehlt dann; die Aufschlüsselung entsteht allein
+   * aus Zustand, Fehlerklasse und Auszug (Punkt 5).
+   */
+  async function aufbewahrterPrueflauf(ansicht = wieAufbewahrt(ECHTER_PRUEFLAUF_STAND)) {
+    renderPage({ listen: [ansicht] })
+
+    const panelEl = await screen.findByTestId(`lauf-${ansicht[0].startedAt}`)
+    fireEvent.click(within(panelEl).getByRole('button', { expanded: false }))
+    await within(panelEl).findByTestId('aufschluesselung')
+    return panelEl
+  }
+
+  it('schlüsselt den frisch geparsten Prüf-Lauf nach seinen Ausgängen auf (Punkt 8)', async () => {
+    const panelEl = await frischGeparsterPrueflauf()
+
+    expect(gesichtet(panelEl)).toHaveTextContent('35 Karten gesichtet')
+    expect(bearbeitet(panelEl)).toHaveTextContent('1 bearbeitet')
+    expect(grundzeilen(panelEl)).toEqual([
+      '17 übersprungen: kein Plan-Dokument ([Plan])',
+      "15 übersprungen: kein Label 'review:offen'",
+      '2 übersprungen: Idee ([Idee])',
+    ])
+    // Jede Karte zählt genau einmal: 1 + 17 + 15 + 2 = 35.
+    expect(within(panelEl).queryByTestId('aufschluesselung-liegengeblieben')).not.toBeInTheDocument()
+    expect(within(panelEl).queryByTestId('aufschluesselung-unbekannt')).not.toBeInTheDocument()
+  })
+
+  it('kommt am aufbewahrten Lauf ohne das Ausgangswort auf dieselben Zahlen (Punkt 9)', async () => {
+    const panelEl = await aufbewahrterPrueflauf()
+
+    expect(gesichtet(panelEl)).toHaveTextContent('35 Karten gesichtet')
+    expect(bearbeitet(panelEl)).toHaveTextContent('1 bearbeitet')
+    expect(grundzeilen(panelEl)).toEqual([
+      '17 übersprungen: kein Plan-Dokument ([Plan])',
+      "15 übersprungen: kein Label 'review:offen'",
+      '2 übersprungen: Idee ([Idee])',
+    ])
+    expect(within(panelEl).queryByTestId('aufschluesselung-unbekannt')).not.toBeInTheDocument()
+  })
+
+  it('zählt einen nicht sicher zuzuordnenden Vorgang als „ohne bekannten Ausgang" (Punkt 10)', async () => {
+    // Konstruiert: Keines der fünf Protokolle liefert einen aufbewahrten Lauf mit diesen Kanten.
+    // Der Auszug ist das einzige Unterscheidungsmerkmal, das die Server-Sicht noch trägt — fehlt
+    // er oder steht eine Fehlerklasse daneben, wird nicht geraten.
+    const panelEl = await aufbewahrterPrueflauf([
+      aufbewahrt({
+        id: 1,
+        startedAt: startedAt(0),
+        mode: 'REVIEW',
+        processedCount: 0,
+        skippedCount: 4,
+        items: [
+          {
+            id: 11,
+            cardNumber: 700,
+            title: 'Paket A',
+            state: 'GREY',
+            excerpt: "kein Label 'review:offen'",
+          },
+          {
+            id: 12,
+            cardNumber: 701,
+            title: 'Paket B',
+            state: 'GREY',
+            excerpt: 'Über die Obergrenze (--max) hinaus — bleibt liegen',
+          },
+          // Ohne Auszug bleibt nur die graue Farbe — sie allein sagt nicht, warum.
+          { id: 13, cardNumber: 702, title: 'Paket C', state: 'GREY' },
+          // Eine Fehlerklasse trägt kein übersprungener und kein liegengebliebener Vorgang.
+          {
+            id: 14,
+            cardNumber: 703,
+            title: 'Paket D',
+            state: 'GREY',
+            errorClass: 'DEPENDENCY_UNMET',
+            excerpt: 'Abhaengigkeit #999 liegt nicht in Done.',
+          },
+        ],
+      }),
+    ])
+
+    expect(gesichtet(panelEl)).toHaveTextContent('4 Karten gesichtet')
+    expect(bearbeitet(panelEl)).toHaveTextContent('0 bearbeitet')
+    // Der eine sicher zuzuordnende Grund steht für sich; die beiden unklaren werden ihm nicht
+    // zugeschlagen.
+    expect(grundzeilen(panelEl)).toEqual(["1 übersprungen: kein Label 'review:offen'"])
+    expect(within(panelEl).getByTestId('aufschluesselung-liegengeblieben')).toHaveTextContent(
+      '1 liegengeblieben',
+    )
+    expect(within(panelEl).getByTestId('aufschluesselung-unbekannt')).toHaveTextContent(
+      '2 ohne bekannten Ausgang',
+    )
+  })
+
+  it('führt den Erzeugungs-Lauf mit übersprungenen, liegengebliebenen und bearbeiteten (Punkt 11)', async () => {
+    renderPage({ listen: [[]] })
+    await screen.findByText('Noch keine Auswertung vorhanden.')
+
+    protokollWaehlen(ECHTE_ERZEUGUNG_STAND, 'night-run-2026-09-09-125621.json')
+
+    const panelEl = await screen.findByTestId(`lauf-${ECHTE_ERZEUGUNG_START}`)
+    fireEvent.click(within(panelEl).getByRole('button', { expanded: false }))
+    await within(panelEl).findByTestId('aufschluesselung')
+
+    // 32 + 3 + 3 = 38 — die Summe der Teilmengen ist die Zahl der gesichteten Karten.
+    expect(gesichtet(panelEl)).toHaveTextContent('38 Karten gesichtet')
+    expect(bearbeitet(panelEl)).toHaveTextContent('3 bearbeitet')
+    expect(grundzeilen(panelEl)).toEqual(["32 übersprungen: kein Label 'kit:nightplan'"])
+    expect(within(panelEl).getByTestId('aufschluesselung-liegengeblieben')).toHaveTextContent(
+      '3 liegengeblieben',
+    )
+    // Dieselbe Zahl wie in der unveränderten Kopfzeile des Laufs (AK 2).
+    expect(within(panelEl).getByText('3 bearbeitet, 35 übergangen')).toBeInTheDocument()
+  })
+
+  it('zeigt die Kartennummern einer Grund-Zeile erst beim Aufklappen (Punkt 12)', async () => {
+    const panelEl = await frischGeparsterPrueflauf()
+
+    // Zugeklappt steht in der Aufschlüsselung nur die Zahl — die Zeilenliste darunter führt die
+    // Karte weiterhin einzeln, und genau sie soll der Betrachter nicht mehr durchsehen müssen.
+    const block = within(panelEl).getByTestId('aufschluesselung')
+    expect(within(block).queryByText(/#683/)).not.toBeInTheDocument()
+
+    fireEvent.click(within(panelEl).getByRole('button', { name: '2 übersprungen: Idee ([Idee])' }))
+
+    const zeile = within(panelEl).getByTestId('aufschluesselung-grund-2')
+    expect(within(zeile).getByText(/^#683/)).toBeInTheDocument()
+    expect(within(zeile).getByText(/^#670/)).toBeInTheDocument()
+  })
+
+  it('lässt an einem Lauf ohne übersprungene Karte die Grund-Zeilen weg (Punkt 13)', async () => {
+    // Konstruiert: Jeder der fünf Ergebnisstände hat übersprungene Karten.
+    const OHNE_UEBERSPRUNGENE = stand({
+      art: 'review',
+      stufe: 'issue',
+      einheiten: [einheit({ ausgang: 'mitBefund' })],
+    })
+    renderPage({
+      submit: { ergebnis: alleNeu(OHNE_UEBERSPRUNGENE) },
+      listen: [[], wieAufbewahrt(OHNE_UEBERSPRUNGENE)],
+      karten: { 700: karte({ id: 1, number: 700, title: 'Paket A' }) },
+    })
+    await screen.findByText('Noch keine Auswertung vorhanden.')
+
+    protokollWaehlen(OHNE_UEBERSPRUNGENE)
+
+    await screen.findByTestId(`lauf-${startedAt(0)}`)
+    aufklappen(0)
+    await within(lauf(0)).findByTestId('aufschluesselung')
+
+    expect(gesichtet(lauf(0))).toHaveTextContent('1 Karten gesichtet')
+    expect(bearbeitet(lauf(0))).toHaveTextContent('1 bearbeitet')
+    expect(within(lauf(0)).queryAllByTestId(/^aufschluesselung-grund-\d+$/)).toHaveLength(0)
+  })
+
+  it('benennt einen übersprungenen Vorgang ohne Grundtext, statt eine leere Zeile zu zeigen', async () => {
+    // Konstruiert: `night.mjs` schreibt zu jedem Überspringen einen Grund; fehlte er, stünde hier
+    // sonst „1 übersprungen: " ohne Aussage. Der Ausgang ist bekannt, nur sein Grund nicht — das
+    // ist etwas anderes als „ohne bekannten Ausgang".
+    const OHNE_GRUND = stand({
+      art: 'erzeugung',
+      stufe: 'plan',
+      einheiten: [
+        einheit({ ausgang: 'uebersprungen', dauerMs: undefined }),
+        // `offen` ist grau, aber weder übersprungen noch liegengeblieben.
+        einheit({ id: '701', titel: 'Paket B', ausgang: 'offen', dauerMs: undefined }),
+      ],
+    })
+    renderPage({ listen: [[]] })
+    await screen.findByText('Noch keine Auswertung vorhanden.')
+
+    protokollWaehlen(OHNE_GRUND)
+
+    await screen.findByTestId(`lauf-${startedAt(0)}`)
+    aufklappen(0)
+    await within(lauf(0)).findByTestId('aufschluesselung')
+
+    expect(grundzeilen(lauf(0))).toEqual(['1 übersprungen: ohne genannten Grund'])
+    expect(within(lauf(0)).getByTestId('aufschluesselung-unbekannt')).toHaveTextContent(
+      '1 ohne bekannten Ausgang',
+    )
+  })
+
+  it('zeigt an einem Umsetzungs-Lauf das Laufband und keine Aufschlüsselung (Punkt 14)', async () => {
+    renderPage({
+      submit: { ergebnis: alleNeu(ECHTER_STAND) },
+      listen: [[], wieAufbewahrt(ECHTER_STAND)],
+    })
+    await screen.findByText('Noch keine Auswertung vorhanden.')
+
+    protokollWaehlen(ECHTER_STAND, 'night-run-2026-09-07-085229.json')
+
+    const panelEl = await screen.findByTestId(`lauf-${ECHTER_START}`)
+    fireEvent.click(within(panelEl).getByRole('button', { expanded: false }))
+    await within(panelEl).findByTestId('laufband')
+
+    expect(within(panelEl).queryByTestId('aufschluesselung')).not.toBeInTheDocument()
+  })
+})

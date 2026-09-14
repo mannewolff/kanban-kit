@@ -181,6 +181,19 @@ export interface NightRunItem {
    * bereits fuer die Herkunftskette einer Karte fuehrt (Plan #863, E3).
    */
   kettenStufen?: NightRunKettenStufen
+  /**
+   * Das rohe Ausgangswort der Einheit (`uebersprungen`, `liegengeblieben`, `erfolg`, …) — nur
+   * aus einem Ergebnisstand, siehe {@link NightRunStand}. Es sagt genau das, was aus Zustand,
+   * Fehlerklasse und Auszug nur noch erraten werden koennte: `uebersprungen` und
+   * `liegengeblieben` sind beide grau ohne Fehlerklasse, `unbekannt` und ein harter Abbruch
+   * beide rot mit derselben Klasse (Plan #864, E2).
+   *
+   * <p><b>Es verlaesst den Browser nicht</b> — `NightRunItemSubmission` und `zurEinlieferung`
+   * picken ihre Felder einzeln und kennen es nicht. Ein aufbewahrter Lauf traegt es deshalb
+   * nie; wer es braucht, faellt dort auf eine ausdrueckliche Ableitung zurueck, statt eine
+   * zweite Wahrheit in den Einlieferungs-Vertrag zu legen (E2, ausdruecklich verworfen).
+   */
+  ausgang?: string
 }
 
 export interface NightRun {

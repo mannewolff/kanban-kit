@@ -281,6 +281,15 @@ const ZURUECKGESTELLT_SONST: Farbe = { state: 'GREY' }
  * Text ohne Laufzeit-Eingabe; nur `uebersprungen` braucht wegen seines dynamischen
  * Freitexts (`grund`) einen eigenen Zweig in {@link deuteEinheit}.
  */
+/**
+ * Der Auszug eines liegengebliebenen Vorgangs. Als **exportierte Konstante**, weil die
+ * Aufschluesselung im Leitstand ihn an einem aufbewahrten Lauf wiedererkennen muss — dort
+ * fehlt das Ausgangswort, und `liegengeblieben` ist von `uebersprungen` nur noch an diesem
+ * Text zu unterscheiden (Plan #864, E2). Zwei Literale liefen auseinander, sobald der Satz
+ * hier einmal umformuliert wird.
+ */
+export const NIGHT_RUN_AUSZUG_LIEGENGEBLIEBEN = 'Über die Obergrenze (--max) hinaus — bleibt liegen'
+
 const OHNE_PRUEFUNG = new Map<string, Farbe & { excerpt: string }>([
   [
     'unbekannt',
@@ -295,10 +304,7 @@ const OHNE_PRUEFUNG = new Map<string, Farbe & { excerpt: string }>([
     'verbraucht',
     { state: 'GREEN', excerpt: 'Dokument(e) erzeugt und geprüft — Label entfernt' },
   ],
-  [
-    'liegengeblieben',
-    { state: 'GREY', excerpt: 'Über die Obergrenze (--max) hinaus — bleibt liegen' },
-  ],
+  ['liegengeblieben', { state: 'GREY', excerpt: NIGHT_RUN_AUSZUG_LIEGENGEBLIEBEN }],
   [
     'offen',
     {
@@ -807,6 +813,9 @@ function baueItem(e: RohEinheit, position: number, modus: NightRunMode): NightRu
     ...(kennzahlen === undefined ? {} : { kennzahlen }),
     ...zahlenfeld('dokumenteAnzahl', dokumenteDerEinheit(e)),
     ...(kettenStufen === undefined ? {} : { kettenStufen }),
+    // Unbedingt, nicht optional: `ausgang` ist in Fassung 1 zugesagt und steht an jeder
+    // Einheit, noch bevor sie erstmals geschrieben wird (siehe {@link RohEinheit}).
+    ausgang: e.ausgang,
   }
 }
 
