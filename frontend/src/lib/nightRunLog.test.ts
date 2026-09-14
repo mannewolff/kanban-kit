@@ -303,6 +303,22 @@ describe('parseNightRunLog — Pruef-Lauf', () => {
     expect(runs[0].items[0].state).toBe('YELLOW')
   })
 
+  it('macht "Synthese ohne Beleg" rot mit AWAITING_DECISION', () => {
+    // Das Kit setzt in diesem Fall `kit:klaeren` — eine offene Entscheidung wartet auf
+    // einen Menschen, und der Ergebnisstand-Parser benennt sie genauso (Issue #816).
+    const { runs } = parseNightRunLog(
+      review(
+        '  Nach 3.2 min: Issue #200 — Synthese ohne Beleg: 2 als uebernommen bezeichnete Funde stehen nicht im Body-Vorschlag.',
+      ),
+    )
+    expect(runs[0].items[0]).toMatchObject({
+      cardNumber: 200,
+      state: 'RED',
+      errorClass: 'AWAITING_DECISION',
+      durationMs: 192_000,
+    })
+  })
+
   it('macht "die Session hat nichts hinterlassen" rot mit CHECKS_NOT_STARTED', () => {
     const { runs } = parseNightRunLog(
       review('  Fehlschlag nach 3 min: Issue #200 — die Session hat nichts hinterlassen, weiter mit dem naechsten.'),

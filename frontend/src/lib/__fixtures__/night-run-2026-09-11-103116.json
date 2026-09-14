@@ -1,0 +1,228 @@
+{
+  "schemaFassung": 1,
+  "erzeugtVon": "1.52.0",
+  "start": "2026-09-11T10:31:16.379Z",
+  "art": "review",
+  "modell": "claude-opus-5",
+  "max": 10,
+  "label": "review:offen",
+  "stufe": "plan",
+  "einheiten": [
+    {
+      "id": "801",
+      "titel": "[Fachlich] Ein Kollisionsfall bei gleichzeitiger Bearbeitung derselben Herkunftsbeziehung meldet sich verständlich statt mit einem Serverfehler",
+      "ausgang": "uebersprungen",
+      "grund": "kein Plan-Dokument ([Plan])"
+    },
+    {
+      "id": "814",
+      "titel": "[Fachlich] Vorhaben in einer Liste ein- und ausblenden",
+      "ausgang": "uebersprungen",
+      "grund": "kein Plan-Dokument ([Plan])"
+    },
+    {
+      "id": "743",
+      "titel": "[Fachlich] Vorhaben und referenzierte Tickets in der Nachtlauf-Auswertung anklickbar machen",
+      "ausgang": "uebersprungen",
+      "grund": "kein Label 'review:offen'"
+    },
+    {
+      "id": "800",
+      "titel": "[Fachlich] Die Nachtlauf-Historie hält auch bei gleichzeitigen Läufen zuverlässig ihre konfigurierte Obergrenze ein",
+      "ausgang": "uebersprungen",
+      "grund": "kein Plan-Dokument ([Plan])"
+    },
+    {
+      "id": "815",
+      "titel": "[Fachlich] Vorhaben löschen, Karten bleiben ohne Vorhaben erhalten",
+      "ausgang": "uebersprungen",
+      "grund": "kein Plan-Dokument ([Plan])"
+    },
+    {
+      "id": "741",
+      "titel": "[Idee] Nachtlauf-Auswertung: Rohprotokoll je Arbeitspaket einsehen, Referenzen und Vorhaben anklickbar machen",
+      "ausgang": "uebersprungen",
+      "grund": "kein Label 'review:offen'"
+    },
+    {
+      "id": "799",
+      "titel": "[Fachlich] Labels bleiben nicht am alten Board hängen, wenn eine Karte auf ein anderes Board übertragen wird",
+      "ausgang": "uebersprungen",
+      "grund": "kein Plan-Dokument ([Plan])"
+    },
+    {
+      "id": "798",
+      "titel": "[Fachlich] Interne Werkzeuge und Einstiegs-Dokumentation entsprechen dem tatsächlichen Projektstand",
+      "ausgang": "uebersprungen",
+      "grund": "kein Plan-Dokument ([Plan])"
+    },
+    {
+      "id": "797",
+      "titel": "[Fachlich] Sicherheits-Tokens für Reset, Verifikation und Einladung liegen nicht als lesbarer Klartext in der Warteschlange",
+      "ausgang": "uebersprungen",
+      "grund": "kein Plan-Dokument ([Plan])"
+    },
+    {
+      "id": "796",
+      "titel": "[Fachlich] Karten und Kacheln lassen sich vollständig per Tastatur öffnen",
+      "ausgang": "uebersprungen",
+      "grund": "kein Plan-Dokument ([Plan])"
+    },
+    {
+      "id": "795",
+      "titel": "[Fachlich] Wichtige Abläufe zeigen bei Fehlern und Unterbrechungen ehrlich, was wirklich passiert ist",
+      "ausgang": "uebersprungen",
+      "grund": "kein Plan-Dokument ([Plan])"
+    },
+    {
+      "id": "794",
+      "titel": "[Fachlich] Anzeige und Bearbeitungsmöglichkeiten passen nach jedem Kontextwechsel zum tatsächlich aktuellen Projekt, Board oder Einstiegspunkt",
+      "ausgang": "uebersprungen",
+      "grund": "kein Plan-Dokument ([Plan])"
+    },
+    {
+      "id": "793",
+      "titel": "[Fachlich] Karten und Vorhaben bleiben bei jedem Wechsel zwischen Board, Ideen-Pool, Archiv und Papierkorb konsistent",
+      "ausgang": "uebersprungen",
+      "grund": "kein Plan-Dokument ([Plan])"
+    },
+    {
+      "id": "792",
+      "titel": "[Fachlich] Checkbox-Klicks in der Aufgabenliste dürfen keine anderen Kartenänderungen überschreiben",
+      "ausgang": "uebersprungen",
+      "grund": "kein Plan-Dokument ([Plan])"
+    },
+    {
+      "id": "791",
+      "titel": "[Fachlich] Zugriff und Konten bleiben nach Widerruf, Sperrung und Passwort-Reset wirklich abgesichert",
+      "ausgang": "uebersprungen",
+      "grund": "kein Plan-Dokument ([Plan])"
+    },
+    {
+      "id": "787",
+      "titel": "[Fachlich] Kartenstatus bei jedem Kartentyp direkt änderbar",
+      "ausgang": "uebersprungen",
+      "grund": "kein Plan-Dokument ([Plan])"
+    },
+    {
+      "id": "737",
+      "titel": "[Fachlich] Daten, die der Server regulaer liefert, duerfen keine Seite umwerfen",
+      "ausgang": "uebersprungen",
+      "grund": "kein Plan-Dokument ([Plan])"
+    },
+    {
+      "id": "736",
+      "titel": "[Fachlich] Nach einem Release ist belegt, welche Fassung wirklich laeuft",
+      "ausgang": "uebersprungen",
+      "grund": "kein Plan-Dokument ([Plan])"
+    },
+    {
+      "id": "735",
+      "titel": "[Fachlich] Ein Release, das nicht ausgeliefert wurde, muss auffallen",
+      "ausgang": "uebersprungen",
+      "grund": "kein Plan-Dokument ([Plan])"
+    },
+    {
+      "id": "719",
+      "titel": "[Idee] Anhaenge sind ungewollt auf 1 MB begrenzt",
+      "ausgang": "uebersprungen",
+      "grund": "kein Label 'review:offen'"
+    },
+    {
+      "id": "683",
+      "titel": "[Idee] Kürzel und Board-Filter beantworten die Zugehörigkeit verschieden",
+      "ausgang": "uebersprungen",
+      "grund": "Idee ([Idee])"
+    },
+    {
+      "id": "679",
+      "titel": "[Plan] Governance-Dateien für ein öffentliches Repo",
+      "ausgang": "uebersprungen",
+      "grund": "kein Label 'review:offen'"
+    },
+    {
+      "id": "677",
+      "titel": "[Fachlich] README für ein öffentliches Repo schärfen",
+      "ausgang": "uebersprungen",
+      "grund": "kein Label 'review:offen'"
+    },
+    {
+      "id": "676",
+      "titel": "[Fachlich] Supply-Chain-Kette: Renovate, Trivy, SBOM",
+      "ausgang": "uebersprungen",
+      "grund": "kein Label 'review:offen'"
+    },
+    {
+      "id": "675",
+      "titel": "[Fachlich] Selbsthoster-Tauglichkeit: veröffentlichtes Image, feste Tags, Backup, Upgrade-Pfad",
+      "ausgang": "uebersprungen",
+      "grund": "kein Label 'review:offen'"
+    },
+    {
+      "id": "674",
+      "titel": "[Fachlich] Governance-Dateien für ein öffentliches Repo",
+      "ausgang": "uebersprungen",
+      "grund": "kein Label 'review:offen'"
+    },
+    {
+      "id": "670",
+      "titel": "[Idee] RELEASING.md und der merge-production-Skill widersprechen sich beim Tag",
+      "ausgang": "uebersprungen",
+      "grund": "Idee ([Idee])"
+    },
+    {
+      "id": "629",
+      "titel": "[Idee] boardId ueber die Compat-API sichtbar machen",
+      "ausgang": "uebersprungen",
+      "grund": "kein Label 'review:offen'"
+    },
+    {
+      "id": "623",
+      "titel": "[Idee] act()-Warnungen der Frontend-Suite: 167 Stueck, ueberwiegend aus eigenen Komponenten",
+      "ausgang": "uebersprungen",
+      "grund": "kein Label 'review:offen'"
+    },
+    {
+      "id": "614",
+      "titel": "[Idee] Labels an allen Karten, nicht nur an eingeplanten Board-Karten",
+      "ausgang": "uebersprungen",
+      "grund": "kein Label 'review:offen'"
+    },
+    {
+      "id": "557",
+      "titel": "Befoerderung zum Plattform-Admin gibt implizit frei",
+      "ausgang": "uebersprungen",
+      "grund": "kein Label 'review:offen'"
+    },
+    {
+      "id": "556",
+      "titel": "Login-Gate: Plattform-Admin braucht keine Freigabe",
+      "ausgang": "uebersprungen",
+      "grund": "kein Label 'review:offen'"
+    },
+    {
+      "id": "487",
+      "titel": "Klickflächen auf Karten und Epics tastaturzugänglich machen (FE, a11y)",
+      "ausgang": "uebersprungen",
+      "grund": "kein Label 'review:offen'"
+    },
+    {
+      "id": "486",
+      "titel": "Detail-Modal: Zuständige und Labels an allen Aufrufstellen durchreichen (FE)",
+      "ausgang": "uebersprungen",
+      "grund": "kein Label 'review:offen'"
+    },
+    {
+      "id": "782",
+      "titel": "[Plan] Vorhaben und referenzierte Tickets in der Nachtlauf-Auswertung anklickbar machen",
+      "ausgang": "mitBefund",
+      "dauerMs": 879763,
+      "kennzahlen": {
+        "kostenUsd": 21.94563399999999,
+        "apiDauerMs": 1084627,
+        "zuege": 252
+      }
+    }
+  ],
+  "abschluss": "regulaer"
+}

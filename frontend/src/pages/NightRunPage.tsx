@@ -15,7 +15,7 @@ import ContentCopyIcon from '@mui/icons-material/ContentCopy'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import { useEffect, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
-import { cardsApi, type CardByNumber } from '../api/cards'
+import { cardsApi, type Card, type CardByNumber } from '../api/cards'
 import { apiErrorMessage } from '../api/client'
 import {
   nightRunsApi,
@@ -96,6 +96,13 @@ interface AnzeigeLauf {
 
 /** Was zu einer projektweiten Kartennummer bekannt ist; `null` = nicht auflösbar (404). */
 type Kartenkatalog = ReadonlyMap<number, CardByNumber | null>
+
+/**
+ * Die Vorhaben je Karten-**ID** (`parentId`), nicht je Kartennummer: Die Zuordnung eines
+ * Arbeitspakets zu seinem Vorhaben läuft über die ID, der Herkunftsweg dagegen über die Nummer
+ * (#818). Ein fehlender Schlüssel heißt „der Abruf läuft noch", `null` heißt „nicht abrufbar".
+ */
+type Vorhabenkatalog = ReadonlyMap<number, Card | null>
 
 /** Je Fehlerklasse die Zahl der aufbewahrten Läufe, in denen sie vorkam; `null` = nicht abrufbar. */
 type Haeufigkeiten = NightRunErrorClassCounts | null
@@ -276,35 +283,149 @@ function kette(start: number, katalog: Kartenkatalog): Kettenglied[] {
 }
 
 /**
- * Der Text einer Kettenstufe. Die vier Fälle sind bewusst unterschieden (#715, A8):
+ * Der Zustand einer Kettenstufe. Die vier Fälle sind bewusst unterschieden (#715, A8):
  *
- * - **vorhanden** — die Stufe existiert; meldet der Lauf zu ihrer Karte einen roten Zustand, ist
+ * - **treffer** — die Stufe existiert; meldet der Lauf zu ihrer Karte einen roten Zustand, ist
  *   der Weg dort **abgerissen** (gescheitert oder auf eine Entscheidung wartend).
  * - **ohne** — das Arbeitspaket hat gar keinen Vorfahren. Kein Abriss, sondern ein legitim kurzer
  *   Weg (etwa ein Sonar-Befund).
- * - **noch nicht erreicht** — die Kette ist begonnen, aber diese Stufe fehlt. Sie zu erzeugen ist
+ * - **noch-nicht-erreicht** — die Kette ist begonnen, aber diese Stufe fehlt. Sie zu erzeugen ist
  *   genau der Schritt, den der Nachtlauf heute nicht fährt.
- * - **Karte #N nicht gefunden** — eine Nummer der Kette ließ sich nicht auflösen; das ist weder
- *   „ohne" noch ein Abriss.
+ * - **nicht-gefunden** — eine Nummer der Kette ließ sich nicht auflösen; das ist weder „ohne"
+ *   noch ein Abriss.
+ *
+ * Ein **Objekt statt eines fertigen Satzes** (#818): Nur der Treffer-Fall ist anklickbar, und
+ * seine Karte liegt bereits hier vor. Ein String zwänge die Anzeige, ihn wieder zu zerlegen oder
+ * die Karte ein zweites Mal zu suchen.
  */
-function stufenText(
-  stufe: { label: string; praefix: string },
+type StufenZustand =
+  | { art: 'treffer'; nummer: number; karte: CardByNumber; abgerissen: boolean }
+  | { art: 'nicht-gefunden'; nummer: number }
+  | { art: 'ohne' }
+  | { art: 'noch-nicht-erreicht' }
+
+function stufenZustand(
+  praefix: string,
   glieder: readonly Kettenglied[],
   istRot: (nummer: number) => boolean,
-): string {
+): StufenZustand {
   const geladen = glieder.filter(
     (glied): glied is { nummer: number; karte: CardByNumber } => glied.karte !== null,
   )
-  const treffer = geladen.find((glied) => glied.karte.title.startsWith(stufe.praefix))
+  const treffer = geladen.find((glied) => glied.karte.title.startsWith(praefix))
   if (treffer !== undefined) {
-    const abriss = istRot(treffer.nummer) ? ' — abgerissen' : ''
-    return `${stufe.label}: #${treffer.nummer} ${treffer.karte.title}${abriss}`
+    return {
+      art: 'treffer',
+      nummer: treffer.nummer,
+      karte: treffer.karte,
+      abgerissen: istRot(treffer.nummer),
+    }
   }
   const unbekannt = glieder.find((glied) => glied.karte === null)
   if (unbekannt !== undefined) {
-    return `${stufe.label}: Karte #${unbekannt.nummer} nicht gefunden`
+    return { art: 'nicht-gefunden', nummer: unbekannt.nummer }
   }
-  return glieder.length === 0 ? `${stufe.label}: ohne` : `${stufe.label}: noch nicht erreicht`
+  return glieder.length === 0 ? { art: 'ohne' } : { art: 'noch-nicht-erreicht' }
+}
+
+/** Der Satzrest hinter „<Stufe>: " in den drei Fällen ohne Karte. */
+function ohneTrefferText(zustand: Exclude<StufenZustand, { art: 'treffer' }>): string {
+  if (zustand.art === 'nicht-gefunden') {
+    return `Karte #${zustand.nummer} nicht gefunden`
+  }
+  return zustand.art === 'ohne' ? 'ohne' : 'noch nicht erreicht'
+}
+
+/**
+ * Eine Stufe der Herkunftskette als Zeile. Im Treffer-Fall ist **nur Nummer und Titel** der Link,
+ * nicht die ganze Zeile: Der zugängliche Name trägt zusätzlich die Stufe („Plan #718 …"), und der
+ * sichtbare Text bleibt sein Teilstring (WCAG 2.5.3). Der Abriss-Vermerk steht außerhalb des
+ * Links — er sagt etwas über den Lauf, nicht über das Ziel des Klicks.
+ */
+function Stufenzeile({
+  label,
+  zustand,
+  onOeffnen,
+}: Readonly<{
+  label: string
+  zustand: StufenZustand
+  onOeffnen: (karte: CardByNumber) => void
+}>) {
+  if (zustand.art !== 'treffer') {
+    return (
+      <Typography variant="body2" color="text.secondary">
+        {`${label}: ${ohneTrefferText(zustand)}`}
+      </Typography>
+    )
+  }
+  return (
+    <Typography variant="body2" color="text.secondary">
+      {`${label}: `}
+      <Link
+        component="button"
+        type="button"
+        variant="body2"
+        aria-label={`${label} #${zustand.nummer} ${zustand.karte.title}`}
+        onClick={() => onOeffnen(zustand.karte)}
+      >
+        {`#${zustand.nummer} ${zustand.karte.title}`}
+      </Link>
+      {zustand.abgerissen ? ' — abgerissen' : null}
+    </Typography>
+  )
+}
+
+/**
+ * Das Vorhaben, dem das Arbeitspaket zugeordnet ist (#818) — die vier sichtbaren Fälle:
+ *
+ * - keine Zuordnung → „ohne"; das ist kein Mangel, viele Pakete hängen an keinem Vorhaben.
+ * - Karte vorhanden → Link auf ihre **projektweite Nummer**, nicht auf die `parentId`, über die
+ *   abgerufen wurde: Die ID steht nirgends im Board.
+ * - Abruf gescheitert (`null`) → „nicht auflösbar"; die übrige Zeile bleibt bedienbar.
+ * - Abruf läuft noch (`undefined`) → **keine Zeile**. Eine Aussage über ein Vorhaben, das gerade
+ *   erst geladen wird, wäre für einen Wimpernschlag falsch.
+ */
+function Vorhabenzeile({
+  parentId,
+  vorhabenKarten,
+  onOeffnen,
+}: Readonly<{
+  parentId: number | null
+  vorhabenKarten: Vorhabenkatalog
+  onOeffnen: (karte: CardByNumber) => void
+}>) {
+  if (parentId === null) {
+    return (
+      <Typography variant="body2" color="text.secondary">
+        Vorhaben: ohne
+      </Typography>
+    )
+  }
+  const karte = vorhabenKarten.get(parentId)
+  if (karte === undefined) {
+    return null
+  }
+  if (karte === null) {
+    return (
+      <Typography variant="body2" color="text.secondary">
+        Vorhaben: nicht auflösbar
+      </Typography>
+    )
+  }
+  return (
+    <Typography variant="body2" color="text.secondary">
+      {'Vorhaben: '}
+      <Link
+        component="button"
+        type="button"
+        variant="body2"
+        aria-label={`Vorhaben #${karte.number} ${karte.title}`}
+        onClick={() => onOeffnen(karte)}
+      >
+        {`#${karte.number} ${karte.title}`}
+      </Link>
+    </Typography>
+  )
 }
 
 /**
@@ -367,12 +488,14 @@ async function inDieZwischenablage(text: string): Promise<void> {
 function Arbeitspaket({
   item,
   katalog,
+  vorhabenKarten,
   haeufigkeit,
   istRot,
   onOeffnen,
 }: Readonly<{
   item: AnzeigeItem
   katalog: Kartenkatalog
+  vorhabenKarten: Vorhabenkatalog
   haeufigkeit: string | null
   istRot: (nummer: number) => boolean
   onOeffnen: (karte: CardByNumber) => void
@@ -438,12 +561,26 @@ function Arbeitspaket({
         </Typography>
       )}
 
-      {wurzel != null &&
-        STUFEN.map((stufe) => (
-          <Typography key={stufe.label} variant="body2" color="text.secondary">
-            {stufenText(stufe, kette(item.cardNumber, katalog), istRot)}
-          </Typography>
-        ))}
+      {wurzel != null && (
+        <>
+          {STUFEN.map((stufe) => (
+            <Stufenzeile
+              key={stufe.label}
+              label={stufe.label}
+              zustand={stufenZustand(stufe.praefix, kette(item.cardNumber, katalog), istRot)}
+              onOeffnen={onOeffnen}
+            />
+          ))}
+          {/* Das Vorhaben hängt an der **Wurzelkarte**, nicht an der Kette: Fachliche Anforderung
+              und Plan tragen ebenfalls eine `parentId`, und deren Vorhaben wäre hier eine andere
+              Aussage als die gesuchte. */}
+          <Vorhabenzeile
+            parentId={wurzel.parentId}
+            vorhabenKarten={vorhabenKarten}
+            onOeffnen={onOeffnen}
+          />
+        </>
+      )}
 
       {uebernahme !== null && (
         // Der Text steht **immer** offen da, nie in einem eingeklappten Bereich: Er speist sich aus
@@ -488,6 +625,7 @@ function LaufPanel({
   ergebnis,
   ausErgebnisstand,
   katalog,
+  vorhabenKarten,
   zaehler,
   aufbewahrteLaeufe,
   onAufklappen,
@@ -499,6 +637,7 @@ function LaufPanel({
   /** Die Startzeitpunkte der Läufe, die in dieser Sitzung aus einem Ergebnisstand entstanden sind. */
   ausErgebnisstand: ReadonlySet<string>
   katalog: Kartenkatalog
+  vorhabenKarten: Vorhabenkatalog
   zaehler: Haeufigkeiten
   /** Das „M" in „N von M aufbewahrten Läufen" — die Länge der zuletzt geladenen Liste. */
   aufbewahrteLaeufe: number
@@ -562,6 +701,7 @@ function LaufPanel({
             key={`${item.cardNumber}-${position}`}
             item={item}
             katalog={katalog}
+            vorhabenKarten={vorhabenKarten}
             haeufigkeit={haeufigkeitsText(item, lauf.gespeichert, zaehler, aufbewahrteLaeufe)}
             istRot={(nummer) => rot.has(nummer)}
             onOeffnen={onOeffnen}
@@ -594,6 +734,7 @@ export function NightRunPage() {
    */
   const [ausErgebnisstand, setAusErgebnisstand] = useState<ReadonlySet<string>>(() => new Set())
   const [katalog, setKatalog] = useState<Kartenkatalog>(() => new Map())
+  const [vorhabenKarten, setVorhabenKarten] = useState<Vorhabenkatalog>(() => new Map())
   // Leer heißt „zu keiner Klasse ist etwas bekannt" — der Zustand vor dem ersten Abruf und der
   // eines leeren Ringpuffers sind derselbe. `null` heißt dagegen: der Abruf ist gescheitert.
   const [zaehler, setZaehler] = useState<Haeufigkeiten>({})
@@ -605,6 +746,13 @@ export function NightRunPage() {
   // So wird jede Kartennummer je Seitenaufruf genau einmal geladen.
   const katalogRef = useRef(new Map<number, CardByNumber | null>())
   const geladeneLaeufe = useRef(new Set<string>())
+  /**
+   * Die laufenden Vorhaben-Abrufe je `parentId` (#818). Der Promise wird **vor** dem Warten
+   * eingetragen, ohne ein `await` dazwischen: Zwei gleichzeitig aufgeklappte Läufe mit demselben
+   * Vorhaben warten so auf denselben Abruf, statt zwei Anfragen auszulösen.
+   */
+  const vorhabenAbrufeRef = useRef(new Map<number, Promise<Card | null>>())
+  const vorhabenKartenRef = useRef(new Map<number, Card | null>())
 
   useEffect(() => {
     if (!validId) {
@@ -650,7 +798,34 @@ export function NightRunPage() {
         ),
       ].filter((n) => !bekannt.has(n))
     }
+
+    // Nachgeladen wird allein das Vorhaben der **Wurzelkarte**: Auch fachliche Anforderung, Plan
+    // und Idee tragen eine `parentId`, deren Vorhaben aber eine andere Aussage wäre.
+    const eltern = [
+      ...new Set(
+        [...new Set(items.map((item) => item.cardNumber))].flatMap((nummer) => {
+          const parentId = bekannt.get(nummer)?.parentId
+          return parentId == null ? [] : [parentId]
+        }),
+      ),
+    ]
+    await Promise.all(
+      eltern.map(async (parentId) => {
+        let abruf = vorhabenAbrufeRef.current.get(parentId)
+        if (abruf === undefined) {
+          // Ein nicht abrufbares Vorhaben (404, fehlendes Leserecht) ist hier kein Fehler, sondern
+          // ein Ergebnis — es erscheint als „Vorhaben: nicht auflösbar".
+          abruf = cardsApi.get(parentId).catch(() => null)
+          vorhabenAbrufeRef.current.set(parentId, abruf)
+        }
+        vorhabenKartenRef.current.set(parentId, await abruf)
+      }),
+    )
+
+    // Beide Stände im selben Durchgang: Sonst zeigte die Seite für einen Wimpernschlag eine
+    // aufgelöste Wurzelkarte, deren Vorhaben-Zeile noch „nicht auflösbar" hieße.
     setKatalog(new Map(bekannt))
+    setVorhabenKarten(new Map(vorhabenKartenRef.current))
   }
 
   const aufklappen = (lauf: AnzeigeLauf) => {
@@ -770,6 +945,7 @@ export function NightRunPage() {
           ergebnis={ergebnisse.get(lauf.startedAt)}
           ausErgebnisstand={ausErgebnisstand}
           katalog={katalog}
+          vorhabenKarten={vorhabenKarten}
           zaehler={zaehler}
           aufbewahrteLaeufe={aufbewahrteLaeufe}
           onAufklappen={() => aufklappen(lauf)}

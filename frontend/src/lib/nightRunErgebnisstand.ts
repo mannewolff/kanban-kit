@@ -19,6 +19,12 @@
  * entscheidet: die Fassung, die Lauf-Art und das Vokabular der Ausgaenge. Ein
  * unbekanntes Wort fuehrt zu einer Ablehnung, nie zu einer geratenen Farbe — im
  * Leitstand waere eine falsche Farbe schlimmer als ein ehrliches „nicht unterstuetzt".
+ *
+ * <p><b>Der Pruef-Lauf ist seit Issue #816 deutbar.</b> Issue #773 hatte ihn ausdruecklich
+ * ausgeschlossen; der Ausschluss ist damit aufgehoben. Sein Vokabular gilt aber **nur**
+ * im Modus `REVIEW`: Die vier Pruef-only-Ausgaenge sagen in einem Implementierungs- oder
+ * Nachtplan-Lauf nichts, und umgekehrt erzeugt ein Pruef-Lauf die Ausgaenge der anderen
+ * Modi nie. Beide Richtungen lehnen deshalb ab, statt modus-unabhaengig weiterzudeuten.
  */
 
 import {
@@ -78,10 +84,14 @@ interface RohLauf {
   start: string
   art?: string
   /**
-   * Nur bei `art: "erzeugung"` bedeutungstragend. `night.mjs` schreibt sie additiv seit
-   * Version 1.51.0 in JEDEN Lauf (`stufe: args.stufe ?? null`) — ein Implementierungslauf
-   * traegt sie deshalb als `null`, nicht als fehlendes Feld; nur Bestaende vor 1.51.0
-   * (z. B. die Fixture vom 2026-09-07) kennen das Feld gar nicht.
+   * Bedeutungstragend bei `art: "erzeugung"` und — seit Issue #816 — bei `art: "review"`.
+   * `night.mjs` schreibt sie additiv seit Version 1.51.0 in JEDEN Lauf
+   * (`stufe: args.stufe ?? null`) — ein Implementierungslauf traegt sie deshalb als `null`,
+   * nicht als fehlendes Feld; nur Bestaende vor 1.51.0 (z. B. die Fixture vom 2026-09-07)
+   * kennen das Feld gar nicht.
+   *
+   * <p>Bei Bestaenden vor 1.51.0 (Feld fehlt) ist `"issue"` eine Annahme — die
+   * tatsaechliche Stufe eines damaligen `--stufe plan`-Laufs stuende nirgends im Stand.
    */
   stufe?: string | null
   einheiten?: unknown
@@ -205,6 +215,67 @@ const OHNE_PRUEFUNG = new Map<string, Farbe & { excerpt: string }>([
 ])
 
 /**
+ * Die Ausgaenge, die **nur** ein Pruef-Lauf schreibt — `werteReviewSession` in `night.mjs`
+ * (Issue #816). `syntheseOhneBeleg` fehlt hier, weil sein Auszug aus dem dynamischen
+ * `grund` kommt und er deshalb einen eigenen Zweig in {@link deuteEinheit} braucht.
+ *
+ * <p>Die Farben sind die des Text-Protokoll-Parsers: `mitBefund` ist gruen, weil ein
+ * Review MIT Befund die gelungene Runde ist — er wartet planmaessig auf den Menschen,
+ * es ist nichts kaputt.
+ */
+const PRUEF_AUSGAENGE = new Map<string, Farbe & { excerpt: string }>([
+  ['ohneBefund', { state: 'GREEN', excerpt: 'geprüft ohne Befund — Marker gesetzt' }],
+  ['mitBefund', { state: 'GREEN', excerpt: 'geprüft mit Befund — kein Marker, wartet auf dich' }],
+  [
+    'schaerfungFehlt',
+    {
+      state: 'YELLOW',
+      errorClass: 'CHECKS_NOT_STARTED',
+      excerpt: 'Befunde vorhanden, aber kein Body-Vorschlag — Schärfung fehlt',
+    },
+  ],
+  [
+    'ohneErgebnis',
+    {
+      state: 'RED',
+      errorClass: 'CHECKS_NOT_STARTED',
+      excerpt: 'Die Review-Session hat nichts hinterlassen — weder Marker noch Befunde',
+    },
+  ],
+])
+
+/**
+ * Die vier Pruef-only-Ausgaenge. In einem Implementierungs- oder Nachtplan-Lauf sagen
+ * sie nichts; sie bleiben dort nicht unterstuetzt. `ohneErgebnis` steht bewusst NICHT
+ * hier: Der Nachtplan-Lauf kennt ihn mit eigener Bedeutung (siehe {@link OHNE_PRUEFUNG}).
+ */
+const NUR_PRUEFLAUF: ReadonlySet<string> = new Set([
+  'ohneBefund',
+  'mitBefund',
+  'schaerfungFehlt',
+  'syntheseOhneBeleg',
+])
+
+/**
+ * Umgekehrt: Ein Pruef-Lauf erzeugt diese Ausgaenge nie. Sie modus-unabhaengig
+ * weiterzudeuten hiesse, fuer eine kaputte oder fremde Datei eine Farbe zu raten
+ * (entschieden am 2026-09-11, Issue-Review zu #816, Fund 2).
+ */
+const NIE_IM_PRUEFLAUF: ReadonlySet<string> = new Set([
+  'erfolg',
+  'fehlschlag',
+  'zurueckgestellt',
+  'verbraucht',
+  'offen',
+])
+
+/** Die Stufen, auf denen `night.mjs --review` laeuft. */
+const REVIEW_STUFEN: ReadonlySet<string> = new Set(['fachlich', 'plan', 'issue'])
+
+/** Die Stufe, mit der `runReviewLoop` ohne `--stufe` laeuft (`args.stufe ?? "issue"`). */
+const REVIEW_STUFE_DEFAULT = 'issue'
+
+/**
  * Bestimmt den Lauf-Modus aus `(art, stufe)` — eine Tupel-Tabelle statt einer
  * Bedingungskette, weil nur so ablesbar ist, dass jede Kombination genau einmal
  * entschieden wird (Plan #803, Architektonische Entscheidung 3/5). `null` liefert sie
@@ -215,9 +286,14 @@ const OHNE_PRUEFUNG = new Map<string, Farbe & { excerpt: string }>([
  * `("erzeugung", "issue")` (`kit:nightissues`, Arbeitspaket-Stufe desselben Runners)
  * bleibt bewusst aussen vor: eine generelle Oeffnung fuer jede `erzeugung`-Stufe waere
  * genau die Oeffnung, die Issue #802 als Nicht-Ziel ausschliesst.
+ *
+ * <p>`("review", <Stufe>)` ist seit Issue #816 der Pruef-Lauf — der Ausschluss aus
+ * Issue #773 ist damit aufgehoben. Anders als beim Nachtplan zaehlt hier jede Stufe, auf
+ * der der Runner tatsaechlich laeuft; eine unbekannte bleibt `null`.
  */
 function bestimmeModus(art: string | undefined, stufe: string | null | undefined): NightRunMode | null {
   if (art === 'erzeugung' && stufe === 'plan') return 'NIGHTPLAN'
+  if (art === 'review' && (stufe === undefined || stufe === null || REVIEW_STUFEN.has(stufe))) return 'REVIEW'
   if (art === 'implementierung' && (stufe === undefined || stufe === null)) return 'IMPLEMENTATION'
   if (art === undefined && (stufe === undefined || stufe === null)) return 'IMPLEMENTATION'
   return null
@@ -226,8 +302,28 @@ function bestimmeModus(art: string | undefined, stufe: string | null | undefined
 /** Auszuege gehen an den Server und teilen sich die Spaltengrenze mit dem Protokoll-Parser. */
 const gekuerzt = (text: string): string => text.slice(0, NIGHT_RUN_EXCERPT_MAX)
 
+/**
+ * Die Ausgaenge eines Pruef-Laufs, soweit sie nur dort vorkommen; `null` heisst: kein
+ * Pruef-Ausgang, es gilt das modus-unabhaengige Vokabular weiter unten.
+ */
+function deutePruefAusgang(e: RohEinheit): (Farbe & { excerpt: string }) | null {
+  const fest = PRUEF_AUSGAENGE.get(e.ausgang)
+  if (fest) return fest
+  if (e.ausgang !== 'syntheseOhneBeleg') return null
+  // Der Grund traegt je unbelegtem Fund eine Zeile (`syntheseGrundText`). Fallback `''`
+  // wie bei `zurueckgestellt`/`uebersprungen`: Der Ausgang steht auch ohne ihn fest.
+  const grund = typeof e.grund === 'string' ? e.grund : ''
+  return { state: 'RED', errorClass: 'AWAITING_DECISION', excerpt: gekuerzt(grund) }
+}
+
 /** Die Deutung einer Einheit; `null` heisst: Vokabular unbekannt, also nicht unterstuetzt. */
-function deuteEinheit(e: RohEinheit): (Farbe & { excerpt: string }) | null {
+function deuteEinheit(e: RohEinheit, modus: NightRunMode): (Farbe & { excerpt: string }) | null {
+  if (modus === 'REVIEW') {
+    if (NIE_IM_PRUEFLAUF.has(e.ausgang)) return null
+    const pruef = deutePruefAusgang(e)
+    if (pruef) return pruef
+  } else if (NUR_PRUEFLAUF.has(e.ausgang)) return null
+
   const ohnePruefung = OHNE_PRUEFUNG.get(e.ausgang)
   if (ohnePruefung) return ohnePruefung
 
@@ -259,8 +355,8 @@ function deuteEinheit(e: RohEinheit): (Farbe & { excerpt: string }) | null {
 }
 
 /** Eine Einheit in ein Arbeitspaket der Auswertung uebersetzen. */
-function baueItem(e: RohEinheit, position: number): NightRunItem | null {
-  const deutung = deuteEinheit(e)
+function baueItem(e: RohEinheit, position: number, modus: NightRunMode): NightRunItem | null {
+  const deutung = deuteEinheit(e, modus)
   if (!deutung) return null
   return {
     cardNumber: Number(e.id),
@@ -303,12 +399,6 @@ export function parseNightRunErgebnisstand(text: string): NightRunErgebnisstandR
   const lauf = roh as unknown as RohLauf
   if (lauf.schemaFassung !== FASSUNG) return { ok: false, grund: 'unbekannte-fassung' }
 
-  // Ein Pruef-Lauf traegt andere Ausgaenge und eine Stufe; ihn hier zu deuten hiesse,
-  // ein zweites Vokabular zu erraten (Issue #773 grenzt ihn ausdruecklich aus). Diese
-  // Ablehnung bleibt vor der Tupel-Tabelle stehen, weil `bestimmeModus` `art: "review"`
-  // gar nicht kennt und sie sonst genauso als `null` ablehnen wuerde — hier aber bewusst
-  // unbenannt bleiben soll, dass es sich um den ausgeschlossenen Pruef-Lauf handelt.
-  if (lauf.art === 'review') return { ok: false, grund: 'nicht-unterstuetzt' }
   const modus = bestimmeModus(lauf.art, lauf.stufe)
   if (modus === null) return { ok: false, grund: 'nicht-unterstuetzt' }
   if (!Array.isArray(lauf.einheiten)) return { ok: false, grund: 'nicht-unterstuetzt' }
@@ -319,7 +409,7 @@ export function parseNightRunErgebnisstand(text: string): NightRunErgebnisstandR
   const einheiten = lauf.einheiten as RohEinheit[]
   const items: NightRunItem[] = []
   for (const [position, e] of einheiten.entries()) {
-    const item = baueItem(e, position)
+    const item = baueItem(e, position, modus)
     if (!item) return { ok: false, grund: 'nicht-unterstuetzt' }
     items.push(item)
   }
@@ -330,6 +420,9 @@ export function parseNightRunErgebnisstand(text: string): NightRunErgebnisstandR
     run: {
       startedAt: lauf.start,
       mode: modus,
+      // Nur der Pruef-Lauf traegt eine Stufe — wie im Text-Parser, der sie aus der
+      // Abschlusszeile `Nacht-Review beendet (Stufe …)` liest.
+      ...(modus === 'REVIEW' ? { stage: lauf.stufe ?? REVIEW_STUFE_DEFAULT } : {}),
       // Dokumentierte Untergrenze: die Summe der Runden, ohne die Zeit zwischen ihnen
       // (Board-Aufrufe, Gates). Der Stand traegt keinen Endzeitstempel.
       durationMs: einheiten.reduce((summe, e) => summe + (e.dauerMs ?? 0), 0),
