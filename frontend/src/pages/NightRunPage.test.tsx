@@ -19,6 +19,7 @@ import type {
 import { SnackbarProvider } from '../components/SnackbarProvider'
 import echterLauf from '../lib/__fixtures__/night-run-2026-09-07-085229.json'
 import echterNachtplanHarterStopp from '../lib/__fixtures__/night-run-2026-09-09-141506.json'
+import echteKette from '../lib/__fixtures__/night-run-2026-09-14-131200.json'
 import { parseNightRunErgebnisstand } from '../lib/nightRunErgebnisstand'
 import { buildHandoffText, type NightRunHandoffItem } from '../lib/nightRunHandoff'
 import { theme } from '../theme'
@@ -138,6 +139,14 @@ const ECHTER_START = '2026-09-07T08:52:29.532Z'
  */
 const ECHTER_NACHTPLAN_STAND = JSON.stringify(echterNachtplanHarterStopp)
 const ECHTER_NACHTPLAN_START = '2026-09-09T14:15:06.165Z'
+
+/**
+ * Der echte Ketten-Lauf vom 2026-09-14 (Issue #854) — unverändert, wie der Runner ihn schrieb.
+ * Drei Vorgänge: zwei fertige Ketten (#791, #814) und ein Zeitbudget-Abbruch mit erzeugtem Plan
+ * (#842). Anders als der Nachtplan-Lauf geht er an den Server.
+ */
+const ECHTE_KETTE_STAND = JSON.stringify(echteKette)
+const ECHTE_KETTE_START = '2026-09-14T13:12:00.574Z'
 
 /** Eine Runner-Zeile, die kein Muster deutete — mit Markdown-Zeichen im Text. */
 const UNGEDEUTET = 'Voellig unbekannte Runner-Zeile mit *Sternchen* und `Backticks`'
@@ -821,6 +830,28 @@ describe('NightRunPage — Nachtplan-Lauf (#806)', () => {
     ).toBeInTheDocument()
     expect(lauf(0)).toBeInTheDocument()
     expect(anfragen.some((a) => a.method === 'POST')).toBe(false)
+  })
+})
+
+describe('NightRunPage — Ketten-Lauf (#854)', () => {
+  it('zeigt den echten Ketten-Lauf mit eigenem Chip und liefert ihn ein', async () => {
+    renderPage({
+      submit: { ergebnis: alleNeu(ECHTE_KETTE_STAND) },
+      listen: [[], wieAufbewahrt(ECHTE_KETTE_STAND)],
+    })
+    await screen.findByText('Noch keine Auswertung vorhanden.')
+
+    protokollWaehlen(ECHTE_KETTE_STAND, 'night-run-2026-09-14-131200.json')
+
+    const panelEl = await screen.findByTestId(`lauf-${ECHTE_KETTE_START}`)
+    expect(within(panelEl).getByText('Ketten-Lauf')).toBeInTheDocument()
+    expect(within(panelEl).getByText('3 bearbeitet, 0 übergangen')).toBeInTheDocument()
+
+    // Anders als der Nachtplan-Lauf geht die Kette an den Server (AK 8 aus #842):
+    // `istEinlieferbar` schließt weiterhin allein `NIGHTPLAN` aus.
+    await waitFor(() => expect(anfragen.some((a) => a.method === 'POST')).toBe(true))
+    expect(anfragen.find((a) => a.method === 'POST')?.body).toContain('"mode":"CHAIN"')
+    expect(within(panelEl).getByText('neu angelegt')).toBeInTheDocument()
   })
 })
 

@@ -6,6 +6,7 @@ import echterLauf from './__fixtures__/night-run-2026-09-07-085229.json'
 import echterNachtplanHarterStopp from './__fixtures__/night-run-2026-09-09-141506.json'
 import echterNachtplanRegulaer from './__fixtures__/night-run-2026-09-09-125621.json'
 import echterPrueflauf from './__fixtures__/night-run-2026-09-11-103116.json'
+import echteKette from './__fixtures__/night-run-2026-09-14-131200.json'
 
 /**
  * Die Fixtures dieser Datei sind — anders als in `nightRunLog.test.ts` — nicht
@@ -45,6 +46,13 @@ const mitEinheit = (felder: Record<string, unknown>, laufFelder: Record<string, 
 /** Dieselbe Einheit in einem Pruef-Lauf — `art`/`stufe`, wie `night.mjs --review` sie schreibt. */
 const imPrueflauf = (felder: Record<string, unknown>, laufFelder: Record<string, unknown> = {}): string =>
   mitEinheit(felder, { art: 'review', stufe: 'plan', ...laufFelder })
+
+/**
+ * Dieselbe Einheit in einem Ketten-Lauf. `stufe: null` schreibt `night.mjs --kette` in jeden
+ * Ketten-Stand — die Stufen liegen dort innerhalb der Einheit, nicht am Lauf.
+ */
+const inKette = (felder: Record<string, unknown>, laufFelder: Record<string, unknown> = {}): string =>
+  mitEinheit(felder, { art: 'kette', stufe: null, ...laufFelder })
 
 /** Den Lauf holen und dabei sicherstellen, dass die Deutung ueberhaupt gelang. */
 function lauf(text: string): NightRun {
@@ -127,6 +135,46 @@ describe('parseNightRunErgebnisstand — Ablehnungen', () => {
     // Ein Pruef-Lauf schreibt sie nie; eine geratene Farbe waere fuer eine kaputte
     // oder fremde Datei die falsche Aussage.
     expect(parseNightRunErgebnisstand(imPrueflauf({ ausgang, ...felder }))).toEqual({
+      ok: false,
+      grund: 'nicht-unterstuetzt',
+    })
+  })
+
+  // Wie bei den Pruef-Lagen tragen die Einheiten genau das, was ihren Ausgang im eigenen
+  // Modus deutbar machte — sonst schluege schon die alte Pruefung zu.
+  it.each([
+    ['verbraucht', {}],
+    ['offen', {}],
+    ['ohneErgebnis', {}],
+    ['ohneBefund', {}],
+    ['mitBefund', {}],
+    ['schaerfungFehlt', {}],
+    ['syntheseOhneBeleg', { grund: 'sonnet: „Der Abschnitt fehlt" — steht nicht im Body-Vorschlag.' }],
+    ['erfolg', { pruefung: { id: '100', zustand: 'geprueft' } }],
+    ['fehlschlag', { pruefung: { id: '100', zustand: 'rot', rotesKommando: 'mvn verify', rotesErgebnis: 'rot' } }],
+    ['zurueckgestellt', { grund: 'Nachtlauf: Idee ([Idee]).' }],
+    ['harterStopp', {}],
+  ] as const)('lehnt den Ausgang %s eines anderen Modus in einem Ketten-Lauf ab', (ausgang, felder) => {
+    // `erfolg` steht hier ausdruecklich mit drin: Er fiele sonst auf das modus-unabhaengige
+    // Vokabular durch und bekaeme in einer Kette eine geratene Farbe.
+    expect(parseNightRunErgebnisstand(inKette({ ausgang, ...felder }))).toEqual({
+      ok: false,
+      grund: 'nicht-unterstuetzt',
+    })
+  })
+
+  it.each([['fertig'], ['angehalten'], ['abgebrochen']])(
+    'lehnt den Ketten-Ausgang %s in einem Implementierungs-Lauf ab',
+    (ausgang) => {
+      expect(parseNightRunErgebnisstand(mitEinheit({ ausgang, grund: 'Kostenbudget: 55.00 $' }))).toEqual({
+        ok: false,
+        grund: 'nicht-unterstuetzt',
+      })
+    },
+  )
+
+  it('lehnt einen Ketten-Stand mit gesetzter Stufe ab — der Runner schreibt dort immer null', () => {
+    expect(parseNightRunErgebnisstand(stand({ art: 'kette', stufe: 'plan' }))).toEqual({
       ok: false,
       grund: 'nicht-unterstuetzt',
     })
@@ -481,6 +529,96 @@ describe('parseNightRunErgebnisstand — Pruef-Lauf (Issue #816)', () => {
   })
 })
 
+describe('parseNightRunErgebnisstand — Ketten-Lauf (Issue #854)', () => {
+  /** Der Grund eines Zeitbudget-Abbruchs, wie `ketteSession` ihn schreibt. */
+  const ZEITBUDGET = 'Zeitbudget review: die Session wurde nach 15.0 min am Limit beendet'
+
+  it('deutet art=kette/stufe=null als CHAIN und laesst die Stufe unbesetzt', () => {
+    const r = lauf(inKette({ ausgang: 'fertig' }))
+    expect(r.mode).toBe('CHAIN')
+    expect(r).not.toHaveProperty('stage')
+  })
+
+  it('macht `fertig` gruen ohne Fehlerklasse', () => {
+    const item = einziges(inKette({ ausgang: 'fertig' }))
+    expect(item.state).toBe('GREEN')
+    expect(item.errorClass).toBeUndefined()
+    expect(item.excerpt).toBe('Kette vollständig durchlaufen — Plan, Prüfung, Pakete, Abdeckung')
+  })
+
+  it('macht `angehalten` rot mit AWAITING_DECISION — eine Stopp-Frage wartet auf einen Menschen', () => {
+    const item = einziges(inKette({ ausgang: 'angehalten', grund: 'Stopp-Frage im Plan #849' }))
+    expect(item.state).toBe('RED')
+    expect(item.errorClass).toBe('AWAITING_DECISION')
+    expect(item.excerpt).toBe('Stopp-Frage am Fachplan — die Kette wartet auf eine Entscheidung')
+  })
+
+  it('macht einen Zeitbudget-Abbruch ohne erzeugtes Dokument rot mit TIME_BUDGET_EXCEEDED', () => {
+    const item = einziges(inKette({ ausgang: 'abgebrochen', grund: ZEITBUDGET }))
+    expect(item.state).toBe('RED')
+    expect(item.errorClass).toBe('TIME_BUDGET_EXCEEDED')
+    expect(item.excerpt).toBe(ZEITBUDGET)
+  })
+
+  // Die Stufen-Blöcke entstehen VOR ihrem Ergebnis (`stufePlan` legt `{ id: null, … }` an,
+  // bevor die Session laeuft). Deshalb entscheidet `plan.id`, nicht die blosse Anwesenheit
+  // des Blocks, und ein leeres `pakete.ids` zaehlt nicht als Dokument.
+  it.each([
+    ['ohne Stufen-Block', {}, 'RED' as const],
+    ['mit begonnener, aber ergebnisloser Plan-Stufe', { stufen: { plan: { id: null } } }, 'RED' as const],
+    ['mit leerem Stufen-Block', { stufen: {} }, 'RED' as const],
+    ['mit leerer Paket-Liste', { stufen: { pakete: { ids: [] } } }, 'RED' as const],
+    ['mit erzeugtem Plan', { stufen: { plan: { id: '849' } } }, 'YELLOW' as const],
+    ['mit erzeugten Paketen', { stufen: { pakete: { ids: ['845'] } } }, 'YELLOW' as const],
+  ])('faerbt einen Zeitbudget-Abbruch %s als %s', (_name, felder, state) => {
+    const item = einziges(inKette({ ausgang: 'abgebrochen', grund: ZEITBUDGET, ...felder }))
+    expect(item.state).toBe(state)
+    expect(item.errorClass).toBe('TIME_BUDGET_EXCEEDED')
+  })
+
+  // E16: Kostenbudget und technischer Fehler sind harte Abbrueche — ein nebenbei erzeugtes
+  // Dokument macht sie nicht gelb, anders als beim Zeitbudget.
+  it.each([
+    ['Kostenbudget: 55.00 $ von 50 $ nach der Stufe review'],
+    ['technischer Fehler: die Session der Stufe plan endete mit exit 1'],
+    ['kein Plan entstanden — die Session hat kein [Plan]-Dokument mit der Herkunftszeile angelegt'],
+  ])('macht den Abbruch "%s" rot mit HARD_ABORT, auch mit erzeugtem Dokument', (grund) => {
+    const item = einziges(
+      inKette({ ausgang: 'abgebrochen', grund, stufen: { plan: { id: '849' } } }),
+    )
+    expect(item.state).toBe('RED')
+    expect(item.errorClass).toBe('HARD_ABORT')
+    expect(item.excerpt).toBe(grund)
+  })
+
+  it.each([
+    ['ohne grund', {}],
+    ['mit nicht-string grund', { grund: 7 }],
+  ])('behandelt einen Abbruch %s als harten Abbruch mit leerem Auszug', (_name, felder) => {
+    const item = einziges(inKette({ ausgang: 'abgebrochen', ...felder }))
+    expect(item.state).toBe('RED')
+    expect(item.errorClass).toBe('HARD_ABORT')
+    expect(item.excerpt).toBe('')
+  })
+
+  it('kuerzt einen ueberlangen Abbruch-Grund auf die gemeinsame Obergrenze', () => {
+    const grund = 'x'.repeat(NIGHT_RUN_EXCERPT_MAX + 100)
+    expect(einziges(inKette({ ausgang: 'abgebrochen', grund })).excerpt).toHaveLength(
+      NIGHT_RUN_EXCERPT_MAX,
+    )
+  })
+
+  it.each([
+    ['uebersprungen', 'GREY' as const, "kein Label 'kit:night'"],
+    ['liegengeblieben', 'GREY' as const, 'Über die Obergrenze (--max) hinaus — bleibt liegen'],
+    ['unbekannt', 'RED' as const, 'Lauf mitten in der Runde abgebrochen — kein Ausgang'],
+  ])('deutet den modus-unabhaengigen Ausgang %s auch im Ketten-Lauf', (ausgang, state, auszug) => {
+    const item = einziges(inKette({ ausgang, grund: auszug }))
+    expect(item.state).toBe(state)
+    expect(item.excerpt).toBe(auszug)
+  })
+})
+
 describe('parseNightRunErgebnisstand — uebernommene Felder', () => {
   const vollstaendig = mitEinheit({
     id: '767',
@@ -740,6 +878,45 @@ describe('parseNightRunErgebnisstand — echter Pruef-Lauf (2026-09-11-103116)',
   it('deutet das `mitBefund`-Paket #782 gruen ohne Fehlerklasse', () => {
     expect(nach(782)?.state).toBe('GREEN')
     expect(nach(782)?.errorClass).toBeUndefined()
+  })
+})
+
+/**
+ * Der erste echte Ketten-Lauf (Issue #854). Er traegt genau die drei Lagen, um die es geht:
+ * zwei vollstaendig durchlaufene Ketten und einen Zeitbudget-Abbruch, bei dem trotzdem ein
+ * Plan-Dokument entstanden ist — der Gelb-Fall. Ein Test gegen selbstgebaute Daten prueft
+ * die eigene Annahme, nicht das Format.
+ */
+describe('parseNightRunErgebnisstand — echter Ketten-Lauf (2026-09-14-131200)', () => {
+  const r = lauf(JSON.stringify(echteKette))
+  const nach = (nummer: number) => r.items.find((i) => i.cardNumber === nummer)
+
+  it('deutet den Lauf als CHAIN, vollstaendig, ohne Lauf-Zustand und ohne Stufe', () => {
+    expect(r.mode).toBe('CHAIN')
+    expect(r.incomplete).toBe(false)
+    expect(r).not.toHaveProperty('runState')
+    expect(r).not.toHaveProperty('stage')
+  })
+
+  it('zaehlt drei bearbeitete Vorgaenge, keinen uebergangen, nichts ungedeutet', () => {
+    expect(r.processedCount).toBe(3)
+    expect(r.skippedCount).toBe(0)
+    expect(r.unparsedCount).toBe(0)
+  })
+
+  it('deutet die beiden fertigen Ketten #791 und #814 gruen ohne Fehlerklasse', () => {
+    for (const nummer of [791, 814]) {
+      expect(nach(nummer)?.state).toBe('GREEN')
+      expect(nach(nummer)?.errorClass).toBeUndefined()
+    }
+  })
+
+  it('deutet den Zeitbudget-Abbruch #842 gelb — der Plan #849 ist trotzdem entstanden', () => {
+    expect(nach(842)?.state).toBe('YELLOW')
+    expect(nach(842)?.errorClass).toBe('TIME_BUDGET_EXCEEDED')
+    expect(nach(842)?.excerpt).toBe(
+      'Zeitbudget review: die Session wurde nach 15.0 min am Limit beendet',
+    )
   })
 })
 

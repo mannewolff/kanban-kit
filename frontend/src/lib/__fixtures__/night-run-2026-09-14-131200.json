@@ -1,0 +1,157 @@
+{
+  "schemaFassung": 1,
+  "erzeugtVon": "1.53.0",
+  "start": "2026-09-14T13:12:00.574Z",
+  "art": "kette",
+  "modell": "claude-opus-5",
+  "max": 3,
+  "label": "kit:night",
+  "stufe": null,
+  "budget": {
+    "label": "kit:night",
+    "planMin": 20,
+    "paketeMin": 15,
+    "reviewMin": 15,
+    "abdeckungMin": 10,
+    "kostenUsd": 50,
+    "korrekturrunden": 2
+  },
+  "einheiten": [
+    {
+      "id": "791",
+      "titel": "[Fachlich] Zugriff und Konten bleiben nach Widerruf, Sperrung und Passwort-Reset wirklich abgesichert",
+      "ausgang": "fertig",
+      "stufen": {
+        "plan": {
+          "id": "844",
+          "dauerMs": 469723,
+          "kennzahlen": {
+            "kostenUsd": 3.604509,
+            "apiDauerMs": 465724,
+            "zuege": 41
+          },
+          "korrekturrunden": 0,
+          "weitere": []
+        },
+        "review": {
+          "dauerMs": 707385,
+          "kennzahlen": {
+            "kostenUsd": 5.13678,
+            "apiDauerMs": 690757,
+            "zuege": 23
+          },
+          "marker": true
+        },
+        "pakete": {
+          "ids": [
+            "845"
+          ],
+          "nichtZuordenbar": [],
+          "dauerMs": 221845,
+          "kennzahlen": {
+            "kostenUsd": 1.6356504999999997,
+            "apiDauerMs": 218314,
+            "zuege": 16
+          },
+          "korrekturrunden": 0
+        },
+        "abdeckung": {
+          "dauerMs": 134369,
+          "kennzahlen": {
+            "kostenUsd": 1.145872,
+            "apiDauerMs": 131236,
+            "zuege": 9
+          },
+          "text": "Der Abgleich steht als Kommentar an #845. Gelesen habe ich #791, #844 und #845; geändert habe ich nur diesen einen Kommentar.\n\n### Zuordnung\n\n- **AK 1** — „Ein board-gebundener Zugriffs-Token öffnet ausschließlich sein Board …\" → **kein Paket**; #845 trägt an #836 nur den Bauform-Hinweis (E2, E3), setzt nichts um.\n- **AK 2** — „Nach jedem Vorgang verbleibt mindestens ein nicht gesperrtes Plattform-Administrator-Konto …\" → **kein Paket**; #845 trägt an #837 nur den Bauform-Hinweis (E4).\n- **AK 3** — „Das erfolgreiche Setzen eines neuen Passworts über den Reset beendet sämtliche bestehenden Anmeldesitzungen …\" → **kein Paket**; #845 trägt an #838 nur den Bauform-Hinweis (E5, E6).\n- **AK 4** — „Außerhalb eines ausdrücklich eingeschalteten Entwicklungsbetriebs startet die Anwendung nicht mit dem mitgelieferten Sitzungsschlüssel.\" → **kein Paket**; #845 trägt an #839 nur den Bauform-Hinweis (E7).\n- **AK 5** — „Wiederholte Anmelde-, Registrierungs- und Reset-Versuche werden begrenzt …\" → **kein Paket**; #845 trägt an #840 nur den Bauform-Hinweis (E9).\n- **AK 6** — „Vom Betreiber abgeschaltete Automatiken bleiben in der laufenden Instanz abgeschaltet.\" → **kein Paket**; #845 trägt an #841 nur den Bauform-Hinweis (E8).\n- **AK 7** — „Die sechs Anforderungen sind einzeln abnehmbar und einzeln umsetzbar. Keine wartet auf eine andere.\" → **#845**.\n\n### Ohne Paket\n\nSechs der sieben Kriterien sind in keinem Paket abgebildet. Das ist die erklärte Absicht von #791 (Zerlegung in #836–#841) und von E1 des Plans #844 („nur die Bauform; kein Produktionscode\"); es bleibt aber der Befund dieses Abgleichs, dass aus dieser Kette kein Paket entsteht, das eine dieser sechs Zusicherungen wirksam macht:\n\n1. Ein board-gebundener Zugriffs-Token öffnet ausschließlich sein Board, unabhängig von den Rollen seines Erstellers, und ein Widerruf bleibt auch bei zeitgleicher Benutzung bestehen — beschrieben in Anforderung 836.\n2. Nach jedem Vorgang verbleibt mindestens ein nicht gesperrtes Plattform-Administrator-Konto, auch wenn zwei Administratoren einander zeitgleich sperren — beschrieben in Anforderung 837.\n3. Das erfolgreiche Setzen eines neuen Passworts über den Reset beendet sämtliche bestehenden Anmeldesitzungen des Kontos, einschließlich der eigenen — beschrieben in Anforderung 838.\n4. Außerhalb eines ausdrücklich eingeschalteten Entwicklungsbetriebs startet die Anwendung nicht mit dem mitgelieferten Sitzungsschlüssel — beschrieben in Anforderung 839.\n5. Wiederholte Anmelde-, Registrierungs- und Reset-Versuche werden begrenzt, ohne dass ein rechtmäßiger Kontobesitzer durch fremde Fehlversuche ausgesperrt werden kann — beschrieben in Anforderung 840.\n6. Vom Betreiber abgeschaltete Automatiken bleiben in der laufenden Instanz abgeschaltet — beschrieben in Anforderung 841.\n\n### Zuwachs\n\n- **#845** — Liefergegenstand sind sechs Board-Kommentare an fremden Karten. #791 verlangt für AK 7 nur, dass die sechs unabhängig bleiben; dass sie an ein gemeinsames technisches Dokument gebunden werden, ist eine Festlegung des Plans, nicht der fachlichen Anforderung.\n- **#845, Abschnitt #838** — „Die einmalige Zwangsabmeldung aller Nutzer beim Deployment ist gewollt.\" AK 3 sagt nur, dass der Reset die Sitzungen des betroffenen Kontos beendet; eine Abmeldung sämtlicher Nutzer der Instanz steht im Fachplan nicht.\n- **#845, Abschnitt #840** — `/api/auth/verify` wird in die Versuchsbremse einbezogen. AK 5 nennt Anmelde-, Registrierungs- und Reset-Versuche; die E-Mail-Verifikation ist dort nicht genannt.\n- **#845, Abschnitt #839** — Als mitzutragende Folgen sind `@SpringBootTest`, `mvn spring-boot:run` und der lokale Compose-Stack ohne `.env` genannt, die künftig ebenfalls abbrechen. AK 4 zielt ausdrücklich auf den Betrieb außerhalb des Entwicklungsbetriebs; der lokale Entwicklerstart soll davon gerade nicht getroffen werden.\n- **#845, Abschnitt #841** — Durchgereicht werden alle sechs Automatik-Variablen, darunter `MANBAN_OUTBOX_POLL_INTERVAL_MS` und `MANBAN_OUTBOX_MAX_ATTEMPTS`. AK 6 spricht von abgeschalteten Automatiken; diese beiden sind Stellgrößen einer laufenden Automatik, keine Abschalter.\n- **#845, Kontext** — Festlegung, dass kein Commit entsteht und die `buildChecks` als unberührte Bereiche entfallen. Eine Prozessfestlegung ohne Entsprechung im Fachplan."
+        }
+      },
+      "kostenUsd": 11.5228115,
+      "kostenUnbekannt": 0,
+      "bericht": "veroeffentlicht"
+    },
+    {
+      "id": "814",
+      "titel": "[Fachlich] Vorhaben in einer Liste ein- und ausblenden",
+      "ausgang": "fertig",
+      "stufen": {
+        "plan": {
+          "id": "846",
+          "dauerMs": 262649,
+          "kennzahlen": {
+            "kostenUsd": 2.1826834999999996,
+            "apiDauerMs": 259284,
+            "zuege": 27
+          },
+          "korrekturrunden": 0,
+          "weitere": []
+        },
+        "review": {
+          "dauerMs": 677783,
+          "kennzahlen": {
+            "kostenUsd": 5.545069,
+            "apiDauerMs": 656331,
+            "zuege": 31
+          },
+          "marker": true
+        },
+        "pakete": {
+          "ids": [
+            "847",
+            "848"
+          ],
+          "nichtZuordenbar": [],
+          "dauerMs": 186963,
+          "kennzahlen": {
+            "kostenUsd": 1.5336624999999997,
+            "apiDauerMs": 183629,
+            "zuege": 19
+          },
+          "korrekturrunden": 0
+        },
+        "abdeckung": {
+          "dauerMs": 147389,
+          "kennzahlen": {
+            "kostenUsd": 1.10545,
+            "apiDauerMs": 143947,
+            "zuege": 10
+          },
+          "text": "Das Ergebnis steht als Kommentar an #814 (der einzige Schreibvorgang — die Weisung „ändere nichts\" und der abschließende Auftrag, das Ergebnis ans Board zu schreiben, widersprechen sich; ich habe den Abschluss-Auftrag befolgt und sonst nichts angefasst).\n\n### Zuordnung\n\n| AK | Wortlaut (Anfang) | Paket |\n|---|---|---|\n| 1 | „Der Umschalter ‚Ausgeblendete zeigen' ist auf der Vorhaben-Seite immer sichtbar …\" | #848 (EpicsPage 1; Testfall AK 1) |\n| 2 | „Ist der Umschalter aus, sieht die Seite aus wie heute …\" | #848 (EpicsPage 2 + 3; Testfall AK 2) |\n| 3 | „Ist der Umschalter an, zeigt die Seite kein Kachelraster mehr, sondern eine Liste …\" | #848 (Verzweigung, kein `vorhaben-raster`; Testfall AK 3) und #847 (Zeile mit Kürzel-Badge und Titel) |\n| 4 | „Die Liste verwendet die bestehende Reihenfolge der Vorhaben vor dem Ausfiltern …\" | #848 (`sortEpics(…)` ungefiltert; Testfall AK 4) und #847 (Reihenfolge genau wie übergeben, Komponente sortiert nicht) |\n| 5 | „Jeder Listeneintrag hat einen eigenen Schalter …\" | #847 (Schalterstellung, Richtung des Rückrufs, Schalter löst `onOpen` nicht aus) und #848 (`onToggle` auf `setzeAusgeblendet`; Testfall AK 5) |\n| 6 | „Die Zahl am Umschalter … folgt jedem Umlegen in der Liste sofort.\" | #848 (Testfall AK 6) |\n| 7 | „Die Liste bleibt beim Schalten stehen …\" | #848 (Umschalter-Bedingung `epics.length > 0`, Zeige-Modus als State; Testfall AK 7) und #847 (Zeilen kommen aus `epics`, nicht nach `hidden` gefiltert) |\n| 8 | „Aus der Liste lässt sich ein Vorhaben öffnen …\" | #847 (`ListItemButton` ruft `onOpen(epic)`, Badge ohne eigenes `onOpen`) und #848 (Testfall AK 8) |\n| 9 | „In der Kachelansicht bleibt das Ausblenden über das Menü an der Kachel erhalten …\" | #848 (EpicsPage 5; Testfall AK 9) |\n| 10 | „Wie bisher darf jeder, der die Vorhaben-Seite sieht, Vorhaben ein- und ausblenden.\" | #847 (kein Rechte-Check, Komponente kennt `canEdit` nicht) und #848 (Testfall AK 10, Nur-Leser) |\n| 11 | „Liste und Schalter sind vollständig per Tastatur bedienbar …\" | #847 (Tastatur-Testfall, `aria-label` je Schalter, `aria-checked`, sichtbarer Vermerk „Ausgeblendet\") |\n\nAnmerkung zu AK 8: In #848 steht die Verdrahtung von `onOpen` nicht in der Aufgabenbeschreibung — dort wird nur `onToggle` ausdrücklich auf `setzeAusgeblendet` gelegt. Abgedeckt ist das Kriterium über das Akzeptanzkriterium „Öffnen aus der Liste zeigt den Detail-Dialog (AK 8)\". Kein Loch, aber die knappste Stelle der Zuordnung.\n\n### Ohne Paket\n\nAlle Kriterien sind abgebildet.\n\n### Zuwachs\n\n- **#848** — `visibleEpics` verliert den dritten Parameter und delegiert zusammen mit `selectableEpics` an eine dateilokale `ohneAusgeblendete`: eine Bereinigung der Bibliothek, die aus AK 2/AK 3 folgt, aber selbst kein fachliches Kriterium ist.\n- **#848** — Der Schreibpfad wechselt auf `schreibeAusgeblendet`, wodurch der `localStorage`-Schlüssel im Leerfall gelöscht statt mit `[]` beschrieben wird. Das ändert das gespeicherte Format im Leerfall; der Fachplan sagt dazu nichts.\n- **#848** — Punkt 6 schreibt fest, dass der Zeige-Modus beim Board-Wechsel auf „aus\" fällt. Bestandsverhalten, im Fachplan aber nicht erwähnt — mit der Liste als zweiter Ansicht ist es eine fachlich sichtbare Eigenschaft.\n- **#847** — Test-Hooks `data-testid=\"vorhaben-liste\"` und `vorhaben-zeile-<id>` sowie der Schnitt als eigene Komponente: reine Struktur- und Prüfbarkeitsentscheidungen.\n- **#847** — Das Akzeptanzkriterium, dass `EpicVisibilityList` in `frontend/src/pages` noch keinen Treffer hat: sichert den Paketschnitt, nicht die Fachlichkeit.\n- **#847 und #848** — `mvn verify` als Akzeptanzkriterium einer reinen Frontend-Änderung: Prozessvorgabe aus der Config, ohne fachlichen Bezug."
+        }
+      },
+      "abdeckungSchrieb": true,
+      "kostenUsd": 10.366864999999999,
+      "kostenUnbekannt": 0,
+      "bericht": "veroeffentlicht"
+    },
+    {
+      "id": "842",
+      "titel": "[Fachlich] Der Leitstand zeigt auch Nachtläufe mit mehrstufigen Vorgängen",
+      "ausgang": "abgebrochen",
+      "grund": "Zeitbudget review: die Session wurde nach 15.0 min am Limit beendet",
+      "stufen": {
+        "plan": {
+          "id": "849",
+          "dauerMs": 439741,
+          "kennzahlen": {
+            "kostenUsd": 4.093616499999999,
+            "apiDauerMs": 436181,
+            "zuege": 37
+          },
+          "korrekturrunden": 0,
+          "weitere": []
+        },
+        "review": {
+          "dauerMs": 900484,
+          "kennzahlen": null,
+          "marker": false
+        }
+      },
+      "kostenUsd": 4.093616499999999,
+      "kostenUnbekannt": 1,
+      "bericht": "veroeffentlicht"
+    }
+  ],
+  "abschluss": "regulaer",
+  "kostenSumme": 25.983292999999996,
+  "kostenUnbekannt": 1
+}

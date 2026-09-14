@@ -25,6 +25,11 @@
  * im Modus `REVIEW`: Die vier Pruef-only-Ausgaenge sagen in einem Implementierungs- oder
  * Nachtplan-Lauf nichts, und umgekehrt erzeugt ein Pruef-Lauf die Ausgaenge der anderen
  * Modi nie. Beide Richtungen lehnen deshalb ab, statt modus-unabhaengig weiterzudeuten.
+ *
+ * <p><b>Der Ketten-Lauf ist seit Issue #854 deutbar.</b> Eine Einheit ist dort kein
+ * Arbeitspaket, sondern ein ganzer Vorgang (Plan, Pruefung, Pakete, Abdeckung zu einer
+ * fachlichen Anforderung). Sein Vokabular ist nach denselben beiden Richtungen abgegrenzt
+ * wie das des Pruef-Laufs ({@link NUR_KETTE}, {@link NIE_IN_KETTE}).
  */
 
 import {
@@ -64,9 +69,24 @@ interface RohPruefung {
 }
 
 /**
- * Eine Einheit des Ergebnisstands — ein Arbeitspaket der Runde. `ausgang` ist aus
- * demselben Grund wie `RohPruefung.zustand` nicht optional: `einheitAnlegen` setzt ihn
- * vor der Session auf `"unbekannt"`, noch bevor die Einheit erstmals geschrieben wird.
+ * Die Stufen eines Ketten-Vorgangs, so wie `stufenDerKette` in `night.mjs` sie schreibt.
+ * Nur die beiden Stufen stehen hier, die ein **Dokument** hinterlassen — Plan und Pakete;
+ * `review` und `abdeckung` erzeugen keines und entscheiden deshalb nichts.
+ *
+ * <p>`plan.id` ist `string | null`, weil `stufePlan` den Block **vor** der Session anlegt
+ * (`{ id: null, dauerMs: 0, … }`). Ein vorhandener Block sagt also nur, dass die Stufe
+ * begonnen hat — ob ein Plan entstand, sagt allein die ID.
+ */
+interface RohStufen {
+  plan?: { id: string | null }
+  pakete?: { ids: string[] }
+}
+
+/**
+ * Eine Einheit des Ergebnisstands — ein Arbeitspaket der Runde, in einem Ketten-Lauf ein
+ * ganzer Vorgang. `ausgang` ist aus demselben Grund wie `RohPruefung.zustand` nicht
+ * optional: `einheitAnlegen` setzt ihn vor der Session auf `"unbekannt"`, noch bevor die
+ * Einheit erstmals geschrieben wird.
  */
 interface RohEinheit {
   id: string
@@ -76,6 +96,7 @@ interface RohEinheit {
   dauerMs?: number
   commit?: string | null
   pruefung?: RohPruefung
+  stufen?: RohStufen
 }
 
 /** Der Lauf als Ganzes. */
@@ -269,6 +290,62 @@ const NIE_IM_PRUEFLAUF: ReadonlySet<string> = new Set([
   'offen',
 ])
 
+/**
+ * Die Ausgaenge eines Ketten-Laufs mit festem Text — `laufeEineKette` in `night.mjs`
+ * (Plan #638). `abgebrochen` fehlt hier, weil Farbe und Auszug an seinem dynamischen
+ * `grund` haengen; er bekommt einen eigenen Zweig in {@link deuteKettenAusgang} —
+ * dasselbe Muster wie `syntheseOhneBeleg` im Pruef-Lauf.
+ *
+ * <p>`angehalten` ist rot mit `AWAITING_DECISION`: Die Kette hat genau eine Stopp-Frage
+ * am Fachplan hinterlassen und wartet damit auf einen Menschen — dieselbe Lage wie ein
+ * wegen `kit:klaeren` zurueckgestelltes Paket.
+ */
+const KETTEN_AUSGAENGE = new Map<string, Farbe & { excerpt: string }>([
+  [
+    'fertig',
+    { state: 'GREEN', excerpt: 'Kette vollständig durchlaufen — Plan, Prüfung, Pakete, Abdeckung' },
+  ],
+  [
+    'angehalten',
+    {
+      state: 'RED',
+      errorClass: 'AWAITING_DECISION',
+      excerpt: 'Stopp-Frage am Fachplan — die Kette wartet auf eine Entscheidung',
+    },
+  ],
+])
+
+/** Der Grund-Praefix, an dem `ketteSession` einen Zeitbudget-Abbruch erkennbar macht. */
+const ZEITBUDGET_PRAEFIX = 'Zeitbudget '
+
+/**
+ * Die Ausgaenge, die **nur** ein Ketten-Lauf schreibt — analog {@link NUR_PRUEFLAUF}. In
+ * jedem anderen Modus sagen sie nichts und bleiben dort nicht unterstuetzt.
+ */
+const NUR_KETTE: ReadonlySet<string> = new Set(['fertig', 'angehalten', 'abgebrochen'])
+
+/**
+ * Umgekehrt: Eine Kette erzeugt diese Ausgaenge nie — die vier Nachtplan-Ausgaenge, die
+ * vier Pruef-Ausgaenge und das Vokabular des Implementierungslaufs. Sie modus-unabhaengig
+ * weiterzudeuten hiesse, fuer eine kaputte oder fremde Datei eine Farbe zu raten; bei
+ * `erfolg` faellt das besonders ins Gewicht, weil er sonst auf das bestehende Vokabular
+ * durchfiele. `uebersprungen`, `liegengeblieben` und `unbekannt` fehlen bewusst: Die
+ * schreibt der Kandidaten-Durchlauf der Kette genauso wie der jedes anderen Modus.
+ */
+const NIE_IN_KETTE: ReadonlySet<string> = new Set([
+  'verbraucht',
+  'offen',
+  'ohneErgebnis',
+  'ohneBefund',
+  'mitBefund',
+  'schaerfungFehlt',
+  'syntheseOhneBeleg',
+  'erfolg',
+  'fehlschlag',
+  'zurueckgestellt',
+  'harterStopp',
+])
+
 /** Die Stufen, auf denen `night.mjs --review` laeuft. */
 const REVIEW_STUFEN: ReadonlySet<string> = new Set(['fachlich', 'plan', 'issue'])
 
@@ -290,9 +367,15 @@ const REVIEW_STUFE_DEFAULT = 'issue'
  * <p>`("review", <Stufe>)` ist seit Issue #816 der Pruef-Lauf — der Ausschluss aus
  * Issue #773 ist damit aufgehoben. Anders als beim Nachtplan zaehlt hier jede Stufe, auf
  * der der Runner tatsaechlich laeuft; eine unbekannte bleibt `null`.
+ *
+ * <p>`("kette", null)` ist seit Issue #854 der Ketten-Lauf. Die Kette traegt ihre Stufen
+ * **in der Einheit** und schreibt am Lauf deshalb immer `stufe: null` (`--kette` kennt
+ * kein `--stufe`); ein gesetzter Wert waere eine Kombination, die kein Runner erzeugt.
  */
 function bestimmeModus(art: string | undefined, stufe: string | null | undefined): NightRunMode | null {
   if (art === 'erzeugung' && stufe === 'plan') return 'NIGHTPLAN'
+  // Lose Gleichheit mit Bedacht: fehlendes und ausdruecklich leeres Feld sind hier dasselbe.
+  if (art === 'kette' && stufe == null) return 'CHAIN'
   if (art === 'review' && (stufe === undefined || stufe === null || REVIEW_STUFEN.has(stufe))) return 'REVIEW'
   if (art === 'implementierung' && (stufe === undefined || stufe === null)) return 'IMPLEMENTATION'
   if (art === undefined && (stufe === undefined || stufe === null)) return 'IMPLEMENTATION'
@@ -316,13 +399,51 @@ function deutePruefAusgang(e: RohEinheit): (Farbe & { excerpt: string }) | null 
   return { state: 'RED', errorClass: 'AWAITING_DECISION', excerpt: gekuerzt(grund) }
 }
 
+/**
+ * Ob die Kette bis zu ihrem Abbruch ein Dokument hinterlassen hat — die Frage, die beim
+ * Zeitbudget ueber Gelb und Rot entscheidet: Ein Plan oder ein Arbeitspaket ist ein
+ * verwertbares Ergebnis, das der Mensch weiterfuehren kann; ohne beides war die Nacht an
+ * dieser Stelle umsonst.
+ */
+function dokumentEntstanden(stufen: RohStufen | undefined): boolean {
+  if (stufen === undefined) return false
+  // `plan.id` und nicht der blosse Block: Den legt `stufePlan` schon vor der Session an.
+  if (typeof stufen.plan?.id === 'string') return true
+  return stufen.pakete !== undefined && stufen.pakete.ids.length > 0
+}
+
+/**
+ * Die Ausgaenge eines Ketten-Laufs, soweit sie nur dort vorkommen; `null` heisst: kein
+ * Ketten-Ausgang, es gilt das modus-unabhaengige Vokabular weiter unten.
+ */
+function deuteKettenAusgang(e: RohEinheit): (Farbe & { excerpt: string }) | null {
+  const fest = KETTEN_AUSGAENGE.get(e.ausgang)
+  if (fest) return fest
+  if (e.ausgang !== 'abgebrochen') return null
+  // Fallback `''` wie bei `zurueckgestellt`/`syntheseOhneBeleg`: Der Ausgang steht auch
+  // ohne Grund fest, und ohne Zeitbudget-Praefix ist er ein harter Abbruch.
+  const grund = typeof e.grund === 'string' ? e.grund : ''
+  if (!grund.startsWith(ZEITBUDGET_PRAEFIX)) {
+    return { state: 'RED', errorClass: 'HARD_ABORT', excerpt: gekuerzt(grund) }
+  }
+  // Nur beim Zeitbudget rettet ein erzeugtes Dokument die Farbe. Kostenbudget und
+  // technischer Fehler bleiben rot, auch wenn nebenbei etwas entstanden ist: Dort ist die
+  // Kette nicht an ihrer Uhr, sondern an einem Befund gescheitert.
+  const state = dokumentEntstanden(e.stufen) ? 'YELLOW' : 'RED'
+  return { state, errorClass: 'TIME_BUDGET_EXCEEDED', excerpt: gekuerzt(grund) }
+}
+
 /** Die Deutung einer Einheit; `null` heisst: Vokabular unbekannt, also nicht unterstuetzt. */
 function deuteEinheit(e: RohEinheit, modus: NightRunMode): (Farbe & { excerpt: string }) | null {
   if (modus === 'REVIEW') {
     if (NIE_IM_PRUEFLAUF.has(e.ausgang)) return null
     const pruef = deutePruefAusgang(e)
     if (pruef) return pruef
-  } else if (NUR_PRUEFLAUF.has(e.ausgang)) return null
+  } else if (modus === 'CHAIN') {
+    if (NIE_IN_KETTE.has(e.ausgang)) return null
+    const ketten = deuteKettenAusgang(e)
+    if (ketten) return ketten
+  } else if (NUR_PRUEFLAUF.has(e.ausgang) || NUR_KETTE.has(e.ausgang)) return null
 
   const ohnePruefung = OHNE_PRUEFUNG.get(e.ausgang)
   if (ohnePruefung) return ohnePruefung
