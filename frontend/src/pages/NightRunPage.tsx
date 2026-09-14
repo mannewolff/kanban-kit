@@ -38,7 +38,17 @@ import {
   parseNightRunErgebnisstand,
   type NightRunErgebnisstandGrund,
 } from '../lib/nightRunErgebnisstand'
-import { type NightRun, type NightRunMode, type NightRunState } from '../lib/nightRunLog'
+import {
+  type NightRun,
+  type NightRunItem,
+  type NightRunKennzahlen,
+  type NightRunKettenStufe,
+  type NightRunKettenStufen,
+  type NightRunMode,
+  type NightRunStand,
+  type NightRunState,
+  type NightRunStufenvorgaben,
+} from '../lib/nightRunLog'
 import { readTextFile } from '../lib/readTextFile'
 import { useProjectName } from '../lib/useProjectName'
 
@@ -679,11 +689,252 @@ function Arbeitspaket({
   )
 }
 
+/**
+ * Die vier Arbeitsschritte einer Kette in der Reihenfolge, in der `stufenDerKette` sie läuft —
+ * derselbe Schlüsselraum wie {@link NightRunKettenStufen} und {@link NightRunStufenvorgaben}, also
+ * stehen Vorgabe und Verbrauch eines Schritts unter demselben Namen.
+ *
+ * <p>Als Liste mit Beschriftung und nicht über `Object.keys`: Die Reihenfolge ist Teil der Aussage,
+ * und ein fünfter Schritt bräuchte hier eine deutsche Benennung, statt still als Schlüssel
+ * durchzurutschen — dieselbe Absicherung wie bei {@link MODUS_TEXT}.
+ */
+const KETTEN_STUFEN: ReadonlyArray<{ schluessel: NightRunKettenStufe; label: string }> = [
+  { schluessel: 'plan', label: 'Plan' },
+  { schluessel: 'review', label: 'Prüfung' },
+  { schluessel: 'pakete', label: 'Pakete' },
+  { schluessel: 'abdeckung', label: 'Abdeckung' },
+]
+
+/**
+ * Wie ein Lauf endete (Plan #863, E5). Eine fehlende Angabe heißt „noch nicht abgeschlossen" und
+ * nicht „vorzeitig beendet": `night.mjs` legt den Lauf ohne Abschluss an, und der Parser nimmt ihn
+ * als unvollständig an.
+ */
+const ABSCHLUSS_TEXT = new Map<string, string>([
+  ['regulaer', 'regulär beendet'],
+  ['harterStopp', 'vorzeitig beendet (harter Stopp)'],
+])
+
+/**
+ * Der Abschluss in Worten — **kein Fall gibt einen Rohwert aus**. `abschluss` ist im Stand eine
+ * freie Zeichenkette; ein fremdes Wort ungeprüft auf die Seite zu stellen hieße, dem Betreiber eine
+ * Auskunft zu geben, die der Leitstand selbst nicht versteht.
+ */
+const abschlussText = (abschluss: string | undefined): string =>
+  abschluss === undefined
+    ? 'noch nicht abgeschlossen'
+    : (ABSCHLUSS_TEXT.get(abschluss) ?? 'Abschluss nicht deutbar')
+
+/** Die Kosten des Nachtlaufs stehen im Ergebnisstand in US-Dollar. */
+const KOSTEN_FORMAT = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'USD' })
+
+/**
+ * Ein Betrag oder die ausdrückliche Auskunft, dass der Stand keinen führt. „0 $" wäre eine
+ * Behauptung über etwas, das gar nicht gemeldet wurde.
+ */
+const betrag = (wert: number | undefined): string =>
+  wert === undefined ? 'nicht angegeben' : KOSTEN_FORMAT.format(wert)
+
+/**
+ * Der Vermerk fehlender Kostenmeldungen (AK 3 und AK 11 aus #859); `null`, wo nichts fehlt. Er
+ * steht als Einschränkung neben der Summe, nicht als eigene Fehlermeldung: Die Summe stimmt, sie
+ * ist nur unvollständig.
+ */
+function ohneKostenmeldung(anzahl: number | undefined): string | null {
+  if (anzahl === undefined || anzahl === 0) {
+    return null
+  }
+  return anzahl === 1
+    ? 'ein Arbeitsschritt ohne Kostenmeldung'
+    : `${anzahl} Arbeitsschritte ohne Kostenmeldung`
+}
+
+/** Die Dokumente eines Arbeitsschritts — leer, wo der Vorgang ihn nicht mehr erreicht hat. */
+const dokumenteDerStufe = (
+  stufen: NightRunKettenStufen | undefined,
+  schluessel: NightRunKettenStufe,
+): readonly string[] => stufen?.[schluessel]?.dokumente ?? []
+
+/**
+ * Die Karten, die in dieser Nacht entstanden sind — Pläne und Pakete zusammen und **jede einmal**
+ * (AK 2). Ein Set und keine Summe der Längen: Derselbe Plan kann in zwei Schritten auftauchen, und
+ * doppelt gezählt wäre die Zahl größer als das, was am Board steht.
+ */
+function entstandeneDokumente(items: readonly NightRunItem[]): ReadonlySet<string> {
+  return new Set(
+    items.flatMap((item) =>
+      KETTEN_STUFEN.flatMap(({ schluessel }) => dokumenteDerStufe(item.kettenStufen, schluessel)),
+    ),
+  )
+}
+
+/**
+ * Die Summe der Zeiten aller Arbeitsschritte aller Vorgänge, in Millisekunden (AK 2). Ein nicht
+ * erreichter Schritt zählt als 0 — er hat keine Zeit verbraucht.
+ */
+function stufenZeitSumme(items: readonly NightRunItem[]): number {
+  const jeVorgang = (item: NightRunItem) =>
+    KETTEN_STUFEN.reduce((summe, { schluessel }) => summe + (item.kettenStufen?.[schluessel]?.dauerMs ?? 0), 0)
+  return items.reduce((summe, item) => summe + jeVorgang(item), 0)
+}
+
+/** Der höchste Kostenverbrauch eines einzelnen Vorgangs (AK 12). */
+function hoechsteKosten(items: readonly NightRunItem[]): string {
+  const gemeldet = items.flatMap((item) =>
+    item.kennzahlen?.kostenUsd === undefined ? [] : [item.kennzahlen.kostenUsd],
+  )
+  return gemeldet.length === 0 ? 'nicht angegeben' : betrag(Math.max(...gemeldet))
+}
+
+/** Die Zeitvorgaben je Arbeitsschritt, in der Reihenfolge der Kette (AK 12). */
+function vorgabenText(vorgaben: NightRunStufenvorgaben | undefined): string {
+  const teile = KETTEN_STUFEN.flatMap(({ schluessel, label }) => {
+    const minuten = vorgaben?.[schluessel]
+    return minuten === undefined ? [] : [`${label} ${minuten}`]
+  })
+  return teile.length === 0 ? 'nicht angegeben' : `${teile.join(' · ')} min`
+}
+
+/** Kosten und Züge eines Vorgangs, dazu der Vermerk fehlender Kostenmeldungen (AK 11). */
+function vorgangsKennzahlen(kennzahlen: NightRunKennzahlen | undefined): string {
+  const vermerk = ohneKostenmeldung(kennzahlen?.kostenUnbekannt)
+  return [
+    kennzahlen?.kostenUsd === undefined ? 'Kosten nicht gemeldet' : betrag(kennzahlen.kostenUsd),
+    ...(kennzahlen?.zuege === undefined ? [] : [`${kennzahlen.zuege} Züge`]),
+    ...(vermerk === null ? [] : [vermerk]),
+  ].join(' · ')
+}
+
+/** Der Kopf der Übersicht: Modell, Label und Abschluss — jede Angabe nur, wo der Stand sie führt. */
+const kopfText = (stand: NightRunStand | undefined): string =>
+  [
+    ...(stand?.modell === undefined ? [] : [stand.modell]),
+    ...(stand?.label === undefined ? [] : [`Label ${stand.label}`]),
+    abschlussText(stand?.abschluss),
+  ].join(' · ')
+
+/** Eine Kennzahl der Nacht: der Wert, darunter seine Benennung und ein etwaiger Vorbehalt. */
+function Kennzahl({
+  wert,
+  label,
+  hinweis,
+}: Readonly<{ wert: string; label: string; hinweis: string | null }>) {
+  return (
+    <Box>
+      <Typography variant="h6">{wert}</Typography>
+      <Typography variant="body2" color="text.secondary">
+        {label}
+      </Typography>
+      {hinweis !== null && (
+        <Typography variant="body2" color="text.secondary">
+          {hinweis}
+        </Typography>
+      )}
+    </Box>
+  )
+}
+
+/** Eine Angabe der Fußzeile: die Vorgabe der Nacht und ihr Wert. */
+function Fussangabe({ label, wert }: Readonly<{ label: string; wert: string }>) {
+  return (
+    <Box>
+      <Typography variant="body2" color="text.secondary">
+        {label}
+      </Typography>
+      <Typography variant="body2">{wert}</Typography>
+    </Box>
+  )
+}
+
+/**
+ * Die Übersicht eines Ketten-Laufs (Plan #863, Issue #866): Kopf, die Kennzahlen der Nacht, je
+ * Vorgang Kosten und Züge, dazu die Vorgaben in der Fußzeile.
+ *
+ * <p>Sie liest den **gedeuteten Lauf aus dem sitzungslokalen Speicher**, nicht den Anzeigelauf
+ * (E1): Zeitvorgaben, Kostenbudget, Modell und die Kennzahlen je Arbeitsschritt stehen allein im
+ * Ergebnisstand und werden nicht aufbewahrt. Nach einem Neuladen der Seite ist der Speicher leer,
+ * und der Lauf fällt auf die Zeilendarstellung zurück.
+ *
+ * <p>Die eigene Kennzeichnung als Wurzel ist Absicht: Die Bestandstests zum Ketten-Lauf (#854,
+ * #856, #858) suchen mit `getByText` im Panel, und ohne eine eigene Wurzel müsste jeder von ihnen
+ * angefasst werden, sobald hier ein Text zweimal auf der Seite steht.
+ */
+function KettenUebersicht({ run }: Readonly<{ run: NightRun }>) {
+  const stand = run.stand
+  const start = new Date(run.startedAt)
+  const datum = start.toLocaleDateString('de-DE', { dateStyle: 'full' })
+  const uhrzeit = start.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })
+  const gruen = run.items.filter((item) => item.state === 'GREEN').length
+
+  return (
+    <Box
+      data-testid="ketten-uebersicht"
+      sx={{ border: 1, borderColor: 'divider', borderRadius: 1, p: 2, mb: 2 }}
+    >
+      <Typography variant="subtitle1">{`Nacht vom ${datum}, ${uhrzeit} Uhr`}</Typography>
+      <Typography variant="body2" color="text.secondary">
+        {kopfText(stand)}
+      </Typography>
+
+      <Stack direction="row" spacing={3} sx={{ mt: 2, flexWrap: 'wrap' }}>
+        {/* „Vollständig durchlaufen" ist der grüne Zustand: Im Modus `CHAIN` wird nach
+            `KETTEN_AUSGAENGE` ausschließlich `fertig` grün, und der rohe Ausgang erreicht die
+            Seite gar nicht (E4). */}
+        <Kennzahl
+          wert={`${gruen} von ${run.items.length}`}
+          label="Ketten durchgelaufen"
+          hinweis={null}
+        />
+        <Kennzahl
+          wert={`${entstandeneDokumente(run.items).size}`}
+          label="Karten entstanden"
+          hinweis={null}
+        />
+        <Kennzahl
+          wert={formatDuration(stufenZeitSumme(run.items) / 1000)}
+          label="Laufzeit über alle Stufen"
+          hinweis={null}
+        />
+        <Kennzahl
+          wert={betrag(stand?.kostenSumme)}
+          label="Kosten der Nacht"
+          hinweis={ohneKostenmeldung(stand?.kostenUnbekannt)}
+        />
+      </Stack>
+
+      <Stack spacing={1} sx={{ mt: 2 }}>
+        {run.items.map((item) => (
+          <Box
+            key={`${item.cardNumber}-${item.position}`}
+            data-testid={`uebersicht-vorgang-${item.cardNumber}`}
+          >
+            <Typography variant="body2">{`#${item.cardNumber} ${item.title}`}</Typography>
+            <Typography variant="body2" color="text.secondary">
+              {vorgangsKennzahlen(item.kennzahlen)}
+            </Typography>
+          </Box>
+        ))}
+      </Stack>
+
+      <Divider sx={{ my: 2 }} />
+      {/* Die Zeile „Herkunft der Budgets" aus `docs/mockup-leitstand-nachtlauf.html` fehlt hier
+          bewusst: Der Leitstand kennt die Einstellungen des Betreibers nicht und kann deshalb
+          nicht sagen, ob eine Vorgabe eingestellt oder voreingestellt war (#859, Nicht-Ziel 2). */}
+      <Stack direction="row" spacing={3} sx={{ flexWrap: 'wrap' }} data-testid="uebersicht-fuss">
+        <Fussangabe label="Zeitvorgaben je Kette" wert={vorgabenText(stand?.vorgabenMin)} />
+        <Fussangabe label="Kostenbudget je Kette" wert={betrag(stand?.kostenBudgetUsd)} />
+        <Fussangabe label="Höchste Kosten eines Vorgangs" wert={hoechsteKosten(run.items)} />
+      </Stack>
+    </Box>
+  )
+}
+
 /** Ein Lauf als aufklappbares Panel; die Kette wird erst beim Aufklappen geladen (A8). */
 function LaufPanel({
   lauf,
   ergebnis,
   ausErgebnisstand,
+  kettenStand,
   katalog,
   vorhabenKarten,
   zaehler,
@@ -696,6 +947,8 @@ function LaufPanel({
   ergebnis: boolean | undefined
   /** Die Startzeitpunkte der Läufe, die in dieser Sitzung aus einem Ergebnisstand entstanden sind. */
   ausErgebnisstand: ReadonlySet<string>
+  /** Der gedeutete Ketten-Lauf dieser Sitzung; `undefined` heißt: keine Übersicht (E1). */
+  kettenStand: NightRun | undefined
   katalog: Kartenkatalog
   vorhabenKarten: Vorhabenkatalog
   zaehler: Haeufigkeiten
@@ -742,6 +995,7 @@ function LaufPanel({
         </Stack>
       </AccordionSummary>
       <AccordionDetails>
+        {kettenStand !== undefined && <KettenUebersicht run={kettenStand} />}
         {lauf.unparsedSample.length > 0 && (
           <Box sx={{ mb: 1 }}>
             <Typography variant="subtitle2">Nicht gedeutete Zeilen (Auszug)</Typography>
@@ -794,6 +1048,21 @@ export function NightRunPage() {
    * gelesen, und ein Ref darf das nicht (`react-hooks/refs`, ein Ref-Wert löst kein Rendern aus).
    */
   const [ausErgebnisstand, setAusErgebnisstand] = useState<ReadonlySet<string>>(() => new Set())
+  /**
+   * Die in **dieser Sitzung** gedeuteten Ketten-Läufe, je Startzeitpunkt (Plan #863, E1). Aus
+   * ihnen allein entsteht die Übersicht: Zeitvorgaben, Kostenbudget, Modell, Label, Abschlussart
+   * und die Kennzahlen je Arbeitsschritt stehen nur im Ergebnisstand — der Server bewahrt sie
+   * nicht auf, und Manne hat am 2026-09-14 entschieden, daran nichts zu ändern (#859, Frage 1).
+   *
+   * <p>Nicht an das Kennzeichen `gespeichert` gebunden, und das ist der Kern der Entscheidung:
+   * `protokollLesen` liefert den Lauf ein und ersetzt danach das **ganze** Lauf-Array durch die
+   * Server-Sicht, in der `gespeichert` auf `true` steht. Eine so gebundene Übersicht hätte nur
+   * zwischen Parsen und Server-Antwort existiert.
+   *
+   * <p>Sitzungslokal wie das benachbarte {@link ausErgebnisstand}: Nach einem Neuladen der Seite
+   * ist der Speicher leer, und der Lauf fällt auf die Zeilendarstellung zurück.
+   */
+  const [kettenStaende, setKettenStaende] = useState<ReadonlyMap<string, NightRun>>(() => new Map())
   const [katalog, setKatalog] = useState<Kartenkatalog>(() => new Map())
   const [vorhabenKarten, setVorhabenKarten] = useState<Vorhabenkatalog>(() => new Map())
   // Leer heißt „zu keiner Klasse ist etwas bekannt" — der Zustand vor dem ersten Abruf und der
@@ -923,6 +1192,11 @@ export function NightRunPage() {
     // Vermerkt **vor** dem Senden: Der Lauf ist aus dem Ergebnisstand entstanden, unabhängig davon,
     // ob die Einlieferung gleich gelingt.
     setAusErgebnisstand((bisher) => new Set(bisher).add(run.startedAt))
+    // Ebenfalls **vor** dem Einliefern vermerkt (E1): Gleich ersetzt die Server-Sicht das ganze
+    // Lauf-Array, und ein erst danach gefüllter Speicher trüge die Angaben des Stands nicht mehr.
+    if (run.mode === 'CHAIN') {
+      setKettenStaende((bisher) => new Map(bisher).set(run.startedAt, run))
+    }
     setLaeufe((bisher) =>
       [ausParser(run), ...bisher.filter((alt) => alt.startedAt !== run.startedAt)].sort(
         nachStartAbsteigend,
@@ -1005,6 +1279,9 @@ export function NightRunPage() {
           lauf={lauf}
           ergebnis={ergebnisse.get(lauf.startedAt)}
           ausErgebnisstand={ausErgebnisstand}
+          // Der Modus steht am Anzeigelauf und damit auch am neu geladenen; der Speicher entscheidet
+          // danach, ob zu genau diesem Lauf ein Ergebnisstand dieser Sitzung vorliegt.
+          kettenStand={lauf.mode === 'CHAIN' ? kettenStaende.get(lauf.startedAt) : undefined}
           katalog={katalog}
           vorhabenKarten={vorhabenKarten}
           zaehler={zaehler}
