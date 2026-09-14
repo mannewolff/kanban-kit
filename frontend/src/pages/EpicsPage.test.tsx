@@ -8,6 +8,7 @@ import { epicsApi } from '../api/epics'
 import { labelsApi } from '../api/labels'
 import { membersApi } from '../api/members'
 import { projectsApi } from '../api/projects'
+import { SnackbarProvider } from '../components/SnackbarProvider'
 import { hiddenEpicsStorageKey } from '../lib/boardHiddenEpics'
 import { EpicsPage } from './EpicsPage'
 
@@ -30,7 +31,9 @@ vi.mock('../api/cards', () => ({
   },
 }))
 vi.mock('../api/members', () => ({ membersApi: { list: vi.fn() } }))
-vi.mock('../api/epics', () => ({ epicsApi: { list: vi.fn(), assign: vi.fn(), create: vi.fn() } }))
+vi.mock('../api/epics', () => ({
+  epicsApi: { list: vi.fn(), assign: vi.fn(), create: vi.fn(), remove: vi.fn() },
+}))
 vi.mock('../api/projects', () => ({ projectsApi: { list: vi.fn() } }))
 vi.mock('../api/labels', () => ({ labelsApi: { list: vi.fn() } }))
 vi.mock('../api/comments', () => ({
@@ -43,7 +46,11 @@ vi.mock('../api/attachments', () => ({
 const mBoards = boardsApi as unknown as { get: ReturnType<typeof vi.fn> }
 const mCards = cardsApi as unknown as { list: ReturnType<typeof vi.fn>; byNumber: ReturnType<typeof vi.fn> }
 const mMembers = membersApi as unknown as { list: ReturnType<typeof vi.fn> }
-const mEpics = epicsApi as unknown as { list: ReturnType<typeof vi.fn>; create: ReturnType<typeof vi.fn> }
+const mEpics = epicsApi as unknown as {
+  list: ReturnType<typeof vi.fn>
+  create: ReturnType<typeof vi.fn>
+  remove: ReturnType<typeof vi.fn>
+}
 const mProjects = projectsApi as unknown as { list: ReturnType<typeof vi.fn> }
 const mLabels = labelsApi as unknown as { list: ReturnType<typeof vi.fn> }
 const mEpicTree = cardsApi as unknown as { epicTree: ReturnType<typeof vi.fn> }
@@ -91,6 +98,19 @@ describe('EpicsPage', () => {
   }
 
   afterEach(() => vi.unstubAllGlobals())
+
+  /**
+   * Öffnet das ⋮-Menü genau dieser Kachel. Steht auf der äußeren Ebene, weil ihn zwei Blöcke
+   * brauchen — „Ausblenden" und „Löschen" —, die eigene Vorhaben-Fixtures führen.
+   */
+  const oeffneMenue = async (epic: { id: number; title: string }) => {
+    const kachel = await screen.findByTestId(`vorhaben-kachel-${epic.id}`)
+    fireEvent.click(within(kachel).getByLabelText(`Menü ${epic.title}`))
+  }
+
+  /** Die IDs der Kacheln im Raster, in angezeigter Reihenfolge. */
+  const kachelIds = () =>
+    screen.queryAllByTestId(/^vorhaben-kachel-/).map((k) => k.dataset.testid)
 
   it('zeigt den Breadcrumb-Pfad ab Projekte', async () => {
     mEpics.list.mockResolvedValue([])
@@ -565,16 +585,6 @@ describe('EpicsPage', () => {
         </MemoryRouter>,
       )
 
-    /** Öffnet das ⋮-Menü genau dieser Kachel. */
-    const oeffneMenue = async (epic = auth) => {
-      const kachel = await screen.findByTestId(`vorhaben-kachel-${epic.id}`)
-      fireEvent.click(within(kachel).getByLabelText(`Menü ${epic.title}`))
-    }
-
-    /** Die IDs der Kacheln im Raster, in angezeigter Reihenfolge. */
-    const kachelIds = () =>
-      screen.queryAllByTestId(/^vorhaben-kachel-/).map((k) => k.dataset.testid)
-
     const umschalter = () => screen.getByLabelText(/^Ausgeblendete zeigen/)
 
     it('nimmt die Kachel über „Ausblenden" aus dem Raster', async () => {
@@ -582,7 +592,7 @@ describe('EpicsPage', () => {
       mEpics.list.mockResolvedValue([auth, zahlung])
       renderAufBoard('/boards/1/vorhaben')
 
-      await oeffneMenue()
+      await oeffneMenue(auth)
       fireEvent.click(screen.getByRole('menuitem', { name: 'Ausblenden' }))
 
       await waitFor(() => expect(kachelIds()).toEqual(['vorhaben-kachel-10']))
@@ -593,7 +603,7 @@ describe('EpicsPage', () => {
       mEpics.list.mockResolvedValue(vorhaben)
       renderAufBoard('/boards/1/vorhaben')
 
-      await oeffneMenue()
+      await oeffneMenue(auth)
 
       // Ohne stopPropagation träfe derselbe Klick den Kachel-Handler eine Ebene darüber.
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
@@ -605,7 +615,7 @@ describe('EpicsPage', () => {
       mEpics.list.mockResolvedValue([auth, zahlung])
       renderAufBoard('/boards/1/vorhaben')
 
-      await oeffneMenue()
+      await oeffneMenue(auth)
       fireEvent.keyDown(screen.getByRole('menuitem', { name: 'Ausblenden' }), { key: 'Escape' })
 
       // Das Menü zu öffnen ist noch keine Entscheidung — es wieder zu schließen darf weder das
@@ -630,7 +640,7 @@ describe('EpicsPage', () => {
       // wahrnehmbar und im Test ohne geratenen Stilwert greifbar.
       expect(within(kachel).getByText('Ausgeblendet')).toBeInTheDocument()
 
-      await oeffneMenue()
+      await oeffneMenue(auth)
       fireEvent.click(screen.getByRole('menuitem', { name: 'Einblenden' }))
 
       await waitFor(() => expect(JSON.parse(store.get(hiddenEpicsStorageKey(1)) as string)).toEqual([]))
@@ -675,7 +685,7 @@ describe('EpicsPage', () => {
       mEpics.list.mockResolvedValue(vorhaben)
       renderAufBoard('/boards/1/vorhaben')
 
-      await oeffneMenue()
+      await oeffneMenue(auth)
       fireEvent.click(screen.getByRole('menuitem', { name: 'Ausblenden' }))
 
       // Gegen die geteilte Funktion geprüft, nicht gegen ein Literal: ein zweiter Schlüsselname
@@ -690,7 +700,7 @@ describe('EpicsPage', () => {
       mEpics.list.mockResolvedValue([auth, zahlung])
       const { unmount: verlasseErsteSitzung } = renderAufBoard('/boards/1/vorhaben')
 
-      await oeffneMenue()
+      await oeffneMenue(auth)
       fireEvent.click(screen.getByRole('menuitem', { name: 'Ausblenden' }))
       await waitFor(() => expect(store.has(hiddenEpicsStorageKey(1))).toBe(true))
       verlasseErsteSitzung()
@@ -742,7 +752,7 @@ describe('EpicsPage', () => {
       await waitFor(() => expect(mProjects.list).toHaveBeenCalled())
       expect(screen.queryByRole('button', { name: 'Neues Vorhaben' })).not.toBeInTheDocument()
 
-      await oeffneMenue()
+      await oeffneMenue(auth)
       expect(screen.getByRole('menuitem', { name: 'Ausblenden' })).toBeInTheDocument()
     })
 
@@ -756,7 +766,7 @@ describe('EpicsPage', () => {
       mEpics.list.mockResolvedValue([auth, zahlung])
       renderAufBoard('/boards/1/vorhaben')
 
-      await oeffneMenue()
+      await oeffneMenue(auth)
       fireEvent.click(screen.getByRole('menuitem', { name: 'Ausblenden' }))
 
       // Der Zustand wirkt in dieser Sitzung — nur das Merken fällt aus (E8).
@@ -957,6 +967,133 @@ describe('EpicsPage', () => {
 
       expect(await screen.findByText('Auth')).toBeInTheDocument()
       await waitFor(() => expect(mMembers.list).toHaveBeenCalledWith(9))
+    })
+  })
+
+  // --- Löschen über das ⋮-Menü (Issue #820, Plan #819, fachlich #815) --------
+
+  describe('⋮-Menü „Löschen"', () => {
+    const ohneKarten = {
+      id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 0, total: 0,
+      memberNumbers: [], rootNumbers: [], requirementCardNumber: null,
+    }
+    const eineKarte = { ...ohneKarten, total: 1, memberNumbers: [1], rootNumbers: [1] }
+    const zweiKarten = { ...ohneKarten, total: 2, memberNumbers: [1, 2], rootNumbers: [1, 2] }
+    const zahlung = {
+      id: 10, number: 3, title: 'Zahlung', description: null, shortcode: 'ZAH', done: 0, total: 0,
+      memberNumbers: [], rootNumbers: [], requirementCardNumber: null,
+    }
+
+    /**
+     * Rendert die Seite im `SnackbarProvider`. Ohne ihn ist `useSnackbar` ein No-op, und der
+     * Fehlerfall unten wäre nicht prüfbar — der Toast entstünde nie.
+     */
+    const renderMitSnackbar = () =>
+      render(
+        <MemoryRouter initialEntries={['/boards/1/vorhaben']}>
+          <SnackbarProvider>
+            <Routes>
+              <Route path="/boards/:boardId/vorhaben" element={<EpicsPage />} />
+            </Routes>
+          </SnackbarProvider>
+        </MemoryRouter>,
+      )
+
+    /** Öffnet das ⋮-Menü und darin die Rückfrage. */
+    const oeffneRueckfrage = async (epic: { id: number; title: string }) => {
+      await oeffneMenue(epic)
+      fireEvent.click(screen.getByRole('menuitem', { name: 'Löschen' }))
+    }
+
+    it('bietet „Löschen" im Menü an, wer bearbeiten darf', async () => {
+      mEpics.list.mockResolvedValue([ohneKarten])
+      renderMitSnackbar()
+
+      await oeffneMenue(ohneKarten)
+
+      expect(screen.getByRole('menuitem', { name: 'Löschen' })).toBeInTheDocument()
+    })
+
+    it('bietet „Löschen" einem Nur-Leser nicht an', async () => {
+      // Anders als „Ausblenden" verändert Löschen den Server — ein VIEWER bekommt die
+      // Möglichkeit gar nicht erst angeboten.
+      mBoards.get.mockResolvedValue({ id: 1, projectId: 42, name: 'B', createdAt: '', columns: [] })
+      mProjects.list.mockResolvedValue([{ id: 42, name: 'Fremd', role: 'VIEWER', createdAt: '' }])
+      mEpics.list.mockResolvedValue([ohneKarten])
+      renderMitSnackbar()
+
+      await waitFor(() => expect(mProjects.list).toHaveBeenCalled())
+      await oeffneMenue(ohneKarten)
+
+      expect(screen.queryByRole('menuitem', { name: 'Löschen' })).toBeNull()
+      expect(screen.getByRole('menuitem', { name: 'Ausblenden' })).toBeInTheDocument()
+    })
+
+    it.each([
+      [
+        'ohne zugeordnete Karte',
+        ohneKarten,
+        '„Auth" wird gelöscht. Keine aktive Karte ist direkt zugeordnet. Das lässt sich nicht rückgängig machen.',
+      ],
+      [
+        'mit einer zugeordneten Karte',
+        eineKarte,
+        '„Auth" wird gelöscht. 1 direkt zugeordnete aktive Karte bleibt erhalten und zeigt danach „(kein Vorhaben)". Das lässt sich nicht rückgängig machen.',
+      ],
+      [
+        'mit zwei zugeordneten Karten',
+        zweiKarten,
+        '„Auth" wird gelöscht. 2 direkt zugeordnete aktive Karten bleiben erhalten und zeigen danach „(kein Vorhaben)". Das lässt sich nicht rückgängig machen.',
+      ],
+    ])('nennt in der Rückfrage %s Titel und Zahl', async (_fall, epic, text) => {
+      mEpics.list.mockResolvedValue([epic])
+      renderMitSnackbar()
+
+      await oeffneRueckfrage(epic)
+
+      expect(screen.getByRole('heading', { name: 'Vorhaben löschen?' })).toBeInTheDocument()
+      expect(screen.getByText(text)).toBeInTheDocument()
+    })
+
+    it('lässt „Abbrechen" die Kachel stehen und ruft nichts auf', async () => {
+      mEpics.list.mockResolvedValue([eineKarte, zahlung])
+      renderMitSnackbar()
+
+      await oeffneRueckfrage(eineKarte)
+      fireEvent.click(screen.getByRole('button', { name: 'Abbrechen' }))
+
+      await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+      expect(mEpics.remove).not.toHaveBeenCalled()
+      expect(kachelIds()).toEqual(['vorhaben-kachel-9', 'vorhaben-kachel-10'])
+    })
+
+    it('löscht das Vorhaben und nimmt die Kachel aus dem Raster', async () => {
+      // Zwei getrennte Antworten: die erste für den Erstaufruf, die zweite für das Nachladen
+      // nach dem Löschen. Mit einer dauerhaften Antwort bliebe die Kachel stehen, und der Test
+      // prüfte die Mock-Mechanik statt der Wirkung.
+      mEpics.list.mockResolvedValueOnce([eineKarte, zahlung]).mockResolvedValueOnce([zahlung])
+      mEpics.remove.mockResolvedValue(undefined)
+      renderMitSnackbar()
+
+      await oeffneRueckfrage(eineKarte)
+      fireEvent.click(screen.getByRole('button', { name: 'Löschen' }))
+
+      await waitFor(() => expect(mEpics.remove).toHaveBeenCalledWith(9))
+      await waitFor(() => expect(kachelIds()).toEqual(['vorhaben-kachel-10']))
+    })
+
+    it('meldet einen Fehlschlag und lässt die Kachel stehen, die Rückfrage ist dann schon zu', async () => {
+      mEpics.list.mockResolvedValue([eineKarte, zahlung])
+      mEpics.remove.mockRejectedValue(new Error('kaputt'))
+      renderMitSnackbar()
+
+      await oeffneRueckfrage(eineKarte)
+      fireEvent.click(screen.getByRole('button', { name: 'Löschen' }))
+
+      expect(await screen.findByText('Löschen fehlgeschlagen.')).toBeInTheDocument()
+      // Der Dialog schließt vor dem Aufruf — sonst schickte ein zweiter Klick ein zweites DELETE.
+      expect(screen.queryByRole('button', { name: 'Abbrechen' })).toBeNull()
+      expect(kachelIds()).toEqual(['vorhaben-kachel-9', 'vorhaben-kachel-10'])
     })
   })
 })

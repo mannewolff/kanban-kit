@@ -4,6 +4,11 @@ import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import CircularProgress from '@mui/material/CircularProgress'
+import Dialog from '@mui/material/Dialog'
+import DialogActions from '@mui/material/DialogActions'
+import DialogContent from '@mui/material/DialogContent'
+import DialogContentText from '@mui/material/DialogContentText'
+import DialogTitle from '@mui/material/DialogTitle'
 import FormControlLabel from '@mui/material/FormControlLabel'
 import IconButton from '@mui/material/IconButton'
 import LinearProgress from '@mui/material/LinearProgress'
@@ -17,7 +22,9 @@ import Typography from '@mui/material/Typography'
 import { useCallback, useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { boardsApi, type Board } from '../api/boards'
+import { apiErrorMessage } from '../api/client'
 import { Breadcrumbs } from '../components/Breadcrumbs'
+import { useSnackbar } from '../components/SnackbarProvider'
 import { cardsApi, type Card } from '../api/cards'
 import { epicsApi, type Epic } from '../api/epics'
 import { labelsApi, type Label } from '../api/labels'
@@ -55,6 +62,27 @@ function Art({ anzahl, eins, viele }: Readonly<{ anzahl: number; eins: string; v
   )
 }
 
+/**
+ * Der Text der Löschen-Rückfrage. „aktive" ist bewusst gewählt: `rootNumbers` lässt archivierte
+ * und im Ideen-Speicher liegende Karten aus (`EpicMembership`), während der Server beim Löschen
+ * auch deren Zuordnung löst. Die Zahl kann also kleiner sein als die Zahl der tatsächlich
+ * gelösten Zuordnungen — der Satz behauptet deshalb nur etwas über die aktiven Karten.
+ *
+ * Der Hinweis auf die Unumkehrbarkeit steht da, weil ein gelöschtes Vorhaben in keinem
+ * Papierkorb-Dialog auftaucht: Der Server filtert die Papierkorb-Liste auf gewöhnliche Karten.
+ */
+function rueckfrageText(epic: Epic): string {
+  const anzahl = epic.rootNumbers.length
+  const ende = 'Das lässt sich nicht rückgängig machen.'
+  if (anzahl === 0) {
+    return `„${epic.title}" wird gelöscht. Keine aktive Karte ist direkt zugeordnet. ${ende}`
+  }
+  if (anzahl === 1) {
+    return `„${epic.title}" wird gelöscht. 1 direkt zugeordnete aktive Karte bleibt erhalten und zeigt danach „(kein Vorhaben)". ${ende}`
+  }
+  return `„${epic.title}" wird gelöscht. ${anzahl} direkt zugeordnete aktive Karten bleiben erhalten und zeigen danach „(kein Vorhaben)". ${ende}`
+}
+
 export function EpicsPage() {
   const { boardId } = useParams()
   const id = Number.parseInt(boardId ?? '', 10)
@@ -80,6 +108,9 @@ export function EpicsPage() {
   // auf jedem Board aus.
   const [zeigeAusgeblendete, setZeigeAusgeblendete] = useState(false)
   const [menu, setMenu] = useState<{ epic: Epic; anchor: HTMLElement } | null>(null)
+  // Das Vorhaben, für das die Löschen-Rückfrage offensteht; `null` = keine Rückfrage.
+  const [deleteConfirm, setDeleteConfirm] = useState<Epic | null>(null)
+  const notify = useSnackbar()
 
   // Die Route `/boards/:boardId/vorhaben` hält die Komponente bei einem reinen Parameterwechsel
   // gemountet — der `useState`-Initializer läuft dann nicht erneut (Plan #703, E11). Ohne dieses
@@ -150,6 +181,31 @@ export function EpicsPage() {
   // ein gescheiterter Erstladeversuch, kein veralteter Stand durch fremde Aenderungen — SSE waere
   // ein eigenstaendiges Feature ueber den Rahmen dieses Issues hinaus.
   useRefetchOnFocus(load)
+
+  /**
+   * Löscht ein Vorhaben, nachdem die Rückfrage bestätigt wurde.
+   *
+   * Die Rückfrage schließt **vor** dem Aufruf: Bliebe sie offen, schickte ein zweiter Klick ein
+   * zweites DELETE, das nach dem erfolgreichen ersten mit 404 scheiterte und einen Fehler meldete,
+   * den es nicht gab (Muster aus `BoardView.confirmDelete`).
+   *
+   * Bewusst nicht optimistisch: Die Kachel verschwindet erst mit dem Nachladen, nicht schon beim
+   * Klick. Anders als beim Karten-Löschen im Board ist das ein seltener, durch die Rückfrage
+   * abgesicherter Vorgang — ein Rollback-Pfad lohnt den Zusatzcode nicht. `load()` statt
+   * `reload()`, weil nur `load()` je Teilaufruf ein `.catch` trägt (Issue #783).
+   */
+  /** Schließt die Rückfrage, ohne etwas zu tun — für „Abbrechen", Escape und Backdrop-Klick. */
+  const schliesseRueckfrage = () => setDeleteConfirm(null)
+
+  const confirmDeleteEpic = async (epic: Epic) => {
+    setDeleteConfirm(null)
+    try {
+      await epicsApi.remove(epic.id)
+      load()
+    } catch (e) {
+      notify(apiErrorMessage(e, 'Löschen fehlgeschlagen.'), 'error')
+    }
+  }
 
   // Projektmitglieder für die Zuständigen an der geöffneten Karte, sobald das Projekt bekannt ist —
   // dasselbe Muster wie auf dem Board. Ein Fehlschlag lässt die Liste leer, statt die Seite
@@ -487,7 +543,41 @@ export function EpicsPage() {
             {hiddenEpics.has(menu.epic.id) ? 'Einblenden' : 'Ausblenden'}
           </MenuItem>
         )}
+        {/* Anders als „Ausblenden" verändert Löschen den Server — deshalb hier der Rechte-Check.
+            Der Server prüft ohnehin; das Gate erspart einem Nur-Leser nur die 403-Antwort auf
+            eine Möglichkeit, die ihm gar nicht offensteht. */}
+        {menu && canEdit && (
+          <MenuItem
+            onClick={() => {
+              const gewaehlt = menu.epic
+              setMenu(null)
+              setDeleteConfirm(gewaehlt)
+            }}
+          >
+            Löschen
+          </MenuItem>
+        )}
       </Menu>
+
+      {/* Bedingt gerendert statt über `open`: Ohne offene Rückfrage gibt es kein Vorhaben, über
+          das der Text etwas aussagen könnte — so bleibt `deleteConfirm` im Inneren nicht-null,
+          ohne dass ein unerreichbarer Null-Zweig entsteht. */}
+      {deleteConfirm !== null && (
+        // Escape, Backdrop-Klick und „Abbrechen" teilen sich einen Handler: Das Schließen ohne
+        // Wirkung ist ein Vorgang, nicht drei — und eine zweite Fassung davon könnte abweichen.
+        <Dialog open onClose={schliesseRueckfrage}>
+          <DialogTitle>Vorhaben löschen?</DialogTitle>
+          <DialogContent>
+            <DialogContentText>{rueckfrageText(deleteConfirm)}</DialogContentText>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={schliesseRueckfrage}>Abbrechen</Button>
+            <Button color="error" onClick={() => void confirmDeleteEpic(deleteConfirm)}>
+              Löschen
+            </Button>
+          </DialogActions>
+        </Dialog>
+      )}
 
       <NewCardModal
         open={creating}
