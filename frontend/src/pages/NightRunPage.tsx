@@ -546,6 +546,7 @@ async function inDieZwischenablage(text: string): Promise<void> {
 function Arbeitspaket({
   item,
   modus,
+  gekuerzt,
   katalog,
   vorhabenKarten,
   haeufigkeit,
@@ -555,6 +556,12 @@ function Arbeitspaket({
   item: AnzeigeItem
   /** Der Modus des Laufs — er entscheidet, ob die Stufenzeilen überhaupt erscheinen (#858). */
   modus: NightRunMode
+  /**
+   * `true` an einem Lauf, über dem die Übersicht steht (Issue #869): Dann trägt die Zeile nur noch
+   * Vorhaben und Übernahmetext. Zustand, Dauer und der Auszug samt Stufenblock stünden sonst ein
+   * zweites Mal auf derselben Seite (AK 15 aus #859).
+   */
+  gekuerzt: boolean
   katalog: Kartenkatalog
   vorhabenKarten: Vorhabenkatalog
   haeufigkeit: string | null
@@ -568,43 +575,45 @@ function Arbeitspaket({
   const uebernahme = buildHandoffText(item)
 
   return (
-    <Box sx={{ py: 1 }}>
-      <Stack direction="row" spacing={1} alignItems="center" sx={{ flexWrap: 'wrap' }}>
-        <Stack
-          direction="row"
-          alignItems="center"
-          spacing={0.5}
-          data-testid={`zustand-${item.cardNumber}`}
-        >
-          {/* Ampel-Fläche (#738): fixe Größe, unabhängig von der Länge des Zustandstexts daneben —
-              wirkt als Signal statt als weitere Textzeile. Dekorativ und redundant zum Text, deshalb
-              `aria-hidden` (CLAUDE-react.md Zeile 142: Farbe trägt die Aussage nie allein). */}
-          <Box
-            aria-hidden="true"
-            data-testid={`ampel-${item.cardNumber}`}
-            sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: ZUSTAND_FARBE[item.state], flexShrink: 0 }}
-          />
-          <Typography component="span" variant="body2">
-            {nightRunZustandsText(item.state, item.errorClass)}
-          </Typography>
+    <Box sx={{ py: 1 }} data-testid={`paket-${item.cardNumber}`}>
+      {!gekuerzt && (
+        <Stack direction="row" spacing={1} alignItems="center" sx={{ flexWrap: 'wrap' }}>
+          <Stack
+            direction="row"
+            alignItems="center"
+            spacing={0.5}
+            data-testid={`zustand-${item.cardNumber}`}
+          >
+            {/* Ampel-Fläche (#738): fixe Größe, unabhängig von der Länge des Zustandstexts daneben —
+                wirkt als Signal statt als weitere Textzeile. Dekorativ und redundant zum Text, deshalb
+                `aria-hidden` (CLAUDE-react.md Zeile 142: Farbe trägt die Aussage nie allein). */}
+            <Box
+              aria-hidden="true"
+              data-testid={`ampel-${item.cardNumber}`}
+              sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: ZUSTAND_FARBE[item.state], flexShrink: 0 }}
+            />
+            <Typography component="span" variant="body2">
+              {nightRunZustandsText(item.state, item.errorClass)}
+            </Typography>
+          </Stack>
+          {wurzel === null && (
+            <Typography component="span">Karte #{item.cardNumber} nicht gefunden</Typography>
+          )}
+          {wurzel === undefined && <Typography component="span">{beschriftung}</Typography>}
+          {wurzel != null && (
+            <Link component="button" type="button" onClick={() => onOeffnen(wurzel)}>
+              {beschriftung}
+            </Link>
+          )}
+          {item.durationMs !== undefined && (
+            <Typography component="span" color="text.secondary">
+              {formatDuration(item.durationMs / 1000)}
+            </Typography>
+          )}
         </Stack>
-        {wurzel === null && (
-          <Typography component="span">Karte #{item.cardNumber} nicht gefunden</Typography>
-        )}
-        {wurzel === undefined && <Typography component="span">{beschriftung}</Typography>}
-        {wurzel != null && (
-          <Link component="button" type="button" onClick={() => onOeffnen(wurzel)}>
-            {beschriftung}
-          </Link>
-        )}
-        {item.durationMs !== undefined && (
-          <Typography component="span" color="text.secondary">
-            {formatDuration(item.durationMs / 1000)}
-          </Typography>
-        )}
-      </Stack>
+      )}
 
-      {item.excerpt !== undefined && (
+      {!gekuerzt && item.excerpt !== undefined && (
         // Auszüge sind Fremdtext (Claude-Ausgaben, Ergebnisse fremder Werkzeuge) und werden
         // deshalb als reiner Text gerendert, nie über den Markdown-Renderer (CLAUDE-security.md).
         <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5, whiteSpace: 'pre-wrap' }}>
@@ -624,24 +633,25 @@ function Arbeitspaket({
 
       {wurzel != null && (
         <>
-          {STUFEN.map((stufe) => {
-            const zustand = stufenZustand(
-              stufe.praefix,
-              kette(item.cardNumber, katalog),
-              istRot,
-              modus,
-            )
-            // `entfaellt` ergibt **keine Zeile** — die Herkunft steht in diesem Modus im Auszug
-            // (#858, siehe `stufenZustand`).
-            return zustand.art === 'entfaellt' ? null : (
-              <Stufenzeile
-                key={stufe.label}
-                label={stufe.label}
-                zustand={zustand}
-                onOeffnen={onOeffnen}
-              />
-            )
-          })}
+          {!gekuerzt &&
+            STUFEN.map((stufe) => {
+              const zustand = stufenZustand(
+                stufe.praefix,
+                kette(item.cardNumber, katalog),
+                istRot,
+                modus,
+              )
+              // `entfaellt` ergibt **keine Zeile** — die Herkunft steht in diesem Modus im Auszug
+              // (#858, siehe `stufenZustand`).
+              return zustand.art === 'entfaellt' ? null : (
+                <Stufenzeile
+                  key={stufe.label}
+                  label={stufe.label}
+                  zustand={zustand}
+                  onOeffnen={onOeffnen}
+                />
+              )
+            })}
           {/* Das Vorhaben hängt an der **Wurzelkarte**, nicht an der Kette: Fachliche Anforderung
               und Plan tragen ebenfalls eine `parentId`, und deren Vorhaben wäre hier eine andere
               Aussage als die gesuchte. */}
@@ -1398,6 +1408,10 @@ function LaufPanel({
             key={`${item.cardNumber}-${position}`}
             item={item}
             modus={lauf.mode}
+            // Dieselbe Bedingung, die über die Übersicht entscheidet, und nicht die Lauf-Art
+            // (#869): Ein aufbewahrter Ketten-Lauf ohne Sitzungsstand bekommt keine Übersicht und
+            // verlöre sonst seine Zeilenangaben, ohne etwas dafür zu bekommen.
+            gekuerzt={kettenStand !== undefined}
             katalog={katalog}
             vorhabenKarten={vorhabenKarten}
             haeufigkeit={haeufigkeitsText(item, lauf.gespeichert, zaehler, aufbewahrteLaeufe)}

@@ -991,18 +991,17 @@ describe('NightRunPage — Zeitbudget als eigener Grund (#856)', () => {
    * #842 geschrieben sind: Die Ampel allein sagte bisher „Erfolg, Prüfung rot", und die Prüfung war
    * nicht rot, sie kam gar nicht dran.
    */
+  /**
+   * Der Lauf wird **vom Server geladen**, nicht als Ergebnisstand hineingegeben: Seit Issue #869
+   * kürzt die Seite die Vorgangszeile an jedem Lauf, zu dem ein Sitzungsstand vorliegt — und beide
+   * Aussagen hier hängen an dieser Zeile. Ohne Sitzungsstand steht sie vollständig da, und das ist
+   * genau der Fall, für den AK 3 und AK 5 aus #842 geschrieben sind. `gespeichert` ist an einem
+   * geladenen Lauf `true`, die Häufigkeitszeile erscheint also weiterhin.
+   */
   async function ketteAufgeklappt(zaehler: NightRunErrorClassCounts) {
-    renderPage({
-      submit: { ergebnis: alleNeu(ECHTE_KETTE_STAND) },
-      listen: [[], wieAufbewahrt(ECHTE_KETTE_STAND)],
-      zaehler: [{}, zaehler],
-    })
-    await screen.findByText('Noch keine Auswertung vorhanden.')
-
-    protokollWaehlen(ECHTE_KETTE_STAND, 'night-run-2026-09-14-131200.json')
+    renderPage({ listen: [wieAufbewahrt(ECHTE_KETTE_STAND)], zaehler: [zaehler] })
 
     const panelEl = await screen.findByTestId(`lauf-${ECHTE_KETTE_START}`)
-    await waitFor(() => expect(within(panelEl).getByText('neu angelegt')).toBeInTheDocument())
     fireEvent.click(within(panelEl).getByRole('button', { expanded: false }))
     await within(panelEl).findByTestId('zustand-842')
     return panelEl
@@ -1506,6 +1505,141 @@ describe('NightRunPage — Entstandene Karten je Vorgang (#868)', () => {
     ).toBeInTheDocument()
     // … und dafür ging genau eine Anfrage hinaus.
     expect(byNumberAufrufe().filter((a) => a.url.endsWith('/901'))).toHaveLength(1)
+  })
+})
+
+describe('NightRunPage — gekürzte Vorgangszeile neben der Übersicht (#869)', () => {
+  /**
+   * Die drei Wurzelkarten der echten Nacht. #842 hängt an einem Vorhaben, damit die Zeile eine
+   * Angabe trägt, die die Übersicht gar nicht führt — genau die, die stehen bleiben soll.
+   */
+  const KARTEN = {
+    791: karte({ id: 1, number: 791, title: '[Fachlich] Zugriff und Konten' }),
+    814: karte({ id: 2, number: 814, title: '[Fachlich] Vorhaben ein- und ausblenden' }),
+    842: karte({ id: 3, number: 842, title: '[Fachlich] Leitstand mehrstufig', parentId: 42 }),
+  }
+
+  const VORHABEN = { 42: vorhaben({ id: 42, number: 9, title: 'Leitstand ausbauen' }) }
+
+  /**
+   * Die Plan-Zeile des Stufenblocks im Auszug von #842. Sie steht seit #855 im `excerpt` und ist
+   * damit der sichtbare Beleg dafür, dass die Zeile den Block nicht ein zweites Mal zeigt — die
+   * Übersicht schreibt dieselbe Karte als „Plan #849 …" und nie in dieser Form.
+   */
+  const STUFENBLOCK_ZEILE = /plan #849: gelungen/
+
+  /** Die Dauer von #842: 439 741 ms Plan plus 900 484 ms Prüfung, gerundet 22 Minuten. */
+  const DAUER_842 = '22 Min'
+
+  /**
+   * Gesucht wird ausschließlich im Absatz beziehungsweise in der Inline-Zeile — **nicht** im
+   * Übernahmetext: Dessen `textarea` trägt Zustand und Auszug absichtlich weiter (#856, AK 5), und
+   * eine Suche über den ganzen Teilbaum fände sie dort wieder. Die Aussage lautet aber, dass der
+   * Auszug nicht mehr als **Zeilentext** dasteht.
+   */
+  const ALS_ABSATZ = { selector: 'p' } as const
+  const ALS_ZEILE = { selector: 'span' } as const
+
+  /** Der echte Ketten-Lauf aus dem Ergebnisstand — mit Sitzungsstand, also mit Übersicht. */
+  async function mitUebersicht() {
+    renderPage({
+      submit: { ergebnis: alleNeu(ECHTE_KETTE_STAND) },
+      listen: [[], wieAufbewahrt(ECHTE_KETTE_STAND)],
+      karten: KARTEN,
+      kartenNachId: VORHABEN,
+    })
+    await screen.findByText('Noch keine Auswertung vorhanden.')
+
+    protokollWaehlen(ECHTE_KETTE_STAND, 'night-run-2026-09-14-131200.json')
+
+    const panelEl = await screen.findByTestId(`lauf-${ECHTE_KETTE_START}`)
+    await within(panelEl).findByText('neu angelegt')
+    fireEvent.click(within(panelEl).getByRole('button', { expanded: false }))
+    await within(panelEl).findByTestId('ketten-uebersicht')
+    return panelEl
+  }
+
+  it('lässt am Lauf mit Übersicht Ampel, Dauer und den Auszug samt Stufenblock weg (Punkt 5)', async () => {
+    const panelEl = await mitUebersicht()
+    const zeile = await within(panelEl).findByTestId('paket-842')
+
+    expect(within(zeile).queryByText(STUFENBLOCK_ZEILE, ALS_ABSATZ)).toBeNull()
+    expect(within(zeile).queryByText(/^Auszug: /, ALS_ABSATZ)).toBeNull()
+    // Ampel und Zustandstext stehen gemeinsam unter dieser Test-ID.
+    expect(within(zeile).queryByTestId('zustand-842')).toBeNull()
+    expect(within(zeile).queryByText(DAUER_842, ALS_ZEILE)).toBeNull()
+  })
+
+  it('lässt Vorhaben und Übernahmetext am Lauf mit Übersicht stehen und bedienbar (Punkt 6)', async () => {
+    const panelEl = await mitUebersicht()
+    const zeile = await within(panelEl).findByTestId('paket-842')
+
+    fireEvent.click(await within(zeile).findByRole('button', { name: /^Vorhaben #9 / }))
+    expect(await screen.findByTestId('karten-detail')).toHaveTextContent('Karte 9')
+
+    expect(uebernahmetext(panelEl, 842)).toContain(
+      'Zustand: Am Zeitbudget beendet, Ergebnis liegt vor',
+    )
+    expect(
+      within(zeile).getByRole('button', { name: 'Übernahmetext zu Karte #842 kopieren' }),
+    ).toBeInTheDocument()
+  })
+
+  it('lässt die Zeile an einem aufbewahrten Ketten-Lauf ohne Sitzungsstand vollständig (Punkt 7)', async () => {
+    // Die Gegenprobe zu AK 2: Derselbe Lauf, dieselbe Lauf-Art `CHAIN` — nur ohne Sitzungsstand.
+    // Eine an `mode === 'CHAIN'` gebundene Kürzung nähme ihm hier alles und gäbe nichts zurück.
+    renderPage({ listen: [wieAufbewahrt(ECHTE_KETTE_STAND)], karten: KARTEN, kartenNachId: VORHABEN })
+    const panelEl = await screen.findByTestId(`lauf-${ECHTE_KETTE_START}`)
+
+    fireEvent.click(within(panelEl).getByRole('button', { expanded: false }))
+
+    expect(within(panelEl).queryByTestId('ketten-uebersicht')).toBeNull()
+    const zeile = await within(panelEl).findByTestId('paket-842')
+    // Abgewartet, bis die Wurzelkarte und ihr Vorhaben aufgelöst sind — erst dann steht die Zeile
+    // fertig da, und der Rest des Tests prüft nicht bloß ihren Zwischenstand.
+    await within(zeile).findByRole('button', { name: /^Vorhaben #9 / })
+    expect(within(zeile).getByTestId('zustand-842')).toHaveTextContent(
+      'Am Zeitbudget beendet, Ergebnis liegt vor',
+    )
+    expect(within(zeile).getByText(DAUER_842, ALS_ZEILE)).toBeInTheDocument()
+    expect(within(zeile).getByText(STUFENBLOCK_ZEILE, ALS_ABSATZ)).toBeInTheDocument()
+  })
+
+  it('lässt die Zeile an einem Lauf anderer Art vollständig (Punkt 8)', async () => {
+    renderPage({
+      listen: [
+        [
+          aufbewahrt({
+            id: 1,
+            startedAt: startedAt(0),
+            items: [
+              {
+                id: 11,
+                cardNumber: 700,
+                title: 'Paket A',
+                state: 'YELLOW',
+                errorClass: 'CHECKS_RED',
+                durationMs: SIEBEN_MIN,
+                excerpt: 'Issue #700: npm test -> rot',
+              },
+            ],
+          }),
+        ],
+      ],
+      karten: { 700: karte({ id: 1, number: 700, title: 'Paket A' }) },
+    })
+    await screen.findByTestId(`lauf-${startedAt(0)}`)
+
+    aufklappen(0)
+    await within(lauf(0)).findByText('Vorhaben: ohne')
+
+    const zeile = within(lauf(0)).getByTestId('paket-700')
+    expect(within(zeile).getByTestId('zustand-700')).toHaveTextContent('Erfolg, Prüfung rot')
+    expect(within(zeile).getByText('7 Min', ALS_ZEILE)).toBeInTheDocument()
+    expect(
+      within(zeile).getByText('Auszug: Issue #700: npm test -> rot', ALS_ABSATZ),
+    ).toBeInTheDocument()
+    expect(within(zeile).getByLabelText('Übernahmetext zu Karte #700')).toBeInTheDocument()
   })
 })
 
