@@ -310,7 +310,7 @@ function kette(start: number, katalog: Kartenkatalog): Kettenglied[] {
 }
 
 /**
- * Der Zustand einer Kettenstufe. Die vier Fälle sind bewusst unterschieden (#715, A8):
+ * Der Zustand einer Kettenstufe. Die fünf Fälle sind bewusst unterschieden (#715, A8):
  *
  * - **treffer** — die Stufe existiert; meldet der Lauf zu ihrer Karte einen roten Zustand, ist
  *   der Weg dort **abgerissen** (gescheitert oder auf eine Entscheidung wartend).
@@ -320,6 +320,8 @@ function kette(start: number, katalog: Kartenkatalog): Kettenglied[] {
  *   genau der Schritt, den der Nachtlauf heute nicht fährt.
  * - **nicht-gefunden** — eine Nummer der Kette ließ sich nicht auflösen; das ist weder „ohne"
  *   noch ein Abriss.
+ * - **entfaellt** — die Frage stellt sich in diesem Lauf-Modus nicht; es erscheint **keine Zeile**
+ *   (#858, siehe unten).
  *
  * Ein **Objekt statt eines fertigen Satzes** (#818): Nur der Treffer-Fall ist anklickbar, und
  * seine Karte liegt bereits hier vor. Ein String zwänge die Anzeige, ihn wieder zu zerlegen oder
@@ -330,12 +332,30 @@ type StufenZustand =
   | { art: 'nicht-gefunden'; nummer: number }
   | { art: 'ohne' }
   | { art: 'noch-nicht-erreicht' }
+  | { art: 'entfaellt' }
 
+/** Die Fälle, die eine Zeile ergeben — `entfaellt` erscheint gar nicht und ist deshalb ausgenommen. */
+type SichtbarerStufenZustand = Exclude<StufenZustand, { art: 'entfaellt' }>
+
+/**
+ * <p><b>Warum der Modus mitkommt (#858):</b> {@link kette} läuft `derivedFrom` **aufwärts**. Bei
+ * einem Ketten-Lauf ist die Wurzelkarte selbst die fachliche Anforderung, und das Plan-Dokument,
+ * das die Kette erzeugt hat, hängt **unterhalb** von ihr (echter Stand: Plan #849 mit
+ * `derivedFrom` auf Fachplan #842). Aufwärts gedeutet hieße das „Fachliche Anforderung: ohne",
+ * obwohl sie die Karte selbst ist, und „Plan: noch nicht erreicht", obwohl der Vorgang gerade
+ * einen Plan erzeugt hat. Die Richtung passt für diesen Modus nicht — und die Auskunft steht
+ * dort ohnehin vollständig im Auszug (Plan-Nummer und Paketnummern, #855). Deshalb entfallen im
+ * Modus `CHAIN` beide Stufenzeilen, statt eine geratene Aussage zu zeigen.
+ */
 function stufenZustand(
   praefix: string,
   glieder: readonly Kettenglied[],
   istRot: (nummer: number) => boolean,
+  modus: NightRunMode,
 ): StufenZustand {
+  if (modus === 'CHAIN') {
+    return { art: 'entfaellt' }
+  }
   const geladen = glieder.filter(
     (glied): glied is { nummer: number; karte: CardByNumber } => glied.karte !== null,
   )
@@ -356,7 +376,7 @@ function stufenZustand(
 }
 
 /** Der Satzrest hinter „<Stufe>: " in den drei Fällen ohne Karte. */
-function ohneTrefferText(zustand: Exclude<StufenZustand, { art: 'treffer' }>): string {
+function ohneTrefferText(zustand: Exclude<SichtbarerStufenZustand, { art: 'treffer' }>): string {
   if (zustand.art === 'nicht-gefunden') {
     return `Karte #${zustand.nummer} nicht gefunden`
   }
@@ -375,7 +395,7 @@ function Stufenzeile({
   onOeffnen,
 }: Readonly<{
   label: string
-  zustand: StufenZustand
+  zustand: SichtbarerStufenZustand
   onOeffnen: (karte: CardByNumber) => void
 }>) {
   if (zustand.art !== 'treffer') {
@@ -514,6 +534,7 @@ async function inDieZwischenablage(text: string): Promise<void> {
 /** Ein Arbeitspaket samt Zustand, Dauer, Auszug, Häufigkeit, Herkunftskette und Übernahmetext. */
 function Arbeitspaket({
   item,
+  modus,
   katalog,
   vorhabenKarten,
   haeufigkeit,
@@ -521,6 +542,8 @@ function Arbeitspaket({
   onOeffnen,
 }: Readonly<{
   item: AnzeigeItem
+  /** Der Modus des Laufs — er entscheidet, ob die Stufenzeilen überhaupt erscheinen (#858). */
+  modus: NightRunMode
   katalog: Kartenkatalog
   vorhabenKarten: Vorhabenkatalog
   haeufigkeit: string | null
@@ -590,14 +613,24 @@ function Arbeitspaket({
 
       {wurzel != null && (
         <>
-          {STUFEN.map((stufe) => (
-            <Stufenzeile
-              key={stufe.label}
-              label={stufe.label}
-              zustand={stufenZustand(stufe.praefix, kette(item.cardNumber, katalog), istRot)}
-              onOeffnen={onOeffnen}
-            />
-          ))}
+          {STUFEN.map((stufe) => {
+            const zustand = stufenZustand(
+              stufe.praefix,
+              kette(item.cardNumber, katalog),
+              istRot,
+              modus,
+            )
+            // `entfaellt` ergibt **keine Zeile** — die Herkunft steht in diesem Modus im Auszug
+            // (#858, siehe `stufenZustand`).
+            return zustand.art === 'entfaellt' ? null : (
+              <Stufenzeile
+                key={stufe.label}
+                label={stufe.label}
+                zustand={zustand}
+                onOeffnen={onOeffnen}
+              />
+            )
+          })}
           {/* Das Vorhaben hängt an der **Wurzelkarte**, nicht an der Kette: Fachliche Anforderung
               und Plan tragen ebenfalls eine `parentId`, und deren Vorhaben wäre hier eine andere
               Aussage als die gesuchte. */}
@@ -727,6 +760,7 @@ function LaufPanel({
           <Arbeitspaket
             key={`${item.cardNumber}-${position}`}
             item={item}
+            modus={lauf.mode}
             katalog={katalog}
             vorhabenKarten={vorhabenKarten}
             haeufigkeit={haeufigkeitsText(item, lauf.gespeichert, zaehler, aufbewahrteLaeufe)}

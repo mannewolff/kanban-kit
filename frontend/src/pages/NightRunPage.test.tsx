@@ -905,6 +905,76 @@ describe('NightRunPage — Ketten-Lauf (#854)', () => {
   })
 })
 
+describe('NightRunPage — Herkunftskette am Ketten-Vorgang (#858)', () => {
+  /**
+   * Die Wurzelkarte eines Ketten-Vorgangs **ist** die fachliche Anforderung, und das erzeugte
+   * Plan-Dokument hängt unterhalb von ihr. Aufwärts gedeutet stünde an #791 und #814 zweimal
+   * „ohne" und an #842 zweimal „noch nicht erreicht" — obwohl #842 den Plan #849 gerade erzeugt
+   * hat. Beides sind geratene Aussagen (zweites Nicht-Ziel aus #842); die Karten hier tragen
+   * genau die Vorbedingungen dafür, damit der Test ohne die Modus-Weitergabe rot wird.
+   */
+  const KETTEN_KARTEN = {
+    791: karte({ id: 1, number: 791, title: '[Fachlich] Zugriff und Konten' }),
+    814: karte({ id: 2, number: 814, title: '[Fachlich] Vorhaben ein- und ausblenden' }),
+    842: karte({ id: 3, number: 842, title: '[Fachlich] Leitstand mehrstufig', derivedFrom: 700 }),
+    700: karte({ id: 4, number: 700, title: 'Leitstand' }),
+  }
+
+  it('lässt an jedem Vorgang des echten Ketten-Laufs beide Stufenzeilen weg', async () => {
+    renderPage({
+      submit: { ergebnis: alleNeu(ECHTE_KETTE_STAND) },
+      listen: [[], wieAufbewahrt(ECHTE_KETTE_STAND)],
+      karten: KETTEN_KARTEN,
+    })
+    await screen.findByText('Noch keine Auswertung vorhanden.')
+
+    protokollWaehlen(ECHTE_KETTE_STAND, 'night-run-2026-09-14-131200.json')
+
+    const panelEl = await screen.findByTestId(`lauf-${ECHTE_KETTE_START}`)
+    await waitFor(() => expect(within(panelEl).getByText('neu angelegt')).toBeInTheDocument())
+    fireEvent.click(within(panelEl).getByRole('button', { expanded: false }))
+
+    // Erst wenn die Wurzelkarten aufgelöst sind, steht der Block mit Stufen- und Vorhabenzeile
+    // überhaupt da — sonst wäre die Erwartung darunter schon vor dem Laden erfüllt.
+    expect(await within(panelEl).findAllByText('Vorhaben: ohne')).toHaveLength(3)
+    expect(within(panelEl).queryAllByText(/^Fachliche Anforderung: /)).toHaveLength(0)
+    expect(within(panelEl).queryAllByText(/^Plan: /)).toHaveLength(0)
+  })
+
+  it('lässt beide Stufenzeilen an einem Lauf bisheriger Art unverändert stehen (AK 9 aus #842)', async () => {
+    // Der Bestandsfall: Nur der Ketten-Modus verliert die Zeilen. Dieser Test sichert die
+    // Nicht-Änderung — ein Umsetzung, die die Zeilen überall wegließe, fiele hier auf.
+    renderPage({
+      listen: [
+        [
+          aufbewahrt({
+            id: 1,
+            startedAt: startedAt(0),
+            items: [{ id: 11, cardNumber: 700, title: 'Paket A', state: 'GREEN' }],
+          }),
+        ],
+      ],
+      karten: {
+        700: karte({ id: 1, number: 700, title: 'Paket A', derivedFrom: 718 }),
+        718: karte({ id: 2, number: 718, title: '[Plan] Nachtlauf', derivedFrom: 715 }),
+        715: karte({ id: 3, number: 715, title: '[Fachlich] Nachtlauf' }),
+      },
+    })
+    await screen.findByTestId(`lauf-${startedAt(0)}`)
+
+    aufklappen(0)
+
+    expect(
+      await within(lauf(0)).findByRole('button', { name: 'Plan #718 [Plan] Nachtlauf' }),
+    ).toBeInTheDocument()
+    expect(
+      within(lauf(0)).getByRole('button', {
+        name: 'Fachliche Anforderung #715 [Fachlich] Nachtlauf',
+      }),
+    ).toBeInTheDocument()
+  })
+})
+
 describe('NightRunPage — Zeitbudget als eigener Grund (#856)', () => {
   /**
    * Der Vorgang #842 der echten Fixture endete am Zeitbudget der Prüf-Stufe und hat trotzdem einen
