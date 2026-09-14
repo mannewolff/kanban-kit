@@ -66,6 +66,45 @@ export const NIGHT_RUN_ERROR_CLASS_TEXT: Record<NightRunErrorClass, string> = {
 }
 
 /**
+ * Wo die Fehlerklasse den Zustand genauer sagt als die Ampel allein (Issue #856).
+ *
+ * <p>`NIGHT_RUN_STATE_TEXT.YELLOW` lautet „Erfolg, Prüfung rot" — an einem am Zeitbudget beendeten
+ * Vorgang waere das eine Falschaussage: Die Pruefung war nicht rot, sie kam gar nicht dran. Diese
+ * Tabelle ueberschreibt den Zustandstext deshalb je Fehlerklasse.
+ *
+ * <p><b>Beide Ebenen sind `Partial`</b> — anders als {@link NIGHT_RUN_ERROR_CLASS_TEXT}, das jede
+ * Klasse fuehren muss: Ein Eintrag hier ist die Ausnahme, und der Regelfall ist der Rueckfall auf
+ * {@link NIGHT_RUN_STATE_TEXT}. Eine neue Fehlerklasse braucht hier nichts; sie faellt zurueck.
+ *
+ * <p>`TIME_BUDGET_EXCEEDED` traegt nur Gelb und Rot: Das sind die beiden Zustaende, die
+ * `deuteKettenAusgang` (`lib/nightRunErgebnisstand.ts`) zu dieser Klasse ueberhaupt vergibt — gelb,
+ * wenn bis zum Abbruch ein Dokument entstand, rot ohne.
+ */
+export const NIGHT_RUN_STATE_TEXT_BY_ERROR_CLASS: Partial<
+  Record<NightRunErrorClass, Partial<Record<NightRunState, string>>>
+> = {
+  TIME_BUDGET_EXCEEDED: {
+    YELLOW: 'Am Zeitbudget beendet, Ergebnis liegt vor',
+    RED: 'Am Zeitbudget beendet, ohne Ergebnis',
+  },
+}
+
+/**
+ * Der Zustandstext neben der Ampel und im Uebernahmetext — die eine Quelle fuer beide.
+ *
+ * <p>Zuerst {@link NIGHT_RUN_STATE_TEXT_BY_ERROR_CLASS}, sonst {@link NIGHT_RUN_STATE_TEXT}. Der
+ * Rueckfall ist wertgleich mit dem frueheren direkten Zugriff: Fuer jede Kombination ausser den
+ * beiden neuen aendert sich nichts (AK 9 aus Issue #842).
+ */
+export function nightRunZustandsText(
+  state: NightRunState,
+  errorClass: NightRunErrorClass | undefined,
+): string {
+  const jeKlasse = errorClass === undefined ? undefined : NIGHT_RUN_STATE_TEXT_BY_ERROR_CLASS[errorClass]
+  return jeKlasse?.[state] ?? NIGHT_RUN_STATE_TEXT[state]
+}
+
+/**
  * Der Text zu einem Arbeitspaket — `null`, wenn keiner entsteht.
  *
  * <p>Nur ein **gelbes oder rotes** Arbeitspaket bekommt einen: Zu einem gruenen gibt es nichts zu
@@ -86,7 +125,10 @@ export function buildHandoffText(item: NightRunHandoffItem): string | null {
     return null
   }
   const karte = item.title === '' ? `#${item.cardNumber}` : `#${item.cardNumber} ${item.title}`
-  const zeilen = [`Nachtlauf-Befund zu Karte ${karte}`, `Zustand: ${NIGHT_RUN_STATE_TEXT[item.state]}`]
+  const zeilen = [
+    `Nachtlauf-Befund zu Karte ${karte}`,
+    `Zustand: ${nightRunZustandsText(item.state, item.errorClass)}`,
+  ]
 
   if (item.errorClass !== undefined) {
     zeilen.push(`Fehlerklasse: ${NIGHT_RUN_ERROR_CLASS_TEXT[item.errorClass]}`)

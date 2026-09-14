@@ -1,5 +1,11 @@
 import { describe, expect, it, vi } from 'vitest'
-import { buildHandoffText, type NightRunHandoffItem } from './nightRunHandoff'
+import { NIGHT_RUN_ERROR_CLASSES, type NightRunState } from './nightRunLog'
+import {
+  buildHandoffText,
+  nightRunZustandsText,
+  NIGHT_RUN_STATE_TEXT,
+  type NightRunHandoffItem,
+} from './nightRunHandoff'
 
 /**
  * Tests des Uebernahmetexts (Issue #727). Sie kommen ohne Oberflaeche aus — genau dafuer ist die
@@ -149,6 +155,74 @@ describe('buildHandoffText — Rohprotokoll', () => {
     expect(
       buildHandoffText(paket({ state: 'GREY', errorClass: 'DEPENDENCY_UNMET', rawLines: ROHZEILEN })),
     ).toBeNull()
+  })
+})
+
+describe('nightRunZustandsText — Zeitbudget (Issue #856)', () => {
+  const GRUND_ZEITBUDGET = 'Zeitbudget review: die Session wurde nach 15.0 min am Limit beendet'
+
+  it('nennt am gelben Vorgang das Zeitbudget als Grund statt „Erfolg, Prüfung rot"', () => {
+    expect(nightRunZustandsText('YELLOW', 'TIME_BUDGET_EXCEEDED')).toBe(
+      'Am Zeitbudget beendet, Ergebnis liegt vor',
+    )
+    expect(nightRunZustandsText('YELLOW', 'TIME_BUDGET_EXCEEDED')).not.toContain('Prüfung rot')
+  })
+
+  it('nennt am roten Vorgang das Zeitbudget und das fehlende Ergebnis', () => {
+    expect(nightRunZustandsText('RED', 'TIME_BUDGET_EXCEEDED')).toBe(
+      'Am Zeitbudget beendet, ohne Ergebnis',
+    )
+  })
+
+  it('traegt den Zeitbudget-Zustandstext in den Uebernahmetext eines gelben Vorgangs', () => {
+    const text = buildHandoffText(
+      paket({ state: 'YELLOW', errorClass: 'TIME_BUDGET_EXCEEDED', excerpt: GRUND_ZEITBUDGET }),
+    )
+
+    expect(text).toContain('Zustand: Am Zeitbudget beendet, Ergebnis liegt vor')
+    expect(text).toContain('Fehlerklasse: Zeitbudget erschöpft')
+    expect(text).not.toContain('Prüfungen nicht gelaufen')
+    expect(text).not.toContain('Erfolg, Prüfung rot')
+  })
+
+  it('traegt den Zeitbudget-Zustandstext in den Uebernahmetext eines roten Vorgangs', () => {
+    const text = buildHandoffText(
+      paket({ state: 'RED', errorClass: 'TIME_BUDGET_EXCEEDED', excerpt: GRUND_ZEITBUDGET }),
+    )
+
+    expect(text).toContain('Zustand: Am Zeitbudget beendet, ohne Ergebnis')
+    expect(text).toContain('Fehlerklasse: Zeitbudget erschöpft')
+    expect(text).not.toContain('Prüfungen nicht gelaufen')
+  })
+})
+
+describe('nightRunZustandsText — Rueckfall wertgleich (AK 9 aus #842)', () => {
+  const ZUSTAENDE: readonly NightRunState[] = ['GREEN', 'YELLOW', 'RED', 'GREY']
+
+  it('liefert ohne Fehlerklasse den Text der Zustandstabelle', () => {
+    for (const state of ZUSTAENDE) {
+      expect(nightRunZustandsText(state, undefined)).toBe(NIGHT_RUN_STATE_TEXT[state])
+    }
+  })
+
+  it('liefert fuer jede bestehende Kombination denselben Text wie die Zustandstabelle', () => {
+    // Genau ein Paar ist neu; jede andere der 32 Kombinationen muss unveraendert bleiben — sonst
+    // saehe ein Bestandslauf nach dieser Aenderung anders aus als vorher.
+    for (const state of ZUSTAENDE) {
+      for (const errorClass of NIGHT_RUN_ERROR_CLASSES) {
+        const neu =
+          errorClass === 'TIME_BUDGET_EXCEEDED' && (state === 'YELLOW' || state === 'RED')
+        if (neu) continue
+        expect(nightRunZustandsText(state, errorClass)).toBe(NIGHT_RUN_STATE_TEXT[state])
+      }
+    }
+  })
+
+  it('laesst den gruenen und den grauen Zeitbudget-Fall auf die Zustandstabelle fallen', () => {
+    // Die neue Tabelle traegt nur Gelb und Rot: Ein Vorgang, der am Zeitbudget endete, ist nie
+    // gruen, und grau ist er nur als uebergangener Kandidat — dort sagt „nicht bearbeitet" mehr.
+    expect(nightRunZustandsText('GREEN', 'TIME_BUDGET_EXCEEDED')).toBe('Erfolg')
+    expect(nightRunZustandsText('GREY', 'TIME_BUDGET_EXCEEDED')).toBe('nicht bearbeitet')
   })
 })
 

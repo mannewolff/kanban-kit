@@ -855,6 +855,54 @@ describe('NightRunPage — Ketten-Lauf (#854)', () => {
   })
 })
 
+describe('NightRunPage — Zeitbudget als eigener Grund (#856)', () => {
+  /**
+   * Der Vorgang #842 der echten Fixture endete am Zeitbudget der Prüf-Stufe und hat trotzdem einen
+   * Plan hinterlassen — gelb mit `TIME_BUDGET_EXCEEDED`. Er ist der Fall, für den AK 3 und AK 5 aus
+   * #842 geschrieben sind: Die Ampel allein sagte bisher „Erfolg, Prüfung rot", und die Prüfung war
+   * nicht rot, sie kam gar nicht dran.
+   */
+  async function ketteAufgeklappt(zaehler: NightRunErrorClassCounts) {
+    renderPage({
+      submit: { ergebnis: alleNeu(ECHTE_KETTE_STAND) },
+      listen: [[], wieAufbewahrt(ECHTE_KETTE_STAND)],
+      zaehler: [{}, zaehler],
+    })
+    await screen.findByText('Noch keine Auswertung vorhanden.')
+
+    protokollWaehlen(ECHTE_KETTE_STAND, 'night-run-2026-09-14-131200.json')
+
+    const panelEl = await screen.findByTestId(`lauf-${ECHTE_KETTE_START}`)
+    await waitFor(() => expect(within(panelEl).getByText('neu angelegt')).toBeInTheDocument())
+    fireEvent.click(within(panelEl).getByRole('button', { expanded: false }))
+    await within(panelEl).findByTestId('zustand-842')
+    return panelEl
+  }
+
+  it('nennt neben der Ampel des Zeitbudget-Vorgangs das Zeitbudget, nicht „Erfolg, Prüfung rot" (AK 3)', async () => {
+    const panelEl = await ketteAufgeklappt({ TIME_BUDGET_EXCEEDED: 1 })
+    const panel = within(panelEl)
+
+    expect(
+      within(panel.getByTestId('zustand-842')).getByText('Am Zeitbudget beendet, Ergebnis liegt vor'),
+    ).toBeInTheDocument()
+    expect(panel.queryByText('Erfolg, Prüfung rot')).not.toBeInTheDocument()
+  })
+
+  it('führt das Zeitbudget in Häufigkeitszeile und Übernahmetext als eigenen Grund (AK 5)', async () => {
+    const panelEl = await ketteAufgeklappt({ TIME_BUDGET_EXCEEDED: 1, CHECKS_NOT_STARTED: 3 })
+
+    const zeile = await within(panelEl).findByTestId('haeufigkeit-842')
+    expect(zeile).toHaveTextContent('Zeitbudget erschöpft: zum ersten Mal')
+    expect(zeile).not.toHaveTextContent('Prüfungen nicht gelaufen')
+
+    const text = uebernahmetext(panelEl, 842)
+    expect(text).toContain('Zustand: Am Zeitbudget beendet, Ergebnis liegt vor')
+    expect(text).toContain('Fehlerklasse: Zeitbudget erschöpft')
+    expect(text).not.toContain('Prüfungen nicht gelaufen')
+  })
+})
+
 describe('NightRunPage — Herkunft eines Laufs (#775)', () => {
   /**
    * Derselbe Lauf, wie der Server ihn nach dem Einliefern zurückgibt — nur mit abweichender

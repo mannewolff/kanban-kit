@@ -30,8 +30,8 @@ import { useSnackbar } from '../components/SnackbarProvider'
 import { formatDuration } from '../lib/formatDuration'
 import {
   buildHandoffText,
+  nightRunZustandsText,
   NIGHT_RUN_ERROR_CLASS_TEXT,
-  NIGHT_RUN_STATE_TEXT,
   type NightRunHandoffItem,
 } from '../lib/nightRunHandoff'
 import {
@@ -525,7 +525,7 @@ function Arbeitspaket({
             sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: ZUSTAND_FARBE[item.state], flexShrink: 0 }}
           />
           <Typography component="span" variant="body2">
-            {NIGHT_RUN_STATE_TEXT[item.state]}
+            {nightRunZustandsText(item.state, item.errorClass)}
           </Typography>
         </Stack>
         {wurzel === null && (
