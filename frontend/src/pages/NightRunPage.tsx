@@ -1320,6 +1320,97 @@ function KettenUebersicht({
   )
 }
 
+/** Ein Abschnitt des Laufbands — ein Vorgang, der eine Dauer verbraucht hat. */
+interface Laufabschnitt {
+  cardNumber: number
+  /** Der Breitenanteil in Prozent an der Summe aller Vorgangsdauern, auf eine Nachkommastelle. */
+  anteil: number
+  /** Die Dauer in derselben Schreibweise wie in der Vorgangszeile darunter. */
+  dauer: string
+  /** Die Ansage für Vorlesewerkzeuge: Kartennummer, Zustand und Dauer. */
+  ansage: string
+  /** Der Ampelton des Vorgangs — derselbe, den seine Zeile trägt. */
+  farbe: string
+}
+
+/**
+ * Ein Vorgang, der im Band einen Abschnitt bekommt: einer mit **gemessener** Dauer. Ohne sie hätte
+ * sein Abschnitt keine Breite und wäre unsichtbar, obwohl er einen Ausgang trägt — er steht
+ * deshalb allein in der Zeilenliste. Eine gemeldete Dauer von null zählt wie keine: Sie ergäbe
+ * ebenfalls keine Breite.
+ */
+const mitDauer = (item: AnzeigeItem): item is AnzeigeItem & { durationMs: number } =>
+  (item.durationMs ?? 0) > 0
+
+/** Ein Abschnitt des Bands: sein Anteil an der Summe, seine Dauer, seine Ansage, seine Farbe. */
+function laufabschnitt(item: AnzeigeItem & { durationMs: number }, summe: number): Laufabschnitt {
+  const dauer = formatDuration(item.durationMs / 1000)
+  return {
+    cardNumber: item.cardNumber,
+    anteil: Math.round((item.durationMs / summe) * 1000) / 10,
+    dauer,
+    ansage: `Karte #${item.cardNumber}: ${nightRunZustandsText(item.state, item.errorClass)}, ${dauer}`,
+    farbe: ZUSTAND_FARBE[item.state],
+  }
+}
+
+/**
+ * Das Laufband eines Umsetzungs-Laufs (Issue #871): **ein** Band über alle Vorgänge der Nacht,
+ * jeder Abschnitt so breit, wie sein Vorgang an der Gesamtzeit verbrauchte. Wer hinsieht, erkennt
+ * ohne Zahlenlesen, woran die Nacht ihre Zeit verbrauchte — an der echten Nacht vom 7. September
+ * verbrauchten drei von fünf Vorgängen zusammen 86,7 Prozent, und alle drei scheiterten.
+ *
+ * <p><b>Bezugsgröße ist die Summe der Vorgangsdauern</b>, nicht die verstrichene Zeit von der
+ * Startzeit bis zum Abschluss: Der Ergebnisstand weist die Zeit zwischen den Vorgängen nicht aus
+ * und trägt gar keinen Endzeitstempel. Ein Band gegen die verstrichene Zeit hätte einen
+ * unbenannten Rest, und der wäre eine erfundene Größe.
+ *
+ * <p><b>Die Aussage hängt nie an der Farbe</b> (`CLAUDE-react.md`, Zeile 142): Jeder Abschnitt
+ * führt eine Ansage mit Kartennummer, Zustand und Dauer, und die Dauer steht zusätzlich sichtbar
+ * unter ihm. Die Töne kommen aus {@link ZUSTAND_FARBE}, also derselben Palette wie die Ampel der
+ * Vorgangszeile — kein neuer Ton, kein Hex-Literal.
+ *
+ * <p><b>Unter zwei Abschnitten erscheint kein Band</b>: Ein Balken mit einem einzigen Abschnitt
+ * behauptet ein Verhältnis, das es nicht gibt. Die Angaben der Vorgänge stehen davon unberührt in
+ * der Zeilenliste. Aus derselben Prüfung folgt, dass die Summe unten nachweislich über null liegt
+ * — die Teilung braucht keinen weiteren Schutz.
+ */
+function Laufband({ items }: Readonly<{ items: readonly AnzeigeItem[] }>) {
+  const gemessen = items.filter(mitDauer)
+  if (gemessen.length < 2) {
+    return null
+  }
+  const summe = gemessen.reduce((wert, item) => wert + item.durationMs, 0)
+
+  return (
+    <Stack direction="row" spacing={0.5} data-testid="laufband" sx={{ mb: 2 }}>
+      {gemessen.map((item, position) => {
+        const abschnitt = laufabschnitt(item, summe)
+        return (
+          <Box
+            // Zwei Vorgänge können dieselbe Karte betreffen — wie in der Zeilenliste trägt der
+            // Schlüssel deshalb die Position dazu.
+            key={`${abschnitt.cardNumber}-${position}`}
+            role="img"
+            aria-label={abschnitt.ansage}
+            data-testid={`laufband-abschnitt-${abschnitt.cardNumber}`}
+            data-anteil={abschnitt.anteil}
+            sx={{ flexGrow: abschnitt.anteil, flexBasis: 0, minWidth: 0 }}
+          >
+            <Box
+              data-testid={`laufband-balken-${abschnitt.cardNumber}`}
+              sx={{ height: 8, borderRadius: 1, bgcolor: abschnitt.farbe }}
+            />
+            <Typography variant="caption" component="div" color="text.secondary">
+              {abschnitt.dauer}
+            </Typography>
+          </Box>
+        )
+      })}
+    </Stack>
+  )
+}
+
 /** Ein Lauf als aufklappbares Panel; die Kette wird erst beim Aufklappen geladen (A8). */
 function LaufPanel({
   lauf,
@@ -1389,6 +1480,11 @@ function LaufPanel({
         {kettenStand !== undefined && (
           <KettenUebersicht run={kettenStand} katalog={katalog} onOeffnen={onOeffnen} />
         )}
+        {/* Das Band steht unter der Kopfzeile des Laufs und über seiner Zeilenliste — die Kopfzeile
+            selbst („N bearbeitet, M übergangen") bleibt unverändert. Nur am Umsetzungs-Lauf: Der
+            Ketten-Lauf hat mit dem Stufenband je Vorgang bereits ein Band, und ein zweites daneben
+            bezöge sich auf eine andere Größe. */}
+        {lauf.mode === 'IMPLEMENTATION' && <Laufband items={lauf.items} />}
         {lauf.unparsedSample.length > 0 && (
           <Box sx={{ mb: 1 }}>
             <Typography variant="subtitle2">Nicht gedeutete Zeilen (Auszug)</Typography>

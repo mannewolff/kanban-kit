@@ -1643,6 +1643,173 @@ describe('NightRunPage — gekürzte Vorgangszeile neben der Übersicht (#869)',
   })
 })
 
+describe('NightRunPage — Laufband für Umsetzungs-Läufe (#871)', () => {
+  /** Ein Abschnitt des Laufbands, über die Kartennummer seines Vorgangs. */
+  const bandabschnitt = (panelEl: HTMLElement, cardNumber: number) =>
+    within(panelEl).getByTestId(`laufband-abschnitt-${cardNumber}`)
+
+  /**
+   * Die fünf Vorgänge der echten Nacht vom 7. September, in der Reihenfolge des Laufs — zwei
+   * erfolgreiche und drei gescheiterte.
+   */
+  const ECHTE_VORGAENGE = [767, 768, 769, 770, 771] as const
+
+  /** Das aufgeklappte Panel des echten Umsetzungs-Laufs, nach Einliefern und Neuladen der Liste. */
+  async function echterUmsetzungslauf() {
+    renderPage({
+      submit: { ergebnis: alleNeu(ECHTER_STAND) },
+      listen: [[], wieAufbewahrt(ECHTER_STAND)],
+    })
+    await screen.findByText('Noch keine Auswertung vorhanden.')
+
+    protokollWaehlen(ECHTER_STAND, 'night-run-2026-09-07-085229.json')
+
+    const panelEl = await screen.findByTestId(`lauf-${ECHTER_START}`)
+    fireEvent.click(within(panelEl).getByRole('button', { expanded: false }))
+    await within(panelEl).findByTestId('zustand-767')
+    return panelEl
+  }
+
+  it('teilt das Band der echten Nacht in den Verhältnissen der Vorgangsdauern (Punkt 9)', async () => {
+    const panelEl = await echterUmsetzungslauf()
+
+    // Geprüft an der Beschriftung und am Datenfeld, nicht an berechneten Stilwerten: In jsdom
+    // rechnet kein Browser ein Layout aus, ein Test auf `flex`-Anteile prüfte dort die
+    // Zeichenkette, die man selbst geschrieben hat.
+    expect(within(panelEl).getAllByTestId(/^laufband-abschnitt-/)).toHaveLength(5)
+    expect(ECHTE_VORGAENGE.map((n) => bandabschnitt(panelEl, n).dataset.anteil)).toEqual([
+      '7.9',
+      '24.9',
+      '31.8',
+      '5.4',
+      '30',
+    ])
+    // Die Aussage der Nacht: Die drei gescheiterten Vorgänge verbrauchten zusammen 86,7 Prozent
+    // der Zeit — die beiden erfolgreichen zusammen 13,3.
+    expect(bandabschnitt(panelEl, 767)).toHaveAttribute(
+      'aria-label',
+      'Karte #767: Erfolg, Prüfung rot, 4 Min',
+    )
+    expect(bandabschnitt(panelEl, 769)).toHaveAttribute(
+      'aria-label',
+      'Karte #769: gescheitert, 16 Min',
+    )
+    // Die Dauer steht auch sichtbar unter ihrem Abschnitt, nicht nur in der Ansage (Punkt 4).
+    expect(bandabschnitt(panelEl, 769)).toHaveTextContent('16 Min')
+  })
+
+  it('färbt allein die drei gescheiterten Abschnitte rot (Punkt 10)', async () => {
+    const panelEl = await echterUmsetzungslauf()
+    const farbe = (cardNumber: number) =>
+      within(panelEl).getByTestId(`laufband-balken-${cardNumber}`)
+
+    for (const nummer of [768, 769, 771]) {
+      expect(farbe(nummer)).toHaveStyle({ backgroundColor: theme.palette.nightRun.red })
+    }
+    for (const nummer of [767, 770]) {
+      expect(farbe(nummer)).toHaveStyle({ backgroundColor: theme.palette.nightRun.yellow })
+    }
+  })
+
+  it('zeigt an einem Lauf mit einem einzigen Vorgang kein Band, aber dessen Angaben (Punkt 11)', async () => {
+    renderPage({
+      listen: [
+        [
+          aufbewahrt({
+            id: 1,
+            startedAt: startedAt(0),
+            items: [
+              {
+                id: 11,
+                cardNumber: 700,
+                title: 'Paket A',
+                state: 'RED',
+                errorClass: 'CHECKS_RED',
+                durationMs: SIEBEN_MIN,
+                excerpt: 'Issue #700: npm test -> rot',
+              },
+            ],
+          }),
+        ],
+      ],
+      karten: { 700: karte({ id: 1, number: 700, title: 'Paket A' }) },
+    })
+    await screen.findByTestId(`lauf-${startedAt(0)}`)
+    aufklappen(0)
+    await within(lauf(0)).findByText('Vorhaben: ohne')
+
+    // Ein Balken mit einem Abschnitt behauptet ein Verhältnis, das es nicht gibt.
+    expect(within(lauf(0)).queryByTestId('laufband')).not.toBeInTheDocument()
+    const zeile = within(lauf(0)).getByTestId('paket-700')
+    expect(within(zeile).getByTestId('zustand-700')).toHaveTextContent('gescheitert')
+    expect(within(zeile).getByText('7 Min')).toBeInTheDocument()
+  })
+
+  it('lässt einen Vorgang ohne Dauer in der Liste, aber nicht im Band (Punkt 12)', async () => {
+    renderPage({
+      listen: [
+        [
+          aufbewahrt({
+            id: 1,
+            startedAt: startedAt(0),
+            items: [
+              { id: 11, cardNumber: 700, title: 'Paket A', state: 'GREEN', durationMs: SIEBEN_MIN },
+              { id: 12, cardNumber: 701, title: 'Paket B', state: 'GREEN', durationMs: SIEBEN_MIN },
+              // Ein zurückgestelltes Paket lief nie, also trägt es auch keine Dauer.
+              { id: 13, cardNumber: 702, title: 'Paket C', state: 'GREY' },
+            ],
+          }),
+        ],
+      ],
+      karten: { 700: karte({ id: 1, number: 700, title: 'Paket A' }) },
+    })
+    await screen.findByTestId(`lauf-${startedAt(0)}`)
+    aufklappen(0)
+    await within(lauf(0)).findByTestId('laufband')
+
+    expect(within(lauf(0)).getAllByTestId(/^laufband-abschnitt-/)).toHaveLength(2)
+    expect(within(lauf(0)).queryByTestId('laufband-abschnitt-702')).not.toBeInTheDocument()
+    // In der Zeilenliste steht er weiterhin — er trägt einen Ausgang, nur keine Breite.
+    expect(within(lauf(0)).getByTestId('paket-702')).toHaveTextContent('nicht bearbeitet')
+  })
+
+  it('zeigt an einem Ketten-Lauf kein Laufband, sondern die Übersicht (Punkt 13)', async () => {
+    const uebersicht = await echteUebersicht()
+
+    expect(uebersicht).toBeInTheDocument()
+    expect(screen.queryByTestId('laufband')).not.toBeInTheDocument()
+  })
+
+  it('misst die Anteile an der Summe der Vorgangsdauern, nicht an der Laufdauer (AK 2)', async () => {
+    // Die Laufdauer weicht hier absichtlich von der Summe ab: Bezöge sich die Breite auf sie,
+    // stünden hier 7 und 21 statt 25 und 75. Am echten Ergebnisstand ist der Unterschied nicht
+    // messbar — dort **ist** die Laufdauer die Summe der Vorgangsdauern, und einen Endzeitstempel
+    // führt der Stand gar nicht (Entscheidung des Issues).
+    renderPage({
+      listen: [
+        [
+          aufbewahrt({
+            id: 1,
+            startedAt: startedAt(0),
+            durationMs: 100 * 60_000,
+            items: [
+              { id: 11, cardNumber: 700, title: 'Paket A', state: 'GREEN', durationMs: SIEBEN_MIN },
+              { id: 12, cardNumber: 701, title: 'Paket B', state: 'GREEN', durationMs: 3 * SIEBEN_MIN },
+            ],
+          }),
+        ],
+      ],
+      karten: { 700: karte({ id: 1, number: 700, title: 'Paket A' }) },
+    })
+    await screen.findByTestId(`lauf-${startedAt(0)}`)
+    aufklappen(0)
+    await within(lauf(0)).findByTestId('laufband')
+
+    expect(bandabschnitt(lauf(0), 700).dataset.anteil).toBe('25')
+    expect(bandabschnitt(lauf(0), 701).dataset.anteil).toBe('75')
+  })
+})
+
 describe('NightRunPage — Herkunft eines Laufs (#775)', () => {
   /**
    * Derselbe Lauf, wie der Server ihn nach dem Einliefern zurückgibt — nur mit abweichender
