@@ -7,6 +7,33 @@ Versionierung folgt der dreiteiligen Betriebsversion (siehe [RELEASING.md](RELEA
 Einträge je Version sind ein automatischer Auszug der Commit-Titel seit dem letzten Release,
 erzeugt von `scripts/gen-changelog.mjs`.
 
+## [1.42.0] – 2026-09-14
+
+- chore: Version 1.41.2
+- Kennzahlenzeile je Lauf-Art und Kosten der Nacht ([#874](https://github.com/mannewolff/kanban-kit/issues/874))
+- Aufschluesselung der gesichteten Karten fuer Erzeugungs- und Pruefungslaeufe ([#873](https://github.com/mannewolff/kanban-kit/issues/873))
+- Modellzeit-Anteil je Vorgang mit gleichzeitigen Arbeiten ([#872](https://github.com/mannewolff/kanban-kit/issues/872))
+- Laufband fuer Umsetzungs-Laeufe ([#871](https://github.com/mannewolff/kanban-kit/issues/871))
+- Kennzahlen fuer alle Lauf-Arten, erzeugte Dokumente und Kennzahlen-Hinweis ([#870](https://github.com/mannewolff/kanban-kit/issues/870))
+- Vorgangszeile am Lauf mit Uebersicht auf das Nicht-Doppelte kuerzen ([#869](https://github.com/mannewolff/kanban-kit/issues/869))
+- Entstandene Karten je Vorgang mit drei Verweis-Zustaenden ([#868](https://github.com/mannewolff/kanban-kit/issues/868))
+- Stufenband je Vorgang mit Kappung und nicht erreichten Schritten ([#867](https://github.com/mannewolff/kanban-kit/issues/867))
+- Ketten-Uebersicht erscheint aus sitzungslokalem Speicher ([#866](https://github.com/mannewolff/kanban-kit/issues/866))
+- Parser traegt die Angaben des Ergebnisstands weiter ([#865](https://github.com/mannewolff/kanban-kit/issues/865))
+- Skizze der Laufarten-Muster als Vorlage fuer Plan #864
+- Herkunftskette am Ketten-Vorgang entfaellt ([#858](https://github.com/mannewolff/kanban-kit/issues/858))
+- Ablehnungsmeldung nennt Wort und Herkunft ([#857](https://github.com/mannewolff/kanban-kit/issues/857))
+- Zustandstext je Fehlerklasse statt fester Text je Ampel ([#856](https://github.com/mannewolff/kanban-kit/issues/856))
+- Auszug und Dauer eines Ketten-Vorgangs ([#855](https://github.com/mannewolff/kanban-kit/issues/855))
+- Ergebnisstand-Parser nimmt Ketten-Laeufe an ([#854](https://github.com/mannewolff/kanban-kit/issues/854))
+- Mockup des Leitstand-Entwurfs nach docs/ verschoben
+- Werte CHAIN und TIME_BUDGET_EXCEEDED durchgaengig eingefuehrt ([#853](https://github.com/mannewolff/kanban-kit/issues/853))
+- Mockup für Darstellung Leitstand
+- Limit für Review von 15 auf 30 hochgesetzt
+- Konfiguration für nightrunner geändert
+- chore: Version 1.41.1
+- MinIO-Image auf quay.io mit festem Tag umstellen ([#834](https://github.com/mannewolff/kanban-kit/issues/834))
+
 ## [1.41.0] – 2026-09-14
 
 - chore: Version 1.40.1
