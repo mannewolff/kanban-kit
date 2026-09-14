@@ -98,6 +98,14 @@ export interface NightRunStand {
   kostenSumme?: number
   /** Zahl der Sitzungen, die keine Kosten gemeldet haben. */
   kostenUnbekannt?: number
+  /**
+   * Warum der Lauf ueberhaupt keine Sitzungs-Kennzahlen fuehrt (Issue #870). Fehlt der
+   * Runner-Aufruf die ausfuehrliche Ausgabe, fordert er den Kennzahlen-Strom nicht an und
+   * schreibt den Grund einmal an den Lauf-Kopf, nicht je Vorgang — das ist der **Regelfall**
+   * eines Umsetzungs-Laufs. Ohne dieses Feld stuende an jedem seiner Vorgaenge eine
+   * Fehlanzeige fuer etwas, das nicht fehlt, sondern nicht angefordert wurde.
+   */
+  kennzahlenHinweis?: string
 }
 
 /** Kosten und Aufwand eines Vorgangs — dieselbe Herkunft wie {@link NightRunStand}. */
@@ -150,6 +158,14 @@ export interface NightRunItem {
   rawLines: string[]
   /** Kosten und Aufwand — nur aus einem Ergebnisstand, siehe {@link NightRunStand}. */
   kennzahlen?: NightRunKennzahlen
+  /**
+   * Wie viele Dokumente in diesem Vorgang entstanden sind — nur aus einem Ergebnisstand,
+   * siehe {@link NightRunStand}. Die **Zahl** und nicht die Nummernliste: Die
+   * Kennzahlenzeile eines Erzeugungs-Laufs nennt nur, wie viele Dokumente entstanden sind;
+   * die Nummern brauchen allein Ketten-Vorgaenge, und dort stehen sie bereits an den
+   * Arbeitsschritten ({@link NightRunKettenStufenwert.dokumente}).
+   */
+  dokumenteAnzahl?: number
   /**
    * Die Arbeitsschritte eines Ketten-Vorgangs — nur aus einem Ergebnisstand, siehe
    * {@link NightRunStand}. Der Name traegt das Praefix, weil `NightRunPage.tsx` „Stufe"

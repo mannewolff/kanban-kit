@@ -142,6 +142,12 @@ interface RohEinheit {
   kostenUsd?: number
   /** Zahl der Sitzungen dieses Vorgangs ohne Kostenmeldung. */
   kostenUnbekannt?: number
+  /**
+   * Die Dokumente, die ein Erzeugungs-Lauf aus dieser Einheit hervorgebracht hat.
+   * `unknown[]` und nicht der Eintragstyp: Ausgewertet wird allein die Laenge, und was in
+   * den Eintraegen steht, geht diesen Parser nichts an.
+   */
+  erzeugt?: unknown[]
 }
 
 /** Die Vorgaben eines Ketten-Laufs, so wie `--kette` sie aus der Config uebernimmt. */
@@ -187,6 +193,12 @@ interface RohLauf {
   budget?: RohBudget
   kostenSumme?: number
   kostenUnbekannt?: number
+  /**
+   * Der Grund, warum der Lauf keine Sitzungs-Kennzahlen angefordert hat. `unknown` wie
+   * {@link RohLauf.erzeugtVon}: Der Wert geht unveraendert in die Anzeige, und eine fremde
+   * Datei darf dort nichts anderes als eine Zeichenkette einschleusen.
+   */
+  kennzahlenHinweis?: unknown
 }
 
 /** Zustand und Fehlerklasse eines Arbeitspakets — der Kern der Deutung. */
@@ -648,6 +660,9 @@ function standDesLaufs(l: RohLauf): NightRunStand | undefined {
     ...textfeld('abschluss', l.abschluss),
     ...zahlenfeld('kostenSumme', l.kostenSumme),
     ...zahlenfeld('kostenUnbekannt', l.kostenUnbekannt),
+    // Nur, wo der Kopf ihn fuehrt: Ein Lauf mit ausfuehrlicher Ausgabe laesst das Feld weg,
+    // weil es dort nichts zu erklaeren gibt (`ergebnisstandAnlegen` in `night.mjs`).
+    ...textfeld('kennzahlenHinweis', l.kennzahlenHinweis),
   })
 }
 
@@ -709,6 +724,18 @@ function kennzahlenDerEinheit(e: RohEinheit): NightRunKennzahlen | undefined {
     ...zahlenfeld('zuege', zuegeDerEinheit(e)),
     ...zahlenfeld('kostenUnbekannt', e.kostenUnbekannt),
   })
+}
+
+/**
+ * Wie viele Dokumente die Einheit hervorgebracht hat; `undefined`, wo der Stand die Liste
+ * gar nicht fuehrt — ein uebersprungener oder liegengebliebener Vorgang hat nie eine
+ * Session gesehen, und „0 Dokumente" behauptete dort einen Versuch, den es nicht gab.
+ *
+ * <p>Eine **vorhandene, leere** Liste ergibt dagegen 0: Sie ist eine Aussage des Stands,
+ * kein Fehlen einer Angabe — dieselbe Linie wie {@link NightRunKettenStufenwert.dokumente}.
+ */
+function dokumenteDerEinheit(e: RohEinheit): number | undefined {
+  return Array.isArray(e.erzeugt) ? e.erzeugt.length : undefined
 }
 
 /** Die Deutung einer Einheit; `null` heisst: Vokabular unbekannt, also nicht unterstuetzt. */
@@ -774,6 +801,7 @@ function baueItem(e: RohEinheit, position: number, modus: NightRunMode): NightRu
     // dem `nightRunLog.ts` die Zeilen je Paket mitschreibt.
     rawLines: [],
     ...(kennzahlen === undefined ? {} : { kennzahlen }),
+    ...zahlenfeld('dokumenteAnzahl', dokumenteDerEinheit(e)),
     ...(kettenStufen === undefined ? {} : { kettenStufen }),
   }
 }

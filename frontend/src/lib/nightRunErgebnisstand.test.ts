@@ -1195,6 +1195,74 @@ describe('parseNightRunErgebnisstand — Angaben des Ergebnisstands (Issue #865)
 })
 
 /**
+ * Der Hinweis, den `ergebnisstandAnlegen` in `night.mjs` genau dann an den Lauf-Kopf
+ * schreibt, wenn weder `--verbose` noch `--kette` gesetzt war — woertlich wie dort.
+ */
+const KENNZAHLEN_HINWEIS =
+  'Ohne --verbose fordert der Runner die Stream-Ausgabe der Session nicht an; die Session-Kennzahlen fehlen darum in allen Einheiten.'
+
+/**
+ * Die Kennzahlen aus Issue #865 gelten fuer **jede** Lauf-Art, nicht nur fuer die Kette
+ * (Issue #870). Dazu kommen zwei Angaben, die der Stand seit je fuehrt und der Parser
+ * bislang verwarf: die Zahl der in einem Vorgang erzeugten Dokumente und der Hinweis am
+ * Lauf-Kopf, wenn der Runner die Session-Kennzahlen gar nicht erst angefordert hat.
+ *
+ * <p>Der Hinweis ist als einziger konstruiert geprueft: Keine der fuenf Fixtures traegt
+ * ihn — sie stammen alle aus Laeufen mit `--verbose` oder `--kette`, und genau dort laesst
+ * `ergebnisstandAnlegen` das Feld weg.
+ */
+describe('parseNightRunErgebnisstand — Kennzahlen aller Lauf-Arten (Issue #870)', () => {
+  const umsetzung = lauf(JSON.stringify(echterLauf))
+  const pruefung = lauf(JSON.stringify(echterPrueflauf))
+  const erzeugung = lauf(JSON.stringify(echterNachtplanRegulaer))
+  const nach = (r: NightRun, nummer: number) => r.items.find((i) => i.cardNumber === nummer)
+
+  it('traegt an jedem der fuenf Vorgaenge des Umsetzungs-Laufs Kosten und Zuege', () => {
+    const werte = umsetzung.items.map((i) => [i.cardNumber, i.kennzahlen?.kostenUsd, i.kennzahlen?.zuege])
+    expect(werte).toEqual([
+      [767, 2.1366104999999997, 38],
+      [768, 5.134166000000001, 63],
+      [769, 10.86053, 123],
+      [770, 1.6051234999999997, 33],
+      [771, 8.1324195, 121],
+    ])
+  })
+
+  it('traegt am bearbeiteten Vorgang des Pruef-Laufs Kosten und Zuege', () => {
+    expect(nach(pruefung, 782)?.kennzahlen).toEqual({ kostenUsd: 21.94563399999999, zuege: 252 })
+  })
+
+  it('nennt am Vorgang eines Erzeugungs-Laufs die Zahl der dort entstandenen Dokumente', () => {
+    expect(nach(erzeugung, 479)?.dokumenteAnzahl).toBe(1)
+  })
+
+  it('nennt die Dokumentenzahl auch an einem Vorgang, dessen Sitzung nichts gemeldet hat', () => {
+    expect(nach(erzeugung, 535)?.dokumenteAnzahl).toBe(1)
+    expect(nach(erzeugung, 535)).not.toHaveProperty('kennzahlen')
+  })
+
+  it('laesst die Dokumentenzahl an einem uebergangenen Vorgang ungesetzt', () => {
+    expect(nach(erzeugung, 164)).not.toHaveProperty('dokumenteAnzahl')
+  })
+
+  it('reicht den Kennzahlen-Hinweis des Lauf-Kopfs durch', () => {
+    expect(lauf(stand({ kennzahlenHinweis: KENNZAHLEN_HINWEIS })).stand?.kennzahlenHinweis).toBe(
+      KENNZAHLEN_HINWEIS,
+    )
+  })
+
+  it('laesst den Kennzahlen-Hinweis weg, wenn der Lauf-Kopf ihn nicht fuehrt', () => {
+    expect(lauf(stand()).stand).not.toHaveProperty('kennzahlenHinweis')
+  })
+
+  it('laesst an einer Einheit ohne Kennzahlen und ohne Dokumente beide Felder ungesetzt', () => {
+    const item = einziges(mitEinheit({ ausgang: 'unbekannt', kennzahlen: null }))
+    expect(item).not.toHaveProperty('kennzahlen')
+    expect(item).not.toHaveProperty('dokumenteAnzahl')
+  })
+})
+
+/**
  * Beide Wege muessen dieselbe Lage gleich benennen — sonst hiesse derselbe Lauf im
  * Leitstand je nach Quelle anders. Verglichen wird nur, was der Ergebnisstand
  * tatsaechlich erzeugen kann.
