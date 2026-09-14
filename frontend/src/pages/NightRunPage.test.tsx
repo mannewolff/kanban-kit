@@ -18,7 +18,9 @@ import type {
 } from '../api/nightRuns'
 import { SnackbarProvider } from '../components/SnackbarProvider'
 import echterLauf from '../lib/__fixtures__/night-run-2026-09-07-085229.json'
+import echterNachtplanRegulaer from '../lib/__fixtures__/night-run-2026-09-09-125621.json'
 import echterNachtplanHarterStopp from '../lib/__fixtures__/night-run-2026-09-09-141506.json'
+import echterPrueflauf from '../lib/__fixtures__/night-run-2026-09-11-103116.json'
 import echteKette from '../lib/__fixtures__/night-run-2026-09-14-131200.json'
 import { parseNightRunErgebnisstand } from '../lib/nightRunErgebnisstand'
 import { buildHandoffText, type NightRunHandoffItem } from '../lib/nightRunHandoff'
@@ -139,6 +141,22 @@ const ECHTER_START = '2026-09-07T08:52:29.532Z'
  */
 const ECHTER_NACHTPLAN_STAND = JSON.stringify(echterNachtplanHarterStopp)
 const ECHTER_NACHTPLAN_START = '2026-09-09T14:15:06.165Z'
+
+/**
+ * Der echte, regulär beendete Erzeugungs-Lauf vom 2026-09-09 (Issue #872). Drei bearbeitete
+ * Vorgänge, darunter der fortgesetzte #535 mit **gemessener** Dauer null und ohne jede
+ * Sitzungs-Kennzahl — der Fall, an dem sich die Null von der fehlenden Angabe trennt.
+ */
+const ECHTE_ERZEUGUNG_STAND = JSON.stringify(echterNachtplanRegulaer)
+const ECHTE_ERZEUGUNG_START = '2026-09-09T12:56:21.983Z'
+
+/**
+ * Der echte Prüf-Lauf vom 2026-09-11 (Issue #872). Sein einziger bearbeiteter Vorgang #782
+ * meldet 18,1 Minuten Arbeitszeit bei 14,7 Minuten Dauer, weil mehrere Prüfer gleichzeitig
+ * liefen — der Beleg dafür, dass die Arbeitszeit die Dauer übersteigen kann.
+ */
+const ECHTER_PRUEFLAUF_STAND = JSON.stringify(echterPrueflauf)
+const ECHTER_PRUEFLAUF_START = '2026-09-11T10:31:16.379Z'
 
 /**
  * Der echte Ketten-Lauf vom 2026-09-14 (Issue #854) — unverändert, wie der Runner ihn schrieb.
@@ -1810,6 +1828,228 @@ describe('NightRunPage — Laufband für Umsetzungs-Läufe (#871)', () => {
   })
 })
 
+describe('NightRunPage — Modellzeit-Anteil je Vorgang (#872)', () => {
+  /** Die Kennzahlenzeile eines Vorgangs, über die Kartennummer. */
+  const kennzahlen = (panelEl: HTMLElement, cardNumber: number) =>
+    within(panelEl).getByTestId(`kennzahlen-${cardNumber}`)
+
+  /**
+   * Klappt einen frisch eingelesenen Lauf auf und gibt sein Panel zurück. Die Kennzahlen stehen
+   * **nur** im Ergebnisstand dieser Sitzung — der Server bewahrt sie nicht auf —, deshalb führt
+   * jeder dieser Tests über das Einlesen einer Datei und nicht über eine Server-Antwort.
+   */
+  async function eingelesen(
+    ergebnisstand: string,
+    start: string,
+    dateiname: string,
+    antworten: Antworten,
+  ) {
+    renderPage(antworten)
+    await screen.findByText('Noch keine Auswertung vorhanden.')
+
+    protokollWaehlen(ergebnisstand, dateiname)
+
+    const panelEl = await screen.findByTestId(`lauf-${start}`)
+    fireEvent.click(within(panelEl).getByRole('button', { expanded: false }))
+    await within(panelEl).findByTestId('vorgangs-kennzahlen')
+    return panelEl
+  }
+
+  const echterUmsetzungslauf = () =>
+    eingelesen(ECHTER_STAND, ECHTER_START, 'night-run-2026-09-07-085229.json', {
+      submit: { ergebnis: alleNeu(ECHTER_STAND) },
+      listen: [[], wieAufbewahrt(ECHTER_STAND)],
+    })
+
+  it('nennt je Vorgang Dauer, Kosten, Züge und den Anteil der Modellarbeit (Punkt 6)', async () => {
+    const panelEl = await echterUmsetzungslauf()
+
+    // 180 563 ms Arbeitszeit auf 244 427 ms Dauer — 73,9 Prozent, gerundet 74.
+    expect(kennzahlen(panelEl, 767)).toHaveTextContent(
+      '4 Min · 2,14 $ · 38 Züge · Modellarbeit 74 % der Dauer, der Rest außerhalb',
+    )
+    // Der zweite Vorgang belegt, dass der Anteil je Vorgang gerechnet wird: 380 034 auf
+    // 769 668 ms sind 49 Prozent, nicht noch einmal 74.
+    expect(kennzahlen(panelEl, 768)).toHaveTextContent(
+      'Modellarbeit 49 % der Dauer, der Rest außerhalb',
+    )
+  })
+
+  it('beziffert die Restzeit nicht und nennt sie nicht Werkzeugzeit (AK 3)', async () => {
+    const panelEl = await echterUmsetzungslauf()
+
+    // Das Protokoll misst die Aufteilung der Restzeit nicht — sie enthält auch die Prüfung
+    // durch den Nachtlauf selbst und Wartezeiten.
+    expect(within(panelEl).queryByText(/Werkzeugzeit/)).not.toBeInTheDocument()
+    expect(kennzahlen(panelEl, 767)).not.toHaveTextContent('26 %')
+  })
+
+  it('zeigt bei gleichzeitigen Arbeiten keinen Anteil, sondern den Hinweis (Punkt 7)', async () => {
+    const panelEl = await eingelesen(
+      ECHTER_PRUEFLAUF_STAND,
+      ECHTER_PRUEFLAUF_START,
+      'night-run-2026-09-11-103116.json',
+      {
+        submit: { ergebnis: alleNeu(ECHTER_PRUEFLAUF_STAND) },
+        listen: [[], wieAufbewahrt(ECHTER_PRUEFLAUF_STAND)],
+      },
+    )
+
+    const zeile = kennzahlen(panelEl, 782)
+    expect(zeile).toHaveTextContent(
+      '14 Min · 21,95 $ · 252 Züge · Modellarbeit: mehrere Arbeiten liefen gleichzeitig',
+    )
+    // Weder ein Anteil über hundert Prozent noch ein negativer Rest: 1 084 627 auf 879 763 ms
+    // wären gerundet 123 Prozent und ein Rest von minus 23.
+    expect(zeile.textContent).not.toMatch(/\d+ %/)
+    expect(zeile.textContent).not.toContain('−')
+    expect(zeile.textContent).not.toContain('-')
+  })
+
+  it('führt einen Prüf-Lauf nur mit seinem einen bearbeiteten Vorgang (Punkt 1)', async () => {
+    const panelEl = await eingelesen(
+      ECHTER_PRUEFLAUF_STAND,
+      ECHTER_PRUEFLAUF_START,
+      'night-run-2026-09-11-103116.json',
+      {
+        submit: { ergebnis: alleNeu(ECHTER_PRUEFLAUF_STAND) },
+        listen: [[], wieAufbewahrt(ECHTER_PRUEFLAUF_STAND)],
+      },
+    )
+
+    // 34 der 35 Karten wurden nur angesehen und aussortiert — eine Kennzahlenzeile je
+    // übergangener Karte wäre eine Wand aus Fehlanzeigen.
+    expect(within(panelEl).getAllByTestId(/^kennzahlen-\d+$/)).toHaveLength(1)
+  })
+
+  it('zeigt eine gemessene Dauer von null als „0 s", fehlende Angaben als Hinweis (Punkt 8)', async () => {
+    const panelEl = await eingelesen(
+      ECHTE_ERZEUGUNG_STAND,
+      ECHTE_ERZEUGUNG_START,
+      'night-run-2026-09-09-125621.json',
+      { listen: [[]] },
+    )
+
+    // #535 wurde in einer früheren Nacht fortgesetzt: In dieser lief keine Sitzung mehr, also
+    // ist die Null gemessen — und die Kennzahlen fehlen tatsächlich.
+    expect(kennzahlen(panelEl, 535)).toHaveTextContent(
+      '0 s · Kosten nicht gemeldet · Züge nicht gemeldet · Modellzeit nicht gemeldet',
+    )
+    // Der Nachbarvorgang derselben Nacht zeigt, dass die Fehlanzeige nicht am Lauf hängt.
+    expect(kennzahlen(panelEl, 533)).toHaveTextContent(
+      '32 Min · 6,88 $ · 54 Züge · Modellarbeit 54 % der Dauer, der Rest außerhalb',
+    )
+  })
+
+  it('zeigt ohne Arbeitszeit die Fehlanzeige und nicht den Hinweis auf Gleichzeitigkeit (Punkt 9)', async () => {
+    const OHNE_ARBEITSZEIT = stand({
+      einheiten: [
+        einheit({
+          ausgang: 'erfolg',
+          pruefung: GEPRUEFT,
+          kennzahlen: { kostenUsd: 1.5, zuege: 7 },
+        }),
+      ],
+    })
+    const panelEl = await eingelesen(OHNE_ARBEITSZEIT, startedAt(0), 'night-run.json', {
+      submit: { ergebnis: alleNeu(OHNE_ARBEITSZEIT) },
+      listen: [[], wieAufbewahrt(OHNE_ARBEITSZEIT)],
+    })
+
+    const zeile = kennzahlen(panelEl, 700)
+    expect(zeile).toHaveTextContent('7 Min · 1,50 $ · 7 Züge · Modellzeit nicht gemeldet')
+    expect(zeile).not.toHaveTextContent('gleichzeitig')
+  })
+
+  it('nennt ohne messbare Dauer keinen Anteil, obwohl beide Angaben vorliegen', async () => {
+    // Konstruiert: Keines der fünf Protokolle trägt eine Sitzung, die neben der Dauer auch die
+    // Arbeitszeit mit null meldet. Ein Anteil an einer Dauer von null ist keine Aussage, und
+    // „0 % Modellarbeit" behauptete eine Restzeit, die es nicht gibt.
+    const OHNE_MESSBARE_DAUER = stand({
+      einheiten: [
+        einheit({
+          ausgang: 'erfolg',
+          pruefung: GEPRUEFT,
+          dauerMs: 0,
+          kennzahlen: { kostenUsd: 1.5, zuege: 7, apiDauerMs: 0 },
+        }),
+      ],
+    })
+    const panelEl = await eingelesen(OHNE_MESSBARE_DAUER, startedAt(0), 'night-run.json', {
+      submit: { ergebnis: alleNeu(OHNE_MESSBARE_DAUER) },
+      listen: [[], wieAufbewahrt(OHNE_MESSBARE_DAUER)],
+    })
+
+    expect(kennzahlen(panelEl, 700)).toHaveTextContent(
+      '0 s · 1,50 $ · 7 Züge · Modellarbeit: ohne messbare Dauer kein Anteil',
+    )
+  })
+
+  it('zeigt an einem Lauf ohne bearbeiteten Vorgang gar keinen Block', async () => {
+    // Ein Lauf, der jede Karte aussortiert hat, hat nichts zu berichten — ein leerer Block
+    // behauptete eine Sitzung, die es nie gab.
+    const NUR_UEBERGANGEN = stand({
+      einheiten: [einheit({ ausgang: 'uebersprungen', grund: 'kein Label', dauerMs: undefined })],
+    })
+    renderPage({
+      submit: { ergebnis: alleNeu(NUR_UEBERGANGEN) },
+      listen: [[], wieAufbewahrt(NUR_UEBERGANGEN)],
+      karten: { 700: karte({ id: 1, number: 700, title: 'Paket A' }) },
+    })
+    await screen.findByText('Noch keine Auswertung vorhanden.')
+
+    protokollWaehlen(NUR_UEBERGANGEN)
+
+    await screen.findByTestId(`lauf-${startedAt(0)}`)
+    aufklappen(0)
+    await within(lauf(0)).findByText('Vorhaben: ohne')
+
+    expect(within(lauf(0)).queryByTestId('vorgangs-kennzahlen')).not.toBeInTheDocument()
+  })
+
+  it('zeigt an einem Ketten-Lauf keine Kennzahlenzeilen, sondern die Übersicht', async () => {
+    renderPage({
+      submit: { ergebnis: alleNeu(ECHTE_KETTE_STAND) },
+      listen: [[], wieAufbewahrt(ECHTE_KETTE_STAND)],
+    })
+    await screen.findByText('Noch keine Auswertung vorhanden.')
+
+    protokollWaehlen(ECHTE_KETTE_STAND, 'night-run-2026-09-14-131200.json')
+
+    const panelEl = await screen.findByTestId(`lauf-${ECHTE_KETTE_START}`)
+    fireEvent.click(within(panelEl).getByRole('button', { expanded: false }))
+    await within(panelEl).findByTestId('ketten-uebersicht')
+
+    // Die Kette führt ihre Kosten und Züge bereits je Vorgang in der Übersicht (#866); eine
+    // zweite Zeile daneben bezöge sich auf dieselben Zahlen.
+    expect(within(panelEl).queryByTestId('vorgangs-kennzahlen')).not.toBeInTheDocument()
+  })
+
+  it('zeigt an einem aufbewahrten Lauf ohne Ergebnisstand keine Kennzahlenzeile', async () => {
+    renderPage({
+      listen: [
+        [
+          aufbewahrt({
+            id: 1,
+            startedAt: startedAt(0),
+            items: [
+              { id: 11, cardNumber: 700, title: 'Paket A', state: 'GREEN', durationMs: SIEBEN_MIN },
+            ],
+          }),
+        ],
+      ],
+      karten: { 700: karte({ id: 1, number: 700, title: 'Paket A' }) },
+    })
+    await screen.findByTestId(`lauf-${startedAt(0)}`)
+    aufklappen(0)
+    await within(lauf(0)).findByText('Vorhaben: ohne')
+
+    // Kosten, Züge und Arbeitszeit verlassen den Browser nie (Plan #718, A1) — ohne den Stand
+    // dieser Sitzung gibt es sie nicht, und ein Block aus lauter Fehlanzeigen wäre kein Gewinn.
+    expect(within(lauf(0)).queryByTestId('vorgangs-kennzahlen')).not.toBeInTheDocument()
+  })
+})
+
 describe('NightRunPage — Herkunft eines Laufs (#775)', () => {
   /**
    * Derselbe Lauf, wie der Server ihn nach dem Einliefern zurückgibt — nur mit abweichender
@@ -1946,7 +2186,11 @@ describe('NightRunPage — Zustände, Kennzahlen und Auszüge', () => {
     expect(within(lauf(0)).getByText('Umsetzungs-Lauf')).toBeInTheDocument()
   })
 
-  it('zeigt Dauer und Stückzahlen je Lauf sowie die Dauer je Arbeitspaket, aber keine Kosten', async () => {
+  // **Umgekehrt mit Issue #872**: Der Test hielt bis dahin fest, dass in der Auswertung
+  // überhaupt keine Kostenangabe erscheint — ein Nicht-Ziel aus #715, das die fachliche Quelle
+  // #861 ausdrücklich aufhebt. Die Kennzahlenzeile je Vorgang nennt Kosten jetzt, und wo der
+  // Stand keine führt, benennt sie das Fehlen, statt es zu verschweigen.
+  it('zeigt Dauer und Stückzahlen je Lauf sowie die Dauer je Arbeitspaket, dazu die Kosten', async () => {
     renderPage({
       submit: { ergebnis: alleNeu(VIER_ZUSTAENDE) },
       listen: [[], wieAufbewahrt(VIER_ZUSTAENDE)],
@@ -1962,8 +2206,13 @@ describe('NightRunPage — Zustände, Kennzahlen und Auszüge', () => {
     expect(panel.getByText('21 Min')).toBeInTheDocument()
     expect(panel.getByText('3 bearbeitet, 1 übergangen')).toBeInTheDocument()
     expect((await panel.findAllByText('7 Min')).length).toBeGreaterThan(0)
-    // Kosten sind ein Nicht-Ziel aus #715 — sie stehen im Ergebnisstand, aber nicht in der Auswertung.
-    expect(screen.queryByText(/Kosten|USD|\$/)).not.toBeInTheDocument()
+    // Die drei bearbeiteten Vorgänge tragen eine Kennzahlenzeile; das zurückgestellte Paket
+    // ist grau und bekommt keine.
+    expect(panel.getAllByTestId(/^kennzahlen-\d+$/)).toHaveLength(3)
+    // Dieser Stand führt keine Sitzungs-Kennzahlen — das Fehlen wird benannt, nicht als Null
+    // dargestellt.
+    expect(panel.getByTestId('kennzahlen-700')).toHaveTextContent('Kosten nicht gemeldet')
+    expect(panel.queryByText(/0,00 \$/)).not.toBeInTheDocument()
   })
 
   it('weist ungedeutete Zeilen mit Anzahl und Auszug aus, wörtlich statt gerendert', async () => {

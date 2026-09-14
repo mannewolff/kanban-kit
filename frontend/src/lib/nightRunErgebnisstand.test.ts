@@ -1146,10 +1146,12 @@ describe('parseNightRunErgebnisstand — Angaben des Ergebnisstands (Issue #865)
     expect(vorgang(791)?.kettenStufen?.pakete?.dokumente).toEqual(['845'])
   })
 
-  it('traegt am Arbeitspaket eines Implementierungs-Laufs Kosten und Zuege, aber keine Stufen', () => {
+  it('traegt am Arbeitspaket eines Implementierungs-Laufs die Kennzahlen, aber keine Stufen', () => {
+    // Die Arbeitszeit kam mit Issue #872 dazu; sie stand schon immer im Stand.
     expect(implementierung.items[0].kennzahlen).toEqual({
       kostenUsd: 2.1366104999999997,
       zuege: 38,
+      arbeitszeitMs: 180563,
     })
     expect(implementierung.items[0]).not.toHaveProperty('kettenStufen')
   })
@@ -1228,8 +1230,12 @@ describe('parseNightRunErgebnisstand — Kennzahlen aller Lauf-Arten (Issue #870
     ])
   })
 
-  it('traegt am bearbeiteten Vorgang des Pruef-Laufs Kosten und Zuege', () => {
-    expect(nach(pruefung, 782)?.kennzahlen).toEqual({ kostenUsd: 21.94563399999999, zuege: 252 })
+  it('traegt am bearbeiteten Vorgang des Pruef-Laufs Kosten, Zuege und Arbeitszeit', () => {
+    expect(nach(pruefung, 782)?.kennzahlen).toEqual({
+      kostenUsd: 21.94563399999999,
+      zuege: 252,
+      arbeitszeitMs: 1084627,
+    })
   })
 
   it('nennt am Vorgang eines Erzeugungs-Laufs die Zahl der dort entstandenen Dokumente', () => {
@@ -1259,6 +1265,39 @@ describe('parseNightRunErgebnisstand — Kennzahlen aller Lauf-Arten (Issue #870
     const item = einziges(mitEinheit({ ausgang: 'unbekannt', kennzahlen: null }))
     expect(item).not.toHaveProperty('kennzahlen')
     expect(item).not.toHaveProperty('dokumenteAnzahl')
+  })
+})
+
+/**
+ * Die Zeit, die das Modell selbst gearbeitet hat (Issue #872). Der Stand fuehrt sie je
+ * Sitzung als `apiDauerMs`; der Parser reichte sie bislang als einzige der drei
+ * Sitzungs-Kennzahlen nicht durch.
+ *
+ * <p>Gelesen wird **nur** das Feld der Einheit, nicht die Summe ueber die Arbeitsschritte
+ * einer Kette — anders als bei den Zuegen ({@link zuegeDerEinheit}). Die Anzeige, fuer die
+ * sie entsteht, gilt den drei Nicht-Ketten-Arten; eine summierte Ketten-Arbeitszeit haette
+ * heute keinen Leser und waere unbelegt.
+ */
+describe('parseNightRunErgebnisstand — Arbeitszeit des Modells (Issue #872)', () => {
+  const umsetzung = lauf(JSON.stringify(echterLauf))
+  const erzeugung = lauf(JSON.stringify(echterNachtplanRegulaer))
+  const nach = (r: NightRun, nummer: number) => r.items.find((i) => i.cardNumber === nummer)
+
+  it('traegt an jedem der fuenf Vorgaenge des Umsetzungs-Laufs die Arbeitszeit', () => {
+    expect(umsetzung.items.map((i) => i.kennzahlen?.arbeitszeitMs)).toEqual([
+      180563, 380034, 567294, 138818, 592769,
+    ])
+  })
+
+  it('traegt sie auch am Vorgang eines Erzeugungs-Laufs', () => {
+    expect(nach(erzeugung, 479)?.kennzahlen?.arbeitszeitMs).toBe(949907)
+  })
+
+  it('laesst sie weg, wo die Kennzahlen sie nicht fuehren', () => {
+    const item = einziges(
+      mitEinheit({ ausgang: 'unbekannt', kennzahlen: { kostenUsd: 1.5, zuege: 7 } }),
+    )
+    expect(item.kennzahlen).toEqual({ kostenUsd: 1.5, zuege: 7 })
   })
 })
 

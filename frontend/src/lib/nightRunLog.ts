@@ -115,6 +115,15 @@ export interface NightRunKennzahlen {
   zuege?: number
   /** Zahl der Sitzungen dieses Vorgangs ohne Kostenmeldung. */
   kostenUnbekannt?: number
+  /**
+   * Die Zeit, die das Modell selbst gearbeitet hat (Issue #872) — im Stand `apiDauerMs`. Ihr
+   * Verhaeltnis zu {@link NightRunItem.durationMs} sagt, ob eine Sitzung denkt oder wartet.
+   *
+   * <p>Sie kann die Dauer **uebersteigen**: Ein Pruef-Lauf startet mehrere Pruefer zugleich,
+   * und ihre Zeiten summieren sich ueber die Wanduhr hinaus. Wer aus ihr einen Anteil
+   * rechnet, muss diesen Fall unterscheiden, statt bei voller Laenge zu kappen.
+   */
+  arbeitszeitMs?: number
 }
 
 /** Was ein einzelner Arbeitsschritt einer Kette verbraucht und hinterlassen hat. */

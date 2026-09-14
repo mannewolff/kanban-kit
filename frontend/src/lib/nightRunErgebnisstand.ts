@@ -723,6 +723,10 @@ function kennzahlenDerEinheit(e: RohEinheit): NightRunKennzahlen | undefined {
     ...zahlenfeld('kostenUsd', kosten),
     ...zahlenfeld('zuege', zuegeDerEinheit(e)),
     ...zahlenfeld('kostenUnbekannt', e.kostenUnbekannt),
+    // Die Arbeitszeit kommt **allein** aus dem Feld der Einheit, anders als die Zuege oben
+    // (Issue #872): Sie wird fuer die drei Nicht-Ketten-Arten angezeigt, und eine ueber die
+    // Arbeitsschritte summierte Ketten-Arbeitszeit haette heute keinen Leser.
+    ...zahlenfeld('arbeitszeitMs', e.kennzahlen?.apiDauerMs),
   })
 }
 

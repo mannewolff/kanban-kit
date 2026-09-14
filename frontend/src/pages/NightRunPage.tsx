@@ -871,6 +871,78 @@ function vorgabenText(vorgaben: NightRunStufenvorgaben | undefined): string {
   return teile.length === 0 ? 'nicht angegeben' : `${teile.join(' · ')} min`
 }
 
+/**
+ * Der Anteil der Modellarbeit an der Dauer eines Vorgangs (Issue #872) — vier unterschiedene
+ * Lagen, keine davon geraten:
+ *
+ * - **anteil** — Arbeitszeit und Dauer liegen vor, die Arbeitszeit ist die kleinere.
+ * - **gleichzeitig** — die gemeldete Arbeitszeit **übersteigt** die Dauer. Sie zu kappen
+ *   behauptete „hundert Prozent Modellarbeit", eine Aussage über die Aufteilung, die die Daten
+ *   nicht hergeben; der Rest wäre negativ. Belegt an Vorgang #782 der Nacht vom 11. September:
+ *   18,1 Minuten Arbeitszeit bei 14,7 Minuten Dauer, weil mehrere Prüfer zugleich liefen.
+ * - **ohne-dauer** — beide sind null. Ein Anteil an einer Dauer von null ist keine Aussage,
+ *   und „0 % Modellarbeit" behauptete eine Restzeit, die es nicht gibt.
+ * - **fehlt** — eine der beiden Angaben führt der Stand gar nicht.
+ */
+type Modellzeit =
+  | { art: 'anteil'; prozent: number }
+  | { art: 'gleichzeitig' }
+  | { art: 'ohne-dauer' }
+  | { art: 'fehlt' }
+
+function modellzeit(dauerMs: number | undefined, arbeitMs: number | undefined): Modellzeit {
+  if (dauerMs === undefined || arbeitMs === undefined) {
+    return { art: 'fehlt' }
+  }
+  if (arbeitMs > dauerMs) {
+    return { art: 'gleichzeitig' }
+  }
+  // Hier ist die Arbeitszeit höchstens so groß wie die Dauer; eine Dauer von null heißt also
+  // auch eine Arbeitszeit von null — die Teilung unten braucht keinen weiteren Schutz.
+  return dauerMs === 0
+    ? { art: 'ohne-dauer' }
+    : { art: 'anteil', prozent: Math.round((arbeitMs / dauerMs) * 100) }
+}
+
+/**
+ * Der Modellzeit-Anteil in Worten. **Die Restzeit wird nie beziffert und nie benannt**: Das
+ * Protokoll misst ihre Aufteilung nicht — sie enthält neben der Wartezeit auf Bauen, Testen und
+ * Versionsverwaltung auch die Prüfung durch den Nachtlauf selbst. „Werkzeugzeit: 26 %" wäre eine
+ * Zahl über etwas, das nirgends gemessen wurde.
+ */
+function modellzeitText(dauerMs: number | undefined, kennzahlen: NightRunKennzahlen | undefined): string {
+  const zeit = modellzeit(dauerMs, kennzahlen?.arbeitszeitMs)
+  if (zeit.art === 'anteil') {
+    return `Modellarbeit ${zeit.prozent} % der Dauer, der Rest außerhalb`
+  }
+  if (zeit.art === 'gleichzeitig') {
+    return 'Modellarbeit: mehrere Arbeiten liefen gleichzeitig'
+  }
+  return zeit.art === 'ohne-dauer'
+    ? 'Modellarbeit: ohne messbare Dauer kein Anteil'
+    : 'Modellzeit nicht gemeldet'
+}
+
+/**
+ * Dauer, Kosten, Züge und Modellzeit eines bearbeiteten Vorgangs (Issue #872). Jede der vier
+ * Angaben steht entweder als Wert da oder benennt ihr Fehlen — ein ausgelassener Platz ließe
+ * offen, ob nichts gemeldet wurde oder nichts nachgesehen.
+ *
+ * <p>Eine **gemessene Null** ist dabei ein Wert: Der fortgesetzte Vorgang #535 der Nacht vom
+ * 9. September trägt die Dauer null, weil in dieser Nacht keine Sitzung mehr lief. „0 s" ist dort
+ * die Wahrheit, „nicht gemeldet" wäre die Lüge in die andere Richtung.
+ */
+function vorgangszeile(item: NightRunItem): string {
+  return [
+    item.durationMs === undefined ? 'Dauer nicht gemeldet' : formatDuration(item.durationMs / 1000),
+    item.kennzahlen?.kostenUsd === undefined
+      ? 'Kosten nicht gemeldet'
+      : betrag(item.kennzahlen.kostenUsd),
+    item.kennzahlen?.zuege === undefined ? 'Züge nicht gemeldet' : `${item.kennzahlen.zuege} Züge`,
+    modellzeitText(item.durationMs, item.kennzahlen),
+  ].join(' · ')
+}
+
 /** Kosten und Züge eines Vorgangs, dazu der Vermerk fehlender Kostenmeldungen (AK 11). */
 function vorgangsKennzahlen(kennzahlen: NightRunKennzahlen | undefined): string {
   const vermerk = ohneKostenmeldung(kennzahlen?.kostenUnbekannt)
@@ -1320,6 +1392,50 @@ function KettenUebersicht({
   )
 }
 
+/**
+ * Die Kennzahlen je bearbeitetem Vorgang eines Umsetzungs-, Erzeugungs- oder Prüf-Laufs
+ * (Issue #872): Dauer, Kosten, Züge und der Anteil der Modellarbeit an der Dauer.
+ *
+ * <p><b>Nur die bearbeiteten Vorgänge</b> — also die mit nicht-grauem Zustand, dieselbe Grenze,
+ * die `processedCount` in der Kopfzeile zieht. Ein Prüf-Lauf sichtet 35 Karten und bearbeitet
+ * eine; eine Zeile je übergangener Karte wäre eine Wand aus Fehlanzeigen für Sitzungen, die es
+ * nie gab.
+ *
+ * <p><b>Sie liest den Ergebnisstand dieser Sitzung</b>, nicht den Anzeigelauf — dieselbe Linie
+ * wie {@link KettenUebersicht} (Plan #863, E1) und aus demselben Grund: Kosten, Züge und
+ * Arbeitszeit verlassen den Browser nie (Plan #718, A1), der Server bewahrt sie nicht auf. Nach
+ * einem Neuladen der Seite ist der Speicher leer, und der Lauf zeigt seine Zeilenliste ohne
+ * diesen Block. Deshalb steht er **für sich** und nicht in der Vorgangszeile: Eine Zuordnung
+ * über die Position zwischen zwei Quellen ginge still schief, sobald ihre Reihenfolgen einmal
+ * auseinanderlaufen, und zeigte dann die Kennzahlen des falschen Vorgangs.
+ *
+ * <p>Die Kette bekommt ihn nicht: Sie führt Kosten und Züge je Vorgang bereits in ihrer
+ * Übersicht (#866), und ihre Zeiten stehen am Stufenband je Arbeitsschritt (#867).
+ */
+function VorgangsKennzahlen({ run }: Readonly<{ run: NightRun }>) {
+  const bearbeitet = run.items.filter((item) => item.state !== 'GREY')
+  if (bearbeitet.length === 0) {
+    return null
+  }
+
+  return (
+    <Stack spacing={1} data-testid="vorgangs-kennzahlen" sx={{ mb: 2 }}>
+      {bearbeitet.map((item) => (
+        <Box key={`${item.cardNumber}-${item.position}`}>
+          <Typography variant="body2">{`#${item.cardNumber} ${item.title}`}</Typography>
+          <Typography
+            variant="body2"
+            color="text.secondary"
+            data-testid={`kennzahlen-${item.cardNumber}`}
+          >
+            {vorgangszeile(item)}
+          </Typography>
+        </Box>
+      ))}
+    </Stack>
+  )
+}
+
 /** Ein Abschnitt des Laufbands — ein Vorgang, der eine Dauer verbraucht hat. */
 interface Laufabschnitt {
   cardNumber: number
@@ -1416,7 +1532,7 @@ function LaufPanel({
   lauf,
   ergebnis,
   ausErgebnisstand,
-  kettenStand,
+  stand,
   katalog,
   vorhabenKarten,
   zaehler,
@@ -1429,8 +1545,11 @@ function LaufPanel({
   ergebnis: boolean | undefined
   /** Die Startzeitpunkte der Läufe, die in dieser Sitzung aus einem Ergebnisstand entstanden sind. */
   ausErgebnisstand: ReadonlySet<string>
-  /** Der gedeutete Ketten-Lauf dieser Sitzung; `undefined` heißt: keine Übersicht (E1). */
-  kettenStand: NightRun | undefined
+  /**
+   * Der in dieser Sitzung gedeutete Lauf; `undefined` heißt: kein Ergebnisstand, also weder
+   * Übersicht (E1) noch Kennzahlen je Vorgang (#872) — beide stehen allein im Stand.
+   */
+  stand: NightRun | undefined
   katalog: Kartenkatalog
   vorhabenKarten: Vorhabenkatalog
   zaehler: Haeufigkeiten
@@ -1477,9 +1596,12 @@ function LaufPanel({
         </Stack>
       </AccordionSummary>
       <AccordionDetails>
-        {kettenStand !== undefined && (
-          <KettenUebersicht run={kettenStand} katalog={katalog} onOeffnen={onOeffnen} />
+        {stand !== undefined && lauf.mode === 'CHAIN' && (
+          <KettenUebersicht run={stand} katalog={katalog} onOeffnen={onOeffnen} />
         )}
+        {/* Die drei Nicht-Ketten-Arten bekommen ihre Kennzahlen je Vorgang; die Kette führt sie
+            bereits in ihrer Übersicht (#872, siehe `VorgangsKennzahlen`). */}
+        {stand !== undefined && lauf.mode !== 'CHAIN' && <VorgangsKennzahlen run={stand} />}
         {/* Das Band steht unter der Kopfzeile des Laufs und über seiner Zeilenliste — die Kopfzeile
             selbst („N bearbeitet, M übergangen") bleibt unverändert. Nur am Umsetzungs-Lauf: Der
             Ketten-Lauf hat mit dem Stufenband je Vorgang bereits ein Band, und ein zweites daneben
@@ -1507,7 +1629,7 @@ function LaufPanel({
             // Dieselbe Bedingung, die über die Übersicht entscheidet, und nicht die Lauf-Art
             // (#869): Ein aufbewahrter Ketten-Lauf ohne Sitzungsstand bekommt keine Übersicht und
             // verlöre sonst seine Zeilenangaben, ohne etwas dafür zu bekommen.
-            gekuerzt={kettenStand !== undefined}
+            gekuerzt={stand !== undefined && lauf.mode === 'CHAIN'}
             katalog={katalog}
             vorhabenKarten={vorhabenKarten}
             haeufigkeit={haeufigkeitsText(item, lauf.gespeichert, zaehler, aufbewahrteLaeufe)}
@@ -1542,10 +1664,11 @@ export function NightRunPage() {
    */
   const [ausErgebnisstand, setAusErgebnisstand] = useState<ReadonlySet<string>>(() => new Set())
   /**
-   * Die in **dieser Sitzung** gedeuteten Ketten-Läufe, je Startzeitpunkt (Plan #863, E1). Aus
-   * ihnen allein entsteht die Übersicht: Zeitvorgaben, Kostenbudget, Modell, Label, Abschlussart
-   * und die Kennzahlen je Arbeitsschritt stehen nur im Ergebnisstand — der Server bewahrt sie
-   * nicht auf, und Manne hat am 2026-09-14 entschieden, daran nichts zu ändern (#859, Frage 1).
+   * Die in **dieser Sitzung** gedeuteten Läufe, je Startzeitpunkt (Plan #863, E1). Aus ihnen
+   * allein entstehen die Ketten-Übersicht und die Kennzahlen je Vorgang (#872): Zeitvorgaben,
+   * Kostenbudget, Modell, Label, Abschlussart, Kosten, Züge und die Arbeitszeit des Modells
+   * stehen nur im Ergebnisstand — der Server bewahrt sie nicht auf, und Manne hat am 2026-09-14
+   * entschieden, daran nichts zu ändern (#859, Frage 1).
    *
    * <p>Nicht an das Kennzeichen `gespeichert` gebunden, und das ist der Kern der Entscheidung:
    * `protokollLesen` liefert den Lauf ein und ersetzt danach das **ganze** Lauf-Array durch die
@@ -1555,7 +1678,7 @@ export function NightRunPage() {
    * <p>Sitzungslokal wie das benachbarte {@link ausErgebnisstand}: Nach einem Neuladen der Seite
    * ist der Speicher leer, und der Lauf fällt auf die Zeilendarstellung zurück.
    */
-  const [kettenStaende, setKettenStaende] = useState<ReadonlyMap<string, NightRun>>(() => new Map())
+  const [staende, setStaende] = useState<ReadonlyMap<string, NightRun>>(() => new Map())
   const [katalog, setKatalog] = useState<Kartenkatalog>(() => new Map())
   const [vorhabenKarten, setVorhabenKarten] = useState<Vorhabenkatalog>(() => new Map())
   // Leer heißt „zu keiner Klasse ist etwas bekannt" — der Zustand vor dem ersten Abruf und der
@@ -1665,7 +1788,7 @@ export function NightRunPage() {
       return
     }
     geladeneLaeufe.current.add(lauf.startedAt)
-    void ladeKetten(lauf.items, dokumentNummern(kettenStaende.get(lauf.startedAt)))
+    void ladeKetten(lauf.items, dokumentNummern(staende.get(lauf.startedAt)))
   }
 
   /**
@@ -1696,9 +1819,9 @@ export function NightRunPage() {
     setAusErgebnisstand((bisher) => new Set(bisher).add(run.startedAt))
     // Ebenfalls **vor** dem Einliefern vermerkt (E1): Gleich ersetzt die Server-Sicht das ganze
     // Lauf-Array, und ein erst danach gefüllter Speicher trüge die Angaben des Stands nicht mehr.
-    if (run.mode === 'CHAIN') {
-      setKettenStaende((bisher) => new Map(bisher).set(run.startedAt, run))
-    }
+    // Seit #872 für **jede** Lauf-Art: Nicht nur die Ketten-Übersicht liest den Stand, sondern
+    // auch die Kennzahlen je Vorgang der drei anderen Arten.
+    setStaende((bisher) => new Map(bisher).set(run.startedAt, run))
     setLaeufe((bisher) =>
       [ausParser(run), ...bisher.filter((alt) => alt.startedAt !== run.startedAt)].sort(
         nachStartAbsteigend,
@@ -1781,9 +1904,10 @@ export function NightRunPage() {
           lauf={lauf}
           ergebnis={ergebnisse.get(lauf.startedAt)}
           ausErgebnisstand={ausErgebnisstand}
-          // Der Modus steht am Anzeigelauf und damit auch am neu geladenen; der Speicher entscheidet
-          // danach, ob zu genau diesem Lauf ein Ergebnisstand dieser Sitzung vorliegt.
-          kettenStand={lauf.mode === 'CHAIN' ? kettenStaende.get(lauf.startedAt) : undefined}
+          // Der Speicher entscheidet, ob zu genau diesem Lauf ein Ergebnisstand dieser Sitzung
+          // vorliegt; welche Darstellung daraus entsteht, entscheidet der Modus am Anzeigelauf —
+          // er steht auch am neu geladenen.
+          stand={staende.get(lauf.startedAt)}
           katalog={katalog}
           vorhabenKarten={vorhabenKarten}
           zaehler={zaehler}
