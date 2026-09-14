@@ -312,6 +312,13 @@ interface Antworten {
   zaehlerFehler?: string
   /** Karten je projektweiter Nummer; ein fehlender Eintrag antwortet mit 404. */
   karten?: Record<number, CardByNumber>
+  /**
+   * Hält den Nummer-Lookup an, bis dieses Promise auflöst — das Gegenstück zu
+   * {@link Antworten.kartenNachIdVerzoegert} für `GET /cards/by-number/{n}`. Nur damit ist der
+   * Verweis-Zustand „die Karte lädt noch" prüfbar, ohne ihn aus dem Zeitverhalten des Stubs zu
+   * erraten (Issue #868, Punkt 8).
+   */
+  kartenVerzoegert?: Promise<void>
   /** Karten je Karten-ID (`GET /api/cards/{id}`) — die Vorhaben; fehlender Eintrag = 404. */
   kartenNachId?: Record<number, Card>
   /**
@@ -392,9 +399,11 @@ function stubFetch(antworten: Antworten) {
       const nummer = /^\/api\/projects\/5\/cards\/by-number\/(\d+)$/.exec(url)
       if (nummer) {
         const gefunden = antworten.karten?.[Number(nummer[1])]
-        return Promise.resolve(
-          gefunden === undefined ? antwortFehler('Karte nicht gefunden', 404) : antwortOk(gefunden),
-        )
+        const antwort = () =>
+          gefunden === undefined ? antwortFehler('Karte nicht gefunden', 404) : antwortOk(gefunden)
+        return antworten.kartenVerzoegert === undefined
+          ? Promise.resolve(antwort())
+          : antworten.kartenVerzoegert.then(antwort)
       }
       const kartenId = /^\/api\/cards\/(\d+)$/.exec(url)
       if (kartenId) {
@@ -1040,11 +1049,22 @@ const kettenStand = (felder: Record<string, unknown> = {}): string =>
     ...felder,
   })
 
-/** Liest einen Ketten-Stand ein, wartet auf `warten` und klappt den Lauf auf. */
-async function uebersichtZu(ergebnisstand: string, warten: string, start = startedAt(0)) {
+/**
+ * Liest einen Ketten-Stand ein, wartet auf `warten` und klappt den Lauf auf.
+ *
+ * `extra` legt weitere Stub-Antworten darüber — seit Issue #868 braucht die Übersicht auch den
+ * Kartenkatalog, und die Verweise auf die entstandenen Karten hängen an ihm.
+ */
+async function uebersichtZu(
+  ergebnisstand: string,
+  warten: string,
+  start = startedAt(0),
+  extra: Partial<Antworten> = {},
+) {
   renderPage({
     submit: { ergebnis: alleNeu(ergebnisstand) },
     listen: [[], wieAufbewahrt(ergebnisstand)],
+    ...extra,
   })
   await screen.findByText('Noch keine Auswertung vorhanden.')
 
@@ -1332,6 +1352,160 @@ describe('NightRunPage — Stufenband je Vorgang (#867)', () => {
     expect(plan).toHaveTextContent('0,0 min · ohne Vorgabe')
     expect(plan.dataset.anteil).toBe('1')
     expect(plan.dataset.fuellung).toBe('0')
+  })
+})
+
+describe('NightRunPage — Entstandene Karten je Vorgang (#868)', () => {
+  /**
+   * Die Karten der echten Nacht: die drei Wurzeln und die sechs, die aus ihnen entstanden sind.
+   * Sie hängen **unterhalb** der Wurzel — ohne die Erweiterung von `ladeKetten` fragt die Seite
+   * keine von ihnen ab, und jeder Verweis bliebe ohne Karte.
+   */
+  const ENTSTANDENE = {
+    791: karte({ id: 1, number: 791, title: '[Fachlich] Zugriff und Konten' }),
+    814: karte({ id: 2, number: 814, title: '[Fachlich] Vorhaben ein- und ausblenden' }),
+    842: karte({ id: 3, number: 842, title: '[Fachlich] Leitstand mehrstufig' }),
+    844: karte({ id: 11, number: 844, title: '[Plan] Sicherheits-Bauform' }),
+    845: karte({ id: 12, number: 845, title: 'Bauform binden' }),
+    846: karte({ id: 13, number: 846, title: '[Plan] Vorhaben-Liste' }),
+    847: karte({ id: 14, number: 847, title: 'Liste als Komponente' }),
+    848: karte({ id: 15, number: 848, title: 'Liste statt Kachelraster' }),
+    849: karte({ id: 16, number: 849, title: '[Plan] Leitstand mehrstufig' }),
+  }
+
+  const echteUebersichtMitKarten = () =>
+    uebersichtZu(ECHTE_KETTE_STAND, 'neu angelegt', ECHTE_KETTE_START, { karten: ENTSTANDENE })
+
+  /** Ein Ketten-Stand mit genau einem Vorgang, dessen Plan-Stufe das Dokument `id` hinterließ. */
+  const mitPlanDokument = (id: string) =>
+    kettenStand({
+      einheiten: [
+        { id: '900', titel: 'Vorgang mit Plan', ausgang: 'fertig', stufen: { plan: { id } } },
+      ],
+    })
+
+  /**
+   * Das Element eines Vorgangs — nicht dessen `within`-Objekt. Der Aufrufer legt `within` selbst
+   * um das Ergebnis: `testing-library/prefer-screen-queries` erkennt eine Teilbaum-Suche nur, wenn
+   * `within(...)` an der Abfragestelle steht, und hielte eine Zwischenvariable sonst für ein
+   * destrukturiertes `render`-Ergebnis.
+   */
+  const vorgangIn = (uebersicht: HTMLElement, cardNumber: number) =>
+    within(uebersicht).getByTestId(`uebersicht-vorgang-${cardNumber}`)
+
+  /**
+   * Die Zeile eines Arbeitsschritts mit den dort entstandenen Karten. Über die Test-ID und nicht
+   * über den Text: Die Zeile setzt sich aus Beschriftung und Verweisen zusammen, und `getByText`
+   * sucht je Element nur dessen eigene Textknoten.
+   */
+  const dokumentzeile = (uebersicht: HTMLElement, cardNumber: number, schritt: string) =>
+    within(uebersicht).getByTestId(`dokumente-${cardNumber}-${schritt}`)
+
+  it('führt an der Einheit 791 die entstandenen Karten und öffnet die angeklickte (Punkt 5)', async () => {
+    const uebersicht = await echteUebersichtMitKarten()
+    const vorgang = vorgangIn(uebersicht, 791)
+
+    expect(
+      await within(vorgang).findByRole('button', { name: 'Plan #844 [Plan] Sicherheits-Bauform' }),
+    ).toBeInTheDocument()
+    expect(
+      within(vorgang).getByRole('button', { name: 'Pakete #845 Bauform binden' }),
+    ).toBeInTheDocument()
+
+    // Zwei Pakete an einem Vorgang stehen in **einer** Zeile, durch Komma getrennt.
+    expect(dokumentzeile(uebersicht, 814, 'pakete')).toHaveTextContent('Pakete #847, #848')
+
+    fireEvent.click(within(vorgang).getByRole('button', { name: /^Plan #844/ }))
+
+    expect(screen.getByTestId('karten-detail')).toHaveTextContent('Karte 844')
+  })
+
+  it('nennt an der Einheit 842 den Plan #849 und ausdrücklich „keine Pakete" (Punkt 6)', async () => {
+    const vorgang = vorgangIn(await echteUebersichtMitKarten(), 842)
+
+    expect(
+      await within(vorgang).findByRole('button', { name: 'Plan #849 [Plan] Leitstand mehrstufig' }),
+    ).toBeInTheDocument()
+    // Die Pakete-Stufe hat der Vorgang nie erreicht — das steht in Worten da, nicht als Leerstelle.
+    expect(within(vorgang).getByText('keine Pakete')).toBeInTheDocument()
+  })
+
+  it('nennt einen Vorgang ohne jede Stufe „kein Plan" und „keine Pakete" (Punkt 4)', async () => {
+    const vorgang = vorgangIn(
+      await uebersichtZu(kettenStand(), 'neu angelegt', startedAt(0), { karten: {} }),
+      900,
+    )
+
+    expect(within(vorgang).getByText('kein Plan')).toBeInTheDocument()
+    expect(within(vorgang).getByText('keine Pakete')).toBeInTheDocument()
+  })
+
+  it('kennzeichnet eine nicht auflösbare Dokumentnummer als nicht mehr vorhanden (Punkt 7)', async () => {
+    // Kein Eintrag im Katalog-Stub: Der Nummer-Lookup antwortet mit 404, und das ist ein
+    // Ergebnis — nicht mehr vorhanden —, kein noch offener Abruf.
+    const uebersicht = await uebersichtZu(mitPlanDokument('901'), 'neu angelegt', startedAt(0), {
+      karten: {},
+    })
+    await waitFor(() =>
+      expect(dokumentzeile(uebersicht, 900, 'plan')).toHaveTextContent(
+        'Plan #901 nicht mehr vorhanden',
+      ),
+    )
+    expect(
+      within(vorgangIn(uebersicht, 900)).queryByRole('button', { name: /901/ }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('zeigt eine noch ladende Dokumentnummer ohne Verweis und nicht als entfallen (Punkt 8)', async () => {
+    let freigeben = () => {}
+    const laedt = new Promise<void>((aufloesen) => {
+      freigeben = aufloesen
+    })
+    const uebersicht = await uebersichtZu(mitPlanDokument('901'), 'neu angelegt', startedAt(0), {
+      karten: { 901: karte({ id: 11, number: 901, title: '[Plan] Gleich da' }) },
+      kartenVerzoegert: laedt,
+    })
+
+    // Solange der Abruf läuft, steht die Nummer da — ohne Verweis und ohne die Falschaussage,
+    // die Karte sei fort.
+    const zeile = dokumentzeile(uebersicht, 900, 'plan')
+    expect(zeile).toHaveTextContent('Plan #901')
+    expect(zeile).not.toHaveTextContent('nicht mehr vorhanden')
+    expect(
+      within(vorgangIn(uebersicht, 900)).queryByRole('button', { name: /901/ }),
+    ).not.toBeInTheDocument()
+
+    freigeben()
+
+    expect(
+      await within(vorgangIn(uebersicht, 900)).findByRole('button', {
+        name: 'Plan #901 [Plan] Gleich da',
+      }),
+    ).toBeInTheDocument()
+  })
+
+  it('ruft eine von zwei Vorgängen genannte Dokumentnummer nur einmal ab (Punkt 9)', async () => {
+    const uebersicht = await uebersichtZu(
+      kettenStand({
+        einheiten: [
+          { id: '900', titel: 'Erster', ausgang: 'fertig', stufen: { plan: { id: '901' } } },
+          { id: '902', titel: 'Zweiter', ausgang: 'fertig', stufen: { pakete: { ids: ['901'] } } },
+        ],
+      }),
+      'neu angelegt',
+      startedAt(0),
+      { karten: { 901: karte({ id: 11, number: 901, title: '[Plan] Gemeinsam' }) } },
+    )
+
+    // Beide Vorgänge zeigen den Verweis — die Karte ist also aufgelöst …
+    expect(
+      await within(vorgangIn(uebersicht, 900)).findByRole('button', { name: /#901/ }),
+    ).toBeInTheDocument()
+    expect(
+      within(vorgangIn(uebersicht, 902)).getByRole('button', { name: /#901/ }),
+    ).toBeInTheDocument()
+    // … und dafür ging genau eine Anfrage hinaus.
+    expect(byNumberAufrufe().filter((a) => a.url.endsWith('/901'))).toHaveLength(1)
   })
 })
 

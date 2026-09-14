@@ -13,7 +13,7 @@ import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
 import ContentCopyIcon from '@mui/icons-material/ContentCopy'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
-import { useEffect, useRef, useState } from 'react'
+import { Fragment, useEffect, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { cardsApi, type Card, type CardByNumber } from '../api/cards'
 import { apiErrorMessage } from '../api/client'
@@ -787,6 +787,24 @@ const dokumenteDesVorgangs = (item: NightRunItem): readonly string[] =>
   KETTEN_STUFEN.flatMap(({ schluessel }) => dokumenteDerStufe(item.kettenStufen, schluessel))
 
 /**
+ * Die Kartennummer einer Dokumentangabe. Der Stand führt sie als Zeichenkette; `NaN` bei einer
+ * Angabe, die keine Nummer ist — der Katalog kennt dazu nichts, und der Verweis bleibt beim
+ * schwächsten seiner drei Zustände stehen, statt eine Karte zu behaupten.
+ */
+const alsNummer = (id: string): number => Number.parseInt(id, 10)
+
+/**
+ * Die Kartennummern aller in einem Lauf entstandenen Dokumente (#868) — je Nummer einmal und ohne
+ * die, die keine Nummer sind: Eine Anfrage auf `NaN` wäre eine Anfrage, die nie eine Karte finden
+ * kann. `undefined` heißt: zu diesem Lauf liegt kein Ergebnisstand dieser Sitzung vor, und dann
+ * gibt es auch keine Dokumente zu laden.
+ */
+const dokumentNummern = (run: NightRun | undefined): number[] =>
+  run === undefined
+    ? []
+    : [...new Set(run.items.flatMap(dokumenteDesVorgangs).map(alsNummer))].filter(Number.isInteger)
+
+/**
  * Der letzte Arbeitsschritt, den ein Vorgang erreicht hat; `undefined`, wenn er gar keinen erreichte
  * — ein übersprungener Vorgang etwa. **An ihm endete die Kette**, und nur dort steht der Vermerk,
  * wie sie endete: `stufenDerKette` in `night.mjs` läuft die vier streng der Reihe nach und bricht
@@ -1067,6 +1085,128 @@ function Fussangabe({ label, wert }: Readonly<{ label: string; wert: string }>) 
 }
 
 /**
+ * Die beiden Arbeitsschritte, in denen Karten entstehen (Issue #868), jeder mit der Auskunft für
+ * den Fall, dass in ihm nichts entstand. Prüfung und Abdeckung hinterlassen nie ein Dokument
+ * (`kettenStufenDerEinheit` in `lib/nightRunErgebnisstand.ts`) und stehen deshalb nicht hier — eine
+ * Zeile „keine Karten" unter einem Schritt, der gar keine hinterlassen kann, wäre keine Aussage.
+ *
+ * <p>Die Beschriftung trägt **keinen Doppelpunkt**: „Plan: " ist im Panel bereits die Stufenzeile
+ * der Herkunftskette ({@link Stufenzeile}), und zwei verschiedene Aussagen unter derselben
+ * Satzform stünden im selben Lauf nebeneinander.
+ */
+const DOKUMENT_STUFEN: ReadonlyArray<{
+  schluessel: NightRunKettenStufe
+  label: string
+  leer: string
+}> = [
+  { schluessel: 'plan', label: 'Plan', leer: 'kein Plan' },
+  { schluessel: 'pakete', label: 'Pakete', leer: 'keine Pakete' },
+]
+
+/**
+ * Der Zustand eines Verweises auf eine entstandene Karte (Issue #868) — die drei Fälle, die der
+ * Kartenkatalog bereits unterscheidet (E7 aus Plan #863):
+ *
+ * - **geladen** — die Karte liegt vor; der Verweis öffnet den Kartendialog.
+ * - **fort** — der Katalog hat sie ausdrücklich als nicht auflösbar vermerkt (404).
+ * - **laedt** — zu dieser Nummer steht noch gar nichts im Katalog.
+ *
+ * „laedt" und „fort" auseinanderzuhalten ist der Kern: Eine Karte, die gerade geladen wird, als
+ * „nicht mehr vorhanden" zu zeigen, wäre eine Falschaussage, die sich Sekunden später selbst
+ * widerlegt.
+ */
+type VerweisZustand =
+  | { art: 'geladen'; karte: CardByNumber }
+  | { art: 'fort' }
+  | { art: 'laedt' }
+
+function verweisZustand(nummer: number, katalog: Kartenkatalog): VerweisZustand {
+  const karte = katalog.get(nummer)
+  if (karte === undefined) {
+    return { art: 'laedt' }
+  }
+  return karte === null ? { art: 'fort' } : { art: 'geladen', karte }
+}
+
+/**
+ * Eine entstandene Karte als Verweis. Sichtbar steht allein ihre Nummer — die Übersicht führt drei
+ * Vorgänge mit bis zu drei Karten, und volle Titel machten daraus eine Textwand. Der zugängliche
+ * Name trägt Stufe und Titel dazu, und die sichtbare Nummer bleibt sein Teilstring (WCAG 2.5.3).
+ */
+function Kartenverweis({
+  id,
+  label,
+  katalog,
+  onOeffnen,
+}: Readonly<{
+  id: string
+  label: string
+  katalog: Kartenkatalog
+  onOeffnen: (karte: CardByNumber) => void
+}>) {
+  const zustand = verweisZustand(alsNummer(id), katalog)
+  if (zustand.art === 'laedt') {
+    return <Typography component="span" variant="body2">{`#${id}`}</Typography>
+  }
+  if (zustand.art === 'fort') {
+    return (
+      <Typography component="span" variant="body2">{`#${id} nicht mehr vorhanden`}</Typography>
+    )
+  }
+  return (
+    <Link
+      component="button"
+      type="button"
+      variant="body2"
+      aria-label={`${label} #${id} ${zustand.karte.title}`}
+      onClick={() => onOeffnen(zustand.karte)}
+    >
+      {`#${id}`}
+    </Link>
+  )
+}
+
+/**
+ * Die Karten, die ein Vorgang in einem Arbeitsschritt hinterlassen hat — oder die ausdrückliche
+ * Auskunft, dass dort keine entstand. Ein leerer Platz ließe offen, ob nichts entstand oder nichts
+ * nachgesehen wurde; dieselbe Begründung wie beim Abbruchsatz über dem Band.
+ */
+function Dokumentzeile({
+  label,
+  leer,
+  ids,
+  testId,
+  katalog,
+  onOeffnen,
+}: Readonly<{
+  label: string
+  leer: string
+  ids: readonly string[]
+  testId: string
+  katalog: Kartenkatalog
+  onOeffnen: (karte: CardByNumber) => void
+}>) {
+  if (ids.length === 0) {
+    return (
+      <Typography variant="body2" color="text.secondary" data-testid={testId}>
+        {leer}
+      </Typography>
+    )
+  }
+  return (
+    <Typography variant="body2" color="text.secondary" data-testid={testId}>
+      {`${label} `}
+      {ids.map((id, position) => (
+        <Fragment key={id}>
+          {position > 0 && ', '}
+          <Kartenverweis id={id} label={label} katalog={katalog} onOeffnen={onOeffnen} />
+        </Fragment>
+      ))}
+    </Typography>
+  )
+}
+
+/**
  * Die Übersicht eines Ketten-Laufs (Plan #863, Issue #866): Kopf, die Kennzahlen der Nacht, je
  * Vorgang Kosten und Züge, dazu die Vorgaben in der Fußzeile.
  *
@@ -1079,7 +1219,16 @@ function Fussangabe({ label, wert }: Readonly<{ label: string; wert: string }>) 
  * #856, #858) suchen mit `getByText` im Panel, und ohne eine eigene Wurzel müsste jeder von ihnen
  * angefasst werden, sobald hier ein Text zweimal auf der Seite steht.
  */
-function KettenUebersicht({ run }: Readonly<{ run: NightRun }>) {
+function KettenUebersicht({
+  run,
+  katalog,
+  onOeffnen,
+}: Readonly<{
+  run: NightRun
+  /** Derselbe Katalog wie in den Arbeitspaket-Zeilen — er trägt seit #868 auch die Dokumente. */
+  katalog: Kartenkatalog
+  onOeffnen: (karte: CardByNumber) => void
+}>) {
   const stand = run.stand
   const start = new Date(run.startedAt)
   const datum = start.toLocaleDateString('de-DE', { dateStyle: 'full' })
@@ -1133,6 +1282,17 @@ function KettenUebersicht({ run }: Readonly<{ run: NightRun }>) {
               {vorgangsKennzahlen(item.kennzahlen)}
             </Typography>
             <Vorgangsband item={item} vorgaben={stand?.vorgabenMin} />
+            {DOKUMENT_STUFEN.map(({ schluessel, label, leer }) => (
+              <Dokumentzeile
+                key={schluessel}
+                label={label}
+                leer={leer}
+                ids={dokumenteDerStufe(item.kettenStufen, schluessel)}
+                testId={`dokumente-${item.cardNumber}-${schluessel}`}
+                katalog={katalog}
+                onOeffnen={onOeffnen}
+              />
+            ))}
           </Box>
         ))}
       </Stack>
@@ -1216,7 +1376,9 @@ function LaufPanel({
         </Stack>
       </AccordionSummary>
       <AccordionDetails>
-        {kettenStand !== undefined && <KettenUebersicht run={kettenStand} />}
+        {kettenStand !== undefined && (
+          <KettenUebersicht run={kettenStand} katalog={katalog} onOeffnen={onOeffnen} />
+        )}
         {lauf.unparsedSample.length > 0 && (
           <Box sx={{ mb: 1 }}>
             <Typography variant="subtitle2">Nicht gedeutete Zeilen (Auszug)</Typography>
@@ -1331,10 +1493,19 @@ export function NightRunPage() {
     }
   }, [id, validId, notify])
 
-  /** Löst die Herkunftsketten eines Laufs auf — Stufe für Stufe, jede Nummer nur einmal. */
-  const ladeKetten = async (items: readonly AnzeigeItem[]) => {
+  /**
+   * Löst die Herkunftsketten eines Laufs auf — Stufe für Stufe, jede Nummer nur einmal.
+   *
+   * <p>`dokumente` sind die Karten, die in der Nacht **aus** den Vorgängen entstanden sind (#868).
+   * Sie kommen in dieselbe erste Abrufrunde wie die Wurzelkarten und nicht in einen eigenen Weg:
+   * Die Entdoppelung gegen `bekannt` und untereinander wirkt so über beide Quellen zugleich, und
+   * eine Nummer, die zugleich Wurzel und Dokument ist, geht genau einmal hinaus.
+   */
+  const ladeKetten = async (items: readonly AnzeigeItem[], dokumente: readonly number[]) => {
     const bekannt = katalogRef.current
-    let offen = [...new Set(items.map((item) => item.cardNumber))].filter((n) => !bekannt.has(n))
+    let offen = [...new Set([...items.map((item) => item.cardNumber), ...dokumente])].filter(
+      (n) => !bekannt.has(n),
+    )
 
     while (offen.length > 0) {
       const geladen = await Promise.all(
@@ -1384,7 +1555,7 @@ export function NightRunPage() {
       return
     }
     geladeneLaeufe.current.add(lauf.startedAt)
-    void ladeKetten(lauf.items)
+    void ladeKetten(lauf.items, dokumentNummern(kettenStaende.get(lauf.startedAt)))
   }
 
   /**
