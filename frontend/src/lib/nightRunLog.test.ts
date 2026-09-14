@@ -19,12 +19,12 @@ const ENDE = (minute: number) =>
   z(minute, 'Nacht-Runner beendet: 1 erfolgreich, 0 zurueckgestellt, 1 Session(s) gestartet.')
 
 describe('NIGHT_RUN_ERROR_CLASSES', () => {
-  it('ist zur Laufzeit ein Array mit genau sieben Eintraegen', () => {
+  it('ist zur Laufzeit ein Array mit genau acht Eintraegen', () => {
     expect(Array.isArray(NIGHT_RUN_ERROR_CLASSES)).toBe(true)
-    expect(NIGHT_RUN_ERROR_CLASSES).toHaveLength(7)
+    expect(NIGHT_RUN_ERROR_CLASSES).toHaveLength(8)
   })
 
-  it('nennt die sieben Klassen aus Plan #718', () => {
+  it('nennt die sieben Klassen aus Plan #718 und die achte aus #842', () => {
     expect([...NIGHT_RUN_ERROR_CLASSES]).toEqual([
       'CHECKS_RED',
       'CHECKS_NOT_STARTED',
@@ -33,6 +33,7 @@ describe('NIGHT_RUN_ERROR_CLASSES', () => {
       'HARD_ABORT',
       'AWAITING_DECISION',
       'REVIEWER_FAILED',
+      'TIME_BUDGET_EXCEEDED',
     ])
   })
 })

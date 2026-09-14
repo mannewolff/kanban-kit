@@ -126,14 +126,15 @@ const ZUSTAND_FARBE: Record<NightRunState, string> = {
 }
 
 /**
- * Die Chip-Beschriftung je Lauf-Modus (Plan #803). Als `Record` über alle drei Werte, nicht als
- * Inline-Bedingung: Ein vierter Modus bricht den Build, statt still auf „Umsetzungs-Lauf" zu
+ * Die Chip-Beschriftung je Lauf-Modus (Plan #803). Als `Record` über alle Werte, nicht als
+ * Inline-Bedingung: Ein weiterer Modus bricht den Build, statt still auf „Umsetzungs-Lauf" zu
  * fallen — dieselbe Absicherung wie bei {@link ZUSTAND_FARBE}.
  */
 const MODUS_TEXT: Record<NightRunMode, string> = {
   IMPLEMENTATION: 'Umsetzungs-Lauf',
   REVIEW: 'Prüf-Lauf',
   NIGHTPLAN: 'Nachtplan-Lauf',
+  CHAIN: 'Ketten-Lauf',
 }
 
 /**

@@ -33,6 +33,7 @@ export const NIGHT_RUN_ERROR_CLASSES = [
   'HARD_ABORT',
   'AWAITING_DECISION',
   'REVIEWER_FAILED',
+  'TIME_BUDGET_EXCEEDED',
 ] as const
 
 export type NightRunErrorClass = (typeof NIGHT_RUN_ERROR_CLASSES)[number]
@@ -52,12 +53,13 @@ export const NIGHT_RUN_EXCERPT_MAX = 4000
 export type NightRunState = 'GREEN' | 'YELLOW' | 'RED' | 'GREY'
 
 /**
- * `NIGHTPLAN` entsteht ausschliesslich ueber den Ergebnisstand-Parser
- * (`nightRunErgebnisstand.ts`, Plan #803): Ein Nachtplan-Textprotokoll traegt in seiner
- * Startzeile keine Stufe und wird von diesem Datei-Parser hier weiterhin als
- * `IMPLEMENTATION` gedeutet.
+ * `NIGHTPLAN` und `CHAIN` entstehen ausschliesslich ueber den Ergebnisstand-Parser
+ * (`nightRunErgebnisstand.ts`, Plan #803 bzw. #849): Ein Nachtplan- oder Ketten-Protokoll
+ * traegt in seiner Startzeile keine Stufe und wird von diesem Datei-Parser hier weiterhin
+ * als `IMPLEMENTATION` gedeutet. `parseNightRunLog` kennt die beiden nicht — am
+ * Textprotokoll-Parser aendert sich durch sie nichts.
  */
-export type NightRunMode = 'IMPLEMENTATION' | 'REVIEW' | 'NIGHTPLAN'
+export type NightRunMode = 'IMPLEMENTATION' | 'REVIEW' | 'NIGHTPLAN' | 'CHAIN'
 
 export interface NightRunItem {
   /** Projektweite Kartennummer des Arbeitspakets. */
