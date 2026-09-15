@@ -140,6 +140,21 @@ class KanbanCompatIT extends AbstractIntegrationTest {
     return json.readTree(body).get("plaintext").asText();
   }
 
+  /** Gültiges Token ohne Board-Bindung — für die 409-Gegenprobe der Compat-Endpunkte. */
+  private String unboundToken(Cookie session, String name) throws Exception {
+    String body =
+        mvc.perform(
+                post("/api/access-tokens")
+                    .cookie(session)
+                    .contentType("application/json")
+                    .content("{\"name\":\"%s\"}".formatted(name)))
+            .andExpect(status().isCreated())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+    return json.readTree(body).get("plaintext").asText();
+  }
+
   private JsonNode kanbanItems(String token) throws Exception {
     String body =
         mvc.perform(get("/api/kanban/items").header("X-Kanban-Token", token))
@@ -305,6 +320,63 @@ class KanbanCompatIT extends AbstractIntegrationTest {
     mvc.perform(
             get("/api/kanban/items/" + foreignCard + "/comments").header("X-Kanban-Token", token1))
         .andExpect(status().isNotFound());
+  }
+
+  /**
+   * Der Aktivitätsverlauf innerhalb der Board-Grenze (#876). Dieselbe Auskunft wie {@code GET
+   * /api/cards/{id}/activity}, nur über das gebundene Token — der Ersatzweg für das nächtliche
+   * Abdeckungs-Gate, sobald board-gebundene Token die übrige API nicht mehr erreichen.
+   *
+   * <p>Reichweite wie beim Kommentar-Lesepfad: eigenes Board 200, Karte eines anderen Boards
+   * desselben Projekts 404 (Board-Guard, nicht Mitgliedschaft), board-lose Pool-Idee 404,
+   * ungebundenes Token 409.
+   */
+  @Test
+  void activity_isReadableForOwnBoard_andScopedToTheBoundBoard() throws Exception {
+    Cookie session = loginAs("kanban-activity@example.com");
+    long projectId = createProject("kanban-activity@example.com", "Activity-Dogfood");
+    long boardId = createBoard(session, projectId, "Activity-Board");
+    String token = boundToken(session, projectId, boardId);
+    long cardId = createCard(session, boardId, firstColumnId(session, boardId), "Karte");
+
+    // Eigenes Board: 200 mit dem Anlege-Eintrag — die Auskunft, aus der das Abdeckungs-Gate das
+    // Anlagedatum liest (Typ und Zeitstempel).
+    mvc.perform(get("/api/kanban/items/" + cardId + "/activity").header("X-Kanban-Token", token))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.length()").value(1))
+        .andExpect(jsonPath("$[0].type").value("CREATED"))
+        .andExpect(jsonPath("$[0].createdAt").exists())
+        .andExpect(jsonPath("$[0].origin").value("SESSION"));
+
+    // Zweites Board desselben Projekts: hier ist der Token-Nutzer Mitglied, allein die
+    // Board-Bindung hält ihn ab — 404.
+    long otherBoard = createBoard(session, projectId, "Activity-Board 2");
+    long foreignCard =
+        createCard(session, otherBoard, firstColumnId(session, otherBoard), "Fremde Karte");
+    mvc.perform(
+            get("/api/kanban/items/" + foreignCard + "/activity").header("X-Kanban-Token", token))
+        .andExpect(status().isNotFound());
+
+    // Board-lose Pool-Idee: trägt gar kein Board und liegt damit außerhalb jeder Bindung — 404.
+    String created =
+        mvc.perform(
+                post("/api/kanban/items")
+                    .header("X-Kanban-Token", token)
+                    .contentType("application/json")
+                    .content("{\"title\":\"Pool-Idee\"}"))
+            .andExpect(status().isCreated())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+    long ideaId = json.readTree(created).get("id").asLong();
+    mvc.perform(get("/api/kanban/items/" + ideaId + "/activity").header("X-Kanban-Token", token))
+        .andExpect(status().isNotFound());
+
+    // Ungebundenes Token: 409 wie bei allen übrigen Compat-Endpunkten.
+    mvc.perform(
+            get("/api/kanban/items/" + cardId + "/activity")
+                .header("X-Kanban-Token", unboundToken(session, "activity-unbound")))
+        .andExpect(status().isConflict());
   }
 
   @Test

@@ -1,5 +1,6 @@
 package org.mwolff.manban.card;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -81,6 +82,42 @@ class CardActivityOriginIT extends AbstractIntegrationTest {
         .andExpect(jsonPath("$[0].origin").value("TOKEN"))
         .andExpect(jsonPath("$[0].tokenName").value("Nachtlauf"))
         .andExpect(jsonPath("$[0].agent").value("claude-opus-5"));
+  }
+
+  /**
+   * Derselbe Verlauf, gelesen über die Kanban-kompatible Schnittstelle (#876). Ein board-gebundenes
+   * Token sieht auf seinem eigenen Board Feld für Feld dieselbe Auskunft wie die Karten-Route — der
+   * Ersatzweg für Werkzeuge, die die übrige API nicht mehr erreichen werden.
+   */
+  @Test
+  void theSameHistoryIsReadableThroughTheKanbanRoute() throws Exception {
+    Cookie owner = session("origin-kanban@example.com", PlatformRole.USER);
+    Cookie admin = session("origin-admin@example.com", PlatformRole.ADMIN);
+    long projectId = createProject(admin, "Kanban-Verlauf", "origin-kanban@example.com");
+    JsonNode board = createBoard(owner, projectId, "Board");
+    long boardId = board.get("id").asLong();
+    long columnId = board.get("columns").get(0).get("id").asLong();
+    long cardId = createCard(owner, boardId, columnId, "Karte", "claude-fable-5");
+    String token = boundToken(owner, projectId, boardId, "Verlauf");
+
+    String viaCards =
+        mvc.perform(get("/api/cards/" + cardId + "/activity").cookie(owner))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$[0].origin").value("SESSION"))
+            .andExpect(jsonPath("$[0].agent").value("claude-fable-5"))
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+    String viaKanban =
+        mvc.perform(
+                get("/api/kanban/items/" + cardId + "/activity").header("X-Kanban-Token", token))
+            .andExpect(status().isOk())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+
+    // Gleiche Felder, gleiche Werte: Der neue Weg ist ein Ersatz, keine zweite Wahrheit.
+    assertThat(json.readTree(viaKanban)).isEqualTo(json.readTree(viaCards));
   }
 
   private String boundToken(Cookie session, long projectId, long boardId, String name)

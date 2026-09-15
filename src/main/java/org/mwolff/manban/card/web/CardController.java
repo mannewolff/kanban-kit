@@ -18,7 +18,6 @@ import org.mwolff.manban.card.application.CardService.DerivationNodeView;
 import org.mwolff.manban.card.application.CardService.EpicView;
 import org.mwolff.manban.card.application.InvalidDerivedFromException;
 import org.mwolff.manban.card.application.SortDirection;
-import org.mwolff.manban.card.domain.CardActivity;
 import org.mwolff.manban.card.domain.CardType;
 import org.mwolff.manban.common.TextLimits;
 import org.springframework.http.HttpStatus;
@@ -331,17 +330,21 @@ class CardController {
   /** Aktivitätsverlauf einer Karte (chronologisch, Leserecht wie Board-Ansicht). */
   @GetMapping("/api/cards/{cardId}/activity")
   List<ActivityView> activity(@AuthenticationPrincipal Long userId, @PathVariable long cardId) {
-    return cards.listActivity(userId, cardId).stream().map(CardController::activityView).toList();
+    return cards.listActivityViews(userId, cardId).stream()
+        .map(CardController::activityView)
+        .toList();
   }
 
-  private static ActivityView activityView(CardActivity a) {
+  // Die Domänen-Abbildung (Aufzählungen -> Namen) liegt seit #876 in der Fassade; hier bleibt die
+  // reine Umhüllung in die Web-Form, damit die Antwortform unverändert an dieser Stelle steht.
+  private static ActivityView activityView(CardService.ActivityView a) {
     return new ActivityView(
         a.id(),
         a.actorUserId(),
-        a.type().name(),
+        a.type(),
         a.detail(),
         a.createdAt(),
-        a.origin() == null ? null : a.origin().name(),
+        a.origin(),
         a.tokenName(),
         a.agent());
   }

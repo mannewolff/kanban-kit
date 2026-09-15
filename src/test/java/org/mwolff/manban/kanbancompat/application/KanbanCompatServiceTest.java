@@ -888,6 +888,68 @@ class KanbanCompatServiceTest {
   }
 
   @Test
+  void listActivity_mapsAllFields_inServiceOrder() {
+    // Given: die card-Fassade liefert bereits chronologisch sortiert
+    Instant first = Instant.parse("2026-01-01T10:00:00Z");
+    Instant second = Instant.parse("2026-01-01T11:00:00Z");
+    when(cardService.listActivityViews(1L, 42L))
+        .thenReturn(
+            List.of(
+                new CardService.ActivityView(
+                    9L, 3L, "CREATED", "Angelegt", first, "TOKEN", "Nachtlauf", "claude-opus-5"),
+                new CardService.ActivityView(
+                    10L, null, "MOVED", "Verschoben", second, null, null, null)));
+
+    // When
+    List<KanbanCompatService.Activity> result = service.listActivity(bound(), 42L);
+
+    // Then: Reihenfolge und Feldabbildung bleiben erhalten
+    assertThat(result)
+        .extracting(
+            KanbanCompatService.Activity::id,
+            KanbanCompatService.Activity::actorUserId,
+            KanbanCompatService.Activity::type,
+            KanbanCompatService.Activity::detail,
+            KanbanCompatService.Activity::createdAt,
+            KanbanCompatService.Activity::origin,
+            KanbanCompatService.Activity::tokenName,
+            KanbanCompatService.Activity::agent)
+        .containsExactly(
+            tuple(9L, 3L, "CREATED", "Angelegt", first, "TOKEN", "Nachtlauf", "claude-opus-5"),
+            tuple(10L, null, "MOVED", "Verschoben", second, null, null, null));
+  }
+
+  @Test
+  void listActivity_returnsEmptyList_whenItemHasNoActivity() {
+    // Given: kein Verlaufseintrag am Item
+
+    // When / Then: leere Liste statt null
+    assertThat(service.listActivity(bound(), 42L)).isEmpty();
+  }
+
+  @Test
+  void listActivity_throwsCardNotFound_whenCardNotOnBoard() {
+    // Given: der Board-Guard der card-Fassade schlaegt an. Fällt der requireOnBoard-Aufruf weg
+    // (Mutant), würde der Verlauf fremder Karten lesbar.
+    doThrow(new CardNotFoundException()).when(cardService).requireOnBoard(42L, BOARD);
+
+    // When / Then
+    KanbanPrincipal principal = bound();
+    assertThatThrownBy(() -> service.listActivity(principal, 42L))
+        .isInstanceOf(CardNotFoundException.class);
+  }
+
+  @Test
+  void listActivity_throwsTokenNotBound_whenPrincipalUnbound() {
+    // Given
+    KanbanPrincipal unbound = new KanbanPrincipal(1L, 2L, null, null, "Token");
+
+    // When / Then
+    assertThatThrownBy(() -> service.listActivity(unbound, 42L))
+        .isInstanceOf(TokenNotBoundException.class);
+  }
+
+  @Test
   void epics_mapsProgressFromCardService() {
     // Given
     when(cardService.listEpics(1L, BOARD))

@@ -14,6 +14,7 @@ import org.mwolff.manban.accesstoken.application.KanbanPrincipal;
 import org.mwolff.manban.card.application.CardNumbers;
 import org.mwolff.manban.common.TextLimits;
 import org.mwolff.manban.kanbancompat.application.KanbanCompatService;
+import org.mwolff.manban.kanbancompat.application.KanbanCompatService.Activity;
 import org.mwolff.manban.kanbancompat.application.KanbanCompatService.Comment;
 import org.mwolff.manban.kanbancompat.application.KanbanCompatService.Created;
 import org.mwolff.manban.kanbancompat.application.KanbanCompatService.Epic;
@@ -139,6 +140,15 @@ class KanbanCompatController {
   @GetMapping("/items/{id}/comments")
   List<Comment> comments(@Nullable Authentication authentication, @PathVariable long id) {
     return service.listComments(principal(authentication), id);
+  }
+
+  /**
+   * Aktivitätsverlauf eines Items (#876). Adressierung über die interne Karten-ID, konsistent zu
+   * {@code /items/{id}/comments}.
+   */
+  @GetMapping("/items/{id}/activity")
+  List<Activity> activity(@Nullable Authentication authentication, @PathVariable long id) {
+    return service.listActivity(principal(authentication), id);
   }
 
   @GetMapping("/epics")

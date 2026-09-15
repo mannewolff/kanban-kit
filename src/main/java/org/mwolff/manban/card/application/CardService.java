@@ -1682,6 +1682,28 @@ public class CardService {
   }
 
   /**
+   * Derselbe Verlauf wie {@link #listActivity(long, long)}, als Fassaden-Sicht ohne Typen aus
+   * {@code card.domain} — der Weg, auf dem fremde Module (heute {@code kanbancompat}, #876) den
+   * Verlauf lesen. Rechte und Reihenfolge sind unverändert die von {@code listActivity}.
+   */
+  @Transactional(readOnly = true)
+  public List<ActivityView> listActivityViews(long userId, long cardId) {
+    return listActivity(userId, cardId).stream().map(CardService::activityView).toList();
+  }
+
+  private static ActivityView activityView(CardActivity a) {
+    return new ActivityView(
+        a.id(),
+        a.actorUserId(),
+        a.type().name(),
+        a.detail(),
+        a.createdAt(),
+        a.origin() == null ? null : a.origin().name(),
+        a.tokenName(),
+        a.agent());
+  }
+
+  /**
    * Verschiebt eine Karte in den Papierkorb (Soft-Delete, reversibel). Recht: TICKET/EPIC_DELETE.
    */
   @Transactional
@@ -1984,6 +2006,25 @@ public class CardService {
       List<Long> labels,
       @Nullable Long targetBoardId,
       @Nullable Integer derivedFrom) {}
+
+  /**
+   * Ein Eintrag des Aktivitätsverlaufs als Fassaden-Sicht: {@code type} und {@code origin} sind die
+   * Namen der zugehörigen Aufzählungen, damit die Sicht keinen Typ aus {@code card.domain} nach
+   * außen gibt.
+   *
+   * <p>{@code origin} und {@code tokenName} sind serverseitig verifiziert, {@code agent} ist eine
+   * Selbstauskunft des Clients — siehe Issue #517. Bei Alt-Einträgen aus der Zeit vor Migration V23
+   * sind alle drei Felder {@code null}.
+   */
+  public record ActivityView(
+      @Nullable Long id,
+      @Nullable Long actorUserId,
+      String type,
+      String detail,
+      Instant createdAt,
+      @Nullable String origin,
+      @Nullable String tokenName,
+      @Nullable String agent) {}
 
   /**
    * Treffer der projektübergreifenden Nummernsuche: die Karte plus die Angabe, wo sie liegt.

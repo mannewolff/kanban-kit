@@ -343,6 +343,38 @@ public class KanbanCompatService {
         .toList();
   }
 
+  /**
+   * Aktivitätsverlauf eines Items des gebundenen Boards in chronologischer Reihenfolge (#876).
+   *
+   * <p>Dieselbe Auskunft wie {@code GET /api/cards/{id}/activity}, nur innerhalb der Board-Grenze:
+   * Werkzeuge, die ausschließlich über ein board-gebundenes Token arbeiten (Abdeckungs-Gate des
+   * Nacht-Runners), brauchen den Verlauf als Quelle des Anlagedatums.
+   *
+   * <p>Der Weg über die Fassade {@link CardService#listActivityViews} ist die einzige zulässige
+   * Kante: Die Domänenschicht des card-Moduls ist modulintern (ArchUnit-Regel), dieses Modul darf
+   * ihre Typen nicht importieren. Die Zugriffskontrolle läuft wie bei {@link #listComments} über
+   * den Board-Guard der card-Fassade und deren Mitgliedschaftsprüfung — ein Nichtmitglied bekommt
+   * dadurch 404 statt 403.
+   */
+  @Transactional(readOnly = true)
+  public List<Activity> listActivity(KanbanPrincipal principal, long cardId) {
+    long boardId = requireBound(principal);
+    cardService.requireOnBoard(cardId, boardId);
+    return cardService.listActivityViews(principal.userId(), cardId).stream()
+        .map(
+            a ->
+                new Activity(
+                    a.id(),
+                    a.actorUserId(),
+                    a.type(),
+                    a.detail(),
+                    a.createdAt(),
+                    a.origin(),
+                    a.tokenName(),
+                    a.agent()))
+        .toList();
+  }
+
   /** Vorhaben des gebundenen Boards inkl. Fortschritt. */
   @Transactional(readOnly = true)
   public List<Epic> epics(KanbanPrincipal principal) {
@@ -443,6 +475,21 @@ public class KanbanCompatService {
 
   /** Kommentar eines Items; {@code author} ist der Anzeigename des Autors zur Schreibzeit. */
   public record Comment(String author, String body, Instant createdAt) {}
+
+  /**
+   * Ein Eintrag des Aktivitätsverlaufs eines Items (#876). Feldgleich mit der Antwort von {@code
+   * GET /api/cards/{id}/activity} — der Endpunkt ist deren Ersatz innerhalb der Board-Grenze, und
+   * eine abweichende Form wäre für jeden Aufrufer eine zweite Wahrheit über dieselbe Auskunft.
+   */
+  public record Activity(
+      @Nullable Long id,
+      @Nullable Long actorUserId,
+      String type,
+      String detail,
+      Instant createdAt,
+      @Nullable String origin,
+      @Nullable String tokenName,
+      @Nullable String agent) {}
 
   /**
    * Ergebnis des Ingests: {@code created=false}, wenn ein {@code externalKey} auf eine bereits
