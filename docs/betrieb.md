@@ -33,6 +33,54 @@ docker compose ps
 docker compose logs -f manban-api   # warten auf "Started ManbanApplication"
 ```
 
+> **Dieser Stack ist der Entwicklungsbetrieb.** Die `docker-compose.yml` setzt
+> `MANBAN_DEV_MODE` auf `true` und liefert einen Standard-Sitzungsschlüssel mit. Die Anwendung
+> startet damit, schreibt aber bei jedem Start eine Warnung ins Log — Sitzungs-Cookies dieser
+> Instanz sind fälschbar, weil der Standardschlüssel im öffentlichen Repository steht. Die Zeile
+> findet man mit:
+>
+> ```
+> docker compose logs manban-api | grep "Entwicklungs-/Testbetrieb"
+> ```
+>
+> Für einen produktiven Stand siehe den nächsten Abschnitt.
+
+## Produktiv betreiben
+
+**Vor dem ersten produktiven Start** wird ein eigener `MANBAN_SESSION_SECRET` gesetzt. Ohne
+diesen Wert startet die Anwendung nicht — sie bricht ab, statt mit dem mitgelieferten
+Standardschlüssel zu signieren. Die ausgelieferte `.env.example` lässt den Wert deshalb bewusst
+leer: Niemand soll einen Schlüssel gesetzt haben, ohne ihn gewählt zu haben.
+
+1. Schlüssel erzeugen:
+   ```
+   openssl rand -hex 32
+   ```
+   `-hex` liefert nur `0-9a-f` — damit ist kein `$`-Escaping in der `.env` nötig.
+2. Den Wert in die `.env` neben der `docker-compose.yml` eintragen:
+   ```
+   MANBAN_SESSION_SECRET=<erzeugter Wert>
+   ```
+3. Mit dem Produktions-Overlay starten:
+   ```
+   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+   ```
+   Das Overlay setzt `MANBAN_DEV_MODE` fest auf `false` — der Entwicklungs-Schalter aus der `.env`
+   greift dort nicht.
+
+Der vollständige Server-Ablauf (Traefik, DNS, Mail, erster Admin) steht in
+[docs/deployment-hostinger.md](deployment-hostinger.md) und wird hier nicht wiederholt.
+
+## Upgrade-Hinweise
+
+**Eigener Sitzungsschlüssel ist Startbedingung.** Eine Instanz, die bisher ohne eigenen
+`MANBAN_SESSION_SECRET` lief, startet nach dem Update erst wieder, wenn ein eigener Schlüssel
+gesetzt ist (siehe [Produktiv betreiben](#produktiv-betreiben)). Alle bestehenden Sitzungen sind
+danach ungültig — die Nutzer melden sich einmal neu an.
+
+Das ist gewollt: Mit dem mitgelieferten Wert kann jeder, der das öffentliche Repository kennt,
+gültige Sitzungen für jedes Konto erzeugen — auch für einen Plattform-Administrator.
+
 ## Aufruf
 
 Im Browser: **`https://localhost`**
@@ -60,7 +108,8 @@ geladen und ist per `.gitignore` ausgeschlossen).
 | `MANBAN_OUTBOX_POLL_INTERVAL_MS` | Abstand zwischen zwei Worker-Läufen in Millisekunden | `5000` |
 | `MANBAN_OUTBOX_MAX_ATTEMPTS` | Versuche, bevor ein Auftrag als gescheitert gilt | `8` |
 | `MANBAN_OUTBOX_RETENTION_DAYS` | Tage, nach denen erledigte Outbox-Einträge gelöscht werden | `7` |
-| `MANBAN_SESSION_SECRET` | HMAC-Secret der Session-Cookies (in Produktion setzen!) | Dev-Default |
+| `MANBAN_SESSION_SECRET` | HMAC-Secret der Session-Cookies. Der Dev-Default gilt **nur** im ausdrücklich eingeschalteten Entwicklungsbetrieb (`MANBAN_DEV_MODE=true`) — sonst verweigert die Anwendung den Start | Dev-Default |
+| `MANBAN_DEV_MODE` | Entwicklungs-/Testbetrieb ausdrücklich einschalten; erlaubt den Start mit dem Standard-Sitzungsschlüssel, mit Warnung. Der lokale Compose-Stack setzt ihn auf `true`, das Produktions-Overlay fest auf `false` | `false` |
 | `MANBAN_COOKIE_SECURE` | Session-Cookie nur über HTTPS | `true` |
 | `POSTGRES_*`, `MINIO_*` | DB- und Objektspeicher-Zugangsdaten | siehe `docker-compose.yml` |
 
@@ -161,7 +210,18 @@ export DOCKER_HOST="unix://$HOME/.colima/default/docker.sock"
 export TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE=/var/run/docker.sock
 ```
 
-Danach laufen `mvn verify` und `mvn -Ppit -Dskip.frontend=true test` durch.
+Danach laufen `mvn verify` und `mvn -Ppit -Dskip.frontend=true test` durch. Beide brauchen
+**keinen** Entwicklungs-Schalter: `AbstractIntegrationTest` setzt `manban.dev-mode=true` selbst.
+
+**`mvn spring-boot:run` braucht ihn dagegen:**
+
+```
+MANBAN_DEV_MODE=true mvn spring-boot:run
+```
+
+Ohne den Schalter bricht der Start ab — jeder Start ohne ausdrückliche Einschaltung gilt als
+Produktivbetrieb, und dort ist der mitgelieferte Sitzungsschlüssel nicht zugelassen. Alternativ
+einen eigenen `MANBAN_SESSION_SECRET` setzen (siehe [Produktiv betreiben](#produktiv-betreiben)).
 
 **Die beiden Variablen beantworten zwei verschiedene Fragen — keine ersetzt die andere.**
 

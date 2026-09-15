@@ -52,7 +52,11 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
    Mindestens:
    - `MANBAN_BASE_URL=https://kanban.mwolff.org`
    - `MANBAN_SESSION_SECRET=$(openssl rand -hex 32)` — **ohne diesen Wert bricht der
-     Start absichtlich ab** (fail-fast). `-hex` liefert nur `0-9a-f`, also kein `$`-Escaping nötig.
+     Start absichtlich ab** (fail-fast), und zwar an zwei Stellen: Der Compose-Aufruf scheitert am
+     `:?` in `docker-compose.prod.yml`, und seit Issue #890 verweigert **auch die Anwendung selbst**
+     den Start, wenn sie mit dem mitgelieferten Standardschlüssel signieren würde. Der Abbruch hängt
+     also nicht mehr daran, dass das Produktions-Overlay verwendet wird.
+     `-hex` liefert nur `0-9a-f`, also kein `$`-Escaping nötig.
    - `MANBAN_COOKIE_SECURE=true`
    - `POSTGRES_PASSWORD`, `MINIO_ROOT_USER`, `MINIO_ROOT_PASSWORD` — starke Werte.
    - Mail (Strato): `MANBAN_MAIL_ENABLED=true`, `MANBAN_SMTP_*`, `MANBAN_MAIL_FROM=info@mwolff.org`,
