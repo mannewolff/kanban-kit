@@ -296,6 +296,33 @@ class ArchitectureTest {
           .resideInAPackage("org.mwolff.manban.outbox.domain..")
           .as("outbox.domain ist modulintern (Zugriff nur ueber die outbox.application-Fassade)");
 
+  // --- Modul-Grenze: ratelimit-Fassade (Issue #897, Plan #892 E16) ----------------------------
+  // Die Zaehlbremse ist Querschnitt: Der Filter fragt die Fassade (RateLimiter) und benennt den
+  // Vorgang (RateLimitedOperation). Alles andere — Speicher-Port, Adapter, Konfiguration — ist
+  // modulintern. Insbesondere RateLimitProperties: Konfiguration ist kein Vertragsbestandteil.
+  // Auch die Composition-Root ist nicht ausgenommen; baute sie den Filter mit den Properties
+  // selbst, waere die Grenze stillschweigend geoeffnet. Deshalb beantwortet RateLimiter.isEnabled()
+  // die einzige Frage, die ein Aufrufer an die Konfiguration haette.
+  static final ArchRule RATELIMIT_APPLICATION_IST_AUF_FASSADE_BEGRENZT =
+      fassadeIstAufWhitelistBegrenzt(
+          "ratelimit",
+          "nur ueber RateLimiter/RateLimitedOperation",
+          "RateLimiter",
+          "RateLimitedOperation");
+
+  // Gegenstueck zu OUTBOX_DOMAIN_IST_MODULINTERN: Die Zeitregeln der Sperre gehoeren der Bremse.
+  // Fremde Module sehen weder Zaehlstand noch Sperrzeitpunkt.
+  static final ArchRule RATELIMIT_DOMAIN_IST_MODULINTERN =
+      noClasses()
+          .that()
+          .resideOutsideOfPackage("org.mwolff.manban.ratelimit..")
+          .should()
+          .dependOnClassesThat()
+          .resideInAPackage("org.mwolff.manban.ratelimit.domain..")
+          .as(
+              "ratelimit.domain ist modulintern (Zugriff nur ueber die "
+                  + "ratelimit.application-Fassade)");
+
   // --- Aufrufer-Whitelist der rechtepruefungsfreien Schreib-Ports (Issue #463) -----------------
   // UserDisplayNameWriter und NextCardNumberWriter pruefen bewusst keine Rechte; die Autorisierung
   // liegt beim Aufrufer. Diese Zusicherung stand bisher nur im Javadoc — jedes weitere Modul, das
@@ -490,6 +517,16 @@ class ArchitectureTest {
   @Test
   void outboxDomainIstModulintern() {
     OUTBOX_DOMAIN_IST_MODULINTERN.check(PRODUKTIONSKLASSEN);
+  }
+
+  @Test
+  void ratelimitApplicationIstAufFassadeBegrenzt() {
+    RATELIMIT_APPLICATION_IST_AUF_FASSADE_BEGRENZT.check(PRODUKTIONSKLASSEN);
+  }
+
+  @Test
+  void ratelimitDomainIstModulintern() {
+    RATELIMIT_DOMAIN_IST_MODULINTERN.check(PRODUKTIONSKLASSEN);
   }
 
   @Test
