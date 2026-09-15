@@ -47,6 +47,7 @@ export default defineConfig({
         'src/test/**', // Test-Setup
         'src/App.tsx', // reines Routen-Wiring (lazy-Imports); Verhalten über Page-Tests gedeckt
         'src/theme.ts', // Design-Token-Objekt ohne Logik
+        'src/nachtlaufDesign.ts', // Design-Token-Objekt ohne Logik (Ausnahme Nachtlauf-Auswertung)
       ],
       // Finaler Ratchet (Stand 2026-07-20, kanban-kit#323): echte 100/100/100/100 über den
       // gesamten Produktcode (Statements/Branches/Functions/Lines). Erreicht ohne `c8 ignore`-
