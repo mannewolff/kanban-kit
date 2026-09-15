@@ -12,6 +12,13 @@
 services:
   manban-api:
     environment:
+      # Fester Wert, bewusst KEINE ${...}-Interpolation: Das Overlay erbt den
+      # environment:-Block des Basis-Compose (dort MANBAN_DEV_MODE=true) und ueberschreibt
+      # nur die hier genannten Schluessel. Ohne eigenen Eintrag reiste "true" nach
+      # Produktion. Kaeme der Wert aus der .env, genuegte ein MANBAN_DEV_MODE=true fuer
+      # den lokalen Betrieb, um die Ausnahme auch im Prod-Lauf stillschweigend
+      # einzuschalten — dieselbe Luecke mit einem Zwischenschritt.
+      MANBAN_DEV_MODE: "false"
       # Prod-kritische Werte MUESSEN aus der Server-.env kommen (kein unsicherer Default).
       MANBAN_SESSION_SECRET: ${MANBAN_SESSION_SECRET:?MANBAN_SESSION_SECRET muss in .env gesetzt sein}
       MANBAN_BASE_URL: ${MANBAN_BASE_URL:?MANBAN_BASE_URL muss in .env gesetzt sein (z. B. https://kanban.mwolff.org)}

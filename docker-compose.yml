@@ -33,8 +33,14 @@ services:
     build: .
     environment:
       MANBAN_BASE_URL: ${MANBAN_BASE_URL:-https://localhost}
-      # Secret zum Signieren der Session-Tokens. Default nur für lokal — in Produktion
-      # zwingend über die .env durch einen zufälligen 32+-Byte-Wert ersetzen.
+      # Dies ist der lokale Entwicklungs-Stack: Der Schalter erlaubt den Start mit den
+      # unsicheren Defaults unten — die Anwendung warnt dabei. Das Produktions-Overlay
+      # (docker-compose.prod.yml) setzt ihn fest auf false und erbt diesen Wert nicht.
+      MANBAN_DEV_MODE: ${MANBAN_DEV_MODE:-true}
+      # Secret zum Signieren der Session-Tokens. Der Default unten gilt nur im
+      # Entwicklungsbetrieb (MANBAN_DEV_MODE=true) — die Anwendung warnt dann beim Start.
+      # In Produktion verweigert sie ihn; dort zwingend über die .env durch einen
+      # zufälligen 32+-Byte-Wert ersetzen.
       MANBAN_SESSION_SECRET: ${MANBAN_SESSION_SECRET:-dev-only-insecure-secret-change-me}
       # Session-Cookie nur über HTTPS ausliefern. Hinter TLS (Prod) true; für reines HTTP-Lokal ggf. false.
       MANBAN_COOKIE_SECURE: ${MANBAN_COOKIE_SECURE:-true}
