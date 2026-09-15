@@ -1227,11 +1227,13 @@ describe('NightRunPage — Ketten-Übersicht (#866)', () => {
   })
 
   it('nennt je Vorgang Kosten, Züge und fehlende Kostenmeldungen (AK 11)', async () => {
-    const uebersicht = within(await echteUebersicht())
+    // Die Werte stehen seit #916 in der Ergebniszeile des Vorgangsblocks, nicht mehr in der
+    // Übersicht — dieselben Werte, ein anderer Ort.
+    await echteUebersicht()
 
-    expect(uebersicht.getByTestId('uebersicht-vorgang-791')).toHaveTextContent('11,52 $ · 89 Züge')
-    expect(uebersicht.getByTestId('uebersicht-vorgang-814')).toHaveTextContent('10,37 $ · 87 Züge')
-    expect(uebersicht.getByTestId('uebersicht-vorgang-842')).toHaveTextContent(
+    expect(screen.getByTestId('paket-791')).toHaveTextContent('11,52 $ · 89 Züge')
+    expect(screen.getByTestId('paket-814')).toHaveTextContent('10,37 $ · 87 Züge')
+    expect(screen.getByTestId('paket-842')).toHaveTextContent(
       '4,09 $ · 37 Züge · ein Arbeitsschritt ohne Kostenmeldung',
     )
   })
@@ -1261,7 +1263,7 @@ describe('NightRunPage — Ketten-Übersicht (#866)', () => {
     expect(
       within(uebersicht.getByTestId('uebersicht-fuss')).getAllByText('nicht angegeben'),
     ).toHaveLength(3)
-    expect(uebersicht.getByText('Kosten nicht gemeldet')).toBeInTheDocument()
+    expect(screen.getByTestId('kennzahlen-900')).toHaveTextContent('Kosten nicht gemeldet')
   })
 
   it('nennt einen hart gestoppten Lauf vorzeitig beendet und zählt fehlende Kostenmeldungen', async () => {
@@ -1305,51 +1307,51 @@ describe('NightRunPage — Stufenband je Vorgang (#867)', () => {
   /** Die vier Arbeitsschritte in der Reihenfolge, in der die Kette sie läuft. */
   const SCHRITTE = ['plan', 'review', 'pakete', 'abdeckung'] as const
 
-  const abschnitt = (uebersicht: HTMLElement, cardNumber: number, schritt: string) =>
-    within(uebersicht).getByTestId(`stufe-${cardNumber}-${schritt}`)
+  // Gesucht wird auf der Seite und nicht in der Übersicht: Die Vorgangsblöcke stehen seit #916
+  // im Panel des Laufs. Die Testkennungen sind dieselben geblieben (E14), und je Test steht genau
+  // ein Lauf auf der Seite.
+  const abschnitt = (cardNumber: number, schritt: string) =>
+    screen.getByTestId(`stufe-${cardNumber}-${schritt}`)
 
   /** Ein Datenfeld aller vier Abschnitte eines Vorgangs, in der Reihenfolge der Kette. */
-  const bandwerte = (
-    uebersicht: HTMLElement,
-    cardNumber: number,
-    feld: 'anteil' | 'fuellung' | 'erreicht',
-  ) => SCHRITTE.map((schritt) => abschnitt(uebersicht, cardNumber, schritt).dataset[feld])
+  const bandwerte = (cardNumber: number, feld: 'anteil' | 'fuellung' | 'erreicht') =>
+    SCHRITTE.map((schritt) => abschnitt(cardNumber, schritt).dataset[feld])
 
   /** Der Grund eines Abbruchs, der **nicht** am Zeitbudget lag. */
   const GRUND_KOSTEN = 'Kostenbudget erschöpft: 52,10 $ über 50,00 $'
 
   it('zeichnet das Band der Einheit 791 in den Verhältnissen der Zeitvorgaben (Punkt 8)', async () => {
-    const uebersicht = await echteUebersicht()
+    await echteUebersicht()
 
     // Geprüft an der Beschriftung und an den Datenfeldern, nicht an berechneten Stilwerten: In
     // jsdom rechnet kein Browser ein Layout aus, ein Test auf `flex`-Anteile prüfte dort die
     // Zeichenkette, die man selbst geschrieben hat.
-    expect(within(uebersicht).getByTestId('stufenband-791')).toHaveAttribute(
+    expect(screen.getByTestId('stufenband-791')).toHaveAttribute(
       'aria-label',
       'Stufenband: Plan 7,8 / 20 min · Prüfung 11,8 / 15 min · Pakete 3,7 / 15 min · Abdeckung 2,2 / 10 min',
     )
-    expect(bandwerte(uebersicht, 791, 'anteil')).toEqual(['20', '15', '15', '10'])
-    expect(bandwerte(uebersicht, 791, 'fuellung')).toEqual(['39.1', '78.6', '24.6', '22.4'])
-    expect(bandwerte(uebersicht, 791, 'erreicht')).toEqual(['ja', 'ja', 'ja', 'ja'])
+    expect(bandwerte(791, 'anteil')).toEqual(['20', '15', '15', '10'])
+    expect(bandwerte(791, 'fuellung')).toEqual(['39.1', '78.6', '24.6', '22.4'])
+    expect(bandwerte(791, 'erreicht')).toEqual(['ja', 'ja', 'ja', 'ja'])
   })
 
   it('kennzeichnet Pakete und Abdeckung der Einheit 842 als nicht erreicht (Punkt 9)', async () => {
-    const uebersicht = await echteUebersicht()
+    await echteUebersicht()
 
-    expect(bandwerte(uebersicht, 842, 'erreicht')).toEqual(['ja', 'ja', 'nein', 'nein'])
-    expect(abschnitt(uebersicht, 842, 'pakete')).toHaveTextContent('nicht erreicht')
-    expect(abschnitt(uebersicht, 842, 'abdeckung')).toHaveTextContent('nicht erreicht')
+    expect(bandwerte(842, 'erreicht')).toEqual(['ja', 'ja', 'nein', 'nein'])
+    expect(abschnitt(842, 'pakete')).toHaveTextContent('nicht erreicht')
+    expect(abschnitt(842, 'abdeckung')).toHaveTextContent('nicht erreicht')
 
     // Der Plan-Schritt lief mit 36,6 % seiner Vorgabe — wenig, aber gelaufen. Er trägt den Vermerk
     // nicht, und daran ist „nicht erreicht" von „wenig verbraucht" unterscheidbar.
-    const plan = abschnitt(uebersicht, 842, 'plan')
+    const plan = abschnitt(842, 'plan')
     expect(plan).not.toHaveTextContent('nicht erreicht')
     expect(plan.dataset.fuellung).toBe('36.6')
   })
 
   it('kappt die übergelaufene Prüfstufe der Einheit 842 bei voller Länge (Punkt 10)', async () => {
-    const uebersicht = await echteUebersicht()
-    const pruefung = abschnitt(uebersicht, 842, 'review')
+    await echteUebersicht()
+    const pruefung = abschnitt(842, 'review')
 
     // 900 484 ms gegen eine Vorgabe von 900 000 ms: Ohne Kappung stünde hier 100.1.
     expect(pruefung.dataset.fuellung).toBe('100')
@@ -1357,7 +1359,7 @@ describe('NightRunPage — Stufenband je Vorgang (#867)', () => {
   })
 
   it('kappt auch einen Schritt mit doppelter Vorgabe (Punkt 11)', async () => {
-    const uebersicht = await uebersichtZu(
+    await uebersichtZu(
       kettenStand({
         budget: { planMin: 10 },
         einheiten: [
@@ -1371,25 +1373,25 @@ describe('NightRunPage — Stufenband je Vorgang (#867)', () => {
       }),
       'neu angelegt',
     )
-    const plan = abschnitt(uebersicht, 900, 'plan')
+    const plan = abschnitt(900, 'plan')
 
     expect(plan.dataset.fuellung).toBe('100')
     expect(plan).toHaveTextContent('20,0 / 10 min')
   })
 
   it('nennt über dem Band der Einheit 842 den Zeitbudget-Grund samt Dokumentnummer (Punkt 12)', async () => {
-    const uebersicht = await echteUebersicht()
+    await echteUebersicht()
 
-    const satz = within(uebersicht).getByTestId('abbruch-842')
+    const satz = screen.getByTestId('abbruch-842')
     expect(satz).toHaveTextContent(
       'Zeitbudget review: die Session wurde nach 15.0 min am Limit beendet',
     )
     expect(satz).toHaveTextContent('#849')
-    expect(abschnitt(uebersicht, 842, 'review')).toHaveTextContent('am Zeitbudget beendet')
+    expect(abschnitt(842, 'review')).toHaveTextContent('am Zeitbudget beendet')
 
     // Ein regulär durchgelaufener Vorgang trägt weder Satz noch Vermerk.
-    expect(within(uebersicht).queryByTestId('abbruch-791')).not.toBeInTheDocument()
-    expect(abschnitt(uebersicht, 791, 'abdeckung')).not.toHaveTextContent('beendet')
+    expect(screen.queryByTestId('abbruch-791')).not.toBeInTheDocument()
+    expect(abschnitt(791, 'abdeckung')).not.toHaveTextContent('beendet')
   })
 
   it('trägt an einem anders begründeten Abbruch „hier abgebrochen" (Punkt 13)', async () => {
@@ -1410,16 +1412,16 @@ describe('NightRunPage — Stufenband je Vorgang (#867)', () => {
       'neu angelegt',
     )
 
-    expect(abschnitt(uebersicht, 900, 'plan')).toHaveTextContent('hier abgebrochen')
+    expect(abschnitt(900, 'plan')).toHaveTextContent('hier abgebrochen')
     expect(uebersicht).not.toHaveTextContent('am Zeitbudget beendet')
 
-    const satz = within(uebersicht).getByTestId('abbruch-900')
+    const satz = screen.getByTestId('abbruch-900')
     expect(satz).toHaveTextContent(GRUND_KOSTEN)
     expect(satz).toHaveTextContent('keine Karten')
   })
 
   it('sagt an einem Schritt ohne Zeitvorgabe ausdrücklich „ohne Vorgabe"', async () => {
-    const uebersicht = await uebersichtZu(
+    await uebersichtZu(
       kettenStand({
         einheiten: [
           {
@@ -1432,7 +1434,7 @@ describe('NightRunPage — Stufenband je Vorgang (#867)', () => {
       }),
       'neu angelegt',
     )
-    const plan = abschnitt(uebersicht, 900, 'plan')
+    const plan = abschnitt(900, 'plan')
 
     // Ohne Vorgabe gibt es kein Verhältnis: Der Schritt bekommt denselben Anteil wie die übrigen,
     // und die Füllung bleibt leer statt eine Quote zu behaupten, die niemand gemeldet hat.
@@ -1477,20 +1479,19 @@ describe('NightRunPage — Entstandene Karten je Vorgang (#868)', () => {
    * `within(...)` an der Abfragestelle steht, und hielte eine Zwischenvariable sonst für ein
    * destrukturiertes `render`-Ergebnis.
    */
-  const vorgangIn = (uebersicht: HTMLElement, cardNumber: number) =>
-    within(uebersicht).getByTestId(`uebersicht-vorgang-${cardNumber}`)
+  const vorgangIn = (cardNumber: number) => screen.getByTestId(`paket-${cardNumber}`)
 
   /**
    * Die Zeile eines Arbeitsschritts mit den dort entstandenen Karten. Über die Test-ID und nicht
    * über den Text: Die Zeile setzt sich aus Beschriftung und Verweisen zusammen, und `getByText`
    * sucht je Element nur dessen eigene Textknoten.
    */
-  const dokumentzeile = (uebersicht: HTMLElement, cardNumber: number, schritt: string) =>
-    within(uebersicht).getByTestId(`dokumente-${cardNumber}-${schritt}`)
+  const dokumentzeile = (cardNumber: number, schritt: string) =>
+    screen.getByTestId(`dokumente-${cardNumber}-${schritt}`)
 
   it('führt an der Einheit 791 die entstandenen Karten und öffnet die angeklickte (Punkt 5)', async () => {
-    const uebersicht = await echteUebersichtMitKarten()
-    const vorgang = vorgangIn(uebersicht, 791)
+    await echteUebersichtMitKarten()
+    const vorgang = vorgangIn(791)
 
     expect(
       await within(vorgang).findByRole('button', { name: 'Plan #844 [Plan] Sicherheits-Bauform' }),
@@ -1499,8 +1500,9 @@ describe('NightRunPage — Entstandene Karten je Vorgang (#868)', () => {
       within(vorgang).getByRole('button', { name: 'Pakete #845 Bauform binden' }),
     ).toBeInTheDocument()
 
-    // Zwei Pakete an einem Vorgang stehen in **einer** Zeile, durch Komma getrennt.
-    expect(dokumentzeile(uebersicht, 814, 'pakete')).toHaveTextContent('Pakete #847, #848')
+    // Zwei Pakete an einem Vorgang stehen in **einer** Zeile. Seit #916 als je eigener Chip mit
+    // eigener Vorzeile, statt als eine Beschriftung mit kommagetrennten Nummern.
+    expect(dokumentzeile(814, 'pakete')).toHaveTextContent('Pakete#847Pakete#848')
 
     fireEvent.click(within(vorgang).getByRole('button', { name: /^Plan #844/ }))
 
@@ -1508,7 +1510,8 @@ describe('NightRunPage — Entstandene Karten je Vorgang (#868)', () => {
   })
 
   it('nennt an der Einheit 842 den Plan #849 und ausdrücklich „keine Pakete" (Punkt 6)', async () => {
-    const vorgang = vorgangIn(await echteUebersichtMitKarten(), 842)
+    await echteUebersichtMitKarten()
+    const vorgang = vorgangIn(842)
 
     expect(
       await within(vorgang).findByRole('button', { name: 'Plan #849 [Plan] Leitstand mehrstufig' }),
@@ -1518,10 +1521,8 @@ describe('NightRunPage — Entstandene Karten je Vorgang (#868)', () => {
   })
 
   it('nennt einen Vorgang ohne jede Stufe „kein Plan" und „keine Pakete" (Punkt 4)', async () => {
-    const vorgang = vorgangIn(
-      await uebersichtZu(kettenStand(), 'neu angelegt', startedAt(0), { karten: {} }),
-      900,
-    )
+    await uebersichtZu(kettenStand(), 'neu angelegt', startedAt(0), { karten: {} })
+    const vorgang = vorgangIn(900)
 
     expect(within(vorgang).getByText('kein Plan')).toBeInTheDocument()
     expect(within(vorgang).getByText('keine Pakete')).toBeInTheDocument()
@@ -1530,16 +1531,12 @@ describe('NightRunPage — Entstandene Karten je Vorgang (#868)', () => {
   it('kennzeichnet eine nicht auflösbare Dokumentnummer als nicht mehr vorhanden (Punkt 7)', async () => {
     // Kein Eintrag im Katalog-Stub: Der Nummer-Lookup antwortet mit 404, und das ist ein
     // Ergebnis — nicht mehr vorhanden —, kein noch offener Abruf.
-    const uebersicht = await uebersichtZu(mitPlanDokument('901'), 'neu angelegt', startedAt(0), {
-      karten: {},
-    })
+    await uebersichtZu(mitPlanDokument('901'), 'neu angelegt', startedAt(0), { karten: {} })
     await waitFor(() =>
-      expect(dokumentzeile(uebersicht, 900, 'plan')).toHaveTextContent(
-        'Plan #901 nicht mehr vorhanden',
-      ),
+      expect(dokumentzeile(900, 'plan')).toHaveTextContent('Plan#901 nicht mehr vorhanden'),
     )
     expect(
-      within(vorgangIn(uebersicht, 900)).queryByRole('button', { name: /901/ }),
+      within(vorgangIn(900)).queryByRole('button', { name: /901/ }),
     ).not.toBeInTheDocument()
   })
 
@@ -1548,31 +1545,31 @@ describe('NightRunPage — Entstandene Karten je Vorgang (#868)', () => {
     const laedt = new Promise<void>((aufloesen) => {
       freigeben = aufloesen
     })
-    const uebersicht = await uebersichtZu(mitPlanDokument('901'), 'neu angelegt', startedAt(0), {
+    await uebersichtZu(mitPlanDokument('901'), 'neu angelegt', startedAt(0), {
       karten: { 901: karte({ id: 11, number: 901, title: '[Plan] Gleich da' }) },
       kartenVerzoegert: laedt,
     })
 
     // Solange der Abruf läuft, steht die Nummer da — ohne Verweis und ohne die Falschaussage,
     // die Karte sei fort.
-    const zeile = dokumentzeile(uebersicht, 900, 'plan')
-    expect(zeile).toHaveTextContent('Plan #901')
+    const zeile = dokumentzeile(900, 'plan')
+    expect(zeile).toHaveTextContent('Plan#901')
     expect(zeile).not.toHaveTextContent('nicht mehr vorhanden')
     expect(
-      within(vorgangIn(uebersicht, 900)).queryByRole('button', { name: /901/ }),
+      within(vorgangIn(900)).queryByRole('button', { name: /901/ }),
     ).not.toBeInTheDocument()
 
     freigeben()
 
     expect(
-      await within(vorgangIn(uebersicht, 900)).findByRole('button', {
+      await within(vorgangIn(900)).findByRole('button', {
         name: 'Plan #901 [Plan] Gleich da',
       }),
     ).toBeInTheDocument()
   })
 
   it('ruft eine von zwei Vorgängen genannte Dokumentnummer nur einmal ab (Punkt 9)', async () => {
-    const uebersicht = await uebersichtZu(
+    await uebersichtZu(
       kettenStand({
         einheiten: [
           { id: '900', titel: 'Erster', ausgang: 'fertig', stufen: { plan: { id: '901' } } },
@@ -1586,10 +1583,10 @@ describe('NightRunPage — Entstandene Karten je Vorgang (#868)', () => {
 
     // Beide Vorgänge zeigen den Verweis — die Karte ist also aufgelöst …
     expect(
-      await within(vorgangIn(uebersicht, 900)).findByRole('button', { name: /#901/ }),
+      await within(vorgangIn(900)).findByRole('button', { name: /#901/ }),
     ).toBeInTheDocument()
     expect(
-      within(vorgangIn(uebersicht, 902)).getByRole('button', { name: /#901/ }),
+      within(vorgangIn(902)).getByRole('button', { name: /#901/ }),
     ).toBeInTheDocument()
     // … und dafür ging genau eine Anfrage hinaus.
     expect(byNumberAufrufe().filter((a) => a.url.endsWith('/901'))).toHaveLength(1)
@@ -1647,15 +1644,20 @@ describe('NightRunPage — gekürzte Vorgangszeile neben der Übersicht (#869)',
     return panelEl
   }
 
-  it('lässt am Lauf mit Übersicht Ampel, Dauer und den Auszug samt Stufenblock weg (Punkt 5)', async () => {
+  it('zeigt am Lauf mit Übersicht jede Angabe genau einmal (Punkt 5)', async () => {
+    // AK 15 aus #859 verlangt, dass nichts zweimal auf derselben Seite steht. Bis #916 wurde
+    // dafür die Zeile des Arbeitspakets gekürzt, weil die Übersicht dieselben Angaben trug; seit
+    // dem Vorgangsblock gibt es nur noch **eine** Darstellung, also ist nichts zu kürzen.
     const panelEl = await mitUebersicht()
     const zeile = await within(panelEl).findByTestId('paket-842')
 
+    // Der rohe Stufenblock-Auszug entfällt: Band und Grund sagen dasselbe genauer.
     expect(within(zeile).queryByText(STUFENBLOCK_ZEILE, ALS_ABSATZ)).toBeNull()
     expect(within(zeile).queryByText(/^Auszug: /, ALS_ABSATZ)).toBeNull()
-    // Ampel und Zustandstext stehen gemeinsam unter dieser Test-ID.
-    expect(within(zeile).queryByTestId('zustand-842')).toBeNull()
-    expect(within(zeile).queryByText(DAUER_842, ALS_ZEILE)).toBeNull()
+    // Zustand und Dauer stehen genau einmal — im Block, nicht zusätzlich in einer Übersicht.
+    expect(screen.getAllByTestId('zustand-842')).toHaveLength(1)
+    expect(within(zeile).getByTestId('kennzahlen-842')).toHaveTextContent(DAUER_842)
+    expect(screen.getAllByTestId('stufenband-842')).toHaveLength(1)
   })
 
   it('lässt Vorhaben und Übernahmetext am Lauf mit Übersicht stehen und bedienbar (Punkt 6)', async () => {
@@ -1689,7 +1691,9 @@ describe('NightRunPage — gekürzte Vorgangszeile neben der Übersicht (#869)',
     expect(within(zeile).getByTestId('zustand-842')).toHaveTextContent(
       'Am Zeitbudget beendet, Ergebnis liegt vor',
     )
-    expect(within(zeile).getByText(DAUER_842, ALS_ZEILE)).toBeInTheDocument()
+    // Die Dauer steht seit #916 in der Ergebniszeile des Blocks; ohne Ergebnisstand gibt es kein
+    // Band, in dem sie sonst steckte.
+    expect(within(zeile).getByTestId('kennzahlen-842')).toHaveTextContent(DAUER_842)
     expect(within(zeile).getByText(STUFENBLOCK_ZEILE, ALS_ABSATZ)).toBeInTheDocument()
   })
 
@@ -3758,5 +3762,128 @@ describe('NightRunPage — Altbestand-Arten behalten ihre Kopfzeile (#915)', () 
     const panelEl = await screen.findByTestId(`lauf-${ECHTER_PRUEFLAUF_START}`)
 
     expect(await within(panelEl).findByText('lag schon vor')).toBeInTheDocument()
+  })
+})
+
+describe('NightRunPage — Vorgangsblock der Kette (#916)', () => {
+  /** Der echte Ketten-Lauf, eingelesen und aufgeklappt. */
+  async function kette(extra: Partial<Antworten> = {}) {
+    renderPage({
+      submit: { ergebnis: alleNeu(ECHTE_KETTE_STAND) },
+      listen: [[], wieAufbewahrt(ECHTE_KETTE_STAND)],
+      ...extra,
+    })
+    await screen.findByText('Noch keine Auswertung vorhanden.')
+    protokollWaehlen(ECHTE_KETTE_STAND, 'night-run-2026-09-14-131200.json')
+    const panelEl = await screen.findByTestId(`lauf-${ECHTE_KETTE_START}`)
+    panelAufklappen(panelEl)
+    return panelEl
+  }
+
+  it('gibt jedem Vorgang einen eigenen Block mit Nummer, Titel und Ausgang (AK 4)', async () => {
+    await kette()
+
+    const block = await screen.findByTestId('paket-791')
+    expect(block).toHaveTextContent('#791')
+    expect(block).toHaveTextContent('Zugriff und Konten bleiben nach Widerruf')
+    expect(within(block).getByTestId('zustand-791')).toHaveTextContent('Erfolg')
+  })
+
+  it('nennt den Grund eines an der Zeitgrenze beendeten Vorgangs in Worten (AK 7)', async () => {
+    await kette()
+
+    // Auffindbar ohne jede Farbwahrnehmung: Der Satz steht als Text unter der Kopfzeile.
+    const grund = await screen.findByTestId('abbruch-842')
+    expect(grund).toHaveTextContent('Zeitbudget')
+    expect(within(screen.getByTestId('paket-842')).getByTestId('zustand-842')).toHaveTextContent(
+      'Am Zeitbudget beendet',
+    )
+  })
+
+  it('unterscheidet einen nie erreichten Arbeitsschritt an einem Wort (AK 8)', async () => {
+    await kette()
+
+    await screen.findByTestId('stufe-842-pakete')
+    // Der nie erreichte Schritt sagt es; der erreichte sagt seine Zeiten.
+    expect(screen.getByTestId('stufe-842-pakete')).toHaveTextContent('nicht erreicht')
+    expect(screen.getByTestId('stufe-842-pakete')).toHaveAttribute('data-erreicht', 'nein')
+    expect(screen.getByTestId('stufe-842-plan')).not.toHaveTextContent('nicht erreicht')
+    expect(screen.getByTestId('stufe-842-plan')).toHaveAttribute('data-erreicht', 'ja')
+  })
+
+  it('führt den Anteil der Modellarbeit in der Ergebniszeile jedes Vorgangs (AK 6)', async () => {
+    await kette()
+
+    expect(await screen.findByTestId('kennzahlen-791')).toHaveTextContent(/Modell(arbeit|zeit)/)
+  })
+
+  it('zeigt die entstandenen Karten als Chips und öffnet die angeklickte', async () => {
+    await kette({
+      karten: {
+        791: karte({ id: 1, number: 791, title: 'Konten' }),
+        844: karte({ id: 2, number: 844, title: '[Plan] Sicherheits-Bauform' }),
+      },
+    })
+
+    const chip = await screen.findByRole('button', { name: /^Plan #844 / })
+    fireEvent.click(chip)
+
+    expect(screen.getByTestId('karten-detail')).toHaveTextContent('Karte 844')
+  })
+
+  it('hält Häufigkeit, Vorhaben-Zeile und Übernahmetext am Block (AK 10)', async () => {
+    await kette({
+      karten: { 842: karte({ id: 1, number: 842, title: 'Leitstand mehrstufig', parentId: 5 }) },
+      kartenNachId: { 5: vorhaben({ id: 5, number: 9, title: 'Leitstand ausbauen' }) },
+    })
+
+    const block = await screen.findByTestId('paket-842')
+    expect(await within(block).findByRole('button', { name: /^Vorhaben #9 / })).toBeInTheDocument()
+    expect(uebernahmetext(block, 842)).toContain('Zustand: Am Zeitbudget beendet')
+    expect(
+      within(block).getByRole('button', { name: 'Übernahmetext zu Karte #842 kopieren' }),
+    ).toBeInTheDocument()
+  })
+
+  it('nennt an einem übergangenen Vorgang ohne Ergebnisstand den Grund, nicht einen Auszug', async () => {
+    // Ohne Stand gibt es kein Band; dann trägt der Auszug die Herkunft (AK 10). An einem grauen
+    // Vorgang heißt er „Grund", weil er sagt, warum nichts geschah — nicht, was geschah.
+    renderPage({
+      listen: [
+        [
+          aufbewahrt({
+            id: 1,
+            startedAt: startedAt(0),
+            mode: 'CHAIN',
+            items: [
+              {
+                id: 11,
+                cardNumber: 700,
+                title: 'Paket A',
+                state: 'GREY',
+                excerpt: GRUND_ZURUECKGESTELLT,
+              },
+            ],
+          }),
+        ],
+      ],
+    })
+    const panelEl = await screen.findByTestId(`lauf-${startedAt(0)}`)
+
+    expect(within(panelEl).getByText(`Grund: ${GRUND_ZURUECKGESTELLT}`)).toBeInTheDocument()
+  })
+
+  it('lässt den Prüf-Lauf bei der Zeilendarstellung, ohne Vorgangsblock (E5)', async () => {
+    renderPage({
+      submit: { ergebnis: alleNeu(ECHTER_PRUEFLAUF_STAND) },
+      listen: [[], wieAufbewahrt(ECHTER_PRUEFLAUF_STAND)],
+    })
+    await screen.findByText('Noch keine Auswertung vorhanden.')
+    protokollWaehlen(ECHTER_PRUEFLAUF_STAND, 'night-run-2026-09-11-103116.json')
+    const panelEl = await screen.findByTestId(`lauf-${ECHTER_PRUEFLAUF_START}`)
+    panelAufklappen(panelEl)
+
+    await within(panelEl).findByTestId('aufschluesselung')
+    expect(within(panelEl).queryByTestId('stufenband-782')).not.toBeInTheDocument()
   })
 })

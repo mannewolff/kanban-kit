@@ -31,7 +31,7 @@ import Typography from '@mui/material/Typography'
 import ContentCopyIcon from '@mui/icons-material/ContentCopy'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import { ThemeProvider } from '@mui/material/styles'
-import { Fragment, useCallback, useEffect, useId, useRef, useState } from 'react'
+import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { cardsApi, type Card, type CardByNumber } from '../api/cards'
 import { apiErrorMessage } from '../api/client'
@@ -49,6 +49,9 @@ import {
   type NachtlaufKennzahl,
 } from '../components/nachtlauf/NachtlaufKennzahlen'
 import { NachtlaufKopf } from '../components/nachtlauf/NachtlaufKopf'
+import type { Kartenchip } from '../components/nachtlauf/NachtlaufKartenchips'
+import { NachtlaufVorgang, type Chipgruppe } from '../components/nachtlauf/NachtlaufVorgang'
+import type { Bandabschnitt as BandabschnittForm } from '../components/nachtlauf/NachtlaufStufenband'
 import { nachtlaufTheme } from '../nachtlaufDesign'
 import { useSnackbar } from '../components/SnackbarProvider'
 import { formatDuration } from '../lib/formatDuration'
@@ -77,7 +80,6 @@ import {
 } from '../lib/nightRunLog'
 import { readTextFile } from '../lib/readTextFile'
 import { useProjectName } from '../lib/useProjectName'
-import { SURFACE_TINT } from '../theme'
 
 /**
  * Auswertung der Nachtläufe eines Projekts (Issue #725, Plan #718).
@@ -597,8 +599,6 @@ function Arbeitspaket({
   // `undefined` = noch nicht aufgelöst (die Kette lädt), `null` = nicht auflösbar.
   const wurzel = katalog.get(item.cardNumber)
   const beschriftung = `#${item.cardNumber} ${item.title}`
-  // `null` an einem grünen oder grauen Arbeitspaket — dort erscheint weder Feld noch Knopf.
-  const uebernahme = buildHandoffText(item)
 
   return (
     <Box sx={{ py: 1 }} data-testid={`paket-${item.cardNumber}`}>
@@ -647,6 +647,54 @@ function Arbeitspaket({
         </Typography>
       )}
 
+      <Paketzusaetze
+        item={item}
+        modus={modus}
+        mitStufenzeilen={!gekuerzt}
+        katalog={katalog}
+        vorhabenKarten={vorhabenKarten}
+        haeufigkeit={haeufigkeit}
+        istRot={istRot}
+        onOeffnen={onOeffnen}
+      />
+    </Box>
+  )
+}
+
+/**
+ * Was ein Vorgang über seine Gestalt hinaus trägt: Häufigkeit eines Befunds über die aufbewahrten
+ * Läufe, die Herkunftskette, das Vorhaben der Wurzelkarte und der Übernahmetext samt Kopierknopf.
+ *
+ * <p>Seit #916 teilen sich {@link Arbeitspaket} und der Vorgangsblock des Entwurfs diese Teile.
+ * Der Entwurf sieht für sie kein Element vor; AK 10 verlangt, sie in ihrer Funktion zu erhalten
+ * und einzupassen — im Block stehen sie deshalb als dessen Kinder unter der Ergebniszeile.
+ */
+function Paketzusaetze({
+  item,
+  modus,
+  /** `false` an einem Lauf, über dem eine Übersicht steht — dieselbe Bedingung wie bisher. */
+  mitStufenzeilen,
+  katalog,
+  vorhabenKarten,
+  haeufigkeit,
+  istRot,
+  onOeffnen,
+}: Readonly<{
+  item: AnzeigeItem
+  modus: NightRunMode
+  mitStufenzeilen: boolean
+  katalog: Kartenkatalog
+  vorhabenKarten: Vorhabenkatalog
+  haeufigkeit: string | null
+  istRot: (nummer: number) => boolean
+  onOeffnen: (karte: CardByNumber) => void
+}>) {
+  const wurzel = katalog.get(item.cardNumber)
+  // `null` an einem grünen oder grauen Arbeitspaket — dort erscheint weder Feld noch Knopf.
+  const uebernahme = buildHandoffText(item)
+
+  return (
+    <>
       {haeufigkeit !== null && (
         <Typography
           variant="body2"
@@ -659,7 +707,7 @@ function Arbeitspaket({
 
       {wurzel != null && (
         <>
-          {!gekuerzt &&
+          {mitStufenzeilen &&
             STUFEN.map((stufe) => {
               const zustand = stufenZustand(
                 stufe.praefix,
@@ -722,7 +770,7 @@ function Arbeitspaket({
           </Button>
         </Stack>
       )}
-    </Box>
+    </>
   )
 }
 
@@ -985,6 +1033,24 @@ function vorgangszeile(item: NightRunItem, ohneKennzahlen: boolean): string {
   ].join(' · ')
 }
 
+/**
+ * Die Ergebniszeile eines Ketten-Vorgangs (#916): Kosten, Züge, der Vermerk fehlender
+ * Kostenmeldungen — und der **Anteil der Modellarbeit** (AK 6, seit Issue #872). Der Entwurf führt
+ * ihn in jeder Ergebniszeile; bis #916 stand er allein an den drei Nicht-Ketten-Arten.
+ */
+const vorgangsKennzahlenText = (
+  item: AnzeigeItem,
+  standItem: NightRunItem | undefined,
+): string =>
+  [
+    // Die Dauer steht vorneweg. Der Entwurf führt sie in der Ergebniszeile nicht — sie steckt
+    // dort im Band —, aber ein Lauf ohne Ergebnisstand hat kein Band, und dann wäre sie ganz
+    // verloren (AK 10).
+    item.durationMs === undefined ? 'Dauer nicht gemeldet' : formatDuration(item.durationMs / 1000),
+    vorgangsKennzahlen(standItem?.kennzahlen),
+    modellzeitText(item.durationMs, standItem?.kennzahlen),
+  ].join(' · ')
+
 /** Kosten und Züge eines Vorgangs, dazu der Vermerk fehlender Kostenmeldungen (AK 11). */
 function vorgangsKennzahlen(kennzahlen: NightRunKennzahlen | undefined): string {
   const vermerk = ohneKostenmeldung(
@@ -1089,23 +1155,11 @@ const kopfText = (stand: NightRunStand | undefined): string =>
     abschlussText(stand?.abschluss),
   ].join(' · ')
 
-/** Ein Abschnitt des Stufenbands — alles, was seine Darstellung und seine Ansage brauchen. */
-interface Bandabschnitt {
-  schluessel: NightRunKettenStufe
-  label: string
-  /** Der Breitenanteil: die Zeitvorgabe in Minuten; ohne Vorgabe {@link ANTEIL_OHNE_VORGABE}. */
-  anteil: number
-  /** Die Füllung in Prozent, **bei 100 gekappt** — der tatsächliche Wert steht in {@link zahlen}. */
-  fuellung: number
-  /** Ob der Vorgang diesen Arbeitsschritt überhaupt erreicht hat. */
-  erreicht: boolean
-  /** Verbrauch und Vorgabe als Zahlen. */
-  zahlen: string
-  /** Der Vermerk unter dem Abschnitt; `null`, wo keiner steht. */
-  vermerk: string | null
-  /** Die Füllfarbe — der Ampelton nur an dem Abschnitt, an dem der Vorgang endete. */
-  farbe: string
-}
+/**
+ * Ein Abschnitt des Stufenbands. Die Form steht seit #916 an der Komponente, die ihn darstellt;
+ * gerechnet wird er weiter hier ({@link bandabschnitt}).
+ */
+type Bandabschnitt = BandabschnittForm & { schluessel: NightRunKettenStufe }
 
 /** Der Breitenanteil eines Schritts ohne Zeitvorgabe: derselbe wie der jedes anderen ohne Vorgabe. */
 const ANTEIL_OHNE_VORGABE = 1
@@ -1173,93 +1227,6 @@ const bandAnsage = (abschnitte: readonly Bandabschnitt[]): string =>
     .map((a) => `${a.label} ${a.zahlen}${a.vermerk === null ? '' : `, ${a.vermerk}`}`)
     .join(' · ')}`
 
-/**
- * Das Stufenband eines Ketten-Vorgangs (Issue #867): die vier Arbeitsschritte in der Breite ihrer
- * Zeitvorgaben, jeder gefüllt, soweit er seine Zeit verbraucht hat, darunter Verbrauch und Vorgabe
- * als Zahlen. Wer hinsieht, erkennt ohne Zahlenlesen, an welchem Schritt eine Kette riss.
- *
- * <p><b>Die Aussage hängt nie an der Farbe</b> (`CLAUDE-react.md`, Zeile 142): „nicht erreicht",
- * „am Zeitbudget beendet" und „hier abgebrochen" stehen unter dem betroffenen Abschnitt in Worten,
- * und die Beschriftung des Bands nennt alle vier Schritte. Die Schraffur für „nicht erreicht" ist
- * die zweite, nicht die einzige Unterscheidung von einem leeren Balken.
- *
- * <p><b>Alle Töne kommen aus dem Theme</b> (E9 aus Plan #863): Schiene und Schraffur aus der
- * Trennlinienfarbe und der hellsten getönten Fläche, die Füllung aus `primary` — und am Abschnitt,
- * an dem der Vorgang endete, aus {@link ZUSTAND_FARBE}, also demselben Ampelton, den die Zeile des
- * Arbeitspakets trägt. Neue Töne in `palette.nightRun` hätten den dortigen Kopfkommentar falsch
- * gemacht.
- */
-function Vorgangsband({
-  item,
-  vorgaben,
-}: Readonly<{ item: NightRunItem; vorgaben: NightRunStufenvorgaben | undefined }>) {
-  const letzte = letzteErreichteStufe(item.kettenStufen)
-  const abschnitte = KETTEN_STUFEN.map((stufe) => bandabschnitt(stufe, item, vorgaben, letzte))
-  // Ein Vorgang, der keinen Schritt erreicht hat, endete an keinem — über ihm steht kein Satz.
-  const abgebrochen = letzte !== undefined && item.state !== 'GREEN'
-
-  return (
-    <>
-      {abgebrochen && (
-        <Typography
-          variant="body2"
-          color="text.secondary"
-          data-testid={`abbruch-${item.cardNumber}`}
-        >
-          {abbruchSatz(item)}
-        </Typography>
-      )}
-      <Stack
-        direction="row"
-        spacing={0.5}
-        role="img"
-        aria-label={bandAnsage(abschnitte)}
-        data-testid={`stufenband-${item.cardNumber}`}
-        sx={{ mt: 0.5 }}
-      >
-        {abschnitte.map((abschnitt) => (
-          <Box
-            key={abschnitt.schluessel}
-            data-testid={`stufe-${item.cardNumber}-${abschnitt.schluessel}`}
-            data-anteil={abschnitt.anteil}
-            data-fuellung={abschnitt.fuellung}
-            data-erreicht={abschnitt.erreicht ? 'ja' : 'nein'}
-            sx={{ flexGrow: abschnitt.anteil, flexBasis: 0, minWidth: 0 }}
-          >
-            <Box
-              sx={(t) => ({
-                height: 8,
-                borderRadius: 1,
-                overflow: 'hidden',
-                bgcolor: t.palette.divider,
-                ...(abschnitt.erreicht
-                  ? {}
-                  : {
-                      backgroundImage: `repeating-linear-gradient(45deg, ${t.palette.divider} 0 3px, ${SURFACE_TINT} 3px 6px)`,
-                    }),
-              })}
-            >
-              {abschnitt.erreicht && (
-                <Box sx={{ height: '100%', width: `${abschnitt.fuellung}%`, bgcolor: abschnitt.farbe }} />
-              )}
-            </Box>
-            <Typography variant="caption" component="div">
-              {abschnitt.label}
-            </Typography>
-            <Typography variant="caption" component="div" color="text.secondary">
-              {abschnitt.zahlen}
-            </Typography>
-            {abschnitt.vermerk !== null && (
-              <Typography variant="caption" component="div" color="text.secondary">
-                {abschnitt.vermerk}
-              </Typography>
-            )}
-          </Box>
-        ))}
-      </Stack>
-    </>
-  )
-}
 
 /** Eine Kennzahl der Nacht: der Wert, darunter seine Benennung und ein etwaiger Vorbehalt. */
 function Kennzahl({
@@ -1338,83 +1305,7 @@ function verweisZustand(nummer: number, katalog: Kartenkatalog): VerweisZustand 
   return karte === null ? { art: 'fort' } : { art: 'geladen', karte }
 }
 
-/**
- * Eine entstandene Karte als Verweis. Sichtbar steht allein ihre Nummer — die Übersicht führt drei
- * Vorgänge mit bis zu drei Karten, und volle Titel machten daraus eine Textwand. Der zugängliche
- * Name trägt Stufe und Titel dazu, und die sichtbare Nummer bleibt sein Teilstring (WCAG 2.5.3).
- */
-function Kartenverweis({
-  id,
-  label,
-  katalog,
-  onOeffnen,
-}: Readonly<{
-  id: string
-  label: string
-  katalog: Kartenkatalog
-  onOeffnen: (karte: CardByNumber) => void
-}>) {
-  const zustand = verweisZustand(alsNummer(id), katalog)
-  if (zustand.art === 'laedt') {
-    return <Typography component="span" variant="body2">{`#${id}`}</Typography>
-  }
-  if (zustand.art === 'fort') {
-    return (
-      <Typography component="span" variant="body2">{`#${id} nicht mehr vorhanden`}</Typography>
-    )
-  }
-  return (
-    <Link
-      component="button"
-      type="button"
-      variant="body2"
-      aria-label={`${label} #${id} ${zustand.karte.title}`}
-      onClick={() => onOeffnen(zustand.karte)}
-    >
-      {`#${id}`}
-    </Link>
-  )
-}
 
-/**
- * Die Karten, die ein Vorgang in einem Arbeitsschritt hinterlassen hat — oder die ausdrückliche
- * Auskunft, dass dort keine entstand. Ein leerer Platz ließe offen, ob nichts entstand oder nichts
- * nachgesehen wurde; dieselbe Begründung wie beim Abbruchsatz über dem Band.
- */
-function Dokumentzeile({
-  label,
-  leer,
-  ids,
-  testId,
-  katalog,
-  onOeffnen,
-}: Readonly<{
-  label: string
-  leer: string
-  ids: readonly string[]
-  testId: string
-  katalog: Kartenkatalog
-  onOeffnen: (karte: CardByNumber) => void
-}>) {
-  if (ids.length === 0) {
-    return (
-      <Typography variant="body2" color="text.secondary" data-testid={testId}>
-        {leer}
-      </Typography>
-    )
-  }
-  return (
-    <Typography variant="body2" color="text.secondary" data-testid={testId}>
-      {`${label} `}
-      {ids.map((id, position) => (
-        <Fragment key={id}>
-          {position > 0 && ', '}
-          <Kartenverweis id={id} label={label} katalog={katalog} onOeffnen={onOeffnen} />
-        </Fragment>
-      ))}
-    </Typography>
-  )
-}
 
 /**
  * Die Übersicht eines Ketten-Laufs (Plan #863, Issue #866): Kopf, die Kennzahlen der Nacht, je
@@ -1429,16 +1320,7 @@ function Dokumentzeile({
  * #856, #858) suchen mit `getByText` im Panel, und ohne eine eigene Wurzel müsste jeder von ihnen
  * angefasst werden, sobald hier ein Text zweimal auf der Seite steht.
  */
-function KettenUebersicht({
-  run,
-  katalog,
-  onOeffnen,
-}: Readonly<{
-  run: NightRun
-  /** Derselbe Katalog wie in den Arbeitspaket-Zeilen — er trägt seit #868 auch die Dokumente. */
-  katalog: Kartenkatalog
-  onOeffnen: (karte: CardByNumber) => void
-}>) {
+function KettenUebersicht({ run }: Readonly<{ run: NightRun }>) {
   const stand = run.stand
 
   return (
@@ -1446,36 +1328,9 @@ function KettenUebersicht({
       data-testid="ketten-uebersicht"
       sx={{ border: 1, borderColor: 'divider', borderRadius: 1, p: 2, mb: 2 }}
     >
-      {/* Kopf und Kennzahlen der Nacht stehen seit #915 im Kopf des Entwurfs über dem Lauf
-          (`NachtlaufKopf`, `NachtlaufKennzahlen`) — hier stünden sie ein zweites Mal. Übrig
-          bleibt, was den Ketten-Lauf allein betrifft: seine Vorgänge und seine Vorgaben. */}
-      <Stack spacing={1}>
-        {run.items.map((item) => (
-          <Box
-            key={`${item.cardNumber}-${item.position}`}
-            data-testid={`uebersicht-vorgang-${item.cardNumber}`}
-          >
-            <Typography variant="body2">{`#${item.cardNumber} ${item.title}`}</Typography>
-            <Typography variant="body2" color="text.secondary">
-              {vorgangsKennzahlen(item.kennzahlen)}
-            </Typography>
-            <Vorgangsband item={item} vorgaben={stand?.vorgabenMin} />
-            {DOKUMENT_STUFEN.map(({ schluessel, label, leer }) => (
-              <Dokumentzeile
-                key={schluessel}
-                label={label}
-                leer={leer}
-                ids={dokumenteDerStufe(item.kettenStufen, schluessel)}
-                testId={`dokumente-${item.cardNumber}-${schluessel}`}
-                katalog={katalog}
-                onOeffnen={onOeffnen}
-              />
-            ))}
-          </Box>
-        ))}
-      </Stack>
-
-      <Divider sx={{ my: 2 }} />
+      {/* Von der Übersicht ist die Fußzeile übrig. Kopf und Kennzahlen der Nacht stehen seit #915
+          im Kopf des Entwurfs über dem Lauf, die Vorgänge seit #916 als eigene Blöcke darunter
+          (`NachtlaufVorgang`) — hier stünden sie ein zweites Mal. */}
       {/* Die Zeile „Herkunft der Budgets" aus `docs/mockup-leitstand-nachtlauf.html` fehlt hier
           bewusst: Der Leitstand kennt die Einstellungen des Betreibers nicht und kann deshalb
           nicht sagen, ob eine Vorgabe eingestellt oder voreingestellt war (#859, Nicht-Ziel 2). */}
@@ -2003,6 +1858,119 @@ function nachtKennzahlen(
   }
 }
 
+/**
+ * Die Arbeitsschritte, aus denen ein Ketten-Vorgang Karten hinterlässt, als Chipgruppen für seinen
+ * Block (#916). Nur `plan` und `pakete`: Die beiden anderen Schritte erzeugen gar keine Karten, und
+ * eine Zeile „keine Karten" unter einem Schritt, der keine hinterlassen kann, wäre keine Aussage.
+ */
+function chipgruppen(item: NightRunItem, katalog: Kartenkatalog): Chipgruppe[] {
+  return DOKUMENT_STUFEN.map(({ schluessel, label, leer }) => ({
+    label,
+    leer,
+    testId: `dokumente-${item.cardNumber}-${schluessel}`,
+    chips: dokumenteDerStufe(item.kettenStufen, schluessel).map(
+      (id): Kartenchip => ({ id, art: label, zustand: verweisZustand(alsNummer(id), katalog) }),
+    ),
+  }))
+}
+
+/**
+ * Das Stufenband eines Ketten-Vorgangs: die gerechneten Abschnitte und ihre Ansage. `null`, wo der
+ * Vorgang gar keine Arbeitsschritte führt — ein aufbewahrter Lauf ohne Sitzungsstand.
+ */
+function vorgangsband(
+  item: NightRunItem,
+  vorgaben: NightRunStufenvorgaben | undefined,
+): { abschnitte: readonly Bandabschnitt[]; ansage: string } | null {
+  if (item.kettenStufen === undefined) {
+    return null
+  }
+  const letzte = letzteErreichteStufe(item.kettenStufen)
+  const abschnitte = KETTEN_STUFEN.map((stufe) => bandabschnitt(stufe, item, vorgaben, letzte))
+  return { abschnitte, ansage: bandAnsage(abschnitte) }
+}
+
+/**
+ * Der Grund, mit dem ein Vorgang endete (AK 7) — `null` an einem regulär beendeten. Derselbe Satz,
+ * der bis #916 über dem Band stand: der Grund und die bis dahin entstandenen Karten.
+ */
+function vorgangsgrund(item: NightRunItem): string | null {
+  const letzte = letzteErreichteStufe(item.kettenStufen)
+  return letzte !== undefined && item.state !== 'GREEN' ? abbruchSatz(item) : null
+}
+
+/**
+ * Ein Vorgang eines Ketten-Laufs (#916): der Block des Entwurfs, gefüllt mit den Werten des
+ * Bestands, darunter die Fähigkeiten, die der Entwurf nicht vorsieht (AK 10).
+ *
+ * <p>Hier wird zusammengestellt, nicht gerechnet: Band, Grund, Chips und Kennzahlenzeile kommen aus
+ * denselben Funktionen wie zuvor, damit die Werte nachweislich dieselben bleiben.
+ */
+function KettenVorgang({
+  item,
+  standItem,
+  vorgaben,
+  modus,
+  katalog,
+  vorhabenKarten,
+  haeufigkeit,
+  istRot,
+  onOeffnen,
+}: Readonly<{
+  item: AnzeigeItem
+  /**
+   * Derselbe Vorgang im Ergebnisstand dieser Sitzung; `undefined` an einem aufbewahrten Lauf.
+   * Arbeitsschritte, Kosten und Züge stehen allein dort — der Server bewahrt sie nicht auf.
+   */
+  standItem: NightRunItem | undefined
+  vorgaben: NightRunStufenvorgaben | undefined
+  modus: NightRunMode
+  katalog: Kartenkatalog
+  vorhabenKarten: Vorhabenkatalog
+  haeufigkeit: string | null
+  istRot: (nummer: number) => boolean
+  onOeffnen: (karte: CardByNumber) => void
+}>) {
+  const band = standItem === undefined ? null : vorgangsband(standItem, vorgaben)
+  return (
+    <Box sx={{ mb: 2 }}>
+      <NachtlaufVorgang
+        nummer={item.cardNumber}
+        titel={item.title}
+        zustand={item.state}
+        ausgangswort={nightRunZustandsText(item.state, item.errorClass)}
+        grund={standItem === undefined ? null : vorgangsgrund(standItem)}
+        band={band}
+        chipgruppen={standItem === undefined ? [] : chipgruppen(standItem, katalog)}
+        kennzahlen={vorgangsKennzahlenText(item, standItem)}
+        onOeffnen={onOeffnen}
+      >
+        {standItem === undefined && item.excerpt !== undefined && (
+          // Auszüge sind Fremdtext (Claude-Ausgaben, Ergebnisse fremder Werkzeuge) und werden
+          // deshalb als reiner Text gerendert, nie über den Markdown-Renderer
+          // (CLAUDE-security.md). Mit Ergebnisstand sagen Band und Grund dasselbe genauer.
+          <Typography variant="body2" color="text.secondary" sx={{ whiteSpace: 'pre-wrap' }}>
+            {(item.state === 'GREY' ? 'Grund: ' : 'Auszug: ') + item.excerpt}
+          </Typography>
+        )}
+        <Paketzusaetze
+          item={item}
+          modus={modus}
+          // Die Entscheidung trifft `stufenZustand` an der Lauf-Art: Im Modus `CHAIN` entfällt
+          // jede Stufenzeile, weil die Herkunft dort im Auszug steht (#858). Sie hier ein zweites
+          // Mal zu treffen hieße, dieselbe Regel an zwei Stellen zu führen.
+          mitStufenzeilen
+          katalog={katalog}
+          vorhabenKarten={vorhabenKarten}
+          haeufigkeit={haeufigkeit}
+          istRot={istRot}
+          onOeffnen={onOeffnen}
+        />
+      </NachtlaufVorgang>
+    </Box>
+  )
+}
+
 /** Ein Lauf als aufklappbares Panel; die Kette wird erst beim Aufklappen geladen (A8). */
 function LaufPanel({
   lauf,
@@ -2048,6 +2016,9 @@ function LaufPanel({
   // Die Lauf-Art in einer eigenen Konstante, damit die Prüfung unten den Typ verengt: Ein
   // Eigenschaftszugriff verengt sich nicht über die Verzweigung hinweg mit.
   const modus = lauf.mode
+  // Eine Fassung für beide Zweige: Zwei gleichlautende Abfragen nebeneinander hießen zwei Stellen,
+  // an denen dieselbe Frage beantwortet wird.
+  const istRot = (nummer: number) => rot.has(nummer)
   const entwurf = traegtEntwurf(modus)
   const kennzahlen = entwurf ? nachtKennzahlen(stand) : null
 
@@ -2119,7 +2090,7 @@ function LaufPanel({
           <NachtlaufKennzahlen kennzahlen={kennzahlen.kennzahlen} hinweis={kennzahlen.hinweis} />
         )}
         {stand !== undefined && lauf.mode === 'CHAIN' && (
-          <KettenUebersicht run={stand} katalog={katalog} onOeffnen={onOeffnen} />
+          <KettenUebersicht run={stand} />
         )}
         {/* Die Kennzahlen der Nacht stehen unter der Kopfzeile des Laufs und über allen
             Einzelangaben (#874). Seit #915 nur noch an den beiden Altbestand-Arten: Kette und
@@ -2154,22 +2125,41 @@ function LaufPanel({
           </Box>
         )}
         <Divider />
-        {lauf.items.map((item, position) => (
-          <Arbeitspaket
-            key={`${item.cardNumber}-${position}`}
-            item={item}
-            modus={lauf.mode}
-            // Dieselbe Bedingung, die über die Übersicht entscheidet, und nicht die Lauf-Art
-            // (#869): Ein aufbewahrter Ketten-Lauf ohne Sitzungsstand bekommt keine Übersicht und
-            // verlöre sonst seine Zeilenangaben, ohne etwas dafür zu bekommen.
-            gekuerzt={stand !== undefined && lauf.mode === 'CHAIN'}
-            katalog={katalog}
-            vorhabenKarten={vorhabenKarten}
-            haeufigkeit={haeufigkeitsText(item, lauf.gespeichert, zaehler, aufbewahrteLaeufe)}
-            istRot={(nummer) => rot.has(nummer)}
-            onOeffnen={onOeffnen}
-          />
-        ))}
+        {/* Der Ketten-Lauf trägt seit #916 den Vorgangsblock des Entwurfs; er vereint, was bis
+            dahin auf die Zeile des Arbeitspakets und die Vorgangsliste der Übersicht verteilt war.
+            Die drei übrigen Arten behalten die Zeilendarstellung — der Umsetzungs-Lauf bis zum
+            Folgepaket, `REVIEW` und `NIGHTPLAN` auf Dauer (E5). */}
+        {lauf.mode === 'CHAIN'
+          ? lauf.items.map((item, position) => (
+              <KettenVorgang
+                key={`${item.cardNumber}-${position}`}
+                item={item}
+                standItem={stand?.items.find((eintrag) => eintrag.cardNumber === item.cardNumber)}
+                vorgaben={stand?.stand?.vorgabenMin}
+                modus={lauf.mode}
+                katalog={katalog}
+                vorhabenKarten={vorhabenKarten}
+                haeufigkeit={haeufigkeitsText(item, lauf.gespeichert, zaehler, aufbewahrteLaeufe)}
+                istRot={istRot}
+                onOeffnen={onOeffnen}
+              />
+            ))
+          : lauf.items.map((item, position) => (
+              <Arbeitspaket
+                key={`${item.cardNumber}-${position}`}
+                item={item}
+                modus={lauf.mode}
+                // Dieselbe Bedingung, die über die Übersicht entscheidet, und nicht die Lauf-Art
+                // (#869): Ein aufbewahrter Ketten-Lauf ohne Sitzungsstand bekommt keine Übersicht
+                // und verlöre sonst seine Zeilenangaben, ohne etwas dafür zu bekommen.
+                gekuerzt={stand !== undefined && lauf.mode === 'CHAIN'}
+                katalog={katalog}
+                vorhabenKarten={vorhabenKarten}
+                haeufigkeit={haeufigkeitsText(item, lauf.gespeichert, zaehler, aufbewahrteLaeufe)}
+                istRot={istRot}
+                onOeffnen={onOeffnen}
+              />
+            ))}
       </AccordionDetails>
     </Accordion>
   )
