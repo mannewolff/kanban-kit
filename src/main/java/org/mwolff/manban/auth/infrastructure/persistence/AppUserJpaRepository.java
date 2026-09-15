@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.Optional;
 import org.mwolff.manban.auth.domain.PlatformRole;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -43,4 +44,35 @@ interface AppUserJpaRepository extends JpaRepository<AppUserEntity, Long> {
               + " order by id for update",
       nativeQuery = true)
   List<Long> lockActiveIdsByPlatformRole(@Param("role") String role);
+
+  /**
+   * Die aktuelle Sitzungs-Generation des Kontos (Issue #884); leer, wenn es die Zeile nicht gibt.
+   *
+   * <p>Native Abfrage mit <strong>Skalar-Projektion</strong> aus demselben Grund wie bei {@link
+   * #lockActiveIdsByPlatformRole}: Eine Entity-Projektion lieferte für einen bereits im
+   * Persistenzkontext liegenden Benutzer die zwischengespeicherte Instanz — und die trägt den Wert
+   * aus der Zeit vor dem Hochzählen. Ein Skalar umgeht den Persistenzkontext und liest die Zeile.
+   *
+   * <p>{@link AppUserEntity} mappt die Spalte bewusst nicht (Plan #883, E5), eine JPQL-Abfrage käme
+   * an sie also ohnehin nicht heran.
+   */
+  @Query(value = "select session_generation from app_user where id = :id", nativeQuery = true)
+  Optional<Long> findSessionGeneration(@Param("id") long id);
+
+  /**
+   * Zählt die Sitzungs-Generation des Kontos um eins hoch (Issue #884).
+   *
+   * <p>Bedingungsloses Inkrement in der Datenbank statt Lesen-Rechnen-Schreiben (Plan #883, E4):
+   * PostgreSQL sperrt die Zeile und wertet {@code session_generation + 1} nach dem Commit einer
+   * gleichzeitig laufenden zweiten Transaktion auf der <em>neuen</em> Zeilenversion aus. Beide
+   * Erhöhungen zählen damit; ein Lesen mit anschließendem Schreiben verlöre eine davon — und eine
+   * verlorene Erhöhung heißt: eine Sitzung, die hätte enden müssen, läuft weiter.
+   *
+   * @return Zahl der geänderten Zeilen; {@code 0} für ein Konto, das es nicht (mehr) gibt
+   */
+  @Modifying
+  @Query(
+      value = "update app_user set session_generation = session_generation + 1 where id = :id",
+      nativeQuery = true)
+  int bumpSessionGeneration(@Param("id") long id);
 }
