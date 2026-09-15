@@ -11,8 +11,12 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Plattform-Administration: Nutzer auflisten, Plattform-Rollen setzen und Registrierungen
- * freigeben. Alle Operationen erfordern, dass der Aufrufer selbst Plattform-Admin ist. Der letzte
- * Admin ist gegen Degradierung geschützt (kein Aussperren).
+ * freigeben. Alle Operationen erfordern, dass der Aufrufer selbst Plattform-Admin ist.
+ *
+ * <p>Über allen rollen- und sperrändernden Vorgängen steht eine Zusicherung: <strong>Mindestens ein
+ * nicht gesperrter Plattform-Administrator bleibt übrig</strong> — gegen Herabstufen wie gegen
+ * Sperren (Issue #881). Beide Vorgänge prüfen sie an derselben Stelle ({@link
+ * #requireAnotherActiveAdminRemains}) und lehnen mit derselben {@link LastAdminException} ab.
  */
 @Service
 public class AdminService {
@@ -40,10 +44,11 @@ public class AdminService {
   }
 
   /**
-   * Setzt die Plattform-Rolle eines Benutzers. Der letzte Admin kann nicht degradiert werden — und
-   * zwar auch dann nicht, wenn zwei Admins das gleichzeitig füreinander versuchen: {@link
-   * AppUserRepository#lockActivePlatformAdminIds()} sperrt die Admin-Zeilen, sodass der zweite
-   * Aufruf erst nach dem ersten prüft und dessen Degradierung bereits sieht (Issue #498).
+   * Setzt die Plattform-Rolle eines Benutzers. Eine Herabstufung darf nicht den letzten nicht
+   * gesperrten Admin nehmen — und zwar auch dann nicht, wenn zwei Admins das gleichzeitig
+   * füreinander versuchen: {@link AppUserRepository#lockActivePlatformAdminIds()} sperrt die
+   * Admin-Zeilen, sodass der zweite Aufruf erst nach dem ersten prüft und dessen Degradierung
+   * bereits sieht (Issue #498).
    */
   @Transactional
   public UserView changePlatformRole(long actorUserId, long targetUserId, PlatformRole newRole) {
@@ -53,9 +58,9 @@ public class AdminService {
     List<Long> adminIds = users.lockActivePlatformAdminIds();
     AppUser target = users.findById(targetUserId).orElseThrow(UserNotFoundException::new);
 
-    // Letzten Admin nicht degradieren (Aussperr-Schutz).
-    if (newRole != PlatformRole.ADMIN && adminIds.size() <= 1 && adminIds.contains(targetUserId)) {
-      throw new LastAdminException();
+    // Eine Beförderung vergrößert die Menge und kann die Zusicherung nicht verletzen.
+    if (newRole != PlatformRole.ADMIN) {
+      requireAnotherActiveAdminRemains(adminIds, targetUserId);
     }
 
     // Wer zum Plattform-Admin befördert wird, ist damit zugleich freigegeben — sonst bliebe ein
@@ -95,9 +100,16 @@ public class AdminService {
   }
 
   /**
-   * Sperrt (deaktiviert) ein Konto. Der Aufrufer kann sich nicht selbst sperren — dadurch bleibt
-   * stets mindestens ein aktiver Admin (der Sperrende selbst) übrig, ein Komplett-Aussperren ist
-   * nicht möglich. Idempotent (ein bereits gesperrtes Konto bleibt unverändert).
+   * Sperrt (deaktiviert) ein Konto. Der Aufrufer kann sich nicht selbst sperren; darüber hinaus
+   * darf das Sperren nicht den letzten nicht gesperrten Plattform-Admin nehmen — dieselbe
+   * Zusicherung und dieselbe Ablehnung wie beim Herabstufen (Issue #881).
+   *
+   * <p>Die Selbstsperre wird zuerst geprüft: Sie ist der häufigste Fehlgriff, spart so eine
+   * Zeilensperre und behält ihre eigene Meldung, statt vom Aussperr-Schutz verdeckt zu werden.
+   * Danach sperrt {@link AppUserRepository#lockActivePlatformAdminIds()} die Admin-Zeilen, damit
+   * zwei gleichzeitige Sperren einander sehen (Issue #498). Idempotent: Ein bereits gesperrtes
+   * Konto bleibt unverändert und erreicht den Schutz gar nicht — es nimmt der Plattform nichts
+   * mehr.
    */
   @Transactional
   public UserView disable(long actorUserId, long targetUserId) {
@@ -105,14 +117,39 @@ public class AdminService {
     if (actorUserId == targetUserId) {
       throw new CannotDisableSelfException();
     }
+    List<Long> adminIds = users.lockActivePlatformAdminIds();
     AppUser target = users.findById(targetUserId).orElseThrow(UserNotFoundException::new);
     if (target.disabled()) {
       return toView(target);
     }
+    requireAnotherActiveAdminRemains(adminIds, targetUserId);
     return toView(users.save(target.withDisabledAt(clock.instant())));
   }
 
-  /** Entsperrt ein Konto. Idempotent (ein aktives Konto bleibt unverändert). */
+  /**
+   * Die gemeinsame Zusicherung beider Vorgänge: Nach dem Vorgang bleibt mindestens ein nicht
+   * gesperrter Plattform-Administrator übrig. Verletzt ist sie genau dann, wenn das Ziel selbst in
+   * der gesperrten Menge steht und diese keinen zweiten enthält.
+   *
+   * <p>Bewusst die <strong>einzige</strong> Stelle mit dieser Bedingung: Zwei Formulierungen
+   * derselben Regel driften auseinander, und ein Vorgang bekäme stillschweigend einen anderen
+   * Schutz als der andere.
+   *
+   * @param activeAdminIds IDs der nicht gesperrten Plattform-Admins, gesperrt gelesen
+   * @param targetUserId Benutzer, den der Vorgang der Menge nähme
+   */
+  private static void requireAnotherActiveAdminRemains(
+      List<Long> activeAdminIds, long targetUserId) {
+    if (activeAdminIds.size() <= 1 && activeAdminIds.contains(targetUserId)) {
+      throw new LastAdminException();
+    }
+  }
+
+  /**
+   * Entsperrt ein Konto. Idempotent (ein aktives Konto bleibt unverändert). Sperrt die Admin-Zeilen
+   * bewusst nicht: Das Entsperren vergrößert die Menge der aktiven Admins und kann die Zusicherung
+   * aus {@link #requireAnotherActiveAdminRemains} nicht verletzen.
+   */
   @Transactional
   public UserView enable(long actorUserId, long targetUserId) {
     requirePlatformAdmin(actorUserId);

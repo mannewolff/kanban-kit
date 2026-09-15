@@ -465,6 +465,93 @@ class AdminServiceTest {
   }
 
   @Test
+  void disable_throwsLastAdmin_whenTargetIsSoleActiveAdmin() {
+    // Given: die gesperrte Menge der aktiven Administratoren besteht nur aus dem Ziel — der
+    // Aufrufer selbst steht nicht darin. Genau so sieht die Lage die zweite Transaktion eines
+    // Rennens, nachdem die erste den Aufrufer gesperrt hat.
+    when(users.findById(1L)).thenReturn(Optional.of(user(1, PlatformRole.ADMIN)));
+    when(users.findById(2L)).thenReturn(Optional.of(user(2, PlatformRole.ADMIN)));
+    when(users.lockActivePlatformAdminIds()).thenReturn(List.of(2L));
+
+    // When / Then: dieselbe Ablehnung wie beim Herabstufen, und nichts wird geschrieben.
+    assertThatThrownBy(() -> service.disable(1L, 2L)).isInstanceOf(LastAdminException.class);
+    verify(users, never()).save(any());
+  }
+
+  @Test
+  void disable_disablesAdmin_whenAnotherActiveAdminRemains() {
+    // Given: zwei aktive Administratoren — das Sperren des einen lässt den anderen übrig.
+    when(users.findById(1L)).thenReturn(Optional.of(user(1, PlatformRole.ADMIN)));
+    when(users.findById(2L)).thenReturn(Optional.of(user(2, PlatformRole.ADMIN)));
+    when(users.lockActivePlatformAdminIds()).thenReturn(List.of(1L, 2L));
+    when(users.save(any(AppUser.class))).thenAnswer(inv -> inv.getArgument(0));
+
+    // When
+    AdminService.UserView view = service.disable(1L, 2L);
+
+    // Then
+    assertThat(view.disabled()).isTrue();
+  }
+
+  @Test
+  void disable_leavesNonAdminTargetUntouchedByTheGuard() {
+    // Given: nur der Aufrufer trägt die Admin-Rolle; das Ziel steht nicht in der gesperrten Menge,
+    // obwohl diese nur einen Eintrag hat. Das Sperren eines gewöhnlichen Benutzers nimmt der
+    // Plattform keine Führung und darf nicht abgelehnt werden.
+    when(users.findById(1L)).thenReturn(Optional.of(user(1, PlatformRole.ADMIN)));
+    when(users.findById(2L)).thenReturn(Optional.of(user(2, PlatformRole.USER)));
+    when(users.lockActivePlatformAdminIds()).thenReturn(List.of(1L));
+    when(users.save(any(AppUser.class))).thenAnswer(inv -> inv.getArgument(0));
+
+    // When
+    AdminService.UserView view = service.disable(1L, 2L);
+
+    // Then
+    assertThat(view.disabled()).isTrue();
+  }
+
+  @Test
+  void disable_staysIdempotent_beforeReachingTheGuard() {
+    // Given: das Ziel ist bereits gesperrt und stünde — hypothetisch — als einziges in der
+    // gesperrten Menge. Der Idempotenz-Zweig kommt zuerst: Ein zweites Sperren desselben Kontos
+    // ändert nichts und darf deshalb auch nicht abgelehnt werden.
+    when(users.findById(1L)).thenReturn(Optional.of(user(1, PlatformRole.ADMIN)));
+    when(users.findById(2L)).thenReturn(Optional.of(disabledUser(2, PlatformRole.ADMIN)));
+    when(users.lockActivePlatformAdminIds()).thenReturn(List.of(2L));
+
+    // When
+    AdminService.UserView view = service.disable(1L, 2L);
+
+    // Then
+    assertThat(view.disabled()).isTrue();
+    verify(users, never()).save(any());
+  }
+
+  @Test
+  void disable_rejectsSelf_whenActorIsTheSoleActiveAdmin() {
+    // Given: der Aufrufer ist der einzige aktive Administrator. Die Selbstsperre bleibt der
+    // Ablehnungsgrund — der neue Schutz darf sie nicht verdecken, sonst bekäme der häufigste
+    // Fehlgriff plötzlich eine Meldung über fremde Konten.
+    when(users.findById(1L)).thenReturn(Optional.of(user(1, PlatformRole.ADMIN)));
+    when(users.lockActivePlatformAdminIds()).thenReturn(List.of(1L));
+
+    // When / Then
+    assertThatThrownBy(() -> service.disable(1L, 1L))
+        .isInstanceOf(CannotDisableSelfException.class);
+  }
+
+  @Test
+  void disable_rejectsSelf_whenSeveralActiveAdminsExist() {
+    // Given: mehrere aktive Administratoren — der neue Schutz griffe hier gar nicht.
+    when(users.findById(1L)).thenReturn(Optional.of(user(1, PlatformRole.ADMIN)));
+    when(users.lockActivePlatformAdminIds()).thenReturn(List.of(1L, 2L));
+
+    // When / Then
+    assertThatThrownBy(() -> service.disable(1L, 1L))
+        .isInstanceOf(CannotDisableSelfException.class);
+  }
+
+  @Test
   void disable_throwsUserNotFound_whenTargetUnknown() {
     when(users.findById(1L)).thenReturn(Optional.of(user(1, PlatformRole.ADMIN)));
     when(users.findById(2L)).thenReturn(Optional.empty());

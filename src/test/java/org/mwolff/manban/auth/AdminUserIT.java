@@ -32,6 +32,13 @@ class AdminUserIT extends AbstractIntegrationTest {
 
   private static final String PASSWORD = "sup3r-secret";
 
+  /**
+   * Die gemeinsame Ablehnung von Herabstufen und Sperren — wörtlich wie in {@code
+   * LastAdminException}. Beide Vorgänge geben denselben Text nach außen (Issue #881).
+   */
+  private static final String LAST_ADMIN_DETAIL =
+      "Mindestens ein aktiver Plattform-Administrator muss bestehen bleiben.";
+
   @Autowired private MockMvc mvc;
   @Autowired private AppUserRepository users;
   @Autowired private PasswordEncoder passwordEncoder;
@@ -183,12 +190,32 @@ class AdminUserIT extends AbstractIntegrationTest {
     Cookie admin = login("last-admin@example.com", PlatformRole.ADMIN);
     long adminId = users.findByEmail("last-admin@example.com").orElseThrow().id();
 
-    // Als einziger Admin schlägt die Selbst-Degradierung mit 409 fehl.
+    // Als einziger Admin schlägt die Selbst-Degradierung mit 409 fehl — mit der gemeinsamen
+    // Meldung beider Vorgänge, wörtlich wie sie die Exception trägt (Issue #881).
     mvc.perform(
             patch("/api/admin/users/" + adminId)
                 .cookie(admin)
                 .contentType("application/json")
                 .content("{\"platformRole\":\"USER\"}"))
-        .andExpect(status().isConflict());
+        .andExpect(status().isConflict())
+        .andExpect(jsonPath("$.detail").value(LAST_ADMIN_DETAIL));
+  }
+
+  @Test
+  void disablingFellowAdminSucceeds_whileSelfLockStaysBadRequest() throws Exception {
+    Cookie admin = login("dis-admin@example.com", PlatformRole.ADMIN);
+    long adminId = users.findByEmail("dis-admin@example.com").orElseThrow().id();
+    long secondAdminId = ensureUser("dis-second-admin@example.com", PlatformRole.ADMIN);
+
+    // Solange ein zweiter aktiver Admin bleibt, gelingt das Sperren eines Admin-Kontos.
+    mvc.perform(post("/api/admin/users/" + secondAdminId + "/disable").cookie(admin))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.disabled").value(true));
+
+    // Danach ist der Aufrufer der einzige aktive Admin. Die Selbstsperre bleibt bei 400 mit ihrer
+    // eigenen Meldung: Der Schutz „mindestens ein aktiver Admin" (409) verdeckt sie nicht.
+    mvc.perform(post("/api/admin/users/" + adminId + "/disable").cookie(admin))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.detail").value("Das eigene Konto kann nicht gesperrt werden"));
   }
 }
