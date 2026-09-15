@@ -25,7 +25,12 @@ const ALLOWLIST: ReadonlyArray<DesignAllowance> = []
  * Theme" sich nicht gegen ihre eigene Quelle richten kann. Bewusst eine kurze, benannte Liste —
  * kein enger Glob, der halbe Verzeichnisse stillschweigend auslaesst.
  */
-const COLOR_SOURCES = ['theme.ts', 'lib/statusColors.ts', 'lib/epicMeta.ts']
+const COLOR_SOURCES = [
+  'theme.ts',
+  'nachtlaufDesign.ts',
+  'lib/statusColors.ts',
+  'lib/epicMeta.ts',
+]
 
 const SOURCES: Record<string, string> = import.meta.glob('./**/*.{ts,tsx}', {
   query: '?raw',

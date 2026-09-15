@@ -67,6 +67,24 @@ Statusfarben der Spalten sind eine eigene, bewusste Ausnahme und liegen in [`fro
 
 ---
 
+## 🌙 Ausnahme: Nachtlauf-Auswertung
+
+**Genau eine Seite weicht bewusst von dieser Datei ab**, und zwar in der Designsprache *und* in der Typografie: die Nachtlauf-Auswertung unter `/projects/:id/nachtlauf`, umgesetzt in [`frontend/src/pages/NightRunPage.tsx`](frontend/src/pages/NightRunPage.tsx) und den Bausteinen unter [`frontend/src/components/nachtlauf/`](frontend/src/components/nachtlauf/).
+
+**Die Ausnahme gilt nur für den Inhaltsbereich dieser einen Seite.** Nicht für AppBar und Drawer der `AppShell`, die sie umgeben, und **nicht für den Kartendialog**, der von ihr aus geöffnet wird — der gehört zur übrigen Anwendung und trägt „Panel“. Das Entwurfs-Theme liegt als verschachtelter `ThemeProvider` über dem Inhaltsbereich, nicht als globale CSS-Regel; der Dialog steht außerhalb dieses Teilbaums.
+
+**Warum sie abweicht:** Sie ist das Vorführstück des Leitstands und trägt eine eigene, vom PO abgenommene Vorlage — [`docs/mockup-leitstand-nachtlauf.html`](docs/mockup-leitstand-nachtlauf.html). Abgenommen wird sie durch Nebeneinanderlegen von Entwurf und Bildschirmfoto; Tests und Gates können Aussehen nicht prüfen, und genau daran ist die erste Umsetzung vorbeigelaufen.
+
+**Wo ihre Werte liegen:** [`frontend/src/nachtlaufDesign.ts`](frontend/src/nachtlaufDesign.ts) — Farben, Schriftfamilien, Größen und Abstände des Entwurfs sowie das Theme, das die Seite überlagert. Die Datei ist in `COLOR_SOURCES` von [`frontend/src/designGuard.test.ts`](frontend/src/designGuard.test.ts) geführt und wie `theme.ts` von der Coverage ausgenommen. **[`frontend/src/theme.ts`](frontend/src/theme.ts) bleibt davon unberührt** und ist weiterhin die Wertequelle der Designsprache; `palette.nightRun` dort trägt unverändert die beiden Lauf-Arten, die in „Panel“ dargestellt werden.
+
+**Was außer den Farben abweicht:** Die Seite trägt **drei Schriftfamilien mit sieben Gewichten** — Chivo (600, 800), IBM Plex Sans (400, 500, 600) und IBM Plex Mono (400, 600) — und damit nicht die Zwei-Gewichte-Regel dieser Datei. Sie werden über `@fontsource` mit der Anwendung ausgeliefert und im lazy geladenen Route-Chunk der Seite geladen, nicht in `main.tsx`: Eine Instanz ohne Internetzugang zeigt dasselbe Schriftbild, und die übrigen Seiten laden die sieben Schnitte nicht mit.
+
+**Der Kontrastanspruch gilt hier unverändert**: 4,5:1 für Fließtext, 3:1 für großen Text und für bedeutungstragende Flächen. Eine Kombination unter AA ist auch in der Ausnahme ein Fehler — vier Töne der Vorlage haben ihn verfehlt und sind abgedunkelt worden. Nachgerechnet wird in [`frontend/src/nachtlaufDesign.test.ts`](frontend/src/nachtlaufDesign.test.ts), die Abweichungen sind an den betroffenen Konstanten vermerkt.
+
+**Diese Ausnahme gilt nirgendwo sonst und ist kein Vorbild.** Wer eine weitere Seite anders gestalten will, braucht dafür eine eigene Entscheidung des PO und einen eigenen Abschnitt hier — nicht den Verweis auf diesen.
+
+---
+
 ## 📜 Historie
 
 Die Designsprache heißt **„Panel“**: runder, zwei Ebenen Tiefe, Fläche nicht durchgehend weiß.

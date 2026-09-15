@@ -141,3 +141,8 @@ Persönliche API-Tokens (für die Kanban-Compat-API / CLIs) erzeugt und widerruf
 darf nur anlegen, wer auf dem betreffenden Board das Recht hat, **Karten anzulegen** (`TICKET_CREATE`)
 — ein VIEWER also nicht. Damit kann ein Token nie mehr als sein Ersteller: das Board über die API zu
 treiben (Karten anlegen/verschieben) entspricht genau dem Recht, das man dafür ohnehin bräuchte.
+
+Ein **board-gebundenes** Token kann ausschließlich die Kanban-Compat-API (`/api/kanban/**`) seines
+gebundenen Boards bedienen; jeder andere `/api/**`-Zugriff wird mit **403** abgewiesen — unabhängig
+von den Rollen des Erstellers, auch bei einem Plattform-Admin. Ein **ungebundenes** Token bleibt in
+seinem bisherigen Umfang nutzbar.

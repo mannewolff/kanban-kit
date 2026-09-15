@@ -28,6 +28,10 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
  *   <li>Default-Deny für {@code /api/**} (außer den öffentlichen Auth-Endpunkten); statische
  *       Inhalte und die React-App unter {@code /} bleiben offen.
  *   <li>Unauthentifizierte API-Zugriffe → 401 (kein Redirect auf eine Login-Seite).
+ *   <li>Board-Bindung (Issue #836): Ein an ein Board gebundenes Zugriffs-Token erreicht
+ *       ausschließlich {@code /api/kanban/**}; die übrige {@code /api/**}-Oberfläche verlangt die
+ *       Session-Authority oder {@code AUTH_PAT_UNBOUND} und antwortet einem gebundenen Token mit
+ *       403 — unabhängig von den Rollen des Erstellers, einschließlich Plattform-Admin.
  *   <li>CSRF: Der Synchronizer-Token entfällt bewusst — es gibt keine Server-Session, und das
  *       Auth-Cookie ist {@code HttpOnly; SameSite=Strict}, wird also nie cross-site gesendet. Damit
  *       ist der zustandslose Cookie-Ansatz CSRF-resistent.
@@ -81,8 +85,18 @@ class SecurityConfig {
                     // Kanban-Compat-API (tbx.mjs/board.mjs) ausschließlich per PAT.
                     .requestMatchers("/api/kanban/**")
                     .hasAuthority(PatAuthenticationFilter.AUTHORITY)
+                    // Whitelist statt Blacklist (Issue #836): Die übrige API steht nur der Session
+                    // und dem UNGEBUNDENEN Token offen. Ein board-gebundenes Token trägt
+                    // AUTH_PAT_UNBOUND nicht und ist damit hier von sich aus gesperrt — auch bei
+                    // einem Plattform-Admin als Ersteller. Ein neuer Endpunkt unter /api/** ist
+                    // für gebundene Token folglich ab dem ersten Tag zu, und das ist die Absicht:
+                    // Eine Prüfung je Endpunkt bliebe offen, bis jemand daran denkt, sie
+                    // nachzutragen. Abgewiesen wird mit 403 über den Default-AccessDeniedHandler
+                    // (das Token ist authentifiziert, nur nicht berechtigt), nicht mit 401.
                     .requestMatchers("/api/**")
-                    .authenticated()
+                    .hasAnyAuthority(
+                        SessionAuthenticationFilter.AUTHORITY,
+                        PatAuthenticationFilter.UNBOUND_AUTHORITY)
                     .anyRequest()
                     .permitAll())
         .exceptionHandling(

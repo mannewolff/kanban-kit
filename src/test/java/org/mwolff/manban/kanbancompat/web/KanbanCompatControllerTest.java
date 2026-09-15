@@ -13,6 +13,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mwolff.manban.accesstoken.application.KanbanPrincipal;
 import org.mwolff.manban.kanbancompat.application.KanbanCompatService;
+import org.mwolff.manban.kanbancompat.application.KanbanCompatService.Activity;
 import org.mwolff.manban.kanbancompat.application.KanbanCompatService.Comment;
 import org.mwolff.manban.kanbancompat.application.KanbanCompatService.Created;
 import org.mwolff.manban.kanbancompat.application.KanbanCompatService.Epic;
@@ -144,6 +145,36 @@ class KanbanCompatControllerTest {
 
     // Then
     assertThat(result).isSameAs(comments);
+  }
+
+  @Test
+  void activity_withBoundPrincipal_delegates() {
+    // Given
+    List<Activity> activity =
+        List.of(
+            new Activity(
+                9L,
+                3L,
+                "CREATED",
+                "Angelegt",
+                Instant.parse("2026-01-01T10:00:00Z"),
+                "TOKEN",
+                "Nachtlauf",
+                "claude-opus-5"));
+    when(service.listActivity(PRINCIPAL, 8L)).thenReturn(activity);
+
+    // When
+    List<Activity> result = controller.activity(boundAuthentication(), 8L);
+
+    // Then
+    assertThat(result).isSameAs(activity);
+  }
+
+  @Test
+  void activity_nullAuthentication_throwsTokenNotBound() {
+    // When / Then: ohne Bindung endet der Aufruf wie bei jedem anderen Endpunkt mit 409
+    assertThatThrownBy(() -> controller.activity(null, 8L))
+        .isInstanceOf(TokenNotBoundException.class);
   }
 
   @Test

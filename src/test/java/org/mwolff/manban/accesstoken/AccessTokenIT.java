@@ -201,8 +201,10 @@ class AccessTokenIT extends AbstractIntegrationTest {
             .getContentAsString();
     String plaintext = json.readTree(body).get("plaintext").asText();
 
-    // PAT authentifiziert weiterhin (Filter löst über resolveBinding auf).
-    mvc.perform(get("/api/me").header("X-Kanban-Token", plaintext)).andExpect(status().isOk());
+    // PAT authentifiziert weiterhin (Filter löst über resolveBinding auf) — seit #877 aber
+    // ausschließlich auf der Kanban-Compat-API des gebundenen Boards, nicht mehr auf /api/me.
+    mvc.perform(get("/api/kanban/items").header("X-Kanban-Token", plaintext))
+        .andExpect(status().isOk());
 
     // Liste (neuestes Token zuerst) zeigt die persistierte Bindung.
     mvc.perform(get("/api/access-tokens").cookie(session))
@@ -255,5 +257,72 @@ class AccessTokenIT extends AbstractIntegrationTest {
                 .contentType("application/json")
                 .content("{\"name\":\"partial\",\"projectId\":%d}".formatted(p1)))
         .andExpect(status().isBadRequest());
+  }
+
+  // --- Widerruf bleibt widerrufen (#878, fachlich #836) ---------------------
+
+  @Test
+  void newTokenWithTheSameNameDoesNotReviveTheRevokedOne() throws Exception {
+    // Given: ein widerrufenes, an ein Board gebundenes Token.
+    Cookie session = loginAs("name-reuse@example.com");
+    long projectId = createProject("name-reuse@example.com", "Namensprojekt");
+    long boardId = createBoard(session, projectId, "Board N");
+    JsonNode old = createBoundToken(session, "Doppelname", projectId, boardId);
+    long oldId = old.get("id").asLong();
+    String oldPlaintext = old.get("plaintext").asText();
+    mvc.perform(delete("/api/access-tokens/" + oldId).cookie(session))
+        .andExpect(status().isNoContent());
+
+    // When: ein neues Token mit demselben Namen entsteht — der Name ist kein Schlüssel.
+    JsonNode fresh = createBoundToken(session, "Doppelname", projectId, boardId);
+    long freshId = fresh.get("id").asLong();
+
+    // Then: eigene Zeile, und das neue Token arbeitet auf seinem Board.
+    assertThat(freshId).isNotEqualTo(oldId);
+    mvc.perform(get("/api/kanban/items").header("X-Kanban-Token", fresh.get("plaintext").asText()))
+        .andExpect(status().isOk());
+    // Das alte bleibt widerrufen und wird weiterhin abgewiesen.
+    mvc.perform(get("/api/kanban/items").header("X-Kanban-Token", oldPlaintext))
+        .andExpect(status().isUnauthorized());
+    JsonNode list =
+        json.readTree(
+            mvc.perform(get("/api/access-tokens").cookie(session))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString());
+    assertThat(list).hasSize(2);
+    assertThat(revokedOf(list, oldId)).isTrue();
+    assertThat(revokedOf(list, freshId)).isFalse();
+  }
+
+  private JsonNode createBoundToken(Cookie session, String name, long projectId, long boardId)
+      throws Exception {
+    return json.readTree(
+        mvc.perform(
+                post("/api/access-tokens")
+                    .cookie(session)
+                    .contentType("application/json")
+                    .content(
+                        "{\"name\":\"%s\",\"projectId\":%d,\"boardId\":%d}"
+                            .formatted(name, projectId, boardId)))
+            .andExpect(status().isCreated())
+            .andReturn()
+            .getResponse()
+            .getContentAsString());
+  }
+
+  /**
+   * Der Widerrufsstatus des Tokens mit dieser ID — bewusst über die ID statt über die
+   * Listenposition gesucht: Bei gleichem Namen und nahezu gleichem {@code createdAt} ist die
+   * Reihenfolge kein verlässliches Merkmal.
+   */
+  private static boolean revokedOf(JsonNode list, long tokenId) {
+    for (JsonNode entry : list) {
+      if (entry.get("id").asLong() == tokenId) {
+        return entry.get("revoked").asBoolean();
+      }
+    }
+    throw new AssertionError("Token " + tokenId + " fehlt in der Liste");
   }
 }

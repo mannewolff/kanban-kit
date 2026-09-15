@@ -24,6 +24,7 @@ import echterPrueflauf from '../lib/__fixtures__/night-run-2026-09-11-103116.jso
 import echteKette from '../lib/__fixtures__/night-run-2026-09-14-131200.json'
 import { parseNightRunErgebnisstand } from '../lib/nightRunErgebnisstand'
 import { buildHandoffText, type NightRunHandoffItem } from '../lib/nightRunHandoff'
+import { NACHTLAUF_FARBEN, NACHTLAUF_TON } from '../nachtlaufDesign'
 import { theme } from '../theme'
 import { NightRunPage } from './NightRunPage'
 
@@ -41,16 +42,34 @@ import { NightRunPage } from './NightRunPage'
 
 // Das Karten-Detail ist separat getestet (CardDetailModal.test.tsx) — hier ein Stub, der die
 // geöffnete Karte sichtbar macht und den Schließen-Pfad auslöst.
-vi.mock('../components/CardDetailModal', () => ({
-  CardDetailModal: ({ card, onClose }: { card: { number: number | null }; onClose: () => void }) => (
-    <div data-testid="karten-detail">
-      Karte {card.number}
-      <button type="button" onClick={onClose}>
-        detail-schliessen
-      </button>
-    </div>
-  ),
-}))
+//
+// Der Stub gibt zusätzlich aus, **welches Theme** er sieht (#914): Nicht-Ziel 2 des Fachplans
+// verbietet, die Gestaltung der Nachtlauf-Auswertung auf die übrige Anwendung zu übertragen, und
+// der Dialog gehört zu ihr, obwohl er von dieser Seite aus geöffnet wird. Ob er im Theme-Teilbaum
+// steht, entscheidet allein seine Stellung im React-Baum — das Portal, in dem er im DOM landet,
+// sagt darüber nichts.
+vi.mock('../components/CardDetailModal', async () => {
+  const { useTheme } = await import('@mui/material/styles')
+  return {
+    CardDetailModal: ({
+      card,
+      onClose,
+    }: {
+      card: { number: number | null }
+      onClose: () => void
+    }) => {
+      const gesehenesTheme = useTheme()
+      return (
+        <div data-testid="karten-detail" data-schrift={String(gesehenesTheme.typography.fontFamily)}>
+          Karte {card.number}
+          <button type="button" onClick={onClose}>
+            detail-schliessen
+          </button>
+        </div>
+      )
+    },
+  }
+})
 
 /** Startzeitpunkt eines Laufs — der Schlüssel der Auswertung (Plan #718, A4). */
 const startedAt = (minute: number) => `2026-09-01T22:${String(minute).padStart(2, '0')}:00.000Z`
@@ -463,9 +482,53 @@ function protokollWaehlen(inhalt: string, name = 'night-run.json', typ = 'applic
 /** Das Panel eines Laufs, identifiziert über seinen Startzeitpunkt. */
 const lauf = (minute: number) => screen.getByTestId(`lauf-${startedAt(minute)}`)
 
-/** Klappt den Lauf auf; erst dabei wird die Herkunftskette aufgelöst (Plan #718, A8). */
+/**
+ * Die Kopfzeile eines Laufs. Bis #915 war sie eine Reihe eigener Chips; Ketten- und
+ * Umsetzungs-Lauf tragen seither die Metazeile des Entwurfs, in der dieselben Angaben stehen
+ * (AK 10) — nur nicht mehr in je eigenen Knoten. Die beiden Altbestand-Arten behalten ihre Chips,
+ * deshalb der Rückfall auf den Aufklappknopf, der beide Formen umschließt.
+ */
+const laufKopfzeile = (panelEl: HTMLElement): HTMLElement =>
+  within(panelEl).queryByTestId('nachtlauf-meta') ?? within(panelEl).getAllByRole('button')[0]
+
+/** `getComputedStyle` gibt Farben als `rgb(…)` zurück, die Tokens stehen als `#rrggbb`. */
+function alsRgb(hex: string): string {
+  const kanal = (position: number) => Number.parseInt(hex.slice(position, position + 2), 16)
+  return `rgb(${kanal(1)}, ${kanal(3)}, ${kanal(5)})`
+}
+
+/** Die Metazeile des einzigen Laufs auf der Seite — dort steht seit #915 seine Kennzeichnung. */
+const metazeile = () => screen.getByTestId('nachtlauf-meta')
+
+/**
+ * Die Kennzahlenreihe eines Laufs, in welcher Form auch immer: Ketten- und Umsetzungs-Lauf tragen
+ * seit #915 die Reihe des Entwurfs, die beiden Altbestand-Arten weiter die bisherige Zeile.
+ */
+const KENNZAHLEN_REIHE = /^(nachtlauf|lauf)-kennzahlen$/
+
+/**
+ * Klappt den Lauf auf; erst dabei wird die Herkunftskette aufgelöst (Plan #718, A8).
+ *
+ * Der **oberste** Lauf steht seit #914 beim Öffnen der Seite bereits offen (E7) — für ihn ist
+ * nichts zu tun. Der Helfer bleibt deshalb still, statt auf einen zugeklappten Knopf zu warten,
+ * den es nicht mehr gibt.
+ */
 function aufklappen(minute: number) {
-  fireEvent.click(within(lauf(minute)).getByRole('button', { expanded: false }))
+  panelAufklappen(lauf(minute))
+}
+
+/**
+ * Dasselbe für ein Panel, das der Test bereits in der Hand hat.
+ *
+ * Genommen wird der **erste** Knopf des Panels: Die Kopfzeile des Laufs steht im DOM vor seinem
+ * Inhalt. Ein offener Lauf trägt weitere zugeklappte Aufklappfelder in sich (etwa die Grund-Zeilen
+ * der Aufschlüsselung) — eine Suche nach „irgendeinem zugeklappten Knopf" träfe die.
+ */
+function panelAufklappen(panelEl: HTMLElement) {
+  const knopf = within(panelEl).getAllByRole('button')[0]
+  if (knopf.getAttribute('aria-expanded') === 'false') {
+    fireEvent.click(knopf)
+  }
 }
 
 /** Der Wert des schreibgeschützten Übernahmetext-Feldes eines Arbeitspakets im Panel eines Laufs. */
@@ -521,11 +584,14 @@ describe('NightRunPage — aufbewahrte Läufe beim Öffnen', () => {
     })
 
     await screen.findByTestId(`lauf-${startedAt(30)}`)
-    const reihenfolge = screen.getAllByTestId(/^lauf-/).map((el) => el.dataset.testid)
+    const reihenfolge = screen.getAllByTestId(/^lauf-\d/).map((el) => el.dataset.testid)
     expect(reihenfolge).toEqual([`lauf-${startedAt(30)}`, `lauf-${startedAt(0)}`])
   })
 
-  it('löst die Herkunftskette beim Öffnen der Seite nicht auf (A8)', async () => {
+  it('löst beim Öffnen der Seite nur die Kette des obersten Laufs auf (A8, E7)', async () => {
+    // A8 hält die Anfragelawine von bis zu 30 aufbewahrten Läufen fern. Seit #914 steht der
+    // oberste Lauf offen (AK 2 verlangt den ersten Vorgangsblock ohne Scrollen) — genau er, und
+    // deshalb bleibt es bei einer Kette statt dreißig.
     renderPage({
       listen: [
         [
@@ -534,12 +600,22 @@ describe('NightRunPage — aufbewahrte Läufe beim Öffnen', () => {
             startedAt: startedAt(0),
             items: [{ id: 11, cardNumber: 700, title: 'Paket A', state: 'GREEN' }],
           }),
+          aufbewahrt({
+            id: 2,
+            startedAt: startedAt(30),
+            items: [{ id: 21, cardNumber: 701, title: 'Paket B', state: 'GREEN' }],
+          }),
         ],
       ],
+      karten: {
+        700: karte({ id: 1, number: 700, title: 'Paket A' }),
+        701: karte({ id: 2, number: 701, title: 'Paket B' }),
+      },
     })
 
-    await screen.findByTestId(`lauf-${startedAt(0)}`)
-    expect(byNumberAufrufe()).toHaveLength(0)
+    await screen.findByTestId(`lauf-${startedAt(30)}`)
+    await waitFor(() => expect(byNumberAufrufe()).toHaveLength(1))
+    expect(byNumberAufrufe()[0].url).toContain('/cards/by-number/701')
   })
 
   it('sagt es, solange keine Auswertung vorliegt', async () => {
@@ -568,9 +644,9 @@ describe('NightRunPage — Ergebnisstand hineingeben', () => {
 
     protokollWaehlen(EIN_LAUF)
 
-    await waitFor(() => expect(screen.getAllByTestId(/^lauf-/)).toHaveLength(2))
-    expect(screen.getAllByTestId(/^lauf-/)[0].dataset.testid).toBe(`lauf-${startedAt(0)}`)
-    expect(within(lauf(0)).getByText('neu angelegt')).toBeInTheDocument()
+    await waitFor(() => expect(screen.getAllByTestId(/^lauf-\d/)).toHaveLength(2))
+    expect(screen.getAllByTestId(/^lauf-\d/)[0].dataset.testid).toBe(`lauf-${startedAt(0)}`)
+    expect(laufKopfzeile(lauf(0))).toHaveTextContent('neu angelegt')
   })
 
   it('schickt die Auswertung hinaus, nie den Ergebnisstand selbst', async () => {
@@ -599,7 +675,7 @@ describe('NightRunPage — Ergebnisstand hineingeben', () => {
     protokollWaehlen(EIN_LAUF)
 
     await screen.findByTestId(`lauf-${startedAt(0)}`)
-    expect(within(lauf(0)).getByText('lag schon vor')).toBeInTheDocument()
+    expect(laufKopfzeile(lauf(0))).toHaveTextContent('lag schon vor')
     aufklappen(0)
     expect(await within(lauf(0)).findByRole('button', { name: /#700 Paket A/ })).toBeInTheDocument()
   })
@@ -615,7 +691,7 @@ describe('NightRunPage — Ergebnisstand hineingeben', () => {
 
     const panelEl = await screen.findByTestId(`lauf-${ECHTER_START}`)
     const panel = within(panelEl)
-    fireEvent.click(panel.getByRole('button', { expanded: false }))
+    panelAufklappen(panelEl)
     await panel.findByTestId('zustand-767')
     // Zwei erfolgreiche, aber ungeprüfte Sessions (gelb) und drei mit rotem Nachweis (rot) —
     // Zustand und Fehlerklasse stehen beide sichtbar auf der Seite.
@@ -644,7 +720,7 @@ describe('NightRunPage — Ergebnisstand hineingeben', () => {
     expect(
       await screen.findByText('Nicht auswertbar — Herkunft nicht angegeben'),
     ).toBeInTheDocument()
-    expect(screen.queryAllByTestId(/^lauf-/)).toHaveLength(0)
+    expect(screen.queryAllByTestId(/^lauf-\d/)).toHaveLength(0)
     expect(anfragen.some((a) => a.method === 'POST')).toBe(false)
   })
 
@@ -659,7 +735,7 @@ describe('NightRunPage — Ergebnisstand hineingeben', () => {
     expect(
       await screen.findByText('Fassung nicht unterstützt — erzeugt von 1.47.0'),
     ).toBeInTheDocument()
-    expect(screen.queryAllByTestId(/^lauf-/)).toHaveLength(0)
+    expect(screen.queryAllByTestId(/^lauf-\d/)).toHaveLength(0)
     expect(anfragen.some((a) => a.method === 'POST')).toBe(false)
   })
 
@@ -677,7 +753,7 @@ describe('NightRunPage — Ergebnisstand hineingeben', () => {
           + ' — erzeugt von 1.47.0',
       ),
     ).toBeInTheDocument()
-    expect(screen.queryAllByTestId(/^lauf-/)).toHaveLength(0)
+    expect(screen.queryAllByTestId(/^lauf-\d/)).toHaveLength(0)
     expect(anfragen.some((a) => a.method === 'POST')).toBe(false)
   })
 
@@ -751,7 +827,7 @@ describe('NightRunPage — Ergebnisstand hineingeben', () => {
     protokollWaehlen(EIN_LAUF)
 
     expect(await screen.findByText('Die Datei konnte nicht gelesen werden.')).toBeInTheDocument()
-    expect(screen.queryAllByTestId(/^lauf-/)).toHaveLength(0)
+    expect(screen.queryAllByTestId(/^lauf-\d/)).toHaveLength(0)
   })
 
   it('öffnet nichts, wenn die Auswahl abgebrochen wurde', async () => {
@@ -787,7 +863,7 @@ describe('NightRunPage — Ergebnisstand hineingeben', () => {
     expect(lauf(0)).toBeInTheDocument()
     // Der Zwischenspeicher wird **vor** dem Senden gefüllt (#775): Auch ein Lauf, dessen
     // Einlieferung scheitert, ist aus dem Ergebnisstand entstanden und sagt das.
-    expect(within(lauf(0)).getByText('Ergebnisstand')).toBeInTheDocument()
+    expect(laufKopfzeile(lauf(0))).toHaveTextContent('Ergebnisstand')
     aufklappen(0)
     expect(await within(lauf(0)).findByRole('button', { name: /#700 Paket A/ })).toBeInTheDocument()
   })
@@ -875,7 +951,7 @@ describe('NightRunPage — Nachtplan-Lauf (#806)', () => {
     expect(within(panelEl).getByText('Nachtplan-Lauf')).toBeInTheDocument()
     expect(within(panelEl).getByText('2 bearbeitet, 33 übergangen')).toBeInTheDocument()
 
-    fireEvent.click(within(panelEl).getByRole('button', { expanded: false }))
+    panelAufklappen(panelEl)
     const panel = within(panelEl)
     await panel.findByTestId('zustand-479')
     for (const nummer of [479, 549]) {
@@ -921,14 +997,14 @@ describe('NightRunPage — Ketten-Lauf (#854)', () => {
     protokollWaehlen(ECHTE_KETTE_STAND, 'night-run-2026-09-14-131200.json')
 
     const panelEl = await screen.findByTestId(`lauf-${ECHTE_KETTE_START}`)
-    expect(within(panelEl).getByText('Ketten-Lauf')).toBeInTheDocument()
-    expect(within(panelEl).getByText('3 bearbeitet, 0 übergangen')).toBeInTheDocument()
+    expect(laufKopfzeile(panelEl)).toHaveTextContent('Ketten-Lauf')
+    expect(laufKopfzeile(panelEl)).toHaveTextContent('3 bearbeitet, 0 übergangen')
 
     // Anders als der Nachtplan-Lauf geht die Kette an den Server (AK 8 aus #842):
     // `istEinlieferbar` schließt weiterhin allein `NIGHTPLAN` aus.
     await waitFor(() => expect(anfragen.some((a) => a.method === 'POST')).toBe(true))
     expect(anfragen.find((a) => a.method === 'POST')?.body).toContain('"mode":"CHAIN"')
-    expect(within(panelEl).getByText('neu angelegt')).toBeInTheDocument()
+    expect(laufKopfzeile(panelEl)).toHaveTextContent('neu angelegt')
   })
 })
 
@@ -958,8 +1034,8 @@ describe('NightRunPage — Herkunftskette am Ketten-Vorgang (#858)', () => {
     protokollWaehlen(ECHTE_KETTE_STAND, 'night-run-2026-09-14-131200.json')
 
     const panelEl = await screen.findByTestId(`lauf-${ECHTE_KETTE_START}`)
-    await waitFor(() => expect(within(panelEl).getByText('neu angelegt')).toBeInTheDocument())
-    fireEvent.click(within(panelEl).getByRole('button', { expanded: false }))
+    await waitFor(() => expect(laufKopfzeile(panelEl)).toHaveTextContent('neu angelegt'))
+    panelAufklappen(panelEl)
 
     // Erst wenn die Wurzelkarten aufgelöst sind, steht der Block mit Stufen- und Vorhabenzeile
     // überhaupt da — sonst wäre die Erwartung darunter schon vor dem Laden erfüllt.
@@ -1020,7 +1096,7 @@ describe('NightRunPage — Zeitbudget als eigener Grund (#856)', () => {
     renderPage({ listen: [wieAufbewahrt(ECHTE_KETTE_STAND)], zaehler: [zaehler] })
 
     const panelEl = await screen.findByTestId(`lauf-${ECHTE_KETTE_START}`)
-    fireEvent.click(within(panelEl).getByRole('button', { expanded: false }))
+    panelAufklappen(panelEl)
     await within(panelEl).findByTestId('zustand-842')
     return panelEl
   }
@@ -1088,11 +1164,15 @@ async function uebersichtZu(
   protokollWaehlen(ergebnisstand)
 
   const panelEl = await screen.findByTestId(`lauf-${start}`)
-  // Auf `screen` und nicht im Panel: Der Hinweis auf einen unabgeschlossenen Lauf steht als
-  // Meldung über der Liste, die Kennzeichnung „neu angelegt" dagegen im Panel.
-  await screen.findByText(warten)
-  fireEvent.click(within(panelEl).getByRole('button', { expanded: false }))
-  return within(panelEl).findByTestId('ketten-uebersicht')
+  // Zwei Orte, ein Warteschritt: Der Hinweis auf einen unabgeschlossenen Lauf steht als Meldung
+  // über der Liste, die Kennzeichnung „neu angelegt" seit #915 in der Metazeile des Kopfes.
+  await waitFor(() =>
+    expect(screen.queryByText(warten) ?? laufKopfzeile(panelEl)).toHaveTextContent(warten),
+  )
+  panelAufklappen(panelEl)
+  // Die Übersicht ist seit #918 ganz aufgegangen: Kopf und Kennzahlen stehen oben, die
+  // Vorgänge als Blöcke, der Rest in der Fußzeile. Sie ist das letzte Element des Laufs.
+  return within(panelEl).findByTestId('uebersicht-fuss')
 }
 
 /** Die Übersicht des echten Ketten-Laufs, nach dem Einliefern und dem Neuladen der Liste. */
@@ -1104,10 +1184,8 @@ describe('NightRunPage — Ketten-Übersicht (#866)', () => {
    * erwartet, mit denen die Seite sie schreibt: Die Zeitzone des Prüfrechners steht nicht fest,
    * und ein fest eingetragener Text wäre anderswo rot, ohne dass etwas kaputt wäre.
    */
-  const kopfzeile = (iso: string) => {
-    const start = new Date(iso)
-    return `Nacht vom ${start.toLocaleDateString('de-DE', { dateStyle: 'full' })}, ${start.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })} Uhr`
-  }
+  const kopfzeile = (iso: string) =>
+    `Nacht vom ${new Date(iso).toLocaleDateString('de-DE', { day: 'numeric', month: 'long' })}`
 
   it('zeigt die Übersicht auch nach dem Einliefern und dem Neuladen der Liste (Gegenprobe zu E1)', async () => {
     // Die abweichende Stückzahl belegt, dass der sichtbare Lauf der **neu geladene** ist. Erst
@@ -1123,51 +1201,60 @@ describe('NightRunPage — Ketten-Übersicht (#866)', () => {
     protokollWaehlen(ECHTE_KETTE_STAND, 'night-run-2026-09-14-131200.json')
 
     const panelEl = await screen.findByTestId(`lauf-${ECHTE_KETTE_START}`)
-    await within(panelEl).findByText('42 bearbeitet, 0 übergangen')
-    fireEvent.click(within(panelEl).getByRole('button', { expanded: false }))
+    await waitFor(() => expect(laufKopfzeile(panelEl)).toHaveTextContent('42 bearbeitet, 0 übergangen'))
+    panelAufklappen(panelEl)
 
-    expect(await within(panelEl).findByTestId('ketten-uebersicht')).toBeInTheDocument()
+    // Der Beleg ist jetzt das Stufenband: Es steht allein im Ergebnisstand, und dass es nach dem
+    // Neuladen der Liste noch da ist, war die Aussage dieses Tests.
+    expect(await within(panelEl).findByTestId('stufenband-791')).toBeInTheDocument()
   })
 
-  it('zeigt sie an einem vom Server geladenen Ketten-Lauf ohne Sitzungsstand nicht', async () => {
+  it('zeigt an einem vom Server geladenen Ketten-Lauf ohne Sitzungsstand kein Band', async () => {
     renderPage({ listen: [wieAufbewahrt(ECHTE_KETTE_STAND)] })
     const panelEl = await screen.findByTestId(`lauf-${ECHTE_KETTE_START}`)
 
-    fireEvent.click(within(panelEl).getByRole('button', { expanded: false }))
+    panelAufklappen(panelEl)
 
+    // Der Vorgang steht da, seine Arbeitsschritte nicht: Die bewahrt der Server nicht auf.
     expect(await within(panelEl).findByTestId('zustand-791')).toBeInTheDocument()
-    expect(within(panelEl).queryByTestId('ketten-uebersicht')).not.toBeInTheDocument()
+    expect(within(panelEl).queryByTestId('stufenband-791')).not.toBeInTheDocument()
+    expect(within(panelEl).queryByTestId('nachtlauf-kennzahlen')).not.toBeInTheDocument()
   })
 
-  it('trägt im Kopf und in der Kennzahlenzeile die Werte des Protokolls (AK 1 bis 3)', async () => {
-    const uebersicht = within(await echteUebersicht())
+  it('trägt im Kopf und in der Kennzahlenreihe die Werte des Protokolls (AK 1 bis 3)', async () => {
+    // Kopf und Kennzahlen stehen seit #915 über der Übersicht statt in ihr — dieselben Werte,
+    // ein anderer Ort.
+    await echteUebersicht()
 
-    expect(uebersicht.getByText(kopfzeile(ECHTE_KETTE_START))).toBeInTheDocument()
-    expect(
-      uebersicht.getByText('claude-opus-5 · Label kit:night · regulär beendet'),
-    ).toBeInTheDocument()
+    expect(screen.getByTestId('nachtlauf-ueberschrift')).toHaveTextContent(kopfzeile(ECHTE_KETTE_START))
+    expect(metazeile()).toHaveTextContent('claude-opus-5 · Label kit:night · regulär beendet')
 
     // Zwei der drei Vorgänge sind grün; entstanden sind #844 bis #849, also sechs Karten; die
     // Summe der zehn Stufenzeiten ergibt 4 148 331 ms; die Kostensumme steht im Kopf des Stands.
-    expect(uebersicht.getByText('2 von 3')).toBeInTheDocument()
-    expect(uebersicht.getByText('6')).toBeInTheDocument()
-    expect(uebersicht.getByText('1 Std 9 Min')).toBeInTheDocument()
-    expect(uebersicht.getByText('25,98 $')).toBeInTheDocument()
-    expect(uebersicht.getByText('ein Arbeitsschritt ohne Kostenmeldung')).toBeInTheDocument()
+    const reihe = within(screen.getByTestId('nachtlauf-kennzahlen'))
+    expect(reihe.getByText('2 von 3')).toBeInTheDocument()
+    expect(reihe.getByText('6')).toBeInTheDocument()
+    expect(reihe.getByText('1 Std 9 Min')).toBeInTheDocument()
+    expect(reihe.getByText('25,98 $')).toBeInTheDocument()
+    expect(reihe.getByText('ein Arbeitsschritt ohne Kostenmeldung')).toBeInTheDocument()
   })
 
   it('nennt je Vorgang Kosten, Züge und fehlende Kostenmeldungen (AK 11)', async () => {
-    const uebersicht = within(await echteUebersicht())
+    // Die Werte stehen seit #916 in der Ergebniszeile des Vorgangsblocks, nicht mehr in der
+    // Übersicht — dieselben Werte, ein anderer Ort.
+    await echteUebersicht()
 
-    expect(uebersicht.getByTestId('uebersicht-vorgang-791')).toHaveTextContent('11,52 $ · 89 Züge')
-    expect(uebersicht.getByTestId('uebersicht-vorgang-814')).toHaveTextContent('10,37 $ · 87 Züge')
-    expect(uebersicht.getByTestId('uebersicht-vorgang-842')).toHaveTextContent(
+    expect(screen.getByTestId('paket-791')).toHaveTextContent('11,52 $ · 89 Züge')
+    expect(screen.getByTestId('paket-814')).toHaveTextContent('10,37 $ · 87 Züge')
+    expect(screen.getByTestId('paket-842')).toHaveTextContent(
       '4,09 $ · 37 Züge · ein Arbeitsschritt ohne Kostenmeldung',
     )
   })
 
   it('führt in der Fußzeile Zeitvorgaben, Kostenbudget und die höchsten Kosten (AK 12)', async () => {
-    const fuss = within(within(await echteUebersicht()).getByTestId('uebersicht-fuss'))
+    // `echteUebersicht` liefert seit #918 die Fußzeile selbst — sie ist, was von der Übersicht
+    // übrig blieb.
+    const fuss = within(await echteUebersicht())
 
     expect(
       fuss.getByText('Plan 20 · Prüfung 15 · Pakete 15 · Abdeckung 10 min'),
@@ -1177,34 +1264,33 @@ describe('NightRunPage — Ketten-Übersicht (#866)', () => {
   })
 
   it('nennt einen Lauf ohne Abschlussangabe „noch nicht abgeschlossen" und keinen Rohwert', async () => {
-    const uebersicht = within(
+    const fuss = within(
       await uebersichtZu(
         kettenStand({ abschluss: null }),
         'Lauf noch nicht abgeschlossen — nicht gespeichert',
       ),
     )
 
-    expect(uebersicht.getByText('noch nicht abgeschlossen')).toBeInTheDocument()
-    expect(uebersicht.queryByText(/null/)).not.toBeInTheDocument()
+    expect(metazeile()).toHaveTextContent('noch nicht abgeschlossen')
+    expect(fuss.queryByText(/null/)).not.toBeInTheDocument()
     // Ohne Vorgaben, Budget und Kostenmeldung steht überall die ausdrückliche Auskunft statt
-    // einer Zahl — eine „0 $" wäre eine Behauptung über etwas, das der Stand nicht führt.
-    expect(
-      within(uebersicht.getByTestId('uebersicht-fuss')).getAllByText('nicht angegeben'),
-    ).toHaveLength(3)
-    expect(uebersicht.getByText('Kosten nicht gemeldet')).toBeInTheDocument()
+    // einer Zahl — eine „0 $" wäre eine Behauptung über etwas, das der Stand nicht führt. Seit
+    // #918 kommt die Herkunft der Budgets als vierte dazu (AK 9, Fall 2).
+    expect(fuss.getAllByText('nicht angegeben')).toHaveLength(4)
+    expect(screen.getByTestId('kennzahlen-900')).toHaveTextContent('Kosten nicht gemeldet')
   })
 
   it('nennt einen hart gestoppten Lauf vorzeitig beendet und zählt fehlende Kostenmeldungen', async () => {
-    const uebersicht = within(
-      await uebersichtZu(
-        kettenStand({ abschluss: 'harterStopp', kostenSumme: 3.5, kostenUnbekannt: 2 }),
-        'neu angelegt',
-      ),
+    // Abschluss, Kostensumme und der Vermerk stehen seit #915 alle drei im Kopf über der
+    // Übersicht; sie selbst wird hier nur noch abgewartet.
+    await uebersichtZu(
+      kettenStand({ abschluss: 'harterStopp', kostenSumme: 3.5, kostenUnbekannt: 2 }),
+      'neu angelegt',
     )
 
-    expect(uebersicht.getByText('vorzeitig beendet (harter Stopp)')).toBeInTheDocument()
-    expect(uebersicht.getByText('3,50 $')).toBeInTheDocument()
-    expect(uebersicht.getByText('2 Arbeitsschritte ohne Kostenmeldung')).toBeInTheDocument()
+    expect(metazeile()).toHaveTextContent('vorzeitig beendet (harter Stopp)')
+    expect(screen.getByTestId('nachtlauf-kennzahlen')).toHaveTextContent('3,50 $')
+    expect(screen.getByTestId('nachtlauf-kennzahlen')).toHaveTextContent('2 Arbeitsschritte ohne Kostenmeldung')
   })
 
   it('gibt eine unbekannte Abschlussangabe nicht im Rohwert aus', async () => {
@@ -1212,7 +1298,7 @@ describe('NightRunPage — Ketten-Übersicht (#866)', () => {
       await uebersichtZu(kettenStand({ abschluss: 'sonntagsruhe' }), 'neu angelegt'),
     )
 
-    expect(uebersicht.getByText('Abschluss nicht deutbar')).toBeInTheDocument()
+    expect(metazeile()).toHaveTextContent('Abschluss nicht deutbar')
     expect(uebersicht.queryByText(/sonntagsruhe/)).not.toBeInTheDocument()
   })
 
@@ -1223,11 +1309,12 @@ describe('NightRunPage — Ketten-Übersicht (#866)', () => {
     protokollWaehlen(EIN_LAUF)
 
     const panelEl = await screen.findByTestId(`lauf-${startedAt(0)}`)
-    await within(panelEl).findByText('neu angelegt')
-    fireEvent.click(within(panelEl).getByRole('button', { expanded: false }))
+    await waitFor(() => expect(laufKopfzeile(panelEl)).toHaveTextContent('neu angelegt'))
+    panelAufklappen(panelEl)
 
     expect(await within(panelEl).findByTestId('zustand-700')).toBeInTheDocument()
-    expect(within(panelEl).queryByTestId('ketten-uebersicht')).not.toBeInTheDocument()
+    // Ein Lauf anderer Art führt kein Stufenband — er kennt keine Arbeitsschritte.
+    expect(within(panelEl).queryByTestId('stufenband-700')).not.toBeInTheDocument()
   })
 })
 
@@ -1235,51 +1322,51 @@ describe('NightRunPage — Stufenband je Vorgang (#867)', () => {
   /** Die vier Arbeitsschritte in der Reihenfolge, in der die Kette sie läuft. */
   const SCHRITTE = ['plan', 'review', 'pakete', 'abdeckung'] as const
 
-  const abschnitt = (uebersicht: HTMLElement, cardNumber: number, schritt: string) =>
-    within(uebersicht).getByTestId(`stufe-${cardNumber}-${schritt}`)
+  // Gesucht wird auf der Seite und nicht in der Übersicht: Die Vorgangsblöcke stehen seit #916
+  // im Panel des Laufs. Die Testkennungen sind dieselben geblieben (E14), und je Test steht genau
+  // ein Lauf auf der Seite.
+  const abschnitt = (cardNumber: number, schritt: string) =>
+    screen.getByTestId(`stufe-${cardNumber}-${schritt}`)
 
   /** Ein Datenfeld aller vier Abschnitte eines Vorgangs, in der Reihenfolge der Kette. */
-  const bandwerte = (
-    uebersicht: HTMLElement,
-    cardNumber: number,
-    feld: 'anteil' | 'fuellung' | 'erreicht',
-  ) => SCHRITTE.map((schritt) => abschnitt(uebersicht, cardNumber, schritt).dataset[feld])
+  const bandwerte = (cardNumber: number, feld: 'anteil' | 'fuellung' | 'erreicht') =>
+    SCHRITTE.map((schritt) => abschnitt(cardNumber, schritt).dataset[feld])
 
   /** Der Grund eines Abbruchs, der **nicht** am Zeitbudget lag. */
   const GRUND_KOSTEN = 'Kostenbudget erschöpft: 52,10 $ über 50,00 $'
 
   it('zeichnet das Band der Einheit 791 in den Verhältnissen der Zeitvorgaben (Punkt 8)', async () => {
-    const uebersicht = await echteUebersicht()
+    await echteUebersicht()
 
     // Geprüft an der Beschriftung und an den Datenfeldern, nicht an berechneten Stilwerten: In
     // jsdom rechnet kein Browser ein Layout aus, ein Test auf `flex`-Anteile prüfte dort die
     // Zeichenkette, die man selbst geschrieben hat.
-    expect(within(uebersicht).getByTestId('stufenband-791')).toHaveAttribute(
+    expect(screen.getByTestId('stufenband-791')).toHaveAttribute(
       'aria-label',
       'Stufenband: Plan 7,8 / 20 min · Prüfung 11,8 / 15 min · Pakete 3,7 / 15 min · Abdeckung 2,2 / 10 min',
     )
-    expect(bandwerte(uebersicht, 791, 'anteil')).toEqual(['20', '15', '15', '10'])
-    expect(bandwerte(uebersicht, 791, 'fuellung')).toEqual(['39.1', '78.6', '24.6', '22.4'])
-    expect(bandwerte(uebersicht, 791, 'erreicht')).toEqual(['ja', 'ja', 'ja', 'ja'])
+    expect(bandwerte(791, 'anteil')).toEqual(['20', '15', '15', '10'])
+    expect(bandwerte(791, 'fuellung')).toEqual(['39.1', '78.6', '24.6', '22.4'])
+    expect(bandwerte(791, 'erreicht')).toEqual(['ja', 'ja', 'ja', 'ja'])
   })
 
   it('kennzeichnet Pakete und Abdeckung der Einheit 842 als nicht erreicht (Punkt 9)', async () => {
-    const uebersicht = await echteUebersicht()
+    await echteUebersicht()
 
-    expect(bandwerte(uebersicht, 842, 'erreicht')).toEqual(['ja', 'ja', 'nein', 'nein'])
-    expect(abschnitt(uebersicht, 842, 'pakete')).toHaveTextContent('nicht erreicht')
-    expect(abschnitt(uebersicht, 842, 'abdeckung')).toHaveTextContent('nicht erreicht')
+    expect(bandwerte(842, 'erreicht')).toEqual(['ja', 'ja', 'nein', 'nein'])
+    expect(abschnitt(842, 'pakete')).toHaveTextContent('nicht erreicht')
+    expect(abschnitt(842, 'abdeckung')).toHaveTextContent('nicht erreicht')
 
     // Der Plan-Schritt lief mit 36,6 % seiner Vorgabe — wenig, aber gelaufen. Er trägt den Vermerk
     // nicht, und daran ist „nicht erreicht" von „wenig verbraucht" unterscheidbar.
-    const plan = abschnitt(uebersicht, 842, 'plan')
+    const plan = abschnitt(842, 'plan')
     expect(plan).not.toHaveTextContent('nicht erreicht')
     expect(plan.dataset.fuellung).toBe('36.6')
   })
 
   it('kappt die übergelaufene Prüfstufe der Einheit 842 bei voller Länge (Punkt 10)', async () => {
-    const uebersicht = await echteUebersicht()
-    const pruefung = abschnitt(uebersicht, 842, 'review')
+    await echteUebersicht()
+    const pruefung = abschnitt(842, 'review')
 
     // 900 484 ms gegen eine Vorgabe von 900 000 ms: Ohne Kappung stünde hier 100.1.
     expect(pruefung.dataset.fuellung).toBe('100')
@@ -1287,7 +1374,7 @@ describe('NightRunPage — Stufenband je Vorgang (#867)', () => {
   })
 
   it('kappt auch einen Schritt mit doppelter Vorgabe (Punkt 11)', async () => {
-    const uebersicht = await uebersichtZu(
+    await uebersichtZu(
       kettenStand({
         budget: { planMin: 10 },
         einheiten: [
@@ -1301,25 +1388,25 @@ describe('NightRunPage — Stufenband je Vorgang (#867)', () => {
       }),
       'neu angelegt',
     )
-    const plan = abschnitt(uebersicht, 900, 'plan')
+    const plan = abschnitt(900, 'plan')
 
     expect(plan.dataset.fuellung).toBe('100')
     expect(plan).toHaveTextContent('20,0 / 10 min')
   })
 
   it('nennt über dem Band der Einheit 842 den Zeitbudget-Grund samt Dokumentnummer (Punkt 12)', async () => {
-    const uebersicht = await echteUebersicht()
+    await echteUebersicht()
 
-    const satz = within(uebersicht).getByTestId('abbruch-842')
+    const satz = screen.getByTestId('abbruch-842')
     expect(satz).toHaveTextContent(
       'Zeitbudget review: die Session wurde nach 15.0 min am Limit beendet',
     )
     expect(satz).toHaveTextContent('#849')
-    expect(abschnitt(uebersicht, 842, 'review')).toHaveTextContent('am Zeitbudget beendet')
+    expect(abschnitt(842, 'review')).toHaveTextContent('am Zeitbudget beendet')
 
     // Ein regulär durchgelaufener Vorgang trägt weder Satz noch Vermerk.
-    expect(within(uebersicht).queryByTestId('abbruch-791')).not.toBeInTheDocument()
-    expect(abschnitt(uebersicht, 791, 'abdeckung')).not.toHaveTextContent('beendet')
+    expect(screen.queryByTestId('abbruch-791')).not.toBeInTheDocument()
+    expect(abschnitt(791, 'abdeckung')).not.toHaveTextContent('beendet')
   })
 
   it('trägt an einem anders begründeten Abbruch „hier abgebrochen" (Punkt 13)', async () => {
@@ -1340,16 +1427,16 @@ describe('NightRunPage — Stufenband je Vorgang (#867)', () => {
       'neu angelegt',
     )
 
-    expect(abschnitt(uebersicht, 900, 'plan')).toHaveTextContent('hier abgebrochen')
+    expect(abschnitt(900, 'plan')).toHaveTextContent('hier abgebrochen')
     expect(uebersicht).not.toHaveTextContent('am Zeitbudget beendet')
 
-    const satz = within(uebersicht).getByTestId('abbruch-900')
+    const satz = screen.getByTestId('abbruch-900')
     expect(satz).toHaveTextContent(GRUND_KOSTEN)
     expect(satz).toHaveTextContent('keine Karten')
   })
 
   it('sagt an einem Schritt ohne Zeitvorgabe ausdrücklich „ohne Vorgabe"', async () => {
-    const uebersicht = await uebersichtZu(
+    await uebersichtZu(
       kettenStand({
         einheiten: [
           {
@@ -1362,7 +1449,7 @@ describe('NightRunPage — Stufenband je Vorgang (#867)', () => {
       }),
       'neu angelegt',
     )
-    const plan = abschnitt(uebersicht, 900, 'plan')
+    const plan = abschnitt(900, 'plan')
 
     // Ohne Vorgabe gibt es kein Verhältnis: Der Schritt bekommt denselben Anteil wie die übrigen,
     // und die Füllung bleibt leer statt eine Quote zu behaupten, die niemand gemeldet hat.
@@ -1407,20 +1494,19 @@ describe('NightRunPage — Entstandene Karten je Vorgang (#868)', () => {
    * `within(...)` an der Abfragestelle steht, und hielte eine Zwischenvariable sonst für ein
    * destrukturiertes `render`-Ergebnis.
    */
-  const vorgangIn = (uebersicht: HTMLElement, cardNumber: number) =>
-    within(uebersicht).getByTestId(`uebersicht-vorgang-${cardNumber}`)
+  const vorgangIn = (cardNumber: number) => screen.getByTestId(`paket-${cardNumber}`)
 
   /**
    * Die Zeile eines Arbeitsschritts mit den dort entstandenen Karten. Über die Test-ID und nicht
    * über den Text: Die Zeile setzt sich aus Beschriftung und Verweisen zusammen, und `getByText`
    * sucht je Element nur dessen eigene Textknoten.
    */
-  const dokumentzeile = (uebersicht: HTMLElement, cardNumber: number, schritt: string) =>
-    within(uebersicht).getByTestId(`dokumente-${cardNumber}-${schritt}`)
+  const dokumentzeile = (cardNumber: number, schritt: string) =>
+    screen.getByTestId(`dokumente-${cardNumber}-${schritt}`)
 
   it('führt an der Einheit 791 die entstandenen Karten und öffnet die angeklickte (Punkt 5)', async () => {
-    const uebersicht = await echteUebersichtMitKarten()
-    const vorgang = vorgangIn(uebersicht, 791)
+    await echteUebersichtMitKarten()
+    const vorgang = vorgangIn(791)
 
     expect(
       await within(vorgang).findByRole('button', { name: 'Plan #844 [Plan] Sicherheits-Bauform' }),
@@ -1429,8 +1515,9 @@ describe('NightRunPage — Entstandene Karten je Vorgang (#868)', () => {
       within(vorgang).getByRole('button', { name: 'Pakete #845 Bauform binden' }),
     ).toBeInTheDocument()
 
-    // Zwei Pakete an einem Vorgang stehen in **einer** Zeile, durch Komma getrennt.
-    expect(dokumentzeile(uebersicht, 814, 'pakete')).toHaveTextContent('Pakete #847, #848')
+    // Zwei Pakete an einem Vorgang stehen in **einer** Zeile. Seit #916 als je eigener Chip mit
+    // eigener Vorzeile, statt als eine Beschriftung mit kommagetrennten Nummern.
+    expect(dokumentzeile(814, 'pakete')).toHaveTextContent('Pakete#847Pakete#848')
 
     fireEvent.click(within(vorgang).getByRole('button', { name: /^Plan #844/ }))
 
@@ -1438,7 +1525,8 @@ describe('NightRunPage — Entstandene Karten je Vorgang (#868)', () => {
   })
 
   it('nennt an der Einheit 842 den Plan #849 und ausdrücklich „keine Pakete" (Punkt 6)', async () => {
-    const vorgang = vorgangIn(await echteUebersichtMitKarten(), 842)
+    await echteUebersichtMitKarten()
+    const vorgang = vorgangIn(842)
 
     expect(
       await within(vorgang).findByRole('button', { name: 'Plan #849 [Plan] Leitstand mehrstufig' }),
@@ -1448,10 +1536,8 @@ describe('NightRunPage — Entstandene Karten je Vorgang (#868)', () => {
   })
 
   it('nennt einen Vorgang ohne jede Stufe „kein Plan" und „keine Pakete" (Punkt 4)', async () => {
-    const vorgang = vorgangIn(
-      await uebersichtZu(kettenStand(), 'neu angelegt', startedAt(0), { karten: {} }),
-      900,
-    )
+    await uebersichtZu(kettenStand(), 'neu angelegt', startedAt(0), { karten: {} })
+    const vorgang = vorgangIn(900)
 
     expect(within(vorgang).getByText('kein Plan')).toBeInTheDocument()
     expect(within(vorgang).getByText('keine Pakete')).toBeInTheDocument()
@@ -1460,16 +1546,12 @@ describe('NightRunPage — Entstandene Karten je Vorgang (#868)', () => {
   it('kennzeichnet eine nicht auflösbare Dokumentnummer als nicht mehr vorhanden (Punkt 7)', async () => {
     // Kein Eintrag im Katalog-Stub: Der Nummer-Lookup antwortet mit 404, und das ist ein
     // Ergebnis — nicht mehr vorhanden —, kein noch offener Abruf.
-    const uebersicht = await uebersichtZu(mitPlanDokument('901'), 'neu angelegt', startedAt(0), {
-      karten: {},
-    })
+    await uebersichtZu(mitPlanDokument('901'), 'neu angelegt', startedAt(0), { karten: {} })
     await waitFor(() =>
-      expect(dokumentzeile(uebersicht, 900, 'plan')).toHaveTextContent(
-        'Plan #901 nicht mehr vorhanden',
-      ),
+      expect(dokumentzeile(900, 'plan')).toHaveTextContent('Plan#901 nicht mehr vorhanden'),
     )
     expect(
-      within(vorgangIn(uebersicht, 900)).queryByRole('button', { name: /901/ }),
+      within(vorgangIn(900)).queryByRole('button', { name: /901/ }),
     ).not.toBeInTheDocument()
   })
 
@@ -1478,31 +1560,31 @@ describe('NightRunPage — Entstandene Karten je Vorgang (#868)', () => {
     const laedt = new Promise<void>((aufloesen) => {
       freigeben = aufloesen
     })
-    const uebersicht = await uebersichtZu(mitPlanDokument('901'), 'neu angelegt', startedAt(0), {
+    await uebersichtZu(mitPlanDokument('901'), 'neu angelegt', startedAt(0), {
       karten: { 901: karte({ id: 11, number: 901, title: '[Plan] Gleich da' }) },
       kartenVerzoegert: laedt,
     })
 
     // Solange der Abruf läuft, steht die Nummer da — ohne Verweis und ohne die Falschaussage,
     // die Karte sei fort.
-    const zeile = dokumentzeile(uebersicht, 900, 'plan')
-    expect(zeile).toHaveTextContent('Plan #901')
+    const zeile = dokumentzeile(900, 'plan')
+    expect(zeile).toHaveTextContent('Plan#901')
     expect(zeile).not.toHaveTextContent('nicht mehr vorhanden')
     expect(
-      within(vorgangIn(uebersicht, 900)).queryByRole('button', { name: /901/ }),
+      within(vorgangIn(900)).queryByRole('button', { name: /901/ }),
     ).not.toBeInTheDocument()
 
     freigeben()
 
     expect(
-      await within(vorgangIn(uebersicht, 900)).findByRole('button', {
+      await within(vorgangIn(900)).findByRole('button', {
         name: 'Plan #901 [Plan] Gleich da',
       }),
     ).toBeInTheDocument()
   })
 
   it('ruft eine von zwei Vorgängen genannte Dokumentnummer nur einmal ab (Punkt 9)', async () => {
-    const uebersicht = await uebersichtZu(
+    await uebersichtZu(
       kettenStand({
         einheiten: [
           { id: '900', titel: 'Erster', ausgang: 'fertig', stufen: { plan: { id: '901' } } },
@@ -1516,10 +1598,10 @@ describe('NightRunPage — Entstandene Karten je Vorgang (#868)', () => {
 
     // Beide Vorgänge zeigen den Verweis — die Karte ist also aufgelöst …
     expect(
-      await within(vorgangIn(uebersicht, 900)).findByRole('button', { name: /#901/ }),
+      await within(vorgangIn(900)).findByRole('button', { name: /#901/ }),
     ).toBeInTheDocument()
     expect(
-      within(vorgangIn(uebersicht, 902)).getByRole('button', { name: /#901/ }),
+      within(vorgangIn(902)).getByRole('button', { name: /#901/ }),
     ).toBeInTheDocument()
     // … und dafür ging genau eine Anfrage hinaus.
     expect(byNumberAufrufe().filter((a) => a.url.endsWith('/901'))).toHaveLength(1)
@@ -1571,21 +1653,26 @@ describe('NightRunPage — gekürzte Vorgangszeile neben der Übersicht (#869)',
     protokollWaehlen(ECHTE_KETTE_STAND, 'night-run-2026-09-14-131200.json')
 
     const panelEl = await screen.findByTestId(`lauf-${ECHTE_KETTE_START}`)
-    await within(panelEl).findByText('neu angelegt')
-    fireEvent.click(within(panelEl).getByRole('button', { expanded: false }))
-    await within(panelEl).findByTestId('ketten-uebersicht')
+    await waitFor(() => expect(laufKopfzeile(panelEl)).toHaveTextContent('neu angelegt'))
+    panelAufklappen(panelEl)
+    await within(panelEl).findByTestId('uebersicht-fuss')
     return panelEl
   }
 
-  it('lässt am Lauf mit Übersicht Ampel, Dauer und den Auszug samt Stufenblock weg (Punkt 5)', async () => {
+  it('zeigt am Lauf mit Übersicht jede Angabe genau einmal (Punkt 5)', async () => {
+    // AK 15 aus #859 verlangt, dass nichts zweimal auf derselben Seite steht. Bis #916 wurde
+    // dafür die Zeile des Arbeitspakets gekürzt, weil die Übersicht dieselben Angaben trug; seit
+    // dem Vorgangsblock gibt es nur noch **eine** Darstellung, also ist nichts zu kürzen.
     const panelEl = await mitUebersicht()
     const zeile = await within(panelEl).findByTestId('paket-842')
 
+    // Der rohe Stufenblock-Auszug entfällt: Band und Grund sagen dasselbe genauer.
     expect(within(zeile).queryByText(STUFENBLOCK_ZEILE, ALS_ABSATZ)).toBeNull()
     expect(within(zeile).queryByText(/^Auszug: /, ALS_ABSATZ)).toBeNull()
-    // Ampel und Zustandstext stehen gemeinsam unter dieser Test-ID.
-    expect(within(zeile).queryByTestId('zustand-842')).toBeNull()
-    expect(within(zeile).queryByText(DAUER_842, ALS_ZEILE)).toBeNull()
+    // Zustand und Dauer stehen genau einmal — im Block, nicht zusätzlich in einer Übersicht.
+    expect(screen.getAllByTestId('zustand-842')).toHaveLength(1)
+    expect(within(zeile).getByTestId('kennzahlen-842')).toHaveTextContent(DAUER_842)
+    expect(screen.getAllByTestId('stufenband-842')).toHaveLength(1)
   })
 
   it('lässt Vorhaben und Übernahmetext am Lauf mit Übersicht stehen und bedienbar (Punkt 6)', async () => {
@@ -1609,9 +1696,9 @@ describe('NightRunPage — gekürzte Vorgangszeile neben der Übersicht (#869)',
     renderPage({ listen: [wieAufbewahrt(ECHTE_KETTE_STAND)], karten: KARTEN, kartenNachId: VORHABEN })
     const panelEl = await screen.findByTestId(`lauf-${ECHTE_KETTE_START}`)
 
-    fireEvent.click(within(panelEl).getByRole('button', { expanded: false }))
+    panelAufklappen(panelEl)
 
-    expect(within(panelEl).queryByTestId('ketten-uebersicht')).toBeNull()
+    expect(within(panelEl).queryByTestId('stufenband-842')).toBeNull()
     const zeile = await within(panelEl).findByTestId('paket-842')
     // Abgewartet, bis die Wurzelkarte und ihr Vorhaben aufgelöst sind — erst dann steht die Zeile
     // fertig da, und der Rest des Tests prüft nicht bloß ihren Zwischenstand.
@@ -1619,7 +1706,9 @@ describe('NightRunPage — gekürzte Vorgangszeile neben der Übersicht (#869)',
     expect(within(zeile).getByTestId('zustand-842')).toHaveTextContent(
       'Am Zeitbudget beendet, Ergebnis liegt vor',
     )
-    expect(within(zeile).getByText(DAUER_842, ALS_ZEILE)).toBeInTheDocument()
+    // Die Dauer steht seit #916 in der Ergebniszeile des Blocks; ohne Ergebnisstand gibt es kein
+    // Band, in dem sie sonst steckte.
+    expect(within(zeile).getByTestId('kennzahlen-842')).toHaveTextContent(DAUER_842)
     expect(within(zeile).getByText(STUFENBLOCK_ZEILE, ALS_ABSATZ)).toBeInTheDocument()
   })
 
@@ -1683,7 +1772,7 @@ describe('NightRunPage — Laufband für Umsetzungs-Läufe (#871)', () => {
     protokollWaehlen(ECHTER_STAND, 'night-run-2026-09-07-085229.json')
 
     const panelEl = await screen.findByTestId(`lauf-${ECHTER_START}`)
-    fireEvent.click(within(panelEl).getByRole('button', { expanded: false }))
+    panelAufklappen(panelEl)
     await within(panelEl).findByTestId('zustand-767')
     return panelEl
   }
@@ -1706,11 +1795,11 @@ describe('NightRunPage — Laufband für Umsetzungs-Läufe (#871)', () => {
     // der Zeit — die beiden erfolgreichen zusammen 13,3.
     expect(bandabschnitt(panelEl, 767)).toHaveAttribute(
       'aria-label',
-      'Karte #767: Erfolg, Prüfung rot, 4 Min',
+      'Karte #767: Erfolg, Prüfung rot, 4 Min, 7.9 % der Nacht',
     )
     expect(bandabschnitt(panelEl, 769)).toHaveAttribute(
       'aria-label',
-      'Karte #769: gescheitert, 16 Min',
+      'Karte #769: gescheitert, 16 Min, 31.8 % der Nacht',
     )
     // Die Dauer steht auch sichtbar unter ihrem Abschnitt, nicht nur in der Ansage (Punkt 4).
     expect(bandabschnitt(panelEl, 769)).toHaveTextContent('16 Min')
@@ -1722,10 +1811,10 @@ describe('NightRunPage — Laufband für Umsetzungs-Läufe (#871)', () => {
       within(panelEl).getByTestId(`laufband-balken-${cardNumber}`)
 
     for (const nummer of [768, 769, 771]) {
-      expect(farbe(nummer)).toHaveStyle({ backgroundColor: theme.palette.nightRun.red })
+      expect(farbe(nummer)).toHaveStyle({ backgroundColor: NACHTLAUF_TON.RED })
     }
     for (const nummer of [767, 770]) {
-      expect(farbe(nummer)).toHaveStyle({ backgroundColor: theme.palette.nightRun.yellow })
+      expect(farbe(nummer)).toHaveStyle({ backgroundColor: NACHTLAUF_TON.YELLOW })
     }
   })
 
@@ -1783,7 +1872,9 @@ describe('NightRunPage — Laufband für Umsetzungs-Läufe (#871)', () => {
     })
     await screen.findByTestId(`lauf-${startedAt(0)}`)
     aufklappen(0)
-    await within(lauf(0)).findByTestId('laufband')
+    // Seit #917 steht der Anteil je Vorgangsblock statt in einem Band über alle — dieselbe
+    // Rechnung, ein anderer Ort.
+    await within(lauf(0)).findByTestId('laufband-abschnitt-700')
 
     expect(within(lauf(0)).getAllByTestId(/^laufband-abschnitt-/)).toHaveLength(2)
     expect(within(lauf(0)).queryByTestId('laufband-abschnitt-702')).not.toBeInTheDocument()
@@ -1795,7 +1886,7 @@ describe('NightRunPage — Laufband für Umsetzungs-Läufe (#871)', () => {
     const uebersicht = await echteUebersicht()
 
     expect(uebersicht).toBeInTheDocument()
-    expect(screen.queryByTestId('laufband')).not.toBeInTheDocument()
+    expect(screen.queryAllByTestId(/^laufband-abschnitt-/)).toHaveLength(0)
   })
 
   it('misst die Anteile an der Summe der Vorgangsdauern, nicht an der Laufdauer (AK 2)', async () => {
@@ -1821,7 +1912,7 @@ describe('NightRunPage — Laufband für Umsetzungs-Läufe (#871)', () => {
     })
     await screen.findByTestId(`lauf-${startedAt(0)}`)
     aufklappen(0)
-    await within(lauf(0)).findByTestId('laufband')
+    await within(lauf(0)).findByTestId('laufband-abschnitt-700')
 
     expect(bandabschnitt(lauf(0), 700).dataset.anteil).toBe('25')
     expect(bandabschnitt(lauf(0), 701).dataset.anteil).toBe('75')
@@ -1850,8 +1941,10 @@ describe('NightRunPage — Modellzeit-Anteil je Vorgang (#872)', () => {
     protokollWaehlen(ergebnisstand, dateiname)
 
     const panelEl = await screen.findByTestId(`lauf-${start}`)
-    fireEvent.click(within(panelEl).getByRole('button', { expanded: false }))
-    await within(panelEl).findByTestId('vorgangs-kennzahlen')
+    panelAufklappen(panelEl)
+    // Umsetzungs-Läufe tragen die Zeile seit #917 im Vorgangsblock, die beiden Altbestand-Arten
+    // weiter in der eigenen Liste — auf beides wartet dieselbe Abfrage.
+    await screen.findAllByTestId(/^kennzahlen-\d+$/)
     return panelEl
   }
 
@@ -2017,8 +2110,8 @@ describe('NightRunPage — Modellzeit-Anteil je Vorgang (#872)', () => {
     protokollWaehlen(ECHTE_KETTE_STAND, 'night-run-2026-09-14-131200.json')
 
     const panelEl = await screen.findByTestId(`lauf-${ECHTE_KETTE_START}`)
-    fireEvent.click(within(panelEl).getByRole('button', { expanded: false }))
-    await within(panelEl).findByTestId('ketten-uebersicht')
+    panelAufklappen(panelEl)
+    await within(panelEl).findByTestId('uebersicht-fuss')
 
     // Die Kette führt ihre Kosten und Züge bereits je Vorgang in der Übersicht (#866); eine
     // zweite Zeile daneben bezöge sich auf dieselben Zahlen.
@@ -2067,8 +2160,8 @@ describe('NightRunPage — Herkunft eines Laufs (#775)', () => {
 
     await screen.findByTestId(`lauf-${startedAt(0)}`)
     // Erst wenn die Stückzahl des Servers dasteht, ist das Neuladen durch.
-    expect(await within(lauf(0)).findByText('42 bearbeitet, 0 übergangen')).toBeInTheDocument()
-    expect(within(lauf(0)).getByText('Ergebnisstand')).toBeInTheDocument()
+    await waitFor(() => expect(laufKopfzeile(lauf(0))).toHaveTextContent('42 bearbeitet, 0 übergangen'))
+    expect(laufKopfzeile(lauf(0))).toHaveTextContent('Ergebnisstand')
     expect(within(lauf(0)).queryByText('Herkunft unbekannt')).not.toBeInTheDocument()
   })
 
@@ -2079,7 +2172,7 @@ describe('NightRunPage — Herkunft eines Laufs (#775)', () => {
     renderPage({ listen: [VOM_SERVER] })
 
     await screen.findByTestId(`lauf-${startedAt(0)}`)
-    expect(within(lauf(0)).getByText('Herkunft unbekannt')).toBeInTheDocument()
+    expect(laufKopfzeile(lauf(0))).toHaveTextContent('Herkunft unbekannt')
     expect(within(lauf(0)).queryByText('Ergebnisstand')).not.toBeInTheDocument()
   })
 })
@@ -2103,6 +2196,10 @@ describe('NightRunPage — Zustände, Kennzahlen und Auszüge', () => {
     expect(panel.getByText('nicht bearbeitet')).toBeInTheDocument()
   })
 
+  /** Der Ton der Ausgangspille eines Vorgangs — seit #916 über die Textfarbe, die der Punkt erbt. */
+  const pillenton = (cardNumber: number) =>
+    getComputedStyle(screen.getByTestId(`zustand-${cardNumber}`)).color
+
   it('macht eine Erfolgsmeldung mit roter Prüfung gelb', async () => {
     renderPage({
       submit: { ergebnis: alleNeu(GELB) },
@@ -2115,12 +2212,9 @@ describe('NightRunPage — Zustände, Kennzahlen und Auszüge', () => {
     aufklappen(0)
 
     expect(await within(lauf(0)).findByText('Erfolg, Prüfung rot')).toBeInTheDocument()
-    // Text **und** Farbe tragen die Aussage (CLAUDE-react.md Zeile 142); die Farbe kommt aus der
-    // Palette, nicht aus `success`/`warning`/`error` (A15) — als ausgefüllte Ampel-Fläche (#738),
-    // nicht mehr als Textfarbe.
-    expect(within(lauf(0)).getByTestId('ampel-700')).toHaveStyle({
-      backgroundColor: theme.palette.nightRun.yellow,
-    })
+    // Text **und** Farbe tragen die Aussage (CLAUDE-react.md Zeile 142). Seit #916 kommt der Ton
+    // aus dem Entwurfs-Theme; die Ampel-Fläche erbt ihn über `currentColor` von ihrer Pille.
+    expect(pillenton(700)).toBe(alsRgb(NACHTLAUF_TON.YELLOW))
   })
 
   it('zeigt den Zustand als ausgefuellte, gleich grosse Flaeche — unabhaengig von der Textlaenge (#738)', async () => {
@@ -2140,10 +2234,14 @@ describe('NightRunPage — Zustände, Kennzahlen und Auszüge', () => {
     // Vier unterschiedlich lange Zustandstexte ("Erfolg" bis "Erfolg, Prüfung rot"), dieselbe
     // Flächengröße — die Fläche wirkt als Signal, nicht als weitere Textzeile (AC3).
     const groesse = { width: '8px', height: '8px' }
-    expect(panel.getByTestId('ampel-700')).toHaveStyle({ ...groesse, backgroundColor: theme.palette.nightRun.green })
-    expect(panel.getByTestId('ampel-701')).toHaveStyle({ ...groesse, backgroundColor: theme.palette.nightRun.yellow })
-    expect(panel.getByTestId('ampel-702')).toHaveStyle({ ...groesse, backgroundColor: theme.palette.nightRun.red })
-    expect(panel.getByTestId('ampel-703')).toHaveStyle({ ...groesse, backgroundColor: theme.palette.nightRun.grey })
+    for (const nummer of [700, 701, 702, 703]) {
+      expect(panel.getByTestId(`ampel-${nummer}`)).toHaveStyle(groesse)
+    }
+    // Der Ton steht seit #916 an der Pille; die Fläche erbt ihn über `currentColor`.
+    expect(pillenton(700)).toBe(alsRgb(NACHTLAUF_TON.GREEN))
+    expect(pillenton(701)).toBe(alsRgb(NACHTLAUF_TON.YELLOW))
+    expect(pillenton(702)).toBe(alsRgb(NACHTLAUF_TON.RED))
+    expect(pillenton(703)).toBe(alsRgb(NACHTLAUF_TON.GREY))
   })
 
   it('zeigt bei einem grauen Arbeitspaket seinen Grund', async () => {
@@ -2183,7 +2281,7 @@ describe('NightRunPage — Zustände, Kennzahlen und Auszüge', () => {
     protokollWaehlen(EIN_LAUF)
 
     await screen.findByTestId(`lauf-${startedAt(0)}`)
-    expect(within(lauf(0)).getByText('Umsetzungs-Lauf')).toBeInTheDocument()
+    expect(laufKopfzeile(lauf(0))).toHaveTextContent('Umsetzungs-Lauf')
   })
 
   // **Umgekehrt mit Issue #872**: Der Test hielt bis dahin fest, dass in der Auswertung
@@ -2203,9 +2301,10 @@ describe('NightRunPage — Zustände, Kennzahlen und Auszüge', () => {
 
     const panel = within(lauf(0))
     // Die Laufdauer ist die Summe der drei gelaufenen Sessions; das zurückgestellte Paket trägt keine.
-    expect(panel.getByText('21 Min')).toBeInTheDocument()
-    expect(panel.getByText('3 bearbeitet, 1 übergangen')).toBeInTheDocument()
-    expect((await panel.findAllByText('7 Min')).length).toBeGreaterThan(0)
+    expect(laufKopfzeile(lauf(0))).toHaveTextContent('21 Min')
+    expect(laufKopfzeile(lauf(0))).toHaveTextContent('3 bearbeitet, 1 übergangen')
+    // Die Dauer je Vorgang steht seit #917 in der Ergebniszeile seines Blocks.
+    await waitFor(() => expect(panel.getByTestId('kennzahlen-700')).toHaveTextContent('7 Min'))
     // Die drei bearbeiteten Vorgänge tragen eine Kennzahlenzeile; das zurückgestellte Paket
     // ist grau und bekommt keine.
     expect(panel.getAllByTestId(/^kennzahlen-\d+$/)).toHaveLength(3)
@@ -2233,7 +2332,7 @@ describe('NightRunPage — Zustände, Kennzahlen und Auszüge', () => {
     })
     await screen.findByTestId(`lauf-${startedAt(0)}`)
 
-    expect(within(lauf(0)).getByText('Ungedeutete Zeilen: 1')).toBeInTheDocument()
+    expect(laufKopfzeile(lauf(0))).toHaveTextContent('Ungedeutete Zeilen: 1')
     aufklappen(0)
     // `findByText` mit exaktem Matcher greift nur, wenn der ganze Text **ein** Textknoten ist —
     // ein Markdown-Renderer hätte ihn in Elemente zerteilt.
@@ -2248,7 +2347,7 @@ describe('NightRunPage — Herkunftskette', () => {
     [aufbewahrt({ id: 1, startedAt: startedAt(0), items })],
   ]
 
-  it('löst die Kette erst beim Aufklappen auf und lädt jede Nummer nur einmal', async () => {
+  it('löst die Kette des offenen Laufs auf und lädt jede Nummer nur einmal', async () => {
     renderPage({
       listen: lauf700([
         { id: 11, cardNumber: 700, title: 'Paket A', state: 'GREEN' },
@@ -2261,7 +2360,6 @@ describe('NightRunPage — Herkunftskette', () => {
       },
     })
     await screen.findByTestId(`lauf-${startedAt(0)}`)
-    expect(byNumberAufrufe()).toHaveLength(0)
 
     aufklappen(0)
 
@@ -2344,7 +2442,9 @@ describe('NightRunPage — Herkunftskette', () => {
 
     aufklappen(0)
 
-    expect(await within(lauf(0)).findByText('Karte #700 nicht gefunden')).toBeInTheDocument()
+    await waitFor(() =>
+      expect(within(lauf(0)).getByTestId('paket-700')).toHaveTextContent('Karte #700 nicht gefunden'),
+    )
     expect(within(lauf(0)).queryByText('Plan: ohne')).not.toBeInTheDocument()
     // Die Seite bleibt bedienbar: der Lauf lässt sich wieder zuklappen.
     fireEvent.click(within(lauf(0)).getByRole('button', { expanded: true }))
@@ -2374,7 +2474,7 @@ describe('NightRunPage — Herkunftskette', () => {
     aufklappen(0)
     await within(lauf(0)).findByText('Plan: ohne')
     fireEvent.click(within(lauf(0)).getByRole('button', { expanded: true }))
-    fireEvent.click(within(lauf(0)).getByRole('button', { expanded: false }))
+    panelAufklappen(lauf(0))
 
     await waitFor(() => expect(within(lauf(0)).getByText('Plan: ohne')).toBeInTheDocument())
     expect(byNumberAufrufe()).toHaveLength(1)
@@ -2536,7 +2636,7 @@ describe('NightRunPage — Vorhaben eines Arbeitspakets (#818)', () => {
     // Die Wurzelkarte bleibt öffenbar, und der Lauf lässt sich weiterhin zu- und aufklappen.
     expect(within(lauf(0)).getByRole('button', { name: '#700 Paket A' })).toBeInTheDocument()
     fireEvent.click(within(lauf(0)).getByRole('button', { expanded: true }))
-    fireEvent.click(within(lauf(0)).getByRole('button', { expanded: false }))
+    panelAufklappen(lauf(0))
     await waitFor(() =>
       expect(within(lauf(0)).getByText('Vorhaben: nicht auflösbar')).toBeInTheDocument(),
     )
@@ -2551,7 +2651,9 @@ describe('NightRunPage — Vorhaben eines Arbeitspakets (#818)', () => {
 
     aufklappen(0)
 
-    expect(await within(lauf(0)).findByText('Karte #700 nicht gefunden')).toBeInTheDocument()
+    await waitFor(() =>
+      expect(within(lauf(0)).getByTestId('paket-700')).toHaveTextContent('Karte #700 nicht gefunden'),
+    )
     expect(within(lauf(0)).queryByText(/^Vorhaben:/)).toBeNull()
     expect(vorhabenAufrufe()).toHaveLength(0)
   })
@@ -2559,9 +2661,13 @@ describe('NightRunPage — Vorhaben eines Arbeitspakets (#818)', () => {
   it('zeigt keine Vorhaben-Zeile, solange der Abruf des Vorhabens noch läuft', async () => {
     const { verzoegert, freigeben } = angehalten()
     renderPage({
+      // Der Lauf mit dem Vorhaben steht **oben** und klappt seit #914 von selbst auf; der zweite
+      // wird im Test aufgeklappt. Die Rollen sind damit gegenüber der früheren Fassung getauscht,
+      // die Inszenierung ist dieselbe: Ein Lauf hängt im Vorhaben-Abruf, der andere veröffentlicht
+      // währenddessen den geteilten Katalog.
       listen: zweiLaeufe(
-        [{ id: 11, cardNumber: 700, title: 'Paket A', state: 'GREEN' }],
-        [{ id: 12, cardNumber: 701, title: 'Paket B', state: 'GREEN' }],
+        [{ id: 11, cardNumber: 701, title: 'Paket B', state: 'GREEN' }],
+        [{ id: 12, cardNumber: 700, title: 'Paket A', state: 'GREEN' }],
       ),
       karten: {
         700: karte({ id: 1, number: 700, title: 'Paket A', parentId: 5 }),
@@ -2570,20 +2676,22 @@ describe('NightRunPage — Vorhaben eines Arbeitspakets (#818)', () => {
       kartenNachId: { 5: vorhaben({ id: 5, number: 9, title: 'Leitstand ausbauen' }) },
       kartenNachIdVerzoegert: verzoegert,
     })
-    await screen.findByTestId(`lauf-${startedAt(0)}`)
+    await screen.findByTestId(`lauf-${startedAt(30)}`)
+    await waitFor(() => expect(vorhabenAufrufe()).toHaveLength(1))
 
     aufklappen(0)
-    await waitFor(() => expect(vorhabenAufrufe()).toHaveLength(1))
-    aufklappen(30)
 
-    // Lauf B veröffentlicht den geteilten Katalog — Karte 700 ist damit aufgelöst, ihr Vorhaben
-    // aber noch nicht. Dann steht dort keine Zeile, nicht etwa „ohne" oder „nicht auflösbar".
-    await within(lauf(30)).findByText('Vorhaben: ohne')
-    expect(within(lauf(0)).getByRole('button', { name: '#700 Paket A' })).toBeInTheDocument()
-    expect(within(lauf(0)).queryByText(/^Vorhaben:/)).toBeNull()
+    // Der zweite Lauf veröffentlicht den geteilten Katalog — Karte 700 ist damit aufgelöst, ihr
+    // Vorhaben aber noch nicht. Dann steht dort keine Zeile, nicht etwa „ohne" oder „nicht
+    // auflösbar".
+    await within(lauf(0)).findByText('Vorhaben: ohne')
+    expect(within(lauf(30)).getByRole('button', { name: '#700 Paket A' })).toBeInTheDocument()
+    expect(within(lauf(30)).queryByText(/^Vorhaben:/)).toBeNull()
 
     freigeben()
-    expect(await within(lauf(0)).findByRole('button', { name: /^Vorhaben #9 / })).toBeInTheDocument()
+    expect(
+      await within(lauf(30)).findByRole('button', { name: /^Vorhaben #9 / }),
+    ).toBeInTheDocument()
   })
 
   it('ruft ein Vorhaben auch bei zwei gleichzeitig aufgeklappten Läufen nur einmal ab', async () => {
@@ -3015,7 +3123,7 @@ describe('NightRunPage — Aufschlüsselung der gesichteten Karten (#873)', () =
     protokollWaehlen(ECHTER_PRUEFLAUF_STAND, 'night-run-2026-09-11-103116.json')
 
     const panelEl = await screen.findByTestId(`lauf-${ECHTER_PRUEFLAUF_START}`)
-    fireEvent.click(within(panelEl).getByRole('button', { expanded: false }))
+    panelAufklappen(panelEl)
     await within(panelEl).findByTestId('aufschluesselung')
     return panelEl
   }
@@ -3029,7 +3137,7 @@ describe('NightRunPage — Aufschlüsselung der gesichteten Karten (#873)', () =
     renderPage({ listen: [ansicht] })
 
     const panelEl = await screen.findByTestId(`lauf-${ansicht[0].startedAt}`)
-    fireEvent.click(within(panelEl).getByRole('button', { expanded: false }))
+    panelAufklappen(panelEl)
     await within(panelEl).findByTestId('aufschluesselung')
     return panelEl
   }
@@ -3123,7 +3231,7 @@ describe('NightRunPage — Aufschlüsselung der gesichteten Karten (#873)', () =
     protokollWaehlen(ECHTE_ERZEUGUNG_STAND, 'night-run-2026-09-09-125621.json')
 
     const panelEl = await screen.findByTestId(`lauf-${ECHTE_ERZEUGUNG_START}`)
-    fireEvent.click(within(panelEl).getByRole('button', { expanded: false }))
+    panelAufklappen(panelEl)
     await within(panelEl).findByTestId('aufschluesselung')
 
     // 32 + 3 + 3 = 38 — die Summe der Teilmengen ist die Zahl der gesichteten Karten.
@@ -3205,7 +3313,7 @@ describe('NightRunPage — Aufschlüsselung der gesichteten Karten (#873)', () =
     )
   })
 
-  it('zeigt an einem Umsetzungs-Lauf das Laufband und keine Aufschlüsselung (Punkt 14)', async () => {
+  it('zeigt an einem Umsetzungs-Lauf die Anteilsbalken und keine Aufschlüsselung (Punkt 14)', async () => {
     renderPage({
       submit: { ergebnis: alleNeu(ECHTER_STAND) },
       listen: [[], wieAufbewahrt(ECHTER_STAND)],
@@ -3215,8 +3323,8 @@ describe('NightRunPage — Aufschlüsselung der gesichteten Karten (#873)', () =
     protokollWaehlen(ECHTER_STAND, 'night-run-2026-09-07-085229.json')
 
     const panelEl = await screen.findByTestId(`lauf-${ECHTER_START}`)
-    fireEvent.click(within(panelEl).getByRole('button', { expanded: false }))
-    await within(panelEl).findByTestId('laufband')
+    panelAufklappen(panelEl)
+    await within(panelEl).findByTestId('laufband-abschnitt-767')
 
     expect(within(panelEl).queryByTestId('aufschluesselung')).not.toBeInTheDocument()
   })
@@ -3247,13 +3355,18 @@ describe('NightRunPage — Kennzahlenzeile je Lauf-Art (#874)', () => {
     protokollWaehlen(ergebnisstand, dateiname)
 
     const panelEl = await screen.findByTestId(`lauf-${start}`)
-    fireEvent.click(within(panelEl).getByRole('button', { expanded: false }))
-    await within(panelEl).findByTestId('lauf-kennzahlen')
+    panelAufklappen(panelEl)
+    // Beide Formen: Ketten- und Umsetzungs-Lauf tragen seit #915 die Reihe des Entwurfs, die
+    // beiden Altbestand-Arten weiter die bisherige Zeile.
+    await within(panelEl).findByTestId(KENNZAHLEN_REIHE)
     return panelEl
   }
 
-  /** Die Kennzahlenzeile eines aufgeklappten Laufs. */
-  const zeile = (panelEl: HTMLElement) => within(within(panelEl).getByTestId('lauf-kennzahlen'))
+  /**
+   * Die Kennzahlenzeile eines aufgeklappten Laufs. Umsetzungs-Läufe tragen seit #915 die Reihe des
+   * Entwurfs, die beiden Altbestand-Arten weiter die bisherige Zeile — dieselben Werte in beiden.
+   */
+  const zeile = (panelEl: HTMLElement) => within(within(panelEl).getByTestId(KENNZAHLEN_REIHE))
 
   const echterUmsetzungslauf = () =>
     eingelesen(ECHTER_STAND, ECHTER_START, 'night-run-2026-09-07-085229.json', {
@@ -3394,8 +3507,8 @@ describe('NightRunPage — Kennzahlenzeile je Lauf-Art (#874)', () => {
     protokollWaehlen(ECHTE_KETTE_STAND, 'night-run-2026-09-14-131200.json')
 
     const panelEl = await screen.findByTestId(`lauf-${ECHTE_KETTE_START}`)
-    fireEvent.click(within(panelEl).getByRole('button', { expanded: false }))
-    await within(panelEl).findByTestId('ketten-uebersicht')
+    panelAufklappen(panelEl)
+    await within(panelEl).findByTestId('uebersicht-fuss')
 
     // Die Kette führt ihre Kennzahlen bereits in der Übersicht (#866) — und ihre Kostensumme
     // steht im Stand, statt gerechnet zu werden.
@@ -3424,5 +3537,588 @@ describe('NightRunPage — Kennzahlenzeile je Lauf-Art (#874)', () => {
     // Kosten und Züge bewahrt der Server nicht auf — eine Zeile aus lauter Fehlanzeigen wäre
     // dieselbe Wand, die der Kennzahlen-Hinweis vermeidet.
     expect(within(lauf(0)).queryByTestId('lauf-kennzahlen')).not.toBeInTheDocument()
+  })
+})
+
+describe('NightRunPage — Rahmen des Entwurfs (#914)', () => {
+  /** Zwei aufbewahrte Läufe, der spätere steht oben. */
+  const zweiAufbewahrte = () => ({
+    listen: [
+      [
+        aufbewahrt({
+          id: 1,
+          startedAt: startedAt(0),
+          items: [{ id: 11, cardNumber: 700, title: 'Paket A', state: 'GREEN' as const }],
+        }),
+        aufbewahrt({
+          id: 2,
+          startedAt: startedAt(30),
+          items: [{ id: 21, cardNumber: 701, title: 'Paket B', state: 'GREEN' as const }],
+        }),
+      ],
+    ],
+    karten: {
+      700: karte({ id: 1, number: 700, title: 'Paket A' }),
+      701: karte({ id: 2, number: 701, title: 'Paket B' }),
+    },
+  })
+
+  it('zeigt den obersten Lauf offen und den zweiten zugeklappt', async () => {
+    // AK 2: Kopf, Kennzahlenreihe und erster Vorgangsblock ohne Scrollen. Genau der oberste
+    // Lauf, nicht alle (E7) — alle aufzuklappen löste die Anfragelawine aus, die A8 vermeidet.
+    renderPage(zweiAufbewahrte())
+
+    await screen.findByTestId(`lauf-${startedAt(30)}`)
+    expect(within(lauf(30)).getByRole('button', { expanded: true })).toBeInTheDocument()
+    expect(within(lauf(0)).getByRole('button', { expanded: false })).toBeInTheDocument()
+  })
+
+  it('lädt die Herkunftskette des obersten Laufs genau einmal, auch bei erneutem Rendern', async () => {
+    const { rerender } = renderPage(zweiAufbewahrte())
+
+    await screen.findByTestId(`lauf-${startedAt(30)}`)
+    await waitFor(() => expect(byNumberAufrufe()).toHaveLength(1))
+
+    rerender(
+      <ThemeProvider theme={theme}>
+        <SnackbarProvider>
+          <MemoryRouter initialEntries={['/projects/5/nachtlauf']}>
+            <Routes>
+              <Route path="/projects/:projectId/nachtlauf" element={<NightRunPage />} />
+            </Routes>
+          </MemoryRouter>
+        </SnackbarProvider>
+      </ThemeProvider>,
+    )
+
+    // `geladeneLaeufe` ist die Stelle, die das sicherstellt — ein zweiter Abruf derselben Kette
+    // wäre für den Nutzer unsichtbar und für den Server eine verdoppelte Last.
+    await waitFor(() => expect(byNumberAufrufe()).toHaveLength(1))
+  })
+
+  it('legt das Theme des Entwurfs über den Inhaltsbereich', async () => {
+    renderPage(zweiAufbewahrte())
+
+    await screen.findByTestId(`lauf-${startedAt(30)}`)
+    const knopf = screen.getByRole('button', { name: 'Protokoll einlesen' })
+    expect(getComputedStyle(knopf).fontFamily).toContain('IBM Plex Sans')
+  })
+
+  it('lässt den Kartendialog außerhalb des Theme-Teilbaums', async () => {
+    renderPage(zweiAufbewahrte())
+
+    await screen.findByTestId(`lauf-${startedAt(30)}`)
+    aufklappen(30)
+    fireEvent.click(await within(lauf(30)).findByRole('button', { name: /#701/ }))
+
+    // Nicht-Ziel 2: Der Dialog gehört zur übrigen Anwendung und trägt deren Designsprache.
+    const detail = await screen.findByTestId('karten-detail')
+    expect(detail.dataset.schrift).toContain('Carlito')
+    expect(detail.dataset.schrift).not.toContain('IBM Plex Sans')
+  })
+
+  it('hält Brotkrumenpfad, Protokoll-Knopf und die Meldung zu einem nicht deutbaren Stand', async () => {
+    // AK 10: Wo der Entwurf kein Element vorsieht, bleibt es in seiner Funktion erhalten.
+    renderPage({ listen: [[]] })
+    await screen.findByText('Noch keine Auswertung vorhanden.')
+
+    expect(screen.getByRole('link', { name: 'Projekte' })).toBeInTheDocument()
+    expect(screen.getByText('Nachtlauf')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Protokoll einlesen' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Protokolldatei auswählen')).toBeInTheDocument()
+
+    protokollWaehlen('{kein json')
+
+    expect(await screen.findByText(/^Nicht auswertbar —/)).toBeInTheDocument()
+  })
+})
+
+describe('NightRunPage — Kopf und Kennzahlenreihe der Nacht (#915)', () => {
+  /** Liest einen Ergebnisstand ein und gibt das Panel seines Laufs zurück. */
+  async function nachEinlesen(standText: string, start: string, dateiname: string) {
+    renderPage({
+      submit: { ergebnis: alleNeu(standText) },
+      listen: [[], wieAufbewahrt(standText)],
+    })
+    await screen.findByText('Noch keine Auswertung vorhanden.')
+    protokollWaehlen(standText, dateiname)
+    return await screen.findByTestId(`lauf-${start}`)
+  }
+
+  it('gibt dem Ketten-Lauf den Kopf des Entwurfs mit seiner Vorzeile', async () => {
+    const panelEl = await nachEinlesen(
+      ECHTE_KETTE_STAND,
+      ECHTE_KETTE_START,
+      'night-run-2026-09-14-131200.json',
+    )
+
+    expect(within(panelEl).getByTestId('nachtlauf-vorzeile')).toHaveTextContent('Nachtlauf · Kette')
+    expect(within(panelEl).getByTestId('nachtlauf-kennzahlen')).toBeInTheDocument()
+  })
+
+  it('gibt dem Umsetzungs-Lauf den Kopf des Entwurfs mit seiner Vorzeile', async () => {
+    const panelEl = await nachEinlesen(
+      ECHTER_STAND,
+      ECHTER_START,
+      'night-run-2026-09-07-085229.json',
+    )
+
+    expect(within(panelEl).getByTestId('nachtlauf-vorzeile')).toHaveTextContent(
+      'Nachtlauf · Umsetzung',
+    )
+    expect(within(panelEl).getByTestId('nachtlauf-kennzahlen')).toBeInTheDocument()
+  })
+
+  it('lässt den Prüf-Lauf bei seiner heutigen Darstellung (E5, Altbestand)', async () => {
+    const panelEl = await nachEinlesen(
+      ECHTER_PRUEFLAUF_STAND,
+      ECHTER_PRUEFLAUF_START,
+      'night-run-2026-09-11-103116.json',
+    )
+
+    expect(within(panelEl).queryByTestId('nachtlauf-vorzeile')).not.toBeInTheDocument()
+    expect(within(panelEl).getByTestId('aufschluesselung')).toBeInTheDocument()
+    expect(within(panelEl).getByTestId('lauf-kennzahlen')).toBeInTheDocument()
+  })
+
+  it('lässt den Erzeugungs-Lauf bei seiner heutigen Darstellung (E5, Altbestand)', async () => {
+    // Nachtplan-Läufe bleiben browser-only (Plan #803, Entscheidung 8) — sie gehen nicht an den
+    // Server und kommen deshalb auch nicht aus der Liste zurück.
+    renderPage()
+    await screen.findByText('Noch keine Auswertung vorhanden.')
+    protokollWaehlen(ECHTE_ERZEUGUNG_STAND, 'night-run-2026-09-09-125621.json')
+    const panelEl = await screen.findByTestId(`lauf-${ECHTE_ERZEUGUNG_START}`)
+    panelAufklappen(panelEl)
+
+    expect(within(panelEl).queryByTestId('nachtlauf-vorzeile')).not.toBeInTheDocument()
+    expect(await within(panelEl).findByTestId('aufschluesselung')).toBeInTheDocument()
+    expect(within(panelEl).getByTestId('lauf-kennzahlen')).toBeInTheDocument()
+  })
+
+  it.each([
+    ['Ketten-Lauf', ECHTE_KETTE_STAND, ECHTE_KETTE_START, 'night-run-2026-09-14-131200.json'],
+    ['Umsetzungs-Lauf', ECHTER_STAND, ECHTER_START, 'night-run-2026-09-07-085229.json'],
+  ])(
+    'nennt die Herkunft des Stands in der Metazeile des %s (AK 9, Fall 3)',
+    async (_art, standText, start, dateiname) => {
+      const panelEl = await nachEinlesen(standText, start, dateiname)
+      expect(within(panelEl).getByTestId('nachtlauf-meta')).toHaveTextContent('Ergebnisstand')
+    },
+  )
+
+  it('vermerkt am Kostenwert der Kette die Sitzungen ohne Kostenmeldung (AK 9, Fall 1)', async () => {
+    const panelEl = await nachEinlesen(
+      ECHTE_KETTE_STAND,
+      ECHTE_KETTE_START,
+      'night-run-2026-09-14-131200.json',
+    )
+
+    const kosten = within(panelEl).getByTestId('nachtlauf-kennzahl-Kosten der Nacht')
+    expect(kosten).toHaveTextContent(/ohne Kostenmeldung/)
+  })
+
+  it('gibt einem aufbewahrten Ketten-Lauf ohne Stand denselben Kopf, aber keine Kennzahlen (E6)', async () => {
+    renderPage({
+      listen: [wieAufbewahrt(ECHTE_KETTE_STAND)],
+    })
+    const panelEl = await screen.findByTestId(`lauf-${ECHTE_KETTE_START}`)
+
+    // Derselbe Kopf — die Gestaltung hängt an der Lauf-Art, nicht am Vorliegen eines Stands.
+    expect(within(panelEl).getByTestId('nachtlauf-vorzeile')).toHaveTextContent('Nachtlauf · Kette')
+    // Kosten und Züge bewahrt der Server nicht auf; eine Reihe aus lauter Fehlanzeigen wäre
+    // dieselbe Wand, die der Bestand schon vermeidet.
+    expect(within(panelEl).queryByTestId('nachtlauf-kennzahlen')).not.toBeInTheDocument()
+    expect(within(panelEl).getByTestId('nachtlauf-meta')).toHaveTextContent('Herkunft unbekannt')
+  })
+})
+
+describe('NightRunPage — Altbestand-Arten behalten ihre Kopfzeile (#915)', () => {
+  it('zeigt ungedeutete Zeilen eines Prüf-Laufs weiter als eigenen Chip', async () => {
+    // Die Chip-Zeile bleibt für `REVIEW` und `NIGHTPLAN` in Kraft (E5). Ohne diesen Nachweis wäre
+    // der Zweig nach dem Umbau ungeprüft, obwohl er erreichbar ist.
+    renderPage({
+      listen: [
+        [
+          aufbewahrt({
+            id: 1,
+            startedAt: startedAt(0),
+            mode: 'REVIEW',
+            unparsedCount: 1,
+            unparsedSample: UNGEDEUTET,
+            items: [{ id: 11, cardNumber: 700, title: 'Paket A', state: 'GREEN' }],
+          }),
+        ],
+      ],
+    })
+    await screen.findByTestId(`lauf-${startedAt(0)}`)
+
+    expect(within(lauf(0)).getByText('Ungedeutete Zeilen: 1')).toBeInTheDocument()
+    expect(within(lauf(0)).queryByTestId('nachtlauf-vorzeile')).not.toBeInTheDocument()
+  })
+
+  it('zeigt den Kennzahlen-Hinweis eines Prüf-Laufs in dessen bisheriger Zeile', async () => {
+    // Der echte Prüf-Lauf, ergänzt um den Hinweis: Seine Ausgänge sind prüfungseigen, ein
+    // selbstgebauter Stand mit `ausgang: 'erfolg'` wäre gar nicht deutbar.
+    const PRUEFUNG_MIT_HINWEIS = JSON.stringify({
+      ...echterPrueflauf,
+      kennzahlenHinweis: 'Kennzahlen nicht angefordert',
+    })
+    renderPage({
+      submit: { ergebnis: alleNeu(PRUEFUNG_MIT_HINWEIS) },
+      listen: [[], wieAufbewahrt(PRUEFUNG_MIT_HINWEIS)],
+    })
+    await screen.findByText('Noch keine Auswertung vorhanden.')
+
+    protokollWaehlen(PRUEFUNG_MIT_HINWEIS, 'night-run-2026-09-11-103116.json')
+    const panelEl = await screen.findByTestId(`lauf-${ECHTER_PRUEFLAUF_START}`)
+    panelAufklappen(panelEl)
+
+    expect(await within(panelEl).findByTestId('lauf-kennzahlen-hinweis')).toHaveTextContent(
+      'Kennzahlen nicht angefordert',
+    )
+  })
+
+  it('kennzeichnet einen schon bekannten Prüf-Lauf weiter mit seinem eigenen Chip', async () => {
+    // Die Gegenprobe zu „neu angelegt": Auch der zweite Zustand des Einlieferungs-Chips gehört zu
+    // den beiden Altbestand-Arten und bleibt dort in seiner bisherigen Form.
+    renderPage({
+      submit: { ergebnis: [{ startedAt: ECHTER_PRUEFLAUF_START, created: false }] },
+      listen: [[], wieAufbewahrt(ECHTER_PRUEFLAUF_STAND)],
+    })
+    await screen.findByText('Noch keine Auswertung vorhanden.')
+
+    protokollWaehlen(ECHTER_PRUEFLAUF_STAND, 'night-run-2026-09-11-103116.json')
+    const panelEl = await screen.findByTestId(`lauf-${ECHTER_PRUEFLAUF_START}`)
+
+    expect(await within(panelEl).findByText('lag schon vor')).toBeInTheDocument()
+  })
+})
+
+describe('NightRunPage — Vorgangsblock der Kette (#916)', () => {
+  /** Der echte Ketten-Lauf, eingelesen und aufgeklappt. */
+  async function kette(extra: Partial<Antworten> = {}) {
+    renderPage({
+      submit: { ergebnis: alleNeu(ECHTE_KETTE_STAND) },
+      listen: [[], wieAufbewahrt(ECHTE_KETTE_STAND)],
+      ...extra,
+    })
+    await screen.findByText('Noch keine Auswertung vorhanden.')
+    protokollWaehlen(ECHTE_KETTE_STAND, 'night-run-2026-09-14-131200.json')
+    const panelEl = await screen.findByTestId(`lauf-${ECHTE_KETTE_START}`)
+    panelAufklappen(panelEl)
+    return panelEl
+  }
+
+  it('gibt jedem Vorgang einen eigenen Block mit Nummer, Titel und Ausgang (AK 4)', async () => {
+    await kette()
+
+    const block = await screen.findByTestId('paket-791')
+    expect(block).toHaveTextContent('#791')
+    expect(block).toHaveTextContent('Zugriff und Konten bleiben nach Widerruf')
+    expect(within(block).getByTestId('zustand-791')).toHaveTextContent('Erfolg')
+  })
+
+  it('nennt den Grund eines an der Zeitgrenze beendeten Vorgangs in Worten (AK 7)', async () => {
+    await kette()
+
+    // Auffindbar ohne jede Farbwahrnehmung: Der Satz steht als Text unter der Kopfzeile.
+    const grund = await screen.findByTestId('abbruch-842')
+    expect(grund).toHaveTextContent('Zeitbudget')
+    expect(within(screen.getByTestId('paket-842')).getByTestId('zustand-842')).toHaveTextContent(
+      'Am Zeitbudget beendet',
+    )
+  })
+
+  it('unterscheidet einen nie erreichten Arbeitsschritt an einem Wort (AK 8)', async () => {
+    await kette()
+
+    await screen.findByTestId('stufe-842-pakete')
+    // Der nie erreichte Schritt sagt es; der erreichte sagt seine Zeiten.
+    expect(screen.getByTestId('stufe-842-pakete')).toHaveTextContent('nicht erreicht')
+    expect(screen.getByTestId('stufe-842-pakete')).toHaveAttribute('data-erreicht', 'nein')
+    expect(screen.getByTestId('stufe-842-plan')).not.toHaveTextContent('nicht erreicht')
+    expect(screen.getByTestId('stufe-842-plan')).toHaveAttribute('data-erreicht', 'ja')
+  })
+
+  it('führt den Anteil der Modellarbeit in der Ergebniszeile jedes Vorgangs (AK 6)', async () => {
+    await kette()
+
+    expect(await screen.findByTestId('kennzahlen-791')).toHaveTextContent(/Modell(arbeit|zeit)/)
+  })
+
+  it('zeigt die entstandenen Karten als Chips und öffnet die angeklickte', async () => {
+    await kette({
+      karten: {
+        791: karte({ id: 1, number: 791, title: 'Konten' }),
+        844: karte({ id: 2, number: 844, title: '[Plan] Sicherheits-Bauform' }),
+      },
+    })
+
+    const chip = await screen.findByRole('button', { name: /^Plan #844 / })
+    fireEvent.click(chip)
+
+    expect(screen.getByTestId('karten-detail')).toHaveTextContent('Karte 844')
+  })
+
+  it('hält Häufigkeit, Vorhaben-Zeile und Übernahmetext am Block (AK 10)', async () => {
+    await kette({
+      karten: { 842: karte({ id: 1, number: 842, title: 'Leitstand mehrstufig', parentId: 5 }) },
+      kartenNachId: { 5: vorhaben({ id: 5, number: 9, title: 'Leitstand ausbauen' }) },
+    })
+
+    const block = await screen.findByTestId('paket-842')
+    expect(await within(block).findByRole('button', { name: /^Vorhaben #9 / })).toBeInTheDocument()
+    expect(uebernahmetext(block, 842)).toContain('Zustand: Am Zeitbudget beendet')
+    expect(
+      within(block).getByRole('button', { name: 'Übernahmetext zu Karte #842 kopieren' }),
+    ).toBeInTheDocument()
+  })
+
+  it('nennt an einem übergangenen Vorgang ohne Ergebnisstand den Grund, nicht einen Auszug', async () => {
+    // Ohne Stand gibt es kein Band; dann trägt der Auszug die Herkunft (AK 10). An einem grauen
+    // Vorgang heißt er „Grund", weil er sagt, warum nichts geschah — nicht, was geschah.
+    renderPage({
+      listen: [
+        [
+          aufbewahrt({
+            id: 1,
+            startedAt: startedAt(0),
+            mode: 'CHAIN',
+            items: [
+              {
+                id: 11,
+                cardNumber: 700,
+                title: 'Paket A',
+                state: 'GREY',
+                excerpt: GRUND_ZURUECKGESTELLT,
+              },
+            ],
+          }),
+        ],
+      ],
+    })
+    const panelEl = await screen.findByTestId(`lauf-${startedAt(0)}`)
+
+    expect(within(panelEl).getByText(`Grund: ${GRUND_ZURUECKGESTELLT}`)).toBeInTheDocument()
+  })
+
+  it('lässt den Prüf-Lauf bei der Zeilendarstellung, ohne Vorgangsblock (E5)', async () => {
+    renderPage({
+      submit: { ergebnis: alleNeu(ECHTER_PRUEFLAUF_STAND) },
+      listen: [[], wieAufbewahrt(ECHTER_PRUEFLAUF_STAND)],
+    })
+    await screen.findByText('Noch keine Auswertung vorhanden.')
+    protokollWaehlen(ECHTER_PRUEFLAUF_STAND, 'night-run-2026-09-11-103116.json')
+    const panelEl = await screen.findByTestId(`lauf-${ECHTER_PRUEFLAUF_START}`)
+    panelAufklappen(panelEl)
+
+    await within(panelEl).findByTestId('aufschluesselung')
+    expect(within(panelEl).queryByTestId('stufenband-782')).not.toBeInTheDocument()
+  })
+})
+
+describe('NightRunPage — Anteilsbalken des Umsetzungs-Laufs (#917)', () => {
+  /** Der echte Umsetzungs-Lauf vom 7. September, eingelesen und aufgeklappt. */
+  async function umsetzung() {
+    renderPage({
+      submit: { ergebnis: alleNeu(ECHTER_STAND) },
+      listen: [[], wieAufbewahrt(ECHTER_STAND)],
+    })
+    await screen.findByText('Noch keine Auswertung vorhanden.')
+    protokollWaehlen(ECHTER_STAND, 'night-run-2026-09-07-085229.json')
+    const panelEl = await screen.findByTestId(`lauf-${ECHTER_START}`)
+    panelAufklappen(panelEl)
+    return panelEl
+  }
+
+  it('gibt jedem Umsetzungs-Vorgang einen Anteilsbalken und kein Stufenband', async () => {
+    const panelEl = await umsetzung()
+
+    expect(await within(panelEl).findByTestId('laufband-abschnitt-767')).toBeInTheDocument()
+    expect(within(panelEl).queryByTestId('stufenband-767')).not.toBeInTheDocument()
+  })
+
+  it('gibt jedem Ketten-Vorgang ein Stufenband und keinen Anteilsbalken', async () => {
+    renderPage({
+      submit: { ergebnis: alleNeu(ECHTE_KETTE_STAND) },
+      listen: [[], wieAufbewahrt(ECHTE_KETTE_STAND)],
+    })
+    await screen.findByText('Noch keine Auswertung vorhanden.')
+    protokollWaehlen(ECHTE_KETTE_STAND, 'night-run-2026-09-14-131200.json')
+    const panelEl = await screen.findByTestId(`lauf-${ECHTE_KETTE_START}`)
+    panelAufklappen(panelEl)
+
+    expect(await within(panelEl).findByTestId('stufenband-791')).toBeInTheDocument()
+    expect(within(panelEl).queryByTestId('laufband-abschnitt-791')).not.toBeInTheDocument()
+  })
+
+  it('misst den Anteil an der Summe der Vorgangsdauern und nicht an der Laufdauer', async () => {
+    // Die Laufdauer weicht hier absichtlich von der Summe ab: Bezöge sich die Breite auf sie,
+    // stünden hier 7 und 21 statt 25 und 75.
+    renderPage({
+      listen: [
+        [
+          aufbewahrt({
+            id: 1,
+            startedAt: startedAt(0),
+            durationMs: 4 * 7 * 60_000,
+            items: [
+              { id: 11, cardNumber: 700, title: 'Paket A', state: 'GREEN', durationMs: SIEBEN_MIN },
+              {
+                id: 12,
+                cardNumber: 701,
+                title: 'Paket B',
+                state: 'GREEN',
+                durationMs: 3 * SIEBEN_MIN,
+              },
+            ],
+          }),
+        ],
+      ],
+    })
+    await screen.findByTestId(`lauf-${startedAt(0)}`)
+
+    expect(screen.getByTestId('laufband-abschnitt-700')).toHaveAttribute('data-anteil', '25')
+    expect(screen.getByTestId('laufband-abschnitt-701')).toHaveAttribute('data-anteil', '75')
+  })
+
+  it('zeigt bei nur einem gemessenen Vorgang keinen Balken, aber dessen Angaben', async () => {
+    // Ein Balken mit einem einzigen Abschnitt behauptet ein Verhältnis, das es nicht gibt.
+    renderPage({
+      listen: [
+        [
+          aufbewahrt({
+            id: 1,
+            startedAt: startedAt(0),
+            items: [
+              { id: 11, cardNumber: 700, title: 'Paket A', state: 'GREEN', durationMs: SIEBEN_MIN },
+              { id: 12, cardNumber: 701, title: 'Paket B', state: 'GREY' },
+            ],
+          }),
+        ],
+      ],
+    })
+    await screen.findByTestId(`lauf-${startedAt(0)}`)
+
+    expect(screen.queryAllByTestId(/^laufband-abschnitt-/)).toHaveLength(0)
+    expect(screen.getByTestId('paket-700')).toHaveTextContent('Paket A')
+    expect(screen.getByTestId('kennzahlen-700')).toHaveTextContent('7 Min')
+  })
+
+  it('hält Ausgang, Auszug, Häufigkeit und Modellzeit am Umsetzungs-Vorgang (AK 6)', async () => {
+    const panelEl = await umsetzung()
+
+    const block = await within(panelEl).findByTestId('paket-769')
+    expect(within(block).getByTestId('zustand-769')).toHaveTextContent('gescheitert')
+    expect(within(block).getByText(/^Auszug: /)).toBeInTheDocument()
+    expect(within(block).getByTestId('kennzahlen-769')).toHaveTextContent(/Modell(arbeit|zeit)/)
+  })
+
+  it('öffnet an einem Prüf-Lauf die Wurzelkarte aus der Zeilendarstellung (AK 10)', async () => {
+    // Die Zeilendarstellung der beiden Altbestand-Arten trägt den Verweis auf die Wurzelkarte
+    // weiterhin selbst — die Vorgangsblöcke haben ihren eigenen.
+    renderPage({
+      listen: [
+        [
+          aufbewahrt({
+            id: 1,
+            startedAt: startedAt(0),
+            mode: 'REVIEW',
+            items: [{ id: 11, cardNumber: 700, title: 'Paket A', state: 'GREEN' }],
+          }),
+        ],
+      ],
+      karten: { 700: karte({ id: 1, number: 700, title: 'Paket A' }) },
+    })
+    await screen.findByTestId(`lauf-${startedAt(0)}`)
+
+    fireEvent.click(await within(lauf(0)).findByRole('button', { name: '#700 Paket A' }))
+
+    expect(screen.getByTestId('karten-detail')).toHaveTextContent('Karte 700')
+  })
+
+  it('lässt einen aufbewahrten Prüf-Lauf bei seiner Darstellung samt Ableitungstabelle', async () => {
+    renderPage({
+      submit: { ergebnis: alleNeu(ECHTER_PRUEFLAUF_STAND) },
+      listen: [[], wieAufbewahrt(ECHTER_PRUEFLAUF_STAND)],
+    })
+    await screen.findByText('Noch keine Auswertung vorhanden.')
+    protokollWaehlen(ECHTER_PRUEFLAUF_STAND, 'night-run-2026-09-11-103116.json')
+    const panelEl = await screen.findByTestId(`lauf-${ECHTER_PRUEFLAUF_START}`)
+    panelAufklappen(panelEl)
+
+    expect(await within(panelEl).findByTestId('aufschluesselung')).toBeInTheDocument()
+    expect(within(panelEl).getByTestId('vorgangs-kennzahlen')).toBeInTheDocument()
+    expect(within(panelEl).queryAllByTestId(/^laufband-abschnitt-/)).toHaveLength(0)
+  })
+})
+
+describe('NightRunPage — Fußzeile beider Lauf-Arten (#918)', () => {
+  const fuss = () => within(screen.getByTestId('uebersicht-fuss'))
+
+  async function eingelesenerLauf(standText: string, start: string, dateiname: string) {
+    renderPage({
+      submit: { ergebnis: alleNeu(standText) },
+      listen: [[], wieAufbewahrt(standText)],
+    })
+    await screen.findByText('Noch keine Auswertung vorhanden.')
+    protokollWaehlen(standText, dateiname)
+    const panelEl = await screen.findByTestId(`lauf-${start}`)
+    panelAufklappen(panelEl)
+    await within(panelEl).findByTestId('uebersicht-fuss')
+    return panelEl
+  }
+
+  it('führt am Ketten-Lauf Zeitvorgaben, Kostenbudget und höchste Kosten', async () => {
+    await eingelesenerLauf(ECHTE_KETTE_STAND, ECHTE_KETTE_START, 'night-run-2026-09-14-131200.json')
+
+    expect(fuss().getByText('Plan 20 · Prüfung 15 · Pakete 15 · Abdeckung 10 min')).toBeInTheDocument()
+    expect(fuss().getByText('50,00 $')).toBeInTheDocument()
+    expect(fuss().getByText('11,52 $')).toBeInTheDocument()
+  })
+
+  it('nennt die Herkunft der Budgets „nicht angegeben", ohne zu warnen (AK 9, Fall 2)', async () => {
+    // Der Ergebnisstand führt das Feld heute nicht (E12). Weggelassen ließe die Zeile offen, ob
+    // nichts vorlag oder nichts nachgesehen wurde — und eine fehlende Angabe ist keine Warnung.
+    await eingelesenerLauf(ECHTE_KETTE_STAND, ECHTE_KETTE_START, 'night-run-2026-09-14-131200.json')
+
+    expect(fuss().getByText('Herkunft der Budgets')).toBeInTheDocument()
+    const wert = fuss().getByText('nicht angegeben')
+    expect(getComputedStyle(wert).color).toBe(alsRgb(NACHTLAUF_FARBEN.ink2))
+    expect(getComputedStyle(wert).color).not.toBe(alsRgb(NACHTLAUF_FARBEN.budget))
+  })
+
+  it('führt am Umsetzungs-Lauf Ergebnis, teuersten Vorgang und Herkunft des Stands', async () => {
+    await eingelesenerLauf(ECHTER_STAND, ECHTER_START, 'night-run-2026-09-07-085229.json')
+
+    expect(fuss().getByText('Ergebnis der Nacht')).toBeInTheDocument()
+    expect(fuss().getByText(/bearbeitet · .* übergangen/)).toBeInTheDocument()
+    expect(fuss().getByText('Teuerster Vorgang')).toBeInTheDocument()
+    expect(fuss().getByText(/^#\d+ mit \d/)).toBeInTheDocument()
+    expect(fuss().getByText('Herkunft des Stands')).toBeInTheDocument()
+    expect(fuss().getByText('Ergebnisstand')).toBeInTheDocument()
+  })
+
+  it('zeigt an einem aufbewahrten Lauf ohne Stand die Fußzeile mit Fehlanzeigen', async () => {
+    renderPage({ listen: [wieAufbewahrt(ECHTE_KETTE_STAND)] })
+    const panelEl = await screen.findByTestId(`lauf-${ECHTE_KETTE_START}`)
+
+    // Vorgaben und Budget stehen allein im Ergebnisstand; die Zeile benennt das, statt zu fehlen.
+    expect(await within(panelEl).findByTestId('uebersicht-fuss')).toBeInTheDocument()
+    expect(fuss().getAllByText('nicht angegeben').length).toBeGreaterThanOrEqual(3)
+  })
+
+  it('gibt einem Prüf-Lauf keine Fußzeile des Entwurfs (Nicht-Ziel 5)', async () => {
+    renderPage({
+      submit: { ergebnis: alleNeu(ECHTER_PRUEFLAUF_STAND) },
+      listen: [[], wieAufbewahrt(ECHTER_PRUEFLAUF_STAND)],
+    })
+    await screen.findByText('Noch keine Auswertung vorhanden.')
+    protokollWaehlen(ECHTER_PRUEFLAUF_STAND, 'night-run-2026-09-11-103116.json')
+    const panelEl = await screen.findByTestId(`lauf-${ECHTER_PRUEFLAUF_START}`)
+    panelAufklappen(panelEl)
+
+    await within(panelEl).findByTestId('aufschluesselung')
+    expect(within(panelEl).queryByTestId('uebersicht-fuss')).not.toBeInTheDocument()
   })
 })

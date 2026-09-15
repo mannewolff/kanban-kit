@@ -3,6 +3,7 @@ package org.mwolff.manban.accesstoken.application;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -170,29 +171,28 @@ class AccessTokenServiceTest {
   }
 
   @Test
-  void revoke_savesRevokedToken_whenActive() {
+  void revoke_marksRevoked_withoutWritingTheWholeToken() {
     // Given
     when(tokens.findById(3L)).thenReturn(Optional.of(token(3L, 1L, false)));
-    when(tokens.save(any(AccessToken.class))).thenAnswer(inv -> saved(inv.getArgument(0)));
 
     // When
-    ArgumentCaptor<AccessToken> captor = ArgumentCaptor.forClass(AccessToken.class);
     service.revoke(1L, 3L);
 
-    // Then
-    verify(tokens).save(captor.capture());
-    assertThat(captor.getValue().revoked()).isTrue();
+    // Then: spaltenscharf — ein volles save würde einen parallelen Widerruf überschreiben (#878).
+    verify(tokens).markRevoked(3L);
+    verify(tokens, never()).save(any(AccessToken.class));
   }
 
   @Test
-  void revoke_isNoOp_whenAlreadyRevoked() {
-    // Given
+  void revoke_marksRevokedAgain_whenAlreadyRevoked() {
+    // Given: der Widerruf ist idempotent — der Zielzustand steht fest und hängt nicht am Lesen.
     when(tokens.findById(3L)).thenReturn(Optional.of(token(3L, 1L, true)));
 
     // When
     service.revoke(1L, 3L);
 
     // Then
+    verify(tokens).markRevoked(3L);
     verify(tokens, never()).save(any(AccessToken.class));
   }
 
@@ -204,6 +204,20 @@ class AccessTokenServiceTest {
     // When / Then
     assertThatThrownBy(() -> service.revoke(1L, 3L))
         .isInstanceOf(AccessTokenNotFoundException.class);
+  }
+
+  @Test
+  void revoke_writesNothing_whenTokenBelongsToOtherUser() {
+    // Given: ein fremdes Token darf nicht einmal berührt werden — sonst wäre die 404 eine Fassade.
+    when(tokens.findById(3L)).thenReturn(Optional.of(token(3L, 99L, false)));
+
+    // When
+    assertThatThrownBy(() -> service.revoke(1L, 3L))
+        .isInstanceOf(AccessTokenNotFoundException.class);
+
+    // Then
+    verify(tokens, never()).markRevoked(anyLong());
+    verify(tokens, never()).save(any(AccessToken.class));
   }
 
   @Test
@@ -221,7 +235,6 @@ class AccessTokenServiceTest {
     // Given
     when(crypto.hash("plain")).thenReturn("hash");
     when(tokens.findByTokenHash("hash")).thenReturn(Optional.of(token(3L, 1L, false)));
-    when(tokens.save(any(AccessToken.class))).thenAnswer(inv -> saved(inv.getArgument(0)));
 
     // When
     Optional<KanbanPrincipal> principal = service.resolveBinding("plain");
@@ -231,19 +244,30 @@ class AccessTokenServiceTest {
   }
 
   @Test
-  void resolveBinding_updatesLastUsedAt_fromClock() {
+  void resolveBinding_touchesLastUsedAt_fromClock() {
     // Given
     when(crypto.hash("plain")).thenReturn("hash");
     when(tokens.findByTokenHash("hash")).thenReturn(Optional.of(token(3L, 1L, false)));
-    when(tokens.save(any(AccessToken.class))).thenAnswer(inv -> saved(inv.getArgument(0)));
 
     // When
-    ArgumentCaptor<AccessToken> captor = ArgumentCaptor.forClass(AccessToken.class);
     service.resolveBinding("plain");
 
     // Then
-    verify(tokens).save(captor.capture());
-    assertThat(captor.getValue().lastUsedAt()).isEqualTo(FIXED);
+    verify(tokens).touchLastUsedAt(3L, FIXED);
+  }
+
+  @Test
+  void resolveBinding_neverWritesTheWholeToken() {
+    // Given: ein volles save aus dem gelesenen Zustand nähme einen parallelen Widerruf
+    // zurück — genau der Fehler, den #878 behebt.
+    when(crypto.hash("plain")).thenReturn("hash");
+    when(tokens.findByTokenHash("hash")).thenReturn(Optional.of(token(3L, 1L, false)));
+
+    // When
+    service.resolveBinding("plain");
+
+    // Then
+    verify(tokens, never()).save(any(AccessToken.class));
   }
 
   @Test
@@ -271,7 +295,6 @@ class AccessTokenServiceTest {
     // Given
     when(crypto.hash("plain")).thenReturn("hash");
     when(tokens.findByTokenHash("hash")).thenReturn(Optional.of(token(3L, 1L, false)));
-    when(tokens.save(any(AccessToken.class))).thenAnswer(inv -> saved(inv.getArgument(0)));
 
     // When / Then
     assertThat(service.resolve("plain")).isEqualTo(OptionalLong.of(1L));

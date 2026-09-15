@@ -224,6 +224,36 @@
   .s-zeit.voll { color: var(--budget); font-weight: 600; }
   .s-zeit.nie { color: var(--nie); }
 
+  /* Umsetzungs-Lauf: ein Vorgang hat keine Stufen, sondern einen Anteil an der Nacht.
+     Derselbe Balken, dieselbe Hoehe, dieselbe Farbe — nur eine Strecke statt vier. */
+  .anteil {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: center;
+    gap: 12px;
+    margin: 16px 0 14px;
+  }
+  .u-rail {
+    height: 26px;
+    background: var(--rail);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+  .u-fill { height: 100%; }
+  .u-zeit {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+    color: var(--ink-2);
+    white-space: nowrap;
+  }
+
+  .trenner {
+    margin: 56px 0 0;
+    border: 0;
+    border-top: 1px solid var(--line);
+  }
+
   .ergebnis {
     display: flex;
     flex-wrap: wrap;
@@ -473,11 +503,162 @@
     </div>
   </dl>
 
+  <hr class="trenner">
+
+  <p class="eyebrow">Nachtlauf · Umsetzung</p>
+  <h1>Abend vom 14. September</h1>
+  <p class="kopf-meta">2026-09-14-203817 · claude-opus-5 · Label kit:nightrun · regulär beendet</p>
+
+  <div class="kennzahlen">
+    <div>
+      <div class="kz-wert">6 von 6</div>
+      <div class="kz-label">Vorgänge erledigt</div>
+    </div>
+    <div>
+      <div class="kz-wert">1:18 h</div>
+      <div class="kz-label">Laufzeit über alle Vorgänge</div>
+    </div>
+    <div>
+      <div class="kz-wert">46,44 $</div>
+      <div class="kz-label">Kosten der Nacht</div>
+    </div>
+    <div>
+      <div class="kz-wert">369</div>
+      <div class="kz-label">Züge des Modells</div>
+    </div>
+  </div>
+
+  <h2>Vorgänge</h2>
+  <div class="vorgaenge">
+
+    <article class="vorgang">
+      <div class="v-kopf">
+        <span class="v-nr">#869</span>
+        <span class="v-titel">Vorgangszeile am Lauf mit Übersicht auf das Nicht-Doppelte kürzen</span>
+        <span class="ampel a-fertig">erfolg</span>
+      </div>
+      <div class="anteil">
+        <div class="u-rail"><div class="u-fill f-gut" style="width:15%"></div></div>
+        <div class="u-zeit">12 min · 15 % der Nacht</div>
+      </div>
+      <div class="ergebnis">
+        <span class="e-label">Aufwand</span>
+        <span class="kosten">6,47 $ · 67 Züge · Modellarbeit 78 % der Dauer, der Rest außerhalb</span>
+      </div>
+    </article>
+
+    <article class="vorgang">
+      <div class="v-kopf">
+        <span class="v-nr">#870</span>
+        <span class="v-titel">Kennzahlen für alle Lauf-Arten, erzeugte Dokumente und Kennzahlen-Hinweis</span>
+        <span class="ampel a-fertig">erfolg</span>
+      </div>
+      <div class="anteil">
+        <div class="u-rail"><div class="u-fill f-gut" style="width:9%"></div></div>
+        <div class="u-zeit">7 min · 9 % der Nacht</div>
+      </div>
+      <div class="ergebnis">
+        <span class="e-label">Aufwand</span>
+        <span class="kosten">4,16 $ · 46 Züge · Modellarbeit 70 % der Dauer, der Rest außerhalb</span>
+      </div>
+    </article>
+
+    <article class="vorgang">
+      <div class="v-kopf">
+        <span class="v-nr">#871</span>
+        <span class="v-titel">Laufband für Umsetzungs-Läufe</span>
+        <span class="ampel a-fertig">erfolg</span>
+      </div>
+      <div class="anteil">
+        <div class="u-rail"><div class="u-fill f-gut" style="width:15%"></div></div>
+        <div class="u-zeit">12 min · 15 % der Nacht</div>
+      </div>
+      <div class="ergebnis">
+        <span class="e-label">Aufwand</span>
+        <span class="kosten">6,98 $ · 13 Züge · Modellarbeit 85 % der Dauer, der Rest außerhalb</span>
+      </div>
+    </article>
+
+    <article class="vorgang">
+      <div class="v-kopf">
+        <span class="v-nr">#872</span>
+        <span class="v-titel">Modellzeit-Anteil je Vorgang, mit gleichzeitigen Arbeiten und gemessener Null</span>
+        <span class="ampel a-fertig">erfolg</span>
+      </div>
+      <div class="anteil">
+        <div class="u-rail"><div class="u-fill f-gut" style="width:23%"></div></div>
+        <div class="u-zeit">18 min · 23 % der Nacht</div>
+      </div>
+      <div class="ergebnis">
+        <span class="e-label">Aufwand</span>
+        <span class="kosten">12,53 $ · 112 Züge · Modellarbeit 74 % der Dauer, der Rest außerhalb</span>
+      </div>
+    </article>
+
+    <article class="vorgang">
+      <div class="v-kopf">
+        <span class="v-nr">#873</span>
+        <span class="v-titel">Aufschlüsselung der gesichteten Karten für Erzeugungs- und Prüfungsläufe</span>
+        <span class="ampel a-fertig">erfolg</span>
+      </div>
+      <div class="anteil">
+        <div class="u-rail"><div class="u-fill f-gut" style="width:21%"></div></div>
+        <div class="u-zeit">16 min · 21 % der Nacht</div>
+      </div>
+      <div class="ergebnis">
+        <span class="e-label">Aufwand</span>
+        <span class="kosten">8,98 $ · 71 Züge · Modellarbeit 71 % der Dauer, der Rest außerhalb</span>
+      </div>
+    </article>
+
+    <article class="vorgang">
+      <div class="v-kopf">
+        <span class="v-nr">#874</span>
+        <span class="v-titel">Kennzahlenzeile je Lauf-Art und Kosten der Nacht</span>
+        <span class="ampel a-fertig">erfolg</span>
+      </div>
+      <div class="anteil">
+        <div class="u-rail"><div class="u-fill f-gut" style="width:15%"></div></div>
+        <div class="u-zeit">12 min · 15 % der Nacht</div>
+      </div>
+      <div class="ergebnis">
+        <span class="e-label">Aufwand</span>
+        <span class="kosten">7,32 $ · 60 Züge · Modellarbeit 80 % der Dauer, der Rest außerhalb</span>
+      </div>
+    </article>
+
+  </div>
+
+  <dl class="fuss">
+    <div>
+      <dt>Ergebnis der Nacht</dt>
+      <dd>6 bearbeitet · 0 übergangen</dd>
+    </div>
+    <div>
+      <dt>Teuerster Vorgang</dt>
+      <dd>#872 mit 12,53 $</dd>
+    </div>
+    <div>
+      <dt>Herkunft des Stands</dt>
+      <dd>Ergebnisstand, neu angelegt</dd>
+    </div>
+  </dl>
+
   <p class="hinweis">
     <strong>Entwurf für kanban-kit.</strong> Die Zahlen stammen aus dem Ergebnisstand
     <span style="font-family:var(--font-mono)">night-run-2026-09-14-131200.json</span>, nicht aus Beispieldaten.
     Das Stufenband zeigt alle vier Stufen im Verhältnis ihrer Zeitbudgets, zusammen 60 Minuten je Kette,
     und füllt jede Stufe mit ihrem Verbrauch. Wo eine Kette riss, ist der Balken voll und die übrigen Stufen
     bleiben schraffiert. Die Chips unter jedem Vorgang führen zu den Karten, die in dieser Nacht entstanden sind.
+  </p>
+
+  <p class="hinweis">
+    <strong>Zwei Lauf-Arten, eine Gestaltung.</strong> Der zweite Block zeigt einen Umsetzungs-Lauf
+    (Ergebnisstand <span style="font-family:var(--font-mono)">night-run-2026-09-14-203817.json</span>).
+    Ein Umsetzungs-Vorgang kennt keine Stufen: An die Stelle des Stufenbands tritt ein Balken, der seinen
+    Anteil an der Laufzeit der Nacht zeigt — die Bezugsgröße ist die Nacht selbst, nicht ein Zeitbudget,
+    weil es für diese Lauf-Art keines gibt. Kopf, Kennzahlenzeile, Vorgangsblöcke und Fußangaben bleiben
+    dieselben. Wo ein Vorgang einen Befund trägt, stehen Auszug, Häufigkeit und Ableitungstabelle wie
+    bisher in seinem Block; diese Nacht lief ohne Befund durch.
   </p>
 </div>

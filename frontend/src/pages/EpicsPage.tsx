@@ -31,9 +31,10 @@ import { labelsApi, type Label } from '../api/labels'
 import { membersApi, type Member } from '../api/members'
 import { CardDetailModal } from '../components/CardDetailModal'
 import { EpicBadge } from '../components/EpicBadge'
+import { EpicVisibilityList } from '../components/EpicVisibilityList'
 import { labelChipSx } from '../components/labelChipSx'
 import { NewCardModal } from '../components/NewCardModal'
-import { hiddenEpicsStorageKey, leseAusgeblendet } from '../lib/boardHiddenEpics'
+import { leseAusgeblendet, schreibeAusgeblendet } from '../lib/boardHiddenEpics'
 import { epicToCard } from '../lib/epicToCard'
 import { aggregateMarks, countKinds, selectableEpics, sortEpics, visibleEpics } from '../lib/epicTiles'
 import { useBoardRole } from '../lib/useBoardRole'
@@ -121,8 +122,11 @@ export function EpicsPage() {
     setZeigeAusgeblendete(false)
   }, [id])
 
+  // Fortgeschrieben wird über `schreibeAusgeblendet` — dieselbe Funktion, die `BoardPage` nutzt
+  // (Plan #846, E8). Sie löscht den Schlüssel im Leerfall, statt ein aussageloses `[]` zu
+  // hinterlassen; mit der Liste ist das Leeren der Menge vom Sonderfall zum Regelfall geworden.
   // Ohne funktionierendes localStorage wirkt das Umlegen trotzdem — nur das Merken über den
-  // Seitenwechsel hinaus fällt aus (E8).
+  // Seitenwechsel hinaus fällt aus.
   const setzeAusgeblendet = (epicId: number, ausblenden: boolean) => {
     const next = new Set(hiddenEpics)
     if (ausblenden) {
@@ -131,11 +135,7 @@ export function EpicsPage() {
       next.delete(epicId)
     }
     setHiddenEpics(next)
-    try {
-      localStorage.setItem(hiddenEpicsStorageKey(id), JSON.stringify([...next]))
-    } catch {
-      // localStorage nicht verfügbar
-    }
+    schreibeAusgeblendet(id, next)
   }
 
   const reload = () => {
@@ -241,7 +241,8 @@ export function EpicsPage() {
 
   // Gezählt wird die Schnittmenge mit den Vorhaben dieses Boards, nicht die Größe des
   // gespeicherten Satzes: Eine ID überlebt dort das Löschen ihres Vorhabens (Issue #704), und
-  // eine Zahl, hinter der im Zeige-Modus weniger Kacheln stehen, wäre ein sichtbarer Widerspruch.
+  // eine Zahl, hinter der in der Liste weniger ausgeschaltete Zeilen stehen, wäre ein sichtbarer
+  // Widerspruch.
   const ausgeblendeteAnzahl = epics.filter((epic) => hiddenEpics.has(epic.id)).length
 
   if (!validId) {
@@ -282,10 +283,11 @@ export function EpicsPage() {
         )}
       </Stack>
 
-      {/* Ist nichts ausgeblendet, erscheint der Umschalter gar nicht — er böte nichts zu zeigen
-          (Plan #703, E3). Er verschwindet auch wieder, sobald das letzte Vorhaben im Zeige-Modus
-          eingeblendet wird; der Zeige-Modus ist damit gegenstandslos. */}
-      {ausgeblendeteAnzahl > 0 && (
+      {/* Immer sichtbar, sobald das Board ein Vorhaben hat (Plan #846, E9): Der Umschalter wechselt
+          zwischen Kachelraster und Liste und ist deshalb auch bei „0" etwas wert — die Liste ist der
+          Weg, überhaupt etwas auszublenden. Nur ein Board ganz ohne Vorhaben hätte nichts zu
+          schalten. Beschriftung und Zahl bleiben wörtlich (PO-Entscheidung, 2026-09-14). */}
+      {epics.length > 0 && (
         <FormControlLabel
           sx={{ mb: 2 }}
           control={
@@ -303,11 +305,25 @@ export function EpicsPage() {
         />
       )}
 
-      {/* Kachelraster statt gestapelter Zeilen: Ein Vorhaben ist ein Gegenstand, den man
+      {/* Zwei Zustände, kein dritter (fachlich #814, AK 2/AK 3): Im Zeige-Modus tritt die Liste an
+          die Stelle des Rasters, sie ergänzt es nicht. Die Liste bekommt `sortEpics` **ungefiltert**
+          — sie führt jedes Vorhaben, und zwar an der Stelle, die es vor dem Ausfiltern hätte
+          (AK 4). `onToggle` geht ohne Umkehrung an `setzeAusgeblendet`: beide Seiten lesen `true`
+          als „ausblenden" (Plan #846, E4). Alles übrige — Kopf, „Neues Vorhaben", Umschalter,
+          Kachel-Menü, Dialoge — steht ausserhalb der Verzweigung und gilt in beiden Ansichten. */}
+      {zeigeAusgeblendete ? (
+        <EpicVisibilityList
+          epics={sortEpics(epics, cards, labels)}
+          hidden={hiddenEpics}
+          onToggle={setzeAusgeblendet}
+          onOpen={(epic) => setSelected(epicToCard(epic, id))}
+        />
+      ) : (
+      /* Kachelraster statt gestapelter Zeilen: Ein Vorhaben ist ein Gegenstand, den man
           überblickt, keine Tabellenzeile. Die Kacheln sind quadratisch (`aspectRatio: '1'`) und
           brechen um, die Seite wird bei vielen Vorhaben länger — beides Nutzerentscheidung
           (#656). `minmax(min(240px, 100%), 1fr)` klemmt die Spalte: Mit `240px` allein liefe das
-          Raster auf schmalen Fenstern über den Rand hinaus. */}
+          Raster auf schmalen Fenstern über den Rand hinaus. */
       <Box
         data-testid="vorhaben-raster"
         sx={{
@@ -316,15 +332,13 @@ export function EpicsPage() {
           gap: 2,
         }}
       >
-        {visibleEpics(sortEpics(epics, cards, labels), hiddenEpics, zeigeAusgeblendete).map((epic) => {
+        {visibleEpics(sortEpics(epics, cards, labels), hiddenEpics).map((epic) => {
           const pct = epic.total > 0 ? (epic.done / epic.total) * 100 : 0
           const arten = countKinds(epic, cards)
           const marken = aggregateMarks(epic, cards, labels)
           // Leer heisst wie in #662: keine Mitglieder UND keine Anforderung. Ein Vorhaben mit
           // Anforderung, aber ohne Karten ist eroeffnet, nicht leer.
           const leer = epic.total === 0 && epic.requirementCardNumber === null
-          // Nur im Zeige-Modus wahr — sonst stünde die Kachel gar nicht im Raster.
-          const istAusgeblendet = hiddenEpics.has(epic.id)
           return (
             <Paper
               key={epic.id}
@@ -342,9 +356,6 @@ export function EpicsPage() {
                 // Begrenzungen darunter (Titel, Anforderung, Mittelteil) sorgen dafür, dass sie
                 // nichts Sinntragendes abschneidet.
                 overflow: 'hidden',
-                // Die Dämpfung hängt an derselben Bedingung wie der Text „Ausgeblendet" unten:
-                // Sie unterstützt ihn, sie ersetzt ihn nicht.
-                opacity: istAusgeblendet ? 0.55 : 1,
                 display: 'flex',
                 flexDirection: 'column',
                 borderRadius: `${PANEL_RADIUS}px`,
@@ -384,15 +395,6 @@ export function EpicsPage() {
                 <Typography variant="caption" color="text.secondary">
                   {epic.done} von {epic.total} fertig
                 </Typography>
-                {/* Der Zustand steht als Text da, nicht nur als blassere Fläche: Eine reine
-                    Opacity-Änderung wäre für Screenreader gar nicht wahrnehmbar (Accessibility,
-                    Priorität 4 in CLAUDE.md) und im Test nur über einen geratenen Stilwert
-                    greifbar. */}
-                {istAusgeblendet && (
-                  <Typography variant="caption" color="text.secondary" sx={{ fontStyle: 'italic' }}>
-                    Ausgeblendet
-                  </Typography>
-                )}
                 {/* Kein Rechte-Check (Plan #703, E8): Ausblenden verändert nichts am Server, und
                     einem Nur-Leser zu verbieten, seine eigene Ansicht aufzuräumen, wäre keine
                     Schutzwirkung. */}
@@ -525,22 +527,28 @@ export function EpicsPage() {
           )
         })}
       </Box>
+      )}
       {epics.length === 0 && <Typography color="text.secondary">Noch keine Vorhaben.</Typography>}
 
       {/* Ein Menü statt eines Schalters an der Kachel (Plan #703, E2): Ein Schalter, der die
           Kachel verschwinden lässt, auf der er sitzt, ist nach dem Umlegen selbst weg — und damit
           unbedienbar. Keine Sicherheitsabfrage (E4): Beim Ausblenden geht nichts verloren, der
-          Vorgang ist mit einem Klick umkehrbar. */}
+          Vorgang ist mit einem Klick umkehrbar.
+
+          Der Eintrag blendet nur noch aus, und er heißt auch so (fachlich #814, AK 9): Seit dem
+          Wegfall der gedämpften Kacheln stehen im Raster ausschließlich eingeblendete Vorhaben, ein
+          zustandsabhängiges „Einblenden"/„Ausblenden" wäre hier unerreichbar. Eingeblendet wird in
+          der Liste. */}
       <Menu anchorEl={menu?.anchor ?? null} open={menu != null} onClose={() => setMenu(null)}>
         {menu && (
           <MenuItem
             onClick={() => {
               const gewaehlt = menu.epic
               setMenu(null)
-              setzeAusgeblendet(gewaehlt.id, !hiddenEpics.has(gewaehlt.id))
+              setzeAusgeblendet(gewaehlt.id, true)
             }}
           >
-            {hiddenEpics.has(menu.epic.id) ? 'Einblenden' : 'Ausblenden'}
+            Ausblenden
           </MenuItem>
         )}
         {/* Anders als „Ausblenden" verändert Löschen den Server — deshalb hier der Rechte-Check.

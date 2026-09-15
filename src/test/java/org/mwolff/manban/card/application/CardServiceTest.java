@@ -31,6 +31,7 @@ import org.mwolff.manban.board.application.ColumnNotFoundException;
 import org.mwolff.manban.card.application.CardBoardActivityEvent.ActivityType;
 import org.mwolff.manban.card.domain.Card;
 import org.mwolff.manban.card.domain.CardActivity;
+import org.mwolff.manban.card.domain.CardActivityOrigin;
 import org.mwolff.manban.card.domain.CardActivityType;
 import org.mwolff.manban.card.domain.CardType;
 import org.mwolff.manban.card.domain.Label;
@@ -44,7 +45,17 @@ import org.springframework.context.ApplicationEventPublisher;
 /** Verhaltenstests der Karten- und Epic-Use-Cases (Mockito an den Ports). */
 // PMD.TooManyMethods: umfassende Unit-Suite (Karten + Epics, Erfolgs- und Fehlerpfade je
 // Use-Case). Viele kleine @Test-Methoden sind hier gewollt, kein God-Class-Smell.
-@SuppressWarnings({"PMD.TooManyMethods", "PMD.CyclomaticComplexity", "PMD.CouplingBetweenObjects"})
+// PMD.NcssCount/PMD.ExcessiveImports: aus demselben Grund und derselben Größe. Die Suite deckt
+// die vollständige Fassade eines Moduls ab; ihre Länge und die Zahl der Typen, die sie dafür
+// aufruft, sind die Folge der Abdeckungspflicht. Ein Zerschneiden nach Zeilenzahl würde die
+// Use-Cases über Dateien verstreuen, ohne etwas zu entkoppeln.
+@SuppressWarnings({
+  "PMD.TooManyMethods",
+  "PMD.CyclomaticComplexity",
+  "PMD.CouplingBetweenObjects",
+  "PMD.NcssCount",
+  "PMD.ExcessiveImports"
+})
 class CardServiceTest {
 
   private static final Instant FIXED = Instant.parse("2026-01-02T03:04:05Z");
@@ -2668,6 +2679,79 @@ class CardServiceTest {
     when(cards.findById(1L)).thenReturn(Optional.empty());
 
     assertThatThrownBy(() -> service.listActivity(5L, 1L))
+        .isInstanceOf(CardNotFoundException.class);
+  }
+
+  @Test
+  void listActivityViews_mapsDomainToFacadeView() {
+    // Given: die Fassaden-Sicht ist der Weg, auf dem fremde Module den Verlauf lesen, ohne
+    // card.domain zu importieren (#876).
+    when(cards.findById(1L))
+        .thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
+    CardActivity entry =
+        new CardActivity(
+            3L,
+            1L,
+            9L,
+            CardActivityType.MOVED,
+            "Verschoben",
+            FIXED,
+            CardActivityOrigin.TOKEN,
+            "Nachtlauf",
+            "claude-opus-5");
+    when(activity.findByCardId(1L)).thenReturn(List.of(entry));
+
+    // When
+    List<CardService.ActivityView> result = service.listActivityViews(5L, 1L);
+
+    // Then: dieselbe Rechteprüfung wie listActivity, alle Felder unverändert übernommen
+    verify(permissions).requireMembership(5L, PROJECT);
+    assertThat(result)
+        .singleElement()
+        .satisfies(
+            v -> {
+              assertThat(v.id()).isEqualTo(3L);
+              assertThat(v.actorUserId()).isEqualTo(9L);
+              assertThat(v.type()).isEqualTo("MOVED");
+              assertThat(v.detail()).isEqualTo("Verschoben");
+              assertThat(v.createdAt()).isEqualTo(FIXED);
+              assertThat(v.origin()).isEqualTo("TOKEN");
+              assertThat(v.tokenName()).isEqualTo("Nachtlauf");
+              assertThat(v.agent()).isEqualTo("claude-opus-5");
+            });
+  }
+
+  @Test
+  void listActivityViews_mapsLegacyEntryWithoutOrigin() {
+    // Given: Alt-Eintrag vor V23 — die Sicht trägt null statt eines Platzhalters.
+    when(cards.findById(1L))
+        .thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
+    when(activity.findByCardId(1L))
+        .thenReturn(
+            List.of(
+                new CardActivity(
+                    3L, 1L, null, CardActivityType.CREATED, "Angelegt", FIXED, null, null, null)));
+
+    // When
+    List<CardService.ActivityView> result = service.listActivityViews(5L, 1L);
+
+    // Then
+    assertThat(result)
+        .singleElement()
+        .satisfies(
+            v -> {
+              assertThat(v.actorUserId()).isNull();
+              assertThat(v.origin()).isNull();
+              assertThat(v.tokenName()).isNull();
+              assertThat(v.agent()).isNull();
+            });
+  }
+
+  @Test
+  void listActivityViews_throwsCardNotFound_whenUnknown() {
+    when(cards.findById(1L)).thenReturn(Optional.empty());
+
+    assertThatThrownBy(() -> service.listActivityViews(5L, 1L))
         .isInstanceOf(CardNotFoundException.class);
   }
 
