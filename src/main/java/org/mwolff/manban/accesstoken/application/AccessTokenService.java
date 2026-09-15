@@ -119,6 +119,15 @@ public class AccessTokenService {
         .toList();
   }
 
+  /**
+   * Widerruft ein eigenes Token; ein fremdes oder unbekanntes gibt es für den Aufrufer nicht (404).
+   *
+   * <p>Geschrieben wird allein die Spalte {@code revoked} — Nutzung und Widerruf fassen disjunkte
+   * Spalten an, damit keins das andere überholt (Issue #878). Der Aufruf ist idempotent: Der
+   * Zielzustand steht fest und hängt nicht am gelesenen Stand.
+   *
+   * @throws AccessTokenNotFoundException Token unbekannt oder nicht dem Aufrufer gehörend (404)
+   */
   @Transactional
   public void revoke(long userId, long tokenId) {
     AccessToken token =
@@ -126,14 +135,17 @@ public class AccessTokenService {
             .findById(tokenId)
             .filter(t -> t.userId() == userId)
             .orElseThrow(AccessTokenNotFoundException::new);
-    if (!token.revoked()) {
-      tokens.save(token.asRevoked());
-    }
+    tokens.markRevoked(token.requireId());
   }
 
   /**
    * Löst einen eingehenden Klartext-Header zum vollständigen Principal auf (inkl. optionaler
-   * Board-Bindung); leer bei unbekannt/widerrufen. Aktualisiert {@code lastUsedAt}.
+   * Board-Bindung); leer bei unbekannt/widerrufen. Stempelt {@code lastUsedAt}.
+   *
+   * <p>Geschrieben wird allein die Spalte {@code lastUsedAt}, und nur solange das Token nicht
+   * widerrufen ist. Ein volles Zurückschreiben des gelesenen Datensatzes nähme einen
+   * zwischenzeitlich committeten Widerruf wieder zurück — ein Widerruf ist aber ein Endzustand
+   * (Issue #878).
    */
   @Transactional
   public Optional<KanbanPrincipal> resolveBinding(String plaintext) {
@@ -142,7 +154,7 @@ public class AccessTokenService {
         .filter(t -> !t.revoked())
         .map(
             t -> {
-              tokens.save(t.withLastUsedAt(clock.instant()));
+              tokens.touchLastUsedAt(t.requireId(), clock.instant());
               return new KanbanPrincipal(
                   t.userId(), t.requireId(), t.projectId(), t.boardId(), t.displayName());
             });

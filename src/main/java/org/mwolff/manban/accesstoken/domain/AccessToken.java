@@ -12,6 +12,11 @@ import org.mwolff.manban.common.Identifiable;
  * Token adressiert genau dieses Board (Kanban-Compat-API, #45), ähnlich einem
  * GitHub-Fine-grained-PAT. Sind beide {@code null}, ist das Token ungebunden.
  *
+ * <p>Bewusst <strong>ohne Wither</strong> für {@code lastUsedAt} und {@code revoked} (Issue #878):
+ * Ein solcher Wither führt zwangsläufig zum vollständigen Zurückschreiben eines zuvor gelesenen
+ * Zustands — und genau dabei ging ein zwischenzeitlicher Widerruf verloren. Nutzung und Widerruf
+ * laufen deshalb über spaltenscharfe Updates am Port, nicht über neu gebaute Datensätze.
+ *
  * @param id technische ID; {@code null} vor der Persistierung
  * @param userId Besitzer
  * @param projectId gebundenes Projekt; {@code null} = ungebunden
@@ -39,15 +44,5 @@ public record AccessToken(
   /** Ob das Token an ein Projekt + Board gebunden ist. */
   public boolean isBound() {
     return projectId != null && boardId != null;
-  }
-
-  public AccessToken withLastUsedAt(Instant when) {
-    return new AccessToken(
-        id, userId, projectId, boardId, name, tokenHash, displayName, createdAt, when, revoked);
-  }
-
-  public AccessToken asRevoked() {
-    return new AccessToken(
-        id, userId, projectId, boardId, name, tokenHash, displayName, createdAt, lastUsedAt, true);
   }
 }

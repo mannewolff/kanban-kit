@@ -1,5 +1,6 @@
 package org.mwolff.manban.accesstoken.infrastructure.persistence;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import org.mwolff.manban.accesstoken.application.AccessTokenRepository;
@@ -36,6 +37,16 @@ class AccessTokenRepositoryAdapter implements AccessTokenRepository {
   @Override
   public Optional<AccessToken> findByTokenHash(String tokenHash) {
     return jpa.findByTokenHash(tokenHash).map(AccessTokenRepositoryAdapter::toDomain);
+  }
+
+  @Override
+  public void touchLastUsedAt(long id, Instant when) {
+    jpa.touchLastUsedAt(id, when);
+  }
+
+  @Override
+  public void markRevoked(long id) {
+    jpa.markRevoked(id);
   }
 
   private static KanbanAccessTokenEntity toEntity(AccessToken t) {
