@@ -7,6 +7,24 @@ Versionierung folgt der dreiteiligen Betriebsversion (siehe [RELEASING.md](RELEA
 Einträge je Version sind ein automatischer Auszug der Commit-Titel seit dem letzten Release,
 erzeugt von `scripts/gen-changelog.mjs`.
 
+## [1.43.0] – 2026-09-15
+
+- chore: Version 1.42.1
+- Designregel: Ausnahme der Nachtlauf-Auswertung festhalten ([#919](https://github.com/mannewolff/kanban-kit/issues/919))
+- Fusszeile beider Lauf-Arten, mit Herkunft der Budgets ([#918](https://github.com/mannewolff/kanban-kit/issues/918))
+- Umsetzungs-Lauf: Anteilsbalken je Vorgang statt Band ueber alle ([#917](https://github.com/mannewolff/kanban-kit/issues/917))
+- Vorgangsblock der Kette: Block, Stufenband und Kartenchips ([#916](https://github.com/mannewolff/kanban-kit/issues/916))
+- Kopf und Kennzahlenreihe der Nacht als eigene Bausteine ([#915](https://github.com/mannewolff/kanban-kit/issues/915))
+- Rahmen der Nachtlauf-Seite: Entwurfs-Theme ueber den Inhaltsbereich ([#914](https://github.com/mannewolff/kanban-kit/issues/914))
+- Schriften des Entwurfs mit der Anwendung ausliefern ([#913](https://github.com/mannewolff/kanban-kit/issues/913))
+- Gestaltungsgrundlage der Nachtlauf-Auswertung ([#912](https://github.com/mannewolff/kanban-kit/issues/912))
+- Token-Widerruf bleibt widerrufen: disjunkte Spalten ([#878](https://github.com/mannewolff/kanban-kit/issues/878))
+- Board-gebundenes Token bleibt auf /api/kanban/** beschraenkt ([#877](https://github.com/mannewolff/kanban-kit/issues/877))
+- Aktivitaetsverlauf ueber die Kanban-kompatible Schnittstelle lesbar ([#876](https://github.com/mannewolff/kanban-kit/issues/876))
+- Entwurf des Leitstands um einen Umsetzungs-Lauf erweitert
+- Vorhaben-Seite: Liste statt Kachelraster, Umschalter immer sichtbar ([#848](https://github.com/mannewolff/kanban-kit/issues/848))
+- Vorhaben-Liste als eigene Komponente EpicVisibilityList ([#847](https://github.com/mannewolff/kanban-kit/issues/847))
+
 ## [1.42.0] – 2026-09-14
 
 - chore: Version 1.41.2
