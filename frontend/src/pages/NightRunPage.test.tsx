@@ -41,16 +41,34 @@ import { NightRunPage } from './NightRunPage'
 
 // Das Karten-Detail ist separat getestet (CardDetailModal.test.tsx) — hier ein Stub, der die
 // geöffnete Karte sichtbar macht und den Schließen-Pfad auslöst.
-vi.mock('../components/CardDetailModal', () => ({
-  CardDetailModal: ({ card, onClose }: { card: { number: number | null }; onClose: () => void }) => (
-    <div data-testid="karten-detail">
-      Karte {card.number}
-      <button type="button" onClick={onClose}>
-        detail-schliessen
-      </button>
-    </div>
-  ),
-}))
+//
+// Der Stub gibt zusätzlich aus, **welches Theme** er sieht (#914): Nicht-Ziel 2 des Fachplans
+// verbietet, die Gestaltung der Nachtlauf-Auswertung auf die übrige Anwendung zu übertragen, und
+// der Dialog gehört zu ihr, obwohl er von dieser Seite aus geöffnet wird. Ob er im Theme-Teilbaum
+// steht, entscheidet allein seine Stellung im React-Baum — das Portal, in dem er im DOM landet,
+// sagt darüber nichts.
+vi.mock('../components/CardDetailModal', async () => {
+  const { useTheme } = await import('@mui/material/styles')
+  return {
+    CardDetailModal: ({
+      card,
+      onClose,
+    }: {
+      card: { number: number | null }
+      onClose: () => void
+    }) => {
+      const gesehenesTheme = useTheme()
+      return (
+        <div data-testid="karten-detail" data-schrift={String(gesehenesTheme.typography.fontFamily)}>
+          Karte {card.number}
+          <button type="button" onClick={onClose}>
+            detail-schliessen
+          </button>
+        </div>
+      )
+    },
+  }
+})
 
 /** Startzeitpunkt eines Laufs — der Schlüssel der Auswertung (Plan #718, A4). */
 const startedAt = (minute: number) => `2026-09-01T22:${String(minute).padStart(2, '0')}:00.000Z`
@@ -463,9 +481,29 @@ function protokollWaehlen(inhalt: string, name = 'night-run.json', typ = 'applic
 /** Das Panel eines Laufs, identifiziert über seinen Startzeitpunkt. */
 const lauf = (minute: number) => screen.getByTestId(`lauf-${startedAt(minute)}`)
 
-/** Klappt den Lauf auf; erst dabei wird die Herkunftskette aufgelöst (Plan #718, A8). */
+/**
+ * Klappt den Lauf auf; erst dabei wird die Herkunftskette aufgelöst (Plan #718, A8).
+ *
+ * Der **oberste** Lauf steht seit #914 beim Öffnen der Seite bereits offen (E7) — für ihn ist
+ * nichts zu tun. Der Helfer bleibt deshalb still, statt auf einen zugeklappten Knopf zu warten,
+ * den es nicht mehr gibt.
+ */
 function aufklappen(minute: number) {
-  fireEvent.click(within(lauf(minute)).getByRole('button', { expanded: false }))
+  panelAufklappen(lauf(minute))
+}
+
+/**
+ * Dasselbe für ein Panel, das der Test bereits in der Hand hat.
+ *
+ * Genommen wird der **erste** Knopf des Panels: Die Kopfzeile des Laufs steht im DOM vor seinem
+ * Inhalt. Ein offener Lauf trägt weitere zugeklappte Aufklappfelder in sich (etwa die Grund-Zeilen
+ * der Aufschlüsselung) — eine Suche nach „irgendeinem zugeklappten Knopf" träfe die.
+ */
+function panelAufklappen(panelEl: HTMLElement) {
+  const knopf = within(panelEl).getAllByRole('button')[0]
+  if (knopf.getAttribute('aria-expanded') === 'false') {
+    fireEvent.click(knopf)
+  }
 }
 
 /** Der Wert des schreibgeschützten Übernahmetext-Feldes eines Arbeitspakets im Panel eines Laufs. */
@@ -521,11 +559,14 @@ describe('NightRunPage — aufbewahrte Läufe beim Öffnen', () => {
     })
 
     await screen.findByTestId(`lauf-${startedAt(30)}`)
-    const reihenfolge = screen.getAllByTestId(/^lauf-/).map((el) => el.dataset.testid)
+    const reihenfolge = screen.getAllByTestId(/^lauf-\d/).map((el) => el.dataset.testid)
     expect(reihenfolge).toEqual([`lauf-${startedAt(30)}`, `lauf-${startedAt(0)}`])
   })
 
-  it('löst die Herkunftskette beim Öffnen der Seite nicht auf (A8)', async () => {
+  it('löst beim Öffnen der Seite nur die Kette des obersten Laufs auf (A8, E7)', async () => {
+    // A8 hält die Anfragelawine von bis zu 30 aufbewahrten Läufen fern. Seit #914 steht der
+    // oberste Lauf offen (AK 2 verlangt den ersten Vorgangsblock ohne Scrollen) — genau er, und
+    // deshalb bleibt es bei einer Kette statt dreißig.
     renderPage({
       listen: [
         [
@@ -534,12 +575,22 @@ describe('NightRunPage — aufbewahrte Läufe beim Öffnen', () => {
             startedAt: startedAt(0),
             items: [{ id: 11, cardNumber: 700, title: 'Paket A', state: 'GREEN' }],
           }),
+          aufbewahrt({
+            id: 2,
+            startedAt: startedAt(30),
+            items: [{ id: 21, cardNumber: 701, title: 'Paket B', state: 'GREEN' }],
+          }),
         ],
       ],
+      karten: {
+        700: karte({ id: 1, number: 700, title: 'Paket A' }),
+        701: karte({ id: 2, number: 701, title: 'Paket B' }),
+      },
     })
 
-    await screen.findByTestId(`lauf-${startedAt(0)}`)
-    expect(byNumberAufrufe()).toHaveLength(0)
+    await screen.findByTestId(`lauf-${startedAt(30)}`)
+    await waitFor(() => expect(byNumberAufrufe()).toHaveLength(1))
+    expect(byNumberAufrufe()[0].url).toContain('/cards/by-number/701')
   })
 
   it('sagt es, solange keine Auswertung vorliegt', async () => {
@@ -568,8 +619,8 @@ describe('NightRunPage — Ergebnisstand hineingeben', () => {
 
     protokollWaehlen(EIN_LAUF)
 
-    await waitFor(() => expect(screen.getAllByTestId(/^lauf-/)).toHaveLength(2))
-    expect(screen.getAllByTestId(/^lauf-/)[0].dataset.testid).toBe(`lauf-${startedAt(0)}`)
+    await waitFor(() => expect(screen.getAllByTestId(/^lauf-\d/)).toHaveLength(2))
+    expect(screen.getAllByTestId(/^lauf-\d/)[0].dataset.testid).toBe(`lauf-${startedAt(0)}`)
     expect(within(lauf(0)).getByText('neu angelegt')).toBeInTheDocument()
   })
 
@@ -615,7 +666,7 @@ describe('NightRunPage — Ergebnisstand hineingeben', () => {
 
     const panelEl = await screen.findByTestId(`lauf-${ECHTER_START}`)
     const panel = within(panelEl)
-    fireEvent.click(panel.getByRole('button', { expanded: false }))
+    panelAufklappen(panelEl)
     await panel.findByTestId('zustand-767')
     // Zwei erfolgreiche, aber ungeprüfte Sessions (gelb) und drei mit rotem Nachweis (rot) —
     // Zustand und Fehlerklasse stehen beide sichtbar auf der Seite.
@@ -644,7 +695,7 @@ describe('NightRunPage — Ergebnisstand hineingeben', () => {
     expect(
       await screen.findByText('Nicht auswertbar — Herkunft nicht angegeben'),
     ).toBeInTheDocument()
-    expect(screen.queryAllByTestId(/^lauf-/)).toHaveLength(0)
+    expect(screen.queryAllByTestId(/^lauf-\d/)).toHaveLength(0)
     expect(anfragen.some((a) => a.method === 'POST')).toBe(false)
   })
 
@@ -659,7 +710,7 @@ describe('NightRunPage — Ergebnisstand hineingeben', () => {
     expect(
       await screen.findByText('Fassung nicht unterstützt — erzeugt von 1.47.0'),
     ).toBeInTheDocument()
-    expect(screen.queryAllByTestId(/^lauf-/)).toHaveLength(0)
+    expect(screen.queryAllByTestId(/^lauf-\d/)).toHaveLength(0)
     expect(anfragen.some((a) => a.method === 'POST')).toBe(false)
   })
 
@@ -677,7 +728,7 @@ describe('NightRunPage — Ergebnisstand hineingeben', () => {
           + ' — erzeugt von 1.47.0',
       ),
     ).toBeInTheDocument()
-    expect(screen.queryAllByTestId(/^lauf-/)).toHaveLength(0)
+    expect(screen.queryAllByTestId(/^lauf-\d/)).toHaveLength(0)
     expect(anfragen.some((a) => a.method === 'POST')).toBe(false)
   })
 
@@ -751,7 +802,7 @@ describe('NightRunPage — Ergebnisstand hineingeben', () => {
     protokollWaehlen(EIN_LAUF)
 
     expect(await screen.findByText('Die Datei konnte nicht gelesen werden.')).toBeInTheDocument()
-    expect(screen.queryAllByTestId(/^lauf-/)).toHaveLength(0)
+    expect(screen.queryAllByTestId(/^lauf-\d/)).toHaveLength(0)
   })
 
   it('öffnet nichts, wenn die Auswahl abgebrochen wurde', async () => {
@@ -875,7 +926,7 @@ describe('NightRunPage — Nachtplan-Lauf (#806)', () => {
     expect(within(panelEl).getByText('Nachtplan-Lauf')).toBeInTheDocument()
     expect(within(panelEl).getByText('2 bearbeitet, 33 übergangen')).toBeInTheDocument()
 
-    fireEvent.click(within(panelEl).getByRole('button', { expanded: false }))
+    panelAufklappen(panelEl)
     const panel = within(panelEl)
     await panel.findByTestId('zustand-479')
     for (const nummer of [479, 549]) {
@@ -959,7 +1010,7 @@ describe('NightRunPage — Herkunftskette am Ketten-Vorgang (#858)', () => {
 
     const panelEl = await screen.findByTestId(`lauf-${ECHTE_KETTE_START}`)
     await waitFor(() => expect(within(panelEl).getByText('neu angelegt')).toBeInTheDocument())
-    fireEvent.click(within(panelEl).getByRole('button', { expanded: false }))
+    panelAufklappen(panelEl)
 
     // Erst wenn die Wurzelkarten aufgelöst sind, steht der Block mit Stufen- und Vorhabenzeile
     // überhaupt da — sonst wäre die Erwartung darunter schon vor dem Laden erfüllt.
@@ -1020,7 +1071,7 @@ describe('NightRunPage — Zeitbudget als eigener Grund (#856)', () => {
     renderPage({ listen: [wieAufbewahrt(ECHTE_KETTE_STAND)], zaehler: [zaehler] })
 
     const panelEl = await screen.findByTestId(`lauf-${ECHTE_KETTE_START}`)
-    fireEvent.click(within(panelEl).getByRole('button', { expanded: false }))
+    panelAufklappen(panelEl)
     await within(panelEl).findByTestId('zustand-842')
     return panelEl
   }
@@ -1091,7 +1142,7 @@ async function uebersichtZu(
   // Auf `screen` und nicht im Panel: Der Hinweis auf einen unabgeschlossenen Lauf steht als
   // Meldung über der Liste, die Kennzeichnung „neu angelegt" dagegen im Panel.
   await screen.findByText(warten)
-  fireEvent.click(within(panelEl).getByRole('button', { expanded: false }))
+  panelAufklappen(panelEl)
   return within(panelEl).findByTestId('ketten-uebersicht')
 }
 
@@ -1124,7 +1175,7 @@ describe('NightRunPage — Ketten-Übersicht (#866)', () => {
 
     const panelEl = await screen.findByTestId(`lauf-${ECHTE_KETTE_START}`)
     await within(panelEl).findByText('42 bearbeitet, 0 übergangen')
-    fireEvent.click(within(panelEl).getByRole('button', { expanded: false }))
+    panelAufklappen(panelEl)
 
     expect(await within(panelEl).findByTestId('ketten-uebersicht')).toBeInTheDocument()
   })
@@ -1133,7 +1184,7 @@ describe('NightRunPage — Ketten-Übersicht (#866)', () => {
     renderPage({ listen: [wieAufbewahrt(ECHTE_KETTE_STAND)] })
     const panelEl = await screen.findByTestId(`lauf-${ECHTE_KETTE_START}`)
 
-    fireEvent.click(within(panelEl).getByRole('button', { expanded: false }))
+    panelAufklappen(panelEl)
 
     expect(await within(panelEl).findByTestId('zustand-791')).toBeInTheDocument()
     expect(within(panelEl).queryByTestId('ketten-uebersicht')).not.toBeInTheDocument()
@@ -1224,7 +1275,7 @@ describe('NightRunPage — Ketten-Übersicht (#866)', () => {
 
     const panelEl = await screen.findByTestId(`lauf-${startedAt(0)}`)
     await within(panelEl).findByText('neu angelegt')
-    fireEvent.click(within(panelEl).getByRole('button', { expanded: false }))
+    panelAufklappen(panelEl)
 
     expect(await within(panelEl).findByTestId('zustand-700')).toBeInTheDocument()
     expect(within(panelEl).queryByTestId('ketten-uebersicht')).not.toBeInTheDocument()
@@ -1572,7 +1623,7 @@ describe('NightRunPage — gekürzte Vorgangszeile neben der Übersicht (#869)',
 
     const panelEl = await screen.findByTestId(`lauf-${ECHTE_KETTE_START}`)
     await within(panelEl).findByText('neu angelegt')
-    fireEvent.click(within(panelEl).getByRole('button', { expanded: false }))
+    panelAufklappen(panelEl)
     await within(panelEl).findByTestId('ketten-uebersicht')
     return panelEl
   }
@@ -1609,7 +1660,7 @@ describe('NightRunPage — gekürzte Vorgangszeile neben der Übersicht (#869)',
     renderPage({ listen: [wieAufbewahrt(ECHTE_KETTE_STAND)], karten: KARTEN, kartenNachId: VORHABEN })
     const panelEl = await screen.findByTestId(`lauf-${ECHTE_KETTE_START}`)
 
-    fireEvent.click(within(panelEl).getByRole('button', { expanded: false }))
+    panelAufklappen(panelEl)
 
     expect(within(panelEl).queryByTestId('ketten-uebersicht')).toBeNull()
     const zeile = await within(panelEl).findByTestId('paket-842')
@@ -1683,7 +1734,7 @@ describe('NightRunPage — Laufband für Umsetzungs-Läufe (#871)', () => {
     protokollWaehlen(ECHTER_STAND, 'night-run-2026-09-07-085229.json')
 
     const panelEl = await screen.findByTestId(`lauf-${ECHTER_START}`)
-    fireEvent.click(within(panelEl).getByRole('button', { expanded: false }))
+    panelAufklappen(panelEl)
     await within(panelEl).findByTestId('zustand-767')
     return panelEl
   }
@@ -1850,7 +1901,7 @@ describe('NightRunPage — Modellzeit-Anteil je Vorgang (#872)', () => {
     protokollWaehlen(ergebnisstand, dateiname)
 
     const panelEl = await screen.findByTestId(`lauf-${start}`)
-    fireEvent.click(within(panelEl).getByRole('button', { expanded: false }))
+    panelAufklappen(panelEl)
     await within(panelEl).findByTestId('vorgangs-kennzahlen')
     return panelEl
   }
@@ -2017,7 +2068,7 @@ describe('NightRunPage — Modellzeit-Anteil je Vorgang (#872)', () => {
     protokollWaehlen(ECHTE_KETTE_STAND, 'night-run-2026-09-14-131200.json')
 
     const panelEl = await screen.findByTestId(`lauf-${ECHTE_KETTE_START}`)
-    fireEvent.click(within(panelEl).getByRole('button', { expanded: false }))
+    panelAufklappen(panelEl)
     await within(panelEl).findByTestId('ketten-uebersicht')
 
     // Die Kette führt ihre Kosten und Züge bereits je Vorgang in der Übersicht (#866); eine
@@ -2248,7 +2299,7 @@ describe('NightRunPage — Herkunftskette', () => {
     [aufbewahrt({ id: 1, startedAt: startedAt(0), items })],
   ]
 
-  it('löst die Kette erst beim Aufklappen auf und lädt jede Nummer nur einmal', async () => {
+  it('löst die Kette des offenen Laufs auf und lädt jede Nummer nur einmal', async () => {
     renderPage({
       listen: lauf700([
         { id: 11, cardNumber: 700, title: 'Paket A', state: 'GREEN' },
@@ -2261,7 +2312,6 @@ describe('NightRunPage — Herkunftskette', () => {
       },
     })
     await screen.findByTestId(`lauf-${startedAt(0)}`)
-    expect(byNumberAufrufe()).toHaveLength(0)
 
     aufklappen(0)
 
@@ -2374,7 +2424,7 @@ describe('NightRunPage — Herkunftskette', () => {
     aufklappen(0)
     await within(lauf(0)).findByText('Plan: ohne')
     fireEvent.click(within(lauf(0)).getByRole('button', { expanded: true }))
-    fireEvent.click(within(lauf(0)).getByRole('button', { expanded: false }))
+    panelAufklappen(lauf(0))
 
     await waitFor(() => expect(within(lauf(0)).getByText('Plan: ohne')).toBeInTheDocument())
     expect(byNumberAufrufe()).toHaveLength(1)
@@ -2536,7 +2586,7 @@ describe('NightRunPage — Vorhaben eines Arbeitspakets (#818)', () => {
     // Die Wurzelkarte bleibt öffenbar, und der Lauf lässt sich weiterhin zu- und aufklappen.
     expect(within(lauf(0)).getByRole('button', { name: '#700 Paket A' })).toBeInTheDocument()
     fireEvent.click(within(lauf(0)).getByRole('button', { expanded: true }))
-    fireEvent.click(within(lauf(0)).getByRole('button', { expanded: false }))
+    panelAufklappen(lauf(0))
     await waitFor(() =>
       expect(within(lauf(0)).getByText('Vorhaben: nicht auflösbar')).toBeInTheDocument(),
     )
@@ -2559,9 +2609,13 @@ describe('NightRunPage — Vorhaben eines Arbeitspakets (#818)', () => {
   it('zeigt keine Vorhaben-Zeile, solange der Abruf des Vorhabens noch läuft', async () => {
     const { verzoegert, freigeben } = angehalten()
     renderPage({
+      // Der Lauf mit dem Vorhaben steht **oben** und klappt seit #914 von selbst auf; der zweite
+      // wird im Test aufgeklappt. Die Rollen sind damit gegenüber der früheren Fassung getauscht,
+      // die Inszenierung ist dieselbe: Ein Lauf hängt im Vorhaben-Abruf, der andere veröffentlicht
+      // währenddessen den geteilten Katalog.
       listen: zweiLaeufe(
-        [{ id: 11, cardNumber: 700, title: 'Paket A', state: 'GREEN' }],
-        [{ id: 12, cardNumber: 701, title: 'Paket B', state: 'GREEN' }],
+        [{ id: 11, cardNumber: 701, title: 'Paket B', state: 'GREEN' }],
+        [{ id: 12, cardNumber: 700, title: 'Paket A', state: 'GREEN' }],
       ),
       karten: {
         700: karte({ id: 1, number: 700, title: 'Paket A', parentId: 5 }),
@@ -2570,20 +2624,22 @@ describe('NightRunPage — Vorhaben eines Arbeitspakets (#818)', () => {
       kartenNachId: { 5: vorhaben({ id: 5, number: 9, title: 'Leitstand ausbauen' }) },
       kartenNachIdVerzoegert: verzoegert,
     })
-    await screen.findByTestId(`lauf-${startedAt(0)}`)
+    await screen.findByTestId(`lauf-${startedAt(30)}`)
+    await waitFor(() => expect(vorhabenAufrufe()).toHaveLength(1))
 
     aufklappen(0)
-    await waitFor(() => expect(vorhabenAufrufe()).toHaveLength(1))
-    aufklappen(30)
 
-    // Lauf B veröffentlicht den geteilten Katalog — Karte 700 ist damit aufgelöst, ihr Vorhaben
-    // aber noch nicht. Dann steht dort keine Zeile, nicht etwa „ohne" oder „nicht auflösbar".
-    await within(lauf(30)).findByText('Vorhaben: ohne')
-    expect(within(lauf(0)).getByRole('button', { name: '#700 Paket A' })).toBeInTheDocument()
-    expect(within(lauf(0)).queryByText(/^Vorhaben:/)).toBeNull()
+    // Der zweite Lauf veröffentlicht den geteilten Katalog — Karte 700 ist damit aufgelöst, ihr
+    // Vorhaben aber noch nicht. Dann steht dort keine Zeile, nicht etwa „ohne" oder „nicht
+    // auflösbar".
+    await within(lauf(0)).findByText('Vorhaben: ohne')
+    expect(within(lauf(30)).getByRole('button', { name: '#700 Paket A' })).toBeInTheDocument()
+    expect(within(lauf(30)).queryByText(/^Vorhaben:/)).toBeNull()
 
     freigeben()
-    expect(await within(lauf(0)).findByRole('button', { name: /^Vorhaben #9 / })).toBeInTheDocument()
+    expect(
+      await within(lauf(30)).findByRole('button', { name: /^Vorhaben #9 / }),
+    ).toBeInTheDocument()
   })
 
   it('ruft ein Vorhaben auch bei zwei gleichzeitig aufgeklappten Läufen nur einmal ab', async () => {
@@ -3015,7 +3071,7 @@ describe('NightRunPage — Aufschlüsselung der gesichteten Karten (#873)', () =
     protokollWaehlen(ECHTER_PRUEFLAUF_STAND, 'night-run-2026-09-11-103116.json')
 
     const panelEl = await screen.findByTestId(`lauf-${ECHTER_PRUEFLAUF_START}`)
-    fireEvent.click(within(panelEl).getByRole('button', { expanded: false }))
+    panelAufklappen(panelEl)
     await within(panelEl).findByTestId('aufschluesselung')
     return panelEl
   }
@@ -3029,7 +3085,7 @@ describe('NightRunPage — Aufschlüsselung der gesichteten Karten (#873)', () =
     renderPage({ listen: [ansicht] })
 
     const panelEl = await screen.findByTestId(`lauf-${ansicht[0].startedAt}`)
-    fireEvent.click(within(panelEl).getByRole('button', { expanded: false }))
+    panelAufklappen(panelEl)
     await within(panelEl).findByTestId('aufschluesselung')
     return panelEl
   }
@@ -3123,7 +3179,7 @@ describe('NightRunPage — Aufschlüsselung der gesichteten Karten (#873)', () =
     protokollWaehlen(ECHTE_ERZEUGUNG_STAND, 'night-run-2026-09-09-125621.json')
 
     const panelEl = await screen.findByTestId(`lauf-${ECHTE_ERZEUGUNG_START}`)
-    fireEvent.click(within(panelEl).getByRole('button', { expanded: false }))
+    panelAufklappen(panelEl)
     await within(panelEl).findByTestId('aufschluesselung')
 
     // 32 + 3 + 3 = 38 — die Summe der Teilmengen ist die Zahl der gesichteten Karten.
@@ -3215,7 +3271,7 @@ describe('NightRunPage — Aufschlüsselung der gesichteten Karten (#873)', () =
     protokollWaehlen(ECHTER_STAND, 'night-run-2026-09-07-085229.json')
 
     const panelEl = await screen.findByTestId(`lauf-${ECHTER_START}`)
-    fireEvent.click(within(panelEl).getByRole('button', { expanded: false }))
+    panelAufklappen(panelEl)
     await within(panelEl).findByTestId('laufband')
 
     expect(within(panelEl).queryByTestId('aufschluesselung')).not.toBeInTheDocument()
@@ -3247,7 +3303,7 @@ describe('NightRunPage — Kennzahlenzeile je Lauf-Art (#874)', () => {
     protokollWaehlen(ergebnisstand, dateiname)
 
     const panelEl = await screen.findByTestId(`lauf-${start}`)
-    fireEvent.click(within(panelEl).getByRole('button', { expanded: false }))
+    panelAufklappen(panelEl)
     await within(panelEl).findByTestId('lauf-kennzahlen')
     return panelEl
   }
@@ -3394,7 +3450,7 @@ describe('NightRunPage — Kennzahlenzeile je Lauf-Art (#874)', () => {
     protokollWaehlen(ECHTE_KETTE_STAND, 'night-run-2026-09-14-131200.json')
 
     const panelEl = await screen.findByTestId(`lauf-${ECHTE_KETTE_START}`)
-    fireEvent.click(within(panelEl).getByRole('button', { expanded: false }))
+    panelAufklappen(panelEl)
     await within(panelEl).findByTestId('ketten-uebersicht')
 
     // Die Kette führt ihre Kennzahlen bereits in der Übersicht (#866) — und ihre Kostensumme
@@ -3424,5 +3480,98 @@ describe('NightRunPage — Kennzahlenzeile je Lauf-Art (#874)', () => {
     // Kosten und Züge bewahrt der Server nicht auf — eine Zeile aus lauter Fehlanzeigen wäre
     // dieselbe Wand, die der Kennzahlen-Hinweis vermeidet.
     expect(within(lauf(0)).queryByTestId('lauf-kennzahlen')).not.toBeInTheDocument()
+  })
+})
+
+describe('NightRunPage — Rahmen des Entwurfs (#914)', () => {
+  /** Zwei aufbewahrte Läufe, der spätere steht oben. */
+  const zweiAufbewahrte = () => ({
+    listen: [
+      [
+        aufbewahrt({
+          id: 1,
+          startedAt: startedAt(0),
+          items: [{ id: 11, cardNumber: 700, title: 'Paket A', state: 'GREEN' as const }],
+        }),
+        aufbewahrt({
+          id: 2,
+          startedAt: startedAt(30),
+          items: [{ id: 21, cardNumber: 701, title: 'Paket B', state: 'GREEN' as const }],
+        }),
+      ],
+    ],
+    karten: {
+      700: karte({ id: 1, number: 700, title: 'Paket A' }),
+      701: karte({ id: 2, number: 701, title: 'Paket B' }),
+    },
+  })
+
+  it('zeigt den obersten Lauf offen und den zweiten zugeklappt', async () => {
+    // AK 2: Kopf, Kennzahlenreihe und erster Vorgangsblock ohne Scrollen. Genau der oberste
+    // Lauf, nicht alle (E7) — alle aufzuklappen löste die Anfragelawine aus, die A8 vermeidet.
+    renderPage(zweiAufbewahrte())
+
+    await screen.findByTestId(`lauf-${startedAt(30)}`)
+    expect(within(lauf(30)).getByRole('button', { expanded: true })).toBeInTheDocument()
+    expect(within(lauf(0)).getByRole('button', { expanded: false })).toBeInTheDocument()
+  })
+
+  it('lädt die Herkunftskette des obersten Laufs genau einmal, auch bei erneutem Rendern', async () => {
+    const { rerender } = renderPage(zweiAufbewahrte())
+
+    await screen.findByTestId(`lauf-${startedAt(30)}`)
+    await waitFor(() => expect(byNumberAufrufe()).toHaveLength(1))
+
+    rerender(
+      <ThemeProvider theme={theme}>
+        <SnackbarProvider>
+          <MemoryRouter initialEntries={['/projects/5/nachtlauf']}>
+            <Routes>
+              <Route path="/projects/:projectId/nachtlauf" element={<NightRunPage />} />
+            </Routes>
+          </MemoryRouter>
+        </SnackbarProvider>
+      </ThemeProvider>,
+    )
+
+    // `geladeneLaeufe` ist die Stelle, die das sicherstellt — ein zweiter Abruf derselben Kette
+    // wäre für den Nutzer unsichtbar und für den Server eine verdoppelte Last.
+    await waitFor(() => expect(byNumberAufrufe()).toHaveLength(1))
+  })
+
+  it('legt das Theme des Entwurfs über den Inhaltsbereich', async () => {
+    renderPage(zweiAufbewahrte())
+
+    await screen.findByTestId(`lauf-${startedAt(30)}`)
+    const knopf = screen.getByRole('button', { name: 'Protokoll einlesen' })
+    expect(getComputedStyle(knopf).fontFamily).toContain('IBM Plex Sans')
+  })
+
+  it('lässt den Kartendialog außerhalb des Theme-Teilbaums', async () => {
+    renderPage(zweiAufbewahrte())
+
+    await screen.findByTestId(`lauf-${startedAt(30)}`)
+    aufklappen(30)
+    fireEvent.click(await within(lauf(30)).findByRole('button', { name: /#701/ }))
+
+    // Nicht-Ziel 2: Der Dialog gehört zur übrigen Anwendung und trägt deren Designsprache.
+    const detail = await screen.findByTestId('karten-detail')
+    expect(detail.dataset.schrift).toContain('Carlito')
+    expect(detail.dataset.schrift).not.toContain('IBM Plex Sans')
+  })
+
+  it('hält Brotkrumenpfad, Protokoll-Knopf und die Meldung zu einem nicht deutbaren Stand', async () => {
+    // AK 10: Wo der Entwurf kein Element vorsieht, bleibt es in seiner Funktion erhalten.
+    renderPage({ listen: [[]] })
+    await screen.findByText('Noch keine Auswertung vorhanden.')
+
+    expect(screen.getByRole('link', { name: 'Projekte' })).toBeInTheDocument()
+    expect(screen.getByText('Nachtlauf')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Protokoll einlesen' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Protokolldatei auswählen')).toBeInTheDocument()
+
+    protokollWaehlen('{kein json')
+
+    expect(await screen.findByText(/^Nicht auswertbar —/)).toBeInTheDocument()
   })
 })

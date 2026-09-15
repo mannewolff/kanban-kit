@@ -30,7 +30,8 @@ import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
 import ContentCopyIcon from '@mui/icons-material/ContentCopy'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
-import { Fragment, useEffect, useId, useRef, useState } from 'react'
+import { ThemeProvider } from '@mui/material/styles'
+import { Fragment, useCallback, useEffect, useId, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { cardsApi, type Card, type CardByNumber } from '../api/cards'
 import { apiErrorMessage } from '../api/client'
@@ -43,6 +44,7 @@ import {
 } from '../api/nightRuns'
 import { Breadcrumbs } from '../components/Breadcrumbs'
 import { CardDetailModal } from '../components/CardDetailModal'
+import { nachtlaufTheme } from '../nachtlaufDesign'
 import { useSnackbar } from '../components/SnackbarProvider'
 import { formatDuration } from '../lib/formatDuration'
 import {
@@ -1958,6 +1960,7 @@ function LaufPanel({
   vorhabenKarten,
   zaehler,
   aufbewahrteLaeufe,
+  zuerst,
   onAufklappen,
   onOeffnen,
 }: Readonly<{
@@ -1976,6 +1979,12 @@ function LaufPanel({
   zaehler: Haeufigkeiten
   /** Das „M" in „N von M aufbewahrten Läufen" — die Länge der zuletzt geladenen Liste. */
   aufbewahrteLaeufe: number
+  /**
+   * Der oberste Lauf der Liste steht beim Öffnen der Seite offen (#914, E7). AK 2 verlangt Kopf,
+   * Kennzahlenreihe und ersten Vorgangsblock ohne Scrollen — genau dieser eine, nicht alle: Bis
+   * zu 30 aufgeklappte Läufe lösten die Anfragelawine aus, die Plan #718 (A8) vermeidet.
+   */
+  zuerst: boolean
   onAufklappen: () => void
   onOeffnen: (karte: CardByNumber) => void
 }>) {
@@ -1986,6 +1995,9 @@ function LaufPanel({
       data-testid={`lauf-${lauf.startedAt}`}
       component={Paper}
       variant="outlined"
+      defaultExpanded={zuerst}
+      // Bleibt erhalten: Es ist der Grund, warum 30 aufbewahrte Läufe nicht alle ihre Inhalte
+      // rendern.
       slotProps={{ transition: { unmountOnExit: true } }}
       onChange={(_, offen) => offen && onAufklappen()}
     >
@@ -2214,13 +2226,36 @@ export function NightRunPage() {
     setVorhabenKarten(new Map(vorhabenKartenRef.current))
   }
 
-  const aufklappen = (lauf: AnzeigeLauf) => {
-    if (geladeneLaeufe.current.has(lauf.startedAt)) {
-      return
+  const aufklappen = useCallback(
+    (lauf: AnzeigeLauf) => {
+      if (geladeneLaeufe.current.has(lauf.startedAt)) {
+        return
+      }
+      geladeneLaeufe.current.add(lauf.startedAt)
+      void ladeKetten(lauf.items, dokumentNummern(staende.get(lauf.startedAt)))
+    },
+    // `ladeKetten` wird bei jedem Rendern neu erzeugt und ließe sich nicht als Abhängigkeit
+    // führen, ohne die ganze Funktion selbst einzupacken — ein Umbau, den dieses Paket nicht
+    // verlangt. Was sie an Veränderlichem liest, steht dafür vollständig in der Liste: `staende`
+    // entscheidet über die Dokumentnummern, `id` über das Projekt, alles Übrige sind Refs.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- ladeKetten liest nur staende, id und Refs
+    [staende, id],
+  )
+
+  /**
+   * Der oberste Lauf steht beim Öffnen der Seite offen (#914, E7), und damit muss auch seine
+   * Herkunftskette geladen werden: Ein `defaultExpanded`-Aufklappfeld löst kein `onChange` aus.
+   *
+   * Hier und nicht in den drei Ladepfaden: Sonst müsste jeder von ihnen einzeln daran denken, und
+   * der nächste vergessene Pfad zeigte einen offenen Lauf ohne aufgelöste Kette. `aufklappen`
+   * bleibt die Stelle, die ein zweites Laden verhindert — der Effekt darf also mehrfach laufen.
+   */
+  useEffect(() => {
+    const oberster = laeufe[0]
+    if (oberster !== undefined) {
+      aufklappen(oberster)
     }
-    geladeneLaeufe.current.add(lauf.startedAt)
-    void ladeKetten(lauf.items, dokumentNummern(staende.get(lauf.startedAt)))
-  }
+  }, [laeufe, aufklappen])
 
   /**
    * Liest den Ergebnisstand im Browser, zeigt die Auswertung und liefert sie ein. Die gedeutete
@@ -2295,59 +2330,75 @@ export function NightRunPage() {
   }
 
   return (
-    <Box>
-      <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
-        <Breadcrumbs
-          items={[
-            { label: 'Projekte', to: '/' },
-            { label: projectName ?? 'Projekt', to: `/projects/${id}` },
-            { label: 'Nachtlauf' },
-          ]}
-        />
-        {/* Dateiauswahl wie in der Ideen-Seite: Button als <label> mit verstecktem Input. */}
-        <Button variant="contained" component="label">
-          Protokoll einlesen<input
-            hidden
-            type="file"
-            accept=".json,application/json"
-            aria-label="Protokolldatei auswählen"
-            onChange={(e) => {
-              const datei = e.target.files?.[0]
-              // Zurücksetzen, damit dieselbe Datei erneut gewählt werden kann.
-              e.target.value = ''
-              if (datei) void protokollLesen(datei)
-            }}
-          />
-        </Button>
-      </Stack>
+    // Das Theme des Entwurfs liegt über dem Inhaltsbereich und nur über ihm (#914, E2): keine
+    // globalen CSS-Regeln, die die übrige Anwendung mitfärbten. Die `AppShell` mit AppBar und
+    // Drawer bleibt außen vor (E8) — der Entwurf beschreibt allein den Inhaltsbereich.
+    <>
+      <ThemeProvider theme={nachtlaufTheme}>
+        <Box>
+          {/* Brotkrumenpfad und „Protokoll einlesen" kennt der Entwurf nicht. AK 10: Wo er kein
+              Element vorsieht, bleibt es in seiner Funktion erhalten und wird eingepasst — als
+              schmale Zeile über dem Entwurfskopf, in dessen Schriftbild und Farben (E9). */}
+          <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
+            <Breadcrumbs
+              items={[
+                { label: 'Projekte', to: '/' },
+                { label: projectName ?? 'Projekt', to: `/projects/${id}` },
+                { label: 'Nachtlauf' },
+              ]}
+            />
+            {/* Dateiauswahl wie in der Ideen-Seite: Button als <label> mit verstecktem Input. */}
+            <Button variant="contained" component="label">
+              Protokoll einlesen<input
+                hidden
+                type="file"
+                accept=".json,application/json"
+                aria-label="Protokolldatei auswählen"
+                onChange={(e) => {
+                  const datei = e.target.files?.[0]
+                  // Zurücksetzen, damit dieselbe Datei erneut gewählt werden kann.
+                  e.target.value = ''
+                  if (datei) void protokollLesen(datei)
+                }}
+              />
+            </Button>
+          </Stack>
 
-      {meldung !== null && (
-        <Alert severity="info" sx={{ mb: 2 }}>
-          {meldung}
-        </Alert>
-      )}
+          {meldung !== null && (
+            <Alert severity="info" sx={{ mb: 2 }}>
+              {meldung}
+            </Alert>
+          )}
 
-      {laeufe.length === 0 && <Typography color="text.secondary">Noch keine Auswertung vorhanden.</Typography>}
+          {laeufe.length === 0 && <Typography color="text.secondary">Noch keine Auswertung vorhanden.</Typography>}
 
-      {laeufe.map((lauf) => (
-        <LaufPanel
-          key={lauf.startedAt}
-          lauf={lauf}
-          ergebnis={ergebnisse.get(lauf.startedAt)}
-          ausErgebnisstand={ausErgebnisstand}
-          // Der Speicher entscheidet, ob zu genau diesem Lauf ein Ergebnisstand dieser Sitzung
-          // vorliegt; welche Darstellung daraus entsteht, entscheidet der Modus am Anzeigelauf —
-          // er steht auch am neu geladenen.
-          stand={staende.get(lauf.startedAt)}
-          katalog={katalog}
-          vorhabenKarten={vorhabenKarten}
-          zaehler={zaehler}
-          aufbewahrteLaeufe={aufbewahrteLaeufe}
-          onAufklappen={() => aufklappen(lauf)}
-          onOeffnen={setDetail}
-        />
-      ))}
+          {laeufe.map((lauf, position) => (
+            <LaufPanel
+              key={lauf.startedAt}
+              lauf={lauf}
+              zuerst={position === 0}
+              ergebnis={ergebnisse.get(lauf.startedAt)}
+              ausErgebnisstand={ausErgebnisstand}
+              // Der Speicher entscheidet, ob zu genau diesem Lauf ein Ergebnisstand dieser Sitzung
+              // vorliegt; welche Darstellung daraus entsteht, entscheidet der Modus am Anzeigelauf —
+              // er steht auch am neu geladenen.
+              stand={staende.get(lauf.startedAt)}
+              katalog={katalog}
+              vorhabenKarten={vorhabenKarten}
+              zaehler={zaehler}
+              aufbewahrteLaeufe={aufbewahrteLaeufe}
+              onAufklappen={() => aufklappen(lauf)}
+              onOeffnen={setDetail}
+            />
+          ))}
 
+        </Box>
+      </ThemeProvider>
+
+      {/* Außerhalb des Theme-Teilbaums: Nicht-Ziel 2 des Fachplans verbietet, die Gestaltung auf
+          die übrige Anwendung zu übertragen, und der Kartendialog gehört zu ihr — auch wenn er
+          von dieser Seite aus geöffnet wird. Maßgeblich ist die Stellung im React-Baum, nicht das
+          Portal, in dem der Dialog im DOM landet. */}
       {detail !== null && (
         <CardDetailModal
           card={detail}
@@ -2356,6 +2407,6 @@ export function NightRunPage() {
           onClose={() => setDetail(null)}
         />
       )}
-    </Box>
+    </>
   )
 }
