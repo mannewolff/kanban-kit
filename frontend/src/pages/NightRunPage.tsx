@@ -1,3 +1,20 @@
+// Schriften des Entwurfs `docs/mockup-leitstand-nachtlauf.html`, mit der Anwendung ausgeliefert.
+// AK 11 des Fachplans #903 verbietet den Bezug von einem fremden Server: Eine Instanz ohne
+// Internetzugang soll dasselbe Schriftbild zeigen wie der Entwurf.
+//
+// Die Importe stehen hier und nicht in `main.tsx`, wo Carlito steht: Diese Seite ist ein lazy
+// geladener Route-Chunk (`App.tsx`), ein Import in `main.tsx` lüde die sieben Schnitte in jede
+// Seite der Anwendung — entgegen dem Performance-Budget aus `CLAUDE-react.md`.
+//
+// Je Datei ein Gewicht aus dem Latin-Subset, keine Sammelimporte der Pakete: Chivo führt neun
+// Gewichte, IBM Plex Sans sieben — gebraucht werden sieben Schnitte insgesamt.
+import '@fontsource/chivo/latin-600.css'
+import '@fontsource/chivo/latin-800.css'
+import '@fontsource/ibm-plex-sans/latin-400.css'
+import '@fontsource/ibm-plex-sans/latin-500.css'
+import '@fontsource/ibm-plex-sans/latin-600.css'
+import '@fontsource/ibm-plex-mono/latin-400.css'
+import '@fontsource/ibm-plex-mono/latin-600.css'
 import Accordion from '@mui/material/Accordion'
 import AccordionDetails from '@mui/material/AccordionDetails'
 import AccordionSummary from '@mui/material/AccordionSummary'
