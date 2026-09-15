@@ -30,6 +30,10 @@ class SecurityActorContext implements ActorContext {
 
   private static final int AGENT_MAX_LENGTH = 100;
   private static final String SESSION_AUTHORITY = "AUTH_SESSION";
+
+  // AUTH_PAT trägt seit Issue #836 bewusst weiterhin JEDES Token — gebunden wie ungebunden; die
+  // Board-Grenze hängt allein an der zusätzlichen Authority AUTH_PAT_UNBOUND. Andernfalls verlören
+  // alle Karten board-gebundener Token hier den Herkunfts-Stempel TOKEN.
   private static final String PAT_AUTHORITY = "AUTH_PAT";
 
   @Override

@@ -119,4 +119,39 @@ class PatAuthenticationFilterTest {
         .containsExactly(PatAuthenticationFilter.AUTHORITY);
     verify(chain).doFilter(request, response);
   }
+
+  @Test
+  void doFilter_boundToken_grantsOnlyPatAuthority() throws Exception {
+    // Given — gebundenes Token: die Board-Grenze entsteht durch das FEHLEN von AUTH_PAT_UNBOUND.
+    var principal = new KanbanPrincipal(7L, 1L, 2L, 3L, "Board-Token");
+    when(request.getHeader(PatAuthenticationFilter.HEADER)).thenReturn("tk_bound");
+    when(accessTokens.resolveBinding("tk_bound")).thenReturn(Optional.of(principal));
+
+    // When
+    filter.doFilter(request, response, chain);
+
+    // Then
+    Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+    assertThat(authentication.getAuthorities().stream().map(GrantedAuthority::getAuthority))
+        .containsExactly(PatAuthenticationFilter.AUTHORITY);
+    assertThat(authentication.getDetails()).isSameAs(principal);
+  }
+
+  @Test
+  void doFilter_unboundToken_grantsPatAndUnboundAuthority() throws Exception {
+    // Given
+    var principal = new KanbanPrincipal(7L, 1L, null, null, "Freies Token");
+    when(request.getHeader(PatAuthenticationFilter.HEADER)).thenReturn("tk_free");
+    when(accessTokens.resolveBinding("tk_free")).thenReturn(Optional.of(principal));
+
+    // When
+    filter.doFilter(request, response, chain);
+
+    // Then
+    Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+    assertThat(authentication.getAuthorities().stream().map(GrantedAuthority::getAuthority))
+        .containsExactlyInAnyOrder(
+            PatAuthenticationFilter.AUTHORITY, PatAuthenticationFilter.UNBOUND_AUTHORITY);
+    assertThat(authentication.getDetails()).isSameAs(principal);
+  }
 }

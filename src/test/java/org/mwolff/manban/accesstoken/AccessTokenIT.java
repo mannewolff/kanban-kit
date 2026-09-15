@@ -201,8 +201,10 @@ class AccessTokenIT extends AbstractIntegrationTest {
             .getContentAsString();
     String plaintext = json.readTree(body).get("plaintext").asText();
 
-    // PAT authentifiziert weiterhin (Filter löst über resolveBinding auf).
-    mvc.perform(get("/api/me").header("X-Kanban-Token", plaintext)).andExpect(status().isOk());
+    // PAT authentifiziert weiterhin (Filter löst über resolveBinding auf) — seit #877 aber
+    // ausschließlich auf der Kanban-Compat-API des gebundenen Boards, nicht mehr auf /api/me.
+    mvc.perform(get("/api/kanban/items").header("X-Kanban-Token", plaintext))
+        .andExpect(status().isOk());
 
     // Liste (neuestes Token zuerst) zeigt die persistierte Bindung.
     mvc.perform(get("/api/access-tokens").cookie(session))
