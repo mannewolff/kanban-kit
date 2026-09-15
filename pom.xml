@@ -875,10 +875,32 @@
                                 <param>org.mwolff.manban.*.application.*</param>
                                 <param>org.mwolff.manban.*.domain.*</param>
                                 <param>org.mwolff.manban.config.*</param>
+                                <!-- ratelimit.web traegt keine Controller, sondern die
+                                     spoofsichere Herkunftsaufloesung der Zaehlbremse
+                                     (ClientOriginResolver, Issue #898, Plan #892 E2): reine,
+                                     vollstaendig unit-getestete Logik. An ihr haengt, ob die
+                                     Bremse ueberhaupt wirkt — sie unter den pauschalen
+                                     web-Ausschluss fallen zu lassen, fuehrte genau diese Klasse
+                                     am Mutationsgate vorbei (gleiche Begruendung wie bei den
+                                     Verhaltensklassen in config, #465). -->
+                                <param>org.mwolff.manban.ratelimit.web.*</param>
                             </targetClasses>
                             <excludedClasses>
-                                <!-- Controller/DTOs (nur via IT abgedeckt). -->
-                                <param>org.mwolff.manban.*.web.*</param>
+                                <!-- Controller/DTOs (nur via IT abgedeckt). Modulweise
+                                     aufgezaehlt statt als org.mwolff.manban.*.web.*, damit das
+                                     oben eingeschlossene ratelimit.web nicht wieder herausfaellt:
+                                     excludedClasses gewinnt in PIT gegen targetClasses,
+                                     unabhaengig davon, welches Muster genauer ist. -->
+                                <param>org.mwolff.manban.accesstoken.web.*</param>
+                                <param>org.mwolff.manban.attachment.web.*</param>
+                                <param>org.mwolff.manban.auth.web.*</param>
+                                <param>org.mwolff.manban.board.web.*</param>
+                                <param>org.mwolff.manban.card.web.*</param>
+                                <param>org.mwolff.manban.comment.web.*</param>
+                                <param>org.mwolff.manban.common.web.*</param>
+                                <param>org.mwolff.manban.kanbancompat.web.*</param>
+                                <param>org.mwolff.manban.nightrun.web.*</param>
+                                <param>org.mwolff.manban.project.web.*</param>
                                 <!-- Entities/Adapter/JpaRepos/Mail/S3/Security-Filter (nur via IT). -->
                                 <param>org.mwolff.manban.*.infrastructure.*</param>
                                 <!-- Reines Bean-Wiring in config: nur die *Config-Klassen selbst
