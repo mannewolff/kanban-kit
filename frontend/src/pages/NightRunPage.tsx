@@ -44,6 +44,11 @@ import {
 } from '../api/nightRuns'
 import { Breadcrumbs } from '../components/Breadcrumbs'
 import { CardDetailModal } from '../components/CardDetailModal'
+import {
+  NachtlaufKennzahlen,
+  type NachtlaufKennzahl,
+} from '../components/nachtlauf/NachtlaufKennzahlen'
+import { NachtlaufKopf } from '../components/nachtlauf/NachtlaufKopf'
 import { nachtlaufTheme } from '../nachtlaufDesign'
 import { useSnackbar } from '../components/SnackbarProvider'
 import { formatDuration } from '../lib/formatDuration'
@@ -1435,48 +1440,16 @@ function KettenUebersicht({
   onOeffnen: (karte: CardByNumber) => void
 }>) {
   const stand = run.stand
-  const start = new Date(run.startedAt)
-  const datum = start.toLocaleDateString('de-DE', { dateStyle: 'full' })
-  const uhrzeit = start.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })
-  const gruen = run.items.filter((item) => item.state === 'GREEN').length
 
   return (
     <Box
       data-testid="ketten-uebersicht"
       sx={{ border: 1, borderColor: 'divider', borderRadius: 1, p: 2, mb: 2 }}
     >
-      <Typography variant="subtitle1">{`Nacht vom ${datum}, ${uhrzeit} Uhr`}</Typography>
-      <Typography variant="body2" color="text.secondary">
-        {kopfText(stand)}
-      </Typography>
-
-      <Stack direction="row" spacing={3} sx={{ mt: 2, flexWrap: 'wrap' }}>
-        {/* „Vollständig durchlaufen" ist der grüne Zustand: Im Modus `CHAIN` wird nach
-            `KETTEN_AUSGAENGE` ausschließlich `fertig` grün, und der rohe Ausgang erreicht die
-            Seite gar nicht (E4). */}
-        <Kennzahl
-          wert={`${gruen} von ${run.items.length}`}
-          label="Ketten durchgelaufen"
-          hinweis={null}
-        />
-        <Kennzahl
-          wert={`${entstandeneDokumente(run.items).size}`}
-          label="Karten entstanden"
-          hinweis={null}
-        />
-        <Kennzahl
-          wert={formatDuration(stufenZeitSumme(run.items) / 1000)}
-          label="Laufzeit über alle Stufen"
-          hinweis={null}
-        />
-        <Kennzahl
-          wert={betrag(stand?.kostenSumme)}
-          label="Kosten der Nacht"
-          hinweis={ohneKostenmeldung(stand?.kostenUnbekannt, 'ein Arbeitsschritt', 'Arbeitsschritte')}
-        />
-      </Stack>
-
-      <Stack spacing={1} sx={{ mt: 2 }}>
+      {/* Kopf und Kennzahlen der Nacht stehen seit #915 im Kopf des Entwurfs über dem Lauf
+          (`NachtlaufKopf`, `NachtlaufKennzahlen`) — hier stünden sie ein zweites Mal. Übrig
+          bleibt, was den Ketten-Lauf allein betrifft: seine Vorgänge und seine Vorgaben. */}
+      <Stack spacing={1}>
         {run.items.map((item) => (
           <Box
             key={`${item.cardNumber}-${item.position}`}
@@ -1950,6 +1923,86 @@ function Aufschluesselung({ items }: Readonly<{ items: readonly Sichtung[] }>) {
   )
 }
 
+/**
+ * Die beiden Lauf-Arten, die die Gestaltung des Entwurfs tragen (#915, E5). `REVIEW` und
+ * `NIGHTPLAN` sind Altbestand: `laufArt` in `.claude/kit/night.mjs` erzeugt seit Kit 1.53.0 nur
+ * noch `kette` und `implementierung` (Nicht-Ziel 5). Sie behalten ihre heutige Darstellung.
+ */
+const ENTWURFS_ARTEN = new Set<NightRunMode>(['CHAIN', 'IMPLEMENTATION'])
+
+const traegtEntwurf = (modus: NightRunMode): modus is 'CHAIN' | 'IMPLEMENTATION' =>
+  ENTWURFS_ARTEN.has(modus)
+
+/**
+ * Die Kennzahlen der Nacht für den Kopf des Entwurfs — **dieselben Werte wie vor diesem Paket**
+ * (Nicht-Ziel 3): für die Kette die vier aus {@link KettenUebersicht}, für den Umsetzungs-Lauf die
+ * aus {@link Laufkennzahlen}. Hier steht nur, wie sie zusammengestellt werden, nicht wie sie
+ * entstehen.
+ *
+ * <p>`null` heißt: Zu diesem Lauf liegt kein Ergebnisstand dieser Sitzung vor. Kosten und Züge
+ * bewahrt der Server nicht auf (Plan #718, A1) — eine Reihe aus lauter Fehlanzeigen wäre dieselbe
+ * Wand, die der Bestand schon vermeidet (E6).
+ */
+function nachtKennzahlen(
+  stand: NightRun | undefined,
+): { kennzahlen: NachtlaufKennzahl[]; hinweis: string | undefined } | null {
+  if (stand === undefined) {
+    return null
+  }
+  if (stand.mode === 'CHAIN') {
+    const gruen = stand.items.filter((item) => item.state === 'GREEN').length
+    return {
+      kennzahlen: [
+        { wert: `${gruen} von ${stand.items.length}`, label: 'Ketten durchgelaufen', hinweis: null },
+        {
+          wert: `${entstandeneDokumente(stand.items).size}`,
+          label: 'Karten entstanden',
+          hinweis: null,
+        },
+        {
+          wert: formatDuration(stufenZeitSumme(stand.items) / 1000),
+          label: 'Laufzeit über alle Stufen',
+          hinweis: null,
+        },
+        {
+          wert: betrag(stand.stand?.kostenSumme),
+          label: 'Kosten der Nacht',
+          hinweis: ohneKostenmeldung(
+            stand.stand?.kostenUnbekannt,
+            'ein Arbeitsschritt',
+            'Arbeitsschritte',
+          ),
+        },
+      ],
+      hinweis: undefined,
+    }
+  }
+
+  const bearbeitet = stand.items.filter((item) => item.state !== 'GREY')
+  const art = artKennzahl(stand, bearbeitet)
+  const kennzahlenHinweis = stand.stand?.kennzahlenHinweis
+  const kosten = laufkosten(bearbeitet)
+  return {
+    kennzahlen: [
+      { wert: art.wert, label: art.label, hinweis: null },
+      {
+        wert: `${MINUTEN_FORMAT.format(stand.durationMs / MINUTE_MS)} min`,
+        label: 'Laufzeit über alle Vorgänge',
+        hinweis: null,
+      },
+      // Der Kennzahlen-Hinweis verdrängt Kosten und Züge (Plan #864, E8): Ohne die ausführliche
+      // Ausgabe fordert der Runner den Kennzahlen-Strom gar nicht erst an.
+      ...(kennzahlenHinweis === undefined
+        ? [
+            { wert: kosten.wert, label: 'Kosten der Nacht', hinweis: kosten.hinweis },
+            { wert: laufZuege(bearbeitet), label: 'Züge des Modells', hinweis: null },
+          ]
+        : []),
+    ],
+    hinweis: kennzahlenHinweis,
+  }
+}
+
 /** Ein Lauf als aufklappbares Panel; die Kette wird erst beim Aufklappen geladen (A8). */
 function LaufPanel({
   lauf,
@@ -1989,6 +2042,14 @@ function LaufPanel({
   onOeffnen: (karte: CardByNumber) => void
 }>) {
   const rot = new Set(lauf.items.filter((item) => item.state === 'RED').map((item) => item.cardNumber))
+  // Die Weiche hängt an der Lauf-Art, nicht am Vorliegen eines Stands (#915, E6): Ein aufbewahrter
+  // Ketten-Lauf ohne Sitzungsstand bekommt denselben Kopf, nur ohne die Kennzahlen, die allein der
+  // Stand hergibt.
+  // Die Lauf-Art in einer eigenen Konstante, damit die Prüfung unten den Typ verengt: Ein
+  // Eigenschaftszugriff verengt sich nicht über die Verzweigung hinweg mit.
+  const modus = lauf.mode
+  const entwurf = traegtEntwurf(modus)
+  const kennzahlen = entwurf ? nachtKennzahlen(stand) : null
 
   return (
     <Accordion
@@ -2002,6 +2063,28 @@ function LaufPanel({
       onChange={(_, offen) => offen && onAufklappen()}
     >
       <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+        {entwurf ? (
+          <NachtlaufKopf
+            startedAt={lauf.startedAt}
+            mode={modus}
+            angaben={[
+              kopfText(stand?.stand),
+              // Die Herkunft wird **hier** aus dem Zwischenspeicher gelesen, nicht in
+              // `AnzeigeLauf` mitgeführt: Der Server kennt die Unterscheidung nicht, ein Feld am
+              // Anzeigemodell müsste also in jedem Ladepfad einzeln gesetzt werden — und der
+              // nächste vergessene Pfad zeigte still die falsche Herkunft (AK 9, Fall 3).
+              ausErgebnisstand.has(lauf.startedAt) ? 'Ergebnisstand' : 'Herkunft unbekannt',
+              // Alles Weitere stand bis #915 als Chip-Zeile im Kopf des Laufs. Der Entwurf sieht
+              // dafür kein Element vor; nach AK 10 bleibt es in seiner Funktion erhalten und wird
+              // eingepasst, statt fallen gelassen zu werden.
+              MODUS_TEXT[lauf.mode],
+              formatDuration(lauf.durationMs / 1000),
+              `${lauf.processedCount} bearbeitet, ${lauf.skippedCount} übergangen`,
+              ...(lauf.unparsedCount > 0 ? [`Ungedeutete Zeilen: ${lauf.unparsedCount}`] : []),
+              ...(ergebnis === undefined ? [] : [ergebnis ? 'neu angelegt' : 'lag schon vor']),
+            ]}
+          />
+        ) : (
         <Stack direction="row" spacing={1} alignItems="center" sx={{ flexWrap: 'wrap' }}>
           <Typography variant="subtitle1">{new Date(lauf.startedAt).toLocaleString('de-DE')}</Typography>
           <Chip size="small" label={MODUS_TEXT[lauf.mode]} variant="outlined" />
@@ -2027,14 +2110,21 @@ function LaufPanel({
             <Chip size="small" label={ergebnis ? 'neu angelegt' : 'lag schon vor'} variant="outlined" />
           )}
         </Stack>
+        )}
       </AccordionSummary>
       <AccordionDetails>
+        {/* Die Kennzahlenreihe des Entwurfs gehört zum Kopf, steht aber im Inhalt: Der
+            `AccordionSummary` ist ein `<button>`, und die Reihe trägt zu viel für einen Knopf. */}
+        {kennzahlen !== null && (
+          <NachtlaufKennzahlen kennzahlen={kennzahlen.kennzahlen} hinweis={kennzahlen.hinweis} />
+        )}
         {stand !== undefined && lauf.mode === 'CHAIN' && (
           <KettenUebersicht run={stand} katalog={katalog} onOeffnen={onOeffnen} />
         )}
         {/* Die Kennzahlen der Nacht stehen unter der Kopfzeile des Laufs und über allen
-            Einzelangaben (#874); die Kette trägt ihre eigenen in der Übersicht darüber. */}
-        {stand !== undefined && lauf.mode !== 'CHAIN' && <Laufkennzahlen run={stand} />}
+            Einzelangaben (#874). Seit #915 nur noch an den beiden Altbestand-Arten: Kette und
+            Umsetzungs-Lauf tragen sie im Kopf des Entwurfs. */}
+        {stand !== undefined && !entwurf && <Laufkennzahlen run={stand} />}
         {/* Die drei Nicht-Ketten-Arten bekommen ihre Kennzahlen je Vorgang; die Kette führt sie
             bereits in ihrer Übersicht (#872, siehe `VorgangsKennzahlen`). */}
         {stand !== undefined && lauf.mode !== 'CHAIN' && <VorgangsKennzahlen run={stand} />}
