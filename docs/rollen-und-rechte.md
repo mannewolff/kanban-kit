@@ -108,9 +108,11 @@ Nur für Plattform-Admins sichtbar (Eintrag „Admin" in der Seitenleiste):
 - **Konto sperren / entsperren:** über den Button „Sperren" bzw. „Entsperren" (Status-Chip „Aktiv" /
   „Gesperrt"). Ein gesperrtes Konto kann sich nicht mehr anmelden („Konto gesperrt") und wird auch aus
   bestehenden Sitzungen abgewiesen — das gilt für die Web-Anmeldung **und** für API-/Ingest-Tokens.
-- **Schutz:** der **letzte** Plattform-Admin kann nicht degradiert werden (kein Aussperren); man kann
-  sich zudem **nicht selbst** sperren. Analog kann der letzte OWNER eines Projekts weder degradiert
-  noch entfernt werden.
+- **Schutz:** der letzte **nicht gesperrte** Plattform-Administrator kann weder herabgestuft noch
+  gesperrt werden (kein Aussperren). Konten mit Administrator-Rolle zählen dabei **nicht** mit,
+  solange sie gesperrt sind — ein gesperrter Admin hält die Plattform also nicht offen. Daneben gilt
+  unverändert: man kann sich **nicht selbst** sperren. Analog kann der letzte OWNER eines Projekts
+  weder degradiert noch entfernt werden.
 
 Den ersten Admin richtet man über den Bootstrap-Token oder direkt in der DB ein — siehe
 [Betrieb → Den ersten Admin einrichten](betrieb.md#den-ersten-admin-einrichten).

@@ -125,16 +125,37 @@ describe('AdminPage', () => {
     await waitFor(() => expect(api.enable).toHaveBeenCalledWith(3))
   })
 
-  it('zeigt beim letzten Admin eine spezifische Fehlermeldung (409)', async () => {
+  it('zeigt die Server-Meldung, wenn das Herabstufen abgelehnt wird', async () => {
     const api = makeApi()
-    api.setRole = vi.fn().mockRejectedValue(new ApiError(409, 'letzter Admin'))
+    api.setRole = vi
+      .fn()
+      .mockRejectedValue(
+        new ApiError(
+          409,
+          'Conflict',
+          undefined,
+          'Mindestens ein aktiver Plattform-Administrator muss bestehen bleiben.',
+        ),
+      )
     render(<AdminPage api={api} />)
     await screen.findByText('Bob')
 
     fireEvent.click(screen.getByLabelText('Rolle von Bob umschalten'))
     expect(
-      await screen.findByText('Der letzte Admin kann nicht degradiert werden.'),
+      await screen.findByText(
+        'Mindestens ein aktiver Plattform-Administrator muss bestehen bleiben.',
+      ),
     ).toBeInTheDocument()
+  })
+
+  it('zeigt bei einem 409 ohne Server-Meldung den eigenen Text zur Rollenänderung', async () => {
+    const api = makeApi()
+    api.setRole = vi.fn().mockRejectedValue(new ApiError(409, 'Conflict'))
+    render(<AdminPage api={api} />)
+    await screen.findByText('Bob')
+
+    fireEvent.click(screen.getByLabelText('Rolle von Bob umschalten'))
+    expect(await screen.findByText('Rollenänderung fehlgeschlagen.')).toBeInTheDocument()
   })
 
   it('zeigt eine generische Fehlermeldung bei fehlgeschlagener Rollenänderung', async () => {
@@ -221,13 +242,22 @@ describe('AdminPage', () => {
     api.disable = vi
       .fn()
       .mockRejectedValue(
-        new ApiError(409, 'Conflict', undefined, 'Der letzte Admin kann nicht gesperrt werden.'),
+        new ApiError(
+          409,
+          'Conflict',
+          undefined,
+          'Mindestens ein aktiver Plattform-Administrator muss bestehen bleiben.',
+        ),
       )
     render(<AdminPage api={api} />)
     await screen.findByText('Alice')
 
     fireEvent.click(screen.getByLabelText('Alice sperren'))
-    expect(await screen.findByText('Der letzte Admin kann nicht gesperrt werden.')).toBeInTheDocument()
+    expect(
+      await screen.findByText(
+        'Mindestens ein aktiver Plattform-Administrator muss bestehen bleiben.',
+      ),
+    ).toBeInTheDocument()
   })
 
   it('zeigt ohne Server-Meldung den eigenen Text zum Sperren/Entsperren', async () => {
