@@ -1,6 +1,7 @@
 package org.mwolff.manban;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.Instant;
 import java.util.List;
@@ -36,8 +37,8 @@ import org.springframework.transaction.PlatformTransactionManager;
  * noch zwei — und danach gäbe es keinen mehr. {@link TransactionRace} erzwingt genau diese Lage
  * deterministisch: Der zweite Aufruf muss nachweislich auf einer Sperre warten, sonst schlägt der
  * Lauf fehl. Damit ist jeder Test hier zugleich die Gegenprobe — ohne die Sperre in {@code
- * lockPlatformAdminIds} bzw. {@code lockOwnerUserIds} liefe der zweite Aufruf ungehindert durch und
- * der Test bräche mit „wartet auf keiner Sperre" ab.
+ * lockActivePlatformAdminIds} bzw. {@code lockOwnerUserIds} liefe der zweite Aufruf ungehindert
+ * durch und der Test bräche mit „wartet auf keiner Sperre" ab.
  *
  * <p>Die Kontext-Konfiguration ist bewusst identisch mit den übrigen {@code
  * WebEnvironment.NONE}-ITs (kein {@code @TestConfiguration}, kein Mock-Bean): Ein eigener
@@ -76,6 +77,26 @@ class RoleInvariantConcurrencyIT extends AbstractIntegrationTest {
         .singleElement()
         .extracting(AppUser::requireId)
         .isEqualTo(adminA);
+  }
+
+  @Test
+  void soleActivePlatformAdmin_cannotBeDemoted_whenOnlyDisabledAdminsRemain() {
+    // Given: ein aktiver und ein gesperrter Administrator. Der gesperrte trägt zwar die Rolle,
+    // hält die Instanz aber nicht handlungsfähig — er darf die gesperrte Menge nicht auffüllen.
+    long activeAdmin = saveUser("disabled-guard-active@example.com", PlatformRole.ADMIN);
+    users.save(
+        new AppUser(
+                null, "disabled-guard-locked@example.com", "hash", "U", true, PlatformRole.ADMIN)
+            .withDisabledAt(Instant.now()));
+
+    // When / Then: bewusst ohne Rennen als gewöhnlicher Aufruf — geprüft wird allein die
+    // Bedingung der Sperr-Abfrage. Über TransactionRace liefe der Fall nicht: Dessen run verlangt,
+    // dass der zweite Aufruf nachweislich auf einer Sperre wartet.
+    assertThatThrownBy(
+            () -> adminService.changePlatformRole(activeAdmin, activeAdmin, PlatformRole.USER))
+        .isInstanceOf(LastAdminException.class);
+    assertThat(users.findById(activeAdmin).orElseThrow().platformRole())
+        .isEqualTo(PlatformRole.ADMIN);
   }
 
   @Test

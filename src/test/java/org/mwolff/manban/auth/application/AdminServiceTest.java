@@ -201,7 +201,7 @@ class AdminServiceTest {
     // Given
     when(users.findById(1L)).thenReturn(Optional.of(user(1, PlatformRole.ADMIN)));
     when(users.findById(2L)).thenReturn(Optional.of(user(2, PlatformRole.ADMIN)));
-    when(users.lockPlatformAdminIds()).thenReturn(List.of(1L, 2L));
+    when(users.lockActivePlatformAdminIds()).thenReturn(List.of(1L, 2L));
     when(users.save(any(AppUser.class))).thenAnswer(inv -> inv.getArgument(0));
 
     // When
@@ -240,7 +240,7 @@ class AdminServiceTest {
     // Aussperr-Schutz darf nicht greifen, denn die Admin-Menge schrumpft nicht.
     when(users.findById(1L)).thenReturn(Optional.of(user(1, PlatformRole.ADMIN)));
     when(users.findById(2L)).thenReturn(Optional.of(user(2, PlatformRole.ADMIN)));
-    when(users.lockPlatformAdminIds()).thenReturn(List.of(2L));
+    when(users.lockActivePlatformAdminIds()).thenReturn(List.of(2L));
     when(users.save(any(AppUser.class))).thenAnswer(inv -> inv.getArgument(0));
 
     // When
@@ -256,7 +256,7 @@ class AdminServiceTest {
     // Nicht-Admins tauchen darin gar nicht erst auf (die Auswahl trifft die Datenbank).
     when(users.findById(1L)).thenReturn(Optional.of(user(1, PlatformRole.ADMIN)));
     when(users.findById(2L)).thenReturn(Optional.of(user(2, PlatformRole.ADMIN)));
-    when(users.lockPlatformAdminIds()).thenReturn(List.of(1L, 2L));
+    when(users.lockActivePlatformAdminIds()).thenReturn(List.of(1L, 2L));
     when(users.save(any(AppUser.class))).thenAnswer(inv -> inv.getArgument(0));
 
     // When
@@ -270,7 +270,21 @@ class AdminServiceTest {
   void changePlatformRole_throwsLastAdmin_whenDemotingSoleAdmin() {
     // Given: die gesperrte Admin-Menge besteht nur aus dem Ziel selbst.
     when(users.findById(2L)).thenReturn(Optional.of(user(2, PlatformRole.ADMIN)));
-    when(users.lockPlatformAdminIds()).thenReturn(List.of(2L));
+    when(users.lockActivePlatformAdminIds()).thenReturn(List.of(2L));
+
+    // When / Then
+    assertThatThrownBy(() -> service.changePlatformRole(2L, 2L, PlatformRole.USER))
+        .isInstanceOf(LastAdminException.class);
+  }
+
+  @Test
+  void changePlatformRole_throwsLastAdmin_whenOnlyDisabledAdminsRemainBesideTheTarget() {
+    // Given: neben dem Ziel trägt zwar noch ein weiterer Benutzer die Admin-Rolle, dieser ist aber
+    // gesperrt. Ein gesperrter Admin hält die Instanz nicht handlungsfähig und gehört deshalb nicht
+    // in die Menge — im Dienst bildet sich das darin ab, dass die gesperrte Menge nur das Ziel
+    // enthält (die Auswahl trifft die Datenbank).
+    when(users.findById(2L)).thenReturn(Optional.of(user(2, PlatformRole.ADMIN)));
+    when(users.lockActivePlatformAdminIds()).thenReturn(List.of(2L));
 
     // When / Then
     assertThatThrownBy(() -> service.changePlatformRole(2L, 2L, PlatformRole.USER))
@@ -285,7 +299,7 @@ class AdminServiceTest {
     // die Admin-Rolle.
     when(users.findById(1L)).thenReturn(Optional.of(user(1, PlatformRole.ADMIN)));
     when(users.findById(2L)).thenReturn(Optional.of(user(2, PlatformRole.USER)));
-    when(users.lockPlatformAdminIds()).thenReturn(List.of(1L));
+    when(users.lockActivePlatformAdminIds()).thenReturn(List.of(1L));
     when(users.save(any(AppUser.class))).thenAnswer(inv -> inv.getArgument(0));
 
     // When
@@ -303,7 +317,7 @@ class AdminServiceTest {
     // obwohl Benutzer 1 als Admin bestehen bleibt (Issue #498).
     when(users.findById(1L)).thenReturn(Optional.of(user(1, PlatformRole.ADMIN)));
     when(users.findById(2L)).thenReturn(Optional.of(user(2, PlatformRole.ADMIN)));
-    when(users.lockPlatformAdminIds()).thenReturn(List.of(1L));
+    when(users.lockActivePlatformAdminIds()).thenReturn(List.of(1L));
     when(users.save(any(AppUser.class))).thenAnswer(inv -> inv.getArgument(0));
 
     // When
@@ -357,7 +371,7 @@ class AdminServiceTest {
     // Given: ein noch nicht freigegebener Admin wird degradiert; ein weiterer Admin bleibt übrig.
     when(users.findById(1L)).thenReturn(Optional.of(user(1, PlatformRole.ADMIN)));
     when(users.findById(2L)).thenReturn(Optional.of(pendingUser(2, PlatformRole.ADMIN)));
-    when(users.lockPlatformAdminIds()).thenReturn(List.of(1L, 2L));
+    when(users.lockActivePlatformAdminIds()).thenReturn(List.of(1L, 2L));
     when(users.save(any(AppUser.class))).thenAnswer(inv -> inv.getArgument(0));
 
     // When
@@ -378,7 +392,7 @@ class AdminServiceTest {
         new AppUser(2L, "u2@x.de", "hash", "U2", true, PlatformRole.ADMIN, earlier, 7L);
     when(users.findById(1L)).thenReturn(Optional.of(user(1, PlatformRole.ADMIN)));
     when(users.findById(2L)).thenReturn(Optional.of(approvedAdmin));
-    when(users.lockPlatformAdminIds()).thenReturn(List.of(1L, 2L));
+    when(users.lockActivePlatformAdminIds()).thenReturn(List.of(1L, 2L));
     when(users.save(any(AppUser.class))).thenAnswer(inv -> inv.getArgument(0));
 
     // When
@@ -396,7 +410,7 @@ class AdminServiceTest {
     // Given: ein wartender Nutzer bekommt (erneut) die Rolle USER zugewiesen.
     when(users.findById(1L)).thenReturn(Optional.of(user(1, PlatformRole.ADMIN)));
     when(users.findById(2L)).thenReturn(Optional.of(pendingUser(2)));
-    when(users.lockPlatformAdminIds()).thenReturn(List.of(1L));
+    when(users.lockActivePlatformAdminIds()).thenReturn(List.of(1L));
     when(users.save(any(AppUser.class))).thenAnswer(inv -> inv.getArgument(0));
 
     // When

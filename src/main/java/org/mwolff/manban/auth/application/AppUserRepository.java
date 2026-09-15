@@ -28,7 +28,9 @@ public interface AppUserRepository {
   List<AppUser> findByPlatformRole(PlatformRole platformRole);
 
   /**
-   * Sperrt alle Plattform-Admins bis zum Ende der laufenden Transaktion und liefert ihre IDs.
+   * Sperrt alle <strong>nicht gesperrten</strong> Plattform-Admins bis zum Ende der laufenden
+   * Transaktion und liefert ihre IDs. Ein gesperrtes Konto trägt die Rolle zwar weiter, hält die
+   * Instanz aber nicht handlungsfähig — es gehört deshalb nicht in die Menge (Issue #880).
    *
    * <p><strong>Warum das Sperren zum Lesen gehört (Issue #498):</strong> Der Aussperr-Schutz „der
    * letzte Admin darf nicht degradiert werden" ist eine Bedingung über eine <em>Zeilenmenge</em>,
@@ -43,13 +45,14 @@ public interface AppUserRepository {
    * Der zweite Aufrufer wertet die Bedingung {@code platform_role = 'ADMIN'} nach dem Commit des
    * ersten auf der neuen Zeilenversion aus und sieht den inzwischen degradierten Admin nicht mehr.
    * Eine <em>Beförderung</em> zum Admin bleibt ungesperrt: Sie vergrößert die Menge und kann die
-   * Invariante nicht verletzen.
+   * Invariante nicht verletzen. Dasselbe gilt aus demselben Grund für das <em>Entsperren</em> eines
+   * Admin-Kontos — auch es vergrößert die Menge.
    *
    * <p>Die zurückgegebene Liste ist damit die einzige verlässliche Quelle für „wer ist gerade
    * Admin?" innerhalb der Transaktion — sie ersetzt sowohl das frühere {@code findAll()}-Zählen in
    * der JVM als auch die Rollenabfrage am einzelnen Benutzer.
    *
-   * @return IDs aller Benutzer mit Plattform-Rolle ADMIN, aufsteigend
+   * @return IDs aller nicht gesperrten Benutzer mit Plattform-Rolle ADMIN, aufsteigend
    */
-  List<Long> lockPlatformAdminIds();
+  List<Long> lockActivePlatformAdminIds();
 }

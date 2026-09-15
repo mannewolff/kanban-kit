@@ -17,9 +17,15 @@ interface AppUserJpaRepository extends JpaRepository<AppUserEntity, Long> {
   List<AppUserEntity> findByPlatformRole(PlatformRole platformRole);
 
   /**
-   * Sperrt die Zeilen aller Benutzer mit der angegebenen Plattform-Rolle bis zum Transaktionsende
-   * und liefert deren IDs (Issue #498, Begründung am Port {@code
-   * AppUserRepository.lockPlatformAdminIds}).
+   * Sperrt die Zeilen aller <strong>nicht gesperrten</strong> Benutzer mit der angegebenen
+   * Plattform-Rolle bis zum Transaktionsende und liefert deren IDs (Issue #498, Begründung am Port
+   * {@code AppUserRepository.lockActivePlatformAdminIds}).
+   *
+   * <p>{@code disabled_at is null} gehört in die Bedingung, weil ein gesperrter Träger der Rolle
+   * die Instanz nicht handlungsfähig hält: Er kann sich nicht anmelden und damit niemanden
+   * befördern oder entsperren. Zählte er mit, genügte neben einem aktiven Administrator ein
+   * gesperrter, damit der aktive herabgestuft werden kann — und die Instanz stünde führungslos da
+   * (Issue #880).
    *
    * <p>Bewusst als native Abfrage mit <strong>Skalar-Projektion</strong> statt als
    * {@code @Lock}-Abfrage auf Entities: Gäbe die Abfrage {@link AppUserEntity} zurück, lieferte
@@ -32,7 +38,9 @@ interface AppUserJpaRepository extends JpaRepository<AppUserEntity, Long> {
    * derselben Folge, deshalb kann kein Deadlock entstehen.
    */
   @Query(
-      value = "select id from app_user where platform_role = :role order by id for update",
+      value =
+          "select id from app_user where platform_role = :role and disabled_at is null"
+              + " order by id for update",
       nativeQuery = true)
-  List<Long> lockIdsByPlatformRole(@Param("role") String role);
+  List<Long> lockActiveIdsByPlatformRole(@Param("role") String role);
 }
