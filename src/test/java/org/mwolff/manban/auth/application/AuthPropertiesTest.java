@@ -17,7 +17,7 @@ class AuthPropertiesTest {
     assertThat(props.baseUrl()).isEqualTo("http://localhost:8080");
     assertThat(props.verificationTtl()).isEqualTo(Duration.ofHours(24));
     assertThat(props.resetTtl()).isEqualTo(Duration.ofHours(1));
-    assertThat(props.sessionSecret()).isEqualTo("dev-only-insecure-secret-change-me");
+    assertThat(props.sessionSecret()).isEqualTo(AuthProperties.INSECURE_DEFAULT_SESSION_SECRET);
     assertThat(props.sessionTtl()).isEqualTo(Duration.ofDays(7));
     assertThat(props.cookieSecure()).isTrue();
   }
@@ -29,7 +29,7 @@ class AuthPropertiesTest {
 
     // Then
     assertThat(props.baseUrl()).isEqualTo("http://localhost:8080");
-    assertThat(props.sessionSecret()).isEqualTo("dev-only-insecure-secret-change-me");
+    assertThat(props.sessionSecret()).isEqualTo(AuthProperties.INSECURE_DEFAULT_SESSION_SECRET);
   }
 
   @Test

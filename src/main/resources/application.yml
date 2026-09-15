@@ -42,6 +42,10 @@ server:
   forward-headers-strategy: framework  # hinter Caddy (Reverse-Proxy) korrekte Scheme/Host-Auflösung
 
 manban:
+  # Ausdrücklicher Entwicklungs-/Testbetrieb. Ohne diesen Schalter gilt jeder Start als
+  # Produktivbetrieb: Die Anwendung verweigert dann den Start, wenn Sitzungs-Cookies mit dem
+  # mitgelieferten Standardschlüssel signiert würden (Issue #890).
+  dev-mode: ${MANBAN_DEV_MODE:false}
   auth:
     base-url: ${MANBAN_BASE_URL:http://localhost:8080}
     verification-ttl: PT24H

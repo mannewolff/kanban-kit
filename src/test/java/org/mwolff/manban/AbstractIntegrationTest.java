@@ -42,7 +42,15 @@ import org.testcontainers.utility.DockerImageName;
 // deterministisch selbst aufrufen, verlören dann sporadisch ihre Einträge. Bewusst per
 // @TestPropertySource statt @DynamicPropertySource: Nur hier überschreibt eine Subklassen-
 // Deklaration (SmtpMailIT testet den echten Worker-Pfad) verlässlich den Basiswert.
-@TestPropertySource(properties = "manban.outbox.enabled=false")
+// "Test" ist die Betriebsart, die AK 2 aus Issue #839 von der Startprüfung des Sitzungsschlüssels
+// ausnimmt (Issue #890): Der Testbetrieb signiert mit dem Standardschlüssel, und das ist hier
+// gewollt. Der Schalter steht in der gemeinsamen Basis, weil alle @SpringBootTest-Klassen von ihr
+// erben und Spring @TestPropertySource über die Klassenhierarchie zusammenführt (inheritProperties
+// ist per Vorgabe true) — die vier Subklassen mit eigener Deklaration (MailOutboxIT, OutboxIT,
+// SmtpMailIT, BootstrapIT) setzen andere Schlüssel, keine davon manban.dev-mode. Bewusst KEINE
+// src/test/resources/application.yml: Sie überlagerte die Produktions-application.yml global und
+// verschöbe damit auch jede künftige Vorgabe unbemerkt.
+@TestPropertySource(properties = {"manban.outbox.enabled=false", "manban.dev-mode=true"})
 public abstract class AbstractIntegrationTest {
 
   @ServiceConnection
