@@ -3,6 +3,7 @@ package org.mwolff.manban.auth.application;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -29,6 +30,7 @@ class ResetPasswordServiceTest {
   private AppUserRepository users;
   private PasswordResetTokenRepository tokens;
   private PasswordEncoder encoder;
+  private SessionGenerations generations;
   private ResetPasswordService service;
 
   private static AppUser user() {
@@ -40,8 +42,9 @@ class ResetPasswordServiceTest {
     users = mock(AppUserRepository.class);
     tokens = mock(PasswordResetTokenRepository.class);
     encoder = mock(PasswordEncoder.class);
+    generations = mock(SessionGenerations.class);
     Clock clock = Clock.fixed(FIXED, ZoneOffset.UTC);
-    service = new ResetPasswordService(users, tokens, encoder, clock);
+    service = new ResetPasswordService(users, tokens, encoder, clock, generations);
   }
 
   @Test
@@ -109,5 +112,48 @@ class ResetPasswordServiceTest {
     // When / Then
     assertThatThrownBy(() -> service.reset("plaintext", "newPw"))
         .isInstanceOf(InvalidResetTokenException.class);
+  }
+
+  @Test
+  void reset_invalidatesSessionsOfTheAccount() {
+    // Given
+    when(tokens.consume(anyString(), any(Instant.class))).thenReturn(Optional.of(2L));
+    when(users.findById(2L)).thenReturn(Optional.of(user()));
+    when(encoder.encode(anyString())).thenReturn("newHash");
+
+    // When
+    service.reset("plaintext", "newPw");
+
+    // Then: wer sein Passwort neu setzt, beendet jede Sitzung des Kontos.
+    verify(generations).invalidateSessions(2L);
+  }
+
+  @Test
+  void reset_leavesSessionsAlive_whenTokenNotConsumable() {
+    // Given: ungültiges oder bereits verbrauchtes Token — der Verlierer des Rennens beendet nichts.
+    when(tokens.consume(anyString(), any(Instant.class))).thenReturn(Optional.empty());
+    when(users.findById(2L)).thenReturn(Optional.of(user()));
+    when(encoder.encode(anyString())).thenReturn("newHash");
+
+    // When
+    assertThatThrownBy(() -> service.reset("plaintext", "newPw"))
+        .isInstanceOf(InvalidResetTokenException.class);
+
+    // Then
+    verify(generations, never()).invalidateSessions(anyLong());
+  }
+
+  @Test
+  void reset_leavesSessionsAlive_whenUserUnknown() {
+    // Given
+    when(tokens.consume(anyString(), any(Instant.class))).thenReturn(Optional.of(2L));
+    when(users.findById(2L)).thenReturn(Optional.empty());
+
+    // When
+    assertThatThrownBy(() -> service.reset("plaintext", "newPw"))
+        .isInstanceOf(InvalidResetTokenException.class);
+
+    // Then: ohne Konto gibt es kein Passwort zu setzen und keine Sitzung zu beenden.
+    verify(generations, never()).invalidateSessions(anyLong());
   }
 }
