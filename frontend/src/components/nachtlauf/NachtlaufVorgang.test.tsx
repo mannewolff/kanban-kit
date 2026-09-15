@@ -1,9 +1,10 @@
 import { ThemeProvider } from '@mui/material/styles'
-import { render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import type { CardByNumber } from '../../api/cards'
 import type { NightRunState } from '../../lib/nightRunLog'
 import { NACHTLAUF_FARBEN, NACHTLAUF_TON, nachtlaufTheme } from '../../nachtlaufDesign'
+import { NachtlaufStufenband } from './NachtlaufStufenband'
 import { NachtlaufVorgang } from './NachtlaufVorgang'
 
 /**
@@ -19,10 +20,10 @@ type Eigenschaften = Parameters<typeof NachtlaufVorgang>[0]
 const grundstellung: Eigenschaften = {
   nummer: 791,
   titel: 'Zugriff und Konten bleiben abgesichert',
+  wurzel: null,
   zustand: 'GREEN',
   ausgangswort: 'fertig',
   grund: null,
-  band: null,
   chipgruppen: [],
   kennzahlen: '11,52 $ · 89 Züge',
   onOeffnen: vi.fn(),
@@ -126,32 +127,61 @@ describe('NachtlaufVorgang', () => {
     expect(screen.getByTestId('ergebnis-791')).not.toHaveTextContent('Entstanden')
   })
 
-  it('zeigt das Stufenband, wo Arbeitsschritte vorliegen', () => {
+  it('nimmt den Verlauf auf, den die Seite ihm gibt', () => {
+    // Ob dort ein Stufenband oder der Anteilsbalken eines Umsetzungs-Vorgangs steht, entscheidet
+    // die Lauf-Art — und damit die Seite, nicht der Block.
     zeige({
-      band: {
-        ansage: 'Stufenband: Plan 7,8 / 20 min',
-        abschnitte: [
-          {
-            schluessel: 'plan',
-            label: 'Plan',
-            anteil: 20,
-            fuellung: 39,
-            erreicht: true,
-            zahlen: '7,8 / 20 min',
-            vermerk: null,
-            farbe: NACHTLAUF_FARBEN.gut,
-          },
-        ],
-      },
+      verlauf: (
+        <NachtlaufStufenband
+          ansage="Stufenband: Plan 7,8 / 20 min"
+          testId="stufenband-791"
+          abschnittTestId="stufe-791"
+          abschnitte={[
+            {
+              schluessel: 'plan',
+              label: 'Plan',
+              anteil: 20,
+              fuellung: 39,
+              erreicht: true,
+              zahlen: '7,8 / 20 min',
+              vermerk: null,
+              farbe: NACHTLAUF_FARBEN.gut,
+            },
+          ]}
+        />
+      ),
     })
 
     expect(screen.getByTestId('stufenband-791')).toBeInTheDocument()
     expect(screen.getByTestId('stufe-791-plan')).toHaveTextContent('7,8 / 20 min')
   })
 
-  it('zeigt ohne Arbeitsschritte kein Band', () => {
-    zeige({ band: null })
+  it('zeigt ohne Verlauf keinen', () => {
+    zeige()
     expect(screen.queryByTestId('stufenband-791')).not.toBeInTheDocument()
+  })
+
+  it('macht die Kopfzeile zum Verweis auf die Wurzelkarte, wo sie vorliegt (AK 10)', () => {
+    const wurzel = karte(791, 'Zugriff und Konten bleiben abgesichert')
+    const onOeffnen = vi.fn()
+    zeige({ wurzel, onOeffnen })
+
+    fireEvent.click(
+      screen.getByRole('button', { name: '#791 Zugriff und Konten bleiben abgesichert' }),
+    )
+
+    expect(onOeffnen).toHaveBeenCalledWith(wurzel)
+  })
+
+  it('nennt eine nicht mehr auffindbare Wurzelkarte beim Namen, statt sie zu verschweigen', () => {
+    zeige({ wurzel: null })
+    expect(screen.getByTestId('paket-791')).toHaveTextContent('Karte #791 nicht gefunden')
+  })
+
+  it('zeigt eine noch ladende Wurzelkarte als Text ohne Verweis', () => {
+    zeige({ wurzel: undefined })
+    expect(screen.queryByRole('button', { name: /^#791 / })).not.toBeInTheDocument()
+    expect(screen.getByTestId('paket-791')).not.toHaveTextContent('nicht gefunden')
   })
 
   it('hängt an, was der Entwurf nicht vorsieht (AK 10)', () => {
