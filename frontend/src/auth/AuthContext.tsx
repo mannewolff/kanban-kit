@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { authApi, type Me } from '../api/auth'
+import { setUnauthorizedHandler } from '../api/client'
 
 interface AuthState {
   user: Me | null
@@ -28,6 +29,13 @@ export function AuthProvider({ children }: Readonly<{ children: ReactNode }>) {
   useEffect(() => {
     void refresh()
   }, [refresh])
+
+  // Eine serverseitig beendete Sitzung meldet sich als 401 an einem beliebigen Endpunkt.
+  // Der zurückgesetzte Nutzer lässt `ProtectedRoute` auf die Anmeldeseite umleiten.
+  useEffect(() => {
+    setUnauthorizedHandler(() => setUser(null))
+    return () => setUnauthorizedHandler(null)
+  }, [])
 
   const login = useCallback(async (email: string, password: string) => {
     setUser(await authApi.login(email, password))

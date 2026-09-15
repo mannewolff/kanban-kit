@@ -69,6 +69,29 @@ function toFieldErrors(value: unknown): FieldErrors | undefined {
   return entries.length > 0 ? Object.fromEntries(entries) : undefined
 }
 
+let unauthorizedHandler: (() => void) | null = null
+
+/**
+ * Registriert den Haken, der bei einer `401`-Antwort feuert; `null` meldet ihn wieder ab.
+ *
+ * Bewusst eine blosse Funktionsreferenz: Dieses Modul kennt weder Anwendungszustand noch
+ * Navigation. Wer den Haken belegt, entscheidet, was eine abgelaufene Sitzung bedeutet.
+ */
+export function setUnauthorizedHandler(handler: (() => void) | null): void {
+  unauthorizedHandler = handler
+}
+
+/**
+ * Meldet den Status einer Fehlerantwort und löst den registrierten Haken genau bei `401` aus.
+ *
+ * Für Aufrufer, die an {@link apiFetch} vorbei direkt `fetch` nutzen (Multipart-Upload,
+ * Blob-Abruf) — sie brauchen andere Body- und Antwortbehandlung als der JSON-Wrapper,
+ * sollen aber dieselbe Sitzungsregel erfüllen.
+ */
+export function notifyUnauthorized(status: number): void {
+  if (status === 401) unauthorizedHandler?.()
+}
+
 /**
  * Dünner Fetch-Wrapper. Sendet Cookies mit (Session-Auth), setzt JSON-Header und
  * wirft {@link ApiError} bei nicht-2xx-Antworten. Leere Antworten -> undefined.
@@ -87,6 +110,7 @@ export async function apiFetch<T>(
   if (!response.ok) {
     const body = await response.text().catch(() => '')
     const problem = parseProblem(body)
+    notifyUnauthorized(response.status)
     throw new ApiError(
       response.status,
       problem.message ?? (body || response.statusText),
