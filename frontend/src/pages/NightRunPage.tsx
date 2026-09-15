@@ -56,6 +56,7 @@ import {
   type Bandabschnitt as BandabschnittForm,
 } from '../components/nachtlauf/NachtlaufStufenband'
 import { NachtlaufAnteilsbalken } from '../components/nachtlauf/NachtlaufAnteilsbalken'
+import { NachtlaufFuss, type Fussangabe as FussangabeForm } from '../components/nachtlauf/NachtlaufFuss'
 import { NACHTLAUF_TON } from '../nachtlaufDesign'
 import { nachtlaufTheme } from '../nachtlaufDesign'
 import { useSnackbar } from '../components/SnackbarProvider'
@@ -1133,7 +1134,7 @@ function laufZuege(bearbeitet: readonly NightRunItem[]): string {
  * der Kopfzeile des Laufs zieht und die die Aufschlüsselung darunter benutzt (E5).
  *
  * <p>Ein Ketten-Lauf erreicht diese Funktion nicht: Er trägt seine eigene Übersicht
- * ({@link KettenUebersicht}), und die Kennzahlenzeile steht nur an den drei übrigen Arten.
+ * — seine Kennzahlen stehen im Kopf des Entwurfs, nicht in dieser Zeile.
  */
 function artKennzahl(
   run: NightRun,
@@ -1254,17 +1255,6 @@ function Kennzahl({
   )
 }
 
-/** Eine Angabe der Fußzeile: die Vorgabe der Nacht und ihr Wert. */
-function Fussangabe({ label, wert }: Readonly<{ label: string; wert: string }>) {
-  return (
-    <Box>
-      <Typography variant="body2" color="text.secondary">
-        {label}
-      </Typography>
-      <Typography variant="body2">{wert}</Typography>
-    </Box>
-  )
-}
 
 /**
  * Die beiden Arbeitsschritte, in denen Karten entstehen (Issue #868), jeder mit der Auskunft für
@@ -1312,48 +1302,13 @@ function verweisZustand(nummer: number, katalog: Kartenkatalog): VerweisZustand 
 
 
 
-/**
- * Die Übersicht eines Ketten-Laufs (Plan #863, Issue #866): Kopf, die Kennzahlen der Nacht, je
- * Vorgang Kosten und Züge, dazu die Vorgaben in der Fußzeile.
- *
- * <p>Sie liest den **gedeuteten Lauf aus dem sitzungslokalen Speicher**, nicht den Anzeigelauf
- * (E1): Zeitvorgaben, Kostenbudget, Modell und die Kennzahlen je Arbeitsschritt stehen allein im
- * Ergebnisstand und werden nicht aufbewahrt. Nach einem Neuladen der Seite ist der Speicher leer,
- * und der Lauf fällt auf die Zeilendarstellung zurück.
- *
- * <p>Die eigene Kennzeichnung als Wurzel ist Absicht: Die Bestandstests zum Ketten-Lauf (#854,
- * #856, #858) suchen mit `getByText` im Panel, und ohne eine eigene Wurzel müsste jeder von ihnen
- * angefasst werden, sobald hier ein Text zweimal auf der Seite steht.
- */
-function KettenUebersicht({ run }: Readonly<{ run: NightRun }>) {
-  const stand = run.stand
-
-  return (
-    <Box
-      data-testid="ketten-uebersicht"
-      sx={{ border: 1, borderColor: 'divider', borderRadius: 1, p: 2, mb: 2 }}
-    >
-      {/* Von der Übersicht ist die Fußzeile übrig. Kopf und Kennzahlen der Nacht stehen seit #915
-          im Kopf des Entwurfs über dem Lauf, die Vorgänge seit #916 als eigene Blöcke darunter
-          (`NachtlaufVorgang`) — hier stünden sie ein zweites Mal. */}
-      {/* Die Zeile „Herkunft der Budgets" aus `docs/mockup-leitstand-nachtlauf.html` fehlt hier
-          bewusst: Der Leitstand kennt die Einstellungen des Betreibers nicht und kann deshalb
-          nicht sagen, ob eine Vorgabe eingestellt oder voreingestellt war (#859, Nicht-Ziel 2). */}
-      <Stack direction="row" spacing={3} sx={{ flexWrap: 'wrap' }} data-testid="uebersicht-fuss">
-        <Fussangabe label="Zeitvorgaben je Kette" wert={vorgabenText(stand?.vorgabenMin)} />
-        <Fussangabe label="Kostenbudget je Kette" wert={betrag(stand?.kostenBudgetUsd)} />
-        <Fussangabe label="Höchste Kosten eines Vorgangs" wert={hoechsteKosten(run.items)} />
-      </Stack>
-    </Box>
-  )
-}
 
 /**
  * Die Kennzahlen der Nacht für einen Umsetzungs-, Erzeugungs- oder Prüf-Lauf (Issue #874) — eine
  * Zeile unter der Kopfzeile des Laufs, mit der art-eigenen Kennzahl vorneweg, dann Laufzeit, Kosten
  * und Züge.
  *
- * <p><b>Sie liest den Ergebnisstand dieser Sitzung</b>, dieselbe Linie wie {@link KettenUebersicht}
+ * <p><b>Sie liest den Ergebnisstand dieser Sitzung</b>, dieselbe Linie wie der Kopf des Entwurfs
  * (Plan #863, E1) und {@link VorgangsKennzahlen}: Kosten und Züge verlassen den Browser nie
  * (Plan #718, A1), der Server bewahrt sie nicht auf. Nach einem Neuladen der Seite fällt der Lauf
  * auf Band bzw. Aufschlüsselung zurück — eine Zeile aus lauter Fehlanzeigen wäre dieselbe Wand,
@@ -1416,7 +1371,7 @@ function Laufkennzahlen({ run }: Readonly<{ run: NightRun }>) {
  * nie gab.
  *
  * <p><b>Sie liest den Ergebnisstand dieser Sitzung</b>, nicht den Anzeigelauf — dieselbe Linie
- * wie {@link KettenUebersicht} (Plan #863, E1) und aus demselben Grund: Kosten, Züge und
+ * wie der Kopf des Entwurfs (Plan #863, E1) und aus demselben Grund: Kosten, Züge und
  * Arbeitszeit verlassen den Browser nie (Plan #718, A1), der Server bewahrt sie nicht auf. Nach
  * einem Neuladen der Seite ist der Speicher leer, und der Lauf zeigt seine Zeilenliste ohne
  * diesen Block. Deshalb steht er **für sich** und nicht in der Vorgangszeile: Eine Zuordnung
@@ -1739,7 +1694,7 @@ const traegtEntwurf = (modus: NightRunMode): modus is 'CHAIN' | 'IMPLEMENTATION'
 
 /**
  * Die Kennzahlen der Nacht für den Kopf des Entwurfs — **dieselben Werte wie vor diesem Paket**
- * (Nicht-Ziel 3): für die Kette die vier aus {@link KettenUebersicht}, für den Umsetzungs-Lauf die
+ * (Nicht-Ziel 3): für die Kette die vier der bisherigen Übersicht, für den Umsetzungs-Lauf die
  * aus {@link Laufkennzahlen}. Hier steht nur, wie sie zusammengestellt werden, nicht wie sie
  * entstehen.
  *
@@ -2050,6 +2005,63 @@ function UmsetzungsVorgang({
   )
 }
 
+/**
+ * Die Angaben der Fußzeile je Lauf-Art (#918). **Dieselben Werte wie vor diesem Paket**
+ * (Nicht-Ziel 3): die drei der Ketten-Übersicht und die drei, die der Entwurf für den
+ * Umsetzungs-Lauf führt.
+ *
+ * <p><b>Die Herkunft der Budgets sagt „nicht angegeben"</b> (AK 9, Fall 2, E12): Der Ergebnisstand
+ * führt das Feld heute nicht — der Leitstand kann deshalb nicht sagen, ob eine Vorgabe eingestellt
+ * oder voreingestellt war. Weggelassen ließe die Zeile offen, ob nichts vorlag oder nichts
+ * nachgesehen wurde; das Feld selbst kommt aus einem Folge-Vorhaben im Kit-Repository, und dann
+ * trägt die Zeile dessen Wert. Die Warnfarbe bleibt bis dahin aus: Eine fehlende Angabe ist keine
+ * Warnung.
+ */
+function fussangaben(lauf: AnzeigeLauf, stand: NightRun | undefined): FussangabeForm[] {
+  if (lauf.mode === 'CHAIN') {
+    return [
+      { label: 'Zeitvorgaben je Kette', wert: vorgabenText(stand?.stand?.vorgabenMin) },
+      { label: 'Kostenbudget je Kette', wert: betrag(stand?.stand?.kostenBudgetUsd) },
+      {
+        label: 'Höchste Kosten eines Vorgangs',
+        wert: stand === undefined ? 'nicht angegeben' : hoechsteKosten(stand.items),
+      },
+      { label: 'Herkunft der Budgets', wert: 'nicht angegeben' },
+    ]
+  }
+  return [
+    {
+      label: 'Ergebnis der Nacht',
+      wert: `${lauf.processedCount} bearbeitet · ${lauf.skippedCount} übergangen`,
+    },
+    {
+      label: 'Teuerster Vorgang',
+      wert: stand === undefined ? 'nicht angegeben' : teuersterVorgang(stand.items),
+    },
+    { label: 'Herkunft des Stands', wert: stand === undefined ? 'nicht angegeben' : 'Ergebnisstand' },
+  ]
+}
+
+/**
+ * Der Vorgang mit den höchsten Kosten, mit seiner Nummer (#918). {@link hoechsteKosten} nennt nur
+ * den Betrag; der Entwurf führt hier beides („#872 mit 12,53 $"), und ohne die Nummer müsste man
+ * die Vorgänge durchsehen, um den teuersten zu finden.
+ */
+function teuersterVorgang(items: readonly NightRunItem[]): string {
+  const gemeldet = items.flatMap((item) =>
+    item.kennzahlen?.kostenUsd === undefined
+      ? []
+      : [{ nummer: item.cardNumber, kosten: item.kennzahlen.kostenUsd }],
+  )
+  if (gemeldet.length === 0) {
+    return 'nicht angegeben'
+  }
+  const teuerster = gemeldet.reduce((hoechster, kandidat) =>
+    kandidat.kosten > hoechster.kosten ? kandidat : hoechster,
+  )
+  return `#${teuerster.nummer} mit ${betrag(teuerster.kosten)}`
+}
+
 /** Ein Lauf als aufklappbares Panel; die Kette wird erst beim Aufklappen geladen (A8). */
 function LaufPanel({
   lauf,
@@ -2171,9 +2183,6 @@ function LaufPanel({
         {kennzahlen !== null && (
           <NachtlaufKennzahlen kennzahlen={kennzahlen.kennzahlen} hinweis={kennzahlen.hinweis} />
         )}
-        {stand !== undefined && lauf.mode === 'CHAIN' && (
-          <KettenUebersicht run={stand} />
-        )}
         {/* Die Kennzahlen der Nacht stehen unter der Kopfzeile des Laufs und über allen
             Einzelangaben (#874). Seit #915 nur noch an den beiden Altbestand-Arten: Kette und
             Umsetzungs-Lauf tragen sie im Kopf des Entwurfs. */}
@@ -2261,6 +2270,7 @@ function LaufPanel({
                 onOeffnen={onOeffnen}
               />
             ))}
+        {entwurf && <NachtlaufFuss angaben={fussangaben(lauf, stand)} testId="uebersicht-fuss" />}
       </AccordionDetails>
     </Accordion>
   )
