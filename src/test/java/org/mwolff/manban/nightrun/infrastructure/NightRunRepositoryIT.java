@@ -518,6 +518,58 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
     assertThat(zeilen("night_run_item")).isEqualTo(1);
   }
 
+  // --- Anlaeufe einer Karte (Issue #967) ----------------------------------------------------
+
+  @Test
+  void findByCardLiefertDieAnlaeufeAusMehrerenLaeufen_juengsterZuerst_auchVerwaiste() {
+    verwaist(T1, paket(721, NightRunState.RED));
+    anlegen(T3, List.of(paket(721, NightRunState.GREEN), paket(722, NightRunState.GREEN)));
+    anlegen(T2, List.of(paket(721, NightRunState.YELLOW)));
+
+    assertThat(runs.findByCard(projectId, 721))
+        .extracting(NightRunItem::startedAt, NightRunItem::state, NightRunItem::projectId)
+        .containsExactly(
+            tuple(T3, NightRunState.GREEN, projectId),
+            tuple(T2, NightRunState.YELLOW, projectId),
+            tuple(T1, NightRunState.RED, projectId));
+  }
+
+  @Test
+  void findByCardKenntNurDasEigeneProjekt() {
+    anlegen(T1, List.of(paket(721, NightRunState.GREEN)));
+    long andererUser =
+        insert(
+            "INSERT INTO app_user (email, password_hash, display_name) "
+                + "VALUES ('c@example.com', 'x', 'C') RETURNING id");
+    long anderesProjekt =
+        insert(
+            "INSERT INTO project (name, owner_user_id) VALUES ('R', "
+                + andererUser
+                + ") RETURNING id");
+    runs.insertIfAbsent(
+        new NightRun(
+            null,
+            anderesProjekt,
+            T2,
+            NightRunMode.IMPLEMENTATION,
+            1_000L,
+            1,
+            0,
+            0,
+            null,
+            ANGELEGT,
+            NightRunOrigin.UPLOAD,
+            null,
+            true,
+            null,
+            null),
+        List.of(paket(721, NightRunState.RED)));
+
+    assertThat(runs.findByCard(projectId, 721))
+        .extracting(NightRunItem::startedAt)
+        .containsExactly(T1);
+  }
+
   // --- Ringpuffer und Zählung -----------------------------------------------------------------
 
   @Test

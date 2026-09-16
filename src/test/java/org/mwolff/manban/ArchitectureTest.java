@@ -154,6 +154,19 @@ class ArchitectureTest {
               "nightrun.application und nightrun.domain duerfen das accesstoken-Modul nicht kennen "
                   + "(die Kante bleibt auf nightrun.web begrenzt)");
 
+  // Die Anlaeufe einer Karte (Issue #967) liest der Endpunkt im Modul nightrun, nicht in card.
+  // Die Regel schuetzt keine Kante, die #967 anlegt, sondern die des verworfenen Alternativdesigns:
+  // Laege der Endpunkt in card, zeigte card auf nightrun — und die Karte braucht die Laeufe fuer
+  // nichts anderes. Derselbe Zweck wie die Regel zwischen nightrun und accesstoken (#947).
+  static final ArchRule CARD_HAENGT_NICHT_VON_NIGHTRUN_AB =
+      noClasses()
+          .that()
+          .resideInAPackage("org.mwolff.manban.card..")
+          .should()
+          .dependOnClassesThat()
+          .resideInAPackage("org.mwolff.manban.nightrun..")
+          .as("card darf das nightrun-Modul nicht kennen (die Anlaeufe liest nightrun)");
+
   // --- Modul-Grenze: card-Fassade (Issue #458, Whitelist seit #470) ---------------------------
   // Das Kartenmodell und alles in card.application ausserhalb der Whitelist sind modulintern.
   // Fremde Module gehen ueber die fachliche Fassade (CardService/LabelService) — sonst haengt jede
@@ -482,6 +495,11 @@ class ArchitectureTest {
   @Test
   void nightrunApplicationUndDomainHaengenNichtVonAccesstokenAb() {
     NIGHTRUN_APPLICATION_UND_DOMAIN_HAENGEN_NICHT_VON_ACCESSTOKEN_AB.check(PRODUKTIONSKLASSEN);
+  }
+
+  @Test
+  void cardHaengtNichtVonNightrunAb() {
+    CARD_HAENGT_NICHT_VON_NIGHTRUN_AB.check(PRODUKTIONSKLASSEN);
   }
 
   @Test

@@ -93,6 +93,13 @@ public interface NightRunRepository {
   int deleteOrphanItemsOlderThanNewest(long projectId, int keep);
 
   /**
+   * Die Anläufe einer Karte über Läufe hinweg, jüngster Startzeitpunkt zuerst — einschließlich der
+   * verwaisten Pakete verdrängter Läufe (Issue #967). Bei gleichem Startzeitpunkt entscheidet die
+   * ID.
+   */
+  List<NightRunItem> findByCard(long projectId, int cardNumber);
+
+  /**
    * Zählt je Fehlerklasse die aufbewahrten Läufe des Projekts, in denen sie mindestens einmal
    * vorkam. Ein Lauf zählt je Klasse höchstens einmal; verdrängte Läufe zählen nicht mehr.
    */

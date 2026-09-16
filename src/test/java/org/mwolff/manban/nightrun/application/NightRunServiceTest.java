@@ -560,6 +560,43 @@ class NightRunServiceTest {
     reihenfolge.verifyNoMoreInteractions();
   }
 
+  // --- Anlaeufe einer Karte (Issue #967) -------------------------------------------------
+
+  @Test
+  void anlaeufeDerKarte_verlangtDenBesitzer() {
+    service.anlaeufeDerKarte(USER, PROJECT, 721);
+
+    verify(permissions).requireOwner(USER, PROJECT);
+  }
+
+  @Test
+  void anlaeufeDerKarte_liestNichts_wennDerBesitzerFehlt() {
+    doThrow(new ProjectAccessDeniedException()).when(permissions).requireOwner(USER, PROJECT);
+
+    assertThatThrownBy(() -> service.anlaeufeDerKarte(USER, PROJECT, 721))
+        .isInstanceOf(ProjectAccessDeniedException.class);
+
+    verifyNoInteractions(runs);
+  }
+
+  /** Ueber Laeufe hinweg, juengster zuerst — einschliesslich eines verdraengten Laufs. */
+  @Test
+  void anlaeufeDerKarte_liefertDieAnlaeufeUeberLaeufeHinweg_juengsterZuerst() {
+    service = serviceMitPuffer(1);
+    service.submit(
+        USER,
+        PROJECT,
+        List.of(lauf(T1, item(721, NightRunState.RED, NightRunErrorClass.CHECKS_RED))));
+    service.submit(USER, PROJECT, List.of(lauf(T2, item(721, NightRunState.GREEN, null))));
+    service.submit(USER, PROJECT, List.of(lauf(T3, item(722, NightRunState.GREEN, null))));
+
+    assertThat(service.anlaeufeDerKarte(USER, PROJECT, 721))
+        .extracting(NightRunItem::startedAt, NightRunItem::state)
+        .containsExactly(
+            org.assertj.core.groups.Tuple.tuple(T2, NightRunState.GREEN),
+            org.assertj.core.groups.Tuple.tuple(T1, NightRunState.RED));
+  }
+
   static class FakeNightRunRepository implements NightRunRepository {
 
     private final List<NightRun> gespeicherteLaeufe = new ArrayList<>();
@@ -738,6 +775,17 @@ class NightRunServiceTest {
               .toList();
       gespeichertePakete.removeAll(zuKappen);
       return zuKappen.size();
+    }
+
+    @Override
+    public List<NightRunItem> findByCard(long projectId, int cardNumber) {
+      return gespeichertePakete.stream()
+          .filter(i -> i.projectId() == projectId && i.cardNumber() == cardNumber)
+          .sorted(
+              Comparator.comparing(NightRunItem::startedAt)
+                  .thenComparing(NightRunItem::requireId)
+                  .reversed())
+          .toList();
     }
 
     /** Alle Pakete, auch verwaiste — die Verdraengung ist sonst ueber keinen Port sichtbar. */

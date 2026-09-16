@@ -155,6 +155,17 @@ public class NightRunService {
     return runs.countRunsByErrorClass(projectId);
   }
 
+  /**
+   * Die Anläufe einer Karte über Läufe hinweg, jüngster zuerst — auch die verdrängter Läufe (Issue
+   * #967). Lesen darf, wer auch die Laufliste sieht: {@code requireOwner}, wie in jedem
+   * Nachtlauf-Use-Case (Plan #718, A6).
+   */
+  @Transactional(readOnly = true)
+  public List<NightRunItem> anlaeufeDerKarte(long userId, long projectId, int cardNumber) {
+    permissions.requireOwner(userId, projectId);
+    return runs.findByCard(projectId, cardNumber);
+  }
+
   private static NightRun run(long projectId, NewNightRun submission, Instant now) {
     return new NightRun(
         null,

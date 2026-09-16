@@ -198,6 +198,15 @@ class NightRunRepositoryAdapter implements NightRunRepository {
   }
 
   @Override
+  public List<NightRunItem> findByCard(long projectId, int cardNumber) {
+    return items
+        .findByProjectIdAndCardNumberOrderByStartedAtDescIdDesc(projectId, cardNumber)
+        .stream()
+        .map(NightRunRepositoryAdapter::toDomain)
+        .toList();
+  }
+
+  @Override
   public int deleteOlderThanNewest(long projectId, int keep) {
     return jdbc.update(
         DELETE_OLDER,

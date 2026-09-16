@@ -20,6 +20,13 @@ interface NightRunItemJpaRepository extends JpaRepository<NightRunItemEntity, Lo
       Collection<Long> nightRunIds);
 
   /**
+   * Die Anläufe einer Karte über Läufe hinweg (Issue #967); der Index {@code
+   * idx_night_run_item_card} aus {@code V33} trägt die Abfrage.
+   */
+  List<NightRunItemEntity> findByProjectIdAndCardNumberOrderByStartedAtDescIdDesc(
+      long projectId, int cardNumber);
+
+  /**
    * Löscht die verwaisten Pakete eines Laufs (Issue #965). Der Teilindex {@code
    * idx_night_run_item_orphan} aus {@code V33} trägt die Bedingung.
    *

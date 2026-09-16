@@ -270,6 +270,14 @@ class NightRunIT extends AbstractIntegrationTest {
         .andExpect(status().isForbidden());
     mvc.perform(get(path(projectId) + "/error-class-counts").cookie(stranger))
         .andExpect(status().isNotFound());
+    // Die Anlaeufe einer Karte (Issue #967) stehen in derselben Matrix.
+    mvc.perform(get(path(projectId) + "/items").param("cardNumber", "721").cookie(viewer))
+        .andExpect(status().isForbidden());
+    mvc.perform(get(path(projectId) + "/items").param("cardNumber", "721").cookie(stranger))
+        .andExpect(status().isNotFound());
+    mvc.perform(get(path(projectId) + "/items").param("cardNumber", "721").cookie(owner))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.length()").value(0));
 
     // Der Owner darf, und keine der abgewiesenen Anfragen hat etwas hinterlassen.
     mvc.perform(get(path(projectId)).cookie(owner))
