@@ -26,10 +26,15 @@ describe('AuthCard', () => {
       </ThemeProvider>,
     )
 
-    expect(karte()).toHaveStyle({
-      borderLeftWidth: `${EPIC_EDGE_WIDTH}px`,
-      borderLeftColor: theme.palette.primary.main,
-    })
+    // Seit #951 trägt das Theme CSS-Variablen. jsdom verwirft die Kurzschreibweise
+    // `border: 1px solid var(…)` des Paper-Overrides und mit ihr die Randbreite im berechneten
+    // Stil — die Farbe steht dort noch, die Breite wird an der erzeugten Regel geprüft.
+    expect(karte()).toHaveStyle({ borderLeftColor: 'var(--mb-palette-primary-main)' })
+    const klasse = [...karte().classList].find((c) => c.startsWith('css-'))
+    const regel = [...document.styleSheets]
+      .flatMap((blatt) => [...blatt.cssRules])
+      .find((r) => r.cssText.startsWith(`.${klasse} `))
+    expect(regel?.cssText).toMatch(new RegExp(`border-left: ${EPIC_EDGE_WIDTH}px solid`))
     // MuiPaper-elevation2 wäre der Schatten, den #653 herausnimmt.
     expect(karte().className).not.toMatch(/MuiPaper-elevation[1-9]/)
   })

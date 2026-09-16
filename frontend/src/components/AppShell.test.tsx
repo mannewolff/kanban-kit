@@ -767,12 +767,12 @@ describe('AppShell auf der weissen Kopfleiste', () => {
     ['Kartensuche', 'Karte suchen'],
   ])('faerbt %s in der Kopfleiste mit text.primary', (_name, label) => {
     renderShellThemed()
-    expect(screen.getByLabelText(label)).toHaveStyle({ color: theme.palette.text.primary })
+    expect(screen.getByLabelText(label)).toHaveStyle({ color: 'var(--mb-palette-text-primary)' })
   })
 
   it('faerbt auch die Versionsangabe mit text.primary', () => {
     renderShellThemed()
-    expect(screen.getByText(`v${pkg.version}`)).toHaveStyle({ color: theme.palette.text.primary })
+    expect(screen.getByText(`v${pkg.version}`)).toHaveStyle({ color: 'var(--mb-palette-text-primary)' })
   })
 })
 
