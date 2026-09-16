@@ -2,7 +2,9 @@ package org.mwolff.manban.nightrun.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
@@ -485,6 +487,53 @@ class NightRunServiceTest {
         cardNumber, "Paket " + cardNumber, NightRunState.GREEN, null, 5L, null, null, usage);
   }
 
+  // --- Wiederkehrender Lauf: verwaiste Pakete vorher weg (Issue #965) --------------------
+
+  /**
+   * Ein verdraengter Lauf, der erneut hochgeladen wird, bringt seinen vollstaendigen Stand mit —
+   * seine verwaisten Pakete muessen vorher weg, sonst stuenden sie doppelt da. Die Reihenfolge ist
+   * die Zusage: Hinterher geloescht, trafe der Aufruf nichts mehr, weil die neuen Pakete schon am
+   * Lauf haengen.
+   */
+  @Test
+  void submit_loeschtVerwaistePaketeDesLaufs_bevorEsIhnAnlegt() {
+    service.submit(USER, PROJECT, List.of(lauf(T1)));
+
+    var reihenfolge = inOrder(runs);
+    reihenfolge.verify(runs).deleteOrphanItemsOfRun(PROJECT, T1);
+    reihenfolge.verify(runs).insertIfAbsent(any(NightRun.class), any());
+  }
+
+  @Test
+  void ingest_loeschtVerwaistePaketeDesLaufs_bevorEsIhnAnlegt() {
+    service.ingest(USER, PROJECT, TOKEN, meldung(T1, true, null));
+
+    var reihenfolge = inOrder(runs);
+    reihenfolge.verify(runs).deleteOrphanItemsOfRun(PROJECT, T1);
+    reihenfolge.verify(runs).upsert(any(NightRun.class), any());
+  }
+
+  /** Am Fake belegt: Nach Verdraengung und erneutem Hochladen steht jede Karte genau einmal da. */
+  @Test
+  void submit_legtDiePaketeEinesVerdraengtenLaufsBeimWiederholenNichtDoppeltAn() {
+    service = serviceMitPuffer(1);
+    service.submit(USER, PROJECT, List.of(lauf(T2)));
+    service.submit(
+        USER,
+        PROJECT,
+        List.of(lauf(T1, item(721, NightRunState.RED, NightRunErrorClass.CHECKS_RED))));
+
+    service.submit(
+        USER,
+        PROJECT,
+        List.of(lauf(T1, item(721, NightRunState.RED, NightRunErrorClass.CHECKS_RED))));
+
+    assertThat(((FakeNightRunRepository) runs).allePakete())
+        .singleElement()
+        .returns(721, NightRunItem::cardNumber)
+        .returns(null, NightRunItem::nightRunId);
+  }
+
   static class FakeNightRunRepository implements NightRunRepository {
 
     private final List<NightRun> gespeicherteLaeufe = new ArrayList<>();
@@ -637,6 +686,22 @@ class NightRunServiceTest {
           item.commitHash(),
           item.excerpt(),
           item.usage());
+    }
+
+    @Override
+    public int deleteOrphanItemsOfRun(long projectId, Instant startedAt) {
+      int vorher = gespeichertePakete.size();
+      gespeichertePakete.removeIf(
+          i ->
+              i.nightRunId() == null
+                  && i.projectId() == projectId
+                  && i.startedAt().equals(startedAt));
+      return vorher - gespeichertePakete.size();
+    }
+
+    /** Alle Pakete, auch verwaiste — die Verdraengung ist sonst ueber keinen Port sichtbar. */
+    List<NightRunItem> allePakete() {
+      return List.copyOf(gespeichertePakete);
     }
 
     @Override

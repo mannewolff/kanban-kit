@@ -29,6 +29,7 @@ import org.mwolff.manban.project.domain.ProjectRole;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
@@ -56,6 +57,7 @@ class NightRunIT extends AbstractIntegrationTest {
   @Autowired private PasswordEncoder passwordEncoder;
   @Autowired private ObjectMapper json;
   @Autowired private NightRunRepository runs;
+  @Autowired private JdbcTemplate jdbc;
 
   @Test
   void submit_reportsKnownRunAsExisting_andCreatesTheNewOne_inRequestOrder() throws Exception {
@@ -365,6 +367,36 @@ class NightRunIT extends AbstractIntegrationTest {
     assertThat(lauf.complete()).isTrue();
     assertThat(lauf.usage().inputTokens()).isEqualTo(148L);
     assertThat(runs.findItemsByRunIds(List.of(lauf.id()))).isEmpty();
+  }
+
+  /**
+   * Ein verdraengter Lauf, erneut hochgeladen, legt seine Pakete nicht ein zweites Mal an (Issue
+   * #965). Ohne die Bereinigung stuende die Karte zweimal da: {@code ON CONFLICT} kennt nur den
+   * Lauf-Kopf, und der war fort.
+   */
+  @Test
+  void submit_nachVerdraengungLegtDerselbeLaufJedeKarteGenauEinmalAn() throws Exception {
+    Cookie owner = session("nr-wdh-owner@example.com", PlatformRole.USER);
+    long projectId = projectOf("nr-wdh-owner@example.com", "nr-wdh-admin@example.com");
+    String lauf = run(ERSTER, item(721, "Persistenz", "GREEN", null));
+
+    submit(owner, projectId, lauf).andExpect(status().isOk());
+    jdbc.update("DELETE FROM night_run WHERE project_id = ?", projectId);
+    submit(owner, projectId, lauf)
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$[0].created").value(true));
+
+    assertThat(paketeDerKarte(projectId, 721)).isEqualTo(1);
+  }
+
+  private long paketeDerKarte(long projectId, int cardNumber) {
+    Long anzahl =
+        jdbc.queryForObject(
+            "SELECT count(*) FROM night_run_item WHERE project_id = ? AND card_number = ?",
+            Long.class,
+            projectId,
+            cardNumber);
+    return anzahl == null ? 0L : anzahl;
   }
 
   private static String path(long projectId) {

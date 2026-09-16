@@ -24,6 +24,7 @@ import org.mwolff.manban.project.domain.ProjectRole;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -50,6 +51,7 @@ class NightRunIngestIT extends AbstractIntegrationTest {
   @Autowired private ObjectMapper json;
   @Autowired private NightRunRepository runs;
   @Autowired private ProjectMembershipRepository memberships;
+  @Autowired private JdbcTemplate jdbc;
 
   private static String meldung(boolean complete, String... pakete) {
     return """
@@ -250,6 +252,35 @@ class NightRunIngestIT extends AbstractIntegrationTest {
     assertThat(runs.findItemsByRunIds(List.of(nachher.requireId())))
         .extracting(item -> item.cardNumber())
         .containsExactly(919);
+  }
+
+  /** Derselbe Fall ueber den Token-Weg (Issue #965): {@code upsert} sieht keinen Lauf mehr. */
+  @Test
+  void nachVerdraengungLegtDieselbeMeldungJedeKarteGenauEinmalAn() throws Exception {
+    Aufbau aufbau = aufbau("ingest-verdraengt");
+    String gleich = meldung(true, paket(917));
+
+    mvc.perform(
+            post(PFAD)
+                .header(TOKEN_HEADER, aufbau.token())
+                .contentType("application/json")
+                .content(gleich))
+        .andExpect(status().isOk());
+    jdbc.update("DELETE FROM night_run WHERE project_id = ?", aufbau.projectId());
+    mvc.perform(
+            post(PFAD)
+                .header(TOKEN_HEADER, aufbau.token())
+                .contentType("application/json")
+                .content(gleich))
+        .andExpect(jsonPath("$.outcome").value("CREATED"));
+
+    Long anzahl =
+        jdbc.queryForObject(
+            "SELECT count(*) FROM night_run_item WHERE project_id = ? AND card_number = ?",
+            Long.class,
+            aufbau.projectId(),
+            917);
+    assertThat(anzahl).isEqualTo(1L);
   }
 
   @Test

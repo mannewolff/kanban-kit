@@ -1,5 +1,6 @@
 package org.mwolff.manban.nightrun.application;
 
+import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
@@ -65,6 +66,19 @@ public interface NightRunRepository {
    * @return Zahl der gelöschten Läufe
    */
   int deleteOlderThanNewest(long projectId, int keep);
+
+  /**
+   * Löscht die <b>verwaisten</b> Arbeitspakete eines Laufs — die mit diesem Projekt und diesem
+   * Startzeitpunkt, deren Lauf verdrängt wurde (Issue #965).
+   *
+   * <p>Pakete eines noch vorhandenen Laufs berührt der Aufruf nie; die ersetzt {@link #upsert}
+   * selbst. Gerufen wird er, bevor ein Lauf angelegt wird: Ein verdrängter Lauf, der wiederkommt,
+   * bringt seinen vollständigen Stand mit, und {@code ON CONFLICT} kennt nur den Lauf-Kopf — ohne
+   * diesen Schritt stünden seine Pakete danach doppelt da.
+   *
+   * @return Zahl der gelöschten Arbeitspakete
+   */
+  int deleteOrphanItemsOfRun(long projectId, Instant startedAt);
 
   /**
    * Zählt je Fehlerklasse die aufbewahrten Läufe des Projekts, in denen sie mindestens einmal

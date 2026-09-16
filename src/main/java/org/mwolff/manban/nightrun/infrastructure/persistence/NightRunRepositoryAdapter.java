@@ -205,6 +205,11 @@ class NightRunRepositoryAdapter implements NightRunRepository {
   }
 
   @Override
+  public int deleteOrphanItemsOfRun(long projectId, java.time.Instant startedAt) {
+    return items.deleteOrphansOfRun(projectId, startedAt);
+  }
+
+  @Override
   public Map<NightRunErrorClass, Long> countRunsByErrorClass(long projectId) {
     Map<NightRunErrorClass, Long> counts = new EnumMap<>(NightRunErrorClass.class);
     jdbc.query(

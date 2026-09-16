@@ -1,13 +1,35 @@
 package org.mwolff.manban.nightrun.infrastructure.persistence;
 
+import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+import org.springframework.transaction.annotation.Transactional;
 
-/** Spring-Data-Repository für {@link NightRunItemEntity} (Lesepfad). */
+/**
+ * Spring-Data-Repository für {@link NightRunItemEntity}: der Lesepfad und das Löschen verwaister
+ * Pakete. Geschrieben wird über JDBC im {@link NightRunRepositoryAdapter}.
+ */
 interface NightRunItemJpaRepository extends JpaRepository<NightRunItemEntity, Long> {
 
   /** Arbeitspakete der genannten Läufe, nach Lauf und Einfügereihenfolge sortiert. */
   List<NightRunItemEntity> findByNightRunIdInOrderByNightRunIdAscIdAsc(
       Collection<Long> nightRunIds);
+
+  /**
+   * Löscht die verwaisten Pakete eines Laufs (Issue #965). Der Teilindex {@code
+   * idx_night_run_item_orphan} aus {@code V33} trägt die Bedingung.
+   *
+   * <p>{@code @Transactional} wie bei den Löschmethoden von Spring Data selbst: Im Service tritt
+   * der Aufruf dessen Transaktion bei, allein aufgerufen öffnet er eine eigene.
+   */
+  @Transactional
+  @Modifying(flushAutomatically = true, clearAutomatically = true)
+  @Query(
+      "delete from #{#entityName} i where i.projectId = :projectId"
+          + " and i.startedAt = :startedAt and i.nightRunId is null")
+  int deleteOrphansOfRun(@Param("projectId") long projectId, @Param("startedAt") Instant startedAt);
 }

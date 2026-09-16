@@ -43,7 +43,8 @@ import org.springframework.jdbc.core.JdbcTemplate;
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE)
 // Testklasse: Jede Methode ist ein Fall, und Faelle werden nicht zusammengelegt, um eine
 // Zahl zu druecken. Issue #944 bringt drei Faelle fuer Herkunft, Vollstaendigkeit und
-// Verbrauch dazu, Issue #964 drei fuer das verwaiste Arbeitspaket.
+// Verbrauch dazu, Issue #964 drei fuer das verwaiste Arbeitspaket, Issue #965 zwei fuer dessen
+// Wiedererkennung.
 @SuppressWarnings("PMD.TooManyMethods")
 class NightRunRepositoryIT extends AbstractIntegrationTest {
 
@@ -341,6 +342,38 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
     assertThat(runs.findItemsByRunIds(List.of(erster.id())))
         .extracting(NightRunItem::projectId, NightRunItem::startedAt, NightRunItem::mode)
         .containsExactly(tuple(projectId, start, NightRunMode.CHAIN));
+  }
+
+  /**
+   * Nur verwaiste Pakete mit genau diesem Startzeitpunkt fallen (Issue #965). Die Pakete eines
+   * vorhandenen Laufs mit demselben Startzeitpunkt bleiben, ebenso verwaiste eines anderen Laufs.
+   */
+  @Test
+  void deleteOrphanItemsOfRunLoeschtNurDieVerwaistenDiesesStartzeitpunkts() {
+    jdbc.update(
+        "DELETE FROM night_run WHERE id = ?", anlegen(T1, List.of(paket(720, NightRunState.RED))));
+    jdbc.update(
+        "DELETE FROM night_run WHERE id = ?", anlegen(T2, List.of(paket(730, NightRunState.RED))));
+    long vorhanden = anlegen(T1, List.of(paket(721, NightRunState.GREEN)));
+
+    assertThat(runs.deleteOrphanItemsOfRun(projectId, T1)).isEqualTo(1);
+
+    assertThat(runs.findItemsByRunIds(List.of(vorhanden)))
+        .extracting(NightRunItem::cardNumber)
+        .containsExactly(721);
+    assertThat(
+            jdbc.queryForList(
+                "SELECT card_number FROM night_run_item ORDER BY card_number", Integer.class))
+        .containsExactly(721, 730);
+  }
+
+  @Test
+  void deleteOrphanItemsOfRunLaesstAndereProjekteUnberuehrt() {
+    jdbc.update(
+        "DELETE FROM night_run WHERE id = ?", anlegen(T1, List.of(paket(720, NightRunState.RED))));
+
+    assertThat(runs.deleteOrphanItemsOfRun(projectId + 999, T1)).isZero();
+    assertThat(zeilen("night_run_item")).isEqualTo(1);
   }
 
   private long zeilen(String tabelle) {

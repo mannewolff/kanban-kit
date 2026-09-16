@@ -72,6 +72,8 @@ public class NightRunService {
     Instant now = clock.instant();
     List<NightRunResult> results = new ArrayList<>(submissions.size());
     for (NewNightRun submission : submissions) {
+      // Ein verdrängter Lauf, der wiederkommt, bringt seinen vollständigen Stand mit (#965).
+      runs.deleteOrphanItemsOfRun(projectId, submission.startedAt());
       boolean created =
           runs.insertIfAbsent(run(projectId, submission, now), items(projectId, submission))
               .isPresent();
@@ -122,6 +124,8 @@ public class NightRunService {
             now,
             meldung.usage());
 
+    // Wie beim Upload-Weg: verwaiste Pakete eines verdrängten Laufs zuerst weg (#965).
+    runs.deleteOrphanItemsOfRun(projectId, meldung.startedAt());
     UpsertResult ergebnis = runs.upsert(gemeldet, items(projectId, meldung));
     // Der Ringpuffer gilt unverändert auch für maschinell eingelieferte Läufe.
     runs.deleteOlderThanNewest(projectId, properties.maxPerProject());
