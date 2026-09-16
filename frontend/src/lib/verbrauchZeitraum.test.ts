@@ -1,0 +1,201 @@
+import { describe, expect, it } from 'vitest'
+import type { VerbrauchAngaben, VerbrauchKennzahlen } from '../api/nightRunUsage'
+import {
+  KEIN_LAUF_TEXT,
+  vergleichMitVorzeitraum,
+  vorzeitraumBeschriftung,
+  zeitraumBeschriftung,
+  zeitraumFall,
+  zeitraumHinweis,
+  zwischenspeicherAnteil,
+} from './verbrauchZeitraum'
+
+/** Textrechnung der Verbrauchs-Auswertung (Issue #940, Plan #933). */
+
+/** `Intl` setzt vor Einheiten ein geschütztes Leerzeichen; verglichen wird der Wortlaut. */
+const lesbar = (text: string | null) => text?.replaceAll(' ', ' ') ?? null
+
+const nichts: VerbrauchAngaben = {
+  costUsd: null,
+  inputTokens: null,
+  outputTokens: null,
+  cachedInputTokens: null,
+  cachedInputSharePercent: null,
+}
+
+const kosten = (costUsd: number | null): VerbrauchAngaben => ({ ...nichts, costUsd })
+
+const kennzahlen = (werte: Partial<VerbrauchKennzahlen>): VerbrauchKennzahlen => ({
+  type: 'MONTH',
+  firstDay: '2026-08-01',
+  lastDay: '2026-08-31',
+  from: '2026-08-01T10:00:00Z',
+  to: '2026-09-01T10:00:00Z',
+  coverage: 'COMPLETE',
+  noRuns: false,
+  runCount: 3,
+  durationMs: 1000,
+  cardCount: 2,
+  usage: { total: kosten(4), cardShare: kosten(3), remainder: kosten(1) },
+  ...werte,
+})
+
+describe('zeitraumBeschriftung', () => {
+  it('benennt eine Nacht mit ihrem Beginn und ihrem Folgetag', () => {
+    expect(
+      zeitraumBeschriftung(kennzahlen({ type: 'DAY', firstDay: '2026-09-15', lastDay: '2026-09-15' })),
+    ).toBe('Nacht vom 15.09.2026 auf den 16.09.2026')
+  })
+
+  it('benennt die Nacht ueber den Monatswechsel richtig', () => {
+    expect(
+      zeitraumBeschriftung(kennzahlen({ type: 'DAY', firstDay: '2026-08-31', lastDay: '2026-08-31' })),
+    ).toBe('Nacht vom 31.08.2026 auf den 01.09.2026')
+  })
+
+  it('benennt eine Woche mit ihren Naechten von Montag bis Sonntag', () => {
+    expect(
+      zeitraumBeschriftung(
+        kennzahlen({ type: 'WEEK', firstDay: '2026-09-07', lastDay: '2026-09-13' }),
+      ),
+    ).toBe('Woche vom 07.09.2026 bis 13.09.2026')
+  })
+
+  it('benennt einen Monat mit Name und Jahr', () => {
+    expect(zeitraumBeschriftung(kennzahlen({ type: 'MONTH', firstDay: '2026-08-01' }))).toBe(
+      'August 2026',
+    )
+  })
+})
+
+describe('vorzeitraumBeschriftung', () => {
+  it('nennt je Art den Vorzeitraum beim Namen', () => {
+    expect(
+      vorzeitraumBeschriftung(
+        kennzahlen({ type: 'DAY', firstDay: '2026-09-14', lastDay: '2026-09-14' }),
+      ),
+    ).toBe('Vornacht: Nacht vom 14.09.2026 auf den 15.09.2026')
+    expect(
+      vorzeitraumBeschriftung(
+        kennzahlen({ type: 'WEEK', firstDay: '2026-08-31', lastDay: '2026-09-06' }),
+      ),
+    ).toBe('Vorwoche: Woche vom 31.08.2026 bis 06.09.2026')
+    expect(vorzeitraumBeschriftung(kennzahlen({ type: 'MONTH', firstDay: '2026-07-01' }))).toBe(
+      'Vormonat: Juli 2026',
+    )
+  })
+})
+
+describe('vergleichMitVorzeitraum', () => {
+  it('nennt teurer mit dem Unterschied, ohne dass der Leser rechnet', () => {
+    const vergleich = vergleichMitVorzeitraum(kosten(6.5), kosten(4))
+
+    expect(vergleich.richtung).toBe('teurer')
+    expect(lesbar(vergleich.text)).toBe('2,50 $ teurer als im Vorzeitraum')
+  })
+
+  it('nennt billiger mit dem Unterschied', () => {
+    const vergleich = vergleichMitVorzeitraum(kosten(1), kosten(4))
+
+    expect(vergleich.richtung).toBe('billiger')
+    expect(lesbar(vergleich.text)).toBe('3,00 $ billiger als im Vorzeitraum')
+  })
+
+  it('unterscheidet unveraendert davon', () => {
+    const vergleich = vergleichMitVorzeitraum(kosten(4), kosten(4))
+
+    expect(vergleich.richtung).toBe('unveraendert')
+    expect(vergleich.text).toBe('genauso teuer wie im Vorzeitraum')
+  })
+
+  /** 0,1 + 0,2 ist in Gleitkomma nicht 0,3 — auf den Mikrodollar gleich gilt als unveraendert. */
+  it('haelt Rundungsreste aus der Gleitkommarechnung fuer unveraendert', () => {
+    expect(vergleichMitVorzeitraum(kosten(0.1 + 0.2), kosten(0.3)).richtung).toBe('unveraendert')
+  })
+
+  it('nennt nicht vergleichbar, wenn eine der beiden Angaben fehlt — in beiden Richtungen', () => {
+    for (const [jetzt, vorher] of [
+      [kosten(null), kosten(4)],
+      [kosten(4), kosten(null)],
+      [kosten(null), kosten(null)],
+    ]) {
+      const vergleich = vergleichMitVorzeitraum(jetzt, vorher)
+      expect(vergleich.richtung).toBe('nicht-vergleichbar')
+      expect(vergleich.text).toBe('nicht vergleichbar — eine der beiden Kostenangaben fehlt')
+    }
+  })
+
+  it('vergleicht eine gemessene Null als Wert', () => {
+    expect(vergleichMitVorzeitraum(kosten(0), kosten(2)).richtung).toBe('billiger')
+  })
+})
+
+describe('zwischenspeicherAnteil', () => {
+  it('schreibt den Prozentwert mit einer Nachkommastelle', () => {
+    expect(
+      lesbar(zwischenspeicherAnteil({ ...nichts, inputTokens: 200, cachedInputSharePercent: 25 })),
+    ).toBe('25,0 %')
+  })
+
+  it('ist ohne Eingabemenge nicht bestimmt', () => {
+    expect(
+      zwischenspeicherAnteil({ ...nichts, cachedInputTokens: 50, cachedInputSharePercent: null }),
+    ).toBe('nicht bestimmt')
+  })
+
+  it('nennt einen gemessenen Anteil von null Prozent als Wert', () => {
+    expect(
+      lesbar(zwischenspeicherAnteil({ ...nichts, inputTokens: 200, cachedInputSharePercent: 0 })),
+    ).toBe('0,0 %')
+  })
+})
+
+describe('zeitraumFall und zeitraumHinweis', () => {
+  const faelle = {
+    keinLauf: kennzahlen({ noRuns: true, runCount: 0, usage: { total: nichts, cardShare: nichts, remainder: nichts } }),
+    vorAufbewahrung: kennzahlen({
+      coverage: 'BEFORE_RETENTION',
+      noRuns: true,
+      runCount: 0,
+      usage: { total: nichts, cardShare: nichts, remainder: nichts },
+    }),
+    teilweise: kennzahlen({ coverage: 'PARTIAL' }),
+    nichtGemessen: kennzahlen({ usage: { total: nichts, cardShare: nichts, remainder: nichts } }),
+  }
+
+  it('unterscheidet die vier Faelle', () => {
+    expect(zeitraumFall(faelle.keinLauf)).toBe('kein-lauf')
+    expect(zeitraumFall(faelle.vorAufbewahrung)).toBe('vor-aufbewahrung')
+    expect(zeitraumFall(faelle.teilweise)).toBe('teilweise')
+    expect(zeitraumFall(faelle.nichtGemessen)).toBe('nicht-gemessen')
+  })
+
+  it('liefert vier verschiedene Texte', () => {
+    const texte = Object.values(faelle).map((f) => zeitraumHinweis(f))
+
+    expect(new Set(texte).size).toBe(4)
+    expect(texte).not.toContain(null)
+  })
+
+  it('sagt beim Zeitraum ohne Lauf den Satz aus #926 AK 9', () => {
+    expect(zeitraumHinweis(faelle.keinLauf)).toBe(KEIN_LAUF_TEXT)
+    expect(KEIN_LAUF_TEXT).toBe('In diesem Zeitraum hat kein Lauf stattgefunden.')
+  })
+
+  it('sagt ganz vor dem aeltesten aufbewahrten Lauf NICHT den Satz aus AK 9', () => {
+    expect(zeitraumHinweis(faelle.vorAufbewahrung)).not.toBe(KEIN_LAUF_TEXT)
+    expect(zeitraumHinweis(faelle.vorAufbewahrung)).toContain('ältesten aufbewahrten Lauf')
+  })
+
+  it('nennt eine Teilabdeckung neben den Zahlen, auch ohne Lauf in der aufbewahrten Zeit', () => {
+    expect(zeitraumHinweis(faelle.teilweise)).toContain('nur teilweise')
+    expect(
+      zeitraumFall(kennzahlen({ coverage: 'PARTIAL', noRuns: true, runCount: 0 })),
+    ).toBe('teilweise')
+  })
+
+  it('hat ohne Besonderheit keinen Hinweis', () => {
+    expect(zeitraumFall(kennzahlen({}))).toBe('vollstaendig')
+    expect(zeitraumHinweis(kennzahlen({}))).toBeNull()
+  })
+})
