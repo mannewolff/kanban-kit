@@ -7,6 +7,55 @@ Versionierung folgt der dreiteiligen Betriebsversion (siehe [RELEASING.md](RELEA
 Einträge je Version sind ein automatischer Auszug der Commit-Titel seit dem letzten Release,
 erzeugt von `scripts/gen-changelog.mjs`.
 
+## [1.44.0] – 2026-09-16
+
+- chore: v1.43.2
+- Zeitraum- und Vorhaben-Ansicht der Verbrauchs-Auswertung ([#942](https://github.com/mannewolff/kanban-kit/issues/942))
+- Verbrauchs-Bereich auf der Nachtlauf-Seite mit der Nachtansicht ([#941](https://github.com/mannewolff/kanban-kit/issues/941))
+- Abruf und Textrechnung der Verbrauchs-Auswertung im Browser ([#940](https://github.com/mannewolff/kanban-kit/issues/940))
+- Endpunkte der Verbrauchs-Auswertung samt Zonen- und Rueckschritt-Pruefung ([#939](https://github.com/mannewolff/kanban-kit/issues/939))
+- Use-Cases der Verbrauchs-Auswertung: Nacht, Zeitraum, Vorhaben ([#938](https://github.com/mannewolff/kanban-kit/issues/938))
+- Tagesgrenze der Nachtlauf-Auswertung auf 12:00 Uhr ([#969](https://github.com/mannewolff/kanban-kit/issues/969))
+- Lesezugriffe der Verbrauchs-Aggregation ueber night_run und night_run_item ([#937](https://github.com/mannewolff/kanban-kit/issues/937))
+- Vorhaben-Zuordnung zu Kartennummern ueber die card-Fassade ([#936](https://github.com/mannewolff/kanban-kit/issues/936))
+- Aufbewahrung der Nachtlaeufe auf 190 je Projekt anheben ([#935](https://github.com/mannewolff/kanban-kit/issues/935))
+- Zeitraum-Rechnung und Verbrauchssumme fuer die Nachtlauf-Auswertung ([#934](https://github.com/mannewolff/kanban-kit/issues/934))
+- Die Karte zeigt ihre Anlaeufe mit Dauer, Verbrauch und Wiederaufnahmen ([#968](https://github.com/mannewolff/kanban-kit/issues/968))
+- Die Anlaeufe einer Karte sind ueber einen eigenen Endpunkt lesbar ([#967](https://github.com/mannewolff/kanban-kit/issues/967))
+- Verwaiste Arbeitspakete haben eine eigene Aufbewahrungsgrenze ([#966](https://github.com/mannewolff/kanban-kit/issues/966))
+- Ein wiederkehrender Lauf legt seine Arbeitspakete nicht doppelt an ([#965](https://github.com/mannewolff/kanban-kit/issues/965))
+- Das Arbeitspaket ueberdauert die Verdraengung seines Laufs ([#964](https://github.com/mannewolff/kanban-kit/issues/964))
+- Der Leitstand zeigt Herkunft, Vollstaendigkeit und Verbrauch eines Laufs ([#949](https://github.com/mannewolff/kanban-kit/issues/949))
+- Der Upload-Weg liefert den Kostenwert mit ([#948](https://github.com/mannewolff/kanban-kit/issues/948))
+- Endpunkt nimmt einen Lauf mit projektgebundenem Token entgegen ([#947](https://github.com/mannewolff/kanban-kit/issues/947))
+- Einliefer-Use-Case schreibt einen Lauf mit maschineller Herkunft ([#946](https://github.com/mannewolff/kanban-kit/issues/946))
+- Ein gemeldeter Lauf ersetzt den gespeicherten Stand vollstaendig ([#945](https://github.com/mannewolff/kanban-kit/issues/945))
+- Nachtlauf-Modell traegt Herkunft, Vollstaendigkeit und Verbrauch ([#944](https://github.com/mannewolff/kanban-kit/issues/944))
+- chore: v1.43.1
+- Startprotokoll meldet die Outbox-Automatiken und bleibt an die Anleitung gekoppelt ([#909](https://github.com/mannewolff/kanban-kit/issues/909))
+- Startprotokoll meldet die Aufraeum-Automatiken des card-Moduls ([#908](https://github.com/mannewolff/kanban-kit/issues/908))
+- Geruest des Startprotokolls: Port, Zustandstyp und Sammler ([#907](https://github.com/mannewolff/kanban-kit/issues/907))
+- Kontext-Tests belegen die Wirkung der Automatik-Schalter ([#906](https://github.com/mannewolff/kanban-kit/issues/906))
+- Automatik-Schalter erreichen den Container ([#905](https://github.com/mannewolff/kanban-kit/issues/905))
+- 429-Abweisung in Anmelde-, Registrier- und Reset-Formular anzeigen ([#902](https://github.com/mannewolff/kanban-kit/issues/902))
+- Proxy-Haertung und Betriebsdokumentation der Zaehlbremse ([#901](https://github.com/mannewolff/kanban-kit/issues/901))
+- Akzeptanzkriterien der Zaehlbremse am laufenden Stack nachweisen ([#900](https://github.com/mannewolff/kanban-kit/issues/900))
+- Leitstandentwurf hinzugefügt
+- Filter, Filterreihenfolge und Konfiguration der Zaehlbremse ([#899](https://github.com/mannewolff/kanban-kit/issues/899))
+- Herkunft spoofsicher aus X-Forwarded-For bestimmen ([#898](https://github.com/mannewolff/kanban-kit/issues/898))
+- Fassade, Konfiguration und Speicher der Zaehlbremse ([#897](https://github.com/mannewolff/kanban-kit/issues/897))
+- Zeitregeln der Zaehlbremse als framework-freie Domaene ([#896](https://github.com/mannewolff/kanban-kit/issues/896))
+- Anleitung nennt Sitzungsschluessel, Dev-Schalter und Upgrade-Folge ([#891](https://github.com/mannewolff/kanban-kit/issues/891))
+- Start verweigern bei mitgeliefertem Sitzungsschluessel ([#890](https://github.com/mannewolff/kanban-kit/issues/890))
+- Betriebsdateien tragen den Entwicklungs-Schalter ([#889](https://github.com/mannewolff/kanban-kit/issues/889))
+- 401 fuehrt im Browser zur Anmeldeseite ([#887](https://github.com/mannewolff/kanban-kit/issues/887))
+- Passwort-Reset beendet alle Sitzungen des Kontos ([#886](https://github.com/mannewolff/kanban-kit/issues/886))
+- Session-Token traegt die Generation und wird bei Abweichung abgewiesen ([#885](https://github.com/mannewolff/kanban-kit/issues/885))
+- Generationsnummer am Konto als Grundlage fuer das Beenden von Sitzungen ([#884](https://github.com/mannewolff/kanban-kit/issues/884))
+- Oberflaeche und Dokumentation nennen dieselbe Schutz-Meldung ([#882](https://github.com/mannewolff/kanban-kit/issues/882))
+- Sperren und Herabstufen teilen Pruefung und Meldung ([#881](https://github.com/mannewolff/kanban-kit/issues/881))
+- Sperr-Menge zaehlt nur nicht gesperrte Plattform-Admins ([#880](https://github.com/mannewolff/kanban-kit/issues/880))
+
 ## [1.43.0] – 2026-09-15
 
 - chore: Version 1.42.1
