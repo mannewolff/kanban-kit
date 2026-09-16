@@ -105,8 +105,8 @@ import { useProjectName } from '../lib/useProjectName'
  * geänderten Dateien und die Kennzahlen der Sessions.
  *
  * **Die Herkunftskette wird erst beim Aufklappen eines Laufs aufgelöst** (A8). `cardsApi.byNumber`
- * liefert genau eine Karte; 30 aufbewahrte Läufe mit je 10 bis 15 Arbeitspaketen und zwei
- * Kettenschritten wären mehrere hundert Anfragen bei jedem Seitenaufruf.
+ * liefert genau eine Karte; bis zu 190 aufbewahrte Läufe mit je 10 bis 15 Arbeitspaketen und zwei
+ * Kettenschritten wären Tausende Anfragen bei jedem Seitenaufruf.
  */
 
 /**
@@ -2267,8 +2267,8 @@ function LaufPanel({
       component={Paper}
       variant="outlined"
       defaultExpanded={zuerst}
-      // Bleibt erhalten: Es ist der Grund, warum 30 aufbewahrte Läufe nicht alle ihre Inhalte
-      // rendern.
+      // Bleibt erhalten: Es ist der Grund, warum bis zu 190 aufbewahrte Läufe nicht alle ihre
+      // Inhalte rendern.
       slotProps={{ transition: { unmountOnExit: true } }}
       onChange={(_, offen) => offen && onAufklappen()}
     >

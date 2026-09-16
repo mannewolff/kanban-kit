@@ -4,7 +4,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import org.junit.jupiter.api.Test;
 
-/** Tests der Defaulting-Logik im Kompaktkonstruktor von {@link NightRunProperties}. */
+/**
+ * Tests der Defaulting-Logik im Kompaktkonstruktor von {@link NightRunProperties}. Der Ersatzwert
+ * der Lauf-Aufbewahrung ist seit Issue #935 190 (Plan #933, E7).
+ */
 class NightRunPropertiesTest {
 
   @Test
@@ -13,7 +16,7 @@ class NightRunPropertiesTest {
     NightRunProperties props = new NightRunProperties(null, null);
 
     // Then
-    assertThat(props.maxPerProject()).isEqualTo(30);
+    assertThat(props.maxPerProject()).isEqualTo(190);
   }
 
   @Test
@@ -22,7 +25,7 @@ class NightRunPropertiesTest {
     NightRunProperties props = new NightRunProperties(0, 0);
 
     // Then
-    assertThat(props.maxPerProject()).isEqualTo(30);
+    assertThat(props.maxPerProject()).isEqualTo(190);
   }
 
   @Test
@@ -52,10 +55,10 @@ class NightRunPropertiesTest {
   @Test
   void keepsProvidedValue() {
     // When
-    NightRunProperties props = new NightRunProperties(5, 7);
+    NightRunProperties props = new NightRunProperties(45, 7);
 
     // Then
-    assertThat(props.maxPerProject()).isEqualTo(5);
+    assertThat(props.maxPerProject()).isEqualTo(45);
     assertThat(props.maxItemsPerProject()).isEqualTo(7);
   }
 }

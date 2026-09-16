@@ -825,9 +825,9 @@ describe('NightRunPage — aufbewahrte Läufe beim Öffnen', () => {
   })
 
   it('löst beim Öffnen der Seite nur die Kette des obersten Laufs auf (A8, E7)', async () => {
-    // A8 hält die Anfragelawine von bis zu 30 aufbewahrten Läufen fern. Seit #914 steht der
+    // A8 hält die Anfragelawine von bis zu 190 aufbewahrten Läufen fern. Seit #914 steht der
     // oberste Lauf offen (AK 2 verlangt den ersten Vorgangsblock ohne Scrollen) — genau er, und
-    // deshalb bleibt es bei einer Kette statt dreißig.
+    // deshalb bleibt es bei einer Kette statt einer je Lauf.
     renderPage({
       listen: [
         [
