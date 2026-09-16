@@ -63,6 +63,7 @@ import { NACHTLAUF_TON } from '../nachtlaufDesign'
 import { nachtlaufTheme } from '../nachtlaufDesign'
 import { useSnackbar } from '../components/SnackbarProvider'
 import { formatDuration } from '../lib/formatDuration'
+import { betrag, kosten, menge } from '../lib/nachtlaufFormat'
 import {
   buildHandoffText,
   nightRunZustandsText,
@@ -922,15 +923,6 @@ const MINUTEN_FORMAT = new Intl.NumberFormat('de-DE', {
 /** Die Zeitvorgaben stehen ohne Nachkommastelle da, aber in deutscher Schreibweise. */
 const ZAHL_FORMAT = new Intl.NumberFormat('de-DE')
 
-/** Die Kosten des Nachtlaufs stehen im Ergebnisstand in US-Dollar. */
-const KOSTEN_FORMAT = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'USD' })
-
-/**
- * Ein Betrag oder die ausdrückliche Auskunft, dass der Stand keinen führt. „0 $" wäre eine
- * Behauptung über etwas, das gar nicht gemeldet wurde.
- */
-const betrag = (wert: number | undefined): string =>
-  wert === undefined ? 'nicht angegeben' : KOSTEN_FORMAT.format(wert)
 
 /**
  * Der Vermerk fehlender Kostenmeldungen (AK 3 und AK 11 aus #859); `null`, wo nichts fehlt. Er
@@ -1188,7 +1180,7 @@ function laufkosten(bearbeitet: readonly NightRunItem[]): { wert: string; hinwei
     'Vorgänge',
   )
   return {
-    wert: KOSTEN_FORMAT.format(gemeldet.reduce((summe, wert) => summe + wert, 0)),
+    wert: betrag(gemeldet.reduce((summe, wert) => summe + wert, 0)),
     hinweis:
       fehlend === null ? 'gerechnet, nicht im Protokoll' : `gerechnet, unvollständig — ${fehlend}`,
   }
@@ -2187,18 +2179,6 @@ function einlieferungsangaben(lauf: AnzeigeLauf): string[] {
   return lauf.vollstaendig ? herkunft : [...herkunft, 'unvollständig gemeldet']
 }
 
-/** Die Mengen des Verbrauchs stehen als Token da — „Zuege" ist im Leitstand die Zahl der Sitzungen. */
-const TOKEN_FORMAT = new Intl.NumberFormat('de-DE')
-
-/**
- * Eine Verbrauchszahl mit ihrer Einheit, oder die ausdrueckliche Fehlanzeige. „0 Token" waere eine
- * Behauptung ueber etwas, das gar nicht gemessen wurde — dieselbe Linie wie bei {@link betrag}.
- */
-const menge = (wert: number | undefined): string =>
-  wert === undefined ? 'nicht gemessen' : `${TOKEN_FORMAT.format(wert)} Token`
-
-const kosten = (wert: number | undefined): string =>
-  wert === undefined ? 'nicht gemessen' : KOSTEN_FORMAT.format(wert)
 
 /**
  * Der aufbewahrte Verbrauch eines Laufs oder eines Arbeitspakets (Issue #949).

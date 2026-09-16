@@ -67,6 +67,15 @@ Klick auf eine Karte öffnet das Detail:
 - **Abhängigkeiten:** Verweise auf andere Kartennummern.
 - **Anhänge:** hochladen, herunterladen, löschen. **Klick auf einen Bild- oder PDF-Anhang** (auf die
   Miniatur oder den Dateinamen) öffnet eine **Vorschau (Lightbox)**; andere Dateitypen werden geladen.
+- **Nachtlauf-Anläufe:** War die Karte schon in einem [Nachtlauf](#nachtlauf), steht hier, was ihre
+  Anläufe gekostet haben — die **Dauer je Lauf-Art** (Umsetzungs-, Prüf- und Ketten-Lauf; eine Art,
+  in der die Karte nie vorkam, steht als „nicht gelaufen"), die **Summen über alle Anläufe** (Kosten,
+  Eingabe, Ausgabe, Zwischenspeicher, jede mit ihrer Grundlage „aus *n* von *m* Anläufen"), die
+  **Anläufe** selbst mit Datum, Ergebnis, Dauer und Kosten, jüngster zuerst, und die Zahl der
+  **Wiederaufnahmen** (ein gescheiterter Anlauf, auf den später ein echter Anlauf folgte; ein
+  übersprungener zählt nicht). Fehlende Werte stehen als „nicht gemessen", nie als 0. Den Block sieht
+  nur, wer auch die Nachtlauf-Auswertung sehen darf (Projekt-Rolle `OWNER`); Anläufe verdrängter Läufe
+  bleiben darin erhalten.
 - **Kommentare:** schreiben; eigene Kommentare löschen (Moderation durch ADMIN/OWNER).
 - **Aktivität:** ein chronologischer Verlauf am Ende des Details — „*Zeitpunkt* · *Person* · *Aktion*".
   Protokolliert werden Anlegen, Bearbeiten, Zuständige geändert, Verschieben, Archivieren und

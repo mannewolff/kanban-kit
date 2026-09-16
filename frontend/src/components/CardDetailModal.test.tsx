@@ -73,7 +73,9 @@ function makeApis() {
     openEpic: vi.fn().mockResolvedValue({ ...card, id: 400, number: 9, title: 'Neues Vorhaben', type: 'EPIC' }),
   }
   const boardsApi = { get: vi.fn().mockResolvedValue(linkedBoard) }
-  return { commentsApi, attachmentsApi, cardsApi, boardsApi }
+  // Die Anlaeufe einer Karte (Issue #968); leer, damit der Block die uebrigen Faelle nicht beruehrt.
+  const nightRunsApi = { anlaeufeDerKarte: vi.fn().mockResolvedValue([]) }
+  return { commentsApi, attachmentsApi, cardsApi, boardsApi, nightRunsApi }
 }
 
 /**
@@ -2544,5 +2546,56 @@ describe('CardDetailModal — interaktiver Status-Chip', () => {
 
     rerender(<CardDetailModal {...gemeinsam} columns={spalten} columnId={10} />)
     erwarteAltesVerhalten()
+  })
+
+  describe('Nachtlauf-Anläufe (Issue #968)', () => {
+    const einAnlauf = {
+      startedAt: '2026-09-01T22:00:00Z',
+      mode: 'IMPLEMENTATION' as const,
+      state: 'GREEN' as const,
+      errorClass: null,
+      durationMs: 60_000,
+      commitHash: null,
+      usage: null,
+    }
+
+    it('zeigt den Block, wenn Projekt und Kartennummer vorliegen', async () => {
+      const apis = makeApis()
+      apis.nightRunsApi.anlaeufeDerKarte.mockResolvedValue([einAnlauf])
+      render(<CardDetailModal card={card} canEdit projectId={9} onClose={vi.fn()} {...apis} />)
+
+      expect(await screen.findByTestId('karten-anlaeufe')).toBeInTheDocument()
+      expect(apis.nightRunsApi.anlaeufeDerKarte).toHaveBeenCalledWith(9, 5)
+    })
+
+    it('ruft ohne projectId nichts ab', async () => {
+      const apis = makeApis()
+      render(<CardDetailModal card={card} canEdit onClose={vi.fn()} {...apis} />)
+
+      expect(await screen.findByText('Aufgabe')).toBeInTheDocument()
+      expect(apis.nightRunsApi.anlaeufeDerKarte).not.toHaveBeenCalled()
+    })
+
+    it('ruft für eine Pool-Idee ohne Nummer nichts ab', async () => {
+      const apis = makeApis()
+      render(
+        <CardDetailModal card={{ ...card, number: null }} canEdit projectId={9} onClose={vi.fn()} {...apis} />,
+      )
+
+      expect(await screen.findByText('Aufgabe')).toBeInTheDocument()
+      expect(apis.nightRunsApi.anlaeufeDerKarte).not.toHaveBeenCalled()
+    })
+
+    it('zeigt bei 403 keinen Block und keine Meldung — die übrige Karte bleibt sichtbar', async () => {
+      const apis = makeApis()
+      apis.nightRunsApi.anlaeufeDerKarte.mockRejectedValue(new ApiError(403, 'Forbidden'))
+      render(<CardDetailModal card={card} canEdit projectId={9} onClose={vi.fn()} {...apis} />)
+
+      await waitFor(() => expect(apis.nightRunsApi.anlaeufeDerKarte).toHaveBeenCalled())
+      expect(await screen.findByText('Hallo')).toBeInTheDocument()
+      expect(screen.getByText('Anhänge')).toBeInTheDocument()
+      expect(screen.queryByTestId('karten-anlaeufe')).not.toBeInTheDocument()
+      expect(screen.queryByText(/Anläufe konnten nicht geladen/)).not.toBeInTheDocument()
+    })
   })
 })

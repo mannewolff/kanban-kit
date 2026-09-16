@@ -78,4 +78,25 @@ describe('nightRunsApi', () => {
     expect(c.method).toBeUndefined()
     expect(zahlen.CHECKS_RED).toBe(2)
   })
+
+  it('anlaeufeDerKarte ruft GET /api/projects/{id}/night-runs/items?cardNumber={n}', async () => {
+    const f = spyFetch(
+      JSON.stringify([
+        {
+          startedAt: '2026-09-02T22:00:00Z',
+          mode: 'CHAIN',
+          state: 'GREEN',
+          errorClass: null,
+          durationMs: 1000,
+          commitHash: null,
+          usage: null,
+        },
+      ]),
+    )
+    const anlaeufe = await nightRunsApi.anlaeufeDerKarte(4, 968)
+    const c = lastCall(f)
+    expect(c.url).toBe('/api/projects/4/night-runs/items?cardNumber=968')
+    expect(c.method).toBeUndefined()
+    expect(anlaeufe[0].usage).toBeNull()
+  })
 })

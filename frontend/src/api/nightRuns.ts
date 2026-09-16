@@ -129,6 +129,21 @@ export interface NightRunView {
   items: NightRunItemView[]
 }
 
+/**
+ * Ein Anlauf an einer Karte — ein Arbeitspaket aus irgendeinem Lauf, auch einem verdrängten
+ * (Issue #967). Felder ohne Wert kommen als `null` und nicht als fehlender Schlüssel — derselbe
+ * Grund wie bei {@link NightRunItemView} (Issue #734).
+ */
+export interface NightRunAnlauf {
+  startedAt: string
+  mode: NightRunServerMode
+  state: NightRunState
+  errorClass: NightRunErrorClass | null
+  durationMs: number | null
+  commitHash: string | null
+  usage: NightRunUsageView | null
+}
+
 /** Je Fehlerklasse die Zahl der aufbewahrten Laeufe, in denen sie vorkam; fehlende Klassen kamen nie vor. */
 export type NightRunErrorClassCounts = Partial<Record<NightRunErrorClass, number>>
 
@@ -141,6 +156,11 @@ export const nightRunsApi = {
   list: (projectId: number) => apiFetch<NightRunView[]>(`/api/projects/${projectId}/night-runs`),
   errorClassCounts: (projectId: number) =>
     apiFetch<NightRunErrorClassCounts>(`/api/projects/${projectId}/night-runs/error-class-counts`),
+  /** Die Anläufe einer Karte über alle Läufe, jüngster zuerst (Issue #967). */
+  anlaeufeDerKarte: (projectId: number, cardNumber: number) =>
+    apiFetch<NightRunAnlauf[]>(
+      `/api/projects/${projectId}/night-runs/items?cardNumber=${encodeURIComponent(cardNumber)}`,
+    ),
 }
 
 export type NightRunsApi = typeof nightRunsApi
