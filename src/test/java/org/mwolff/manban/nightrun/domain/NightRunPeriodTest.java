@@ -12,7 +12,13 @@ import java.time.ZoneId;
 import java.time.ZoneOffset;
 import org.junit.jupiter.api.Test;
 
-/** Zeitraumgrenzen der Verbrauchs-Auswertung (Issue #934, Plan #933 E14, E18, E19). */
+/**
+ * Zeitraumgrenzen der Verbrauchs-Auswertung (Issue #934, Plan #933 E14, E18, E19) mit der
+ * Tagesgrenze 12:00 zonenlokal (Issue #969): Ein Lauf vor 12:00 zählt zur vorangegangenen Nacht.
+ *
+ * <p>Zeiten im Kommentar sind Berliner Ortszeit; im September gilt CEST (UTC+2), ab dem 25.10. und
+ * bis zum 29.03. CET (UTC+1).
+ */
 class NightRunPeriodTest {
 
   private static final ZoneId BERLIN = ZoneId.of("Europe/Berlin");
@@ -21,126 +27,210 @@ class NightRunPeriodTest {
     return Clock.fixed(Instant.parse(instant), ZoneOffset.UTC);
   }
 
-  // --- Tag ---------------------------------------------------------------------------------
+  private static NightRunPeriod nacht(String jetzt) {
+    return NightRunPeriod.of(NightRunPeriodType.DAY, BERLIN, am(jetzt), 0);
+  }
 
+  // --- Tag -------------------------------------------------------------------------------------
+
+  /** 16.09. 10:00 — die Nacht vom 15. auf den 16. läuft bis 12:00 noch. */
   @Test
-  void rueckschrittNullIstDerZuletztAbgeschlosseneTag_nichtDerLaufende() {
-    NightRunPeriod tag =
-        NightRunPeriod.of(NightRunPeriodType.DAY, BERLIN, am("2026-09-16T10:00:00Z"), 0);
+  void vorZwoelfUhrIstDieNachtVomVortagNochNichtAbgeschlossen() {
+    NightRunPeriod tag = nacht("2026-09-16T08:00:00Z");
 
     assertThat(tag.type()).isEqualTo(NightRunPeriodType.DAY);
+    assertThat(tag.firstDay()).isEqualTo(LocalDate.of(2026, 9, 14));
+    assertThat(tag.lastDay()).isEqualTo(LocalDate.of(2026, 9, 14));
+    assertThat(tag.from()).isEqualTo(Instant.parse("2026-09-14T10:00:00Z"));
+    assertThat(tag.to()).isEqualTo(Instant.parse("2026-09-15T10:00:00Z"));
+  }
+
+  /** 16.09. 13:00 — die Nacht vom 15. auf den 16. ist abgeschlossen. */
+  @Test
+  void nachZwoelfUhrIstDieNachtVomVortagAbgeschlossen() {
+    NightRunPeriod tag = nacht("2026-09-16T11:00:00Z");
+
     assertThat(tag.firstDay()).isEqualTo(LocalDate.of(2026, 9, 15));
-    assertThat(tag.lastDay()).isEqualTo(LocalDate.of(2026, 9, 15));
-    assertThat(tag.from()).isEqualTo(Instant.parse("2026-09-14T22:00:00Z"));
-    assertThat(tag.to()).isEqualTo(Instant.parse("2026-09-15T22:00:00Z"));
+    assertThat(tag.from()).isEqualTo(Instant.parse("2026-09-15T10:00:00Z"));
+    assertThat(tag.to()).isEqualTo(Instant.parse("2026-09-16T10:00:00Z"));
+  }
+
+  /** Genau 12:00 gehört schon zur beginnenden Nacht. */
+  @Test
+  void genauZwoelfUhrBeginntDieNeueNacht() {
+    assertThat(nacht("2026-09-16T10:00:00Z").firstDay()).isEqualTo(LocalDate.of(2026, 9, 15));
+    assertThat(nacht("2026-09-16T09:59:59Z").firstDay()).isEqualTo(LocalDate.of(2026, 9, 14));
   }
 
   @Test
-  void rueckschrittEinsIstDerTagDavor() {
+  void rueckschrittEinsIstDieNachtDavor() {
     NightRunPeriod tag =
-        NightRunPeriod.of(NightRunPeriodType.DAY, BERLIN, am("2026-09-16T10:00:00Z"), 1);
+        NightRunPeriod.of(NightRunPeriodType.DAY, BERLIN, am("2026-09-16T11:00:00Z"), 1);
 
     assertThat(tag.firstDay()).isEqualTo(LocalDate.of(2026, 9, 14));
   }
 
-  /** Der Tag wird zonenlokal bestimmt: 23:30 UTC ist in Berlin schon der naechste Tag. */
+  /** Läufe um 23:10 und um 03:22 des Folgetages liegen in derselben Nacht. */
   @Test
-  void derTagFolgtDerZone_nichtUtc() {
-    NightRunPeriod tag =
-        NightRunPeriod.of(NightRunPeriodType.DAY, BERLIN, am("2026-09-15T23:30:00Z"), 0);
+  void laeufeUm2310UndUm0322BildenEineNacht() {
+    NightRunPeriod tag = nacht("2026-09-16T11:00:00Z");
 
     assertThat(tag.firstDay()).isEqualTo(LocalDate.of(2026, 9, 15));
+    assertThat(tag.contains(Instant.parse("2026-09-15T21:10:00Z"))).isTrue();
+    assertThat(tag.contains(Instant.parse("2026-09-16T01:22:00Z"))).isTrue();
   }
 
-  /** Der Umstellungstag im Maerz hat 23 Stunden; die Grenzen bleiben lokale Mitternacht. */
+  /** 11:59 gehört zur vorangegangenen Nacht, 12:00 zur beginnenden. */
   @Test
-  void derUmstellungstagImMaerzHatDreiundzwanzigStunden() {
-    NightRunPeriod tag =
-        NightRunPeriod.of(NightRunPeriodType.DAY, BERLIN, am("2026-03-30T10:00:00Z"), 0);
+  void elfUhrNeunundfuenfzigGehoertZurVorangegangenenNacht() {
+    NightRunPeriod tag = nacht("2026-09-16T11:00:00Z");
 
-    assertThat(tag.firstDay()).isEqualTo(LocalDate.of(2026, 3, 29));
-    assertThat(tag.from()).isEqualTo(Instant.parse("2026-03-28T23:00:00Z"));
-    assertThat(tag.to()).isEqualTo(Instant.parse("2026-03-29T22:00:00Z"));
+    assertThat(tag.contains(Instant.parse("2026-09-15T09:59:00Z"))).isFalse();
+    assertThat(tag.contains(Instant.parse("2026-09-15T10:00:00Z"))).isTrue();
+    assertThat(tag.contains(Instant.parse("2026-09-16T09:59:00Z"))).isTrue();
+    assertThat(tag.contains(Instant.parse("2026-09-16T10:00:00Z"))).isFalse();
+  }
+
+  /** 16.09. 12:30 in Berlin ist in UTC noch 10:30 — dort liefe die Nacht noch. */
+  @Test
+  void dieNachtFolgtDerZone_nichtUtc() {
+    assertThat(nacht("2026-09-16T10:30:00Z").firstDay()).isEqualTo(LocalDate.of(2026, 9, 15));
+    assertThat(
+            NightRunPeriod.of(NightRunPeriodType.DAY, ZoneOffset.UTC, am("2026-09-16T10:30:00Z"), 0)
+                .firstDay())
+        .isEqualTo(LocalDate.of(2026, 9, 14));
+  }
+
+  /** Nacht vom 28. auf den 29.03.2026: 12:00 CET bis 12:00 CEST, 23 Stunden. */
+  @Test
+  void dieNachtUeberDieMaerzUmstellungHatDreiundzwanzigStunden() {
+    NightRunPeriod tag = nacht("2026-03-29T12:00:00Z");
+
+    assertThat(tag.firstDay()).isEqualTo(LocalDate.of(2026, 3, 28));
+    assertThat(tag.from()).isEqualTo(Instant.parse("2026-03-28T11:00:00Z"));
+    assertThat(tag.to()).isEqualTo(Instant.parse("2026-03-29T10:00:00Z"));
     assertThat(Duration.between(tag.from(), tag.to())).isEqualTo(Duration.ofHours(23));
   }
 
+  /** Nacht vom 24. auf den 25.10.2026: 12:00 CEST bis 12:00 CET, 25 Stunden. */
   @Test
-  void derUmstellungstagImOktoberHatFuenfundzwanzigStunden() {
-    NightRunPeriod tag =
-        NightRunPeriod.of(NightRunPeriodType.DAY, BERLIN, am("2026-10-26T10:00:00Z"), 0);
+  void dieNachtUeberDieOktoberUmstellungHatFuenfundzwanzigStunden() {
+    NightRunPeriod tag = nacht("2026-10-25T12:00:00Z");
 
-    assertThat(tag.firstDay()).isEqualTo(LocalDate.of(2026, 10, 25));
-    assertThat(tag.from()).isEqualTo(Instant.parse("2026-10-24T22:00:00Z"));
-    assertThat(tag.to()).isEqualTo(Instant.parse("2026-10-25T23:00:00Z"));
+    assertThat(tag.firstDay()).isEqualTo(LocalDate.of(2026, 10, 24));
+    assertThat(tag.from()).isEqualTo(Instant.parse("2026-10-24T10:00:00Z"));
+    assertThat(tag.to()).isEqualTo(Instant.parse("2026-10-25T11:00:00Z"));
     assertThat(Duration.between(tag.from(), tag.to())).isEqualTo(Duration.ofHours(25));
   }
 
-  // --- Woche -------------------------------------------------------------------------------
+  // --- Woche -----------------------------------------------------------------------------------
 
   /**
-   * 16.09.2026 ist ein Mittwoch; die zuletzt abgeschlossene Woche lief von Montag 07. bis 13.09.
+   * Mi 16.09. 13:00; die zuletzt abgeschlossene Woche lief von Mo 07.09. 12:00 bis Mo 14.09. 12:00.
    */
   @Test
-  void dieWocheBeginntAmMontag_undRueckschrittNullIstDieZuletztAbgeschlossene() {
+  void dieWocheBeginntMontagZwoelfUhr() {
     NightRunPeriod woche =
-        NightRunPeriod.of(NightRunPeriodType.WEEK, BERLIN, am("2026-09-16T10:00:00Z"), 0);
+        NightRunPeriod.of(NightRunPeriodType.WEEK, BERLIN, am("2026-09-16T11:00:00Z"), 0);
 
     assertThat(woche.firstDay()).isEqualTo(LocalDate.of(2026, 9, 7));
     assertThat(woche.firstDay().getDayOfWeek()).isEqualTo(DayOfWeek.MONDAY);
     assertThat(woche.lastDay()).isEqualTo(LocalDate.of(2026, 9, 13));
-    assertThat(woche.from()).isEqualTo(Instant.parse("2026-09-06T22:00:00Z"));
-    assertThat(woche.to()).isEqualTo(Instant.parse("2026-09-13T22:00:00Z"));
+    assertThat(woche.from()).isEqualTo(Instant.parse("2026-09-07T10:00:00Z"));
+    assertThat(woche.to()).isEqualTo(Instant.parse("2026-09-14T10:00:00Z"));
   }
 
-  /** Am Montag selbst laeuft die neue Woche; abgeschlossen ist die davor. */
+  /** Die Nacht vom Sonntag auf den Montag gehört zur Woche des Sonntags. */
   @Test
-  void amMontagIstDieVorwocheDieZuletztAbgeschlossene() {
+  void dieNachtVonSonntagAufMontagGehoertZurWocheDesSonntags() {
+    NightRunPeriod woche =
+        NightRunPeriod.of(NightRunPeriodType.WEEK, BERLIN, am("2026-09-16T11:00:00Z"), 0);
+
+    assertThat(woche.contains(Instant.parse("2026-09-13T22:30:00Z"))).isTrue(); // Mo 00:30
+    assertThat(woche.contains(Instant.parse("2026-09-14T09:59:00Z"))).isTrue(); // Mo 11:59
+    assertThat(woche.contains(Instant.parse("2026-09-14T10:00:00Z"))).isFalse(); // Mo 12:00
+  }
+
+  /** Mo 14.09. 10:00 läuft noch die Nacht vom Sonntag — und damit die Woche ab dem 07.09. */
+  @Test
+  void amMontagVormittagLaeuftNochDieVorwoche() {
     NightRunPeriod woche =
         NightRunPeriod.of(NightRunPeriodType.WEEK, BERLIN, am("2026-09-14T08:00:00Z"), 0);
+
+    assertThat(woche.firstDay()).isEqualTo(LocalDate.of(2026, 8, 31));
+  }
+
+  @Test
+  void amMontagNachmittagIstDieVorwocheAbgeschlossen() {
+    NightRunPeriod woche =
+        NightRunPeriod.of(NightRunPeriodType.WEEK, BERLIN, am("2026-09-14T11:00:00Z"), 0);
 
     assertThat(woche.firstDay()).isEqualTo(LocalDate.of(2026, 9, 7));
   }
 
+  /** Mo 19.10. 12:00 CEST bis Mo 26.10. 12:00 CET — eine Stunde mehr. */
   @Test
-  void eineWocheUeberDenUmstellungstagImOktoberHatEineStundeMehr() {
+  void eineWocheUeberDieOktoberUmstellungHatEineStundeMehr() {
     NightRunPeriod woche =
-        NightRunPeriod.of(NightRunPeriodType.WEEK, BERLIN, am("2026-10-28T10:00:00Z"), 0);
+        NightRunPeriod.of(NightRunPeriodType.WEEK, BERLIN, am("2026-10-28T11:00:00Z"), 0);
 
     assertThat(woche.firstDay()).isEqualTo(LocalDate.of(2026, 10, 19));
-    assertThat(woche.from()).isEqualTo(Instant.parse("2026-10-18T22:00:00Z"));
-    assertThat(woche.to()).isEqualTo(Instant.parse("2026-10-25T23:00:00Z"));
+    assertThat(woche.from()).isEqualTo(Instant.parse("2026-10-19T10:00:00Z"));
+    assertThat(woche.to()).isEqualTo(Instant.parse("2026-10-26T11:00:00Z"));
+    assertThat(Duration.between(woche.from(), woche.to()))
+        .isEqualTo(Duration.ofDays(7).plusHours(1));
   }
 
   @Test
   void rueckschrittZweiIstDieWocheVorDerVorwoche() {
     NightRunPeriod woche =
-        NightRunPeriod.of(NightRunPeriodType.WEEK, BERLIN, am("2026-09-16T10:00:00Z"), 2);
+        NightRunPeriod.of(NightRunPeriodType.WEEK, BERLIN, am("2026-09-16T11:00:00Z"), 2);
 
     assertThat(woche.firstDay()).isEqualTo(LocalDate.of(2026, 8, 24));
   }
 
-  // --- Monat -------------------------------------------------------------------------------
+  // --- Monat -----------------------------------------------------------------------------------
 
   @Test
-  void rueckschrittNullIstDerZuletztAbgeschlosseneMonat() {
+  void derMonatBeginntAmErstenUmZwoelfUhr() {
     NightRunPeriod monat =
-        NightRunPeriod.of(NightRunPeriodType.MONTH, BERLIN, am("2026-09-16T10:00:00Z"), 0);
+        NightRunPeriod.of(NightRunPeriodType.MONTH, BERLIN, am("2026-09-16T11:00:00Z"), 0);
 
     assertThat(monat.firstDay()).isEqualTo(LocalDate.of(2026, 8, 1));
     assertThat(monat.lastDay()).isEqualTo(LocalDate.of(2026, 8, 31));
-    assertThat(monat.from()).isEqualTo(Instant.parse("2026-07-31T22:00:00Z"));
-    assertThat(monat.to()).isEqualTo(Instant.parse("2026-08-31T22:00:00Z"));
+    assertThat(monat.from()).isEqualTo(Instant.parse("2026-08-01T10:00:00Z"));
+    assertThat(monat.to()).isEqualTo(Instant.parse("2026-09-01T10:00:00Z"));
   }
 
-  /** Der Maerz traegt die Umstellung: Beginn in Winterzeit (+01), Ende in Sommerzeit (+02). */
+  /** Die Nacht vom 31. auf den 1. gehört zum alten Monat. */
+  @Test
+  void dieNachtVom31AufDen1GehoertZumAltenMonat() {
+    NightRunPeriod august =
+        NightRunPeriod.of(NightRunPeriodType.MONTH, BERLIN, am("2026-09-16T11:00:00Z"), 0);
+
+    assertThat(august.contains(Instant.parse("2026-08-31T22:30:00Z"))).isTrue(); // 01.09. 00:30
+    assertThat(august.contains(Instant.parse("2026-09-01T09:59:00Z"))).isTrue(); // 01.09. 11:59
+    assertThat(august.contains(Instant.parse("2026-09-01T10:00:00Z"))).isFalse(); // 01.09. 12:00
+  }
+
+  /** Am 1. vor 12:00 läuft noch die letzte Nacht des Vormonats — abgeschlossen ist der davor. */
+  @Test
+  void amErstenVormittagLaeuftNochDerVormonat() {
+    NightRunPeriod monat =
+        NightRunPeriod.of(NightRunPeriodType.MONTH, BERLIN, am("2026-09-01T08:00:00Z"), 0);
+
+    assertThat(monat.firstDay()).isEqualTo(LocalDate.of(2026, 7, 1));
+  }
+
+  /** Der März beginnt in Winterzeit (12:00 CET) und endet in Sommerzeit (12:00 CEST). */
   @Test
   void derMaerzBeginntInWinterzeitUndEndetInSommerzeit() {
     NightRunPeriod maerz =
         NightRunPeriod.of(NightRunPeriodType.MONTH, BERLIN, am("2026-04-10T10:00:00Z"), 0);
 
     assertThat(maerz.firstDay()).isEqualTo(LocalDate.of(2026, 3, 1));
-    assertThat(maerz.from()).isEqualTo(Instant.parse("2026-02-28T23:00:00Z"));
-    assertThat(maerz.to()).isEqualTo(Instant.parse("2026-03-31T22:00:00Z"));
+    assertThat(maerz.from()).isEqualTo(Instant.parse("2026-03-01T11:00:00Z"));
+    assertThat(maerz.to()).isEqualTo(Instant.parse("2026-04-01T10:00:00Z"));
   }
 
   @Test
@@ -152,11 +242,11 @@ class NightRunPeriodTest {
     assertThat(monat.lastDay()).isEqualTo(LocalDate.of(2025, 12, 31));
   }
 
-  // --- Vorzeitraum und Eingaben ------------------------------------------------------------
+  // --- Vorzeitraum und Eingaben ----------------------------------------------------------------
 
   @Test
   void derVorzeitraumIstDerUnmittelbarVorangegangeneGleichartige() {
-    Clock jetzt = am("2026-09-16T10:00:00Z");
+    Clock jetzt = am("2026-09-16T11:00:00Z");
     for (NightRunPeriodType art : NightRunPeriodType.values()) {
       NightRunPeriod zeitraum = NightRunPeriod.of(art, BERLIN, jetzt, 0);
 
@@ -169,7 +259,7 @@ class NightRunPeriodTest {
 
   @Test
   void einNegativerRueckschrittWirdAbgewiesen() {
-    Clock jetzt = am("2026-09-16T10:00:00Z");
+    Clock jetzt = am("2026-09-16T11:00:00Z");
 
     assertThatThrownBy(() -> NightRunPeriod.of(NightRunPeriodType.DAY, BERLIN, jetzt, -1))
         .isInstanceOf(IllegalArgumentException.class)
@@ -178,21 +268,7 @@ class NightRunPeriodTest {
 
   @Test
   void rueckschrittNullIstErlaubt() {
-    Clock jetzt = am("2026-09-16T10:00:00Z");
-
-    assertThat(NightRunPeriod.of(NightRunPeriodType.DAY, BERLIN, jetzt, 0).zone())
-        .isEqualTo(BERLIN);
-  }
-
-  @Test
-  void enthaeltDenBeginnAberNichtDasEnde() {
-    NightRunPeriod tag =
-        NightRunPeriod.of(NightRunPeriodType.DAY, BERLIN, am("2026-09-16T10:00:00Z"), 0);
-
-    assertThat(tag.contains(tag.from())).isTrue();
-    assertThat(tag.contains(tag.to().minusNanos(1))).isTrue();
-    assertThat(tag.contains(tag.to())).isFalse();
-    assertThat(tag.contains(tag.from().minusNanos(1))).isFalse();
+    assertThat(nacht("2026-09-16T11:00:00Z").zone()).isEqualTo(BERLIN);
   }
 
   @Test
