@@ -3,6 +3,7 @@ package org.mwolff.manban.card.application;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
 import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -126,5 +127,25 @@ class DoneRetentionSettingServiceTest {
 
     verify(settings, never())
         .save(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString());
+  }
+
+  @Test
+  void retentionForStartup_liefertDenselbenStandWieCurrentFor_ohneActor() {
+    when(platformAdminChecker.isPlatformAdmin(ADMIN)).thenReturn(true);
+    when(settings.find(DoneRetentionSettingService.KEY)).thenReturn(Optional.of("7"));
+
+    assertThat(service.retentionForStartup()).isEqualTo(service.currentFor(ADMIN));
+  }
+
+  /**
+   * Der Startpfad hat keinen Actor: Beim Hochfahren ist niemand angemeldet. Die Methode darf
+   * deshalb nicht pruefen — und sie tut es auch nicht, sonst flaege hier eine Ausnahme.
+   */
+  @Test
+  void retentionForStartup_pruefteKeineRechte() {
+    when(settings.find(DoneRetentionSettingService.KEY)).thenReturn(Optional.of("7"));
+
+    assertThat(service.retentionForStartup().effective()).isEqualTo(7);
+    verify(platformAdminChecker, never()).isPlatformAdmin(anyLong());
   }
 }
