@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Theme } from '@mui/material/styles'
+import { kontrast } from './lib/kontrast'
 import {
   APP_BACKGROUND,
   CARD_LIFT,
@@ -87,23 +88,6 @@ describe('theme Design-Tokens (Panel)', () => {
     expect(CARD_LIFT).toBeLessThan(0)
   })
 })
-
-/** Relative Luminanz nach WCAG 2.1, aus einem `#rrggbb`-Wert. */
-const luminanz = (hex: string): number => {
-  const kanal = (paar: string): number => {
-    const v = Number.parseInt(paar, 16) / 255
-    return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4
-  }
-  const r = kanal(hex.slice(1, 3))
-  const g = kanal(hex.slice(3, 5))
-  const b = kanal(hex.slice(5, 7))
-  return 0.2126 * r + 0.7152 * g + 0.0722 * b
-}
-
-const kontrast = (a: string, b: string): number => {
-  const [hell, dunkel] = [luminanz(a), luminanz(b)].sort((x, y) => y - x)
-  return (hell + 0.05) / (dunkel + 0.05)
-}
 
 describe('theme Kopfleiste', () => {
   // Die Leiste war vor #653 mittleres Teal mit weißer Schrift (3,85:1, AA verfehlt) und danach

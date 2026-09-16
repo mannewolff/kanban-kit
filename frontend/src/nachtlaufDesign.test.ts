@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { kontrast } from './lib/kontrast'
 import type { NightRunState } from './lib/nightRunLog'
 import {
   NACHTLAUF_FARBEN,
@@ -17,23 +18,6 @@ import {
  * Prioritätenordnung vor der visuellen Präferenz. Verfehlt ein Ton die Schwelle, wird der Ton
  * angepasst und die Abweichung an seiner Konstante vermerkt — nicht die Schwelle gesenkt.
  */
-
-/** Relative Luminanz nach WCAG 2.1, aus einem `#rrggbb`-Wert (Vorbild: `theme.test.ts`). */
-const luminanz = (hex: string): number => {
-  const kanal = (paar: string): number => {
-    const v = Number.parseInt(paar, 16) / 255
-    return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4
-  }
-  const r = kanal(hex.slice(1, 3))
-  const g = kanal(hex.slice(3, 5))
-  const b = kanal(hex.slice(5, 7))
-  return 0.2126 * r + 0.7152 * g + 0.0722 * b
-}
-
-const kontrast = (a: string, b: string): number => {
-  const [hell, dunkel] = [luminanz(a), luminanz(b)].sort((x, y) => y - x)
-  return (hell + 0.05) / (dunkel + 0.05)
-}
 
 const QUELLE: Record<string, string> = import.meta.glob('./nachtlaufDesign.ts', {
   query: '?raw',
