@@ -90,3 +90,25 @@ manban:
     # Einmal-Token, um auf einer frischen Instanz den ersten Plattform-Admin zu erzeugen.
     # Leer = deaktiviert. Greift nur, solange kein Admin existiert.
     admin-token: ${MANBAN_BOOTSTRAP_ADMIN_TOKEN:}
+  # Zaehlbremse gegen Massenversuche an Anmeldung, Registrierung und Reset-Anforderung
+  # (Issue #840). Gezaehlt wird je Herkunft und Vorgang; die Sperre laeuft ab dem ersten
+  # tatsaechlich abgewiesenen Versuch und wird durch weitere Versuche nicht verlaengert.
+  # trusted-proxy-count ist die Zahl der Proxies VOR der Anwendung: 1 passt zum mitgelieferten
+  # Caddy, 0 gilt, wenn die App direkt erreichbar ist. Zu hoch gesetzt liest die Bremse eine vom
+  # Client mitgeschickte Adresse — dann waere sie umgehbar.
+  ratelimit:
+    enabled: ${MANBAN_RATELIMIT_ENABLED:true}
+    trusted-proxy-count: ${MANBAN_RATELIMIT_TRUSTED_PROXY_COUNT:1}
+    max-tracked-origins: ${MANBAN_RATELIMIT_MAX_TRACKED_ORIGINS:100000}
+    login:
+      max-attempts: ${MANBAN_RATELIMIT_LOGIN_MAX_ATTEMPTS:10}
+      window: ${MANBAN_RATELIMIT_LOGIN_WINDOW:PT15M}
+      block-duration: ${MANBAN_RATELIMIT_LOGIN_BLOCK_DURATION:PT15M}
+    register:
+      max-attempts: ${MANBAN_RATELIMIT_REGISTER_MAX_ATTEMPTS:10}
+      window: ${MANBAN_RATELIMIT_REGISTER_WINDOW:PT15M}
+      block-duration: ${MANBAN_RATELIMIT_REGISTER_BLOCK_DURATION:PT15M}
+    forgot:
+      max-attempts: ${MANBAN_RATELIMIT_FORGOT_MAX_ATTEMPTS:10}
+      window: ${MANBAN_RATELIMIT_FORGOT_WINDOW:PT15M}
+      block-duration: ${MANBAN_RATELIMIT_FORGOT_BLOCK_DURATION:PT15M}

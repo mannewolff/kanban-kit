@@ -50,7 +50,17 @@ import org.testcontainers.utility.DockerImageName;
 // SmtpMailIT, BootstrapIT) setzen andere Schlüssel, keine davon manban.dev-mode. Bewusst KEINE
 // src/test/resources/application.yml: Sie überlagerte die Produktions-application.yml global und
 // verschöbe damit auch jede künftige Vorgabe unbemerkt.
-@TestPropertySource(properties = {"manban.outbox.enabled=false", "manban.dev-mode=true"})
+// Zaehlbremse in IT-Kontexten grundsaetzlich aus (Issue #899): 45 IT-Klassen melden sich an, vier
+// registrieren, zwei fordern ein neues Passwort an — alle von derselben Herkunft 127.0.0.1. Ihr
+// Zaehlstand steht im Arbeitsspeicher und ueberlebt den TRUNCATE aus resetDatabase(), weil er gar
+// nicht in der Datenbank steht. Ohne diesen Schalter liefe die Suite nach wenigen Klassen in 429.
+// Wer die Bremse selbst prueft, setzt sie in seiner Testklasse wieder an.
+@TestPropertySource(
+    properties = {
+      "manban.outbox.enabled=false",
+      "manban.dev-mode=true",
+      "manban.ratelimit.enabled=false"
+    })
 public abstract class AbstractIntegrationTest {
 
   @ServiceConnection
