@@ -397,7 +397,7 @@ export const SCHRIFT_MONO = '"IBM Plex Mono", ui-monospace, "SF Mono", Menlo, mo
 /**
  * Tabellenziffern für Zahlen, die untereinander stehen: rechtsbündige Tabellenzellen und
  * Kennzahl-Kacheln. Eine große Einzelzahl trägt sie bewusst nicht — dort lassen gleich breite
- * Ziffern die Zahl auseinanderfallen (`DashboardPage.tsx`).
+ * Ziffern die Zahl auseinanderfallen (Kachelwerte im Leitstand).
  */
 export const TABELLENZIFFERN = { fontVariantNumeric: 'tabular-nums' } as const
 
@@ -446,6 +446,8 @@ export const RAND_STARK = VARIABLEN.warte.randStark
 export const TEXT_SCHWACH = VARIABLEN.warte.textSchwach
 /** Leitfarbe. */
 export const KUPFER = VARIABLEN.primary.main
+/** Oberes Ende einer Kupferfläche. */
+export const KUPFER_HELL = VARIABLEN.primary.light
 /** Kupferner Schimmer. */
 export const KUPFER_SCHIMMER = VARIABLEN.warte.kupferSchimmer
 /** Gewählte Zeile. */
@@ -484,6 +486,12 @@ export const MARKE_MAL_SX = {
   background: `linear-gradient(155deg, ${VARIABLEN.primary.light}, ${KUPFER} 62%, ${HELL.kupferTief})`,
   boxShadow: '0 1px 0 rgba(255,255,255,.35) inset, 0 2px 6px rgba(0,0,0,.35)',
 } as const
+
+/**
+ * Dunkler Innenring einer Melder-LED (Entwurf Z. 421): gibt der Leuchtfläche eine Fassung. Schwarz
+ * wie im Entwurf, in beiden Erscheinungsbildern — ein Ring in der Leuchtfarbe verschwömme mit ihr.
+ */
+export const LED_RING = '0 0 0 1px rgba(0,0,0,.22) inset'
 
 /** Rundes Nutzer-Mal im Kopf (Entwurf Z. 350–356), in beiden Erscheinungsbildern gleich. */
 export const NUTZER_MAL_SX = {

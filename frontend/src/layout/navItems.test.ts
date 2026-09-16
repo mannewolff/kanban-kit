@@ -51,7 +51,7 @@ describe('buildNavItems Gliederung nach dem Leitstand-Entwurf (#978)', () => {
   })
 
   it('verlinkt die Ansichten des Boards auf ihre Routen', () => {
-    expect(link({ board }, 'Leitstand')?.path).toBe('/boards/1/dashboard')
+    expect(link({ board }, 'Leitstand')?.path).toBe('/boards/1/leitstand')
     expect(link({ board }, 'Board')?.path).toBe('/boards/1')
     expect(link({ board }, 'Liste')?.path).toBe('/boards/1/list')
     expect(link({ board }, 'Vorhaben')?.path).toBe('/boards/1/vorhaben')

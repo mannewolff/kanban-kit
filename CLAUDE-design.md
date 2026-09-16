@@ -149,7 +149,7 @@ Die Gestalt jeder Ansicht folgt der Vorlage. Zustände sind an **Form** erkennba
 
 ## 🗺️ Ansicht → Regel
 
-Zu jeder darstellenden Route aus [`frontend/src/App.tsx`](frontend/src/App.tsx) steht hier, welcher Stelle der Vorlage sie folgt (AK 3). Die reine Weiterleitung `/boards/:boardId/epics` fehlt. Alle Ansichten tragen den Rahmen, die Palette, die Schrift und die Tiefe der Vorlage. „Umsetzung" nennt das Paket, das die Gestalt herstellt. `frontend/src/designQuelle.test.ts` hält die Tabelle gegen die Routen.
+Zu jeder darstellenden Route aus [`frontend/src/App.tsx`](frontend/src/App.tsx) steht hier, welcher Stelle der Vorlage sie folgt (AK 3). Die reinen Weiterleitungen `/boards/:boardId/epics` und `/boards/:boardId/dashboard` (auf den Leitstand) fehlen. Alle Ansichten tragen den Rahmen, die Palette, die Schrift und die Tiefe der Vorlage. „Umsetzung" nennt das Paket, das die Gestalt herstellt. `frontend/src/designQuelle.test.ts` hält die Tabelle gegen die Routen.
 
 | Route | Ansicht | Regel | Umsetzung |
 |---|---|---|---|
@@ -166,7 +166,7 @@ Zu jeder darstellenden Route aus [`frontend/src/App.tsx`](frontend/src/App.tsx) 
 | `/boards/:boardId` | Board | Board der Vorlage (Entwurf Z. 1679–1864) | #980 |
 | `/boards/:boardId/list` | Liste | Liste der Vorlage, nach Vorhaben gruppiert (Entwurf Z. 1865–2054) | #980 |
 | `/boards/:boardId/vorhaben` | Vorhaben | Rahmen; Vorhaben als Platten mit Fortschritt | #978 |
-| `/boards/:boardId/dashboard` | Leitstand | Leitstand der Vorlage (Entwurf Z. 1200–1678) | #979 |
+| `/boards/:boardId/leitstand` | Leitstand | Leitstand der Vorlage (Entwurf Z. 1200–1678); ersetzt die Kennzahlen-Ansicht, ohne Verweildauer je Spalte | #979 |
 | `/admin` | Plattform-Administration | Rahmen; Tabelle als Platte | #978 |
 | `/admin/bootstrap` | Ersten Admin festlegen | Rahmen; Formular als Platte | #978 |
 | `/roles` | Rollen und Rechte | Rahmen; Tabelle als Platte | #978 |

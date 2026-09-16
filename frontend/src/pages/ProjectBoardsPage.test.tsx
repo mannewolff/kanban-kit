@@ -219,7 +219,7 @@ describe('ProjectBoardsPage RBAC', () => {
       <MemoryRouter initialEntries={['/projects/5']}>
         <Routes>
           <Route path="/projects/:projectId" element={<ProjectBoardsPage />} />
-          <Route path="/boards/:boardId" element={<div>Board-Ansicht</div>} />
+          <Route path="/boards/:boardId/leitstand" element={<div>Board-Ansicht</div>} />
         </Routes>
       </MemoryRouter>,
     )
@@ -240,7 +240,7 @@ describe('ProjectBoardsPage RBAC', () => {
         <Routes>
           <Route path="/start" element={<Start />} />
           <Route path="/projects/:projectId" element={<ProjectBoardsPage />} />
-          <Route path="/boards/:boardId" element={<div>Board-Ansicht</div>} />
+          <Route path="/boards/:boardId/leitstand" element={<div>Board-Ansicht</div>} />
         </Routes>
       </MemoryRouter>,
     )
@@ -357,7 +357,7 @@ describe('ProjectBoardsPage RBAC', () => {
       <MemoryRouter initialEntries={['/projects/5']}>
         <Routes>
           <Route path="/projects/:projectId" element={<ProjectBoardsPage />} />
-          <Route path="/boards/:boardId" element={<div>Board-Ansicht</div>} />
+          <Route path="/boards/:boardId/leitstand" element={<div>Board-Ansicht</div>} />
         </Routes>
       </MemoryRouter>,
     )

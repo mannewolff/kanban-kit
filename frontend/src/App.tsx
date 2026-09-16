@@ -2,6 +2,7 @@ import { Suspense, lazy } from 'react'
 import { Route, Routes } from 'react-router-dom'
 import { Box, CircularProgress } from '@mui/material'
 import { AppShell } from './components/AppShell'
+import { LegacyDashboardRedirect } from './routes/LegacyDashboardRedirect'
 import { LegacyEpicsRedirect } from './routes/LegacyEpicsRedirect'
 import { ProtectedRoute } from './routes/ProtectedRoute'
 
@@ -18,8 +19,8 @@ const BoardListPage = lazy(() =>
   import('./pages/BoardListPage').then((m) => ({ default: m.BoardListPage })),
 )
 const BoardPage = lazy(() => import('./pages/BoardPage').then((m) => ({ default: m.BoardPage })))
-const DashboardPage = lazy(() =>
-  import('./pages/DashboardPage').then((m) => ({ default: m.DashboardPage })),
+const LeitstandPage = lazy(() =>
+  import('./pages/LeitstandPage').then((m) => ({ default: m.LeitstandPage })),
 )
 const BootstrapAdminPage = lazy(() =>
   import('./pages/BootstrapAdminPage').then((m) => ({ default: m.BootstrapAdminPage })),
@@ -81,7 +82,8 @@ export function App() {
             <Route path="/boards/:boardId/vorhaben" element={<EpicsPage />} />
             {/* Alter Pfad: leitet weiter, damit Lesezeichen und Doku-Verweise tragen. */}
             <Route path="/boards/:boardId/epics" element={<LegacyEpicsRedirect />} />
-            <Route path="/boards/:boardId/dashboard" element={<DashboardPage />} />
+            <Route path="/boards/:boardId/leitstand" element={<LeitstandPage />} />
+            <Route path="/boards/:boardId/dashboard" element={<LegacyDashboardRedirect />} />
             <Route path="/admin" element={<AdminPage />} />
             <Route path="/admin/bootstrap" element={<BootstrapAdminPage />} />
             <Route path="/roles" element={<RolesPage />} />

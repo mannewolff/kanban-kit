@@ -1,0 +1,574 @@
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { boardsApi } from '../api/boards'
+import { cardsApi, type Card } from '../api/cards'
+import { ApiError } from '../api/client'
+import { dashboardApi, type BoardDashboardKpis } from '../api/dashboard'
+import { epicsApi, type Epic } from '../api/epics'
+import { nightRunsApi, type NightRunItemView, type NightRunView } from '../api/nightRuns'
+import { nightRunUsageApi, type VerbrauchKennzahlen, type VerbrauchZeitraum } from '../api/nightRunUsage'
+import { LeitstandPage } from './LeitstandPage'
+
+vi.mock('../api/boards', () => ({ boardsApi: { get: vi.fn() } }))
+vi.mock('../api/cards', () => ({ cardsApi: { get: vi.fn(), byNumber: vi.fn() } }))
+vi.mock('../api/dashboard', () => ({ dashboardApi: { get: vi.fn() } }))
+vi.mock('../api/epics', () => ({ epicsApi: { list: vi.fn() } }))
+vi.mock('../api/nightRuns', () => ({ nightRunsApi: { list: vi.fn(), errorClassCounts: vi.fn() } }))
+vi.mock('../api/nightRunUsage', async (original) => ({
+  ...(await original<typeof import('../api/nightRunUsage')>()),
+  nightRunUsageApi: { period: vi.fn() },
+}))
+
+const mNotify = vi.fn()
+vi.mock('../components/SnackbarProvider', () => ({ useSnackbar: () => mNotify }))
+
+// Der Kartendialog ist eigenständig getestet; hier zählt, mit welcher Karte er geöffnet wird.
+vi.mock('../components/CardDetailModal', () => ({
+  CardDetailModal: ({ card, columnName, onClose }: Readonly<{ card: Card; columnName?: string; onClose: () => void }>) => (
+    <div data-testid="karten-detail">
+      <span>{card.title}</span>
+      <span data-testid="detail-spalte">{columnName ?? ''}</span>
+      <button type="button" onClick={onClose}>
+        Detail schließen
+      </button>
+    </div>
+  ),
+}))
+
+const m = {
+  board: boardsApi.get as ReturnType<typeof vi.fn>,
+  kpis: dashboardApi.get as ReturnType<typeof vi.fn>,
+  epics: epicsApi.list as ReturnType<typeof vi.fn>,
+  laeufe: nightRunsApi.list as ReturnType<typeof vi.fn>,
+  klassen: nightRunsApi.errorClassCounts as ReturnType<typeof vi.fn>,
+  karte: cardsApi.get as ReturnType<typeof vi.fn>,
+  karteNachNummer: cardsApi.byNumber as ReturnType<typeof vi.fn>,
+  verbrauch: nightRunUsageApi.period as ReturnType<typeof vi.fn>,
+}
+
+const karte = (title: string): Card => ({
+  derivedFrom: null,
+  id: 9,
+  boardId: 1,
+  columnId: 5,
+  number: 42,
+  title,
+  description: null,
+  excerpt: null,
+  positionInColumn: 0,
+  archived: false,
+  ideaStored: false,
+  movedToDoneAt: null,
+  dependencies: [],
+  type: 'CARD',
+  parentId: null,
+  shortcode: null,
+  assignees: [],
+  dueDate: null,
+  labels: [],
+})
+
+const kpis = (extra: Partial<BoardDashboardKpis> = {}): BoardDashboardKpis => ({
+  columnDwell: [{ columnId: 1, columnName: 'Ready', avgDwellSeconds: 7200, sampleCount: 3 }],
+  throughput: [
+    { weekStart: '2026-06-01T09:00:00Z', doneCount: 10 },
+    { weekStart: '2026-06-08T09:00:00Z', doneCount: 12 },
+  ],
+  avgLeadTimeSeconds: 276_480,
+  leadTimeSampleCount: 86,
+  avgCycleTimeSeconds: 53_280,
+  cycleTimeSampleCount: 61,
+  outliers: [{ cardId: 9, number: 846, title: 'Kartenverlauf als Zeitstrahl', columnName: 'Review', dwellSeconds: 14 * 86_400 }],
+  ...extra,
+})
+
+const paket = (nummer: number, state: NightRunItemView['state'], extra: Partial<NightRunItemView> = {}): NightRunItemView => ({
+  id: nummer,
+  cardNumber: nummer,
+  title: `Paket ${nummer}`,
+  state,
+  errorClass: null,
+  durationMs: 1_122_000,
+  commitHash: null,
+  excerpt: null,
+  usage: null,
+  ...extra,
+})
+
+const lauf = (extra: Partial<NightRunView> = {}): NightRunView => ({
+  id: 3,
+  startedAt: '2026-09-14T21:10:00Z',
+  mode: 'CHAIN',
+  durationMs: 15_120_000,
+  processedCount: 3,
+  skippedCount: 0,
+  unparsedCount: 0,
+  unparsedSample: null,
+  createdAt: '2026-09-15T01:22:00Z',
+  origin: 'TOKEN',
+  tokenName: 'kette',
+  complete: true,
+  updatedAt: null,
+  usage: { costUsd: 12.4, inputTokens: null, outputTokens: null, cachedInputTokens: null },
+  items: [
+    paket(917, 'GREEN', { commitHash: '9489421abcdef' }),
+    paket(922, 'RED', { errorClass: 'CHECKS_RED', excerpt: '2 Tests rot in BoardViewTest' }),
+    paket(925, 'YELLOW', { errorClass: 'AWAITING_DECISION' }),
+    paket(930, 'GREY', { durationMs: null }),
+  ],
+  ...extra,
+})
+
+const epic = (id: number, title: string, done: number, total: number, memberNumbers: number[] = []): Epic => ({
+  id,
+  number: id,
+  title,
+  description: null,
+  shortcode: null,
+  done,
+  total,
+  memberNumbers,
+  rootNumbers: [],
+  requirementCardNumber: null,
+})
+
+const angaben = (costUsd: number | null, inputTokens: number | null = 4_820_000, outputTokens: number | null = 186_000, cachedInputTokens: number | null = 3_660_000) => ({
+  costUsd,
+  inputTokens,
+  outputTokens,
+  cachedInputTokens,
+  cachedInputSharePercent: null,
+})
+
+const kennzahlen = (extra: Partial<VerbrauchKennzahlen> = {}): VerbrauchKennzahlen => ({
+  type: 'DAY',
+  firstDay: '2026-09-14',
+  lastDay: '2026-09-14',
+  from: '',
+  to: '',
+  coverage: 'COMPLETE',
+  noRuns: false,
+  runCount: 1,
+  durationMs: 1,
+  cardCount: 9,
+  usage: { total: angaben(12.4), cardShare: angaben(null), remainder: angaben(null) },
+  ...extra,
+})
+
+const nacht = (night: string, outputTokens: number | null) => ({
+  night,
+  runCount: 1,
+  cardCount: 9,
+  usage: { total: angaben(10, 1, outputTokens, 1), cardShare: angaben(null), remainder: angaben(null) },
+  aborted: false,
+})
+
+const zeitraum = (extra: Partial<VerbrauchZeitraum> = {}): VerbrauchZeitraum => ({
+  current: kennzahlen(),
+  previous: kennzahlen({ usage: { total: angaben(14.1), cardShare: angaben(null), remainder: angaben(null) } }),
+  nights: [nacht('2026-09-14', 186_000)],
+  epics: [],
+  withoutEpic: { epicId: null, shortcode: null, title: null, cardCount: 0, usage: angaben(null) },
+  epicsOverlap: false,
+  ...extra,
+})
+
+function renderPage(pfad = '/boards/1/leitstand') {
+  return render(
+    <MemoryRouter initialEntries={[pfad]}>
+      <Routes>
+        <Route path="/boards/:boardId/leitstand" element={<LeitstandPage />} />
+        <Route path="/boards/leitstand" element={<LeitstandPage />} />
+      </Routes>
+    </MemoryRouter>,
+  )
+}
+
+beforeEach(() => {
+  vi.clearAllMocks()
+  m.board.mockResolvedValue({ id: 1, name: 'Entwicklung', projectId: 5, columns: [] })
+  m.kpis.mockResolvedValue(kpis())
+  m.epics.mockResolvedValue([epic(1, 'Nachtlauf-Auswertung', 7, 9, [917]), epic(2, 'Erledigt', 3, 3)])
+  m.laeufe.mockResolvedValue([lauf({ id: 1, startedAt: '2026-09-10T21:00:00Z', items: [paket(1, 'GREEN')] }), lauf()])
+  m.klassen.mockResolvedValue({ CHECKS_RED: 11, AWAITING_DECISION: 7 })
+  m.verbrauch.mockResolvedValue(zeitraum())
+})
+
+describe('LeitstandPage (#979)', () => {
+  it('lehnt eine ungültige Board-ID ab', () => {
+    renderPage('/boards/abc/leitstand')
+    expect(screen.getByRole('alert')).toHaveTextContent('Ungültige Board-ID.')
+  })
+
+  it('behandelt einen fehlenden Board-Parameter als ungültig', () => {
+    renderPage('/boards/leitstand')
+    expect(screen.getByRole('alert')).toHaveTextContent('Ungültige Board-ID.')
+  })
+
+  it('zeigt im Laufband den jüngsten Lauf mit Titel, letztem Vorgang, Zeit und Kosten', async () => {
+    renderPage()
+    const band = await screen.findByRole('region', { name: 'Jüngster Lauf' })
+    expect(within(band).getByTestId('laufband-titel')).toHaveTextContent('Kette abgeschlossen — 4 Vorgänge')
+    expect(band).toHaveTextContent('#930 Paket 930 · Beginn')
+    expect(band).toHaveTextContent('252 min')
+    expect(band).toHaveTextContent('12,40 $')
+    expect(within(band).getAllByTestId('led-zinnob')).toHaveLength(1)
+  })
+
+  it('lässt im Laufband die Kosten weg, wenn sie nicht gemessen wurden, und pulsiert bei laufender Kette', async () => {
+    m.laeufe.mockResolvedValue([lauf({ usage: null, complete: false, items: [] })])
+    renderPage()
+    const band = await screen.findByRole('region', { name: 'Jüngster Lauf' })
+    expect(band).toHaveTextContent('Kette läuft')
+    expect(band).not.toHaveTextContent('Kosten')
+    expect(within(band).getByTestId('led-stahl')).toBeInTheDocument()
+  })
+
+  it('zeigt die Kennzahl-Kacheln mit Wert, Einheit, Delta und Datenbasis', async () => {
+    renderPage()
+    const durchsatz = await screen.findByRole('article', { name: 'Durchsatz · Woche' })
+    expect(durchsatz).toHaveTextContent('12Karten')
+    expect(durchsatz).toHaveTextContent('▲ 20 %')
+    expect(durchsatz).toHaveTextContent('2 Wochen')
+    expect(within(durchsatz).getByTestId('funke')).toBeInTheDocument()
+    expect(screen.getByRole('article', { name: 'Durchlaufzeit' })).toHaveTextContent('3,2Tage')
+    expect(screen.getByRole('article', { name: 'Zykluszeit' })).toHaveTextContent('14,8Stunden')
+    expect(screen.getByRole('article', { name: 'Zykluszeit' })).toHaveTextContent('61 Karten')
+  })
+
+  it('zeigt ohne Datenbasis einen Leerwert statt einer Null', async () => {
+    m.kpis.mockResolvedValue(kpis({ avgLeadTimeSeconds: null, leadTimeSampleCount: 0, throughput: [{ weekStart: '2026-06-01T09:00:00Z', doneCount: 0 }] }))
+    renderPage()
+    const lead = await screen.findByRole('article', { name: 'Durchlaufzeit' })
+    expect(lead).toHaveTextContent('—keine Datenbasis')
+    expect(screen.getByRole('article', { name: 'Durchsatz · Woche' })).toHaveTextContent('—keine Datenbasis')
+    expect(screen.getByRole('region', { name: 'Durchsatz' })).toHaveTextContent('Noch keine abgeschlossene Karte in den letzten Wochen.')
+  })
+
+  it('meldet Laden und Fehler der Kennzahlen', async () => {
+    let ablehnen: (e: unknown) => void = () => undefined
+    m.kpis.mockReturnValue(new Promise((_, reject) => (ablehnen = reject)))
+    renderPage()
+    expect(screen.getByText('Kennzahlen werden geladen …')).toBeInTheDocument()
+    ablehnen(new Error('kaputt'))
+    expect(await screen.findByText('Kennzahlen konnten nicht geladen werden.')).toBeInTheDocument()
+  })
+
+  it('rechnet die Nachtlauf-Kachel über alle aufbewahrten Pakete ohne graue', async () => {
+    renderPage()
+    const kachel = await screen.findByRole('article', { name: 'Nachtlauf · grün' })
+    expect(kachel).toHaveTextContent('50%')
+    expect(within(kachel).getByRole('img', { name: '2 grün, 1 gelb, 1 rot' })).toBeInTheDocument()
+    expect(kachel).toHaveTextContent('letzte 4 Pakete')
+  })
+
+  it('nennt ein einzelnes Paket in der Nachtlauf-Kachel und zeigt ohne bewertetes Paket keinen Balken', async () => {
+    m.laeufe.mockResolvedValue([lauf({ items: [paket(1, 'GREEN')] })])
+    const { unmount } = renderPage()
+    expect(await screen.findByRole('article', { name: 'Nachtlauf · grün' })).toHaveTextContent('letztes Paket')
+    unmount()
+
+    m.laeufe.mockResolvedValue([lauf({ items: [paket(1, 'GREY')] })])
+    renderPage()
+    const kachel = await screen.findByRole('article', { name: 'Nachtlauf · grün' })
+    expect(kachel).toHaveTextContent('keine Datenbasis')
+    expect(within(kachel).queryByRole('img')).not.toBeInTheDocument()
+  })
+
+  it('lässt ohne Recht auf die Läufe alles Lauf-Bezogene still weg und behält die Board-Kennzahlen', async () => {
+    m.laeufe.mockRejectedValue(new ApiError(403, 'Forbidden'))
+    m.klassen.mockRejectedValue(new ApiError(403, 'Forbidden'))
+    renderPage()
+    expect(await screen.findByRole('article', { name: 'Durchlaufzeit' })).toBeInTheDocument()
+    await waitFor(() => expect(m.laeufe).toHaveBeenCalled())
+    expect(screen.queryByRole('region', { name: 'Jüngster Lauf' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('article', { name: 'Nachtlauf · grün' })).not.toBeInTheDocument()
+    expect(screen.queryByText('Verbrauch')).not.toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Abbruchgründe' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(m.verbrauch).not.toHaveBeenCalled()
+  })
+
+  it('lässt auch bei einem anderen Fehler der Läufe die Lauf-Bereiche weg', async () => {
+    m.laeufe.mockRejectedValue(new Error('Netz'))
+    renderPage()
+    expect(await screen.findByRole('article', { name: 'Durchlaufzeit' })).toBeInTheDocument()
+    await waitFor(() => expect(m.laeufe).toHaveBeenCalled())
+    expect(screen.queryByRole('region', { name: /Letzter Lauf/ })).not.toBeInTheDocument()
+  })
+
+  it('zeigt ohne aufbewahrten Lauf weder Laufband noch Letzten Lauf', async () => {
+    m.laeufe.mockResolvedValue([])
+    renderPage()
+    expect(await screen.findByRole('article', { name: 'Nachtlauf · grün' })).toHaveTextContent('keine Datenbasis')
+    expect(screen.queryByRole('region', { name: 'Jüngster Lauf' })).not.toBeInTheDocument()
+  })
+
+  it('verarbeitet eine verspätete Antwort nach dem Verlassen der Seite nicht mehr', async () => {
+    let liefern: (wert: BoardDashboardKpis) => void = () => undefined
+    m.kpis.mockReturnValue(new Promise((resolve) => (liefern = resolve)))
+    const { unmount } = renderPage()
+    unmount()
+    liefern(kpis())
+    await Promise.resolve()
+    expect(screen.queryByRole('article')).not.toBeInTheDocument()
+  })
+
+  it('nennt den Board-Namen in der unsichtbaren Überschrift', async () => {
+    renderPage()
+    expect(screen.getByRole('heading', { level: 1, name: 'Leitstand' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { level: 1, name: 'Leitstand Entwicklung' })).toBeInTheDocument()
+  })
+})
+
+describe('LeitstandPage — Herkunft der Einlieferung', () => {
+  it('nennt eine von der Kette gemeldete Einlieferung samt Token und Zeilen', async () => {
+    renderPage()
+    expect(await screen.findByText(/^Eingeliefert von der Kette um \d\d:\d\d — automatisch/)).toBeInTheDocument()
+    expect(screen.getByText('Token kette')).toBeInTheDocument()
+    expect(screen.getByText('4 Vorgänge · 0 ungedeutete Zeilen')).toBeInTheDocument()
+  })
+
+  it('nennt einen hochgeladenen Lauf ohne Token, einen einzelnen Vorgang und laufend mit stahlblauer LED', async () => {
+    m.laeufe.mockResolvedValue([lauf({ origin: 'UPLOAD', tokenName: null, updatedAt: '2026-09-15T02:00:00Z', complete: false, items: [paket(1, 'GREEN')] })])
+    renderPage()
+    await screen.findByText(/^Im Browser hochgeladen um/)
+    expect(screen.queryByText(/^Token /)).not.toBeInTheDocument()
+    expect(screen.getByText('1 Vorgang · 0 ungedeutete Zeilen')).toBeInTheDocument()
+    // Laufband, Letzter Lauf und Herkunftszeile melden den laufenden Lauf stahlblau.
+    expect(screen.getAllByTestId('led-stahl')).toHaveLength(3)
+  })
+})
+
+describe('LeitstandPage — Letzter Lauf', () => {
+  const platte = () => screen.findByRole('region', { name: 'Letzter Lauf · Kette' })
+
+  it('listet die Arbeitspakete mit Zustand, Vorhaben, Fehlerklasse, Dauer und kurzem Hash', async () => {
+    renderPage()
+    const letzter = await platte()
+    const zeilen = within(letzter).getAllByRole('listitem')
+    expect(zeilen).toHaveLength(4)
+    expect(zeilen[0]).toHaveTextContent('#917Paket 917Nachtlauf-Auswertung18:429489421')
+    expect(zeilen[1]).toHaveTextContent('CHECKS_RED2 Tests rot in BoardViewTest')
+    expect(zeilen[2]).toHaveTextContent('AWAITING_DECISION')
+    expect(zeilen[3]).toHaveTextContent('#930Paket 930—')
+    expect(letzter).toHaveTextContent('4 Pakete')
+  })
+
+  it('filtert auf Abbrüche und zurück', async () => {
+    renderPage()
+    const letzter = await platte()
+    fireEvent.click(within(letzter).getByRole('button', { name: 'Nur Abbrüche' }))
+    expect(within(letzter).getAllByRole('listitem')).toHaveLength(2)
+    expect(within(letzter).getByRole('button', { name: 'Nur Abbrüche' })).toHaveAttribute('aria-pressed', 'true')
+    fireEvent.click(within(letzter).getByRole('button', { name: 'Alle' }))
+    expect(within(letzter).getAllByRole('listitem')).toHaveLength(4)
+  })
+
+  it('sagt es, wenn der Filter nichts findet oder der Lauf noch kein Paket gemeldet hat', async () => {
+    m.laeufe.mockResolvedValue([lauf({ items: [paket(1, 'GREEN')] })])
+    const { unmount } = renderPage()
+    const letzter = await platte()
+    fireEvent.click(within(letzter).getByRole('button', { name: 'Nur Abbrüche' }))
+    expect(letzter).toHaveTextContent('Kein Abbruch in diesem Lauf.')
+    unmount()
+
+    m.laeufe.mockResolvedValue([lauf({ items: [], complete: false })])
+    renderPage()
+    expect(await platte()).toHaveTextContent('Der Lauf hat noch kein Arbeitspaket gemeldet.')
+  })
+
+  it('öffnet die Karte über ihre Nummer im Projekt', async () => {
+    m.karteNachNummer.mockResolvedValue(karte('Paket 917 im Detail'))
+    renderPage()
+    const letzter = await platte()
+    fireEvent.click(within(letzter).getByRole('button', { name: 'Karte #917 öffnen: Paket 917' }))
+    expect(await screen.findByTestId('karten-detail')).toHaveTextContent('Paket 917 im Detail')
+    expect(m.karteNachNummer).toHaveBeenCalledWith(5, 917)
+    fireEvent.click(screen.getByRole('button', { name: 'Detail schließen' }))
+    expect(screen.queryByTestId('karten-detail')).not.toBeInTheDocument()
+  })
+
+  it('meldet eine nicht gefundene Karte als Warnung und einen anderen Fehler als Fehler', async () => {
+    m.karteNachNummer.mockRejectedValueOnce(new ApiError(404, 'Not Found')).mockRejectedValueOnce(new Error('Netz'))
+    renderPage()
+    const letzter = await platte()
+    fireEvent.click(within(letzter).getByRole('button', { name: 'Karte #917 öffnen: Paket 917' }))
+    await waitFor(() => expect(mNotify).toHaveBeenCalledWith('Karte #917 nicht gefunden — gelöscht oder kein Zugriff.', 'warning'))
+    fireEvent.click(within(letzter).getByRole('button', { name: 'Karte #922 öffnen: Paket 922' }))
+    await waitFor(() => expect(mNotify).toHaveBeenCalledWith('Karte konnte nicht geladen werden.', 'error'))
+  })
+})
+
+describe('LeitstandPage — Platten des Rumpfs', () => {
+  it('zeigt den Durchsatz als Balkenwerk mit Kalenderwochen, eine leere Woche ohne Balken', async () => {
+    m.kpis.mockResolvedValue(
+      kpis({
+        throughput: [
+          { weekStart: '2026-06-01T09:00:00Z', doneCount: 10 },
+          { weekStart: '2026-06-08T09:00:00Z', doneCount: 0 },
+          { weekStart: '2026-06-15T09:00:00Z', doneCount: 12 },
+        ],
+      }),
+    )
+    renderPage()
+    const durchsatz = await screen.findByRole('region', { name: 'Durchsatz' })
+    expect(within(durchsatz).getByRole('img')).toHaveAccessibleName('Durchsatz der letzten 3 Wochen: 10, 0, 12 Karten, zuletzt 12')
+    expect(within(durchsatz).getAllByTestId(/^balken-/).map((b) => b.dataset.testid)).toEqual(['balken-83', 'balken-0', 'balken-100'])
+    expect(durchsatz).toHaveTextContent('232425')
+  })
+
+  it('öffnet Liegengebliebenes auch dann, wenn das Board selbst nicht geladen werden konnte', async () => {
+    m.board.mockRejectedValue(new Error('Netz'))
+    m.karte.mockResolvedValue(karte('Ohne Board'))
+    renderPage()
+    const liegen = await screen.findByRole('region', { name: 'Liegengeblieben' })
+    fireEvent.click(within(liegen).getByRole('button', { name: /Karte 846 öffnen/ }))
+    expect(await screen.findByTestId('karten-detail')).toHaveTextContent('Ohne Board')
+    expect(m.laeufe).not.toHaveBeenCalled()
+  })
+
+  it('sortiert die Abbruchgründe nach Häufigkeit und nennt die Zahl der Läufe', async () => {
+    renderPage()
+    const gruende = await screen.findByRole('region', { name: 'Abbruchgründe' })
+    expect(within(gruende).getAllByRole('listitem').map((z) => z.textContent)).toEqual(['CHECKS_RED11', 'AWAITING_DECISION7'])
+    expect(gruende).toHaveTextContent('2 Läufe')
+  })
+
+  it('sagt ohne Abbruch, dass es keinen gab, und nennt einen einzelnen Lauf im Singular', async () => {
+    m.klassen.mockResolvedValue({})
+    m.laeufe.mockResolvedValue([lauf()])
+    renderPage()
+    const gruende = await screen.findByRole('region', { name: 'Abbruchgründe' })
+    expect(gruende).toHaveTextContent('Kein Abbruch in den aufbewahrten Läufen.')
+    expect(gruende).toHaveTextContent('1 Lauf')
+  })
+
+  it('listet Liegengebliebenes mit Liegedauer und öffnet die Karte samt Spalte', async () => {
+    m.karte.mockResolvedValue(karte('Kartenverlauf im Detail'))
+    renderPage()
+    const liegen = await screen.findByRole('region', { name: 'Liegengeblieben' })
+    expect(liegen).toHaveTextContent('#846Kartenverlauf als Zeitstrahl14 T')
+    fireEvent.click(within(liegen).getByRole('button', { name: 'Karte 846 öffnen: Kartenverlauf als Zeitstrahl' }))
+    expect(await screen.findByTestId('detail-spalte')).toHaveTextContent('Review')
+    expect(m.karte).toHaveBeenCalledWith(9)
+  })
+
+  it('ignoriert weitere Klicks, solange eine Karte lädt, und meldet Fehler beim Öffnen', async () => {
+    let ablehnen: (e: unknown) => void = () => undefined
+    m.karte.mockReturnValueOnce(new Promise((_, reject) => (ablehnen = reject))).mockRejectedValueOnce(new Error('Netz'))
+    renderPage()
+    const liegen = await screen.findByRole('region', { name: 'Liegengeblieben' })
+    const knopf = within(liegen).getByRole('button', { name: /Karte 846 öffnen/ })
+    fireEvent.click(knopf)
+    fireEvent.click(knopf)
+    expect(m.karte).toHaveBeenCalledTimes(1)
+    expect(knopf).toHaveAttribute('aria-busy', 'true')
+    ablehnen(new ApiError(404, 'Not Found'))
+    await waitFor(() => expect(mNotify).toHaveBeenCalledWith('Karte 846 nicht gefunden — gelöscht oder kein Zugriff.', 'warning'))
+    fireEvent.click(knopf)
+    await waitFor(() => expect(mNotify).toHaveBeenCalledWith('Karte konnte nicht geladen werden.', 'error'))
+  })
+
+  it('sagt ohne Ausreißer, dass nichts liegengeblieben ist', async () => {
+    m.kpis.mockResolvedValue(kpis({ outliers: [] }))
+    renderPage()
+    expect(await screen.findByRole('region', { name: 'Liegengeblieben' })).toHaveTextContent('Nichts liegengeblieben.')
+  })
+
+  it('zeigt nur offene Vorhaben mit Fortschritt', async () => {
+    renderPage()
+    const vorhaben = await screen.findByRole('region', { name: 'Vorhaben' })
+    expect(within(vorhaben).getAllByRole('listitem').map((z) => z.textContent)).toEqual(['Nachtlauf-Auswertung7/9'])
+    expect(within(vorhaben).getByTestId('fuellung-78')).toBeInTheDocument()
+  })
+
+  it('sagt ohne offenes Vorhaben, dass es keins gibt', async () => {
+    m.epics.mockResolvedValue([epic(2, 'Erledigt', 3, 3)])
+    renderPage()
+    expect(await screen.findByRole('region', { name: 'Vorhaben' })).toHaveTextContent('Kein offenes Vorhaben.')
+  })
+})
+
+describe('LeitstandPage — Verbrauch', () => {
+  const kachel = (name: string) => screen.findByRole('article', { name })
+
+  it('zeigt die Nacht mit Eingabe-Aufteilung, Ausgabe und Kosten samt Vergleich', async () => {
+    renderPage()
+    const eingabe = await kachel('Eingabe-Token')
+    expect(eingabe).toHaveTextContent('4,82Mio')
+    expect(within(eingabe).getByRole('img')).toHaveAccessibleName('Aufteilung der Eingabe: 76 Prozent aus dem Cache gelesen, 24 Prozent frisch')
+    expect(eingabe).toHaveTextContent('Cache gelesen 3,66 Mio')
+    expect(eingabe).toHaveTextContent('frisch 1,16 Mio')
+    expect(await kachel('Ausgabe-Token')).toHaveTextContent('186Tsd')
+    expect(await kachel('Ausgabe-Token')).toHaveTextContent('21 Tsd je Vorgang')
+    expect(await kachel('Ausgabe-Token')).toHaveTextContent('1 Nacht')
+    const kosten = await kachel('Kosten')
+    expect(kosten).toHaveTextContent('12,40$')
+    expect(within(kosten).getByTestId('delta-gut')).toHaveTextContent('▼ 1,70 $')
+    expect(kosten).toHaveTextContent('1,38 $ je Vorgang')
+    expect(screen.getByText(/^Nacht vom 14\.09\.2026 auf den 15\.09\.2026 · 1 Lauf$/)).toBeInTheDocument()
+    expect(m.verbrauch).toHaveBeenCalledWith(5, 'DAY', 0)
+  })
+
+  it('wechselt den Zeitraum und zeigt dort den Verlauf der Ausgabe', async () => {
+    renderPage()
+    await kachel('Kosten')
+    m.verbrauch.mockResolvedValue(
+      zeitraum({
+        current: kennzahlen({ type: 'WEEK', lastDay: '2026-09-20', runCount: 3, usage: { total: angaben(20), cardShare: angaben(null), remainder: angaben(null) } }),
+        nights: [nacht('2026-09-14', 100), nacht('2026-09-15', null), nacht('2026-09-16', 300)],
+      }),
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Woche' }))
+    expect(screen.getByRole('button', { name: 'Woche' })).toHaveAttribute('aria-pressed', 'true')
+    expect(await screen.findByText(/· 3 Läufe$/)).toBeInTheDocument()
+    expect(m.verbrauch).toHaveBeenLastCalledWith(5, 'WEEK', 0)
+    const ausgabe = await kachel('Ausgabe-Token')
+    expect(within(ausgabe).getByTestId('funke')).toBeInTheDocument()
+    expect(ausgabe).toHaveTextContent('3 Nächte')
+    expect(within(await kachel('Kosten')).getByTestId('delta-schlecht')).toHaveTextContent('▲ 5,90 $')
+  })
+
+  it('zeigt ohne Messung Leerwerte, keinen Stapel, keinen Vergleich und den Hinweis zum Zeitraum', async () => {
+    m.verbrauch.mockResolvedValue(
+      zeitraum({
+        current: kennzahlen({ noRuns: true, cardCount: 0, usage: { total: angaben(null, null, null, null), cardShare: angaben(null), remainder: angaben(null) } }),
+        nights: [],
+      }),
+    )
+    renderPage()
+    const eingabe = await kachel('Eingabe-Token')
+    expect(eingabe).toHaveTextContent('keine Datenbasis')
+    expect(within(eingabe).queryByRole('img')).not.toBeInTheDocument()
+    expect(await kachel('Kosten')).not.toHaveTextContent('je Vorgang')
+    expect(await kachel('Ausgabe-Token')).toHaveTextContent('0 Nächte')
+    expect(screen.getByText('In diesem Zeitraum hat kein Lauf stattgefunden.')).toBeInTheDocument()
+  })
+
+  it('meldet Laden und Fehler des Verbrauchs im Bereich', async () => {
+    let ablehnen: (e: unknown) => void = () => undefined
+    m.verbrauch.mockReturnValue(new Promise((_, reject) => (ablehnen = reject)))
+    renderPage()
+    expect(await screen.findByText('Der Verbrauch wird geladen …')).toBeInTheDocument()
+    ablehnen(new Error('Netz'))
+    expect(await screen.findByText('Der Verbrauch konnte nicht geladen werden.')).toBeInTheDocument()
+  })
+
+  it('verarbeitet eine verspätete Verbrauchsantwort nach einem Zeitraumwechsel nicht mehr', async () => {
+    let erste: (z: VerbrauchZeitraum) => void = () => undefined
+    let fehler: (e: unknown) => void = () => undefined
+    m.verbrauch
+      .mockReturnValueOnce(new Promise((resolve) => (erste = resolve)))
+      .mockReturnValueOnce(new Promise((_, reject) => (fehler = reject)))
+      .mockResolvedValue(zeitraum({ current: kennzahlen({ type: 'MONTH', runCount: 2 }) }))
+    renderPage()
+    fireEvent.click(await screen.findByRole('button', { name: 'Woche' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Monat' }))
+    erste(zeitraum())
+    fehler(new Error('spät'))
+    expect(await screen.findByText(/^September 2026 · 2 Läufe$/)).toBeInTheDocument()
+    expect(screen.queryByText('Der Verbrauch konnte nicht geladen werden.')).not.toBeInTheDocument()
+  })
+})

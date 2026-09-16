@@ -106,7 +106,7 @@ export function buildNavItems(params: NavParams): NavGroup[] {
     const projekt: NavLink[] = []
     if (board) {
       projekt.push(
-        { kind: 'link', label: 'Leitstand', path: `/boards/${board.id}/dashboard`, icon: LeitstandSymbol },
+        { kind: 'link', label: 'Leitstand', path: `/boards/${board.id}/leitstand`, icon: LeitstandSymbol },
         { kind: 'link', label: 'Board', path: `/boards/${board.id}`, icon: BoardSymbol },
         { kind: 'link', label: 'Liste', path: `/boards/${board.id}/list`, icon: ListeSymbol },
         { kind: 'link', label: 'Vorhaben', path: `/boards/${board.id}/vorhaben`, icon: VorhabenSymbol },
