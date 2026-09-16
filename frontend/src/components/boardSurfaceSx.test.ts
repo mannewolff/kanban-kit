@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { CARD_LIFT, CARD_RADIUS, CARD_SHADOW, CARD_SHADOW_HOVER, STATUS_EDGE_WIDTH } from '../theme'
-import { ablageflaecheSx, edgeSurfaceSx } from './boardSurfaceSx'
+import { ablageflaecheSx, edgeSurfaceSx, PLATZHALTER_SX } from './boardSurfaceSx'
 
 describe('edgeSurfaceSx', () => {
   it('trägt den Status an der linken Kante, in der Breite aus dem Theme', () => {
@@ -97,5 +97,12 @@ describe('ablageflaecheSx', () => {
 
   it('trägt außerhalb eines Ziehvorgangs nichts', () => {
     expect(ablageflaecheSx(false)).toEqual({})
+  })
+})
+
+describe('PLATZHALTER_SX', () => {
+  it('ist derselbe Platzhalter, den die Board-Karte im Ziehzustand trägt', () => {
+    // Die Listenansicht (#957) nutzt ihn ohne `edgeSurfaceSx`; beide Stellen sollen gleich aussehen.
+    expect(edgeSurfaceSx({ statusColor: '#2F8C97', bewegt: true })).toMatchObject(PLATZHALTER_SX)
   })
 })

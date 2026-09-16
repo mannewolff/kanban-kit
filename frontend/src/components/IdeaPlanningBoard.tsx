@@ -91,8 +91,8 @@ export function IdeaPlanningBoard({
   // weiterhin `dragged`.
   const [bewegt, setBewegt] = useState<string | null>(null)
   const [ablageZone, setAblageZone] = useState<string | null>(null)
-  const zugTakt = useRef<ReturnType<typeof setTimeout> | null>(null)
-  useEffect(() => () => clearTimeout(zugTakt.current ?? undefined), [])
+  const zugTakt = useRef<ReturnType<typeof setTimeout>>(undefined)
+  useEffect(() => () => clearTimeout(zugTakt.current), [])
   const navigate = useNavigate()
   const notify = useSnackbar()
 
@@ -233,13 +233,13 @@ export function IdeaPlanningBoard({
 
   /** Kennzeichnet die Zeile einen Takt nach Ziehbeginn — erst dann hat der Browser das Ziehbild. */
   const bewegtMarkieren = (schluessel: string) => {
-    clearTimeout(zugTakt.current ?? undefined)
+    clearTimeout(zugTakt.current)
     zugTakt.current = setTimeout(() => setBewegt(schluessel), 0)
   }
 
   /** Räumt die Darstellung des Ziehens weg — nach dem Ablegen wie nach einem Abbruch. */
   const zugBeenden = () => {
-    clearTimeout(zugTakt.current ?? undefined)
+    clearTimeout(zugTakt.current)
     setBewegt(null)
     setAblageZone(null)
   }

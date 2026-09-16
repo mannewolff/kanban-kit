@@ -289,19 +289,19 @@ export function BoardView({
   // die `dataTransfer`-Nutzlast.
   const [dragCardId, setDragCardId] = useState<number | null>(null)
   const [ablageSpalteId, setAblageSpalteId] = useState<number | null>(null)
-  const zugTakt = useRef<ReturnType<typeof setTimeout> | null>(null)
-  useEffect(() => () => clearTimeout(zugTakt.current ?? undefined), [])
+  const zugTakt = useRef<ReturnType<typeof setTimeout>>(undefined)
+  useEffect(() => () => clearTimeout(zugTakt.current), [])
 
   const zugBeginnen = (e: React.DragEvent, cardId: number) => {
     e.dataTransfer.setData('text/plain', String(cardId))
     // Einen Takt später: Der Browser nimmt das Ziehbild erst nach diesem Ereignis auf. Ein sofortiger
     // Zustandswechsel zeigte dort schon den Platzhalter statt der Karte.
-    clearTimeout(zugTakt.current ?? undefined)
+    clearTimeout(zugTakt.current)
     zugTakt.current = setTimeout(() => setDragCardId(cardId), 0)
   }
 
   const zugBeenden = () => {
-    clearTimeout(zugTakt.current ?? undefined)
+    clearTimeout(zugTakt.current)
     setDragCardId(null)
     setAblageSpalteId(null)
   }

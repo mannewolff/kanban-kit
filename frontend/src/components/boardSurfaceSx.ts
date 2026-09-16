@@ -49,19 +49,24 @@ export function edgeSurfaceSx(options: {
     // Wer Bewegung abgestellt hat, bekommt dieselbe Tiefe ohne Übergang: Die Dauer setzt die
     // zentrale Regel in `theme.ts` auf null (#953), statt dass jede Fläche ihren eigenen Vorbehalt führt.
     '&:hover': { boxShadow: CARD_SHADOW_HOVER, transform: `translateY(${CARD_LIFT}px)` },
-    ...(options.bewegt
-      ? {
-          opacity: 0.6,
-          boxShadow: 'none',
-          bgcolor: 'action.hover',
-          // `visibility` statt Entfernen: Der Platzhalter behält die Höhe der Karte, und das
-          // Element bleibt im Dokument — verschwände die Quelle, bräche das native Ziehen ab.
-          '& > *': { visibility: 'hidden' },
-          '&:hover': { boxShadow: 'none', transform: 'none' },
-        }
-      : {}),
+    ...(options.bewegt ? PLATZHALTER_SX : {}),
   }
 }
+
+/**
+ * Platzhalter an der Stelle eines gezogenen Elements (AK 8, #956, #957): zurückgenommen, ohne
+ * Tiefe, auf getönter Fläche, Inhalt unsichtbar. `visibility` statt Entfernen: Der Platzhalter
+ * behält die Höhe, und das Element bleibt im Dokument — verschwände die Quelle, bräche das native
+ * Ziehen ab. Die Strichelung der Haarlinie setzt der Aufrufer vor seine Status-Kante, damit jene
+ * durchgezogen bleibt.
+ */
+export const PLATZHALTER_SX = {
+  opacity: 0.6,
+  boxShadow: 'none',
+  bgcolor: 'action.hover',
+  '& > *': { visibility: 'hidden' },
+  '&:hover': { boxShadow: 'none', transform: 'none' },
+} as const
 
 /**
  * Ablagefläche während eines Ziehvorgangs (AK 8, #956): ein gestrichelter Rahmen in der

@@ -30,7 +30,8 @@ import { useBoardRole } from '../lib/useBoardRole'
 import { useProjectName } from '../lib/useProjectName'
 import { formatDueDate, isOverdue } from '../lib/dueDate'
 import { ARCHIVED_STATUS_COLOR, statusColors } from '../lib/statusColors'
-import { STATUS_EDGE_WIDTH, SURFACE_HOVER_SHADOW } from '../theme'
+import { STATUS_EDGE_WIDTH, SURFACE_HOVER_SHADOW, TABELLENZIFFERN } from '../theme'
+import { ablageflaecheSx, PLATZHALTER_SX } from '../components/boardSurfaceSx'
 import { labelChipSx } from '../components/labelChipSx'
 
 const ARCHIVED = 'archived'
@@ -111,6 +112,11 @@ export function BoardListPage() {
   const [detailCard, setDetailCard] = useState<Card | null>(null)
   const [rowDrag, setRowDrag] = useState<number | null>(null)
   const [rowOver, setRowOver] = useState<number | null>(null)
+  // Darstellung der bewegten Zeile (AK 7, AK 8, #957): einen Takt nach Ziehbeginn gesetzt, damit
+  // das Ziehbild des Browsers die Zeile zeigt und nicht schon den Platzhalter.
+  const [bewegteZeile, setBewegteZeile] = useState<number | null>(null)
+  const zugTakt = useRef<ReturnType<typeof setTimeout>>(undefined)
+  useEffect(() => () => clearTimeout(zugTakt.current), [])
   const [colDrag, setColDrag] = useState<ColumnKey | null>(null)
   const [colOver, setColOver] = useState<ColumnKey | null>(null)
   const [excerptWidth, setExcerptWidth] = useState<number>(() => readExcerptWidth())
@@ -335,7 +341,12 @@ export function BoardListPage() {
     const col = columnById.get(card.columnId)
     switch (key) {
       case 'number':
-        return <Typography variant="caption" color="text.secondary">#{card.number}</Typography>
+        // Zahlen untereinander: rechtsbündig in Tabellenziffern (AK 10).
+        return (
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', textAlign: 'right', ...TABELLENZIFFERN }}>
+            #{card.number}
+          </Typography>
+        )
       case 'status': {
         // Die Farbe traegt allein die linke Zeilenkante; der Text bleibt, weil Farbe nie
         // alleiniger Informationstraeger sein darf (#650).
@@ -358,14 +369,18 @@ export function BoardListPage() {
       case 'title': {
         const overdue = isOverdue(card.dueDate, (col?.name ?? '').toLowerCase().includes('done'))
         return (
-          <Box>
-            <Typography variant="body2" noWrap sx={{ fontWeight: 500 }}>{card.title}</Typography>
+          // Fälligkeit neben dem Titel statt darunter: eine Zeile weniger je fälliger Karte (AK 12).
+          // Reicht der Platz nicht, bricht sie um, statt den Titel zu kürzen.
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', columnGap: 1 }}>
+            {/* Ohne `noWrap`: Der Titel wird nicht abgeschnitten (AK 12). Der Auszug daneben bleibt
+                bewusst einzeilig (Plan #932 E16). */}
+            <Typography variant="body2" sx={{ fontWeight: 500, overflowWrap: 'anywhere' }}>{card.title}</Typography>
             {card.dueDate != null && (
               <Typography
                 variant="caption"
                 aria-label={`Fällig ${card.title}`}
                 color={overdue ? 'error' : 'text.secondary'}
-                sx={{ display: 'block', fontWeight: overdue ? 600 : 400 }}
+                sx={{ whiteSpace: 'nowrap', fontWeight: overdue ? 600 : 400 }}
               >
                 📅 {formatDueDate(card.dueDate)}
               </Typography>
@@ -484,6 +499,7 @@ export function BoardListPage() {
                   ...cellSx(key),
                   display: 'flex',
                   alignItems: 'center',
+                  justifyContent: key === 'number' ? 'flex-end' : undefined,
                   cursor: 'grab',
                   userSelect: 'none',
                   borderBottom: '2px solid',
@@ -520,7 +536,9 @@ export function BoardListPage() {
             ))}
           </Box>
 
-          <Stack spacing={0.75}>
+          {/* Dichte (AK 12, Plan #932 E16 a): Die Liste ist keine MUI-Tabelle, ihre Dichte steht deshalb
+              hier. Vor #957 zeigte sie auf 1440 x 900 13 Zeilen bei 8 px Polsterung und 6 px Abstand. */}
+          <Stack spacing={0.25} useFlexGap data-testid="listen-zeilen">
             {visible.map((card) => (
               <Box
                 key={card.id}
@@ -528,21 +546,34 @@ export function BoardListPage() {
                 tabIndex={0}
                 aria-label={`Detail öffnen: ${card.title}`}
                 draggable={sortable}
-                onDragStart={(e) => { setRowDrag(card.id); e.dataTransfer.setData('text/plain', String(card.id)) }}
+                onDragStart={(e) => {
+                  setRowDrag(card.id)
+                  e.dataTransfer.setData('text/plain', String(card.id))
+                  clearTimeout(zugTakt.current)
+                  zugTakt.current = setTimeout(() => setBewegteZeile(card.id), 0)
+                }}
                 onDragOver={(e) => { if (validRowDrop(card)) { e.preventDefault(); setRowOver(card.id) } }}
                 onDrop={(e) => { e.preventDefault(); void onRowDrop(card) }}
-                onDragEnd={() => { setRowDrag(null); setRowOver(null) }}
+                onDragEnd={() => {
+                  clearTimeout(zugTakt.current)
+                  setRowDrag(null)
+                  setRowOver(null)
+                  setBewegteZeile(null)
+                }}
+                data-zieh-zustand={bewegteZeile === card.id ? 'bewegt' : undefined}
+                data-ablage={rowOver === card.id ? 'aktiv' : undefined}
                 onClick={() => { if (!resizingRef.current) setDetailCard(card) }}
                 onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setDetailCard(card) } }}
                 sx={{
                   display: 'flex',
                   alignItems: 'center',
                   gap: 1.5,
-                  bgcolor: 'common.white',
+                  // Papierfläche als Token: schaltet mit dem Erscheinungsbild (#957).
+                  bgcolor: 'background.paper',
                   border: '1px solid',
                   borderColor: 'divider',
-                  borderTopColor: rowOver === card.id ? 'primary.main' : 'divider',
-                  borderTopWidth: rowOver === card.id ? 2 : 1,
+                  // Strichelung der bewegten Zeile vor der Status-Kante, damit jene durchgezogen bleibt.
+                  ...(bewegteZeile === card.id ? { borderStyle: 'dashed' } : {}),
                   // Abweichung von E5 mit Grund: Am Board bedeutet die linke Kante die
                   // Zugehoerigkeit zu einem Vorhaben. Eine Listenzeile hat keine Oberkante, an die
                   // der Status koennte — hier traegt die linke Kante deshalb den Status. Soll in
@@ -551,11 +582,15 @@ export function BoardListPage() {
                   borderLeft: `${STATUS_EDGE_WIDTH}px solid ${rowStatusColor(card)}`,
                   borderRadius: (t) => `${t.shape.borderRadius}px`,
                   px: 1.5,
-                  py: 1,
+                  py: 0.25,
                   cursor: 'pointer',
                   userSelect: 'none',
                   transition: 'box-shadow 150ms',
                   '&:hover': { boxShadow: SURFACE_HOVER_SHADOW },
+                  // Dieselben Bausteine wie auf dem Board: Platzhalter an der verlassenen Stelle,
+                  // Ablagefläche an der Zeile, an deren Platz die bewegte landet.
+                  ...(bewegteZeile === card.id ? PLATZHALTER_SX : {}),
+                  ...ablageflaecheSx(rowOver === card.id),
                 }}
               >
                 {sortable && (

@@ -11,8 +11,9 @@ import { epicsApi, type Epic } from '../api/epics'
 import { SnackbarProvider } from '../components/SnackbarProvider'
 import { BoardListPage } from './BoardListPage'
 import { ARCHIVED_STATUS_COLOR, statusColors } from '../lib/statusColors'
-import { cssRegel } from '../test/cssRegel'
-import { STATUS_EDGE_WIDTH } from '../theme'
+import { ThemeProvider } from '@mui/material/styles'
+import { cssRegel, cssRegelMit } from '../test/cssRegel'
+import { STATUS_EDGE_WIDTH, theme } from '../theme'
 
 function deferred<T>() {
   let resolve!: (value: T) => void
@@ -1282,5 +1283,110 @@ describe('BoardListPage', () => {
       expect(zeilenTitel()).toEqual(['Anton', 'Beta', 'Zebra'])
       expect(screen.getByText('Sortiert nach Titel.')).toBeInTheDocument()
     })
+  })
+})
+
+describe('BoardListPage Dichte, Ziffern und Ziehen (AK 7, AK 8, AK 10, AK 12, #957)', () => {
+  const erste: Card = { ...base, id: 100, columnId: 10, number: 1, title: 'Erste', description: '', archived: false }
+  const zweite: Card = {
+    ...base, id: 103, columnId: 10, number: 4, positionInColumn: 1, archived: false, description: '',
+    title: 'Ein langer Titel, der in einer schmalen Titelspalte über mehr als eine Zeile laufen darf',
+    excerpt: 'Auszug',
+  }
+
+  /** Einspaltiges Board: Dort ist das Umordnen per Ziehen zugelassen. Im echten Theme gerendert. */
+  const renderEinspaltig = async () => {
+    mBoards.get.mockResolvedValue({
+      id: 1, projectId: 9, name: 'B', createdAt: '',
+      columns: [{ id: 10, name: 'Backlog', position: 0, wipLimit: null }],
+    })
+    mCards.list.mockResolvedValue([erste, zweite])
+    mEpics.list.mockResolvedValue([])
+    mProjects.list.mockResolvedValue([{ id: 9, name: 'Projekt', role: 'OWNER', createdAt: '' }])
+    render(
+      <ThemeProvider theme={theme}>
+        <SnackbarProvider>
+          <MemoryRouter initialEntries={['/boards/1/list']}>
+            <Routes>
+              <Route path="/boards/:boardId/list" element={<BoardListPage />} />
+            </Routes>
+          </MemoryRouter>
+        </SnackbarProvider>
+      </ThemeProvider>,
+    )
+    await screen.findByText('Erste')
+  }
+
+  it('setzt die Zeilen in der dichteren Stufe: knappe Polsterung, knapper Zeilenabstand', async () => {
+    // Ausgangswert vor #957 auf 1440 x 900: 13 vollständig sichtbare Zeilen bei 8 px Polsterung
+    // oben und unten und 6 px Abstand. Die neue Stufe hält 2 px Polsterung und 2 px Abstand.
+    await renderEinspaltig()
+
+    // Unter dem Variablen-Theme schreibt MUI Abstände als Vielfaches von `--mb-spacing` (8 px).
+    expect(theme.spacing(0.25)).toBe('calc(0.25 * var(--mb-spacing, 8px))')
+    const zeile = screen.getByLabelText('Detail öffnen: Erste')
+    expect(cssRegel(zeile)).toContain('padding-top: calc(0.25 * var(--mb-spacing))')
+    expect(cssRegel(zeile)).toContain('padding-bottom: calc(0.25 * var(--mb-spacing))')
+    expect(cssRegel(screen.getByTestId('listen-zeilen'))).toContain('gap: calc(0.25 * var(--mb-spacing))')
+  })
+
+  it('schneidet den Titel nicht ab, lässt den Auszug aber einzeilig', async () => {
+    await renderEinspaltig()
+
+    const titel = screen.getByText(zweite.title)
+    expect(cssRegel(titel)).not.toContain('white-space: nowrap')
+    expect(cssRegel(titel)).not.toContain('text-overflow')
+    // Der Auszug bleibt die „einzeilige Vorschau" aus `lib/listExcerpt.ts` (Plan #932 E16).
+    expect(cssRegel(screen.getByText('Auszug'))).toContain('white-space: nowrap')
+  })
+
+  it('malt die Zeilenfläche aus einem Token statt mit festem Weiß', async () => {
+    await renderEinspaltig()
+
+    const zeile = screen.getByLabelText('Detail öffnen: Erste')
+    expect(cssRegel(zeile)).toContain('background-color: var(--mb-palette-background-paper)')
+    expect(cssRegel(zeile)).not.toContain('common-white')
+  })
+
+  it('setzt die Nummernspalte rechtsbündig in Tabellenziffern, in der Kopfzeile wie in den Zeilen', async () => {
+    await renderEinspaltig()
+
+    const nummer = within(screen.getByLabelText('Detail öffnen: Erste')).getByText('#1')
+    const zelle = cssRegel(nummer)
+    expect(zelle).toContain('font-variant-numeric: tabular-nums')
+    expect(zelle).toContain('text-align: right')
+    expect(cssRegel(screen.getByLabelText('Spalte Nr'))).toContain('justify-content: flex-end')
+  })
+
+  it('kennzeichnet die bewegte Zeile und zeigt die Stelle, an der sie landen würde', async () => {
+    await renderEinspaltig()
+    const dataTransfer = { setData: vi.fn() }
+
+    fireEvent.dragStart(screen.getByLabelText('Detail öffnen: Erste'), { dataTransfer })
+    await waitFor(() => expect(screen.getByLabelText('Detail öffnen: Erste')).toHaveAttribute('data-zieh-zustand', 'bewegt'))
+    fireEvent.dragOver(screen.getByLabelText(`Detail öffnen: ${zweite.title}`), { dataTransfer })
+
+    const quelle = screen.getByLabelText('Detail öffnen: Erste')
+    const ziel = screen.getByLabelText(`Detail öffnen: ${zweite.title}`)
+    // Dieselben Bausteine wie auf dem Board (`boardSurfaceSx.ts`): Platzhalter und Ablagefläche.
+    expect(cssRegelMit(quelle, '>*')).toContain('visibility: hidden')
+    expect(cssRegel(quelle)).toContain('border-style: dashed')
+    expect(ziel).toHaveAttribute('data-ablage', 'aktiv')
+    expect(cssRegel(ziel)).toContain('outline: 2px dashed')
+
+    fireEvent.dragEnd(quelle)
+
+    expect(screen.getByLabelText('Detail öffnen: Erste')).not.toHaveAttribute('data-zieh-zustand')
+    expect(screen.getByLabelText(`Detail öffnen: ${zweite.title}`)).not.toHaveAttribute('data-ablage')
+  })
+
+  it('setzt keinen Ziehzustand, wenn das Ziehen endet, bevor er greift', async () => {
+    await renderEinspaltig()
+
+    fireEvent.dragStart(screen.getByLabelText('Detail öffnen: Erste'), { dataTransfer: { setData: vi.fn() } })
+    fireEvent.dragEnd(screen.getByLabelText('Detail öffnen: Erste'))
+    await new Promise((fertig) => setTimeout(fertig, 5))
+
+    expect(screen.getByLabelText('Detail öffnen: Erste')).not.toHaveAttribute('data-zieh-zustand')
   })
 })

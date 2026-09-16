@@ -148,7 +148,8 @@ export function DataTable<Row>({
           </Menu>
         </Box>
       )}
-      <Table size="small" sx={{ tableLayout: 'fixed' }}>
+      {/* Die Dichte kommt aus dem Theme (`MuiTableCell`, #953), nicht aus dieser Tabelle. */}
+      <Table sx={{ tableLayout: 'fixed' }}>
         <TableHead>
           <TableRow>
             {visibleColumns.map((col) => (
