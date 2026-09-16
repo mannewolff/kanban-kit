@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { kontrast } from './lib/kontrast'
 import type { NightRunState } from './lib/nightRunLog'
+import { theme } from './theme'
 import {
   NACHTLAUF_FARBEN,
+  NACHTLAUF_WURZEL_SX,
   NACHTLAUF_MASSE,
   NACHTLAUF_SCHRIFTEN,
   NACHTLAUF_TON,
@@ -168,5 +170,58 @@ describe('nachtlaufTheme', () => {
     // `palette.nightRun` bleibt unverändert (E10): Es trägt die beiden Lauf-Arten, die
     // weiterhin in der Designsprache „Panel" dargestellt werden.
     expect(nachtlaufTheme.palette.nightRun.red).toBe('#FF0000')
+  })
+})
+
+/**
+ * Die Ausnahme gilt auch im dunklen Erscheinungsbild (Plan #932 E2, #954). Sie stellt sich nicht
+ * von selbst her: Die `--mb-*`-Variablen hängen an `:root` und schalten per Media-Query —
+ * unabhängig vom verschachtelten Theme-Provider. Ohne diese Zusicherungen stünde die Seite halb
+ * hell, halb dunkel da, und kein Test meldete es.
+ */
+describe('nachtlaufDesign Ausnahme auch im Dunkeln (#954)', () => {
+  const blaetter = theme.generateStyleSheets()
+  const dunkleRegel = blaetter.find((blatt) => '@media (prefers-color-scheme: dark)' in blatt)![
+    '@media (prefers-color-scheme: dark)'
+  ] as Record<string, Record<string, string>>
+  const helleRegel = blaetter
+    .map((blatt) => blatt[':root'] as Record<string, string> | undefined)
+    .find((wurzel) => wurzel?.colorScheme === 'light')!
+  const dunklePaletteVariablen = Object.keys(dunkleRegel[':root']).filter((name) => name.startsWith('--mb-palette-'))
+  const wurzel = NACHTLAUF_WURZEL_SX as Record<string, unknown>
+  const hell = theme.colorSchemes.light!.palette
+
+  it('setzt am Wurzelknoten jede Palette-Variable, die das dunkle Erscheinungsbild ändert, auf ihren Hellwert', () => {
+    expect(dunklePaletteVariablen.length).toBeGreaterThan(50)
+    // Fehlt eine davon, schlägt an dieser Stelle der dunkle Wert von `:root` durch.
+    expect(dunklePaletteVariablen.filter((name) => wurzel[name] === undefined)).toEqual([])
+    for (const name of dunklePaletteVariablen.filter((n) => n in helleRegel)) {
+      expect(wurzel[name], name).toBe(helleRegel[name])
+    }
+  })
+
+  it('trifft dabei die Hellwerte des Leitstand-Themes', () => {
+    expect(wurzel['--mb-palette-background-paper']).toBe(hell.background.paper)
+    expect(wurzel['--mb-palette-text-primary']).toBe(hell.text.primary)
+    expect(wurzel['--mb-palette-divider']).toBe(hell.divider)
+    expect(wurzel['--mb-palette-panel-surfaceTint']).toBe(hell.panel.surfaceTint)
+    expect(wurzel['--mb-palette-status-done-dot']).toBe(hell.status.done.dot)
+    expect(wurzel['--mb-palette-epic-3-hue']).toBe(hell.epic[3].hue)
+    expect(wurzel.colorScheme).toBe('light')
+  })
+
+  it('malt den Grund der Seite selbst, statt ihn aus body::before zu beziehen', () => {
+    // `body::before` trägt APP_BACKGROUND und würde dunkel, während die Flächen der Seite hell blieben.
+    expect(wurzel.bgcolor).toBe(NACHTLAUF_FARBEN.ground)
+  })
+
+  it('übernimmt die Overrides des Leitstands mit festen Hellwerten statt mit Variablen', () => {
+    // Menüs und Popover landen in einem Portal außerhalb des Wurzelknotens; dort griffe dessen
+    // Variablen-Rücksetzung nicht. Die Overrides tragen deshalb gar keine Variable mehr.
+    expect(JSON.stringify(nachtlaufTheme.components)).not.toContain('var(')
+    const paper = nachtlaufTheme.components?.MuiPaper?.styleOverrides as Record<string, Record<string, string>>
+    expect(paper.outlined.borderColor).toBe(hell.divider)
+    const tabelle = nachtlaufTheme.components?.MuiTable?.styleOverrides?.root as Record<string, Record<string, string>>
+    expect(tabelle['& .MuiTableBody-root .MuiTableRow-root:nth-of-type(even)'].backgroundColor).toBe(hell.panel.surfaceTint)
   })
 })

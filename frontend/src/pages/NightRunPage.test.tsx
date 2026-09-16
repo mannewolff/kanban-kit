@@ -26,6 +26,7 @@ import echteKette from '../lib/__fixtures__/night-run-2026-09-14-131200.json'
 import { parseNightRunErgebnisstand } from '../lib/nightRunErgebnisstand'
 import { buildHandoffText, type NightRunHandoffItem } from '../lib/nightRunHandoff'
 import { NACHTLAUF_FARBEN, NACHTLAUF_TON } from '../nachtlaufDesign'
+import { cssRegel } from '../test/cssRegel'
 import { theme } from '../theme'
 import { NightRunPage } from './NightRunPage'
 import appQuelle from '../App.tsx?raw'
@@ -1314,6 +1315,21 @@ describe('NightRunPage — Ergebnisstand hineingeben', () => {
     ).toBeInTheDocument()
     // Der lokal aus dem Ergebnisstand erzeugte Lauf-Eintrag bleibt trotzdem sichtbar.
     expect(lauf(0)).toBeInTheDocument()
+  })
+})
+
+describe('NightRunPage — Ausnahme auch im Dunkeln (#954)', () => {
+  it('setzt am Wurzelknoten der Seite die Hellwerte und malt ihren Grund selbst', async () => {
+    renderPage()
+    await screen.findByText('Noch keine Auswertung vorhanden.')
+
+    // jsdom wertet `prefers-color-scheme` nicht aus; geprüft wird deshalb die erzeugte Regel am
+    // Wurzelknoten. Sie fällt, sobald die Variablen von `:root` durchschlagen könnten.
+    const regel = cssRegel(screen.getByTestId('nachtlauf-wurzel'))
+    expect(regel).toContain('--mb-palette-background-paper: #FFFFFF')
+    expect(regel).toContain('--mb-palette-divider: #D8ECEE')
+    expect(regel).toContain('color-scheme: light')
+    expect(regel).toContain(`background-color: ${NACHTLAUF_FARBEN.ground}`)
   })
 })
 

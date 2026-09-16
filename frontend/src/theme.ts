@@ -269,9 +269,10 @@ const VARIABLEN = VARIABLEN_THEME.vars.palette
 /**
  * Alle Variablen des hellen Erscheinungsbilds samt `color-scheme: light`, so wie MUI sie an
  * `:root` schreibt. Der Druckblock setzt sie zurück, damit der Ausdruck auch bei dunklem System
- * hell bleibt (#953).
+ * hell bleibt (#953); die Nachtlauf-Auswertung setzt sie an ihrem Wurzelknoten, damit ihre
+ * Ausnahme auch im Dunkeln hell bleibt (#954).
  */
-const HELLE_VARIABLEN = (() => {
+export const HELLE_VARIABLEN: Readonly<Record<string, string>> = (() => {
   const blaetter = VARIABLEN_THEME.generateStyleSheets()
   const hell = blaetter
     .map((blatt) => blatt[':root'] as Record<string, string> | undefined)

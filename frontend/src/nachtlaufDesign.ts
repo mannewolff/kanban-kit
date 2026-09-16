@@ -1,6 +1,7 @@
-import { createTheme } from '@mui/material/styles'
+import { createTheme, type SxProps, type Theme } from '@mui/material/styles'
 import type { NightRunState } from './lib/nightRunLog'
-import { theme } from './theme'
+import { variablenAufloesen } from './lib/variablenAufloesen'
+import { HELLE_VARIABLEN, theme } from './theme'
 
 /**
  * Wertequelle der Nachtlauf-Auswertung (`/projects/:id/nachtlauf`) — die einzige bewusste
@@ -195,6 +196,11 @@ export const NACHTLAUF_TON: Record<NightRunState, string> = {
  *
  * `palette.nightRun` in `theme.ts` bleibt unverändert (E10): Es trägt weiter die beiden
  * Lauf-Arten, die in der Designsprache „Panel" dargestellt werden.
+ *
+ * **Die übernommenen Vorgaben tragen feste Hellwerte (#954).** Seit #951 stehen in `theme.ts`
+ * Variablen, die an `:root` hängen und im dunklen Erscheinungsbild umschalten — unabhängig von
+ * diesem verschachtelten Provider, und auch in Menüs und Popovern, die im Portal außerhalb der
+ * Seite landen. Aufgelöst zu den Hellwerten bleibt die Ausnahme hell (Plan #932 E2).
  */
 export const nachtlaufTheme = createTheme(
   {
@@ -208,5 +214,26 @@ export const nachtlaufTheme = createTheme(
     shape: { borderRadius: 8 },
     typography: { fontFamily: NACHTLAUF_SCHRIFTEN.body },
   },
-  { components: theme.components, palette: { nightRun: theme.palette.nightRun } },
+  { components: variablenAufloesen(theme.components, HELLE_VARIABLEN), palette: { nightRun: theme.palette.nightRun } },
 )
+
+/**
+ * Wurzelknoten des Inhaltsbereichs der Nachtlauf-Auswertung (#954, Plan #932 E2).
+ *
+ * **Die Ausnahme gilt auch im dunklen Erscheinungsbild — und stellt sich nicht von selbst her.**
+ * Bausteine auf der Seite lesen weiterhin Variablen des Leitstands (Status- und Vorhaben-Farben,
+ * Flächen-Tokens); die hängen an `:root` und schalteten ins Dunkle. Der Wurzelknoten setzt sie für
+ * seinen Teilbaum auf die Hellwerte zurück.
+ *
+ * **Der Grund wird hier gemalt**, nicht aus `body::before` bezogen: Jener trägt den Grund des
+ * Leitstands und würde dunkel, während die Flächen der Seite hell blieben. Die negativen Ränder
+ * ziehen die Fläche über die Polsterung des Inhaltsbereichs der Shell, damit dort kein dunkler
+ * Streifen stehen bleibt; die Mindesthöhe reicht bis unter die Kopfleiste.
+ */
+export const NACHTLAUF_WURZEL_SX: SxProps<Theme> = {
+  ...HELLE_VARIABLEN,
+  bgcolor: GROUND,
+  m: -3,
+  p: 3,
+  minHeight: 'calc(100vh - 64px)',
+}

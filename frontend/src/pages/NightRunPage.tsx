@@ -61,7 +61,7 @@ import { NachtlaufAnteilsbalken } from '../components/nachtlauf/NachtlaufAnteils
 import { NachtlaufVerbrauchBereich } from '../components/nachtlauf/NachtlaufVerbrauchBereich'
 import { NachtlaufFuss, type Fussangabe as FussangabeForm } from '../components/nachtlauf/NachtlaufFuss'
 import { NACHTLAUF_TON } from '../nachtlaufDesign'
-import { nachtlaufTheme } from '../nachtlaufDesign'
+import { NACHTLAUF_WURZEL_SX, nachtlaufTheme } from '../nachtlaufDesign'
 import { useSnackbar } from '../components/SnackbarProvider'
 import { formatDuration } from '../lib/formatDuration'
 import { betrag, kosten, menge } from '../lib/nachtlaufFormat'
@@ -2689,7 +2689,9 @@ export function NightRunPage() {
     // Drawer bleibt außen vor (E8) — der Entwurf beschreibt allein den Inhaltsbereich.
     <>
       <ThemeProvider theme={nachtlaufTheme}>
-        <Box>
+        {/* Die Ausnahme bleibt auch bei dunklem System hell (#954): Der Wurzelknoten setzt die
+            Variablen des Leitstands für seinen Teilbaum auf die Hellwerte und malt den Grund selbst. */}
+        <Box data-testid="nachtlauf-wurzel" sx={NACHTLAUF_WURZEL_SX}>
           {/* Brotkrumenpfad und „Protokoll einlesen" kennt der Entwurf nicht. AK 10: Wo er kein
               Element vorsieht, bleibt es in seiner Funktion erhalten und wird eingepasst — als
               schmale Zeile über dem Entwurfskopf, in dessen Schriftbild und Farben (E9). */}
