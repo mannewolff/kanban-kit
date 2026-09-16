@@ -190,7 +190,10 @@ class ArchitectureTest {
           "CardService",
           "LabelService",
           "CardBoardActivityEvent",
-          "CardsPurgedEvent");
+          "CardsPurgedEvent",
+          // EpicRef ist Vertrag (Issue #936): die Nachtlauf-Auswertung fragt je Kartennummer die
+          // Vorhaben ab, ohne card.domain zu beruehren — analog CardsPurgedEvent (Issue #503).
+          "EpicRef");
 
   // --- Modul-Grenze: board-Fassade (Issue #459, Whitelist seit #470) --------------------------
   // Board und Spalte sind modulintern. Fremde Module fragen die fachliche board.application-
