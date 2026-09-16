@@ -11,7 +11,9 @@ import org.mwolff.manban.nightrun.domain.NightRun;
 import org.mwolff.manban.nightrun.domain.NightRunErrorClass;
 import org.mwolff.manban.nightrun.domain.NightRunItem;
 import org.mwolff.manban.nightrun.domain.NightRunMode;
+import org.mwolff.manban.nightrun.domain.NightRunOrigin;
 import org.mwolff.manban.nightrun.domain.NightRunState;
+import org.mwolff.manban.nightrun.domain.NightRunUsage;
 import org.mwolff.manban.project.application.PermissionChecker;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -108,7 +110,14 @@ public class NightRunService {
         submission.skippedCount(),
         submission.unparsedCount(),
         submission.unparsedSample(),
-        now);
+        now,
+        // Der Upload-Weg ist per Definition die menschliche Herkunft; updatedAt bleibt leer,
+        // weil ein hochgeladener Lauf nie fortgeschrieben wird.
+        NightRunOrigin.UPLOAD,
+        null,
+        submission.complete(),
+        null,
+        submission.usage());
   }
 
   private static List<NightRunItem> items(NewNightRun submission) {
@@ -124,7 +133,8 @@ public class NightRunService {
                     item.errorClass(),
                     item.durationMs(),
                     item.commitHash(),
-                    item.excerpt()))
+                    item.excerpt(),
+                    item.usage()))
         .toList();
   }
 
@@ -150,6 +160,11 @@ public class NightRunService {
         run.unparsedCount(),
         run.unparsedSample(),
         run.createdAt(),
+        run.origin(),
+        run.tokenName(),
+        run.complete(),
+        run.updatedAt(),
+        run.usage(),
         items);
   }
 
@@ -162,7 +177,8 @@ public class NightRunService {
         item.errorClass(),
         item.durationMs(),
         item.commitHash(),
-        item.excerpt());
+        item.excerpt(),
+        item.usage());
   }
 
   /**
@@ -176,6 +192,8 @@ public class NightRunService {
       int skippedCount,
       int unparsedCount,
       @Nullable String unparsedSample,
+      boolean complete,
+      @Nullable NightRunUsage usage,
       List<NewNightRunItem> items) {}
 
   /** Ein einzulieferndes Arbeitspaket ohne technische Felder. */
@@ -186,7 +204,8 @@ public class NightRunService {
       @Nullable NightRunErrorClass errorClass,
       @Nullable Long durationMs,
       @Nullable String commitHash,
-      @Nullable String excerpt) {}
+      @Nullable String excerpt,
+      @Nullable NightRunUsage usage) {}
 
   /**
    * Ergebnis der Einlieferung eines Laufs.
@@ -207,6 +226,11 @@ public class NightRunService {
       int unparsedCount,
       @Nullable String unparsedSample,
       Instant createdAt,
+      NightRunOrigin origin,
+      @Nullable String tokenName,
+      boolean complete,
+      @Nullable Instant updatedAt,
+      @Nullable NightRunUsage usage,
       List<NightRunItemView> items) {}
 
   /** Darstellung eines Arbeitspakets. */
@@ -218,5 +242,6 @@ public class NightRunService {
       @Nullable NightRunErrorClass errorClass,
       @Nullable Long durationMs,
       @Nullable String commitHash,
-      @Nullable String excerpt) {}
+      @Nullable String excerpt,
+      @Nullable NightRunUsage usage) {}
 }

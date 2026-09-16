@@ -106,6 +106,11 @@ class NightRunController {
         request.skippedCount(),
         request.unparsedCount(),
         request.unparsedSample(),
+        // Fest true und kein Request-Feld: Der Browser liefert einen unabgeschlossenen Lauf
+        // ohnehin nicht ein, und ein Feld, das nur einen Wert annehmen kann, taeuschte eine Wahl
+        // vor, die es nicht gibt. Der Kostenwert kommt mit einem eigenen Paket.
+        true,
+        null,
         request.items().stream().map(NightRunController::item).toList());
   }
 
@@ -117,7 +122,8 @@ class NightRunController {
         request.errorClass(),
         request.durationMs(),
         request.commitHash(),
-        request.excerpt());
+        request.excerpt(),
+        null);
   }
 
   /**

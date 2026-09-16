@@ -26,6 +26,7 @@ import org.mwolff.manban.nightrun.domain.NightRun;
 import org.mwolff.manban.nightrun.domain.NightRunErrorClass;
 import org.mwolff.manban.nightrun.domain.NightRunItem;
 import org.mwolff.manban.nightrun.domain.NightRunMode;
+import org.mwolff.manban.nightrun.domain.NightRunOrigin;
 import org.mwolff.manban.nightrun.domain.NightRunState;
 import org.mwolff.manban.project.application.PermissionChecker;
 import org.mwolff.manban.project.application.ProjectAccessDeniedException;
@@ -339,7 +340,16 @@ class NightRunServiceTest {
   private static NightRunService.NewNightRun lauf(
       Instant startedAt, NightRunService.NewNightRunItem... items) {
     return new NightRunService.NewNightRun(
-        startedAt, NightRunMode.IMPLEMENTATION, 1_000L, 2, 1, 3, "Rest", List.of(items));
+        startedAt,
+        NightRunMode.IMPLEMENTATION,
+        1_000L,
+        2,
+        1,
+        3,
+        "Rest",
+        true,
+        null,
+        List.of(items));
   }
 
   private static NightRunService.NewNightRunItem item(
@@ -351,7 +361,8 @@ class NightRunServiceTest {
         errorClass,
         500L,
         "abc1234",
-        "Auszug " + cardNumber);
+        "Auszug " + cardNumber,
+        null);
   }
 
   /**
@@ -390,7 +401,12 @@ class NightRunServiceTest {
               run.skippedCount(),
               run.unparsedCount(),
               run.unparsedSample(),
-              run.createdAt()));
+              run.createdAt(),
+              NightRunOrigin.UPLOAD,
+              null,
+              true,
+              null,
+              null));
       for (NightRunItem item : items) {
         long paketId = naechstePaketId;
         naechstePaketId += 1;
@@ -404,7 +420,8 @@ class NightRunServiceTest {
                 item.errorClass(),
                 item.durationMs(),
                 item.commitHash(),
-                item.excerpt()));
+                item.excerpt(),
+                null));
       }
       return Optional.of(id);
     }
@@ -452,5 +469,21 @@ class NightRunServiceTest {
           .forEach(e -> counts.merge(e.getKey(), 1L, Long::sum));
       return counts;
     }
+  }
+
+  /**
+   * Der Upload-Weg ist die menschliche Herkunft, und ein hochgeladener Lauf gilt als abgeschlossen:
+   * Der Browser liefert einen unvollstaendigen gar nicht erst ein. {@code updatedAt} bleibt leer,
+   * weil dieser Weg nichts fortschreibt.
+   */
+  @Test
+  void submit_schreibtMenschlicheHerkunft_undGiltAlsVollstaendig() {
+    service.submit(USER, PROJECT, List.of(lauf(T1)));
+
+    NightRun geschrieben = runs.findByProjectOrderByStartedAtDesc(PROJECT).getFirst();
+    assertThat(geschrieben.origin()).isEqualTo(NightRunOrigin.UPLOAD);
+    assertThat(geschrieben.complete()).isTrue();
+    assertThat(geschrieben.updatedAt()).isNull();
+    assertThat(geschrieben.tokenName()).isNull();
   }
 }

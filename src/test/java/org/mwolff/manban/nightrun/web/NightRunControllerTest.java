@@ -30,6 +30,7 @@ import org.mwolff.manban.nightrun.application.NightRunService.NightRunView;
 import org.mwolff.manban.nightrun.domain.NightRunErrorClass;
 import org.mwolff.manban.nightrun.domain.NightRunLimits;
 import org.mwolff.manban.nightrun.domain.NightRunMode;
+import org.mwolff.manban.nightrun.domain.NightRunOrigin;
 import org.mwolff.manban.nightrun.domain.NightRunState;
 import org.mwolff.manban.project.application.ProjectAccessDeniedException;
 import org.mwolff.manban.project.application.ProjectNotFoundException;
@@ -51,6 +52,9 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
  * belegt {@code NightRunIT}: {@code GlobalExceptionHandler} ist package-private in {@code
  * common.web} und hier nicht im Spiel, es käme nur der Statuscode an.
  */
+// Testklasse: Die Importe folgen den geprueften Typen. Issue #944 bringt NightRunOrigin
+// dazu und reisst damit die Schwelle von 40.
+@SuppressWarnings("PMD.ExcessiveImports")
 class NightRunControllerTest {
 
   private static final long USER = 7L;
@@ -137,6 +141,8 @@ class NightRunControllerTest {
                 1,
                 3,
                 "Fehler: kaputt",
+                true,
+                null,
                 List.of(
                     new NewNightRunItem(
                         721,
@@ -145,9 +151,12 @@ class NightRunControllerTest {
                         NightRunErrorClass.CHECKS_RED,
                         900L,
                         "abc1234",
-                        "mvn verify rot"))));
+                        "mvn verify rot",
+                        null))));
     assertThat(uebergeben.get(1))
-        .isEqualTo(new NewNightRun(ZWEITER, NightRunMode.REVIEW, 10L, 0, 0, 0, null, List.of()));
+        .isEqualTo(
+            new NewNightRun(
+                ZWEITER, NightRunMode.REVIEW, 10L, 0, 0, 0, null, true, null, List.of()));
   }
 
   /**
@@ -187,12 +196,15 @@ class NightRunControllerTest {
                 0,
                 0,
                 null,
+                true,
+                null,
                 List.of(
                     new NewNightRunItem(
                         853,
                         "Kette",
                         NightRunState.RED,
                         NightRunErrorClass.TIME_BUDGET_EXCEEDED,
+                        null,
                         null,
                         null,
                         null))));
@@ -365,6 +377,11 @@ class NightRunControllerTest {
                     3,
                     "Fehler: kaputt",
                     Instant.parse("2026-09-01T06:00:00Z"),
+                    NightRunOrigin.UPLOAD,
+                    null,
+                    true,
+                    null,
+                    null,
                     List.of(
                         new NightRunItemView(
                             21L,
@@ -374,7 +391,8 @@ class NightRunControllerTest {
                             NightRunErrorClass.CHECKS_RED,
                             900L,
                             "abc1234",
-                            "mvn verify rot")))));
+                            "mvn verify rot",
+                            null)))));
 
     mvc.perform(get(PATH))
         .andExpect(status().isOk())
@@ -412,6 +430,11 @@ class NightRunControllerTest {
                     0,
                     null,
                     Instant.parse("2026-09-01T06:00:00Z"),
+                    NightRunOrigin.UPLOAD,
+                    null,
+                    true,
+                    null,
+                    null,
                     List.of(
                         new NightRunItemView(
                             22L,
@@ -419,6 +442,7 @@ class NightRunControllerTest {
                             "Kette",
                             NightRunState.RED,
                             NightRunErrorClass.TIME_BUDGET_EXCEEDED,
+                            null,
                             null,
                             null,
                             null)))));

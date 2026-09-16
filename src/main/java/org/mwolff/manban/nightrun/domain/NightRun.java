@@ -31,5 +31,10 @@ public record NightRun(
     int skippedCount,
     int unparsedCount,
     @Nullable String unparsedSample,
-    Instant createdAt)
+    Instant createdAt,
+    NightRunOrigin origin,
+    @Nullable String tokenName,
+    boolean complete,
+    @Nullable Instant updatedAt,
+    @Nullable NightRunUsage usage)
     implements Identifiable {}

@@ -35,7 +35,8 @@ public record NightRunItem(
     @Nullable NightRunErrorClass errorClass,
     @Nullable Long durationMs,
     @Nullable String commitHash,
-    @Nullable String excerpt)
+    @Nullable String excerpt,
+    @Nullable NightRunUsage usage)
     implements Identifiable {
 
   /**
@@ -47,6 +48,15 @@ public record NightRunItem(
    */
   public NightRunItem withNightRunId(Long newNightRunId) {
     return new NightRunItem(
-        id, newNightRunId, cardNumber, title, state, errorClass, durationMs, commitHash, excerpt);
+        id,
+        newNightRunId,
+        cardNumber,
+        title,
+        state,
+        errorClass,
+        durationMs,
+        commitHash,
+        excerpt,
+        usage);
   }
 }

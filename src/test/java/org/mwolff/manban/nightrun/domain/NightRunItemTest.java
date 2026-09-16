@@ -17,7 +17,8 @@ class NightRunItemTest {
           NightRunErrorClass.CHECKS_RED,
           92_000L,
           "4c9f42a",
-          "  Issue #721: gelaufen: mvn verify -> rot");
+          "  Issue #721: gelaufen: mvn verify -> rot",
+          null);
 
   @Test
   void withNightRunIdSetztDenFremdschluessel() {

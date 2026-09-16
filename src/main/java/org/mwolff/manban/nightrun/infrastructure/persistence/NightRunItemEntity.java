@@ -6,6 +6,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import java.math.BigDecimal;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -46,6 +47,18 @@ class NightRunItemEntity {
   @Column(name = "excerpt")
   private @Nullable String excerpt;
 
+  @Column(name = "cost_usd")
+  private @Nullable BigDecimal costUsd;
+
+  @Column(name = "input_tokens")
+  private @Nullable Long inputTokens;
+
+  @Column(name = "output_tokens")
+  private @Nullable Long outputTokens;
+
+  @Column(name = "cached_input_tokens")
+  private @Nullable Long cachedInputTokens;
+
   protected NightRunItemEntity() {
     // für JPA
   }
@@ -84,5 +97,21 @@ class NightRunItemEntity {
 
   @Nullable String getExcerpt() {
     return excerpt;
+  }
+
+  @Nullable BigDecimal getCostUsd() {
+    return costUsd;
+  }
+
+  @Nullable Long getInputTokens() {
+    return inputTokens;
+  }
+
+  @Nullable Long getOutputTokens() {
+    return outputTokens;
+  }
+
+  @Nullable Long getCachedInputTokens() {
+    return cachedInputTokens;
   }
 }

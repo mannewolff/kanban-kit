@@ -6,10 +6,12 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.entry;
 import static org.assertj.core.api.Assertions.tuple;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mwolff.manban.AbstractIntegrationTest;
@@ -19,7 +21,9 @@ import org.mwolff.manban.nightrun.domain.NightRunErrorClass;
 import org.mwolff.manban.nightrun.domain.NightRunItem;
 import org.mwolff.manban.nightrun.domain.NightRunLimits;
 import org.mwolff.manban.nightrun.domain.NightRunMode;
+import org.mwolff.manban.nightrun.domain.NightRunOrigin;
 import org.mwolff.manban.nightrun.domain.NightRunState;
+import org.mwolff.manban.nightrun.domain.NightRunUsage;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -34,6 +38,10 @@ import org.springframework.jdbc.core.JdbcTemplate;
  * Spaltenzusicherung nicht misst — und die Verdrängung des Ringpuffers.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE)
+// Testklasse: Jede Methode ist ein Fall, und Faelle werden nicht zusammengelegt, um eine
+// Zahl zu druecken. Issue #944 bringt drei Faelle fuer Herkunft, Vollstaendigkeit und
+// Verbrauch dazu.
+@SuppressWarnings("PMD.TooManyMethods")
 class NightRunRepositoryIT extends AbstractIntegrationTest {
 
   private static final Instant T1 = Instant.parse("2026-09-01T22:00:00Z");
@@ -73,7 +81,12 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
         1,
         0,
         null,
-        ANGELEGT);
+        ANGELEGT,
+        NightRunOrigin.UPLOAD,
+        null,
+        true,
+        null,
+        null);
   }
 
   private static NightRunItem paket(int cardNumber, NightRunState state) {
@@ -86,7 +99,8 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
         state == NightRunState.GREEN ? null : NightRunErrorClass.CHECKS_RED,
         state == NightRunState.GREY ? null : 60_000L,
         state == NightRunState.GREEN ? "4c9f42a" : null,
-        "  #" + cardNumber + " -> " + state);
+        "  #" + cardNumber + " -> " + state,
+        null);
   }
 
   private long anlegen(Instant startedAt, List<NightRunItem> items) {
@@ -138,7 +152,22 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
   @Test
   void einKettenLaufMitZeitbudgetAbbruchWirdAngenommenUndZurueckgelesen() {
     NightRun kette =
-        new NightRun(null, projectId, T1, NightRunMode.CHAIN, 3_600_000L, 1, 0, 0, null, ANGELEGT);
+        new NightRun(
+            null,
+            projectId,
+            T1,
+            NightRunMode.CHAIN,
+            3_600_000L,
+            1,
+            0,
+            0,
+            null,
+            ANGELEGT,
+            NightRunOrigin.UPLOAD,
+            null,
+            true,
+            null,
+            null);
 
     long id =
         runs.insertIfAbsent(kette, List.of(mitKlasse(853, NightRunErrorClass.TIME_BUDGET_EXCEEDED)))
@@ -212,7 +241,21 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
 
     NightRun fremd =
         new NightRun(
-            null, anderesProjekt, T1, NightRunMode.REVIEW, 1_000L, 0, 0, 0, null, ANGELEGT);
+            null,
+            anderesProjekt,
+            T1,
+            NightRunMode.REVIEW,
+            1_000L,
+            0,
+            0,
+            0,
+            null,
+            ANGELEGT,
+            NightRunOrigin.UPLOAD,
+            null,
+            true,
+            null,
+            null);
 
     assertThat(runs.insertIfAbsent(fremd, List.of())).isPresent();
   }
@@ -269,7 +312,7 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
 
   private static NightRunItem mitAuszug(String excerpt) {
     return new NightRunItem(
-        null, null, 721, "Paket", NightRunState.GREEN, null, null, null, excerpt);
+        null, null, 721, "Paket", NightRunState.GREEN, null, null, null, excerpt, null);
   }
 
   private NightRun mitProbe(Instant startedAt, int laenge) {
@@ -283,7 +326,12 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
         0,
         1,
         "y".repeat(laenge),
-        ANGELEGT);
+        ANGELEGT,
+        NightRunOrigin.UPLOAD,
+        null,
+        true,
+        null,
+        null);
   }
 
   // --- Korrelation Zustand <-> Fehlerklasse ---------------------------------------------------
@@ -374,6 +422,140 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
         errorClass,
         null,
         null,
+        null,
         null);
+  }
+
+  /**
+   * Die Vorgaben der Migration: Eine Zeile, die ohne die neuen Spalten eingefuegt wird, traegt
+   * danach die menschliche Herkunft, gilt als vollstaendig und hat in allen vier Verbrauchsspalten
+   * {@code NULL} — „nicht gemessen" und nicht Null. Fuer Altlaeufe sind die Werte nicht
+   * rekonstruierbar, und eine 0 behauptete, der Lauf habe nichts verbraucht.
+   */
+  @Test
+  void eineZeileOhneDieNeuenSpaltenTraegtDieVorgabenDerMigration() {
+    long runId =
+        insert(
+            "INSERT INTO night_run (project_id, started_at, mode, duration_ms, processed_count,"
+                + " skipped_count, unparsed_count, created_at) VALUES ("
+                + projectId
+                + ", timestamptz '2026-09-05T22:00:00Z', 'IMPLEMENTATION', 1000, 1, 0, 0,"
+                + " timestamptz '2026-09-05T23:00:00Z') RETURNING id");
+    jdbc.update(
+        "INSERT INTO night_run_item (night_run_id, card_number, title, state) VALUES (?, ?, ?, ?)",
+        runId,
+        901,
+        "Altpaket",
+        "GREEN");
+
+    NightRun gelesen =
+        runs.findByProjectOrderByStartedAtDesc(projectId).stream()
+            .filter(r -> Objects.equals(r.id(), runId))
+            .findFirst()
+            .orElseThrow();
+
+    assertThat(gelesen.origin()).isEqualTo(NightRunOrigin.UPLOAD);
+    assertThat(gelesen.complete()).isTrue();
+    assertThat(gelesen.tokenName()).isNull();
+    assertThat(gelesen.updatedAt()).isNull();
+    assertThat(gelesen.usage()).isNull();
+    assertThat(runs.findItemsByRunIds(List.of(runId)))
+        .singleElement()
+        .extracting(NightRunItem::usage)
+        .isNull();
+  }
+
+  /** Verbrauch kommt an Lauf und Arbeitspaket unveraendert zurueck. */
+  @Test
+  void gemeldeterVerbrauchKommtAnLaufUndPaketZurueck() {
+    NightRunUsage laufVerbrauch =
+        new NightRunUsage(new BigDecimal("8.032575"), 148L, 62_411L, 8_883_160L);
+    NightRunUsage paketVerbrauch = new NightRunUsage(new BigDecimal("0.940000"), 12L, 34L, 56L);
+    NightRun mitVerbrauch =
+        new NightRun(
+            null,
+            projectId,
+            Instant.parse("2026-09-06T22:00:00Z"),
+            NightRunMode.CHAIN,
+            1000L,
+            1,
+            0,
+            0,
+            null,
+            ANGELEGT,
+            NightRunOrigin.UPLOAD,
+            null,
+            true,
+            null,
+            laufVerbrauch);
+    NightRunItem paket =
+        new NightRunItem(
+            null,
+            null,
+            944,
+            "Mit Verbrauch",
+            NightRunState.GREEN,
+            null,
+            5L,
+            null,
+            null,
+            paketVerbrauch);
+
+    long runId = runs.insertIfAbsent(mitVerbrauch, List.of(paket)).orElseThrow();
+
+    NightRun gelesen =
+        runs.findByProjectOrderByStartedAtDesc(projectId).stream()
+            .filter(r -> Objects.equals(r.id(), runId))
+            .findFirst()
+            .orElseThrow();
+    assertThat(gelesen.usage()).isNotNull();
+    assertThat(gelesen.usage().costUsd())
+        .usingComparator(BigDecimal::compareTo)
+        .isEqualTo(laufVerbrauch.costUsd());
+    assertThat(gelesen.usage().inputTokens()).isEqualTo(148L);
+    assertThat(gelesen.usage().outputTokens()).isEqualTo(62_411L);
+    assertThat(gelesen.usage().cachedInputTokens()).isEqualTo(8_883_160L);
+
+    NightRunItem gelesenesPaket = runs.findItemsByRunIds(List.of(runId)).getFirst();
+    assertThat(gelesenesPaket.usage()).isNotNull();
+    assertThat(gelesenesPaket.usage().costUsd())
+        .usingComparator(BigDecimal::compareTo)
+        .isEqualTo(paketVerbrauch.costUsd());
+  }
+
+  /** Maschinelle Herkunft samt Tokenname und Fortschreibungszeitpunkt. */
+  @Test
+  void maschinelleHerkunftKommtMitTokennamenUndZeitpunktZurueck() {
+    String langerName = "x".repeat(120);
+    Instant fortgeschrieben = Instant.parse("2026-09-07T03:22:00Z");
+    NightRun maschinell =
+        new NightRun(
+            null,
+            projectId,
+            Instant.parse("2026-09-07T22:00:00Z"),
+            NightRunMode.IMPLEMENTATION,
+            1000L,
+            1,
+            0,
+            0,
+            null,
+            ANGELEGT,
+            NightRunOrigin.TOKEN,
+            langerName,
+            false,
+            fortgeschrieben,
+            null);
+
+    long runId = runs.insertIfAbsent(maschinell, List.of()).orElseThrow();
+
+    NightRun gelesen =
+        runs.findByProjectOrderByStartedAtDesc(projectId).stream()
+            .filter(r -> Objects.equals(r.id(), runId))
+            .findFirst()
+            .orElseThrow();
+    assertThat(gelesen.origin()).isEqualTo(NightRunOrigin.TOKEN);
+    assertThat(gelesen.tokenName()).isEqualTo(langerName);
+    assertThat(gelesen.complete()).isFalse();
+    assertThat(gelesen.updatedAt()).isEqualTo(fortgeschrieben);
   }
 }

@@ -6,6 +6,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import java.math.BigDecimal;
 import java.time.Instant;
 import org.jspecify.annotations.Nullable;
 
@@ -15,6 +16,11 @@ import org.jspecify.annotations.Nullable;
  * <p>Geschrieben wird über {@code INSERT … ON CONFLICT … RETURNING id} per JDBC (Plan #718, A11);
  * die Entity trägt deshalb keinen öffentlichen Konstruktor.
  */
+// Die Feldzahl folgt dem Tabellenschema, nicht einer Entwurfsentscheidung: Diese Klasse
+// bildet night_run ab, und die Tabelle traegt seit Issue #944 acht Spalten mehr. Sie
+// aufzuteilen hiesse, eine Zeile auf zwei Objekte zu verteilen, die es in der Datenbank
+// nicht gibt.
+@SuppressWarnings("PMD.TooManyFields")
 @Entity
 @Table(name = "night_run")
 class NightRunEntity {
@@ -49,6 +55,30 @@ class NightRunEntity {
 
   @Column(name = "created_at", nullable = false)
   private Instant createdAt;
+
+  @Column(name = "origin", nullable = false)
+  private String origin;
+
+  @Column(name = "token_name")
+  private @Nullable String tokenName;
+
+  @Column(name = "complete", nullable = false)
+  private boolean complete;
+
+  @Column(name = "updated_at")
+  private @Nullable Instant updatedAt;
+
+  @Column(name = "cost_usd")
+  private @Nullable BigDecimal costUsd;
+
+  @Column(name = "input_tokens")
+  private @Nullable Long inputTokens;
+
+  @Column(name = "output_tokens")
+  private @Nullable Long outputTokens;
+
+  @Column(name = "cached_input_tokens")
+  private @Nullable Long cachedInputTokens;
 
   protected NightRunEntity() {
     // für JPA
@@ -92,5 +122,37 @@ class NightRunEntity {
 
   Instant getCreatedAt() {
     return createdAt;
+  }
+
+  String getOrigin() {
+    return origin;
+  }
+
+  @Nullable String getTokenName() {
+    return tokenName;
+  }
+
+  boolean isComplete() {
+    return complete;
+  }
+
+  @Nullable Instant getUpdatedAt() {
+    return updatedAt;
+  }
+
+  @Nullable BigDecimal getCostUsd() {
+    return costUsd;
+  }
+
+  @Nullable Long getInputTokens() {
+    return inputTokens;
+  }
+
+  @Nullable Long getOutputTokens() {
+    return outputTokens;
+  }
+
+  @Nullable Long getCachedInputTokens() {
+    return cachedInputTokens;
   }
 }
