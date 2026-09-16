@@ -43,6 +43,20 @@ public record NightRunUsage(
   }
 
   /**
+   * Die feldweise Differenz — der nicht zuordenbare Rest, wenn {@code this} die Lauf-Summe und
+   * {@code other} die Summe der Arbeitspakete ist (Issue #938, Plan #933 E6). Fehlt eine Seite, ist
+   * das Feld nicht bestimmt und bleibt {@code null}: Eine fehlende Paket-Summe als 0 zu lesen,
+   * behauptete, der ganze Verbrauch sei keiner Karte zuzuordnen.
+   */
+  public NightRunUsage minus(NightRunUsage other) {
+    return new NightRunUsage(
+        costUsd == null || other.costUsd == null ? null : costUsd.subtract(other.costUsd),
+        differenz(inputTokens, other.inputTokens),
+        differenz(outputTokens, other.outputTokens),
+        differenz(cachedInputTokens, other.cachedInputTokens));
+  }
+
+  /**
    * Der Anteil der Eingabe aus dem Zwischenspeicher in Prozent, auf zwei Nachkommastellen gerundet
    * (#926 AK 13). Nicht bestimmt — {@code null}, nicht 0 — ohne Eingabemenge, ohne
    * Zwischenspeicher-Menge oder bei einer Eingabemenge von 0.
@@ -68,5 +82,9 @@ public record NightRunUsage(
       return b;
     }
     return b == null ? a : a + b;
+  }
+
+  private static @Nullable Long differenz(@Nullable Long a, @Nullable Long b) {
+    return a == null || b == null ? null : a - b;
   }
 }

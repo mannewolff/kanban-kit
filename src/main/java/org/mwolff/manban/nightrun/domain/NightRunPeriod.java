@@ -56,6 +56,15 @@ public record NightRunPeriod(
     return beginnendAm(type, zone, verschoben(type, laufenderBeginn, -(rueckschritt + 1L)));
   }
 
+  /**
+   * Die einzelne Nacht, die am angegebenen Datum beginnt — 12:00 an diesem Tag bis 12:00 am
+   * Folgetag (Issue #938). Anders als {@link #of} ohne Bezug auf „jetzt": Die Nacht wird über ihr
+   * Datum adressiert (Plan #933 E21).
+   */
+  public static NightRunPeriod night(LocalDate datum, ZoneId zone) {
+    return beginnendAm(NightRunPeriodType.DAY, zone, datum);
+  }
+
   /** Der unmittelbar vorangegangene gleichartige Zeitraum. */
   public NightRunPeriod previous() {
     return beginnendAm(type, zone, verschoben(type, firstDay, -1));

@@ -52,6 +52,31 @@ class NightRunUsageTest {
     assertThat(summe).isEqualTo(new NightRunUsage(new BigDecimal("1.00"), 100L, 50L, 80L));
   }
 
+  // --- Differenz: der nicht zuordenbare Rest (Issue #938, Plan #933 E6) -------------------------
+
+  @Test
+  void minusRechnetFeldweise() {
+    NightRunUsage lauf = new NightRunUsage(new BigDecimal("10.00"), 1_000L, 100L, 900L);
+    NightRunUsage pakete = new NightRunUsage(new BigDecimal("4.00"), 400L, 40L, 360L);
+
+    NightRunUsage rest = lauf.minus(pakete);
+
+    assertThat(rest.costUsd()).isEqualByComparingTo("6.00");
+    assertThat(rest.inputTokens()).isEqualTo(600L);
+    assertThat(rest.outputTokens()).isEqualTo(60L);
+    assertThat(rest.cachedInputTokens()).isEqualTo(540L);
+  }
+
+  /** Fehlt eine Seite, ist die Differenz nicht bestimmt — sie wird nicht zum vorhandenen Wert. */
+  @Test
+  void minusMitEinerFehlendenSeiteBleibtFehlend_inBeidenRichtungen() {
+    NightRunUsage nurKosten = new NightRunUsage(new BigDecimal("1.00"), null, null, null);
+    NightRunUsage nurMengen = new NightRunUsage(null, 100L, 50L, 80L);
+
+    assertThat(nurKosten.minus(nurMengen)).isEqualTo(NICHTS);
+    assertThat(nurMengen.minus(nurKosten)).isEqualTo(NICHTS);
+  }
+
   @Test
   void zwischenspeicherAnteilInProzent() {
     NightRunUsage verbrauch = new NightRunUsage(null, 200L, null, 50L);

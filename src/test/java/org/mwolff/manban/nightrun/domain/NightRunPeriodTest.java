@@ -123,6 +123,18 @@ class NightRunPeriodTest {
     assertThat(Duration.between(tag.from(), tag.to())).isEqualTo(Duration.ofHours(25));
   }
 
+  /** Die einzelne Nacht aus ihrem Datum (Issue #938): 12:00 am Datum bis 12:00 am Folgetag. */
+  @Test
+  void eineNachtAusIhremDatum() {
+    NightRunPeriod nacht = NightRunPeriod.night(LocalDate.of(2026, 3, 28), BERLIN);
+
+    assertThat(nacht.type()).isEqualTo(NightRunPeriodType.DAY);
+    assertThat(nacht.zone()).isEqualTo(BERLIN);
+    assertThat(nacht.firstDay()).isEqualTo(LocalDate.of(2026, 3, 28));
+    assertThat(nacht.from()).isEqualTo(Instant.parse("2026-03-28T11:00:00Z"));
+    assertThat(nacht.to()).isEqualTo(Instant.parse("2026-03-29T10:00:00Z"));
+  }
+
   // --- Woche -----------------------------------------------------------------------------------
 
   /**
