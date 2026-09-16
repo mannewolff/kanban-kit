@@ -11,5 +11,11 @@
 	# Caddys reverse_proxy erkennt text/event-stream und flusht solche Streams sofort durch
 	# (kein Buffering, keine gzip-Kompression auf Event-Streams). Kein flush_interval nötig.
 	encode gzip
+	# X-Forwarded-For wird ersetzt, nicht angehaengt: Caddy haengt den Wert sonst hinten an,
+	# und ein vom Client mitgeschickter Eintrag bliebe stehen. Die Zaehlbremse liest zwar von
+	# rechts und kaeme damit zurecht (Issue #899, E2) — aber diese zweite Linie im Proxy haelt
+	# die Umgehung auch dann geschlossen, wenn spaeter trusted-proxy-count oder die
+	# Filterreihenfolge geaendert wird, ohne dass es jemandem auffaellt.
+	header_up X-Forwarded-For {remote_host}
 	reverse_proxy manban-api:8080
 }

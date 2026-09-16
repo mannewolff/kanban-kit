@@ -148,6 +148,45 @@ geladen und ist per `.gitignore` ausgeschlossen).
 > ein Objekt ohne Metadaten). Verwaiste Objekte bei Bedarf gezielt über die MinIO-Konsole oder
 > `mc rm` entfernen.
 
+## Zählbremse gegen Massenversuche
+
+Drei Endpunkte sind gegen Massenversuche begrenzt:
+
+| Endpunkt | Was gezählt wird |
+| --- | --- |
+| `POST /api/auth/login` | nur abgewiesene Anmeldungen (`401`) — ein `400` zählt nicht |
+| `POST /api/auth/register` | jeder Aufruf, auch der erfolgreiche |
+| `POST /api/auth/forgot` | jeder Aufruf, auch der erfolgreiche |
+
+Registrierung und Reset-Anforderung zählen auch bei Erfolg, weil beide von außen erfolgreich
+ausgelöst werden können und sonst unbegrenzt Mails erzeugten.
+
+**Vorgabewerte:** zehn Versuche je fünfzehn Minuten, danach fünfzehn Minuten Sperre. Gezählt wird
+je **Herkunft und Vorgang** getrennt: Ausgeschöpfte Anmeldeversuche sperren die Reset-Anforderung
+nicht, und eine gesperrte Herkunft sperrt kein Konto — dieselbe Anmeldung von einer anderen
+Herkunft gelingt weiterhin. Die Sperre läuft ab dem ersten abgewiesenen Versuch und wird durch
+weitere Versuche **nicht verlängert**. Abgewiesen wird mit `429` und einem `Retry-After`-Header.
+
+Alle Werte lassen sich über `MANBAN_RATELIMIT_*` überschreiben, siehe `.env.example`.
+
+**Im Protokoll** steht beim Eintritt einer Sperre genau **eine** `WARN`-Zeile je Herkunft, Vorgang
+und Sperrfenster — weitere abgewiesene Versuche im selben Fenster erzeugen keine weiteren Zeilen.
+Die Zeile nennt Herkunft und Vorgang. **Die E-Mail-Adresse steht nie darin**: Die Bremse liest den
+Request-Body gar nicht, sie kennt ihn nicht.
+
+**Annahme zum Proxy.** Vorgegeben ist **ein** vertrauenswürdiger Proxy vor der Anwendung — lokal der
+mitgelieferte Caddy, in Produktion etwa Traefik. Ist die Anwendung **direkt** erreichbar, muss
+`MANBAN_RATELIMIT_TRUSTED_PROXY_COUNT=0` gesetzt werden. Ein zu hoher Wert ist gefährlich: Die Bremse
+läse dann eine Adresse, die der Client selbst mitschicken kann, und wäre umgehbar. Der mitgelieferte
+`Caddyfile` ersetzt `X-Forwarded-For` zusätzlich, statt ihn anzuhängen — eine zweite Linie für den
+Fall, dass an dieser Einstellung später etwas verstellt wird.
+
+**Grenze bei mehreren Instanzen.** Der Zählstand liegt **im Arbeitsspeicher des Prozesses**. Laufen
+N Instanzen hinter einem Lastverteiler, zählt jede für sich: Die tatsächliche Grenze ist dann das
+N-fache der eingestellten. Das ist bekannt und bewusst nicht gelöst — das Produkt liefert eine
+Instanz aus. Wer mehrere betreibt, sollte die Werte entsprechend senken oder eine Bremse im Proxy
+davorsetzen.
+
 ## E-Mail-Bestätigung (ohne Mailserver)
 
 Im Standard ist der Mailversand **aus** (`MANBAN_MAIL_ENABLED=false`). Verifikations-, Passwort-Reset-
