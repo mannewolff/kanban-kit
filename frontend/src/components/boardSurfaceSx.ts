@@ -38,11 +38,8 @@ export function edgeSurfaceSx(options: {
     borderRadius: `${CARD_RADIUS}px`,
     boxShadow: CARD_SHADOW,
     transition: 'box-shadow .2s ease, transform .2s ease',
+    // Wer Bewegung abgestellt hat, bekommt dieselbe Tiefe ohne Übergang: Die Dauer setzt die
+    // zentrale Regel in `theme.ts` auf null (#953), statt dass jede Fläche ihren eigenen Vorbehalt führt.
     '&:hover': { boxShadow: CARD_SHADOW_HOVER, transform: `translateY(${CARD_LIFT}px)` },
-    // Wer Bewegung abgestellt hat, bekommt die Tiefe trotzdem — nur ohne das Anheben.
-    '@media (prefers-reduced-motion: reduce)': {
-      transition: 'none',
-      '&:hover': { boxShadow: CARD_SHADOW_HOVER, transform: 'none' },
-    },
   }
 }

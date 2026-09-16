@@ -30,12 +30,13 @@ describe('edgeSurfaceSx', () => {
     expect(Object.keys(hover).filter((key) => key.startsWith('border'))).toEqual([])
   })
 
-  it('behält bei abgestellter Bewegung die Tiefe und lässt nur das Anheben weg', () => {
+  // Seit #953 steht der Vorbehalt zentral im Theme (`MuiCssBaseline`, Plan #932 E13). Eine eigene
+  // Regel hier liefe neben der zentralen her und könnte ihr unbemerkt widersprechen.
+  it('führt keinen eigenen Bewegungsvorbehalt neben der zentralen Regel', () => {
     const sx = edgeSurfaceSx({ statusColor: '#2F8C97' })
-    const reduced = sx['@media (prefers-reduced-motion: reduce)'] as Record<string, unknown>
 
-    expect(reduced.transition).toBe('none')
-    expect(reduced['&:hover']).toEqual({ boxShadow: CARD_SHADOW_HOVER, transform: 'none' })
+    expect(Object.keys(sx).filter((key) => key.includes('prefers-reduced-motion'))).toEqual([])
+    expect(sx.transition).toBe('box-shadow .2s ease, transform .2s ease')
   })
 
   it('erlaubt eine abweichende Farbe der Haarlinie, ohne die Status-Kante zu verlieren', () => {

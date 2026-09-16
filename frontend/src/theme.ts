@@ -261,8 +261,55 @@ const ERSCHEINUNGSBILDER = {
   },
 } as const
 
+const VARIABLEN_THEME = createTheme(ERSCHEINUNGSBILDER)
+
 /** Die Variablen-Verweise, wie MUI sie erzeugt — ohne sie von Hand nachzubauen. */
-const VARIABLEN = createTheme(ERSCHEINUNGSBILDER).vars.palette
+const VARIABLEN = VARIABLEN_THEME.vars.palette
+
+/**
+ * Alle Variablen des hellen Erscheinungsbilds samt `color-scheme: light`, so wie MUI sie an
+ * `:root` schreibt. Der Druckblock setzt sie zurück, damit der Ausdruck auch bei dunklem System
+ * hell bleibt (#953).
+ */
+const HELLE_VARIABLEN = (() => {
+  const blaetter = VARIABLEN_THEME.generateStyleSheets()
+  const hell = blaetter
+    .map((blatt) => blatt[':root'] as Record<string, string> | undefined)
+    .find((wurzel) => wurzel?.colorScheme === 'light')
+  const dunkel = (
+    blaetter.find((blatt) => '@media (prefers-color-scheme: dark)' in blatt)?.['@media (prefers-color-scheme: dark)'] as
+      | Record<string, Record<string, string>>
+      | undefined
+  )?.[':root']
+  // Einige Variablen legt MUI nur dunkel an: die Aufhellung erhöhter Flächen (`overlays`) und
+  // zwei Farben, die nur dunkle Komponenten-Stile lesen. Hell gibt es für sie keinen Wert zum
+  // Zurücksetzen; im Druck bekommen sie deshalb den hellen Gegenwert.
+  const palette = VARIABLEN_THEME.colorSchemes.light!.palette
+  const ersatz: Record<string, string> = {
+    '--mb-palette-text-icon': palette.action.active,
+    '--mb-palette-AppBar-darkBg': palette.background.paper,
+    '--mb-palette-AppBar-darkColor': palette.text.primary,
+  }
+  const nurDunkel = Object.keys(dunkel ?? {}).filter((name) => name.startsWith('--') && !(name in (hell ?? {})))
+  return {
+    ...hell,
+    ...Object.fromEntries(
+      nurDunkel
+        .map((name) => [name, name.startsWith('--mb-overlays-') ? 'none' : ersatz[name]] as const)
+        .filter(([, wert]) => wert !== undefined),
+    ),
+  }
+})()
+
+/** Fokusring der Anwendung: zwei Pixel Primärfarbe mit Abstand, schaltet mit dem Erscheinungsbild. */
+const FOKUSRING = { outline: `2px solid ${VARIABLEN.primary.main}`, outlineOffset: '2px' }
+
+/**
+ * Tabellenziffern für Zahlen, die untereinander stehen (AK 10, Plan #932 E17): rechtsbündige
+ * Tabellenzellen und Kennzahl-Kacheln. Eine große Einzelzahl trägt sie bewusst nicht — dort lassen
+ * gleich breite Ziffern die Zahl auseinanderfallen (`DashboardPage.tsx`).
+ */
+export const TABELLENZIFFERN = { fontVariantNumeric: 'tabular-nums' } as const
 
 /** Anheben einer einfachen Fläche beim Hover — Teal der Palette, kein schwarzer Farbanteil. */
 export const SURFACE_HOVER_SHADOW = VARIABLEN.panel.surfaceHoverShadow
@@ -339,7 +386,44 @@ export const theme = createTheme({
           zIndex: -1,
           background: APP_BACKGROUND,
         },
+        // Bewegung reduzieren (AK 16, Plan #932 E13): eine zentrale Regel statt je Fundstelle ein
+        // Vorbehalt. Dialog, Collapse, Snackbar und Tooltip sind CSS-Übergänge und fallen darunter.
+        // `theme.transitions` bleibt unberührt — das Theme kennt keine Media-Query, eine
+        // Neutralisierung dort träfe alle Nutzer. `!important`, weil die Übergänge an den Klassen
+        // der Komponenten stehen; die Wiederholung auf 1, damit eine Endlos-Animation mit Dauer
+        // null nicht endlos neu startet.
+        '@media (prefers-reduced-motion: reduce)': {
+          '*, *::before, *::after': {
+            transitionDuration: '0s !important',
+            animationDuration: '0s !important',
+            animationIterationCount: '1 !important',
+            scrollBehavior: 'auto !important',
+          },
+        },
+        // Ausdruck (Fachplan-Frage 6, E6): bewusst schlicht — kein getönter Grund, keine Verläufe,
+        // keine Schatten. Tiefe und Tönung tragen auf Papier keine Information und kosten Farbe.
+        // Und immer hell: Die Dunkelwerte hängen an `prefers-color-scheme` und gälten sonst auch
+        // im Druck. `:root:root` übertrifft die Spezifität der Dunkel-Regel an `:root`.
+        '@media print': {
+          ':root:root': HELLE_VARIABLEN,
+          'body::before': { background: 'none' },
+          '*, *::before, *::after': {
+            backgroundImage: 'none !important',
+            boxShadow: 'none !important',
+            textShadow: 'none !important',
+          },
+        },
+        // Sichtbarer Tastaturfokus (AK 15) an jedem Element, das ihn per Tastatur erhält.
+        ':focus-visible': FOKUSRING,
+        // Eingabefelder tragen den Fokus schon an ihrer Rahmenlinie (MuiOutlinedInput unten); ein
+        // zweiter Ring läge doppelt um dasselbe Feld.
+        '.MuiInputBase-input:focus-visible': { outline: 'none' },
       },
+    },
+    // MUI-Bedienelemente setzen `outline: 0` und zeigen Fokus nur über eine blasse Welle. Der Ring
+    // kommt deshalb an der Klasse, die MUI bei Tastaturfokus setzt.
+    MuiButtonBase: {
+      styleOverrides: { root: { '&.Mui-focusVisible': FOKUSRING } },
     },
     // Kopfleiste: eigene Fläche statt `primary`, Haarlinie statt Elevation. Der eigene
     // `elevation: 0` ist nötig, weil MuiAppBar seinen Default 4 selbst setzt und der
@@ -401,6 +485,16 @@ export const theme = createTheme({
     },
     MuiSelect: {
       styleOverrides: { icon: { color: VARIABLEN.primary.main } },
+    },
+    // Dichte der echten MUI-Tabellen (AK 12, Plan #932 E16 b): `DataTable` und seine Nutzer. Sie
+    // sitzt in der Zelle — eine Tabellenzeile hat in MUI weder Höhe noch Polsterung. Die
+    // Listenansicht ist keine MUI-Tabelle und wird in ihrem eigenen Paket dichter.
+    MuiTableCell: {
+      defaultProps: { size: 'small' },
+      styleOverrides: {
+        sizeSmall: { paddingTop: 4, paddingBottom: 4 },
+        alignRight: TABELLENZIFFERN,
+      },
     },
     // Zebra für alle Daten-Tabellen: nur gerade Zeilen im TableBody dezent tönen. Header-Zeilen
     // liegen im TableHead und bleiben ungestreift; das Hover-Verhalten bleibt unberührt.

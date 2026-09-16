@@ -17,6 +17,7 @@ import {
   STATUS_EDGE_WIDTH,
   SURFACE_HOVER_SHADOW,
   SURFACE_TINT,
+  TABELLENZIFFERN,
   theme,
   type PanelPalette,
 } from './theme'
@@ -249,8 +250,10 @@ describe('theme Overrides schalten mit dem Erscheinungsbild', () => {
       }
       return ergebnis
     }
-    const alle = JSON.stringify(theme.components, (_, wert: unknown) =>
-      typeof wert === 'string' ? ohneVariablen(wert) : wert,
+    // Ausgenommen ist allein der Druckblock: Er setzt die hellen Werte absichtlich fest, damit der
+    // Ausdruck auch bei dunklem System hell bleibt (#953) — dort ist ein fester Wert der Zweck.
+    const alle = JSON.stringify(theme.components, (schluessel, wert: unknown) =>
+      schluessel === '@media print' ? undefined : typeof wert === 'string' ? ohneVariablen(wert) : wert,
     )
     expect(alle).not.toMatch(/#[0-9A-Fa-f]{3,8}\b/)
     // Gegenprobe: Die Ausblendung frisst keinen Hexwert außerhalb einer Variable.
@@ -488,4 +491,125 @@ describe('theme Status- und Vorhaben-Farben beider Erscheinungsbilder (#952)', (
       expect(kontrast(ueber(platz.tint, wert), platz.hue)).toBeGreaterThanOrEqual(4.5)
     },
   )
+})
+
+/** Die `MuiCssBaseline`-Overrides als Objekt — dort liegen die anwendungsweiten Regeln. */
+const grundregeln = (): Record<string, Record<string, unknown>> =>
+  theme.components?.MuiCssBaseline?.styleOverrides as Record<string, Record<string, unknown>>
+
+describe('theme Bewegung reduzieren (AK 16, #953)', () => {
+  // Geprüft wird das Theme-Objekt, nicht das Verhalten: jsdom wertet Media-Queries nicht aus, und
+  // `src/test/setup.ts` stubbt kein `matchMedia` — ein Verhaltenstest wäre nur scheinbar grün.
+  const regel = () =>
+    grundregeln()['@media (prefers-reduced-motion: reduce)']?.['*, *::before, *::after'] as
+      | Record<string, string>
+      | undefined
+
+  it('setzt bei abgestellter Bewegung Übergänge und Animationen zentral auf null', () => {
+    expect(regel()).toBeDefined()
+    expect(regel()!.transitionDuration).toMatch(/^0s !important$/)
+    expect(regel()!.animationDuration).toMatch(/^0s !important$/)
+  })
+
+  it('lässt eine Endlos-Animation dabei nicht endlos mit Dauer null laufen', () => {
+    expect(regel()!.animationIterationCount).toBe('1 !important')
+  })
+
+  it('lässt theme.transitions unverändert — das Theme kennt keine Media-Query', () => {
+    // Eine Neutralisierung dort träfe alle Nutzer, auch die ohne die Einstellung (Plan #932 E13).
+    expect(theme.transitions.duration.standard).toBeGreaterThan(0)
+    expect(theme.transitions.duration.enteringScreen).toBeGreaterThan(0)
+    expect(theme.transitions.duration.leavingScreen).toBeGreaterThan(0)
+  })
+})
+
+describe('theme Ausdruck (Fachplan-Frage 6, E6, #953)', () => {
+  const druck = () => grundregeln()['@media print'] as Record<string, Record<string, unknown>> | undefined
+
+  it('führt eine eigene Regel für den Ausdruck', () => {
+    expect(druck()).toBeDefined()
+  })
+
+  it('druckt ohne getönten Grund', () => {
+    expect(druck()!['body::before']).toEqual({ background: 'none' })
+  })
+
+  it('druckt ohne Verläufe und ohne Schatten', () => {
+    const alles = druck()!['*, *::before, *::after']
+    expect(alles.backgroundImage).toBe('none !important')
+    expect(alles.boxShadow).toBe('none !important')
+    expect(alles.textShadow).toBe('none !important')
+  })
+
+  it('druckt immer im hellen Erscheinungsbild, auch bei dunklem System', () => {
+    // Die dunklen Werte hängen an `@media (prefers-color-scheme: dark)` und gälten auch im Druck.
+    // Der Druckblock setzt deshalb alle Palette-Variablen auf ihre hellen Werte zurück, mit
+    // höherer Spezifität als die Dunkel-Regel.
+    const wurzel = druck()![':root:root'] as Record<string, string>
+    expect(wurzel.colorScheme).toBe('light')
+    expect(wurzel['--mb-palette-background-paper']).toBe(hell.background.paper)
+    expect(wurzel['--mb-palette-text-primary']).toBe(hell.text.primary)
+    expect(wurzel['--mb-palette-panel-surfaceTint']).toBe(hell.panel.surfaceTint)
+    expect(wurzel['--mb-palette-status-done-dot']).toBe(hell.status.done.dot)
+    expect(wurzel['--mb-palette-epic-0-tint']).toBe(hell.epic[0].tint)
+  })
+
+  it('setzt im Druck jede Variable zurück, die das dunkle Erscheinungsbild ändert', () => {
+    const dunkleRegel = theme
+      .generateStyleSheets()
+      .find((blatt) => '@media (prefers-color-scheme: dark)' in blatt)!['@media (prefers-color-scheme: dark)'] as Record<
+      string,
+      Record<string, string>
+    >
+    const dunkleVariablen = Object.keys(dunkleRegel[':root']).filter((name) => name.startsWith('--'))
+    const wurzel = druck()![':root:root'] as Record<string, string>
+    expect(dunkleVariablen.length).toBeGreaterThan(50)
+    expect(dunkleVariablen.filter((name) => !(name in wurzel))).toEqual([])
+  })
+})
+
+describe('theme Tastaturfokus (AK 15, #953)', () => {
+  it('zeichnet einen sichtbaren Fokusring an jedem per Tastatur fokussierten Element', () => {
+    const ring = grundregeln()[':focus-visible'] as Record<string, string>
+    expect(ring.outline).toBe(`2px solid ${theme.vars.palette.primary.main}`)
+    expect(ring.outlineOffset).toBe('2px')
+  })
+
+  it('setzt den Ring auch an MUI-Bedienelementen, die ihren Umriss sonst auf null stellen', () => {
+    // ButtonBase setzt `outline: 0` und zeigt Fokus nur über eine blasse Welle.
+    const root = theme.components?.MuiButtonBase?.styleOverrides?.root as Record<string, Record<string, string>>
+    expect(root['&.Mui-focusVisible'].outline).toBe(`2px solid ${theme.vars.palette.primary.main}`)
+  })
+
+  it('unterdrückt den Fokus nirgends ersatzlos', () => {
+    // Die einzige Ausnahme sind Eingabefelder: Sie tragen den Fokus bereits an ihrer Rahmenlinie
+    // (MuiOutlinedInput, Primärfarbe). Ein zweiter Ring läge doppelt um dasselbe Feld.
+    const eingabe = grundregeln()['.MuiInputBase-input:focus-visible'] as Record<string, string>
+    expect(eingabe.outline).toBe('none')
+    const rahmen = (theme.components?.MuiOutlinedInput?.styleOverrides?.root as Record<string, Record<string, unknown>>)[
+      '&.Mui-focused .MuiOutlinedInput-notchedOutline'
+    ]
+    expect(rahmen.borderColor).toBe(theme.vars.palette.primary.main)
+    const ohneAusnahme = JSON.stringify({ ...grundregeln(), '.MuiInputBase-input:focus-visible': undefined })
+    expect(ohneAusnahme).not.toMatch(/"outline":"(none|0)"/)
+  })
+})
+
+describe('theme Tabellen: Dichte und Ziffern (AK 10, AK 12b, #953)', () => {
+  it('führt Tabellenziffern als zentralen Baustein', () => {
+    expect(TABELLENZIFFERN).toEqual({ fontVariantNumeric: 'tabular-nums' })
+  })
+
+  it('setzt rechtsbündige Tabellenzellen in Tabellenziffern', () => {
+    const zelle = theme.components?.MuiTableCell?.styleOverrides as Record<string, Record<string, unknown>>
+    expect(zelle.alignRight).toMatchObject(TABELLENZIFFERN)
+  })
+
+  it('trägt die Dichtestufe an den Tabellenzellen', () => {
+    // Die Dichte sitzt in der Zelle: Eine MUI-Tabellenzeile hat weder Höhe noch Polsterung, die
+    // ein Override dort ändern könnte (#953, E2 im Abschlussbericht).
+    expect(theme.components?.MuiTableCell?.defaultProps?.size).toBe('small')
+    const zelle = theme.components?.MuiTableCell?.styleOverrides as Record<string, Record<string, unknown>>
+    expect(zelle.sizeSmall).toEqual({ paddingTop: 4, paddingBottom: 4 })
+  })
 })

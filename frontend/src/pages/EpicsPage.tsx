@@ -361,11 +361,8 @@ export function EpicsPage() {
                 borderRadius: `${PANEL_RADIUS}px`,
                 boxShadow: CARD_SHADOW,
                 transition: 'box-shadow .2s ease, transform .2s ease',
+                // Bei abgestellter Bewegung setzt die zentrale Regel in `theme.ts` die Dauer auf null (#953).
                 '&:hover': { boxShadow: CARD_SHADOW_HOVER, transform: `translateY(${CARD_LIFT}px)` },
-                '@media (prefers-reduced-motion: reduce)': {
-                  transition: 'none',
-                  '&:hover': { boxShadow: CARD_SHADOW_HOVER, transform: 'none' },
-                },
               }}
             >
               <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
