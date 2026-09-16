@@ -1,0 +1,2284 @@
+<title>Kupferwarte</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@100..125,400..800&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+  /* ============================================================
+     KUPFERWARTE — Designentwurf fuer den KI-Leitstand kanban-kit
+     Tiefenmodell: Nut (-1) < Grund (0) < Platte (1) < Abgehoben (2)
+     ============================================================ */
+
+  :root {
+    /* --- Grundfarben: hell --- */
+    --grund:        #E7E9ED;
+    --grund-tief:   #D8DBE2;
+    --nute:         #D5D9E0;
+    --platte:       #FDFDFE;
+    --platte-fuss:  #F2F4F7;
+    --platte-hoch:  #FFFFFF;
+    --rand:         #CDD2DA;
+    --rand-stark:   #B7BEC9;
+    --kante:        rgba(255,255,255,.9);
+
+    --text:         #14181E;
+    --text-matt:    #58606C;
+    --text-schwach: #868E9B;
+
+    /* --- Leitfarbe Kupfer --- */
+    --kupfer:       #A85F2C;
+    --kupfer-hell:  #C2743C;
+    --kupfer-schat: rgba(168,95,44,.16);
+
+    /* --- Melder (Semantik, nie als Akzent verwenden) --- */
+    --gruen:   #2F8F4E;
+    --bernst:  #B07C15;
+    --zinnob:  #C8393E;
+    --stahl:   #2F6FC9;
+    --grau:    #8A929E;
+
+    /* --- Tiefe --- */
+    --schatten-platte:
+      0 1px 0 var(--kante) inset,
+      0 1px 2px rgba(18,24,33,.10),
+      0 10px 24px -14px rgba(18,24,33,.35);
+    --schatten-hoch:
+      0 1px 0 var(--kante) inset,
+      0 2px 4px rgba(18,24,33,.10),
+      0 18px 34px -16px rgba(18,24,33,.42);
+    --schatten-nute:
+      0 2px 5px rgba(18,24,33,.14) inset,
+      0 -1px 0 var(--kante) inset;
+    --schatten-taste:
+      0 1px 0 var(--kante) inset,
+      0 1px 2px rgba(18,24,33,.18);
+
+    --r-gross: 14px;
+    --r-mittel: 10px;
+    --r-klein: 6px;
+
+    color-scheme: light;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --grund:        #0D1014;
+      --grund-tief:   #090B0E;
+      --nute:         #080A0D;
+      --platte:       #171B22;
+      --platte-fuss:  #12151B;
+      --platte-hoch:  #1E242D;
+      --rand:         #262C36;
+      --rand-stark:   #333B47;
+      --kante:        rgba(255,255,255,.075);
+
+      --text:         #E7EAEF;
+      --text-matt:    #98A1AE;
+      --text-schwach: #69717E;
+
+      --kupfer:       #D08A52;
+      --kupfer-hell:  #E3A26C;
+      --kupfer-schat: rgba(208,138,82,.18);
+
+      --gruen:   #46C46F;
+      --bernst:  #E0AE49;
+      --zinnob:  #F0575C;
+      --stahl:   #5B96F0;
+      --grau:    #6E7681;
+
+      --schatten-platte:
+        0 1px 0 var(--kante) inset,
+        0 1px 2px rgba(0,0,0,.5),
+        0 12px 28px -16px rgba(0,0,0,.85);
+      --schatten-hoch:
+        0 1px 0 rgba(255,255,255,.11) inset,
+        0 2px 6px rgba(0,0,0,.55),
+        0 22px 40px -18px rgba(0,0,0,.95);
+      --schatten-nute:
+        0 3px 7px rgba(0,0,0,.6) inset,
+        0 -1px 0 rgba(255,255,255,.05) inset;
+      --schatten-taste:
+        0 1px 0 rgba(255,255,255,.08) inset,
+        0 1px 2px rgba(0,0,0,.6);
+
+      color-scheme: dark;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --grund:        #0D1014;
+    --grund-tief:   #090B0E;
+    --nute:         #080A0D;
+    --platte:       #171B22;
+    --platte-fuss:  #12151B;
+    --platte-hoch:  #1E242D;
+    --rand:         #262C36;
+    --rand-stark:   #333B47;
+    --kante:        rgba(255,255,255,.075);
+
+    --text:         #E7EAEF;
+    --text-matt:    #98A1AE;
+    --text-schwach: #69717E;
+
+    --kupfer:       #D08A52;
+    --kupfer-hell:  #E3A26C;
+    --kupfer-schat: rgba(208,138,82,.18);
+
+    --gruen:   #46C46F;
+    --bernst:  #E0AE49;
+    --zinnob:  #F0575C;
+    --stahl:   #5B96F0;
+    --grau:    #6E7681;
+
+    --schatten-platte:
+      0 1px 0 var(--kante) inset,
+      0 1px 2px rgba(0,0,0,.5),
+      0 12px 28px -16px rgba(0,0,0,.85);
+    --schatten-hoch:
+      0 1px 0 rgba(255,255,255,.11) inset,
+      0 2px 6px rgba(0,0,0,.55),
+      0 22px 40px -18px rgba(0,0,0,.95);
+    --schatten-nute:
+      0 3px 7px rgba(0,0,0,.6) inset,
+      0 -1px 0 rgba(255,255,255,.05) inset;
+    --schatten-taste:
+      0 1px 0 rgba(255,255,255,.08) inset,
+      0 1px 2px rgba(0,0,0,.6);
+
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background:
+      radial-gradient(1100px 600px at 18% -8%, var(--kupfer-schat), transparent 62%),
+      var(--grund);
+    color: var(--text);
+    font-family: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1, h2, h3, .display {
+    font-family: Archivo, "Archivo Fallback", system-ui, sans-serif;
+    font-stretch: 112%;
+    margin: 0;
+    text-wrap: balance;
+  }
+
+  .mono, .zahl {
+    font-family: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+    font-variant-numeric: tabular-nums;
+  }
+
+  a { color: inherit; }
+
+  :is(button, a, [tabindex]):focus-visible {
+    outline: 2px solid var(--kupfer);
+    outline-offset: 2px;
+    border-radius: var(--r-klein);
+  }
+
+  /* ---------- Etikett ---------- */
+  .etikett {
+    font-family: Archivo, system-ui, sans-serif;
+    font-stretch: 118%;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--text-schwach);
+  }
+
+  /* ============================================================
+     Rahmen: Schiene links, Warte rechts
+     ============================================================ */
+  .warte {
+    display: grid;
+    grid-template-columns: 224px minmax(0, 1fr);
+    min-height: 100vh;
+  }
+
+  /* ---------- Schiene (Navigation, eingelassen) ---------- */
+  .schiene {
+    background: linear-gradient(180deg, var(--grund-tief), var(--nute));
+    border-right: 1px solid var(--rand);
+    box-shadow: var(--schatten-nute);
+    padding-block: 18px 24px;
+    padding-inline: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 22px;
+  }
+
+  .marke {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding-inline: 4px;
+  }
+  .marke-mal {
+    width: 30px; height: 30px;
+    border-radius: 9px;
+    background: linear-gradient(155deg, var(--kupfer-hell), var(--kupfer) 62%, #7b421c);
+    box-shadow:
+      0 1px 0 rgba(255,255,255,.35) inset,
+      0 2px 6px rgba(0,0,0,.35);
+    display: grid; place-items: center;
+    flex: none;
+  }
+  .marke-mal svg { display: block; }
+  .marke-text { line-height: 1.15; }
+  .marke-name {
+    font-family: Archivo, sans-serif;
+    font-stretch: 118%;
+    font-weight: 700;
+    font-size: 14px;
+    letter-spacing: -.01em;
+  }
+  .marke-zusatz { font-size: 10.5px; color: var(--text-schwach); letter-spacing: .04em; }
+
+  .nav-block { display: flex; flex-direction: column; gap: 3px; }
+  .nav-block + .nav-block { margin-top: 2px; }
+  .nav-titel { padding: 0 8px 7px; }
+
+  .nav-eintrag {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 7px 10px;
+    border-radius: var(--r-mittel);
+    color: var(--text-matt);
+    font-size: 13px;
+    font-weight: 500;
+    text-decoration: none;
+    border: 1px solid transparent;
+    transition: background .14s ease, color .14s ease;
+  }
+  .nav-eintrag:hover { background: color-mix(in srgb, var(--platte) 70%, transparent); color: var(--text); }
+  .nav-eintrag[aria-current="page"] {
+    background: linear-gradient(180deg, var(--platte-hoch), var(--platte));
+    border-color: var(--rand);
+    box-shadow: var(--schatten-taste);
+    color: var(--text);
+  }
+  .nav-eintrag[aria-current="page"] .nav-icon { color: var(--kupfer); }
+  .nav-icon { width: 16px; height: 16px; flex: none; color: var(--text-schwach); }
+  .nav-zahl {
+    margin-left: auto;
+    font-size: 10.5px;
+    color: var(--text-schwach);
+    background: var(--nute);
+    border: 1px solid var(--rand);
+    border-radius: 5px;
+    padding: 1px 5px;
+  }
+
+  .schiene-fuss { margin-top: auto; display: flex; flex-direction: column; gap: 10px; }
+
+  /* ---------- Kopf ---------- */
+  .inhalt { min-width: 0; display: flex; flex-direction: column; }
+
+  .kopf {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 14px 26px;
+    border-bottom: 1px solid var(--rand);
+    background: color-mix(in srgb, var(--grund) 86%, var(--platte));
+    position: sticky; top: 0; z-index: 20;
+    backdrop-filter: blur(10px);
+    flex-wrap: wrap;
+  }
+
+  .pfad { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-matt); min-width: 0; }
+  .pfad b { font-weight: 600; color: var(--text); font-family: Archivo, sans-serif; font-stretch: 110%; }
+  .pfad-trenn { color: var(--text-schwach); }
+
+  .suche {
+    margin-left: auto;
+    display: flex; align-items: center; gap: 8px;
+    background: var(--nute);
+    border: 1px solid var(--rand);
+    border-radius: 9px;
+    box-shadow: var(--schatten-nute);
+    padding: 6px 10px;
+    min-width: 190px;
+    color: var(--text-schwach);
+    font-size: 12.5px;
+  }
+  .suche kbd {
+    margin-left: auto;
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 10px;
+    border: 1px solid var(--rand-stark);
+    border-radius: 4px;
+    padding: 0 4px;
+    color: var(--text-schwach);
+  }
+
+  .taste {
+    font-family: "IBM Plex Sans", sans-serif;
+    font-size: 12.5px; font-weight: 600;
+    color: var(--text);
+    background: linear-gradient(180deg, var(--platte-hoch), var(--platte-fuss));
+    border: 1px solid var(--rand);
+    box-shadow: var(--schatten-taste);
+    border-radius: 9px;
+    padding: 7px 13px;
+    cursor: pointer;
+    display: inline-flex; align-items: center; gap: 7px;
+    transition: transform .1s ease, box-shadow .14s ease;
+  }
+  .taste:hover { box-shadow: var(--schatten-platte); }
+  .taste:active { transform: translateY(1px); box-shadow: var(--schatten-nute); }
+  .taste-kupfer {
+    color: #fff;
+    background: linear-gradient(180deg, var(--kupfer-hell), var(--kupfer));
+    border-color: color-mix(in srgb, var(--kupfer) 70%, #000);
+    box-shadow:
+      0 1px 0 rgba(255,255,255,.35) inset,
+      0 2px 8px -2px var(--kupfer-schat),
+      0 4px 12px -6px rgba(0,0,0,.5);
+  }
+
+  .nutzer {
+    width: 30px; height: 30px; border-radius: 50%;
+    background: linear-gradient(160deg, #47505d, #2b323c);
+    color: #fff;
+    display: grid; place-items: center;
+    font-size: 11px; font-weight: 600;
+    box-shadow: 0 1px 0 rgba(255,255,255,.18) inset, 0 2px 5px rgba(0,0,0,.35);
+    flex: none;
+  }
+
+  /* ---------- Ansichtswahl ---------- */
+  .wahl {
+    display: inline-flex;
+    background: var(--nute);
+    border: 1px solid var(--rand);
+    border-radius: 10px;
+    box-shadow: var(--schatten-nute);
+    padding: 3px;
+    gap: 3px;
+  }
+  .wahl button {
+    font-family: Archivo, sans-serif;
+    font-stretch: 112%;
+    font-size: 11.5px; font-weight: 600;
+    letter-spacing: .04em;
+    padding: 5px 12px;
+    border-radius: 7px;
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--text-matt);
+    cursor: pointer;
+  }
+  .wahl button[aria-selected="true"] {
+    background: linear-gradient(180deg, var(--platte-hoch), var(--platte));
+    border-color: var(--rand);
+    box-shadow: var(--schatten-taste);
+    color: var(--text);
+  }
+
+  /* ---------- Buehne ---------- */
+  .buehne { padding: 22px 26px 44px; display: flex; flex-direction: column; gap: 20px; }
+  [hidden] { display: none !important; }
+
+  /* ============================================================
+     Laufband — der aktive Vorgang
+     ============================================================ */
+  .laufband {
+    display: grid;
+    grid-template-columns: minmax(260px, 1.5fr) minmax(0, 2fr) auto;
+    gap: 22px;
+    align-items: center;
+    padding: 14px 18px;
+    border-radius: var(--r-gross);
+    border: 1px solid var(--rand);
+    background:
+      linear-gradient(180deg, var(--platte-hoch), var(--platte-fuss));
+    box-shadow: var(--schatten-platte);
+    position: relative;
+    overflow: hidden;
+  }
+  .laufband::after {
+    content: "";
+    position: absolute; inset: 0;
+    background: linear-gradient(100deg, transparent 40%, var(--kupfer-schat));
+    pointer-events: none;
+  }
+  .lauf-kopf { display: flex; align-items: center; gap: 11px; min-width: 0; }
+  .lauf-titel { font-size: 14px; font-weight: 600; font-family: Archivo, sans-serif; font-stretch: 110%; }
+  .lauf-unter { font-size: 12px; color: var(--text-matt); }
+
+  /* Melder-LED */
+  .led {
+    width: 9px; height: 9px; border-radius: 50%;
+    flex: none;
+    background: var(--grau);
+    box-shadow: 0 0 0 1px rgba(0,0,0,.22) inset, 0 0 8px -1px currentColor;
+    color: var(--grau);
+  }
+  .led-gruen  { background: var(--gruen);  color: var(--gruen); }
+  .led-gelb   { background: var(--bernst); color: var(--bernst); }
+  .led-rot    { background: var(--zinnob); color: var(--zinnob); }
+  .led-stahl  { background: var(--stahl);  color: var(--stahl); }
+  .led-puls { animation: puls 1.9s ease-in-out infinite; }
+  @keyframes puls {
+    0%, 100% { box-shadow: 0 0 0 1px rgba(0,0,0,.22) inset, 0 0 7px -1px currentColor; }
+    50%      { box-shadow: 0 0 0 1px rgba(0,0,0,.22) inset, 0 0 14px 1px currentColor; }
+  }
+
+  /* Stufenkette */
+  .stufen { display: flex; align-items: center; gap: 0; min-width: 0; }
+  .stufe { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; }
+  .stufe-punkt {
+    width: 22px; height: 22px; border-radius: 50%;
+    display: grid; place-items: center;
+    font-size: 10px; font-weight: 600;
+    font-family: "IBM Plex Mono", monospace;
+    background: var(--nute);
+    border: 1px solid var(--rand);
+    box-shadow: var(--schatten-nute);
+    color: var(--text-schwach);
+    flex: none;
+  }
+  .stufe-fertig .stufe-punkt {
+    background: linear-gradient(180deg, color-mix(in srgb, var(--gruen) 26%, var(--platte)), var(--platte));
+    border-color: color-mix(in srgb, var(--gruen) 45%, var(--rand));
+    color: var(--gruen);
+    box-shadow: var(--schatten-taste);
+  }
+  .stufe-aktiv .stufe-punkt {
+    background: linear-gradient(180deg, var(--kupfer-hell), var(--kupfer));
+    border-color: color-mix(in srgb, var(--kupfer) 60%, #000);
+    color: #fff;
+    box-shadow: 0 1px 0 rgba(255,255,255,.3) inset, 0 0 12px -2px var(--kupfer);
+  }
+  .stufe-name { font-size: 11.5px; color: var(--text-matt); white-space: nowrap; }
+  .stufe-aktiv .stufe-name { color: var(--text); font-weight: 600; }
+  .stufe-strich { flex: 1; height: 2px; border-radius: 2px; background: var(--nute); box-shadow: var(--schatten-nute); margin: 0 9px; min-width: 12px; }
+  .stufe-fertig .stufe-strich { background: color-mix(in srgb, var(--gruen) 55%, var(--nute)); box-shadow: none; }
+
+  .budget { display: flex; gap: 20px; flex: none; }
+  .budget-wert { font-family: "IBM Plex Mono", monospace; font-size: 15px; font-weight: 500; font-variant-numeric: tabular-nums; }
+  .budget-wert small { color: var(--text-schwach); font-size: 11px; }
+
+  /* ============================================================
+     KPI-Kacheln
+     ============================================================ */
+  .kacheln {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 14px;
+    perspective: 1100px;
+  }
+  .kachel {
+    display: flex; flex-direction: column; gap: 10px;
+    padding: 15px 16px 13px;
+    border-radius: var(--r-gross);
+    border: 1px solid var(--rand);
+    background: linear-gradient(180deg, var(--platte-hoch), var(--platte-fuss));
+    box-shadow: var(--schatten-platte);
+    transition: transform .22s cubic-bezier(.22,.7,.3,1), box-shadow .22s ease;
+    transform-style: preserve-3d;
+    position: relative;
+  }
+  .kachel:hover {
+    transform: rotateX(3.2deg) translateY(-3px) scale(1.008);
+    box-shadow: var(--schatten-hoch);
+  }
+  .kachel-kopf { display: flex; align-items: baseline; gap: 8px; }
+  .kachel-wert {
+    font-family: Archivo, sans-serif;
+    font-stretch: 116%;
+    font-weight: 700;
+    font-size: 34px;
+    line-height: 1;
+    letter-spacing: -.02em;
+    font-variant-numeric: tabular-nums;
+  }
+  .kachel-einheit { font-size: 12px; color: var(--text-matt); font-weight: 500; }
+  .kachel-fuss { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .kachel-basis { font-size: 11px; color: var(--text-schwach); }
+
+  .delta {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 11px; font-weight: 500;
+    padding: 2px 6px;
+    border-radius: 5px;
+    border: 1px solid var(--rand);
+    background: var(--nute);
+    box-shadow: var(--schatten-nute);
+    color: var(--text-matt);
+  }
+  .delta-gut { color: var(--gruen); border-color: color-mix(in srgb, var(--gruen) 32%, var(--rand)); }
+  .delta-schlecht { color: var(--zinnob); border-color: color-mix(in srgb, var(--zinnob) 32%, var(--rand)); }
+
+  .funke { display: block; width: 100%; height: 36px; overflow: visible; }
+  .funke-kupfer { color: var(--kupfer); }
+  .funke-gruen  { color: var(--gruen); }
+  .funke-stahl  { color: var(--stahl); }
+  .f-nute   { fill: var(--nute); }
+  .f-gruen  { fill: var(--gruen); }
+  .f-bernst { fill: var(--bernst); }
+  .f-zinnob { fill: var(--zinnob); }
+  .f-matt   { fill: var(--text-schwach); }
+
+  /* ============================================================
+     Zweispaltiger Rumpf
+     ============================================================ */
+  .rumpf {
+    display: grid;
+    grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr);
+    gap: 16px;
+    align-items: start;
+  }
+  .saeule { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+
+  .platte {
+    border-radius: var(--r-gross);
+    border: 1px solid var(--rand);
+    background: var(--platte);
+    box-shadow: var(--schatten-platte);
+    overflow: hidden;
+  }
+  .platte-kopf {
+    display: flex; align-items: center; gap: 12px;
+    padding: 13px 16px;
+    border-bottom: 1px solid var(--rand);
+    background: linear-gradient(180deg, var(--platte-hoch), var(--platte));
+    flex-wrap: wrap;
+  }
+  .platte-titel { font-size: 13.5px; font-weight: 600; font-family: Archivo, sans-serif; font-stretch: 112%; }
+  .platte-notiz { font-size: 11.5px; color: var(--text-schwach); }
+  .platte-werkzeug { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+
+  .filter {
+    font-family: "IBM Plex Sans", sans-serif;
+    font-size: 11.5px; font-weight: 500;
+    color: var(--text-matt);
+    background: var(--nute);
+    border: 1px solid var(--rand);
+    box-shadow: var(--schatten-nute);
+    border-radius: 7px;
+    padding: 4px 9px;
+    cursor: pointer;
+  }
+  .filter[aria-pressed="true"] {
+    color: var(--text);
+    background: linear-gradient(180deg, var(--platte-hoch), var(--platte));
+    box-shadow: var(--schatten-taste);
+  }
+
+  /* ---------- Vorgangsliste ---------- */
+  .vorgaenge { display: flex; flex-direction: column; }
+  .vorgang {
+    display: grid;
+    grid-template-columns: 14px 64px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 12px;
+    padding: 11px 16px;
+    border-bottom: 1px solid color-mix(in srgb, var(--rand) 55%, transparent);
+    cursor: pointer;
+    transition: background .12s ease;
+    position: relative;
+  }
+  .vorgang:last-child { border-bottom: 0; }
+  .vorgang:hover { background: color-mix(in srgb, var(--platte-hoch) 75%, var(--kupfer-schat)); }
+  .vorgang-nr {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 12px; font-weight: 500;
+    color: var(--text-schwach);
+    font-variant-numeric: tabular-nums;
+  }
+  .vorgang-kern { min-width: 0; }
+  .vorgang-titel {
+    font-size: 13.5px; font-weight: 500;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .vorgang-zeile { display: flex; align-items: center; gap: 8px; margin-top: 3px; flex-wrap: wrap; }
+  .vorgang-rechts { display: flex; align-items: center; gap: 12px; flex: none; }
+  .dauer {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 12px;
+    color: var(--text-matt);
+    font-variant-numeric: tabular-nums;
+  }
+  .hash {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 11px;
+    color: var(--text-schwach);
+    background: var(--nute);
+    border: 1px solid var(--rand);
+    box-shadow: var(--schatten-nute);
+    border-radius: 5px;
+    padding: 1px 5px;
+  }
+
+  .marke-klasse {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 10px; font-weight: 500;
+    letter-spacing: .02em;
+    padding: 1px 6px;
+    border-radius: 5px;
+    border: 1px solid currentColor;
+    background: color-mix(in srgb, currentColor 12%, transparent);
+  }
+  .k-rot  { color: var(--zinnob); }
+  .k-gelb { color: var(--bernst); }
+  .k-grau { color: var(--grau); }
+
+  .vorhaben {
+    display: inline-flex; align-items: center; gap: 5px;
+    font-size: 11px; color: var(--text-matt);
+  }
+  .vorhaben-mal { width: 7px; height: 7px; border-radius: 2px; flex: none; }
+
+  /* ---------- Balkenwerk (Durchsatz) ---------- */
+  .balkenwerk {
+    display: grid;
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    align-items: end;
+    gap: 6px;
+    height: 132px;
+    padding: 16px 16px 0;
+  }
+  .balken-saeule { display: flex; flex-direction: column; justify-content: flex-end; height: 100%; gap: 6px; }
+  .balken {
+    border-radius: 4px 4px 2px 2px;
+    background: linear-gradient(180deg, color-mix(in srgb, var(--kupfer) 78%, var(--platte)), color-mix(in srgb, var(--kupfer) 34%, var(--platte)));
+    border: 1px solid color-mix(in srgb, var(--kupfer) 45%, var(--rand));
+    box-shadow: 0 1px 0 rgba(255,255,255,.22) inset, 0 3px 8px -5px var(--kupfer);
+    transition: filter .14s ease;
+  }
+  .balken-saeule:hover .balken { filter: brightness(1.12); }
+  .balken-jetzt {
+    background: linear-gradient(180deg, var(--kupfer-hell), var(--kupfer));
+    box-shadow: 0 1px 0 rgba(255,255,255,.35) inset, 0 0 14px -4px var(--kupfer);
+  }
+  .balken-fuss {
+    display: grid;
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    gap: 6px;
+    padding: 7px 16px 14px;
+    border-top: 1px solid var(--rand);
+    margin-top: 10px;
+  }
+  .balken-fuss span {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 9.5px;
+    color: var(--text-schwach);
+    text-align: center;
+  }
+
+  /* ---------- Fehlerklassen ---------- */
+  .klassen { display: flex; flex-direction: column; gap: 9px; padding: 14px 16px 16px; }
+  .klasse { display: grid; grid-template-columns: minmax(0, 1fr) 34px; gap: 10px; align-items: center; }
+  .klasse-name { font-family: "IBM Plex Mono", monospace; font-size: 11px; color: var(--text-matt); }
+  .klasse-schiene {
+    height: 7px;
+    border-radius: 4px;
+    background: var(--nute);
+    box-shadow: var(--schatten-nute);
+    overflow: hidden;
+    margin-top: 5px;
+  }
+  .klasse-fuellung {
+    height: 100%;
+    border-radius: 4px;
+    background: linear-gradient(90deg, color-mix(in srgb, currentColor 55%, transparent), currentColor);
+    box-shadow: 0 0 8px -2px currentColor;
+  }
+  .klasse-zahl {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 12.5px;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    color: var(--text);
+  }
+
+  /* ---------- Ausreisser ---------- */
+  .ausreisser { display: flex; flex-direction: column; }
+  .ausreisser-zeile {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 16px;
+    border-bottom: 1px solid color-mix(in srgb, var(--rand) 55%, transparent);
+    font-size: 12.5px;
+  }
+  .ausreisser-zeile:last-child { border-bottom: 0; }
+  .ausreisser-titel { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .liegt {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 11.5px;
+    color: var(--bernst);
+    font-variant-numeric: tabular-nums;
+    flex: none;
+  }
+
+  /* ============================================================
+     Board — Spalten liegen in Nuten, Karten liegen auf
+     ============================================================ */
+  .board {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(210px, 1fr));
+    gap: 13px;
+    align-items: start;
+    overflow-x: auto;
+    padding-bottom: 8px;
+  }
+  .spalte {
+    border-radius: var(--r-gross);
+    background: linear-gradient(180deg, var(--nute), color-mix(in srgb, var(--nute) 80%, var(--grund)));
+    border: 1px solid var(--rand);
+    box-shadow: var(--schatten-nute);
+    padding: 10px;
+    display: flex; flex-direction: column; gap: 9px;
+    min-height: 220px;
+  }
+  .spalte-kopf { display: flex; align-items: center; gap: 8px; padding: 2px 4px 0; }
+  .spalte-name { font-family: Archivo, sans-serif; font-stretch: 114%; font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
+  .spalte-zahl {
+    margin-left: auto;
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 10.5px;
+    color: var(--text-schwach);
+  }
+  .wip-voll { color: var(--bernst); }
+
+  .karte {
+    border-radius: var(--r-mittel);
+    border: 1px solid var(--rand);
+    background: linear-gradient(180deg, var(--platte-hoch), var(--platte));
+    box-shadow: var(--schatten-platte);
+    padding: 10px 11px;
+    display: flex; flex-direction: column; gap: 7px;
+    cursor: grab;
+    transition: transform .16s cubic-bezier(.22,.7,.3,1), box-shadow .16s ease;
+  }
+  .karte:hover { transform: translateY(-2px); box-shadow: var(--schatten-hoch); }
+  .karte-gehoben {
+    transform: rotate(-1.1deg) translateY(-5px) scale(1.018);
+    box-shadow: var(--schatten-hoch);
+    border-color: color-mix(in srgb, var(--kupfer) 52%, var(--rand));
+  }
+  .karte-platz {
+    border: 1px dashed var(--rand-stark);
+    border-radius: var(--r-mittel);
+    height: 64px;
+    background: color-mix(in srgb, var(--grund-tief) 60%, transparent);
+    box-shadow: var(--schatten-nute);
+  }
+  .karte-kopf { display: flex; align-items: center; gap: 7px; }
+  .karte-titel { font-size: 12.5px; font-weight: 500; line-height: 1.35; }
+  .karte-fuss { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+  .schild {
+    font-size: 10px; font-weight: 500;
+    padding: 1px 6px;
+    border-radius: 5px;
+    border: 1px solid currentColor;
+    background: color-mix(in srgb, currentColor 13%, transparent);
+  }
+  .s-kupfer { color: var(--kupfer); }
+  .s-stahl  { color: var(--stahl); }
+  .s-gruen  { color: var(--gruen); }
+  .s-bernst { color: var(--bernst); }
+
+  .frist { margin-left: auto; font-family: "IBM Plex Mono", monospace; font-size: 10.5px; color: var(--text-schwach); }
+  .frist-eng { color: var(--zinnob); }
+
+
+  /* ============================================================
+     Werkzeugleiste (Board und Liste teilen sie)
+     ============================================================ */
+  .werkzeugleiste {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    padding: 9px 11px;
+    border-radius: var(--r-mittel);
+    border: 1px solid var(--rand);
+    background: linear-gradient(180deg, var(--platte-hoch), var(--platte-fuss));
+    box-shadow: var(--schatten-platte);
+  }
+  .chip-gruppe {
+    display: inline-flex; gap: 3px; padding: 3px;
+    background: var(--nute); border: 1px solid var(--rand);
+    border-radius: 9px; box-shadow: var(--schatten-nute);
+  }
+  .chip {
+    font-family: "IBM Plex Sans", sans-serif;
+    font-size: 11.5px; font-weight: 500;
+    color: var(--text-matt);
+    background: transparent; border: 1px solid transparent;
+    border-radius: 6px; padding: 4px 10px; cursor: pointer;
+    display: inline-flex; align-items: center; gap: 6px;
+  }
+  .chip[aria-pressed="true"] {
+    color: var(--text);
+    background: linear-gradient(180deg, var(--platte-hoch), var(--platte));
+    border-color: var(--rand); box-shadow: var(--schatten-taste);
+  }
+  .chip-zahl {
+    font-family: "IBM Plex Mono", monospace; font-size: 10px;
+    padding: 0 4px; border-radius: 4px;
+    background: color-mix(in srgb, var(--zinnob) 18%, transparent);
+    color: var(--zinnob);
+  }
+  .werkzeug-rechts { margin-left: auto; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .waehler {
+    font-family: "IBM Plex Sans", sans-serif; font-size: 11.5px; font-weight: 500;
+    color: var(--text-matt);
+    background: var(--nute); border: 1px solid var(--rand);
+    box-shadow: var(--schatten-nute);
+    border-radius: 7px; padding: 4px 9px; cursor: pointer;
+    display: inline-flex; align-items: center; gap: 6px;
+  }
+  .waehler b { color: var(--text); font-weight: 600; }
+
+  /* ---------- reichere Karten ---------- */
+  .karte-nr { font-family: "IBM Plex Mono", monospace; font-size: 11px; color: var(--text-schwach); }
+  .kuerzel {
+    width: 19px; height: 19px; border-radius: 50%;
+    display: grid; place-items: center; flex: none;
+    font-size: 9px; font-weight: 600; letter-spacing: .02em;
+    color: #fff;
+    background: linear-gradient(160deg, #4a5462, #2c333d);
+    box-shadow: 0 1px 0 rgba(255,255,255,.18) inset, 0 1px 3px rgba(0,0,0,.4);
+  }
+  .karte-meta {
+    display: flex; align-items: center; gap: 11px;
+    font-family: "IBM Plex Mono", monospace; font-size: 10.5px;
+    color: var(--text-schwach);
+  }
+  .karte-meta span { display: inline-flex; align-items: center; gap: 4px; }
+  .karte-meta svg { flex: none; }
+  .teil-schiene {
+    flex: 1; height: 4px; border-radius: 3px; min-width: 26px;
+    background: var(--nute); box-shadow: var(--schatten-nute); overflow: hidden;
+  }
+  .teil-fuellung { height: 100%; border-radius: 3px; background: var(--kupfer); }
+
+  /* WIP-Skala im Spaltenkopf */
+  .wip { display: inline-flex; gap: 2px; margin-left: auto; align-items: center; }
+  .wip i {
+    width: 5px; height: 11px; border-radius: 2px; display: block;
+    background: var(--nute); box-shadow: var(--schatten-nute);
+  }
+  .wip i.voll { background: var(--kupfer); box-shadow: 0 0 6px -2px var(--kupfer); }
+  .wip i.ueber { background: var(--bernst); box-shadow: 0 0 6px -2px var(--bernst); }
+  .spalte-warn { border-color: color-mix(in srgb, var(--bernst) 42%, var(--rand)); }
+
+  /* ============================================================
+     Liste
+     ============================================================ */
+  .tafel-rahmen { overflow-x: auto; }
+  .tafel { width: 100%; border-collapse: separate; border-spacing: 0; min-width: 880px; }
+  .tafel thead th {
+    position: sticky; top: 59px; z-index: 5;
+    text-align: left;
+    font-family: Archivo, sans-serif; font-stretch: 116%;
+    font-size: 10px; font-weight: 600; letter-spacing: .13em; text-transform: uppercase;
+    color: var(--text-schwach);
+    padding: 10px 12px;
+    background: linear-gradient(180deg, var(--platte-hoch), var(--platte-fuss));
+    border-bottom: 1px solid var(--rand);
+    white-space: nowrap;
+  }
+  .tafel thead th button {
+    all: unset; cursor: pointer; display: inline-flex; align-items: center; gap: 5px;
+    font: inherit; color: inherit; letter-spacing: inherit;
+  }
+  .tafel thead th.sortiert button { color: var(--kupfer); }
+  .tafel td {
+    padding: 9px 12px;
+    border-bottom: 1px solid color-mix(in srgb, var(--rand) 50%, transparent);
+    font-size: 12.5px;
+    vertical-align: middle;
+  }
+  .tafel tbody tr { transition: background .12s ease; }
+  .tafel tbody tr:hover td { background: color-mix(in srgb, var(--platte-hoch) 80%, var(--kupfer-schat)); }
+  .tafel tbody tr.gewaehlt td {
+    background: color-mix(in srgb, var(--kupfer) 9%, var(--platte));
+    box-shadow: 0 1px 0 var(--kante) inset;
+  }
+  .t-nr { font-family: "IBM Plex Mono", monospace; color: var(--text-schwach); width: 58px; }
+  .t-titel { font-weight: 500; }
+  .t-waehl { width: 34px; }
+  .t-frist, .t-liegt { font-family: "IBM Plex Mono", monospace; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .t-liegt { color: var(--text-matt); }
+  .liegt-lang { color: var(--bernst); }
+  .frist-ueber { color: var(--zinnob); }
+
+  /* Gruppenzeile als eingelassene Nut */
+  .gruppe td {
+    padding: 0; border-bottom: 1px solid var(--rand);
+    background: linear-gradient(180deg, var(--nute), color-mix(in srgb, var(--nute) 82%, var(--grund)));
+    box-shadow: var(--schatten-nute);
+  }
+  .gruppe-inhalt { display: flex; align-items: center; gap: 10px; padding: 8px 12px; }
+  .gruppe-name { font-family: Archivo, sans-serif; font-stretch: 112%; font-size: 11.5px; font-weight: 700; letter-spacing: .04em; }
+  .gruppe-zahl { font-family: "IBM Plex Mono", monospace; font-size: 11px; color: var(--text-schwach); }
+  .gruppe-schiene {
+    width: 96px; height: 5px; border-radius: 3px; margin-left: auto;
+    background: color-mix(in srgb, var(--grund-tief) 70%, transparent);
+    box-shadow: var(--schatten-nute); overflow: hidden;
+  }
+  .gruppe-fuellung { height: 100%; border-radius: 3px; background: currentColor; box-shadow: 0 0 7px -2px currentColor; }
+
+  /* Zustandsplakette */
+  .zustand {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 11.5px; color: var(--text-matt);
+    padding: 2px 8px 2px 6px;
+    border-radius: 6px;
+    border: 1px solid var(--rand);
+    background: var(--nute);
+    box-shadow: var(--schatten-nute);
+    white-space: nowrap;
+  }
+
+  .haken {
+    width: 15px; height: 15px; border-radius: 4px;
+    border: 1px solid var(--rand-stark);
+    background: var(--nute);
+    box-shadow: var(--schatten-nute);
+    display: grid; place-items: center;
+    cursor: pointer;
+  }
+  .haken-an {
+    background: linear-gradient(180deg, var(--kupfer-hell), var(--kupfer));
+    border-color: color-mix(in srgb, var(--kupfer) 62%, #000);
+    box-shadow: 0 1px 0 rgba(255,255,255,.3) inset, 0 0 9px -3px var(--kupfer);
+  }
+
+  /* Massenaktionsleiste — schwebt ueber allem */
+  .massen {
+    position: sticky; bottom: 16px;
+    margin: 4px auto 0;
+    width: fit-content; max-width: 100%;
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    padding: 9px 10px 9px 16px;
+    border-radius: 12px;
+    border: 1px solid var(--rand-stark);
+    background: linear-gradient(180deg, var(--platte-hoch), var(--platte));
+    box-shadow: var(--schatten-hoch), 0 0 0 1px var(--kupfer-schat);
+    z-index: 12;
+  }
+  .massen-zahl { font-size: 12.5px; font-weight: 600; }
+  .massen-zahl b { font-family: "IBM Plex Mono", monospace; color: var(--kupfer); }
+  .massen-trenn { width: 1px; height: 20px; background: var(--rand); }
+
+
+  /* ============================================================
+     Abschnitte mit Zeitraum-Wahl
+     ============================================================ */
+  .abschnitt-kopf { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 4px; }
+  .abschnitt-titel { font-family: Archivo, sans-serif; font-stretch: 114%; font-size: 13px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
+  .abschnitt-notiz { font-size: 11.5px; color: var(--text-schwach); }
+  .zeitraum { margin-left: auto; display: inline-flex; gap: 3px; padding: 3px;
+    background: var(--nute); border: 1px solid var(--rand); border-radius: 9px; box-shadow: var(--schatten-nute); }
+  .zeitraum button {
+    font-family: "IBM Plex Mono", monospace; font-size: 11px; font-weight: 500;
+    color: var(--text-matt); background: transparent; border: 1px solid transparent;
+    border-radius: 6px; padding: 3px 11px; cursor: pointer;
+  }
+  .zeitraum button[aria-pressed="true"] {
+    color: var(--text); background: linear-gradient(180deg, var(--platte-hoch), var(--platte));
+    border-color: var(--rand); box-shadow: var(--schatten-taste);
+  }
+
+  /* ---------- Stapelbalken fuer die Eingabe-Aufteilung ---------- */
+  .stapel {
+    display: flex; height: 13px; border-radius: 7px; overflow: hidden;
+    background: var(--nute); box-shadow: var(--schatten-nute);
+  }
+  .stapel span { display: block; height: 100%; }
+  .st-cache  { background: linear-gradient(180deg, color-mix(in srgb, var(--gruen) 88%, #fff), var(--gruen)); }
+  .st-frisch { background: linear-gradient(180deg, var(--kupfer-hell), var(--kupfer)); }
+  .st-schreib{ background: linear-gradient(180deg, color-mix(in srgb, var(--stahl) 80%, #fff), var(--stahl)); }
+  .legende { display: flex; gap: 13px; flex-wrap: wrap; font-size: 10.5px; color: var(--text-matt); }
+  .legende span { display: inline-flex; align-items: center; gap: 5px; }
+  .legende i { width: 8px; height: 8px; border-radius: 2px; display: block; }
+  .legende b { font-family: "IBM Plex Mono", monospace; font-weight: 500; color: var(--text); }
+
+  .spar {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-family: "IBM Plex Mono", monospace; font-size: 11px;
+    color: var(--gruen);
+    border: 1px solid color-mix(in srgb, var(--gruen) 34%, var(--rand));
+    background: color-mix(in srgb, var(--gruen) 11%, transparent);
+    border-radius: 6px; padding: 2px 7px;
+  }
+
+  /* ============================================================
+     Kartenblatt — Instrumententafel
+     ============================================================ */
+  .blatt { display: grid; grid-template-columns: minmax(0, 1.9fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+  .blatt-kopf { display: flex; align-items: flex-start; gap: 12px; padding: 16px 18px 14px; border-bottom: 1px solid var(--rand);
+    background: linear-gradient(180deg, var(--platte-hoch), var(--platte)); flex-wrap: wrap; }
+  .blatt-titel { font-family: Archivo, sans-serif; font-stretch: 110%; font-size: 19px; font-weight: 700; line-height: 1.25; letter-spacing: -.01em; }
+  .blatt-nr { font-family: "IBM Plex Mono", monospace; font-size: 13px; color: var(--kupfer); font-weight: 500; }
+  .blatt-rumpf { padding: 16px 18px 18px; display: flex; flex-direction: column; gap: 18px; }
+  .blatt-text { font-size: 13.5px; color: var(--text-matt); max-width: 62ch; }
+  .blatt-text code { font-family: "IBM Plex Mono", monospace; font-size: 12px; background: var(--nute);
+    border: 1px solid var(--rand); border-radius: 4px; padding: 1px 4px; }
+
+  /* Instrumente: eingelassene Felder */
+  .instrumente { display: grid; grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); gap: 9px; }
+  .instrument {
+    padding: 9px 11px 8px; border-radius: var(--r-mittel);
+    background: linear-gradient(180deg, var(--nute), color-mix(in srgb, var(--nute) 85%, var(--grund)));
+    border: 1px solid var(--rand); box-shadow: var(--schatten-nute);
+    display: flex; flex-direction: column; gap: 3px;
+  }
+  .instrument-wert { font-family: "IBM Plex Mono", monospace; font-size: 16px; font-weight: 500; font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
+  .instrument-wert small { font-size: 10.5px; color: var(--text-schwach); font-weight: 400; }
+  .instrument-leer .instrument-wert { color: var(--text-schwach); }
+  .instrument-heiss { border-color: color-mix(in srgb, var(--kupfer) 40%, var(--rand)); }
+  .instrument-heiss .instrument-wert { color: var(--kupfer); }
+
+  /* Anlaufstrahl */
+  .anlaeufe { display: flex; flex-direction: column; gap: 0; }
+  .anlauf { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; gap: 11px; align-items: start; position: relative; padding-bottom: 13px; }
+  .anlauf:last-child { padding-bottom: 0; }
+  .anlauf::before {
+    content: ""; position: absolute; left: 7px; top: 15px; bottom: 0; width: 2px;
+    background: var(--nute); box-shadow: var(--schatten-nute); border-radius: 2px;
+  }
+  .anlauf:last-child::before { display: none; }
+  .anlauf-marke { width: 15px; height: 15px; border-radius: 50%; display: grid; place-items: center; z-index: 1;
+    background: var(--platte); border: 1px solid var(--rand); box-shadow: var(--schatten-taste); }
+  .anlauf-kern { min-width: 0; }
+  .anlauf-titel { font-size: 12.5px; font-weight: 500; }
+  .anlauf-notiz { font-size: 11.5px; color: var(--text-schwach); margin-top: 2px; }
+  .anlauf-rechts { font-family: "IBM Plex Mono", monospace; font-size: 11.5px; color: var(--text-matt); text-align: right; white-space: nowrap; }
+
+  /* Feldliste rechts */
+  .felder { display: flex; flex-direction: column; }
+  .feld { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 10px; align-items: center;
+    padding: 9px 16px; border-bottom: 1px solid color-mix(in srgb, var(--rand) 50%, transparent); font-size: 12.5px; }
+  .feld:last-child { border-bottom: 0; }
+  .feld-name { font-size: 11px; color: var(--text-schwach); }
+
+  @media (max-width: 1080px) { .blatt { grid-template-columns: minmax(0, 1fr); } }
+
+  /* ---------- Fussnote ---------- */
+  .fussnote {
+    font-size: 11.5px;
+    color: var(--text-schwach);
+    border-top: 1px dashed var(--rand);
+    padding-top: 14px;
+    max-width: 72ch;
+  }
+
+  /* ---------- Schmale Schirme ---------- */
+  @media (max-width: 1080px) {
+    .kacheln { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .rumpf { grid-template-columns: minmax(0, 1fr); }
+    .laufband { grid-template-columns: minmax(0, 1fr); gap: 14px; }
+  }
+  @media (max-width: 760px) {
+    .warte { grid-template-columns: minmax(0, 1fr); }
+    .schiene { display: none; }
+    .buehne { padding: 16px; }
+    .kopf { padding: 12px 16px; }
+    .kacheln { grid-template-columns: minmax(0, 1fr); }
+    .budget { flex-wrap: wrap; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; transition: none !important; }
+    .kachel:hover, .karte:hover { transform: none; }
+  }
+</style>
+
+<div class="warte">
+
+  <!-- ===================== Schiene ===================== -->
+  <nav class="schiene" aria-label="Hauptnavigation">
+    <div class="marke">
+      <span class="marke-mal" aria-hidden="true">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+          <rect x="1.5" y="2" width="3.6" height="12" rx="1.2" fill="#fff" fill-opacity=".92"/>
+          <rect x="6.2" y="2" width="3.6" height="8" rx="1.2" fill="#fff" fill-opacity=".72"/>
+          <rect x="10.9" y="2" width="3.6" height="5" rx="1.2" fill="#fff" fill-opacity=".5"/>
+        </svg>
+      </span>
+      <span class="marke-text">
+        <span class="marke-name">kanban-kit</span><br>
+        <span class="marke-zusatz">Leitstand</span>
+      </span>
+    </div>
+
+    <div class="nav-block">
+      <div class="nav-titel etikett">Projekt kanban-kit</div>
+      <a class="nav-eintrag" href="#" aria-current="page">
+        <svg class="nav-icon" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M2 12.5V9m4 3.5V5m4 7.5V7.5m4 5V3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+        Leitstand
+      </a>
+      <a class="nav-eintrag" href="#">
+        <svg class="nav-icon" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="2" y="2.5" width="3.4" height="11" rx="1" stroke="currentColor" stroke-width="1.5"/><rect x="6.3" y="2.5" width="3.4" height="7.5" rx="1" stroke="currentColor" stroke-width="1.5"/><rect x="10.6" y="2.5" width="3.4" height="9.5" rx="1" stroke="currentColor" stroke-width="1.5"/></svg>
+        Board
+        <span class="nav-zahl">47</span>
+      </a>
+      <a class="nav-eintrag" href="#">
+        <svg class="nav-icon" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M2.5 4h11M2.5 8h11M2.5 12h7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+        Liste
+      </a>
+      <a class="nav-eintrag" href="#">
+        <svg class="nav-icon" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M8 2v5.5L12 10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.5"/></svg>
+        Vorhaben
+        <span class="nav-zahl">6</span>
+      </a>
+      <a class="nav-eintrag" href="#">
+        <svg class="nav-icon" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M6 13h4M8 2a4.2 4.2 0 0 0-2.4 7.7c.3.3.4.6.4 1v.3h4v-.3c0-.4.1-.7.4-1A4.2 4.2 0 0 0 8 2Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
+        Ideen
+        <span class="nav-zahl">12</span>
+      </a>
+      <a class="nav-eintrag" href="#">
+        <svg class="nav-icon" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M13 9.6A5.6 5.6 0 0 1 6.4 3 5.6 5.6 0 1 0 13 9.6Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
+        Nachtläufe
+        <span class="nav-zahl">28</span>
+      </a>
+    </div>
+
+    <div class="nav-block">
+      <div class="nav-titel etikett">Verwaltung</div>
+      <a class="nav-eintrag" href="#">
+        <svg class="nav-icon" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="5.5" r="2.4" stroke="currentColor" stroke-width="1.5"/><path d="M3 13.2c.7-2.2 2.6-3.4 5-3.4s4.3 1.2 5 3.4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+        Mitglieder
+      </a>
+      <a class="nav-eintrag" href="#">
+        <svg class="nav-icon" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M8 1.8 13.2 4v3.7c0 3.2-2.1 5.6-5.2 6.5-3.1-.9-5.2-3.3-5.2-6.5V4L8 1.8Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
+        Rollen &amp; Rechte
+      </a>
+    </div>
+
+    <div class="schiene-fuss">
+      <div class="nav-titel etikett">Letzte Kette</div>
+      <div style="display:flex;align-items:center;gap:8px;padding:0 8px;">
+        <span class="led led-stahl led-puls" aria-hidden="true"></span>
+        <span style="font-size:12px;color:var(--text-matt)">läuft seit <span class="mono">02:41</span></span>
+      </div>
+    </div>
+  </nav>
+
+  <!-- ===================== Inhalt ===================== -->
+  <div class="inhalt">
+
+    <header class="kopf">
+      <div class="pfad">
+        <b>kanban-kit</b>
+        <span class="pfad-trenn">/</span>
+        <b>Entwicklung</b>
+      </div>
+
+      <div class="wahl" role="tablist" aria-label="Ansicht">
+        <button role="tab" id="tab-leitstand" aria-selected="true" aria-controls="ansicht-leitstand">Leitstand</button>
+        <button role="tab" id="tab-board" aria-selected="false" aria-controls="ansicht-board">Board</button>
+        <button role="tab" id="tab-liste" aria-selected="false" aria-controls="ansicht-liste">Liste</button>
+        <button role="tab" id="tab-karte" aria-selected="false" aria-controls="ansicht-karte">Karte</button>
+      </div>
+
+      <div class="suche" role="search">
+        <svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="7" cy="7" r="4.6" stroke="currentColor" stroke-width="1.6"/><path d="m10.6 10.6 3 3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+        Karte, #Nummer, Vorhaben
+        <kbd>⌘K</kbd>
+      </div>
+      <button class="taste taste-kupfer" type="button">
+        <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        Karte
+      </button>
+      <span class="nutzer" title="Manfred Wolff">MW</span>
+    </header>
+
+    <!-- ============ Ansicht: Leitstand ============ -->
+    <main class="buehne" id="ansicht-leitstand" role="tabpanel" aria-labelledby="tab-leitstand">
+
+      <!-- Laufband -->
+      <section class="laufband" aria-label="Laufender Vorgang">
+        <div class="lauf-kopf">
+          <span class="led led-stahl led-puls" aria-hidden="true"></span>
+          <div style="min-width:0">
+            <div class="lauf-titel">Kette läuft — Vorgang 3 von 5</div>
+            <div class="lauf-unter"><span class="mono">#941</span> Anteilsbalken je Vorgang · seit <span class="mono">02:41</span></div>
+          </div>
+        </div>
+
+        <ol class="stufen" aria-label="Stufen der Kette">
+          <li class="stufe stufe-fertig"><span class="stufe-punkt">1</span><span class="stufe-name">plan</span><span class="stufe-strich"></span></li>
+          <li class="stufe stufe-fertig"><span class="stufe-punkt">2</span><span class="stufe-name">review</span><span class="stufe-strich"></span></li>
+          <li class="stufe stufe-aktiv"><span class="stufe-punkt">3</span><span class="stufe-name">pakete</span><span class="stufe-strich"></span></li>
+          <li class="stufe"><span class="stufe-punkt">4</span><span class="stufe-name">abdeckung</span></li>
+        </ol>
+
+        <div class="budget">
+          <div>
+            <div class="etikett">Zeit</div>
+            <div class="budget-wert">161<small> / 240 min</small></div>
+          </div>
+          <div>
+            <div class="etikett">Kosten</div>
+            <div class="budget-wert">12,40<small> / 18,00 $</small></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- KPI-Kacheln -->
+      <section class="kacheln" aria-label="Kennzahlen">
+
+        <article class="kachel">
+          <div class="etikett">Durchsatz · Woche</div>
+          <div class="kachel-kopf">
+            <span class="kachel-wert">12</span>
+            <span class="kachel-einheit">Karten</span>
+          </div>
+          <svg class="funke funke-kupfer" viewBox="0 0 124 36" preserveAspectRatio="none" aria-hidden="true">
+            <defs>
+              <linearGradient id="fl-kupfer" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" stop-color="currentColor" stop-opacity=".34"/>
+                <stop offset="1" stop-color="currentColor" stop-opacity="0"/>
+              </linearGradient>
+            </defs>
+            <path d="M2 27 L13 21 L24 25 L35 13 L46 20 L57 10 L68 15 L79 5 L90 18 L101 9 L112 3 L122 9 L122 34 L2 34 Z" fill="url(#fl-kupfer)"/>
+            <polyline points="2,27 13,21 24,25 35,13 46,20 57,10 68,15 79,5 90,18 101,9 112,3 122,9"
+                      fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/>
+            <circle cx="122" cy="9" r="2.6" fill="currentColor"/>
+          </svg>
+          <div class="kachel-fuss">
+            <span class="delta delta-gut">▲ 20 %</span>
+            <span class="kachel-basis">12 Wochen</span>
+          </div>
+        </article>
+
+        <article class="kachel">
+          <div class="etikett">Durchlaufzeit</div>
+          <div class="kachel-kopf">
+            <span class="kachel-wert">3,2</span>
+            <span class="kachel-einheit">Tage</span>
+          </div>
+          <svg class="funke funke-gruen" viewBox="0 0 124 36" preserveAspectRatio="none" aria-hidden="true">
+            <defs>
+              <linearGradient id="fl-gruen" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" stop-color="currentColor" stop-opacity=".3"/>
+                <stop offset="1" stop-color="currentColor" stop-opacity="0"/>
+              </linearGradient>
+            </defs>
+            <path d="M2 6 L13 9 L24 7 L35 14 L46 11 L57 17 L68 15 L79 21 L90 19 L101 24 L112 22 L122 26 L122 34 L2 34 Z" fill="url(#fl-gruen)"/>
+            <polyline points="2,6 13,9 24,7 35,14 46,11 57,17 68,15 79,21 90,19 101,24 112,22 122,26"
+                      fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/>
+            <circle cx="122" cy="26" r="2.6" fill="currentColor"/>
+          </svg>
+          <div class="kachel-fuss">
+            <span class="delta delta-gut">▼ 0,8 Tage</span>
+            <span class="kachel-basis">86 Karten</span>
+          </div>
+        </article>
+
+        <article class="kachel">
+          <div class="etikett">Zykluszeit</div>
+          <div class="kachel-kopf">
+            <span class="kachel-wert">14,8</span>
+            <span class="kachel-einheit">Stunden</span>
+          </div>
+          <svg class="funke funke-stahl" viewBox="0 0 124 36" preserveAspectRatio="none" aria-hidden="true">
+            <defs>
+              <linearGradient id="fl-stahl" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" stop-color="currentColor" stop-opacity=".3"/>
+                <stop offset="1" stop-color="currentColor" stop-opacity="0"/>
+              </linearGradient>
+            </defs>
+            <path d="M2 18 L13 14 L24 20 L35 16 L46 22 L57 13 L68 19 L79 12 L90 16 L101 11 L112 15 L122 12 L122 34 L2 34 Z" fill="url(#fl-stahl)"/>
+            <polyline points="2,18 13,14 24,20 35,16 46,22 57,13 68,19 79,12 90,16 101,11 112,15 122,12"
+                      fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/>
+            <circle cx="122" cy="12" r="2.6" fill="currentColor"/>
+          </svg>
+          <div class="kachel-fuss">
+            <span class="delta">± 0</span>
+            <span class="kachel-basis">61 Karten</span>
+          </div>
+        </article>
+
+        <article class="kachel">
+          <div class="etikett">Nachtlauf · grün</div>
+          <div class="kachel-kopf">
+            <span class="kachel-wert">83</span>
+            <span class="kachel-einheit">%</span>
+          </div>
+          <svg class="funke" viewBox="0 0 124 36" aria-hidden="true">
+            <rect x="2"  y="4" width="118" height="12" rx="6" class="f-nute"/>
+            <rect x="2"  y="4" width="98"  height="12" rx="6" class="f-gruen"/>
+            <rect x="100" y="4" width="12" height="12" class="f-bernst"/>
+            <rect x="112" y="4" width="8"  height="12" rx="4" class="f-zinnob"/>
+            <text x="2"   y="31" class="f-matt" font-size="9" font-family="IBM Plex Mono, monospace">24 grün</text>
+            <text x="66"  y="31" class="f-matt" font-size="9" font-family="IBM Plex Mono, monospace">3 gelb</text>
+            <text x="100" y="31" class="f-matt" font-size="9" font-family="IBM Plex Mono, monospace">2 rot</text>
+          </svg>
+          <div class="kachel-fuss">
+            <span class="delta delta-schlecht">▼ 5 %</span>
+            <span class="kachel-basis">letzte 29 Pakete</span>
+          </div>
+        </article>
+      </section>
+
+      <!-- Verbrauch -->
+      <div class="abschnitt-kopf">
+        <span class="abschnitt-titel">Verbrauch</span>
+        <span class="abschnitt-notiz">Nacht vom 14.09., 23:10 – 03:22 · 9 Vorgänge</span>
+        <div class="zeitraum" role="group" aria-label="Zeitraum">
+          <button type="button" aria-pressed="true">Nacht</button>
+          <button type="button" aria-pressed="false">Tag</button>
+          <button type="button" aria-pressed="false">Woche</button>
+          <button type="button" aria-pressed="false">Monat</button>
+        </div>
+      </div>
+
+      <section class="kacheln" aria-label="Verbrauch der Nacht">
+
+        <article class="kachel" style="grid-column: span 2">
+          <div class="etikett">Eingabe-Token</div>
+          <div class="kachel-kopf">
+            <span class="kachel-wert">4,82</span>
+            <span class="kachel-einheit">Mio</span>
+            <span class="spar" style="margin-left:auto">Cache spart 9,80 $</span>
+          </div>
+          <div class="stapel" role="img" aria-label="Aufteilung der Eingabe: 76 Prozent aus dem Cache gelesen, 15 Prozent frisch, 9 Prozent in den Cache geschrieben">
+            <span class="st-cache" style="width:76%"></span>
+            <span class="st-frisch" style="width:15%"></span>
+            <span class="st-schreib" style="width:9%"></span>
+          </div>
+          <div class="legende">
+            <span><i class="st-cache"></i>Cache gelesen <b>3,66 Mio</b></span>
+            <span><i class="st-frisch"></i>frisch <b>0,71 Mio</b></span>
+            <span><i class="st-schreib"></i>Cache geschrieben <b>0,45 Mio</b></span>
+          </div>
+        </article>
+
+        <article class="kachel">
+          <div class="etikett">Ausgabe-Token</div>
+          <div class="kachel-kopf">
+            <span class="kachel-wert">186</span>
+            <span class="kachel-einheit">Tsd</span>
+          </div>
+          <svg class="funke funke-stahl" viewBox="0 0 124 36" preserveAspectRatio="none" aria-hidden="true">
+            <defs>
+              <linearGradient id="fl-aus" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" stop-color="currentColor" stop-opacity=".3"/>
+                <stop offset="1" stop-color="currentColor" stop-opacity="0"/>
+              </linearGradient>
+            </defs>
+            <path d="M2 24 L13 20 L24 26 L35 15 L46 21 L57 12 L68 18 L79 9 L90 17 L101 11 L112 7 L122 13 L122 34 L2 34 Z" fill="url(#fl-aus)"/>
+            <polyline points="2,24 13,20 24,26 35,15 46,21 57,12 68,18 79,9 90,17 101,11 112,7 122,13"
+                      fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/>
+            <circle cx="122" cy="13" r="2.6" fill="currentColor"/>
+          </svg>
+          <div class="kachel-fuss">
+            <span class="delta">20,7 Tsd je Vorgang</span>
+            <span class="kachel-basis">7 Nächte</span>
+          </div>
+        </article>
+
+        <article class="kachel">
+          <div class="etikett">Kosten der Nacht</div>
+          <div class="kachel-kopf">
+            <span class="kachel-wert">12,40</span>
+            <span class="kachel-einheit">$ von 18,00</span>
+          </div>
+          <div class="stapel" role="img" aria-label="12,40 von 18,00 Dollar Budget verbraucht">
+            <span class="st-frisch" style="width:69%"></span>
+          </div>
+          <div class="kachel-fuss">
+            <span class="delta delta-gut">1,38 $ je Vorgang</span>
+            <span class="kachel-basis">Budget aus <span class="mono">night.mjs</span></span>
+          </div>
+        </article>
+      </section>
+
+      <div class="werkzeugleiste" style="font-size:12px;color:var(--text-matt)">
+        <span class="led led-gruen" aria-hidden="true"></span>
+        <span>Eingeliefert von der Kette um <span class="mono">03:22</span> — automatisch, ohne Handgriff im Browser.</span>
+        <span class="zustand" style="margin-left:auto"><span class="mono">POST /api/projects/1/night-runs</span></span>
+        <span class="zustand">9 Vorgänge · 0 ungedeutete Zeilen</span>
+      </div>
+
+      <!-- Rumpf -->
+      <div class="rumpf">
+
+        <!-- Linke Saeule: Arbeitspakete -->
+        <div class="saeule">
+          <section class="platte" aria-label="Arbeitspakete des letzten Laufs">
+            <div class="platte-kopf">
+              <span class="led led-gelb" aria-hidden="true"></span>
+              <span class="platte-titel">Letzter Lauf · Kette</span>
+              <span class="platte-notiz">14.09., 23:10 · 4 h 12 min · 9 Pakete</span>
+              <div class="platte-werkzeug">
+                <button class="filter" type="button" aria-pressed="true">Alle</button>
+                <button class="filter" type="button" aria-pressed="false">Nur Abbrüche</button>
+              </div>
+            </div>
+
+            <div class="vorgaenge">
+              <div class="vorgang">
+                <span class="led led-gruen" aria-hidden="true"></span>
+                <span class="vorgang-nr">#917</span>
+                <div class="vorgang-kern">
+                  <div class="vorgang-titel">Umsetzungs-Lauf: Anteilsbalken je Vorgang statt Band über alle</div>
+                  <div class="vorgang-zeile">
+                    <span class="vorhaben"><span class="vorhaben-mal" style="background:var(--kupfer)"></span>Nachtlauf-Auswertung</span>
+                  </div>
+                </div>
+                <div class="vorgang-rechts">
+                  <span class="dauer">18:42</span>
+                  <span class="hash">9489421</span>
+                </div>
+              </div>
+
+              <div class="vorgang">
+                <span class="led led-gruen" aria-hidden="true"></span>
+                <span class="vorgang-nr">#918</span>
+                <div class="vorgang-kern">
+                  <div class="vorgang-titel">Fußzeile beider Lauf-Arten, mit Herkunft der Budgets</div>
+                  <div class="vorgang-zeile">
+                    <span class="vorhaben"><span class="vorhaben-mal" style="background:var(--kupfer)"></span>Nachtlauf-Auswertung</span>
+                  </div>
+                </div>
+                <div class="vorgang-rechts">
+                  <span class="dauer">11:07</span>
+                  <span class="hash">2dbab6c</span>
+                </div>
+              </div>
+
+              <div class="vorgang">
+                <span class="led led-rot" aria-hidden="true"></span>
+                <span class="vorgang-nr">#922</span>
+                <div class="vorgang-kern">
+                  <div class="vorgang-titel">Spaltenbreite der Vorgangsliste an den Inhalt binden</div>
+                  <div class="vorgang-zeile">
+                    <span class="marke-klasse k-rot">CHECKS_RED</span>
+                    <span class="vorhaben">2 Tests rot in <span class="mono">BoardViewTest</span></span>
+                  </div>
+                </div>
+                <div class="vorgang-rechts">
+                  <span class="dauer">42:15</span>
+                </div>
+              </div>
+
+              <div class="vorgang">
+                <span class="led led-gelb" aria-hidden="true"></span>
+                <span class="vorgang-nr">#925</span>
+                <div class="vorgang-kern">
+                  <div class="vorgang-titel">Vorhaben-Kürzel im Kartenkopf statt in der Fußzeile</div>
+                  <div class="vorgang-zeile">
+                    <span class="marke-klasse k-gelb">AWAITING_DECISION</span>
+                    <span class="vorhaben">Frage zur Sortierung offen</span>
+                  </div>
+                </div>
+                <div class="vorgang-rechts">
+                  <span class="dauer">06:31</span>
+                </div>
+              </div>
+
+              <div class="vorgang">
+                <span class="led led-gruen" aria-hidden="true"></span>
+                <span class="vorgang-nr">#919</span>
+                <div class="vorgang-kern">
+                  <div class="vorgang-titel">Designregel: Ausnahme der Nachtlauf-Auswertung festhalten</div>
+                  <div class="vorgang-zeile">
+                    <span class="vorhaben"><span class="vorhaben-mal" style="background:var(--stahl)"></span>Designsystem</span>
+                  </div>
+                </div>
+                <div class="vorgang-rechts">
+                  <span class="dauer">08:55</span>
+                  <span class="hash">adcd017</span>
+                </div>
+              </div>
+
+              <div class="vorgang">
+                <span class="led" aria-hidden="true"></span>
+                <span class="vorgang-nr">#930</span>
+                <div class="vorgang-kern">
+                  <div class="vorgang-titel">Kennzahl „Wiederaufnahmen" je Vorhaben</div>
+                  <div class="vorgang-zeile">
+                    <span class="marke-klasse k-grau">DEPENDENCY_UNMET</span>
+                    <span class="vorhaben">wartet auf <span class="mono">#922</span></span>
+                  </div>
+                </div>
+                <div class="vorgang-rechts">
+                  <span class="dauer">—</span>
+                </div>
+              </div>
+
+              <div class="vorgang">
+                <span class="led led-gruen" aria-hidden="true"></span>
+                <span class="vorgang-nr">#931</span>
+                <div class="vorgang-kern">
+                  <div class="vorgang-titel">Zeitbudget je Stufe in der Kopfzeile des Laufs</div>
+                  <div class="vorgang-zeile">
+                    <span class="vorhaben"><span class="vorhaben-mal" style="background:var(--kupfer)"></span>Nachtlauf-Auswertung</span>
+                  </div>
+                </div>
+                <div class="vorgang-rechts">
+                  <span class="dauer">14:20</span>
+                  <span class="hash">aab91a1</span>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- Durchsatz -->
+          <section class="platte" aria-label="Durchsatz je Woche">
+            <div class="platte-kopf">
+              <span class="platte-titel">Durchsatz</span>
+              <span class="platte-notiz">abgeschlossene Karten je Woche</span>
+              <div class="platte-werkzeug">
+                <button class="filter" type="button" aria-pressed="false">12 Wochen</button>
+                <button class="filter" type="button" aria-pressed="true">Board</button>
+              </div>
+            </div>
+            <div class="balkenwerk" role="img" aria-label="Durchsatz der letzten zwölf Wochen, zwischen 6 und 15 Karten, zuletzt 12">
+              <div class="balken-saeule"><div class="balken" style="height:40%"></div></div>
+              <div class="balken-saeule"><div class="balken" style="height:60%"></div></div>
+              <div class="balken-saeule"><div class="balken" style="height:47%"></div></div>
+              <div class="balken-saeule"><div class="balken" style="height:73%"></div></div>
+              <div class="balken-saeule"><div class="balken" style="height:53%"></div></div>
+              <div class="balken-saeule"><div class="balken" style="height:80%"></div></div>
+              <div class="balken-saeule"><div class="balken" style="height:67%"></div></div>
+              <div class="balken-saeule"><div class="balken" style="height:93%"></div></div>
+              <div class="balken-saeule"><div class="balken" style="height:60%"></div></div>
+              <div class="balken-saeule"><div class="balken" style="height:87%"></div></div>
+              <div class="balken-saeule"><div class="balken" style="height:100%"></div></div>
+              <div class="balken-saeule"><div class="balken balken-jetzt" style="height:80%"></div></div>
+            </div>
+            <div class="balken-fuss">
+              <span>23</span><span>24</span><span>25</span><span>26</span><span>27</span><span>28</span>
+              <span>29</span><span>30</span><span>31</span><span>32</span><span>33</span><span>34</span>
+            </div>
+          </section>
+        </div>
+
+        <!-- Rechte Saeule -->
+        <div class="saeule">
+          <section class="platte" aria-label="Abbruchgründe">
+            <div class="platte-kopf">
+              <span class="platte-titel">Abbruchgründe</span>
+              <span class="platte-notiz">28 Läufe</span>
+            </div>
+            <div class="klassen">
+              <div class="klasse">
+                <div>
+                  <div class="klasse-name">CHECKS_RED</div>
+                  <div class="klasse-schiene"><div class="klasse-fuellung" style="width:100%;color:var(--zinnob)"></div></div>
+                </div>
+                <div class="klasse-zahl">11</div>
+              </div>
+              <div class="klasse">
+                <div>
+                  <div class="klasse-name">AWAITING_DECISION</div>
+                  <div class="klasse-schiene"><div class="klasse-fuellung" style="width:64%;color:var(--bernst)"></div></div>
+                </div>
+                <div class="klasse-zahl">7</div>
+              </div>
+              <div class="klasse">
+                <div>
+                  <div class="klasse-name">DEPENDENCY_UNMET</div>
+                  <div class="klasse-schiene"><div class="klasse-fuellung" style="width:45%;color:var(--bernst)"></div></div>
+                </div>
+                <div class="klasse-zahl">5</div>
+              </div>
+              <div class="klasse">
+                <div>
+                  <div class="klasse-name">TIME_BUDGET_EXCEEDED</div>
+                  <div class="klasse-schiene"><div class="klasse-fuellung" style="width:27%;color:var(--zinnob)"></div></div>
+                </div>
+                <div class="klasse-zahl">3</div>
+              </div>
+              <div class="klasse">
+                <div>
+                  <div class="klasse-name">REVIEWER_FAILED</div>
+                  <div class="klasse-schiene"><div class="klasse-fuellung" style="width:18%;color:var(--grau)"></div></div>
+                </div>
+                <div class="klasse-zahl">2</div>
+              </div>
+            </div>
+          </section>
+
+          <section class="platte" aria-label="Liegengebliebene Karten">
+            <div class="platte-kopf">
+              <span class="led led-gelb" aria-hidden="true"></span>
+              <span class="platte-titel">Liegengeblieben</span>
+              <span class="platte-notiz">über dem Spaltenschnitt</span>
+            </div>
+            <div class="ausreisser">
+              <div class="ausreisser-zeile">
+                <span class="mono" style="color:var(--text-schwach)">#846</span>
+                <span class="ausreisser-titel">Kartenverlauf als Zeitstrahl</span>
+                <span class="liegt">14 T</span>
+              </div>
+              <div class="ausreisser-zeile">
+                <span class="mono" style="color:var(--text-schwach)">#803</span>
+                <span class="ausreisser-titel">Nachtplan aus dem Browser einliefern</span>
+                <span class="liegt">11 T</span>
+              </div>
+              <div class="ausreisser-zeile">
+                <span class="mono" style="color:var(--text-schwach)">#872</span>
+                <span class="ausreisser-titel">MinIO-Anhänge im Papierkorb aufräumen</span>
+                <span class="liegt">9 T</span>
+              </div>
+              <div class="ausreisser-zeile">
+                <span class="mono" style="color:var(--text-schwach)">#889</span>
+                <span class="ausreisser-titel">Rollenmatrix je Projekt exportieren</span>
+                <span class="liegt">7 T</span>
+              </div>
+            </div>
+          </section>
+
+          <section class="platte" aria-label="Vorhaben">
+            <div class="platte-kopf">
+              <span class="platte-titel">Vorhaben</span>
+              <span class="platte-notiz">offen</span>
+            </div>
+            <div class="klassen">
+              <div class="klasse">
+                <div>
+                  <div class="klasse-name" style="font-family:'IBM Plex Sans',sans-serif;font-size:12.5px;color:var(--text)">Nachtlauf-Auswertung</div>
+                  <div class="klasse-schiene"><div class="klasse-fuellung" style="width:78%;color:var(--kupfer)"></div></div>
+                </div>
+                <div class="klasse-zahl">7/9</div>
+              </div>
+              <div class="klasse">
+                <div>
+                  <div class="klasse-name" style="font-family:'IBM Plex Sans',sans-serif;font-size:12.5px;color:var(--text)">Designsystem</div>
+                  <div class="klasse-schiene"><div class="klasse-fuellung" style="width:33%;color:var(--stahl)"></div></div>
+                </div>
+                <div class="klasse-zahl">2/6</div>
+              </div>
+              <div class="klasse">
+                <div>
+                  <div class="klasse-name" style="font-family:'IBM Plex Sans',sans-serif;font-size:12.5px;color:var(--text)">Anhänge &amp; Vorschau</div>
+                  <div class="klasse-schiene"><div class="klasse-fuellung" style="width:20%;color:var(--gruen)"></div></div>
+                </div>
+                <div class="klasse-zahl">1/5</div>
+              </div>
+            </div>
+          </section>
+        </div>
+      </div>
+
+      <p class="fussnote">
+        Entwurf mit Beispieldaten — die Zahlen stammen nicht aus einer laufenden Instanz.
+        Tiefenmodell: Nut (eingelassen) → Grund → Platte → abgehobene Karte. Kupfer ist die einzige
+        Leitfarbe; Grün, Bernstein, Zinnober und Stahlblau sind ausschließlich Melderfarben.
+      </p>
+    </main>
+
+    <!-- ============ Ansicht: Board ============ -->
+    <main class="buehne" id="ansicht-board" role="tabpanel" aria-labelledby="tab-board" hidden>
+
+      <div class="werkzeugleiste">
+        <div class="chip-gruppe">
+          <button class="chip" type="button" aria-pressed="true">Alle Karten</button>
+          <button class="chip" type="button" aria-pressed="false">Meine</button>
+          <button class="chip" type="button" aria-pressed="false">Überfällig <span class="chip-zahl">3</span></button>
+        </div>
+        <button class="waehler" type="button">
+          <svg width="11" height="11" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M2.5 4h11l-4.2 4.8v4l-2.6 1.4V8.8L2.5 4Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
+          Vorhaben: <b>alle</b>
+        </button>
+        <div class="werkzeug-rechts">
+          <button class="waehler" type="button">Gruppieren: <b>keine</b></button>
+          <button class="waehler" type="button">Dichte: <b>normal</b></button>
+        </div>
+      </div>
+
+      <section class="board" aria-label="Board Entwicklung">
+
+        <div class="spalte">
+          <div class="spalte-kopf">
+            <span class="spalte-name">Backlog</span>
+            <span class="spalte-zahl">18</span>
+          </div>
+          <article class="karte">
+            <div class="karte-kopf">
+              <span class="karte-nr">#846</span>
+              <span class="kuerzel" style="margin-left:auto" title="Manfred Wolff">MW</span>
+            </div>
+            <div class="karte-titel">Kartenverlauf als Zeitstrahl im Detailfenster</div>
+            <div class="karte-meta">
+              <span><svg width="11" height="11" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M13.5 9.2c0 1-.8 1.9-1.9 1.9H6.4L3 13.4V4.3c0-1 .8-1.9 1.9-1.9h6.7c1 0 1.9.8 1.9 1.9v4.9Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg> 4</span>
+              <span><svg width="11" height="11" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M12.4 7.6 8 12a3.1 3.1 0 0 1-4.4-4.4l4.8-4.8a2.1 2.1 0 1 1 2.9 2.9l-4.8 4.8a1 1 0 0 1-1.5-1.5l4.4-4.4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg> 2</span>
+            </div>
+            <div class="karte-fuss"><span class="schild s-stahl">Designsystem</span><span class="frist">liegt 14 T</span></div>
+          </article>
+          <article class="karte">
+            <div class="karte-kopf"><span class="karte-nr">#889</span></div>
+            <div class="karte-titel">Rollenmatrix je Projekt exportieren</div>
+            <div class="karte-fuss"><span class="schild s-bernst">Verwaltung</span></div>
+          </article>
+          <article class="karte">
+            <div class="karte-kopf">
+              <span class="karte-nr">#872</span>
+              <span class="kuerzel" style="margin-left:auto" title="Manfred Wolff">MW</span>
+            </div>
+            <div class="karte-titel">MinIO-Anhänge im Papierkorb aufräumen</div>
+            <div class="karte-meta">
+              <span><svg width="11" height="11" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="2.3" y="2.3" width="11.4" height="11.4" rx="3" stroke="currentColor" stroke-width="1.5"/><path d="m5.4 8.2 1.9 1.9 3.4-3.7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg> 1/4</span>
+              <span class="teil-schiene"><span class="teil-fuellung" style="width:25%"></span></span>
+            </div>
+            <div class="karte-fuss"><span class="schild s-gruen">Anhänge</span></div>
+          </article>
+        </div>
+
+        <div class="spalte">
+          <div class="spalte-kopf">
+            <span class="spalte-name">Ready</span>
+            <span class="wip" title="5 Karten"><i class="voll"></i><i class="voll"></i><i class="voll"></i><i></i><i></i></span>
+          </div>
+          <article class="karte">
+            <div class="karte-kopf">
+              <span class="karte-nr">#930</span>
+              <span class="led led-gelb" style="margin-left:auto" title="wartet auf #922" aria-hidden="true"></span>
+            </div>
+            <div class="karte-titel">Kennzahl „Wiederaufnahmen“ je Vorhaben</div>
+            <div class="karte-fuss">
+              <span class="schild s-kupfer">Nachtlauf</span>
+              <span class="frist">wartet auf #922</span>
+            </div>
+          </article>
+          <article class="karte">
+            <div class="karte-kopf">
+              <span class="karte-nr">#933</span>
+              <span class="kuerzel" style="margin-left:auto" title="Manfred Wolff">MW</span>
+            </div>
+            <div class="karte-titel">Spaltenvorlagen beim Anlegen eines Boards</div>
+            <div class="karte-meta">
+              <span><svg width="11" height="11" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="2.3" y="2.3" width="11.4" height="11.4" rx="3" stroke="currentColor" stroke-width="1.5"/><path d="m5.4 8.2 1.9 1.9 3.4-3.7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg> 3/5</span>
+              <span class="teil-schiene"><span class="teil-fuellung" style="width:60%"></span></span>
+            </div>
+            <div class="karte-fuss"><span class="schild s-stahl">Designsystem</span><span class="frist frist-eng">morgen</span></div>
+          </article>
+        </div>
+
+        <div class="spalte spalte-warn">
+          <div class="spalte-kopf">
+            <span class="led led-stahl led-puls" aria-hidden="true"></span>
+            <span class="spalte-name">In Arbeit</span>
+            <span class="wip" title="3 von 3 — Grenze erreicht"><i class="voll"></i><i class="voll"></i><i class="ueber"></i></span>
+          </div>
+          <article class="karte karte-gehoben">
+            <div class="karte-kopf">
+              <span class="karte-nr">#941</span>
+              <span class="led led-stahl led-puls" style="margin-left:auto" aria-hidden="true"></span>
+            </div>
+            <div class="karte-titel">Anteilsbalken je Vorgang statt Band über alle</div>
+            <div class="karte-meta">
+              <span><svg width="11" height="11" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="2.3" y="2.3" width="11.4" height="11.4" rx="3" stroke="currentColor" stroke-width="1.5"/><path d="m5.4 8.2 1.9 1.9 3.4-3.7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg> 2/3</span>
+              <span class="teil-schiene"><span class="teil-fuellung" style="width:66%"></span></span>
+            </div>
+            <div class="karte-fuss">
+              <span class="schild s-kupfer">Nachtlauf</span>
+              <span class="frist mono">läuft 02:41</span>
+            </div>
+          </article>
+          <div class="karte-platz" aria-hidden="true"></div>
+          <article class="karte">
+            <div class="karte-kopf">
+              <span class="karte-nr">#922</span>
+              <span class="kuerzel" style="margin-left:auto" title="Manfred Wolff">MW</span>
+            </div>
+            <div class="karte-titel">Spaltenbreite der Vorgangsliste an den Inhalt binden</div>
+            <div class="karte-meta">
+              <span><svg width="11" height="11" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M13.5 9.2c0 1-.8 1.9-1.9 1.9H6.4L3 13.4V4.3c0-1 .8-1.9 1.9-1.9h6.7c1 0 1.9.8 1.9 1.9v4.9Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg> 1</span>
+            </div>
+            <div class="karte-fuss">
+              <span class="schild s-stahl">Designsystem</span>
+              <span class="marke-klasse k-rot">CHECKS_RED</span>
+            </div>
+          </article>
+        </div>
+
+        <div class="spalte">
+          <div class="spalte-kopf">
+            <span class="spalte-name">In review</span>
+            <span class="spalte-zahl">4</span>
+          </div>
+          <article class="karte">
+            <div class="karte-kopf">
+              <span class="karte-nr">#925</span>
+              <span class="led led-gelb" style="margin-left:auto" title="Frage offen" aria-hidden="true"></span>
+            </div>
+            <div class="karte-titel">Vorhaben-Kürzel im Kartenkopf statt in der Fußzeile</div>
+            <div class="karte-fuss">
+              <span class="schild s-kupfer">Nachtlauf</span>
+              <span class="marke-klasse k-gelb">Frage offen</span>
+            </div>
+          </article>
+          <article class="karte">
+            <div class="karte-kopf">
+              <span class="karte-nr">#931</span>
+              <span class="kuerzel" style="margin-left:auto" title="Manfred Wolff">MW</span>
+            </div>
+            <div class="karte-titel">Zeitbudget je Stufe in der Kopfzeile des Laufs</div>
+            <div class="karte-meta"><span><svg width="11" height="11" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M13.5 9.2c0 1-.8 1.9-1.9 1.9H6.4L3 13.4V4.3c0-1 .8-1.9 1.9-1.9h6.7c1 0 1.9.8 1.9 1.9v4.9Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg> 2</span></div>
+            <div class="karte-fuss"><span class="schild s-kupfer">Nachtlauf</span><span class="frist">aab91a1</span></div>
+          </article>
+        </div>
+
+        <div class="spalte">
+          <div class="spalte-kopf">
+            <span class="spalte-name">Done</span>
+            <span class="spalte-zahl">17</span>
+          </div>
+          <article class="karte" style="opacity:.84">
+            <div class="karte-kopf"><span class="karte-nr">#917</span></div>
+            <div class="karte-titel">Umsetzungs-Lauf: Anteilsbalken je Vorgang</div>
+            <div class="karte-fuss"><span class="schild s-gruen">grün</span><span class="frist">9489421</span></div>
+          </article>
+          <article class="karte" style="opacity:.84">
+            <div class="karte-kopf"><span class="karte-nr">#918</span></div>
+            <div class="karte-titel">Fußzeile beider Lauf-Arten</div>
+            <div class="karte-fuss"><span class="schild s-gruen">grün</span><span class="frist">2dbab6c</span></div>
+          </article>
+          <article class="karte" style="opacity:.84">
+            <div class="karte-kopf"><span class="karte-nr">#919</span></div>
+            <div class="karte-titel">Designregel der Nachtlauf-Auswertung</div>
+            <div class="karte-fuss"><span class="schild s-gruen">grün</span><span class="frist">adcd017</span></div>
+          </article>
+          <div style="text-align:center;padding:4px 0 2px">
+            <span class="etikett">14 weitere · Aufräumen in 12 Tagen</span>
+          </div>
+        </div>
+      </section>
+
+      <p class="fussnote">
+        Spalten liegen als Nut im Grund, Karten liegen darauf. Die gezogene Karte kippt und wirft
+        einen längeren Schatten; der Platz, den sie verlässt, bleibt als Vertiefung sichtbar.
+        Der WIP-Stand steht als Segmentskala im Spaltenkopf — bei erreichter Grenze färbt sich das
+        letzte Segment bernstein, statt eine Zahl rot zu setzen.
+      </p>
+    </main>
+
+    <!-- ============ Ansicht: Liste ============ -->
+    <main class="buehne" id="ansicht-liste" role="tabpanel" aria-labelledby="tab-liste" hidden>
+
+      <div class="werkzeugleiste">
+        <div class="chip-gruppe">
+          <button class="chip" type="button" aria-pressed="true">Offen</button>
+          <button class="chip" type="button" aria-pressed="false">Alle</button>
+          <button class="chip" type="button" aria-pressed="false">Überfällig <span class="chip-zahl">3</span></button>
+        </div>
+        <button class="waehler" type="button">
+          <svg width="11" height="11" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M2.5 4h11l-4.2 4.8v4l-2.6 1.4V8.8L2.5 4Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
+          Vorhaben: <b>alle</b>
+        </button>
+        <button class="waehler" type="button">Zuständig: <b>alle</b></button>
+        <div class="werkzeug-rechts">
+          <button class="waehler" type="button">Gruppieren: <b>Vorhaben</b></button>
+          <button class="waehler" type="button">Spalten</button>
+          <button class="taste" type="button">
+            <svg width="11" height="11" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M8 2v8m0 0L5 7m3 3 3-3M3 13h10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            Export
+          </button>
+        </div>
+      </div>
+
+      <section class="platte" aria-label="Karten als Liste">
+        <div class="tafel-rahmen">
+          <table class="tafel">
+            <thead>
+              <tr>
+                <th class="t-waehl"><span class="haken" role="checkbox" aria-checked="false" aria-label="Alle wählen"></span></th>
+                <th>Nr.</th>
+                <th><button type="button">Karte</button></th>
+                <th>Spalte</th>
+                <th>Zuständig</th>
+                <th><button type="button">Frist</button></th>
+                <th class="sortiert"><button type="button">Liegt seit
+                  <svg width="9" height="9" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M8 3v10m0 0 4-4m-4 4-4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </button></th>
+              </tr>
+            </thead>
+            <tbody>
+
+              <tr class="gruppe">
+                <td colspan="7">
+                  <div class="gruppe-inhalt" style="color:var(--kupfer)">
+                    <span class="vorhaben-mal" style="background:currentColor;width:8px;height:8px"></span>
+                    <span class="gruppe-name" style="color:var(--text)">Nachtlauf-Auswertung</span>
+                    <span class="gruppe-zahl">7 von 9 fertig</span>
+                    <span class="gruppe-schiene"><span class="gruppe-fuellung" style="width:78%"></span></span>
+                  </div>
+                </td>
+              </tr>
+
+              <tr class="gewaehlt">
+                <td><span class="haken haken-an" role="checkbox" aria-checked="true" aria-label="Karte 941 wählen"><svg width="9" height="9" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m3.5 8.4 3 3 6-7" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></span></td>
+                <td class="t-nr">#941</td>
+                <td class="t-titel">Anteilsbalken je Vorgang statt Band über alle</td>
+                <td><span class="zustand"><span class="led led-stahl led-puls" aria-hidden="true"></span>In Arbeit</span></td>
+                <td><span class="kuerzel" title="Manfred Wolff">MW</span></td>
+                <td class="t-frist">—</td>
+                <td class="t-liegt">2 h 41</td>
+              </tr>
+
+              <tr class="gewaehlt">
+                <td><span class="haken haken-an" role="checkbox" aria-checked="true" aria-label="Karte 925 wählen"><svg width="9" height="9" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m3.5 8.4 3 3 6-7" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></span></td>
+                <td class="t-nr">#925</td>
+                <td class="t-titel">Vorhaben-Kürzel im Kartenkopf statt in der Fußzeile
+                  <span class="marke-klasse k-gelb" style="margin-left:7px">Frage offen</span></td>
+                <td><span class="zustand"><span class="led led-gelb" aria-hidden="true"></span>In review</span></td>
+                <td><span class="kuerzel" title="Manfred Wolff">MW</span></td>
+                <td class="t-frist">18.09.</td>
+                <td class="t-liegt">3 T</td>
+              </tr>
+
+              <tr>
+                <td><span class="haken" role="checkbox" aria-checked="false" aria-label="Karte 931 wählen"></span></td>
+                <td class="t-nr">#931</td>
+                <td class="t-titel">Zeitbudget je Stufe in der Kopfzeile des Laufs</td>
+                <td><span class="zustand"><span class="led led-gruen" aria-hidden="true"></span>In review</span></td>
+                <td><span class="kuerzel" title="Manfred Wolff">MW</span></td>
+                <td class="t-frist">—</td>
+                <td class="t-liegt">1 T</td>
+              </tr>
+
+              <tr>
+                <td><span class="haken" role="checkbox" aria-checked="false" aria-label="Karte 930 wählen"></span></td>
+                <td class="t-nr">#930</td>
+                <td class="t-titel">Kennzahl „Wiederaufnahmen“ je Vorhaben
+                  <span class="marke-klasse k-grau" style="margin-left:7px">wartet auf #922</span></td>
+                <td><span class="zustand"><span class="led" aria-hidden="true"></span>Ready</span></td>
+                <td><span style="color:var(--text-schwach)">—</span></td>
+                <td class="t-frist">—</td>
+                <td class="t-liegt">5 T</td>
+              </tr>
+
+              <tr class="gruppe">
+                <td colspan="7">
+                  <div class="gruppe-inhalt" style="color:var(--stahl)">
+                    <span class="vorhaben-mal" style="background:currentColor;width:8px;height:8px"></span>
+                    <span class="gruppe-name" style="color:var(--text)">Designsystem</span>
+                    <span class="gruppe-zahl">2 von 6 fertig</span>
+                    <span class="gruppe-schiene"><span class="gruppe-fuellung" style="width:33%"></span></span>
+                  </div>
+                </td>
+              </tr>
+
+              <tr class="gewaehlt">
+                <td><span class="haken haken-an" role="checkbox" aria-checked="true" aria-label="Karte 922 wählen"><svg width="9" height="9" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m3.5 8.4 3 3 6-7" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></span></td>
+                <td class="t-nr">#922</td>
+                <td class="t-titel">Spaltenbreite der Vorgangsliste an den Inhalt binden
+                  <span class="marke-klasse k-rot" style="margin-left:7px">CHECKS_RED</span></td>
+                <td><span class="zustand"><span class="led led-rot" aria-hidden="true"></span>In Arbeit</span></td>
+                <td><span class="kuerzel" title="Manfred Wolff">MW</span></td>
+                <td class="t-frist frist-ueber">14.09.</td>
+                <td class="t-liegt">4 T</td>
+              </tr>
+
+              <tr>
+                <td><span class="haken" role="checkbox" aria-checked="false" aria-label="Karte 933 wählen"></span></td>
+                <td class="t-nr">#933</td>
+                <td class="t-titel">Spaltenvorlagen beim Anlegen eines Boards</td>
+                <td><span class="zustand"><span class="led" aria-hidden="true"></span>Ready</span></td>
+                <td><span class="kuerzel" title="Manfred Wolff">MW</span></td>
+                <td class="t-frist frist-ueber">morgen</td>
+                <td class="t-liegt">6 T</td>
+              </tr>
+
+              <tr>
+                <td><span class="haken" role="checkbox" aria-checked="false" aria-label="Karte 846 wählen"></span></td>
+                <td class="t-nr">#846</td>
+                <td class="t-titel">Kartenverlauf als Zeitstrahl im Detailfenster</td>
+                <td><span class="zustand"><span class="led" aria-hidden="true"></span>Backlog</span></td>
+                <td><span class="kuerzel" title="Manfred Wolff">MW</span></td>
+                <td class="t-frist">—</td>
+                <td class="t-liegt liegt-lang">14 T</td>
+              </tr>
+
+              <tr class="gruppe">
+                <td colspan="7">
+                  <div class="gruppe-inhalt" style="color:var(--gruen)">
+                    <span class="vorhaben-mal" style="background:currentColor;width:8px;height:8px"></span>
+                    <span class="gruppe-name" style="color:var(--text)">Anhänge &amp; Vorschau</span>
+                    <span class="gruppe-zahl">1 von 5 fertig</span>
+                    <span class="gruppe-schiene"><span class="gruppe-fuellung" style="width:20%"></span></span>
+                  </div>
+                </td>
+              </tr>
+
+              <tr>
+                <td><span class="haken" role="checkbox" aria-checked="false" aria-label="Karte 872 wählen"></span></td>
+                <td class="t-nr">#872</td>
+                <td class="t-titel">MinIO-Anhänge im Papierkorb aufräumen</td>
+                <td><span class="zustand"><span class="led" aria-hidden="true"></span>Backlog</span></td>
+                <td><span class="kuerzel" title="Manfred Wolff">MW</span></td>
+                <td class="t-frist">—</td>
+                <td class="t-liegt liegt-lang">9 T</td>
+              </tr>
+
+              <tr>
+                <td><span class="haken" role="checkbox" aria-checked="false" aria-label="Karte 889 wählen"></span></td>
+                <td class="t-nr">#889</td>
+                <td class="t-titel">Rollenmatrix je Projekt exportieren</td>
+                <td><span class="zustand"><span class="led" aria-hidden="true"></span>Backlog</span></td>
+                <td><span style="color:var(--text-schwach)">—</span></td>
+                <td class="t-frist">—</td>
+                <td class="t-liegt liegt-lang">7 T</td>
+              </tr>
+
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <div class="massen" id="massen">
+        <span class="massen-zahl"><b id="massen-zahl">3</b> Karten gewählt</span>
+        <span class="massen-trenn" aria-hidden="true"></span>
+        <button class="taste" type="button">Verschieben nach …</button>
+        <button class="taste" type="button">Vorhaben zuweisen</button>
+        <button class="taste" type="button">Label</button>
+        <button class="taste" type="button">In den Papierkorb</button>
+      </div>
+
+      <p class="fussnote">
+        Die Liste ist dieselbe Warte, nur dichter: Kopfzeile erhaben und mitlaufend, Gruppen als
+        eingelassene Nut mit Fortschritt des Vorhabens, gewählte Zeilen kupfern getönt. Die
+        Massenleiste schwebt über allem — sie ist das einzige Element der Ansicht auf der obersten
+        Tiefenstufe. Häkchen lassen sich anklicken.
+      </p>
+    </main>
+
+    <!-- ============ Ansicht: Karte ============ -->
+    <main class="buehne" id="ansicht-karte" role="tabpanel" aria-labelledby="tab-karte" hidden>
+
+      <div class="blatt">
+
+        <section class="platte" aria-label="Karte 941">
+          <div class="blatt-kopf">
+            <div style="min-width:0;flex:1">
+              <div class="blatt-nr">#941</div>
+              <h2 class="blatt-titel">Anteilsbalken je Vorgang statt Band über alle</h2>
+            </div>
+            <span class="zustand"><span class="led led-stahl led-puls" aria-hidden="true"></span>In Arbeit · läuft 02:41</span>
+          </div>
+
+          <div class="blatt-rumpf">
+            <p class="blatt-text">
+              Die Auswertung zeigt heute ein Band über alle Vorgänge. Gebraucht wird der Anteil je
+              Vorgang, damit sichtbar wird, welcher Vorgang die Nacht verbraucht hat. Die Werte
+              kommen aus <code>NightRunItemView.durationMs</code>.
+            </p>
+
+            <div>
+              <div class="etikett" style="margin-bottom:8px">Dauer je Schritt</div>
+              <div class="instrumente">
+                <div class="instrument">
+                  <span class="etikett">Fachplan</span>
+                  <span class="instrument-wert">4:12<small> min</small></span>
+                </div>
+                <div class="instrument">
+                  <span class="etikett">Plan</span>
+                  <span class="instrument-wert">11:30<small> min</small></span>
+                </div>
+                <div class="instrument">
+                  <span class="etikett">Zerlegung</span>
+                  <span class="instrument-wert">3:05<small> min</small></span>
+                </div>
+                <div class="instrument instrument-heiss">
+                  <span class="etikett">Umsetzung</span>
+                  <span class="instrument-wert">18:42<small> min</small></span>
+                </div>
+                <div class="instrument">
+                  <span class="etikett">Prüfung</span>
+                  <span class="instrument-wert">6:20<small> min</small></span>
+                </div>
+                <div class="instrument">
+                  <span class="etikett">Review</span>
+                  <span class="instrument-wert">5:48<small> min</small></span>
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <div class="etikett" style="margin-bottom:8px">Verbrauch dieser Karte · über alle Anläufe</div>
+              <div class="instrumente">
+                <div class="instrument">
+                  <span class="etikett">Eingabe</span>
+                  <span class="instrument-wert">412<small> Tsd</small></span>
+                </div>
+                <div class="instrument">
+                  <span class="etikett">Ausgabe</span>
+                  <span class="instrument-wert">18,4<small> Tsd</small></span>
+                </div>
+                <div class="instrument">
+                  <span class="etikett">Cache-Quote</span>
+                  <span class="instrument-wert">81<small> %</small></span>
+                </div>
+                <div class="instrument instrument-heiss">
+                  <span class="etikett">Kosten</span>
+                  <span class="instrument-wert">0,94<small> $</small></span>
+                </div>
+                <div class="instrument">
+                  <span class="etikett">Wiederaufnahmen</span>
+                  <span class="instrument-wert">2</span>
+                </div>
+                <div class="instrument instrument-leer">
+                  <span class="etikett">Nacharbeit</span>
+                  <span class="instrument-wert">—</span>
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <div class="etikett" style="margin-bottom:10px">Anläufe</div>
+              <div class="anlaeufe">
+                <div class="anlauf">
+                  <span class="anlauf-marke"><span class="led led-rot" aria-hidden="true"></span></span>
+                  <div class="anlauf-kern">
+                    <div class="anlauf-titel">12.09. · Kette, Stufe <span class="mono">pakete</span></div>
+                    <div class="anlauf-notiz"><span class="marke-klasse k-rot">CHECKS_RED</span> — 2 Tests rot in <span class="mono">BoardViewTest</span>, zurück nach Ready</div>
+                  </div>
+                  <div class="anlauf-rechts">42:15<br><span style="color:var(--text-schwach)">0,51 $</span></div>
+                </div>
+                <div class="anlauf">
+                  <span class="anlauf-marke"><span class="led led-gruen" aria-hidden="true"></span></span>
+                  <div class="anlauf-kern">
+                    <div class="anlauf-titel">14.09. · Kette, Stufe <span class="mono">pakete</span></div>
+                    <div class="anlauf-notiz">grün, committet als <span class="hash">9489421</span></div>
+                  </div>
+                  <div class="anlauf-rechts">18:42<br><span style="color:var(--text-schwach)">0,43 $</span></div>
+                </div>
+                <div class="anlauf">
+                  <span class="anlauf-marke"><span class="led led-stahl led-puls" aria-hidden="true"></span></span>
+                  <div class="anlauf-kern">
+                    <div class="anlauf-titel">15.09. · Kette läuft</div>
+                    <div class="anlauf-notiz">Stufe 3 von 4 · seit 02:41</div>
+                  </div>
+                  <div class="anlauf-rechts">—</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <div class="saeule">
+          <section class="platte" aria-label="Felder">
+            <div class="platte-kopf"><span class="platte-titel">Felder</span></div>
+            <div class="felder">
+              <div class="feld"><span class="feld-name">Spalte</span>
+                <span><span class="zustand"><span class="led led-stahl" aria-hidden="true"></span>In Arbeit</span></span></div>
+              <div class="feld"><span class="feld-name">Vorhaben</span>
+                <span><span class="schild s-kupfer">Nachtlauf-Auswertung</span></span></div>
+              <div class="feld"><span class="feld-name">Zuständig</span>
+                <span style="display:flex;align-items:center;gap:7px"><span class="kuerzel">MW</span> Manfred Wolff</span></div>
+              <div class="feld"><span class="feld-name">Labels</span>
+                <span style="display:flex;gap:5px;flex-wrap:wrap"><span class="schild s-stahl">Frontend</span><span class="schild s-bernst">Messwerte</span></span></div>
+              <div class="feld"><span class="feld-name">Angelegt</span><span class="mono">12.09. · 23:14</span></div>
+              <div class="feld"><span class="feld-name">Fällig</span><span class="mono">—</span></div>
+              <div class="feld"><span class="feld-name">Anhänge</span><span class="mono">2</span></div>
+              <div class="feld"><span class="feld-name">Herkunft</span>
+                <span style="font-size:11.5px;color:var(--text-matt)">Kette, eingeliefert <span class="mono">15.09. 03:22</span></span></div>
+            </div>
+          </section>
+
+          <section class="platte" aria-label="Diese Karte im Vergleich">
+            <div class="platte-kopf">
+              <span class="platte-titel">Im Vergleich</span>
+              <span class="platte-notiz">Vorhaben · 9 Karten</span>
+            </div>
+            <div class="klassen">
+              <div class="klasse">
+                <div>
+                  <div class="klasse-name">Kosten je Karte</div>
+                  <div class="klasse-schiene"><div class="klasse-fuellung" style="width:71%;color:var(--kupfer)"></div></div>
+                </div>
+                <div class="klasse-zahl">0,94</div>
+              </div>
+              <div class="klasse">
+                <div>
+                  <div class="klasse-name">Schnitt im Vorhaben</div>
+                  <div class="klasse-schiene"><div class="klasse-fuellung" style="width:48%;color:var(--grau)"></div></div>
+                </div>
+                <div class="klasse-zahl">0,63</div>
+              </div>
+              <div class="klasse">
+                <div>
+                  <div class="klasse-name">Teuerste Karte <span style="color:var(--text-schwach)">#922</span></div>
+                  <div class="klasse-schiene"><div class="klasse-fuellung" style="width:100%;color:var(--zinnob)"></div></div>
+                </div>
+                <div class="klasse-zahl">1,32</div>
+              </div>
+            </div>
+          </section>
+        </div>
+      </div>
+
+      <p class="fussnote">
+        Die Messwerte hängen an der Karte, nicht am Lauf — die Karte ist das, was mehrfach angefasst
+        wird. Jeder Anlauf schreibt seine eigene Zeile; die Instrumente oben sind die Summe darüber.
+        Weil die Wahrheit hier liegt, ist jede Auswertung — Nacht, Tag, Woche, Monat, Vorhaben —
+        nur noch eine Summe über eine andere Menge derselben Zeilen.
+      </p>
+    </main>
+
+  </div>
+</div>
+
+<script>
+  (function () {
+    var paare = [['tab-leitstand', 'ansicht-leitstand'], ['tab-board', 'ansicht-board'], ['tab-liste', 'ansicht-liste'], ['tab-karte', 'ansicht-karte']]
+      .map(function (p) { return { knopf: document.getElementById(p[0]), tafel: document.getElementById(p[1]) }; });
+
+    paare.forEach(function (t, i) {
+      t.knopf.addEventListener('click', function () {
+        paare.forEach(function (andere, j) {
+          andere.knopf.setAttribute('aria-selected', String(i === j));
+          andere.tafel.hidden = i !== j;
+        });
+      });
+    });
+
+    // Auswahl in der Liste
+    var zaehler = document.getElementById('massen-zahl');
+    var leiste = document.getElementById('massen');
+    function zaehlen() {
+      var n = document.querySelectorAll('.tafel tbody tr.gewaehlt').length;
+      if (zaehler) zaehler.textContent = String(n);
+      if (leiste) leiste.hidden = n === 0;
+    }
+    function setzen(haken, an) {
+      var zeile = haken.closest('tr');
+      if (zeile) zeile.classList.toggle('gewaehlt', an);
+      haken.classList.toggle('haken-an', an);
+      haken.setAttribute('aria-checked', String(an));
+      haken.innerHTML = an
+        ? '<svg width="9" height="9" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m3.5 8.4 3 3 6-7" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>'
+        : '';
+    }
+
+    var kopfHaken = document.querySelector('.tafel thead .haken');
+    if (kopfHaken) {
+      kopfHaken.addEventListener('click', function () {
+        var an = kopfHaken.getAttribute('aria-checked') !== 'true';
+        kopfHaken.classList.toggle('haken-an', an);
+        kopfHaken.setAttribute('aria-checked', String(an));
+        kopfHaken.innerHTML = an
+          ? '<svg width="9" height="9" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m3.5 8.4 3 3 6-7" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>'
+          : '';
+        document.querySelectorAll('.tafel tbody .haken').forEach(function (h) { setzen(h, an); });
+        zaehlen();
+      });
+    }
+
+    document.querySelectorAll('.tafel tbody .haken').forEach(function (h) {
+      h.addEventListener('click', function () {
+        setzen(h, h.getAttribute('aria-checked') !== 'true');
+        zaehlen();
+      });
+    });
+    zaehlen();
+  })();
+</script>
