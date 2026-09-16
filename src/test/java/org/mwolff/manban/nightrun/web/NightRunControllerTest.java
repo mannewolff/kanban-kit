@@ -13,6 +13,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.fasterxml.jackson.databind.SerializationFeature;
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -32,6 +33,7 @@ import org.mwolff.manban.nightrun.domain.NightRunLimits;
 import org.mwolff.manban.nightrun.domain.NightRunMode;
 import org.mwolff.manban.nightrun.domain.NightRunOrigin;
 import org.mwolff.manban.nightrun.domain.NightRunState;
+import org.mwolff.manban.nightrun.domain.NightRunUsage;
 import org.mwolff.manban.project.application.ProjectAccessDeniedException;
 import org.mwolff.manban.project.application.ProjectNotFoundException;
 import org.springframework.http.converter.json.Jackson2ObjectMapperBuilder;
@@ -479,6 +481,63 @@ class NightRunControllerTest {
     when(service.countRunsByErrorClass(USER, PROJECT)).thenThrow(new ProjectNotFoundException());
 
     mvc.perform(get(PATH + "/error-class-counts")).andExpect(status().isNotFound());
+  }
+
+  /**
+   * Der gemeldete Kostenwert kommt als {@link NightRunUsage} beim Use-Case an — je Lauf und je
+   * Arbeitspaket (Issue #948). Bis hierher übergab der Controller an beiden Stellen {@code null}.
+   */
+  @Test
+  // Siehe submit_passesEveryFieldToService_andAnswersInRequestOrder: derselbe Grund.
+  @SuppressWarnings("unchecked")
+  void submit_passesReportedCost_toService() throws Exception {
+    when(service.submit(eq(USER), eq(PROJECT), anyList()))
+        .thenReturn(List.of(new NightRunResult(ERSTER, true)));
+
+    mvc.perform(
+            post(PATH)
+                .contentType(JSON)
+                .content(
+                    """
+                    {"runs":[
+                      {"startedAt":"2026-08-31T22:00:00Z","mode":"CHAIN","durationMs":1,
+                       "processedCount":1,"skippedCount":0,"unparsedCount":0,
+                       "usage":{"costUsd":25.983293},
+                       "items":[{"cardNumber":791,"title":"Paket","state":"GREEN",
+                                 "excerpt":"Auszug","usage":{"costUsd":11.5228115}}]}]}
+                    """))
+        .andExpect(status().isOk());
+
+    ArgumentCaptor<List<NewNightRun>> captor = ArgumentCaptor.forClass(List.class);
+    verify(service).submit(eq(USER), eq(PROJECT), captor.capture());
+    NewNightRun uebergeben = captor.getValue().getFirst();
+    assertThat(uebergeben.usage())
+        .isEqualTo(new NightRunUsage(new BigDecimal("25.983293"), null, null, null));
+    assertThat(uebergeben.items().getFirst().usage())
+        .isEqualTo(new NightRunUsage(new BigDecimal("11.5228115"), null, null, null));
+  }
+
+  /** Ohne {@code usage} bleibt es bei „nicht gemessen" — kein Record aus lauter Nullen. */
+  @Test
+  // Siehe submit_passesEveryFieldToService_andAnswersInRequestOrder: derselbe Grund.
+  @SuppressWarnings("unchecked")
+  void submit_withoutUsage_passesNull_toService() throws Exception {
+    when(service.submit(eq(USER), eq(PROJECT), anyList()))
+        .thenReturn(List.of(new NightRunResult(ERSTER, true)));
+
+    mvc.perform(
+            post(PATH)
+                .contentType(JSON)
+                .content(
+                    "{\"runs\":[%s]}"
+                        .formatted(run("2026-08-31T22:00:00Z", item("Paket", "Auszug")))))
+        .andExpect(status().isOk());
+
+    ArgumentCaptor<List<NewNightRun>> captor = ArgumentCaptor.forClass(List.class);
+    verify(service).submit(eq(USER), eq(PROJECT), captor.capture());
+    NewNightRun uebergeben = captor.getValue().getFirst();
+    assertThat(uebergeben.usage()).isNull();
+    assertThat(uebergeben.items().getFirst().usage()).isNull();
   }
 
   private static String run(String startedAt, String items) {

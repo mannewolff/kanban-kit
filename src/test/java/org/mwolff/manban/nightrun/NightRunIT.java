@@ -1,5 +1,6 @@
 package org.mwolff.manban.nightrun;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -7,13 +8,21 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.Cookie;
+import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.mwolff.manban.AbstractIntegrationTest;
 import org.mwolff.manban.auth.application.AppUserRepository;
 import org.mwolff.manban.auth.domain.AppUser;
 import org.mwolff.manban.auth.domain.PlatformRole;
+import org.mwolff.manban.nightrun.application.NightRunRepository;
+import org.mwolff.manban.nightrun.domain.NightRun;
+import org.mwolff.manban.nightrun.domain.NightRunItem;
 import org.mwolff.manban.nightrun.domain.NightRunLimits;
+import org.mwolff.manban.nightrun.domain.NightRunMode;
+import org.mwolff.manban.nightrun.domain.NightRunOrigin;
+import org.mwolff.manban.nightrun.domain.NightRunUsage;
 import org.mwolff.manban.project.application.ProjectMembershipRepository;
 import org.mwolff.manban.project.domain.ProjectMembership;
 import org.mwolff.manban.project.domain.ProjectRole;
@@ -46,6 +55,7 @@ class NightRunIT extends AbstractIntegrationTest {
   @Autowired private ProjectMembershipRepository memberships;
   @Autowired private PasswordEncoder passwordEncoder;
   @Autowired private ObjectMapper json;
+  @Autowired private NightRunRepository runs;
 
   @Test
   void submit_reportsKnownRunAsExisting_andCreatesTheNewOne_inRequestOrder() throws Exception {
@@ -265,6 +275,98 @@ class NightRunIT extends AbstractIntegrationTest {
         .andExpect(jsonPath("$.length()").value(0));
   }
 
+  /**
+   * Der Kostenwert des hochgeladenen Protokolls kommt mit — je Lauf und je Arbeitspaket (Issue
+   * #948). Der Parser kennt ihn seit Issue #773; bis hierher ließ ihn die Einlieferung fallen.
+   *
+   * <p>Verglichen wird mit {@code compareTo}: Die Spalte ist {@code numeric(12,6)}, und der
+   * gelesene Wert trägt darum sechs Nachkommastellen. {@code equals} auf {@code BigDecimal}
+   * unterscheidet 8.03 von 8.030000 — hier wäre das ein Fehlschlag ohne Fehler.
+   */
+  @Test
+  void submit_carriesTheReportedCost_toRunAndItem() throws Exception {
+    Cookie owner = session("nr-cost-owner@example.com", PlatformRole.USER);
+    long projectId = projectOf("nr-cost-owner@example.com", "nr-cost-admin@example.com");
+
+    submit(owner, projectId, runMitKosten(ERSTER, "25.983293", itemMitKosten(791, "11.5228115")))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$[0].created").value(true));
+
+    NightRun lauf = einzigerLauf(projectId);
+    assertThat(lauf.usage()).isNotNull();
+    assertThat(lauf.usage().costUsd())
+        .isNotNull()
+        .usingComparator(BigDecimal::compareTo)
+        .isEqualTo(new BigDecimal("25.983293"));
+    // Die drei Mengen bleiben dem Upload-Weg fremd: Der Browser misst sie nicht.
+    assertThat(lauf.usage().inputTokens()).isNull();
+    assertThat(lauf.usage().outputTokens()).isNull();
+    assertThat(lauf.usage().cachedInputTokens()).isNull();
+
+    // Gemeldet waren 11.5228115; die Spalte fuehrt sechs Nachkommastellen und rundet kaufmaennisch.
+    NightRunItem paket = einzigesPaket(lauf);
+    assertThat(paket.usage()).isNotNull();
+    assertThat(paket.usage().costUsd())
+        .isNotNull()
+        .usingComparator(BigDecimal::compareTo)
+        .isEqualTo(new BigDecimal("11.522812"));
+  }
+
+  /** Ohne gemeldeten Kostenwert bleibt jede Verbrauchsspalte {@code NULL} — nicht 0. */
+  @Test
+  void submit_withoutUsage_leavesEveryUsageColumnNull() throws Exception {
+    Cookie owner = session("nr-nocost-owner@example.com", PlatformRole.USER);
+    long projectId = projectOf("nr-nocost-owner@example.com", "nr-nocost-admin@example.com");
+
+    submit(owner, projectId, run(ERSTER, item(721, "Persistenz", "GREEN", null)))
+        .andExpect(status().isOk());
+
+    NightRun lauf = einzigerLauf(projectId);
+    assertThat(lauf.usage()).isNull();
+    assertThat(einzigesPaket(lauf).usage()).isNull();
+  }
+
+  /**
+   * Ein per Token gemeldeter Lauf ist reicher als jedes hochgeladene Protokoll — er trägt die
+   * Token-Herkunft, die Vollständigkeit und die drei Mengen. Der Upload-Weg darf ihn nicht plätten:
+   * {@code insertIfAbsent} lässt ihn stehen und meldet {@code created: false}.
+   */
+  @Test
+  void submit_doesNotFlattenRunReportedByToken() throws Exception {
+    Cookie owner = session("nr-reich-owner@example.com", PlatformRole.USER);
+    long projectId = projectOf("nr-reich-owner@example.com", "nr-reich-admin@example.com");
+    NightRunUsage gemeldet =
+        new NightRunUsage(new BigDecimal("8.032575"), 148L, 62_411L, 8_883_160L);
+    runs.upsert(
+        new NightRun(
+            null,
+            projectId,
+            Instant.parse(ERSTER),
+            NightRunMode.CHAIN,
+            1000L,
+            1,
+            0,
+            0,
+            null,
+            Instant.now(),
+            NightRunOrigin.TOKEN,
+            "nachtlauf",
+            true,
+            Instant.now(),
+            gemeldet),
+        List.of());
+
+    submit(owner, projectId, runMitKosten(ERSTER, "25.983293", itemMitKosten(791, "11.5228115")))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$[0].created").value(false));
+
+    NightRun lauf = einzigerLauf(projectId);
+    assertThat(lauf.origin()).isEqualTo(NightRunOrigin.TOKEN);
+    assertThat(lauf.complete()).isTrue();
+    assertThat(lauf.usage().inputTokens()).isEqualTo(148L);
+    assertThat(runs.findItemsByRunIds(List.of(lauf.id()))).isEmpty();
+  }
+
   private static String path(long projectId) {
     return "/api/projects/" + projectId + "/night-runs";
   }
@@ -289,6 +391,32 @@ class NightRunIT extends AbstractIntegrationTest {
     return """
         {"cardNumber":%d,"title":"%s","state":"%s","errorClass":%s,"excerpt":"Auszug"}"""
         .formatted(cardNumber, title, state, klasse);
+  }
+
+  private static String runMitKosten(String startedAt, String kosten, String items) {
+    return """
+        {"startedAt":"%s","mode":"CHAIN","durationMs":1234,"processedCount":1,
+         "skippedCount":0,"unparsedCount":0,"usage":{"costUsd":%s},"items":[%s]}"""
+        .formatted(startedAt, kosten, items);
+  }
+
+  private static String itemMitKosten(int cardNumber, String kosten) {
+    return """
+        {"cardNumber":%d,"title":"Paket","state":"GREEN","excerpt":"Auszug",
+         "usage":{"costUsd":%s}}"""
+        .formatted(cardNumber, kosten);
+  }
+
+  private NightRun einzigerLauf(long projectId) {
+    List<NightRun> gefunden = runs.findByProjectOrderByStartedAtDesc(projectId);
+    assertThat(gefunden).hasSize(1);
+    return gefunden.getFirst();
+  }
+
+  private NightRunItem einzigesPaket(NightRun lauf) {
+    List<NightRunItem> pakete = runs.findItemsByRunIds(List.of(lauf.id()));
+    assertThat(pakete).hasSize(1);
+    return pakete.getFirst();
   }
 
   private long projectOf(String ownerEmail, String adminEmail) throws Exception {

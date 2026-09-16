@@ -130,6 +130,15 @@ const EIN_LAUF = stand({
   einheiten: [einheit({ ausgang: 'erfolg', commit: 'a1b2c3d', pruefung: GEPRUEFT })],
 })
 
+/**
+ * Ein Lauf, der Kosten meldet (Issue #948) — am Lauf die Summe über alle Sitzungen, am Vorgang
+ * sein eigener Betrag. Die Zahlen sind die des echten Ketten-Laufs vom 2026-09-14.
+ */
+const MIT_KOSTEN = stand({
+  kostenSumme: 25.983293,
+  einheiten: [einheit({ ausgang: 'erfolg', commit: 'a1b2c3d', pruefung: GEPRUEFT, kostenUsd: 11.5228115 })],
+})
+
 /** Erfolgreiche Session, aber roter Nachweis → gelb. */
 const GELB = stand({
   einheiten: [einheit({ ausgang: 'erfolg', commit: 'a1b2c3d', pruefung: NACHWEIS_ROT })],
@@ -662,6 +671,46 @@ describe('NightRunPage — Ergebnisstand hineingeben', () => {
     }
     const gesendet = anfragen.find((a) => a.method === 'POST')
     expect(gesendet?.body).toContain('"cardNumber":700')
+  })
+
+  it('nimmt den gemeldeten Kostenwert mit — am Lauf und am Arbeitspaket', async () => {
+    renderPage({ submit: { ergebnis: [{ startedAt: startedAt(0), created: true }] } })
+    await screen.findByText('Noch keine Auswertung vorhanden.')
+
+    protokollWaehlen(MIT_KOSTEN)
+
+    await waitFor(() => expect(anfragen.some((a) => a.method === 'POST')).toBe(true))
+    const gesendet = JSON.parse(anfragen.find((a) => a.method === 'POST')!.body)
+    expect(gesendet.runs[0].usage).toEqual({ costUsd: 25.983293 })
+    expect(gesendet.runs[0].items[0].usage).toEqual({ costUsd: 11.5228115 })
+  })
+
+  it('lässt den usage-Schlüssel weg, wo kein Kostenwert gemeldet ist', async () => {
+    renderPage({ submit: { ergebnis: [{ startedAt: startedAt(0), created: true }] } })
+    await screen.findByText('Noch keine Auswertung vorhanden.')
+
+    protokollWaehlen(EIN_LAUF)
+
+    await waitFor(() => expect(anfragen.some((a) => a.method === 'POST')).toBe(true))
+    const gesendet = JSON.parse(anfragen.find((a) => a.method === 'POST')!.body)
+    // Kein `usage: undefined`, sondern gar kein Schlüssel — dieselbe Regel wie bei den übrigen
+    // optionalen Feldern: Was nicht gemessen wurde, steht nicht im Body.
+    expect('usage' in gesendet.runs[0]).toBe(false)
+    expect('usage' in gesendet.runs[0].items[0]).toBe(false)
+  })
+
+  it('trägt den Kostenwert des echten Ketten-Laufs in den Request', async () => {
+    renderPage({ submit: { ergebnis: alleNeu(ECHTE_KETTE_STAND) } })
+    await screen.findByText('Noch keine Auswertung vorhanden.')
+
+    protokollWaehlen(ECHTE_KETTE_STAND, 'night-run-2026-09-14-131200.json')
+
+    await waitFor(() => expect(anfragen.some((a) => a.method === 'POST')).toBe(true))
+    const gesendet = JSON.parse(anfragen.find((a) => a.method === 'POST')!.body)
+    expect(gesendet.runs[0].usage.costUsd).toBe(25.983292999999996)
+    // Die drei Ketten-Vorgänge tragen je ihren eigenen Betrag.
+    expect(gesendet.runs[0].items.map((i: { usage?: { costUsd: number } }) => i.usage?.costUsd))
+      .toEqual([11.5228115, 10.366864999999999, 4.093616499999999])
   })
 
   it('stellt einen bereits bekannten Lauf vollständig dar und kennzeichnet ihn', async () => {

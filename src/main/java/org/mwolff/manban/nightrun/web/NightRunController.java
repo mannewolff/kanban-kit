@@ -29,6 +29,10 @@ import org.springframework.web.bind.annotation.RestController;
  * Die Nachtlauf-Auswertung an HTTP (Issue #723). Ausgewertet wird im Browser; hierher geht allein
  * die verdichtete Fassung (Plan #718, A1).
  *
+ * <p>Seit Issue #948 nimmt der Weg den gemeldeten Kostenwert mit — je Lauf und je Arbeitspaket. Die
+ * drei Mengen (Eingabe, Ausgabe, Zwischenspeicher) bleiben ihm fremd: Der Browser misst sie nicht,
+ * und ein Feld, das nie einen Wert trägt, wäre eine leere Zusage.
+ *
  * <p>Es entstehen keine eigenen Exceptions: 404 und 403 liefert {@code requireOwner} im {@link
  * NightRunService}, 400 die Bean Validation über den {@code GlobalExceptionHandler} — die einzige
  * Mapping-Stelle des Projekts. Ein Eintrag in der {@code SecurityConfig} ist nicht nötig, {@code
@@ -108,9 +112,9 @@ class NightRunController {
         request.unparsedSample(),
         // Fest true und kein Request-Feld: Der Browser liefert einen unabgeschlossenen Lauf
         // ohnehin nicht ein, und ein Feld, das nur einen Wert annehmen kann, taeuschte eine Wahl
-        // vor, die es nicht gibt. Der Kostenwert kommt mit einem eigenen Paket.
+        // vor, die es nicht gibt.
         true,
-        null,
+        NightRunUsageRequest.toDomain(request.usage()),
         request.items().stream().map(NightRunController::item).toList());
   }
 
@@ -123,7 +127,7 @@ class NightRunController {
         request.durationMs(),
         request.commitHash(),
         request.excerpt(),
-        null);
+        NightRunUsageRequest.toDomain(request.usage()));
   }
 
   /**
@@ -147,6 +151,7 @@ class NightRunController {
       int skippedCount,
       int unparsedCount,
       @Nullable @Size(max = NightRunLimits.EXCERPT_MAX) String unparsedSample,
+      @Nullable NightRunUsageRequest usage,
       @NotNull @Size(max = MAX_ITEMS_PER_RUN) List<@Valid @NotNull NightRunItemRequest> items) {}
 
   /** Ein einzulieferndes Arbeitspaket. */
@@ -157,5 +162,6 @@ class NightRunController {
       @Nullable NightRunErrorClass errorClass,
       @Nullable Long durationMs,
       @Nullable @Size(max = COMMIT_HASH_MAX) String commitHash,
-      @Nullable @Size(max = NightRunLimits.EXCERPT_MAX) String excerpt) {}
+      @Nullable @Size(max = NightRunLimits.EXCERPT_MAX) String excerpt,
+      @Nullable NightRunUsageRequest usage) {}
 }

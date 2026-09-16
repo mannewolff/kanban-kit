@@ -19,6 +19,23 @@ import { apiFetch } from './client'
  */
 export type NightRunServerMode = Exclude<NightRunMode, 'NIGHTPLAN'>
 
+/**
+ * Der gemeldete Verbrauch eines Laufs oder eines Arbeitspakets (Issue #948).
+ *
+ * Alle Felder sind optional, weil der Browser eine fehlende Angabe **weglaesst** statt `null` zu
+ * senden — dieselbe Regel wie bei den uebrigen Submission-Feldern. Der Server liest ein fehlendes
+ * Feld als „nicht gemessen", und das ist etwas anderes als eine gemessene Null.
+ *
+ * Vom Upload-Weg gefuellt wird allein `costUsd`: Die drei Mengen entstehen erst mit der Messung im
+ * Runner und kommen ueber den Token-Weg herein.
+ */
+export interface NightRunUsage {
+  costUsd?: number
+  inputTokens?: number
+  outputTokens?: number
+  cachedInputTokens?: number
+}
+
 /** Ein Arbeitspaket, wie es an den Server geht — der Ausschnitt des Parser-Ergebnisses, den der Server kennt. */
 export interface NightRunItemSubmission {
   cardNumber: number
@@ -28,6 +45,7 @@ export interface NightRunItemSubmission {
   durationMs?: number
   commitHash?: string
   excerpt?: string
+  usage?: NightRunUsage
 }
 
 /** Ein einzuliefernder Lauf. */
@@ -39,6 +57,7 @@ export interface NightRunSubmission {
   skippedCount: number
   unparsedCount: number
   unparsedSample?: string
+  usage?: NightRunUsage
   items: NightRunItemSubmission[]
 }
 

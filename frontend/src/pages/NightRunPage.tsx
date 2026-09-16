@@ -40,6 +40,7 @@ import {
   type NightRunErrorClassCounts,
   type NightRunServerMode,
   type NightRunSubmission,
+  type NightRunUsage,
   type NightRunView,
 } from '../api/nightRuns'
 import { Breadcrumbs } from '../components/Breadcrumbs'
@@ -317,6 +318,14 @@ function istEinlieferbar(run: NightRun): run is NightRun & { mode: NightRunServe
   return run.mode !== 'NIGHTPLAN'
 }
 
+/**
+ * Der gemeldete Kostenbetrag als Verbrauchsangabe (Issue #948) — oder gar kein Schlüssel, wo
+ * nichts gemessen wurde. `{ costUsd: undefined }` wäre der falsche Zwischenzustand: Er stünde im
+ * Body als leeres Objekt und behauptete eine Messung ohne Wert.
+ */
+const alsVerbrauch = (kostenUsd: number | undefined): { usage?: NightRunUsage } =>
+  kostenUsd === undefined ? {} : { usage: { costUsd: kostenUsd } }
+
 const zurEinlieferung = (run: NightRun & { mode: NightRunServerMode }): NightRunSubmission => ({
   startedAt: run.startedAt,
   mode: run.mode,
@@ -324,6 +333,10 @@ const zurEinlieferung = (run: NightRun & { mode: NightRunServerMode }): NightRun
   processedCount: run.processedCount,
   skippedCount: run.skippedCount,
   unparsedCount: run.unparsedCount,
+  // Die Summe über **alle** Sitzungen des Laufs, nicht die über die Arbeitspakete: Die Differenz
+  // beider Zahlen ist der keinem Paket zuordenbare Rest, und aus den Paketen gerechnet wäre er
+  // per Konstruktion null.
+  ...alsVerbrauch(run.stand?.kostenSumme),
   items: run.items.map((item) => ({
     cardNumber: item.cardNumber,
     title: item.title,
@@ -332,6 +345,7 @@ const zurEinlieferung = (run: NightRun & { mode: NightRunServerMode }): NightRun
     ...(item.durationMs === undefined ? {} : { durationMs: item.durationMs }),
     ...(item.commit === undefined ? {} : { commitHash: item.commit }),
     excerpt: item.excerpt,
+    ...alsVerbrauch(item.kennzahlen?.kostenUsd),
   })),
 })
 
