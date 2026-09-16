@@ -680,11 +680,8 @@ describe('CardNumberSearch', () => {
   })
 })
 
-describe('CardNumberSearch in beiden Erscheinungsbildern (#955)', () => {
-  /**
-   * Alle erzeugten Regeln, die das Suchfeld betreffen, samt Media-Blöcken. Gerendert ist allein
-   * diese Komponente; die Regeln mit ihren Feld-Selektoren gehören also zu ihr.
-   */
+describe('CardNumberSearch als Nut im Kopf (#978)', () => {
+  /** Alle erzeugten Regeln, die das Suchfeld betreffen. */
   const regelnDesFelds = (): string => {
     expect(screen.getByLabelText('Kartennummer suchen')).toBeInTheDocument()
     return [...document.styleSheets]
@@ -694,31 +691,34 @@ describe('CardNumberSearch in beiden Erscheinungsbildern (#955)', () => {
       .join('\n')
   }
 
-  it('rechnet den Rand über den Farbkanal der Variable, nicht über den hellen Farbwert', () => {
+  it('legt das Feld als eingelassene Nut mit Innenschatten an, ganz aus Variablen', () => {
     render(
       <ThemeProvider theme={theme}>
         <CardNumberSearch />
       </ThemeProvider>,
     )
-    // `alpha(t.palette.…)` rechnete auf dem hellen Wert und schaltete im Dunkeln nicht um.
-    expect(regelnDesFelds()).toContain('rgba(var(--mb-palette-primary-contrastTextChannel) / 0.5)')
+    const regeln = regelnDesFelds()
+    expect(regeln).toContain('background-color: var(--mb-palette-warte-nute')
+    expect(regeln).toContain('box-shadow: var(--mb-palette-warte-schattenNute')
+    // Ein fester Wert bliebe im dunklen Erscheinungsbild hell; die Variablen schalten selbst um.
+    expect(regeln).not.toContain('prefers-color-scheme')
   })
 
-  it('gibt dem Feld im dunklen Erscheinungsbild eine eigene Fläche mit lesbarer Schrift', () => {
+  it('zeigt das echte Tastenkürzel als Tastenkappe', () => {
     render(
       <ThemeProvider theme={theme}>
         <CardNumberSearch />
       </ThemeProvider>,
     )
-    // Dunkel läge die Schrift der Primärfläche auf `primary.dark` nur bei 4,41:1. Das Feld trägt
-    // dort Grund und Textfarbe der Anwendung (15:1).
-    const regeln = regelnDesFelds()
-    expect(regeln).toMatch(/@media \(prefers-color-scheme: dark\)[\s\S]*background-color: var\(--mb-palette-background-default\)/)
-    expect(regeln).toMatch(/@media \(prefers-color-scheme: dark\)[\s\S]*color: var\(--mb-palette-text-primary\)/)
-    // Platzhalter und Rand trügen dunkel sonst die dunkle Grundtinte auf dunklem Feld.
-    expect(regeln).toMatch(/@media \(prefers-color-scheme: dark\)[^}]*placeholder[^}]*color: var\(--mb-palette-text-secondary\)/)
-    expect(regeln).toMatch(/@media \(prefers-color-scheme: dark\)[^}]*notchedOutline[^}]*border-color: var\(--mb-palette-divider\)/)
-    const dunkel = theme.colorSchemes.dark!.palette
-    expect(kontrast(dunkel.background.default, dunkel.text.primary)).toBeGreaterThanOrEqual(4.5)
+    expect(screen.getByRole('search')).toHaveTextContent('/')
+    expect(screen.getByPlaceholderText('Karte #Nummer')).toBeInTheDocument()
+  })
+
+  it.each([
+    ['hell', theme.colorSchemes.light!.palette],
+    ['dunkel', theme.colorSchemes.dark!.palette],
+  ] as const)('hält %s Schrift und Platzhalter auf der Nut mit 4,5:1', (_, palette) => {
+    expect(kontrast(palette.warte.nute, palette.text.primary)).toBeGreaterThanOrEqual(4.5)
+    expect(kontrast(palette.warte.nute, palette.warte.textSchwach)).toBeGreaterThanOrEqual(4.5)
   })
 })

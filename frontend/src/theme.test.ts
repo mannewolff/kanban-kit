@@ -10,24 +10,34 @@ import {
   CARD_SHADOW_HOVER,
   CODE_BG,
   EPIC_EDGE_WIDTH,
+  ETIKETT,
   HEADER_BG,
+  KLEIN_RADIUS,
+  NUT,
   PANEL_HEAD_GRADIENT,
   PANEL_RADIUS,
   PANEL_SHADOW,
+  SCHATTEN_NUTE,
+  SCHATTEN_TASTE,
+  SCHRIFT_ANZEIGE,
+  SCHRIFT_MONO,
+  SCHRIFT_TEXT,
   STATUS_EDGE_WIDTH,
   SURFACE_HOVER_SHADOW,
   SURFACE_TINT,
   TABELLENZIFFERN,
+  ZAHL,
   theme,
   type PanelPalette,
+  type WartePalette,
 } from './theme'
 
 /**
- * Seit #951 trägt das Theme zwei Erscheinungsbilder als MUI-CSS-Variablen. Die exportierten Tokens
- * sind deshalb keine Hexwerte mehr, sondern `var(--mb-…)`-Verweise; geprüft wird zweierlei: dass
- * der Verweis auf die Variable zeigt, die MUI tatsächlich erzeugt, und welcher Wert je
- * Erscheinungsbild dahinter liegt. jsdom löst `var()` nicht auf — die Werte liest der Test
- * deshalb aus `theme.colorSchemes`, nicht aus einem gerenderten Stil.
+ * Seit #951 trägt das Theme zwei Erscheinungsbilder als MUI-CSS-Variablen, seit #978 mit den
+ * Werten des Leitstand-Entwurfs `docs/entwurf-leitstand.html` („Kupferwarte"). Geprüft wird
+ * zweierlei: dass die exportierten Verweise auf Variablen zeigen, die MUI tatsächlich erzeugt, und
+ * welcher Wert je Erscheinungsbild dahinter liegt. jsdom löst `var()` nicht auf — die Werte liest
+ * der Test deshalb aus `theme.colorSchemes`.
  */
 const hell = theme.colorSchemes.light!.palette
 const dunkel = theme.colorSchemes.dark!.palette
@@ -36,15 +46,11 @@ const schemata = [
   ['dunkel', dunkel],
 ] as const
 
-// Seit #951 ein festes Objekt: Die Overrides lesen keine Theme-Funktion mehr (siehe theme.ts).
 const appBarStil = (): Record<string, unknown> =>
   theme.components?.MuiAppBar?.styleOverrides?.root as Record<string, unknown>
 
 describe('theme Erscheinungsbilder', () => {
   it('folgt der Einstellung des Betriebssystems und bietet keinen Schalter an', () => {
-    // `media` erzeugt die Dunkelwerte unter `@media (prefers-color-scheme: dark)`. Die Selektoren
-    // `class` oder `data` setzten einen Zustand voraus, den jemand umschalten müsste — genau das
-    // schließt der Fachplan aus („kein Einstellen des Erscheinungsbildes").
     expect(theme.colorSchemeSelector).toBe('media')
     const schluessel = theme.generateStyleSheets().flatMap((blatt) => Object.keys(blatt))
     expect(schluessel).toContain('@media (prefers-color-scheme: dark)')
@@ -62,7 +68,147 @@ describe('theme Erscheinungsbilder', () => {
   })
 })
 
-describe('theme Panel-Tokens als Variablen', () => {
+describe('theme Werte des Entwurfs (Z. 17–108, #978)', () => {
+  // Die Werte stehen 1:1 wie im Entwurf. Wo sie abweichen, ist die Abweichung hier benannt und an
+  // der Konstante in theme.ts begründet (AA-Kontrast).
+  const entwurf: Record<'hell' | 'dunkel', Partial<Record<keyof WartePalette, string>>> = {
+    hell: {
+      grund: '#E7E9ED',
+      grundTief: '#D8DBE2',
+      nute: '#D5D9E0',
+      platte: '#FDFDFE',
+      platteFuss: '#F2F4F7',
+      platteHoch: '#FFFFFF',
+      rand: '#CDD2DA',
+      randStark: '#B7BEC9',
+      kante: 'rgba(255,255,255,.9)',
+      kupferHell: '#C2743C',
+      kupferSchimmer: 'rgba(168,95,44,.16)',
+    },
+    dunkel: {
+      grund: '#0D1014',
+      grundTief: '#090B0E',
+      nute: '#080A0D',
+      platte: '#171B22',
+      platteFuss: '#12151B',
+      platteHoch: '#1E242D',
+      rand: '#262C36',
+      randStark: '#333B47',
+      kante: 'rgba(255,255,255,.075)',
+      kupferHell: '#E3A26C',
+      kupferSchimmer: 'rgba(208,138,82,.18)',
+    },
+  }
+
+  it.each(schemata)('übernimmt %s die Grundfarben des Entwurfs unverändert', (name, palette) => {
+    expect(palette.warte).toMatchObject(entwurf[name])
+  })
+
+  it('setzt Grund, Platte, Rand und Text in die MUI-Rollen', () => {
+    for (const [, palette] of schemata) {
+      expect(palette.background.default).toBe(palette.warte.grund)
+      expect(palette.background.paper).toBe(palette.warte.platte)
+      expect(palette.divider).toBe(palette.warte.rand)
+    }
+    expect(hell.text.primary).toBe('#14181E')
+    expect(dunkel.text.primary).toBe('#E7EAEF')
+    expect(dunkel.text.secondary).toBe('#98A1AE')
+  })
+
+  it('führt Kupfer als Leitfarbe', () => {
+    expect(hell.primary.main).toBe('#A85F2C')
+    expect(dunkel.primary.main).toBe('#D08A52')
+    expect(hell.primary.light).toBe('#C2743C')
+    expect(dunkel.primary.light).toBe('#E3A26C')
+  })
+
+  it('übernimmt die Melder dunkel unverändert und Zinnober und Stahl hell', () => {
+    expect(dunkel.melder).toEqual({ gruen: '#46C46F', bernst: '#E0AE49', zinnob: '#F0575C', stahl: '#5B96F0', grau: '#6E7681' })
+    expect(hell.melder.zinnob).toBe('#C8393E')
+    expect(hell.melder.stahl).toBe('#2F6FC9')
+  })
+
+  // Abweichungen, jede mit dem Entwurfston, der die Schwelle verfehlt.
+  const abweichungen = [
+    ['hell: Text matt auf der Nut', '#58606C', hell.text.secondary, hell.warte.nute, 4.5],
+    ['hell: Text schwach als Schrift auf der Nut', '#868E9B', hell.warte.textSchwach, hell.warte.nute, 4.5],
+    ['dunkel: Text schwach als Schrift auf der Platte hoch', '#69717E', dunkel.warte.textSchwach, dunkel.warte.platteHoch, 4.5],
+    ['hell: Weiß auf dem oberen Ende der Kupfertaste', '#C2743C', hell.warte.kupferTaste, '#FFFFFF', 4.5],
+    ['hell: Melder Grün auf der Nut', '#2F8F4E', hell.melder.gruen, hell.warte.nute, 3],
+    ['hell: Melder Bernstein auf der Nut', '#B07C15', hell.melder.bernst, hell.warte.nute, 3],
+    ['hell: Melder Grau auf der Nut', '#8A929E', hell.melder.grau, hell.warte.nute, 3],
+  ] as const
+
+  it.each(abweichungen)('%s: der Entwurfston verfehlt die Schwelle, der gesetzte hält sie', (_, entwurfston, gesetzt, flaeche, schwelle) => {
+    expect(kontrast(entwurfston, flaeche)).toBeLessThan(schwelle)
+    expect(kontrast(gesetzt, flaeche)).toBeGreaterThanOrEqual(schwelle)
+  })
+
+  it('setzt dunkel die Grundtinte als Schrift auf Kupfer, weil Weiß dort 2,8:1 hielte', () => {
+    expect(kontrast('#FFFFFF', dunkel.primary.main)).toBeLessThan(4.5)
+    expect(dunkel.primary.contrastText).toBe(dunkel.warte.grund)
+    expect(dunkel.warte.aufKupfer).toBe(dunkel.warte.grund)
+    expect(kontrast(dunkel.primary.contrastText, dunkel.primary.main)).toBeGreaterThanOrEqual(4.5)
+    expect(kontrast(dunkel.warte.aufKupfer, dunkel.warte.kupferTaste)).toBeGreaterThanOrEqual(4.5)
+    expect(kontrast(hell.primary.contrastText, hell.primary.main)).toBeGreaterThanOrEqual(4.5)
+  })
+})
+
+describe('theme Tiefenmodell (Entwurf Z. 38–53, 81–94)', () => {
+  it('übernimmt die vier Schatten hell wie im Entwurf, mit der Tinte rgba(18,24,33)', () => {
+    expect(hell.warte.schattenPlatte).toBe(
+      '0 1px 0 rgba(255,255,255,.9) inset, 0 1px 2px rgba(18,24,33,.10), 0 10px 24px -14px rgba(18,24,33,.35)',
+    )
+    expect(hell.warte.schattenHoch).toBe(
+      '0 1px 0 rgba(255,255,255,.9) inset, 0 2px 4px rgba(18,24,33,.10), 0 18px 34px -16px rgba(18,24,33,.42)',
+    )
+    expect(hell.warte.schattenNute).toBe('0 2px 5px rgba(18,24,33,.14) inset, 0 -1px 0 rgba(255,255,255,.9) inset')
+    expect(hell.warte.schattenTaste).toBe('0 1px 0 rgba(255,255,255,.9) inset, 0 1px 2px rgba(18,24,33,.18)')
+  })
+
+  it('übernimmt die vier Schatten dunkel wie im Entwurf', () => {
+    expect(dunkel.warte.schattenPlatte).toBe(
+      '0 1px 0 rgba(255,255,255,.075) inset, 0 1px 2px rgba(0,0,0,.5), 0 12px 28px -16px rgba(0,0,0,.85)',
+    )
+    expect(dunkel.warte.schattenHoch).toBe(
+      '0 1px 0 rgba(255,255,255,.11) inset, 0 2px 6px rgba(0,0,0,.55), 0 22px 40px -18px rgba(0,0,0,.95)',
+    )
+    expect(dunkel.warte.schattenNute).toBe('0 3px 7px rgba(0,0,0,.6) inset, 0 -1px 0 rgba(255,255,255,.05) inset')
+    expect(dunkel.warte.schattenTaste).toBe('0 1px 0 rgba(255,255,255,.08) inset, 0 1px 2px rgba(0,0,0,.6)')
+  })
+
+  it.each(schemata)('leitet die Panel-Tokens %s aus den Rollen der Warte ab', (_, palette) => {
+    expect(palette.panel.cardShadow).toBe(palette.warte.schattenPlatte)
+    expect(palette.panel.cardShadowHover).toBe(palette.warte.schattenHoch)
+    expect(palette.panel.panelShadow).toBe(palette.warte.schattenPlatte)
+    expect(palette.panel.surfaceTint).toBe(palette.warte.platteFuss)
+    expect(palette.panel.codeBg).toBe(palette.warte.nute)
+    expect(palette.panel.headerBg).toBe(palette.warte.kopf)
+    expect(palette.panel.panelHeadGradient).toBe(
+      `linear-gradient(180deg,${palette.warte.platteHoch} 0%,${palette.warte.platte} 100%)`,
+    )
+  })
+
+  it('rundet mit den drei Radien des Entwurfs (Z. 55–57)', () => {
+    expect(PANEL_RADIUS).toBe(14)
+    expect(CARD_RADIUS).toBe(10)
+    expect(KLEIN_RADIUS).toBe(6)
+    expect(theme.shape.borderRadius).toBe(6)
+  })
+
+  it('legt Kanten-Stärken und Anheben fest', () => {
+    expect(STATUS_EDGE_WIDTH).toBe(3)
+    expect(EPIC_EDGE_WIDTH).toBe(4)
+    expect(CARD_LIFT).toBe(-2)
+  })
+
+  it('mischt den Kopf aus Grund (86 %) und Platte wie der Entwurf (Z. 288)', () => {
+    expect(hell.warte.kopf).toBe('#EAECEF')
+    expect(dunkel.warte.kopf).toBe('#0E1216')
+  })
+})
+
+describe('theme Variablen-Verweise', () => {
   const tokens: ReadonlyArray<readonly [keyof PanelPalette, string]> = [
     ['surfaceTint', SURFACE_TINT],
     ['appBackground', APP_BACKGROUND],
@@ -76,164 +222,87 @@ describe('theme Panel-Tokens als Variablen', () => {
   ]
 
   it.each(tokens)('%s zeigt auf die Variable, die MUI erzeugt', (name, token) => {
-    // Die Konstante bleibt eine Zeichenkette, damit ihre Fundstellen außerhalb von theme.ts
-    // unberührt bleiben; sie trägt aber den Verweis statt eines Werts.
     expect(token.startsWith(`var(--mb-palette-panel-${name}`)).toBe(true)
     expect(token).toBe(theme.vars.palette.panel[name])
   })
 
   it.each(tokens)('%s hat in beiden Erscheinungsbildern einen eigenen Wert', (name) => {
-    expect(hell.panel[name]).toBeTruthy()
-    expect(dunkel.panel[name]).toBeTruthy()
     expect(dunkel.panel[name]).not.toBe(hell.panel[name])
     expect(hell.panel[name]).not.toContain('var(')
     expect(dunkel.panel[name]).not.toContain('var(')
+  })
+
+  it('führt die Rollen der Warte als Verweise', () => {
+    expect(NUT).toBe(theme.vars.palette.warte.nute)
+    expect(SCHATTEN_NUTE).toBe(theme.vars.palette.warte.schattenNute)
+    expect(SCHATTEN_TASTE).toBe(theme.vars.palette.warte.schattenTaste)
+  })
+})
+
+describe('theme Schriften (Entwurf Z. 2–4, 162–194)', () => {
+  it('setzt Plex Sans als Fließtext mit 14 px und Zeilenhöhe 1,5', () => {
+    expect(SCHRIFT_TEXT.startsWith('"IBM Plex Sans"')).toBe(true)
+    expect(theme.typography.fontFamily).toBe(SCHRIFT_TEXT)
+    expect(theme.typography.body1).toMatchObject({ fontSize: '0.875rem', lineHeight: 1.5 })
+  })
+
+  it('setzt Archivo, leicht gestreckt, für die Überschriften', () => {
+    expect(SCHRIFT_ANZEIGE.startsWith('"Archivo Variable"')).toBe(true)
+    for (const variante of ['h1', 'h2', 'h3', 'h4', 'h5', 'h6'] as const) {
+      expect(theme.typography[variante]).toMatchObject({ fontFamily: SCHRIFT_ANZEIGE, fontStretch: '112%' })
+    }
+  })
+
+  it('setzt Zahlen in Plex Mono mit Tabellenziffern', () => {
+    expect(SCHRIFT_MONO.startsWith('"IBM Plex Mono"')).toBe(true)
+    expect(ZAHL).toEqual({ fontFamily: SCHRIFT_MONO, fontVariantNumeric: 'tabular-nums' })
+  })
+
+  it('führt das Etikett als Baustein wie im Entwurf', () => {
+    expect(ETIKETT).toMatchObject({
+      fontFamily: SCHRIFT_ANZEIGE,
+      fontStretch: '118%',
+      fontSize: 10,
+      fontWeight: 600,
+      letterSpacing: '.14em',
+      textTransform: 'uppercase',
+      color: theme.vars.palette.warte.textSchwach,
+    })
+    expect(theme.typography.overline).toMatchObject({ fontStretch: '118%', textTransform: 'uppercase' })
+  })
+
+  it('kennt Carlito nicht mehr', () => {
+    expect(JSON.stringify(theme.typography)).not.toContain('Carlito')
   })
 })
 
 describe('theme Zebra-Streifen', () => {
   it('streift nur gerade Datenzeilen im TableBody, nicht den Header', () => {
     const root = theme.components?.MuiTable?.styleOverrides?.root as Record<string, unknown>
-    expect(root).toBeDefined()
-
     const zebra = root['& .MuiTableBody-root .MuiTableRow-root:nth-of-type(even)']
-    // Nur Body-Zeilen: der Selektor ist auf TableBody eingeschränkt (kein TableHead).
     expect(zebra).toMatchObject({ backgroundColor: SURFACE_TINT })
     expect(JSON.stringify(root)).not.toContain('MuiTableHead')
   })
 })
 
-describe('theme Design-Tokens (Panel)', () => {
-  // `src/theme.ts` ist in vite.config.ts von der Coverage ausgenommen. Ohne diese
-  // Zusicherungen erzwingt kein Gate die Existenz und die Werte der Tokens.
-  it('legt die Kanten-Stärken und die hellen Flächentöne mit den festgeschriebenen Werten fest', () => {
-    expect(STATUS_EDGE_WIDTH).toBe(3)
-    expect(EPIC_EDGE_WIDTH).toBe(4)
-    expect(hell.panel.surfaceTint).toBe('#F6FAFB')
-    expect(hell.panel.codeBg).toBe('#f4f5f7')
-  })
-
-  it('führt die Flächentöne beider Erscheinungsbilder als Hexwert', () => {
-    for (const [, palette] of schemata) {
-      expect(palette.panel.surfaceTint).toMatch(/^#[0-9A-Fa-f]{6}$/)
-      expect(palette.panel.headerBg).toMatch(/^#[0-9A-Fa-f]{6}$/)
-      expect(palette.panel.codeBg).toMatch(/^#[0-9A-Fa-f]{6}$/)
-      expect(palette.panel.ice).toMatch(/^#[0-9A-Fa-f]{6}$/)
-    }
-  })
-
-  it.each(schemata)('hebt einfache Flächen %s mit einem Teal-Schatten an, ohne schwarzen Farbanteil', (_, palette) => {
-    const shadow = palette.panel.surfaceHoverShadow.toLowerCase()
-    expect(shadow).toMatch(/rgba\((47,140,151|92,188,199)/)
-    expect(shadow).not.toContain('rgba(0,0,0')
-    expect(shadow).not.toContain('rgba(0, 0, 0')
-    expect(shadow).not.toContain('#000')
-    expect(shadow).not.toContain('black')
-  })
-
-  it('rundet Karten und Panels stärker als die Bedienelemente', () => {
-    expect(theme.shape.borderRadius).toBe(8)
-    expect(CARD_RADIUS).toBe(10)
-    expect(PANEL_RADIUS).toBe(14)
-  })
-
-  // Kern der Variante „Panel": Die Karte trägt eine Lichtkante an der Oberkante. Ein Pixel Licht
-  // macht den plastischen Eindruck — ohne sie ist es nur ein Schatten unter einem flachen Rechteck.
-  it('gibt der Karte hell eine weiße Lichtkante und zwei Schattenebenen, im Ruhezustand wie beim Hover', () => {
-    for (const shadow of [hell.panel.cardShadow, hell.panel.cardShadowHover]) {
-      expect(shadow).toContain('inset 0 1px 0 #FFFFFF')
-      // Zwei abgesetzte Ebenen: eine harte Kontaktschattierung, eine weiche Streuung.
-      expect(shadow.match(/rgba\(36,53,57/g)).toHaveLength(2)
-    }
-    // Der Hover öffnet weiter, als der Ruhezustand steht.
-    expect(hell.panel.cardShadowHover).toContain('30px')
-  })
-
-  it('gibt der Karte auch dunkel eine Lichtkante — gedämpft, weil volles Weiß dort grell wäre', () => {
-    for (const shadow of [dunkel.panel.cardShadow, dunkel.panel.cardShadowHover]) {
-      expect(shadow).toMatch(/^inset 0 1px 0 rgba\(255,255,255,0\.\d+\)/)
-      expect(shadow.match(/rgba\(4,14,16/g)).toHaveLength(2)
-    }
-    expect(dunkel.panel.cardShadowHover).toContain('30px')
-  })
-
-  it.each(schemata)('führt alle Flächen-Schatten %s in einer Tinte, nie in Schwarz', (name, palette) => {
-    // Hell ist es die Marken-Tinte, dunkel eine fast schwarze Teal-Tinte: Auch auf dunklem Grund
-    // wirkt ein Schatten in der Grundfarbe wie Licht und ein schwarzer wie Schmutz.
-    const tinte = name === 'hell' ? 'rgba(36,53,57' : 'rgba(4,14,16'
-    for (const shadow of [palette.panel.cardShadow, palette.panel.cardShadowHover, palette.panel.panelShadow]) {
-      const lower = shadow.toLowerCase()
-      expect(lower).toContain(tinte)
-      expect(lower).not.toContain('rgba(0,0,0')
-      expect(lower).not.toContain('rgba(0, 0, 0')
-      expect(lower).not.toContain('#000')
-      expect(lower).not.toContain('black')
-    }
-  })
-
-  it.each(schemata)('lässt den Panel-Kopf %s auf die Papierfläche auslaufen, damit er kein eigener Kasten wird', (_, palette) => {
-    expect(palette.panel.panelHeadGradient).toContain('linear-gradient')
-    expect(palette.panel.panelHeadGradient).toContain(palette.panel.ice)
-    expect(palette.panel.panelHeadGradient).toContain(palette.background.paper)
-  })
-
-  it('hebt die Karte nach oben an, nicht nach unten', () => {
-    expect(CARD_LIFT).toBeLessThan(0)
-  })
-})
-
-describe('theme Kopfleiste', () => {
-  // Die Leiste war vor #653 mittleres Teal mit weißer Schrift (3,85:1, AA verfehlt) und danach
-  // weiß. Diese Zusicherung hält den Weg zurück zur Farbe offen, ohne den alten Fehler zu
-  // wiederholen: Farbe ja, aber nur mit einem Kontrast, der die AA-Schwelle hält.
-  it.each(schemata)('hält %s mit der Textfarbe die AA-Schwelle für normalen Text', (_, palette) => {
-    expect(kontrast(palette.panel.headerBg, palette.text.primary)).toBeGreaterThanOrEqual(4.5)
-  })
-
-  it('wäre hell mit weißer Schrift schlechter — deshalb trägt die Leiste dunkle', () => {
-    expect(kontrast(hell.panel.headerBg, '#FFFFFF')).toBeLessThan(4.5)
-  })
-
-  it('trägt hell den hellen und dunkel den dunklen Teal der Palette', () => {
-    expect(hell.panel.headerBg).toBe('#5BABB5')
-    expect(hell.panel.headerBg).toBe(hell.primary.light)
-    expect(dunkel.panel.headerBg).toBe('#1E5F68')
-  })
-})
-
 describe('theme AppBar-Override', () => {
-  it('gibt der Kopfleiste ihre eigene Fläche, nicht die Papierfläche und nicht die Primärfarbe', () => {
-    const style = appBarStil()
-
-    expect(style.backgroundColor).toBe(HEADER_BG)
-    // Weiß war der Zustand zwischen #653 und dem 2026-08-31; die Primärfarbe war der davor und
-    // verfehlte mit weißer Schrift die AA-Schwelle.
-    for (const [, palette] of schemata) {
-      expect(palette.panel.headerBg).not.toBe(palette.background.paper)
-      expect(palette.panel.headerBg).not.toBe(palette.primary.main)
-    }
-  })
-
-  it('gibt der Kopfleiste auch ihre Textfarbe, als Variable', () => {
-    // Geerbtes Weiss aus primary.contrastText waere auf dem hellen Teal schlechter lesbar. Als
-    // Variable, damit die Schrift im dunklen Erscheinungsbild mitschaltet.
+  it('gibt einer Leiste die Fläche und Schrift des Kopfs und eine Haarlinie', () => {
+    expect(appBarStil().backgroundColor).toBe(HEADER_BG)
     expect(appBarStil().color).toBe(theme.vars.palette.text.primary)
+    expect(appBarStil().borderBottom).toBe(`1px solid ${theme.vars.palette.divider}`)
+    expect(theme.components?.MuiAppBar?.defaultProps?.elevation).toBe(0)
   })
 
-  it('trennt die Kopfleiste mit einer Haarlinie statt mit einer Elevation', () => {
-    expect(appBarStil().borderBottom).toBe(`1px solid ${theme.vars.palette.divider}`)
-    // MUI setzt am AppBar eine eigene Elevation von 4; der MuiPaper-Default 0 greift dort nicht.
-    expect(theme.components?.MuiAppBar?.defaultProps?.elevation).toBe(0)
+  it.each(schemata)('hält %s die Schrift auf dem Kopf mit 4,5:1', (_, palette) => {
+    expect(kontrast(palette.panel.headerBg, palette.text.primary)).toBeGreaterThanOrEqual(4.5)
+    expect(kontrast(palette.panel.headerBg, palette.text.secondary)).toBeGreaterThanOrEqual(4.5)
   })
 })
 
 describe('theme Overrides schalten mit dem Erscheinungsbild', () => {
   it('führt in den Komponenten-Overrides keinen festen Hexwert', () => {
-    // Ein Hexwert in einem Override bliebe im dunklen Erscheinungsbild hell. Die Overrides tragen
-    // deshalb ausschließlich Variablen; die Werte stehen in `colorSchemes`.
-    // MUI hängt an jede Variable den hellen Wert als Rückfall an (`var(--mb-…, #F6FAFB)`); der
-    // gehört zur Variable und wird deshalb samt Klammerinhalt ausgeblendet — mit Klammertiefe,
-    // weil Rückfallwerte selbst `rgba(…)` tragen.
+    // MUI hängt an jede Variable den hellen Wert als Rückfall an; der gehört zur Variable und wird
+    // samt Klammerinhalt ausgeblendet — mit Klammertiefe, weil Rückfallwerte `rgba(…)` tragen.
     const ohneVariablen = (text: string): string => {
       let ergebnis = ''
       let tiefe = 0
@@ -250,104 +319,64 @@ describe('theme Overrides schalten mit dem Erscheinungsbild', () => {
       }
       return ergebnis
     }
-    // Ausgenommen ist allein der Druckblock: Er setzt die hellen Werte absichtlich fest, damit der
-    // Ausdruck auch bei dunklem System hell bleibt (#953) — dort ist ein fester Wert der Zweck.
+    // Ausgenommen ist allein der Druckblock: Er setzt die hellen Werte absichtlich fest (#953).
     const alle = JSON.stringify(theme.components, (schluessel, wert: unknown) =>
       schluessel === '@media print' ? undefined : typeof wert === 'string' ? ohneVariablen(wert) : wert,
     )
     expect(alle).not.toMatch(/#[0-9A-Fa-f]{3,8}\b/)
-    // Gegenprobe: Die Ausblendung frisst keinen Hexwert außerhalb einer Variable.
     expect(ohneVariablen('var(--a, rgba(1,2,3,0)) #ABCDEF')).toBe(' #ABCDEF')
   })
 })
 
-describe('theme Grund der Anwendung', () => {
-  it('tönt den hellen Grund aus dem Eis der Palette, ohne eine neue Hexfarbe einzuführen', () => {
-    // Zwei radiale Verläufe, beide aus ICE — der Grund trägt keinen Ton, den die Palette nicht kennt.
-    expect(hell.panel.appBackground.match(/#EDF5F6/g)).toHaveLength(2)
-    expect(hell.panel.appBackground.match(/radial-gradient/g)).toHaveLength(2)
-  })
-
-  it.each(schemata)('baut den Grund %s aus den eigenen Flächentönen', (_, palette) => {
-    const grund = palette.panel.appBackground
-    expect(grund.split(palette.panel.ice)).toHaveLength(3)
-    expect(grund.match(/radial-gradient/g)).toHaveLength(2)
-  })
-
-  it.each(schemata)('legt %s eine getönte Grundfläche unter die Verläufe, nicht die Papierfläche', (_, palette) => {
-    // Der tragende Teil der Tönung. Mit `#FFFFFF` als Grundfläche war der Grund nur dort getönt,
-    // wo die Verläufe reichten — bei 1920px Breite blieben Mitte, unterer Bereich und beide
-    // unteren Ecken reines Weiß, die Tönung war auf einem breiten Bildschirm unsichtbar.
-    expect(palette.panel.appBackground.endsWith(palette.panel.surfaceTint)).toBe(true)
-    expect(palette.panel.appBackground).not.toContain(palette.background.paper)
-  })
-
-  it.each(schemata)('lässt die Verläufe %s weit genug auslaufen, um Fläche zu tragen', (_, palette) => {
-    // Die erste Fassung lief bei 55 % von 1200px aus und deckte damit ab etwa 660px nichts mehr.
-    // Ein Verlauf, der auf einem Drittel der Fläche endet, setzt einen Akzent statt einen Grund.
-    const radien = [...palette.panel.appBackground.matchAll(/(\d+)px (\d+)px at/g)].map((m) => Number(m[1]))
-    expect(radien).toHaveLength(2)
-    expect(radien.every((r) => r >= 1400)).toBe(true)
+describe('theme Grund der Anwendung (Entwurf Z. 152–160)', () => {
+  it.each(schemata)('legt %s den Kupfer-Schimmer oben links über den Grundton', (_, palette) => {
+    expect(palette.panel.appBackground).toBe(
+      `radial-gradient(1100px 600px at 18% -8%, ${palette.warte.kupferSchimmer}, transparent 62%), ${palette.warte.grund}`,
+    )
   })
 
   it('legt den Grund auf eine fixierte eigene Schicht hinter dem Inhalt', () => {
-    const vorSatz = theme.components?.MuiCssBaseline?.styleOverrides as
-      | Record<string, unknown>
-      | undefined
-    const schicht = vorSatz?.['body::before'] as Record<string, unknown> | undefined
-
-    expect(schicht).toBeDefined()
-    // Fixiert und hinter allem: eine eigene Schicht, damit der Grund beim Scrollen stehenbleibt.
-    expect(schicht).toMatchObject({
+    const vorSatz = theme.components?.MuiCssBaseline?.styleOverrides as Record<string, unknown>
+    expect(vorSatz['body::before']).toMatchObject({
       content: '""',
       position: 'fixed',
       inset: 0,
       zIndex: -1,
       background: APP_BACKGROUND,
     })
-  })
-
-  it('fixiert den Grund über eine eigene Schicht statt über background-attachment', () => {
-    // iOS Safari ignoriert `background-attachment: fixed` und fällt auf `scroll` zurück; auf einem
-    // langen Board läge die Mitte des Verlaufs dann im Scrollbereich.
-    for (const [, palette] of schemata) {
-      expect(palette.panel.appBackground).not.toContain('background-attachment')
-    }
-    expect(JSON.stringify(theme.components?.MuiCssBaseline?.styleOverrides)).not.toContain(
-      'attachment',
-    )
+    expect(JSON.stringify(vorSatz)).not.toContain('attachment')
   })
 
   it.each(schemata)('hält background.default %s als Farbwert, nicht als Verlaufsstring', (_, palette) => {
-    // MUI leitet aus diesem Feld Kontraste ab; ein Verlauf bräche die Komponenten, die das tun.
     expect(palette.background.default).toMatch(/^#[0-9A-Fa-f]{6}$/)
     expect(palette.background.paper).toMatch(/^#[0-9A-Fa-f]{6}$/)
   })
 })
 
 /**
- * Die tatsächlichen Flächen eines Erscheinungsbilds, auf denen Text und Zustandsfarben stehen:
- * Papier (Karten, Panels, Dialoge), getönter Grund, Eis der Panel-Köpfe und der Code-Grund. Die
- * Kopfleiste steht gesondert, weil auf ihr nur die Textfarbe steht.
+ * Die Flächen der Warte, auf denen Text und Zustandsfarben stehen: Nut (Schiene, Spalte, Suche),
+ * Grund, Grund tief (oberes Ende der Schiene), Platte, Platte-Fuß, Platte hoch und der Kopf.
  */
 const flaechenVon = (palette: typeof hell) =>
   [
-    ['Papier', palette.background.paper],
-    ['Grund', palette.panel.surfaceTint],
-    ['Eis', palette.panel.ice],
-    ['Code', palette.panel.codeBg],
+    ['Nut', palette.warte.nute],
+    ['Grund', palette.warte.grund],
+    ['Grund tief', palette.warte.grundTief],
+    ['Platte', palette.warte.platte],
+    ['Platte-Fuß', palette.warte.platteFuss],
+    ['Platte hoch', palette.warte.platteHoch],
+    ['Kopf', palette.warte.kopf],
   ] as const
 
 const tabelle = <T,>(bauen: (name: string, palette: typeof hell) => T[]): T[] =>
   schemata.flatMap(([name, palette]) => bauen(name, palette))
 
 describe('theme Kontrasttabelle beider Erscheinungsbilder (AK 14)', () => {
-  // Kontrast wird gegen die Fläche gerechnet, auf der der Text steht (CLAUDE-design.md) — und seit
-  // #951 in beiden Erscheinungsbildern. Weiß allein genügt als Nachweis nicht mehr.
   const textPaare = tabelle((name, palette) =>
     flaechenVon(palette).flatMap(([flaeche, wert]) => [
-      [name, 'Fließtext', flaeche, wert, palette.text.primary] as const,
-      [name, 'Sekundärtext', flaeche, wert, palette.text.secondary] as const,
+      [name, 'Text', flaeche, wert, palette.text.primary] as const,
+      [name, 'Text matt', flaeche, wert, palette.text.secondary] as const,
+      [name, 'Text schwach', flaeche, wert, palette.warte.textSchwach] as const,
     ]),
   )
 
@@ -355,75 +384,64 @@ describe('theme Kontrasttabelle beider Erscheinungsbilder (AK 14)', () => {
     expect(kontrast(flaeche, farbe)).toBeGreaterThanOrEqual(4.5)
   })
 
-  const flaechenPaare = tabelle((name, palette) =>
-    // Die Primärfarbe trägt Fokuslinie, Auswahl und Akzente — Grafikelemente, kein Fließtext.
-    flaechenVon(palette).map(([flaeche, wert]) => [name, 'Primärfarbe', flaeche, wert, palette.primary.main] as const),
+  it.each(schemata)('%s: matter Text auf einer gewählten Zeile hält 4,5:1', (_, palette) => {
+    expect(kontrast(palette.warte.auswahl, palette.text.secondary)).toBeGreaterThanOrEqual(4.5)
+  })
+
+  const grafikPaare = tabelle((name, palette) =>
+    flaechenVon(palette).flatMap(([flaeche, wert]) => [
+      // Kupfer trägt Fokusring, aktives Icon und Auswahl — Grafikelemente.
+      [name, 'Kupfer', flaeche, wert, palette.primary.main] as const,
+      ...(Object.entries(palette.melder) as Array<[string, string]>).map(
+        ([melder, ton]) => [name, `Melder ${melder}`, flaeche, wert, ton] as const,
+      ),
+    ]),
   )
 
-  it.each(flaechenPaare)('%s: %s auf %s hält 3:1 als bedeutungstragendes Element', (_, __, ___, flaeche, farbe) => {
+  it.each(grafikPaare)('%s: %s auf %s hält 3:1 als bedeutungstragendes Element', (_, __, ___, flaeche, farbe) => {
     expect(kontrast(flaeche, farbe)).toBeGreaterThanOrEqual(3)
   })
 
-  it('hält dunkel die Schrift auf einer gefüllten Primärfläche mit 4,5:1', () => {
-    // Hell liegt Weiß auf #2F8C97 bei 3,95:1 — ein Bestandswert, den dieses Paket nicht ändert.
-    // Dunkel wird der Ton neu gewählt und muss die Schwelle deshalb von Anfang an halten.
-    expect(kontrast(dunkel.primary.main, dunkel.primary.contrastText)).toBeGreaterThanOrEqual(4.5)
+  it.each(schemata)('%s: Schrift auf der Kupfertaste hält 4,5:1 über den ganzen Verlauf', (_, palette) => {
+    expect(kontrast(palette.warte.aufKupfer, palette.warte.kupferTaste)).toBeGreaterThanOrEqual(4.5)
+    expect(kontrast(palette.warte.aufKupfer, palette.primary.main)).toBeGreaterThanOrEqual(4.5)
   })
 })
 
 describe('theme Nachtlauf-Zustandsfarben (Plan #718, A15)', () => {
-  // Die Ampel-Flächen (#738) der Nachtlauf-Auswertung stehen auf Papier, Grund und Eis. Alle vier
-  // Zustände dienen ausschließlich als ausgefüllte Fläche, nicht als Text — deshalb gilt hier nur
-  // die 3:1-Schwelle für bedeutungstragende Grafikelemente, nicht die 4,5:1 für Text.
   const zustaende = ['green', 'yellow', 'red', 'grey'] as const
-  const paare = tabelle((name, palette) =>
-    zustaende.flatMap((zustand) =>
-      flaechenVon(palette)
-        .filter(([flaeche]) => flaeche !== 'Code')
-        .map(([flaeche, wert]) => [name, zustand, flaeche, wert, palette.nightRun[zustand]] as const),
-    ),
-  )
 
-  it.each(schemata)('legt %s für alle vier Zustände einen eigenen Palette-Eintrag als Hexwert an', (_, palette) => {
-    for (const zustand of zustaende) {
-      expect(palette.nightRun[zustand]).toMatch(/^#[0-9A-Fa-f]{6}$/)
-    }
+  it.each(schemata)('spricht %s die Melder des Entwurfs', (_, palette) => {
+    expect(palette.nightRun).toEqual({
+      green: palette.melder.gruen,
+      yellow: palette.melder.bernst,
+      red: palette.melder.zinnob,
+      grey: palette.text.secondary,
+    })
   })
 
-  it('gibt jedem Zustand dunkel einen eigenen Ton', () => {
-    for (const zustand of zustaende) {
-      expect(dunkel.nightRun[zustand]).not.toBe(hell.nightRun[zustand])
-    }
-  })
-
-  it.each(schemata)('führt Grau %s auf den Sekundärtext zurück, nicht auf text.disabled', (_, palette) => {
-    // `text.disabled` ist in theme.ts gar nicht gesetzt; es gälte der MUI-Default
-    // rgba(0,0,0,0.38) mit rund 2,8:1. Grau ist hier aber ein bedeutungstragender Zustand
-    // („vom Lauf nicht bearbeitet"), kein deaktiviertes Bedienelement.
-    expect(palette.nightRun.grey).toBe(palette.text.secondary)
-  })
-
-  it('bleibt über theme.palette beim hellen Wert, den die Nachtlauf-Auswertung bisher liest', () => {
+  it('bleibt über theme.palette beim hellen Wert, den die Nachtlauf-Auswertung liest', () => {
     expect(theme.palette.nightRun).toEqual(hell.nightRun)
   })
+
+  const paare = tabelle((name, palette) =>
+    zustaende.flatMap((zustand) =>
+      flaechenVon(palette).map(([flaeche, wert]) => [name, zustand, flaeche, wert, palette.nightRun[zustand]] as const),
+    ),
+  )
 
   it.each(paare)('%s: %s auf %s hält die Schwelle für das Farbfeld (3:1)', (_, __, ___, flaeche, farbe) => {
     expect(kontrast(flaeche, farbe)).toBeGreaterThanOrEqual(3)
   })
 
   it.each(schemata)('lässt die MUI-Semantikfarben %s unberührt', (_, palette) => {
-    // `success`/`warning`/`error` sind im Frontend an Dutzenden Nicht-Test-Stellen in Gebrauch
-    // (Lösch-Buttons, Alert-`severity`, Feldfehler). Sie umzudefinieren färbte all das mit um.
     expect(palette.nightRun.green).not.toBe(palette.success.main)
     expect(palette.nightRun.yellow).not.toBe(palette.warning.main)
     expect(palette.nightRun.red).not.toBe(palette.error.main)
   })
 })
 
-describe('theme Status- und Vorhaben-Farben beider Erscheinungsbilder (#952)', () => {
-  // Die Werte stehen in `lib/statusColors.ts` und `lib/epicMeta.ts` (Plan #932 E10/E11), das Theme
-  // legt sie als Variablen an. Die beiden Module liefern Verweise; hier wird geprüft, dass diese
-  // Verweise auf Variablen zeigen, die MUI tatsächlich erzeugt, und welche Werte dahinter liegen.
+describe('theme Status- und Vorhaben-Farben beider Erscheinungsbilder (#952, #978)', () => {
   const statusSets = Object.keys(STATUS_FARBWERTE.light) as Array<keyof typeof STATUS_FARBWERTE.light>
   const felder = ['bg', 'text', 'dot'] as const
 
@@ -435,13 +453,21 @@ describe('theme Status- und Vorhaben-Farben beider Erscheinungsbilder (#952)', (
     expect(palette.epic).toEqual(name === 'hell' ? EPIC_FARBWERTE.light : EPIC_FARBWERTE.dark)
   })
 
+  it.each(schemata)('setzt den Statuspunkt %s auf den Melder: Done grün, Review bernstein, In Arbeit stahl, sonst grau', (_, palette) => {
+    expect(palette.status.done.dot).toBe(palette.melder.gruen)
+    expect(palette.status.review.dot).toBe(palette.melder.bernst)
+    expect(palette.status.progress.dot).toBe(palette.melder.stahl)
+    for (const set of ['ready', 'backlog', 'neutral', 'archived'] as const) {
+      expect(palette.status[set].dot).toBe(palette.melder.grau)
+    }
+  })
+
   it('erzeugt für jeden Status-Verweis aus lib/statusColors die passende Variable', () => {
     for (const set of statusSets) {
       for (const feld of felder) {
         expect(theme.vars.palette.status[set][feld]).toMatch(new RegExp(`^var\\(--mb-palette-status-${set}-${feld},`))
       }
     }
-    // Stichprobe über die öffentliche Funktion: derselbe Name, nur ohne Rückfallwert.
     expect(theme.vars.palette.status.done.dot.startsWith(statusColors('Done').dot.slice(0, -1))).toBe(true)
     expect(theme.vars.palette.status.archived.dot.startsWith(ARCHIVED_STATUS_COLOR.dot.slice(0, -1))).toBe(true)
   })
@@ -469,28 +495,31 @@ describe('theme Status- und Vorhaben-Farben beider Erscheinungsbilder (#952)', (
     expect(ueber('rgba(255,0,0,1)', '#123456')).toBe('#ff0000')
   })
 
-  // Die dunklen Werte sind neu gewählt und halten AA von Anfang an. Die hellen Werte sind
-  // unveränderter Bestand; ihre Lücken hält der Abschlussbericht zu #952 fest.
-  const dunkleFlaechen = flaechenVon(dunkel).filter(([flaeche]) => flaeche !== 'Code')
+  const statusPaare = tabelle((name, palette) =>
+    statusSets.flatMap((set) => [
+      [name, set, 'Schrift auf der Schild-Fläche', palette.status[set].bg, palette.status[set].text, 4.5] as const,
+      ...flaechenVon(palette).map(
+        ([flaeche, wert]) => [name, set, `Punkt auf ${flaeche}`, wert, palette.status[set].dot, 3] as const,
+      ),
+    ]),
+  )
 
-  it.each(statusSets)('dunkel: Statustext %s hält 4,5:1 auf seiner Fläche', (set) => {
-    expect(kontrast(dunkel.status[set].bg, dunkel.status[set].text)).toBeGreaterThanOrEqual(4.5)
+  it.each(statusPaare)('%s: Status %s, %s hält die Schwelle', (_, __, ___, flaeche, farbe, schwelle) => {
+    expect(kontrast(flaeche, farbe)).toBeGreaterThanOrEqual(schwelle)
   })
 
-  it.each(statusSets.flatMap((set) => dunkleFlaechen.map(([flaeche, wert]) => [set, flaeche, wert] as const)))(
-    'dunkel: Statuspunkt %s hält auf %s 3:1',
-    (set, _, wert) => {
-      expect(kontrast(wert, dunkel.status[set].dot)).toBeGreaterThanOrEqual(3)
-    },
+  // Das Schild eines Vorhabens steht auf Karten, Tabellenzeilen und Platten (Entwurf Z. 780–786).
+  const schildFlaechen = (palette: typeof hell) =>
+    flaechenVon(palette).filter(([flaeche]) => flaeche.startsWith('Platte'))
+
+  const epicPaare = tabelle((name, palette) =>
+    palette.epic.flatMap((platz, i) => schildFlaechen(palette).map(([flaeche, wert]) => [name, i, flaeche, wert, platz] as const)),
   )
 
-  it.each(EPIC_FARBWERTE.dark.flatMap((platz, i) => dunkleFlaechen.map(([flaeche, wert]) => [i, flaeche, wert, platz] as const)))(
-    'dunkel: Vorhaben-Platz %s hält auf %s 3:1 als Kante und 4,5:1 als Kürzel auf seinem Tint',
-    (_, __, wert, platz) => {
-      expect(kontrast(wert, platz.hue)).toBeGreaterThanOrEqual(3)
-      expect(kontrast(ueber(platz.tint, wert), platz.hue)).toBeGreaterThanOrEqual(4.5)
-    },
-  )
+  it.each(epicPaare)('%s: Vorhaben-Schild %s auf %s hält 3:1 als Rand und 4,5:1 als Schrift auf seiner Tönung', (_, __, ___, wert, platz) => {
+    expect(kontrast(wert, platz.hue)).toBeGreaterThanOrEqual(3)
+    expect(kontrast(ueber(platz.tint, wert), platz.hue)).toBeGreaterThanOrEqual(4.5)
+  })
 })
 
 /** Die `MuiCssBaseline`-Overrides als Objekt — dort liegen die anwendungsweiten Regeln. */

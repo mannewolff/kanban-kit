@@ -233,7 +233,12 @@ export const nachtlaufTheme = createTheme(
 export const NACHTLAUF_WURZEL_SX: SxProps<Theme> = {
   ...HELLE_VARIABLEN,
   bgcolor: GROUND,
-  m: -3,
-  p: 3,
-  minHeight: 'calc(100vh - 64px)',
+  // Deckt die Bühne der Shell bis an Schiene und Kopf ab (Innenabstand 22/26/44 px, #978).
+  mt: '-22px',
+  mb: '-44px',
+  mx: { xs: '-16px', md: '-26px' },
+  pt: '22px',
+  pb: '44px',
+  px: { xs: '16px', md: '26px' },
+  minHeight: 'calc(100vh - 59px)',
 }

@@ -12,26 +12,29 @@ export interface EpicFarbe {
 }
 
 /**
- * Feste Palette mittel-kräftiger Töne für Epics, je Erscheinungsbild (#952, Plan #932 E10/E11).
- * `theme.ts` legt sie als CSS-Variablen an; {@link epicColor} und {@link epicTint} liefern
- * Verweise darauf. Das Modul importiert das Theme nicht — `theme.ts` liest die Werte von hier.
+ * Die Schild-Töne des Leitstand-Entwurfs (#978, `docs/entwurf-leitstand.html` Z. 780–790: Kupfer,
+ * Stahl, Grün, Bernstein), je Erscheinungsbild. `theme.ts` legt sie als CSS-Variablen an;
+ * {@link epicColor} und {@link epicTint} liefern Verweise darauf. Das Modul importiert das Theme
+ * nicht — `theme.ts` liest die Werte von hier.
  *
- * **Der Tint ist ein eigener Wert, keine Rechnung auf dem Farbton.** Bis #952 bildete `EpicBadge`
- * die Fläche als `${hue}22`. Auf einem Variablen-Verweis ergäbe das ungültiges CSS, und die Fläche
- * verschwände still. Hell ist der Tint deshalb exakt der alte Wert als `rgba` (Deckkraft 34/255);
- * dunkel ist der Farbton aufgehellt, damit das Kürzel auf seiner Fläche 4,5:1 hält.
+ * Das Schild des Entwurfs trägt den Ton als Schrift und Rand auf 13 % desselben Tons. Hell hält die
+ * Schrift dort 4,5:1 (auf Platte, Platte hoch und Platte-Fuß) nur nachgedunkelt; dunkel halten die
+ * Entwurfstöne bis auf Stahl, der eine Stufe aufgehellt ist.
+ *
+ * **Der Tint ist ein eigener Wert, keine Rechnung auf dem Farbton.** Auf einem Variablen-Verweis
+ * ergäbe `${hue}22` ungültiges CSS, und die Fläche verschwände still.
  */
 const tint = (hex: string, deckkraft: number): string => {
   const [r, g, b] = [1, 3, 5].map((i) => Number.parseInt(hex.slice(i, i + 2), 16))
   return `rgba(${r},${g},${b},${deckkraft})`
 }
 
-const HELL = ['#534AB7', '#1D9E75', '#D4537E', '#185FA5', '#BA7517', '#993C1D', '#0F6E56', '#0C447C']
-const DUNKEL = ['#BAB5F4', '#6BDDB5', '#F29DBB', '#8CBBEE', '#EDBE70', '#EC9C7B', '#62D1AD', '#8FB6E6']
+const HELL = ['#935327', '#2A63B3', '#25713E', '#835C10']
+const DUNKEL = ['#D08A52', '#629BF1', '#46C46F', '#E0AE49']
 
 export const EPIC_FARBWERTE: Readonly<Record<'light' | 'dark', ReadonlyArray<EpicFarbe>>> = {
-  light: HELL.map((hue) => ({ hue, tint: tint(hue, 0.133) })),
-  dark: DUNKEL.map((hue) => ({ hue, tint: tint(hue, 0.14) })),
+  light: HELL.map((hue) => ({ hue, tint: tint(hue, 0.13) })),
+  dark: DUNKEL.map((hue) => ({ hue, tint: tint(hue, 0.13) })),
 }
 
 function hashId(id: number): number {

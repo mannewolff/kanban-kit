@@ -166,10 +166,11 @@ describe('nachtlaufTheme', () => {
     expect(nachtlaufTheme.components?.MuiTable?.styleOverrides?.root).toBeDefined()
   })
 
-  it('behält die eigene Palette des Leitstands für die Altbestand-Lauf-Arten', () => {
-    // `palette.nightRun` bleibt unverändert (E10): Es trägt die beiden Lauf-Arten, die
-    // weiterhin in der Designsprache „Panel" dargestellt werden.
-    expect(nachtlaufTheme.palette.nightRun.red).toBe('#FF0000')
+  it('behält die Palette des Leitstands für die Altbestand-Lauf-Arten', () => {
+    // `palette.nightRun` trägt die beiden Lauf-Arten, die in der Designsprache der übrigen
+    // Anwendung dargestellt werden — seit #978 die Melder der Kupferwarte.
+    expect(nachtlaufTheme.palette.nightRun).toEqual(theme.palette.nightRun)
+    expect(nachtlaufTheme.palette.nightRun.red).toBe(theme.palette.melder.zinnob)
   })
 })
 

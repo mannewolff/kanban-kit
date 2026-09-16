@@ -30,14 +30,13 @@ describe('statusColors', () => {
     expect(ARCHIVED_STATUS_COLOR.dot).toBe('var(--mb-palette-status-archived-dot)')
   })
 
-  it('hält die hellen Werte des Bestands unverändert', () => {
-    expect(STATUS_FARBWERTE.light.backlog.dot).toBe('#5BABB5')
-    expect(STATUS_FARBWERTE.light.ready.dot).toBe('#2F8C97')
-    expect(STATUS_FARBWERTE.light.progress.dot).toBe('#C99A2E')
-    expect(STATUS_FARBWERTE.light.review.dot).toBe('#C46B4E')
-    expect(STATUS_FARBWERTE.light.done.dot).toBe('#2E9E7A')
-    expect(STATUS_FARBWERTE.light.neutral.dot).toBe('#8FA6AB')
-    expect(STATUS_FARBWERTE.light.archived.dot).toBe('#9FB0B4')
+  it('setzt die Punkte hell auf die Melder des Entwurfs', () => {
+    expect(STATUS_FARBWERTE.light.done.dot).toBe('#2E8B4C')
+    expect(STATUS_FARBWERTE.light.review.dot).toBe('#A17113')
+    expect(STATUS_FARBWERTE.light.progress.dot).toBe('#2F6FC9')
+    for (const set of ['ready', 'backlog', 'neutral', 'archived'] as const) {
+      expect(STATUS_FARBWERTE.light[set].dot).toBe('#757B86')
+    }
   })
 
   it('führt in beiden Erscheinungsbildern dieselben Sets mit Hexwerten', () => {

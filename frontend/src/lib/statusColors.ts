@@ -1,9 +1,8 @@
 /**
  * Statusfarben je Spalte, aus dem Spaltennamen abgeleitet. Bewusste Ausnahme von
  * "Farben nur über das Theme": Board-Status ist eine feste, kleine, semantische Menge —
- * ein zentraler Ort statt verstreuter Hex-Werte. Entsättigt auf die Marken-Familie
- * (CLAUDE-design.md): weiche, helle Tints als Pill-Flächen, dunkler Text derselben Familie, ein
- * ruhiger Akzent-Punkt.
+ * ein zentraler Ort statt verstreuter Hex-Werte. Die Töne sind die Melder des Leitstand-Entwurfs
+ * (CLAUDE-design.md): getönte Schild-Fläche, Melder als Schrift, Melder als Punkt.
  *
  * Das Modul trägt ausschließlich Status-Farben (#648, E2). Jedes andere Token gehört ins Theme —
  * zwei Farbquellen laufen auseinander, ohne dass ein Test es merkt.
@@ -28,28 +27,37 @@ export interface StatusColorSet {
 type StatusSet = 'done' | 'review' | 'progress' | 'ready' | 'backlog' | 'neutral' | 'archived'
 
 /**
- * Werte beider Erscheinungsbilder. Hell ist unveränderter Bestand. Dunkel kehrt die Rollen um:
- * eine dunkle, im Farbton getönte Pill-Fläche, heller Text derselben Familie und ein aufgehellter
- * Punkt, der auf den dunklen Flächen des Leitstands 3:1 hält (`theme.test.ts`).
+ * Werte beider Erscheinungsbilder, abgebildet auf die Melder des Leitstand-Entwurfs (#978,
+ * `docs/entwurf-leitstand.html`): Done grün, In review bernstein, In Arbeit stahl, alles Wartende
+ * grau — so, wie die Spalten und die Liste des Entwurfs ihre LED setzen.
+ *
+ * - `dot` ist der Melder als Füllung (LED, Kante): 3:1 auf jeder Fläche der Warte, die Nut
+ *   eingeschlossen. Hell sind Grün, Bernstein und Grau dafür nachgedunkelt (siehe `theme.ts`).
+ * - `bg` ist der Melder zu 13 % über der Platte, wie das Schild des Entwurfs (Z. 780–786).
+ * - `text` ist der Melder als Schrift: 4,5:1 auf `bg`, Platte und Grund. Hell nachgedunkelt, dunkel
+ *   hält der Entwurfston unverändert — außer Grau, das aufgehellt ist.
  */
+const HELL_GRAU: StatusColorSet = { bg: '#EEEFF2', text: '#636972', dot: '#757B86' }
+const DUNKEL_GRAU: StatusColorSet = { bg: '#22272E', text: '#878E97', dot: '#6E7681' }
+
 export const STATUS_FARBWERTE: Readonly<Record<'light' | 'dark', Readonly<Record<StatusSet, StatusColorSet>>>> = {
   light: {
-    done: { bg: '#E4F3EC', text: '#14624A', dot: '#2E9E7A' },
-    review: { bg: '#F7EAE4', text: '#8A3F28', dot: '#C46B4E' },
-    progress: { bg: '#FAF3E3', text: '#7A5B12', dot: '#C99A2E' },
-    ready: { bg: '#E1F0F2', text: '#1E5F68', dot: '#2F8C97' },
-    backlog: { bg: '#EDF5F6', text: '#1E5F68', dot: '#5BABB5' },
-    neutral: { bg: '#F1F5F6', text: '#5F7A7F', dot: '#8FA6AB' },
-    archived: { bg: '#F0F2F2', text: '#5F7A7F', dot: '#9FB0B4' },
+    done: { bg: '#E2EFE7', text: '#277741', dot: '#2E8B4C' },
+    review: { bg: '#F3ECE0', text: '#8A6110', dot: '#A17113' },
+    progress: { bg: '#E2EBF7', text: '#2C68BD', dot: '#2F6FC9' },
+    ready: HELL_GRAU,
+    backlog: HELL_GRAU,
+    neutral: HELL_GRAU,
+    archived: HELL_GRAU,
   },
   dark: {
-    done: { bg: '#173A30', text: '#8FE0BF', dot: '#3FBF92' },
-    review: { bg: '#3F2A22', text: '#F2B8A2', dot: '#E08A6C' },
-    progress: { bg: '#3A3120', text: '#F0D38F', dot: '#DDB04A' },
-    ready: { bg: '#173A3F', text: '#9ADCE4', dot: '#4FB3BF' },
-    backlog: { bg: '#1E363B', text: '#A9D8DE', dot: '#7CC3CC' },
-    neutral: { bg: '#22343A', text: '#B4C6CA', dot: '#8FA6AB' },
-    archived: { bg: '#262F31', text: '#AAB7BA', dot: '#7F9195' },
+    done: { bg: '#1D312C', text: '#46C46F', dot: '#46C46F' },
+    review: { bg: '#312E27', text: '#E0AE49', dot: '#E0AE49' },
+    progress: { bg: '#202B3D', text: '#5B96F0', dot: '#5B96F0' },
+    ready: DUNKEL_GRAU,
+    backlog: DUNKEL_GRAU,
+    neutral: DUNKEL_GRAU,
+    archived: DUNKEL_GRAU,
   },
 }
 

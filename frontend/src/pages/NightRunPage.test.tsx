@@ -25,7 +25,7 @@ import echterPrueflauf from '../lib/__fixtures__/night-run-2026-09-11-103116.jso
 import echteKette from '../lib/__fixtures__/night-run-2026-09-14-131200.json'
 import { parseNightRunErgebnisstand } from '../lib/nightRunErgebnisstand'
 import { buildHandoffText, type NightRunHandoffItem } from '../lib/nightRunHandoff'
-import { NACHTLAUF_FARBEN, NACHTLAUF_TON } from '../nachtlaufDesign'
+import { NACHTLAUF_FARBEN, NACHTLAUF_SCHRIFTEN, NACHTLAUF_TON } from '../nachtlaufDesign'
 import { cssRegel } from '../test/cssRegel'
 import { theme } from '../theme'
 import { NightRunPage } from './NightRunPage'
@@ -1326,8 +1326,8 @@ describe('NightRunPage — Ausnahme auch im Dunkeln (#954)', () => {
     // jsdom wertet `prefers-color-scheme` nicht aus; geprüft wird deshalb die erzeugte Regel am
     // Wurzelknoten. Sie fällt, sobald die Variablen von `:root` durchschlagen könnten.
     const regel = cssRegel(screen.getByTestId('nachtlauf-wurzel'))
-    expect(regel).toContain('--mb-palette-background-paper: #FFFFFF')
-    expect(regel).toContain('--mb-palette-divider: #D8ECEE')
+    expect(regel).toContain(`--mb-palette-background-paper: ${theme.colorSchemes.light!.palette.background.paper}`)
+    expect(regel).toContain(`--mb-palette-divider: ${theme.colorSchemes.light!.palette.divider}`)
     expect(regel).toContain('color-scheme: light')
     expect(regel).toContain(`background-color: ${NACHTLAUF_FARBEN.ground}`)
   })
@@ -4006,8 +4006,9 @@ describe('NightRunPage — Rahmen des Entwurfs (#914)', () => {
 
     // Nicht-Ziel 2: Der Dialog gehört zur übrigen Anwendung und trägt deren Designsprache.
     const detail = await screen.findByTestId('karten-detail')
-    expect(detail.dataset.schrift).toContain('Carlito')
-    expect(detail.dataset.schrift).not.toContain('IBM Plex Sans')
+    // Seit #978 setzt auch die Anwendung Plex Sans, aber mit eigenem Schriftstapel.
+    expect(detail.dataset.schrift).toBe(theme.typography.fontFamily)
+    expect(detail.dataset.schrift).not.toBe(NACHTLAUF_SCHRIFTEN.body)
   })
 
   it('hält Brotkrumenpfad, Protokoll-Knopf und die Meldung zu einem nicht deutbaren Stand', async () => {

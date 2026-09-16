@@ -14,7 +14,11 @@ Diese Datei ist die Designquelle der Anwendung **kanban-kit**. Sie beschreibt, *
 
 **Abgenommen wird visuell:** je Ansicht ein Bildschirmfoto bei 1440 × 900 neben der Vorlage, im hellen und im dunklen Erscheinungsbild. Tests und Gates sichern Werte, Kontrast und Verhalten; ob eine Ansicht aussieht wie die Vorlage, sagen sie nicht.
 
-**Die Vorlage zeigt mehr, als kanban-kit kann.** Bedienelemente ohne Funktion im Bestand (z. B. „Meine", „Gruppieren", „Export", Kostenbudget) erscheinen nicht als tote Knöpfe; sie stehen als offene Punkte in den Abschlussberichten.
+**Umgesetzt wird 1:1, auch die neuen Ideen der Vorlage** (Entscheidung Manne, 2026-09-16): Bedienelemente, die kanban-kit heute nicht kann — etwa die Filter „Meine" und „Überfällig", die Gruppierung der Liste nach Vorhaben —, werden als echte Funktion gebaut, sofern die Daten dafür vorliegen. Wofür es keine Daten gibt (z. B. Kostenbudget, Stufen der laufenden Kette), erscheint nichts statt einer erfundenen Zahl; das steht als offener Punkt im Abschlussbericht. Nach der Umsetzung wird gemeinsam angesehen und geändert.
+
+**Eine bewusste Abweichung von der Vorlage:** Die Ansichtswahl oben (Reiter Leitstand · Board · Liste · Karte) entfällt. Die Ansichten stehen **links in der Schiene**, wie in der Anwendung gewohnt (Entscheidung Manne, 2026-09-16).
+
+**Die Anwendung ist der KI-Leitstand 2.0, kein Kanban-Board mit Zusatzseite** (Manne, 2026-09-16). Das Board bleibt ein wichtiger Bestandteil; der Kern ist der Leitstand mit den detaillierten, verdichteten Informationen über die KI-Arbeit (Läufe, Durchsatz, Verbrauch, Abbrüche, Liegengebliebenes, Vorhaben). Kennzahlen des bisherigen Dashboards wie die **Verweildauer je Spalte** sind dagegen unwichtig und gehören nicht in den Leitstand.
 
 ---
 
@@ -34,7 +38,7 @@ Die Rollen und Werte der Vorlage (Entwurf Z. 10–150). Die **Leitfarbe ist Kupf
 |---|---|---|---|
 | Grund | `#E7E9ED` | `#0D1014` | Grund der Anwendung (`background.default`) |
 | Grund tief | `#D8DBE2` | `#090B0E` | oberes Ende der Schiene |
-| Nut | `#D5D9E0` | `#080A0D` | eingelassene Flächen: Schiene, Suche, Ansichtswahl, Spalten, Zähler |
+| Nut | `#D5D9E0` | `#080A0D` | eingelassene Flächen: Schiene, Suche, Filtergruppen, Spalten, Zähler |
 | Platte | `#FDFDFE` | `#171B22` | Inhaltsflächen: Karten, Kacheln, Platten (`background.paper`) |
 | Platte Fuß | `#F2F4F7` | `#12151B` | unteres Ende eines Tastenverlaufs |
 | Platte hoch | `#FFFFFF` | `#1E242D` | abgehobene Flächen, oberes Ende eines Tastenverlaufs |
@@ -61,7 +65,7 @@ Die Rollen und Werte der Vorlage (Entwurf Z. 10–150). Die **Leitfarbe ist Kupf
 
 | Rolle | Schrift | Einsatz |
 |---|---|---|
-| Titel, Anzeige | **Archivo** (variable Breite, `font-stretch` 110–118 %) | Überschriften, Markenname, Pfad, Ansichtswahl, Etiketten, Spaltennamen, Plattentitel |
+| Titel, Anzeige | **Archivo** (variable Breite, `font-stretch` 110–118 %) | Überschriften, Markenname, Pfad, Etiketten, Spaltennamen, Plattentitel |
 | Fließtext | **IBM Plex Sans**, 14 px, Zeilenhöhe 1,5 | alles Lesbare |
 | Zahlen und Kennungen | **IBM Plex Mono** mit `tabular-nums` | Kartennummern, Dauern, Kosten, Token, Commit-Hashes, Tastenkürzel, Kennzahlen |
 
@@ -77,14 +81,14 @@ Die Rollen und Werte der Vorlage (Entwurf Z. 10–150). Die **Leitfarbe ist Kupf
 | Ebene | Radius | Token |
 |---|---|---|
 | Platte, Kachel, Laufband, Spalte | 14 px | `PANEL_RADIUS` (`--r-gross`) |
-| Karte, Navigationseintrag, Ansichtswahl | 10 px | `CARD_RADIUS` (`--r-mittel`) |
+| Karte, Navigationseintrag | 10 px | `CARD_RADIUS` (`--r-mittel`) |
 | Bedienelement, Fokusring | 6 px | `shape.borderRadius` (`--r-klein`) |
 
 ---
 
 ## 🌓 Tiefe
 
-**Vier Stufen: Nut < Grund < Platte < Abgehoben** (Entwurf Z. 6–8). Eingelassenes liegt als Nut im Grund (Schiene, Suche, Ansichtswahl, Spalten, Zähler); Inhalte liegen als Platte darauf; was gerade bewegt wird oder über allem schwebt (gezogene Karte, Massenleiste), ist abgehoben. Tasten sind kleine erhabene Flächen mit Lichtkante, die beim Drücken zur Nut werden.
+**Vier Stufen: Nut < Grund < Platte < Abgehoben** (Entwurf Z. 6–8). Eingelassenes liegt als Nut im Grund (Schiene, Suche, Filtergruppen, Spalten, Zähler); Inhalte liegen als Platte darauf; was gerade bewegt wird oder über allem schwebt (gezogene Karte, Massenleiste), ist abgehoben. Tasten sind kleine erhabene Flächen mit Lichtkante, die beim Drücken zur Nut werden.
 
 | Token | Rolle |
 |---|---|
@@ -115,9 +119,9 @@ Die Schattenfarbe folgt der Vorlage: hell eine dunkle Blaugrau-Tinte `rgba(18,24
 Vorlage: Entwurf CSS Z. 196–389, HTML Z. 1101–1199.
 
 - **Warte:** zweispaltig, links die Schiene (224 px), rechts der Inhalt.
-- **Schiene:** eingelassene Nut mit Verlauf von „Grund tief" nach „Nut", Innenschatten, Haarlinie rechts. Oben die **Marke** (Kupfer-Mal mit drei Balken, Name, Zusatz); darunter **Navigationsblöcke** mit Etikett-Titel: Projekt (Leitstand, Board, Liste, Vorhaben, Ideen, Nachtläufe) und Verwaltung (Mitglieder, Rollen & Rechte); unten der **Fuß** (Hinweis auf die letzte Kette, Administration, Dokumentation). Ein Eintrag trägt Icon, Beschriftung und — wo die Anwendung sie kennt — eine Zahl; der aktive Eintrag ist eine erhabene Taste mit kupfernem Icon.
-- **Kopf:** klebt oben, leicht getönt mit Weichzeichner; **Pfad** (Projekt / Board / Ansicht, der letzte Teil in Archivo), **Suche** als Nut mit `⌘K`, **Tasten** (Kupfertaste für die Hauptaktion), **Nutzer** als rundes Mal. Kartensuche, Board-Wechsel, Profil und Abmelden bleiben erreichbar.
-- **Ansichtswahl:** Nut mit den Reitern **Leitstand · Board · Liste · Karte**; der gewählte Reiter ist eine erhabene Taste.
+- **Schiene:** eingelassene Nut mit Verlauf von „Grund tief" nach „Nut", Innenschatten, Haarlinie rechts. Oben die **Marke** (Kupfer-Mal mit drei Balken, Name, Version); darunter **Navigationsblöcke** mit Etikett-Titel, immer offen: **Projekt ‹Name›** (Leitstand, Board, Liste, Vorhaben, Ideen, Nachtläufe), **Übersicht** (Projekte, Boards — nur wenn es etwas zu wählen gibt; der Entwurf kennt den Block nicht, er hält den Weg zurück zur Auswahl) und **Verwaltung** (Mitglieder, Rollen & Rechte, Admin); unten der **Fuß** (Administration, Dokumentation, Einklappen). Die Schiene ist der einzige Ort, an dem man zwischen den Ansichten wechselt. Ein Eintrag ist ein echter Link mit Symbol aus der Vorlage und Beschriftung; der aktive Eintrag (`aria-current="page"`, der längste passende Pfad) ist eine erhabene Taste mit kupfernem Symbol. Zahlen an Einträgen und der Hinweis auf die letzte Kette erscheinen erst, wenn die Shell diese Daten kennt. Eingeklappt (64 px) bleiben nur die Symbole.
+- **Kopf:** klebt oben, leicht getönt mit Weichzeichner; **Pfad** (Projekt / Board, in Archivo, beide verlinkt), **Suche** als Nut mit der Tastenkappe des echten Kürzels `/` (die Vorlage zeigt `⌘K`; Modifikator-Kürzel überlässt die Anwendung dem Browser), **Taste** „Board" für den Board-Wechsel (Kürzel `b`), **Nutzer** als rundes Mal mit Kürzel, das ein Menü mit „Profil bearbeiten" und „Abmelden" öffnet. Die Kupfertaste für die Hauptaktion der Ansicht bringt das jeweilige Ansichtspaket mit.
+- **Keine Ansichtswahl oben.** Abweichung von der Vorlage (siehe [Vorlage und Abnahme](#vorlage-und-abnahme)): Leitstand, Board und Liste wählt man in der Schiene; die Karte öffnet sich wie bisher aus Board, Liste oder Leitstand.
 - **Bühne:** Innenabstand 22/26/44 px, Abstand zwischen Bereichen 20 px.
 - **Fokusring:** 2 px Kupfer mit 2 px Abstand an jedem Tastaturziel; Eingabefelder zeigen den Fokus an ihrer Rahmenlinie.
 - **Mindestbreite** (AK 19): 768 px vollständig bedienbar; unterhalb von 900 px liegt die Schiene hinter einer Schaltfläche.
@@ -128,10 +132,10 @@ Vorlage: Entwurf CSS Z. 196–389, HTML Z. 1101–1199.
 
 Die Gestalt jeder Ansicht folgt der Vorlage. Zustände sind an **Form** erkennbar, nicht allein an Farbe (AK 4–8).
 
-- **Leitstand** (Entwurf CSS Z. 390–722, 977–1017; HTML Z. 1200–1678): Laufband des jüngsten Laufs mit LED, Stufen, Zeit und Kosten; Kennzahl-Kacheln mit Wert, Einheit, Sparkline, Delta und Basis; Verbrauch mit Zeitraum-Wahl und Stapelbalken; Platten „Letzter Lauf", „Durchsatz", „Abbruchgründe", „Liegengeblieben", „Vorhaben".
+- **Leitstand** (Entwurf CSS Z. 390–722, 977–1017; HTML Z. 1200–1678) — die Hauptansicht der Anwendung, nicht eine Statistikseite neben dem Board. Laufband des jüngsten Laufs mit LED, Stufen, Zeit und Kosten; Kennzahl-Kacheln mit Wert, Einheit, Sparkline, Delta und Basis; Verbrauch mit Zeitraum-Wahl und Stapelbalken; Platten „Letzter Lauf", „Durchsatz", „Abbruchgründe", „Liegengeblieben", „Vorhaben".
 - **Board** (CSS Z. 723–875; HTML Z. 1679–1864): Spalten als Nut im Grund, Karten als Platte darauf; Karte mit Nummer (Plex Mono), Kürzel, Zuständigen, Titel, Meta-Zeile, Schild für das Vorhaben, Frist und Liegedauer. Die **gezogene Karte kippt** und wirft einen längeren Schatten, ihr **verlassener Platz bleibt als Vertiefung**; die **Belastungsgrenze** steht als Segmentskala im Spaltenkopf, bei erreichter Grenze wird das letzte Segment bernstein. Werkzeugleiste über dem Board (Z. 797–842).
-- **Liste** (CSS Z. 876–976; HTML Z. 1865–2054): dieselbe Warte, dichter; erhabene, mitlaufende Kopfzeile; Gruppen als Nut mit Fortschritt des Vorhabens; gewählte Zeilen kupfern getönt.
-- **Karte** (CSS Z. 1018–1078; HTML Z. 2055–2229): Instrumententafel mit Blatt (Titel, Zustand, Beschreibung) und den Platten „Felder" und „Diese Karte im Vergleich".
+- **Liste** (CSS Z. 876–976; HTML Z. 1865–2054): dieselbe Warte, dichter; erhabene, mitlaufende Kopfzeile; **nach Vorhaben gruppiert**, jede Gruppe als Nut mit Name und Fortschritt des Vorhabens; gewählte Zeilen kupfern getönt.
+- **Karte** (CSS Z. 1018–1078; HTML Z. 2055–2229): Instrumententafel mit Blatt (Titel, Zustand, Beschreibung) und den Platten „Felder" und „Diese Karte im Vergleich" — als Kartendialog, der sich aus Board, Liste und Leitstand öffnet.
 - **Bewegung reduzieren** (AK 16): eine zentrale Regel setzt unter `prefers-reduced-motion: reduce` Übergangs- und Animationsdauern auf null, auch das Pulsieren der LED.
 - **Ausdruck** (E6): schlicht und immer hell — ohne Grund, Verläufe und Schatten.
 
@@ -160,7 +164,7 @@ Zu jeder darstellenden Route aus [`frontend/src/App.tsx`](frontend/src/App.tsx) 
 | `/projects/:projectId/members` | Mitglieder | Rahmen; Tabelle als Platte, Zahlen in Plex Mono | #978 |
 | `/projects/:projectId/nachtlauf` | Nachtläufe | **Ausnahme Nachtlauf** (eigener Abschnitt); Rahmen der Vorlage | #978 |
 | `/boards/:boardId` | Board | Board der Vorlage (Entwurf Z. 1679–1864) | #980 |
-| `/boards/:boardId/list` | Liste | Liste der Vorlage (Entwurf Z. 1865–2054) | #980 |
+| `/boards/:boardId/list` | Liste | Liste der Vorlage, nach Vorhaben gruppiert (Entwurf Z. 1865–2054) | #980 |
 | `/boards/:boardId/vorhaben` | Vorhaben | Rahmen; Vorhaben als Platten mit Fortschritt | #978 |
 | `/boards/:boardId/dashboard` | Leitstand | Leitstand der Vorlage (Entwurf Z. 1200–1678) | #979 |
 | `/admin` | Plattform-Administration | Rahmen; Tabelle als Platte | #978 |

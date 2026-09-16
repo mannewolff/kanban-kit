@@ -3,134 +3,156 @@ import { buildNavItems, type BoardContext, type NavParams } from './navItems'
 
 const board: BoardContext = { id: 1, name: 'B', projectId: 5 }
 
-const topLabels = (params: NavParams) => buildNavItems(params).map((n) => n.label)
+/** Titel der Blöcke in ihrer Reihenfolge. */
+const bloecke = (params: NavParams) => buildNavItems(params).map((b) => b.label)
 
-const groupChildren = (params: NavParams) => {
-  const group = buildNavItems(params).find((n) => n.label === 'B')
-  return group?.kind === 'group' ? group.children.map((c) => c.label) : []
-}
+/** Beschriftungen eines Blocks; Projekt-Block über das Präfix „Projekt". */
+const eintraege = (params: NavParams, titel: string) =>
+  buildNavItems(params)
+    .find((b) => b.label === titel || (titel === 'Projekt' && b.label.startsWith('Projekt')))
+    ?.children.map((c) => c.label) ?? []
 
-describe('buildNavItems Sichtbarkeit', () => {
+/** Alle Einträge über alle Blöcke, zum Suchen nach einem Link. */
+const link = (params: NavParams, label: string) =>
+  buildNavItems(params)
+    .flatMap((b) => b.children)
+    .find((c) => c.label === label)
+
+describe('buildNavItems Gliederung nach dem Leitstand-Entwurf (#978)', () => {
+  it('führt bei offenem Board die Blöcke Projekt, Übersicht und Verwaltung in dieser Reihenfolge', () => {
+    expect(bloecke({ board, projectName: 'kanban-kit', boardCount: 2 })).toEqual([
+      'Projekt kanban-kit',
+      'Übersicht',
+      'Verwaltung',
+    ])
+  })
+
+  it('nennt den Projekt-Block ohne bekannten Namen schlicht „Projekt"', () => {
+    expect(bloecke({ board })[0]).toBe('Projekt')
+  })
+
+  it('ordnet den Projekt-Block wie der Entwurf: Leitstand, Board, Liste, Vorhaben, Ideen, Nachtläufe', () => {
+    expect(eintraege({ board, canViewNightRun: true }, 'Projekt')).toEqual([
+      'Leitstand',
+      'Board',
+      'Liste',
+      'Vorhaben',
+      'Ideen',
+      'Nachtläufe',
+    ])
+  })
+
+  it('führt ohne offenes Board im Projekt-Block nur die projektweiten Einträge', () => {
+    expect(eintraege({ board: null, projectId: 7, canViewNightRun: true }, 'Projekt')).toEqual(['Ideen', 'Nachtläufe'])
+  })
+
+  it('lässt den Projekt-Block ohne Projekt-Kontext weg', () => {
+    expect(bloecke({ board: null })).toEqual(['Übersicht', 'Verwaltung'])
+  })
+
+  it('verlinkt die Ansichten des Boards auf ihre Routen', () => {
+    expect(link({ board }, 'Leitstand')?.path).toBe('/boards/1/dashboard')
+    expect(link({ board }, 'Board')?.path).toBe('/boards/1')
+    expect(link({ board }, 'Liste')?.path).toBe('/boards/1/list')
+    expect(link({ board }, 'Vorhaben')?.path).toBe('/boards/1/vorhaben')
+  })
+})
+
+describe('buildNavItems Übersicht', () => {
   it('blendet „Projekte" bei genau einem Projekt aus (Nicht-Admin)', () => {
-    expect(topLabels({ board: null, projectCount: 1 })).not.toContain('Projekte')
+    expect(eintraege({ board: null, projectCount: 1 }, 'Übersicht')).not.toContain('Projekte')
   })
 
   it('zeigt „Projekte" bei mehreren Projekten', () => {
-    expect(topLabels({ board: null, projectCount: 2 })).toContain('Projekte')
+    expect(eintraege({ board: null, projectCount: 2 }, 'Übersicht')).toContain('Projekte')
   })
 
   it('zeigt „Projekte" für System-Admins auch bei genau einem Projekt', () => {
-    expect(topLabels({ board: null, projectCount: 1, isAdmin: true })).toContain('Projekte')
+    expect(eintraege({ board: null, projectCount: 1, isAdmin: true }, 'Übersicht')).toContain('Projekte')
   })
 
   it('zeigt „Projekte" solange die Anzahl unbekannt ist (kein Flackern)', () => {
-    expect(topLabels({ board: null })).toContain('Projekte')
+    expect(eintraege({ board: null }, 'Übersicht')).toContain('Projekte')
   })
 
   it('blendet „Boards" bei genau einem Board aus (ohne Verwaltungsrecht)', () => {
-    expect(topLabels({ board, boardCount: 1 })).not.toContain('Boards')
+    expect(eintraege({ board, boardCount: 1 }, 'Übersicht')).not.toContain('Boards')
   })
 
-  it('zeigt „Boards" als Top-Level-Eintrag bei mehreren Boards', () => {
-    expect(topLabels({ board, boardCount: 2 })).toContain('Boards')
+  it('zeigt „Boards" bei mehreren Boards nach „Projekte"', () => {
+    expect(eintraege({ board, boardCount: 2, projectCount: 2 }, 'Übersicht')).toEqual(['Projekte', 'Boards'])
   })
 
   it('zeigt „Boards" trotz einem Board, wenn man Boards verwalten darf', () => {
-    expect(topLabels({ board, boardCount: 1, canManageBoards: true })).toContain('Boards')
-  })
-
-  it('hängt „Boards" nach „Projekte" und vor die Board-Gruppe', () => {
-    const labels = topLabels({ board, projectCount: 2, boardCount: 2 })
-    expect(labels.indexOf('Boards')).toBeGreaterThan(labels.indexOf('Projekte'))
-    expect(labels.indexOf('Boards')).toBeLessThan(labels.indexOf('B'))
-  })
-
-  it('führt in der Board-Gruppe nur die vier Ansichten (kein „Boards")', () => {
-    expect(groupChildren({ board, boardCount: 2 })).toEqual(['Board', 'Liste', 'Vorhaben', 'Dashboard'])
-  })
-
-  it('verlinkt „Vorhaben" auf die neue Route — Beschriftung und Pfad zusammen', () => {
-    const group = buildNavItems({ board, boardCount: 2 }).find((n) => n.label === 'B')
-    const child = group?.kind === 'group' ? group.children.find((c) => c.label === 'Vorhaben') : undefined
-
-    expect(child).toEqual(expect.objectContaining({ label: 'Vorhaben', path: '/boards/1/vorhaben' }))
+    expect(eintraege({ board, boardCount: 1, canManageBoards: true }, 'Übersicht')).toContain('Boards')
   })
 
   it('verlinkt „Boards" auf die existierende Projekt-Route (nicht /projects/:id/boards)', () => {
-    // Regression zu Issue #3: /projects/:id/boards ist in App.tsx keine registrierte Route
-    // (nur /projects/:id) — der falsche Pfad führte zu einer leeren Seite.
-    const boardsLink = buildNavItems({ board, boardCount: 2 }).find((n) => n.label === 'Boards')
-    expect(boardsLink?.kind === 'link' ? boardsLink.path : undefined).toBe(`/projects/${board.projectId}`)
+    // Regression zu Issue #3: /projects/:id/boards ist in App.tsx keine registrierte Route.
+    expect(link({ board, boardCount: 2 }, 'Boards')?.path).toBe(`/projects/${board.projectId}`)
   })
 
-  it('verlinkt „Dashboard" auf die Board-Dashboard-Route', () => {
-    expect(groupChildren({ board })).toContain('Dashboard')
-    const group = buildNavItems({ board }).find((n) => n.label === 'B')
-    const link = group?.kind === 'group' ? group.children.find((c) => c.label === 'Dashboard') : undefined
-    expect(link?.path).toBe(`/boards/${board.id}/dashboard`)
+  it('lässt den Block weg, wenn es nichts zu wählen gibt', () => {
+    expect(bloecke({ board, projectCount: 1, boardCount: 1 })).not.toContain('Übersicht')
   })
 })
 
 describe('buildNavItems Ideen-Link', () => {
-  const ideasLink = (params: NavParams) => {
-    const node = buildNavItems(params).find((n) => n.label === 'Ideen')
-    return node?.kind === 'link' ? node : undefined
-  }
-
   it('zeigt „Ideen" bei offenem Board (Projekt-Kontext aus dem Board)', () => {
-    expect(ideasLink({ board })?.path).toBe(`/projects/${board.projectId}/ideas`)
+    expect(link({ board }, 'Ideen')?.path).toBe(`/projects/${board.projectId}/ideas`)
   })
 
   it('zeigt „Ideen" auf einer Projekt-Route ohne offenes Board', () => {
-    expect(ideasLink({ board: null, projectId: 7 })?.path).toBe('/projects/7/ideas')
+    expect(link({ board: null, projectId: 7 }, 'Ideen')?.path).toBe('/projects/7/ideas')
   })
 
   it('blendet „Ideen" ohne Projekt-Kontext aus (kein Board, keine projectId)', () => {
-    expect(ideasLink({ board: null })).toBeUndefined()
+    expect(link({ board: null }, 'Ideen')).toBeUndefined()
   })
 
   it('bevorzugt den Board-Projektkontext vor einer abweichenden projectId', () => {
-    // Bei offenem Board hat board.projectId Vorrang — der Ideen-Link bleibt beim Board-Projekt.
-    expect(ideasLink({ board, projectId: 99 })?.path).toBe(`/projects/${board.projectId}/ideas`)
-  })
-
-  it('hängt „Ideen" als Geschwister von „Boards" (nach Boards, vor die Board-Gruppe)', () => {
-    const labels = topLabels({ board, boardCount: 2 })
-    expect(labels.indexOf('Ideen')).toBeGreaterThan(labels.indexOf('Boards'))
-    expect(labels.indexOf('Ideen')).toBeLessThan(labels.indexOf('B'))
+    expect(link({ board, projectId: 99 }, 'Ideen')?.path).toBe(`/projects/${board.projectId}/ideas`)
   })
 })
 
-describe('buildNavItems Nachtlauf-Link', () => {
-  // Reine Parameterprüfung: buildNavItems bekommt den fertigen Booleschen Wert, nicht Rolle und
-  // Admin-Status. Wie er entsteht (canManageProject, also auch für den Plattform-Admin), gehört
-  // in die AppShell und ist dort geprüft.
-  const nightRunLink = (params: NavParams) => {
-    const node = buildNavItems(params).find((n) => n.label === 'Nachtlauf')
-    return node?.kind === 'link' ? node : undefined
-  }
-
-  it('zeigt „Nachtlauf" bei gesetztem Sichtbarkeitswert und offenem Board', () => {
-    expect(nightRunLink({ board, canViewNightRun: true })?.path).toBe(
-      `/projects/${board.projectId}/nachtlauf`,
-    )
+describe('buildNavItems Nachtläufe-Link', () => {
+  // Reine Parameterprüfung: buildNavItems bekommt den fertigen Booleschen Wert. Wie er entsteht
+  // (canManageProject, also auch für den Plattform-Admin), ist in der AppShell geprüft.
+  it('zeigt „Nachtläufe" bei gesetztem Sichtbarkeitswert und offenem Board', () => {
+    expect(link({ board, canViewNightRun: true }, 'Nachtläufe')?.path).toBe(`/projects/${board.projectId}/nachtlauf`)
   })
 
-  it('zeigt „Nachtlauf" auf einer Projekt-Route ohne offenes Board', () => {
-    expect(nightRunLink({ board: null, projectId: 7, canViewNightRun: true })?.path).toBe(
-      '/projects/7/nachtlauf',
-    )
+  it('zeigt „Nachtläufe" auf einer Projekt-Route ohne offenes Board', () => {
+    expect(link({ board: null, projectId: 7, canViewNightRun: true }, 'Nachtläufe')?.path).toBe('/projects/7/nachtlauf')
   })
 
-  it('blendet „Nachtlauf" ohne Projekt-Kontext aus (kein Board, keine projectId)', () => {
-    expect(nightRunLink({ board: null, canViewNightRun: true })).toBeUndefined()
+  it('blendet „Nachtläufe" ohne Projekt-Kontext aus', () => {
+    expect(link({ board: null, canViewNightRun: true }, 'Nachtläufe')).toBeUndefined()
   })
 
-  it('blendet „Nachtlauf" ohne gesetzten Sichtbarkeitswert aus', () => {
-    expect(nightRunLink({ board, canViewNightRun: false })).toBeUndefined()
+  it('blendet „Nachtläufe" ohne gesetzten oder mit fehlendem Sichtbarkeitswert aus', () => {
+    expect(link({ board, canViewNightRun: false }, 'Nachtläufe')).toBeUndefined()
+    expect(link({ board }, 'Nachtläufe')).toBeUndefined()
+  })
+})
+
+describe('buildNavItems Verwaltung', () => {
+  it('führt „Rollen & Rechte" immer', () => {
+    expect(link({ board: null }, 'Rollen & Rechte')?.path).toBe('/roles')
   })
 
-  it('blendet „Nachtlauf" auch dann aus, wenn der Sichtbarkeitswert fehlt (Default)', () => {
-    expect(nightRunLink({ board })).toBeUndefined()
+  it('führt „Mitglieder" nur mit Projekt-Kontext und Verwaltungsrecht', () => {
+    expect(link({ board, canManageMembers: true }, 'Mitglieder')?.path).toBe('/projects/5/members')
+    expect(link({ board, canManageMembers: false }, 'Mitglieder')).toBeUndefined()
+    expect(link({ board: null, canManageMembers: true }, 'Mitglieder')).toBeUndefined()
+  })
+
+  it('führt „Admin" nur für System-Admins, nach Mitglieder und Rollen', () => {
+    expect(eintraege({ board, canManageMembers: true, isAdmin: true }, 'Verwaltung')).toEqual([
+      'Mitglieder',
+      'Rollen & Rechte',
+      'Admin',
+    ])
+    expect(link({ board: null }, 'Admin')).toBeUndefined()
   })
 })

@@ -1,13 +1,17 @@
 import type { ComponentType } from 'react'
 import type { SvgIconProps } from '@mui/material'
-import AccountTreeIcon from '@mui/icons-material/AccountTree'
 import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings'
 import FolderIcon from '@mui/icons-material/Folder'
-import InsightsIcon from '@mui/icons-material/Insights'
-import LightbulbIcon from '@mui/icons-material/Lightbulb'
-import NightsStayIcon from '@mui/icons-material/NightsStay'
-import ViewColumnIcon from '@mui/icons-material/ViewColumn'
-import ViewListIcon from '@mui/icons-material/ViewList'
+import {
+  BoardSymbol,
+  IdeenSymbol,
+  LeitstandSymbol,
+  ListeSymbol,
+  MitgliederSymbol,
+  NachtlaeufeSymbol,
+  RollenSymbol,
+  VorhabenSymbol,
+} from './navIcons'
 
 type NavIcon = ComponentType<SvgIconProps>
 
@@ -18,14 +22,17 @@ export interface NavLink {
   icon: NavIcon
 }
 
+/**
+ * Ein Block der Navigationsschiene (Entwurf `.nav-block`): Etikett als Titel, darunter die
+ * Einträge. Blöcke klappen nicht auf und zu — der Entwurf zeigt sie immer offen.
+ */
 export interface NavGroup {
   kind: 'group'
+  /** Fester Schlüssel des Blocks; der Titel wechselt, sobald der Projektname geladen ist. */
+  id: 'projekt' | 'uebersicht' | 'verwaltung'
   label: string
-  icon: NavIcon
   children: NavLink[]
 }
-
-export type NavNode = NavLink | NavGroup
 
 /** Aktueller Board-Kontext für die kontextbewusste Seitenleiste. */
 export interface BoardContext {
@@ -59,16 +66,26 @@ export interface NavParams {
    * gesetzt ist und ein Projekt-Kontext besteht.
    */
   canViewNightRun?: boolean
+  /** Name des aktuellen Projekts für den Titel des Projekt-Blocks; unbekannt = „Projekt". */
+  projectName?: string | null
+  /** Ob man die Mitglieder des aktuellen Projekts verwalten darf (dann erscheint „Mitglieder"). */
+  canManageMembers?: boolean
 }
 
 /**
- * Baut den Navigationsbaum kontextbewusst. „Projekte" erscheint nur, wenn es etwas zu wählen gibt
- * (≥ 2 Projekte) oder man System-Admin ist (Anlege-Zugang). Ist ein Board offen, kommt ein
- * Top-Level-Einstieg „Boards" (zurück zur Boardauswahl, nur bei ≥ 2 Boards oder Verwaltungsrecht)
- * und danach eine nach dem Board benannte Gruppe mit den vier Ansichten (Board/Liste/Epics/Dashboard)
- * hinzu.
+ * Baut die Blöcke der Navigationsschiene in der Gliederung des Leitstand-Entwurfs (#978,
+ * `docs/entwurf-leitstand.html` HTML Z. 1114–1156):
+ *
+ * - **Projekt** — sobald ein Projekt-Kontext besteht: bei offenem Board Leitstand, Board, Liste und
+ *   Vorhaben, dazu projektweit Ideen und (mit Recht) Nachtläufe.
+ * - **Übersicht** — „Projekte" nur, wenn es etwas zu wählen gibt (≥ 2 Projekte) oder man
+ *   System-Admin ist; „Boards" bei offenem Board nur, wenn es ≥ 2 Boards gibt oder man sie verwalten
+ *   darf. Der Entwurf kennt diesen Block nicht; er hält die Wege zurück zur Auswahl.
+ * - **Verwaltung** — Mitglieder (mit Recht), Rollen & Rechte, Admin (System-Admin).
+ *
+ * Leere Blöcke entfallen. Administration und Dokumentation stehen im Fuß der Schiene.
  */
-export function buildNavItems(params: NavParams): NavNode[] {
+export function buildNavItems(params: NavParams): NavGroup[] {
   const {
     board,
     isAdmin = false,
@@ -77,57 +94,63 @@ export function buildNavItems(params: NavParams): NavNode[] {
     canManageBoards = false,
     projectId = null,
     canViewNightRun = false,
+    projectName = null,
+    canManageMembers = false,
   } = params
-  const items: NavNode[] = []
-
-  if (isAdmin || projectCount !== 1) {
-    items.push({ kind: 'link', label: 'Projekte', path: '/', icon: FolderIcon })
-  }
+  const bloecke: NavGroup[] = []
 
   // Projekt-Kontext: entweder aus dem offenen Board oder direkt aus einer Projekt-Route.
   const currentProjectId = board?.projectId ?? projectId
 
-  if (board && (canManageBoards || boardCount !== 1)) {
-    // „Boards" ist die Eltern-Ebene (die Sammlung, in der das Board liegt), kein View des Boards —
-    // deshalb als Top-Level-Einstieg neben „Projekte", nicht als Kind der Board-Gruppe. Sichtbar nur,
-    // wenn es ≥ 2 Boards gibt oder man Boards verwalten darf.
-    items.push({ kind: 'link', label: 'Boards', path: `/projects/${board.projectId}`, icon: FolderIcon })
-  }
-
-  // „Ideen" ist projektweit (Geschwister von „Boards") und auch ohne offenes Board sichtbar,
-  // sobald ein Projekt-Kontext bekannt ist — dort liegt der board-lose Ideen-Pool.
   if (currentProjectId !== null) {
-    items.push({
+    const projekt: NavLink[] = []
+    if (board) {
+      projekt.push(
+        { kind: 'link', label: 'Leitstand', path: `/boards/${board.id}/dashboard`, icon: LeitstandSymbol },
+        { kind: 'link', label: 'Board', path: `/boards/${board.id}`, icon: BoardSymbol },
+        { kind: 'link', label: 'Liste', path: `/boards/${board.id}/list`, icon: ListeSymbol },
+        { kind: 'link', label: 'Vorhaben', path: `/boards/${board.id}/vorhaben`, icon: VorhabenSymbol },
+      )
+    }
+    // „Ideen" ist projektweit und auch ohne offenes Board sichtbar — dort liegt der Ideen-Pool.
+    projekt.push({ kind: 'link', label: 'Ideen', path: `/projects/${currentProjectId}/ideas`, icon: IdeenSymbol })
+    // „Nachtläufe" liegt hinter einem eigenen Recht (Owner bzw. Plattform-Admin); die Shell entscheidet.
+    if (canViewNightRun) {
+      projekt.push({
+        kind: 'link',
+        label: 'Nachtläufe',
+        path: `/projects/${currentProjectId}/nachtlauf`,
+        icon: NachtlaeufeSymbol,
+      })
+    }
+    bloecke.push({ kind: 'group', id: 'projekt', label: projectName ? `Projekt ${projectName}` : 'Projekt', children: projekt })
+  }
+
+  const uebersicht: NavLink[] = []
+  if (isAdmin || projectCount !== 1) {
+    uebersicht.push({ kind: 'link', label: 'Projekte', path: '/', icon: FolderIcon })
+  }
+  if (board && (canManageBoards || boardCount !== 1)) {
+    uebersicht.push({ kind: 'link', label: 'Boards', path: `/projects/${board.projectId}`, icon: BoardSymbol })
+  }
+  if (uebersicht.length > 0) {
+    bloecke.push({ kind: 'group', id: 'uebersicht', label: 'Übersicht', children: uebersicht })
+  }
+
+  const verwaltung: NavLink[] = []
+  if (currentProjectId !== null && canManageMembers) {
+    verwaltung.push({
       kind: 'link',
-      label: 'Ideen',
-      path: `/projects/${currentProjectId}/ideas`,
-      icon: LightbulbIcon,
+      label: 'Mitglieder',
+      path: `/projects/${currentProjectId}/members`,
+      icon: MitgliederSymbol,
     })
   }
-
-  // „Nachtlauf" ist ebenfalls projektweit und liegt hinter einem eigenen Recht (Owner bzw.
-  // Plattform-Admin) — die Entscheidung darüber trifft die Shell, hier zählt nur der Wert.
-  if (canViewNightRun && currentProjectId !== null) {
-    items.push({
-      kind: 'link',
-      label: 'Nachtlauf',
-      path: `/projects/${currentProjectId}/nachtlauf`,
-      icon: NightsStayIcon,
-    })
-  }
-
-  if (board) {
-    const children: NavLink[] = [
-      { kind: 'link', label: 'Board', path: `/boards/${board.id}`, icon: ViewColumnIcon },
-      { kind: 'link', label: 'Liste', path: `/boards/${board.id}/list`, icon: ViewListIcon },
-      { kind: 'link', label: 'Vorhaben', path: `/boards/${board.id}/vorhaben`, icon: AccountTreeIcon },
-      { kind: 'link', label: 'Dashboard', path: `/boards/${board.id}/dashboard`, icon: InsightsIcon },
-    ]
-    items.push({ kind: 'group', label: board.name, icon: ViewColumnIcon, children })
-  }
-
+  verwaltung.push({ kind: 'link', label: 'Rollen & Rechte', path: '/roles', icon: RollenSymbol })
   if (isAdmin) {
-    items.push({ kind: 'link', label: 'Admin', path: '/admin', icon: AdminPanelSettingsIcon })
+    verwaltung.push({ kind: 'link', label: 'Admin', path: '/admin', icon: AdminPanelSettingsIcon })
   }
-  return items
+  bloecke.push({ kind: 'group', id: 'verwaltung', label: 'Verwaltung', children: verwaltung })
+
+  return bloecke
 }

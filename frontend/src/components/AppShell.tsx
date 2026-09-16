@@ -1,55 +1,66 @@
-import AppBar from '@mui/material/AppBar'
-import Avatar from '@mui/material/Avatar'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import ButtonBase from '@mui/material/ButtonBase'
-import Collapse from '@mui/material/Collapse'
-import Divider from '@mui/material/Divider'
 import Drawer from '@mui/material/Drawer'
 import IconButton from '@mui/material/IconButton'
-import List from '@mui/material/List'
-import ListItem from '@mui/material/ListItem'
-import ListItemButton from '@mui/material/ListItemButton'
 import ListItemIcon from '@mui/material/ListItemIcon'
 import ListItemText from '@mui/material/ListItemText'
 import Menu from '@mui/material/Menu'
 import MenuItem from '@mui/material/MenuItem'
-import Toolbar from '@mui/material/Toolbar'
 import Tooltip from '@mui/material/Tooltip'
-import Typography from '@mui/material/Typography'
 import useMediaQuery from '@mui/material/useMediaQuery'
 import { useTheme, type Theme } from '@mui/material/styles'
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft'
 import ChevronRightIcon from '@mui/icons-material/ChevronRight'
-import ExpandLessIcon from '@mui/icons-material/ExpandLess'
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import LogoutIcon from '@mui/icons-material/Logout'
 import MenuBookIcon from '@mui/icons-material/MenuBook'
 import MenuIcon from '@mui/icons-material/Menu'
+import PersonOutlineIcon from '@mui/icons-material/PersonOutline'
 import SettingsIcon from '@mui/icons-material/Settings'
 import SwapHorizIcon from '@mui/icons-material/SwapHoriz'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Outlet, useLocation, useMatch, useNavigate } from 'react-router-dom'
+import { Fragment, type MouseEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Link as RouterLink, Outlet, useLocation, useMatch, useNavigate } from 'react-router-dom'
 import { boardsApi } from '../api/boards'
 import { apiErrorMessage } from '../api/client'
 import { projectsApi, type Project } from '../api/projects'
 import { APP_NAME } from '../appMeta'
 import { useAuth } from '../auth/AuthContext'
-import { buildNavItems, type BoardContext, type NavGroup, type NavLink, type NavNode } from '../layout/navItems'
-import { canManageBoards, canManageProject, isPlatformAdmin } from '../lib/roles'
+import { MarkenSymbol } from '../layout/navIcons'
+import { buildNavItems, type BoardContext, type NavLink } from '../layout/navItems'
+import { canManageBoards, canManageMembers, canManageProject, isPlatformAdmin } from '../lib/roles'
 import { useBoardHistory, type BoardHistoryEntry } from '../lib/useBoardHistory'
 import { useEditMode } from '../lib/EditModeContext'
 import { useKeyboardShortcut } from '../lib/useKeyboardShortcut'
 import { useRefetchOnFocus } from '../lib/useRefetchOnFocus'
+import {
+  ANZEIGE,
+  CARD_RADIUS,
+  ETIKETT,
+  GRUND_TIEF,
+  HEADER_BG,
+  KUPFER,
+  MARKE_MAL_SX,
+  NUT,
+  NUTZER_MAL_SX,
+  PLATTE,
+  PLATTE_HOCH,
+  RAND,
+  SCHATTEN_NUTE,
+  SCHATTEN_TASTE,
+  SCHRIFT_ANZEIGE,
+  TEXT_SCHWACH,
+} from '../theme'
 import { BoardSwitcher } from './BoardSwitcher'
 import { CardNumberSearch } from './CardNumberSearch'
 import { EditModeBanner, EDIT_MODE_BANNER_HEIGHT } from './EditModeBanner'
 import { useSnackbar } from './SnackbarProvider'
 
-const DRAWER_WIDTH = 240
-const DRAWER_COLLAPSED_WIDTH = 56
-/** Höhe der fixen Kopfleiste (MUI-Standard-Toolbar, Desktop). */
-const APPBAR_HEIGHT = 64
+/** Breite der Schiene (Entwurf `.warte`, Z. 199). */
+const DRAWER_WIDTH = 224
+/** Eingeklappt: Innenabstand 14 + Eintrag (10 + 16 + 10) + 14 — nur die Symbole. */
+const DRAWER_COLLAPSED_WIDTH = 64
+/** Höhe des Kopfs: 14 px Innenabstand oben und unten um das 30-px-Nutzer-Mal, dazu die Haarlinie. */
+const KOPF_HEIGHT = 59
 const STORAGE_KEY = 'sidebar-collapsed'
 
 /**
@@ -98,11 +109,37 @@ function writeCollapsed(value: boolean): void {
   }
 }
 
-function isGroup(node: NavNode): node is NavGroup {
-  return node.kind === 'group'
-}
+/**
+ * Eintrag der Schiene (Entwurf `.nav-eintrag`, Z. 245–268): Symbol, Beschriftung; der aktive
+ * Eintrag ist eine erhabene Taste mit kupfernem Symbol. Eingeklappt bleibt nur das Symbol.
+ */
+const NAV_EINTRAG_SX = {
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'flex-start',
+  gap: '10px',
+  px: '10px',
+  py: '7px',
+  borderRadius: `${CARD_RADIUS}px`,
+  color: 'text.secondary',
+  fontSize: 13,
+  fontWeight: 500,
+  lineHeight: 1.5,
+  textDecoration: 'none',
+  border: '1px solid transparent',
+  transition: 'background .14s ease, color .14s ease',
+  '& .nav-icon': { width: 16, height: 16, flex: 'none', color: TEXT_SCHWACH },
+  '&:hover': { bgcolor: `color-mix(in srgb, ${PLATTE} 70%, transparent)`, color: 'text.primary' },
+  '&[aria-current="page"]': {
+    background: `linear-gradient(180deg, ${PLATTE_HOCH}, ${PLATTE})`,
+    borderColor: RAND,
+    boxShadow: SCHATTEN_TASTE,
+    color: 'text.primary',
+  },
+  '&[aria-current="page"] .nav-icon': { color: KUPFER },
+} as const
 
-/** Rahmen für angemeldete Bereiche: fixe Kopfleiste + einklappbare, kontextbewusste Seitenleiste. */
+/** Rahmen für angemeldete Bereiche: Schiene links, Kopf und Bühne rechts (Entwurf Z. 196–389). */
 export function AppShell() {
   const location = useLocation()
   const navigate = useNavigate()
@@ -115,13 +152,13 @@ export function AppShell() {
   const muiTheme = useTheme()
   const schmal = useMediaQuery(muiTheme.breakpoints.down('md'), { noSsr: true })
   const [navOffen, setNavOffen] = useState(false)
+  const [kontoAnker, setKontoAnker] = useState<HTMLElement | null>(null)
   // Eingeklappt gibt es nur im breiten Zweig; die Schublade zeigt immer die volle Navigation.
   const eingeklappt = collapsed && !schmal
   const inhaltRef = useRef<HTMLElement>(null)
   const [board, setBoard] = useState<BoardContext | null>(null)
   const [projects, setProjects] = useState<Project[] | null>(null)
   const [boardCount, setBoardCount] = useState<number | null>(null)
-  const [flyout, setFlyout] = useState<{ label: string; anchor: HTMLElement } | null>(null)
 
   // Projektliste für die Sichtbarkeit von „Projekte" (Anzahl) und die Board-Verwaltungsrolle.
   useEffect(() => {
@@ -208,10 +245,9 @@ export function AppShell() {
   // genau nach dem Klick auf ihn). `canManageProject` ist die Semantik von `requireOwner`:
   // Owner *oder* Plattform-Admin (Plan #718, A6).
   const nightRunProjectId = board?.projectId ?? routeProjectId
-  const canViewNightRun = canManageProject(
-    projects?.find((p) => p.id === nightRunProjectId)?.role ?? 'VIEWER',
-    admin,
-  )
+  // Das Projekt der Route oder des Boards: Titel des Projekt-Blocks und erster Teil des Pfads.
+  const pfadProjekt = projects?.find((p) => p.id === nightRunProjectId)
+  const canViewNightRun = canManageProject(pfadProjekt?.role ?? 'VIEWER', admin)
   const navItems = useMemo(
     () =>
       buildNavItems({
@@ -222,8 +258,10 @@ export function AppShell() {
         canManageBoards: canManageCurrentBoards,
         projectId: routeProjectId,
         canViewNightRun,
+        projectName: pfadProjekt?.name ?? null,
+        canManageMembers: canManageMembers(pfadProjekt?.role ?? 'VIEWER'),
       }),
-    [board, admin, projectCount, boardCount, canManageCurrentBoards, routeProjectId, canViewNightRun],
+    [board, admin, projectCount, boardCount, canManageCurrentBoards, routeProjectId, canViewNightRun, pfadProjekt],
   )
 
   // ---- Board-Wechsel (#587): Verlauf fortschreiben und das Overlay bedienen ----
@@ -253,20 +291,6 @@ export function AppShell() {
   // Overlay ohnehin unsichtbar (#584), und ein wirkungsloses Kürzel wäre nur verwirrend.
   useKeyboardShortcut('b', history.length > 0, () => setSwitcherOpen(true))
 
-  const [openGroups, setOpenGroups] = useState<Set<string>>(new Set())
-  // Gruppe der aktiven Route automatisch aufklappen.
-  useEffect(() => {
-    setOpenGroups((prev) => {
-      const next = new Set(prev)
-      for (const node of navItems) {
-        if (isGroup(node) && node.children.some((c) => location.pathname.startsWith(c.path))) {
-          next.add(node.label)
-        }
-      }
-      return next
-    })
-  }, [navItems, location.pathname])
-
   // `navigate` bleibt im Erfolgszweig: Scheitert das Abmelden, ist der Nutzer weiter angemeldet und
   // bleibt auf der Seite, statt vor eine Login-Maske gestellt zu werden.
   const handleLogout = async () => {
@@ -286,179 +310,66 @@ export function AppShell() {
     })
   }
 
-  const toggleGroup = (label: string) => {
-    setOpenGroups((prev) => {
-      const next = new Set(prev)
-      if (next.has(label)) next.delete(label)
-      else next.add(label)
-      return next
-    })
-  }
-
-  /** Navigiert und schließt die Schublade des schmalen Zweigs — dort läge sie sonst über dem Ziel. */
-  const zielWaehlen = (pfad: string) => {
+  /**
+   * Navigiert in der Anwendung und schließt die Schublade des schmalen Zweigs — dort läge sie sonst
+   * über dem Ziel. Ein Klick mit Zusatztaste oder mittlerer Maustaste bleibt beim Browser (neuer Tab).
+   */
+  const zielWaehlen = (event: MouseEvent<HTMLAnchorElement>, pfad: string) => {
+    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+      return
+    }
+    event.preventDefault()
     navigate(pfad)
     setNavOffen(false)
   }
 
-  const renderLink = (link: NavLink, indented: boolean) => {
+  // Aktiv ist der Eintrag mit dem längsten passenden Pfad: Auf `/boards/1/list` passt „Board"
+  // (`/boards/1`) als Präfix ebenso wie „Liste" — gemeint ist nur die Liste.
+  const aktiverPfad = [...navItems.flatMap((block) => block.children), ADMINISTRATION_LINK]
+    .map((link) => link.path)
+    .filter((pfad) => location.pathname === pfad || (pfad !== '/' && location.pathname.startsWith(`${pfad}/`)))
+    .sort((a, b) => b.length - a.length)[0]
+
+  const renderLink = (link: NavLink) => {
     const Icon = link.icon
-    const selected = location.pathname === link.path || location.pathname.startsWith(`${link.path}/`)
-    if (eingeklappt) {
-      return (
-        <Tooltip key={link.path} title={link.label} placement="right">
-          <ListItem disablePadding>
-            <ListItemButton
-              selected={selected}
-              onClick={() => zielWaehlen(link.path)}
-              aria-label={link.label}
-              sx={{ justifyContent: 'center', px: 1 }}
-            >
-              <ListItemIcon sx={{ minWidth: 0 }}>
-                <Icon color={selected ? 'primary' : 'inherit'} />
-              </ListItemIcon>
-            </ListItemButton>
-          </ListItem>
-        </Tooltip>
-      )
-    }
-    return (
-      <ListItem key={link.path} disablePadding>
-        <ListItemButton
-          selected={selected}
-          onClick={() => zielWaehlen(link.path)}
-          sx={indented ? { pl: 4 } : undefined}
-        >
-          <ListItemIcon>
-            <Icon color={selected ? 'primary' : 'inherit'} />
-          </ListItemIcon>
-          <ListItemText primary={link.label} />
-        </ListItemButton>
-      </ListItem>
+    const aktiv = link.path === aktiverPfad
+    const eintrag = (
+      <ButtonBase
+        key={link.path}
+        component="a"
+        href={link.path}
+        onClick={(event: MouseEvent<HTMLAnchorElement>) => zielWaehlen(event, link.path)}
+        aria-current={aktiv ? 'page' : undefined}
+        aria-label={eingeklappt ? link.label : undefined}
+        sx={{ ...NAV_EINTRAG_SX, ...(eingeklappt && { justifyContent: 'center', px: 0 }) }}
+      >
+        <Icon className="nav-icon" />
+        {!eingeklappt && link.label}
+      </ButtonBase>
+    )
+    return eingeklappt ? (
+      <Tooltip key={link.path} title={link.label} placement="right">
+        {eintrag}
+      </Tooltip>
+    ) : (
+      eintrag
     )
   }
 
-  // Doku ist statisch unter /docs/ ausgeliefert (#314), keine SPA-Route -> echter Anker im neuen
-  // Tab, nicht navigate(). Steht im abgesetzten Administrations-Bereich (unten).
-  const renderDocsLink = () => {
-    if (eingeklappt) {
-      return (
-        <Tooltip title="Dokumentation" placement="right">
-          <ListItem disablePadding>
-            <ListItemButton
-              component="a"
-              href="/docs/"
-              target="_blank"
-              rel="noopener noreferrer"
-              aria-label="Dokumentation"
-              sx={{ justifyContent: 'center', px: 1 }}
-            >
-              <ListItemIcon sx={{ minWidth: 0 }}>
-                <MenuBookIcon />
-              </ListItemIcon>
-            </ListItemButton>
-          </ListItem>
-        </Tooltip>
-      )
-    }
-    return (
-      <ListItem disablePadding>
-        <ListItemButton component="a" href="/docs/" target="_blank" rel="noopener noreferrer">
-          <ListItemIcon>
-            <MenuBookIcon />
-          </ListItemIcon>
-          <ListItemText primary="Dokumentation" />
-        </ListItemButton>
-      </ListItem>
-    )
-  }
-
-  const renderGroup = (group: NavGroup) => {
-    const GroupIcon = group.icon
-    const expanded = openGroups.has(group.label)
-    const hasActiveChild = group.children.some((c) => location.pathname.startsWith(c.path))
-
-    if (eingeklappt) {
-      const flyoutOpen = flyout?.label === group.label
-      return (
-        <Box key={group.label}>
-          <Tooltip title={group.label} placement="right">
-            <ListItem disablePadding>
-              <ListItemButton
-                aria-label={group.label}
-                aria-haspopup="menu"
-                aria-expanded={flyoutOpen}
-                onClick={(e) => setFlyout({ label: group.label, anchor: e.currentTarget })}
-                sx={{ justifyContent: 'center', px: 1 }}
-              >
-                <ListItemIcon sx={{ minWidth: 0 }}>
-                  <GroupIcon color={hasActiveChild ? 'primary' : 'inherit'} />
-                </ListItemIcon>
-              </ListItemButton>
-            </ListItem>
-          </Tooltip>
-          <Menu
-            anchorEl={flyout?.anchor ?? null}
-            open={flyoutOpen}
-            onClose={() => setFlyout(null)}
-            anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
-            transformOrigin={{ vertical: 'top', horizontal: 'left' }}
-          >
-            {group.children.map((child) => {
-              const ChildIcon = child.icon
-              return (
-                <MenuItem
-                  key={child.path}
-                  selected={location.pathname.startsWith(child.path)}
-                  onClick={() => {
-                    navigate(child.path)
-                    setFlyout(null)
-                  }}
-                >
-                  <ListItemIcon>
-                    <ChildIcon fontSize="small" />
-                  </ListItemIcon>
-                  <ListItemText>{child.label}</ListItemText>
-                </MenuItem>
-              )
-            })}
-          </Menu>
-        </Box>
-      )
-    }
-
-    return (
-      <Box key={group.label}>
-        <ListItem disablePadding>
-          <ListItemButton onClick={() => toggleGroup(group.label)} aria-expanded={expanded}>
-            <ListItemIcon>
-              <GroupIcon color={hasActiveChild ? 'primary' : 'inherit'} />
-            </ListItemIcon>
-            <ListItemText
-              primary={group.label}
-              slotProps={{
-                primary: {
-                  sx: {
-                    textTransform: 'uppercase',
-                    letterSpacing: '.08em',
-                    fontSize: 12,
-                    fontWeight: 700,
-                    color: hasActiveChild ? 'primary.main' : 'text.secondary',
-                  },
-                },
-              }}
-            />
-            {expanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
-          </ListItemButton>
-        </ListItem>
-        <Collapse in={expanded} timeout="auto" unmountOnExit>
-          <List component="div" disablePadding>
-            {group.children.map((child) => renderLink(child, true))}
-          </List>
-        </Collapse>
-      </Box>
-    )
-  }
+  // Doku ist statisch unter /docs/ ausgeliefert (#314), keine SPA-Route -> echter Anker im neuen Tab.
+  const docsLink = (
+    <ButtonBase
+      component="a"
+      href="/docs/"
+      target="_blank"
+      rel="noopener noreferrer"
+      aria-label={eingeklappt ? 'Dokumentation' : undefined}
+      sx={{ ...NAV_EINTRAG_SX, ...(eingeklappt && { justifyContent: 'center', px: 0 }) }}
+    >
+      <MenuBookIcon className="nav-icon" />
+      {!eingeklappt && 'Dokumentation'}
+    </ButtonBase>
+  )
 
   const drawerWidth = eingeklappt ? DRAWER_COLLAPSED_WIDTH : DRAWER_WIDTH
   // Dialoge versetzen sich um die Breite, die der Drawer tatsächlich einnimmt. Die Schublade des
@@ -477,13 +388,113 @@ export function AppShell() {
   useEffect(() => {
     const root = document.documentElement
     root.style.setProperty('--app-content-left', `${inhaltLinks}px`)
-    root.style.setProperty('--app-content-top', `${APPBAR_HEIGHT + bannerOffset}px`)
+    root.style.setProperty('--app-content-top', `${KOPF_HEIGHT + bannerOffset}px`)
     return () => {
       root.style.removeProperty('--app-content-left')
       root.style.removeProperty('--app-content-top')
     }
   }, [inhaltLinks, bannerOffset])
-  const initial = user?.displayName?.trim().charAt(0).toUpperCase() ?? '?'
+  // Kürzel des Nutzers wie im Entwurf: die Anfangsbuchstaben der ersten beiden Namensteile.
+  const kuerzel =
+    user?.displayName
+      ?.trim()
+      .split(/\s+/)
+      .slice(0, 2)
+      .map((teil) => teil.charAt(0).toUpperCase())
+      .join('') || '?'
+
+  const schiene = (
+    <Box
+      component="nav"
+      aria-label="Hauptnavigation"
+      sx={{
+        minHeight: '100%',
+        boxSizing: 'border-box',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '22px',
+        pt: '18px',
+        pb: '24px',
+        px: '14px',
+        overflowX: 'hidden',
+        overflowY: 'auto',
+      }}
+    >
+      {/* Marke (Entwurf `.marke`, Z. 211–236). */}
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: '10px', px: eingeklappt ? 0 : '4px', justifyContent: eingeklappt ? 'center' : 'flex-start' }}>
+        <Box
+          component="span"
+          aria-hidden
+          sx={{ ...MARKE_MAL_SX, width: 30, height: 30, borderRadius: '9px', display: 'grid', placeItems: 'center', flex: 'none' }}
+        >
+          <MarkenSymbol />
+        </Box>
+        {!eingeklappt && (
+          <Box component="span" sx={{ lineHeight: 1.15, minWidth: 0 }}>
+            <Box
+              component="span"
+              sx={{ display: 'block', fontFamily: SCHRIFT_ANZEIGE, fontStretch: '118%', fontWeight: 700, fontSize: 14, letterSpacing: '-.01em' }}
+            >
+              {APP_NAME}
+            </Box>
+            <Box component="span" sx={{ display: 'block', fontSize: 10.5, color: TEXT_SCHWACH, letterSpacing: '.04em' }}>
+              v{__APP_VERSION__}
+            </Box>
+          </Box>
+        )}
+      </Box>
+
+      {navItems.map((block) => (
+        <Box key={block.id} role="group" aria-label={block.label} sx={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+          {eingeklappt ? (
+            <Box aria-hidden sx={{ height: '1px', bgcolor: RAND, mx: '6px', mb: '4px' }} />
+          ) : (
+            <Box component="span" sx={{ ...ETIKETT, px: '8px', pb: '7px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {block.label}
+            </Box>
+          )}
+          {block.children.map((link) => (
+            <Fragment key={link.path}>{renderLink(link)}</Fragment>
+          ))}
+        </Box>
+      ))}
+
+      {/* Fuß der Schiene (Entwurf `.schiene-fuss`, Z. 272): Administration, Dokumentation, Einklappen. */}
+      <Box sx={{ mt: 'auto', display: 'flex', flexDirection: 'column', gap: '3px' }}>
+        {renderLink(ADMINISTRATION_LINK)}
+        {eingeklappt ? (
+          <Tooltip title="Dokumentation" placement="right">
+            {docsLink}
+          </Tooltip>
+        ) : (
+          docsLink
+        )}
+        {!schmal && (
+          <Box sx={{ display: 'flex', justifyContent: collapsed ? 'center' : 'flex-end', pt: '6px' }}>
+            <Tooltip title={collapsed ? 'Menü ausklappen' : 'Menü einklappen'} placement="right">
+              <IconButton
+                onClick={toggleCollapsed}
+                size="small"
+                aria-label={collapsed ? 'Menü ausklappen' : 'Menü einklappen'}
+                sx={{ color: TEXT_SCHWACH }}
+              >
+                {collapsed ? <ChevronRightIcon fontSize="small" /> : <ChevronLeftIcon fontSize="small" />}
+              </IconButton>
+            </Tooltip>
+          </Box>
+        )}
+      </Box>
+    </Box>
+  )
+
+  // Pfad im Kopf (Entwurf `.pfad`, Z. 301–303): Projekt / Board, der letzte Teil in Archivo.
+  const pfad: Array<{ label: string; to: string }> = []
+  if (pfadProjekt) {
+    pfad.push({ label: pfadProjekt.name, to: `/projects/${pfadProjekt.id}` })
+  }
+  if (board?.id === boardId && board) {
+    pfad.push({ label: board.name, to: `/boards/${board.id}` })
+  }
 
   return (
     <Box sx={{ display: 'flex', minHeight: '100vh' }}>
@@ -493,7 +504,7 @@ export function AppShell() {
         sx={SPRUNGMARKE_SX}
         onClick={(e) => {
           // Der Browser scrollte nur zum Anker; der Fokus bliebe oben, und die nächste Tab-Taste
-          // begänne wieder bei der Kopfleiste.
+          // begänne wieder beim Kopf.
           e.preventDefault()
           inhaltRef.current?.focus()
         }}
@@ -501,104 +512,8 @@ export function AppShell() {
         Zum Inhalt springen
       </Box>
       <EditModeBanner />
-      <AppBar position="fixed" sx={{ zIndex: (t) => t.zIndex.drawer + 1, top: `${bannerOffset}px` }}>
-        <Toolbar>
-          {schmal && (
-            <IconButton
-              edge="start"
-              sx={{ color: 'text.primary', mr: 1 }}
-              aria-label="Navigation öffnen"
-              aria-expanded={navOffen}
-              onClick={() => setNavOffen(true)}
-            >
-              <MenuIcon />
-            </IconButton>
-          )}
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexGrow: 1 }}>
-            {/* Teal-Einfaerbung als Marken-Echo zur Leiste am Drawer (#653): `knight.svg` traegt
-                keinen eigenen Fill und waere auf der jetzt weissen Leiste schwarz. Als Maske
-                gerendert nimmt es die Palettenfarbe an. Rein dekorativ, daher aria-hidden. */}
-            <Box
-              component="span"
-              aria-hidden
-              sx={{
-                width: 22,
-                height: 22,
-                flexShrink: 0,
-                // Dieselbe dunkle Tinte wie die Schrift daneben. Der Marken-Teal `primary.main`
-                // stand auf der weissen Leiste gut, auf dem hellen Teal der Leiste waere es Teal
-                // auf Teal.
-                bgcolor: 'text.primary',
-                maskImage: 'url(/knight.svg)',
-                maskSize: 'contain',
-                maskRepeat: 'no-repeat',
-                maskPosition: 'center',
-                WebkitMaskImage: 'url(/knight.svg)',
-                WebkitMaskSize: 'contain',
-                WebkitMaskRepeat: 'no-repeat',
-                WebkitMaskPosition: 'center',
-              }}
-            />
-            <Typography variant="h6" noWrap component="div" sx={{ fontWeight: 700, color: 'text.primary' }}>
-              {APP_NAME}
-            </Typography>
-            {/* Kein `opacity`: Die Abschwaechung druecke den Kontrast unter die AA-Schwelle. Auch
-                die sekundaere Textfarbe entfaellt -- auf dem hellen Teal der Leiste traegt die
-                Versionsangabe dieselbe dunkle Tinte wie der Name. */}
-            <Typography variant="body1" noWrap sx={{ color: 'text.primary' }}>
-              v{__APP_VERSION__}
-            </Typography>
-          </Box>
-          {user && (
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              {/* Ein unsichtbares Kürzel gibt es für die Hälfte der Nutzer nicht: Der Knopf ist der
-                  sichtbare Zugang und trägt zugleich die Beschriftung, über die `b` bekannt wird.
-                  Der Umschlag mit `span` ist nötig, damit der Tooltip auch am deaktivierten Knopf
-                  einen Ereignisempfänger hat. */}
-              <Tooltip title="Board wechseln (Taste b)">
-                <span>
-                  <IconButton
-                    sx={{ color: 'text.primary' }}
-                    aria-label="Board wechseln"
-                    disabled={history.length === 0}
-                    onClick={() => setSwitcherOpen(true)}
-                  >
-                    <SwapHorizIcon />
-                  </IconButton>
-                </span>
-              </Tooltip>
-              <CardNumberSearch />
-              <Tooltip title="Profil bearbeiten">
-                <ButtonBase
-                  onClick={() => navigate('/profil')}
-                  aria-label={`Profil von ${user.displayName} bearbeiten`}
-                  sx={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 1,
-                    borderRadius: (t) => `${t.shape.borderRadius}px`,
-                    p: 0.5,
-                    color: 'text.primary',
-                  }}
-                >
-                  <Avatar
-                    sx={{ bgcolor: 'primary.dark', width: 32, height: 32, fontSize: '0.875rem' }}
-                  >
-                    {initial}
-                  </Avatar>
-                  <Typography variant="body2" sx={{ display: { xs: 'none', sm: 'inline' } }}>
-                    {user.displayName}
-                  </Typography>
-                </ButtonBase>
-              </Tooltip>
-              <Button sx={{ color: 'text.primary' }} startIcon={<LogoutIcon />} onClick={handleLogout} aria-label="Abmelden">
-                Abmelden
-              </Button>
-            </Box>
-          )}
-        </Toolbar>
-      </AppBar>
 
+      {/* Schiene (Entwurf `.schiene`, Z. 204–212): eingelassene Nut mit Verlauf und Innenschatten. */}
       <Drawer
         variant={schmal ? 'temporary' : 'permanent'}
         open={schmal ? navOffen : true}
@@ -615,10 +530,11 @@ export function AppShell() {
             width: drawerWidth,
             boxSizing: 'border-box',
             overflowX: 'hidden',
-            // Über `borderLeftColor` statt einer Theme-Funktion: `t.palette` wäre der helle Wert,
-            // der Palettenpfad schaltet mit dem Erscheinungsbild um (#955).
-            borderLeft: '8px solid',
-            borderLeftColor: 'primary.main',
+            top: `${bannerOffset}px`,
+            height: `calc(100% - ${bannerOffset}px)`,
+            background: `linear-gradient(180deg, ${GRUND_TIEF}, ${NUT})`,
+            borderRight: `1px solid ${RAND}`,
+            boxShadow: SCHATTEN_NUTE,
             transition: (t) =>
               t.transitions.create('width', {
                 easing: t.transitions.easing.sharp,
@@ -627,57 +543,166 @@ export function AppShell() {
           },
         }}
       >
-        <Toolbar sx={{ mt: `${bannerOffset}px` }} />
-        <Box
-          component="nav"
-          aria-label="Hauptnavigation"
-          sx={{ overflow: 'auto', display: 'flex', flexDirection: 'column', height: '100%' }}
-        >
-          <Box sx={{ flexGrow: 1 }}>
-            <List>{navItems.map((node) => (isGroup(node) ? renderGroup(node) : renderLink(node, false)))}</List>
-          </Box>
-          <Box>
-            <Divider />
-            <List disablePadding>
-              {renderLink(ADMINISTRATION_LINK, false)}
-              {renderDocsLink()}
-            </List>
-            {!schmal && <Divider />}
-            {!schmal && (
-            <Box sx={{ display: 'flex', justifyContent: collapsed ? 'center' : 'flex-end', p: 0.5 }}>
-              <Tooltip title={collapsed ? 'Menü ausklappen' : 'Menü einklappen'} placement="right">
-                <IconButton
-                  onClick={toggleCollapsed}
-                  size="small"
-                  aria-label={collapsed ? 'Menü ausklappen' : 'Menü einklappen'}
-                >
-                  {collapsed ? <ChevronRightIcon /> : <ChevronLeftIcon />}
-                </IconButton>
-              </Tooltip>
-            </Box>
-            )}
-          </Box>
-        </Box>
+        {schiene}
       </Drawer>
 
-      {/* Ohne eigenen Grund: der getönte Grund der Anwendung (theme.ts, `body::before`) scheint
-          durch. Ein `bgcolor` deckte ihn innerhalb der Shell wieder mit Weiß zu. */}
-      {/* Ziel der Sprungmarke: `tabIndex={-1}` macht `main` per Skript fokussierbar, ohne es in die
-          Tab-Reihenfolge zu legen. Ein Ring um den ganzen Inhaltsbereich zeigte nichts an. */}
-      <Box
-        component="main"
-        id="inhalt"
-        ref={inhaltRef}
-        tabIndex={-1}
-        sx={{ flexGrow: 1, p: 3, minWidth: 0, '&:focus': { outline: 'none' } }}
-      >
-        <Toolbar sx={{ mt: `${bannerOffset}px` }} />
-        <Outlet />
+      <Box sx={{ flexGrow: 1, minWidth: 0, display: 'flex', flexDirection: 'column', pt: `${bannerOffset}px` }}>
+        {/* Kopf (Entwurf `.kopf`, Z. 284–296): klebt oben, leicht getönt, mit Weichzeichner. Keine
+            Ansichtswahl — die Ansichten stehen in der Schiene (Entscheidung Manne, #978). */}
+        <Box
+          component="header"
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '16px',
+            px: { xs: '16px', md: '26px' },
+            minHeight: KOPF_HEIGHT,
+            boxSizing: 'border-box',
+            borderBottom: `1px solid ${RAND}`,
+            bgcolor: HEADER_BG,
+            backdropFilter: 'blur(10px)',
+            position: 'sticky',
+            top: `${bannerOffset}px`,
+            zIndex: (t) => t.zIndex.appBar,
+            color: 'text.primary',
+          }}
+        >
+          {schmal && (
+            <IconButton
+              edge="start"
+              sx={{ color: 'text.primary' }}
+              aria-label="Navigation öffnen"
+              aria-expanded={navOffen}
+              onClick={() => setNavOffen(true)}
+            >
+              <MenuIcon />
+            </IconButton>
+          )}
+          <Box
+            component="nav"
+            aria-label="Pfad"
+            sx={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: 13, color: 'text.secondary', minWidth: 0 }}
+          >
+            {pfad.map((teil, i) => (
+              <Fragment key={`${teil.label}-${i}`}>
+                {i > 0 && (
+                  <Box component="span" aria-hidden sx={{ color: TEXT_SCHWACH }}>
+                    /
+                  </Box>
+                )}
+                <Box
+                  component={RouterLink}
+                  to={teil.to}
+                  sx={{
+                    ...ANZEIGE,
+                    fontStretch: '110%',
+                    fontWeight: 600,
+                    color: 'text.primary',
+                    textDecoration: 'none',
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    '&:hover': { textDecoration: 'underline' },
+                  }}
+                >
+                  {teil.label}
+                </Box>
+              </Fragment>
+            ))}
+          </Box>
+          {user && (
+            <Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <CardNumberSearch />
+              {/* Ein unsichtbares Kürzel gibt es für die Hälfte der Nutzer nicht: Die Taste ist der
+                  sichtbare Zugang und trägt zugleich die Beschriftung, über die `b` bekannt wird.
+                  Der Umschlag mit `span` gibt dem Tooltip auch an der deaktivierten Taste einen
+                  Ereignisempfänger. */}
+              <Tooltip title="Board wechseln (Taste b)">
+                <span>
+                  <Button
+                    variant="outlined"
+                    startIcon={<SwapHorizIcon />}
+                    aria-label="Board wechseln"
+                    disabled={history.length === 0}
+                    onClick={() => setSwitcherOpen(true)}
+                    sx={{ color: 'text.primary' }}
+                  >
+                    Board
+                  </Button>
+                </span>
+              </Tooltip>
+              {/* Nutzer-Mal (Entwurf `.nutzer`): öffnet Profil und Abmelden, statt beides als eigene
+                  Tasten in den Kopf zu stellen. */}
+              <Tooltip title={user.displayName}>
+                <ButtonBase
+                  onClick={(e) => setKontoAnker(e.currentTarget)}
+                  aria-label={`Konto von ${user.displayName}`}
+                  aria-haspopup="menu"
+                  aria-expanded={kontoAnker !== null}
+                  sx={{
+                    ...NUTZER_MAL_SX,
+                    width: 30,
+                    height: 30,
+                    borderRadius: '50%',
+                    fontSize: 11,
+                    fontWeight: 600,
+                    flex: 'none',
+                  }}
+                >
+                  {kuerzel}
+                </ButtonBase>
+              </Tooltip>
+              <Menu
+                anchorEl={kontoAnker}
+                open={kontoAnker !== null}
+                onClose={() => setKontoAnker(null)}
+                anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+                transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+                slotProps={{ list: { 'aria-label': `Konto von ${user.displayName}` } }}
+              >
+                <MenuItem
+                  onClick={() => {
+                    setKontoAnker(null)
+                    navigate('/profil')
+                  }}
+                >
+                  <ListItemIcon>
+                    <PersonOutlineIcon fontSize="small" />
+                  </ListItemIcon>
+                  <ListItemText>Profil bearbeiten</ListItemText>
+                </MenuItem>
+                <MenuItem
+                  onClick={() => {
+                    setKontoAnker(null)
+                    void handleLogout()
+                  }}
+                >
+                  <ListItemIcon>
+                    <LogoutIcon fontSize="small" />
+                  </ListItemIcon>
+                  <ListItemText>Abmelden</ListItemText>
+                </MenuItem>
+              </Menu>
+            </Box>
+          )}
+        </Box>
+
+        {/* Bühne (Entwurf `.buehne`, Z. 386–389). Ohne eigenen Grund: Der Grund der Anwendung
+            (theme.ts, `body::before`) scheint durch. Ziel der Sprungmarke: `tabIndex={-1}` macht
+            `main` per Skript fokussierbar, ohne es in die Tab-Reihenfolge zu legen. */}
+        <Box
+          component="main"
+          id="inhalt"
+          ref={inhaltRef}
+          tabIndex={-1}
+          sx={{ flexGrow: 1, pt: '22px', px: { xs: '16px', md: '26px' }, pb: '44px', minWidth: 0, '&:focus': { outline: 'none' } }}
+        >
+          <Outlet />
+        </Box>
       </Box>
 
       {/* Auf einer Board-Route bestimmt die aktuelle Board-ID die Vorauswahl, sonst gibt es keine
-          — das weiß allein die Shell (`boardMatch`). Ein als 403/404 gemeldetes Ziel fliegt aus
-          dem Verlauf; der Fehler-Catch des Board-Abrufs oben bleibt davon unberührt. */}
+          — das weiß allein die Shell (`boardMatch`). */}
       <BoardSwitcher
         open={switcherOpen}
         entries={history}

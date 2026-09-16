@@ -20,7 +20,7 @@ describe('epicColor', () => {
   // Seit #952 ein Variablen-Verweis: Die Farbe schaltet mit dem Erscheinungsbild, die Signatur
   // bleibt dieselbe. Welcher Wert dahinter liegt, prüft `theme.test.ts`.
   it('liefert einen Verweis auf den Farbton eines Palettenplatzes', () => {
-    expect(epicColor(7)).toMatch(/^var\(--mb-palette-epic-[0-7]-hue\)$/)
+    expect(epicColor(7)).toMatch(/^var\(--mb-palette-epic-[0-3]-hue\)$/)
   })
 
   it('verteilt verschiedene Vorhaben auf verschiedene Plätze', () => {
@@ -39,14 +39,14 @@ describe('epicTint', () => {
   })
 
   it('hängt kein Alpha-Suffix an einen Farbwert', () => {
-    expect(epicTint(7)).toMatch(/^var\(--mb-palette-epic-[0-7]-tint\)$/)
+    expect(epicTint(7)).toMatch(/^var\(--mb-palette-epic-[0-3]-tint\)$/)
   })
 })
 
 describe('EPIC_FARBWERTE', () => {
-  it('führt in beiden Erscheinungsbildern acht Plätze mit Farbton und Tint', () => {
+  it('führt in beiden Erscheinungsbildern die vier Schild-Töne des Entwurfs mit Farbton und Tint', () => {
     for (const plaetze of [EPIC_FARBWERTE.light, EPIC_FARBWERTE.dark]) {
-      expect(plaetze).toHaveLength(8)
+      expect(plaetze).toHaveLength(4)
       for (const platz of plaetze) {
         expect(platz.hue).toMatch(/^#[0-9A-F]{6}$/)
         expect(platz.tint).toMatch(/^rgba\(\d+,\d+,\d+,0\.\d+\)$/)
@@ -54,15 +54,14 @@ describe('EPIC_FARBWERTE', () => {
     }
   })
 
-  it('hält die hellen Farbtöne des Bestands unverändert', () => {
-    expect(EPIC_FARBWERTE.light.map((p) => p.hue)).toEqual([
-      '#534AB7', '#1D9E75', '#D4537E', '#185FA5',
-      '#BA7517', '#993C1D', '#0F6E56', '#0C447C',
-    ])
+  it('folgt der Reihenfolge des Entwurfs: Kupfer, Stahl, Grün, Bernstein (Z. 787–790)', () => {
+    // Hell nachgedunkelt, damit das Kürzel auf seiner Tönung 4,5:1 hält (theme.test.ts rechnet nach).
+    expect(EPIC_FARBWERTE.light.map((p) => p.hue)).toEqual(['#935327', '#2A63B3', '#25713E', '#835C10'])
+    expect(EPIC_FARBWERTE.dark.map((p) => p.hue)).toEqual(['#D08A52', '#629BF1', '#46C46F', '#E0AE49'])
   })
 
-  it('bildet den hellen Tint wie bisher: der Farbton mit Deckkraft 0x22', () => {
-    // `#534AB722` hieß Deckkraft 34/255. Als rgba bleibt das Aussehen im hellen Erscheinungsbild gleich.
-    expect(EPIC_FARBWERTE.light[0].tint).toBe('rgba(83,74,183,0.133)')
+  it('bildet den Tint wie das Schild des Entwurfs: der Farbton zu 13 %', () => {
+    expect(EPIC_FARBWERTE.light[0].tint).toBe('rgba(147,83,39,0.13)')
+    expect(EPIC_FARBWERTE.dark[0].tint).toBe('rgba(208,138,82,0.13)')
   })
 })
