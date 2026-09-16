@@ -526,7 +526,7 @@ class NightRunServiceTest {
               run.updatedAt(),
               run.usage()));
       for (NightRunItem item : items) {
-        gespeichertePakete.add(paket(item, id));
+        gespeichertePakete.add(paket(item, run, id));
       }
       return new UpsertResult(id, false);
     }
@@ -564,18 +564,24 @@ class NightRunServiceTest {
               run.updatedAt(),
               run.usage()));
       for (NightRunItem item : items) {
-        gespeichertePakete.add(paket(item, id));
+        gespeichertePakete.add(paket(item, run, id));
       }
       return Optional.of(id);
     }
 
-    /** Vergibt eine Id und uebernimmt alle uebergebenen Werte — auch den Verbrauch. */
-    private NightRunItem paket(NightRunItem item, long runId) {
+    /**
+     * Vergibt eine Id und uebernimmt alle uebergebenen Werte — auch den Verbrauch. Projekt,
+     * Startzeitpunkt und Lauf-Art kommen wie im Adapter aus dem Lauf (Issue #964).
+     */
+    private NightRunItem paket(NightRunItem item, NightRun run, long runId) {
       long paketId = naechstePaketId;
       naechstePaketId += 1;
       return new NightRunItem(
           paketId,
           runId,
+          run.projectId(),
+          run.startedAt(),
+          run.mode(),
           item.cardNumber(),
           item.title(),
           item.state(),
@@ -600,7 +606,7 @@ class NightRunServiceTest {
     @Override
     public List<NightRunItem> findItemsByRunIds(Collection<Long> runIds) {
       return gespeichertePakete.stream()
-          .filter(i -> runIds.contains(i.nightRunId()))
+          .filter(i -> i.nightRunId() != null && runIds.contains(i.nightRunId()))
           .sorted(Comparator.comparing(NightRunItem::requireId))
           .toList();
     }
@@ -611,8 +617,26 @@ class NightRunServiceTest {
           findByProjectOrderByStartedAtDesc(projectId).stream().skip(keep).toList();
       Set<Long> ids = zuVerdraengen.stream().map(NightRun::requireId).collect(Collectors.toSet());
       gespeicherteLaeufe.removeAll(zuVerdraengen);
-      gespeichertePakete.removeIf(i -> ids.contains(i.nightRunId()));
+      // ON DELETE SET NULL (Issue #964): Die Pakete bleiben verwaist stehen.
+      gespeichertePakete.replaceAll(i -> ids.contains(i.nightRunId()) ? verwaist(i) : i);
       return zuVerdraengen.size();
+    }
+
+    private static NightRunItem verwaist(NightRunItem item) {
+      return new NightRunItem(
+          item.id(),
+          null,
+          item.projectId(),
+          item.startedAt(),
+          item.mode(),
+          item.cardNumber(),
+          item.title(),
+          item.state(),
+          item.errorClass(),
+          item.durationMs(),
+          item.commitHash(),
+          item.excerpt(),
+          item.usage());
     }
 
     @Override

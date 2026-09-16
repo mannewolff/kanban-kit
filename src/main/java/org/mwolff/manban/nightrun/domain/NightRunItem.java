@@ -1,5 +1,6 @@
 package org.mwolff.manban.nightrun.domain;
 
+import java.time.Instant;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.common.Identifiable;
 
@@ -14,8 +15,17 @@ import org.mwolff.manban.common.Identifiable;
  * unabhängig von den Fehlerklassen weiterentwickeln —, sondern ist in {@code NightRunRepositoryIT}
  * belegt.
  *
+ * <p>Ein Arbeitspaket überdauert die Verdrängung seines Laufs (Issue #964): Es trägt Projekt,
+ * Startzeitpunkt und Lauf-Art selbst, damit die Messwerte einer Karte nicht mit der Aufbewahrung
+ * der Läufe verschwinden. Geschrieben werden diese drei stets aus dem Lauf, zu dem das Paket gehört
+ * — die Werte am einzuliefernden Paket sind dafür nicht maßgeblich.
+ *
  * @param id technische ID; {@code null} vor der Persistierung
- * @param nightRunId zugehöriger Lauf; {@code null}, solange dessen ID noch nicht vergeben ist
+ * @param nightRunId zugehöriger Lauf; {@code null}, solange dessen ID noch nicht vergeben ist — und
+ *     bei einem gespeicherten Paket, wenn der Lauf verdrängt wurde
+ * @param projectId Projekt des Laufs
+ * @param startedAt Startzeitpunkt des Laufs
+ * @param mode Betriebsart des Laufs
  * @param cardNumber projektweite Kartennummer des Arbeitspakets
  * @param title Titel zum Zeitpunkt des Laufs
  * @param state Ausgang des Arbeitspakets
@@ -29,6 +39,9 @@ import org.mwolff.manban.common.Identifiable;
 public record NightRunItem(
     @Nullable Long id,
     @Nullable Long nightRunId,
+    long projectId,
+    Instant startedAt,
+    NightRunMode mode,
     int cardNumber,
     String title,
     NightRunState state,
@@ -50,6 +63,9 @@ public record NightRunItem(
     return new NightRunItem(
         id,
         newNightRunId,
+        projectId,
+        startedAt,
+        mode,
         cardNumber,
         title,
         state,

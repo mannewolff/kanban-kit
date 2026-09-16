@@ -7,6 +7,7 @@ import static org.assertj.core.api.Assertions.entry;
 import static org.assertj.core.api.Assertions.tuple;
 
 import java.math.BigDecimal;
+import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.List;
@@ -35,14 +36,14 @@ import org.springframework.jdbc.core.JdbcTemplate;
  * Adapter-Test der Nachtlauf-Persistenz gegen Postgres (Issue #721).
  *
  * <p>Belegt die Zusagen, die nur die echte Datenbank einlösen kann: die Duplikatserkennung über
- * {@code ON CONFLICT (project_id, started_at) DO NOTHING RETURNING id}, beide Richtungen des {@code
- * ON DELETE CASCADE}, die Auszugsgrenze aus {@link NightRunLimits#EXCERPT_MAX} — die JaCoCo als
+ * {@code ON CONFLICT (project_id, started_at) DO NOTHING RETURNING id}, das Loeschverhalten an Lauf
+ * und Projekt, die Auszugsgrenze aus {@link NightRunLimits#EXCERPT_MAX} — die JaCoCo als
  * Spaltenzusicherung nicht misst — und die Verdrängung des Ringpuffers.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE)
 // Testklasse: Jede Methode ist ein Fall, und Faelle werden nicht zusammengelegt, um eine
 // Zahl zu druecken. Issue #944 bringt drei Faelle fuer Herkunft, Vollstaendigkeit und
-// Verbrauch dazu.
+// Verbrauch dazu, Issue #964 drei fuer das verwaiste Arbeitspaket.
 @SuppressWarnings("PMD.TooManyMethods")
 class NightRunRepositoryIT extends AbstractIntegrationTest {
 
@@ -50,6 +51,16 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
   private static final Instant T2 = Instant.parse("2026-09-02T22:00:00Z");
   private static final Instant T3 = Instant.parse("2026-09-03T22:00:00Z");
   private static final Instant ANGELEGT = Instant.parse("2026-09-04T06:00:00Z");
+
+  /**
+   * Absichtlich falsche Werte an den einzuliefernden Paketen (Issue #964): Projekt, Startzeitpunkt
+   * und Lauf-Art eines Pakets schreibt der Adapter aus dem Lauf, zu dem es gehoert, und nie aus dem
+   * Paket. Stuenden hier die Werte des Laufs, bewiese kein Test, woher der Adapter sie nimmt.
+   */
+  private static final long PLATZHALTER_PROJEKT = -1L;
+
+  private static final Instant PLATZHALTER_START = Instant.EPOCH;
+  private static final NightRunMode PLATZHALTER_MODUS = NightRunMode.REVIEW;
 
   @Autowired private NightRunRepository runs;
   @Autowired private JdbcTemplate jdbc;
@@ -95,6 +106,9 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
     return new NightRunItem(
         null,
         null,
+        PLATZHALTER_PROJEKT,
+        PLATZHALTER_START,
+        PLATZHALTER_MODUS,
         cardNumber,
         "Paket " + cardNumber,
         state,
@@ -262,11 +276,18 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
     assertThat(runs.insertIfAbsent(fremd, List.of())).isPresent();
   }
 
-  // --- ON DELETE CASCADE in beide Richtungen --------------------------------------------------
+  // --- Loeschen: Projekt nimmt alles mit, Lauf laesst Pakete verwaist stehen (Issue #964) ----
 
+  /**
+   * Das Projekt nimmt alles mit — auch ein Paket, dessen Lauf schon verdraengt ist. Ohne eigenen
+   * Fremdschluessel auf {@code project} ueberlebte ein verwaistes Paket sein Projekt (Issue #964).
+   */
   @Test
-  void dasLoeschenDesProjektsEntferntLaeufeUndItems() {
-    anlegen(T1, List.of(paket(721, NightRunState.GREEN)));
+  void dasLoeschenDesProjektsEntferntLaeufeUndItems_auchVerwaiste() {
+    long verdraengt = anlegen(T1, List.of(paket(720, NightRunState.RED)));
+    anlegen(T2, List.of(paket(721, NightRunState.GREEN)));
+    jdbc.update("DELETE FROM night_run WHERE id = ?", verdraengt);
+    assertThat(zeilen("night_run_item")).isEqualTo(2);
 
     jdbc.update("DELETE FROM project WHERE id = ?", projectId);
 
@@ -274,13 +295,52 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
     assertThat(zeilen("night_run_item")).isZero();
   }
 
+  /**
+   * Der Lauf verschwindet, seine Pakete bleiben verwaist stehen und tragen Projekt, Startzeitpunkt
+   * und Lauf-Art weiter (Issue #964) — die Messwerte einer Karte ueberdauern die Aufbewahrung.
+   */
   @Test
-  void dasLoeschenEinesLaufsEntferntSeineItems() {
+  void dasLoeschenEinesLaufsLaesstSeineItemsVerwaistStehen() {
     long id = anlegen(T1, List.of(paket(721, NightRunState.GREEN)));
 
     jdbc.update("DELETE FROM night_run WHERE id = ?", id);
 
-    assertThat(zeilen("night_run_item")).isZero();
+    assertThat(
+            jdbc.queryForMap(
+                "SELECT night_run_id, project_id, started_at, mode FROM night_run_item"
+                    + " WHERE card_number = 721"))
+        .containsEntry("night_run_id", null)
+        .containsEntry("project_id", projectId)
+        .containsEntry("mode", "IMPLEMENTATION")
+        .extractingByKey("started_at")
+        .isEqualTo(Timestamp.from(T1));
+  }
+
+  /** Ueber den Upload-Weg: Das Paket traegt die drei Werte seines Laufs, nicht seine eigenen. */
+  @Test
+  void insertIfAbsentSchreibtProjektStartUndArtDesLaufsAnsPaket() {
+    long id = anlegen(T1, List.of(paket(721, NightRunState.GREEN)));
+
+    assertThat(runs.findItemsByRunIds(List.of(id)))
+        .extracting(NightRunItem::projectId, NightRunItem::startedAt, NightRunItem::mode)
+        .containsExactly(tuple(projectId, T1, NightRunMode.IMPLEMENTATION));
+  }
+
+  /** Ueber den meldenden Weg, beim Anlegen wie beim Ersetzen. */
+  @Test
+  void upsertSchreibtProjektStartUndArtDesLaufsAnsPaket_auchBeimErsetzen() {
+    Instant start = Instant.parse("2026-09-15T22:00:00Z");
+    UpsertResult erster =
+        runs.upsert(meldung(start, false), List.of(paket(101, NightRunState.GREEN)));
+    assertThat(runs.findItemsByRunIds(List.of(erster.id())))
+        .extracting(NightRunItem::projectId, NightRunItem::startedAt, NightRunItem::mode)
+        .containsExactly(tuple(projectId, start, NightRunMode.CHAIN));
+
+    runs.upsert(meldung(start, true), List.of(paket(102, NightRunState.RED)));
+
+    assertThat(runs.findItemsByRunIds(List.of(erster.id())))
+        .extracting(NightRunItem::projectId, NightRunItem::startedAt, NightRunItem::mode)
+        .containsExactly(tuple(projectId, start, NightRunMode.CHAIN));
   }
 
   private long zeilen(String tabelle) {
@@ -314,7 +374,19 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
 
   private static NightRunItem mitAuszug(String excerpt) {
     return new NightRunItem(
-        null, null, 721, "Paket", NightRunState.GREEN, null, null, null, excerpt, null);
+        null,
+        null,
+        PLATZHALTER_PROJEKT,
+        PLATZHALTER_START,
+        PLATZHALTER_MODUS,
+        721,
+        "Paket",
+        NightRunState.GREEN,
+        null,
+        null,
+        null,
+        excerpt,
+        null);
   }
 
   private NightRun mitProbe(Instant startedAt, int laenge) {
@@ -418,6 +490,9 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
     return new NightRunItem(
         null,
         null,
+        PLATZHALTER_PROJEKT,
+        PLATZHALTER_START,
+        PLATZHALTER_MODUS,
         cardNumber,
         "Paket " + cardNumber,
         NightRunState.RED,
@@ -444,8 +519,11 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
                 + ", timestamptz '2026-09-05T22:00:00Z', 'IMPLEMENTATION', 1000, 1, 0, 0,"
                 + " timestamptz '2026-09-05T23:00:00Z') RETURNING id");
     jdbc.update(
-        "INSERT INTO night_run_item (night_run_id, card_number, title, state) VALUES (?, ?, ?, ?)",
+        "INSERT INTO night_run_item (night_run_id, project_id, started_at, mode, card_number,"
+            + " title, state) VALUES (?, ?, timestamptz '2026-09-05T22:00:00Z', ?, ?, ?, ?)",
         runId,
+        projectId,
+        "IMPLEMENTATION",
         901,
         "Altpaket",
         "GREEN");
@@ -494,6 +572,9 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
         new NightRunItem(
             null,
             null,
+            PLATZHALTER_PROJEKT,
+            PLATZHALTER_START,
+            PLATZHALTER_MODUS,
             944,
             "Mit Verbrauch",
             NightRunState.GREEN,

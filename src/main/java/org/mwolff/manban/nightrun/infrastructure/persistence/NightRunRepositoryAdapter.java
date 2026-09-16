@@ -65,10 +65,11 @@ class NightRunRepositoryAdapter implements NightRunRepository {
           + " RETURNING id";
 
   private static final String INSERT_ITEM =
-      "INSERT INTO night_run_item (night_run_id, card_number, title, state, error_class,"
-          + " duration_ms, commit_hash, excerpt, cost_usd, input_tokens, output_tokens,"
-          + " cached_input_tokens)"
-          + " VALUES (:nightRunId, :cardNumber, :title, :state, :errorClass,"
+      "INSERT INTO night_run_item (night_run_id, project_id, started_at, mode, card_number,"
+          + " title, state, error_class, duration_ms, commit_hash, excerpt, cost_usd,"
+          + " input_tokens, output_tokens, cached_input_tokens)"
+          + " VALUES (:nightRunId, :projectId, :startedAt, :mode, :cardNumber, :title, :state,"
+          + " :errorClass,"
           + " :durationMs, :commitHash, :excerpt, :costUsd, :inputTokens, :outputTokens,"
           + " :cachedInputTokens)";
 
@@ -126,7 +127,7 @@ class NightRunRepositoryAdapter implements NightRunRepository {
       return Optional.empty();
     }
     Long runId = vergebeneId.get(0);
-    insertItems(runId, newItems);
+    insertItems(run, runId, newItems);
     return Optional.of(runId);
   }
 
@@ -150,7 +151,7 @@ class NightRunRepositoryAdapter implements NightRunRepository {
 
     if (vorhanden.isEmpty()) {
       Long runId = jdbc.queryForList(INSERT_RUN, runParameters(run), Long.class).get(0);
-      insertItems(runId, newItems);
+      insertItems(run, runId, newItems);
       return new UpsertResult(runId, true);
     }
 
@@ -159,18 +160,22 @@ class NightRunRepositoryAdapter implements NightRunRepository {
     aenderung.addValue("id", runId);
     jdbc.update(UPDATE_RUN, aenderung);
     jdbc.update(DELETE_ITEMS_OF_RUN, new MapSqlParameterSource().addValue(P_NIGHT_RUN_ID, runId));
-    insertItems(runId, newItems);
+    insertItems(run, runId, newItems);
     return new UpsertResult(runId, false);
   }
 
-  private void insertItems(Long runId, List<NightRunItem> newItems) {
+  /**
+   * Projekt, Startzeitpunkt und Lauf-Art eines Pakets kommen aus dem Lauf und nie aus dem Paket
+   * (Issue #964): So kann kein Paket mit einem anderen Projekt geschrieben werden als sein Lauf —
+   * ein verwaistes Paket fände man sonst später im falschen Projekt wieder.
+   */
+  private void insertItems(NightRun run, Long runId, List<NightRunItem> newItems) {
     if (newItems.isEmpty()) {
       return;
     }
     SqlParameterSource[] batch =
         newItems.stream()
-            .map(item -> item.withNightRunId(runId))
-            .map(NightRunRepositoryAdapter::itemParameters)
+            .map(item -> itemParameters(item.withNightRunId(runId), run))
             .toArray(SqlParameterSource[]::new);
     jdbc.batchUpdate(INSERT_ITEM, batch);
   }
@@ -249,11 +254,14 @@ class NightRunRepositoryAdapter implements NightRunRepository {
             "cachedInputTokens", usage == null ? null : usage.cachedInputTokens(), Types.BIGINT);
   }
 
-  private static SqlParameterSource itemParameters(NightRunItem item) {
+  private static SqlParameterSource itemParameters(NightRunItem item, NightRun run) {
     NightRunErrorClass errorClass = item.errorClass();
     MapSqlParameterSource parameter =
         new MapSqlParameterSource()
             .addValue(P_NIGHT_RUN_ID, item.nightRunId())
+            .addValue(P_PROJECT_ID, run.projectId())
+            .addValue("startedAt", zeitpunkt(run.startedAt()))
+            .addValue("mode", run.mode().name())
             .addValue("cardNumber", item.cardNumber())
             .addValue("title", item.title())
             .addValue("state", item.state().name())
@@ -299,6 +307,9 @@ class NightRunRepositoryAdapter implements NightRunRepository {
     return new NightRunItem(
         e.getId(),
         e.getNightRunId(),
+        e.getProjectId(),
+        e.getStartedAt(),
+        NightRunMode.valueOf(e.getMode()),
         e.getCardNumber(),
         e.getTitle(),
         NightRunState.valueOf(e.getState()),

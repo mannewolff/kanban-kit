@@ -195,7 +195,9 @@ gesehen haben. Legt der Browser die Zwischenablage nicht frei, bleibt es beim si
 Hand markieren und kopieren.
 
 **Aufbewahrung:** Je Projekt bleiben die **letzten 30 Läufe** erhalten; ältere fallen heraus, sobald
-neue hinzukommen.
+neue hinzukommen. Die **Arbeitspakete** eines verdrängten Laufs bleiben dabei bestehen: Sie tragen
+Projekt, Startzeitpunkt und Lauf-Art selbst, damit die Messwerte einer Karte nicht mit dem Lauf
+verschwinden. In der Liste der Läufe erscheinen sie nicht mehr.
 
 Drei Sonderfälle, die keine Fehler sind: Ein **Probelauf** (`DRY-RUN`) wird nicht aufbewahrt — ein
 Protokoll aus lauter Probeläufen erzeugt darum nur die Meldung, dass es nichts auszuwerten gibt. Ein

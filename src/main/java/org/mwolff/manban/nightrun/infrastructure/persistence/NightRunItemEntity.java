@@ -7,6 +7,7 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.math.BigDecimal;
+import java.time.Instant;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -17,14 +18,28 @@ import org.jspecify.annotations.Nullable;
  */
 @Entity
 @Table(name = "night_run_item")
+// Die Feldzahl folgt dem Tabellenschema, wie bei NightRunEntity: night_run_item traegt seit
+// Issue #964 Projekt, Startzeitpunkt und Lauf-Art selbst. Sie aufzuteilen hiesse, eine Zeile
+// auf zwei Objekte zu verteilen, die es in der Datenbank nicht gibt.
+@SuppressWarnings("PMD.TooManyFields")
 class NightRunItemEntity {
 
   @Id
   @GeneratedValue(strategy = GenerationType.IDENTITY)
   private @Nullable Long id;
 
-  @Column(name = "night_run_id", nullable = false)
-  private Long nightRunId;
+  /** {@code null}, wenn der Lauf verdrängt wurde (Issue #964). */
+  @Column(name = "night_run_id")
+  private @Nullable Long nightRunId;
+
+  @Column(name = "project_id", nullable = false)
+  private long projectId;
+
+  @Column(name = "started_at", nullable = false)
+  private Instant startedAt;
+
+  @Column(name = "mode", nullable = false)
+  private String mode;
 
   @Column(name = "card_number", nullable = false)
   private int cardNumber;
@@ -67,8 +82,20 @@ class NightRunItemEntity {
     return id;
   }
 
-  Long getNightRunId() {
+  @Nullable Long getNightRunId() {
     return nightRunId;
+  }
+
+  long getProjectId() {
+    return projectId;
+  }
+
+  Instant getStartedAt() {
+    return startedAt;
+  }
+
+  String getMode() {
+    return mode;
   }
 
   int getCardNumber() {

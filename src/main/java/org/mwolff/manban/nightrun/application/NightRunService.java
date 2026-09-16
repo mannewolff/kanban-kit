@@ -73,7 +73,8 @@ public class NightRunService {
     List<NightRunResult> results = new ArrayList<>(submissions.size());
     for (NewNightRun submission : submissions) {
       boolean created =
-          runs.insertIfAbsent(run(projectId, submission, now), items(submission)).isPresent();
+          runs.insertIfAbsent(run(projectId, submission, now), items(projectId, submission))
+              .isPresent();
       results.add(new NightRunResult(submission.startedAt(), created));
     }
     runs.deleteOlderThanNewest(projectId, properties.maxPerProject());
@@ -121,7 +122,7 @@ public class NightRunService {
             now,
             meldung.usage());
 
-    UpsertResult ergebnis = runs.upsert(gemeldet, items(meldung));
+    UpsertResult ergebnis = runs.upsert(gemeldet, items(projectId, meldung));
     // Der Ringpuffer gilt unverändert auch für maschinell eingelieferte Läufe.
     runs.deleteOlderThanNewest(projectId, properties.maxPerProject());
     return new NightRunResult(meldung.startedAt(), ergebnis.created());
@@ -168,13 +169,21 @@ public class NightRunService {
         submission.usage());
   }
 
-  private static List<NightRunItem> items(NewNightRun submission) {
+  /**
+   * Die Arbeitspakete tragen Projekt, Startzeitpunkt und Lauf-Art ihres Laufs (Issue #964). Der
+   * Adapter schreibt diese drei aus dem Lauf selbst; hier stehen sie, weil ein Paket ohne sie kein
+   * vollständiges Domänenobjekt ist.
+   */
+  private static List<NightRunItem> items(long projectId, NewNightRun submission) {
     return submission.items().stream()
         .map(
             item ->
                 new NightRunItem(
                     null,
                     null,
+                    projectId,
+                    submission.startedAt(),
+                    submission.mode(),
                     item.cardNumber(),
                     item.title(),
                     item.state(),

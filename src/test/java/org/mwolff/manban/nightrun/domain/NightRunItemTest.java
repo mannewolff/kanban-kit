@@ -2,6 +2,7 @@ package org.mwolff.manban.nightrun.domain;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.time.Instant;
 import org.junit.jupiter.api.Test;
 
 /** Kopiermethode des Arbeitspakets: Der Fremdschlüssel kommt erst beim Schreiben dazu (#721). */
@@ -11,6 +12,9 @@ class NightRunItemTest {
       new NightRunItem(
           null,
           null,
+          42L,
+          Instant.parse("2026-09-01T22:00:00Z"),
+          NightRunMode.CHAIN,
           721,
           "Migration, Domaene und Persistenz",
           NightRunState.RED,
@@ -34,6 +38,9 @@ class NightRunItemTest {
     assertThat(mitLauf)
         .extracting(
             NightRunItem::id,
+            NightRunItem::projectId,
+            NightRunItem::startedAt,
+            NightRunItem::mode,
             NightRunItem::cardNumber,
             NightRunItem::title,
             NightRunItem::state,
@@ -43,6 +50,9 @@ class NightRunItemTest {
             NightRunItem::excerpt)
         .containsExactly(
             null,
+            42L,
+            Instant.parse("2026-09-01T22:00:00Z"),
+            NightRunMode.CHAIN,
             721,
             "Migration, Domaene und Persistenz",
             NightRunState.RED,
