@@ -197,7 +197,10 @@ Hand markieren und kopieren.
 **Aufbewahrung:** Je Projekt bleiben die **letzten 30 Läufe** erhalten; ältere fallen heraus, sobald
 neue hinzukommen. Die **Arbeitspakete** eines verdrängten Laufs bleiben dabei bestehen: Sie tragen
 Projekt, Startzeitpunkt und Lauf-Art selbst, damit die Messwerte einer Karte nicht mit dem Lauf
-verschwinden. In der Liste der Läufe erscheinen sie nicht mehr.
+verschwinden. In der Liste der Läufe erscheinen sie nicht mehr. Diese **verwaisten Arbeitspakete**
+haben eine eigene Grenze: Je Projekt bleiben die **letzten 2000** erhalten, gemessen am
+Startzeitpunkt ihres Laufs. Läufe und verwaiste Arbeitspakete werden also getrennt begrenzt — die
+Pakete eines noch aufbewahrten Laufs zählen nicht mit und fallen erst mit ihm.
 
 Drei Sonderfälle, die keine Fehler sind: Ein **Probelauf** (`DRY-RUN`) wird nicht aufbewahrt — ein
 Protokoll aus lauter Probeläufen erzeugt darum nur die Meldung, dass es nichts auszuwerten gibt. Ein

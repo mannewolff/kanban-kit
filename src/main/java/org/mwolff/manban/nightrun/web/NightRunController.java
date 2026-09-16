@@ -43,7 +43,7 @@ class NightRunController {
 
   /**
    * Obergrenze der Läufe je Anfrage. Bewusst <b>nicht</b> an {@code
-   * manban.night-run.max-per-project} gekoppelt: Das Verdrängen überlässt Plan #718 (A14) dem
+   * manban.nightrun.max-per-project} gekoppelt: Das Verdrängen überlässt Plan #718 (A14) dem
    * Service, und ein Protokoll kann mehr Läufe tragen als aufbewahrt werden — am 31.08. standen
    * vierzehn Aufrufe in einer Datei (A4). Wäre die Grenze die Aufbewahrung, bekäme der Owner für
    * ein größeres Protokoll 400 statt einer Antwort.

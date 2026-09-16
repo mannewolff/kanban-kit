@@ -81,6 +81,18 @@ public interface NightRunRepository {
   int deleteOrphanItemsOfRun(long projectId, Instant startedAt);
 
   /**
+   * Kappt die <b>verwaisten</b> Arbeitspakete des Projekts: behält die {@code keep} jüngsten nach
+   * {@code started_at} und löscht die älteren (Issue #966).
+   *
+   * <p>Pakete mit gesetzter {@code night_run_id} sind für diesen Aufruf unsichtbar — sie zählen
+   * nicht mit und werden nicht gekappt. Eine Grenze über alle Pakete risse Löcher in Läufe, die der
+   * Leitstand noch anzeigt.
+   *
+   * @return Zahl der gelöschten Arbeitspakete
+   */
+  int deleteOrphanItemsOlderThanNewest(long projectId, int keep);
+
+  /**
    * Zählt je Fehlerklasse die aufbewahrten Läufe des Projekts, in denen sie mindestens einmal
    * vorkam. Ein Lauf zählt je Klasse höchstens einmal; verdrängte Läufe zählen nicht mehr.
    */

@@ -80,8 +80,11 @@ manban:
     completed-retention-days: ${MANBAN_OUTBOX_RETENTION_DAYS:7}
   # Nachtlauf-Auswertung (Issue #722): Ringpuffer je Projekt. Der aelteste Lauf nach started_at
   # wird verdraengt, sobald die Grenze ueberschritten ist.
+  # Verwaiste Arbeitspakete (Lauf verdraengt, Issue #964) haben eine eigene Grenze (Issue #966);
+  # Pakete eines aufbewahrten Laufs zaehlen nicht mit.
   nightrun:
     max-per-project: 30
+    max-items-per-project: 2000
   cleanup:
     enabled: ${MANBAN_CLEANUP_ENABLED:true}
     done-retention-days: ${MANBAN_DONE_RETENTION_DAYS:30}

@@ -32,4 +32,20 @@ interface NightRunItemJpaRepository extends JpaRepository<NightRunItemEntity, Lo
       "delete from #{#entityName} i where i.projectId = :projectId"
           + " and i.startedAt = :startedAt and i.nightRunId is null")
   int deleteOrphansOfRun(@Param("projectId") long projectId, @Param("startedAt") Instant startedAt);
+
+  /**
+   * Kappt die verwaisten Pakete des Projekts auf die {@code keep} jüngsten (Issue #966). Nativ,
+   * weil JPQL kein {@code LIMIT} kennt; die Auswahl steht als Unterabfrage wie bei der Verdrängung
+   * der Läufe. Bei gleichem Startzeitpunkt entscheidet die ID. Der Teilindex {@code
+   * idx_night_run_item_orphan} trägt beide Abfragen.
+   */
+  @Transactional
+  @Modifying(flushAutomatically = true, clearAutomatically = true)
+  @Query(
+      value =
+          "delete from night_run_item where project_id = :projectId and night_run_id is null"
+              + " and id not in (select id from night_run_item where project_id = :projectId"
+              + " and night_run_id is null order by started_at desc, id desc limit :keep)",
+      nativeQuery = true)
+  int deleteOrphansOlderThanNewest(@Param("projectId") long projectId, @Param("keep") int keep);
 }

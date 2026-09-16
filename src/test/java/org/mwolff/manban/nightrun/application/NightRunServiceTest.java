@@ -77,7 +77,7 @@ class NightRunServiceTest {
     return new NightRunService(
         runs,
         permissions,
-        new NightRunProperties(maxPerProject),
+        new NightRunProperties(maxPerProject, 2000),
         Clock.fixed(FIXED, ZoneOffset.UTC));
   }
 
@@ -534,6 +534,32 @@ class NightRunServiceTest {
         .returns(null, NightRunItem::nightRunId);
   }
 
+  // --- Kappung der verwaisten Pakete (Issue #966) ------------------------------------------
+
+  /**
+   * Die Kappung folgt unmittelbar auf die Lauf-Verdraengung und schliesst den Vorgang ab: Erst
+   * danach steht fest, welche Pakete verwaist sind.
+   */
+  @Test
+  void submit_kapptVerwaistePaketeUnmittelbarNachDerVerdraengung() {
+    service.submit(USER, PROJECT, List.of(lauf(T1)));
+
+    var reihenfolge = inOrder(runs);
+    reihenfolge.verify(runs).deleteOlderThanNewest(PROJECT, 30);
+    reihenfolge.verify(runs).deleteOrphanItemsOlderThanNewest(PROJECT, 2000);
+    reihenfolge.verifyNoMoreInteractions();
+  }
+
+  @Test
+  void ingest_kapptVerwaistePaketeUnmittelbarNachDerVerdraengung() {
+    service.ingest(USER, PROJECT, TOKEN, meldung(T1, true, null));
+
+    var reihenfolge = inOrder(runs);
+    reihenfolge.verify(runs).deleteOlderThanNewest(PROJECT, 30);
+    reihenfolge.verify(runs).deleteOrphanItemsOlderThanNewest(PROJECT, 2000);
+    reihenfolge.verifyNoMoreInteractions();
+  }
+
   static class FakeNightRunRepository implements NightRunRepository {
 
     private final List<NightRun> gespeicherteLaeufe = new ArrayList<>();
@@ -697,6 +723,21 @@ class NightRunServiceTest {
                   && i.projectId() == projectId
                   && i.startedAt().equals(startedAt));
       return vorher - gespeichertePakete.size();
+    }
+
+    @Override
+    public int deleteOrphanItemsOlderThanNewest(long projectId, int keep) {
+      List<NightRunItem> zuKappen =
+          gespeichertePakete.stream()
+              .filter(i -> i.nightRunId() == null && i.projectId() == projectId)
+              .sorted(
+                  Comparator.comparing(NightRunItem::startedAt)
+                      .thenComparing(NightRunItem::requireId)
+                      .reversed())
+              .skip(keep)
+              .toList();
+      gespeichertePakete.removeAll(zuKappen);
+      return zuKappen.size();
     }
 
     /** Alle Pakete, auch verwaiste — die Verdraengung ist sonst ueber keinen Port sichtbar. */

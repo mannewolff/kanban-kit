@@ -14,6 +14,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.stream.IntStream;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mwolff.manban.AbstractIntegrationTest;
@@ -464,6 +465,57 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
         .isNotEmpty()
         .allSatisfy(
             item -> assertThat(item.errorClass()).isIn(Arrays.asList(NightRunErrorClass.values())));
+  }
+
+  // --- Kappung verwaister Pakete (Issue #966) ------------------------------------------------
+
+  /** Verdraengt einen gerade angelegten Lauf, damit seine Pakete verwaist stehen bleiben. */
+  private void verwaist(Instant startedAt, NightRunItem... items) {
+    jdbc.update("DELETE FROM night_run WHERE id = ?", anlegen(startedAt, List.of(items)));
+  }
+
+  @Test
+  void deleteOrphanItemsOlderThanNewestBehaeltDieJuengstenVerwaistenNachStartzeitpunkt() {
+    // Absichtlich nicht in Zeitfolge angelegt: gemessen wird an started_at, nicht an der ID.
+    verwaist(T2, paket(2, NightRunState.GREEN));
+    verwaist(T1, paket(1, NightRunState.GREEN));
+    verwaist(T3, paket(3, NightRunState.GREEN));
+
+    assertThat(runs.deleteOrphanItemsOlderThanNewest(projectId, 2)).isEqualTo(1);
+
+    assertThat(
+            jdbc.queryForList(
+                "SELECT card_number FROM night_run_item ORDER BY card_number", Integer.class))
+        .containsExactly(2, 3);
+  }
+
+  /**
+   * Ein aufbewahrter Lauf mit der Hoechstzahl an Paketen bleibt bei voller Grenze unversehrt: Seine
+   * Pakete zaehlen nicht mit und werden nicht gekappt (Issue #966).
+   */
+  @Test
+  void einAufbewahrterLaufMitVollerPaketzahlBleibtBeiVollerGrenzeUnversehrt() {
+    List<NightRunItem> zweihundert =
+        IntStream.rangeClosed(1, 200).mapToObj(n -> paket(n, NightRunState.GREEN)).toList();
+    long aufbewahrt = anlegen(T3, zweihundert);
+    verwaist(T1, paket(1001, NightRunState.RED));
+    verwaist(T2, paket(1002, NightRunState.RED));
+
+    assertThat(runs.deleteOrphanItemsOlderThanNewest(projectId, 1)).isEqualTo(1);
+
+    assertThat(runs.findItemsByRunIds(List.of(aufbewahrt))).hasSize(200);
+    assertThat(
+            jdbc.queryForList(
+                "SELECT card_number FROM night_run_item WHERE night_run_id IS NULL", Integer.class))
+        .containsExactly(1002);
+  }
+
+  @Test
+  void deleteOrphanItemsOlderThanNewestLaesstAndereProjekteUnberuehrt() {
+    verwaist(T1, paket(1, NightRunState.GREEN));
+
+    assertThat(runs.deleteOrphanItemsOlderThanNewest(projectId + 999, 1)).isZero();
+    assertThat(zeilen("night_run_item")).isEqualTo(1);
   }
 
   // --- Ringpuffer und Zählung -----------------------------------------------------------------

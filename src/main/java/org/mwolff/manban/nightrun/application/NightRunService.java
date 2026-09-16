@@ -26,8 +26,9 @@ import org.springframework.transaction.annotation.Transactional;
  * verlangt die Projekt-Rolle OWNER; ein Plattform-Admin passiert {@link
  * PermissionChecker#requireOwner} bewusst mit (Plan #718, A6). <b>Wie viele bleiben</b> — je
  * Projekt höchstens {@code max-per-project} Läufe; verdrängt wird nach {@code startedAt}, in
- * derselben Transaktion wie das Einfügen (A10, A14). <b>Was bei einem bekannten Lauf geschieht</b>
- * — er wird als schon vorliegend gemeldet und bleibt unangetastet (A11).
+ * derselben Transaktion wie das Einfügen (A10, A14); die verwaisten Arbeitspakete verdrängter Läufe
+ * haben eine eigene Grenze {@code max-items-per-project} (Issue #966). <b>Was bei einem bekannten
+ * Lauf geschieht</b> — er wird als schon vorliegend gemeldet und bleibt unangetastet (A11).
  */
 @Service
 public class NightRunService {
@@ -80,6 +81,7 @@ public class NightRunService {
       results.add(new NightRunResult(submission.startedAt(), created));
     }
     runs.deleteOlderThanNewest(projectId, properties.maxPerProject());
+    runs.deleteOrphanItemsOlderThanNewest(projectId, properties.maxItemsPerProject());
     return List.copyOf(results);
   }
 
@@ -129,6 +131,7 @@ public class NightRunService {
     UpsertResult ergebnis = runs.upsert(gemeldet, items(projectId, meldung));
     // Der Ringpuffer gilt unverändert auch für maschinell eingelieferte Läufe.
     runs.deleteOlderThanNewest(projectId, properties.maxPerProject());
+    runs.deleteOrphanItemsOlderThanNewest(projectId, properties.maxItemsPerProject());
     return new NightRunResult(meldung.startedAt(), ergebnis.created());
   }
 
