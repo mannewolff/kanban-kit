@@ -1,5 +1,5 @@
 import { ThemeProvider } from '@mui/material/styles'
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import type {
   VerbrauchAngaben,
@@ -37,7 +37,15 @@ const kennzahlen: VerbrauchKennzahlen = {
 const zeitraum: VerbrauchZeitraum = {
   current: kennzahlen,
   previous: { ...kennzahlen, firstDay: '2026-09-14', lastDay: '2026-09-14' },
-  nights: [],
+  nights: [
+    {
+      night: '2026-09-10',
+      runCount: 1,
+      cardCount: 1,
+      usage: { total: nichts, cardShare: nichts, remainder: nichts },
+      aborted: false,
+    },
+  ],
   epics: [],
   withoutEpic: { epicId: null, shortcode: null, title: null, cardCount: 0, usage: nichts },
   epicsOverlap: false,
@@ -73,6 +81,45 @@ describe('NachtlaufVerbrauchBereich', () => {
     expect(api.period).toHaveBeenCalledWith(5, 'DAY', 0)
     expect(api.night).toHaveBeenCalledWith(5, '2026-09-15')
     expect(screen.getByRole('heading', { level: 2, name: 'Verbrauch' })).toBeInTheDocument()
+  })
+
+  it('stellt die Nachtansicht auf die im Zeitraum gewaehlte Nacht um (AK 8)', async () => {
+    const api = {
+      period: vi.fn().mockResolvedValue(zeitraum),
+      night: vi.fn((_: number, datum: string) => Promise.resolve({ ...nacht, night: datum })),
+    }
+    zeige(api)
+    expect(await screen.findByTestId('verbrauch-nacht')).toHaveTextContent('Nacht vom 15.09.2026')
+
+    fireEvent.click(await screen.findByRole('button', { name: /Nacht vom 10\.09\.2026/ }))
+
+    await waitFor(() =>
+      expect(screen.getByTestId('verbrauch-nacht')).toHaveTextContent('Nacht vom 10.09.2026 auf den 11.09.2026'),
+    )
+    expect(api.night).toHaveBeenLastCalledWith(5, '2026-09-10')
+  })
+
+  it('laesst eine vor der ersten Antwort gewaehlte Nacht gelten', async () => {
+    let tagLiefern: (z: VerbrauchZeitraum) => void = () => undefined
+    const api = {
+      period: vi.fn((_: number, type: string) =>
+        type === 'DAY'
+          ? new Promise<VerbrauchZeitraum>((resolve) => {
+              tagLiefern = resolve
+            })
+          : Promise.resolve(zeitraum),
+      ),
+      night: vi.fn((_: number, datum: string) => Promise.resolve({ ...nacht, night: datum })),
+    }
+    zeige(api)
+
+    fireEvent.click(await screen.findByRole('button', { name: /Nacht vom 10\.09\.2026/ }))
+    expect(await screen.findByTestId('verbrauch-nacht')).toHaveTextContent('Nacht vom 10.09.2026')
+    tagLiefern(zeitraum)
+    await Promise.resolve()
+
+    expect(api.night).toHaveBeenCalledTimes(1)
+    expect(api.night).toHaveBeenCalledWith(5, '2026-09-10')
   })
 
   it('sagt, dass geladen wird, solange die Antwort aussteht', () => {

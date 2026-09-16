@@ -370,21 +370,52 @@ const VERBRAUCH_NICHTS = {
   cachedInputSharePercent: null,
 }
 
-/** Tageszeitraum mit Rückschritt 0: liefert das Datum der zuletzt abgeschlossenen Nacht. */
-const VERBRAUCH_TAG = {
-  current: { type: 'DAY', firstDay: '2026-09-15', lastDay: '2026-09-15' },
+/** Kennzahlen eines Zeitraums ohne Messung. */
+const verbrauchKennzahlen = (type: string, firstDay: string, lastDay: string) => ({
+  type,
+  firstDay,
+  lastDay,
+  from: '2026-09-07T10:00:00Z',
+  to: '2026-09-14T10:00:00Z',
+  coverage: 'COMPLETE',
+  noRuns: false,
+  runCount: 2,
+  durationMs: 60_000,
+  cardCount: 1,
+  usage: { total: VERBRAUCH_NICHTS, cardShare: VERBRAUCH_NICHTS, remainder: VERBRAUCH_NICHTS },
+})
+
+/**
+ * Jede Zeitraum-Anfrage bekommt denselben Zeitraum: Beim Tageszeitraum mit Rückschritt 0 liefert er
+ * das Datum der zuletzt abgeschlossenen Nacht, in der Zeitraum-Sicht eine Nacht zum Anwählen.
+ */
+const VERBRAUCH_ZEITRAUM = {
+  current: verbrauchKennzahlen('DAY', '2026-09-15', '2026-09-15'),
+  previous: verbrauchKennzahlen('DAY', '2026-09-14', '2026-09-14'),
+  nights: [
+    {
+      night: '2026-09-10',
+      runCount: 1,
+      cardCount: 1,
+      usage: { total: VERBRAUCH_NICHTS, cardShare: VERBRAUCH_NICHTS, remainder: VERBRAUCH_NICHTS },
+      aborted: false,
+    },
+  ],
+  epics: [],
+  withoutEpic: { epicId: null, shortcode: null, title: null, cardCount: 0, usage: VERBRAUCH_NICHTS },
+  epicsOverlap: false,
 }
 
-/** Die zuletzt abgeschlossene Nacht aus zwei Läufen. */
-const VERBRAUCH_NACHT = {
-  night: '2026-09-15',
+/** Eine Nacht aus zwei Läufen — mit dem Datum, nach dem gefragt wurde. */
+const verbrauchNacht = (night: string) => ({
+  night,
   runCount: 2,
   durationMs: 60_000,
   cardCount: 1,
   usage: { total: VERBRAUCH_NICHTS, cardShare: VERBRAUCH_NICHTS, remainder: VERBRAUCH_NICHTS },
   aborted: false,
   cards: [],
-}
+})
 
 interface Antworten {
   /** Je `GET /night-runs` eine Antwort; die letzte gilt für alle weiteren Aufrufe. */
@@ -457,10 +488,11 @@ function stubFetch(antworten: Antworten) {
 
       // Der Verbrauchs-Bereich (Issue #941) fragt beim Öffnen den Tageszeitraum und die Nacht ab.
       if (url.startsWith('/api/projects/5/night-run-usage/night?')) {
-        return Promise.resolve(antwortOk(VERBRAUCH_NACHT))
+        const datum = new URL(url, 'http://localhost').searchParams.get('date') ?? ''
+        return Promise.resolve(antwortOk(verbrauchNacht(datum)))
       }
       if (url.startsWith('/api/projects/5/night-run-usage?')) {
-        return Promise.resolve(antwortOk(VERBRAUCH_TAG))
+        return Promise.resolve(antwortOk(VERBRAUCH_ZEITRAUM))
       }
       if (url === '/api/projects') {
         return Promise.resolve(antwortOk([{ id: 5, name: 'Team', role: 'OWNER', createdAt: '' }]))
@@ -908,6 +940,22 @@ describe('NightRunPage — Verbrauch (Issue #941)', () => {
     expect(within(bereich).getByRole('heading', { level: 2, name: 'Verbrauch' })).toBeInTheDocument()
     expect(await within(bereich).findByTestId('verbrauch-nacht')).toHaveTextContent('2 Läufe')
     expect(anfragen.map((a) => a.url)).toContain('/api/projects/5/night-run-usage/night?date=2026-09-15&zone=' + encodeURIComponent(Intl.DateTimeFormat().resolvedOptions().timeZone))
+  })
+
+  it('erreicht vom Zeitraum aus eine einzelne Nacht und stellt die Nachtansicht um (Issue #942, AK 8)', async () => {
+    renderPage()
+    const bereich = await screen.findByTestId('verbrauch-bereich')
+    // Die Überschrift der Nachtansicht, nicht die gleichlautende der Zeitraum-Sicht darüber.
+    const nachtUeberschrift = async () =>
+      within(await within(bereich).findByTestId('verbrauch-nacht')).getByRole('heading', { level: 3 })
+    expect(await nachtUeberschrift()).toHaveTextContent('Nacht vom 15.09.2026 auf den 16.09.2026')
+
+    fireEvent.click(await within(bereich).findByRole('button', { name: /Nacht vom 10\.09\.2026/ }))
+
+    await waitFor(async () =>
+      expect(await nachtUeberschrift()).toHaveTextContent('Nacht vom 10.09.2026 auf den 11.09.2026'),
+    )
+    expect(anfragen.some((a) => a.url.includes('/night-run-usage/night?date=2026-09-10&'))).toBe(true)
   })
 
   it('legt keine neue Route an: App.tsx fuehrt fuer die Seite nur /projects/:projectId/nachtlauf', () => {

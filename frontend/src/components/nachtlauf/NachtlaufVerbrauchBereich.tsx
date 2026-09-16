@@ -8,16 +8,18 @@ import {
 } from '../../api/nightRunUsage'
 import { NACHTLAUF_FARBEN, NACHTLAUF_SCHRIFTEN } from '../../nachtlaufDesign'
 import { NachtlaufVerbrauchNacht } from './NachtlaufVerbrauchNacht'
+import { NachtlaufVerbrauchZeitraum } from './NachtlaufVerbrauchZeitraum'
 
 type Zustand = { art: 'laden' } | { art: 'fehler' } | { art: 'nacht'; nacht: VerbrauchNacht }
 
 /**
- * Der Verbrauchs-Bereich der Nachtlauf-Seite (Issue #941, Plan #933 E13): ein eigener Bereich
- * **innerhalb** der bestehenden Seite und ihres Theme-Teilbaums, keine eigene Route.
+ * Der Verbrauchs-Bereich der Nachtlauf-Seite (Issues #941, #942, Plan #933 E13): ein eigener
+ * Bereich **innerhalb** der bestehenden Seite und ihres Theme-Teilbaums, keine eigene Route.
  *
- * <p>Gezeigt wird die zuletzt abgeschlossene Nacht. Ihr Datum rechnet nicht der Browser, sondern
- * der Server über den Tageszeitraum mit Rückschritt 0 — die Tagesgrenze 12:00 (Issue #969) steht
- * damit an genau einer Stelle. Der Zeitraum-Teil (#942) setzt an genau diesem Abruf an.
+ * <p>Oben die Zeitraum-Sicht, darunter die Nachtansicht. Beim Öffnen zeigt sie die zuletzt
+ * abgeschlossene Nacht — ihr Datum rechnet der Server über den Tageszeitraum mit Rückschritt 0, die
+ * Tagesgrenze 12:00 (Issue #969) steht damit an genau einer Stelle. Wird im Zeitraum eine Nacht
+ * gewählt, stellt die Nachtansicht auf deren Datum um, ohne die Seite zu verlassen (#926 AK 8).
  *
  * <p>Ein Fehler bleibt im Bereich und wandert nicht in die Meldungszeile der Seite: Die übrige
  * Auswertung funktioniert auch ohne ihn.
@@ -26,23 +28,43 @@ export function NachtlaufVerbrauchBereich({
   projectId,
   api = nightRunUsageApi,
 }: Readonly<{ projectId: number; api?: Pick<NightRunUsageApi, 'night' | 'period'> }>) {
+  const [nachtDatum, setNachtDatum] = useState<string | null>(null)
   const [zustand, setZustand] = useState<Zustand>({ art: 'laden' })
 
   useEffect(() => {
     let aktiv = true
-    const laden = async () => {
-      const tag = await api.period(projectId, 'DAY', 0)
-      if (!aktiv) return
-      const nacht = await api.night(projectId, tag.current.firstDay)
-      if (aktiv) setZustand({ art: 'nacht', nacht })
-    }
-    laden().catch(() => {
-      if (aktiv) setZustand({ art: 'fehler' })
-    })
+    api.period(projectId, 'DAY', 0).then(
+      (tag) => {
+        // Hat der Leser inzwischen selbst eine Nacht gewählt, gilt seine Wahl.
+        if (aktiv) setNachtDatum((gewaehlt) => gewaehlt ?? tag.current.firstDay)
+      },
+      () => {
+        if (aktiv) setZustand({ art: 'fehler' })
+      },
+    )
     return () => {
       aktiv = false
     }
   }, [api, projectId])
+
+  useEffect(() => {
+    if (nachtDatum === null) {
+      return
+    }
+    let aktiv = true
+    setZustand({ art: 'laden' })
+    api.night(projectId, nachtDatum).then(
+      (nacht) => {
+        if (aktiv) setZustand({ art: 'nacht', nacht })
+      },
+      () => {
+        if (aktiv) setZustand({ art: 'fehler' })
+      },
+    )
+    return () => {
+      aktiv = false
+    }
+  }, [api, projectId, nachtDatum])
 
   return (
     <Box
@@ -64,11 +86,18 @@ export function NachtlaufVerbrauchBereich({
       >
         Verbrauch
       </Typography>
-      {zustand.art === 'laden' && <Typography sx={HINWEIS}>Der Verbrauch wird geladen …</Typography>}
-      {zustand.art === 'fehler' && (
-        <Typography sx={HINWEIS}>Der Verbrauch konnte nicht geladen werden.</Typography>
-      )}
-      {zustand.art === 'nacht' && <NachtlaufVerbrauchNacht nacht={zustand.nacht} />}
+
+      <NachtlaufVerbrauchZeitraum projectId={projectId} api={api} onNachtWaehlen={setNachtDatum} />
+
+      <Box sx={{ mt: 4 }}>
+        {zustand.art === 'laden' && (
+          <Typography sx={HINWEIS}>Der Verbrauch wird geladen …</Typography>
+        )}
+        {zustand.art === 'fehler' && (
+          <Typography sx={HINWEIS}>Der Verbrauch konnte nicht geladen werden.</Typography>
+        )}
+        {zustand.art === 'nacht' && <NachtlaufVerbrauchNacht nacht={zustand.nacht} />}
+      </Box>
     </Box>
   )
 }
