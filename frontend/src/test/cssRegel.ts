@@ -17,3 +17,18 @@ export function cssRegel(element: Element): string {
   }
   return regel.cssText
 }
+
+/**
+ * Eine zusätzliche Regel derselben Emotion-Klasse, deren Selektor den Zusatz trägt — etwa
+ * `.css-abc.Mui-focusVisible { outline: … }` oder `.css-abc:focus { … }`.
+ */
+export function cssRegelMit(element: Element, zusatz: string): string {
+  const klasse = [...element.classList].find((c) => c.startsWith('css-'))
+  const regel = [...document.styleSheets]
+    .flatMap((blatt) => [...blatt.cssRules])
+    .find((r) => r.cssText.startsWith(`.${klasse}${zusatz}`))
+  if (!regel) {
+    throw new Error(`Keine erzeugte CSS-Regel für .${String(klasse)}${zusatz} gefunden`)
+  }
+  return regel.cssText
+}

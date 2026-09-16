@@ -17,15 +17,18 @@ import MenuItem from '@mui/material/MenuItem'
 import Toolbar from '@mui/material/Toolbar'
 import Tooltip from '@mui/material/Tooltip'
 import Typography from '@mui/material/Typography'
+import useMediaQuery from '@mui/material/useMediaQuery'
+import { useTheme, type Theme } from '@mui/material/styles'
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft'
 import ChevronRightIcon from '@mui/icons-material/ChevronRight'
 import ExpandLessIcon from '@mui/icons-material/ExpandLess'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import LogoutIcon from '@mui/icons-material/Logout'
 import MenuBookIcon from '@mui/icons-material/MenuBook'
+import MenuIcon from '@mui/icons-material/Menu'
 import SettingsIcon from '@mui/icons-material/Settings'
 import SwapHorizIcon from '@mui/icons-material/SwapHoriz'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Outlet, useLocation, useMatch, useNavigate } from 'react-router-dom'
 import { boardsApi } from '../api/boards'
 import { apiErrorMessage } from '../api/client'
@@ -48,6 +51,24 @@ const DRAWER_COLLAPSED_WIDTH = 56
 /** Höhe der fixen Kopfleiste (MUI-Standard-Toolbar, Desktop). */
 const APPBAR_HEIGHT = 64
 const STORAGE_KEY = 'sidebar-collapsed'
+
+/**
+ * Sprungmarke zum Inhalt (AK 15): erstes Tastaturziel der Seite, außerhalb des sichtbaren Bereichs,
+ * bis sie den Fokus hat. Nicht `display: none` — dann wäre sie gar nicht fokussierbar.
+ */
+const SPRUNGMARKE_SX = {
+  position: 'absolute',
+  left: 16,
+  top: -64,
+  zIndex: (t: Theme) => t.zIndex.tooltip + 1,
+  px: 2,
+  py: 1,
+  borderRadius: 1,
+  bgcolor: 'background.paper',
+  color: 'text.primary',
+  fontWeight: 700,
+  '&:focus': { top: 8 },
+} as const
 
 /**
  * Fester, vom kontextuellen Navigationsbaum abgesetzter Eintrag am unteren Rand der Seitenleiste.
@@ -88,6 +109,15 @@ export function AppShell() {
   const { user, logout } = useAuth()
 
   const [collapsed, setCollapsed] = useState<boolean>(readCollapsed)
+  // Mindestbreite 768 px (Plan #932 E5): Unterhalb des Breakpoints `md` (900 px) wird die Navigation
+  // zur temporären Schublade hinter einer Schaltfläche, damit 768 vollständig im schmalen Zweig liegt.
+  // `noSsr`, damit der erste Render schon den richtigen Zweig trägt statt kurz den breiten.
+  const muiTheme = useTheme()
+  const schmal = useMediaQuery(muiTheme.breakpoints.down('md'), { noSsr: true })
+  const [navOffen, setNavOffen] = useState(false)
+  // Eingeklappt gibt es nur im breiten Zweig; die Schublade zeigt immer die volle Navigation.
+  const eingeklappt = collapsed && !schmal
+  const inhaltRef = useRef<HTMLElement>(null)
   const [board, setBoard] = useState<BoardContext | null>(null)
   const [projects, setProjects] = useState<Project[] | null>(null)
   const [boardCount, setBoardCount] = useState<number | null>(null)
@@ -265,16 +295,22 @@ export function AppShell() {
     })
   }
 
+  /** Navigiert und schließt die Schublade des schmalen Zweigs — dort läge sie sonst über dem Ziel. */
+  const zielWaehlen = (pfad: string) => {
+    navigate(pfad)
+    setNavOffen(false)
+  }
+
   const renderLink = (link: NavLink, indented: boolean) => {
     const Icon = link.icon
     const selected = location.pathname === link.path || location.pathname.startsWith(`${link.path}/`)
-    if (collapsed) {
+    if (eingeklappt) {
       return (
         <Tooltip key={link.path} title={link.label} placement="right">
           <ListItem disablePadding>
             <ListItemButton
               selected={selected}
-              onClick={() => navigate(link.path)}
+              onClick={() => zielWaehlen(link.path)}
               aria-label={link.label}
               sx={{ justifyContent: 'center', px: 1 }}
             >
@@ -290,7 +326,7 @@ export function AppShell() {
       <ListItem key={link.path} disablePadding>
         <ListItemButton
           selected={selected}
-          onClick={() => navigate(link.path)}
+          onClick={() => zielWaehlen(link.path)}
           sx={indented ? { pl: 4 } : undefined}
         >
           <ListItemIcon>
@@ -305,7 +341,7 @@ export function AppShell() {
   // Doku ist statisch unter /docs/ ausgeliefert (#314), keine SPA-Route -> echter Anker im neuen
   // Tab, nicht navigate(). Steht im abgesetzten Administrations-Bereich (unten).
   const renderDocsLink = () => {
-    if (collapsed) {
+    if (eingeklappt) {
       return (
         <Tooltip title="Dokumentation" placement="right">
           <ListItem disablePadding>
@@ -342,7 +378,7 @@ export function AppShell() {
     const expanded = openGroups.has(group.label)
     const hasActiveChild = group.children.some((c) => location.pathname.startsWith(c.path))
 
-    if (collapsed) {
+    if (eingeklappt) {
       const flyoutOpen = flyout?.label === group.label
       return (
         <Box key={group.label}>
@@ -424,7 +460,11 @@ export function AppShell() {
     )
   }
 
-  const drawerWidth = collapsed ? DRAWER_COLLAPSED_WIDTH : DRAWER_WIDTH
+  const drawerWidth = eingeklappt ? DRAWER_COLLAPSED_WIDTH : DRAWER_WIDTH
+  // Dialoge versetzen sich um die Breite, die der Drawer tatsächlich einnimmt. Die Schublade des
+  // schmalen Zweigs liegt über dem Inhalt und nimmt keine ein — sonst hingen CardDetailModal und
+  // NewCardModal bei 768 px rechts versetzt.
+  const inhaltLinks = schmal ? 0 : drawerWidth
 
   const { editMode } = useEditMode()
   // Im Editiermodus liegt der Hinweisstreifen über dem Header; Header und Inhalt weichen um die
@@ -436,20 +476,44 @@ export function AppShell() {
   // Reaktiv zur Drawer-Breite und zum Editiermodus-Banner; Default 0 gilt außerhalb der Shell.
   useEffect(() => {
     const root = document.documentElement
-    root.style.setProperty('--app-content-left', `${drawerWidth}px`)
+    root.style.setProperty('--app-content-left', `${inhaltLinks}px`)
     root.style.setProperty('--app-content-top', `${APPBAR_HEIGHT + bannerOffset}px`)
     return () => {
       root.style.removeProperty('--app-content-left')
       root.style.removeProperty('--app-content-top')
     }
-  }, [drawerWidth, bannerOffset])
+  }, [inhaltLinks, bannerOffset])
   const initial = user?.displayName?.trim().charAt(0).toUpperCase() ?? '?'
 
   return (
     <Box sx={{ display: 'flex', minHeight: '100vh' }}>
+      <Box
+        component="a"
+        href="#inhalt"
+        sx={SPRUNGMARKE_SX}
+        onClick={(e) => {
+          // Der Browser scrollte nur zum Anker; der Fokus bliebe oben, und die nächste Tab-Taste
+          // begänne wieder bei der Kopfleiste.
+          e.preventDefault()
+          inhaltRef.current?.focus()
+        }}
+      >
+        Zum Inhalt springen
+      </Box>
       <EditModeBanner />
       <AppBar position="fixed" sx={{ zIndex: (t) => t.zIndex.drawer + 1, top: `${bannerOffset}px` }}>
         <Toolbar>
+          {schmal && (
+            <IconButton
+              edge="start"
+              sx={{ color: 'text.primary', mr: 1 }}
+              aria-label="Navigation öffnen"
+              aria-expanded={navOffen}
+              onClick={() => setNavOffen(true)}
+            >
+              <MenuIcon />
+            </IconButton>
+          )}
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexGrow: 1 }}>
             {/* Teal-Einfaerbung als Marken-Echo zur Leiste am Drawer (#653): `knight.svg` traegt
                 keinen eigenen Fill und waere auf der jetzt weissen Leiste schwarz. Als Maske
@@ -536,9 +600,11 @@ export function AppShell() {
       </AppBar>
 
       <Drawer
-        variant="permanent"
+        variant={schmal ? 'temporary' : 'permanent'}
+        open={schmal ? navOffen : true}
+        onClose={() => setNavOffen(false)}
         sx={{
-          width: drawerWidth,
+          width: schmal ? undefined : drawerWidth,
           flexShrink: 0,
           transition: (t) =>
             t.transitions.create('width', {
@@ -549,7 +615,10 @@ export function AppShell() {
             width: drawerWidth,
             boxSizing: 'border-box',
             overflowX: 'hidden',
-            borderLeft: (t) => `8px solid ${t.palette.primary.main}`,
+            // Über `borderLeftColor` statt einer Theme-Funktion: `t.palette` wäre der helle Wert,
+            // der Palettenpfad schaltet mit dem Erscheinungsbild um (#955).
+            borderLeft: '8px solid',
+            borderLeftColor: 'primary.main',
             transition: (t) =>
               t.transitions.create('width', {
                 easing: t.transitions.easing.sharp,
@@ -559,7 +628,11 @@ export function AppShell() {
         }}
       >
         <Toolbar sx={{ mt: `${bannerOffset}px` }} />
-        <Box sx={{ overflow: 'auto', display: 'flex', flexDirection: 'column', height: '100%' }}>
+        <Box
+          component="nav"
+          aria-label="Hauptnavigation"
+          sx={{ overflow: 'auto', display: 'flex', flexDirection: 'column', height: '100%' }}
+        >
           <Box sx={{ flexGrow: 1 }}>
             <List>{navItems.map((node) => (isGroup(node) ? renderGroup(node) : renderLink(node, false)))}</List>
           </Box>
@@ -569,7 +642,8 @@ export function AppShell() {
               {renderLink(ADMINISTRATION_LINK, false)}
               {renderDocsLink()}
             </List>
-            <Divider />
+            {!schmal && <Divider />}
+            {!schmal && (
             <Box sx={{ display: 'flex', justifyContent: collapsed ? 'center' : 'flex-end', p: 0.5 }}>
               <Tooltip title={collapsed ? 'Menü ausklappen' : 'Menü einklappen'} placement="right">
                 <IconButton
@@ -581,13 +655,22 @@ export function AppShell() {
                 </IconButton>
               </Tooltip>
             </Box>
+            )}
           </Box>
         </Box>
       </Drawer>
 
       {/* Ohne eigenen Grund: der getönte Grund der Anwendung (theme.ts, `body::before`) scheint
           durch. Ein `bgcolor` deckte ihn innerhalb der Shell wieder mit Weiß zu. */}
-      <Box component="main" sx={{ flexGrow: 1, p: 3, minWidth: 0 }}>
+      {/* Ziel der Sprungmarke: `tabIndex={-1}` macht `main` per Skript fokussierbar, ohne es in die
+          Tab-Reihenfolge zu legen. Ein Ring um den ganzen Inhaltsbereich zeigte nichts an. */}
+      <Box
+        component="main"
+        id="inhalt"
+        ref={inhaltRef}
+        tabIndex={-1}
+        sx={{ flexGrow: 1, p: 3, minWidth: 0, '&:focus': { outline: 'none' } }}
+      >
         <Toolbar sx={{ mt: `${bannerOffset}px` }} />
         <Outlet />
       </Box>

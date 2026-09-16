@@ -1,4 +1,5 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import type { ReactNode } from 'react'
 import { MemoryRouter, useLocation, useNavigate } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -10,6 +11,7 @@ import { projectsApi } from '../api/projects'
 import { AppShell } from './AppShell'
 import { SnackbarProvider } from './SnackbarProvider'
 import { ThemeProvider } from '@mui/material/styles'
+import { cssRegel, cssRegelMit } from '../test/cssRegel'
 import { theme } from '../theme'
 
 const logoutMock = vi.fn().mockResolvedValue(undefined)
@@ -785,5 +787,184 @@ describe('AppShell Inhaltsbereich', () => {
     renderShellThemed()
 
     expect(screen.getByRole('main')).not.toHaveStyle({ backgroundColor: 'rgb(255, 255, 255)' })
+  })
+})
+
+/**
+ * Stellt eine Fensterbreite nach, soweit `useMediaQuery` sie sieht. jsdom kennt kein `matchMedia`
+ * (und `src/test/setup.ts` stubbt es nicht); ohne Stub gilt jede Media-Query als nicht erfüllt, die
+ * Bestandstests oben laufen damit im breiten Zweig.
+ */
+function mitFensterbreite(breite: number) {
+  vi.stubGlobal('matchMedia', (query: string) => {
+    const max = /max-width:\s*([\d.]+)px/.exec(query)
+    const min = /min-width:\s*([\d.]+)px/.exec(query)
+    const matches = (!max || breite <= Number(max[1])) && (!min || breite >= Number(min[1]))
+    return {
+      matches,
+      media: query,
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    }
+  })
+}
+
+describe('AppShell bis zur Mindestbreite (AK 19, Plan #932 E5, #955)', () => {
+  beforeEach(() => {
+    useAuthMock.mockReturnValue({ user: loggedInUser, logout: logoutMock })
+    vi.stubGlobal('localStorage', fakeStorage())
+  })
+
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('legt die Navigation bei 768 px hinter eine Schaltfläche in der Kopfleiste', async () => {
+    mitFensterbreite(768)
+    renderShell()
+
+    // Temporär heißt: geschlossen, bis sie jemand öffnet — und dann über dem Inhalt.
+    expect(screen.queryByRole('navigation', { name: 'Hauptnavigation' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Navigation öffnen' }))
+
+    const navigation = await screen.findByRole('navigation', { name: 'Hauptnavigation' })
+    expect(navigation).toHaveTextContent('Administration')
+  })
+
+  it('schließt die schmale Navigation, sobald ein Ziel gewählt ist', async () => {
+    mitFensterbreite(768)
+    renderShell()
+    fireEvent.click(screen.getByRole('button', { name: 'Navigation öffnen' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Administration' }))
+
+    expect(screen.getByTestId('location')).toHaveTextContent('/administration')
+    await waitFor(() => expect(screen.queryByRole('navigation', { name: 'Hauptnavigation' })).not.toBeInTheDocument())
+  })
+
+  it('schließt die schmale Navigation mit Escape, ohne ein Ziel zu wählen', async () => {
+    mitFensterbreite(768)
+    renderShell('/profil')
+    fireEvent.click(screen.getByRole('button', { name: 'Navigation öffnen' }))
+    const navigation = await screen.findByRole('navigation', { name: 'Hauptnavigation' })
+
+    fireEvent.keyDown(navigation, { key: 'Escape' })
+
+    await waitFor(() => expect(screen.queryByRole('navigation', { name: 'Hauptnavigation' })).not.toBeInTheDocument())
+    expect(screen.getByTestId('location')).toHaveTextContent('/profil')
+    expect(screen.getByRole('button', { name: 'Navigation öffnen' })).toHaveAttribute('aria-expanded', 'false')
+  })
+
+  it('bietet im schmalen Zweig kein Einklappen an — die Navigation ist dort ohnehin ausgeblendet', async () => {
+    mitFensterbreite(768)
+    renderShell()
+    fireEvent.click(screen.getByRole('button', { name: 'Navigation öffnen' }))
+    await screen.findByRole('navigation', { name: 'Hauptnavigation' })
+
+    expect(screen.queryByLabelText('Menü einklappen')).not.toBeInTheDocument()
+  })
+
+  it('lässt die Navigation bei 900 px und mehr fest stehen, ohne Schaltfläche', () => {
+    mitFensterbreite(1280)
+    renderShell()
+
+    expect(screen.getByRole('navigation', { name: 'Hauptnavigation' })).toHaveTextContent('Administration')
+    expect(screen.queryByRole('button', { name: 'Navigation öffnen' })).not.toBeInTheDocument()
+  })
+
+  it('schaltet genau am Breakpoint md um: 899 px schmal, 900 px breit', () => {
+    mitFensterbreite(899)
+    const { unmount } = renderShell()
+    expect(screen.getByRole('button', { name: 'Navigation öffnen' })).toBeInTheDocument()
+    unmount()
+
+    mitFensterbreite(900)
+    renderShell()
+    expect(screen.queryByRole('button', { name: 'Navigation öffnen' })).not.toBeInTheDocument()
+  })
+
+  it('setzt --app-content-left unterhalb md auf 0, damit Dialoge mittig sitzen', () => {
+    // CardDetailModal und NewCardModal versetzen sich um diese Variable. Mit der Drawer-Breite
+    // hingen sie bei 768 px rechts versetzt, obwohl der Drawer gar nicht dasteht.
+    mitFensterbreite(768)
+    renderShell()
+
+    expect(document.documentElement.style.getPropertyValue('--app-content-left')).toBe('0px')
+  })
+
+  it('behält --app-content-left ab md bei der Drawer-Breite', () => {
+    mitFensterbreite(1280)
+    renderShell()
+
+    expect(document.documentElement.style.getPropertyValue('--app-content-left')).toBe('240px')
+  })
+})
+
+describe('AppShell Tastatur (AK 15, #955)', () => {
+  beforeEach(() => {
+    useAuthMock.mockReturnValue({ user: loggedInUser, logout: logoutMock })
+    vi.stubGlobal('localStorage', fakeStorage())
+  })
+
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('führt als erstes Tastaturziel eine Sprungmarke zum Inhalt', async () => {
+    const user = userEvent.setup()
+    renderShell()
+
+    await user.tab()
+
+    const marke = screen.getByRole('link', { name: 'Zum Inhalt springen' })
+    expect(marke).toHaveFocus()
+    expect(marke).toHaveAttribute('href', '#inhalt')
+  })
+
+  it('springt über die Sprungmarke in den Inhaltsbereich', async () => {
+    const user = userEvent.setup()
+    renderShell()
+
+    await user.tab()
+    await user.keyboard('{Enter}')
+
+    const inhalt = screen.getByRole('main')
+    expect(inhalt).toHaveAttribute('id', 'inhalt')
+    // Ohne tabIndex nähme `main` den Fokus nicht an, und die nächste Tab-Taste begänne wieder oben.
+    expect(inhalt).toHaveAttribute('tabindex', '-1')
+    expect(inhalt).toHaveFocus()
+  })
+
+  it('zeigt die Sprungmarke erst, wenn sie den Fokus hat', async () => {
+    const user = userEvent.setup()
+    renderShellThemed()
+    const marke = screen.getByRole('link', { name: 'Zum Inhalt springen' })
+    const regel = () => cssRegelMit(marke, ':focus')
+
+    // Außerhalb des sichtbaren Bereichs, aber nicht `display: none` — sonst wäre sie gar nicht fokussierbar.
+    expect(cssRegel(marke)).toContain('position: absolute')
+    expect(cssRegel(marke)).not.toContain('display: none')
+    await user.tab()
+    expect(regel()).toMatch(/top: \d/)
+  })
+
+  it('trägt an jedem Navigationsziel einen sichtbaren Fokusring', async () => {
+    const user = userEvent.setup()
+    renderShellThemed()
+    const navigation = screen.getByRole('navigation', { name: 'Hauptnavigation' })
+    const ziele = [...within(navigation).getAllByRole('button'), ...within(navigation).getAllByRole('link')]
+    expect(ziele.length).toBeGreaterThan(2)
+
+    const erreicht = new Set<HTMLElement>()
+    for (let schritt = 0; schritt < 40 && erreicht.size < ziele.length; schritt++) {
+      await user.tab()
+      const aktiv = ziele.find((ziel) => ziel.matches(':focus'))
+      if (aktiv) {
+        erreicht.add(aktiv)
+        // MUI setzt bei Tastaturfokus `Mui-focusVisible`; das Theme hängt daran den Ring (#953).
+        expect(aktiv).toHaveClass('Mui-focusVisible')
+        expect(cssRegelMit(aktiv, '.Mui-focusVisible')).toMatch(/outline: 2px solid var\(--mb-palette-primary-main/)
+      }
+    }
+    expect([...erreicht].length).toBe(ziele.length)
   })
 })

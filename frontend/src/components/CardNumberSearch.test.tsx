@@ -5,6 +5,9 @@ import { epicsApi, type Epic } from '../api/epics'
 import { labelsApi, type Label } from '../api/labels'
 import { membersApi, type Member } from '../api/members'
 import { projectsApi } from '../api/projects'
+import { ThemeProvider } from '@mui/material/styles'
+import { kontrast } from '../lib/kontrast'
+import { theme } from '../theme'
 import { CardNumberSearch } from './CardNumberSearch'
 
 vi.mock('../api/cards', () => ({ cardsApi: { searchByNumber: vi.fn() } }))
@@ -674,5 +677,48 @@ describe('CardNumberSearch', () => {
     fireEvent.keyDown(input(), { key: 'a' })
 
     expect(input()).toHaveValue('345')
+  })
+})
+
+describe('CardNumberSearch in beiden Erscheinungsbildern (#955)', () => {
+  /**
+   * Alle erzeugten Regeln, die das Suchfeld betreffen, samt Media-Blöcken. Gerendert ist allein
+   * diese Komponente; die Regeln mit ihren Feld-Selektoren gehören also zu ihr.
+   */
+  const regelnDesFelds = (): string => {
+    expect(screen.getByLabelText('Kartennummer suchen')).toBeInTheDocument()
+    return [...document.styleSheets]
+      .flatMap((blatt) => [...blatt.cssRules])
+      .map((regel) => regel.cssText)
+      .filter((text) => text.includes('-MuiTextField-root'))
+      .join('\n')
+  }
+
+  it('rechnet den Rand über den Farbkanal der Variable, nicht über den hellen Farbwert', () => {
+    render(
+      <ThemeProvider theme={theme}>
+        <CardNumberSearch />
+      </ThemeProvider>,
+    )
+    // `alpha(t.palette.…)` rechnete auf dem hellen Wert und schaltete im Dunkeln nicht um.
+    expect(regelnDesFelds()).toContain('rgba(var(--mb-palette-primary-contrastTextChannel) / 0.5)')
+  })
+
+  it('gibt dem Feld im dunklen Erscheinungsbild eine eigene Fläche mit lesbarer Schrift', () => {
+    render(
+      <ThemeProvider theme={theme}>
+        <CardNumberSearch />
+      </ThemeProvider>,
+    )
+    // Dunkel läge die Schrift der Primärfläche auf `primary.dark` nur bei 4,41:1. Das Feld trägt
+    // dort Grund und Textfarbe der Anwendung (15:1).
+    const regeln = regelnDesFelds()
+    expect(regeln).toMatch(/@media \(prefers-color-scheme: dark\)[\s\S]*background-color: var\(--mb-palette-background-default\)/)
+    expect(regeln).toMatch(/@media \(prefers-color-scheme: dark\)[\s\S]*color: var\(--mb-palette-text-primary\)/)
+    // Platzhalter und Rand trügen dunkel sonst die dunkle Grundtinte auf dunklem Feld.
+    expect(regeln).toMatch(/@media \(prefers-color-scheme: dark\)[^}]*placeholder[^}]*color: var\(--mb-palette-text-secondary\)/)
+    expect(regeln).toMatch(/@media \(prefers-color-scheme: dark\)[^}]*notchedOutline[^}]*border-color: var\(--mb-palette-divider\)/)
+    const dunkel = theme.colorSchemes.dark!.palette
+    expect(kontrast(dunkel.background.default, dunkel.text.primary)).toBeGreaterThanOrEqual(4.5)
   })
 })

@@ -322,25 +322,41 @@ export function CardNumberSearch() {
               ),
             },
           }}
-          // Die Kopfleiste steht auf `primary`; ein unveränderter Rand/Text wäre darauf kaum
-          // lesbar. Alle Farben aus den Marken-Tokens des Themes abgeleitet, keine Sonderfarben.
-          sx={{
+          // Das Feld hebt sich als dunkle Primärfläche von der Kopfleiste ab. Alle Farben aus den
+          // Marken-Tokens des Themes abgeleitet, keine Sonderfarben.
+          sx={(t) => ({
             width: { xs: 130, sm: 150, md: 190 },
             '& .MuiOutlinedInput-root': {
               bgcolor: 'primary.dark',
               color: 'primary.contrastText',
+              // Dunkel läge die Schrift der Primärfläche auf `primary.dark` nur bei 4,41:1 (#955);
+              // dort trägt das Feld Grund und Textfarbe der Anwendung.
+              ...t.applyStyles('dark', { bgcolor: 'background.default', color: 'text.primary' }),
             },
             '& .MuiOutlinedInput-notchedOutline': {
-              borderColor: (t) => alpha(t.palette.primary.contrastText, 0.5),
+              // Über den Farbkanal der Variable: `alpha(t.palette.…)` rechnete auf dem hellen Wert
+              // und schaltete im dunklen Erscheinungsbild nicht um.
+              borderColor: t.vars
+                ? `rgba(${t.vars.palette.primary.contrastTextChannel} / 0.5)`
+                : alpha(t.palette.primary.contrastText, 0.5),
+              ...t.applyStyles('dark', { borderColor: 'divider' }),
             },
             '& .MuiOutlinedInput-root:hover .MuiOutlinedInput-notchedOutline': {
               borderColor: 'primary.contrastText',
+              ...t.applyStyles('dark', { borderColor: 'text.primary' }),
             },
             '& .MuiOutlinedInput-root.Mui-focused .MuiOutlinedInput-notchedOutline': {
               borderColor: 'primary.contrastText',
+              ...t.applyStyles('dark', { borderColor: 'text.primary' }),
             },
-            '& .MuiInputBase-input::placeholder': { color: 'primary.contrastText', opacity: 0.85 },
-          }}
+            // Dunkel ist `primary.contrastText` die dunkle Grundtinte — auf dem dunklen Feld wären
+            // Platzhalter und Rand unsichtbar.
+            '& .MuiInputBase-input::placeholder': {
+              color: 'primary.contrastText',
+              opacity: 0.85,
+              ...t.applyStyles('dark', { color: 'text.secondary', opacity: 1 }),
+            },
+          })}
         />
       </Box>
 
