@@ -28,6 +28,7 @@ import { buildHandoffText, type NightRunHandoffItem } from '../lib/nightRunHando
 import { NACHTLAUF_FARBEN, NACHTLAUF_TON } from '../nachtlaufDesign'
 import { theme } from '../theme'
 import { NightRunPage } from './NightRunPage'
+import appQuelle from '../App.tsx?raw'
 
 /**
  * Die Seite wird gegen einen **`fetch`-Stub** getestet, nicht gegen gemockte API-Module. Nur so
@@ -360,6 +361,31 @@ function aufbewahrt(
   }
 }
 
+/** Leere Verbrauchsangaben — „nicht gemessen". */
+const VERBRAUCH_NICHTS = {
+  costUsd: null,
+  inputTokens: null,
+  outputTokens: null,
+  cachedInputTokens: null,
+  cachedInputSharePercent: null,
+}
+
+/** Tageszeitraum mit Rückschritt 0: liefert das Datum der zuletzt abgeschlossenen Nacht. */
+const VERBRAUCH_TAG = {
+  current: { type: 'DAY', firstDay: '2026-09-15', lastDay: '2026-09-15' },
+}
+
+/** Die zuletzt abgeschlossene Nacht aus zwei Läufen. */
+const VERBRAUCH_NACHT = {
+  night: '2026-09-15',
+  runCount: 2,
+  durationMs: 60_000,
+  cardCount: 1,
+  usage: { total: VERBRAUCH_NICHTS, cardShare: VERBRAUCH_NICHTS, remainder: VERBRAUCH_NICHTS },
+  aborted: false,
+  cards: [],
+}
+
 interface Antworten {
   /** Je `GET /night-runs` eine Antwort; die letzte gilt für alle weiteren Aufrufe. */
   listen?: NightRunView[][]
@@ -429,6 +455,13 @@ function stubFetch(antworten: Antworten) {
       const method = init?.method ?? 'GET'
       anfragen.push({ url, method, body: String(init?.body ?? '') })
 
+      // Der Verbrauchs-Bereich (Issue #941) fragt beim Öffnen den Tageszeitraum und die Nacht ab.
+      if (url.startsWith('/api/projects/5/night-run-usage/night?')) {
+        return Promise.resolve(antwortOk(VERBRAUCH_NACHT))
+      }
+      if (url.startsWith('/api/projects/5/night-run-usage?')) {
+        return Promise.resolve(antwortOk(VERBRAUCH_TAG))
+      }
       if (url === '/api/projects') {
         return Promise.resolve(antwortOk([{ id: 5, name: 'Team', role: 'OWNER', createdAt: '' }]))
       }
@@ -864,6 +897,26 @@ describe('NightRunPage — aufbewahrte Läufe beim Öffnen', () => {
     renderPage({ listenFehler: 'Nur der Owner darf die Auswertung sehen.' })
 
     expect(await screen.findByText('Nur der Owner darf die Auswertung sehen.')).toBeInTheDocument()
+  })
+})
+
+describe('NightRunPage — Verbrauch (Issue #941)', () => {
+  it('zeigt den Verbrauchs-Bereich auf der bestehenden Seite, im Theme-Teilbaum des Entwurfs', async () => {
+    renderPage()
+
+    const bereich = await screen.findByTestId('verbrauch-bereich')
+    expect(within(bereich).getByRole('heading', { level: 2, name: 'Verbrauch' })).toBeInTheDocument()
+    expect(await within(bereich).findByTestId('verbrauch-nacht')).toHaveTextContent('2 Läufe')
+    expect(anfragen.map((a) => a.url)).toContain('/api/projects/5/night-run-usage/night?date=2026-09-15&zone=' + encodeURIComponent(Intl.DateTimeFormat().resolvedOptions().timeZone))
+  })
+
+  it('legt keine neue Route an: App.tsx fuehrt fuer die Seite nur /projects/:projectId/nachtlauf', () => {
+    const routen = [...appQuelle.matchAll(/path="([^"]+)"\s+element=\{<NightRunPage \/>\}/g)].map(
+      (treffer) => treffer[1],
+    )
+
+    expect(routen).toEqual(['/projects/:projectId/nachtlauf'])
+    expect(appQuelle).not.toMatch(/verbrauch|night-run-usage/i)
   })
 })
 

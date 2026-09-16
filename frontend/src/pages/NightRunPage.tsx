@@ -58,6 +58,7 @@ import {
   type Bandabschnitt as BandabschnittForm,
 } from '../components/nachtlauf/NachtlaufStufenband'
 import { NachtlaufAnteilsbalken } from '../components/nachtlauf/NachtlaufAnteilsbalken'
+import { NachtlaufVerbrauchBereich } from '../components/nachtlauf/NachtlaufVerbrauchBereich'
 import { NachtlaufFuss, type Fussangabe as FussangabeForm } from '../components/nachtlauf/NachtlaufFuss'
 import { NACHTLAUF_TON } from '../nachtlaufDesign'
 import { nachtlaufTheme } from '../nachtlaufDesign'
@@ -2722,6 +2723,11 @@ export function NightRunPage() {
               {meldung}
             </Alert>
           )}
+
+          {/* Der Verbrauchs-Bereich (Issue #941) liegt im selben Theme-Teilbaum und auf derselben
+              Route (Plan #933 E13): `CLAUDE-design.md` erlaubt die Gestaltung des Entwurfs nur
+              für den Inhaltsbereich dieser einen Seite. */}
+          <NachtlaufVerbrauchBereich projectId={id} />
 
           {laeufe.length === 0 && <Typography color="text.secondary">Noch keine Auswertung vorhanden.</Typography>}
 
