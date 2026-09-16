@@ -85,6 +85,24 @@ export interface NightRunItemView {
   durationMs: number | null
   commitHash: string | null
   excerpt: string | null
+  usage: NightRunUsageView | null
+}
+
+/**
+ * Der aufbewahrte Verbrauch, wie der Server ihn schickt (Issue #949).
+ *
+ * Ein **zweiter** Typ neben {@link NightRunUsage}, und zwar mit `| null` statt `?:` — aus demselben
+ * Grund wie bei {@link NightRunItemView}: Der Server sendet ein fehlendes Feld als `null`, nicht
+ * als fehlenden Schluessel. Ein `?:` beschriebe hier eine Antwort, die es nicht gibt, und niemand
+ * bemerkte es, bis eine Rechnung auf `null` laeuft.
+ *
+ * `usage` selbst ist `null`, wenn ueberhaupt nichts gemessen wurde.
+ */
+export interface NightRunUsageView {
+  costUsd: number | null
+  inputTokens: number | null
+  outputTokens: number | null
+  cachedInputTokens: number | null
 }
 
 /** Ein aufbewahrter Lauf samt seiner Arbeitspakete. */
@@ -99,6 +117,15 @@ export interface NightRunView {
   /** Auszug der ungedeuteten Zeilen; `null`, wenn es keine gab — siehe {@link NightRunItemView}. */
   unparsedSample: string | null
   createdAt: string
+  /** Wie der Lauf hereinkam: `UPLOAD` ueber den Browser, `TOKEN` gemeldet von der Kette selbst. */
+  origin: 'UPLOAD' | 'TOKEN'
+  /** Der Name des meldenden Tokens; `null` bei einem hochgeladenen Lauf. */
+  tokenName: string | null
+  /** `false`, solange die Kette den Lauf noch nicht abgeschlossen gemeldet hat. */
+  complete: boolean
+  /** Zeitpunkt der letzten Meldung; `null`, wenn der Lauf seit dem Anlegen nicht gemeldet wurde. */
+  updatedAt: string | null
+  usage: NightRunUsageView | null
   items: NightRunItemView[]
 }
 

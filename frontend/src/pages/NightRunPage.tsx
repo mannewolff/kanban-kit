@@ -41,6 +41,7 @@ import {
   type NightRunServerMode,
   type NightRunSubmission,
   type NightRunUsage,
+  type NightRunUsageView,
   type NightRunView,
 } from '../api/nightRuns'
 import { Breadcrumbs } from '../components/Breadcrumbs'
@@ -119,6 +120,23 @@ import { useProjectName } from '../lib/useProjectName'
  */
 interface AnzeigeItem extends NightRunHandoffItem {
   durationMs: number | undefined
+  /**
+   * Der aufbewahrte Verbrauch (Issue #949); `undefined` allein am eben geparsten Lauf — dort gibt
+   * es noch keinen aufbewahrten Stand. Ein aufbewahrter ohne Messung traegt vier leere Felder.
+   */
+  verbrauch: Verbrauch | undefined
+}
+
+/**
+ * Der aufbewahrte Verbrauch in der Anzeigeform (Issue #949) — `undefined` statt `null`, wie
+ * ueberall im Anzeigemodell (Issue #734). Jedes Feld fehlt einzeln: Ein hochgeladener Lauf traegt
+ * einen Kostenbetrag ohne Mengen, ein gemeldeter beides.
+ */
+interface Verbrauch {
+  kostenUsd: number | undefined
+  eingabe: number | undefined
+  ausgabe: number | undefined
+  zwischenspeicher: number | undefined
 }
 
 /** Ein Lauf in der Anzeigeform. */
@@ -137,6 +155,17 @@ interface AnzeigeLauf {
   skippedCount: number
   unparsedCount: number
   unparsedSample: string[]
+  /**
+   * Wie der Lauf hereinkam (Issue #949); `undefined` bei einem eben geparsten Lauf — der ist noch
+   * gar nicht eingeliefert, und „hochgeladen" waere dort eine Behauptung ueber die Zukunft.
+   */
+  herkunft: NightRunView['origin'] | undefined
+  tokenName: string | undefined
+  eingeliefertAm: string | undefined
+  zuletztGemeldetAm: string | undefined
+  /** `false`, solange die Kette den Lauf nicht abgeschlossen gemeldet hat. */
+  vollstaendig: boolean
+  verbrauch: Verbrauch | undefined
   items: AnzeigeItem[]
 }
 
@@ -260,6 +289,14 @@ const ausParser = (run: NightRun): AnzeigeLauf => ({
   skippedCount: run.skippedCount,
   unparsedCount: run.unparsedCount,
   unparsedSample: run.unparsedSample,
+  // Die Herkunftsfelder bleiben leer: Ein eben geparster Lauf ist nicht gespeichert. Die
+  // Vollstaendigkeit kennt der Stand dagegen selbst.
+  herkunft: undefined,
+  tokenName: undefined,
+  eingeliefertAm: undefined,
+  zuletztGemeldetAm: undefined,
+  vollstaendig: !run.incomplete,
+  verbrauch: undefined,
   items: run.items.map((item) => ({
     cardNumber: item.cardNumber,
     title: item.title,
@@ -267,8 +304,27 @@ const ausParser = (run: NightRun): AnzeigeLauf => ({
     errorClass: item.errorClass,
     durationMs: item.durationMs,
     excerpt: item.excerpt,
+    verbrauch: undefined,
   })),
 })
+
+/**
+ * Der Verbrauch vom Server in der Anzeigeform.
+ *
+ * <p>Ein `null` des Servers wird zum **leeren Verbrauch** und nicht zu `undefined`: Beides heisst
+ * hier Verschiedenes. Ein leerer Verbrauch ist ein aufbewahrter Lauf, an dem nichts gemessen wurde
+ * — das gehoert als Fehlanzeige auf die Seite. `undefined` bleibt dem eben geparsten Lauf
+ * vorbehalten, an dem es noch gar nichts aufzubewahren gab.
+ */
+const ausVerbrauch = (view: NightRunUsageView | null): Verbrauch =>
+  view === null
+    ? { kostenUsd: undefined, eingabe: undefined, ausgabe: undefined, zwischenspeicher: undefined }
+    : {
+        kostenUsd: view.costUsd ?? undefined,
+        eingabe: view.inputTokens ?? undefined,
+        ausgabe: view.outputTokens ?? undefined,
+        zwischenspeicher: view.cachedInputTokens ?? undefined,
+      }
 
 /**
  * Der Lauf vom Server in der Anzeigeform (#725).
@@ -289,6 +345,12 @@ const ausSicht = (view: NightRunView): AnzeigeLauf => ({
   skippedCount: view.skippedCount,
   unparsedCount: view.unparsedCount,
   unparsedSample: view.unparsedSample == null ? [] : view.unparsedSample.split('\n'),
+  herkunft: view.origin,
+  tokenName: view.tokenName ?? undefined,
+  eingeliefertAm: view.createdAt,
+  zuletztGemeldetAm: view.updatedAt ?? undefined,
+  vollstaendig: view.complete,
+  verbrauch: ausVerbrauch(view.usage),
   items: view.items.map((item) => ({
     cardNumber: item.cardNumber,
     title: item.title,
@@ -296,6 +358,7 @@ const ausSicht = (view: NightRunView): AnzeigeLauf => ({
     errorClass: item.errorClass ?? undefined,
     durationMs: item.durationMs ?? undefined,
     excerpt: item.excerpt ?? undefined,
+    verbrauch: ausVerbrauch(item.usage),
   })),
 })
 
@@ -715,6 +778,18 @@ function Paketzusaetze({
 
   return (
     <>
+      {/* Der aufbewahrte Verbrauch des Arbeitspakets (Issue #949) — hier und nicht in einer der
+          drei Vorgangsformen: Er gilt fuer alle drei gleichermassen, und dreimal geschrieben liefe
+          er beim naechsten Wortwechsel auseinander. Er steht nur, wo einer aufbewahrt ist: An
+          einem eben geparsten Lauf gaebe es vier Fehlanzeigen zu lesen, die nichts ueber den Lauf
+          sagen, sondern nur darueber, dass er noch nicht eingeliefert ist. */}
+      {item.verbrauch !== undefined && (
+        <VerbrauchsZeile
+          verbrauch={item.verbrauch}
+          testId={`paket-verbrauch-${item.cardNumber}`}
+        />
+      )}
+
       {haeufigkeit !== null && (
         <Typography
           variant="body2"
@@ -2076,6 +2151,82 @@ function teuersterVorgang(items: readonly NightRunItem[]): string {
   return `#${teuerster.nummer} mit ${betrag(teuerster.kosten)}`
 }
 
+/** Ein Zeitpunkt in der Schreibweise, die die Seite ueberall fuer Zeitpunkte fuehrt. */
+const zeitpunkt = (iso: string): string => new Date(iso).toLocaleString('de-DE')
+
+/**
+ * Was der Kopf ueber die Einlieferung eines Laufs sagt (Issue #949): woher er kam, wann er zuletzt
+ * gemeldet wurde und ob er abgeschlossen ist.
+ *
+ * <p>Ein eben geparster Lauf sagt dazu **nichts** — er ist noch nicht eingeliefert, und
+ * „hochgeladen am" waere dort eine Behauptung ueber die Zukunft. Die Unvollstaendigkeit steht
+ * trotzdem da: Sie gilt dem Lauf selbst, nicht seiner Speicherung.
+ *
+ * <p>Der Zeitpunkt der letzten Meldung erscheint nur, wenn er vom Anlegen abweicht. Eine Kette
+ * meldet denselben Lauf mehrfach; stehen beide Zeitpunkte gleich, gab es genau eine Meldung, und
+ * zwei gleiche Zeiten nebeneinander liessen den Leser nach einem Unterschied suchen, den es nicht
+ * gibt.
+ */
+function einlieferungsangaben(lauf: AnzeigeLauf): string[] {
+  const herkunft: string[] = []
+  if (lauf.herkunft === 'TOKEN' && lauf.eingeliefertAm !== undefined) {
+    herkunft.push(
+      `maschinell eingeliefert am ${zeitpunkt(lauf.eingeliefertAm)}${
+        lauf.tokenName === undefined ? '' : ` (Token: ${lauf.tokenName})`
+      }`,
+    )
+  } else if (lauf.herkunft === 'UPLOAD' && lauf.eingeliefertAm !== undefined) {
+    herkunft.push(`hochgeladen am ${zeitpunkt(lauf.eingeliefertAm)}`)
+  }
+  if (
+    lauf.zuletztGemeldetAm !== undefined &&
+    lauf.zuletztGemeldetAm !== lauf.eingeliefertAm
+  ) {
+    herkunft.push(`zuletzt gemeldet am ${zeitpunkt(lauf.zuletztGemeldetAm)}`)
+  }
+  return lauf.vollstaendig ? herkunft : [...herkunft, 'unvollständig gemeldet']
+}
+
+/** Die Mengen des Verbrauchs stehen als Token da — „Zuege" ist im Leitstand die Zahl der Sitzungen. */
+const TOKEN_FORMAT = new Intl.NumberFormat('de-DE')
+
+/**
+ * Eine Verbrauchszahl mit ihrer Einheit, oder die ausdrueckliche Fehlanzeige. „0 Token" waere eine
+ * Behauptung ueber etwas, das gar nicht gemessen wurde — dieselbe Linie wie bei {@link betrag}.
+ */
+const menge = (wert: number | undefined): string =>
+  wert === undefined ? 'nicht gemessen' : `${TOKEN_FORMAT.format(wert)} Token`
+
+const kosten = (wert: number | undefined): string =>
+  wert === undefined ? 'nicht gemessen' : KOSTEN_FORMAT.format(wert)
+
+/**
+ * Der aufbewahrte Verbrauch eines Laufs oder eines Arbeitspakets (Issue #949).
+ *
+ * <p><b>Die Lauf-Summe wird angezeigt, nicht gerechnet.</b> Sie kommt aus dem Lauf selbst und
+ * liegt ueber der Summe seiner Arbeitspakete, wo Sitzungen keinem Paket zuzuordnen waren. Aus den
+ * Paketen gerechnet waere dieser Rest per Konstruktion null — und damit unsichtbar.
+ */
+function VerbrauchsZeile({
+  verbrauch,
+  testId,
+}: Readonly<{
+  verbrauch: Verbrauch | undefined
+  testId: string
+}>) {
+  const angaben = [
+    `Kosten: ${kosten(verbrauch?.kostenUsd)}`,
+    `Eingabe: ${menge(verbrauch?.eingabe)}`,
+    `Ausgabe: ${menge(verbrauch?.ausgabe)}`,
+    `Zwischenspeicher: ${menge(verbrauch?.zwischenspeicher)}`,
+  ]
+  return (
+    <Typography data-testid={testId} variant="body2" color="text.secondary">
+      {angaben.join(' · ')}
+    </Typography>
+  )
+}
+
 /** Ein Lauf als aufklappbares Panel; die Kette wird erst beim Aufklappen geladen (A8). */
 function LaufPanel({
   lauf,
@@ -2161,6 +2312,10 @@ function LaufPanel({
               `${lauf.processedCount} bearbeitet, ${lauf.skippedCount} übergangen`,
               ...(lauf.unparsedCount > 0 ? [`Ungedeutete Zeilen: ${lauf.unparsedCount}`] : []),
               ...(ergebnis === undefined ? [] : [ergebnis ? 'neu angelegt' : 'lag schon vor']),
+              // Herkunft, letzte Meldung und Vollstaendigkeit (Issue #949) — sie stehen im Kopf
+              // und nicht im Inhalt: Ein unvollstaendig gemeldeter Lauf soll auffallen, ohne dass
+              // man ihn erst aufklappt.
+              ...einlieferungsangaben(lauf),
             ]}
           />
         ) : (
@@ -2188,10 +2343,23 @@ function LaufPanel({
           {ergebnis !== undefined && (
             <Chip size="small" label={ergebnis ? 'neu angelegt' : 'lag schon vor'} variant="outlined" />
           )}
+          {/* Dieselben Angaben wie im Entwurfs-Kopf (Issue #949), in der Chip-Form der beiden
+              Altbestand-Arten. */}
+          {einlieferungsangaben(lauf).map((angabe) => (
+            <Typography key={angabe} component="span" color="text.secondary">
+              {angabe}
+            </Typography>
+          ))}
         </Stack>
         )}
       </AccordionSummary>
       <AccordionDetails>
+        {/* Der aufbewahrte Verbrauch des Laufs (Issue #949) — anders als die Kennzahlen aus dem
+            Ergebnisstand steht er auch dann da, wenn diese Sitzung den Stand nie gesehen hat. Nur
+            an einem gespeicherten Lauf: Ein eben geparster hat noch keinen aufbewahrten Wert. */}
+        {lauf.verbrauch !== undefined && (
+          <VerbrauchsZeile verbrauch={lauf.verbrauch} testId="lauf-verbrauch" />
+        )}
         {/* Die Kennzahlenreihe des Entwurfs gehört zum Kopf, steht aber im Inhalt: Der
             `AccordionSummary` ist ein `<button>`, und die Reihe trägt zu viel für einen Knopf. */}
         {kennzahlen !== null && (
