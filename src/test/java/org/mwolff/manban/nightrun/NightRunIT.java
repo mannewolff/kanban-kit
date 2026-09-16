@@ -378,6 +378,76 @@ class NightRunIT extends AbstractIntegrationTest {
   }
 
   /**
+   * Die beiden Endpunkte der Verbrauchs-Auswertung im vollen Kontext (Issue #939): dieselbe
+   * Rechte-Matrix wie die Laufliste, und die 400-Faelle kommen auch durch den {@code
+   * GlobalExceptionHandler} als 400 und nicht als 500 heraus.
+   */
+  @Test
+  void usageEndpoints_followTheOwnerMatrix_andRejectOffsetZonesAndStepsBack() throws Exception {
+    Cookie owner = session("nr-usage-owner@example.com", PlatformRole.USER);
+    Cookie viewer = session("nr-usage-viewer@example.com", PlatformRole.USER);
+    Cookie stranger = session("nr-usage-stranger@example.com", PlatformRole.USER);
+    Cookie admin = session("nr-usage-platform@example.com", PlatformRole.ADMIN);
+    long projectId = projectOf("nr-usage-owner@example.com", "nr-usage-admin@example.com");
+    memberships.save(
+        new ProjectMembership(
+            null,
+            projectId,
+            userId("nr-usage-viewer@example.com"),
+            ProjectRole.VIEWER,
+            Instant.now()));
+    String nacht = "/api/projects/" + projectId + "/night-run-usage/night";
+    String zeitraum = "/api/projects/" + projectId + "/night-run-usage";
+
+    for (Cookie wer : List.of(owner, admin)) {
+      mvc.perform(get(nacht).param("date", "2026-09-15").param("zone", "Europe/Berlin").cookie(wer))
+          .andExpect(status().isOk())
+          .andExpect(jsonPath("$.runCount").value(0));
+      mvc.perform(
+              get(zeitraum)
+                  .param("type", "MONTH")
+                  .param("stepsBack", "0")
+                  .param("zone", "Europe/Berlin")
+                  .cookie(wer))
+          .andExpect(status().isOk())
+          .andExpect(jsonPath("$.current.noRuns").value(true));
+    }
+    mvc.perform(get(nacht).param("date", "2026-09-15").param("zone", "UTC").cookie(viewer))
+        .andExpect(status().isForbidden());
+    mvc.perform(
+            get(zeitraum)
+                .param("type", "DAY")
+                .param("stepsBack", "0")
+                .param("zone", "UTC")
+                .cookie(stranger))
+        .andExpect(status().isNotFound());
+
+    mvc.perform(get(nacht).param("date", "2026-09-15").param("zone", "+05:30").cookie(owner))
+        .andExpect(status().isBadRequest());
+    mvc.perform(
+            get(zeitraum)
+                .param("type", "DAY")
+                .param("stepsBack", "0")
+                .param("zone", "Nirgendwo/Nirgends")
+                .cookie(owner))
+        .andExpect(status().isBadRequest());
+    mvc.perform(
+            get(zeitraum)
+                .param("type", "DAY")
+                .param("stepsBack", "367")
+                .param("zone", "UTC")
+                .cookie(owner))
+        .andExpect(status().isBadRequest());
+    mvc.perform(
+            get(zeitraum)
+                .param("type", "QUARTER")
+                .param("stepsBack", "0")
+                .param("zone", "UTC")
+                .cookie(owner))
+        .andExpect(status().isBadRequest());
+  }
+
+  /**
    * Ein verdraengter Lauf, erneut hochgeladen, legt seine Pakete nicht ein zweites Mal an (Issue
    * #965). Ohne die Bereinigung stuende die Karte zweimal da: {@code ON CONFLICT} kennt nur den
    * Lauf-Kopf, und der war fort.
