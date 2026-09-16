@@ -17,11 +17,13 @@ import java.util.Comparator;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mwolff.manban.nightrun.application.NightRunRepository.UpsertResult;
 import org.mwolff.manban.nightrun.domain.NightRun;
 import org.mwolff.manban.nightrun.domain.NightRunErrorClass;
 import org.mwolff.manban.nightrun.domain.NightRunItem;
@@ -378,6 +380,45 @@ class NightRunServiceTest {
     private long naechstePaketId = 1L;
 
     @Override
+    public UpsertResult upsert(NightRun run, List<NightRunItem> items) {
+      Optional<NightRun> vorhanden =
+          gespeicherteLaeufe.stream()
+              .filter(
+                  r ->
+                      r.projectId().equals(run.projectId())
+                          && r.startedAt().equals(run.startedAt()))
+              .findFirst();
+      if (vorhanden.isEmpty()) {
+        return new UpsertResult(insertIfAbsent(run, items).orElseThrow(), true);
+      }
+      long id = vorhanden.get().requireId();
+      gespeicherteLaeufe.remove(vorhanden.get());
+      gespeichertePakete.removeIf(item -> Objects.equals(item.nightRunId(), id));
+      gespeicherteLaeufe.add(
+          new NightRun(
+              id,
+              run.projectId(),
+              run.startedAt(),
+              run.mode(),
+              run.durationMs(),
+              run.processedCount(),
+              run.skippedCount(),
+              run.unparsedCount(),
+              run.unparsedSample(),
+              // created_at der ersten Meldung, nicht der jetzigen.
+              vorhanden.get().createdAt(),
+              run.origin(),
+              run.tokenName(),
+              run.complete(),
+              run.updatedAt(),
+              run.usage()));
+      for (NightRunItem item : items) {
+        gespeichertePakete.add(paket(item, id));
+      }
+      return new UpsertResult(id, false);
+    }
+
+    @Override
     public Optional<Long> insertIfAbsent(NightRun run, List<NightRunItem> items) {
       boolean bekannt =
           gespeicherteLaeufe.stream()
@@ -402,28 +443,34 @@ class NightRunServiceTest {
               run.unparsedCount(),
               run.unparsedSample(),
               run.createdAt(),
-              NightRunOrigin.UPLOAD,
-              null,
-              true,
-              null,
-              null));
+              // Uebernommen statt erfunden: Ein Fake, der hier feste Werte setzte, machte jeden
+              // Test darueber blind fuer das, was der Service tatsaechlich schreibt.
+              run.origin(),
+              run.tokenName(),
+              run.complete(),
+              run.updatedAt(),
+              run.usage()));
       for (NightRunItem item : items) {
-        long paketId = naechstePaketId;
-        naechstePaketId += 1;
-        gespeichertePakete.add(
-            new NightRunItem(
-                paketId,
-                id,
-                item.cardNumber(),
-                item.title(),
-                item.state(),
-                item.errorClass(),
-                item.durationMs(),
-                item.commitHash(),
-                item.excerpt(),
-                null));
+        gespeichertePakete.add(paket(item, id));
       }
       return Optional.of(id);
+    }
+
+    /** Vergibt eine Id und uebernimmt alle uebergebenen Werte — auch den Verbrauch. */
+    private NightRunItem paket(NightRunItem item, long runId) {
+      long paketId = naechstePaketId;
+      naechstePaketId += 1;
+      return new NightRunItem(
+          paketId,
+          runId,
+          item.cardNumber(),
+          item.title(),
+          item.state(),
+          item.errorClass(),
+          item.durationMs(),
+          item.commitHash(),
+          item.excerpt(),
+          item.usage());
     }
 
     @Override

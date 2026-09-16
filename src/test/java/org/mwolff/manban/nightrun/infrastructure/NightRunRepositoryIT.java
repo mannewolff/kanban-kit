@@ -12,10 +12,12 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mwolff.manban.AbstractIntegrationTest;
 import org.mwolff.manban.nightrun.application.NightRunRepository;
+import org.mwolff.manban.nightrun.application.NightRunRepository.UpsertResult;
 import org.mwolff.manban.nightrun.domain.NightRun;
 import org.mwolff.manban.nightrun.domain.NightRunErrorClass;
 import org.mwolff.manban.nightrun.domain.NightRunItem;
@@ -557,5 +559,128 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
     assertThat(gelesen.tokenName()).isEqualTo(langerName);
     assertThat(gelesen.complete()).isFalse();
     assertThat(gelesen.updatedAt()).isEqualTo(fortgeschrieben);
+  }
+
+  // --- upsert: der meldende Weg (Issue #945) ---------------------------------------------
+
+  private NightRun meldung(Instant startedAt, boolean complete) {
+    return new NightRun(
+        null,
+        projectId,
+        startedAt,
+        NightRunMode.CHAIN,
+        1000L,
+        1,
+        0,
+        0,
+        null,
+        ANGELEGT,
+        NightRunOrigin.TOKEN,
+        "nacht-token",
+        complete,
+        Instant.parse("2026-09-10T03:22:00Z"),
+        null);
+  }
+
+  private NightRun gelesen(long runId) {
+    return runs.findByProjectOrderByStartedAtDesc(projectId).stream()
+        .filter(r -> Objects.equals(r.id(), runId))
+        .findFirst()
+        .orElseThrow();
+  }
+
+  @Test
+  void ersterUpsertLegtDenLaufAnUndMeldetCreated() {
+    Instant start = Instant.parse("2026-09-10T22:00:00Z");
+
+    UpsertResult ergebnis =
+        runs.upsert(meldung(start, false), List.of(paket(101, NightRunState.GREEN)));
+
+    assertThat(ergebnis.created()).isTrue();
+    assertThat(gelesen(ergebnis.id()).origin()).isEqualTo(NightRunOrigin.TOKEN);
+    assertThat(runs.findItemsByRunIds(List.of(ergebnis.id()))).hasSize(1);
+  }
+
+  @Test
+  void zweiterUpsertMeldetDieselbeIdUndVerdoppeltNichts() {
+    Instant start = Instant.parse("2026-09-11T22:00:00Z");
+    UpsertResult erster =
+        runs.upsert(meldung(start, false), List.of(paket(101, NightRunState.GREEN)));
+
+    UpsertResult zweiter =
+        runs.upsert(meldung(start, true), List.of(paket(101, NightRunState.GREEN)));
+
+    assertThat(zweiter.created()).isFalse();
+    assertThat(zweiter.id()).isEqualTo(erster.id());
+    assertThat(runs.findByProjectOrderByStartedAtDesc(projectId))
+        .filteredOn(r -> Objects.equals(r.startedAt(), start))
+        .hasSize(1);
+    assertThat(runs.findItemsByRunIds(List.of(erster.id()))).hasSize(1);
+  }
+
+  /** Der gemeldete Stand ist vollstaendig: Was die zweite Meldung nicht mehr fuehrt, ist fort. */
+  @Test
+  void einZweiterUpsertErsetztDenStandVollstaendig() {
+    Instant start = Instant.parse("2026-09-12T22:00:00Z");
+    UpsertResult erster =
+        runs.upsert(
+            meldung(start, false),
+            List.of(paket(101, NightRunState.GREEN), paket(102, NightRunState.RED)));
+
+    runs.upsert(meldung(start, true), List.of(paket(103, NightRunState.GREEN)));
+
+    assertThat(runs.findItemsByRunIds(List.of(erster.id())))
+        .extracting(NightRunItem::cardNumber)
+        .containsExactly(103);
+  }
+
+  @Test
+  void beimErsetzenBleibtCreatedAtStehenUndUpdatedAtWaechst() {
+    Instant start = Instant.parse("2026-09-13T22:00:00Z");
+    UpsertResult erster = runs.upsert(meldung(start, false), List.of());
+    Instant spaeter = Instant.parse("2026-09-13T04:00:00Z");
+
+    NightRun zweite =
+        new NightRun(
+            null,
+            projectId,
+            start,
+            NightRunMode.CHAIN,
+            2000L,
+            2,
+            0,
+            0,
+            null,
+            Instant.parse("2026-09-14T06:00:00Z"),
+            NightRunOrigin.TOKEN,
+            "nacht-token",
+            true,
+            spaeter,
+            null);
+    runs.upsert(zweite, List.of());
+
+    NightRun nachher = gelesen(erster.id());
+    assertThat(nachher.createdAt()).isEqualTo(ANGELEGT);
+    assertThat(nachher.updatedAt()).isEqualTo(spaeter);
+    assertThat(nachher.complete()).isTrue();
+  }
+
+  /** Der Upload-Weg plaettet keinen reicheren Stand: insertIfAbsent laesst ihn unangetastet. */
+  @Test
+  void nachEinemUpsertLaesstInsertIfAbsentDenLaufUnangetastet() {
+    Instant start = Instant.parse("2026-09-14T22:00:00Z");
+    UpsertResult gemeldet =
+        runs.upsert(meldung(start, true), List.of(paket(101, NightRunState.GREEN)));
+
+    Optional<Long> nochmal =
+        runs.insertIfAbsent(lauf(start), List.of(paket(999, NightRunState.RED)));
+
+    assertThat(nochmal).isEmpty();
+    NightRun nachher = gelesen(gemeldet.id());
+    assertThat(nachher.origin()).isEqualTo(NightRunOrigin.TOKEN);
+    assertThat(nachher.tokenName()).isEqualTo("nacht-token");
+    assertThat(runs.findItemsByRunIds(List.of(gemeldet.id())))
+        .extracting(NightRunItem::cardNumber)
+        .containsExactly(101);
   }
 }

@@ -27,6 +27,31 @@ public interface NightRunRepository {
    */
   Optional<Long> insertIfAbsent(NightRun run, List<NightRunItem> items);
 
+  /**
+   * Schreibt einen gemeldeten Lauf und <b>ersetzt</b> einen vorhandenen vollständig (Issue #945).
+   *
+   * <p>Die übergebenen Werte sind der <b>vollständige Stand</b> des Laufs: Was diese Meldung nicht
+   * mehr führt, ist danach fort. Eine meldende Kette schickt denselben Lauf mehrfach, jedes Mal mit
+   * allem, was sie bis dahin weiß — die spätere Meldung gilt.
+   *
+   * <p><b>Abgrenzung zu {@link #insertIfAbsent}:</b> Dort gewinnt der erste Stand und bleibt
+   * unangetastet. Das ist für den Upload-Weg richtig, denn ein hochgeladenes Protokoll ist ärmer
+   * als ein maschineller Stand und darf ihn nicht plätten. Für die Meldung wäre es falsch: Ein
+   * unvollständiger Zwischenstand blockierte den späteren vollständigen dauerhaft.
+   *
+   * <p>{@code created_at} bleibt beim Ersetzen unangetastet — es trägt, seit wann der Lauf am Board
+   * steht, nicht wann er zuletzt gemeldet wurde.
+   */
+  UpsertResult upsert(NightRun run, List<NightRunItem> items);
+
+  /**
+   * Ergebnis eines {@link #upsert}.
+   *
+   * @param id die Kennung des Laufs — beim Ersetzen dieselbe wie bei der ersten Meldung
+   * @param created {@code true}, wenn der Lauf angelegt wurde; {@code false}, wenn er ersetzt wurde
+   */
+  record UpsertResult(long id, boolean created) {}
+
   /** Läufe des Projekts, jüngster Startzeitpunkt zuerst; bei Gleichstand entscheidet die ID. */
   List<NightRun> findByProjectOrderByStartedAtDesc(long projectId);
 

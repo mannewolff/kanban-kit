@@ -11,6 +11,7 @@ import java.util.Map;
 import java.util.Optional;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.nightrun.application.NightRunRepository;
+import org.mwolff.manban.nightrun.application.NightRunRepository.UpsertResult;
 import org.mwolff.manban.nightrun.domain.NightRun;
 import org.mwolff.manban.nightrun.domain.NightRunErrorClass;
 import org.mwolff.manban.nightrun.domain.NightRunItem;
@@ -76,6 +77,22 @@ class NightRunRepositoryAdapter implements NightRunRepository {
    * Auswahl steht als Unterabfrage, weil {@code LIMIT} weder in JPQL noch in einer {@code
    * DELETE}-Bedingung direkt zur Verfügung steht.
    */
+  private static final String SELECT_ID_FOR_UPDATE =
+      "SELECT id FROM night_run WHERE project_id = :projectId AND started_at = :startedAt"
+          + " FOR UPDATE";
+
+  private static final String UPDATE_RUN =
+      "UPDATE night_run SET mode = :mode, duration_ms = :durationMs,"
+          + " processed_count = :processedCount, skipped_count = :skippedCount,"
+          + " unparsed_count = :unparsedCount, unparsed_sample = :unparsedSample,"
+          + " origin = :origin, token_name = :tokenName, complete = :complete,"
+          + " updated_at = :updatedAt, cost_usd = :costUsd, input_tokens = :inputTokens,"
+          + " output_tokens = :outputTokens, cached_input_tokens = :cachedInputTokens"
+          + " WHERE id = :id";
+
+  private static final String DELETE_ITEMS_OF_RUN =
+      "DELETE FROM night_run_item WHERE night_run_id = :nightRunId";
+
   private static final String DELETE_OLDER =
       "DELETE FROM night_run WHERE project_id = :projectId AND id NOT IN"
           + " (SELECT id FROM night_run WHERE project_id = :projectId"
@@ -111,6 +128,39 @@ class NightRunRepositoryAdapter implements NightRunRepository {
     Long runId = vergebeneId.get(0);
     insertItems(runId, newItems);
     return Optional.of(runId);
+  }
+
+  /**
+   * Zwei Anweisungen statt {@code ON CONFLICT ... DO UPDATE}: Das Ersetzen braucht ohnehin mehr als
+   * eine — die Arbeitspakete werden gelöscht und neu geschrieben —, und {@code xmax = 0} als
+   * Unterscheidung zwischen „angelegt" und „ersetzt" wäre ein Trick, dessen Bedeutung kein Leser
+   * der Zeile ansieht.
+   *
+   * <p>Das {@code FOR UPDATE} sperrt die Zeile für die Dauer der Transaktion. Ohne es könnten zwei
+   * gleichzeitige Meldungen desselben Laufs beide kein Vorkommen sehen und beide einfügen wollen;
+   * die zweite liefe in den eindeutigen Schlüssel.
+   */
+  @Override
+  public UpsertResult upsert(NightRun run, List<NightRunItem> newItems) {
+    SqlParameterSource schluessel =
+        new MapSqlParameterSource()
+            .addValue(P_PROJECT_ID, run.projectId())
+            .addValue("startedAt", zeitpunkt(run.startedAt()));
+    List<Long> vorhanden = jdbc.queryForList(SELECT_ID_FOR_UPDATE, schluessel, Long.class);
+
+    if (vorhanden.isEmpty()) {
+      Long runId = jdbc.queryForList(INSERT_RUN, runParameters(run), Long.class).get(0);
+      insertItems(runId, newItems);
+      return new UpsertResult(runId, true);
+    }
+
+    Long runId = vorhanden.get(0);
+    MapSqlParameterSource aenderung = (MapSqlParameterSource) runParameters(run);
+    aenderung.addValue("id", runId);
+    jdbc.update(UPDATE_RUN, aenderung);
+    jdbc.update(DELETE_ITEMS_OF_RUN, new MapSqlParameterSource().addValue(P_NIGHT_RUN_ID, runId));
+    insertItems(runId, newItems);
+    return new UpsertResult(runId, false);
   }
 
   private void insertItems(Long runId, List<NightRunItem> newItems) {
