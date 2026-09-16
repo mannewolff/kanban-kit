@@ -461,7 +461,8 @@ function LetzteNacht({ projectId }: Readonly<{ projectId: number }>) {
 
   return (
     <Paper component="section" aria-label="Letzte Nacht" variant="outlined" sx={{ p: 2 }}>
-      <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1 }}>
+      {/* Ohne eigenes Gewicht: `subtitle1` trägt im Theme 700 (Zwei-Gewichte-Regel, CLAUDE-design.md). */}
+      <Typography variant="subtitle1" sx={{ mb: 1 }}>
         Letzte Nacht
       </Typography>
       {stand.art === 'laedt' && <Typography color="text.secondary">Stand der letzten Nacht wird geladen …</Typography>}
