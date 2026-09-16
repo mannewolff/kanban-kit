@@ -1,7 +1,7 @@
 import Paper from '@mui/material/Paper'
 import Stack from '@mui/material/Stack'
 import Typography from '@mui/material/Typography'
-import { EPIC_EDGE_WIDTH } from '../theme'
+import { EPIC_EDGE_WIDTH, TABELLENZIFFERN } from '../theme'
 
 interface Props {
   /** Beschriftung der Kennzahl, z. B. der Spaltenname. */
@@ -22,6 +22,12 @@ interface Props {
    * nicht allein an der Farbe hängt.
    */
   emphasis?: string
+  /**
+   * Zeitraum, auf den sich der Wert bezieht, z. B. „gesamter Verlauf" (AK 11, #959). Er steht auch
+   * ohne Datenbasis da: Wer „keine Messung" liest, soll wissen, in welchem Zeitraum nichts gemessen
+   * wurde. Fehlt die Angabe, entfällt die Zeile.
+   */
+  zeitraum?: string
 }
 
 /**
@@ -30,7 +36,7 @@ interface Props {
  * zwischen Minuten und Tagen, ein gemeinsamer Maßstab macht die kurzen Werte unsichtbar und
  * täuscht eine Vergleichbarkeit vor, die es nicht gibt.
  */
-export function MetricTile({ label, value, sample, emphasis }: Readonly<Props>) {
+export function MetricTile({ label, value, sample, emphasis, zeitraum }: Readonly<Props>) {
   const noMeasurement = sample === 0
   return (
     <Paper
@@ -51,10 +57,17 @@ export function MetricTile({ label, value, sample, emphasis }: Readonly<Props>) 
           sx={{
             fontWeight: noMeasurement ? 400 : 700,
             color: noMeasurement ? 'text.secondary' : 'text.primary',
+            // Kacheln stehen nebeneinander und werden verglichen: gleich breite Ziffern (AK 10).
+            ...TABELLENZIFFERN,
           }}
         >
           {value}
         </Typography>
+        {zeitraum && (
+          <Typography variant="caption" color="text.secondary">
+            {zeitraum}
+          </Typography>
+        )}
         {noMeasurement ? (
           <Typography variant="caption" color="text.secondary">
             keine Messung

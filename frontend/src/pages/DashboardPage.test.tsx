@@ -1,4 +1,4 @@
-import { act, render, screen, within } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -6,7 +6,9 @@ import { boardsApi } from '../api/boards'
 import { cardsApi, type Card, type CardDetail } from '../api/cards'
 import { ApiError } from '../api/client'
 import { dashboardApi, type BoardDashboardKpis } from '../api/dashboard'
+import { nightRunsApi, type NightRunItemView, type NightRunView } from '../api/nightRuns'
 import { projectsApi } from '../api/projects'
+import { cssRegel } from '../test/cssRegel'
 import { DashboardPage } from './DashboardPage'
 
 interface MarkStubProps {
@@ -48,6 +50,7 @@ vi.mock('../api/boards', () => ({ boardsApi: { get: vi.fn() } }))
 vi.mock('../api/cards', () => ({ cardsApi: { get: vi.fn(), list: vi.fn() } }))
 vi.mock('../api/dashboard', () => ({ dashboardApi: { get: vi.fn() } }))
 vi.mock('../api/projects', () => ({ projectsApi: { list: vi.fn() } }))
+vi.mock('../api/nightRuns', () => ({ nightRunsApi: { list: vi.fn() } }))
 
 // Toast-Weg: useSnackbar liefert im Test einen Spy (statt des No-op-Defaults ohne Provider).
 const mNotify = vi.fn()
@@ -84,6 +87,7 @@ const mCards = cardsApi as unknown as {
 }
 const mDashboard = dashboardApi as unknown as { get: ReturnType<typeof vi.fn> }
 const mProjects = projectsApi as unknown as { list: ReturnType<typeof vi.fn> }
+const mNightRuns = nightRunsApi as unknown as { list: ReturnType<typeof vi.fn> }
 
 const outlierCard: Card = {
   derivedFrom: null,
@@ -143,6 +147,7 @@ describe('DashboardPage', () => {
     mProjects.list.mockResolvedValue([{ id: 9, name: 'Projekt', role: 'VIEWER', createdAt: '' }])
     mDashboard.get.mockResolvedValue(kpis)
     mCards.get.mockResolvedValue(outlierCard)
+    mNightRuns.list.mockResolvedValue([])
   })
 
   it('zeigt den Breadcrumb-Pfad ab Projekte', async () => {
@@ -497,5 +502,183 @@ describe('DashboardPage', () => {
       </MemoryRouter>,
     )
     expect(screen.getByText('Ungültige Board-ID.')).toBeInTheDocument()
+  })
+
+  // AK 11 (#959): Jede Kennzahl nennt ihren Zeitraum; eine Zahl ohne Datenbasis erscheint nicht als Null.
+  it('nennt an jeder Kachel den Zeitraum, auf den sie sich bezieht', async () => {
+    renderPage()
+    await screen.findByText('Ready')
+    // Drei Spalten plus die Cycle Time: vier Kacheln, jede mit ihrem Zeitraum.
+    expect(screen.getAllByText('gesamter Verlauf')).toHaveLength(4)
+  })
+
+  it('nennt am Durchsatz den Zeitraum von zwölf Wochen', async () => {
+    renderPage()
+    expect(await screen.findByText(/letzte 12 Wochen/)).toBeInTheDocument()
+  })
+
+  it('zeigt bei zwölf Wochen ohne fertige Karte den Hinweis statt einer Nulllinie', async () => {
+    // Das Backend liefert immer zwölf Wochen, auch wenn alle leer sind — eine Linie auf null wäre
+    // eine Zahl ohne Datenbasis.
+    const leer = Array.from({ length: 12 }, (_, i) => ({ weekStart: `2026-06-${String(i + 1).padStart(2, '0')}T09:00:00Z`, doneCount: 0 }))
+    mDashboard.get.mockResolvedValue({ ...kpis, throughput: leer })
+    renderPage()
+    expect(await screen.findByText('Noch keine abgeschlossene Karte in den letzten Wochen.')).toBeInTheDocument()
+    expect(screen.queryByTestId('line-chart')).not.toBeInTheDocument()
+  })
+
+  it('unterscheidet bei den Ausreißern „keine Datenbasis" von „keine Ausreißer"', async () => {
+    mDashboard.get.mockResolvedValue({
+      ...kpis,
+      outliers: [],
+      leadTimeSampleCount: 0,
+      avgLeadTimeSeconds: null,
+      columnDwell: kpis.columnDwell.map((c) => ({ ...c, avgDwellSeconds: null, sampleCount: 0 })),
+    })
+    renderPage()
+    expect(await screen.findByText('Keine Datenbasis — auf diesem Board wurde noch keine Verweildauer gemessen.')).toBeInTheDocument()
+    expect(screen.queryByText('Keine Ausreißer.')).not.toBeInTheDocument()
+  })
+
+  it('lässt die große Einzelzahl ohne Tabellenziffern', async () => {
+    renderPage()
+    expect(cssRegel(await screen.findByTestId('hero-metric'))).not.toContain('tabular-nums')
+  })
+})
+
+describe('DashboardPage — Stand der letzten Nacht (AK 9, E22, #959)', () => {
+  const paket = (cardNumber: number, title: string, state: NightRunItemView['state'], errorClass: NightRunItemView['errorClass'] = null): NightRunItemView => ({
+    id: cardNumber, cardNumber, title, state, errorClass, durationMs: 60_000, commitHash: null, excerpt: null,
+    usage: { costUsd: 4.2, inputTokens: null, outputTokens: null, cachedInputTokens: null },
+  })
+  const lauf = (startedAt: string, items: NightRunItemView[], complete = true): NightRunView => ({
+    id: Number(startedAt.slice(8, 10)), startedAt, mode: 'CHAIN', durationMs: 3_600_000, processedCount: items.length,
+    skippedCount: 0, unparsedCount: 0, unparsedSample: null, createdAt: startedAt, origin: 'TOKEN', tokenName: 'kette',
+    complete, updatedAt: null, usage: { costUsd: 12.5, inputTokens: null, outputTokens: null, cachedInputTokens: null }, items,
+  })
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mBoards.get.mockResolvedValue({ id: 1, projectId: 9, name: 'B', createdAt: '', columns: [] })
+    mProjects.list.mockResolvedValue([{ id: 9, name: 'Projekt', role: 'OWNER', createdAt: '' }])
+    mDashboard.get.mockResolvedValue(kpis)
+    mNightRuns.list.mockResolvedValue([])
+  })
+
+  it('steht ganz oben, vor den Kennzahlen', async () => {
+    mNightRuns.list.mockResolvedValue([lauf('2026-09-16T01:00:00Z', [paket(1, 'A', 'GREEN')])])
+    renderPage()
+    const stand = await screen.findByRole('region', { name: 'Letzte Nacht' })
+    await screen.findByTestId('hero-metric')
+    // Vor der Hero-Zahl im Dokument: ohne Rollen sichtbar.
+    expect(stand.compareDocumentPosition(screen.getByTestId('hero-metric')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(mNightRuns.list).toHaveBeenCalledWith(9)
+  })
+
+  it('nennt einen Abbruch samt Ort: Vorgang, Titel und Fehlerklasse', async () => {
+    mNightRuns.list.mockResolvedValue([
+      lauf('2026-09-16T01:00:00Z', [
+        paket(840, 'Grün', 'GREEN'),
+        paket(842, 'Theme trägt zwei Erscheinungsbilder', 'RED', 'HARD_ABORT'),
+      ]),
+    ])
+    renderPage()
+    const stand = await screen.findByRole('region', { name: 'Letzte Nacht' })
+    expect(await within(stand).findByText(/Abgebrochen/)).toBeInTheDocument()
+    const ort = within(stand).getByRole('listitem')
+    expect(ort).toHaveTextContent('#842')
+    expect(ort).toHaveTextContent('Theme trägt zwei Erscheinungsbilder')
+    expect(ort).toHaveTextContent('Harter Abbruch')
+    expect(within(stand).queryByText(/#840/)).not.toBeInTheDocument()
+  })
+
+  it('nennt auch einen Vorgang mit roter Prüfung als Befund', async () => {
+    mNightRuns.list.mockResolvedValue([lauf('2026-09-16T01:00:00Z', [paket(7, 'Gelb', 'YELLOW', 'CHECKS_RED')])])
+    renderPage()
+    const stand = await screen.findByRole('region', { name: 'Letzte Nacht' })
+    expect(await within(stand).findByText(/Abgebrochen/)).toBeInTheDocument()
+    expect(within(stand).getByRole('listitem')).toHaveTextContent('#7')
+  })
+
+  it('meldet eine durchgelaufene Nacht als durchgelaufen', async () => {
+    mNightRuns.list.mockResolvedValue([lauf('2026-09-16T01:00:00Z', [paket(1, 'A', 'GREEN'), paket(2, 'B', 'GREEN'), paket(3, 'C', 'GREY')])])
+    renderPage()
+    const stand = await screen.findByRole('region', { name: 'Letzte Nacht' })
+    expect(await within(stand).findByText('Durchgelaufen — 2 Vorgänge ohne Abbruch.')).toBeInTheDocument()
+  })
+
+  it('liest den jüngsten Lauf, nicht den ersten der Liste', async () => {
+    mNightRuns.list.mockResolvedValue([
+      lauf('2026-09-14T01:00:00Z', [paket(5, 'Alt', 'RED', 'HARD_ABORT')]),
+      lauf('2026-09-16T01:00:00Z', [paket(1, 'A', 'GREEN')]),
+    ])
+    renderPage()
+    const stand = await screen.findByRole('region', { name: 'Letzte Nacht' })
+    expect(await within(stand).findByText('Durchgelaufen — 1 Vorgang ohne Abbruch.')).toBeInTheDocument()
+  })
+
+  it('liest den jüngsten Lauf auch dann, wenn er schon vorne steht', async () => {
+    mNightRuns.list.mockResolvedValue([
+      lauf('2026-09-16T01:00:00Z', [paket(1, 'A', 'GREEN')]),
+      lauf('2026-09-14T01:00:00Z', [paket(5, 'Alt', 'RED', 'HARD_ABORT')]),
+    ])
+    renderPage()
+    const stand = await screen.findByRole('region', { name: 'Letzte Nacht' })
+    expect(await within(stand).findByText('Durchgelaufen — 1 Vorgang ohne Abbruch.')).toBeInTheDocument()
+  })
+
+  it('nennt einen Befund ohne Fehlerklasse ohne leere Klammer', async () => {
+    mNightRuns.list.mockResolvedValue([lauf('2026-09-16T01:00:00Z', [paket(9, 'Ohne Klasse', 'RED')])])
+    renderPage()
+    const stand = await screen.findByRole('region', { name: 'Letzte Nacht' })
+    const ort = await within(stand).findByRole('listitem')
+    expect(ort).toHaveTextContent('#9 Ohne Klasse — gescheitert')
+    expect(ort).not.toHaveTextContent('(')
+  })
+
+  it('sagt ausdrücklich, dass ein Lauf noch nicht abgeschlossen gemeldet ist', async () => {
+    mNightRuns.list.mockResolvedValue([lauf('2026-09-16T01:00:00Z', [paket(1, 'A', 'GREEN')], false)])
+    renderPage()
+    const stand = await screen.findByRole('region', { name: 'Letzte Nacht' })
+    expect(await within(stand).findByText('Noch nicht abgeschlossen gemeldet — bisher 1 Vorgang ohne Abbruch.')).toBeInTheDocument()
+  })
+
+  it('zeigt ohne aufbewahrten Lauf eine eigene Aussage statt einer Null', async () => {
+    mNightRuns.list.mockResolvedValue([])
+    renderPage()
+    const stand = await screen.findByRole('region', { name: 'Letzte Nacht' })
+    expect(await within(stand).findByText('Kein Nachtlauf aufbewahrt.')).toBeInTheDocument()
+    expect(within(stand).queryByText(/\b0\b/)).not.toBeInTheDocument()
+  })
+
+  it('zeigt keine Kosten', async () => {
+    mNightRuns.list.mockResolvedValue([lauf('2026-09-16T01:00:00Z', [paket(842, 'X', 'RED', 'HARD_ABORT')])])
+    renderPage()
+    const stand = await screen.findByRole('region', { name: 'Letzte Nacht' })
+    await within(stand).findByText(/Abgebrochen/)
+    expect(stand).not.toHaveTextContent(/Kosten|\$|USD|12[,.]5|4[,.]2/)
+  })
+
+  it('blendet den Stand ohne Recht auf die Läufe aus, statt einen Fehler zu zeigen', async () => {
+    mNightRuns.list.mockRejectedValue(new ApiError(403, 'Forbidden'))
+    renderPage()
+    await screen.findByTestId('hero-metric')
+    await waitFor(() => expect(mNightRuns.list).toHaveBeenCalled())
+    // Während des Ladens steht der Bereich kurz da; nach der Abweisung verschwindet er ganz.
+    await waitFor(() => expect(screen.queryByRole('region', { name: 'Letzte Nacht' })).not.toBeInTheDocument())
+    expect(screen.queryByText(/konnte nicht geladen werden/)).not.toBeInTheDocument()
+  })
+
+  it('meldet einen anderen Fehler beim Laden des Stands', async () => {
+    mNightRuns.list.mockRejectedValue(new TypeError('Failed to fetch'))
+    renderPage()
+    const stand = await screen.findByRole('region', { name: 'Letzte Nacht' })
+    expect(await within(stand).findByText('Stand der letzten Nacht konnte nicht geladen werden.')).toBeInTheDocument()
+  })
+
+  it('zeigt den Stand erst nach dem Laden des Boards — ohne Projekt gibt es keine Läufe', () => {
+    mBoards.get.mockReturnValue(new Promise(() => {}))
+    renderPage()
+    expect(mNightRuns.list).not.toHaveBeenCalled()
   })
 })

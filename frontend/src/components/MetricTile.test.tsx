@@ -2,6 +2,7 @@ import { render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { MetricTile } from './MetricTile'
 import { EPIC_EDGE_WIDTH } from '../theme'
+import { cssRegel } from '../test/cssRegel'
 
 describe('MetricTile', () => {
   it('zeigt Beschriftung und bereits formatierten Wert', () => {
@@ -64,5 +65,29 @@ describe('MetricTile', () => {
     const kachel = screen.getByText((_content, element) =>
       element?.classList.contains('MuiPaper-root') === true)
     expect(kachel).not.toHaveStyle({ borderLeftWidth: `${EPIC_EDGE_WIDTH}px` })
+  })
+
+  // AK 11 (#959): Jede Kennzahl nennt sichtbar, worauf sie sich bezieht.
+  it('nennt den Zeitraum, auf den sich die Kennzahl bezieht', () => {
+    render(<MetricTile label="Review" value="8 Min" sample={34} zeitraum="gesamter Verlauf" />)
+    expect(screen.getByText('gesamter Verlauf')).toBeInTheDocument()
+    expect(screen.getByText('34 Messungen')).toBeInTheDocument()
+  })
+
+  it('nennt den Zeitraum auch ohne Datenbasis und zeigt dann keine Null', () => {
+    render(<MetricTile label="Done" value="n. v." sample={0} zeitraum="gesamter Verlauf" />)
+    expect(screen.getByText('gesamter Verlauf')).toBeInTheDocument()
+    expect(screen.getByText('keine Messung')).toBeInTheDocument()
+    expect(screen.queryByText(/\b0\b/)).not.toBeInTheDocument()
+  })
+
+  it('zeigt ohne Zeitraumangabe keine Zeitraumzeile', () => {
+    render(<MetricTile label="Review" value="8 Min" sample={2} />)
+    expect(screen.getAllByText(/./).map((e) => e.textContent)).toEqual(['Review', '8 Min', '2 Messungen'])
+  })
+
+  it('setzt den Wert in Tabellenziffern, weil Kacheln untereinander verglichen werden', () => {
+    render(<MetricTile label="Review" value="8 Min" sample={4} />)
+    expect(cssRegel(screen.getByText('8 Min'))).toContain('font-variant-numeric: tabular-nums')
   })
 })

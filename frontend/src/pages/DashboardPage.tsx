@@ -28,7 +28,9 @@ import {
   type OutlierCard,
   type WeeklyThroughput,
 } from '../api/dashboard'
+import { nightRunsApi, type NightRunView } from '../api/nightRuns'
 import { formatDuration } from '../lib/formatDuration'
+import { NIGHT_RUN_ERROR_CLASS_TEXT, nightRunZustandsText } from '../lib/nightRunHandoff'
 import { useProjectName } from '../lib/useProjectName'
 
 /**
@@ -56,6 +58,13 @@ function longestDwellColumnId(columns: readonly ColumnDwell[]): number | null {
   }
   return measured >= 2 ? bestId : null
 }
+
+/**
+ * Zeitraum der Verweil-, Lead- und Cycle-Time-Kennzahlen (AK 11, #959): Das Backend mittelt über
+ * alle aufgezeichneten Aufenthalte des Boards, ohne Zeitfenster. Der Durchsatz dagegen umfasst
+ * zwölf Wochen und nennt das an seiner Überschrift.
+ */
+const GESAMTER_VERLAUF = 'gesamter Verlauf'
 
 /**
  * Datenbasis der Hero-Zahl als Satzteil — dieselbe Aussage wie die Stichprobengröße der
@@ -134,6 +143,7 @@ function MetricHeadline({ kpis }: Readonly<{ kpis: BoardDashboardKpis }>) {
           label="Ø Cycle Time"
           value={formatDuration(kpis.avgCycleTimeSeconds)}
           sample={kpis.cycleTimeSampleCount}
+          zeitraum={GESAMTER_VERLAUF}
         />
       </Stack>
     </Paper>
@@ -227,15 +237,18 @@ export function makeThroughputMark(counts: readonly number[]) {
  * Hürde statt einer Alternative.
  */
 function ThroughputSection({ throughput }: Readonly<{ throughput: readonly WeeklyThroughput[] }>) {
+  // Das Backend liefert immer zwölf Wochen, auch leere. Zwölf Nullen sind keine Messung, sondern
+  // das Fehlen einer Datenbasis — sie erscheinen deshalb als Hinweis, nicht als Nulllinie (AK 11).
+  const ohneDatenbasis = throughput.every((w) => w.doneCount === 0)
   const counts = useMemo(() => throughput.map((w) => w.doneCount), [throughput])
   const Mark = useMemo(() => makeThroughputMark(counts), [counts])
 
   return (
     <Paper variant="outlined" sx={{ p: 2 }}>
       <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1 }}>
-        Durchsatz je Woche (abgeschlossene Karten)
+        Durchsatz je Woche (abgeschlossene Karten, letzte 12 Wochen)
       </Typography>
-      {throughput.length === 0 ? (
+      {ohneDatenbasis ? (
         <Typography color="text.secondary">
           Noch keine abgeschlossene Karte in den letzten Wochen.
         </Typography>
@@ -296,7 +309,8 @@ function ThroughputSection({ throughput }: Readonly<{ throughput: readonly Weekl
 function OutlierSection({
   projectId,
   outliers,
-}: Readonly<{ projectId?: number; outliers: readonly OutlierCard[] }>) {
+  ohneDatenbasis,
+}: Readonly<{ projectId?: number; outliers: readonly OutlierCard[]; ohneDatenbasis: boolean }>) {
   const notify = useSnackbar()
   const [busyCardId, setBusyCardId] = useState<number | null>(null)
   const [detail, setDetail] = useState<{ card: Card; columnName: string } | null>(null)
@@ -330,9 +344,15 @@ function OutlierSection({
       <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1 }}>
         Ausreißer (über 7 Tage in einer Spalte)
       </Typography>
-      {outliers.length === 0 ? (
-        <Typography color="text.secondary">Keine Ausreißer.</Typography>
-      ) : (
+      {/* „Keine Ausreißer" behauptet eine Messung ohne Befund. Ohne jede gemessene Verweildauer gibt
+          es diese Messung nicht — dann sagt die Ansicht genau das (AK 11). */}
+      {outliers.length === 0 && ohneDatenbasis && (
+        <Typography color="text.secondary">
+          Keine Datenbasis — auf diesem Board wurde noch keine Verweildauer gemessen.
+        </Typography>
+      )}
+      {outliers.length === 0 && !ohneDatenbasis && <Typography color="text.secondary">Keine Ausreißer.</Typography>}
+      {outliers.length > 0 && (
         <TableContainer>
           <Table size="small" aria-label="Ausreißer-Karten">
             <TableHead>
@@ -396,6 +416,103 @@ function OutlierSection({
   )
 }
 
+/** Ladezustand des Stands der letzten Nacht. */
+type NachtStand =
+  | { art: 'laedt' }
+  | { art: 'ohneRecht' }
+  | { art: 'fehler' }
+  | { art: 'geladen'; laeufe: readonly NightRunView[] }
+
+const vorgaenge = (anzahl: number): string => (anzahl === 1 ? '1 Vorgang' : `${anzahl} Vorgänge`)
+
+/**
+ * Der Stand der letzten Nacht (AK 9, Plan #932 E22): oben in der Kennzahlen-Ansicht, ohne Rollen
+ * und ohne Filter ablesbar, ob der jüngste Lauf durchlief oder wo er stehenblieb.
+ *
+ * Gespeist aus den aufbewahrten Läufen des Projekts, mit den Feldern, die sie ohnehin tragen:
+ * Zustand und Fehlerklasse je Arbeitspaket. Kein neues Feld, keine Migration. Befund ist jedes
+ * rote oder gelbe Arbeitspaket; ein graues wurde nicht bearbeitet und ist keiner.
+ *
+ * Die Läufe sieht nur, wer sie auch auf der Nachtlauf-Seite sieht. Ohne dieses Recht entfällt der
+ * Bereich still: Er ist eine Zusatzaussage, und eine Fehlermeldung zu einem Recht, das der Nutzer
+ * nie hatte, erklärte nichts.
+ */
+function LetzteNacht({ projectId }: Readonly<{ projectId: number }>) {
+  const [stand, setStand] = useState<NachtStand>({ art: 'laedt' })
+
+  useEffect(() => {
+    let active = true
+    nightRunsApi
+      .list(projectId)
+      .then((laeufe) => {
+        if (active) setStand({ art: 'geladen', laeufe })
+      })
+      .catch((err: unknown) => {
+        if (active) setStand(err instanceof ApiError && err.status === 403 ? { art: 'ohneRecht' } : { art: 'fehler' })
+      })
+    return () => {
+      active = false
+    }
+  }, [projectId])
+
+  if (stand.art === 'ohneRecht') {
+    return null
+  }
+
+  return (
+    <Paper component="section" aria-label="Letzte Nacht" variant="outlined" sx={{ p: 2 }}>
+      <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1 }}>
+        Letzte Nacht
+      </Typography>
+      {stand.art === 'laedt' && <Typography color="text.secondary">Stand der letzten Nacht wird geladen …</Typography>}
+      {stand.art === 'fehler' && (
+        <Typography color="text.secondary">Stand der letzten Nacht konnte nicht geladen werden.</Typography>
+      )}
+      {stand.art === 'geladen' && <NachtBefund laeufe={stand.laeufe} />}
+    </Paper>
+  )
+}
+
+/** Die Aussage zum jüngsten Lauf: durchgelaufen, noch offen oder abgebrochen samt Ort. */
+function NachtBefund({ laeufe }: Readonly<{ laeufe: readonly NightRunView[] }>) {
+  if (laeufe.length === 0) {
+    return <Typography color="text.secondary">Kein Nachtlauf aufbewahrt.</Typography>
+  }
+  // Der jüngste nach Startzeit — nicht der erste der Antwort, deren Reihenfolge hier nicht zugesichert ist.
+  const juengster = laeufe.reduce((a, b) => (b.startedAt > a.startedAt ? b : a))
+  const befunde = juengster.items.filter((item) => item.state === 'RED' || item.state === 'YELLOW')
+  const ohneAbbruch = juengster.items.filter((item) => item.state === 'GREEN').length
+  const beginn = new Date(juengster.startedAt).toLocaleString('de-DE', { dateStyle: 'medium', timeStyle: 'short' })
+
+  if (befunde.length > 0) {
+    return (
+      <Alert severity="error">
+        <Typography variant="body2" sx={{ fontWeight: 700 }}>
+          {`Abgebrochen — ${vorgaenge(befunde.length)} mit Befund (Lauf vom ${beginn}):`}
+        </Typography>
+        <Box component="ul" sx={{ m: 0, pl: 2.5 }}>
+          {befunde.map((item) => (
+            <li key={item.id}>
+              <Typography variant="body2" component="span">
+                {`#${item.cardNumber} ${item.title} — ${nightRunZustandsText(item.state, item.errorClass ?? undefined)}`}
+                {item.errorClass && ` (${NIGHT_RUN_ERROR_CLASS_TEXT[item.errorClass]})`}
+              </Typography>
+            </li>
+          ))}
+        </Box>
+      </Alert>
+    )
+  }
+  if (!juengster.complete) {
+    return (
+      <Alert severity="info">
+        {`Noch nicht abgeschlossen gemeldet — bisher ${vorgaenge(ohneAbbruch)} ohne Abbruch.`}
+      </Alert>
+    )
+  }
+  return <Alert severity="success">{`Durchgelaufen — ${vorgaenge(ohneAbbruch)} ohne Abbruch.`}</Alert>
+}
+
 export function DashboardPage() {
   const { boardId } = useParams()
   const id = Number.parseInt(boardId ?? '', 10)
@@ -439,6 +556,12 @@ export function DashboardPage() {
         />
       </Box>
 
+      {board && (
+        <Box sx={{ mb: 3 }}>
+          <LetzteNacht projectId={board.projectId} />
+        </Box>
+      )}
+
       {!kpis && <Typography color="text.secondary">Kennzahlen werden geladen …</Typography>}
 
       {kpis && (
@@ -457,6 +580,7 @@ export function DashboardPage() {
                   label={c.columnName}
                   value={formatDuration(c.avgDwellSeconds)}
                   sample={c.sampleCount}
+                  zeitraum={GESAMTER_VERLAUF}
                   emphasis={c.columnId === longestColumnId ? 'längste Spalte' : undefined}
                 />
               ))}
@@ -465,7 +589,11 @@ export function DashboardPage() {
 
           <ThroughputSection throughput={kpis.throughput} />
 
-          <OutlierSection projectId={board?.projectId} outliers={kpis.outliers} />
+          <OutlierSection
+            projectId={board?.projectId}
+            outliers={kpis.outliers}
+            ohneDatenbasis={kpis.leadTimeSampleCount === 0 && kpis.columnDwell.every((c) => c.sampleCount === 0)}
+          />
         </Stack>
       )}
     </Box>
