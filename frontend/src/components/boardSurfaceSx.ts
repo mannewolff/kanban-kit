@@ -28,12 +28,20 @@ export function edgeSurfaceSx(options: {
   statusColor: string
   /** Farbe der umlaufenden Haarlinie (Default: `divider`). */
   hairlineColor?: string
+  /**
+   * Die Fläche wird gerade gezogen (AK 7, AK 8, #956). Sie bleibt als Platzhalter an ihrem Platz:
+   * zurückgenommen, mit gestrichelter Haarlinie, ohne Tiefe, Inhalt unsichtbar. Das Ziehbild des
+   * Browsers zeigt die Karte selbst — wer zieht, sieht also, was sich bewegt und wo es herkommt.
+   */
+  bewegt?: boolean
 }): SxProps<Theme> & Record<string, unknown> {
   return {
     border: 1,
     // Die Haarlinie steht vor der Status-Kante: eine spätere `borderColor` überschriebe deren
     // Farbe wieder.
     borderColor: options.hairlineColor ?? 'divider',
+    // Ebenso die Strichelung: Sie gilt der Haarlinie, die Status-Kante danach bleibt durchgezogen.
+    ...(options.bewegt ? { borderStyle: 'dashed' } : {}),
     borderLeft: `${STATUS_EDGE_WIDTH}px solid ${options.statusColor}`,
     borderRadius: `${CARD_RADIUS}px`,
     boxShadow: CARD_SHADOW,
@@ -41,5 +49,34 @@ export function edgeSurfaceSx(options: {
     // Wer Bewegung abgestellt hat, bekommt dieselbe Tiefe ohne Übergang: Die Dauer setzt die
     // zentrale Regel in `theme.ts` auf null (#953), statt dass jede Fläche ihren eigenen Vorbehalt führt.
     '&:hover': { boxShadow: CARD_SHADOW_HOVER, transform: `translateY(${CARD_LIFT}px)` },
+    ...(options.bewegt
+      ? {
+          opacity: 0.6,
+          boxShadow: 'none',
+          bgcolor: 'action.hover',
+          // `visibility` statt Entfernen: Der Platzhalter behält die Höhe der Karte, und das
+          // Element bleibt im Dokument — verschwände die Quelle, bräche das native Ziehen ab.
+          '& > *': { visibility: 'hidden' },
+          '&:hover': { boxShadow: 'none', transform: 'none' },
+        }
+      : {}),
+  }
+}
+
+/**
+ * Ablagefläche während eines Ziehvorgangs (AK 8, #956): ein gestrichelter Rahmen in der
+ * Primärfarbe auf getönter Fläche, nach innen versetzt, damit er die Kanten der Spalte nicht
+ * überdeckt. Außerhalb eines Ziehvorgangs trägt die Fläche nichts.
+ */
+export function ablageflaecheSx(aktiv: boolean): Record<string, unknown> {
+  if (!aktiv) {
+    return {}
+  }
+  return {
+    outline: '2px dashed',
+    outlineColor: 'primary.main',
+    outlineOffset: '-4px',
+    bgcolor: 'action.hover',
+    borderRadius: `${CARD_RADIUS}px`,
   }
 }

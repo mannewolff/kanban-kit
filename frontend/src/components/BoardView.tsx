@@ -23,7 +23,7 @@ import Stack from '@mui/material/Stack'
 import TextField from '@mui/material/TextField'
 import Tooltip from '@mui/material/Tooltip'
 import Typography from '@mui/material/Typography'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { Board, BoardColumn } from '../api/boards'
 import { cardsApi, type Card, type CardsApi } from '../api/cards'
 import { ApiError, apiErrorMessage } from '../api/client'
@@ -44,7 +44,7 @@ import { useKeyboardShortcut } from '../lib/useKeyboardShortcut'
 import { statusColors } from '../lib/statusColors'
 import { PANEL_HEAD_GRADIENT, PANEL_SHADOW, PANEL_RADIUS, STATUS_EDGE_WIDTH, SURFACE_TINT } from '../theme'
 import { labelChipSx } from './labelChipSx'
-import { edgeSurfaceSx } from './boardSurfaceSx'
+import { ablageflaecheSx, edgeSurfaceSx } from './boardSurfaceSx'
 import { BulkActionBar } from './BulkActionBar'
 import { EpicBadge } from './EpicBadge'
 import { NewCardModal, type NewCardInitialValues, type NewItemInput } from './NewCardModal'
@@ -284,6 +284,29 @@ export function BoardView({
 
   // Spalten-Reihenfolge per Drag & Drop (getrennt vom Karten-Drag, das dataTransfer nutzt).
   const [colDrag, setColDrag] = useState<number | null>(null)
+  // Ziehen einer Karte (AK 7, AK 8, Plan #932 E15): welche Karte bewegt wird und über welcher Spalte
+  // sie gerade steht. Beides dient allein der Darstellung; das Verschieben selbst trägt weiterhin
+  // die `dataTransfer`-Nutzlast.
+  const [dragCardId, setDragCardId] = useState<number | null>(null)
+  const [ablageSpalteId, setAblageSpalteId] = useState<number | null>(null)
+  const zugTakt = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => () => clearTimeout(zugTakt.current ?? undefined), [])
+
+  const zugBeginnen = (e: React.DragEvent, cardId: number) => {
+    e.dataTransfer.setData('text/plain', String(cardId))
+    // Einen Takt später: Der Browser nimmt das Ziehbild erst nach diesem Ereignis auf. Ein sofortiger
+    // Zustandswechsel zeigte dort schon den Platzhalter statt der Karte.
+    clearTimeout(zugTakt.current ?? undefined)
+    zugTakt.current = setTimeout(() => setDragCardId(cardId), 0)
+  }
+
+  const zugBeenden = () => {
+    clearTimeout(zugTakt.current ?? undefined)
+    setDragCardId(null)
+    setAblageSpalteId(null)
+  }
+
+  const herkunftsSpalteId = cards.find((c) => c.id === dragCardId)?.columnId
   const reorderColumn = async (fromId: number, toId: number) => {
     if (fromId === toId) {
       return
@@ -649,6 +672,11 @@ export function BoardView({
 
       {/* Ohne eigenen Grund und ohne eigenen Radius: Die Fläche, auf der die Panels schweben, ist
           seit #713 der Grund der ganzen Anwendung (theme.ts, APP_BACKGROUND). */}
+      {/* Unterhalb von 900 px passen die Spalten nicht nebeneinander (Plan #932 E5); sie rollen
+          waagerecht, und der Hinweis sagt es, statt dass Spalten unbemerkt rechts verschwinden. */}
+      <Typography variant="caption" color="text.secondary" sx={{ display: { xs: 'block', md: 'none' }, px: 1 }}>
+        Weitere Spalten: waagerecht rollen
+      </Typography>
       <Stack
         data-testid="board-surface"
         direction="row"
@@ -679,9 +707,13 @@ export function BoardView({
               key={column.id}
               data-testid={`column-${column.id}`}
               elevation={0}
-              onDragOver={(e) => e.preventDefault()}
+              onDragOver={(e) => {
+                e.preventDefault()
+                if (dragCardId != null) setAblageSpalteId(column.id)
+              }}
               onDrop={(e) => {
                 e.preventDefault()
+                zugBeenden()
                 const id = Number(e.dataTransfer.getData('text/plain'))
                 if (id) {
                   void moveCard(id, column.id)
@@ -777,7 +809,48 @@ export function BoardView({
                 )}
               </Box>
 
-              <Stack spacing={1} sx={{ p: 1, flex: 1 }}>
+              {/* Belastungsgrenze ohne Lesen (AK 6, Plan #932 E14): ein eigenes Element unter dem
+                  Kopf, keine Einfärbung des Kopfes — der ist im Struktur-Editiermodus anklickbar und
+                  ziehbar, und eine zustandstragende Fläche darf keine Bedienfunktion tragen (AK 2).
+                  Der Text `count/limit` bleibt im Kopf stehen. */}
+              {column.wipLimit != null && (
+                <Box
+                  role="meter"
+                  aria-label={`Auslastung ${column.name}`}
+                  aria-valuemin={0}
+                  aria-valuemax={column.wipLimit}
+                  aria-valuenow={Math.min(count, column.wipLimit)}
+                  aria-valuetext={`${count} von ${column.wipLimit}`}
+                  data-grenze={count >= column.wipLimit ? 'erreicht' : 'offen'}
+                  sx={{
+                    height: count >= column.wipLimit ? 6 : 4,
+                    bgcolor: 'divider',
+                    // Bei erreichter Grenze eine deutlichere Kante: Der Balken läuft über die volle
+                    // Breite, wird höher und trägt die Fehlerfarbe — erkennbar auch in Graustufen.
+                    borderBottom: count >= column.wipLimit ? 2 : 0,
+                    borderColor: 'error.main',
+                  }}
+                >
+                  <Box
+                    sx={{
+                      height: '100%',
+                      width: `${Math.min(count / column.wipLimit, 1) * 100}%`,
+                      bgcolor: count >= column.wipLimit ? 'error.main' : 'primary.main',
+                    }}
+                  />
+                </Box>
+              )}
+
+              <Stack
+                spacing={1}
+                data-testid={`ablage-${column.id}`}
+                data-ablage={dragCardId != null && ablageSpalteId === column.id && herkunftsSpalteId !== column.id ? 'aktiv' : undefined}
+                sx={{
+                  p: 1,
+                  flex: 1,
+                  ...ablageflaecheSx(dragCardId != null && ablageSpalteId === column.id && herkunftsSpalteId !== column.id),
+                }}
+              >
                 {activeCardsInColumn(filteredCards, column.id).map((card) => {
                   const epic = epicOfCard(card, epics)
                   const doneAt = done ? card.movedToDoneAt : null
@@ -791,7 +864,9 @@ export function BoardView({
                       key={card.id}
                       data-testid={`card-${card.id}`}
                       draggable={canEdit && !selectionMode}
-                      onDragStart={(e) => e.dataTransfer.setData('text/plain', String(card.id))}
+                      onDragStart={(e) => zugBeginnen(e, card.id)}
+                      onDragEnd={zugBeenden}
+                      data-zieh-zustand={dragCardId === card.id ? 'bewegt' : undefined}
                       onClick={() => (selectionMode ? toggleSelect(card.id) : onCardClick?.(card))}
                       elevation={0}
                       sx={{
@@ -800,6 +875,7 @@ export function BoardView({
                         ...edgeSurfaceSx({
                           statusColor: colors.dot,
                           hairlineColor: selected ? 'primary.main' : undefined,
+                          bewegt: dragCardId === card.id,
                         }),
                         cursor: grabbable ? 'grab' : 'pointer',
                         '&:active': { cursor: grabbable ? 'grabbing' : 'pointer' },

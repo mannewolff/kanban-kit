@@ -12,7 +12,7 @@ import { projectsApi } from '../api/projects'
 import { BoardView } from './BoardView'
 import { SnackbarProvider } from './SnackbarProvider'
 import { statusColors } from '../lib/statusColors'
-import { cssRegel } from '../test/cssRegel'
+import { cssRegel, cssRegelMit } from '../test/cssRegel'
 import { PANEL_RADIUS, STATUS_EDGE_WIDTH } from '../theme'
 
 vi.mock('../api/columns', () => ({
@@ -1030,6 +1030,147 @@ describe('BoardView', () => {
 
     expect(setData).toHaveBeenCalledWith('text/plain', '100')
     await waitFor(() => expect(api.move).toHaveBeenCalledWith(100, 20, 0))
+  })
+
+  describe('Ziehen einer Karte (AK 7, AK 8, #956)', () => {
+    const ziehen = async () => {
+      fireEvent.dragStart(screen.getByTestId('card-100'), { dataTransfer: { setData: vi.fn() } })
+      // Der Zustand kommt einen Takt nach dem Ziehbeginn: Der Browser nimmt das Ziehbild erst nach
+      // dem Ereignis auf und zeigte sonst schon den Platzhalter statt der Karte.
+      await waitFor(() => expect(screen.getByTestId('card-100')).toHaveAttribute('data-zieh-zustand', 'bewegt'))
+    }
+
+    it('kennzeichnet die gezogene Karte als bewegt und lässt sie als Platzhalter an ihrer Stelle', async () => {
+      render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} />)
+
+      await ziehen()
+
+      const quelle = screen.getByTestId('card-100')
+      expect(within(screen.getByTestId('column-10')).getByTestId('card-100')).toBe(quelle)
+      // Platzhalter derselben Höhe: dasselbe Element, Inhalt unsichtbar statt entfernt.
+      expect(cssRegelMit(quelle, '>*')).toContain('visibility: hidden')
+      expect(cssRegel(quelle)).toContain('border-style: dashed')
+    })
+
+    it('zeigt die Ablagefläche in der Zielspalte, nicht in der Herkunftsspalte', async () => {
+      render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} />)
+      await ziehen()
+
+      fireEvent.dragOver(screen.getByTestId('column-20'), { dataTransfer: {} })
+
+      expect(screen.getByTestId('ablage-20')).toHaveAttribute('data-ablage', 'aktiv')
+      expect(cssRegel(screen.getByTestId('ablage-20'))).toContain('outline: 2px dashed')
+      fireEvent.dragOver(screen.getByTestId('column-10'), { dataTransfer: {} })
+      expect(screen.getByTestId('ablage-10')).not.toHaveAttribute('data-ablage')
+      expect(screen.getByTestId('ablage-20')).not.toHaveAttribute('data-ablage')
+    })
+
+    it('räumt Kennzeichnung und Ablagefläche nach dem Ablegen weg', async () => {
+      const api = mkApi({ move: vi.fn().mockResolvedValue(undefined) })
+      render(<BoardView board={board} initialCards={[card]} canEdit api={api} />)
+      await ziehen()
+      fireEvent.dragOver(screen.getByTestId('column-20'), { dataTransfer: {} })
+
+      fireEvent.drop(screen.getByTestId('column-20'), { dataTransfer: { getData: () => '100' } })
+
+      await waitFor(() => expect(api.move).toHaveBeenCalledWith(100, 20, 0))
+      expect(screen.getByTestId('card-100')).not.toHaveAttribute('data-zieh-zustand')
+      expect(screen.getByTestId('ablage-20')).not.toHaveAttribute('data-ablage')
+    })
+
+    it('räumt Kennzeichnung und Ablagefläche nach einem Abbruch weg', async () => {
+      render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} />)
+      await ziehen()
+      fireEvent.dragOver(screen.getByTestId('column-20'), { dataTransfer: {} })
+
+      fireEvent.dragEnd(screen.getByTestId('card-100'))
+
+      expect(screen.getByTestId('card-100')).not.toHaveAttribute('data-zieh-zustand')
+      expect(screen.getByTestId('ablage-20')).not.toHaveAttribute('data-ablage')
+    })
+
+    it('setzt keinen Ziehzustand, wenn das Ziehen endet, bevor er greift', async () => {
+      render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} />)
+
+      fireEvent.dragStart(screen.getByTestId('card-100'), { dataTransfer: { setData: vi.fn() } })
+      fireEvent.dragEnd(screen.getByTestId('card-100'))
+
+      await new Promise((fertig) => setTimeout(fertig, 5))
+      expect(screen.getByTestId('card-100')).not.toHaveAttribute('data-zieh-zustand')
+    })
+
+    it('zeigt ohne Ziehvorgang keine Ablagefläche', () => {
+      render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} />)
+
+      fireEvent.dragOver(screen.getByTestId('column-20'), { dataTransfer: {} })
+
+      expect(screen.getByTestId('ablage-20')).not.toHaveAttribute('data-ablage')
+    })
+  })
+
+  describe('Belastungsgrenze einer Spalte (AK 6, #956)', () => {
+    const mitGrenze = (wipLimit: number | null): Board => ({
+      ...board,
+      columns: [
+        { id: 10, name: 'Backlog', position: 0, wipLimit },
+        { id: 20, name: 'Done', position: 1, wipLimit: null },
+      ],
+    })
+
+    it('trägt bei erreichter Grenze den Grenz-Zustand, ohne dass man die Zahl lesen muss', () => {
+      render(<BoardView board={mitGrenze(1)} initialCards={[card]} canEdit api={mkApi()} />)
+
+      const balken = screen.getByRole('meter', { name: 'Auslastung Backlog' })
+      expect(balken).toHaveAttribute('data-grenze', 'erreicht')
+      expect(balken).toHaveAttribute('aria-valuenow', '1')
+      expect(balken).toHaveAttribute('aria-valuemax', '1')
+      expect(balken).toHaveAttribute('aria-valuetext', '1 von 1')
+      // Der Text bleibt daneben stehen.
+      expect(within(screen.getByTestId('column-header-10')).getByText('1/1')).toBeInTheDocument()
+    })
+
+    it('trägt unterhalb der Grenze keinen Grenz-Zustand', () => {
+      render(<BoardView board={mitGrenze(3)} initialCards={[card]} canEdit api={mkApi()} />)
+
+      expect(screen.getByRole('meter', { name: 'Auslastung Backlog' })).toHaveAttribute('data-grenze', 'offen')
+    })
+
+    it('meldet eine überschrittene Grenze ebenfalls als erreicht und kappt den Wert', () => {
+      const zweite = { ...card, id: 101, number: 2, title: 'Zweite', positionInColumn: 1 }
+      render(<BoardView board={mitGrenze(1)} initialCards={[card, zweite]} canEdit api={mkApi()} />)
+
+      const balken = screen.getByRole('meter', { name: 'Auslastung Backlog' })
+      expect(balken).toHaveAttribute('data-grenze', 'erreicht')
+      expect(balken).toHaveAttribute('aria-valuenow', '1')
+      expect(balken).toHaveAttribute('aria-valuetext', '2 von 1')
+    })
+
+    it('zeigt ohne Grenze keinen Balken', () => {
+      render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} />)
+
+      expect(screen.queryByRole('meter')).not.toBeInTheDocument()
+    })
+
+    it('legt den Balken neben den Spaltenkopf, statt den Kopf einzufärben', () => {
+      // AK 2: Der Kopf ist im Struktur-Editiermodus anklickbar und ziehbar — eine zustandstragende
+      // Fläche darf keine Bedienfunktion tragen.
+      render(<BoardView board={mitGrenze(1)} initialCards={[card]} canEdit api={mkApi()} />)
+
+      const kopf = screen.getByTestId('column-header-10')
+      expect(within(kopf).queryByRole('meter')).not.toBeInTheDocument()
+    })
+  })
+
+  it('weist bei schmalem Fenster darauf hin, dass sich weitere Spalten waagerecht rollen lassen', () => {
+    render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} />)
+
+    const hinweis = screen.getByText('Weitere Spalten: waagerecht rollen')
+    // Nur unterhalb von 900 px sichtbar; darüber stehen die Spalten nebeneinander.
+    const regeln = [...document.styleSheets]
+      .flatMap((blatt) => [...blatt.cssRules])
+      .map((regel) => regel.cssText)
+    const klasse = [...hinweis.classList].find((c) => c.startsWith('css-'))
+    expect(regeln.some((r) => r.includes('min-width:900px') && r.includes(`.${klasse}`) && r.includes('display: none'))).toBe(true)
   })
 
   it('bearbeitet eine Karte über „Bearbeiten“ im Menü', () => {

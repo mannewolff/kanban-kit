@@ -11,7 +11,7 @@ import { ideasApi, type Idea } from '../api/ideas'
 import { membersApi } from '../api/members'
 import { IdeaPlanningBoard } from './IdeaPlanningBoard'
 import { statusColors } from '../lib/statusColors'
-import { cssRegel } from '../test/cssRegel'
+import { cssRegel, cssRegelMit } from '../test/cssRegel'
 import { STATUS_EDGE_WIDTH } from '../theme'
 
 // Toast-Weg: useSnackbar liefert im Test einen Spy (statt des No-op-Defaults ohne Provider).
@@ -351,6 +351,59 @@ describe('IdeaPlanningBoard', () => {
     expect(statusColors('Backlog').dot).toBe('var(--mb-palette-status-backlog-dot)')
     expect(cssRegel(screen.getByTestId('pool-item-20'))).toContain(erwartet)
     expect(cssRegel(screen.getByTestId('board-item-1'))).toContain(erwartet)
+  })
+
+  describe('Ziehen mit denselben Bausteinen wie das Board (AK 7, AK 8, #956)', () => {
+    it('kennzeichnet die gezogene Pool-Idee als bewegt und zeigt die Ablagefläche am Ziel-Board', async () => {
+      setup()
+      renderBoard()
+      await screen.findByText('Pool 1')
+
+      fireEvent.dragStart(screen.getByTestId('pool-item-20'), dt())
+      await waitFor(() => expect(screen.getByTestId('pool-item-20')).toHaveAttribute('data-zieh-zustand', 'bewegt'))
+      expect(cssRegelMit(screen.getByTestId('pool-item-20'), '>*')).toContain('visibility: hidden')
+
+      fireEvent.dragOver(screen.getByTestId('board-zone-11'), dt())
+      expect(screen.getByTestId('board-zone-11')).toHaveAttribute('data-ablage', 'aktiv')
+      expect(cssRegel(screen.getByTestId('board-zone-11'))).toContain('outline: 2px dashed')
+      expect(screen.getByTestId('pool-zone')).not.toHaveAttribute('data-ablage')
+    })
+
+    it('zeigt beim Ziehen einer Board-Karte die Ablagefläche am Pool', async () => {
+      setup()
+      renderBoard()
+      await screen.findByText('Backlog A')
+
+      fireEvent.dragStart(screen.getByTestId('board-item-1'), dt())
+      await waitFor(() => expect(screen.getByTestId('board-item-1')).toHaveAttribute('data-zieh-zustand', 'bewegt'))
+      fireEvent.dragOver(screen.getByTestId('pool-zone'), dt())
+
+      expect(screen.getByTestId('pool-zone')).toHaveAttribute('data-ablage', 'aktiv')
+    })
+
+    it('räumt Kennzeichnung und Ablagefläche nach einem Abbruch weg', async () => {
+      setup()
+      renderBoard()
+      await screen.findByText('Pool 1')
+      fireEvent.dragStart(screen.getByTestId('pool-item-20'), dt())
+      await waitFor(() => expect(screen.getByTestId('pool-item-20')).toHaveAttribute('data-zieh-zustand', 'bewegt'))
+      fireEvent.dragOver(screen.getByTestId('board-zone-11'), dt())
+
+      fireEvent.dragEnd(screen.getByTestId('pool-item-20'))
+
+      expect(screen.getByTestId('pool-item-20')).not.toHaveAttribute('data-zieh-zustand')
+      expect(screen.getByTestId('board-zone-11')).not.toHaveAttribute('data-ablage')
+    })
+
+    it('zeigt ohne Ziehvorgang keine Ablagefläche', async () => {
+      setup()
+      renderBoard()
+      await screen.findByText('Pool 1')
+
+      fireEvent.dragOver(screen.getByTestId('board-zone-11'), dt())
+
+      expect(screen.getByTestId('board-zone-11')).not.toHaveAttribute('data-ablage')
+    })
   })
 
   it('holt per Drag von einem Board in den Pool', async () => {
