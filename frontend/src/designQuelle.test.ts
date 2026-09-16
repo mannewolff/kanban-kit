@@ -3,7 +3,7 @@ import appQuelle from './App.tsx?raw'
 
 /**
  * Hält `CLAUDE-design.md` gegen den Quelltext (#961). Die Designquelle macht Aussagen, die sich
- * nachzählen lassen — welche Routen sie abdeckt und wie viele Abweichungen offen sind. Ohne diesen
+ * nachprüfen lassen — welche Routen sie abdeckt und welche Vorlage sie bindet. Ohne diesen
  * Test liefen Tabelle und Zahl beim nächsten Paket still auseinander, und die Abnahme nach AK 3
  * prüfte gegen eine veraltete Liste.
  */
@@ -13,12 +13,6 @@ const DOKU: Record<string, string> = import.meta.glob('../../CLAUDE-design.md', 
   eager: true,
 })
 const doku = Object.values(DOKU)[0] ?? ''
-
-const QUELLEN: Record<string, string> = import.meta.glob('./**/*.tsx', {
-  query: '?raw',
-  import: 'default',
-  eager: true,
-})
 
 /** Der Abschnitt einer Überschrift bis zum nächsten Trenner. */
 const abschnitt = (ueberschrift: string): string => {
@@ -50,20 +44,12 @@ describe('CLAUDE-design.md gegen den Quelltext', () => {
     expect(erscheinungsbilder).toMatch(/kein Schalter/)
   })
 
-  it('nennt die Zahl der Gewichtsabweichungen so, wie das Kommando sie findet', () => {
-    // Nachbildung von `grep -rn "fontWeight: 5\|fontWeight: 6" frontend/src --include=*.tsx | grep -v test`:
-    // Die Zeile samt Pfad fällt heraus, sobald sie „test" enthält.
-    const treffer = Object.entries(QUELLEN).flatMap(([pfad, quelle]) =>
-      quelle
-        .split('\n')
-        .map((zeile, i) => `frontend/src/${pfad.replace('./', '')}:${i + 1}:${zeile}`)
-        .filter((zeile) => /fontWeight: [56]/.test(zeile) && !zeile.includes('test')),
-    )
-    const nachtlauf = treffer.filter((zeile) => zeile.startsWith('frontend/src/components/nachtlauf/'))
-    const offen = abschnitt('## ⚠️ Offene Abweichungen')
-
-    expect(offen).toContain(`findet **${treffer.length}** Stellen`)
-    expect(offen).toContain(`Davon liegen ${nachtlauf.length} unter`)
-    expect(offen).toContain(`die übrigen ${treffer.length - nachtlauf.length} verletzen`)
+  it('macht den Leitstand-Entwurf zur verbindlichen Vorlage, abgenommen per Bildschirmfoto', () => {
+    // Seit 2026-09-16 (#978): Die Vorlage gilt für Aussehen und Aufbau; ohne diese Sätze entschiede
+    // ein Plan Gestaltungsfragen wieder gegen sie (Retro zu #925/#932).
+    const vorlage = abschnitt('## 📌 Vorlage und Abnahme')
+    expect(vorlage).toContain('docs/entwurf-leitstand.html')
+    expect(vorlage).toMatch(/Die Vorlage ist verbindlich/)
+    expect(vorlage).toMatch(/Bildschirmfoto bei 1440 × 900 neben der Vorlage/)
   })
 })
