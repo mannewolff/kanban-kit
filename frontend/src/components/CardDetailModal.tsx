@@ -29,6 +29,7 @@ import {
   useState,
   type ComponentPropsWithoutRef,
   type Dispatch,
+  type ReactNode,
   type SetStateAction,
 } from 'react'
 import Markdown, { type Components } from 'react-markdown'
@@ -55,7 +56,7 @@ import { epicShortcode } from '../lib/epicMeta'
 import { normalizeTaskLists, toggleTaskAt } from '../lib/markdownTasks'
 import { safeImageSrc, safeLinkHref } from '../lib/markdownUrls'
 import { statusColors } from '../lib/statusColors'
-import { CODE_BG, theme } from '../theme'
+import { CODE_BG, PANEL_RADIUS, SURFACE_TINT, theme } from '../theme'
 import { labelChipSx } from './labelChipSx'
 import { useAuth } from '../auth/AuthContext'
 import { AttachmentPreview } from './AttachmentPreview'
@@ -768,6 +769,23 @@ function DependencyList({
  * bearbeitbares Feld zur Verfügung — beides wäre eine Aussage über einen noch unbekannten Text.
  */
 type BeschreibungStatus = 'laedt' | 'geladen' | 'fehler'
+
+/**
+ * Ein Block des Kartenblatts (AK 13, #958): eigene Fläche und Haarlinie auf dem getönten Grund des
+ * Dialogs, als benannter Bereich für Screenreader. Die drei Blöcke und ihr Inhalt stehen fest (Plan
+ * #932): Beschreibung und Details, Zuordnung, Verlauf.
+ */
+function KartenBlock({ name, children }: Readonly<{ name: string; children: ReactNode }>) {
+  return (
+    <Box
+      component="section"
+      aria-label={name}
+      sx={{ bgcolor: 'background.paper', border: 1, borderColor: 'divider', borderRadius: `${PANEL_RADIUS}px`, p: 2 }}
+    >
+      <Stack spacing={2}>{children}</Stack>
+    </Box>
+  )
+}
 
 /** View-Modus-Inhalt: Beschreibung (Markdown mit Task-Checkboxen), Abhängigkeiten, Fälligkeitsdatum. */
 function CardBodyView({
@@ -1491,8 +1509,10 @@ function CardDetailModalView({
         )}
       </DialogTitle>
 
-      <DialogContent dividers sx={{ overflowY: 'auto' }}>
+      {/* Getönter Grund, damit die drei Blöcke als eigene Flächen darauf stehen (AK 13). */}
+      <DialogContent dividers sx={{ overflowY: 'auto', bgcolor: SURFACE_TINT }}>
         <Stack spacing={2} sx={{ mt: 0.5 }}>
+          <KartenBlock name="Beschreibung und Details">
           {editing ? (
             <CardFields
               isEpic={isEpic}
@@ -1537,24 +1557,6 @@ function CardDetailModalView({
             />
           )}
 
-          {!isEpic && (
-            <AssigneeSection
-              canEdit={canEdit}
-              members={members}
-              assigneeIds={assigneeIds}
-              onChange={(ids) => void saveAssignees(ids)}
-            />
-          )}
-
-          {!isEpic && (
-            <LabelSection
-              canEdit={canEdit && canEditLabels}
-              boardLabels={boardLabels}
-              labelIds={labelIds}
-              onChange={(ids) => void saveLabels(ids)}
-            />
-          )}
-
           {!editing && fortschritt !== null && (
             <>
               <Divider />
@@ -1594,9 +1596,28 @@ function CardDetailModalView({
               </Box>
             </>
           )}
+          </KartenBlock>
+
+          {/* Ein Vorhaben trägt weder Zuständige noch Labels — ohne Inhalt entfällt der Block. */}
+          {!isEpic && (
+            <KartenBlock name="Zuordnung">
+              <AssigneeSection
+                canEdit={canEdit}
+                members={members}
+                assigneeIds={assigneeIds}
+                onChange={(ids) => void saveAssignees(ids)}
+              />
+              <LabelSection
+                canEdit={canEdit && canEditLabels}
+                boardLabels={boardLabels}
+                labelIds={labelIds}
+                onChange={(ids) => void saveLabels(ids)}
+              />
+            </KartenBlock>
+          )}
 
           {!editing && (
-            <>
+            <KartenBlock name="Verlauf">
               {/* Nur mit Projekt und Kartennummer gibt es etwas abzurufen: `projectId` ist am
                   Modal optional, und eine Pool-Idee trägt keine Nummer (Issue #968). */}
               {projectId != null && card.number != null && (
@@ -1632,7 +1653,7 @@ function CardDetailModalView({
 
               <Divider />
               <ActivitySection activities={activities} actorName={actorName} />
-            </>
+            </KartenBlock>
           )}
         </Stack>
       </DialogContent>

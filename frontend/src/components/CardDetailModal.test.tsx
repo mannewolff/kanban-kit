@@ -12,6 +12,9 @@ import type { CardLocation } from '../lib/cardLocation'
 import { CardDetailModal, commentFieldProps, parseDependencyInput, parseHerkunftInput } from './CardDetailModal'
 import { SnackbarProvider } from './SnackbarProvider'
 import { MAX_TEXT_LENGTH } from '../lib/textLimits'
+import { ThemeProvider } from '@mui/material/styles'
+import { cssRegel } from '../test/cssRegel'
+import { theme } from '../theme'
 
 vi.mock('../auth/AuthContext', () => ({
   useAuth: () => ({ user: { userId: 7, email: 'a@b.c', displayName: 'A', platformRole: 'USER', memberships: [] } }),
@@ -2598,4 +2601,66 @@ describe('CardDetailModal — interaktiver Status-Chip', () => {
       expect(screen.queryByText(/Anläufe konnten nicht geladen/)).not.toBeInTheDocument()
     })
   })
+})
+
+describe('CardDetailModal — drei Blöcke (AK 13, #958)', () => {
+  beforeEach(() => {
+    URL.createObjectURL = vi.fn(() => 'blob:preview')
+    URL.revokeObjectURL = vi.fn()
+  })
+
+  const renderThemed = (props: Partial<ComponentProps<typeof CardDetailModal>> = {}) => {
+    const apis = makeApis()
+    render(
+      <ThemeProvider theme={theme}>
+        <CardDetailModal card={card} canEdit columnName="In Progress" onClose={vi.fn()} {...apis} {...props} />
+      </ThemeProvider>,
+    )
+    return apis
+  }
+
+  it('gliedert das Kartenblatt in Beschreibung, Zuordnung und Verlauf', async () => {
+    renderThemed()
+
+    const beschreibung = screen.getByRole('region', { name: 'Beschreibung und Details' })
+    const zuordnung = screen.getByRole('region', { name: 'Zuordnung' })
+    const verlauf = screen.getByRole('region', { name: 'Verlauf' })
+
+    // Welche Felder in welchen Block gehören, legt der Plan fest (#932): nicht zwei beliebige Blöcke.
+    expect(await within(beschreibung).findByRole('heading', { name: 'Titel' })).toBeInTheDocument()
+    expect(within(beschreibung).getByLabelText('Abhängigkeiten')).toBeInTheDocument()
+    expect(within(zuordnung).getByLabelText('Zuständige')).toBeInTheDocument()
+    expect(within(verlauf).getByLabelText('Kommentar schreiben')).toBeInTheDocument()
+    expect(within(verlauf).getByText('Anhänge')).toBeInTheDocument()
+    expect(within(verlauf).getByText('Aktivität')).toBeInTheDocument()
+    expect(await within(verlauf).findByText('Hallo')).toBeInTheDocument()
+  })
+
+  it('behält im Bearbeiten-Modus Beschreibung und Zuordnung, ohne Verlauf wie bisher', async () => {
+    renderThemed()
+    await klickeBearbeiten()
+
+    expect(screen.getByRole('region', { name: 'Beschreibung und Details' })).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Zuordnung' })).toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Verlauf' })).not.toBeInTheDocument()
+  })
+
+  it('lässt bei einem Vorhaben den leeren Zuordnungsblock weg', async () => {
+    renderThemed({ card: { ...card, type: 'EPIC' } })
+
+    expect(await screen.findByRole('region', { name: 'Beschreibung und Details' })).toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Zuordnung' })).not.toBeInTheDocument()
+  })
+
+  it.each(['Beschreibung und Details', 'Zuordnung', 'Verlauf'])(
+    'malt den Block „%s" mit Fläche und Haarlinie aus den Tokens, ohne festen Hellwert',
+    (name) => {
+      renderThemed()
+
+      const regel = cssRegel(screen.getByRole('region', { name }))
+      expect(regel).toContain('background-color: var(--mb-palette-background-paper)')
+      expect(regel).toContain('border-color: var(--mb-palette-divider)')
+      expect(regel).not.toMatch(/#[0-9A-Fa-f]{3,8}\b/)
+    },
+  )
 })
