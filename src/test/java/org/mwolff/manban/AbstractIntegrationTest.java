@@ -63,8 +63,16 @@ import org.testcontainers.utility.DockerImageName;
     })
 public abstract class AbstractIntegrationTest {
 
+  // max_connections hochgesetzt (Issue #900): Spring cached Testkontexte ueber den ganzen Lauf,
+  // statt sie zu schliessen, und jeder haelt einen Hikari-Pool mit der Standardgroesse 10. Die 77
+  // IT-Klassen teilen sich zwar wenige Kontexte, aber jede Klasse mit eigenem @TestPropertySource
+  // macht einen neuen auf. Mit der Vorgabe 100 riss das Budget beim siebten Kontext, und zwar nicht
+  // bei ihm selbst, sondern bei allem, was danach lief: `FATAL: sorry, too many clients already`,
+  // ganze Klassen mit ERROR statt Failure. Bewusst hier und nicht als kleinerer Pool je Kontext —
+  // das aenderte das Verhalten der vier Nebenlaeufigkeits-ITs, die parallele Verbindungen brauchen.
   @ServiceConnection
-  static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16");
+  static final PostgreSQLContainer<?> POSTGRES =
+      new PostgreSQLContainer<>("postgres:16").withCommand("postgres", "-c", "max_connections=200");
 
   // Das Image kommt von quay.io, nicht von Docker Hub: `minio/minio` existiert dort nicht mehr
   // (404 beim Pull), was die gesamte IT-Suite lahmlegte. Der Tag steht fest — ein beweglicher
