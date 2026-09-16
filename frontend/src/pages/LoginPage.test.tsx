@@ -84,13 +84,18 @@ describe('LoginPage', () => {
     const detail =
       'Das Konto wartet auf die Freigabe durch einen Plattform-Admin.' +
       ' Bitte wenden Sie sich an den Betreiber dieser Instanz.'
-    mockedApi.login.mockRejectedValue(new ApiError(403, detail))
+    // message UND detail, wie client.ts sie aus einem RFC-9457-Body baut: Angezeigt wird
+    // ausschliesslich detail (apiErrorMessage), message bleibt der nicht anzeigbare Rohwert.
+    mockedApi.login.mockRejectedValue(new ApiError(403, detail, undefined, detail))
     await submitLogin()
     expect(await screen.findByText(detail)).toBeInTheDocument()
   })
 
   it('zeigt bei 403 die E-Mail-Bestätigungs-Meldung des Backends', async () => {
-    mockedApi.login.mockRejectedValue(new ApiError(403, 'E-Mail-Adresse ist noch nicht bestätigt'))
+    mockedApi.login.mockRejectedValue(
+      new ApiError(403, 'E-Mail-Adresse ist noch nicht bestätigt', undefined,
+        'E-Mail-Adresse ist noch nicht bestätigt'),
+    )
     await submitLogin()
     expect(await screen.findByText('E-Mail-Adresse ist noch nicht bestätigt')).toBeInTheDocument()
   })
@@ -105,5 +110,16 @@ describe('LoginPage', () => {
     mockedApi.login.mockRejectedValue(new Error('network down'))
     await submitLogin()
     expect(await screen.findByText(/fehlgeschlagen/i)).toBeInTheDocument()
+  })
+
+  it('zeigt bei 429 die Abweisung der Zaehlbremse', async () => {
+    mockedApi.login.mockRejectedValue(
+      new ApiError(429, 'Too Many Requests', undefined, 'Zu viele Versuche. Bitte in 15 Minuten erneut versuchen.'),
+    )
+    renderLogin()
+    await userEvent.type(await screen.findByLabelText(/E-Mail/), 'a@b.de')
+    await userEvent.type(screen.getByLabelText(/Passwort/, { selector: 'input' }), 'geheim12')
+    await userEvent.click(screen.getByRole('button', { name: 'Anmelden' }))
+    expect(await screen.findByText('Zu viele Versuche. Bitte in 15 Minuten erneut versuchen.')).toBeInTheDocument()
   })
 })
