@@ -225,6 +225,27 @@ declare module '@mui/material/styles' {
   }
 }
 
+/**
+ * Flächen der gefüllten Meldungen — die Toasts der Anwendung (`SnackbarProvider`, #960).
+ *
+ * MUI leitet sie selbst ab: hell aus `main`, dunkel aus `dark`, jeweils mit weißer oder schwarzer
+ * Schrift. Nachgerechnet hielten davon vier Paare die 4,5:1 für Text nicht — hell Warnung (3,1:1)
+ * und Info (3,9:1), dunkel Info (3,9:1) und Erfolg (4,1:1). Die Flächen sind deshalb hier gesetzt,
+ * gleich in beiden Erscheinungsbildern: gesättigte, dunkle Zustandstöne mit weißer Schrift, die auf
+ * hellem wie auf dunklem Grund als Meldung erkennbar sind. Nur die gefüllte Form ist betroffen;
+ * Formular- und Seitenmeldungen (Standardform) behalten MUIs Ableitung, die AA hält.
+ */
+const MELDUNGEN_GEFUELLT = {
+  errorFilledBg: '#C62828',
+  errorFilledColor: '#FFFFFF',
+  warningFilledBg: '#A34700',
+  warningFilledColor: '#FFFFFF',
+  infoFilledBg: '#01579B',
+  infoFilledColor: '#FFFFFF',
+  successFilledBg: '#2E7D32',
+  successFilledColor: '#FFFFFF',
+}
+
 /** Beide Erscheinungsbilder samt Variablen-Schalter — Grundlage für die Tokens und das Theme. */
 const ERSCHEINUNGSBILDER = {
   cssVariables: { colorSchemeSelector: 'media', cssVarPrefix: 'mb' },
@@ -241,6 +262,7 @@ const ERSCHEINUNGSBILDER = {
         // Status- und Vorhaben-Farben: Werte aus ihren Modulen, Variablen von hier (#952).
         status: STATUS_FARBWERTE.light,
         epic: EPIC_FARBWERTE.light,
+        Alert: MELDUNGEN_GEFUELLT,
       },
     },
     dark: {
@@ -256,6 +278,7 @@ const ERSCHEINUNGSBILDER = {
         panel: PANEL_DUNKEL,
         status: STATUS_FARBWERTE.dark,
         epic: EPIC_FARBWERTE.dark,
+        Alert: MELDUNGEN_GEFUELLT,
       },
     },
   },

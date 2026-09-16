@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { cssRegel } from '../test/cssRegel'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes, useNavigate } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -139,6 +140,15 @@ describe('EpicsPage', () => {
     expect(screen.getByText('AUT')).toBeInTheDocument()
     expect(screen.getByText('1 von 2 fertig')).toBeInTheDocument()
     expect(await screen.findByLabelText('Fortschritt Auth')).toBeInTheDocument()
+  })
+
+  it('setzt den Fortschritt in Tabellenziffern, damit Kacheln vergleichbar bleiben (#960)', async () => {
+    mEpics.list.mockResolvedValue([
+      { id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 1, total: 2, memberNumbers: [], rootNumbers: [], requirementCardNumber: null },
+    ])
+    renderPage()
+
+    expect(cssRegel(await screen.findByText('1 von 2 fertig'))).toContain('font-variant-numeric: tabular-nums')
   })
 
   // Die Gestalt ist hier keine Geschmacksfrage, sondern eine ausdrückliche Nutzerentscheidung

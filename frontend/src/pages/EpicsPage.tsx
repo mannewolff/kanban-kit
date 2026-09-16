@@ -40,7 +40,7 @@ import { aggregateMarks, countKinds, selectableEpics, sortEpics, visibleEpics } 
 import { useBoardRole } from '../lib/useBoardRole'
 import { useProjectName } from '../lib/useProjectName'
 import { useRefetchOnFocus } from '../lib/useRefetchOnFocus'
-import { CARD_LIFT, CARD_SHADOW, CARD_SHADOW_HOVER, PANEL_RADIUS } from '../theme'
+import { CARD_LIFT, CARD_SHADOW, CARD_SHADOW_HOVER, PANEL_RADIUS, TABELLENZIFFERN } from '../theme'
 
 /**
  * Zeilenhöhe eines Marken-Chips auf der Vorhaben-Kachel.
@@ -389,7 +389,7 @@ export function EpicsPage() {
                     Mitglieder, und sobald dieselbe Kachel Anforderungen und Plaene ausweist, waere
                     "n Arbeitspakete fertig" schlicht falsch. Eine nur bedingte Umbenennung waere
                     kein Fortschritt — sie liesse die Bestandstests gruen. */}
-                <Typography variant="caption" color="text.secondary">
+                <Typography variant="caption" color="text.secondary" sx={TABELLENZIFFERN}>
                   {epic.done} von {epic.total} fertig
                 </Typography>
                 {/* Kein Rechte-Check (Plan #703, E8): Ausblenden verändert nichts am Server, und

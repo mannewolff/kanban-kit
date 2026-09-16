@@ -20,6 +20,8 @@ describe('dialogTitleSx', () => {
     // `theme.vars` statt `theme.palette`: Das Objekt entsteht einmal beim Modulstart, und nur der
     // Variablen-Verweis schaltet danach mit dem Erscheinungsbild um (#952).
     expect(dialogTitleSx.borderBottom).toBe(`1px solid ${theme.vars.palette.divider}`)
+    // Kein fester Hellwert: Die Linie trägt die Variable (#960); der Hexwert darin ist MUIs Rückfall.
+    expect(dialogTitleSx.borderBottom).toMatch(/^1px solid var\(--mb-palette-divider,/)
     expect(dialogTitleSx).not.toHaveProperty('bgcolor')
     expect(dialogTitleSx).not.toHaveProperty('backgroundColor')
   })

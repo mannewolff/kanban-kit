@@ -613,3 +613,29 @@ describe('theme Tabellen: Dichte und Ziffern (AK 10, AK 12b, #953)', () => {
     expect(zelle.sizeSmall).toEqual({ paddingTop: 4, paddingBottom: 4 })
   })
 })
+
+describe('theme Meldungen in beiden Erscheinungsbildern (#960)', () => {
+  const zustaende = ['error', 'warning', 'info', 'success'] as const
+
+  /** MUI rechnet die hellen Meldungsflächen selbst und liefert sie als `rgb(r, g, b)`. */
+  const alsHex = (farbe: string): string => {
+    const rgb = /^rgb\((\d+), (\d+), (\d+)\)$/.exec(farbe)
+    return rgb ? `#${rgb.slice(1).map((k) => Number(k).toString(16).padStart(2, '0')).join('')}` : farbe
+  }
+
+  it.each(schemata.flatMap(([name, palette]) => zustaende.map((z) => [name, z, palette] as const)))(
+    '%s: gefüllte Meldung „%s" hält 4,5:1',
+    (_, zustand, palette) => {
+      // Die Toasts der Anwendung sind gefüllte Meldungen (SnackbarProvider).
+      expect(kontrast(palette.Alert[`${zustand}FilledBg`], palette.Alert[`${zustand}FilledColor`])).toBeGreaterThanOrEqual(4.5)
+    },
+  )
+
+  it.each(schemata.flatMap(([name, palette]) => zustaende.map((z) => [name, z, palette] as const)))(
+    '%s: Meldung „%s" auf getönter Fläche hält 4,5:1',
+    (_, zustand, palette) => {
+      // Formular- und Seitenmeldungen (Anmelden, Dialoge) nutzen die Standardform.
+      expect(kontrast(alsHex(palette.Alert[`${zustand}StandardBg`]), alsHex(palette.Alert[`${zustand}Color`]))).toBeGreaterThanOrEqual(4.5)
+    },
+  )
+})

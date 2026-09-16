@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cssRegel } from '../test/cssRegel'
 import { MemoryRouter, Route, Routes, useNavigate } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { boardsApi, type Board } from '../api/boards'
@@ -107,6 +108,16 @@ function renderMitArchiv() {
     </SnackbarProvider>,
   )
 }
+
+describe('ProjectBoardsPage Zahlen (#960)', () => {
+  it('setzt die Spaltenzahl der Boards in Tabellenziffern — sie stehen untereinander', async () => {
+    renderAt('OWNER', [{ id: 1, name: 'Eins' }, { id: 2, name: 'Zwei' }])
+
+    const zahlen = await screen.findAllByText('0 Spalten')
+    expect(zahlen).toHaveLength(2)
+    expect(cssRegel(zahlen[0])).toContain('font-variant-numeric: tabular-nums')
+  })
+})
 
 describe('ProjectBoardsPage RBAC', () => {
   beforeEach(() => vi.clearAllMocks())

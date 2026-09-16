@@ -23,7 +23,7 @@ import { Breadcrumbs } from '../components/Breadcrumbs'
 import { useSnackbar } from '../components/SnackbarProvider'
 import { canManageBoards, canManageMembers } from '../lib/roles'
 import { useRefetchOnFocus } from '../lib/useRefetchOnFocus'
-import { SURFACE_HOVER_SHADOW } from '../theme'
+import { SURFACE_HOVER_SHADOW, TABELLENZIFFERN } from '../theme'
 
 export function ProjectBoardsPage() {
   const { projectId } = useParams()
@@ -205,7 +205,8 @@ export function ProjectBoardsPage() {
               <Typography variant="subtitle1" sx={{ fontWeight: 600, flexGrow: 1, minWidth: 0 }}>
                 {board.name}
               </Typography>
-              <Typography variant="caption" color="text.secondary">
+              {/* Die Zahlen stehen je Board untereinander: gleich breite Ziffern (AK 10, #960). */}
+              <Typography variant="caption" color="text.secondary" sx={TABELLENZIFFERN}>
                 {board.columns.length} Spalten
               </Typography>
               {canManage && (

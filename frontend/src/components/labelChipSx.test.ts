@@ -22,6 +22,11 @@ describe('labelChipSx', () => {
     })
   })
 
+  it('traegt Grau und Weiss der Palette als Variable, nicht als festen Hellwert (#960)', () => {
+    expect(labelChipSx(undefined).bgcolor).toMatch(/^var\(--mb-palette-grey-500,/)
+    expect(labelChipSx('primary.main').color).toMatch(/^var\(--mb-palette-common-white,/)
+  })
+
   it('traegt auf dem Grau dieselbe dunkle Schrift wie vor der Umstellung', () => {
     expect(labelChipSx(null).color).toBe(theme.palette.getContrastText(theme.palette.grey[500]))
   })
