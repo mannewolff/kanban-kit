@@ -82,7 +82,10 @@ class SecurityConfig {
                     // Die Admin-Autorisierung selbst erledigt der AdminService pro Endpunkt.
                     .requestMatchers("/api/admin/**")
                     .hasAuthority(SessionAuthenticationFilter.AUTHORITY)
-                    // Kanban-Compat-API (tbx.mjs/board.mjs) ausschließlich per PAT.
+                    // Kanban-Compat-API (tbx.mjs/board.mjs) ausschließlich per PAT. Seit
+                    // Issue #947 liegt hier auch POST /api/kanban/night-runs: Der
+                    // Nachtlauf meldet sich mit demselben projektgebundenen Token, ohne
+                    // Sitzung. Keine Regel ändert sich dadurch — der Matcher deckt ihn ab.
                     .requestMatchers("/api/kanban/**")
                     .hasAuthority(PatAuthenticationFilter.AUTHORITY)
                     // Whitelist statt Blacklist (Issue #836): Die übrige API steht nur der Session

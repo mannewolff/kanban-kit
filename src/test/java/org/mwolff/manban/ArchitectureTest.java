@@ -139,6 +139,21 @@ class ArchitectureTest {
               "auth darf das accesstoken-Modul nicht kennen (Wiring gehoert in die "
                   + "Composition-Root)");
 
+  // Der Ingest-Endpunkt (Issue #947) liest den KanbanPrincipal, um das Zielprojekt aus der
+  // Token-Bindung zu nehmen. Diese Kante bleibt auf nightrun.web begrenzt: Der Use-Case nimmt
+  // primitive Werte, damit Application und Domaene von nightrun das accesstoken-Modul nicht kennen.
+  static final ArchRule NIGHTRUN_APPLICATION_UND_DOMAIN_HAENGEN_NICHT_VON_ACCESSTOKEN_AB =
+      noClasses()
+          .that()
+          .resideInAnyPackage(
+              "org.mwolff.manban.nightrun.application..", "org.mwolff.manban.nightrun.domain..")
+          .should()
+          .dependOnClassesThat()
+          .resideInAPackage("org.mwolff.manban.accesstoken..")
+          .as(
+              "nightrun.application und nightrun.domain duerfen das accesstoken-Modul nicht kennen "
+                  + "(die Kante bleibt auf nightrun.web begrenzt)");
+
   // --- Modul-Grenze: card-Fassade (Issue #458, Whitelist seit #470) ---------------------------
   // Das Kartenmodell und alles in card.application ausserhalb der Whitelist sind modulintern.
   // Fremde Module gehen ueber die fachliche Fassade (CardService/LabelService) — sonst haengt jede
@@ -462,6 +477,11 @@ class ArchitectureTest {
   @Test
   void authHaengtNichtVonAccesstokenAb() {
     AUTH_HAENGT_NICHT_VON_ACCESSTOKEN_AB.check(PRODUKTIONSKLASSEN);
+  }
+
+  @Test
+  void nightrunApplicationUndDomainHaengenNichtVonAccesstokenAb() {
+    NIGHTRUN_APPLICATION_UND_DOMAIN_HAENGEN_NICHT_VON_ACCESSTOKEN_AB.check(PRODUKTIONSKLASSEN);
   }
 
   @Test

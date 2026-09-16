@@ -53,10 +53,10 @@ class NightRunController {
   static final int MAX_ITEMS_PER_RUN = 200;
 
   /** Titelgrenze wie an der Quelle {@code card.title}; ein Schnappschuss kann nie länger sein. */
-  private static final int TITLE_MAX = 300;
+  static final int TITLE_MAX = 300;
 
   /** Ein Commit-Hash ist höchstens ein vollständiger SHA-1 (40 Zeichen), wie in {@code V29}. */
-  private static final int COMMIT_HASH_MAX = 40;
+  static final int COMMIT_HASH_MAX = 40;
 
   private final NightRunService runs;
 
