@@ -1,3 +1,4 @@
+import { grey } from '@mui/material/colors'
 import { describe, expect, it } from 'vitest'
 import { theme } from '../theme'
 import { labelChipSx } from './labelChipSx'
@@ -11,11 +12,18 @@ describe('labelChipSx', () => {
     expect(labelChipSx('#1E5F68').color).toBe(theme.palette.getContrastText('#1E5F68'))
   })
 
+  // Seit #952 liest das Modul die Farben der Palette als Variablen-Verweis (`theme.vars`), damit sie
+  // mit dem Erscheinungsbild umschalten. Die lesbare Textfarbe zum Grau wird weiter auf dem Farbwert
+  // gerechnet — auf einem Verweis kann `getContrastText` nicht rechnen und fiele auf Weiss zurueck.
   it('faellt ohne Farbe auf den Grauton der Palette zurueck', () => {
     expect(labelChipSx(undefined)).toEqual({
-      bgcolor: theme.palette.grey[500],
-      color: theme.palette.getContrastText(theme.palette.grey[500]),
+      bgcolor: theme.vars.palette.grey[500],
+      color: theme.palette.getContrastText(grey[500]),
     })
+  })
+
+  it('traegt auf dem Grau dieselbe dunkle Schrift wie vor der Umstellung', () => {
+    expect(labelChipSx(null).color).toBe(theme.palette.getContrastText(theme.palette.grey[500]))
   })
 
   // Der eigentliche Grund für dieses Modul: `getContrastText` wirft für alles, was keine
@@ -26,7 +34,7 @@ describe('labelChipSx', () => {
     'wirft bei der unbrauchbaren Farbe %p nicht, sondern nimmt Weiss',
     (farbe) => {
       expect(() => labelChipSx(farbe)).not.toThrow()
-      expect(labelChipSx(farbe)).toEqual({ bgcolor: farbe, color: theme.palette.common.white })
+      expect(labelChipSx(farbe)).toEqual({ bgcolor: farbe, color: theme.vars.palette.common.white })
     },
   )
 

@@ -1,9 +1,26 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
+import { epicColor, epicTint } from '../lib/epicMeta'
 import { EpicBadge } from './EpicBadge'
 
 describe('EpicBadge', () => {
+  // Bis #952 stand hier `${hue}22` — Hexwert plus Alpha-Suffix. Seit die Vorhaben-Farben
+  // Variablen-Verweise sind, ergäbe das `var(--mb-palette-epic-N-hue)22`: ungültiges CSS, und die
+  // getönte Fläche verschwände still. Die Fläche nutzt deshalb einen eigenen Tint-Wert.
+  it.each([
+    ['als reine Anzeige', undefined, 'Vorhaben AUT'],
+    ['als Knopf', vi.fn(), 'Vorhaben AUT öffnen'],
+  ])('tönt die Fläche %s über den eigenen Tint-Wert, nicht über ein Alpha-Suffix', (_, onOpen, name) => {
+    render(<EpicBadge epicId={9} title="Authentifizierung" shortcode="AUT" onOpen={onOpen} />)
+
+    const badge = screen.getByLabelText(name)
+    expect(badge).toHaveStyle({ backgroundColor: epicTint(9) })
+    expect(epicTint(9)).toMatch(/^var\(--mb-palette-epic-\d-tint\)$/)
+    // Punkt und Kürzel tragen den Farbton, die Fläche den Tint — beide aus demselben Palettenplatz.
+    expect(screen.getByText('AUT')).toHaveStyle({ color: epicColor(9) })
+  })
+
   it('bleibt ohne onOpen reine Anzeige', () => {
     render(<EpicBadge epicId={9} title="Authentifizierung" shortcode="AUT" />)
 

@@ -1,4 +1,6 @@
 import { createTheme } from '@mui/material/styles'
+import { EPIC_FARBWERTE, type EpicFarbe } from './lib/epicMeta'
+import { STATUS_FARBWERTE, type StatusColorSet } from './lib/statusColors'
 
 /**
  * Designsprache des Leitstands (siehe CLAUDE-design.md): fein, Teal-Familie, Carlito
@@ -209,10 +211,14 @@ declare module '@mui/material/styles' {
   interface Palette {
     nightRun: NightRunPalette
     panel: PanelPalette
+    status: typeof STATUS_FARBWERTE.light
+    epic: ReadonlyArray<EpicFarbe>
   }
   interface PaletteOptions {
     nightRun?: NightRunPalette
     panel?: PanelPalette
+    status?: Readonly<Record<string, StatusColorSet>>
+    epic?: ReadonlyArray<EpicFarbe>
   }
   interface CssThemeVariables {
     enabled: true
@@ -232,6 +238,9 @@ const ERSCHEINUNGSBILDER = {
         divider: BORDER,
         nightRun: NIGHT_RUN_HELL,
         panel: PANEL_HELL,
+        // Status- und Vorhaben-Farben: Werte aus ihren Modulen, Variablen von hier (#952).
+        status: STATUS_FARBWERTE.light,
+        epic: EPIC_FARBWERTE.light,
       },
     },
     dark: {
@@ -245,6 +254,8 @@ const ERSCHEINUNGSBILDER = {
         divider: D_BORDER,
         nightRun: NIGHT_RUN_DUNKEL,
         panel: PANEL_DUNKEL,
+        status: STATUS_FARBWERTE.dark,
+        epic: EPIC_FARBWERTE.dark,
       },
     },
   },

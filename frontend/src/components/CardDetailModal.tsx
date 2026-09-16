@@ -190,13 +190,16 @@ const TaskMarkdown = memo(function TaskMarkdown({
  * Deckel auf den Überschriftsgrößen. Lange Tokens (URLs, Hashes) brechen um; Codeblöcke und breite
  * GFM-Tabellen scrollen in ihrem eigenen Bereich, damit der Modal-Inhalt selbst keinen
  * horizontalen Scrollbalken bekommt. Genau solche Inhalte stehen in Review-Kommentaren (#575).
+ *
+ * Beide Objekte entstehen beim Modulstart und lesen deshalb `theme.vars`: `theme.palette` wäre der
+ * helle Wert und schaltete im dunklen Erscheinungsbild nicht um (#952).
  */
 const markdownBodySx = {
   overflowWrap: 'anywhere',
   '& :first-of-type': { mt: 0 },
-  '& h1, & h2': { fontWeight: 600, fontSize: '1.15rem', mt: 2, pb: 0.5, borderBottom: `1px solid ${theme.palette.divider}` },
+  '& h1, & h2': { fontWeight: 600, fontSize: '1.15rem', mt: 2, pb: 0.5, borderBottom: `1px solid ${theme.vars.palette.divider}` },
   '& h3, & h4': { fontWeight: 600, fontSize: '1rem', mt: 1.5, mb: 0.5 },
-  '& p, & li': { lineHeight: 1.6, color: theme.palette.text.primary },
+  '& p, & li': { lineHeight: 1.6, color: theme.vars.palette.text.primary },
   '& ul, & ol': { pl: 3, my: 1 },
   '& code': { backgroundColor: CODE_BG, px: 0.5, borderRadius: 1, fontFamily: 'monospace', fontSize: '0.85em' },
   '& pre': { backgroundColor: CODE_BG, p: 1.5, borderRadius: 1, overflowX: 'auto' },
@@ -207,7 +210,7 @@ const markdownBodySx = {
 } as const
 
 const descriptionSx = {
-  border: `1px solid ${theme.palette.divider}`,
+  border: `1px solid ${theme.vars.palette.divider}`,
   borderRadius: 1,
   p: 2,
   ...markdownBodySx,

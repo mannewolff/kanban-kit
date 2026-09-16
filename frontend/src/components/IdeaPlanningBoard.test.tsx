@@ -11,6 +11,7 @@ import { ideasApi, type Idea } from '../api/ideas'
 import { membersApi } from '../api/members'
 import { IdeaPlanningBoard } from './IdeaPlanningBoard'
 import { statusColors } from '../lib/statusColors'
+import { cssRegel } from '../test/cssRegel'
 import { STATUS_EDGE_WIDTH } from '../theme'
 
 // Toast-Weg: useSnackbar liefert im Test einen Spy (statt des No-op-Defaults ohne Provider).
@@ -344,12 +345,12 @@ describe('IdeaPlanningBoard', () => {
     renderBoard()
     await screen.findByText('Pool 1')
 
-    const erwartet = {
-      borderLeftColor: statusColors('Backlog').dot,
-      borderLeftWidth: `${STATUS_EDGE_WIDTH}px`,
-    }
-    expect(screen.getByTestId('pool-item-20')).toHaveStyle(erwartet)
-    expect(screen.getByTestId('board-item-1')).toHaveStyle(erwartet)
+    // Seit #952 ein Variablen-Verweis; jsdom verwirft die Kurzschreibweise mit `var(…)` im
+    // berechneten Stil, deshalb wird die erzeugte Regel samt Variablenname geprüft.
+    const erwartet = `border-left: ${STATUS_EDGE_WIDTH}px solid var(--mb-palette-status-backlog-dot)`
+    expect(statusColors('Backlog').dot).toBe('var(--mb-palette-status-backlog-dot)')
+    expect(cssRegel(screen.getByTestId('pool-item-20'))).toContain(erwartet)
+    expect(cssRegel(screen.getByTestId('board-item-1'))).toContain(erwartet)
   })
 
   it('holt per Drag von einem Board in den Pool', async () => {

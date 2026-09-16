@@ -11,6 +11,7 @@ import { epicsApi, type Epic } from '../api/epics'
 import { SnackbarProvider } from '../components/SnackbarProvider'
 import { BoardListPage } from './BoardListPage'
 import { ARCHIVED_STATUS_COLOR, statusColors } from '../lib/statusColors'
+import { cssRegel } from '../test/cssRegel'
 import { STATUS_EDGE_WIDTH } from '../theme'
 
 function deferred<T>() {
@@ -223,14 +224,15 @@ describe('BoardListPage', () => {
     renderPage()
     fireEvent.click(await screen.findByLabelText('Filter Archiv'))
 
-    expect(await screen.findByLabelText('Detail öffnen: Aufgabe')).toHaveStyle({
-      borderLeftColor: statusColors('Backlog').dot,
-      borderLeftWidth: `${STATUS_EDGE_WIDTH}px`,
-    })
-    expect(screen.getByLabelText('Detail öffnen: AlteKarte')).toHaveStyle({
-      borderLeftColor: ARCHIVED_STATUS_COLOR.dot,
-      borderLeftWidth: `${STATUS_EDGE_WIDTH}px`,
-    })
+    // Seit #952 Variablen-Verweise; jsdom verwirft die Kurzschreibweise mit `var(…)` im berechneten
+    // Stil, deshalb wird die erzeugte Regel samt Variablenname geprüft.
+    expect(cssRegel(await screen.findByLabelText('Detail öffnen: Aufgabe'))).toContain(
+      `border-left: ${STATUS_EDGE_WIDTH}px solid var(--mb-palette-status-backlog-dot)`,
+    )
+    expect(cssRegel(screen.getByLabelText('Detail öffnen: AlteKarte'))).toContain(
+      `border-left: ${STATUS_EDGE_WIDTH}px solid var(--mb-palette-status-archived-dot)`,
+    )
+    expect(ARCHIVED_STATUS_COLOR.dot).toBe('var(--mb-palette-status-archived-dot)')
   })
 
   it('lässt dem Status-Chip den Text, nimmt ihm aber die Farbfläche', async () => {

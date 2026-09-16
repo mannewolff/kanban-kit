@@ -2,6 +2,7 @@ import { render, screen } from '@testing-library/react'
 import { ThemeProvider } from '@mui/material/styles'
 import { describe, expect, it } from 'vitest'
 import { AuthCard } from './AuthCard'
+import { cssRegel } from '../test/cssRegel'
 import { EPIC_EDGE_WIDTH, theme } from '../theme'
 
 describe('AuthCard', () => {
@@ -30,11 +31,7 @@ describe('AuthCard', () => {
     // `border: 1px solid var(…)` des Paper-Overrides und mit ihr die Randbreite im berechneten
     // Stil — die Farbe steht dort noch, die Breite wird an der erzeugten Regel geprüft.
     expect(karte()).toHaveStyle({ borderLeftColor: 'var(--mb-palette-primary-main)' })
-    const klasse = [...karte().classList].find((c) => c.startsWith('css-'))
-    const regel = [...document.styleSheets]
-      .flatMap((blatt) => [...blatt.cssRules])
-      .find((r) => r.cssText.startsWith(`.${klasse} `))
-    expect(regel?.cssText).toMatch(new RegExp(`border-left: ${EPIC_EDGE_WIDTH}px solid`))
+    expect(cssRegel(karte())).toContain(`border-left: ${EPIC_EDGE_WIDTH}px solid`)
     // MuiPaper-elevation2 wäre der Schatten, den #653 herausnimmt.
     expect(karte().className).not.toMatch(/MuiPaper-elevation[1-9]/)
   })

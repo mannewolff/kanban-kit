@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
+import { EPIC_FARBWERTE, epicColor, epicTint } from './lib/epicMeta'
 import { kontrast } from './lib/kontrast'
+import { ARCHIVED_STATUS_COLOR, STATUS_FARBWERTE, statusColors } from './lib/statusColors'
 import {
   APP_BACKGROUND,
   CARD_LIFT,
@@ -413,4 +415,77 @@ describe('theme Nachtlauf-Zustandsfarben (Plan #718, A15)', () => {
     expect(palette.nightRun.yellow).not.toBe(palette.warning.main)
     expect(palette.nightRun.red).not.toBe(palette.error.main)
   })
+})
+
+describe('theme Status- und Vorhaben-Farben beider Erscheinungsbilder (#952)', () => {
+  // Die Werte stehen in `lib/statusColors.ts` und `lib/epicMeta.ts` (Plan #932 E10/E11), das Theme
+  // legt sie als Variablen an. Die beiden Module liefern Verweise; hier wird geprüft, dass diese
+  // Verweise auf Variablen zeigen, die MUI tatsächlich erzeugt, und welche Werte dahinter liegen.
+  const statusSets = Object.keys(STATUS_FARBWERTE.light) as Array<keyof typeof STATUS_FARBWERTE.light>
+  const felder = ['bg', 'text', 'dot'] as const
+
+  it.each(schemata)('trägt %s die Statusfarben aus lib/statusColors', (name, palette) => {
+    expect(palette.status).toEqual(name === 'hell' ? STATUS_FARBWERTE.light : STATUS_FARBWERTE.dark)
+  })
+
+  it.each(schemata)('trägt %s die Vorhaben-Farben aus lib/epicMeta', (name, palette) => {
+    expect(palette.epic).toEqual(name === 'hell' ? EPIC_FARBWERTE.light : EPIC_FARBWERTE.dark)
+  })
+
+  it('erzeugt für jeden Status-Verweis aus lib/statusColors die passende Variable', () => {
+    for (const set of statusSets) {
+      for (const feld of felder) {
+        expect(theme.vars.palette.status[set][feld]).toMatch(new RegExp(`^var\\(--mb-palette-status-${set}-${feld},`))
+      }
+    }
+    // Stichprobe über die öffentliche Funktion: derselbe Name, nur ohne Rückfallwert.
+    expect(theme.vars.palette.status.done.dot.startsWith(statusColors('Done').dot.slice(0, -1))).toBe(true)
+    expect(theme.vars.palette.status.archived.dot.startsWith(ARCHIVED_STATUS_COLOR.dot.slice(0, -1))).toBe(true)
+  })
+
+  it('erzeugt für jeden Vorhaben-Verweis aus lib/epicMeta die passende Variable', () => {
+    for (let id = 0; id < 40; id++) {
+      const platz = Number(/epic-(\d)-hue/.exec(epicColor(id))![1])
+      expect(theme.vars.palette.epic[platz].hue.startsWith(epicColor(id).slice(0, -1))).toBe(true)
+      expect(theme.vars.palette.epic[platz].tint.startsWith(epicTint(id).slice(0, -1))).toBe(true)
+    }
+  })
+
+  /** Deckt eine `rgba(r,g,b,a)`-Tönung über eine Hexfläche und liefert die sichtbare Farbe als Hex. */
+  const ueber = (rgba: string, flaeche: string): string => {
+    const [r, g, b, a] = rgba.slice(5, -1).split(',').map(Number)
+    const kanal = (wert: number, i: number) =>
+      Math.round(wert * a + Number.parseInt(flaeche.slice(1 + 2 * i, 3 + 2 * i), 16) * (1 - a))
+        .toString(16)
+        .padStart(2, '0')
+    return `#${[r, g, b].map(kanal).join('')}`
+  }
+
+  it('rechnet die Tönung wie der Browser: Deckkraft 0 lässt die Fläche, 1 den Farbton stehen', () => {
+    expect(ueber('rgba(255,0,0,0)', '#123456')).toBe('#123456')
+    expect(ueber('rgba(255,0,0,1)', '#123456')).toBe('#ff0000')
+  })
+
+  // Die dunklen Werte sind neu gewählt und halten AA von Anfang an. Die hellen Werte sind
+  // unveränderter Bestand; ihre Lücken hält der Abschlussbericht zu #952 fest.
+  const dunkleFlaechen = flaechenVon(dunkel).filter(([flaeche]) => flaeche !== 'Code')
+
+  it.each(statusSets)('dunkel: Statustext %s hält 4,5:1 auf seiner Fläche', (set) => {
+    expect(kontrast(dunkel.status[set].bg, dunkel.status[set].text)).toBeGreaterThanOrEqual(4.5)
+  })
+
+  it.each(statusSets.flatMap((set) => dunkleFlaechen.map(([flaeche, wert]) => [set, flaeche, wert] as const)))(
+    'dunkel: Statuspunkt %s hält auf %s 3:1',
+    (set, _, wert) => {
+      expect(kontrast(wert, dunkel.status[set].dot)).toBeGreaterThanOrEqual(3)
+    },
+  )
+
+  it.each(EPIC_FARBWERTE.dark.flatMap((platz, i) => dunkleFlaechen.map(([flaeche, wert]) => [i, flaeche, wert, platz] as const)))(
+    'dunkel: Vorhaben-Platz %s hält auf %s 3:1 als Kante und 4,5:1 als Kürzel auf seinem Tint',
+    (_, __, wert, platz) => {
+      expect(kontrast(wert, platz.hue)).toBeGreaterThanOrEqual(3)
+      expect(kontrast(ueber(platz.tint, wert), platz.hue)).toBeGreaterThanOrEqual(4.5)
+    },
+  )
 })

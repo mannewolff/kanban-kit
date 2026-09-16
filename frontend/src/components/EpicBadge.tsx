@@ -2,7 +2,7 @@ import Box from '@mui/material/Box'
 import Stack from '@mui/material/Stack'
 import Typography from '@mui/material/Typography'
 import type { SxProps, Theme } from '@mui/material/styles'
-import { epicColor, epicShortcode } from '../lib/epicMeta'
+import { epicColor, epicShortcode, epicTint } from '../lib/epicMeta'
 
 interface Props {
   epicId: number
@@ -25,7 +25,9 @@ const AKTIVIERUNGSTASTEN = new Set(['Enter', ' '])
 export function EpicBadge({ epicId, title, shortcode, sx, onOpen }: Readonly<Props>) {
   const hue = epicColor(epicId)
   const label = epicShortcode(title, shortcode)
-  const grund = { width: 'fit-content', px: 0.75, py: 0.25, borderRadius: 1, bgcolor: `${hue}22`, flexShrink: 0 }
+  // Die Fläche trägt einen eigenen Tint-Wert (#952): `hue` ist ein Variablen-Verweis, und ein
+  // angehängtes Alpha-Suffix ergäbe ungültiges CSS — die Fläche verschwände ohne Fehler.
+  const grund = { width: 'fit-content', px: 0.75, py: 0.25, borderRadius: 1, bgcolor: epicTint(epicId), flexShrink: 0 }
   const inhalt = (
     <>
       <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: hue, flexShrink: 0 }} />

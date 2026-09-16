@@ -12,6 +12,7 @@ import { projectsApi } from '../api/projects'
 import { BoardView } from './BoardView'
 import { SnackbarProvider } from './SnackbarProvider'
 import { statusColors } from '../lib/statusColors'
+import { cssRegel } from '../test/cssRegel'
 import { PANEL_RADIUS, STATUS_EDGE_WIDTH } from '../theme'
 
 vi.mock('../api/columns', () => ({
@@ -561,24 +562,28 @@ describe('BoardView', () => {
     expect(within(group).getByText('#')).toBeInTheDocument()
   })
 
+  // Seit #952 tragen die Statusfarben Variablen-Verweise. jsdom verwirft `border-top: 3px solid
+  // var(…)` im berechneten Stil; geprüft wird deshalb die erzeugte Regel samt Variablenname — der
+  // Wert dahinter steht je Erscheinungsbild in `theme.test.ts`.
   it('trägt den Status der Spalte an ihrer Oberkante', () => {
     // Kanten-Semantik (#649): oben = Status. Der frühere Farbpunkt im Spaltenkopf entfällt dafür.
     render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} />)
 
-    expect(screen.getByTestId('column-10')).toHaveStyle({
-      borderTopColor: statusColors('Backlog').dot,
-      borderTopWidth: `${STATUS_EDGE_WIDTH}px`,
-    })
-    expect(screen.getByTestId('column-20')).toHaveStyle({ borderTopColor: statusColors('Done').dot })
+    expect(cssRegel(screen.getByTestId('column-10'))).toContain(
+      `border-top: ${STATUS_EDGE_WIDTH}px solid var(--mb-palette-status-backlog-dot)`,
+    )
+    expect(cssRegel(screen.getByTestId('column-20'))).toContain(
+      `border-top: ${STATUS_EDGE_WIDTH}px solid var(--mb-palette-status-done-dot)`,
+    )
+    expect(statusColors('Backlog').dot).toBe('var(--mb-palette-status-backlog-dot)')
   })
 
   it('trägt den Status an der linken Kante der Karte', () => {
     render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} />)
 
-    expect(screen.getByTestId('card-100')).toHaveStyle({
-      borderLeftColor: statusColors('Backlog').dot,
-      borderLeftWidth: `${STATUS_EDGE_WIDTH}px`,
-    })
+    expect(cssRegel(screen.getByTestId('card-100'))).toContain(
+      `border-left: ${STATUS_EDGE_WIDTH}px solid var(--mb-palette-status-backlog-dot)`,
+    )
   })
 
   // Die Oberkante gehört dem Panel, nicht der Karte: Bis 2026-08-31 trug die Karte den Status oben,
@@ -586,13 +591,11 @@ describe('BoardView', () => {
   it('trägt den Status an der Spalte oben und an der Karte nicht doppelt', () => {
     render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} />)
 
-    expect(screen.getByTestId('column-10')).toHaveStyle({
-      borderTopColor: statusColors('Backlog').dot,
-      borderTopWidth: `${STATUS_EDGE_WIDTH}px`,
-    })
-    expect(screen.getByTestId('card-100')).not.toHaveStyle({
-      borderTopWidth: `${STATUS_EDGE_WIDTH}px`,
-    })
+    expect(cssRegel(screen.getByTestId('column-10'))).toContain(
+      `border-top: ${STATUS_EDGE_WIDTH}px solid var(--mb-palette-status-backlog-dot)`,
+    )
+    expect(cssRegel(screen.getByTestId('card-100'))).not.toContain('border-top:')
+    expect(cssRegel(screen.getByTestId('card-100'))).not.toContain('border-top-width')
   })
 
   // Der getönte Grund liegt seit #713 an der Anwendung (theme.ts, `body::before`) und nicht mehr
