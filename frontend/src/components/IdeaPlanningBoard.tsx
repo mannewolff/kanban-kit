@@ -19,8 +19,7 @@ import { membersApi, type Member } from '../api/members'
 import { CardDetailModal } from './CardDetailModal'
 import { useSnackbar } from './SnackbarProvider'
 import { useRefetchOnFocus } from '../lib/useRefetchOnFocus'
-import { statusColors } from '../lib/statusColors'
-import { ablageflaecheSx, edgeSurfaceSx } from './boardSurfaceSx'
+import { ablageflaecheSx, karteSx } from './boardSurfaceSx'
 
 /** Erste Spalte eines Boards (kleinste Position); `null`, wenn das Board keine Spalte hat. */
 function firstColumnOf(board: Board): number | null {
@@ -62,15 +61,10 @@ const SCROLL_STEP_PX = 16
  * Backlog-Zonen der Boards bleiben davon unberührt. `refreshKey` ist ein Reload-Impuls von außen:
  * Bei jeder Änderung werden Pool und Backlogs neu geladen (z. B. nach „Idee anlegen" auf der Seite).
  */
-/**
- * Kanten-Semantik im Ideen-Board (#649, E5): dieselben Token wie die Board-Karte. Eine Idee liegt
- * vor der Spaltenzuordnung, ihr Status ist deshalb fest `Backlog`. Eine linke Kante entfaellt hier,
- * weil die Ansicht keine Vorhaben-Zuordnung kennt — sie bleibt unbelegt und bedeutet nie etwas
- * anderes als auf dem Board.
- */
-const IDEA_EDGE_SX = edgeSurfaceSx({ statusColor: statusColors('Backlog').dot })
-/** Dieselbe Kante im Ziehzustand: Platzhalter an der verlassenen Stelle, wie auf dem Board (#956). */
-const IDEA_EDGE_SX_BEWEGT = edgeSurfaceSx({ statusColor: statusColors('Backlog').dot, bewegt: true })
+/** Eine Idee liegt als dieselbe Platte wie die Board-Karte (#980, `karteSx`). */
+const IDEA_EDGE_SX = karteSx()
+/** Dieselbe Platte im Ziehzustand: Vertiefung an der verlassenen Stelle, wie auf dem Board (#956). */
+const IDEA_EDGE_SX_BEWEGT = karteSx({ bewegt: true })
 
 export function IdeaPlanningBoard({
   projectId,

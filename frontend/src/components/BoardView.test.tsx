@@ -13,7 +13,7 @@ import { BoardView } from './BoardView'
 import { SnackbarProvider } from './SnackbarProvider'
 import { statusColors } from '../lib/statusColors'
 import { cssRegel, cssRegelMit } from '../test/cssRegel'
-import { PANEL_RADIUS, STATUS_EDGE_WIDTH } from '../theme'
+import { PANEL_RADIUS } from '../theme'
 
 vi.mock('../api/columns', () => ({
   columnsApi: {
@@ -562,40 +562,28 @@ describe('BoardView', () => {
     expect(within(group).getByText('#')).toBeInTheDocument()
   })
 
-  // Seit #952 tragen die Statusfarben Variablen-Verweise. jsdom verwirft `border-top: 3px solid
-  // var(…)` im berechneten Stil; geprüft wird deshalb die erzeugte Regel samt Variablenname — der
-  // Wert dahinter steht je Erscheinungsbild in `theme.test.ts`.
-  it('trägt den Status der Spalte an ihrer Oberkante', () => {
-    // Kanten-Semantik (#649): oben = Status. Der frühere Farbpunkt im Spaltenkopf entfällt dafür.
+  // Seit #980 (Leitstand-Entwurf) trägt die Spalte ihren Status als Melder-LED im Kopf; Spalte und
+  // Karte haben keine farbige Kante mehr. jsdom verwirft Kurzschreibweisen mit `var(…)`, geprüft
+  // wird deshalb die erzeugte Regel samt Variablenname.
+  it('trägt den Status der Spalte als LED im Spaltenkopf', () => {
     render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} />)
 
-    expect(cssRegel(screen.getByTestId('column-10'))).toContain(
-      `border-top: ${STATUS_EDGE_WIDTH}px solid var(--mb-palette-status-backlog-dot)`,
-    )
-    expect(cssRegel(screen.getByTestId('column-20'))).toContain(
-      `border-top: ${STATUS_EDGE_WIDTH}px solid var(--mb-palette-status-done-dot)`,
-    )
+    expect(cssRegel(screen.getByTestId('status-10'))).toContain('background-color: var(--mb-palette-status-backlog-dot')
+    expect(cssRegel(screen.getByTestId('status-20'))).toContain('background-color: var(--mb-palette-status-done-dot')
+    expect(within(screen.getByTestId('column-header-10')).getByTestId('status-10')).toBeInTheDocument()
     expect(statusColors('Backlog').dot).toBe('var(--mb-palette-status-backlog-dot)')
   })
 
-  it('trägt den Status an der linken Kante der Karte', () => {
+  it('legt Spalten als Nut und Karten als Platte an, ohne farbige Kanten', () => {
     render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} />)
 
-    expect(cssRegel(screen.getByTestId('card-100'))).toContain(
-      `border-left: ${STATUS_EDGE_WIDTH}px solid var(--mb-palette-status-backlog-dot)`,
-    )
-  })
-
-  // Die Oberkante gehört dem Panel, nicht der Karte: Bis 2026-08-31 trug die Karte den Status oben,
-  // und die Spalte trug ihn ebenfalls — dieselbe Farbe zweimal übereinander, zwei Pixel auseinander.
-  it('trägt den Status an der Spalte oben und an der Karte nicht doppelt', () => {
-    render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} />)
-
-    expect(cssRegel(screen.getByTestId('column-10'))).toContain(
-      `border-top: ${STATUS_EDGE_WIDTH}px solid var(--mb-palette-status-backlog-dot)`,
-    )
-    expect(cssRegel(screen.getByTestId('card-100'))).not.toContain('border-top:')
-    expect(cssRegel(screen.getByTestId('card-100'))).not.toContain('border-top-width')
+    const spalte = cssRegel(screen.getByTestId('column-10'))
+    expect(spalte).toContain('box-shadow: var(--mb-palette-warte-schattenNute')
+    expect(spalte).not.toContain('border-top:')
+    const karte = cssRegel(screen.getByTestId('card-100'))
+    expect(karte).toContain('box-shadow: var(--mb-palette-panel-cardShadow')
+    expect(karte).not.toContain('border-left:')
+    expect(karte).not.toContain('border-top:')
   })
 
   // Der getönte Grund liegt seit #713 an der Anwendung (theme.ts, `body::before`) und nicht mehr
@@ -803,7 +791,9 @@ describe('BoardView', () => {
 
     expect(screen.getByLabelText('Fällig Bald fällig')).toBeInTheDocument()
     expect(screen.getByLabelText('Fällig Überfällig')).toBeInTheDocument()
-    expect(screen.getAllByText(/📅/)).toHaveLength(2)
+    expect(screen.getAllByText(/^fällig /)).toHaveLength(2)
+    expect(screen.getByLabelText('Fällig Überfällig')).toHaveAttribute('data-ueberfaellig', 'ja')
+    expect(screen.getByLabelText('Fällig Bald fällig')).not.toHaveAttribute('data-ueberfaellig')
   })
 
   it('rollt eine fehlgeschlagene Kartenverschiebung zurück', async () => {
@@ -1049,7 +1039,7 @@ describe('BoardView', () => {
       expect(within(screen.getByTestId('column-10')).getByTestId('card-100')).toBe(quelle)
       // Platzhalter derselben Höhe: dasselbe Element, Inhalt unsichtbar statt entfernt.
       expect(cssRegelMit(quelle, '>*')).toContain('visibility: hidden')
-      expect(cssRegel(quelle)).toContain('border-style: dashed')
+      expect(cssRegel(quelle)).toContain('border: 1px dashed')
     })
 
     it('zeigt die Ablagefläche in der Zielspalte, nicht in der Herkunftsspalte', async () => {
@@ -1108,6 +1098,87 @@ describe('BoardView', () => {
     })
   })
 
+  describe('Werkzeugleiste (#980)', () => {
+    const heute = Date.now()
+    const eigene: Card = { ...card, id: 100, title: 'Meine Karte', assignees: [7] }
+    const fremde: Card = { ...card, id: 101, number: 2, title: 'Fremde Karte', assignees: [8], positionInColumn: 1, dueDate: new Date(heute - 86_400_000).toISOString() }
+    const fertig: Card = { ...card, id: 102, number: 3, title: 'Fertige Karte', columnId: 20, dueDate: new Date(heute - 86_400_000).toISOString() }
+
+    it('filtert auf die Karten des angemeldeten Nutzers und zurück', () => {
+      render(<BoardView board={board} initialCards={[eigene, fremde]} canEdit currentUserId={7} api={mkApi()} />)
+
+      fireEvent.click(screen.getByRole('button', { name: 'Meine' }))
+
+      expect(screen.getByRole('button', { name: 'Meine' })).toHaveAttribute('aria-pressed', 'true')
+      expect(screen.getByText('Meine Karte')).toBeInTheDocument()
+      expect(screen.queryByText('Fremde Karte')).not.toBeInTheDocument()
+      fireEvent.click(screen.getByRole('button', { name: 'Alle Karten' }))
+      expect(screen.getByText('Fremde Karte')).toBeInTheDocument()
+    })
+
+    it('öffnet eine Karte über den Klick-Handler der Seite', () => {
+      const onCardClick = vi.fn()
+      render(<BoardView board={board} initialCards={[eigene]} canEdit onCardClick={onCardClick} api={mkApi()} />)
+
+      fireEvent.click(screen.getByText('Meine Karte'))
+
+      expect(onCardClick).toHaveBeenCalledWith(expect.objectContaining({ id: 100 }))
+    })
+
+    it('öffnet ohne Klick-Handler beim Klick auf eine Karte nichts und wirft nicht', () => {
+      render(<BoardView board={board} initialCards={[eigene]} canEdit api={mkApi()} />)
+
+      fireEvent.click(screen.getByTestId('card-100'))
+
+      expect(screen.getByTestId('card-100')).toBeInTheDocument()
+    })
+
+    it('bietet „Meine" ohne angemeldeten Nutzer nicht an', () => {
+      render(<BoardView board={board} initialCards={[eigene]} canEdit api={mkApi()} />)
+
+      expect(screen.queryByRole('button', { name: 'Meine' })).not.toBeInTheDocument()
+    })
+
+    it('zählt und filtert überfällige Karten, fertige zählen nicht', () => {
+      render(<BoardView board={board} initialCards={[eigene, fremde, fertig]} canEdit currentUserId={7} api={mkApi()} />)
+
+      const knopf = screen.getByRole('button', { name: /^Überfällig/ })
+      expect(knopf).toHaveTextContent('Überfällig1')
+      fireEvent.click(knopf)
+
+      expect(screen.getByText('Fremde Karte')).toBeInTheDocument()
+      expect(screen.queryByText('Meine Karte')).not.toBeInTheDocument()
+      expect(screen.queryByText('Fertige Karte')).not.toBeInTheDocument()
+    })
+
+    it('zeigt ohne überfällige Karte keine Zahl am Filter', () => {
+      render(<BoardView board={board} initialCards={[eigene]} canEdit api={mkApi()} />)
+
+      expect(screen.getByRole('button', { name: 'Überfällig' })).toHaveTextContent(/^Überfällig$/)
+    })
+
+    it('blendet in der kompakten Dichte Zuständige und Labels aus', () => {
+      const mitLabel: Card = { ...eigene, labels: [5] }
+      const boardLabels = [{ id: 5, boardId: 1, name: 'Wichtig', color: '#C8393E', countOnEpicTile: false }]
+      render(<BoardView board={board} initialCards={[mitLabel]} canEdit boardLabels={boardLabels} api={mkApi()} />)
+      expect(screen.getByLabelText('Zuständige Meine Karte')).toBeInTheDocument()
+
+      fireEvent.click(screen.getByRole('button', { name: 'kompakt' }))
+
+      expect(screen.getByTestId('card-100')).toHaveAttribute('data-dichte', 'kompakt')
+      expect(screen.queryByLabelText('Zuständige Meine Karte')).not.toBeInTheDocument()
+      expect(screen.queryByText('Wichtig')).not.toBeInTheDocument()
+    })
+
+    it('zeigt die Werkzeugleiste auch ohne Bearbeitungsrecht, dann ohne Auswählen und Anlegen', () => {
+      render(<BoardView board={board} initialCards={[eigene]} canEdit={false} api={mkApi()} />)
+
+      expect(screen.getByRole('group', { name: 'Karten filtern' })).toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Auswählen' })).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Neu anlegen' })).not.toBeInTheDocument()
+    })
+  })
+
   describe('Belastungsgrenze einer Spalte (AK 6, #956)', () => {
     const mitGrenze = (wipLimit: number | null): Board => ({
       ...board,
@@ -1149,6 +1220,25 @@ describe('BoardView', () => {
       render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} />)
 
       expect(screen.queryByRole('meter')).not.toBeInTheDocument()
+    })
+
+    it('zeigt die Grenze als Segmentskala: belegte Plätze, bei erreichter Grenze das letzte als Grenzsegment', () => {
+      const zweite = { ...card, id: 101, number: 2, title: 'Zweite', positionInColumn: 1 }
+      const { unmount } = render(<BoardView board={mitGrenze(4)} initialCards={[card, zweite]} canEdit api={mkApi()} />)
+      const segmente = () =>
+        within(screen.getByRole('meter', { name: 'Auslastung Backlog' }))
+          .getAllByTestId('segment')
+          .map((segment) => segment.dataset.segment)
+      expect(segmente()).toEqual(['belegt', 'belegt', 'frei', 'frei'])
+      unmount()
+
+      render(<BoardView board={mitGrenze(2)} initialCards={[card, zweite]} canEdit api={mkApi()} />)
+      expect(segmente()).toEqual(['belegt', 'grenze'])
+    })
+
+    it('begrenzt die Skala bei großen Grenzen auf zwölf Segmente', () => {
+      render(<BoardView board={mitGrenze(30)} initialCards={[card]} canEdit api={mkApi()} />)
+      expect(within(screen.getByRole('meter', { name: 'Auslastung Backlog' })).getAllByTestId('segment')).toHaveLength(12)
     })
 
     it('legt den Balken neben den Spaltenkopf, statt den Kopf einzufärben', () => {

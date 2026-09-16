@@ -56,7 +56,7 @@ import { epicShortcode } from '../lib/epicMeta'
 import { normalizeTaskLists, toggleTaskAt } from '../lib/markdownTasks'
 import { safeImageSrc, safeLinkHref } from '../lib/markdownUrls'
 import { statusColors } from '../lib/statusColors'
-import { CODE_BG, PANEL_RADIUS, SURFACE_TINT, theme } from '../theme'
+import { ANZEIGE, CODE_BG, GRUND, PANEL_RADIUS, PLATTE, PLATTE_HOCH, SCHATTEN_HOCH, SCHATTEN_PLATTE, theme, ZAHL } from '../theme'
 import { labelChipSx } from './labelChipSx'
 import { useAuth } from '../auth/AuthContext'
 import { AttachmentPreview } from './AttachmentPreview'
@@ -771,18 +771,27 @@ function DependencyList({
 type BeschreibungStatus = 'laedt' | 'geladen' | 'fehler'
 
 /**
- * Ein Block des Kartenblatts (AK 13, #958): eigene Fläche und Haarlinie auf dem getönten Grund des
- * Dialogs, als benannter Bereich für Screenreader. Die drei Blöcke und ihr Inhalt stehen fest (Plan
- * #932): Beschreibung und Details, Zuordnung, Verlauf.
+ * Ein Block des Kartenblatts (AK 13, #958) als Platte der Instrumententafel (#980, Entwurf
+ * `.platte`, `.platte-kopf`, Z. 543–557): Fläche, Haarlinie, Schatten und ein Kopf mit dem Namen,
+ * als benannter Bereich für Screenreader. Die drei Blöcke und ihr Inhalt stehen fest (Plan #932):
+ * Beschreibung und Details, Zuordnung, Verlauf.
  */
 function KartenBlock({ name, children }: Readonly<{ name: string; children: ReactNode }>) {
   return (
     <Box
       component="section"
       aria-label={name}
-      sx={{ bgcolor: 'background.paper', border: 1, borderColor: 'divider', borderRadius: `${PANEL_RADIUS}px`, p: 2 }}
+      sx={{ bgcolor: 'background.paper', border: 1, borderColor: 'divider', borderRadius: `${PANEL_RADIUS}px`, boxShadow: SCHATTEN_PLATTE, overflow: 'hidden', minWidth: 0 }}
     >
-      <Stack spacing={2}>{children}</Stack>
+      <Box
+        aria-hidden
+        sx={{ ...ANZEIGE, fontSize: 13.5, fontWeight: 600, px: '16px', py: '11px', borderBottom: 1, borderColor: 'divider', background: `linear-gradient(180deg, ${PLATTE_HOCH}, ${PLATTE})` }}
+      >
+        {name}
+      </Box>
+      <Stack spacing={2} sx={{ px: '18px', pt: '16px', pb: '18px' }}>
+        {children}
+      </Stack>
     </Box>
   )
 }
@@ -1445,7 +1454,7 @@ function CardDetailModalView({
         },
       }}
       slotProps={{
-        paper: { sx: { width: '90%', maxWidth: '90%', height: '90%', maxHeight: '90%', m: 0 } },
+        paper: { sx: { width: '90%', maxWidth: '90%', height: '90%', maxHeight: '90%', m: 0, boxShadow: SCHATTEN_HOCH } },
       }}
     >
       <DialogTitle sx={dialogTitleSx}>
@@ -1467,13 +1476,14 @@ function CardDetailModalView({
             columnId={columnId}
             onMove={onMove}
           />
-          {/* Legacy-Pool-Ideen ohne projektweite Nummer zeigen kein nacktes „#". */}
+          {/* Legacy-Pool-Ideen ohne projektweite Nummer zeigen kein nacktes „#". Nummer in Kupfer und
+              Titel in Archivo wie der Kopf des Blatts (Entwurf `.blatt-nr`, `.blatt-titel`, Z. 1023–1024). */}
           {card.number != null && (
-            <Typography component="span" variant="body2" color="text.secondary">
+            <Typography component="span" sx={{ ...ZAHL, fontSize: 13, fontWeight: 500, color: 'primary.main' }}>
               #{card.number}
             </Typography>
           )}
-          <Typography component="span" sx={{ fontWeight: 600 }}>
+          <Typography component="span" sx={{ ...ANZEIGE, fontStretch: '110%', fontSize: 19, fontWeight: 700, lineHeight: 1.25, letterSpacing: '-.01em' }}>
             {card.title}
           </Typography>
           <Box sx={{ flexGrow: 1 }} />
@@ -1509,9 +1519,22 @@ function CardDetailModalView({
         )}
       </DialogTitle>
 
-      {/* Getönter Grund, damit die drei Blöcke als eigene Flächen darauf stehen (AK 13). */}
-      <DialogContent dividers sx={{ overflowY: 'auto', bgcolor: SURFACE_TINT }}>
-        <Stack spacing={2} sx={{ mt: 0.5 }}>
+      {/* Instrumententafel (Entwurf `.blatt`, Z. 1020): der Grund der Warte, darauf links das Blatt
+          mit Beschreibung und Verlauf, rechts die Felder der Zuordnung. Unter 1080 px untereinander. */}
+      <DialogContent dividers sx={{ overflowY: 'auto', bgcolor: GRUND }}>
+        <Box
+          sx={{
+            mt: 0.5,
+            display: 'grid',
+            gap: '16px',
+            alignItems: 'start',
+            gridTemplateColumns: { xs: 'minmax(0,1fr)', lg: isEpic ? 'minmax(0,1fr)' : 'minmax(0,1.9fr) minmax(0,1fr)' },
+            gridTemplateAreas: { xs: '"blatt" "felder" "verlauf"', lg: isEpic ? '"blatt" "verlauf"' : '"blatt felder" "verlauf felder"' },
+            '& > [aria-label="Beschreibung und Details"]': { gridArea: 'blatt' },
+            '& > [aria-label="Zuordnung"]': { gridArea: 'felder' },
+            '& > [aria-label="Verlauf"]': { gridArea: 'verlauf' },
+          }}
+        >
           <KartenBlock name="Beschreibung und Details">
           {editing ? (
             <CardFields
@@ -1655,7 +1678,7 @@ function CardDetailModalView({
               <ActivitySection activities={activities} actorName={actorName} />
             </KartenBlock>
           )}
-        </Stack>
+        </Box>
       </DialogContent>
 
       <DialogActions>

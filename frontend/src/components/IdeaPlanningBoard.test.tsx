@@ -10,9 +10,7 @@ import { commentsApi } from '../api/comments'
 import { ideasApi, type Idea } from '../api/ideas'
 import { membersApi } from '../api/members'
 import { IdeaPlanningBoard } from './IdeaPlanningBoard'
-import { statusColors } from '../lib/statusColors'
 import { cssRegel, cssRegelMit } from '../test/cssRegel'
-import { STATUS_EDGE_WIDTH } from '../theme'
 
 // Toast-Weg: useSnackbar liefert im Test einen Spy (statt des No-op-Defaults ohne Provider).
 const { mNotify } = vi.hoisted(() => ({ mNotify: vi.fn() }))
@@ -338,19 +336,16 @@ describe('IdeaPlanningBoard', () => {
     await waitFor(() => expect(mIdeas.planOntoBoard).toHaveBeenCalledWith(20, 11))
   })
 
-  it('trägt an Pool- und Board-Zonen-Item dieselbe linke Status-Kante wie die Board-Karte', async () => {
-    // Die Kante bedeutet auf beiden Seiten dasselbe. Eine Idee liegt vor der Spaltenzuordnung, ihr
-    // Status ist deshalb Backlog. Seit 2026-08-31 sitzt der Status links, nicht oben.
+  it('legt Pool- und Board-Zonen-Item als dieselbe Platte wie die Board-Karte an (#980)', async () => {
     setup()
     renderBoard()
     await screen.findByText('Pool 1')
 
-    // Seit #952 ein Variablen-Verweis; jsdom verwirft die Kurzschreibweise mit `var(…)` im
-    // berechneten Stil, deshalb wird die erzeugte Regel samt Variablenname geprüft.
-    const erwartet = `border-left: ${STATUS_EDGE_WIDTH}px solid var(--mb-palette-status-backlog-dot)`
-    expect(statusColors('Backlog').dot).toBe('var(--mb-palette-status-backlog-dot)')
-    expect(cssRegel(screen.getByTestId('pool-item-20'))).toContain(erwartet)
-    expect(cssRegel(screen.getByTestId('board-item-1'))).toContain(erwartet)
+    // jsdom verwirft die Kurzschreibweise mit `var(…)`; geprüft wird die erzeugte Regel.
+    for (const item of [screen.getByTestId('pool-item-20'), screen.getByTestId('board-item-1')]) {
+      expect(cssRegel(item)).toContain('border: 1px solid var(--mb-palette-warte-rand')
+      expect(cssRegel(item)).not.toContain('border-left:')
+    }
   })
 
   describe('Ziehen mit denselben Bausteinen wie das Board (AK 7, AK 8, #956)', () => {
