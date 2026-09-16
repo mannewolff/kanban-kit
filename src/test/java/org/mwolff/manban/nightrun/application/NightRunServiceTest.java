@@ -8,6 +8,7 @@ import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
+import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -21,6 +22,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mwolff.manban.nightrun.application.NightRunRepository.UpsertResult;
@@ -30,6 +32,7 @@ import org.mwolff.manban.nightrun.domain.NightRunItem;
 import org.mwolff.manban.nightrun.domain.NightRunMode;
 import org.mwolff.manban.nightrun.domain.NightRunOrigin;
 import org.mwolff.manban.nightrun.domain.NightRunState;
+import org.mwolff.manban.nightrun.domain.NightRunUsage;
 import org.mwolff.manban.project.application.PermissionChecker;
 import org.mwolff.manban.project.application.ProjectAccessDeniedException;
 import org.mwolff.manban.project.application.ProjectNotFoundException;
@@ -43,6 +46,9 @@ import org.mwolff.manban.project.application.ProjectNotFoundException;
  * Das {@code spy} darüber hält zugleich {@code verifyNoInteractions} verfügbar, das die
  * Rechteprüfung braucht.
  */
+// Testklasse: Jede Methode ist ein Fall, und Faelle werden nicht zusammengelegt, um eine
+// Zahl zu druecken. Issue #946 bringt sieben Faelle fuer den meldenden Weg dazu.
+@SuppressWarnings("PMD.TooManyMethods")
 class NightRunServiceTest {
 
   private static final Instant FIXED = Instant.parse("2026-09-02T04:00:00Z");
@@ -372,6 +378,113 @@ class NightRunServiceTest {
    * schon vorhandenen {@code (projectId, startedAt)} ab, {@code deleteOlderThanNewest} verdrängt
    * nach {@code startedAt} absteigend.
    */
+
+  // --- ingest: der meldende Weg (Issue #946) ----------------------------------------------
+
+  private static final String TOKEN = "nacht-token";
+
+  private static NightRunService.NewNightRun meldung(
+      Instant startedAt,
+      boolean complete,
+      @Nullable NightRunUsage usage,
+      NightRunService.NewNightRunItem... items) {
+    return new NightRunService.NewNightRun(
+        startedAt, NightRunMode.CHAIN, 1_000L, 1, 0, 0, null, complete, usage, List.of(items));
+  }
+
+  private NightRun gemeldeterLauf() {
+    return runs.findByProjectOrderByStartedAtDesc(PROJECT).getFirst();
+  }
+
+  @Test
+  void ingest_verlangtDenBesitzer() {
+    service.ingest(USER, PROJECT, TOKEN, meldung(T1, true, null));
+
+    verify(permissions).requireOwner(USER, PROJECT);
+  }
+
+  @Test
+  void ingest_schreibtNichts_wennDerBesitzerFehlt() {
+    doThrow(new ProjectAccessDeniedException()).when(permissions).requireOwner(USER, PROJECT);
+
+    assertThatThrownBy(() -> service.ingest(USER, PROJECT, TOKEN, meldung(T1, true, null)))
+        .isInstanceOf(ProjectAccessDeniedException.class);
+
+    verifyNoInteractions(runs);
+  }
+
+  @Test
+  void ingest_schreibtMaschinelleHerkunftMitTokennamenUndZeitpunkt() {
+    service.ingest(USER, PROJECT, TOKEN, meldung(T1, false, null));
+
+    NightRun geschrieben = gemeldeterLauf();
+    assertThat(geschrieben.origin()).isEqualTo(NightRunOrigin.TOKEN);
+    assertThat(geschrieben.tokenName()).isEqualTo(TOKEN);
+    assertThat(geschrieben.updatedAt()).isEqualTo(FIXED);
+    assertThat(geschrieben.complete()).isFalse();
+  }
+
+  @Test
+  void ingest_zieehtDenRingpufferNach() {
+    service.ingest(USER, PROJECT, TOKEN, meldung(T1, true, null));
+
+    verify(runs).deleteOlderThanNewest(PROJECT, 30);
+  }
+
+  @Test
+  void ingest_reichtDenGemeldetenKostenbetragUnveraendertDurch() {
+    NightRunUsage gemeldet =
+        new NightRunUsage(new BigDecimal("8.032575"), 148L, 62_411L, 8_883_160L);
+
+    service.ingest(USER, PROJECT, TOKEN, meldung(T1, true, gemeldet));
+
+    NightRunUsage angekommen = gemeldeterLauf().usage();
+    assertThat(angekommen).isNotNull();
+    assertThat(angekommen.costUsd())
+        .usingComparator(BigDecimal::compareTo)
+        .isEqualTo(gemeldet.costUsd());
+    assertThat(angekommen.inputTokens()).isEqualTo(148L);
+    assertThat(angekommen.cachedInputTokens()).isEqualTo(8_883_160L);
+  }
+
+  /**
+   * Der nicht zuordenbare Rest: Die Lauf-Summe ist groesser als die Summe ueber die Pakete, und
+   * genau so muss sie ankommen. Rechnete der Service sie aus den Paketen, waere der Rest per
+   * Konstruktion null und damit unsichtbar — die Auswertung braucht ihn aber als eigene Zahl.
+   */
+  @Test
+  void ingest_normalisiertDenNichtZuordenbarenRestNichtWeg() {
+    NightRunUsage laufSumme = new NightRunUsage(new BigDecimal("10.000000"), 1_000L, 100L, 900L);
+    NightRunUsage paketAnteil = new NightRunUsage(new BigDecimal("4.000000"), 400L, 40L, 360L);
+
+    service.ingest(
+        USER, PROJECT, TOKEN, meldung(T1, true, laufSumme, itemMitVerbrauch(721, paketAnteil)));
+
+    NightRunUsage angekommen = gemeldeterLauf().usage();
+    assertThat(angekommen).isNotNull();
+    assertThat(angekommen.costUsd())
+        .usingComparator(BigDecimal::compareTo)
+        .isEqualTo(new BigDecimal("10.000000"));
+    assertThat(runs.findItemsByRunIds(List.of(gemeldeterLauf().requireId())))
+        .singleElement()
+        .extracting(item -> item.usage().costUsd())
+        .asInstanceOf(org.assertj.core.api.InstanceOfAssertFactories.BIG_DECIMAL)
+        .usingComparator(BigDecimal::compareTo)
+        .isEqualTo(new BigDecimal("4.000000"));
+  }
+
+  @Test
+  void ingest_reichtDasErgebnisDesSchreibwegsDurch() {
+    assertThat(service.ingest(USER, PROJECT, TOKEN, meldung(T1, true, null)).created()).isTrue();
+    assertThat(service.ingest(USER, PROJECT, TOKEN, meldung(T1, true, null)).created()).isFalse();
+  }
+
+  private static NightRunService.NewNightRunItem itemMitVerbrauch(
+      int cardNumber, NightRunUsage usage) {
+    return new NightRunService.NewNightRunItem(
+        cardNumber, "Paket " + cardNumber, NightRunState.GREEN, null, 5L, null, null, usage);
+  }
+
   static class FakeNightRunRepository implements NightRunRepository {
 
     private final List<NightRun> gespeicherteLaeufe = new ArrayList<>();

@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import org.jspecify.annotations.Nullable;
+import org.mwolff.manban.nightrun.application.NightRunRepository.UpsertResult;
 import org.mwolff.manban.nightrun.domain.NightRun;
 import org.mwolff.manban.nightrun.domain.NightRunErrorClass;
 import org.mwolff.manban.nightrun.domain.NightRunItem;
@@ -77,6 +78,53 @@ public class NightRunService {
     }
     runs.deleteOlderThanNewest(projectId, properties.maxPerProject());
     return List.copyOf(results);
+  }
+
+  /**
+   * Nimmt einen <b>maschinell gemeldeten</b> Lauf entgegen (Issue #946, fachlich #927).
+   *
+   * <p>Zwei Unterschiede zu {@link #submit}: Hier gilt <b>Zustands-Semantik</b> — die Meldung ist
+   * der vollständige Stand des Laufs und ersetzt einen vorhandenen, statt mit „lag schon vor"
+   * abzuprallen. Und es kommt <b>eine</b> Meldung statt einer Liste: Eine Kette meldet den Lauf, an
+   * dem sie gerade arbeitet.
+   *
+   * <p>Die Rechteprüfung ist dieselbe. Ein Token darf nicht mehr als sein Besitzer, also verlangt
+   * auch dieser Weg {@code requireOwner}.
+   *
+   * <p><b>Die Verbrauchszahlen werden gemeldet, nicht gerechnet.</b> Die Lauf-Summe darf größer
+   * sein als die Summe über die Arbeitspakete — die Differenz ist der Verbrauch, der zu keinem
+   * Paket gehört (Vorflug, übergreifendes Review, Aufräumen), und die Auswertung braucht ihn als
+   * eigene Zahl. Würde der Server die Lauf-Summe aus den Paketen rechnen, wäre dieser Rest per
+   * Konstruktion null und damit unsichtbar, obwohl er existiert.
+   */
+  @Transactional
+  public NightRunResult ingest(long userId, long projectId, String tokenName, NewNightRun meldung) {
+    permissions.requireOwner(userId, projectId);
+    Instant now = clock.instant();
+    NightRun gemeldet =
+        new NightRun(
+            null,
+            projectId,
+            meldung.startedAt(),
+            meldung.mode(),
+            meldung.durationMs(),
+            meldung.processedCount(),
+            meldung.skippedCount(),
+            meldung.unparsedCount(),
+            meldung.unparsedSample(),
+            // Beim Ersetzen lässt der Adapter created_at unangetastet; der Wert trägt also nur
+            // beim ersten Mal, und updated_at sagt, wann zuletzt gemeldet wurde.
+            now,
+            NightRunOrigin.TOKEN,
+            tokenName,
+            meldung.complete(),
+            now,
+            meldung.usage());
+
+    UpsertResult ergebnis = runs.upsert(gemeldet, items(meldung));
+    // Der Ringpuffer gilt unverändert auch für maschinell eingelieferte Läufe.
+    runs.deleteOlderThanNewest(projectId, properties.maxPerProject());
+    return new NightRunResult(meldung.startedAt(), ergebnis.created());
   }
 
   /** Die aufbewahrten Läufe des Projekts, neueste zuerst, jeder mit seinen Arbeitspaketen. */
