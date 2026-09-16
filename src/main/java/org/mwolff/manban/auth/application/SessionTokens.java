@@ -21,6 +21,11 @@ public interface SessionTokens {
    * Prüft Echtheit und Gültigkeitsdauer des Tokens und liefert die enthaltene userId, oder leer,
    * wenn das Token fehlt, manipuliert oder abgelaufen ist. {@code null} ist bewusst zulässig und
    * liefert ein leeres Ergebnis statt einer Ausnahme.
+   *
+   * <p>Ein leeres Ergebnis heißt nicht zwingend „gefälscht oder abgelaufen": Ein echtes,
+   * unverfallenes Token wird auch dann abgelehnt, wenn die Sitzungen des Kontos zwischenzeitlich
+   * beendet wurden (Plan #883) oder es das Konto nicht mehr gibt. Der Aufrufer behandelt alle diese
+   * Fälle gleich — nicht angemeldet.
    */
   OptionalLong verify(@Nullable String token);
 }

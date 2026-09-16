@@ -9,14 +9,32 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * nicht in der Datenbank (Plan #718, A10) — Vorbild ist {@code manban.storage.max-per-card}. Ein
  * Datenbank-Trigger wäre im Test unsichtbar.
  *
- * @param maxPerProject Zahl der je Projekt aufbewahrten Läufe; fehlend oder kleiner als 1 ergibt 30
+ * <p><b>Warum 190 Läufe</b> (Issue #935, Plan #933 E7): Die Auswertung zeigt einen Monat neben
+ * seinem Vormonat, und verdrängt wird nach den jüngsten Läufen — der laufende Monat belegt den
+ * Ringpuffer mit. Bei zwei Läufen je Nacht sind das laufender Monat (bis 62) plus zuletzt
+ * abgeschlossener Monat (62) plus Vormonat (62), zusammen bis zu 186. Unbegrenzt aufzubewahren
+ * scheidet aus: Jedes Arbeitspaket trägt bis zu 4.000 Zeichen Auszug.
+ *
+ * <p>Läufe und verwaiste Arbeitspakete haben getrennte Grenzen (Issue #966): Seit Issue #964
+ * überdauert ein Paket die Verdrängung seines Laufs, und ohne eigene Grenze wüchse {@code
+ * night_run_item} unbegrenzt. Pakete eines aufbewahrten Laufs zählen nicht mit — sie fallen erst
+ * mit ihrem Lauf.
+ *
+ * @param maxPerProject Zahl der je Projekt aufbewahrten Läufe; fehlend oder kleiner als 1 ergibt
+ *     190
+ * @param maxItemsPerProject Zahl der je Projekt aufbewahrten <b>verwaisten</b> Arbeitspakete;
+ *     fehlend oder kleiner als 1 ergibt 2000. Bei rund zehn Paketen je Nacht ist das ein halbes
+ *     Jahr Rückblick.
  */
 @ConfigurationProperties(prefix = "manban.nightrun")
-public record NightRunProperties(Integer maxPerProject) {
+public record NightRunProperties(Integer maxPerProject, Integer maxItemsPerProject) {
 
   public NightRunProperties {
     if (maxPerProject == null || maxPerProject < 1) {
-      maxPerProject = 30;
+      maxPerProject = 190;
+    }
+    if (maxItemsPerProject == null || maxItemsPerProject < 1) {
+      maxItemsPerProject = 2000;
     }
   }
 }

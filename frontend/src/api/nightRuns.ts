@@ -19,6 +19,23 @@ import { apiFetch } from './client'
  */
 export type NightRunServerMode = Exclude<NightRunMode, 'NIGHTPLAN'>
 
+/**
+ * Der gemeldete Verbrauch eines Laufs oder eines Arbeitspakets (Issue #948).
+ *
+ * Alle Felder sind optional, weil der Browser eine fehlende Angabe **weglaesst** statt `null` zu
+ * senden — dieselbe Regel wie bei den uebrigen Submission-Feldern. Der Server liest ein fehlendes
+ * Feld als „nicht gemessen", und das ist etwas anderes als eine gemessene Null.
+ *
+ * Vom Upload-Weg gefuellt wird allein `costUsd`: Die drei Mengen entstehen erst mit der Messung im
+ * Runner und kommen ueber den Token-Weg herein.
+ */
+export interface NightRunUsage {
+  costUsd?: number
+  inputTokens?: number
+  outputTokens?: number
+  cachedInputTokens?: number
+}
+
 /** Ein Arbeitspaket, wie es an den Server geht — der Ausschnitt des Parser-Ergebnisses, den der Server kennt. */
 export interface NightRunItemSubmission {
   cardNumber: number
@@ -28,6 +45,7 @@ export interface NightRunItemSubmission {
   durationMs?: number
   commitHash?: string
   excerpt?: string
+  usage?: NightRunUsage
 }
 
 /** Ein einzuliefernder Lauf. */
@@ -39,6 +57,7 @@ export interface NightRunSubmission {
   skippedCount: number
   unparsedCount: number
   unparsedSample?: string
+  usage?: NightRunUsage
   items: NightRunItemSubmission[]
 }
 
@@ -66,6 +85,24 @@ export interface NightRunItemView {
   durationMs: number | null
   commitHash: string | null
   excerpt: string | null
+  usage: NightRunUsageView | null
+}
+
+/**
+ * Der aufbewahrte Verbrauch, wie der Server ihn schickt (Issue #949).
+ *
+ * Ein **zweiter** Typ neben {@link NightRunUsage}, und zwar mit `| null` statt `?:` — aus demselben
+ * Grund wie bei {@link NightRunItemView}: Der Server sendet ein fehlendes Feld als `null`, nicht
+ * als fehlenden Schluessel. Ein `?:` beschriebe hier eine Antwort, die es nicht gibt, und niemand
+ * bemerkte es, bis eine Rechnung auf `null` laeuft.
+ *
+ * `usage` selbst ist `null`, wenn ueberhaupt nichts gemessen wurde.
+ */
+export interface NightRunUsageView {
+  costUsd: number | null
+  inputTokens: number | null
+  outputTokens: number | null
+  cachedInputTokens: number | null
 }
 
 /** Ein aufbewahrter Lauf samt seiner Arbeitspakete. */
@@ -80,7 +117,31 @@ export interface NightRunView {
   /** Auszug der ungedeuteten Zeilen; `null`, wenn es keine gab — siehe {@link NightRunItemView}. */
   unparsedSample: string | null
   createdAt: string
+  /** Wie der Lauf hereinkam: `UPLOAD` ueber den Browser, `TOKEN` gemeldet von der Kette selbst. */
+  origin: 'UPLOAD' | 'TOKEN'
+  /** Der Name des meldenden Tokens; `null` bei einem hochgeladenen Lauf. */
+  tokenName: string | null
+  /** `false`, solange die Kette den Lauf noch nicht abgeschlossen gemeldet hat. */
+  complete: boolean
+  /** Zeitpunkt der letzten Meldung; `null`, wenn der Lauf seit dem Anlegen nicht gemeldet wurde. */
+  updatedAt: string | null
+  usage: NightRunUsageView | null
   items: NightRunItemView[]
+}
+
+/**
+ * Ein Anlauf an einer Karte — ein Arbeitspaket aus irgendeinem Lauf, auch einem verdrängten
+ * (Issue #967). Felder ohne Wert kommen als `null` und nicht als fehlender Schlüssel — derselbe
+ * Grund wie bei {@link NightRunItemView} (Issue #734).
+ */
+export interface NightRunAnlauf {
+  startedAt: string
+  mode: NightRunServerMode
+  state: NightRunState
+  errorClass: NightRunErrorClass | null
+  durationMs: number | null
+  commitHash: string | null
+  usage: NightRunUsageView | null
 }
 
 /** Je Fehlerklasse die Zahl der aufbewahrten Laeufe, in denen sie vorkam; fehlende Klassen kamen nie vor. */
@@ -95,6 +156,11 @@ export const nightRunsApi = {
   list: (projectId: number) => apiFetch<NightRunView[]>(`/api/projects/${projectId}/night-runs`),
   errorClassCounts: (projectId: number) =>
     apiFetch<NightRunErrorClassCounts>(`/api/projects/${projectId}/night-runs/error-class-counts`),
+  /** Die Anläufe einer Karte über alle Läufe, jüngster zuerst (Issue #967). */
+  anlaeufeDerKarte: (projectId: number, cardNumber: number) =>
+    apiFetch<NightRunAnlauf[]>(
+      `/api/projects/${projectId}/night-runs/items?cardNumber=${encodeURIComponent(cardNumber)}`,
+    ),
 }
 
 export type NightRunsApi = typeof nightRunsApi

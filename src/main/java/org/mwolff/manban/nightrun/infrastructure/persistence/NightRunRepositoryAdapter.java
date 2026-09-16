@@ -1,5 +1,6 @@
 package org.mwolff.manban.nightrun.infrastructure.persistence;
 
+import java.math.BigDecimal;
 import java.sql.Types;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
@@ -8,12 +9,16 @@ import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.nightrun.application.NightRunRepository;
+import org.mwolff.manban.nightrun.application.NightRunRepository.UpsertResult;
 import org.mwolff.manban.nightrun.domain.NightRun;
 import org.mwolff.manban.nightrun.domain.NightRunErrorClass;
 import org.mwolff.manban.nightrun.domain.NightRunItem;
 import org.mwolff.manban.nightrun.domain.NightRunMode;
+import org.mwolff.manban.nightrun.domain.NightRunOrigin;
 import org.mwolff.manban.nightrun.domain.NightRunState;
+import org.mwolff.manban.nightrun.domain.NightRunUsage;
 import org.springframework.jdbc.core.RowCallbackHandler;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
@@ -31,6 +36,11 @@ import org.springframework.stereotype.Component;
  * Vorbild {@code JdbcCardLabelRepository#addLabel}.
  */
 @Component
+// Die Kopplung folgt den Spalten: Der Adapter uebersetzt zwischen Domaenentypen, Entities
+// und JDBC-Typen, und jede neue Spalte bringt ihren Typ mit. Mit Issue #944 sind es
+// BigDecimal und NightRunOrigin mehr; 21 statt 20. Eine Aufteilung verteilte das Mapping
+// einer Tabelle auf zwei Klassen.
+@SuppressWarnings("PMD.CouplingBetweenObjects")
 class NightRunRepositoryAdapter implements NightRunRepository {
 
   /** Name des benannten SQL-Parameters für die Projekt-ID (Sonar java:S1192). */
@@ -44,23 +54,46 @@ class NightRunRepositoryAdapter implements NightRunRepository {
 
   private static final String INSERT_RUN =
       "INSERT INTO night_run (project_id, started_at, mode, duration_ms, processed_count,"
-          + " skipped_count, unparsed_count, unparsed_sample, created_at)"
+          + " skipped_count, unparsed_count, unparsed_sample, created_at, origin,"
+          + " token_name, complete, updated_at, cost_usd, input_tokens, output_tokens,"
+          + " cached_input_tokens)"
           + " VALUES (:projectId, :startedAt, :mode, :durationMs, :processedCount,"
-          + " :skippedCount, :unparsedCount, :unparsedSample, :createdAt)"
+          + " :skippedCount, :unparsedCount, :unparsedSample, :createdAt, :origin,"
+          + " :tokenName, :complete, :updatedAt, :costUsd, :inputTokens, :outputTokens,"
+          + " :cachedInputTokens)"
           + " ON CONFLICT (project_id, started_at) DO NOTHING"
           + " RETURNING id";
 
   private static final String INSERT_ITEM =
-      "INSERT INTO night_run_item (night_run_id, card_number, title, state, error_class,"
-          + " duration_ms, commit_hash, excerpt)"
-          + " VALUES (:nightRunId, :cardNumber, :title, :state, :errorClass,"
-          + " :durationMs, :commitHash, :excerpt)";
+      "INSERT INTO night_run_item (night_run_id, project_id, started_at, mode, card_number,"
+          + " title, state, error_class, duration_ms, commit_hash, excerpt, cost_usd,"
+          + " input_tokens, output_tokens, cached_input_tokens)"
+          + " VALUES (:nightRunId, :projectId, :startedAt, :mode, :cardNumber, :title, :state,"
+          + " :errorClass,"
+          + " :durationMs, :commitHash, :excerpt, :costUsd, :inputTokens, :outputTokens,"
+          + " :cachedInputTokens)";
 
   /**
    * Verdrängung des Ringpuffers: alles außerhalb der {@code keep} jüngsten Läufe fällt weg. Die
    * Auswahl steht als Unterabfrage, weil {@code LIMIT} weder in JPQL noch in einer {@code
    * DELETE}-Bedingung direkt zur Verfügung steht.
    */
+  private static final String SELECT_ID_FOR_UPDATE =
+      "SELECT id FROM night_run WHERE project_id = :projectId AND started_at = :startedAt"
+          + " FOR UPDATE";
+
+  private static final String UPDATE_RUN =
+      "UPDATE night_run SET mode = :mode, duration_ms = :durationMs,"
+          + " processed_count = :processedCount, skipped_count = :skippedCount,"
+          + " unparsed_count = :unparsedCount, unparsed_sample = :unparsedSample,"
+          + " origin = :origin, token_name = :tokenName, complete = :complete,"
+          + " updated_at = :updatedAt, cost_usd = :costUsd, input_tokens = :inputTokens,"
+          + " output_tokens = :outputTokens, cached_input_tokens = :cachedInputTokens"
+          + " WHERE id = :id";
+
+  private static final String DELETE_ITEMS_OF_RUN =
+      "DELETE FROM night_run_item WHERE night_run_id = :nightRunId";
+
   private static final String DELETE_OLDER =
       "DELETE FROM night_run WHERE project_id = :projectId AND id NOT IN"
           + " (SELECT id FROM night_run WHERE project_id = :projectId"
@@ -94,18 +127,55 @@ class NightRunRepositoryAdapter implements NightRunRepository {
       return Optional.empty();
     }
     Long runId = vergebeneId.get(0);
-    insertItems(runId, newItems);
+    insertItems(run, runId, newItems);
     return Optional.of(runId);
   }
 
-  private void insertItems(Long runId, List<NightRunItem> newItems) {
+  /**
+   * Zwei Anweisungen statt {@code ON CONFLICT ... DO UPDATE}: Das Ersetzen braucht ohnehin mehr als
+   * eine — die Arbeitspakete werden gelöscht und neu geschrieben —, und {@code xmax = 0} als
+   * Unterscheidung zwischen „angelegt" und „ersetzt" wäre ein Trick, dessen Bedeutung kein Leser
+   * der Zeile ansieht.
+   *
+   * <p>Das {@code FOR UPDATE} sperrt die Zeile für die Dauer der Transaktion. Ohne es könnten zwei
+   * gleichzeitige Meldungen desselben Laufs beide kein Vorkommen sehen und beide einfügen wollen;
+   * die zweite liefe in den eindeutigen Schlüssel.
+   */
+  @Override
+  public UpsertResult upsert(NightRun run, List<NightRunItem> newItems) {
+    SqlParameterSource schluessel =
+        new MapSqlParameterSource()
+            .addValue(P_PROJECT_ID, run.projectId())
+            .addValue("startedAt", zeitpunkt(run.startedAt()));
+    List<Long> vorhanden = jdbc.queryForList(SELECT_ID_FOR_UPDATE, schluessel, Long.class);
+
+    if (vorhanden.isEmpty()) {
+      Long runId = jdbc.queryForList(INSERT_RUN, runParameters(run), Long.class).get(0);
+      insertItems(run, runId, newItems);
+      return new UpsertResult(runId, true);
+    }
+
+    Long runId = vorhanden.get(0);
+    MapSqlParameterSource aenderung = (MapSqlParameterSource) runParameters(run);
+    aenderung.addValue("id", runId);
+    jdbc.update(UPDATE_RUN, aenderung);
+    jdbc.update(DELETE_ITEMS_OF_RUN, new MapSqlParameterSource().addValue(P_NIGHT_RUN_ID, runId));
+    insertItems(run, runId, newItems);
+    return new UpsertResult(runId, false);
+  }
+
+  /**
+   * Projekt, Startzeitpunkt und Lauf-Art eines Pakets kommen aus dem Lauf und nie aus dem Paket
+   * (Issue #964): So kann kein Paket mit einem anderen Projekt geschrieben werden als sein Lauf —
+   * ein verwaistes Paket fände man sonst später im falschen Projekt wieder.
+   */
+  private void insertItems(NightRun run, Long runId, List<NightRunItem> newItems) {
     if (newItems.isEmpty()) {
       return;
     }
     SqlParameterSource[] batch =
         newItems.stream()
-            .map(item -> item.withNightRunId(runId))
-            .map(NightRunRepositoryAdapter::itemParameters)
+            .map(item -> itemParameters(item.withNightRunId(runId), run))
             .toArray(SqlParameterSource[]::new);
     jdbc.batchUpdate(INSERT_ITEM, batch);
   }
@@ -128,10 +198,29 @@ class NightRunRepositoryAdapter implements NightRunRepository {
   }
 
   @Override
+  public List<NightRunItem> findByCard(long projectId, int cardNumber) {
+    return items
+        .findByProjectIdAndCardNumberOrderByStartedAtDescIdDesc(projectId, cardNumber)
+        .stream()
+        .map(NightRunRepositoryAdapter::toDomain)
+        .toList();
+  }
+
+  @Override
   public int deleteOlderThanNewest(long projectId, int keep) {
     return jdbc.update(
         DELETE_OLDER,
         new MapSqlParameterSource().addValue(P_PROJECT_ID, projectId).addValue("keep", keep));
+  }
+
+  @Override
+  public int deleteOrphanItemsOfRun(long projectId, java.time.Instant startedAt) {
+    return items.deleteOrphansOfRun(projectId, startedAt);
+  }
+
+  @Override
+  public int deleteOrphanItemsOlderThanNewest(long projectId, int keep) {
+    return items.deleteOrphansOlderThanNewest(projectId, keep);
   }
 
   @Override
@@ -148,29 +237,59 @@ class NightRunRepositoryAdapter implements NightRunRepository {
   }
 
   private static SqlParameterSource runParameters(NightRun run) {
-    return new MapSqlParameterSource()
-        .addValue(P_PROJECT_ID, run.projectId())
-        .addValue("startedAt", zeitpunkt(run.startedAt()))
-        .addValue("mode", run.mode().name())
-        .addValue("durationMs", run.durationMs())
-        .addValue("processedCount", run.processedCount())
-        .addValue("skippedCount", run.skippedCount())
-        .addValue("unparsedCount", run.unparsedCount())
-        .addValue("unparsedSample", run.unparsedSample(), Types.VARCHAR)
-        .addValue("createdAt", zeitpunkt(run.createdAt()));
+    MapSqlParameterSource parameter =
+        new MapSqlParameterSource()
+            .addValue(P_PROJECT_ID, run.projectId())
+            .addValue("startedAt", zeitpunkt(run.startedAt()))
+            .addValue("mode", run.mode().name())
+            .addValue("durationMs", run.durationMs())
+            .addValue("processedCount", run.processedCount())
+            .addValue("skippedCount", run.skippedCount())
+            .addValue("unparsedCount", run.unparsedCount())
+            .addValue("unparsedSample", run.unparsedSample(), Types.VARCHAR)
+            .addValue("createdAt", zeitpunkt(run.createdAt()))
+            .addValue("origin", run.origin().name())
+            .addValue("tokenName", run.tokenName(), Types.VARCHAR)
+            .addValue("complete", run.complete())
+            .addValue(
+                "updatedAt",
+                run.updatedAt() == null ? null : zeitpunkt(run.updatedAt()),
+                Types.TIMESTAMP_WITH_TIMEZONE);
+    verbrauchSchreiben(parameter, run.usage());
+    return parameter;
   }
 
-  private static SqlParameterSource itemParameters(NightRunItem item) {
+  /**
+   * Die vier Verbrauchswerte an denselben Namen fuer Lauf und Arbeitspaket — sie tragen dieselbe
+   * Form, und ein fehlendes {@code usage} setzt alle vier auf {@code NULL} („nicht gemessen").
+   */
+  private static void verbrauchSchreiben(
+      MapSqlParameterSource parameter, @Nullable NightRunUsage usage) {
+    parameter
+        .addValue("costUsd", usage == null ? null : usage.costUsd(), Types.NUMERIC)
+        .addValue("inputTokens", usage == null ? null : usage.inputTokens(), Types.BIGINT)
+        .addValue("outputTokens", usage == null ? null : usage.outputTokens(), Types.BIGINT)
+        .addValue(
+            "cachedInputTokens", usage == null ? null : usage.cachedInputTokens(), Types.BIGINT);
+  }
+
+  private static SqlParameterSource itemParameters(NightRunItem item, NightRun run) {
     NightRunErrorClass errorClass = item.errorClass();
-    return new MapSqlParameterSource()
-        .addValue(P_NIGHT_RUN_ID, item.nightRunId())
-        .addValue("cardNumber", item.cardNumber())
-        .addValue("title", item.title())
-        .addValue("state", item.state().name())
-        .addValue("errorClass", errorClass == null ? null : errorClass.name(), Types.VARCHAR)
-        .addValue("durationMs", item.durationMs(), Types.BIGINT)
-        .addValue("commitHash", item.commitHash(), Types.VARCHAR)
-        .addValue("excerpt", item.excerpt(), Types.VARCHAR);
+    MapSqlParameterSource parameter =
+        new MapSqlParameterSource()
+            .addValue(P_NIGHT_RUN_ID, item.nightRunId())
+            .addValue(P_PROJECT_ID, run.projectId())
+            .addValue("startedAt", zeitpunkt(run.startedAt()))
+            .addValue("mode", run.mode().name())
+            .addValue("cardNumber", item.cardNumber())
+            .addValue("title", item.title())
+            .addValue("state", item.state().name())
+            .addValue("errorClass", errorClass == null ? null : errorClass.name(), Types.VARCHAR)
+            .addValue("durationMs", item.durationMs(), Types.BIGINT)
+            .addValue("commitHash", item.commitHash(), Types.VARCHAR)
+            .addValue("excerpt", item.excerpt(), Types.VARCHAR);
+    verbrauchSchreiben(parameter, item.usage());
+    return parameter;
   }
 
   /**
@@ -193,7 +312,13 @@ class NightRunRepositoryAdapter implements NightRunRepository {
         e.getSkippedCount(),
         e.getUnparsedCount(),
         e.getUnparsedSample(),
-        e.getCreatedAt());
+        e.getCreatedAt(),
+        NightRunOrigin.valueOf(e.getOrigin()),
+        e.getTokenName(),
+        e.isComplete(),
+        e.getUpdatedAt(),
+        verbrauchLesen(
+            e.getCostUsd(), e.getInputTokens(), e.getOutputTokens(), e.getCachedInputTokens()));
   }
 
   private static NightRunItem toDomain(NightRunItemEntity e) {
@@ -201,12 +326,36 @@ class NightRunRepositoryAdapter implements NightRunRepository {
     return new NightRunItem(
         e.getId(),
         e.getNightRunId(),
+        e.getProjectId(),
+        e.getStartedAt(),
+        NightRunMode.valueOf(e.getMode()),
         e.getCardNumber(),
         e.getTitle(),
         NightRunState.valueOf(e.getState()),
         errorClass == null ? null : NightRunErrorClass.valueOf(errorClass),
         e.getDurationMs(),
         e.getCommitHash(),
-        e.getExcerpt());
+        e.getExcerpt(),
+        verbrauchLesen(
+            e.getCostUsd(), e.getInputTokens(), e.getOutputTokens(), e.getCachedInputTokens()));
+  }
+
+  /**
+   * Aus vier Spalten wird ein {@link NightRunUsage} — oder {@code null}, wenn keine davon gesetzt
+   * ist. Ein Record aus lauter {@code null} waere von „nicht gemessen" nicht zu unterscheiden und
+   * zwaenge jede Anzeigestelle zu einer zweiten Fallunterscheidung.
+   */
+  private static @Nullable NightRunUsage verbrauchLesen(
+      @Nullable BigDecimal costUsd,
+      @Nullable Long inputTokens,
+      @Nullable Long outputTokens,
+      @Nullable Long cachedInputTokens) {
+    if (costUsd == null
+        && inputTokens == null
+        && outputTokens == null
+        && cachedInputTokens == null) {
+      return null;
+    }
+    return new NightRunUsage(costUsd, inputTokens, outputTokens, cachedInputTokens);
   }
 }

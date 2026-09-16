@@ -29,6 +29,10 @@ import org.springframework.web.bind.annotation.RestController;
  * Die Nachtlauf-Auswertung an HTTP (Issue #723). Ausgewertet wird im Browser; hierher geht allein
  * die verdichtete Fassung (Plan #718, A1).
  *
+ * <p>Seit Issue #948 nimmt der Weg den gemeldeten Kostenwert mit — je Lauf und je Arbeitspaket. Die
+ * drei Mengen (Eingabe, Ausgabe, Zwischenspeicher) bleiben ihm fremd: Der Browser misst sie nicht,
+ * und ein Feld, das nie einen Wert trägt, wäre eine leere Zusage.
+ *
  * <p>Es entstehen keine eigenen Exceptions: 404 und 403 liefert {@code requireOwner} im {@link
  * NightRunService}, 400 die Bean Validation über den {@code GlobalExceptionHandler} — die einzige
  * Mapping-Stelle des Projekts. Ein Eintrag in der {@code SecurityConfig} ist nicht nötig, {@code
@@ -39,7 +43,7 @@ class NightRunController {
 
   /**
    * Obergrenze der Läufe je Anfrage. Bewusst <b>nicht</b> an {@code
-   * manban.night-run.max-per-project} gekoppelt: Das Verdrängen überlässt Plan #718 (A14) dem
+   * manban.nightrun.max-per-project} gekoppelt: Das Verdrängen überlässt Plan #718 (A14) dem
    * Service, und ein Protokoll kann mehr Läufe tragen als aufbewahrt werden — am 31.08. standen
    * vierzehn Aufrufe in einer Datei (A4). Wäre die Grenze die Aufbewahrung, bekäme der Owner für
    * ein größeres Protokoll 400 statt einer Antwort.
@@ -53,10 +57,10 @@ class NightRunController {
   static final int MAX_ITEMS_PER_RUN = 200;
 
   /** Titelgrenze wie an der Quelle {@code card.title}; ein Schnappschuss kann nie länger sein. */
-  private static final int TITLE_MAX = 300;
+  static final int TITLE_MAX = 300;
 
   /** Ein Commit-Hash ist höchstens ein vollständiger SHA-1 (40 Zeichen), wie in {@code V29}. */
-  private static final int COMMIT_HASH_MAX = 40;
+  static final int COMMIT_HASH_MAX = 40;
 
   private final NightRunService runs;
 
@@ -106,6 +110,11 @@ class NightRunController {
         request.skippedCount(),
         request.unparsedCount(),
         request.unparsedSample(),
+        // Fest true und kein Request-Feld: Der Browser liefert einen unabgeschlossenen Lauf
+        // ohnehin nicht ein, und ein Feld, das nur einen Wert annehmen kann, taeuschte eine Wahl
+        // vor, die es nicht gibt.
+        true,
+        NightRunUsageRequest.toDomain(request.usage()),
         request.items().stream().map(NightRunController::item).toList());
   }
 
@@ -117,7 +126,8 @@ class NightRunController {
         request.errorClass(),
         request.durationMs(),
         request.commitHash(),
-        request.excerpt());
+        request.excerpt(),
+        NightRunUsageRequest.toDomain(request.usage()));
   }
 
   /**
@@ -141,6 +151,7 @@ class NightRunController {
       int skippedCount,
       int unparsedCount,
       @Nullable @Size(max = NightRunLimits.EXCERPT_MAX) String unparsedSample,
+      @Nullable NightRunUsageRequest usage,
       @NotNull @Size(max = MAX_ITEMS_PER_RUN) List<@Valid @NotNull NightRunItemRequest> items) {}
 
   /** Ein einzulieferndes Arbeitspaket. */
@@ -151,5 +162,6 @@ class NightRunController {
       @Nullable NightRunErrorClass errorClass,
       @Nullable Long durationMs,
       @Nullable @Size(max = COMMIT_HASH_MAX) String commitHash,
-      @Nullable @Size(max = NightRunLimits.EXCERPT_MAX) String excerpt) {}
+      @Nullable @Size(max = NightRunLimits.EXCERPT_MAX) String excerpt,
+      @Nullable NightRunUsageRequest usage) {}
 }

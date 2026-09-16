@@ -42,11 +42,7 @@ export function AdminPage({ api = defaultAdminApi }: Readonly<Props>) {
       await api.setRole(u.id, next)
       reload()
     } catch (e) {
-      setError(
-        e instanceof ApiError && e.status === 409
-          ? 'Der letzte Admin kann nicht degradiert werden.'
-          : 'Rollenänderung fehlgeschlagen.',
-      )
+      setError(apiErrorMessage(e, 'Rollenänderung fehlgeschlagen.'))
     }
   }
 

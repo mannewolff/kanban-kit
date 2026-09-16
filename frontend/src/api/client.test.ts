@@ -1,11 +1,26 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { apiFetch, ApiError, apiErrorMessage } from './client'
+import {
+  apiFetch,
+  ApiError,
+  apiErrorMessage,
+  notifyUnauthorized,
+  setUnauthorizedHandler,
+} from './client'
 
 function mockErrorResponse(status: number, body: string, statusText = 'Error') {
   vi.spyOn(globalThis, 'fetch').mockResolvedValue({
     ok: false,
     status,
     statusText,
+    text: () => Promise.resolve(body),
+  } as Response)
+}
+
+function mockOkResponse(body: string) {
+  vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+    ok: true,
+    status: 200,
+    statusText: 'OK',
     text: () => Promise.resolve(body),
   } as Response)
 }
@@ -22,6 +37,7 @@ async function failingFetch(): Promise<ApiError> {
 
 afterEach(() => {
   vi.restoreAllMocks()
+  setUnauthorizedHandler(null)
 })
 
 describe('apiFetch – ApiError aus RFC-9457 Problem Details', () => {
@@ -158,6 +174,89 @@ describe('ApiError.detail – nur aus einem gelesenen Problem-Body', () => {
     expect(error.detail).toBeUndefined()
     expect(error.fieldErrors).toEqual({ title: 'darf nicht leer sein' })
     expect(apiErrorMessage(error, 'Fallback')).toBe('Fallback')
+  })
+})
+
+describe('401-Haken', () => {
+  it('feuert bei einer 401-Antwort', async () => {
+    const handler = vi.fn()
+    setUnauthorizedHandler(handler)
+    mockErrorResponse(401, '', 'Unauthorized')
+
+    await failingFetch()
+
+    expect(handler).toHaveBeenCalledTimes(1)
+  })
+
+  it('feuert nicht bei einer erfolgreichen Antwort (200)', async () => {
+    const handler = vi.fn()
+    setUnauthorizedHandler(handler)
+    mockOkResponse(JSON.stringify({ id: 1 }))
+
+    await apiFetch('/api/test')
+
+    expect(handler).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    [403, 'Forbidden'],
+    [500, 'Internal Server Error'],
+  ])('feuert nicht bei %i', async (status, statusText) => {
+    const handler = vi.fn()
+    setUnauthorizedHandler(handler)
+    mockErrorResponse(status, '', statusText)
+
+    await failingFetch()
+
+    expect(handler).not.toHaveBeenCalled()
+  })
+
+  it('wirft den ApiError bei 401 unverändert weiter', async () => {
+    const handler = vi.fn()
+    setUnauthorizedHandler(handler)
+    mockErrorResponse(
+      401,
+      JSON.stringify({
+        title: 'Unauthorized',
+        status: 401,
+        detail: 'Sitzung abgelaufen',
+        fieldErrors: { email: 'unbekannt' },
+      }),
+    )
+
+    const error = await failingFetch()
+
+    expect(error.status).toBe(401)
+    expect(error.message).toBe('Sitzung abgelaufen')
+    expect(error.detail).toBe('Sitzung abgelaufen')
+    expect(error.fieldErrors).toEqual({ email: 'unbekannt' })
+    expect(handler).toHaveBeenCalledTimes(1)
+  })
+
+  it('feuert nach setUnauthorizedHandler(null) nicht mehr', async () => {
+    const handler = vi.fn()
+    setUnauthorizedHandler(handler)
+    setUnauthorizedHandler(null)
+    mockErrorResponse(401, '', 'Unauthorized')
+
+    await failingFetch()
+
+    expect(handler).not.toHaveBeenCalled()
+  })
+
+  it('löst über notifyUnauthorized nur bei 401 aus', () => {
+    const handler = vi.fn()
+    setUnauthorizedHandler(handler)
+
+    notifyUnauthorized(401)
+    expect(handler).toHaveBeenCalledTimes(1)
+
+    notifyUnauthorized(403)
+    expect(handler).toHaveBeenCalledTimes(1)
+  })
+
+  it('bleibt ohne registrierten Haken folgenlos', () => {
+    expect(() => notifyUnauthorized(401)).not.toThrow()
   })
 })
 

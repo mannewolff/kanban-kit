@@ -7,11 +7,14 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import org.jspecify.annotations.Nullable;
+import org.mwolff.manban.nightrun.application.NightRunRepository.UpsertResult;
 import org.mwolff.manban.nightrun.domain.NightRun;
 import org.mwolff.manban.nightrun.domain.NightRunErrorClass;
 import org.mwolff.manban.nightrun.domain.NightRunItem;
 import org.mwolff.manban.nightrun.domain.NightRunMode;
+import org.mwolff.manban.nightrun.domain.NightRunOrigin;
 import org.mwolff.manban.nightrun.domain.NightRunState;
+import org.mwolff.manban.nightrun.domain.NightRunUsage;
 import org.mwolff.manban.project.application.PermissionChecker;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -23,8 +26,9 @@ import org.springframework.transaction.annotation.Transactional;
  * verlangt die Projekt-Rolle OWNER; ein Plattform-Admin passiert {@link
  * PermissionChecker#requireOwner} bewusst mit (Plan #718, A6). <b>Wie viele bleiben</b> — je
  * Projekt höchstens {@code max-per-project} Läufe; verdrängt wird nach {@code startedAt}, in
- * derselben Transaktion wie das Einfügen (A10, A14). <b>Was bei einem bekannten Lauf geschieht</b>
- * — er wird als schon vorliegend gemeldet und bleibt unangetastet (A11).
+ * derselben Transaktion wie das Einfügen (A10, A14); die verwaisten Arbeitspakete verdrängter Läufe
+ * haben eine eigene Grenze {@code max-items-per-project} (Issue #966). <b>Was bei einem bekannten
+ * Lauf geschieht</b> — er wird als schon vorliegend gemeldet und bleibt unangetastet (A11).
  */
 @Service
 public class NightRunService {
@@ -69,12 +73,66 @@ public class NightRunService {
     Instant now = clock.instant();
     List<NightRunResult> results = new ArrayList<>(submissions.size());
     for (NewNightRun submission : submissions) {
+      // Ein verdrängter Lauf, der wiederkommt, bringt seinen vollständigen Stand mit (#965).
+      runs.deleteOrphanItemsOfRun(projectId, submission.startedAt());
       boolean created =
-          runs.insertIfAbsent(run(projectId, submission, now), items(submission)).isPresent();
+          runs.insertIfAbsent(run(projectId, submission, now), items(projectId, submission))
+              .isPresent();
       results.add(new NightRunResult(submission.startedAt(), created));
     }
     runs.deleteOlderThanNewest(projectId, properties.maxPerProject());
+    runs.deleteOrphanItemsOlderThanNewest(projectId, properties.maxItemsPerProject());
     return List.copyOf(results);
+  }
+
+  /**
+   * Nimmt einen <b>maschinell gemeldeten</b> Lauf entgegen (Issue #946, fachlich #927).
+   *
+   * <p>Zwei Unterschiede zu {@link #submit}: Hier gilt <b>Zustands-Semantik</b> — die Meldung ist
+   * der vollständige Stand des Laufs und ersetzt einen vorhandenen, statt mit „lag schon vor"
+   * abzuprallen. Und es kommt <b>eine</b> Meldung statt einer Liste: Eine Kette meldet den Lauf, an
+   * dem sie gerade arbeitet.
+   *
+   * <p>Die Rechteprüfung ist dieselbe. Ein Token darf nicht mehr als sein Besitzer, also verlangt
+   * auch dieser Weg {@code requireOwner}.
+   *
+   * <p><b>Die Verbrauchszahlen werden gemeldet, nicht gerechnet.</b> Die Lauf-Summe darf größer
+   * sein als die Summe über die Arbeitspakete — die Differenz ist der Verbrauch, der zu keinem
+   * Paket gehört (Vorflug, übergreifendes Review, Aufräumen), und die Auswertung braucht ihn als
+   * eigene Zahl. Würde der Server die Lauf-Summe aus den Paketen rechnen, wäre dieser Rest per
+   * Konstruktion null und damit unsichtbar, obwohl er existiert.
+   */
+  @Transactional
+  public NightRunResult ingest(long userId, long projectId, String tokenName, NewNightRun meldung) {
+    permissions.requireOwner(userId, projectId);
+    Instant now = clock.instant();
+    NightRun gemeldet =
+        new NightRun(
+            null,
+            projectId,
+            meldung.startedAt(),
+            meldung.mode(),
+            meldung.durationMs(),
+            meldung.processedCount(),
+            meldung.skippedCount(),
+            meldung.unparsedCount(),
+            meldung.unparsedSample(),
+            // Beim Ersetzen lässt der Adapter created_at unangetastet; der Wert trägt also nur
+            // beim ersten Mal, und updated_at sagt, wann zuletzt gemeldet wurde.
+            now,
+            NightRunOrigin.TOKEN,
+            tokenName,
+            meldung.complete(),
+            now,
+            meldung.usage());
+
+    // Wie beim Upload-Weg: verwaiste Pakete eines verdrängten Laufs zuerst weg (#965).
+    runs.deleteOrphanItemsOfRun(projectId, meldung.startedAt());
+    UpsertResult ergebnis = runs.upsert(gemeldet, items(projectId, meldung));
+    // Der Ringpuffer gilt unverändert auch für maschinell eingelieferte Läufe.
+    runs.deleteOlderThanNewest(projectId, properties.maxPerProject());
+    runs.deleteOrphanItemsOlderThanNewest(projectId, properties.maxItemsPerProject());
+    return new NightRunResult(meldung.startedAt(), ergebnis.created());
   }
 
   /** Die aufbewahrten Läufe des Projekts, neueste zuerst, jeder mit seinen Arbeitspaketen. */
@@ -97,6 +155,17 @@ public class NightRunService {
     return runs.countRunsByErrorClass(projectId);
   }
 
+  /**
+   * Die Anläufe einer Karte über Läufe hinweg, jüngster zuerst — auch die verdrängter Läufe (Issue
+   * #967). Lesen darf, wer auch die Laufliste sieht: {@code requireOwner}, wie in jedem
+   * Nachtlauf-Use-Case (Plan #718, A6).
+   */
+  @Transactional(readOnly = true)
+  public List<NightRunItem> anlaeufeDerKarte(long userId, long projectId, int cardNumber) {
+    permissions.requireOwner(userId, projectId);
+    return runs.findByCard(projectId, cardNumber);
+  }
+
   private static NightRun run(long projectId, NewNightRun submission, Instant now) {
     return new NightRun(
         null,
@@ -108,23 +177,39 @@ public class NightRunService {
         submission.skippedCount(),
         submission.unparsedCount(),
         submission.unparsedSample(),
-        now);
+        now,
+        // Der Upload-Weg ist per Definition die menschliche Herkunft; updatedAt bleibt leer,
+        // weil ein hochgeladener Lauf nie fortgeschrieben wird.
+        NightRunOrigin.UPLOAD,
+        null,
+        submission.complete(),
+        null,
+        submission.usage());
   }
 
-  private static List<NightRunItem> items(NewNightRun submission) {
+  /**
+   * Die Arbeitspakete tragen Projekt, Startzeitpunkt und Lauf-Art ihres Laufs (Issue #964). Der
+   * Adapter schreibt diese drei aus dem Lauf selbst; hier stehen sie, weil ein Paket ohne sie kein
+   * vollständiges Domänenobjekt ist.
+   */
+  private static List<NightRunItem> items(long projectId, NewNightRun submission) {
     return submission.items().stream()
         .map(
             item ->
                 new NightRunItem(
                     null,
                     null,
+                    projectId,
+                    submission.startedAt(),
+                    submission.mode(),
                     item.cardNumber(),
                     item.title(),
                     item.state(),
                     item.errorClass(),
                     item.durationMs(),
                     item.commitHash(),
-                    item.excerpt()))
+                    item.excerpt(),
+                    item.usage()))
         .toList();
   }
 
@@ -150,6 +235,11 @@ public class NightRunService {
         run.unparsedCount(),
         run.unparsedSample(),
         run.createdAt(),
+        run.origin(),
+        run.tokenName(),
+        run.complete(),
+        run.updatedAt(),
+        run.usage(),
         items);
   }
 
@@ -162,7 +252,8 @@ public class NightRunService {
         item.errorClass(),
         item.durationMs(),
         item.commitHash(),
-        item.excerpt());
+        item.excerpt(),
+        item.usage());
   }
 
   /**
@@ -176,6 +267,8 @@ public class NightRunService {
       int skippedCount,
       int unparsedCount,
       @Nullable String unparsedSample,
+      boolean complete,
+      @Nullable NightRunUsage usage,
       List<NewNightRunItem> items) {}
 
   /** Ein einzulieferndes Arbeitspaket ohne technische Felder. */
@@ -186,7 +279,8 @@ public class NightRunService {
       @Nullable NightRunErrorClass errorClass,
       @Nullable Long durationMs,
       @Nullable String commitHash,
-      @Nullable String excerpt) {}
+      @Nullable String excerpt,
+      @Nullable NightRunUsage usage) {}
 
   /**
    * Ergebnis der Einlieferung eines Laufs.
@@ -207,6 +301,11 @@ public class NightRunService {
       int unparsedCount,
       @Nullable String unparsedSample,
       Instant createdAt,
+      NightRunOrigin origin,
+      @Nullable String tokenName,
+      boolean complete,
+      @Nullable Instant updatedAt,
+      @Nullable NightRunUsage usage,
       List<NightRunItemView> items) {}
 
   /** Darstellung eines Arbeitspakets. */
@@ -218,5 +317,6 @@ public class NightRunService {
       @Nullable NightRunErrorClass errorClass,
       @Nullable Long durationMs,
       @Nullable String commitHash,
-      @Nullable String excerpt) {}
+      @Nullable String excerpt,
+      @Nullable NightRunUsage usage) {}
 }

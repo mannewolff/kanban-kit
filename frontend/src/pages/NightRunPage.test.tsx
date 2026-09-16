@@ -14,6 +14,7 @@ import type {
   NightRunErrorClassCounts,
   NightRunItemView,
   NightRunResult,
+  NightRunUsageView,
   NightRunView,
 } from '../api/nightRuns'
 import { SnackbarProvider } from '../components/SnackbarProvider'
@@ -27,6 +28,7 @@ import { buildHandoffText, type NightRunHandoffItem } from '../lib/nightRunHando
 import { NACHTLAUF_FARBEN, NACHTLAUF_TON } from '../nachtlaufDesign'
 import { theme } from '../theme'
 import { NightRunPage } from './NightRunPage'
+import appQuelle from '../App.tsx?raw'
 
 /**
  * Die Seite wird gegen einen **`fetch`-Stub** getestet, nicht gegen gemockte API-Module. Nur so
@@ -128,6 +130,15 @@ const NACHWEIS_ROT = {
 
 const EIN_LAUF = stand({
   einheiten: [einheit({ ausgang: 'erfolg', commit: 'a1b2c3d', pruefung: GEPRUEFT })],
+})
+
+/**
+ * Ein Lauf, der Kosten meldet (Issue #948) — am Lauf die Summe über alle Sitzungen, am Vorgang
+ * sein eigener Betrag. Die Zahlen sind die des echten Ketten-Laufs vom 2026-09-14.
+ */
+const MIT_KOSTEN = stand({
+  kostenSumme: 25.983293,
+  einheiten: [einheit({ ausgang: 'erfolg', commit: 'a1b2c3d', pruefung: GEPRUEFT, kostenUsd: 11.5228115 })],
 })
 
 /** Erfolgreiche Session, aber roter Nachweis → gelb. */
@@ -276,6 +287,11 @@ function wieAufbewahrt(ergebnisstand: string): NightRunView[] {
       // dafür steht {@link aufbewahrt} mit ausdrücklicher Vorgabe.
       unparsedSample: null,
       createdAt: '2026-09-02T06:00:00.000Z',
+      origin: 'UPLOAD',
+      tokenName: null,
+      complete: true,
+      updatedAt: null,
+      usage: null,
       items: run.items.map((item, position) => wieAufbewahrtesItem({ id: position + 1, ...item })),
     },
   ]
@@ -301,8 +317,18 @@ function wieAufbewahrtesItem(item: ItemVorgabe): NightRunItemView {
     durationMs: item.durationMs ?? null,
     commitHash: item.commitHash ?? null,
     excerpt: item.excerpt ?? null,
+    usage: item.usage ?? null,
   }
 }
+
+/** Ein Verbrauch in der Antwortform: Was der Test nicht nennt, hat der Lauf nicht gemessen. */
+const verbraucht = (felder: Partial<NightRunUsageView>): NightRunUsageView => ({
+  costUsd: null,
+  inputTokens: null,
+  outputTokens: null,
+  cachedInputTokens: null,
+  ...felder,
+})
 
 /** Die Einlieferungs-Antwort zu einem Ergebnisstand, dessen Lauf neu ist. */
 const alleNeu = (ergebnisstand: string): NightRunResult[] => [
@@ -325,10 +351,71 @@ function aufbewahrt(
     unparsedCount: 0,
     unparsedSample: null,
     createdAt: '2026-09-02T06:00:00.000Z',
+    origin: 'UPLOAD',
+    tokenName: null,
+    complete: true,
+    updatedAt: null,
+    usage: null,
     ...rest,
     items: (items ?? []).map(wieAufbewahrtesItem),
   }
 }
+
+/** Leere Verbrauchsangaben — „nicht gemessen". */
+const VERBRAUCH_NICHTS = {
+  costUsd: null,
+  inputTokens: null,
+  outputTokens: null,
+  cachedInputTokens: null,
+  cachedInputSharePercent: null,
+}
+
+/** Kennzahlen eines Zeitraums ohne Messung. */
+const verbrauchKennzahlen = (type: string, firstDay: string, lastDay: string) => ({
+  type,
+  firstDay,
+  lastDay,
+  from: '2026-09-07T10:00:00Z',
+  to: '2026-09-14T10:00:00Z',
+  coverage: 'COMPLETE',
+  noRuns: false,
+  runCount: 2,
+  durationMs: 60_000,
+  cardCount: 1,
+  usage: { total: VERBRAUCH_NICHTS, cardShare: VERBRAUCH_NICHTS, remainder: VERBRAUCH_NICHTS },
+})
+
+/**
+ * Jede Zeitraum-Anfrage bekommt denselben Zeitraum: Beim Tageszeitraum mit Rückschritt 0 liefert er
+ * das Datum der zuletzt abgeschlossenen Nacht, in der Zeitraum-Sicht eine Nacht zum Anwählen.
+ */
+const VERBRAUCH_ZEITRAUM = {
+  current: verbrauchKennzahlen('DAY', '2026-09-15', '2026-09-15'),
+  previous: verbrauchKennzahlen('DAY', '2026-09-14', '2026-09-14'),
+  nights: [
+    {
+      night: '2026-09-10',
+      runCount: 1,
+      cardCount: 1,
+      usage: { total: VERBRAUCH_NICHTS, cardShare: VERBRAUCH_NICHTS, remainder: VERBRAUCH_NICHTS },
+      aborted: false,
+    },
+  ],
+  epics: [],
+  withoutEpic: { epicId: null, shortcode: null, title: null, cardCount: 0, usage: VERBRAUCH_NICHTS },
+  epicsOverlap: false,
+}
+
+/** Eine Nacht aus zwei Läufen — mit dem Datum, nach dem gefragt wurde. */
+const verbrauchNacht = (night: string) => ({
+  night,
+  runCount: 2,
+  durationMs: 60_000,
+  cardCount: 1,
+  usage: { total: VERBRAUCH_NICHTS, cardShare: VERBRAUCH_NICHTS, remainder: VERBRAUCH_NICHTS },
+  aborted: false,
+  cards: [],
+})
 
 interface Antworten {
   /** Je `GET /night-runs` eine Antwort; die letzte gilt für alle weiteren Aufrufe. */
@@ -399,6 +486,14 @@ function stubFetch(antworten: Antworten) {
       const method = init?.method ?? 'GET'
       anfragen.push({ url, method, body: String(init?.body ?? '') })
 
+      // Der Verbrauchs-Bereich (Issue #941) fragt beim Öffnen den Tageszeitraum und die Nacht ab.
+      if (url.startsWith('/api/projects/5/night-run-usage/night?')) {
+        const datum = new URL(url, 'http://localhost').searchParams.get('date') ?? ''
+        return Promise.resolve(antwortOk(verbrauchNacht(datum)))
+      }
+      if (url.startsWith('/api/projects/5/night-run-usage?')) {
+        return Promise.resolve(antwortOk(VERBRAUCH_ZEITRAUM))
+      }
       if (url === '/api/projects') {
         return Promise.resolve(antwortOk([{ id: 5, name: 'Team', role: 'OWNER', createdAt: '' }]))
       }
@@ -572,6 +667,212 @@ describe('NightRunPage — ungültige Projekt-ID', () => {
   })
 })
 
+describe('NightRunPage — Herkunft, Vollständigkeit und Verbrauch eines Laufs', () => {
+  it('nennt die maschinelle Herkunft samt Zeitpunkt und Token-Namen', async () => {
+    renderPage({
+      listen: [
+        [
+          aufbewahrt({
+            id: 1,
+            startedAt: startedAt(0),
+            origin: 'TOKEN',
+            tokenName: 'nachtlauf-kette',
+            createdAt: '2026-09-02T06:00:00.000Z',
+          }),
+        ],
+      ],
+    })
+
+    await screen.findByTestId(`lauf-${startedAt(0)}`)
+    const kopf = laufKopfzeile(lauf(0))
+    expect(kopf).toHaveTextContent('maschinell eingeliefert')
+    expect(kopf).toHaveTextContent('nachtlauf-kette')
+    expect(kopf).toHaveTextContent(new Date('2026-09-02T06:00:00.000Z').toLocaleString('de-DE'))
+  })
+
+  it('nennt bei einem hochgeladenen Lauf stattdessen den Upload', async () => {
+    renderPage({ listen: [[aufbewahrt({ id: 1, startedAt: startedAt(0), origin: 'UPLOAD' })]] })
+
+    await screen.findByTestId(`lauf-${startedAt(0)}`)
+    const kopf = laufKopfzeile(lauf(0))
+    expect(kopf).toHaveTextContent('hochgeladen am')
+    expect(kopf).not.toHaveTextContent('maschinell eingeliefert')
+  })
+
+  it('zeigt den Zeitpunkt der letzten Meldung nur, wenn er vom Anlegen abweicht', async () => {
+    renderPage({
+      listen: [
+        [
+          aufbewahrt({
+            id: 1,
+            startedAt: startedAt(0),
+            createdAt: '2026-09-02T06:00:00.000Z',
+            updatedAt: '2026-09-02T06:00:00.000Z',
+          }),
+          aufbewahrt({
+            id: 2,
+            startedAt: startedAt(30),
+            createdAt: '2026-09-02T06:00:00.000Z',
+            updatedAt: '2026-09-02T07:30:00.000Z',
+          }),
+        ],
+      ],
+    })
+
+    await screen.findByTestId(`lauf-${startedAt(30)}`)
+    expect(laufKopfzeile(lauf(0))).not.toHaveTextContent('zuletzt gemeldet')
+    const spaeter = laufKopfzeile(lauf(30))
+    expect(spaeter).toHaveTextContent('zuletzt gemeldet')
+    expect(spaeter).toHaveTextContent(new Date('2026-09-02T07:30:00.000Z').toLocaleString('de-DE'))
+  })
+
+  it('kennzeichnet einen unvollständig gemeldeten Lauf', async () => {
+    renderPage({
+      listen: [
+        [
+          aufbewahrt({ id: 1, startedAt: startedAt(0), complete: false }),
+          aufbewahrt({ id: 2, startedAt: startedAt(30), complete: true }),
+        ],
+      ],
+    })
+
+    await screen.findByTestId(`lauf-${startedAt(30)}`)
+    expect(laufKopfzeile(lauf(0))).toHaveTextContent('unvollständig')
+    expect(laufKopfzeile(lauf(30))).not.toHaveTextContent('unvollständig')
+  })
+
+  it('sagt „nicht gemessen", wo kein Verbrauch aufbewahrt ist — und schreibt nirgends 0', async () => {
+    renderPage({
+      listen: [
+        [
+          aufbewahrt({
+            id: 1,
+            startedAt: startedAt(0),
+            usage: null,
+            items: [{ id: 1, cardNumber: 700, title: 'Paket A', state: 'GREEN', usage: null }],
+          }),
+        ],
+      ],
+    })
+
+    await screen.findByTestId(`lauf-${startedAt(0)}`)
+    aufklappen(0)
+
+    const verbrauch = await within(lauf(0)).findByTestId('lauf-verbrauch')
+    expect(verbrauch).toHaveTextContent('nicht gemessen')
+    expect(verbrauch.textContent).not.toMatch(/\d/)
+    const jePaket = within(lauf(0)).getByTestId('paket-verbrauch-700')
+    expect(jePaket).toHaveTextContent('nicht gemessen')
+  })
+
+  it('zeigt gesetzte Verbrauchswerte mit ihrer Einheit', async () => {
+    renderPage({
+      listen: [
+        [
+          aufbewahrt({
+            id: 1,
+            startedAt: startedAt(0),
+            usage: verbraucht({
+              costUsd: 25.98,
+              inputTokens: 148,
+              outputTokens: 62411,
+              cachedInputTokens: 8883160,
+            }),
+            items: [
+              {
+                id: 1,
+                cardNumber: 700,
+                title: 'Paket A',
+                state: 'GREEN',
+                usage: verbraucht({ costUsd: 11.52 }),
+              },
+            ],
+          }),
+        ],
+      ],
+    })
+
+    await screen.findByTestId(`lauf-${startedAt(0)}`)
+    aufklappen(0)
+
+    const verbrauch = await within(lauf(0)).findByTestId('lauf-verbrauch')
+    expect(verbrauch).toHaveTextContent('25,98')
+    expect(verbrauch).toHaveTextContent('$')
+    expect(verbrauch).toHaveTextContent('148 Token')
+    expect(verbrauch).toHaveTextContent('62.411 Token')
+    expect(verbrauch).toHaveTextContent('8.883.160 Token')
+    // Was der Lauf nicht misst, bleibt eine Fehlanzeige — auch neben gemessenen Werten.
+    expect(within(lauf(0)).getByTestId('paket-verbrauch-700')).toHaveTextContent('11,52')
+  })
+
+  it('nennt die maschinelle Herkunft auch ohne Token-Namen', async () => {
+    // Die Spalte ist nullbar: Ein Lauf aus der Zeit vor dem Namensfeld trägt keinen. Dann steht
+    // die Herkunft ohne Klammer da — und nicht „(Token: undefined)".
+    renderPage({
+      listen: [[aufbewahrt({ id: 1, startedAt: startedAt(0), origin: 'TOKEN', tokenName: null })]],
+    })
+
+    await screen.findByTestId(`lauf-${startedAt(0)}`)
+    const kopf = laufKopfzeile(lauf(0))
+    expect(kopf).toHaveTextContent('maschinell eingeliefert am')
+    expect(kopf).not.toHaveTextContent('Token:')
+  })
+
+  it('meldet fehlende Kosten neben gemessenen Mengen als Fehlanzeige', async () => {
+    // Der Runner kann Mengen melden, ohne die Kosten zu kennen — dann steht an der einen Stelle
+    // eine Zahl und an der anderen die Fehlanzeige, nicht 0 $.
+    renderPage({
+      listen: [
+        [
+          aufbewahrt({
+            id: 1,
+            startedAt: startedAt(0),
+            usage: verbraucht({ inputTokens: 148, outputTokens: 62411 }),
+          }),
+        ],
+      ],
+    })
+
+    await screen.findByTestId(`lauf-${startedAt(0)}`)
+    aufklappen(0)
+
+    const verbrauch = await within(lauf(0)).findByTestId('lauf-verbrauch')
+    expect(verbrauch).toHaveTextContent('Kosten: nicht gemessen')
+    expect(verbrauch).toHaveTextContent('148 Token')
+    expect(verbrauch).toHaveTextContent('Zwischenspeicher: nicht gemessen')
+  })
+
+  it('zeigt die Lauf-Summe unverändert, auch wenn sie über der Summe der Arbeitspakete liegt', async () => {
+    renderPage({
+      listen: [
+        [
+          aufbewahrt({
+            id: 1,
+            startedAt: startedAt(0),
+            // 25,98 am Lauf gegen 11,52 am einzigen Paket: Die Differenz ist der keinem Paket
+            // zuordenbare Rest, und genau er verschwände, wenn die Anzeige selbst summierte.
+            usage: verbraucht({ costUsd: 25.98 }),
+            items: [
+              {
+                id: 1,
+                cardNumber: 700,
+                title: 'Paket A',
+                state: 'GREEN',
+                usage: verbraucht({ costUsd: 11.52 }),
+              },
+            ],
+          }),
+        ],
+      ],
+    })
+
+    await screen.findByTestId(`lauf-${startedAt(0)}`)
+    aufklappen(0)
+
+    expect(await within(lauf(0)).findByTestId('lauf-verbrauch')).toHaveTextContent('25,98')
+  })
+})
+
 describe('NightRunPage — aufbewahrte Läufe beim Öffnen', () => {
   it('zeigt die aufbewahrten Läufe, neueste zuerst', async () => {
     renderPage({
@@ -589,9 +890,9 @@ describe('NightRunPage — aufbewahrte Läufe beim Öffnen', () => {
   })
 
   it('löst beim Öffnen der Seite nur die Kette des obersten Laufs auf (A8, E7)', async () => {
-    // A8 hält die Anfragelawine von bis zu 30 aufbewahrten Läufen fern. Seit #914 steht der
+    // A8 hält die Anfragelawine von bis zu 190 aufbewahrten Läufen fern. Seit #914 steht der
     // oberste Lauf offen (AK 2 verlangt den ersten Vorgangsblock ohne Scrollen) — genau er, und
-    // deshalb bleibt es bei einer Kette statt dreißig.
+    // deshalb bleibt es bei einer Kette statt einer je Lauf.
     renderPage({
       listen: [
         [
@@ -631,6 +932,42 @@ describe('NightRunPage — aufbewahrte Läufe beim Öffnen', () => {
   })
 })
 
+describe('NightRunPage — Verbrauch (Issue #941)', () => {
+  it('zeigt den Verbrauchs-Bereich auf der bestehenden Seite, im Theme-Teilbaum des Entwurfs', async () => {
+    renderPage()
+
+    const bereich = await screen.findByTestId('verbrauch-bereich')
+    expect(within(bereich).getByRole('heading', { level: 2, name: 'Verbrauch' })).toBeInTheDocument()
+    expect(await within(bereich).findByTestId('verbrauch-nacht')).toHaveTextContent('2 Läufe')
+    expect(anfragen.map((a) => a.url)).toContain('/api/projects/5/night-run-usage/night?date=2026-09-15&zone=' + encodeURIComponent(Intl.DateTimeFormat().resolvedOptions().timeZone))
+  })
+
+  it('erreicht vom Zeitraum aus eine einzelne Nacht und stellt die Nachtansicht um (Issue #942, AK 8)', async () => {
+    renderPage()
+    const bereich = await screen.findByTestId('verbrauch-bereich')
+    // Die Überschrift der Nachtansicht, nicht die gleichlautende der Zeitraum-Sicht darüber.
+    const nachtUeberschrift = async () =>
+      within(await within(bereich).findByTestId('verbrauch-nacht')).getByRole('heading', { level: 3 })
+    expect(await nachtUeberschrift()).toHaveTextContent('Nacht vom 15.09.2026 auf den 16.09.2026')
+
+    fireEvent.click(await within(bereich).findByRole('button', { name: /Nacht vom 10\.09\.2026/ }))
+
+    await waitFor(async () =>
+      expect(await nachtUeberschrift()).toHaveTextContent('Nacht vom 10.09.2026 auf den 11.09.2026'),
+    )
+    expect(anfragen.some((a) => a.url.includes('/night-run-usage/night?date=2026-09-10&'))).toBe(true)
+  })
+
+  it('legt keine neue Route an: App.tsx fuehrt fuer die Seite nur /projects/:projectId/nachtlauf', () => {
+    const routen = [...appQuelle.matchAll(/path="([^"]+)"\s+element=\{<NightRunPage \/>\}/g)].map(
+      (treffer) => treffer[1],
+    )
+
+    expect(routen).toEqual(['/projects/:projectId/nachtlauf'])
+    expect(appQuelle).not.toMatch(/verbrauch|night-run-usage/i)
+  })
+})
+
 describe('NightRunPage — Ergebnisstand hineingeben', () => {
   it('sendet die Auswertung und stellt den neuen Lauf nach oben', async () => {
     renderPage({
@@ -662,6 +999,46 @@ describe('NightRunPage — Ergebnisstand hineingeben', () => {
     }
     const gesendet = anfragen.find((a) => a.method === 'POST')
     expect(gesendet?.body).toContain('"cardNumber":700')
+  })
+
+  it('nimmt den gemeldeten Kostenwert mit — am Lauf und am Arbeitspaket', async () => {
+    renderPage({ submit: { ergebnis: [{ startedAt: startedAt(0), created: true }] } })
+    await screen.findByText('Noch keine Auswertung vorhanden.')
+
+    protokollWaehlen(MIT_KOSTEN)
+
+    await waitFor(() => expect(anfragen.some((a) => a.method === 'POST')).toBe(true))
+    const gesendet = JSON.parse(anfragen.find((a) => a.method === 'POST')!.body)
+    expect(gesendet.runs[0].usage).toEqual({ costUsd: 25.983293 })
+    expect(gesendet.runs[0].items[0].usage).toEqual({ costUsd: 11.5228115 })
+  })
+
+  it('lässt den usage-Schlüssel weg, wo kein Kostenwert gemeldet ist', async () => {
+    renderPage({ submit: { ergebnis: [{ startedAt: startedAt(0), created: true }] } })
+    await screen.findByText('Noch keine Auswertung vorhanden.')
+
+    protokollWaehlen(EIN_LAUF)
+
+    await waitFor(() => expect(anfragen.some((a) => a.method === 'POST')).toBe(true))
+    const gesendet = JSON.parse(anfragen.find((a) => a.method === 'POST')!.body)
+    // Kein `usage: undefined`, sondern gar kein Schlüssel — dieselbe Regel wie bei den übrigen
+    // optionalen Feldern: Was nicht gemessen wurde, steht nicht im Body.
+    expect('usage' in gesendet.runs[0]).toBe(false)
+    expect('usage' in gesendet.runs[0].items[0]).toBe(false)
+  })
+
+  it('trägt den Kostenwert des echten Ketten-Laufs in den Request', async () => {
+    renderPage({ submit: { ergebnis: alleNeu(ECHTE_KETTE_STAND) } })
+    await screen.findByText('Noch keine Auswertung vorhanden.')
+
+    protokollWaehlen(ECHTE_KETTE_STAND, 'night-run-2026-09-14-131200.json')
+
+    await waitFor(() => expect(anfragen.some((a) => a.method === 'POST')).toBe(true))
+    const gesendet = JSON.parse(anfragen.find((a) => a.method === 'POST')!.body)
+    expect(gesendet.runs[0].usage.costUsd).toBe(25.983292999999996)
+    // Die drei Ketten-Vorgänge tragen je ihren eigenen Betrag.
+    expect(gesendet.runs[0].items.map((i: { usage?: { costUsd: number } }) => i.usage?.costUsd))
+      .toEqual([11.5228115, 10.366864999999999, 4.093616499999999])
   })
 
   it('stellt einen bereits bekannten Lauf vollständig dar und kennzeichnet ihn', async () => {

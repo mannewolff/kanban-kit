@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { attachmentsApi } from './attachments'
-import { ApiError } from './client'
+import { ApiError, setUnauthorizedHandler } from './client'
 
 function spyFetch(overrides: Partial<Response> = {}) {
   return vi.spyOn(globalThis, 'fetch').mockResolvedValue({
@@ -13,7 +13,10 @@ function spyFetch(overrides: Partial<Response> = {}) {
   } as Response)
 }
 
-afterEach(() => vi.restoreAllMocks())
+afterEach(() => {
+  vi.restoreAllMocks()
+  setUnauthorizedHandler(null)
+})
 
 const attachment = {
   id: 1, cardId: 7, filename: 'doc.pdf', contentType: 'application/pdf', size: 1024, createdAt: '2026-01-01',
@@ -81,5 +84,36 @@ describe('attachmentsApi', () => {
   it('fetchBlob wirft ApiError bei Fehlerantwort', async () => {
     spyFetch({ ok: false, status: 404, statusText: 'Not Found' })
     await expect(attachmentsApi.fetchBlob(1)).rejects.toBeInstanceOf(ApiError)
+  })
+})
+
+const aufrufe: ReadonlyArray<readonly [string, () => Promise<unknown>]> = [
+  ['list', () => attachmentsApi.list(7)],
+  ['upload', () => attachmentsApi.upload(7, new File(['content'], 'doc.pdf', { type: 'application/pdf' }))],
+  ['remove', () => attachmentsApi.remove(1)],
+  ['fetchBlob', () => attachmentsApi.fetchBlob(1)],
+]
+
+describe.each(aufrufe)('attachmentsApi.%s – 401-Haken', (_name, call) => {
+  it('löst bei 401 den registrierten Haken aus und wirft weiterhin den ApiError', async () => {
+    const handler = vi.fn()
+    setUnauthorizedHandler(handler)
+    spyFetch({ ok: false, status: 401, statusText: 'Unauthorized' })
+
+    await expect(call()).rejects.toMatchObject({ status: 401 })
+    await expect(call()).rejects.toBeInstanceOf(ApiError)
+    expect(handler).toHaveBeenCalledTimes(2)
+  })
+
+  it.each([
+    [403, 'Forbidden'],
+    [500, 'Internal Server Error'],
+  ])('feuert nicht bei %i', async (status, statusText) => {
+    const handler = vi.fn()
+    setUnauthorizedHandler(handler)
+    spyFetch({ ok: false, status, statusText })
+
+    await expect(call()).rejects.toBeInstanceOf(ApiError)
+    expect(handler).not.toHaveBeenCalled()
   })
 })

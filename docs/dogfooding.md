@@ -158,3 +158,64 @@ Fehlercodes (jeder Fehler lässt Labels und Zuordnungen unverändert):
 | `403` | Der Token-Nutzer hat kein `TICKET_UPDATE` im Projekt (ein VIEWER darf nicht labeln, ein MEMBER schon) |
 | `404` | Karte unbekannt, Karte liegt auf einem **anderen** Board als dem gebundenen — oder das Board kennt kein Label dieses Namens |
 | `409` | Gültiges, aber an kein Board gebundenes Token |
+
+## 7. Nachtlauf-Ergebnis einliefern
+
+`POST /api/kanban/night-runs` nimmt **einen** Lauf entgegen — ohne Sitzung, ohne Mensch. Damit
+meldet eine Kette ihr Ergebnis selbst, statt dass am Morgen jemand ein Protokoll in den Browser
+lädt.
+
+Zwei Voraussetzungen, und beide müssen stimmen:
+
+- Das Token ist **an ein Projekt gebunden**. Das Zielprojekt kommt aus dieser Bindung und nicht
+  aus dem Aufruf — so kann eine Meldung nur dort landen, wofür das Token ausgestellt wurde. Ein
+  ungebundenes Token wird mit `400` abgewiesen.
+- Der **Besitzer des Tokens ist OWNER** in diesem Projekt. Ein Token darf nie mehr als der Mensch,
+  dem es gehört; fehlt die Rolle, antwortet der Endpunkt `403`.
+
+```
+curl -sk -X POST https://localhost/api/kanban/night-runs \
+  -H "X-Kanban-Token: tk_…" \
+  -H "Content-Type: application/json" \
+  -d '{
+        "startedAt": "2026-09-16T22:31:00Z",
+        "mode": "CHAIN",
+        "durationMs": 4320000,
+        "processedCount": 3,
+        "skippedCount": 0,
+        "unparsedCount": 0,
+        "complete": false,
+        "usage": {
+          "costUsd": 8.032575,
+          "inputTokens": 148,
+          "outputTokens": 62411,
+          "cachedInputTokens": 8883160
+        },
+        "items": [
+          {
+            "cardNumber": 917,
+            "title": "Anteilsbalken je Vorgang",
+            "state": "GREEN",
+            "durationMs": 1122000,
+            "commitHash": "9489421",
+            "usage": { "costUsd": 0.94, "inputTokens": 412000 }
+          }
+        ]
+      }'
+```
+
+Die Antwort nennt den fachlichen Schlüssel des Laufs und was mit ihm geschah:
+`{"startedAt":"2026-09-16T22:31:00Z","outcome":"CREATED"}` — beim zweiten Mal `REPLACED`.
+
+**Der gemeldete Stand ist vollständig.** Eine zweite Meldung desselben `startedAt` ersetzt die
+erste; was sie nicht mehr führt, ist danach fort. Genau deshalb kann eine Kette unterwegs melden:
+`"complete": false`, solange sie läuft, und am Ende dieselbe Meldung mit `"complete": true`. Bricht
+sie vorher ab, steht der letzte gemeldete Stand am Board und ist dort als unvollständig zu sehen —
+statt dass die ganze Nacht fehlt.
+
+**Die Verbrauchszahlen werden gemeldet, nicht gerechnet.** `usage` am Lauf darf größer sein als die
+Summe über die `usage` der Arbeitspakete: Die Differenz ist der Verbrauch, der zu keinem Paket
+gehört — Vorflug, übergreifendes Review, Aufräumen. Der Server normalisiert sie nicht weg.
+
+Fehlende Angaben in `usage` heißen **„nicht gemessen"** und nie Null; ein Feld, das nichts trägt,
+lässt man weg.

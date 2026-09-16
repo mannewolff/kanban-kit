@@ -67,6 +67,15 @@ Klick auf eine Karte öffnet das Detail:
 - **Abhängigkeiten:** Verweise auf andere Kartennummern.
 - **Anhänge:** hochladen, herunterladen, löschen. **Klick auf einen Bild- oder PDF-Anhang** (auf die
   Miniatur oder den Dateinamen) öffnet eine **Vorschau (Lightbox)**; andere Dateitypen werden geladen.
+- **Nachtlauf-Anläufe:** War die Karte schon in einem [Nachtlauf](#nachtlauf), steht hier, was ihre
+  Anläufe gekostet haben — die **Dauer je Lauf-Art** (Umsetzungs-, Prüf- und Ketten-Lauf; eine Art,
+  in der die Karte nie vorkam, steht als „nicht gelaufen"), die **Summen über alle Anläufe** (Kosten,
+  Eingabe, Ausgabe, Zwischenspeicher, jede mit ihrer Grundlage „aus *n* von *m* Anläufen"), die
+  **Anläufe** selbst mit Datum, Ergebnis, Dauer und Kosten, jüngster zuerst, und die Zahl der
+  **Wiederaufnahmen** (ein gescheiterter Anlauf, auf den später ein echter Anlauf folgte; ein
+  übersprungener zählt nicht). Fehlende Werte stehen als „nicht gemessen", nie als 0. Den Block sieht
+  nur, wer auch die Nachtlauf-Auswertung sehen darf (Projekt-Rolle `OWNER`); Anläufe verdrängter Läufe
+  bleiben darin erhalten.
 - **Kommentare:** schreiben; eigene Kommentare löschen (Moderation durch ADMIN/OWNER).
 - **Aktivität:** ein chronologischer Verlauf am Ende des Details — „*Zeitpunkt* · *Person* · *Aktion*".
   Protokolliert werden Anlegen, Bearbeiten, Zuständige geändert, Verschieben, Archivieren und
@@ -194,14 +203,20 @@ der Text enthält Fremdtext aus dem Protokoll, und was in die eigene Sitzung wan
 gesehen haben. Legt der Browser die Zwischenablage nicht frei, bleibt es beim sichtbaren Feld: von
 Hand markieren und kopieren.
 
-**Aufbewahrung:** Je Projekt bleiben die **letzten 30 Läufe** erhalten; ältere fallen heraus, sobald
-neue hinzukommen.
+**Aufbewahrung:** Je Projekt bleiben die **letzten 190 Läufe** erhalten — genug, um bei zwei Läufen
+je Nacht den laufenden, den zuletzt abgeschlossenen und den Vormonat vorzuhalten; ältere fallen
+heraus, sobald neue hinzukommen. Die **Arbeitspakete** eines verdrängten Laufs bleiben dabei bestehen: Sie tragen
+Projekt, Startzeitpunkt und Lauf-Art selbst, damit die Messwerte einer Karte nicht mit dem Lauf
+verschwinden. In der Liste der Läufe erscheinen sie nicht mehr. Diese **verwaisten Arbeitspakete**
+haben eine eigene Grenze: Je Projekt bleiben die **letzten 2000** erhalten, gemessen am
+Startzeitpunkt ihres Laufs. Läufe und verwaiste Arbeitspakete werden also getrennt begrenzt — die
+Pakete eines noch aufbewahrten Laufs zählen nicht mit und fallen erst mit ihm.
 
 Drei Sonderfälle, die keine Fehler sind: Ein **Probelauf** (`DRY-RUN`) wird nicht aufbewahrt — ein
 Protokoll aus lauter Probeläufen erzeugt darum nur die Meldung, dass es nichts auszuwerten gibt. Ein
 Lauf, der bereits ausgewertet wurde, wird als **„lag schon vor"** gemeldet und bleibt unangetastet;
 die übrigen Läufe derselben Datei entstehen trotzdem. Und ein **nachgereichter Lauf**, der älter ist
-als alle 30 aufbewahrten, verdrängt keinen neueren — er wird angelegt und sogleich wieder verdrängt,
+als alle 190 aufbewahrten, verdrängt keinen neueren — er wird angelegt und sogleich wieder verdrängt,
 erscheint also nach dem Einlesen nicht in der Liste.
 
 ## Dashboard (Kennzahlen)

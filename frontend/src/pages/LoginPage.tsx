@@ -6,7 +6,7 @@ import Stack from '@mui/material/Stack'
 import TextField from '@mui/material/TextField'
 import { useState } from 'react'
 import { Link as RouterLink, useNavigate } from 'react-router-dom'
-import { ApiError } from '../api/client'
+import { ApiError, apiErrorMessage } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
 import { AuthCard } from '../components/AuthCard'
 import { PasswordField } from '../components/PasswordField'
@@ -29,15 +29,19 @@ export function LoginPage() {
       // (nach dem Login ist die Navigation ein Push, also nicht location.key === 'default').
       navigate('/', { replace: true, state: { autoRoute: true } })
     } catch (e) {
-      if (e instanceof ApiError && e.status === 401) {
+      if (e instanceof ApiError && e.status === 429) {
+        // Zählbremse: vor dem 401-Zweig, weil ein abgewiesener Versuch sonst als falsche
+        // Zugangsdaten erschiene und der Nutzer weiterprobierte, statt zu warten.
+        setError(apiErrorMessage(e, 'Zu viele Versuche. Bitte später erneut versuchen.'))
+      } else if (e instanceof ApiError && e.status === 401) {
         // Falsche Zugangsdaten: generische Meldung (verrät nicht, ob E-Mail oder Passwort falsch).
         setError('Ungültige Anmeldedaten.')
-      } else if (e instanceof ApiError && e.message) {
-        // Backend liefert die konkrete RFC-9457-Meldung (403: E-Mail nicht bestätigt / noch nicht
-        // freigegeben / Konto gesperrt). Direkt anzeigen, statt pauschal auf E-Mail zu verweisen.
-        setError(e.message)
       } else {
-        setError('Anmeldung fehlgeschlagen. Bitte später erneut versuchen.')
+        // Backend liefert die konkrete RFC-9457-Meldung (403: E-Mail nicht bestätigt / noch nicht
+        // freigegeben / Konto gesperrt). Gelesen wird `detail` über apiErrorMessage, nie `message`:
+        // das fällt bei unlesbarem Body auf den Roh-Body bzw. statusText zurück und ist damit nicht
+        // anzeigbar — bei einem 429 eines vorgelagerten Proxys stünde sonst dessen HTML im Formular.
+        setError(apiErrorMessage(e, 'Anmeldung fehlgeschlagen. Bitte später erneut versuchen.'))
       }
     } finally {
       setBusy(false)

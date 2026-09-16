@@ -40,6 +40,8 @@ import { ApiError, apiErrorMessage } from '../api/client'
 import { DerivationTree } from './DerivationTree'
 import { cardsApi as defaultCardsApi, type CardActivity, type CardByNumber, type CardDetail, type DerivationNode } from '../api/cards'
 import { commentsApi as defaultCommentsApi, type Comment, type CommentsApi } from '../api/comments'
+import type { NightRunsApi } from '../api/nightRuns'
+import { KartenAnlaeufe } from './nachtlauf/KartenAnlaeufe'
 import type { Epic } from '../api/epics'
 import type { Label as BoardLabel } from '../api/labels'
 import type { Member } from '../api/members'
@@ -912,6 +914,8 @@ interface Props {
     | 'openEpic'
   >
   boardsApi?: Pick<typeof defaultBoardsApi, 'get'>
+  /** Abruf der Nachtlauf-Anläufe (Issue #968); ohne Angabe der echte Endpunkt. */
+  nightRunsApi?: Pick<NightRunsApi, 'anlaeufeDerKarte'>
 }
 
 /**
@@ -946,6 +950,8 @@ function CardDetailModalView({
   commentsApi = defaultCommentsApi,
   attachmentsApi = defaultAttachmentsApi,
   cardsApi = defaultCardsApi,
+  projectId,
+  nightRunsApi,
   onOpenDependency,
   onBack,
 }: Readonly<ViewProps>) {
@@ -1588,6 +1594,11 @@ function CardDetailModalView({
 
           {!editing && (
             <>
+              {/* Nur mit Projekt und Kartennummer gibt es etwas abzurufen: `projectId` ist am
+                  Modal optional, und eine Pool-Idee trägt keine Nummer (Issue #968). */}
+              {projectId != null && card.number != null && (
+                <KartenAnlaeufe projectId={projectId} cardNumber={card.number} api={nightRunsApi} />
+              )}
               <Divider />
               <AttachmentsSection
                 attachments={attachments}

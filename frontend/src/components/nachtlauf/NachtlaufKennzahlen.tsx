@@ -29,9 +29,14 @@ export function NachtlaufKennzahlen({
    * Seite die betroffenen Kennzahlen gar nicht erst übergeben.
    */
   hinweis,
-}: Readonly<{ kennzahlen: readonly NachtlaufKennzahl[]; hinweis?: string }>) {
+  /**
+   * Kennung der Reihe. Die Vorgabe trägt die Reihe des Laufs; der Verbrauchs-Bereich (#941) führt
+   * eigene Reihen auf derselben Seite und braucht deshalb eine andere.
+   */
+  testId = 'nachtlauf-kennzahlen',
+}: Readonly<{ kennzahlen: readonly NachtlaufKennzahl[]; hinweis?: string; testId?: string }>) {
   return (
-    <Box data-testid="nachtlauf-kennzahlen">
+    <Box data-testid={testId}>
       <Box
         sx={{
           display: 'flex',

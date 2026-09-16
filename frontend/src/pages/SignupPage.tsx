@@ -7,7 +7,7 @@ import TextField from '@mui/material/TextField'
 import { useState } from 'react'
 import { Link as RouterLink, useNavigate } from 'react-router-dom'
 import { authApi } from '../api/auth'
-import { ApiError } from '../api/client'
+import { ApiError, apiErrorMessage } from '../api/client'
 import { AuthCard } from '../components/AuthCard'
 import { PasswordField } from '../components/PasswordField'
 
@@ -27,7 +27,11 @@ export function SignupPage() {
       await authApi.register(email, password, displayName)
       navigate('/verify')
     } catch (e) {
-      if (e instanceof ApiError && e.status === 409) {
+      if (e instanceof ApiError && e.status === 429) {
+        // Zählbremse vor dem 409-Zweig. Die Abweisung ist herkunftsbezogen und verrät nichts
+        // darüber, ob die E-Mail bereits registriert ist.
+        setError(apiErrorMessage(e, 'Zu viele Versuche. Bitte später erneut versuchen.'))
+      } else if (e instanceof ApiError && e.status === 409) {
         setError('Diese E-Mail-Adresse ist bereits registriert.')
       } else {
         setError('Registrierung fehlgeschlagen. Bitte Eingaben prüfen (Passwort mind. 8 Zeichen).')

@@ -1,9 +1,11 @@
 package org.mwolff.manban.auth;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import jakarta.servlet.http.Cookie;
 import java.time.Instant;
 import org.junit.jupiter.api.Test;
 import org.mwolff.manban.AbstractIntegrationTest;
@@ -22,6 +24,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Primary;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
 
 /** End-to-End-Test des Passwort-Resets gegen echtes Postgres. */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK)
@@ -98,6 +101,84 @@ class PasswordResetIT extends AbstractIntegrationTest {
                 .contentType("application/json")
                 .content("{\"token\":\"%s\",\"newPassword\":\"%s\"}".formatted(token, newPassword)))
         .andExpect(status().is(expectedStatus));
+  }
+
+  /** Meldet an und gibt das Session-Cookie der Antwort zurück. */
+  private Cookie loginForCookie(String email, String password) throws Exception {
+    MvcResult login =
+        mvc.perform(
+                post("/api/auth/login")
+                    .contentType("application/json")
+                    .content("{\"email\":\"%s\",\"password\":\"%s\"}".formatted(email, password)))
+            .andExpect(status().isOk())
+            .andReturn();
+
+    Cookie session = login.getResponse().getCookie("manban_session");
+    assertThat(session).isNotNull();
+    return session;
+  }
+
+  private void me(Cookie session, int expectedStatus) throws Exception {
+    mvc.perform(get("/api/me").cookie(session)).andExpect(status().is(expectedStatus));
+  }
+
+  /** AK 1 + AK 2: Der Reset beendet jede Sitzung des Kontos, auch die des auslösenden Geräts. */
+  @Test
+  void resetEndsEverySessionOfTheAccount() throws Exception {
+    String email = "reset-sessions@example.com";
+    createVerifiedUser(email);
+
+    Cookie phone = loginForCookie(email, OLD_PASSWORD);
+    Cookie laptop = loginForCookie(email, OLD_PASSWORD);
+    me(phone, 200);
+    me(laptop, 200);
+
+    forgot(email);
+    reset(mailer.lastToken(), NEW_PASSWORD, 204);
+
+    me(phone, 401);
+    me(laptop, 401);
+  }
+
+  /** AK 3: Das blosse Anfordern eines Resets beendet noch keine Sitzung. */
+  @Test
+  void forgotAloneKeepsSessionsAlive() throws Exception {
+    String email = "reset-forgot-only@example.com";
+    createVerifiedUser(email);
+
+    Cookie session = loginForCookie(email, OLD_PASSWORD);
+
+    forgot(email);
+
+    me(session, 200);
+  }
+
+  /** Nach dem Reset trägt die neue Anmeldung wieder eine gültige Sitzung. */
+  @Test
+  void loginAfterResetYieldsWorkingSession() throws Exception {
+    String email = "reset-relogin@example.com";
+    createVerifiedUser(email);
+
+    forgot(email);
+    reset(mailer.lastToken(), NEW_PASSWORD, 204);
+
+    me(loginForCookie(email, NEW_PASSWORD), 200);
+  }
+
+  /** Die Entwertung ist kontogebunden — fremde Sitzungen bleiben unberührt. */
+  @Test
+  void resetLeavesOtherAccountsSessionsAlive() throws Exception {
+    String owner = "reset-owner@example.com";
+    String bystander = "reset-bystander@example.com";
+    createVerifiedUser(owner);
+    createVerifiedUser(bystander);
+
+    Cookie bystanderSession = loginForCookie(bystander, OLD_PASSWORD);
+
+    forgot(owner);
+    reset(mailer.lastToken(), NEW_PASSWORD, 204);
+
+    me(bystanderSession, 200);
   }
 
   @Test

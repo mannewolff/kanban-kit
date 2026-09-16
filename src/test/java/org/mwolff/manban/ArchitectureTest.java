@@ -139,6 +139,34 @@ class ArchitectureTest {
               "auth darf das accesstoken-Modul nicht kennen (Wiring gehoert in die "
                   + "Composition-Root)");
 
+  // Der Ingest-Endpunkt (Issue #947) liest den KanbanPrincipal, um das Zielprojekt aus der
+  // Token-Bindung zu nehmen. Diese Kante bleibt auf nightrun.web begrenzt: Der Use-Case nimmt
+  // primitive Werte, damit Application und Domaene von nightrun das accesstoken-Modul nicht kennen.
+  static final ArchRule NIGHTRUN_APPLICATION_UND_DOMAIN_HAENGEN_NICHT_VON_ACCESSTOKEN_AB =
+      noClasses()
+          .that()
+          .resideInAnyPackage(
+              "org.mwolff.manban.nightrun.application..", "org.mwolff.manban.nightrun.domain..")
+          .should()
+          .dependOnClassesThat()
+          .resideInAPackage("org.mwolff.manban.accesstoken..")
+          .as(
+              "nightrun.application und nightrun.domain duerfen das accesstoken-Modul nicht kennen "
+                  + "(die Kante bleibt auf nightrun.web begrenzt)");
+
+  // Die Anlaeufe einer Karte (Issue #967) liest der Endpunkt im Modul nightrun, nicht in card.
+  // Die Regel schuetzt keine Kante, die #967 anlegt, sondern die des verworfenen Alternativdesigns:
+  // Laege der Endpunkt in card, zeigte card auf nightrun — und die Karte braucht die Laeufe fuer
+  // nichts anderes. Derselbe Zweck wie die Regel zwischen nightrun und accesstoken (#947).
+  static final ArchRule CARD_HAENGT_NICHT_VON_NIGHTRUN_AB =
+      noClasses()
+          .that()
+          .resideInAPackage("org.mwolff.manban.card..")
+          .should()
+          .dependOnClassesThat()
+          .resideInAPackage("org.mwolff.manban.nightrun..")
+          .as("card darf das nightrun-Modul nicht kennen (die Anlaeufe liest nightrun)");
+
   // --- Modul-Grenze: card-Fassade (Issue #458, Whitelist seit #470) ---------------------------
   // Das Kartenmodell und alles in card.application ausserhalb der Whitelist sind modulintern.
   // Fremde Module gehen ueber die fachliche Fassade (CardService/LabelService) — sonst haengt jede
@@ -162,7 +190,10 @@ class ArchitectureTest {
           "CardService",
           "LabelService",
           "CardBoardActivityEvent",
-          "CardsPurgedEvent");
+          "CardsPurgedEvent",
+          // EpicRef ist Vertrag (Issue #936): die Nachtlauf-Auswertung fragt je Kartennummer die
+          // Vorhaben ab, ohne card.domain zu beruehren — analog CardsPurgedEvent (Issue #503).
+          "EpicRef");
 
   // --- Modul-Grenze: board-Fassade (Issue #459, Whitelist seit #470) --------------------------
   // Board und Spalte sind modulintern. Fremde Module fragen die fachliche board.application-
@@ -295,6 +326,33 @@ class ArchitectureTest {
           .dependOnClassesThat()
           .resideInAPackage("org.mwolff.manban.outbox.domain..")
           .as("outbox.domain ist modulintern (Zugriff nur ueber die outbox.application-Fassade)");
+
+  // --- Modul-Grenze: ratelimit-Fassade (Issue #897, Plan #892 E16) ----------------------------
+  // Die Zaehlbremse ist Querschnitt: Der Filter fragt die Fassade (RateLimiter) und benennt den
+  // Vorgang (RateLimitedOperation). Alles andere — Speicher-Port, Adapter, Konfiguration — ist
+  // modulintern. Insbesondere RateLimitProperties: Konfiguration ist kein Vertragsbestandteil.
+  // Auch die Composition-Root ist nicht ausgenommen; baute sie den Filter mit den Properties
+  // selbst, waere die Grenze stillschweigend geoeffnet. Deshalb beantwortet RateLimiter.isEnabled()
+  // die einzige Frage, die ein Aufrufer an die Konfiguration haette.
+  static final ArchRule RATELIMIT_APPLICATION_IST_AUF_FASSADE_BEGRENZT =
+      fassadeIstAufWhitelistBegrenzt(
+          "ratelimit",
+          "nur ueber RateLimiter/RateLimitedOperation",
+          "RateLimiter",
+          "RateLimitedOperation");
+
+  // Gegenstueck zu OUTBOX_DOMAIN_IST_MODULINTERN: Die Zeitregeln der Sperre gehoeren der Bremse.
+  // Fremde Module sehen weder Zaehlstand noch Sperrzeitpunkt.
+  static final ArchRule RATELIMIT_DOMAIN_IST_MODULINTERN =
+      noClasses()
+          .that()
+          .resideOutsideOfPackage("org.mwolff.manban.ratelimit..")
+          .should()
+          .dependOnClassesThat()
+          .resideInAPackage("org.mwolff.manban.ratelimit.domain..")
+          .as(
+              "ratelimit.domain ist modulintern (Zugriff nur ueber die "
+                  + "ratelimit.application-Fassade)");
 
   // --- Aufrufer-Whitelist der rechtepruefungsfreien Schreib-Ports (Issue #463) -----------------
   // UserDisplayNameWriter und NextCardNumberWriter pruefen bewusst keine Rechte; die Autorisierung
@@ -438,6 +496,16 @@ class ArchitectureTest {
   }
 
   @Test
+  void nightrunApplicationUndDomainHaengenNichtVonAccesstokenAb() {
+    NIGHTRUN_APPLICATION_UND_DOMAIN_HAENGEN_NICHT_VON_ACCESSTOKEN_AB.check(PRODUKTIONSKLASSEN);
+  }
+
+  @Test
+  void cardHaengtNichtVonNightrunAb() {
+    CARD_HAENGT_NICHT_VON_NIGHTRUN_AB.check(PRODUKTIONSKLASSEN);
+  }
+
+  @Test
   void cardDomainIstModulintern() {
     CARD_DOMAIN_IST_MODULINTERN.check(PRODUKTIONSKLASSEN);
   }
@@ -490,6 +558,16 @@ class ArchitectureTest {
   @Test
   void outboxDomainIstModulintern() {
     OUTBOX_DOMAIN_IST_MODULINTERN.check(PRODUKTIONSKLASSEN);
+  }
+
+  @Test
+  void ratelimitApplicationIstAufFassadeBegrenzt() {
+    RATELIMIT_APPLICATION_IST_AUF_FASSADE_BEGRENZT.check(PRODUKTIONSKLASSEN);
+  }
+
+  @Test
+  void ratelimitDomainIstModulintern() {
+    RATELIMIT_DOMAIN_IST_MODULINTERN.check(PRODUKTIONSKLASSEN);
   }
 
   @Test

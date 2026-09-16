@@ -3,8 +3,10 @@ package org.mwolff.manban.card.application;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -692,6 +694,61 @@ public class CardService {
                   anforderungsNummer(epic, nachId));
             })
         .toList();
+  }
+
+  /**
+   * Zu jeder genannten Kartennummer des Projekts die Vorhaben, zu denen ihre Karte gehört (Issue
+   * #936, Plan #933 E10).
+   *
+   * <p>Die Zugehörigkeit ist die aus {@link EpicMembership} — {@code parentId} plus Herkunftskette
+   * — und kein eigener Begriff. Gerechnet wird je Board, wie überall, wo {@code EpicMembership}
+   * gilt, und über alle Boards des Projekts vereinigt: Kartennummern sind projektweit eindeutig,
+   * und der Aufrufer kennt nur Nummern.
+   *
+   * <p><b>Eine Karte kann zu mehreren Vorhaben gehören</b> (Plan #631, E10) und steht dann mit
+   * mehreren {@link EpicRef} im Ergebnis. Wer über Vorhaben summiert, zählt ihre Werte deshalb
+   * mehrfach — die Summen der Vorhaben dürfen sich überschneiden und ergeben zusammen nicht die
+   * Gesamtsumme.
+   *
+   * <p>Eine Nummer ohne Karte oder ohne Vorhaben fehlt im Ergebnis; die Methode wirft dafür nicht.
+   * Eine leere Nummernmenge fragt die Datenbank nicht.
+   *
+   * <p>Ohne Rechteprüfung wie {@link #requireProjectId}: Die Methode ist Vertrag für fremde Module,
+   * die ihre eigene Prüfung bereits vorgenommen haben — sie liefert keine Karteninhalte, nur die
+   * Zuordnung zu den Nummern, die der Aufrufer schon kennt.
+   *
+   * @return je Kartennummer die Menge ihrer Vorhaben; Nummern ohne Vorhaben fehlen
+   */
+  @Transactional(readOnly = true)
+  public Map<Integer, Set<EpicRef>> epicsByCardNumber(
+      long projectId, Collection<Integer> cardNumbers) {
+    if (cardNumbers.isEmpty()) {
+      return Map.of();
+    }
+    Set<Integer> gesucht = Set.copyOf(cardNumbers);
+    Map<Long, List<Card>> jeBoard =
+        cards.findByProjectId(projectId).stream()
+            .filter(c -> c.boardId() != null)
+            .collect(Collectors.groupingBy(Card::requireBoardId));
+
+    Map<Integer, Set<EpicRef>> ergebnis = new HashMap<>();
+    for (List<Card> boardKarten : jeBoard.values()) {
+      Map<Long, Card> nachId =
+          boardKarten.stream().collect(Collectors.toMap(Card::requireId, Function.identity()));
+      EpicMembership.compute(boardKarten)
+          .forEach(
+              (epicId, mitglieder) -> {
+                // Die Schluessel von compute sind die Vorhaben genau dieser Kartenmenge.
+                Card epic = Objects.requireNonNull(nachId.get(epicId));
+                EpicRef ref = new EpicRef(epicId, epic.shortcode(), epic.title());
+                mitglieder.stream()
+                    .map(Card::requireNumber)
+                    .filter(gesucht::contains)
+                    .forEach(n -> ergebnis.computeIfAbsent(n, k -> new HashSet<>()).add(ref));
+              });
+    }
+    return ergebnis.entrySet().stream()
+        .collect(Collectors.toUnmodifiableMap(Map.Entry::getKey, e -> Set.copyOf(e.getValue())));
   }
 
   @Transactional

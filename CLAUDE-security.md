@@ -25,13 +25,14 @@ Verbindliche Sicherheits-Regeln für Spring-Boot-Backend und React-Frontend. Die
 
 ### Session-Cookie — Sicherheitsmodell
 
-**Ist-Stand:** Nach dem Login setzt das Backend ein **signiertes, zustandsloses Session-Cookie** ([`SessionCookieManager`](src/main/java/org/mwolff/manban/auth/infrastructure/security/SessionCookieManager.java), [`SignedSessionTokens`](src/main/java/org/mwolff/manban/auth/infrastructure/security/SignedSessionTokens.java)). Der Cookie-Wert ist per HMAC (`AuthProperties.sessionSecret`) signiert; es gibt **keine** Server-Session und **kein** Token im JS-zugänglichen Storage. Ein externer Identity-Provider (Keycloak/OIDC) wird bewusst nicht eingesetzt.
+**Ist-Stand:** Nach dem Login setzt das Backend ein **signiertes, zustandsloses Session-Cookie** ([`SessionCookieManager`](src/main/java/org/mwolff/manban/auth/web/security/SessionCookieManager.java), [`SignedSessionTokens`](src/main/java/org/mwolff/manban/auth/infrastructure/security/SignedSessionTokens.java)). Der Cookie-Wert ist per HMAC (`AuthProperties.sessionSecret`) signiert; es gibt **keine** Server-Session und **kein** Token im JS-zugänglichen Storage. Ein externer Identity-Provider (Keycloak/OIDC) wird bewusst nicht eingesetzt.
 
 **Eigenschaften des Cookies:**
 - `HttpOnly` — per JavaScript nicht lesbar; ein XSS kann das Session-Token nicht exfiltrieren.
 - `SameSite=Strict` — wird nie cross-site gesendet; damit ist der zustandslose Cookie-Ansatz CSRF-resistent, ein CSRF-Synchronizer-Token entfällt bewusst (siehe [`SecurityConfig`](src/main/java/org/mwolff/manban/auth/infrastructure/security/SecurityConfig.java)).
 - `Secure` (Default `true` über `AuthProperties.cookieSecure`; TLS terminiert der Caddy-Reverse-Proxy) — nur über HTTPS.
 - Begrenzte Gültigkeit über `AuthProperties.sessionTtl`; abgelaufene/ungültige Cookies werden vom `SessionAuthenticationFilter` mit `401` abgewiesen.
+- **Sitzungs-Generation** — das Token trägt die kontogebundene Generation seiner Ausstellung ([`SessionGenerations`](src/main/java/org/mwolff/manban/auth/application/SessionGenerations.java)); weicht sie von der aktuellen Generation des Kontos ab, gilt das Token nicht mehr. Ein **Passwort-Reset zählt die Generation hoch und beendet damit alle Sitzungen des Kontos** — auf jedem Gerät, auch dem auslösenden. Wer sich mit dem alten Passwort angemeldet hatte, verliert den Zugang in dem Moment, in dem der rechtmäßige Besitzer ein neues Passwort vergibt. Das bloße Anfordern eines Resets beendet noch nichts; erst das Einlösen des Einmal-Tokens zählt hoch. **Projektgebundene Ingest-Access-Tokens bleiben davon unberührt** — sie hängen nicht an einer Anmeldesitzung (siehe *Access-Tokens (Ingest)* unten).
 
 **Passwörter:** ausschließlich über Spring Securitys `PasswordEncoder` (**Argon2id**, `Argon2PasswordEncoder.defaultsForSpringSecurity_v5_8()`, siehe [`AuthConfig`](src/main/java/org/mwolff/manban/auth/infrastructure/AuthConfig.java)) gehasht — nie im Klartext gespeichert, übertragen oder geloggt.
 

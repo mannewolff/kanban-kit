@@ -66,6 +66,24 @@ public class DoneRetentionSettingService {
     return current();
   }
 
+  /**
+   * Derselbe Stand wie {@link #currentFor(long)}, aber <b>ohne Rechteprüfung</b> — für das
+   * Startprotokoll (Issue #908).
+   *
+   * <p>Rechtefrei, weil der Startpfad keinen Actor hat: Beim Hochfahren ist niemand angemeldet, und
+   * {@code requireAdmin} bräuchte eine Benutzer-Id, die es dort nicht gibt. Der Wert trägt auch
+   * nichts Schützenswertes — er ist eine Betriebseinstellung ohne Personenbezug, und dieselbe Zahl
+   * steht als Vorgabe in {@code docs/betrieb.md}.
+   *
+   * <p><b>Diese Methode darf an keinen Web-Endpunkt gebunden werden.</b> Über HTTP gibt es immer
+   * einen Actor, und dort gilt {@link #currentFor(long)} mit seiner Prüfung. Ihr einziger Aufrufer
+   * ist der Beitrag zum Startprotokoll; ein zweiter wäre erklärungsbedürftig.
+   */
+  @Transactional(readOnly = true)
+  public RetentionSettings retentionForStartup() {
+    return current();
+  }
+
   private RetentionSettings current() {
     return new RetentionSettings(computeEffective(), override().orElse(null));
   }

@@ -1,4 +1,6 @@
-import { ApiError } from './client'
+// Diese vier Aufrufe laufen bewusst an `apiFetch` vorbei (Multipart-Upload, Blob-Abruf) und
+// melden eine `401` deshalb selbst, damit auch hier die Sitzungsregel greift.
+import { ApiError, notifyUnauthorized } from './client'
 
 export interface Attachment {
   id: number
@@ -11,7 +13,10 @@ export interface Attachment {
 
 async function listAttachments(cardId: number): Promise<Attachment[]> {
   const res = await fetch(`/api/cards/${cardId}/attachments`, { credentials: 'include' })
-  if (!res.ok) throw new ApiError(res.status, res.statusText)
+  if (!res.ok) {
+    notifyUnauthorized(res.status)
+    throw new ApiError(res.status, res.statusText)
+  }
   return res.json()
 }
 
@@ -23,19 +28,28 @@ async function upload(cardId: number, file: File): Promise<Attachment> {
     credentials: 'include',
     body: form, // KEIN Content-Type setzen -> Browser setzt multipart-Boundary
   })
-  if (!res.ok) throw new ApiError(res.status, res.statusText)
+  if (!res.ok) {
+    notifyUnauthorized(res.status)
+    throw new ApiError(res.status, res.statusText)
+  }
   return res.json()
 }
 
 async function remove(id: number): Promise<void> {
   const res = await fetch(`/api/attachments/${id}`, { method: 'DELETE', credentials: 'include' })
-  if (!res.ok) throw new ApiError(res.status, res.statusText)
+  if (!res.ok) {
+    notifyUnauthorized(res.status)
+    throw new ApiError(res.status, res.statusText)
+  }
 }
 
 /** Lädt den Blob (für die Inline-Vorschau; der Download-Endpunkt liefert Content-Disposition: attachment). */
 async function fetchBlob(id: number): Promise<Blob> {
   const res = await fetch(`/api/attachments/${id}`, { credentials: 'include' })
-  if (!res.ok) throw new ApiError(res.status, res.statusText)
+  if (!res.ok) {
+    notifyUnauthorized(res.status)
+    throw new ApiError(res.status, res.statusText)
+  }
   return res.blob()
 }
 

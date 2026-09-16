@@ -1,6 +1,7 @@
 package org.mwolff.manban;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.Instant;
 import java.util.List;
@@ -27,7 +28,8 @@ import org.springframework.transaction.PlatformTransactionManager;
  * Nebenläufigkeit halten (Issue #498):
  *
  * <ul>
- *   <li>Die Plattform behält mindestens einen Admin.
+ *   <li>Die Plattform behält mindestens einen nicht gesperrten Admin — gegen Herabstufen wie gegen
+ *       Sperren (Issue #881).
  *   <li>Jedes Projekt behält mindestens einen OWNER — über alle rollenändernden Pfade hinweg.
  * </ul>
  *
@@ -36,8 +38,8 @@ import org.springframework.transaction.PlatformTransactionManager;
  * noch zwei — und danach gäbe es keinen mehr. {@link TransactionRace} erzwingt genau diese Lage
  * deterministisch: Der zweite Aufruf muss nachweislich auf einer Sperre warten, sonst schlägt der
  * Lauf fehl. Damit ist jeder Test hier zugleich die Gegenprobe — ohne die Sperre in {@code
- * lockPlatformAdminIds} bzw. {@code lockOwnerUserIds} liefe der zweite Aufruf ungehindert durch und
- * der Test bräche mit „wartet auf keiner Sperre" ab.
+ * lockActivePlatformAdminIds} bzw. {@code lockOwnerUserIds} liefe der zweite Aufruf ungehindert
+ * durch und der Test bräche mit „wartet auf keiner Sperre" ab.
  *
  * <p>Die Kontext-Konfiguration ist bewusst identisch mit den übrigen {@code
  * WebEnvironment.NONE}-ITs (kein {@code @TestConfiguration}, kein Mock-Bean): Ein eigener
@@ -76,6 +78,71 @@ class RoleInvariantConcurrencyIT extends AbstractIntegrationTest {
         .singleElement()
         .extracting(AppUser::requireId)
         .isEqualTo(adminA);
+  }
+
+  @Test
+  void soleActivePlatformAdmin_cannotBeDemoted_whenOnlyDisabledAdminsRemain() {
+    // Given: ein aktiver und ein gesperrter Administrator. Der gesperrte trägt zwar die Rolle,
+    // hält die Instanz aber nicht handlungsfähig — er darf die gesperrte Menge nicht auffüllen.
+    long activeAdmin = saveUser("disabled-guard-active@example.com", PlatformRole.ADMIN);
+    users.save(
+        new AppUser(
+                null, "disabled-guard-locked@example.com", "hash", "U", true, PlatformRole.ADMIN)
+            .withDisabledAt(Instant.now()));
+
+    // When / Then: bewusst ohne Rennen als gewöhnlicher Aufruf — geprüft wird allein die
+    // Bedingung der Sperr-Abfrage. Über TransactionRace liefe der Fall nicht: Dessen run verlangt,
+    // dass der zweite Aufruf nachweislich auf einer Sperre wartet.
+    assertThatThrownBy(
+            () -> adminService.changePlatformRole(activeAdmin, activeAdmin, PlatformRole.USER))
+        .isInstanceOf(LastAdminException.class);
+    assertThat(users.findById(activeAdmin).orElseThrow().platformRole())
+        .isEqualTo(PlatformRole.ADMIN);
+  }
+
+  @Test
+  void lastTwoActivePlatformAdmins_cannotDisableEachOtherIntoNothingness() throws Exception {
+    // Given: genau zwei aktive Plattform-Admins.
+    long adminA = saveUser("race-disable-a@example.com", PlatformRole.ADMIN);
+    long adminB = saveUser("race-disable-b@example.com", PlatformRole.ADMIN);
+
+    // When: beide sperren einander gleichzeitig.
+    TransactionRace.Result race =
+        race(
+            () -> adminService.disable(adminA, adminB), () -> adminService.disable(adminB, adminA));
+
+    // Then: der zweite Aufruf sieht die bereits erfolgte Sperre und lehnt ab.
+    assertThat(race.firstFailure()).isNull();
+    assertThat(race.secondFailure()).isInstanceOf(LastAdminException.class);
+
+    // Und er hat nichts verändert — Rolle wie Sperrzustand frisch aus der Datenbank gelesen.
+    AppUser rejectedTarget = users.findById(adminA).orElseThrow();
+    assertThat(rejectedTarget.platformRole()).isEqualTo(PlatformRole.ADMIN);
+    assertThat(rejectedTarget.disabled()).isFalse();
+    assertThat(users.findById(adminB).orElseThrow().disabled()).isTrue();
+  }
+
+  @Test
+  void disablingOneAdmin_whileDemotingTheOther_leavesAnActiveAdmin() throws Exception {
+    // Given: zwei aktive Plattform-Admins. Deckt das Zusammenspiel zweier verschiedener Pfade ab
+    // (disable gegen changePlatformRole) — beide greifen auf dieselbe Menge zu.
+    long adminA = saveUser("race-mixed-a@example.com", PlatformRole.ADMIN);
+    long adminB = saveUser("race-mixed-b@example.com", PlatformRole.ADMIN);
+
+    // When: A sperrt B, während B gleichzeitig A herabstuft.
+    TransactionRace.Result race =
+        race(
+            () -> adminService.disable(adminA, adminB),
+            () -> adminService.changePlatformRole(adminB, adminA, PlatformRole.USER));
+
+    // Then
+    assertThat(race.firstFailure()).isNull();
+    assertThat(race.secondFailure()).isInstanceOf(LastAdminException.class);
+
+    // Der abgelehnte Vorgang hat nichts verändert.
+    AppUser rejectedTarget = users.findById(adminA).orElseThrow();
+    assertThat(rejectedTarget.platformRole()).isEqualTo(PlatformRole.ADMIN);
+    assertThat(rejectedTarget.disabled()).isFalse();
   }
 
   @Test

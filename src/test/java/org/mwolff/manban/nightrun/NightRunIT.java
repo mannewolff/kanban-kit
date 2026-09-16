@@ -1,5 +1,6 @@
 package org.mwolff.manban.nightrun;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -7,19 +8,28 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.Cookie;
+import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.mwolff.manban.AbstractIntegrationTest;
 import org.mwolff.manban.auth.application.AppUserRepository;
 import org.mwolff.manban.auth.domain.AppUser;
 import org.mwolff.manban.auth.domain.PlatformRole;
+import org.mwolff.manban.nightrun.application.NightRunRepository;
+import org.mwolff.manban.nightrun.domain.NightRun;
+import org.mwolff.manban.nightrun.domain.NightRunItem;
 import org.mwolff.manban.nightrun.domain.NightRunLimits;
+import org.mwolff.manban.nightrun.domain.NightRunMode;
+import org.mwolff.manban.nightrun.domain.NightRunOrigin;
+import org.mwolff.manban.nightrun.domain.NightRunUsage;
 import org.mwolff.manban.project.application.ProjectMembershipRepository;
 import org.mwolff.manban.project.domain.ProjectMembership;
 import org.mwolff.manban.project.domain.ProjectRole;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
@@ -46,6 +56,8 @@ class NightRunIT extends AbstractIntegrationTest {
   @Autowired private ProjectMembershipRepository memberships;
   @Autowired private PasswordEncoder passwordEncoder;
   @Autowired private ObjectMapper json;
+  @Autowired private NightRunRepository runs;
+  @Autowired private JdbcTemplate jdbc;
 
   @Test
   void submit_reportsKnownRunAsExisting_andCreatesTheNewOne_inRequestOrder() throws Exception {
@@ -258,11 +270,211 @@ class NightRunIT extends AbstractIntegrationTest {
         .andExpect(status().isForbidden());
     mvc.perform(get(path(projectId) + "/error-class-counts").cookie(stranger))
         .andExpect(status().isNotFound());
+    // Die Anlaeufe einer Karte (Issue #967) stehen in derselben Matrix.
+    mvc.perform(get(path(projectId) + "/items").param("cardNumber", "721").cookie(viewer))
+        .andExpect(status().isForbidden());
+    mvc.perform(get(path(projectId) + "/items").param("cardNumber", "721").cookie(stranger))
+        .andExpect(status().isNotFound());
+    mvc.perform(get(path(projectId) + "/items").param("cardNumber", "721").cookie(owner))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.length()").value(0));
 
     // Der Owner darf, und keine der abgewiesenen Anfragen hat etwas hinterlassen.
     mvc.perform(get(path(projectId)).cookie(owner))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.length()").value(0));
+  }
+
+  /**
+   * Der Kostenwert des hochgeladenen Protokolls kommt mit — je Lauf und je Arbeitspaket (Issue
+   * #948). Der Parser kennt ihn seit Issue #773; bis hierher ließ ihn die Einlieferung fallen.
+   *
+   * <p>Verglichen wird mit {@code compareTo}: Die Spalte ist {@code numeric(12,6)}, und der
+   * gelesene Wert trägt darum sechs Nachkommastellen. {@code equals} auf {@code BigDecimal}
+   * unterscheidet 8.03 von 8.030000 — hier wäre das ein Fehlschlag ohne Fehler.
+   */
+  @Test
+  void submit_carriesTheReportedCost_toRunAndItem() throws Exception {
+    Cookie owner = session("nr-cost-owner@example.com", PlatformRole.USER);
+    long projectId = projectOf("nr-cost-owner@example.com", "nr-cost-admin@example.com");
+
+    submit(owner, projectId, runMitKosten(ERSTER, "25.983293", itemMitKosten(791, "11.5228115")))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$[0].created").value(true));
+
+    NightRun lauf = einzigerLauf(projectId);
+    assertThat(lauf.usage()).isNotNull();
+    assertThat(lauf.usage().costUsd())
+        .isNotNull()
+        .usingComparator(BigDecimal::compareTo)
+        .isEqualTo(new BigDecimal("25.983293"));
+    // Die drei Mengen bleiben dem Upload-Weg fremd: Der Browser misst sie nicht.
+    assertThat(lauf.usage().inputTokens()).isNull();
+    assertThat(lauf.usage().outputTokens()).isNull();
+    assertThat(lauf.usage().cachedInputTokens()).isNull();
+
+    // Gemeldet waren 11.5228115; die Spalte fuehrt sechs Nachkommastellen und rundet kaufmaennisch.
+    NightRunItem paket = einzigesPaket(lauf);
+    assertThat(paket.usage()).isNotNull();
+    assertThat(paket.usage().costUsd())
+        .isNotNull()
+        .usingComparator(BigDecimal::compareTo)
+        .isEqualTo(new BigDecimal("11.522812"));
+  }
+
+  /** Ohne gemeldeten Kostenwert bleibt jede Verbrauchsspalte {@code NULL} — nicht 0. */
+  @Test
+  void submit_withoutUsage_leavesEveryUsageColumnNull() throws Exception {
+    Cookie owner = session("nr-nocost-owner@example.com", PlatformRole.USER);
+    long projectId = projectOf("nr-nocost-owner@example.com", "nr-nocost-admin@example.com");
+
+    submit(owner, projectId, run(ERSTER, item(721, "Persistenz", "GREEN", null)))
+        .andExpect(status().isOk());
+
+    NightRun lauf = einzigerLauf(projectId);
+    assertThat(lauf.usage()).isNull();
+    assertThat(einzigesPaket(lauf).usage()).isNull();
+  }
+
+  /**
+   * Ein per Token gemeldeter Lauf ist reicher als jedes hochgeladene Protokoll — er trägt die
+   * Token-Herkunft, die Vollständigkeit und die drei Mengen. Der Upload-Weg darf ihn nicht plätten:
+   * {@code insertIfAbsent} lässt ihn stehen und meldet {@code created: false}.
+   */
+  @Test
+  void submit_doesNotFlattenRunReportedByToken() throws Exception {
+    Cookie owner = session("nr-reich-owner@example.com", PlatformRole.USER);
+    long projectId = projectOf("nr-reich-owner@example.com", "nr-reich-admin@example.com");
+    NightRunUsage gemeldet =
+        new NightRunUsage(new BigDecimal("8.032575"), 148L, 62_411L, 8_883_160L);
+    runs.upsert(
+        new NightRun(
+            null,
+            projectId,
+            Instant.parse(ERSTER),
+            NightRunMode.CHAIN,
+            1000L,
+            1,
+            0,
+            0,
+            null,
+            Instant.now(),
+            NightRunOrigin.TOKEN,
+            "nachtlauf",
+            true,
+            Instant.now(),
+            gemeldet),
+        List.of());
+
+    submit(owner, projectId, runMitKosten(ERSTER, "25.983293", itemMitKosten(791, "11.5228115")))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$[0].created").value(false));
+
+    NightRun lauf = einzigerLauf(projectId);
+    assertThat(lauf.origin()).isEqualTo(NightRunOrigin.TOKEN);
+    assertThat(lauf.complete()).isTrue();
+    assertThat(lauf.usage().inputTokens()).isEqualTo(148L);
+    assertThat(runs.findItemsByRunIds(List.of(lauf.id()))).isEmpty();
+  }
+
+  /**
+   * Die beiden Endpunkte der Verbrauchs-Auswertung im vollen Kontext (Issue #939): dieselbe
+   * Rechte-Matrix wie die Laufliste, und die 400-Faelle kommen auch durch den {@code
+   * GlobalExceptionHandler} als 400 und nicht als 500 heraus.
+   */
+  @Test
+  void usageEndpoints_followTheOwnerMatrix_andRejectOffsetZonesAndStepsBack() throws Exception {
+    Cookie owner = session("nr-usage-owner@example.com", PlatformRole.USER);
+    Cookie viewer = session("nr-usage-viewer@example.com", PlatformRole.USER);
+    Cookie stranger = session("nr-usage-stranger@example.com", PlatformRole.USER);
+    Cookie admin = session("nr-usage-platform@example.com", PlatformRole.ADMIN);
+    long projectId = projectOf("nr-usage-owner@example.com", "nr-usage-admin@example.com");
+    memberships.save(
+        new ProjectMembership(
+            null,
+            projectId,
+            userId("nr-usage-viewer@example.com"),
+            ProjectRole.VIEWER,
+            Instant.now()));
+    String nacht = "/api/projects/" + projectId + "/night-run-usage/night";
+    String zeitraum = "/api/projects/" + projectId + "/night-run-usage";
+
+    for (Cookie wer : List.of(owner, admin)) {
+      mvc.perform(get(nacht).param("date", "2026-09-15").param("zone", "Europe/Berlin").cookie(wer))
+          .andExpect(status().isOk())
+          .andExpect(jsonPath("$.runCount").value(0));
+      mvc.perform(
+              get(zeitraum)
+                  .param("type", "MONTH")
+                  .param("stepsBack", "0")
+                  .param("zone", "Europe/Berlin")
+                  .cookie(wer))
+          .andExpect(status().isOk())
+          .andExpect(jsonPath("$.current.noRuns").value(true));
+    }
+    mvc.perform(get(nacht).param("date", "2026-09-15").param("zone", "UTC").cookie(viewer))
+        .andExpect(status().isForbidden());
+    mvc.perform(
+            get(zeitraum)
+                .param("type", "DAY")
+                .param("stepsBack", "0")
+                .param("zone", "UTC")
+                .cookie(stranger))
+        .andExpect(status().isNotFound());
+
+    mvc.perform(get(nacht).param("date", "2026-09-15").param("zone", "+05:30").cookie(owner))
+        .andExpect(status().isBadRequest());
+    mvc.perform(
+            get(zeitraum)
+                .param("type", "DAY")
+                .param("stepsBack", "0")
+                .param("zone", "Nirgendwo/Nirgends")
+                .cookie(owner))
+        .andExpect(status().isBadRequest());
+    mvc.perform(
+            get(zeitraum)
+                .param("type", "DAY")
+                .param("stepsBack", "367")
+                .param("zone", "UTC")
+                .cookie(owner))
+        .andExpect(status().isBadRequest());
+    mvc.perform(
+            get(zeitraum)
+                .param("type", "QUARTER")
+                .param("stepsBack", "0")
+                .param("zone", "UTC")
+                .cookie(owner))
+        .andExpect(status().isBadRequest());
+  }
+
+  /**
+   * Ein verdraengter Lauf, erneut hochgeladen, legt seine Pakete nicht ein zweites Mal an (Issue
+   * #965). Ohne die Bereinigung stuende die Karte zweimal da: {@code ON CONFLICT} kennt nur den
+   * Lauf-Kopf, und der war fort.
+   */
+  @Test
+  void submit_nachVerdraengungLegtDerselbeLaufJedeKarteGenauEinmalAn() throws Exception {
+    Cookie owner = session("nr-wdh-owner@example.com", PlatformRole.USER);
+    long projectId = projectOf("nr-wdh-owner@example.com", "nr-wdh-admin@example.com");
+    String lauf = run(ERSTER, item(721, "Persistenz", "GREEN", null));
+
+    submit(owner, projectId, lauf).andExpect(status().isOk());
+    jdbc.update("DELETE FROM night_run WHERE project_id = ?", projectId);
+    submit(owner, projectId, lauf)
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$[0].created").value(true));
+
+    assertThat(paketeDerKarte(projectId, 721)).isEqualTo(1);
+  }
+
+  private long paketeDerKarte(long projectId, int cardNumber) {
+    Long anzahl =
+        jdbc.queryForObject(
+            "SELECT count(*) FROM night_run_item WHERE project_id = ? AND card_number = ?",
+            Long.class,
+            projectId,
+            cardNumber);
+    return anzahl == null ? 0L : anzahl;
   }
 
   private static String path(long projectId) {
@@ -289,6 +501,32 @@ class NightRunIT extends AbstractIntegrationTest {
     return """
         {"cardNumber":%d,"title":"%s","state":"%s","errorClass":%s,"excerpt":"Auszug"}"""
         .formatted(cardNumber, title, state, klasse);
+  }
+
+  private static String runMitKosten(String startedAt, String kosten, String items) {
+    return """
+        {"startedAt":"%s","mode":"CHAIN","durationMs":1234,"processedCount":1,
+         "skippedCount":0,"unparsedCount":0,"usage":{"costUsd":%s},"items":[%s]}"""
+        .formatted(startedAt, kosten, items);
+  }
+
+  private static String itemMitKosten(int cardNumber, String kosten) {
+    return """
+        {"cardNumber":%d,"title":"Paket","state":"GREEN","excerpt":"Auszug",
+         "usage":{"costUsd":%s}}"""
+        .formatted(cardNumber, kosten);
+  }
+
+  private NightRun einzigerLauf(long projectId) {
+    List<NightRun> gefunden = runs.findByProjectOrderByStartedAtDesc(projectId);
+    assertThat(gefunden).hasSize(1);
+    return gefunden.getFirst();
+  }
+
+  private NightRunItem einzigesPaket(NightRun lauf) {
+    List<NightRunItem> pakete = runs.findItemsByRunIds(List.of(lauf.id()));
+    assertThat(pakete).hasSize(1);
+    return pakete.getFirst();
   }
 
   private long projectOf(String ownerEmail, String adminEmail) throws Exception {

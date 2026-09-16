@@ -1,12 +1,20 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { authApi } from '../api/auth'
+import { notifyUnauthorized, setUnauthorizedHandler } from '../api/client'
 import { AuthProvider, useAuth } from './AuthContext'
 
 vi.mock('../api/auth', () => ({
   authApi: { me: vi.fn(), login: vi.fn(), logout: vi.fn() },
 }))
+
+// Nur `setUnauthorizedHandler` wird umhüllt, damit das Abmelden beim Unmount beobachtbar ist;
+// der Handler-Zustand bleibt der des echten Moduls, das `notifyUnauthorized` mitbenutzt.
+vi.mock('../api/client', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../api/client')>()
+  return { ...actual, setUnauthorizedHandler: vi.fn(actual.setUnauthorizedHandler) }
+})
 
 const mockedApi = authApi as unknown as {
   me: ReturnType<typeof vi.fn>
@@ -74,6 +82,27 @@ describe('AuthContext', () => {
     await userEvent.click(screen.getByRole('button', { name: 'logout' }))
     expect(mockedApi.logout).toHaveBeenCalled()
     await waitFor(() => expect(screen.getByTestId('user')).toHaveTextContent('none'))
+  })
+
+  it('setzt den Nutzer auf null, wenn ein API-Aufruf mit 401 antwortet', async () => {
+    mockedApi.me.mockResolvedValue(meFixture)
+    renderProbe()
+    await waitFor(() => expect(screen.getByTestId('user')).toHaveTextContent('a@b.de'))
+
+    act(() => notifyUnauthorized(401))
+
+    await waitFor(() => expect(screen.getByTestId('user')).toHaveTextContent('none'))
+  })
+
+  it('meldet den Haken beim Unmount wieder ab', async () => {
+    mockedApi.me.mockResolvedValue(meFixture)
+    const { unmount } = renderProbe()
+    await waitFor(() => expect(screen.getByTestId('user')).toHaveTextContent('a@b.de'))
+
+    unmount()
+
+    expect(vi.mocked(setUnauthorizedHandler)).toHaveBeenLastCalledWith(null)
+    expect(() => notifyUnauthorized(401)).not.toThrow()
   })
 
   describe('useAuth außerhalb von AuthProvider', () => {

@@ -66,4 +66,12 @@ describe('SignupPage', () => {
     await submitSignup()
     expect(await screen.findByText(/Registrierung fehlgeschlagen/)).toBeInTheDocument()
   })
+
+  it('zeigt bei 429 die Abweisung der Zaehlbremse', async () => {
+    mockedApi.register.mockRejectedValue(
+      new ApiError(429, 'Too Many Requests', undefined, 'Zu viele Versuche. Bitte in 15 Minuten erneut versuchen.'),
+    )
+    await submitSignup()
+    expect(await screen.findByText('Zu viele Versuche. Bitte in 15 Minuten erneut versuchen.')).toBeInTheDocument()
+  })
 })

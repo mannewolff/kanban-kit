@@ -42,11 +42,37 @@ import org.testcontainers.utility.DockerImageName;
 // deterministisch selbst aufrufen, verlören dann sporadisch ihre Einträge. Bewusst per
 // @TestPropertySource statt @DynamicPropertySource: Nur hier überschreibt eine Subklassen-
 // Deklaration (SmtpMailIT testet den echten Worker-Pfad) verlässlich den Basiswert.
-@TestPropertySource(properties = "manban.outbox.enabled=false")
+// "Test" ist die Betriebsart, die AK 2 aus Issue #839 von der Startprüfung des Sitzungsschlüssels
+// ausnimmt (Issue #890): Der Testbetrieb signiert mit dem Standardschlüssel, und das ist hier
+// gewollt. Der Schalter steht in der gemeinsamen Basis, weil alle @SpringBootTest-Klassen von ihr
+// erben und Spring @TestPropertySource über die Klassenhierarchie zusammenführt (inheritProperties
+// ist per Vorgabe true) — die vier Subklassen mit eigener Deklaration (MailOutboxIT, OutboxIT,
+// SmtpMailIT, BootstrapIT) setzen andere Schlüssel, keine davon manban.dev-mode. Bewusst KEINE
+// src/test/resources/application.yml: Sie überlagerte die Produktions-application.yml global und
+// verschöbe damit auch jede künftige Vorgabe unbemerkt.
+// Zaehlbremse in IT-Kontexten grundsaetzlich aus (Issue #899): 45 IT-Klassen melden sich an, vier
+// registrieren, zwei fordern ein neues Passwort an — alle von derselben Herkunft 127.0.0.1. Ihr
+// Zaehlstand steht im Arbeitsspeicher und ueberlebt den TRUNCATE aus resetDatabase(), weil er gar
+// nicht in der Datenbank steht. Ohne diesen Schalter liefe die Suite nach wenigen Klassen in 429.
+// Wer die Bremse selbst prueft, setzt sie in seiner Testklasse wieder an.
+@TestPropertySource(
+    properties = {
+      "manban.outbox.enabled=false",
+      "manban.dev-mode=true",
+      "manban.ratelimit.enabled=false"
+    })
 public abstract class AbstractIntegrationTest {
 
+  // max_connections hochgesetzt (Issue #900): Spring cached Testkontexte ueber den ganzen Lauf,
+  // statt sie zu schliessen, und jeder haelt einen Hikari-Pool mit der Standardgroesse 10. Die 77
+  // IT-Klassen teilen sich zwar wenige Kontexte, aber jede Klasse mit eigenem @TestPropertySource
+  // macht einen neuen auf. Mit der Vorgabe 100 riss das Budget beim siebten Kontext, und zwar nicht
+  // bei ihm selbst, sondern bei allem, was danach lief: `FATAL: sorry, too many clients already`,
+  // ganze Klassen mit ERROR statt Failure. Bewusst hier und nicht als kleinerer Pool je Kontext —
+  // das aenderte das Verhalten der vier Nebenlaeufigkeits-ITs, die parallele Verbindungen brauchen.
   @ServiceConnection
-  static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16");
+  static final PostgreSQLContainer<?> POSTGRES =
+      new PostgreSQLContainer<>("postgres:16").withCommand("postgres", "-c", "max_connections=200");
 
   // Das Image kommt von quay.io, nicht von Docker Hub: `minio/minio` existiert dort nicht mehr
   // (404 beim Pull), was die gesamte IT-Suite lahmlegte. Der Tag steht fest — ein beweglicher
