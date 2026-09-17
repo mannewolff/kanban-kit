@@ -41,6 +41,10 @@ class NightRunItemEntity {
   @Column(name = "mode", nullable = false)
   private String mode;
 
+  /** Gattung des Laufs (Issue #1010); wie {@code mode} aus dem Lauf geschrieben. */
+  @Column(name = "kind", nullable = false)
+  private String kind;
+
   @Column(name = "card_number", nullable = false)
   private int cardNumber;
 
@@ -96,6 +100,10 @@ class NightRunItemEntity {
 
   String getMode() {
     return mode;
+  }
+
+  String getKind() {
+    return kind;
   }
 
   int getCardNumber() {

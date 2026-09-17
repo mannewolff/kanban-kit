@@ -18,6 +18,7 @@ import org.junit.jupiter.api.Test;
 import org.mwolff.manban.nightrun.application.NightRunService;
 import org.mwolff.manban.nightrun.domain.NightRunErrorClass;
 import org.mwolff.manban.nightrun.domain.NightRunItem;
+import org.mwolff.manban.nightrun.domain.NightRunKind;
 import org.mwolff.manban.nightrun.domain.NightRunMode;
 import org.mwolff.manban.nightrun.domain.NightRunState;
 import org.mwolff.manban.nightrun.domain.NightRunUsage;
@@ -82,6 +83,7 @@ class NightRunCardControllerTest {
         PROJECT,
         startedAt,
         mode,
+        NightRunKind.NIGHT,
         967,
         "Endpunkt",
         state,

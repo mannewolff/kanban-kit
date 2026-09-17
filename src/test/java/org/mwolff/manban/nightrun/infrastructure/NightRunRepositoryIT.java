@@ -23,6 +23,7 @@ import org.mwolff.manban.nightrun.application.NightRunRepository.UpsertResult;
 import org.mwolff.manban.nightrun.domain.NightRun;
 import org.mwolff.manban.nightrun.domain.NightRunErrorClass;
 import org.mwolff.manban.nightrun.domain.NightRunItem;
+import org.mwolff.manban.nightrun.domain.NightRunKind;
 import org.mwolff.manban.nightrun.domain.NightRunLimits;
 import org.mwolff.manban.nightrun.domain.NightRunMode;
 import org.mwolff.manban.nightrun.domain.NightRunOrigin;
@@ -55,14 +56,16 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
   private static final Instant ANGELEGT = Instant.parse("2026-09-04T06:00:00Z");
 
   /**
-   * Absichtlich falsche Werte an den einzuliefernden Paketen (Issue #964): Projekt, Startzeitpunkt
-   * und Lauf-Art eines Pakets schreibt der Adapter aus dem Lauf, zu dem es gehoert, und nie aus dem
-   * Paket. Stuenden hier die Werte des Laufs, bewiese kein Test, woher der Adapter sie nimmt.
+   * Absichtlich falsche Werte an den einzuliefernden Paketen (Issue #964, um die Gattung erweitert
+   * in #1010): Projekt, Startzeitpunkt, Lauf-Art und Gattung eines Pakets schreibt der Adapter aus
+   * dem Lauf, zu dem es gehoert, und nie aus dem Paket. Stuenden hier die Werte des Laufs, bewiese
+   * kein Test, woher der Adapter sie nimmt.
    */
   private static final long PLATZHALTER_PROJEKT = -1L;
 
   private static final Instant PLATZHALTER_START = Instant.EPOCH;
   private static final NightRunMode PLATZHALTER_MODUS = NightRunMode.REVIEW;
+  private static final NightRunKind PLATZHALTER_GATTUNG = NightRunKind.INTERACTIVE;
 
   @Autowired private NightRunRepository runs;
   @Autowired private JdbcTemplate jdbc;
@@ -91,6 +94,7 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
         projectId,
         startedAt,
         NightRunMode.IMPLEMENTATION,
+        NightRunKind.NIGHT,
         3_600_000L,
         2,
         1,
@@ -111,6 +115,7 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
         PLATZHALTER_PROJEKT,
         PLATZHALTER_START,
         PLATZHALTER_MODUS,
+        PLATZHALTER_GATTUNG,
         cardNumber,
         "Paket " + cardNumber,
         state,
@@ -175,6 +180,7 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
             projectId,
             T1,
             NightRunMode.CHAIN,
+            NightRunKind.NIGHT,
             3_600_000L,
             1,
             0,
@@ -197,6 +203,74 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
     assertThat(runs.findItemsByRunIds(List.of(id)))
         .extracting(NightRunItem::errorClass)
         .containsExactly(NightRunErrorClass.TIME_BUDGET_EXCEEDED);
+  }
+
+  // --- Gattung (Issue #1010) ------------------------------------------------------------------
+
+  /**
+   * Der Roundtrip der interaktiven Sitzung: Gattung und Laufart gehen als {@code INTERACTIVE}
+   * hinein und kommen an Lauf <b>und</b> Arbeitspaket so zurueck. Nur die echte Datenbank loest das
+   * ein — ein fehlender {@code CHECK}-Wert oder eine zu kurze Spalte faellt weder beim Uebersetzen
+   * noch im Service auf.
+   */
+  @Test
+  void eineSitzungKommtMitGattungUndLaufartInteractiveZurueck() {
+    NightRun sitzung =
+        new NightRun(
+            null,
+            projectId,
+            T1,
+            NightRunMode.INTERACTIVE,
+            NightRunKind.INTERACTIVE,
+            1_000L,
+            1,
+            0,
+            0,
+            null,
+            ANGELEGT,
+            NightRunOrigin.TOKEN,
+            "sitzungs-token",
+            true,
+            null,
+            null);
+
+    long id = runs.insertIfAbsent(sitzung, List.of(paket(1010, NightRunState.GREEN))).orElseThrow();
+
+    assertThat(runs.findByProjectOrderByStartedAtDesc(projectId))
+        .extracting(NightRun::mode, NightRun::kind)
+        .containsExactly(tuple(NightRunMode.INTERACTIVE, NightRunKind.INTERACTIVE));
+    assertThat(runs.findItemsByRunIds(List.of(id)))
+        .extracting(NightRunItem::mode, NightRunItem::kind)
+        .containsExactly(tuple(NightRunMode.INTERACTIVE, NightRunKind.INTERACTIVE));
+  }
+
+  /**
+   * Eine Zeile, die ohne Gattung eingefuegt wird, liest sich als Nachtlauf — der Vorgabewert aus
+   * {@code V34} (Issue #1009). Bestandszeilen leben davon; sie haben nie eine Gattung geschrieben.
+   */
+  @Test
+  void einLaufOhneGattungLiestSichSamtPaketAlsNight() {
+    long runId =
+        insert(
+            "INSERT INTO night_run (project_id, started_at, mode, duration_ms, processed_count,"
+                + " skipped_count, unparsed_count, created_at) VALUES ("
+                + projectId
+                + ", timestamptz '2026-09-08T22:00:00Z', 'IMPLEMENTATION', 1000, 1, 0, 0,"
+                + " timestamptz '2026-09-08T23:00:00Z') RETURNING id");
+    jdbc.update(
+        "INSERT INTO night_run_item (night_run_id, project_id, started_at, mode, card_number,"
+            + " title, state) VALUES (?, ?, timestamptz '2026-09-08T22:00:00Z',"
+            + " 'IMPLEMENTATION', ?, ?, ?)",
+        runId,
+        projectId,
+        902,
+        "Altpaket ohne Gattung",
+        "GREEN");
+
+    assertThat(gelesen(runId).kind()).isEqualTo(NightRunKind.NIGHT);
+    assertThat(runs.findItemsByRunIds(List.of(runId)))
+        .extracting(NightRunItem::kind)
+        .containsExactly(NightRunKind.NIGHT);
   }
 
   @Test
@@ -263,6 +337,7 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
             anderesProjekt,
             T1,
             NightRunMode.REVIEW,
+            NightRunKind.NIGHT,
             1_000L,
             0,
             0,
@@ -318,14 +393,18 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
         .isEqualTo(Timestamp.from(T1));
   }
 
-  /** Ueber den Upload-Weg: Das Paket traegt die drei Werte seines Laufs, nicht seine eigenen. */
+  /** Ueber den Upload-Weg: Das Paket traegt die vier Werte seines Laufs, nicht seine eigenen. */
   @Test
-  void insertIfAbsentSchreibtProjektStartUndArtDesLaufsAnsPaket() {
+  void insertIfAbsentSchreibtProjektStartArtUndGattungDesLaufsAnsPaket() {
     long id = anlegen(T1, List.of(paket(721, NightRunState.GREEN)));
 
     assertThat(runs.findItemsByRunIds(List.of(id)))
-        .extracting(NightRunItem::projectId, NightRunItem::startedAt, NightRunItem::mode)
-        .containsExactly(tuple(projectId, T1, NightRunMode.IMPLEMENTATION));
+        .extracting(
+            NightRunItem::projectId,
+            NightRunItem::startedAt,
+            NightRunItem::mode,
+            NightRunItem::kind)
+        .containsExactly(tuple(projectId, T1, NightRunMode.IMPLEMENTATION, NightRunKind.NIGHT));
   }
 
   /** Ueber den meldenden Weg, beim Anlegen wie beim Ersetzen. */
@@ -413,6 +492,7 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
         PLATZHALTER_PROJEKT,
         PLATZHALTER_START,
         PLATZHALTER_MODUS,
+        PLATZHALTER_GATTUNG,
         721,
         "Paket",
         NightRunState.GREEN,
@@ -429,6 +509,7 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
         projectId,
         startedAt,
         NightRunMode.IMPLEMENTATION,
+        NightRunKind.NIGHT,
         1_000L,
         0,
         0,
@@ -552,6 +633,7 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
             anderesProjekt,
             T2,
             NightRunMode.IMPLEMENTATION,
+            NightRunKind.NIGHT,
             1_000L,
             1,
             0,
@@ -630,6 +712,7 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
         PLATZHALTER_PROJEKT,
         PLATZHALTER_START,
         PLATZHALTER_MODUS,
+        PLATZHALTER_GATTUNG,
         cardNumber,
         "Paket " + cardNumber,
         NightRunState.RED,
@@ -694,6 +777,7 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
             projectId,
             Instant.parse("2026-09-06T22:00:00Z"),
             NightRunMode.CHAIN,
+            NightRunKind.NIGHT,
             1000L,
             1,
             0,
@@ -712,6 +796,7 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
             PLATZHALTER_PROJEKT,
             PLATZHALTER_START,
             PLATZHALTER_MODUS,
+            PLATZHALTER_GATTUNG,
             944,
             "Mit Verbrauch",
             NightRunState.GREEN,
@@ -754,6 +839,7 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
             projectId,
             Instant.parse("2026-09-07T22:00:00Z"),
             NightRunMode.IMPLEMENTATION,
+            NightRunKind.NIGHT,
             1000L,
             1,
             0,
@@ -787,6 +873,7 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
         projectId,
         startedAt,
         NightRunMode.CHAIN,
+        NightRunKind.NIGHT,
         1000L,
         1,
         0,
@@ -852,6 +939,42 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
         .containsExactly(103);
   }
 
+  /**
+   * Die Gattung gehoert zum gemeldeten Stand und wird wie die Lauf-Art fortgeschrieben (Issue
+   * #1010) — am Lauf und an seinen neu geschriebenen Arbeitspaketen.
+   */
+  @Test
+  void einZweiterUpsertSchreibtDieGattungFort() {
+    Instant start = Instant.parse("2026-09-16T22:00:00Z");
+    UpsertResult erster =
+        runs.upsert(meldung(start, false), List.of(paket(101, NightRunState.GREEN)));
+
+    NightRun alsSitzung =
+        new NightRun(
+            null,
+            projectId,
+            start,
+            NightRunMode.INTERACTIVE,
+            NightRunKind.INTERACTIVE,
+            2000L,
+            1,
+            0,
+            0,
+            null,
+            ANGELEGT,
+            NightRunOrigin.TOKEN,
+            "sitzungs-token",
+            true,
+            null,
+            null);
+    runs.upsert(alsSitzung, List.of(paket(102, NightRunState.GREEN)));
+
+    assertThat(gelesen(erster.id()).kind()).isEqualTo(NightRunKind.INTERACTIVE);
+    assertThat(runs.findItemsByRunIds(List.of(erster.id())))
+        .extracting(NightRunItem::kind)
+        .containsExactly(NightRunKind.INTERACTIVE);
+  }
+
   @Test
   void beimErsetzenBleibtCreatedAtStehenUndUpdatedAtWaechst() {
     Instant start = Instant.parse("2026-09-13T22:00:00Z");
@@ -864,6 +987,7 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
             projectId,
             start,
             NightRunMode.CHAIN,
+            NightRunKind.NIGHT,
             2000L,
             2,
             0,

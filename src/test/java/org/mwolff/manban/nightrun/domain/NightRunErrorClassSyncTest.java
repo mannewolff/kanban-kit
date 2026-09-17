@@ -114,6 +114,21 @@ class NightRunErrorClassSyncTest {
         .allMatch(modi::contains, "steht im wirksamen CHECK ck_night_run_mode");
   }
 
+  /**
+   * Dieselbe Leitplanke für die Gattung (Issue #1010): {@code NightRunKind} steht seit {@code V34}
+   * in zwei {@code CHECK}s, und ein Wert ohne {@code CHECK}-Eintrag fällt sonst erst beim Schreiben
+   * gegen die echte Datenbank auf.
+   */
+  @Test
+  void jedeGattungStehtInBeidenWirksamenChecks() {
+    List<String> amLauf = wirksameWerte("ck_night_run_kind");
+    List<String> amPaket = wirksameWerte("ck_night_run_item_kind");
+
+    assertThat(Arrays.stream(NightRunKind.values()).map(Enum::name))
+        .allMatch(amLauf::contains, "steht im wirksamen CHECK ck_night_run_kind")
+        .allMatch(amPaket::contains, "steht im wirksamen CHECK ck_night_run_item_kind");
+  }
+
   @Test
   void dieSpaltenTragenJedenWertDerListenInVollerLaenge() throws IOException {
     String migration = Files.readString(SPALTEN_MIGRATION, StandardCharsets.UTF_8);

@@ -18,6 +18,7 @@ import org.mwolff.manban.nightrun.application.NightRunUsageService.NightUsageVie
 import org.mwolff.manban.nightrun.application.NightRunUsageService.PeriodUsageView;
 import org.mwolff.manban.nightrun.domain.NightRun;
 import org.mwolff.manban.nightrun.domain.NightRunItem;
+import org.mwolff.manban.nightrun.domain.NightRunKind;
 import org.mwolff.manban.nightrun.domain.NightRunMode;
 import org.mwolff.manban.nightrun.domain.NightRunOrigin;
 import org.mwolff.manban.nightrun.domain.NightRunPeriod;
@@ -90,6 +91,7 @@ class NightRunUsageServiceIT extends AbstractIntegrationTest {
             projectId,
             startedAt,
             mode,
+            NightRunKind.NIGHT,
             1_000L,
             pakete.length,
             0,
@@ -111,6 +113,7 @@ class NightRunUsageServiceIT extends AbstractIntegrationTest {
         0L,
         Instant.EPOCH,
         NightRunMode.IMPLEMENTATION,
+        NightRunKind.NIGHT,
         cardNumber,
         "Paket",
         NightRunState.GREEN,

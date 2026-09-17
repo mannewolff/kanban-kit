@@ -19,6 +19,7 @@ import org.mwolff.manban.auth.domain.PlatformRole;
 import org.mwolff.manban.nightrun.application.NightRunRepository;
 import org.mwolff.manban.nightrun.domain.NightRun;
 import org.mwolff.manban.nightrun.domain.NightRunItem;
+import org.mwolff.manban.nightrun.domain.NightRunKind;
 import org.mwolff.manban.nightrun.domain.NightRunLimits;
 import org.mwolff.manban.nightrun.domain.NightRunMode;
 import org.mwolff.manban.nightrun.domain.NightRunOrigin;
@@ -353,6 +354,7 @@ class NightRunIT extends AbstractIntegrationTest {
             projectId,
             Instant.parse(ERSTER),
             NightRunMode.CHAIN,
+            NightRunKind.NIGHT,
             1000L,
             1,
             0,

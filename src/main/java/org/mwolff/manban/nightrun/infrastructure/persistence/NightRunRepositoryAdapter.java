@@ -15,6 +15,7 @@ import org.mwolff.manban.nightrun.application.NightRunRepository.UpsertResult;
 import org.mwolff.manban.nightrun.domain.NightRun;
 import org.mwolff.manban.nightrun.domain.NightRunErrorClass;
 import org.mwolff.manban.nightrun.domain.NightRunItem;
+import org.mwolff.manban.nightrun.domain.NightRunKind;
 import org.mwolff.manban.nightrun.domain.NightRunMode;
 import org.mwolff.manban.nightrun.domain.NightRunOrigin;
 import org.mwolff.manban.nightrun.domain.NightRunState;
@@ -38,8 +39,8 @@ import org.springframework.stereotype.Component;
 @Component
 // Die Kopplung folgt den Spalten: Der Adapter uebersetzt zwischen Domaenentypen, Entities
 // und JDBC-Typen, und jede neue Spalte bringt ihren Typ mit. Mit Issue #944 sind es
-// BigDecimal und NightRunOrigin mehr; 21 statt 20. Eine Aufteilung verteilte das Mapping
-// einer Tabelle auf zwei Klassen.
+// BigDecimal und NightRunOrigin mehr, mit Issue #1010 NightRunKind. Eine Aufteilung
+// verteilte das Mapping einer Tabelle auf zwei Klassen.
 @SuppressWarnings("PMD.CouplingBetweenObjects")
 class NightRunRepositoryAdapter implements NightRunRepository {
 
@@ -53,11 +54,11 @@ class NightRunRepositoryAdapter implements NightRunRepository {
   private static final String C_ERROR_CLASS = "error_class";
 
   private static final String INSERT_RUN =
-      "INSERT INTO night_run (project_id, started_at, mode, duration_ms, processed_count,"
+      "INSERT INTO night_run (project_id, started_at, mode, kind, duration_ms, processed_count,"
           + " skipped_count, unparsed_count, unparsed_sample, created_at, origin,"
           + " token_name, complete, updated_at, cost_usd, input_tokens, output_tokens,"
           + " cached_input_tokens)"
-          + " VALUES (:projectId, :startedAt, :mode, :durationMs, :processedCount,"
+          + " VALUES (:projectId, :startedAt, :mode, :kind, :durationMs, :processedCount,"
           + " :skippedCount, :unparsedCount, :unparsedSample, :createdAt, :origin,"
           + " :tokenName, :complete, :updatedAt, :costUsd, :inputTokens, :outputTokens,"
           + " :cachedInputTokens)"
@@ -65,11 +66,11 @@ class NightRunRepositoryAdapter implements NightRunRepository {
           + " RETURNING id";
 
   private static final String INSERT_ITEM =
-      "INSERT INTO night_run_item (night_run_id, project_id, started_at, mode, card_number,"
+      "INSERT INTO night_run_item (night_run_id, project_id, started_at, mode, kind, card_number,"
           + " title, state, error_class, duration_ms, commit_hash, excerpt, cost_usd,"
           + " input_tokens, output_tokens, cached_input_tokens)"
-          + " VALUES (:nightRunId, :projectId, :startedAt, :mode, :cardNumber, :title, :state,"
-          + " :errorClass,"
+          + " VALUES (:nightRunId, :projectId, :startedAt, :mode, :kind, :cardNumber, :title,"
+          + " :state, :errorClass,"
           + " :durationMs, :commitHash, :excerpt, :costUsd, :inputTokens, :outputTokens,"
           + " :cachedInputTokens)";
 
@@ -83,7 +84,7 @@ class NightRunRepositoryAdapter implements NightRunRepository {
           + " FOR UPDATE";
 
   private static final String UPDATE_RUN =
-      "UPDATE night_run SET mode = :mode, duration_ms = :durationMs,"
+      "UPDATE night_run SET mode = :mode, kind = :kind, duration_ms = :durationMs,"
           + " processed_count = :processedCount, skipped_count = :skippedCount,"
           + " unparsed_count = :unparsedCount, unparsed_sample = :unparsedSample,"
           + " origin = :origin, token_name = :tokenName, complete = :complete,"
@@ -165,9 +166,10 @@ class NightRunRepositoryAdapter implements NightRunRepository {
   }
 
   /**
-   * Projekt, Startzeitpunkt und Lauf-Art eines Pakets kommen aus dem Lauf und nie aus dem Paket
-   * (Issue #964): So kann kein Paket mit einem anderen Projekt geschrieben werden als sein Lauf —
-   * ein verwaistes Paket fände man sonst später im falschen Projekt wieder.
+   * Projekt, Startzeitpunkt, Lauf-Art und Gattung eines Pakets kommen aus dem Lauf und nie aus dem
+   * Paket (Issue #964, um die Gattung erweitert in #1010): So kann kein Paket mit einem anderen
+   * Projekt geschrieben werden als sein Lauf — ein verwaistes Paket fände man sonst später im
+   * falschen Projekt wieder.
    */
   private void insertItems(NightRun run, Long runId, List<NightRunItem> newItems) {
     if (newItems.isEmpty()) {
@@ -242,6 +244,7 @@ class NightRunRepositoryAdapter implements NightRunRepository {
             .addValue(P_PROJECT_ID, run.projectId())
             .addValue("startedAt", zeitpunkt(run.startedAt()))
             .addValue("mode", run.mode().name())
+            .addValue("kind", run.kind().name())
             .addValue("durationMs", run.durationMs())
             .addValue("processedCount", run.processedCount())
             .addValue("skippedCount", run.skippedCount())
@@ -281,6 +284,7 @@ class NightRunRepositoryAdapter implements NightRunRepository {
             .addValue(P_PROJECT_ID, run.projectId())
             .addValue("startedAt", zeitpunkt(run.startedAt()))
             .addValue("mode", run.mode().name())
+            .addValue("kind", run.kind().name())
             .addValue("cardNumber", item.cardNumber())
             .addValue("title", item.title())
             .addValue("state", item.state().name())
@@ -307,6 +311,7 @@ class NightRunRepositoryAdapter implements NightRunRepository {
         e.getProjectId(),
         e.getStartedAt(),
         NightRunMode.valueOf(e.getMode()),
+        NightRunKind.valueOf(e.getKind()),
         e.getDurationMs(),
         e.getProcessedCount(),
         e.getSkippedCount(),
@@ -329,6 +334,7 @@ class NightRunRepositoryAdapter implements NightRunRepository {
         e.getProjectId(),
         e.getStartedAt(),
         NightRunMode.valueOf(e.getMode()),
+        NightRunKind.valueOf(e.getKind()),
         e.getCardNumber(),
         e.getTitle(),
         NightRunState.valueOf(e.getState()),

@@ -31,6 +31,7 @@ import org.mwolff.manban.nightrun.application.NightRunRepository.UpsertResult;
 import org.mwolff.manban.nightrun.domain.NightRun;
 import org.mwolff.manban.nightrun.domain.NightRunErrorClass;
 import org.mwolff.manban.nightrun.domain.NightRunItem;
+import org.mwolff.manban.nightrun.domain.NightRunKind;
 import org.mwolff.manban.nightrun.domain.NightRunMode;
 import org.mwolff.manban.nightrun.domain.NightRunOrigin;
 import org.mwolff.manban.nightrun.domain.NightRunState;
@@ -426,6 +427,22 @@ class NightRunServiceTest {
     assertThat(geschrieben.complete()).isFalse();
   }
 
+  /**
+   * Der meldende Weg kennt die Gattung noch nicht — sie kommt mit der Einlieferung der interaktiven
+   * Sitzung in einem eigenen Paket. Bis dahin ist jeder gemeldete Lauf ein Nachtlauf (Issue #1010).
+   */
+  @Test
+  void ingest_schreibtDieGattungNightAnLaufUndPaket() {
+    service.ingest(
+        USER, PROJECT, TOKEN, meldung(T1, true, null, item(721, NightRunState.GREEN, null)));
+
+    NightRun geschrieben = gemeldeterLauf();
+    assertThat(geschrieben.kind()).isEqualTo(NightRunKind.NIGHT);
+    assertThat(runs.findItemsByRunIds(List.of(geschrieben.requireId())))
+        .extracting(NightRunItem::kind)
+        .containsExactly(NightRunKind.NIGHT);
+  }
+
   @Test
   void ingest_zieehtDenRingpufferNach() {
     service.ingest(USER, PROJECT, TOKEN, meldung(T1, true, null));
@@ -625,6 +642,7 @@ class NightRunServiceTest {
               run.projectId(),
               run.startedAt(),
               run.mode(),
+              run.kind(),
               run.durationMs(),
               run.processedCount(),
               run.skippedCount(),
@@ -662,6 +680,7 @@ class NightRunServiceTest {
               run.projectId(),
               run.startedAt(),
               run.mode(),
+              run.kind(),
               run.durationMs(),
               run.processedCount(),
               run.skippedCount(),
@@ -694,6 +713,7 @@ class NightRunServiceTest {
           run.projectId(),
           run.startedAt(),
           run.mode(),
+          run.kind(),
           item.cardNumber(),
           item.title(),
           item.state(),
@@ -741,6 +761,7 @@ class NightRunServiceTest {
           item.projectId(),
           item.startedAt(),
           item.mode(),
+          item.kind(),
           item.cardNumber(),
           item.title(),
           item.state(),
@@ -823,5 +844,17 @@ class NightRunServiceTest {
     assertThat(geschrieben.complete()).isTrue();
     assertThat(geschrieben.updatedAt()).isNull();
     assertThat(geschrieben.tokenName()).isNull();
+  }
+
+  /** Auch der Upload-Weg liefert heute nur Nachtlaeufe ein (Issue #1010). */
+  @Test
+  void submit_schreibtDieGattungNightAnLaufUndPaket() {
+    service.submit(USER, PROJECT, List.of(lauf(T1, item(721, NightRunState.GREEN, null))));
+
+    NightRun geschrieben = runs.findByProjectOrderByStartedAtDesc(PROJECT).getFirst();
+    assertThat(geschrieben.kind()).isEqualTo(NightRunKind.NIGHT);
+    assertThat(runs.findItemsByRunIds(List.of(geschrieben.requireId())))
+        .extracting(NightRunItem::kind)
+        .containsExactly(NightRunKind.NIGHT);
   }
 }

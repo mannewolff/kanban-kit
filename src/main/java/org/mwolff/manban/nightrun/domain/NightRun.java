@@ -14,6 +14,8 @@ import org.mwolff.manban.common.Identifiable;
  * @param projectId Projekt, zu dem der Lauf gehört
  * @param startedAt Startzeitpunkt des Laufs — sein fachlicher Schlüssel
  * @param mode Betriebsart des Laufs
+ * @param kind Gattung des Eintrags — Nachtlauf oder interaktive Sitzung (Issue #1010); niemals
+ *     {@code null}, ein Erzeugungspfad ohne eigene Gattung trägt {@link NightRunKind#NIGHT}
  * @param durationMs Dauer des Laufs in Millisekunden
  * @param processedCount Zahl der bearbeiteten Arbeitspakete
  * @param skippedCount Zahl der übergangenen Arbeitspakete
@@ -26,6 +28,7 @@ public record NightRun(
     Long projectId,
     Instant startedAt,
     NightRunMode mode,
+    NightRunKind kind,
     long durationMs,
     int processedCount,
     int skippedCount,

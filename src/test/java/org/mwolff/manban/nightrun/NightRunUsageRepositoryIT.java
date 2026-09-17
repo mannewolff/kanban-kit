@@ -21,6 +21,7 @@ import org.mwolff.manban.nightrun.application.NightRunUsageRepository.PeriodTota
 import org.mwolff.manban.nightrun.domain.NightRun;
 import org.mwolff.manban.nightrun.domain.NightRunErrorClass;
 import org.mwolff.manban.nightrun.domain.NightRunItem;
+import org.mwolff.manban.nightrun.domain.NightRunKind;
 import org.mwolff.manban.nightrun.domain.NightRunMode;
 import org.mwolff.manban.nightrun.domain.NightRunOrigin;
 import org.mwolff.manban.nightrun.domain.NightRunState;
@@ -93,6 +94,7 @@ class NightRunUsageRepositoryIT extends AbstractIntegrationTest {
             projekt,
             Instant.parse(startedAt),
             mode,
+            NightRunKind.NIGHT,
             durationMs,
             pakete.length,
             0,
@@ -119,6 +121,7 @@ class NightRunUsageRepositoryIT extends AbstractIntegrationTest {
         0L,
         Instant.EPOCH,
         NightRunMode.IMPLEMENTATION,
+        NightRunKind.NIGHT,
         cardNumber,
         "Paket " + cardNumber,
         state,

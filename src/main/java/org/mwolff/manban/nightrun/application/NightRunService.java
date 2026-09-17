@@ -11,6 +11,7 @@ import org.mwolff.manban.nightrun.application.NightRunRepository.UpsertResult;
 import org.mwolff.manban.nightrun.domain.NightRun;
 import org.mwolff.manban.nightrun.domain.NightRunErrorClass;
 import org.mwolff.manban.nightrun.domain.NightRunItem;
+import org.mwolff.manban.nightrun.domain.NightRunKind;
 import org.mwolff.manban.nightrun.domain.NightRunMode;
 import org.mwolff.manban.nightrun.domain.NightRunOrigin;
 import org.mwolff.manban.nightrun.domain.NightRunState;
@@ -112,6 +113,9 @@ public class NightRunService {
             projectId,
             meldung.startedAt(),
             meldung.mode(),
+            // Beide Einlieferungswege melden heute Nachtlaeufe; die Gattung der interaktiven
+            // Sitzung kommt mit ihrer eigenen Einlieferung (Issue #1010).
+            NightRunKind.NIGHT,
             meldung.durationMs(),
             meldung.processedCount(),
             meldung.skippedCount(),
@@ -172,6 +176,7 @@ public class NightRunService {
         projectId,
         submission.startedAt(),
         submission.mode(),
+        NightRunKind.NIGHT,
         submission.durationMs(),
         submission.processedCount(),
         submission.skippedCount(),
@@ -188,9 +193,9 @@ public class NightRunService {
   }
 
   /**
-   * Die Arbeitspakete tragen Projekt, Startzeitpunkt und Lauf-Art ihres Laufs (Issue #964). Der
-   * Adapter schreibt diese drei aus dem Lauf selbst; hier stehen sie, weil ein Paket ohne sie kein
-   * vollständiges Domänenobjekt ist.
+   * Die Arbeitspakete tragen Projekt, Startzeitpunkt, Lauf-Art und Gattung ihres Laufs (Issue #964,
+   * um die Gattung erweitert in #1010). Der Adapter schreibt diese vier aus dem Lauf selbst; hier
+   * stehen sie, weil ein Paket ohne sie kein vollständiges Domänenobjekt ist.
    */
   private static List<NightRunItem> items(long projectId, NewNightRun submission) {
     return submission.items().stream()
@@ -202,6 +207,7 @@ public class NightRunService {
                     projectId,
                     submission.startedAt(),
                     submission.mode(),
+                    NightRunKind.NIGHT,
                     item.cardNumber(),
                     item.title(),
                     item.state(),
