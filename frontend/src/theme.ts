@@ -461,6 +461,15 @@ export const PLATTE_HOCH = VARIABLEN.warte.platteHoch
 export const RAND = VARIABLEN.warte.rand
 /** Kräftigere Linie. */
 export const RAND_STARK = VARIABLEN.warte.randStark
+/**
+ * Matter Text: Sekundärtext und Navigation (`CLAUDE-design.md`, Palettentabelle „Text matt").
+ *
+ * <p>Derselbe Verweis, den der Palettenpfad `text.secondary` in `sx` erzeugt — als benannter Token
+ * neben `RAND`, `PLATTE`, `NUT` und `TEXT_SCHWACH`, damit ein Baustein seine Farben aus **einer**
+ * Reihe nimmt und nicht aus zwei Schreibweisen (#1041). Eine eigene Variable wäre eine zweite
+ * Wertequelle für dieselbe Rolle.
+ */
+export const TEXT_MATT = VARIABLEN.text.secondary
 /** Schwache Schrift: Etiketten, Zähler, Fristen. */
 export const TEXT_SCHWACH = VARIABLEN.warte.textSchwach
 /** Leitfarbe. */
