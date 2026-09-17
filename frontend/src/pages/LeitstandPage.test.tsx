@@ -77,8 +77,8 @@ const kpis = (extra: Partial<BoardDashboardKpis> = {}): BoardDashboardKpis => ({
   ],
   avgLeadTimeSeconds: 276_480,
   leadTimeSampleCount: 86,
-  avgCycleTimeSeconds: 53_280,
-  cycleTimeSampleCount: 61,
+  avgImplementationSeconds: 53_280,
+  implementationSampleCount: 61,
   outliers: [{ cardId: 9, number: 846, title: 'Kartenverlauf als Zeitstrahl', columnName: 'Review', dwellSeconds: 14 * 86_400 }],
   ...extra,
 })
@@ -233,15 +233,31 @@ describe('LeitstandPage (#979)', () => {
     expect(durchsatz).toHaveTextContent('2 Wochen')
     expect(within(durchsatz).getByTestId('funke')).toBeInTheDocument()
     expect(screen.getByRole('article', { name: 'Durchlaufzeit' })).toHaveTextContent('3,2Tage')
-    expect(screen.getByRole('article', { name: 'Zykluszeit' })).toHaveTextContent('14,8Stunden')
-    expect(screen.getByRole('article', { name: 'Zykluszeit' })).toHaveTextContent('61 Karten')
+    expect(screen.getByRole('article', { name: 'Implementierungszeit' })).toHaveTextContent('14,8Stunden')
+    expect(screen.getByRole('article', { name: 'Implementierungszeit' })).toHaveTextContent('61 Karten')
+    // Genau diese vier Kacheln — die abgelöste Kennzahl steht nicht mehr daneben.
+    expect(screen.getAllByRole('article').map((k) => k.getAttribute('aria-label'))).toEqual([
+      'Durchsatz · Woche',
+      'Durchlaufzeit',
+      'Implementierungszeit',
+      'Nachtlauf · grün',
+    ])
   })
 
   it('zeigt ohne Datenbasis einen Leerwert statt einer Null', async () => {
-    m.kpis.mockResolvedValue(kpis({ avgLeadTimeSeconds: null, leadTimeSampleCount: 0, throughput: [{ weekStart: '2026-06-01T09:00:00Z', doneCount: 0 }] }))
+    m.kpis.mockResolvedValue(
+      kpis({
+        avgLeadTimeSeconds: null,
+        leadTimeSampleCount: 0,
+        avgImplementationSeconds: null,
+        implementationSampleCount: 0,
+        throughput: [{ weekStart: '2026-06-01T09:00:00Z', doneCount: 0 }],
+      }),
+    )
     renderPage()
     const lead = await screen.findByRole('article', { name: 'Durchlaufzeit' })
     expect(lead).toHaveTextContent('—keine Datenbasis')
+    expect(screen.getByRole('article', { name: 'Implementierungszeit' })).toHaveTextContent('—keine Datenbasis')
     expect(screen.getByRole('article', { name: 'Durchsatz · Woche' })).toHaveTextContent('—keine Datenbasis')
     expect(screen.getByRole('region', { name: 'Durchsatz' })).toHaveTextContent('Noch keine abgeschlossene Karte in den letzten Wochen.')
   })

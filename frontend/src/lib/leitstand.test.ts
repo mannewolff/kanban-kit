@@ -8,6 +8,7 @@ import {
   ersteZeile,
   funkenPunkte,
   gruenAnteil,
+  implementierungKachel,
   istAbbruch,
   juengsterLauf,
   kalenderwoche,
@@ -23,7 +24,6 @@ import {
   tokenMenge,
   tokenText,
   vorgaenge,
-  zyklusKachel,
 } from './leitstand'
 
 const paket = (nummer: number, state: NightRunItemView['state'], extra: Partial<NightRunItemView> = {}): NightRunItemView => ({
@@ -169,14 +169,22 @@ describe('leitstand Kennzahl-Kacheln', () => {
     expect(kachel).toEqual({ wert: null, einheit: 'Karten', basis: '12 Wochen', verlauf: null, delta: null })
   })
 
-  it('zeigt Durchlaufzeit in Tagen und Zykluszeit in Stunden mit ihrer Datenbasis', () => {
+  it('zeigt Durchlaufzeit in Tagen und Implementierungszeit in Stunden mit ihrer Datenbasis', () => {
     expect(durchlaufKachel(276_480, 86)).toEqual({ wert: '3,2', einheit: 'Tage', basis: '86 Karten', verlauf: null, delta: null })
     expect(durchlaufKachel(null, 0).wert).toBeNull()
     expect(durchlaufKachel(86_400, 1).basis).toBe('1 Karte')
-    expect(zyklusKachel(53_280, 61)).toMatchObject({ wert: '14,8', einheit: 'Stunden', basis: '61 Karten' })
-    expect(zyklusKachel(3600, 0).wert).toBeNull()
-    expect(zyklusKachel(null, 3).wert).toBeNull()
-    expect(zyklusKachel(3600, 1).basis).toBe('1 Karte')
+    expect(implementierungKachel(53_280, 61)).toMatchObject({ wert: '14,8', einheit: 'Stunden', basis: '61 Karten' })
+    expect(implementierungKachel(3600, 0).wert).toBeNull()
+    expect(implementierungKachel(null, 3).wert).toBeNull()
+    expect(implementierungKachel(3600, 1).basis).toBe('1 Karte')
+  })
+
+  it('zeigt die Implementierungszeit unter einer Stunde in Minuten', () => {
+    expect(implementierungKachel(1080, 4)).toMatchObject({ wert: '18', einheit: 'Minuten' })
+    expect(implementierungKachel(3540, 4)).toMatchObject({ wert: '59', einheit: 'Minuten' })
+    // Ab 60 gerundeten Minuten kippt die Einheit — „60 Minuten" stünde sonst neben „1,0 Stunden".
+    expect(implementierungKachel(3570, 4)).toMatchObject({ wert: '1,0', einheit: 'Stunden' })
+    expect(implementierungKachel(7200, 4)).toMatchObject({ wert: '2,0', einheit: 'Stunden' })
   })
 
   it('rechnet den grünen Anteil über alle aufbewahrten Läufe ohne graue Pakete', () => {

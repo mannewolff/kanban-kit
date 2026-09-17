@@ -34,6 +34,7 @@ import {
   durchsatzKachel,
   ersteZeile,
   gruenAnteil,
+  implementierungKachel,
   istAbbruch,
   juengsterLauf,
   kalenderwoche,
@@ -46,7 +47,6 @@ import {
   MELDER_JE_ZUSTAND,
   modusName,
   paketDauer,
-  zyklusKachel,
 } from '../lib/leitstand'
 import {
   ETIKETT,
@@ -153,7 +153,7 @@ export function LeitstandPage() {
           <>
             <Kachel titel="Durchsatz · Woche" daten={durchsatzKachel(kpis.wert.throughput)} melder="kupfer" />
             <Kachel titel="Durchlaufzeit" daten={durchlaufKachel(kpis.wert.avgLeadTimeSeconds, kpis.wert.leadTimeSampleCount)} melder="gruen" />
-            <Kachel titel="Zykluszeit" daten={zyklusKachel(kpis.wert.avgCycleTimeSeconds, kpis.wert.cycleTimeSampleCount)} melder="stahl" />
+            <Kachel titel="Implementierungszeit" daten={implementierungKachel(kpis.wert.avgImplementationSeconds, kpis.wert.implementationSampleCount)} melder="stahl" />
           </>
         ) : (
           <Typography color="text.secondary">

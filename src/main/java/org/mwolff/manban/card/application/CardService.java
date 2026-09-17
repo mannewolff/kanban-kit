@@ -40,7 +40,7 @@ import org.springframework.transaction.annotation.Transactional;
  * gruppieren Karten über {@code parentId}. Rechte über den {@link PermissionChecker}.
  */
 // PMD.CouplingBetweenObjects: zentraler Karten-Use-Case-Service; die Kopplung an die Ports
-// (Karten, Abhängigkeiten, Boards/Spalten, Rechte, Zykluszeit, Zuständige, Labels)
+// (Karten, Abhängigkeiten, Boards/Spalten, Rechte, Spaltenverlauf, Zuständige, Labels)
 // ist fachlich begründet und kein God-Class-Smell.
 // PMD.CyclomaticComplexity: die Klassen-Gesamtkomplexität summiert viele kleine, je für sich
 // einfache Use-Case-Methoden (höchste Einzelmethode weit unter dem Schwellwert); kein Smell.
@@ -1053,7 +1053,7 @@ public class CardService {
 
     cards.move(cardId, targetColumnId, targetPosition);
 
-    // Zykluszeit: nur bei echtem Spaltenwechsel (kein Eintrag bei reinem Reindex). Ein einziger
+    // Spaltenverlauf: nur bei echtem Spaltenwechsel (kein Eintrag bei reinem Reindex). Ein einziger
     // Zeitstempel schließt die verlassene und eröffnet die Ziel-Spalte lückenlos.
     long fromColumn = card.requireColumnId();
     if (fromColumn != targetColumnId) {
@@ -1165,7 +1165,7 @@ public class CardService {
       assignees.deleteByCardId(cardId);
     }
 
-    // Zykluszeit: der board-/spaltenübergreifende Umzug zählt als Spaltenwechsel.
+    // Spaltenverlauf: der board-/spaltenübergreifende Umzug zählt als Spaltenwechsel.
     Instant switchedAt = clock.instant();
     transitions.closeOpen(cardId, switchedAt);
     transitions.open(cardId, targetColumnId, targetColumn.name(), switchedAt);

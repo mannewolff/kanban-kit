@@ -8,7 +8,7 @@ import type { NightRunErrorClass, NightRunState } from './nightRunLog'
  * und ohne Netzzugriff.
  *
  * **Was keine Datenquelle hat, erscheint nicht** (CLAUDE-design.md, „Vorlage und Abnahme"): kein
- * Budget, keine Stufen der laufenden Kette, kein Verlauf von Durchlauf- und Zykluszeit. Die
+ * Budget, keine Stufen der laufenden Kette, kein Verlauf von Durchlauf- und Implementierungszeit. Die
  * Funktionen liefern dort `null`, und die Ansicht lässt die Stelle weg.
  */
 
@@ -230,12 +230,23 @@ export function durchlaufKachel(sekunden: number | null, stichprobe: number): Ka
   }
 }
 
-/** Zykluszeit in Stunden (Entwurf Z. 1284–1306). */
-export function zyklusKachel(sekunden: number | null, stichprobe: number): Kachel {
+/**
+ * Implementierungszeit (Entwurf Z. 1284–1306): wie lange eine erledigte Karte in In Progress lag.
+ * Unter einer Stunde in Minuten — KI-Umsetzungen dauern oft weniger, und „0,3 Stunden" liest sich
+ * schlecht.
+ */
+export function implementierungKachel(sekunden: number | null, stichprobe: number): Kachel {
+  const basis = stichprobe === 1 ? '1 Karte' : `${stichprobe} Karten`
+  if (sekunden === null || stichprobe === 0) {
+    return { wert: null, einheit: 'Stunden', basis, verlauf: null, delta: null }
+  }
+  // Die Grenze liegt bei den gerundeten Minuten: 3570 s wären sonst „60 Minuten" statt „1,0 Stunden".
+  const minuten = Math.round(sekunden / 60)
+  const inMinuten = minuten < 60
   return {
-    wert: sekunden === null || stichprobe === 0 ? null : ZAHL_1.format(sekunden / 3600),
-    einheit: 'Stunden',
-    basis: stichprobe === 1 ? '1 Karte' : `${stichprobe} Karten`,
+    wert: inMinuten ? GANZ.format(minuten) : ZAHL_1.format(sekunden / 3600),
+    einheit: inMinuten ? 'Minuten' : 'Stunden',
+    basis,
     verlauf: null,
     delta: null,
   }

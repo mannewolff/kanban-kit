@@ -225,7 +225,9 @@ erscheint also nach dem Einlesen nicht in der Liste.
 durch das Board laufen. Grundlage ist die automatisch erfasste Verweildauer jeder Karte pro Spalte —
 gemessen bei **jedem** Spaltenwechsel, egal ob per Drag & Drop, ⋮-Menü oder über die API (kanbancompat).
 
-- **Ø Lead Time** und **Ø Cycle Time** als Kennzahl-Kacheln.
+- **Ø Lead Time** und **Ø Implementierungszeit** als Kennzahl-Kacheln — die Implementierungszeit
+  misst, wie lange eine erledigte Karte insgesamt in „In Progress" lag (mehrere Aufenthalte zählen
+  zusammen).
 - **Ø Verweildauer je Spalte** (Balkendiagramm, in Stunden).
 - **Durchsatz je Woche** — abgeschlossene Karten (Liniendiagramm).
 - **Ausreißer** — Karten, die über 7 Tage in einer Spalte lagen (Tabelle mit #, Titel, Spalte, Dauer).

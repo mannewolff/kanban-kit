@@ -23,7 +23,7 @@ export interface OutlierCard {
   dwellSeconds: number
 }
 
-/** Zykluszeit-Kennzahlen eines Boards. Dauern in Sekunden; `null` = keine Datenbasis. */
+/** Kennzahlen eines Boards. Dauern in Sekunden; `null` = keine Datenbasis. */
 export interface BoardDashboardKpis {
   columnDwell: ColumnDwell[]
   throughput: WeeklyThroughput[]
@@ -33,13 +33,14 @@ export interface BoardDashboardKpis {
    * die nur zwölf Wochen umfasst.
    */
   leadTimeSampleCount: number
-  avgCycleTimeSeconds: number | null
+  /** Summe der abgeschlossenen In-Progress-Aufenthalte je erledigter Karte, gemittelt. */
+  avgImplementationSeconds: number | null
   /**
-   * Anzahl der Karten hinter `avgCycleTimeSeconds` — kleiner als `leadTimeSampleCount`, sobald eine
-   * fertige Karte nie in einer „Ready“-artigen Spalte lag. `0` heißt „keine Datenbasis“ und ist
-   * damit die eine Quelle für die Leerwert-Optik der Kennzahl.
+   * Anzahl der Karten hinter `avgImplementationSeconds` — kleiner als `leadTimeSampleCount`, sobald
+   * eine fertige Karte nie in einer „In Progress“-artigen Spalte lag. `0` heißt „keine Datenbasis“
+   * und ist damit die eine Quelle für die Leerwert-Optik der Kennzahl.
    */
-  cycleTimeSampleCount: number
+  implementationSampleCount: number
   outliers: OutlierCard[]
 }
 

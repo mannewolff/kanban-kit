@@ -205,7 +205,7 @@ public class KanbanCompatService {
    * und die Done-Retention archiviert ausschließlich darüber ({@code findArchivableDoneCards}
    * verlangt {@code movedToDoneAt is not null}). Eine direkt in DONE angelegte Karte fiele
    * dauerhaft aus der Aufbewahrung, ohne dass der Grund sichtbar wäre; außerdem umginge sie die
-   * Zykluszeit-Messung. Der reale Bedarf (Ready) ist davon nicht berührt.
+   * Messung des Spaltenverlaufs. Der reale Bedarf (Ready) ist davon nicht berührt.
    */
   private long directColumnId(long boardId, @Nullable String column) {
     if (column == null) {
