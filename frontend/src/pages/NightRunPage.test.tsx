@@ -4692,8 +4692,10 @@ describe('NightRunPage — Laufblock im Leitstand-Stil (#988)', () => {
     renderPage(mitAllem())
     await screen.findByTestId(`lauf-${startedAt(0)}`)
 
+    // Der Tag hängt an der Zeitzone des Laufs: `startedAt(0)` ist 22:00 UTC, in Berlin schon der
+    // 2., in der CI (UTC) noch der 1. September. Geprüft wird die Form, nicht der Kalendertag.
     const titel = within(lauf(0)).getByTestId('nachtlauf-ueberschrift')
-    expect(titel).toHaveTextContent('Nacht vom 2. September')
+    expect(titel).toHaveTextContent(/^Nacht vom [12]\. September$/)
     expect(titel).toHaveStyle({ fontSize: '15px' })
   })
 
