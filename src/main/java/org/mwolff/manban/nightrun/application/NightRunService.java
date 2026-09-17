@@ -28,8 +28,9 @@ import org.springframework.transaction.annotation.Transactional;
  * PermissionChecker#requireOwner} bewusst mit (Plan #718, A6). <b>Wie viele bleiben</b> — je
  * Projekt höchstens {@code max-per-project} Läufe; verdrängt wird nach {@code startedAt}, in
  * derselben Transaktion wie das Einfügen (A10, A14); die verwaisten Arbeitspakete verdrängter Läufe
- * haben eine eigene Grenze {@code max-items-per-project} (Issue #966). <b>Was bei einem bekannten
- * Lauf geschieht</b> — er wird als schon vorliegend gemeldet und bleibt unangetastet (A11).
+ * haben eine eigene Grenze {@code max-items-per-project} (Issue #966), und beide Grenzen gelten je
+ * Gattung getrennt (Issue #1011). <b>Was bei einem bekannten Lauf geschieht</b> — er wird als schon
+ * vorliegend gemeldet und bleibt unangetastet (A11).
  */
 @Service
 public class NightRunService {
@@ -81,8 +82,9 @@ public class NightRunService {
               .isPresent();
       results.add(new NightRunResult(submission.startedAt(), created));
     }
-    runs.deleteOlderThanNewest(projectId, properties.maxPerProject());
-    runs.deleteOrphanItemsOlderThanNewest(projectId, properties.maxItemsPerProject());
+    // Der Upload-Weg legt ausschliesslich Nachtlaeufe an (siehe run()), also zieht er deren
+    // Ringpuffer — nicht den der interaktiven Sitzungen (Issue #1011).
+    ringpufferNachziehen(projectId, NightRunKind.NIGHT);
     return List.copyOf(results);
   }
 
@@ -133,10 +135,21 @@ public class NightRunService {
     // Wie beim Upload-Weg: verwaiste Pakete eines verdrängten Laufs zuerst weg (#965).
     runs.deleteOrphanItemsOfRun(projectId, meldung.startedAt());
     UpsertResult ergebnis = runs.upsert(gemeldet, items(projectId, meldung));
-    // Der Ringpuffer gilt unverändert auch für maschinell eingelieferte Läufe.
-    runs.deleteOlderThanNewest(projectId, properties.maxPerProject());
-    runs.deleteOrphanItemsOlderThanNewest(projectId, properties.maxItemsPerProject());
+    // Der Ringpuffer gilt unverändert auch für maschinell eingelieferte Läufe — gezogen wird der
+    // der Gattung, die gerade eingeliefert wurde (Issue #1011).
+    ringpufferNachziehen(projectId, gemeldet.kind());
     return new NightRunResult(meldung.startedAt(), ergebnis.created());
+  }
+
+  /**
+   * Zieht den Ringpuffer einer Gattung nach: erst die Läufe, dann die verwaisten Arbeitspakete —
+   * erst danach steht fest, welche Pakete verwaist sind. Beide Grenzen kommen aus {@link
+   * NightRunProperties} und gelten je Gattung getrennt (Plan #1007, E14): Die häufigeren
+   * interaktiven Sitzungen verdrängen sonst binnen Tagen die Nachtlauf-Auswertung.
+   */
+  private void ringpufferNachziehen(long projectId, NightRunKind kind) {
+    runs.deleteOlderThanNewest(projectId, kind, properties.maxRunsFor(kind));
+    runs.deleteOrphanItemsOlderThanNewest(projectId, kind, properties.maxOrphanItemsFor(kind));
   }
 
   /** Die aufbewahrten Läufe des Projekts, neueste zuerst, jeder mit seinen Arbeitspaketen. */

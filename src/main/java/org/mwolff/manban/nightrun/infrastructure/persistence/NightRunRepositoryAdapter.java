@@ -50,6 +50,9 @@ class NightRunRepositoryAdapter implements NightRunRepository {
   /** Name des benannten SQL-Parameters für die Lauf-ID (Sonar java:S1192). */
   private static final String P_NIGHT_RUN_ID = "nightRunId";
 
+  /** Name des benannten SQL-Parameters für die Gattung (Sonar java:S1192). */
+  private static final String P_KIND = "kind";
+
   /** Spaltenname der Fehlerklasse in der Zählabfrage (Sonar java:S1192). */
   private static final String C_ERROR_CLASS = "error_class";
 
@@ -75,9 +78,10 @@ class NightRunRepositoryAdapter implements NightRunRepository {
           + " :cachedInputTokens)";
 
   /**
-   * Verdrängung des Ringpuffers: alles außerhalb der {@code keep} jüngsten Läufe fällt weg. Die
-   * Auswahl steht als Unterabfrage, weil {@code LIMIT} weder in JPQL noch in einer {@code
-   * DELETE}-Bedingung direkt zur Verfügung steht.
+   * Verdrängung des Ringpuffers: alles außerhalb der {@code keep} jüngsten Läufe <b>dieser
+   * Gattung</b> fällt weg (je Gattung getrennt seit Issue #1011). Die Auswahl steht als
+   * Unterabfrage, weil {@code LIMIT} weder in JPQL noch in einer {@code DELETE}-Bedingung direkt
+   * zur Verfügung steht.
    */
   private static final String SELECT_ID_FOR_UPDATE =
       "SELECT id FROM night_run WHERE project_id = :projectId AND started_at = :startedAt"
@@ -96,8 +100,8 @@ class NightRunRepositoryAdapter implements NightRunRepository {
       "DELETE FROM night_run_item WHERE night_run_id = :nightRunId";
 
   private static final String DELETE_OLDER =
-      "DELETE FROM night_run WHERE project_id = :projectId AND id NOT IN"
-          + " (SELECT id FROM night_run WHERE project_id = :projectId"
+      "DELETE FROM night_run WHERE project_id = :projectId AND kind = :kind AND id NOT IN"
+          + " (SELECT id FROM night_run WHERE project_id = :projectId AND kind = :kind"
           + " ORDER BY started_at DESC, id DESC LIMIT :keep)";
 
   /** Ein Lauf zählt je Fehlerklasse höchstens einmal — daher {@code count(DISTINCT …)}. */
@@ -209,10 +213,13 @@ class NightRunRepositoryAdapter implements NightRunRepository {
   }
 
   @Override
-  public int deleteOlderThanNewest(long projectId, int keep) {
+  public int deleteOlderThanNewest(long projectId, NightRunKind kind, int keep) {
     return jdbc.update(
         DELETE_OLDER,
-        new MapSqlParameterSource().addValue(P_PROJECT_ID, projectId).addValue("keep", keep));
+        new MapSqlParameterSource()
+            .addValue(P_PROJECT_ID, projectId)
+            .addValue(P_KIND, kind.name())
+            .addValue("keep", keep));
   }
 
   @Override
@@ -220,9 +227,13 @@ class NightRunRepositoryAdapter implements NightRunRepository {
     return items.deleteOrphansOfRun(projectId, startedAt);
   }
 
+  /**
+   * Die Gattung geht als {@link String} in die native Abfrage: Die Spalte ist ein {@code varchar} +
+   * {@code CHECK} (V34), und ein Enum-Parameter bände Hibernate sonst als Ordinalzahl.
+   */
   @Override
-  public int deleteOrphanItemsOlderThanNewest(long projectId, int keep) {
-    return items.deleteOrphansOlderThanNewest(projectId, keep);
+  public int deleteOrphanItemsOlderThanNewest(long projectId, NightRunKind kind, int keep) {
+    return items.deleteOrphansOlderThanNewest(projectId, kind.name(), keep);
   }
 
   @Override
@@ -244,7 +255,7 @@ class NightRunRepositoryAdapter implements NightRunRepository {
             .addValue(P_PROJECT_ID, run.projectId())
             .addValue("startedAt", zeitpunkt(run.startedAt()))
             .addValue("mode", run.mode().name())
-            .addValue("kind", run.kind().name())
+            .addValue(P_KIND, run.kind().name())
             .addValue("durationMs", run.durationMs())
             .addValue("processedCount", run.processedCount())
             .addValue("skippedCount", run.skippedCount())
@@ -284,7 +295,7 @@ class NightRunRepositoryAdapter implements NightRunRepository {
             .addValue(P_PROJECT_ID, run.projectId())
             .addValue("startedAt", zeitpunkt(run.startedAt()))
             .addValue("mode", run.mode().name())
-            .addValue("kind", run.kind().name())
+            .addValue(P_KIND, run.kind().name())
             .addValue("cardNumber", item.cardNumber())
             .addValue("title", item.title())
             .addValue("state", item.state().name())

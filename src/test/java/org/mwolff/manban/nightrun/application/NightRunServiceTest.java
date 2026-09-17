@@ -78,7 +78,9 @@ class NightRunServiceTest {
     return new NightRunService(
         runs,
         permissions,
-        new NightRunProperties(maxPerProject, 2000),
+        // Die Grenzen der interaktiven Sitzung stehen bewusst anders als die der Nachtlaeufe
+        // (Issue #1011): Ein Test, der sie gleich setzte, saehe nicht, welche durchgereicht wird.
+        new NightRunProperties(maxPerProject, 2000, 400, 4000),
         Clock.fixed(FIXED, ZoneOffset.UTC));
   }
 
@@ -447,7 +449,7 @@ class NightRunServiceTest {
   void ingest_zieehtDenRingpufferNach() {
     service.ingest(USER, PROJECT, TOKEN, meldung(T1, true, null));
 
-    verify(runs).deleteOlderThanNewest(PROJECT, 30);
+    verify(runs).deleteOlderThanNewest(PROJECT, NightRunKind.NIGHT, 30);
   }
 
   @Test
@@ -562,8 +564,8 @@ class NightRunServiceTest {
     service.submit(USER, PROJECT, List.of(lauf(T1)));
 
     var reihenfolge = inOrder(runs);
-    reihenfolge.verify(runs).deleteOlderThanNewest(PROJECT, 30);
-    reihenfolge.verify(runs).deleteOrphanItemsOlderThanNewest(PROJECT, 2000);
+    reihenfolge.verify(runs).deleteOlderThanNewest(PROJECT, NightRunKind.NIGHT, 30);
+    reihenfolge.verify(runs).deleteOrphanItemsOlderThanNewest(PROJECT, NightRunKind.NIGHT, 2000);
     reihenfolge.verifyNoMoreInteractions();
   }
 
@@ -572,9 +574,75 @@ class NightRunServiceTest {
     service.ingest(USER, PROJECT, TOKEN, meldung(T1, true, null));
 
     var reihenfolge = inOrder(runs);
-    reihenfolge.verify(runs).deleteOlderThanNewest(PROJECT, 30);
-    reihenfolge.verify(runs).deleteOrphanItemsOlderThanNewest(PROJECT, 2000);
+    reihenfolge.verify(runs).deleteOlderThanNewest(PROJECT, NightRunKind.NIGHT, 30);
+    reihenfolge.verify(runs).deleteOrphanItemsOlderThanNewest(PROJECT, NightRunKind.NIGHT, 2000);
     reihenfolge.verifyNoMoreInteractions();
+  }
+
+  // --- Getrennte Grenzen je Gattung (Issue #1011) ------------------------------------------
+
+  /**
+   * Beide Einlieferungswege tragen heute die Gattung {@code NIGHT} (Issue #1010) und muessen
+   * deshalb deren Grenzen ziehen — nicht die der interaktiven Sitzung. Der Fall haelt fest, was
+   * durchgereicht wird: Reichte der Service versehentlich die Sitzungs-Grenzen durch, verdraengten
+   * Nachtlaeufe erst bei 400 statt bei 30, und das faellt sonst nirgends auf.
+   */
+  @Test
+  void submit_zieehtDieGrenzenDerGattungNight_nichtDieDerSitzung() {
+    service.submit(USER, PROJECT, List.of(lauf(T1)));
+
+    verify(runs).deleteOlderThanNewest(PROJECT, NightRunKind.NIGHT, 30);
+    verify(runs).deleteOrphanItemsOlderThanNewest(PROJECT, NightRunKind.NIGHT, 2000);
+  }
+
+  @Test
+  void ingest_zieehtDieGrenzenDerGattungDesGemeldetenLaufs() {
+    service.ingest(USER, PROJECT, TOKEN, meldung(T1, true, null));
+
+    verify(runs).deleteOlderThanNewest(PROJECT, NightRunKind.NIGHT, 30);
+    verify(runs).deleteOrphanItemsOlderThanNewest(PROJECT, NightRunKind.NIGHT, 2000);
+  }
+
+  /**
+   * Am Fake belegt: Eine Gattung verdraengt nie die andere. Der Fake bekommt eine Sitzung
+   * untergeschoben, die der Service selbst noch nicht einliefert — sie bleibt stehen, waehrend die
+   * Nachtlaeufe auf ihre Grenze zusammenschrumpfen.
+   */
+  @Test
+  void submit_verdraengtKeineSitzung_wennDieNachtlaeufeIhreGrenzeReissen() {
+    FakeNightRunRepository fake = (FakeNightRunRepository) runs;
+    fake.insertIfAbsent(sitzung(T4), List.of());
+    service = serviceMitPuffer(1);
+
+    service.submit(USER, PROJECT, List.of(lauf(T1)));
+    service.submit(USER, PROJECT, List.of(lauf(T2)));
+    service.submit(USER, PROJECT, List.of(lauf(T3)));
+
+    assertThat(fake.findByProjectOrderByStartedAtDesc(PROJECT))
+        .extracting(NightRun::startedAt, NightRun::kind)
+        .containsExactly(
+            org.assertj.core.groups.Tuple.tuple(T4, NightRunKind.INTERACTIVE),
+            org.assertj.core.groups.Tuple.tuple(T3, NightRunKind.NIGHT));
+  }
+
+  private static NightRun sitzung(Instant startedAt) {
+    return new NightRun(
+        null,
+        PROJECT,
+        startedAt,
+        NightRunMode.INTERACTIVE,
+        NightRunKind.INTERACTIVE,
+        1_000L,
+        1,
+        0,
+        0,
+        null,
+        FIXED,
+        NightRunOrigin.TOKEN,
+        TOKEN,
+        true,
+        FIXED,
+        null);
   }
 
   // --- Anlaeufe einer Karte (Issue #967) -------------------------------------------------
@@ -744,9 +812,12 @@ class NightRunServiceTest {
     }
 
     @Override
-    public int deleteOlderThanNewest(long projectId, int keep) {
+    public int deleteOlderThanNewest(long projectId, NightRunKind kind, int keep) {
       List<NightRun> zuVerdraengen =
-          findByProjectOrderByStartedAtDesc(projectId).stream().skip(keep).toList();
+          findByProjectOrderByStartedAtDesc(projectId).stream()
+              .filter(r -> r.kind() == kind)
+              .skip(keep)
+              .toList();
       Set<Long> ids = zuVerdraengen.stream().map(NightRun::requireId).collect(Collectors.toSet());
       gespeicherteLaeufe.removeAll(zuVerdraengen);
       // ON DELETE SET NULL (Issue #964): Die Pakete bleiben verwaist stehen.
@@ -784,10 +855,10 @@ class NightRunServiceTest {
     }
 
     @Override
-    public int deleteOrphanItemsOlderThanNewest(long projectId, int keep) {
+    public int deleteOrphanItemsOlderThanNewest(long projectId, NightRunKind kind, int keep) {
       List<NightRunItem> zuKappen =
           gespeichertePakete.stream()
-              .filter(i -> i.nightRunId() == null && i.projectId() == projectId)
+              .filter(i -> i.nightRunId() == null && i.projectId() == projectId && i.kind() == kind)
               .sorted(
                   Comparator.comparing(NightRunItem::startedAt)
                       .thenComparing(NightRunItem::requireId)

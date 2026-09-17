@@ -8,6 +8,7 @@ import java.util.Optional;
 import org.mwolff.manban.nightrun.domain.NightRun;
 import org.mwolff.manban.nightrun.domain.NightRunErrorClass;
 import org.mwolff.manban.nightrun.domain.NightRunItem;
+import org.mwolff.manban.nightrun.domain.NightRunKind;
 
 /** Ausgehender Port für die Persistenz der Nachtlauf-Auswertungen (Issue #721). */
 public interface NightRunRepository {
@@ -60,12 +61,17 @@ public interface NightRunRepository {
   List<NightRunItem> findItemsByRunIds(Collection<Long> runIds);
 
   /**
-   * Verdrängt die Läufe des Projekts jenseits der {@code keep} jüngsten (Ringpuffer, Plan #718
-   * A14).
+   * Verdrängt die Läufe <b>dieser Gattung</b> im Projekt jenseits der {@code keep} jüngsten
+   * (Ringpuffer, Plan #718 A14; je Gattung getrennt seit Issue #1011, Plan #1007 E14).
+   *
+   * <p>Verdrängt wird innerhalb einer Gattung, und eine Gattung berührt die andere nie: Läufe der
+   * anderen Gattung zählen weder mit noch fallen sie. Interaktive Sitzungen sind deutlich häufiger
+   * als Nachtläufe — unter einer gemeinsamen Grenze räumten sie die Nachtlauf-Auswertung binnen
+   * Tagen aus.
    *
    * @return Zahl der gelöschten Läufe
    */
-  int deleteOlderThanNewest(long projectId, int keep);
+  int deleteOlderThanNewest(long projectId, NightRunKind kind, int keep);
 
   /**
    * Löscht die <b>verwaisten</b> Arbeitspakete eines Laufs — die mit diesem Projekt und diesem
@@ -81,16 +87,20 @@ public interface NightRunRepository {
   int deleteOrphanItemsOfRun(long projectId, Instant startedAt);
 
   /**
-   * Kappt die <b>verwaisten</b> Arbeitspakete des Projekts: behält die {@code keep} jüngsten nach
-   * {@code started_at} und löscht die älteren (Issue #966).
+   * Kappt die <b>verwaisten</b> Arbeitspakete <b>dieser Gattung</b> im Projekt: behält die {@code
+   * keep} jüngsten nach {@code started_at} und löscht die älteren (Issue #966; je Gattung getrennt
+   * seit Issue #1011).
    *
    * <p>Pakete mit gesetzter {@code night_run_id} sind für diesen Aufruf unsichtbar — sie zählen
    * nicht mit und werden nicht gekappt. Eine Grenze über alle Pakete risse Löcher in Läufe, die der
    * Leitstand noch anzeigt.
    *
+   * <p>Wie bei {@link #deleteOlderThanNewest} gilt die Grenze innerhalb einer Gattung, und eine
+   * Gattung berührt die andere nie.
+   *
    * @return Zahl der gelöschten Arbeitspakete
    */
-  int deleteOrphanItemsOlderThanNewest(long projectId, int keep);
+  int deleteOrphanItemsOlderThanNewest(long projectId, NightRunKind kind, int keep);
 
   /**
    * Die Anläufe einer Karte über Läufe hinweg, jüngster Startzeitpunkt zuerst — einschließlich der
