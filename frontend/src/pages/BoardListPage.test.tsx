@@ -1498,6 +1498,18 @@ describe('BoardListPage Gruppierung und Filter (#980)', () => {
     expect(screen.getByText('Aufgabe')).toBeInTheDocument()
   })
 
+  // Wie in der Werkzeugleiste des Boards steht die Benennung im Wert, nicht über dem Feld
+  // (Entwurf `.waehler`, Z. 833–842; Issue #986).
+  it('benennt den Zuständig-Filter im Wert statt über einer Beschriftung', async () => {
+    localStorage.setItem('manban.listGruppierung', 'keine')
+    await renderGruppiert()
+
+    const auswahl = await screen.findByRole('combobox', { name: 'Zuständig' })
+    expect(screen.queryByText('Zuständig')).not.toBeInTheDocument()
+    expect(within(auswahl).getByRole('option', { name: 'Zuständig: alle' })).toBeInTheDocument()
+    expect(within(auswahl).getByRole('option', { name: 'Zuständig: Anna' })).toBeInTheDocument()
+  })
+
   it('lässt den Zuständigen-Filter weg, wenn die Mitglieder nicht geladen werden können', async () => {
     mMembers.list.mockRejectedValue(new Error('403'))
     localStorage.setItem('manban.listGruppierung', 'keine')

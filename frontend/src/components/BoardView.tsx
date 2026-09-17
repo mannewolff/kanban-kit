@@ -757,23 +757,33 @@ export function BoardView({
             ]}
           />
           {sichtbareEpics.length > 0 && (
+            /* Wähler ohne sichtbare Beschriftung (Entwurf `.waehler`, Z. 833–842): Die Benennung
+               trägt der Wert („Vorhaben: …"), der zugängliche Name bleibt am Feld (Issue #986). */
             <TextField
               select
               size="small"
-              label="Vorhaben-Filter"
               value={epicFilter ?? ''}
               onChange={(e) => changeEpicFilter(e.target.value === '' ? null : Number(e.target.value))}
               slotProps={{
                 htmlInput: { 'aria-label': 'Vorhaben-Filter' },
                 select: { native: true },
-                inputLabel: { shrink: true },
               }}
-              sx={{ minWidth: 200, '& .MuiOutlinedInput-root': { bgcolor: NUT, boxShadow: SCHATTEN_NUTE, fontSize: 12 } }}
+              sx={{
+                '& .MuiOutlinedInput-root': {
+                  bgcolor: NUT,
+                  boxShadow: SCHATTEN_NUTE,
+                  borderRadius: '7px',
+                  fontSize: '11.5px',
+                  fontWeight: 500,
+                  color: 'text.secondary',
+                },
+                '& .MuiNativeSelect-select': { py: '4px', pl: '9px' },
+              }}
             >
-              <option value="">Alle Vorhaben</option>
+              <option value="">Vorhaben: alle</option>
               {sichtbareEpics.map((epic) => (
                 <option key={epic.id} value={epic.id}>
-                  {epicShortcode(epic.title, epic.shortcode)} – {epic.title}
+                  Vorhaben: {epicShortcode(epic.title, epic.shortcode)} – {epic.title}
                 </option>
               ))}
             </TextField>

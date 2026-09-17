@@ -396,6 +396,19 @@ describe('BoardView', () => {
     expect(screen.queryByTestId('card-200')).not.toBeInTheDocument()
   })
 
+  // Der Wähler der Werkzeugleiste trägt seine Benennung im Wert, nicht in einer Beschriftung darüber
+  // (Entwurf `.waehler`, Z. 833–842; Issue #986). Der zugängliche Name bleibt, sonst hätte das Feld
+  // ohne sichtbare Beschriftung gar keinen.
+  it('benennt den Vorhaben-Filter im Wert statt über einer Beschriftung', () => {
+    const epics = [{ id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 0, total: 1, memberNumbers: [], rootNumbers: [], requirementCardNumber: null }]
+    render(<BoardView board={board} initialCards={[card]} canEdit epics={epics} api={mkApi()} />)
+
+    expect(screen.queryByText('Vorhaben-Filter')).not.toBeInTheDocument()
+    const filter = screen.getByLabelText('Vorhaben-Filter')
+    expect(within(filter).getByRole('option', { name: 'Vorhaben: alle' })).toBeInTheDocument()
+    expect(within(filter).getByRole('option', { name: 'Vorhaben: AUT – Auth' })).toBeInTheDocument()
+  })
+
   it('legt eine neue Spalte an (mit canEdit)', async () => {
     mColumns.create.mockResolvedValue({ id: 30, name: 'Neu', position: 2, wipLimit: null })
     render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} />)

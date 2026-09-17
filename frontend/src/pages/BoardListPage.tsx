@@ -597,19 +597,23 @@ export function BoardListPage() {
           />
         </Box>
         {members.length > 0 && (
+          /* Wähler ohne sichtbare Beschriftung (Entwurf `.waehler`, Z. 833–842): Die Benennung trägt
+             der Wert („Zuständig: …"), der zugängliche Name bleibt am Feld (Issue #986). */
           <TextField
             select
             size="small"
-            label="Zuständig"
             value={zustaendig ?? ''}
             onChange={(e) => setZustaendig(e.target.value === '' ? null : Number(e.target.value))}
-            slotProps={{ htmlInput: { 'aria-label': 'Zuständig' }, select: { native: true }, inputLabel: { shrink: true } }}
-            sx={{ minWidth: 160, '& .MuiOutlinedInput-root': { bgcolor: NUT, boxShadow: SCHATTEN_NUTE, fontSize: 12 } }}
+            slotProps={{ htmlInput: { 'aria-label': 'Zuständig' }, select: { native: true } }}
+            sx={{
+              '& .MuiOutlinedInput-root': { bgcolor: NUT, boxShadow: SCHATTEN_NUTE, borderRadius: '7px', fontSize: '11.5px', fontWeight: 500, color: 'text.secondary' },
+              '& .MuiNativeSelect-select': { py: '4px', pl: '9px' },
+            }}
           >
-            <option value="">alle</option>
+            <option value="">Zuständig: alle</option>
             {members.map((m) => (
               <option key={m.userId} value={m.userId}>
-                {m.displayName}
+                Zuständig: {m.displayName}
               </option>
             ))}
           </TextField>
