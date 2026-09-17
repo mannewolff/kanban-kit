@@ -217,8 +217,19 @@ export const KACHEL_SX = {
   '@media (prefers-reduced-motion: reduce)': { '&:hover': { transform: 'none' } },
 } as const
 
-/** Der große Wert einer Kachel (Entwurf `.kachel-wert`, Z. 496–504); ohne Datenbasis ein Leerwert. */
-export function KachelWert({ wert, einheit }: Readonly<{ wert: string | null; einheit: string }>) {
+/**
+ * Der große Wert einer Kachel (Entwurf `.kachel-wert`, Z. 496–504); ohne Datenbasis ein Leerwert.
+ *
+ * <p>`leerText` benennt, **warum** der Wert fehlt: Der Leitstand kennt Kennzahlen ohne Datenbasis,
+ * die Verbrauchs-Auswertung Angaben, die nicht gemessen wurden (#987). Beides ist nicht 0, aber es
+ * ist auch nicht dasselbe. `groesse` deckt die kleine Kachel des Mockups ab (Z. 370–371).
+ */
+export function KachelWert({
+  wert,
+  einheit,
+  leerText = 'keine Datenbasis',
+  groesse = 34,
+}: Readonly<{ wert: string | null; einheit: string; leerText?: string; groesse?: number }>) {
   return (
     <Box sx={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
       <Box
@@ -228,7 +239,7 @@ export function KachelWert({ wert, einheit }: Readonly<{ wert: string | null; ei
           ...ANZEIGE,
           fontStretch: '116%',
           fontWeight: 700,
-          fontSize: 34,
+          fontSize: groesse,
           lineHeight: 1,
           letterSpacing: '-.02em',
           fontVariantNumeric: 'tabular-nums',
@@ -238,7 +249,7 @@ export function KachelWert({ wert, einheit }: Readonly<{ wert: string | null; ei
         {wert ?? '—'}
       </Box>
       <Box component="span" sx={{ fontSize: 12, color: 'text.secondary', fontWeight: 500 }}>
-        {wert === null ? 'keine Datenbasis' : einheit}
+        {wert === null ? leerText : einheit}
       </Box>
     </Box>
   )

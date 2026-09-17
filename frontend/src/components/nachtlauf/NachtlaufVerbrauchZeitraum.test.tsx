@@ -9,10 +9,13 @@ import type {
   VerbrauchZeitraumArt,
 } from '../../api/nightRunUsage'
 import { KEIN_LAUF_TEXT } from '../../lib/verbrauchZeitraum'
-import { nachtlaufTheme } from '../../nachtlaufDesign'
+import { theme } from '../../theme'
 import { NachtlaufVerbrauchZeitraum } from './NachtlaufVerbrauchZeitraum'
 
-/** Die Zeitraum-Sicht der Verbrauchs-Auswertung (Issue #942, #926 AK 5–9). */
+/**
+ * Die Zeitraum-Sicht der Verbrauchs-Auswertung (Issue #942, #926 AK 5–9), seit #987 in der Gestalt
+ * der Kupferwarte nach `docs/mockup-nachtlauf-verbrauch.html`.
+ */
 
 const nichts: VerbrauchAngaben = {
   costUsd: null,
@@ -56,6 +59,8 @@ const zeitraum = (
   previous: kennzahlen(type, {
     firstDay: '2026-08-31',
     lastDay: '2026-09-06',
+    runCount: 2,
+    cardCount: 1,
     usage: { total: kosten(4), cardShare: kosten(3), remainder: kosten(1) },
   }),
   nights: [
@@ -77,24 +82,29 @@ const apiMit = (antwort: (type: VerbrauchZeitraumArt) => Promise<VerbrauchZeitra
 
 const zeige = (api: ReturnType<typeof apiMit>, onNacht = vi.fn()) => {
   render(
-    <ThemeProvider theme={nachtlaufTheme}>
+    <ThemeProvider theme={theme}>
       <NachtlaufVerbrauchZeitraum projectId={5} api={api} onNachtWaehlen={onNacht} />
     </ThemeProvider>,
   )
   return onNacht
 }
 
+/** `Intl` setzt vor der Einheit ein geschütztes Leerzeichen; verglichen wird der Wortlaut. */
 const lesbar = (element: HTMLElement) => element.textContent?.replaceAll(' ', ' ') ?? ''
 
-describe('NachtlaufVerbrauchZeitraum', () => {
-  it('zeigt beim Oeffnen den zuletzt abgeschlossenen Zeitraum der gewaehlten Art', async () => {
+const beschriftung = () => screen.findByTestId('verbrauch-zeitraum-beschriftung')
+
+const kachel = (platte: HTMLElement, etikett: string) =>
+  within(platte).getByTestId(`verbrauch-kachel-${etikett}`)
+
+describe('NachtlaufVerbrauchZeitraum — Kopfzeile und Navigation', () => {
+  it('fuehrt die Abschnittsueberschrift „Verbrauch" mit dem gewaehlten Zeitraum daneben', async () => {
     const api = apiMit((type) => Promise.resolve(zeitraum(type)))
 
     zeige(api)
 
-    expect(
-      await screen.findByRole('heading', { name: 'Woche vom 07.09.2026 bis 13.09.2026' }),
-    ).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 2, name: 'Verbrauch' })).toBeInTheDocument()
+    expect(await beschriftung()).toHaveTextContent('Woche vom 07.09.2026 bis 13.09.2026')
     expect(api.period).toHaveBeenCalledWith(5, 'WEEK', 0)
     expect(screen.getByRole('button', { name: 'Woche' })).toHaveAttribute('aria-pressed', 'true')
   })
@@ -102,20 +112,20 @@ describe('NachtlaufVerbrauchZeitraum', () => {
   it('ruft Tag, Woche und Monat nacheinander ab, ohne den Bereich zu verlassen', async () => {
     const api = apiMit((type) => Promise.resolve(zeitraum(type)))
     zeige(api)
-    await screen.findByRole('heading', { name: 'Woche vom 07.09.2026 bis 13.09.2026' })
+    expect(await beschriftung()).toHaveTextContent('Woche vom 07.09.2026 bis 13.09.2026')
 
     fireEvent.click(screen.getByRole('button', { name: 'Tag' }))
-    expect(
-      await screen.findByRole('heading', { name: 'Nacht vom 15.09.2026 auf den 16.09.2026' }),
-    ).toBeInTheDocument()
+    await waitFor(async () =>
+      expect(await beschriftung()).toHaveTextContent('Nacht vom 15.09.2026 auf den 16.09.2026'),
+    )
 
     fireEvent.click(screen.getByRole('button', { name: 'Monat' }))
-    expect(await screen.findByRole('heading', { name: 'August 2026' })).toBeInTheDocument()
+    await waitFor(async () => expect(await beschriftung()).toHaveTextContent('August 2026'))
 
     fireEvent.click(screen.getByRole('button', { name: 'Woche' }))
-    expect(
-      await screen.findByRole('heading', { name: 'Woche vom 07.09.2026 bis 13.09.2026' }),
-    ).toBeInTheDocument()
+    await waitFor(async () =>
+      expect(await beschriftung()).toHaveTextContent('Woche vom 07.09.2026 bis 13.09.2026'),
+    )
     expect(api.period.mock.calls.map((c) => [c[1], c[2]])).toEqual([
       ['WEEK', 0],
       ['DAY', 0],
@@ -127,7 +137,7 @@ describe('NachtlaufVerbrauchZeitraum', () => {
   it('bleibt bei einem Klick auf die schon gewaehlte Art stehen', async () => {
     const api = apiMit((type) => Promise.resolve(zeitraum(type)))
     zeige(api)
-    await screen.findByRole('heading', { name: 'Woche vom 07.09.2026 bis 13.09.2026' })
+    await beschriftung()
 
     fireEvent.click(screen.getByRole('button', { name: 'Woche' }))
 
@@ -137,7 +147,7 @@ describe('NachtlaufVerbrauchZeitraum', () => {
   it('schreitet zurueck und wieder vor; spaeter als der letzte abgeschlossene geht nicht', async () => {
     const api = apiMit((type) => Promise.resolve(zeitraum(type)))
     zeige(api)
-    await screen.findByRole('heading', { name: 'Woche vom 07.09.2026 bis 13.09.2026' })
+    await beschriftung()
     expect(screen.getByRole('button', { name: 'Späterer Zeitraum' })).toBeDisabled()
 
     fireEvent.click(screen.getByRole('button', { name: 'Früherer Zeitraum' }))
@@ -151,112 +161,13 @@ describe('NachtlaufVerbrauchZeitraum', () => {
   it('beginnt beim Wechsel der Art wieder beim zuletzt abgeschlossenen Zeitraum', async () => {
     const api = apiMit((type) => Promise.resolve(zeitraum(type)))
     zeige(api)
-    await screen.findByRole('heading', { name: 'Woche vom 07.09.2026 bis 13.09.2026' })
+    await beschriftung()
     fireEvent.click(screen.getByRole('button', { name: 'Früherer Zeitraum' }))
     await waitFor(() => expect(api.period).toHaveBeenLastCalledWith(5, 'WEEK', 1))
 
     fireEvent.click(screen.getByRole('button', { name: 'Monat' }))
 
     await waitFor(() => expect(api.period).toHaveBeenLastCalledWith(5, 'MONTH', 0))
-  })
-
-  it('stellt Zeitraum und Vorzeitraum nebeneinander und nennt die Richtung als Text', async () => {
-    zeige(apiMit((type) => Promise.resolve(zeitraum(type))))
-
-    const aktuell = await screen.findByTestId('verbrauch-zeitraum-aktuell')
-    const vorher = screen.getByTestId('verbrauch-zeitraum-vorher')
-    expect(lesbar(within(aktuell).getByTestId('nachtlauf-kennzahl-Gesamtsumme'))).toContain('6,50 $')
-    expect(vorher).toHaveTextContent('Vorwoche: Woche vom 31.08.2026 bis 06.09.2026')
-    expect(lesbar(within(vorher).getByTestId('nachtlauf-kennzahl-Gesamtsumme'))).toContain('4,00 $')
-    expect(lesbar(screen.getByTestId('verbrauch-zeitraum-vergleich'))).toBe(
-      '2,50 $ teurer als im Vorzeitraum',
-    )
-  })
-
-  it('zeigt bei einem Zeitraum ohne Laeufe den Satz aus AK 9 und keine Zahlen', async () => {
-    zeige(
-      apiMit((type) =>
-        Promise.resolve(
-          zeitraum(type, { noRuns: true, runCount: 0, cardCount: 0, usage: { total: nichts, cardShare: nichts, remainder: nichts } }),
-        ),
-      ),
-    )
-
-    expect(await screen.findByText(KEIN_LAUF_TEXT)).toBeInTheDocument()
-    expect(screen.queryByTestId('verbrauch-zeitraum-aktuell')).not.toBeInTheDocument()
-    expect(screen.queryByTestId('verbrauch-vorhaben')).not.toBeInTheDocument()
-  })
-
-  it('zeigt bei Teilabdeckung die Zahlen und den Hinweis daneben', async () => {
-    zeige(apiMit((type) => Promise.resolve(zeitraum(type, { coverage: 'PARTIAL' }))))
-
-    expect(await screen.findByTestId('verbrauch-zeitraum-hinweis')).toHaveTextContent('nur teilweise abgedeckt')
-    expect(screen.getByTestId('verbrauch-zeitraum-aktuell')).toBeInTheDocument()
-  })
-
-  it('zeigt ganz vor dem aeltesten aufbewahrten Lauf den eigenen Satz, nicht den aus AK 9', async () => {
-    zeige(
-      apiMit((type) =>
-        Promise.resolve(
-          zeitraum(type, { coverage: 'BEFORE_RETENTION', noRuns: true, runCount: 0, usage: { total: nichts, cardShare: nichts, remainder: nichts } }),
-        ),
-      ),
-    )
-
-    const hinweis = await screen.findByTestId('verbrauch-zeitraum-hinweis')
-    expect(hinweis).toHaveTextContent('vor dem ältesten aufbewahrten Lauf')
-    expect(screen.queryByText(KEIN_LAUF_TEXT)).not.toBeInTheDocument()
-    expect(screen.queryByTestId('verbrauch-zeitraum-aktuell')).not.toBeInTheDocument()
-  })
-
-  it('zeigt nicht gemessene Angaben mit Hinweis als „nicht gemessen"', async () => {
-    zeige(
-      apiMit((type) =>
-        Promise.resolve(zeitraum(type, { usage: { total: nichts, cardShare: nichts, remainder: nichts } })),
-      ),
-    )
-
-    expect(await screen.findByTestId('verbrauch-zeitraum-hinweis')).toHaveTextContent('nicht gemessen')
-    expect(
-      within(screen.getByTestId('verbrauch-zeitraum-aktuell')).getByTestId('nachtlauf-kennzahl-Gesamtsumme'),
-    ).toHaveTextContent('nicht gemessen')
-    expect(screen.getByTestId('verbrauch-zeitraum-vergleich')).toHaveTextContent('nicht vergleichbar')
-  })
-
-  it('macht die Naechte des Zeitraums erreichbar', async () => {
-    const onNacht = zeige(apiMit((type) => Promise.resolve(zeitraum(type))))
-
-    const knopf = await screen.findByRole('button', { name: /Nacht vom 09\.09\.2026/ })
-    expect(knopf).toHaveTextContent('abgebrochen')
-    fireEvent.click(knopf)
-
-    expect(onNacht).toHaveBeenCalledWith('2026-09-09')
-    expect(lesbar(screen.getByRole('button', { name: /Nacht vom 08\.09\.2026/ }))).toContain('3,00 $')
-  })
-
-  it('nennt den Hinweis des Vorzeitraums an seiner Spalte', async () => {
-    const mitAltemVorzeitraum = (type: VerbrauchZeitraumArt): VerbrauchZeitraum => ({
-      ...zeitraum(type),
-      previous: kennzahlen(type, { coverage: 'BEFORE_RETENTION', noRuns: true, runCount: 0 }),
-    })
-    zeige(apiMit((type) => Promise.resolve(mitAltemVorzeitraum(type))))
-
-    const vorher = await screen.findByTestId('verbrauch-zeitraum-vorher')
-    expect(vorher).toHaveTextContent('vor dem ältesten aufbewahrten Lauf')
-    expect(screen.getByTestId('verbrauch-zeitraum-aktuell')).not.toHaveTextContent('aufbewahrten')
-  })
-
-  it('zeigt keine Naechte-Liste, wenn der Zeitraum keine Nacht traegt', async () => {
-    zeige(apiMit((type) => Promise.resolve({ ...zeitraum(type), nights: [] })))
-
-    await screen.findByTestId('verbrauch-zeitraum-aktuell')
-    expect(screen.queryByRole('heading', { name: 'Nächte' })).not.toBeInTheDocument()
-  })
-
-  it('zeigt die Vorhaben-Aufstellung des Zeitraums', async () => {
-    zeige(apiMit((type) => Promise.resolve(zeitraum(type))))
-
-    expect(await screen.findByTestId('verbrauch-vorhaben')).toHaveTextContent('PLANEN · Planen')
   })
 
   it('sagt es, wenn der Zeitraum nicht geladen werden kann', async () => {
@@ -287,13 +198,204 @@ describe('NachtlaufVerbrauchZeitraum', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Tag' }))
     fireEvent.click(screen.getByRole('button', { name: 'Monat' }))
-    expect(await screen.findByRole('heading', { name: 'August 2026' })).toBeInTheDocument()
+    expect(await beschriftung()).toHaveTextContent('August 2026')
 
     wocheLiefern(zeitraum('WEEK'))
     wocheScheitern(new Error('zu spaet'))
     await Promise.resolve()
 
-    expect(screen.getByRole('heading', { name: 'August 2026' })).toBeInTheDocument()
+    expect(await beschriftung()).toHaveTextContent('August 2026')
     expect(screen.queryByText('Der Zeitraum konnte nicht geladen werden.')).not.toBeInTheDocument()
+  })
+})
+
+describe('NachtlaufVerbrauchZeitraum — Platten und Kacheln', () => {
+  it('stellt Zeitraum und Vorzeitraum als zwei Platten mit je vier Kacheln nebeneinander', async () => {
+    zeige(apiMit((type) => Promise.resolve(zeitraum(type))))
+
+    const aktuell = await screen.findByTestId('verbrauch-zeitraum-aktuell')
+    const vorher = screen.getByTestId('verbrauch-zeitraum-vorher')
+    expect(within(aktuell).getByRole('heading', { name: 'Dieser Zeitraum' })).toBeInTheDocument()
+    expect(within(vorher).getByRole('heading', { name: 'Vorwoche' })).toBeInTheDocument()
+    expect(vorher).toHaveTextContent('Woche vom 31.08.2026 bis 06.09.2026')
+    expect(within(aktuell).getAllByTestId(/^verbrauch-kachel-/)).toHaveLength(4)
+    expect(within(vorher).getAllByTestId(/^verbrauch-kachel-/)).toHaveLength(4)
+    expect(lesbar(kachel(aktuell, 'Gesamtsumme'))).toContain('6,50')
+    expect(lesbar(kachel(vorher, 'Gesamtsumme'))).toContain('4,00')
+  })
+
+  it('ordnet jede Kachel aus vorhandenen Daten ein', async () => {
+    zeige(apiMit((type) => Promise.resolve(zeitraum(type))))
+
+    const aktuell = await screen.findByTestId('verbrauch-zeitraum-aktuell')
+    // 6,50 $ auf 4 Läufe, 5,00 $ von 6,50 $ sind 77 %, 3 Karten in 4 Läufen.
+    expect(lesbar(kachel(aktuell, 'Gesamtsumme'))).toContain('1,63 $ je Lauf')
+    expect(kachel(aktuell, 'Karten zugeordnet')).toHaveTextContent('77 % der Summe')
+    expect(kachel(aktuell, 'Rest')).toHaveTextContent('keiner Karte zuzuordnen')
+    expect(kachel(aktuell, 'Läufe')).toHaveTextContent('3 Karten')
+    expect(lesbar(kachel(aktuell, 'Läufe'))).toContain('4')
+  })
+
+  it('laesst die Einordnung weg, wo der Wert dafuer fehlt — und schreibt nie 0', async () => {
+    zeige(
+      apiMit((type) =>
+        Promise.resolve(
+          zeitraum(type, { usage: { total: nichts, cardShare: nichts, remainder: nichts } }),
+        ),
+      ),
+    )
+
+    const aktuell = await screen.findByTestId('verbrauch-zeitraum-aktuell')
+    expect(kachel(aktuell, 'Gesamtsumme')).toHaveTextContent('nicht gemessen')
+    expect(kachel(aktuell, 'Gesamtsumme')).not.toHaveTextContent('je Lauf')
+    expect(kachel(aktuell, 'Karten zugeordnet')).not.toHaveTextContent('der Summe')
+    expect(kachel(aktuell, 'Gesamtsumme').textContent).not.toMatch(/\d/)
+  })
+
+  it('nennt im Kopf der Platte die Spanne und die Zahl der Laeufe', async () => {
+    zeige(apiMit((type) => Promise.resolve(zeitraum(type))))
+
+    expect(await screen.findByTestId('verbrauch-zeitraum-aktuell')).toHaveTextContent('4 Läufe')
+    expect(screen.getByTestId('verbrauch-zeitraum-vorher')).toHaveTextContent('2 Läufe')
+  })
+})
+
+describe('NachtlaufVerbrauchZeitraum — Vergleich mit dem Vorzeitraum', () => {
+  it('zeigt teurer als zinnoberne Marke mit ▲ und behaelt den ganzen Satz fuer Vorlesewerkzeuge', async () => {
+    zeige(apiMit((type) => Promise.resolve(zeitraum(type))))
+
+    const vergleich = await screen.findByTestId('verbrauch-zeitraum-vergleich')
+    expect(lesbar(within(vergleich).getByTestId('delta-schlecht'))).toBe('▲ 2,50 $ zur Vorwoche')
+    expect(lesbar(vergleich)).toContain('2,50 $ teurer als im Vorzeitraum')
+  })
+
+  it('zeigt billiger als gruene Marke mit ▼', async () => {
+    zeige(
+      apiMit((type) =>
+        Promise.resolve(
+          zeitraum(type, { usage: { total: kosten(3), cardShare: kosten(2), remainder: kosten(1) } }),
+        ),
+      ),
+    )
+
+    const vergleich = await screen.findByTestId('verbrauch-zeitraum-vergleich')
+    expect(lesbar(within(vergleich).getByTestId('delta-gut'))).toBe('▼ 1,00 $ zur Vorwoche')
+  })
+
+  it('setzt keine Marke, wo nicht vergleichbar ist', async () => {
+    zeige(
+      apiMit((type) =>
+        Promise.resolve(
+          zeitraum(type, { usage: { total: nichts, cardShare: nichts, remainder: nichts } }),
+        ),
+      ),
+    )
+
+    const vergleich = await screen.findByTestId('verbrauch-zeitraum-vergleich')
+    expect(vergleich).toHaveTextContent('nicht vergleichbar')
+    expect(within(vergleich).queryByTestId(/^delta-/)).not.toBeInTheDocument()
+  })
+})
+
+describe('NachtlaufVerbrauchZeitraum — Hinweise', () => {
+  it('zeigt bei einem Zeitraum ohne Laeufe den Satz aus AK 9 und keine Zahlen', async () => {
+    zeige(
+      apiMit((type) =>
+        Promise.resolve(
+          zeitraum(type, { noRuns: true, runCount: 0, cardCount: 0, usage: { total: nichts, cardShare: nichts, remainder: nichts } }),
+        ),
+      ),
+    )
+
+    expect(await screen.findByText(KEIN_LAUF_TEXT)).toBeInTheDocument()
+    expect(screen.queryByTestId(/^verbrauch-kachel-/)).not.toBeInTheDocument()
+    expect(screen.queryByTestId('verbrauch-zeitraum-vorher')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('verbrauch-vorhaben')).not.toBeInTheDocument()
+  })
+
+  it('zeigt ganz vor dem aeltesten aufbewahrten Lauf den eigenen Satz, nicht den aus AK 9', async () => {
+    zeige(
+      apiMit((type) =>
+        Promise.resolve(
+          zeitraum(type, { coverage: 'BEFORE_RETENTION', noRuns: true, runCount: 0, usage: { total: nichts, cardShare: nichts, remainder: nichts } }),
+        ),
+      ),
+    )
+
+    const hinweis = await screen.findByTestId('verbrauch-zeitraum-hinweis')
+    expect(hinweis).toHaveTextContent('vor dem ältesten aufbewahrten Lauf')
+    expect(screen.queryByText(KEIN_LAUF_TEXT)).not.toBeInTheDocument()
+    expect(screen.queryByTestId(/^verbrauch-kachel-/)).not.toBeInTheDocument()
+  })
+
+  it('zeigt bei Teilabdeckung die Zahlen und den Hinweis im Kopf der Platte', async () => {
+    zeige(apiMit((type) => Promise.resolve(zeitraum(type, { coverage: 'PARTIAL' }))))
+
+    const aktuell = await screen.findByTestId('verbrauch-zeitraum-aktuell')
+    expect(within(aktuell).getByTestId('verbrauch-zeitraum-hinweis')).toHaveTextContent(
+      'nur teilweise abgedeckt',
+    )
+    expect(within(aktuell).getAllByTestId(/^verbrauch-kachel-/)).toHaveLength(4)
+  })
+
+  it('zeigt nicht gemessene Angaben mit Hinweis als „nicht gemessen"', async () => {
+    zeige(
+      apiMit((type) =>
+        Promise.resolve(zeitraum(type, { usage: { total: nichts, cardShare: nichts, remainder: nichts } })),
+      ),
+    )
+
+    expect(await screen.findByTestId('verbrauch-zeitraum-hinweis')).toHaveTextContent('nicht gemessen')
+    expect(screen.getByTestId('verbrauch-zeitraum-vergleich')).toHaveTextContent('nicht vergleichbar')
+  })
+
+  it('nennt den Hinweis des Vorzeitraums an seiner Platte', async () => {
+    const mitAltemVorzeitraum = (type: VerbrauchZeitraumArt): VerbrauchZeitraum => ({
+      ...zeitraum(type),
+      previous: kennzahlen(type, { coverage: 'BEFORE_RETENTION', noRuns: true, runCount: 0 }),
+    })
+    zeige(apiMit((type) => Promise.resolve(mitAltemVorzeitraum(type))))
+
+    const vorher = await screen.findByTestId('verbrauch-zeitraum-vorher')
+    expect(vorher).toHaveTextContent('vor dem ältesten aufbewahrten Lauf')
+    expect(screen.getByTestId('verbrauch-zeitraum-aktuell')).not.toHaveTextContent('aufbewahrten')
+  })
+})
+
+describe('NachtlaufVerbrauchZeitraum — Naechte und Vorhaben', () => {
+  it('macht jede Nacht des Zeitraums als Zeile erreichbar', async () => {
+    const onNacht = zeige(apiMit((type) => Promise.resolve(zeitraum(type))))
+
+    const knopf = await screen.findByRole('button', { name: /Nacht vom 09\.09\.2026/ })
+    expect(knopf).toHaveAccessibleName(/abgebrochen/)
+    fireEvent.click(knopf)
+
+    expect(onNacht).toHaveBeenCalledWith('2026-09-09')
+    const erste = screen.getByRole('button', { name: /Nacht vom 08\.09\.2026/ })
+    expect(lesbar(erste)).toContain('3,00 $')
+    expect(erste).toHaveTextContent('Di 08.09. → 09.09.')
+    expect(erste).toHaveTextContent('2 Läufe')
+  })
+
+  it('zeichnet den Balken einer Nacht im Verhaeltnis zur teuersten und nie fuer eine ungemessene', async () => {
+    zeige(apiMit((type) => Promise.resolve(zeitraum(type))))
+
+    const erste = await screen.findByRole('button', { name: /Nacht vom 08\.09\.2026/ })
+    expect(within(erste).getByTestId('fuellung-100')).toBeInTheDocument()
+    const zweite = screen.getByRole('button', { name: /Nacht vom 09\.09\.2026/ })
+    expect(within(zweite).queryByTestId(/^fuellung-/)).not.toBeInTheDocument()
+  })
+
+  it('zeigt keine Naechte-Platte, wenn der Zeitraum keine Nacht traegt', async () => {
+    zeige(apiMit((type) => Promise.resolve({ ...zeitraum(type), nights: [] })))
+
+    await screen.findByTestId('verbrauch-zeitraum-aktuell')
+    expect(screen.queryByRole('heading', { name: 'Nächte' })).not.toBeInTheDocument()
+  })
+
+  it('zeigt die Vorhaben-Aufstellung des Zeitraums neben den Naechten', async () => {
+    zeige(apiMit((type) => Promise.resolve(zeitraum(type))))
+
+    expect(await screen.findByTestId('verbrauch-vorhaben')).toHaveTextContent('PLANEN · Planen')
   })
 })

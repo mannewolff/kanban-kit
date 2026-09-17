@@ -25,6 +25,11 @@ const DATUM = new Intl.DateTimeFormat('de-DE', {
 
 const MONAT = new Intl.DateTimeFormat('de-DE', { month: 'long', year: 'numeric', timeZone: 'UTC' })
 
+/** Tag und Monat ohne Jahr — für die Zeilen der Nächte, wo die Spalte schmal ist. */
+const TAG_MONAT = new Intl.DateTimeFormat('de-DE', { day: '2-digit', month: '2-digit', timeZone: 'UTC' })
+
+const WOCHENTAG = new Intl.DateTimeFormat('de-DE', { weekday: 'short', timeZone: 'UTC' })
+
 const PROZENT = new Intl.NumberFormat('de-DE', {
   minimumFractionDigits: 1,
   maximumFractionDigits: 1,
@@ -65,11 +70,27 @@ export function zeitraumBeschriftung(
   }
 }
 
-/** Der Vorzeitraum beim Namen seiner Art, gefolgt von seiner Beschriftung. */
-export function vorzeitraumBeschriftung(
-  kennzahlen: Pick<VerbrauchKennzahlen, 'type' | 'firstDay' | 'lastDay'>,
-): string {
-  return `${VORZEITRAUM[kennzahlen.type]}: ${zeitraumBeschriftung(kennzahlen)}`
+/** Der Vorzeitraum beim Namen seiner Art — der Titel seiner Platte. */
+export function vorzeitraumName(kennzahlen: Pick<VerbrauchKennzahlen, 'type'>): string {
+  return VORZEITRAUM[kennzahlen.type]
+}
+
+/**
+ * Eine Nacht in der Kurzform der Nächte-Platte: Wochentag, Beginn und Folgetag ohne Jahr. Die
+ * Spalte ist schmal, das Jahr steht schon in der Beschriftung des Zeitraums darüber.
+ */
+export function nachtKurz(nacht: string): string {
+  return `${WOCHENTAG.format(alsDatum(nacht))} ${TAG_MONAT.format(alsDatum(nacht))} → ${TAG_MONAT.format(folgetag(nacht))}`
+}
+
+/** „1 Lauf" bzw. „n Läufe" — die Zahl steht in Kopfzeilen, Einordnungen und Nächte-Zeilen. */
+export function laeufeText(anzahl: number): string {
+  return anzahl === 1 ? '1 Lauf' : `${anzahl} Läufe`
+}
+
+/** „1 Karte" bzw. „n Karten". */
+export function kartenText(anzahl: number): string {
+  return anzahl === 1 ? '1 Karte' : `${anzahl} Karten`
 }
 
 export type VergleichsRichtung = 'teurer' | 'billiger' | 'unveraendert' | 'nicht-vergleichbar'

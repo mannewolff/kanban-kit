@@ -5,6 +5,7 @@ import { ARCHIVED_STATUS_COLOR, STATUS_FARBWERTE, statusColors } from './lib/sta
 import {
   APP_BACKGROUND,
   CARD_LIFT,
+  ERSCHEINUNGSBILD_SX,
   CARD_RADIUS,
   CARD_SHADOW,
   CARD_SHADOW_HOVER,
@@ -594,6 +595,40 @@ describe('theme Ausdruck (Fachplan-Frage 6, E6, #953)', () => {
     const wurzel = druck()![':root:root'] as Record<string, string>
     expect(dunkleVariablen.length).toBeGreaterThan(50)
     expect(dunkleVariablen.filter((name) => !(name in wurzel))).toEqual([])
+  })
+})
+
+describe('theme Teilbaum mit beiden Erscheinungsbildern (#987)', () => {
+  const dunkelBlock = () =>
+    ERSCHEINUNGSBILD_SX['@media (prefers-color-scheme: dark)'] as Record<string, string>
+
+  it('setzt die hellen Variablen und schaltet im dunklen System auf die dunklen um', () => {
+    // Die Nachtlauf-Seite setzt an ihrem Wurzelknoten die hellen Variablen fest (#954). Ein Bereich
+    // darin, der Kupferwarte trägt, kann sie nicht „erben lassen" — er schreibt beide Sätze selbst,
+    // mit derselben Media-Query, die auch `:root` benutzt.
+    expect(ERSCHEINUNGSBILD_SX['--mb-palette-background-default']).toBe(hell.background.default)
+    expect(dunkelBlock()['--mb-palette-background-default']).toBe(dunkel.background.default)
+    expect(ERSCHEINUNGSBILD_SX.colorScheme).toBe('light')
+    expect(dunkelBlock().colorScheme).toBe('dark')
+  })
+
+  it('schaltet jede Variable zurueck, die das dunkle Erscheinungsbild aendert', () => {
+    // Bliebe eine hängen, stünde im Dunkeln ein heller Wert mitten in der dunklen Fläche.
+    const dunkleRegel = theme
+      .generateStyleSheets()
+      .find((blatt) => '@media (prefers-color-scheme: dark)' in blatt)!['@media (prefers-color-scheme: dark)'] as Record<
+      string,
+      Record<string, string>
+    >
+    const dunkleVariablen = Object.keys(dunkleRegel[':root']).filter((name) => name.startsWith('--'))
+
+    expect(dunkleVariablen.length).toBeGreaterThan(50)
+    expect(dunkleVariablen.filter((name) => !(name in dunkelBlock()))).toEqual([])
+  })
+
+  it('traegt die Warte-Tokens beider Erscheinungsbilder, aus denen die Bausteine bauen', () => {
+    expect(ERSCHEINUNGSBILD_SX['--mb-palette-warte-platte']).toBe(hell.warte.platte)
+    expect(dunkelBlock()['--mb-palette-warte-platte']).toBe(dunkel.warte.platte)
   })
 })
 

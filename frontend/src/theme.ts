@@ -353,16 +353,21 @@ const VARIABLEN = VARIABLEN_THEME.vars.palette
  * hell bleibt (#953); die Nachtlauf-Auswertung setzt sie an ihrem Wurzelknoten, damit ihre
  * Ausnahme auch im Dunkeln hell bleibt (#954).
  */
-export const HELLE_VARIABLEN: Readonly<Record<string, string>> = (() => {
-  const blaetter = VARIABLEN_THEME.generateStyleSheets()
-  const hell = blaetter
-    .map((blatt) => blatt[':root'] as Record<string, string> | undefined)
-    .find((wurzel) => wurzel?.colorScheme === 'light')
-  const dunkel = (
-    blaetter.find((blatt) => '@media (prefers-color-scheme: dark)' in blatt)?.['@media (prefers-color-scheme: dark)'] as
+const BLAETTER = VARIABLEN_THEME.generateStyleSheets()
+
+/** Der `:root`-Block des dunklen Erscheinungsbilds, so wie MUI ihn in die Media-Query schreibt. */
+const WURZEL_DUNKEL: Readonly<Record<string, string>> =
+  (
+    BLAETTER.find((blatt) => '@media (prefers-color-scheme: dark)' in blatt)?.['@media (prefers-color-scheme: dark)'] as
       | Record<string, Record<string, string>>
       | undefined
-  )?.[':root']
+  )?.[':root'] ?? {}
+
+export const HELLE_VARIABLEN: Readonly<Record<string, string>> = (() => {
+  const hell = BLAETTER.map((blatt) => blatt[':root'] as Record<string, string> | undefined).find(
+    (wurzel) => wurzel?.colorScheme === 'light',
+  )
+  const dunkel = WURZEL_DUNKEL
   // Einige Variablen legt MUI nur dunkel an: die Aufhellung erhöhter Flächen (`overlays`) und
   // zwei Farben, die nur dunkle Komponenten-Stile lesen. Hell gibt es für sie keinen Wert zum
   // Zurücksetzen; im Druck bekommen sie deshalb den hellen Gegenwert.
@@ -372,7 +377,7 @@ export const HELLE_VARIABLEN: Readonly<Record<string, string>> = (() => {
     '--mb-palette-AppBar-darkBg': palette.background.paper,
     '--mb-palette-AppBar-darkColor': palette.text.primary,
   }
-  const nurDunkel = Object.keys(dunkel ?? {}).filter((name) => name.startsWith('--') && !(name in (hell ?? {})))
+  const nurDunkel = Object.keys(dunkel).filter((name) => name.startsWith('--') && !(name in (hell ?? {})))
   return {
     ...hell,
     ...Object.fromEntries(
@@ -382,6 +387,20 @@ export const HELLE_VARIABLEN: Readonly<Record<string, string>> = (() => {
     ),
   }
 })()
+
+/**
+ * Beide Erscheinungsbilder für einen Teilbaum, der nicht an `:root` hängen kann (#987).
+ *
+ * <p>Die Nachtlauf-Auswertung setzt an ihrem Wurzelknoten die hellen Variablen fest, damit ihre
+ * Ausnahme auch im Dunkeln hell bleibt (#954). Ein Bereich **darin**, der wieder Kupferwarte trägt,
+ * kann die Variablen von `:root` nicht zurückholen — CSS kennt kein „erbe wieder von oben". Er
+ * schreibt deshalb beide Sätze selbst, mit derselben Media-Query, die auch `:root` benutzt: hell als
+ * Grundlage, dunkel im dunklen System.
+ */
+export const ERSCHEINUNGSBILD_SX: Readonly<Record<string, string | Readonly<Record<string, string>>>> = {
+  ...HELLE_VARIABLEN,
+  '@media (prefers-color-scheme: dark)': WURZEL_DUNKEL,
+}
 
 // ---------------------------------------------------------------------------------------------
 // Schriften (Entwurf Z. 2–4, 162–183)
@@ -498,6 +517,20 @@ export const NUTZER_MAL_SX = {
   background: 'linear-gradient(160deg, #47505d, #2b323c)',
   color: '#FFFFFF',
   boxShadow: '0 1px 0 rgba(255,255,255,.18) inset, 0 2px 5px rgba(0,0,0,.35)',
+} as const
+
+/**
+ * Text, der nur Vorlesewerkzeugen gilt: aus dem Fluss genommen, aber nicht `display: none` — sonst
+ * läse ihn niemand. Für Stellen, an denen die Gestalt eine Angabe auf ein Zeichen verkürzt (eine
+ * Marke, ein Strich) und der volle Satz trotzdem erreichbar bleiben muss.
+ */
+export const NUR_LESER_SX = {
+  position: 'absolute',
+  width: 1,
+  height: 1,
+  overflow: 'hidden',
+  clip: 'rect(0 0 0 0)',
+  whiteSpace: 'nowrap',
 } as const
 
 /** Anheben einer Taste beim Hover. */

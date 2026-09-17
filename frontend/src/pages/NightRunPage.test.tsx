@@ -946,7 +946,8 @@ describe('NightRunPage — Verbrauch (Issue #941)', () => {
   it('erreicht vom Zeitraum aus eine einzelne Nacht und stellt die Nachtansicht um (Issue #942, AK 8)', async () => {
     renderPage()
     const bereich = await screen.findByTestId('verbrauch-bereich')
-    // Die Überschrift der Nachtansicht, nicht die gleichlautende der Zeitraum-Sicht darüber.
+    // Die Überschrift der Nachtansicht; die Zeitraum-Sicht darüber nennt ihren Zeitraum seit #987
+    // in der Kopfzeile und nicht mehr als Überschrift.
     const nachtUeberschrift = async () =>
       within(await within(bereich).findByTestId('verbrauch-nacht')).getByRole('heading', { level: 3 })
     expect(await nachtUeberschrift()).toHaveTextContent('Nacht vom 15.09.2026 auf den 16.09.2026')

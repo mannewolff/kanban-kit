@@ -1,11 +1,7 @@
 import Box from '@mui/material/Box'
-import Button from '@mui/material/Button'
 import ButtonBase from '@mui/material/ButtonBase'
-import Stack from '@mui/material/Stack'
-import ToggleButton from '@mui/material/ToggleButton'
-import ToggleButtonGroup from '@mui/material/ToggleButtonGroup'
 import Typography from '@mui/material/Typography'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import {
   nightRunUsageApi,
   type NightRunUsageApi,
@@ -14,16 +10,43 @@ import {
   type VerbrauchZeitraum,
   type VerbrauchZeitraumArt,
 } from '../../api/nightRunUsage'
+import { dollar } from '../../lib/leitstand'
 import { kosten } from '../../lib/nachtlaufFormat'
 import {
+  kartenText,
+  laeufeText,
+  nachtKurz,
   vergleichMitVorzeitraum,
-  vorzeitraumBeschriftung,
+  vorzeitraumName,
   zeitraumBeschriftung,
   zeitraumFall,
   zeitraumHinweis,
 } from '../../lib/verbrauchZeitraum'
-import { NACHTLAUF_FARBEN, NACHTLAUF_SCHRIFTEN } from '../../nachtlaufDesign'
-import { NachtlaufKennzahlen } from './NachtlaufKennzahlen'
+import {
+  ETIKETT,
+  KUPFER,
+  NUR_LESER_SX,
+  NUT,
+  PLATTE,
+  PLATTE_FUSS,
+  PLATTE_HOCH,
+  RAND,
+  SCHATTEN_NUTE,
+  SCHATTEN_TASTE,
+  SCHRIFT_ANZEIGE,
+  TEXT_SCHWACH,
+  ZAHL,
+} from '../../theme'
+import {
+  DeltaMarke,
+  Fuellschiene,
+  KACHEL_SX,
+  KachelFuss,
+  KachelWert,
+  Led,
+  Platte,
+  ZEILE_HOVER,
+} from '../leitstand/LeitstandBausteine'
 import { NachtlaufVerbrauchVorhaben } from './NachtlaufVerbrauchVorhaben'
 
 /** `null` aus der Antwort heißt „nicht gemessen" — die Formatierer kennen dafür `undefined`. */
@@ -41,12 +64,16 @@ type Zustand = { art: 'laden' } | { art: 'fehler' } | { art: 'daten'; zeitraum: 
  * Die Zeitraum-Sicht der Verbrauchs-Auswertung (Issue #942, #926 AK 5–9): Art und Rückschritt
  * wählen, Zeitraum und Vorzeitraum nebeneinander, die Nächte darin und die Vorhaben-Aufstellung.
  *
+ * <p><b>Gestalt seit #987:</b> Kupferwarte nach `docs/mockup-nachtlauf-verbrauch.html` — Kopfzeile
+ * mit Wahl, zwei Platten mit je vier Kacheln, darunter Nächte und Vorhaben. Der Bereich verlässt
+ * damit die Nachtlauf-Ausnahme aus `CLAUDE-design.md`; der Rest der Seite bleibt darin.
+ *
  * <p><b>Gewählt wird ohne Datumseingabe</b> (Plan #933 E14): Art plus Rückschritt, 0 ist der zuletzt
  * abgeschlossene Zeitraum. Ein Wechsel der Art beginnt wieder dort.
  *
  * <p>Die Hinweise folgen `zeitraumFall`: Ein Zeitraum ohne Lauf und einer vor der Aufbewahrung
- * zeigen allein ihren Satz, ein angeschnittener Zeitraum und einer ohne Messung zeigen ihre Zahlen
- * **mit** dem Hinweis daneben (Plan E8, E5).
+ * stehen anstelle der Kacheln, ein angeschnittener Zeitraum und einer ohne Messung stehen im Kopf
+ * ihrer Platte **neben** den Zahlen (Plan E8, E5).
  */
 export function NachtlaufVerbrauchZeitraum({
   projectId,
@@ -78,51 +105,136 @@ export function NachtlaufVerbrauchZeitraum({
   }, [api, projectId, art, rueckschritt])
 
   return (
-    <Box data-testid="verbrauch-zeitraum">
-      <Stack direction="row" spacing={2} alignItems="center" flexWrap="wrap" useFlexGap>
-        <ToggleButtonGroup
-          exclusive
-          size="small"
-          value={art}
-          aria-label="Art des Zeitraums"
-          onChange={(_, neu: VerbrauchZeitraumArt | null) => {
-            if (neu !== null) {
-              setArt(neu)
-              setRueckschritt(0)
-            }
+    <Box
+      data-testid="verbrauch-zeitraum"
+      sx={{ display: 'flex', flexDirection: 'column', gap: '16px' }}
+    >
+      {/* Kopfzeile (Mockup `.abschnitt-kopf`): Titel, gewählter Zeitraum, Schritt und Wahl. */}
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap', mt: '4px' }}>
+        <Box
+          component="h2"
+          id="verbrauch-ueberschrift"
+          sx={{
+            m: 0,
+            fontFamily: SCHRIFT_ANZEIGE,
+            fontStretch: '114%',
+            fontSize: 13,
+            fontWeight: 700,
+            letterSpacing: '.05em',
+            textTransform: 'uppercase',
           }}
         >
-          {ARTEN.map((eintrag) => (
-            <ToggleButton key={eintrag.art} value={eintrag.art}>
-              {eintrag.label}
-            </ToggleButton>
-          ))}
-        </ToggleButtonGroup>
-        <Button
-          size="small"
-          aria-label="Früherer Zeitraum"
-          onClick={() => setRueckschritt((r) => r + 1)}
-        >
-          ← früher
-        </Button>
-        <Button
-          size="small"
-          aria-label="Späterer Zeitraum"
-          disabled={rueckschritt === 0}
-          onClick={() => setRueckschritt((r) => r - 1)}
-        >
-          später →
-        </Button>
-      </Stack>
+          Verbrauch
+        </Box>
+        {zustand.art === 'daten' && (
+          <Box
+            component="span"
+            data-testid="verbrauch-zeitraum-beschriftung"
+            sx={{ fontSize: 11.5, color: TEXT_SCHWACH }}
+          >
+            {zeitraumBeschriftung(zustand.zeitraum.current)}
+          </Box>
+        )}
+        <Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+          <Schritt aria-label="Früherer Zeitraum" onClick={() => setRueckschritt((r) => r + 1)}>
+            ← früher
+          </Schritt>
+          <Schritt
+            aria-label="Späterer Zeitraum"
+            disabled={rueckschritt === 0}
+            onClick={() => setRueckschritt((r) => r - 1)}
+          >
+            später →
+          </Schritt>
+          <Box
+            role="group"
+            aria-label="Art des Zeitraums"
+            sx={{
+              display: 'inline-flex',
+              gap: '3px',
+              p: '3px',
+              bgcolor: NUT,
+              border: `1px solid ${RAND}`,
+              borderRadius: '9px',
+              boxShadow: SCHATTEN_NUTE,
+            }}
+          >
+            {ARTEN.map((eintrag) => {
+              const gewaehlt = eintrag.art === art
+              return (
+                <ButtonBase
+                  key={eintrag.art}
+                  aria-pressed={gewaehlt}
+                  onClick={() => {
+                    setArt(eintrag.art)
+                    setRueckschritt(0)
+                  }}
+                  sx={{
+                    ...ZAHL,
+                    fontSize: 11,
+                    fontWeight: 500,
+                    color: gewaehlt ? 'text.primary' : 'text.secondary',
+                    border: `1px solid ${gewaehlt ? RAND : 'transparent'}`,
+                    borderRadius: '6px',
+                    px: '11px',
+                    py: '3px',
+                    ...(gewaehlt && {
+                      background: `linear-gradient(180deg, ${PLATTE_HOCH}, ${PLATTE})`,
+                      boxShadow: SCHATTEN_TASTE,
+                    }),
+                  }}
+                >
+                  {eintrag.label}
+                </ButtonBase>
+              )
+            })}
+          </Box>
+        </Box>
+      </Box>
 
-      {zustand.art === 'laden' && <Typography sx={HINWEIS}>Der Zeitraum wird geladen …</Typography>}
+      {zustand.art === 'laden' && <Typography color="text.secondary">Der Zeitraum wird geladen …</Typography>}
       {zustand.art === 'fehler' && (
-        <Typography sx={HINWEIS}>Der Zeitraum konnte nicht geladen werden.</Typography>
+        <Typography color="text.secondary">Der Zeitraum konnte nicht geladen werden.</Typography>
       )}
       {zustand.art === 'daten' && (
         <ZeitraumInhalt zeitraum={zustand.zeitraum} onNachtWaehlen={onNachtWaehlen} />
       )}
     </Box>
+  )
+}
+
+/** Schritt-Taste der Kopfzeile (Mockup `.schritt`). */
+function Schritt({
+  'aria-label': label,
+  disabled = false,
+  onClick,
+  children,
+}: Readonly<{
+  'aria-label': string
+  disabled?: boolean
+  onClick: () => void
+  children: ReactNode
+}>) {
+  return (
+    <ButtonBase
+      aria-label={label}
+      disabled={disabled}
+      onClick={onClick}
+      sx={{
+        fontSize: 12,
+        fontWeight: 500,
+        color: 'text.secondary',
+        background: `linear-gradient(180deg, ${PLATTE_HOCH}, ${PLATTE})`,
+        border: `1px solid ${RAND}`,
+        boxShadow: SCHATTEN_TASTE,
+        borderRadius: '8px',
+        px: '10px',
+        py: '4px',
+        '&.Mui-disabled': { opacity: 0.45 },
+      }}
+    >
+      {children}
+    </ButtonBase>
   )
 }
 
@@ -132,103 +244,203 @@ function ZeitraumInhalt({
 }: Readonly<{ zeitraum: VerbrauchZeitraum; onNachtWaehlen: (datum: string) => void }>) {
   const { current, previous } = zeitraum
   const fall = zeitraumFall(current)
-  const hinweis = zeitraumHinweis(current)
   const ohneZahlen = fall === 'kein-lauf' || fall === 'vor-aufbewahrung'
+  const hinweis = zeitraumHinweis(current)
   return (
-    <Box sx={{ mt: 2 }}>
-      <Typography component="h3" sx={UEBERSCHRIFT}>
-        {zeitraumBeschriftung(current)}
-      </Typography>
-      {hinweis !== null && (
-        <Typography
-          component="p"
-          role="note"
-          data-testid="verbrauch-zeitraum-hinweis"
-          sx={{ ...HINWEIS, color: NACHTLAUF_FARBEN.ink }}
-        >
-          {hinweis}
-        </Typography>
-      )}
+    <>
+      <Box
+        sx={{
+          display: 'grid',
+          gridTemplateColumns: { xs: 'minmax(0,1fr)', md: 'minmax(0,1fr) minmax(0,1fr)' },
+          gap: '16px',
+          alignItems: 'start',
+        }}
+      >
+        <Box data-testid="verbrauch-zeitraum-aktuell" sx={{ minWidth: 0 }}>
+          <Platte
+            titel="Dieser Zeitraum"
+            led={<Led melder="stahl" />}
+            notiz={
+              <>
+                {laeufeText(current.runCount)}
+                {/* Ein angeschnittener Zeitraum und einer ohne Messung zeigen ihre Zahlen — ihr
+                    Hinweis erklärt sie und steht deshalb daneben, im Kopf (Plan E8, E5). */}
+                {!ohneZahlen && hinweis !== null && (
+                  <Box component="span" role="note" data-testid="verbrauch-zeitraum-hinweis" sx={{ ml: '8px' }}>
+                    {hinweis}
+                  </Box>
+                )}
+              </>
+            }
+            werkzeug={<Vergleich current={current} previous={previous} />}
+          >
+            {ohneZahlen ? (
+              // Ohne Zahlen tritt der Hinweis an ihre Stelle: Leere Kacheln läsen sich als Nullen.
+              <Box
+                role="note"
+                data-testid="verbrauch-zeitraum-hinweis"
+                sx={{ px: '16px', py: '14px', fontSize: 12.5, color: 'text.secondary' }}
+              >
+                {hinweis}
+              </Box>
+            ) : (
+              <Kacheln kennzahlen={current} />
+            )}
+          </Platte>
+        </Box>
+
+        {!ohneZahlen && (
+          <Box data-testid="verbrauch-zeitraum-vorher" sx={{ minWidth: 0, ...ZURUECKGENOMMEN }}>
+            <Platte
+              titel={vorzeitraumName(previous)}
+              led={<Led melder="grau" />}
+              notiz={
+                <>
+                  {`${zeitraumBeschriftung(previous)} · ${laeufeText(previous.runCount)}`}
+                  {/* Der Hinweis des Zeitraums steht an seiner eigenen Platte; dieser gehört zum
+                      Vorzeitraum und erklärt dessen Zahlen. */}
+                  {zeitraumHinweis(previous) !== null && (
+                    <Box component="span" role="note" sx={{ ml: '8px' }}>
+                      {zeitraumHinweis(previous)}
+                    </Box>
+                  )}
+                </>
+              }
+            >
+              <Kacheln kennzahlen={previous} />
+            </Platte>
+          </Box>
+        )}
+      </Box>
 
       {!ohneZahlen && (
-        <>
-          <Box
-            sx={{
-              display: 'grid',
-              gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' },
-              columnGap: 4,
-            }}
-          >
-            <Spalte
-              testId="verbrauch-zeitraum-aktuell"
-              titel="Dieser Zeitraum"
-              kennzahlen={current}
-              hinweis={null}
-            />
-            {/* Der Hinweis des Vorzeitraums steht an seiner Spalte; der des Zeitraums steht schon
-                über beiden. */}
-            <Spalte
-              testId="verbrauch-zeitraum-vorher"
-              titel={vorzeitraumBeschriftung(previous)}
-              kennzahlen={previous}
-              hinweis={zeitraumHinweis(previous)}
-            />
-          </Box>
-          <Typography
-            component="p"
-            data-testid="verbrauch-zeitraum-vergleich"
-            sx={{ ...HINWEIS, color: NACHTLAUF_FARBEN.ink, fontWeight: 600, mt: 1 }}
-          >
-            {vergleichMitVorzeitraum(current.usage.total, previous.usage.total).text}
-          </Typography>
-
+        <Box
+          sx={{
+            display: 'grid',
+            gridTemplateColumns: { xs: 'minmax(0,1fr)', lg: 'minmax(0,1.2fr) minmax(0,1fr)' },
+            gap: '16px',
+            alignItems: 'start',
+          }}
+        >
           <Naechte naechte={zeitraum.nights} onNachtWaehlen={onNachtWaehlen} />
-
-          <Box sx={{ mt: 3 }}>
-            <NachtlaufVerbrauchVorhaben
-              epics={zeitraum.epics}
-              withoutEpic={zeitraum.withoutEpic}
-              epicsOverlap={zeitraum.epicsOverlap}
-            />
-          </Box>
-        </>
+          <NachtlaufVerbrauchVorhaben
+            epics={zeitraum.epics}
+            withoutEpic={zeitraum.withoutEpic}
+            epicsOverlap={zeitraum.epicsOverlap}
+          />
+        </Box>
       )}
+    </>
+  )
+}
+
+/**
+ * Die Vergleichsmarke im Kopf der Platte (#926 AK 6): billiger grün mit ▼, teurer zinnober mit ▲.
+ * Die Marke ist knapp, damit sie in die Kopfzeile passt — der vollständige Satz bleibt daneben für
+ * Vorlesewerkzeuge stehen, sonst ginge mit der Gestalt die Aussage verloren.
+ */
+function Vergleich({
+  current,
+  previous,
+}: Readonly<{ current: VerbrauchKennzahlen; previous: VerbrauchKennzahlen }>) {
+  const vergleich = vergleichMitVorzeitraum(current.usage.total, previous.usage.total)
+  const gerichtet = vergleich.richtung === 'teurer' || vergleich.richtung === 'billiger'
+  return (
+    <Box component="span" data-testid="verbrauch-zeitraum-vergleich">
+      {gerichtet && (
+        <Box component="span" aria-hidden>
+          <DeltaMarke art={vergleich.richtung === 'billiger' ? 'gut' : 'schlecht'}>
+            {`${vergleich.richtung === 'billiger' ? '▼' : '▲'} ${dollar(
+              Math.abs(current.usage.total.costUsd! - previous.usage.total.costUsd!),
+            )} $ zur ${vorzeitraumName(current)}`}
+          </DeltaMarke>
+        </Box>
+      )}
+      <Box component="span" sx={NUR_LESER_SX}>
+        {vergleich.text}
+      </Box>
     </Box>
   )
 }
 
-/** Die Kennzahlen eines Zeitraums als eine Spalte; die Beschriftung sagt, welcher es ist. */
-function Spalte({
-  testId,
-  titel,
-  kennzahlen,
-  hinweis,
-}: Readonly<{
-  testId: string
-  titel: string
-  kennzahlen: VerbrauchKennzahlen
-  hinweis: string | null
-}>) {
+/**
+ * Die vier Kacheln eines Zeitraums (Mockup `.kacheln-2`). Die Einordnung unter dem Wert entsteht
+ * ausschließlich aus vorhandenen Zahlen; fehlt eine, bleibt die Zeile leer — „nicht gemessen" wird
+ * nie zu 0.
+ */
+function Kacheln({ kennzahlen }: Readonly<{ kennzahlen: VerbrauchKennzahlen }>) {
   const { total, cardShare, remainder } = kennzahlen.usage
+  const jeLauf =
+    total.costUsd !== null && kennzahlen.runCount > 0
+      ? `${dollar(total.costUsd / kennzahlen.runCount)} $ je Lauf`
+      : ''
+  const anteil =
+    total.costUsd !== null && total.costUsd > 0 && cardShare.costUsd !== null
+      ? `${Math.round((cardShare.costUsd / total.costUsd) * 100)} % der Summe`
+      : ''
   return (
-    <Box data-testid={testId}>
-      <Typography component="div" sx={{ ...HINWEIS, mt: 2 }}>
-        {titel}
-      </Typography>
-      <NachtlaufKennzahlen
-        testId={`${testId}-kennzahlen`}
-        kennzahlen={[
-          { label: 'Gesamtsumme', wert: kosten(ohneNull(total.costUsd)), hinweis: null },
-          { label: 'Karten zugeordnet', wert: kosten(ohneNull(cardShare.costUsd)), hinweis: null },
-          { label: 'Rest', wert: kosten(ohneNull(remainder.costUsd)), hinweis: null },
-          { label: 'Läufe', wert: String(kennzahlen.runCount), hinweis },
-        ]}
+    <Box
+      sx={{
+        display: 'grid',
+        gridTemplateColumns: { xs: 'minmax(0,1fr)', sm: 'repeat(2, minmax(0,1fr))' },
+        gap: '10px',
+        p: '14px',
+        perspective: '1100px',
+      }}
+    >
+      <Kachel etikett="Gesamtsumme" wert={total.costUsd} einheit="$" basis={jeLauf} />
+      <Kachel etikett="Karten zugeordnet" wert={cardShare.costUsd} einheit="$" basis={anteil} />
+      <Kachel
+        etikett="Rest"
+        wert={remainder.costUsd}
+        einheit="$"
+        basis="keiner Karte zuzuordnen"
+      />
+      <Kachel
+        etikett="Läufe"
+        wert={kennzahlen.runCount}
+        einheit={kennzahlen.runCount === 1 ? 'Lauf' : 'Läufe'}
+        basis={kartenText(kennzahlen.cardCount)}
+        alsZahl
       />
     </Box>
   )
 }
 
-/** Die Nächte des Zeitraums; jede führt zur Nachtansicht (#926 AK 8). */
+/** Eine kleine Kachel (Mockup `.kachel-klein`): Etikett, Wert mit Einheit, Einordnung darunter. */
+function Kachel({
+  etikett,
+  wert,
+  einheit,
+  basis,
+  alsZahl = false,
+}: Readonly<{
+  etikett: string
+  wert: number | null
+  einheit: string
+  basis: string
+  alsZahl?: boolean
+}>) {
+  return (
+    <Box
+      component="article"
+      aria-label={etikett}
+      data-testid={`verbrauch-kachel-${etikett}`}
+      sx={{ ...KACHEL_SX, gap: '6px', pt: '12px', px: '13px', pb: '11px' }}
+    >
+      <Box sx={ETIKETT}>{etikett}</Box>
+      <KachelWert
+        wert={wert === null ? null : alsZahl ? String(wert) : dollar(wert)}
+        einheit={einheit}
+        leerText="nicht gemessen"
+        groesse={26}
+      />
+      <KachelFuss basis={basis} />
+    </Box>
+  )
+}
+
+/** Die Nächte des Zeitraums als Platte; jede Zeile führt zur Nachtansicht (#926 AK 8). */
 function Naechte({
   naechte,
   onNachtWaehlen,
@@ -236,48 +448,65 @@ function Naechte({
   if (naechte.length === 0) {
     return null
   }
+  const teuerste = Math.max(0, ...naechte.map((n) => n.usage.total.costUsd ?? 0))
   return (
-    <Box sx={{ mt: 3 }}>
-      <Typography component="h4" sx={{ ...UEBERSCHRIFT, fontSize: 16 }}>
-        Nächte
-      </Typography>
-      <Box component="ul" sx={{ listStyle: 'none', p: 0, m: 0, mt: 1, display: 'grid', gap: 0.5 }}>
-        {naechte.map((nacht) => (
-          <Box component="li" key={nacht.night}>
+    <Platte titel="Nächte" notiz="Klick öffnet die Nacht">
+      <Box>
+        {naechte.map((nacht, stelle) => {
+          const betrag = nacht.usage.total.costUsd
+          const breite = betrag === null || teuerste === 0 ? null : Math.round((betrag / teuerste) * 100)
+          return (
             <ButtonBase
+              key={nacht.night}
               onClick={() => onNachtWaehlen(nacht.night)}
-              sx={{
-                fontFamily: NACHTLAUF_SCHRIFTEN.mono,
-                fontSize: 13,
-                color: NACHTLAUF_FARBEN.akzent,
-                textDecoration: 'underline',
-                textAlign: 'left',
-              }}
-            >
-              {[
+              aria-label={[
                 zeitraumBeschriftung({ type: 'DAY', firstDay: nacht.night, lastDay: nacht.night }),
-                nacht.runCount === 1 ? '1 Lauf' : `${nacht.runCount} Läufe`,
-                kosten(ohneNull(nacht.usage.total.costUsd)),
+                laeufeText(nacht.runCount),
+                kosten(ohneNull(betrag)),
                 ...(nacht.aborted ? ['abgebrochen'] : []),
               ].join(' · ')}
+              sx={{
+                display: 'grid',
+                gridTemplateColumns: 'minmax(0,150px) 70px minmax(0,1fr) 70px',
+                gap: '12px',
+                alignItems: 'center',
+                width: '100%',
+                textAlign: 'left',
+                px: '16px',
+                py: '9px',
+                fontSize: 12.5,
+                borderBottom:
+                  stelle === naechte.length - 1
+                    ? 0
+                    : `1px solid color-mix(in srgb, ${RAND} 55%, transparent)`,
+                '&:hover': { bgcolor: ZEILE_HOVER },
+              }}
+            >
+              <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                {nachtKurz(nacht.night)}
+                {nacht.aborted && <Led melder="zinnob" />}
+              </Box>
+              <Box component="span" sx={ZAHL}>
+                {laeufeText(nacht.runCount)}
+              </Box>
+              <Box component="span">
+                {breite !== null && <Fuellschiene breite={breite} farbe={KUPFER} />}
+              </Box>
+              <Box component="span" sx={{ ...ZAHL, textAlign: 'right' }} aria-hidden>
+                {betrag === null ? '—' : `${dollar(betrag)} $`}
+              </Box>
             </ButtonBase>
-          </Box>
-        ))}
+          )
+        })}
       </Box>
-    </Box>
+    </Platte>
   )
 }
 
-const UEBERSCHRIFT = {
-  fontFamily: NACHTLAUF_SCHRIFTEN.display,
-  fontWeight: 600,
-  fontSize: 18,
-  color: NACHTLAUF_FARBEN.ink,
-} as const
-
-const HINWEIS = {
-  fontFamily: NACHTLAUF_SCHRIFTEN.body,
-  fontSize: 13,
-  color: NACHTLAUF_FARBEN.ink3,
-  mt: 1,
+/** Die Kacheln des Vorzeitraums stehen zurück (Mockup `.vorher`): matter Wert, matte Fläche. */
+const ZURUECKGENOMMEN = {
+  '& [data-testid="kachel-wert"]': { color: 'text.secondary' },
+  '& [data-testid^="verbrauch-kachel-"]': {
+    background: `linear-gradient(180deg, ${PLATTE}, ${PLATTE_FUSS})`,
+  },
 } as const

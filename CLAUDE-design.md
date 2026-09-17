@@ -166,7 +166,7 @@ Zu jeder darstellenden Route aus [`frontend/src/App.tsx`](frontend/src/App.tsx) 
 | `/projects/:projectId` | Boards eines Projekts | Rahmen; Boards als Platten, Zahlen in Plex Mono | #978 |
 | `/projects/:projectId/ideas` | Ideen | Rahmen; Nut-Zonen und Platten wie das Board | #978, #980 |
 | `/projects/:projectId/members` | Mitglieder | Rahmen; Tabelle als Platte, Zahlen in Plex Mono | #978 |
-| `/projects/:projectId/nachtlauf` | Nachtläufe | **Ausnahme Nachtlauf** (eigener Abschnitt); Rahmen der Vorlage | #978 |
+| `/projects/:projectId/nachtlauf` | Nachtläufe | Verbrauchs-Bereich (Zeitraum-Sicht) nach `docs/mockup-nachtlauf-verbrauch.html` in Kupferwarte; der übrige Inhalt **Ausnahme Nachtlauf** (eigener Abschnitt); Rahmen der Vorlage | #978, #987 |
 | `/boards/:boardId` | Board | Board der Vorlage (Entwurf Z. 1679–1864) | #980 |
 | `/boards/:boardId/list` | Liste | Liste der Vorlage, nach Vorhaben gruppiert (Entwurf Z. 1865–2054) | #980 |
 | `/boards/:boardId/vorhaben` | Vorhaben | Rahmen; Vorhaben als Platten mit Fortschritt | #978 |
@@ -182,9 +182,11 @@ Zu jeder darstellenden Route aus [`frontend/src/App.tsx`](frontend/src/App.tsx) 
 
 ## 🌙 Ausnahme: Nachtlauf-Auswertung
 
-**Die Nachtlauf-Auswertung unter `/projects/:id/nachtlauf` behält vorerst ihre eigene, vom PO abgenommene Vorlage** [`docs/mockup-leitstand-nachtlauf.html`](docs/mockup-leitstand-nachtlauf.html), umgesetzt in [`frontend/src/pages/NightRunPage.tsx`](frontend/src/pages/NightRunPage.tsx), den Bausteinen unter [`frontend/src/components/nachtlauf/`](frontend/src/components/nachtlauf/) und der Wertequelle [`frontend/src/nachtlaufDesign.ts`](frontend/src/nachtlaufDesign.ts). Ob sie in Kupferwarte aufgeht, ist offen.
+**Die Nachtlauf-Auswertung unter `/projects/:id/nachtlauf` behält vorerst ihre eigene, vom PO abgenommene Vorlage** [`docs/mockup-leitstand-nachtlauf.html`](docs/mockup-leitstand-nachtlauf.html), umgesetzt in [`frontend/src/pages/NightRunPage.tsx`](frontend/src/pages/NightRunPage.tsx), den Bausteinen unter [`frontend/src/components/nachtlauf/`](frontend/src/components/nachtlauf/) und der Wertequelle [`frontend/src/nachtlaufDesign.ts`](frontend/src/nachtlaufDesign.ts). Ob der Rest in Kupferwarte aufgeht, ist offen.
 
 **Die Ausnahme gilt nur für den Inhaltsbereich dieser Seite** — Schiene, Kopf und Kartendialog folgen Kupferwarte. Das Entwurfs-Theme liegt als verschachtelter `ThemeProvider` über dem Inhaltsbereich.
+
+**Der Verbrauchs-Bereich (Zeitraum-Sicht) steht seit #987 außerhalb der Ausnahme.** Er folgt Kupferwarte — Tokens aus [`frontend/src/theme.ts`](frontend/src/theme.ts), Bausteine aus [`frontend/src/components/leitstand/LeitstandBausteine.tsx`](frontend/src/components/leitstand/LeitstandBausteine.tsx) — und seine Vorlage ist [`docs/mockup-nachtlauf-verbrauch.html`](docs/mockup-nachtlauf-verbrauch.html), von Manne am 2026-09-17 abgenommen: Kopfzeile „Verbrauch" mit Zeitraum-Wahl, zwei Platten mit je vier Kacheln, darunter Nächte und Vorhaben. **Er folgt damit auch im Dunkeln dem Erscheinungsbild**, wie der Leitstand; hergestellt in [`frontend/src/components/nachtlauf/KupferwarteBereich.tsx`](frontend/src/components/nachtlauf/KupferwarteBereich.tsx), das Theme und Variablen (`ERSCHEINUNGSBILD_SX`) für seinen Teilbaum zurückstellt. **Die Nachtansicht darunter und die Laufblöcke bleiben in der Ausnahme.**
 
 **Auch im dunklen Erscheinungsbild bleibt der Inhaltsbereich hell.** Hergestellt wird das am Wurzelknoten (`NACHTLAUF_WURZEL_SX` setzt `HELLE_VARIABLEN` und malt den Grund selbst) und in `nachtlaufTheme` (Komponenten-Vorgaben mit aufgelösten Hellwerten, `lib/variablenAufloesen.ts`); nachgewiesen in `nachtlaufDesign.test.ts` und `NightRunPage.test.tsx`.
 
