@@ -536,12 +536,12 @@ describe('BoardView', () => {
       <BoardView board={board} initialCards={[card]} canEdit api={mkApi()} />,
     )
     fireEvent.click(screen.getByLabelText('Menü Aufgabe'))
-    expect(screen.queryByText('Auf anderes Board verschieben…')).not.toBeInTheDocument()
+    expect(screen.queryByText('Verschieben…')).not.toBeInTheDocument()
     unmount()
 
     render(<BoardView board={board} initialCards={[card]} canEdit canTransfer api={mkApi()} />)
     fireEvent.click(screen.getByLabelText('Menü Aufgabe'))
-    expect(screen.getByText('Auf anderes Board verschieben…')).toBeInTheDocument()
+    expect(screen.getByText('Verschieben…')).toBeInTheDocument()
   })
 
   it('zeigt farbige Label-Chips auf der Karte', () => {
@@ -782,7 +782,7 @@ describe('BoardView', () => {
     fireEvent.click(screen.getByTestId('card-100'))
     fireEvent.click(screen.getByRole('button', { name: 'Verschieben' }))
 
-    expect(screen.getByText('Auf anderes Board verschieben')).toBeInTheDocument()
+    expect(screen.getByText('Karte verschieben')).toBeInTheDocument()
   })
 
   it('leert die Auswahl beim Abbrechen', () => {
@@ -998,7 +998,7 @@ describe('BoardView', () => {
     )
 
     fireEvent.click(screen.getByLabelText('Menü Aufgabe'))
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Auf anderes Board verschieben…' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Verschieben…' }))
 
     fireEvent.change(await screen.findByLabelText('Zielprojekt'), { target: { value: '2' } })
     fireEvent.change(await screen.findByLabelText('Zielboard'), { target: { value: '99' } })
@@ -1038,6 +1038,51 @@ describe('BoardView', () => {
     expect(onCardsChanged).toHaveBeenCalled()
   })
 
+  it('verschiebt die Auswahl in eine andere Spalte desselben Boards und zeigt sie dort', async () => {
+    // #1043: Auf dem eigenen Board verlassen die Karten die Ansicht nicht — sie wechseln die
+    // Spalte. Die Reihenfolge folgt der Sicht, also landet 301 vor 302 am Ende von Done.
+    const onCardsChanged = vi.fn()
+    mProjects.list.mockResolvedValue([{ id: 1, name: 'Eigenes Projekt', role: 'OWNER', createdAt: '' }])
+    mBoards.list.mockResolvedValue([
+      { id: 1, projectId: 1, name: 'Board', createdAt: '', columns: [
+        { id: 10, name: 'Backlog', position: 0, wipLimit: null },
+        { id: 20, name: 'Done', position: 1, wipLimit: null },
+      ] },
+    ])
+    const cards: Card[] = [
+      { ...card, id: 301, columnId: 10, positionInColumn: 0, title: 'Eins' },
+      { ...card, id: 302, columnId: 10, positionInColumn: 1, title: 'Zwei' },
+    ]
+    mCards.bulkTransfer.mockResolvedValue([
+      { ...cards[0], columnId: 20 },
+      { ...cards[1], columnId: 20 },
+    ])
+    render(
+      <BoardView board={board} initialCards={cards} canEdit canTransfer api={mkApi()}
+        onCardsChanged={onCardsChanged} />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Auswählen' }))
+    fireEvent.click(screen.getByTestId('card-301'))
+    fireEvent.click(screen.getByTestId('card-302'))
+    fireEvent.click(screen.getByRole('button', { name: 'Verschieben' }))
+
+    // Das eigene Board steht vorausgewählt, die Quellspalte ist vorbelegt.
+    await waitFor(() => expect(screen.getByLabelText('Zielboard')).toHaveValue('1'))
+    expect(screen.getByLabelText('Zielspalte')).toHaveValue('10')
+    fireEvent.change(screen.getByLabelText('Zielspalte'), { target: { value: '20' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Verschieben' }))
+
+    await waitFor(() => expect(mCards.bulkTransfer).toHaveBeenCalledWith([301, 302], 1, 20))
+    await waitFor(() =>
+      expect(within(screen.getByTestId('column-20')).getByTestId('card-301')).toBeInTheDocument(),
+    )
+    expect(within(screen.getByTestId('column-20')).getByTestId('card-302')).toBeInTheDocument()
+    expect(within(screen.getByTestId('column-10')).queryByTestId('card-301')).not.toBeInTheDocument()
+    expect(screen.queryByText('2 ausgewählt')).not.toBeInTheDocument()
+    expect(onCardsChanged).toHaveBeenCalled()
+  })
+
   it('belegt im Verschieben-Dialog Projekt und Zielspalte der Einzelkarte vor', async () => {
     mProjects.list.mockResolvedValue([{ id: 1, name: 'Eigenes Projekt', role: 'OWNER', createdAt: '' }])
     mBoards.list.mockResolvedValue([
@@ -1051,7 +1096,7 @@ describe('BoardView', () => {
     render(<BoardView board={board} initialCards={[inDone]} canEdit canTransfer api={mkApi()} />)
 
     fireEvent.click(screen.getByLabelText('Menü Fertige Aufgabe'))
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Auf anderes Board verschieben…' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Verschieben…' }))
 
     await screen.findByRole('option', { name: 'Ziel' })
     expect(screen.getByLabelText('Zielprojekt')).toHaveValue('1')
@@ -1498,10 +1543,10 @@ describe('BoardView', () => {
     render(<BoardView board={board} initialCards={[card]} canEdit canTransfer api={mkApi()} />)
 
     fireEvent.click(screen.getByLabelText('Menü Aufgabe'))
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Auf anderes Board verschieben…' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Verschieben…' }))
     fireEvent.keyDown(await screen.findByRole('dialog'), { key: 'Escape', code: 'Escape' })
     await waitFor(() =>
-      expect(screen.queryByText('Auf anderes Board verschieben')).not.toBeInTheDocument(),
+      expect(screen.queryByText('Karte verschieben')).not.toBeInTheDocument(),
     )
 
     fireEvent.click(screen.getByRole('button', { name: 'Auswählen' }))
@@ -1509,7 +1554,7 @@ describe('BoardView', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Verschieben' }))
     fireEvent.keyDown(await screen.findByRole('dialog'), { key: 'Escape', code: 'Escape' })
     await waitFor(() =>
-      expect(screen.queryByText('Auf anderes Board verschieben')).not.toBeInTheDocument(),
+      expect(screen.queryByText('Karte verschieben')).not.toBeInTheDocument(),
     )
   })
 
@@ -1909,7 +1954,7 @@ describe('BoardView', () => {
       fireEvent.click(screen.getByLabelText('Menü Aufgabe'))
 
       for (const name of ['Bearbeiten', 'Duplizieren', 'Archivieren', 'In den Ideen-Pool',
-        'Auf anderes Board verschieben…']) {
+        'Verschieben…']) {
         expect(screen.getByRole('menuitem', { name })).toBeInTheDocument()
       }
     })

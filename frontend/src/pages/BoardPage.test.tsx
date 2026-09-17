@@ -652,13 +652,13 @@ describe('BoardPage Berechtigungen aus Rolle und Plattform-Admin', () => {
   const ownProject = { id: 9, name: 'P', role: 'OWNER', createdAt: '' }
   const foreignProject = { id: 77, name: 'Fremd', role: 'VIEWER', createdAt: '' }
 
-  it('bietet OWNER das Verschieben auf ein anderes Board an (canTransfer)', async () => {
+  it('bietet OWNER das Verschieben an (canTransfer)', async () => {
     memberships = [{ projectId: 9, role: 'OWNER' }]
     renderBoardWithCard([ownProject])
 
     fireEvent.click(await screen.findByLabelText('Menü Aufgabe'))
     expect(
-      screen.getByRole('menuitem', { name: 'Auf anderes Board verschieben…' }),
+      screen.getByRole('menuitem', { name: 'Verschieben…' }),
     ).toBeInTheDocument()
   })
 
@@ -668,7 +668,7 @@ describe('BoardPage Berechtigungen aus Rolle und Plattform-Admin', () => {
 
     fireEvent.click(await screen.findByLabelText('Menü Aufgabe'))
     expect(
-      screen.queryByRole('menuitem', { name: 'Auf anderes Board verschieben…' }),
+      screen.queryByRole('menuitem', { name: 'Verschieben…' }),
     ).not.toBeInTheDocument()
     expect(screen.getByRole('menuitem', { name: 'Bearbeiten' })).toBeInTheDocument()
   })
@@ -698,7 +698,7 @@ describe('BoardPage Berechtigungen aus Rolle und Plattform-Admin', () => {
     renderBoardWithCard([{ ...ownProject, role: 'VIEWER' }, foreignProject])
 
     fireEvent.click(await screen.findByLabelText('Menü Aufgabe'))
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Auf anderes Board verschieben…' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Verschieben…' }))
 
     const target = await screen.findByLabelText('Zielprojekt')
     await waitFor(() => expect(target).toHaveTextContent('Fremd'))
@@ -710,7 +710,7 @@ describe('BoardPage Berechtigungen aus Rolle und Plattform-Admin', () => {
     renderBoardWithCard([ownProject, foreignProject])
 
     fireEvent.click(await screen.findByLabelText('Menü Aufgabe'))
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Auf anderes Board verschieben…' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Verschieben…' }))
 
     const target = await screen.findByLabelText('Zielprojekt')
     await waitFor(() => expect(target).toHaveTextContent('P'))

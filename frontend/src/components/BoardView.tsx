@@ -778,10 +778,21 @@ export function BoardView({
       : null
   }
 
-  // Bulk-Verschieben: der Dialog erledigt den Transfer; danach die Karten aus der Ansicht nehmen.
-  const onBulkTransferred = (movedIds: number[]) => {
-    const moved = new Set(movedIds)
-    setCards((current) => current.filter((c) => !moved.has(c.id)))
+  // Nach dem Verschieben: Auf ein fremdes Board verlassen die Karten die Ansicht, auf dem eigenen
+  // wechseln sie nur die Spalte und müssen dort auftauchen (#1043). `applyMove` hängt je Karte ans
+  // Ende — in derselben Reihenfolge wie der Server, der die Eingabereihenfolge anhängt.
+  const applyTransferred = (movedIds: number[], targetBoardId: number, targetColumnId: number) => {
+    if (targetBoardId !== board.id) {
+      const moved = new Set(movedIds)
+      setCards((current) => current.filter((c) => !moved.has(c.id)))
+      return
+    }
+    setCards((current) => movedIds.reduce((acc, id) => applyMove(acc, id, targetColumnId), current))
+  }
+
+  // Bulk-Verschieben: der Dialog erledigt den Transfer, danach die Ansicht nachziehen.
+  const onBulkTransferred = (movedIds: number[], targetBoardId: number, targetColumnId: number) => {
+    applyTransferred(movedIds, targetBoardId, targetColumnId)
     setBulkTransferOpen(false)
     exitSelection()
     onCardsChanged?.()
@@ -1266,7 +1277,7 @@ export function BoardView({
                   key="transfer"
                   onClick={() => { const c = menu.card; closeMenu(); setTransferCard(c) }}
                 >
-                  Auf anderes Board verschieben…
+                  Verschieben…
                 </MenuItem>,
               ]
             : []),
@@ -1327,10 +1338,10 @@ export function BoardView({
           sourceColumnPosition={sourceColumnPosition([transferCard.id])}
           platformAdmin={platformAdmin}
           onClose={() => setTransferCard(null)}
-          onTransferred={() => {
+          onTransferred={(targetBoardId, targetColumnId) => {
             const c = transferCard
             setTransferCard(null)
-            setCards((current) => current.filter((x) => x.id !== c.id))
+            applyTransferred([c.id], targetBoardId, targetColumnId)
             onCardsChanged?.()
           }}
         />
@@ -1344,7 +1355,9 @@ export function BoardView({
           sourceColumnPosition={sourceColumnPosition(selectedIdsInViewOrder())}
           platformAdmin={platformAdmin}
           onClose={() => setBulkTransferOpen(false)}
-          onTransferred={() => onBulkTransferred(selectedIdsInViewOrder())}
+          onTransferred={(targetBoardId, targetColumnId) =>
+            onBulkTransferred(selectedIdsInViewOrder(), targetBoardId, targetColumnId)
+          }
         />
       )}
 

@@ -20,6 +20,7 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -2424,6 +2425,134 @@ class CardServiceTest {
     // When / Then
     assertThatThrownBy(() -> service.transfer(1L, 100L, 20L, 60L))
         .isInstanceOf(ColumnNotFoundException.class);
+  }
+
+  // --- transfer auf dasselbe Board (Issue #1043) -------------------------
+
+  /**
+   * Karte 100 liegt auf {@link #BOARD} in Spalte 50; Zielspalte 60 desselben Boards. Zielboard ist
+   * damit das eigene — der Umzug ist in Wahrheit ein Spaltenwechsel.
+   */
+  private void stubSelbesBoardScenario(String zielspalte, @Nullable Instant done) {
+    when(cards.findById(100L))
+        .thenReturn(Optional.of(card(100L, 50L, 3, false, done, CardType.CARD, 9L, null)));
+    when(boardService.requireColumn(60L, BOARD)).thenReturn(column(60L, zielspalte, 1));
+  }
+
+  @Test
+  void transfer_aufDasEigeneBoard_verschiebtNurDieSpalteUndBehaeltNummerUndVorhaben() {
+    // Das Zielboard ist das Board der Karte: kein Umzug (cards.transfer), sondern ein
+    // Spaltenwechsel ans Ende der Zielspalte — Nummer und Vorhaben-Zuordnung bleiben.
+    stubSelbesBoardScenario("Ready", null);
+
+    ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
+    CardService.CardView view = service.transfer(1L, 100L, BOARD, 60L);
+
+    verify(cards).move(100L, 60L, Integer.MAX_VALUE);
+    verify(cards, never()).transfer(anyLong(), anyLong(), anyLong(), anyInt());
+    verify(cards).save(captor.capture());
+    assertThat(captor.getValue().parentId()).isEqualTo(9L);
+    assertThat(view.number()).isEqualTo(3);
+  }
+
+  @Test
+  void transfer_aufDasEigeneBoard_schreibtSpaltenwechselUndVerlaufseintrag() {
+    stubSelbesBoardScenario("Ready", null);
+
+    service.transfer(9L, 100L, BOARD, 60L);
+
+    verify(transitions).closeOpen(100L, FIXED);
+    verify(transitions).open(100L, 60L, "Ready", FIXED);
+    verify(activity)
+        .add(
+            100L,
+            9L,
+            CardActivityType.MOVED,
+            "Verschoben nach Ready",
+            FIXED,
+            ActorContext.ActorStamp.unknown());
+  }
+
+  @Test
+  void transfer_aufDasEigeneBoard_setztDenDoneZeitpunkt() {
+    // Anders als beim Board-Wechsel (der movedToDoneAt immer leert) zählt hier der Eintritt in
+    // eine Done-Spalte — sonst fehlte der Karte ihr Done-Zeitpunkt und Durchlauf-/
+    // Implementierungszeit stimmten nicht mehr.
+    stubSelbesBoardScenario("Done", null);
+
+    ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
+    service.transfer(1L, 100L, BOARD, 60L);
+
+    verify(cards).save(captor.capture());
+    assertThat(captor.getValue().movedToDoneAt()).isEqualTo(FIXED);
+  }
+
+  @Test
+  void transfer_aufDasEigeneBoard_loeschtDenDoneZeitpunktBeimVerlassen() {
+    stubSelbesBoardScenario("Ready", FIXED.minusSeconds(10));
+
+    ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
+    service.transfer(1L, 100L, BOARD, 60L);
+
+    verify(cards).save(captor.capture());
+    assertThat(captor.getValue().movedToDoneAt()).isNull();
+  }
+
+  @Test
+  void transfer_aufDasEigeneBoard_inDieSelbeSpalte_schreibtKeinenEintrag() {
+    // Dieselbe Regel wie move: kein Eintrag bei reinem Reindex. Eine Auswahl über mehrere Spalten
+    // soll nicht scheitern, nur weil eine Karte schon in der Zielspalte liegt.
+    when(cards.findById(100L))
+        .thenReturn(Optional.of(card(100L, 60L, 3, false, null, CardType.CARD, null, null)));
+    when(boardService.requireColumn(60L, BOARD)).thenReturn(column(60L, "Ready", 1));
+
+    service.transfer(1L, 100L, BOARD, 60L);
+
+    verify(transitions, never()).closeOpen(anyLong(), any());
+    verify(transitions, never()).open(anyLong(), anyLong(), any(), any());
+    verify(activity, never()).add(anyLong(), anyLong(), any(), any(), any(), any());
+  }
+
+  @Test
+  void transfer_aufDasEigeneBoard_verlangtNurDasVerschieberecht() {
+    stubSelbesBoardScenario("Ready", null);
+
+    service.transfer(1L, 100L, BOARD, 60L);
+
+    verify(permissions).require(1L, PROJECT, Permission.CARD_MOVE);
+    verify(permissions, never()).requireOwner(anyLong(), anyLong());
+  }
+
+  @Test
+  void transfer_aufDasEigeneBoard_lehntEpicsAb() {
+    // Die Ablehnung steht vor der Weiche — ein Vorhaben wird auch auf dem eigenen Board nicht
+    // positioniert, und die Meldung des Transfers bleibt erhalten.
+    when(cards.findById(100L))
+        .thenReturn(Optional.of(card(100L, 50L, 3, false, null, CardType.EPIC, null, "EP")));
+
+    assertThatThrownBy(() -> service.transfer(1L, 100L, BOARD, 60L))
+        .isInstanceOf(InvalidDependencyException.class)
+        .hasMessage("Epics können nicht verschoben werden");
+    verify(cards, never()).move(anyLong(), anyLong(), anyInt());
+  }
+
+  @Test
+  void bulkTransfer_aufDasEigeneBoard_verschiebtJedeKarteAnsEndeDerZielspalte() {
+    when(cards.findById(100L))
+        .thenReturn(Optional.of(card(100L, 50L, 3, false, null, CardType.CARD, 9L, null)));
+    when(cards.findById(101L))
+        .thenReturn(Optional.of(card(101L, 51L, 4, false, null, CardType.CARD, 9L, null)));
+    when(boardService.requireColumn(60L, BOARD)).thenReturn(column(60L, "Ready", 1));
+
+    List<CardService.CardView> result = service.bulkTransfer(1L, List.of(100L, 101L), BOARD, 60L);
+
+    assertThat(result).extracting(CardService.CardView::id).containsExactly(100L, 101L);
+    // Auswahlreihenfolge: jede Karte einzeln ans Ende — der Server sortiert nicht um.
+    InOrder inOrder = inOrder(cards);
+    inOrder.verify(cards).lockColumnPositions(List.of(60L, 50L, 51L));
+    inOrder.verify(cards).move(100L, 60L, Integer.MAX_VALUE);
+    inOrder.verify(cards).move(101L, 60L, Integer.MAX_VALUE);
+    verify(cards, never()).lockCardNumbers(anyLong());
   }
 
   @Test

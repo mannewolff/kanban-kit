@@ -35,7 +35,7 @@
   weit) — auch per Tastatur bedienbar. In der ersten bzw. letzten Spalte fehlt der jeweils sinnlose
   Eintrag.
 - **⋮-Menü:** „Duplizieren", „Archivieren", „In den Ideen-Pool" (legt die Karte in den
-  [Ideen-Pool](#ideen-pool)) — mit Board-Recht — „Auf anderes Board verschieben…" sowie „Nach
+  [Ideen-Pool](#ideen-pool)) — mit Board-Recht — „Verschieben…" (Spalte, Board oder Projekt) sowie „Nach
   links/rechts verschieben". Der Eintrag **„Bearbeiten"** (öffnet das Detail im Bearbeiten-Modus)
   erscheint nur bei aktivem [Editiermodus](#editiermodus); der Button „Bearbeiten" im Karten-Detail
   steht dagegen immer zur Verfügung, sofern du Bearbeitungsrecht hast. Bei **archivierten** Karten
@@ -93,7 +93,12 @@ eine Karte gewählt ist, erscheint unten eine Aktionsleiste mit vier Massenaktio
   gewählten Karten an, ein Klick auf einen vollen Haken **nimmt es allen ab**; die übrigen Labels
   jeder Karte bleiben dabei unberührt. Das Menü bleibt offen, sodass mehrere Labels in einem Zug
   gehen. Hat das Board keine Labels, ist die Taste gesperrt.
-- **Verschieben:** alle gewählten Karten auf ein anderes Board (nur mit Verschieberecht).
+- **Verschieben:** alle gewählten Karten in eine Spalte — wahlweise in eine **andere Spalte desselben
+  Boards** (vorausgewählt; etwa fünf Pakete auf einmal nach Ready) oder auf ein **anderes Board**
+  bzw. in ein anderes Projekt. Nur mit Verschieberecht. Innerhalb des Boards behalten die Karten
+  Nummer, Vorhaben-Zuordnung und Abhängigkeiten; beim Board-Wechsel gehen Vorhaben-Zuordnung und
+  Abhängigkeiten verloren. Die Karten landen in der Reihenfolge der Auswahl am Ende der Zielspalte;
+  eine Karte, die schon dort liegt, bleibt an ihrem Platz.
 - **Archivieren** und **In den Papierkorb:** jeweils nach einer Rückfrage.
 
 Alle vier laufen als **eine Transaktion**: Scheitert eine Karte, bleibt die ganze Auswahl unverändert.

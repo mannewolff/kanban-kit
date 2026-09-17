@@ -209,6 +209,12 @@ public interface CardRepository {
    * aktiven Positions-Namespace). Quell- und Zielspalte werden dabei gesperrt (siehe {@link
    * #lockColumnPositions(List)}).
    *
+   * <p>{@code newPosition} wird auf das aktive Band der Zielspalte begrenzt: kleiner als 0 heißt an
+   * den Anfang, größer oder gleich der Anzahl der dort liegenden aktiven Karten heißt ans Ende. Das
+   * ist Vertrag und keine Nachlässigkeit — Aufrufer kennen die Spaltenlänge nicht immer (der
+   * Kanban-kompatible Ingest nimmt sie vom Client entgegen), und wer bewusst ans Ende will, kommt
+   * ohne einen zählenden Zweitzugriff samt zweiter Spaltensperre aus.
+   *
    * @throws CardMovedConcurrentlyException wenn die Karte die Quellspalte verlassen hat, während
    *     die Sperren erworben wurden
    */
