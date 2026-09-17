@@ -15,6 +15,9 @@ Funktionsstand nachgezogen.
 - [Nutzung](nutzung.md) — Registrieren, Projekte, Boards, Karten (Zuständige, Fälligkeit, Labels),
   Papierkorb, Listen-Ansicht, Ideen-Pool, Nachtlauf, Dashboard, Vorhaben, Mitglieder, Editiermodus.
 - [Rollen & Rechte](rollen-und-rechte.md) — Plattform- vs. Projekt-Rollen, Rechte-Matrix, Admin-Bereich (inkl. Konten sperren).
+- [Befund: Verbrauchsangaben, Hook-Ereignisse und Worktrees](befund-interaktive-sitzungen.md) —
+  was das Sitzungsprotokoll an Verbrauch führt, welche Hook-Ereignisse es gibt und was ein frischer
+  Worktree mitbekommt.
 
 ## Kurzüberblick der Ebenen
 
