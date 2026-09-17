@@ -1,0 +1,497 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>Mockup Nachtlauf-Verbrauch</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@100..125,400..800&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+
+  :root {
+    /* --- Grundfarben: hell --- */
+    --grund:        #E7E9ED;
+    --grund-tief:   #D8DBE2;
+    --nute:         #D5D9E0;
+    --platte:       #FDFDFE;
+    --platte-fuss:  #F2F4F7;
+    --platte-hoch:  #FFFFFF;
+    --rand:         #CDD2DA;
+    --rand-stark:   #B7BEC9;
+    --kante:        rgba(255,255,255,.9);
+
+    --text:         #14181E;
+    --text-matt:    #58606C;
+    --text-schwach: #868E9B;
+
+    /* --- Leitfarbe Kupfer --- */
+    --kupfer:       #A85F2C;
+    --kupfer-hell:  #C2743C;
+    --kupfer-schat: rgba(168,95,44,.16);
+
+    /* --- Melder (Semantik, nie als Akzent verwenden) --- */
+    --gruen:   #2F8F4E;
+    --bernst:  #B07C15;
+    --zinnob:  #C8393E;
+    --stahl:   #2F6FC9;
+    --grau:    #8A929E;
+
+    /* --- Tiefe --- */
+    --schatten-platte:
+      0 1px 0 var(--kante) inset,
+      0 1px 2px rgba(18,24,33,.10),
+      0 10px 24px -14px rgba(18,24,33,.35);
+    --schatten-hoch:
+      0 1px 0 var(--kante) inset,
+      0 2px 4px rgba(18,24,33,.10),
+      0 18px 34px -16px rgba(18,24,33,.42);
+    --schatten-nute:
+      0 2px 5px rgba(18,24,33,.14) inset,
+      0 -1px 0 var(--kante) inset;
+    --schatten-taste:
+      0 1px 0 var(--kante) inset,
+      0 1px 2px rgba(18,24,33,.18);
+
+    --r-gross: 14px;
+    --r-mittel: 10px;
+    --r-klein: 6px;
+
+    color-scheme: light;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --grund:        #0D1014;
+      --grund-tief:   #090B0E;
+      --nute:         #080A0D;
+      --platte:       #171B22;
+      --platte-fuss:  #12151B;
+      --platte-hoch:  #1E242D;
+      --rand:         #262C36;
+      --rand-stark:   #333B47;
+      --kante:        rgba(255,255,255,.075);
+
+      --text:         #E7EAEF;
+      --text-matt:    #98A1AE;
+      --text-schwach: #69717E;
+
+      --kupfer:       #D08A52;
+      --kupfer-hell:  #E3A26C;
+      --kupfer-schat: rgba(208,138,82,.18);
+
+      --gruen:   #46C46F;
+      --bernst:  #E0AE49;
+      --zinnob:  #F0575C;
+      --stahl:   #5B96F0;
+      --grau:    #6E7681;
+
+      --schatten-platte:
+        0 1px 0 var(--kante) inset,
+        0 1px 2px rgba(0,0,0,.5),
+        0 12px 28px -16px rgba(0,0,0,.85);
+      --schatten-hoch:
+        0 1px 0 rgba(255,255,255,.11) inset,
+        0 2px 6px rgba(0,0,0,.55),
+        0 22px 40px -18px rgba(0,0,0,.95);
+      --schatten-nute:
+        0 3px 7px rgba(0,0,0,.6) inset,
+        0 -1px 0 rgba(255,255,255,.05) inset;
+      --schatten-taste:
+        0 1px 0 rgba(255,255,255,.08) inset,
+        0 1px 2px rgba(0,0,0,.6);
+
+      color-scheme: dark;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --grund:        #0D1014;
+    --grund-tief:   #090B0E;
+    --nute:         #080A0D;
+    --platte:       #171B22;
+    --platte-fuss:  #12151B;
+    --platte-hoch:  #1E242D;
+    --rand:         #262C36;
+    --rand-stark:   #333B47;
+    --kante:        rgba(255,255,255,.075);
+
+    --text:         #E7EAEF;
+    --text-matt:    #98A1AE;
+    --text-schwach: #69717E;
+
+    --kupfer:       #D08A52;
+    --kupfer-hell:  #E3A26C;
+    --kupfer-schat: rgba(208,138,82,.18);
+
+    --gruen:   #46C46F;
+    --bernst:  #E0AE49;
+    --zinnob:  #F0575C;
+    --stahl:   #5B96F0;
+    --grau:    #6E7681;
+
+    --schatten-platte:
+      0 1px 0 var(--kante) inset,
+      0 1px 2px rgba(0,0,0,.5),
+      0 12px 28px -16px rgba(0,0,0,.85);
+    --schatten-hoch:
+      0 1px 0 rgba(255,255,255,.11) inset,
+      0 2px 6px rgba(0,0,0,.55),
+      0 22px 40px -18px rgba(0,0,0,.95);
+    --schatten-nute:
+      0 3px 7px rgba(0,0,0,.6) inset,
+      0 -1px 0 rgba(255,255,255,.05) inset;
+    --schatten-taste:
+      0 1px 0 rgba(255,255,255,.08) inset,
+      0 1px 2px rgba(0,0,0,.6);
+
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background:
+      radial-gradient(1100px 600px at 18% -8%, var(--kupfer-schat), transparent 62%),
+      var(--grund);
+    color: var(--text);
+    font-family: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1, h2, h3, .display {
+    font-family: Archivo, "Archivo Fallback", system-ui, sans-serif;
+    font-stretch: 112%;
+    margin: 0;
+    text-wrap: balance;
+  }
+
+  .mono, .zahl {
+    font-family: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+    font-variant-numeric: tabular-nums;
+  }
+
+  a { color: inherit; }
+
+  :is(button, a, [tabindex]):focus-visible {
+    outline: 2px solid var(--kupfer);
+    outline-offset: 2px;
+    border-radius: var(--r-klein);
+  }
+
+  /* ---------- Etikett ---------- */
+  .etikett {
+    font-family: Archivo, system-ui, sans-serif;
+    font-stretch: 118%;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--text-schwach);
+  }
+
+  /* ============================================================
+  /* Melder-LED */
+  .led {
+    width: 9px; height: 9px; border-radius: 50%;
+    flex: none;
+    background: var(--grau);
+    box-shadow: 0 0 0 1px rgba(0,0,0,.22) inset, 0 0 8px -1px currentColor;
+    color: var(--grau);
+  }
+  .led-gruen  { background: var(--gruen);  color: var(--gruen); }
+  .led-gelb   { background: var(--bernst); color: var(--bernst); }
+  .led-rot    { background: var(--zinnob); color: var(--zinnob); }
+  .led-stahl  { background: var(--stahl);  color: var(--stahl); }
+  .led-puls { animation: puls 1.9s ease-in-out infinite; }
+  @keyframes puls {
+    0%, 100% { box-shadow: 0 0 0 1px rgba(0,0,0,.22) inset, 0 0 7px -1px currentColor; }
+    50%      { box-shadow: 0 0 0 1px rgba(0,0,0,.22) inset, 0 0 14px 1px currentColor; }
+  }
+  .kacheln {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 14px;
+    perspective: 1100px;
+  }
+  .kachel {
+    display: flex; flex-direction: column; gap: 10px;
+    padding: 15px 16px 13px;
+    border-radius: var(--r-gross);
+    border: 1px solid var(--rand);
+    background: linear-gradient(180deg, var(--platte-hoch), var(--platte-fuss));
+    box-shadow: var(--schatten-platte);
+    transition: transform .22s cubic-bezier(.22,.7,.3,1), box-shadow .22s ease;
+    transform-style: preserve-3d;
+    position: relative;
+  }
+  .kachel:hover {
+    transform: rotateX(3.2deg) translateY(-3px) scale(1.008);
+    box-shadow: var(--schatten-hoch);
+  }
+  .kachel-kopf { display: flex; align-items: baseline; gap: 8px; }
+  .kachel-wert {
+    font-family: Archivo, sans-serif;
+    font-stretch: 116%;
+    font-weight: 700;
+    font-size: 34px;
+    line-height: 1;
+    letter-spacing: -.02em;
+    font-variant-numeric: tabular-nums;
+  }
+  .kachel-einheit { font-size: 12px; color: var(--text-matt); font-weight: 500; }
+  .kachel-fuss { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .kachel-basis { font-size: 11px; color: var(--text-schwach); }
+
+  .delta {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 11px; font-weight: 500;
+    padding: 2px 6px;
+    border-radius: 5px;
+    border: 1px solid var(--rand);
+    background: var(--nute);
+    box-shadow: var(--schatten-nute);
+    color: var(--text-matt);
+  }
+  .delta-gut { color: var(--gruen); border-color: color-mix(in srgb, var(--gruen) 32%, var(--rand)); }
+  .delta-schlecht { color: var(--zinnob); border-color: color-mix(in srgb, var(--zinnob) 32%, var(--rand)); }
+
+  .funke { display: block; width: 100%; height: 36px; overflow: visible; }
+  .funke-kupfer { color: var(--kupfer); }
+  .funke-gruen  { color: var(--gruen); }
+  .funke-stahl  { color: var(--stahl); }
+  .f-nute   { fill: var(--nute); }
+  .f-gruen  { fill: var(--gruen); }
+  .f-bernst { fill: var(--bernst); }
+  .platte {
+    border-radius: var(--r-gross);
+    border: 1px solid var(--rand);
+    background: var(--platte);
+    box-shadow: var(--schatten-platte);
+    overflow: hidden;
+  }
+  .platte-kopf {
+    display: flex; align-items: center; gap: 12px;
+    padding: 13px 16px;
+    border-bottom: 1px solid var(--rand);
+    background: linear-gradient(180deg, var(--platte-hoch), var(--platte));
+    flex-wrap: wrap;
+  }
+  .platte-titel { font-size: 13.5px; font-weight: 600; font-family: Archivo, sans-serif; font-stretch: 112%; }
+  .platte-notiz { font-size: 11.5px; color: var(--text-schwach); }
+  .platte-werkzeug { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+  }
+  .klasse-fuellung {
+    height: 100%;
+    border-radius: 4px;
+    background: linear-gradient(90deg, color-mix(in srgb, currentColor 55%, transparent), currentColor);
+    box-shadow: 0 0 8px -2px currentColor;
+  }
+  .klasse-zahl {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 12.5px;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    color: var(--text);
+  }
+
+  /* ---------- Ausreisser ---------- */
+  .abschnitt-kopf { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 4px; }
+  .abschnitt-titel { font-family: Archivo, sans-serif; font-stretch: 114%; font-size: 13px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
+  .abschnitt-notiz { font-size: 11.5px; color: var(--text-schwach); }
+  .zeitraum { margin-left: auto; display: inline-flex; gap: 3px; padding: 3px;
+    background: var(--nute); border: 1px solid var(--rand); border-radius: 9px; box-shadow: var(--schatten-nute); }
+  .zeitraum button {
+    font-family: "IBM Plex Mono", monospace; font-size: 11px; font-weight: 500;
+    color: var(--text-matt); background: transparent; border: 1px solid transparent;
+    border-radius: 6px; padding: 3px 11px; cursor: pointer;
+  }
+  .zeitraum button[aria-pressed="true"] {
+    color: var(--text); background: linear-gradient(180deg, var(--platte-hoch), var(--platte));
+    border-color: var(--rand); box-shadow: var(--schatten-taste);
+  }
+
+  /* ---------- Stapelbalken fuer die Eingabe-Aufteilung ---------- */
+  .stapel {
+    display: flex; height: 13px; border-radius: 7px; overflow: hidden;
+    background: var(--nute); box-shadow: var(--schatten-nute);
+  }
+  .stapel span { display: block; height: 100%; }
+  .st-cache  { background: linear-gradient(180deg, color-mix(in srgb, var(--gruen) 88%, #fff), var(--gruen)); }
+  .st-frisch { background: linear-gradient(180deg, var(--kupfer-hell), var(--kupfer)); }
+  .st-schreib{ background: linear-gradient(180deg, color-mix(in srgb, var(--stahl) 80%, #fff), var(--stahl)); }
+  .legende { display: flex; gap: 13px; flex-wrap: wrap; font-size: 10.5px; color: var(--text-matt); }
+  .legende span { display: inline-flex; align-items: center; gap: 5px; }
+  .legende i { width: 8px; height: 8px; border-radius: 2px; display: block; }
+  .legende b { font-family: "IBM Plex Mono", monospace; font-weight: 500; color: var(--text); }
+
+  .spar {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-family: "IBM Plex Mono", monospace; font-size: 11px;
+    color: var(--gruen);
+    border: 1px solid color-mix(in srgb, var(--gruen) 34%, var(--rand));
+    background: color-mix(in srgb, var(--gruen) 11%, transparent);
+    border-radius: 6px; padding: 2px 7px;
+  }
+
+  .klassen { display: flex; flex-direction: column; gap: 9px; padding: 14px 16px 16px; }
+  .klasse { display: grid; grid-template-columns: minmax(0, 1fr) 34px; gap: 10px; align-items: center; }
+  .klasse-name { font-family: "IBM Plex Mono", monospace; font-size: 11px; color: var(--text-matt); }
+  .klasse-schiene {
+    height: 7px;
+    border-radius: 4px;
+    background: var(--nute);
+    box-shadow: var(--schatten-nute);
+    overflow: hidden;
+    margin-top: 5px;
+  }
+  .klasse-fuellung {
+    height: 100%;
+    border-radius: 4px;
+    background: linear-gradient(90deg, color-mix(in srgb, currentColor 55%, transparent), currentColor);
+    box-shadow: 0 0 8px -2px currentColor;
+  }
+  .klasse-zahl {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 12.5px;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    color: var(--text);
+  }
+  .buehne { max-width: 1188px; margin: 0 auto; padding: 22px 26px 44px; display: flex; flex-direction: column; gap: 16px; }
+  .mono { font-family: "IBM Plex Mono", monospace; font-variant-numeric: tabular-nums; }
+  .schritt { font-family: "IBM Plex Sans", sans-serif; font-size: 12px; font-weight: 500; color: var(--text-matt);
+    background: linear-gradient(180deg, var(--platte-hoch), var(--platte-fuss)); border: 1px solid var(--rand);
+    box-shadow: var(--schatten-taste); border-radius: 8px; padding: 4px 10px; cursor: pointer; }
+  .schritt[disabled] { opacity: .45; cursor: default; }
+  .vergleich { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 16px; align-items: start; }
+  .zeitraum-platte { padding: 14px; display: flex; flex-direction: column; gap: 12px; }
+  .kacheln-2 { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 10px; perspective: 1100px; }
+  .kachel-klein { padding: 12px 13px 11px; gap: 6px; }
+  .kachel-klein .kachel-wert { font-size: 26px; }
+  .vorher .kachel-wert { color: var(--text-matt); }
+  .vorher .kachel { background: linear-gradient(180deg, var(--platte), var(--platte-fuss)); }
+  .zeile-kopf { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+  .zeile-kopf .etikett { color: var(--text-matt); }
+  .naechte { display: flex; flex-direction: column; }
+  .nacht { display: grid; grid-template-columns: 150px 70px minmax(0,1fr) 70px; gap: 12px; align-items: center;
+    padding: 9px 16px; border-bottom: 1px solid color-mix(in srgb, var(--rand) 55%, transparent); font-size: 12.5px; cursor: pointer; }
+  .nacht:last-child { border-bottom: 0; }
+  .nacht:hover { background: color-mix(in srgb, var(--platte-hoch) 75%, var(--kupfer-schat)); }
+  .balken-mini { height: 7px; border-radius: 4px; background: var(--nute); box-shadow: var(--schatten-nute); overflow: hidden; }
+  .balken-mini span { display: block; height: 100%; border-radius: 4px; background: linear-gradient(90deg, color-mix(in srgb, var(--kupfer) 55%, transparent), var(--kupfer)); }
+  .rumpf-2 { display: grid; grid-template-columns: minmax(0,1.2fr) minmax(0,1fr); gap: 16px; align-items: start; }
+  .notiz-mockup { font-size: 11.5px; color: var(--text-schwach); border-top: 1px dashed var(--rand); padding-top: 12px; }
+</style>
+</head>
+<body>
+<main class="buehne">
+
+  <div class="abschnitt-kopf">
+    <span class="abschnitt-titel">Verbrauch</span>
+    <span class="abschnitt-notiz">Woche vom 08.09.2026 bis 14.09.2026</span>
+    <div style="margin-left:auto;display:flex;align-items:center;gap:8px">
+      <button class="schritt" type="button" aria-label="Früherer Zeitraum">← früher</button>
+      <button class="schritt" type="button" aria-label="Späterer Zeitraum" disabled>später →</button>
+      <div class="zeitraum" role="group" aria-label="Zeitraum" style="margin-left:0">
+        <button type="button" aria-pressed="false">Tag</button>
+        <button type="button" aria-pressed="true">Woche</button>
+        <button type="button" aria-pressed="false">Monat</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="vergleich">
+    <section class="platte" aria-label="Dieser Zeitraum">
+      <div class="platte-kopf">
+        <span class="led led-stahl" aria-hidden="true"></span>
+        <span class="platte-titel">Dieser Zeitraum</span>
+        <span class="platte-notiz">08.–14.09. · 7 Läufe</span>
+        <div class="platte-werkzeug"><span class="delta delta-gut">▼ 1,70 $ zur Vorwoche</span></div>
+      </div>
+      <div class="zeitraum-platte">
+        <div class="kacheln-2">
+          <article class="kachel kachel-klein">
+            <div class="etikett">Gesamtsumme</div>
+            <div class="kachel-kopf"><span class="kachel-wert">48,20</span><span class="kachel-einheit">$</span></div>
+            <div class="kachel-fuss"><span class="kachel-basis">6,89 $ je Lauf</span></div>
+          </article>
+          <article class="kachel kachel-klein">
+            <div class="etikett">Karten zugeordnet</div>
+            <div class="kachel-kopf"><span class="kachel-wert">41,05</span><span class="kachel-einheit">$</span></div>
+            <div class="kachel-fuss"><span class="kachel-basis">85 % der Summe</span></div>
+          </article>
+          <article class="kachel kachel-klein">
+            <div class="etikett">Rest</div>
+            <div class="kachel-kopf"><span class="kachel-wert">7,15</span><span class="kachel-einheit">$</span></div>
+            <div class="kachel-fuss"><span class="kachel-basis">keiner Karte zuzuordnen</span></div>
+          </article>
+          <article class="kachel kachel-klein">
+            <div class="etikett">Läufe</div>
+            <div class="kachel-kopf"><span class="kachel-wert">7</span><span class="kachel-einheit">Läufe</span></div>
+            <div class="kachel-fuss"><span class="kachel-basis">54 Karten</span></div>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="platte vorher" aria-label="Vorwoche">
+      <div class="platte-kopf">
+        <span class="led" aria-hidden="true"></span>
+        <span class="platte-titel">Vorwoche</span>
+        <span class="platte-notiz">01.–07.09. · 6 Läufe</span>
+      </div>
+      <div class="zeitraum-platte">
+        <div class="kacheln-2">
+          <article class="kachel kachel-klein">
+            <div class="etikett">Gesamtsumme</div>
+            <div class="kachel-kopf"><span class="kachel-wert">49,90</span><span class="kachel-einheit">$</span></div>
+            <div class="kachel-fuss"><span class="kachel-basis">8,32 $ je Lauf</span></div>
+          </article>
+          <article class="kachel kachel-klein">
+            <div class="etikett">Karten zugeordnet</div>
+            <div class="kachel-kopf"><span class="kachel-wert">40,10</span><span class="kachel-einheit">$</span></div>
+            <div class="kachel-fuss"><span class="kachel-basis">80 % der Summe</span></div>
+          </article>
+          <article class="kachel kachel-klein">
+            <div class="etikett">Rest</div>
+            <div class="kachel-kopf"><span class="kachel-wert">9,80</span><span class="kachel-einheit">$</span></div>
+            <div class="kachel-fuss"><span class="kachel-basis">keiner Karte zuzuordnen</span></div>
+          </article>
+          <article class="kachel kachel-klein">
+            <div class="etikett">Läufe</div>
+            <div class="kachel-kopf"><span class="kachel-wert">6</span><span class="kachel-einheit">Läufe</span></div>
+            <div class="kachel-fuss"><span class="kachel-basis">47 Karten</span></div>
+          </article>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <div class="rumpf-2">
+    <section class="platte" aria-label="Nächte">
+      <div class="platte-kopf"><span class="platte-titel">Nächte</span><span class="platte-notiz">Klick öffnet die Nacht</span></div>
+      <div class="naechte">
+        <div class="nacht"><span>Mo 08.09. → 09.09.</span><span class="mono">1 Lauf</span><span class="balken-mini"><span style="width:62%"></span></span><span class="mono" style="text-align:right">6,40 $</span></div>
+        <div class="nacht"><span>Di 09.09. → 10.09.</span><span class="mono">1 Lauf</span><span class="balken-mini"><span style="width:81%"></span></span><span class="mono" style="text-align:right">8,30 $</span></div>
+        <div class="nacht"><span>Mi 10.09. → 11.09.</span><span class="mono">1 Lauf</span><span class="balken-mini"><span style="width:44%"></span></span><span class="mono" style="text-align:right">4,55 $</span></div>
+        <div class="nacht"><span>Do 11.09. → 12.09. <span class="led led-rot" style="display:inline-block;margin-left:6px" title="abgebrochen"></span></span><span class="mono">2 Läufe</span><span class="balken-mini"><span style="width:100%"></span></span><span class="mono" style="text-align:right">10,20 $</span></div>
+        <div class="nacht"><span>Fr 12.09. → 13.09.</span><span class="mono">1 Lauf</span><span class="balken-mini"><span style="width:58%"></span></span><span class="mono" style="text-align:right">5,95 $</span></div>
+        <div class="nacht"><span>So 14.09. → 15.09.</span><span class="mono">1 Lauf</span><span class="balken-mini"><span style="width:100%"></span></span><span class="mono" style="text-align:right">12,40 $</span></div>
+      </div>
+    </section>
+
+    <section class="platte" aria-label="Vorhaben">
+      <div class="platte-kopf"><span class="platte-titel">Vorhaben</span><span class="platte-notiz">Kosten im Zeitraum</span></div>
+      <div class="klassen">
+        <div class="klasse"><div><div class="klasse-name" style="font-family:'IBM Plex Sans',sans-serif;font-size:12.5px;color:var(--text)">Oberfläche als Leitstand</div><div class="klasse-schiene"><div class="klasse-fuellung" style="width:100%;color:var(--kupfer)"></div></div></div><div class="klasse-zahl" style="width:auto">22,10</div></div>
+        <div class="klasse"><div><div class="klasse-name" style="font-family:'IBM Plex Sans',sans-serif;font-size:12.5px;color:var(--text)">Nachtlauf-Auswertung</div><div class="klasse-schiene"><div class="klasse-fuellung" style="width:61%;color:var(--stahl)"></div></div></div><div class="klasse-zahl">13,40</div></div>
+        <div class="klasse"><div><div class="klasse-name" style="font-family:'IBM Plex Sans',sans-serif;font-size:12.5px;color:var(--text)">Ohne Vorhaben</div><div class="klasse-schiene"><div class="klasse-fuellung" style="width:25%;color:var(--grau)"></div></div></div><div class="klasse-zahl">5,55</div></div>
+      </div>
+    </section>
+  </div>
+
+  <p class="notiz-mockup">Mockup mit Beispielzahlen. Oben die Zeitraum-Wahl Tag · Woche · Monat mit „früher/später", darunter links „Dieser Zeitraum", rechts der Vorzeitraum — je vier kleine Kacheln wie im Leitstand. Darunter Nächte und Vorhaben als Platten. Die Nachtansicht folgt unverändert darunter.</p>
+</main>
+</body>
+</html>
