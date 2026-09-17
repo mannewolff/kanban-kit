@@ -1,6 +1,6 @@
 import Box from '@mui/material/Box'
 import Typography from '@mui/material/Typography'
-import { NACHTLAUF_FARBEN, NACHTLAUF_SCHRIFTEN } from '../../nachtlaufDesign'
+import { MELDER, NUT, RAND, SCHATTEN_NUTE, TEXT_SCHWACH, ZAHL } from '../../theme'
 
 /** Ein Abschnitt des Bands — alles, was seine Darstellung und seine Ansage brauchen. */
 export interface Bandabschnitt {
@@ -78,14 +78,15 @@ export function NachtlaufStufenband({
               height: 26,
               borderRadius: '3px',
               overflow: 'hidden',
-              backgroundColor: NACHTLAUF_FARBEN.rail,
+              backgroundColor: NUT,
+              boxShadow: SCHATTEN_NUTE,
               // AK 8: Ein nie erreichter Schritt trägt die Schraffur des Entwurfs und einen
               // Innenrahmen — sonst sähe er aus wie ein erreichter Schritt ohne Verbrauch.
               ...(abschnitt.erreicht
                 ? {}
                 : {
-                    backgroundImage: `repeating-linear-gradient(135deg, ${NACHTLAUF_FARBEN.nieFill} 0 6px, transparent 6px 12px)`,
-                    boxShadow: `inset 0 0 0 1px ${NACHTLAUF_FARBEN.line}`,
+                    backgroundImage: `repeating-linear-gradient(135deg, color-mix(in srgb, ${MELDER.grau} 26%, transparent) 0 6px, transparent 6px 12px)`,
+                    boxShadow: `${SCHATTEN_NUTE}, inset 0 0 0 1px ${RAND}`,
                   }),
             }}
           >
@@ -98,12 +99,12 @@ export function NachtlaufStufenband({
           </Typography>
           <Typography
             component="div"
-            sx={{ ...ZEIT_STIL, color: abschnitt.erreicht ? NACHTLAUF_FARBEN.ink2 : NACHTLAUF_FARBEN.nie }}
+            sx={{ ...ZEIT_STIL, color: abschnitt.erreicht ? 'text.secondary' : TEXT_SCHWACH }}
           >
             {abschnitt.zahlen}
           </Typography>
           {abschnitt.vermerk !== null && (
-            <Typography component="div" sx={{ ...ZEIT_STIL, color: NACHTLAUF_FARBEN.budget }}>
+            <Typography component="div" sx={{ ...ZEIT_STIL, color: MELDER.bernst }}>
               {abschnitt.vermerk}
             </Typography>
           )}
@@ -114,17 +115,15 @@ export function NachtlaufStufenband({
 }
 
 const LABEL_STIL = {
-  fontFamily: NACHTLAUF_SCHRIFTEN.body,
   fontSize: 11,
   letterSpacing: '0.04em',
-  color: NACHTLAUF_FARBEN.ink3,
+  color: TEXT_SCHWACH,
   whiteSpace: 'nowrap',
   overflow: 'hidden',
   textOverflow: 'ellipsis',
 } as const
 
 const ZEIT_STIL = {
-  fontFamily: NACHTLAUF_SCHRIFTEN.mono,
+  ...ZAHL,
   fontSize: 12,
-  fontVariantNumeric: 'tabular-nums',
 } as const

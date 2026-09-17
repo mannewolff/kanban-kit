@@ -6,11 +6,14 @@ import type { DeltaArt, Kachel as KachelDaten, Melder } from '../../lib/leitstan
 import { funkenPunkte } from '../../lib/leitstand'
 import {
   ANZEIGE,
+  CARD_RADIUS,
   ETIKETT,
+  GRUND,
   KUPFER,
   KUPFER_SCHIMMER,
   LED_RING,
   MELDER,
+  NUR_LESER_SX,
   NUT,
   PANEL_RADIUS,
   PLATTE,
@@ -297,6 +300,94 @@ export function Fuellschiene({ breite, farbe }: Readonly<{ breite: number; farbe
           boxShadow: '0 0 8px -2px currentColor',
         }}
       />
+    </Box>
+  )
+}
+
+/**
+ * Ein Wert eines Instruments: die Zahl und ihre kleine Einheit dahinter. Die Einheit ist Pflicht —
+ * jede Zahl der Vorlage trägt eine, und eine Zahl ohne Einheit ließe offen, was sie zählt.
+ */
+export interface InstrumentWert {
+  wert: string
+  einheit: string
+}
+
+/**
+ * Eingelassenes Instrument (Vorlage `docs/mockup-nachtlauf-lauf.html` Z. 306–318): Etikett über
+ * einem großen Zahlenwert mit kleiner Einheit, in einer Nut statt auf einer Platte. Die Kachel des
+ * Leitstands ({@link Kachel}) ist ihr erhabenes Gegenstück — sie trägt Verlauf und Delta, das
+ * Instrument nur die Zahl.
+ *
+ * <p><b>Nicht gemessen ist nicht 0</b> (`CLAUDE-design.md`): `teile === null` zeigt „—", und den
+ * Grund trägt ein Text, der allein Vorlesewerkzeugen gilt. Eine Null behauptete eine Messung, die
+ * es nicht gab; ein leeres Feld ließe offen, ob nichts gemessen oder nichts nachgesehen wurde.
+ *
+ * <p><b>Mehrere Teile sind ein Wert</b>, nicht mehrere Instrumente: „5 grün 1 gelb 1 rot" ist die
+ * Aufteilung **einer** Zahl (Mockup Z. 398) und gehört deshalb in ein Feld.
+ */
+export function Instrument({
+  titel,
+  teile,
+  /** `true` gibt dem Instrument die Kupferfassung des Mockups (`.instrument-heiss`, Z. 317–318). */
+  heiss = false,
+  leerText = 'nicht gemessen',
+  testId,
+}: Readonly<{
+  titel: string
+  teile: readonly InstrumentWert[] | null
+  heiss?: boolean
+  leerText?: string
+  testId: string
+}>) {
+  return (
+    <Box
+      data-testid={testId}
+      sx={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '3px',
+        minWidth: 0,
+        px: '11px',
+        pt: '9px',
+        pb: '8px',
+        borderRadius: `${CARD_RADIUS}px`,
+        background: `linear-gradient(180deg, ${NUT}, color-mix(in srgb, ${NUT} 85%, ${GRUND}))`,
+        border: `1px solid ${heiss ? `color-mix(in srgb, ${KUPFER} 40%, ${RAND})` : RAND}`,
+        boxShadow: SCHATTEN_NUTE,
+      }}
+    >
+      <Box sx={ETIKETT}>{titel}</Box>
+      <Box
+        component="span"
+        data-testid={`${testId}-wert`}
+        sx={{
+          ...ZAHL,
+          fontSize: 16,
+          fontWeight: 500,
+          letterSpacing: '-.01em',
+          color: teile === null ? TEXT_SCHWACH : heiss ? KUPFER : 'text.primary',
+        }}
+      >
+        {teile === null ? (
+          <>
+            {'—'}
+            <Box component="span" sx={NUR_LESER_SX}>{leerText}</Box>
+          </>
+        ) : (
+          teile.map((teil, position) => (
+            <Box component="span" key={`${teil.wert}-${teil.einheit}`}>
+              {/* Das Leerzeichen zwischen zwei Werten steht im Text und nicht als Abstand einer
+                  Flex-Zeile: Sonst läse ein Vorlesewerkzeug „1 grün1 gelb". */}
+              {position === 0 ? '' : ' '}
+              {teil.wert}
+              <Box component="span" sx={{ fontSize: 10.5, fontWeight: 400, color: TEXT_SCHWACH }}>
+                {` ${teil.einheit}`}
+              </Box>
+            </Box>
+          ))
+        )}
+      </Box>
     </Box>
   )
 }

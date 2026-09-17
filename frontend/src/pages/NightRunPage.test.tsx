@@ -1,7 +1,6 @@
 import { ThemeProvider } from '@mui/material/styles'
 import {
   fireEvent,
-  getDefaultNormalizer,
   render,
   screen,
   waitFor,
@@ -25,9 +24,9 @@ import echterPrueflauf from '../lib/__fixtures__/night-run-2026-09-11-103116.jso
 import echteKette from '../lib/__fixtures__/night-run-2026-09-14-131200.json'
 import { parseNightRunErgebnisstand } from '../lib/nightRunErgebnisstand'
 import { buildHandoffText, type NightRunHandoffItem } from '../lib/nightRunHandoff'
-import { NACHTLAUF_FARBEN, NACHTLAUF_SCHRIFTEN, NACHTLAUF_TON } from '../nachtlaufDesign'
+import { NACHTLAUF_FARBEN, NACHTLAUF_SCHRIFTEN } from '../nachtlaufDesign'
 import { cssRegel } from '../test/cssRegel'
-import { theme } from '../theme'
+import { MELDER, theme } from '../theme'
 import { NightRunPage } from './NightRunPage'
 import appQuelle from '../App.tsx?raw'
 
@@ -579,28 +578,28 @@ function protokollWaehlen(inhalt: string, name = 'night-run.json', typ = 'applic
 const lauf = (minute: number) => screen.getByTestId(`lauf-${startedAt(minute)}`)
 
 /**
- * Die Kopfzeile eines Laufs. Bis #915 war sie eine Reihe eigener Chips; Ketten- und
- * Umsetzungs-Lauf tragen seither die Metazeile des Entwurfs, in der dieselben Angaben stehen
- * (AK 10) — nur nicht mehr in je eigenen Knoten. Die beiden Altbestand-Arten behalten ihre Chips,
- * deshalb der Rückfall auf den Aufklappknopf, der beide Formen umschließt.
+ * Die Kopfzeile eines Laufs. Bis #915 war sie eine Reihe eigener Chips, bis #988 trugen die beiden
+ * Altbestand-Arten sie weiter; seither hat **jede** Lauf-Art den Kopf der Vorlage
+ * `docs/mockup-nachtlauf-lauf.html` — Etikett, Titel, Metazeile und die Marken rechts. Geprüft wird
+ * deshalb der ganze Kopf, nicht nur seine Metazeile: Herkunft und Einlieferung stehen als Marken
+ * daneben, nicht mehr in der Zeile.
  */
 const laufKopfzeile = (panelEl: HTMLElement): HTMLElement =>
-  within(panelEl).queryByTestId('nachtlauf-meta') ?? within(panelEl).getAllByRole('button')[0]
-
-/** `getComputedStyle` gibt Farben als `rgb(…)` zurück, die Tokens stehen als `#rrggbb`. */
-function alsRgb(hex: string): string {
-  const kanal = (position: number) => Number.parseInt(hex.slice(position, position + 2), 16)
-  return `rgb(${kanal(1)}, ${kanal(3)}, ${kanal(5)})`
-}
+  within(panelEl).getByTestId('lauf-kopf')
 
 /** Die Metazeile des einzigen Laufs auf der Seite — dort steht seit #915 seine Kennzeichnung. */
 const metazeile = () => screen.getByTestId('nachtlauf-meta')
 
 /**
- * Die Kennzahlenreihe eines Laufs, in welcher Form auch immer: Ketten- und Umsetzungs-Lauf tragen
- * seit #915 die Reihe des Entwurfs, die beiden Altbestand-Arten weiter die bisherige Zeile.
+ * Die Fußzeile eines Laufs. Bis #988 standen die Kennzahlen des Ergebnisstands als eigene Reihe
+ * über den Vorgängen; dort tragen seither die sechs Instrumente der Vorlage den Verbrauch, und die
+ * Auskünfte des Stands stehen in der Fußzeile — dieselben Werte, ein anderer Ort.
  */
-const KENNZAHLEN_REIHE = /^(nachtlauf|lauf)-kennzahlen$/
+const FUSSZEILE = 'uebersicht-fuss'
+
+/** Eine einzelne Angabe der Fußzeile, über ihre Benennung. */
+const fussangabe = (panelEl: HTMLElement, label: string) =>
+  within(panelEl).getByTestId(`fussangabe-${label}`)
 
 /**
  * Klappt den Lauf auf; erst dabei wird die Herkunftskette aufgelöst (Plan #718, A8).
@@ -614,23 +613,46 @@ function aufklappen(minute: number) {
 }
 
 /**
- * Dasselbe für ein Panel, das der Test bereits in der Hand hat.
+ * Dasselbe für ein Panel, das der Test bereits in der Hand hat — und seit #988 zusätzlich jede
+ * Vorgangszeile darin.
  *
- * Genommen wird der **erste** Knopf des Panels: Die Kopfzeile des Laufs steht im DOM vor seinem
- * Inhalt. Ein offener Lauf trägt weitere zugeklappte Aufklappfelder in sich (etwa die Grund-Zeilen
- * der Aufschlüsselung) — eine Suche nach „irgendeinem zugeklappten Knopf" träfe die.
+ * Genommen wird der **erste** Knopf des Panels: Der Aufklapp-Pfeil steht im Kopf und damit im DOM
+ * vor dem Inhalt. Danach klappt jede Vorgangszeile auf: Die Vorlage zeigt in der Zeile nur LED,
+ * Nummer, Titel, Dauer, Kosten und Commit; Befund, Herkunftskette, Vorhaben, Verlauf und
+ * Ergebniszeile stehen darunter (Entscheidung Manne 2026-09-17). Die Tests prüfen diese Angaben —
+ * also müssen sie sie erst sichtbar machen. Wer die **Zeile selbst** prüft, klappt nicht auf.
  */
 function panelAufklappen(panelEl: HTMLElement) {
   const knopf = within(panelEl).getAllByRole('button')[0]
   if (knopf.getAttribute('aria-expanded') === 'false') {
     fireEvent.click(knopf)
   }
+  vorgaengeAufklappen(panelEl)
 }
 
-/** Der Wert des schreibgeschützten Übernahmetext-Feldes eines Arbeitspakets im Panel eines Laufs. */
+/**
+ * Der Aufklapp-Pfeil im Kopf eines Laufs — der **erste** Knopf des Panels. Ein aufgeklappter Lauf
+ * trägt weitere Knöpfe mit `aria-expanded`: die Vorgangszeilen und die Grund-Zeilen der
+ * Aufschlüsselung. Eine Suche nach „dem aufgeklappten Knopf" träfe die mit.
+ */
+const laufTaste = (panelEl: HTMLElement) => within(panelEl).getAllByRole('button')[0]
+
+/** Klappt jede noch zugeklappte Vorgangszeile eines Panels auf. */
+function vorgaengeAufklappen(panelEl: HTMLElement) {
+  for (const taste of within(panelEl).queryAllByTestId(/^vorgang-taste-\d+$/)) {
+    if (taste.getAttribute('aria-expanded') === 'false') {
+      fireEvent.click(taste)
+    }
+  }
+}
+
+/**
+ * Der Text des Befunds eines Arbeitspakets im Panel eines Laufs. Seit #988 ein `<pre>` statt eines
+ * schreibgeschützten Textfelds (Vorlage Z. 420–423); die Beschriftung ist dieselbe geblieben, weil
+ * die Aussage dieselbe ist.
+ */
 const uebernahmetext = (panel: HTMLElement, cardNumber: number) =>
-  (within(panel).getByLabelText(`Übernahmetext zu Karte #${cardNumber}`) as HTMLTextAreaElement)
-    .value
+  within(panel).getByLabelText(`Übernahmetext zu Karte #${cardNumber}`).textContent
 
 const byNumberAufrufe = () => anfragen.filter((a) => a.url.includes('/cards/by-number/'))
 
@@ -759,11 +781,22 @@ describe('NightRunPage — Herkunft, Vollständigkeit und Verbrauch eines Laufs'
     await screen.findByTestId(`lauf-${startedAt(0)}`)
     aufklappen(0)
 
-    const verbrauch = await within(lauf(0)).findByTestId('lauf-verbrauch')
-    expect(verbrauch).toHaveTextContent('nicht gemessen')
-    expect(verbrauch.textContent).not.toMatch(/\d/)
-    const jePaket = within(lauf(0)).getByTestId('paket-verbrauch-700')
-    expect(jePaket).toHaveTextContent('nicht gemessen')
+    // Seit #988 tragen die Instrumente den Verbrauch des Laufs und die Kostenspalte den des
+    // Vorgangs. „Nicht gemessen" steht dort als „—", der Grund nur für Vorlesewerkzeuge — und
+    // nirgends eine 0 (`CLAUDE-design.md`).
+    const panel = within(lauf(0))
+    for (const kennung of ['instrument-kosten', 'instrument-eingabe', 'instrument-ausgabe']) {
+      const wert = (await panel.findByTestId(`${kennung}-wert`)) as HTMLElement
+      expect(wert).toHaveTextContent('—')
+      expect(wert).toHaveTextContent('nicht gemessen')
+      expect(wert.textContent).not.toMatch(/\d/)
+    }
+    const quote = panel.getByTestId('instrument-cache-wert')
+    expect(quote).toHaveTextContent('nicht berechenbar')
+    const kosten = panel.getByTestId('kosten-700')
+    expect(kosten).toHaveTextContent('—')
+    expect(kosten).toHaveTextContent('nicht gemessen')
+    expect(kosten.textContent).not.toMatch(/\d/)
   })
 
   it('zeigt gesetzte Verbrauchswerte mit ihrer Einheit', async () => {
@@ -775,9 +808,9 @@ describe('NightRunPage — Herkunft, Vollständigkeit und Verbrauch eines Laufs'
             startedAt: startedAt(0),
             usage: verbraucht({
               costUsd: 25.98,
-              inputTokens: 148,
+              inputTokens: 1_000_000,
               outputTokens: 62411,
-              cachedInputTokens: 8883160,
+              cachedInputTokens: 760_000,
             }),
             items: [
               {
@@ -796,14 +829,15 @@ describe('NightRunPage — Herkunft, Vollständigkeit und Verbrauch eines Laufs'
     await screen.findByTestId(`lauf-${startedAt(0)}`)
     aufklappen(0)
 
-    const verbrauch = await within(lauf(0)).findByTestId('lauf-verbrauch')
-    expect(verbrauch).toHaveTextContent('25,98')
-    expect(verbrauch).toHaveTextContent('$')
-    expect(verbrauch).toHaveTextContent('148 Token')
-    expect(verbrauch).toHaveTextContent('62.411 Token')
-    expect(verbrauch).toHaveTextContent('8.883.160 Token')
-    // Was der Lauf nicht misst, bleibt eine Fehlanzeige — auch neben gemessenen Werten.
-    expect(within(lauf(0)).getByTestId('paket-verbrauch-700')).toHaveTextContent('11,52')
+    const panel = within(lauf(0))
+    expect(await panel.findByTestId('instrument-kosten-wert')).toHaveTextContent('25,98 $')
+    // Die Instrumente nennen die Mengen in der Einheit der Vorlage („1,00 Mio", „62 Tsd").
+    expect(panel.getByTestId('instrument-eingabe-wert')).toHaveTextContent('1,00 Mio')
+    expect(panel.getByTestId('instrument-ausgabe-wert')).toHaveTextContent('62 Tsd')
+    // Die Cache-Quote ist der Anteil des Zwischenspeichers an der Eingabe — dieselbe Formel, die
+    // der Server für die Verbrauchs-Sicht rechnet.
+    expect(panel.getByTestId('instrument-cache-wert')).toHaveTextContent('76 %')
+    expect(panel.getByTestId('kosten-700')).toHaveTextContent('11,52 $')
   })
 
   it('nennt die maschinelle Herkunft auch ohne Token-Namen', async () => {
@@ -837,10 +871,11 @@ describe('NightRunPage — Herkunft, Vollständigkeit und Verbrauch eines Laufs'
     await screen.findByTestId(`lauf-${startedAt(0)}`)
     aufklappen(0)
 
-    const verbrauch = await within(lauf(0)).findByTestId('lauf-verbrauch')
-    expect(verbrauch).toHaveTextContent('Kosten: nicht gemessen')
-    expect(verbrauch).toHaveTextContent('148 Token')
-    expect(verbrauch).toHaveTextContent('Zwischenspeicher: nicht gemessen')
+    const panel = within(lauf(0))
+    expect(await panel.findByTestId('instrument-kosten-wert')).toHaveTextContent('nicht gemessen')
+    expect(panel.getByTestId('instrument-eingabe-wert')).toHaveTextContent('148 Token')
+    // Ohne Zwischenspeicher gibt es kein Verhältnis — und keine 0 %.
+    expect(panel.getByTestId('instrument-cache-wert')).toHaveTextContent('nicht berechenbar')
   })
 
   it('zeigt die Lauf-Summe unverändert, auch wenn sie über der Summe der Arbeitspakete liegt', async () => {
@@ -870,7 +905,31 @@ describe('NightRunPage — Herkunft, Vollständigkeit und Verbrauch eines Laufs'
     await screen.findByTestId(`lauf-${startedAt(0)}`)
     aufklappen(0)
 
-    expect(await within(lauf(0)).findByTestId('lauf-verbrauch')).toHaveTextContent('25,98')
+    expect(await within(lauf(0)).findByTestId('instrument-kosten-wert')).toHaveTextContent('25,98 $')
+    expect(within(lauf(0)).getByTestId('kosten-700')).toHaveTextContent('11,52 $')
+  })
+
+  it('nennt die Kosten des zugeklappten Laufs im Kopf und aufgeklappt im Instrument', async () => {
+    // Vorlage Z. 452 gegen Z. 393: Die Kosten stehen zugeklappt als Marke im Kopf, aufgeklappt im
+    // Instrument — zweimal dieselbe Zahl im Blick ließe nach einem Unterschied suchen.
+    renderPage({
+      listen: [
+        [
+          aufbewahrt({ id: 1, startedAt: startedAt(0), usage: verbraucht({ costUsd: 9.8 }) }),
+          aufbewahrt({ id: 2, startedAt: startedAt(30) }),
+        ],
+      ],
+    })
+
+    await screen.findByTestId(`lauf-${startedAt(30)}`)
+    // Der spätere Lauf steht oben und offen; `lauf(0)` ist damit der zugeklappte.
+    expect(within(lauf(0)).getByTestId('lauf-kosten')).toHaveTextContent('9,80 $')
+    expect(within(lauf(0)).queryByTestId('instrument-kosten')).not.toBeInTheDocument()
+
+    fireEvent.click(within(lauf(0)).getAllByRole('button')[0])
+
+    expect(within(lauf(0)).queryByTestId('lauf-kosten')).not.toBeInTheDocument()
+    expect(within(lauf(0)).getByTestId('instrument-kosten-wert')).toHaveTextContent('9,80 $')
   })
 })
 
@@ -1342,8 +1401,10 @@ describe('NightRunPage — Nachtplan-Lauf (#806)', () => {
     protokollWaehlen(ECHTER_NACHTPLAN_STAND, 'night-run-2026-09-09-141506.json')
 
     const panelEl = await screen.findByTestId(`lauf-${ECHTER_NACHTPLAN_START}`)
-    expect(within(panelEl).getByText('Nachtplan-Lauf')).toBeInTheDocument()
-    expect(within(panelEl).getByText('2 bearbeitet, 33 übergangen')).toBeInTheDocument()
+    expect(within(panelEl).getByTestId('nachtlauf-vorzeile')).toHaveTextContent(
+      'Nachtlauf · Nachtplan',
+    )
+    expect(laufKopfzeile(panelEl)).toHaveTextContent('2 bearbeitet · 33 übergangen')
 
     panelAufklappen(panelEl)
     const panel = within(panelEl)
@@ -1391,8 +1452,10 @@ describe('NightRunPage — Ketten-Lauf (#854)', () => {
     protokollWaehlen(ECHTE_KETTE_STAND, 'night-run-2026-09-14-131200.json')
 
     const panelEl = await screen.findByTestId(`lauf-${ECHTE_KETTE_START}`)
-    expect(laufKopfzeile(panelEl)).toHaveTextContent('Ketten-Lauf')
-    expect(laufKopfzeile(panelEl)).toHaveTextContent('3 bearbeitet, 0 übergangen')
+    expect(within(panelEl).getByTestId('nachtlauf-vorzeile')).toHaveTextContent(
+      'Nachtlauf · Kette',
+    )
+    expect(laufKopfzeile(panelEl)).toHaveTextContent('3 bearbeitet · 0 übergangen')
 
     // Anders als der Nachtplan-Lauf geht die Kette an den Server (AK 8 aus #842):
     // `istEinlieferbar` schließt weiterhin allein `NIGHTPLAN` aus.
@@ -1595,7 +1658,9 @@ describe('NightRunPage — Ketten-Übersicht (#866)', () => {
     protokollWaehlen(ECHTE_KETTE_STAND, 'night-run-2026-09-14-131200.json')
 
     const panelEl = await screen.findByTestId(`lauf-${ECHTE_KETTE_START}`)
-    await waitFor(() => expect(laufKopfzeile(panelEl)).toHaveTextContent('42 bearbeitet, 0 übergangen'))
+    await waitFor(() =>
+      expect(laufKopfzeile(panelEl)).toHaveTextContent('42 bearbeitet · 0 übergangen'),
+    )
     panelAufklappen(panelEl)
 
     // Der Beleg ist jetzt das Stufenband: Es steht allein im Ergebnisstand, und dass es nach dem
@@ -1612,7 +1677,10 @@ describe('NightRunPage — Ketten-Übersicht (#866)', () => {
     // Der Vorgang steht da, seine Arbeitsschritte nicht: Die bewahrt der Server nicht auf.
     expect(await within(panelEl).findByTestId('zustand-791')).toBeInTheDocument()
     expect(within(panelEl).queryByTestId('stufenband-791')).not.toBeInTheDocument()
-    expect(within(panelEl).queryByTestId('nachtlauf-kennzahlen')).not.toBeInTheDocument()
+    // Und ebenso wenig die Angaben, die allein der Stand hergibt: Ohne ihn bleibt die Fußzeile
+    // bei den Budgets und nennt keine durchgelaufenen Ketten.
+    expect(within(panelEl).queryByTestId('fussangabe-Ketten durchgelaufen')).not.toBeInTheDocument()
+    expect(within(panelEl).getByTestId(FUSSZEILE)).toBeInTheDocument()
   })
 
   it('trägt im Kopf und in der Kennzahlenreihe die Werte des Protokolls (AK 1 bis 3)', async () => {
@@ -1625,12 +1693,14 @@ describe('NightRunPage — Ketten-Übersicht (#866)', () => {
 
     // Zwei der drei Vorgänge sind grün; entstanden sind #844 bis #849, also sechs Karten; die
     // Summe der zehn Stufenzeiten ergibt 4 148 331 ms; die Kostensumme steht im Kopf des Stands.
-    const reihe = within(screen.getByTestId('nachtlauf-kennzahlen'))
-    expect(reihe.getByText('2 von 3')).toBeInTheDocument()
-    expect(reihe.getByText('6')).toBeInTheDocument()
-    expect(reihe.getByText('1 Std 9 Min')).toBeInTheDocument()
-    expect(reihe.getByText('25,98 $')).toBeInTheDocument()
-    expect(reihe.getByText('ein Arbeitsschritt ohne Kostenmeldung')).toBeInTheDocument()
+    const fuss = screen.getByTestId(FUSSZEILE)
+    expect(fussangabe(fuss, 'Ketten durchgelaufen')).toHaveTextContent('2 von 3')
+    expect(fussangabe(fuss, 'Karten entstanden')).toHaveTextContent('6')
+    expect(fussangabe(fuss, 'Laufzeit über alle Stufen')).toHaveTextContent('1 Std 9 Min')
+    expect(fussangabe(fuss, 'Kosten der Nacht')).toHaveTextContent('25,98 $')
+    expect(fussangabe(fuss, 'Zur Kostensumme')).toHaveTextContent(
+      'ein Arbeitsschritt ohne Kostenmeldung',
+    )
   })
 
   it('nennt je Vorgang Kosten, Züge und fehlende Kostenmeldungen (AK 11)', async () => {
@@ -1667,10 +1737,10 @@ describe('NightRunPage — Ketten-Übersicht (#866)', () => {
 
     expect(metazeile()).toHaveTextContent('noch nicht abgeschlossen')
     expect(fuss.queryByText(/null/)).not.toBeInTheDocument()
-    // Ohne Vorgaben, Budget und Kostenmeldung steht überall die ausdrückliche Auskunft statt
-    // einer Zahl — eine „0 $" wäre eine Behauptung über etwas, das der Stand nicht führt. Seit
-    // #918 kommt die Herkunft der Budgets als vierte dazu (AK 9, Fall 2).
-    expect(fuss.getAllByText('nicht angegeben')).toHaveLength(4)
+    // Ohne Vorgaben, Budget, Kostensumme und Kostenmeldung steht überall die ausdrückliche
+    // Auskunft statt einer Zahl — eine „0 $" wäre eine Behauptung über etwas, das der Stand nicht
+    // führt. Seit #918 kommt die Herkunft der Budgets dazu, seit #988 die Kostensumme der Nacht.
+    expect(fuss.getAllByText('nicht angegeben')).toHaveLength(5)
     expect(screen.getByTestId('kennzahlen-900')).toHaveTextContent('Kosten nicht gemeldet')
   })
 
@@ -1683,8 +1753,8 @@ describe('NightRunPage — Ketten-Übersicht (#866)', () => {
     )
 
     expect(metazeile()).toHaveTextContent('vorzeitig beendet (harter Stopp)')
-    expect(screen.getByTestId('nachtlauf-kennzahlen')).toHaveTextContent('3,50 $')
-    expect(screen.getByTestId('nachtlauf-kennzahlen')).toHaveTextContent('2 Arbeitsschritte ohne Kostenmeldung')
+    expect(screen.getByTestId(FUSSZEILE)).toHaveTextContent('3,50 $')
+    expect(screen.getByTestId(FUSSZEILE)).toHaveTextContent('2 Arbeitsschritte ohne Kostenmeldung')
   })
 
   it('gibt eine unbekannte Abschlussangabe nicht im Rohwert aus', async () => {
@@ -2204,11 +2274,13 @@ describe('NightRunPage — Laufband für Umsetzungs-Läufe (#871)', () => {
     const farbe = (cardNumber: number) =>
       within(panelEl).getByTestId(`laufband-balken-${cardNumber}`)
 
+    // Seit #988 tragen die Melder des Leitstands die Aussage; sie stehen als Variablen im Theme,
+    // deshalb der Vergleich auf den Verweis und nicht auf einen aufgelösten Farbwert.
     for (const nummer of [768, 769, 771]) {
-      expect(farbe(nummer)).toHaveStyle({ backgroundColor: NACHTLAUF_TON.RED })
+      expect(getComputedStyle(farbe(nummer)).backgroundColor).toBe(MELDER.zinnob)
     }
     for (const nummer of [767, 770]) {
-      expect(farbe(nummer)).toHaveStyle({ backgroundColor: NACHTLAUF_TON.YELLOW })
+      expect(getComputedStyle(farbe(nummer)).backgroundColor).toBe(MELDER.bernst)
     }
   })
 
@@ -2491,10 +2563,11 @@ describe('NightRunPage — Modellzeit-Anteil je Vorgang (#872)', () => {
     aufklappen(0)
     await within(lauf(0)).findByText('Vorhaben: ohne')
 
-    expect(within(lauf(0)).queryByTestId('vorgangs-kennzahlen')).not.toBeInTheDocument()
+    // Ein grauer Vorgang lief nie; seine Ergebniszeile bestünde aus lauter Fehlanzeigen.
+    expect(within(lauf(0)).queryByTestId('kennzahlen-700')).not.toBeInTheDocument()
   })
 
-  it('zeigt an einem Ketten-Lauf keine Kennzahlenzeilen, sondern die Übersicht', async () => {
+  it('führt am Ketten-Vorgang Kosten, Züge und Modellzeit in seiner eigenen Form', async () => {
     renderPage({
       submit: { ergebnis: alleNeu(ECHTE_KETTE_STAND) },
       listen: [[], wieAufbewahrt(ECHTE_KETTE_STAND)],
@@ -2507,9 +2580,11 @@ describe('NightRunPage — Modellzeit-Anteil je Vorgang (#872)', () => {
     panelAufklappen(panelEl)
     await within(panelEl).findByTestId('uebersicht-fuss')
 
-    // Die Kette führt ihre Kosten und Züge bereits je Vorgang in der Übersicht (#866); eine
-    // zweite Zeile daneben bezöge sich auf dieselben Zahlen.
-    expect(within(panelEl).queryByTestId('vorgangs-kennzahlen')).not.toBeInTheDocument()
+    // Die Kette führt Kosten und Züge je Vorgang (#866) — seit #988 in der aufgeklappten Zeile.
+    expect(within(panelEl).getByTestId('kennzahlen-791')).toHaveTextContent('11,52 $ · 89 Züge')
+    expect(within(panelEl).getByTestId('kennzahlen-791')).toHaveTextContent(
+      'Modellzeit nicht gemeldet',
+    )
   })
 
   it('zeigt an einem aufbewahrten Lauf ohne Ergebnisstand keine Kennzahlenzeile', async () => {
@@ -2532,8 +2607,10 @@ describe('NightRunPage — Modellzeit-Anteil je Vorgang (#872)', () => {
     await within(lauf(0)).findByText('Vorhaben: ohne')
 
     // Kosten, Züge und Arbeitszeit verlassen den Browser nie (Plan #718, A1) — ohne den Stand
-    // dieser Sitzung gibt es sie nicht, und ein Block aus lauter Fehlanzeigen wäre kein Gewinn.
-    expect(within(lauf(0)).queryByTestId('vorgangs-kennzahlen')).not.toBeInTheDocument()
+    // dieser Sitzung bleibt allein die Dauer, und die drei Fehlanzeigen entfallen.
+    const zeileOhneStand = within(lauf(0)).getByTestId('kennzahlen-700')
+    expect(zeileOhneStand).toHaveTextContent('7 Min')
+    expect(zeileOhneStand).not.toHaveTextContent('Züge')
   })
 })
 
@@ -2554,7 +2631,9 @@ describe('NightRunPage — Herkunft eines Laufs (#775)', () => {
 
     await screen.findByTestId(`lauf-${startedAt(0)}`)
     // Erst wenn die Stückzahl des Servers dasteht, ist das Neuladen durch.
-    await waitFor(() => expect(laufKopfzeile(lauf(0))).toHaveTextContent('42 bearbeitet, 0 übergangen'))
+    await waitFor(() =>
+      expect(laufKopfzeile(lauf(0))).toHaveTextContent('42 bearbeitet · 0 übergangen'),
+    )
     expect(laufKopfzeile(lauf(0))).toHaveTextContent('Ergebnisstand')
     expect(within(lauf(0)).queryByText('Herkunft unbekannt')).not.toBeInTheDocument()
   })
@@ -2590,9 +2669,15 @@ describe('NightRunPage — Zustände, Kennzahlen und Auszüge', () => {
     expect(panel.getByText('nicht bearbeitet')).toBeInTheDocument()
   })
 
-  /** Der Ton der Ausgangspille eines Vorgangs — seit #916 über die Textfarbe, die der Punkt erbt. */
-  const pillenton = (cardNumber: number) =>
-    getComputedStyle(screen.getByTestId(`zustand-${cardNumber}`)).color
+/**
+   * Die LED eines Vorgangs, benannt nach ihrem Melder — seit #988 trägt sie die Farbaussage
+   * (`led-gruen`, `led-bernst`, `led-zinnob`, `led-grau`). Der Melder steht als Variable im Theme;
+   * geprüft wird deshalb, **welcher** Melder gewählt wurde, nicht sein aufgelöster Farbwert.
+   */
+  const melderVon = (cardNumber: number) =>
+    within(screen.getByTestId(`paket-${cardNumber}`))
+      .getByTestId(/^led-/)
+      .getAttribute('data-testid')
 
   it('macht eine Erfolgsmeldung mit roter Prüfung gelb', async () => {
     renderPage({
@@ -2606,9 +2691,9 @@ describe('NightRunPage — Zustände, Kennzahlen und Auszüge', () => {
     aufklappen(0)
 
     expect(await within(lauf(0)).findByText('Erfolg, Prüfung rot')).toBeInTheDocument()
-    // Text **und** Farbe tragen die Aussage (CLAUDE-react.md Zeile 142). Seit #916 kommt der Ton
-    // aus dem Entwurfs-Theme; die Ampel-Fläche erbt ihn über `currentColor` von ihrer Pille.
-    expect(pillenton(700)).toBe(alsRgb(NACHTLAUF_TON.YELLOW))
+    // Text **und** Farbe tragen die Aussage (CLAUDE-react.md Zeile 142): der Satz in der
+    // aufgeklappten Zeile, die Farbe in der LED.
+    expect(melderVon(700)).toBe('led-bernst')
   })
 
   it('zeigt den Zustand als ausgefuellte, gleich grosse Flaeche — unabhaengig von der Textlaenge (#738)', async () => {
@@ -2626,16 +2711,18 @@ describe('NightRunPage — Zustände, Kennzahlen und Auszüge', () => {
     await panel.findByText('Erfolg')
 
     // Vier unterschiedlich lange Zustandstexte ("Erfolg" bis "Erfolg, Prüfung rot"), dieselbe
-    // Flächengröße — die Fläche wirkt als Signal, nicht als weitere Textzeile (AC3).
-    const groesse = { width: '8px', height: '8px' }
+    // Flächengröße — die Fläche wirkt als Signal, nicht als weitere Textzeile (AC3). Seit #988
+    // ist es die LED der Vorlage (9 px, Z. 190–196).
+    const groesse = { width: '9px', height: '9px' }
     for (const nummer of [700, 701, 702, 703]) {
-      expect(panel.getByTestId(`ampel-${nummer}`)).toHaveStyle(groesse)
+      const zeile = within(panel.getByTestId(`paket-${nummer}`))
+      expect(zeile.getByTestId(/^led-/)).toHaveStyle(groesse)
     }
-    // Der Ton steht seit #916 an der Pille; die Fläche erbt ihn über `currentColor`.
-    expect(pillenton(700)).toBe(alsRgb(NACHTLAUF_TON.GREEN))
-    expect(pillenton(701)).toBe(alsRgb(NACHTLAUF_TON.YELLOW))
-    expect(pillenton(702)).toBe(alsRgb(NACHTLAUF_TON.RED))
-    expect(pillenton(703)).toBe(alsRgb(NACHTLAUF_TON.GREY))
+    // Und jeder Zustand hat seinen eigenen Melder — vier Zustände, vier LEDs.
+    expect(melderVon(700)).toBe('led-gruen')
+    expect(melderVon(701)).toBe('led-bernst')
+    expect(melderVon(702)).toBe('led-zinnob')
+    expect(melderVon(703)).toBe('led-grau')
   })
 
   it('zeigt bei einem grauen Arbeitspaket seinen Grund', async () => {
@@ -2661,8 +2748,10 @@ describe('NightRunPage — Zustände, Kennzahlen und Auszüge', () => {
     renderPage({ listen: [[aufbewahrt({ id: 1, startedAt: startedAt(0), mode: 'REVIEW' })]] })
 
     await screen.findByTestId(`lauf-${startedAt(0)}`)
-    expect(within(lauf(0)).getByText('Prüf-Lauf')).toBeInTheDocument()
-    expect(within(lauf(0)).queryByText('Umsetzungs-Lauf')).not.toBeInTheDocument()
+    expect(within(lauf(0)).getByTestId('nachtlauf-vorzeile')).toHaveTextContent(
+      'Nachtlauf · Prüfung',
+    )
+    expect(within(lauf(0)).queryByText(/Umsetzung/)).not.toBeInTheDocument()
   })
 
   it('kennzeichnet einen Umsetzungs-Lauf als solchen', async () => {
@@ -2675,7 +2764,9 @@ describe('NightRunPage — Zustände, Kennzahlen und Auszüge', () => {
     protokollWaehlen(EIN_LAUF)
 
     await screen.findByTestId(`lauf-${startedAt(0)}`)
-    expect(laufKopfzeile(lauf(0))).toHaveTextContent('Umsetzungs-Lauf')
+    expect(within(lauf(0)).getByTestId('nachtlauf-vorzeile')).toHaveTextContent(
+      'Nachtlauf · Umsetzung',
+    )
   })
 
   // **Umgekehrt mit Issue #872**: Der Test hielt bis dahin fest, dass in der Auswertung
@@ -2695,8 +2786,9 @@ describe('NightRunPage — Zustände, Kennzahlen und Auszüge', () => {
 
     const panel = within(lauf(0))
     // Die Laufdauer ist die Summe der drei gelaufenen Sessions; das zurückgestellte Paket trägt keine.
-    expect(laufKopfzeile(lauf(0))).toHaveTextContent('21 Min')
-    expect(laufKopfzeile(lauf(0))).toHaveTextContent('3 bearbeitet, 1 übergangen')
+    // Die Metazeile nennt die Laufdauer in der Form der Vorlage („4 h 12 min", Z. 385).
+    expect(laufKopfzeile(lauf(0))).toHaveTextContent('21 min')
+    expect(laufKopfzeile(lauf(0))).toHaveTextContent('3 bearbeitet · 1 übergangen')
     // Die Dauer je Vorgang steht seit #917 in der Ergebniszeile seines Blocks.
     await waitFor(() => expect(panel.getByTestId('kennzahlen-700')).toHaveTextContent('7 Min'))
     // Die drei bearbeiteten Vorgänge tragen eine Kennzahlenzeile; das zurückgestellte Paket
@@ -2841,8 +2933,8 @@ describe('NightRunPage — Herkunftskette', () => {
     )
     expect(within(lauf(0)).queryByText('Plan: ohne')).not.toBeInTheDocument()
     // Die Seite bleibt bedienbar: der Lauf lässt sich wieder zuklappen.
-    fireEvent.click(within(lauf(0)).getByRole('button', { expanded: true }))
-    expect(within(lauf(0)).getByRole('button', { expanded: false })).toBeInTheDocument()
+    fireEvent.click(laufTaste(lauf(0)))
+    expect(laufTaste(lauf(0))).toHaveAttribute('aria-expanded', 'false')
   })
 
   it('meldet eine nicht auflösbare Stufe der Kette, ohne sie „ohne" zu nennen', async () => {
@@ -2867,7 +2959,7 @@ describe('NightRunPage — Herkunftskette', () => {
 
     aufklappen(0)
     await within(lauf(0)).findByText('Plan: ohne')
-    fireEvent.click(within(lauf(0)).getByRole('button', { expanded: true }))
+    fireEvent.click(laufTaste(lauf(0)))
     panelAufklappen(lauf(0))
 
     await waitFor(() => expect(within(lauf(0)).getByText('Plan: ohne')).toBeInTheDocument())
@@ -3029,7 +3121,7 @@ describe('NightRunPage — Vorhaben eines Arbeitspakets (#818)', () => {
     expect(await within(lauf(0)).findByText('Vorhaben: nicht auflösbar')).toBeInTheDocument()
     // Die Wurzelkarte bleibt öffenbar, und der Lauf lässt sich weiterhin zu- und aufklappen.
     expect(within(lauf(0)).getByRole('button', { name: '#700 Paket A' })).toBeInTheDocument()
-    fireEvent.click(within(lauf(0)).getByRole('button', { expanded: true }))
+    fireEvent.click(laufTaste(lauf(0)))
     panelAufklappen(lauf(0))
     await waitFor(() =>
       expect(within(lauf(0)).getByText('Vorhaben: nicht auflösbar')).toBeInTheDocument(),
@@ -3072,6 +3164,9 @@ describe('NightRunPage — Vorhaben eines Arbeitspakets (#818)', () => {
     })
     await screen.findByTestId(`lauf-${startedAt(30)}`)
     await waitFor(() => expect(vorhabenAufrufe()).toHaveLength(1))
+    // Der oberste Lauf steht offen, seine Vorgangszeile aber zugeklappt (#988) — und darin steht
+    // die Vorhaben-Zeile.
+    vorgaengeAufklappen(lauf(30))
 
     aufklappen(0)
 
@@ -3315,11 +3410,12 @@ describe('NightRunPage — Übernahmetext für die Entwicklungsumgebung', () => 
     }),
   ]
 
-  /** Das schreibgeschützte Feld eines Arbeitspakets; `null`, wenn keines gerendert wird. */
+/**
+   * Der Befund-Kasten eines Arbeitspakets; `null`, wenn keiner gerendert wird. Seit #988 ein
+   * `<pre>` statt eines schreibgeschützten Feldes — die Beschriftung ist dieselbe geblieben.
+   */
   const feld = (cardNumber: number) =>
-    within(lauf(0)).queryByLabelText(`Übernahmetext zu Karte #${cardNumber}`) as
-      | HTMLTextAreaElement
-      | null
+    within(lauf(0)).queryByLabelText(`Übernahmetext zu Karte #${cardNumber}`)
 
   const kopierKnopf = (cardNumber: number) =>
     within(lauf(0)).queryByRole('button', {
@@ -3344,21 +3440,15 @@ describe('NightRunPage — Übernahmetext für die Entwicklungsumgebung', () => 
   it('zeigt zu einem gelben und einem roten Arbeitspaket den vollständigen Text, bevor kopiert wird', async () => {
     await befundeZeigen()
 
-    // `getByDisplayValue` mit dem **ganzen** String: Ein gekürzter Wert fände nichts. Der
-    // Normalisierer bleibt aus, sonst faltete Testing Library die Zeilenumbrüche des Werts zu
-    // Leerzeichen zusammen und der Vergleich prüfte weniger, als er behauptet.
-    const woertlich = getDefaultNormalizer({ trim: false, collapseWhitespace: false })
-    expect(
-      within(lauf(0)).getByDisplayValue(buildHandoffText(GELB) as string, { normalizer: woertlich }),
-    ).toBeInTheDocument()
-    expect(
-      within(lauf(0)).getByDisplayValue(buildHandoffText(ROT) as string, { normalizer: woertlich }),
-    ).toBeInTheDocument()
-    expect(feld(700)?.value).toContain(AUSZUG_GELB)
+    // Verglichen wird der **ganze** String: Ein gekürzter Text wäre ein halber Befund in der
+    // Zwischenablage. `textContent` faltet keine Zeilenumbrüche, die Prüfung bleibt wörtlich.
+    expect(feld(700)?.textContent).toBe(buildHandoffText(GELB))
+    expect(feld(701)?.textContent).toBe(buildHandoffText(ROT))
+    expect(feld(700)?.textContent).toContain(AUSZUG_GELB)
     expect(writeText).not.toHaveBeenCalled()
   })
 
-  it('zeigt zu einem grünen und einem grauen Arbeitspaket weder Feld noch Knopf', async () => {
+  it('zeigt zu einem grünen und einem grauen Arbeitspaket weder Befund noch Knopf', async () => {
     await befundeZeigen()
 
     expect(feld(702)).toBeNull()
@@ -3369,7 +3459,7 @@ describe('NightRunPage — Übernahmetext für die Entwicklungsumgebung', () => 
 
   it('legt exakt den String des sichtbaren Feldes in die Zwischenablage', async () => {
     await befundeZeigen()
-    const sichtbar = feld(700)?.value
+    const sichtbar = feld(700)?.textContent
 
     fireEvent.click(kopierKnopf(700) as HTMLElement)
 
@@ -3380,10 +3470,10 @@ describe('NightRunPage — Übernahmetext für die Entwicklungsumgebung', () => 
   it('gibt den Auszug wörtlich wieder, statt seine Markdown-Zeichen zu deuten', async () => {
     await befundeZeigen()
 
-    // Der Wert einer `textarea` trägt kein Markup — geprüft wird beides: der wörtliche Inhalt und
-    // dass daneben nichts vom Markdown-Renderer Erzeugtes steht.
-    expect(feld(700)?.value).toContain('*fett*')
-    expect(feld(700)?.value).toContain('`npm test`')
+    // Ein `<pre>` mit Textinhalt trägt kein Markup — geprüft wird beides: der wörtliche Inhalt
+    // und dass daneben nichts vom Markdown-Renderer Erzeugtes steht.
+    expect(feld(700)?.textContent).toContain('*fett*')
+    expect(feld(700)?.textContent).toContain('`npm test`')
     expect(within(lauf(0)).queryByText('fett', { selector: 'em' })).toBeNull()
     expect(within(lauf(0)).queryByText('npm test', { selector: 'code' })).toBeNull()
   })
@@ -3391,13 +3481,13 @@ describe('NightRunPage — Übernahmetext für die Entwicklungsumgebung', () => 
   it('lässt den Text sichtbar, wenn die Zwischenablage nicht verfügbar ist', async () => {
     writeText.mockRejectedValue(new Error('Clipboard nicht verfügbar'))
     await befundeZeigen()
-    const sichtbar = feld(700)?.value
+    const sichtbar = feld(700)?.textContent
 
     fireEvent.click(kopierKnopf(700) as HTMLElement)
 
     await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1))
     // Der Text bleibt stehen und ist von Hand markierbar; eine Fehlermeldung ist nicht nötig.
-    expect(feld(700)?.value).toBe(sichtbar)
+    expect(feld(700)?.textContent).toBe(sichtbar)
     expect(screen.queryByRole('alert')).toBeNull()
   })
 
@@ -3417,8 +3507,8 @@ describe('NightRunPage — Übernahmetext für die Entwicklungsumgebung', () => 
     aufklappen(0)
     await within(lauf(0)).findByTestId('zustand-700')
 
-    expect(feld(700)?.value).not.toContain('undefined')
-    expect(feld(700)?.value).toContain('Harter Abbruch')
+    expect(feld(700)?.textContent).not.toContain('undefined')
+    expect(feld(700)?.textContent).toContain('Harter Abbruch')
   })
 })
 
@@ -3449,11 +3539,9 @@ describe('NightRunPage — null aus der API (#734)', () => {
     }),
   ]
 
-  /** Das schreibgeschützte Feld des Übernahmetexts; `null`, wenn keines gerendert wird. */
+  /** Der Befund-Kasten des Übernahmetexts; `null`, wenn keiner gerendert wird. */
   const feld = (cardNumber: number) =>
-    within(lauf(0)).queryByLabelText(`Übernahmetext zu Karte #${cardNumber}`) as
-      | HTMLTextAreaElement
-      | null
+    within(lauf(0)).queryByLabelText(`Übernahmetext zu Karte #${cardNumber}`)
 
   async function nullLaufZeigen() {
     renderPage({
@@ -3485,7 +3573,9 @@ describe('NightRunPage — null aus der API (#734)', () => {
   it('lässt die Fehlerklasse aus dem Übernahmetext weg, statt „undefined" hineinzuschreiben', async () => {
     await nullLaufZeigen()
 
-    expect(feld(700)?.value).toBe('Nachtlauf-Befund zu Karte #700 Paket A\nZustand: gescheitert')
+    expect(feld(700)?.textContent).toBe(
+      'Nachtlauf-Befund zu Karte #700 Paket A\nZustand: gescheitert',
+    )
   })
 })
 
@@ -3636,7 +3726,7 @@ describe('NightRunPage — Aufschlüsselung der gesichteten Karten (#873)', () =
       '3 liegengeblieben',
     )
     // Dieselbe Zahl wie in der unveränderten Kopfzeile des Laufs (AK 2).
-    expect(within(panelEl).getByText('3 bearbeitet, 35 übergangen')).toBeInTheDocument()
+    expect(laufKopfzeile(panelEl)).toHaveTextContent('3 bearbeitet · 35 übergangen')
   })
 
   it('zeigt die Kartennummern einer Grund-Zeile erst beim Aufklappen (Punkt 12)', async () => {
@@ -3752,15 +3842,14 @@ describe('NightRunPage — Kennzahlenzeile je Lauf-Art (#874)', () => {
     panelAufklappen(panelEl)
     // Beide Formen: Ketten- und Umsetzungs-Lauf tragen seit #915 die Reihe des Entwurfs, die
     // beiden Altbestand-Arten weiter die bisherige Zeile.
-    await within(panelEl).findByTestId(KENNZAHLEN_REIHE)
+    await within(panelEl).findByTestId(FUSSZEILE)
     return panelEl
   }
 
   /**
-   * Die Kennzahlenzeile eines aufgeklappten Laufs. Umsetzungs-Läufe tragen seit #915 die Reihe des
-   * Entwurfs, die beiden Altbestand-Arten weiter die bisherige Zeile — dieselben Werte in beiden.
+   * Die Fußzeile eines aufgeklappten Laufs — seit #988 der Ort der Kennzahlen des Ergebnisstands.
    */
-  const zeile = (panelEl: HTMLElement) => within(within(panelEl).getByTestId(KENNZAHLEN_REIHE))
+  const zeile = (panelEl: HTMLElement) => within(within(panelEl).getByTestId(FUSSZEILE))
 
   const echterUmsetzungslauf = () =>
     eingelesen(ECHTER_STAND, ECHTER_START, 'night-run-2026-09-07-085229.json', {
@@ -3904,9 +3993,10 @@ describe('NightRunPage — Kennzahlenzeile je Lauf-Art (#874)', () => {
     panelAufklappen(panelEl)
     await within(panelEl).findByTestId('uebersicht-fuss')
 
-    // Die Kette führt ihre Kennzahlen bereits in der Übersicht (#866) — und ihre Kostensumme
-    // steht im Stand, statt gerechnet zu werden.
-    expect(within(panelEl).queryByTestId('lauf-kennzahlen')).not.toBeInTheDocument()
+    // Die Kostensumme der Kette steht im Stand, statt gerechnet zu werden — deshalb trägt ihre
+    // Fußzeile die Budgets der Kette und keine Züge des Modells.
+    expect(within(panelEl).queryByTestId('fussangabe-Züge des Modells')).not.toBeInTheDocument()
+    expect(fussangabe(panelEl, 'Kostenbudget je Kette')).toBeInTheDocument()
   })
 
   it('zeigt an einem aufbewahrten Lauf ohne Ergebnisstand keine Kennzahlenzeile', async () => {
@@ -3928,9 +4018,10 @@ describe('NightRunPage — Kennzahlenzeile je Lauf-Art (#874)', () => {
     aufklappen(0)
     await within(lauf(0)).findByText('Vorhaben: ohne')
 
-    // Kosten und Züge bewahrt der Server nicht auf — eine Zeile aus lauter Fehlanzeigen wäre
+    // Kosten und Züge bewahrt der Server nicht auf — eine Reihe aus lauter Fehlanzeigen wäre
     // dieselbe Wand, die der Kennzahlen-Hinweis vermeidet.
-    expect(within(lauf(0)).queryByTestId('lauf-kennzahlen')).not.toBeInTheDocument()
+    expect(within(lauf(0)).queryByTestId('fussangabe-Züge des Modells')).not.toBeInTheDocument()
+    expect(within(lauf(0)).getByTestId('fussangabe-Ergebnis der Nacht')).toBeInTheDocument()
   })
 })
 
@@ -4048,7 +4139,7 @@ describe('NightRunPage — Kopf und Kennzahlenreihe der Nacht (#915)', () => {
     )
 
     expect(within(panelEl).getByTestId('nachtlauf-vorzeile')).toHaveTextContent('Nachtlauf · Kette')
-    expect(within(panelEl).getByTestId('nachtlauf-kennzahlen')).toBeInTheDocument()
+    expect(within(panelEl).getByTestId(FUSSZEILE)).toBeInTheDocument()
   })
 
   it('gibt dem Umsetzungs-Lauf den Kopf des Entwurfs mit seiner Vorzeile', async () => {
@@ -4061,22 +4152,26 @@ describe('NightRunPage — Kopf und Kennzahlenreihe der Nacht (#915)', () => {
     expect(within(panelEl).getByTestId('nachtlauf-vorzeile')).toHaveTextContent(
       'Nachtlauf · Umsetzung',
     )
-    expect(within(panelEl).getByTestId('nachtlauf-kennzahlen')).toBeInTheDocument()
+    expect(within(panelEl).getByTestId(FUSSZEILE)).toBeInTheDocument()
   })
 
-  it('lässt den Prüf-Lauf bei seiner heutigen Darstellung (E5, Altbestand)', async () => {
+  it('gibt dem Prüf-Lauf seit #988 denselben Kopf, behält aber seine Aufschlüsselung', async () => {
     const panelEl = await nachEinlesen(
       ECHTER_PRUEFLAUF_STAND,
       ECHTER_PRUEFLAUF_START,
       'night-run-2026-09-11-103116.json',
     )
 
-    expect(within(panelEl).queryByTestId('nachtlauf-vorzeile')).not.toBeInTheDocument()
+    // Die Platte der Vorlage gilt seit #988 für **jede** Lauf-Art; was den Prüf-Lauf eigen macht,
+    // ist die Aufschlüsselung seiner aussortierten Karten (#873), nicht mehr sein Kopf.
+    expect(within(panelEl).getByTestId('nachtlauf-vorzeile')).toHaveTextContent(
+      'Nachtlauf · Prüfung',
+    )
     expect(within(panelEl).getByTestId('aufschluesselung')).toBeInTheDocument()
-    expect(within(panelEl).getByTestId('lauf-kennzahlen')).toBeInTheDocument()
+    expect(within(panelEl).getByTestId(FUSSZEILE)).toBeInTheDocument()
   })
 
-  it('lässt den Erzeugungs-Lauf bei seiner heutigen Darstellung (E5, Altbestand)', async () => {
+  it('gibt dem Erzeugungs-Lauf denselben Kopf und seine Aufschlüsselung', async () => {
     // Nachtplan-Läufe bleiben browser-only (Plan #803, Entscheidung 8) — sie gehen nicht an den
     // Server und kommen deshalb auch nicht aus der Liste zurück.
     renderPage()
@@ -4085,19 +4180,22 @@ describe('NightRunPage — Kopf und Kennzahlenreihe der Nacht (#915)', () => {
     const panelEl = await screen.findByTestId(`lauf-${ECHTE_ERZEUGUNG_START}`)
     panelAufklappen(panelEl)
 
-    expect(within(panelEl).queryByTestId('nachtlauf-vorzeile')).not.toBeInTheDocument()
+    expect(within(panelEl).getByTestId('nachtlauf-vorzeile')).toHaveTextContent(
+      'Nachtlauf · Nachtplan',
+    )
     expect(await within(panelEl).findByTestId('aufschluesselung')).toBeInTheDocument()
-    expect(within(panelEl).getByTestId('lauf-kennzahlen')).toBeInTheDocument()
+    expect(within(panelEl).getByTestId(FUSSZEILE)).toBeInTheDocument()
   })
 
   it.each([
     ['Ketten-Lauf', ECHTE_KETTE_STAND, ECHTE_KETTE_START, 'night-run-2026-09-14-131200.json'],
     ['Umsetzungs-Lauf', ECHTER_STAND, ECHTER_START, 'night-run-2026-09-07-085229.json'],
   ])(
-    'nennt die Herkunft des Stands in der Metazeile des %s (AK 9, Fall 3)',
+    'nennt die Herkunft des Stands im Kopf des %s (AK 9, Fall 3)',
     async (_art, standText, start, dateiname) => {
       const panelEl = await nachEinlesen(standText, start, dateiname)
-      expect(within(panelEl).getByTestId('nachtlauf-meta')).toHaveTextContent('Ergebnisstand')
+      // Seit #988 als Marke rechts im Kopf (Vorlage Z. 388), nicht mehr in der Metazeile.
+      expect(within(panelEl).getByTestId('lauf-stand')).toHaveTextContent('Ergebnisstand')
     },
   )
 
@@ -4108,8 +4206,7 @@ describe('NightRunPage — Kopf und Kennzahlenreihe der Nacht (#915)', () => {
       'night-run-2026-09-14-131200.json',
     )
 
-    const kosten = within(panelEl).getByTestId('nachtlauf-kennzahl-Kosten der Nacht')
-    expect(kosten).toHaveTextContent(/ohne Kostenmeldung/)
+    expect(fussangabe(panelEl, 'Zur Kostensumme')).toHaveTextContent(/ohne Kostenmeldung/)
   })
 
   it('gibt einem aufbewahrten Ketten-Lauf ohne Stand denselben Kopf, aber keine Kennzahlen (E6)', async () => {
@@ -4122,15 +4219,15 @@ describe('NightRunPage — Kopf und Kennzahlenreihe der Nacht (#915)', () => {
     expect(within(panelEl).getByTestId('nachtlauf-vorzeile')).toHaveTextContent('Nachtlauf · Kette')
     // Kosten und Züge bewahrt der Server nicht auf; eine Reihe aus lauter Fehlanzeigen wäre
     // dieselbe Wand, die der Bestand schon vermeidet.
-    expect(within(panelEl).queryByTestId('nachtlauf-kennzahlen')).not.toBeInTheDocument()
-    expect(within(panelEl).getByTestId('nachtlauf-meta')).toHaveTextContent('Herkunft unbekannt')
+    expect(within(panelEl).queryByTestId('fussangabe-Ketten durchgelaufen')).not.toBeInTheDocument()
+    expect(within(panelEl).getByTestId('lauf-stand')).toHaveTextContent('Herkunft unbekannt')
   })
 })
 
-describe('NightRunPage — Altbestand-Arten behalten ihre Kopfzeile (#915)', () => {
-  it('zeigt ungedeutete Zeilen eines Prüf-Laufs weiter als eigenen Chip', async () => {
-    // Die Chip-Zeile bleibt für `REVIEW` und `NIGHTPLAN` in Kraft (E5). Ohne diesen Nachweis wäre
-    // der Zweig nach dem Umbau ungeprüft, obwohl er erreichbar ist.
+describe('NightRunPage — Altbestand-Arten im Kopf der Vorlage (#988)', () => {
+  it('nennt ungedeutete Zeilen eines Prüf-Laufs in der Metazeile', async () => {
+    // Bis #988 war das ein eigener Chip. Die Vorlage sieht dafür kein Element vor; die Angabe
+    // bleibt in ihrer Funktion erhalten und steht in der Metazeile (AK 10).
     renderPage({
       listen: [
         [
@@ -4147,11 +4244,15 @@ describe('NightRunPage — Altbestand-Arten behalten ihre Kopfzeile (#915)', () 
     })
     await screen.findByTestId(`lauf-${startedAt(0)}`)
 
-    expect(within(lauf(0)).getByText('Ungedeutete Zeilen: 1')).toBeInTheDocument()
-    expect(within(lauf(0)).queryByTestId('nachtlauf-vorzeile')).not.toBeInTheDocument()
+    expect(within(lauf(0)).getByTestId('nachtlauf-meta')).toHaveTextContent(
+      'Ungedeutete Zeilen: 1',
+    )
+    expect(within(lauf(0)).getByTestId('nachtlauf-vorzeile')).toHaveTextContent(
+      'Nachtlauf · Prüfung',
+    )
   })
 
-  it('zeigt den Kennzahlen-Hinweis eines Prüf-Laufs in dessen bisheriger Zeile', async () => {
+  it('zeigt den Kennzahlen-Hinweis eines Prüf-Laufs in seiner Fußzeile', async () => {
     // Der echte Prüf-Lauf, ergänzt um den Hinweis: Seine Ausgänge sind prüfungseigen, ein
     // selbstgebauter Stand mit `ausgang: 'erfolg'` wäre gar nicht deutbar.
     const PRUEFUNG_MIT_HINWEIS = JSON.stringify({
@@ -4168,7 +4269,7 @@ describe('NightRunPage — Altbestand-Arten behalten ihre Kopfzeile (#915)', () 
     const panelEl = await screen.findByTestId(`lauf-${ECHTER_PRUEFLAUF_START}`)
     panelAufklappen(panelEl)
 
-    expect(await within(panelEl).findByTestId('lauf-kennzahlen-hinweis')).toHaveTextContent(
+    expect(await within(panelEl).findByTestId('fussangabe-Kennzahlen')).toHaveTextContent(
       'Kennzahlen nicht angefordert',
     )
   })
@@ -4294,6 +4395,8 @@ describe('NightRunPage — Vorgangsblock der Kette (#916)', () => {
     })
     const panelEl = await screen.findByTestId(`lauf-${startedAt(0)}`)
 
+    vorgaengeAufklappen(panelEl)
+
     expect(within(panelEl).getByText(`Grund: ${GRUND_ZURUECKGESTELLT}`)).toBeInTheDocument()
   })
 
@@ -4373,6 +4476,8 @@ describe('NightRunPage — Anteilsbalken des Umsetzungs-Laufs (#917)', () => {
     })
     await screen.findByTestId(`lauf-${startedAt(0)}`)
 
+    vorgaengeAufklappen(lauf(0))
+
     expect(screen.getByTestId('laufband-abschnitt-700')).toHaveAttribute('data-anteil', '25')
     expect(screen.getByTestId('laufband-abschnitt-701')).toHaveAttribute('data-anteil', '75')
   })
@@ -4394,6 +4499,8 @@ describe('NightRunPage — Anteilsbalken des Umsetzungs-Laufs (#917)', () => {
       ],
     })
     await screen.findByTestId(`lauf-${startedAt(0)}`)
+
+    vorgaengeAufklappen(lauf(0))
 
     expect(screen.queryAllByTestId(/^laufband-abschnitt-/)).toHaveLength(0)
     expect(screen.getByTestId('paket-700')).toHaveTextContent('Paket A')
@@ -4443,7 +4550,7 @@ describe('NightRunPage — Anteilsbalken des Umsetzungs-Laufs (#917)', () => {
     panelAufklappen(panelEl)
 
     expect(await within(panelEl).findByTestId('aufschluesselung')).toBeInTheDocument()
-    expect(within(panelEl).getByTestId('vorgangs-kennzahlen')).toBeInTheDocument()
+    expect(within(panelEl).getByTestId('kennzahlen-782')).toBeInTheDocument()
     expect(within(panelEl).queryAllByTestId(/^laufband-abschnitt-/)).toHaveLength(0)
   })
 })
@@ -4479,8 +4586,11 @@ describe('NightRunPage — Fußzeile beider Lauf-Arten (#918)', () => {
 
     expect(fuss().getByText('Herkunft der Budgets')).toBeInTheDocument()
     const wert = fuss().getByText('nicht angegeben')
-    expect(getComputedStyle(wert).color).toBe(alsRgb(NACHTLAUF_FARBEN.ink2))
-    expect(getComputedStyle(wert).color).not.toBe(alsRgb(NACHTLAUF_FARBEN.budget))
+    // Die Gegenprobe im selben Fuß: Der Vermerk zur Kostensumme **ist** ein Vorbehalt und trägt
+    // den Bernstein-Melder, die fehlende Angabe daneben nicht.
+    const vorbehalt = fuss().getByText(/ohne Kostenmeldung/)
+    expect(getComputedStyle(vorbehalt).color).toBe(MELDER.bernst)
+    expect(getComputedStyle(wert).color).not.toBe(MELDER.bernst)
   })
 
   it('führt am Umsetzungs-Lauf Ergebnis, teuersten Vorgang und Herkunft des Stands', async () => {
@@ -4503,7 +4613,7 @@ describe('NightRunPage — Fußzeile beider Lauf-Arten (#918)', () => {
     expect(fuss().getAllByText('nicht angegeben').length).toBeGreaterThanOrEqual(3)
   })
 
-  it('gibt einem Prüf-Lauf keine Fußzeile des Entwurfs (Nicht-Ziel 5)', async () => {
+  it('gibt seit #988 auch einem Prüf-Lauf eine Fußzeile, mit seinen eigenen Angaben', async () => {
     renderPage({
       submit: { ergebnis: alleNeu(ECHTER_PRUEFLAUF_STAND) },
       listen: [[], wieAufbewahrt(ECHTER_PRUEFLAUF_STAND)],
@@ -4514,6 +4624,181 @@ describe('NightRunPage — Fußzeile beider Lauf-Arten (#918)', () => {
     panelAufklappen(panelEl)
 
     await within(panelEl).findByTestId('aufschluesselung')
-    expect(within(panelEl).queryByTestId('uebersicht-fuss')).not.toBeInTheDocument()
+    // Die Platte der Vorlage gilt für jede Lauf-Art; der Prüf-Lauf führt in seinem Fuß die
+    // art-eigene Kennzahl „Karten bearbeitet" statt der Budgets einer Kette.
+    const fussEl = within(panelEl).getByTestId('uebersicht-fuss')
+    expect(within(fussEl).getByTestId('fussangabe-Karten bearbeitet')).toBeInTheDocument()
+    expect(within(fussEl).queryByTestId('fussangabe-Kostenbudget je Kette')).not.toBeInTheDocument()
+  })
+})
+
+describe('NightRunPage — Laufblock im Leitstand-Stil (#988)', () => {
+  /** Ein Lauf mit allem, was eine Vorgangszeile der Vorlage zeigt. */
+  const mitAllem = () => ({
+    listen: [
+      [
+        aufbewahrt({
+          id: 1,
+          startedAt: startedAt(0),
+          durationMs: 4 * 3_600_000 + 12 * 60_000,
+          processedCount: 3,
+          skippedCount: 0,
+          usage: verbraucht({
+            costUsd: 12.4,
+            inputTokens: 4_820_000,
+            outputTokens: 186_000,
+            cachedInputTokens: 3_663_200,
+          }),
+          items: [
+            {
+              id: 11,
+              cardNumber: 917,
+              title: 'Anteilsbalken je Vorgang',
+              state: 'GREEN' as const,
+              durationMs: 25 * 60_000,
+              commitHash: '9489421abcdef',
+              usage: verbraucht({ costUsd: 2.3 }),
+            },
+            {
+              id: 12,
+              cardNumber: 922,
+              title: 'Spaltenbreite der Vorgangsliste',
+              state: 'RED' as const,
+              errorClass: 'CHECKS_RED' as const,
+              durationMs: 42 * 60_000 + 15_000,
+              excerpt: '2 Tests rot in BoardViewTest\nweitere Zeile',
+            },
+            {
+              id: 13,
+              cardNumber: 925,
+              title: 'Vorhaben-Kürzel im Kartenkopf',
+              state: 'YELLOW' as const,
+              errorClass: 'AWAITING_DECISION' as const,
+            },
+          ],
+        }),
+      ],
+    ],
+    karten: {
+      917: karte({ id: 1, number: 917, title: 'Anteilsbalken je Vorgang' }),
+      922: karte({ id: 2, number: 922, title: 'Spaltenbreite der Vorgangsliste' }),
+      925: karte({ id: 3, number: 925, title: 'Vorhaben-Kürzel im Kartenkopf' }),
+    },
+  })
+
+  it('gibt dem Lauf einen Titel von 15 px statt der bisherigen großen Überschrift', async () => {
+    // Der Kern des Auftrags (Manne, 2026-09-17): Die Überschrift „Nacht vom 14. September" stand
+    // in 40 px über jedem Lauf. Die Vorlage führt sie in 15 px (Z. 362).
+    renderPage(mitAllem())
+    await screen.findByTestId(`lauf-${startedAt(0)}`)
+
+    const titel = within(lauf(0)).getByTestId('nachtlauf-ueberschrift')
+    expect(titel).toHaveTextContent('Nacht vom 2. September')
+    expect(titel).toHaveStyle({ fontSize: '15px' })
+  })
+
+  it('führt Kopf mit Art, Titel, Metazeile und Herkunft — und die LED nach Ergebnis', async () => {
+    renderPage(mitAllem())
+    await screen.findByTestId(`lauf-${startedAt(0)}`)
+
+    const kopf = laufKopfzeile(lauf(0))
+    expect(within(kopf).getByTestId('nachtlauf-vorzeile')).toHaveTextContent('Nachtlauf · Umsetzung')
+    expect(within(kopf).getByTestId('nachtlauf-meta')).toHaveTextContent(
+      '4 h 12 min · 3 bearbeitet · 0 übergangen',
+    )
+    expect(within(kopf).getByTestId('lauf-stand')).toHaveTextContent('Herkunft unbekannt')
+    // Ein Lauf mit einem gescheiterten Vorgang meldet Zinnober — dieselbe Rechnung wie im
+    // Leitstand (`laufMelder`).
+    expect(within(kopf).getByTestId('led-zinnob')).toBeInTheDocument()
+  })
+
+  it('zeigt aufgeklappt die sechs Instrumente der Vorlage', async () => {
+    renderPage(mitAllem())
+    await screen.findByTestId(`lauf-${startedAt(0)}`)
+
+    const panel = within(lauf(0))
+    expect(panel.getByTestId('instrument-kosten-wert')).toHaveTextContent('12,40 $')
+    expect(panel.getByTestId('instrument-eingabe-wert')).toHaveTextContent('4,82 Mio')
+    expect(panel.getByTestId('instrument-ausgabe-wert')).toHaveTextContent('186 Tsd')
+    expect(panel.getByTestId('instrument-cache-wert')).toHaveTextContent('76 %')
+    expect(panel.getByTestId('instrument-dauer-wert')).toHaveTextContent('4:12 h')
+    // Die Pakete nach Zustand, alle drei Zahlen in einem Feld (Vorlage Z. 398).
+    expect(panel.getByTestId('instrument-pakete-wert')).toHaveTextContent('1 grün 1 gelb 1 rot')
+  })
+
+  it('führt je Vorgangszeile Dauer, Kosten und Commit — und „—" ohne Messung', async () => {
+    renderPage(mitAllem())
+    await screen.findByTestId(`lauf-${startedAt(0)}`)
+
+    const panel = within(lauf(0))
+    expect(panel.getByTestId('dauer-917')).toHaveTextContent('25:00')
+    expect(panel.getByTestId('kosten-917')).toHaveTextContent('2,30 $')
+    expect(panel.getByTestId('commit-917')).toHaveTextContent('9489421')
+    // Der Abbruch hat keine Kostenmeldung und keinen Commit.
+    expect(panel.getByTestId('dauer-922')).toHaveTextContent('42:15')
+    expect(panel.getByTestId('kosten-922')).toHaveTextContent('—')
+    expect(panel.queryByTestId('commit-922')).not.toBeInTheDocument()
+  })
+
+  it('nennt an einem Abbruch Fehlerklasse und Auszug in der Zeile, einzeilig', async () => {
+    renderPage(mitAllem())
+    await screen.findByTestId(`lauf-${startedAt(0)}`)
+
+    const zeile = within(lauf(0)).getByTestId('vorgang-taste-922')
+    expect(zeile).toHaveTextContent('CHECKS_RED')
+    // Nur die erste Zeile des Auszugs: Mehr passt in eine Zeile nicht (`ersteZeile`).
+    expect(zeile).toHaveTextContent('2 Tests rot in BoardViewTest')
+    expect(zeile).not.toHaveTextContent('weitere Zeile')
+  })
+
+  it('schreibt die Zeile „Kosten: nicht gemessen · Eingabe: …" nirgends mehr auf die Seite', async () => {
+    // Entscheidung Manne 2026-09-17: Ihre Werte stehen in Instrumenten bzw. Kostenspalte.
+    renderPage(mitAllem())
+    await screen.findByTestId(`lauf-${startedAt(0)}`)
+    vorgaengeAufklappen(lauf(0))
+
+    expect(lauf(0).textContent).not.toContain('Kosten: nicht gemessen')
+    expect(lauf(0).textContent).not.toContain('Zwischenspeicher:')
+  })
+
+  it('klappt den Befund eines Abbruchs an seiner Zeile auf und wieder zu', async () => {
+    renderPage(mitAllem())
+    await screen.findByTestId(`lauf-${startedAt(0)}`)
+
+    const panel = within(lauf(0))
+    expect(panel.queryByTestId('befund-922')).not.toBeInTheDocument()
+
+    fireEvent.click(panel.getByTestId('vorgang-taste-922'))
+
+    expect(panel.getByTestId('befund-922')).toHaveTextContent('Nachtlauf-Befund zu Karte #922')
+    expect(
+      panel.getByRole('button', { name: 'Übernahmetext zu Karte #922 kopieren' }),
+    ).toBeInTheDocument()
+
+    fireEvent.click(panel.getByTestId('vorgang-taste-922'))
+
+    expect(panel.queryByTestId('befund-922')).not.toBeInTheDocument()
+  })
+
+  it('gibt einem grünen Vorgang keinen Befund, wohl aber seine Einzelheiten', async () => {
+    renderPage(mitAllem())
+    await screen.findByTestId(`lauf-${startedAt(0)}`)
+
+    fireEvent.click(within(lauf(0)).getByTestId('vorgang-taste-917'))
+
+    expect(within(lauf(0)).getByTestId('einzelheiten-917')).toBeInTheDocument()
+    expect(within(lauf(0)).queryByTestId('befund-917')).not.toBeInTheDocument()
+  })
+
+  it('stellt die Laufblöcke in den Kupferwarte-Bereich, die übrige Seite in die Ausnahme', async () => {
+    // `CLAUDE-design.md`: Die Laufblöcke haben die Nachtlauf-Ausnahme verlassen; Brotkrumenpfad,
+    // „Protokoll einlesen" und die Nachtansicht bleiben darin.
+    renderPage(mitAllem())
+    await screen.findByTestId(`lauf-${startedAt(0)}`)
+
+    const bereiche = screen.getAllByTestId('kupferwarte-bereich')
+    // Zwei: die Zeitraum-Sicht des Verbrauchs (#987) und die Laufblöcke (#988).
+    expect(bereiche).toHaveLength(2)
+    expect(bereiche[1]).toContainElement(lauf(0))
   })
 })

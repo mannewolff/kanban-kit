@@ -68,8 +68,17 @@ export function juengsterLauf(laeufe: readonly NightRunView[]): NightRunView | n
   return laeufe.reduce((a, b) => (b.startedAt > a.startedAt ? b : a))
 }
 
-/** Der Melder eines ganzen Laufs: läuft er noch, stahl; sonst der schlechteste Zustand seiner Pakete. */
-export function laufMelder(lauf: NightRunView): Melder {
+/**
+ * Der Melder eines ganzen Laufs: läuft er noch, stahl; sonst der schlechteste Zustand seiner Pakete.
+ *
+ * <p>Die Form ist absichtlich schmal — `complete` und die Zustände. Die Server-Sicht erfüllt sie,
+ * und das Anzeigemodell der Nachtlauf-Seite (#988) ebenso; eine zweite Rechenstelle für dieselbe
+ * Frage liefe beim nächsten Zustand auseinander.
+ */
+export function laufMelder(lauf: {
+  complete: boolean
+  items: readonly { state: NightRunState }[]
+}): Melder {
   if (!lauf.complete) {
     return 'stahl'
   }
@@ -146,10 +155,51 @@ export function laufDauer(ms: number): string {
   return h > 0 ? `${h} h ${minuten % 60} min` : `${minuten} min`
 }
 
+/**
+ * Dieselbe Dauer in Wert und Einheit getrennt, für das Instrument „Dauer" der Laufplatte (#988,
+ * Mockup `docs/mockup-nachtlauf-lauf.html` Z. 397: „4:12 h"). Nicht {@link laufDauer}: Ein
+ * Instrument setzt die Einheit klein hinter den Wert, und „4 h 12 min" ließe sich dafür nicht
+ * teilen. Nicht {@link paketDauer}: Die zählt Sekunden mit, und über vier Stunden sagt „4:12:00"
+ * nichts, was „4:12 h" nicht kürzer sagte.
+ */
+export function laufDauerGeteilt(ms: number): { wert: string; einheit: string } {
+  const minuten = Math.round(ms / 60_000)
+  const h = Math.floor(minuten / 60)
+  return h > 0
+    ? { wert: `${h}:${String(minuten % 60).padStart(2, '0')}`, einheit: 'h' }
+    : { wert: String(minuten), einheit: 'min' }
+}
+
+/** Ein Zeitpunkt als Tag und Uhrzeit („14.09. 23:10") — Beginn eines Laufs in Notiz und Metazeile. */
+export function tagZeit(iso: string): string {
+  return TAG_ZEIT.format(new Date(iso))
+}
+
 /** Die Notiz im Kopf der Platte „Letzter Lauf": Beginn, Dauer, Zahl der Pakete. */
 export function laufNotiz(lauf: NightRunView): string {
   const pakete = lauf.items.length === 1 ? '1 Paket' : `${lauf.items.length} Pakete`
-  return `${TAG_ZEIT.format(new Date(lauf.startedAt))} · ${laufDauer(lauf.durationMs)} · ${pakete}`
+  return `${tagZeit(lauf.startedAt)} · ${laufDauer(lauf.durationMs)} · ${pakete}`
+}
+
+/**
+ * Der Anteil des Zwischenspeichers an der Eingabe in Prozent (#988, Instrument „Cache-Quote");
+ * `null`, wo eine der beiden Zahlen fehlt oder die Eingabe null ist.
+ *
+ * <p><b>Dieselbe Formel wie am Server</b> (`NightRunUsage#cachedInputSharePercent`): Zwischenspeicher
+ * mal hundert geteilt durch Eingabe, `null` ohne eine der beiden Zahlen oder bei Eingabe null. Die
+ * Sicht eines Laufs (`api/nightRuns.ts`) führt den fertigen Anteil nicht — nur die Verbrauchs-Sicht
+ * tut das. Gerechnet wird hier deshalb, aber nicht anders.
+ *
+ * <p><b>Ohne Bezugsgröße kein Prozentwert.</b> „0 %" behauptete eine gemessene Quote von null,
+ * „100 %" eine vollständige Wiederverwendung — beides sind Aussagen über eine Division, die es
+ * nicht gibt. Eine gemessene Null im Zwischenspeicher ist dagegen ein Wert: Dort lief die Messung
+ * und ergab nichts.
+ */
+export function cacheQuote(zwischenspeicher: number | null, eingabe: number | null): number | null {
+  if (zwischenspeicher === null || eingabe === null || eingabe === 0) {
+    return null
+  }
+  return Math.round((zwischenspeicher / eingabe) * 100)
 }
 
 /** Ob ein Arbeitspaket ein Abbruch ist — der Filter „Nur Abbrüche" (Entwurf Z. 1419). */
@@ -262,12 +312,29 @@ export interface GruenAnteil {
 }
 
 export function gruenAnteil(laeufe: readonly NightRunView[]): GruenAnteil {
-  const pakete = laeufe.flatMap((lauf) => lauf.items)
+  const gezaehlt = paketZaehlung(laeufe.flatMap((lauf) => lauf.items))
+  return {
+    prozent: gezaehlt.gesamt === 0 ? null : Math.round((gezaehlt.gruen / gezaehlt.gesamt) * 100),
+    ...gezaehlt,
+  }
+}
+
+/**
+ * Die Pakete einer Menge nach Zustand gezählt — grün, gelb, rot und ihre Summe. **Graue zählen
+ * nicht mit**: Ein übergangener Vorgang lief nie, und ihn in die Summe zu nehmen machte aus der
+ * Auswahlregel eines Laufs einen Mangel. Dieselbe Grenze, die `processedCount` zieht.
+ *
+ * <p>Sie nimmt nur den Zustand und nicht die ganze Server-Sicht: Der Anteil des Leitstands
+ * ({@link gruenAnteil}) und das Instrument „Pakete" der Laufplatte (#988) reichen verschiedene
+ * Formen herein, zählen aber dasselbe.
+ */
+export function paketZaehlung(
+  pakete: readonly { state: NightRunState }[],
+): { gruen: number; gelb: number; rot: number; gesamt: number } {
   const gruen = pakete.filter((p) => p.state === 'GREEN').length
   const gelb = pakete.filter((p) => p.state === 'YELLOW').length
   const rot = pakete.filter((p) => p.state === 'RED').length
-  const gesamt = gruen + gelb + rot
-  return { prozent: gesamt === 0 ? null : Math.round((gruen / gesamt) * 100), gruen, gelb, rot, gesamt }
+  return { gruen, gelb, rot, gesamt: gruen + gelb + rot }
 }
 
 /**

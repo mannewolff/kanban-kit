@@ -15,20 +15,12 @@ import '@fontsource/ibm-plex-sans/latin-500.css'
 import '@fontsource/ibm-plex-sans/latin-600.css'
 import '@fontsource/ibm-plex-mono/latin-400.css'
 import '@fontsource/ibm-plex-mono/latin-600.css'
-import Accordion from '@mui/material/Accordion'
-import AccordionDetails from '@mui/material/AccordionDetails'
-import AccordionSummary from '@mui/material/AccordionSummary'
 import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
-import Chip from '@mui/material/Chip'
-import Divider from '@mui/material/Divider'
 import Link from '@mui/material/Link'
-import Paper from '@mui/material/Paper'
 import Stack from '@mui/material/Stack'
-import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
-import ContentCopyIcon from '@mui/icons-material/ContentCopy'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import { ThemeProvider } from '@mui/material/styles'
 import { useCallback, useEffect, useId, useRef, useState } from 'react'
@@ -46,13 +38,16 @@ import {
 } from '../api/nightRuns'
 import { Breadcrumbs } from '../components/Breadcrumbs'
 import { CardDetailModal } from '../components/CardDetailModal'
+import { Led, melderFarbe } from '../components/leitstand/LeitstandBausteine'
 import {
-  NachtlaufKennzahlen,
-  type NachtlaufKennzahl,
-} from '../components/nachtlauf/NachtlaufKennzahlen'
-import { NachtlaufKopf } from '../components/nachtlauf/NachtlaufKopf'
-import type { Kartenchip } from '../components/nachtlauf/NachtlaufKartenchips'
-import { NachtlaufVorgang, type Chipgruppe } from '../components/nachtlauf/NachtlaufVorgang'
+  NachtlaufKartenchips,
+  type Kartenchip,
+} from '../components/nachtlauf/NachtlaufKartenchips'
+import { NachtlaufBefund } from '../components/nachtlauf/NachtlaufBefund'
+import { KupferwarteBereich } from '../components/nachtlauf/KupferwarteBereich'
+import { NachtlaufLaufInstrumente } from '../components/nachtlauf/NachtlaufLaufInstrumente'
+import { LaufMarke, NachtlaufLaufPlatte } from '../components/nachtlauf/NachtlaufLaufPlatte'
+import { NachtlaufVorgangszeile } from '../components/nachtlauf/NachtlaufVorgangszeile'
 import {
   NachtlaufStufenband,
   type Bandabschnitt as BandabschnittForm,
@@ -60,11 +55,24 @@ import {
 import { NachtlaufAnteilsbalken } from '../components/nachtlauf/NachtlaufAnteilsbalken'
 import { NachtlaufVerbrauchBereich } from '../components/nachtlauf/NachtlaufVerbrauchBereich'
 import { NachtlaufFuss, type Fussangabe as FussangabeForm } from '../components/nachtlauf/NachtlaufFuss'
-import { NACHTLAUF_TON } from '../nachtlaufDesign'
 import { NACHTLAUF_WURZEL_SX, nachtlaufTheme } from '../nachtlaufDesign'
+import { KUPFER, NUT, RAND, TEXT_SCHWACH, ZAHL } from '../theme'
 import { useSnackbar } from '../components/SnackbarProvider'
+import { epicColor } from '../lib/epicMeta'
 import { formatDuration } from '../lib/formatDuration'
-import { betrag, kosten, menge } from '../lib/nachtlaufFormat'
+import {
+  ersteZeile,
+  kostenText,
+  kurzHash,
+  laufDauer,
+  laufMelder,
+  paketDauer,
+  paketZaehlung,
+  tagZeit,
+  MELDER_JE_FEHLERKLASSE,
+  MELDER_JE_ZUSTAND,
+} from '../lib/leitstand'
+import { betrag } from '../lib/nachtlaufFormat'
 import {
   buildHandoffText,
   nightRunZustandsText,
@@ -122,6 +130,11 @@ import { useProjectName } from '../lib/useProjectName'
  */
 interface AnzeigeItem extends NightRunHandoffItem {
   durationMs: number | undefined
+  /**
+   * Der Commit, den der Vorgang hinterlassen hat (#988) — in der Zeile die letzte Spalte;
+   * `undefined`, wo der Lauf keinen gemeldet hat.
+   */
+  commitHash: string | undefined
   /**
    * Der aufbewahrte Verbrauch (Issue #949); `undefined` allein am eben geparsten Lauf — dort gibt
    * es noch keinen aufbewahrten Stand. Ein aufbewahrter ohne Messung traegt vier leere Felder.
@@ -191,27 +204,26 @@ interface Kettenglied {
 }
 
 /**
- * Die Zustandsfarben als Palettenpfade — nie als Hex-Literal (`lib/designGuard.ts` ließe das rot
- * werden) und nie über `palette.success/warning/error`, die im Frontend an Dutzenden Stellen für
- * Lösch-Buttons, Alerts und Feldfehler in Gebrauch sind (Plan #718, A15).
+ * Die Zustandsfarbe eines Vorgangs seit #988: der Melder des Leitstands. Die eigenen Palettenpfade
+ * `nightRun.*` der Nachtlauf-Ausnahme sind damit aus den Laufblöcken verschwunden — sie folgen
+ * Kupferwarte, und dort trägt der Melder diese Aussage (`CLAUDE-design.md`).
  */
-const ZUSTAND_FARBE: Record<NightRunState, string> = {
-  GREEN: 'nightRun.green',
-  YELLOW: 'nightRun.yellow',
-  RED: 'nightRun.red',
-  GREY: 'nightRun.grey',
-}
+const zustandsFarbe = (zustand: NightRunState): string => melderFarbe(MELDER_JE_ZUSTAND[zustand])
 
 /**
- * Die Chip-Beschriftung je Lauf-Modus (Plan #803). Als `Record` über alle Werte, nicht als
- * Inline-Bedingung: Ein weiterer Modus bricht den Build, statt still auf „Umsetzungs-Lauf" zu
- * fallen — dieselbe Absicherung wie bei {@link ZUSTAND_FARBE}.
+ * Die Lauf-Art im Etikett des Laufkopfs („Nachtlauf · Kette", Vorlage
+ * `docs/mockup-nachtlauf-lauf.html` Z. 382). Als `Record` über alle Werte, nicht als
+ * Inline-Bedingung: Ein weiterer Modus bricht den Build, statt still auf „Umsetzung" zu fallen.
+ *
+ * <p>Nicht `modusName` aus `lib/leitstand.ts`: Die kennt nur die drei Arten, die der Server
+ * aufbewahrt. `NIGHTPLAN` bleibt browser-only (Plan #803, Entscheidung 8) und käme dort nie vor —
+ * hier steht er aber auf der Seite.
  */
-const MODUS_TEXT: Record<NightRunMode, string> = {
-  IMPLEMENTATION: 'Umsetzungs-Lauf',
-  REVIEW: 'Prüf-Lauf',
-  NIGHTPLAN: 'Nachtplan-Lauf',
-  CHAIN: 'Ketten-Lauf',
+const ART_KURZ: Record<NightRunMode, string> = {
+  IMPLEMENTATION: 'Umsetzung',
+  REVIEW: 'Prüfung',
+  NIGHTPLAN: 'Nachtplan',
+  CHAIN: 'Kette',
 }
 
 /**
@@ -305,6 +317,7 @@ const ausParser = (run: NightRun): AnzeigeLauf => ({
     state: item.state,
     errorClass: item.errorClass,
     durationMs: item.durationMs,
+    commitHash: item.commit,
     excerpt: item.excerpt,
     verbrauch: undefined,
   })),
@@ -359,6 +372,7 @@ const ausSicht = (view: NightRunView): AnzeigeLauf => ({
     state: item.state,
     errorClass: item.errorClass ?? undefined,
     durationMs: item.durationMs ?? undefined,
+    commitHash: item.commitHash ?? undefined,
     excerpt: item.excerpt ?? undefined,
     verbrauch: ausVerbrauch(item.usage),
   })),
@@ -655,222 +669,6 @@ async function inDieZwischenablage(text: string): Promise<void> {
   }
 }
 
-/** Ein Arbeitspaket samt Zustand, Dauer, Auszug, Häufigkeit, Herkunftskette und Übernahmetext. */
-function Arbeitspaket({
-  item,
-  modus,
-  gekuerzt,
-  katalog,
-  vorhabenKarten,
-  haeufigkeit,
-  istRot,
-  onOeffnen,
-}: Readonly<{
-  item: AnzeigeItem
-  /** Der Modus des Laufs — er entscheidet, ob die Stufenzeilen überhaupt erscheinen (#858). */
-  modus: NightRunMode
-  /**
-   * `true` an einem Lauf, über dem die Übersicht steht (Issue #869): Dann trägt die Zeile nur noch
-   * Vorhaben und Übernahmetext. Zustand, Dauer und der Auszug samt Stufenblock stünden sonst ein
-   * zweites Mal auf derselben Seite (AK 15 aus #859).
-   */
-  gekuerzt: boolean
-  katalog: Kartenkatalog
-  vorhabenKarten: Vorhabenkatalog
-  haeufigkeit: string | null
-  istRot: (nummer: number) => boolean
-  onOeffnen: (karte: CardByNumber) => void
-}>) {
-  // `undefined` = noch nicht aufgelöst (die Kette lädt), `null` = nicht auflösbar.
-  const wurzel = katalog.get(item.cardNumber)
-  const beschriftung = `#${item.cardNumber} ${item.title}`
-
-  return (
-    <Box sx={{ py: 1 }} data-testid={`paket-${item.cardNumber}`}>
-      {!gekuerzt && (
-        <Stack direction="row" spacing={1} alignItems="center" sx={{ flexWrap: 'wrap' }}>
-          <Stack
-            direction="row"
-            alignItems="center"
-            spacing={0.5}
-            data-testid={`zustand-${item.cardNumber}`}
-          >
-            {/* Ampel-Fläche (#738): fixe Größe, unabhängig von der Länge des Zustandstexts daneben —
-                wirkt als Signal statt als weitere Textzeile. Dekorativ und redundant zum Text, deshalb
-                `aria-hidden` (CLAUDE-react.md Zeile 142: Farbe trägt die Aussage nie allein). */}
-            <Box
-              aria-hidden="true"
-              data-testid={`ampel-${item.cardNumber}`}
-              sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: ZUSTAND_FARBE[item.state], flexShrink: 0 }}
-            />
-            <Typography component="span" variant="body2">
-              {nightRunZustandsText(item.state, item.errorClass)}
-            </Typography>
-          </Stack>
-          {wurzel === null && (
-            <Typography component="span">Karte #{item.cardNumber} nicht gefunden</Typography>
-          )}
-          {wurzel === undefined && <Typography component="span">{beschriftung}</Typography>}
-          {wurzel != null && (
-            <Link component="button" type="button" onClick={() => onOeffnen(wurzel)}>
-              {beschriftung}
-            </Link>
-          )}
-          {item.durationMs !== undefined && (
-            <Typography component="span" color="text.secondary">
-              {formatDuration(item.durationMs / 1000)}
-            </Typography>
-          )}
-        </Stack>
-      )}
-
-      {!gekuerzt && item.excerpt !== undefined && (
-        // Auszüge sind Fremdtext (Claude-Ausgaben, Ergebnisse fremder Werkzeuge) und werden
-        // deshalb als reiner Text gerendert, nie über den Markdown-Renderer (CLAUDE-security.md).
-        <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5, whiteSpace: 'pre-wrap' }}>
-          {(item.state === 'GREY' ? 'Grund: ' : 'Auszug: ') + item.excerpt}
-        </Typography>
-      )}
-
-      <Paketzusaetze
-        item={item}
-        modus={modus}
-        mitStufenzeilen={!gekuerzt}
-        katalog={katalog}
-        vorhabenKarten={vorhabenKarten}
-        haeufigkeit={haeufigkeit}
-        istRot={istRot}
-        onOeffnen={onOeffnen}
-      />
-    </Box>
-  )
-}
-
-/**
- * Was ein Vorgang über seine Gestalt hinaus trägt: Häufigkeit eines Befunds über die aufbewahrten
- * Läufe, die Herkunftskette, das Vorhaben der Wurzelkarte und der Übernahmetext samt Kopierknopf.
- *
- * <p>Seit #916 teilen sich {@link Arbeitspaket} und der Vorgangsblock des Entwurfs diese Teile.
- * Der Entwurf sieht für sie kein Element vor; AK 10 verlangt, sie in ihrer Funktion zu erhalten
- * und einzupassen — im Block stehen sie deshalb als dessen Kinder unter der Ergebniszeile.
- */
-function Paketzusaetze({
-  item,
-  modus,
-  /** `false` an einem Lauf, über dem eine Übersicht steht — dieselbe Bedingung wie bisher. */
-  mitStufenzeilen,
-  katalog,
-  vorhabenKarten,
-  haeufigkeit,
-  istRot,
-  onOeffnen,
-}: Readonly<{
-  item: AnzeigeItem
-  modus: NightRunMode
-  mitStufenzeilen: boolean
-  katalog: Kartenkatalog
-  vorhabenKarten: Vorhabenkatalog
-  haeufigkeit: string | null
-  istRot: (nummer: number) => boolean
-  onOeffnen: (karte: CardByNumber) => void
-}>) {
-  const wurzel = katalog.get(item.cardNumber)
-  // `null` an einem grünen oder grauen Arbeitspaket — dort erscheint weder Feld noch Knopf.
-  const uebernahme = buildHandoffText(item)
-
-  return (
-    <>
-      {/* Der aufbewahrte Verbrauch des Arbeitspakets (Issue #949) — hier und nicht in einer der
-          drei Vorgangsformen: Er gilt fuer alle drei gleichermassen, und dreimal geschrieben liefe
-          er beim naechsten Wortwechsel auseinander. Er steht nur, wo einer aufbewahrt ist: An
-          einem eben geparsten Lauf gaebe es vier Fehlanzeigen zu lesen, die nichts ueber den Lauf
-          sagen, sondern nur darueber, dass er noch nicht eingeliefert ist. */}
-      {item.verbrauch !== undefined && (
-        <VerbrauchsZeile
-          verbrauch={item.verbrauch}
-          testId={`paket-verbrauch-${item.cardNumber}`}
-        />
-      )}
-
-      {haeufigkeit !== null && (
-        <Typography
-          variant="body2"
-          color="text.secondary"
-          data-testid={`haeufigkeit-${item.cardNumber}`}
-        >
-          {haeufigkeit}
-        </Typography>
-      )}
-
-      {wurzel != null && (
-        <>
-          {mitStufenzeilen &&
-            STUFEN.map((stufe) => {
-              const zustand = stufenZustand(
-                stufe.praefix,
-                kette(item.cardNumber, katalog),
-                istRot,
-                modus,
-              )
-              // `entfaellt` ergibt **keine Zeile** — die Herkunft steht in diesem Modus im Auszug
-              // (#858, siehe `stufenZustand`).
-              return zustand.art === 'entfaellt' ? null : (
-                <Stufenzeile
-                  key={stufe.label}
-                  label={stufe.label}
-                  zustand={zustand}
-                  onOeffnen={onOeffnen}
-                />
-              )
-            })}
-          {/* Das Vorhaben hängt an der **Wurzelkarte**, nicht an der Kette: Fachliche Anforderung
-              und Plan tragen ebenfalls eine `parentId`, und deren Vorhaben wäre hier eine andere
-              Aussage als die gesuchte. */}
-          <Vorhabenzeile
-            parentId={wurzel.parentId}
-            vorhabenKarten={vorhabenKarten}
-            onOeffnen={onOeffnen}
-          />
-        </>
-      )}
-
-      {uebernahme !== null && (
-        // Der Text steht **immer** offen da, nie in einem eingeklappten Bereich: Er speist sich aus
-        // Protokollauszügen, also aus Fremdtext (Claude-Ausgaben, Ergebnisse fremder Werkzeuge).
-        // Ein unsichtbar kopierter Text wäre ein Weg von fremdem Text in die eigene
-        // Entwicklungssitzung. Als reiner Wert eines Textfelds, nie über den Markdown-Renderer
-        // (CLAUDE-security.md). `maxRows` begrenzt nur die Höhe — das Feld scrollt, der Wert
-        // bleibt ungekürzt, sonst wanderte ein halbes Rohprotokoll in die Zwischenablage.
-        <Stack direction="row" spacing={1} alignItems="flex-start" sx={{ mt: 1 }}>
-          <TextField
-            fullWidth
-            multiline
-            minRows={3}
-            maxRows={12}
-            size="small"
-            value={uebernahme}
-            slotProps={{
-              htmlInput: {
-                readOnly: true,
-                'aria-label': `Übernahmetext zu Karte #${item.cardNumber}`,
-              },
-            }}
-          />
-          <Button
-            size="small"
-            variant="outlined"
-            startIcon={<ContentCopyIcon fontSize="small" />}
-            aria-label={`Übernahmetext zu Karte #${item.cardNumber} kopieren`}
-            onClick={() => void inDieZwischenablage(uebernahme)}
-          >
-            Kopieren
-          </Button>
-        </Stack>
-      )}
-    </>
-  )
-}
-
 /**
  * Die vier Arbeitsschritte einer Kette in der Reihenfolge, in der `stufenDerKette` sie läuft —
  * derselbe Schlüsselraum wie {@link NightRunKettenStufen} und {@link NightRunStufenvorgaben}, also
@@ -878,7 +676,7 @@ function Paketzusaetze({
  *
  * <p>Als Liste mit Beschriftung und nicht über `Object.keys`: Die Reihenfolge ist Teil der Aussage,
  * und ein fünfter Schritt bräuchte hier eine deutsche Benennung, statt still als Schlüssel
- * durchzurutschen — dieselbe Absicherung wie bei {@link MODUS_TEXT}.
+ * durchzurutschen — dieselbe Absicherung wie bei {@link ART_KURZ}.
  */
 const KETTEN_STUFEN: ReadonlyArray<{ schluessel: NightRunKettenStufe; label: string }> = [
   { schluessel: 'plan', label: 'Plan' },
@@ -1301,7 +1099,7 @@ function bandabschnitt(
       ? `${verbrauch} / ${ZAHL_FORMAT.format(vorgabeMin)} min`
       : `${verbrauch} min · ohne Vorgabe`,
     vermerk: erreicht ? vermerkAmEnde(istEnde, item) : 'nicht erreicht',
-    farbe: istEnde ? ZUSTAND_FARBE[item.state] : 'primary.main',
+    farbe: istEnde ? zustandsFarbe(item.state) : KUPFER,
   }
 }
 
@@ -1314,28 +1112,6 @@ const bandAnsage = (abschnitte: readonly Bandabschnitt[]): string =>
   `Stufenband: ${abschnitte
     .map((a) => `${a.label} ${a.zahlen}${a.vermerk === null ? '' : `, ${a.vermerk}`}`)
     .join(' · ')}`
-
-
-/** Eine Kennzahl der Nacht: der Wert, darunter seine Benennung und ein etwaiger Vorbehalt. */
-function Kennzahl({
-  wert,
-  label,
-  hinweis,
-}: Readonly<{ wert: string; label: string; hinweis: string | null }>) {
-  return (
-    <Box>
-      <Typography variant="h6">{wert}</Typography>
-      <Typography variant="body2" color="text.secondary">
-        {label}
-      </Typography>
-      {hinweis !== null && (
-        <Typography variant="body2" color="text.secondary">
-          {hinweis}
-        </Typography>
-      )}
-    </Box>
-  )
-}
 
 
 /**
@@ -1382,114 +1158,6 @@ function verweisZustand(nummer: number, katalog: Kartenkatalog): VerweisZustand 
   return karte === null ? { art: 'fort' } : { art: 'geladen', karte }
 }
 
-
-
-
-/**
- * Die Kennzahlen der Nacht für einen Umsetzungs-, Erzeugungs- oder Prüf-Lauf (Issue #874) — eine
- * Zeile unter der Kopfzeile des Laufs, mit der art-eigenen Kennzahl vorneweg, dann Laufzeit, Kosten
- * und Züge.
- *
- * <p><b>Sie liest den Ergebnisstand dieser Sitzung</b>, dieselbe Linie wie der Kopf des Entwurfs
- * (Plan #863, E1) und {@link VorgangsKennzahlen}: Kosten und Züge verlassen den Browser nie
- * (Plan #718, A1), der Server bewahrt sie nicht auf. Nach einem Neuladen der Seite fällt der Lauf
- * auf Band bzw. Aufschlüsselung zurück — eine Zeile aus lauter Fehlanzeigen wäre dieselbe Wand,
- * die der Kennzahlen-Hinweis unten vermeidet.
- *
- * <p><b>Die Laufzeit steht mit einer Nachkommastelle</b> und damit feiner als die grobkörnige
- * Angabe der Kopfzeile darüber ({@link formatDuration} rundet auf ganze Minuten). Das ist die Form
- * der Vorlage `docs/mockup-leitstand-laufarten.html` und hält die beiden Angaben auseinander,
- * obwohl sie dieselbe Größe messen: Die Laufdauer eines Ergebnisstands **ist** die Summe der
- * Vorgangsdauern (`parseNightRunErgebnisstand`), eine eigene Addition wäre eine zweite Rechenstelle.
- *
- * <p><b>Der Kennzahlen-Hinweis des Lauf-Kopfs verdrängt Kosten und Züge</b> (Plan #864, E8): Ohne
- * die ausführliche Ausgabe fordert der Runner den Kennzahlen-Strom gar nicht erst an und schreibt
- * den Grund einmal an den Lauf — das ist der Regelfall eines Umsetzungs-Laufs. „Kosten unbekannt"
- * daneben behauptete ein Fehlen, wo nichts fehlt; es wurde nur nichts angefordert.
- */
-function Laufkennzahlen({ run }: Readonly<{ run: NightRun }>) {
-  const bearbeitet = run.items.filter((item) => item.state !== 'GREY')
-  const art = artKennzahl(run, bearbeitet)
-  const hinweis = run.stand?.kennzahlenHinweis
-  const kosten = laufkosten(bearbeitet)
-
-  return (
-    <Box data-testid="lauf-kennzahlen" sx={{ mb: 2 }}>
-      <Stack direction="row" spacing={3} sx={{ flexWrap: 'wrap' }}>
-        <Kennzahl wert={art.wert} label={art.label} hinweis={null} />
-        <Kennzahl
-          wert={`${MINUTEN_FORMAT.format(run.durationMs / MINUTE_MS)} min`}
-          label="Laufzeit über alle Vorgänge"
-          hinweis={null}
-        />
-        {hinweis === undefined && (
-          <>
-            <Kennzahl wert={kosten.wert} label="Kosten der Nacht" hinweis={kosten.hinweis} />
-            <Kennzahl wert={laufZuege(bearbeitet)} label="Züge des Modells" hinweis={null} />
-          </>
-        )}
-      </Stack>
-      {hinweis !== undefined && (
-        <Typography
-          variant="body2"
-          color="text.secondary"
-          data-testid="lauf-kennzahlen-hinweis"
-          sx={{ mt: 1 }}
-        >
-          {hinweis}
-        </Typography>
-      )}
-    </Box>
-  )
-}
-
-/**
- * Die Kennzahlen je bearbeitetem Vorgang eines Umsetzungs-, Erzeugungs- oder Prüf-Laufs
- * (Issue #872): Dauer, Kosten, Züge und der Anteil der Modellarbeit an der Dauer.
- *
- * <p><b>Nur die bearbeiteten Vorgänge</b> — also die mit nicht-grauem Zustand, dieselbe Grenze,
- * die `processedCount` in der Kopfzeile zieht. Ein Prüf-Lauf sichtet 35 Karten und bearbeitet
- * eine; eine Zeile je übergangener Karte wäre eine Wand aus Fehlanzeigen für Sitzungen, die es
- * nie gab.
- *
- * <p><b>Sie liest den Ergebnisstand dieser Sitzung</b>, nicht den Anzeigelauf — dieselbe Linie
- * wie der Kopf des Entwurfs (Plan #863, E1) und aus demselben Grund: Kosten, Züge und
- * Arbeitszeit verlassen den Browser nie (Plan #718, A1), der Server bewahrt sie nicht auf. Nach
- * einem Neuladen der Seite ist der Speicher leer, und der Lauf zeigt seine Zeilenliste ohne
- * diesen Block. Deshalb steht er **für sich** und nicht in der Vorgangszeile: Eine Zuordnung
- * über die Position zwischen zwei Quellen ginge still schief, sobald ihre Reihenfolgen einmal
- * auseinanderlaufen, und zeigte dann die Kennzahlen des falschen Vorgangs.
- *
- * <p>Die Kette bekommt ihn nicht: Sie führt Kosten und Züge je Vorgang bereits in ihrer
- * Übersicht (#866), und ihre Zeiten stehen am Stufenband je Arbeitsschritt (#867).
- */
-function VorgangsKennzahlen({ run }: Readonly<{ run: NightRun }>) {
-  const bearbeitet = run.items.filter((item) => item.state !== 'GREY')
-  if (bearbeitet.length === 0) {
-    return null
-  }
-  // Hat der Lauf die Sitzungs-Kennzahlen gar nicht angefordert, nennt er den Grund einmal an
-  // seinem Kopf ({@link Laufkennzahlen}); je Vorgang stünde dann dreimal „fehlt" (#874).
-  const ohneKennzahlen = run.stand?.kennzahlenHinweis !== undefined
-
-  return (
-    <Stack spacing={1} data-testid="vorgangs-kennzahlen" sx={{ mb: 2 }}>
-      {bearbeitet.map((item) => (
-        <Box key={`${item.cardNumber}-${item.position}`}>
-          <Typography variant="body2">{`#${item.cardNumber} ${item.title}`}</Typography>
-          <Typography
-            variant="body2"
-            color="text.secondary"
-            data-testid={`kennzahlen-${item.cardNumber}`}
-          >
-            {vorgangszeile(item, ohneKennzahlen)}
-          </Typography>
-        </Box>
-      ))}
-    </Stack>
-  )
-}
-
 /** Ein Abschnitt des Laufbands — ein Vorgang, der eine Dauer verbraucht hat. */
 interface Laufabschnitt {
   cardNumber: number
@@ -1520,7 +1188,7 @@ function laufabschnitt(item: AnzeigeItem & { durationMs: number }, summe: number
     anteil: Math.round((item.durationMs / summe) * 1000) / 10,
     dauer,
     ansage: `Karte #${item.cardNumber}: ${nightRunZustandsText(item.state, item.errorClass)}, ${dauer}`,
-    farbe: ZUSTAND_FARBE[item.state],
+    farbe: zustandsFarbe(item.state),
   }
 }
 
@@ -1765,90 +1433,18 @@ function Aufschluesselung({ items }: Readonly<{ items: readonly Sichtung[] }>) {
 }
 
 /**
- * Die beiden Lauf-Arten, die die Gestaltung des Entwurfs tragen (#915, E5). `REVIEW` und
- * `NIGHTPLAN` sind Altbestand: `laufArt` in `.claude/kit/night.mjs` erzeugt seit Kit 1.53.0 nur
- * noch `kette` und `implementierung` (Nicht-Ziel 5). Sie behalten ihre heutige Darstellung.
- */
-const ENTWURFS_ARTEN = new Set<NightRunMode>(['CHAIN', 'IMPLEMENTATION'])
-
-const traegtEntwurf = (modus: NightRunMode): modus is 'CHAIN' | 'IMPLEMENTATION' =>
-  ENTWURFS_ARTEN.has(modus)
-
-/**
- * Die Kennzahlen der Nacht für den Kopf des Entwurfs — **dieselben Werte wie vor diesem Paket**
- * (Nicht-Ziel 3): für die Kette die vier der bisherigen Übersicht, für den Umsetzungs-Lauf die
- * aus {@link Laufkennzahlen}. Hier steht nur, wie sie zusammengestellt werden, nicht wie sie
- * entstehen.
- *
- * <p>`null` heißt: Zu diesem Lauf liegt kein Ergebnisstand dieser Sitzung vor. Kosten und Züge
- * bewahrt der Server nicht auf (Plan #718, A1) — eine Reihe aus lauter Fehlanzeigen wäre dieselbe
- * Wand, die der Bestand schon vermeidet (E6).
- */
-function nachtKennzahlen(
-  stand: NightRun | undefined,
-): { kennzahlen: NachtlaufKennzahl[]; hinweis: string | undefined } | null {
-  if (stand === undefined) {
-    return null
-  }
-  if (stand.mode === 'CHAIN') {
-    const gruen = stand.items.filter((item) => item.state === 'GREEN').length
-    return {
-      kennzahlen: [
-        { wert: `${gruen} von ${stand.items.length}`, label: 'Ketten durchgelaufen', hinweis: null },
-        {
-          wert: `${entstandeneDokumente(stand.items).size}`,
-          label: 'Karten entstanden',
-          hinweis: null,
-        },
-        {
-          wert: formatDuration(stufenZeitSumme(stand.items) / 1000),
-          label: 'Laufzeit über alle Stufen',
-          hinweis: null,
-        },
-        {
-          wert: betrag(stand.stand?.kostenSumme),
-          label: 'Kosten der Nacht',
-          hinweis: ohneKostenmeldung(
-            stand.stand?.kostenUnbekannt,
-            'ein Arbeitsschritt',
-            'Arbeitsschritte',
-          ),
-        },
-      ],
-      hinweis: undefined,
-    }
-  }
-
-  const bearbeitet = stand.items.filter((item) => item.state !== 'GREY')
-  const art = artKennzahl(stand, bearbeitet)
-  const kennzahlenHinweis = stand.stand?.kennzahlenHinweis
-  const kosten = laufkosten(bearbeitet)
-  return {
-    kennzahlen: [
-      { wert: art.wert, label: art.label, hinweis: null },
-      {
-        wert: `${MINUTEN_FORMAT.format(stand.durationMs / MINUTE_MS)} min`,
-        label: 'Laufzeit über alle Vorgänge',
-        hinweis: null,
-      },
-      // Der Kennzahlen-Hinweis verdrängt Kosten und Züge (Plan #864, E8): Ohne die ausführliche
-      // Ausgabe fordert der Runner den Kennzahlen-Strom gar nicht erst an.
-      ...(kennzahlenHinweis === undefined
-        ? [
-            { wert: kosten.wert, label: 'Kosten der Nacht', hinweis: kosten.hinweis },
-            { wert: laufZuege(bearbeitet), label: 'Züge des Modells', hinweis: null },
-          ]
-        : []),
-    ],
-    hinweis: kennzahlenHinweis,
-  }
-}
-
-/**
  * Die Arbeitsschritte, aus denen ein Ketten-Vorgang Karten hinterlässt, als Chipgruppen für seinen
  * Block (#916). Nur `plan` und `pakete`: Die beiden anderen Schritte erzeugen gar keine Karten, und
  * eine Zeile „keine Karten" unter einem Schritt, der keine hinterlassen kann, wäre keine Aussage.
  */
+interface Chipgruppe {
+  label: string
+  /** Was steht, wenn in diesem Schritt keine Karte entstand. */
+  leer: string
+  testId: string
+  chips: readonly Kartenchip[]
+}
+
 function chipgruppen(item: NightRunItem, katalog: Kartenkatalog): Chipgruppe[] {
   return DOKUMENT_STUFEN.map(({ schluessel, label, leer }) => ({
     label,
@@ -1883,88 +1479,6 @@ function vorgangsband(
 function vorgangsgrund(item: NightRunItem): string | null {
   const letzte = letzteErreichteStufe(item.kettenStufen)
   return letzte !== undefined && item.state !== 'GREEN' ? abbruchSatz(item) : null
-}
-
-/**
- * Ein Vorgang eines Ketten-Laufs (#916): der Block des Entwurfs, gefüllt mit den Werten des
- * Bestands, darunter die Fähigkeiten, die der Entwurf nicht vorsieht (AK 10).
- *
- * <p>Hier wird zusammengestellt, nicht gerechnet: Band, Grund, Chips und Kennzahlenzeile kommen aus
- * denselben Funktionen wie zuvor, damit die Werte nachweislich dieselben bleiben.
- */
-function KettenVorgang({
-  item,
-  standItem,
-  vorgaben,
-  modus,
-  katalog,
-  vorhabenKarten,
-  haeufigkeit,
-  istRot,
-  onOeffnen,
-}: Readonly<{
-  item: AnzeigeItem
-  /**
-   * Derselbe Vorgang im Ergebnisstand dieser Sitzung; `undefined` an einem aufbewahrten Lauf.
-   * Arbeitsschritte, Kosten und Züge stehen allein dort — der Server bewahrt sie nicht auf.
-   */
-  standItem: NightRunItem | undefined
-  vorgaben: NightRunStufenvorgaben | undefined
-  modus: NightRunMode
-  katalog: Kartenkatalog
-  vorhabenKarten: Vorhabenkatalog
-  haeufigkeit: string | null
-  istRot: (nummer: number) => boolean
-  onOeffnen: (karte: CardByNumber) => void
-}>) {
-  const band = standItem === undefined ? null : vorgangsband(standItem, vorgaben)
-  return (
-    <Box sx={{ mb: 2 }}>
-      <NachtlaufVorgang
-        nummer={item.cardNumber}
-        titel={item.title}
-        wurzel={katalog.get(item.cardNumber)}
-        zustand={item.state}
-        ausgangswort={nightRunZustandsText(item.state, item.errorClass)}
-        grund={standItem === undefined ? null : vorgangsgrund(standItem)}
-        verlauf={
-          band === null ? undefined : (
-            <NachtlaufStufenband
-              abschnitte={band.abschnitte}
-              ansage={band.ansage}
-              testId={`stufenband-${item.cardNumber}`}
-              abschnittTestId={`stufe-${item.cardNumber}`}
-            />
-          )
-        }
-        chipgruppen={standItem === undefined ? [] : chipgruppen(standItem, katalog)}
-        kennzahlen={vorgangsKennzahlenText(item, standItem)}
-        onOeffnen={onOeffnen}
-      >
-        {standItem === undefined && item.excerpt !== undefined && (
-          // Auszüge sind Fremdtext (Claude-Ausgaben, Ergebnisse fremder Werkzeuge) und werden
-          // deshalb als reiner Text gerendert, nie über den Markdown-Renderer
-          // (CLAUDE-security.md). Mit Ergebnisstand sagen Band und Grund dasselbe genauer.
-          <Typography variant="body2" color="text.secondary" sx={{ whiteSpace: 'pre-wrap' }}>
-            {(item.state === 'GREY' ? 'Grund: ' : 'Auszug: ') + item.excerpt}
-          </Typography>
-        )}
-        <Paketzusaetze
-          item={item}
-          modus={modus}
-          // Die Entscheidung trifft `stufenZustand` an der Lauf-Art: Im Modus `CHAIN` entfällt
-          // jede Stufenzeile, weil die Herkunft dort im Auszug steht (#858). Sie hier ein zweites
-          // Mal zu treffen hieße, dieselbe Regel an zwei Stellen zu führen.
-          mitStufenzeilen
-          katalog={katalog}
-          vorhabenKarten={vorhabenKarten}
-          haeufigkeit={haeufigkeit}
-          istRot={istRot}
-          onOeffnen={onOeffnen}
-        />
-      </NachtlaufVorgang>
-    </Box>
-  )
 }
 
 /**
@@ -2009,99 +1523,10 @@ function laufanteile(items: readonly AnzeigeItem[]): ReadonlyMap<number, Laufabs
   return new Map(gemessen.map((item) => [item.cardNumber, laufabschnitt(item, summe)]))
 }
 
-/**
- * Ein Vorgang eines Umsetzungs-Laufs (#917): derselbe Block wie bei der Kette, nur mit dem
- * Anteilsbalken an der Stelle des Stufenbands — ein Umsetzungs-Vorgang kennt keine Arbeitsschritte,
- * sondern eine Strecke.
- */
-function UmsetzungsVorgang({
-  item,
-  anteil,
-  kennzahlen,
-  modus,
-  katalog,
-  vorhabenKarten,
-  haeufigkeit,
-  istRot,
-  onOeffnen,
-}: Readonly<{
-  item: AnzeigeItem
-  /** Der Anteil dieses Vorgangs; `undefined`, wo der Lauf keine Bezugsgröße hergibt. */
-  anteil: Laufabschnitt | undefined
-  /** Dauer, Kosten, Züge und Modellzeit — dieselbe Zeile, die `VorgangsKennzahlen` bildet. */
-  kennzahlen: string
-  modus: NightRunMode
-  katalog: Kartenkatalog
-  vorhabenKarten: Vorhabenkatalog
-  haeufigkeit: string | null
-  istRot: (nummer: number) => boolean
-  onOeffnen: (karte: CardByNumber) => void
-}>) {
-  return (
-    <Box sx={{ mb: 2 }}>
-      <NachtlaufVorgang
-        nummer={item.cardNumber}
-        titel={item.title}
-        wurzel={katalog.get(item.cardNumber)}
-        zustand={item.state}
-        ausgangswort={nightRunZustandsText(item.state, item.errorClass)}
-        // Der Grund steht bei dieser Lauf-Art im Auszug und nicht als eigener Satz: Sie kennt
-        // keine Arbeitsschritte, an denen eine Kette reißen könnte.
-        grund={null}
-        verlauf={
-          anteil === undefined ? undefined : (
-            <NachtlaufAnteilsbalken
-              anteil={anteil.anteil}
-              beschriftung={`${anteil.dauer} · ${anteil.anteil} % der Nacht`}
-              ansage={`${anteil.ansage}, ${anteil.anteil} % der Nacht`}
-              farbe={NACHTLAUF_TON[item.state]}
-              testId={`laufband-abschnitt-${item.cardNumber}`}
-              fuellungTestId={`laufband-balken-${item.cardNumber}`}
-            />
-          )
-        }
-        // Ein Umsetzungs-Vorgang hinterlässt keine Dokumente je Arbeitsschritt.
-        chipgruppen={[]}
-        kennzahlen={kennzahlen}
-        onOeffnen={onOeffnen}
-      >
-        {item.excerpt !== undefined && (
-          // Auszüge sind Fremdtext und werden als reiner Text gerendert, nie über den
-          // Markdown-Renderer (CLAUDE-security.md).
-          <Typography variant="body2" color="text.secondary" sx={{ whiteSpace: 'pre-wrap' }}>
-            {(item.state === 'GREY' ? 'Grund: ' : 'Auszug: ') + item.excerpt}
-          </Typography>
-        )}
-        <Paketzusaetze
-          item={item}
-          modus={modus}
-          mitStufenzeilen
-          katalog={katalog}
-          vorhabenKarten={vorhabenKarten}
-          haeufigkeit={haeufigkeit}
-          istRot={istRot}
-          onOeffnen={onOeffnen}
-        />
-      </NachtlaufVorgang>
-    </Box>
-  )
-}
-
-/**
- * Die Angaben der Fußzeile je Lauf-Art (#918). **Dieselben Werte wie vor diesem Paket**
- * (Nicht-Ziel 3): die drei der Ketten-Übersicht und die drei, die der Entwurf für den
- * Umsetzungs-Lauf führt.
- *
- * <p><b>Die Herkunft der Budgets sagt „nicht angegeben"</b> (AK 9, Fall 2, E12): Der Ergebnisstand
- * führt das Feld heute nicht — der Leitstand kann deshalb nicht sagen, ob eine Vorgabe eingestellt
- * oder voreingestellt war. Weggelassen ließe die Zeile offen, ob nichts vorlag oder nichts
- * nachgesehen wurde; das Feld selbst kommt aus einem Folge-Vorhaben im Kit-Repository, und dann
- * trägt die Zeile dessen Wert. Die Warnfarbe bleibt bis dahin aus: Eine fehlende Angabe ist keine
- * Warnung.
- */
 function fussangaben(lauf: AnzeigeLauf, stand: NightRun | undefined): FussangabeForm[] {
   if (lauf.mode === 'CHAIN') {
     return [
+      ...kettenAngaben(stand),
       { label: 'Zeitvorgaben je Kette', wert: vorgabenText(stand?.stand?.vorgabenMin) },
       { label: 'Kostenbudget je Kette', wert: betrag(stand?.stand?.kostenBudgetUsd) },
       {
@@ -2112,6 +1537,7 @@ function fussangaben(lauf: AnzeigeLauf, stand: NightRun | undefined): Fussangabe
     ]
   }
   return [
+    ...standAngaben(stand),
     {
       label: 'Ergebnis der Nacht',
       wert: `${lauf.processedCount} bearbeitet · ${lauf.skippedCount} übergangen`,
@@ -2123,6 +1549,79 @@ function fussangaben(lauf: AnzeigeLauf, stand: NightRun | undefined): Fussangabe
     { label: 'Herkunft des Stands', wert: stand === undefined ? 'nicht angegeben' : 'Ergebnisstand' },
   ]
 }
+
+/**
+ * Die Angaben, die allein der Ergebnisstand eines Ketten-Laufs hergibt — bis #988 die
+ * Kennzahlenreihe der Übersicht (#866). Die Werte sind dieselben; nur ihr Ort ist neu: Über den
+ * Vorgängen stehen seit #988 die sechs Instrumente der Vorlage, und die tragen den Verbrauch, nicht
+ * die Auskünfte des Stands.
+ *
+ * <p>Leer ohne Stand: Kosten und Zeiten der Arbeitsschritte verlassen den Browser nie (Plan #718,
+ * A1), der Server bewahrt sie nicht auf. Eine Reihe aus lauter Fehlanzeigen wäre dieselbe Wand, die
+ * der Bestand schon vermeidet.
+ */
+function kettenAngaben(stand: NightRun | undefined): FussangabeForm[] {
+  if (stand === undefined) {
+    return []
+  }
+  const gruen = stand.items.filter((item) => item.state === 'GREEN').length
+  const vermerk = ohneKostenmeldung(
+    stand.stand?.kostenUnbekannt,
+    'ein Arbeitsschritt',
+    'Arbeitsschritte',
+  )
+  return [
+    { label: 'Ketten durchgelaufen', wert: `${gruen} von ${stand.items.length}` },
+    { label: 'Karten entstanden', wert: `${entstandeneDokumente(stand.items).size}` },
+    {
+      label: 'Laufzeit über alle Stufen',
+      wert: formatDuration(stufenZeitSumme(stand.items) / 1000),
+    },
+    { label: 'Kosten der Nacht', wert: betrag(stand.stand?.kostenSumme) },
+    ...(vermerk === null ? [] : [{ label: 'Zur Kostensumme', wert: vermerk, vorbehalt: true }]),
+  ]
+}
+
+/**
+ * Dasselbe für die drei übrigen Lauf-Arten — bis #988 die Zeile `Laufkennzahlen` (#874): die
+ * art-eigene Kennzahl, die Laufzeit, Kosten und Züge.
+ *
+ * <p><b>Der Kennzahlen-Hinweis verdrängt Kosten und Züge</b> (Plan #864, E8): Ohne die ausführliche
+ * Ausgabe fordert der Runner den Kennzahlen-Strom gar nicht erst an und schreibt den Grund einmal
+ * an den Lauf. „Kosten unbekannt“ daneben behauptete ein Fehlen, wo nichts fehlt; es wurde nur
+ * nichts angefordert.
+ *
+ * <p><b>Die Laufzeit steht mit einer Nachkommastelle</b> und damit feiner als die grobkörnige
+ * Angabe der Metazeile darüber ({@link laufDauer} rundet auf ganze Minuten). Das ist die Form der
+ * Vorlage `docs/mockup-leitstand-laufarten.html` und hält die beiden Angaben auseinander, obwohl
+ * sie dieselbe Größe messen.
+ */
+function standAngaben(stand: NightRun | undefined): FussangabeForm[] {
+  if (stand === undefined) {
+    return []
+  }
+  const bearbeitet = stand.items.filter((item) => item.state !== 'GREY')
+  const art = artKennzahl(stand, bearbeitet)
+  const hinweis = stand.stand?.kennzahlenHinweis
+  const kosten = laufkosten(bearbeitet)
+  return [
+    { label: art.label, wert: art.wert },
+    {
+      label: 'Laufzeit über alle Vorgänge',
+      wert: `${MINUTEN_FORMAT.format(stand.durationMs / MINUTE_MS)} min`,
+    },
+    ...(hinweis === undefined
+      ? [
+          { label: 'Kosten der Nacht', wert: kosten.wert },
+          ...(kosten.hinweis === null
+            ? []
+            : [{ label: 'Zur Kostensumme', wert: kosten.hinweis, vorbehalt: true }]),
+          { label: 'Züge des Modells', wert: laufZuege(bearbeitet) },
+        ]
+      : [{ label: 'Kennzahlen', wert: hinweis, vorbehalt: true }]),
+  ]
+}
+
 
 /**
  * Der Vorgang mit den höchsten Kosten, mit seiner Nummer (#918). {@link hoechsteKosten} nennt nur
@@ -2148,12 +1647,19 @@ function teuersterVorgang(items: readonly NightRunItem[]): string {
 const zeitpunkt = (iso: string): string => new Date(iso).toLocaleString('de-DE')
 
 /**
- * Was der Kopf ueber die Einlieferung eines Laufs sagt (Issue #949): woher er kam, wann er zuletzt
- * gemeldet wurde und ob er abgeschlossen ist.
+ * Was ein unvollstaendig gemeldeter Lauf im Kopf sagt. Er wird **angezeigt, aber nicht
+ * eingeliefert** — der Satz gilt dem Lauf selbst, nicht seiner Speicherung, und steht seit #988 als
+ * Zustandsmarke mit LED im Kopf (Vorlage Z. 387), damit er ohne Aufklappen auffaellt.
+ */
+const UNVOLLSTAENDIG_GEMELDET = 'unvollständig gemeldet'
+
+/**
+ * Was der Kopf ueber die Einlieferung eines Laufs sagt (Issue #949): woher er kam und wann er
+ * zuletzt gemeldet wurde.
  *
  * <p>Ein eben geparster Lauf sagt dazu **nichts** — er ist noch nicht eingeliefert, und
  * „hochgeladen am" waere dort eine Behauptung ueber die Zukunft. Die Unvollstaendigkeit steht
- * trotzdem da: Sie gilt dem Lauf selbst, nicht seiner Speicherung.
+ * dagegen unabhaengig davon da ({@link UNVOLLSTAENDIG_GEMELDET}): Sie gilt dem Lauf selbst.
  *
  * <p>Der Zeitpunkt der letzten Meldung erscheint nur, wenn er vom Anlegen abweicht. Eine Kette
  * meldet denselben Lauf mehrfach; stehen beide Zeitpunkte gleich, gab es genau eine Meldung, und
@@ -2177,38 +1683,297 @@ function einlieferungsangaben(lauf: AnzeigeLauf): string[] {
   ) {
     herkunft.push(`zuletzt gemeldet am ${zeitpunkt(lauf.zuletztGemeldetAm)}`)
   }
-  return lauf.vollstaendig ? herkunft : [...herkunft, 'unvollständig gemeldet']
+  return herkunft
 }
 
-
 /**
- * Der aufbewahrte Verbrauch eines Laufs oder eines Arbeitspakets (Issue #949).
+ * Die Marken rechts im Kopf eines Laufs (Vorlage `docs/mockup-nachtlauf-lauf.html` Z. 386–389):
+ * Zustand, Kosten und Herkunft.
  *
- * <p><b>Die Lauf-Summe wird angezeigt, nicht gerechnet.</b> Sie kommt aus dem Lauf selbst und
- * liegt ueber der Summe seiner Arbeitspakete, wo Sitzungen keinem Paket zuzuordnen waren. Aus den
- * Paketen gerechnet waere dieser Rest per Konstruktion null — und damit unsichtbar.
+ * <p><b>Die Kosten stehen nur am zugeklappten Lauf.</b> Aufgeklappt trägt sie das Instrument
+ * „Kosten“, und zweimal dieselbe Zahl im Blick ließe den Leser nach einem Unterschied suchen, den
+ * es nicht gibt — so führt es die Vorlage (Z. 452 gegen Z. 393).
  */
-function VerbrauchsZeile({
-  verbrauch,
-  testId,
+function Kopfmarken({
+  lauf,
+  ergebnis,
+  ausErgebnisstand,
+  offen,
 }: Readonly<{
-  verbrauch: Verbrauch | undefined
-  testId: string
+  lauf: AnzeigeLauf
+  ergebnis: boolean | undefined
+  ausErgebnisstand: ReadonlySet<string>
+  offen: boolean
 }>) {
-  const angaben = [
-    `Kosten: ${kosten(verbrauch?.kostenUsd)}`,
-    `Eingabe: ${menge(verbrauch?.eingabe)}`,
-    `Ausgabe: ${menge(verbrauch?.ausgabe)}`,
-    `Zwischenspeicher: ${menge(verbrauch?.zwischenspeicher)}`,
-  ]
+  const kosten = kostenText(lauf.verbrauch?.kostenUsd ?? null)
   return (
-    <Typography data-testid={testId} variant="body2" color="text.secondary">
-      {angaben.join(' · ')}
-    </Typography>
+    <>
+      {!lauf.vollstaendig && (
+        <LaufMarke testId="lauf-zustand" led={<Led melder="stahl" pulsiert />}>
+          {UNVOLLSTAENDIG_GEMELDET}
+        </LaufMarke>
+      )}
+      {!offen && kosten !== null && <LaufMarke testId="lauf-kosten">{kosten}</LaufMarke>}
+      {/* Die Herkunft wird **hier** aus dem Zwischenspeicher gelesen, nicht in `AnzeigeLauf`
+          mitgeführt: Der Server kennt die Unterscheidung nicht, ein Feld am Anzeigemodell müsste
+          also in jedem Ladepfad einzeln gesetzt werden — und der nächste vergessene Pfad zeigte
+          still die falsche Herkunft (AK 9, Fall 3). */}
+      <LaufMarke testId="lauf-stand">
+        {ausErgebnisstand.has(lauf.startedAt) ? 'Ergebnisstand' : 'Herkunft unbekannt'}
+      </LaufMarke>
+      {einlieferungsangaben(lauf).map((angabe) => (
+        <LaufMarke key={angabe}>{angabe}</LaufMarke>
+      ))}
+      {ergebnis !== undefined && <LaufMarke>{ergebnis ? 'neu angelegt' : 'lag schon vor'}</LaufMarke>}
+    </>
   )
 }
 
-/** Ein Lauf als aufklappbares Panel; die Kette wird erst beim Aufklappen geladen (A8). */
+/**
+ * Die Metazeile im Kopf eines Laufs (Vorlage Z. 385): Beginn, Dauer und die Stückzahlen — dazu,
+ * was der Ergebnisstand über Modell, Label und Abschluss weiß.
+ *
+ * <p>Die Zeile ist lang, und das ist Absicht: Die Vorlage zeigt dort vier Angaben, ein Lauf hat
+ * aber mehr zu sagen. Weggelassen wäre die Auskunft verloren; in der Metazeile steht sie in der
+ * Gestalt, die die Vorlage dafür kennt.
+ */
+const metazeile = (lauf: AnzeigeLauf, stand: NightRun | undefined): string =>
+  [
+    tagZeit(lauf.startedAt),
+    laufDauer(lauf.durationMs),
+    `${lauf.processedCount} bearbeitet`,
+    `${lauf.skippedCount} übergangen`,
+    kopfText(stand?.stand),
+    ...(lauf.unparsedCount > 0 ? [`Ungedeutete Zeilen: ${lauf.unparsedCount}`] : []),
+  ]
+    .filter((eintrag) => eintrag !== '')
+    .join(' · ')
+
+/** Der Titel eines Laufs — „Nacht vom 14. September“, wie die Vorlage ihn führt (Z. 383). */
+const laufTitel = (startedAt: string): string =>
+  `Nacht vom ${new Date(startedAt).toLocaleDateString('de-DE', { day: 'numeric', month: 'long' })}`
+
+/**
+ * Die Ergebniszeile eines Vorgangs: Dauer, Kosten, Züge und der Anteil der Modellarbeit. Die Kette
+ * führt sie in ihrer eigenen Form ({@link vorgangsKennzahlenText}), die drei übrigen Arten in der
+ * des Umsetzungs-Laufs — beides unverändert gegenüber #916 und #917, nur ihr Ort ist neu: Sie steht
+ * seit #988 in der aufgeklappten Zeile ihres Vorgangs.
+ */
+const ergebniszeile = (
+  modus: NightRunMode,
+  item: AnzeigeItem,
+  standItem: NightRunItem | undefined,
+  ohneKennzahlen: boolean,
+): string =>
+  modus === 'CHAIN'
+    ? vorgangsKennzahlenText(item, standItem)
+    : umsetzungsKennzahlen(item, standItem, ohneKennzahlen)
+
+/**
+ * Die Kosten eines Vorgangs für seine Spalte (#988) — der aufbewahrte Wert, sonst der des
+ * Ergebnisstands dieser Sitzung; `null` heißt „nicht gemessen“ und erscheint als „—“.
+ *
+ * <p>Beide Quellen, weil beide Lagen vorkommen: Ein eben geparster Lauf trägt keinen aufbewahrten
+ * Verbrauch, ein neu geladener keinen Sitzungsstand. Der aufbewahrte Wert hat Vorrang — er ist der,
+ * den der Server auch nach einem Neuladen noch kennt.
+ */
+const vorgangskosten = (item: AnzeigeItem, standItem: NightRunItem | undefined): number | null =>
+  item.verbrauch?.kostenUsd ?? standItem?.kennzahlen?.kostenUsd ?? null
+
+/**
+ * Ein Vorgang eines Laufs als kompakte Zeile (#988) — und aufgeklappt alles, was die Vorlage in
+ * der Zeile nicht zeigt: Zustand in Worten, Abbruchgrund, Auszug, Verlauf, entstandene Karten,
+ * Ergebniszeile, Herkunftskette, Vorhaben und der Befund mit „Kopieren“.
+ *
+ * <p><b>Hier wird zusammengestellt, nicht gerechnet.</b> Band, Grund, Chips, Ergebniszeile und
+ * Häufigkeit kommen aus denselben Funktionen wie vor diesem Paket — die Werte bleiben nachweislich
+ * dieselben, nur ihre Gestalt ist neu.
+ */
+function Vorgangszeile({
+  item,
+  standItem,
+  modus,
+  vorgaben,
+  anteil,
+  ohneKennzahlen,
+  katalog,
+  vorhabenKarten,
+  haeufigkeit,
+  istRot,
+  onOeffnen,
+}: Readonly<{
+  item: AnzeigeItem
+  /**
+   * Derselbe Vorgang im Ergebnisstand dieser Sitzung; `undefined` an einem aufbewahrten Lauf.
+   * Arbeitsschritte, Züge und Modellzeit stehen allein dort — der Server bewahrt sie nicht auf.
+   */
+  standItem: NightRunItem | undefined
+  modus: NightRunMode
+  vorgaben: NightRunStufenvorgaben | undefined
+  /** Der Anteil dieses Vorgangs an der Nacht; `undefined`, wo der Lauf keine Bezugsgröße hergibt. */
+  anteil: Laufabschnitt | undefined
+  ohneKennzahlen: boolean
+  katalog: Kartenkatalog
+  vorhabenKarten: Vorhabenkatalog
+  haeufigkeit: string | null
+  istRot: (nummer: number) => boolean
+  onOeffnen: (karte: CardByNumber) => void
+}>) {
+  const [offen, setOffen] = useState(false)
+  // `undefined` = noch nicht aufgelöst (die Kette lädt), `null` = nicht auflösbar.
+  const wurzel = katalog.get(item.cardNumber)
+  // `null` an einem grünen oder grauen Vorgang — dort erscheint kein Befund.
+  const uebernahme = buildHandoffText(item)
+  const band = modus === 'CHAIN' && standItem !== undefined ? vorgangsband(standItem, vorgaben) : null
+  const grund = modus === 'CHAIN' && standItem !== undefined ? vorgangsgrund(standItem) : null
+  const chips = modus === 'CHAIN' && standItem !== undefined ? chipgruppen(standItem, katalog) : []
+  const kennzahlen = ergebniszeile(modus, item, standItem, ohneKennzahlen)
+  const zustandswort = nightRunZustandsText(item.state, item.errorClass)
+  // Das Vorhaben hängt an der **Wurzelkarte**, nicht an der Kette: Fachliche Anforderung und Plan
+  // tragen ebenfalls eine `parentId`, und deren Vorhaben wäre hier eine andere Aussage.
+  const vorhabenKarte = wurzel?.parentId == null ? undefined : vorhabenKarten.get(wurzel.parentId)
+
+  return (
+    <NachtlaufVorgangszeile
+      nummer={item.cardNumber}
+      titel={item.title}
+      wurzel={wurzel}
+      melder={MELDER_JE_ZUSTAND[item.state]}
+      zustandswort={zustandswort}
+      klasse={
+        item.errorClass === undefined
+          ? null
+          : { marke: item.errorClass, melder: MELDER_JE_FEHLERKLASSE[item.errorClass] }
+      }
+      auszug={ersteZeile(item.excerpt ?? null)}
+      haeufigkeit={haeufigkeit}
+      vorhaben={
+        vorhabenKarte == null
+          ? null
+          : { titel: vorhabenKarte.title, farbe: epicColor(vorhabenKarte.id) }
+      }
+      dauer={paketDauer(item.durationMs ?? null)}
+      kosten={kostenText(vorgangskosten(item, standItem))}
+      commit={kurzHash(item.commitHash ?? null)}
+      offen={offen}
+      onUmschalten={() => setOffen((wert) => !wert)}
+      onOeffnen={onOeffnen}
+    >
+      {grund !== null && (
+        <Typography
+          variant="body2"
+          data-testid={`abbruch-${item.cardNumber}`}
+          sx={{ color: 'text.secondary', whiteSpace: 'pre-wrap' }}
+        >
+          {grund}
+        </Typography>
+      )}
+
+      {/* Auszüge sind Fremdtext (Claude-Ausgaben, Ergebnisse fremder Werkzeuge) und werden
+          deshalb als reiner Text gerendert, nie über den Markdown-Renderer (CLAUDE-security.md).
+          An einer Kette **mit** Ergebnisstand entfällt er: Dort sagen Band und Grund dasselbe
+          genauer, und der rohe Stufenblock stünde ein zweites Mal daneben (#916, AK 15 aus #859). */}
+      {item.excerpt !== undefined && (modus !== 'CHAIN' || standItem === undefined) && (
+        <Typography variant="body2" color="text.secondary" sx={{ whiteSpace: 'pre-wrap' }}>
+          {(item.state === 'GREY' ? 'Grund: ' : 'Auszug: ') + item.excerpt}
+        </Typography>
+      )}
+
+      {band !== null && (
+        <NachtlaufStufenband
+          abschnitte={band.abschnitte}
+          ansage={band.ansage}
+          testId={`stufenband-${item.cardNumber}`}
+          abschnittTestId={`stufe-${item.cardNumber}`}
+        />
+      )}
+
+      {anteil !== undefined && (
+        <NachtlaufAnteilsbalken
+          anteil={anteil.anteil}
+          beschriftung={`${anteil.dauer} · ${anteil.anteil} % der Nacht`}
+          ansage={`${anteil.ansage}, ${anteil.anteil} % der Nacht`}
+          farbe={anteil.farbe}
+          schiene={NUT}
+          testId={`laufband-abschnitt-${item.cardNumber}`}
+          fuellungTestId={`laufband-balken-${item.cardNumber}`}
+        />
+      )}
+
+      {(chips.length > 0 || kennzahlen !== '') && (
+        <Box
+          data-testid={`ergebnis-${item.cardNumber}`}
+          sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '8px' }}
+        >
+          {chips.length > 0 && (
+            <Typography component="span" sx={{ fontSize: 12, color: TEXT_SCHWACH, mr: '2px' }}>
+              Entstanden
+            </Typography>
+          )}
+          {chips.map((gruppe) => (
+            <NachtlaufKartenchips
+              key={gruppe.testId}
+              chips={gruppe.chips}
+              leer={gruppe.leer}
+              testId={gruppe.testId}
+              onOeffnen={onOeffnen}
+            />
+          ))}
+          {kennzahlen !== '' && (
+            <Typography
+              component="span"
+              data-testid={`kennzahlen-${item.cardNumber}`}
+              sx={{ ml: 'auto', ...ZAHL, fontSize: 12.5, color: 'text.secondary' }}
+            >
+              {kennzahlen}
+            </Typography>
+          )}
+        </Box>
+      )}
+
+      {wurzel != null && (
+        <>
+          {STUFEN.map((stufe) => {
+            const zustand = stufenZustand(
+              stufe.praefix,
+              kette(item.cardNumber, katalog),
+              istRot,
+              modus,
+            )
+            // `entfaellt` ergibt **keine Zeile** — die Herkunft steht in diesem Modus im Auszug
+            // (#858, siehe `stufenZustand`).
+            return zustand.art === 'entfaellt' ? null : (
+              <Stufenzeile
+                key={stufe.label}
+                label={stufe.label}
+                zustand={zustand}
+                onOeffnen={onOeffnen}
+              />
+            )
+          })}
+          <Vorhabenzeile
+            parentId={wurzel.parentId}
+            vorhabenKarten={vorhabenKarten}
+            onOeffnen={onOeffnen}
+          />
+        </>
+      )}
+
+      {uebernahme !== null && (
+        <NachtlaufBefund
+          cardNumber={item.cardNumber}
+          text={uebernahme}
+          onKopieren={() => void inDieZwischenablage(uebernahme)}
+        />
+      )}
+    </NachtlaufVorgangszeile>
+  )
+}
+
+/**
+ * Ein Lauf als aufklappbare Platte (#988) — Kopf, sechs Instrumente, die Vorgänge als kompakte
+ * Zeilen und die Fußzeile. Die Kette wird erst beim Aufklappen geladen (Plan #718, A8).
+ */
 function LaufPanel({
   lauf,
   ergebnis,
@@ -2229,215 +1994,126 @@ function LaufPanel({
   ausErgebnisstand: ReadonlySet<string>
   /**
    * Der in dieser Sitzung gedeutete Lauf; `undefined` heißt: kein Ergebnisstand, also weder
-   * Übersicht (E1) noch Kennzahlen je Vorgang (#872) — beide stehen allein im Stand.
+   * Arbeitsschritte noch Züge und Modellzeit — die stehen allein dort.
    */
   stand: NightRun | undefined
   katalog: Kartenkatalog
   vorhabenKarten: Vorhabenkatalog
   zaehler: Haeufigkeiten
-  /** Das „M" in „N von M aufbewahrten Läufen" — die Länge der zuletzt geladenen Liste. */
+  /** Das „M“ in „N von M aufbewahrten Läufen“ — die Länge der zuletzt geladenen Liste. */
   aufbewahrteLaeufe: number
   /**
    * Der oberste Lauf der Liste steht beim Öffnen der Seite offen (#914, E7). AK 2 verlangt Kopf,
-   * Kennzahlenreihe und ersten Vorgangsblock ohne Scrollen — genau dieser eine, nicht alle: Bis
-   * zu 30 aufgeklappte Läufe lösten die Anfragelawine aus, die Plan #718 (A8) vermeidet.
+   * Instrumente und erste Vorgangszeile ohne Scrollen — genau dieser eine, nicht alle: Bis zu 30
+   * aufgeklappte Läufe lösten die Anfragelawine aus, die Plan #718 (A8) vermeidet.
    */
   zuerst: boolean
   onAufklappen: () => void
   onOeffnen: (karte: CardByNumber) => void
 }>) {
+  const [offen, setOffen] = useState(zuerst)
   const rot = new Set(lauf.items.filter((item) => item.state === 'RED').map((item) => item.cardNumber))
-  // Die Weiche hängt an der Lauf-Art, nicht am Vorliegen eines Stands (#915, E6): Ein aufbewahrter
-  // Ketten-Lauf ohne Sitzungsstand bekommt denselben Kopf, nur ohne die Kennzahlen, die allein der
-  // Stand hergibt.
-  // Die Lauf-Art in einer eigenen Konstante, damit die Prüfung unten den Typ verengt: Ein
-  // Eigenschaftszugriff verengt sich nicht über die Verzweigung hinweg mit.
-  const modus = lauf.mode
-  // Eine Fassung für beide Zweige: Zwei gleichlautende Abfragen nebeneinander hießen zwei Stellen,
+  // Eine Fassung für alle Vorgänge: Zwei gleichlautende Abfragen nebeneinander hießen zwei Stellen,
   // an denen dieselbe Frage beantwortet wird.
   const istRot = (nummer: number) => rot.has(nummer)
-  const entwurf = traegtEntwurf(modus)
-  const kennzahlen = entwurf ? nachtKennzahlen(stand) : null
   // Einmal je Lauf gerechnet: Die Bezugsgröße ist die Summe **aller** Vorgangsdauern, also eine
   // Größe des Laufs und nicht eines Vorgangs.
-  const anteile = modus === 'IMPLEMENTATION' ? laufanteile(lauf.items) : new Map<number, Laufabschnitt>()
+  const anteile =
+    lauf.mode === 'IMPLEMENTATION' ? laufanteile(lauf.items) : new Map<number, Laufabschnitt>()
+  // Hat der Lauf die Sitzungs-Kennzahlen gar nicht angefordert, nennt er den Grund einmal in seiner
+  // Fußzeile; je Vorgang stünde sonst dreimal „fehlt“ (#874).
+  const ohneKennzahlen = stand?.stand?.kennzahlenHinweis !== undefined
+
+  const umschalten = () => {
+    const neu = !offen
+    setOffen(neu)
+    if (neu) {
+      onAufklappen()
+    }
+  }
 
   return (
-    <Accordion
-      data-testid={`lauf-${lauf.startedAt}`}
-      component={Paper}
-      variant="outlined"
-      defaultExpanded={zuerst}
-      // Bleibt erhalten: Es ist der Grund, warum bis zu 190 aufbewahrte Läufe nicht alle ihre
-      // Inhalte rendern.
-      slotProps={{ transition: { unmountOnExit: true } }}
-      onChange={(_, offen) => offen && onAufklappen()}
+    <NachtlaufLaufPlatte
+      testId={`lauf-${lauf.startedAt}`}
+      titel={laufTitel(lauf.startedAt)}
+      art={ART_KURZ[lauf.mode]}
+      meta={metazeile(lauf, stand)}
+      melder={laufMelder({ complete: lauf.vollstaendig, items: lauf.items })}
+      pulsiert={!lauf.vollstaendig}
+      offen={offen}
+      onUmschalten={umschalten}
+      marken={
+        <Kopfmarken
+          lauf={lauf}
+          ergebnis={ergebnis}
+          ausErgebnisstand={ausErgebnisstand}
+          offen={offen}
+        />
+      }
     >
-      <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-        {entwurf ? (
-          <NachtlaufKopf
-            startedAt={lauf.startedAt}
-            mode={modus}
-            angaben={[
-              kopfText(stand?.stand),
-              // Die Herkunft wird **hier** aus dem Zwischenspeicher gelesen, nicht in
-              // `AnzeigeLauf` mitgeführt: Der Server kennt die Unterscheidung nicht, ein Feld am
-              // Anzeigemodell müsste also in jedem Ladepfad einzeln gesetzt werden — und der
-              // nächste vergessene Pfad zeigte still die falsche Herkunft (AK 9, Fall 3).
-              ausErgebnisstand.has(lauf.startedAt) ? 'Ergebnisstand' : 'Herkunft unbekannt',
-              // Alles Weitere stand bis #915 als Chip-Zeile im Kopf des Laufs. Der Entwurf sieht
-              // dafür kein Element vor; nach AK 10 bleibt es in seiner Funktion erhalten und wird
-              // eingepasst, statt fallen gelassen zu werden.
-              MODUS_TEXT[lauf.mode],
-              formatDuration(lauf.durationMs / 1000),
-              `${lauf.processedCount} bearbeitet, ${lauf.skippedCount} übergangen`,
-              ...(lauf.unparsedCount > 0 ? [`Ungedeutete Zeilen: ${lauf.unparsedCount}`] : []),
-              ...(ergebnis === undefined ? [] : [ergebnis ? 'neu angelegt' : 'lag schon vor']),
-              // Herkunft, letzte Meldung und Vollstaendigkeit (Issue #949) — sie stehen im Kopf
-              // und nicht im Inhalt: Ein unvollstaendig gemeldeter Lauf soll auffallen, ohne dass
-              // man ihn erst aufklappt.
-              ...einlieferungsangaben(lauf),
-            ]}
-          />
-        ) : (
-        <Stack direction="row" spacing={1} alignItems="center" sx={{ flexWrap: 'wrap' }}>
-          <Typography variant="subtitle1">{new Date(lauf.startedAt).toLocaleString('de-DE')}</Typography>
-          <Chip size="small" label={MODUS_TEXT[lauf.mode]} variant="outlined" />
-          {/* Die Herkunft wird **hier** aus dem Zwischenspeicher gelesen, nicht in `AnzeigeLauf`
-              mitgeführt: Der Server kennt die Unterscheidung nicht, ein Feld am Anzeigemodell
-              müsste also in jedem Ladepfad einzeln gesetzt werden — und der nächste vergessene
-              Pfad zeigte still die falsche Herkunft. */}
-          <Chip
-            size="small"
-            variant="outlined"
-            label={ausErgebnisstand.has(lauf.startedAt) ? 'Ergebnisstand' : 'Herkunft unbekannt'}
-          />
-          <Typography component="span" color="text.secondary">
-            {formatDuration(lauf.durationMs / 1000)}
-          </Typography>
-          <Typography component="span" color="text.secondary">
-            {`${lauf.processedCount} bearbeitet, ${lauf.skippedCount} übergangen`}
-          </Typography>
-          {lauf.unparsedCount > 0 && (
-            <Chip size="small" variant="outlined" label={`Ungedeutete Zeilen: ${lauf.unparsedCount}`} />
-          )}
-          {ergebnis !== undefined && (
-            <Chip size="small" label={ergebnis ? 'neu angelegt' : 'lag schon vor'} variant="outlined" />
-          )}
-          {/* Dieselben Angaben wie im Entwurfs-Kopf (Issue #949), in der Chip-Form der beiden
-              Altbestand-Arten. */}
-          {einlieferungsangaben(lauf).map((angabe) => (
-            <Typography key={angabe} component="span" color="text.secondary">
-              {angabe}
+      {/* Die sechs Instrumente ersetzen die Textzeile der Laufsumme (Entscheidung Manne
+          2026-09-17). Der Verbrauch kommt aus dem Lauf selbst, nicht aus seinen Vorgängen. */}
+      <NachtlaufLaufInstrumente
+        verbrauch={lauf.verbrauch}
+        dauerMs={lauf.durationMs}
+        pakete={paketZaehlung(lauf.items)}
+      />
+
+      {/* Statt eines Bandes (#873): Der Erzeugungs- und der Prüf-Lauf sortieren die große Mehrheit
+          ihrer Karten aus, und die Aufschlüsselung sagt, warum. Sie liest den Ergebnisstand dieser
+          Sitzung, wo er vorliegt — allein er trägt das Ausgangswort; sonst leitet sie aus der
+          Server-Sicht ab (Plan #864, E2). */}
+      {(lauf.mode === 'REVIEW' || lauf.mode === 'NIGHTPLAN') && (
+        <Box sx={{ px: '16px', pt: '14px' }}>
+          <Aufschluesselung items={stand?.items ?? lauf.items} />
+        </Box>
+      )}
+
+      {lauf.unparsedSample.length > 0 && (
+        <Box sx={{ px: '16px', pt: '14px' }}>
+          <Typography variant="subtitle2">Nicht gedeutete Zeilen (Auszug)</Typography>
+          {lauf.unparsedSample.map((zeile, position) => (
+            // Der Index als Schlüssel: Zwei ungedeutete Zeilen können wörtlich gleich sein, und
+            // die Liste ist unveränderlich — sie wird weder sortiert noch gefiltert.
+            // Sonar S6479 ist deshalb an der Schlüssel-Zeile unterdrückt (Plan #776, Entscheidung 3).
+            <Typography key={position /* NOSONAR */} variant="body2" color="text.secondary">
+              {zeile}
             </Typography>
           ))}
-        </Stack>
-        )}
-      </AccordionSummary>
-      <AccordionDetails>
-        {/* Der aufbewahrte Verbrauch des Laufs (Issue #949) — anders als die Kennzahlen aus dem
-            Ergebnisstand steht er auch dann da, wenn diese Sitzung den Stand nie gesehen hat. Nur
-            an einem gespeicherten Lauf: Ein eben geparster hat noch keinen aufbewahrten Wert. */}
-        {lauf.verbrauch !== undefined && (
-          <VerbrauchsZeile verbrauch={lauf.verbrauch} testId="lauf-verbrauch" />
-        )}
-        {/* Die Kennzahlenreihe des Entwurfs gehört zum Kopf, steht aber im Inhalt: Der
-            `AccordionSummary` ist ein `<button>`, und die Reihe trägt zu viel für einen Knopf. */}
-        {kennzahlen !== null && (
-          <NachtlaufKennzahlen kennzahlen={kennzahlen.kennzahlen} hinweis={kennzahlen.hinweis} />
-        )}
-        {/* Die Kennzahlen der Nacht stehen unter der Kopfzeile des Laufs und über allen
-            Einzelangaben (#874). Seit #915 nur noch an den beiden Altbestand-Arten: Kette und
-            Umsetzungs-Lauf tragen sie im Kopf des Entwurfs. */}
-        {stand !== undefined && !entwurf && <Laufkennzahlen run={stand} />}
-        {/* Die drei Nicht-Ketten-Arten bekommen ihre Kennzahlen je Vorgang; die Kette führt sie
-            bereits in ihrer Übersicht (#872, siehe `VorgangsKennzahlen`). */}
-        {stand !== undefined && !entwurf && <VorgangsKennzahlen run={stand} />}
-        {/* Das Band steht unter der Kopfzeile des Laufs und über seiner Zeilenliste — die Kopfzeile
-            selbst („N bearbeitet, M übergangen") bleibt unverändert. Nur am Umsetzungs-Lauf: Der
-            Ketten-Lauf hat mit dem Stufenband je Vorgang bereits ein Band, und ein zweites daneben
-            bezöge sich auf eine andere Größe. */}
+        </Box>
+      )}
 
-        {/* Statt eines Bandes (#873): Der Erzeugungs- und der Prüf-Lauf sortieren die große
-            Mehrheit ihrer Karten aus, und die Aufschlüsselung sagt, warum. Sie liest den
-            Ergebnisstand dieser Sitzung, wo er vorliegt — allein er trägt das Ausgangswort;
-            sonst leitet sie aus der Server-Sicht ab (Plan #864, E2). */}
-        {(lauf.mode === 'REVIEW' || lauf.mode === 'NIGHTPLAN') && (
-          <Aufschluesselung items={stand?.items ?? lauf.items} />
-        )}
-        {lauf.unparsedSample.length > 0 && (
-          <Box sx={{ mb: 1 }}>
-            <Typography variant="subtitle2">Nicht gedeutete Zeilen (Auszug)</Typography>
-            {lauf.unparsedSample.map((zeile, position) => (
-              // Der Index als Schlüssel: Zwei ungedeutete Zeilen können wörtlich gleich sein, und
-              // die Liste ist unveränderlich — sie wird weder sortiert noch gefiltert.
-              // Sonar S6479 ist deshalb an der Schlüssel-Zeile unterdrückt (Plan #776, Entscheidung 3).
-              <Typography key={position /* NOSONAR */} variant="body2" color="text.secondary">
-                {zeile}
-              </Typography>
-            ))}
-          </Box>
-        )}
-        <Divider />
-        {/* Der Ketten-Lauf trägt seit #916 den Vorgangsblock des Entwurfs; er vereint, was bis
-            dahin auf die Zeile des Arbeitspakets und die Vorgangsliste der Übersicht verteilt war.
-            Die drei übrigen Arten behalten die Zeilendarstellung — der Umsetzungs-Lauf bis zum
-            Folgepaket, `REVIEW` und `NIGHTPLAN` auf Dauer (E5). */}
-        {entwurf
-          ? lauf.items.map((item, position) =>
-              lauf.mode === 'CHAIN' ? (
-              <KettenVorgang
-                key={`${item.cardNumber}-${position}`}
-                item={item}
-                standItem={stand?.items.find((eintrag) => eintrag.cardNumber === item.cardNumber)}
-                vorgaben={stand?.stand?.vorgabenMin}
-                modus={lauf.mode}
-                katalog={katalog}
-                vorhabenKarten={vorhabenKarten}
-                haeufigkeit={haeufigkeitsText(item, lauf.gespeichert, zaehler, aufbewahrteLaeufe)}
-                istRot={istRot}
-                onOeffnen={onOeffnen}
-              />
-              ) : (
-                <UmsetzungsVorgang
-                  key={`${item.cardNumber}-${position}`}
-                  item={item}
-                  anteil={anteile.get(item.cardNumber)}
-                  kennzahlen={umsetzungsKennzahlen(
-                    item,
-                    stand?.items.find((eintrag) => eintrag.cardNumber === item.cardNumber),
-                    stand?.stand?.kennzahlenHinweis !== undefined,
-                  )}
-                  modus={lauf.mode}
-                  katalog={katalog}
-                  vorhabenKarten={vorhabenKarten}
-                  haeufigkeit={haeufigkeitsText(item, lauf.gespeichert, zaehler, aufbewahrteLaeufe)}
-                  istRot={istRot}
-                  onOeffnen={onOeffnen}
-                />
-              ),
-            )
-          : lauf.items.map((item, position) => (
-              <Arbeitspaket
-                key={`${item.cardNumber}-${position}`}
-                item={item}
-                modus={lauf.mode}
-                // Dieselbe Bedingung, die über die Übersicht entscheidet, und nicht die Lauf-Art
-                // (#869): Ein aufbewahrter Ketten-Lauf ohne Sitzungsstand bekommt keine Übersicht
-                // und verlöre sonst seine Zeilenangaben, ohne etwas dafür zu bekommen.
-                gekuerzt={stand !== undefined && lauf.mode === 'CHAIN'}
-                katalog={katalog}
-                vorhabenKarten={vorhabenKarten}
-                haeufigkeit={haeufigkeitsText(item, lauf.gespeichert, zaehler, aufbewahrteLaeufe)}
-                istRot={istRot}
-                onOeffnen={onOeffnen}
-              />
-            ))}
-        {entwurf && <NachtlaufFuss angaben={fussangaben(lauf, stand)} testId="uebersicht-fuss" />}
-      </AccordionDetails>
-    </Accordion>
+      <Box
+        component="ul"
+        sx={{ listStyle: 'none', m: 0, p: 0, borderTop: `1px solid ${RAND}` }}
+      >
+        {lauf.items.map((item, position) => (
+          <Vorgangszeile
+            // Zwei Vorgänge können dieselbe Karte betreffen — der Schlüssel trägt deshalb die
+            // Position dazu.
+            key={`${item.cardNumber}-${position}`}
+            item={item}
+            standItem={stand?.items.find((eintrag) => eintrag.cardNumber === item.cardNumber)}
+            modus={lauf.mode}
+            vorgaben={stand?.stand?.vorgabenMin}
+            anteil={anteile.get(item.cardNumber)}
+            ohneKennzahlen={ohneKennzahlen}
+            katalog={katalog}
+            vorhabenKarten={vorhabenKarten}
+            haeufigkeit={haeufigkeitsText(item, lauf.gespeichert, zaehler, aufbewahrteLaeufe)}
+            istRot={istRot}
+            onOeffnen={onOeffnen}
+          />
+        ))}
+      </Box>
+
+      <Box sx={{ borderTop: `1px solid ${RAND}` }}>
+        <NachtlaufFuss angaben={fussangaben(lauf, stand)} testId="uebersicht-fuss" />
+      </Box>
+    </NachtlaufLaufPlatte>
   )
 }
+
 
 export function NightRunPage() {
   const { projectId } = useParams()
@@ -2733,25 +2409,35 @@ export function NightRunPage() {
 
           {laeufe.length === 0 && <Typography color="text.secondary">Noch keine Auswertung vorhanden.</Typography>}
 
-          {laeufe.map((lauf, position) => (
-            <LaufPanel
-              key={lauf.startedAt}
-              lauf={lauf}
-              zuerst={position === 0}
-              ergebnis={ergebnisse.get(lauf.startedAt)}
-              ausErgebnisstand={ausErgebnisstand}
-              // Der Speicher entscheidet, ob zu genau diesem Lauf ein Ergebnisstand dieser Sitzung
-              // vorliegt; welche Darstellung daraus entsteht, entscheidet der Modus am Anzeigelauf —
-              // er steht auch am neu geladenen.
-              stand={staende.get(lauf.startedAt)}
-              katalog={katalog}
-              vorhabenKarten={vorhabenKarten}
-              zaehler={zaehler}
-              aufbewahrteLaeufe={aufbewahrteLaeufe}
-              onAufklappen={() => aufklappen(lauf)}
-              onOeffnen={setDetail}
-            />
-          ))}
+          {/* Die Laufblöcke haben mit #988 die Nachtlauf-Ausnahme verlassen und folgen Kupferwarte
+              (`CLAUDE-design.md`) — deshalb stehen sie im `KupferwarteBereich`, der Theme und
+              Variablen für seinen Teilbaum zurückstellt. Was sonst auf dieser Seite steht, bleibt
+              in der Ausnahme. */}
+          {laeufe.length > 0 && (
+            <KupferwarteBereich>
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                {laeufe.map((lauf, position) => (
+                  <LaufPanel
+                    key={lauf.startedAt}
+                    lauf={lauf}
+                    zuerst={position === 0}
+                    ergebnis={ergebnisse.get(lauf.startedAt)}
+                    ausErgebnisstand={ausErgebnisstand}
+                    // Der Speicher entscheidet, ob zu genau diesem Lauf ein Ergebnisstand dieser
+                    // Sitzung vorliegt; welche Darstellung daraus entsteht, entscheidet der Modus
+                    // am Anzeigelauf — er steht auch am neu geladenen.
+                    stand={staende.get(lauf.startedAt)}
+                    katalog={katalog}
+                    vorhabenKarten={vorhabenKarten}
+                    zaehler={zaehler}
+                    aufbewahrteLaeufe={aufbewahrteLaeufe}
+                    onAufklappen={() => aufklappen(lauf)}
+                    onOeffnen={setDetail}
+                  />
+                ))}
+              </Box>
+            </KupferwarteBereich>
+          )}
 
         </Box>
       </ThemeProvider>

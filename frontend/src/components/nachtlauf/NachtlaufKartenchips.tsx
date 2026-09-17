@@ -2,7 +2,7 @@ import Box from '@mui/material/Box'
 import Link from '@mui/material/Link'
 import Typography from '@mui/material/Typography'
 import type { CardByNumber } from '../../api/cards'
-import { NACHTLAUF_FARBEN, NACHTLAUF_SCHRIFTEN } from '../../nachtlaufDesign'
+import { KUPFER, MELDER, NUT, RAND, SCHATTEN_NUTE, TEXT_SCHWACH, ZAHL } from '../../theme'
 
 /**
  * Der Zustand eines Verweises auf eine entstandene Karte (Issue #868) — die drei Fälle, die der
@@ -106,11 +106,8 @@ function ChipVerweis({
       sx={{
         ...CHIP_STIL,
         cursor: 'pointer',
-        '&:hover': { borderColor: NACHTLAUF_FARBEN.akzent, color: NACHTLAUF_FARBEN.akzent },
-        '&:focus-visible': {
-          outline: `2px solid ${NACHTLAUF_FARBEN.akzent}`,
-          outlineOffset: 2,
-        },
+        '&:hover': { borderColor: KUPFER, color: KUPFER },
+        '&:focus-visible': { outline: `2px solid ${KUPFER}`, outlineOffset: 2 },
       }}
     >
       <Box component="span" sx={ART_STIL}>
@@ -122,30 +119,29 @@ function ChipVerweis({
 }
 
 const CHIP_STIL = {
+  ...ZAHL,
   display: 'inline-flex',
   alignItems: 'baseline',
   gap: '7px',
-  fontFamily: NACHTLAUF_SCHRIFTEN.mono,
   fontSize: 13,
   fontWeight: 600,
-  color: NACHTLAUF_FARBEN.ink,
-  backgroundColor: NACHTLAUF_FARBEN.ground,
-  border: `1px solid ${NACHTLAUF_FARBEN.line}`,
+  color: 'text.primary',
+  backgroundColor: NUT,
+  border: `1px solid ${RAND}`,
+  boxShadow: SCHATTEN_NUTE,
   borderRadius: '6px',
   padding: '4px 10px',
 } as const
 
 const ART_STIL = {
-  fontFamily: NACHTLAUF_SCHRIFTEN.body,
   fontSize: 11,
   fontWeight: 500,
   letterSpacing: '0.04em',
-  color: NACHTLAUF_FARBEN.ink3,
+  color: TEXT_SCHWACH,
 } as const
 
 const LEER_STIL = {
-  fontFamily: NACHTLAUF_SCHRIFTEN.body,
   fontSize: 13,
   fontStyle: 'italic',
-  color: NACHTLAUF_FARBEN.budget,
+  color: MELDER.bernst,
 } as const

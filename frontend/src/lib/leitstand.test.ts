@@ -3,6 +3,7 @@ import type { NightRunItemView, NightRunView } from '../api/nightRuns'
 import {
   abbruchgruende,
   balkenHoehen,
+  cacheQuote,
   durchlaufKachel,
   durchsatzKachel,
   ersteZeile,
@@ -16,10 +17,13 @@ import {
   kurzHash,
   laufband,
   laufDauer,
+  laufDauerGeteilt,
   laufMelder,
   laufNotiz,
   modusName,
   paketDauer,
+  paketZaehlung,
+  tagZeit,
   tokenMenge,
   tokenText,
   vorgaenge,
@@ -237,5 +241,50 @@ describe('leitstand Platten', () => {
     expect(tokenMenge(420)).toEqual({ wert: '420', einheit: 'Token' })
     expect(tokenMenge(null)).toBeNull()
     expect(tokenText(3_660_000)).toBe('3,66 Mio')
+  })
+})
+
+describe('leitstand Instrumente eines Laufs (#988)', () => {
+  it('nennt den Beginn eines Laufs als Tag und Uhrzeit — dieselbe Form wie die Notiz', () => {
+    // Dieselbe Rechenstelle wie `laufNotiz` und `laufband`: Zwei Formatierer für denselben
+    // Zeitpunkt liefen beim nächsten Wortwechsel auseinander.
+    expect(tagZeit('2026-09-14T21:10:00Z')).toBe(laufNotiz(lauf()).split(' · ')[0])
+  })
+
+  it('teilt die Laufdauer in Wert und Einheit — ab einer Stunde als h:mm', () => {
+    expect(laufDauerGeteilt(15_120_000)).toEqual({ wert: '4:12', einheit: 'h' })
+    expect(laufDauerGeteilt(3_600_000)).toEqual({ wert: '1:00', einheit: 'h' })
+    expect(laufDauerGeteilt(2_535_000)).toEqual({ wert: '42', einheit: 'min' })
+    expect(laufDauerGeteilt(0)).toEqual({ wert: '0', einheit: 'min' })
+  })
+
+  it('zählt die Pakete eines Laufs nach Zustand; graue zählen nicht mit', () => {
+    const gezaehlt = paketZaehlung([
+      { state: 'GREEN' },
+      { state: 'GREEN' },
+      { state: 'YELLOW' },
+      { state: 'RED' },
+      { state: 'GREY' },
+    ])
+    expect(gezaehlt).toEqual({ gruen: 2, gelb: 1, rot: 1, gesamt: 4 })
+    expect(paketZaehlung([])).toEqual({ gruen: 0, gelb: 0, rot: 0, gesamt: 0 })
+  })
+
+  it('rechnet den Anteil aus Zwischenspeicher, bleibt aber ohne Bezugsgröße bei null', () => {
+    expect(cacheQuote(760_000, 1_000_000)).toBe(76)
+    expect(cacheQuote(0, 1_000_000)).toBe(0)
+    // Ohne Eingabe gibt es kein Verhältnis: „0 %" behauptete eine Messung, „100 %" eine zweite.
+    expect(cacheQuote(760_000, 0)).toBeNull()
+    expect(cacheQuote(760_000, null)).toBeNull()
+    expect(cacheQuote(null, 1_000_000)).toBeNull()
+  })
+
+  it('rechnet den Paket-Anteil des Leitstands über dieselbe Zählung', () => {
+    // Gegenprobe zur Wiederverwendung: `gruenAnteil` zählt nicht mehr selbst.
+    const laeufe = [lauf({ items: [paket(1, 'GREEN'), paket(2, 'RED'), paket(3, 'GREY')] })]
+    const { gruen, gelb, rot, gesamt } = gruenAnteil(laeufe)
+    expect({ gruen, gelb, rot, gesamt }).toEqual(
+      paketZaehlung(laeufe.flatMap((l) => l.items)),
+    )
   })
 })
