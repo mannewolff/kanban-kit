@@ -18,7 +18,6 @@ import {
   laufDauer,
   laufMelder,
   laufNotiz,
-  liegedauer,
   modusName,
   paketDauer,
   tokenMenge,
@@ -230,12 +229,6 @@ describe('leitstand Platten', () => {
       { klasse: 'REVIEWER_FAILED', zahl: 2, breite: 18, melder: 'grau' },
     ])
     expect(abbruchgruende({})).toEqual([])
-  })
-
-  it('nennt Liegedauern in Tagen, unter einem Tag in Stunden', () => {
-    expect(liegedauer(14 * 86_400 + 500)).toBe('14 T')
-    expect(liegedauer(5 * 3600)).toBe('5 h')
-    expect(liegedauer(60)).toBe('1 h')
   })
 
   it('nennt Token-Mengen in der Einheit des Entwurfs', () => {

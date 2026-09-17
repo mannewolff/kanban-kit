@@ -321,12 +321,6 @@ export function abbruchgruende(zaehler: NightRunErrorClassCounts): Klassenzeile[
     }))
 }
 
-/** Liegedauer eines Ausreißers wie im Entwurf: „14 T", unter einem Tag „n h". */
-export function liegedauer(sekunden: number): string {
-  const tage = Math.floor(sekunden / 86_400)
-  return tage > 0 ? `${tage} T` : `${Math.max(1, Math.round(sekunden / 3600))} h`
-}
-
 /** Eine Token-Menge in der Einheit des Entwurfs: „4,82 Mio", „186 Tsd" oder die Zahl selbst. */
 export function tokenMenge(anzahl: number | null): { wert: string; einheit: string } | null {
   if (anzahl === null) {

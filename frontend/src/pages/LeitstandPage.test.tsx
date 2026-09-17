@@ -11,7 +11,7 @@ import { nightRunUsageApi, type VerbrauchKennzahlen, type VerbrauchZeitraum } fr
 import { LeitstandPage } from './LeitstandPage'
 
 vi.mock('../api/boards', () => ({ boardsApi: { get: vi.fn() } }))
-vi.mock('../api/cards', () => ({ cardsApi: { get: vi.fn(), byNumber: vi.fn() } }))
+vi.mock('../api/cards', () => ({ cardsApi: { byNumber: vi.fn() } }))
 vi.mock('../api/dashboard', () => ({ dashboardApi: { get: vi.fn() } }))
 vi.mock('../api/epics', () => ({ epicsApi: { list: vi.fn() } }))
 vi.mock('../api/nightRuns', () => ({ nightRunsApi: { list: vi.fn(), errorClassCounts: vi.fn() } }))
@@ -25,10 +25,9 @@ vi.mock('../components/SnackbarProvider', () => ({ useSnackbar: () => mNotify })
 
 // Der Kartendialog ist eigenständig getestet; hier zählt, mit welcher Karte er geöffnet wird.
 vi.mock('../components/CardDetailModal', () => ({
-  CardDetailModal: ({ card, columnName, onClose }: Readonly<{ card: Card; columnName?: string; onClose: () => void }>) => (
+  CardDetailModal: ({ card, onClose }: Readonly<{ card: Card; onClose: () => void }>) => (
     <div data-testid="karten-detail">
       <span>{card.title}</span>
-      <span data-testid="detail-spalte">{columnName ?? ''}</span>
       <button type="button" onClick={onClose}>
         Detail schließen
       </button>
@@ -42,7 +41,6 @@ const m = {
   epics: epicsApi.list as ReturnType<typeof vi.fn>,
   laeufe: nightRunsApi.list as ReturnType<typeof vi.fn>,
   klassen: nightRunsApi.errorClassCounts as ReturnType<typeof vi.fn>,
-  karte: cardsApi.get as ReturnType<typeof vi.fn>,
   karteNachNummer: cardsApi.byNumber as ReturnType<typeof vi.fn>,
   verbrauch: nightRunUsageApi.period as ReturnType<typeof vi.fn>,
 }
@@ -235,13 +233,17 @@ describe('LeitstandPage (#979)', () => {
     expect(screen.getByRole('article', { name: 'Durchlaufzeit' })).toHaveTextContent('3,2Tage')
     expect(screen.getByRole('article', { name: 'Implementierungszeit' })).toHaveTextContent('14,8Stunden')
     expect(screen.getByRole('article', { name: 'Implementierungszeit' })).toHaveTextContent('61 Karten')
-    // Genau diese vier Kacheln — die abgelöste Kennzahl steht nicht mehr daneben.
-    expect(screen.getAllByRole('article').map((k) => k.getAttribute('aria-label'))).toEqual([
-      'Durchsatz · Woche',
-      'Durchlaufzeit',
-      'Implementierungszeit',
-      'Nachtlauf · grün',
-    ])
+    // Genau diese vier Kacheln — die abgelöste Kennzahl steht nicht mehr daneben. Die
+    // Nachtlauf-Kachel hängt an der längeren Kette Board → Läufe und kommt nach den Kennzahlen;
+    // ohne das Warten hinge die Vollständigkeitsprüfung am Zufall der Auflösungsreihenfolge.
+    await waitFor(() =>
+      expect(screen.getAllByRole('article').map((k) => k.getAttribute('aria-label'))).toEqual([
+        'Durchsatz · Woche',
+        'Durchlaufzeit',
+        'Implementierungszeit',
+        'Nachtlauf · grün',
+      ]),
+    )
   })
 
   it('zeigt ohne Datenbasis einen Leerwert statt einer Null', async () => {
@@ -435,16 +437,6 @@ describe('LeitstandPage — Platten des Rumpfs', () => {
     expect(durchsatz).toHaveTextContent('232425')
   })
 
-  it('öffnet Liegengebliebenes auch dann, wenn das Board selbst nicht geladen werden konnte', async () => {
-    m.board.mockRejectedValue(new Error('Netz'))
-    m.karte.mockResolvedValue(karte('Ohne Board'))
-    renderPage()
-    const liegen = await screen.findByRole('region', { name: 'Liegengeblieben' })
-    fireEvent.click(within(liegen).getByRole('button', { name: /Karte 846 öffnen/ }))
-    expect(await screen.findByTestId('karten-detail')).toHaveTextContent('Ohne Board')
-    expect(m.laeufe).not.toHaveBeenCalled()
-  })
-
   it('sortiert die Abbruchgründe nach Häufigkeit und nennt die Zahl der Läufe', async () => {
     renderPage()
     const gruende = await screen.findByRole('region', { name: 'Abbruchgründe' })
@@ -461,36 +453,12 @@ describe('LeitstandPage — Platten des Rumpfs', () => {
     expect(gruende).toHaveTextContent('1 Lauf')
   })
 
-  it('listet Liegengebliebenes mit Liegedauer und öffnet die Karte samt Spalte', async () => {
-    m.karte.mockResolvedValue(karte('Kartenverlauf im Detail'))
+  it('zeigt keine Platte „Liegengeblieben", auch wenn die Antwort Ausreißer führt (#983)', async () => {
+    // `outliers` bleibt im Backend; im Leitstand wird die Kennzahl nicht mehr dargestellt.
     renderPage()
-    const liegen = await screen.findByRole('region', { name: 'Liegengeblieben' })
-    expect(liegen).toHaveTextContent('#846Kartenverlauf als Zeitstrahl14 T')
-    fireEvent.click(within(liegen).getByRole('button', { name: 'Karte 846 öffnen: Kartenverlauf als Zeitstrahl' }))
-    expect(await screen.findByTestId('detail-spalte')).toHaveTextContent('Review')
-    expect(m.karte).toHaveBeenCalledWith(9)
-  })
-
-  it('ignoriert weitere Klicks, solange eine Karte lädt, und meldet Fehler beim Öffnen', async () => {
-    let ablehnen: (e: unknown) => void = () => undefined
-    m.karte.mockReturnValueOnce(new Promise((_, reject) => (ablehnen = reject))).mockRejectedValueOnce(new Error('Netz'))
-    renderPage()
-    const liegen = await screen.findByRole('region', { name: 'Liegengeblieben' })
-    const knopf = within(liegen).getByRole('button', { name: /Karte 846 öffnen/ })
-    fireEvent.click(knopf)
-    fireEvent.click(knopf)
-    expect(m.karte).toHaveBeenCalledTimes(1)
-    expect(knopf).toHaveAttribute('aria-busy', 'true')
-    ablehnen(new ApiError(404, 'Not Found'))
-    await waitFor(() => expect(mNotify).toHaveBeenCalledWith('Karte 846 nicht gefunden — gelöscht oder kein Zugriff.', 'warning'))
-    fireEvent.click(knopf)
-    await waitFor(() => expect(mNotify).toHaveBeenCalledWith('Karte konnte nicht geladen werden.', 'error'))
-  })
-
-  it('sagt ohne Ausreißer, dass nichts liegengeblieben ist', async () => {
-    m.kpis.mockResolvedValue(kpis({ outliers: [] }))
-    renderPage()
-    expect(await screen.findByRole('region', { name: 'Liegengeblieben' })).toHaveTextContent('Nichts liegengeblieben.')
+    await screen.findByRole('region', { name: 'Abbruchgründe' })
+    expect(screen.queryByRole('region', { name: 'Liegengeblieben' })).not.toBeInTheDocument()
+    expect(screen.queryByText(/Kartenverlauf als Zeitstrahl/)).not.toBeInTheDocument()
   })
 
   it('zeigt nur offene Vorhaben mit Fortschritt', async () => {

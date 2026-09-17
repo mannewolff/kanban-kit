@@ -5,9 +5,9 @@ import Typography from '@mui/material/Typography'
 import { useEffect, useMemo, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { boardsApi, type Board } from '../api/boards'
-import { cardsApi, type Card, type CardByNumber } from '../api/cards'
+import { cardsApi, type CardByNumber } from '../api/cards'
 import { ApiError } from '../api/client'
-import { dashboardApi, type BoardDashboardKpis, type OutlierCard } from '../api/dashboard'
+import { dashboardApi, type BoardDashboardKpis } from '../api/dashboard'
 import { epicsApi, type Epic } from '../api/epics'
 import { nightRunsApi, type NightRunErrorClassCounts, type NightRunItemView, type NightRunView } from '../api/nightRuns'
 import { CardDetailModal } from '../components/CardDetailModal'
@@ -42,7 +42,6 @@ import {
   laufband,
   laufMelder,
   laufNotiz,
-  liegedauer,
   MELDER_JE_FEHLERKLASSE,
   MELDER_JE_ZUSTAND,
   modusName,
@@ -70,8 +69,9 @@ import {
  * Der Leitstand (#979) — die Hauptansicht eines Boards nach dem Entwurf
  * `docs/entwurf-leitstand.html` (CSS Z. 390–722, 977–1017; HTML Z. 1200–1678). Er ersetzt die
  * Kennzahlen-Ansicht: Laufband des jüngsten Laufs, vier Kennzahl-Kacheln, Verbrauch mit
- * Zeitraum-Wahl und der Rumpf aus „Letzter Lauf", „Durchsatz", „Abbruchgründe", „Liegengeblieben"
- * und „Vorhaben".
+ * Zeitraum-Wahl und der Rumpf aus „Letzter Lauf", „Durchsatz", „Abbruchgründe" und „Vorhaben".
+ * Die Platte „Liegengeblieben" des Entwurfs entfällt (Manne, 2026-09-17, #983) — die Kennzahl
+ * `outliers` bleibt im Backend, wird hier aber nicht mehr dargestellt.
  *
  * **Kein neuer Endpunkt.** Gespeist aus Board, Kennzahlen, Vorhaben, aufbewahrten Läufen,
  * Häufigkeit der Fehlerklassen und Verbrauch. Die Verweildauer je Spalte gehört nicht in den
@@ -126,7 +126,9 @@ export function LeitstandPage() {
     projectId === null ? null : () => nightRunsApi.errorClassCounts(projectId),
     [projectId],
   )
-  const [detail, setDetail] = useState<{ card: Card | CardByNumber; columnName?: string } | null>(null)
+  // Die Karte kommt aus „Letzter Lauf" und damit immer aus einem bekannten Projekt; das Projekt
+  // reist im Zustand mit, statt beim Rendern des Dialogs noch einmal gegen `null` geprüft zu werden.
+  const [detail, setDetail] = useState<{ card: CardByNumber; projectId: number } | null>(null)
 
   if (!validId) {
     return <Alert severity="error">Ungültige Board-ID.</Alert>
@@ -170,27 +172,23 @@ export function LeitstandPage() {
       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'minmax(0,1fr)', lg: 'minmax(0,1.55fr) minmax(0,1fr)' }, gap: '16px', alignItems: 'start' }}>
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: '16px', minWidth: 0 }}>
           {juengster && projectId !== null && (
-            <LetzterLauf lauf={juengster} epics={epicListe} projectId={projectId} onOeffnen={(card) => setDetail({ card })} />
+            <LetzterLauf
+              lauf={juengster}
+              epics={epicListe}
+              projectId={projectId}
+              onOeffnen={(card) => setDetail({ card, projectId })}
+            />
           )}
           {kpis.art === 'da' && <Durchsatz wochen={kpis.wert.throughput} />}
         </Box>
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: '16px', minWidth: 0 }}>
           {klassen.art === 'da' && liste && <Abbruchgruende zaehler={klassen.wert} laeufe={liste.length} />}
-          {kpis.art === 'da' && (
-            <Liegengeblieben ausreisser={kpis.wert.outliers} onOeffnen={(card, columnName) => setDetail({ card, columnName })} />
-          )}
           {epics.art === 'da' && <VorhabenPlatte epics={epics.wert} />}
         </Box>
       </Box>
 
       {detail && (
-        <CardDetailModal
-          card={detail.card}
-          canEdit={false}
-          projectId={projectId ?? undefined}
-          columnName={detail.columnName}
-          onClose={() => setDetail(null)}
-        />
+        <CardDetailModal card={detail.card} canEdit={false} projectId={detail.projectId} onClose={() => setDetail(null)} />
       )}
     </Box>
   )
@@ -502,65 +500,6 @@ function Abbruchgruende({ zaehler, laeufe }: Readonly<{ zaehler: NightRunErrorCl
                 <Fuellschiene breite={zeile.breite} farbe={melderFarbe(zeile.melder)} />
               </div>
               <Box sx={{ ...ZAHL, fontSize: 12.5, textAlign: 'right' }}>{zeile.zahl}</Box>
-            </Box>
-          ))}
-        </Box>
-      )}
-    </Platte>
-  )
-}
-
-/** Liegengeblieben (Entwurf Z. 713–722, 1655–1680): Karten, die über sieben Tage in einer Spalte lagen. */
-function Liegengeblieben({
-  ausreisser,
-  onOeffnen,
-}: Readonly<{ ausreisser: readonly OutlierCard[]; onOeffnen: (card: Card, columnName: string) => void }>) {
-  const notify = useSnackbar()
-  const [laedt, setLaedt] = useState<number | null>(null)
-
-  const oeffnen = async (karte: OutlierCard) => {
-    // Läuft schon ein Abruf, verfällt der Klick — sonst lösten ungeduldige Doppelklicks zwei Anfragen aus.
-    if (laedt !== null) {
-      return
-    }
-    setLaedt(karte.cardId)
-    try {
-      onOeffnen(await cardsApi.get(karte.cardId), karte.columnName)
-    } catch (err) {
-      if (err instanceof ApiError && err.status === 404) {
-        notify(`Karte ${karte.number} nicht gefunden — gelöscht oder kein Zugriff.`, 'warning')
-      } else {
-        notify('Karte konnte nicht geladen werden.', 'error')
-      }
-    } finally {
-      setLaedt(null)
-    }
-  }
-
-  return (
-    <Platte titel="Liegengeblieben" notiz="über 7 Tage in einer Spalte" led={ausreisser.length > 0 ? <Led melder="bernst" /> : undefined}>
-      {ausreisser.length === 0 ? (
-        <Typography color="text.secondary" sx={{ px: '16px', py: '14px' }}>
-          Nichts liegengeblieben.
-        </Typography>
-      ) : (
-        <Box component="ul" sx={{ listStyle: 'none', m: 0, p: 0 }}>
-          {ausreisser.map((karte) => (
-            <Box component="li" key={`${karte.cardId}-${karte.columnName}`} sx={{ '&:not(:last-child)': { borderBottom: `1px solid color-mix(in srgb, ${RAND} 55%, transparent)` } }}>
-              <ButtonBase
-                onClick={() => void oeffnen(karte)}
-                aria-busy={laedt === karte.cardId}
-                aria-label={`Karte ${karte.number} öffnen: ${karte.title}`}
-                sx={{ width: '100%', display: 'flex', alignItems: 'center', gap: '10px', px: '16px', py: '10px', fontSize: 12.5, textAlign: 'left', '&:hover': { background: ZEILE_HOVER } }}
-              >
-                <Box component="span" sx={{ ...ZAHL, color: TEXT_SCHWACH }}>{`#${karte.number}`}</Box>
-                <Box component="span" sx={{ flex: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  {karte.title}
-                </Box>
-                <Box component="span" sx={{ ...ZAHL, fontSize: 11.5, color: MELDER.bernst, flex: 'none' }} title={`in ${karte.columnName}`}>
-                  {liegedauer(karte.dwellSeconds)}
-                </Box>
-              </ButtonBase>
             </Box>
           ))}
         </Box>
