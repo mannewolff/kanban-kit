@@ -44,6 +44,14 @@ const linkedBoard: Board = {
  */
 const serverfehler = (text: string) => new ApiError(409, 'Conflict', undefined, text)
 
+/**
+ * Zwei echte Zeitpunkte für die Kommentar-Tests (Issue #843). Sie stehen bewusst nur dort, wo ein
+ * Test sie braucht: Die übrigen Fixturen bleiben bei `createdAt: ''` und belegen damit weiter den
+ * Fall ohne darstellbaren Zeitstempel.
+ */
+const ERST = '2026-09-01T08:30:00.000Z'
+const SPAETER = '2026-09-02T09:45:00.000Z'
+
 function makeApis() {
   const commentsApi = {
     list: vi.fn().mockResolvedValue([
@@ -145,6 +153,67 @@ describe('CardDetailModal', () => {
 
     await waitFor(() => expect(apis.commentsApi.create).toHaveBeenCalledWith(100, 'Neu'))
     expect(await screen.findByText('Neu')).toBeInTheDocument()
+  })
+
+  it('zeigt den jüngeren Kommentar vor dem älteren', async () => {
+    const apis = makeApis()
+    apis.commentsApi.list = vi.fn().mockResolvedValue([
+      { id: 1, cardId: 100, authorUserId: 7, authorName: 'A', body: 'Älter', createdAt: ERST, updatedAt: ERST },
+      { id: 2, cardId: 100, authorUserId: 7, authorName: 'A', body: 'Jünger', createdAt: SPAETER, updatedAt: SPAETER },
+    ])
+    render(<CardDetailModal card={card} canEdit onClose={vi.fn()} {...apis} />)
+    expect(await screen.findByText('Jünger')).toBeInTheDocument()
+
+    const bodies = screen.getAllByTestId('comment-body')
+    expect(bodies[0]).toHaveTextContent('Jünger')
+    expect(bodies[1]).toHaveTextContent('Älter')
+  })
+
+  it('stellt einen neu angelegten Kommentar an die erste Stelle', async () => {
+    const apis = makeApis()
+    render(<CardDetailModal card={card} canEdit onClose={vi.fn()} {...apis} />)
+    expect(await screen.findByText('Hallo')).toBeInTheDocument()
+
+    fireEvent.change(screen.getByLabelText('Kommentar schreiben'), { target: { value: 'Neu' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Senden' }))
+
+    expect(await screen.findByText('Neu')).toBeInTheDocument()
+    const bodies = screen.getAllByTestId('comment-body')
+    expect(bodies[0]).toHaveTextContent('Neu')
+    expect(bodies[1]).toHaveTextContent('Hallo')
+  })
+
+  it('zeigt den Zeitpunkt eines Kommentars', async () => {
+    const apis = makeApis()
+    apis.commentsApi.list = vi.fn().mockResolvedValue([
+      { id: 1, cardId: 100, authorUserId: 7, authorName: 'A', body: 'Hallo', createdAt: ERST, updatedAt: ERST },
+    ])
+    render(<CardDetailModal card={card} canEdit onClose={vi.fn()} {...apis} />)
+
+    const meta = await screen.findByTestId('comment-meta')
+    expect(meta).toHaveTextContent(new Date(ERST).toLocaleString('de-DE'))
+    expect(meta).not.toHaveTextContent('bearbeitet')
+  })
+
+  it('weist einen nachträglich bearbeiteten Kommentar als bearbeitet aus', async () => {
+    const apis = makeApis()
+    apis.commentsApi.list = vi.fn().mockResolvedValue([
+      { id: 1, cardId: 100, authorUserId: 7, authorName: 'A', body: 'Hallo', createdAt: ERST, updatedAt: SPAETER },
+    ])
+    render(<CardDetailModal card={card} canEdit onClose={vi.fn()} {...apis} />)
+
+    const meta = await screen.findByTestId('comment-meta')
+    expect(meta).toHaveTextContent(`bearbeitet ${new Date(SPAETER).toLocaleString('de-DE')}`)
+  })
+
+  it('zeigt bei fehlendem Zeitstempel keinen Zeitpunkt und kein „Invalid Date"', async () => {
+    // Die Standard-Fixtur trägt genau diesen Fall: createdAt und updatedAt sind leer.
+    const apis = makeApis()
+    render(<CardDetailModal card={card} canEdit onClose={vi.fn()} {...apis} />)
+    expect(await screen.findByText('Hallo')).toBeInTheDocument()
+
+    expect(screen.queryByTestId('comment-meta')).not.toBeInTheDocument()
+    expect(screen.queryByText(/Invalid Date/)).not.toBeInTheDocument()
   })
 
   it('legt eine aktive Karte über den Detail-Button in den Ideen-Pool', async () => {

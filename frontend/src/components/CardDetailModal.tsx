@@ -258,6 +258,28 @@ function CommentBody({ body }: Readonly<{ body: string }>) {
 }
 
 /**
+ * Zeitpunkt eines Kommentars als Text. Ein leerer oder nicht parsbarer Wert ergibt `''` statt eines
+ * sichtbaren „Invalid Date" — dasselbe Muster wie `formatDate` in `ProjectsPage`.
+ */
+function formatCommentTime(iso: string): string {
+  const d = new Date(iso)
+  return Number.isNaN(d.getTime()) ? '' : d.toLocaleString('de-DE')
+}
+
+/**
+ * Zeitzeile eines Kommentars (#843): Erstellzeitpunkt, bei nachträglicher Bearbeitung ergänzt um
+ * „bearbeitet <Zeitpunkt>". Ohne den Zusatz wäre ein spät bearbeiteter alter Kommentar von einem
+ * neuen nicht zu unterscheiden — und genau die zeitliche Einordnung ist der Zweck der Anzeige.
+ * Ohne darstellbaren Erstellzeitpunkt bleibt die Zeile leer und wird gar nicht gerendert.
+ */
+export function commentMetaText(c: Readonly<Pick<Comment, 'createdAt' | 'updatedAt'>>): string {
+  const erstellt = formatCommentTime(c.createdAt)
+  if (!erstellt) return ''
+  const bearbeitet = c.updatedAt === c.createdAt ? '' : formatCommentTime(c.updatedAt)
+  return bearbeitet ? `${erstellt} · bearbeitet ${bearbeitet}` : erstellt
+}
+
+/**
  * Feld-Konfiguration für Kommentare: Verfassen und Bearbeiten teilen sie, damit beide Felder gleich
  * aussehen und mehrzeilige Kommentare auch bequem entstehen können — nicht nur bearbeitbar sind.
  */
@@ -486,12 +508,21 @@ function CommentsSection({
       <Stack spacing={1}>
         {comments.map((c) => {
           const isAuthor = c.authorUserId === currentUserId
+          const meta = commentMetaText(c)
           return (
             <Box key={c.id}>
               <Stack direction="row" justifyContent="space-between" alignItems="center">
-                <Typography variant="body2" fontWeight={600}>
-                  {c.authorName}
-                </Typography>
+                <Stack direction="row" spacing={1} alignItems="baseline" flexWrap="wrap">
+                  <Typography variant="body2" fontWeight={600}>
+                    {c.authorName}
+                  </Typography>
+                  {/* Zeitpunkt im Muster der Aktivitätsliste desselben Modals (#843). */}
+                  {meta && (
+                    <Typography data-testid="comment-meta" variant="caption" color="text.secondary">
+                      {meta}
+                    </Typography>
+                  )}
+                </Stack>
                 <Stack direction="row" spacing={0.5}>
                   {/* Bearbeiten darf nur der Autor selbst. */}
                   {isAuthor && editingCommentId !== c.id && (
@@ -1128,7 +1159,11 @@ function CardDetailModalView({
   const [baumFehler, setBaumFehler] = useState<string | null>(null)
 
   useEffect(() => {
-    void commentsApi.list(card.id).then(setComments)
+    // Neuester zuerst (#843): Der Server liefert stabil nach `createdAt, id` aufsteigend; das
+    // Umkehren der ganzen Liste ergibt exakt `createdAt desc, id desc` — der Tie-Break (#472) dreht
+    // sich mit, ohne dass die Sortierregel hier ein zweites Mal formuliert werden muss. Gedreht
+    // wird nur an dieser einen Stelle, damit es genau eine Wahrheit über die Reihenfolge gibt.
+    void commentsApi.list(card.id).then((list) => setComments([...list].reverse()))
     void attachmentsApi.list(card.id).then((list) => {
       setAttachments(list)
       loadImagePreviews(list, attachmentsApi, setPreviews)
@@ -1318,7 +1353,9 @@ function CardDetailModalView({
     if (!newComment.trim()) return
     try {
       const created = await commentsApi.create(card.id, newComment.trim())
-      setComments((c) => [...c, created])
+      // Vorne einsortiert (#843): Der neue Kommentar ist der jüngste und steht damit ohne
+      // Neuladen an der Stelle, an der ihn die Sortierregel erwartet.
+      setComments((c) => [created, ...c])
       // Erst nach der Zusage des Servers leeren: Sonst wäre der verfasste Text weg, ohne dass er
       // irgendwo läge.
       setNewComment('')
