@@ -761,6 +761,184 @@ describe('AppShell', () => {
       await waitFor(() => expect(switcherEntries()).toEqual(['DreiP1', 'ZweiP2']))
     })
   })
+
+  describe('Board-Kontext auf Projektseiten (#990)', () => {
+    /** Boards je Projekt, wie `boardsApi.list` sie liefert — Projekt 5 hat zwei, Projekt 6 eines. */
+    const PROJEKT_BOARDS: Record<number, TestBoard[]> = {
+      5: [BOARDS[1], BOARDS[3]],
+      6: [BOARDS[2]],
+    }
+
+    const ZIELE = [
+      '/',
+      '/boards/1',
+      '/boards/3',
+      '/projects/5/ideas',
+      '/projects/5/nachtlauf',
+      '/projects/6/ideas',
+    ]
+
+    function ZielNav() {
+      const navigate = useNavigate()
+      return (
+        <>
+          {ZIELE.map((ziel) => (
+            <button key={ziel} onClick={() => navigate(ziel)}>{`nach ${ziel}`}</button>
+          ))}
+        </>
+      )
+    }
+
+    function renderMitZielen(entry: string) {
+      return render(
+        <MemoryRouter initialEntries={[entry]}>
+          <LocationProbe />
+          <ZielNav />
+          <AppShell />
+        </MemoryRouter>,
+      )
+    }
+
+    async function gehZu(ziel: string): Promise<void> {
+      fireEvent.click(screen.getByRole('button', { name: `nach ${ziel}` }))
+      await waitFor(() => expect(screen.getByTestId('location').textContent).toBe(ziel))
+    }
+
+    /** Verlauf des angemeldeten Nutzers vorbelegen — wie nach früheren Besuchen im selben Browser. */
+    function verlaufSetzen(eintraege: unknown[]): void {
+      localStorage.setItem(`manban.boardHistory.v1.${loggedInUser.userId}`, JSON.stringify(eintraege))
+    }
+
+    /** Die Ziele des Projekt-Blocks in ihrer Reihenfolge — Beschriftung und Ziel-Pfad. */
+    function projektBlock(projektName: string): Array<[string, string | null]> {
+      const block = screen.getByRole('group', { name: `Projekt ${projektName}` })
+      return within(block)
+        .getAllByRole('link')
+        .map((link) => [link.textContent ?? '', link.getAttribute('href')])
+    }
+
+    beforeEach(() => {
+      mockedBoards.get.mockImplementation((id: number) => Promise.resolve(BOARDS[id as BoardId]))
+      mockedBoards.list.mockImplementation((projectId: number) =>
+        Promise.resolve(PROJEKT_BOARDS[projectId] ?? []),
+      )
+    })
+
+    it('behält beim Wechsel vom Board auf eine Projektseite desselben Projekts die Board-Einträge', async () => {
+      renderMitZielen('/boards/1')
+      await screen.findByRole('link', { name: 'Leitstand' })
+
+      await gehZu('/projects/5/nachtlauf')
+
+      expect(projektBlock('P1')).toEqual([
+        ['Leitstand', '/boards/1/leitstand'],
+        ['Board', '/boards/1'],
+        ['Liste', '/boards/1/list'],
+        ['Vorhaben', '/boards/1/vorhaben'],
+        ['Ideen', '/projects/5/ideas'],
+        ['Nachtläufe', '/projects/5/nachtlauf'],
+      ])
+      // Aktiv ist die Seite, auf der man steht — kein Board-Eintrag.
+      expect(screen.getByRole('link', { name: 'Nachtläufe' })).toHaveAttribute('aria-current', 'page')
+      expect(screen.getByRole('link', { name: 'Board' })).not.toHaveAttribute('aria-current')
+      // Der Pfad im Kopf nennt dort nur das Projekt.
+      const pfad = screen.getByRole('navigation', { name: 'Pfad' })
+      expect(within(pfad).getAllByRole('link').map((link) => link.textContent)).toEqual(['P1'])
+    })
+
+    it('nimmt beim direkten Aufruf einer Projektseite das zuletzt besuchte Board dieses Projekts', async () => {
+      verlaufSetzen([{ id: 3, name: 'Drei', projectId: 5, projectName: 'P1' }])
+      renderMitZielen('/projects/5/ideas')
+
+      expect(await screen.findByRole('link', { name: 'Board' })).toHaveAttribute('href', '/boards/3')
+    })
+
+    it('merkt sich das Projekt eines Besuchs und findet das Board nach dem Verlassen wieder', async () => {
+      renderMitZielen('/boards/3')
+      await screen.findByRole('link', { name: 'Leitstand' })
+      await gehZu('/')
+
+      await gehZu('/projects/5/ideas')
+
+      // Ohne `projectId` im Verlaufseintrag fiele die Schiene auf das erste Board (1) zurück.
+      expect(await screen.findByRole('link', { name: 'Board' })).toHaveAttribute('href', '/boards/3')
+    })
+
+    it('nimmt ohne Verlauf das erste Board des Projekts', async () => {
+      renderMitZielen('/projects/5/ideas')
+
+      expect(await screen.findByRole('link', { name: 'Board' })).toHaveAttribute('href', '/boards/1')
+    })
+
+    it('ignoriert einen alten Verlaufseintrag ohne projectId und nimmt das erste Board', async () => {
+      verlaufSetzen([{ id: 3, name: 'Drei', projectName: 'P1' }])
+      renderMitZielen('/projects/5/ideas')
+
+      expect(await screen.findByRole('link', { name: 'Board' })).toHaveAttribute('href', '/boards/1')
+    })
+
+    it('zeigt bei einem Projekt ohne Board keine Board-Einträge', async () => {
+      mockedBoards.list.mockResolvedValue([])
+      renderMitZielen('/projects/6/ideas')
+
+      await screen.findByRole('group', { name: 'Projekt P2' })
+      await waitFor(() => expect(mockedBoards.list).toHaveBeenCalledWith(6))
+      expect(projektBlock('P2')).toEqual([['Ideen', '/projects/6/ideas']])
+    })
+
+    it('zeigt auf der Projektseite eines anderen Projekts nie ein Board des vorigen', async () => {
+      renderMitZielen('/boards/1')
+      await screen.findByRole('link', { name: 'Leitstand' })
+
+      await gehZu('/projects/6/ideas')
+
+      // Schon vor der Antwort der Boardliste ist der fremde Kontext weg.
+      expect(
+        screen
+          .getAllByRole('link')
+          .map((link) => link.getAttribute('href'))
+          .filter((href) => href?.startsWith('/boards/1')),
+      ).toEqual([])
+      await waitFor(() =>
+        expect(screen.getByRole('link', { name: 'Board' })).toHaveAttribute('href', '/boards/2'),
+      )
+      expect(projektBlock('P2')).toEqual([
+        ['Leitstand', '/boards/2/leitstand'],
+        ['Board', '/boards/2'],
+        ['Liste', '/boards/2/list'],
+        ['Vorhaben', '/boards/2/vorhaben'],
+        ['Ideen', '/projects/6/ideas'],
+      ])
+    })
+
+    it('lässt die Schiene ohne Board, wenn die Boardliste des Projekts fehlschlägt', async () => {
+      mockedBoards.list.mockRejectedValue(new Error('500'))
+      renderMitZielen('/projects/5/ideas')
+
+      await screen.findByRole('group', { name: 'Projekt P1' })
+      await waitFor(() => expect(mockedBoards.list).toHaveBeenCalledWith(5))
+      expect(projektBlock('P1')).toEqual([
+        ['Ideen', '/projects/5/ideas'],
+        ['Nachtläufe', '/projects/5/nachtlauf'],
+      ])
+    })
+
+    it('verwirft eine verspätete Boardliste nach dem Verlassen der Projektseite', async () => {
+      let liste: (boards: TestBoard[]) => void = () => {}
+      mockedBoards.list.mockReturnValue(
+        new Promise<TestBoard[]>((resolve) => {
+          liste = resolve
+        }),
+      )
+      renderMitZielen('/projects/5/ideas')
+      await screen.findByRole('group', { name: 'Projekt P1' })
+
+      await gehZu('/')
+      liste(PROJEKT_BOARDS[5])
+
+      await waitFor(() => expect(screen.queryByRole('link', { name: 'Board' })).not.toBeInTheDocument())
+    })
+  })
 })
 
 describe('AppShell Kopf (Entwurf `.kopf`, #978)', () => {
@@ -769,7 +947,7 @@ describe('AppShell Kopf (Entwurf `.kopf`, #978)', () => {
     // Ein Verlaufseintrag aktiviert die Taste „Board wechseln"; deaktiviert trüge sie MUIs Disabled-Farbe.
     window.localStorage.setItem(
       `manban.boardHistory.v1.${loggedInUser.userId}`,
-      JSON.stringify([{ id: 1, name: 'B', projectName: 'P1' }]),
+      JSON.stringify([{ id: 1, name: 'B', projectId: 5, projectName: 'P1' }]),
     )
   })
 

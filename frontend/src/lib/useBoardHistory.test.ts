@@ -1,7 +1,7 @@
 import { act, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Me } from '../api/auth'
-import { useBoardHistory, type BoardHistoryEntry } from './useBoardHistory'
+import { lastBoardOfProject, useBoardHistory, type BoardHistoryEntry } from './useBoardHistory'
 
 const auth = vi.hoisted(() => ({ value: { user: null as Me | null, loading: false } }))
 vi.mock('../auth/AuthContext', () => ({ useAuth: () => auth.value }))
@@ -15,9 +15,15 @@ const me = (userId: number): Me => ({
 })
 
 const key = (userId: number): string => `manban.boardHistory.v1.${userId}`
-const entry = (id: number, name = `B${id}`, projectName = `P${id}`): BoardHistoryEntry => ({
+const entry = (
+  id: number,
+  name = `B${id}`,
+  projectName = `P${id}`,
+  projectId = id,
+): BoardHistoryEntry => ({
   id,
   name,
+  projectId,
   projectName,
 })
 const stored = (userId: number): unknown => JSON.parse(localStorage.getItem(key(userId)) ?? 'null')
@@ -74,19 +80,20 @@ describe('useBoardHistory', () => {
     expect(remounted.current.history).toEqual([entry(3), entry(2), entry(1)])
   })
 
-  it('speichert unter dem nutzerspezifischen Schluessel nur id, name und projectName', () => {
-    const withExtra: BoardHistoryEntry & { projectId: number } = {
+  it('speichert unter dem nutzerspezifischen Schluessel nur id, name, projectId und projectName', () => {
+    const withExtra: BoardHistoryEntry & { columns: never[] } = {
       id: 7,
       name: 'B7',
-      projectName: 'P7',
       projectId: 3,
+      projectName: 'P7',
+      columns: [],
     }
     const { result } = renderHook(() => useBoardHistory())
 
     act(() => result.current.recordVisit(withExtra))
 
     expect(localStorage.getItem(key(42))).not.toBeNull()
-    expect(stored(42)).toEqual([{ id: 7, name: 'B7', projectName: 'P7' }])
+    expect(stored(42)).toEqual([{ id: 7, name: 'B7', projectId: 3, projectName: 'P7' }])
   })
 
   it('zeigt beim Kontowechsel ohne Unmount in keinem Render den fremden Verlauf', () => {
@@ -159,20 +166,37 @@ describe('useBoardHistory', () => {
       JSON.stringify([
         'kein Objekt',
         null,
-        { id: '3', name: 'B3', projectName: 'P3' },
-        { id: 0, name: 'B0', projectName: 'P0' },
-        { id: 4.5, name: 'B4', projectName: 'P4' },
+        { id: '3', name: 'B3', projectId: 3, projectName: 'P3' },
+        { id: 0, name: 'B0', projectId: 0, projectName: 'P0' },
+        { id: 4.5, name: 'B4', projectId: 4, projectName: 'P4' },
         { id: 5 },
-        { id: 6, name: 'B6' },
-        { id: 7, name: 'B7', projectName: 'P7' },
-        { id: 7, name: 'B7 veraltet', projectName: 'P7 veraltet' },
-        { id: 8, name: 'B8', projectName: 'P8' },
+        { id: 6, name: 'B6', projectId: 6 },
+        { id: 7, name: 'B7', projectId: 7, projectName: 'P7' },
+        { id: 7, name: 'B7 veraltet', projectId: 7, projectName: 'P7 veraltet' },
+        { id: 8, name: 'B8', projectId: 8, projectName: 'P8' },
       ]),
     )
 
     const { result } = renderHook(() => useBoardHistory())
 
     expect(result.current.history).toEqual([entry(7), entry(8)])
+  })
+
+  it('verwirft gespeicherte Eintraege ohne projectId, statt sie zu migrieren', () => {
+    localStorage.setItem(
+      key(42),
+      JSON.stringify([
+        { id: 1, name: 'B1', projectName: 'P1' },
+        { id: 2, name: 'B2', projectId: '2', projectName: 'P2' },
+        { id: 3, name: 'B3', projectId: 0, projectName: 'P3' },
+        { id: 4, name: 'B4', projectId: 4.5, projectName: 'P4' },
+        { id: 5, name: 'B5', projectId: 5, projectName: 'P5' },
+      ]),
+    )
+
+    const { result } = renderHook(() => useBoardHistory())
+
+    expect(result.current.history).toEqual([entry(5)])
   })
 
   it('uebernimmt beim erneuten Besuch die neuen Namen', () => {
@@ -257,5 +281,22 @@ describe('useBoardHistory', () => {
 
     expect(() => act(() => result.current.remove(2))).not.toThrow()
     expect(result.current.history).toEqual([entry(1)])
+  })
+})
+
+describe('lastBoardOfProject', () => {
+  it('liefert den vordersten — also zuletzt besuchten — Eintrag des Projekts', () => {
+    const history = [
+      entry(9, 'B9', 'P2', 2),
+      entry(8, 'B8', 'P1', 1),
+      entry(7, 'B7', 'P1', 1),
+    ]
+
+    expect(lastBoardOfProject(history, 1)).toEqual(entry(8, 'B8', 'P1', 1))
+  })
+
+  it('liefert undefined, wenn das Projekt im Verlauf nicht vorkommt', () => {
+    expect(lastBoardOfProject([entry(9, 'B9', 'P2', 2)], 1)).toBeUndefined()
+    expect(lastBoardOfProject([], 1)).toBeUndefined()
   })
 })

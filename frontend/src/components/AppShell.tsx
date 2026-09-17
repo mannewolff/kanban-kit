@@ -28,7 +28,7 @@ import { useAuth } from '../auth/AuthContext'
 import { MarkenSymbol } from '../layout/navIcons'
 import { buildNavItems, type BoardContext, type NavLink } from '../layout/navItems'
 import { canManageBoards, canManageMembers, canManageProject, isPlatformAdmin } from '../lib/roles'
-import { useBoardHistory, type BoardHistoryEntry } from '../lib/useBoardHistory'
+import { lastBoardOfProject, useBoardHistory, type BoardHistoryEntry } from '../lib/useBoardHistory'
 import { useEditMode } from '../lib/EditModeContext'
 import { useKeyboardShortcut } from '../lib/useKeyboardShortcut'
 import { useRefetchOnFocus } from '../lib/useRefetchOnFocus'
@@ -178,27 +178,75 @@ export function AppShell() {
   const projectMatch = useMatch('/projects/:projectId/*')
   const routeProjectId = projectMatch?.params.projectId ? Number(projectMatch.params.projectId) : null
 
+  // Der Verlauf steht schon hier, weil der Board-Kontext einer Projektseite aus ihm kommt (#990).
+  const { history, recordVisit, remove } = useBoardHistory()
+
+  // Spiegel von Board-Kontext und Verlauf für den Effekt darunter: Der soll auf den Routenwechsel
+  // anspringen, nicht auf jede neue Verlaufsreferenz — und sich nicht selbst neu anstoßen, wenn er
+  // den Kontext setzt. Schon mit dem ersten Render belegt (Muster wie in `useBoardHistory`), damit
+  // der erste Lauf den gespeicherten Verlauf sieht und nicht einen leeren.
+  const letzterKontext = useRef({ board, history })
   useEffect(() => {
-    if (boardId == null) {
+    letzterKontext.current = { board, history }
+  }, [board, history])
+
+  /*
+   * Board-Kontext der Schiene in drei Fällen:
+   *
+   * - **Board-Route** — das Board der Route laden.
+   * - **Projektseite** — wer von einem Board auf eine Seite desselben Projekts geht, ist weiter in
+   *   diesem Projekt: Der Kontext bleibt unangetastet stehen. Ohne ihn (Lesezeichen, Neuladen,
+   *   anderes Projekt) entscheidet der Verlauf — das zuletzt besuchte Board dieses Projekts —, sonst
+   *   das erste Board des Projekts; hat das Projekt keines, bleibt es bei keinem Board (#990).
+   * - **sonst** — kein Board-Kontext.
+   */
+  useEffect(() => {
+    let cancelled = false
+    if (boardId != null) {
+      boardsApi
+        .get(boardId)
+        .then((b) => {
+          if (cancelled) return
+          setBoard({ id: b.id, name: b.name, projectId: b.projectId })
+          // Anzahl Boards im Projekt für die Sichtbarkeit des „Boards"-Eintrags.
+          boardsApi
+            .list(b.projectId)
+            .then((bs) => {
+              if (!cancelled) setBoardCount(bs.length)
+            })
+            .catch(() => {
+              if (!cancelled) setBoardCount(null)
+            })
+        })
+        .catch(() => {
+          if (!cancelled) {
+            setBoard(null)
+            setBoardCount(null)
+          }
+        })
+      return () => {
+        cancelled = true
+      }
+    }
+    if (routeProjectId == null) {
       setBoard(null)
       setBoardCount(null)
       return
     }
-    let cancelled = false
+    if (letzterKontext.current.board?.projectId === routeProjectId) {
+      return
+    }
+    // Die Boardliste liefert beides: das Ziel der Board-Einträge und ihre Anzahl. Der Verlauf
+    // entscheidet nur, welches der vorhandenen Boards gemeint ist — ein inzwischen gelöschtes
+    // steht nicht darin und fällt so von selbst auf das erste Board zurück.
     boardsApi
-      .get(boardId)
-      .then((b) => {
+      .list(routeProjectId)
+      .then((bs) => {
         if (cancelled) return
-        setBoard({ id: b.id, name: b.name, projectId: b.projectId })
-        // Anzahl Boards im Projekt für die Sichtbarkeit des „Boards"-Eintrags.
-        boardsApi
-          .list(b.projectId)
-          .then((bs) => {
-            if (!cancelled) setBoardCount(bs.length)
-          })
-          .catch(() => {
-            if (!cancelled) setBoardCount(null)
-          })
+        const zuletzt = lastBoardOfProject(letzterKontext.current.history, routeProjectId)
+        const gewaehlt = bs.find((b) => b.id === zuletzt?.id) ?? bs[0]
+        setBoard(gewaehlt ? { id: gewaehlt.id, name: gewaehlt.name, projectId: gewaehlt.projectId } : null)
+        setBoardCount(bs.length)
       })
       .catch(() => {
         if (!cancelled) {
@@ -209,7 +257,7 @@ export function AppShell() {
     return () => {
       cancelled = true
     }
-  }, [boardId])
+  }, [boardId, routeProjectId])
 
   // Beim Zurückkehren in den Tab Projekt- und Board-Kontext neu laden, damit die Seitenleiste
   // nicht auf einem in einer anderen Session veränderten Stand (z. B. entferntes Board) verharrt.
@@ -238,20 +286,24 @@ export function AppShell() {
   // neuen user-Referenz neu und die openGroups-Effect-Schleife läuft endlos).
   const admin = isPlatformAdmin(user)
   const projectCount = projects?.length ?? null
-  const currentProject = board ? projects?.find((p) => p.id === board.projectId) : undefined
+  // Auf einer Projektseite zählt nur ein Board desselben Projekts. Der Abgleich steht im Render und
+  // nicht allein im Effekt: Sonst stünde nach einem Projektwechsel für einen Wimpernschlag das Board
+  // des vorigen Projekts unter dem Namen des neuen.
+  const kontextBoard = routeProjectId !== null && board?.projectId !== routeProjectId ? null : board
+  const currentProject = kontextBoard ? projects?.find((p) => p.id === kontextBoard.projectId) : undefined
   const canManageCurrentBoards = canManageBoards(currentProject?.role ?? 'VIEWER', admin)
   // Der Nachtlauf-Bereich ist projektweit, nicht board-gebunden: Bezug ist das Projekt der Route,
   // sobald kein Board offen ist (`currentProject` ist dann undefined — der Eintrag verschwände
   // genau nach dem Klick auf ihn). `canManageProject` ist die Semantik von `requireOwner`:
   // Owner *oder* Plattform-Admin (Plan #718, A6).
-  const nightRunProjectId = board?.projectId ?? routeProjectId
+  const nightRunProjectId = kontextBoard?.projectId ?? routeProjectId
   // Das Projekt der Route oder des Boards: Titel des Projekt-Blocks und erster Teil des Pfads.
   const pfadProjekt = projects?.find((p) => p.id === nightRunProjectId)
   const canViewNightRun = canManageProject(pfadProjekt?.role ?? 'VIEWER', admin)
   const navItems = useMemo(
     () =>
       buildNavItems({
-        board,
+        board: kontextBoard,
         isAdmin: admin,
         projectCount,
         boardCount,
@@ -261,12 +313,11 @@ export function AppShell() {
         projectName: pfadProjekt?.name ?? null,
         canManageMembers: canManageMembers(pfadProjekt?.role ?? 'VIEWER'),
       }),
-    [board, admin, projectCount, boardCount, canManageCurrentBoards, routeProjectId, canViewNightRun, pfadProjekt],
+    [kontextBoard, admin, projectCount, boardCount, canManageCurrentBoards, routeProjectId, canViewNightRun, pfadProjekt],
   )
 
   // ---- Board-Wechsel (#587): Verlauf fortschreiben und das Overlay bedienen ----
   const notify = useSnackbar()
-  const { history, recordVisit, remove } = useBoardHistory()
   const [switcherOpen, setSwitcherOpen] = useState(false)
 
   // Ein Verlaufseintrag entsteht nur aus kohärentem Kontext: Route, geladenes Board und zugeordnetes
@@ -276,10 +327,15 @@ export function AppShell() {
   const currentProjectName = currentProject?.name ?? null
   const visit = useMemo<BoardHistoryEntry | null>(
     () =>
-      board !== null && board.id === boardId && currentProjectName !== null
-        ? { id: board.id, name: board.name, projectName: currentProjectName }
+      kontextBoard !== null && kontextBoard.id === boardId && currentProjectName !== null
+        ? {
+            id: kontextBoard.id,
+            name: kontextBoard.name,
+            projectId: kontextBoard.projectId,
+            projectName: currentProjectName,
+          }
         : null,
-    [board, boardId, currentProjectName],
+    [kontextBoard, boardId, currentProjectName],
   )
   useEffect(() => {
     if (visit !== null) {
@@ -492,8 +548,10 @@ export function AppShell() {
   if (pfadProjekt) {
     pfad.push({ label: pfadProjekt.name, to: `/projects/${pfadProjekt.id}` })
   }
-  if (board?.id === boardId && board) {
-    pfad.push({ label: board.name, to: `/boards/${board.id}` })
+  // Auf einer Projektseite nennt der Pfad nur das Projekt — er sagt, wo man ist, die Schiene, wohin
+  // man kann (#990). Der Abgleich mit `boardId` hält ihn zugleich vom noch geladenen Vorgänger frei.
+  if (kontextBoard?.id === boardId && kontextBoard) {
+    pfad.push({ label: kontextBoard.name, to: `/boards/${kontextBoard.id}` })
   }
 
   return (
