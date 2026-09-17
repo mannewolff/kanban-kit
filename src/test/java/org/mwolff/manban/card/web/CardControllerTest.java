@@ -13,6 +13,7 @@ import org.mwolff.manban.board.application.ColumnNotFoundException;
 import org.mwolff.manban.card.application.CardService;
 import org.mwolff.manban.card.application.CardService.CardView;
 import org.mwolff.manban.card.application.CardService.EpicView;
+import org.mwolff.manban.card.application.LabelAction;
 import org.mwolff.manban.card.application.SortDirection;
 import org.mwolff.manban.card.domain.CardType;
 
@@ -325,6 +326,32 @@ class CardControllerTest {
 
     // Then
     assertThat(result).isSameAs(views);
+  }
+
+  @Test
+  void bulkLabels_delegatesToService() {
+    // Given
+    List<CardView> views = List.of(card());
+    var request = new CardController.BulkLabelsRequest(List.of(8L, 9L), 5L, LabelAction.ADD);
+    when(service.bulkLabels(3L, List.of(8L, 9L), 5L, LabelAction.ADD)).thenReturn(views);
+
+    // When
+    List<CardView> result = controller.bulkLabels(3L, request);
+
+    // Then
+    assertThat(result).isSameAs(views);
+  }
+
+  @Test
+  void bulkLabels_reichtDieAktionUnveraendertDurch() {
+    // Gegenprobe: REMOVE darf unterwegs nicht zu ADD werden — beide Richtungen laufen über
+    // denselben Endpunkt, und nur die Aktion unterscheidet sie.
+    var request = new CardController.BulkLabelsRequest(List.of(8L), 5L, LabelAction.REMOVE);
+    when(service.bulkLabels(3L, List.of(8L), 5L, LabelAction.REMOVE)).thenReturn(List.of());
+
+    controller.bulkLabels(3L, request);
+
+    verify(service).bulkLabels(3L, List.of(8L), 5L, LabelAction.REMOVE);
   }
 
   @Test

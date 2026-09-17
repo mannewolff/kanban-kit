@@ -2,6 +2,12 @@ import { apiFetch } from './client'
 
 export type CardType = 'CARD' | 'EPIC'
 
+/**
+ * Richtung der Label-Massenaktion: Das Label wird allen gewählten Karten hinzugefügt oder allen
+ * abgenommen. Die übrigen Labels jeder Karte bleiben stehen (Issue #994).
+ */
+export type LabelAction = 'ADD' | 'REMOVE'
+
 export interface Card {
   id: number
   boardId: number
@@ -215,6 +221,15 @@ export const cardsApi = {
     }),
   bulkDelete: (cardIds: number[]) =>
     apiFetch<void>(`/api/cards/bulk-delete`, { method: 'POST', body: JSON.stringify({ cardIds }) }),
+  /**
+   * Setzt ein Label an mehreren Karten oder nimmt es ihnen ab — eine Transaktion,
+   * alles-oder-nichts. Die übrigen Labels jeder Karte bleiben unberührt (Issue #994).
+   */
+  bulkLabels: (cardIds: number[], labelId: number, action: LabelAction) =>
+    apiFetch<Card[]>(`/api/cards/bulk-labels`, {
+      method: 'POST',
+      body: JSON.stringify({ cardIds, labelId, action }),
+    }),
   restore: (cardId: number) => apiFetch<Card>(`/api/cards/${cardId}/restore`, { method: 'POST' }),
   remove: (cardId: number) => apiFetch<void>(`/api/cards/${cardId}`, { method: 'DELETE' }),
   update: (

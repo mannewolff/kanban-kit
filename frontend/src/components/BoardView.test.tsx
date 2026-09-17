@@ -64,7 +64,8 @@ function mkApi(over: Record<string, unknown> = {}) {
   return {
     create: vi.fn(), move: vi.fn(), archive: vi.fn(), moveToIdeaStorage: vi.fn(),
     restore: vi.fn(), remove: vi.fn(), get: vi.fn().mockResolvedValue(card),
-    bulkArchive: vi.fn(), bulkTransfer: vi.fn(), bulkDelete: vi.fn(), ...over,
+    bulkArchive: vi.fn(), bulkTransfer: vi.fn(), bulkDelete: vi.fn(),
+    bulkLabels: vi.fn().mockResolvedValue([]), ...over,
   }
 }
 
@@ -793,6 +794,164 @@ describe('BoardView', () => {
 
     expect(screen.queryByLabelText('Karte Aufgabe auswählen')).not.toBeInTheDocument()
     expect(screen.queryByText('1 ausgewählt')).not.toBeInTheDocument()
+  })
+
+  describe('Labels über die Mehrfachauswahl', () => {
+    const bug = { id: 7, boardId: 1, name: 'Bug', color: 'red', countOnEpicTile: false }
+    const nacht = { id: 9, boardId: 1, name: 'Nacht', color: 'blue', countOnEpicTile: false }
+    const zweite: Card = { ...card, id: 101, number: 2, title: 'Zweite', positionInColumn: 1 }
+
+    /** Auswahlmodus starten, beide Karten anhaken und das Label-Menü öffnen. */
+    function waehleBeideUndOeffneLabels() {
+      fireEvent.click(screen.getByRole('button', { name: 'Auswählen' }))
+      fireEvent.click(screen.getByTestId('card-100'))
+      fireEvent.click(screen.getByTestId('card-101'))
+      fireEvent.click(screen.getByRole('button', { name: 'Labels' }))
+    }
+
+    it('fügt ein Label, das keine gewählte Karte trägt, der ganzen Auswahl hinzu', async () => {
+      // Die dritte Karte ist nicht gewählt und steht nicht in der Antwort — sie bleibt unberührt.
+      const dritte: Card = {
+        ...card, id: 102, number: 3, title: 'Dritte', positionInColumn: 2, labels: [7],
+      }
+      const api = mkApi({
+        bulkLabels: vi.fn().mockResolvedValue([
+          { ...card, labels: [7, 9] },
+          { ...zweite, labels: [9] },
+        ]),
+      })
+      const onCardsChanged = vi.fn()
+      render(
+        <BoardView
+          board={board}
+          initialCards={[{ ...card, labels: [7] }, zweite, dritte]}
+          canEdit
+          boardLabels={[bug, nacht]}
+          api={api}
+          onCardsChanged={onCardsChanged}
+        />,
+      )
+
+      waehleBeideUndOeffneLabels()
+      // Nur die erste Karte trägt „Bug" -> „einige"; „Nacht" trägt keine.
+      expect(screen.getByRole('menuitem', { name: 'Bug — einige gewählte Karten' })).toBeInTheDocument()
+      fireEvent.click(screen.getByRole('menuitem', { name: 'Nacht — keine gewählte Karte' }))
+
+      await waitFor(() => expect(api.bulkLabels).toHaveBeenCalledWith([100, 101], 9, 'ADD'))
+      // Die Antwort ist übernommen: „Nacht" steht jetzt an allen, „Bug" weiter nur an einer.
+      expect(
+        await screen.findByRole('menuitem', { name: 'Nacht — alle gewählten Karten' }),
+      ).toBeInTheDocument()
+      expect(screen.getByRole('menuitem', { name: 'Bug — einige gewählte Karten' })).toBeInTheDocument()
+      // Die ungewählte dritte Karte behält ihr Label, obwohl sie nicht in der Antwort stand.
+      expect(within(screen.getByTestId('card-102')).getByText('Bug')).toBeInTheDocument()
+      expect(onCardsChanged).toHaveBeenCalled()
+    })
+
+    it('nimmt ein Label ab, das alle gewählten Karten tragen', async () => {
+      const api = mkApi({
+        bulkLabels: vi.fn().mockResolvedValue([
+          { ...card, labels: [] },
+          { ...zweite, labels: [] },
+        ]),
+      })
+      render(
+        <BoardView
+          board={board}
+          initialCards={[{ ...card, labels: [7] }, { ...zweite, labels: [7] }]}
+          canEdit
+          boardLabels={[bug]}
+          api={api}
+        />,
+      )
+
+      waehleBeideUndOeffneLabels()
+      fireEvent.click(screen.getByRole('menuitem', { name: 'Bug — alle gewählten Karten' }))
+
+      await waitFor(() => expect(api.bulkLabels).toHaveBeenCalledWith([100, 101], 7, 'REMOVE'))
+      expect(
+        await screen.findByRole('menuitem', { name: 'Bug — keine gewählte Karte' }),
+      ).toBeInTheDocument()
+    })
+
+    it('meldet einen Fehler und lässt die Auswahl bestehen', async () => {
+      const api = mkApi({ bulkLabels: vi.fn().mockRejectedValue(new Error('fail')) })
+      render(
+        <BoardView
+          board={board}
+          initialCards={[card, zweite]}
+          canEdit
+          boardLabels={[nacht]}
+          api={api}
+        />,
+        { wrapper: SnackbarProvider },
+      )
+
+      waehleBeideUndOeffneLabels()
+      fireEvent.click(screen.getByRole('menuitem', { name: 'Nacht — keine gewählte Karte' }))
+
+      await erwarteFehlerToast('Labels setzen fehlgeschlagen.')
+      expect(screen.getByText('2 ausgewählt')).toBeInTheDocument()
+    })
+
+    it('schickt während der laufenden Anfrage keinen zweiten Batch', async () => {
+      let antwort: (cards: Card[]) => void = () => {}
+      const api = mkApi({
+        bulkLabels: vi.fn(() => new Promise<Card[]>((resolve) => { antwort = resolve })),
+      })
+      render(
+        <BoardView
+          board={board}
+          initialCards={[card, zweite]}
+          canEdit
+          boardLabels={[nacht]}
+          api={api}
+        />,
+      )
+
+      waehleBeideUndOeffneLabels()
+      const eintrag = screen.getByRole('menuitem', { name: 'Nacht — keine gewählte Karte' })
+      fireEvent.click(eintrag)
+      fireEvent.click(eintrag)
+
+      expect(api.bulkLabels).toHaveBeenCalledTimes(1)
+
+      antwort([{ ...card, labels: [9] }, { ...zweite, labels: [9] }])
+      expect(
+        await screen.findByRole('menuitem', { name: 'Nacht — alle gewählten Karten' }),
+      ).toBeInTheDocument()
+    })
+
+    it('sperrt „Labels" mit Hinweis, wenn das Board keine Labels hat', () => {
+      render(<BoardView board={board} initialCards={[card]} canEdit boardLabels={[]} api={mkApi()} />)
+
+      fireEvent.click(screen.getByRole('button', { name: 'Auswählen' }))
+      fireEvent.click(screen.getByTestId('card-100'))
+
+      expect(
+        screen.getByRole('button', { name: 'Labels — Das Board hat keine Labels' }),
+      ).toBeDisabled()
+    })
+
+    it('sperrt „Labels" mit Hinweis, wenn die Auswahl ein Vorhaben enthält', () => {
+      // Die Board-Liste liefert heute keine Vorhaben aus (sie halten keine Spaltenposition); die
+      // gesperrte Taste ist der Gurt zum Hosenträger des Servers, der einen solchen Batch ablehnt.
+      const vorhaben: Card = { ...card, id: 102, number: 3, title: 'Vorhaben', type: 'EPIC' }
+      render(
+        <BoardView
+          board={board}
+          initialCards={[card, vorhaben]}
+          canEdit
+          boardLabels={[nacht]}
+          api={mkApi()}
+        />,
+      )
+
+      fireEvent.click(screen.getByRole('button', { name: 'Auswählen' }))
+      fireEvent.click(screen.getByTestId('card-102'))
+
+      expect(screen.getByRole('button', { name: 'Labels — Vorhaben tragen keine Labels' })).toBeDisabled()
+    })
   })
 
   it('zeigt das Fälligkeitsdatum-Badge, hervorgehoben bei überfälligen Karten', () => {

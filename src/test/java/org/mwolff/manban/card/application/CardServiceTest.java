@@ -2572,6 +2572,150 @@ class CardServiceTest {
     verify(cardLabels, never()).replaceLabels(anyLong(), anyList());
   }
 
+  // --- Labels an mehreren Karten (bulkLabels) ---------------------------
+
+  /** Board-Labels für die Massenaktion: 7 liegt an den Karten, 9 ist das umzuschaltende. */
+  private void zweiBoardLabels() {
+    when(labels.findByBoardId(BOARD))
+        .thenReturn(
+            List.of(
+                new Label(7L, BOARD, "Bug", "#f00", false),
+                new Label(9L, BOARD, "Nacht", "#00f", false)));
+  }
+
+  private void zweiKarten() {
+    when(cards.findById(1L))
+        .thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
+    when(cards.findById(2L))
+        .thenReturn(Optional.of(card(2L, 20L, 2, false, null, CardType.CARD, null, null)));
+  }
+
+  @Test
+  void bulkLabels_addsLabelToEveryCardAndKeepsTheOthers() {
+    zweiKarten();
+    zweiBoardLabels();
+    // Zweimal je Karte gelesen: einmal für die neue Menge, einmal für die zurückgegebene Sicht.
+    when(cardLabels.findByCardId(1L)).thenReturn(List.of(7L)).thenReturn(List.of(7L, 9L));
+    when(cardLabels.findByCardId(2L)).thenReturn(List.of()).thenReturn(List.of(9L));
+
+    List<CardService.CardView> result =
+        service.bulkLabels(3L, List.of(1L, 2L), 9L, LabelAction.ADD);
+
+    // Die Antwort trägt je Karte den neuen Stand — daran liest das Frontend die Labels ab.
+    assertThat(result).extracting(CardService.CardView::id).containsExactly(1L, 2L);
+    assertThat(result.get(0).labels()).containsExactly(7L, 9L);
+    assertThat(result.get(1).labels()).containsExactly(9L);
+    verify(permissions, times(2)).require(3L, PROJECT, Permission.TICKET_UPDATE);
+    // Die übrigen Labels der Karte bleiben stehen — nur 9 kommt hinzu.
+    verify(cardLabels).replaceLabels(1L, List.of(7L, 9L));
+    verify(cardLabels).replaceLabels(2L, List.of(9L));
+    verify(events).publishEvent(new CardBoardActivityEvent(BOARD, ActivityType.UPDATED, 1L));
+    verify(events).publishEvent(new CardBoardActivityEvent(BOARD, ActivityType.UPDATED, 2L));
+  }
+
+  @Test
+  void bulkLabels_removesLabelFromEveryCardAndKeepsTheOthers() {
+    zweiKarten();
+    zweiBoardLabels();
+    when(cardLabels.findByCardId(1L)).thenReturn(List.of(7L, 9L));
+    when(cardLabels.findByCardId(2L)).thenReturn(List.of(9L));
+
+    service.bulkLabels(3L, List.of(1L, 2L), 9L, LabelAction.REMOVE);
+
+    verify(cardLabels).replaceLabels(1L, List.of(7L));
+    verify(cardLabels).replaceLabels(2L, List.of());
+  }
+
+  @Test
+  void bulkLabels_addOnCardThatAlreadyCarriesItIsNoError() {
+    zweiBoardLabels();
+    when(cards.findById(1L))
+        .thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
+    when(cardLabels.findByCardId(1L)).thenReturn(List.of(7L, 9L));
+
+    assertThatCode(() -> service.bulkLabels(3L, List.of(1L), 9L, LabelAction.ADD))
+        .doesNotThrowAnyException();
+    verify(cardLabels).replaceLabels(1L, List.of(7L, 9L));
+  }
+
+  @Test
+  void bulkLabels_removeOnCardWithoutItIsNoError() {
+    zweiBoardLabels();
+    when(cards.findById(1L))
+        .thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
+    when(cardLabels.findByCardId(1L)).thenReturn(List.of(7L));
+
+    assertThatCode(() -> service.bulkLabels(3L, List.of(1L), 9L, LabelAction.REMOVE))
+        .doesNotThrowAnyException();
+    verify(cardLabels).replaceLabels(1L, List.of(7L));
+  }
+
+  /**
+   * Ein Vorhaben in der Auswahl lässt den ganzen Batch scheitern. Hier steht es an erster Stelle,
+   * um ohne Transaktionsklammer zu zeigen, dass nichts geschrieben wurde; das echte Zurückrollen
+   * einer gemischten Auswahl prüft {@code CardIT}.
+   */
+  @Test
+  void bulkLabels_rejectsEpicInSelection() {
+    when(cards.findById(5L))
+        .thenReturn(Optional.of(card(5L, 20L, 5, false, null, CardType.EPIC, null, "E")));
+
+    assertThatThrownBy(() -> service.bulkLabels(3L, List.of(5L, 1L), 9L, LabelAction.ADD))
+        .isInstanceOf(InvalidDependencyException.class);
+    verify(cardLabels, never()).replaceLabels(anyLong(), anyList());
+  }
+
+  /**
+   * Auch beim Abnehmen wird geprüft, ob das Label zum Board der Karte gehört: Ein fremdes Label ist
+   * an keiner Karte gesetzt, ein stiller Nicht-Treffer meldete also Erfolg für einen Aufruf, den
+   * {@link CardService#setLabels} abwiese.
+   */
+  @Test
+  void bulkLabels_rejectsForeignBoardLabelAlsoWhenRemoving() {
+    when(cards.findById(1L))
+        .thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
+    when(labels.findByBoardId(BOARD))
+        .thenReturn(List.of(new Label(7L, BOARD, "Bug", "#f00", false)));
+
+    assertThatThrownBy(() -> service.bulkLabels(3L, List.of(1L), 9L, LabelAction.REMOVE))
+        .isInstanceOf(InvalidLabelException.class);
+    verify(cardLabels, never()).replaceLabels(anyLong(), anyList());
+  }
+
+  @Test
+  void bulkLabels_rejectsForeignBoardLabelWhenAdding() {
+    when(cards.findById(1L))
+        .thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
+    when(labels.findByBoardId(BOARD))
+        .thenReturn(List.of(new Label(7L, BOARD, "Bug", "#f00", false)));
+
+    assertThatThrownBy(() -> service.bulkLabels(3L, List.of(1L), 9L, LabelAction.ADD))
+        .isInstanceOf(InvalidLabelException.class);
+    verify(cardLabels, never()).replaceLabels(anyLong(), anyList());
+  }
+
+  @Test
+  void bulkLabels_throwsCardNotFound_whenUnknown() {
+    when(cards.findById(2L)).thenReturn(Optional.empty());
+
+    assertThatThrownBy(() -> service.bulkLabels(3L, List.of(2L, 1L), 9L, LabelAction.ADD))
+        .isInstanceOf(CardNotFoundException.class);
+    verify(cardLabels, never()).replaceLabels(anyLong(), anyList());
+  }
+
+  @Test
+  void bulkLabels_propagatesPermissionDenied() {
+    when(cards.findById(1L))
+        .thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
+    doThrow(new ProjectAccessDeniedException())
+        .when(permissions)
+        .require(9L, PROJECT, Permission.TICKET_UPDATE);
+
+    assertThatThrownBy(() -> service.bulkLabels(9L, List.of(1L, 2L), 9L, LabelAction.ADD))
+        .isInstanceOf(ProjectAccessDeniedException.class);
+    verify(cardLabels, never()).replaceLabels(anyLong(), anyList());
+  }
+
   // --- Aktivitätsverlauf (card_activity) --------------------------------
 
   @Test

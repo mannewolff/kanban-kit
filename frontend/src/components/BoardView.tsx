@@ -26,7 +26,7 @@ import Tooltip from '@mui/material/Tooltip'
 import Typography from '@mui/material/Typography'
 import { useEffect, useRef, useState } from 'react'
 import type { Board, BoardColumn } from '../api/boards'
-import { cardsApi, type Card, type CardsApi } from '../api/cards'
+import { cardsApi, type Card, type CardsApi, type LabelAction } from '../api/cards'
 import { ApiError, apiErrorMessage } from '../api/client'
 import { columnsApi, type SortDirection } from '../api/columns'
 import { epicsApi as defaultEpicsApi, type Epic, type EpicsApi } from '../api/epics'
@@ -63,13 +63,30 @@ import {
 } from '../theme'
 import { labelChipSx } from './labelChipSx'
 import { ablageflaecheSx, karteSx } from './boardSurfaceSx'
-import { BulkActionBar } from './BulkActionBar'
+import { BulkActionBar, type LabelOption, type LabelZustand } from './BulkActionBar'
 import { EpicBadge } from './EpicBadge'
 import { NewCardModal, type NewCardInitialValues, type NewItemInput } from './NewCardModal'
 import { useSnackbar } from './SnackbarProvider'
 import { TransferCardDialog } from './TransferCardDialog'
 
 const isDoneColumn = (name: string) => name.toLowerCase().includes('done')
+
+/** Wie weit ein Label in der Auswahl vertreten ist — `alle` nur, wenn jede gewählte Karte es trägt. */
+const labelZustand = (treffer: number, gesamt: number): LabelZustand => {
+  if (treffer === 0) return 'keine'
+  return treffer === gesamt ? 'alle' : 'einige'
+}
+
+/**
+ * Grund, warum die Massenaktion „Labels" gesperrt ist; `null` heißt bedienbar. Ein Vorhaben in der
+ * Auswahl lässt den Server den ganzen Batch ablehnen — die gesperrte Taste sagt das vorher, statt
+ * die Auswahl in einen Fehler laufen zu lassen.
+ */
+const labelSperrgrund = (gewaehlt: Card[], boardLabels: Label[]): string | null => {
+  if (gewaehlt.some((c) => c.type === 'EPIC')) return 'Vorhaben tragen keine Labels'
+  if (boardLabels.length === 0) return 'Das Board hat keine Labels'
+  return null
+}
 
 type KartenFilter = 'alle' | 'meine' | 'ueberfaellig'
 
@@ -278,6 +295,7 @@ interface Props {
     | 'bulkArchive'
     | 'bulkTransfer'
     | 'bulkDelete'
+    | 'bulkLabels'
   >
   epicsApi?: Pick<EpicsApi, 'create'>
 }
@@ -325,6 +343,8 @@ export function BoardView({
   // Karte und Auswahlmodus), damit die Zusage „wiederherstellbar" nur an einer Stelle steht.
   const [deleteConfirm, setDeleteConfirm] = useState<number[]>([])
   const [bulkTransferOpen, setBulkTransferOpen] = useState(false)
+  // Läuft gerade ein bulk-labels-Aufruf? Sperrt den zweiten Klick, solange die Antwort aussteht.
+  const [labelBusy, setLabelBusy] = useState(false)
   const [kartenFilter, setKartenFilter] = useState<KartenFilter>('alle')
   const [dichte, setDichte] = useState<Dichte>('normal')
   const notify = useSnackbar()
@@ -532,6 +552,17 @@ export function BoardView({
   const visibleCardIds = new Set(sichtbareKarten.map((c) => c.id))
   const effectiveSelectedIds = new Set([...selectedIds].filter((id) => visibleCardIds.has(id)))
 
+  // Label-Massenaktion (#994): Zustand je Board-Label über dieselbe wirksame Auswahl wie jede
+  // andere Massenaktion — so kann ein Klick keine Karte treffen, die der Filter gerade verdeckt.
+  const gewaehlteKarten = sichtbareKarten.filter((c) => effectiveSelectedIds.has(c.id))
+  const labelOptions: LabelOption[] = boardLabels.map((label) => ({
+    label,
+    zustand: labelZustand(
+      gewaehlteKarten.filter((c) => c.labels.includes(label.id)).length,
+      gewaehlteKarten.length,
+    ),
+  }))
+
   const changeEpicFilter = (value: number | null) => {
     setEpicFilter(value)
     try {
@@ -692,6 +723,35 @@ export function BoardView({
     } catch (e) {
       setCards(previous)
       notify(apiErrorMessage(e, 'In den Papierkorb verschieben fehlgeschlagen.'), 'error')
+    }
+  }
+
+  /**
+   * Setzt ein Label an der Auswahl oder nimmt es ihr ab. Die Auswahl bleibt in beiden Ausgängen
+   * bestehen — das Menü bleibt offen, damit mehrere Labels in einem Zug gehen.
+   */
+  const applyBulkLabel = async (labelId: number, action: LabelAction) => {
+    // Doppelklickschutz: Ein zweiter Klick vor der Antwort schickte denselben Batch erneut los,
+    // denn der Zustand im Menü zeigt bis dahin noch den alten Stand.
+    if (labelBusy) return
+    setLabelBusy(true)
+    try {
+      const geaendert = await api.bulkLabels([...effectiveSelectedIds], labelId, action)
+      // Nur die Labels aus der Antwort übernehmen: Sie ist eine Einzelkarten-Sicht (Volltext in
+      // `description`, `excerpt` leer), die Board-Liste genau umgekehrt (#771). Die ganze Karte zu
+      // ersetzen mischte beide Antwortformen in einen Zustand.
+      const labelsJeKarte = new Map(geaendert.map((c) => [c.id, c.labels]))
+      setCards((current) =>
+        current.map((c) => {
+          const labels = labelsJeKarte.get(c.id)
+          return labels === undefined ? c : { ...c, labels }
+        }),
+      )
+      onCardsChanged?.()
+    } catch (e) {
+      notify(apiErrorMessage(e, 'Labels setzen fehlgeschlagen.'), 'error')
+    } finally {
+      setLabelBusy(false)
     }
   }
 
@@ -1328,6 +1388,9 @@ export function BoardView({
         <BulkActionBar
           count={effectiveSelectedIds.size}
           canMove={canTransfer}
+          labelOptions={labelOptions}
+          labelsDisabledReason={labelSperrgrund(gewaehlteKarten, boardLabels)}
+          onToggleLabel={(labelId, action) => void applyBulkLabel(labelId, action)}
           onArchive={() => setBulkArchiveConfirm(true)}
           onMove={() => setBulkTransferOpen(true)}
           onDelete={() => setDeleteConfirm([...effectiveSelectedIds])}

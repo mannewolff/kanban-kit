@@ -15,6 +15,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.board.application.BoardNotFoundException;
 import org.mwolff.manban.board.application.BoardService;
@@ -876,6 +877,53 @@ public class CardService {
     assignValidatedLabels(cardId, card.requireBoardId(), labelIds);
     publishChanged(card.requireBoardId(), ActivityType.UPDATED, cardId);
     return view(card);
+  }
+
+  /**
+   * Setzt <b>ein</b> Label an mehreren Karten oder nimmt es ihnen ab — in einer Transaktion
+   * (alles-oder-nichts). Je Karte gelten dieselben Prüfungen wie bei {@link #setLabels}; scheitert
+   * eine, rollt der ganze Batch zurück.
+   *
+   * <p><b>Warum hinzufügen/abnehmen statt ersetzen:</b> Die Auswahl trägt in aller Regel
+   * unterschiedliche Labels. Eine ersetzende Massenaktion löschte die übrigen still mit — der
+   * Nutzer sähe nur das gesetzte Label und nicht, was dafür verschwunden ist (Issue #994).
+   *
+   * <p>Eine Karte, die das Label schon trägt (bzw. schon nicht trägt), bleibt unverändert und ist
+   * kein Fehler: Die Massenaktion beschreibt einen Zielzustand, keinen Umschalter je Karte.
+   */
+  @Transactional
+  public List<CardView> bulkLabels(
+      long userId, List<Long> cardIds, long labelId, LabelAction action) {
+    return cardIds.stream().map(cardId -> doLabel(userId, cardId, labelId, action)).toList();
+  }
+
+  private CardView doLabel(long userId, long cardId, long labelId, LabelAction action) {
+    Card card = cards.findById(cardId).orElseThrow(CardNotFoundException::new);
+    if (card.type() != CardType.CARD) {
+      throw new InvalidDependencyException("Nur Karten haben Labels");
+    }
+    permissions.require(userId, card.projectId(), Permission.TICKET_UPDATE);
+
+    long boardId = card.requireBoardId();
+    // Auch beim Abnehmen geprüft: Ein fremdes Label ist an keiner Karte gesetzt, der Aufruf ginge
+    // sonst als stiller Nicht-Treffer durch und meldete Erfolg für etwas, das setLabels abwiese.
+    requireBoardLabel(boardId, labelId);
+    List<Long> current = cardLabels.findByCardId(cardId);
+    List<Long> next =
+        action == LabelAction.ADD
+            ? Stream.concat(current.stream(), Stream.of(labelId)).distinct().toList()
+            : current.stream().filter(id -> id.longValue() != labelId).toList();
+    assignValidatedLabels(cardId, boardId, next);
+    publishChanged(boardId, ActivityType.UPDATED, cardId);
+    return view(card);
+  }
+
+  private void requireBoardLabel(long boardId, long labelId) {
+    List<Long> boardLabelIds =
+        labels.findByBoardId(boardId).stream().map(Label::requireId).toList();
+    if (!boardLabelIds.contains(labelId)) {
+      throw new InvalidLabelException("Kein Label dieses Boards: " + labelId);
+    }
   }
 
   /**

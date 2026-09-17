@@ -219,6 +219,22 @@ describe('cardsApi', () => {
     expect(JSON.parse(String(c.body))).toEqual({ cardIds: [1, 2] })
   })
 
+  it('bulkLabels ruft POST /api/cards/bulk-labels mit IDs, Label und Richtung', async () => {
+    const f = spyFetch(JSON.stringify([card]))
+    const result = await cardsApi.bulkLabels([1, 2], 7, 'ADD')
+    const c = lastCall(f)
+    expect(c.url).toBe('/api/cards/bulk-labels')
+    expect(c.method).toBe('POST')
+    expect(JSON.parse(String(c.body))).toEqual({ cardIds: [1, 2], labelId: 7, action: 'ADD' })
+    expect(result).toEqual([card])
+  })
+
+  it('bulkLabels reicht REMOVE unverändert durch', async () => {
+    const f = spyFetch(JSON.stringify([]))
+    await cardsApi.bulkLabels([1], 7, 'REMOVE')
+    expect(JSON.parse(String(lastCall(f).body))).toEqual({ cardIds: [1], labelId: 7, action: 'REMOVE' })
+  })
+
   it('restore ruft POST /api/cards/{id}/restore', async () => {
     const f = spyFetch()
     await cardsApi.restore(1)

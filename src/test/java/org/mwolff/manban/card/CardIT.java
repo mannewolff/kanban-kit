@@ -414,6 +414,160 @@ class CardIT extends AbstractIntegrationTest {
         .andExpect(status().isBadRequest());
   }
 
+  private long createLabel(Cookie session, long boardId, String name) throws Exception {
+    String body =
+        mvc.perform(
+                post("/api/boards/" + boardId + "/labels")
+                    .cookie(session)
+                    .contentType("application/json")
+                    .content("{\"name\":\"%s\",\"color\":\"#ff0000\"}".formatted(name)))
+            .andExpect(status().isCreated())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+    return json.readTree(body).get("id").asLong();
+  }
+
+  private String bulkLabelsBody(long labelId, String action, long... cardIds) {
+    String ids =
+        java.util.Arrays.stream(cardIds)
+            .mapToObj(Long::toString)
+            .collect(java.util.stream.Collectors.joining(","));
+    return "{\"cardIds\":[%s],\"labelId\":%d,\"action\":\"%s\"}".formatted(ids, labelId, action);
+  }
+
+  @Test
+  void bulkLabelsAddsAndRemovesAcrossTheSelection() throws Exception {
+    Cookie alice = loginAs("bulk-lbl-owner@example.com");
+    long projectId = createProject("bulk-lbl-owner@example.com", "BulkLbl");
+    JsonNode board = createBoard(alice, projectId);
+    long boardId = board.get("id").asLong();
+    long columnId = board.get("columns").get(0).get("id").asLong();
+    long c1 = createCard(alice, boardId, columnId, "Eins", null).get("id").asLong();
+    long c2 = createCard(alice, boardId, columnId, "Zwei", null).get("id").asLong();
+    long bug = createLabel(alice, boardId, "Bug");
+    long nacht = createLabel(alice, boardId, "Nacht");
+
+    // Vorbelegung: nur die erste Karte trägt „Bug".
+    mvc.perform(
+            post("/api/cards/bulk-labels")
+                .cookie(alice)
+                .contentType("application/json")
+                .content(bulkLabelsBody(bug, "ADD", c1)))
+        .andExpect(status().isOk());
+
+    mvc.perform(
+            post("/api/cards/bulk-labels")
+                .cookie(alice)
+                .contentType("application/json")
+                .content(bulkLabelsBody(nacht, "ADD", c1, c2)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.length()").value(2));
+
+    // Beide tragen „Nacht"; das fremde „Bug" der ersten Karte bleibt unberührt.
+    mvc.perform(get("/api/cards/" + c1).cookie(alice))
+        .andExpect(jsonPath("$.labels.length()").value(2));
+    mvc.perform(get("/api/cards/" + c2).cookie(alice))
+        .andExpect(jsonPath("$.labels.length()").value(1))
+        .andExpect(jsonPath("$.labels[0]").value(nacht));
+
+    // Abnehmen trifft beide und lässt „Bug" stehen — auch an der Karte, die „Nacht" schon verloren
+    // hat, ist ein zweiter Durchlauf kein Fehler.
+    mvc.perform(
+            post("/api/cards/bulk-labels")
+                .cookie(alice)
+                .contentType("application/json")
+                .content(bulkLabelsBody(nacht, "REMOVE", c1, c2)))
+        .andExpect(status().isOk());
+
+    mvc.perform(get("/api/cards/" + c1).cookie(alice))
+        .andExpect(jsonPath("$.labels.length()").value(1))
+        .andExpect(jsonPath("$.labels[0]").value(bug));
+    mvc.perform(get("/api/cards/" + c2).cookie(alice))
+        .andExpect(jsonPath("$.labels.length()").value(0));
+  }
+
+  @Test
+  void bulkLabelsRollsBackWhenSelectionContainsEpic() throws Exception {
+    Cookie alice = loginAs("bulk-lbl-epic@example.com");
+    long projectId = createProject("bulk-lbl-epic@example.com", "BulkLblEpic");
+    JsonNode board = createBoard(alice, projectId);
+    long boardId = board.get("id").asLong();
+    long columnId = board.get("columns").get(0).get("id").asLong();
+    long c1 = createCard(alice, boardId, columnId, "Eins", null).get("id").asLong();
+    long epicId = createEpic(alice, boardId, "EP");
+    long nacht = createLabel(alice, boardId, "Nacht");
+
+    // Die Karte steht vorn: Ohne Rollback trüge sie das Label, obwohl der Aufruf scheitert.
+    mvc.perform(
+            post("/api/cards/bulk-labels")
+                .cookie(alice)
+                .contentType("application/json")
+                .content(bulkLabelsBody(nacht, "ADD", c1, epicId)))
+        .andExpect(status().isBadRequest());
+
+    mvc.perform(get("/api/cards/" + c1).cookie(alice))
+        .andExpect(jsonPath("$.labels.length()").value(0));
+  }
+
+  @Test
+  void bulkLabelsRollsBackWhenPermissionMissingOnOneCard() throws Exception {
+    Cookie alice = loginAs("bulk-lbl-rb-owner@example.com");
+    Cookie bob = loginAs("bulk-lbl-rb-bob@example.com");
+    long p1 = createProject("bulk-lbl-rb-owner@example.com", "BulkLblRb1");
+    long p2 = createProject("bulk-lbl-rb-bob@example.com", "BulkLblRb2");
+    JsonNode boardA = createBoard(alice, p1);
+    JsonNode boardB = createBoard(bob, p2);
+    long boardIdA = boardA.get("id").asLong();
+    long colA = boardA.get("columns").get(0).get("id").asLong();
+    long boardIdB = boardB.get("id").asLong();
+    long colB = boardB.get("columns").get(0).get("id").asLong();
+    long ownCard = createCard(alice, boardIdA, colA, "Meine", null).get("id").asLong();
+    long foreignCard = createCard(bob, boardIdB, colB, "Fremde", null).get("id").asLong();
+    long nacht = createLabel(alice, boardIdA, "Nacht");
+    // alice ist in bobs Projekt nur VIEWER -> kein TICKET_UPDATE.
+    memberships.save(
+        new ProjectMembership(
+            null, p2, userId("bulk-lbl-rb-owner@example.com"), ProjectRole.VIEWER, Instant.now()));
+
+    mvc.perform(
+            post("/api/cards/bulk-labels")
+                .cookie(alice)
+                .contentType("application/json")
+                .content(bulkLabelsBody(nacht, "ADD", ownCard, foreignCard)))
+        .andExpect(status().isForbidden());
+
+    // Rollback: alices eigene Karte hat das Label nicht bekommen.
+    mvc.perform(get("/api/cards/" + ownCard).cookie(alice))
+        .andExpect(jsonPath("$.labels.length()").value(0));
+  }
+
+  @Test
+  void bulkLabelsRejectsEmptySelectionAndMissingFields() throws Exception {
+    Cookie alice = loginAs("bulk-lbl-val@example.com");
+
+    mvc.perform(
+            post("/api/cards/bulk-labels")
+                .cookie(alice)
+                .contentType("application/json")
+                .content("{\"cardIds\":[],\"labelId\":1,\"action\":\"ADD\"}"))
+        .andExpect(status().isBadRequest());
+
+    mvc.perform(
+            post("/api/cards/bulk-labels")
+                .cookie(alice)
+                .contentType("application/json")
+                .content("{\"cardIds\":[1],\"action\":\"ADD\"}"))
+        .andExpect(status().isBadRequest());
+
+    mvc.perform(
+            post("/api/cards/bulk-labels")
+                .cookie(alice)
+                .contentType("application/json")
+                .content("{\"cardIds\":[1],\"labelId\":1}"))
+        .andExpect(status().isBadRequest());
+  }
+
   @Test
   void bulkTransferMovesEveryCardToTargetForOwner() throws Exception {
     Cookie alice = loginAs("bulk-xfer-owner@example.com");
