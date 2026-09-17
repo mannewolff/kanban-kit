@@ -20,10 +20,12 @@ import org.mwolff.manban.card.application.EpicRef;
 import org.mwolff.manban.nightrun.application.NightRunUsageRepository.CardTotals;
 import org.mwolff.manban.nightrun.application.NightRunUsageRepository.NightTotals;
 import org.mwolff.manban.nightrun.application.NightRunUsageRepository.PeriodTotals;
+import org.mwolff.manban.nightrun.application.NightRunUsageRepository.TotalsByKind;
 import org.mwolff.manban.nightrun.domain.NightRunErrorClass;
 import org.mwolff.manban.nightrun.domain.NightRunPeriod;
 import org.mwolff.manban.nightrun.domain.NightRunPeriodType;
 import org.mwolff.manban.nightrun.domain.NightRunUsage;
+import org.mwolff.manban.project.application.InteractiveUsageSinceReader;
 import org.mwolff.manban.project.application.PermissionChecker;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -63,16 +65,19 @@ public class NightRunUsageService {
   private final NightRunUsageRepository usage;
   private final CardService cards;
   private final PermissionChecker permissions;
+  private final InteractiveUsageSinceReader erfassungsbeginn;
   private final Clock clock;
 
   public NightRunUsageService(
       NightRunUsageRepository usage,
       CardService cards,
       PermissionChecker permissions,
+      InteractiveUsageSinceReader erfassungsbeginn,
       Clock clock) {
     this.usage = usage;
     this.cards = cards;
     this.permissions = permissions;
+    this.erfassungsbeginn = erfassungsbeginn;
     this.clock = clock;
   }
 
@@ -92,7 +97,8 @@ public class NightRunUsageService {
         summe.runCount(),
         summe.durationMs(),
         summe.cardCount(),
-        aufteilung(summe),
+        teilen(summe.runUsage(), summe.itemUsage()),
+        jeGattung(summe.byKind()),
         tagesgruppen.stream().anyMatch(NightRunUsageService::abgebrochen),
         usage.totalsPerCard(projectId, spanne.from(), spanne.to()));
   }
@@ -107,6 +113,7 @@ public class NightRunUsageService {
     permissions.requireOwner(userId, projectId);
     NightRunPeriod zeitraum = NightRunPeriod.of(type, zone, clock, stepsBack);
     Optional<Instant> aeltester = usage.oldestRetainedRunStart(projectId);
+    Instant seit = erfassungsbeginn.interactiveUsageSince(projectId).orElse(null);
 
     List<NightSummary> naechte =
         usage.totalsPerNight(projectId, zeitraum.from(), zeitraum.to(), zone).stream()
@@ -116,8 +123,8 @@ public class NightRunUsageService {
                         n.night(),
                         n.runCount(),
                         n.cardCount(),
-                        new UsageSplit(
-                            n.runUsage(), n.itemUsage(), n.runUsage().minus(n.itemUsage())),
+                        teilen(n.runUsage(), n.itemUsage()),
+                        jeGattung(n.byKind()),
                         abgebrochen(n)))
             .toList();
 
@@ -126,8 +133,8 @@ public class NightRunUsageService {
         cards.epicsByCardNumber(projectId, karten.stream().map(CardTotals::cardNumber).toList());
 
     return new PeriodUsageView(
-        kennzahlen(projectId, zeitraum, aeltester),
-        kennzahlen(projectId, zeitraum.previous(), aeltester),
+        kennzahlen(projectId, zeitraum, aeltester, seit),
+        kennzahlen(projectId, zeitraum.previous(), aeltester, seit),
         naechte,
         vorhaben(karten, zuordnung),
         ohneVorhaben(karten, zuordnung),
@@ -135,7 +142,10 @@ public class NightRunUsageService {
   }
 
   private PeriodFigures kennzahlen(
-      long projectId, NightRunPeriod zeitraum, Optional<Instant> aeltester) {
+      long projectId,
+      NightRunPeriod zeitraum,
+      Optional<Instant> aeltester,
+      @Nullable Instant seit) {
     PeriodTotals summe = usage.totals(projectId, zeitraum.from(), zeitraum.to());
     return new PeriodFigures(
         zeitraum,
@@ -143,7 +153,9 @@ public class NightRunUsageService {
         summe.runCount(),
         summe.durationMs(),
         summe.cardCount(),
-        aufteilung(summe));
+        teilen(summe.runUsage(), summe.itemUsage()),
+        jeGattung(summe.byKind()),
+        seit);
   }
 
   /**
@@ -158,9 +170,20 @@ public class NightRunUsageService {
     return zeitraum.to().isAfter(aeltester.get()) ? Coverage.PARTIAL : Coverage.BEFORE_RETENTION;
   }
 
-  private static UsageSplit aufteilung(PeriodTotals summe) {
-    return new UsageSplit(
-        summe.runUsage(), summe.itemUsage(), summe.runUsage().minus(summe.itemUsage()));
+  /**
+   * Dieselbe Rechnung noch einmal, jede Gattung für sich (Issue #1013, #984 AK 3): Der Rest einer
+   * Gattung ist die Differenz aus <b>ihrer</b> Lauf-Summe und <b>ihrer</b> Paket-Summe — nie aus
+   * den Paketen gerechnet und nie aus dem Gesamtrest verteilt.
+   */
+  private static KindSplit jeGattung(TotalsByKind summe) {
+    return new KindSplit(
+        teilen(summe.night().runUsage(), summe.night().itemUsage()),
+        teilen(summe.interactive().runUsage(), summe.interactive().itemUsage()));
+  }
+
+  /** Die Rechnung aus Plan E6: Der Rest ist die Differenz, nie aus den Paketen gerechnet. */
+  private static UsageSplit teilen(NightRunUsage lauf, NightRunUsage pakete) {
+    return new UsageSplit(lauf, pakete, lauf.minus(pakete));
   }
 
   private static boolean abgebrochen(NightTotals nacht) {
@@ -226,6 +249,15 @@ public class NightRunUsageService {
    */
   public record UsageSplit(NightRunUsage total, NightRunUsage cardShare, NightRunUsage remainder) {}
 
+  /**
+   * Dieselbe Teilung je Gattung (Issue #1013, #984 AK 1): daneben, nicht anstelle der Gesamtzahlen.
+   * Die Gesamtsumme bleibt, was sie war, und ist genau die Addition der beiden Anteile (AK 5).
+   *
+   * @param night Anteil der Nachtläufe
+   * @param interactive Anteil der interaktiven Sitzungen
+   */
+  public record KindSplit(UsageSplit night, UsageSplit interactive) {}
+
   /** Eine Nacht mit ihren Kartenzeilen (#926 AK 1–4). */
   public record NightUsageView(
       LocalDate night,
@@ -233,19 +265,29 @@ public class NightRunUsageService {
       long durationMs,
       long cardCount,
       UsageSplit usage,
+      KindSplit usageByKind,
       boolean aborted,
       List<CardTotals> cards) {}
 
-  /** Die Kennzahlen eines Zeitraums. */
+  /**
+   * Die Kennzahlen eines Zeitraums.
+   *
+   * @param interactiveUsageSince Startzeitpunkt der ersten je gemeldeten interaktiven Sitzung des
+   *     Projekts; {@code null}, solange keine gemeldet wurde (Plan E18). Daran unterscheidet die
+   *     Anzeige „nicht erfasst" von „teilweise erfasst" — die Klassifikation selbst entsteht im
+   *     Frontend, hier steht nur der Zeitpunkt.
+   */
   public record PeriodFigures(
       NightRunPeriod period,
       Coverage coverage,
       long runCount,
       long durationMs,
       long cardCount,
-      UsageSplit usage) {
+      UsageSplit usage,
+      KindSplit usageByKind,
+      @Nullable Instant interactiveUsageSince) {
 
-    /** Kein Lauf in diesem Zeitraum (#926 AK 9) — unabhängig von der Abdeckung. */
+    /** Kein Eintrag in diesem Zeitraum (#926 AK 9) — unabhängig von der Abdeckung. */
     public boolean noRuns() {
       return runCount == 0;
     }
@@ -253,7 +295,12 @@ public class NightRunUsageService {
 
   /** Eine Nacht innerhalb eines Zeitraums, von der aus die Nachtansicht erreichbar ist (AK 8). */
   public record NightSummary(
-      LocalDate night, long runCount, long cardCount, UsageSplit usage, boolean aborted) {}
+      LocalDate night,
+      long runCount,
+      long cardCount,
+      UsageSplit usage,
+      KindSplit usageByKind,
+      boolean aborted) {}
 
   /**
    * Ein Vorhaben mit seinen Kartensummen.

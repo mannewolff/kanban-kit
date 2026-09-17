@@ -282,6 +282,7 @@ class ArchitectureTest {
           "ProjectService",
           "NextCardNumberWriter",
           "InteractiveUsageSinceWriter",
+          "InteractiveUsageSinceReader",
           "ProjectCreatedEvent",
           "ProjectAccessDeniedException");
 
@@ -390,7 +391,10 @@ class ArchitectureTest {
   // den Erfassungsbeginn am Projekt-Aggregat. Die Autorisierung liegt beim Aufrufer —
   // NightRunService
   // .ingest prueft requireOwner als erste Anweisung, wie jeder Nachtlauf-Use-Case (Plan #718, A6).
-  static final ArchRule INTERACTIVE_USAGE_SINCE_WRITER_HAT_AUFRUFER_WHITELIST =
+  // Seit Issue #1013 gilt dieselbe Grenze fuer den Lese-Port derselben Spalte: Die Verbrauchs-
+  // Auswertung gibt den Zeitpunkt mit, nachdem NightRunUsageService.period requireOwner geprueft
+  // hat.
+  static final ArchRule INTERACTIVE_USAGE_SINCE_PORTS_HABEN_AUFRUFER_WHITELIST =
       noClasses()
           .that()
           .resideOutsideOfPackages(
@@ -398,10 +402,11 @@ class ArchitectureTest {
           .should()
           .dependOnClassesThat()
           .haveNameMatching(
-              "org\\.mwolff\\.manban\\.project\\.application\\.InteractiveUsageSinceWriter")
+              "org\\.mwolff\\.manban\\.project\\.application\\.InteractiveUsageSince"
+                  + "(Writer|Reader)")
           .as(
-              "InteractiveUsageSinceWriter prueft keine Rechte: Aufrufer nur nightrun.application "
-                  + "(NightRunService.ingest, requireOwner)");
+              "InteractiveUsageSince-Ports pruefen keine Rechte: Aufrufer nur nightrun.application "
+                  + "(NightRunService.ingest und NightRunUsageService.period, je requireOwner)");
 
   // --- Composition-Root: verdrahten ja, Datenzugriff nein (Issue #470) ------------------------
   // org.mwolff.manban.config ist der einzige Ort im Projekt, der aus BOARD_CHANGED_EVENT_IST_
@@ -599,8 +604,8 @@ class ArchitectureTest {
   }
 
   @Test
-  void interactiveUsageSinceWriterHatAufruferWhitelist() {
-    INTERACTIVE_USAGE_SINCE_WRITER_HAT_AUFRUFER_WHITELIST.check(PRODUKTIONSKLASSEN);
+  void interactiveUsageSincePortsHabenAufruferWhitelist() {
+    INTERACTIVE_USAGE_SINCE_PORTS_HABEN_AUFRUFER_WHITELIST.check(PRODUKTIONSKLASSEN);
   }
 
   @Test

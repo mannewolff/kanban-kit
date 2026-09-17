@@ -1,12 +1,15 @@
 package org.mwolff.manban.project.application;
 
 import java.time.Instant;
+import java.util.Optional;
+import org.mwolff.manban.project.domain.Project;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Implementierung des rechteprüfungsfreien Schreib-Ports {@link InteractiveUsageSinceWriter} (Issue
- * #1012).
+ * Implementierung der rechteprüfungsfreien Ports {@link InteractiveUsageSinceWriter} (Issue #1012)
+ * und {@link InteractiveUsageSinceReader} (Issue #1013) — beide auf derselben Spalte, deshalb hier
+ * zusammen.
  *
  * <p>Bewusst eine eigene, <em>package-private</em> Klasse statt einer Methode auf {@link
  * ProjectService} — dieselbe Begründung wie bei {@link ProjectNumberingService}: Auf der
@@ -16,7 +19,8 @@ import org.springframework.transaction.annotation.Transactional;
  * dessen Aufruferkreis {@code ArchitectureTest} begrenzt.
  */
 @Service
-class ProjectInteractiveUsageService implements InteractiveUsageSinceWriter {
+class ProjectInteractiveUsageService
+    implements InteractiveUsageSinceWriter, InteractiveUsageSinceReader {
 
   private final ProjectRepository projects;
 
@@ -28,5 +32,11 @@ class ProjectInteractiveUsageService implements InteractiveUsageSinceWriter {
   @Transactional
   public void setInteractiveUsageSinceIfAbsent(long projectId, Instant startedAt) {
     projects.setInteractiveUsageSinceIfAbsent(projectId, startedAt);
+  }
+
+  @Override
+  @Transactional(readOnly = true)
+  public Optional<Instant> interactiveUsageSince(long projectId) {
+    return projects.findById(projectId).map(Project::interactiveUsageSince);
   }
 }

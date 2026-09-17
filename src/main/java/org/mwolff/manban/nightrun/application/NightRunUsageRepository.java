@@ -24,6 +24,12 @@ import org.mwolff.manban.nightrun.domain.NightRunUsage;
  *
  * <p>Fehlende Verbrauchsangaben bleiben fehlend: Eine Summe über lauter {@code NULL} ist {@code
  * NULL} und wird nie 0 (Plan E5).
+ *
+ * <p><b>Getrennt nach Gattung</b> (Issue #1013, Plan #1007): Läufe und interaktive Sitzungen liegen
+ * in derselben Tabelle, unterschieden durch {@code kind}. Die Aggregate liefern deshalb je Gattung
+ * einen eigenen Satz Summen; die Gesamtsumme entsteht daraus durch Addition und ist damit per
+ * Konstruktion <b>genau</b> die Summe der beiden Anteile (#984 AK 5) — nicht eine zweite,
+ * unabhängig gerechnete Zahl, die davon abweichen könnte.
  */
 public interface NightRunUsageRepository {
 
@@ -34,7 +40,10 @@ public interface NightRunUsageRepository {
    */
   List<NightTotals> totalsPerNight(long projectId, Instant from, Instant to, ZoneId zone);
 
-  /** Die Summen je Kartennummer über alle Anläufe in der Spanne, aufsteigend nach Nummer. */
+  /**
+   * Die Summen je Kartennummer über alle Anläufe in der Spanne, aufsteigend nach Nummer — der
+   * Verbrauch je Gattung getrennt (Issue #1013).
+   */
   List<CardTotals> totalsPerCard(long projectId, Instant from, Instant to);
 
   /**
@@ -49,50 +58,117 @@ public interface NightRunUsageRepository {
   Optional<Instant> oldestRetainedRunStart(long projectId);
 
   /**
+   * Die Summen einer einzelnen Gattung (Issue #1013).
+   *
+   * @param runCount Zahl der Einträge dieser Gattung — Läufe bzw. Sitzungen
+   * @param runUsage Summe der gemeldeten Verbräuche der Einträge
+   * @param itemUsage Summe der Verbräuche ihrer Arbeitspakete
+   */
+  record KindTotals(long runCount, NightRunUsage runUsage, NightRunUsage itemUsage) {}
+
+  /**
+   * Beide Gattungen nebeneinander. Die Gesamtwerte sind hier abgeleitet und nicht gespeichert:
+   * Damit <b>ist</b> die Summe die Addition der beiden Anteile (#984 AK 5), statt es nur zu sein,
+   * solange zwei getrennte Rechnungen übereinstimmen.
+   *
+   * @param night Anteil der Nachtläufe
+   * @param interactive Anteil der interaktiven Sitzungen
+   */
+  record TotalsByKind(KindTotals night, KindTotals interactive) {
+
+    /** Zahl aller Einträge — Läufe <b>und</b> Sitzungen. */
+    public long runCount() {
+      return night.runCount() + interactive.runCount();
+    }
+
+    /** Summe der gemeldeten Verbräuche über beide Gattungen. */
+    public NightRunUsage runUsage() {
+      return night.runUsage().plus(interactive.runUsage());
+    }
+
+    /** Summe der Verbräuche der Arbeitspakete über beide Gattungen. */
+    public NightRunUsage itemUsage() {
+      return night.itemUsage().plus(interactive.itemUsage());
+    }
+  }
+
+  /**
    * Eine Nacht als Tagesgruppe.
    *
    * @param night Datum, an dem die Nacht beginnt
-   * @param runCount Zahl der Läufe dieser Nacht
-   * @param durationMs Summe der Laufdauern
-   * @param cardCount Zahl der verschiedenen Kartennummern über alle Läufe — mehrere Anläufe an
+   * @param durationMs Summe der Laufdauern über beide Gattungen
+   * @param cardCount Zahl der verschiedenen Kartennummern über alle Einträge — mehrere Anläufe an
    *     derselben Karte zählen als eine
-   * @param runUsage Summe der gemeldeten Lauf-Verbräuche
-   * @param itemUsage Summe der Verbräuche der Arbeitspakete
+   * @param byKind die Summen je Gattung; Gesamtwerte entstehen daraus
    * @param errorClasses die in dieser Nacht vorkommenden Fehlerklassen
    */
   record NightTotals(
       LocalDate night,
-      long runCount,
       long durationMs,
       long cardCount,
-      NightRunUsage runUsage,
-      NightRunUsage itemUsage,
-      Set<NightRunErrorClass> errorClasses) {}
+      TotalsByKind byKind,
+      Set<NightRunErrorClass> errorClasses) {
+
+    /** Zahl der Einträge dieser Nacht — Läufe und Sitzungen. */
+    public long runCount() {
+      return byKind.runCount();
+    }
+
+    /** Summe der gemeldeten Verbräuche dieser Nacht. */
+    public NightRunUsage runUsage() {
+      return byKind.runUsage();
+    }
+
+    /** Summe der Verbräuche der Arbeitspakete dieser Nacht. */
+    public NightRunUsage itemUsage() {
+      return byKind.itemUsage();
+    }
+  }
 
   /**
    * Eine Kartennummer mit ihren Anläufen in der Spanne.
    *
    * @param cardNumber projektweite Kartennummer
-   * @param attemptCount Zahl der Anläufe
+   * @param attemptCount Zahl der Anläufe über beide Gattungen
    * @param durationMs Summe der Dauern; {@code null}, wenn kein Anlauf eine Dauer trägt
-   * @param usage Summe der Verbräuche
+   * @param nightUsage Summe der Verbräuche aus Nachtläufen
+   * @param interactiveUsage Summe der Verbräuche aus interaktiven Sitzungen
    */
   record CardTotals(
-      int cardNumber, long attemptCount, @Nullable Long durationMs, NightRunUsage usage) {}
+      int cardNumber,
+      long attemptCount,
+      @Nullable Long durationMs,
+      NightRunUsage nightUsage,
+      NightRunUsage interactiveUsage) {
+
+    /** Summe über beide Gattungen. */
+    public NightRunUsage usage() {
+      return nightUsage.plus(interactiveUsage);
+    }
+  }
 
   /**
    * Die Gesamtsummen einer Spanne.
    *
-   * @param runCount Zahl der Läufe
-   * @param durationMs Summe der Laufdauern; 0 ohne Lauf — eine Dauer ist immer gemessen
+   * @param durationMs Summe der Laufdauern; 0 ohne Eintrag — eine Dauer ist immer gemessen
    * @param cardCount Zahl der verschiedenen Kartennummern
-   * @param runUsage Summe der gemeldeten Lauf-Verbräuche
-   * @param itemUsage Summe der Verbräuche der Arbeitspakete
+   * @param byKind die Summen je Gattung; Gesamtwerte entstehen daraus
    */
-  record PeriodTotals(
-      long runCount,
-      long durationMs,
-      long cardCount,
-      NightRunUsage runUsage,
-      NightRunUsage itemUsage) {}
+  record PeriodTotals(long durationMs, long cardCount, TotalsByKind byKind) {
+
+    /** Zahl der Einträge der Spanne — Läufe und Sitzungen. */
+    public long runCount() {
+      return byKind.runCount();
+    }
+
+    /** Summe der gemeldeten Verbräuche der Spanne. */
+    public NightRunUsage runUsage() {
+      return byKind.runUsage();
+    }
+
+    /** Summe der Verbräuche der Arbeitspakete der Spanne. */
+    public NightRunUsage itemUsage() {
+      return byKind.itemUsage();
+    }
+  }
 }

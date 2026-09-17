@@ -8,6 +8,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -85,13 +86,27 @@ class NightRunUsageServiceIT extends AbstractIntegrationTest {
   }
 
   private void lauf(Instant startedAt, NightRunMode mode, String kosten, NightRunItem... pakete) {
+    eintrag(startedAt, mode, NightRunKind.NIGHT, kosten, pakete);
+  }
+
+  /** Eine interaktive Sitzung (Issue #1013); ihre Pakete erben die Gattung aus dem Lauf. */
+  private void sitzung(Instant startedAt, String kosten, NightRunItem... pakete) {
+    eintrag(startedAt, NightRunMode.INTERACTIVE, NightRunKind.INTERACTIVE, kosten, pakete);
+  }
+
+  private void eintrag(
+      Instant startedAt,
+      NightRunMode mode,
+      NightRunKind kind,
+      String kosten,
+      NightRunItem... pakete) {
     runs.insertIfAbsent(
         new NightRun(
             null,
             projectId,
             startedAt,
             mode,
-            NightRunKind.NIGHT,
+            kind,
             1_000L,
             pakete.length,
             0,
@@ -166,6 +181,63 @@ class NightRunUsageServiceIT extends AbstractIntegrationTest {
     assertThat(auswertung.withoutEpic().cardCount()).isEqualTo(2L);
     assertThat(auswertung.withoutEpic().usage().costUsd()).isEqualByComparingTo("7");
     assertThat(auswertung.current().usage().total().costUsd()).isEqualByComparingTo("9");
+  }
+
+  /**
+   * Über die ganze Kette — SQL, Service, Gattungen: Die Gesamtsumme ist genau die Addition beider
+   * Anteile, und kein Eintrag steht in beiden (Issue #1013, #984 AK 5).
+   */
+  @Test
+  void nachtlaeufeUndSitzungenStehenGetrennt_undDieSummeIstIhreAddition() {
+    lauf(
+        Instant.parse("2026-09-15T21:10:00Z"),
+        NightRunMode.IMPLEMENTATION,
+        "6",
+        paket(721, "2"),
+        paket(722, "1"));
+    sitzung(Instant.parse("2026-09-16T01:22:00Z"), "4", paket(721, "3"));
+
+    NightUsageView nacht = service.night(owner, projectId, NACHT_15, BERLIN);
+
+    assertThat(nacht.runCount()).isEqualTo(2L);
+    assertThat(nacht.usageByKind().night().total().costUsd()).isEqualByComparingTo("6");
+    assertThat(nacht.usageByKind().night().cardShare().costUsd()).isEqualByComparingTo("3");
+    assertThat(nacht.usageByKind().night().remainder().costUsd()).isEqualByComparingTo("3");
+    assertThat(nacht.usageByKind().interactive().total().costUsd()).isEqualByComparingTo("4");
+    assertThat(nacht.usageByKind().interactive().cardShare().costUsd()).isEqualByComparingTo("3");
+    assertThat(nacht.usageByKind().interactive().remainder().costUsd()).isEqualByComparingTo("1");
+    assertThat(nacht.usage().total().costUsd()).isEqualByComparingTo("10");
+    assertThat(nacht.cards())
+        .filteredOn(c -> c.cardNumber() == 721)
+        .singleElement()
+        .satisfies(
+            c -> {
+              assertThat(c.nightUsage().costUsd()).isEqualByComparingTo("2");
+              assertThat(c.interactiveUsage().costUsd()).isEqualByComparingTo("3");
+            });
+  }
+
+  /** Der Erfassungsbeginn kommt aus dem Projekt-Aggregat (Issue #1012, Plan E18). */
+  @Test
+  void derErfassungsbeginnDesProjektsKommtMitDenKennzahlen() {
+    Instant seit = Instant.parse("2026-08-14T07:00:00Z");
+    jdbc.update(
+        "UPDATE project SET interactive_usage_since = ? WHERE id = ?",
+        seit.atOffset(ZoneOffset.UTC),
+        projectId);
+
+    PeriodUsageView auswertung =
+        service.period(owner, projectId, NightRunPeriodType.MONTH, 0, BERLIN);
+
+    assertThat(auswertung.current().interactiveUsageSince()).isEqualTo(seit);
+  }
+
+  @Test
+  void ohneGemeldeteSitzungBleibtDerErfassungsbeginnLeer() {
+    PeriodUsageView auswertung =
+        service.period(owner, projectId, NightRunPeriodType.MONTH, 0, BERLIN);
+
+    assertThat(auswertung.current().interactiveUsageSince()).isNull();
   }
 
   @Test

@@ -21,6 +21,7 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.List;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -29,6 +30,7 @@ import org.mwolff.manban.nightrun.application.NightRunUsageRepository.CardTotals
 import org.mwolff.manban.nightrun.application.NightRunUsageService;
 import org.mwolff.manban.nightrun.application.NightRunUsageService.Coverage;
 import org.mwolff.manban.nightrun.application.NightRunUsageService.EpicUsageView;
+import org.mwolff.manban.nightrun.application.NightRunUsageService.KindSplit;
 import org.mwolff.manban.nightrun.application.NightRunUsageService.NightSummary;
 import org.mwolff.manban.nightrun.application.NightRunUsageService.NightUsageView;
 import org.mwolff.manban.nightrun.application.NightRunUsageService.PeriodFigures;
@@ -89,18 +91,23 @@ class NightRunUsageControllerTest {
     SecurityContextHolder.clearContext();
   }
 
+  /** Eine Gattung, die in der Spanne nicht vorkommt. */
+  private static final UsageSplit LEER = new UsageSplit(NICHTS, NICHTS, NICHTS);
+
   private static NightUsageView nacht(NightRunUsage gesamt, NightRunUsage karten) {
+    UsageSplit teilung = new UsageSplit(gesamt, karten, gesamt.minus(karten));
     return new NightUsageView(
         LocalDate.of(2026, 9, 15),
         2L,
         4_000L,
         1L,
-        new UsageSplit(gesamt, karten, gesamt.minus(karten)),
+        teilung,
+        new KindSplit(teilung, LEER),
         true,
-        List.of(new CardTotals(721, 2L, null, karten)));
+        List.of(new CardTotals(721, 2L, null, karten, NICHTS)));
   }
 
-  private static PeriodUsageView zeitraum() {
+  private static PeriodUsageView zeitraum(@Nullable Instant erfassungsbeginn) {
     Clock jetzt = Clock.fixed(Instant.parse("2026-09-16T11:00:00Z"), ZoneOffset.UTC);
     NightRunPeriod monat = NightRunPeriod.of(NightRunPeriodType.MONTH, BERLIN, jetzt, 0);
     UsageSplit teilung =
@@ -108,16 +115,25 @@ class NightRunUsageControllerTest {
             new NightRunUsage(new BigDecimal("9.50"), 1_000L, 100L, 250L),
             new NightRunUsage(new BigDecimal("6.00"), 800L, 80L, 200L),
             new NightRunUsage(new BigDecimal("3.50"), 200L, 20L, 50L));
+    UsageSplit sitzungen =
+        new UsageSplit(
+            new NightRunUsage(new BigDecimal("2.50"), 400L, 40L, 100L),
+            new NightRunUsage(new BigDecimal("1.00"), 300L, 30L, 80L),
+            new NightRunUsage(new BigDecimal("1.50"), 100L, 10L, 20L));
+    KindSplit jeGattung = new KindSplit(teilung, sitzungen);
     return new PeriodUsageView(
-        new PeriodFigures(monat, Coverage.PARTIAL, 5L, 9_000L, 4L, teilung),
+        new PeriodFigures(
+            monat, Coverage.PARTIAL, 5L, 9_000L, 4L, teilung, jeGattung, erfassungsbeginn),
         new PeriodFigures(
             monat.previous(),
             Coverage.BEFORE_RETENTION,
             0L,
             0L,
             0L,
-            new UsageSplit(NICHTS, NICHTS, NICHTS)),
-        List.of(new NightSummary(LocalDate.of(2026, 8, 3), 2L, 1L, teilung, false)),
+            LEER,
+            new KindSplit(LEER, LEER),
+            erfassungsbeginn),
+        List.of(new NightSummary(LocalDate.of(2026, 8, 3), 2L, 1L, teilung, jeGattung, false)),
         List.of(
             new EpicUsageView(
                 new EpicRef(11L, "PLANEN", "Planen"),
@@ -125,6 +141,10 @@ class NightRunUsageControllerTest {
                 new NightRunUsage(new BigDecimal("4.00"), null, null, null))),
         new EpicUsageView(null, 1L, NICHTS),
         true);
+  }
+
+  private static PeriodUsageView zeitraum() {
+    return zeitraum(Instant.parse("2026-08-14T07:00:00Z"));
   }
 
   // --- Nacht -----------------------------------------------------------------------------------
@@ -142,9 +162,12 @@ class NightRunUsageControllerTest {
         .andExpect(jsonPath("$.cardCount").value(1))
         .andExpect(jsonPath("$.aborted").value(true))
         .andExpect(jsonPath("$.usage.total.costUsd").value(10))
+        .andExpect(jsonPath("$.usageByKind.night.total.costUsd").value(10))
+        .andExpect(jsonPath("$.usageByKind.interactive.total.costUsd").value(nullValue()))
         .andExpect(jsonPath("$.cards[0].cardNumber").value(721))
         .andExpect(jsonPath("$.cards[0].attemptCount").value(2))
-        .andExpect(jsonPath("$.cards[0].durationMs").value(nullValue()));
+        .andExpect(jsonPath("$.cards[0].durationMs").value(nullValue()))
+        .andExpect(jsonPath("$.cards[0].usageByKind.interactive.costUsd").value(nullValue()));
   }
 
   /** „Nicht gemessen" steht als {@code null} und nie als 0 (Plan E5). */
@@ -227,6 +250,11 @@ class NightRunUsageControllerTest {
         .andExpect(jsonPath("$.current.cardCount").value(4))
         .andExpect(jsonPath("$.current.usage.remainder.costUsd").value(3.5))
         .andExpect(jsonPath("$.current.usage.total.cachedInputSharePercent").value(25))
+        .andExpect(jsonPath("$.current.usageByKind.night.total.costUsd").value(9.5))
+        .andExpect(jsonPath("$.current.usageByKind.interactive.total.costUsd").value(2.5))
+        .andExpect(jsonPath("$.current.usageByKind.interactive.cardShare.inputTokens").value(300))
+        .andExpect(jsonPath("$.current.usageByKind.interactive.remainder.costUsd").value(1.5))
+        .andExpect(jsonPath("$.current.interactiveUsageSince").value("2026-08-14T07:00:00Z"))
         .andExpect(jsonPath("$.previous.firstDay").value("2026-07-01"))
         .andExpect(jsonPath("$.previous.coverage").value("BEFORE_RETENTION"))
         .andExpect(jsonPath("$.previous.noRuns").value(true))
@@ -235,6 +263,8 @@ class NightRunUsageControllerTest {
         .andExpect(jsonPath("$.nights[0].cardCount").value(1))
         .andExpect(jsonPath("$.nights[0].aborted").value(false))
         .andExpect(jsonPath("$.nights[0].usage.cardShare.costUsd").value(6))
+        .andExpect(jsonPath("$.nights[0].usageByKind.night.cardShare.costUsd").value(6))
+        .andExpect(jsonPath("$.nights[0].usageByKind.interactive.cardShare.costUsd").value(1))
         .andExpect(jsonPath("$.epics[0].epicId").value(11))
         .andExpect(jsonPath("$.epics[0].shortcode").value("PLANEN"))
         .andExpect(jsonPath("$.epics[0].title").value("Planen"))
@@ -246,6 +276,19 @@ class NightRunUsageControllerTest {
         .andExpect(jsonPath("$.withoutEpic.cardCount").value(1))
         .andExpect(jsonPath("$.withoutEpic.usage.costUsd").value(nullValue()))
         .andExpect(jsonPath("$.epicsOverlap").value(true));
+  }
+
+  /** Ohne je gemeldete Sitzung steht der Erfassungsbeginn als {@code null} (Plan E18). */
+  @Test
+  void zeitraum_ohneErfassungsbeginnStehtDortNull() throws Exception {
+    when(service.period(anyLong(), anyLong(), any(), anyInt(), any()))
+        .thenReturn(zeitraum((Instant) null));
+
+    mvc.perform(
+            get(PFAD_ZEITRAUM).param("type", "DAY").param("stepsBack", "0").param("zone", "UTC"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.current.interactiveUsageSince").value(nullValue()))
+        .andExpect(jsonPath("$.previous.interactiveUsageSince").value(nullValue()));
   }
 
   @Test

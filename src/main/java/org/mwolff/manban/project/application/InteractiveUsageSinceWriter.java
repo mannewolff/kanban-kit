@@ -15,9 +15,10 @@ import java.time.Instant;
  * Wer diesen Port ohne vorgelagerte Prüfung aufruft, umgeht die Projekt-Rechtelogik vollständig.
  *
  * <p>Der Aufruferkreis ist deshalb nicht nur dokumentiert, sondern maschinell begrenzt: {@code
- * ArchitectureTest.INTERACTIVE_USAGE_SINCE_WRITER_HAT_AUFRUFER_WHITELIST} lässt ausschließlich
+ * ArchitectureTest.INTERACTIVE_USAGE_SINCE_PORTS_HABEN_AUFRUFER_WHITELIST} lässt ausschließlich
  * {@code project.application} (Port und Implementierung) sowie {@code nightrun.application}
- * (autorisierender Aufrufer) zu.
+ * (autorisierender Aufrufer) zu — für diesen Port und den lesenden {@link
+ * InteractiveUsageSinceReader}.
  */
 @FunctionalInterface
 public interface InteractiveUsageSinceWriter {
