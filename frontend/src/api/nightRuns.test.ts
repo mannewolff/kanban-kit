@@ -85,6 +85,7 @@ describe('nightRunsApi', () => {
         {
           startedAt: '2026-09-02T22:00:00Z',
           mode: 'CHAIN',
+          kind: 'NIGHT',
           state: 'GREEN',
           errorClass: null,
           durationMs: 1000,
@@ -98,5 +99,6 @@ describe('nightRunsApi', () => {
     expect(c.url).toBe('/api/projects/4/night-runs/items?cardNumber=968')
     expect(c.method).toBeUndefined()
     expect(anlaeufe[0].usage).toBeNull()
+    expect(anlaeufe[0].kind).toBe('NIGHT')
   })
 })
