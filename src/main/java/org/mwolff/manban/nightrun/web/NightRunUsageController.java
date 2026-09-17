@@ -18,6 +18,7 @@ import org.mwolff.manban.nightrun.application.NightRunUsageService.NightSummary;
 import org.mwolff.manban.nightrun.application.NightRunUsageService.NightUsageView;
 import org.mwolff.manban.nightrun.application.NightRunUsageService.PeriodFigures;
 import org.mwolff.manban.nightrun.application.NightRunUsageService.PeriodUsageView;
+import org.mwolff.manban.nightrun.application.NightRunUsageService.TotalUsageView;
 import org.mwolff.manban.nightrun.application.NightRunUsageService.UsageSplit;
 import org.mwolff.manban.nightrun.domain.NightRunPeriodType;
 import org.mwolff.manban.nightrun.domain.NightRunUsage;
@@ -77,6 +78,16 @@ class NightRunUsageController {
       @RequestParam @Min(0) @Max(MAX_STEPS_BACK) int stepsBack,
       @RequestParam ZoneId zone) {
     return PeriodResponse.of(usage.period(userId, projectId, type, stepsBack, regionszone(zone)));
+  }
+
+  /**
+   * Die Summe über die ganze Laufzeit des Projekts (Plan E19). Ein eigener Abruf und kein vierter
+   * Wert für {@code type}: Eine Lebenszeit hat keinen ersten Tag, keinen Vorzeitraum und keine
+   * Zone, nach der sie sich gruppieren ließe — sie braucht deshalb keinen Parameter.
+   */
+  @GetMapping("/api/projects/{projectId}/night-run-usage/total")
+  TotalResponse total(@AuthenticationPrincipal Long userId, @PathVariable long projectId) {
+    return TotalResponse.of(usage.total(userId, projectId));
   }
 
   /** Lässt allein Zonen aus der Zonendatenbank durch — nie einen festen Offset. */
@@ -257,6 +268,37 @@ class NightRunUsageController {
           ref == null ? null : ref.title(),
           e.cardCount(),
           UsageResponse.of(e.usage()));
+    }
+  }
+
+  /**
+   * Die Summe über die ganze Laufzeit.
+   *
+   * @param oldestRetainedRunStart Beginn des ältesten aufbewahrten Eintrags als ISO-Zeitpunkt;
+   *     {@code null} ohne Eintrag. Daran ist ablesbar, ab wann die Summe abgedeckt ist.
+   * @param interactiveUsageSince Erfassungsbeginn der interaktiven Sitzungen; {@code null}, solange
+   *     das Projekt keine gemeldet hat (Plan E18)
+   */
+  record TotalResponse(
+      long runCount,
+      long nightRunCount,
+      long interactiveRunCount,
+      long cardCount,
+      SplitResponse usage,
+      KindSplitResponse usageByKind,
+      @Nullable Instant oldestRetainedRunStart,
+      @Nullable Instant interactiveUsageSince) {
+
+    static TotalResponse of(TotalUsageView t) {
+      return new TotalResponse(
+          t.runCount(),
+          t.nightRunCount(),
+          t.interactiveRunCount(),
+          t.cardCount(),
+          SplitResponse.of(t.usage()),
+          KindSplitResponse.of(t.usageByKind()),
+          t.oldestRetainedRunStart(),
+          t.interactiveUsageSince());
     }
   }
 

@@ -28,6 +28,7 @@ import org.mwolff.manban.card.application.CardService;
 import org.mwolff.manban.card.application.EpicRef;
 import org.mwolff.manban.nightrun.application.NightRunUsageRepository.CardTotals;
 import org.mwolff.manban.nightrun.application.NightRunUsageRepository.KindTotals;
+import org.mwolff.manban.nightrun.application.NightRunUsageRepository.LifetimeTotals;
 import org.mwolff.manban.nightrun.application.NightRunUsageRepository.NightTotals;
 import org.mwolff.manban.nightrun.application.NightRunUsageRepository.PeriodTotals;
 import org.mwolff.manban.nightrun.application.NightRunUsageRepository.TotalsByKind;
@@ -36,6 +37,7 @@ import org.mwolff.manban.nightrun.application.NightRunUsageService.EpicUsageView
 import org.mwolff.manban.nightrun.application.NightRunUsageService.NightSummary;
 import org.mwolff.manban.nightrun.application.NightRunUsageService.NightUsageView;
 import org.mwolff.manban.nightrun.application.NightRunUsageService.PeriodUsageView;
+import org.mwolff.manban.nightrun.application.NightRunUsageService.TotalUsageView;
 import org.mwolff.manban.nightrun.domain.NightRunErrorClass;
 import org.mwolff.manban.nightrun.domain.NightRunPeriodType;
 import org.mwolff.manban.nightrun.domain.NightRunUsage;
@@ -354,6 +356,63 @@ class NightRunUsageServiceTest {
     assertThat(monat.previous().interactiveUsageSince()).isNull();
   }
 
+  // --- Die Lebenszeit (Issue #1014) ------------------------------------------------------------
+
+  @Test
+  void dieLebenszeitSummeVerlangtDenBesitzer_undLiestOhneIhnNichts() {
+    doThrow(new ProjectAccessDeniedException()).when(permissions).requireOwner(USER, PROJECT);
+
+    assertThatThrownBy(() -> service.total(USER, PROJECT))
+        .isInstanceOf(ProjectAccessDeniedException.class);
+    assertThat(usage.aufrufe).isEmpty();
+    verifyNoInteractions(cards);
+  }
+
+  /**
+   * Die Lebenszeit trägt dieselbe Rechnung wie ein Zeitraum — der Rest je Gattung als Differenz —
+   * und dazu beide Lückenangaben: den ältesten aufbewahrten Eintrag und den Erfassungsbeginn.
+   */
+  @Test
+  void dieLebenszeitSummeTrenntDieGattungen_undTraegtBeideLueckenangaben() {
+    Instant aeltester = Instant.parse("2026-06-01T00:00:00Z");
+    Instant seit = Instant.parse("2026-08-14T07:00:00Z");
+    usage.lebenszeit =
+        new LifetimeTotals(
+            4L,
+            new TotalsByKind(
+                new KindTotals(3L, kosten("10.00"), kosten("4.00")),
+                new KindTotals(2L, kosten("2.50"), kosten("1.00"))));
+    usage.aeltester = Optional.of(aeltester);
+    when(erfassungsbeginn.interactiveUsageSince(PROJECT)).thenReturn(Optional.of(seit));
+
+    TotalUsageView gesamt = service.total(USER, PROJECT);
+
+    assertThat(gesamt.nightRunCount()).isEqualTo(3L);
+    assertThat(gesamt.interactiveRunCount()).isEqualTo(2L);
+    assertThat(gesamt.runCount()).isEqualTo(5L);
+    assertThat(gesamt.cardCount()).isEqualTo(4L);
+    assertThat(gesamt.usage().total().costUsd()).isEqualByComparingTo("12.50");
+    assertThat(gesamt.usage().cardShare().costUsd()).isEqualByComparingTo("5.00");
+    assertThat(gesamt.usage().remainder().costUsd()).isEqualByComparingTo("7.50");
+    assertThat(gesamt.usageByKind().night().remainder().costUsd()).isEqualByComparingTo("6.00");
+    assertThat(gesamt.usageByKind().interactive().remainder().costUsd())
+        .isEqualByComparingTo("1.50");
+    assertThat(gesamt.oldestRetainedRunStart()).isEqualTo(aeltester);
+    assertThat(gesamt.interactiveUsageSince()).isEqualTo(seit);
+  }
+
+  /** Ohne Eintrag und ohne gemeldete Sitzung bleiben beide Zeitpunkte leer (Plan E8, E18). */
+  @Test
+  void ohneEintragUndOhneSitzungBleibenBeideZeitpunkteLeer() {
+    TotalUsageView gesamt = service.total(USER, PROJECT);
+
+    assertThat(gesamt.runCount()).isZero();
+    assertThat(gesamt.usage().total()).isEqualTo(NICHTS);
+    assertThat(gesamt.usageByKind().interactive().total()).isEqualTo(NICHTS);
+    assertThat(gesamt.oldestRetainedRunStart()).isNull();
+    assertThat(gesamt.interactiveUsageSince()).isNull();
+  }
+
   // --- Ein Zeitraum ----------------------------------------------------------------------------
 
   @Test
@@ -570,6 +629,7 @@ class NightRunUsageServiceTest {
     List<NightTotals> naechte = List.of();
     List<CardTotals> jeKarte = List.of();
     PeriodTotals summe = summe(0, 0, NICHTS, NICHTS);
+    LifetimeTotals lebenszeit = new LifetimeTotals(0L, new TotalsByKind(LEER, LEER));
     final Map<Instant, PeriodTotals> summeJeBeginn = new java.util.HashMap<>();
     Optional<Instant> aeltester = Optional.empty();
 
@@ -589,6 +649,12 @@ class NightRunUsageServiceTest {
     public PeriodTotals totals(long projectId, Instant from, Instant to) {
       aufrufe.add("totals " + from + " " + to);
       return summeJeBeginn.getOrDefault(from, summe);
+    }
+
+    @Override
+    public LifetimeTotals lifetimeTotals(long projectId) {
+      aufrufe.add("lifetime");
+      return lebenszeit;
     }
 
     @Override

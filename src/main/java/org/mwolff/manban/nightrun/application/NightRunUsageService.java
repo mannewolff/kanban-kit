@@ -18,6 +18,7 @@ import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.card.application.CardService;
 import org.mwolff.manban.card.application.EpicRef;
 import org.mwolff.manban.nightrun.application.NightRunUsageRepository.CardTotals;
+import org.mwolff.manban.nightrun.application.NightRunUsageRepository.LifetimeTotals;
 import org.mwolff.manban.nightrun.application.NightRunUsageRepository.NightTotals;
 import org.mwolff.manban.nightrun.application.NightRunUsageRepository.PeriodTotals;
 import org.mwolff.manban.nightrun.application.NightRunUsageRepository.TotalsByKind;
@@ -139,6 +140,27 @@ public class NightRunUsageService {
         vorhaben(karten, zuordnung),
         ohneVorhaben(karten, zuordnung),
         zuordnung.values().stream().anyMatch(vorhaben -> vorhaben.size() > 1));
+  }
+
+  /**
+   * Die Summe über die ganze Laufzeit des Projekts (#984 AK 4, Plan E19) — ohne Zeitraum und
+   * deshalb ohne Abdeckungs-Einordnung: Über die Lebenszeit gibt es keinen Zeitraum, der ganz vor
+   * der Aufbewahrung liegen könnte. Stattdessen kommen beide Lückenangaben mit, und sie sagen
+   * Verschiedenes: Der älteste aufbewahrte Eintrag zeigt, was der Ringpuffer verdrängt hat, der
+   * Erfassungsbeginn trennt „nie erfasst" von „erfasst, dann verdrängt".
+   */
+  @Transactional(readOnly = true)
+  public TotalUsageView total(long userId, long projectId) {
+    permissions.requireOwner(userId, projectId);
+    LifetimeTotals summe = usage.lifetimeTotals(projectId);
+    return new TotalUsageView(
+        summe.byKind().night().runCount(),
+        summe.byKind().interactive().runCount(),
+        summe.cardCount(),
+        teilen(summe.byKind().runUsage(), summe.byKind().itemUsage()),
+        jeGattung(summe.byKind()),
+        usage.oldestRetainedRunStart(projectId).orElse(null),
+        erfassungsbeginn.interactiveUsageSince(projectId).orElse(null));
   }
 
   private PeriodFigures kennzahlen(
@@ -290,6 +312,34 @@ public class NightRunUsageService {
     /** Kein Eintrag in diesem Zeitraum (#926 AK 9) — unabhängig von der Abdeckung. */
     public boolean noRuns() {
       return runCount == 0;
+    }
+  }
+
+  /**
+   * Die Summe über die ganze Laufzeit des Projekts (#984 AK 4, Plan E19).
+   *
+   * @param nightRunCount Zahl der aufbewahrten Nachtläufe
+   * @param interactiveRunCount Zahl der aufbewahrten interaktiven Sitzungen
+   * @param cardCount Zahl der verschiedenen Kartennummern über beide Gattungen
+   * @param oldestRetainedRunStart Beginn des ältesten aufbewahrten Eintrags; {@code null}, solange
+   *     das Projekt keinen hat. Liegt er nach dem Erfassungsbeginn, hat der Ringpuffer verdrängt —
+   *     die Summe ist dann unvollständig, und der abgedeckte Zeitraum beginnt hier.
+   * @param interactiveUsageSince Erfassungsbeginn der interaktiven Sitzungen; {@code null}, solange
+   *     keine gemeldet wurde (Plan E18). Er trennt „nie erfasst" von „erfasst, dann verdrängt" —
+   *     die Einordnung selbst entsteht im Frontend, hier stehen nur die beiden Zeitpunkte.
+   */
+  public record TotalUsageView(
+      long nightRunCount,
+      long interactiveRunCount,
+      long cardCount,
+      UsageSplit usage,
+      KindSplit usageByKind,
+      @Nullable Instant oldestRetainedRunStart,
+      @Nullable Instant interactiveUsageSince) {
+
+    /** Zahl aller aufbewahrten Einträge — Läufe <b>und</b> Sitzungen. */
+    public long runCount() {
+      return nightRunCount + interactiveRunCount;
     }
   }
 

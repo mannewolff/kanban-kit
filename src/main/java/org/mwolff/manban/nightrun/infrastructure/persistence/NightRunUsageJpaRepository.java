@@ -38,11 +38,21 @@ import org.springframework.data.repository.query.Param;
  */
 interface NightRunUsageJpaRepository extends Repository<NightRunEntity, Long> {
 
-  /** Die aufbewahrten Läufe eines Projekts in der Spanne — Grundlage aller drei Summen. */
-  String LAEUFE =
+  /** Die aufbewahrten Läufe eines Projekts, noch ohne Zeitgrenze — offen für deren Anhang. */
+  String LAUF_QUELLE =
       "laeufe AS (SELECT r.id, r.started_at, r.duration_ms, r.kind, r.cost_usd, r.input_tokens,"
           + " r.output_tokens, r.cached_input_tokens FROM night_run r"
-          + " WHERE r.project_id = :projectId AND r.started_at >= :from AND r.started_at < :to)";
+          + " WHERE r.project_id = :projectId";
+
+  /** Die aufbewahrten Läufe eines Projekts in der Spanne — Grundlage aller drei Summen. */
+  String LAEUFE = LAUF_QUELLE + " AND r.started_at >= :from AND r.started_at < :to)";
+
+  /**
+   * Alle aufbewahrten Läufe und Sitzungen eines Projekts über seine ganze Laufzeit (Issue #1014) —
+   * dieselben Spalten wie {@link #LAEUFE}, nur ohne die Zeitgrenzen. Geteilt statt zweimal
+   * geschrieben: Zwei Spaltenlisten liefen sonst unbemerkt auseinander.
+   */
+  String ALLE_LAEUFE = LAUF_QUELLE + ")";
 
   /** Zahl und Verbrauch der Einträge je Gattung; erwartet die Spalten der Lauf-Menge. */
   String LAUF_JE_GATTUNG =
@@ -169,6 +179,27 @@ interface NightRunUsageJpaRepository extends Repository<NightRunEntity, Long> {
       nativeQuery = true)
   TotalsRow totals(
       @Param("projectId") long projectId, @Param("from") Instant from, @Param("to") Instant to);
+
+  /**
+   * Die Summen über die ganze Laufzeit — dieselbe Rechnung wie {@link #totals}, nur ohne die
+   * Zeitgrenzen (Issue #1014). Die Laufdauer kommt über {@link #SPALTEN} mit und bleibt ungelesen:
+   * Sie geteilt zu lassen ist billiger, als eine zweite Spaltenliste zu pflegen.
+   */
+  @Query(
+      value =
+          "WITH "
+              + ALLE_LAEUFE
+              + ", l AS (SELECT"
+              + LAUF_JE_GATTUNG
+              + " FROM laeufe),"
+              + " p AS (SELECT"
+              + PAKET_JE_GATTUNG
+              + " FROM night_run_item i JOIN laeufe x ON x.id = i.night_run_id)"
+              + " SELECT"
+              + SPALTEN
+              + " FROM l CROSS JOIN p",
+      nativeQuery = true)
+  TotalsRow lifetimeTotals(@Param("projectId") long projectId);
 
   /** JPQL statt nativ: Der Typ des Startzeitpunkts kommt so als {@link Instant} aus der Entity. */
   @Query("select min(r.startedAt) from NightRunEntity r where r.projectId = :projectId")

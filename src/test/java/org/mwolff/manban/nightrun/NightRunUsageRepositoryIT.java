@@ -16,6 +16,7 @@ import org.mwolff.manban.AbstractIntegrationTest;
 import org.mwolff.manban.nightrun.application.NightRunRepository;
 import org.mwolff.manban.nightrun.application.NightRunUsageRepository;
 import org.mwolff.manban.nightrun.application.NightRunUsageRepository.CardTotals;
+import org.mwolff.manban.nightrun.application.NightRunUsageRepository.LifetimeTotals;
 import org.mwolff.manban.nightrun.application.NightRunUsageRepository.NightTotals;
 import org.mwolff.manban.nightrun.application.NightRunUsageRepository.PeriodTotals;
 import org.mwolff.manban.nightrun.domain.NightRun;
@@ -38,6 +39,10 @@ import org.springframework.jdbc.core.JdbcTemplate;
  * Sommerzeit-Fälle hier nutzen dieselben Spannen wie dessen Einheitentest — sonst liefen die beiden
  * Rechenorte unbemerkt auseinander (Plan E4, H2).
  */
+// Testklasse: Jede Methode ist ein Lesefall des Ports, und alle vier Zugriffe teilen dieselbe
+// Fixture. Nach Gattungen oder Zugriffen aufzuteilen doppelte sie in jede neue Klasse — seit Issue
+// #1014 kommt die Lebenszeit-Summe dazu.
+@SuppressWarnings("PMD.TooManyMethods")
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE)
 class NightRunUsageRepositoryIT extends AbstractIntegrationTest {
 
@@ -428,6 +433,74 @@ class NightRunUsageRepositoryIT extends AbstractIntegrationTest {
 
     assertThat(usage.oldestRetainedRunStart(projectId))
         .contains(Instant.parse("2026-09-10T08:00:00Z"));
+  }
+
+  // --- Lebenszeit (Issue #1014) ----------------------------------------------------------------
+
+  /**
+   * Über die ganze Laufzeit: Die Summe nimmt Einträge mit, die in keiner gemeinsamen Spanne liegen,
+   * ist genau die Addition beider Gattungen und stimmt mit einer Abfrage über alle Zeilen der
+   * Tabelle überein (#984 AK 4, Plan E19).
+   */
+  @Test
+  void dieLebenszeitSummeZaehltAlleEintraege_unabhaengigVonJederSpanne() {
+    lauf(
+        projectId,
+        "2026-03-02T21:10:00Z",
+        NightRunMode.CHAIN,
+        1_000L,
+        verbrauch("10.000000", 1_000L, 100L, 900L),
+        gruen(721, verbrauch("4.000000", 400L, 40L, 360L)));
+    sitzung(
+        projectId,
+        "2026-09-16T01:22:00Z",
+        2_000L,
+        verbrauch("2.500000", 250L, 25L, 200L),
+        gruen(722, verbrauch("1.000000", 100L, 10L, 80L)));
+
+    LifetimeTotals gesamt = usage.lifetimeTotals(projectId);
+
+    assertThat(gesamt.byKind().night().runCount()).isEqualTo(1L);
+    assertThat(gesamt.byKind().interactive().runCount()).isEqualTo(1L);
+    assertThat(gesamt.byKind().runCount()).isEqualTo(2L);
+    assertThat(gesamt.cardCount()).isEqualTo(2L);
+    assertThat(gesamt.byKind().night().runUsage().costUsd()).isEqualByComparingTo("10");
+    assertThat(gesamt.byKind().interactive().runUsage().costUsd()).isEqualByComparingTo("2.5");
+    assertThat(gesamt.byKind().runUsage().costUsd()).isEqualByComparingTo("12.5");
+    assertThat(gesamt.byKind().runUsage().inputTokens()).isEqualTo(1_250L);
+    assertThat(gesamt.byKind().runUsage().outputTokens()).isEqualTo(125L);
+    assertThat(gesamt.byKind().runUsage().cachedInputTokens()).isEqualTo(1_100L);
+    assertThat(gesamt.byKind().night().itemUsage().costUsd()).isEqualByComparingTo("4");
+    assertThat(gesamt.byKind().interactive().itemUsage().costUsd()).isEqualByComparingTo("1");
+    assertThat(gesamt.byKind().itemUsage().costUsd()).isEqualByComparingTo("5");
+    // Die Gegenrechnung: dieselbe Summe, unabhängig von der Aggregat-Abfrage über alle Zeilen.
+    assertThat(gesamt.byKind().runUsage().costUsd())
+        .isEqualByComparingTo(
+            jdbc.queryForObject(
+                "SELECT sum(cost_usd) FROM night_run WHERE project_id = ?",
+                BigDecimal.class,
+                projectId));
+  }
+
+  /** Ohne einen einzigen Eintrag: Zähler 0, Verbrauchsangaben fehlend — und nie 0 (Plan E5). */
+  @Test
+  void einProjektOhneEintragHatEineLeereLebenszeitSumme() {
+    lauf(
+        fremdesProjekt,
+        "2026-09-15T21:10:00Z",
+        NightRunMode.CHAIN,
+        1L,
+        kosten("9"),
+        gruen(721, kosten("9")));
+
+    LifetimeTotals gesamt = usage.lifetimeTotals(projectId);
+
+    assertThat(gesamt.byKind().runCount()).isZero();
+    assertThat(gesamt.byKind().night().runCount()).isZero();
+    assertThat(gesamt.byKind().interactive().runCount()).isZero();
+    assertThat(gesamt.cardCount()).isZero();
+    assertThat(gesamt.byKind().runUsage()).isEqualTo(NICHTS);
+    assertThat(gesamt.byKind().itemUsage()).isEqualTo(NICHTS);
   }
 
   // --- Sommerzeit ------------------------------------------------------------------------------

@@ -67,6 +67,12 @@ class NightRunUsageRepositoryAdapter implements NightRunUsageRepository {
   }
 
   @Override
+  public LifetimeTotals lifetimeTotals(long projectId) {
+    NightRunUsageJpaRepository.TotalsRow z = abfragen.lifetimeTotals(projectId);
+    return new LifetimeTotals(z.getCardCount(), jeGattung(z));
+  }
+
+  @Override
   public Optional<Instant> oldestRetainedRunStart(long projectId) {
     return abfragen.oldestStartedAt(projectId);
   }

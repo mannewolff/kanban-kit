@@ -53,6 +53,17 @@ public interface NightRunUsageRepository {
   PeriodTotals totals(long projectId, Instant from, Instant to);
 
   /**
+   * Die Summen über <b>alle</b> aufbewahrten Läufe und Sitzungen des Projekts — ohne Zeitspanne
+   * (Plan E19, #984 AK 4).
+   *
+   * <p>Ein eigener Zugriff und kein Sonderfall von {@link #totals}: Eine Lebenszeit ist kein {@code
+   * NightRunPeriod}. Sie hat keinen ersten Tag, keinen Vorzeitraum und lässt sich nicht verschieben
+   * — ein vierter Wert in {@code NightRunPeriodType} träfe jede der drei bestehenden Arten mit
+   * einem Sonderfall.
+   */
+  LifetimeTotals lifetimeTotals(long projectId);
+
+  /**
    * Startzeitpunkt des ältesten aufbewahrten Laufs; leer, wenn das Projekt keinen hat (Plan E8).
    */
   Optional<Instant> oldestRetainedRunStart(long projectId);
@@ -146,6 +157,16 @@ public interface NightRunUsageRepository {
       return nightUsage.plus(interactiveUsage);
     }
   }
+
+  /**
+   * Die Summen über die ganze Laufzeit eines Projekts (Issue #1014). Ohne Spanne gibt es keine
+   * Laufdauer zu zeigen — die Lebenszeit beantwortet „was hat es insgesamt gekostet", nicht „wie
+   * lange lief es".
+   *
+   * @param cardCount Zahl der verschiedenen Kartennummern über alle aufbewahrten Einträge
+   * @param byKind die Summen je Gattung; Läufe, Sitzungen und die Gesamtsumme entstehen daraus
+   */
+  record LifetimeTotals(long cardCount, TotalsByKind byKind) {}
 
   /**
    * Die Gesamtsummen einer Spanne.

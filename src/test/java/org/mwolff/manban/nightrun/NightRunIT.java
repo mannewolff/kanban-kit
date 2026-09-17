@@ -400,6 +400,7 @@ class NightRunIT extends AbstractIntegrationTest {
             Instant.now()));
     String nacht = "/api/projects/" + projectId + "/night-run-usage/night";
     String zeitraum = "/api/projects/" + projectId + "/night-run-usage";
+    String gesamt = zeitraum + "/total";
 
     for (Cookie wer : List.of(owner, admin)) {
       mvc.perform(get(nacht).param("date", "2026-09-15").param("zone", "Europe/Berlin").cookie(wer))
@@ -413,9 +414,13 @@ class NightRunIT extends AbstractIntegrationTest {
                   .cookie(wer))
           .andExpect(status().isOk())
           .andExpect(jsonPath("$.current.noRuns").value(true));
+      mvc.perform(get(gesamt).cookie(wer))
+          .andExpect(status().isOk())
+          .andExpect(jsonPath("$.runCount").value(0));
     }
     mvc.perform(get(nacht).param("date", "2026-09-15").param("zone", "UTC").cookie(viewer))
         .andExpect(status().isForbidden());
+    mvc.perform(get(gesamt).cookie(viewer)).andExpect(status().isForbidden());
     mvc.perform(
             get(zeitraum)
                 .param("type", "DAY")
@@ -423,6 +428,7 @@ class NightRunIT extends AbstractIntegrationTest {
                 .param("zone", "UTC")
                 .cookie(stranger))
         .andExpect(status().isNotFound());
+    mvc.perform(get(gesamt).cookie(stranger)).andExpect(status().isNotFound());
 
     mvc.perform(get(nacht).param("date", "2026-09-15").param("zone", "+05:30").cookie(owner))
         .andExpect(status().isBadRequest());

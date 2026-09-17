@@ -35,6 +35,7 @@ import org.mwolff.manban.nightrun.application.NightRunUsageService.NightSummary;
 import org.mwolff.manban.nightrun.application.NightRunUsageService.NightUsageView;
 import org.mwolff.manban.nightrun.application.NightRunUsageService.PeriodFigures;
 import org.mwolff.manban.nightrun.application.NightRunUsageService.PeriodUsageView;
+import org.mwolff.manban.nightrun.application.NightRunUsageService.TotalUsageView;
 import org.mwolff.manban.nightrun.application.NightRunUsageService.UsageSplit;
 import org.mwolff.manban.nightrun.domain.NightRunPeriod;
 import org.mwolff.manban.nightrun.domain.NightRunPeriodType;
@@ -63,6 +64,7 @@ class NightRunUsageControllerTest {
   private static final long PROJECT = 3L;
   private static final String PFAD_NACHT = "/api/projects/" + PROJECT + "/night-run-usage/night";
   private static final String PFAD_ZEITRAUM = "/api/projects/" + PROJECT + "/night-run-usage";
+  private static final String PFAD_GESAMT = PFAD_ZEITRAUM + "/total";
   private static final ZoneId BERLIN = ZoneId.of("Europe/Berlin");
   private static final NightRunUsage NICHTS = new NightRunUsage(null, null, null, null);
 
@@ -145,6 +147,33 @@ class NightRunUsageControllerTest {
 
   private static PeriodUsageView zeitraum() {
     return zeitraum(Instant.parse("2026-08-14T07:00:00Z"));
+  }
+
+  /** Die Lebenszeit-Summe (Issue #1014); beide Lückenangaben sind gesetzt. */
+  private static TotalUsageView gesamt(@Nullable Instant erfassungsbeginn) {
+    UsageSplit laeufe =
+        new UsageSplit(
+            new NightRunUsage(new BigDecimal("10.00"), 1_000L, 100L, 250L),
+            new NightRunUsage(new BigDecimal("4.00"), 800L, 80L, 200L),
+            new NightRunUsage(new BigDecimal("6.00"), 200L, 20L, 50L));
+    UsageSplit sitzungen =
+        new UsageSplit(
+            new NightRunUsage(new BigDecimal("2.50"), 400L, 40L, 100L),
+            new NightRunUsage(new BigDecimal("1.00"), 300L, 30L, 80L),
+            new NightRunUsage(new BigDecimal("1.50"), 100L, 10L, 20L));
+    UsageSplit zusammen =
+        new UsageSplit(
+            laeufe.total().plus(sitzungen.total()),
+            laeufe.cardShare().plus(sitzungen.cardShare()),
+            laeufe.remainder().plus(sitzungen.remainder()));
+    return new TotalUsageView(
+        3L,
+        2L,
+        4L,
+        zusammen,
+        new KindSplit(laeufe, sitzungen),
+        Instant.parse("2026-05-01T00:00:00Z"),
+        erfassungsbeginn);
   }
 
   // --- Nacht -----------------------------------------------------------------------------------
@@ -370,6 +399,64 @@ class NightRunUsageControllerTest {
                 .param("stepsBack", darueber)
                 .param("zone", "UTC"))
         .andExpect(status().isBadRequest());
+  }
+
+  // --- Lebenszeit (Issue #1014) ----------------------------------------------------------------
+
+  /** Ein eigener Abruf ohne Zeitraum-Parameter: keine Art, kein Rückschritt, keine Zone. */
+  @Test
+  void gesamt_liefertDieLebenszeitSumme_mitZaehlernUndBeidenLueckenangaben() throws Exception {
+    when(service.total(USER, PROJECT)).thenReturn(gesamt(Instant.parse("2026-08-14T07:00:00Z")));
+
+    mvc.perform(get(PFAD_GESAMT))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.runCount").value(5))
+        .andExpect(jsonPath("$.nightRunCount").value(3))
+        .andExpect(jsonPath("$.interactiveRunCount").value(2))
+        .andExpect(jsonPath("$.cardCount").value(4))
+        .andExpect(jsonPath("$.usage.total.costUsd").value(12.5))
+        .andExpect(jsonPath("$.usage.cardShare.costUsd").value(5))
+        .andExpect(jsonPath("$.usage.remainder.costUsd").value(7.5))
+        .andExpect(jsonPath("$.usage.total.cachedInputSharePercent").value(25))
+        .andExpect(jsonPath("$.usageByKind.night.total.costUsd").value(10))
+        .andExpect(jsonPath("$.usageByKind.night.remainder.costUsd").value(6))
+        .andExpect(jsonPath("$.usageByKind.interactive.total.costUsd").value(2.5))
+        .andExpect(jsonPath("$.usageByKind.interactive.cardShare.inputTokens").value(300))
+        .andExpect(jsonPath("$.oldestRetainedRunStart").value("2026-05-01T00:00:00Z"))
+        .andExpect(jsonPath("$.interactiveUsageSince").value("2026-08-14T07:00:00Z"));
+  }
+
+  /** Ohne je gemeldete Sitzung steht der Erfassungsbeginn als {@code null} (Plan E18). */
+  @Test
+  void gesamt_ohneErfassungsbeginnStehtDortNull() throws Exception {
+    when(service.total(anyLong(), anyLong())).thenReturn(gesamt((Instant) null));
+
+    mvc.perform(get(PFAD_GESAMT))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.interactiveUsageSince").value(nullValue()));
+  }
+
+  @Test
+  void gesamt_derPlattformAdminBekommtEineAntwort() throws Exception {
+    when(service.total(anyLong(), anyLong())).thenReturn(gesamt((Instant) null));
+
+    mvc.perform(get(PFAD_GESAMT)).andExpect(status().isOk());
+
+    verify(service).total(USER, PROJECT);
+  }
+
+  @Test
+  void gesamt_verbotenFuerEinMitgliedOhneOwnerRecht() throws Exception {
+    when(service.total(anyLong(), anyLong())).thenThrow(new ProjectAccessDeniedException());
+
+    mvc.perform(get(PFAD_GESAMT)).andExpect(status().isForbidden());
+  }
+
+  @Test
+  void gesamt_nichtGefundenFuerEinProjektDasEsNichtGibt() throws Exception {
+    when(service.total(anyLong(), anyLong())).thenThrow(new ProjectNotFoundException());
+
+    mvc.perform(get(PFAD_GESAMT)).andExpect(status().isNotFound());
   }
 
   @Test
