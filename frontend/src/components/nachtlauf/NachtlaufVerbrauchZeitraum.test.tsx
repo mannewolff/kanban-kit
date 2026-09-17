@@ -69,6 +69,8 @@ const kennzahlen = (
   coverage: 'COMPLETE',
   noRuns: false,
   runCount: 4,
+  nightRunCount: 4,
+  interactiveRunCount: 0,
   durationMs: 1000,
   cardCount: 3,
   interactiveUsageSince: null,
@@ -313,7 +315,7 @@ describe('NachtlaufVerbrauchZeitraum — Hinweise', () => {
     zeige(
       apiMit((type) =>
         Promise.resolve(
-          zeitraum(type, { noRuns: true, runCount: 0, cardCount: 0, ...verbrauch(LEER) }),
+          zeitraum(type, { noRuns: true, runCount: 0, nightRunCount: 0, cardCount: 0, ...verbrauch(LEER) }),
         ),
       ),
     )
@@ -328,7 +330,7 @@ describe('NachtlaufVerbrauchZeitraum — Hinweise', () => {
     zeige(
       apiMit((type) =>
         Promise.resolve(
-          zeitraum(type, { coverage: 'BEFORE_RETENTION', noRuns: true, runCount: 0, ...verbrauch(LEER) }),
+          zeitraum(type, { coverage: 'BEFORE_RETENTION', noRuns: true, runCount: 0, nightRunCount: 0, ...verbrauch(LEER) }),
         ),
       ),
     )
@@ -349,17 +351,23 @@ describe('NachtlaufVerbrauchZeitraum — Hinweise', () => {
     expect(within(aktuell).getAllByTestId(/^verbrauch-kachel-/)).toHaveLength(4)
   })
 
-  it('zeigt nicht gemessene Angaben mit Hinweis als „nicht gemessen"', async () => {
+  /**
+   * Der Hinweis des Zeitraums sagt, dass der Verbrauch nicht vorliegt — „nicht gemessen" bleibt
+   * dem Kartenblatt vorbehalten, wo es einen bekannten Lauf ohne Zahl meint (Issue #1017).
+   */
+  it('erklaert Angaben ohne Verbrauch mit einem eigenen Hinweis', async () => {
     zeige(apiMit((type) => Promise.resolve(zeitraum(type, verbrauch(LEER)))))
 
-    expect(await screen.findByTestId('verbrauch-zeitraum-hinweis')).toHaveTextContent('nicht gemessen')
+    expect(await screen.findByTestId('verbrauch-zeitraum-hinweis')).toHaveTextContent(
+      'ihr Verbrauch liegt aber nicht vor',
+    )
     expect(screen.getByTestId('verbrauch-zeitraum-vergleich')).toHaveTextContent('nicht vergleichbar')
   })
 
   it('nennt den Hinweis des Vorzeitraums an seiner Platte', async () => {
     const mitAltemVorzeitraum = (type: VerbrauchZeitraumArt): VerbrauchZeitraum => ({
       ...zeitraum(type),
-      previous: kennzahlen(type, { coverage: 'BEFORE_RETENTION', noRuns: true, runCount: 0 }),
+      previous: kennzahlen(type, { coverage: 'BEFORE_RETENTION', noRuns: true, runCount: 0, nightRunCount: 0 }),
     })
     zeige(apiMit((type) => Promise.resolve(mitAltemVorzeitraum(type))))
 

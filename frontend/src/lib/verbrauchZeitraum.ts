@@ -13,8 +13,21 @@ import { betrag } from './nachtlaufFormat'
  * Der Kern ist derselbe wie im Backend: **„nicht gemessen" ist nicht 0** (Plan E5).
  */
 
-/** Der Satz aus #926 AK 9 — ausschließlich für einen aufbewahrten Zeitraum ohne Lauf. */
-export const KEIN_LAUF_TEXT = 'In diesem Zeitraum hat kein Lauf stattgefunden.'
+/**
+ * Der Satz aus #926 AK 9 — ausschließlich für einen aufbewahrten Zeitraum ohne jeden Eintrag.
+ *
+ * Seit Issue #1017 zählt der Zeitraum Läufe **und** Sitzungen (#984 AK 1): An einem Tag ohne
+ * Nachtlauf, an dem im Gespräch gearbeitet wurde, stehen Zahlen — der Satz erschiene sonst über
+ * einer Arbeit, die stattgefunden hat.
+ */
+export const KEIN_LAUF_TEXT =
+  'In diesem Zeitraum hat weder ein Lauf noch eine Sitzung stattgefunden.'
+
+/** Ein Zeitraum ganz vor dem Erfassungsbeginn — und niemals eine 0 (#984 AK 6). */
+export const NICHT_ERFASST_TEXT = 'nicht erfasst'
+
+/** Ein Zeitraum, der den Erfassungsbeginn schneidet: Zahlen sind da, aber unvollständig. */
+export const TEILWEISE_ERFASST_TEXT = 'teilweise erfasst'
 
 const DATUM = new Intl.DateTimeFormat('de-DE', {
   day: '2-digit',
@@ -70,6 +83,11 @@ export function zeitraumBeschriftung(
   }
 }
 
+/** Ein ISO-Zeitpunkt als Kalendertag — für Grenzen wie den Erfassungs- oder Aufbewahrungsbeginn. */
+export function zeitpunktDatum(zeitpunkt: string): string {
+  return DATUM.format(new Date(zeitpunkt))
+}
+
 /** Der Vorzeitraum beim Namen seiner Art — der Titel seiner Platte. */
 export function vorzeitraumName(kennzahlen: Pick<VerbrauchKennzahlen, 'type'>): string {
   return VORZEITRAUM[kennzahlen.type]
@@ -86,6 +104,11 @@ export function nachtKurz(nacht: string): string {
 /** „1 Lauf" bzw. „n Läufe" — die Zahl steht in Kopfzeilen, Einordnungen und Nächte-Zeilen. */
 export function laeufeText(anzahl: number): string {
   return anzahl === 1 ? '1 Lauf' : `${anzahl} Läufe`
+}
+
+/** „1 Sitzung" bzw. „n Sitzungen" — der Anteil neben den Läufen (#984 AK 1). */
+export function sitzungenText(anzahl: number): string {
+  return anzahl === 1 ? '1 Sitzung' : `${anzahl} Sitzungen`
 }
 
 /** „1 Karte" bzw. „n Karten". */
@@ -156,7 +179,9 @@ export function zeitraumFall(kennzahlen: VerbrauchKennzahlen): ZeitraumFall {
   if (kennzahlen.coverage === 'PARTIAL') {
     return 'teilweise'
   }
-  if (kennzahlen.noRuns) {
+  // Gezählt wird über beide Gattungen (#984 AK 1): Ein Zeitraum mit Sitzungen und ohne Nachtlauf
+  // ist nicht leer. `runCount` ist am Server genau die Addition der beiden Zahlen.
+  if (kennzahlen.runCount === 0) {
     return 'kein-lauf'
   }
   return kennzahlen.usage.total.costUsd === null ? 'nicht-gemessen' : 'vollstaendig'
@@ -168,11 +193,61 @@ const HINWEIS: Record<Exclude<ZeitraumFall, 'vollstaendig'>, string> = {
     'Dieser Zeitraum liegt vor dem ältesten aufbewahrten Lauf — seine Läufe sind nicht mehr gespeichert.',
   teilweise:
     'Dieser Zeitraum ist nur teilweise abgedeckt: Er beginnt vor dem ältesten aufbewahrten Lauf, die Zahlen sind unvollständig.',
-  'nicht-gemessen': 'In diesem Zeitraum liefen Läufe, ihr Verbrauch wurde aber nicht gemessen.',
+  // „Nicht gemessen" bleibt dem Kartenblatt vorbehalten, wo es einen bekannten Lauf ohne Zahl
+  // meint (#984 AK 6). Hier geht es um einen ganzen Zeitraum, und der Satz benennt das.
+  'nicht-gemessen': 'In diesem Zeitraum liefen Läufe, ihr Verbrauch liegt aber nicht vor.',
 }
 
-/** Der Hinweis zum Fall; `null`, wenn es nichts zu erklären gibt. */
+/** Was der Erfassungsbeginn über den interaktiven Anteil eines Zeitraums aussagt (#984 AK 6). */
+export type Erfassungsstand = 'nicht-erfasst' | 'teilweise-erfasst' | 'erfasst'
+
+type Erfassung = Pick<VerbrauchKennzahlen, 'from' | 'to' | 'interactiveUsageSince'>
+
+/**
+ * Ob der interaktive Anteil dieses Zeitraums erfasst ist (#984 AK 6, Plan #1007 E18). Ohne je
+ * gemeldete Sitzung gibt es keinen Beginn — dann ist nichts erfasst, und eine 0 wäre die
+ * Behauptung, es sei nichts verbraucht worden. `to` ist ausschließlich: Beginnt die Erfassung
+ * genau am Ende, liegt der Zeitraum noch ganz davor.
+ */
+export function erfassungsstand(kennzahlen: Erfassung): Erfassungsstand {
+  if (kennzahlen.interactiveUsageSince === null) {
+    return 'nicht-erfasst'
+  }
+  const seit = Date.parse(kennzahlen.interactiveUsageSince)
+  if (Date.parse(kennzahlen.to) <= seit) {
+    return 'nicht-erfasst'
+  }
+  return Date.parse(kennzahlen.from) < seit ? 'teilweise-erfasst' : 'erfasst'
+}
+
+/**
+ * Der Hinweis zur Erfassungslücke; `null`, wenn es keine gibt. Ohne gemeldeten Beginn schweigt er
+ * ebenfalls: Dass ein Projekt noch nie eine Sitzung gemeldet hat, ist sein Zustand und kein Befund
+ * über diesen Zeitraum — der Anteil selbst sagt dort {@link NICHT_ERFASST_TEXT}.
+ */
+function erfassungsHinweis(kennzahlen: Erfassung): string | null {
+  if (kennzahlen.interactiveUsageSince === null) {
+    return null
+  }
+  const seit = DATUM.format(new Date(kennzahlen.interactiveUsageSince))
+  switch (erfassungsstand(kennzahlen)) {
+    case 'nicht-erfasst':
+      return `Interaktive Sitzungen werden erst seit dem ${seit} erfasst — dieser Zeitraum liegt ganz davor.`
+    case 'teilweise-erfasst':
+      return `Interaktive Sitzungen werden erst seit dem ${seit} erfasst — dieser Zeitraum beginnt davor.`
+    case 'erfasst':
+      return null
+  }
+}
+
+/**
+ * Der Hinweis zum Zeitraum; `null`, wenn es nichts zu erklären gibt. Treffen Erfassungslücke und
+ * Abdeckungslücke zusammen, steht die Erfassung vorn — sie erklärt die größere Lücke: Die
+ * Abdeckung fehlt für aufbewahrte Läufe, die Erfassung für eine ganze Gattung.
+ */
 export function zeitraumHinweis(kennzahlen: VerbrauchKennzahlen): string | null {
   const fall = zeitraumFall(kennzahlen)
-  return fall === 'vollstaendig' ? null : HINWEIS[fall]
+  const teile = [erfassungsHinweis(kennzahlen), fall === 'vollstaendig' ? null : HINWEIS[fall]]
+  const text = teile.filter((teil): teil is string => teil !== null).join(' ')
+  return text === '' ? null : text
 }

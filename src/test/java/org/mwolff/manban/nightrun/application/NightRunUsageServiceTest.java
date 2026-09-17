@@ -292,6 +292,38 @@ class NightRunUsageServiceTest {
         .isEqualByComparingTo("5");
   }
 
+  /**
+   * Die Zahl der Einträge zerfällt in Läufe und Sitzungen (#984 AK 1): Eine Anzeige, die nur die
+   * Summe kennt, schriebe „3 Läufe" über einen Zeitraum, in dem ein Lauf und zwei Sitzungen lagen.
+   */
+  @Test
+  void derZeitraumFuehrtLaeufeUndSitzungenGetrennt() {
+    usage.summeJeBeginn.put(
+        Instant.parse("2026-08-01T10:00:00Z"),
+        new PeriodTotals(
+            1_000L,
+            1L,
+            new TotalsByKind(
+                new KindTotals(1L, kosten("6"), kosten("2")),
+                new KindTotals(2L, kosten("3"), kosten("1")))));
+
+    PeriodUsageView monat = service.period(USER, PROJECT, NightRunPeriodType.MONTH, 0, BERLIN);
+
+    assertThat(monat.current().nightRunCount()).isEqualTo(1L);
+    assertThat(monat.current().interactiveRunCount()).isEqualTo(2L);
+    assertThat(monat.current().runCount()).isEqualTo(3L);
+  }
+
+  /** Ohne Eintrag ist jede der beiden Zahlen 0 — und der Zeitraum leer. */
+  @Test
+  void ohneEintragSindBeideZahlenNull() {
+    PeriodUsageView monat = service.period(USER, PROJECT, NightRunPeriodType.MONTH, 0, BERLIN);
+
+    assertThat(monat.current().nightRunCount()).isZero();
+    assertThat(monat.current().interactiveRunCount()).isZero();
+    assertThat(monat.current().noRuns()).isTrue();
+  }
+
   /** Die Nächte des Zeitraums tragen dieselbe Trennung. */
   @Test
   void dieNaechteDesZeitraumsTragenDieAufteilungNachGattung() {

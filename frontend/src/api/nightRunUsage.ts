@@ -84,6 +84,14 @@ export interface VerbrauchKennzahlen {
   noRuns: boolean
   /** Zahl der Einträge des Zeitraums — Läufe **und** Sitzungen (Issue #1013). */
   runCount: number
+  /** Zahl der Nachtläufe des Zeitraums (Issue #1017). */
+  nightRunCount: number
+  /**
+   * Zahl der interaktiven Sitzungen des Zeitraums. Beide stehen getrennt neben `runCount`, weil
+   * die Gesamtzahl allein nicht sagt, woher sie kommt: „3 Läufe" über einem Zeitraum aus einem
+   * Lauf und zwei Sitzungen wäre eine falsche Aussage (#984 AK 1).
+   */
+  interactiveRunCount: number
   durationMs: number
   cardCount: number
   usage: VerbrauchAufteilung

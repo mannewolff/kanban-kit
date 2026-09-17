@@ -172,7 +172,8 @@ public class NightRunUsageService {
     return new PeriodFigures(
         zeitraum,
         abdeckung(zeitraum, aeltester),
-        summe.runCount(),
+        summe.byKind().night().runCount(),
+        summe.byKind().interactive().runCount(),
         summe.durationMs(),
         summe.cardCount(),
         teilen(summe.runUsage(), summe.itemUsage()),
@@ -294,6 +295,10 @@ public class NightRunUsageService {
   /**
    * Die Kennzahlen eines Zeitraums.
    *
+   * @param nightRunCount Zahl der Nachtläufe im Zeitraum
+   * @param interactiveRunCount Zahl der interaktiven Sitzungen im Zeitraum. Beide stehen getrennt,
+   *     weil die Gesamtzahl allein nicht sagt, woher sie kommt: „3 Läufe" über einem Zeitraum aus
+   *     einem Lauf und zwei Sitzungen wäre eine falsche Aussage (#984 AK 1).
    * @param interactiveUsageSince Startzeitpunkt der ersten je gemeldeten interaktiven Sitzung des
    *     Projekts; {@code null}, solange keine gemeldet wurde (Plan E18). Daran unterscheidet die
    *     Anzeige „nicht erfasst" von „teilweise erfasst" — die Klassifikation selbst entsteht im
@@ -302,16 +307,22 @@ public class NightRunUsageService {
   public record PeriodFigures(
       NightRunPeriod period,
       Coverage coverage,
-      long runCount,
+      long nightRunCount,
+      long interactiveRunCount,
       long durationMs,
       long cardCount,
       UsageSplit usage,
       KindSplit usageByKind,
       @Nullable Instant interactiveUsageSince) {
 
+    /** Zahl aller Einträge des Zeitraums — Läufe <b>und</b> Sitzungen. */
+    public long runCount() {
+      return nightRunCount + interactiveRunCount;
+    }
+
     /** Kein Eintrag in diesem Zeitraum (#926 AK 9) — unabhängig von der Abdeckung. */
     public boolean noRuns() {
-      return runCount == 0;
+      return runCount() == 0;
     }
   }
 

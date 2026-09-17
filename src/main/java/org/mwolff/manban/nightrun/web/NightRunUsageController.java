@@ -194,6 +194,8 @@ class NightRunUsageController {
   /**
    * Die Kennzahlen eines Zeitraums samt seiner Grenzen.
    *
+   * @param nightRunCount Zahl der Nachtläufe, {@code interactiveRunCount} die der interaktiven
+   *     Sitzungen; {@code runCount} ist ihre Summe (#984 AK 1)
    * @param interactiveUsageSince Erfassungsbeginn der interaktiven Sitzungen als ISO-Zeitpunkt;
    *     {@code null}, solange das Projekt keine gemeldet hat (Plan E18)
    */
@@ -206,6 +208,8 @@ class NightRunUsageController {
       Coverage coverage,
       boolean noRuns,
       long runCount,
+      long nightRunCount,
+      long interactiveRunCount,
       long durationMs,
       long cardCount,
       SplitResponse usage,
@@ -222,6 +226,8 @@ class NightRunUsageController {
           f.coverage(),
           f.noRuns(),
           f.runCount(),
+          f.nightRunCount(),
+          f.interactiveRunCount(),
           f.durationMs(),
           f.cardCount(),
           SplitResponse.of(f.usage()),

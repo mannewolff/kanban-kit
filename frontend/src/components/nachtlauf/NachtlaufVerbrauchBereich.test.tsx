@@ -47,6 +47,8 @@ const kennzahlen: VerbrauchKennzahlen = {
   coverage: 'COMPLETE',
   noRuns: false,
   runCount: 1,
+  nightRunCount: 1,
+  interactiveRunCount: 0,
   durationMs: 1,
   cardCount: 0,
   interactiveUsageSince: null,

@@ -125,10 +125,11 @@ class NightRunUsageControllerTest {
     KindSplit jeGattung = new KindSplit(teilung, sitzungen);
     return new PeriodUsageView(
         new PeriodFigures(
-            monat, Coverage.PARTIAL, 5L, 9_000L, 4L, teilung, jeGattung, erfassungsbeginn),
+            monat, Coverage.PARTIAL, 3L, 2L, 9_000L, 4L, teilung, jeGattung, erfassungsbeginn),
         new PeriodFigures(
             monat.previous(),
             Coverage.BEFORE_RETENTION,
+            0L,
             0L,
             0L,
             0L,
@@ -275,6 +276,8 @@ class NightRunUsageControllerTest {
         .andExpect(jsonPath("$.current.coverage").value("PARTIAL"))
         .andExpect(jsonPath("$.current.noRuns").value(false))
         .andExpect(jsonPath("$.current.runCount").value(5))
+        .andExpect(jsonPath("$.current.nightRunCount").value(3))
+        .andExpect(jsonPath("$.current.interactiveRunCount").value(2))
         .andExpect(jsonPath("$.current.durationMs").value(9000))
         .andExpect(jsonPath("$.current.cardCount").value(4))
         .andExpect(jsonPath("$.current.usage.remainder.costUsd").value(3.5))
