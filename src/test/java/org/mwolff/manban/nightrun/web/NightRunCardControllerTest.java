@@ -77,13 +77,23 @@ class NightRunCardControllerTest {
       NightRunState state,
       NightRunErrorClass errorClass,
       NightRunUsage usage) {
+    return anlauf(startedAt, mode, NightRunKind.NIGHT, state, errorClass, usage);
+  }
+
+  private static NightRunItem anlauf(
+      Instant startedAt,
+      NightRunMode mode,
+      NightRunKind kind,
+      NightRunState state,
+      NightRunErrorClass errorClass,
+      NightRunUsage usage) {
     return new NightRunItem(
         31L,
         null,
         PROJECT,
         startedAt,
         mode,
-        NightRunKind.NIGHT,
+        kind,
         967,
         "Endpunkt",
         state,
@@ -125,9 +135,42 @@ class NightRunCardControllerTest {
         .andExpect(jsonPath("$[0].usage.inputTokens").value(412_000))
         .andExpect(jsonPath("$[0].usage.outputTokens").value(3_100))
         .andExpect(jsonPath("$[0].usage.cachedInputTokens").value(380_000))
+        .andExpect(jsonPath("$[0].kind").value("NIGHT"))
         .andExpect(jsonPath("$[1].startedAt").value("2026-09-01T22:00:00Z"))
         .andExpect(jsonPath("$[1].mode").value("IMPLEMENTATION"))
         .andExpect(jsonPath("$[1].errorClass").value("CHECKS_RED"));
+  }
+
+  /**
+   * Die Gattung steht am Anlauf, statt ihn zu filtern (Issue #1015, Plan #1007 E10): Nachtlauf und
+   * interaktive Sitzung stehen nebeneinander an derselben Karte, jeder mit seiner eigenen. Erst
+   * daran erkennt die Anzeige eine Sitzung — {@code mode} allein trüge sie nicht, denn eine Sitzung
+   * aus der Zeit vor der eigenen Lauf-Art gäbe sich damit als Nachtlauf aus.
+   */
+  @Test
+  void jederAnlaufTraegtSeineGattung() throws Exception {
+    when(service.anlaeufeDerKarte(USER, PROJECT, 967))
+        .thenReturn(
+            List.of(
+                anlauf(
+                    JUENGER,
+                    NightRunMode.INTERACTIVE,
+                    NightRunKind.INTERACTIVE,
+                    NightRunState.GREEN,
+                    null,
+                    null),
+                anlauf(
+                    AELTER,
+                    NightRunMode.CHAIN,
+                    NightRunKind.NIGHT,
+                    NightRunState.GREEN,
+                    null,
+                    null)));
+
+    mvc.perform(get(PATH).param("cardNumber", "967"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$[0].kind").value("INTERACTIVE"))
+        .andExpect(jsonPath("$[1].kind").value("NIGHT"));
   }
 
   /** „Nicht gemessen" ist {@code null} und nie 0 — eine 0 behauptete, es sei nichts verbraucht. */

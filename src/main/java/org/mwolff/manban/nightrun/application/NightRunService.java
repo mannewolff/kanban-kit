@@ -209,6 +209,10 @@ public class NightRunService {
    * Die Anläufe einer Karte über Läufe hinweg, jüngster zuerst — auch die verdrängter Läufe (Issue
    * #967). Lesen darf, wer auch die Laufliste sieht: {@code requireOwner}, wie in jedem
    * Nachtlauf-Use-Case (Plan #718, A6).
+   *
+   * <p>Anders als die Laufliste und die Abbruchgründe legt dieser Abruf <b>keine</b> Gattung fest
+   * (Issue #1015): Er reicht beide durch, jede mit ihrer eigenen am Anlauf. Die Karte ist der eine
+   * Ort, an dem Nachtlauf und interaktive Sitzung zusammengehören.
    */
   @Transactional(readOnly = true)
   public List<NightRunItem> anlaeufeDerKarte(long userId, long projectId, int cardNumber) {

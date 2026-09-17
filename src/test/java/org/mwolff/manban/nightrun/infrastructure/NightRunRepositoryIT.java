@@ -709,6 +709,58 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
         .containsExactly(T1);
   }
 
+  // --- Gattung an den Anlaeufen einer Karte (Issue #1015) ------------------------------------
+
+  /**
+   * Die Anläufe einer Karte filtern nicht nach Gattung, sie zeigen sie an (Plan #1007, E10):
+   * Nachtlauf und interaktive Sitzung stehen nebeneinander, jüngster zuerst, jeder mit seiner
+   * eigenen.
+   */
+  @Test
+  void findByCardLiefertBeideGattungenNebeneinander_jedeMitIhrer() {
+    anlegen(T1, NightRunKind.NIGHT, List.of(paket(1015, NightRunState.GREEN)));
+    anlegen(T2, NightRunKind.INTERACTIVE, List.of(paket(1015, NightRunState.RED)));
+
+    assertThat(runs.findByCard(projectId, 1015))
+        .extracting(NightRunItem::startedAt, NightRunItem::kind)
+        .containsExactly(tuple(T2, NightRunKind.INTERACTIVE), tuple(T1, NightRunKind.NIGHT));
+  }
+
+  /**
+   * Ein verwaistes Paket trägt seine Gattung selbst (Issue #964, #1010): Sein Lauf ist verdrängt,
+   * und ohne die eigene Spalte fiele die Sitzung nach der Verdrängung auf den Nachtlauf zurück.
+   */
+  @Test
+  void findByCardLiefertDieGattungAuchFuerVerwaistePakete() {
+    verwaist(T1, NightRunKind.INTERACTIVE, paket(1015, NightRunState.GREEN));
+
+    assertThat(runs.findByCard(projectId, 1015))
+        .singleElement()
+        .extracting(NightRunItem::nightRunId, NightRunItem::kind)
+        .containsExactly(null, NightRunKind.INTERACTIVE);
+  }
+
+  /**
+   * Bestandsdaten ändern ihre Darstellung nicht: Eine Zeile, die ihre Gattung nicht selbst setzt —
+   * jede aus der Zeit vor {@code V34} —, liest sich als Nachtlauf. Den Wert liefert der Vorgabewert
+   * der Spalte, nicht der Lesepfad; deshalb steht hier ein {@code INSERT} ohne {@code kind} und
+   * kein Aufruf des Adapters.
+   */
+  @Test
+  void findByCardLiestEinPaketOhneGesetzteGattungAlsNachtlauf() {
+    jdbc.update(
+        "INSERT INTO night_run_item (night_run_id, project_id, started_at, mode, card_number,"
+            + " title, state, excerpt)"
+            + " VALUES (NULL, ?, ?, 'IMPLEMENTATION', 1015, 'Bestand', 'GREEN', 'Auszug')",
+        projectId,
+        Timestamp.from(T1));
+
+    assertThat(runs.findByCard(projectId, 1015))
+        .singleElement()
+        .extracting(NightRunItem::kind)
+        .isEqualTo(NightRunKind.NIGHT);
+  }
+
   // --- Ringpuffer und Zählung -----------------------------------------------------------------
 
   @Test

@@ -115,6 +115,12 @@ public interface NightRunRepository {
    * Die Anläufe einer Karte über Läufe hinweg, jüngster Startzeitpunkt zuerst — einschließlich der
    * verwaisten Pakete verdrängter Läufe (Issue #967). Bei gleichem Startzeitpunkt entscheidet die
    * ID.
+   *
+   * <p><b>Beide Gattungen</b>, jede mit ihrer eigenen am Paket (Issue #1015): Anders als {@link
+   * #findByProjectAndKindOrderByStartedAtDesc} filtert dieser Abruf nicht nach der Gattung, sondern
+   * liefert sie mit. Auf dem Kartenblatt ist sie eine Eigenschaft des Anlaufs und keine Frage —
+   * eine Karte wird nachts und am Tag angefasst. Ein verwaistes Paket trägt seine Gattung selbst,
+   * seit {@code V34} die Spalte auch auf {@code night_run_item} führt.
    */
   List<NightRunItem> findByCard(long projectId, int cardNumber);
 
