@@ -796,6 +796,89 @@ describe('BoardView', () => {
     expect(screen.queryByText('1 ausgewählt')).not.toBeInTheDocument()
   })
 
+  describe('Alle Karten einer Spalte auswählen', () => {
+    const zweiteImBacklog: Card = { ...card, id: 101, number: 2, title: 'Zweite', positionInColumn: 1 }
+    const inDone: Card = { ...card, id: 200, number: 3, title: 'Fertig', columnId: 20, positionInColumn: 0 }
+    const alleWaehlen = 'Alle Karten in Backlog auswählen'
+    const auswahlAufheben = 'Auswahl in Backlog aufheben'
+
+    const starteAuswahl = () => fireEvent.click(screen.getByRole('button', { name: 'Auswählen' }))
+
+    it('zeigt das Kästchen im Spaltenkopf nur im Auswahlmodus', () => {
+      render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} />)
+
+      expect(within(screen.getByTestId('column-header-10')).queryByRole('checkbox')).not.toBeInTheDocument()
+
+      starteAuswahl()
+      expect(within(screen.getByTestId('column-header-10')).getByRole('checkbox', { name: alleWaehlen }))
+        .toBeInTheDocument()
+    })
+
+    it('wählt mit einem Klick alle angezeigten Karten der Spalte', () => {
+      render(<BoardView board={board} initialCards={[card, zweiteImBacklog, inDone]} canEdit api={mkApi()} />)
+
+      starteAuswahl()
+      fireEvent.click(screen.getByRole('checkbox', { name: alleWaehlen }))
+
+      // Nur die beiden Karten des Backlogs — die Karte in Done bleibt ungewählt.
+      expect(screen.getByText('2 ausgewählt')).toBeInTheDocument()
+      expect(screen.getByRole('checkbox', { name: auswahlAufheben })).toBeChecked()
+    })
+
+    it('hebt beim zweiten Klick nur die Auswahl dieser Spalte auf', () => {
+      render(<BoardView board={board} initialCards={[card, zweiteImBacklog, inDone]} canEdit api={mkApi()} />)
+
+      starteAuswahl()
+      fireEvent.click(screen.getByTestId('card-200')) // Karte in Done einzeln gewählt
+      fireEvent.click(screen.getByRole('checkbox', { name: alleWaehlen }))
+      expect(screen.getByText('3 ausgewählt')).toBeInTheDocument()
+
+      fireEvent.click(screen.getByRole('checkbox', { name: auswahlAufheben }))
+
+      // Die Karte der anderen Spalte bleibt gewählt.
+      expect(screen.getByText('1 ausgewählt')).toBeInTheDocument()
+    })
+
+    it('zeigt bei teilweiser Auswahl „einige" und ergänzt beim Klick die fehlenden', () => {
+      render(<BoardView board={board} initialCards={[card, zweiteImBacklog]} canEdit api={mkApi()} />)
+
+      starteAuswahl()
+      fireEvent.click(screen.getByTestId('card-100'))
+
+      const kaestchen = screen.getByRole('checkbox', { name: alleWaehlen })
+      expect(kaestchen).toHaveAttribute('data-indeterminate', 'true')
+
+      fireEvent.click(kaestchen)
+      expect(screen.getByText('2 ausgewählt')).toBeInTheDocument()
+    })
+
+    it('lässt eine verdeckte Karte der Spalte ungewählt', () => {
+      const epic = {
+        id: 9, number: 9, title: 'Auth', description: null, shortcode: 'AUT',
+        done: 0, total: 1, memberNumbers: [2], rootNumbers: [2], requirementCardNumber: null,
+      }
+      const verdeckt: Card = { ...zweiteImBacklog, title: 'Verdeckt', parentId: 9 }
+      render(
+        <BoardView board={board} initialCards={[card, verdeckt]} canEdit epics={[epic]}
+          hiddenEpics={new Set([9])} api={mkApi()} />,
+      )
+
+      starteAuswahl()
+      fireEvent.click(screen.getByRole('checkbox', { name: alleWaehlen }))
+
+      expect(screen.getByText('1 ausgewählt')).toBeInTheDocument()
+      // „Alle" meint die angezeigten Karten: mit der einen sichtbaren ist die Spalte voll gewählt.
+      expect(screen.getByRole('checkbox', { name: auswahlAufheben })).toBeChecked()
+    })
+
+    it('sperrt das Kästchen einer leeren Spalte', () => {
+      render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} />)
+
+      starteAuswahl()
+      expect(screen.getByRole('checkbox', { name: 'Alle Karten in Done auswählen' })).toBeDisabled()
+    })
+  })
+
   describe('Labels über die Mehrfachauswahl', () => {
     const bug = { id: 7, boardId: 1, name: 'Bug', color: 'red', countOnEpicTile: false }
     const nacht = { id: 9, boardId: 1, name: 'Nacht', color: 'blue', countOnEpicTile: false }

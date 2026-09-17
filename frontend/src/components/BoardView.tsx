@@ -31,7 +31,13 @@ import { ApiError, apiErrorMessage } from '../api/client'
 import { columnsApi, type SortDirection } from '../api/columns'
 import { epicsApi as defaultEpicsApi, type Epic, type EpicsApi } from '../api/epics'
 import type { Member } from '../api/members'
-import { activeCardsInColumn, applyMove } from '../lib/boardOps'
+import {
+  activeCardsInColumn,
+  applyMove,
+  spaltenAuswahl,
+  spaltenAuswahlUmschalten,
+  type SpaltenAuswahlZustand,
+} from '../lib/boardOps'
 import { epicOfCard } from '../lib/cardEpic'
 import { cleanupCountdownLabel, cleanupDaysRemaining } from '../lib/cleanupCountdown'
 import { neighbourColumns } from '../lib/columnMeta'
@@ -76,6 +82,10 @@ const labelZustand = (treffer: number, gesamt: number): LabelZustand => {
   if (treffer === 0) return 'keine'
   return treffer === gesamt ? 'alle' : 'einige'
 }
+
+/** Zugänglicher Name des Spalten-Kästchens: Er sagt, was der nächste Klick tut. */
+const spaltenAuswahlLabel = (zustand: SpaltenAuswahlZustand, spalte: string) =>
+  zustand === 'alle' ? `Auswahl in ${spalte} aufheben` : `Alle Karten in ${spalte} auswählen`
 
 /**
  * Grund, warum die Massenaktion „Labels" gesperrt ist; `null` heißt bedienbar. Ein Vorhaben in der
@@ -692,6 +702,10 @@ export function BoardView({
       else next.add(cardId)
       return next
     })
+  // Ganze Spalte an- oder abwählen. Übergeben werden die IDs der **angezeigten** Karten dieser
+  // Spalte — was ein Filter oder ein ausgeblendetes Vorhaben verdeckt, bleibt außen vor.
+  const toggleSpaltenAuswahl = (angezeigteIds: number[]) =>
+    setSelectedIds((prev) => spaltenAuswahlUmschalten(angezeigteIds, prev))
   // Bulk-Archivieren: nach Bestätigung optimistisch aus der Ansicht nehmen, bei Fehler zurückrollen.
   const confirmBulkArchive = async () => {
     const ids = [...effectiveSelectedIds]
@@ -917,6 +931,9 @@ export function BoardView({
           // die tatsächlich verletzt ist. Dargestellt wird weiterhin filteredCards.
           const columnCards = activeCardsInColumn(cards, column.id)
           const count = columnCards.length
+          // Was die Spalte gerade zeigt — Grundlage des Spalten-Kästchens und der Karten-Schleife.
+          const angezeigteKarten = activeCardsInColumn(sichtbareKarten, column.id)
+          const spaltenZustand = spaltenAuswahl(angezeigteKarten.map((c) => c.id), selectedIds)
           // Eine Zahl je Spalte: die Vereinigung beider Achsen, keine zwei Zählungen (E4).
           const hiddenCount = columnCards.filter((c) => hiddenNumbers.has(c.number)).length
           const done = isDoneColumn(column.name)
@@ -965,6 +982,21 @@ export function BoardView({
                 onDragEnd={() => setColDrag(null)}
                 sx={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: 0, cursor: showStructureEdit ? 'grab' : undefined }}
               >
+                {selectionMode && (
+                  // Ganze Spalte auf einmal: dieselbe Bildsprache wie der Haken an der Karte, mit
+                  // dem Strich für „einige". Der Klick bleibt im Kästchen, damit die Handler des
+                  // Kopfes (Sortieren, Ziehen) nicht mitlaufen.
+                  <Checkbox
+                    size="small"
+                    checked={spaltenZustand === 'alle'}
+                    indeterminate={spaltenZustand === 'einige'}
+                    disabled={angezeigteKarten.length === 0}
+                    onChange={() => toggleSpaltenAuswahl(angezeigteKarten.map((c) => c.id))}
+                    onClick={(e) => e.stopPropagation()}
+                    slotProps={{ input: { 'aria-label': spaltenAuswahlLabel(spaltenZustand, column.name) } }}
+                    sx={{ p: 0, flex: 'none' }}
+                  />
+                )}
                 {/* Zustand der Spalte als Melder-LED (Entwurf Z. 1767): die Farbe des Status. */}
                 <Box
                   component="span"
@@ -1092,7 +1124,7 @@ export function BoardView({
                   ...ablageflaecheSx(dragCardId != null && ablageSpalteId === column.id && herkunftsSpalteId !== column.id),
                 }}
               >
-                {activeCardsInColumn(sichtbareKarten, column.id).map((card) => {
+                {angezeigteKarten.map((card) => {
                   const epic = epicOfCard(card, epics)
                   const doneAt = done ? card.movedToDoneAt : null
                   const overdue = isOverdue(card.dueDate, done)

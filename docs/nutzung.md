@@ -84,8 +84,15 @@ Klick auf eine Karte öffnet das Detail:
 ### Mehrfachauswahl
 
 Der Button **„Auswählen"** über dem Board schaltet in den Auswahlmodus: Jede Karte bekommt ein
-Kästchen, ein Klick auf die Karte hakt sie an oder ab (statt das Detail zu öffnen). Sobald mindestens
-eine Karte gewählt ist, erscheint unten eine Aktionsleiste mit vier Massenaktionen:
+Kästchen, ein Klick auf die Karte hakt sie an oder ab (statt das Detail zu öffnen).
+
+Im Spaltenkopf steht dazu ein eigenes Kästchen: Es wählt **alle Karten einer Spalte** auf einmal —
+und zwar die gerade **angezeigten**; was ein Filter oder ein ausgeblendetes Vorhaben verdeckt, bleibt
+außen vor. Ein **Strich** zeigt an, dass nur einige Karten der Spalte gewählt sind; der nächste Klick
+ergänzt die fehlenden. Sind alle gewählt, hebt der Klick die Auswahl **dieser** Spalte wieder auf —
+Karten anderer Spalten bleiben gewählt, sodass sich mehrere Spalten nacheinander einsammeln lassen.
+
+Sobald mindestens eine Karte gewählt ist, erscheint unten eine Aktionsleiste mit vier Massenaktionen:
 
 - **Labels:** öffnet ein Menü mit allen Labels des Boards. Je Label steht dort, wie weit es in der
   Auswahl vertreten ist — ein **voller Haken** („alle gewählten Karten"), ein **Strich** („einige")
