@@ -16,15 +16,21 @@ import { kosten, menge } from '../../lib/nachtlaufFormat'
 import { nightRunZustandsText } from '../../lib/nightRunHandoff'
 
 /**
- * Die drei Lauf-Arten, die eingeliefert werden, in fester Reihenfolge. Als `Record` über
+ * Die Lauf-Arten, die eingeliefert werden, in fester Reihenfolge. Als `Record` über
  * `NightRunServerMode`: `NIGHTPLAN` entsteht allein im Browser und wird nie eingeliefert (`V30`,
  * Plan #803) — er kann hier gar nicht erst stehen, und ein neuer einlieferbarer Modus bricht den
  * Build, statt still zu fehlen. Die Wörter sind die der Nachtlauf-Auswertung.
+ *
+ * `INTERACTIVE` steht seit Issue #1016 dabei und ist hier richtig aufgehoben: Anders als die
+ * Laufliste legt der Abruf der Anläufe keine Gattung fest (Issue #1015) — eine Karte wird nachts
+ * und am Tag angefasst, und beides gehört auf ihr Blatt. Ohne Anlauf dieser Art steht die Kachel
+ * auf „nicht gelaufen", wie bei jeder anderen nie gelaufenen Art.
  */
 const LAUF_ART_TEXT: Record<NightRunServerMode, string> = {
   IMPLEMENTATION: 'Umsetzungs-Lauf',
   REVIEW: 'Prüf-Lauf',
   CHAIN: 'Ketten-Lauf',
+  INTERACTIVE: 'Interaktive Sitzung',
 }
 
 const LAUF_ARTEN = Object.keys(LAUF_ART_TEXT) as NightRunServerMode[]

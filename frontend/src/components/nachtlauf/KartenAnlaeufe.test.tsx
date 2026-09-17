@@ -60,6 +60,14 @@ describe('KartenAnlaeufe', () => {
     expect(screen.getByTestId('anlaeufe-dauer-REVIEW').textContent).not.toMatch(/0/)
   })
 
+  it('fuehrt die interaktive Sitzung als eigene Lauf-Art (Issue #1016)', async () => {
+    zeige([anlauf({ mode: 'INTERACTIVE', durationMs: 90_000 })])
+
+    const sitzung = await screen.findByTestId('anlaeufe-dauer-INTERACTIVE')
+    expect(sitzung).toHaveTextContent('Interaktive Sitzung')
+    expect(sitzung).toHaveTextContent('1 Min')
+  })
+
   it('schreibt eine gelaufene Art ohne gemessene Dauer als „nicht gemessen", auch in der Liste', async () => {
     zeige([anlauf({ mode: 'REVIEW', state: 'GREY', durationMs: null })])
 

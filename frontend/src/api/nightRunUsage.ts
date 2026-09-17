@@ -31,22 +31,42 @@ export interface VerbrauchAufteilung {
   remainder: VerbrauchAngaben
 }
 
+/**
+ * Dieselbe Aufteilung je Gattung (Issue #1013, Plan #1007): `night` sind die Nachtläufe,
+ * `interactive` die interaktiven Sitzungen. Die Angabe steht **neben** `usage` und nicht an dessen
+ * Stelle — `usage` bleibt die Gesamtsumme und ist am Server genau die Addition der beiden Anteile
+ * (#984 AK 5).
+ */
+export interface VerbrauchAufteilungGattung {
+  night: VerbrauchAufteilung
+  interactive: VerbrauchAufteilung
+}
+
+/** Der Verbrauch einer Kartenzeile je Gattung (Issue #1013). */
+export interface VerbrauchAngabenGattung {
+  night: VerbrauchAngaben
+  interactive: VerbrauchAngaben
+}
+
 /** Eine Kartenzeile einer Nacht. */
 export interface VerbrauchKarte {
   cardNumber: number
   attemptCount: number
   durationMs: number | null
   usage: VerbrauchAngaben
+  usageByKind: VerbrauchAngabenGattung
 }
 
 /** Eine Nacht (#926 AK 1–4). */
 export interface VerbrauchNacht {
   /** Datum, an dem die Nacht beginnt (`JJJJ-MM-TT`). */
   night: string
+  /** Zahl der Einträge der Nacht — Läufe **und** Sitzungen; der Server zählt beide (Issue #1013). */
   runCount: number
   durationMs: number
   cardCount: number
   usage: VerbrauchAufteilung
+  usageByKind: VerbrauchAufteilungGattung
   aborted: boolean
   cards: VerbrauchKarte[]
 }
@@ -62,10 +82,19 @@ export interface VerbrauchKennzahlen {
   to: string
   coverage: VerbrauchAbdeckung
   noRuns: boolean
+  /** Zahl der Einträge des Zeitraums — Läufe **und** Sitzungen (Issue #1013). */
   runCount: number
   durationMs: number
   cardCount: number
   usage: VerbrauchAufteilung
+  usageByKind: VerbrauchAufteilungGattung
+  /**
+   * Beginn der Erfassung interaktiver Sitzungen als ISO-Zeitpunkt; `null`, solange das Projekt
+   * keine gemeldet hat (Plan #1007 E18). Daran unterscheidet die Anzeige „nicht erfasst" von
+   * „teilweise erfasst" — ein Sitzungs-Anteil von `null` vor diesem Zeitpunkt ist keine gemessene
+   * Null, sondern eine Zeit ohne Erfassung.
+   */
+  interactiveUsageSince: string | null
 }
 
 /** Eine Nacht innerhalb eines Zeitraums (#926 AK 8). */
@@ -74,6 +103,7 @@ export interface VerbrauchNachtKurz {
   runCount: number
   cardCount: number
   usage: VerbrauchAufteilung
+  usageByKind: VerbrauchAufteilungGattung
   aborted: boolean
 }
 
@@ -95,6 +125,28 @@ export interface VerbrauchZeitraum {
   withoutEpic: VerbrauchVorhaben
   /** Eine Karte gehört zu mehreren Vorhaben — die Vorhaben-Summen überschneiden sich (Plan E11). */
   epicsOverlap: boolean
+}
+
+/**
+ * Die Summe über die ganze Laufzeit des Projekts (Issue #1014, #984 AK 4, Plan #1007 E19) — ohne
+ * Zeitraum und deshalb ohne Abdeckungs-Einordnung.
+ *
+ * Die beiden Lückenangaben sagen Verschiedenes und ersetzen einander nicht:
+ * `oldestRetainedRunStart` zeigt, was der Ringpuffer verdrängt hat, `interactiveUsageSince` trennt
+ * „nie erfasst" von „erfasst, dann verdrängt".
+ */
+export interface VerbrauchGesamt {
+  /** Zahl aller aufbewahrten Einträge — Läufe **und** Sitzungen. */
+  runCount: number
+  nightRunCount: number
+  interactiveRunCount: number
+  cardCount: number
+  usage: VerbrauchAufteilung
+  usageByKind: VerbrauchAufteilungGattung
+  /** Beginn des ältesten aufbewahrten Eintrags als ISO-Zeitpunkt; `null` ohne Eintrag. */
+  oldestRetainedRunStart: string | null
+  /** Erfassungsbeginn der interaktiven Sitzungen; `null`, solange keine gemeldet wurde. */
+  interactiveUsageSince: string | null
 }
 
 /** Die Zone des Lesers: „die letzte Nacht" ist seine Nacht, nicht die des Servers (Plan E4). */
@@ -120,6 +172,12 @@ export const nightRunUsageApi = {
         zone,
       })}`,
     ),
+  /**
+   * Die Lebenszeit-Summe (Issue #1014). Ohne Parameter: Eine Lebenszeit hat keinen ersten Tag,
+   * keinen Vorzeitraum und keine Zone, nach der sie sich gruppieren ließe.
+   */
+  total: (projectId: number) =>
+    apiFetch<VerbrauchGesamt>(`/api/projects/${projectId}/night-run-usage/total`),
 }
 
 export type NightRunUsageApi = typeof nightRunUsageApi

@@ -74,6 +74,11 @@ type Zustand = { art: 'laden' } | { art: 'fehler' } | { art: 'daten'; zeitraum: 
  * <p>Die Hinweise folgen `zeitraumFall`: Ein Zeitraum ohne Lauf und einer vor der Aufbewahrung
  * stehen anstelle der Kacheln, ein angeschnittener Zeitraum und einer ohne Messung stehen im Kopf
  * ihrer Platte **neben** den Zahlen (Plan E8, E5).
+ *
+ * <p><b>Gezeigt wird der Nachtlauf-Anteil</b> (Issue #1016, Plan #1007): Derselbe Abruf führt seit
+ * Issue #1013 auch die interaktiven Sitzungen, und `usage` ist die Summe über beide. Die
+ * Nachtlauf-Seite bleibt in ihrer Aussage auf Nachtläufe beschränkt — läse sie `usage`, wüchsen
+ * ihre Zahlen still um die Arbeit am Tag, und niemand sähe, woher der Zuwachs kommt.
  */
 export function NachtlaufVerbrauchZeitraum({
   projectId,
@@ -343,7 +348,11 @@ function Vergleich({
   current,
   previous,
 }: Readonly<{ current: VerbrauchKennzahlen; previous: VerbrauchKennzahlen }>) {
-  const vergleich = vergleichMitVorzeitraum(current.usage.total, previous.usage.total)
+  // Nachtlauf-Anteil gegen Nachtlauf-Anteil (Issue #1016): Ein Vergleich über die Gesamtsumme läse
+  // sich als Aussage über die Nachtläufe und wäre in Wahrheit eine über Nächte und Tage zusammen.
+  const aktuell = current.usageByKind.night.total
+  const vorher = previous.usageByKind.night.total
+  const vergleich = vergleichMitVorzeitraum(aktuell, vorher)
   const gerichtet = vergleich.richtung === 'teurer' || vergleich.richtung === 'billiger'
   return (
     <Box component="span" data-testid="verbrauch-zeitraum-vergleich">
@@ -351,7 +360,7 @@ function Vergleich({
         <Box component="span" aria-hidden>
           <DeltaMarke art={vergleich.richtung === 'billiger' ? 'gut' : 'schlecht'}>
             {`${vergleich.richtung === 'billiger' ? '▼' : '▲'} ${dollar(
-              Math.abs(current.usage.total.costUsd! - previous.usage.total.costUsd!),
+              Math.abs(aktuell.costUsd! - vorher.costUsd!),
             )} $ zur ${vorzeitraumName(current)}`}
           </DeltaMarke>
         </Box>
@@ -369,7 +378,7 @@ function Vergleich({
  * nie zu 0.
  */
 function Kacheln({ kennzahlen }: Readonly<{ kennzahlen: VerbrauchKennzahlen }>) {
-  const { total, cardShare, remainder } = kennzahlen.usage
+  const { total, cardShare, remainder } = kennzahlen.usageByKind.night
   const jeLauf =
     total.costUsd !== null && kennzahlen.runCount > 0
       ? `${dollar(total.costUsd / kennzahlen.runCount)} $ je Lauf`
@@ -448,12 +457,14 @@ function Naechte({
   if (naechte.length === 0) {
     return null
   }
-  const teuerste = Math.max(0, ...naechte.map((n) => n.usage.total.costUsd ?? 0))
+  // Auch die Nächte-Platte zeigt den Nachtlauf-Anteil (Issue #1016) — Zahl **und** Bezugsgröße des
+  // Balkens, sonst stünde eine Nacht im Verhältnis zu einer Summe, die sie nicht ausweist.
+  const teuerste = Math.max(0, ...naechte.map((n) => n.usageByKind.night.total.costUsd ?? 0))
   return (
     <Platte titel="Nächte" notiz="Klick öffnet die Nacht">
       <Box>
         {naechte.map((nacht, stelle) => {
-          const betrag = nacht.usage.total.costUsd
+          const betrag = nacht.usageByKind.night.total.costUsd
           const breite = betrag === null || teuerste === 0 ? null : Math.round((betrag / teuerste) * 100)
           return (
             <ButtonBase

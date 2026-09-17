@@ -16,8 +16,14 @@ import { apiFetch } from './client'
  * Diese Verengung erzwingt den Compiler-Schutz in `NightRunPage.tsx` (`istEinlieferbar`) — ein Cast
  * an `mode` hebelte ihn aus. Der Ausschluss ist der einzige Ort, der gepflegt wird: Ein neuer
  * einlieferbarer Modus weitet diesen Typ von selbst.
+ *
+ * `INTERACTIVE` (Issue #1010, Plan #1007 E23) kommt **hinzu** statt aus `NightRunMode`: Eine
+ * interaktive Sitzung hat kein Nachtlauf-Protokoll, der Browser-Parser kann sie nie erzeugen, und
+ * eingeliefert wird sie allein vom Hook des Kits. Sie im Parser-Typ zu führen, hieße eine Zeile zu
+ * versprechen, die dort nie steht. Wer den Typ erweitert, muss die `Record`-Tabellen darüber
+ * pflegen — `LAUF_ART_TEXT` (`KartenAnlaeufe`) und `MODUS` (`lib/leitstand`) brechen sonst `tsc`.
  */
-export type NightRunServerMode = Exclude<NightRunMode, 'NIGHTPLAN'>
+export type NightRunServerMode = Exclude<NightRunMode, 'NIGHTPLAN'> | 'INTERACTIVE'
 
 /**
  * Der gemeldete Verbrauch eines Laufs oder eines Arbeitspakets (Issue #948).

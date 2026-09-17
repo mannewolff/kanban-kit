@@ -100,6 +100,11 @@ describe('nightRunUsageApi', () => {
           durationMs: 1,
           cardCount: 1,
           usage: { total: { ...nichts, costUsd: 2.5 }, cardShare: nichts, remainder: nichts },
+          usageByKind: {
+            night: { total: { ...nichts, costUsd: 2 }, cardShare: nichts, remainder: nichts },
+            interactive: { total: { ...nichts, costUsd: 0.5 }, cardShare: nichts, remainder: nichts },
+          },
+          interactiveUsageSince: null,
         },
       }),
     )
@@ -109,6 +114,64 @@ describe('nightRunUsageApi', () => {
     expect(zeitraum.current.usage.total.costUsd).toBe(2.5)
     expect(zeitraum.current.usage.total.inputTokens).toBeNull()
     expect(zeitraum.current.usage.cardShare.costUsd).toBeNull()
+    expect(zeitraum.current.usageByKind.night.total.costUsd).toBe(2)
+    expect(zeitraum.current.usageByKind.interactive.total.costUsd).toBe(0.5)
+    expect(zeitraum.current.interactiveUsageSince).toBeNull()
+  })
+
+  it('total ruft GET /api/projects/{id}/night-run-usage/total ohne einen einzigen Parameter', async () => {
+    const f = spyFetch(
+      JSON.stringify({
+        runCount: 3,
+        nightRunCount: 2,
+        interactiveRunCount: 1,
+        cardCount: 4,
+        usage: { total: { ...nichts, costUsd: 9 }, cardShare: nichts, remainder: nichts },
+        usageByKind: {
+          night: { total: { ...nichts, costUsd: 6 }, cardShare: nichts, remainder: nichts },
+          interactive: { total: { ...nichts, costUsd: 3 }, cardShare: nichts, remainder: nichts },
+        },
+        oldestRetainedRunStart: '2026-09-01T10:00:00Z',
+        interactiveUsageSince: '2026-09-05T08:00:00Z',
+      }),
+    )
+
+    const gesamt = await nightRunUsageApi.total(4)
+
+    const url = lastUrl(f)
+    expect(url.pathname).toBe('/api/projects/4/night-run-usage/total')
+    expect(url.search).toBe('')
+    expect(gesamt.nightRunCount).toBe(2)
+    expect(gesamt.interactiveRunCount).toBe(1)
+    expect(gesamt.usageByKind.night.total.costUsd).toBe(6)
+    expect(gesamt.usageByKind.interactive.total.costUsd).toBe(3)
+    expect(gesamt.oldestRetainedRunStart).toBe('2026-09-01T10:00:00Z')
+    expect(gesamt.interactiveUsageSince).toBe('2026-09-05T08:00:00Z')
+  })
+
+  /** Der neue Anteil folgt demselben Grundsatz: nicht gemessen bleibt `null` und wird nie 0. */
+  it('laesst einen fehlenden Sitzungs-Anteil null und den Erfassungsbeginn ohne Meldung null', async () => {
+    spyFetch(
+      JSON.stringify({
+        runCount: 1,
+        nightRunCount: 1,
+        interactiveRunCount: 0,
+        cardCount: 0,
+        usage: { total: { ...nichts, costUsd: 6 }, cardShare: nichts, remainder: nichts },
+        usageByKind: {
+          night: { total: { ...nichts, costUsd: 6 }, cardShare: nichts, remainder: nichts },
+          interactive: { total: nichts, cardShare: nichts, remainder: nichts },
+        },
+        oldestRetainedRunStart: null,
+        interactiveUsageSince: null,
+      }),
+    )
+
+    const gesamt = await nightRunUsageApi.total(4)
+
+    expect(gesamt.usageByKind.interactive.total.costUsd).toBeNull()
+    expect(gesamt.interactiveUsageSince).toBeNull()
+    expect(gesamt.oldestRetainedRunStart).toBeNull()
   })
 
   it('reicht einen Fehlerstatus als ApiError weiter', async () => {

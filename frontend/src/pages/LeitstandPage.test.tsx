@@ -139,6 +139,16 @@ const angaben = (costUsd: number | null, inputTokens: number | null = 4_820_000,
   cachedInputSharePercent: null,
 })
 
+/**
+ * Der Gattungs-Split der Antwort (Issue #1016). Der Leitstand liest weiterhin die Gesamtsumme; die
+ * Fixtures führen den Split, weil die Antwort ihn trägt — der Nachtlauf-Anteil ist hier die ganze
+ * Summe, der Sitzungs-Anteil leer.
+ */
+const jeGattung = (gesamt: ReturnType<typeof angaben>) => ({
+  night: { total: gesamt, cardShare: angaben(null), remainder: angaben(null) },
+  interactive: { total: angaben(null), cardShare: angaben(null), remainder: angaben(null) },
+})
+
 const kennzahlen = (extra: Partial<VerbrauchKennzahlen> = {}): VerbrauchKennzahlen => ({
   type: 'DAY',
   firstDay: '2026-09-14',
@@ -151,6 +161,8 @@ const kennzahlen = (extra: Partial<VerbrauchKennzahlen> = {}): VerbrauchKennzahl
   durationMs: 1,
   cardCount: 9,
   usage: { total: angaben(12.4), cardShare: angaben(null), remainder: angaben(null) },
+  usageByKind: jeGattung(angaben(12.4)),
+  interactiveUsageSince: null,
   ...extra,
 })
 
@@ -159,12 +171,16 @@ const nacht = (night: string, outputTokens: number | null) => ({
   runCount: 1,
   cardCount: 9,
   usage: { total: angaben(10, 1, outputTokens, 1), cardShare: angaben(null), remainder: angaben(null) },
+  usageByKind: jeGattung(angaben(10, 1, outputTokens, 1)),
   aborted: false,
 })
 
 const zeitraum = (extra: Partial<VerbrauchZeitraum> = {}): VerbrauchZeitraum => ({
   current: kennzahlen(),
-  previous: kennzahlen({ usage: { total: angaben(14.1), cardShare: angaben(null), remainder: angaben(null) } }),
+  previous: kennzahlen({
+    usage: { total: angaben(14.1), cardShare: angaben(null), remainder: angaben(null) },
+    usageByKind: jeGattung(angaben(14.1)),
+  }),
   nights: [nacht('2026-09-14', 186_000)],
   epics: [],
   withoutEpic: { epicId: null, shortcode: null, title: null, cardCount: 0, usage: angaben(null) },
@@ -501,7 +517,7 @@ describe('LeitstandPage — Verbrauch', () => {
     await kachel('Kosten')
     m.verbrauch.mockResolvedValue(
       zeitraum({
-        current: kennzahlen({ type: 'WEEK', lastDay: '2026-09-20', runCount: 3, usage: { total: angaben(20), cardShare: angaben(null), remainder: angaben(null) } }),
+        current: kennzahlen({ type: 'WEEK', lastDay: '2026-09-20', runCount: 3, usage: { total: angaben(20), cardShare: angaben(null), remainder: angaben(null) }, usageByKind: jeGattung(angaben(20)) }),
         nights: [nacht('2026-09-14', 100), nacht('2026-09-15', null), nacht('2026-09-16', 300)],
       }),
     )
@@ -518,7 +534,7 @@ describe('LeitstandPage — Verbrauch', () => {
   it('zeigt ohne Messung Leerwerte, keinen Stapel, keinen Vergleich und den Hinweis zum Zeitraum', async () => {
     m.verbrauch.mockResolvedValue(
       zeitraum({
-        current: kennzahlen({ noRuns: true, cardCount: 0, usage: { total: angaben(null, null, null, null), cardShare: angaben(null), remainder: angaben(null) } }),
+        current: kennzahlen({ noRuns: true, cardCount: 0, usage: { total: angaben(null, null, null, null), cardShare: angaben(null), remainder: angaben(null) }, usageByKind: jeGattung(angaben(null, null, null, null)) }),
         nights: [],
       }),
     )

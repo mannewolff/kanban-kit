@@ -40,6 +40,13 @@ const kennzahlen = (werte: Partial<VerbrauchKennzahlen>): VerbrauchKennzahlen =>
   durationMs: 1000,
   cardCount: 2,
   usage: { total: kosten(4), cardShare: kosten(3), remainder: kosten(1) },
+  // Die Textrechnung urteilt über die Gesamtsumme — sie dient Leitstand und Nachtlauf-Seite
+  // gleichermaßen. Der Gattungs-Split steht daneben und bleibt hier ohne Einfluss (Issue #1016).
+  usageByKind: {
+    night: { total: kosten(4), cardShare: kosten(3), remainder: kosten(1) },
+    interactive: { total: nichts, cardShare: nichts, remainder: nichts },
+  },
+  interactiveUsageSince: null,
   ...werte,
 })
 

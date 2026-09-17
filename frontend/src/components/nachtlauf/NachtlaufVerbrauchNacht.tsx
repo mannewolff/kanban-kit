@@ -24,9 +24,14 @@ const kennzahl = (label: string, wert: string): NachtlaufKennzahl => ({ label, w
  * <p>Jede fehlende Angabe steht als „nicht gemessen" und nie als 0 (Plan E5). Die Darstellung der
  * Kennzahlen und der Anteile ist die der übrigen Seite — {@link NachtlaufKennzahlen} und {@link
  * NachtlaufAnteilsbalken} —, damit dieselbe Sache nicht zweimal verschieden aussieht.
+ *
+ * <p><b>Gezeigt wird der Nachtlauf-Anteil</b> (Issue #1016, Plan #1007): Derselbe Abruf führt seit
+ * Issue #1013 auch die interaktiven Sitzungen, und `usage` ist die Summe über beide. Die
+ * Nachtlauf-Seite bleibt in ihrer Aussage auf Nachtläufe beschränkt — läse sie `usage`, wüchsen
+ * ihre Zahlen still um die Arbeit am Tag, und niemand sähe, woher der Zuwachs kommt.
  */
 export function NachtlaufVerbrauchNacht({ nacht }: Readonly<{ nacht: VerbrauchNacht }>) {
-  const { total, cardShare, remainder } = nacht.usage
+  const { total, cardShare, remainder } = nacht.usageByKind.night
   return (
     <Box data-testid="verbrauch-nacht">
       <Typography
@@ -104,22 +109,27 @@ export function NachtlaufVerbrauchNacht({ nacht }: Readonly<{ nacht: VerbrauchNa
  * Eine Karte mit ihren Summen über die Anläufe dieser Nacht (AK 3). Den Balken gibt es nur mit
  * Bezugsgröße: Fehlen die Kosten der Karte oder der Nacht, oder kostete die Nacht nichts, gäbe er
  * ein Verhältnis vor, das es nicht gibt.
+ *
+ * <p>Auch hier zählt allein der Nachtlauf-Anteil (Issue #1016) — er muss es sogar: Der Balken setzt
+ * die Karte ins Verhältnis zur Nacht, und ein kartenbezogener Gesamtwert über einem
+ * Nachtlauf-Bezugswert ergäbe Anteile über 100 %.
  */
 function Kartenzeile({
   karte,
   nachtKosten,
 }: Readonly<{ karte: VerbrauchKarte; nachtKosten: number | null }>) {
+  const verbrauch = karte.usageByKind.night
   const anteil =
-    karte.usage.costUsd === null || nachtKosten === null || nachtKosten <= 0
+    verbrauch.costUsd === null || nachtKosten === null || nachtKosten <= 0
       ? null
-      : Math.round((karte.usage.costUsd / nachtKosten) * 100)
+      : Math.round((verbrauch.costUsd / nachtKosten) * 100)
   const angaben = [
     `#${karte.cardNumber}`,
     karte.attemptCount === 1 ? '1 Anlauf' : `${karte.attemptCount} Anläufe`,
     karte.durationMs === null ? 'Dauer nicht gemessen' : formatDuration(karte.durationMs / 1000),
-    `Kosten ${kosten(ohneNull(karte.usage.costUsd))}`,
-    `Eingabe ${menge(ohneNull(karte.usage.inputTokens))}`,
-    `Ausgabe ${menge(ohneNull(karte.usage.outputTokens))}`,
+    `Kosten ${kosten(ohneNull(verbrauch.costUsd))}`,
+    `Eingabe ${menge(ohneNull(verbrauch.inputTokens))}`,
+    `Ausgabe ${menge(ohneNull(verbrauch.outputTokens))}`,
   ]
   return (
     <Box component="li">

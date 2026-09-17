@@ -1,8 +1,9 @@
 import { ThemeProvider } from '@mui/material/styles'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import type {
   VerbrauchAngaben,
+  VerbrauchAufteilung,
   VerbrauchKennzahlen,
   VerbrauchNacht,
   VerbrauchZeitraum,
@@ -20,6 +21,23 @@ const nichts: VerbrauchAngaben = {
   cachedInputSharePercent: null,
 }
 
+const kosten = (costUsd: number | null): VerbrauchAngaben => ({ ...nichts, costUsd })
+
+const aufteilung = (
+  total: VerbrauchAngaben,
+  cardShare: VerbrauchAngaben = nichts,
+  remainder: VerbrauchAngaben = nichts,
+): VerbrauchAufteilung => ({ total, cardShare, remainder })
+
+const LEER = aufteilung(nichts)
+
+/** Nachtlauf-Anteil, Sitzungs-Anteil und Gesamtsumme einer Antwort (Issue #1016). */
+const verbrauch = (
+  nachtlauf: VerbrauchAufteilung,
+  sitzungen: VerbrauchAufteilung = LEER,
+  gesamt: VerbrauchAufteilung = nachtlauf,
+) => ({ usage: gesamt, usageByKind: { night: nachtlauf, interactive: sitzungen } })
+
 const kennzahlen: VerbrauchKennzahlen = {
   type: 'DAY',
   firstDay: '2026-09-15',
@@ -31,7 +49,8 @@ const kennzahlen: VerbrauchKennzahlen = {
   runCount: 1,
   durationMs: 1,
   cardCount: 0,
-  usage: { total: nichts, cardShare: nichts, remainder: nichts },
+  interactiveUsageSince: null,
+  ...verbrauch(LEER),
 }
 
 const zeitraum: VerbrauchZeitraum = {
@@ -42,7 +61,7 @@ const zeitraum: VerbrauchZeitraum = {
       night: '2026-09-10',
       runCount: 1,
       cardCount: 1,
-      usage: { total: nichts, cardShare: nichts, remainder: nichts },
+      ...verbrauch(LEER),
       aborted: false,
     },
   ],
@@ -56,10 +75,43 @@ const nacht: VerbrauchNacht = {
   runCount: 2,
   durationMs: 60_000,
   cardCount: 1,
-  usage: { total: nichts, cardShare: nichts, remainder: nichts },
+  ...verbrauch(LEER),
   aborted: false,
   cards: [],
 }
+
+/**
+ * Dieselbe Antwort mit einem Sitzungs-Anteil ungleich null (Issue #1016): Nachtläufe 6,50 $,
+ * Sitzungen 10,00 $, Gesamtsumme 16,50 $. Die Nachtlauf-Seite darf davon nur die 6,50 $ zeigen.
+ */
+const mitSitzungen: VerbrauchZeitraum = {
+  ...zeitraum,
+  current: {
+    ...kennzahlen,
+    ...verbrauch(aufteilung(kosten(6.5), kosten(5), kosten(1.5)), aufteilung(kosten(10)), aufteilung(kosten(16.5))),
+  },
+  previous: { ...kennzahlen, firstDay: '2026-09-14', lastDay: '2026-09-14', ...verbrauch(aufteilung(kosten(6.5))) },
+  nights: [
+    {
+      night: '2026-09-10',
+      runCount: 1,
+      cardCount: 1,
+      ...verbrauch(aufteilung(kosten(2)), aufteilung(kosten(3)), aufteilung(kosten(5))),
+      aborted: false,
+    },
+  ],
+  epics: [{ epicId: 1, shortcode: 'PLANEN', title: 'Planen', cardCount: 2, usage: kosten(4) }],
+}
+
+/** Die Nacht dazu: Nachtläufe 4,00 $, Sitzungen 6,00 $, Gesamtsumme 10,00 $. */
+const nachtMitSitzungen: VerbrauchNacht = {
+  ...nacht,
+  night: '2026-09-15',
+  ...verbrauch(aufteilung(kosten(4)), aufteilung(kosten(6)), aufteilung(kosten(10))),
+}
+
+/** `Intl` setzt vor der Einheit ein geschütztes Leerzeichen; verglichen wird der Wortlaut. */
+const lesbar = (element: HTMLElement) => element.textContent?.replaceAll(' ', ' ') ?? ''
 
 const zeige = (api: Parameters<typeof NachtlaufVerbrauchBereich>[0]['api']) =>
   render(
@@ -196,6 +248,54 @@ describe('NachtlaufVerbrauchBereich', () => {
     await Promise.resolve()
 
     expect(screen.queryByText('Der Verbrauch konnte nicht geladen werden.')).not.toBeInTheDocument()
+  })
+
+  it('bleibt in seinen Zahlen auf dem Nachtlauf-Anteil, auch wenn Sitzungen mitgemeldet sind', async () => {
+    const api = {
+      period: vi.fn().mockResolvedValue(mitSitzungen),
+      night: vi.fn().mockResolvedValue(nachtMitSitzungen),
+    }
+
+    zeige(api)
+
+    const aktuell = await screen.findByTestId('verbrauch-zeitraum-aktuell')
+    expect(lesbar(within(aktuell).getByTestId('verbrauch-kachel-Gesamtsumme'))).toContain('6,50')
+    expect(lesbar(aktuell)).not.toContain('16,50')
+    const nachtzeile = screen.getByRole('button', { name: /Nacht vom 10\.09\.2026/ })
+    expect(lesbar(nachtzeile)).toContain('2,00 $')
+    expect(lesbar(nachtzeile)).not.toContain('5,00 $')
+  })
+
+  it('zeigt in der Nachtansicht den Nachtlauf-Anteil der Nacht', async () => {
+    const api = {
+      period: vi.fn().mockResolvedValue(mitSitzungen),
+      night: vi.fn().mockResolvedValue(nachtMitSitzungen),
+    }
+
+    zeige(api)
+
+    const ansicht = await screen.findByTestId('verbrauch-nacht')
+    expect(lesbar(within(ansicht).getByTestId('nachtlauf-kennzahl-Gesamtsumme'))).toContain('4,00 $')
+    expect(lesbar(ansicht)).not.toContain('10,00 $')
+  })
+
+  /**
+   * Die Vorhaben-Aufstellung trägt in der Antwort **keine** Aufteilung nach Gattung — der Server
+   * summiert je Vorhaben über beide (`EpicResponse`). Sie bleibt deshalb unberührt davon, dass die
+   * Kennzahlen daneben einen Sitzungs-Anteil führen; belegt wird genau das, nicht mehr.
+   */
+  it('laesst die Vorhaben-Aufstellung von einem Sitzungs-Anteil unberuehrt', async () => {
+    const api = {
+      period: vi.fn().mockResolvedValue(mitSitzungen),
+      night: vi.fn().mockResolvedValue(nachtMitSitzungen),
+    }
+
+    zeige(api)
+
+    const vorhaben = await screen.findByTestId('verbrauch-vorhaben')
+    expect(lesbar(vorhaben)).toContain('PLANEN · Planen')
+    expect(lesbar(vorhaben)).toContain('4,00 $')
+    expect(lesbar(vorhaben)).not.toContain('16,50')
   })
 
   it('schreibt nach dem Verlassen nichts mehr', async () => {

@@ -44,10 +44,17 @@ export const MELDER_JE_FEHLERKLASSE: Record<NightRunErrorClass, Melder> = {
   REVIEWER_FAILED: 'grau',
 }
 
+/**
+ * Ein `Record` über `NightRunServerMode` — ein neuer Modus ohne Eintrag bricht `tsc`. `INTERACTIVE`
+ * steht seit Issue #1016 dabei, damit der Typ vollständig gepflegt ist; die Platte „Letzter Lauf"
+ * des Leitstands liest ihre Läufe weiterhin aus der serverseitig auf Nachtläufe beschränkten
+ * Laufliste (`NightRunService.list`, Issue #1012) und zeigt das Wort deshalb heute nicht.
+ */
 const MODUS: Record<NightRunServerMode, string> = {
   CHAIN: 'Kette',
   IMPLEMENTATION: 'Umsetzung',
   REVIEW: 'Review',
+  INTERACTIVE: 'Sitzung',
 }
 
 /** Der Name der Betriebsart eines Laufs. */
