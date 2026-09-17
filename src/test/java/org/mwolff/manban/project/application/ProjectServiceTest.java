@@ -71,7 +71,10 @@ class ProjectServiceTest {
         .thenAnswer(
             inv -> {
               Project p = inv.getArgument(0);
-              return p.id() == null ? new Project(9L, p.name(), p.ownerUserId(), p.createdAt()) : p;
+              return p.id() == null
+                  ? new Project(
+                      9L, p.name(), p.ownerUserId(), p.createdAt(), p.interactiveUsageSince())
+                  : p;
             });
 
     // When
@@ -93,7 +96,8 @@ class ProjectServiceTest {
         .thenAnswer(
             inv -> {
               Project p = inv.getArgument(0);
-              return new Project(9L, p.name(), p.ownerUserId(), p.createdAt());
+              return new Project(
+                  9L, p.name(), p.ownerUserId(), p.createdAt(), p.interactiveUsageSince());
             });
 
     // When
@@ -115,7 +119,8 @@ class ProjectServiceTest {
         .thenAnswer(
             inv -> {
               Project p = inv.getArgument(0);
-              return new Project(9L, p.name(), p.ownerUserId(), p.createdAt());
+              return new Project(
+                  9L, p.name(), p.ownerUserId(), p.createdAt(), p.interactiveUsageSince());
             });
 
     // When
@@ -135,7 +140,8 @@ class ProjectServiceTest {
         .thenAnswer(
             inv -> {
               Project p = inv.getArgument(0);
-              return new Project(9L, p.name(), p.ownerUserId(), p.createdAt());
+              return new Project(
+                  9L, p.name(), p.ownerUserId(), p.createdAt(), p.interactiveUsageSince());
             });
 
     // When
@@ -156,7 +162,8 @@ class ProjectServiceTest {
         .thenAnswer(
             inv -> {
               Project p = inv.getArgument(0);
-              return new Project(9L, p.name(), p.ownerUserId(), p.createdAt());
+              return new Project(
+                  9L, p.name(), p.ownerUserId(), p.createdAt(), p.interactiveUsageSince());
             });
 
     // When
@@ -179,7 +186,8 @@ class ProjectServiceTest {
         .thenAnswer(
             inv -> {
               Project p = inv.getArgument(0);
-              return new Project(9L, p.name(), p.ownerUserId(), p.createdAt());
+              return new Project(
+                  9L, p.name(), p.ownerUserId(), p.createdAt(), p.interactiveUsageSince());
             });
 
     // When
@@ -203,7 +211,8 @@ class ProjectServiceTest {
         .thenAnswer(
             inv -> {
               Project p = inv.getArgument(0);
-              return new Project(9L, p.name(), p.ownerUserId(), p.createdAt());
+              return new Project(
+                  9L, p.name(), p.ownerUserId(), p.createdAt(), p.interactiveUsageSince());
             });
 
     // When
@@ -251,7 +260,7 @@ class ProjectServiceTest {
     // Given
     when(permissions.isPlatformAdmin(1L)).thenReturn(true);
     when(memberships.findByUserId(1L)).thenReturn(List.of());
-    when(projects.findAll()).thenReturn(List.of(new Project(9L, "P", 2L, FIXED)));
+    when(projects.findAll()).thenReturn(List.of(new Project(9L, "P", 2L, FIXED, null)));
 
     // When
     List<ProjectService.ProjectView> result = service.list(1L);
@@ -268,7 +277,7 @@ class ProjectServiceTest {
     // Given
     when(permissions.isPlatformAdmin(2L)).thenReturn(false);
     when(memberships.findByUserId(2L)).thenReturn(List.of(membership(9L, 2L, ProjectRole.MEMBER)));
-    when(projects.findById(9L)).thenReturn(Optional.of(new Project(9L, "P", 1L, FIXED)));
+    when(projects.findById(9L)).thenReturn(Optional.of(new Project(9L, "P", 1L, FIXED, null)));
 
     // When
     List<ProjectService.ProjectView> result = service.list(2L);
@@ -298,7 +307,7 @@ class ProjectServiceTest {
   void listAccessible_returnsAllProjects_forPlatformAdmin() {
     // Given: derselbe Sichtbarkeitsschnitt wie list — der Admin sieht alles (#489).
     when(permissions.isPlatformAdmin(1L)).thenReturn(true);
-    when(projects.findAll()).thenReturn(List.of(new Project(9L, "P", 2L, FIXED)));
+    when(projects.findAll()).thenReturn(List.of(new Project(9L, "P", 2L, FIXED, null)));
 
     // When / Then
     assertThat(service.listAccessible(1L))
@@ -310,7 +319,7 @@ class ProjectServiceTest {
     // Given
     when(permissions.isPlatformAdmin(2L)).thenReturn(false);
     when(memberships.findByUserId(2L)).thenReturn(List.of(membership(9L, 2L, ProjectRole.MEMBER)));
-    when(projects.findById(9L)).thenReturn(Optional.of(new Project(9L, "P", 1L, FIXED)));
+    when(projects.findById(9L)).thenReturn(Optional.of(new Project(9L, "P", 1L, FIXED, null)));
 
     // When / Then
     assertThat(service.listAccessible(2L))
@@ -333,12 +342,15 @@ class ProjectServiceTest {
     // Given
     when(permissions.require(2L, 9L, Permission.PROJECT_EDIT))
         .thenReturn(membership(9L, 2L, ProjectRole.OWNER));
-    when(projects.findById(9L)).thenReturn(Optional.of(new Project(9L, "Alt", 2L, FIXED)));
+    when(projects.findById(9L)).thenReturn(Optional.of(new Project(9L, "Alt", 2L, FIXED, null)));
     when(projects.save(any(Project.class)))
         .thenAnswer(
             inv -> {
               Project p = inv.getArgument(0);
-              return p.id() == null ? new Project(9L, p.name(), p.ownerUserId(), p.createdAt()) : p;
+              return p.id() == null
+                  ? new Project(
+                      9L, p.name(), p.ownerUserId(), p.createdAt(), p.interactiveUsageSince())
+                  : p;
             });
 
     // When
@@ -355,12 +367,15 @@ class ProjectServiceTest {
     // Given
     when(permissions.require(2L, 9L, Permission.PROJECT_EDIT))
         .thenReturn(membership(9L, 2L, ProjectRole.OWNER));
-    when(projects.findById(9L)).thenReturn(Optional.of(new Project(9L, "Alt", 2L, FIXED)));
+    when(projects.findById(9L)).thenReturn(Optional.of(new Project(9L, "Alt", 2L, FIXED, null)));
     when(projects.save(any(Project.class)))
         .thenAnswer(
             inv -> {
               Project p = inv.getArgument(0);
-              return p.id() == null ? new Project(9L, p.name(), p.ownerUserId(), p.createdAt()) : p;
+              return p.id() == null
+                  ? new Project(
+                      9L, p.name(), p.ownerUserId(), p.createdAt(), p.interactiveUsageSince())
+                  : p;
             });
 
     // When

@@ -52,7 +52,7 @@ class InvitationAutoApprovalIT extends AbstractIntegrationTest {
                     PlatformRole.USER))
             .requireId();
     long projectId =
-        projects.save(new Project(null, "Projekt", ownerId, clock.instant())).requireId();
+        projects.save(new Project(null, "Projekt", ownerId, clock.instant(), null)).requireId();
     invitations.save(
         new ProjectInvitation(
             null,

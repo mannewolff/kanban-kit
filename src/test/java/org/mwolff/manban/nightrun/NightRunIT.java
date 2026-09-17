@@ -520,7 +520,8 @@ class NightRunIT extends AbstractIntegrationTest {
   }
 
   private NightRun einzigerLauf(long projectId) {
-    List<NightRun> gefunden = runs.findByProjectOrderByStartedAtDesc(projectId);
+    List<NightRun> gefunden =
+        runs.findByProjectAndKindOrderByStartedAtDesc(projectId, NightRunKind.NIGHT);
     assertThat(gefunden).hasSize(1);
     return gefunden.getFirst();
   }

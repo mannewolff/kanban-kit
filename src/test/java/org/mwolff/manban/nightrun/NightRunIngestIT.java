@@ -17,8 +17,13 @@ import org.mwolff.manban.auth.domain.AppUser;
 import org.mwolff.manban.auth.domain.PlatformRole;
 import org.mwolff.manban.nightrun.application.NightRunRepository;
 import org.mwolff.manban.nightrun.domain.NightRun;
+import org.mwolff.manban.nightrun.domain.NightRunErrorClass;
+import org.mwolff.manban.nightrun.domain.NightRunItem;
+import org.mwolff.manban.nightrun.domain.NightRunKind;
+import org.mwolff.manban.nightrun.domain.NightRunMode;
 import org.mwolff.manban.nightrun.domain.NightRunOrigin;
 import org.mwolff.manban.project.application.ProjectMembershipRepository;
+import org.mwolff.manban.project.application.ProjectRepository;
 import org.mwolff.manban.project.domain.ProjectMembership;
 import org.mwolff.manban.project.domain.ProjectRole;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -51,6 +56,7 @@ class NightRunIngestIT extends AbstractIntegrationTest {
   @Autowired private ObjectMapper json;
   @Autowired private NightRunRepository runs;
   @Autowired private ProjectMembershipRepository memberships;
+  @Autowired private ProjectRepository projects;
   @Autowired private JdbcTemplate jdbc;
 
   private static String meldung(boolean complete, String... pakete) {
@@ -63,10 +69,28 @@ class NightRunIngestIT extends AbstractIntegrationTest {
         .formatted(START, pakete.length, complete, String.join(",", pakete));
   }
 
+  /**
+   * Eine gemeldete interaktive Sitzung: Laufart <b>und</b> Gattung {@code INTERACTIVE} (E23), sonst
+   * derselbe Rumpf wie beim Nachtlauf — die Erweiterung ist additiv (Issue #1012).
+   */
+  private static String sitzung(String startedAt, String... pakete) {
+    return """
+        {"startedAt":"%s","mode":"INTERACTIVE","kind":"INTERACTIVE","durationMs":180000,
+         "processedCount":%d,"skippedCount":0,"unparsedCount":0,"complete":true,
+         "items":[%s]}"""
+        .formatted(startedAt, pakete.length, String.join(",", pakete));
+  }
+
   private static String paket(int cardNumber) {
     return """
         {"cardNumber":%d,"title":"Paket %d","state":"GREEN","durationMs":1122000,
          "usage":{"costUsd":0.94,"inputTokens":412000}}"""
+        .formatted(cardNumber, cardNumber);
+  }
+
+  private static String rotesPaket(int cardNumber) {
+    return """
+        {"cardNumber":%d,"title":"Paket %d","state":"RED","errorClass":"CHECKS_RED"}"""
         .formatted(cardNumber, cardNumber);
   }
 
@@ -114,7 +138,7 @@ class NightRunIngestIT extends AbstractIntegrationTest {
                 .content(meldung(true, paket(917)).replace(START, "2026-09-17T22:31:00Z")))
         .andExpect(status().isUnauthorized());
 
-    assertThat(runs.findByProjectOrderByStartedAtDesc(aufbau.projectId())).hasSize(1);
+    assertThat(nachtlaeufe(aufbau.projectId())).hasSize(1);
   }
 
   @Test
@@ -142,8 +166,8 @@ class NightRunIngestIT extends AbstractIntegrationTest {
                 .content(meldung(true, paket(917))))
         .andExpect(status().isOk());
 
-    assertThat(runs.findByProjectOrderByStartedAtDesc(fremd.projectId())).hasSize(1);
-    assertThat(runs.findByProjectOrderByStartedAtDesc(eigen.projectId())).isEmpty();
+    assertThat(nachtlaeufe(fremd.projectId())).hasSize(1);
+    assertThat(nachtlaeufe(eigen.projectId())).isEmpty();
   }
 
   /**
@@ -175,7 +199,7 @@ class NightRunIngestIT extends AbstractIntegrationTest {
                 .content(meldung(true)))
         .andExpect(status().isForbidden());
 
-    assertThat(runs.findByProjectOrderByStartedAtDesc(projectId)).isEmpty();
+    assertThat(nachtlaeufe(projectId)).isEmpty();
   }
 
   /** Der Kern des fortschreibenden Meldens: erst unvollstaendig, dann vollstaendig. */
@@ -300,7 +324,148 @@ class NightRunIngestIT extends AbstractIntegrationTest {
         .andExpect(jsonPath("$.fieldErrors").exists());
   }
 
+  // --- Die Gattung an der Einlieferung (Issue #1012) -----------------------------------------
+
+  /**
+   * Der Kern des Pakets: Eine Sitzung kommt ueber dieselbe Strecke herein wie ein Nachtlauf und
+   * liegt danach mit Laufart <b>und</b> Gattung {@code INTERACTIVE} in {@code night_run}.
+   */
+  @Test
+  void eineSitzungWirdMitGattungUndLaufartInteractiveAngenommen() throws Exception {
+    Aufbau aufbau = aufbau("ingest-sitzung");
+
+    mvc.perform(
+            post(PFAD)
+                .header(TOKEN_HEADER, aufbau.token())
+                .contentType("application/json")
+                .content(sitzung(START, paket(1012))))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.outcome").value("CREATED"));
+
+    List<NightRun> sitzungen = sitzungen(aufbau.projectId());
+    assertThat(sitzungen).hasSize(1);
+    assertThat(sitzungen.getFirst().mode()).isEqualTo(NightRunMode.INTERACTIVE);
+    assertThat(sitzungen.getFirst().kind()).isEqualTo(NightRunKind.INTERACTIVE);
+    assertThat(runs.findItemsByRunIds(List.of(sitzungen.getFirst().requireId())))
+        .extracting(NightRunItem::kind)
+        .containsExactly(NightRunKind.INTERACTIVE);
+  }
+
+  /**
+   * Die Gegenprobe zur Additivitaet: Eine aeltere Kit-Kopie kennt das Feld {@code kind} nicht und
+   * meldet unveraendert weiter — ihre Meldung ist ein Nachtlauf.
+   */
+  @Test
+  void eineMeldungOhneGattungLiegtAlsNachtlaufVor() throws Exception {
+    Aufbau aufbau = aufbau("ingest-ohne-gattung");
+
+    mvc.perform(
+            post(PFAD)
+                .header(TOKEN_HEADER, aufbau.token())
+                .contentType("application/json")
+                .content(meldung(true, paket(917))))
+        .andExpect(status().isOk());
+
+    assertThat(einzigerLauf(aufbau.projectId()).kind()).isEqualTo(NightRunKind.NIGHT);
+    assertThat(sitzungen(aufbau.projectId())).isEmpty();
+  }
+
+  /**
+   * Der Erfassungsbeginn (E18) steht nach der ersten Sitzung und bewegt sich danach nie wieder —
+   * weder nach vorn noch nach hinten. Aus der aeltesten vorhandenen Sitzung liesse er sich nicht
+   * ableiten: Die wandert mit dem Ringpuffer nach vorn.
+   */
+  @Test
+  void dieErsteSitzungSetztDenErfassungsbeginn_spaetereLassenIhnStehen() throws Exception {
+    Aufbau aufbau = aufbau("ingest-beginn");
+    Instant erste = Instant.parse("2026-09-16T10:00:00Z");
+    Instant frueher = Instant.parse("2026-09-15T10:00:00Z");
+    Instant spaeter = Instant.parse("2026-09-17T10:00:00Z");
+
+    melde(aufbau, sitzung(erste.toString()));
+    assertThat(erfassungsbeginn(aufbau.projectId())).isEqualTo(erste);
+
+    melde(aufbau, sitzung(frueher.toString()));
+    assertThat(erfassungsbeginn(aufbau.projectId())).isEqualTo(erste);
+
+    melde(aufbau, sitzung(spaeter.toString()));
+    assertThat(erfassungsbeginn(aufbau.projectId())).isEqualTo(erste);
+  }
+
+  /** Ein Nachtlauf sagt ueber die interaktive Nutzung nichts aus und setzt den Wert nicht. */
+  @Test
+  void einNachtlaufSetztDenErfassungsbeginnNicht() throws Exception {
+    Aufbau aufbau = aufbau("ingest-beginn-nacht");
+
+    melde(aufbau, meldung(true, paket(917)));
+
+    assertThat(erfassungsbeginn(aufbau.projectId())).isNull();
+  }
+
+  /**
+   * Das Nicht-Ziel: Die Nachtlauf-Seite und die Platte „Abbruchgruende" liefern dieselben
+   * Ergebnisse wie vor der Aenderung, auch wenn im selben Projekt Sitzungen liegen.
+   */
+  @Test
+  void dieNachtlaufSeiteSiehtKeineSitzungen() throws Exception {
+    Aufbau aufbau = aufbau("ingest-nichtziel");
+
+    melde(aufbau, meldung(true, rotesPaket(917)));
+    melde(aufbau, sitzung("2026-09-17T10:00:00Z", rotesPaket(1012)));
+
+    assertThat(nachtlaeufe(aufbau.projectId()))
+        .extracting(NightRun::startedAt)
+        .containsExactly(Instant.parse(START));
+    assertThat(runs.countRunsByErrorClass(aufbau.projectId(), NightRunKind.NIGHT))
+        .containsExactly(java.util.Map.entry(NightRunErrorClass.CHECKS_RED, 1L));
+  }
+
+  /** Die Idempotenz gilt fuer die Sitzung wie fuer den Lauf: derselbe Start, ein Eintrag. */
+  @Test
+  void eineWiederholteSitzungErsetztDieErsteUndVerdoppeltNichts() throws Exception {
+    Aufbau aufbau = aufbau("ingest-sitzung-wdh");
+    String gleich = sitzung(START, paket(1012));
+
+    mvc.perform(
+            post(PFAD)
+                .header(TOKEN_HEADER, aufbau.token())
+                .contentType("application/json")
+                .content(gleich))
+        .andExpect(jsonPath("$.outcome").value("CREATED"));
+    mvc.perform(
+            post(PFAD)
+                .header(TOKEN_HEADER, aufbau.token())
+                .contentType("application/json")
+                .content(gleich))
+        .andExpect(jsonPath("$.outcome").value("REPLACED"));
+
+    List<NightRun> sitzungen = sitzungen(aufbau.projectId());
+    assertThat(sitzungen).hasSize(1);
+    assertThat(runs.findItemsByRunIds(List.of(sitzungen.getFirst().requireId()))).hasSize(1);
+  }
+
   // --- Aufbau -------------------------------------------------------------------------------
+
+  private void melde(Aufbau aufbau, String rumpf) throws Exception {
+    mvc.perform(
+            post(PFAD)
+                .header(TOKEN_HEADER, aufbau.token())
+                .contentType("application/json")
+                .content(rumpf))
+        .andExpect(status().isOk());
+  }
+
+  private List<NightRun> sitzungen(long projectId) {
+    return runs.findByProjectAndKindOrderByStartedAtDesc(projectId, NightRunKind.INTERACTIVE);
+  }
+
+  private List<NightRun> nachtlaeufe(long projectId) {
+    return runs.findByProjectAndKindOrderByStartedAtDesc(projectId, NightRunKind.NIGHT);
+  }
+
+  private Instant erfassungsbeginn(long projectId) {
+    return projects.findById(projectId).orElseThrow().interactiveUsageSince();
+  }
 
   private record Aufbau(
       Cookie session, long projectId, String token, long tokenId, String tokenName) {}
@@ -328,7 +493,7 @@ class NightRunIngestIT extends AbstractIntegrationTest {
   }
 
   private NightRun einzigerLauf(long projectId) {
-    List<NightRun> gefunden = runs.findByProjectOrderByStartedAtDesc(projectId);
+    List<NightRun> gefunden = nachtlaeufe(projectId);
     assertThat(gefunden).hasSize(1);
     return gefunden.getFirst();
   }

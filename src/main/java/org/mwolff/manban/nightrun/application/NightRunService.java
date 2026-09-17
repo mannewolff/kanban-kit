@@ -16,6 +16,7 @@ import org.mwolff.manban.nightrun.domain.NightRunMode;
 import org.mwolff.manban.nightrun.domain.NightRunOrigin;
 import org.mwolff.manban.nightrun.domain.NightRunState;
 import org.mwolff.manban.nightrun.domain.NightRunUsage;
+import org.mwolff.manban.project.application.InteractiveUsageSinceWriter;
 import org.mwolff.manban.project.application.PermissionChecker;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -33,20 +34,30 @@ import org.springframework.transaction.annotation.Transactional;
  * vorliegend gemeldet und bleibt unangetastet (A11).
  */
 @Service
+// Die Kopplung folgt dem Domaenenmodell: Der Dienst baut ein vollstaendiges NightRun samt seinen
+// Arbeitspaketen und kennt deshalb jeden Typ, den die beiden Records fuehren. Mit Issue #1012 kommt
+// InteractiveUsageSinceWriter dazu, und der Zaehler steht bei 21 (Schwelle 20). Eine Aufteilung
+// loeste das nur nominell: submit, ingest und list teilen sich run(), items() und den Ringpuffer;
+// sie zu trennen verteilte einen zusammenhaengenden Use-Case auf zwei Klassen und dieselben Typen
+// auf beide. Dieselbe Begruendung wie am NightRunRepositoryAdapter.
+@SuppressWarnings("PMD.CouplingBetweenObjects")
 public class NightRunService {
 
   private final NightRunRepository runs;
   private final PermissionChecker permissions;
+  private final InteractiveUsageSinceWriter erfassungsbeginn;
   private final NightRunProperties properties;
   private final Clock clock;
 
   public NightRunService(
       NightRunRepository runs,
       PermissionChecker permissions,
+      InteractiveUsageSinceWriter erfassungsbeginn,
       NightRunProperties properties,
       Clock clock) {
     this.runs = runs;
     this.permissions = permissions;
+    this.erfassungsbeginn = erfassungsbeginn;
     this.properties = properties;
     this.clock = clock;
   }
@@ -78,7 +89,8 @@ public class NightRunService {
       // Ein verdrängter Lauf, der wiederkommt, bringt seinen vollständigen Stand mit (#965).
       runs.deleteOrphanItemsOfRun(projectId, submission.startedAt());
       boolean created =
-          runs.insertIfAbsent(run(projectId, submission, now), items(projectId, submission))
+          runs.insertIfAbsent(
+                  run(projectId, submission, now), items(projectId, submission, NightRunKind.NIGHT))
               .isPresent();
       results.add(new NightRunResult(submission.startedAt(), created));
     }
@@ -104,9 +116,17 @@ public class NightRunService {
    * Paket gehört (Vorflug, übergreifendes Review, Aufräumen), und die Auswertung braucht ihn als
    * eigene Zahl. Würde der Server die Lauf-Summe aus den Paketen rechnen, wäre dieser Rest per
    * Konstruktion null und damit unsichtbar, obwohl er existiert.
+   *
+   * <p><b>Die Gattung kommt mit der Meldung</b> (Issue #1012): Derselbe Endpunkt trägt den
+   * Nachtlauf und die interaktive Sitzung. Bei einer Sitzung wird zusätzlich der Erfassungsbeginn
+   * des Projekts gesetzt — der Port setzt ihn nur, falls er noch leer ist, und der Wert ist der
+   * Startzeitpunkt der Sitzung. Aus der ältesten vorhandenen Sitzung ließe sich die Grenze nicht
+   * ableiten: Die wandert mit dem Ringpuffer nach vorn, und der Unterschied zwischen „nie erfasst"
+   * und „erfasst, dann verdrängt" ginge verloren.
    */
   @Transactional
-  public NightRunResult ingest(long userId, long projectId, String tokenName, NewNightRun meldung) {
+  public NightRunResult ingest(
+      long userId, long projectId, String tokenName, NightRunKind kind, NewNightRun meldung) {
     permissions.requireOwner(userId, projectId);
     Instant now = clock.instant();
     NightRun gemeldet =
@@ -115,9 +135,7 @@ public class NightRunService {
             projectId,
             meldung.startedAt(),
             meldung.mode(),
-            // Beide Einlieferungswege melden heute Nachtlaeufe; die Gattung der interaktiven
-            // Sitzung kommt mit ihrer eigenen Einlieferung (Issue #1010).
-            NightRunKind.NIGHT,
+            kind,
             meldung.durationMs(),
             meldung.processedCount(),
             meldung.skippedCount(),
@@ -134,7 +152,10 @@ public class NightRunService {
 
     // Wie beim Upload-Weg: verwaiste Pakete eines verdrängten Laufs zuerst weg (#965).
     runs.deleteOrphanItemsOfRun(projectId, meldung.startedAt());
-    UpsertResult ergebnis = runs.upsert(gemeldet, items(projectId, meldung));
+    UpsertResult ergebnis = runs.upsert(gemeldet, items(projectId, meldung, kind));
+    if (kind == NightRunKind.INTERACTIVE) {
+      erfassungsbeginn.setInteractiveUsageSinceIfAbsent(projectId, meldung.startedAt());
+    }
     // Der Ringpuffer gilt unverändert auch für maschinell eingelieferte Läufe — gezogen wird der
     // der Gattung, die gerade eingeliefert wurde (Issue #1011).
     ringpufferNachziehen(projectId, gemeldet.kind());
@@ -152,24 +173,36 @@ public class NightRunService {
     runs.deleteOrphanItemsOlderThanNewest(projectId, kind, properties.maxOrphanItemsFor(kind));
   }
 
-  /** Die aufbewahrten Läufe des Projekts, neueste zuerst, jeder mit seinen Arbeitspaketen. */
+  /**
+   * Die aufbewahrten <b>Nachtläufe</b> des Projekts, neueste zuerst, jeder mit seinen
+   * Arbeitspaketen.
+   *
+   * <p>Die Gattung {@code NIGHT} steht hier fest (Issue #1012, Nicht-Ziel): Diese Liste speist die
+   * Nachtlauf-Seite und die Platte „Letzter Lauf". Sie liefert dieselben Ergebnisse wie vor der
+   * Einlieferung von Sitzungen, auch wenn im selben Projekt Sitzungen liegen — die bekommen ihre
+   * eigene Ansicht.
+   */
   @Transactional(readOnly = true)
   public List<NightRunView> list(long userId, long projectId) {
     permissions.requireOwner(userId, projectId);
-    List<NightRun> gefunden = runs.findByProjectOrderByStartedAtDesc(projectId);
+    List<NightRun> gefunden =
+        runs.findByProjectAndKindOrderByStartedAtDesc(projectId, NightRunKind.NIGHT);
     List<NightRunItem> pakete =
         runs.findItemsByRunIds(gefunden.stream().map(NightRun::requireId).toList());
     return gefunden.stream().map(run -> view(run, pakete)).toList();
   }
 
   /**
-   * Je Fehlerklasse die Zahl der aufbewahrten Läufe, in denen sie mindestens einmal vorkam. Ein
-   * Lauf zählt je Klasse höchstens einmal; ein verdrängter Lauf zählt nicht mehr.
+   * Je Fehlerklasse die Zahl der aufbewahrten <b>Nachtläufe</b>, in denen sie mindestens einmal
+   * vorkam. Ein Lauf zählt je Klasse höchstens einmal; ein verdrängter Lauf zählt nicht mehr.
+   *
+   * <p>Die Gattung {@code NIGHT} steht aus demselben Grund fest wie bei {@link #list} (Issue
+   * #1012): Die Platte „Abbruchgründe" gehört zur Nachtlauf-Seite.
    */
   @Transactional(readOnly = true)
   public Map<NightRunErrorClass, Long> countRunsByErrorClass(long userId, long projectId) {
     permissions.requireOwner(userId, projectId);
-    return runs.countRunsByErrorClass(projectId);
+    return runs.countRunsByErrorClass(projectId, NightRunKind.NIGHT);
   }
 
   /**
@@ -210,7 +243,8 @@ public class NightRunService {
    * um die Gattung erweitert in #1010). Der Adapter schreibt diese vier aus dem Lauf selbst; hier
    * stehen sie, weil ein Paket ohne sie kein vollständiges Domänenobjekt ist.
    */
-  private static List<NightRunItem> items(long projectId, NewNightRun submission) {
+  private static List<NightRunItem> items(
+      long projectId, NewNightRun submission, NightRunKind kind) {
     return submission.items().stream()
         .map(
             item ->
@@ -220,7 +254,7 @@ public class NightRunService {
                     projectId,
                     submission.startedAt(),
                     submission.mode(),
-                    NightRunKind.NIGHT,
+                    kind,
                     item.cardNumber(),
                     item.title(),
                     item.state(),

@@ -281,6 +281,7 @@ class ArchitectureTest {
           "PermissionChecker",
           "ProjectService",
           "NextCardNumberWriter",
+          "InteractiveUsageSinceWriter",
           "ProjectCreatedEvent",
           "ProjectAccessDeniedException");
 
@@ -384,6 +385,23 @@ class ArchitectureTest {
           .as(
               "NextCardNumberWriter prueft keine Rechte: Aufrufer nur card.application "
                   + "(ProjectStartNumberService, PROJECT_EDIT)");
+
+  // Dritter Port derselben Bauart (Issue #1012): Die Einlieferung einer interaktiven Sitzung setzt
+  // den Erfassungsbeginn am Projekt-Aggregat. Die Autorisierung liegt beim Aufrufer —
+  // NightRunService
+  // .ingest prueft requireOwner als erste Anweisung, wie jeder Nachtlauf-Use-Case (Plan #718, A6).
+  static final ArchRule INTERACTIVE_USAGE_SINCE_WRITER_HAT_AUFRUFER_WHITELIST =
+      noClasses()
+          .that()
+          .resideOutsideOfPackages(
+              "org.mwolff.manban.project.application..", "org.mwolff.manban.nightrun.application..")
+          .should()
+          .dependOnClassesThat()
+          .haveNameMatching(
+              "org\\.mwolff\\.manban\\.project\\.application\\.InteractiveUsageSinceWriter")
+          .as(
+              "InteractiveUsageSinceWriter prueft keine Rechte: Aufrufer nur nightrun.application "
+                  + "(NightRunService.ingest, requireOwner)");
 
   // --- Composition-Root: verdrahten ja, Datenzugriff nein (Issue #470) ------------------------
   // org.mwolff.manban.config ist der einzige Ort im Projekt, der aus BOARD_CHANGED_EVENT_IST_
@@ -578,6 +596,11 @@ class ArchitectureTest {
   @Test
   void nextCardNumberWriterHatAufruferWhitelist() {
     NEXT_CARD_NUMBER_WRITER_HAT_AUFRUFER_WHITELIST.check(PRODUKTIONSKLASSEN);
+  }
+
+  @Test
+  void interactiveUsageSinceWriterHatAufruferWhitelist() {
+    INTERACTIVE_USAGE_SINCE_WRITER_HAT_AUFRUFER_WHITELIST.check(PRODUKTIONSKLASSEN);
   }
 
   @Test

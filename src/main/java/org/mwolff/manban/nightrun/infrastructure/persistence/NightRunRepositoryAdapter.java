@@ -104,11 +104,15 @@ class NightRunRepositoryAdapter implements NightRunRepository {
           + " (SELECT id FROM night_run WHERE project_id = :projectId AND kind = :kind"
           + " ORDER BY started_at DESC, id DESC LIMIT :keep)";
 
-  /** Ein Lauf zählt je Fehlerklasse höchstens einmal — daher {@code count(DISTINCT …)}. */
+  /**
+   * Ein Lauf zählt je Fehlerklasse höchstens einmal — daher {@code count(DISTINCT …)}. Gefiltert
+   * wird am Lauf und nicht am Paket (Issue #1012): Die Gattung steht an beiden, aber der Lauf ist
+   * das, was gezählt wird.
+   */
   private static final String COUNT_BY_ERROR_CLASS =
       "SELECT i.error_class AS error_class, count(DISTINCT i.night_run_id) AS runs"
           + " FROM night_run_item i JOIN night_run r ON r.id = i.night_run_id"
-          + " WHERE r.project_id = :projectId AND i.error_class IS NOT NULL"
+          + " WHERE r.project_id = :projectId AND r.kind = :kind AND i.error_class IS NOT NULL"
           + " GROUP BY i.error_class";
 
   private final NamedParameterJdbcTemplate jdbc;
@@ -187,8 +191,9 @@ class NightRunRepositoryAdapter implements NightRunRepository {
   }
 
   @Override
-  public List<NightRun> findByProjectOrderByStartedAtDesc(long projectId) {
-    return runs.findByProjectIdOrderByStartedAtDescIdDesc(projectId).stream()
+  public List<NightRun> findByProjectAndKindOrderByStartedAtDesc(
+      long projectId, NightRunKind kind) {
+    return runs.findByProjectIdAndKindOrderByStartedAtDescIdDesc(projectId, kind.name()).stream()
         .map(NightRunRepositoryAdapter::toDomain)
         .toList();
   }
@@ -237,11 +242,11 @@ class NightRunRepositoryAdapter implements NightRunRepository {
   }
 
   @Override
-  public Map<NightRunErrorClass, Long> countRunsByErrorClass(long projectId) {
+  public Map<NightRunErrorClass, Long> countRunsByErrorClass(long projectId, NightRunKind kind) {
     Map<NightRunErrorClass, Long> counts = new EnumMap<>(NightRunErrorClass.class);
     jdbc.query(
         COUNT_BY_ERROR_CLASS,
-        new MapSqlParameterSource(P_PROJECT_ID, projectId),
+        new MapSqlParameterSource(P_PROJECT_ID, projectId).addValue(P_KIND, kind.name()),
         (RowCallbackHandler)
             rs ->
                 counts.put(

@@ -36,6 +36,7 @@ import org.mwolff.manban.nightrun.domain.NightRunMode;
 import org.mwolff.manban.nightrun.domain.NightRunOrigin;
 import org.mwolff.manban.nightrun.domain.NightRunState;
 import org.mwolff.manban.nightrun.domain.NightRunUsage;
+import org.mwolff.manban.project.application.InteractiveUsageSinceWriter;
 import org.mwolff.manban.project.application.PermissionChecker;
 import org.mwolff.manban.project.application.ProjectAccessDeniedException;
 import org.mwolff.manban.project.application.ProjectNotFoundException;
@@ -65,12 +66,14 @@ class NightRunServiceTest {
 
   private NightRunRepository runs;
   private PermissionChecker permissions;
+  private InteractiveUsageSinceWriter erfassungsbeginn;
   private NightRunService service;
 
   @BeforeEach
   void setUp() {
     runs = spy(new FakeNightRunRepository());
     permissions = mock(PermissionChecker.class);
+    erfassungsbeginn = mock(InteractiveUsageSinceWriter.class);
     service = serviceMitPuffer(30);
   }
 
@@ -78,6 +81,7 @@ class NightRunServiceTest {
     return new NightRunService(
         runs,
         permissions,
+        erfassungsbeginn,
         // Die Grenzen der interaktiven Sitzung stehen bewusst anders als die der Nachtlaeufe
         // (Issue #1011): Ein Test, der sie gleich setzte, saehe nicht, welche durchgereicht wird.
         new NightRunProperties(maxPerProject, 2000, 400, 4000),
@@ -398,12 +402,16 @@ class NightRunServiceTest {
   }
 
   private NightRun gemeldeterLauf() {
-    return runs.findByProjectOrderByStartedAtDesc(PROJECT).getFirst();
+    return gemeldeterLauf(NightRunKind.NIGHT);
+  }
+
+  private NightRun gemeldeterLauf(NightRunKind kind) {
+    return runs.findByProjectAndKindOrderByStartedAtDesc(PROJECT, kind).getFirst();
   }
 
   @Test
   void ingest_verlangtDenBesitzer() {
-    service.ingest(USER, PROJECT, TOKEN, meldung(T1, true, null));
+    service.ingest(USER, PROJECT, TOKEN, NightRunKind.NIGHT, meldung(T1, true, null));
 
     verify(permissions).requireOwner(USER, PROJECT);
   }
@@ -412,7 +420,8 @@ class NightRunServiceTest {
   void ingest_schreibtNichts_wennDerBesitzerFehlt() {
     doThrow(new ProjectAccessDeniedException()).when(permissions).requireOwner(USER, PROJECT);
 
-    assertThatThrownBy(() -> service.ingest(USER, PROJECT, TOKEN, meldung(T1, true, null)))
+    assertThatThrownBy(
+            () -> service.ingest(USER, PROJECT, TOKEN, NightRunKind.NIGHT, meldung(T1, true, null)))
         .isInstanceOf(ProjectAccessDeniedException.class);
 
     verifyNoInteractions(runs);
@@ -420,7 +429,7 @@ class NightRunServiceTest {
 
   @Test
   void ingest_schreibtMaschinelleHerkunftMitTokennamenUndZeitpunkt() {
-    service.ingest(USER, PROJECT, TOKEN, meldung(T1, false, null));
+    service.ingest(USER, PROJECT, TOKEN, NightRunKind.NIGHT, meldung(T1, false, null));
 
     NightRun geschrieben = gemeldeterLauf();
     assertThat(geschrieben.origin()).isEqualTo(NightRunOrigin.TOKEN);
@@ -429,14 +438,15 @@ class NightRunServiceTest {
     assertThat(geschrieben.complete()).isFalse();
   }
 
-  /**
-   * Der meldende Weg kennt die Gattung noch nicht — sie kommt mit der Einlieferung der interaktiven
-   * Sitzung in einem eigenen Paket. Bis dahin ist jeder gemeldete Lauf ein Nachtlauf (Issue #1010).
-   */
+  /** Die gemeldete Gattung steht am Lauf und an jedem seiner Arbeitspakete (Issue #1010). */
   @Test
   void ingest_schreibtDieGattungNightAnLaufUndPaket() {
     service.ingest(
-        USER, PROJECT, TOKEN, meldung(T1, true, null, item(721, NightRunState.GREEN, null)));
+        USER,
+        PROJECT,
+        TOKEN,
+        NightRunKind.NIGHT,
+        meldung(T1, true, null, item(721, NightRunState.GREEN, null)));
 
     NightRun geschrieben = gemeldeterLauf();
     assertThat(geschrieben.kind()).isEqualTo(NightRunKind.NIGHT);
@@ -445,9 +455,106 @@ class NightRunServiceTest {
         .containsExactly(NightRunKind.NIGHT);
   }
 
+  // --- Die Gattung der Einlieferung (Issue #1012) ------------------------------------------
+
+  /**
+   * Die Gegenprobe zum Fall darueber: Der Service erfindet die Gattung nicht, sondern nimmt sie
+   * entgegen. Ein Service, der {@code NIGHT} fest verdrahtet hielte, bestuende den Fall darueber —
+   * und legte jede Sitzung als Nachtlauf ab.
+   */
+  @Test
+  void ingest_schreibtDieGemeldeteGattungInteractiveAnLaufUndPaket() {
+    service.ingest(
+        USER,
+        PROJECT,
+        TOKEN,
+        NightRunKind.INTERACTIVE,
+        meldung(T1, true, null, item(1012, NightRunState.GREEN, null)));
+
+    NightRun geschrieben = gemeldeterLauf(NightRunKind.INTERACTIVE);
+    assertThat(geschrieben.kind()).isEqualTo(NightRunKind.INTERACTIVE);
+    assertThat(runs.findItemsByRunIds(List.of(geschrieben.requireId())))
+        .extracting(NightRunItem::kind)
+        .containsExactly(NightRunKind.INTERACTIVE);
+  }
+
+  /**
+   * Der Erfassungsbeginn traegt den <b>Startzeitpunkt der Sitzung</b> und nicht die Uhr des
+   * Servers: Er markiert, ab wann erfasst wurde, und das ist der Zeitpunkt der ersten Sitzung
+   * selbst. Ob der Wert schon steht, entscheidet der Port — der Service ruft ihn bei jeder Sitzung.
+   */
+  @Test
+  void ingest_meldetDenErfassungsbeginnMitDemStartzeitpunktDerSitzung() {
+    service.ingest(USER, PROJECT, TOKEN, NightRunKind.INTERACTIVE, meldung(T1, true, null));
+
+    verify(erfassungsbeginn).setInteractiveUsageSinceIfAbsent(PROJECT, T1);
+  }
+
+  /** Ein Nachtlauf sagt ueber die interaktive Nutzung nichts aus und ruehrt den Wert nicht an. */
+  @Test
+  void ingest_ruehrtDenErfassungsbeginnNichtAn_beiEinemNachtlauf() {
+    service.ingest(USER, PROJECT, TOKEN, NightRunKind.NIGHT, meldung(T1, true, null));
+
+    verifyNoInteractions(erfassungsbeginn);
+  }
+
+  /** Auch der Upload-Weg liefert nur Nachtlaeufe ein — kein Erfassungsbeginn. */
+  @Test
+  void submit_ruehrtDenErfassungsbeginnNichtAn() {
+    service.submit(USER, PROJECT, List.of(lauf(T1)));
+
+    verifyNoInteractions(erfassungsbeginn);
+  }
+
+  /** Die Gattung bestimmt auch, welcher Ringpuffer gezogen wird (Issue #1011). */
+  @Test
+  void ingest_zieehtDieGrenzenDerSitzung_wennEineSitzungGemeldetWird() {
+    service.ingest(USER, PROJECT, TOKEN, NightRunKind.INTERACTIVE, meldung(T1, true, null));
+
+    verify(runs).deleteOlderThanNewest(PROJECT, NightRunKind.INTERACTIVE, 400);
+    verify(runs).deleteOrphanItemsOlderThanNewest(PROJECT, NightRunKind.INTERACTIVE, 4000);
+  }
+
+  // --- Die Nachtlauf-Seite sieht nur Nachtlaeufe (Issue #1012, Nicht-Ziel) ------------------
+
+  /**
+   * Die Laufliste speist die Nachtlauf-Seite und die Platte „Letzter Lauf". Sie muss dieselben
+   * Ergebnisse liefern wie vor der Einlieferung von Sitzungen — sonst stuende nach der ersten
+   * Sitzung eine Sitzung als „letzter Lauf" da.
+   */
+  @Test
+  void list_zeigtNurNachtlaeufe_auchWennSitzungenDanebenLiegen() {
+    service.ingest(USER, PROJECT, TOKEN, NightRunKind.NIGHT, meldung(T1, true, null));
+    service.ingest(USER, PROJECT, TOKEN, NightRunKind.INTERACTIVE, meldung(T2, true, null));
+
+    assertThat(service.list(USER, PROJECT))
+        .extracting(NightRunService.NightRunView::startedAt)
+        .containsExactly(T1);
+  }
+
+  /** Dasselbe fuer die Platte „Abbruchgruende": Eine rote Sitzung zaehlt dort nicht mit. */
+  @Test
+  void countRunsByErrorClass_zaehltNurNachtlaeufe() {
+    service.ingest(
+        USER,
+        PROJECT,
+        TOKEN,
+        NightRunKind.NIGHT,
+        meldung(T1, true, null, item(1, NightRunState.RED, NightRunErrorClass.CHECKS_RED)));
+    service.ingest(
+        USER,
+        PROJECT,
+        TOKEN,
+        NightRunKind.INTERACTIVE,
+        meldung(T2, true, null, item(2, NightRunState.RED, NightRunErrorClass.CHECKS_RED)));
+
+    assertThat(service.countRunsByErrorClass(USER, PROJECT))
+        .containsExactly(Map.entry(NightRunErrorClass.CHECKS_RED, 1L));
+  }
+
   @Test
   void ingest_zieehtDenRingpufferNach() {
-    service.ingest(USER, PROJECT, TOKEN, meldung(T1, true, null));
+    service.ingest(USER, PROJECT, TOKEN, NightRunKind.NIGHT, meldung(T1, true, null));
 
     verify(runs).deleteOlderThanNewest(PROJECT, NightRunKind.NIGHT, 30);
   }
@@ -457,7 +564,7 @@ class NightRunServiceTest {
     NightRunUsage gemeldet =
         new NightRunUsage(new BigDecimal("8.032575"), 148L, 62_411L, 8_883_160L);
 
-    service.ingest(USER, PROJECT, TOKEN, meldung(T1, true, gemeldet));
+    service.ingest(USER, PROJECT, TOKEN, NightRunKind.NIGHT, meldung(T1, true, gemeldet));
 
     NightRunUsage angekommen = gemeldeterLauf().usage();
     assertThat(angekommen).isNotNull();
@@ -479,7 +586,11 @@ class NightRunServiceTest {
     NightRunUsage paketAnteil = new NightRunUsage(new BigDecimal("4.000000"), 400L, 40L, 360L);
 
     service.ingest(
-        USER, PROJECT, TOKEN, meldung(T1, true, laufSumme, itemMitVerbrauch(721, paketAnteil)));
+        USER,
+        PROJECT,
+        TOKEN,
+        NightRunKind.NIGHT,
+        meldung(T1, true, laufSumme, itemMitVerbrauch(721, paketAnteil)));
 
     NightRunUsage angekommen = gemeldeterLauf().usage();
     assertThat(angekommen).isNotNull();
@@ -496,8 +607,16 @@ class NightRunServiceTest {
 
   @Test
   void ingest_reichtDasErgebnisDesSchreibwegsDurch() {
-    assertThat(service.ingest(USER, PROJECT, TOKEN, meldung(T1, true, null)).created()).isTrue();
-    assertThat(service.ingest(USER, PROJECT, TOKEN, meldung(T1, true, null)).created()).isFalse();
+    assertThat(
+            service
+                .ingest(USER, PROJECT, TOKEN, NightRunKind.NIGHT, meldung(T1, true, null))
+                .created())
+        .isTrue();
+    assertThat(
+            service
+                .ingest(USER, PROJECT, TOKEN, NightRunKind.NIGHT, meldung(T1, true, null))
+                .created())
+        .isFalse();
   }
 
   private static NightRunService.NewNightRunItem itemMitVerbrauch(
@@ -525,7 +644,7 @@ class NightRunServiceTest {
 
   @Test
   void ingest_loeschtVerwaistePaketeDesLaufs_bevorEsIhnAnlegt() {
-    service.ingest(USER, PROJECT, TOKEN, meldung(T1, true, null));
+    service.ingest(USER, PROJECT, TOKEN, NightRunKind.NIGHT, meldung(T1, true, null));
 
     var reihenfolge = inOrder(runs);
     reihenfolge.verify(runs).deleteOrphanItemsOfRun(PROJECT, T1);
@@ -571,7 +690,7 @@ class NightRunServiceTest {
 
   @Test
   void ingest_kapptVerwaistePaketeUnmittelbarNachDerVerdraengung() {
-    service.ingest(USER, PROJECT, TOKEN, meldung(T1, true, null));
+    service.ingest(USER, PROJECT, TOKEN, NightRunKind.NIGHT, meldung(T1, true, null));
 
     var reihenfolge = inOrder(runs);
     reihenfolge.verify(runs).deleteOlderThanNewest(PROJECT, NightRunKind.NIGHT, 30);
@@ -597,7 +716,7 @@ class NightRunServiceTest {
 
   @Test
   void ingest_zieehtDieGrenzenDerGattungDesGemeldetenLaufs() {
-    service.ingest(USER, PROJECT, TOKEN, meldung(T1, true, null));
+    service.ingest(USER, PROJECT, TOKEN, NightRunKind.NIGHT, meldung(T1, true, null));
 
     verify(runs).deleteOlderThanNewest(PROJECT, NightRunKind.NIGHT, 30);
     verify(runs).deleteOrphanItemsOlderThanNewest(PROJECT, NightRunKind.NIGHT, 2000);
@@ -618,7 +737,7 @@ class NightRunServiceTest {
     service.submit(USER, PROJECT, List.of(lauf(T2)));
     service.submit(USER, PROJECT, List.of(lauf(T3)));
 
-    assertThat(fake.findByProjectOrderByStartedAtDesc(PROJECT))
+    assertThat(fake.alleLaeufe(PROJECT))
         .extracting(NightRun::startedAt, NightRun::kind)
         .containsExactly(
             org.assertj.core.groups.Tuple.tuple(T4, NightRunKind.INTERACTIVE),
@@ -793,7 +912,17 @@ class NightRunServiceTest {
     }
 
     @Override
-    public List<NightRun> findByProjectOrderByStartedAtDesc(long projectId) {
+    public List<NightRun> findByProjectAndKindOrderByStartedAtDesc(
+        long projectId, NightRunKind kind) {
+      return alleLaeufe(projectId).stream().filter(r -> r.kind() == kind).toList();
+    }
+
+    /**
+     * Alle Laeufe des Projekts ueber beide Gattungen hinweg — der Port bietet das nicht mehr an
+     * (Issue #1012), der Fake braucht es fuer die Verdraengung und die Faelle, die belegen, dass
+     * eine Gattung die andere stehen laesst.
+     */
+    List<NightRun> alleLaeufe(long projectId) {
       return gespeicherteLaeufe.stream()
           .filter(r -> r.projectId() == projectId)
           .sorted(
@@ -814,10 +943,7 @@ class NightRunServiceTest {
     @Override
     public int deleteOlderThanNewest(long projectId, NightRunKind kind, int keep) {
       List<NightRun> zuVerdraengen =
-          findByProjectOrderByStartedAtDesc(projectId).stream()
-              .filter(r -> r.kind() == kind)
-              .skip(keep)
-              .toList();
+          findByProjectAndKindOrderByStartedAtDesc(projectId, kind).stream().skip(keep).toList();
       Set<Long> ids = zuVerdraengen.stream().map(NightRun::requireId).collect(Collectors.toSet());
       gespeicherteLaeufe.removeAll(zuVerdraengen);
       // ON DELETE SET NULL (Issue #964): Die Pakete bleiben verwaist stehen.
@@ -886,9 +1012,9 @@ class NightRunServiceTest {
     }
 
     @Override
-    public Map<NightRunErrorClass, Long> countRunsByErrorClass(long projectId) {
+    public Map<NightRunErrorClass, Long> countRunsByErrorClass(long projectId, NightRunKind kind) {
       Set<Long> laufIds =
-          findByProjectOrderByStartedAtDesc(projectId).stream()
+          findByProjectAndKindOrderByStartedAtDesc(projectId, kind).stream()
               .map(NightRun::requireId)
               .collect(Collectors.toSet());
       Map<NightRunErrorClass, Long> counts = new EnumMap<>(NightRunErrorClass.class);
@@ -910,7 +1036,7 @@ class NightRunServiceTest {
   void submit_schreibtMenschlicheHerkunft_undGiltAlsVollstaendig() {
     service.submit(USER, PROJECT, List.of(lauf(T1)));
 
-    NightRun geschrieben = runs.findByProjectOrderByStartedAtDesc(PROJECT).getFirst();
+    NightRun geschrieben = gemeldeterLauf();
     assertThat(geschrieben.origin()).isEqualTo(NightRunOrigin.UPLOAD);
     assertThat(geschrieben.complete()).isTrue();
     assertThat(geschrieben.updatedAt()).isNull();
@@ -922,7 +1048,7 @@ class NightRunServiceTest {
   void submit_schreibtDieGattungNightAnLaufUndPaket() {
     service.submit(USER, PROJECT, List.of(lauf(T1, item(721, NightRunState.GREEN, null))));
 
-    NightRun geschrieben = runs.findByProjectOrderByStartedAtDesc(PROJECT).getFirst();
+    NightRun geschrieben = gemeldeterLauf();
     assertThat(geschrieben.kind()).isEqualTo(NightRunKind.NIGHT);
     assertThat(runs.findItemsByRunIds(List.of(geschrieben.requireId())))
         .extracting(NightRunItem::kind)

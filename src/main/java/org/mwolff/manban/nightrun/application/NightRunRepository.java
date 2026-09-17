@@ -54,8 +54,17 @@ public interface NightRunRepository {
    */
   record UpsertResult(long id, boolean created) {}
 
-  /** Läufe des Projekts, jüngster Startzeitpunkt zuerst; bei Gleichstand entscheidet die ID. */
-  List<NightRun> findByProjectOrderByStartedAtDesc(long projectId);
+  /**
+   * Läufe <b>dieser Gattung</b> im Projekt, jüngster Startzeitpunkt zuerst; bei Gleichstand
+   * entscheidet die ID.
+   *
+   * <p>Die Gattung ist seit Issue #1012 Teil der Frage und nicht optional: Seit sich Nachtläufe und
+   * interaktive Sitzungen dieselbe Tabelle teilen, gibt es keine sinnvolle Liste über beide. Die
+   * Nachtlauf-Seite fragt nach {@code NIGHT} und bekommt dieselben Ergebnisse wie vorher, auch wenn
+   * im selben Projekt Sitzungen liegen — sonst stünde nach der ersten Sitzung eine Sitzung als
+   * „letzter Lauf" da.
+   */
+  List<NightRun> findByProjectAndKindOrderByStartedAtDesc(long projectId, NightRunKind kind);
 
   /** Arbeitspakete der genannten Läufe, nach Lauf und Einfügereihenfolge sortiert. */
   List<NightRunItem> findItemsByRunIds(Collection<Long> runIds);
@@ -110,8 +119,14 @@ public interface NightRunRepository {
   List<NightRunItem> findByCard(long projectId, int cardNumber);
 
   /**
-   * Zählt je Fehlerklasse die aufbewahrten Läufe des Projekts, in denen sie mindestens einmal
-   * vorkam. Ein Lauf zählt je Klasse höchstens einmal; verdrängte Läufe zählen nicht mehr.
+   * Zählt je Fehlerklasse die aufbewahrten Läufe <b>dieser Gattung</b> im Projekt, in denen sie
+   * mindestens einmal vorkam. Ein Lauf zählt je Klasse höchstens einmal; verdrängte Läufe zählen
+   * nicht mehr.
+   *
+   * <p>Die Gattung filtert aus demselben Grund wie bei {@link
+   * #findByProjectAndKindOrderByStartedAtDesc} (Issue #1012): Die Platte „Abbruchgründe" der
+   * Nachtlauf-Seite fragt nach {@code NIGHT}, und eine rote Sitzung trüge dieselbe Fehlerklasse —
+   * sie würde die Zahl still erhöhen.
    */
-  Map<NightRunErrorClass, Long> countRunsByErrorClass(long projectId);
+  Map<NightRunErrorClass, Long> countRunsByErrorClass(long projectId, NightRunKind kind);
 }

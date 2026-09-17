@@ -82,7 +82,9 @@ public class ProjectService {
     }
 
     Instant now = clock.instant();
-    Project project = projects.save(new Project(null, name.trim(), owner.id(), now));
+    // Der Erfassungsbeginn der interaktiven Sitzungen bleibt leer: Ein frisches Projekt hat noch
+    // keine gemeldet (Issue #1012). Gesetzt wird er allein ueber InteractiveUsageSinceWriter.
+    Project project = projects.save(new Project(null, name.trim(), owner.id(), now, null));
     memberships.save(
         new ProjectMembership(null, project.requireId(), owner.id(), ProjectRole.OWNER, now));
     // Synchron im selben Transaktions-Scope: der Board-seitige Listener legt das Default-Board an;

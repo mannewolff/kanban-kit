@@ -27,6 +27,17 @@ class ProjectEntity {
   @Column(name = "created_at", nullable = false)
   private Instant createdAt;
 
+  /**
+   * Der Erfassungsbeginn der interaktiven Sitzungen (Issue #1012) — <b>nur lesbar</b>. {@code
+   * insertable}/{@code updatable} stehen auf {@code false}, damit der allgemeine Schreibweg ({@code
+   * save}) ihn weder setzen noch überschreiben kann: Geschrieben wird er ausschließlich über den
+   * eng geschnittenen Port-Aufruf {@code setInteractiveUsageSinceIfAbsent}, dessen „falls noch
+   * leer" in der {@code WHERE}-Bedingung des {@code UPDATE} steht und damit auch bei zwei
+   * gleichzeitigen Meldungen trägt.
+   */
+  @Column(name = "interactive_usage_since", insertable = false, updatable = false)
+  private @Nullable Instant interactiveUsageSince;
+
   protected ProjectEntity() {
     // für JPA
   }
@@ -52,5 +63,9 @@ class ProjectEntity {
 
   Instant getCreatedAt() {
     return createdAt;
+  }
+
+  @Nullable Instant getInteractiveUsageSince() {
+    return interactiveUsageSince;
   }
 }
