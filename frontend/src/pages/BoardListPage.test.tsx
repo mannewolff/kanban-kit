@@ -8,10 +8,13 @@ import { ApiError } from '../api/client'
 import { labelsApi } from '../api/labels'
 import { projectsApi } from '../api/projects'
 import { epicsApi, type Epic } from '../api/epics'
+import { membersApi } from '../api/members'
 import { SnackbarProvider } from '../components/SnackbarProvider'
 import { BoardListPage } from './BoardListPage'
-import { ARCHIVED_STATUS_COLOR, statusColors } from '../lib/statusColors'
-import { STATUS_EDGE_WIDTH } from '../theme'
+import { ARCHIVED_STATUS_COLOR } from '../lib/statusColors'
+import { ThemeProvider } from '@mui/material/styles'
+import { cssRegel, cssRegelMit } from '../test/cssRegel'
+import { theme } from '../theme'
 
 function deferred<T>() {
   let resolve!: (value: T) => void
@@ -44,6 +47,7 @@ vi.mock('../api/cards', () => ({
 }))
 vi.mock('../api/epics', () => ({ epicsApi: { list: vi.fn() } }))
 vi.mock('../api/labels', () => ({ labelsApi: { list: vi.fn().mockResolvedValue([]) } }))
+vi.mock('../api/members', () => ({ membersApi: { list: vi.fn().mockResolvedValue([]) } }))
 vi.mock('../api/projects', () => ({ projectsApi: { list: vi.fn() } }))
 vi.mock('../api/comments', () => ({ commentsApi: { list: vi.fn().mockResolvedValue([]), create: vi.fn(), update: vi.fn(), remove: vi.fn() } }))
 vi.mock('../api/attachments', () => ({ attachmentsApi: { list: vi.fn().mockResolvedValue([]), upload: vi.fn(), remove: vi.fn(), fetchBlob: vi.fn() } }))
@@ -198,6 +202,8 @@ describe('BoardListPage', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.stubGlobal('localStorage', fakeStorage())
+    // Die Bestandstests prüfen die ungruppierte Liste; die Gruppierung nach Vorhaben hat eigene Tests.
+    localStorage.setItem('manban.listGruppierung', 'keine')
     mProjects.list.mockResolvedValue([{ id: 9, name: 'Projekt', role: 'OWNER', createdAt: '' }])
   })
 
@@ -217,32 +223,18 @@ describe('BoardListPage', () => {
     expect(await screen.findByText('AlteKarte')).toBeInTheDocument()
   })
 
-  it('trägt den Status an der linken Kante der Zeile, archivierte in ihrer eigenen Farbe', async () => {
-    // Kanten-Semantik (#650, E5): In der Liste gibt es keine Oberkante, an die der Status könnte —
-    // deshalb trägt hier die linke Kante den Status, nicht die Vorhaben-Zugehörigkeit.
+  it('trägt den Status als Plakette mit LED in der Zeile, archivierte in ihrer eigenen Farbe (#980)', async () => {
     renderPage()
     fireEvent.click(await screen.findByLabelText('Filter Archiv'))
 
-    expect(await screen.findByLabelText('Detail öffnen: Aufgabe')).toHaveStyle({
-      borderLeftColor: statusColors('Backlog').dot,
-      borderLeftWidth: `${STATUS_EDGE_WIDTH}px`,
-    })
-    expect(screen.getByLabelText('Detail öffnen: AlteKarte')).toHaveStyle({
-      borderLeftColor: ARCHIVED_STATUS_COLOR.dot,
-      borderLeftWidth: `${STATUS_EDGE_WIDTH}px`,
-    })
-  })
-
-  it('lässt dem Status-Chip den Text, nimmt ihm aber die Farbfläche', async () => {
-    renderPage()
-    await screen.findByText('Aufgabe')
-
-    // Innerhalb der Zeile suchen: der gleichnamige Status-Filter-Chip steht ausserhalb.
-    const row = screen.getByLabelText('Detail öffnen: Aufgabe')
-    const chip = within(row).getByText((_content, element) =>
-      element?.classList.contains('MuiChip-root') === true && element.textContent === 'Backlog')
-
-    expect(chip).not.toHaveStyle({ backgroundColor: statusColors('Backlog').bg })
+    const aufgabe = within(await screen.findByLabelText('Detail öffnen: Aufgabe')).getByTestId('zustand-100')
+    expect(aufgabe).toHaveTextContent('Backlog')
+    expect(cssRegel(within(aufgabe).getByTestId('zustand-led-100'))).toContain('background-color: var(--mb-palette-status-backlog-dot')
+    const alt = within(screen.getByLabelText('Detail öffnen: AlteKarte')).getByTestId('zustand-101')
+    expect(alt).toHaveTextContent('Archiv')
+    expect(cssRegel(within(alt).getByTestId('zustand-led-101'))).toContain('background-color: var(--mb-palette-status-archived-dot')
+    expect(cssRegel(screen.getByLabelText('Detail öffnen: Aufgabe'))).not.toContain('border-left:')
+    expect(ARCHIVED_STATUS_COLOR.dot).toBe('var(--mb-palette-status-archived-dot)')
   })
 
   it('stellt eine archivierte Karte über die Zeilen-Aktion wieder her', async () => {
@@ -1280,5 +1272,270 @@ describe('BoardListPage', () => {
       expect(zeilenTitel()).toEqual(['Anton', 'Beta', 'Zebra'])
       expect(screen.getByText('Sortiert nach Titel.')).toBeInTheDocument()
     })
+  })
+})
+
+describe('BoardListPage Dichte, Ziffern und Ziehen (AK 7, AK 8, AK 10, AK 12, #957)', () => {
+  const erste: Card = { ...base, id: 100, columnId: 10, number: 1, title: 'Erste', description: '', archived: false }
+  const zweite: Card = {
+    ...base, id: 103, columnId: 10, number: 4, positionInColumn: 1, archived: false, description: '',
+    title: 'Ein langer Titel, der in einer schmalen Titelspalte über mehr als eine Zeile laufen darf',
+    excerpt: 'Auszug',
+  }
+
+  /** Einspaltiges Board: Dort ist das Umordnen per Ziehen zugelassen. Im echten Theme gerendert. */
+  const renderEinspaltig = async () => {
+    localStorage.setItem('manban.listGruppierung', 'keine')
+    mBoards.get.mockResolvedValue({
+      id: 1, projectId: 9, name: 'B', createdAt: '',
+      columns: [{ id: 10, name: 'Backlog', position: 0, wipLimit: null }],
+    })
+    mCards.list.mockResolvedValue([erste, zweite])
+    mEpics.list.mockResolvedValue([])
+    mProjects.list.mockResolvedValue([{ id: 9, name: 'Projekt', role: 'OWNER', createdAt: '' }])
+    render(
+      <ThemeProvider theme={theme}>
+        <SnackbarProvider>
+          <MemoryRouter initialEntries={['/boards/1/list']}>
+            <Routes>
+              <Route path="/boards/:boardId/list" element={<BoardListPage />} />
+            </Routes>
+          </MemoryRouter>
+        </SnackbarProvider>
+      </ThemeProvider>,
+    )
+    await screen.findByText('Erste')
+  }
+
+  it('setzt die Zeilen in der dichteren Stufe: knappe Polsterung, knapper Zeilenabstand', async () => {
+    // Ausgangswert vor #957 auf 1440 x 900: 13 vollständig sichtbare Zeilen bei 8 px Polsterung
+    // oben und unten und 6 px Abstand. Die neue Stufe hält 2 px Polsterung und 2 px Abstand.
+    await renderEinspaltig()
+
+    // Unter dem Variablen-Theme schreibt MUI Abstände als Vielfaches von `--mb-spacing` (8 px).
+    expect(theme.spacing(0.25)).toBe('calc(0.25 * var(--mb-spacing, 8px))')
+    const zeile = screen.getByLabelText('Detail öffnen: Erste')
+    expect(cssRegel(zeile)).toContain('padding-top: calc(0.25 * var(--mb-spacing))')
+    expect(cssRegel(zeile)).toContain('padding-bottom: calc(0.25 * var(--mb-spacing))')
+    expect(cssRegel(screen.getByTestId('listen-zeilen'))).toContain('gap: calc(0.25 * var(--mb-spacing))')
+  })
+
+  it('schneidet den Titel nicht ab, lässt den Auszug aber einzeilig', async () => {
+    await renderEinspaltig()
+
+    const titel = screen.getByText(zweite.title)
+    expect(cssRegel(titel)).not.toContain('white-space: nowrap')
+    expect(cssRegel(titel)).not.toContain('text-overflow')
+    // Der Auszug bleibt die „einzeilige Vorschau" aus `lib/listExcerpt.ts` (Plan #932 E16).
+    expect(cssRegel(screen.getByText('Auszug'))).toContain('white-space: nowrap')
+  })
+
+  it('malt die Zeilenfläche aus einem Token statt mit festem Weiß', async () => {
+    await renderEinspaltig()
+
+    const zeile = screen.getByLabelText('Detail öffnen: Erste')
+    expect(cssRegel(zeile)).toContain('background-color: var(--mb-palette-background-paper)')
+    expect(cssRegel(zeile)).not.toContain('common-white')
+  })
+
+  it('setzt die Nummernspalte rechtsbündig in Tabellenziffern, in der Kopfzeile wie in den Zeilen', async () => {
+    await renderEinspaltig()
+
+    const nummer = within(screen.getByLabelText('Detail öffnen: Erste')).getByText('#1')
+    const zelle = cssRegel(nummer)
+    expect(zelle).toContain('font-variant-numeric: tabular-nums')
+    expect(zelle).toContain('text-align: right')
+    expect(cssRegel(screen.getByLabelText('Spalte Nr'))).toContain('justify-content: flex-end')
+  })
+
+  it('kennzeichnet die bewegte Zeile und zeigt die Stelle, an der sie landen würde', async () => {
+    await renderEinspaltig()
+    const dataTransfer = { setData: vi.fn() }
+
+    fireEvent.dragStart(screen.getByLabelText('Detail öffnen: Erste'), { dataTransfer })
+    await waitFor(() => expect(screen.getByLabelText('Detail öffnen: Erste')).toHaveAttribute('data-zieh-zustand', 'bewegt'))
+    fireEvent.dragOver(screen.getByLabelText(`Detail öffnen: ${zweite.title}`), { dataTransfer })
+
+    const quelle = screen.getByLabelText('Detail öffnen: Erste')
+    const ziel = screen.getByLabelText(`Detail öffnen: ${zweite.title}`)
+    // Dieselben Bausteine wie auf dem Board (`boardSurfaceSx.ts`): Platzhalter und Ablagefläche.
+    expect(cssRegelMit(quelle, '>*')).toContain('visibility: hidden')
+    expect(cssRegel(quelle)).toContain('border: 1px dashed')
+    expect(ziel).toHaveAttribute('data-ablage', 'aktiv')
+    expect(cssRegel(ziel)).toContain('outline: 2px dashed')
+
+    fireEvent.dragEnd(quelle)
+
+    expect(screen.getByLabelText('Detail öffnen: Erste')).not.toHaveAttribute('data-zieh-zustand')
+    expect(screen.getByLabelText(`Detail öffnen: ${zweite.title}`)).not.toHaveAttribute('data-ablage')
+  })
+
+  it('setzt keinen Ziehzustand, wenn das Ziehen endet, bevor er greift', async () => {
+    await renderEinspaltig()
+
+    fireEvent.dragStart(screen.getByLabelText('Detail öffnen: Erste'), { dataTransfer: { setData: vi.fn() } })
+    fireEvent.dragEnd(screen.getByLabelText('Detail öffnen: Erste'))
+    await new Promise((fertig) => setTimeout(fertig, 5))
+
+    expect(screen.getByLabelText('Detail öffnen: Erste')).not.toHaveAttribute('data-zieh-zustand')
+  })
+})
+
+describe('BoardListPage Gruppierung und Filter (#980)', () => {
+  const mMembers = membersApi as unknown as { list: ReturnType<typeof vi.fn> }
+  const zweitesEpic: Epic = { id: 8, number: 2, title: 'Zweites Vorhaben', description: null, shortcode: 'ZV', done: 1, total: 4, memberNumbers: [5], rootNumbers: [], requirementCardNumber: null }
+  const imEpic: Card = { ...active, dueDate: new Date(Date.now() - 86_400_000).toISOString(), assignees: [3] }
+  const imZweiten: Card = { ...base, id: 104, columnId: 10, number: 5, positionInColumn: 1, title: 'Im zweiten', description: '', archived: false }
+  const ohne: Card = { ...base, id: 105, columnId: 10, number: 6, positionInColumn: 2, title: 'Ohne Zuordnung', description: '', archived: false, assignees: [4] }
+  const fertig: Card = { ...base, id: 106, columnId: 20, number: 7, title: 'Fertig und alt', description: '', archived: false, dueDate: new Date(Date.now() - 86_400_000).toISOString() }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.stubGlobal('localStorage', fakeStorage())
+    mProjects.list.mockResolvedValue([{ id: 9, name: 'Projekt', role: 'OWNER', createdAt: '' }])
+    mMembers.list.mockResolvedValue([
+      { userId: 3, displayName: 'Anna', email: 'a@x', role: 'MEMBER' },
+      { userId: 4, displayName: 'Ben', email: 'b@x', role: 'MEMBER' },
+    ])
+  })
+
+  const renderGruppiert = async (cards: Card[] = [imEpic, imZweiten, ohne, fertig]) => {
+    renderPage(cards)
+    mEpics.list.mockResolvedValue([epic, zweitesEpic])
+    await screen.findByText('Ohne Zuordnung')
+  }
+
+  it('gruppiert die Liste standardmäßig nach Vorhaben, Karten ohne Vorhaben am Ende', async () => {
+    renderPage([imEpic, imZweiten, ohne])
+    mEpics.list.mockResolvedValue([epic, zweitesEpic])
+    // renderPage setzt die Vorhaben leer; die Gruppen entstehen, sobald sie geladen sind.
+    await screen.findByText('Ohne Zuordnung')
+
+    const koepfe = await screen.findAllByRole('heading', { level: 3 })
+    expect(koepfe.map((k) => k.getAttribute('aria-label'))).toContain('Ohne Vorhaben')
+    expect(screen.getByRole('button', { name: 'Vorhaben' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByText('Kartenreihenfolge ändern: dazu die Gruppierung aufheben.')).toBeInTheDocument()
+  })
+
+  it('zeigt je Vorhaben Name und Fortschritt und hebt die Gruppierung auf Wunsch auf', async () => {
+    mEpics.list.mockResolvedValue([epic, zweitesEpic])
+    mBoards.get.mockResolvedValue({
+      id: 1, projectId: 9, name: 'B', createdAt: '',
+      columns: [
+        { id: 10, name: 'Backlog', position: 0, wipLimit: null },
+        { id: 20, name: 'Done', position: 1, wipLimit: null },
+      ],
+    })
+    mCards.list.mockResolvedValue([imEpic, imZweiten, ohne])
+    render(
+      <SnackbarProvider>
+        <MemoryRouter initialEntries={['/boards/1/list']}>
+          <Routes>
+            <Route path="/boards/:boardId/list" element={<BoardListPage />} />
+          </Routes>
+        </MemoryRouter>
+      </SnackbarProvider>,
+    )
+
+    const zweite = await screen.findByTestId('gruppe-8')
+    expect(zweite).toHaveTextContent('Zweites Vorhaben1 von 4 fertig')
+    expect(cssRegel(screen.getByTestId('gruppe-fortschritt-8'))).toContain('width: 25%')
+    expect(screen.getByTestId('gruppe-7')).toHaveTextContent('Mein Epic0 von 1 fertig')
+    expect(screen.getByTestId('gruppe-ohne')).toHaveTextContent('Ohne Vorhaben1 Karte')
+
+    fireEvent.click(screen.getByRole('button', { name: 'keine' }))
+
+    expect(screen.queryByTestId('gruppe-8')).not.toBeInTheDocument()
+    expect(localStorage.getItem('manban.listGruppierung')).toBe('keine')
+    fireEvent.click(screen.getByRole('button', { name: 'Vorhaben' }))
+    expect(await screen.findByTestId('gruppe-8')).toBeInTheDocument()
+  })
+
+  it('nennt mehrere Karten ohne Vorhaben im Plural und lässt eine Gruppe ohne Karten weg', async () => {
+    mEpics.list.mockResolvedValue([epic, zweitesEpic])
+    mBoards.get.mockResolvedValue({ id: 1, projectId: 9, name: 'B', createdAt: '', columns: [{ id: 10, name: 'Backlog', position: 0, wipLimit: null }] })
+    mCards.list.mockResolvedValue([ohne, { ...ohne, id: 107, number: 8, title: 'Noch eine' }])
+    render(
+      <SnackbarProvider>
+        <MemoryRouter initialEntries={['/boards/1/list']}>
+          <Routes>
+            <Route path="/boards/:boardId/list" element={<BoardListPage />} />
+          </Routes>
+        </MemoryRouter>
+      </SnackbarProvider>,
+    )
+
+    expect(await screen.findByTestId('gruppe-ohne')).toHaveTextContent('2 Karten')
+    expect(screen.queryByTestId('gruppe-7')).not.toBeInTheDocument()
+  })
+
+  it('filtert auf überfällige Karten und zählt fertige nicht mit', async () => {
+    localStorage.setItem('manban.listGruppierung', 'keine')
+    await renderGruppiert()
+    fireEvent.click(screen.getByLabelText('Filter Done'))
+
+    const filter = screen.getByLabelText('Filter Überfällig')
+    expect(filter).toHaveTextContent('Überfällig1')
+    fireEvent.click(filter)
+
+    expect(filter).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByText('Aufgabe')).toBeInTheDocument()
+    expect(screen.queryByText('Ohne Zuordnung')).not.toBeInTheDocument()
+    expect(screen.queryByText('Fertig und alt')).not.toBeInTheDocument()
+    expect(within(screen.getByLabelText('Detail öffnen: Aufgabe')).getByLabelText('Fällig Aufgabe')).toHaveAttribute('data-ueberfaellig', 'ja')
+  })
+
+  it('filtert nach Zuständigen und zurück auf alle', async () => {
+    localStorage.setItem('manban.listGruppierung', 'keine')
+    await renderGruppiert()
+
+    const auswahl = await screen.findByRole('combobox', { name: 'Zuständig' })
+    fireEvent.change(auswahl, { target: { value: '4' } })
+    expect(screen.getByText('Ohne Zuordnung')).toBeInTheDocument()
+    expect(screen.queryByText('Aufgabe')).not.toBeInTheDocument()
+
+    fireEvent.change(auswahl, { target: { value: '' } })
+    expect(screen.getByText('Aufgabe')).toBeInTheDocument()
+  })
+
+  // Wie in der Werkzeugleiste des Boards steht die Benennung im Wert, nicht über dem Feld
+  // (Entwurf `.waehler`, Z. 833–842; Issue #986).
+  it('benennt den Zuständig-Filter im Wert statt über einer Beschriftung', async () => {
+    localStorage.setItem('manban.listGruppierung', 'keine')
+    await renderGruppiert()
+
+    const auswahl = await screen.findByRole('combobox', { name: 'Zuständig' })
+    expect(screen.queryByText('Zuständig')).not.toBeInTheDocument()
+    expect(within(auswahl).getByRole('option', { name: 'Zuständig: alle' })).toBeInTheDocument()
+    expect(within(auswahl).getByRole('option', { name: 'Zuständig: Anna' })).toBeInTheDocument()
+  })
+
+  it('lässt den Zuständigen-Filter weg, wenn die Mitglieder nicht geladen werden können', async () => {
+    mMembers.list.mockRejectedValue(new Error('403'))
+    localStorage.setItem('manban.listGruppierung', 'keine')
+    await renderGruppiert()
+
+    await waitFor(() => expect(mMembers.list).toHaveBeenCalledWith(9))
+    expect(screen.queryByRole('combobox', { name: 'Zuständig' })).not.toBeInTheDocument()
+  })
+
+  it('liest die Gruppierung auch dann, wenn localStorage nicht verfügbar ist', async () => {
+    vi.stubGlobal('localStorage', {
+      getItem: () => {
+        throw new Error('gesperrt')
+      },
+      setItem: () => {
+        throw new Error('gesperrt')
+      },
+      removeItem: () => undefined,
+      key: () => null,
+      length: 0,
+      clear: () => undefined,
+    })
+    await renderGruppiert()
+
+    expect(screen.getByRole('button', { name: 'Vorhaben' })).toHaveAttribute('aria-pressed', 'true')
+    fireEvent.click(screen.getByRole('button', { name: 'keine' }))
+    expect(screen.getByRole('button', { name: 'keine' })).toHaveAttribute('aria-pressed', 'true')
   })
 })

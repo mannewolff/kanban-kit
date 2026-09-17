@@ -14,8 +14,9 @@ import { BoardPage } from './BoardPage'
 
 let memberships: { projectId: number; role: string }[] = []
 let platformRole = 'USER'
+let angemeldet = true
 vi.mock('../auth/AuthContext', () => ({
-  useAuth: () => ({ user: { userId: 1, email: 'a@b.c', displayName: 'A', platformRole, memberships } }),
+  useAuth: () => ({ user: angemeldet ? { userId: 1, email: 'a@b.c', displayName: 'A', platformRole, memberships } : null }),
 }))
 vi.mock('../api/boards', () => ({ boardsApi: { get: vi.fn(), rename: vi.fn(), list: vi.fn() } }))
 vi.mock('../api/cards', () => ({
@@ -128,6 +129,23 @@ describe('BoardPage canEdit aus Membership', () => {
     expect(await screen.findByRole('button', { name: 'Neu anlegen' })).toBeInTheDocument()
     // Hinweis: projectsApi.list() läuft seit #160 für den Projektnamen (useProjectName); die
     // Rolle selbst kommt weiterhin synchron aus den Memberships (Anlege-Aktion sofort sichtbar).
+  })
+
+  it('bietet den Filter „Meine" nur mit angemeldetem Nutzer an (#980)', async () => {
+    memberships = [{ projectId: 9, role: 'OWNER' }]
+    renderPage()
+    expect(await screen.findByRole('button', { name: 'Meine' })).toBeInTheDocument()
+  })
+
+  it('zeigt das Board ohne angemeldeten Nutzer ohne den Filter „Meine"', async () => {
+    angemeldet = false
+    try {
+      renderPage()
+      expect(await screen.findByText('B')).toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Meine' })).not.toBeInTheDocument()
+    } finally {
+      angemeldet = true
+    }
   })
 
   it('blendet für VIEWER-Membership die Anlege-Aktion aus', async () => {

@@ -23,7 +23,7 @@ import { Breadcrumbs } from '../components/Breadcrumbs'
 import { useSnackbar } from '../components/SnackbarProvider'
 import { canManageBoards, canManageMembers } from '../lib/roles'
 import { useRefetchOnFocus } from '../lib/useRefetchOnFocus'
-import { SURFACE_HOVER_SHADOW } from '../theme'
+import { SURFACE_HOVER_SHADOW, TABELLENZIFFERN } from '../theme'
 
 export function ProjectBoardsPage() {
   const { projectId } = useParams()
@@ -57,10 +57,11 @@ export function ProjectBoardsPage() {
     void boardsApi.list(id).then((bs) => {
       if (!active) return
       setBoards(bs)
-      // Bei genau einem Board direkt aufs Board — nur beim Erst-Aufruf oder in der Auto-Routing-Kette.
+      // Bei genau einem Board direkt in dessen Leitstand, die Startansicht des Boards (#979) — nur
+      // beim Erst-Aufruf oder in der Auto-Routing-Kette.
       const auto = location.key === 'default' || (location.state as { autoRoute?: boolean } | null)?.autoRoute
       if (bs.length === 1 && auto) {
-        navigate(`/boards/${bs[0].id}`, { replace: true })
+        navigate(`/boards/${bs[0].id}/leitstand`, { replace: true })
       }
     })
     void boardsApi.listArchived(id).then((arch) => {
@@ -189,7 +190,7 @@ export function ProjectBoardsPage() {
             <Paper
               key={board.id}
               variant="outlined"
-              onClick={() => navigate(`/boards/${board.id}`)}
+              onClick={() => navigate(`/boards/${board.id}/leitstand`)}
               sx={{
                 px: 2,
                 py: 1.5,
@@ -205,7 +206,8 @@ export function ProjectBoardsPage() {
               <Typography variant="subtitle1" sx={{ fontWeight: 600, flexGrow: 1, minWidth: 0 }}>
                 {board.name}
               </Typography>
-              <Typography variant="caption" color="text.secondary">
+              {/* Die Zahlen stehen je Board untereinander: gleich breite Ziffern (AK 10, #960). */}
+              <Typography variant="caption" color="text.secondary" sx={TABELLENZIFFERN}>
                 {board.columns.length} Spalten
               </Typography>
               {canManage && (

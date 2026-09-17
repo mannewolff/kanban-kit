@@ -1,23 +1,22 @@
 import { ThemeProvider } from '@mui/material/styles'
 import { render, screen, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
-import { NACHTLAUF_FARBEN, nachtlaufTheme } from '../../nachtlaufDesign'
+import { MELDER, theme } from '../../theme'
 import { NachtlaufFuss, type Fussangabe } from './NachtlaufFuss'
 
-/** Die Fußzeile eines Laufs (#918). Welche Angaben sie führt, entscheidet die Seite. */
+/**
+ * Die Fußzeile eines Laufs (#918). Welche Angaben sie führt, entscheidet die Seite.
+ *
+ * <p>Seit #988 folgt sie Kupferwarte (`CLAUDE-design.md`): Die Farben kommen als Variablen aus dem
+ * Theme, deshalb wird auf den **Verweis** verglichen und nicht auf einen aufgelösten Farbwert.
+ */
 
 const zeige = (angaben: readonly Fussangabe[]) =>
   render(
-    <ThemeProvider theme={nachtlaufTheme}>
+    <ThemeProvider theme={theme}>
       <NachtlaufFuss angaben={angaben} testId="uebersicht-fuss" />
     </ThemeProvider>,
   )
-
-/** `getComputedStyle` gibt Farben als `rgb(…)` zurück, die Tokens stehen als `#rrggbb`. */
-function alsRgb(hex: string): string {
-  const kanal = (position: number) => Number.parseInt(hex.slice(position, position + 2), 16)
-  return `rgb(${kanal(1)}, ${kanal(3)}, ${kanal(5)})`
-}
 
 describe('NachtlaufFuss', () => {
   it('zeigt jede Angabe als Paar aus Benennung und Wert', () => {
@@ -42,7 +41,7 @@ describe('NachtlaufFuss', () => {
     expect(within(fuss).getByText('50,00 $').tagName).toBe('DD')
   })
 
-  it('gibt einem Vorbehalt die Warnfarbe des Entwurfs', () => {
+  it('gibt einem Vorbehalt den Bernstein-Melder', () => {
     zeige([
       {
         label: 'Herkunft der Budgets',
@@ -52,7 +51,7 @@ describe('NachtlaufFuss', () => {
     ])
 
     const wert = screen.getByText('Vorgabewerte, night.kette fehlt in der Config')
-    expect(getComputedStyle(wert).color).toBe(alsRgb(NACHTLAUF_FARBEN.budget))
+    expect(getComputedStyle(wert).color).toBe(MELDER.bernst)
   })
 
   it('lässt eine Angabe ohne Vorbehalt in der gewöhnlichen Textfarbe', () => {
@@ -60,6 +59,7 @@ describe('NachtlaufFuss', () => {
     zeige([{ label: 'Herkunft der Budgets', wert: 'nicht angegeben' }])
 
     const wert = screen.getByText('nicht angegeben')
-    expect(getComputedStyle(wert).color).toBe(alsRgb(NACHTLAUF_FARBEN.ink2))
+    expect(getComputedStyle(wert).color).not.toBe(MELDER.bernst)
+    expect(getComputedStyle(wert).color).toContain('text-secondary')
   })
 })

@@ -17,6 +17,7 @@ import org.mwolff.manban.card.application.CardService.CardView;
 import org.mwolff.manban.card.application.CardService.DerivationNodeView;
 import org.mwolff.manban.card.application.CardService.EpicView;
 import org.mwolff.manban.card.application.InvalidDerivedFromException;
+import org.mwolff.manban.card.application.LabelAction;
 import org.mwolff.manban.card.application.SortDirection;
 import org.mwolff.manban.card.domain.CardType;
 import org.mwolff.manban.common.TextLimits;
@@ -243,6 +244,16 @@ class CardController {
     return cards.bulkArchive(userId, request.cardIds());
   }
 
+  /**
+   * Setzt ein Label an mehreren Karten oder nimmt es ihnen ab, in einer Transaktion
+   * (alles-oder-nichts). Die übrigen Labels jeder Karte bleiben unberührt.
+   */
+  @PostMapping("/api/cards/bulk-labels")
+  List<CardView> bulkLabels(
+      @AuthenticationPrincipal Long userId, @Valid @RequestBody BulkLabelsRequest request) {
+    return cards.bulkLabels(userId, request.cardIds(), request.labelId(), request.action());
+  }
+
   @PostMapping("/api/cards/{cardId}/restore")
   CardView restore(@AuthenticationPrincipal Long userId, @PathVariable long cardId) {
     return cards.restore(userId, cardId);
@@ -402,6 +413,11 @@ class CardController {
       @NotEmpty @Size(max = 200) List<Long> cardIds,
       @NotNull Long targetBoardId,
       @NotNull Long targetColumnId) {}
+
+  record BulkLabelsRequest(
+      @NotEmpty @Size(max = 200) List<Long> cardIds,
+      @NotNull Long labelId,
+      @NotNull LabelAction action) {}
 
   record AssigneesRequest(@Nullable List<Long> assignees) {}
 

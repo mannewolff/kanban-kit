@@ -1,7 +1,7 @@
 import { act, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { DerivationTree } from './DerivationTree'
+import { DerivationTree, hakenArt } from './DerivationTree'
 import type { DerivationNode } from '../api/cards'
 
 vi.mock('../api/cards', async (original) => {
@@ -194,10 +194,12 @@ describe('DerivationTree', () => {
     expect(zeilen()[0]).toHaveFocus()
   })
 
-  it('macht eine erledigte Zeile auch textlich als erledigt erkennbar', async () => {
+  it('macht eine erledigte Zeile am Haken erkennbar, der zugänglich „erledigt" heißt (Issue #985)', async () => {
     await zeigeBaum([node({ number: 1 }), node({ number: 2, depth: 1, done: true })])
 
-    expect(zeilen()[1]).toHaveTextContent(/erledigt/i)
+    const haken = screen.getByRole('img', { name: 'erledigt' })
+    expect(zeilen()[1]).toContainElement(haken)
+    expect(haken).toHaveTextContent('✓')
   })
 
   it('macht eine blockierte Zeile auch textlich erkennbar', async () => {
@@ -553,5 +555,131 @@ describe('DerivationTree', () => {
     expect(nummer.compareDocumentPosition(erstesLabel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(erstesLabel.compareDocumentPosition(zweitesLabel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(zweitesLabel.compareDocumentPosition(titel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  // --- Hakenspalte ganz links (Issue #985) ---------------------------------
+  //
+  // Die Regel liegt als reine Funktion neben der Komponente: Ob ein Haken steht, haengt am Baum
+  // und nicht am Rendern. Die Faelle darunter pruefen deshalb `hakenArt` direkt; die
+  // Render-Tests danach belegen nur noch, dass der Haken an der richtigen Stelle landet.
+
+  /** Zeilen aus Titeln bauen — die Regel liest den Titel, nicht die Nummer. */
+  const baum = (...titel: (readonly [number, string, Partial<DerivationNode>?])[]) =>
+    titel.map(([depth, title, rest], i) => node({ number: i + 1, depth, title, ...rest }))
+
+  it('setzt an einer erledigten Karte den Haken „erledigt"', () => {
+    const rows = baum([0, '[Plan] Herkunftsbaum'], [1, 'Hakenspalte bauen', { done: true }])
+
+    expect(hakenArt(rows, 1)).toBe('erledigt')
+  })
+
+  it('setzt an einer offenen Karte keinen Haken', () => {
+    const rows = baum([0, '[Plan] Herkunftsbaum'], [1, 'Hakenspalte bauen'])
+
+    expect(hakenArt(rows, 1)).toBeNull()
+  })
+
+  it('setzt an einem [Fachlich] mit [Plan] darunter den Haken „abgearbeitet"', () => {
+    const rows = baum([0, '[Fachlich] Stand links ablesbar'], [1, '[Plan] Herkunftsbaum'])
+
+    expect(hakenArt(rows, 0)).toBe('abgearbeitet')
+  })
+
+  it('setzt an einem [Fachlich] ohne Kind keinen Haken', () => {
+    const rows = baum([0, '[Fachlich] Stand links ablesbar'])
+
+    expect(hakenArt(rows, 0)).toBeNull()
+  })
+
+  it('setzt an einem [Fachlich] mit nur Nicht-Plan-Kind keinen Haken', () => {
+    // Eine Karte direkt unter dem Fachplan ist noch kein abgearbeiteter Fachplan — erst ein Plan
+    // darunter belegt, dass der fachliche Weg in einen technischen ueberfuehrt wurde.
+    const rows = baum([0, '[Fachlich] Stand links ablesbar'], [1, 'Irgendeine Karte'])
+
+    expect(hakenArt(rows, 0)).toBeNull()
+  })
+
+  it('setzt an einem [Plan] mit Arbeitspaket darunter den Haken „abgearbeitet"', () => {
+    const rows = baum([0, '[Plan] Herkunftsbaum'], [1, '[Task] Hakenspalte bauen'])
+
+    expect(hakenArt(rows, 0)).toBe('abgearbeitet')
+  })
+
+  it('setzt an einem [Plan] ohne Arbeitspaket keinen Haken', () => {
+    const rows = baum([0, '[Fachlich] Stand links ablesbar'], [1, '[Plan] Herkunftsbaum'])
+
+    expect(hakenArt(rows, 1)).toBeNull()
+  })
+
+  it('zählt nur direkte Kinder, keine tieferen Nachfahren', () => {
+    // Plan und Arbeitspakete haengen direkt an ihrem Vorgaenger; ein Plan zwei Ebenen tiefer
+    // gehoert zu einer anderen Zeile und darf den Fachplan nicht als abgearbeitet ausweisen.
+    const rows = baum(
+      [0, '[Fachlich] Stand links ablesbar'],
+      [1, 'Irgendeine Karte'],
+      [2, '[Plan] Herkunftsbaum'],
+    )
+
+    expect(hakenArt(rows, 0)).toBeNull()
+  })
+
+  it('zählt ein Kind auch dann, wenn davor ein Enkel derselben Zeile steht', () => {
+    // In Praeorder liegen die Nachfahren eines ersten Kindes zwischen erstem und zweitem Kind —
+    // die Suche darf dort nicht abbrechen, sonst bliebe das zweite Kind ungezaehlt.
+    const rows = baum(
+      [0, '[Fachlich] Stand links ablesbar'],
+      [1, 'Irgendeine Karte'],
+      [2, 'Enkel'],
+      [1, '[Plan] Herkunftsbaum'],
+    )
+
+    expect(hakenArt(rows, 0)).toBe('abgearbeitet')
+  })
+
+  it('zeigt den Haken eines abgearbeiteten Plans zugänglich als „abgearbeitet"', async () => {
+    await zeigeBaum(baum([0, '[Plan] Herkunftsbaum'], [1, '[Task] Hakenspalte bauen']))
+
+    const haken = screen.getByRole('img', { name: 'abgearbeitet' })
+    expect(zeilen()[0]).toContainElement(haken)
+  })
+
+  it('zeigt die graue Marke „erledigt" rechts nicht mehr', async () => {
+    await zeigeBaum([node({ number: 1, done: true })])
+
+    // Nur noch der Haken traegt die Aussage — als zugaenglicher Name, nicht als sichtbarer Text.
+    expect(screen.queryByText('erledigt')).toBeNull()
+    expect(screen.getByRole('img', { name: 'erledigt' })).toBeInTheDocument()
+  })
+
+  it('stellt den Haken vor die Kartennummer', async () => {
+    await zeigeBaum([node({ number: 1, done: true })])
+
+    const haken = screen.getByRole('img', { name: 'erledigt' })
+    const nummer = screen.getByText('#1')
+    expect(haken.compareDocumentPosition(nummer) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('hält die Hakenspalte über alle Tiefen hinweg bündig und gleich breit', async () => {
+    await zeigeBaum([node({ number: 1, done: true }), node({ number: 2, depth: 1 })])
+
+    // Die Einrueckung beginnt erst hinter der Spalte: Beide Zeilen haben denselben linken
+    // Innenabstand, und beide fuehren als erstes Kind eine Spalte gleicher Breite — die der
+    // zweiten Zeile leer.
+    const [ersteZeile, zweiteZeile] = zeilen()
+    expect(zweiteZeile).toHaveStyle({ paddingLeft: getComputedStyle(ersteZeile).paddingLeft })
+    const spalten = screen.getAllByTestId('hakenspalte')
+    expect(spalten).toHaveLength(2)
+    expect(spalten[0]).toHaveTextContent('✓')
+    expect(spalten[1]).toHaveTextContent('')
+    expect(spalten[1]).toHaveStyle({ width: getComputedStyle(spalten[0]).width })
+    expect(getComputedStyle(spalten[1]).width).not.toBe('')
+  })
+
+  it('rückt die Zeileninhalte weiterhin nach der Tiefe ein', async () => {
+    await zeigeBaum(kette)
+
+    const abstand = (text: string) => getComputedStyle(screen.getByText(text)).marginLeft
+    expect(abstand('#1')).not.toBe(abstand('#2'))
+    expect(abstand('#2')).not.toBe(abstand('#3'))
   })
 })

@@ -1,5 +1,8 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { ThemeProvider } from '@mui/material/styles'
+import { cssRegel } from '../test/cssRegel'
+import { theme } from '../theme'
 import { DataTable, type DataTableColumn } from './DataTable'
 
 interface Row {
@@ -215,5 +218,44 @@ describe('DataTable', () => {
     fireEvent.mouseDown(handle, { clientX: 100 })
     fireEvent.mouseMove(document, { clientX: 150 })
     expect(() => fireEvent.mouseUp(document)).not.toThrow()
+  })
+})
+
+describe('DataTable Dichte aus dem Theme (#953, #957)', () => {
+  it('übernimmt die Dichtestufe aus dem Theme statt sie selbst zu setzen', () => {
+    render(
+      <ThemeProvider theme={theme}>
+        <DataTable columns={makeColumns()} rows={rows} getRowKey={(r) => r.id} storageKey="dichte" />
+      </ThemeProvider>,
+    )
+
+    for (const zelle of screen.getAllByRole('cell')) {
+      expect(zelle).toHaveClass('MuiTableCell-sizeSmall')
+    }
+  })
+
+  it('legt die Dichte nicht selbst fest — ohne Theme gilt die MUI-Vorgabe', () => {
+    renderTable('ohne-theme')
+
+    expect(screen.getAllByRole('cell')[0]).toHaveClass('MuiTableCell-sizeMedium')
+  })
+
+  it('lässt mehrzeiligen Text vollständig stehen', () => {
+    const lang = 'Ein sehr langer Zelleninhalt, der in einer schmalen Spalte mehrere Zeilen braucht und nicht gekürzt wird'
+    render(
+      <ThemeProvider theme={theme}>
+        <DataTable
+          columns={[{ key: 'text', header: 'Text', render: () => lang, defaultWidth: 80 }]}
+          rows={[{ id: 1 }]}
+          getRowKey={(r) => r.id}
+          storageKey="lang"
+        />
+      </ThemeProvider>,
+    )
+
+    const zelle = screen.getByRole('cell')
+    expect(zelle).toHaveTextContent(lang)
+    expect(cssRegel(zelle)).not.toContain('white-space: nowrap')
+    expect(cssRegel(zelle)).not.toContain('text-overflow')
   })
 })

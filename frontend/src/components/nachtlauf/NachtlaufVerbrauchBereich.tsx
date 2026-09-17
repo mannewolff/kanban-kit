@@ -7,6 +7,7 @@ import {
   type VerbrauchNacht,
 } from '../../api/nightRunUsage'
 import { NACHTLAUF_FARBEN, NACHTLAUF_SCHRIFTEN } from '../../nachtlaufDesign'
+import { KupferwarteBereich } from './KupferwarteBereich'
 import { NachtlaufVerbrauchNacht } from './NachtlaufVerbrauchNacht'
 import { NachtlaufVerbrauchZeitraum } from './NachtlaufVerbrauchZeitraum'
 
@@ -14,7 +15,11 @@ type Zustand = { art: 'laden' } | { art: 'fehler' } | { art: 'nacht'; nacht: Ver
 
 /**
  * Der Verbrauchs-Bereich der Nachtlauf-Seite (Issues #941, #942, Plan #933 E13): ein eigener
- * Bereich **innerhalb** der bestehenden Seite und ihres Theme-Teilbaums, keine eigene Route.
+ * Bereich **innerhalb** der bestehenden Seite, keine eigene Route.
+ *
+ * <p><b>Der Bereich liegt seit #987 auf der Grenze der Nachtlauf-Ausnahme:</b> Die Zeitraum-Sicht
+ * folgt Kupferwarte und steht deshalb in einem {@link KupferwarteBereich}; die Nachtansicht
+ * darunter bleibt in der Ausnahme und damit im hellen Theme-Teilbaum der Seite.
  *
  * <p>Oben die Zeitraum-Sicht, darunter die Nachtansicht. Beim Öffnen zeigt sie die zuletzt
  * abgeschlossene Nacht — ihr Datum rechnet der Server über den Tageszeitraum mit Rückschritt 0, die
@@ -73,21 +78,10 @@ export function NachtlaufVerbrauchBereich({
       data-testid="verbrauch-bereich"
       sx={{ mb: 4 }}
     >
-      <Typography
-        id="verbrauch-ueberschrift"
-        component="h2"
-        sx={{
-          fontFamily: NACHTLAUF_SCHRIFTEN.display,
-          fontWeight: 600,
-          fontSize: 22,
-          color: NACHTLAUF_FARBEN.ink,
-          mb: 1,
-        }}
-      >
-        Verbrauch
-      </Typography>
-
-      <NachtlaufVerbrauchZeitraum projectId={projectId} api={api} onNachtWaehlen={setNachtDatum} />
+      {/* Die Überschrift des Bereichs steht in der Kopfzeile der Zeitraum-Sicht (Mockup). */}
+      <KupferwarteBereich>
+        <NachtlaufVerbrauchZeitraum projectId={projectId} api={api} onNachtWaehlen={setNachtDatum} />
+      </KupferwarteBereich>
 
       <Box sx={{ mt: 4 }}>
         {zustand.art === 'laden' && (

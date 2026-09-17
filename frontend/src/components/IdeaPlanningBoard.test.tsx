@@ -10,8 +10,7 @@ import { commentsApi } from '../api/comments'
 import { ideasApi, type Idea } from '../api/ideas'
 import { membersApi } from '../api/members'
 import { IdeaPlanningBoard } from './IdeaPlanningBoard'
-import { statusColors } from '../lib/statusColors'
-import { STATUS_EDGE_WIDTH } from '../theme'
+import { cssRegel, cssRegelMit } from '../test/cssRegel'
 
 // Toast-Weg: useSnackbar liefert im Test einen Spy (statt des No-op-Defaults ohne Provider).
 const { mNotify } = vi.hoisted(() => ({ mNotify: vi.fn() }))
@@ -337,19 +336,69 @@ describe('IdeaPlanningBoard', () => {
     await waitFor(() => expect(mIdeas.planOntoBoard).toHaveBeenCalledWith(20, 11))
   })
 
-  it('trägt an Pool- und Board-Zonen-Item dieselbe linke Status-Kante wie die Board-Karte', async () => {
-    // Die Kante bedeutet auf beiden Seiten dasselbe. Eine Idee liegt vor der Spaltenzuordnung, ihr
-    // Status ist deshalb Backlog. Seit 2026-08-31 sitzt der Status links, nicht oben.
+  it('legt Pool- und Board-Zonen-Item als dieselbe Platte wie die Board-Karte an (#980)', async () => {
     setup()
     renderBoard()
     await screen.findByText('Pool 1')
 
-    const erwartet = {
-      borderLeftColor: statusColors('Backlog').dot,
-      borderLeftWidth: `${STATUS_EDGE_WIDTH}px`,
+    // jsdom verwirft die Kurzschreibweise mit `var(…)`; geprüft wird die erzeugte Regel.
+    for (const item of [screen.getByTestId('pool-item-20'), screen.getByTestId('board-item-1')]) {
+      expect(cssRegel(item)).toContain('border: 1px solid var(--mb-palette-warte-rand')
+      expect(cssRegel(item)).not.toContain('border-left:')
     }
-    expect(screen.getByTestId('pool-item-20')).toHaveStyle(erwartet)
-    expect(screen.getByTestId('board-item-1')).toHaveStyle(erwartet)
+  })
+
+  describe('Ziehen mit denselben Bausteinen wie das Board (AK 7, AK 8, #956)', () => {
+    it('kennzeichnet die gezogene Pool-Idee als bewegt und zeigt die Ablagefläche am Ziel-Board', async () => {
+      setup()
+      renderBoard()
+      await screen.findByText('Pool 1')
+
+      fireEvent.dragStart(screen.getByTestId('pool-item-20'), dt())
+      await waitFor(() => expect(screen.getByTestId('pool-item-20')).toHaveAttribute('data-zieh-zustand', 'bewegt'))
+      expect(cssRegelMit(screen.getByTestId('pool-item-20'), '>*')).toContain('visibility: hidden')
+
+      fireEvent.dragOver(screen.getByTestId('board-zone-11'), dt())
+      expect(screen.getByTestId('board-zone-11')).toHaveAttribute('data-ablage', 'aktiv')
+      expect(cssRegel(screen.getByTestId('board-zone-11'))).toContain('outline: 2px dashed')
+      expect(screen.getByTestId('pool-zone')).not.toHaveAttribute('data-ablage')
+    })
+
+    it('zeigt beim Ziehen einer Board-Karte die Ablagefläche am Pool', async () => {
+      setup()
+      renderBoard()
+      await screen.findByText('Backlog A')
+
+      fireEvent.dragStart(screen.getByTestId('board-item-1'), dt())
+      await waitFor(() => expect(screen.getByTestId('board-item-1')).toHaveAttribute('data-zieh-zustand', 'bewegt'))
+      fireEvent.dragOver(screen.getByTestId('pool-zone'), dt())
+
+      expect(screen.getByTestId('pool-zone')).toHaveAttribute('data-ablage', 'aktiv')
+    })
+
+    it('räumt Kennzeichnung und Ablagefläche nach einem Abbruch weg', async () => {
+      setup()
+      renderBoard()
+      await screen.findByText('Pool 1')
+      fireEvent.dragStart(screen.getByTestId('pool-item-20'), dt())
+      await waitFor(() => expect(screen.getByTestId('pool-item-20')).toHaveAttribute('data-zieh-zustand', 'bewegt'))
+      fireEvent.dragOver(screen.getByTestId('board-zone-11'), dt())
+
+      fireEvent.dragEnd(screen.getByTestId('pool-item-20'))
+
+      expect(screen.getByTestId('pool-item-20')).not.toHaveAttribute('data-zieh-zustand')
+      expect(screen.getByTestId('board-zone-11')).not.toHaveAttribute('data-ablage')
+    })
+
+    it('zeigt ohne Ziehvorgang keine Ablagefläche', async () => {
+      setup()
+      renderBoard()
+      await screen.findByText('Pool 1')
+
+      fireEvent.dragOver(screen.getByTestId('board-zone-11'), dt())
+
+      expect(screen.getByTestId('board-zone-11')).not.toHaveAttribute('data-ablage')
+    })
   })
 
   it('holt per Drag von einem Board in den Pool', async () => {

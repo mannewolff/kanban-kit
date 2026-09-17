@@ -2,6 +2,7 @@ import Box from '@mui/material/Box'
 import Typography from '@mui/material/Typography'
 import { useEffect, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react'
 import { type DerivationNode } from '../api/cards'
+import { MELDER } from '../theme'
 import { labelChipSx } from './labelChipSx'
 
 interface Props {
@@ -32,6 +33,52 @@ function parentIndex(rows: readonly DerivationNode[], index: number): number {
 /** In Präorder folgt das erste Kind unmittelbar — und trägt genau eine Ebene mehr. */
 function hasChildren(rows: readonly DerivationNode[], index: number): boolean {
   return rows[index + 1]?.depth === rows[index].depth + 1
+}
+
+/**
+ * Die direkten Kinder einer Zeile in Präorder: alles zwischen der Zeile und der nächsten Zeile
+ * gleicher oder geringerer Tiefe, davon genau die Zeilen einer Ebene tiefer. Die Nachfahren eines
+ * Kindes liegen dazwischen — die Suche darf dort nicht abbrechen, sonst bliebe jedes Kind nach dem
+ * ersten ungezählt.
+ */
+function directChildren(rows: readonly DerivationNode[], index: number): DerivationNode[] {
+  const kinder: DerivationNode[] = []
+  for (let j = index + 1; j < rows.length && rows[j].depth > rows[index].depth; j++) {
+    if (rows[j].depth === rows[index].depth + 1) {
+      kinder.push(rows[j])
+    }
+  }
+  return kinder
+}
+
+/** Was die Hakenspalte einer Zeile aussagt — oder `null`, wenn sie leer bleibt. */
+export type HakenArt = 'erledigt' | 'abgearbeitet' | null
+
+const PRAEFIX_FACHLICH = '[Fachlich]'
+const PRAEFIX_PLAN = '[Plan]'
+
+/**
+ * Die Regel der Hakenspalte (Issue #985) als reine Funktion — ohne Rendering prüfbar.
+ *
+ * <p>Erledigt ist eine Karte, die auf Done steht. **Abgearbeitet** ist ein Planungsdokument, aus
+ * dem der nächste Schritt entstanden ist: ein `[Fachlich]` mit mindestens einem `[Plan]` darunter,
+ * ein `[Plan]` mit mindestens einem Arbeitspaket darunter. Gezählt werden nur **direkte** Kinder —
+ * Plan und Arbeitspakete hängen direkt an ihrem Vorgänger, ein Dokument zwei Ebenen tiefer gehört
+ * zu einer anderen Zeile.
+ */
+export function hakenArt(rows: readonly DerivationNode[], index: number): HakenArt {
+  const zeile = rows[index]
+  if (zeile.done) {
+    return 'erledigt'
+  }
+  if (zeile.title.startsWith(PRAEFIX_FACHLICH)) {
+    const plaene = directChildren(rows, index).filter((kind) => kind.title.startsWith(PRAEFIX_PLAN))
+    return plaene.length > 0 ? 'abgearbeitet' : null
+  }
+  if (zeile.title.startsWith(PRAEFIX_PLAN)) {
+    return directChildren(rows, index).length > 0 ? 'abgearbeitet' : null
+  }
+  return null
 }
 
 /** Sichtbar ist eine Zeile, solange kein Vorfahre zugeklappt ist. */
@@ -227,7 +274,9 @@ export function DerivationTree({ rows, onOpenCard }: Readonly<Props>) {
               gap: 1,
               py: 0.5,
               pr: 1,
-              pl: zeile.depth * 2.5 + 1,
+              // Fest, ohne Tiefe: Die Hakenspalte steht über alle Ebenen bündig, eingerückt wird
+              // erst dahinter (Issue #985).
+              pl: 1,
               borderRadius: 1,
               cursor: 'pointer',
               opacity: zeile.blocked ? 0.6 : 1,
@@ -235,7 +284,12 @@ export function DerivationTree({ rows, onOpenCard }: Readonly<Props>) {
               '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main' },
             }}
           >
-            <Typography variant="body2" component="span" sx={{ color: 'text.secondary' }}>
+            <Haken art={hakenArt(rows, index)} />
+            <Typography
+              variant="body2"
+              component="span"
+              sx={{ color: 'text.secondary', ml: zeile.depth * 2.5 }}
+            >
               #{zeile.number}
             </Typography>
             {zeile.labels.map((label) => (
@@ -245,7 +299,6 @@ export function DerivationTree({ rows, onOpenCard }: Readonly<Props>) {
               {zeile.title}
             </Typography>
             {zeile.type === 'EPIC' && <Marke text="Vorhaben" />}
-            {zeile.done && <Marke text="erledigt" />}
             {zeile.blocked && <Marke text="blockiert" />}
             {zeile.broken && <Marke text="Herkunftskette unterbrochen" />}
             {zeile.externalOrigin && <Marke text={`Herkunft extern: #${zeile.derivedFrom}`} />}
@@ -264,6 +317,38 @@ export function DerivationTree({ rows, onOpenCard }: Readonly<Props>) {
         )
       })}
     </Box>
+  )
+}
+
+/**
+ * Die Hakenspalte einer Zeile (Issue #985): ganz links, feste Breite, damit die Zeilen über alle
+ * Tiefen bündig stehen — ohne Haken bleibt sie leer statt zu fehlen.
+ *
+ * <p>`role="img"` mit `aria-label` statt eines blossen Zeichens: Farbe ist nie alleiniger
+ * Informationsträger (CLAUDE-design.md), und ein „✓" allein sagt nicht, ob eine Karte erledigt
+ * oder ein Planungsdokument abgearbeitet ist. Wie {@link Marke} ohne `tabIndex` — der Baum ist ein
+ * Roving Tabindex mit genau einem Tab-Stopp.
+ */
+function Haken({ art }: Readonly<{ art: HakenArt }>) {
+  return (
+    <Typography
+      variant="body2"
+      component="span"
+      role={art === null ? undefined : 'img'}
+      aria-label={art ?? undefined}
+      // Die leere Spalte traegt keine Rolle und keinen Namen — sie haelt nur Platz. Damit die
+      // Buendigkeit trotzdem pruefbar bleibt, ist sie ueber diese Marke greifbar.
+      data-testid="hakenspalte"
+      sx={{
+        width: 14,
+        flexShrink: 0,
+        textAlign: 'center',
+        color: MELDER.gruen,
+        fontWeight: 600,
+      }}
+    >
+      {art === null ? '' : '✓'}
+    </Typography>
   )
 }
 

@@ -294,6 +294,7 @@ export function BoardPage() {
         onCardsChanged={reloadCards}
         canTransfer={canTransfer}
         platformAdmin={admin}
+        currentUserId={user?.userId ?? null}
       />
       {selectedCard && (
         <CardDetailModal

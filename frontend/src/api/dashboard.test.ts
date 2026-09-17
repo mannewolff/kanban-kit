@@ -10,8 +10,8 @@ describe('dashboardApi', () => {
       throughput: [],
       avgLeadTimeSeconds: 100,
       leadTimeSampleCount: 3,
-      avgCycleTimeSeconds: null,
-      cycleTimeSampleCount: 0,
+      avgImplementationSeconds: null,
+      implementationSampleCount: 0,
       outliers: [],
     }
     const f = vi.spyOn(globalThis, 'fetch').mockResolvedValue({

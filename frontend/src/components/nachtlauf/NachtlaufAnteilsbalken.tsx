@@ -23,6 +23,12 @@ export function NachtlaufAnteilsbalken({
   beschriftung,
   ansage,
   farbe,
+  /**
+   * Die Farbe der Schiene hinter der Füllung. Vorgabe ist der Wert der Nachtlauf-Ausnahme; der
+   * Laufblock übergibt seit #988 die Nut des Themes, weil er Kupferwarte folgt und im dunklen
+   * Erscheinungsbild dunkel ist (`CLAUDE-design.md`).
+   */
+  schiene = NACHTLAUF_FARBEN.rail,
   testId,
   /** Eigene Kennung statt einer Ableitung aus {@link testId} — sonst träfe ein Präfix-Muster über
    * die Abschnitte auch die Füllungen und zählte doppelt. */
@@ -32,6 +38,7 @@ export function NachtlaufAnteilsbalken({
   beschriftung: string
   ansage: string
   farbe: string
+  schiene?: string
   testId: string
   fuellungTestId: string
 }>) {
@@ -53,7 +60,7 @@ export function NachtlaufAnteilsbalken({
           height: 26,
           borderRadius: '3px',
           overflow: 'hidden',
-          backgroundColor: NACHTLAUF_FARBEN.rail,
+          backgroundColor: schiene,
         }}
       >
         <Box

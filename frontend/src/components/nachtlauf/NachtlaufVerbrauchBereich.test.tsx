@@ -83,6 +83,19 @@ describe('NachtlaufVerbrauchBereich', () => {
     expect(screen.getByRole('heading', { level: 2, name: 'Verbrauch' })).toBeInTheDocument()
   })
 
+  it('stellt die Zeitraum-Sicht in den Kupferwarte-Bereich und laesst die Nachtansicht in der Ausnahme', async () => {
+    const api = {
+      period: vi.fn().mockResolvedValue(zeitraum),
+      night: vi.fn().mockResolvedValue(nacht),
+    }
+
+    zeige(api)
+
+    const kupferwarte = screen.getByTestId('kupferwarte-bereich')
+    expect(kupferwarte).toContainElement(screen.getByTestId('verbrauch-zeitraum'))
+    expect(kupferwarte).not.toContainElement(await screen.findByTestId('verbrauch-nacht'))
+  })
+
   it('stellt die Nachtansicht auf die im Zeitraum gewaehlte Nacht um (AK 8)', async () => {
     const api = {
       period: vi.fn().mockResolvedValue(zeitraum),

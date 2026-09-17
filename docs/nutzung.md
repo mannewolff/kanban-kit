@@ -81,6 +81,24 @@ Klick auf eine Karte öffnet das Detail:
   Protokolliert werden Anlegen, Bearbeiten, Zuständige geändert, Verschieben, Archivieren und
   Wiederherstellen (Label-Änderungen werden nicht protokolliert).
 
+### Mehrfachauswahl
+
+Der Button **„Auswählen"** über dem Board schaltet in den Auswahlmodus: Jede Karte bekommt ein
+Kästchen, ein Klick auf die Karte hakt sie an oder ab (statt das Detail zu öffnen). Sobald mindestens
+eine Karte gewählt ist, erscheint unten eine Aktionsleiste mit vier Massenaktionen:
+
+- **Labels:** öffnet ein Menü mit allen Labels des Boards. Je Label steht dort, wie weit es in der
+  Auswahl vertreten ist — ein **voller Haken** („alle gewählten Karten"), ein **Strich** („einige")
+  oder ein **leeres Kästchen** („keine"). Ein Klick auf ein Label ohne vollen Haken **hängt es allen**
+  gewählten Karten an, ein Klick auf einen vollen Haken **nimmt es allen ab**; die übrigen Labels
+  jeder Karte bleiben dabei unberührt. Das Menü bleibt offen, sodass mehrere Labels in einem Zug
+  gehen. Hat das Board keine Labels, ist die Taste gesperrt.
+- **Verschieben:** alle gewählten Karten auf ein anderes Board (nur mit Verschieberecht).
+- **Archivieren** und **In den Papierkorb:** jeweils nach einer Rückfrage.
+
+Alle vier laufen als **eine Transaktion**: Scheitert eine Karte, bleibt die ganze Auswahl unverändert.
+Sie treffen immer nur, was der aktive Anzeige-Filter gerade zeigt.
+
 ## Labels
 
 Labels sind **pro Board** definiert und werden über den Button **„Labels"** in der Board-Kopfzeile
@@ -88,7 +106,8 @@ verwaltet (nur mit Bearbeitungsrecht sichtbar):
 
 - **Anlegen:** Name + Farbe wählen, „Anlegen". Namen müssen je Board eindeutig sein.
 - **Ändern/Löschen:** je Label Name und Farbe anpassen und „Speichern", oder über „✕" löschen.
-- **Vergeben:** im Karten-Detail über das Feld „Labels" (siehe oben). **Filtern** nach Labels in der
+- **Vergeben:** im Karten-Detail über das Feld „Labels" (siehe oben) oder für mehrere Karten auf
+  einmal über die [Mehrfachauswahl](#mehrfachauswahl) des Boards. **Filtern** nach Labels in der
   [Listen-Ansicht](#listen-ansicht).
 
 ## Papierkorb
@@ -225,7 +244,9 @@ erscheint also nach dem Einlesen nicht in der Liste.
 durch das Board laufen. Grundlage ist die automatisch erfasste Verweildauer jeder Karte pro Spalte —
 gemessen bei **jedem** Spaltenwechsel, egal ob per Drag & Drop, ⋮-Menü oder über die API (kanbancompat).
 
-- **Ø Lead Time** und **Ø Cycle Time** als Kennzahl-Kacheln.
+- **Ø Lead Time** und **Ø Implementierungszeit** als Kennzahl-Kacheln — die Implementierungszeit
+  misst, wie lange eine erledigte Karte insgesamt in „In Progress" lag (mehrere Aufenthalte zählen
+  zusammen).
 - **Ø Verweildauer je Spalte** (Balkendiagramm, in Stunden).
 - **Durchsatz je Woche** — abgeschlossene Karten (Liniendiagramm).
 - **Ausreißer** — Karten, die über 7 Tage in einer Spalte lagen (Tabelle mit #, Titel, Spalte, Dauer).

@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -31,5 +32,19 @@ class DashboardControllerTest {
     BoardDashboardKpis result = controller.dashboard(3L, 7L);
 
     assertThat(result).isSameAs(kpis);
+  }
+
+  @Test
+  void dashboard_namesTheImplementationFieldsInTheJsonResponse() throws Exception {
+    BoardDashboardKpis kpis =
+        new BoardDashboardKpis(List.of(), List.of(), 100L, 4, 7200L, 3, List.of());
+    when(service.dashboard(3L, 7L)).thenReturn(kpis);
+
+    String json = new ObjectMapper().writeValueAsString(controller.dashboard(3L, 7L));
+
+    // Das Frontend liest genau diese Namen; die abgelöste Zykluszeit darf nicht zurückbleiben.
+    assertThat(json)
+        .contains("\"avgImplementationSeconds\":7200", "\"implementationSampleCount\":3");
+    assertThat(json).doesNotContain("CycleTime", "cycleTime");
   }
 }

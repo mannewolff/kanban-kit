@@ -20,7 +20,7 @@ Diese Datei ist der Einstiegspunkt für alle Engineering-Regeln in diesem Projek
 | Guide | Fokus | Wiederverwendbar |
 |---|---|---|
 | **CLAUDE.md** (diese Datei) | Projekt-Übersicht + Pflichtchecks | ❌ Projekt |
-| [CLAUDE-java.md](CLAUDE-java.md) | Java 21, Spring Boot 3, TDD, Coverage, Mutationstests | ✅ Allgemein |
+| [CLAUDE-java.md](CLAUDE-java.md) | Java 25, Spring Boot 3, TDD, Coverage, Mutationstests | ✅ Allgemein |
 | [CLAUDE-react.md](CLAUDE-react.md) | React 18, Vite, TypeScript, MUI, Lazy Loading, ESLint/A11y | ✅ Allgemein |
 | [CLAUDE-design.md](CLAUDE-design.md) | Palette, Font, Radien, Tiefe, Kontrast des Leitstands | ❌ Projekt |
 | [CLAUDE-security.md](CLAUDE-security.md) | Spring Security, JPA, Frontend-XSS, Secrets, Session-/Token-Handling | ✅ Allgemein |
@@ -36,7 +36,7 @@ Diese Datei ist der Einstiegspunkt für alle Engineering-Regeln in diesem Projek
 
 | Schicht | Technologie |
 |---|---|
-| Backend-Sprache | Java 21 (LTS) |
+| Backend-Sprache | Java 25 (LTS) |
 | Backend-Framework | Spring Boot 3.5, Spring Data JPA, Spring Web |
 | Build (Backend) | Maven (inkl. `frontend-maven-plugin` für den Vite-Build) |
 | Datenbank | PostgreSQL 16 |
@@ -67,7 +67,7 @@ Diese Datei ist der Einstiegspunkt für alle Engineering-Regeln in diesem Projek
 ├── Dockerfile, docker-compose.yml      # Multi-Stage-Image + lokale Composition (Postgres, MinIO, Caddy)
 ├── Caddyfile                           # Reverse-Proxy + automatisches TLS
 ├── .env.example                        # DB-, MinIO- und App-Konfig-Vorlage
-├── issues/                             # Lokaler Issue-Tracker (0001.md …) für den 9-Schritte-Workflow
+├── .claude/workflow.config.json        # issueTracker: toolbox — Issues auf dem Board https://kanban.mwolff.org (node .claude/kit/board.mjs)
 ├── src/main/java/org/mwolff/manban/    # Backend (je Modul: domain/application/web/infrastructure)
 │   ├── ManbanApplication.java
 │   ├── auth/                           # Registrierung, Login, Session, Passwort-Reset, Bootstrap-Admin
@@ -142,7 +142,7 @@ Keine kurzfristige Bequemlichkeit rechtfertigt unsicheren, untypisierten oder sc
 
 ---
 
-**TL;DR:** Java 21 + Spring Boot 3 (TDD-pflichtig, 100 % Coverage) auf PostgreSQL 16 + MinIO. React 18 + TypeScript strict + MUI. Eigenes Session-Auth, rollenbasierte Rechte. Sicherheit > Korrektheit > Komfort. Vor jedem Push: `mvn verify` und `npm run build`/`lint`/`test` grün. Plan-Mode und lokale Issues sind verbindlich (siehe Workflow).
+**TL;DR:** Java 25 + Spring Boot 3 (TDD-pflichtig, 100 % Coverage) auf PostgreSQL 16 + MinIO. React 18 + TypeScript strict + MUI. Eigenes Session-Auth, rollenbasierte Rechte. Sicherheit > Korrektheit > Komfort. Vor jedem Push: `mvn verify` und `npm run build`/`lint`/`test` grün. Plan-Mode und Board-Issues sind verbindlich (siehe Workflow).
 
 ## Gedächtnis (Obsidian-Vault)
 

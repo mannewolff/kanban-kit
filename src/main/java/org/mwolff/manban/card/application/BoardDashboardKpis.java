@@ -5,15 +5,15 @@ import java.util.List;
 import org.jspecify.annotations.Nullable;
 
 /**
- * Kennzahlen eines Boards für das Zykluszeit-Dashboard. Dauern durchgängig in Sekunden; die
+ * Kennzahlen eines Boards für das Kennzahl-Dashboard. Dauern durchgängig in Sekunden; die
  * Formatierung übernimmt das Frontend. {@code null} bei einer Kennzahl bedeutet „keine Datenbasis"
- * (z. B. noch keine abgeschlossene Karte oder keine „Ready"-artige Spalte).
+ * (z. B. noch keine abgeschlossene Karte oder keine „In-Progress"-artige Spalte).
  *
- * <p>{@code leadTimeSampleCount} und {@code cycleTimeSampleCount} sind die Anzahl der Karten, aus
- * denen der jeweilige Durchschnitt gemittelt wurde — nicht die Anzahl aller Karten und nicht die
- * Summe des Durchsatzes (der ist auf zwölf Wochen gefenstert). Ohne diese Zahl ließe sich der
- * Durchschnitt nicht einordnen. Beide Zählungen weichen voneinander ab: die Cycle Time setzt
- * zusätzlich einen Eintritt in eine „Ready"-artige Spalte voraus.
+ * <p>{@code leadTimeSampleCount} und {@code implementationSampleCount} sind die Anzahl der Karten,
+ * aus denen der jeweilige Durchschnitt gemittelt wurde — nicht die Anzahl aller Karten und nicht
+ * die Summe des Durchsatzes (der ist auf zwölf Wochen gefenstert). Ohne diese Zahl ließe sich der
+ * Durchschnitt nicht einordnen. Beide Zählungen weichen voneinander ab: die Implementierungszeit
+ * setzt zusätzlich einen abgeschlossenen Aufenthalt in einer „In-Progress"-artigen Spalte voraus.
  *
  * <p>Durchschnitt und Stichprobengröße gehören zusammen: ein Durchschnitt ohne Messung ist ebenso
  * widersprüchlich wie Messungen ohne Durchschnitt. Der Kompaktkonstruktor sichert das zu, statt
@@ -25,13 +25,13 @@ public record BoardDashboardKpis(
     List<WeeklyThroughput> throughput,
     @Nullable Long avgLeadTimeSeconds,
     int leadTimeSampleCount,
-    @Nullable Long avgCycleTimeSeconds,
-    int cycleTimeSampleCount,
+    @Nullable Long avgImplementationSeconds,
+    int implementationSampleCount,
     List<OutlierCard> outliers) {
 
   public BoardDashboardKpis {
     requireSampleBasis(avgLeadTimeSeconds, leadTimeSampleCount, "leadTime");
-    requireSampleBasis(avgCycleTimeSeconds, cycleTimeSampleCount, "cycleTime");
+    requireSampleBasis(avgImplementationSeconds, implementationSampleCount, "implementation");
   }
 
   private static void requireSampleBasis(

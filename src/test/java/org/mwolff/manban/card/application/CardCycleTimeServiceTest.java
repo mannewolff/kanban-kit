@@ -110,8 +110,8 @@ class CardCycleTimeServiceTest {
     assertThat(kpis.outliers()).isEmpty();
     assertThat(kpis.avgLeadTimeSeconds()).isNull();
     assertThat(kpis.leadTimeSampleCount()).isZero();
-    assertThat(kpis.avgCycleTimeSeconds()).isNull();
-    assertThat(kpis.cycleTimeSampleCount()).isZero();
+    assertThat(kpis.avgImplementationSeconds()).isNull();
+    assertThat(kpis.implementationSampleCount()).isZero();
     assertThat(kpis.throughput()).hasSize(12);
     assertThat(kpis.throughput()).allSatisfy(w -> assertThat(w.doneCount()).isZero());
   }
@@ -215,37 +215,81 @@ class CardCycleTimeServiceTest {
   }
 
   @Test
-  void cycleTime_averagesFromEarliestReadyEntryToDone() {
-    Card done = card(1L, 21L, 1, "done", NOW.minusSeconds(9999), NOW);
-    Card noReady = card(2L, 20L, 2, "noReady", NOW.minusSeconds(9999), NOW);
-    Card openCard = card(3L, 21L, 3, "open", NOW.minusSeconds(9999), null);
+  void implementation_sumsSingleProgressStayOfDoneCard() {
     stub(
-        List.of(done, noReady, openCard),
+        List.of(card(1L, 22L, 1, "done", NOW.minusSeconds(9999), NOW)),
         List.of(
-            tr(1L, 20L, "Backlog", NOW.minusSeconds(600), 100L),
-            tr(1L, 21L, "Ready", NOW.minusSeconds(500), 500L),
-            tr(1L, 21L, "Ready", NOW.minusSeconds(400), 400L),
-            tr(2L, 20L, "Backlog", NOW.minusSeconds(700), 700L),
-            tr(3L, 21L, "Ready", NOW.minusSeconds(300), null)),
-        List.of(col(20L, "Backlog", 0), col(21L, "Ready", 1)));
+            tr(1L, 20L, "Backlog", NOW.minusSeconds(9000), 4000L),
+            tr(1L, 21L, "In progress", NOW.minusSeconds(5000), 1800L),
+            tr(1L, 22L, "Done", NOW.minusSeconds(3000), null)),
+        List.of(col(20L, "Backlog", 0), col(21L, "In progress", 1), col(22L, "Done", 2)));
 
-    // Nur die abgeschlossene Karte mit Ready-Eintritt zählt; frühester Ready-Eintritt = -500s.
     BoardDashboardKpis kpis = service.dashboard(5L, BOARD);
-    assertThat(kpis.avgCycleTimeSeconds()).isEqualTo(500L);
-    // Von drei Karten trägt genau eine zur Cycle Time bei — die Datenbasis nennt sie einzeln.
-    assertThat(kpis.cycleTimeSampleCount()).isEqualTo(1);
+
+    // Nur der Aufenthalt in „In progress" zählt — Backlog und Done bleiben draußen.
+    assertThat(kpis.avgImplementationSeconds()).isEqualTo(1800L);
+    assertThat(kpis.implementationSampleCount()).isEqualTo(1);
   }
 
   @Test
-  void cycleTime_isNull_whenNoReadyColumnAmongDoneCards() {
+  void implementation_sumsAllClosedProgressStaysOfOneCard() {
+    stub(
+        List.of(card(1L, 22L, 1, "nacharbeit", NOW.minusSeconds(9999), NOW)),
+        List.of(
+            tr(1L, 21L, "In progress", NOW.minusSeconds(9000), 1800L),
+            tr(1L, 23L, "In review", NOW.minusSeconds(7000), 900L),
+            tr(1L, 21L, "In progress", NOW.minusSeconds(6000), 5400L),
+            tr(1L, 21L, "In progress", NOW.minusSeconds(500), null)),
+        List.of(col(21L, "In progress", 0)));
+
+    BoardDashboardKpis kpis = service.dashboard(5L, BOARD);
+
+    // 30 min + 90 min = 2 h; der noch offene dritte Aufenthalt ist nicht gemessen und zählt nicht.
+    assertThat(kpis.avgImplementationSeconds()).isEqualTo(7200L);
+    assertThat(kpis.implementationSampleCount()).isEqualTo(1);
+  }
+
+  @Test
+  void implementation_ignoresOpenCardsAndCardsWithoutProgressStay() {
+    Card done = card(1L, 22L, 1, "done", NOW.minusSeconds(9999), NOW);
+    Card noProgress = card(2L, 22L, 2, "noProgress", NOW.minusSeconds(9999), NOW);
+    Card openCard = card(3L, 21L, 3, "open", NOW.minusSeconds(9999), null);
+    stub(
+        List.of(done, noProgress, openCard),
+        List.of(
+            tr(1L, 21L, "In progress", NOW.minusSeconds(5000), 600L),
+            tr(2L, 20L, "Backlog", NOW.minusSeconds(7000), 7000L),
+            tr(3L, 21L, "In progress", NOW.minusSeconds(3000), 3000L)),
+        List.of(col(20L, "Backlog", 0), col(21L, "In progress", 1)));
+
+    BoardDashboardKpis kpis = service.dashboard(5L, BOARD);
+
+    // Die offene Karte und die ohne In-Progress-Aufenthalt tragen nichts bei — sonst wäre der
+    // Schnitt nicht 600 und die Datenbasis nicht 1.
+    assertThat(kpis.avgImplementationSeconds()).isEqualTo(600L);
+    assertThat(kpis.implementationSampleCount()).isEqualTo(1);
+  }
+
+  @Test
+  void implementation_matchesProgressColumnsRegardlessOfSpelling() {
+    stub(
+        List.of(card(1L, 22L, 1, "done", NOW.minusSeconds(9999), NOW)),
+        List.of(tr(1L, 21L, "IN PROGRESS (WIP 3)", NOW.minusSeconds(5000), 3600L)),
+        List.of(col(21L, "IN PROGRESS (WIP 3)", 0)));
+
+    assertThat(service.dashboard(5L, BOARD).avgImplementationSeconds()).isEqualTo(3600L);
+  }
+
+  @Test
+  void implementation_isNull_whenNoDoneCardVisitedProgressColumn() {
     stub(
         List.of(card(1L, 20L, 1, "done", NOW.minusSeconds(9999), NOW)),
         List.of(tr(1L, 20L, "Backlog", NOW.minusSeconds(500), 500L)),
         List.of(col(20L, "Backlog", 0)));
 
     BoardDashboardKpis kpis = service.dashboard(5L, BOARD);
-    assertThat(kpis.avgCycleTimeSeconds()).isNull();
-    assertThat(kpis.cycleTimeSampleCount()).isZero();
+    assertThat(kpis.avgImplementationSeconds()).isNull();
+    assertThat(kpis.implementationSampleCount()).isZero();
   }
 
   @Test

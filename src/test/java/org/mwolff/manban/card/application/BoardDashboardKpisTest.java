@@ -11,9 +11,15 @@ import org.junit.jupiter.api.Test;
 class BoardDashboardKpisTest {
 
   private static BoardDashboardKpis kpis(
-      Long avgLead, int leadSamples, Long avgCycle, int cycleSamples) {
+      Long avgLead, int leadSamples, Long avgImplementation, int implementationSamples) {
     return new BoardDashboardKpis(
-        List.of(), List.of(), avgLead, leadSamples, avgCycle, cycleSamples, List.of());
+        List.of(),
+        List.of(),
+        avgLead,
+        leadSamples,
+        avgImplementation,
+        implementationSamples,
+        List.of());
   }
 
   @Test
@@ -24,8 +30,8 @@ class BoardDashboardKpisTest {
 
     assertThat(empty.avgLeadTimeSeconds()).isNull();
     assertThat(empty.leadTimeSampleCount()).isZero();
-    assertThat(empty.avgCycleTimeSeconds()).isNull();
-    assertThat(empty.cycleTimeSampleCount()).isZero();
+    assertThat(empty.avgImplementationSeconds()).isNull();
+    assertThat(empty.implementationSampleCount()).isZero();
   }
 
   @Test
@@ -50,23 +56,23 @@ class BoardDashboardKpisTest {
   }
 
   @Test
-  void rejects_cycleTimeAverageWithoutSamples() {
+  void rejects_implementationAverageWithoutSamples() {
     assertThatThrownBy(() -> kpis(null, 0, 200L, 0))
         .isInstanceOf(IllegalArgumentException.class)
-        .hasMessageContaining("cycleTime");
+        .hasMessageContaining("implementation");
   }
 
   @Test
-  void rejects_missingCycleTimeAverageDespiteSamples() {
+  void rejects_missingImplementationAverageDespiteSamples() {
     assertThatThrownBy(() -> kpis(null, 0, null, 2))
         .isInstanceOf(IllegalArgumentException.class)
-        .hasMessageContaining("cycleTime");
+        .hasMessageContaining("implementation");
   }
 
   @Test
-  void rejects_negativeCycleTimeSampleCount() {
+  void rejects_negativeImplementationSampleCount() {
     assertThatThrownBy(() -> kpis(null, 0, 200L, -1))
         .isInstanceOf(IllegalArgumentException.class)
-        .hasMessageContaining("cycleTimeSampleCount");
+        .hasMessageContaining("implementationSampleCount");
   }
 }

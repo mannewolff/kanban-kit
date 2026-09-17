@@ -19,8 +19,7 @@ import { membersApi, type Member } from '../api/members'
 import { CardDetailModal } from './CardDetailModal'
 import { useSnackbar } from './SnackbarProvider'
 import { useRefetchOnFocus } from '../lib/useRefetchOnFocus'
-import { statusColors } from '../lib/statusColors'
-import { edgeSurfaceSx } from './boardSurfaceSx'
+import { ablageflaecheSx, karteSx } from './boardSurfaceSx'
 
 /** Erste Spalte eines Boards (kleinste Position); `null`, wenn das Board keine Spalte hat. */
 function firstColumnOf(board: Board): number | null {
@@ -62,13 +61,10 @@ const SCROLL_STEP_PX = 16
  * Backlog-Zonen der Boards bleiben davon unberührt. `refreshKey` ist ein Reload-Impuls von außen:
  * Bei jeder Änderung werden Pool und Backlogs neu geladen (z. B. nach „Idee anlegen" auf der Seite).
  */
-/**
- * Kanten-Semantik im Ideen-Board (#649, E5): dieselben Token wie die Board-Karte. Eine Idee liegt
- * vor der Spaltenzuordnung, ihr Status ist deshalb fest `Backlog`. Eine linke Kante entfaellt hier,
- * weil die Ansicht keine Vorhaben-Zuordnung kennt — sie bleibt unbelegt und bedeutet nie etwas
- * anderes als auf dem Board.
- */
-const IDEA_EDGE_SX = edgeSurfaceSx({ statusColor: statusColors('Backlog').dot })
+/** Eine Idee liegt als dieselbe Platte wie die Board-Karte (#980, `karteSx`). */
+const IDEA_EDGE_SX = karteSx()
+/** Dieselbe Platte im Ziehzustand: Vertiefung an der verlassenen Stelle, wie auf dem Board (#956). */
+const IDEA_EDGE_SX_BEWEGT = karteSx({ bewegt: true })
 
 export function IdeaPlanningBoard({
   projectId,
@@ -84,6 +80,13 @@ export function IdeaPlanningBoard({
   // Board-lose Pool-Idee, die im Detail-Modal geöffnet ist (null = geschlossen).
   const [selectedIdea, setSelectedIdea] = useState<Idea | null>(null)
   const [dragged, setDragged] = useState<DragState | null>(null)
+  // Darstellung des Ziehens (AK 7, AK 8, #956): die bewegte Zeile (`pool-<id>` bzw. `board-<id>`)
+  // und die Zone, über der sie steht (`pool` bzw. `board-<boardId>`). Das Ablegen selbst liest
+  // weiterhin `dragged`.
+  const [bewegt, setBewegt] = useState<string | null>(null)
+  const [ablageZone, setAblageZone] = useState<string | null>(null)
+  const zugTakt = useRef<ReturnType<typeof setTimeout>>(undefined)
+  useEffect(() => () => clearTimeout(zugTakt.current), [])
   const navigate = useNavigate()
   const notify = useSnackbar()
 
@@ -222,14 +225,46 @@ export function IdeaPlanningBoard({
     [reloadOrNotify, notify],
   )
 
+  /** Kennzeichnet die Zeile einen Takt nach Ziehbeginn — erst dann hat der Browser das Ziehbild. */
+  const bewegtMarkieren = (schluessel: string) => {
+    clearTimeout(zugTakt.current)
+    zugTakt.current = setTimeout(() => setBewegt(schluessel), 0)
+  }
+
+  /** Räumt die Darstellung des Ziehens weg — nach dem Ablegen wie nach einem Abbruch. */
+  const zugBeenden = () => {
+    clearTimeout(zugTakt.current)
+    setBewegt(null)
+    setAblageZone(null)
+  }
+
   const startPoolDrag = (id: number) => (e: React.DragEvent) => {
     e.dataTransfer.setData('text/plain', String(id))
     setDragged({ source: 'pool', id })
+    bewegtMarkieren(`pool-${id}`)
   }
 
   const startBoardDrag = (boardId: number, id: number) => (e: React.DragEvent) => {
     e.dataTransfer.setData('text/plain', String(id))
     setDragged({ source: 'board', boardId, id })
+    bewegtMarkieren(`board-${id}`)
+  }
+
+  const endDrag = () => {
+    setDragged(null)
+    zugBeenden()
+  }
+
+  // Eine Zone ist nur dann Ablagefläche, wenn ein Ablegen dort etwas bewirkt: der Pool für eine
+  // Board-Karte, ein Board für eine Pool-Idee oder für eine Karte eines anderen Boards.
+  const zoneBetreten = (zone: string) => (e: React.DragEvent) => {
+    e.preventDefault()
+    if (dragged !== null) setAblageZone(zone)
+  }
+  const istAblage = (zone: string, board?: Board): boolean => {
+    if (dragged === null || ablageZone !== zone) return false
+    if (board === undefined) return dragged.source === 'board'
+    return dragged.source === 'pool' || dragged.boardId !== board.id
   }
 
   // Drop auf die Zone eines Boards: aus dem Pool → auf dieses Board einplanen; von einem anderen
@@ -237,7 +272,7 @@ export function IdeaPlanningBoard({
   const handleBoardDrop = (board: Board) => (e: React.DragEvent) => {
     e.preventDefault()
     const d = dragged
-    setDragged(null)
+    endDrag()
     if (d === null) return
     if (d.source === 'pool') void plan(d.id, board.id)
     else if (d.boardId !== board.id) void transfer(d.id, board)
@@ -247,7 +282,7 @@ export function IdeaPlanningBoard({
   const handlePoolDrop = (e: React.DragEvent) => {
     e.preventDefault()
     const d = dragged
-    setDragged(null)
+    endDrag()
     if (d === null) return
     if (d.source === 'board') void toPool(d.id)
   }
@@ -270,7 +305,7 @@ export function IdeaPlanningBoard({
     if (d?.source !== 'board' || d.boardId !== boardId || d.id === target.id) return
     e.preventDefault()
     e.stopPropagation()
-    setDragged(null)
+    endDrag()
     void reorder(d.id, target.columnId, target.positionInColumn)
   }
 
@@ -323,9 +358,10 @@ export function IdeaPlanningBoard({
 
             <Box
               data-testid={`board-zone-${board.id}`}
-              onDragOver={(e) => e.preventDefault()}
+              data-ablage={istAblage(`board-${board.id}`, board) ? 'aktiv' : undefined}
+              onDragOver={zoneBetreten(`board-${board.id}`)}
               onDrop={handleBoardDrop(board)}
-              sx={{ minHeight: 64, borderRadius: 1, p: 1, bgcolor: 'background.paper' }}
+              sx={{ minHeight: 64, borderRadius: 1, p: 1, bgcolor: 'background.paper', ...ablageflaecheSx(istAblage(`board-${board.id}`, board)) }}
             >
               {cards.length === 0 ? (
                 <Typography variant="body2" color="text.secondary" sx={{ py: 1 }}>
@@ -340,9 +376,11 @@ export function IdeaPlanningBoard({
                       variant="outlined"
                       draggable={canEdit}
                       onDragStart={startBoardDrag(board.id, cardItem.id)}
+                      onDragEnd={endDrag}
                       onDragOver={(e) => e.preventDefault()}
                       onDrop={handleBoardRowDrop(board.id, cardItem)}
-                      sx={{ px: 1.5, py: 1, display: 'flex', alignItems: 'center', gap: 1.5, ...IDEA_EDGE_SX, cursor: canEdit ? 'grab' : 'default' }}
+                      data-zieh-zustand={bewegt === `board-${cardItem.id}` ? 'bewegt' : undefined}
+                      sx={{ px: 1.5, py: 1, display: 'flex', alignItems: 'center', gap: 1.5, ...(bewegt === `board-${cardItem.id}` ? IDEA_EDGE_SX_BEWEGT : IDEA_EDGE_SX), cursor: canEdit ? 'grab' : 'default' }}
                     >
                       {canEdit && (
                         <DragIndicatorIcon
@@ -383,9 +421,10 @@ export function IdeaPlanningBoard({
       {/* Projektweiter, board-loser Ideen-Pool (Quelle beim Einplanen). */}
       <Box
         data-testid="pool-zone"
-        onDragOver={(e) => e.preventDefault()}
+        data-ablage={istAblage('pool') ? 'aktiv' : undefined}
+        onDragOver={zoneBetreten('pool')}
         onDrop={handlePoolDrop}
-        sx={{ minHeight: 80, borderRadius: 1, p: 1 }}
+        sx={{ minHeight: 80, borderRadius: 1, p: 1, ...ablageflaecheSx(istAblage('pool')) }}
       >
         <Typography
           variant="subtitle2"
@@ -406,7 +445,9 @@ export function IdeaPlanningBoard({
                 variant="outlined"
                 draggable={canEdit}
                 onDragStart={startPoolDrag(idea.id)}
-                sx={{ px: 1.5, py: 1, display: 'flex', alignItems: 'center', gap: 1.5, bgcolor: 'action.hover', ...IDEA_EDGE_SX, cursor: canEdit ? 'grab' : 'default' }}
+                onDragEnd={endDrag}
+                data-zieh-zustand={bewegt === `pool-${idea.id}` ? 'bewegt' : undefined}
+                sx={{ px: 1.5, py: 1, display: 'flex', alignItems: 'center', gap: 1.5, bgcolor: 'action.hover', ...(bewegt === `pool-${idea.id}` ? IDEA_EDGE_SX_BEWEGT : IDEA_EDGE_SX), cursor: canEdit ? 'grab' : 'default' }}
               >
                 {canEdit && (
                   <DragIndicatorIcon

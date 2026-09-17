@@ -8,6 +8,7 @@ import Avatar from '@mui/material/Avatar'
 import AvatarGroup from '@mui/material/AvatarGroup'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
+import ButtonBase from '@mui/material/ButtonBase'
 import Checkbox from '@mui/material/Checkbox'
 import Chip from '@mui/material/Chip'
 import Dialog from '@mui/material/Dialog'
@@ -23,9 +24,9 @@ import Stack from '@mui/material/Stack'
 import TextField from '@mui/material/TextField'
 import Tooltip from '@mui/material/Tooltip'
 import Typography from '@mui/material/Typography'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { Board, BoardColumn } from '../api/boards'
-import { cardsApi, type Card, type CardsApi } from '../api/cards'
+import { cardsApi, type Card, type CardsApi, type LabelAction } from '../api/cards'
 import { ApiError, apiErrorMessage } from '../api/client'
 import { columnsApi, type SortDirection } from '../api/columns'
 import { epicsApi as defaultEpicsApi, type Epic, type EpicsApi } from '../api/epics'
@@ -42,16 +43,107 @@ import { selectableEpics } from '../lib/epicTiles'
 import { hiddenCardNumbers } from '../lib/hiddenCards'
 import { useKeyboardShortcut } from '../lib/useKeyboardShortcut'
 import { statusColors } from '../lib/statusColors'
-import { PANEL_HEAD_GRADIENT, PANEL_SHADOW, PANEL_RADIUS, STATUS_EDGE_WIDTH, SURFACE_TINT } from '../theme'
+import {
+  KUPFER,
+  LED_RING,
+  MELDER,
+  NUT,
+  NUTZER_MAL_SX,
+  PANEL_RADIUS,
+  PLATTE,
+  PLATTE_FUSS,
+  PLATTE_HOCH,
+  RAND,
+  SCHATTEN_NUTE,
+  SCHATTEN_PLATTE,
+  SCHATTEN_TASTE,
+  SCHRIFT_ANZEIGE,
+  TEXT_SCHWACH,
+  ZAHL,
+} from '../theme'
 import { labelChipSx } from './labelChipSx'
-import { edgeSurfaceSx } from './boardSurfaceSx'
-import { BulkActionBar } from './BulkActionBar'
+import { ablageflaecheSx, karteSx } from './boardSurfaceSx'
+import { BulkActionBar, type LabelOption, type LabelZustand } from './BulkActionBar'
 import { EpicBadge } from './EpicBadge'
 import { NewCardModal, type NewCardInitialValues, type NewItemInput } from './NewCardModal'
 import { useSnackbar } from './SnackbarProvider'
 import { TransferCardDialog } from './TransferCardDialog'
 
 const isDoneColumn = (name: string) => name.toLowerCase().includes('done')
+
+/** Wie weit ein Label in der Auswahl vertreten ist — `alle` nur, wenn jede gewählte Karte es trägt. */
+const labelZustand = (treffer: number, gesamt: number): LabelZustand => {
+  if (treffer === 0) return 'keine'
+  return treffer === gesamt ? 'alle' : 'einige'
+}
+
+/**
+ * Grund, warum die Massenaktion „Labels" gesperrt ist; `null` heißt bedienbar. Ein Vorhaben in der
+ * Auswahl lässt den Server den ganzen Batch ablehnen — die gesperrte Taste sagt das vorher, statt
+ * die Auswahl in einen Fehler laufen zu lassen.
+ */
+const labelSperrgrund = (gewaehlt: Card[], boardLabels: Label[]): string | null => {
+  if (gewaehlt.some((c) => c.type === 'EPIC')) return 'Vorhaben tragen keine Labels'
+  if (boardLabels.length === 0) return 'Das Board hat keine Labels'
+  return null
+}
+
+type KartenFilter = 'alle' | 'meine' | 'ueberfaellig'
+
+/** Zustand eines Segments der Belastungsskala. */
+const segmentZustand = (belegt: boolean, grenze: boolean): string => {
+  if (grenze) return 'grenze'
+  return belegt ? 'belegt' : 'frei'
+}
+type Dichte = 'normal' | 'kompakt'
+
+/** Wahlschalter der Werkzeugleiste (Entwurf `.chip-gruppe`, `.chip`, Z. 807–826). */
+function ChipGruppe<T extends string>({
+  label,
+  wert,
+  optionen,
+  onChange,
+}: Readonly<{ label: string; wert: T; optionen: ReadonlyArray<{ wert: T; text: string; zahl?: number }>; onChange: (wert: T) => void }>) {
+  return (
+    <Box
+      role="group"
+      aria-label={label}
+      sx={{ display: 'inline-flex', gap: '3px', p: '3px', bgcolor: NUT, border: `1px solid ${RAND}`, borderRadius: '9px', boxShadow: SCHATTEN_NUTE }}
+    >
+      {optionen.map((o) => {
+        const gewaehlt = o.wert === wert
+        return (
+          <ButtonBase
+            key={o.wert}
+            aria-pressed={gewaehlt}
+            onClick={() => onChange(o.wert)}
+            sx={{
+              fontSize: 11.5,
+              fontWeight: 500,
+              color: gewaehlt ? 'text.primary' : 'text.secondary',
+              border: `1px solid ${gewaehlt ? RAND : 'transparent'}`,
+              borderRadius: '6px',
+              px: '10px',
+              py: '4px',
+              gap: '6px',
+              ...(gewaehlt && { background: `linear-gradient(180deg, ${PLATTE_HOCH}, ${PLATTE})`, boxShadow: SCHATTEN_TASTE }),
+            }}
+          >
+            {o.text}
+            {o.zahl !== undefined && o.zahl > 0 && (
+              <Box
+                component="span"
+                sx={{ ...ZAHL, fontSize: 10, px: '4px', borderRadius: '4px', color: MELDER.zinnob, bgcolor: `color-mix(in srgb, ${MELDER.zinnob} 18%, transparent)` }}
+              >
+                {o.zahl}
+              </Box>
+            )}
+          </ButtonBase>
+        )
+      })}
+    </Box>
+  )
+}
 
 /**
  * Default der `hiddenEpics`-Prop. Steht als Konstante da und nicht als `new Set()` in der
@@ -123,11 +215,23 @@ function CardLabels({ labelIds, boardLabels, cardTitle }: Readonly<{ labelIds: n
 function CardAssignees({ assigneeIds, members, cardTitle }: Readonly<{ assigneeIds: number[]; members: Member[]; cardTitle: string }>) {
   if (assigneeIds.length === 0) return null
   return (
-    <Stack direction="row" justifyContent="flex-end" sx={{ mt: 0.5 }}>
+    <Stack direction="row" justifyContent="flex-end" sx={{ ml: 'auto', flex: 'none' }}>
+      {/* Kürzel wie im Entwurf (`.kuerzel`, Z. 845–853): kleine dunkle Male. */}
       <AvatarGroup
         max={4}
         aria-label={`Zuständige ${cardTitle}`}
-        sx={{ '& .MuiAvatar-root': { width: 24, height: 24, fontSize: '0.7rem' } }}
+        sx={{
+          '& .MuiAvatar-root': {
+            ...NUTZER_MAL_SX,
+            width: 19,
+            height: 19,
+            fontSize: 9,
+            fontWeight: 600,
+            letterSpacing: '.02em',
+            border: 'none',
+            ml: '-4px',
+          },
+        }}
       >
         {assigneeIds.map((uid) => {
           const name = members.find((m) => m.userId === uid)?.displayName ?? `#${uid}`
@@ -176,6 +280,8 @@ interface Props {
   canTransfer?: boolean
   /** Ob der Nutzer Plattform-Admin ist (darf in alle Projekte verschieben). */
   platformAdmin?: boolean
+  /** Der angemeldete Nutzer — Grundlage des Filters „Meine" (#980). Ohne ihn entfällt der Filter. */
+  currentUserId?: number | null
   /** Injizierbar für Tests. */
   api?: Pick<
     CardsApi,
@@ -189,6 +295,7 @@ interface Props {
     | 'bulkArchive'
     | 'bulkTransfer'
     | 'bulkDelete'
+    | 'bulkLabels'
   >
   epicsApi?: Pick<EpicsApi, 'create'>
 }
@@ -215,6 +322,7 @@ export function BoardView({
   onCardsChanged,
   canTransfer = false,
   platformAdmin = false,
+  currentUserId = null,
   api = cardsApi,
   epicsApi = defaultEpicsApi,
 }: Readonly<Props>) {
@@ -235,6 +343,10 @@ export function BoardView({
   // Karte und Auswahlmodus), damit die Zusage „wiederherstellbar" nur an einer Stelle steht.
   const [deleteConfirm, setDeleteConfirm] = useState<number[]>([])
   const [bulkTransferOpen, setBulkTransferOpen] = useState(false)
+  // Läuft gerade ein bulk-labels-Aufruf? Sperrt den zweiten Klick, solange die Antwort aussteht.
+  const [labelBusy, setLabelBusy] = useState(false)
+  const [kartenFilter, setKartenFilter] = useState<KartenFilter>('alle')
+  const [dichte, setDichte] = useState<Dichte>('normal')
   const notify = useSnackbar()
   const [epicFilter, setEpicFilter] = useState<number | null>(() => {
     try {
@@ -284,6 +396,29 @@ export function BoardView({
 
   // Spalten-Reihenfolge per Drag & Drop (getrennt vom Karten-Drag, das dataTransfer nutzt).
   const [colDrag, setColDrag] = useState<number | null>(null)
+  // Ziehen einer Karte (AK 7, AK 8, Plan #932 E15): welche Karte bewegt wird und über welcher Spalte
+  // sie gerade steht. Beides dient allein der Darstellung; das Verschieben selbst trägt weiterhin
+  // die `dataTransfer`-Nutzlast.
+  const [dragCardId, setDragCardId] = useState<number | null>(null)
+  const [ablageSpalteId, setAblageSpalteId] = useState<number | null>(null)
+  const zugTakt = useRef<ReturnType<typeof setTimeout>>(undefined)
+  useEffect(() => () => clearTimeout(zugTakt.current), [])
+
+  const zugBeginnen = (e: React.DragEvent, cardId: number) => {
+    e.dataTransfer.setData('text/plain', String(cardId))
+    // Einen Takt später: Der Browser nimmt das Ziehbild erst nach diesem Ereignis auf. Ein sofortiger
+    // Zustandswechsel zeigte dort schon den Platzhalter statt der Karte.
+    clearTimeout(zugTakt.current)
+    zugTakt.current = setTimeout(() => setDragCardId(cardId), 0)
+  }
+
+  const zugBeenden = () => {
+    clearTimeout(zugTakt.current)
+    setDragCardId(null)
+    setAblageSpalteId(null)
+  }
+
+  const herkunftsSpalteId = cards.find((c) => c.id === dragCardId)?.columnId
   const reorderColumn = async (fromId: number, toId: number) => {
     if (fromId === toId) {
       return
@@ -391,6 +526,16 @@ export function BoardView({
   // Nur Darstellung: Move/Anlegen arbeiten weiter auf dem vollen Bestand (`cards`).
   const hiddenNumbers = hiddenCardNumbers(cards, epics, hiddenEpics, epicFilter)
   const filteredCards = cards.filter((c) => !hiddenNumbers.has(c.number))
+  // Filter der Werkzeugleiste (#980, Entwurf Z. 1682–1686): „Meine" sind Karten, denen der
+  // angemeldete Nutzer zugeordnet ist; „Überfällig" Karten mit einer Frist vor heute außerhalb von Done.
+  const spaltenName = new Map(columns.map((c) => [c.id, c.name]))
+  const istUeberfaellig = (c: Card) => isOverdue(c.dueDate, isDoneColumn(spaltenName.get(c.columnId) ?? ''))
+  const ueberfaelligZahl = filteredCards.filter((c) => !c.archived && !c.ideaStored && istUeberfaellig(c)).length
+  const sichtbareKarten = filteredCards.filter((c) => {
+    if (kartenFilter === 'meine') return currentUserId !== null && c.assignees.includes(currentUserId)
+    if (kartenFilter === 'ueberfaellig') return istUeberfaellig(c)
+    return true
+  })
   // Einblendbare Vorhaben (weder ausgeblendet). Sowohl Vorhaben-Filter als auch Anlege-Dialog
   // bieten seit Issue #785 nur noch daraus an — ein ausgeblendetes Vorhaben zeigte über den
   // Filter ohnehin nie etwas an, weil seine Karten auf dem Board grundsätzlich verdeckt bleiben.
@@ -404,8 +549,19 @@ export function BoardView({
   // Reihenfolge folgt weiter der Klickhistorie (Iteration über die Auswahl, nicht über die Karten).
   // Nicht hierüber läuft der Haken an der Karte selbst (`selected` in der Render-Schleife): der
   // steht ohnehin nur an sichtbaren Karten und müsste sonst nach dem Filterwechsel verschwinden.
-  const visibleCardIds = new Set(filteredCards.map((c) => c.id))
+  const visibleCardIds = new Set(sichtbareKarten.map((c) => c.id))
   const effectiveSelectedIds = new Set([...selectedIds].filter((id) => visibleCardIds.has(id)))
+
+  // Label-Massenaktion (#994): Zustand je Board-Label über dieselbe wirksame Auswahl wie jede
+  // andere Massenaktion — so kann ein Klick keine Karte treffen, die der Filter gerade verdeckt.
+  const gewaehlteKarten = sichtbareKarten.filter((c) => effectiveSelectedIds.has(c.id))
+  const labelOptions: LabelOption[] = boardLabels.map((label) => ({
+    label,
+    zustand: labelZustand(
+      gewaehlteKarten.filter((c) => c.labels.includes(label.id)).length,
+      gewaehlteKarten.length,
+    ),
+  }))
 
   const changeEpicFilter = (value: number | null) => {
     setEpicFilter(value)
@@ -570,6 +726,35 @@ export function BoardView({
     }
   }
 
+  /**
+   * Setzt ein Label an der Auswahl oder nimmt es ihr ab. Die Auswahl bleibt in beiden Ausgängen
+   * bestehen — das Menü bleibt offen, damit mehrere Labels in einem Zug gehen.
+   */
+  const applyBulkLabel = async (labelId: number, action: LabelAction) => {
+    // Doppelklickschutz: Ein zweiter Klick vor der Antwort schickte denselben Batch erneut los,
+    // denn der Zustand im Menü zeigt bis dahin noch den alten Stand.
+    if (labelBusy) return
+    setLabelBusy(true)
+    try {
+      const geaendert = await api.bulkLabels([...effectiveSelectedIds], labelId, action)
+      // Nur die Labels aus der Antwort übernehmen: Sie ist eine Einzelkarten-Sicht (Volltext in
+      // `description`, `excerpt` leer), die Board-Liste genau umgekehrt (#771). Die ganze Karte zu
+      // ersetzen mischte beide Antwortformen in einen Zustand.
+      const labelsJeKarte = new Map(geaendert.map((c) => [c.id, c.labels]))
+      setCards((current) =>
+        current.map((c) => {
+          const labels = labelsJeKarte.get(c.id)
+          return labels === undefined ? c : { ...c, labels }
+        }),
+      )
+      onCardsChanged?.()
+    } catch (e) {
+      notify(apiErrorMessage(e, 'Labels setzen fehlgeschlagen.'), 'error')
+    } finally {
+      setLabelBusy(false)
+    }
+  }
+
   // Die Auswahl liegt als Set vor und gibt damit die Klick-Reihenfolge wieder. Für den Transfer
   // zählt aber, was der Nutzer sieht: die API hängt die Karten in Eingabereihenfolge ans Ende der
   // Zielspalte, also muss die Eingabe der Sichtreihenfolge des Quellboards folgen. Sortierschlüssel
@@ -604,51 +789,101 @@ export function BoardView({
 
   return (
     <Box>
-      {(sichtbareEpics.length > 0 || (canEdit && columns.length > 0)) && (
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+      {/* Werkzeugleiste (Entwurf `.werkzeugleiste`, Z. 797–842): Filter links, Dichte und Aktionen rechts. */}
+      {columns.length > 0 && (
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px',
+            flexWrap: 'wrap',
+            mb: '14px',
+            px: '11px',
+            py: '9px',
+            borderRadius: '10px',
+            border: `1px solid ${RAND}`,
+            background: `linear-gradient(180deg, ${PLATTE_HOCH}, ${PLATTE_FUSS})`,
+            boxShadow: SCHATTEN_PLATTE,
+          }}
+        >
+          <ChipGruppe<KartenFilter>
+            label="Karten filtern"
+            wert={kartenFilter}
+            onChange={setKartenFilter}
+            optionen={[
+              { wert: 'alle', text: 'Alle Karten' },
+              ...(currentUserId === null ? [] : [{ wert: 'meine' as const, text: 'Meine' }]),
+              { wert: 'ueberfaellig', text: 'Überfällig', zahl: ueberfaelligZahl },
+            ]}
+          />
           {sichtbareEpics.length > 0 && (
+            /* Wähler ohne sichtbare Beschriftung (Entwurf `.waehler`, Z. 833–842): Die Benennung
+               trägt der Wert („Vorhaben: …"), der zugängliche Name bleibt am Feld (Issue #986). */
             <TextField
               select
               size="small"
-              label="Vorhaben-Filter"
               value={epicFilter ?? ''}
               onChange={(e) => changeEpicFilter(e.target.value === '' ? null : Number(e.target.value))}
               slotProps={{
                 htmlInput: { 'aria-label': 'Vorhaben-Filter' },
                 select: { native: true },
-                inputLabel: { shrink: true },
               }}
-              sx={{ minWidth: 200 }}
+              sx={{
+                '& .MuiOutlinedInput-root': {
+                  bgcolor: NUT,
+                  boxShadow: SCHATTEN_NUTE,
+                  borderRadius: '7px',
+                  fontSize: '11.5px',
+                  fontWeight: 500,
+                  color: 'text.secondary',
+                },
+                '& .MuiNativeSelect-select': { py: '4px', pl: '9px' },
+              }}
             >
-              <option value="">Alle Vorhaben</option>
+              <option value="">Vorhaben: alle</option>
               {sichtbareEpics.map((epic) => (
                 <option key={epic.id} value={epic.id}>
-                  {epicShortcode(epic.title, epic.shortcode)} – {epic.title}
+                  Vorhaben: {epicShortcode(epic.title, epic.shortcode)} – {epic.title}
                 </option>
               ))}
             </TextField>
           )}
-          <Box sx={{ flexGrow: 1 }} />
-          {canEdit && columns.length > 0 && (
-            <Button size="small" onClick={toggleSelectionMode}>
-              {selectionMode ? 'Auswahl beenden' : 'Auswählen'}
-            </Button>
-          )}
-          {canEdit && columns.length > 0 && (
-            <Button
-              variant="contained"
-              size="small"
-              startIcon={<AddIcon />}
-              onClick={() => setModalColumn({ id: columns[0].id, name: columns[0].name })}
-            >
-              Neu anlegen
-            </Button>
-          )}
+          <Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+            <ChipGruppe<Dichte>
+              label="Dichte"
+              wert={dichte}
+              onChange={setDichte}
+              optionen={[
+                { wert: 'normal', text: 'normal' },
+                { wert: 'kompakt', text: 'kompakt' },
+              ]}
+            />
+            {canEdit && (
+              <Button size="small" variant="outlined" onClick={toggleSelectionMode}>
+                {selectionMode ? 'Auswahl beenden' : 'Auswählen'}
+              </Button>
+            )}
+            {canEdit && (
+              <Button
+                variant="contained"
+                size="small"
+                startIcon={<AddIcon />}
+                onClick={() => setModalColumn({ id: columns[0].id, name: columns[0].name })}
+              >
+                Neu anlegen
+              </Button>
+            )}
+          </Box>
         </Box>
       )}
 
       {/* Ohne eigenen Grund und ohne eigenen Radius: Die Fläche, auf der die Panels schweben, ist
           seit #713 der Grund der ganzen Anwendung (theme.ts, APP_BACKGROUND). */}
+      {/* Unterhalb von 900 px passen die Spalten nicht nebeneinander (Plan #932 E5); sie rollen
+          waagerecht, und der Hinweis sagt es, statt dass Spalten unbemerkt rechts verschwinden. */}
+      <Typography variant="caption" color="text.secondary" sx={{ display: { xs: 'block', md: 'none' }, px: 1 }}>
+        Weitere Spalten: waagerecht rollen
+      </Typography>
       <Stack
         data-testid="board-surface"
         direction="row"
@@ -679,30 +914,34 @@ export function BoardView({
               key={column.id}
               data-testid={`column-${column.id}`}
               elevation={0}
-              onDragOver={(e) => e.preventDefault()}
+              onDragOver={(e) => {
+                e.preventDefault()
+                if (dragCardId != null) setAblageSpalteId(column.id)
+              }}
               onDrop={(e) => {
                 e.preventDefault()
+                zugBeenden()
                 const id = Number(e.dataTransfer.getData('text/plain'))
                 if (id) {
                   void moveCard(id, column.id)
                 }
               }}
+              // Spalte als Nut im Grund (Entwurf `.spalte`, Z. 735–743); bei erreichter
+              // Belastungsgrenze bernsteinfarbene Haarlinie (`.spalte-warn`, Z. 868).
               sx={{
                 flex: '1 1 0',
-                minWidth: 240,
+                minWidth: 230,
                 display: 'flex',
                 flexDirection: 'column',
-                bgcolor: 'background.paper',
-                border: 1,
-                borderColor: 'divider',
-                // Die Spalte trägt den Status weiterhin oben: Sie ist das Panel, und an ihm ist die
-                // Oberkante frei — die Karten darin führen ihn links (edgeSurfaceSx).
-                borderTop: `${STATUS_EDGE_WIDTH}px solid ${colors.dot}`,
+                gap: '9px',
+                p: '10px',
+                background: `linear-gradient(180deg, ${NUT}, color-mix(in srgb, ${NUT} 80%, var(--mb-palette-warte-grund)))`,
+                border: `1px solid ${column.wipLimit != null && count >= column.wipLimit ? `color-mix(in srgb, ${MELDER.bernst} 42%, ${RAND})` : RAND}`,
                 borderRadius: `${PANEL_RADIUS}px`,
-                boxShadow: PANEL_SHADOW,
-                overflow: 'hidden',
+                boxShadow: SCHATTEN_NUTE,
               }}
             >
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: '8px', px: '4px', pt: '2px' }}>
               <Box
                 data-testid={`column-header-${column.id}`}
                 draggable={showStructureEdit}
@@ -713,12 +952,25 @@ export function BoardView({
                   setColDrag(null)
                 } : undefined}
                 onDragEnd={() => setColDrag(null)}
-                sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 1.5, py: 1, background: PANEL_HEAD_GRADIENT, borderBottom: 1, borderColor: 'divider', cursor: showStructureEdit ? 'grab' : undefined }}
+                sx={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: 0, cursor: showStructureEdit ? 'grab' : undefined }}
               >
-                <Typography variant="caption" sx={{ fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.08em', color: 'text.secondary', flexGrow: 1 }}>
+                {/* Zustand der Spalte als Melder-LED (Entwurf Z. 1767): die Farbe des Status. */}
+                <Box
+                  component="span"
+                  aria-hidden
+                  data-testid={`status-${column.id}`}
+                  sx={{ width: 9, height: 9, borderRadius: '50%', flex: 'none', bgcolor: colors.dot, color: colors.dot, boxShadow: `${LED_RING}, 0 0 8px -1px currentColor` }}
+                />
+                <Typography
+                  component="h3"
+                  sx={{ m: 0, fontFamily: SCHRIFT_ANZEIGE, fontStretch: '114%', fontSize: 11, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: 'text.primary', flexGrow: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                >
                   {column.name}
                 </Typography>
-                <Typography variant="caption" sx={{ color: 'text.secondary', bgcolor: SURFACE_TINT, border: 1, borderColor: 'divider', borderRadius: 10, px: 0.75, lineHeight: 1.6 }}>
+                <Typography
+                  component="span"
+                  sx={{ ...ZAHL, fontSize: 10.5, color: column.wipLimit != null && count >= column.wipLimit ? MELDER.bernst : TEXT_SCHWACH }}
+                >
                   {column.wipLimit != null ? `${count}/${column.wipLimit}` : count}
                 </Typography>
                 {hiddenCount > 0 && (
@@ -737,10 +989,10 @@ export function BoardView({
                       fontSize: '0.75rem',
                       lineHeight: 1.6,
                       color: 'text.secondary',
-                      bgcolor: SURFACE_TINT,
-                      border: 1,
-                      borderColor: 'divider',
-                      borderRadius: 10,
+                      bgcolor: NUT,
+                      border: `1px solid ${RAND}`,
+                      boxShadow: SCHATTEN_NUTE,
+                      borderRadius: '5px',
                     }}
                   >
                     {`${hiddenCount} ausgeblendet`}
@@ -776,9 +1028,60 @@ export function BoardView({
                   </Tooltip>
                 )}
               </Box>
+              {/* Belastungsgrenze als Segmentskala (Entwurf `.wip`, Z. 855–866): ein Segment je Platz,
+                  belegte Plätze kupfern, bei erreichter Grenze das letzte bernstein. Ein eigenes
+                  Element neben dem Kopf, keine Einfärbung des Kopfes — der ist im
+                  Struktur-Editiermodus anklickbar und ziehbar (AK 2, #925). */}
+              {column.wipLimit != null && (
+                <Box
+                  role="meter"
+                  aria-label={`Auslastung ${column.name}`}
+                  aria-valuemin={0}
+                  aria-valuemax={column.wipLimit}
+                  aria-valuenow={Math.min(count, column.wipLimit)}
+                  aria-valuetext={`${count} von ${column.wipLimit}`}
+                  data-grenze={count >= column.wipLimit ? 'erreicht' : 'offen'}
+                  sx={{ display: 'inline-flex', gap: '2px', alignItems: 'center', flex: 'none' }}
+                >
+                  {Array.from({ length: Math.min(column.wipLimit, 12) }, (_, i) => {
+                    const grenze = column.wipLimit!
+                    const segmente = Math.min(grenze, 12)
+                    const belegt = i < Math.round((Math.min(count, grenze) / grenze) * segmente)
+                    const letztes = count >= grenze && i === segmente - 1
+                    const farbe = letztes ? MELDER.bernst : KUPFER
+                    return (
+                      <Box
+                        key={i}
+                        component="i"
+                        data-testid="segment"
+                        data-segment={segmentZustand(belegt, letztes)}
+                        sx={{
+                          width: 5,
+                          height: 11,
+                          borderRadius: '2px',
+                          display: 'block',
+                          ...(belegt ? { bgcolor: farbe, boxShadow: `0 0 6px -2px ${farbe}` } : { bgcolor: NUT, boxShadow: SCHATTEN_NUTE }),
+                        }}
+                      />
+                    )
+                  })}
+                </Box>
+              )}
+              </Box>
 
-              <Stack spacing={1} sx={{ p: 1, flex: 1 }}>
-                {activeCardsInColumn(filteredCards, column.id).map((card) => {
+              <Stack
+                spacing={1}
+                data-testid={`ablage-${column.id}`}
+                data-ablage={dragCardId != null && ablageSpalteId === column.id && herkunftsSpalteId !== column.id ? 'aktiv' : undefined}
+                sx={{
+                  flex: 1,
+                  gap: '9px',
+                  minHeight: 120,
+                  '& > :not(style) ~ :not(style)': { mt: 0 },
+                  ...ablageflaecheSx(dragCardId != null && ablageSpalteId === column.id && herkunftsSpalteId !== column.id),
+                }}
+              >
+                {activeCardsInColumn(sichtbareKarten, column.id).map((card) => {
                   const epic = epicOfCard(card, epics)
                   const doneAt = done ? card.movedToDoneAt : null
                   const overdue = isOverdue(card.dueDate, done)
@@ -789,28 +1092,30 @@ export function BoardView({
                   return (
                     <Paper
                       key={card.id}
+                      component="article"
                       data-testid={`card-${card.id}`}
+                      data-dichte={dichte}
                       draggable={canEdit && !selectionMode}
-                      onDragStart={(e) => e.dataTransfer.setData('text/plain', String(card.id))}
+                      onDragStart={(e) => zugBeginnen(e, card.id)}
+                      onDragEnd={zugBeenden}
+                      data-zieh-zustand={dragCardId === card.id ? 'bewegt' : undefined}
                       onClick={() => (selectionMode ? toggleSelect(card.id) : onCardClick?.(card))}
                       elevation={0}
+                      // Karte als Platte (Entwurf `.karte`, Z. 751–778): Kopf mit Nummer und
+                      // Zuständigen, Titel, Labels, Fuß mit Schild und Frist. Kompakt bleiben Kopf
+                      // und Titel.
                       sx={{
-                        p: 1.25,
-                        bgcolor: selected ? 'action.selected' : 'background.paper',
-                        ...edgeSurfaceSx({
-                          statusColor: colors.dot,
-                          hairlineColor: selected ? 'primary.main' : undefined,
-                        }),
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: dichte === 'kompakt' ? '4px' : '7px',
+                        px: dichte === 'kompakt' ? '9px' : '11px',
+                        py: dichte === 'kompakt' ? '6px' : '10px',
+                        ...karteSx({ gewaehlt: selected, bewegt: dragCardId === card.id }),
                         cursor: grabbable ? 'grab' : 'pointer',
                         '&:active': { cursor: grabbable ? 'grabbing' : 'pointer' },
                       }}
                     >
-                      {epic && (
-                        <EpicBadge epicId={epic.id} title={epic.title} shortcode={epic.shortcode} sx={{ mb: 0.5 }}
-                          onOpen={onEpicOpen ? () => onEpicOpen(epic) : undefined} />
-                      )}
-                      <CardLabels labelIds={card.labels} boardLabels={boardLabels} cardTitle={card.title} />
-                      <Stack direction="row" alignItems="flex-start" spacing={0.5}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: '7px', minHeight: 20 }}>
                         {selectionMode && (
                           <Checkbox
                             size="small"
@@ -818,13 +1123,13 @@ export function BoardView({
                             onChange={() => toggleSelect(card.id)}
                             onClick={(e) => e.stopPropagation()}
                             slotProps={{ input: { 'aria-label': `Karte ${card.title} auswählen` } }}
-                            sx={{ p: 0, mt: 0.25 }}
+                            sx={{ p: 0 }}
                           />
                         )}
-                        <Typography variant="body2" sx={{ flex: 1, minWidth: 0 }}>
-                          <Box component="span" sx={{ color: 'text.secondary' }}>#{card.number} – </Box>
-                          <Box component="span" sx={{ fontWeight: 600 }}>{card.title}</Box>
-                        </Typography>
+                        <Box component="span" sx={{ ...ZAHL, fontSize: 11, color: TEXT_SCHWACH }}>{`#${card.number}`}</Box>
+                        {dichte === 'normal' && (
+                          <CardAssignees assigneeIds={card.assignees} members={members} cardTitle={card.title} />
+                        )}
                         {canEdit && !selectionMode && (
                           <IconButton
                             size="small"
@@ -833,28 +1138,41 @@ export function BoardView({
                               e.stopPropagation()
                               setMenu({ card, anchor: e.currentTarget })
                             }}
-                            sx={{ mt: -0.5, mr: -0.5 }}
+                            sx={{ ml: card.assignees.length > 0 && dichte === 'normal' ? 0 : 'auto', mr: '-6px', my: '-4px', p: '2px', color: TEXT_SCHWACH }}
                           >
                             <MoreVertIcon fontSize="small" />
                           </IconButton>
                         )}
-                      </Stack>
-                      {doneAt != null && retentionDays > 0 && (
-                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
-                          {cleanupCountdownLabel(cleanupDaysRemaining(doneAt, retentionDays))}
-                        </Typography>
+                      </Box>
+                      <Typography component="h4" sx={{ m: 0, fontSize: 12.5, fontWeight: 500, lineHeight: 1.35 }}>
+                        {card.title}
+                      </Typography>
+                      {dichte === 'normal' && <CardLabels labelIds={card.labels} boardLabels={boardLabels} cardTitle={card.title} />}
+                      {(epic || card.dueDate != null || (doneAt != null && retentionDays > 0)) && (
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                          {epic && (
+                            <EpicBadge epicId={epic.id} title={epic.title} shortcode={epic.shortcode}
+                              onOpen={onEpicOpen ? () => onEpicOpen(epic) : undefined} />
+                          )}
+                          {doneAt != null && retentionDays > 0 && (
+                            <Box component="span" sx={{ ...ZAHL, ml: 'auto', fontSize: 10.5, color: TEXT_SCHWACH }}>
+                              {cleanupCountdownLabel(cleanupDaysRemaining(doneAt, retentionDays))}
+                            </Box>
+                          )}
+                          {card.dueDate != null && (
+                            // Frist wie im Entwurf (`.frist`, `.frist-eng`, Z. 792–793): Plex Mono,
+                            // überfällig zinnoberrot.
+                            <Box
+                              component="span"
+                              aria-label={`Fällig ${card.title}`}
+                              data-ueberfaellig={overdue ? 'ja' : undefined}
+                              sx={{ ...ZAHL, ml: 'auto', fontSize: 10.5, fontWeight: overdue ? 600 : 400, color: overdue ? MELDER.zinnob : TEXT_SCHWACH }}
+                            >
+                              {`fällig ${formatDueDate(card.dueDate)}`}
+                            </Box>
+                          )}
+                        </Box>
                       )}
-                      {card.dueDate != null && (
-                        <Typography
-                          variant="caption"
-                          aria-label={`Fällig ${card.title}`}
-                          color={overdue ? 'error' : 'text.secondary'}
-                          sx={{ display: 'block', mt: 0.5, fontWeight: overdue ? 600 : 400 }}
-                        >
-                          📅 {formatDueDate(card.dueDate)}
-                        </Typography>
-                      )}
-                      <CardAssignees assigneeIds={card.assignees} members={members} cardTitle={card.title} />
                     </Paper>
                   )
                 })}
@@ -1070,6 +1388,9 @@ export function BoardView({
         <BulkActionBar
           count={effectiveSelectedIds.size}
           canMove={canTransfer}
+          labelOptions={labelOptions}
+          labelsDisabledReason={labelSperrgrund(gewaehlteKarten, boardLabels)}
+          onToggleLabel={(labelId, action) => void applyBulkLabel(labelId, action)}
           onArchive={() => setBulkArchiveConfirm(true)}
           onMove={() => setBulkTransferOpen(true)}
           onDelete={() => setDeleteConfirm([...effectiveSelectedIds])}

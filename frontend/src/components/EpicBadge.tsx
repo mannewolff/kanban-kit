@@ -1,8 +1,7 @@
-import Box from '@mui/material/Box'
 import Stack from '@mui/material/Stack'
 import Typography from '@mui/material/Typography'
 import type { SxProps, Theme } from '@mui/material/styles'
-import { epicColor, epicShortcode } from '../lib/epicMeta'
+import { epicColor, epicShortcode, epicTint } from '../lib/epicMeta'
 
 interface Props {
   epicId: number
@@ -21,18 +20,27 @@ interface Props {
  */
 const AKTIVIERUNGSTASTEN = new Set(['Enter', ' '])
 
-/** Kürzel-Badge eines Epics: farbiger Punkt + Kürzel auf zartem Grund in der Epic-Farbe (Toolbox-Stil). */
+/** Kürzel eines Vorhabens als Schild: Kürzel mit Rand in der Vorhaben-Farbe auf ihrer Tönung. */
 export function EpicBadge({ epicId, title, shortcode, sx, onOpen }: Readonly<Props>) {
   const hue = epicColor(epicId)
   const label = epicShortcode(title, shortcode)
-  const grund = { width: 'fit-content', px: 0.75, py: 0.25, borderRadius: 1, bgcolor: `${hue}22`, flexShrink: 0 }
+  // Die Fläche trägt einen eigenen Tint-Wert (#952): `hue` ist ein Variablen-Verweis, und ein
+  // angehängtes Alpha-Suffix ergäbe ungültiges CSS — die Fläche verschwände ohne Fehler.
+  // Schild des Leitstand-Entwurfs (`.schild`, Z. 780–786, #980): Rand und Schrift im Farbton, die
+  // Fläche als eigene Tönung (#952) — ein Alpha-Suffix an einem Variablen-Verweis wäre ungültiges CSS.
+  const grund = {
+    width: 'fit-content',
+    px: '6px',
+    py: '1px',
+    borderRadius: '5px',
+    border: `1px solid ${hue}`,
+    bgcolor: epicTint(epicId),
+    flexShrink: 0,
+  }
   const inhalt = (
-    <>
-      <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: hue, flexShrink: 0 }} />
-      <Typography variant="caption" sx={{ fontWeight: 700, color: hue, lineHeight: 1 }}>
-        {label}
-      </Typography>
-    </>
+    <Typography variant="caption" sx={{ fontSize: 10, fontWeight: 500, color: hue, lineHeight: 1.5 }}>
+      {label}
+    </Typography>
   )
 
   if (onOpen) {
@@ -60,9 +68,9 @@ export function EpicBadge({ epicId, title, shortcode, sx, onOpen }: Readonly<Pro
         onKeyDown={(e) => {
           if (AKTIVIERUNGSTASTEN.has(e.key)) e.stopPropagation()
         }}
-        // Ein natives <button> braechte Rahmen, Schrift und Hintergrund des Browsers mit; ohne
-        // diese Neutralisierung saehe der Badge mit onOpen anders aus als ohne.
-        sx={{ ...grund, border: 0, font: 'inherit', cursor: 'pointer', ...sx }}
+        // Ein natives <button> braechte Schrift des Browsers mit; ohne diese Neutralisierung saehe
+        // der Badge mit onOpen anders aus als ohne. Rahmen und Fläche setzt `grund`.
+        sx={{ ...grund, font: 'inherit', cursor: 'pointer', ...sx }}
       >
         {inhalt}
       </Stack>

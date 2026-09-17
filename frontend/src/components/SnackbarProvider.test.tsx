@@ -1,5 +1,8 @@
 import { act, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { ThemeProvider } from '@mui/material/styles'
+import { cssRegel } from '../test/cssRegel'
+import { theme } from '../theme'
 import { SnackbarProvider, useSnackbar } from './SnackbarProvider'
 
 function Harness() {
@@ -103,5 +106,30 @@ describe('SnackbarProvider', () => {
     render(<Harness />)
     fireEvent.click(screen.getByText('ok'))
     expect(screen.queryByText('Erfolg')).not.toBeInTheDocument()
+  })
+})
+
+describe('SnackbarProvider in beiden Erscheinungsbildern (#960)', () => {
+  it.each([
+    ['err', 'Fehler', 'error'],
+    ['warn', 'Warnung', 'warning'],
+    ['ok', 'Erfolg', 'success'],
+    ['info', 'Info', 'info'],
+  ])('färbt die Meldung „%s" aus den Zustandsfarben des Themes, nicht aus einem festen Wert', (button, text, zustand) => {
+    render(
+      <ThemeProvider theme={theme}>
+        <SnackbarProvider>
+          <Harness />
+        </SnackbarProvider>
+      </ThemeProvider>,
+    )
+    fireEvent.click(screen.getByText(button))
+
+    const meldung = screen.getByRole('alert')
+    expect(meldung).toHaveTextContent(text)
+    const regel = cssRegel(meldung)
+    expect(regel).toContain(`background-color: var(--mb-palette-Alert-${zustand}FilledBg)`)
+    expect(regel).toContain(`color: var(--mb-palette-Alert-${zustand}FilledColor)`)
+    expect(regel).not.toMatch(/#[0-9A-Fa-f]{3,8}\b/)
   })
 })

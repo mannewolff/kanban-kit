@@ -5,6 +5,9 @@ import { epicsApi, type Epic } from '../api/epics'
 import { labelsApi, type Label } from '../api/labels'
 import { membersApi, type Member } from '../api/members'
 import { projectsApi } from '../api/projects'
+import { ThemeProvider } from '@mui/material/styles'
+import { kontrast } from '../lib/kontrast'
+import { theme } from '../theme'
 import { CardNumberSearch } from './CardNumberSearch'
 
 vi.mock('../api/cards', () => ({ cardsApi: { searchByNumber: vi.fn() } }))
@@ -674,5 +677,48 @@ describe('CardNumberSearch', () => {
     fireEvent.keyDown(input(), { key: 'a' })
 
     expect(input()).toHaveValue('345')
+  })
+})
+
+describe('CardNumberSearch als Nut im Kopf (#978)', () => {
+  /** Alle erzeugten Regeln, die das Suchfeld betreffen. */
+  const regelnDesFelds = (): string => {
+    expect(screen.getByLabelText('Kartennummer suchen')).toBeInTheDocument()
+    return [...document.styleSheets]
+      .flatMap((blatt) => [...blatt.cssRules])
+      .map((regel) => regel.cssText)
+      .filter((text) => text.includes('-MuiTextField-root'))
+      .join('\n')
+  }
+
+  it('legt das Feld als eingelassene Nut mit Innenschatten an, ganz aus Variablen', () => {
+    render(
+      <ThemeProvider theme={theme}>
+        <CardNumberSearch />
+      </ThemeProvider>,
+    )
+    const regeln = regelnDesFelds()
+    expect(regeln).toContain('background-color: var(--mb-palette-warte-nute')
+    expect(regeln).toContain('box-shadow: var(--mb-palette-warte-schattenNute')
+    // Ein fester Wert bliebe im dunklen Erscheinungsbild hell; die Variablen schalten selbst um.
+    expect(regeln).not.toContain('prefers-color-scheme')
+  })
+
+  it('zeigt das echte Tastenkürzel als Tastenkappe', () => {
+    render(
+      <ThemeProvider theme={theme}>
+        <CardNumberSearch />
+      </ThemeProvider>,
+    )
+    expect(screen.getByRole('search')).toHaveTextContent('/')
+    expect(screen.getByPlaceholderText('Karte #Nummer')).toBeInTheDocument()
+  })
+
+  it.each([
+    ['hell', theme.colorSchemes.light!.palette],
+    ['dunkel', theme.colorSchemes.dark!.palette],
+  ] as const)('hält %s Schrift und Platzhalter auf der Nut mit 4,5:1', (_, palette) => {
+    expect(kontrast(palette.warte.nute, palette.text.primary)).toBeGreaterThanOrEqual(4.5)
+    expect(kontrast(palette.warte.nute, palette.warte.textSchwach)).toBeGreaterThanOrEqual(4.5)
   })
 })

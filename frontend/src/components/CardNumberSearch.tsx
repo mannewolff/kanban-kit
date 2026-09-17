@@ -8,7 +8,6 @@ import MenuItem from '@mui/material/MenuItem'
 import TextField from '@mui/material/TextField'
 import Tooltip from '@mui/material/Tooltip'
 import SearchIcon from '@mui/icons-material/Search'
-import { alpha } from '@mui/material/styles'
 import { Suspense, lazy, useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
 import { cardsApi, type CardSearchHit } from '../api/cards'
 import { epicsApi, type Epic } from '../api/epics'
@@ -17,6 +16,7 @@ import { membersApi, type Member } from '../api/members'
 import { cardLocationLabel, type CardLocation } from '../lib/cardLocation'
 import { useKeyboardShortcut } from '../lib/useKeyboardShortcut'
 import { useProjectRole } from '../lib/useProjectRole'
+import { NUT_SX, RAND, RAND_STARK, TEXT_SCHWACH, ZAHL } from '../theme'
 import { useSnackbar } from './SnackbarProvider'
 
 /**
@@ -305,7 +305,7 @@ export function CardNumberSearch() {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={onKeyDown}
-          placeholder="#345"
+          placeholder="Karte #Nummer"
           slotProps={{
             // Kein `inputMode="numeric"`: Es widerspräche der zugesagten Toleranz gegenüber `#345`,
             // weil die Ziffern-Tastatur mobiler Geräte das Lattenkreuz nicht anbietet.
@@ -316,30 +316,44 @@ export function CardNumberSearch() {
                   {busy ? (
                     <CircularProgress size={14} sx={{ color: 'text.primary' }} aria-label="Suche läuft" />
                   ) : (
-                    <SearchIcon fontSize="small" aria-hidden />
+                    // Tastenkappe des Kürzels, wie der Entwurf sie zeigt — mit dem echten Kürzel `/`.
+                    <Box
+                      component="kbd"
+                      aria-hidden
+                      sx={{
+                        ...ZAHL,
+                        fontSize: 10,
+                        lineHeight: 1.4,
+                        border: `1px solid ${RAND_STARK}`,
+                        borderRadius: '4px',
+                        px: '4px',
+                        color: TEXT_SCHWACH,
+                      }}
+                    >
+                      /
+                    </Box>
                   )}
                 </InputAdornment>
               ),
             },
           }}
-          // Die Kopfleiste steht auf `primary`; ein unveränderter Rand/Text wäre darauf kaum
-          // lesbar. Alle Farben aus den Marken-Tokens des Themes abgeleitet, keine Sonderfarben.
+          // Das Feld liegt als Nut im Kopf (Leitstand-Entwurf `.suche`, Z. 304–320): eingelassen,
+          // mit Innenschatten und schwacher Schrift. Alle Werte sind Variablen und schalten mit dem
+          // Erscheinungsbild; die Kontraste rechnet `theme.test.ts` nach.
           sx={{
             width: { xs: 130, sm: 150, md: 190 },
             '& .MuiOutlinedInput-root': {
-              bgcolor: 'primary.dark',
-              color: 'primary.contrastText',
+              ...NUT_SX,
+              border: 'none',
+              borderRadius: '9px',
+              fontSize: 12.5,
+              color: 'text.primary',
             },
-            '& .MuiOutlinedInput-notchedOutline': {
-              borderColor: (t) => alpha(t.palette.primary.contrastText, 0.5),
-            },
-            '& .MuiOutlinedInput-root:hover .MuiOutlinedInput-notchedOutline': {
-              borderColor: 'primary.contrastText',
-            },
-            '& .MuiOutlinedInput-root.Mui-focused .MuiOutlinedInput-notchedOutline': {
-              borderColor: 'primary.contrastText',
-            },
-            '& .MuiInputBase-input::placeholder': { color: 'primary.contrastText', opacity: 0.85 },
+            '& .MuiOutlinedInput-input': { py: '6px', pl: '10px' },
+            '& .MuiOutlinedInput-notchedOutline': { borderColor: RAND },
+            '& .MuiOutlinedInput-root:hover .MuiOutlinedInput-notchedOutline': { borderColor: RAND_STARK },
+            '& .MuiInputBase-input::placeholder': { color: TEXT_SCHWACH, opacity: 1 },
+            '& .MuiInputAdornment-root': { color: TEXT_SCHWACH },
           }}
         />
       </Box>

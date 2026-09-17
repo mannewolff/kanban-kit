@@ -18,9 +18,9 @@ vi.mock('../api/boards', () => ({
 const mockedBoards = boardsApi as unknown as { get: ReturnType<typeof vi.fn> }
 
 const ENTRIES: BoardHistoryEntry[] = [
-  { id: 1, name: 'Alpha', projectName: 'Projekt A' },
-  { id: 2, name: 'Beta', projectName: 'Projekt B' },
-  { id: 3, name: 'Gamma', projectName: 'Projekt C' },
+  { id: 1, name: 'Alpha', projectId: 11, projectName: 'Projekt A' },
+  { id: 2, name: 'Beta', projectId: 12, projectName: 'Projekt B' },
+  { id: 3, name: 'Gamma', projectId: 13, projectName: 'Projekt C' },
 ]
 
 const onClose = vi.fn()
@@ -355,8 +355,8 @@ describe('BoardSwitcher', () => {
     it('unterscheidet gleichnamige Boards über den Projektnamen', () => {
       renderSwitcher({
         entries: [
-          { id: 7, name: 'Board', projectName: 'Projekt A' },
-          { id: 8, name: 'Board', projectName: 'Projekt B' },
+          { id: 7, name: 'Board', projectId: 11, projectName: 'Projekt A' },
+          { id: 8, name: 'Board', projectId: 12, projectName: 'Projekt B' },
         ],
       })
 

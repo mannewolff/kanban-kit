@@ -1,0 +1,459 @@
+<!doctype html>
+<html lang="de"><head><meta charset="utf-8"><title>Mockup einzelner Nachtlauf</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@100..125,400..800&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+
+  :root {
+    /* --- Grundfarben: hell --- */
+    --grund:        #E7E9ED;
+    --grund-tief:   #D8DBE2;
+    --nute:         #D5D9E0;
+    --platte:       #FDFDFE;
+    --platte-fuss:  #F2F4F7;
+    --platte-hoch:  #FFFFFF;
+    --rand:         #CDD2DA;
+    --rand-stark:   #B7BEC9;
+    --kante:        rgba(255,255,255,.9);
+
+    --text:         #14181E;
+    --text-matt:    #58606C;
+    --text-schwach: #868E9B;
+
+    /* --- Leitfarbe Kupfer --- */
+    --kupfer:       #A85F2C;
+    --kupfer-hell:  #C2743C;
+    --kupfer-schat: rgba(168,95,44,.16);
+
+    /* --- Melder (Semantik, nie als Akzent verwenden) --- */
+    --gruen:   #2F8F4E;
+    --bernst:  #B07C15;
+    --zinnob:  #C8393E;
+    --stahl:   #2F6FC9;
+    --grau:    #8A929E;
+
+    /* --- Tiefe --- */
+    --schatten-platte:
+      0 1px 0 var(--kante) inset,
+      0 1px 2px rgba(18,24,33,.10),
+      0 10px 24px -14px rgba(18,24,33,.35);
+    --schatten-hoch:
+      0 1px 0 var(--kante) inset,
+      0 2px 4px rgba(18,24,33,.10),
+      0 18px 34px -16px rgba(18,24,33,.42);
+    --schatten-nute:
+      0 2px 5px rgba(18,24,33,.14) inset,
+      0 -1px 0 var(--kante) inset;
+    --schatten-taste:
+      0 1px 0 var(--kante) inset,
+      0 1px 2px rgba(18,24,33,.18);
+
+    --r-gross: 14px;
+    --r-mittel: 10px;
+    --r-klein: 6px;
+
+    color-scheme: light;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --grund:        #0D1014;
+      --grund-tief:   #090B0E;
+      --nute:         #080A0D;
+      --platte:       #171B22;
+      --platte-fuss:  #12151B;
+      --platte-hoch:  #1E242D;
+      --rand:         #262C36;
+      --rand-stark:   #333B47;
+      --kante:        rgba(255,255,255,.075);
+
+      --text:         #E7EAEF;
+      --text-matt:    #98A1AE;
+      --text-schwach: #69717E;
+
+      --kupfer:       #D08A52;
+      --kupfer-hell:  #E3A26C;
+      --kupfer-schat: rgba(208,138,82,.18);
+
+      --gruen:   #46C46F;
+      --bernst:  #E0AE49;
+      --zinnob:  #F0575C;
+      --stahl:   #5B96F0;
+      --grau:    #6E7681;
+
+      --schatten-platte:
+        0 1px 0 var(--kante) inset,
+        0 1px 2px rgba(0,0,0,.5),
+        0 12px 28px -16px rgba(0,0,0,.85);
+      --schatten-hoch:
+        0 1px 0 rgba(255,255,255,.11) inset,
+        0 2px 6px rgba(0,0,0,.55),
+        0 22px 40px -18px rgba(0,0,0,.95);
+      --schatten-nute:
+        0 3px 7px rgba(0,0,0,.6) inset,
+        0 -1px 0 rgba(255,255,255,.05) inset;
+      --schatten-taste:
+        0 1px 0 rgba(255,255,255,.08) inset,
+        0 1px 2px rgba(0,0,0,.6);
+
+      color-scheme: dark;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --grund:        #0D1014;
+    --grund-tief:   #090B0E;
+    --nute:         #080A0D;
+    --platte:       #171B22;
+    --platte-fuss:  #12151B;
+    --platte-hoch:  #1E242D;
+    --rand:         #262C36;
+    --rand-stark:   #333B47;
+    --kante:        rgba(255,255,255,.075);
+
+    --text:         #E7EAEF;
+    --text-matt:    #98A1AE;
+    --text-schwach: #69717E;
+
+    --kupfer:       #D08A52;
+    --kupfer-hell:  #E3A26C;
+    --kupfer-schat: rgba(208,138,82,.18);
+
+    --gruen:   #46C46F;
+    --bernst:  #E0AE49;
+    --zinnob:  #F0575C;
+    --stahl:   #5B96F0;
+    --grau:    #6E7681;
+
+    --schatten-platte:
+      0 1px 0 var(--kante) inset,
+      0 1px 2px rgba(0,0,0,.5),
+      0 12px 28px -16px rgba(0,0,0,.85);
+    --schatten-hoch:
+      0 1px 0 rgba(255,255,255,.11) inset,
+      0 2px 6px rgba(0,0,0,.55),
+      0 22px 40px -18px rgba(0,0,0,.95);
+    --schatten-nute:
+      0 3px 7px rgba(0,0,0,.6) inset,
+      0 -1px 0 rgba(255,255,255,.05) inset;
+    --schatten-taste:
+      0 1px 0 rgba(255,255,255,.08) inset,
+      0 1px 2px rgba(0,0,0,.6);
+
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background:
+      radial-gradient(1100px 600px at 18% -8%, var(--kupfer-schat), transparent 62%),
+      var(--grund);
+    color: var(--text);
+    font-family: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1, h2, h3, .display {
+    font-family: Archivo, "Archivo Fallback", system-ui, sans-serif;
+    font-stretch: 112%;
+    margin: 0;
+    text-wrap: balance;
+  }
+
+  .mono, .zahl {
+    font-family: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+    font-variant-numeric: tabular-nums;
+  }
+
+  a { color: inherit; }
+
+  :is(button, a, [tabindex]):focus-visible {
+    outline: 2px solid var(--kupfer);
+    outline-offset: 2px;
+    border-radius: var(--r-klein);
+  }
+
+  /* ---------- Etikett ---------- */
+  .etikett {
+    font-family: Archivo, system-ui, sans-serif;
+    font-stretch: 118%;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--text-schwach);
+  }
+
+  /* ============================================================ */
+  .led {
+    width: 9px; height: 9px; border-radius: 50%;
+    flex: none;
+    background: var(--grau);
+    box-shadow: 0 0 0 1px rgba(0,0,0,.22) inset, 0 0 8px -1px currentColor;
+    color: var(--grau);
+  }
+  .led-gruen  { background: var(--gruen);  color: var(--gruen); }
+  .led-gelb   { background: var(--bernst); color: var(--bernst); }
+  .led-rot    { background: var(--zinnob); color: var(--zinnob); }
+  .led-stahl  { background: var(--stahl);  color: var(--stahl); }
+  .led-puls { animation: puls 1.9s ease-in-out infinite; }
+  @keyframes puls {
+    0%, 100% { box-shadow: 0 0 0 1px rgba(0,0,0,.22) inset, 0 0 7px -1px currentColor; }
+    50%      { box-shadow: 0 0 0 1px rgba(0,0,0,.22) inset, 0 0 14px 1px currentColor; }
+  }
+
+  .platte {
+    border-radius: var(--r-gross);
+    border: 1px solid var(--rand);
+    background: var(--platte);
+    box-shadow: var(--schatten-platte);
+    overflow: hidden;
+  }
+  .platte-kopf {
+    display: flex; align-items: center; gap: 12px;
+    padding: 13px 16px;
+    border-bottom: 1px solid var(--rand);
+    background: linear-gradient(180deg, var(--platte-hoch), var(--platte));
+    flex-wrap: wrap;
+  }
+  .platte-titel { font-size: 13.5px; font-weight: 600; font-family: Archivo, sans-serif; font-stretch: 112%; }
+  .platte-notiz { font-size: 11.5px; color: var(--text-schwach); }
+  .platte-werkzeug { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+
+  .filter {
+    font-family: "IBM Plex Sans", sans-serif;
+    font-size: 11.5px; font-weight: 500;
+    color: var(--text-matt);
+    background: var(--nute);
+    border: 1px solid var(--rand);
+    box-shadow: var(--schatten-nute);
+    border-radius: 7px;
+    padding: 4px 9px;
+    cursor: pointer;
+  }
+  .filter[aria-pressed="true"] {
+    color: var(--text);
+    background: linear-gradient(180deg, var(--platte-hoch), var(--platte));
+    box-shadow: var(--schatten-taste);
+  }
+
+  /* ---------- Vorgangsliste ---------- */
+  .vorgaenge { display: flex; flex-direction: column; }
+  .vorgang {
+    display: grid;
+    grid-template-columns: 14px 64px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 12px;
+    padding: 11px 16px;
+    border-bottom: 1px solid color-mix(in srgb, var(--rand) 55%, transparent);
+    cursor: pointer;
+    transition: background .12s ease;
+    position: relative;
+  }
+  .vorgang:last-child { border-bottom: 0; }
+  .vorgang:hover { background: color-mix(in srgb, var(--platte-hoch) 75%, var(--kupfer-schat)); }
+  .vorgang-nr {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 12px; font-weight: 500;
+    color: var(--text-schwach);
+    font-variant-numeric: tabular-nums;
+  }
+  .vorgang-kern { min-width: 0; }
+  .vorgang-titel {
+    font-size: 13.5px; font-weight: 500;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .vorgang-zeile { display: flex; align-items: center; gap: 8px; margin-top: 3px; flex-wrap: wrap; }
+  .vorgang-rechts { display: flex; align-items: center; gap: 12px; flex: none; }
+  .dauer {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 12px;
+    color: var(--text-matt);
+    font-variant-numeric: tabular-nums;
+  }
+  .hash {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 11px;
+    color: var(--text-schwach);
+    background: var(--nute);
+    border: 1px solid var(--rand);
+    box-shadow: var(--schatten-nute);
+    border-radius: 5px;
+    padding: 1px 5px;
+  }
+
+  .marke-klasse {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 10px; font-weight: 500;
+    letter-spacing: .02em;
+    padding: 1px 6px;
+    border-radius: 5px;
+    border: 1px solid currentColor;
+    background: color-mix(in srgb, currentColor 12%, transparent);
+  }
+  .k-rot  { color: var(--zinnob); }
+  .k-gelb { color: var(--bernst); }
+  .k-grau { color: var(--grau); }
+
+  .vorhaben {
+    display: inline-flex; align-items: center; gap: 5px;
+    font-size: 11px; color: var(--text-matt);
+  }
+  .vorhaben-mal { width: 7px; height: 7px; border-radius: 2px; flex: none; }
+
+  /* Instrumente: eingelassene Felder */
+  .instrumente { display: grid; grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); gap: 9px; }
+  .instrument {
+    padding: 9px 11px 8px; border-radius: var(--r-mittel);
+    background: linear-gradient(180deg, var(--nute), color-mix(in srgb, var(--nute) 85%, var(--grund)));
+    border: 1px solid var(--rand); box-shadow: var(--schatten-nute);
+    display: flex; flex-direction: column; gap: 3px;
+  }
+  .instrument-wert { font-family: "IBM Plex Mono", monospace; font-size: 16px; font-weight: 500; font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
+  .instrument-wert small { font-size: 10.5px; color: var(--text-schwach); font-weight: 400; }
+  .instrument-leer .instrument-wert { color: var(--text-schwach); }
+  .instrument-heiss { border-color: color-mix(in srgb, var(--kupfer) 40%, var(--rand)); }
+  .instrument-heiss .instrument-wert { color: var(--kupfer); }
+
+  .taste {
+    font-family: "IBM Plex Sans", sans-serif;
+    font-size: 12.5px; font-weight: 600;
+    color: var(--text);
+    background: linear-gradient(180deg, var(--platte-hoch), var(--platte-fuss));
+    border: 1px solid var(--rand);
+    box-shadow: var(--schatten-taste);
+    border-radius: 9px;
+    padding: 7px 13px;
+    cursor: pointer;
+    display: inline-flex; align-items: center; gap: 7px;
+    transition: transform .1s ease, box-shadow .14s ease;
+  }
+  .taste:hover { box-shadow: var(--schatten-platte); }
+  .taste:active { transform: translateY(1px); box-shadow: var(--schatten-nute); }
+  .taste-kupfer {
+    color: #fff;
+    background: linear-gradient(180deg, var(--kupfer-hell), var(--kupfer));
+    border-color: color-mix(in srgb, var(--kupfer) 70%, #000);
+    box-shadow:
+      0 1px 0 rgba(255,255,255,.35) inset,
+      0 2px 8px -2px var(--kupfer-schat),
+      0 4px 12px -6px rgba(0,0,0,.5);
+  }
+
+  .zustand {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 11.5px; color: var(--text-matt);
+    padding: 2px 8px 2px 6px;
+    border-radius: 6px;
+    border: 1px solid var(--rand);
+    background: var(--nute);
+    box-shadow: var(--schatten-nute);
+    white-space: nowrap;
+  }
+
+  .buehne { max-width: 1188px; margin: 0 auto; padding: 22px 26px 44px; display: flex; flex-direction: column; gap: 14px; }
+  .mono { font-family: "IBM Plex Mono", monospace; font-variant-numeric: tabular-nums; }
+  .auf { all: unset; cursor: pointer; width: 22px; height: 22px; display: grid; place-items: center; border-radius: 6px; color: var(--text-matt); }
+  .auf:hover { background: var(--nute); }
+  .auf svg { transition: transform .15s ease; }
+  .zu .auf svg { transform: rotate(-90deg); }
+  .lauf-titel2 { font-family: Archivo, sans-serif; font-stretch: 112%; font-size: 15px; font-weight: 600; margin: 0; }
+  .lauf-meta { font-family: "IBM Plex Mono", monospace; font-size: 11px; color: var(--text-schwach); }
+  .instrumente-6 { display: grid; grid-template-columns: repeat(6, minmax(0,1fr)); gap: 9px; padding: 14px 16px; border-bottom: 1px solid var(--rand); }
+  .vorgang { grid-template-columns: 14px 56px minmax(0,1fr) 64px 60px 70px; }
+  .kosten-zelle { font-family: "IBM Plex Mono", monospace; font-size: 12px; color: var(--text-matt); text-align: right; }
+  .leer { color: var(--text-schwach); }
+  .befund { grid-column: 3 / -1; margin-top: 8px; display: flex; gap: 10px; align-items: flex-start; }
+  .befund pre { flex: 1; margin: 0; font-family: "IBM Plex Mono", monospace; font-size: 11.5px; line-height: 1.55; color: var(--text-matt);
+    background: var(--nute); border: 1px solid var(--rand); box-shadow: var(--schatten-nute); border-radius: 8px; padding: 9px 11px; white-space: pre-wrap; }
+  .auszug { font-size: 11.5px; color: var(--text-matt); }
+  .haeufig { font-size: 11px; color: var(--text-schwach); }
+  .notiz-mockup { font-size: 11.5px; color: var(--text-schwach); border-top: 1px dashed var(--rand); padding-top: 12px; }
+</style></head>
+<body><main class="buehne">
+
+<section class="platte" aria-label="Nachtlauf vom 14. September">
+  <div class="platte-kopf">
+    <button class="auf" type="button" aria-expanded="true" aria-label="Lauf zuklappen"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m4 6 4 4 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+    <span class="led led-gelb" aria-hidden="true"></span>
+    <div style="min-width:0">
+      <div class="etikett" style="margin-bottom:1px">Nachtlauf · Kette</div>
+      <h3 class="lauf-titel2">Nacht vom 14. September</h3>
+    </div>
+    <span class="lauf-meta">14.09. 23:10 · 4 h 12 min · 7 bearbeitet · 0 übergangen</span>
+    <div class="platte-werkzeug">
+      <span class="zustand"><span class="led led-stahl" aria-hidden="true"></span>noch nicht abgeschlossen</span>
+      <span class="zustand">Token <span class="mono">kette</span> · 15.09. 03:22</span>
+    </div>
+  </div>
+
+  <div class="instrumente-6">
+    <div class="instrument instrument-heiss"><span class="etikett">Kosten</span><span class="instrument-wert">12,40<small> $</small></span></div>
+    <div class="instrument"><span class="etikett">Eingabe</span><span class="instrument-wert">4,82<small> Mio</small></span></div>
+    <div class="instrument"><span class="etikett">Ausgabe</span><span class="instrument-wert">186<small> Tsd</small></span></div>
+    <div class="instrument"><span class="etikett">Cache-Quote</span><span class="instrument-wert">76<small> %</small></span></div>
+    <div class="instrument"><span class="etikett">Dauer</span><span class="instrument-wert">4:12<small> h</small></span></div>
+    <div class="instrument"><span class="etikett">Pakete</span><span class="instrument-wert">5<small> grün</small> 1<small> gelb</small> 1<small> rot</small></span></div>
+  </div>
+
+  <div class="vorgaenge">
+    <div class="vorgang">
+      <span class="led led-gruen" aria-hidden="true"></span><span class="vorgang-nr">#917</span>
+      <div class="vorgang-kern"><div class="vorgang-titel">Umsetzungs-Lauf: Anteilsbalken je Vorgang statt Band über alle</div>
+        <div class="vorgang-zeile"><span class="vorhaben"><span class="vorhaben-mal" style="background:var(--kupfer)"></span>Nachtlauf-Auswertung</span></div></div>
+      <span class="dauer">25:00</span><span class="kosten-zelle leer">—</span><span class="hash">9489421</span>
+    </div>
+    <div class="vorgang">
+      <span class="led led-gruen" aria-hidden="true"></span><span class="vorgang-nr">#918</span>
+      <div class="vorgang-kern"><div class="vorgang-titel">Fußzeile beider Lauf-Arten, mit Herkunft der Budgets</div>
+        <div class="vorgang-zeile"><span class="vorhaben"><span class="vorhaben-mal" style="background:var(--kupfer)"></span>Nachtlauf-Auswertung</span></div></div>
+      <span class="dauer">25:00</span><span class="kosten-zelle leer">—</span><span class="hash">2dbab6c</span>
+    </div>
+    <div class="vorgang" style="background:color-mix(in srgb, var(--zinnob) 5%, var(--platte))">
+      <span class="led led-rot" aria-hidden="true"></span><span class="vorgang-nr">#922</span>
+      <div class="vorgang-kern"><div class="vorgang-titel">Spaltenbreite der Vorgangsliste an den Inhalt binden</div>
+        <div class="vorgang-zeile"><span class="marke-klasse k-rot">CHECKS_RED</span><span class="auszug">2 Tests rot in <span class="mono">BoardViewTest</span></span><span class="haeufig">· Prüfungen rot in 11 von 28 Läufen</span></div></div>
+      <span class="dauer">42:15</span><span class="kosten-zelle">2,30 $</span><span></span>
+      <div class="befund">
+        <pre>Nachtlauf-Befund zu Karte #922 Spaltenbreite der Vorgangsliste an den Inhalt binden
+Zustand: gescheitert
+Fehlerklasse: Prüfungen rot
+Auszug: 2 Tests rot in BoardViewTest</pre>
+        <button class="taste" type="button"><svg width="11" height="11" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="5" y="5" width="8.5" height="8.5" rx="1.8" stroke="currentColor" stroke-width="1.5"/><path d="M11 3.2V3a1.5 1.5 0 0 0-1.5-1.5h-6A1.5 1.5 0 0 0 2 3v6a1.5 1.5 0 0 0 1.5 1.5h.3" stroke="currentColor" stroke-width="1.5"/></svg> Kopieren</button>
+      </div>
+    </div>
+    <div class="vorgang">
+      <span class="led led-gelb" aria-hidden="true"></span><span class="vorgang-nr">#925</span>
+      <div class="vorgang-kern"><div class="vorgang-titel">Vorhaben-Kürzel im Kartenkopf statt in der Fußzeile</div>
+        <div class="vorgang-zeile"><span class="marke-klasse k-gelb">AWAITING_DECISION</span><span class="auszug">Frage zur Sortierung offen</span><span class="haeufig">· Befund aufklappen</span></div></div>
+      <span class="dauer">25:00</span><span class="kosten-zelle leer">—</span><span></span>
+    </div>
+    <div class="vorgang">
+      <span class="led led-gruen" aria-hidden="true"></span><span class="vorgang-nr">#919</span>
+      <div class="vorgang-kern"><div class="vorgang-titel">Designregel: Ausnahme der Nachtlauf-Auswertung festhalten</div>
+        <div class="vorgang-zeile"><span class="vorhaben"><span class="vorhaben-mal" style="background:var(--stahl)"></span>Designsystem</span></div></div>
+      <span class="dauer">08:55</span><span class="kosten-zelle">0,43 $</span><span class="hash">adcd017</span>
+    </div>
+  </div>
+</section>
+
+<section class="platte zu" aria-label="Nachtlauf vom 13. September">
+  <div class="platte-kopf" style="border-bottom:0">
+    <button class="auf" type="button" aria-expanded="false" aria-label="Lauf aufklappen"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m4 6 4 4 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+    <span class="led led-gruen" aria-hidden="true"></span>
+    <div style="min-width:0">
+      <div class="etikett" style="margin-bottom:1px">Nachtlauf · Umsetzung</div>
+      <h3 class="lauf-titel2">Nacht vom 13. September</h3>
+    </div>
+    <span class="lauf-meta">13.09. 23:05 · 2 h 30 min · 22 bearbeitet · 0 übergangen</span>
+    <div class="platte-werkzeug">
+      <span class="zustand">9,80 $</span>
+      <span class="zustand">Token <span class="mono">kette</span> · 14.09. 01:00</span>
+    </div>
+  </div>
+</section>
+
+<p class="notiz-mockup">Mockup mit Beispieldaten. Jeder Lauf ist eine aufklappbare Platte. Kopf: LED nach Ergebnis, Etikett mit Art, Titel 15 px statt der großen Überschrift, Metazeile, Zustand und Herkunft. Aufgeklappt: sechs Instrumente (Kosten, Eingabe, Ausgabe, Cache-Quote, Dauer, Pakete) und die Vorgänge als kompakte Zeilen wie „Letzter Lauf" im Leitstand — Dauer, Kosten je Vorgang (— wenn nicht gemessen), Commit. Abbrüche tragen Fehlerklasse, Auszug und Häufigkeit in der Zeile; der Befund mit „Kopieren" klappt an der Zeile auf. Die Zeilen „Kosten: nicht gemessen · …" je Vorgang entfallen zugunsten der Kostenspalte.</p>
+</main></body></html>

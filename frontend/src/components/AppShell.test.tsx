@@ -1,4 +1,5 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import type { ReactNode } from 'react'
 import { MemoryRouter, useLocation, useNavigate } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -10,7 +11,8 @@ import { projectsApi } from '../api/projects'
 import { AppShell } from './AppShell'
 import { SnackbarProvider } from './SnackbarProvider'
 import { ThemeProvider } from '@mui/material/styles'
-import { theme } from '../theme'
+import { cssRegel, cssRegelMit } from '../test/cssRegel'
+import { TEXT_SCHWACH, theme } from '../theme'
 
 const logoutMock = vi.fn().mockResolvedValue(undefined)
 const useAuthMock = vi.fn()
@@ -100,6 +102,12 @@ function renderShell(entry = '/') {
   )
 }
 
+/** Abmelden über das Menü am Nutzer-Mal (Entwurf `.nutzer`, #978). */
+function abmelden() {
+  fireEvent.click(screen.getByRole('button', { name: 'Konto von Manne' }))
+  fireEvent.click(screen.getByRole('menuitem', { name: 'Abmelden' }))
+}
+
 /** Server-Ablehnung mit einer für den Nutzer formulierten Meldung in `detail` (RFC 9457). */
 const serverfehler = (text: string) => new ApiError(409, 'Conflict', undefined, text)
 
@@ -163,7 +171,8 @@ function renderBoardShell(entry = '/', extra: ReactNode = null) {
 /** Board öffnen und warten, bis sein Kontext steht — erst dann darf ein Verlaufseintrag entstehen. */
 async function visitBoard(id: BoardId): Promise<void> {
   fireEvent.click(screen.getByRole('button', { name: `zu ${id}` }))
-  await screen.findByRole('button', { name: BOARDS[id].name })
+  // Der Board-Name steht als letzter Teil des Pfads im Kopf, sobald der Kontext geladen ist.
+  await within(screen.getByRole('navigation', { name: 'Pfad' })).findByRole('link', { name: BOARDS[id].name })
 }
 
 async function leaveBoard(): Promise<void> {
@@ -220,8 +229,8 @@ describe('AppShell', () => {
     renderShell()
     expect(screen.getByText(APP_NAME)).toBeInTheDocument()
     expect(screen.getByText('Projekte')).toBeInTheDocument()
-    expect(screen.getByText('Manne')).toBeInTheDocument()
-    expect(screen.getByLabelText('Abmelden')).toBeInTheDocument()
+    // Der Nutzer steht als rundes Mal mit seinem Kürzel im Kopf (Entwurf `.nutzer`).
+    expect(screen.getByRole('button', { name: 'Konto von Manne' })).toHaveTextContent('M')
     // Kartensuche der Kopfzeile (#490); ihr Verhalten ist in CardNumberSearch.test.tsx geprüft.
     expect(screen.getByRole('search')).toBeInTheDocument()
     expect(screen.getByRole('textbox', { name: 'Kartennummer suchen' })).toBeInTheDocument()
@@ -259,11 +268,12 @@ describe('AppShell', () => {
   it('setzt die Kontextbereich-Maße als CSS-Variablen und aktualisiert sie beim Einklappen', () => {
     renderShell()
     const root = document.documentElement
-    expect(root.style.getPropertyValue('--app-content-left')).toBe('240px')
-    expect(root.style.getPropertyValue('--app-content-top')).toBe('64px')
+    // Schiene 224 px und Kopf 59 px wie im Leitstand-Entwurf (#978).
+    expect(root.style.getPropertyValue('--app-content-left')).toBe('224px')
+    expect(root.style.getPropertyValue('--app-content-top')).toBe('59px')
 
     fireEvent.click(screen.getByLabelText('Menü einklappen'))
-    expect(root.style.getPropertyValue('--app-content-left')).toBe('56px')
+    expect(root.style.getPropertyValue('--app-content-left')).toBe('64px')
   })
 
   it('überlebt den Wechsel von einer Nicht-Board- auf eine Board-Route (Rules of Hooks)', async () => {
@@ -346,7 +356,7 @@ describe('AppShell', () => {
 
   it('meldet ab und navigiert zur Login-Seite', async () => {
     renderShell()
-    fireEvent.click(screen.getByLabelText('Abmelden'))
+    abmelden()
     expect(logoutMock).toHaveBeenCalled()
     await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/login'))
   })
@@ -355,7 +365,7 @@ describe('AppShell', () => {
     logoutMock.mockRejectedValue(serverfehler('Die Sitzung wurde bereits beendet.'))
     renderShell()
 
-    fireEvent.click(screen.getByLabelText('Abmelden'))
+    abmelden()
 
     await erwarteFehlerToast('Die Sitzung wurde bereits beendet.')
     // Der Sprung auf /login gehört zum Erfolgsfall: Scheitert der Logout, bleibt der Nutzer
@@ -367,53 +377,48 @@ describe('AppShell', () => {
     logoutMock.mockRejectedValue(new TypeError('Failed to fetch'))
     renderShell()
 
-    fireEvent.click(screen.getByLabelText('Abmelden'))
+    abmelden()
 
     await erwarteFehlerToast('Abmelden fehlgeschlagen.')
   })
 
-  it('klappt eine Nav-Gruppe bei ausgeklappter Sidebar zu und wieder auf', async () => {
+  it('gliedert die Schiene in Blöcke mit Etikett-Titel, die immer offen stehen (#978)', async () => {
     renderShell('/boards/1')
-    expect(await screen.findByText('B')).toBeInTheDocument()
-    // Die Board-Gruppe ist wegen der aktiven Route automatisch aufgeklappt.
-    expect(screen.getByText('Liste')).toBeInTheDocument()
+    const projekt = await screen.findByRole('group', { name: 'Projekt P1' })
 
-    fireEvent.click(screen.getByRole('button', { name: 'B' }))
-    await waitFor(() => expect(screen.queryByText('Liste')).not.toBeInTheDocument())
-
-    fireEvent.click(screen.getByRole('button', { name: 'B' }))
-    expect(await screen.findByText('Liste')).toBeInTheDocument()
+    expect(within(projekt).getAllByRole('link').map((link) => link.textContent)).toEqual([
+      'Leitstand',
+      'Board',
+      'Liste',
+      'Vorhaben',
+      'Ideen',
+      'Nachtläufe',
+    ])
+    expect(screen.getByRole('group', { name: 'Verwaltung' })).toHaveTextContent('Rollen & Rechte')
   })
 
-  it('öffnet bei eingeklappter Sidebar ein Flyout-Menü für eine Nav-Gruppe und navigiert darüber', async () => {
-    renderShell('/boards/1')
-    expect(await screen.findByText('B')).toBeInTheDocument()
+  it('markiert den Eintrag der aktuellen Ansicht und nur ihn als aktuelle Seite', async () => {
+    renderShell('/boards/1/list')
+    const projekt = await screen.findByRole('group', { name: 'Projekt P1' })
 
-    fireEvent.click(screen.getByLabelText('Menü einklappen'))
-    fireEvent.click(screen.getByRole('button', { name: 'B' }))
-
-    const menu = await screen.findByRole('menu')
-    expect(menu).toBeInTheDocument()
-
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Liste' }))
-
-    await waitFor(() =>
-      expect(screen.getByTestId('location')).toHaveTextContent('/boards/1/list'),
-    )
-    expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+    expect(within(projekt).getByRole('link', { name: 'Liste' })).toHaveAttribute('aria-current', 'page')
+    expect(within(projekt).getByRole('link', { name: 'Board' })).not.toHaveAttribute('aria-current')
   })
 
-  it('schließt das Flyout-Menü per Escape, ohne zu navigieren', async () => {
+  it('zeigt im Kopf den Pfad aus Projekt und Board und verlinkt beide', async () => {
     renderShell('/boards/1')
-    expect(await screen.findByText('B')).toBeInTheDocument()
+    const pfad = await screen.findByRole('navigation', { name: 'Pfad' })
 
-    fireEvent.click(screen.getByLabelText('Menü einklappen'))
-    fireEvent.click(screen.getByRole('button', { name: 'B' }))
-    await screen.findByRole('menu')
+    expect(await within(pfad).findByRole('link', { name: 'B' })).toHaveAttribute('href', '/boards/1')
+    expect(within(pfad).getByRole('link', { name: 'P1' })).toHaveAttribute('href', '/projects/5')
+  })
 
-    fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape', code: 'Escape' })
+  it('lässt einen Klick mit Zusatztaste beim Browser, statt selbst zu navigieren', async () => {
+    renderShell('/boards/1')
+    const liste = await screen.findByRole('link', { name: 'Liste' })
 
-    await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument())
+    fireEvent.click(liste, { metaKey: true })
+
     expect(screen.getByTestId('location')).toHaveTextContent('/boards/1')
   })
 
@@ -421,7 +426,7 @@ describe('AppShell', () => {
     renderShell('/boards/1')
     expect(await screen.findByText('B')).toBeInTheDocument()
     fireEvent.click(screen.getByLabelText('Menü einklappen'))
-    fireEvent.click(screen.getByRole('button', { name: 'Projekte' }))
+    fireEvent.click(screen.getByRole('link', { name: 'Projekte' }))
     await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/'))
   })
 
@@ -432,9 +437,23 @@ describe('AppShell', () => {
     await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/'))
   })
 
-  it('navigiert über den Profil-Avatar zur Profilseite', async () => {
+  it('schließt das Menü am Nutzer-Mal mit Escape, ohne zu navigieren oder abzumelden', async () => {
+    renderShell('/boards/1')
+    fireEvent.click(screen.getByRole('button', { name: 'Konto von Manne' }))
+    const menue = await screen.findByRole('menu', { name: 'Konto von Manne' })
+
+    fireEvent.keyDown(menue, { key: 'Escape' })
+
+    await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument())
+    expect(screen.getByRole('button', { name: 'Konto von Manne' })).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.getByTestId('location')).toHaveTextContent('/boards/1')
+    expect(logoutMock).not.toHaveBeenCalled()
+  })
+
+  it('navigiert über das Menü am Nutzer-Mal zur Profilseite', async () => {
     renderShell()
-    fireEvent.click(screen.getByLabelText('Profil von Manne bearbeiten'))
+    fireEvent.click(screen.getByRole('button', { name: 'Konto von Manne' }))
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Profil bearbeiten' }))
     await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/profil'))
   })
 
@@ -447,7 +466,7 @@ describe('AppShell', () => {
   it('erreicht den Administration-Eintrag auch bei eingeklappter Sidebar', async () => {
     renderShell()
     fireEvent.click(screen.getByLabelText('Menü einklappen'))
-    fireEvent.click(screen.getByRole('button', { name: 'Administration' }))
+    fireEvent.click(screen.getByRole('link', { name: 'Administration' }))
     await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/administration'))
   })
 
@@ -455,7 +474,7 @@ describe('AppShell', () => {
     useAuthMock.mockReturnValue({ user: null, logout: logoutMock })
     renderShell()
     expect(screen.getByText(APP_NAME)).toBeInTheDocument()
-    expect(screen.queryByLabelText('Abmelden')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Konto von/ })).not.toBeInTheDocument()
     // Die Kartensuche läuft über die eigenen Projekte — ohne Session gibt es nichts zu durchsuchen.
     expect(screen.queryByRole('search')).not.toBeInTheDocument()
   })
@@ -499,7 +518,7 @@ describe('AppShell', () => {
     await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/projects/5/ideas'))
   })
 
-  describe('Nachtlauf-Eintrag', () => {
+  describe('Nachtläufe-Eintrag', () => {
     /**
      * Anker für „Kontext vollständig geladen": Der Verlaufseintrag — und damit der aktivierte
      * Wechsel-Knopf — entsteht erst, wenn Board *und* Projektliste da sind. Ohne ihn prüften die
@@ -511,17 +530,17 @@ describe('AppShell', () => {
       )
     }
 
-    it('zeigt „Nachtlauf" auf einer Board-Route, wenn man Owner des Projekts ist', async () => {
+    it('zeigt „Nachtläufe" auf einer Board-Route, wenn man Owner des Projekts ist', async () => {
       renderShell('/boards/1')
 
-      fireEvent.click(await screen.findByText('Nachtlauf'))
+      fireEvent.click(await screen.findByText('Nachtläufe'))
 
       await waitFor(() =>
         expect(screen.getByTestId('location')).toHaveTextContent('/projects/5/nachtlauf'),
       )
     })
 
-    it('blendet „Nachtlauf" für eine Rolle unterhalb OWNER aus', async () => {
+    it('blendet „Nachtläufe" für eine Rolle unterhalb OWNER aus', async () => {
       mockedProjects.list.mockResolvedValue([
         { id: 5, name: 'P1', role: 'MEMBER', createdAt: '' },
         { id: 6, name: 'P2', role: 'MEMBER', createdAt: '' },
@@ -529,20 +548,20 @@ describe('AppShell', () => {
       renderShell('/boards/1')
       await waitForLoadedBoardContext()
 
-      expect(screen.queryByText('Nachtlauf')).not.toBeInTheDocument()
+      expect(screen.queryByText('Nachtläufe')).not.toBeInTheDocument()
     })
 
-    it('zeigt „Nachtlauf" auf einer Projekt-Route ohne offenes Board (routeProjectId)', async () => {
+    it('zeigt „Nachtläufe" auf einer Projekt-Route ohne offenes Board (routeProjectId)', async () => {
       renderShell('/projects/5')
 
-      fireEvent.click(await screen.findByText('Nachtlauf'))
+      fireEvent.click(await screen.findByText('Nachtläufe'))
 
       await waitFor(() =>
         expect(screen.getByTestId('location')).toHaveTextContent('/projects/5/nachtlauf'),
       )
     })
 
-    it('zeigt „Nachtlauf" dem Plattform-Admin trotz Rolle unterhalb OWNER', async () => {
+    it('zeigt „Nachtläufe" dem Plattform-Admin trotz Rolle unterhalb OWNER', async () => {
       // Plan-Entscheidung A6: `PermissionChecker.requireOwner` lässt den Plattform-Admin passieren —
       // ein eigenes `isOwner` in der Shell blendete ihm den Bereich aus, den der Server ihm öffnet.
       useAuthMock.mockReturnValue({
@@ -555,7 +574,7 @@ describe('AppShell', () => {
       ])
       renderShell('/boards/1')
 
-      expect(await screen.findByText('Nachtlauf')).toBeInTheDocument()
+      expect(await screen.findByText('Nachtläufe')).toBeInTheDocument()
     })
   })
 
@@ -742,37 +761,221 @@ describe('AppShell', () => {
       await waitFor(() => expect(switcherEntries()).toEqual(['DreiP1', 'ZweiP2']))
     })
   })
+
+  describe('Board-Kontext auf Projektseiten (#990)', () => {
+    /** Boards je Projekt, wie `boardsApi.list` sie liefert — Projekt 5 hat zwei, Projekt 6 eines. */
+    const PROJEKT_BOARDS: Record<number, TestBoard[]> = {
+      5: [BOARDS[1], BOARDS[3]],
+      6: [BOARDS[2]],
+    }
+
+    const ZIELE = [
+      '/',
+      '/boards/1',
+      '/boards/3',
+      '/projects/5/ideas',
+      '/projects/5/nachtlauf',
+      '/projects/6/ideas',
+    ]
+
+    function ZielNav() {
+      const navigate = useNavigate()
+      return (
+        <>
+          {ZIELE.map((ziel) => (
+            <button key={ziel} onClick={() => navigate(ziel)}>{`nach ${ziel}`}</button>
+          ))}
+        </>
+      )
+    }
+
+    function renderMitZielen(entry: string) {
+      return render(
+        <MemoryRouter initialEntries={[entry]}>
+          <LocationProbe />
+          <ZielNav />
+          <AppShell />
+        </MemoryRouter>,
+      )
+    }
+
+    async function gehZu(ziel: string): Promise<void> {
+      fireEvent.click(screen.getByRole('button', { name: `nach ${ziel}` }))
+      await waitFor(() => expect(screen.getByTestId('location').textContent).toBe(ziel))
+    }
+
+    /** Verlauf des angemeldeten Nutzers vorbelegen — wie nach früheren Besuchen im selben Browser. */
+    function verlaufSetzen(eintraege: unknown[]): void {
+      localStorage.setItem(`manban.boardHistory.v1.${loggedInUser.userId}`, JSON.stringify(eintraege))
+    }
+
+    /** Die Ziele des Projekt-Blocks in ihrer Reihenfolge — Beschriftung und Ziel-Pfad. */
+    function projektBlock(projektName: string): Array<[string, string | null]> {
+      const block = screen.getByRole('group', { name: `Projekt ${projektName}` })
+      return within(block)
+        .getAllByRole('link')
+        .map((link) => [link.textContent ?? '', link.getAttribute('href')])
+    }
+
+    beforeEach(() => {
+      mockedBoards.get.mockImplementation((id: number) => Promise.resolve(BOARDS[id as BoardId]))
+      mockedBoards.list.mockImplementation((projectId: number) =>
+        Promise.resolve(PROJEKT_BOARDS[projectId] ?? []),
+      )
+    })
+
+    it('behält beim Wechsel vom Board auf eine Projektseite desselben Projekts die Board-Einträge', async () => {
+      renderMitZielen('/boards/1')
+      await screen.findByRole('link', { name: 'Leitstand' })
+
+      await gehZu('/projects/5/nachtlauf')
+
+      expect(projektBlock('P1')).toEqual([
+        ['Leitstand', '/boards/1/leitstand'],
+        ['Board', '/boards/1'],
+        ['Liste', '/boards/1/list'],
+        ['Vorhaben', '/boards/1/vorhaben'],
+        ['Ideen', '/projects/5/ideas'],
+        ['Nachtläufe', '/projects/5/nachtlauf'],
+      ])
+      // Aktiv ist die Seite, auf der man steht — kein Board-Eintrag.
+      expect(screen.getByRole('link', { name: 'Nachtläufe' })).toHaveAttribute('aria-current', 'page')
+      expect(screen.getByRole('link', { name: 'Board' })).not.toHaveAttribute('aria-current')
+      // Der Pfad im Kopf nennt dort nur das Projekt.
+      const pfad = screen.getByRole('navigation', { name: 'Pfad' })
+      expect(within(pfad).getAllByRole('link').map((link) => link.textContent)).toEqual(['P1'])
+    })
+
+    it('nimmt beim direkten Aufruf einer Projektseite das zuletzt besuchte Board dieses Projekts', async () => {
+      verlaufSetzen([{ id: 3, name: 'Drei', projectId: 5, projectName: 'P1' }])
+      renderMitZielen('/projects/5/ideas')
+
+      expect(await screen.findByRole('link', { name: 'Board' })).toHaveAttribute('href', '/boards/3')
+    })
+
+    it('merkt sich das Projekt eines Besuchs und findet das Board nach dem Verlassen wieder', async () => {
+      renderMitZielen('/boards/3')
+      await screen.findByRole('link', { name: 'Leitstand' })
+      await gehZu('/')
+
+      await gehZu('/projects/5/ideas')
+
+      // Ohne `projectId` im Verlaufseintrag fiele die Schiene auf das erste Board (1) zurück.
+      expect(await screen.findByRole('link', { name: 'Board' })).toHaveAttribute('href', '/boards/3')
+    })
+
+    it('nimmt ohne Verlauf das erste Board des Projekts', async () => {
+      renderMitZielen('/projects/5/ideas')
+
+      expect(await screen.findByRole('link', { name: 'Board' })).toHaveAttribute('href', '/boards/1')
+    })
+
+    it('ignoriert einen alten Verlaufseintrag ohne projectId und nimmt das erste Board', async () => {
+      verlaufSetzen([{ id: 3, name: 'Drei', projectName: 'P1' }])
+      renderMitZielen('/projects/5/ideas')
+
+      expect(await screen.findByRole('link', { name: 'Board' })).toHaveAttribute('href', '/boards/1')
+    })
+
+    it('zeigt bei einem Projekt ohne Board keine Board-Einträge', async () => {
+      mockedBoards.list.mockResolvedValue([])
+      renderMitZielen('/projects/6/ideas')
+
+      await screen.findByRole('group', { name: 'Projekt P2' })
+      await waitFor(() => expect(mockedBoards.list).toHaveBeenCalledWith(6))
+      expect(projektBlock('P2')).toEqual([['Ideen', '/projects/6/ideas']])
+    })
+
+    it('zeigt auf der Projektseite eines anderen Projekts nie ein Board des vorigen', async () => {
+      renderMitZielen('/boards/1')
+      await screen.findByRole('link', { name: 'Leitstand' })
+
+      await gehZu('/projects/6/ideas')
+
+      // Schon vor der Antwort der Boardliste ist der fremde Kontext weg.
+      expect(
+        screen
+          .getAllByRole('link')
+          .map((link) => link.getAttribute('href'))
+          .filter((href) => href?.startsWith('/boards/1')),
+      ).toEqual([])
+      await waitFor(() =>
+        expect(screen.getByRole('link', { name: 'Board' })).toHaveAttribute('href', '/boards/2'),
+      )
+      expect(projektBlock('P2')).toEqual([
+        ['Leitstand', '/boards/2/leitstand'],
+        ['Board', '/boards/2'],
+        ['Liste', '/boards/2/list'],
+        ['Vorhaben', '/boards/2/vorhaben'],
+        ['Ideen', '/projects/6/ideas'],
+      ])
+    })
+
+    it('lässt die Schiene ohne Board, wenn die Boardliste des Projekts fehlschlägt', async () => {
+      mockedBoards.list.mockRejectedValue(new Error('500'))
+      renderMitZielen('/projects/5/ideas')
+
+      await screen.findByRole('group', { name: 'Projekt P1' })
+      await waitFor(() => expect(mockedBoards.list).toHaveBeenCalledWith(5))
+      expect(projektBlock('P1')).toEqual([
+        ['Ideen', '/projects/5/ideas'],
+        ['Nachtläufe', '/projects/5/nachtlauf'],
+      ])
+    })
+
+    it('verwirft eine verspätete Boardliste nach dem Verlassen der Projektseite', async () => {
+      let liste: (boards: TestBoard[]) => void = () => {}
+      mockedBoards.list.mockReturnValue(
+        new Promise<TestBoard[]>((resolve) => {
+          liste = resolve
+        }),
+      )
+      renderMitZielen('/projects/5/ideas')
+      await screen.findByRole('group', { name: 'Projekt P1' })
+
+      await gehZu('/')
+      liste(PROJEKT_BOARDS[5])
+
+      await waitFor(() => expect(screen.queryByRole('link', { name: 'Board' })).not.toBeInTheDocument())
+    })
+  })
 })
 
-describe('AppShell auf der weissen Kopfleiste', () => {
+describe('AppShell Kopf (Entwurf `.kopf`, #978)', () => {
   beforeEach(() => {
     useAuthMock.mockReturnValue({ user: loggedInUser, logout: logoutMock })
-    // Ein Verlaufseintrag aktiviert den Board-Wechsel-Knopf. Ohne ihn ist er deaktiviert und
-    // traegt MUIs Disabled-Farbe — die Zusicherung liefe an der Umstellung vorbei.
+    // Ein Verlaufseintrag aktiviert die Taste „Board wechseln"; deaktiviert trüge sie MUIs Disabled-Farbe.
     window.localStorage.setItem(
       `manban.boardHistory.v1.${loggedInUser.userId}`,
-      JSON.stringify([{ id: 1, name: 'B', projectName: 'P1' }]),
+      JSON.stringify([{ id: 1, name: 'B', projectId: 5, projectName: 'P1' }]),
     )
   })
 
   afterEach(() => window.localStorage.clear())
 
-  // Die Kopfleiste ist seit #653 weiss. Ohne diese Umstellung stuenden die Bedienelemente weiss
-  // auf weiss — geprueft wird deshalb die BERECHNETE Farbe, nicht die Abwesenheit von
-  // color="inherit": zwei der Elemente trugen nie ein color-Attribut.
   it.each([
     ['Board wechseln', 'Board wechseln'],
-    ['Abmelden', 'Abmelden'],
-    ['Profil-Knopf', 'Profil von Manne bearbeiten'],
     ['Kartensuche', 'Karte suchen'],
-  ])('faerbt %s in der Kopfleiste mit text.primary', (_name, label) => {
+  ])('färbt %s im Kopf mit text.primary', (_name, label) => {
     renderShellThemed()
-    expect(screen.getByLabelText(label)).toHaveStyle({ color: theme.palette.text.primary })
+    expect(screen.getByLabelText(label)).toHaveStyle({ color: 'var(--mb-palette-text-primary)' })
   })
 
-  it('faerbt auch die Versionsangabe mit text.primary', () => {
+  it('setzt das Nutzer-Mal weiß auf seinen dunklen Verlauf', () => {
     renderShellThemed()
-    expect(screen.getByText(`v${pkg.version}`)).toHaveStyle({ color: theme.palette.text.primary })
+    expect(screen.getByRole('button', { name: 'Konto von Manne' })).toHaveStyle({ color: '#FFFFFF' })
+  })
+
+  it('führt die Versionsangabe unter der Marke in schwacher Schrift', () => {
+    renderShellThemed()
+    expect(screen.getByText(`v${pkg.version}`)).toHaveStyle({ color: TEXT_SCHWACH })
+  })
+
+  it('klebt oben und trägt keine Ansichtswahl (Entscheidung Manne, #978)', () => {
+    renderShellThemed()
+    const kopf = screen.getByRole('banner')
+    expect(cssRegel(kopf)).toContain('position: sticky')
+    expect(within(kopf).queryByRole('tablist')).not.toBeInTheDocument()
   })
 })
 
@@ -785,5 +988,184 @@ describe('AppShell Inhaltsbereich', () => {
     renderShellThemed()
 
     expect(screen.getByRole('main')).not.toHaveStyle({ backgroundColor: 'rgb(255, 255, 255)' })
+  })
+})
+
+/**
+ * Stellt eine Fensterbreite nach, soweit `useMediaQuery` sie sieht. jsdom kennt kein `matchMedia`
+ * (und `src/test/setup.ts` stubbt es nicht); ohne Stub gilt jede Media-Query als nicht erfüllt, die
+ * Bestandstests oben laufen damit im breiten Zweig.
+ */
+function mitFensterbreite(breite: number) {
+  vi.stubGlobal('matchMedia', (query: string) => {
+    const max = /max-width:\s*([\d.]+)px/.exec(query)
+    const min = /min-width:\s*([\d.]+)px/.exec(query)
+    const matches = (!max || breite <= Number(max[1])) && (!min || breite >= Number(min[1]))
+    return {
+      matches,
+      media: query,
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    }
+  })
+}
+
+describe('AppShell bis zur Mindestbreite (AK 19, Plan #932 E5, #955)', () => {
+  beforeEach(() => {
+    useAuthMock.mockReturnValue({ user: loggedInUser, logout: logoutMock })
+    vi.stubGlobal('localStorage', fakeStorage())
+  })
+
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('legt die Navigation bei 768 px hinter eine Schaltfläche in der Kopfleiste', async () => {
+    mitFensterbreite(768)
+    renderShell()
+
+    // Temporär heißt: geschlossen, bis sie jemand öffnet — und dann über dem Inhalt.
+    expect(screen.queryByRole('navigation', { name: 'Hauptnavigation' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Navigation öffnen' }))
+
+    const navigation = await screen.findByRole('navigation', { name: 'Hauptnavigation' })
+    expect(navigation).toHaveTextContent('Administration')
+  })
+
+  it('schließt die schmale Navigation, sobald ein Ziel gewählt ist', async () => {
+    mitFensterbreite(768)
+    renderShell()
+    fireEvent.click(screen.getByRole('button', { name: 'Navigation öffnen' }))
+    fireEvent.click(await screen.findByRole('link', { name: 'Administration' }))
+
+    expect(screen.getByTestId('location')).toHaveTextContent('/administration')
+    await waitFor(() => expect(screen.queryByRole('navigation', { name: 'Hauptnavigation' })).not.toBeInTheDocument())
+  })
+
+  it('schließt die schmale Navigation mit Escape, ohne ein Ziel zu wählen', async () => {
+    mitFensterbreite(768)
+    renderShell('/profil')
+    fireEvent.click(screen.getByRole('button', { name: 'Navigation öffnen' }))
+    const navigation = await screen.findByRole('navigation', { name: 'Hauptnavigation' })
+
+    fireEvent.keyDown(navigation, { key: 'Escape' })
+
+    await waitFor(() => expect(screen.queryByRole('navigation', { name: 'Hauptnavigation' })).not.toBeInTheDocument())
+    expect(screen.getByTestId('location')).toHaveTextContent('/profil')
+    expect(screen.getByRole('button', { name: 'Navigation öffnen' })).toHaveAttribute('aria-expanded', 'false')
+  })
+
+  it('bietet im schmalen Zweig kein Einklappen an — die Navigation ist dort ohnehin ausgeblendet', async () => {
+    mitFensterbreite(768)
+    renderShell()
+    fireEvent.click(screen.getByRole('button', { name: 'Navigation öffnen' }))
+    await screen.findByRole('navigation', { name: 'Hauptnavigation' })
+
+    expect(screen.queryByLabelText('Menü einklappen')).not.toBeInTheDocument()
+  })
+
+  it('lässt die Navigation bei 900 px und mehr fest stehen, ohne Schaltfläche', () => {
+    mitFensterbreite(1280)
+    renderShell()
+
+    expect(screen.getByRole('navigation', { name: 'Hauptnavigation' })).toHaveTextContent('Administration')
+    expect(screen.queryByRole('button', { name: 'Navigation öffnen' })).not.toBeInTheDocument()
+  })
+
+  it('schaltet genau am Breakpoint md um: 899 px schmal, 900 px breit', () => {
+    mitFensterbreite(899)
+    const { unmount } = renderShell()
+    expect(screen.getByRole('button', { name: 'Navigation öffnen' })).toBeInTheDocument()
+    unmount()
+
+    mitFensterbreite(900)
+    renderShell()
+    expect(screen.queryByRole('button', { name: 'Navigation öffnen' })).not.toBeInTheDocument()
+  })
+
+  it('setzt --app-content-left unterhalb md auf 0, damit Dialoge mittig sitzen', () => {
+    // CardDetailModal und NewCardModal versetzen sich um diese Variable. Mit der Drawer-Breite
+    // hingen sie bei 768 px rechts versetzt, obwohl der Drawer gar nicht dasteht.
+    mitFensterbreite(768)
+    renderShell()
+
+    expect(document.documentElement.style.getPropertyValue('--app-content-left')).toBe('0px')
+  })
+
+  it('behält --app-content-left ab md bei der Drawer-Breite', () => {
+    mitFensterbreite(1280)
+    renderShell()
+
+    expect(document.documentElement.style.getPropertyValue('--app-content-left')).toBe('224px')
+  })
+})
+
+describe('AppShell Tastatur (AK 15, #955)', () => {
+  beforeEach(() => {
+    useAuthMock.mockReturnValue({ user: loggedInUser, logout: logoutMock })
+    vi.stubGlobal('localStorage', fakeStorage())
+  })
+
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('führt als erstes Tastaturziel eine Sprungmarke zum Inhalt', async () => {
+    const user = userEvent.setup()
+    renderShell()
+
+    await user.tab()
+
+    const marke = screen.getByRole('link', { name: 'Zum Inhalt springen' })
+    expect(marke).toHaveFocus()
+    expect(marke).toHaveAttribute('href', '#inhalt')
+  })
+
+  it('springt über die Sprungmarke in den Inhaltsbereich', async () => {
+    const user = userEvent.setup()
+    renderShell()
+
+    await user.tab()
+    await user.keyboard('{Enter}')
+
+    const inhalt = screen.getByRole('main')
+    expect(inhalt).toHaveAttribute('id', 'inhalt')
+    // Ohne tabIndex nähme `main` den Fokus nicht an, und die nächste Tab-Taste begänne wieder oben.
+    expect(inhalt).toHaveAttribute('tabindex', '-1')
+    expect(inhalt).toHaveFocus()
+  })
+
+  it('zeigt die Sprungmarke erst, wenn sie den Fokus hat', async () => {
+    const user = userEvent.setup()
+    renderShellThemed()
+    const marke = screen.getByRole('link', { name: 'Zum Inhalt springen' })
+    const regel = () => cssRegelMit(marke, ':focus')
+
+    // Außerhalb des sichtbaren Bereichs, aber nicht `display: none` — sonst wäre sie gar nicht fokussierbar.
+    expect(cssRegel(marke)).toContain('position: absolute')
+    expect(cssRegel(marke)).not.toContain('display: none')
+    await user.tab()
+    expect(regel()).toMatch(/top: \d/)
+  })
+
+  it('trägt an jedem Navigationsziel einen sichtbaren Fokusring', async () => {
+    const user = userEvent.setup()
+    renderShellThemed()
+    const navigation = screen.getByRole('navigation', { name: 'Hauptnavigation' })
+    const ziele = [...within(navigation).getAllByRole('button'), ...within(navigation).getAllByRole('link')]
+    expect(ziele.length).toBeGreaterThan(2)
+
+    const erreicht = new Set<HTMLElement>()
+    for (let schritt = 0; schritt < 40 && erreicht.size < ziele.length; schritt++) {
+      await user.tab()
+      const aktiv = ziele.find((ziel) => ziel.matches(':focus'))
+      if (aktiv) {
+        erreicht.add(aktiv)
+        // MUI setzt bei Tastaturfokus `Mui-focusVisible`; das Theme hängt daran den Ring (#953).
+        expect(aktiv).toHaveClass('Mui-focusVisible')
+        expect(cssRegelMit(aktiv, '.Mui-focusVisible')).toMatch(/outline: 2px solid var\(--mb-palette-primary-main/)
+      }
+    }
+    expect([...erreicht].length).toBe(ziele.length)
   })
 })

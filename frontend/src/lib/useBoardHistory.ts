@@ -1,10 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useAuth } from '../auth/AuthContext'
 
-/** Ein Eintrag des Board-Verlaufs. Bewusst ohne `projectId` — der Sprung braucht nur die Board-ID. */
+/**
+ * Ein Eintrag des Board-Verlaufs. Die `projectId` trägt er, seit die Schiene auf einer Projektseite
+ * das zuletzt besuchte Board *desselben* Projekts wiederfinden muss (#990) — der Projektname taugt
+ * dafür nicht, weil Namen nicht eindeutig sind.
+ */
 export interface BoardHistoryEntry {
   id: number
   name: string
+  projectId: number
   projectName: string
 }
 
@@ -27,15 +32,24 @@ function storageKey(userId: number): string {
   return `${STORAGE_PREFIX}${userId}`
 }
 
-/** Verengung eines Storage-Werts (externer Input, daher `unknown`) auf einen gueltigen Eintrag. */
+/** Eine positive Ganzzahl — die Form, die Board- und Projekt-IDs haben. */
+function isId(value: unknown): value is number {
+  return Number.isInteger(value) && (value as number) > 0
+}
+
+/**
+ * Verengung eines Storage-Werts (externer Input, daher `unknown`) auf einen gueltigen Eintrag.
+ * Eintraege ohne `projectId` stammen aus der Zeit vor #990; sie werden beim Lesen verworfen statt
+ * migriert — der Verlauf fuellt sich beim naechsten Besuch von selbst neu.
+ */
 function isEntry(value: unknown): value is BoardHistoryEntry {
   if (typeof value !== 'object' || value === null) {
     return false
   }
   const candidate = value as Record<string, unknown>
   return (
-    Number.isInteger(candidate.id) &&
-    (candidate.id as number) > 0 &&
+    isId(candidate.id) &&
+    isId(candidate.projectId) &&
     typeof candidate.name === 'string' &&
     typeof candidate.projectName === 'string'
   )
@@ -43,7 +57,7 @@ function isEntry(value: unknown): value is BoardHistoryEntry {
 
 /**
  * Von vorne nach hinten: ungueltige Eintraege verwerfen, bei mehrfacher ID das erste — damit
- * neueste — Vorkommen behalten, auf {@link MAX_ENTRIES} begrenzen und auf die drei erlaubten
+ * neueste — Vorkommen behalten, auf {@link MAX_ENTRIES} begrenzen und auf die vier erlaubten
  * Felder projizieren. Ein Nicht-Array ergibt einen leeren Verlauf.
  */
 function normalize(value: unknown): BoardHistoryEntry[] {
@@ -55,13 +69,29 @@ function normalize(value: unknown): BoardHistoryEntry[] {
   for (const item of value) {
     if (isEntry(item) && !seen.has(item.id)) {
       seen.add(item.id)
-      entries.push({ id: item.id, name: item.name, projectName: item.projectName })
+      entries.push({
+        id: item.id,
+        name: item.name,
+        projectId: item.projectId,
+        projectName: item.projectName,
+      })
       if (entries.length === MAX_ENTRIES) {
         break
       }
     }
   }
   return entries
+}
+
+/**
+ * Das zuletzt besuchte Board eines Projekts, oder `undefined`, wenn der Verlauf keines kennt. Der
+ * Verlauf steht absteigend nach letzter Benutzung — der erste Treffer ist damit der juengste.
+ */
+export function lastBoardOfProject(
+  history: readonly BoardHistoryEntry[],
+  projectId: number,
+): BoardHistoryEntry | undefined {
+  return history.find((entry) => entry.projectId === projectId)
 }
 
 function read(userId: number | null): BoardHistoryEntry[] {
@@ -133,7 +163,7 @@ export function useBoardHistory(): BoardHistory {
     (entry: BoardHistoryEntry) =>
       update((entries) =>
         [
-          { id: entry.id, name: entry.name, projectName: entry.projectName },
+          { id: entry.id, name: entry.name, projectId: entry.projectId, projectName: entry.projectName },
           ...entries.filter((e) => e.id !== entry.id),
         ].slice(0, MAX_ENTRIES),
       ),

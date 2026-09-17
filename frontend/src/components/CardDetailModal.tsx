@@ -29,6 +29,7 @@ import {
   useState,
   type ComponentPropsWithoutRef,
   type Dispatch,
+  type ReactNode,
   type SetStateAction,
 } from 'react'
 import Markdown, { type Components } from 'react-markdown'
@@ -55,7 +56,7 @@ import { epicShortcode } from '../lib/epicMeta'
 import { normalizeTaskLists, toggleTaskAt } from '../lib/markdownTasks'
 import { safeImageSrc, safeLinkHref } from '../lib/markdownUrls'
 import { statusColors } from '../lib/statusColors'
-import { CODE_BG, theme } from '../theme'
+import { ANZEIGE, CODE_BG, GRUND, PANEL_RADIUS, PLATTE, PLATTE_HOCH, SCHATTEN_HOCH, SCHATTEN_PLATTE, theme, ZAHL } from '../theme'
 import { labelChipSx } from './labelChipSx'
 import { useAuth } from '../auth/AuthContext'
 import { AttachmentPreview } from './AttachmentPreview'
@@ -190,13 +191,16 @@ const TaskMarkdown = memo(function TaskMarkdown({
  * Deckel auf den Überschriftsgrößen. Lange Tokens (URLs, Hashes) brechen um; Codeblöcke und breite
  * GFM-Tabellen scrollen in ihrem eigenen Bereich, damit der Modal-Inhalt selbst keinen
  * horizontalen Scrollbalken bekommt. Genau solche Inhalte stehen in Review-Kommentaren (#575).
+ *
+ * Beide Objekte entstehen beim Modulstart und lesen deshalb `theme.vars`: `theme.palette` wäre der
+ * helle Wert und schaltete im dunklen Erscheinungsbild nicht um (#952).
  */
 const markdownBodySx = {
   overflowWrap: 'anywhere',
   '& :first-of-type': { mt: 0 },
-  '& h1, & h2': { fontWeight: 600, fontSize: '1.15rem', mt: 2, pb: 0.5, borderBottom: `1px solid ${theme.palette.divider}` },
+  '& h1, & h2': { fontWeight: 600, fontSize: '1.15rem', mt: 2, pb: 0.5, borderBottom: `1px solid ${theme.vars.palette.divider}` },
   '& h3, & h4': { fontWeight: 600, fontSize: '1rem', mt: 1.5, mb: 0.5 },
-  '& p, & li': { lineHeight: 1.6, color: theme.palette.text.primary },
+  '& p, & li': { lineHeight: 1.6, color: theme.vars.palette.text.primary },
   '& ul, & ol': { pl: 3, my: 1 },
   '& code': { backgroundColor: CODE_BG, px: 0.5, borderRadius: 1, fontFamily: 'monospace', fontSize: '0.85em' },
   '& pre': { backgroundColor: CODE_BG, p: 1.5, borderRadius: 1, overflowX: 'auto' },
@@ -207,7 +211,7 @@ const markdownBodySx = {
 } as const
 
 const descriptionSx = {
-  border: `1px solid ${theme.palette.divider}`,
+  border: `1px solid ${theme.vars.palette.divider}`,
   borderRadius: 1,
   p: 2,
   ...markdownBodySx,
@@ -251,6 +255,28 @@ function CommentBody({ body }: Readonly<{ body: string }>) {
       </Markdown>
     </Box>
   )
+}
+
+/**
+ * Zeitpunkt eines Kommentars als Text. Ein leerer oder nicht parsbarer Wert ergibt `''` statt eines
+ * sichtbaren „Invalid Date" — dasselbe Muster wie `formatDate` in `ProjectsPage`.
+ */
+function formatCommentTime(iso: string): string {
+  const d = new Date(iso)
+  return Number.isNaN(d.getTime()) ? '' : d.toLocaleString('de-DE')
+}
+
+/**
+ * Zeitzeile eines Kommentars (#843): Erstellzeitpunkt, bei nachträglicher Bearbeitung ergänzt um
+ * „bearbeitet <Zeitpunkt>". Ohne den Zusatz wäre ein spät bearbeiteter alter Kommentar von einem
+ * neuen nicht zu unterscheiden — und genau die zeitliche Einordnung ist der Zweck der Anzeige.
+ * Ohne darstellbaren Erstellzeitpunkt bleibt die Zeile leer und wird gar nicht gerendert.
+ */
+export function commentMetaText(c: Readonly<Pick<Comment, 'createdAt' | 'updatedAt'>>): string {
+  const erstellt = formatCommentTime(c.createdAt)
+  if (!erstellt) return ''
+  const bearbeitet = c.updatedAt === c.createdAt ? '' : formatCommentTime(c.updatedAt)
+  return bearbeitet ? `${erstellt} · bearbeitet ${bearbeitet}` : erstellt
 }
 
 /**
@@ -482,12 +508,21 @@ function CommentsSection({
       <Stack spacing={1}>
         {comments.map((c) => {
           const isAuthor = c.authorUserId === currentUserId
+          const meta = commentMetaText(c)
           return (
             <Box key={c.id}>
               <Stack direction="row" justifyContent="space-between" alignItems="center">
-                <Typography variant="body2" fontWeight={600}>
-                  {c.authorName}
-                </Typography>
+                <Stack direction="row" spacing={1} alignItems="baseline" flexWrap="wrap">
+                  <Typography variant="body2" fontWeight={600}>
+                    {c.authorName}
+                  </Typography>
+                  {/* Zeitpunkt im Muster der Aktivitätsliste desselben Modals (#843). */}
+                  {meta && (
+                    <Typography data-testid="comment-meta" variant="caption" color="text.secondary">
+                      {meta}
+                    </Typography>
+                  )}
+                </Stack>
                 <Stack direction="row" spacing={0.5}>
                   {/* Bearbeiten darf nur der Autor selbst. */}
                   {isAuthor && editingCommentId !== c.id && (
@@ -765,6 +800,32 @@ function DependencyList({
  * bearbeitbares Feld zur Verfügung — beides wäre eine Aussage über einen noch unbekannten Text.
  */
 type BeschreibungStatus = 'laedt' | 'geladen' | 'fehler'
+
+/**
+ * Ein Block des Kartenblatts (AK 13, #958) als Platte der Instrumententafel (#980, Entwurf
+ * `.platte`, `.platte-kopf`, Z. 543–557): Fläche, Haarlinie, Schatten und ein Kopf mit dem Namen,
+ * als benannter Bereich für Screenreader. Die drei Blöcke und ihr Inhalt stehen fest (Plan #932):
+ * Beschreibung und Details, Zuordnung, Verlauf.
+ */
+function KartenBlock({ name, children }: Readonly<{ name: string; children: ReactNode }>) {
+  return (
+    <Box
+      component="section"
+      aria-label={name}
+      sx={{ bgcolor: 'background.paper', border: 1, borderColor: 'divider', borderRadius: `${PANEL_RADIUS}px`, boxShadow: SCHATTEN_PLATTE, overflow: 'hidden', minWidth: 0 }}
+    >
+      <Box
+        aria-hidden
+        sx={{ ...ANZEIGE, fontSize: 13.5, fontWeight: 600, px: '16px', py: '11px', borderBottom: 1, borderColor: 'divider', background: `linear-gradient(180deg, ${PLATTE_HOCH}, ${PLATTE})` }}
+      >
+        {name}
+      </Box>
+      <Stack spacing={2} sx={{ px: '18px', pt: '16px', pb: '18px' }}>
+        {children}
+      </Stack>
+    </Box>
+  )
+}
 
 /** View-Modus-Inhalt: Beschreibung (Markdown mit Task-Checkboxen), Abhängigkeiten, Fälligkeitsdatum. */
 function CardBodyView({
@@ -1098,7 +1159,11 @@ function CardDetailModalView({
   const [baumFehler, setBaumFehler] = useState<string | null>(null)
 
   useEffect(() => {
-    void commentsApi.list(card.id).then(setComments)
+    // Neuester zuerst (#843): Der Server liefert stabil nach `createdAt, id` aufsteigend; das
+    // Umkehren der ganzen Liste ergibt exakt `createdAt desc, id desc` — der Tie-Break (#472) dreht
+    // sich mit, ohne dass die Sortierregel hier ein zweites Mal formuliert werden muss. Gedreht
+    // wird nur an dieser einen Stelle, damit es genau eine Wahrheit über die Reihenfolge gibt.
+    void commentsApi.list(card.id).then((list) => setComments([...list].reverse()))
     void attachmentsApi.list(card.id).then((list) => {
       setAttachments(list)
       loadImagePreviews(list, attachmentsApi, setPreviews)
@@ -1288,7 +1353,9 @@ function CardDetailModalView({
     if (!newComment.trim()) return
     try {
       const created = await commentsApi.create(card.id, newComment.trim())
-      setComments((c) => [...c, created])
+      // Vorne einsortiert (#843): Der neue Kommentar ist der jüngste und steht damit ohne
+      // Neuladen an der Stelle, an der ihn die Sortierregel erwartet.
+      setComments((c) => [created, ...c])
       // Erst nach der Zusage des Servers leeren: Sonst wäre der verfasste Text weg, ohne dass er
       // irgendwo läge.
       setNewComment('')
@@ -1424,7 +1491,7 @@ function CardDetailModalView({
         },
       }}
       slotProps={{
-        paper: { sx: { width: '90%', maxWidth: '90%', height: '90%', maxHeight: '90%', m: 0 } },
+        paper: { sx: { width: '90%', maxWidth: '90%', height: '90%', maxHeight: '90%', m: 0, boxShadow: SCHATTEN_HOCH } },
       }}
     >
       <DialogTitle sx={dialogTitleSx}>
@@ -1446,13 +1513,14 @@ function CardDetailModalView({
             columnId={columnId}
             onMove={onMove}
           />
-          {/* Legacy-Pool-Ideen ohne projektweite Nummer zeigen kein nacktes „#". */}
+          {/* Legacy-Pool-Ideen ohne projektweite Nummer zeigen kein nacktes „#". Nummer in Kupfer und
+              Titel in Archivo wie der Kopf des Blatts (Entwurf `.blatt-nr`, `.blatt-titel`, Z. 1023–1024). */}
           {card.number != null && (
-            <Typography component="span" variant="body2" color="text.secondary">
+            <Typography component="span" sx={{ ...ZAHL, fontSize: 13, fontWeight: 500, color: 'primary.main' }}>
               #{card.number}
             </Typography>
           )}
-          <Typography component="span" sx={{ fontWeight: 600 }}>
+          <Typography component="span" sx={{ ...ANZEIGE, fontStretch: '110%', fontSize: 19, fontWeight: 700, lineHeight: 1.25, letterSpacing: '-.01em' }}>
             {card.title}
           </Typography>
           <Box sx={{ flexGrow: 1 }} />
@@ -1488,8 +1556,23 @@ function CardDetailModalView({
         )}
       </DialogTitle>
 
-      <DialogContent dividers sx={{ overflowY: 'auto' }}>
-        <Stack spacing={2} sx={{ mt: 0.5 }}>
+      {/* Instrumententafel (Entwurf `.blatt`, Z. 1020): der Grund der Warte, darauf links das Blatt
+          mit Beschreibung und Verlauf, rechts die Felder der Zuordnung. Unter 1080 px untereinander. */}
+      <DialogContent dividers sx={{ overflowY: 'auto', bgcolor: GRUND }}>
+        <Box
+          sx={{
+            mt: 0.5,
+            display: 'grid',
+            gap: '16px',
+            alignItems: 'start',
+            gridTemplateColumns: { xs: 'minmax(0,1fr)', lg: isEpic ? 'minmax(0,1fr)' : 'minmax(0,1.9fr) minmax(0,1fr)' },
+            gridTemplateAreas: { xs: '"blatt" "felder" "verlauf"', lg: isEpic ? '"blatt" "verlauf"' : '"blatt felder" "verlauf felder"' },
+            '& > [aria-label="Beschreibung und Details"]': { gridArea: 'blatt' },
+            '& > [aria-label="Zuordnung"]': { gridArea: 'felder' },
+            '& > [aria-label="Verlauf"]': { gridArea: 'verlauf' },
+          }}
+        >
+          <KartenBlock name="Beschreibung und Details">
           {editing ? (
             <CardFields
               isEpic={isEpic}
@@ -1534,24 +1617,6 @@ function CardDetailModalView({
             />
           )}
 
-          {!isEpic && (
-            <AssigneeSection
-              canEdit={canEdit}
-              members={members}
-              assigneeIds={assigneeIds}
-              onChange={(ids) => void saveAssignees(ids)}
-            />
-          )}
-
-          {!isEpic && (
-            <LabelSection
-              canEdit={canEdit && canEditLabels}
-              boardLabels={boardLabels}
-              labelIds={labelIds}
-              onChange={(ids) => void saveLabels(ids)}
-            />
-          )}
-
           {!editing && fortschritt !== null && (
             <>
               <Divider />
@@ -1591,9 +1656,28 @@ function CardDetailModalView({
               </Box>
             </>
           )}
+          </KartenBlock>
+
+          {/* Ein Vorhaben trägt weder Zuständige noch Labels — ohne Inhalt entfällt der Block. */}
+          {!isEpic && (
+            <KartenBlock name="Zuordnung">
+              <AssigneeSection
+                canEdit={canEdit}
+                members={members}
+                assigneeIds={assigneeIds}
+                onChange={(ids) => void saveAssignees(ids)}
+              />
+              <LabelSection
+                canEdit={canEdit && canEditLabels}
+                boardLabels={boardLabels}
+                labelIds={labelIds}
+                onChange={(ids) => void saveLabels(ids)}
+              />
+            </KartenBlock>
+          )}
 
           {!editing && (
-            <>
+            <KartenBlock name="Verlauf">
               {/* Nur mit Projekt und Kartennummer gibt es etwas abzurufen: `projectId` ist am
                   Modal optional, und eine Pool-Idee trägt keine Nummer (Issue #968). */}
               {projectId != null && card.number != null && (
@@ -1629,9 +1713,9 @@ function CardDetailModalView({
 
               <Divider />
               <ActivitySection activities={activities} actorName={actorName} />
-            </>
+            </KartenBlock>
           )}
-        </Stack>
+        </Box>
       </DialogContent>
 
       <DialogActions>

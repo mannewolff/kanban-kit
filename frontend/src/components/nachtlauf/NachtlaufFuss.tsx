@@ -1,6 +1,6 @@
 import Box from '@mui/material/Box'
 import Typography from '@mui/material/Typography'
-import { NACHTLAUF_FARBEN, NACHTLAUF_SCHRIFTEN } from '../../nachtlaufDesign'
+import { ETIKETT, MELDER, RAND, ZAHL } from '../../theme'
 
 /** Eine Angabe der Fußzeile: ihre Benennung, ihr Wert und ob der Wert ein Vorbehalt ist. */
 export interface Fussangabe {
@@ -34,9 +34,9 @@ export function NachtlaufFuss({
       component="dl"
       data-testid={testId}
       sx={{
-        marginTop: '34px',
-        paddingTop: '18px',
-        borderTop: `1px solid ${NACHTLAUF_FARBEN.line}`,
+        marginTop: 0,
+        padding: '14px 16px',
+        borderTop: `1px solid ${RAND}`,
         display: 'flex',
         flexWrap: 'wrap',
         gap: '10px 26px',
@@ -44,27 +44,20 @@ export function NachtlaufFuss({
       }}
     >
       {angaben.map((angabe) => (
-        <Box key={angabe.label}>
+        <Box key={angabe.label} data-testid={`fussangabe-${angabe.label}`}>
           <Box
             component="dt"
-            sx={{
-              fontFamily: NACHTLAUF_SCHRIFTEN.body,
-              fontSize: 11,
-              letterSpacing: '0.08em',
-              textTransform: 'uppercase',
-              color: NACHTLAUF_FARBEN.ink3,
-            }}
+sx={ETIKETT}
           >
             {angabe.label}
           </Box>
           <Typography
             component="dd"
             sx={{
+              ...ZAHL,
               margin: '2px 0 0',
-              fontFamily: NACHTLAUF_SCHRIFTEN.mono,
               fontSize: 13,
-              fontVariantNumeric: 'tabular-nums',
-              color: angabe.vorbehalt === true ? NACHTLAUF_FARBEN.budget : NACHTLAUF_FARBEN.ink2,
+              color: angabe.vorbehalt === true ? MELDER.bernst : 'text.secondary',
             }}
           >
             {angabe.wert}

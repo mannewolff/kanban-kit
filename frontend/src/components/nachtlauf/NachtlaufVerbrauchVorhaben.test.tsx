@@ -2,10 +2,13 @@ import { ThemeProvider } from '@mui/material/styles'
 import { render, screen, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import type { VerbrauchAngaben, VerbrauchVorhaben } from '../../api/nightRunUsage'
-import { nachtlaufTheme } from '../../nachtlaufDesign'
+import { theme } from '../../theme'
 import { NachtlaufVerbrauchVorhaben } from './NachtlaufVerbrauchVorhaben'
 
-/** Die Vorhaben-Aufstellung der Verbrauchs-Auswertung (Issue #942, #926 AK 10–12). */
+/**
+ * Die Vorhaben-Aufstellung der Verbrauchs-Auswertung (Issue #942, #926 AK 10–12), seit #987 als
+ * Balkenliste in der Platte „Vorhaben" nach `docs/mockup-nachtlauf-verbrauch.html`.
+ */
 
 const nichts: VerbrauchAngaben = {
   costUsd: null,
@@ -33,14 +36,23 @@ const ohne: VerbrauchVorhaben = {
 
 const zeige = (epics: VerbrauchVorhaben[], overlap = false, withoutEpic = ohne) =>
   render(
-    <ThemeProvider theme={nachtlaufTheme}>
+    <ThemeProvider theme={theme}>
       <NachtlaufVerbrauchVorhaben epics={epics} withoutEpic={withoutEpic} epicsOverlap={overlap} />
     </ThemeProvider>,
   )
 
+/** `Intl` setzt vor der Einheit ein geschütztes Leerzeichen; verglichen wird der Wortlaut. */
 const lesbar = (element: HTMLElement) => element.textContent?.replaceAll(' ', ' ') ?? ''
 
 describe('NachtlaufVerbrauchVorhaben', () => {
+  it('steht als Platte „Vorhaben" mit den Kosten des Zeitraums', () => {
+    zeige([vorhaben(1, 'PLANEN', 'Planen', 3)])
+
+    const platte = screen.getByTestId('verbrauch-vorhaben')
+    expect(within(platte).getByRole('heading', { name: 'Vorhaben' })).toBeInTheDocument()
+    expect(platte).toHaveTextContent('Kosten im Zeitraum')
+  })
+
   it('fuehrt die Vorhaben in der Reihenfolge des Servers — absteigend nach Kosten', () => {
     zeige([
       vorhaben(2, 'BACKUP', 'Backup', 5),
@@ -60,7 +72,22 @@ describe('NachtlaufVerbrauchVorhaben', () => {
     expect(lesbar(zeilen[2])).toContain('nicht gemessen')
   })
 
-  it('fuehrt „ohne Vorhaben" als eigenen Posten', () => {
+  it('zeichnet je Vorhaben einen Balken im Verhaeltnis zum teuersten', () => {
+    zeige([vorhaben(2, 'BACKUP', 'Backup', 5), vorhaben(1, 'PLANEN', 'Planen', 2)])
+
+    const zeilen = within(screen.getByTestId('verbrauch-vorhaben-liste')).getAllByRole('listitem')
+    expect(within(zeilen[0]).getByTestId('fuellung-100')).toBeInTheDocument()
+    expect(within(zeilen[1]).getByTestId('fuellung-40')).toBeInTheDocument()
+  })
+
+  it('zeichnet ohne gemessene Kosten keinen Balken, statt 0 zu behaupten', () => {
+    zeige([vorhaben(3, null, 'Ohne Kürzel', null)])
+
+    const zeile = within(screen.getByTestId('verbrauch-vorhaben-liste')).getAllByRole('listitem')[0]
+    expect(within(zeile).queryByTestId(/^fuellung-/)).not.toBeInTheDocument()
+  })
+
+  it('fuehrt „ohne Vorhaben" als eigenen Posten am Ende', () => {
     zeige([vorhaben(1, 'PLANEN', 'Planen', 3)])
 
     const posten = screen.getByTestId('verbrauch-ohne-vorhaben')
@@ -73,7 +100,10 @@ describe('NachtlaufVerbrauchVorhaben', () => {
     zeige([], false, { ...ohne, cardCount: 0, usage: nichts })
 
     expect(screen.getByTestId('verbrauch-ohne-vorhaben')).toHaveTextContent('0 Karten')
-    expect(screen.getByText('In diesem Zeitraum ist keine Karte einem Vorhaben zugeordnet.')).toBeInTheDocument()
+    expect(
+      screen.getByText('In diesem Zeitraum ist keine Karte einem Vorhaben zugeordnet.'),
+    ).toBeInTheDocument()
+    expect(screen.queryByTestId('verbrauch-vorhaben-liste')).not.toBeInTheDocument()
   })
 
   it('sagt, dass die Aufstellung nur den kartenbezogenen Anteil zeigt', () => {

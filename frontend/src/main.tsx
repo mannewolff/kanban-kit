@@ -1,5 +1,13 @@
-import '@fontsource/carlito/400.css'
-import '@fontsource/carlito/700.css'
+// Schriften der Kupferwarte (#978), offline ausgeliefert: Archivo mit variabler Breite und
+// variablem Gewicht für Titel und Etiketten, IBM Plex Sans für Fließtext, IBM Plex Mono für Zahlen.
+import '@fontsource-variable/archivo/wdth.css'
+import '@fontsource/ibm-plex-sans/latin-400.css'
+import '@fontsource/ibm-plex-sans/latin-500.css'
+import '@fontsource/ibm-plex-sans/latin-600.css'
+import '@fontsource/ibm-plex-sans/latin-700.css'
+import '@fontsource/ibm-plex-mono/latin-400.css'
+import '@fontsource/ibm-plex-mono/latin-500.css'
+import '@fontsource/ibm-plex-mono/latin-600.css'
 import CssBaseline from '@mui/material/CssBaseline'
 import { ThemeProvider } from '@mui/material/styles'
 import { StrictMode } from 'react'

@@ -76,15 +76,15 @@ public class CardCycleTimeService {
     // Durchschnitt und Stichprobengröße stammen aus derselben Liste — die angezeigte Datenbasis
     // kann damit nicht von der Zahl abweichen, die sie stützt.
     long[] leads = leadTimes(workCards);
-    long[] cycles = cycleTimes(workCards, byCard);
+    long[] implementations = implementationTimes(workCards, byCard);
 
     return new BoardDashboardKpis(
         columnDwell(boardColumns, trans),
         throughput(workCards, now),
         average(leads),
         leads.length,
-        average(cycles),
-        cycles.length,
+        average(implementations),
+        implementations.length,
         outliers(workCards, byCard, now));
   }
 
@@ -142,31 +142,46 @@ public class CardCycleTimeService {
   }
 
   /**
-   * Cycle Times aller abgeschlossenen Karten mit „Ready"-Eintritt — je Karte ein Wert. Die Zählung
-   * ist deshalb kleiner als die der Lead Times, sobald eine fertige Karte nie in einer „Ready"-
-   * artigen Spalte lag.
+   * Implementierungszeiten aller abgeschlossenen Karten, die mindestens einmal in einer
+   * „In-Progress"-artigen Spalte lagen — je Karte ein Wert. Die Zählung ist deshalb kleiner als die
+   * der Lead Times, sobald eine fertige Karte nie durch eine solche Spalte lief.
    */
-  private static long[] cycleTimes(
+  private static long[] implementationTimes(
       List<Card> workCards, Map<Long, List<CardColumnTransition>> byCard) {
     return workCards.stream()
-        .map(card -> cycleSeconds(card, byCard.getOrDefault(card.requireId(), List.of())))
+        .map(card -> implementationSeconds(card, byCard.getOrDefault(card.requireId(), List.of())))
         .filter(Objects::nonNull)
         .mapToLong(Long::longValue)
         .toArray();
   }
 
-  private static @Nullable Long cycleSeconds(Card card, List<CardColumnTransition> cardTrans) {
-    Instant done = card.movedToDoneAt();
-    if (done == null) {
+  /**
+   * Die Summe aller <em>abgeschlossenen</em> Aufenthalte einer erledigten Karte in „In-Progress"-
+   * artigen Spalten; {@code null}, wenn die Karte offen ist oder keinen solchen Aufenthalt hat.
+   * Nacharbeit zählt mit: Liegt eine Karte ein zweites Mal in In Progress, ist das ebenfalls
+   * Implementierungszeit. Ein noch offener Aufenthalt ({@code durationSeconds == null}) ist nicht
+   * gemessen und geht nicht ein.
+   */
+  private static @Nullable Long implementationSeconds(
+      Card card, List<CardColumnTransition> cardTrans) {
+    if (card.movedToDoneAt() == null) {
       return null;
     }
-    Instant readyEntry =
+    long[] stays =
         cardTrans.stream()
-            .filter(t -> isReadyColumn(t.columnName()))
-            .map(CardColumnTransition::enteredAt)
-            .min(Comparator.naturalOrder())
-            .orElse(null);
-    return readyEntry == null ? null : Duration.between(readyEntry, done).toSeconds();
+            .filter(t -> isProgressColumn(t.columnName()))
+            .map(CardColumnTransition::durationSeconds)
+            .filter(Objects::nonNull)
+            .mapToLong(Long::longValue)
+            .toArray();
+    if (stays.length == 0) {
+      return null;
+    }
+    long sum = 0;
+    for (long stay : stays) {
+      sum += stay;
+    }
+    return sum;
   }
 
   private static List<OutlierCard> outliers(
@@ -191,8 +206,13 @@ public class CardCycleTimeService {
         card.requireId(), card.requireNumber(), card.title(), t.columnName(), dwell);
   }
 
-  private static boolean isReadyColumn(String name) {
-    return name.toLowerCase(Locale.ROOT).contains("ready");
+  /**
+   * Ob eine Spalte für „in Arbeit" steht — dieselbe Namensregel wie die Statusfarben des Frontends
+   * ({@code lib/statusColors.ts}). Boards konfigurieren ihre Spalten selbst; eine feste Spalten-ID
+   * gäbe es nicht für jedes Board.
+   */
+  private static boolean isProgressColumn(String name) {
+    return name.toLowerCase(Locale.ROOT).contains("progress");
   }
 
   private static @Nullable Long average(long... values) {

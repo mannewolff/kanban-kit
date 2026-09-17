@@ -12,6 +12,9 @@ import type { CardLocation } from '../lib/cardLocation'
 import { CardDetailModal, commentFieldProps, parseDependencyInput, parseHerkunftInput } from './CardDetailModal'
 import { SnackbarProvider } from './SnackbarProvider'
 import { MAX_TEXT_LENGTH } from '../lib/textLimits'
+import { ThemeProvider } from '@mui/material/styles'
+import { cssRegel } from '../test/cssRegel'
+import { theme } from '../theme'
 
 vi.mock('../auth/AuthContext', () => ({
   useAuth: () => ({ user: { userId: 7, email: 'a@b.c', displayName: 'A', platformRole: 'USER', memberships: [] } }),
@@ -40,6 +43,14 @@ const linkedBoard: Board = {
  * wird angezeigt (Issue #807), `message` ist der nicht anzeigbare Roh-Fallback.
  */
 const serverfehler = (text: string) => new ApiError(409, 'Conflict', undefined, text)
+
+/**
+ * Zwei echte Zeitpunkte für die Kommentar-Tests (Issue #843). Sie stehen bewusst nur dort, wo ein
+ * Test sie braucht: Die übrigen Fixturen bleiben bei `createdAt: ''` und belegen damit weiter den
+ * Fall ohne darstellbaren Zeitstempel.
+ */
+const ERST = '2026-09-01T08:30:00.000Z'
+const SPAETER = '2026-09-02T09:45:00.000Z'
 
 function makeApis() {
   const commentsApi = {
@@ -142,6 +153,67 @@ describe('CardDetailModal', () => {
 
     await waitFor(() => expect(apis.commentsApi.create).toHaveBeenCalledWith(100, 'Neu'))
     expect(await screen.findByText('Neu')).toBeInTheDocument()
+  })
+
+  it('zeigt den jüngeren Kommentar vor dem älteren', async () => {
+    const apis = makeApis()
+    apis.commentsApi.list = vi.fn().mockResolvedValue([
+      { id: 1, cardId: 100, authorUserId: 7, authorName: 'A', body: 'Älter', createdAt: ERST, updatedAt: ERST },
+      { id: 2, cardId: 100, authorUserId: 7, authorName: 'A', body: 'Jünger', createdAt: SPAETER, updatedAt: SPAETER },
+    ])
+    render(<CardDetailModal card={card} canEdit onClose={vi.fn()} {...apis} />)
+    expect(await screen.findByText('Jünger')).toBeInTheDocument()
+
+    const bodies = screen.getAllByTestId('comment-body')
+    expect(bodies[0]).toHaveTextContent('Jünger')
+    expect(bodies[1]).toHaveTextContent('Älter')
+  })
+
+  it('stellt einen neu angelegten Kommentar an die erste Stelle', async () => {
+    const apis = makeApis()
+    render(<CardDetailModal card={card} canEdit onClose={vi.fn()} {...apis} />)
+    expect(await screen.findByText('Hallo')).toBeInTheDocument()
+
+    fireEvent.change(screen.getByLabelText('Kommentar schreiben'), { target: { value: 'Neu' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Senden' }))
+
+    expect(await screen.findByText('Neu')).toBeInTheDocument()
+    const bodies = screen.getAllByTestId('comment-body')
+    expect(bodies[0]).toHaveTextContent('Neu')
+    expect(bodies[1]).toHaveTextContent('Hallo')
+  })
+
+  it('zeigt den Zeitpunkt eines Kommentars', async () => {
+    const apis = makeApis()
+    apis.commentsApi.list = vi.fn().mockResolvedValue([
+      { id: 1, cardId: 100, authorUserId: 7, authorName: 'A', body: 'Hallo', createdAt: ERST, updatedAt: ERST },
+    ])
+    render(<CardDetailModal card={card} canEdit onClose={vi.fn()} {...apis} />)
+
+    const meta = await screen.findByTestId('comment-meta')
+    expect(meta).toHaveTextContent(new Date(ERST).toLocaleString('de-DE'))
+    expect(meta).not.toHaveTextContent('bearbeitet')
+  })
+
+  it('weist einen nachträglich bearbeiteten Kommentar als bearbeitet aus', async () => {
+    const apis = makeApis()
+    apis.commentsApi.list = vi.fn().mockResolvedValue([
+      { id: 1, cardId: 100, authorUserId: 7, authorName: 'A', body: 'Hallo', createdAt: ERST, updatedAt: SPAETER },
+    ])
+    render(<CardDetailModal card={card} canEdit onClose={vi.fn()} {...apis} />)
+
+    const meta = await screen.findByTestId('comment-meta')
+    expect(meta).toHaveTextContent(`bearbeitet ${new Date(SPAETER).toLocaleString('de-DE')}`)
+  })
+
+  it('zeigt bei fehlendem Zeitstempel keinen Zeitpunkt und kein „Invalid Date"', async () => {
+    // Die Standard-Fixtur trägt genau diesen Fall: createdAt und updatedAt sind leer.
+    const apis = makeApis()
+    render(<CardDetailModal card={card} canEdit onClose={vi.fn()} {...apis} />)
+    expect(await screen.findByText('Hallo')).toBeInTheDocument()
+
+    expect(screen.queryByTestId('comment-meta')).not.toBeInTheDocument()
+    expect(screen.queryByText(/Invalid Date/)).not.toBeInTheDocument()
   })
 
   it('legt eine aktive Karte über den Detail-Button in den Ideen-Pool', async () => {
@@ -2598,4 +2670,66 @@ describe('CardDetailModal — interaktiver Status-Chip', () => {
       expect(screen.queryByText(/Anläufe konnten nicht geladen/)).not.toBeInTheDocument()
     })
   })
+})
+
+describe('CardDetailModal — drei Blöcke (AK 13, #958)', () => {
+  beforeEach(() => {
+    URL.createObjectURL = vi.fn(() => 'blob:preview')
+    URL.revokeObjectURL = vi.fn()
+  })
+
+  const renderThemed = (props: Partial<ComponentProps<typeof CardDetailModal>> = {}) => {
+    const apis = makeApis()
+    render(
+      <ThemeProvider theme={theme}>
+        <CardDetailModal card={card} canEdit columnName="In Progress" onClose={vi.fn()} {...apis} {...props} />
+      </ThemeProvider>,
+    )
+    return apis
+  }
+
+  it('gliedert das Kartenblatt in Beschreibung, Zuordnung und Verlauf', async () => {
+    renderThemed()
+
+    const beschreibung = screen.getByRole('region', { name: 'Beschreibung und Details' })
+    const zuordnung = screen.getByRole('region', { name: 'Zuordnung' })
+    const verlauf = screen.getByRole('region', { name: 'Verlauf' })
+
+    // Welche Felder in welchen Block gehören, legt der Plan fest (#932): nicht zwei beliebige Blöcke.
+    expect(await within(beschreibung).findByRole('heading', { name: 'Titel' })).toBeInTheDocument()
+    expect(within(beschreibung).getByLabelText('Abhängigkeiten')).toBeInTheDocument()
+    expect(within(zuordnung).getByLabelText('Zuständige')).toBeInTheDocument()
+    expect(within(verlauf).getByLabelText('Kommentar schreiben')).toBeInTheDocument()
+    expect(within(verlauf).getByText('Anhänge')).toBeInTheDocument()
+    expect(within(verlauf).getByText('Aktivität')).toBeInTheDocument()
+    expect(await within(verlauf).findByText('Hallo')).toBeInTheDocument()
+  })
+
+  it('behält im Bearbeiten-Modus Beschreibung und Zuordnung, ohne Verlauf wie bisher', async () => {
+    renderThemed()
+    await klickeBearbeiten()
+
+    expect(screen.getByRole('region', { name: 'Beschreibung und Details' })).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Zuordnung' })).toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Verlauf' })).not.toBeInTheDocument()
+  })
+
+  it('lässt bei einem Vorhaben den leeren Zuordnungsblock weg', async () => {
+    renderThemed({ card: { ...card, type: 'EPIC' } })
+
+    expect(await screen.findByRole('region', { name: 'Beschreibung und Details' })).toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Zuordnung' })).not.toBeInTheDocument()
+  })
+
+  it.each(['Beschreibung und Details', 'Zuordnung', 'Verlauf'])(
+    'malt den Block „%s" mit Fläche und Haarlinie aus den Tokens, ohne festen Hellwert',
+    (name) => {
+      renderThemed()
+
+      const regel = cssRegel(screen.getByRole('region', { name }))
+      expect(regel).toContain('background-color: var(--mb-palette-background-paper)')
+      expect(regel).toContain('border-color: var(--mb-palette-divider)')
+      expect(regel).not.toMatch(/#[0-9A-Fa-f]{3,8}\b/)
+    },
+  )
 })

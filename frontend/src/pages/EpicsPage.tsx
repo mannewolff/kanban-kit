@@ -40,7 +40,7 @@ import { aggregateMarks, countKinds, selectableEpics, sortEpics, visibleEpics } 
 import { useBoardRole } from '../lib/useBoardRole'
 import { useProjectName } from '../lib/useProjectName'
 import { useRefetchOnFocus } from '../lib/useRefetchOnFocus'
-import { CARD_LIFT, CARD_SHADOW, CARD_SHADOW_HOVER, PANEL_RADIUS } from '../theme'
+import { CARD_LIFT, CARD_SHADOW, CARD_SHADOW_HOVER, PANEL_RADIUS, TABELLENZIFFERN } from '../theme'
 
 /**
  * Zeilenhöhe eines Marken-Chips auf der Vorhaben-Kachel.
@@ -361,11 +361,8 @@ export function EpicsPage() {
                 borderRadius: `${PANEL_RADIUS}px`,
                 boxShadow: CARD_SHADOW,
                 transition: 'box-shadow .2s ease, transform .2s ease',
+                // Bei abgestellter Bewegung setzt die zentrale Regel in `theme.ts` die Dauer auf null (#953).
                 '&:hover': { boxShadow: CARD_SHADOW_HOVER, transform: `translateY(${CARD_LIFT}px)` },
-                '@media (prefers-reduced-motion: reduce)': {
-                  transition: 'none',
-                  '&:hover': { boxShadow: CARD_SHADOW_HOVER, transform: 'none' },
-                },
               }}
             >
               <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
@@ -392,7 +389,7 @@ export function EpicsPage() {
                     Mitglieder, und sobald dieselbe Kachel Anforderungen und Plaene ausweist, waere
                     "n Arbeitspakete fertig" schlicht falsch. Eine nur bedingte Umbenennung waere
                     kein Fortschritt — sie liesse die Bestandstests gruen. */}
-                <Typography variant="caption" color="text.secondary">
+                <Typography variant="caption" color="text.secondary" sx={TABELLENZIFFERN}>
                   {epic.done} von {epic.total} fertig
                 </Typography>
                 {/* Kein Rechte-Check (Plan #703, E8): Ausblenden verändert nichts am Server, und

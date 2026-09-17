@@ -2,8 +2,11 @@ import { describe, expect, it } from 'vitest'
 import type { VerbrauchAngaben, VerbrauchKennzahlen } from '../api/nightRunUsage'
 import {
   KEIN_LAUF_TEXT,
+  kartenText,
+  laeufeText,
+  nachtKurz,
   vergleichMitVorzeitraum,
-  vorzeitraumBeschriftung,
+  vorzeitraumName,
   zeitraumBeschriftung,
   zeitraumFall,
   zeitraumHinweis,
@@ -68,21 +71,32 @@ describe('zeitraumBeschriftung', () => {
   })
 })
 
-describe('vorzeitraumBeschriftung', () => {
+describe('vorzeitraumName', () => {
   it('nennt je Art den Vorzeitraum beim Namen', () => {
-    expect(
-      vorzeitraumBeschriftung(
-        kennzahlen({ type: 'DAY', firstDay: '2026-09-14', lastDay: '2026-09-14' }),
-      ),
-    ).toBe('Vornacht: Nacht vom 14.09.2026 auf den 15.09.2026')
-    expect(
-      vorzeitraumBeschriftung(
-        kennzahlen({ type: 'WEEK', firstDay: '2026-08-31', lastDay: '2026-09-06' }),
-      ),
-    ).toBe('Vorwoche: Woche vom 31.08.2026 bis 06.09.2026')
-    expect(vorzeitraumBeschriftung(kennzahlen({ type: 'MONTH', firstDay: '2026-07-01' }))).toBe(
-      'Vormonat: Juli 2026',
-    )
+    expect(vorzeitraumName(kennzahlen({ type: 'DAY' }))).toBe('Vornacht')
+    expect(vorzeitraumName(kennzahlen({ type: 'WEEK' }))).toBe('Vorwoche')
+    expect(vorzeitraumName(kennzahlen({ type: 'MONTH' }))).toBe('Vormonat')
+  })
+})
+
+describe('laeufeText und kartenText', () => {
+  it('setzt den Einzahl- und den Mehrzahlfall', () => {
+    expect(laeufeText(1)).toBe('1 Lauf')
+    expect(laeufeText(0)).toBe('0 Läufe')
+    expect(laeufeText(7)).toBe('7 Läufe')
+    expect(kartenText(1)).toBe('1 Karte')
+    expect(kartenText(0)).toBe('0 Karten')
+    expect(kartenText(54)).toBe('54 Karten')
+  })
+})
+
+describe('nachtKurz', () => {
+  it('nennt Wochentag, Beginn und Folgetag ohne Jahr', () => {
+    expect(nachtKurz('2026-09-08')).toBe('Di 08.09. → 09.09.')
+  })
+
+  it('zaehlt ueber den Monatswechsel richtig weiter', () => {
+    expect(nachtKurz('2026-08-31')).toBe('Mo 31.08. → 01.09.')
   })
 })
 
