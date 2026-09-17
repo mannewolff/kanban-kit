@@ -7,6 +7,41 @@ Versionierung folgt der dreiteiligen Betriebsversion (siehe [RELEASING.md](RELEA
 Einträge je Version sind ein automatischer Auszug der Commit-Titel seit dem letzten Release,
 erzeugt von `scripts/gen-changelog.mjs`.
 
+## [2.0.0] – 2026-09-17
+
+- chore: v1.44.3
+- test: Lauftitel der Nachtlauf-Seite zeitzonenfest pruefen ([#988](https://github.com/mannewolff/kanban-kit/issues/988))
+- chore: v1.44.2
+- Labels über die Mehrfachauswahl des Boards setzen ([#994](https://github.com/mannewolff/kanban-kit/issues/994))
+- Schiene behält den Board-Kontext auf Projektseiten ([#990](https://github.com/mannewolff/kanban-kit/issues/990))
+- Favicon und Touch-Icon mit dem Kupfer-Mal ([#989](https://github.com/mannewolff/kanban-kit/issues/989))
+- Nachtlauf-Seite: einzelner Lauf kompakt im Leitstand-Stil ([#988](https://github.com/mannewolff/kanban-kit/issues/988))
+- Nachtlauf-Seite: Verbrauch als Kacheln im Leitstand-Stil ([#987](https://github.com/mannewolff/kanban-kit/issues/987))
+- Werkzeugleiste: Filter-Wähler ohne Überschrift ([#986](https://github.com/mannewolff/kanban-kit/issues/986))
+- Herkunftsbaum: gruener Haken ganz links ([#985](https://github.com/mannewolff/kanban-kit/issues/985))
+- Leitstand: Platte „Liegengeblieben" entfernen ([#983](https://github.com/mannewolff/kanban-kit/issues/983))
+- Leitstand: Implementierungszeit statt Zykluszeit ([#982](https://github.com/mannewolff/kanban-kit/issues/982))
+- Kommentare im Kartendialog: neuester zuerst, mit Zeitstempel ([#843](https://github.com/mannewolff/kanban-kit/issues/843))
+- docs: Mockups Nachtlauf-Verbrauch und einzelner Lauf im Leitstand-Stil (Issues #987, #988)
+- CLAUDE.md: Java-Version und Issue-Tracker nachfuehren ([#981](https://github.com/mannewolff/kanban-kit/issues/981))
+- Board, Liste und Kartenblatt nach dem Leitstand-Entwurf ([#980](https://github.com/mannewolff/kanban-kit/issues/980))
+- Leitstand als Hauptansicht des Boards ([#979](https://github.com/mannewolff/kanban-kit/issues/979))
+- Kupfer-Rahmen: Palette, Schriften, Tiefe, Schiene und Kopf ([#978](https://github.com/mannewolff/kanban-kit/issues/978))
+- Designquelle auf Kupferwarte umstellen (Issue #978, Teil 1)
+- chore: v1.44.1
+- Designbeschreibung abgleichen und Abnahme vorbereiten ([#961](https://github.com/mannewolff/kanban-kit/issues/961))
+- Anmeldeseiten, Dialoge, Formulare und Fehlermeldungen ([#960](https://github.com/mannewolff/kanban-kit/issues/960))
+- Kennzahlen mit Bezugsgroesse und Stand der letzten Nacht ([#959](https://github.com/mannewolff/kanban-kit/issues/959))
+- Kartenblatt in drei Bloecken ([#958](https://github.com/mannewolff/kanban-kit/issues/958))
+- Listenansicht: Dichte, Ziffern, Zeilensortierung ([#957](https://github.com/mannewolff/kanban-kit/issues/957))
+- Board: Belastungsgrenze, bewegte Karte, Ablageflaeche ([#956](https://github.com/mannewolff/kanban-kit/issues/956))
+- Shell: Navigation, Fokus und Mindestbreite ([#955](https://github.com/mannewolff/kanban-kit/issues/955))
+- Nachtlauf-Ausnahme bleibt auch im Dunkeln hell ([#954](https://github.com/mannewolff/kanban-kit/issues/954))
+- Zentrale Regeln: Bewegung, Fokus, Ziffern, Ausdruck ([#953](https://github.com/mannewolff/kanban-kit/issues/953))
+- Status- und Vorhaben-Farben in beiden Erscheinungsbildern ([#952](https://github.com/mannewolff/kanban-kit/issues/952))
+- Theme traegt zwei Erscheinungsbilder ([#951](https://github.com/mannewolff/kanban-kit/issues/951))
+- Kontrastrechner als eigenes Lib-Modul ([#950](https://github.com/mannewolff/kanban-kit/issues/950))
+
 ## [1.44.0] – 2026-09-16
 
 - chore: v1.43.2
