@@ -74,8 +74,6 @@
       }
     }
   },
-
-  },
   "toolbox": {
     "host": "https://kanban.mwolff.org",
     "tokenFile": ".claude/toolbox.cli/tbx.token",
