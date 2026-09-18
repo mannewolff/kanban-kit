@@ -411,7 +411,9 @@ export function BoardView({
   // die `dataTransfer`-Nutzlast.
   const [dragCardId, setDragCardId] = useState<number | null>(null)
   const [ablageSpalteId, setAblageSpalteId] = useState<number | null>(null)
-  const zugTakt = useRef<ReturnType<typeof setTimeout>>(undefined)
+  // Ohne Argument: Unter `@types/react` 18.3 wählt `useRef<T>()` dieselbe Überladung, der Typ
+  // bleibt `MutableRefObject<T | undefined>` (S4623). React 19 verlangt das Argument wieder.
+  const zugTakt = useRef<ReturnType<typeof setTimeout>>()
   useEffect(() => () => clearTimeout(zugTakt.current), [])
 
   const zugBeginnen = (e: React.DragEvent, cardId: number) => {

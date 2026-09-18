@@ -32,8 +32,9 @@ export function karteSx(options: {
   /** Die Karte wird gerade gezogen — an ihrer Stelle bleibt die Vertiefung (siehe {@link PLATZHALTER_SX}). */
   bewegt?: boolean
 } = {}): SxProps<Theme> & Record<string, unknown> {
+  const randfarbe = options.gewaehlt ? `color-mix(in srgb, ${KUPFER} 52%, ${RAND})` : RAND
   return {
-    border: `1px solid ${options.gewaehlt ? `color-mix(in srgb, ${KUPFER} 52%, ${RAND})` : RAND}`,
+    border: `1px solid ${randfarbe}`,
     borderRadius: `${CARD_RADIUS}px`,
     background: options.gewaehlt ? AUSWAHL : `linear-gradient(180deg, ${PLATTE_HOCH}, ${PLATTE})`,
     boxShadow: CARD_SHADOW,

@@ -32,6 +32,7 @@ import { useBoardRole } from '../lib/useBoardRole'
 import { useProjectName } from '../lib/useProjectName'
 import { formatDueDate, isOverdue } from '../lib/dueDate'
 import { ARCHIVED_STATUS_COLOR, statusColors } from '../lib/statusColors'
+import { kartenText } from '../lib/verbrauchZeitraum'
 import {
   ETIKETT,
   GRUND_TIEF,
@@ -174,7 +175,7 @@ function GruppenKopf({ epic, zahl }: Readonly<{ epic: Epic | null; zahl: number 
         {name}
       </Box>
       <Box component="span" sx={{ ...ZAHL, fontSize: 11, color: TEXT_SCHWACH }}>
-        {epic === null ? (zahl === 1 ? '1 Karte' : `${zahl} Karten`) : `${epic.done} von ${epic.total} fertig`}
+        {epic === null ? kartenText(zahl) : `${epic.done} von ${epic.total} fertig`}
       </Box>
       {epic !== null && epic.total > 0 && (
         <Box sx={{ width: 96, height: 5, borderRadius: '3px', ml: 'auto', bgcolor: `color-mix(in srgb, ${GRUND_TIEF} 70%, transparent)`, boxShadow: SCHATTEN_NUTE, overflow: 'hidden' }}>
@@ -207,7 +208,9 @@ export function BoardListPage() {
   // Darstellung der bewegten Zeile (AK 7, AK 8, #957): einen Takt nach Ziehbeginn gesetzt, damit
   // das Ziehbild des Browsers die Zeile zeigt und nicht schon den Platzhalter.
   const [bewegteZeile, setBewegteZeile] = useState<number | null>(null)
-  const zugTakt = useRef<ReturnType<typeof setTimeout>>(undefined)
+  // Ohne Argument: Unter `@types/react` 18.3 wählt `useRef<T>()` dieselbe Überladung, der Typ
+  // bleibt `MutableRefObject<T | undefined>` (S4623). React 19 verlangt das Argument wieder.
+  const zugTakt = useRef<ReturnType<typeof setTimeout>>()
   useEffect(() => () => clearTimeout(zugTakt.current), [])
   const [colDrag, setColDrag] = useState<ColumnKey | null>(null)
   const [colOver, setColOver] = useState<ColumnKey | null>(null)
@@ -658,165 +661,163 @@ export function BoardListPage() {
           Keine Karten
         </Typography>
       ) : (
-        <>
-          <Box
-            component="section"
-            aria-label="Karten als Liste"
-            sx={{ borderRadius: `${PANEL_RADIUS}px`, border: `1px solid ${RAND}`, bgcolor: PLATTE, boxShadow: SCHATTEN_PLATTE, overflow: 'clip' }}
-          >
-          {/* Kopfzeile: erhaben und mitlaufend (Entwurf `.tafel thead th`, Z. 880–893); Spalten per Drag
-              umsortierbar (Excel-artig), per Klick nach Inhalt sortierbar. */}
-          <Box
-            data-testid="list-header"
-            sx={{ display: 'flex', alignItems: 'center', gap: 1.5, px: 1.5, py: '10px', position: 'sticky', top: 'var(--app-content-top, 0px)', zIndex: 5, background: `linear-gradient(180deg, ${PLATTE_HOCH}, ${PLATTE_FUSS})`, borderBottom: `1px solid ${RAND}` }}
-          >
-            <Box sx={{ width: 20, flexShrink: 0 }} />
-            {order.map((key) => (
-              <Box
-                key={key}
-                draggable
-                role="button"
-                tabIndex={0}
-                aria-label={headerLabel(key)}
-                // Der Guard entspricht dem `resizingRef` beim Breiten-Ziehen (siehe `startResize`):
-                // Ein HTML5-Drag löst zwar üblicherweise keinen Click aus, aber die Sortierung soll
-                // sich darauf nicht verlassen. Kein zweites Muster für dasselbe Problem.
-                onClick={() => { if (!headerDragRef.current) toggleSort(key) }}
-                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleSort(key) } }}
-                onDragStart={(e) => { e.stopPropagation(); headerDragRef.current = true; setColDrag(key) }}
-                onDragOver={(e) => { if (colDrag && colDrag !== key) { e.preventDefault(); setColOver(key) } }}
-                onDrop={(e) => { e.preventDefault(); if (colDrag) { reorderColumns(colDrag, key) } setColDrag(null); setColOver(null) }}
-                onDragEnd={() => {
-                  setColDrag(null)
-                  setColOver(null)
-                  // Flag erst nach einem etwaigen Click-Event zurücksetzen — wie beim Resize.
-                  setTimeout(() => { headerDragRef.current = false }, 0)
-                }}
-                sx={{
-                  ...cellSx(key),
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: key === 'number' ? 'flex-end' : undefined,
-                  cursor: 'grab',
-                  userSelect: 'none',
-                  borderBottom: '2px solid',
-                  borderColor: colOver === key ? KUPFER : 'transparent',
-                }}
-              >
-                {key === 'excerpt' && (
-                  <Box
-                    role="separator"
-                    aria-label="Beschreibung-Spalte breiter ziehen"
-                    onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); startResize(e) }}
-                    onDragStart={(e) => e.preventDefault()}
-                    onClick={(e) => e.stopPropagation()}
-                    sx={{
-                      alignSelf: 'stretch',
-                      width: '6px',
-                      flexShrink: 0,
-                      mr: 0.5,
-                      cursor: 'col-resize',
-                      borderRight: '2px solid',
-                      borderColor: 'divider',
-                      '&:hover': { borderColor: 'primary.main' },
-                    }}
-                  />
-                )}
-                <Typography component="span" sx={{ ...ETIKETT, fontStretch: '116%', letterSpacing: '.13em', color: sort?.key === key ? KUPFER : TEXT_SCHWACH }}>
-                  {COLUMN_META[key].label}
-                </Typography>
-                {sort?.key === key &&
-                  (sort.dir === 'asc'
-                    ? <ArrowUpwardIcon fontSize="inherit" sx={{ ml: 0.5, color: KUPFER }} />
-                    : <ArrowDownwardIcon fontSize="inherit" sx={{ ml: 0.5, color: KUPFER }} />)}
-              </Box>
-            ))}
-          </Box>
+        <Box
+          component="section"
+          aria-label="Karten als Liste"
+          sx={{ borderRadius: `${PANEL_RADIUS}px`, border: `1px solid ${RAND}`, bgcolor: PLATTE, boxShadow: SCHATTEN_PLATTE, overflow: 'clip' }}
+        >
+        {/* Kopfzeile: erhaben und mitlaufend (Entwurf `.tafel thead th`, Z. 880–893); Spalten per Drag
+            umsortierbar (Excel-artig), per Klick nach Inhalt sortierbar. */}
+        <Box
+          data-testid="list-header"
+          sx={{ display: 'flex', alignItems: 'center', gap: 1.5, px: 1.5, py: '10px', position: 'sticky', top: 'var(--app-content-top, 0px)', zIndex: 5, background: `linear-gradient(180deg, ${PLATTE_HOCH}, ${PLATTE_FUSS})`, borderBottom: `1px solid ${RAND}` }}
+        >
+          <Box sx={{ width: 20, flexShrink: 0 }} />
+          {order.map((key) => (
+            <Box
+              key={key}
+              draggable
+              role="button"
+              tabIndex={0}
+              aria-label={headerLabel(key)}
+              // Der Guard entspricht dem `resizingRef` beim Breiten-Ziehen (siehe `startResize`):
+              // Ein HTML5-Drag löst zwar üblicherweise keinen Click aus, aber die Sortierung soll
+              // sich darauf nicht verlassen. Kein zweites Muster für dasselbe Problem.
+              onClick={() => { if (!headerDragRef.current) toggleSort(key) }}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleSort(key) } }}
+              onDragStart={(e) => { e.stopPropagation(); headerDragRef.current = true; setColDrag(key) }}
+              onDragOver={(e) => { if (colDrag && colDrag !== key) { e.preventDefault(); setColOver(key) } }}
+              onDrop={(e) => { e.preventDefault(); if (colDrag) { reorderColumns(colDrag, key) } setColDrag(null); setColOver(null) }}
+              onDragEnd={() => {
+                setColDrag(null)
+                setColOver(null)
+                // Flag erst nach einem etwaigen Click-Event zurücksetzen — wie beim Resize.
+                setTimeout(() => { headerDragRef.current = false }, 0)
+              }}
+              sx={{
+                ...cellSx(key),
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: key === 'number' ? 'flex-end' : undefined,
+                cursor: 'grab',
+                userSelect: 'none',
+                borderBottom: '2px solid',
+                borderColor: colOver === key ? KUPFER : 'transparent',
+              }}
+            >
+              {key === 'excerpt' && (
+                <Box
+                  role="separator"
+                  aria-label="Beschreibung-Spalte breiter ziehen"
+                  onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); startResize(e) }}
+                  onDragStart={(e) => e.preventDefault()}
+                  onClick={(e) => e.stopPropagation()}
+                  sx={{
+                    alignSelf: 'stretch',
+                    width: '6px',
+                    flexShrink: 0,
+                    mr: 0.5,
+                    cursor: 'col-resize',
+                    borderRight: '2px solid',
+                    borderColor: 'divider',
+                    '&:hover': { borderColor: 'primary.main' },
+                  }}
+                />
+              )}
+              <Typography component="span" sx={{ ...ETIKETT, fontStretch: '116%', letterSpacing: '.13em', color: sort?.key === key ? KUPFER : TEXT_SCHWACH }}>
+                {COLUMN_META[key].label}
+              </Typography>
+              {sort?.key === key &&
+                (sort.dir === 'asc'
+                  ? <ArrowUpwardIcon fontSize="inherit" sx={{ ml: 0.5, color: KUPFER }} />
+                  : <ArrowDownwardIcon fontSize="inherit" sx={{ ml: 0.5, color: KUPFER }} />)}
+            </Box>
+          ))}
+        </Box>
 
-          {/* Dichte (AK 12, Plan #932 E16 a): Die Liste ist keine MUI-Tabelle, ihre Dichte steht deshalb
-              hier. Vor #957 zeigte sie auf 1440 x 900 13 Zeilen bei 8 px Polsterung und 6 px Abstand. */}
-          <Stack spacing={0.25} useFlexGap data-testid="listen-zeilen">
-            {gruppen.map((gruppe) => [
-              gruppierung === 'vorhaben' && <GruppenKopf key={`gruppe-${gruppe.epic?.id ?? 'ohne'}`} epic={gruppe.epic} zahl={gruppe.karten.length} />,
-              ...gruppe.karten.map((card) => (
-              <Box
-                key={card.id}
-                role="button"
-                tabIndex={0}
-                aria-label={`Detail öffnen: ${card.title}`}
-                draggable={sortable}
-                onDragStart={(e) => {
-                  setRowDrag(card.id)
-                  e.dataTransfer.setData('text/plain', String(card.id))
-                  clearTimeout(zugTakt.current)
-                  zugTakt.current = setTimeout(() => setBewegteZeile(card.id), 0)
-                }}
-                onDragOver={(e) => { if (validRowDrop(card)) { e.preventDefault(); setRowOver(card.id) } }}
-                onDrop={(e) => { e.preventDefault(); void onRowDrop(card) }}
-                onDragEnd={() => {
-                  clearTimeout(zugTakt.current)
-                  setRowDrag(null)
-                  setRowOver(null)
-                  setBewegteZeile(null)
-                }}
-                data-zieh-zustand={bewegteZeile === card.id ? 'bewegt' : undefined}
-                data-ablage={rowOver === card.id ? 'aktiv' : undefined}
-                onClick={() => { if (!resizingRef.current) setDetailCard(card) }}
-                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setDetailCard(card) } }}
-                sx={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 1.5,
-                  // Papierfläche als Token: schaltet mit dem Erscheinungsbild (#957).
-                  // Zeile der Tafel (Entwurf `.tafel td`, Z. 900–905): Haarlinie unten statt eigenem
-                  // Kasten; der Status steht als Plakette in der Zeile, nicht als Kante.
-                  bgcolor: 'background.paper',
-                  borderBottom: `1px solid color-mix(in srgb, ${RAND} 50%, transparent)`,
-                  px: 1.5,
-                  py: 0.25,
-                  cursor: 'pointer',
-                  userSelect: 'none',
-                  transition: 'background 120ms ease',
-                  '&:hover': { background: `color-mix(in srgb, ${PLATTE_HOCH} 80%, ${KUPFER_SCHIMMER})` },
-                  // Dieselben Bausteine wie auf dem Board: Platzhalter an der verlassenen Stelle,
-                  // Ablagefläche an der Zeile, an deren Platz die bewegte landet.
-                  ...(bewegteZeile === card.id ? PLATZHALTER_SX : {}),
-                  ...ablageflaecheSx(rowOver === card.id),
-                }}
-              >
-                {sortable && (
-                  <DragIndicatorIcon
-                    fontSize="small"
-                    aria-label="Reihenfolge ändern"
-                    sx={{ flexShrink: 0, color: 'action.disabled' }}
-                  />
-                )}
-                {order.map((key) => (
-                  <Box key={key} sx={{ ...cellSx(key), overflow: 'hidden' }}>
-                    {renderCell(key, card)}
-                  </Box>
-                ))}
-                {canEdit && card.archived && (
-                  <Tooltip title="Wiederherstellen">
-                    <IconButton
-                      size="small"
-                      aria-label={`Karte ${card.title} wiederherstellen`}
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        void restoreCard(card.id)
-                      }}
-                      sx={{ flexShrink: 0 }}
-                    >
-                      <RestoreOutlinedIcon fontSize="small" />
-                    </IconButton>
-                  </Tooltip>
-                )}
-              </Box>
-              )),
-            ])}
-          </Stack>
-          </Box>
-        </>
+        {/* Dichte (AK 12, Plan #932 E16 a): Die Liste ist keine MUI-Tabelle, ihre Dichte steht deshalb
+            hier. Vor #957 zeigte sie auf 1440 x 900 13 Zeilen bei 8 px Polsterung und 6 px Abstand. */}
+        <Stack spacing={0.25} useFlexGap data-testid="listen-zeilen">
+          {gruppen.map((gruppe) => [
+            gruppierung === 'vorhaben' && <GruppenKopf key={`gruppe-${gruppe.epic?.id ?? 'ohne'}`} epic={gruppe.epic} zahl={gruppe.karten.length} />,
+            ...gruppe.karten.map((card) => (
+            <Box
+              key={card.id}
+              role="button"
+              tabIndex={0}
+              aria-label={`Detail öffnen: ${card.title}`}
+              draggable={sortable}
+              onDragStart={(e) => {
+                setRowDrag(card.id)
+                e.dataTransfer.setData('text/plain', String(card.id))
+                clearTimeout(zugTakt.current)
+                zugTakt.current = setTimeout(() => setBewegteZeile(card.id), 0)
+              }}
+              onDragOver={(e) => { if (validRowDrop(card)) { e.preventDefault(); setRowOver(card.id) } }}
+              onDrop={(e) => { e.preventDefault(); void onRowDrop(card) }}
+              onDragEnd={() => {
+                clearTimeout(zugTakt.current)
+                setRowDrag(null)
+                setRowOver(null)
+                setBewegteZeile(null)
+              }}
+              data-zieh-zustand={bewegteZeile === card.id ? 'bewegt' : undefined}
+              data-ablage={rowOver === card.id ? 'aktiv' : undefined}
+              onClick={() => { if (!resizingRef.current) setDetailCard(card) }}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setDetailCard(card) } }}
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 1.5,
+                // Papierfläche als Token: schaltet mit dem Erscheinungsbild (#957).
+                // Zeile der Tafel (Entwurf `.tafel td`, Z. 900–905): Haarlinie unten statt eigenem
+                // Kasten; der Status steht als Plakette in der Zeile, nicht als Kante.
+                bgcolor: 'background.paper',
+                borderBottom: `1px solid color-mix(in srgb, ${RAND} 50%, transparent)`,
+                px: 1.5,
+                py: 0.25,
+                cursor: 'pointer',
+                userSelect: 'none',
+                transition: 'background 120ms ease',
+                '&:hover': { background: `color-mix(in srgb, ${PLATTE_HOCH} 80%, ${KUPFER_SCHIMMER})` },
+                // Dieselben Bausteine wie auf dem Board: Platzhalter an der verlassenen Stelle,
+                // Ablagefläche an der Zeile, an deren Platz die bewegte landet.
+                ...(bewegteZeile === card.id ? PLATZHALTER_SX : {}),
+                ...ablageflaecheSx(rowOver === card.id),
+              }}
+            >
+              {sortable && (
+                <DragIndicatorIcon
+                  fontSize="small"
+                  aria-label="Reihenfolge ändern"
+                  sx={{ flexShrink: 0, color: 'action.disabled' }}
+                />
+              )}
+              {order.map((key) => (
+                <Box key={key} sx={{ ...cellSx(key), overflow: 'hidden' }}>
+                  {renderCell(key, card)}
+                </Box>
+              ))}
+              {canEdit && card.archived && (
+                <Tooltip title="Wiederherstellen">
+                  <IconButton
+                    size="small"
+                    aria-label={`Karte ${card.title} wiederherstellen`}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      void restoreCard(card.id)
+                    }}
+                    sx={{ flexShrink: 0 }}
+                  >
+                    <RestoreOutlinedIcon fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+              )}
+            </Box>
+            )),
+          ])}
+        </Stack>
+        </Box>
       )}
 
       {detailCard && (

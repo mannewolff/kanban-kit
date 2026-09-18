@@ -1166,6 +1166,6 @@ describe('AppShell Tastatur (AK 15, #955)', () => {
         expect(cssRegelMit(aktiv, '.Mui-focusVisible')).toMatch(/outline: 2px solid var\(--mb-palette-primary-main/)
       }
     }
-    expect([...erreicht].length).toBe(ziele.length)
+    expect([...erreicht]).toHaveLength(ziele.length)
   })
 })
