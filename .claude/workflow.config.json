@@ -62,6 +62,10 @@
       "kostenUsd": 50,
       "korrekturrunden": 2
     },
+    "modelle": [
+       "claude-opus-5",
+       "claude-sonnet-5"
+    ],
     "stufen": {
       "schwer": {
         "modell": "claude-opus-5"
