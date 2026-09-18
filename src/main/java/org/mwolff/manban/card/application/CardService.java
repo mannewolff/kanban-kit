@@ -1814,6 +1814,15 @@ public class CardService {
    */
   @Transactional(readOnly = true)
   public List<CardActivity> listActivity(long userId, long cardId) {
+    return doListActivity(userId, cardId);
+  }
+
+  /**
+   * Der Kern ohne Annotation, damit ihn {@link #listActivityViews(long, long)} rufen kann, ohne
+   * über {@code this} an einer {@code @Transactional}-Methode vorbeizugehen (Sonar java:S6809) —
+   * dasselbe Muster wie {@code doArchive} und {@code doCreateEpic}.
+   */
+  private List<CardActivity> doListActivity(long userId, long cardId) {
     Card card = cards.findById(cardId).orElseThrow(CardNotFoundException::new);
     permissions.requireMembership(userId, card.projectId());
     return activity.findByCardId(cardId);
@@ -1826,7 +1835,7 @@ public class CardService {
    */
   @Transactional(readOnly = true)
   public List<ActivityView> listActivityViews(long userId, long cardId) {
-    return listActivity(userId, cardId).stream().map(CardService::activityView).toList();
+    return doListActivity(userId, cardId).stream().map(CardService::activityView).toList();
   }
 
   private static ActivityView activityView(CardActivity a) {

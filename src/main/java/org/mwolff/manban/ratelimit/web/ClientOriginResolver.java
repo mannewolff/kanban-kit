@@ -109,7 +109,7 @@ public class ClientOriginResolver {
   private static @Nullable InetAddress parseLiteral(String raw) {
     try {
       return InetAddress.ofLiteral(stripPort(raw));
-    } catch (IllegalArgumentException unusable) {
+    } catch (IllegalArgumentException _) {
       return null;
     }
   }
