@@ -386,7 +386,7 @@ export function abbruchgruende(zaehler: NightRunErrorClassCounts): Klassenzeile[
   const eintraege = (Object.entries(zaehler) as Array<[NightRunErrorClass, number]>).filter(([, zahl]) => zahl > 0)
   const max = Math.max(0, ...eintraege.map(([, zahl]) => zahl))
   return eintraege
-    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .toSorted((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
     .map(([klasse, zahl]) => ({
       klasse,
       zahl,

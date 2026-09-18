@@ -297,13 +297,14 @@ function Herkunft({ lauf }: Readonly<{ lauf: NightRunView }>) {
     lauf.origin === 'TOKEN'
       ? `Eingeliefert von der ${modusName(lauf.mode)} um ${zeitpunkt} — automatisch, ohne Handgriff im Browser.`
       : `Im Browser hochgeladen um ${zeitpunkt}.`
+  const vorgaengeText = lauf.items.length === 1 ? '1 Vorgang' : `${lauf.items.length} Vorgänge`
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', fontSize: 12, color: 'text.secondary' }}>
       <Led melder={laufMelder(lauf) === 'stahl' ? 'stahl' : 'gruen'} />
       <span>{text}</span>
       <Box sx={{ ml: 'auto', display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
         {lauf.tokenName && <Zustand>{`Token ${lauf.tokenName}`}</Zustand>}
-        <Zustand>{`${lauf.items.length === 1 ? '1 Vorgang' : `${lauf.items.length} Vorgänge`} · ${lauf.unparsedCount} ungedeutete Zeilen`}</Zustand>
+        <Zustand>{`${vorgaengeText} · ${lauf.unparsedCount} ungedeutete Zeilen`}</Zustand>
       </Box>
     </Box>
   )

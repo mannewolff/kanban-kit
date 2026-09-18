@@ -149,6 +149,7 @@ const DELTA_FARBE: Record<DeltaArt, string | undefined> = {
 /** Delta-Marke (Entwurf `.delta`, Z. 509–522): eingelassen, grün für gut, zinnober für schlecht. */
 export function DeltaMarke({ art, children }: Readonly<{ art: DeltaArt; children: ReactNode }>) {
   const farbe = DELTA_FARBE[art]
+  const randFarbe = farbe ? `color-mix(in srgb, ${farbe} 32%, ${RAND})` : RAND
   return (
     <Box
       component="span"
@@ -163,7 +164,7 @@ export function DeltaMarke({ art, children }: Readonly<{ art: DeltaArt; children
         px: '6px',
         py: '2px',
         borderRadius: '5px',
-        border: `1px solid ${farbe ? `color-mix(in srgb, ${farbe} 32%, ${RAND})` : RAND}`,
+        border: `1px solid ${randFarbe}`,
         bgcolor: NUT,
         boxShadow: SCHATTEN_NUTE,
         color: farbe ?? 'text.secondary',
@@ -179,6 +180,7 @@ export function Funke({ werte, melder }: Readonly<{ werte: readonly number[]; me
   const verlaufId = useId()
   const punkte = funkenPunkte(werte)
   const linie = punkte.map((p) => `${p.x},${p.y}`).join(' ')
+  const linienzug = punkte.map((p) => `${p.x} ${p.y}`).join(' L')
   const letzter = punkte.at(-1)!
   return (
     <Box
@@ -195,7 +197,7 @@ export function Funke({ werte, melder }: Readonly<{ werte: readonly number[]; me
           <stop offset="1" stopColor="currentColor" stopOpacity="0" />
         </linearGradient>
       </defs>
-      <path d={`M${punkte.map((p) => `${p.x} ${p.y}`).join(' L')} L${letzter.x} 34 L${punkte[0].x} 34 Z`} fill={`url(#${verlaufId})`} />
+      <path d={`M${linienzug} L${letzter.x} 34 L${punkte[0].x} 34 Z`} fill={`url(#${verlaufId})`} />
       <polyline points={linie} fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" strokeLinecap="round" />
       <circle cx={letzter.x} cy={letzter.y} r="2.6" fill="currentColor" />
     </Box>
@@ -340,6 +342,15 @@ export function Instrument({
   leerText?: string
   testId: string
 }>) {
+  const randFarbe = heiss ? `color-mix(in srgb, ${KUPFER} 40%, ${RAND})` : RAND
+  let wertFarbe: string
+  if (teile === null) {
+    wertFarbe = TEXT_SCHWACH
+  } else if (heiss) {
+    wertFarbe = KUPFER
+  } else {
+    wertFarbe = 'text.primary'
+  }
   return (
     <Box
       data-testid={testId}
@@ -353,7 +364,7 @@ export function Instrument({
         pb: '8px',
         borderRadius: `${CARD_RADIUS}px`,
         background: `linear-gradient(180deg, ${NUT}, color-mix(in srgb, ${NUT} 85%, ${GRUND}))`,
-        border: `1px solid ${heiss ? `color-mix(in srgb, ${KUPFER} 40%, ${RAND})` : RAND}`,
+        border: `1px solid ${randFarbe}`,
         boxShadow: SCHATTEN_NUTE,
       }}
     >
@@ -366,7 +377,7 @@ export function Instrument({
           fontSize: 16,
           fontWeight: 500,
           letterSpacing: '-.01em',
-          color: teile === null ? TEXT_SCHWACH : heiss ? KUPFER : 'text.primary',
+          color: wertFarbe,
         }}
       >
         {teile === null ? (

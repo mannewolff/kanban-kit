@@ -299,18 +299,12 @@ function Anteile({
   sitzungen,
   stand,
 }: Readonly<{ nacht: string | null; sitzungen: string | null; stand: Erfassungsstand }>) {
+  const zusatz = stand === 'teilweise-erfasst' ? ` (${TEILWEISE_ERFASST_TEXT})` : ''
+  const interaktivText = stand === 'nicht-erfasst' ? NICHT_ERFASST_TEXT : `${sitzungen ?? '—'}${zusatz}`
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: '2px', fontSize: 10.5, color: 'text.secondary' }}>
       <Anteil testId="anteil-nacht" text="aus Nachtläufen" wert={nacht ?? '—'} />
-      <Anteil
-        testId="anteil-interaktiv"
-        text="aus interaktiven Sitzungen"
-        wert={
-          stand === 'nicht-erfasst'
-            ? NICHT_ERFASST_TEXT
-            : `${sitzungen ?? '—'}${stand === 'teilweise-erfasst' ? ` (${TEILWEISE_ERFASST_TEXT})` : ''}`
-        }
-      />
+      <Anteil testId="anteil-interaktiv" text="aus interaktiven Sitzungen" wert={interaktivText} />
     </Box>
   )
 }
