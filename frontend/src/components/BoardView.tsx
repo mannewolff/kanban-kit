@@ -1,24 +1,17 @@
 import AddIcon from '@mui/icons-material/Add'
-import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline'
-import EditOutlinedIcon from '@mui/icons-material/EditOutlined'
-import SortIcon from '@mui/icons-material/Sort'
 import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import ButtonBase from '@mui/material/ButtonBase'
-import Checkbox from '@mui/material/Checkbox'
 import Dialog from '@mui/material/Dialog'
 import DialogActions from '@mui/material/DialogActions'
 import DialogContent from '@mui/material/DialogContent'
 import DialogContentText from '@mui/material/DialogContentText'
 import DialogTitle from '@mui/material/DialogTitle'
-import IconButton from '@mui/material/IconButton'
 import Menu from '@mui/material/Menu'
 import MenuItem from '@mui/material/MenuItem'
-import Paper from '@mui/material/Paper'
 import Stack from '@mui/material/Stack'
 import TextField from '@mui/material/TextField'
-import Tooltip from '@mui/material/Tooltip'
 import Typography from '@mui/material/Typography'
 import { useEffect, useRef, useState } from 'react'
 import type { Board, BoardColumn } from '../api/boards'
@@ -27,14 +20,7 @@ import { ApiError, apiErrorMessage } from '../api/client'
 import { columnsApi, type SortDirection } from '../api/columns'
 import { epicsApi as defaultEpicsApi, type Epic, type EpicsApi } from '../api/epics'
 import type { Member } from '../api/members'
-import {
-  activeCardsInColumn,
-  applyMove,
-  spaltenAuswahl,
-  spaltenAuswahlUmschalten,
-  type SpaltenAuswahlZustand,
-} from '../lib/boardOps'
-import { epicOfCard } from '../lib/cardEpic'
+import { activeCardsInColumn, applyMove, spaltenAuswahlUmschalten } from '../lib/boardOps'
 import { neighbourColumns } from '../lib/columnMeta'
 import { useEditMode } from '../lib/EditModeContext'
 import type { Label } from '../api/labels'
@@ -43,13 +29,9 @@ import { epicShortcode } from '../lib/epicMeta'
 import { selectableEpics } from '../lib/epicTiles'
 import { hiddenCardNumbers } from '../lib/hiddenCards'
 import { useKeyboardShortcut } from '../lib/useKeyboardShortcut'
-import { statusColors } from '../lib/statusColors'
 import {
-  KUPFER,
-  LED_RING,
   MELDER,
   NUT,
-  PANEL_RADIUS,
   PLATTE,
   PLATTE_FUSS,
   PLATTE_HOCH,
@@ -57,12 +39,10 @@ import {
   SCHATTEN_NUTE,
   SCHATTEN_PLATTE,
   SCHATTEN_TASTE,
-  SCHRIFT_ANZEIGE,
-  TEXT_SCHWACH,
   ZAHL,
 } from '../theme'
-import { BoardKarte } from './board/BoardKarte'
-import { ablageflaecheSx, type Dichte } from './boardSurfaceSx'
+import { BoardSpalte } from './board/BoardSpalte'
+import { type Dichte } from './boardSurfaceSx'
 import { BulkActionBar, type LabelOption, type LabelZustand } from './BulkActionBar'
 import { NewCardModal, type NewCardInitialValues, type NewItemInput } from './NewCardModal'
 import { useSnackbar } from './SnackbarProvider'
@@ -76,10 +56,6 @@ const labelZustand = (treffer: number, gesamt: number): LabelZustand => {
   return treffer === gesamt ? 'alle' : 'einige'
 }
 
-/** Zugänglicher Name des Spalten-Kästchens: Er sagt, was der nächste Klick tut. */
-const spaltenAuswahlLabel = (zustand: SpaltenAuswahlZustand, spalte: string) =>
-  zustand === 'alle' ? `Auswahl in ${spalte} aufheben` : `Alle Karten in ${spalte} auswählen`
-
 /**
  * Grund, warum die Massenaktion „Labels" gesperrt ist; `null` heißt bedienbar. Ein Vorhaben in der
  * Auswahl lässt den Server den ganzen Batch ablehnen — die gesperrte Taste sagt das vorher, statt
@@ -92,12 +68,6 @@ const labelSperrgrund = (gewaehlt: Card[], boardLabels: Label[]): string | null 
 }
 
 type KartenFilter = 'alle' | 'meine' | 'ueberfaellig'
-
-/** Zustand eines Segments der Belastungsskala. */
-const segmentZustand = (belegt: boolean, grenze: boolean): string => {
-  if (grenze) return 'grenze'
-  return belegt ? 'belegt' : 'frei'
-}
 
 /** Wahlschalter der Werkzeugleiste (Entwurf `.chip-gruppe`, `.chip`, Z. 807–826). */
 function ChipGruppe<T extends string>({
@@ -154,10 +124,6 @@ function ChipGruppe<T extends string>({
  */
 const LEERE_AUSBLENDUNG: ReadonlySet<number> = new Set<number>()
 
-/** Beschriftung des Sortier-Toggles: benennt die Richtung, die der nächste Klick auslöst. */
-const sortByNumberLabel = (columnName: string, next: SortDirection) =>
-  `Spalte ${columnName} nach Nummer ${next === 'ASC' ? 'aufsteigend' : 'absteigend'} sortieren`
-
 /**
  * Erfolgsmeldung nach dem Sortieren: benennt die Richtung, in der tatsächlich sortiert wurde.
  * Läuft über den Toast-Stapel, dessen `Alert` als Live-Region vorgelesen wird — ohne die Meldung
@@ -165,14 +131,6 @@ const sortByNumberLabel = (columnName: string, next: SortDirection) =>
  */
 const sortedByNumberMessage = (columnName: string, sorted: SortDirection) =>
   `Spalte ${columnName} ${sorted === 'ASC' ? 'aufsteigend' : 'absteigend'} sortiert`
-
-/**
- * Zugänglicher Name der Spaltenmarke: Zahl, Objekt und Rückweg in einem. Achsenneutral formuliert,
- * denn gezählt wird die Vereinigung aus ausgeblendeten Vorhaben und Vorhaben-Filter (Plan #620,
- * E4/E9) — eine Spalte meldet eine Zahl, nicht zwei Ursachen.
- */
-const hiddenBadgeLabel = (count: number) =>
-  `${count} ${count === 1 ? 'Karte' : 'Karten'} ausgeblendet, einblenden`
 
 interface Props {
   board: Board
@@ -845,229 +803,60 @@ export function BoardView({
         }}
       >
         {columns.map((column) => {
-          const colors = statusColors(column.name)
           // Voller Bestand, nicht der gefilterte: Der Zähler trägt die WIP-Grenze. Zählte er
           // filteredCards, meldete er bei gesetztem Vorhaben-Filter eine eingehaltene Grenze,
           // die tatsächlich verletzt ist. Dargestellt wird weiterhin filteredCards.
           const columnCards = activeCardsInColumn(cards, column.id)
-          const count = columnCards.length
-          // Was die Spalte gerade zeigt — Grundlage des Spalten-Kästchens und der Karten-Schleife.
-          const angezeigteKarten = activeCardsInColumn(sichtbareKarten, column.id)
-          const spaltenZustand = spaltenAuswahl(angezeigteKarten.map((c) => c.id), selectedIds)
-          // Eine Zahl je Spalte: die Vereinigung beider Achsen, keine zwei Zählungen (E4).
-          const hiddenCount = columnCards.filter((c) => hiddenNumbers.has(c.number)).length
-          const done = isDoneColumn(column.name)
           return (
-            <Paper
+            <BoardSpalte
               key={column.id}
-              data-testid={`column-${column.id}`}
-              elevation={0}
-              onDragOver={(e) => {
-                e.preventDefault()
-                if (dragCardId != null) setAblageSpalteId(column.id)
-              }}
-              onDrop={(e) => {
-                e.preventDefault()
+              column={column}
+              count={columnCards.length}
+              // Eine Zahl je Spalte: die Vereinigung beider Achsen, keine zwei Zählungen (E4).
+              hiddenCount={columnCards.filter((c) => hiddenNumbers.has(c.number)).length}
+              // Was die Spalte gerade zeigt — Grundlage des Spalten-Kästchens und der Karten.
+              angezeigteKarten={activeCardsInColumn(sichtbareKarten, column.id)}
+              epics={epics}
+              done={isDoneColumn(column.name)}
+              dichte={dichte}
+              selectionMode={selectionMode}
+              selectedIds={selectedIds}
+              canEdit={canEdit}
+              showStructureEdit={showStructureEdit}
+              members={members}
+              boardLabels={boardLabels}
+              retentionDays={retentionDays}
+              naechsteRichtung={nextSortDirection[column.id] ?? 'ASC'}
+              sortiertGerade={sortingColumnId === column.id}
+              dragCardId={dragCardId}
+              ablageSpalteId={ablageSpalteId}
+              herkunftsSpalteId={herkunftsSpalteId}
+              colDrag={colDrag}
+              onKarteUeber={() => setAblageSpalteId(column.id)}
+              onKarteAbgelegt={(cardId) => {
                 zugBeenden()
-                const id = Number(e.dataTransfer.getData('text/plain'))
-                if (id) {
-                  void moveCard(id, column.id)
+                if (cardId) {
+                  void moveCard(cardId, column.id)
                 }
               }}
-              // Spalte als Nut im Grund (Entwurf `.spalte`, Z. 735–743); bei erreichter
-              // Belastungsgrenze bernsteinfarbene Haarlinie (`.spalte-warn`, Z. 868).
-              sx={{
-                flex: '1 1 0',
-                minWidth: 230,
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '9px',
-                p: '10px',
-                background: `linear-gradient(180deg, ${NUT}, color-mix(in srgb, ${NUT} 80%, var(--mb-palette-warte-grund)))`,
-                border: `1px solid ${column.wipLimit != null && count >= column.wipLimit ? `color-mix(in srgb, ${MELDER.bernst} 42%, ${RAND})` : RAND}`,
-                borderRadius: `${PANEL_RADIUS}px`,
-                boxShadow: SCHATTEN_NUTE,
+              onKarteZugBeginn={(e, card) => zugBeginnen(e, card.id)}
+              onKarteZugEnde={zugBeenden}
+              onKarteWaehlen={(card) => toggleSelect(card.id)}
+              onKarteOeffnen={(card) => onCardClick?.(card)}
+              onKarteMenu={(card, anchor) => setMenu({ card, anchor })}
+              onEpicOpen={onEpicOpen}
+              onSpaltenAuswahl={toggleSpaltenAuswahl}
+              onAusblendungAufheben={showAllHidden}
+              onSortieren={() => void sortColumnByNumber(column)}
+              onBearbeiten={() => openColumnDialog(column)}
+              onLoeschen={() => {
+                setDeleteError(null)
+                setDeleteColumn(column)
               }}
-            >
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: '8px', px: '4px', pt: '2px' }}>
-              <Box
-                data-testid={`column-header-${column.id}`}
-                draggable={showStructureEdit}
-                onDragStart={showStructureEdit ? (e) => { e.stopPropagation(); setColDrag(column.id) } : undefined}
-                onDragOver={showStructureEdit ? (e) => { if (colDrag != null && colDrag !== column.id) { e.preventDefault(); e.stopPropagation() } } : undefined}
-                onDrop={showStructureEdit ? (e) => {
-                  if (colDrag != null) { e.preventDefault(); e.stopPropagation(); void reorderColumn(colDrag, column.id) }
-                  setColDrag(null)
-                } : undefined}
-                onDragEnd={() => setColDrag(null)}
-                sx={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: 0, cursor: showStructureEdit ? 'grab' : undefined }}
-              >
-                {selectionMode && (
-                  // Ganze Spalte auf einmal: dieselbe Bildsprache wie der Haken an der Karte, mit
-                  // dem Strich für „einige". Der Klick bleibt im Kästchen, damit die Handler des
-                  // Kopfes (Sortieren, Ziehen) nicht mitlaufen.
-                  <Checkbox
-                    size="small"
-                    checked={spaltenZustand === 'alle'}
-                    indeterminate={spaltenZustand === 'einige'}
-                    disabled={angezeigteKarten.length === 0}
-                    onChange={() => toggleSpaltenAuswahl(angezeigteKarten.map((c) => c.id))}
-                    onClick={(e) => e.stopPropagation()}
-                    slotProps={{ input: { 'aria-label': spaltenAuswahlLabel(spaltenZustand, column.name) } }}
-                    sx={{ p: 0, flex: 'none' }}
-                  />
-                )}
-                {/* Zustand der Spalte als Melder-LED (Entwurf Z. 1767): die Farbe des Status. */}
-                <Box
-                  component="span"
-                  aria-hidden
-                  data-testid={`status-${column.id}`}
-                  sx={{ width: 9, height: 9, borderRadius: '50%', flex: 'none', bgcolor: colors.dot, color: colors.dot, boxShadow: `${LED_RING}, 0 0 8px -1px currentColor` }}
-                />
-                <Typography
-                  component="h3"
-                  sx={{ m: 0, fontFamily: SCHRIFT_ANZEIGE, fontStretch: '114%', fontSize: 11, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: 'text.primary', flexGrow: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
-                >
-                  {column.name}
-                </Typography>
-                <Typography
-                  component="span"
-                  sx={{ ...ZAHL, fontSize: 10.5, color: column.wipLimit != null && count >= column.wipLimit ? MELDER.bernst : TEXT_SCHWACH }}
-                >
-                  {column.wipLimit != null ? `${count}/${column.wipLimit}` : count}
-                </Typography>
-                {hiddenCount > 0 && (
-                  // Ausgeblendet heißt sichtbar ausgeblendet: Jede Spalte, aus der etwas
-                  // verschwunden ist, sagt es an und trägt den Rückweg an Ort und Stelle. Ein
-                  // echter Button, damit der Rückweg auch mit der Tastatur erreichbar ist.
-                  <Button
-                    size="small"
-                    onClick={showAllHidden}
-                    aria-label={hiddenBadgeLabel(hiddenCount)}
-                    sx={{
-                      minWidth: 0,
-                      px: 0.75,
-                      py: 0,
-                      textTransform: 'none',
-                      fontSize: '0.75rem',
-                      lineHeight: 1.6,
-                      color: 'text.secondary',
-                      bgcolor: NUT,
-                      border: `1px solid ${RAND}`,
-                      boxShadow: SCHATTEN_NUTE,
-                      borderRadius: '5px',
-                    }}
-                  >
-                    {`${hiddenCount} ausgeblendet`}
-                  </Button>
-                )}
-                {canEdit && (
-                  <Tooltip title={sortByNumberLabel(column.name, nextSortDirection[column.id] ?? 'ASC')}>
-                    {/* Kein span-Wrapper um den Button: MUI legt den Tooltip-Titel als aria-label auf
-                        sein direktes Kind, ein Wrapper trüge den Namen also doppelt (span + Button).
-                        Preis dafür: während des laufenden Aufrufs (disabled) zeigt der Tooltip nicht. */}
-                    <IconButton size="small"
-                      aria-label={sortByNumberLabel(column.name, nextSortDirection[column.id] ?? 'ASC')}
-                      disabled={sortingColumnId === column.id}
-                      onClick={() => void sortColumnByNumber(column)} sx={{ color: 'text.secondary' }}>
-                      <SortIcon fontSize="small" />
-                    </IconButton>
-                  </Tooltip>
-                )}
-                {showStructureEdit && (
-                  <Tooltip title="Spalte bearbeiten">
-                    <IconButton size="small" aria-label={`Spalte ${column.name} bearbeiten`}
-                      onClick={() => openColumnDialog(column)} sx={{ color: 'text.secondary' }}>
-                      <EditOutlinedIcon fontSize="small" />
-                    </IconButton>
-                  </Tooltip>
-                )}
-                {showStructureEdit && (
-                  <Tooltip title="Spalte löschen">
-                    <IconButton size="small" aria-label={`Spalte ${column.name} löschen`}
-                      onClick={() => { setDeleteError(null); setDeleteColumn(column) }} sx={{ color: 'text.secondary' }}>
-                      <DeleteOutlineIcon fontSize="small" />
-                    </IconButton>
-                  </Tooltip>
-                )}
-              </Box>
-              {/* Belastungsgrenze als Segmentskala (Entwurf `.wip`, Z. 855–866): ein Segment je Platz,
-                  belegte Plätze kupfern, bei erreichter Grenze das letzte bernstein. Ein eigenes
-                  Element neben dem Kopf, keine Einfärbung des Kopfes — der ist im
-                  Struktur-Editiermodus anklickbar und ziehbar (AK 2, #925). */}
-              {column.wipLimit != null && (
-                <Box
-                  role="meter"
-                  aria-label={`Auslastung ${column.name}`}
-                  aria-valuemin={0}
-                  aria-valuemax={column.wipLimit}
-                  aria-valuenow={Math.min(count, column.wipLimit)}
-                  aria-valuetext={`${count} von ${column.wipLimit}`}
-                  data-grenze={count >= column.wipLimit ? 'erreicht' : 'offen'}
-                  sx={{ display: 'inline-flex', gap: '2px', alignItems: 'center', flex: 'none' }}
-                >
-                  {Array.from({ length: Math.min(column.wipLimit, 12) }, (_, i) => {
-                    const grenze = column.wipLimit!
-                    const segmente = Math.min(grenze, 12)
-                    const belegt = i < Math.round((Math.min(count, grenze) / grenze) * segmente)
-                    const letztes = count >= grenze && i === segmente - 1
-                    const farbe = letztes ? MELDER.bernst : KUPFER
-                    return (
-                      <Box
-                        key={i}
-                        component="i"
-                        data-testid="segment"
-                        data-segment={segmentZustand(belegt, letztes)}
-                        sx={{
-                          width: 5,
-                          height: 11,
-                          borderRadius: '2px',
-                          display: 'block',
-                          ...(belegt ? { bgcolor: farbe, boxShadow: `0 0 6px -2px ${farbe}` } : { bgcolor: NUT, boxShadow: SCHATTEN_NUTE }),
-                        }}
-                      />
-                    )
-                  })}
-                </Box>
-              )}
-              </Box>
-
-              <Stack
-                spacing={1}
-                data-testid={`ablage-${column.id}`}
-                data-ablage={dragCardId != null && ablageSpalteId === column.id && herkunftsSpalteId !== column.id ? 'aktiv' : undefined}
-                sx={{
-                  flex: 1,
-                  gap: '9px',
-                  minHeight: 120,
-                  '& > :not(style) ~ :not(style)': { mt: 0 },
-                  ...ablageflaecheSx(dragCardId != null && ablageSpalteId === column.id && herkunftsSpalteId !== column.id),
-                }}
-              >
-                {angezeigteKarten.map((card) => (
-                  <BoardKarte
-                    key={card.id}
-                    card={card}
-                    epic={epicOfCard(card, epics)}
-                    done={done}
-                    dichte={dichte}
-                    selectionMode={selectionMode}
-                    selected={selectedIds.has(card.id)}
-                    canEdit={canEdit}
-                    bewegt={dragCardId === card.id}
-                    members={members}
-                    boardLabels={boardLabels}
-                    retentionDays={retentionDays}
-                    onDragStart={(e) => zugBeginnen(e, card.id)}
-                    onDragEnd={zugBeenden}
-                    onSelect={() => toggleSelect(card.id)}
-                    onOpen={() => onCardClick?.(card)}
-                    onMenu={(anchor) => setMenu({ card, anchor })}
-                    onEpicOpen={onEpicOpen}
-                  />
-                ))}
-              </Stack>
-            </Paper>
+              onZugBeginn={() => setColDrag(column.id)}
+              onAblage={(fromId) => void reorderColumn(fromId, column.id)}
+              onZugEnde={() => setColDrag(null)}
+            />
           )
         })}
         {showStructureEdit && (
