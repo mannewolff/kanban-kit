@@ -26,6 +26,17 @@
     "in_review": "In review",
     "done": "Done"
   },
+  "stufen": {
+    "schwer": {
+      "modell": "claude-opus-5"
+    },
+    "mittel": {
+      "modell": "claude-sonnet-5"
+    },
+    "leicht": {
+      "modell": "claude-sonnet-5"
+    }
+  },
   "reviewCommand": "codex exec --model gpt-6-astra -c model_reasoning_effort=\"high\"",
   "formatFixCommand": "mvn spotless:apply",
   "github": {
