@@ -1647,8 +1647,9 @@ function teuersterVorgang(items: readonly NightRunItem[]): string {
   if (gemeldet.length === 0) {
     return 'nicht angegeben'
   }
-  const teuerster = gemeldet.reduce((hoechster, kandidat) =>
-    kandidat.kosten > hoechster.kosten ? kandidat : hoechster,
+  const teuerster = gemeldet.reduce(
+    (hoechster, kandidat) => (kandidat.kosten > hoechster.kosten ? kandidat : hoechster),
+    gemeldet[0],
   )
   return `#${teuerster.nummer} mit ${betrag(teuerster.kosten)}`
 }

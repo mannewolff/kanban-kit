@@ -7,15 +7,15 @@ import type { ReactNode } from 'react'
  * `currentColor`. Einträge ohne Vorlage im Entwurf tragen weiter ein MUI-Symbol.
  */
 function strichSymbol(name: string, pfade: ReactNode) {
-  function Symbol(props: SvgIconProps) {
+  function StrichSymbol(props: SvgIconProps) {
     return (
       <SvgIcon viewBox="0 0 16 16" {...props} sx={{ fill: 'none', ...props.sx }}>
         {pfade}
       </SvgIcon>
     )
   }
-  Symbol.displayName = name
-  return Symbol
+  StrichSymbol.displayName = name
+  return StrichSymbol
 }
 
 const strich = { stroke: 'currentColor', strokeWidth: 1.5 } as const

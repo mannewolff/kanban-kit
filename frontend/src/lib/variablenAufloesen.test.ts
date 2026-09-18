@@ -23,6 +23,12 @@ describe('variablenAufloesen', () => {
     expect(variablenAufloesen('var(--mb-x, 0 1px rgba(4,5,6,0.1)) x', WERTE)).toBe('0 1px rgba(4,5,6,0.1) x')
   })
 
+  it('überliest Klammern des Rückfallwerts auch dann, wenn der hinterlegte Wert gewinnt', () => {
+    // Zählte die öffnende Klammer von `rgba(` nicht mit, endete der Verweis an deren schließender
+    // Klammer — die zweite bliebe als `)` hinter dem eingesetzten Wert stehen.
+    expect(variablenAufloesen('var(--mb-a, rgba(1,2,3,0.5)) x', WERTE)).toBe('#AAAAAA x')
+  })
+
   it('nimmt ohne hinterlegten Wert den Rückfallwert', () => {
     expect(variablenAufloesen('var(--mb-x, #123456)', WERTE)).toBe('#123456')
   })
@@ -33,6 +39,16 @@ describe('variablenAufloesen', () => {
 
   it('lässt Zeichenketten ohne Verweis unverändert', () => {
     expect(variablenAufloesen('2px solid red', WERTE)).toBe('2px solid red')
+  })
+
+  it('endet bei einem Verweis ohne schließende Klammer und lässt ihn unverändert stehen', () => {
+    // Ohne Abbruch am Textende zählte die Klammertiefe nie herunter (#977): ein Tippfehler im Theme
+    // fröre die Seite beim Modulimport ein, statt nur diesen einen Wert stehen zu lassen.
+    expect(variablenAufloesen('1px solid var(--mb-a', WERTE)).toBe('1px solid var(--mb-a')
+  })
+
+  it('endet auch, wenn im Rückfallwert eine Klammer offen bleibt', () => {
+    expect(variablenAufloesen('var(--mb-a, rgba(1,2', WERTE)).toBe('var(--mb-a, rgba(1,2')
   })
 
   it('löst verschachtelte Objekte und Listen auf, ohne das Original zu verändern', () => {
