@@ -16,8 +16,21 @@ import { apiFetch } from './client'
  * Diese Verengung erzwingt den Compiler-Schutz in `NightRunPage.tsx` (`istEinlieferbar`) — ein Cast
  * an `mode` hebelte ihn aus. Der Ausschluss ist der einzige Ort, der gepflegt wird: Ein neuer
  * einlieferbarer Modus weitet diesen Typ von selbst.
+ *
+ * `INTERACTIVE` (Issue #1010, Plan #1007 E23) kommt **hinzu** statt aus `NightRunMode`: Eine
+ * interaktive Sitzung hat kein Nachtlauf-Protokoll, der Browser-Parser kann sie nie erzeugen, und
+ * eingeliefert wird sie allein vom Hook des Kits. Sie im Parser-Typ zu führen, hieße eine Zeile zu
+ * versprechen, die dort nie steht. Wer den Typ erweitert, muss die `Record`-Tabellen darüber
+ * pflegen — `LAUF_ART_TEXT` (`KartenAnlaeufe`) und `MODUS` (`lib/leitstand`) brechen sonst `tsc`.
  */
-export type NightRunServerMode = Exclude<NightRunMode, 'NIGHTPLAN'>
+export type NightRunServerMode = Exclude<NightRunMode, 'NIGHTPLAN'> | 'INTERACTIVE'
+
+/**
+ * Die Gattung eines Eintrags: **was** er ist — ein Lauf des Runners oder eine Sitzung am Rechner
+ * eines Menschen (Issue #1010, Plan #1007). Nicht zu verwechseln mit {@link NightRunServerMode},
+ * der **Art** des Laufs, und nicht mit der Herkunft (`origin`), dem **Weg** ans Board.
+ */
+export type NightRunKind = 'NIGHT' | 'INTERACTIVE'
 
 /**
  * Der gemeldete Verbrauch eines Laufs oder eines Arbeitspakets (Issue #948).
@@ -137,6 +150,14 @@ export interface NightRunView {
 export interface NightRunAnlauf {
   startedAt: string
   mode: NightRunServerMode
+  /**
+   * Die Gattung des Anlaufs (Issue #1015). `null` steht für eine Antwort, die das Feld noch nicht
+   * führt — ein Server vor der Migration `V34`: Der heutige Endpunkt schickt die Gattung immer und
+   * liest einen Anlauf ohne eigene Gattung selbst schon als `NIGHT`. Der Typ lässt das Fehlen
+   * trotzdem zu, damit die Anzeige den Fall behandeln **muss**, statt ihn ungeprüft als Sitzung
+   * oder als leere Beschriftung durchzureichen.
+   */
+  kind: NightRunKind | null
   state: NightRunState
   errorClass: NightRunErrorClass | null
   durationMs: number | null

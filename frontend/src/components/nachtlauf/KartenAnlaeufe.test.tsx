@@ -1,8 +1,8 @@
 import { render, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { ApiError } from '../../api/client'
-import type { NightRunAnlauf, NightRunUsageView } from '../../api/nightRuns'
-import { KartenAnlaeufe, zaehleWiederaufnahmen } from './KartenAnlaeufe'
+import type { NightRunAnlauf, NightRunServerMode, NightRunUsageView } from '../../api/nightRuns'
+import { KartenAnlaeufe, LAUF_ART_TEXT, zaehleWiederaufnahmen } from './KartenAnlaeufe'
 
 /** Die Anläufe einer Karte im Karten-Detail (Issue #968). */
 
@@ -17,6 +17,7 @@ const verbrauch = (werte: Partial<NightRunUsageView>): NightRunUsageView => ({
 const anlauf = (werte: Partial<NightRunAnlauf>): NightRunAnlauf => ({
   startedAt: '2026-09-01T22:00:00Z',
   mode: 'IMPLEMENTATION',
+  kind: 'NIGHT',
   state: 'GREEN',
   errorClass: null,
   durationMs: 60_000,
@@ -24,6 +25,9 @@ const anlauf = (werte: Partial<NightRunAnlauf>): NightRunAnlauf => ({
   usage: null,
   ...werte,
 })
+
+/** Der Text eines Elements mit gewöhnlichem Leerzeichen vor der Einheit — die Anzeige setzt ein geschütztes. */
+const text = (element: HTMLElement) => element.textContent?.replace(/ /g, ' ') ?? ''
 
 const apiMit = (antwort: Promise<NightRunAnlauf[]>) => ({
   anlaeufeDerKarte: vi.fn().mockReturnValue(antwort),
@@ -58,6 +62,85 @@ describe('KartenAnlaeufe', () => {
     const pruefung = within(screen.getByTestId('anlaeufe-dauer-REVIEW'))
     expect(pruefung.getByText('nicht gelaufen')).toBeInTheDocument()
     expect(screen.getByTestId('anlaeufe-dauer-REVIEW').textContent).not.toMatch(/0/)
+  })
+
+  it('fuehrt die interaktive Sitzung als eigene Lauf-Art (Issue #1016)', async () => {
+    zeige([anlauf({ mode: 'INTERACTIVE', durationMs: 90_000 })])
+
+    const sitzung = await screen.findByTestId('anlaeufe-dauer-INTERACTIVE')
+    expect(sitzung).toHaveTextContent('Interaktive Sitzung')
+    expect(sitzung).toHaveTextContent('1 Min')
+  })
+
+  it('zeigt Nachtlauf-Anlauf und Sitzungs-Anlauf nebeneinander, je mit seiner Gattung, jüngster zuerst', async () => {
+    zeige([
+      anlauf({ kind: 'NIGHT', mode: 'IMPLEMENTATION', startedAt: '2026-09-01T22:00:00Z' }),
+      anlauf({ kind: 'INTERACTIVE', mode: 'INTERACTIVE', startedAt: '2026-09-02T14:00:00Z' }),
+    ])
+
+    const zeilen = within(await screen.findByTestId('anlaeufe-liste')).getAllByRole('listitem')
+    expect(zeilen).toHaveLength(2)
+    expect(zeilen[0]).toHaveTextContent('Interaktive Sitzung')
+    expect(zeilen[1]).toHaveTextContent('Nachtlauf')
+    expect(zeilen[1]).not.toHaveTextContent('Interaktive Sitzung')
+  })
+
+  it('liest die Gattung aus dem eigenen Feld und nicht aus der Lauf-Art', async () => {
+    zeige([anlauf({ kind: 'INTERACTIVE', mode: 'IMPLEMENTATION' })])
+
+    const zeile = within(await screen.findByTestId('anlaeufe-liste')).getByRole('listitem')
+    expect(zeile).toHaveTextContent('Interaktive Sitzung')
+    expect(zeile).not.toHaveTextContent('Nachtlauf')
+  })
+
+  it('führt den Verbrauch der Sitzung an der Sitzung und nicht in den Nachtlauf-Summen', async () => {
+    zeige([
+      anlauf({ kind: 'NIGHT', usage: verbrauch({ costUsd: 2, inputTokens: 100 }) }),
+      anlauf({
+        kind: 'INTERACTIVE',
+        mode: 'INTERACTIVE',
+        startedAt: '2026-09-02T14:00:00Z',
+        usage: verbrauch({ costUsd: 7, inputTokens: 900 }),
+      }),
+    ])
+
+    const kosten = await screen.findByTestId('anlaeufe-summe-kosten')
+    expect(text(kosten)).toContain('2,00 $')
+    expect(text(kosten)).not.toContain('9,00 $')
+    expect(kosten).toHaveTextContent('aus 1 von 1 Anläufen')
+    expect(screen.getByTestId('anlaeufe-summe-eingabe')).toHaveTextContent('100 Token')
+
+    const sitzung = within(screen.getByTestId('anlaeufe-liste')).getAllByRole('listitem')[0]
+    expect(text(sitzung)).toContain('7,00 $')
+  })
+
+  it('stellt einen Anlauf ohne Gattungsangabe als Nachtlauf dar und zählt ihn in die Summen', async () => {
+    zeige([anlauf({ kind: null, usage: verbrauch({ costUsd: 3 }) })])
+
+    const kosten = await screen.findByTestId('anlaeufe-summe-kosten')
+    expect(text(kosten)).toContain('3,00 $')
+    expect(kosten).toHaveTextContent('aus 1 von 1 Anläufen')
+    const zeile = within(screen.getByTestId('anlaeufe-liste')).getByRole('listitem')
+    expect(zeile).toHaveTextContent('Nachtlauf')
+  })
+
+  it('schreibt eine Sitzung ohne Verbrauchsangabe als „nicht gemessen" und nicht als 0', async () => {
+    zeige([anlauf({ kind: 'INTERACTIVE', mode: 'INTERACTIVE', usage: null })])
+
+    const zeile = within(await screen.findByTestId('anlaeufe-liste')).getByRole('listitem')
+    expect(zeile).toHaveTextContent('Kosten nicht gemessen')
+    expect(zeile.textContent).not.toMatch(/0,00/)
+  })
+
+  it('führt jede Lauf-Art des Servers in der Beschriftungstabelle', () => {
+    const alleArten: Record<NightRunServerMode, true> = {
+      IMPLEMENTATION: true,
+      REVIEW: true,
+      CHAIN: true,
+      INTERACTIVE: true,
+    }
+
+    expect(Object.keys(LAUF_ART_TEXT).sort()).toEqual(Object.keys(alleArten).sort())
   })
 
   it('schreibt eine gelaufene Art ohne gemessene Dauer als „nicht gemessen", auch in der Liste', async () => {

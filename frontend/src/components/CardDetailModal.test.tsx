@@ -2624,6 +2624,7 @@ describe('CardDetailModal — interaktiver Status-Chip', () => {
     const einAnlauf = {
       startedAt: '2026-09-01T22:00:00Z',
       mode: 'IMPLEMENTATION' as const,
+      kind: 'NIGHT' as const,
       state: 'GREEN' as const,
       errorClass: null,
       durationMs: 60_000,

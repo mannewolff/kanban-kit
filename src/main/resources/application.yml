@@ -85,6 +85,10 @@ manban:
   nightrun:
     max-per-project: 190
     max-items-per-project: 2000
+    # Eigenes Grenzenpaar je Gattung (Issue #1011): Interaktive Sitzungen sind haeufiger als
+    # Naechte und raeumten unter einer gemeinsamen Grenze die Nachtlauf-Auswertung aus.
+    max-interactive-per-project: 400
+    max-interactive-items-per-project: 4000
   cleanup:
     enabled: ${MANBAN_CLEANUP_ENABLED:true}
     done-retention-days: ${MANBAN_DONE_RETENTION_DAYS:30}

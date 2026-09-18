@@ -7,7 +7,7 @@ import { ApiError } from '../api/client'
 import { dashboardApi, type BoardDashboardKpis } from '../api/dashboard'
 import { epicsApi, type Epic } from '../api/epics'
 import { nightRunsApi, type NightRunItemView, type NightRunView } from '../api/nightRuns'
-import { nightRunUsageApi, type VerbrauchKennzahlen, type VerbrauchZeitraum } from '../api/nightRunUsage'
+import { nightRunUsageApi, type VerbrauchGesamt, type VerbrauchKennzahlen, type VerbrauchZeitraum } from '../api/nightRunUsage'
 import { LeitstandPage } from './LeitstandPage'
 
 vi.mock('../api/boards', () => ({ boardsApi: { get: vi.fn() } }))
@@ -17,7 +17,7 @@ vi.mock('../api/epics', () => ({ epicsApi: { list: vi.fn() } }))
 vi.mock('../api/nightRuns', () => ({ nightRunsApi: { list: vi.fn(), errorClassCounts: vi.fn() } }))
 vi.mock('../api/nightRunUsage', async (original) => ({
   ...(await original<typeof import('../api/nightRunUsage')>()),
-  nightRunUsageApi: { period: vi.fn() },
+  nightRunUsageApi: { period: vi.fn(), total: vi.fn() },
 }))
 
 const mNotify = vi.fn()
@@ -43,6 +43,7 @@ const m = {
   klassen: nightRunsApi.errorClassCounts as ReturnType<typeof vi.fn>,
   karteNachNummer: cardsApi.byNumber as ReturnType<typeof vi.fn>,
   verbrauch: nightRunUsageApi.period as ReturnType<typeof vi.fn>,
+  lebenszeit: nightRunUsageApi.total as ReturnType<typeof vi.fn>,
 }
 
 const karte = (title: string): Card => ({
@@ -139,6 +140,16 @@ const angaben = (costUsd: number | null, inputTokens: number | null = 4_820_000,
   cachedInputSharePercent: null,
 })
 
+/**
+ * Der Gattungs-Split der Antwort (Issue #1016). Der Leitstand liest weiterhin die Gesamtsumme; die
+ * Fixtures führen den Split, weil die Antwort ihn trägt — der Nachtlauf-Anteil ist hier die ganze
+ * Summe, der Sitzungs-Anteil leer.
+ */
+const jeGattung = (gesamt: ReturnType<typeof angaben>) => ({
+  night: { total: gesamt, cardShare: angaben(null), remainder: angaben(null) },
+  interactive: { total: angaben(null), cardShare: angaben(null), remainder: angaben(null) },
+})
+
 const kennzahlen = (extra: Partial<VerbrauchKennzahlen> = {}): VerbrauchKennzahlen => ({
   type: 'DAY',
   firstDay: '2026-09-14',
@@ -148,9 +159,13 @@ const kennzahlen = (extra: Partial<VerbrauchKennzahlen> = {}): VerbrauchKennzahl
   coverage: 'COMPLETE',
   noRuns: false,
   runCount: 1,
+  nightRunCount: 1,
+  interactiveRunCount: 0,
   durationMs: 1,
   cardCount: 9,
   usage: { total: angaben(12.4), cardShare: angaben(null), remainder: angaben(null) },
+  usageByKind: jeGattung(angaben(12.4)),
+  interactiveUsageSince: null,
   ...extra,
 })
 
@@ -159,17 +174,33 @@ const nacht = (night: string, outputTokens: number | null) => ({
   runCount: 1,
   cardCount: 9,
   usage: { total: angaben(10, 1, outputTokens, 1), cardShare: angaben(null), remainder: angaben(null) },
+  usageByKind: jeGattung(angaben(10, 1, outputTokens, 1)),
   aborted: false,
 })
 
 const zeitraum = (extra: Partial<VerbrauchZeitraum> = {}): VerbrauchZeitraum => ({
   current: kennzahlen(),
-  previous: kennzahlen({ usage: { total: angaben(14.1), cardShare: angaben(null), remainder: angaben(null) } }),
+  previous: kennzahlen({
+    usage: { total: angaben(14.1), cardShare: angaben(null), remainder: angaben(null) },
+    usageByKind: jeGattung(angaben(14.1)),
+  }),
   nights: [nacht('2026-09-14', 186_000)],
   epics: [],
   withoutEpic: { epicId: null, shortcode: null, title: null, cardCount: 0, usage: angaben(null) },
   epicsOverlap: false,
   ...extra,
+})
+
+/** Die Lebenszeit-Summe der Verbrauchs-Kacheln (Issue #1014, #1017). */
+const lebenszeit = (): VerbrauchGesamt => ({
+  runCount: 12,
+  nightRunCount: 9,
+  interactiveRunCount: 3,
+  cardCount: 30,
+  usage: { total: angaben(150), cardShare: angaben(null), remainder: angaben(null) },
+  usageByKind: jeGattung(angaben(150)),
+  oldestRetainedRunStart: '2026-08-01T00:00:00Z',
+  interactiveUsageSince: null,
 })
 
 function renderPage(pfad = '/boards/1/leitstand') {
@@ -191,6 +222,7 @@ beforeEach(() => {
   m.laeufe.mockResolvedValue([lauf({ id: 1, startedAt: '2026-09-10T21:00:00Z', items: [paket(1, 'GREEN')] }), lauf()])
   m.klassen.mockResolvedValue({ CHECKS_RED: 11, AWAITING_DECISION: 7 })
   m.verbrauch.mockResolvedValue(zeitraum())
+  m.lebenszeit.mockResolvedValue(lebenszeit())
 })
 
 describe('LeitstandPage (#979)', () => {
@@ -492,7 +524,9 @@ describe('LeitstandPage — Verbrauch', () => {
     expect(kosten).toHaveTextContent('12,40$')
     expect(within(kosten).getByTestId('delta-gut')).toHaveTextContent('▼ 1,70 $')
     expect(kosten).toHaveTextContent('1,38 $ je Vorgang')
-    expect(screen.getByText(/^Nacht vom 14\.09\.2026 auf den 15\.09\.2026 · 1 Lauf$/)).toBeInTheDocument()
+    expect(screen.getByTestId('verbrauch-umfang')).toHaveTextContent(
+      'Nacht vom 14.09.2026 auf den 15.09.2026 · 1 Lauf · 0 Sitzungen',
+    )
     expect(m.verbrauch).toHaveBeenCalledWith(5, 'DAY', 0)
   })
 
@@ -501,13 +535,15 @@ describe('LeitstandPage — Verbrauch', () => {
     await kachel('Kosten')
     m.verbrauch.mockResolvedValue(
       zeitraum({
-        current: kennzahlen({ type: 'WEEK', lastDay: '2026-09-20', runCount: 3, usage: { total: angaben(20), cardShare: angaben(null), remainder: angaben(null) } }),
+        current: kennzahlen({ type: 'WEEK', lastDay: '2026-09-20', runCount: 3, nightRunCount: 3, usage: { total: angaben(20), cardShare: angaben(null), remainder: angaben(null) }, usageByKind: jeGattung(angaben(20)) }),
         nights: [nacht('2026-09-14', 100), nacht('2026-09-15', null), nacht('2026-09-16', 300)],
       }),
     )
     fireEvent.click(screen.getByRole('button', { name: 'Woche' }))
     expect(screen.getByRole('button', { name: 'Woche' })).toHaveAttribute('aria-pressed', 'true')
-    expect(await screen.findByText(/· 3 Läufe$/)).toBeInTheDocument()
+    await waitFor(() =>
+      expect(screen.getByTestId('verbrauch-umfang')).toHaveTextContent('3 Läufe · 0 Sitzungen'),
+    )
     expect(m.verbrauch).toHaveBeenLastCalledWith(5, 'WEEK', 0)
     const ausgabe = await kachel('Ausgabe-Token')
     expect(within(ausgabe).getByTestId('funke')).toBeInTheDocument()
@@ -518,7 +554,7 @@ describe('LeitstandPage — Verbrauch', () => {
   it('zeigt ohne Messung Leerwerte, keinen Stapel, keinen Vergleich und den Hinweis zum Zeitraum', async () => {
     m.verbrauch.mockResolvedValue(
       zeitraum({
-        current: kennzahlen({ noRuns: true, cardCount: 0, usage: { total: angaben(null, null, null, null), cardShare: angaben(null), remainder: angaben(null) } }),
+        current: kennzahlen({ noRuns: true, runCount: 0, nightRunCount: 0, cardCount: 0, usage: { total: angaben(null, null, null, null), cardShare: angaben(null), remainder: angaben(null) }, usageByKind: jeGattung(angaben(null, null, null, null)) }),
         nights: [],
       }),
     )
@@ -528,7 +564,9 @@ describe('LeitstandPage — Verbrauch', () => {
     expect(within(eingabe).queryByRole('img')).not.toBeInTheDocument()
     expect(await kachel('Kosten')).not.toHaveTextContent('je Vorgang')
     expect(await kachel('Ausgabe-Token')).toHaveTextContent('0 Nächte')
-    expect(screen.getByText('In diesem Zeitraum hat kein Lauf stattgefunden.')).toBeInTheDocument()
+    expect(
+      screen.getByText('In diesem Zeitraum hat weder ein Lauf noch eine Sitzung stattgefunden.'),
+    ).toBeInTheDocument()
   })
 
   it('meldet Laden und Fehler des Verbrauchs im Bereich', async () => {
@@ -546,13 +584,19 @@ describe('LeitstandPage — Verbrauch', () => {
     m.verbrauch
       .mockReturnValueOnce(new Promise((resolve) => (erste = resolve)))
       .mockReturnValueOnce(new Promise((_, reject) => (fehler = reject)))
-      .mockResolvedValue(zeitraum({ current: kennzahlen({ type: 'MONTH', runCount: 2 }) }))
+      .mockResolvedValue(
+        zeitraum({ current: kennzahlen({ type: 'MONTH', runCount: 2, nightRunCount: 2 }) }),
+      )
     renderPage()
     fireEvent.click(await screen.findByRole('button', { name: 'Woche' }))
     fireEvent.click(screen.getByRole('button', { name: 'Monat' }))
     erste(zeitraum())
     fehler(new Error('spät'))
-    expect(await screen.findByText(/^September 2026 · 2 Läufe$/)).toBeInTheDocument()
+    await waitFor(() =>
+      expect(screen.getByTestId('verbrauch-umfang')).toHaveTextContent(
+        'September 2026 · 2 Läufe · 0 Sitzungen',
+      ),
+    )
     expect(screen.queryByText('Der Verbrauch konnte nicht geladen werden.')).not.toBeInTheDocument()
   })
 })

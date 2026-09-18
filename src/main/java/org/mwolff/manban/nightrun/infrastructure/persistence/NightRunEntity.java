@@ -38,6 +38,10 @@ class NightRunEntity {
   @Column(name = "mode", nullable = false)
   private String mode;
 
+  /** Gattung des Eintrags (Issue #1010); wie {@code origin} als Zeichenkette abgebildet. */
+  @Column(name = "kind", nullable = false)
+  private String kind;
+
   @Column(name = "duration_ms", nullable = false)
   private long durationMs;
 
@@ -98,6 +102,10 @@ class NightRunEntity {
 
   String getMode() {
     return mode;
+  }
+
+  String getKind() {
+    return kind;
   }
 
   long getDurationMs() {

@@ -1172,8 +1172,16 @@ class CardIT extends AbstractIntegrationTest {
   }
 
   private String bulkTransferBody(long cardId, long boardId, long columnId) {
-    return "{\"cardIds\":[%d],\"targetBoardId\":%d,\"targetColumnId\":%d}"
-        .formatted(cardId, boardId, columnId);
+    return bulkTransferBody(new long[] {cardId}, boardId, columnId);
+  }
+
+  private String bulkTransferBody(long[] cardIds, long boardId, long columnId) {
+    String ids =
+        java.util.Arrays.stream(cardIds)
+            .mapToObj(Long::toString)
+            .collect(java.util.stream.Collectors.joining(","));
+    return "{\"cardIds\":[%s],\"targetBoardId\":%d,\"targetColumnId\":%d}"
+        .formatted(ids, boardId, columnId);
   }
 
   @Test
@@ -1317,6 +1325,210 @@ class CardIT extends AbstractIntegrationTest {
     // Rollback: die Karte liegt weiterhin im Quellboard.
     mvc.perform(get("/api/boards/" + boardIdA + "/cards").cookie(alice))
         .andExpect(jsonPath("$.length()").value(1));
+  }
+
+  private JsonNode activityOf(Cookie session, long cardId) throws Exception {
+    return json.readTree(
+        mvc.perform(get("/api/cards/" + cardId + "/activity").cookie(session))
+            .andExpect(status().isOk())
+            .andReturn()
+            .getResponse()
+            .getContentAsString());
+  }
+
+  /** Zählt die Verlaufseinträge einer Karte mit dem gegebenen Typ und Text. */
+  private long countActivity(Cookie session, long cardId, String type, String detail)
+      throws Exception {
+    long count = 0;
+    for (JsonNode entry : activityOf(session, cardId)) {
+      if (type.equals(entry.get("type").asText()) && detail.equals(entry.get("detail").asText())) {
+        count++;
+      }
+    }
+    return count;
+  }
+
+  /**
+   * Sammel-Verschieben innerhalb desselben Boards (Issue #1043): Die Karten landen in
+   * Eingabereihenfolge am Ende der Zielspalte, behalten Nummer und Vorhaben-Zuordnung und tragen je
+   * einen Verlaufseintrag. Der Board-Wechsel leert {@code parentId} — auf demselben Board wäre das
+   * ein Datenverlust ohne Anlass, denn das Vorhaben gehört zu genau diesem Board.
+   */
+  @Test
+  void bulkTransferWithinSameBoardMovesToColumnKeepingNumberAndParent() throws Exception {
+    Cookie alice = loginAs("same-board-owner@example.com");
+    long projectId = createProject("same-board-owner@example.com", "SameBoard");
+    JsonNode board = createBoard(alice, projectId);
+    long boardId = board.get("id").asLong();
+    long backlog = board.get("columns").get(0).get("id").asLong();
+    long ready = board.get("columns").get(1).get("id").asLong();
+    long epicId = createEpic(alice, boardId, "EP");
+    long c1 = createCard(alice, boardId, backlog, "Eins", null).get("id").asLong();
+    long c2 = createCard(alice, boardId, backlog, "Zwei", null).get("id").asLong();
+    long c3 = createCard(alice, boardId, backlog, "Drei", null).get("id").asLong();
+    long bleibt = createCard(alice, boardId, backlog, "Bleibt", null).get("id").asLong();
+    // Zielspalte ist bereits befüllt: der Block muss dahinter landen.
+    long alt = createCard(alice, boardId, ready, "Alt", null).get("id").asLong();
+    for (long id : new long[] {c1, c2, c3}) {
+      mvc.perform(
+              patch("/api/cards/" + id + "/parent")
+                  .cookie(alice)
+                  .contentType("application/json")
+                  .content("{\"parentId\":%d}".formatted(epicId)))
+          .andExpect(status().isOk());
+    }
+
+    // Eingabereihenfolge bewusst ungleich der Anlage-Reihenfolge.
+    mvc.perform(
+            post("/api/cards/bulk-transfer")
+                .cookie(alice)
+                .contentType("application/json")
+                .content(bulkTransferBody(new long[] {c3, c1, c2}, boardId, ready)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.length()").value(3))
+        // Nummer und Vorhaben überleben — die Karte verlässt ihr Board ja nicht.
+        .andExpect(jsonPath("$[0].number").value(4))
+        .andExpect(jsonPath("$[0].parentId").value((int) epicId))
+        .andExpect(jsonPath("$[0].columnId").value((int) ready))
+        .andExpect(jsonPath("$[0].boardId").value((int) boardId));
+
+    JsonNode cards = boardCards(alice, boardId);
+    org.assertj.core.api.Assertions.assertThat(
+            new int[] {
+              positionOf(cards, alt),
+              positionOf(cards, c3),
+              positionOf(cards, c1),
+              positionOf(cards, c2)
+            })
+        .containsExactly(0, 1, 2, 3);
+    // Quellspalte lückenlos nachgezogen.
+    org.assertj.core.api.Assertions.assertThat(positionOf(cards, bleibt)).isZero();
+    // Je Karte genau ein Verlaufseintrag über den Spaltenwechsel.
+    for (long id : new long[] {c1, c2, c3}) {
+      org.assertj.core.api.Assertions.assertThat(
+              countActivity(alice, id, "MOVED", "Verschoben nach Ready"))
+          .isEqualTo(1);
+    }
+    // Und ein fortgeschriebener Spaltenverlauf: Backlog geschlossen, genau eine offene Zeile für
+    // Ready. Ohne ihn zeigte die Durchlaufzeit die Karte weiterhin in Backlog.
+    org.assertj.core.api.Assertions.assertThat(
+            jdbc.queryForList(
+                "SELECT column_name FROM card_column_transition "
+                    + "WHERE card_id = ? AND left_at IS NULL",
+                String.class,
+                c1))
+        .containsExactly("Ready");
+  }
+
+  /**
+   * Der Done-Zeitpunkt folgt dem Spaltenwechsel — beim Eintritt gesetzt, beim Verlassen gelöscht.
+   * Der Board-Wechsel leert ihn dagegen immer; träfe diese Regel auch das eigene Board, verlöre die
+   * Karte ihren Done-Zeitpunkt (Durchlaufzeit, Implementierungszeit, Done-Aufbewahrung).
+   */
+  @Test
+  void bulkTransferWithinSameBoardSetsAndClearsDoneTimestamp() throws Exception {
+    Cookie alice = loginAs("same-board-done@example.com");
+    long projectId = createProject("same-board-done@example.com", "SameBoardDone");
+    JsonNode board = createBoard(alice, projectId);
+    long boardId = board.get("id").asLong();
+    long backlog = board.get("columns").get(0).get("id").asLong();
+    long done = board.get("columns").get(4).get("id").asLong();
+    long cardId = createCard(alice, boardId, backlog, "Karte", null).get("id").asLong();
+
+    mvc.perform(
+            post("/api/cards/bulk-transfer")
+                .cookie(alice)
+                .contentType("application/json")
+                .content(bulkTransferBody(new long[] {cardId}, boardId, done)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$[0].movedToDoneAt").isNotEmpty());
+
+    mvc.perform(
+            post("/api/cards/bulk-transfer")
+                .cookie(alice)
+                .contentType("application/json")
+                .content(bulkTransferBody(new long[] {cardId}, boardId, backlog)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$[0].movedToDoneAt").doesNotExist());
+  }
+
+  /**
+   * Eine Karte, die schon in der Zielspalte liegt, bleibt an ihrem Platz — ohne Verlaufseintrag und
+   * ohne Fehler. Sonst scheiterte jede Auswahl über mehrere Spalten an der einen Karte, die bereits
+   * am Ziel ist.
+   */
+  @Test
+  void bulkTransferWithinSameBoardLeavesCardsAlreadyInTargetColumnUntouched() throws Exception {
+    Cookie alice = loginAs("same-board-noop@example.com");
+    long projectId = createProject("same-board-noop@example.com", "SameBoardNoop");
+    JsonNode board = createBoard(alice, projectId);
+    long boardId = board.get("id").asLong();
+    long backlog = board.get("columns").get(0).get("id").asLong();
+    long ready = board.get("columns").get(1).get("id").asLong();
+    long schonDa = createCard(alice, boardId, ready, "Schon da", null).get("id").asLong();
+    long wandert = createCard(alice, boardId, backlog, "Wandert", null).get("id").asLong();
+
+    mvc.perform(
+            post("/api/cards/bulk-transfer")
+                .cookie(alice)
+                .contentType("application/json")
+                .content(bulkTransferBody(new long[] {schonDa, wandert}, boardId, ready)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.length()").value(2));
+
+    org.assertj.core.api.Assertions.assertThat(
+            countActivity(alice, schonDa, "MOVED", "Verschoben nach Ready"))
+        .isZero();
+    org.assertj.core.api.Assertions.assertThat(
+            countActivity(alice, wandert, "MOVED", "Verschoben nach Ready"))
+        .isEqualTo(1);
+    JsonNode cards = boardCards(alice, boardId);
+    org.assertj.core.api.Assertions.assertThat(
+            new int[] {positionOf(cards, schonDa), positionOf(cards, wandert)})
+        .containsExactly(0, 1);
+  }
+
+  /**
+   * Auf dem eigenen Board genügt {@link ProjectRole#MEMBER} mit {@code CARD_MOVE} — dasselbe Recht
+   * wie für das Verschieben einer einzelnen Karte. Ohne das Recht bewegt sich keine Karte.
+   */
+  @Test
+  void bulkTransferWithinSameBoardNeedsOnlyCardMove() throws Exception {
+    Cookie alice = loginAs("same-board-rights-owner@example.com");
+    Cookie bob = loginAs("same-board-rights-member@example.com");
+    Cookie viewer = loginAs("same-board-rights-viewer@example.com");
+    long projectId = createProject("same-board-rights-owner@example.com", "SameBoardRights");
+    JsonNode board = createBoard(alice, projectId);
+    long boardId = board.get("id").asLong();
+    long backlog = board.get("columns").get(0).get("id").asLong();
+    long ready = board.get("columns").get(1).get("id").asLong();
+    long c1 = createCard(alice, boardId, backlog, "Eins", null).get("id").asLong();
+    long c2 = createCard(alice, boardId, backlog, "Zwei", null).get("id").asLong();
+    addMember(projectId, "same-board-rights-member@example.com", ProjectRole.MEMBER);
+    addMember(projectId, "same-board-rights-viewer@example.com", ProjectRole.VIEWER);
+
+    mvc.perform(
+            post("/api/cards/bulk-transfer")
+                .cookie(viewer)
+                .contentType("application/json")
+                .content(bulkTransferBody(new long[] {c1, c2}, boardId, ready)))
+        .andExpect(status().isForbidden());
+    // Rollback: beide Karten liegen weiterhin in der Quellspalte.
+    JsonNode unveraendert = boardCards(alice, boardId);
+    org.assertj.core.api.Assertions.assertThat(
+            new int[] {positionOf(unveraendert, c1), positionOf(unveraendert, c2)})
+        .containsExactly(0, 1);
+    mvc.perform(get("/api/cards/" + c1).cookie(alice))
+        .andExpect(jsonPath("$.columnId").value((int) backlog));
+
+    mvc.perform(
+            post("/api/cards/bulk-transfer")
+                .cookie(bob)
+                .contentType("application/json")
+                .content(bulkTransferBody(new long[] {c1, c2}, boardId, ready)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$[0].columnId").value((int) ready))
+        .andExpect(jsonPath("$[1].columnId").value((int) ready));
   }
 
   @Test

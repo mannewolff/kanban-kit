@@ -154,6 +154,16 @@ interface Verbrauch {
   zwischenspeicher: number | undefined
 }
 
+/**
+ * Die Lauf-Arten, die in der Anzeige vorkommen können: die des Browser-Parsers **und** die, die der
+ * Server melden darf. Seit Issue #1016 kennt `NightRunServerMode` zusätzlich `INTERACTIVE`.
+ *
+ * <p>Auf der Seite steht das Wort heute nicht: Die Laufliste ist serverseitig auf Nachtläufe
+ * beschränkt (`NightRunService.list`, Issue #1012), eine Sitzung erreicht sie also gar nicht. Der
+ * Typ lässt sie trotzdem zu — ein Wort dafür ist billiger als ein Cast, der den Schutz aushebelte.
+ */
+type AnzeigeArt = NightRunMode | NightRunServerMode
+
 /** Ein Lauf in der Anzeigeform. */
 interface AnzeigeLauf {
   /**
@@ -164,7 +174,7 @@ interface AnzeigeLauf {
    */
   gespeichert: boolean
   startedAt: string
-  mode: NightRun['mode']
+  mode: AnzeigeArt
   durationMs: number
   processedCount: number
   skippedCount: number
@@ -215,15 +225,15 @@ const zustandsFarbe = (zustand: NightRunState): string => melderFarbe(MELDER_JE_
  * `docs/mockup-nachtlauf-lauf.html` Z. 382). Als `Record` über alle Werte, nicht als
  * Inline-Bedingung: Ein weiterer Modus bricht den Build, statt still auf „Umsetzung" zu fallen.
  *
- * <p>Nicht `modusName` aus `lib/leitstand.ts`: Die kennt nur die drei Arten, die der Server
- * aufbewahrt. `NIGHTPLAN` bleibt browser-only (Plan #803, Entscheidung 8) und käme dort nie vor —
- * hier steht er aber auf der Seite.
+ * <p>Nicht `modusName` aus `lib/leitstand.ts`: Die kennt nicht `NIGHTPLAN`, der browser-only bleibt
+ * (Plan #803, Entscheidung 8) und dort nie vorkäme — hier steht er aber auf der Seite.
  */
-const ART_KURZ: Record<NightRunMode, string> = {
+const ART_KURZ: Record<AnzeigeArt, string> = {
   IMPLEMENTATION: 'Umsetzung',
   REVIEW: 'Prüfung',
   NIGHTPLAN: 'Nachtplan',
   CHAIN: 'Kette',
+  INTERACTIVE: 'Sitzung',
 }
 
 /**
@@ -489,7 +499,7 @@ function stufenZustand(
   praefix: string,
   glieder: readonly Kettenglied[],
   istRot: (nummer: number) => boolean,
-  modus: NightRunMode,
+  modus: AnzeigeArt,
 ): StufenZustand {
   if (modus === 'CHAIN') {
     return { art: 'entfaellt' }
@@ -1760,7 +1770,7 @@ const laufTitel = (startedAt: string): string =>
  * seit #988 in der aufgeklappten Zeile ihres Vorgangs.
  */
 const ergebniszeile = (
-  modus: NightRunMode,
+  modus: AnzeigeArt,
   item: AnzeigeItem,
   standItem: NightRunItem | undefined,
   ohneKennzahlen: boolean,
@@ -1808,7 +1818,7 @@ function Vorgangszeile({
    * Arbeitsschritte, Züge und Modellzeit stehen allein dort — der Server bewahrt sie nicht auf.
    */
   standItem: NightRunItem | undefined
-  modus: NightRunMode
+  modus: AnzeigeArt
   vorgaben: NightRunStufenvorgaben | undefined
   /** Der Anteil dieses Vorgangs an der Nacht; `undefined`, wo der Lauf keine Bezugsgröße hergibt. */
   anteil: Laufabschnitt | undefined

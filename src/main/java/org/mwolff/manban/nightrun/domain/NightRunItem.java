@@ -16,9 +16,10 @@ import org.mwolff.manban.common.Identifiable;
  * belegt.
  *
  * <p>Ein Arbeitspaket überdauert die Verdrängung seines Laufs (Issue #964): Es trägt Projekt,
- * Startzeitpunkt und Lauf-Art selbst, damit die Messwerte einer Karte nicht mit der Aufbewahrung
- * der Läufe verschwinden. Geschrieben werden diese drei stets aus dem Lauf, zu dem das Paket gehört
- * — die Werte am einzuliefernden Paket sind dafür nicht maßgeblich.
+ * Startzeitpunkt, Lauf-Art und seit Issue #1010 auch die Gattung selbst, damit die Messwerte einer
+ * Karte nicht mit der Aufbewahrung der Läufe verschwinden. Geschrieben werden diese vier stets aus
+ * dem Lauf, zu dem das Paket gehört — die Werte am einzuliefernden Paket sind dafür nicht
+ * maßgeblich.
  *
  * @param id technische ID; {@code null} vor der Persistierung
  * @param nightRunId zugehöriger Lauf; {@code null}, solange dessen ID noch nicht vergeben ist — und
@@ -26,6 +27,8 @@ import org.mwolff.manban.common.Identifiable;
  * @param projectId Projekt des Laufs
  * @param startedAt Startzeitpunkt des Laufs
  * @param mode Betriebsart des Laufs
+ * @param kind Gattung des Laufs — Nachtlauf oder interaktive Sitzung (Issue #1010); niemals {@code
+ *     null}, ein Erzeugungspfad ohne eigene Gattung trägt {@link NightRunKind#NIGHT}
  * @param cardNumber projektweite Kartennummer des Arbeitspakets
  * @param title Titel zum Zeitpunkt des Laufs
  * @param state Ausgang des Arbeitspakets
@@ -42,6 +45,7 @@ public record NightRunItem(
     long projectId,
     Instant startedAt,
     NightRunMode mode,
+    NightRunKind kind,
     int cardNumber,
     String title,
     NightRunState state,
@@ -66,6 +70,7 @@ public record NightRunItem(
         projectId,
         startedAt,
         mode,
+        kind,
         cardNumber,
         title,
         state,

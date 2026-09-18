@@ -28,6 +28,11 @@ type Zustand = { art: 'laden' } | { art: 'fehler' } | { art: 'nacht'; nacht: Ver
  *
  * <p>Ein Fehler bleibt im Bereich und wandert nicht in die Meldungszeile der Seite: Die übrige
  * Auswertung funktioniert auch ohne ihn.
+ *
+ * <p><b>Der Bereich zeigt den Nachtlauf-Anteil</b> (Issue #1016, Plan #1007). Die Endpunkte, die er
+ * liest, führen seit Issue #1013 auch die interaktiven Sitzungen; die Festlegung darauf treffen die
+ * beiden Unterbausteine {@link NachtlaufVerbrauchZeitraum} und {@link NachtlaufVerbrauchNacht}, die
+ * die Zahlen anzeigen. Hier wird allein das Datum der Nacht gelesen, und das trägt keine Gattung.
  */
 export function NachtlaufVerbrauchBereich({
   projectId,

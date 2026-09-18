@@ -24,6 +24,15 @@ const ohneNull = (wert: number | null): number | undefined => (wert === null ? u
  * den kartenbezogenen Anteil, der Rest gehört zu keinem Vorhaben (AK 12). Und eine Karte kann zu
  * mehreren Vorhaben gehören und zählt dann in jedem (Plan E11) — ohne den Hinweis addiert der
  * Leser Zahlen, die sich überlappen.
+ *
+ * <p><b>Ohne Aufteilung nach Gattung</b> (Issue #1016, Plan #1007): Die übrigen Bausteine des
+ * Bereichs sind auf den Nachtlauf-Anteil festgelegt — dieser kann es nicht. Die Antwort trägt je
+ * Vorhaben nur eine Summe (`EpicResponse`, ohne `usageByKind`), und der Zeitraum-Abruf liefert die
+ * Kartenzeilen nicht mit, aus denen sie entstand; im Browser ist der Anteil deshalb nicht
+ * herstellbar. Sobald interaktive Sitzungen eingehen, enthalten diese Zahlen sie mit. Die Lücke ist
+ * im Plan benannt und gehört in ein Paket „Vorhaben-Aufstellung nach Gattung" (Backend-Aggregation
+ * plus Anzeige) — sie hier durch eine Rechnung im Browser zu schließen, erfände eine Zuordnung, die
+ * nur der Server kennt.
  */
 export function NachtlaufVerbrauchVorhaben({
   epics,

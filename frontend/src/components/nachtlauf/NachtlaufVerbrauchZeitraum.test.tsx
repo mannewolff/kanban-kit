@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type {
   NightRunUsageApi,
   VerbrauchAngaben,
+  VerbrauchAufteilung,
   VerbrauchKennzahlen,
   VerbrauchZeitraum,
   VerbrauchZeitraumArt,
@@ -27,6 +28,29 @@ const nichts: VerbrauchAngaben = {
 
 const kosten = (costUsd: number | null): VerbrauchAngaben => ({ ...nichts, costUsd })
 
+const aufteilung = (
+  total: VerbrauchAngaben,
+  cardShare: VerbrauchAngaben = nichts,
+  remainder: VerbrauchAngaben = nichts,
+): VerbrauchAufteilung => ({ total, cardShare, remainder })
+
+const LEER = aufteilung(nichts)
+
+/**
+ * Der Verbrauch einer Antwort nach Gattung (Issue #1016): `nachtlauf` ist der Anteil, den die
+ * Nachtlauf-Seite zeigt, `sitzungen` der interaktive. `gesamt` ist standardmäßig der
+ * Nachtlauf-Anteil — das trifft zu, solange keine Sitzung im Spiel ist; wo eine ist, nennt der Test
+ * die Gesamtsumme ausdrücklich, statt sie hier zu rechnen.
+ */
+const verbrauch = (
+  nachtlauf: VerbrauchAufteilung,
+  sitzungen: VerbrauchAufteilung = LEER,
+  gesamt: VerbrauchAufteilung = nachtlauf,
+): Pick<VerbrauchKennzahlen, 'usage' | 'usageByKind'> => ({
+  usage: gesamt,
+  usageByKind: { night: nachtlauf, interactive: sitzungen },
+})
+
 const TAGE: Record<VerbrauchZeitraumArt, [string, string]> = {
   DAY: ['2026-09-15', '2026-09-15'],
   WEEK: ['2026-09-07', '2026-09-13'],
@@ -45,9 +69,12 @@ const kennzahlen = (
   coverage: 'COMPLETE',
   noRuns: false,
   runCount: 4,
+  nightRunCount: 4,
+  interactiveRunCount: 0,
   durationMs: 1000,
   cardCount: 3,
-  usage: { total: kosten(6.5), cardShare: kosten(5), remainder: kosten(1.5) },
+  interactiveUsageSince: null,
+  ...verbrauch(aufteilung(kosten(6.5), kosten(5), kosten(1.5))),
   ...werte,
 })
 
@@ -61,11 +88,11 @@ const zeitraum = (
     lastDay: '2026-09-06',
     runCount: 2,
     cardCount: 1,
-    usage: { total: kosten(4), cardShare: kosten(3), remainder: kosten(1) },
+    ...verbrauch(aufteilung(kosten(4), kosten(3), kosten(1))),
   }),
   nights: [
-    { night: '2026-09-08', runCount: 2, cardCount: 1, usage: { total: kosten(3), cardShare: nichts, remainder: nichts }, aborted: false },
-    { night: '2026-09-09', runCount: 1, cardCount: 1, usage: { total: nichts, cardShare: nichts, remainder: nichts }, aborted: true },
+    { night: '2026-09-08', runCount: 2, cardCount: 1, ...verbrauch(aufteilung(kosten(3))), aborted: false },
+    { night: '2026-09-09', runCount: 1, cardCount: 1, ...verbrauch(LEER), aborted: true },
   ],
   epics: [
     { epicId: 1, shortcode: 'PLANEN', title: 'Planen', cardCount: 2, usage: kosten(4) },
@@ -237,13 +264,7 @@ describe('NachtlaufVerbrauchZeitraum — Platten und Kacheln', () => {
   })
 
   it('laesst die Einordnung weg, wo der Wert dafuer fehlt — und schreibt nie 0', async () => {
-    zeige(
-      apiMit((type) =>
-        Promise.resolve(
-          zeitraum(type, { usage: { total: nichts, cardShare: nichts, remainder: nichts } }),
-        ),
-      ),
-    )
+    zeige(apiMit((type) => Promise.resolve(zeitraum(type, verbrauch(LEER)))))
 
     const aktuell = await screen.findByTestId('verbrauch-zeitraum-aktuell')
     expect(kachel(aktuell, 'Gesamtsumme')).toHaveTextContent('nicht gemessen')
@@ -272,9 +293,7 @@ describe('NachtlaufVerbrauchZeitraum — Vergleich mit dem Vorzeitraum', () => {
   it('zeigt billiger als gruene Marke mit ▼', async () => {
     zeige(
       apiMit((type) =>
-        Promise.resolve(
-          zeitraum(type, { usage: { total: kosten(3), cardShare: kosten(2), remainder: kosten(1) } }),
-        ),
+        Promise.resolve(zeitraum(type, verbrauch(aufteilung(kosten(3), kosten(2), kosten(1))))),
       ),
     )
 
@@ -283,13 +302,7 @@ describe('NachtlaufVerbrauchZeitraum — Vergleich mit dem Vorzeitraum', () => {
   })
 
   it('setzt keine Marke, wo nicht vergleichbar ist', async () => {
-    zeige(
-      apiMit((type) =>
-        Promise.resolve(
-          zeitraum(type, { usage: { total: nichts, cardShare: nichts, remainder: nichts } }),
-        ),
-      ),
-    )
+    zeige(apiMit((type) => Promise.resolve(zeitraum(type, verbrauch(LEER)))))
 
     const vergleich = await screen.findByTestId('verbrauch-zeitraum-vergleich')
     expect(vergleich).toHaveTextContent('nicht vergleichbar')
@@ -302,7 +315,7 @@ describe('NachtlaufVerbrauchZeitraum — Hinweise', () => {
     zeige(
       apiMit((type) =>
         Promise.resolve(
-          zeitraum(type, { noRuns: true, runCount: 0, cardCount: 0, usage: { total: nichts, cardShare: nichts, remainder: nichts } }),
+          zeitraum(type, { noRuns: true, runCount: 0, nightRunCount: 0, cardCount: 0, ...verbrauch(LEER) }),
         ),
       ),
     )
@@ -317,7 +330,7 @@ describe('NachtlaufVerbrauchZeitraum — Hinweise', () => {
     zeige(
       apiMit((type) =>
         Promise.resolve(
-          zeitraum(type, { coverage: 'BEFORE_RETENTION', noRuns: true, runCount: 0, usage: { total: nichts, cardShare: nichts, remainder: nichts } }),
+          zeitraum(type, { coverage: 'BEFORE_RETENTION', noRuns: true, runCount: 0, nightRunCount: 0, ...verbrauch(LEER) }),
         ),
       ),
     )
@@ -338,21 +351,23 @@ describe('NachtlaufVerbrauchZeitraum — Hinweise', () => {
     expect(within(aktuell).getAllByTestId(/^verbrauch-kachel-/)).toHaveLength(4)
   })
 
-  it('zeigt nicht gemessene Angaben mit Hinweis als „nicht gemessen"', async () => {
-    zeige(
-      apiMit((type) =>
-        Promise.resolve(zeitraum(type, { usage: { total: nichts, cardShare: nichts, remainder: nichts } })),
-      ),
-    )
+  /**
+   * Der Hinweis des Zeitraums sagt, dass der Verbrauch nicht vorliegt — „nicht gemessen" bleibt
+   * dem Kartenblatt vorbehalten, wo es einen bekannten Lauf ohne Zahl meint (Issue #1017).
+   */
+  it('erklaert Angaben ohne Verbrauch mit einem eigenen Hinweis', async () => {
+    zeige(apiMit((type) => Promise.resolve(zeitraum(type, verbrauch(LEER)))))
 
-    expect(await screen.findByTestId('verbrauch-zeitraum-hinweis')).toHaveTextContent('nicht gemessen')
+    expect(await screen.findByTestId('verbrauch-zeitraum-hinweis')).toHaveTextContent(
+      'ihr Verbrauch liegt aber nicht vor',
+    )
     expect(screen.getByTestId('verbrauch-zeitraum-vergleich')).toHaveTextContent('nicht vergleichbar')
   })
 
   it('nennt den Hinweis des Vorzeitraums an seiner Platte', async () => {
     const mitAltemVorzeitraum = (type: VerbrauchZeitraumArt): VerbrauchZeitraum => ({
       ...zeitraum(type),
-      previous: kennzahlen(type, { coverage: 'BEFORE_RETENTION', noRuns: true, runCount: 0 }),
+      previous: kennzahlen(type, { coverage: 'BEFORE_RETENTION', noRuns: true, runCount: 0, nightRunCount: 0 }),
     })
     zeige(apiMit((type) => Promise.resolve(mitAltemVorzeitraum(type))))
 
@@ -397,5 +412,82 @@ describe('NachtlaufVerbrauchZeitraum — Naechte und Vorhaben', () => {
     zeige(apiMit((type) => Promise.resolve(zeitraum(type))))
 
     expect(await screen.findByTestId('verbrauch-vorhaben')).toHaveTextContent('PLANEN · Planen')
+  })
+})
+
+/**
+ * Die Festlegung auf den Nachtlauf-Anteil (Issue #1016, Plan #1007): Die Seite bleibt in ihrer
+ * Aussage auf Nachtläufe beschränkt, auch wenn dieselben Endpunkte seit #1013 die interaktiven
+ * Sitzungen mitführen.
+ */
+describe('NachtlaufVerbrauchZeitraum — Nachtlauf-Anteil', () => {
+  /** Nachtläufe wie im Standard-Fixture, dazu Sitzungen für 10,00 $ — Gesamtsumme 16,50 $. */
+  const mitSitzungen = (type: VerbrauchZeitraumArt): VerbrauchZeitraum =>
+    zeitraum(
+      type,
+      verbrauch(
+        aufteilung(kosten(6.5), kosten(5), kosten(1.5)),
+        aufteilung(kosten(10), kosten(8), kosten(2)),
+        aufteilung(kosten(16.5), kosten(13), kosten(3.5)),
+      ),
+    )
+
+  it('zeigt in den Kacheln den Nachtlauf-Anteil und nicht die Gesamtsumme', async () => {
+    zeige(apiMit((type) => Promise.resolve(mitSitzungen(type))))
+
+    const aktuell = await screen.findByTestId('verbrauch-zeitraum-aktuell')
+    expect(lesbar(kachel(aktuell, 'Gesamtsumme'))).toContain('6,50')
+    expect(lesbar(kachel(aktuell, 'Gesamtsumme'))).not.toContain('16,50')
+    expect(lesbar(kachel(aktuell, 'Rest'))).toContain('1,50')
+    expect(kachel(aktuell, 'Karten zugeordnet')).toHaveTextContent('77 % der Summe')
+  })
+
+  it('vergleicht Nachtlauf-Anteil mit Nachtlauf-Anteil des Vorzeitraums', async () => {
+    zeige(apiMit((type) => Promise.resolve(mitSitzungen(type))))
+
+    const vergleich = await screen.findByTestId('verbrauch-zeitraum-vergleich')
+    expect(lesbar(within(vergleich).getByTestId('delta-schlecht'))).toBe('▲ 2,50 $ zur Vorwoche')
+  })
+
+  it('zeigt in den Naechte-Zeilen den Nachtlauf-Anteil der Nacht', async () => {
+    zeige(
+      apiMit((type) =>
+        Promise.resolve({
+          ...zeitraum(type),
+          nights: [
+            {
+              night: '2026-09-08',
+              runCount: 2,
+              cardCount: 1,
+              ...verbrauch(aufteilung(kosten(3)), aufteilung(kosten(7)), aufteilung(kosten(10))),
+              aborted: false,
+            },
+          ],
+        }),
+      ),
+    )
+
+    const zeile = await screen.findByRole('button', { name: /Nacht vom 08\.09\.2026/ })
+    expect(lesbar(zeile)).toContain('3,00 $')
+    expect(lesbar(zeile)).not.toContain('10,00 $')
+  })
+
+  /** „Nicht gemessen" bleibt „nicht gemessen" — auch wenn die Gesamtsumme einen Wert trägt. */
+  it('schreibt einen ungemessenen Nachtlauf-Anteil nie als 0 und nie als Gesamtsumme', async () => {
+    zeige(
+      apiMit((type) =>
+        Promise.resolve(
+          zeitraum(type, verbrauch(LEER, aufteilung(kosten(10)), aufteilung(kosten(10)))),
+        ),
+      ),
+    )
+
+    const aktuell = await screen.findByTestId('verbrauch-zeitraum-aktuell')
+    expect(kachel(aktuell, 'Gesamtsumme')).toHaveTextContent('nicht gemessen')
+    expect(kachel(aktuell, 'Gesamtsumme').textContent).not.toMatch(/\d/)
+    expect(kachel(aktuell, 'Rest')).toHaveTextContent('nicht gemessen')
+    expect(screen.getByTestId('verbrauch-zeitraum-vergleich')).toHaveTextContent(
+      'nicht vergleichbar',
+    )
   })
 })

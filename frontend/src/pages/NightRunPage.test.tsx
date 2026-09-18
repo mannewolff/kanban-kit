@@ -370,6 +370,15 @@ const VERBRAUCH_NICHTS = {
   cachedInputSharePercent: null,
 }
 
+const VERBRAUCH_LEER = {
+  total: VERBRAUCH_NICHTS,
+  cardShare: VERBRAUCH_NICHTS,
+  remainder: VERBRAUCH_NICHTS,
+}
+
+/** Die Aufteilung nach Gattung, beide Anteile ungemessen (Issue #1013, #1016). */
+const VERBRAUCH_JE_GATTUNG = { night: VERBRAUCH_LEER, interactive: VERBRAUCH_LEER }
+
 /** Kennzahlen eines Zeitraums ohne Messung. */
 const verbrauchKennzahlen = (type: string, firstDay: string, lastDay: string) => ({
   type,
@@ -382,7 +391,9 @@ const verbrauchKennzahlen = (type: string, firstDay: string, lastDay: string) =>
   runCount: 2,
   durationMs: 60_000,
   cardCount: 1,
-  usage: { total: VERBRAUCH_NICHTS, cardShare: VERBRAUCH_NICHTS, remainder: VERBRAUCH_NICHTS },
+  usage: VERBRAUCH_LEER,
+  usageByKind: VERBRAUCH_JE_GATTUNG,
+  interactiveUsageSince: null,
 })
 
 /**
@@ -397,7 +408,8 @@ const VERBRAUCH_ZEITRAUM = {
       night: '2026-09-10',
       runCount: 1,
       cardCount: 1,
-      usage: { total: VERBRAUCH_NICHTS, cardShare: VERBRAUCH_NICHTS, remainder: VERBRAUCH_NICHTS },
+      usage: VERBRAUCH_LEER,
+      usageByKind: VERBRAUCH_JE_GATTUNG,
       aborted: false,
     },
   ],
@@ -412,7 +424,8 @@ const verbrauchNacht = (night: string) => ({
   runCount: 2,
   durationMs: 60_000,
   cardCount: 1,
-  usage: { total: VERBRAUCH_NICHTS, cardShare: VERBRAUCH_NICHTS, remainder: VERBRAUCH_NICHTS },
+  usage: VERBRAUCH_LEER,
+  usageByKind: VERBRAUCH_JE_GATTUNG,
   aborted: false,
   cards: [],
 })

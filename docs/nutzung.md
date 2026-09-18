@@ -35,7 +35,7 @@
   weit) — auch per Tastatur bedienbar. In der ersten bzw. letzten Spalte fehlt der jeweils sinnlose
   Eintrag.
 - **⋮-Menü:** „Duplizieren", „Archivieren", „In den Ideen-Pool" (legt die Karte in den
-  [Ideen-Pool](#ideen-pool)) — mit Board-Recht — „Auf anderes Board verschieben…" sowie „Nach
+  [Ideen-Pool](#ideen-pool)) — mit Board-Recht — „Verschieben…" (Spalte, Board oder Projekt) sowie „Nach
   links/rechts verschieben". Der Eintrag **„Bearbeiten"** (öffnet das Detail im Bearbeiten-Modus)
   erscheint nur bei aktivem [Editiermodus](#editiermodus); der Button „Bearbeiten" im Karten-Detail
   steht dagegen immer zur Verfügung, sofern du Bearbeitungsrecht hast. Bei **archivierten** Karten
@@ -67,15 +67,17 @@ Klick auf eine Karte öffnet das Detail:
 - **Abhängigkeiten:** Verweise auf andere Kartennummern.
 - **Anhänge:** hochladen, herunterladen, löschen. **Klick auf einen Bild- oder PDF-Anhang** (auf die
   Miniatur oder den Dateinamen) öffnet eine **Vorschau (Lightbox)**; andere Dateitypen werden geladen.
-- **Nachtlauf-Anläufe:** War die Karte schon in einem [Nachtlauf](#nachtlauf), steht hier, was ihre
-  Anläufe gekostet haben — die **Dauer je Lauf-Art** (Umsetzungs-, Prüf- und Ketten-Lauf; eine Art,
-  in der die Karte nie vorkam, steht als „nicht gelaufen"), die **Summen über alle Anläufe** (Kosten,
-  Eingabe, Ausgabe, Zwischenspeicher, jede mit ihrer Grundlage „aus *n* von *m* Anläufen"), die
-  **Anläufe** selbst mit Datum, Ergebnis, Dauer und Kosten, jüngster zuerst, und die Zahl der
-  **Wiederaufnahmen** (ein gescheiterter Anlauf, auf den später ein echter Anlauf folgte; ein
-  übersprungener zählt nicht). Fehlende Werte stehen als „nicht gemessen", nie als 0. Den Block sieht
-  nur, wer auch die Nachtlauf-Auswertung sehen darf (Projekt-Rolle `OWNER`); Anläufe verdrängter Läufe
-  bleiben darin erhalten.
+- **Anläufe dieser Karte:** War die Karte schon in einem [Nachtlauf](#nachtlauf) oder in einer
+  interaktiven Sitzung, steht hier, was ihre Anläufe gekostet haben — die **Dauer je Lauf-Art**
+  (Umsetzungs-, Prüf-, Ketten-Lauf und interaktive Sitzung; eine Art, in der die Karte nie vorkam,
+  steht als „nicht gelaufen"), die **Summen über alle Nachtlauf-Anläufe** (Kosten, Eingabe, Ausgabe,
+  Zwischenspeicher, jede mit ihrer Grundlage „aus *n* von *m* Anläufen"; der Verbrauch einer
+  interaktiven Sitzung steht an ihrer eigenen Zeile und geht in diese Summen nicht ein), die
+  **Anläufe** selbst mit Datum, [Gattung](#zwei-gattungen), Ergebnis, Dauer und Kosten, jüngster
+  zuerst, und die Zahl der **Wiederaufnahmen** (ein gescheiterter Anlauf, auf den später ein echter
+  Anlauf folgte; ein übersprungener zählt nicht). Fehlende Werte stehen als „nicht gemessen", nie
+  als 0. Den Block sieht nur, wer auch die Nachtlauf-Auswertung sehen darf (Projekt-Rolle `OWNER`);
+  Anläufe verdrängter Läufe bleiben darin erhalten.
 - **Kommentare:** schreiben; eigene Kommentare löschen (Moderation durch ADMIN/OWNER).
 - **Aktivität:** ein chronologischer Verlauf am Ende des Details — „*Zeitpunkt* · *Person* · *Aktion*".
   Protokolliert werden Anlegen, Bearbeiten, Zuständige geändert, Verschieben, Archivieren und
@@ -84,8 +86,15 @@ Klick auf eine Karte öffnet das Detail:
 ### Mehrfachauswahl
 
 Der Button **„Auswählen"** über dem Board schaltet in den Auswahlmodus: Jede Karte bekommt ein
-Kästchen, ein Klick auf die Karte hakt sie an oder ab (statt das Detail zu öffnen). Sobald mindestens
-eine Karte gewählt ist, erscheint unten eine Aktionsleiste mit vier Massenaktionen:
+Kästchen, ein Klick auf die Karte hakt sie an oder ab (statt das Detail zu öffnen).
+
+Im Spaltenkopf steht dazu ein eigenes Kästchen: Es wählt **alle Karten einer Spalte** auf einmal —
+und zwar die gerade **angezeigten**; was ein Filter oder ein ausgeblendetes Vorhaben verdeckt, bleibt
+außen vor. Ein **Strich** zeigt an, dass nur einige Karten der Spalte gewählt sind; der nächste Klick
+ergänzt die fehlenden. Sind alle gewählt, hebt der Klick die Auswahl **dieser** Spalte wieder auf —
+Karten anderer Spalten bleiben gewählt, sodass sich mehrere Spalten nacheinander einsammeln lassen.
+
+Sobald mindestens eine Karte gewählt ist, erscheint unten eine Aktionsleiste mit vier Massenaktionen:
 
 - **Labels:** öffnet ein Menü mit allen Labels des Boards. Je Label steht dort, wie weit es in der
   Auswahl vertreten ist — ein **voller Haken** („alle gewählten Karten"), ein **Strich** („einige")
@@ -93,7 +102,12 @@ eine Karte gewählt ist, erscheint unten eine Aktionsleiste mit vier Massenaktio
   gewählten Karten an, ein Klick auf einen vollen Haken **nimmt es allen ab**; die übrigen Labels
   jeder Karte bleiben dabei unberührt. Das Menü bleibt offen, sodass mehrere Labels in einem Zug
   gehen. Hat das Board keine Labels, ist die Taste gesperrt.
-- **Verschieben:** alle gewählten Karten auf ein anderes Board (nur mit Verschieberecht).
+- **Verschieben:** alle gewählten Karten in eine Spalte — wahlweise in eine **andere Spalte desselben
+  Boards** (vorausgewählt; etwa fünf Pakete auf einmal nach Ready) oder auf ein **anderes Board**
+  bzw. in ein anderes Projekt. Nur mit Verschieberecht. Innerhalb des Boards behalten die Karten
+  Nummer, Vorhaben-Zuordnung und Abhängigkeiten; beim Board-Wechsel gehen Vorhaben-Zuordnung und
+  Abhängigkeiten verloren. Die Karten landen in der Reihenfolge der Auswahl am Ende der Zielspalte;
+  eine Karte, die schon dort liegt, bleibt an ihrem Platz.
 - **Archivieren** und **In den Papierkorb:** jeweils nach einer Rückfrage.
 
 Alle vier laufen als **eine Transaktion**: Scheitert eine Karte, bleibt die ganze Auswahl unverändert.
@@ -237,6 +251,99 @@ Lauf, der bereits ausgewertet wurde, wird als **„lag schon vor"** gemeldet und
 die übrigen Läufe derselben Datei entstehen trotzdem. Und ein **nachgereichter Lauf**, der älter ist
 als alle 190 aufbewahrten, verdrängt keinen neueren — er wird angelegt und sogleich wieder verdrängt,
 erscheint also nach dem Einlesen nicht in der Liste.
+
+## Verbrauch (Leitstand)
+
+Der **Leitstand** (Sidebar-Eintrag **„Leitstand"** im Board-Kontext, Route
+`/boards/:boardId/leitstand`) führt einen Bereich **„Verbrauch"**: was die Arbeit an diesem Projekt
+an Claude-Code-Verbrauch gekostet hat. Sichtbar ist er — wie die [Nachtlauf](#nachtlauf)-Auswertung
+— nur für den **Owner** des Projekts und für **Plattform-Admins**.
+
+### Zwei Gattungen
+
+Gezählt werden zwei **Gattungen** von Einträgen:
+
+- **Nachtlauf** — ein Lauf des Nacht-Runners.
+- **Interaktive Sitzung** — eine Arbeitssitzung am Rechner eines Menschen.
+
+**„Gattung" ist nicht „Herkunft".** Die Gattung sagt, *was* ein Eintrag ist — Nachtlauf oder
+interaktive Sitzung. Die **Herkunft** ist eine zweite, davon unabhängige Angabe und sagt, *auf
+welchem Weg* er ans Board kam: von Hand im Browser eingelesen oder maschinell mit einem
+projektgebundenen Zugriffstoken gemeldet. Sie steht im Leitstand auf der eigenen Platte
+„Herkunft". Eine interaktive Sitzung ist Gattung *interaktive Sitzung* und Herkunft *Token* —
+beide Angaben stehen nebeneinander, keine ersetzt die andere.
+
+### Was der Bereich zeigt
+
+Über den Kacheln steht der gewählte Zeitraum — **Nacht · Woche · Monat** — und daneben, aus wie
+vielen Einträgen die Zahlen stammen („*Nacht vom 17.09.2026 auf den 18.09.2026* · 2 Läufe ·
+5 Sitzungen"). Die Kacheln selbst:
+
+- **Eingabe-Token** mit einem Balken, der die Eingabe in **„Cache gelesen"** und **„frisch"**
+  aufteilt. Der Balken beantwortet eine andere Frage als die Gattungen und wird nicht auf sie
+  umgewidmet.
+- **Ausgabe-Token**, darunter der Verlauf über die Nächte des Zeitraums.
+- **Kosten**, mit dem Vergleich zum Vorzeitraum (▲/▼ und der Unterschied in Dollar).
+- **Gesamt über die Laufzeit** — siehe unten.
+
+Unter jeder Summe stehen die beiden **Anteile**: „aus Nachtläufen" und „aus interaktiven
+Sitzungen". Die Summe ist genau ihre Addition; kein Eintrag zählt in beiden.
+
+**Der Posten „ohne Karte"** steht an der Kosten-Kachel und trägt den Verbrauch, der keinem
+Arbeitspaket zuzuordnen war. Er wird nicht auf die berührten Karten verteilt — eine Verteilung
+erfände eine Genauigkeit, die niemand gemessen hat. Liegt kein gemessener Rest vor, fehlt der
+Posten ganz; eine 0 behauptete, es gäbe keinen.
+
+**Die Kachel „Gesamt über die Laufzeit"** summiert über alle aufbewahrten Läufe und Sitzungen des
+Projekts und hängt nicht am gewählten Zeitraum — ein Klick auf „Woche" ändert an ihr nichts. Ihr
+Fuß nennt die **Abdeckung** dieser Summe, und zwar zweigeteilt: ab welchem Datum überhaupt ein
+Eintrag aufbewahrt ist (oder „ohne aufbewahrten Eintrag") und ab wann interaktive Sitzungen erfasst
+werden (oder „Sitzungen nicht erfasst"). Die Zahl ist damit die Summe des **Aufbewahrten**, nicht
+die des Gelebten: Was der Ringpuffer verdrängt hat, fehlt darin.
+
+### Eine Sitzung zählt zum Zeitraum ihres Beginns
+
+Ein Eintrag gehört zu dem Zeitraum, in dem er **beginnt** — bei einer Sitzung also zu dem
+Zeitpunkt, an dem sie eröffnet wurde, nicht zu dem, an dem sie endete. Eine Sitzung, die über eine
+Zeitraumgrenze hinweg läuft, wird nicht aufgeteilt.
+
+Dabei gilt die **Tagesgrenze 12:00** zonenlokal: Eine Nacht beginnt mittags und endet am nächsten
+Mittag; wer vor 12:00 startet, gehört zur Nacht davor. Für interaktive Sitzungen hat das eine
+Folge, die man kennen muss: **Eine Sitzung, die vormittags vor 12:00 beginnt, zählt zur Nacht
+davor.** Wer am Donnerstag um 9:30 Uhr zu arbeiten anfängt, findet seinen Verbrauch also unter der
+Nacht von Mittwoch auf Donnerstag, nicht unter der von Donnerstag auf Freitag. Die Regel ist
+dieselbe wie für Nachtläufe — eine zweite Regel für Sitzungen machte die Summe von der Gattung
+abhängig.
+
+### „nicht erfasst", „teilweise erfasst" und „nicht gemessen"
+
+Drei Angaben, die alle drei **keine Null** sind und sich paarweise unterscheiden:
+
+- **„nicht erfasst"** meint einen **Zeitraum ohne Messung**: Er liegt ganz vor dem Beginn der
+  Erfassung interaktiver Sitzungen in diesem Projekt, es existiert für ihn also überhaupt keine
+  Zahl. Anders als bei „teilweise erfasst" liegt hier kein Teil der Messung vor, und anders als bei
+  „nicht gemessen" geht es nicht um einen einzelnen bekannten Eintrag.
+- **„teilweise erfasst"** meint einen **Zeitraum, der den Erfassungsbeginn schneidet**: Die Zahlen
+  stehen da, sie decken aber nur den späteren Teil ab, der interaktive Anteil ist deshalb zu klein.
+  Anders als bei „nicht erfasst" fehlt hier nicht die Messung, sondern ein Stück von ihr.
+- **„nicht gemessen"** meint auf dem Kartenblatt (siehe [Karten-Detail](#karten-detail), „Anläufe
+  dieser Karte") einen **bekannten Lauf oder eine bekannte Sitzung ohne Zahl**: Der Eintrag steht in
+  der Liste, zu diesem einen Wert liegt aber kein Messwert vor. Anders als bei den beiden anderen
+  Angaben geht es nicht um einen Zeitraum, sondern um einen einzelnen Eintrag.
+
+Dazu kommen zwei Sätze über den Zeitraum als Ganzes, die keine Lücke der Erfassung sind: „In diesem
+Zeitraum hat weder ein Lauf noch eine Sitzung stattgefunden." (es wurde nicht gearbeitet) und „In
+diesem Zeitraum liefen Läufe, ihr Verbrauch liegt aber nicht vor." (es wurde gearbeitet, die Zahlen
+fehlen).
+
+### Wo Zahlen fehlen können
+
+Erfasst wird eine interaktive Sitzung nur, wenn in ihrem Arbeitsverzeichnis ein projektgebundenes
+Zugriffstoken liegt; Sitzungen in einem frisch angelegten Git-Worktree bleiben außen vor. Beides —
+samt Hook, Erfassungsbeginn und Aufbewahrungsgrenzen — steht in
+[Betrieb: Meldeweg der interaktiven Sitzungen](betrieb.md#meldeweg-der-interaktiven-sitzungen).
+Die Tatsachengrundlage dazu steht in
+[Befund: Verbrauchsangaben, Hook-Ereignisse und Worktrees](befund-interaktive-sitzungen.md).
 
 ## Dashboard (Kennzahlen)
 

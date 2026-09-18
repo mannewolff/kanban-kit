@@ -13,10 +13,12 @@ import org.mwolff.manban.nightrun.application.NightRunUsageRepository.CardTotals
 import org.mwolff.manban.nightrun.application.NightRunUsageService;
 import org.mwolff.manban.nightrun.application.NightRunUsageService.Coverage;
 import org.mwolff.manban.nightrun.application.NightRunUsageService.EpicUsageView;
+import org.mwolff.manban.nightrun.application.NightRunUsageService.KindSplit;
 import org.mwolff.manban.nightrun.application.NightRunUsageService.NightSummary;
 import org.mwolff.manban.nightrun.application.NightRunUsageService.NightUsageView;
 import org.mwolff.manban.nightrun.application.NightRunUsageService.PeriodFigures;
 import org.mwolff.manban.nightrun.application.NightRunUsageService.PeriodUsageView;
+import org.mwolff.manban.nightrun.application.NightRunUsageService.TotalUsageView;
 import org.mwolff.manban.nightrun.application.NightRunUsageService.UsageSplit;
 import org.mwolff.manban.nightrun.domain.NightRunPeriodType;
 import org.mwolff.manban.nightrun.domain.NightRunUsage;
@@ -78,6 +80,16 @@ class NightRunUsageController {
     return PeriodResponse.of(usage.period(userId, projectId, type, stepsBack, regionszone(zone)));
   }
 
+  /**
+   * Die Summe über die ganze Laufzeit des Projekts (Plan E19). Ein eigener Abruf und kein vierter
+   * Wert für {@code type}: Eine Lebenszeit hat keinen ersten Tag, keinen Vorzeitraum und keine
+   * Zone, nach der sie sich gruppieren ließe — sie braucht deshalb keinen Parameter.
+   */
+  @GetMapping("/api/projects/{projectId}/night-run-usage/total")
+  TotalResponse total(@AuthenticationPrincipal Long userId, @PathVariable long projectId) {
+    return TotalResponse.of(usage.total(userId, projectId));
+  }
+
   /** Lässt allein Zonen aus der Zonendatenbank durch — nie einen festen Offset. */
   private static ZoneId regionszone(ZoneId zone) {
     if (!ZoneId.getAvailableZoneIds().contains(zone.getId())) {
@@ -116,13 +128,42 @@ class NightRunUsageController {
     }
   }
 
+  /**
+   * Dieselbe Teilung je Gattung (Issue #1013): {@code night} sind die Nachtläufe, {@code
+   * interactive} die interaktiven Sitzungen. Steht neben {@code usage}, nicht an dessen Stelle —
+   * die Erweiterung ist additiv.
+   */
+  record KindSplitResponse(SplitResponse night, SplitResponse interactive) {
+
+    static KindSplitResponse of(KindSplit s) {
+      return new KindSplitResponse(SplitResponse.of(s.night()), SplitResponse.of(s.interactive()));
+    }
+  }
+
+  /** Der Verbrauch einer Kartenzeile je Gattung. */
+  record KindUsageResponse(UsageResponse night, UsageResponse interactive) {
+
+    static KindUsageResponse of(CardTotals c) {
+      return new KindUsageResponse(
+          UsageResponse.of(c.nightUsage()), UsageResponse.of(c.interactiveUsage()));
+    }
+  }
+
   /** Eine Kartenzeile. */
   record CardResponse(
-      int cardNumber, long attemptCount, @Nullable Long durationMs, UsageResponse usage) {
+      int cardNumber,
+      long attemptCount,
+      @Nullable Long durationMs,
+      UsageResponse usage,
+      KindUsageResponse usageByKind) {
 
     static CardResponse of(CardTotals c) {
       return new CardResponse(
-          c.cardNumber(), c.attemptCount(), c.durationMs(), UsageResponse.of(c.usage()));
+          c.cardNumber(),
+          c.attemptCount(),
+          c.durationMs(),
+          UsageResponse.of(c.usage()),
+          KindUsageResponse.of(c));
     }
   }
 
@@ -133,6 +174,7 @@ class NightRunUsageController {
       long durationMs,
       long cardCount,
       SplitResponse usage,
+      KindSplitResponse usageByKind,
       boolean aborted,
       List<CardResponse> cards) {
 
@@ -143,12 +185,20 @@ class NightRunUsageController {
           n.durationMs(),
           n.cardCount(),
           SplitResponse.of(n.usage()),
+          KindSplitResponse.of(n.usageByKind()),
           n.aborted(),
           n.cards().stream().map(CardResponse::of).toList());
     }
   }
 
-  /** Die Kennzahlen eines Zeitraums samt seiner Grenzen. */
+  /**
+   * Die Kennzahlen eines Zeitraums samt seiner Grenzen.
+   *
+   * @param nightRunCount Zahl der Nachtläufe, {@code interactiveRunCount} die der interaktiven
+   *     Sitzungen; {@code runCount} ist ihre Summe (#984 AK 1)
+   * @param interactiveUsageSince Erfassungsbeginn der interaktiven Sitzungen als ISO-Zeitpunkt;
+   *     {@code null}, solange das Projekt keine gemeldet hat (Plan E18)
+   */
   record PeriodFiguresResponse(
       NightRunPeriodType type,
       LocalDate firstDay,
@@ -158,9 +208,13 @@ class NightRunUsageController {
       Coverage coverage,
       boolean noRuns,
       long runCount,
+      long nightRunCount,
+      long interactiveRunCount,
       long durationMs,
       long cardCount,
-      SplitResponse usage) {
+      SplitResponse usage,
+      KindSplitResponse usageByKind,
+      @Nullable Instant interactiveUsageSince) {
 
     static PeriodFiguresResponse of(PeriodFigures f) {
       return new PeriodFiguresResponse(
@@ -172,19 +226,33 @@ class NightRunUsageController {
           f.coverage(),
           f.noRuns(),
           f.runCount(),
+          f.nightRunCount(),
+          f.interactiveRunCount(),
           f.durationMs(),
           f.cardCount(),
-          SplitResponse.of(f.usage()));
+          SplitResponse.of(f.usage()),
+          KindSplitResponse.of(f.usageByKind()),
+          f.interactiveUsageSince());
     }
   }
 
   /** Eine Nacht innerhalb eines Zeitraums. */
   record NightSummaryResponse(
-      LocalDate night, long runCount, long cardCount, SplitResponse usage, boolean aborted) {
+      LocalDate night,
+      long runCount,
+      long cardCount,
+      SplitResponse usage,
+      KindSplitResponse usageByKind,
+      boolean aborted) {
 
     static NightSummaryResponse of(NightSummary n) {
       return new NightSummaryResponse(
-          n.night(), n.runCount(), n.cardCount(), SplitResponse.of(n.usage()), n.aborted());
+          n.night(),
+          n.runCount(),
+          n.cardCount(),
+          SplitResponse.of(n.usage()),
+          KindSplitResponse.of(n.usageByKind()),
+          n.aborted());
     }
   }
 
@@ -206,6 +274,37 @@ class NightRunUsageController {
           ref == null ? null : ref.title(),
           e.cardCount(),
           UsageResponse.of(e.usage()));
+    }
+  }
+
+  /**
+   * Die Summe über die ganze Laufzeit.
+   *
+   * @param oldestRetainedRunStart Beginn des ältesten aufbewahrten Eintrags als ISO-Zeitpunkt;
+   *     {@code null} ohne Eintrag. Daran ist ablesbar, ab wann die Summe abgedeckt ist.
+   * @param interactiveUsageSince Erfassungsbeginn der interaktiven Sitzungen; {@code null}, solange
+   *     das Projekt keine gemeldet hat (Plan E18)
+   */
+  record TotalResponse(
+      long runCount,
+      long nightRunCount,
+      long interactiveRunCount,
+      long cardCount,
+      SplitResponse usage,
+      KindSplitResponse usageByKind,
+      @Nullable Instant oldestRetainedRunStart,
+      @Nullable Instant interactiveUsageSince) {
+
+    static TotalResponse of(TotalUsageView t) {
+      return new TotalResponse(
+          t.runCount(),
+          t.nightRunCount(),
+          t.interactiveRunCount(),
+          t.cardCount(),
+          SplitResponse.of(t.usage()),
+          KindSplitResponse.of(t.usageByKind()),
+          t.oldestRetainedRunStart(),
+          t.interactiveUsageSince());
     }
   }
 

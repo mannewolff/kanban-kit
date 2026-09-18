@@ -6,6 +6,7 @@ import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.nightrun.application.NightRunService;
 import org.mwolff.manban.nightrun.domain.NightRunErrorClass;
 import org.mwolff.manban.nightrun.domain.NightRunItem;
+import org.mwolff.manban.nightrun.domain.NightRunKind;
 import org.mwolff.manban.nightrun.domain.NightRunMode;
 import org.mwolff.manban.nightrun.domain.NightRunState;
 import org.mwolff.manban.nightrun.domain.NightRunUsage;
@@ -34,7 +35,13 @@ class NightRunCardController {
     this.runs = runs;
   }
 
-  /** Jüngster Anlauf zuerst; ein verdrängter Lauf hinterlässt seine Anläufe weiterhin. */
+  /**
+   * Jüngster Anlauf zuerst; ein verdrängter Lauf hinterlässt seine Anläufe weiterhin.
+   *
+   * <p>Beide Gattungen stehen nebeneinander: Der Abruf filtert nicht nach ihr, sondern gibt sie je
+   * Anlauf mit aus (Issue #1015, Plan #1007 E10). Eine Karte wird nachts und am Tag angefasst, und
+   * beides gehört auf ihr Blatt.
+   */
   @GetMapping("/api/projects/{projectId}/night-runs/items")
   List<NightRunAnlaufView> anlaeufe(
       @AuthenticationPrincipal Long userId,
@@ -49,6 +56,7 @@ class NightRunCardController {
     return new NightRunAnlaufView(
         item.startedAt(),
         item.mode(),
+        item.kind(),
         item.state(),
         item.errorClass(),
         item.durationMs(),
@@ -61,6 +69,8 @@ class NightRunCardController {
    *
    * @param startedAt Startzeitpunkt des Laufs
    * @param mode Lauf-Art
+   * @param kind Gattung des Anlaufs — Nachtlauf oder interaktive Sitzung (Issue #1015); nie {@code
+   *     null}, ein Anlauf ohne eigene Gattung liest sich als {@code NIGHT}
    * @param state Ausgang des Anlaufs
    * @param errorClass Grund eines nicht-grünen Ausgangs
    * @param durationMs Dauer; {@code null} bei übergangenen Paketen
@@ -70,6 +80,7 @@ class NightRunCardController {
   record NightRunAnlaufView(
       Instant startedAt,
       NightRunMode mode,
+      NightRunKind kind,
       NightRunState state,
       @Nullable NightRunErrorClass errorClass,
       @Nullable Long durationMs,

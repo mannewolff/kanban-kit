@@ -1,5 +1,6 @@
 package org.mwolff.manban.nightrun.application;
 
+import org.mwolff.manban.nightrun.domain.NightRunKind;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /**
@@ -20,14 +21,30 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * night_run_item} unbegrenzt. Pakete eines aufbewahrten Laufs zählen nicht mit — sie fallen erst
  * mit ihrem Lauf.
  *
+ * <p><b>Warum je Gattung ein eigenes Grenzenpaar</b> (Issue #1011, Plan #1007 E14): Interaktive
+ * Sitzungen sind deutlich häufiger als Nachtläufe. Unter einer gemeinsamen Grenze verdrängten sie
+ * die Nachtläufe binnen Tagen und zerstörten die bestehende Auswertung. {@link
+ * #maxRunsFor(NightRunKind)} und {@link #maxOrphanItemsFor(NightRunKind)} wählen das Paar; die
+ * Verdrängung selbst kappt innerhalb einer Gattung und berührt die andere nie.
+ *
  * @param maxPerProject Zahl der je Projekt aufbewahrten Läufe; fehlend oder kleiner als 1 ergibt
  *     190
  * @param maxItemsPerProject Zahl der je Projekt aufbewahrten <b>verwaisten</b> Arbeitspakete;
  *     fehlend oder kleiner als 1 ergibt 2000. Bei rund zehn Paketen je Nacht ist das ein halbes
  *     Jahr Rückblick.
+ * @param maxInteractivePerProject Zahl der je Projekt aufbewahrten <b>interaktiven Sitzungen</b>;
+ *     fehlend oder kleiner als 1 ergibt 400. Bei mehreren Sitzungen am Tag deckt das rund ein
+ *     halbes Jahr ab — denselben Rückblick, den 190 Läufe für die Nächte geben.
+ * @param maxInteractiveItemsPerProject Zahl der je Projekt aufbewahrten <b>verwaisten</b>
+ *     Arbeitspakete interaktiver Sitzungen; fehlend oder kleiner als 1 ergibt 4000 — dasselbe
+ *     Verhältnis zur Lauf-Grenze wie bei den Nachtläufen.
  */
 @ConfigurationProperties(prefix = "manban.nightrun")
-public record NightRunProperties(Integer maxPerProject, Integer maxItemsPerProject) {
+public record NightRunProperties(
+    Integer maxPerProject,
+    Integer maxItemsPerProject,
+    Integer maxInteractivePerProject,
+    Integer maxInteractiveItemsPerProject) {
 
   public NightRunProperties {
     if (maxPerProject == null || maxPerProject < 1) {
@@ -36,5 +53,21 @@ public record NightRunProperties(Integer maxPerProject, Integer maxItemsPerProje
     if (maxItemsPerProject == null || maxItemsPerProject < 1) {
       maxItemsPerProject = 2000;
     }
+    if (maxInteractivePerProject == null || maxInteractivePerProject < 1) {
+      maxInteractivePerProject = 400;
+    }
+    if (maxInteractiveItemsPerProject == null || maxInteractiveItemsPerProject < 1) {
+      maxInteractiveItemsPerProject = 4000;
+    }
+  }
+
+  /** Zahl der je Projekt aufbewahrten Läufe dieser Gattung. */
+  public int maxRunsFor(NightRunKind kind) {
+    return kind == NightRunKind.INTERACTIVE ? maxInteractivePerProject : maxPerProject;
+  }
+
+  /** Zahl der je Projekt aufbewahrten <b>verwaisten</b> Arbeitspakete dieser Gattung. */
+  public int maxOrphanItemsFor(NightRunKind kind) {
+    return kind == NightRunKind.INTERACTIVE ? maxInteractiveItemsPerProject : maxItemsPerProject;
   }
 }

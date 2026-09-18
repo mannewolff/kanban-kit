@@ -42,6 +42,7 @@ class RateLimitFilterTest {
 
   private static final String ORIGIN = "203.0.113.9";
   private static final String PROBLEM_JSON = "application/problem+json";
+  private static final String UTF_8 = "UTF-8";
 
   private RateLimiter rateLimiter;
   private RateLimitFilter filter;
@@ -184,6 +185,10 @@ class RateLimitFilterTest {
     assertThat(response.getContentAsString())
         .contains("\"status\":429")
         .contains("Bitte in 2 Minuten erneut versuchen");
+    // Die Kodierung ist zugesichert: Der Filter setzt sie selbst, denn der MVC-Stack, der sie
+    // sonst mitgäbe, wird hier gerade übersprungen.
+    assertThat(response.getCharacterEncoding()).isEqualTo(UTF_8);
+    assertThat(response.getContentType()).contains("charset=" + UTF_8);
     // Der abgewiesene Aufruf zählt nicht mit — sonst verlängerte jeder Anklopfer seine Sperre.
     verify(rateLimiter, never()).recordAttempt(anyString(), any());
   }
@@ -202,6 +207,39 @@ class RateLimitFilterTest {
     // Then
     assertThat(response.getHeader("Retry-After")).isEqualTo("30");
     assertThat(response.getContentAsString()).contains("Bitte in einer Minute erneut versuchen");
+  }
+
+  @Test
+  void restdauerVonGenauEinerMinuteWirdAlsEineMinuteGenannt() throws Exception {
+    // Given — 60 Sekunden liegen genau auf der Grenze: Wer hier aufrundet, nennt zwei Minuten und
+    // schickt den Absender eine Minute länger weg als nötig.
+    when(rateLimiter.isEnabled()).thenReturn(true);
+    when(rateLimiter.checkBlocked(ORIGIN, RateLimitedOperation.LOGIN))
+        .thenReturn(Optional.of(Duration.ofSeconds(60)));
+
+    // When
+    MockHttpServletResponse response =
+        runFilter(request("POST", "/api/auth/login"), chainAnswering(200));
+
+    // Then
+    assertThat(response.getHeader("Retry-After")).isEqualTo("60");
+    assertThat(response.getContentAsString()).contains("Bitte in einer Minute erneut versuchen");
+  }
+
+  @Test
+  void restdauerVonGenauZweiMinutenWirdAlsZweiMinutenGenannt() throws Exception {
+    // Given — dieselbe Grenze eine Minute weiter: 120 Sekunden sind zwei Minuten, nicht drei.
+    when(rateLimiter.isEnabled()).thenReturn(true);
+    when(rateLimiter.checkBlocked(ORIGIN, RateLimitedOperation.LOGIN))
+        .thenReturn(Optional.of(Duration.ofMinutes(2)));
+
+    // When
+    MockHttpServletResponse response =
+        runFilter(request("POST", "/api/auth/login"), chainAnswering(200));
+
+    // Then
+    assertThat(response.getHeader("Retry-After")).isEqualTo("120");
+    assertThat(response.getContentAsString()).contains("Bitte in 2 Minuten erneut versuchen");
   }
 
   @Test

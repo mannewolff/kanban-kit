@@ -2,9 +2,13 @@ import { describe, expect, it } from 'vitest'
 import type { VerbrauchAngaben, VerbrauchKennzahlen } from '../api/nightRunUsage'
 import {
   KEIN_LAUF_TEXT,
+  NICHT_ERFASST_TEXT,
+  TEILWEISE_ERFASST_TEXT,
+  erfassungsstand,
   kartenText,
   laeufeText,
   nachtKurz,
+  sitzungenText,
   vergleichMitVorzeitraum,
   vorzeitraumName,
   zeitraumBeschriftung,
@@ -37,9 +41,18 @@ const kennzahlen = (werte: Partial<VerbrauchKennzahlen>): VerbrauchKennzahlen =>
   coverage: 'COMPLETE',
   noRuns: false,
   runCount: 3,
+  nightRunCount: 3,
+  interactiveRunCount: 0,
   durationMs: 1000,
   cardCount: 2,
   usage: { total: kosten(4), cardShare: kosten(3), remainder: kosten(1) },
+  // Die Textrechnung urteilt über die Gesamtsumme — sie dient Leitstand und Nachtlauf-Seite
+  // gleichermaßen. Der Gattungs-Split steht daneben und bleibt hier ohne Einfluss (Issue #1016).
+  usageByKind: {
+    night: { total: kosten(4), cardShare: kosten(3), remainder: kosten(1) },
+    interactive: { total: nichts, cardShare: nichts, remainder: nichts },
+  },
+  interactiveUsageSince: null,
   ...werte,
 })
 
@@ -79,11 +92,14 @@ describe('vorzeitraumName', () => {
   })
 })
 
-describe('laeufeText und kartenText', () => {
+describe('laeufeText, sitzungenText und kartenText', () => {
   it('setzt den Einzahl- und den Mehrzahlfall', () => {
     expect(laeufeText(1)).toBe('1 Lauf')
     expect(laeufeText(0)).toBe('0 Läufe')
     expect(laeufeText(7)).toBe('7 Läufe')
+    expect(sitzungenText(1)).toBe('1 Sitzung')
+    expect(sitzungenText(0)).toBe('0 Sitzungen')
+    expect(sitzungenText(4)).toBe('4 Sitzungen')
     expect(kartenText(1)).toBe('1 Karte')
     expect(kartenText(0)).toBe('0 Karten')
     expect(kartenText(54)).toBe('54 Karten')
@@ -165,12 +181,12 @@ describe('zwischenspeicherAnteil', () => {
 })
 
 describe('zeitraumFall und zeitraumHinweis', () => {
+  const leer = { noRuns: true, runCount: 0, nightRunCount: 0, interactiveRunCount: 0 } as const
   const faelle = {
-    keinLauf: kennzahlen({ noRuns: true, runCount: 0, usage: { total: nichts, cardShare: nichts, remainder: nichts } }),
+    keinLauf: kennzahlen({ ...leer, usage: { total: nichts, cardShare: nichts, remainder: nichts } }),
     vorAufbewahrung: kennzahlen({
       coverage: 'BEFORE_RETENTION',
-      noRuns: true,
-      runCount: 0,
+      ...leer,
       usage: { total: nichts, cardShare: nichts, remainder: nichts },
     }),
     teilweise: kennzahlen({ coverage: 'PARTIAL' }),
@@ -191,9 +207,38 @@ describe('zeitraumFall und zeitraumHinweis', () => {
     expect(texte).not.toContain(null)
   })
 
-  it('sagt beim Zeitraum ohne Lauf den Satz aus #926 AK 9', () => {
+  it('sagt beim Zeitraum ohne Lauf und ohne Sitzung den Satz aus #926 AK 9', () => {
     expect(zeitraumHinweis(faelle.keinLauf)).toBe(KEIN_LAUF_TEXT)
-    expect(KEIN_LAUF_TEXT).toBe('In diesem Zeitraum hat kein Lauf stattgefunden.')
+    expect(KEIN_LAUF_TEXT).toBe(
+      'In diesem Zeitraum hat weder ein Lauf noch eine Sitzung stattgefunden.',
+    )
+  })
+
+  /**
+   * Ein Tag ohne Nachtlauf, aber mit Sitzungen, ist nicht leer (#984 AK 1) — die Zahlen der
+   * Sitzungen stehen dort, wo bisher „kein Lauf" stand.
+   */
+  it('haelt einen Zeitraum ohne Nachtlauf, aber mit Sitzungen, fuer voll besetzt', () => {
+    const nurSitzungen = kennzahlen({
+      noRuns: false,
+      runCount: 2,
+      nightRunCount: 0,
+      interactiveRunCount: 2,
+      usageByKind: {
+        night: { total: nichts, cardShare: nichts, remainder: nichts },
+        interactive: { total: kosten(4), cardShare: kosten(3), remainder: kosten(1) },
+      },
+    })
+
+    expect(zeitraumFall(nurSitzungen)).toBe('vollstaendig')
+    expect(zeitraumHinweis(nurSitzungen)).not.toBe(KEIN_LAUF_TEXT)
+  })
+
+  /** Der Text des Kartenblatts bleibt dem Kartenblatt (#984 AK 6). */
+  it('nennt in keinem Hinweis das Wort aus dem Kartenblatt', () => {
+    for (const fall of Object.values(faelle)) {
+      expect(zeitraumHinweis(fall)).not.toContain('nicht gemessen')
+    }
   })
 
   it('sagt ganz vor dem aeltesten aufbewahrten Lauf NICHT den Satz aus AK 9', () => {
@@ -211,5 +256,91 @@ describe('zeitraumFall und zeitraumHinweis', () => {
   it('hat ohne Besonderheit keinen Hinweis', () => {
     expect(zeitraumFall(kennzahlen({}))).toBe('vollstaendig')
     expect(zeitraumHinweis(kennzahlen({}))).toBeNull()
+  })
+})
+
+/**
+ * Der Erfassungsbeginn der interaktiven Sitzungen (#984 AK 6). Er entscheidet, ob eine fehlende
+ * Zahl „noch nicht erfasst" heißt oder eine gemessene Null ist — 0 ist nie die Antwort auf
+ * „nicht erfasst".
+ */
+describe('erfassungsstand', () => {
+  /** August 2026; der Erfassungsbeginn liegt mitten darin. */
+  const august = (interactiveUsageSince: string | null) =>
+    kennzahlen({
+      from: '2026-08-01T10:00:00Z',
+      to: '2026-09-01T10:00:00Z',
+      interactiveUsageSince,
+    })
+
+  it('nennt einen Zeitraum ganz vor dem Beginn nicht erfasst', () => {
+    expect(erfassungsstand(august('2026-09-05T08:00:00Z'))).toBe('nicht-erfasst')
+  })
+
+  /** `to` ist ausschliesslich: Beginnt die Erfassung genau am Ende, liegt der Zeitraum davor. */
+  it('zaehlt einen Beginn genau am Ende des Zeitraums noch als davor', () => {
+    expect(erfassungsstand(august('2026-09-01T10:00:00Z'))).toBe('nicht-erfasst')
+  })
+
+  it('nennt einen Zeitraum, der den Beginn schneidet, teilweise erfasst', () => {
+    expect(erfassungsstand(august('2026-08-14T07:00:00Z'))).toBe('teilweise-erfasst')
+  })
+
+  it('nennt einen Zeitraum ganz nach dem Beginn erfasst — auch wenn er genau dort anfaengt', () => {
+    expect(erfassungsstand(august('2026-07-01T00:00:00Z'))).toBe('erfasst')
+    expect(erfassungsstand(august('2026-08-01T10:00:00Z'))).toBe('erfasst')
+  })
+
+  /** Ohne je gemeldete Sitzung gibt es keinen Beginn — und damit keine gemessene Null. */
+  it('nennt ein Projekt ohne gemeldete Sitzung nicht erfasst', () => {
+    expect(erfassungsstand(august(null))).toBe('nicht-erfasst')
+  })
+
+  it('schreibt die beiden Aussagen aus, ohne 0 zu sagen', () => {
+    expect(NICHT_ERFASST_TEXT).toBe('nicht erfasst')
+    expect(TEILWEISE_ERFASST_TEXT).toBe('teilweise erfasst')
+  })
+})
+
+describe('zeitraumHinweis mit Erfassungsluecke', () => {
+  const august = (extra: Partial<VerbrauchKennzahlen>) =>
+    kennzahlen({ from: '2026-08-01T10:00:00Z', to: '2026-09-01T10:00:00Z', ...extra })
+
+  it('erklaert einen Zeitraum ganz vor dem Erfassungsbeginn mit dessen Datum', () => {
+    const hinweis = zeitraumHinweis(august({ interactiveUsageSince: '2026-09-05T08:00:00Z' }))
+
+    expect(hinweis).toContain('05.09.2026')
+    expect(hinweis).toContain('ganz davor')
+  })
+
+  it('erklaert einen angeschnittenen Erfassungsbeginn eigens', () => {
+    const hinweis = zeitraumHinweis(august({ interactiveUsageSince: '2026-08-14T07:00:00Z' }))
+
+    expect(hinweis).toContain('14.08.2026')
+    expect(hinweis).toContain('beginnt davor')
+  })
+
+  /** Der Erfassungs-Hinweis erklaert die groessere Luecke und steht deshalb vorn. */
+  it('stellt den Erfassungs-Hinweis vor den Abdeckungs-Hinweis', () => {
+    const hinweis = zeitraumHinweis(
+      august({ coverage: 'PARTIAL', interactiveUsageSince: '2026-08-14T07:00:00Z' }),
+    )
+
+    expect(hinweis).not.toBeNull()
+    expect(hinweis!.indexOf('Interaktive Sitzungen')).toBeLessThan(
+      hinweis!.indexOf('nur teilweise abgedeckt'),
+    )
+  })
+
+  /**
+   * Ohne je gemeldete Sitzung gibt es keinen Zeitraum-Befund: Das ist ein Zustand des Projekts,
+   * und die Nachtlauf-Seite (Issue #1016) bekaeme sonst einen Hinweis zu etwas, das sie nicht zeigt.
+   */
+  it('schweigt, solange das Projekt keine Sitzung gemeldet hat', () => {
+    expect(zeitraumHinweis(august({ interactiveUsageSince: null }))).toBeNull()
+  })
+
+  it('schweigt, wenn der Zeitraum ganz nach dem Erfassungsbeginn liegt', () => {
+    expect(zeitraumHinweis(august({ interactiveUsageSince: '2026-07-01T00:00:00Z' }))).toBeNull()
   })
 })

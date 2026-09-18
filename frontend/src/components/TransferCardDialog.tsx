@@ -17,6 +17,7 @@ import { dialogTitleSx } from './dialogChromeSx'
 interface Props {
   /** Eine oder mehrere zu verschiebende Karten. */
   cardIds: number[]
+  /** Board der Karten: im Dialog vorausgewählt und selbst ein gültiges Ziel (#1043). */
   currentBoardId: number
   /** Projekt des Quellboards: im Dialog vorausgewählt, bleibt frei änderbar. */
   currentProjectId: number
@@ -30,13 +31,25 @@ interface Props {
   /** Plattform-Admin darf in alle Projekte verschieben, sonst nur in eigene OWNER-Projekte. */
   platformAdmin: boolean
   onClose: () => void
-  onTransferred: () => void
+  /**
+   * Meldet Zielboard und Zielspalte zurück. Der Aufrufer braucht beide: Beim fremden Board
+   * verlassen die Karten die Ansicht, beim eigenen wechseln sie nur die Spalte.
+   */
+  onTransferred: (targetBoardId: number, targetColumnId: number) => void
 }
 
+const sortedColumns = (b: Board) => [...b.columns].sort((x, y) => x.position - y.position)
+
+/** Spalte an der Ordnungsposition der Quellspalte, oder `''` wenn es dort keine gibt. */
+const spalteAnPosition = (b: Board, position: number | null): number | '' =>
+  position === null ? '' : (sortedColumns(b)[position]?.id ?? '')
+
 /**
- * Auswahl-Dialog für das board-/projektübergreifende Verschieben einer oder mehrerer Karten:
- * Projekt → Board → Spalte. Es werden nur Projekte angeboten, in denen der Nutzer OWNER ist
- * (Plattform-Admin: alle); die Durchsetzung erfolgt zusätzlich serverseitig.
+ * Auswahl-Dialog für das Verschieben einer oder mehrerer Karten: Projekt → Board → Spalte. Ziel
+ * kann ein anderes Board, ein anderes Projekt oder eine andere Spalte **desselben** Boards sein —
+ * letzteres ist vorausgewählt und der häufigste Fall der Mehrfachauswahl (#1043). Es werden nur
+ * Projekte angeboten, in denen der Nutzer OWNER ist (Plattform-Admin: alle); die Durchsetzung
+ * erfolgt zusätzlich serverseitig.
  */
 export function TransferCardDialog({
   cardIds,
@@ -68,13 +81,25 @@ export function TransferCardDialog({
       setBoards([])
       return
     }
-    // Das aktuelle Board ist kein sinnvolles Ziel (die Karte liegt bereits dort).
-    void boardsApi.list(projectId).then((bs) => setBoards(bs.filter((b) => b.id !== currentBoardId)))
-  }, [projectId, currentBoardId])
+    void boardsApi.list(projectId).then((bs) => {
+      setBoards(bs)
+      // Das eigene Board ist ein gültiges Ziel — eine andere Spalte desselben Boards — und steht
+      // vorausgewählt. Im fremden Projekt gibt es es nicht, dann bleibt die Auswahl leer.
+      const eigenes = bs.find((b) => b.id === currentBoardId)
+      if (eigenes) {
+        setBoardId(eigenes.id)
+        setColumnId(spalteAnPosition(eigenes, sourceColumnPosition))
+      }
+    })
+  }, [projectId, currentBoardId, sourceColumnPosition])
 
-  const sortedColumns = (b: Board) => [...b.columns].sort((x, y) => x.position - y.position)
   const selectedBoard = boards.find((b) => b.id === boardId)
   const columns = selectedBoard ? sortedColumns(selectedBoard) : []
+  // Nur der Board-Wechsel kostet die Karte ihre board-lokalen Verknüpfungen; auf dem eigenen Board
+  // ist der Umzug ein Spaltenwechsel und lässt alles stehen. Solange kein Board gewählt ist, steht
+  // die Warnung — sie ist die vorsichtigere der beiden Aussagen.
+  const aufEigenemBoard = boardId === currentBoardId
+  const subjekt = cardIds.length === 1 ? 'Die Karte wird' : `Die ${cardIds.length} Karten werden`
 
   const submit = async () => {
     setBusy(true)
@@ -82,8 +107,10 @@ export function TransferCardDialog({
     try {
       // boardId/columnId sind hier garantiert Zahlen (der Verschieben-Button ist bei leerer
       // Auswahl disabled); Number(...) verengt number|'' ohne toten Guard-Zweig.
-      await cardsApi.bulkTransfer(cardIds, Number(boardId), Number(columnId))
-      onTransferred()
+      const zielBoard = Number(boardId)
+      const zielSpalte = Number(columnId)
+      await cardsApi.bulkTransfer(cardIds, zielBoard, zielSpalte)
+      onTransferred(zielBoard, zielSpalte)
     } catch (e) {
       setError(apiErrorMessage(e, 'Verschieben fehlgeschlagen.'))
       setBusy(false)
@@ -94,12 +121,22 @@ export function TransferCardDialog({
 
   return (
     <Dialog open onClose={onClose} maxWidth="xs" fullWidth>
-      <DialogTitle sx={dialogTitleSx}>Auf anderes Board verschieben</DialogTitle>
+      <DialogTitle sx={dialogTitleSx}>
+        {cardIds.length === 1 ? 'Karte verschieben' : 'Karten verschieben'}
+      </DialogTitle>
       <DialogContent>
         <DialogContentText sx={{ mb: 2 }}>
-          {cardIds.length === 1 ? 'Die Karte wird' : `Die ${cardIds.length} Karten werden`} in das
-          gewählte Board verschoben. Dabei gehen Vorhaben-Zuordnung und Abhängigkeiten verloren;
-          Kommentare und Anhänge bleiben erhalten.
+          {aufEigenemBoard ? (
+            <>
+              {subjekt} in die gewählte Spalte dieses Boards verschoben. Nummer,
+              Vorhaben-Zuordnung, Abhängigkeiten, Kommentare und Anhänge bleiben erhalten.
+            </>
+          ) : (
+            <>
+              {subjekt} in das gewählte Board verschoben. Dabei gehen Vorhaben-Zuordnung und
+              Abhängigkeiten verloren; Kommentare und Anhänge bleiben erhalten.
+            </>
+          )}
         </DialogContentText>
         {error && (
           <Alert severity="error" sx={{ mb: 2 }}>
@@ -133,11 +170,7 @@ export function TransferCardDialog({
               // Quellspalte nicht eindeutig oder hat das Zielboard dort keine Spalte, bleibt das
               // Feld leer. Die Vorbelegung wird bei jedem Board-Wechsel neu bestimmt, damit eine
               // zuvor manuell gewählte Spalte nicht auf das nächste Board durchschlägt.
-              setColumnId(
-                target && sourceColumnPosition !== null
-                  ? (sortedColumns(target)[sourceColumnPosition]?.id ?? '')
-                  : '',
-              )
+              setColumnId(target ? spalteAnPosition(target, sourceColumnPosition) : '')
             }}
             slotProps={{ htmlInput: { 'aria-label': 'Zielboard' } }}
           >

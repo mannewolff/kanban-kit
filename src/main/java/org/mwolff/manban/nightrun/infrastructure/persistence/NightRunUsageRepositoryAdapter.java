@@ -31,11 +31,9 @@ class NightRunUsageRepositoryAdapter implements NightRunUsageRepository {
             z ->
                 new NightTotals(
                     LocalDate.parse(z.getNight()),
-                    z.getRunCount(),
                     z.getDurationMs(),
                     z.getCardCount(),
-                    laufVerbrauch(z),
-                    paketVerbrauch(z),
+                    jeGattung(z),
                     fehlerklassen(z.getErrorClasses())))
         .toList();
   }
@@ -50,18 +48,28 @@ class NightRunUsageRepositoryAdapter implements NightRunUsageRepository {
                     z.getAttemptCount(),
                     z.getDurationMs(),
                     new NightRunUsage(
-                        z.getCostUsd(),
-                        z.getInputTokens(),
-                        z.getOutputTokens(),
-                        z.getCachedInputTokens())))
+                        z.getNightCostUsd(),
+                        z.getNightInputTokens(),
+                        z.getNightOutputTokens(),
+                        z.getNightCachedInputTokens()),
+                    new NightRunUsage(
+                        z.getInteractiveCostUsd(),
+                        z.getInteractiveInputTokens(),
+                        z.getInteractiveOutputTokens(),
+                        z.getInteractiveCachedInputTokens())))
         .toList();
   }
 
   @Override
   public PeriodTotals totals(long projectId, Instant from, Instant to) {
     NightRunUsageJpaRepository.TotalsRow z = abfragen.totals(projectId, from, to);
-    return new PeriodTotals(
-        z.getRunCount(), z.getDurationMs(), z.getCardCount(), laufVerbrauch(z), paketVerbrauch(z));
+    return new PeriodTotals(z.getDurationMs(), z.getCardCount(), jeGattung(z));
+  }
+
+  @Override
+  public LifetimeTotals lifetimeTotals(long projectId) {
+    NightRunUsageJpaRepository.TotalsRow z = abfragen.lifetimeTotals(projectId);
+    return new LifetimeTotals(z.getCardCount(), jeGattung(z));
   }
 
   @Override
@@ -69,20 +77,38 @@ class NightRunUsageRepositoryAdapter implements NightRunUsageRepository {
     return abfragen.oldestStartedAt(projectId);
   }
 
-  private static NightRunUsage laufVerbrauch(NightRunUsageJpaRepository.UsageColumns z) {
-    return new NightRunUsage(
-        z.getRunCostUsd(),
-        z.getRunInputTokens(),
-        z.getRunOutputTokens(),
-        z.getRunCachedInputTokens());
+  private static TotalsByKind jeGattung(NightRunUsageJpaRepository.UsageColumns z) {
+    return new TotalsByKind(nachtlaeufe(z), sitzungen(z));
   }
 
-  private static NightRunUsage paketVerbrauch(NightRunUsageJpaRepository.UsageColumns z) {
-    return new NightRunUsage(
-        z.getItemCostUsd(),
-        z.getItemInputTokens(),
-        z.getItemOutputTokens(),
-        z.getItemCachedInputTokens());
+  private static KindTotals nachtlaeufe(NightRunUsageJpaRepository.UsageColumns z) {
+    return new KindTotals(
+        z.getNightRunCount(),
+        new NightRunUsage(
+            z.getNightRunCostUsd(),
+            z.getNightRunInputTokens(),
+            z.getNightRunOutputTokens(),
+            z.getNightRunCachedInputTokens()),
+        new NightRunUsage(
+            z.getNightItemCostUsd(),
+            z.getNightItemInputTokens(),
+            z.getNightItemOutputTokens(),
+            z.getNightItemCachedInputTokens()));
+  }
+
+  private static KindTotals sitzungen(NightRunUsageJpaRepository.UsageColumns z) {
+    return new KindTotals(
+        z.getInteractiveRunCount(),
+        new NightRunUsage(
+            z.getInteractiveRunCostUsd(),
+            z.getInteractiveRunInputTokens(),
+            z.getInteractiveRunOutputTokens(),
+            z.getInteractiveRunCachedInputTokens()),
+        new NightRunUsage(
+            z.getInteractiveItemCostUsd(),
+            z.getInteractiveItemInputTokens(),
+            z.getInteractiveItemOutputTokens(),
+            z.getInteractiveItemCachedInputTokens()));
   }
 
   /** {@code string_agg} liefert die Klassen kommagetrennt, ohne Pakete gar nicht. */

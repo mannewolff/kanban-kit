@@ -7,6 +7,7 @@ import { ApiError } from '../../api/client'
 import {
   nightRunsApi,
   type NightRunAnlauf,
+  type NightRunKind,
   type NightRunsApi,
   type NightRunServerMode,
   type NightRunUsageView,
@@ -16,33 +17,63 @@ import { kosten, menge } from '../../lib/nachtlaufFormat'
 import { nightRunZustandsText } from '../../lib/nightRunHandoff'
 
 /**
- * Die drei Lauf-Arten, die eingeliefert werden, in fester Reihenfolge. Als `Record` über
+ * Die Lauf-Arten, die eingeliefert werden, in fester Reihenfolge. Als `Record` über
  * `NightRunServerMode`: `NIGHTPLAN` entsteht allein im Browser und wird nie eingeliefert (`V30`,
  * Plan #803) — er kann hier gar nicht erst stehen, und ein neuer einlieferbarer Modus bricht den
  * Build, statt still zu fehlen. Die Wörter sind die der Nachtlauf-Auswertung.
+ *
+ * `INTERACTIVE` steht seit Issue #1016 dabei und ist hier richtig aufgehoben: Anders als die
+ * Laufliste legt der Abruf der Anläufe keine Gattung fest (Issue #1015) — eine Karte wird nachts
+ * und am Tag angefasst, und beides gehört auf ihr Blatt. Ohne Anlauf dieser Art steht die Kachel
+ * auf „nicht gelaufen", wie bei jeder anderen nie gelaufenen Art.
  */
-const LAUF_ART_TEXT: Record<NightRunServerMode, string> = {
+export const LAUF_ART_TEXT: Record<NightRunServerMode, string> = {
   IMPLEMENTATION: 'Umsetzungs-Lauf',
   REVIEW: 'Prüf-Lauf',
   CHAIN: 'Ketten-Lauf',
+  INTERACTIVE: 'Interaktive Sitzung',
 }
 
 const LAUF_ARTEN = Object.keys(LAUF_ART_TEXT) as NightRunServerMode[]
 
-/** Die vier Verbrauchssummen: Schlüssel am Server, Benennung, Formatierer. */
+/**
+ * Die Gattung in Worten (Issue #1018). Sie steht an jedem Anlauf der Liste: Auf dem Blatt einer
+ * Karte stehen seit Issue #1015 beide Gattungen nebeneinander, und ohne das Wort wäre einer Zeile
+ * nicht anzusehen, ob sie aus der Nacht oder aus dem Gespräch stammt.
+ */
+const GATTUNG_TEXT: Record<NightRunKind, string> = {
+  NIGHT: 'Nachtlauf',
+  INTERACTIVE: 'Interaktive Sitzung',
+}
+
+/**
+ * Die Gattung eines Anlaufs; ohne Angabe gilt er als Nachtlauf — die Gattung, die es vor der
+ * Migration `V34` allein gab (siehe {@link NightRunAnlauf.kind}).
+ */
+function gattung(anlauf: NightRunAnlauf): NightRunKind {
+  return anlauf.kind ?? 'NIGHT'
+}
+
+/**
+ * Die vier Verbrauchssummen: Schlüssel am Server, Benennung, Formatierer.
+ *
+ * <p>Die Benennung nennt die Gattung, weil die Summen allein die Nachtläufe umfassen (Issue
+ * #1018): Der Verbrauch einer interaktiven Sitzung steht an ihrer Zeile und geht hier nicht ein —
+ * eine Summe über beides wäre keine Nachtlauf-Zahl mehr, ohne dass man es der Zeile ansähe.
+ */
 const SUMMEN: ReadonlyArray<{
   schluessel: keyof NightRunUsageView
   testId: string
   label: string
   format: (wert: number | undefined) => string
 }> = [
-  { schluessel: 'costUsd', testId: 'kosten', label: 'Kosten', format: kosten },
-  { schluessel: 'inputTokens', testId: 'eingabe', label: 'Eingabe', format: menge },
-  { schluessel: 'outputTokens', testId: 'ausgabe', label: 'Ausgabe', format: menge },
+  { schluessel: 'costUsd', testId: 'kosten', label: 'Kosten (Nachtläufe)', format: kosten },
+  { schluessel: 'inputTokens', testId: 'eingabe', label: 'Eingabe (Nachtläufe)', format: menge },
+  { schluessel: 'outputTokens', testId: 'ausgabe', label: 'Ausgabe (Nachtläufe)', format: menge },
   {
     schluessel: 'cachedInputTokens',
     testId: 'zwischenspeicher',
-    label: 'Zwischenspeicher',
+    label: 'Zwischenspeicher (Nachtläufe)',
     format: menge,
   },
 ]
@@ -160,8 +191,9 @@ export function KartenAnlaeufe({
     <>
       <Divider />
       <Box data-testid="karten-anlaeufe">
+        {/* Nicht mehr „Nachtlauf-Anläufe": Seit Issue #1018 steht hier auch die interaktive Sitzung. */}
         <Typography variant="subtitle2" gutterBottom>
-          Nachtlauf-Anläufe
+          Anläufe dieser Karte
         </Typography>
         {zustand.art === 'fehler' ? (
           <Typography color="text.secondary">Die Anläufe konnten nicht geladen werden.</Typography>
@@ -175,6 +207,7 @@ export function KartenAnlaeufe({
 
 function AnlaufInhalt({ anlaeufe }: Readonly<{ anlaeufe: NightRunAnlauf[] }>) {
   const juengsterZuerst = [...anlaeufe].sort((a, b) => b.startedAt.localeCompare(a.startedAt))
+  const nachtlaeufe = anlaeufe.filter((anlauf) => gattung(anlauf) === 'NIGHT')
   return (
     <Stack spacing={1.5}>
       <Box component="dl" sx={{ m: 0 }}>
@@ -191,7 +224,7 @@ function AnlaufInhalt({ anlaeufe }: Readonly<{ anlaeufe: NightRunAnlauf[] }>) {
             key={schluessel}
             testId={`anlaeufe-summe-${testId}`}
             label={label}
-            wert={summeMitGrundlage(anlaeufe, schluessel, format)}
+            wert={summeMitGrundlage(nachtlaeufe, schluessel, format)}
           />
         ))}
       </Box>
@@ -209,6 +242,7 @@ function AnlaufInhalt({ anlaeufe }: Readonly<{ anlaeufe: NightRunAnlauf[] }>) {
           >
             {[
               ZEITPUNKT_FORMAT.format(new Date(anlauf.startedAt)),
+              GATTUNG_TEXT[gattung(anlauf)],
               nightRunZustandsText(anlauf.state, anlauf.errorClass ?? undefined),
               anlauf.durationMs === null ? 'Dauer nicht gemessen' : formatDuration(anlauf.durationMs / 1000),
               `Kosten ${kosten(anlauf.usage?.costUsd ?? undefined)}`,

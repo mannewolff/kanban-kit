@@ -7,6 +7,26 @@ Versionierung folgt der dreiteiligen Betriebsversion (siehe [RELEASING.md](RELEA
 Einträge je Version sind ein automatischer Auszug der Commit-Titel seit dem letzten Release,
 erzeugt von `scripts/gen-changelog.mjs`.
 
+## [2.1.0] – 2026-09-18
+
+- chore: v2.0.1
+- Dokumentation: Meldeweg, Erfassungsluecken und Zeitraumgrenze ([#1022](https://github.com/mannewolff/kanban-kit/issues/1022))
+- Auswahlmodus: alle Karten einer Spalte auf einmal auswählen ([#1059](https://github.com/mannewolff/kanban-kit/issues/1059))
+- Mehrere Karten auch innerhalb desselben Boards verschieben ([#1043](https://github.com/mannewolff/kanban-kit/issues/1043))
+- Aufklapp-Pfeil sichtbar, ganze Kopfzeile klickbar ([#1041](https://github.com/mannewolff/kanban-kit/issues/1041))
+- PIT-Gate wieder grün: zwei überlebende Mutanten geprüft ([#1040](https://github.com/mannewolff/kanban-kit/issues/1040))
+- Kartenblatt zeigt die interaktive Sitzung als Anlauf ([#1018](https://github.com/mannewolff/kanban-kit/issues/1018))
+- Leitstand zeigt beide Anteile, „ohne Karte" und die Lebenszeit-Summe ([#1017](https://github.com/mannewolff/kanban-kit/issues/1017))
+- Frontend-Typen nach Gattung; Nachtlauf-Seite auf ihren Anteil festgelegt ([#1016](https://github.com/mannewolff/kanban-kit/issues/1016))
+- Anlaeufe einer Karte tragen ihre Gattung ([#1015](https://github.com/mannewolff/kanban-kit/issues/1015))
+- Lebenszeit-Summe je Projekt als eigener Abruf ([#1014](https://github.com/mannewolff/kanban-kit/issues/1014))
+- Verbrauchs-Auswertung getrennt nach Gattung ([#1013](https://github.com/mannewolff/kanban-kit/issues/1013))
+- Einlieferung nimmt die Gattung an ([#1012](https://github.com/mannewolff/kanban-kit/issues/1012))
+- Ringpuffer verdraengt je Gattung getrennt ([#1011](https://github.com/mannewolff/kanban-kit/issues/1011))
+- Domaene und Persistenz tragen die Gattung ([#1010](https://github.com/mannewolff/kanban-kit/issues/1010))
+- Migration V34: Gattung, Sitzungs-Laufart und Erfassungsbeginn ([#1009](https://github.com/mannewolff/kanban-kit/issues/1009))
+- Befund zu Verbrauch, Hook-Ereignissen und Worktrees ([#1008](https://github.com/mannewolff/kanban-kit/issues/1008))
+
 ## [2.0.0] – 2026-09-17
 
 - chore: v1.44.3

@@ -41,18 +41,25 @@ interface NightRunItemJpaRepository extends JpaRepository<NightRunItemEntity, Lo
   int deleteOrphansOfRun(@Param("projectId") long projectId, @Param("startedAt") Instant startedAt);
 
   /**
-   * Kappt die verwaisten Pakete des Projekts auf die {@code keep} jüngsten (Issue #966). Nativ,
-   * weil JPQL kein {@code LIMIT} kennt; die Auswahl steht als Unterabfrage wie bei der Verdrängung
-   * der Läufe. Bei gleichem Startzeitpunkt entscheidet die ID. Der Teilindex {@code
-   * idx_night_run_item_orphan} trägt beide Abfragen.
+   * Kappt die verwaisten Pakete <b>einer Gattung</b> im Projekt auf die {@code keep} jüngsten
+   * (Issue #966, je Gattung getrennt seit Issue #1011). Nativ, weil JPQL kein {@code LIMIT} kennt;
+   * die Auswahl steht als Unterabfrage wie bei der Verdrängung der Läufe. Bei gleichem
+   * Startzeitpunkt entscheidet die ID. Der um {@code kind} erweiterte Teilindex {@code
+   * idx_night_run_item_orphan} aus {@code V34} trägt beide Abfragen.
+   *
+   * <p>{@code kind} kommt als {@link String} und nicht als Enum: Die Spalte ist ein {@code varchar}
+   * + {@code CHECK}, und in einer nativen Abfrage bände Hibernate ein Enum als Ordinalzahl.
    */
   @Transactional
   @Modifying(flushAutomatically = true, clearAutomatically = true)
   @Query(
       value =
-          "delete from night_run_item where project_id = :projectId and night_run_id is null"
+          "delete from night_run_item where project_id = :projectId and kind = :kind"
+              + " and night_run_id is null"
               + " and id not in (select id from night_run_item where project_id = :projectId"
-              + " and night_run_id is null order by started_at desc, id desc limit :keep)",
+              + " and kind = :kind and night_run_id is null"
+              + " order by started_at desc, id desc limit :keep)",
       nativeQuery = true)
-  int deleteOrphansOlderThanNewest(@Param("projectId") long projectId, @Param("keep") int keep);
+  int deleteOrphansOlderThanNewest(
+      @Param("projectId") long projectId, @Param("kind") String kind, @Param("keep") int keep);
 }

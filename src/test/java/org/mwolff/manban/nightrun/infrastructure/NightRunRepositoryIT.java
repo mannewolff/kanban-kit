@@ -23,6 +23,7 @@ import org.mwolff.manban.nightrun.application.NightRunRepository.UpsertResult;
 import org.mwolff.manban.nightrun.domain.NightRun;
 import org.mwolff.manban.nightrun.domain.NightRunErrorClass;
 import org.mwolff.manban.nightrun.domain.NightRunItem;
+import org.mwolff.manban.nightrun.domain.NightRunKind;
 import org.mwolff.manban.nightrun.domain.NightRunLimits;
 import org.mwolff.manban.nightrun.domain.NightRunMode;
 import org.mwolff.manban.nightrun.domain.NightRunOrigin;
@@ -55,14 +56,16 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
   private static final Instant ANGELEGT = Instant.parse("2026-09-04T06:00:00Z");
 
   /**
-   * Absichtlich falsche Werte an den einzuliefernden Paketen (Issue #964): Projekt, Startzeitpunkt
-   * und Lauf-Art eines Pakets schreibt der Adapter aus dem Lauf, zu dem es gehoert, und nie aus dem
-   * Paket. Stuenden hier die Werte des Laufs, bewiese kein Test, woher der Adapter sie nimmt.
+   * Absichtlich falsche Werte an den einzuliefernden Paketen (Issue #964, um die Gattung erweitert
+   * in #1010): Projekt, Startzeitpunkt, Lauf-Art und Gattung eines Pakets schreibt der Adapter aus
+   * dem Lauf, zu dem es gehoert, und nie aus dem Paket. Stuenden hier die Werte des Laufs, bewiese
+   * kein Test, woher der Adapter sie nimmt.
    */
   private static final long PLATZHALTER_PROJEKT = -1L;
 
   private static final Instant PLATZHALTER_START = Instant.EPOCH;
   private static final NightRunMode PLATZHALTER_MODUS = NightRunMode.REVIEW;
+  private static final NightRunKind PLATZHALTER_GATTUNG = NightRunKind.INTERACTIVE;
 
   @Autowired private NightRunRepository runs;
   @Autowired private JdbcTemplate jdbc;
@@ -86,11 +89,17 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
   }
 
   private NightRun lauf(Instant startedAt) {
+    return lauf(startedAt, NightRunKind.NIGHT);
+  }
+
+  /** Derselbe Lauf in der genannten Gattung — die Verdrängung kappt je Gattung (Issue #1011). */
+  private NightRun lauf(Instant startedAt, NightRunKind kind) {
     return new NightRun(
         null,
         projectId,
         startedAt,
-        NightRunMode.IMPLEMENTATION,
+        kind == NightRunKind.INTERACTIVE ? NightRunMode.INTERACTIVE : NightRunMode.IMPLEMENTATION,
+        kind,
         3_600_000L,
         2,
         1,
@@ -111,6 +120,7 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
         PLATZHALTER_PROJEKT,
         PLATZHALTER_START,
         PLATZHALTER_MODUS,
+        PLATZHALTER_GATTUNG,
         cardNumber,
         "Paket " + cardNumber,
         state,
@@ -125,13 +135,17 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
     return runs.insertIfAbsent(lauf(startedAt), items).orElseThrow();
   }
 
+  private long anlegen(Instant startedAt, NightRunKind kind, List<NightRunItem> items) {
+    return runs.insertIfAbsent(lauf(startedAt, kind), items).orElseThrow();
+  }
+
   // --- Anlegen und Lesen ---------------------------------------------------------------------
 
   @Test
   void insertIfAbsentLegtDenLaufAnUndLiefertSeineId() {
     long id = anlegen(T1, List.of(paket(721, NightRunState.GREEN)));
 
-    assertThat(runs.findByProjectOrderByStartedAtDesc(projectId))
+    assertThat(runs.findByProjectAndKindOrderByStartedAtDesc(projectId, NightRunKind.NIGHT))
         .extracting(NightRun::id, NightRun::startedAt, NightRun::mode, NightRun::processedCount)
         .containsExactly(tuple(id, T1, NightRunMode.IMPLEMENTATION, 2));
   }
@@ -175,6 +189,7 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
             projectId,
             T1,
             NightRunMode.CHAIN,
+            NightRunKind.NIGHT,
             3_600_000L,
             1,
             0,
@@ -191,12 +206,80 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
         runs.insertIfAbsent(kette, List.of(mitKlasse(853, NightRunErrorClass.TIME_BUDGET_EXCEEDED)))
             .orElseThrow();
 
-    assertThat(runs.findByProjectOrderByStartedAtDesc(projectId))
+    assertThat(runs.findByProjectAndKindOrderByStartedAtDesc(projectId, NightRunKind.NIGHT))
         .extracting(NightRun::mode)
         .containsExactly(NightRunMode.CHAIN);
     assertThat(runs.findItemsByRunIds(List.of(id)))
         .extracting(NightRunItem::errorClass)
         .containsExactly(NightRunErrorClass.TIME_BUDGET_EXCEEDED);
+  }
+
+  // --- Gattung (Issue #1010) ------------------------------------------------------------------
+
+  /**
+   * Der Roundtrip der interaktiven Sitzung: Gattung und Laufart gehen als {@code INTERACTIVE}
+   * hinein und kommen an Lauf <b>und</b> Arbeitspaket so zurueck. Nur die echte Datenbank loest das
+   * ein — ein fehlender {@code CHECK}-Wert oder eine zu kurze Spalte faellt weder beim Uebersetzen
+   * noch im Service auf.
+   */
+  @Test
+  void eineSitzungKommtMitGattungUndLaufartInteractiveZurueck() {
+    NightRun sitzung =
+        new NightRun(
+            null,
+            projectId,
+            T1,
+            NightRunMode.INTERACTIVE,
+            NightRunKind.INTERACTIVE,
+            1_000L,
+            1,
+            0,
+            0,
+            null,
+            ANGELEGT,
+            NightRunOrigin.TOKEN,
+            "sitzungs-token",
+            true,
+            null,
+            null);
+
+    long id = runs.insertIfAbsent(sitzung, List.of(paket(1010, NightRunState.GREEN))).orElseThrow();
+
+    assertThat(runs.findByProjectAndKindOrderByStartedAtDesc(projectId, NightRunKind.INTERACTIVE))
+        .extracting(NightRun::mode, NightRun::kind)
+        .containsExactly(tuple(NightRunMode.INTERACTIVE, NightRunKind.INTERACTIVE));
+    assertThat(runs.findItemsByRunIds(List.of(id)))
+        .extracting(NightRunItem::mode, NightRunItem::kind)
+        .containsExactly(tuple(NightRunMode.INTERACTIVE, NightRunKind.INTERACTIVE));
+  }
+
+  /**
+   * Eine Zeile, die ohne Gattung eingefuegt wird, liest sich als Nachtlauf — der Vorgabewert aus
+   * {@code V34} (Issue #1009). Bestandszeilen leben davon; sie haben nie eine Gattung geschrieben.
+   */
+  @Test
+  void einLaufOhneGattungLiestSichSamtPaketAlsNight() {
+    long runId =
+        insert(
+            "INSERT INTO night_run (project_id, started_at, mode, duration_ms, processed_count,"
+                + " skipped_count, unparsed_count, created_at) VALUES ("
+                + projectId
+                + ", timestamptz '2026-09-08T22:00:00Z', 'IMPLEMENTATION', 1000, 1, 0, 0,"
+                + " timestamptz '2026-09-08T23:00:00Z') RETURNING id");
+    jdbc.update(
+        "INSERT INTO night_run_item (night_run_id, project_id, started_at, mode, card_number,"
+            + " title, state) VALUES (?, ?, timestamptz '2026-09-08T22:00:00Z',"
+            + " 'IMPLEMENTATION', ?, ?, ?)",
+        runId,
+        projectId,
+        902,
+        "Altpaket ohne Gattung",
+        "GREEN");
+
+    assertThat(gelesen(runId).kind()).isEqualTo(NightRunKind.NIGHT);
+    assertThat(runs.findItemsByRunIds(List.of(runId)))
+        .extracting(NightRunItem::kind)
+        .containsExactly(NightRunKind.NIGHT);
   }
 
   @Test
@@ -205,7 +288,7 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
     anlegen(T3, List.of());
     anlegen(T2, List.of());
 
-    assertThat(runs.findByProjectOrderByStartedAtDesc(projectId))
+    assertThat(runs.findByProjectAndKindOrderByStartedAtDesc(projectId, NightRunKind.NIGHT))
         .extracting(NightRun::startedAt)
         .containsExactly(T3, T2, T1);
   }
@@ -214,7 +297,8 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
   void findByProjectOrderByStartedAtDescKenntNurDasEigeneProjekt() {
     anlegen(T1, List.of());
 
-    assertThat(runs.findByProjectOrderByStartedAtDesc(projectId + 999)).isEmpty();
+    assertThat(runs.findByProjectAndKindOrderByStartedAtDesc(projectId + 999, NightRunKind.NIGHT))
+        .isEmpty();
   }
 
   @Test
@@ -263,6 +347,7 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
             anderesProjekt,
             T1,
             NightRunMode.REVIEW,
+            NightRunKind.NIGHT,
             1_000L,
             0,
             0,
@@ -318,14 +403,18 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
         .isEqualTo(Timestamp.from(T1));
   }
 
-  /** Ueber den Upload-Weg: Das Paket traegt die drei Werte seines Laufs, nicht seine eigenen. */
+  /** Ueber den Upload-Weg: Das Paket traegt die vier Werte seines Laufs, nicht seine eigenen. */
   @Test
-  void insertIfAbsentSchreibtProjektStartUndArtDesLaufsAnsPaket() {
+  void insertIfAbsentSchreibtProjektStartArtUndGattungDesLaufsAnsPaket() {
     long id = anlegen(T1, List.of(paket(721, NightRunState.GREEN)));
 
     assertThat(runs.findItemsByRunIds(List.of(id)))
-        .extracting(NightRunItem::projectId, NightRunItem::startedAt, NightRunItem::mode)
-        .containsExactly(tuple(projectId, T1, NightRunMode.IMPLEMENTATION));
+        .extracting(
+            NightRunItem::projectId,
+            NightRunItem::startedAt,
+            NightRunItem::mode,
+            NightRunItem::kind)
+        .containsExactly(tuple(projectId, T1, NightRunMode.IMPLEMENTATION, NightRunKind.NIGHT));
   }
 
   /** Ueber den meldenden Weg, beim Anlegen wie beim Ersetzen. */
@@ -413,6 +502,7 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
         PLATZHALTER_PROJEKT,
         PLATZHALTER_START,
         PLATZHALTER_MODUS,
+        PLATZHALTER_GATTUNG,
         721,
         "Paket",
         NightRunState.GREEN,
@@ -429,6 +519,7 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
         projectId,
         startedAt,
         NightRunMode.IMPLEMENTATION,
+        NightRunKind.NIGHT,
         1_000L,
         0,
         0,
@@ -471,7 +562,11 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
 
   /** Verdraengt einen gerade angelegten Lauf, damit seine Pakete verwaist stehen bleiben. */
   private void verwaist(Instant startedAt, NightRunItem... items) {
-    jdbc.update("DELETE FROM night_run WHERE id = ?", anlegen(startedAt, List.of(items)));
+    verwaist(startedAt, NightRunKind.NIGHT, items);
+  }
+
+  private void verwaist(Instant startedAt, NightRunKind kind, NightRunItem... items) {
+    jdbc.update("DELETE FROM night_run WHERE id = ?", anlegen(startedAt, kind, List.of(items)));
   }
 
   @Test
@@ -481,7 +576,8 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
     verwaist(T1, paket(1, NightRunState.GREEN));
     verwaist(T3, paket(3, NightRunState.GREEN));
 
-    assertThat(runs.deleteOrphanItemsOlderThanNewest(projectId, 2)).isEqualTo(1);
+    assertThat(runs.deleteOrphanItemsOlderThanNewest(projectId, NightRunKind.NIGHT, 2))
+        .isEqualTo(1);
 
     assertThat(
             jdbc.queryForList(
@@ -501,7 +597,8 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
     verwaist(T1, paket(1001, NightRunState.RED));
     verwaist(T2, paket(1002, NightRunState.RED));
 
-    assertThat(runs.deleteOrphanItemsOlderThanNewest(projectId, 1)).isEqualTo(1);
+    assertThat(runs.deleteOrphanItemsOlderThanNewest(projectId, NightRunKind.NIGHT, 1))
+        .isEqualTo(1);
 
     assertThat(runs.findItemsByRunIds(List.of(aufbewahrt))).hasSize(200);
     assertThat(
@@ -514,8 +611,49 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
   void deleteOrphanItemsOlderThanNewestLaesstAndereProjekteUnberuehrt() {
     verwaist(T1, paket(1, NightRunState.GREEN));
 
-    assertThat(runs.deleteOrphanItemsOlderThanNewest(projectId + 999, 1)).isZero();
+    assertThat(runs.deleteOrphanItemsOlderThanNewest(projectId + 999, NightRunKind.NIGHT, 1))
+        .isZero();
     assertThat(zeilen("night_run_item")).isEqualTo(1);
+  }
+
+  // --- Getrennte Kappung je Gattung (Issue #1011) --------------------------------------------
+
+  /**
+   * Die Sitzungs-Grenze kappt nur Sitzungen. Die verwaisten Pakete der Nachtlaeufe stehen daneben
+   * und werden von ihr nicht gezaehlt — sonst risse eine haeufige Gattung die seltene mit sich.
+   */
+  @Test
+  void deleteOrphanItemsOlderThanNewestKapptNurDieEigeneGattung() {
+    verwaist(T1, NightRunKind.NIGHT, paket(1, NightRunState.GREEN));
+    verwaist(T2, NightRunKind.NIGHT, paket(2, NightRunState.GREEN));
+    verwaist(T1, NightRunKind.INTERACTIVE, paket(11, NightRunState.GREEN));
+    verwaist(T2, NightRunKind.INTERACTIVE, paket(12, NightRunState.GREEN));
+    verwaist(T3, NightRunKind.INTERACTIVE, paket(13, NightRunState.GREEN));
+
+    assertThat(runs.deleteOrphanItemsOlderThanNewest(projectId, NightRunKind.INTERACTIVE, 1))
+        .isEqualTo(2);
+
+    assertThat(
+            jdbc.queryForList(
+                "SELECT card_number FROM night_run_item ORDER BY card_number", Integer.class))
+        .containsExactly(1, 2, 13);
+  }
+
+  /** Und umgekehrt: Die Nachtlauf-Grenze laesst die verwaisten Pakete der Sitzungen stehen. */
+  @Test
+  void deleteOrphanItemsOlderThanNewestLaesstDieAndereGattungStehen() {
+    verwaist(T1, NightRunKind.INTERACTIVE, paket(11, NightRunState.GREEN));
+    verwaist(T2, NightRunKind.INTERACTIVE, paket(12, NightRunState.GREEN));
+    verwaist(T1, NightRunKind.NIGHT, paket(1, NightRunState.GREEN));
+    verwaist(T2, NightRunKind.NIGHT, paket(2, NightRunState.GREEN));
+
+    assertThat(runs.deleteOrphanItemsOlderThanNewest(projectId, NightRunKind.NIGHT, 1))
+        .isEqualTo(1);
+
+    assertThat(
+            jdbc.queryForList(
+                "SELECT card_number FROM night_run_item ORDER BY card_number", Integer.class))
+        .containsExactly(2, 11, 12);
   }
 
   // --- Anlaeufe einer Karte (Issue #967) ----------------------------------------------------
@@ -552,6 +690,7 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
             anderesProjekt,
             T2,
             NightRunMode.IMPLEMENTATION,
+            NightRunKind.NIGHT,
             1_000L,
             1,
             0,
@@ -570,6 +709,58 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
         .containsExactly(T1);
   }
 
+  // --- Gattung an den Anlaeufen einer Karte (Issue #1015) ------------------------------------
+
+  /**
+   * Die Anläufe einer Karte filtern nicht nach Gattung, sie zeigen sie an (Plan #1007, E10):
+   * Nachtlauf und interaktive Sitzung stehen nebeneinander, jüngster zuerst, jeder mit seiner
+   * eigenen.
+   */
+  @Test
+  void findByCardLiefertBeideGattungenNebeneinander_jedeMitIhrer() {
+    anlegen(T1, NightRunKind.NIGHT, List.of(paket(1015, NightRunState.GREEN)));
+    anlegen(T2, NightRunKind.INTERACTIVE, List.of(paket(1015, NightRunState.RED)));
+
+    assertThat(runs.findByCard(projectId, 1015))
+        .extracting(NightRunItem::startedAt, NightRunItem::kind)
+        .containsExactly(tuple(T2, NightRunKind.INTERACTIVE), tuple(T1, NightRunKind.NIGHT));
+  }
+
+  /**
+   * Ein verwaistes Paket trägt seine Gattung selbst (Issue #964, #1010): Sein Lauf ist verdrängt,
+   * und ohne die eigene Spalte fiele die Sitzung nach der Verdrängung auf den Nachtlauf zurück.
+   */
+  @Test
+  void findByCardLiefertDieGattungAuchFuerVerwaistePakete() {
+    verwaist(T1, NightRunKind.INTERACTIVE, paket(1015, NightRunState.GREEN));
+
+    assertThat(runs.findByCard(projectId, 1015))
+        .singleElement()
+        .extracting(NightRunItem::nightRunId, NightRunItem::kind)
+        .containsExactly(null, NightRunKind.INTERACTIVE);
+  }
+
+  /**
+   * Bestandsdaten ändern ihre Darstellung nicht: Eine Zeile, die ihre Gattung nicht selbst setzt —
+   * jede aus der Zeit vor {@code V34} —, liest sich als Nachtlauf. Den Wert liefert der Vorgabewert
+   * der Spalte, nicht der Lesepfad; deshalb steht hier ein {@code INSERT} ohne {@code kind} und
+   * kein Aufruf des Adapters.
+   */
+  @Test
+  void findByCardLiestEinPaketOhneGesetzteGattungAlsNachtlauf() {
+    jdbc.update(
+        "INSERT INTO night_run_item (night_run_id, project_id, started_at, mode, card_number,"
+            + " title, state, excerpt)"
+            + " VALUES (NULL, ?, ?, 'IMPLEMENTATION', 1015, 'Bestand', 'GREEN', 'Auszug')",
+        projectId,
+        Timestamp.from(T1));
+
+    assertThat(runs.findByCard(projectId, 1015))
+        .singleElement()
+        .extracting(NightRunItem::kind)
+        .isEqualTo(NightRunKind.NIGHT);
+  }
+
   // --- Ringpuffer und Zählung -----------------------------------------------------------------
 
   @Test
@@ -578,8 +769,8 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
     anlegen(T2, List.of());
     anlegen(T3, List.of());
 
-    assertThat(runs.deleteOlderThanNewest(projectId, 2)).isEqualTo(1);
-    assertThat(runs.findByProjectOrderByStartedAtDesc(projectId))
+    assertThat(runs.deleteOlderThanNewest(projectId, NightRunKind.NIGHT, 2)).isEqualTo(1);
+    assertThat(runs.findByProjectAndKindOrderByStartedAtDesc(projectId, NightRunKind.NIGHT))
         .extracting(NightRun::startedAt)
         .containsExactly(T3, T2);
   }
@@ -588,8 +779,75 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
   void deleteOlderThanNewestLaesstAndereProjekteUnberuehrt() {
     anlegen(T1, List.of());
 
-    assertThat(runs.deleteOlderThanNewest(projectId + 999, 0)).isZero();
-    assertThat(runs.findByProjectOrderByStartedAtDesc(projectId)).hasSize(1);
+    assertThat(runs.deleteOlderThanNewest(projectId + 999, NightRunKind.NIGHT, 0)).isZero();
+    assertThat(runs.findByProjectAndKindOrderByStartedAtDesc(projectId, NightRunKind.NIGHT))
+        .hasSize(1);
+  }
+
+  // --- Getrennte Verdraengung je Gattung (Issue #1011) ---------------------------------------
+
+  /**
+   * Fuenf Sitzungen bei einer Sitzungs-Grenze von drei: Es bleiben die drei juengsten Sitzungen,
+   * und <b>kein</b> gleichzeitig vorhandener Nachtlauf faellt. Unter einer gemeinsamen Grenze
+   * haetten die haeufigeren Sitzungen die Nachtlauf-Auswertung binnen Tagen ausgeraeumt.
+   */
+  @Test
+  void deleteOlderThanNewestVerdraengtNurDieEigeneGattung() {
+    anlegen(T1, NightRunKind.NIGHT, List.of());
+    anlegen(T2, NightRunKind.NIGHT, List.of());
+    List<Instant> sitzungen =
+        List.of(
+            Instant.parse("2026-09-05T08:00:00Z"),
+            Instant.parse("2026-09-05T09:00:00Z"),
+            Instant.parse("2026-09-05T10:00:00Z"),
+            Instant.parse("2026-09-05T11:00:00Z"),
+            Instant.parse("2026-09-05T12:00:00Z"));
+    sitzungen.forEach(s -> anlegen(s, NightRunKind.INTERACTIVE, List.of()));
+
+    assertThat(runs.deleteOlderThanNewest(projectId, NightRunKind.INTERACTIVE, 3)).isEqualTo(2);
+
+    assertThat(runs.findByProjectAndKindOrderByStartedAtDesc(projectId, NightRunKind.INTERACTIVE))
+        .extracting(NightRun::startedAt)
+        .containsExactly(sitzungen.get(4), sitzungen.get(3), sitzungen.get(2));
+    assertThat(runs.findByProjectAndKindOrderByStartedAtDesc(projectId, NightRunKind.NIGHT))
+        .extracting(NightRun::startedAt)
+        .containsExactly(T2, T1);
+  }
+
+  /** Und umgekehrt: Nachtlaeufe jenseits ihrer Grenze verdraengen keine Sitzung. */
+  @Test
+  void deleteOlderThanNewestLaesstDieAndereGattungStehen() {
+    anlegen(T1, NightRunKind.INTERACTIVE, List.of());
+    anlegen(T2, NightRunKind.INTERACTIVE, List.of());
+    anlegen(Instant.parse("2026-09-05T08:00:00Z"), NightRunKind.NIGHT, List.of());
+    anlegen(Instant.parse("2026-09-05T09:00:00Z"), NightRunKind.NIGHT, List.of());
+    anlegen(Instant.parse("2026-09-05T10:00:00Z"), NightRunKind.NIGHT, List.of());
+
+    assertThat(runs.deleteOlderThanNewest(projectId, NightRunKind.NIGHT, 1)).isEqualTo(2);
+
+    assertThat(runs.findByProjectAndKindOrderByStartedAtDesc(projectId, NightRunKind.NIGHT))
+        .hasSize(1);
+    assertThat(runs.findByProjectAndKindOrderByStartedAtDesc(projectId, NightRunKind.INTERACTIVE))
+        .extracting(NightRun::startedAt)
+        .containsExactly(T2, T1);
+  }
+
+  /**
+   * Die Laufliste der Nachtlauf-Seite sieht nur Nachtlaeufe (Issue #1012, Nicht-Ziel): Eine Sitzung
+   * im selben Projekt darf dort nicht auftauchen, sonst stuende sie als „letzter Lauf" da.
+   */
+  @Test
+  void findByProjectAndKindOrderByStartedAtDescLiefertNurDieGenannteGattung() {
+    anlegen(T1, NightRunKind.NIGHT, List.of());
+    anlegen(T2, NightRunKind.INTERACTIVE, List.of());
+    anlegen(T3, NightRunKind.INTERACTIVE, List.of());
+
+    assertThat(runs.findByProjectAndKindOrderByStartedAtDesc(projectId, NightRunKind.NIGHT))
+        .extracting(NightRun::startedAt)
+        .containsExactly(T1);
+    assertThat(runs.findByProjectAndKindOrderByStartedAtDesc(projectId, NightRunKind.INTERACTIVE))
+        .extracting(NightRun::startedAt)
+        .containsExactly(T3, T2);
   }
 
   @Test
@@ -602,7 +860,7 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
             mitKlasse(3, NightRunErrorClass.HARD_ABORT)));
     anlegen(T2, List.of(mitKlasse(4, NightRunErrorClass.CHECKS_RED)));
 
-    assertThat(runs.countRunsByErrorClass(projectId))
+    assertThat(runs.countRunsByErrorClass(projectId, NightRunKind.NIGHT))
         .containsOnly(
             entry(NightRunErrorClass.CHECKS_RED, 2L), entry(NightRunErrorClass.HARD_ABORT, 1L));
   }
@@ -611,16 +869,31 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
   void countRunsByErrorClassLaesstVerdraengteLaeufeUndGrueneItemsAusserAcht() {
     anlegen(T1, List.of(mitKlasse(1, NightRunErrorClass.CHECKS_RED)));
     anlegen(T2, List.of(paket(2, NightRunState.GREEN)));
-    runs.deleteOlderThanNewest(projectId, 1);
+    runs.deleteOlderThanNewest(projectId, NightRunKind.NIGHT, 1);
 
-    assertThat(runs.countRunsByErrorClass(projectId)).isEmpty();
+    assertThat(runs.countRunsByErrorClass(projectId, NightRunKind.NIGHT)).isEmpty();
   }
 
   @Test
   void countRunsByErrorClassKenntNurDasEigeneProjekt() {
     anlegen(T1, List.of(mitKlasse(1, NightRunErrorClass.CHECKS_RED)));
 
-    assertThat(runs.countRunsByErrorClass(projectId + 999)).isEqualTo(Map.of());
+    assertThat(runs.countRunsByErrorClass(projectId + 999, NightRunKind.NIGHT)).isEqualTo(Map.of());
+  }
+
+  /**
+   * Die Platte „Abbruchgruende" zaehlt nur Nachtlaeufe (Issue #1012, Nicht-Ziel). Eine rote Sitzung
+   * im selben Projekt traegt dieselbe Fehlerklasse und wuerde die Zahl sonst still verdoppeln.
+   */
+  @Test
+  void countRunsByErrorClassZaehltNurDieGenannteGattung() {
+    anlegen(T1, NightRunKind.NIGHT, List.of(mitKlasse(1, NightRunErrorClass.CHECKS_RED)));
+    anlegen(T2, NightRunKind.INTERACTIVE, List.of(mitKlasse(2, NightRunErrorClass.CHECKS_RED)));
+
+    assertThat(runs.countRunsByErrorClass(projectId, NightRunKind.NIGHT))
+        .containsOnly(entry(NightRunErrorClass.CHECKS_RED, 1L));
+    assertThat(runs.countRunsByErrorClass(projectId, NightRunKind.INTERACTIVE))
+        .containsOnly(entry(NightRunErrorClass.CHECKS_RED, 1L));
   }
 
   private static NightRunItem mitKlasse(int cardNumber, NightRunErrorClass errorClass) {
@@ -630,6 +903,7 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
         PLATZHALTER_PROJEKT,
         PLATZHALTER_START,
         PLATZHALTER_MODUS,
+        PLATZHALTER_GATTUNG,
         cardNumber,
         "Paket " + cardNumber,
         NightRunState.RED,
@@ -666,7 +940,7 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
         "GREEN");
 
     NightRun gelesen =
-        runs.findByProjectOrderByStartedAtDesc(projectId).stream()
+        runs.findByProjectAndKindOrderByStartedAtDesc(projectId, NightRunKind.NIGHT).stream()
             .filter(r -> Objects.equals(r.id(), runId))
             .findFirst()
             .orElseThrow();
@@ -694,6 +968,7 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
             projectId,
             Instant.parse("2026-09-06T22:00:00Z"),
             NightRunMode.CHAIN,
+            NightRunKind.NIGHT,
             1000L,
             1,
             0,
@@ -712,6 +987,7 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
             PLATZHALTER_PROJEKT,
             PLATZHALTER_START,
             PLATZHALTER_MODUS,
+            PLATZHALTER_GATTUNG,
             944,
             "Mit Verbrauch",
             NightRunState.GREEN,
@@ -724,7 +1000,7 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
     long runId = runs.insertIfAbsent(mitVerbrauch, List.of(paket)).orElseThrow();
 
     NightRun gelesen =
-        runs.findByProjectOrderByStartedAtDesc(projectId).stream()
+        runs.findByProjectAndKindOrderByStartedAtDesc(projectId, NightRunKind.NIGHT).stream()
             .filter(r -> Objects.equals(r.id(), runId))
             .findFirst()
             .orElseThrow();
@@ -754,6 +1030,7 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
             projectId,
             Instant.parse("2026-09-07T22:00:00Z"),
             NightRunMode.IMPLEMENTATION,
+            NightRunKind.NIGHT,
             1000L,
             1,
             0,
@@ -769,7 +1046,7 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
     long runId = runs.insertIfAbsent(maschinell, List.of()).orElseThrow();
 
     NightRun gelesen =
-        runs.findByProjectOrderByStartedAtDesc(projectId).stream()
+        runs.findByProjectAndKindOrderByStartedAtDesc(projectId, NightRunKind.NIGHT).stream()
             .filter(r -> Objects.equals(r.id(), runId))
             .findFirst()
             .orElseThrow();
@@ -787,6 +1064,7 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
         projectId,
         startedAt,
         NightRunMode.CHAIN,
+        NightRunKind.NIGHT,
         1000L,
         1,
         0,
@@ -800,8 +1078,13 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
         null);
   }
 
+  /**
+   * Ein Lauf ueber die ID, unabhaengig von seiner Gattung: Die Laufliste des Ports filtert seit
+   * Issue #1012 auf eine Gattung, und mancher Fall hier schreibt die Gattung gerade um.
+   */
   private NightRun gelesen(long runId) {
-    return runs.findByProjectOrderByStartedAtDesc(projectId).stream()
+    return Arrays.stream(NightRunKind.values())
+        .flatMap(k -> runs.findByProjectAndKindOrderByStartedAtDesc(projectId, k).stream())
         .filter(r -> Objects.equals(r.id(), runId))
         .findFirst()
         .orElseThrow();
@@ -830,7 +1113,7 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
 
     assertThat(zweiter.created()).isFalse();
     assertThat(zweiter.id()).isEqualTo(erster.id());
-    assertThat(runs.findByProjectOrderByStartedAtDesc(projectId))
+    assertThat(runs.findByProjectAndKindOrderByStartedAtDesc(projectId, NightRunKind.NIGHT))
         .filteredOn(r -> Objects.equals(r.startedAt(), start))
         .hasSize(1);
     assertThat(runs.findItemsByRunIds(List.of(erster.id()))).hasSize(1);
@@ -852,6 +1135,42 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
         .containsExactly(103);
   }
 
+  /**
+   * Die Gattung gehoert zum gemeldeten Stand und wird wie die Lauf-Art fortgeschrieben (Issue
+   * #1010) — am Lauf und an seinen neu geschriebenen Arbeitspaketen.
+   */
+  @Test
+  void einZweiterUpsertSchreibtDieGattungFort() {
+    Instant start = Instant.parse("2026-09-16T22:00:00Z");
+    UpsertResult erster =
+        runs.upsert(meldung(start, false), List.of(paket(101, NightRunState.GREEN)));
+
+    NightRun alsSitzung =
+        new NightRun(
+            null,
+            projectId,
+            start,
+            NightRunMode.INTERACTIVE,
+            NightRunKind.INTERACTIVE,
+            2000L,
+            1,
+            0,
+            0,
+            null,
+            ANGELEGT,
+            NightRunOrigin.TOKEN,
+            "sitzungs-token",
+            true,
+            null,
+            null);
+    runs.upsert(alsSitzung, List.of(paket(102, NightRunState.GREEN)));
+
+    assertThat(gelesen(erster.id()).kind()).isEqualTo(NightRunKind.INTERACTIVE);
+    assertThat(runs.findItemsByRunIds(List.of(erster.id())))
+        .extracting(NightRunItem::kind)
+        .containsExactly(NightRunKind.INTERACTIVE);
+  }
+
   @Test
   void beimErsetzenBleibtCreatedAtStehenUndUpdatedAtWaechst() {
     Instant start = Instant.parse("2026-09-13T22:00:00Z");
@@ -864,6 +1183,7 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
             projectId,
             start,
             NightRunMode.CHAIN,
+            NightRunKind.NIGHT,
             2000L,
             2,
             0,

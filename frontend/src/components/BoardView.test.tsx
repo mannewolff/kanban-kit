@@ -536,12 +536,12 @@ describe('BoardView', () => {
       <BoardView board={board} initialCards={[card]} canEdit api={mkApi()} />,
     )
     fireEvent.click(screen.getByLabelText('Menü Aufgabe'))
-    expect(screen.queryByText('Auf anderes Board verschieben…')).not.toBeInTheDocument()
+    expect(screen.queryByText('Verschieben…')).not.toBeInTheDocument()
     unmount()
 
     render(<BoardView board={board} initialCards={[card]} canEdit canTransfer api={mkApi()} />)
     fireEvent.click(screen.getByLabelText('Menü Aufgabe'))
-    expect(screen.getByText('Auf anderes Board verschieben…')).toBeInTheDocument()
+    expect(screen.getByText('Verschieben…')).toBeInTheDocument()
   })
 
   it('zeigt farbige Label-Chips auf der Karte', () => {
@@ -782,7 +782,7 @@ describe('BoardView', () => {
     fireEvent.click(screen.getByTestId('card-100'))
     fireEvent.click(screen.getByRole('button', { name: 'Verschieben' }))
 
-    expect(screen.getByText('Auf anderes Board verschieben')).toBeInTheDocument()
+    expect(screen.getByText('Karte verschieben')).toBeInTheDocument()
   })
 
   it('leert die Auswahl beim Abbrechen', () => {
@@ -794,6 +794,89 @@ describe('BoardView', () => {
 
     expect(screen.queryByLabelText('Karte Aufgabe auswählen')).not.toBeInTheDocument()
     expect(screen.queryByText('1 ausgewählt')).not.toBeInTheDocument()
+  })
+
+  describe('Alle Karten einer Spalte auswählen', () => {
+    const zweiteImBacklog: Card = { ...card, id: 101, number: 2, title: 'Zweite', positionInColumn: 1 }
+    const inDone: Card = { ...card, id: 200, number: 3, title: 'Fertig', columnId: 20, positionInColumn: 0 }
+    const alleWaehlen = 'Alle Karten in Backlog auswählen'
+    const auswahlAufheben = 'Auswahl in Backlog aufheben'
+
+    const starteAuswahl = () => fireEvent.click(screen.getByRole('button', { name: 'Auswählen' }))
+
+    it('zeigt das Kästchen im Spaltenkopf nur im Auswahlmodus', () => {
+      render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} />)
+
+      expect(within(screen.getByTestId('column-header-10')).queryByRole('checkbox')).not.toBeInTheDocument()
+
+      starteAuswahl()
+      expect(within(screen.getByTestId('column-header-10')).getByRole('checkbox', { name: alleWaehlen }))
+        .toBeInTheDocument()
+    })
+
+    it('wählt mit einem Klick alle angezeigten Karten der Spalte', () => {
+      render(<BoardView board={board} initialCards={[card, zweiteImBacklog, inDone]} canEdit api={mkApi()} />)
+
+      starteAuswahl()
+      fireEvent.click(screen.getByRole('checkbox', { name: alleWaehlen }))
+
+      // Nur die beiden Karten des Backlogs — die Karte in Done bleibt ungewählt.
+      expect(screen.getByText('2 ausgewählt')).toBeInTheDocument()
+      expect(screen.getByRole('checkbox', { name: auswahlAufheben })).toBeChecked()
+    })
+
+    it('hebt beim zweiten Klick nur die Auswahl dieser Spalte auf', () => {
+      render(<BoardView board={board} initialCards={[card, zweiteImBacklog, inDone]} canEdit api={mkApi()} />)
+
+      starteAuswahl()
+      fireEvent.click(screen.getByTestId('card-200')) // Karte in Done einzeln gewählt
+      fireEvent.click(screen.getByRole('checkbox', { name: alleWaehlen }))
+      expect(screen.getByText('3 ausgewählt')).toBeInTheDocument()
+
+      fireEvent.click(screen.getByRole('checkbox', { name: auswahlAufheben }))
+
+      // Die Karte der anderen Spalte bleibt gewählt.
+      expect(screen.getByText('1 ausgewählt')).toBeInTheDocument()
+    })
+
+    it('zeigt bei teilweiser Auswahl „einige" und ergänzt beim Klick die fehlenden', () => {
+      render(<BoardView board={board} initialCards={[card, zweiteImBacklog]} canEdit api={mkApi()} />)
+
+      starteAuswahl()
+      fireEvent.click(screen.getByTestId('card-100'))
+
+      const kaestchen = screen.getByRole('checkbox', { name: alleWaehlen })
+      expect(kaestchen).toHaveAttribute('data-indeterminate', 'true')
+
+      fireEvent.click(kaestchen)
+      expect(screen.getByText('2 ausgewählt')).toBeInTheDocument()
+    })
+
+    it('lässt eine verdeckte Karte der Spalte ungewählt', () => {
+      const epic = {
+        id: 9, number: 9, title: 'Auth', description: null, shortcode: 'AUT',
+        done: 0, total: 1, memberNumbers: [2], rootNumbers: [2], requirementCardNumber: null,
+      }
+      const verdeckt: Card = { ...zweiteImBacklog, title: 'Verdeckt', parentId: 9 }
+      render(
+        <BoardView board={board} initialCards={[card, verdeckt]} canEdit epics={[epic]}
+          hiddenEpics={new Set([9])} api={mkApi()} />,
+      )
+
+      starteAuswahl()
+      fireEvent.click(screen.getByRole('checkbox', { name: alleWaehlen }))
+
+      expect(screen.getByText('1 ausgewählt')).toBeInTheDocument()
+      // „Alle" meint die angezeigten Karten: mit der einen sichtbaren ist die Spalte voll gewählt.
+      expect(screen.getByRole('checkbox', { name: auswahlAufheben })).toBeChecked()
+    })
+
+    it('sperrt das Kästchen einer leeren Spalte', () => {
+      render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} />)
+
+      starteAuswahl()
+      expect(screen.getByRole('checkbox', { name: 'Alle Karten in Done auswählen' })).toBeDisabled()
+    })
   })
 
   describe('Labels über die Mehrfachauswahl', () => {
@@ -998,7 +1081,7 @@ describe('BoardView', () => {
     )
 
     fireEvent.click(screen.getByLabelText('Menü Aufgabe'))
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Auf anderes Board verschieben…' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Verschieben…' }))
 
     fireEvent.change(await screen.findByLabelText('Zielprojekt'), { target: { value: '2' } })
     fireEvent.change(await screen.findByLabelText('Zielboard'), { target: { value: '99' } })
@@ -1038,6 +1121,51 @@ describe('BoardView', () => {
     expect(onCardsChanged).toHaveBeenCalled()
   })
 
+  it('verschiebt die Auswahl in eine andere Spalte desselben Boards und zeigt sie dort', async () => {
+    // #1043: Auf dem eigenen Board verlassen die Karten die Ansicht nicht — sie wechseln die
+    // Spalte. Die Reihenfolge folgt der Sicht, also landet 301 vor 302 am Ende von Done.
+    const onCardsChanged = vi.fn()
+    mProjects.list.mockResolvedValue([{ id: 1, name: 'Eigenes Projekt', role: 'OWNER', createdAt: '' }])
+    mBoards.list.mockResolvedValue([
+      { id: 1, projectId: 1, name: 'Board', createdAt: '', columns: [
+        { id: 10, name: 'Backlog', position: 0, wipLimit: null },
+        { id: 20, name: 'Done', position: 1, wipLimit: null },
+      ] },
+    ])
+    const cards: Card[] = [
+      { ...card, id: 301, columnId: 10, positionInColumn: 0, title: 'Eins' },
+      { ...card, id: 302, columnId: 10, positionInColumn: 1, title: 'Zwei' },
+    ]
+    mCards.bulkTransfer.mockResolvedValue([
+      { ...cards[0], columnId: 20 },
+      { ...cards[1], columnId: 20 },
+    ])
+    render(
+      <BoardView board={board} initialCards={cards} canEdit canTransfer api={mkApi()}
+        onCardsChanged={onCardsChanged} />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Auswählen' }))
+    fireEvent.click(screen.getByTestId('card-301'))
+    fireEvent.click(screen.getByTestId('card-302'))
+    fireEvent.click(screen.getByRole('button', { name: 'Verschieben' }))
+
+    // Das eigene Board steht vorausgewählt, die Quellspalte ist vorbelegt.
+    await waitFor(() => expect(screen.getByLabelText('Zielboard')).toHaveValue('1'))
+    expect(screen.getByLabelText('Zielspalte')).toHaveValue('10')
+    fireEvent.change(screen.getByLabelText('Zielspalte'), { target: { value: '20' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Verschieben' }))
+
+    await waitFor(() => expect(mCards.bulkTransfer).toHaveBeenCalledWith([301, 302], 1, 20))
+    await waitFor(() =>
+      expect(within(screen.getByTestId('column-20')).getByTestId('card-301')).toBeInTheDocument(),
+    )
+    expect(within(screen.getByTestId('column-20')).getByTestId('card-302')).toBeInTheDocument()
+    expect(within(screen.getByTestId('column-10')).queryByTestId('card-301')).not.toBeInTheDocument()
+    expect(screen.queryByText('2 ausgewählt')).not.toBeInTheDocument()
+    expect(onCardsChanged).toHaveBeenCalled()
+  })
+
   it('belegt im Verschieben-Dialog Projekt und Zielspalte der Einzelkarte vor', async () => {
     mProjects.list.mockResolvedValue([{ id: 1, name: 'Eigenes Projekt', role: 'OWNER', createdAt: '' }])
     mBoards.list.mockResolvedValue([
@@ -1051,7 +1179,7 @@ describe('BoardView', () => {
     render(<BoardView board={board} initialCards={[inDone]} canEdit canTransfer api={mkApi()} />)
 
     fireEvent.click(screen.getByLabelText('Menü Fertige Aufgabe'))
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Auf anderes Board verschieben…' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Verschieben…' }))
 
     await screen.findByRole('option', { name: 'Ziel' })
     expect(screen.getByLabelText('Zielprojekt')).toHaveValue('1')
@@ -1498,10 +1626,10 @@ describe('BoardView', () => {
     render(<BoardView board={board} initialCards={[card]} canEdit canTransfer api={mkApi()} />)
 
     fireEvent.click(screen.getByLabelText('Menü Aufgabe'))
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Auf anderes Board verschieben…' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Verschieben…' }))
     fireEvent.keyDown(await screen.findByRole('dialog'), { key: 'Escape', code: 'Escape' })
     await waitFor(() =>
-      expect(screen.queryByText('Auf anderes Board verschieben')).not.toBeInTheDocument(),
+      expect(screen.queryByText('Karte verschieben')).not.toBeInTheDocument(),
     )
 
     fireEvent.click(screen.getByRole('button', { name: 'Auswählen' }))
@@ -1509,7 +1637,7 @@ describe('BoardView', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Verschieben' }))
     fireEvent.keyDown(await screen.findByRole('dialog'), { key: 'Escape', code: 'Escape' })
     await waitFor(() =>
-      expect(screen.queryByText('Auf anderes Board verschieben')).not.toBeInTheDocument(),
+      expect(screen.queryByText('Karte verschieben')).not.toBeInTheDocument(),
     )
   })
 
@@ -1909,7 +2037,7 @@ describe('BoardView', () => {
       fireEvent.click(screen.getByLabelText('Menü Aufgabe'))
 
       for (const name of ['Bearbeiten', 'Duplizieren', 'Archivieren', 'In den Ideen-Pool',
-        'Auf anderes Board verschieben…']) {
+        'Verschieben…']) {
         expect(screen.getByRole('menuitem', { name })).toBeInTheDocument()
       }
     })

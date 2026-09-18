@@ -19,6 +19,7 @@ import org.mwolff.manban.auth.domain.PlatformRole;
 import org.mwolff.manban.nightrun.application.NightRunRepository;
 import org.mwolff.manban.nightrun.domain.NightRun;
 import org.mwolff.manban.nightrun.domain.NightRunItem;
+import org.mwolff.manban.nightrun.domain.NightRunKind;
 import org.mwolff.manban.nightrun.domain.NightRunLimits;
 import org.mwolff.manban.nightrun.domain.NightRunMode;
 import org.mwolff.manban.nightrun.domain.NightRunOrigin;
@@ -353,6 +354,7 @@ class NightRunIT extends AbstractIntegrationTest {
             projectId,
             Instant.parse(ERSTER),
             NightRunMode.CHAIN,
+            NightRunKind.NIGHT,
             1000L,
             1,
             0,
@@ -398,6 +400,7 @@ class NightRunIT extends AbstractIntegrationTest {
             Instant.now()));
     String nacht = "/api/projects/" + projectId + "/night-run-usage/night";
     String zeitraum = "/api/projects/" + projectId + "/night-run-usage";
+    String gesamt = zeitraum + "/total";
 
     for (Cookie wer : List.of(owner, admin)) {
       mvc.perform(get(nacht).param("date", "2026-09-15").param("zone", "Europe/Berlin").cookie(wer))
@@ -411,9 +414,13 @@ class NightRunIT extends AbstractIntegrationTest {
                   .cookie(wer))
           .andExpect(status().isOk())
           .andExpect(jsonPath("$.current.noRuns").value(true));
+      mvc.perform(get(gesamt).cookie(wer))
+          .andExpect(status().isOk())
+          .andExpect(jsonPath("$.runCount").value(0));
     }
     mvc.perform(get(nacht).param("date", "2026-09-15").param("zone", "UTC").cookie(viewer))
         .andExpect(status().isForbidden());
+    mvc.perform(get(gesamt).cookie(viewer)).andExpect(status().isForbidden());
     mvc.perform(
             get(zeitraum)
                 .param("type", "DAY")
@@ -421,6 +428,7 @@ class NightRunIT extends AbstractIntegrationTest {
                 .param("zone", "UTC")
                 .cookie(stranger))
         .andExpect(status().isNotFound());
+    mvc.perform(get(gesamt).cookie(stranger)).andExpect(status().isNotFound());
 
     mvc.perform(get(nacht).param("date", "2026-09-15").param("zone", "+05:30").cookie(owner))
         .andExpect(status().isBadRequest());
@@ -518,7 +526,8 @@ class NightRunIT extends AbstractIntegrationTest {
   }
 
   private NightRun einzigerLauf(long projectId) {
-    List<NightRun> gefunden = runs.findByProjectOrderByStartedAtDesc(projectId);
+    List<NightRun> gefunden =
+        runs.findByProjectAndKindOrderByStartedAtDesc(projectId, NightRunKind.NIGHT);
     assertThat(gefunden).hasSize(1);
     return gefunden.getFirst();
   }

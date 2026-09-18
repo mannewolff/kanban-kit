@@ -9,10 +9,12 @@ import {
   NUT,
   PANEL_RADIUS,
   PLATTE,
+  PLATTE_FUSS,
   PLATTE_HOCH,
   RAND,
   SCHATTEN_NUTE,
   SCHATTEN_PLATTE,
+  TEXT_MATT,
   TEXT_SCHWACH,
   ZAHL,
 } from '../../theme'
@@ -36,6 +38,11 @@ import { Led } from '../leitstand/LeitstandBausteine'
  * <p><b>Der Inhalt wird zugeklappt gar nicht gerendert.</b> Das ist der Grund, warum bis zu 190
  * aufbewahrte Läufe nicht alle ihre Vorgänge, Karten und Herkunftsketten aufbauen (Plan #718, A8);
  * `Accordion` hat das vorher mit `unmountOnExit` besorgt.
+ *
+ * <p><b>Die ganze Kopfzeile schaltet, der Pfeil bleibt der eine Knopf</b> (#1041). Ein 22-px-Ziel
+ * trifft man schlecht; ein `button` mit Titel, Metazeile und Marken als Inhalt ergäbe dagegen einen
+ * überlangen zugänglichen Namen. Tastatur und Screenreader bedienen deshalb weiter den Pfeil mit
+ * `aria-expanded`/`aria-controls`, die Maus zusätzlich die Fläche daneben.
  */
 export function NachtlaufLaufPlatte({
   /** Der Titel des Laufs, etwa „Nacht vom 14. September" — auch der Name der Platte. */
@@ -70,6 +77,17 @@ export function NachtlaufLaufPlatte({
 }>) {
   const inhaltId = useId()
 
+  /**
+   * Ein Klick in die Kopfzeile schaltet um — außer er beendet gerade eine Textauswahl. Herkunft
+   * und Token-Namen in den Marken werden kopiert; wer sie markiert, will den Lauf nicht zuklappen.
+   */
+  const kopfKlick = () => {
+    if ((window.getSelection()?.toString() ?? '') !== '') {
+      return
+    }
+    onUmschalten()
+  }
+
   return (
     <Box
       component="section"
@@ -83,8 +101,14 @@ export function NachtlaufLaufPlatte({
         overflow: 'hidden',
       }}
     >
+      {/* `role="presentation"` sagt, was der Fall ist: Die Zeile trägt keine eigene Semantik, ihr
+          Klick ist die bequemere Fläche für den Pfeil darin. Ohne die Angabe verlangte jsx-a11y
+          eine Tastaturbedienung an der Zeile — die gibt es, am Pfeil, und ein zweites Mal wäre sie
+          ein zweiter Halt in der Tabulator-Reihenfolge. */}
       <Box
+        role="presentation"
         data-testid="lauf-kopf"
+        onClick={kopfKlick}
         sx={{
           display: 'flex',
           alignItems: 'center',
@@ -92,7 +116,9 @@ export function NachtlaufLaufPlatte({
           flexWrap: 'wrap',
           px: '16px',
           py: '13px',
+          cursor: 'pointer',
           background: `linear-gradient(180deg, ${PLATTE_HOCH}, ${PLATTE})`,
+          '&:hover': { background: `linear-gradient(180deg, ${PLATTE}, ${PLATTE_FUSS})` },
           ...(offen && { borderBottom: `1px solid ${RAND}` }),
         }}
       >
@@ -100,7 +126,12 @@ export function NachtlaufLaufPlatte({
           aria-expanded={offen}
           aria-controls={offen ? inhaltId : undefined}
           aria-label={`${titel} ${offen ? 'zuklappen' : 'aufklappen'}`}
-          onClick={onUmschalten}
+          // Die Kopfzeile schaltet ebenfalls um — ohne gestoppte Weitergabe schaltete der Pfeil
+          // zweimal und damit gar nicht.
+          onClick={(ereignis) => {
+            ereignis.stopPropagation()
+            onUmschalten()
+          }}
           sx={{
             width: 22,
             height: 22,
@@ -108,18 +139,23 @@ export function NachtlaufLaufPlatte({
             display: 'grid',
             placeItems: 'center',
             borderRadius: `${KLEIN_RADIUS}px`,
-            color: 'text.secondary',
+            color: TEXT_MATT,
             '&:hover': { bgcolor: NUT },
           }}
         >
+          {/* Größe und Ausschnitt stehen im `sx` und nicht als `width`/`height` am Element: `Box`
+              verbraucht beide als Systemeigenschaften, und die Zeichenkette `"12"` wurde dabei zu
+              `width:12` ohne Einheit — eine Angabe, die jeder Browser verwirft. Genau daran war
+              der Pfeil nicht zu sehen (#1041). Als Zahl im `sx` hängt Emotion die Einheit an. */}
           <Box
             component="svg"
-            width="12"
-            height="12"
+            data-testid="nachtlauf-pfeil"
             viewBox="0 0 16 16"
             fill="none"
             aria-hidden
             sx={{
+              width: 12,
+              height: 12,
               transition: 'transform .15s ease',
               transform: offen ? 'none' : 'rotate(-90deg)',
               '@media (prefers-reduced-motion: reduce)': { transition: 'none' },
@@ -192,7 +228,7 @@ export function LaufMarke({
         alignItems: 'center',
         gap: '6px',
         fontSize: 11.5,
-        color: 'text.secondary',
+        color: TEXT_MATT,
         px: '8px',
         py: '2px',
         pl: led === undefined ? '8px' : '6px',

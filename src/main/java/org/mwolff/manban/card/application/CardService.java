@@ -68,6 +68,17 @@ public class CardService {
    */
   private static final int AUSZUG_CODEPOINTS = 200;
 
+  /**
+   * Zielposition „ans Ende der Spalte" für {@link #doMove(long, long, long, int)}. {@link
+   * CardRepository#move(long, long, int)} begrenzt die Zielposition auf das aktive Band der
+   * Zielspalte — ein Wert oberhalb jeder erreichbaren Spaltenlänge landet damit hinter der letzten
+   * Karte, ohne die Spalte vorher zählen zu müssen. Ein zusätzlicher Zählzugriff wäre nicht nur
+   * überflüssig: Er nähme eine zweite Spaltensperre und verstieße damit gegen die Regel „eine
+   * Transaktion nimmt ihre Spaltensperren in einem Aufruf" ({@link
+   * CardRepository#lockColumnPositions(List)}).
+   */
+  private static final int POSITION_AM_ENDE = Integer.MAX_VALUE;
+
   private final CardRepository cards;
   private final CardDependencyRepository dependencies;
   private final BoardService boardService;
@@ -1090,6 +1101,10 @@ public class CardService {
 
   @Transactional
   public CardView move(long userId, long cardId, long targetColumnId, int targetPosition) {
+    return doMove(userId, cardId, targetColumnId, targetPosition);
+  }
+
+  private CardView doMove(long userId, long cardId, long targetColumnId, int targetPosition) {
     Card card = cards.findById(cardId).orElseThrow(CardNotFoundException::new);
     if (card.type() == CardType.EPIC) {
       throw new InvalidDependencyException("Epics werden nicht auf dem Board positioniert");
@@ -1160,8 +1175,15 @@ public class CardService {
   }
 
   /**
-   * Verschiebt eine Karte in eine Spalte eines anderen Boards; die Karte landet am Ende der
-   * Zielspalte. Rechte und Nebenwirkungen sind richtungsabhängig:
+   * Verschiebt eine Karte in eine Spalte eines Boards; die Karte landet am Ende der Zielspalte.
+   *
+   * <p><b>Dasselbe Board</b> (Issue #1043): kein Umzug, sondern ein Spaltenwechsel — die Karte
+   * behält Nummer, Vorhaben-Zuordnung, Abhängigkeiten und Zuständige, bekommt einen Verlaufseintrag
+   * {@code MOVED} und ihren Done-Zeitpunkt nach denselben Regeln wie {@link #move(long, long, long,
+   * int)}, an das dieser Fall delegiert. Liegt die Karte bereits in der Zielspalte, bleibt sie an
+   * ihrem Platz, ohne Eintrag und ohne Fehler.
+   *
+   * <p><b>Anderes Board</b> — Rechte und Nebenwirkungen sind richtungsabhängig:
    *
    * <ul>
    *   <li><b>Selbes Projekt:</b> es genügt {@link Permission#CARD_MOVE} — dasselbe Recht wie für
@@ -1173,8 +1195,8 @@ public class CardService {
    *       Abhängigkeiten und Zuständige (projekt-lokal) werden entfernt.
    * </ul>
    *
-   * <p>Die board-lokale Vorhaben-Zuordnung wird in beiden Fällen entfernt (das Ziel-Board hat
-   * eigene Vorhaben). Kommentare und Anhänge wandern immer mit (an der Karten-ID).
+   * <p>Die board-lokale Vorhaben-Zuordnung wird beim Board-Wechsel in beiden Fällen entfernt (das
+   * Ziel-Board hat eigene Vorhaben). Kommentare und Anhänge wandern immer mit (an der Karten-ID).
    */
   @Transactional
   public CardView transfer(long userId, long cardId, long targetBoardId, long targetColumnId) {
@@ -1185,6 +1207,15 @@ public class CardService {
     Card card = cards.findById(cardId).orElseThrow(CardNotFoundException::new);
     if (card.type() == CardType.EPIC) {
       throw new InvalidDependencyException("Epics können nicht verschoben werden");
+    }
+    // Zielboard == Board der Karte: Das ist kein Umzug, sondern ein Spaltenwechsel, und dessen
+    // Regeln stehen vollständig in doMove — Spaltenverlauf nur bei echtem Wechsel, Verlaufseintrag
+    // MOVED, movedToDoneAt beim Eintritt in eine Done-Spalte, Vorhaben-Zuordnung bleibt. Der
+    // Umzugspfad unten ist auf den Board-Wechsel gebaut: Er leert parentId (das Ziel-Board hat
+    // eigene Vorhaben) und movedToDoneAt und schreibt den Spaltenverlauf auch dann fort, wenn die
+    // Spalte dieselbe bleibt. Auf dem eigenen Board wäre jede dieser drei Wirkungen falsch.
+    if (targetBoardId == card.requireBoardId()) {
+      return doMove(userId, cardId, targetColumnId, POSITION_AM_ENDE);
     }
     long sourceProjectId = boardService.requireProjectId(card.requireBoardId());
     long targetProjectId = boardService.requireProjectId(targetBoardId);
@@ -1256,7 +1287,9 @@ public class CardService {
    * long)} inklusive der richtungsabhängigen Rechteprüfung ({@link Permission#CARD_MOVE} innerhalb
    * des Projekts, OWNER in Quell- und Zielprojekt darüber hinaus) sowie Vorhaben-Ausschluss;
    * scheitert eine Karte, rollt der gesamte Batch zurück. Die Karten landen in Eingabereihenfolge
-   * am Ende der Zielspalte, jede Quellspalte wird dabei lückenlos nachgezogen.
+   * am Ende der Zielspalte, jede Quellspalte wird dabei lückenlos nachgezogen. Das gilt auch, wenn
+   * das Zielboard das Board der Karten ist — dann ist der Sammel-Umzug ein Sammel-Spaltenwechsel
+   * (Issue #1043), und Karten, die schon in der Zielspalte liegen, bleiben unberührt.
    *
    * <p>Die Spaltensperren nimmt der Batch <strong>vorab in einem Zug</strong> (Issue #499): Nähme
    * jeder Einzel-Umzug seine beiden Sperren für sich, könnten zwei gleichzeitige Sammel-Umzüge mit

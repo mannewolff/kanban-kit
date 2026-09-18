@@ -15,6 +15,7 @@ import org.mwolff.manban.nightrun.application.NightRunRepository.UpsertResult;
 import org.mwolff.manban.nightrun.domain.NightRun;
 import org.mwolff.manban.nightrun.domain.NightRunErrorClass;
 import org.mwolff.manban.nightrun.domain.NightRunItem;
+import org.mwolff.manban.nightrun.domain.NightRunKind;
 import org.mwolff.manban.nightrun.domain.NightRunMode;
 import org.mwolff.manban.nightrun.domain.NightRunOrigin;
 import org.mwolff.manban.nightrun.domain.NightRunState;
@@ -38,8 +39,8 @@ import org.springframework.stereotype.Component;
 @Component
 // Die Kopplung folgt den Spalten: Der Adapter uebersetzt zwischen Domaenentypen, Entities
 // und JDBC-Typen, und jede neue Spalte bringt ihren Typ mit. Mit Issue #944 sind es
-// BigDecimal und NightRunOrigin mehr; 21 statt 20. Eine Aufteilung verteilte das Mapping
-// einer Tabelle auf zwei Klassen.
+// BigDecimal und NightRunOrigin mehr, mit Issue #1010 NightRunKind. Eine Aufteilung
+// verteilte das Mapping einer Tabelle auf zwei Klassen.
 @SuppressWarnings("PMD.CouplingBetweenObjects")
 class NightRunRepositoryAdapter implements NightRunRepository {
 
@@ -49,15 +50,18 @@ class NightRunRepositoryAdapter implements NightRunRepository {
   /** Name des benannten SQL-Parameters für die Lauf-ID (Sonar java:S1192). */
   private static final String P_NIGHT_RUN_ID = "nightRunId";
 
+  /** Name des benannten SQL-Parameters für die Gattung (Sonar java:S1192). */
+  private static final String P_KIND = "kind";
+
   /** Spaltenname der Fehlerklasse in der Zählabfrage (Sonar java:S1192). */
   private static final String C_ERROR_CLASS = "error_class";
 
   private static final String INSERT_RUN =
-      "INSERT INTO night_run (project_id, started_at, mode, duration_ms, processed_count,"
+      "INSERT INTO night_run (project_id, started_at, mode, kind, duration_ms, processed_count,"
           + " skipped_count, unparsed_count, unparsed_sample, created_at, origin,"
           + " token_name, complete, updated_at, cost_usd, input_tokens, output_tokens,"
           + " cached_input_tokens)"
-          + " VALUES (:projectId, :startedAt, :mode, :durationMs, :processedCount,"
+          + " VALUES (:projectId, :startedAt, :mode, :kind, :durationMs, :processedCount,"
           + " :skippedCount, :unparsedCount, :unparsedSample, :createdAt, :origin,"
           + " :tokenName, :complete, :updatedAt, :costUsd, :inputTokens, :outputTokens,"
           + " :cachedInputTokens)"
@@ -65,25 +69,26 @@ class NightRunRepositoryAdapter implements NightRunRepository {
           + " RETURNING id";
 
   private static final String INSERT_ITEM =
-      "INSERT INTO night_run_item (night_run_id, project_id, started_at, mode, card_number,"
+      "INSERT INTO night_run_item (night_run_id, project_id, started_at, mode, kind, card_number,"
           + " title, state, error_class, duration_ms, commit_hash, excerpt, cost_usd,"
           + " input_tokens, output_tokens, cached_input_tokens)"
-          + " VALUES (:nightRunId, :projectId, :startedAt, :mode, :cardNumber, :title, :state,"
-          + " :errorClass,"
+          + " VALUES (:nightRunId, :projectId, :startedAt, :mode, :kind, :cardNumber, :title,"
+          + " :state, :errorClass,"
           + " :durationMs, :commitHash, :excerpt, :costUsd, :inputTokens, :outputTokens,"
           + " :cachedInputTokens)";
 
   /**
-   * Verdrängung des Ringpuffers: alles außerhalb der {@code keep} jüngsten Läufe fällt weg. Die
-   * Auswahl steht als Unterabfrage, weil {@code LIMIT} weder in JPQL noch in einer {@code
-   * DELETE}-Bedingung direkt zur Verfügung steht.
+   * Verdrängung des Ringpuffers: alles außerhalb der {@code keep} jüngsten Läufe <b>dieser
+   * Gattung</b> fällt weg (je Gattung getrennt seit Issue #1011). Die Auswahl steht als
+   * Unterabfrage, weil {@code LIMIT} weder in JPQL noch in einer {@code DELETE}-Bedingung direkt
+   * zur Verfügung steht.
    */
   private static final String SELECT_ID_FOR_UPDATE =
       "SELECT id FROM night_run WHERE project_id = :projectId AND started_at = :startedAt"
           + " FOR UPDATE";
 
   private static final String UPDATE_RUN =
-      "UPDATE night_run SET mode = :mode, duration_ms = :durationMs,"
+      "UPDATE night_run SET mode = :mode, kind = :kind, duration_ms = :durationMs,"
           + " processed_count = :processedCount, skipped_count = :skippedCount,"
           + " unparsed_count = :unparsedCount, unparsed_sample = :unparsedSample,"
           + " origin = :origin, token_name = :tokenName, complete = :complete,"
@@ -95,15 +100,19 @@ class NightRunRepositoryAdapter implements NightRunRepository {
       "DELETE FROM night_run_item WHERE night_run_id = :nightRunId";
 
   private static final String DELETE_OLDER =
-      "DELETE FROM night_run WHERE project_id = :projectId AND id NOT IN"
-          + " (SELECT id FROM night_run WHERE project_id = :projectId"
+      "DELETE FROM night_run WHERE project_id = :projectId AND kind = :kind AND id NOT IN"
+          + " (SELECT id FROM night_run WHERE project_id = :projectId AND kind = :kind"
           + " ORDER BY started_at DESC, id DESC LIMIT :keep)";
 
-  /** Ein Lauf zählt je Fehlerklasse höchstens einmal — daher {@code count(DISTINCT …)}. */
+  /**
+   * Ein Lauf zählt je Fehlerklasse höchstens einmal — daher {@code count(DISTINCT …)}. Gefiltert
+   * wird am Lauf und nicht am Paket (Issue #1012): Die Gattung steht an beiden, aber der Lauf ist
+   * das, was gezählt wird.
+   */
   private static final String COUNT_BY_ERROR_CLASS =
       "SELECT i.error_class AS error_class, count(DISTINCT i.night_run_id) AS runs"
           + " FROM night_run_item i JOIN night_run r ON r.id = i.night_run_id"
-          + " WHERE r.project_id = :projectId AND i.error_class IS NOT NULL"
+          + " WHERE r.project_id = :projectId AND r.kind = :kind AND i.error_class IS NOT NULL"
           + " GROUP BY i.error_class";
 
   private final NamedParameterJdbcTemplate jdbc;
@@ -165,9 +174,10 @@ class NightRunRepositoryAdapter implements NightRunRepository {
   }
 
   /**
-   * Projekt, Startzeitpunkt und Lauf-Art eines Pakets kommen aus dem Lauf und nie aus dem Paket
-   * (Issue #964): So kann kein Paket mit einem anderen Projekt geschrieben werden als sein Lauf —
-   * ein verwaistes Paket fände man sonst später im falschen Projekt wieder.
+   * Projekt, Startzeitpunkt, Lauf-Art und Gattung eines Pakets kommen aus dem Lauf und nie aus dem
+   * Paket (Issue #964, um die Gattung erweitert in #1010): So kann kein Paket mit einem anderen
+   * Projekt geschrieben werden als sein Lauf — ein verwaistes Paket fände man sonst später im
+   * falschen Projekt wieder.
    */
   private void insertItems(NightRun run, Long runId, List<NightRunItem> newItems) {
     if (newItems.isEmpty()) {
@@ -181,8 +191,9 @@ class NightRunRepositoryAdapter implements NightRunRepository {
   }
 
   @Override
-  public List<NightRun> findByProjectOrderByStartedAtDesc(long projectId) {
-    return runs.findByProjectIdOrderByStartedAtDescIdDesc(projectId).stream()
+  public List<NightRun> findByProjectAndKindOrderByStartedAtDesc(
+      long projectId, NightRunKind kind) {
+    return runs.findByProjectIdAndKindOrderByStartedAtDescIdDesc(projectId, kind.name()).stream()
         .map(NightRunRepositoryAdapter::toDomain)
         .toList();
   }
@@ -207,10 +218,13 @@ class NightRunRepositoryAdapter implements NightRunRepository {
   }
 
   @Override
-  public int deleteOlderThanNewest(long projectId, int keep) {
+  public int deleteOlderThanNewest(long projectId, NightRunKind kind, int keep) {
     return jdbc.update(
         DELETE_OLDER,
-        new MapSqlParameterSource().addValue(P_PROJECT_ID, projectId).addValue("keep", keep));
+        new MapSqlParameterSource()
+            .addValue(P_PROJECT_ID, projectId)
+            .addValue(P_KIND, kind.name())
+            .addValue("keep", keep));
   }
 
   @Override
@@ -218,17 +232,21 @@ class NightRunRepositoryAdapter implements NightRunRepository {
     return items.deleteOrphansOfRun(projectId, startedAt);
   }
 
+  /**
+   * Die Gattung geht als {@link String} in die native Abfrage: Die Spalte ist ein {@code varchar} +
+   * {@code CHECK} (V34), und ein Enum-Parameter bände Hibernate sonst als Ordinalzahl.
+   */
   @Override
-  public int deleteOrphanItemsOlderThanNewest(long projectId, int keep) {
-    return items.deleteOrphansOlderThanNewest(projectId, keep);
+  public int deleteOrphanItemsOlderThanNewest(long projectId, NightRunKind kind, int keep) {
+    return items.deleteOrphansOlderThanNewest(projectId, kind.name(), keep);
   }
 
   @Override
-  public Map<NightRunErrorClass, Long> countRunsByErrorClass(long projectId) {
+  public Map<NightRunErrorClass, Long> countRunsByErrorClass(long projectId, NightRunKind kind) {
     Map<NightRunErrorClass, Long> counts = new EnumMap<>(NightRunErrorClass.class);
     jdbc.query(
         COUNT_BY_ERROR_CLASS,
-        new MapSqlParameterSource(P_PROJECT_ID, projectId),
+        new MapSqlParameterSource(P_PROJECT_ID, projectId).addValue(P_KIND, kind.name()),
         (RowCallbackHandler)
             rs ->
                 counts.put(
@@ -242,6 +260,7 @@ class NightRunRepositoryAdapter implements NightRunRepository {
             .addValue(P_PROJECT_ID, run.projectId())
             .addValue("startedAt", zeitpunkt(run.startedAt()))
             .addValue("mode", run.mode().name())
+            .addValue(P_KIND, run.kind().name())
             .addValue("durationMs", run.durationMs())
             .addValue("processedCount", run.processedCount())
             .addValue("skippedCount", run.skippedCount())
@@ -281,6 +300,7 @@ class NightRunRepositoryAdapter implements NightRunRepository {
             .addValue(P_PROJECT_ID, run.projectId())
             .addValue("startedAt", zeitpunkt(run.startedAt()))
             .addValue("mode", run.mode().name())
+            .addValue(P_KIND, run.kind().name())
             .addValue("cardNumber", item.cardNumber())
             .addValue("title", item.title())
             .addValue("state", item.state().name())
@@ -307,6 +327,7 @@ class NightRunRepositoryAdapter implements NightRunRepository {
         e.getProjectId(),
         e.getStartedAt(),
         NightRunMode.valueOf(e.getMode()),
+        NightRunKind.valueOf(e.getKind()),
         e.getDurationMs(),
         e.getProcessedCount(),
         e.getSkippedCount(),
@@ -329,6 +350,7 @@ class NightRunRepositoryAdapter implements NightRunRepository {
         e.getProjectId(),
         e.getStartedAt(),
         NightRunMode.valueOf(e.getMode()),
+        NightRunKind.valueOf(e.getKind()),
         e.getCardNumber(),
         e.getTitle(),
         NightRunState.valueOf(e.getState()),

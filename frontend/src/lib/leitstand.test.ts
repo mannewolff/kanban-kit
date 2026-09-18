@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { NightRunItemView, NightRunView } from '../api/nightRuns'
+import type { NightRunItemView, NightRunServerMode, NightRunView } from '../api/nightRuns'
 import {
   abbruchgruende,
   balkenHoehen,
@@ -114,6 +114,24 @@ describe('leitstand Laufband (#979)', () => {
     expect(modusName('CHAIN')).toBe('Kette')
     expect(vorgaenge(1)).toBe('1 Vorgang')
     expect(vorgaenge(9)).toBe('9 Vorgänge')
+  })
+
+  /**
+   * Die Tabelle ist ein `Record` über `NightRunServerMode` — ein neuer Modus ohne Eintrag bricht
+   * `tsc`. Dieser Test hält fest, dass jeder Modus auch tatsächlich ein Wort bekommt, statt einen
+   * leeren String (Issue #1016).
+   */
+  it('benennt jede Betriebsart, die der Server kennt — auch die interaktive Sitzung', () => {
+    const alle: Record<NightRunServerMode, true> = {
+      IMPLEMENTATION: true,
+      REVIEW: true,
+      CHAIN: true,
+      INTERACTIVE: true,
+    }
+    for (const modus of Object.keys(alle) as NightRunServerMode[]) {
+      expect(modusName(modus)).not.toBe('')
+    }
+    expect(modusName('INTERACTIVE')).toBe('Sitzung')
   })
 })
 

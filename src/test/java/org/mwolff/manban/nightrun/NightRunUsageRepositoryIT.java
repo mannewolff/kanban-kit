@@ -16,11 +16,13 @@ import org.mwolff.manban.AbstractIntegrationTest;
 import org.mwolff.manban.nightrun.application.NightRunRepository;
 import org.mwolff.manban.nightrun.application.NightRunUsageRepository;
 import org.mwolff.manban.nightrun.application.NightRunUsageRepository.CardTotals;
+import org.mwolff.manban.nightrun.application.NightRunUsageRepository.LifetimeTotals;
 import org.mwolff.manban.nightrun.application.NightRunUsageRepository.NightTotals;
 import org.mwolff.manban.nightrun.application.NightRunUsageRepository.PeriodTotals;
 import org.mwolff.manban.nightrun.domain.NightRun;
 import org.mwolff.manban.nightrun.domain.NightRunErrorClass;
 import org.mwolff.manban.nightrun.domain.NightRunItem;
+import org.mwolff.manban.nightrun.domain.NightRunKind;
 import org.mwolff.manban.nightrun.domain.NightRunMode;
 import org.mwolff.manban.nightrun.domain.NightRunOrigin;
 import org.mwolff.manban.nightrun.domain.NightRunState;
@@ -37,6 +39,10 @@ import org.springframework.jdbc.core.JdbcTemplate;
  * Sommerzeit-Fälle hier nutzen dieselben Spannen wie dessen Einheitentest — sonst liefen die beiden
  * Rechenorte unbemerkt auseinander (Plan E4, H2).
  */
+// Testklasse: Jede Methode ist ein Lesefall des Ports, und alle vier Zugriffe teilen dieselbe
+// Fixture. Nach Gattungen oder Zugriffen aufzuteilen doppelte sie in jede neue Klasse — seit Issue
+// #1014 kommt die Lebenszeit-Summe dazu.
+@SuppressWarnings("PMD.TooManyMethods")
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE)
 class NightRunUsageRepositoryIT extends AbstractIntegrationTest {
 
@@ -47,6 +53,8 @@ class NightRunUsageRepositoryIT extends AbstractIntegrationTest {
   private static final Instant NACHT_15_VON = Instant.parse("2026-09-15T10:00:00Z");
 
   private static final Instant NACHT_15_BIS = Instant.parse("2026-09-16T10:00:00Z");
+
+  private static final NightRunUsage NICHTS = new NightRunUsage(null, null, null, null);
 
   @Autowired private NightRunRepository runs;
   @Autowired private NightRunUsageRepository usage;
@@ -80,9 +88,45 @@ class NightRunUsageRepositoryIT extends AbstractIntegrationTest {
     return new NightRunUsage(new BigDecimal(betrag), null, null, null);
   }
 
+  private static NightRunUsage verbrauch(
+      String betrag, long eingabe, long ausgabe, long zwischenspeicher) {
+    return new NightRunUsage(new BigDecimal(betrag), eingabe, ausgabe, zwischenspeicher);
+  }
+
   private void lauf(
       long projekt,
       String startedAt,
+      NightRunMode mode,
+      long durationMs,
+      @Nullable NightRunUsage laufVerbrauch,
+      NightRunItem... pakete) {
+    eintrag(projekt, startedAt, NightRunKind.NIGHT, mode, durationMs, laufVerbrauch, pakete);
+  }
+
+  /**
+   * Eine interaktive Sitzung (Issue #1013). Ihre Pakete erben die Gattung aus dem Lauf — den Wert
+   * am eingelieferten Paket schreibt der Adapter nicht.
+   */
+  private void sitzung(
+      long projekt,
+      String startedAt,
+      long durationMs,
+      @Nullable NightRunUsage laufVerbrauch,
+      NightRunItem... pakete) {
+    eintrag(
+        projekt,
+        startedAt,
+        NightRunKind.INTERACTIVE,
+        NightRunMode.INTERACTIVE,
+        durationMs,
+        laufVerbrauch,
+        pakete);
+  }
+
+  private void eintrag(
+      long projekt,
+      String startedAt,
+      NightRunKind kind,
       NightRunMode mode,
       long durationMs,
       @Nullable NightRunUsage laufVerbrauch,
@@ -93,6 +137,7 @@ class NightRunUsageRepositoryIT extends AbstractIntegrationTest {
             projekt,
             Instant.parse(startedAt),
             mode,
+            kind,
             durationMs,
             pakete.length,
             0,
@@ -119,6 +164,7 @@ class NightRunUsageRepositoryIT extends AbstractIntegrationTest {
         0L,
         Instant.EPOCH,
         NightRunMode.IMPLEMENTATION,
+        NightRunKind.NIGHT,
         cardNumber,
         "Paket " + cardNumber,
         state,
@@ -229,6 +275,232 @@ class NightRunUsageRepositoryIT extends AbstractIntegrationTest {
     assertThat(karte.usage().costUsd()).isEqualByComparingTo("2.00");
     assertThat(usage.totalsPerCard(projectId, NACHT_15_VON, NACHT_15_BIS).get(1).usage().costUsd())
         .isNull();
+  }
+
+  // --- Gattungen (Issue #1013) -----------------------------------------------------------------
+
+  /**
+   * Eine gemischte Spanne: Jede Kennzahl der Gesamtsumme ist <b>genau</b> die Addition des
+   * Nachtlauf- und des Sitzungs-Anteils, und kein Eintrag taucht in beiden auf (#984 AK 5).
+   */
+  @Test
+  void dieGesamtsummeIstDieAdditionBeiderGattungen_undKeinEintragZaehltZweimal() {
+    lauf(
+        projectId,
+        "2026-09-15T21:10:00Z",
+        NightRunMode.CHAIN,
+        1_000L,
+        verbrauch("10.000000", 1_000L, 100L, 900L),
+        gruen(721, verbrauch("4.000000", 400L, 40L, 360L)));
+    sitzung(
+        projectId,
+        "2026-09-16T01:22:00Z",
+        2_000L,
+        verbrauch("2.500000", 250L, 25L, 200L),
+        gruen(722, verbrauch("1.000000", 100L, 10L, 80L)));
+
+    PeriodTotals summe = usage.totals(projectId, NACHT_15_VON, NACHT_15_BIS);
+
+    assertThat(summe.byKind().night().runUsage().costUsd()).isEqualByComparingTo("10");
+    assertThat(summe.byKind().night().runUsage().inputTokens()).isEqualTo(1_000L);
+    assertThat(summe.byKind().night().runUsage().outputTokens()).isEqualTo(100L);
+    assertThat(summe.byKind().night().runUsage().cachedInputTokens()).isEqualTo(900L);
+    assertThat(summe.byKind().interactive().runUsage().costUsd()).isEqualByComparingTo("2.5");
+    assertThat(summe.byKind().interactive().runUsage().inputTokens()).isEqualTo(250L);
+    assertThat(summe.byKind().interactive().runUsage().outputTokens()).isEqualTo(25L);
+    assertThat(summe.byKind().interactive().runUsage().cachedInputTokens()).isEqualTo(200L);
+
+    assertThat(summe.runUsage().costUsd()).isEqualByComparingTo("12.5");
+    assertThat(summe.runUsage().inputTokens()).isEqualTo(1_250L);
+    assertThat(summe.runUsage().outputTokens()).isEqualTo(125L);
+    assertThat(summe.runUsage().cachedInputTokens()).isEqualTo(1_100L);
+
+    assertThat(summe.byKind().night().itemUsage().costUsd()).isEqualByComparingTo("4");
+    assertThat(summe.byKind().interactive().itemUsage().costUsd()).isEqualByComparingTo("1");
+    assertThat(summe.itemUsage().costUsd()).isEqualByComparingTo("5");
+    assertThat(summe.itemUsage().inputTokens()).isEqualTo(500L);
+  }
+
+  /** Die Nacht trägt dieselbe Trennung wie die Spanne. */
+  @Test
+  void dieTagesgruppeTrenntDieGattungenEbenso() {
+    lauf(
+        projectId,
+        "2026-09-15T21:10:00Z",
+        NightRunMode.CHAIN,
+        1_000L,
+        kosten("10.000000"),
+        gruen(721, kosten("4.000000")));
+    sitzung(projectId, "2026-09-16T01:22:00Z", 2_000L, kosten("2.500000"), gruen(722, null));
+
+    NightTotals nacht =
+        usage.totalsPerNight(projectId, NACHT_15_VON, NACHT_15_BIS, BERLIN).getFirst();
+
+    assertThat(nacht.byKind().night().runCount()).isEqualTo(1L);
+    assertThat(nacht.byKind().interactive().runCount()).isEqualTo(1L);
+    assertThat(nacht.byKind().night().runUsage().costUsd()).isEqualByComparingTo("10");
+    assertThat(nacht.byKind().interactive().runUsage().costUsd()).isEqualByComparingTo("2.5");
+    assertThat(nacht.byKind().night().itemUsage().costUsd()).isEqualByComparingTo("4");
+    assertThat(nacht.byKind().interactive().itemUsage().costUsd()).isNull();
+    assertThat(nacht.runUsage().costUsd()).isEqualByComparingTo("12.5");
+    assertThat(nacht.runCount()).isEqualTo(2L);
+    assertThat(nacht.cardCount()).isEqualTo(2L);
+  }
+
+  /** „Nicht gemessen" bleibt nicht gemessen: ohne Sitzung ist ihr Anteil {@code null}, nicht 0. */
+  @Test
+  void eineSpanneOhneSitzungenLaesstDenSitzungsanteilFehlend() {
+    lauf(
+        projectId,
+        "2026-09-15T21:10:00Z",
+        NightRunMode.CHAIN,
+        1_000L,
+        verbrauch("10.000000", 1_000L, 100L, 900L),
+        gruen(721, verbrauch("4.000000", 400L, 40L, 360L)));
+
+    PeriodTotals summe = usage.totals(projectId, NACHT_15_VON, NACHT_15_BIS);
+    NightTotals nacht =
+        usage.totalsPerNight(projectId, NACHT_15_VON, NACHT_15_BIS, BERLIN).getFirst();
+
+    assertThat(summe.byKind().interactive().runCount()).isZero();
+    assertThat(summe.byKind().interactive().runUsage()).isEqualTo(NICHTS);
+    assertThat(summe.byKind().interactive().itemUsage()).isEqualTo(NICHTS);
+    assertThat(nacht.byKind().interactive().runUsage()).isEqualTo(NICHTS);
+    assertThat(nacht.byKind().interactive().itemUsage()).isEqualTo(NICHTS);
+  }
+
+  /** Ein Tag ohne Nachtlauf, aber mit Sitzungen, ist nicht leer (#984 AK 1). */
+  @Test
+  void runCountZaehltSitzungenMit_auchOhneNachtlauf() {
+    sitzung(projectId, "2026-09-15T21:10:00Z", 1_000L, kosten("2.000000"), gruen(721, null));
+
+    PeriodTotals summe = usage.totals(projectId, NACHT_15_VON, NACHT_15_BIS);
+
+    assertThat(summe.runCount()).isEqualTo(1L);
+    assertThat(summe.byKind().night().runCount()).isZero();
+    assertThat(summe.byKind().interactive().runCount()).isEqualTo(1L);
+    assertThat(summe.byKind().night().runUsage()).isEqualTo(NICHTS);
+    assertThat(usage.totalsPerNight(projectId, NACHT_15_VON, NACHT_15_BIS, BERLIN))
+        .singleElement()
+        .returns(1L, NightTotals::runCount)
+        .returns(LocalDate.of(2026, 9, 15), NightTotals::night);
+  }
+
+  /** Je Karte kommt der Anteil je Gattung — die Anläufe zählen zusammen (#984 AK 3). */
+  @Test
+  void jeKarteKommtDerAnteilJeGattung() {
+    lauf(
+        projectId,
+        "2026-09-15T21:10:00Z",
+        NightRunMode.CHAIN,
+        1_000L,
+        null,
+        gruen(721, verbrauch("3.000000", 300L, 30L, 20L)));
+    sitzung(
+        projectId,
+        "2026-09-16T01:22:00Z",
+        1_000L,
+        null,
+        gruen(721, verbrauch("1.000000", 100L, 10L, 5L)));
+
+    CardTotals karte = usage.totalsPerCard(projectId, NACHT_15_VON, NACHT_15_BIS).getFirst();
+
+    assertThat(karte.attemptCount()).isEqualTo(2L);
+    assertThat(karte.nightUsage().costUsd()).isEqualByComparingTo("3");
+    assertThat(karte.nightUsage().inputTokens()).isEqualTo(300L);
+    assertThat(karte.interactiveUsage().costUsd()).isEqualByComparingTo("1");
+    assertThat(karte.interactiveUsage().cachedInputTokens()).isEqualTo(5L);
+    assertThat(karte.usage().costUsd()).isEqualByComparingTo("4");
+    assertThat(karte.usage().outputTokens()).isEqualTo(40L);
+  }
+
+  /** Eine Karte, die nur eine Gattung berührt, lässt die andere fehlend. */
+  @Test
+  void eineKarteOhneSitzungLaesstDenSitzungsanteilFehlend() {
+    lauf(projectId, "2026-09-15T21:10:00Z", NightRunMode.CHAIN, 1L, null, gruen(721, kosten("3")));
+
+    CardTotals karte = usage.totalsPerCard(projectId, NACHT_15_VON, NACHT_15_BIS).getFirst();
+
+    assertThat(karte.interactiveUsage()).isEqualTo(NICHTS);
+    assertThat(karte.usage().costUsd()).isEqualByComparingTo("3");
+  }
+
+  /** Der älteste aufbewahrte Eintrag bleibt gattungsübergreifend (Plan E8). */
+  @Test
+  void derAeltesteEintragKannEineSitzungSein() {
+    lauf(projectId, "2026-09-15T21:10:00Z", NightRunMode.CHAIN, 1L, null);
+    sitzung(projectId, "2026-09-10T08:00:00Z", 1L, null);
+
+    assertThat(usage.oldestRetainedRunStart(projectId))
+        .contains(Instant.parse("2026-09-10T08:00:00Z"));
+  }
+
+  // --- Lebenszeit (Issue #1014) ----------------------------------------------------------------
+
+  /**
+   * Über die ganze Laufzeit: Die Summe nimmt Einträge mit, die in keiner gemeinsamen Spanne liegen,
+   * ist genau die Addition beider Gattungen und stimmt mit einer Abfrage über alle Zeilen der
+   * Tabelle überein (#984 AK 4, Plan E19).
+   */
+  @Test
+  void dieLebenszeitSummeZaehltAlleEintraege_unabhaengigVonJederSpanne() {
+    lauf(
+        projectId,
+        "2026-03-02T21:10:00Z",
+        NightRunMode.CHAIN,
+        1_000L,
+        verbrauch("10.000000", 1_000L, 100L, 900L),
+        gruen(721, verbrauch("4.000000", 400L, 40L, 360L)));
+    sitzung(
+        projectId,
+        "2026-09-16T01:22:00Z",
+        2_000L,
+        verbrauch("2.500000", 250L, 25L, 200L),
+        gruen(722, verbrauch("1.000000", 100L, 10L, 80L)));
+
+    LifetimeTotals gesamt = usage.lifetimeTotals(projectId);
+
+    assertThat(gesamt.byKind().night().runCount()).isEqualTo(1L);
+    assertThat(gesamt.byKind().interactive().runCount()).isEqualTo(1L);
+    assertThat(gesamt.byKind().runCount()).isEqualTo(2L);
+    assertThat(gesamt.cardCount()).isEqualTo(2L);
+    assertThat(gesamt.byKind().night().runUsage().costUsd()).isEqualByComparingTo("10");
+    assertThat(gesamt.byKind().interactive().runUsage().costUsd()).isEqualByComparingTo("2.5");
+    assertThat(gesamt.byKind().runUsage().costUsd()).isEqualByComparingTo("12.5");
+    assertThat(gesamt.byKind().runUsage().inputTokens()).isEqualTo(1_250L);
+    assertThat(gesamt.byKind().runUsage().outputTokens()).isEqualTo(125L);
+    assertThat(gesamt.byKind().runUsage().cachedInputTokens()).isEqualTo(1_100L);
+    assertThat(gesamt.byKind().night().itemUsage().costUsd()).isEqualByComparingTo("4");
+    assertThat(gesamt.byKind().interactive().itemUsage().costUsd()).isEqualByComparingTo("1");
+    assertThat(gesamt.byKind().itemUsage().costUsd()).isEqualByComparingTo("5");
+    // Die Gegenrechnung: dieselbe Summe, unabhängig von der Aggregat-Abfrage über alle Zeilen.
+    assertThat(gesamt.byKind().runUsage().costUsd())
+        .isEqualByComparingTo(
+            jdbc.queryForObject(
+                "SELECT sum(cost_usd) FROM night_run WHERE project_id = ?",
+                BigDecimal.class,
+                projectId));
+  }
+
+  /** Ohne einen einzigen Eintrag: Zähler 0, Verbrauchsangaben fehlend — und nie 0 (Plan E5). */
+  @Test
+  void einProjektOhneEintragHatEineLeereLebenszeitSumme() {
+    lauf(
+        fremdesProjekt,
+        "2026-09-15T21:10:00Z",
+        NightRunMode.CHAIN,
+        1L,
+        kosten("9"),
+        gruen(721, kosten("9")));
+
+    LifetimeTotals gesamt = usage.lifetimeTotals(projectId);
+
+    assertThat(gesamt.byKind().runCount()).isZero();
+    assertThat(gesamt.byKind().night().runCount()).isZero();
+    assertThat(gesamt.byKind().interactive().runCount()).isZero();
+    assertThat(gesamt.cardCount()).isZero();
+    assertThat(gesamt.byKind().runUsage()).isEqualTo(NICHTS);
+    assertThat(gesamt.byKind().itemUsage()).isEqualTo(NICHTS);
   }
 
   // --- Sommerzeit ------------------------------------------------------------------------------

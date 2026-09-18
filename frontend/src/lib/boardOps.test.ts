@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Card } from '../api/cards'
-import { activeCardsInColumn, applyMove } from './boardOps'
+import { activeCardsInColumn, applyMove, spaltenAuswahl, spaltenAuswahlUmschalten } from './boardOps'
 
 function card(
   id: number,
@@ -43,5 +43,27 @@ describe('boardOps', () => {
   it('applyMove in dieselbe Spalte liefert unveränderte Referenz', () => {
     const cards = [card(1, 10, 0)]
     expect(applyMove(cards, 1, 10)).toBe(cards)
+  })
+
+  it('spaltenAuswahl meldet alle, einige und keine', () => {
+    const ids = [1, 2, 3]
+    expect(spaltenAuswahl(ids, new Set([1, 2, 3]))).toBe('alle')
+    expect(spaltenAuswahl(ids, new Set([2]))).toBe('einige')
+    expect(spaltenAuswahl(ids, new Set([9]))).toBe('keine')
+  })
+
+  it('spaltenAuswahl meldet für eine leere Spalte keine', () => {
+    expect(spaltenAuswahl([], new Set([1]))).toBe('keine')
+  })
+
+  it('spaltenAuswahlUmschalten ergänzt die fehlenden Karten der Spalte', () => {
+    const auswahl = new Set([1, 9])
+    expect([...spaltenAuswahlUmschalten([1, 2], auswahl)]).toEqual([1, 9, 2])
+    expect([...auswahl]).toEqual([1, 9]) // Eingabe unverändert
+  })
+
+  it('spaltenAuswahlUmschalten nimmt bei voller Spalte nur deren Karten heraus', () => {
+    const auswahl = new Set([1, 2, 9])
+    expect([...spaltenAuswahlUmschalten([1, 2], auswahl)]).toEqual([9])
   })
 })

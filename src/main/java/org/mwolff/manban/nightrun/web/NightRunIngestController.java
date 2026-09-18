@@ -18,6 +18,7 @@ import org.mwolff.manban.nightrun.application.NightRunService.NewNightRunItem;
 import org.mwolff.manban.nightrun.application.NightRunService.NightRunResult;
 import org.mwolff.manban.nightrun.application.TokenNotBoundForIngestException;
 import org.mwolff.manban.nightrun.domain.NightRunErrorClass;
+import org.mwolff.manban.nightrun.domain.NightRunKind;
 import org.mwolff.manban.nightrun.domain.NightRunLimits;
 import org.mwolff.manban.nightrun.domain.NightRunMode;
 import org.mwolff.manban.nightrun.domain.NightRunState;
@@ -41,6 +42,11 @@ import org.springframework.web.bind.annotation.RestController;
  * <p><b>Kein {@code unparsedSample}</b>: Der Ergebnisstand einer Kette ist strukturiert und kennt
  * keine ungedeuteten Zeilen. Das Feld gehört zum Weg über das Textprotokoll.
  *
+ * <p><b>Dieselbe Strecke trägt die interaktive Sitzung</b> (Issue #1012, Plan #1007 E12/E17): Der
+ * Rumpf ist bis auf das optionale Feld {@code kind} derselbe. Fehlt es, gilt {@link
+ * NightRunKind#NIGHT} — die Erweiterung ist additiv, und eine ältere Kit-Kopie meldet unverändert
+ * weiter. Ein zweiter Endpunkt mit gleichem Rumpf liefe mit der Zeit auseinander.
+ *
  * <p>Diese Klasse ist die einzige Stelle in {@code nightrun}, die {@link KanbanPrincipal} liest;
  * die Application- und Domänenschicht kennen {@code accesstoken} nicht. Eine ArchUnit-Regel hält
  * das fest.
@@ -63,9 +69,16 @@ class NightRunIngestController {
       throw new TokenNotBoundForIngestException();
     }
     NightRunResult ergebnis =
-        service.ingest(principal.userId(), projectId, principal.tokenName(), run(request));
+        service.ingest(
+            principal.userId(), projectId, principal.tokenName(), kind(request), run(request));
     return new IngestResponse(
         ergebnis.startedAt(), ergebnis.created() ? Outcome.CREATED : Outcome.REPLACED);
+  }
+
+  /** Fehlt die Gattung, ist die Meldung ein Nachtlauf — so meldet jede ältere Kit-Kopie. */
+  private static NightRunKind kind(IngestRequest request) {
+    NightRunKind gemeldet = request.kind();
+    return gemeldet == null ? NightRunKind.NIGHT : gemeldet;
   }
 
   private static KanbanPrincipal principal(@Nullable Authentication authentication) {
@@ -110,10 +123,18 @@ class NightRunIngestController {
   /** Antwort: der fachliche Schlüssel des Laufs und was mit ihm geschah. */
   record IngestResponse(Instant startedAt, Outcome outcome) {}
 
-  /** Ein gemeldeter Lauf — der vollständige Stand, nicht eine Ergänzung. */
+  /**
+   * Ein gemeldeter Lauf — der vollständige Stand, nicht eine Ergänzung.
+   *
+   * @param mode Pflichtfeld; nimmt seit {@code V34} auch {@link NightRunMode#INTERACTIVE} an (E23)
+   * @param kind Gattung des Eintrags; fehlt sie, gilt {@link NightRunKind#NIGHT} (Issue #1012).
+   *     Bewusst optional und nicht {@code @NotNull}: Eine ältere Kit-Kopie kennt das Feld nicht,
+   *     und ihre Meldung soll weiterhin ankommen statt an der Prüfung zu scheitern.
+   */
   record IngestRequest(
       @NotNull Instant startedAt,
       @NotNull NightRunMode mode,
+      @Nullable NightRunKind kind,
       long durationMs,
       int processedCount,
       int skippedCount,

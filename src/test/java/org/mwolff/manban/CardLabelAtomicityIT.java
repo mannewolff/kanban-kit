@@ -77,7 +77,7 @@ class CardLabelAtomicityIT extends AbstractIntegrationTest {
   }
 
   private long project(long ownerUserId) {
-    return projects.save(new Project(null, "Rennen", ownerUserId, Instant.now())).requireId();
+    return projects.save(new Project(null, "Rennen", ownerUserId, Instant.now(), null)).requireId();
   }
 
   /**
