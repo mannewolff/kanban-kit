@@ -2,14 +2,13 @@ import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
 import ButtonBase from '@mui/material/ButtonBase'
 import Typography from '@mui/material/Typography'
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useParams } from 'react-router-dom'
-import { boardsApi, type Board } from '../api/boards'
 import { cardsApi, type CardByNumber } from '../api/cards'
 import { ApiError } from '../api/client'
-import { dashboardApi, type BoardDashboardKpis } from '../api/dashboard'
-import { epicsApi, type Epic } from '../api/epics'
-import { nightRunsApi, type NightRunErrorClassCounts, type NightRunItemView, type NightRunView } from '../api/nightRuns'
+import { type BoardDashboardKpis } from '../api/dashboard'
+import { type Epic } from '../api/epics'
+import { type NightRunErrorClassCounts, type NightRunItemView, type NightRunView } from '../api/nightRuns'
 import { CardDetailModal } from '../components/CardDetailModal'
 import {
   FilterTaste,
@@ -36,7 +35,6 @@ import {
   gruenAnteil,
   implementierungKachel,
   istAbbruch,
-  juengsterLauf,
   kalenderwoche,
   kurzHash,
   laufband,
@@ -47,6 +45,7 @@ import {
   modusName,
   paketDauer,
 } from '../lib/leitstand'
+import { useLeitstandDaten, type Laden } from '../lib/useLeitstandDaten'
 import {
   ETIKETT,
   KUPFER,
@@ -82,61 +81,21 @@ import {
  * still; die Board-Kennzahlen bleiben.
  */
 
-type Laden<T> = { art: 'laedt' } | { art: 'ohneRecht' } | { art: 'fehler' } | { art: 'da'; wert: T }
-
-const LAEDT = { art: 'laedt' } as const
-
-/** Lädt einen Abruf in einen {@link Laden}-Zustand; 403 wird zu „ohne Recht". */
-function useLaden<T>(abruf: (() => Promise<T>) | null, abhaengig: readonly unknown[]): Laden<T> {
-  const [zustand, setZustand] = useState<Laden<T>>(LAEDT)
-  useEffect(() => {
-    if (abruf === null) {
-      return
-    }
-    let aktiv = true
-    setZustand(LAEDT)
-    abruf().then(
-      (wert) => {
-        if (aktiv) setZustand({ art: 'da', wert })
-      },
-      (err: unknown) => {
-        if (aktiv) setZustand(err instanceof ApiError && err.status === 403 ? { art: 'ohneRecht' } : { art: 'fehler' })
-      },
-    )
-    return () => {
-      aktiv = false
-    }
-    // Der Abruf ist je Render eine neue Funktion; maßgeblich sind die Werte, von denen er abhängt.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, abhaengig)
-  return zustand
-}
+/** Die Karte, die der Dialog zeigt, mit dem Projekt, aus dem sie kam. */
+type Auswahl = { card: CardByNumber; projectId: number }
 
 export function LeitstandPage() {
   const { boardId } = useParams()
-  const id = Number.parseInt(boardId ?? '', 10)
-  const validId = Number.isInteger(id) && id > 0
-
-  const board = useLaden<Board>(validId ? () => boardsApi.get(id) : null, [id, validId])
-  const kpis = useLaden<BoardDashboardKpis>(validId ? () => dashboardApi.get(id) : null, [id, validId])
-  const epics = useLaden<Epic[]>(validId ? () => epicsApi.list(id) : null, [id, validId])
-  const projectId = board.art === 'da' ? board.wert.projectId : null
-  const laeufe = useLaden<NightRunView[]>(projectId === null ? null : () => nightRunsApi.list(projectId), [projectId])
-  const klassen = useLaden<NightRunErrorClassCounts>(
-    projectId === null ? null : () => nightRunsApi.errorClassCounts(projectId),
-    [projectId],
-  )
+  const daten = useLeitstandDaten(boardId)
   // Die Karte kommt aus „Letzter Lauf" und damit immer aus einem bekannten Projekt; das Projekt
   // reist im Zustand mit, statt beim Rendern des Dialogs noch einmal gegen `null` geprüft zu werden.
-  const [detail, setDetail] = useState<{ card: CardByNumber; projectId: number } | null>(null)
+  const [detail, setDetail] = useState<Auswahl | null>(null)
 
-  if (!validId) {
+  if (!daten.validId) {
     return <Alert severity="error">Ungültige Board-ID.</Alert>
   }
 
-  const liste = laeufe.art === 'da' ? laeufe.wert : null
-  const juengster = liste === null ? null : juengsterLauf(liste)
-  const epicListe = epics.art === 'da' ? epics.wert : []
+  const { board, kpis, epics, klassen, projectId, liste, juengster, epicListe } = daten
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
@@ -146,50 +105,91 @@ export function LeitstandPage() {
 
       {juengster && <LaufbandBereich lauf={juengster} />}
 
-      <Box
-        component="section"
-        aria-label="Kennzahlen"
-        sx={{ display: 'grid', gridTemplateColumns: { xs: 'minmax(0,1fr)', sm: 'repeat(2, minmax(0,1fr))', lg: 'repeat(4, minmax(0,1fr))' }, gap: '14px', perspective: '1100px' }}
-      >
-        {kpis.art === 'da' ? (
-          <>
-            <Kachel titel="Durchsatz · Woche" daten={durchsatzKachel(kpis.wert.throughput)} melder="kupfer" />
-            <Kachel titel="Durchlaufzeit" daten={durchlaufKachel(kpis.wert.avgLeadTimeSeconds, kpis.wert.leadTimeSampleCount)} melder="gruen" />
-            <Kachel titel="Implementierungszeit" daten={implementierungKachel(kpis.wert.avgImplementationSeconds, kpis.wert.implementationSampleCount)} melder="stahl" />
-          </>
-        ) : (
-          <Typography color="text.secondary">
-            {kpis.art === 'laedt' ? 'Kennzahlen werden geladen …' : 'Kennzahlen konnten nicht geladen werden.'}
-          </Typography>
-        )}
-        {liste && <NachtlaufKachel laeufe={liste} />}
-      </Box>
+      <KennzahlenBereich kpis={kpis} liste={liste} />
 
-      {projectId !== null && laeufe.art === 'da' && <LeitstandVerbrauch projectId={projectId} />}
+      {projectId !== null && liste !== null && <LeitstandVerbrauch projectId={projectId} />}
 
       {juengster && <Herkunft lauf={juengster} />}
 
-      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'minmax(0,1fr)', lg: 'minmax(0,1.55fr) minmax(0,1fr)' }, gap: '16px', alignItems: 'start' }}>
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: '16px', minWidth: 0 }}>
-          {juengster && projectId !== null && (
-            <LetzterLauf
-              lauf={juengster}
-              epics={epicListe}
-              projectId={projectId}
-              onOeffnen={(card) => setDetail({ card, projectId })}
-            />
-          )}
-          {kpis.art === 'da' && <Durchsatz wochen={kpis.wert.throughput} />}
-        </Box>
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: '16px', minWidth: 0 }}>
-          {klassen.art === 'da' && liste && <Abbruchgruende zaehler={klassen.wert} laeufe={liste.length} />}
-          {epics.art === 'da' && <VorhabenPlatte epics={epics.wert} />}
-        </Box>
-      </Box>
+      <LeitstandRumpf
+        juengster={juengster}
+        projectId={projectId}
+        kpis={kpis}
+        klassen={klassen}
+        epics={epics}
+        epicListe={epicListe}
+        liste={liste}
+        onDetail={setDetail}
+      />
 
       {detail && (
         <CardDetailModal card={detail.card} canEdit={false} projectId={detail.projectId} onClose={() => setDetail(null)} />
       )}
+    </Box>
+  )
+}
+
+/** Die Kennzahlen-Zeile (Entwurf Z. 1240–1323): drei Board-Kacheln und die Nachtlauf-Kachel. */
+function KennzahlenBereich({ kpis, liste }: Readonly<{ kpis: Laden<BoardDashboardKpis>; liste: readonly NightRunView[] | null }>) {
+  return (
+    <Box
+      component="section"
+      aria-label="Kennzahlen"
+      sx={{ display: 'grid', gridTemplateColumns: { xs: 'minmax(0,1fr)', sm: 'repeat(2, minmax(0,1fr))', lg: 'repeat(4, minmax(0,1fr))' }, gap: '14px', perspective: '1100px' }}
+    >
+      {kpis.art === 'da' ? (
+        <>
+          <Kachel titel="Durchsatz · Woche" daten={durchsatzKachel(kpis.wert.throughput)} melder="kupfer" />
+          <Kachel titel="Durchlaufzeit" daten={durchlaufKachel(kpis.wert.avgLeadTimeSeconds, kpis.wert.leadTimeSampleCount)} melder="gruen" />
+          <Kachel titel="Implementierungszeit" daten={implementierungKachel(kpis.wert.avgImplementationSeconds, kpis.wert.implementationSampleCount)} melder="stahl" />
+        </>
+      ) : (
+        <Typography color="text.secondary">
+          {kpis.art === 'laedt' ? 'Kennzahlen werden geladen …' : 'Kennzahlen konnten nicht geladen werden.'}
+        </Typography>
+      )}
+      {liste && <NachtlaufKachel laeufe={liste} />}
+    </Box>
+  )
+}
+
+/** Der Rumpf (Entwurf Z. 1410–1712): „Letzter Lauf", „Durchsatz", „Abbruchgründe" und „Vorhaben". */
+function LeitstandRumpf({
+  juengster,
+  projectId,
+  kpis,
+  klassen,
+  epics,
+  epicListe,
+  liste,
+  onDetail,
+}: Readonly<{
+  juengster: NightRunView | null
+  projectId: number | null
+  kpis: Laden<BoardDashboardKpis>
+  klassen: Laden<NightRunErrorClassCounts>
+  epics: Laden<Epic[]>
+  epicListe: readonly Epic[]
+  liste: readonly NightRunView[] | null
+  onDetail: (auswahl: Auswahl) => void
+}>) {
+  return (
+    <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'minmax(0,1fr)', lg: 'minmax(0,1.55fr) minmax(0,1fr)' }, gap: '16px', alignItems: 'start' }}>
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: '16px', minWidth: 0 }}>
+        {juengster && projectId !== null && (
+          <LetzterLauf
+            lauf={juengster}
+            epics={epicListe}
+            projectId={projectId}
+            onOeffnen={(card) => onDetail({ card, projectId })}
+          />
+        )}
+        {kpis.art === 'da' && <Durchsatz wochen={kpis.wert.throughput} />}
+      </Box>
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: '16px', minWidth: 0 }}>
+        {klassen.art === 'da' && liste && <Abbruchgruende zaehler={klassen.wert} laeufe={liste.length} />}
+        {epics.art === 'da' && <VorhabenPlatte epics={epics.wert} />}
+      </Box>
     </Box>
   )
 }
