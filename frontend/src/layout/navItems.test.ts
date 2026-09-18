@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildNavItems, type BoardContext, type NavParams } from './navItems'
+import { buildNavItems, navKontext, type BoardContext, type NavKontextParams, type NavParams } from './navItems'
 
 const board: BoardContext = { id: 1, name: 'B', projectId: 5 }
 
@@ -154,5 +154,150 @@ describe('buildNavItems Verwaltung', () => {
       'Admin',
     ])
     expect(link({ board: null }, 'Admin')).toBeUndefined()
+  })
+})
+
+const projekte = [
+  { id: 5, name: 'Fünf', role: 'OWNER' },
+  { id: 9, name: 'Neun', role: 'VIEWER' },
+]
+
+/** Voreinstellung einer Board-Route auf Board 1 (Projekt 5); jeder Test ändert nur, was er meint. */
+const kontext = (ueberschreibungen: Partial<NavKontextParams> = {}) =>
+  navKontext({ board, routeProjectId: null, boardId: 1, projects: projekte, admin: false, ...ueberschreibungen })
+
+describe('navKontext Board-Kontext der Schiene', () => {
+  it('nimmt auf einer Board-Route das geladene Board', () => {
+    expect(kontext().kontextBoard).toEqual(board)
+  })
+
+  it('behält das Board auf einer Projektseite desselben Projekts (#990)', () => {
+    expect(kontext({ routeProjectId: 5, boardId: null }).kontextBoard).toEqual(board)
+  })
+
+  it('verwirft das Board auf der Projektseite eines anderen Projekts', () => {
+    expect(kontext({ routeProjectId: 9, boardId: null }).kontextBoard).toBeNull()
+  })
+
+  it('bleibt ohne geladenes Board auf einer Projektseite ohne Board-Kontext', () => {
+    expect(kontext({ board: null, routeProjectId: 7, boardId: null }).kontextBoard).toBeNull()
+  })
+
+  it('bleibt auf einer Seite ohne Projekt- und Board-Bezug (Admin-Seite) ohne Board-Kontext', () => {
+    expect(kontext({ board: null, boardId: null }).kontextBoard).toBeNull()
+  })
+})
+
+describe('navKontext Projektzahl', () => {
+  it('zählt die geladenen Projekte', () => {
+    expect(kontext().projectCount).toBe(2)
+  })
+
+  it('meldet die Anzahl als unbekannt, solange die Liste nicht geladen ist', () => {
+    expect(kontext({ projects: null }).projectCount).toBe(null)
+  })
+})
+
+describe('navKontext Rechte des aktuellen Projekts', () => {
+  it('leitet das Board-Verwaltungsrecht aus der Rolle im Projekt des Boards ab', () => {
+    expect(kontext().canManageCurrentBoards).toBe(true)
+    expect(kontext({ routeProjectId: 9, boardId: null }).canManageCurrentBoards).toBe(false)
+  })
+
+  it('gibt dem Plattform-Admin die Rechte auch ohne Projektrolle', () => {
+    const ohneProjekt = kontext({ board: null, boardId: null, admin: true })
+    expect(ohneProjekt.canManageCurrentBoards).toBe(true)
+    expect(ohneProjekt.canViewNightRun).toBe(true)
+    // `canManageMembers` bekommt bewusst keinen Plattform-Admin-Wert: Der Eintrag „Mitglieder"
+    // hängt an der Projektrolle, so wie bisher in der Shell.
+    expect(ohneProjekt.canManageCurrentMembers).toBe(false)
+  })
+
+  it('zeigt Nachtläufe nur mit Owner-Rolle im Projekt des Pfads', () => {
+    expect(kontext().canViewNightRun).toBe(true)
+    expect(kontext({ routeProjectId: 9, boardId: null }).canViewNightRun).toBe(false)
+    expect(kontext({ board: null, boardId: null, projects: [{ id: 7, name: 'Sieben', role: 'ADMIN' }], routeProjectId: 7 }).canViewNightRun).toBe(
+      false,
+    )
+  })
+
+  it('erlaubt die Mitgliederverwaltung ab der Projektrolle ADMIN', () => {
+    const projektAdmin = kontext({
+      board: null,
+      boardId: null,
+      routeProjectId: 7,
+      projects: [{ id: 7, name: 'Sieben', role: 'ADMIN' }],
+    })
+    expect(projektAdmin.canManageCurrentMembers).toBe(true)
+    // Boards verwalten hängt am Projekt des Boards — ohne Board-Kontext bleibt es aus.
+    expect(projektAdmin.canManageCurrentBoards).toBe(false)
+    expect(kontext({ routeProjectId: 9, boardId: null }).canManageCurrentMembers).toBe(false)
+  })
+
+  it('lässt ohne Projekt-Kontext alle Rechte aus', () => {
+    const leer = kontext({ board: null, boardId: null })
+    expect(leer.canManageCurrentBoards).toBe(false)
+    expect(leer.canViewNightRun).toBe(false)
+    expect(leer.canManageCurrentMembers).toBe(false)
+  })
+})
+
+describe('navKontext Projektnamen', () => {
+  it('nennt auf einer Board-Route beide Namen aus demselben Projekt', () => {
+    expect(kontext().projectName).toBe('Fünf')
+    expect(kontext().currentProjectName).toBe('Fünf')
+  })
+
+  it('sucht das Projekt des Boards heraus, statt das erste der Liste zu nehmen', () => {
+    const zweites = kontext({ board: { id: 3, name: 'C', projectId: 9 }, boardId: 3 })
+    expect(zweites.projectName).toBe('Neun')
+    expect(zweites.currentProjectName).toBe('Neun')
+  })
+
+  it('nennt auf der Projektseite eines anderen Projekts nur den Namen des Pfad-Projekts', () => {
+    const fremd = kontext({ routeProjectId: 9, boardId: null })
+    expect(fremd.projectName).toBe('Neun')
+    expect(fremd.currentProjectName).toBe(null)
+  })
+
+  it('lässt beide Namen ohne Projekt-Kontext offen', () => {
+    expect(kontext({ board: null, boardId: null }).projectName).toBe(null)
+    expect(kontext({ board: null, boardId: null }).currentProjectName).toBe(null)
+  })
+
+  it('lässt beide Namen offen, solange die Projektliste fehlt', () => {
+    expect(kontext({ projects: null }).projectName).toBe(null)
+    expect(kontext({ projects: null }).currentProjectName).toBe(null)
+  })
+})
+
+describe('navKontext Pfad im Kopf', () => {
+  it('führt auf einer Board-Route Projekt und Board', () => {
+    expect(kontext().pfad).toEqual([
+      { label: 'Fünf', to: '/projects/5' },
+      { label: 'B', to: '/boards/1' },
+    ])
+  })
+
+  it('nennt auf einer Projektseite nur das Projekt (#990)', () => {
+    expect(kontext({ routeProjectId: 5, boardId: null }).pfad).toEqual([{ label: 'Fünf', to: '/projects/5' }])
+  })
+
+  it('nennt beim Board-Wechsel nicht das noch geladene Vorgänger-Board', () => {
+    expect(kontext({ boardId: 2 }).pfad).toEqual([{ label: 'Fünf', to: '/projects/5' }])
+  })
+
+  it('nennt das Board auch ohne geladene Projektliste', () => {
+    expect(kontext({ projects: null }).pfad).toEqual([{ label: 'B', to: '/boards/1' }])
+  })
+
+  it('nennt das Projekt der Route auch ohne Board', () => {
+    expect(kontext({ board: null, boardId: null, routeProjectId: 9 }).pfad).toEqual([
+      { label: 'Neun', to: '/projects/9' },
+    ])
+  })
+
+  it('bleibt ohne Projekt- und Board-Bezug leer', () => {
+    expect(kontext({ board: null, boardId: null }).pfad).toEqual([])
   })
 })
