@@ -66,9 +66,13 @@ class CardServiceEpicTreeTest {
             mock(PermissionChecker.class),
             mock(ProjectService.class),
             mock(CardColumnTransitionRepository.class),
-            mock(CardAssigneeRepository.class),
-            labels,
-            cardLabels,
+            // Echte KartenZuordnung aus denselben Port-Mocks (Issue #1051) — der Baum liest die
+            // gezählten Marken über sie.
+            new KartenZuordnung(
+                mock(CardAssigneeRepository.class),
+                labels,
+                cardLabels,
+                mock(PermissionChecker.class)),
             mock(CardActivityRepository.class),
             actor,
             mock(ApplicationEventPublisher.class),

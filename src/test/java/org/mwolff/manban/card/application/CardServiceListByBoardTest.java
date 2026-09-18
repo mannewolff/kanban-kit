@@ -66,9 +66,11 @@ class CardServiceListByBoardTest {
             mock(PermissionChecker.class),
             mock(ProjectService.class),
             mock(CardColumnTransitionRepository.class),
-            assignees,
-            mock(LabelRepository.class),
-            cardLabels,
+            // Echte KartenZuordnung aus denselben Port-Mocks (Issue #1051): Die Tests halten fest,
+            // welcher Sammelzugriff läuft und dass der Einzel-Finder daneben schweigt — ein Mock
+            // der Zuordnung verdeckte genau das.
+            new KartenZuordnung(
+                assignees, mock(LabelRepository.class), cardLabels, mock(PermissionChecker.class)),
             mock(CardActivityRepository.class),
             actor,
             mock(ApplicationEventPublisher.class),

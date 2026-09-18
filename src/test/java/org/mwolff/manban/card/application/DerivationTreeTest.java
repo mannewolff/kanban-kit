@@ -115,9 +115,12 @@ class DerivationTreeTest {
             permissions,
             mock(ProjectService.class),
             mock(CardColumnTransitionRepository.class),
-            mock(CardAssigneeRepository.class),
-            mock(LabelRepository.class),
-            mock(CardLabelRepository.class),
+            // Echte KartenZuordnung aus Port-Mocks (Issue #1051), kein Mock der Zuordnung selbst.
+            new KartenZuordnung(
+                mock(CardAssigneeRepository.class),
+                mock(LabelRepository.class),
+                mock(CardLabelRepository.class),
+                permissions),
             mock(CardActivityRepository.class),
             actor,
             mock(ApplicationEventPublisher.class),

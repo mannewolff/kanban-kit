@@ -15,7 +15,6 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.board.application.BoardNotFoundException;
 import org.mwolff.manban.board.application.BoardService;
@@ -26,7 +25,6 @@ import org.mwolff.manban.card.domain.Card;
 import org.mwolff.manban.card.domain.CardActivity;
 import org.mwolff.manban.card.domain.CardActivityType;
 import org.mwolff.manban.card.domain.CardType;
-import org.mwolff.manban.card.domain.Label;
 import org.mwolff.manban.project.application.PermissionChecker;
 import org.mwolff.manban.project.application.ProjectService;
 import org.mwolff.manban.project.domain.Permission;
@@ -41,8 +39,10 @@ import org.springframework.transaction.annotation.Transactional;
  * gruppieren Karten über {@code parentId}. Rechte über den {@link PermissionChecker}.
  */
 // PMD.CouplingBetweenObjects: zentraler Karten-Use-Case-Service; die Kopplung an die Ports
-// (Karten, Abhängigkeiten, Boards/Spalten, Rechte, Spaltenverlauf, Zuständige, Labels)
-// ist fachlich begründet und kein God-Class-Smell.
+// (Karten, Abhängigkeiten, Boards/Spalten, Rechte, Spaltenverlauf, Aktivität) ist fachlich
+// begründet und kein God-Class-Smell. Zuständige und Labels laufen seit Issue #1051 über die
+// modulinterne KartenZuordnung — sie trägt deren drei Ports, Label und die beiden Ablehnungen,
+// die der Service damit nicht mehr sieht (SonarCloud S6539, Plan #1042).
 // PMD.CyclomaticComplexity: die Klassen-Gesamtkomplexität summiert viele kleine, je für sich
 // einfache Use-Case-Methoden (höchste Einzelmethode weit unter dem Schwellwert); kein Smell.
 // PMD.TooManyMethods: zentraler Karten-/Vorhaben-Use-Case-Service — viele kleine, kohäsive Methoden
@@ -85,9 +85,7 @@ public class CardService {
   private final PermissionChecker permissions;
   private final ProjectService projects;
   private final CardColumnTransitionRepository transitions;
-  private final CardAssigneeRepository assignees;
-  private final LabelRepository labels;
-  private final CardLabelRepository cardLabels;
+  private final KartenZuordnung zuordnung;
   private final CardActivityRepository activity;
   private final ActorContext actor;
   private final ApplicationEventPublisher events;
@@ -100,9 +98,7 @@ public class CardService {
       PermissionChecker permissions,
       ProjectService projects,
       CardColumnTransitionRepository transitions,
-      CardAssigneeRepository assignees,
-      LabelRepository labels,
-      CardLabelRepository cardLabels,
+      KartenZuordnung zuordnung,
       CardActivityRepository activity,
       ActorContext actor,
       ApplicationEventPublisher events,
@@ -113,9 +109,7 @@ public class CardService {
     this.permissions = permissions;
     this.projects = projects;
     this.transitions = transitions;
-    this.assignees = assignees;
-    this.labels = labels;
-    this.cardLabels = cardLabels;
+    this.zuordnung = zuordnung;
     this.activity = activity;
     this.actor = actor;
     this.events = events;
@@ -307,10 +301,10 @@ public class CardService {
         actor.current());
     setDependencies(saved, dependsOn);
     if (assigneeIds != null && !assigneeIds.isEmpty()) {
-      assignValidatedAssignees(saved.requireId(), projectId, assigneeIds);
+      zuordnung.ersetzeZustaendige(saved.requireId(), projectId, assigneeIds);
     }
     if (labelIds != null && !labelIds.isEmpty()) {
-      assignValidatedLabels(saved.requireId(), boardId, labelIds);
+      zuordnung.ersetzeLabels(saved.requireId(), boardId, labelIds);
     }
     publishChanged(boardId, ActivityType.CREATED, saved.requireId());
     return view(saved);
@@ -404,8 +398,8 @@ public class CardService {
     // Karten ohne Eintrag fehlen in den Maps (Vertrag der drei findByCardIds) — die Sicht setzt
     // dort eine leere Liste, nie null.
     Map<Long, List<Integer>> abhaengigkeiten = dependencies.findByCardIds(ids);
-    Map<Long, List<Long>> zustaendige = assignees.findByCardIds(ids);
-    Map<Long, List<Long>> labelIds = cardLabels.findByCardIds(ids);
+    Map<Long, List<Long>> zustaendige = zuordnung.zustaendigeJeKarte(ids);
+    Map<Long, List<Long>> labelIds = zuordnung.labelsJeKarte(ids);
     Map<Long, Integer> nummern = herkunftsnummern(karten);
     return karten.stream()
         .map(
@@ -539,42 +533,7 @@ public class CardService {
         baumKarten,
         dependencies.findByCardIds(ids),
         fremdeVorfahrenNummern(alle),
-        gezaehlteMarken(boardId, ids));
-  }
-
-  /**
-   * Die gezählten Label-Marken je Karten-ID — zwei Sammelzugriffe, unabhängig von der Kartenzahl
-   * (kein N+1), analog zu {@code depsByCardId}.
-   *
-   * <p>Vom Server und nicht aus der Kartenliste durchgereicht (Plan #657, E5): Ein Karten-Array
-   * durch drei Ebenen zu fädeln, um Namen nachzuschlagen, baute eine zweite Wahrheit über den
-   * Zustand neben der ersten.
-   *
-   * <p>Die Reihenfolge je Karte ist die von {@link CardLabelRepository#findByCardIds} — aufsteigend
-   * nach Label-ID. Ohne diese Festlegung wäre die Anzeige nicht deterministisch testbar. Karten
-   * ohne gezählte Labels fehlen in der Map; {@code DerivationTree} liest sie mit einer leeren Liste
-   * als Vorgabe.
-   */
-  private Map<Long, List<LabelMarkView>> gezaehlteMarken(long boardId, Set<Long> cardIds) {
-    Map<Long, Label> gezaehlt = new HashMap<>();
-    for (Label l : labels.findByBoardId(boardId)) {
-      if (l.countOnEpicTile()) {
-        gezaehlt.put(l.requireId(), l);
-      }
-    }
-    Map<Long, List<LabelMarkView>> marken = new HashMap<>();
-    cardLabels
-        .findByCardIds(cardIds)
-        .forEach(
-            (cardId, labelIds) ->
-                marken.put(
-                    cardId,
-                    labelIds.stream()
-                        .map(gezaehlt::get)
-                        .filter(Objects::nonNull)
-                        .map(l -> new LabelMarkView(l.name(), l.color()))
-                        .toList()));
-    return marken;
+        zuordnung.gezaehlteMarken(boardId, ids));
   }
 
   /**
@@ -859,7 +818,7 @@ public class CardService {
     // Projekt-basierte Rechte (#405): auch board-lose Pool-Ideen haben Zuständige.
     permissions.require(userId, card.projectId(), Permission.TICKET_UPDATE);
 
-    assignValidatedAssignees(cardId, card.projectId(), assigneeIds);
+    zuordnung.ersetzeZustaendige(cardId, card.projectId(), assigneeIds);
     activity.add(
         cardId,
         userId,
@@ -885,7 +844,7 @@ public class CardService {
     // kein Board mit Labels; das Frontend ruft setLabels für sie nicht auf.
     permissions.require(userId, card.projectId(), Permission.TICKET_UPDATE);
 
-    assignValidatedLabels(cardId, card.requireBoardId(), labelIds);
+    zuordnung.ersetzeLabels(cardId, card.requireBoardId(), labelIds);
     publishChanged(card.requireBoardId(), ActivityType.UPDATED, cardId);
     return view(card);
   }
@@ -916,57 +875,9 @@ public class CardService {
     permissions.require(userId, card.projectId(), Permission.TICKET_UPDATE);
 
     long boardId = card.requireBoardId();
-    // Auch beim Abnehmen geprüft: Ein fremdes Label ist an keiner Karte gesetzt, der Aufruf ginge
-    // sonst als stiller Nicht-Treffer durch und meldete Erfolg für etwas, das setLabels abwiese.
-    requireBoardLabel(boardId, labelId);
-    List<Long> current = cardLabels.findByCardId(cardId);
-    List<Long> next =
-        action == LabelAction.ADD
-            ? Stream.concat(current.stream(), Stream.of(labelId)).distinct().toList()
-            : current.stream().filter(id -> id.longValue() != labelId).toList();
-    assignValidatedLabels(cardId, boardId, next);
+    zuordnung.aendereLabel(cardId, boardId, labelId, action);
     publishChanged(boardId, ActivityType.UPDATED, cardId);
     return view(card);
-  }
-
-  private void requireBoardLabel(long boardId, long labelId) {
-    List<Long> boardLabelIds =
-        labels.findByBoardId(boardId).stream().map(Label::requireId).toList();
-    if (!boardLabelIds.contains(labelId)) {
-      throw new InvalidLabelException("Kein Label dieses Boards: " + labelId);
-    }
-  }
-
-  /**
-   * Prüft und setzt die Zuständigen einer Karte (Duplikate raus; jede ID muss Mitglied des Projekts
-   * sein) ohne Aktivitätseintrag — die wiederverwendbare Kernlogik von {@link #setAssignees} und
-   * dem atomaren {@link #create}.
-   */
-  private void assignValidatedAssignees(long cardId, long projectId, List<Long> assigneeIds) {
-    List<Long> distinct = assigneeIds.stream().distinct().toList();
-    for (Long assignee : distinct) {
-      if (!permissions.isRealProjectMember(assignee, projectId)) {
-        throw new InvalidAssigneeException("Kein Projektmitglied: " + assignee);
-      }
-    }
-    assignees.replaceAssignees(cardId, distinct);
-  }
-
-  /**
-   * Prüft und setzt die Labels einer Karte (Duplikate raus; jede ID muss ein Label desselben Boards
-   * sein) — die wiederverwendbare Kernlogik von {@link #setLabels} und dem atomaren {@link
-   * #create}.
-   */
-  private void assignValidatedLabels(long cardId, long boardId, List<Long> labelIds) {
-    List<Long> distinct = labelIds.stream().distinct().toList();
-    List<Long> boardLabelIds =
-        labels.findByBoardId(boardId).stream().map(Label::requireId).toList();
-    for (Long labelId : distinct) {
-      if (!boardLabelIds.contains(labelId)) {
-        throw new InvalidLabelException("Kein Label dieses Boards: " + labelId);
-      }
-    }
-    cardLabels.replaceLabels(cardId, distinct);
   }
 
   /**
@@ -1241,7 +1152,7 @@ public class CardService {
     cards.transfer(cardId, targetBoardId, targetColumnId, newNumber);
     if (!sameProject) {
       dependencies.deleteByCardId(cardId);
-      assignees.deleteByCardId(cardId);
+      zuordnung.entferneZustaendige(cardId);
     }
 
     // Spaltenverlauf: der board-/spaltenübergreifende Umzug zählt als Spaltenwechsel.
@@ -2112,9 +2023,9 @@ public class CardService {
         c.type(),
         c.parentId(),
         c.shortcode(),
-        assignees.findByCardId(c.requireId()),
+        zuordnung.zustaendigeVon(c.requireId()),
         c.dueDate(),
-        cardLabels.findByCardId(c.requireId()),
+        zuordnung.labelsVon(c.requireId()),
         c.targetBoardId(),
         herkunftsnummer(c));
   }

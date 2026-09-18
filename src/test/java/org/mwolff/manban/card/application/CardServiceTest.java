@@ -122,9 +122,11 @@ class CardServiceTest {
             permissions,
             projects,
             transitions,
-            assignees,
-            labels,
-            cardLabels,
+            // Echte KartenZuordnung aus denselben Port-Mocks (Issue #1051): Die Prüfungen für
+            // Zuständige und Labels sind nur aus dem Service herausgezogen, nicht ersetzt — ein
+            // Mock der Zuordnung ließe die Tests zu InvalidAssigneeException/InvalidLabelException
+            // ins Leere laufen.
+            new KartenZuordnung(assignees, labels, cardLabels, permissions),
             activity,
             actor,
             events,
