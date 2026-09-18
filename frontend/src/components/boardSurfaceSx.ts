@@ -47,6 +47,30 @@ export function karteSx(options: {
 }
 
 /**
+ * Wie dicht die Karten einer Spalte stehen — Wahlschalter der Werkzeugleiste (#980). Der Typ steht
+ * beim Maß und nicht bei der Ansicht, damit Board und Karte dieselbe Quelle lesen (#1056).
+ */
+export type Dichte = 'normal' | 'kompakt'
+
+/** Innenabstände einer Karte, in einer Form, die beide Dichten mit denselben Schlüsseln beschreibt. */
+export interface KarteDichteSx {
+  gap: string
+  px: string
+  py: string
+}
+
+/**
+ * Abstände der Karte nach gewählter Dichte (#1056). Als Tabelle statt als drei Ternäre im `sx`:
+ * Die beiden Maßsätze stehen nebeneinander und sind als Ganzes lesbar, und die Karte trägt die
+ * Fallunterscheidung nicht mehr in ihrer eigenen Komplexität (Plan #1042, P11).
+ */
+export function karteDichteSx(dichte: Dichte): KarteDichteSx {
+  return dichte === 'kompakt'
+    ? { gap: '4px', px: '9px', py: '6px' }
+    : { gap: '7px', px: '11px', py: '10px' }
+}
+
+/**
  * Der verlassene Platz einer gezogenen Karte (Entwurf `.karte-platz`, Z. 766–772): eine Vertiefung
  * mit gestrichelter Linie, Inhalt unsichtbar. `visibility` statt Entfernen: Der Platz behält die
  * Höhe, und das Element bleibt im Dokument — verschwände die Quelle, bräche das native Ziehen ab.

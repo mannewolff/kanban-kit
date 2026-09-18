@@ -1,16 +1,12 @@
 import AddIcon from '@mui/icons-material/Add'
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline'
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined'
-import MoreVertIcon from '@mui/icons-material/MoreVert'
 import SortIcon from '@mui/icons-material/Sort'
 import Alert from '@mui/material/Alert'
-import Avatar from '@mui/material/Avatar'
-import AvatarGroup from '@mui/material/AvatarGroup'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import ButtonBase from '@mui/material/ButtonBase'
 import Checkbox from '@mui/material/Checkbox'
-import Chip from '@mui/material/Chip'
 import Dialog from '@mui/material/Dialog'
 import DialogActions from '@mui/material/DialogActions'
 import DialogContent from '@mui/material/DialogContent'
@@ -39,11 +35,10 @@ import {
   type SpaltenAuswahlZustand,
 } from '../lib/boardOps'
 import { epicOfCard } from '../lib/cardEpic'
-import { cleanupCountdownLabel, cleanupDaysRemaining } from '../lib/cleanupCountdown'
 import { neighbourColumns } from '../lib/columnMeta'
 import { useEditMode } from '../lib/EditModeContext'
 import type { Label } from '../api/labels'
-import { formatDueDate, isOverdue } from '../lib/dueDate'
+import { isOverdue } from '../lib/dueDate'
 import { epicShortcode } from '../lib/epicMeta'
 import { selectableEpics } from '../lib/epicTiles'
 import { hiddenCardNumbers } from '../lib/hiddenCards'
@@ -54,7 +49,6 @@ import {
   LED_RING,
   MELDER,
   NUT,
-  NUTZER_MAL_SX,
   PANEL_RADIUS,
   PLATTE,
   PLATTE_FUSS,
@@ -67,10 +61,9 @@ import {
   TEXT_SCHWACH,
   ZAHL,
 } from '../theme'
-import { labelChipSx } from './labelChipSx'
-import { ablageflaecheSx, karteSx } from './boardSurfaceSx'
+import { BoardKarte } from './board/BoardKarte'
+import { ablageflaecheSx, type Dichte } from './boardSurfaceSx'
 import { BulkActionBar, type LabelOption, type LabelZustand } from './BulkActionBar'
-import { EpicBadge } from './EpicBadge'
 import { NewCardModal, type NewCardInitialValues, type NewItemInput } from './NewCardModal'
 import { useSnackbar } from './SnackbarProvider'
 import { TransferCardDialog } from './TransferCardDialog'
@@ -105,7 +98,6 @@ const segmentZustand = (belegt: boolean, grenze: boolean): string => {
   if (grenze) return 'grenze'
   return belegt ? 'belegt' : 'frei'
 }
-type Dichte = 'normal' | 'kompakt'
 
 /** Wahlschalter der Werkzeugleiste (Entwurf `.chip-gruppe`, `.chip`, Z. 807–826). */
 function ChipGruppe<T extends string>({
@@ -181,80 +173,6 @@ const sortedByNumberMessage = (columnName: string, sorted: SortDirection) =>
  */
 const hiddenBadgeLabel = (count: number) =>
   `${count} ${count === 1 ? 'Karte' : 'Karten'} ausgeblendet, einblenden`
-
-/** Initialen (max. 2 Zeichen) aus einem Anzeigenamen für Assignee-Avatare. */
-function initials(name: string): string {
-  const parts = name.trim().split(/\s+/).filter((p) => p.length > 0)
-  // Leerer/nur-Whitespace-Name hat kein Wort -> Platzhalter. Danach ist parts garantiert nicht
-  // leer, sodass parts[0] und das letzte Element ohne Optional-Chaining/Default zugreifbar sind.
-  // Das Non-null-`!` bei .at(-1) vermeidet den unerreichbaren Optional-Zweig (100 % Branch) und
-  // hält zugleich die von Sonar (S7755) bevorzugte .at()-Form.
-  if (parts.length === 0) return '?'
-  const first = parts[0].charAt(0)
-  const last = parts.length > 1 ? parts.at(-1)!.charAt(0) : ''
-  return (first + last).toUpperCase()
-}
-
-/**
- * Farbige Label-Chips einer Karte. Als eigene Komponente ausgelagert, damit die
- * `find`-Suche nicht innerhalb der tief verschachtelten Spalten-/Karten-`map` steht.
- */
-function CardLabels({ labelIds, boardLabels, cardTitle }: Readonly<{ labelIds: number[]; boardLabels: Label[]; cardTitle: string }>) {
-  if (labelIds.length === 0) return null
-  return (
-    <Stack direction="row" spacing={0.5} sx={{ flexWrap: 'wrap', mb: 0.5 }} aria-label={`Labels ${cardTitle}`}>
-      {labelIds.map((labelId) => {
-        const l = boardLabels.find((b) => b.id === labelId)
-        return (
-          <Chip
-            key={labelId}
-            size="small"
-            label={l?.name ?? `#${labelId}`}
-            sx={{ ...labelChipSx(l?.color), height: 18, '& .MuiChip-label': { px: 0.75, fontSize: '0.65rem' } }}
-          />
-        )
-      })}
-    </Stack>
-  )
-}
-
-/**
- * Zuständigen-Avatare einer Karte. Analog zu {@link CardLabels} ausgelagert, um die
- * `find`-Suche aus der verschachtelten Karten-`map` zu holen.
- */
-function CardAssignees({ assigneeIds, members, cardTitle }: Readonly<{ assigneeIds: number[]; members: Member[]; cardTitle: string }>) {
-  if (assigneeIds.length === 0) return null
-  return (
-    <Stack direction="row" justifyContent="flex-end" sx={{ ml: 'auto', flex: 'none' }}>
-      {/* Kürzel wie im Entwurf (`.kuerzel`, Z. 845–853): kleine dunkle Male. */}
-      <AvatarGroup
-        max={4}
-        aria-label={`Zuständige ${cardTitle}`}
-        sx={{
-          '& .MuiAvatar-root': {
-            ...NUTZER_MAL_SX,
-            width: 19,
-            height: 19,
-            fontSize: 9,
-            fontWeight: 600,
-            letterSpacing: '.02em',
-            border: 'none',
-            ml: '-4px',
-          },
-        }}
-      >
-        {assigneeIds.map((uid) => {
-          const name = members.find((m) => m.userId === uid)?.displayName ?? `#${uid}`
-          return (
-            <Avatar key={uid} title={name}>
-              {initials(name)}
-            </Avatar>
-          )
-        })}
-      </AvatarGroup>
-    </Stack>
-  )
-}
 
 interface Props {
   board: Board
@@ -1126,101 +1044,28 @@ export function BoardView({
                   ...ablageflaecheSx(dragCardId != null && ablageSpalteId === column.id && herkunftsSpalteId !== column.id),
                 }}
               >
-                {angezeigteKarten.map((card) => {
-                  const epic = epicOfCard(card, epics)
-                  const doneAt = done ? card.movedToDoneAt : null
-                  const overdue = isOverdue(card.dueDate, done)
-                  const selected = selectedIds.has(card.id)
-                  // Nur greifbar (Drag-Cursor), wenn bearbeitbar und nicht im Auswahlmodus —
-                  // ersetzt zwei verschachtelte Cursor-Ternaries (S3358).
-                  const grabbable = canEdit && !selectionMode
-                  return (
-                    <Paper
-                      key={card.id}
-                      component="article"
-                      data-testid={`card-${card.id}`}
-                      data-dichte={dichte}
-                      draggable={canEdit && !selectionMode}
-                      onDragStart={(e) => zugBeginnen(e, card.id)}
-                      onDragEnd={zugBeenden}
-                      data-zieh-zustand={dragCardId === card.id ? 'bewegt' : undefined}
-                      onClick={() => (selectionMode ? toggleSelect(card.id) : onCardClick?.(card))}
-                      elevation={0}
-                      // Karte als Platte (Entwurf `.karte`, Z. 751–778): Kopf mit Nummer und
-                      // Zuständigen, Titel, Labels, Fuß mit Schild und Frist. Kompakt bleiben Kopf
-                      // und Titel.
-                      sx={{
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: dichte === 'kompakt' ? '4px' : '7px',
-                        px: dichte === 'kompakt' ? '9px' : '11px',
-                        py: dichte === 'kompakt' ? '6px' : '10px',
-                        ...karteSx({ gewaehlt: selected, bewegt: dragCardId === card.id }),
-                        cursor: grabbable ? 'grab' : 'pointer',
-                        '&:active': { cursor: grabbable ? 'grabbing' : 'pointer' },
-                      }}
-                    >
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: '7px', minHeight: 20 }}>
-                        {selectionMode && (
-                          <Checkbox
-                            size="small"
-                            checked={selected}
-                            onChange={() => toggleSelect(card.id)}
-                            onClick={(e) => e.stopPropagation()}
-                            slotProps={{ input: { 'aria-label': `Karte ${card.title} auswählen` } }}
-                            sx={{ p: 0 }}
-                          />
-                        )}
-                        <Box component="span" sx={{ ...ZAHL, fontSize: 11, color: TEXT_SCHWACH }}>{`#${card.number}`}</Box>
-                        {dichte === 'normal' && (
-                          <CardAssignees assigneeIds={card.assignees} members={members} cardTitle={card.title} />
-                        )}
-                        {canEdit && !selectionMode && (
-                          <IconButton
-                            size="small"
-                            aria-label={`Menü ${card.title}`}
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              setMenu({ card, anchor: e.currentTarget })
-                            }}
-                            sx={{ ml: card.assignees.length > 0 && dichte === 'normal' ? 0 : 'auto', mr: '-6px', my: '-4px', p: '2px', color: TEXT_SCHWACH }}
-                          >
-                            <MoreVertIcon fontSize="small" />
-                          </IconButton>
-                        )}
-                      </Box>
-                      <Typography component="h4" sx={{ m: 0, fontSize: 12.5, fontWeight: 500, lineHeight: 1.35 }}>
-                        {card.title}
-                      </Typography>
-                      {dichte === 'normal' && <CardLabels labelIds={card.labels} boardLabels={boardLabels} cardTitle={card.title} />}
-                      {(epic || card.dueDate != null || (doneAt != null && retentionDays > 0)) && (
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                          {epic && (
-                            <EpicBadge epicId={epic.id} title={epic.title} shortcode={epic.shortcode}
-                              onOpen={onEpicOpen ? () => onEpicOpen(epic) : undefined} />
-                          )}
-                          {doneAt != null && retentionDays > 0 && (
-                            <Box component="span" sx={{ ...ZAHL, ml: 'auto', fontSize: 10.5, color: TEXT_SCHWACH }}>
-                              {cleanupCountdownLabel(cleanupDaysRemaining(doneAt, retentionDays))}
-                            </Box>
-                          )}
-                          {card.dueDate != null && (
-                            // Frist wie im Entwurf (`.frist`, `.frist-eng`, Z. 792–793): Plex Mono,
-                            // überfällig zinnoberrot.
-                            <Box
-                              component="span"
-                              aria-label={`Fällig ${card.title}`}
-                              data-ueberfaellig={overdue ? 'ja' : undefined}
-                              sx={{ ...ZAHL, ml: 'auto', fontSize: 10.5, fontWeight: overdue ? 600 : 400, color: overdue ? MELDER.zinnob : TEXT_SCHWACH }}
-                            >
-                              {`fällig ${formatDueDate(card.dueDate)}`}
-                            </Box>
-                          )}
-                        </Box>
-                      )}
-                    </Paper>
-                  )
-                })}
+                {angezeigteKarten.map((card) => (
+                  <BoardKarte
+                    key={card.id}
+                    card={card}
+                    epic={epicOfCard(card, epics)}
+                    done={done}
+                    dichte={dichte}
+                    selectionMode={selectionMode}
+                    selected={selectedIds.has(card.id)}
+                    canEdit={canEdit}
+                    bewegt={dragCardId === card.id}
+                    members={members}
+                    boardLabels={boardLabels}
+                    retentionDays={retentionDays}
+                    onDragStart={(e) => zugBeginnen(e, card.id)}
+                    onDragEnd={zugBeenden}
+                    onSelect={() => toggleSelect(card.id)}
+                    onOpen={() => onCardClick?.(card)}
+                    onMenu={(anchor) => setMenu({ card, anchor })}
+                    onEpicOpen={onEpicOpen}
+                  />
+                ))}
               </Stack>
             </Paper>
           )
