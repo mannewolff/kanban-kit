@@ -235,6 +235,122 @@ Plattform-Admin gilt zwar auch ohne Zeitstempel als freigegeben und kann sich an
 Danach **ab- und wieder anmelden** — das Frontend lädt die Rolle nur beim Login (`/api/me`).
 Anschließend erscheint **„Admin"** in der Seitenleiste.
 
+## Meldeweg der interaktiven Sitzungen
+
+Der [Verbrauch im Leitstand](nutzung.md#verbrauch-leitstand) zählt zwei Gattungen: Nachtläufe und
+interaktive Sitzungen. Nachtläufe meldet der Nacht-Runner, interaktive Sitzungen ein **Hook des
+Kits**. Dieser Abschnitt sagt, was dafür vorliegen muss, was den Erfassungsbeginn setzt, wie lange
+aufbewahrt wird und wo die Erfassung Lücken hat.
+
+Die Tatsachengrundlage — welche Verbrauchsangaben das Sitzungsprotokoll führt, welche
+Hook-Ereignisse Claude Code kennt und was ein frischer Worktree mitbekommt — steht in
+[Befund: Verbrauchsangaben, Hook-Ereignisse und Worktrees](befund-interaktive-sitzungen.md), samt
+den Kommandos, mit denen sie erhoben wurde.
+
+### Voraussetzung: ein projektgebundenes Zugriffstoken im Arbeitsverzeichnis
+
+Beide Gattungen gehen über **dieselbe** Strecke ins Board: `POST /api/kanban/night-runs`,
+angemeldet mit einem **projektgebundenen Zugriffstoken**, ohne Sitzungs-Cookie. Das **Zielprojekt
+kommt aus der Bindung des Tokens** und nicht aus dem Aufruf — eine Meldung kann nur dort landen,
+wofür das Token ausgestellt wurde, und ein Token kann nie mehr als sein Besitzer. Ein Token ohne
+Projektbindung wird abgewiesen.
+
+Daraus folgt die Voraussetzung und gleichzeitig die Grenze: Erfasst wird eine Sitzung genau dann,
+wenn in ihrem **Arbeitsverzeichnis** ein projektgebundenes Zugriffstoken liegt. **Ohne Token bleibt
+die Sitzung außen vor** — sie erzeugt keinen Eintrag, und der Leitstand erfährt nichts von ihr. Eine
+Sitzung außerhalb eines so eingerichteten Projekts (etwa die Arbeit am Kit selbst) zählt damit nicht
+mit. Die Zuordnung läuft ausdrücklich **nicht** über den Repository-Pfad oder einen
+Konfigurationsnamen: Nur die Bindung des Tokens entscheidet.
+
+### Der Hook aus dem Kit
+
+Eingerichtet wird der Hook als `hooks`-Block in der **`.claude/settings.json` des Projekts**, der
+ein Skript des Kits aufruft; Skript und Block bringt das Kit über seinen Installer mit. Eine
+nutzerweite Einstellung unter `~/.claude` wäre falsch — sie meldete aus jedem Verzeichnis, und die
+Erfassung ist projektgebunden.
+
+- **Gemeldet wird am Sitzungsende** (`SessionEnd`) als vollständiger Stand, und davor
+  **fortschreibend und gedrosselt** — höchstens einmal je fünf Minuten — nach einem Zug (`Stop`).
+  Nur am Ende zu melden verlöre jede abgestürzte oder abgebrochene Sitzung; ungedrosselt entstünde
+  je Zug ein HTTP-Aufruf.
+- **Mehrfache Meldungen derselben Sitzung ersetzen einander.** Der fachliche Schlüssel ist der
+  Startzeitpunkt; die Strecke antwortet, ob sie den Eintrag angelegt oder einen vorhandenen ersetzt
+  hat. Eine Sitzung doppelt zu melden erzeugt also keinen zweiten Eintrag.
+- **Die Sitzungen des Nacht-Runners melden über diesen Weg nicht.** Der Hook schweigt, wenn
+  `KIT_AGENT_MODEL` in der Umgebung gesetzt ist — dieselbe Bedingung, an der die Skills den
+  Nachtbetrieb erkennen. Ihr Verbrauch steckt bereits in der Meldung des Runners; ein zweiter
+  Meldeweg zählte ihn ein zweites Mal.
+
+> **Stand.** Die Server-Seite dieses Weges steht: dieselbe Einlieferungsstrecke nimmt die Gattung
+> `INTERACTIVE` an, der Erfassungsbeginn und die getrennten Aufbewahrungsgrenzen sind umgesetzt, und
+> der Leitstand zeigt beide Anteile. Der **Hook selbst liegt im Kit-Repository** und wird von dort
+> ausgeliefert. Solange er in einem Projekt nicht eingerichtet ist, meldet keine interaktive
+> Sitzung — der Leitstand zeigt beim interaktiven Anteil dann „nicht erfasst", und das ist keine
+> Störung, sondern der Zustand eines Projekts ohne Hook.
+
+### Erfassungsbeginn je Projekt
+
+Die Spalte `project.interactive_usage_since` trägt den **Startzeitpunkt der ersten je gemeldeten
+interaktiven Sitzung** dieses Projekts. Gesetzt wird sie **beim ersten Eingang** einer solchen
+Meldung und danach nie wieder; die Bedingung liegt im `UPDATE` selbst, damit zwei gleichzeitig
+eingehende Sitzungen sie nicht beide passieren. Einen Handgriff und eine Umgebungsvariable dafür
+gibt es nicht.
+
+Dieser Zeitpunkt ist die Grenze, an der die Anzeige **„nicht erfasst" von einer echten 0
+unterscheidet**: Ein Zeitraum ganz davor zeigt „nicht erfasst", einer, der ihn schneidet,
+„teilweise erfasst", und danach ist eine 0 eine gemessene 0 (siehe
+[Nutzung](nutzung.md#nicht-erfasst-teilweise-erfasst-und-nicht-gemessen)). Abgeleitet wird er
+bewusst **nicht** aus dem ältesten noch vorhandenen Eintrag — der wandert mit dem Ringpuffer nach
+vorn, und die Unterscheidung „nie erfasst" gegen „erfasst, dann verdrängt" ginge verloren.
+
+Eine nachträgliche Erfassung älterer Sitzungen gibt es nicht: Die Erfassung beginnt mit ihrer
+Einführung. Nachsehen lässt sich der Stand je Projekt mit:
+
+```
+docker compose exec -T postgres psql -U manban -d manban \
+  -c "SELECT id, name, interactive_usage_since FROM project ORDER BY id;"
+```
+
+### Getrennte Ringpuffer-Grenzen
+
+Aufbewahrt wird je Projekt und **je Gattung** begrenzt. Vier Werte stehen dafür in
+`NightRunProperties` (`src/main/java/org/mwolff/manban/nightrun/application/`):
+
+| Eigenschaft in `NightRunProperties` | Konfigurationsschlüssel | Was begrenzt wird | Vorgabe |
+|---|---|---|---|
+| `maxPerProject` | `manban.nightrun.max-per-project` | aufbewahrte **Nachtläufe** | 190 |
+| `maxItemsPerProject` | `manban.nightrun.max-items-per-project` | **verwaiste** Arbeitspakete von Nachtläufen | 2000 |
+| `maxInteractivePerProject` | `manban.nightrun.max-interactive-per-project` | aufbewahrte **interaktive Sitzungen** | 400 |
+| `maxInteractiveItemsPerProject` | `manban.nightrun.max-interactive-items-per-project` | **verwaiste** Arbeitspakete interaktiver Sitzungen | 4000 |
+
+Die Werte werden in `src/main/resources/application.yml` gesetzt; eine eigene `MANBAN_*`-Variable
+führt die `docker-compose.yml` dafür nicht. Ein fehlender oder kleinerer Wert als 1 fällt auf die
+Vorgabe zurück.
+
+**Warum je Gattung ein eigenes Paar:** Interaktive Sitzungen sind deutlich häufiger als Nachtläufe.
+Unter einer gemeinsamen Grenze verdrängten sie die Nachtläufe binnen Tagen und zerstörten die
+bestehende Auswertung. Verdrängt wird deshalb **innerhalb** einer Gattung; die andere bleibt
+unberührt. **Verwaist** heißt: Der Lauf oder die Sitzung ist schon verdrängt, das Arbeitspaket lebt
+weiter, damit die Messwerte einer Karte nicht mit dem Lauf verschwinden. Pakete eines noch
+aufbewahrten Laufs zählen nicht mit und fallen erst mit ihm.
+
+### Einschränkung: Sitzungen in Worktrees
+
+Eine Sitzung in einem **frisch angelegten Git-Worktree** meldet **nicht**. `.claude/` ist in diesem
+Repository unversioniert — versioniert ist allein `.claude/workflow.config.json` —, ein neuer
+Worktree trägt darum weder das Kit noch eine `settings.json` mit dem Hook. Unversionierte Dateien
+kopiert das Werkzeug nur, wenn die Wurzel des Repositorys eine Datei `.worktreeinclude` führt;
+dieses Repository hat keine.
+
+Solche Sitzungen bleiben damit **unerfasst**: Ihr Protokoll entsteht, ihr Verbrauch erscheint im
+Leitstand nicht. Der Befund dazu — samt Prüfkommandos und dem Gegenbeispiel eines älteren
+Worktrees, den eine frühere Fassung des Werkzeugs noch mitversorgt hat — steht in
+[Befund: Worktrees](befund-interaktive-sitzungen.md#worktrees).
+
+**Folge für die Zahlen:** Die Kachel „Gesamt über die Laufzeit" ist die Summe des Aufbewahrten und
+Erfassten. Worktree-Sitzungen und Sitzungen ohne Token fehlen darin, ohne dass die Anzeige das sagen
+könnte — sie weiß von ihnen nichts.
+
 ## Testsuite lokal starten
 
 Betrifft nur, wer das Repository klont und selbst baut — für den reinen Betrieb über

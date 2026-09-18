@@ -10,10 +10,14 @@ Funktionsstand nachgezogen.
 
 ## Inhalt
 
-- [Betrieb & Installation](betrieb.md) — Start via Docker, Umgebungsvariablen, erster Admin, E-Mail/Verifikation.
+- [Betrieb & Installation](betrieb.md) — Start via Docker, Umgebungsvariablen, erster Admin, E-Mail/Verifikation,
+  [Meldeweg der interaktiven Sitzungen](betrieb.md#meldeweg-der-interaktiven-sitzungen) (Token,
+  Hook, Erfassungsbeginn, Aufbewahrungsgrenzen, Worktree-Einschränkung).
 - [Produktions-Deployment (Hostinger)](deployment-hostinger.md) — öffentlicher Betrieb hinter Traefik unter `kanban.mwolff.org`.
 - [Nutzung](nutzung.md) — Registrieren, Projekte, Boards, Karten (Zuständige, Fälligkeit, Labels),
-  Papierkorb, Listen-Ansicht, Ideen-Pool, Nachtlauf, Dashboard, Vorhaben, Mitglieder, Editiermodus.
+  Papierkorb, Listen-Ansicht, Ideen-Pool, Nachtlauf,
+  [Verbrauch im Leitstand](nutzung.md#verbrauch-leitstand) (Gattungen, „ohne Karte", Lebenszeit-Summe,
+  Erfassungslücken), Dashboard, Vorhaben, Mitglieder, Editiermodus.
 - [Rollen & Rechte](rollen-und-rechte.md) — Plattform- vs. Projekt-Rollen, Rechte-Matrix, Admin-Bereich (inkl. Konten sperren).
 - [Befund: Verbrauchsangaben, Hook-Ereignisse und Worktrees](befund-interaktive-sitzungen.md) —
   was das Sitzungsprotokoll an Verbrauch führt, welche Hook-Ereignisse es gibt und was ein frischer
