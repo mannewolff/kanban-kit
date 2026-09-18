@@ -29,3 +29,12 @@ export const menge = (wert: number | undefined): string =>
 /** Ein gemessener Kostenbetrag oder „nicht gemessen" — die Verbrauchs-Schwester von {@link betrag}. */
 export const kosten = (wert: number | undefined): string =>
   wert === undefined ? 'nicht gemessen' : KOSTEN_FORMAT.format(wert)
+
+/**
+ * `null` aus der Antwort heißt „nicht gemessen" — die Formatierer oben kennen dafür `undefined`.
+ *
+ * <p>Steht hier und nicht dreimal in den Verbrauchs-Komponenten (Plan #1042, E5): Die Umdeutung
+ * gehört zu den Formatierern, die sie erwarten, und eine dreifache Kopie derselben Zeile läuft
+ * beim nächsten Gedanken über die 0 auseinander. Die 0 bleibt eine Zahl — sie wurde gemessen.
+ */
+export const ohneNull = (wert: number | null): number | undefined => wert ?? undefined

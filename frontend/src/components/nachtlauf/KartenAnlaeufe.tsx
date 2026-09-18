@@ -168,10 +168,10 @@ export function KartenAnlaeufe({
       (anlaeufe) => {
         if (aktiv) setZustand({ art: 'geladen', anlaeufe })
       },
-      (fehler: unknown) => {
+      (error: unknown) => {
         if (!aktiv) return
         const verborgen =
-          fehler instanceof ApiError && (fehler.status === 403 || fehler.status === 404)
+          error instanceof ApiError && (error.status === 403 || error.status === 404)
         setZustand({ art: verborgen ? 'verborgen' : 'fehler' })
       },
     )

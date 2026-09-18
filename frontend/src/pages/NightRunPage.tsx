@@ -799,7 +799,7 @@ const dokumentNummern = (run: NightRun | undefined): number[] =>
 const letzteErreichteStufe = (
   stufen: NightRunKettenStufen | undefined,
 ): NightRunKettenStufe | undefined =>
-  KETTEN_STUFEN.filter(({ schluessel }) => stufen?.[schluessel] !== undefined).at(-1)?.schluessel
+  KETTEN_STUFEN.findLast(({ schluessel }) => stufen?.[schluessel] !== undefined)?.schluessel
 
 /**
  * Der Grund, mit dem ein Vorgang endete: die **erste Zeile** seines Auszugs. Im Modus `CHAIN` setzt
@@ -1118,10 +1118,13 @@ function bandabschnitt(
  * Vermerk. Sie ist der Grund, warum das Band `role="img"` trägt — die Zahlen darunter werden damit
  * nicht ein zweites Mal einzeln vorgelesen, sondern genau einmal in dieser Reihenfolge.
  */
-const bandAnsage = (abschnitte: readonly Bandabschnitt[]): string =>
-  `Stufenband: ${abschnitte
-    .map((a) => `${a.label} ${a.zahlen}${a.vermerk === null ? '' : `, ${a.vermerk}`}`)
-    .join(' · ')}`
+const bandAnsage = (abschnitte: readonly Bandabschnitt[]): string => {
+  const schritte = abschnitte.map((a) => {
+    const vermerk = a.vermerk === null ? '' : `, ${a.vermerk}`
+    return `${a.label} ${a.zahlen}${vermerk}`
+  })
+  return `Stufenband: ${schritte.join(' · ')}`
+}
 
 
 /**
@@ -1507,11 +1510,12 @@ const umsetzungsKennzahlen = (
   if (item.state === 'GREY') {
     return ''
   }
-  return standItem === undefined
-    ? item.durationMs === undefined
-      ? 'Dauer nicht gemeldet'
-      : formatDuration(item.durationMs / 1000)
-    : vorgangszeile(standItem, ohneKennzahlen)
+  if (standItem !== undefined) {
+    return vorgangszeile(standItem, ohneKennzahlen)
+  }
+  return item.durationMs === undefined
+    ? 'Dauer nicht gemeldet'
+    : formatDuration(item.durationMs / 1000)
 }
 
 /**

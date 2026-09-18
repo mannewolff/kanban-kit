@@ -11,7 +11,7 @@ import {
   type VerbrauchZeitraumArt,
 } from '../../api/nightRunUsage'
 import { dollar } from '../../lib/leitstand'
-import { kosten } from '../../lib/nachtlaufFormat'
+import { kosten, ohneNull } from '../../lib/nachtlaufFormat'
 import {
   kartenText,
   laeufeText,
@@ -48,9 +48,6 @@ import {
   ZEILE_HOVER,
 } from '../leitstand/LeitstandBausteine'
 import { NachtlaufVerbrauchVorhaben } from './NachtlaufVerbrauchVorhaben'
-
-/** `null` aus der Antwort heißt „nicht gemessen" — die Formatierer kennen dafür `undefined`. */
-const ohneNull = (wert: number | null): number | undefined => (wert === null ? undefined : wert)
 
 const ARTEN: ReadonlyArray<{ art: VerbrauchZeitraumArt; label: string }> = [
   { art: 'DAY', label: 'Tag' },
@@ -430,6 +427,10 @@ function Kachel({
   basis: string
   alsZahl?: boolean
 }>) {
+  let anzeigewert: string | null = null
+  if (wert !== null) {
+    anzeigewert = alsZahl ? String(wert) : dollar(wert)
+  }
   return (
     <Box
       component="article"
@@ -439,7 +440,7 @@ function Kachel({
     >
       <Box sx={ETIKETT}>{etikett}</Box>
       <KachelWert
-        wert={wert === null ? null : alsZahl ? String(wert) : dollar(wert)}
+        wert={anzeigewert}
         einheit={einheit}
         leerText="nicht gemessen"
         groesse={26}

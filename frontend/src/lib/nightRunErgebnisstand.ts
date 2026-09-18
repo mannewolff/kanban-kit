@@ -527,6 +527,18 @@ interface ErreichteStufe {
 }
 
 /**
+ * Die Nummern der Pakete einer Stufe als angehaengter Textbaustein, leer wenn keines entstand.
+ *
+ * <p>Die Liste steht vorab in einer eigenen Konstante statt im Textbaustein selbst: dort waere
+ * sie eine Schablone in einer Schablone (Sonar S4624, Issue #894).
+ */
+function paketDokumente(ids: readonly string[]): string {
+  if (ids.length === 0) return ''
+  const nummern = ids.map((id) => `#${id}`).join(', ')
+  return ` ${nummern}`
+}
+
+/**
  * Die erreichten Stufen in der Reihenfolge, in der `stufenDerKette` sie laeuft — aus ihr
  * allein folgt, wie jede ausging (siehe {@link stufenText}); der Stand fuehrt je Stufe
  * keinen eigenen Ausgang.
@@ -544,13 +556,7 @@ function erreichteStufen(stufen: RohStufen): ErreichteStufe[] {
     ...(review === undefined ? [] : [{ name: 'review', dokumente: '' }]),
     ...(pakete === undefined
       ? []
-      : [
-          {
-            name: 'pakete',
-            dokumente:
-              pakete.ids.length === 0 ? '' : ` ${pakete.ids.map((id) => `#${id}`).join(', ')}`,
-          },
-        ]),
+      : [{ name: 'pakete', dokumente: paketDokumente(pakete.ids) }]),
     ...(abdeckung === undefined
       ? []
       : [{ name: 'abdeckung', dokumente: '', grund: abdeckung.grund }]),
@@ -560,6 +566,18 @@ function erreichteStufen(stufen: RohStufen): ErreichteStufe[] {
 /** Der Ausgang der Einheit, wie ihn die letzte erreichte Stufe traegt — samt `grund`. */
 function ausgangDerEinheit(e: RohEinheit): string {
   return typeof e.grund === 'string' ? `${e.ausgang} — ${e.grund}` : e.ausgang
+}
+
+/**
+ * Wie eine einzelne Stufe ausging — die drei Faelle, die {@link stufenText} im Kopf ausbreitet,
+ * als eigene Funktion mit `if`/`return` statt als verschachtelter Ternaer (Sonar S3358, #895).
+ *
+ * @param letzte ob die Stufe die letzte erreichte ist; nur sie traegt den Ausgang der Einheit
+ */
+function stufenErgebnis(stufe: ErreichteStufe, letzte: boolean, e: RohEinheit): string {
+  if (typeof stufe.grund === 'string') return stufe.grund
+  if (!letzte || e.ausgang === 'fertig') return 'gelungen'
+  return ausgangDerEinheit(e)
 }
 
 /**
@@ -586,13 +604,7 @@ function stufenText(e: RohEinheit, kopf: string): string {
   const erreicht = erreichteStufen(e.stufen)
   const zeilen = erreicht.map((stufe, i) => {
     const letzte = i === erreicht.length - 1
-    const ergebnis =
-      typeof stufe.grund === 'string'
-        ? stufe.grund
-        : !letzte || e.ausgang === 'fertig'
-          ? 'gelungen'
-          : ausgangDerEinheit(e)
-    return `${stufe.name}${stufe.dokumente}: ${ergebnis}`
+    return `${stufe.name}${stufe.dokumente}: ${stufenErgebnis(stufe, letzte, e)}`
   })
   return gekuerzt([kopf, ...zeilen].join('\n'))
 }

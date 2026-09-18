@@ -1,13 +1,10 @@
 import Box from '@mui/material/Box'
 import type { VerbrauchVorhaben } from '../../api/nightRunUsage'
 import { epicColor } from '../../lib/epicMeta'
-import { kosten } from '../../lib/nachtlaufFormat'
+import { kosten, ohneNull } from '../../lib/nachtlaufFormat'
 import { kartenText } from '../../lib/verbrauchZeitraum'
 import { MELDER, TEXT_SCHWACH, ZAHL } from '../../theme'
 import { Fuellschiene, Platte } from '../leitstand/LeitstandBausteine'
-
-/** `null` aus der Antwort heißt „nicht gemessen" — die Formatierer kennen dafür `undefined`. */
-const ohneNull = (wert: number | null): number | undefined => (wert === null ? undefined : wert)
 
 /**
  * Die Aufstellung je Vorhaben innerhalb eines Zeitraums (Issue #942, #926 AK 10–12), seit #987 als

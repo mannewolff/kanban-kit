@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { betrag, kosten, menge } from './nachtlaufFormat'
+import { betrag, kosten, menge, ohneNull } from './nachtlaufFormat'
 
 /**
  * Die drei Formatierer der Nachtlauf-Anzeigen (Issue #968). Sie stehen an einer Stelle, weil
@@ -24,5 +24,11 @@ describe('nachtlaufFormat', () => {
     expect(menge(8_883_160)).toBe('8.883.160 Token')
     expect(menge(0)).toBe('0 Token')
     expect(menge(undefined)).toBe('nicht gemessen')
+  })
+
+  it('ohneNull macht aus `null` ein `undefined` und lässt jede Zahl stehen — auch die 0', () => {
+    expect(ohneNull(null)).toBeUndefined()
+    expect(ohneNull(0)).toBe(0)
+    expect(ohneNull(25.98)).toBe(25.98)
   })
 })

@@ -15,6 +15,11 @@ gebaute Frontend ausliefert), **Postgres** und **MinIO** (Objektspeicher für An
   Wer das Projekt nicht nur betreibt, sondern auch **baut und testet**, braucht unter Colima
   zusätzlich zwei Umgebungsvariablen — siehe [Testsuite lokal starten](#testsuite-lokal-starten).
 
+- Browser ab **Chrome 110**, **Safari 16** und **Firefox 115**. Das Frontend nutzt Methoden aus
+  ES2023 (etwa `Array.prototype.findLast`); der Vite-Build übersetzt Methoden nicht in ältere
+  Fassungen, sie müssen also im Browser selbst vorhanden sein. In älteren Browsern bricht die
+  Oberfläche an diesen Stellen ab.
+
 ## Starten
 
 Im Repo-Verzeichnis (dort liegt `docker-compose.yml`):

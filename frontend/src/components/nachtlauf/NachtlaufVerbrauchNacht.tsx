@@ -2,14 +2,11 @@ import Box from '@mui/material/Box'
 import Typography from '@mui/material/Typography'
 import type { VerbrauchKarte, VerbrauchNacht } from '../../api/nightRunUsage'
 import { formatDuration } from '../../lib/formatDuration'
-import { kosten, menge } from '../../lib/nachtlaufFormat'
+import { kosten, menge, ohneNull } from '../../lib/nachtlaufFormat'
 import { zeitraumBeschriftung, zwischenspeicherAnteil } from '../../lib/verbrauchZeitraum'
 import { NACHTLAUF_FARBEN, NACHTLAUF_SCHRIFTEN } from '../../nachtlaufDesign'
 import { NachtlaufAnteilsbalken } from './NachtlaufAnteilsbalken'
 import { NachtlaufKennzahlen, type NachtlaufKennzahl } from './NachtlaufKennzahlen'
-
-/** `null` aus der Antwort heißt „nicht gemessen" — die Formatierer kennen dafür `undefined`. */
-const ohneNull = (wert: number | null): number | undefined => (wert === null ? undefined : wert)
 
 const kennzahl = (label: string, wert: string): NachtlaufKennzahl => ({ label, wert, hinweis: null })
 
