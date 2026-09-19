@@ -479,10 +479,21 @@ function deutePruefAusgang(e: RohEinheit): (Farbe & { excerpt: string }) | null 
   const fest = PRUEF_AUSGAENGE.get(e.ausgang)
   if (fest) return fest
   if (e.ausgang !== 'syntheseOhneBeleg') return null
-  // Der Grund traegt je unbelegtem Fund eine Zeile (`syntheseGrundText`). Fallback `''`
-  // wie bei `zurueckgestellt`/`uebersprungen`: Der Ausgang steht auch ohne ihn fest.
-  const grund = typeof e.grund === 'string' ? e.grund : ''
+  // Der Grund traegt je unbelegtem Fund eine Zeile (`syntheseGrundText`); der Rueckfall auf den
+  // leeren Text steht in {@link grundText}.
+  const grund = grundText(e)
   return { state: 'RED', errorClass: 'AWAITING_DECISION', excerpt: gekuerzt(grund) }
+}
+
+/**
+ * Der Grund der Einheit als Text — `''`, wo der Stand keinen oder keinen stringartigen fuehrt.
+ *
+ * <p>Der Rueckfall auf den leeren Text ist an jeder Stelle derselbe und stand deshalb viermal
+ * woertlich in dieser Datei (Plan #1042, E12): Der Ausgang steht auch ohne Grund fest, der Grund
+ * fuellt nur den Auszug.
+ */
+function grundText(e: RohEinheit): string {
+  return typeof e.grund === 'string' ? e.grund : ''
 }
 
 /**
@@ -506,9 +517,9 @@ function deuteKettenAusgang(e: RohEinheit): (Farbe & { excerpt: string }) | null
   const fest = KETTEN_AUSGAENGE.get(e.ausgang)
   if (fest) return fest
   if (e.ausgang !== 'abgebrochen') return null
-  // Fallback `''` wie bei `zurueckgestellt`/`syntheseOhneBeleg`: Der Ausgang steht auch
-  // ohne Grund fest, und ohne Zeitbudget-Praefix ist er ein harter Abbruch.
-  const grund = typeof e.grund === 'string' ? e.grund : ''
+  // Ohne Zeitbudget-Praefix ist es ein harter Abbruch; der Rueckfall auf den leeren Text
+  // steht in {@link grundText}.
+  const grund = grundText(e)
   if (!grund.startsWith(ZEITBUDGET_PRAEFIX)) {
     return { state: 'RED', errorClass: 'HARD_ABORT', excerpt: gekuerzt(grund) }
   }
@@ -565,7 +576,8 @@ function erreichteStufen(stufen: RohStufen): ErreichteStufe[] {
 
 /** Der Ausgang der Einheit, wie ihn die letzte erreichte Stufe traegt — samt `grund`. */
 function ausgangDerEinheit(e: RohEinheit): string {
-  return typeof e.grund === 'string' ? `${e.ausgang} — ${e.grund}` : e.ausgang
+  const grund = grundText(e)
+  return grund === '' ? e.ausgang : `${e.ausgang} — ${grund}`
 }
 
 /**
@@ -760,39 +772,57 @@ function dokumenteDerEinheit(e: RohEinheit): number | undefined {
   return Array.isArray(e.erzeugt) ? e.erzeugt.length : undefined
 }
 
-/** Die Deutung einer Einheit; `null` heisst: Vokabular unbekannt, also nicht unterstuetzt. */
-function deuteEinheit(e: RohEinheit, modus: NightRunMode): (Farbe & { excerpt: string }) | null {
+/**
+ * Was der Modus ueber die Einheit entscheidet — drei Antworten statt zweier: `null` heisst „in
+ * diesem Modus nicht unterstuetzt", ein Ergebnis heisst „hier schon entschieden", und `undefined`
+ * heisst „der Modus sagt nichts, es gilt das gemeinsame Vokabular darunter".
+ *
+ * <p>NIGHTPLAN und IMPLEMENTATION teilen sich den letzten Zweig; deshalb steht hier eine Kette und
+ * keine Tabelle je Modus (Plan #1042, E12).
+ */
+function modusDeutung(
+  e: RohEinheit,
+  modus: NightRunMode,
+): (Farbe & { excerpt: string }) | null | undefined {
   if (modus === 'REVIEW') {
     if (NIE_IM_PRUEFLAUF.has(e.ausgang)) return null
-    const pruef = deutePruefAusgang(e)
-    if (pruef) return pruef
-  } else if (modus === 'CHAIN') {
+    return deutePruefAusgang(e) ?? undefined
+  }
+  if (modus === 'CHAIN') {
     if (NIE_IN_KETTE.has(e.ausgang)) return null
-    const ketten = deuteKettenAusgang(e)
-    if (ketten) return ketten
-  } else if (NUR_PRUEFLAUF.has(e.ausgang) || NUR_KETTE.has(e.ausgang)) return null
+    return deuteKettenAusgang(e) ?? undefined
+  }
+  return NUR_PRUEFLAUF.has(e.ausgang) || NUR_KETTE.has(e.ausgang) ? null : undefined
+}
 
-  const ohnePruefung = OHNE_PRUEFUNG.get(e.ausgang)
-  if (ohnePruefung) return ohnePruefung
-
+/**
+ * Die beiden Ausgaenge, deren Auszug am mitgelieferten Grund haengt; `undefined` bei jedem
+ * anderen Ausgang.
+ *
+ * <p>Beide sind modus-unabhaengig (Plan #803, Entscheidung 7): `uebersprungen` kennt bereits der
+ * Text-Protokoll-Parser (`nightRunLog.ts`, Muster `^#(\d+) uebersprungen: `). Der Rueckfall auf
+ * den leeren Grund ({@link grundText}) gilt beiden — der Ausgang steht auch ohne ihn fest, und
+ * `uebersprungen` ist kein Befund, traegt also keine Fehlerklasse.
+ */
+function deuteGrundAusgang(e: RohEinheit): (Farbe & { excerpt: string }) | undefined {
   if (e.ausgang === 'zurueckgestellt') {
-    const grund = typeof e.grund === 'string' ? e.grund : ''
+    const grund = grundText(e)
     const farbe = ZURUECKGESTELLT.find((z) => z.trifft(grund)) ?? ZURUECKGESTELLT_SONST
     return { state: farbe.state, errorClass: farbe.errorClass, excerpt: gekuerzt(grund) }
   }
-
-  // Modus-unabhaengig (Plan #803, Entscheidung 7): derselbe Ausgang kennt bereits der
-  // Text-Protokoll-Parser (`nightRunLog.ts`, Muster `^#(\d+) uebersprungen: `). Fallback
-  // `''` bei fehlendem/nicht-stringartigem `grund` spiegelt das Muster von `zurueckgestellt`
-  // oben — kein Befund, deshalb keine Fehlerklasse.
   if (e.ausgang === 'uebersprungen') {
-    const grund = typeof e.grund === 'string' ? e.grund : ''
-    return { state: 'GREY', excerpt: gekuerzt(grund) }
+    return { state: 'GREY', excerpt: gekuerzt(grundText(e)) }
   }
+  return undefined
+}
 
+/**
+ * Erfolg und Fehlschlag: Ihre Farbe haengt am Pruefblock. Jedes fehlende Glied der Kette gibt
+ * `null` — ein Ausgang aus einer Runde ohne Pruefblock ist unvollstaendig, die Farbe haengt am
+ * Nachweis, und ohne ihn bliebe nur Raten.
+ */
+function deutePruefblock(e: RohEinheit): (Farbe & { excerpt: string }) | null {
   if (e.ausgang !== 'erfolg' && e.ausgang !== 'fehlschlag') return null
-  // Ein Ausgang aus einer Runde ohne Pruefblock ist unvollstaendig: Die Farbe haengt
-  // am Nachweis, und ohne ihn bliebe nur Raten.
   const p = e.pruefung
   if (!p) return null
   const zeile = NACH_ZUSTAND.get(p.zustand)
@@ -800,6 +830,20 @@ function deuteEinheit(e: RohEinheit, modus: NightRunMode): (Farbe & { excerpt: s
   const farbe = e.ausgang === 'erfolg' ? zeile.erfolg : zeile.fehlschlag
   if (!farbe) return null
   return { state: farbe.state, errorClass: farbe.errorClass, excerpt: gekuerzt(zeile.auszug(p)) }
+}
+
+/**
+ * Die Deutung einer Einheit; `null` heisst: Vokabular unbekannt, also nicht unterstuetzt.
+ *
+ * <p>Vier Schritte in fester Reihenfolge: was der Modus entscheidet, die Ausgaenge ohne Pruefung,
+ * die Ausgaenge mit Grund, und zuletzt der Pruefblock.
+ */
+function deuteEinheit(e: RohEinheit, modus: NightRunMode): (Farbe & { excerpt: string }) | null {
+  const ausModus = modusDeutung(e, modus)
+  if (ausModus !== undefined) return ausModus
+  const ohnePruefung = OHNE_PRUEFUNG.get(e.ausgang)
+  if (ohnePruefung) return ohnePruefung
+  return deuteGrundAusgang(e) ?? deutePruefblock(e)
 }
 
 /** Eine Einheit in ein Arbeitspaket der Auswertung uebersetzen. */
