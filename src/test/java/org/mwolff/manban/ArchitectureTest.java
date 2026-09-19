@@ -5,8 +5,6 @@ import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 import static com.tngtech.archunit.library.Architectures.layeredArchitecture;
 
 import com.tngtech.archunit.core.domain.JavaClasses;
-import com.tngtech.archunit.core.importer.ClassFileImporter;
-import com.tngtech.archunit.core.importer.ImportOption;
 import com.tngtech.archunit.lang.ArchRule;
 import com.tngtech.archunit.library.dependencies.SlicesRuleDefinition;
 import org.junit.jupiter.api.Test;
@@ -22,20 +20,22 @@ import org.junit.jupiter.api.Test;
  * <p>Bewusst nicht über die {@code archunit-junit5}-Engine
  * ({@code @AnalyzeClasses}/{@code @ArchTest}) ausgeführt: Maven Surefire 3.5.3 registriert die
  * ArchUnit-TestEngine in diesem Projekt nicht (die Regeln liefen dann als „0 Tests" durch, ein
- * bewusst eingebauter Verstoß blieb unentdeckt). Stattdessen werden die Klassen einmalig via {@link
- * ClassFileImporter} (ohne Testklassen, entspricht {@code DoNotIncludeTests}) importiert und die
- * Regeln über reguläre JUnit-Jupiter-Tests geprüft — so werden Verstöße zuverlässig zu
- * Build-Fehlern.
+ * bewusst eingebauter Verstoß blieb unentdeckt). Stattdessen werden die Klassen einmalig in {@link
+ * ArchitekturKlassen} importiert und die Regeln über reguläre JUnit-Jupiter-Tests geprüft — so
+ * werden Verstöße zuverlässig zu Build-Fehlern.
+ *
+ * <p>Die Aufrufer-Whitelists der rechteprüfungsfreien Ports liegen seit Issue #1076 in {@link
+ * PortWhitelistArchitectureTest}.
  */
 class ArchitectureTest {
 
-  /** Produktionsklassen ohne Testklassen (entspricht {@code importOptions = DoNotIncludeTests}). */
+  /**
+   * Produktionsklassen ohne Testklassen. Der Import liegt seit Issue #1076 in {@link
+   * ArchitekturKlassen}, damit er trotz der Aufteilung auf mehrere Testklassen einmal laeuft.
+   */
   // PMD.LooseCoupling: JavaClasses ist der konkrete ArchUnit-API-Typ (kein Interface verfügbar).
   @SuppressWarnings("PMD.LooseCoupling")
-  private static final JavaClasses PRODUKTIONSKLASSEN =
-      new ClassFileImporter()
-          .withImportOption(new ImportOption.DoNotIncludeTests())
-          .importPackages("org.mwolff.manban");
+  private static final JavaClasses PRODUKTIONSKLASSEN = ArchitekturKlassen.PRODUKTIONSKLASSEN;
 
   /**
    * Begrenzt {@code <modul>.application} für Fremdmodule auf die aufgezählte Fassade — alles andere
@@ -53,8 +53,9 @@ class ArchitectureTest {
    *
    * <p>Whitelist-Einträge gelten samt ihrer inneren Klassen ({@code CardService$BoardItemView}),
    * denn die View-Records einer Fassadenmethode sind Teil ihrer Signatur. Ergänzende
-   * Aufrufer-Whitelists (siehe {@link #USER_DISPLAY_NAME_WRITER_HAT_AUFRUFER_WHITELIST}) bleiben
-   * davon unberührt: diese Regel sagt <em>was</em> Vertrag ist, jene <em>wer</em> ihn nutzen darf.
+   * Aufrufer-Whitelists (siehe {@link
+   * PortWhitelistArchitectureTest#USER_DISPLAY_NAME_WRITER_HAT_AUFRUFER_WHITELIST}) bleiben davon
+   * unberührt: diese Regel sagt <em>was</em> Vertrag ist, jene <em>wer</em> ihn nutzen darf.
    *
    * <p><strong>Bewusste Ausnahme vom Grundsatz „kein Fachmodul kennt Interna eines fremden Moduls":
    * das Exception-Vokabular.</strong> Fremde Module werfen und fangen die 404-Exceptions der
@@ -283,6 +284,7 @@ class ArchitectureTest {
           "NextCardNumberWriter",
           "InteractiveUsageSinceWriter",
           "InteractiveUsageSinceReader",
+          "DashboardParticipationReader",
           "ProjectCreatedEvent",
           "ProjectAccessDeniedException");
 
@@ -355,58 +357,6 @@ class ArchitectureTest {
           .as(
               "ratelimit.domain ist modulintern (Zugriff nur ueber die "
                   + "ratelimit.application-Fassade)");
-
-  // --- Aufrufer-Whitelist der rechtepruefungsfreien Schreib-Ports (Issue #463) -----------------
-  // UserDisplayNameWriter und NextCardNumberWriter pruefen bewusst keine Rechte; die Autorisierung
-  // liegt beim Aufrufer. Diese Zusicherung stand bisher nur im Javadoc — jedes weitere Modul, das
-  // einen der Ports injiziert, umgeht damit stillschweigend die vorgelagerte Rechtepruefung.
-  // Deshalb ist der Aufruferkreis hier maschinell auf genau ein autorisierendes Modul begrenzt
-  // (plus das anbietende Modul selbst, in dem Port und Implementierung liegen). Ein neuer Aufrufer
-  // ist kein Versehen mehr, sondern eine bewusste Aenderung dieser Regel.
-  static final ArchRule USER_DISPLAY_NAME_WRITER_HAT_AUFRUFER_WHITELIST =
-      noClasses()
-          .that()
-          .resideOutsideOfPackages(
-              "org.mwolff.manban.auth.application..", "org.mwolff.manban.project.application..")
-          .should()
-          .dependOnClassesThat()
-          .haveNameMatching("org\\.mwolff\\.manban\\.auth\\.application\\.UserDisplayNameWriter")
-          .as(
-              "UserDisplayNameWriter prueft keine Rechte: Aufrufer nur project.application "
-                  + "(MembershipService, MEMBER_REMOVE)");
-
-  static final ArchRule NEXT_CARD_NUMBER_WRITER_HAT_AUFRUFER_WHITELIST =
-      noClasses()
-          .that()
-          .resideOutsideOfPackages(
-              "org.mwolff.manban.project.application..", "org.mwolff.manban.card.application..")
-          .should()
-          .dependOnClassesThat()
-          .haveNameMatching("org\\.mwolff\\.manban\\.project\\.application\\.NextCardNumberWriter")
-          .as(
-              "NextCardNumberWriter prueft keine Rechte: Aufrufer nur card.application "
-                  + "(ProjectStartNumberService, PROJECT_EDIT)");
-
-  // Dritter Port derselben Bauart (Issue #1012): Die Einlieferung einer interaktiven Sitzung setzt
-  // den Erfassungsbeginn am Projekt-Aggregat. Die Autorisierung liegt beim Aufrufer —
-  // NightRunService
-  // .ingest prueft requireOwner als erste Anweisung, wie jeder Nachtlauf-Use-Case (Plan #718, A6).
-  // Seit Issue #1013 gilt dieselbe Grenze fuer den Lese-Port derselben Spalte: Die Verbrauchs-
-  // Auswertung gibt den Zeitpunkt mit, nachdem NightRunUsageService.period requireOwner geprueft
-  // hat.
-  static final ArchRule INTERACTIVE_USAGE_SINCE_PORTS_HABEN_AUFRUFER_WHITELIST =
-      noClasses()
-          .that()
-          .resideOutsideOfPackages(
-              "org.mwolff.manban.project.application..", "org.mwolff.manban.nightrun.application..")
-          .should()
-          .dependOnClassesThat()
-          .haveNameMatching(
-              "org\\.mwolff\\.manban\\.project\\.application\\.InteractiveUsageSince"
-                  + "(Writer|Reader)")
-          .as(
-              "InteractiveUsageSince-Ports pruefen keine Rechte: Aufrufer nur nightrun.application "
-                  + "(NightRunService.ingest und NightRunUsageService.period, je requireOwner)");
 
   // --- Composition-Root: verdrahten ja, Datenzugriff nein (Issue #470) ------------------------
   // org.mwolff.manban.config ist der einzige Ort im Projekt, der aus BOARD_CHANGED_EVENT_IST_
@@ -591,21 +541,6 @@ class ArchitectureTest {
   @Test
   void ratelimitDomainIstModulintern() {
     RATELIMIT_DOMAIN_IST_MODULINTERN.check(PRODUKTIONSKLASSEN);
-  }
-
-  @Test
-  void userDisplayNameWriterHatAufruferWhitelist() {
-    USER_DISPLAY_NAME_WRITER_HAT_AUFRUFER_WHITELIST.check(PRODUKTIONSKLASSEN);
-  }
-
-  @Test
-  void nextCardNumberWriterHatAufruferWhitelist() {
-    NEXT_CARD_NUMBER_WRITER_HAT_AUFRUFER_WHITELIST.check(PRODUKTIONSKLASSEN);
-  }
-
-  @Test
-  void interactiveUsageSincePortsHabenAufruferWhitelist() {
-    INTERACTIVE_USAGE_SINCE_PORTS_HABEN_AUFRUFER_WHITELIST.check(PRODUKTIONSKLASSEN);
   }
 
   @Test

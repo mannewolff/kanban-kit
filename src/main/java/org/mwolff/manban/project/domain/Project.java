@@ -17,16 +17,21 @@ import org.mwolff.manban.common.Identifiable;
  *     verdrängt". Aus der ältesten vorhandenen Sitzung ließe sich die Grenze nicht ableiten, weil
  *     die mit dem Ringpuffer nach vorn wandert. Gesetzt wird er ausschließlich über {@code
  *     ProjectRepository#setInteractiveUsageSinceIfAbsent}, nie über {@code save}.
+ * @param dashboardParticipation ob der Plattform-Leitstand Störungen dieses Projekts zeigt (Issue
+ *     #1076, Plan #1072 E5). Vorgabe {@code false} für Bestand und neue Projekte; das Schalten
+ *     selbst folgt in einem späteren Paket.
  */
 public record Project(
     @Nullable Long id,
     String name,
     Long ownerUserId,
     Instant createdAt,
-    @Nullable Instant interactiveUsageSince)
+    @Nullable Instant interactiveUsageSince,
+    boolean dashboardParticipation)
     implements Identifiable {
 
   public Project withName(String newName) {
-    return new Project(id, newName, ownerUserId, createdAt, interactiveUsageSince);
+    return new Project(
+        id, newName, ownerUserId, createdAt, interactiveUsageSince, dashboardParticipation);
   }
 }

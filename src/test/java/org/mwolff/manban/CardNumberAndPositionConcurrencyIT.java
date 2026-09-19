@@ -389,7 +389,9 @@ class CardNumberAndPositionConcurrencyIT extends AbstractIntegrationTest {
   }
 
   private long project(long ownerUserId) {
-    return projects.save(new Project(null, "Rennen", ownerUserId, Instant.now(), null)).requireId();
+    return projects
+        .save(new Project(null, "Rennen", ownerUserId, Instant.now(), null, false))
+        .requireId();
   }
 
   private long board(long userId, long projectId) {

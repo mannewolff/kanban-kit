@@ -22,7 +22,7 @@ class ProjectControllerTest {
   private ProjectController controller;
 
   private static ProjectView project() {
-    return new ProjectView(1L, "Project", ProjectRole.OWNER, Instant.EPOCH);
+    return new ProjectView(1L, "Project", ProjectRole.OWNER, Instant.EPOCH, false, true);
   }
 
   @BeforeEach

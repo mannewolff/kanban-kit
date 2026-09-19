@@ -4,6 +4,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
 import java.util.Locale;
+import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.auth.application.AuthProperties;
 import org.mwolff.manban.auth.application.UserLookup;
 import org.mwolff.manban.auth.application.UserSummary;
@@ -84,7 +85,8 @@ public class ProjectService {
     Instant now = clock.instant();
     // Der Erfassungsbeginn der interaktiven Sitzungen bleibt leer: Ein frisches Projekt hat noch
     // keine gemeldet (Issue #1012). Gesetzt wird er allein ueber InteractiveUsageSinceWriter.
-    Project project = projects.save(new Project(null, name.trim(), owner.id(), now, null));
+    // Die Teilnahme am Plattform-Leitstand startet aus (Issue #1076, AK 17).
+    Project project = projects.save(new Project(null, name.trim(), owner.id(), now, null, false));
     memberships.save(
         new ProjectMembership(null, project.requireId(), owner.id(), ProjectRole.OWNER, now));
     // Synchron im selben Transaktions-Scope: der Board-seitige Listener legt das Default-Board an;
@@ -97,7 +99,12 @@ public class ProjectService {
         ProjectRole.OWNER,
         authProperties.baseUrl() + "/projects/" + project.requireId());
     return new ProjectView(
-        project.requireId(), project.name(), ProjectRole.OWNER, project.createdAt());
+        project.requireId(),
+        project.name(),
+        ProjectRole.OWNER,
+        project.createdAt(),
+        project.dashboardParticipation(),
+        participationEditable(ProjectRole.OWNER));
   }
 
   @Transactional(readOnly = true)
@@ -116,7 +123,9 @@ public class ProjectService {
                     p.requireId(),
                     p.name(),
                     ownRoles.getOrDefault(p.id(), ProjectRole.OWNER),
-                    p.createdAt()))
+                    p.createdAt(),
+                    p.dashboardParticipation(),
+                    participationEditable(ownRoles.get(p.id()))))
         .toList();
   }
 
@@ -156,8 +165,15 @@ public class ProjectService {
     ProjectMembership membership = permissions.require(userId, projectId, Permission.PROJECT_EDIT);
     Project project = projects.findById(projectId).orElseThrow(ProjectNotFoundException::new);
     Project renamed = projects.save(project.withName(newName.trim()));
+    ProjectRole realRole =
+        permissions.isRealProjectMember(userId, projectId) ? membership.role() : null;
     return new ProjectView(
-        renamed.requireId(), renamed.name(), membership.role(), renamed.createdAt());
+        renamed.requireId(),
+        renamed.name(),
+        membership.role(),
+        renamed.createdAt(),
+        renamed.dashboardParticipation(),
+        participationEditable(realRole));
   }
 
   /**
@@ -178,8 +194,25 @@ public class ProjectService {
     }
   }
 
+  /**
+   * Ob der Benutzer die Teilnahme am Plattform-Leitstand schalten darf: nur mit <b>echter</b>
+   * Mitgliedschaft in der Rolle OWNER oder ADMIN — nicht über die synthetische Rolle, die ein
+   * Plattform-Admin ohne eigene Mitgliedschaft bekommt (Issue #1076, Plan #1072 E7).
+   *
+   * @param realRole die Rolle der echten Mitgliedschaft, {@code null} ohne eine solche
+   */
+  private static boolean participationEditable(@Nullable ProjectRole realRole) {
+    return realRole == ProjectRole.OWNER || realRole == ProjectRole.ADMIN;
+  }
+
   /** Projektdarstellung inkl. der Rolle des anfragenden Benutzers. */
-  public record ProjectView(Long id, String name, ProjectRole role, Instant createdAt) {}
+  public record ProjectView(
+      Long id,
+      String name,
+      ProjectRole role,
+      Instant createdAt,
+      boolean dashboardParticipation,
+      boolean participationEditable) {}
 
   /** Projekt-Kurzinfo für modulfremde Aufrufer: Id und Name (siehe {@link #listAccessible}). */
   public record AccessibleProject(Long id, String name) {}

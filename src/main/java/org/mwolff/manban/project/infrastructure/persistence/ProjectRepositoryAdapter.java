@@ -65,9 +65,10 @@ class ProjectRepositoryAdapter implements ProjectRepository {
   }
 
   /**
-   * {@code interactive_usage_since} fehlt hier absichtlich: Die Spalte ist an der Entity {@code
-   * insertable = false, updatable = false} und gehört dem engen Schreibweg oben. Über {@code save}
-   * kann sie deshalb weder gesetzt noch verloren werden.
+   * {@code interactive_usage_since} und {@code dashboard_participation} fehlen hier absichtlich:
+   * Beide Spalten sind an der Entity {@code insertable = false, updatable = false} und gehören
+   * jeweils einem engen Schreibweg. Über {@code save} können sie deshalb weder gesetzt noch
+   * verloren werden.
    */
   private static ProjectEntity toEntity(Project p) {
     return new ProjectEntity(p.id(), p.name(), p.ownerUserId(), p.createdAt());
@@ -75,6 +76,11 @@ class ProjectRepositoryAdapter implements ProjectRepository {
 
   private static Project toDomain(ProjectEntity e) {
     return new Project(
-        e.getId(), e.getName(), e.getOwnerUserId(), e.getCreatedAt(), e.getInteractiveUsageSince());
+        e.getId(),
+        e.getName(),
+        e.getOwnerUserId(),
+        e.getCreatedAt(),
+        e.getInteractiveUsageSince(),
+        e.isDashboardParticipation());
   }
 }
