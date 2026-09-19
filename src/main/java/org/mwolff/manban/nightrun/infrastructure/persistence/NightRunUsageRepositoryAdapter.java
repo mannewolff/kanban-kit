@@ -6,11 +6,15 @@ import java.time.ZoneId;
 import java.util.Arrays;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.nightrun.application.NightRunUsageRepository;
 import org.mwolff.manban.nightrun.domain.NightRunErrorClass;
+import org.mwolff.manban.nightrun.domain.NightRunKind;
 import org.mwolff.manban.nightrun.domain.NightRunUsage;
 import org.springframework.stereotype.Component;
 
@@ -75,6 +79,23 @@ class NightRunUsageRepositoryAdapter implements NightRunUsageRepository {
   @Override
   public Optional<Instant> oldestRetainedRunStart(long projectId) {
     return abfragen.oldestStartedAt(projectId);
+  }
+
+  @Override
+  public List<RetainedByKind> retentionBoundary(long projectId) {
+    Map<NightRunKind, NightRunUsageJpaRepository.RetentionRow> jeGattung =
+        abfragen.retentionByKind(projectId).stream()
+            .collect(
+                Collectors.toMap(row -> NightRunKind.valueOf(row.getKind()), Function.identity()));
+    return Arrays.stream(NightRunKind.values())
+        .map(
+            kind -> {
+              NightRunUsageJpaRepository.RetentionRow row = jeGattung.get(kind);
+              return row == null
+                  ? new RetainedByKind(kind, 0L, null)
+                  : new RetainedByKind(kind, row.getCount(), row.getOldestStart());
+            })
+        .toList();
   }
 
   private static TotalsByKind jeGattung(NightRunUsageJpaRepository.UsageColumns z) {

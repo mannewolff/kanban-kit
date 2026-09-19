@@ -8,6 +8,7 @@ import java.util.Optional;
 import java.util.Set;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.nightrun.domain.NightRunErrorClass;
+import org.mwolff.manban.nightrun.domain.NightRunKind;
 import org.mwolff.manban.nightrun.domain.NightRunUsage;
 
 /**
@@ -19,8 +20,9 @@ import org.mwolff.manban.nightrun.domain.NightRunUsage;
  * to} ausschließlich über {@code started_at} des Laufs.
  *
  * <p><b>Gezählt werden die aufbewahrten Läufe.</b> Ein Arbeitspaket, dessen Lauf verdrängt wurde
- * (Issue #964), gehört zu keiner Nacht mehr, die die Auswertung als Lauf zeigen könnte — und die
- * Grenze der Aufbewahrung macht {@link #oldestRetainedRunStart} sichtbar (Plan E8).
+ * (Issue #964), gehört zu keiner Nacht mehr, die die Auswertung als Lauf zeigen könnte — und {@link
+ * #retentionBoundary} macht sichtbar, ob und wo eine Gattung tatsächlich verdrängt hat (Plan E8,
+ * Issue #1071).
  *
  * <p>Fehlende Verbrauchsangaben bleiben fehlend: Eine Summe über lauter {@code NULL} ist {@code
  * NULL} und wird nie 0 (Plan E5).
@@ -67,6 +69,30 @@ public interface NightRunUsageRepository {
    * Startzeitpunkt des ältesten aufbewahrten Laufs; leer, wenn das Projekt keinen hat (Plan E8).
    */
   Optional<Instant> oldestRetainedRunStart(long projectId);
+
+  /**
+   * Zahl und ältester Startzeitpunkt der aufbewahrten Einträge, je Gattung getrennt (Issue #1071,
+   * Plan #1067, E8) — die Grundlage der Aufbewahrungsgrenze: Ob eine Gattung ihren Ringpuffer
+   * gefüllt hat, entscheidet erst der Aufrufer anhand von {@code NightRunProperties}, denn eine in
+   * diese Abfrage gegossene Zahl liefe beim nächsten Wert der Property auseinander. Anders als
+   * {@link #oldestRetainedRunStart} — dem gattungsübergreifend ältesten Eintrag — liefert dies je
+   * Gattung eine eigene Zahl und einen eigenen Zeitpunkt, unabhängig davon, ob deren Ringpuffer
+   * voll ist.
+   *
+   * <p>Eine Gattung ohne aufbewahrten Eintrag liefert Zahl 0 und keinen Zeitpunkt.
+   */
+  List<RetainedByKind> retentionBoundary(long projectId);
+
+  /**
+   * Zahl und ältester Startzeitpunkt der aufbewahrten Einträge einer Gattung (Plan E8, Issue
+   * #1071).
+   *
+   * @param kind die Gattung
+   * @param count Zahl der aufbewahrten Einträge dieser Gattung
+   * @param oldestStart Startzeitpunkt des ältesten aufbewahrten Eintrags dieser Gattung; {@code
+   *     null}, wenn die Gattung keinen aufbewahrten Eintrag hat
+   */
+  record RetainedByKind(NightRunKind kind, long count, @Nullable Instant oldestStart) {}
 
   /**
    * Die Summen einer einzelnen Gattung (Issue #1013).

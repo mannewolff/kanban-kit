@@ -206,6 +206,17 @@ interface NightRunUsageJpaRepository extends Repository<NightRunEntity, Long> {
   Optional<Instant> oldestStartedAt(@Param("projectId") long projectId);
 
   /**
+   * Zahl und ältester Startzeitpunkt je Gattung (Issue #1071, Plan #1067, E8) — Grundlage der
+   * Aufbewahrungsgrenze. JPQL statt nativ, aus demselben Grund wie {@link #oldestStartedAt}: Der
+   * Startzeitpunkt kommt so als {@link Instant} aus der Entity. Eine Gattung ohne Eintrag liefert
+   * keine Zeile — das gleicht der Adapter aus.
+   */
+  @Query(
+      "select r.kind as kind, count(r) as count, min(r.startedAt) as oldestStart"
+          + " from NightRunEntity r where r.projectId = :projectId group by r.kind")
+  List<RetentionRow> retentionByKind(@Param("projectId") long projectId);
+
+  /**
    * Die Verbräuche von Läufen und Paketen je Gattung, wie beide Summen-Zeilen sie tragen. Die
    * Zählung kommt mit, weil eine Nacht ohne Lauf, aber mit Sitzungen, sonst nicht als besetzt
    * erkennbar wäre (Issue #1013).
@@ -289,5 +300,14 @@ interface NightRunUsageJpaRepository extends Repository<NightRunEntity, Long> {
     long getDurationMs();
 
     long getCardCount();
+  }
+
+  /** Eine Zeile von {@link #retentionByKind}; {@code kind} kommt als Enum-Name der Entity. */
+  interface RetentionRow {
+    String getKind();
+
+    long getCount();
+
+    @Nullable Instant getOldestStart();
   }
 }
