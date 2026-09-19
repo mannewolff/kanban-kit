@@ -292,6 +292,7 @@ function wieAufbewahrt(ergebnisstand: string): NightRunView[] {
       complete: true,
       updatedAt: null,
       usage: null,
+      noWorkReason: null,
       items: run.items.map((item, position) => wieAufbewahrtesItem({ id: position + 1, ...item })),
     },
   ]
@@ -356,6 +357,7 @@ function aufbewahrt(
     complete: true,
     updatedAt: null,
     usage: null,
+    noWorkReason: null,
     ...rest,
     items: (items ?? []).map(wieAufbewahrtesItem),
   }
@@ -4815,5 +4817,49 @@ describe('NightRunPage — Laufblock im Leitstand-Stil (#988)', () => {
     // Zwei: die Zeitraum-Sicht des Verbrauchs (#987) und die Laufblöcke (#988).
     expect(bereiche).toHaveLength(2)
     expect(bereiche[1]).toContainElement(lauf(0))
+  })
+})
+
+describe('NightRunPage — Lauf ohne Arbeit (#1069)', () => {
+  const GRUND = 'Kein Eintrag trug das Label kit:nightrun'
+
+  it('zeigt am Lauf ohne Arbeit eine Zustandsmarke mit rotem Melder und dem Grund', async () => {
+    renderPage({
+      listen: [
+        [aufbewahrt({ id: 1, startedAt: startedAt(0), processedCount: 0, noWorkReason: GRUND })],
+      ],
+    })
+
+    await screen.findByTestId(`lauf-${startedAt(0)}`)
+    // Gezielt auf die Zustandsmarke: Der Kopf traegt zusaetzlich die rote LED der Laufplatte
+    // selbst, und ein Zaehlen ueber beide sagte nicht, dass die Marke die ihre hat.
+    const marke = within(laufKopfzeile(lauf(0))).getByTestId('lauf-zustand')
+    expect(marke).toHaveTextContent(GRUND)
+    expect(within(marke).getByTestId('led-zinnob')).toBeInTheDocument()
+  })
+
+  /**
+   * Die beiden Marken schliessen einander aus: Ein Lauf ist entweder noch nicht abgeschlossen
+   * oder ohne Arbeit beendet. Beide zugleich waeren ein Widerspruch im Kopf derselben Platte.
+   */
+  it('zeigt am unvollstaendigen Lauf weiterhin nur „unvollständig gemeldet"', async () => {
+    renderPage({
+      listen: [
+        [
+          aufbewahrt({
+            id: 1,
+            startedAt: startedAt(0),
+            complete: false,
+            processedCount: 0,
+            noWorkReason: GRUND,
+          }),
+        ],
+      ],
+    })
+
+    await screen.findByTestId(`lauf-${startedAt(0)}`)
+    const kopf = laufKopfzeile(lauf(0))
+    expect(kopf).toHaveTextContent('unvollständig')
+    expect(kopf).not.toHaveTextContent(GRUND)
   })
 })

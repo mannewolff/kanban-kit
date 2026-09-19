@@ -57,6 +57,7 @@ const lauf = (extra: Partial<NightRunView> = {}): NightRunView => ({
   complete: true,
   updatedAt: null,
   usage: null,
+  noWorkReason: null,
   items: [],
   ...extra,
 })
@@ -304,5 +305,50 @@ describe('leitstand Instrumente eines Laufs (#988)', () => {
     expect({ gruen, gelb, rot, gesamt }).toEqual(
       paketZaehlung(laeufe.flatMap((l) => l.items)),
     )
+  })
+})
+
+describe('leitstand Lauf ohne Arbeit (#1069)', () => {
+  const GRUND = 'Kein Eintrag trug das Label kit:nightrun'
+
+  it('laufMelder meldet zinnob am abgeschlossenen Lauf mit Grund', () => {
+    expect(laufMelder({ complete: true, items: [] }, GRUND)).toBe('zinnob')
+  })
+
+  // "Laeuft noch" schlaegt "ohne Arbeit": Ein laufender Lauf hat noch nichts zu melden.
+  it('laufMelder bleibt stahl am laufenden Lauf, auch mit Grund', () => {
+    expect(laufMelder({ complete: false, items: [] }, GRUND)).toBe('stahl')
+  })
+
+  it('laufMelder bleibt gruen am abgeschlossenen Lauf ohne Grund', () => {
+    expect(laufMelder({ complete: true, items: [] }, null)).toBe('gruen')
+  })
+
+  // E13: Das zweite Argument ist optional -- bestehende Aufrufe bleiben woertlich stehen.
+  it('laufMelder liefert ohne zweites Argument dasselbe wie zuvor', () => {
+    expect(laufMelder({ complete: true, items: [] })).toBe('gruen')
+    expect(laufMelder({ complete: false, items: [] })).toBe('stahl')
+    expect(laufMelder({ complete: true, items: [{ state: 'RED' }] })).toBe('zinnob')
+    expect(laufMelder({ complete: true, items: [{ state: 'YELLOW' }] })).toBe('bernst')
+  })
+
+  it('laufband traegt den Grund als Titel, meldet zinnob und laesst Dauer und Kosten stehen', () => {
+    const ohne = laufband(lauf({ noWorkReason: GRUND, usage: { costUsd: 8.03, inputTokens: null, outputTokens: null, cachedInputTokens: null } }))
+
+    expect(ohne.titel).toBe(GRUND)
+    expect(ohne.melder).toBe('zinnob')
+    expect(ohne.minuten).toBe(252)
+    expect(ohne.kosten).toBe('8,03')
+    expect(ohne.laeuft).toBe(false)
+  })
+
+  it('laufband bleibt ohne Grund bei seinem bisherigen Titel', () => {
+    expect(laufband(lauf({ noWorkReason: null })).titel).toBe('Kette abgeschlossen — 0 Vorgänge')
+  })
+
+  it('laufNotiz haengt den Grund an und laesst ihn ohne Grund weg', () => {
+    expect(laufNotiz(lauf({ noWorkReason: GRUND }))).toContain(GRUND)
+    expect(laufNotiz(lauf({ noWorkReason: null }))).not.toContain('·  ')
+    expect(laufNotiz(lauf({ noWorkReason: null }))).toBe(laufNotiz(lauf()))
   })
 })

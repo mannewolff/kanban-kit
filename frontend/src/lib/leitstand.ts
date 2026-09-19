@@ -82,12 +82,20 @@ export function juengsterLauf(laeufe: readonly NightRunView[]): NightRunView | n
  * und das Anzeigemodell der Nachtlauf-Seite (#988) ebenso; eine zweite Rechenstelle für dieselbe
  * Frage liefe beim nächsten Zustand auseinander.
  */
-export function laufMelder(lauf: {
-  complete: boolean
-  items: readonly { state: NightRunState }[]
-}): Melder {
+export function laufMelder(
+  lauf: {
+    complete: boolean
+    items: readonly { state: NightRunState }[]
+  },
+  ohneArbeit?: string | null,
+): Melder {
+  // Die Reihenfolge traegt eine Aussage: „laeuft noch" schlaegt „ohne Arbeit". Ein laufender Lauf
+  // hat noch nichts zu melden und wird nicht rot (Vorspann der fachlichen Kriterien, #1060).
   if (!lauf.complete) {
     return 'stahl'
+  }
+  if (ohneArbeit != null && ohneArbeit !== '') {
+    return 'zinnob'
   }
   if (lauf.items.some((item) => item.state === 'RED')) {
     return 'zinnob'
@@ -114,7 +122,11 @@ export function laufband(lauf: NightRunView): Laufband {
   const letzter = lauf.items.at(-1)
   const beginn = new Date(lauf.startedAt)
   let titel: string
-  if (lauf.complete) {
+  if (lauf.complete && lauf.noWorkReason != null) {
+    // Der Grund steht statt „abgeschlossen — 0 Vorgaenge": Die Zahl sagt dasselbe noch einmal,
+    // der Grund sagt, warum.
+    titel = lauf.noWorkReason
+  } else if (lauf.complete) {
     titel = `${modus} abgeschlossen — ${vorgaenge(gesamt)}`
   } else if (gesamt === 0) {
     titel = `${modus} läuft`
@@ -124,7 +136,7 @@ export function laufband(lauf: NightRunView): Laufband {
   }
   return {
     titel,
-    melder: laufMelder(lauf),
+    melder: laufMelder(lauf, lauf.noWorkReason),
     laeuft: !lauf.complete,
     vorgang: letzter ? { nummer: letzter.cardNumber, titel: letzter.title } : null,
     zeitpunkt: lauf.complete ? `Beginn ${TAG_ZEIT.format(beginn)}` : `seit ${ZEIT.format(beginn)}`,
@@ -185,7 +197,8 @@ export function tagZeit(iso: string): string {
 /** Die Notiz im Kopf der Platte „Letzter Lauf": Beginn, Dauer, Zahl der Pakete. */
 export function laufNotiz(lauf: NightRunView): string {
   const pakete = lauf.items.length === 1 ? '1 Paket' : `${lauf.items.length} Pakete`
-  return `${tagZeit(lauf.startedAt)} · ${laufDauer(lauf.durationMs)} · ${pakete}`
+  const stand = `${tagZeit(lauf.startedAt)} · ${laufDauer(lauf.durationMs)} · ${pakete}`
+  return lauf.noWorkReason == null ? stand : `${stand} · ${lauf.noWorkReason}`
 }
 
 /**

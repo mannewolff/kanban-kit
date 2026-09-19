@@ -139,6 +139,12 @@ export interface NightRunView {
   /** Zeitpunkt der letzten Meldung; `null`, wenn der Lauf seit dem Anlegen nicht gemeldet wurde. */
   updatedAt: string | null
   usage: NightRunUsageView | null
+  /**
+   * Grund, warum der Lauf nichts abgearbeitet hat (Issue #1068). `null` heisst „der Lauf hat
+   * gearbeitet" oder „eingeliefert vor der Umstellung" — beides ist kein Befund. Felder ohne Wert
+   * kommen als `null` und nicht als fehlender Schluessel (Issue #734).
+   */
+  noWorkReason: string | null
   items: NightRunItemView[]
 }
 

@@ -190,6 +190,11 @@ interface AnzeigeLauf {
   zuletztGemeldetAm: string | undefined
   /** `false`, solange die Kette den Lauf nicht abgeschlossen gemeldet hat. */
   vollstaendig: boolean
+  /**
+   * Grund, warum der Lauf nichts abgearbeitet hat (Issue #1068); `undefined`, wenn er gearbeitet
+   * hat, aus der Zeit vor der Umstellung stammt oder eben erst im Browser geparst wurde.
+   */
+  ohneArbeit: string | undefined
   verbrauch: Verbrauch | undefined
   items: AnzeigeItem[]
 }
@@ -320,6 +325,9 @@ const ausParser = (run: NightRun): AnzeigeLauf => ({
   eingeliefertAm: undefined,
   zuletztGemeldetAm: undefined,
   vollstaendig: !run.incomplete,
+  // Wie die Herkunftsfelder leer: Den Grund kennt nur der Server, ein eben geparster Lauf war
+  // noch bei keinem.
+  ohneArbeit: undefined,
   verbrauch: undefined,
   items: run.items.map((item) => ({
     cardNumber: item.cardNumber,
@@ -375,6 +383,7 @@ const ausSicht = (view: NightRunView): AnzeigeLauf => ({
   eingeliefertAm: view.createdAt,
   zuletztGemeldetAm: view.updatedAt ?? undefined,
   vollstaendig: view.complete,
+  ohneArbeit: view.noWorkReason ?? undefined,
   verbrauch: ausVerbrauch(view.usage),
   items: view.items.map((item) => ({
     cardNumber: item.cardNumber,
@@ -1728,6 +1737,14 @@ function Kopfmarken({
           {UNVOLLSTAENDIG_GEMELDET}
         </LaufMarke>
       )}
+      {/* Die beiden Zustandsmarken schliessen einander aus: Ein Lauf ist entweder noch nicht
+          abgeschlossen oder ohne Arbeit beendet. Beide zugleich waeren ein Widerspruch im Kopf
+          derselben Platte (Issue #1069). */}
+      {lauf.vollstaendig && lauf.ohneArbeit !== undefined && (
+        <LaufMarke testId="lauf-zustand" led={<Led melder="zinnob" />}>
+          {lauf.ohneArbeit}
+        </LaufMarke>
+      )}
       {!offen && kosten !== null && <LaufMarke testId="lauf-kosten">{kosten}</LaufMarke>}
       {/* Die Herkunft wird **hier** aus dem Zwischenspeicher gelesen, nicht in `AnzeigeLauf`
           mitgeführt: Der Server kennt die Unterscheidung nicht, ein Feld am Anzeigemodell müsste
@@ -2053,7 +2070,7 @@ function LaufPanel({
       titel={laufTitel(lauf.startedAt)}
       art={ART_KURZ[lauf.mode]}
       meta={metazeile(lauf, stand)}
-      melder={laufMelder({ complete: lauf.vollstaendig, items: lauf.items })}
+      melder={laufMelder({ complete: lauf.vollstaendig, items: lauf.items }, lauf.ohneArbeit)}
       pulsiert={!lauf.vollstaendig}
       offen={offen}
       onUmschalten={umschalten}
