@@ -30,6 +30,17 @@ export default defineConfig({
     globals: true,
     setupFiles: './src/test/setup.ts',
     css: false,
+    // Stryker kopiert das gesamte `frontend/` in einen Sandkasten unter `.stryker-tmp/`. Bricht
+    // ein Mutationslauf ab, bleibt diese Kopie liegen — samt aller Testdateien. Vitests
+    // Default-`exclude` kennt sie nicht, also sammelt der naechste Testlauf jede Datei doppelt
+    // ein: einmal aus `src/`, einmal eingefroren aus dem Sandkasten. Die Kopie enthaelt nur
+    // `frontend/`, nicht die Repo-Wurzel, weshalb jeder Test, der eine Datei ueber `..` sucht
+    // (z. B. `designQuelle.test.ts` auf `CLAUDE-design.md`), dort ins Leere greift und rot wird.
+    // Der Ordner ist gitignored, taucht also in `git status` nicht auf — der rote Check gehoert
+    // dann zu keiner Aenderung und laesst sich von der ausloesenden Sitzung nicht beheben.
+    // Die Default-Liste wird durch eine eigene ersetzt, deshalb stehen die Vitest-Defaults hier
+    // ausgeschrieben.
+    exclude: ['**/node_modules/**', '**/dist/**', '**/.stryker-tmp/**'],
     // Coverage-Gate (CLAUDE-react.md §Tests): v8-Provider, Build bricht bei Unterschreitung.
     // lcov zusätzlich zu text/html: wird von SonarQube importiert (sonar-project.properties).
     coverage: {
