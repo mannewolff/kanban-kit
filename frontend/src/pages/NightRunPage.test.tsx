@@ -492,75 +492,105 @@ const antwortOhneDetail = (body: string, status = 502) => ({
   text: () => Promise.resolve(body),
 })
 
+/**
+ * Die Antworten des Verbrauchs-Bereichs (Issue #941). Ausgelagert, weil sie keinen Zustand des
+ * Stubs brauchen — anders als Liste und Haeufigkeiten, die ihren Zaehler mitfuehren.
+ */
+function verbrauchsAntwort(url: string) {
+  if (url.startsWith('/api/projects/5/night-run-usage/night?')) {
+    const datum = new URL(url, 'http://localhost').searchParams.get('date') ?? ''
+    return Promise.resolve(antwortOk(verbrauchNacht(datum)))
+  }
+  if (url.startsWith('/api/projects/5/night-run-usage?')) {
+    return Promise.resolve(antwortOk(VERBRAUCH_ZEITRAUM))
+  }
+  return undefined
+}
+
+/**
+ * Eine gefundene Karte oder 404, wahlweise angehalten bis `verzoegert` aufloest — die Form teilen
+ * sich der Abruf nach Nummer und der nach ID.
+ */
+function kartenErgebnis(gefunden: unknown, verzoegert: Promise<void> | undefined) {
+  const antwort = () =>
+    gefunden === undefined ? antwortFehler('Karte nicht gefunden', 404) : antwortOk(gefunden)
+  return verzoegert === undefined ? Promise.resolve(antwort()) : verzoegert.then(antwort)
+}
+
+/** Die beiden Kartenabrufe: nach projektweiter Nummer und nach Karten-ID. */
+function kartenAntwort(url: string, antworten: Antworten) {
+  const nummer = /^\/api\/projects\/5\/cards\/by-number\/(\d+)$/.exec(url)
+  if (nummer) {
+    return kartenErgebnis(antworten.karten?.[Number(nummer[1])], antworten.kartenVerzoegert)
+  }
+  const kartenId = /^\/api\/cards\/(\d+)$/.exec(url)
+  if (kartenId) {
+    return kartenErgebnis(
+      antworten.kartenNachId?.[Number(kartenId[1])],
+      antworten.kartenNachIdVerzoegert,
+    )
+  }
+  return undefined
+}
+
+/**
+ * Eine Folge von Antworten: je Aufruf die naechste, die letzte gilt fuer alle weiteren. Den
+ * Zaehler traegt der Abschluss statt einer Variablen im Stub — Liste und Haeufigkeiten teilen
+ * sich damit dieselbe Mechanik, statt sie zweimal zu schreiben.
+ */
+function folge(staende: readonly unknown[]) {
+  let index = 0
+  return () => {
+    const daten = staende[Math.min(index, staende.length - 1)]
+    index += 1
+    return Promise.resolve(antwortOk(daten))
+  }
+}
+
+/** Die vier Ausgaenge des Sendepfads: Netzfehler, Antwort ohne `detail`, Fehler, Erfolg. */
+function submitAntwort(submit: Antworten['submit']) {
+  if (submit?.netzfehler === true) {
+    return Promise.reject(new TypeError('Failed to fetch'))
+  }
+  if (submit?.rohText !== undefined) {
+    return Promise.resolve(antwortOhneDetail(submit.rohText))
+  }
+  return Promise.resolve(
+    submit?.fehler === undefined ? antwortOk(submit?.ergebnis ?? []) : antwortFehler(submit.fehler),
+  )
+}
+
 function stubFetch(antworten: Antworten) {
-  let listenIndex = 0
-  let zaehlerIndex = 0
+  const naechsteListe = folge(antworten.listen ?? [[]])
+  const naechsterZaehler = folge(antworten.zaehler ?? [{}])
   vi.stubGlobal(
     'fetch',
     vi.fn((url: string, init?: RequestInit) => {
       const method = init?.method ?? 'GET'
       anfragen.push({ url, method, body: String(init?.body ?? '') })
 
-      // Der Verbrauchs-Bereich (Issue #941) fragt beim Öffnen den Tageszeitraum und die Nacht ab.
-      if (url.startsWith('/api/projects/5/night-run-usage/night?')) {
-        const datum = new URL(url, 'http://localhost').searchParams.get('date') ?? ''
-        return Promise.resolve(antwortOk(verbrauchNacht(datum)))
-      }
-      if (url.startsWith('/api/projects/5/night-run-usage?')) {
-        return Promise.resolve(antwortOk(VERBRAUCH_ZEITRAUM))
-      }
+      const verbrauch = verbrauchsAntwort(url)
+      if (verbrauch) return verbrauch
+
       if (url === '/api/projects') {
         return Promise.resolve(antwortOk([{ id: 5, name: 'Team', role: 'OWNER', createdAt: '' }]))
       }
       if (url === '/api/projects/5/night-runs' && method === 'GET') {
-        if (antworten.listenFehler !== undefined) {
-          return Promise.resolve(antwortFehler(antworten.listenFehler, 403))
-        }
-        const listen = antworten.listen ?? [[]]
-        const daten = listen[Math.min(listenIndex, listen.length - 1)]
-        listenIndex += 1
-        return Promise.resolve(antwortOk(daten))
+        return antworten.listenFehler === undefined
+          ? naechsteListe()
+          : Promise.resolve(antwortFehler(antworten.listenFehler, 403))
       }
       if (url === '/api/projects/5/night-runs/error-class-counts') {
-        if (antworten.zaehlerFehler !== undefined) {
-          return Promise.resolve(antwortFehler(antworten.zaehlerFehler, 403))
-        }
-        const staende = antworten.zaehler ?? [{}]
-        const daten = staende[Math.min(zaehlerIndex, staende.length - 1)]
-        zaehlerIndex += 1
-        return Promise.resolve(antwortOk(daten))
+        return antworten.zaehlerFehler === undefined
+          ? naechsterZaehler()
+          : Promise.resolve(antwortFehler(antworten.zaehlerFehler, 403))
       }
       if (url === '/api/projects/5/night-runs' && method === 'POST') {
-        if (antworten.submit?.netzfehler === true) {
-          return Promise.reject(new TypeError('Failed to fetch'))
-        }
-        if (antworten.submit?.rohText !== undefined) {
-          return Promise.resolve(antwortOhneDetail(antworten.submit.rohText))
-        }
-        return Promise.resolve(
-          antworten.submit?.fehler === undefined
-            ? antwortOk(antworten.submit?.ergebnis ?? [])
-            : antwortFehler(antworten.submit.fehler),
-        )
+        return submitAntwort(antworten.submit)
       }
-      const nummer = /^\/api\/projects\/5\/cards\/by-number\/(\d+)$/.exec(url)
-      if (nummer) {
-        const gefunden = antworten.karten?.[Number(nummer[1])]
-        const antwort = () =>
-          gefunden === undefined ? antwortFehler('Karte nicht gefunden', 404) : antwortOk(gefunden)
-        return antworten.kartenVerzoegert === undefined
-          ? Promise.resolve(antwort())
-          : antworten.kartenVerzoegert.then(antwort)
-      }
-      const kartenId = /^\/api\/cards\/(\d+)$/.exec(url)
-      if (kartenId) {
-        const gefunden = antworten.kartenNachId?.[Number(kartenId[1])]
-        const antwort = () =>
-          gefunden === undefined ? antwortFehler('Karte nicht gefunden', 404) : antwortOk(gefunden)
-        return antworten.kartenNachIdVerzoegert === undefined
-          ? Promise.resolve(antwort())
-          : antworten.kartenNachIdVerzoegert.then(antwort)
-      }
+      const karte = kartenAntwort(url, antworten)
+      if (karte) return karte
+
       return Promise.reject(new Error(`unerwartete Anfrage: ${method} ${url}`))
     }),
   )

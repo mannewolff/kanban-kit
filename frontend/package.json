@@ -10,7 +10,6 @@
     "preview": "vite preview",
     "test": "vitest run",
     "lint": "eslint src",
-    "lint:sonar": "eslint -c eslint.sonar.config.js src",
     "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
