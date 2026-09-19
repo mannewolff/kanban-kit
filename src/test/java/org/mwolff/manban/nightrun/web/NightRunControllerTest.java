@@ -145,6 +145,7 @@ class NightRunControllerTest {
                 "Fehler: kaputt",
                 true,
                 null,
+                null,
                 List.of(
                     new NewNightRunItem(
                         721,
@@ -158,7 +159,7 @@ class NightRunControllerTest {
     assertThat(uebergeben.get(1))
         .isEqualTo(
             new NewNightRun(
-                ZWEITER, NightRunMode.REVIEW, 10L, 0, 0, 0, null, true, null, List.of()));
+                ZWEITER, NightRunMode.REVIEW, 10L, 0, 0, 0, null, true, null, null, List.of()));
   }
 
   /**
@@ -199,6 +200,7 @@ class NightRunControllerTest {
                 0,
                 null,
                 true,
+                null,
                 null,
                 List.of(
                     new NewNightRunItem(
@@ -384,6 +386,7 @@ class NightRunControllerTest {
                     true,
                     null,
                     null,
+                    null,
                     List.of(
                         new NightRunItemView(
                             21L,
@@ -435,6 +438,7 @@ class NightRunControllerTest {
                     NightRunOrigin.UPLOAD,
                     null,
                     true,
+                    null,
                     null,
                     null,
                     List.of(

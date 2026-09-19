@@ -72,6 +72,10 @@ class NightRunEntity {
   @Column(name = "updated_at")
   private @Nullable Instant updatedAt;
 
+  /** Grund ohne Arbeit (Issue #1068); {@code null} heisst „hat gearbeitet" oder „Bestand". */
+  @Column(name = "no_work_reason")
+  private @Nullable String noWorkReason;
+
   @Column(name = "cost_usd")
   private @Nullable BigDecimal costUsd;
 
@@ -146,6 +150,10 @@ class NightRunEntity {
 
   @Nullable Instant getUpdatedAt() {
     return updatedAt;
+  }
+
+  @Nullable String getNoWorkReason() {
+    return noWorkReason;
   }
 
   @Nullable BigDecimal getCostUsd() {

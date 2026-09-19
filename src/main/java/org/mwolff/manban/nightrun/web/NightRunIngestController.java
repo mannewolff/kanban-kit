@@ -2,6 +2,7 @@ package org.mwolff.manban.nightrun.web;
 
 import static org.mwolff.manban.nightrun.web.NightRunController.COMMIT_HASH_MAX;
 import static org.mwolff.manban.nightrun.web.NightRunController.MAX_ITEMS_PER_RUN;
+import static org.mwolff.manban.nightrun.web.NightRunController.NO_WORK_REASON_MAX;
 import static org.mwolff.manban.nightrun.web.NightRunController.TITLE_MAX;
 
 import jakarta.validation.Valid;
@@ -99,6 +100,7 @@ class NightRunIngestController {
         null,
         Boolean.TRUE.equals(request.complete()),
         NightRunUsageRequest.toDomain(request.usage()),
+        request.noWorkReason(),
         request.items().stream().map(NightRunIngestController::item).toList());
   }
 
@@ -130,6 +132,11 @@ class NightRunIngestController {
    * @param kind Gattung des Eintrags; fehlt sie, gilt {@link NightRunKind#NIGHT} (Issue #1012).
    *     Bewusst optional und nicht {@code @NotNull}: Eine ältere Kit-Kopie kennt das Feld nicht,
    *     und ihre Meldung soll weiterhin ankommen statt an der Prüfung zu scheitern.
+   * @param noWorkReason Grund, warum nichts abzuarbeiten war (Issue #1068). Additiv und
+   *     {@code @Nullable} aus demselben Grund wie {@code kind} (Issue #1012): Eine ältere Kit-Kopie
+   *     kennt das Feld nicht und meldet unverändert weiter; ihr Lauf bekommt dann den Rückfalltext
+   *     des Servers statt einer abgewiesenen Meldung. Ob der Wert überhaupt am Lauf landet,
+   *     entscheidet der Dienst — gemeldet heißt nicht gesetzt.
    */
   record IngestRequest(
       @NotNull Instant startedAt,
@@ -141,6 +148,7 @@ class NightRunIngestController {
       int unparsedCount,
       @NotNull Boolean complete,
       @Nullable @Valid NightRunUsageRequest usage,
+      @Nullable @Size(max = NO_WORK_REASON_MAX) String noWorkReason,
       @NotNull @Size(max = MAX_ITEMS_PER_RUN) List<@Valid @NotNull IngestItemRequest> items) {}
 
   /** Ein gemeldetes Arbeitspaket. */

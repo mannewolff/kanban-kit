@@ -43,6 +43,14 @@ import org.springframework.transaction.annotation.Transactional;
 @SuppressWarnings("PMD.CouplingBetweenObjects")
 public class NightRunService {
 
+  /**
+   * Rueckfalltext fuer einen Lauf ohne Arbeit, der keinen Grund meldet (Issue #1068, AK 2 der
+   * fachlichen Quelle #1060). Er entsteht am Server und nicht im Frontend (Plan #1067, E4):
+   * Laufplatte, Laufband und „Letzter Lauf" lesen denselben Wert, drei Einsetzstellen liefen
+   * auseinander.
+   */
+  static final String GRUND_UNBEKANNT = "Nichts abgearbeitet — Grund unbekannt";
+
   private final NightRunRepository runs;
   private final PermissionChecker permissions;
   private final InteractiveUsageSinceWriter erfassungsbeginn;
@@ -148,7 +156,9 @@ public class NightRunService {
             tokenName,
             meldung.complete(),
             now,
-            meldung.usage());
+            meldung.usage(),
+            grundOhneArbeit(
+                kind, meldung.complete(), meldung.processedCount(), meldung.noWorkReason()));
 
     // Wie beim Upload-Weg: verwaiste Pakete eines verdrängten Laufs zuerst weg (#965).
     runs.deleteOrphanItemsOfRun(projectId, meldung.startedAt());
@@ -239,7 +249,37 @@ public class NightRunService {
         null,
         submission.complete(),
         null,
-        submission.usage());
+        submission.usage(),
+        // Der Upload-Weg fuehrt kein Grund-Feld (Plan #1067, E4): Ein hochgeladenes Protokoll
+        // kommt aus der Datei, nicht aus dem Runner. Ein Lauf ohne Arbeit landet damit im
+        // Rueckfalltext -- angezeigt wird er trotzdem, nur ohne die Begruendung des Runners.
+        grundOhneArbeit(
+            NightRunKind.NIGHT, submission.complete(), submission.processedCount(), null));
+  }
+
+  /**
+   * Der Grund, warum ein Lauf nichts abgearbeitet hat — oder {@code null}, wenn die Frage sich
+   * nicht stellt (Issue #1068, Plan #1067).
+   *
+   * <p>Drei Faelle liefern {@code null}, und jeder ist ein Normalfall statt eines Befundes: Eine
+   * interaktive Sitzung arbeitet keine Arbeitspakete ab, ihre 0 sagt nichts (E6). Ein nicht
+   * abgeschlossen gemeldeter Lauf ist noch unterwegs. Und ein Lauf mit bearbeiteten Paketen hat
+   * gearbeitet.
+   *
+   * <p>Gemessen wird an {@code processedCount} — der vom Runner <b>gemeldeten</b> Zahl (E5),
+   * derselben, die die Metazeile als „N bearbeitet" zeigt. Ausdruecklich keine zweite Rechnung
+   * ueber die Arbeitspakete: Zwei Zaehlweisen fuer dieselbe Aussage liefen auseinander, und die
+   * Anzeige zeigte dann eine 0 neben einem gruenen Melder.
+   *
+   * <p>Ein gemeldeter, aber leerer Grund gilt wie ein fehlender. AK 2 verlangt einen Text, nicht
+   * ein gesetztes Feld — ein leerer Grund erschiene in der Anzeige als Luecke.
+   */
+  private static @Nullable String grundOhneArbeit(
+      NightRunKind kind, boolean complete, int processedCount, @Nullable String gemeldet) {
+    if (kind != NightRunKind.NIGHT || !complete || processedCount > 0) {
+      return null;
+    }
+    return gemeldet == null || gemeldet.isBlank() ? GRUND_UNBEKANNT : gemeldet;
   }
 
   /**
@@ -297,6 +337,7 @@ public class NightRunService {
         run.complete(),
         run.updatedAt(),
         run.usage(),
+        run.noWorkReason(),
         items);
   }
 
@@ -326,6 +367,7 @@ public class NightRunService {
       @Nullable String unparsedSample,
       boolean complete,
       @Nullable NightRunUsage usage,
+      @Nullable String noWorkReason,
       List<NewNightRunItem> items) {}
 
   /** Ein einzulieferndes Arbeitspaket ohne technische Felder. */
@@ -363,6 +405,7 @@ public class NightRunService {
       boolean complete,
       @Nullable Instant updatedAt,
       @Nullable NightRunUsage usage,
+      @Nullable String noWorkReason,
       List<NightRunItemView> items) {}
 
   /** Darstellung eines Arbeitspakets. */

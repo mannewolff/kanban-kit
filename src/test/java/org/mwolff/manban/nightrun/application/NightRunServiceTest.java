@@ -366,6 +366,7 @@ class NightRunServiceTest {
         "Rest",
         true,
         null,
+        null,
         List.of(items));
   }
 
@@ -398,7 +399,17 @@ class NightRunServiceTest {
       @Nullable NightRunUsage usage,
       NightRunService.NewNightRunItem... items) {
     return new NightRunService.NewNightRun(
-        startedAt, NightRunMode.CHAIN, 1_000L, 1, 0, 0, null, complete, usage, List.of(items));
+        startedAt,
+        NightRunMode.CHAIN,
+        1_000L,
+        1,
+        0,
+        0,
+        null,
+        complete,
+        usage,
+        null,
+        List.of(items));
   }
 
   private NightRun gemeldeterLauf() {
@@ -761,6 +772,7 @@ class NightRunServiceTest {
         TOKEN,
         true,
         FIXED,
+        null,
         null);
   }
 
@@ -799,6 +811,95 @@ class NightRunServiceTest {
         .containsExactly(
             org.assertj.core.groups.Tuple.tuple(T2, NightRunState.GREEN),
             org.assertj.core.groups.Tuple.tuple(T1, NightRunState.RED));
+  }
+
+  // --- Lauf ohne Arbeit: der Grund am Lauf (Issue #1068, Plan #1067) -----------------------
+
+  /** Der Rueckfalltext des Servers (E4, AK 2): Ein Lauf ohne Arbeit steht nie ohne Text da. */
+  private static final String RUECKFALL = "Nichts abgearbeitet — Grund unbekannt";
+
+  private static final String GEMELDETER_GRUND = "Kein Eintrag trug das Label kit:nightrun";
+
+  /** Eine Meldung, die nichts abgearbeitet hat: {@code processedCount = 0} (E5). */
+  private static NightRunService.NewNightRun ohneArbeit(
+      Instant startedAt, boolean complete, @Nullable String grund) {
+    return new NightRunService.NewNightRun(
+        startedAt, NightRunMode.CHAIN, 1_000L, 0, 0, 0, null, complete, null, grund, List.of());
+  }
+
+  /** Derselbe Fall auf dem Upload-Weg, der kein Grund-Feld kennt. */
+  private static NightRunService.NewNightRun hochgeladenOhneArbeit(Instant startedAt) {
+    return new NightRunService.NewNightRun(
+        startedAt, NightRunMode.IMPLEMENTATION, 1_000L, 0, 0, 0, null, true, null, null, List.of());
+  }
+
+  @Test
+  void ingest_setztDenRueckfalltext_wennEinNachtlaufOhneArbeitKeinenGrundMeldet() {
+    service.ingest(USER, PROJECT, TOKEN, NightRunKind.NIGHT, ohneArbeit(T1, true, null));
+
+    assertThat(gemeldeterLauf().noWorkReason()).isEqualTo(RUECKFALL);
+  }
+
+  @Test
+  void ingest_uebernimmtDenGemeldetenGrundWoertlich() {
+    service.ingest(
+        USER, PROJECT, TOKEN, NightRunKind.NIGHT, ohneArbeit(T1, true, GEMELDETER_GRUND));
+
+    assertThat(gemeldeterLauf().noWorkReason()).isEqualTo(GEMELDETER_GRUND);
+  }
+
+  /**
+   * Leer ist wie nicht gemeldet: Ein Runner, der das Feld mitschickt aber nicht fuellt, darf keinen
+   * leeren Text an die Anzeige durchreichen — AK 2 verlangt einen Text, nicht ein Feld.
+   */
+  @Test
+  void ingest_faelltAufDenRueckfalltextZurueck_wennDerGemeldeteGrundLeerIst() {
+    service.ingest(USER, PROJECT, TOKEN, NightRunKind.NIGHT, ohneArbeit(T1, true, "   "));
+
+    assertThat(gemeldeterLauf().noWorkReason()).isEqualTo(RUECKFALL);
+  }
+
+  @Test
+  void ingest_laesstDenGrundLeer_wennDerLaufGearbeitetHat() {
+    service.ingest(USER, PROJECT, TOKEN, NightRunKind.NIGHT, meldung(T1, true, null));
+
+    assertThat(gemeldeterLauf().noWorkReason()).isNull();
+  }
+
+  @Test
+  void ingest_laesstDenGrundLeer_wennDerLaufNichtAbgeschlossenIst() {
+    service.ingest(USER, PROJECT, TOKEN, NightRunKind.NIGHT, ohneArbeit(T1, false, null));
+
+    assertThat(gemeldeterLauf().noWorkReason()).isNull();
+  }
+
+  /**
+   * Die Gattung entscheidet vor dem gemeldeten Wert (E6): Eine Sitzung arbeitet keine Pakete ab,
+   * ihre 0 ist der Normalfall und kein Befund. Der Grund wird hier absichtlich <b>mitgemeldet</b> —
+   * eine Regel, die nur auf den fehlenden Grund sieht, bestuende den Fall sonst zufaellig.
+   */
+  @Test
+  void ingest_laesstDenGrundLeer_beiEinerInteraktivenSitzung() {
+    service.ingest(
+        USER, PROJECT, TOKEN, NightRunKind.INTERACTIVE, ohneArbeit(T1, true, GEMELDETER_GRUND));
+
+    assertThat(gemeldeterLauf(NightRunKind.INTERACTIVE).noWorkReason()).isNull();
+  }
+
+  @Test
+  void submit_setztDenRueckfalltext_beiEinemHochgeladenenLaufOhneArbeit() {
+    service.submit(USER, PROJECT, List.of(hochgeladenOhneArbeit(T1)));
+
+    assertThat(gemeldeterLauf().noWorkReason()).isEqualTo(RUECKFALL);
+  }
+
+  @Test
+  void list_reichtDenGrundInDieSichtDurch() {
+    service.ingest(USER, PROJECT, TOKEN, NightRunKind.NIGHT, ohneArbeit(T1, true, null));
+
+    assertThat(service.list(USER, PROJECT))
+        .extracting(NightRunService.NightRunView::noWorkReason)
+        .containsExactly(RUECKFALL);
   }
 
   static class FakeNightRunRepository implements NightRunRepository {
@@ -841,7 +942,8 @@ class NightRunServiceTest {
               run.tokenName(),
               run.complete(),
               run.updatedAt(),
-              run.usage()));
+              run.usage(),
+              run.noWorkReason()));
       for (NightRunItem item : items) {
         gespeichertePakete.add(paket(item, run, id));
       }
@@ -880,7 +982,8 @@ class NightRunServiceTest {
               run.tokenName(),
               run.complete(),
               run.updatedAt(),
-              run.usage()));
+              run.usage(),
+              run.noWorkReason()));
       for (NightRunItem item : items) {
         gespeichertePakete.add(paket(item, run, id));
       }

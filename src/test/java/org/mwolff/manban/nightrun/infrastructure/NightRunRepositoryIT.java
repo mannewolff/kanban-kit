@@ -110,6 +110,7 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
         null,
         true,
         null,
+        null,
         null);
   }
 
@@ -200,6 +201,7 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
             null,
             true,
             null,
+            null,
             null);
 
     long id =
@@ -240,6 +242,7 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
             NightRunOrigin.TOKEN,
             "sitzungs-token",
             true,
+            null,
             null,
             null);
 
@@ -357,6 +360,7 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
             NightRunOrigin.UPLOAD,
             null,
             true,
+            null,
             null,
             null);
 
@@ -530,6 +534,7 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
         null,
         true,
         null,
+        null,
         null);
   }
 
@@ -700,6 +705,7 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
             NightRunOrigin.UPLOAD,
             null,
             true,
+            null,
             null,
             null),
         List.of(paket(721, NightRunState.RED)));
@@ -979,7 +985,8 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
             null,
             true,
             null,
-            laufVerbrauch);
+            laufVerbrauch,
+            null);
     NightRunItem paket =
         new NightRunItem(
             null,
@@ -1041,6 +1048,7 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
             langerName,
             false,
             fortgeschrieben,
+            null,
             null);
 
     long runId = runs.insertIfAbsent(maschinell, List.of()).orElseThrow();
@@ -1075,6 +1083,7 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
         "nacht-token",
         complete,
         Instant.parse("2026-09-10T03:22:00Z"),
+        null,
         null);
   }
 
@@ -1162,6 +1171,7 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
             "sitzungs-token",
             true,
             null,
+            null,
             null);
     runs.upsert(alsSitzung, List.of(paket(102, NightRunState.GREEN)));
 
@@ -1194,6 +1204,7 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
             "nacht-token",
             true,
             spaeter,
+            null,
             null);
     runs.upsert(zweite, List.of());
 

@@ -22,6 +22,10 @@ import org.mwolff.manban.common.Identifiable;
  * @param unparsedCount Zahl der ungedeuteten Runner-Zeilen
  * @param unparsedSample Auszug der ungedeuteten Zeilen; {@code null}, wenn es keine gab
  * @param createdAt Einfügezeitpunkt
+ * @param noWorkReason Grund, warum der Lauf nichts abgearbeitet hat (Issue #1068); gesetzt nur an
+ *     Läufen der Gattung {@link NightRunKind#NIGHT}, die abgeschlossen gemeldet wurden und deren
+ *     {@code processedCount} 0 ist. {@code null} heißt „hat gearbeitet" oder „vor der Umstellung
+ *     eingeliefert" — beides ist kein Befund.
  */
 public record NightRun(
     @Nullable Long id,
@@ -39,5 +43,6 @@ public record NightRun(
     @Nullable String tokenName,
     boolean complete,
     @Nullable Instant updatedAt,
-    @Nullable NightRunUsage usage)
+    @Nullable NightRunUsage usage,
+    @Nullable String noWorkReason)
     implements Identifiable {}

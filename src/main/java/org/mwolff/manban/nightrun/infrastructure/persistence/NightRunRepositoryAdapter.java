@@ -63,11 +63,11 @@ class NightRunRepositoryAdapter implements NightRunRepository {
       "INSERT INTO night_run (project_id, started_at, mode, kind, duration_ms, processed_count,"
           + " skipped_count, unparsed_count, unparsed_sample, created_at, origin,"
           + " token_name, complete, updated_at, cost_usd, input_tokens, output_tokens,"
-          + " cached_input_tokens)"
+          + " cached_input_tokens, no_work_reason)"
           + " VALUES (:projectId, :startedAt, :mode, :kind, :durationMs, :processedCount,"
           + " :skippedCount, :unparsedCount, :unparsedSample, :createdAt, :origin,"
           + " :tokenName, :complete, :updatedAt, :costUsd, :inputTokens, :outputTokens,"
-          + " :cachedInputTokens)"
+          + " :cachedInputTokens, :noWorkReason)"
           + " ON CONFLICT (project_id, started_at) DO NOTHING"
           + " RETURNING id";
 
@@ -96,7 +96,8 @@ class NightRunRepositoryAdapter implements NightRunRepository {
           + " unparsed_count = :unparsedCount, unparsed_sample = :unparsedSample,"
           + " origin = :origin, token_name = :tokenName, complete = :complete,"
           + " updated_at = :updatedAt, cost_usd = :costUsd, input_tokens = :inputTokens,"
-          + " output_tokens = :outputTokens, cached_input_tokens = :cachedInputTokens"
+          + " output_tokens = :outputTokens, cached_input_tokens = :cachedInputTokens,"
+          + " no_work_reason = :noWorkReason"
           + " WHERE id = :id";
 
   private static final String DELETE_ITEMS_OF_RUN =
@@ -279,7 +280,8 @@ class NightRunRepositoryAdapter implements NightRunRepository {
             .addValue(
                 "updatedAt",
                 updatedAt == null ? null : zeitpunkt(updatedAt),
-                Types.TIMESTAMP_WITH_TIMEZONE);
+                Types.TIMESTAMP_WITH_TIMEZONE)
+            .addValue("noWorkReason", run.noWorkReason(), Types.VARCHAR);
     verbrauchSchreiben(parameter, run.usage());
     return parameter;
   }
@@ -345,7 +347,8 @@ class NightRunRepositoryAdapter implements NightRunRepository {
         e.isComplete(),
         e.getUpdatedAt(),
         verbrauchLesen(
-            e.getCostUsd(), e.getInputTokens(), e.getOutputTokens(), e.getCachedInputTokens()));
+            e.getCostUsd(), e.getInputTokens(), e.getOutputTokens(), e.getCachedInputTokens()),
+        e.getNoWorkReason());
   }
 
   private static NightRunItem toDomain(NightRunItemEntity e) {
