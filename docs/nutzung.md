@@ -76,8 +76,9 @@ Klick auf eine Karte öffnet das Detail:
   **Anläufe** selbst mit Datum, [Gattung](#zwei-gattungen), Ergebnis, Dauer und Kosten, jüngster
   zuerst, und die Zahl der **Wiederaufnahmen** (ein gescheiterter Anlauf, auf den später ein echter
   Anlauf folgte; ein übersprungener zählt nicht). Fehlende Werte stehen als „nicht gemessen", nie
-  als 0. Den Block sieht nur, wer auch die Nachtlauf-Auswertung sehen darf (Projekt-Rolle `OWNER`);
-  Anläufe verdrängter Läufe bleiben darin erhalten.
+  als 0. Den Block sieht nur, wer auch die Nachtlauf-Auswertung sehen darf (Projekt-Rolle `OWNER`,
+  oder Plattform-Admin eines teilnehmenden Projekts); Anläufe verdrängter Läufe bleiben darin
+  erhalten.
 - **Kommentare:** schreiben; eigene Kommentare löschen (Moderation durch ADMIN/OWNER).
 - **Aktivität:** ein chronologischer Verlauf am Ende des Details — „*Zeitpunkt* · *Person* · *Aktion*".
   Protokolliert werden Anlegen, Bearbeiten, Zuständige geändert, Verschieben, Archivieren und
@@ -199,7 +200,8 @@ Arbeitspakete durchliefen, welche stehenblieben und woran es lag. Er ist **proje
 ein Board gebunden.
 
 Erreichbar über den Sidebar-Eintrag **„Nachtlauf"** (Route `/projects/:projectId/nachtlauf`).
-Sichtbar ist er nur für den **Owner** des Projekts und für **Plattform-Admins** — siehe
+Sichtbar ist er nur für den **Owner** des Projekts und für **Plattform-Admins**, sofern das Projekt
+am [Plattform-Leitstand](#plattform-leitstand) teilnimmt — siehe
 [Rollen & Rechte](rollen-und-rechte.md#projekt-rollen-rechte-matrix).
 
 **Protokoll hineingeben:** Button **„Protokoll einlesen"** oben rechts, dann die Protokolldatei
@@ -257,7 +259,8 @@ erscheint also nach dem Einlesen nicht in der Liste.
 Der **Leitstand** (Sidebar-Eintrag **„Leitstand"** im Board-Kontext, Route
 `/boards/:boardId/leitstand`) führt einen Bereich **„Verbrauch"**: was die Arbeit an diesem Projekt
 an Claude-Code-Verbrauch gekostet hat. Sichtbar ist er — wie die [Nachtlauf](#nachtlauf)-Auswertung
-— nur für den **Owner** des Projekts und für **Plattform-Admins**.
+— nur für den **Owner** des Projekts und für **Plattform-Admins**, sofern das Projekt am
+[Plattform-Leitstand](#plattform-leitstand) teilnimmt.
 
 ### Zwei Gattungen
 
@@ -416,5 +419,21 @@ Sidebar-Eintrag **„Administration"** ein- und ausgeschaltet:
 - **Ist er aktiv,** erscheinen die **Bearbeiten-/Umbenennen-Symbole** (Bleistifte) — etwa zum
   Umbenennen von Projekten, Boards und Spalten sowie zum Anlegen/Bearbeiten/Löschen von Spalten —,
   **sofern du die nötigen Rechte hast**.
+- **Teilnahme am Plattform-Leitstand:** In der Projektliste erscheint bei aktivem Editiermodus je
+  Projekt ein **Ankreuzfeld**, mit dem OWNER und ADMIN mit echter Mitgliedschaft die Teilnahme
+  ihres Projekts am [Plattform-Leitstand](#plattform-leitstand) schalten — der Plattform-Admin
+  schaltet es für ein fremdes Projekt nicht.
 - **Der Alltag bleibt unberührt:** Karten anlegen, verschieben, archivieren und in den Ideen-Pool
   legen funktioniert **unabhängig** vom Editiermodus.
+
+## Plattform-Leitstand
+
+Der **Plattform-Leitstand** ist die Startseite eines **Plattform-Admins** nach dem Anmelden (Sidebar
+„Verwaltung" → „Plattform-Leitstand"). Er zeigt den Bereich **Störungen**: jede nicht quittierte
+Störung aus den Nachtläufen aller Projekte, die am Plattform-Leitstand **teilnehmen** — mit Projekt,
+Zeitpunkt, anklickbarer Lauf-Kennung, Grund und dem Knopf **„Störung löschen"**.
+
+Ob ein Projekt teilnimmt, entscheidet ausschließlich das Projekt selbst — OWNER oder ADMIN mit
+echter Mitgliedschaft, über das Teilnahme-Ankreuzfeld im [Editiermodus](#editiermodus) der
+Projektliste. Der Plattform-Admin sieht nur Störungen teilnehmender Projekte und kann die Teilnahme
+selbst nicht erzwingen.

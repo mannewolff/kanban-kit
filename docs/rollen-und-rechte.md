@@ -32,7 +32,8 @@ Recht). Der Schlüssel in der zweiten Spalte ist der technische Name des Rechts 
 | Karte archivieren, in den Papierkorb legen, wiederherstellen | `TICKET_DELETE` | – | ✓ | ✓ | ✓ |
 | Karte verschieben — Spalte, **anderes Board desselben Projekts**, Ideen-Pool; Spalte nach Kartennummer sortieren | `CARD_MOVE` | – | ✓ | ✓ | ✓ |
 | **Karte in ein anderes Projekt verschieben** | *(Projekt-Rolle `OWNER`)* | – | – | – | ✓ |
-| **Nachtlauf-Auswertung lesen und Protokoll hineingeben** | *(Projekt-Rolle `OWNER`)* | – | – | – | ✓ |
+| **Nachtlauf-Auswertung lesen und Protokoll hineingeben** | *(Projekt-Rolle `OWNER`; zusätzlich Plattform-Admin eines teilnehmenden Projekts)* | – | – | – | ✓ |
+| **Teilnahme am Plattform-Leitstand schalten** | *(Projekt-Rolle `OWNER` oder `ADMIN` — nicht der Plattform-Admin)* | – | – | ✓ | ✓ |
 | Kommentare lesen | `COMMENT_READ` | ✓ | ✓ | ✓ | ✓ |
 | Kommentar schreiben | `COMMENT_CREATE` | – | ✓ | ✓ | ✓ |
 | Kommentar bearbeiten *(nur eigenen)* | `COMMENT_UPDATE` | – | ✓ | ✓ | ✓ |
@@ -80,12 +81,12 @@ Einige Aktionen folgen nicht allein dem Recht aus der Tabelle:
   und die [Nachtlauf-Auswertung](nutzung.md#nachtlauf) lesen sowie Protokolle hineingeben. Das alles
   kann bewusst **nur** der Owner, nicht der Projekt-Admin.
 
-  Neben dem Owner passiert allerdings auch der **Plattform-Admin** diese Prüfung
-  (`PermissionChecker.requireOwner`) — als Super-User hat er auf alle Projekte Vollzugriff, siehe
-  [Plattform-Rollen](#plattform-rollen). „Nur der Owner" grenzt also gegen die *Projekt*-Rollen ab,
-  nicht gegen die Plattform-Ebene. Beim Nachtlauf ist das die bewusste Entscheidung dahinter: Wer
-  die Instanz betreibt, soll die Auswertung eines Projekts auch dann lesen können, wenn er dort
-  kein Mitglied ist.
+  Neben dem Owner passiert allerdings auch der **Plattform-Admin** diese Prüfung — als Super-User
+  hat er auf alle Projekte Vollzugriff, siehe [Plattform-Rollen](#plattform-rollen). „Nur der Owner"
+  grenzt also gegen die *Projekt*-Rollen ab, nicht gegen die Plattform-Ebene. Beim Nachtlauf gilt das
+  nur eingeschränkt: Der Plattform-Admin liest die Nachtlauf-Auswertung, die Anläufe und den
+  Verbrauch eines Projekts ohne eigene Mitgliedschaft **nur, wenn das Projekt am
+  Plattform-Leitstand teilnimmt**. Das Protokoll-Hineingeben (Ingest) bleibt davon unberührt.
 
 ## Plattform-Rollen
 
