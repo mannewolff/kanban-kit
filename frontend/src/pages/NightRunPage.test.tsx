@@ -4863,3 +4863,37 @@ describe('NightRunPage — Lauf ohne Arbeit (#1069)', () => {
     expect(kopf).not.toHaveTextContent(GRUND)
   })
 })
+
+describe('NightRunPage — Abschlussvermerk nur mit Ergebnisstand (#1070)', () => {
+  /**
+   * Der Prueffall aus dem Issue: der Lauf vom 17.09.2026, 17:02 — in elf Minuten fuer 10,10 $ ein
+   * gruenes Paket abgeschlossen, und trotzdem stand „noch nicht abgeschlossen" in der Metazeile.
+   * Der Vermerk hing an der Abwesenheit einer hochgeladenen Datei, nicht am Zustand des Laufs.
+   */
+  it('nennt einen gemeldeten Lauf ohne Ergebnisstand nicht „noch nicht abgeschlossen"', async () => {
+    renderPage({ listen: [wieAufbewahrt(ECHTE_KETTE_STAND)] })
+    const panelEl = await screen.findByTestId(`lauf-${ECHTE_KETTE_START}`)
+
+    panelAufklappen(panelEl)
+
+    await within(panelEl).findByTestId('zustand-791')
+    expect(metazeile()).not.toHaveTextContent('noch nicht abgeschlossen')
+  })
+
+  // Die Aussage ueber den Abschluss traegt allein die Kopfmarke, und die haengt am gemeldeten
+  // Zustand (E7) -- nicht daran, ob jemand eine Datei hochgeladen hat.
+  it('zeigt die Kopfmarke „unvollständig gemeldet" unveraendert am nicht abgeschlossenen Lauf', async () => {
+    renderPage({
+      listen: [
+        [
+          aufbewahrt({ id: 1, startedAt: startedAt(0), complete: false }),
+          aufbewahrt({ id: 2, startedAt: startedAt(30), complete: true }),
+        ],
+      ],
+    })
+
+    await screen.findByTestId(`lauf-${startedAt(30)}`)
+    expect(laufKopfzeile(lauf(0))).toHaveTextContent('unvollständig')
+    expect(laufKopfzeile(lauf(30))).not.toHaveTextContent('unvollständig')
+  })
+})

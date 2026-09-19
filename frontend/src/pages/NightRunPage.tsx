@@ -92,7 +92,6 @@ import {
   type NightRunKettenStufe,
   type NightRunKettenStufen,
   type NightRunMode,
-  type NightRunStand,
   type NightRunState,
   type NightRunStufenvorgaben,
 } from '../lib/nightRunLog'
@@ -718,6 +717,13 @@ const ABSCHLUSS_TEXT = new Map<string, string>([
  * Der Abschluss in Worten — **kein Fall gibt einen Rohwert aus**. `abschluss` ist im Stand eine
  * freie Zeichenkette; ein fremdes Wort ungeprüft auf die Seite zu stellen hieße, dem Betreiber eine
  * Auskunft zu geben, die der Leitstand selbst nicht versteht.
+ *
+ * <p><b>Das Fehlen eines Ergebnisstands ist keine Aussage über den Abschluss</b> (Issue #1070).
+ * Der `undefined`-Fall hier gilt einem <em>vorliegenden</em> Stand ohne `abschluss` — dort sagt die
+ * Datei selbst, dass der Lauf nicht zu Ende lief. Ob die Angabe überhaupt in die Metazeile kommt,
+ * entscheidet deshalb {@link kopfText} am Vorhandensein des Stands, nicht diese Funktion. Was über
+ * den Abschluss des Laufs auszusagen ist, trägt allein die Kopfmarke {@link
+ * UNVOLLSTAENDIG_GEMELDET}, und die hängt am gemeldeten Zustand.
  */
 const abschlussText = (abschluss: string | undefined): string =>
   abschluss === undefined
@@ -1052,13 +1058,27 @@ function artKennzahl(
   return { wert: `${bearbeitet.length} von ${run.items.length}`, label: 'Karten bearbeitet' }
 }
 
-/** Der Kopf der Übersicht: Modell, Label und Abschluss — jede Angabe nur, wo der Stand sie führt. */
-const kopfText = (stand: NightRunStand | undefined): string =>
-  [
+/**
+ * Der Kopf der Übersicht: Modell, Label und Abschluss — jede Angabe nur, wo der Stand sie führt.
+ *
+ * <p><b>Der Abschluss hängt am Vorliegen eines Ergebnisstands</b> (Issue #1070), nicht daran, ob
+ * dieser ein `abschluss`-Feld trägt. Vorher stand der Vermerk bedingungslos da und las sich an
+ * einem per Token gemeldeten Lauf — der nie einen hochgeladenen Stand hat — als „noch nicht
+ * abgeschlossen", obwohl der Lauf fertig war. Die Prüfung gilt deshalb dem <em>Ergebnisstand</em>
+ * und nicht seinen Kopfangaben: Eine hochgeladene Datei ohne Kopfangaben hat hier `stand`
+ * `undefined`, sagt mit ihrem fehlenden Abschluss aber sehr wohl etwas aus.
+ */
+const kopfText = (ergebnisstand: NightRun | undefined): string => {
+  if (ergebnisstand === undefined) {
+    return ''
+  }
+  const stand = ergebnisstand.stand
+  return [
     ...(stand?.modell === undefined ? [] : [stand.modell]),
     ...(stand?.label === undefined ? [] : [`Label ${stand.label}`]),
     abschlussText(stand?.abschluss),
   ].join(' · ')
+}
 
 /**
  * Ein Abschnitt des Stufenbands. Die Form steht seit #916 an der Komponente, die ihn darstellt;
@@ -1775,7 +1795,7 @@ const metazeile = (lauf: AnzeigeLauf, stand: NightRun | undefined): string =>
     laufDauer(lauf.durationMs),
     `${lauf.processedCount} bearbeitet`,
     `${lauf.skippedCount} übergangen`,
-    kopfText(stand?.stand),
+    kopfText(stand),
     ...(lauf.unparsedCount > 0 ? [`Ungedeutete Zeilen: ${lauf.unparsedCount}`] : []),
   ]
     .filter((eintrag) => eintrag !== '')
