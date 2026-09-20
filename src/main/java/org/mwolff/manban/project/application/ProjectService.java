@@ -195,6 +195,41 @@ public class ProjectService {
   }
 
   /**
+   * Schaltet die Teilnahme des Projekts am Plattform-Leitstand (Issue #1077, AK 16, Plan #1072 E6).
+   *
+   * <p>Die Rechteprüfung ist {@link PermissionChecker#requireRealRole} und bewusst keine der
+   * Prüfungen mit Plattform-Admin-Bypass: Die Teilnahme ist die Einwilligung des Projekts, und wer
+   * sie einholt, erteilt sie sich nicht selbst. Erlaubt sind deshalb genau die echten Mitglieder in
+   * der Rolle OWNER oder ADMIN.
+   *
+   * <p>Geschrieben wird über den gezielten Repository-Weg, nicht über {@code withName}/{@code save}
+   * (Plan #1072 E25). Zurück kommt die aktualisierte Sicht, damit das Frontend den neuen Stand ohne
+   * zweiten Aufruf hat.
+   *
+   * @throws ProjectNotFoundException wenn der Benutzer kein echtes Mitglied ist oder das Projekt
+   *     zwischen Prüfung und Lesen verschwindet (404)
+   * @throws ProjectAccessDeniedException wenn die echte Rolle weder OWNER noch ADMIN ist (403)
+   */
+  @Transactional
+  public ProjectView setDashboardParticipation(long userId, long projectId, boolean participating) {
+    permissions.requireRealRole(userId, projectId, ProjectRole.OWNER, ProjectRole.ADMIN);
+    projects.setDashboardParticipation(projectId, participating);
+    Project project = projects.findById(projectId).orElseThrow(ProjectNotFoundException::new);
+    ProjectRole realRole =
+        memberships
+            .findByProjectIdAndUserId(projectId, userId)
+            .map(ProjectMembership::role)
+            .orElseThrow(ProjectNotFoundException::new);
+    return new ProjectView(
+        project.requireId(),
+        project.name(),
+        realRole,
+        project.createdAt(),
+        project.dashboardParticipation(),
+        participationEditable(realRole));
+  }
+
+  /**
    * Ob der Benutzer die Teilnahme am Plattform-Leitstand schalten darf: nur mit <b>echter</b>
    * Mitgliedschaft in der Rolle OWNER oder ADMIN — nicht über die synthetische Rolle, die ein
    * Plattform-Admin ohne eigene Mitgliedschaft bekommt (Issue #1076, Plan #1072 E7).

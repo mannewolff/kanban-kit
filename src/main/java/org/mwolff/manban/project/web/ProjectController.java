@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
@@ -69,8 +70,27 @@ class ProjectController {
     memberships.transferOwnership(userId, id, request.newOwnerUserId());
   }
 
+  /**
+   * Schaltet die Teilnahme des Projekts am Plattform-Leitstand (Issue #1077, Plan #1072 E6).
+   *
+   * <p>Eigener Endpunkt und kein zweites Feld am {@code PATCH /{id}}: Jener Weg ist das Umbenennen
+   * und lässt einen Plattform-Admin passieren; dieser darf ihn ausdrücklich nicht passieren lassen
+   * (AK 16). Zwei gegenläufige Rechteregeln an einem Endpunkt wären eine Abzweigung, die man beim
+   * Lesen übersieht.
+   */
+  @PutMapping("/{id}/dashboard-participation")
+  ProjectView setDashboardParticipation(
+      @AuthenticationPrincipal Long userId,
+      @PathVariable long id,
+      @Valid @RequestBody ParticipationRequest request) {
+    return projects.setDashboardParticipation(userId, id, request.participating());
+  }
+
   /** Request-Body für das Umbenennen. */
   record ProjectRequest(@NotBlank @Size(max = 200) String name) {}
+
+  /** Request-Body für das Schalten der Teilnahme am Plattform-Leitstand. */
+  record ParticipationRequest(@NotNull Boolean participating) {}
 
   /** Request-Body für den Eigentümer-Transfer. */
   record TransferOwnerRequest(@NotNull Long newOwnerUserId) {}

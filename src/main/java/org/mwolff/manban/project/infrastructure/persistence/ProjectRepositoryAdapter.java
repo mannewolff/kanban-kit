@@ -65,6 +65,19 @@ class ProjectRepositoryAdapter implements ProjectRepository {
   }
 
   /**
+   * Gezielter Direkt-Update wie bei den Nachbarspalten (Issue #1077): {@code
+   * dashboard_participation} ist an der Entity {@code insertable = false, updatable = false}, also
+   * erreicht {@code save} sie nicht — und soll sie auch nicht erreichen. Ein unbekanntes Projekt
+   * trifft keine Zeile; das ist kein Fehler, sondern dasselbe Ergebnis wie ein Projekt, das
+   * gleichzeitig gelöscht wurde.
+   */
+  @Override
+  public void setDashboardParticipation(long projectId, boolean participating) {
+    jdbc.update(
+        "UPDATE project SET dashboard_participation = ? WHERE id = ?", participating, projectId);
+  }
+
+  /**
    * {@code interactive_usage_since} und {@code dashboard_participation} fehlen hier absichtlich:
    * Beide Spalten sind an der Entity {@code insertable = false, updatable = false} und gehören
    * jeweils einem engen Schreibweg. Über {@code save} können sie deshalb weder gesetzt noch

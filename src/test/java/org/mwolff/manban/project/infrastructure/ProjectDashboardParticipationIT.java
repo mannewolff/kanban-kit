@@ -13,10 +13,10 @@ import org.springframework.jdbc.core.JdbcTemplate;
 /**
  * Die Teilnahme am Plattform-Leitstand am Projekt-Aggregat (Issue #1076, Plan #1072 E5).
  *
- * <p>Nur der lesende Weg: Das Schalten der Teilnahme selbst folgt in einem späteren Paket. Die
- * Spalte ist wie {@code interactive_usage_since} an der Entity {@code insertable = false, updatable
- * = false} — nur die echte Datenbank belegt, dass der allgemeine Schreibweg ({@code save}) sie
- * weder setzt noch überschreibt.
+ * <p>Lesen und Schalten (Issue #1077). Die Spalte ist wie {@code interactive_usage_since} an der
+ * Entity {@code insertable = false, updatable = false} — nur die echte Datenbank belegt, dass der
+ * allgemeine Schreibweg ({@code save}) sie weder setzt noch überschreibt und dass der gezielte Weg
+ * ({@code setDashboardParticipation}) sie trotzdem erreicht.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE)
 class ProjectDashboardParticipationIT extends AbstractIntegrationTest {
@@ -55,5 +55,48 @@ class ProjectDashboardParticipationIT extends AbstractIntegrationTest {
     var nachher = projects.findById(projectId).orElseThrow();
     assertThat(nachher.name()).isEqualTo("Neuer Name");
     assertThat(nachher.dashboardParticipation()).isFalse();
+  }
+
+  @Test
+  void dasSchaltenSetztDieSpalteUndLaesstDenNamenStehen() {
+    projects.setDashboardParticipation(projectId, true);
+
+    var nachher = projects.findById(projectId).orElseThrow();
+    assertThat(nachher.dashboardParticipation()).isTrue();
+    assertThat(nachher.name()).isEqualTo("P");
+  }
+
+  @Test
+  void dasSchaltenNimmtDieTeilnahmeAuchWiederZurueck() {
+    projects.setDashboardParticipation(projectId, true);
+
+    projects.setDashboardParticipation(projectId, false);
+
+    assertThat(projects.findById(projectId).orElseThrow().dashboardParticipation()).isFalse();
+  }
+
+  /**
+   * Der eigentliche Beleg für Plan #1072 E25: Die Spalte steht an der Entity auf {@code insertable
+   * = false, updatable = false}, also darf der allgemeine Schreibweg sie nicht anfassen. Mit {@code
+   * false} wäre der Test wertlos — ein Überschreiben mit dem Default sähe aus wie ein Bewahren.
+   * Deshalb erst anhaken, dann umbenennen.
+   */
+  @Test
+  void dasUmbenennenUeberschreibtEineGesetzteTeilnahmeNicht() {
+    projects.setDashboardParticipation(projectId, true);
+    var angehakt = projects.findById(projectId).orElseThrow();
+
+    projects.save(angehakt.withName("Umbenannt"));
+
+    var nachher = projects.findById(projectId).orElseThrow();
+    assertThat(nachher.name()).isEqualTo("Umbenannt");
+    assertThat(nachher.dashboardParticipation()).isTrue();
+  }
+
+  @Test
+  void dasSchaltenEinesUnbekanntenProjektsIstEinNoOp() {
+    projects.setDashboardParticipation(projectId + 9999, true);
+
+    assertThat(projects.findById(projectId).orElseThrow().dashboardParticipation()).isFalse();
   }
 }

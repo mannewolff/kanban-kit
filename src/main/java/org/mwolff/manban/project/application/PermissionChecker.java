@@ -125,6 +125,42 @@ public class PermissionChecker {
   }
 
   /**
+   * Stellt sicher, dass der Benutzer im Projekt eine der erlaubten Rollen hat — <b>als einzige
+   * Prüfung dieser Klasse ohne Plattform-Admin-Bypass</b>.
+   *
+   * <p><strong>Das ist kein Versehen, sondern der Zweck (Issue #1077, AK 16).</strong> Überall
+   * sonst ist der Plattform-Admin Super-User und passiert jede Prüfung. Beim Schalten der Teilnahme
+   * am Plattform-Leitstand darf er das nicht: Die Teilnahme ist die Einwilligung des Projekts in
+   * die Einsicht durch den Betreiber, und wer sie einholt, erteilt sie sich nicht selbst. Ein
+   * Plattform-Admin ohne eigene Mitgliedschaft ist hier also ein Nichtmitglied wie jedes andere —
+   * {@link PlatformAdminChecker} wird gar nicht erst befragt. Hat er im Projekt eine <em>echte</em>
+   * Mitgliedschaft in einer erlaubten Rolle, darf er wie jedes andere Mitglied.
+   *
+   * <p>Auch die Rollen-Rechte-Matrix bleibt außen vor: Geprüft wird gegen die aufgezählten Rollen,
+   * nicht gegen ein {@link Permission}. Ein Recht in der Matrix wäre eine Zeile, die für den
+   * Plattform-Admin anders gelten müsste als für alle anderen — genau die Sonderregel, die diese
+   * Methode vermeidet.
+   *
+   * @param erlaubt die zulässigen Rollen; leer bedeutet, dass keine Rolle genügt
+   * @throws ProjectNotFoundException wenn der Benutzer keine echte Mitgliedschaft hat (404, kein
+   *     Existenz-Leak)
+   * @throws ProjectAccessDeniedException wenn die echte Rolle nicht aufgezählt ist (403)
+   */
+  @Transactional(readOnly = true)
+  public void requireRealRole(long userId, long projectId, ProjectRole... erlaubt) {
+    ProjectMembership m =
+        memberships
+            .findByProjectIdAndUserId(projectId, userId)
+            .orElseThrow(ProjectNotFoundException::new);
+    for (ProjectRole rolle : erlaubt) {
+      if (m.role() == rolle) {
+        return;
+      }
+    }
+    throw new ProjectAccessDeniedException();
+  }
+
+  /**
    * Synthetische Mitgliedschaft für einen Plattform-Admin ohne echte Mitgliedschaft (Vollzugriff).
    */
   private ProjectMembership adminMembership(long projectId, long userId) {
