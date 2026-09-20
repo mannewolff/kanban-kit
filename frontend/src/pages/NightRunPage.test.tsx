@@ -1,4 +1,5 @@
 import { ThemeProvider } from '@mui/material/styles'
+import { serverBefund } from '../test/befund'
 import {
   fireEvent,
   render,
@@ -273,8 +274,7 @@ function alsServerModus(mode: NightRunView['mode'] | 'NIGHTPLAN'): NightRunView[
  */
 function wieAufbewahrt(ergebnisstand: string): NightRunView[] {
   const run = gedeutet(ergebnisstand)
-  return [
-    {
+  const lauf: NightRunView = {
       id: 1,
       startedAt: run.startedAt,
       mode: alsServerModus(run.mode),
@@ -294,8 +294,10 @@ function wieAufbewahrt(ergebnisstand: string): NightRunView[] {
       usage: null,
       noWorkReason: null,
       items: run.items.map((item, position) => wieAufbewahrtesItem({ id: position + 1, ...item })),
-    },
-  ]
+      outcome: { verdict: 'SUCCEEDED', decisiveItem: null, noWorkReason: null },
+  }
+  // Der Befund kommt aus dem Szenario, nicht aus einer Vorgabe (Issue #1081).
+  return [{ ...lauf, outcome: serverBefund(lauf) }]
 }
 
 /** Ein Arbeitspaket in der Kurzform der Tests: Was nichts zur Sache tut, bleibt weg. */
@@ -360,6 +362,7 @@ function aufbewahrt(
     noWorkReason: null,
     ...rest,
     items: (items ?? []).map(wieAufbewahrtesItem),
+    outcome: rest.outcome ?? serverBefund({ complete: rest.complete ?? true, noWorkReason: rest.noWorkReason, items: (items ?? []).map(wieAufbewahrtesItem) }),
   }
 }
 
@@ -2739,6 +2742,25 @@ describe('NightRunPage — Zustände, Kennzahlen und Auszüge', () => {
     // Text **und** Farbe tragen die Aussage (CLAUDE-react.md Zeile 142): der Satz in der
     // aufgeklappten Zeile, die Farbe in der LED.
     expect(melderVon(700)).toBe('led-bernst')
+  })
+
+  /**
+   * Plan #1072 E28: Der eben geparste Lauf ist noch bei keinem Server gewesen und traegt deshalb
+   * keinen Befund. Ohne die lokale Rechnung in `laufMelder` verloere er seine LED — er ist die
+   * einzige Stelle, an der ein Lauf ohne Server-Sicht beurteilt wird.
+   */
+  it('beurteilt den eben geparsten Lauf weiterhin lokal — ohne Befund vom Server (#1081)', async () => {
+    renderPage({
+      submit: { ergebnis: alleNeu(GELB) },
+      listen: [[], wieAufbewahrt(GELB)],
+    })
+    await screen.findByText('Noch keine Auswertung vorhanden.')
+
+    protokollWaehlen(GELB)
+    const panelEl = await screen.findByTestId(`lauf-${startedAt(0)}`)
+
+    const kopf = within(panelEl).getByTestId('lauf-kopf')
+    expect(within(kopf).getByTestId(/^led-/).getAttribute('data-testid')).toBe('led-bernst')
   })
 
   it('zeigt den Zustand als ausgefuellte, gleich grosse Flaeche — unabhaengig von der Textlaenge (#738)', async () => {

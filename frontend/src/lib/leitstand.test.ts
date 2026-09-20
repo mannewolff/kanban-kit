@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { NightRunItemView, NightRunServerMode, NightRunView } from '../api/nightRuns'
+import type { NightRunErrorClass, NightRunState } from './nightRunLog'
+import { serverBefund } from '../test/befund'
 import {
   abbruchgruende,
   balkenHoehen,
@@ -42,7 +44,8 @@ const paket = (nummer: number, state: NightRunItemView['state'], extra: Partial<
   ...extra,
 })
 
-const lauf = (extra: Partial<NightRunView> = {}): NightRunView => ({
+const lauf = (extra: Partial<NightRunView> = {}): NightRunView => {
+  const basis: NightRunView = {
   id: 1,
   startedAt: '2026-09-14T21:10:00Z',
   mode: 'CHAIN',
@@ -59,8 +62,13 @@ const lauf = (extra: Partial<NightRunView> = {}): NightRunView => ({
   usage: null,
   noWorkReason: null,
   items: [],
-  ...extra,
-})
+    outcome: { verdict: 'SUCCEEDED', decisiveItem: null, noWorkReason: null },
+    ...extra,
+  }
+  // Der Befund kommt aus dem Szenario, nicht aus der Vorgabe: Ein Lauf mit rotem Paket traegt sonst
+  // einen Befund, der etwas anderes sagt als seine eigenen Pakete (Issue #1081).
+  return { ...basis, outcome: extra.outcome ?? serverBefund(basis) }
+}
 
 const woche = (tag: number, doneCount: number) => ({
   weekStart: new Date(Date.UTC(2026, 5, 1 + 7 * tag, 9)).toISOString(),
@@ -350,5 +358,72 @@ describe('leitstand Lauf ohne Arbeit (#1069)', () => {
     expect(laufNotiz(lauf({ noWorkReason: GRUND }))).toContain(GRUND)
     expect(laufNotiz(lauf({ noWorkReason: null }))).not.toContain('·  ')
     expect(laufNotiz(lauf({ noWorkReason: null }))).toBe(laufNotiz(lauf()))
+  })
+})
+
+describe('leitstand Der Browser liest den Massstab (#1081)', () => {
+  const befund = (
+    verdict: 'SUCCEEDED' | 'FAILED' | 'WAITING' | 'RUNNING',
+    decisiveItem: { cardNumber: number; state: NightRunState; errorClass: NightRunErrorClass | null } | null = null,
+    noWorkReason: string | null = null,
+  ) => ({ verdict, decisiveItem, noWorkReason })
+
+  // Der Befund gewinnt gegen die Pakete: Sonst waere er nur Zierde, und die zweite Rechnung
+  // entschiede weiter.
+  it('laufMelder nimmt den Melder aus dem Befund, auch gegen die eigenen Pakete', () => {
+    const lauf = { complete: true, items: [paket(1, 'GREEN')], outcome: befund('FAILED', { cardNumber: 9, state: 'RED' as const, errorClass: 'HARD_ABORT' as const }) }
+
+    expect(laufMelder(lauf)).toBe('zinnob')
+  })
+
+  it('laufMelder liest gelb aus dem Befund als bernst, nicht als zinnob', () => {
+    // Der Server fasst rot und gelb zu FAILED zusammen; die Anzeige unterscheidet sie seit jeher.
+    const lauf = { complete: true, items: [], outcome: befund('FAILED', { cardNumber: 9, state: 'YELLOW' as const, errorClass: 'CHECKS_RED' as const }) }
+
+    expect(laufMelder(lauf)).toBe('bernst')
+  })
+
+  it('laufMelder meldet den wartenden Lauf aus dem Befund grau', () => {
+    const lauf = { complete: true, items: [], outcome: befund('WAITING', { cardNumber: 9, state: 'GREY' as const, errorClass: 'DEPENDENCY_UNMET' as const }) }
+
+    expect(laufMelder(lauf)).toBe('grau')
+  })
+
+  it('laufMelder meldet den laufenden Lauf aus dem Befund stahl', () => {
+    expect(laufMelder({ complete: true, items: [paket(1, 'RED', { errorClass: 'HARD_ABORT' })], outcome: befund('RUNNING') })).toBe('stahl')
+  })
+
+  it('laufMelder meldet den Lauf ohne Arbeit aus dem Befund zinnob', () => {
+    expect(laufMelder({ complete: true, items: [], outcome: befund('FAILED', null, 'Ready war leer') })).toBe('zinnob')
+  })
+
+  it('laufMelder meldet den gelungenen Lauf aus dem Befund gruen', () => {
+    expect(laufMelder({ complete: true, items: [], outcome: befund('SUCCEEDED') })).toBe('gruen')
+  })
+
+  // Ohne Befund bleibt die lokale Rechnung: der eben geparste Lauf der Nachtlauf-Seite.
+  it('laufMelder rechnet ohne Befund weiter lokal — rot, gelb, ohne Arbeit', () => {
+    expect(laufMelder({ complete: true, items: [paket(1, 'RED', { errorClass: 'HARD_ABORT' })] })).toBe('zinnob')
+    expect(laufMelder({ complete: true, items: [paket(1, 'YELLOW', { errorClass: 'CHECKS_RED' })] })).toBe('bernst')
+    expect(laufMelder({ complete: true, items: [] }, 'Ready war leer')).toBe('zinnob')
+    expect(laufMelder({ complete: false, items: [] })).toBe('stahl')
+  })
+
+  // Neu gegenueber #1069: Ein zurueckgestelltes Paket ist eine Stoerung und faellt nicht auf gruen.
+  it('laufMelder erkennt ohne Befund das zurueckgestellte Paket', () => {
+    expect(laufMelder({ complete: true, items: [paket(1, 'GREEN'), paket(2, 'GREY', { errorClass: 'DEPENDENCY_UNMET' })] })).toBe('grau')
+    expect(laufMelder({ complete: true, items: [paket(1, 'GREY', { errorClass: 'AWAITING_DECISION' })] })).toBe('grau')
+  })
+
+  // Grau ohne Fehlerklasse ist ein uebergangenes Paket — der Lauf hat es nicht angefasst.
+  it('laufMelder laesst grau ohne Fehlerklasse gruen', () => {
+    expect(laufMelder({ complete: true, items: [paket(1, 'GREEN'), paket(2, 'GREY')] })).toBe('gruen')
+  })
+
+  // Dieselbe Rangfolge wie im Server (#1078): rot vor gelb vor grau-mit-Fehlerklasse.
+  it('laufMelder haelt ohne Befund die Rangfolge des Servers', () => {
+    const items = [paket(1, 'GREY', { errorClass: 'DEPENDENCY_UNMET' }), paket(2, 'YELLOW', { errorClass: 'CHECKS_RED' })]
+
+    expect(laufMelder({ complete: true, items })).toBe('bernst')
   })
 })

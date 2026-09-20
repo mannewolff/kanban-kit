@@ -30,6 +30,7 @@ import { apiErrorMessage } from '../api/client'
 import {
   nightRunsApi,
   type NightRunErrorClassCounts,
+  type NightRunOutcomeView,
   type NightRunServerMode,
   type NightRunSubmission,
   type NightRunUsage,
@@ -194,6 +195,11 @@ interface AnzeigeLauf {
    * hat, aus der Zeit vor der Umstellung stammt oder eben erst im Browser geparst wurde.
    */
   ohneArbeit: string | undefined
+  /**
+   * Der Befund des Servers (Issue #1078); `undefined` beim eben geparsten Lauf — der ist noch bei
+   * keinem Server gewesen und wird deshalb weiterhin lokal beurteilt (Plan #1072 E28).
+   */
+  befund: NightRunOutcomeView | undefined
   verbrauch: Verbrauch | undefined
   items: AnzeigeItem[]
 }
@@ -327,6 +333,7 @@ const ausParser = (run: NightRun): AnzeigeLauf => ({
   // Wie die Herkunftsfelder leer: Den Grund kennt nur der Server, ein eben geparster Lauf war
   // noch bei keinem.
   ohneArbeit: undefined,
+  befund: undefined,
   verbrauch: undefined,
   items: run.items.map((item) => ({
     cardNumber: item.cardNumber,
@@ -383,6 +390,7 @@ const ausSicht = (view: NightRunView): AnzeigeLauf => ({
   zuletztGemeldetAm: view.updatedAt ?? undefined,
   vollstaendig: view.complete,
   ohneArbeit: view.noWorkReason ?? undefined,
+  befund: view.outcome,
   verbrauch: ausVerbrauch(view.usage),
   items: view.items.map((item) => ({
     cardNumber: item.cardNumber,
@@ -2090,7 +2098,10 @@ function LaufPanel({
       titel={laufTitel(lauf.startedAt)}
       art={ART_KURZ[lauf.mode]}
       meta={metazeile(lauf, stand)}
-      melder={laufMelder({ complete: lauf.vollstaendig, items: lauf.items }, lauf.ohneArbeit)}
+      melder={laufMelder(
+        { complete: lauf.vollstaendig, items: lauf.items, outcome: lauf.befund },
+        lauf.ohneArbeit,
+      )}
       pulsiert={!lauf.vollstaendig}
       offen={offen}
       onUmschalten={umschalten}

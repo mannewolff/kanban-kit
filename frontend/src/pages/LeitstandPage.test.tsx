@@ -1,3 +1,4 @@
+import { serverBefund } from '../test/befund'
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -95,7 +96,8 @@ const paket = (nummer: number, state: NightRunItemView['state'], extra: Partial<
   ...extra,
 })
 
-const lauf = (extra: Partial<NightRunView> = {}): NightRunView => ({
+const lauf = (extra: Partial<NightRunView> = {}): NightRunView => {
+  const basis: NightRunView = {
   id: 3,
   startedAt: '2026-09-14T21:10:00Z',
   mode: 'CHAIN',
@@ -117,8 +119,13 @@ const lauf = (extra: Partial<NightRunView> = {}): NightRunView => ({
     paket(925, 'YELLOW', { errorClass: 'AWAITING_DECISION' }),
     paket(930, 'GREY', { durationMs: null }),
   ],
-  ...extra,
-})
+    outcome: { verdict: 'SUCCEEDED', decisiveItem: null, noWorkReason: null },
+    ...extra,
+  }
+  // Der Befund kommt aus dem Szenario, nicht aus der Vorgabe: Ein Lauf mit rotem Paket traegt sonst
+  // einen Befund, der etwas anderes sagt als seine eigenen Pakete (Issue #1081).
+  return { ...basis, outcome: extra.outcome ?? serverBefund(basis) }
+}
 
 const epic = (id: number, title: string, done: number, total: number, memberNumbers: number[] = []): Epic => ({
   id,

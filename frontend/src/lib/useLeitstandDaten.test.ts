@@ -68,6 +68,7 @@ const lauf = (id: number, startedAt: string): NightRunView => ({
   updatedAt: null,
   usage: null,
   noWorkReason: null,
+  outcome: { verdict: 'SUCCEEDED', decisiveItem: null, noWorkReason: null },
   items: [],
 })
 

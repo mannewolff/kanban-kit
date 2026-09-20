@@ -1,5 +1,5 @@
 import type { WeeklyThroughput } from '../api/dashboard'
-import type { NightRunErrorClassCounts, NightRunItemView, NightRunServerMode, NightRunView } from '../api/nightRuns'
+import type { NightRunErrorClassCounts, NightRunItemView, NightRunOutcomeView, NightRunServerMode, NightRunView } from '../api/nightRuns'
 import type { NightRunErrorClass, NightRunState } from './nightRunLog'
 
 /**
@@ -85,10 +85,16 @@ export function juengsterLauf(laeufe: readonly NightRunView[]): NightRunView | n
 export function laufMelder(
   lauf: {
     complete: boolean
-    items: readonly { state: NightRunState }[]
+    items: readonly { state: NightRunState; errorClass?: NightRunErrorClass | null }[]
+    outcome?: NightRunOutcomeView | null
   },
   ohneArbeit?: string | null,
 ): Melder {
+  // Traegt der Lauf den Befund des Servers, gilt er. Nur der eben im Browser geparste Lauf der
+  // Nachtlauf-Seite hat keinen (#988, Plan #1072 E28) — er ist noch nicht eingeliefert.
+  if (lauf.outcome != null) {
+    return melderAusBefund(lauf.outcome)
+  }
   // Die Reihenfolge traegt eine Aussage: „laeuft noch" schlaegt „ohne Arbeit". Ein laufender Lauf
   // hat noch nichts zu melden und wird nicht rot (Vorspann der fachlichen Kriterien, #1060).
   if (!lauf.complete) {
@@ -97,10 +103,36 @@ export function laufMelder(
   if (ohneArbeit != null && ohneArbeit !== '') {
     return 'zinnob'
   }
+  // Dieselbe Rangfolge wie NightRunOutcome im Server (#1078): rot vor gelb vor
+  // grau-mit-Fehlerklasse. Grau ohne Fehlerklasse ist ein uebergangenes Paket und kein Mangel.
   if (lauf.items.some((item) => item.state === 'RED')) {
     return 'zinnob'
   }
-  return lauf.items.some((item) => item.state === 'YELLOW') ? 'bernst' : 'gruen'
+  if (lauf.items.some((item) => item.state === 'YELLOW')) {
+    return 'bernst'
+  }
+  const zurueckgestellt = lauf.items.some(
+    (item) => item.state === 'GREY' && item.errorClass != null,
+  )
+  return zurueckgestellt ? MELDER_JE_ZUSTAND.GREY : 'gruen'
+}
+
+/**
+ * Der Melder eines Laufs aus dem Befund des Servers.
+ *
+ * Gelesen wird der **Zustand des massgeblichen Pakets**, nicht das Urteil: Der Server fasst rot und
+ * gelb beide zu `FAILED` zusammen, die Anzeige unterscheidet sie aber seit jeher (zinnober gegen
+ * bernstein). Ueber `MELDER_JE_ZUSTAND` bleibt die Darstellung deshalb Zeichen fuer Zeichen die von
+ * vorher — die Verlagerung aendert den Ort der Rechnung, nicht das Bild.
+ */
+function melderAusBefund(befund: NightRunOutcomeView): Melder {
+  if (befund.verdict === 'RUNNING') {
+    return 'stahl'
+  }
+  if (befund.noWorkReason != null && befund.noWorkReason !== '') {
+    return 'zinnob'
+  }
+  return befund.decisiveItem == null ? 'gruen' : MELDER_JE_ZUSTAND[befund.decisiveItem.state]
 }
 
 /** Die Aussage des Laufbands (Entwurf Z. 1203–1230). */
