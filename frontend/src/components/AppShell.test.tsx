@@ -561,9 +561,24 @@ describe('AppShell', () => {
       )
     })
 
-    it('zeigt „Nachtläufe" dem Plattform-Admin trotz Rolle unterhalb OWNER', async () => {
-      // Plan-Entscheidung A6: `PermissionChecker.requireOwner` lässt den Plattform-Admin passieren —
-      // ein eigenes `isOwner` in der Shell blendete ihm den Bereich aus, den der Server ihm öffnet.
+    it('zeigt „Nachtläufe" dem Plattform-Admin nur am teilnehmenden Projekt', async () => {
+      // Seit Issue #1079 lässt der Server einen Plattform-Admin ohne eigene OWNER-Rolle die
+      // Nachtlauf-Auswertung nur noch am teilnehmenden Projekt lesen (fachliche Quelle #1064,
+      // Frage 9). Bis dahin galt Plan-Entscheidung A6: `requireOwner` ließ ihn überall passieren.
+      useAuthMock.mockReturnValue({
+        user: { ...loggedInUser, platformRole: 'ADMIN' as const },
+        logout: logoutMock,
+      })
+      mockedProjects.list.mockResolvedValue([
+        { id: 5, name: 'P1', role: 'MEMBER', createdAt: '', dashboardParticipation: true },
+        { id: 6, name: 'P2', role: 'MEMBER', createdAt: '' },
+      ])
+      renderShell('/boards/1')
+
+      expect(await screen.findByText('Nachtläufe')).toBeInTheDocument()
+    })
+
+    it('blendet „Nachtläufe" dem Plattform-Admin am nicht teilnehmenden Projekt aus', async () => {
       useAuthMock.mockReturnValue({
         user: { ...loggedInUser, platformRole: 'ADMIN' as const },
         logout: logoutMock,
@@ -574,7 +589,8 @@ describe('AppShell', () => {
       ])
       renderShell('/boards/1')
 
-      expect(await screen.findByText('Nachtläufe')).toBeInTheDocument()
+      expect(await screen.findByText('P1')).toBeInTheDocument()
+      expect(screen.queryByText('Nachtläufe')).not.toBeInTheDocument()
     })
   })
 

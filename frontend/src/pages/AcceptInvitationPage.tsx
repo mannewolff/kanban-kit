@@ -49,7 +49,7 @@ export function AcceptInvitationPage({ api = defaultMembersApi }: Readonly<Props
           <Alert severity="success" sx={{ mb: 2 }}>
             Du bist dem Projekt als {state.member.role} beigetreten.
           </Alert>
-          <Button component={RouterLink} to="/" variant="contained">
+          <Button component={RouterLink} to="/projects" variant="contained">
             Zu den Projekten
           </Button>
         </Box>

@@ -147,13 +147,25 @@ describe('buildNavItems Verwaltung', () => {
     expect(link({ board: null, canManageMembers: true }, 'Mitglieder')).toBeUndefined()
   })
 
-  it('führt „Admin" nur für System-Admins, nach Mitglieder und Rollen', () => {
+  it('führt „Plattform-Leitstand" und „Admin" nur für System-Admins, nach Mitglieder und Rollen', () => {
     expect(eintraege({ board, canManageMembers: true, isAdmin: true }, 'Verwaltung')).toEqual([
       'Mitglieder',
       'Rollen & Rechte',
+      'Plattform-Leitstand',
       'Admin',
     ])
     expect(link({ board: null }, 'Admin')).toBeUndefined()
+  })
+
+  // AK 2: jederzeit über die Schiene erreichbar, nicht nur beim Anmelden. AK 3: wer nicht
+  // Plattform-Admin ist, sieht den Eintrag nicht.
+  it('zeigt „Plattform-Leitstand" nur dem Plattform-Admin und verweist auf die Seite (#1082)', () => {
+    expect(link({ board, isAdmin: true }, 'Plattform-Leitstand')?.path).toBe('/plattform-leitstand')
+    expect(link({ board, isAdmin: false }, 'Plattform-Leitstand')).toBeUndefined()
+  })
+
+  it('führt „Projekte" auf den eigenen Pfad der Projektliste (#1082)', () => {
+    expect(link({ board, isAdmin: true }, 'Projekte')?.path).toBe('/projects')
   })
 })
 
@@ -207,10 +219,35 @@ describe('navKontext Rechte des aktuellen Projekts', () => {
   it('gibt dem Plattform-Admin die Rechte auch ohne Projektrolle', () => {
     const ohneProjekt = kontext({ board: null, boardId: null, admin: true })
     expect(ohneProjekt.canManageCurrentBoards).toBe(true)
-    expect(ohneProjekt.canViewNightRun).toBe(true)
     // `canManageMembers` bekommt bewusst keinen Plattform-Admin-Wert: Der Eintrag „Mitglieder"
     // hängt an der Projektrolle, so wie bisher in der Shell.
     expect(ohneProjekt.canManageCurrentMembers).toBe(false)
+  })
+
+  /**
+   * Seit Issue #1079 lässt der Server einen Plattform-Admin ohne eigene OWNER-Rolle die
+   * Nachtlauf-Auswertung nur noch am **teilnehmenden** Projekt lesen. Ein Eintrag, der sonst auf
+   * einen Fehlertext führte, ist schlechter als keiner (#1082).
+   */
+  it('zeigt dem Plattform-Admin „Nachtläufe" nur am teilnehmenden Projekt (#1082)', () => {
+    const fremd = { id: 7, name: 'Sieben', role: 'VIEWER' }
+    const ohneTeilnahme = kontext({ board: null, boardId: null, routeProjectId: 7, admin: true, projects: [fremd] })
+    const mitTeilnahme = kontext({
+      board: null,
+      boardId: null,
+      routeProjectId: 7,
+      admin: true,
+      projects: [{ ...fremd, dashboardParticipation: true }],
+    })
+
+    expect(ohneTeilnahme.canViewNightRun).toBe(false)
+    expect(mitTeilnahme.canViewNightRun).toBe(true)
+  })
+
+  it('zeigt dem echten Owner „Nachtläufe" auch ohne Teilnahme (#1082)', () => {
+    const eigen = { id: 7, name: 'Sieben', role: 'OWNER' }
+
+    expect(kontext({ board: null, boardId: null, routeProjectId: 7, admin: false, projects: [eigen] }).canViewNightRun).toBe(true)
   })
 
   it('zeigt Nachtläufe nur mit Owner-Rolle im Projekt des Pfads', () => {

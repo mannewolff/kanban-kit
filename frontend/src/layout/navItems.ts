@@ -2,7 +2,7 @@ import type { ComponentType } from 'react'
 import type { SvgIconProps } from '@mui/material'
 import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings'
 import FolderIcon from '@mui/icons-material/Folder'
-import { canManageBoards, canManageMembers, canManageProject } from '../lib/roles'
+import { canManageBoards, canManageMembers } from '../lib/roles'
 import {
   BoardSymbol,
   IdeenSymbol,
@@ -129,7 +129,7 @@ export function buildNavItems(params: NavParams): NavGroup[] {
 
   const uebersicht: NavLink[] = []
   if (isAdmin || projectCount !== 1) {
-    uebersicht.push({ kind: 'link', label: 'Projekte', path: '/', icon: FolderIcon })
+    uebersicht.push({ kind: 'link', label: 'Projekte', path: '/projects', icon: FolderIcon })
   }
   if (board && (canManageBoards || boardCount !== 1)) {
     uebersicht.push({ kind: 'link', label: 'Boards', path: `/projects/${board.projectId}`, icon: BoardSymbol })
@@ -149,6 +149,14 @@ export function buildNavItems(params: NavParams): NavGroup[] {
   }
   verwaltung.push({ kind: 'link', label: 'Rollen & Rechte', path: '/roles', icon: RollenSymbol })
   if (isAdmin) {
+    // Die Startseite eines Plattform-Admins (Issue #1082, AK 2): jederzeit erreichbar, nicht nur
+    // beim Anmelden. Wer nicht Plattform-Admin ist, sieht den Eintrag nicht (AK 3).
+    verwaltung.push({
+      kind: 'link',
+      label: 'Plattform-Leitstand',
+      path: '/plattform-leitstand',
+      icon: LeitstandSymbol,
+    })
     verwaltung.push({ kind: 'link', label: 'Admin', path: '/admin', icon: AdminPanelSettingsIcon })
   }
   bloecke.push({ kind: 'group', id: 'verwaltung', label: 'Verwaltung', children: verwaltung })
@@ -164,6 +172,12 @@ export interface NavProjekt {
   id: number
   name: string
   role: string
+  /**
+   * Ob das Projekt am Plattform-Leitstand teilnimmt (Issue #1076). Seit Issue #1079 haengt daran,
+   * ob ein Plattform-Admin ohne eigene OWNER-Rolle die Nachtlauf-Auswertung ueberhaupt lesen darf;
+   * ohne die Angabe fuehrte der Eintrag "Nachtlaeufe" auf einen Fehlertext.
+   */
+  dashboardParticipation?: boolean
 }
 
 /** Rohdaten der Shell für {@link navKontext}: Route, geladenes Board, Projektliste, Plattform-Rolle. */
@@ -214,6 +228,21 @@ export interface NavKontext {
  * genau nach dem Klick auf ihn. {@code canManageProject} ist die Semantik von {@code requireOwner}:
  * Owner *oder* Plattform-Admin (Plan #718, A6).
  */
+/**
+ * Ob der Eintrag „Nachtlaeufe" sichtbar ist.
+ *
+ * Der echte Projekt-OWNER sieht ihn immer. Ein Plattform-Admin **ohne** diese Rolle nur, wenn das
+ * Projekt am Plattform-Leitstand teilnimmt — seit Issue #1079 laesst ihn der Server sonst nicht
+ * mehr lesen, und ein Eintrag, der auf einen Fehlertext fuehrt, ist schlechter als keiner.
+ *
+ * Ist die Teilnahme unbekannt (Projektliste noch nicht geladen, aeltere Antwort ohne das Feld),
+ * gilt sie als nicht gegeben: Ein zu frueh gezeigter Eintrag fuehrt ins Leere, ein zu spaet
+ * gezeigter erscheint mit der naechsten Antwort.
+ */
+function darfNachtlaufSehen(rolle: string, admin: boolean, teilnahme: boolean | undefined): boolean {
+  return rolle === 'OWNER' || (admin && teilnahme === true)
+}
+
 export function navKontext(params: NavKontextParams): NavKontext {
   const { board, routeProjectId, boardId, projects, admin } = params
 
@@ -240,7 +269,7 @@ export function navKontext(params: NavKontextParams): NavKontext {
     kontextBoard,
     projectCount: projects?.length ?? null,
     canManageCurrentBoards: canManageBoards(currentProject?.role ?? 'VIEWER', admin),
-    canViewNightRun: canManageProject(pfadRolle, admin),
+    canViewNightRun: darfNachtlaufSehen(pfadRolle, admin, pfadProjekt?.dashboardParticipation),
     canManageCurrentMembers: canManageMembers(pfadRolle),
     projectName: pfadProjekt?.name ?? null,
     currentProjectName: currentProject?.name ?? null,

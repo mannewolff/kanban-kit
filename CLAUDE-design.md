@@ -153,7 +153,7 @@ Die Gestalt jeder Ansicht folgt der Vorlage. Zustände sind an **Form** erkennba
 
 ## 🗺️ Ansicht → Regel
 
-Zu jeder darstellenden Route aus [`frontend/src/App.tsx`](frontend/src/App.tsx) steht hier, welcher Stelle der Vorlage sie folgt (AK 3). Die reinen Weiterleitungen `/boards/:boardId/epics` und `/boards/:boardId/dashboard` (auf den Leitstand) fehlen. Alle Ansichten tragen den Rahmen, die Palette, die Schrift und die Tiefe der Vorlage. „Umsetzung" nennt das Paket, das die Gestalt herstellt. `frontend/src/designQuelle.test.ts` hält die Tabelle gegen die Routen.
+Zu jeder darstellenden Route aus [`frontend/src/App.tsx`](frontend/src/App.tsx) steht hier, welcher Stelle der Vorlage sie folgt (AK 3). Die reinen Weiterleitungen `/` (Weiche: Plattform-Admin zum Plattform-Leitstand, sonst zur Projektliste), `/boards/:boardId/epics` und `/boards/:boardId/dashboard` (auf den Leitstand) fehlen. Alle Ansichten tragen den Rahmen, die Palette, die Schrift und die Tiefe der Vorlage. „Umsetzung" nennt das Paket, das die Gestalt herstellt. `frontend/src/designQuelle.test.ts` hält die Tabelle gegen die Routen.
 
 | Route | Ansicht | Regel | Umsetzung |
 |---|---|---|---|
@@ -162,7 +162,8 @@ Zu jeder darstellenden Route aus [`frontend/src/App.tsx`](frontend/src/App.tsx) 
 | `/verify` | E-Mail bestätigen | wie Anmelden | #978 |
 | `/forgot` | Passwort vergessen | wie Anmelden | #978 |
 | `/reset` | Passwort neu setzen | wie Anmelden | #978 |
-| `/` | Projekte | Rahmen; Projekte als Platten | #978 |
+| `/projects` | Projekte | Rahmen; Projekte als Platten | #978, #1082 |
+| `/plattform-leitstand` | Plattform-Leitstand | Kupferwarte aus den Bausteinen des Leitstands (`LeitstandBausteine.tsx`, `KupferwarteBereich`); der Entwurf führt für diese Ansicht kein eigenes Mockup | #1083 |
 | `/projects/:projectId` | Boards eines Projekts | Rahmen; Boards als Platten, Zahlen in Plex Mono | #978 |
 | `/projects/:projectId/ideas` | Ideen | Rahmen; Nut-Zonen und Platten wie das Board | #978, #980 |
 | `/projects/:projectId/members` | Mitglieder | Rahmen; Tabelle als Platte, Zahlen in Plex Mono | #978 |

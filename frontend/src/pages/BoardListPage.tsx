@@ -557,7 +557,7 @@ export function BoardListPage() {
       <Box sx={{ mb: 2 }}>
         <Breadcrumbs
           items={[
-            { label: 'Projekte', to: '/' },
+            { label: 'Projekte', to: '/projects' },
             ...(board && projectName ? [{ label: projectName, to: `/projects/${board.projectId}` }] : []),
             ...(board ? [{ label: board.name, to: `/boards/${id}` }] : []),
             { label: 'Liste' },

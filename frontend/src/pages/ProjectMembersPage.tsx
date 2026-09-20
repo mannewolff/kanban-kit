@@ -279,7 +279,7 @@ export function ProjectMembersPage({ api = defaultMembersApi, loadRole }: Readon
       <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
         <Breadcrumbs
           items={[
-            { label: 'Projekte', to: '/' },
+            { label: 'Projekte', to: '/projects' },
             ...(projectName ? [{ label: projectName, to: `/projects/${id}` }] : []),
             { label: 'Mitglieder' },
           ]}

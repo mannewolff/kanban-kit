@@ -105,7 +105,7 @@ export function IdeasPage() {
       <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
         <Breadcrumbs
           items={[
-            { label: 'Projekte', to: '/' },
+            { label: 'Projekte', to: '/projects' },
             { label: projectName || 'Projekt', to: `/projects/${id}` },
             { label: 'Ideen' },
           ]}

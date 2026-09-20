@@ -254,7 +254,7 @@ export function BoardPage() {
       <Stack direction="row" alignItems="center" spacing={0.5} sx={{ mb: 2 }}>
         <Breadcrumbs
           items={[
-            { label: 'Projekte', to: '/' },
+            { label: 'Projekte', to: '/projects' },
             ...(projectName ? [{ label: projectName, to: `/projects/${board.projectId}` }] : []),
             { label: board.name },
           ]}

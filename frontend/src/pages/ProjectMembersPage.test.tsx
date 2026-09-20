@@ -117,7 +117,7 @@ describe('ProjectMembersPage', () => {
 
   it('zeigt den Breadcrumb-Pfad ab Projekte', async () => {
     renderPage(makeApi(), 'OWNER')
-    expect(await screen.findByRole('link', { name: 'Projekte' })).toHaveAttribute('href', '/')
+    expect(await screen.findByRole('link', { name: 'Projekte' })).toHaveAttribute('href', '/projects')
   })
 
   it('sperrt Entfernen für den letzten Owner, erlaubt es für andere', async () => {
