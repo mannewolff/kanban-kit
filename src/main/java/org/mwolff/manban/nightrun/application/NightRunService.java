@@ -26,13 +26,16 @@ import org.springframework.transaction.annotation.Transactional;
  * Use-Cases der Nachtlauf-Auswertung (Issue #722).
  *
  * <p>Drei Regeln tragen das Modul: <b>Wer darf</b> — jeder Use-Case, lesend wie schreibend,
- * verlangt die Projekt-Rolle OWNER; ein Plattform-Admin passiert {@link
- * PermissionChecker#requireOwner} bewusst mit (Plan #718, A6). <b>Wie viele bleiben</b> — je
- * Projekt höchstens {@code max-per-project} Läufe; verdrängt wird nach {@code startedAt}, in
- * derselben Transaktion wie das Einfügen (A10, A14); die verwaisten Arbeitspakete verdrängter Läufe
- * haben eine eigene Grenze {@code max-items-per-project} (Issue #966), und beide Grenzen gelten je
- * Gattung getrennt (Issue #1011). <b>Was bei einem bekannten Lauf geschieht</b> — er wird als schon
- * vorliegend gemeldet und bleibt unangetastet (A11).
+ * verlangt die Projekt-Rolle OWNER. Die <b>schreibenden</b> Wege ({@link #submit}, {@link #ingest})
+ * lassen einen Plattform-Admin dabei mit durch ({@link PermissionChecker#requireOwner}, Plan #718,
+ * A6); die <b>lesenden</b> seit Issue #1079 nur noch, wenn das Projekt am Plattform-Leitstand
+ * teilnimmt ({@link PermissionChecker#requireNightRunAccess}) — die Teilnahme ist die Einwilligung
+ * des Projekts in die Einsicht durch den Betreiber. <b>Wie viele bleiben</b> — je Projekt höchstens
+ * {@code max-per-project} Läufe; verdrängt wird nach {@code startedAt}, in derselben Transaktion
+ * wie das Einfügen (A10, A14); die verwaisten Arbeitspakete verdrängter Läufe haben eine eigene
+ * Grenze {@code max-items-per-project} (Issue #966), und beide Grenzen gelten je Gattung getrennt
+ * (Issue #1011). <b>Was bei einem bekannten Lauf geschieht</b> — er wird als schon vorliegend
+ * gemeldet und bleibt unangetastet (A11).
  */
 @Service
 // Die Kopplung folgt dem Domaenenmodell: Der Dienst baut ein vollstaendiges NightRun samt seinen
@@ -195,7 +198,7 @@ public class NightRunService {
    */
   @Transactional(readOnly = true)
   public List<NightRunView> list(long userId, long projectId) {
-    permissions.requireOwner(userId, projectId);
+    permissions.requireNightRunAccess(userId, projectId);
     List<NightRun> gefunden =
         runs.findByProjectAndKindOrderByStartedAtDesc(projectId, NightRunKind.NIGHT);
     List<NightRunItem> pakete =
@@ -212,7 +215,7 @@ public class NightRunService {
    */
   @Transactional(readOnly = true)
   public Map<NightRunErrorClass, Long> countRunsByErrorClass(long userId, long projectId) {
-    permissions.requireOwner(userId, projectId);
+    permissions.requireNightRunAccess(userId, projectId);
     return runs.countRunsByErrorClass(projectId, NightRunKind.NIGHT);
   }
 
@@ -227,7 +230,7 @@ public class NightRunService {
    */
   @Transactional(readOnly = true)
   public List<NightRunItem> anlaeufeDerKarte(long userId, long projectId, int cardNumber) {
-    permissions.requireOwner(userId, projectId);
+    permissions.requireNightRunAccess(userId, projectId);
     return runs.findByCard(projectId, cardNumber);
   }
 

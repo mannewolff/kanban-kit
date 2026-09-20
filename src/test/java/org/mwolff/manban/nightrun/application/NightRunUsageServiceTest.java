@@ -118,8 +118,10 @@ class NightRunUsageServiceTest {
   // --- Rechte ----------------------------------------------------------------------------------
 
   @Test
-  void dieNachtVerlangtDenBesitzer_undLiestOhneIhnNichts() {
-    doThrow(new ProjectAccessDeniedException()).when(permissions).requireOwner(USER, PROJECT);
+  void dieNachtVerlangtDenNachtlaufZugriff_undLiestOhneIhnNichts() {
+    doThrow(new ProjectAccessDeniedException())
+        .when(permissions)
+        .requireNightRunAccess(USER, PROJECT);
 
     assertThatThrownBy(() -> service.night(USER, PROJECT, NACHT_15, BERLIN))
         .isInstanceOf(ProjectAccessDeniedException.class);
@@ -128,8 +130,10 @@ class NightRunUsageServiceTest {
   }
 
   @Test
-  void derZeitraumVerlangtDenBesitzer_undLiestOhneIhnNichts() {
-    doThrow(new ProjectAccessDeniedException()).when(permissions).requireOwner(USER, PROJECT);
+  void derZeitraumVerlangtDenNachtlaufZugriff_undLiestOhneIhnNichts() {
+    doThrow(new ProjectAccessDeniedException())
+        .when(permissions)
+        .requireNightRunAccess(USER, PROJECT);
 
     assertThatThrownBy(() -> service.period(USER, PROJECT, NightRunPeriodType.MONTH, 0, BERLIN))
         .isInstanceOf(ProjectAccessDeniedException.class);
@@ -138,11 +142,11 @@ class NightRunUsageServiceTest {
   }
 
   @Test
-  void beideUseCasesPruefenDenBesitzerFuerDasFragendeProjekt() {
+  void beideUseCasesPruefenDenZugriffFuerDasFragendeProjekt() {
     service.night(USER, PROJECT, NACHT_15, BERLIN);
     service.period(USER, PROJECT, NightRunPeriodType.DAY, 0, BERLIN);
 
-    verify(permissions, org.mockito.Mockito.times(2)).requireOwner(USER, PROJECT);
+    verify(permissions, org.mockito.Mockito.times(2)).requireNightRunAccess(USER, PROJECT);
   }
 
   // --- Eine Nacht ------------------------------------------------------------------------------
@@ -406,8 +410,10 @@ class NightRunUsageServiceTest {
   // --- Die Lebenszeit (Issue #1014) ------------------------------------------------------------
 
   @Test
-  void dieLebenszeitSummeVerlangtDenBesitzer_undLiestOhneIhnNichts() {
-    doThrow(new ProjectAccessDeniedException()).when(permissions).requireOwner(USER, PROJECT);
+  void dieLebenszeitSummeVerlangtDenNachtlaufZugriff_undLiestOhneIhnNichts() {
+    doThrow(new ProjectAccessDeniedException())
+        .when(permissions)
+        .requireNightRunAccess(USER, PROJECT);
 
     assertThatThrownBy(() -> service.total(USER, PROJECT))
         .isInstanceOf(ProjectAccessDeniedException.class);

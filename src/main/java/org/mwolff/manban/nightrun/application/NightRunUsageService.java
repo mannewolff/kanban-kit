@@ -49,8 +49,9 @@ import org.springframework.transaction.annotation.Transactional;
  *       getrennt vom Fall, dass im Zeitraum schlicht kein Lauf stattfand.
  * </ul>
  *
- * <p>Wer darf: {@code requireOwner} wie jeder Nachtlauf-Use-Case, der Plattform-Admin kommt mit
- * durch (Plan E17).
+ * <p>Wer darf: {@code requireNightRunAccess} wie jeder lesende Nachtlauf-Use-Case (Issue #1079).
+ * Der echte Projekt-OWNER darf immer; ein Plattform-Admin ohne diese Rolle nur, wenn das Projekt am
+ * Plattform-Leitstand teilnimmt — sonst 403. Bis dahin kam er ungebunden durch (Plan E17).
  */
 @Service
 // Die Kopplung folgt den Sichten, nicht einer Entwurfsentscheidung: Der Use-Case setzt aus Port,
@@ -92,7 +93,7 @@ public class NightRunUsageService {
    */
   @Transactional(readOnly = true)
   public NightUsageView night(long userId, long projectId, LocalDate night, ZoneId zone) {
-    permissions.requireOwner(userId, projectId);
+    permissions.requireNightRunAccess(userId, projectId);
     NightRunPeriod spanne = NightRunPeriod.night(night, zone);
     PeriodTotals summe = usage.totals(projectId, spanne.from(), spanne.to());
     List<NightTotals> tagesgruppen =
@@ -115,7 +116,7 @@ public class NightRunUsageService {
   @Transactional(readOnly = true)
   public PeriodUsageView period(
       long userId, long projectId, NightRunPeriodType type, int stepsBack, ZoneId zone) {
-    permissions.requireOwner(userId, projectId);
+    permissions.requireNightRunAccess(userId, projectId);
     NightRunPeriod zeitraum = NightRunPeriod.of(type, zone, clock, stepsBack);
     Optional<Instant> grenze = aufbewahrungsgrenze(projectId);
     Instant seit = erfassungsbeginn.interactiveUsageSince(projectId).orElse(null);
@@ -155,7 +156,7 @@ public class NightRunUsageService {
    */
   @Transactional(readOnly = true)
   public TotalUsageView total(long userId, long projectId) {
-    permissions.requireOwner(userId, projectId);
+    permissions.requireNightRunAccess(userId, projectId);
     LifetimeTotals summe = usage.lifetimeTotals(projectId);
     return new TotalUsageView(
         summe.byKind().night().runCount(),

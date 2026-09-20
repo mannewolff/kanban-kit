@@ -37,7 +37,13 @@ class PermissionCheckerTest {
     rolePermissions = mock(RolePermissionRepository.class);
     platformAdminChecker = mock(PlatformAdminChecker.class);
     Clock clock = Clock.fixed(FIXED, ZoneOffset.UTC);
-    checker = new PermissionChecker(memberships, rolePermissions, platformAdminChecker, clock);
+    checker =
+        new PermissionChecker(
+            memberships,
+            rolePermissions,
+            platformAdminChecker,
+            mock(ProjectRepository.class),
+            clock);
   }
 
   @Test

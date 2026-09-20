@@ -438,6 +438,9 @@ class NightRunIT extends AbstractIntegrationTest {
             userId("nr-usage-viewer@example.com"),
             ProjectRole.VIEWER,
             Instant.now()));
+    // Seit Issue #1079 liest ein Plattform-Admin den Verbrauch nur am teilnehmenden Projekt;
+    // diese Matrix prueft seinen Durchgang, also nimmt das Projekt teil.
+    jdbc.update("UPDATE project SET dashboard_participation = true WHERE id = ?", projectId);
     String nacht = "/api/projects/" + projectId + "/night-run-usage/night";
     String zeitraum = "/api/projects/" + projectId + "/night-run-usage";
     String gesamt = zeitraum + "/total";

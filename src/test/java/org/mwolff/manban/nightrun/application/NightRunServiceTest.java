@@ -116,15 +116,17 @@ class NightRunServiceTest {
   }
 
   @Test
-  void list_requiresOwner() {
+  void list_verlangtDenNachtlaufZugriff() {
     service.list(USER, PROJECT);
 
-    verify(permissions).requireOwner(USER, PROJECT);
+    verify(permissions).requireNightRunAccess(USER, PROJECT);
   }
 
   @Test
-  void list_touchesNoRepository_whenMemberIsNotOwner() {
-    doThrow(new ProjectAccessDeniedException()).when(permissions).requireOwner(USER, PROJECT);
+  void list_touchesNoRepository_whenAccessIsDenied() {
+    doThrow(new ProjectAccessDeniedException())
+        .when(permissions)
+        .requireNightRunAccess(USER, PROJECT);
 
     assertThatThrownBy(() -> service.list(USER, PROJECT))
         .isInstanceOf(ProjectAccessDeniedException.class);
@@ -133,7 +135,7 @@ class NightRunServiceTest {
 
   @Test
   void list_touchesNoRepository_whenUserIsNoMember() {
-    doThrow(new ProjectNotFoundException()).when(permissions).requireOwner(USER, PROJECT);
+    doThrow(new ProjectNotFoundException()).when(permissions).requireNightRunAccess(USER, PROJECT);
 
     assertThatThrownBy(() -> service.list(USER, PROJECT))
         .isInstanceOf(ProjectNotFoundException.class);
@@ -141,15 +143,17 @@ class NightRunServiceTest {
   }
 
   @Test
-  void countRunsByErrorClass_requiresOwner() {
+  void countRunsByErrorClass_verlangtDenNachtlaufZugriff() {
     service.countRunsByErrorClass(USER, PROJECT);
 
-    verify(permissions).requireOwner(USER, PROJECT);
+    verify(permissions).requireNightRunAccess(USER, PROJECT);
   }
 
   @Test
-  void countRunsByErrorClass_touchesNoRepository_whenMemberIsNotOwner() {
-    doThrow(new ProjectAccessDeniedException()).when(permissions).requireOwner(USER, PROJECT);
+  void countRunsByErrorClass_touchesNoRepository_whenAccessIsDenied() {
+    doThrow(new ProjectAccessDeniedException())
+        .when(permissions)
+        .requireNightRunAccess(USER, PROJECT);
 
     assertThatThrownBy(() -> service.countRunsByErrorClass(USER, PROJECT))
         .isInstanceOf(ProjectAccessDeniedException.class);
@@ -158,7 +162,7 @@ class NightRunServiceTest {
 
   @Test
   void countRunsByErrorClass_touchesNoRepository_whenUserIsNoMember() {
-    doThrow(new ProjectNotFoundException()).when(permissions).requireOwner(USER, PROJECT);
+    doThrow(new ProjectNotFoundException()).when(permissions).requireNightRunAccess(USER, PROJECT);
 
     assertThatThrownBy(() -> service.countRunsByErrorClass(USER, PROJECT))
         .isInstanceOf(ProjectNotFoundException.class);
@@ -779,15 +783,17 @@ class NightRunServiceTest {
   // --- Anlaeufe einer Karte (Issue #967) -------------------------------------------------
 
   @Test
-  void anlaeufeDerKarte_verlangtDenBesitzer() {
+  void anlaeufeDerKarte_verlangtDenNachtlaufZugriff() {
     service.anlaeufeDerKarte(USER, PROJECT, 721);
 
-    verify(permissions).requireOwner(USER, PROJECT);
+    verify(permissions).requireNightRunAccess(USER, PROJECT);
   }
 
   @Test
-  void anlaeufeDerKarte_liestNichts_wennDerBesitzerFehlt() {
-    doThrow(new ProjectAccessDeniedException()).when(permissions).requireOwner(USER, PROJECT);
+  void anlaeufeDerKarte_liestNichts_ohneZugriff() {
+    doThrow(new ProjectAccessDeniedException())
+        .when(permissions)
+        .requireNightRunAccess(USER, PROJECT);
 
     assertThatThrownBy(() -> service.anlaeufeDerKarte(USER, PROJECT, 721))
         .isInstanceOf(ProjectAccessDeniedException.class);

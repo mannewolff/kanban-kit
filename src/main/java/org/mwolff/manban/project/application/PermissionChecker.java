@@ -4,6 +4,7 @@ import java.time.Clock;
 import java.util.Optional;
 import org.mwolff.manban.auth.application.PlatformAdminChecker;
 import org.mwolff.manban.project.domain.Permission;
+import org.mwolff.manban.project.domain.Project;
 import org.mwolff.manban.project.domain.ProjectMembership;
 import org.mwolff.manban.project.domain.ProjectRole;
 import org.springframework.stereotype.Component;
@@ -24,16 +25,19 @@ public class PermissionChecker {
   private final ProjectMembershipRepository memberships;
   private final RolePermissionRepository rolePermissions;
   private final PlatformAdminChecker platformAdminChecker;
+  private final ProjectRepository projects;
   private final Clock clock;
 
   public PermissionChecker(
       ProjectMembershipRepository memberships,
       RolePermissionRepository rolePermissions,
       PlatformAdminChecker platformAdminChecker,
+      ProjectRepository projects,
       Clock clock) {
     this.memberships = memberships;
     this.rolePermissions = rolePermissions;
     this.platformAdminChecker = platformAdminChecker;
+    this.projects = projects;
     this.clock = clock;
   }
 
@@ -122,6 +126,52 @@ public class PermissionChecker {
       return membership.orElseGet(() -> adminMembership(projectId, userId));
     }
     return membership.orElseThrow(ProjectNotFoundException::new);
+  }
+
+  /**
+   * Stellt sicher, dass der Benutzer die Nachtlauf-Auswertung des Projekts lesen darf (Issue #1079,
+   * fachliche Quelle #1064, Frage 9).
+   *
+   * <p>Der echte Projekt-{@code OWNER} darf immer. Ein <b>Plattform-Admin ohne</b> echte
+   * OWNER-Rolle darf nur, wenn das Projekt am Plattform-Leitstand <b>teilnimmt</b> — die Teilnahme
+   * ist genau diese Einwilligung. Eine Mitgliedschaft unterhalb von OWNER trägt den
+   * Nachtlauf-Zugriff auch sonst nicht; der Admin-Status macht daraus keinen Owner.
+   *
+   * <p><b>403 und nicht 404, wenn die Teilnahme fehlt.</b> Der Plattform-Admin sieht das Board des
+   * Projekts ohnehin — 404 wäre eine Lüge über die Existenz, die er längst kennt. Wichtiger noch:
+   * {@code frontend/src/lib/useLeitstandDaten.ts} macht in {@code useLadenWenn} aus 403 den stillen
+   * Zustand {@code ohneRecht} und aus jedem anderen Fehler {@code fehler}. Bei 404 zeigte der
+   * Board-Leitstand für „Letzter Lauf", „Abbruchgründe" und Verbrauch eine kaputte Anzeige statt
+   * einer Aussage.
+   *
+   * <p>Die Teilnahme wird nur gelesen, wenn sie überhaupt entscheidet — ein echter OWNER kommt
+   * durch, ohne dass das Projekt dafür geladen wird.
+   *
+   * @throws ProjectNotFoundException wenn der Benutzer weder Mitglied noch Plattform-Admin ist
+   *     (404)
+   * @throws ProjectAccessDeniedException wenn die Rolle nicht OWNER ist und die Teilnahme fehlt
+   *     (403)
+   */
+  @Transactional(readOnly = true)
+  public void requireNightRunAccess(long userId, long projectId) {
+    Optional<ProjectMembership> membership =
+        memberships.findByProjectIdAndUserId(projectId, userId);
+    if (membership.map(m -> m.role() == ProjectRole.OWNER).orElse(false)) {
+      return;
+    }
+    if (!platformAdminChecker.isPlatformAdmin(userId)) {
+      // Ohne Admin-Status entscheidet allein die Mitgliedschaft — wie in requireOwner:
+      // Nichtmitglied 404 (kein Existenz-Leak), Mitglied ohne OWNER-Rolle 403.
+      if (membership.isEmpty()) {
+        throw new ProjectNotFoundException();
+      }
+      throw new ProjectAccessDeniedException();
+    }
+    boolean teilnehmend =
+        projects.findById(projectId).map(Project::dashboardParticipation).orElse(false);
+    if (!teilnehmend) {
+      throw new ProjectAccessDeniedException();
+    }
   }
 
   /**

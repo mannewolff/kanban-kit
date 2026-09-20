@@ -333,13 +333,34 @@ class NightRunUsageServiceIT extends AbstractIntegrationTest {
         .isInstanceOf(ProjectNotFoundException.class);
   }
 
-  /** Der Plattform-Admin kommt ohne Mitgliedschaft durch (Plan E17). */
+  /**
+   * Der Plattform-Admin kommt ohne Mitgliedschaft durch — <b>aber nur am teilnehmenden Projekt</b>
+   * (Issue #1079). Bis dahin galt der ungebundene Durchgang aus Plan E17.
+   */
   @Test
   void derPlattformAdminKommtDurch() {
     lauf(Instant.parse("2026-09-15T21:10:00Z"), NightRunMode.CHAIN, "1", paket(721, "1"));
+    jdbc.update("UPDATE project SET dashboard_participation = true WHERE id = ?", projectId);
 
     assertThat(service.night(admin, projectId, NACHT_15, BERLIN).runCount()).isEqualTo(1L);
     assertThat(service.period(admin, projectId, NightRunPeriodType.WEEK, 0, BERLIN)).isNotNull();
     assertThat(service.total(admin, projectId).runCount()).isEqualTo(1L);
+  }
+
+  /**
+   * Der negative Fall zum vorigen Test: Ohne Teilnahme ist der Verbrauch für den Plattform-Admin zu
+   * — mit 403, nicht 404, damit der Board-Leitstand „ohne Recht" zeigt statt einer kaputten
+   * Anzeige.
+   */
+  @Test
+  void derPlattformAdminKommtOhneTeilnahmeNichtDurch() {
+    lauf(Instant.parse("2026-09-15T21:10:00Z"), NightRunMode.CHAIN, "1", paket(721, "1"));
+
+    assertThatThrownBy(() -> service.night(admin, projectId, NACHT_15, BERLIN))
+        .isInstanceOf(ProjectAccessDeniedException.class);
+    assertThatThrownBy(() -> service.period(admin, projectId, NightRunPeriodType.WEEK, 0, BERLIN))
+        .isInstanceOf(ProjectAccessDeniedException.class);
+    assertThatThrownBy(() -> service.total(admin, projectId))
+        .isInstanceOf(ProjectAccessDeniedException.class);
   }
 }
