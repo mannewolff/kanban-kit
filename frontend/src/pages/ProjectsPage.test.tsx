@@ -34,6 +34,7 @@ vi.mock('../api/projects', () => ({
     rename: vi.fn(),
     nextCardNumber: vi.fn(),
     setNextCardNumber: vi.fn(),
+    setDashboardParticipation: vi.fn(),
   },
 }))
 
@@ -53,6 +54,7 @@ const mocked = projectsApi as unknown as {
   rename: ReturnType<typeof vi.fn>
   nextCardNumber: ReturnType<typeof vi.fn>
   setNextCardNumber: ReturnType<typeof vi.fn>
+  setDashboardParticipation: ReturnType<typeof vi.fn>
 }
 
 describe('ProjectsPage', () => {
@@ -400,5 +402,114 @@ describe('ProjectsPage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Anlegen' }))
 
     await waitFor(() => expect(mocked.create).toHaveBeenCalledWith('Neu', 'x@x.de'))
+  })
+
+  /**
+   * Die Teilnahme am Plattform-Leitstand (Issue #1084, fachliche Quelle #1064, AK 15/16).
+   *
+   * Ob jemand sie schalten darf, sagt der **Server** über `participationEditable`. Die Rolle im
+   * Browser auszuwerten wäre falsch: `ProjectService#list` setzt für einen Plattform-Admin ohne
+   * Mitgliedschaft die synthetische Rolle `OWNER` — aus `role` ist die echte Mitgliedschaft nicht
+   * ablesbar (Plan #1072 E7).
+   */
+  describe('Teilnahme am Plattform-Leitstand (#1084)', () => {
+    const projekt = (extra: Record<string, unknown> = {}) => ({
+      id: 1,
+      name: 'Meins',
+      role: 'OWNER',
+      createdAt: '',
+      dashboardParticipation: false,
+      participationEditable: true,
+      ...extra,
+    })
+
+    const dialogOeffnen = async () => {
+      render(<MemoryRouter><ProjectsPage /></MemoryRouter>)
+      fireEvent.click(await screen.findByLabelText('Projekt Meins umbenennen'))
+    }
+
+    it('zeigt dem Projekt-OWNER das Ankreuzfeld und das Namensfeld', async () => {
+      mocked.list.mockResolvedValue([projekt()])
+
+      await dialogOeffnen()
+
+      expect(screen.getByLabelText('Teilnahme am Plattform-Leitstand')).toBeInTheDocument()
+      expect(screen.getByLabelText('Neuer Projektname')).toBeInTheDocument()
+    })
+
+    /** AK 15: Der Projekt-ADMIN darf die Teilnahme schalten, aber nicht umbenennen. */
+    it('zeigt dem Projekt-ADMIN das Ankreuzfeld, aber kein Namensfeld', async () => {
+      mocked.list.mockResolvedValue([projekt({ role: 'ADMIN' })])
+
+      await dialogOeffnen()
+
+      expect(screen.getByLabelText('Teilnahme am Plattform-Leitstand')).toBeInTheDocument()
+      expect(screen.queryByLabelText('Neuer Projektname')).not.toBeInTheDocument()
+      expect(screen.queryByLabelText('Nächste Kartennummer')).not.toBeInTheDocument()
+    })
+
+    /**
+     * AK 16: Der Plattform-Admin trägt die synthetische Rolle OWNER und käme über die Rolle an das
+     * Ankreuzfeld — der Server sagt aber Nein, und das gilt.
+     */
+    it('zeigt dem Plattform-Admin ohne echte Mitgliedschaft kein Ankreuzfeld', async () => {
+      mockUser = { platformRole: 'ADMIN' }
+      mocked.list.mockResolvedValue([projekt({ participationEditable: false })])
+
+      await dialogOeffnen()
+
+      expect(screen.getByLabelText('Neuer Projektname')).toBeInTheDocument()
+      expect(screen.queryByLabelText('Teilnahme am Plattform-Leitstand')).not.toBeInTheDocument()
+    })
+
+    it('schaltet beim Umschalten den Endpunkt und zeigt danach den neuen Zustand', async () => {
+      mocked.list.mockResolvedValue([projekt()])
+      mocked.setDashboardParticipation.mockResolvedValue(projekt({ dashboardParticipation: true }))
+
+      await dialogOeffnen()
+      const haken = screen.getByLabelText('Teilnahme am Plattform-Leitstand')
+      expect(haken).not.toBeChecked()
+      fireEvent.click(haken)
+
+      await waitFor(() => expect(mocked.setDashboardParticipation).toHaveBeenCalledWith(1, true))
+      await waitFor(() =>
+        expect(screen.getByLabelText('Teilnahme am Plattform-Leitstand')).toBeChecked(),
+      )
+    })
+
+    it('meldet einen gescheiterten Umschaltversuch, statt den Haken stehen zu lassen', async () => {
+      mocked.list.mockResolvedValue([projekt()])
+      mocked.setDashboardParticipation.mockRejectedValue(new Error('boom'))
+
+      await dialogOeffnen()
+      fireEvent.click(screen.getByLabelText('Teilnahme am Plattform-Leitstand'))
+
+      expect(await screen.findByText('Teilnahme konnte nicht geschaltet werden.')).toBeInTheDocument()
+      expect(screen.getByLabelText('Teilnahme am Plattform-Leitstand')).not.toBeChecked()
+    })
+
+    /** Ohne das Recht bleibt auch das Stift-Symbol weg — der Dialog hätte keinen Inhalt. */
+    it('zeigt einem MEMBER ohne das Recht kein Stift-Symbol', async () => {
+      mocked.list.mockResolvedValue([projekt({ role: 'MEMBER', participationEditable: false })])
+      render(<MemoryRouter><ProjectsPage /></MemoryRouter>)
+
+      expect(await screen.findByText('Meins')).toBeInTheDocument()
+      expect(screen.queryByLabelText('Projekt Meins umbenennen')).not.toBeInTheDocument()
+    })
+    /** Die übrigen Projekte der Liste bleiben unberührt — geschaltet wird genau eines. */
+    it('lässt beim Umschalten die anderen Projekte der Liste stehen', async () => {
+      mocked.list.mockResolvedValue([
+        projekt(),
+        projekt({ id: 2, name: 'Anderes', dashboardParticipation: false }),
+      ])
+      mocked.setDashboardParticipation.mockResolvedValue(projekt({ dashboardParticipation: true }))
+
+      await dialogOeffnen()
+      fireEvent.click(screen.getByLabelText('Teilnahme am Plattform-Leitstand'))
+
+      await waitFor(() => expect(mocked.setDashboardParticipation).toHaveBeenCalledWith(1, true))
+      fireEvent.click(screen.getByRole('button', { name: 'Abbrechen' }))
+      expect(screen.getByText('Anderes')).toBeInTheDocument()
+    })
   })
 })

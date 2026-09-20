@@ -73,4 +73,24 @@ describe('projectsApi', () => {
     expect(c.method).toBe('PUT')
     expect(JSON.parse(String(c.body))).toEqual({ nextCardNumber: 13457 })
   })
+
+  it('setDashboardParticipation ruft PUT /api/projects/{id}/dashboard-participation (#1084)', async () => {
+    const f = spyFetch(JSON.stringify({ id: 3, name: 'P', role: 'OWNER', createdAt: '', dashboardParticipation: true }))
+
+    const ergebnis = await projectsApi.setDashboardParticipation(3, true)
+
+    const c = lastCall(f)
+    expect(c.url).toBe('/api/projects/3/dashboard-participation')
+    expect(c.method).toBe('PUT')
+    expect(JSON.parse(String(c.body))).toEqual({ participating: true })
+    expect(ergebnis.dashboardParticipation).toBe(true)
+  })
+
+  it('setDashboardParticipation kann die Teilnahme auch abwählen', async () => {
+    const f = spyFetch(JSON.stringify({ id: 3, name: 'P', role: 'OWNER', createdAt: '', dashboardParticipation: false }))
+
+    await projectsApi.setDashboardParticipation(3, false)
+
+    expect(JSON.parse(String(lastCall(f).body))).toEqual({ participating: false })
+  })
 })

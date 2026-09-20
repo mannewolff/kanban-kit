@@ -1,12 +1,14 @@
 import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
+import Checkbox from '@mui/material/Checkbox'
 import Chip from '@mui/material/Chip'
 import Dialog from '@mui/material/Dialog'
 import DialogActions from '@mui/material/DialogActions'
 import DialogContent from '@mui/material/DialogContent'
 import DialogContentText from '@mui/material/DialogContentText'
 import DialogTitle from '@mui/material/DialogTitle'
+import FormControlLabel from '@mui/material/FormControlLabel'
 import IconButton from '@mui/material/IconButton'
 import Paper from '@mui/material/Paper'
 import Stack from '@mui/material/Stack'
@@ -67,6 +69,25 @@ export function ProjectsPage() {
       setNextOriginal(String(r.nextCardNumber))
     })
   }
+  /** Wer Name und Kartennummer aendern darf — OWNER oder Plattform-Admin, wie bisher. */
+  const darfProjektVerwalten = (project: Project) => canManageProject(project.role, admin)
+
+  /**
+   * Schaltet die Teilnahme und uebernimmt den zurueckgegebenen Wert (AK 15).
+   *
+   * Der Server antwortet mit der aktualisierten Sicht, also wird sie eingesetzt statt geraten — ein
+   * optimistisch gesetzter Haken staende sonst auch dann, wenn der Aufruf scheitert.
+   */
+  const handleTeilnahme = async (project: Project, teilnehmend: boolean) => {
+    try {
+      const aktualisiert = await projectsApi.setDashboardParticipation(project.id, teilnehmend)
+      setRenameProject(aktualisiert)
+      setProjects((vorher) => vorher.map((p) => (p.id === aktualisiert.id ? aktualisiert : p)))
+    } catch {
+      setRenameError('Teilnahme konnte nicht geschaltet werden.')
+    }
+  }
+
   const closeRename = () => {
     setRenameProject(null)
     setRenameError(null)
@@ -206,7 +227,10 @@ export function ProjectsPage() {
                   {formatDate(project.createdAt)}
                 </Typography>
               )}
-              {canManageProject(project.role, admin) && editMode && (
+              {/* AK 15: Ein Projekt-ADMIN darf die Teilnahme schalten, kaeme ueber
+                  canManageProject aber nie an den Dialog — das Stift-Symbol oeffnet ihn. */}
+              {(canManageProject(project.role, admin) || project.participationEditable === true) &&
+                editMode && (
                 <IconButton
                   size="small"
                   aria-label={`Projekt ${project.name} umbenennen`}
@@ -256,25 +280,43 @@ export function ProjectsPage() {
           <DialogTitle>Projekt umbenennen</DialogTitle>
           <DialogContent>
             {renameError && <Alert severity="error" sx={{ mb: 2 }}>{renameError}</Alert>}
-            <TextField
-              autoFocus
-              fullWidth
-              label="Projektname"
-              value={renameValue}
-              onChange={(e) => setRenameValue(e.target.value)}
-              sx={{ mt: 1 }}
-              slotProps={{ htmlInput: { 'aria-label': 'Neuer Projektname' } }}
-            />
-            <TextField
-              fullWidth
-              type="number"
-              label="Nächste Kartennummer"
-              value={nextValue}
-              onChange={(e) => setNextValue(e.target.value)}
-              helperText="Nummer, die die nächste neue Karte bekommt."
-              sx={{ mt: 2 }}
-              slotProps={{ htmlInput: { 'aria-label': 'Nächste Kartennummer', min: 1 } }}
-            />
+            {darfProjektVerwalten(renameProject) && (
+              <>
+                <TextField
+                  autoFocus
+                  fullWidth
+                  label="Projektname"
+                  value={renameValue}
+                  onChange={(e) => setRenameValue(e.target.value)}
+                  sx={{ mt: 1 }}
+                  slotProps={{ htmlInput: { 'aria-label': 'Neuer Projektname' } }}
+                />
+                <TextField
+                  fullWidth
+                  type="number"
+                  label="Nächste Kartennummer"
+                  value={nextValue}
+                  onChange={(e) => setNextValue(e.target.value)}
+                  helperText="Nummer, die die nächste neue Karte bekommt."
+                  sx={{ mt: 2 }}
+                  slotProps={{ htmlInput: { 'aria-label': 'Nächste Kartennummer', min: 1 } }}
+                />
+              </>
+            )}
+            {/* AK 15/16: Nur wer echtes Mitglied als OWNER oder ADMIN ist, darf die Teilnahme
+                schalten. Ob das gilt, sagt der Server — aus `role` ist es nicht ablesbar. */}
+            {renameProject.participationEditable === true && (
+              <FormControlLabel
+                sx={{ mt: 2, display: 'block' }}
+                control={
+                  <Checkbox
+                    checked={renameProject.dashboardParticipation === true}
+                    onChange={(e) => void handleTeilnahme(renameProject, e.target.checked)}
+                  />
+                }
+                label="Teilnahme am Plattform-Leitstand"
+              />
+            )}
           </DialogContent>
           <DialogActions>
             <Button onClick={closeRename}>Abbrechen</Button>
