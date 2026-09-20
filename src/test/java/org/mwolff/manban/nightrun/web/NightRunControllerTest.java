@@ -32,6 +32,7 @@ import org.mwolff.manban.nightrun.domain.NightRunErrorClass;
 import org.mwolff.manban.nightrun.domain.NightRunLimits;
 import org.mwolff.manban.nightrun.domain.NightRunMode;
 import org.mwolff.manban.nightrun.domain.NightRunOrigin;
+import org.mwolff.manban.nightrun.domain.NightRunOutcome;
 import org.mwolff.manban.nightrun.domain.NightRunState;
 import org.mwolff.manban.nightrun.domain.NightRunUsage;
 import org.mwolff.manban.project.application.ProjectAccessDeniedException;
@@ -387,6 +388,7 @@ class NightRunControllerTest {
                     null,
                     null,
                     null,
+                    NightRunOutcome.of(true, null, List.of()),
                     List.of(
                         new NightRunItemView(
                             21L,
@@ -441,6 +443,7 @@ class NightRunControllerTest {
                     null,
                     null,
                     null,
+                    NightRunOutcome.of(true, null, List.of()),
                     List.of(
                         new NightRunItemView(
                             22L,

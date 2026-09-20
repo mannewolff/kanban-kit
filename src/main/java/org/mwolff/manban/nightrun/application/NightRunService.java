@@ -14,6 +14,7 @@ import org.mwolff.manban.nightrun.domain.NightRunItem;
 import org.mwolff.manban.nightrun.domain.NightRunKind;
 import org.mwolff.manban.nightrun.domain.NightRunMode;
 import org.mwolff.manban.nightrun.domain.NightRunOrigin;
+import org.mwolff.manban.nightrun.domain.NightRunOutcome;
 import org.mwolff.manban.nightrun.domain.NightRunState;
 import org.mwolff.manban.nightrun.domain.NightRunUsage;
 import org.mwolff.manban.project.application.InteractiveUsageSinceWriter;
@@ -317,11 +318,12 @@ public class NightRunService {
    */
   private static NightRunView view(NightRun run, List<NightRunItem> alleItems) {
     Long runId = run.requireId();
-    List<NightRunItemView> items =
-        alleItems.stream()
-            .filter(item -> Objects.equals(item.nightRunId(), runId))
-            .map(NightRunService::itemView)
-            .toList();
+    // Einmal filtern, zweimal gebraucht: Die Sicht zeigt die Pakete, der Befund wertet sie aus
+    // (Issue #1078). Die Reihenfolge bleibt die der Abfrage — sie entscheidet bei gleichrangigen
+    // Paketen, welches maßgeblich ist.
+    List<NightRunItem> eigeneItems =
+        alleItems.stream().filter(item -> Objects.equals(item.nightRunId(), runId)).toList();
+    List<NightRunItemView> items = eigeneItems.stream().map(NightRunService::itemView).toList();
     return new NightRunView(
         runId,
         run.startedAt(),
@@ -338,6 +340,7 @@ public class NightRunService {
         run.updatedAt(),
         run.usage(),
         run.noWorkReason(),
+        NightRunOutcome.of(run.complete(), run.noWorkReason(), eigeneItems),
         items);
   }
 
@@ -406,6 +409,7 @@ public class NightRunService {
       @Nullable Instant updatedAt,
       @Nullable NightRunUsage usage,
       @Nullable String noWorkReason,
+      NightRunOutcome outcome,
       List<NightRunItemView> items) {}
 
   /** Darstellung eines Arbeitspakets. */

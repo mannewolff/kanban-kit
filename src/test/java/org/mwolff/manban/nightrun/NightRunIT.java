@@ -108,6 +108,44 @@ class NightRunIT extends AbstractIntegrationTest {
     mvc.perform(get(path(projectId)).cookie(owner)).andExpect(jsonPath("$.length()").value(1));
   }
 
+  /**
+   * Der Befund reist mit dem gespeicherten Lauf zurück (Issue #1078, Plan #1072 E2).
+   *
+   * <p>Hier und nicht im Service-Unit-Test: „gefüllt für einen gespeicherten Lauf" ist eine Aussage
+   * über den Weg durch die Datenbank und den JSON-Vertrag. Die Feldnamen stehen mit im Test, weil
+   * der Browser sie in #1081 liest — ein stillschweigendes Umbenennen soll hier auffallen und nicht
+   * erst dort.
+   */
+  @Test
+  void list_liefertDenBefundDesGespeichertenLaufs() throws Exception {
+    Cookie owner = session("nr-outcome-owner@example.com", PlatformRole.USER);
+    long projectId = projectOf("nr-outcome-owner@example.com", "nr-outcome-admin@example.com");
+
+    submit(owner, projectId, run(ERSTER, item(721, "Persistenz", "RED", "CHECKS_RED")))
+        .andExpect(status().isOk());
+
+    mvc.perform(get(path(projectId)).cookie(owner))
+        .andExpect(jsonPath("$[0].outcome.verdict").value("FAILED"))
+        .andExpect(jsonPath("$[0].outcome.decisiveItem.cardNumber").value(721))
+        .andExpect(jsonPath("$[0].outcome.decisiveItem.state").value("RED"))
+        .andExpect(jsonPath("$[0].outcome.decisiveItem.errorClass").value("CHECKS_RED"))
+        .andExpect(jsonPath("$[0].outcome.noWorkReason").doesNotExist());
+  }
+
+  /** Auch der gelungene Lauf trägt einen Befund — sonst hieße „kein Befund" zweierlei. */
+  @Test
+  void list_liefertEinenBefundAuchFuerDenGelungenenLauf() throws Exception {
+    Cookie owner = session("nr-gruen-owner@example.com", PlatformRole.USER);
+    long projectId = projectOf("nr-gruen-owner@example.com", "nr-gruen-admin@example.com");
+
+    submit(owner, projectId, run(ERSTER, item(721, "Persistenz", "GREEN", null)))
+        .andExpect(status().isOk());
+
+    mvc.perform(get(path(projectId)).cookie(owner))
+        .andExpect(jsonPath("$[0].outcome.verdict").value("SUCCEEDED"))
+        .andExpect(jsonPath("$[0].outcome.decisiveItem").doesNotExist());
+  }
+
   /** Zu lange Auszüge sind 400 mit {@code fieldErrors} — nicht 500 an der Spaltengrenze. */
   @Test
   void submit_rejectsExcerptAndUnparsedSampleAboveLimit_withFieldErrors() throws Exception {
