@@ -428,3 +428,45 @@ export function KlassenMarke({ melder, children }: Readonly<{ melder: Melder; ch
 
 /** Hover einer Zeile in einer Platte (Entwurf `.vorgang:hover`, Z. 578). */
 export const ZEILE_HOVER = `color-mix(in srgb, ${PLATTE_HOCH} 75%, ${KUPFER_SCHIMMER})`
+
+/**
+ * Eine Taste im Kupferwarte-Stil (#1083).
+ *
+ * Gestaltet wie {@link FilterTaste}, aber ohne Umschaltzustand: Sie löst eine Handlung aus, statt
+ * einen Filter zu halten. Sie steht hier und nicht in der aufrufenden Seite, weil die Nuten,
+ * Ränder und Schatten der Warte hier als Konstanten liegen — ein zweiter Satz Werte in einer Seite
+ * liefe beim nächsten Feinschliff auseinander.
+ *
+ * Das `aria-label` ist Pflicht und kein Vorschlag: In einer Liste gleichlautender Tasten ist eine
+ * Vorlesehilfe sonst ohne Anhalt, welche Zeile sie gerade nennt.
+ */
+export function Taste({
+  ariaLabel,
+  onClick,
+  children,
+}: Readonly<{ ariaLabel: string; onClick: () => void; children: ReactNode }>) {
+  return (
+    <ButtonBase
+      aria-label={ariaLabel}
+      onClick={onClick}
+      sx={{
+        fontSize: 11.5,
+        fontWeight: 500,
+        color: 'text.secondary',
+        bgcolor: NUT,
+        border: `1px solid ${RAND}`,
+        boxShadow: SCHATTEN_NUTE,
+        borderRadius: '7px',
+        px: '9px',
+        py: '4px',
+        '&:hover': {
+          color: 'text.primary',
+          boxShadow: SCHATTEN_TASTE,
+          background: `linear-gradient(180deg, ${PLATTE_HOCH}, ${PLATTE})`,
+        },
+      }}
+    >
+      {children}
+    </ButtonBase>
+  )
+}
