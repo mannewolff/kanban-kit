@@ -27,6 +27,15 @@ export default defineConfig({
   },
   test: {
     environment: 'jsdom',
+    // Die Zone der Tests ist festgenagelt und nicht die der Maschine. Ein Intl.DateTimeFormat
+    // ohne `timeZone` folgt sonst der Zone des Rechners, und jede Erwartung auf einen
+    // formatierten Zeitpunkt haengt daran: `19.09., 23:10` hier, `19.09., 21:10` auf dem
+    // UTC-Runner der CI. Genau daran scheiterte v2.1.3 in der CI, waehrend der lokale
+    // Pflichtlauf gruen war — der Fehler gehoert zu keiner Aenderung und ist lokal unsichtbar.
+    // Europe/Berlin und nicht UTC, weil das Produkt Ortszeit zeigt (`leserZone()` in
+    // api/nightRunUsage.ts, Plan E4: „die letzte Nacht" ist die des Lesers). In UTC getestet
+    // fiele ein Fehler am Sommer-/Winterzeitwechsel nie auf.
+    env: { TZ: 'Europe/Berlin' },
     globals: true,
     setupFiles: './src/test/setup.ts',
     css: false,
