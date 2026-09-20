@@ -4949,3 +4949,79 @@ describe('NightRunPage — Abschlussvermerk nur mit Ergebnisstand (#1070)', () =
     expect(laufKopfzeile(lauf(30))).not.toHaveTextContent('unvollständig')
   })
 })
+
+/**
+ * Ein Lauf ist adressierbar (Issue #1085, fachliche Quelle #1064, AK 7).
+ *
+ * Eine Störzeile des Plattform-Leitstands verweist auf `?lauf=<id>`. Ohne das Aufklappen führte der
+ * Verweis auf eine zugeklappte Platte — der Klick hätte den Nutzer an die richtige Seite gebracht
+ * und dort allein gelassen.
+ */
+describe('NightRunPage — adressierbarer Lauf (#1085)', () => {
+  const scrollIntoView = vi.fn()
+  Element.prototype.scrollIntoView = scrollIntoView
+
+  const dreiLaeufe = [
+    aufbewahrt({ id: 11, startedAt: startedAt(0) }),
+    aufbewahrt({ id: 12, startedAt: startedAt(1) }),
+    aufbewahrt({ id: 13, startedAt: startedAt(2) }),
+  ]
+
+  beforeEach(() => scrollIntoView.mockClear())
+
+  // Ziel ist der aelteste Lauf — er steht unten. Auf den obersten zu zeigen bewiese nichts, weil
+  // der ohnehin aufgeklappt waere.
+  it('klappt mit ?lauf=<id> genau diesen Lauf auf statt des obersten', async () => {
+    renderPage({ listen: [dreiLaeufe] }, '/projects/5/nachtlauf?lauf=11')
+
+    await screen.findByTestId(`lauf-${startedAt(0)}`)
+    expect(laufTaste(lauf(0))).toHaveAttribute('aria-expanded', 'true')
+    expect(laufTaste(lauf(2))).toHaveAttribute('aria-expanded', 'false')
+  })
+
+  it('springt zum angesteuerten Lauf', async () => {
+    renderPage({ listen: [dreiLaeufe] }, '/projects/5/nachtlauf?lauf=11')
+
+    await screen.findByTestId(`lauf-${startedAt(0)}`)
+    await waitFor(() => expect(scrollIntoView).toHaveBeenCalled())
+  })
+
+  it('klappt ohne ?lauf wie bisher den obersten Lauf auf', async () => {
+    renderPage({ listen: [dreiLaeufe] })
+
+    // Die Liste steht absteigend nach Startzeit: oben der juengste Lauf.
+    await screen.findByTestId(`lauf-${startedAt(2)}`)
+    expect(laufTaste(lauf(2))).toHaveAttribute('aria-expanded', 'true')
+    expect(laufTaste(lauf(0))).toHaveAttribute('aria-expanded', 'false')
+    expect(scrollIntoView).not.toHaveBeenCalled()
+  })
+
+  /**
+   * Eine Störzeile kann veralten, während der Admin sie liest. Ein Verweis, den das System selbst
+   * ausgegeben hat, darf den Nutzer nicht für eine Verdrängung bestrafen, die er nicht veranlasst
+   * hat — die Seite öffnet normal, ohne Meldung.
+   */
+  it('nimmt ein verdrängtes ?lauf=<id> hin, ohne Fehler und ohne Aufklappen', async () => {
+    renderPage({ listen: [dreiLaeufe] }, '/projects/5/nachtlauf?lauf=999')
+
+    await screen.findByTestId(`lauf-${startedAt(2)}`)
+    expect(laufTaste(lauf(2))).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.queryByText(/nicht gefunden/i)).not.toBeInTheDocument()
+    expect(scrollIntoView).not.toHaveBeenCalled()
+  })
+
+  it('nimmt einen unsinnigen Parameter hin wie gar keinen', async () => {
+    renderPage({ listen: [dreiLaeufe] }, '/projects/5/nachtlauf?lauf=abc')
+
+    await screen.findByTestId(`lauf-${startedAt(2)}`)
+    expect(laufTaste(lauf(2))).toHaveAttribute('aria-expanded', 'true')
+  })
+
+  /** Der gespeicherte Lauf trägt seine Id, der eben geparste nicht — er war bei keinem Server. */
+  it('trägt die Id nur am gespeicherten Lauf', async () => {
+    renderPage({ listen: [[aufbewahrt({ id: 11, startedAt: startedAt(0) })]] }, '/projects/5/nachtlauf?lauf=11')
+
+    await screen.findByTestId(`lauf-${startedAt(0)}`)
+    expect(laufTaste(lauf(0))).toHaveAttribute('aria-expanded', 'true')
+  })
+})

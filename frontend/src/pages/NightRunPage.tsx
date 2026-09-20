@@ -24,7 +24,7 @@ import Typography from '@mui/material/Typography'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import { ThemeProvider } from '@mui/material/styles'
 import { useCallback, useEffect, useId, useRef, useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { useParams, useSearchParams } from 'react-router-dom'
 import { cardsApi, type Card, type CardByNumber } from '../api/cards'
 import { apiErrorMessage } from '../api/client'
 import {
@@ -200,6 +200,12 @@ interface AnzeigeLauf {
    * keinem Server gewesen und wird deshalb weiterhin lokal beurteilt (Plan #1072 E28).
    */
   befund: NightRunOutcomeView | undefined
+  /**
+   * Die technische Lauf-Id (Issue #1085); `undefined` beim eben geparsten Lauf — der ist noch bei
+   * keinem Server gewesen und hat deshalb keine. Sie ist die Kennung, ueber die eine Stoerzeile des
+   * Plattform-Leitstands auf genau diesen Lauf zeigt (AK 7, Plan #1072 E10).
+   */
+  laufId: number | undefined
   verbrauch: Verbrauch | undefined
   items: AnzeigeItem[]
 }
@@ -334,6 +340,7 @@ const ausParser = (run: NightRun): AnzeigeLauf => ({
   // noch bei keinem.
   ohneArbeit: undefined,
   befund: undefined,
+  laufId: undefined,
   verbrauch: undefined,
   items: run.items.map((item) => ({
     cardNumber: item.cardNumber,
@@ -391,6 +398,7 @@ const ausSicht = (view: NightRunView): AnzeigeLauf => ({
   vollstaendig: view.complete,
   ohneArbeit: view.noWorkReason ?? undefined,
   befund: view.outcome,
+  laufId: view.id,
   verbrauch: ausVerbrauch(view.usage),
   items: view.items.map((item) => ({
     cardNumber: item.cardNumber,
@@ -2180,6 +2188,17 @@ function LaufPanel({
 
 export function NightRunPage() {
   const { projectId } = useParams()
+  const [suchparameter] = useSearchParams()
+  /**
+   * Der angesteuerte Lauf aus `?lauf=<id>` (Issue #1085, AK 7).
+   *
+   * Eine Stoerzeile des Plattform-Leitstands zeigt hierher. Steht kein Parameter oder etwas
+   * Ungueltiges darin, ist das Ergebnis `null` und die Seite verhaelt sich wie ohne ihn — ein
+   * Verweis, den das System selbst ausgegeben hat, soll nicht auf eine Fehlerseite fuehren, nur
+   * weil der Ringpuffer den Lauf inzwischen verdraengt hat.
+   */
+  const angesteuerterLauf = Number(suchparameter.get('lauf'))
+  const gesuchteLaufId = Number.isInteger(angesteuerterLauf) && angesteuerterLauf > 0 ? angesteuerterLauf : null
   const id = Number.parseInt(projectId ?? '', 10)
   const validId = Number.isInteger(id) && id > 0
   const projectName = useProjectName(validId ? id : null)
@@ -2351,6 +2370,26 @@ export function NightRunPage() {
   }, [laeufe, aufklappen])
 
   /**
+   * Springt zum angesteuerten Lauf (Issue #1085, AK 7).
+   *
+   * Aufgeklappt ist er schon über `zuerst` — ohne den Sprung stünde er aber möglicherweise weit
+   * unten, und der Verweis aus der Störzeile führte auf eine Seite, auf der man erst suchen muss.
+   * Der Effekt läuft, sobald die Läufe geladen sind; ein Ziel, das der Ringpuffer verdrängt hat,
+   * findet kein Element und tut nichts.
+   */
+  useEffect(() => {
+    if (gesuchteLaufId === null) {
+      return
+    }
+    const ziel = laeufe.find((lauf) => lauf.laufId === gesuchteLaufId)
+    if (ziel === undefined) {
+      return
+    }
+    document.querySelector(`[data-testid="lauf-${ziel.startedAt}"]`)?.scrollIntoView({ block: 'start' })
+  }, [gesuchteLaufId, laeufe])
+
+
+  /**
    * Liest den Ergebnisstand im Browser, zeigt die Auswertung und liefert sie ein. Die gedeutete
    * Auswertung steht **vor** dem Senden auf der Seite: Scheitert das Einliefern, bleibt sie
    * sichtbar, und die Meldung nennt den Grund.
@@ -2483,7 +2522,13 @@ export function NightRunPage() {
                   <LaufPanel
                     key={lauf.startedAt}
                     lauf={lauf}
-                    zuerst={position === 0}
+                    // Mit `?lauf=<id>` steht genau dieser Lauf offen statt des obersten; zeigt der
+                    // Parameter ins Leere, bleibt es beim obersten (Issue #1085).
+                    zuerst={
+                      gesuchteLaufId === null
+                        ? position === 0
+                        : lauf.laufId === gesuchteLaufId
+                    }
                     ergebnis={ergebnisse.get(lauf.startedAt)}
                     ausErgebnisstand={ausErgebnisstand}
                     // Der Speicher entscheidet, ob zu genau diesem Lauf ein Ergebnisstand dieser
