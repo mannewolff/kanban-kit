@@ -122,4 +122,28 @@ describe('LoginPage', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Anmelden' }))
     expect(await screen.findByText('Zu viele Versuche. Bitte in 15 Minuten erneut versuchen.')).toBeInTheDocument()
   })
+
+  /**
+   * AK 1 Satz 2 (Issue #1082): Die vor dem Anmelden aufgerufene Adresse gewinnt gegen die
+   * Startseite. `ProtectedRoute` gibt sie als `state.from` mit.
+   */
+  it('steuert nach dem Anmelden die vor dem Anmelden aufgerufene Adresse an (#1082)', async () => {
+    mockedApi.login.mockResolvedValue({
+      userId: 1, email: 'a@b.de', displayName: 'A', platformRole: 'USER', memberships: [],
+    })
+    render(
+      <MemoryRouter initialEntries={[{ pathname: '/login', state: { from: '/boards/7/leitstand' } }]}>
+        <AuthProvider>
+          <LoginPage />
+        </AuthProvider>
+      </MemoryRouter>,
+    )
+    await userEvent.type(screen.getByLabelText(/E-Mail/), 'a@b.de')
+    await userEvent.type(screen.getByLabelText(/Passwort/, { selector: 'input' }), 'geheim123')
+    await userEvent.click(screen.getByRole('button', { name: 'Anmelden' }))
+
+    await waitFor(() =>
+      expect(navigateMock).toHaveBeenCalledWith('/boards/7/leitstand', { replace: true }),
+    )
+  })
 })

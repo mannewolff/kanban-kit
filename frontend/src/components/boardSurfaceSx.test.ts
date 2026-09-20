@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { AUSWAHL, CARD_LIFT, CARD_RADIUS, CARD_SHADOW, CARD_SHADOW_HOVER, KUPFER_SCHIMMER, RAND, SCHATTEN_NUTE } from '../theme'
-import { ablageflaecheSx, karteSx, PLATZHALTER_SX } from './boardSurfaceSx'
+import { ablageflaecheSx, karteDichteSx, karteSx, PLATZHALTER_SX } from './boardSurfaceSx'
 
 describe('karteSx (#980)', () => {
   it('legt die Karte als Platte mit Haarlinie, Verlauf und Schatten an', () => {
@@ -39,6 +39,25 @@ describe('karteSx (#980)', () => {
     expect(sx.boxShadow).toBe(SCHATTEN_NUTE)
     expect(String(sx.border)).toContain('dashed')
     expect(karteSx()).not.toHaveProperty('& > *')
+  })
+})
+
+describe('karteDichteSx (#1056)', () => {
+  it('gibt der normalen Dichte die weiten Abstände der Platte', () => {
+    expect(karteDichteSx('normal')).toEqual({ gap: '7px', px: '11px', py: '10px' })
+  })
+
+  it('rückt die kompakte Karte in jedem Maß enger zusammen', () => {
+    expect(karteDichteSx('kompakt')).toEqual({ gap: '4px', px: '9px', py: '6px' })
+  })
+
+  it('bleibt kompakt in jedem Maß kleiner als normal — die Dichte wirkt in eine Richtung', () => {
+    const normal = karteDichteSx('normal')
+    const kompakt = karteDichteSx('kompakt')
+    const px = (wert: string) => Number.parseFloat(wert)
+    expect(px(kompakt.gap)).toBeLessThan(px(normal.gap))
+    expect(px(kompakt.px)).toBeLessThan(px(normal.px))
+    expect(px(kompakt.py)).toBeLessThan(px(normal.py))
   })
 })
 

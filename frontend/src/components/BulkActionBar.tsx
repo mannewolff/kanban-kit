@@ -128,7 +128,7 @@ export function BulkActionBar({
       )}
       <Menu anchorEl={labelAnchor} open={labelAnchor !== null} onClose={() => setLabelAnchor(null)}>
         {labelOptions.map(({ label, zustand }) => {
-          const Symbol = ZUSTAND_SYMBOL[zustand]
+          const ZustandSymbol = ZUSTAND_SYMBOL[zustand]
           return (
             <MenuItem
               key={label.id}
@@ -138,7 +138,7 @@ export function BulkActionBar({
               onClick={() => onToggleLabel(label.id, zustand === 'alle' ? 'REMOVE' : 'ADD')}
             >
               <ListItemIcon>
-                <Symbol fontSize="small" />
+                <ZustandSymbol fontSize="small" />
               </ListItemIcon>
               <ListItemText primary={label.name} />
             </MenuItem>

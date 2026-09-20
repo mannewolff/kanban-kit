@@ -5,7 +5,7 @@ import Link from '@mui/material/Link'
 import Stack from '@mui/material/Stack'
 import TextField from '@mui/material/TextField'
 import { useState } from 'react'
-import { Link as RouterLink, useNavigate } from 'react-router-dom'
+import { Link as RouterLink, useLocation, useNavigate } from 'react-router-dom'
 import { ApiError, apiErrorMessage } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
 import { AuthCard } from '../components/AuthCard'
@@ -14,6 +14,7 @@ import { PasswordField } from '../components/PasswordField'
 export function LoginPage() {
   const { login } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -25,6 +26,13 @@ export function LoginPage() {
     setBusy(true)
     try {
       await login(email, password)
+      // Die vor dem Anmelden aufgerufene Adresse gewinnt (Issue #1082, AK 1 Satz 2): Wer auf eine
+      // bestimmte Seite wollte, landet dort und nicht auf der Startseite.
+      const vorher = (location.state as { from?: string } | null)?.from
+      if (vorher != null && vorher !== '') {
+        navigate(vorher, { replace: true })
+        return
+      }
       // autoRoute-Signal, damit bei genau einem Projekt/Board direkt durchgeroutet wird
       // (nach dem Login ist die Navigation ein Push, also nicht location.key === 'default').
       navigate('/', { replace: true, state: { autoRoute: true } })

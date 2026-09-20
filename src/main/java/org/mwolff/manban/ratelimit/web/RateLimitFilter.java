@@ -120,11 +120,15 @@ public class RateLimitFilter extends OncePerRequestFilter {
     response.setHeader(HttpHeaders.RETRY_AFTER, Long.toString(seconds));
     response.setContentType(MediaType.APPLICATION_PROBLEM_JSON_VALUE);
     response.setCharacterEncoding(StandardCharsets.UTF_8.name());
+    // Gewoehnliches Literal statt Text Block: Einzeilig waere der Block ein Block ohne Grund
+    // (Sonar java:S5663), und eingerueckt risse die maskierte Zeile die Zeilengrenze. Am Ort statt
+    // als Konstante, weil Error Prone (InlineFormatString) eine einmal benutzte Formatvorlage
+    // nicht als Konstante duldet.
     response
         .getWriter()
         .write(
-            """
-            {"type":"about:blank","title":"Too Many Requests","status":429,"detail":"%s"}"""
+            ("{\"type\":\"about:blank\",\"title\":\"Too Many Requests\","
+                    + "\"status\":429,\"detail\":\"%s\"}")
                 .formatted(detailFor(seconds)));
   }
 

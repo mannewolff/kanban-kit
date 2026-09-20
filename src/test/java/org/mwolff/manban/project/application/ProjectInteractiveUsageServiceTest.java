@@ -66,6 +66,6 @@ class ProjectInteractiveUsageServiceTest {
   }
 
   private static Project projekt(@Nullable Instant seit) {
-    return new Project(9L, "P", 1L, Instant.parse("2026-01-01T00:00:00Z"), seit);
+    return new Project(9L, "P", 1L, Instant.parse("2026-01-01T00:00:00Z"), seit, false);
   }
 }

@@ -5,6 +5,7 @@ import { AppShell } from './components/AppShell'
 import { LegacyDashboardRedirect } from './routes/LegacyDashboardRedirect'
 import { LegacyEpicsRedirect } from './routes/LegacyEpicsRedirect'
 import { ProtectedRoute } from './routes/ProtectedRoute'
+import { StartRedirect } from './routes/StartRedirect'
 
 // Route-Level Lazy Loading (CLAUDE-react.md Performance-Budget): jede Page wird als
 // eigener Chunk geladen. AppShell/ProtectedRoute bleiben statisch (App-Shell).
@@ -41,6 +42,7 @@ const ProjectMembersPage = lazy(() =>
 const ProjectsPage = lazy(() =>
   import('./pages/ProjectsPage').then((m) => ({ default: m.ProjectsPage })),
 )
+const PlattformLeitstandPage = lazy(() => import("./pages/PlattformLeitstandPage"))
 const ProfilePage = lazy(() =>
   import('./pages/ProfilePage').then((m) => ({ default: m.ProfilePage })),
 )
@@ -72,7 +74,9 @@ export function App() {
         <Route path="/reset" element={<ResetPasswordPage />} />
         <Route element={<ProtectedRoute />}>
           <Route element={<AppShell />}>
-            <Route path="/" element={<ProjectsPage />} />
+            <Route path="/" element={<StartRedirect />} />
+            <Route path="/projects" element={<ProjectsPage />} />
+            <Route path="/plattform-leitstand" element={<PlattformLeitstandPage />} />
             <Route path="/projects/:projectId" element={<ProjectBoardsPage />} />
             <Route path="/projects/:projectId/ideas" element={<IdeasPage />} />
             <Route path="/projects/:projectId/members" element={<ProjectMembersPage />} />

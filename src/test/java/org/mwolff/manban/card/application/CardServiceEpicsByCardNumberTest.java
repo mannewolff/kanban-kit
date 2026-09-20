@@ -50,9 +50,12 @@ class CardServiceEpicsByCardNumberTest {
             mock(PermissionChecker.class),
             mock(ProjectService.class),
             mock(CardColumnTransitionRepository.class),
-            mock(CardAssigneeRepository.class),
-            mock(LabelRepository.class),
-            mock(CardLabelRepository.class),
+            // Echte KartenZuordnung aus Port-Mocks (Issue #1051), kein Mock der Zuordnung selbst.
+            new KartenZuordnung(
+                mock(CardAssigneeRepository.class),
+                mock(LabelRepository.class),
+                mock(CardLabelRepository.class),
+                mock(PermissionChecker.class)),
             mock(CardActivityRepository.class),
             actor,
             mock(ApplicationEventPublisher.class),

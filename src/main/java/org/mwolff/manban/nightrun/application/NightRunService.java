@@ -14,6 +14,7 @@ import org.mwolff.manban.nightrun.domain.NightRunItem;
 import org.mwolff.manban.nightrun.domain.NightRunKind;
 import org.mwolff.manban.nightrun.domain.NightRunMode;
 import org.mwolff.manban.nightrun.domain.NightRunOrigin;
+import org.mwolff.manban.nightrun.domain.NightRunOutcome;
 import org.mwolff.manban.nightrun.domain.NightRunState;
 import org.mwolff.manban.nightrun.domain.NightRunUsage;
 import org.mwolff.manban.project.application.InteractiveUsageSinceWriter;
@@ -25,13 +26,16 @@ import org.springframework.transaction.annotation.Transactional;
  * Use-Cases der Nachtlauf-Auswertung (Issue #722).
  *
  * <p>Drei Regeln tragen das Modul: <b>Wer darf</b> — jeder Use-Case, lesend wie schreibend,
- * verlangt die Projekt-Rolle OWNER; ein Plattform-Admin passiert {@link
- * PermissionChecker#requireOwner} bewusst mit (Plan #718, A6). <b>Wie viele bleiben</b> — je
- * Projekt höchstens {@code max-per-project} Läufe; verdrängt wird nach {@code startedAt}, in
- * derselben Transaktion wie das Einfügen (A10, A14); die verwaisten Arbeitspakete verdrängter Läufe
- * haben eine eigene Grenze {@code max-items-per-project} (Issue #966), und beide Grenzen gelten je
- * Gattung getrennt (Issue #1011). <b>Was bei einem bekannten Lauf geschieht</b> — er wird als schon
- * vorliegend gemeldet und bleibt unangetastet (A11).
+ * verlangt die Projekt-Rolle OWNER. Die <b>schreibenden</b> Wege ({@link #submit}, {@link #ingest})
+ * lassen einen Plattform-Admin dabei mit durch ({@link PermissionChecker#requireOwner}, Plan #718,
+ * A6); die <b>lesenden</b> seit Issue #1079 nur noch, wenn das Projekt am Plattform-Leitstand
+ * teilnimmt ({@link PermissionChecker#requireNightRunAccess}) — die Teilnahme ist die Einwilligung
+ * des Projekts in die Einsicht durch den Betreiber. <b>Wie viele bleiben</b> — je Projekt höchstens
+ * {@code max-per-project} Läufe; verdrängt wird nach {@code startedAt}, in derselben Transaktion
+ * wie das Einfügen (A10, A14); die verwaisten Arbeitspakete verdrängter Läufe haben eine eigene
+ * Grenze {@code max-items-per-project} (Issue #966), und beide Grenzen gelten je Gattung getrennt
+ * (Issue #1011). <b>Was bei einem bekannten Lauf geschieht</b> — er wird als schon vorliegend
+ * gemeldet und bleibt unangetastet (A11).
  */
 @Service
 // Die Kopplung folgt dem Domaenenmodell: Der Dienst baut ein vollstaendiges NightRun samt seinen
@@ -42,6 +46,14 @@ import org.springframework.transaction.annotation.Transactional;
 // auf beide. Dieselbe Begruendung wie am NightRunRepositoryAdapter.
 @SuppressWarnings("PMD.CouplingBetweenObjects")
 public class NightRunService {
+
+  /**
+   * Rueckfalltext fuer einen Lauf ohne Arbeit, der keinen Grund meldet (Issue #1068, AK 2 der
+   * fachlichen Quelle #1060). Er entsteht am Server und nicht im Frontend (Plan #1067, E4):
+   * Laufplatte, Laufband und „Letzter Lauf" lesen denselben Wert, drei Einsetzstellen liefen
+   * auseinander.
+   */
+  static final String GRUND_UNBEKANNT = "Nichts abgearbeitet — Grund unbekannt";
 
   private final NightRunRepository runs;
   private final PermissionChecker permissions;
@@ -148,7 +160,9 @@ public class NightRunService {
             tokenName,
             meldung.complete(),
             now,
-            meldung.usage());
+            meldung.usage(),
+            grundOhneArbeit(
+                kind, meldung.complete(), meldung.processedCount(), meldung.noWorkReason()));
 
     // Wie beim Upload-Weg: verwaiste Pakete eines verdrängten Laufs zuerst weg (#965).
     runs.deleteOrphanItemsOfRun(projectId, meldung.startedAt());
@@ -184,7 +198,7 @@ public class NightRunService {
    */
   @Transactional(readOnly = true)
   public List<NightRunView> list(long userId, long projectId) {
-    permissions.requireOwner(userId, projectId);
+    permissions.requireNightRunAccess(userId, projectId);
     List<NightRun> gefunden =
         runs.findByProjectAndKindOrderByStartedAtDesc(projectId, NightRunKind.NIGHT);
     List<NightRunItem> pakete =
@@ -201,7 +215,7 @@ public class NightRunService {
    */
   @Transactional(readOnly = true)
   public Map<NightRunErrorClass, Long> countRunsByErrorClass(long userId, long projectId) {
-    permissions.requireOwner(userId, projectId);
+    permissions.requireNightRunAccess(userId, projectId);
     return runs.countRunsByErrorClass(projectId, NightRunKind.NIGHT);
   }
 
@@ -216,7 +230,7 @@ public class NightRunService {
    */
   @Transactional(readOnly = true)
   public List<NightRunItem> anlaeufeDerKarte(long userId, long projectId, int cardNumber) {
-    permissions.requireOwner(userId, projectId);
+    permissions.requireNightRunAccess(userId, projectId);
     return runs.findByCard(projectId, cardNumber);
   }
 
@@ -239,7 +253,37 @@ public class NightRunService {
         null,
         submission.complete(),
         null,
-        submission.usage());
+        submission.usage(),
+        // Der Upload-Weg fuehrt kein Grund-Feld (Plan #1067, E4): Ein hochgeladenes Protokoll
+        // kommt aus der Datei, nicht aus dem Runner. Ein Lauf ohne Arbeit landet damit im
+        // Rueckfalltext -- angezeigt wird er trotzdem, nur ohne die Begruendung des Runners.
+        grundOhneArbeit(
+            NightRunKind.NIGHT, submission.complete(), submission.processedCount(), null));
+  }
+
+  /**
+   * Der Grund, warum ein Lauf nichts abgearbeitet hat — oder {@code null}, wenn die Frage sich
+   * nicht stellt (Issue #1068, Plan #1067).
+   *
+   * <p>Drei Faelle liefern {@code null}, und jeder ist ein Normalfall statt eines Befundes: Eine
+   * interaktive Sitzung arbeitet keine Arbeitspakete ab, ihre 0 sagt nichts (E6). Ein nicht
+   * abgeschlossen gemeldeter Lauf ist noch unterwegs. Und ein Lauf mit bearbeiteten Paketen hat
+   * gearbeitet.
+   *
+   * <p>Gemessen wird an {@code processedCount} — der vom Runner <b>gemeldeten</b> Zahl (E5),
+   * derselben, die die Metazeile als „N bearbeitet" zeigt. Ausdruecklich keine zweite Rechnung
+   * ueber die Arbeitspakete: Zwei Zaehlweisen fuer dieselbe Aussage liefen auseinander, und die
+   * Anzeige zeigte dann eine 0 neben einem gruenen Melder.
+   *
+   * <p>Ein gemeldeter, aber leerer Grund gilt wie ein fehlender. AK 2 verlangt einen Text, nicht
+   * ein gesetztes Feld — ein leerer Grund erschiene in der Anzeige als Luecke.
+   */
+  private static @Nullable String grundOhneArbeit(
+      NightRunKind kind, boolean complete, int processedCount, @Nullable String gemeldet) {
+    if (kind != NightRunKind.NIGHT || !complete || processedCount > 0) {
+      return null;
+    }
+    return gemeldet == null || gemeldet.isBlank() ? GRUND_UNBEKANNT : gemeldet;
   }
 
   /**
@@ -277,11 +321,12 @@ public class NightRunService {
    */
   private static NightRunView view(NightRun run, List<NightRunItem> alleItems) {
     Long runId = run.requireId();
-    List<NightRunItemView> items =
-        alleItems.stream()
-            .filter(item -> Objects.equals(item.nightRunId(), runId))
-            .map(NightRunService::itemView)
-            .toList();
+    // Einmal filtern, zweimal gebraucht: Die Sicht zeigt die Pakete, der Befund wertet sie aus
+    // (Issue #1078). Die Reihenfolge bleibt die der Abfrage — sie entscheidet bei gleichrangigen
+    // Paketen, welches maßgeblich ist.
+    List<NightRunItem> eigeneItems =
+        alleItems.stream().filter(item -> Objects.equals(item.nightRunId(), runId)).toList();
+    List<NightRunItemView> items = eigeneItems.stream().map(NightRunService::itemView).toList();
     return new NightRunView(
         runId,
         run.startedAt(),
@@ -297,6 +342,8 @@ public class NightRunService {
         run.complete(),
         run.updatedAt(),
         run.usage(),
+        run.noWorkReason(),
+        NightRunOutcome.of(run.complete(), run.noWorkReason(), eigeneItems),
         items);
   }
 
@@ -326,6 +373,7 @@ public class NightRunService {
       @Nullable String unparsedSample,
       boolean complete,
       @Nullable NightRunUsage usage,
+      @Nullable String noWorkReason,
       List<NewNightRunItem> items) {}
 
   /** Ein einzulieferndes Arbeitspaket ohne technische Felder. */
@@ -363,6 +411,8 @@ public class NightRunService {
       boolean complete,
       @Nullable Instant updatedAt,
       @Nullable NightRunUsage usage,
+      @Nullable String noWorkReason,
+      NightRunOutcome outcome,
       List<NightRunItemView> items) {}
 
   /** Darstellung eines Arbeitspakets. */

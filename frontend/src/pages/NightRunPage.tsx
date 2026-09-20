@@ -24,12 +24,13 @@ import Typography from '@mui/material/Typography'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import { ThemeProvider } from '@mui/material/styles'
 import { useCallback, useEffect, useId, useRef, useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { useParams, useSearchParams } from 'react-router-dom'
 import { cardsApi, type Card, type CardByNumber } from '../api/cards'
 import { apiErrorMessage } from '../api/client'
 import {
   nightRunsApi,
   type NightRunErrorClassCounts,
+  type NightRunOutcomeView,
   type NightRunServerMode,
   type NightRunSubmission,
   type NightRunUsage,
@@ -92,7 +93,6 @@ import {
   type NightRunKettenStufe,
   type NightRunKettenStufen,
   type NightRunMode,
-  type NightRunStand,
   type NightRunState,
   type NightRunStufenvorgaben,
 } from '../lib/nightRunLog'
@@ -190,6 +190,22 @@ interface AnzeigeLauf {
   zuletztGemeldetAm: string | undefined
   /** `false`, solange die Kette den Lauf nicht abgeschlossen gemeldet hat. */
   vollstaendig: boolean
+  /**
+   * Grund, warum der Lauf nichts abgearbeitet hat (Issue #1068); `undefined`, wenn er gearbeitet
+   * hat, aus der Zeit vor der Umstellung stammt oder eben erst im Browser geparst wurde.
+   */
+  ohneArbeit: string | undefined
+  /**
+   * Der Befund des Servers (Issue #1078); `undefined` beim eben geparsten Lauf — der ist noch bei
+   * keinem Server gewesen und wird deshalb weiterhin lokal beurteilt (Plan #1072 E28).
+   */
+  befund: NightRunOutcomeView | undefined
+  /**
+   * Die technische Lauf-Id (Issue #1085); `undefined` beim eben geparsten Lauf — der ist noch bei
+   * keinem Server gewesen und hat deshalb keine. Sie ist die Kennung, ueber die eine Stoerzeile des
+   * Plattform-Leitstands auf genau diesen Lauf zeigt (AK 7, Plan #1072 E10).
+   */
+  laufId: number | undefined
   verbrauch: Verbrauch | undefined
   items: AnzeigeItem[]
 }
@@ -320,6 +336,11 @@ const ausParser = (run: NightRun): AnzeigeLauf => ({
   eingeliefertAm: undefined,
   zuletztGemeldetAm: undefined,
   vollstaendig: !run.incomplete,
+  // Wie die Herkunftsfelder leer: Den Grund kennt nur der Server, ein eben geparster Lauf war
+  // noch bei keinem.
+  ohneArbeit: undefined,
+  befund: undefined,
+  laufId: undefined,
   verbrauch: undefined,
   items: run.items.map((item) => ({
     cardNumber: item.cardNumber,
@@ -375,6 +396,9 @@ const ausSicht = (view: NightRunView): AnzeigeLauf => ({
   eingeliefertAm: view.createdAt,
   zuletztGemeldetAm: view.updatedAt ?? undefined,
   vollstaendig: view.complete,
+  ohneArbeit: view.noWorkReason ?? undefined,
+  befund: view.outcome,
+  laufId: view.id,
   verbrauch: ausVerbrauch(view.usage),
   items: view.items.map((item) => ({
     cardNumber: item.cardNumber,
@@ -709,6 +733,13 @@ const ABSCHLUSS_TEXT = new Map<string, string>([
  * Der Abschluss in Worten — **kein Fall gibt einen Rohwert aus**. `abschluss` ist im Stand eine
  * freie Zeichenkette; ein fremdes Wort ungeprüft auf die Seite zu stellen hieße, dem Betreiber eine
  * Auskunft zu geben, die der Leitstand selbst nicht versteht.
+ *
+ * <p><b>Das Fehlen eines Ergebnisstands ist keine Aussage über den Abschluss</b> (Issue #1070).
+ * Der `undefined`-Fall hier gilt einem <em>vorliegenden</em> Stand ohne `abschluss` — dort sagt die
+ * Datei selbst, dass der Lauf nicht zu Ende lief. Ob die Angabe überhaupt in die Metazeile kommt,
+ * entscheidet deshalb {@link kopfText} am Vorhandensein des Stands, nicht diese Funktion. Was über
+ * den Abschluss des Laufs auszusagen ist, trägt allein die Kopfmarke {@link
+ * UNVOLLSTAENDIG_GEMELDET}, und die hängt am gemeldeten Zustand.
  */
 const abschlussText = (abschluss: string | undefined): string =>
   abschluss === undefined
@@ -799,7 +830,7 @@ const dokumentNummern = (run: NightRun | undefined): number[] =>
 const letzteErreichteStufe = (
   stufen: NightRunKettenStufen | undefined,
 ): NightRunKettenStufe | undefined =>
-  KETTEN_STUFEN.filter(({ schluessel }) => stufen?.[schluessel] !== undefined).at(-1)?.schluessel
+  KETTEN_STUFEN.findLast(({ schluessel }) => stufen?.[schluessel] !== undefined)?.schluessel
 
 /**
  * Der Grund, mit dem ein Vorgang endete: die **erste Zeile** seines Auszugs. Im Modus `CHAIN` setzt
@@ -1043,13 +1074,27 @@ function artKennzahl(
   return { wert: `${bearbeitet.length} von ${run.items.length}`, label: 'Karten bearbeitet' }
 }
 
-/** Der Kopf der Übersicht: Modell, Label und Abschluss — jede Angabe nur, wo der Stand sie führt. */
-const kopfText = (stand: NightRunStand | undefined): string =>
-  [
+/**
+ * Der Kopf der Übersicht: Modell, Label und Abschluss — jede Angabe nur, wo der Stand sie führt.
+ *
+ * <p><b>Der Abschluss hängt am Vorliegen eines Ergebnisstands</b> (Issue #1070), nicht daran, ob
+ * dieser ein `abschluss`-Feld trägt. Vorher stand der Vermerk bedingungslos da und las sich an
+ * einem per Token gemeldeten Lauf — der nie einen hochgeladenen Stand hat — als „noch nicht
+ * abgeschlossen", obwohl der Lauf fertig war. Die Prüfung gilt deshalb dem <em>Ergebnisstand</em>
+ * und nicht seinen Kopfangaben: Eine hochgeladene Datei ohne Kopfangaben hat hier `stand`
+ * `undefined`, sagt mit ihrem fehlenden Abschluss aber sehr wohl etwas aus.
+ */
+const kopfText = (ergebnisstand: NightRun | undefined): string => {
+  if (ergebnisstand === undefined) {
+    return ''
+  }
+  const stand = ergebnisstand.stand
+  return [
     ...(stand?.modell === undefined ? [] : [stand.modell]),
     ...(stand?.label === undefined ? [] : [`Label ${stand.label}`]),
     abschlussText(stand?.abschluss),
   ].join(' · ')
+}
 
 /**
  * Ein Abschnitt des Stufenbands. Die Form steht seit #916 an der Komponente, die ihn darstellt;
@@ -1118,10 +1163,13 @@ function bandabschnitt(
  * Vermerk. Sie ist der Grund, warum das Band `role="img"` trägt — die Zahlen darunter werden damit
  * nicht ein zweites Mal einzeln vorgelesen, sondern genau einmal in dieser Reihenfolge.
  */
-const bandAnsage = (abschnitte: readonly Bandabschnitt[]): string =>
-  `Stufenband: ${abschnitte
-    .map((a) => `${a.label} ${a.zahlen}${a.vermerk === null ? '' : `, ${a.vermerk}`}`)
-    .join(' · ')}`
+const bandAnsage = (abschnitte: readonly Bandabschnitt[]): string => {
+  const schritte = abschnitte.map((a) => {
+    const vermerk = a.vermerk === null ? '' : `, ${a.vermerk}`
+    return `${a.label} ${a.zahlen}${vermerk}`
+  })
+  return `Stufenband: ${schritte.join(' · ')}`
+}
 
 
 /**
@@ -1507,11 +1555,12 @@ const umsetzungsKennzahlen = (
   if (item.state === 'GREY') {
     return ''
   }
-  return standItem === undefined
-    ? item.durationMs === undefined
-      ? 'Dauer nicht gemeldet'
-      : formatDuration(item.durationMs / 1000)
-    : vorgangszeile(standItem, ohneKennzahlen)
+  if (standItem !== undefined) {
+    return vorgangszeile(standItem, ohneKennzahlen)
+  }
+  return item.durationMs === undefined
+    ? 'Dauer nicht gemeldet'
+    : formatDuration(item.durationMs / 1000)
 }
 
 /**
@@ -1647,8 +1696,9 @@ function teuersterVorgang(items: readonly NightRunItem[]): string {
   if (gemeldet.length === 0) {
     return 'nicht angegeben'
   }
-  const teuerster = gemeldet.reduce((hoechster, kandidat) =>
-    kandidat.kosten > hoechster.kosten ? kandidat : hoechster,
+  const teuerster = gemeldet.reduce(
+    (hoechster, kandidat) => (kandidat.kosten > hoechster.kosten ? kandidat : hoechster),
+    gemeldet[0],
   )
   return `#${teuerster.nummer} mit ${betrag(teuerster.kosten)}`
 }
@@ -1723,6 +1773,14 @@ function Kopfmarken({
           {UNVOLLSTAENDIG_GEMELDET}
         </LaufMarke>
       )}
+      {/* Die beiden Zustandsmarken schliessen einander aus: Ein Lauf ist entweder noch nicht
+          abgeschlossen oder ohne Arbeit beendet. Beide zugleich waeren ein Widerspruch im Kopf
+          derselben Platte (Issue #1069). */}
+      {lauf.vollstaendig && lauf.ohneArbeit !== undefined && (
+        <LaufMarke testId="lauf-zustand" led={<Led melder="zinnob" />}>
+          {lauf.ohneArbeit}
+        </LaufMarke>
+      )}
       {!offen && kosten !== null && <LaufMarke testId="lauf-kosten">{kosten}</LaufMarke>}
       {/* Die Herkunft wird **hier** aus dem Zwischenspeicher gelesen, nicht in `AnzeigeLauf`
           mitgeführt: Der Server kennt die Unterscheidung nicht, ein Feld am Anzeigemodell müsste
@@ -1753,7 +1811,7 @@ const metazeile = (lauf: AnzeigeLauf, stand: NightRun | undefined): string =>
     laufDauer(lauf.durationMs),
     `${lauf.processedCount} bearbeitet`,
     `${lauf.skippedCount} übergangen`,
-    kopfText(stand?.stand),
+    kopfText(stand),
     ...(lauf.unparsedCount > 0 ? [`Ungedeutete Zeilen: ${lauf.unparsedCount}`] : []),
   ]
     .filter((eintrag) => eintrag !== '')
@@ -2048,7 +2106,10 @@ function LaufPanel({
       titel={laufTitel(lauf.startedAt)}
       art={ART_KURZ[lauf.mode]}
       meta={metazeile(lauf, stand)}
-      melder={laufMelder({ complete: lauf.vollstaendig, items: lauf.items })}
+      melder={laufMelder(
+        { complete: lauf.vollstaendig, items: lauf.items, outcome: lauf.befund },
+        lauf.ohneArbeit,
+      )}
       pulsiert={!lauf.vollstaendig}
       offen={offen}
       onUmschalten={umschalten}
@@ -2127,6 +2188,17 @@ function LaufPanel({
 
 export function NightRunPage() {
   const { projectId } = useParams()
+  const [suchparameter] = useSearchParams()
+  /**
+   * Der angesteuerte Lauf aus `?lauf=<id>` (Issue #1085, AK 7).
+   *
+   * Eine Stoerzeile des Plattform-Leitstands zeigt hierher. Steht kein Parameter oder etwas
+   * Ungueltiges darin, ist das Ergebnis `null` und die Seite verhaelt sich wie ohne ihn — ein
+   * Verweis, den das System selbst ausgegeben hat, soll nicht auf eine Fehlerseite fuehren, nur
+   * weil der Ringpuffer den Lauf inzwischen verdraengt hat.
+   */
+  const angesteuerterLauf = Number(suchparameter.get('lauf'))
+  const gesuchteLaufId = Number.isInteger(angesteuerterLauf) && angesteuerterLauf > 0 ? angesteuerterLauf : null
   const id = Number.parseInt(projectId ?? '', 10)
   const validId = Number.isInteger(id) && id > 0
   const projectName = useProjectName(validId ? id : null)
@@ -2298,6 +2370,26 @@ export function NightRunPage() {
   }, [laeufe, aufklappen])
 
   /**
+   * Springt zum angesteuerten Lauf (Issue #1085, AK 7).
+   *
+   * Aufgeklappt ist er schon über `zuerst` — ohne den Sprung stünde er aber möglicherweise weit
+   * unten, und der Verweis aus der Störzeile führte auf eine Seite, auf der man erst suchen muss.
+   * Der Effekt läuft, sobald die Läufe geladen sind; ein Ziel, das der Ringpuffer verdrängt hat,
+   * findet kein Element und tut nichts.
+   */
+  useEffect(() => {
+    if (gesuchteLaufId === null) {
+      return
+    }
+    const ziel = laeufe.find((lauf) => lauf.laufId === gesuchteLaufId)
+    if (ziel === undefined) {
+      return
+    }
+    document.querySelector(`[data-testid="lauf-${ziel.startedAt}"]`)?.scrollIntoView({ block: 'start' })
+  }, [gesuchteLaufId, laeufe])
+
+
+  /**
    * Liest den Ergebnisstand im Browser, zeigt die Auswertung und liefert sie ein. Die gedeutete
    * Auswertung steht **vor** dem Senden auf der Seite: Scheitert das Einliefern, bleibt sie
    * sichtbar, und die Meldung nennt den Grund.
@@ -2384,7 +2476,7 @@ export function NightRunPage() {
           <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
             <Breadcrumbs
               items={[
-                { label: 'Projekte', to: '/' },
+                { label: 'Projekte', to: '/projects' },
                 { label: projectName ?? 'Projekt', to: `/projects/${id}` },
                 { label: 'Nachtlauf' },
               ]}
@@ -2430,7 +2522,13 @@ export function NightRunPage() {
                   <LaufPanel
                     key={lauf.startedAt}
                     lauf={lauf}
-                    zuerst={position === 0}
+                    // Mit `?lauf=<id>` steht genau dieser Lauf offen statt des obersten; zeigt der
+                    // Parameter ins Leere, bleibt es beim obersten (Issue #1085).
+                    zuerst={
+                      gesuchteLaufId === null
+                        ? position === 0
+                        : lauf.laufId === gesuchteLaufId
+                    }
                     ergebnis={ergebnisse.get(lauf.startedAt)}
                     ausErgebnisstand={ausErgebnisstand}
                     // Der Speicher entscheidet, ob zu genau diesem Lauf ein Ergebnisstand dieser

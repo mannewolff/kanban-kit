@@ -32,8 +32,9 @@ export function karteSx(options: {
   /** Die Karte wird gerade gezogen — an ihrer Stelle bleibt die Vertiefung (siehe {@link PLATZHALTER_SX}). */
   bewegt?: boolean
 } = {}): SxProps<Theme> & Record<string, unknown> {
+  const randfarbe = options.gewaehlt ? `color-mix(in srgb, ${KUPFER} 52%, ${RAND})` : RAND
   return {
-    border: `1px solid ${options.gewaehlt ? `color-mix(in srgb, ${KUPFER} 52%, ${RAND})` : RAND}`,
+    border: `1px solid ${randfarbe}`,
     borderRadius: `${CARD_RADIUS}px`,
     background: options.gewaehlt ? AUSWAHL : `linear-gradient(180deg, ${PLATTE_HOCH}, ${PLATTE})`,
     boxShadow: CARD_SHADOW,
@@ -43,6 +44,30 @@ export function karteSx(options: {
     '&:hover': { boxShadow: CARD_SHADOW_HOVER, transform: `translateY(${CARD_LIFT}px)` },
     ...(options.bewegt ? PLATZHALTER_SX : {}),
   }
+}
+
+/**
+ * Wie dicht die Karten einer Spalte stehen — Wahlschalter der Werkzeugleiste (#980). Der Typ steht
+ * beim Maß und nicht bei der Ansicht, damit Board und Karte dieselbe Quelle lesen (#1056).
+ */
+export type Dichte = 'normal' | 'kompakt'
+
+/** Innenabstände einer Karte, in einer Form, die beide Dichten mit denselben Schlüsseln beschreibt. */
+export interface KarteDichteSx {
+  gap: string
+  px: string
+  py: string
+}
+
+/**
+ * Abstände der Karte nach gewählter Dichte (#1056). Als Tabelle statt als drei Ternäre im `sx`:
+ * Die beiden Maßsätze stehen nebeneinander und sind als Ganzes lesbar, und die Karte trägt die
+ * Fallunterscheidung nicht mehr in ihrer eigenen Komplexität (Plan #1042, P11).
+ */
+export function karteDichteSx(dichte: Dichte): KarteDichteSx {
+  return dichte === 'kompakt'
+    ? { gap: '4px', px: '9px', py: '6px' }
+    : { gap: '7px', px: '11px', py: '10px' }
 }
 
 /**

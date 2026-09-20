@@ -21,6 +21,7 @@ import org.mwolff.manban.nightrun.application.NightRunUsageRepository.CardTotals
 import org.mwolff.manban.nightrun.application.NightRunUsageRepository.LifetimeTotals;
 import org.mwolff.manban.nightrun.application.NightRunUsageRepository.NightTotals;
 import org.mwolff.manban.nightrun.application.NightRunUsageRepository.PeriodTotals;
+import org.mwolff.manban.nightrun.application.NightRunUsageRepository.RetainedByKind;
 import org.mwolff.manban.nightrun.application.NightRunUsageRepository.TotalsByKind;
 import org.mwolff.manban.nightrun.domain.NightRunErrorClass;
 import org.mwolff.manban.nightrun.domain.NightRunPeriod;
@@ -48,8 +49,9 @@ import org.springframework.transaction.annotation.Transactional;
  *       getrennt vom Fall, dass im Zeitraum schlicht kein Lauf stattfand.
  * </ul>
  *
- * <p>Wer darf: {@code requireOwner} wie jeder Nachtlauf-Use-Case, der Plattform-Admin kommt mit
- * durch (Plan E17).
+ * <p>Wer darf: {@code requireNightRunAccess} wie jeder lesende Nachtlauf-Use-Case (Issue #1079).
+ * Der echte Projekt-OWNER darf immer; ein Plattform-Admin ohne diese Rolle nur, wenn das Projekt am
+ * Plattform-Leitstand teilnimmt — sonst 403. Bis dahin kam er ungebunden durch (Plan E17).
  */
 @Service
 // Die Kopplung folgt den Sichten, nicht einer Entwurfsentscheidung: Der Use-Case setzt aus Port,
@@ -68,18 +70,21 @@ public class NightRunUsageService {
   private final PermissionChecker permissions;
   private final InteractiveUsageSinceReader erfassungsbeginn;
   private final Clock clock;
+  private final NightRunProperties properties;
 
   public NightRunUsageService(
       NightRunUsageRepository usage,
       CardService cards,
       PermissionChecker permissions,
       InteractiveUsageSinceReader erfassungsbeginn,
-      Clock clock) {
+      Clock clock,
+      NightRunProperties properties) {
     this.usage = usage;
     this.cards = cards;
     this.permissions = permissions;
     this.erfassungsbeginn = erfassungsbeginn;
     this.clock = clock;
+    this.properties = properties;
   }
 
   /**
@@ -88,7 +93,7 @@ public class NightRunUsageService {
    */
   @Transactional(readOnly = true)
   public NightUsageView night(long userId, long projectId, LocalDate night, ZoneId zone) {
-    permissions.requireOwner(userId, projectId);
+    permissions.requireNightRunAccess(userId, projectId);
     NightRunPeriod spanne = NightRunPeriod.night(night, zone);
     PeriodTotals summe = usage.totals(projectId, spanne.from(), spanne.to());
     List<NightTotals> tagesgruppen =
@@ -111,9 +116,9 @@ public class NightRunUsageService {
   @Transactional(readOnly = true)
   public PeriodUsageView period(
       long userId, long projectId, NightRunPeriodType type, int stepsBack, ZoneId zone) {
-    permissions.requireOwner(userId, projectId);
+    permissions.requireNightRunAccess(userId, projectId);
     NightRunPeriod zeitraum = NightRunPeriod.of(type, zone, clock, stepsBack);
-    Optional<Instant> aeltester = usage.oldestRetainedRunStart(projectId);
+    Optional<Instant> grenze = aufbewahrungsgrenze(projectId);
     Instant seit = erfassungsbeginn.interactiveUsageSince(projectId).orElse(null);
 
     List<NightSummary> naechte =
@@ -134,8 +139,8 @@ public class NightRunUsageService {
         cards.epicsByCardNumber(projectId, karten.stream().map(CardTotals::cardNumber).toList());
 
     return new PeriodUsageView(
-        kennzahlen(projectId, zeitraum, aeltester, seit),
-        kennzahlen(projectId, zeitraum.previous(), aeltester, seit),
+        kennzahlen(projectId, zeitraum, grenze, seit),
+        kennzahlen(projectId, zeitraum.previous(), grenze, seit),
         naechte,
         vorhaben(karten, zuordnung),
         ohneVorhaben(karten, zuordnung),
@@ -151,7 +156,7 @@ public class NightRunUsageService {
    */
   @Transactional(readOnly = true)
   public TotalUsageView total(long userId, long projectId) {
-    permissions.requireOwner(userId, projectId);
+    permissions.requireNightRunAccess(userId, projectId);
     LifetimeTotals summe = usage.lifetimeTotals(projectId);
     return new TotalUsageView(
         summe.byKind().night().runCount(),
@@ -164,14 +169,11 @@ public class NightRunUsageService {
   }
 
   private PeriodFigures kennzahlen(
-      long projectId,
-      NightRunPeriod zeitraum,
-      Optional<Instant> aeltester,
-      @Nullable Instant seit) {
+      long projectId, NightRunPeriod zeitraum, Optional<Instant> grenze, @Nullable Instant seit) {
     PeriodTotals summe = usage.totals(projectId, zeitraum.from(), zeitraum.to());
     return new PeriodFigures(
         zeitraum,
-        abdeckung(zeitraum, aeltester),
+        abdeckung(zeitraum, grenze),
         summe.byKind().night().runCount(),
         summe.byKind().interactive().runCount(),
         summe.durationMs(),
@@ -182,15 +184,33 @@ public class NightRunUsageService {
   }
 
   /**
-   * Ohne aufbewahrten Lauf ist nichts verdrängt worden — der Zeitraum ist dann vollständig, nur
-   * leer. Ein Lauf genau am Beginn des Zeitraums lässt ihn vollständig; endet der Zeitraum genau am
-   * ältesten Lauf, liegt er ganz davor ({@code to} ist ausschließlich).
+   * Die Aufbewahrungsgrenze (Plan E8, Issue #1071): der späteste älteste Eintrag unter den
+   * Gattungen, deren Ringpuffer <b>gefüllt</b> ist ({@code count >= properties.maxRunsFor(kind)}).
+   * Hat keine Gattung ihren Ringpuffer gefüllt, ist nichts verdrängt worden — dann gibt es keine
+   * Grenze, unabhängig davon, wie alt das Projekt ist.
+   *
+   * <p>Hält eine nicht volle Gattung ältere Einträge als die volle, bleibt die Grenze am ältesten
+   * Eintrag der vollen Gattung — die nicht volle hat davon nichts verloren (E9, Plan-Review H5).
    */
-  private static Coverage abdeckung(NightRunPeriod zeitraum, Optional<Instant> aeltester) {
-    if (aeltester.isEmpty() || !zeitraum.from().isBefore(aeltester.get())) {
+  private Optional<Instant> aufbewahrungsgrenze(long projectId) {
+    return usage.retentionBoundary(projectId).stream()
+        .filter(r -> r.count() >= properties.maxRunsFor(r.kind()))
+        .map(RetainedByKind::oldestStart)
+        .filter(Objects::nonNull)
+        .max(Instant::compareTo);
+  }
+
+  /**
+   * Ohne Aufbewahrungsgrenze ist nichts verdrängt worden — der Zeitraum ist dann vollständig, auch
+   * wenn er leer ist oder ganz vor dem ersten Lauf des Projekts liegt. Ein Lauf genau am Beginn des
+   * Zeitraums lässt ihn vollständig; endet der Zeitraum genau an der Grenze, liegt er ganz davor
+   * ({@code to} ist ausschließlich).
+   */
+  private static Coverage abdeckung(NightRunPeriod zeitraum, Optional<Instant> grenze) {
+    if (grenze.isEmpty() || !zeitraum.from().isBefore(grenze.get())) {
       return Coverage.COMPLETE;
     }
-    return zeitraum.to().isAfter(aeltester.get()) ? Coverage.PARTIAL : Coverage.BEFORE_RETENTION;
+    return zeitraum.to().isAfter(grenze.get()) ? Coverage.PARTIAL : Coverage.BEFORE_RETENTION;
   }
 
   /**
@@ -256,13 +276,18 @@ public class NightRunUsageService {
     return new EpicUsageView(a.epic(), a.cardCount() + b.cardCount(), a.usage().plus(b.usage()));
   }
 
-  /** Abdeckung eines Zeitraums durch die aufbewahrten Läufe (Plan E8). */
+  /**
+   * Abdeckung eines Zeitraums durch die aufbewahrten Läufe (Plan E8, Issue #1071). Die drei Werte
+   * sagen etwas über <b>verdrängte</b> Läufe — nicht über das Alter des Projekts: Ein junges
+   * Projekt, dessen Ringpuffer noch nicht gefüllt ist, ist für jeden Zeitraum {@code COMPLETE},
+   * auch für einen, der ganz vor seinem ersten Lauf liegt.
+   */
   public enum Coverage {
     /** Kein Lauf dieses Zeitraums ist verdrängt worden. */
     COMPLETE,
-    /** Der Zeitraum beginnt vor dem ältesten aufbewahrten Lauf und reicht über ihn hinaus. */
+    /** Der Zeitraum beginnt vor der Aufbewahrungsgrenze und reicht über sie hinaus. */
     PARTIAL,
-    /** Der Zeitraum endet vor dem ältesten aufbewahrten Lauf. */
+    /** Der Zeitraum endet vor der Aufbewahrungsgrenze. */
     BEFORE_RETENTION
   }
 

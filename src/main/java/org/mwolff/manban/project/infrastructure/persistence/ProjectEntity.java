@@ -38,6 +38,15 @@ class ProjectEntity {
   @Column(name = "interactive_usage_since", insertable = false, updatable = false)
   private @Nullable Instant interactiveUsageSince;
 
+  /**
+   * Ob der Plattform-Leitstand Störungen dieses Projekts zeigt (Issue #1076) — <b>nur lesbar</b>,
+   * dieselbe Begründung wie bei {@link #interactiveUsageSince}: Der allgemeine Schreibweg ({@code
+   * save}) darf die Teilnahme nicht mit einem veralteten Wert überschreiben, etwa beim Umbenennen.
+   * Geschrieben wird sie über einen eigenen, engen Schreibweg (folgt in einem späteren Paket).
+   */
+  @Column(name = "dashboard_participation", insertable = false, updatable = false)
+  private boolean dashboardParticipation;
+
   protected ProjectEntity() {
     // für JPA
   }
@@ -67,5 +76,9 @@ class ProjectEntity {
 
   @Nullable Instant getInteractiveUsageSince() {
     return interactiveUsageSince;
+  }
+
+  boolean isDashboardParticipation() {
+    return dashboardParticipation;
   }
 }

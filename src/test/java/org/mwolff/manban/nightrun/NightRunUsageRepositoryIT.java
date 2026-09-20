@@ -19,6 +19,7 @@ import org.mwolff.manban.nightrun.application.NightRunUsageRepository.CardTotals
 import org.mwolff.manban.nightrun.application.NightRunUsageRepository.LifetimeTotals;
 import org.mwolff.manban.nightrun.application.NightRunUsageRepository.NightTotals;
 import org.mwolff.manban.nightrun.application.NightRunUsageRepository.PeriodTotals;
+import org.mwolff.manban.nightrun.application.NightRunUsageRepository.RetainedByKind;
 import org.mwolff.manban.nightrun.domain.NightRun;
 import org.mwolff.manban.nightrun.domain.NightRunErrorClass;
 import org.mwolff.manban.nightrun.domain.NightRunItem;
@@ -148,7 +149,8 @@ class NightRunUsageRepositoryIT extends AbstractIntegrationTest {
             "t",
             true,
             null,
-            laufVerbrauch),
+            laufVerbrauch,
+            null),
         List.of(pakete));
   }
 
@@ -587,6 +589,32 @@ class NightRunUsageRepositoryIT extends AbstractIntegrationTest {
   @Test
   void einProjektOhneLaeufeHatKeinenAeltestenLauf() {
     assertThat(usage.oldestRetainedRunStart(projectId)).isEmpty();
+  }
+
+  /** Zahl und aeltester Zeitpunkt kommen getrennt je Gattung (Issue #1071, Plan #1067 E8). */
+  @Test
+  void retentionBoundaryLiefertZahlUndAeltestenZeitpunktJeGattung() {
+    lauf(projectId, "2026-09-15T21:10:00Z", NightRunMode.CHAIN, 1L, null);
+    lauf(projectId, "2026-09-10T21:00:00Z", NightRunMode.IMPLEMENTATION, 1L, null);
+    sitzung(projectId, "2026-09-16T01:22:00Z", 1L, null);
+
+    assertThat(usage.retentionBoundary(projectId))
+        .extracting(RetainedByKind::kind, RetainedByKind::count, RetainedByKind::oldestStart)
+        .containsExactlyInAnyOrder(
+            tuple(NightRunKind.NIGHT, 2L, Instant.parse("2026-09-10T21:00:00Z")),
+            tuple(NightRunKind.INTERACTIVE, 1L, Instant.parse("2026-09-16T01:22:00Z")));
+  }
+
+  /** Eine Gattung ohne Zeile ergibt Zahl 0 und keinen Zeitpunkt — nicht fehlend als Zeile. */
+  @Test
+  void retentionBoundaryOhneEintragEinerGattungLiefertZahlNullUndKeinenZeitpunkt() {
+    lauf(projectId, "2026-09-15T21:10:00Z", NightRunMode.CHAIN, 1L, null);
+
+    assertThat(usage.retentionBoundary(projectId))
+        .filteredOn(r -> r.kind() == NightRunKind.INTERACTIVE)
+        .singleElement()
+        .returns(0L, RetainedByKind::count)
+        .returns(null, RetainedByKind::oldestStart);
   }
 
   /** Leere Summen, nicht Nullen an Verbrauchsstellen (Plan E5). */

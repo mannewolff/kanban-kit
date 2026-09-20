@@ -10,14 +10,20 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
+import static org.mwolff.manban.nightrun.web.NightRunController.NO_WORK_REASON_MAX;
 
+import jakarta.validation.Validation;
+import jakarta.validation.Validator;
+import jakarta.validation.ValidatorFactory;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.mwolff.manban.accesstoken.application.KanbanPrincipal;
 import org.mwolff.manban.nightrun.application.NightRunService;
+import org.mwolff.manban.nightrun.application.NightRunService.NewNightRun;
 import org.mwolff.manban.nightrun.application.NightRunService.NightRunResult;
 import org.mwolff.manban.nightrun.application.TokenNotBoundForIngestException;
 import org.mwolff.manban.nightrun.domain.NightRunKind;
@@ -47,7 +53,7 @@ class NightRunIngestControllerTest {
   private static NightRunIngestController.IngestRequest anfrage(
       @Nullable NightRunUsageRequest usage, @Nullable NightRunKind kind, NightRunMode mode) {
     return new NightRunIngestController.IngestRequest(
-        START, mode, kind, 1000L, 1, 0, 0, Boolean.TRUE, usage, List.of());
+        START, mode, kind, 1000L, 1, 0, 0, Boolean.TRUE, usage, null, List.of());
   }
 
   @Test
@@ -132,6 +138,60 @@ class NightRunIngestControllerTest {
     controller.ingest(gebunden, anfrage(null, NightRunKind.INTERACTIVE, NightRunMode.INTERACTIVE));
 
     verify(service).ingest(eq(1L), eq(42L), eq("sitzung"), eq(NightRunKind.INTERACTIVE), any());
+  }
+
+  /** Eine Meldung mit gemeldetem Grund ohne abgearbeitete Pakete. */
+  private static NightRunIngestController.IngestRequest anfrageMitGrund(@Nullable String grund) {
+    return new NightRunIngestController.IngestRequest(
+        START,
+        NightRunMode.CHAIN,
+        NightRunKind.NIGHT,
+        1000L,
+        0,
+        0,
+        0,
+        Boolean.TRUE,
+        null,
+        grund,
+        List.of());
+  }
+
+  /**
+   * Additiv wie die Gattung (E3, Vorbild Issue #1012): Eine aeltere Kit-Kopie kennt {@code
+   * noWorkReason} nicht. Ihre Meldung muss die Pruefung bestehen statt an ihr zu scheitern — den
+   * Text setzt dann der Server.
+   */
+  @Test
+  void eineMeldungOhneGrundFeldBestehtDiePruefung() {
+    try (ValidatorFactory factory = Validation.buildDefaultValidatorFactory()) {
+      assertThat(factory.getValidator().validate(anfrageMitGrund(null))).isEmpty();
+    }
+  }
+
+  /** Die Grenze wird beidseitig belegt — sonst bestuende auch eine Zusicherung ohne Obergrenze. */
+  @Test
+  void einGrundBisZurGrenzeBestehtUndEinerDarueberWirdAbgewiesen() {
+    try (ValidatorFactory factory = Validation.buildDefaultValidatorFactory()) {
+      Validator validator = factory.getValidator();
+
+      assertThat(validator.validate(anfrageMitGrund("x".repeat(NO_WORK_REASON_MAX)))).isEmpty();
+      assertThat(validator.validate(anfrageMitGrund("x".repeat(NO_WORK_REASON_MAX + 1))))
+          .hasSize(1);
+    }
+  }
+
+  @Test
+  void derGemeldeteGrundWirdAnDenDienstDurchgereicht() {
+    Authentication gebunden = mitPrincipal(new KanbanPrincipal(1L, 2L, 42L, 7L, "nacht"));
+    when(service.ingest(anyLong(), anyLong(), anyString(), any(), any()))
+        .thenReturn(new NightRunResult(START, true));
+
+    controller.ingest(gebunden, anfrageMitGrund("Kein Eintrag trug das Label kit:nightrun"));
+
+    ArgumentCaptor<NewNightRun> meldung = ArgumentCaptor.forClass(NewNightRun.class);
+    verify(service).ingest(anyLong(), anyLong(), anyString(), any(), meldung.capture());
+    assertThat(meldung.getValue().noWorkReason())
+        .isEqualTo("Kein Eintrag trug das Label kit:nightrun");
   }
 
   private static Authentication mitPrincipal(KanbanPrincipal principal) {

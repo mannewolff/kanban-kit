@@ -410,34 +410,21 @@ describe('parseNightRunErgebnisstand — Zustand je Arbeitspaket', () => {
     expect(item.excerpt).toBe('Harter Stopp')
   })
 
-  it('macht `verbraucht` gruen ohne Fehlerklasse', () => {
-    const item = einziges(mitEinheit({ ausgang: 'verbraucht' }, { art: 'erzeugung', stufe: 'plan' }))
-    expect(item.state).toBe('GREEN')
+  // Die vier Ausgaenge eines Erzeugungs-Laufs: gleicher Aufbau, nur Farbe und Auszug
+  // unterscheiden sich; keiner traegt eine Fehlerklasse. Als Tabelle statt viermal
+  // ausgeschrieben (Sonar S5976, Issue #813).
+  it.each([
+    ['verbraucht', 'GREEN', 'Dokument(e) erzeugt und geprüft — Label entfernt'],
+    ['liegengeblieben', 'GREY', 'Über die Obergrenze (--max) hinaus — bleibt liegen'],
+    // `offen` kommt in keinem der beiden echten Fixtures vor (Plan #803, #805) — diese
+    // Zeile ist bewusst synthetisch, nicht gegen echte Daten belegt.
+    ['offen', 'GREY', 'Noch nicht jedes erzeugte Dokument hat einen Endzustand — Label bleibt stehen'],
+    ['ohneErgebnis', 'RED', 'Keine verwertbare Erzeugung — Session ohne Dokument oder Prüfrunde ohne Anker'],
+  ])('macht `%s` %s ohne Fehlerklasse', (ausgang, state, excerpt) => {
+    const item = einziges(mitEinheit({ ausgang }, { art: 'erzeugung', stufe: 'plan' }))
+    expect(item.state).toBe(state)
     expect(item.errorClass).toBeUndefined()
-    expect(item.excerpt).toBe('Dokument(e) erzeugt und geprüft — Label entfernt')
-  })
-
-  it('macht `liegengeblieben` grau ohne Fehlerklasse', () => {
-    const item = einziges(mitEinheit({ ausgang: 'liegengeblieben' }, { art: 'erzeugung', stufe: 'plan' }))
-    expect(item.state).toBe('GREY')
-    expect(item.errorClass).toBeUndefined()
-    expect(item.excerpt).toBe('Über die Obergrenze (--max) hinaus — bleibt liegen')
-  })
-
-  // `offen` kommt in keinem der beiden echten Fixtures vor (Plan #803, #805) — dieser
-  // Test ist bewusst synthetisch, nicht gegen echte Daten belegt.
-  it('macht das synthetische `offen` grau ohne Fehlerklasse', () => {
-    const item = einziges(mitEinheit({ ausgang: 'offen' }, { art: 'erzeugung', stufe: 'plan' }))
-    expect(item.state).toBe('GREY')
-    expect(item.errorClass).toBeUndefined()
-    expect(item.excerpt).toBe('Noch nicht jedes erzeugte Dokument hat einen Endzustand — Label bleibt stehen')
-  })
-
-  it('macht `ohneErgebnis` rot ohne Fehlerklasse', () => {
-    const item = einziges(mitEinheit({ ausgang: 'ohneErgebnis' }, { art: 'erzeugung', stufe: 'plan' }))
-    expect(item.state).toBe('RED')
-    expect(item.errorClass).toBeUndefined()
-    expect(item.excerpt).toBe('Keine verwertbare Erzeugung — Session ohne Dokument oder Prüfrunde ohne Anker')
+    expect(item.excerpt).toBe(excerpt)
   })
 
   it('macht `uebersprungen` grau mit Freitext aus grund, unabhaengig vom Lauf-Modus', () => {

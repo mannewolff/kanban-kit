@@ -266,7 +266,7 @@ export function EpicsPage() {
       <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
         <Breadcrumbs
           items={[
-            { label: 'Projekte', to: '/' },
+            { label: 'Projekte', to: '/projects' },
             // `board` ist ab hier immer gesetzt: Dieser Zweig wird nur erreicht, wenn `load()`
             // erfolgreich war (weder `loading` noch `loadError`, siehe die Returns oben) — die
             // Zusicherung dient nur der Typverengung, die TypeScript ueber die fruehen Returns

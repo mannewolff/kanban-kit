@@ -194,6 +194,26 @@ class RateLimitFilterTest {
   }
 
   @Test
+  void problemBodyIstZeichenGenau() throws Exception {
+    // Given — dieselbe Lage wie oben, hier aber auf den ganzen Body gesehen.
+    when(rateLimiter.isEnabled()).thenReturn(true);
+    when(rateLimiter.checkBlocked(ORIGIN, RateLimitedOperation.LOGIN))
+        .thenReturn(Optional.of(Duration.ofSeconds(90)));
+
+    // When
+    MockHttpServletResponse response =
+        runFilter(request("POST", "/api/auth/login"), chainAnswering(200));
+
+    // Then — kein Feld, kein Komma, kein Leerzeichen darf sich verschieben: Der Body entsteht von
+    // Hand aus einer Vorlage, und ein umgebauter Literal-Aufbau (Issue #1050) fiele sonst nur über
+    // einen Aufrufer auf, der ihn liest.
+    assertThat(response.getContentAsString())
+        .isEqualTo(
+            "{\"type\":\"about:blank\",\"title\":\"Too Many Requests\",\"status\":429,"
+                + "\"detail\":\"Zu viele Versuche. Bitte in 2 Minuten erneut versuchen.\"}");
+  }
+
+  @Test
   void restdauerUnterEinerMinuteWirdAlsEineMinuteGenannt() throws Exception {
     // Given — 30 Sekunden Restdauer; „in 0 Minuten" wäre eine falsche Auskunft.
     when(rateLimiter.isEnabled()).thenReturn(true);

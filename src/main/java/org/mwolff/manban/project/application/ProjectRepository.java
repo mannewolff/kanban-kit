@@ -37,4 +37,15 @@ public interface ProjectRepository {
    *     wann erfasst wurde
    */
   void setInteractiveUsageSinceIfAbsent(long projectId, Instant startedAt);
+
+  /**
+   * Schaltet die Teilnahme am Plattform-Leitstand ({@code project.dashboard_participation}, Issue
+   * #1077, Plan #1072 E25).
+   *
+   * <p>Gezieltes Update statt {@code save}: Die Spalte steht an der Entity auf {@code insertable =
+   * false, updatable = false} — wie {@code interactive_usage_since} und aus demselben Grund. Liefe
+   * sie über den allgemeinen Schreibweg, überschriebe ein Umbenennen sie mit dem Wert, den das
+   * Aggregat beim Laden gesehen hat. Ein unbekanntes Projekt ist ein No-Op.
+   */
+  void setDashboardParticipation(long projectId, boolean participating);
 }

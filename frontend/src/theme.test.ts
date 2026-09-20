@@ -321,9 +321,10 @@ describe('theme Overrides schalten mit dem Erscheinungsbild', () => {
       return ergebnis
     }
     // Ausgenommen ist allein der Druckblock: Er setzt die hellen Werte absichtlich fest (#953).
-    const alle = JSON.stringify(theme.components, (schluessel, wert: unknown) =>
-      schluessel === '@media print' ? undefined : typeof wert === 'string' ? ohneVariablen(wert) : wert,
-    )
+    const alle = JSON.stringify(theme.components, (schluessel, wert: unknown) => {
+      if (schluessel === '@media print') return undefined
+      return typeof wert === 'string' ? ohneVariablen(wert) : wert
+    })
     expect(alle).not.toMatch(/#[0-9A-Fa-f]{3,8}\b/)
     expect(ohneVariablen('var(--a, rgba(1,2,3,0)) #ABCDEF')).toBe(' #ABCDEF')
   })

@@ -49,10 +49,10 @@ import type { Member } from '../api/members'
 import { Breadcrumbs } from './Breadcrumbs'
 import { isTooLong, tooLongMessage } from '../lib/textLimits'
 import { CardFields } from './CardFields'
+import { vorhabenFeld } from '../lib/cardEpic'
 import { cardLocationCrumbs, type CardLocation } from '../lib/cardLocation'
 import { canonicalColumnKey, otherCanonicalColumns } from '../lib/columnMeta'
 import { dueInputToIso, formatDueDate, isOverdue } from '../lib/dueDate'
-import { epicShortcode } from '../lib/epicMeta'
 import { normalizeTaskLists, toggleTaskAt } from '../lib/markdownTasks'
 import { safeImageSrc, safeLinkHref } from '../lib/markdownUrls'
 import { statusColors } from '../lib/statusColors'
@@ -892,6 +892,175 @@ function CardBodyView({
   )
 }
 
+/**
+ * „Vorgang eröffnen" (Issue #647): der Knopf in der Fußzeile und der Dialog für Name und Kürzel.
+ * Eigene Komponente mit eigenem Zustand (Plan #1042, E11) — Name, Kürzel und Offen-Zustand
+ * interessieren ausschließlich diesen einen Weg und belasteten die Kartenmaske sonst mit drei
+ * weiteren Zustandsfeldern.
+ *
+ * Steht der Weg nicht offen, rendert die Komponente nichts: Der Knopf entfällt, und der Dialog
+ * hätte ohne ihn keinen Auslöser.
+ */
+function VorgangEroeffnenDialog({
+  cardId,
+  cardTitle,
+  canEdit,
+  isEpic,
+  archived,
+  ideaStored,
+  parentId,
+  cardsApi,
+  onChanged,
+  onOpenDependency,
+}: Readonly<{
+  cardId: number
+  cardTitle: string
+  canEdit: boolean
+  isEpic: boolean
+  archived: boolean
+  ideaStored: boolean
+  parentId: number | null
+  cardsApi: Pick<typeof defaultCardsApi, 'openEpic'>
+  onChanged?: () => void
+  onOpenDependency?: (number: number) => void
+}>) {
+  const notify = useSnackbar()
+  // Der Name ist mit dem Kartentitel vorbelegt und ueberschreibbar; das Kuerzel ist optional wie
+  // beim Anlegen eines Vorhabens.
+  const [offen, setOffen] = useState(false)
+  const [name, setName] = useState('')
+  const [kuerzel, setKuerzel] = useState('')
+
+  /**
+   * Ob an dieser Karte ein Vorgang eroeffnet werden kann — dieselben Bedingungen, die das Backend
+   * in #640 prueft. Die Oberflaeche zeigt den Weg gar nicht erst an, statt ihn in einen Fehler
+   * laufen zu lassen.
+   */
+  const kannVorgangEroeffnen = canEdit && !isEpic && !archived && !ideaStored && parentId === null
+
+  const eroeffneVorgang = async () => {
+    try {
+      const vorhaben = await cardsApi.openEpic(cardId, name.trim(), (kuerzel.trim() === '' ? null : kuerzel.trim()))
+      setOffen(false)
+      onChanged?.()
+      notify(`Vorgang eröffnet: ${vorhaben.title}`, 'success')
+      // Zum neuen Vorhaben: ueber denselben Verweis-Stack wie die `#N`-Spruenge. Fehlt die
+      // Projekt-ID, gibt es keine Aufloesung — dann bleibt es bei der Meldung.
+      onOpenDependency?.(vorhaben.number)
+    } catch (error_: unknown) {
+      // Die Meldung des Servers, nicht eine eigene: Die Ablehnungen aus #640 tragen einen
+      // Feldbezug, und ein verschluckter Text liesse den Nutzer raten.
+      notify(apiErrorMessage(error_, 'Vorgang eröffnen fehlgeschlagen.'), 'error')
+    }
+  }
+
+  if (!kannVorgangEroeffnen) {
+    return null
+  }
+
+  return (
+    <>
+      <Button
+        onClick={() => {
+          setName(cardTitle)
+          setKuerzel('')
+          setOffen(true)
+        }}
+      >
+        Vorgang eröffnen
+      </Button>
+      {/* Eigener Dialog statt Inline-Feldern, damit die Kartenmaske im Lesemodus nicht zwei
+          Eingabefelder traegt, die fast nie gebraucht werden. */}
+      <Dialog open={offen} onClose={() => setOffen(false)} fullWidth maxWidth="xs">
+        <DialogTitle sx={dialogTitleSx}>Vorgang eröffnen</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ mt: 1 }}>
+            <TextField
+              label="Name des Vorhabens"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              fullWidth
+              autoFocus
+            />
+            <TextField
+              label="Kürzel (optional)"
+              value={kuerzel}
+              onChange={(e) => setKuerzel(e.target.value)}
+              fullWidth
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setOffen(false)}>Abbrechen</Button>
+          <Button
+            variant="contained"
+            onClick={() => void eroeffneVorgang()}
+            disabled={name.trim() === ''}
+          >
+            Eröffnen
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </>
+  )
+}
+
+/**
+ * Fußzeile der Kartenmaske: im Editiermodus Abbrechen und Speichern, sonst die Alltags-Aktionen.
+ * Eigene Komponente (Plan #1042, E11), damit der Editier-Ternär mit seinen beiden Zweigen nicht in
+ * der Kartenmaske zählt. `vorgang` ist der Platz des „Vorgang eröffnen"-Wegs, der seinen Zustand
+ * selbst hält.
+ */
+function KartenDialogAktionen({
+  editing,
+  canEdit,
+  archived,
+  ideaStored,
+  isEpic,
+  speichernGesperrt,
+  onAbbrechen,
+  onSpeichern,
+  onWiederherstellen,
+  onIdeenPool,
+  onClose,
+  vorgang,
+}: Readonly<{
+  editing: boolean
+  canEdit: boolean
+  archived: boolean
+  ideaStored: boolean
+  isEpic: boolean
+  speichernGesperrt: boolean
+  onAbbrechen: () => void
+  onSpeichern: () => void
+  onWiederherstellen: () => void
+  onIdeenPool: () => void
+  onClose: () => void
+  vorgang: ReactNode
+}>) {
+  if (editing) {
+    return (
+      <DialogActions>
+        <Button onClick={onAbbrechen}>Abbrechen</Button>
+        <Button variant="contained" onClick={onSpeichern} disabled={speichernGesperrt}>
+          Speichern
+        </Button>
+      </DialogActions>
+    )
+  }
+  return (
+    <DialogActions>
+      {canEdit && archived && <Button onClick={onWiederherstellen}>Wiederherstellen</Button>}
+      {/* In den Ideen-Pool: Alltags-Aktion (an canEdit gebunden, nicht editiermodus-gegatet). */}
+      {canEdit && !archived && !ideaStored && !isEpic && (
+        <Button onClick={onIdeenPool}>In den Ideen-Pool</Button>
+      )}
+      {vorgang}
+      <Button onClick={onClose}>Schließen</Button>
+    </DialogActions>
+  )
+}
+
 interface Props {
   card: CardDetail
   canEdit: boolean
@@ -1053,6 +1222,7 @@ function CardDetailModalView({
   }
 
   // In den Ideen-Pool: Alltags-Aktion (an canEdit gebunden, nicht editiermodus-gegatet).
+  // Der Knopf dazu steht in `KartenDialogAktionen`.
   const moveToIdeaStorage = async () => {
     try {
       await cardsApi.moveToIdeaStorage(card.id)
@@ -1062,36 +1232,6 @@ function CardDetailModalView({
     } catch (error_: unknown) {
       // Bei einem Fehler bleibt der Dialog offen — die Karte verschwindet nicht.
       notify(apiErrorMessage(error_, 'In den Ideen-Pool verschieben fehlgeschlagen.'), 'error')
-    }
-  }
-
-  // Vorgang eroeffnen (Issue #647). Der Name ist mit dem Kartentitel vorbelegt und
-  // ueberschreibbar; das Kuerzel ist optional wie beim Anlegen eines Vorhabens.
-  const [eroeffnen, setEroeffnen] = useState(false)
-  const [vorgangName, setVorgangName] = useState('')
-  const [vorgangKuerzel, setVorgangKuerzel] = useState('')
-
-  /**
-   * Ob an dieser Karte ein Vorgang eroeffnet werden kann — dieselben Bedingungen, die das Backend
-   * in #640 prueft. Die Oberflaeche zeigt den Weg gar nicht erst an, statt ihn in einen Fehler
-   * laufen zu lassen.
-   */
-  const kannVorgangEroeffnen =
-    canEdit && !isEpic && !card.archived && !card.ideaStored && card.parentId === null
-
-  const eroeffneVorgang = async () => {
-    try {
-      const vorhaben = await cardsApi.openEpic(card.id, vorgangName.trim(), (vorgangKuerzel.trim() === '' ? null : vorgangKuerzel.trim()))
-      setEroeffnen(false)
-      onChanged?.()
-      notify(`Vorgang eröffnet: ${vorhaben.title}`, 'success')
-      // Zum neuen Vorhaben: ueber denselben Verweis-Stack wie die `#N`-Spruenge. Fehlt die
-      // Projekt-ID, gibt es keine Aufloesung — dann bleibt es bei der Meldung.
-      onOpenDependency?.(vorhaben.number)
-    } catch (error_: unknown) {
-      // Die Meldung des Servers, nicht eine eigene: Die Ablehnungen aus #640 tragen einen
-      // Feldbezug, und ein verschluckter Text liesse den Nutzer raten.
-      notify(apiErrorMessage(error_, 'Vorgang eröffnen fehlgeschlagen.'), 'error')
     }
   }
 
@@ -1438,20 +1578,14 @@ function CardDetailModalView({
     })
   }
 
-  // Optionsvorrat des Auswahlfelds. Ohne eigene Angabe ist er die volle `epics`-Liste — Aufrufer
-  // ohne ausgeblendete Vorhaben ändern sich dadurch nicht.
-  const epicOptionen = selectableEpics ?? epics
-  // Zeigt die Karte auf ein Vorhaben, das nicht zur Auswahl steht (ausgeblendet, fehlende Liste,
-  // fremdes oder gelöschtes Vorhaben), bleibt das Feld lesend: Ein Dropdown ohne diesen Eintrag
-  // böte nur an, die Zuordnung zu löschen, ohne sie je gezeigt zu haben (#586, Plan #717 A2).
-  const epicLesend =
-    !canEditEpic || (parentId !== null && !epicOptionen.some((e) => e.id === parentId))
-  // Der Titel kommt aus der vollen `epics`-Liste, nicht aus dem Optionsvorrat: Nur sie kennt das
-  // ausgeblendete Vorhaben. Fehlt es auch dort, bleibt es bei der nackten Nummer.
-  const zugeordnetesVorhaben = epics.find((e) => e.id === parentId)
-  const epicLesendText = zugeordnetesVorhaben
-    ? `${epicShortcode(zugeordnetesVorhaben.title, zugeordnetesVorhaben.shortcode)} – ${zugeordnetesVorhaben.title}`
-    : undefined
+  // Optionsvorrat, Lesezustand und Lesetext des Vorhaben-Felds — die Regeln stehen als reine
+  // Funktion in `lib/cardEpic.ts` (Plan #1042, E11), samt Begründung der drei Fälle.
+  const { epicOptionen, epicLesend, epicLesendText } = vorhabenFeld({
+    canEditEpic,
+    parentId,
+    selectableEpics,
+    epics,
+  })
 
   const colors = columnName ? statusColors(columnName) : null
   const dueOverdue =
@@ -1718,74 +1852,33 @@ function CardDetailModalView({
         </Box>
       </DialogContent>
 
-      <DialogActions>
-        {editing ? (
-          <>
-            <Button onClick={() => setEditing(false)}>Abbrechen</Button>
-            <Button
-              variant="contained"
-              onClick={() => void save()}
-              disabled={!title.trim() || saving || isTooLong(body)}
-            >
-              Speichern
-            </Button>
-          </>
-        ) : (
-          <>
-            {canEdit && card.archived && (
-              <Button onClick={() => void restore()}>Wiederherstellen</Button>
-            )}
-            {canEdit && !card.archived && !card.ideaStored && !isEpic && (
-              <Button onClick={() => void moveToIdeaStorage()}>In den Ideen-Pool</Button>
-            )}
-            {kannVorgangEroeffnen && (
-              <Button
-                onClick={() => {
-                  setVorgangName(card.title)
-                  setVorgangKuerzel('')
-                  setEroeffnen(true)
-                }}
-              >
-                Vorgang eröffnen
-              </Button>
-            )}
-            <Button onClick={onClose}>Schließen</Button>
-          </>
-        )}
-      </DialogActions>
-    </Dialog>
-
-    {/* Vorgang eroeffnen: Name und Kuerzel. Eigener Dialog statt Inline-Feldern, damit die
-        Kartenmaske im Lesemodus nicht zwei Eingabefelder traegt, die fast nie gebraucht werden. */}
-    <Dialog open={eroeffnen} onClose={() => setEroeffnen(false)} fullWidth maxWidth="xs">
-      <DialogTitle sx={dialogTitleSx}>Vorgang eröffnen</DialogTitle>
-      <DialogContent>
-        <Stack spacing={2} sx={{ mt: 1 }}>
-          <TextField
-            label="Name des Vorhabens"
-            value={vorgangName}
-            onChange={(e) => setVorgangName(e.target.value)}
-            fullWidth
-            autoFocus
+      <KartenDialogAktionen
+        editing={editing}
+        canEdit={canEdit}
+        archived={card.archived}
+        ideaStored={card.ideaStored}
+        isEpic={isEpic}
+        speichernGesperrt={!title.trim() || saving || isTooLong(body)}
+        onAbbrechen={() => setEditing(false)}
+        onSpeichern={() => void save()}
+        onWiederherstellen={() => void restore()}
+        onIdeenPool={() => void moveToIdeaStorage()}
+        onClose={onClose}
+        vorgang={
+          <VorgangEroeffnenDialog
+            cardId={card.id}
+            cardTitle={card.title}
+            canEdit={canEdit}
+            isEpic={isEpic}
+            archived={card.archived}
+            ideaStored={card.ideaStored}
+            parentId={card.parentId}
+            cardsApi={cardsApi}
+            onChanged={onChanged}
+            onOpenDependency={onOpenDependency}
           />
-          <TextField
-            label="Kürzel (optional)"
-            value={vorgangKuerzel}
-            onChange={(e) => setVorgangKuerzel(e.target.value)}
-            fullWidth
-          />
-        </Stack>
-      </DialogContent>
-      <DialogActions>
-        <Button onClick={() => setEroeffnen(false)}>Abbrechen</Button>
-        <Button
-          variant="contained"
-          onClick={() => void eroeffneVorgang()}
-          disabled={vorgangName.trim() === ''}
-        >
-          Eröffnen
-        </Button>
-      </DialogActions>
+        }
+      />
     </Dialog>
 
     {preview && (

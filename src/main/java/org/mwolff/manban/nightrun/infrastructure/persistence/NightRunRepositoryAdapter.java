@@ -2,6 +2,7 @@ package org.mwolff.manban.nightrun.infrastructure.persistence;
 
 import java.math.BigDecimal;
 import java.sql.Types;
+import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.Collection;
@@ -11,7 +12,6 @@ import java.util.Map;
 import java.util.Optional;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.nightrun.application.NightRunRepository;
-import org.mwolff.manban.nightrun.application.NightRunRepository.UpsertResult;
 import org.mwolff.manban.nightrun.domain.NightRun;
 import org.mwolff.manban.nightrun.domain.NightRunErrorClass;
 import org.mwolff.manban.nightrun.domain.NightRunItem;
@@ -50,6 +50,9 @@ class NightRunRepositoryAdapter implements NightRunRepository {
   /** Name des benannten SQL-Parameters für die Lauf-ID (Sonar java:S1192). */
   private static final String P_NIGHT_RUN_ID = "nightRunId";
 
+  /** Name des benannten SQL-Parameters für den Beginn des Laufs (Sonar java:S1192). */
+  private static final String P_STARTED_AT = "startedAt";
+
   /** Name des benannten SQL-Parameters für die Gattung (Sonar java:S1192). */
   private static final String P_KIND = "kind";
 
@@ -60,11 +63,11 @@ class NightRunRepositoryAdapter implements NightRunRepository {
       "INSERT INTO night_run (project_id, started_at, mode, kind, duration_ms, processed_count,"
           + " skipped_count, unparsed_count, unparsed_sample, created_at, origin,"
           + " token_name, complete, updated_at, cost_usd, input_tokens, output_tokens,"
-          + " cached_input_tokens)"
+          + " cached_input_tokens, no_work_reason)"
           + " VALUES (:projectId, :startedAt, :mode, :kind, :durationMs, :processedCount,"
           + " :skippedCount, :unparsedCount, :unparsedSample, :createdAt, :origin,"
           + " :tokenName, :complete, :updatedAt, :costUsd, :inputTokens, :outputTokens,"
-          + " :cachedInputTokens)"
+          + " :cachedInputTokens, :noWorkReason)"
           + " ON CONFLICT (project_id, started_at) DO NOTHING"
           + " RETURNING id";
 
@@ -93,7 +96,8 @@ class NightRunRepositoryAdapter implements NightRunRepository {
           + " unparsed_count = :unparsedCount, unparsed_sample = :unparsedSample,"
           + " origin = :origin, token_name = :tokenName, complete = :complete,"
           + " updated_at = :updatedAt, cost_usd = :costUsd, input_tokens = :inputTokens,"
-          + " output_tokens = :outputTokens, cached_input_tokens = :cachedInputTokens"
+          + " output_tokens = :outputTokens, cached_input_tokens = :cachedInputTokens,"
+          + " no_work_reason = :noWorkReason"
           + " WHERE id = :id";
 
   private static final String DELETE_ITEMS_OF_RUN =
@@ -155,7 +159,7 @@ class NightRunRepositoryAdapter implements NightRunRepository {
     SqlParameterSource schluessel =
         new MapSqlParameterSource()
             .addValue(P_PROJECT_ID, run.projectId())
-            .addValue("startedAt", zeitpunkt(run.startedAt()));
+            .addValue(P_STARTED_AT, zeitpunkt(run.startedAt()));
     List<Long> vorhanden = jdbc.queryForList(SELECT_ID_FOR_UPDATE, schluessel, Long.class);
 
     if (vorhanden.isEmpty()) {
@@ -255,10 +259,13 @@ class NightRunRepositoryAdapter implements NightRunRepository {
   }
 
   private static SqlParameterSource runParameters(NightRun run) {
+    // Einmal geholt statt zweimal gerufen: Beim doppelten Getter-Aufruf sieht Sonar (java:S4449)
+    // einen Pfad, auf dem der zweite Aufruf null liefern koennte, obwohl der erste es nicht tat.
+    Instant updatedAt = run.updatedAt();
     MapSqlParameterSource parameter =
         new MapSqlParameterSource()
             .addValue(P_PROJECT_ID, run.projectId())
-            .addValue("startedAt", zeitpunkt(run.startedAt()))
+            .addValue(P_STARTED_AT, zeitpunkt(run.startedAt()))
             .addValue("mode", run.mode().name())
             .addValue(P_KIND, run.kind().name())
             .addValue("durationMs", run.durationMs())
@@ -272,8 +279,9 @@ class NightRunRepositoryAdapter implements NightRunRepository {
             .addValue("complete", run.complete())
             .addValue(
                 "updatedAt",
-                run.updatedAt() == null ? null : zeitpunkt(run.updatedAt()),
-                Types.TIMESTAMP_WITH_TIMEZONE);
+                updatedAt == null ? null : zeitpunkt(updatedAt),
+                Types.TIMESTAMP_WITH_TIMEZONE)
+            .addValue("noWorkReason", run.noWorkReason(), Types.VARCHAR);
     verbrauchSchreiben(parameter, run.usage());
     return parameter;
   }
@@ -298,7 +306,7 @@ class NightRunRepositoryAdapter implements NightRunRepository {
         new MapSqlParameterSource()
             .addValue(P_NIGHT_RUN_ID, item.nightRunId())
             .addValue(P_PROJECT_ID, run.projectId())
-            .addValue("startedAt", zeitpunkt(run.startedAt()))
+            .addValue(P_STARTED_AT, zeitpunkt(run.startedAt()))
             .addValue("mode", run.mode().name())
             .addValue(P_KIND, run.kind().name())
             .addValue("cardNumber", item.cardNumber())
@@ -317,7 +325,7 @@ class NightRunRepositoryAdapter implements NightRunRepository {
    * Postgres-Treiber bildet nur ersteren ohne Umweg ab. Über JPA (Lesepfad) übernimmt Hibernate die
    * Umrechnung selbst.
    */
-  private static OffsetDateTime zeitpunkt(java.time.Instant instant) {
+  private static OffsetDateTime zeitpunkt(Instant instant) {
     return OffsetDateTime.ofInstant(instant, ZoneOffset.UTC);
   }
 
@@ -339,7 +347,8 @@ class NightRunRepositoryAdapter implements NightRunRepository {
         e.isComplete(),
         e.getUpdatedAt(),
         verbrauchLesen(
-            e.getCostUsd(), e.getInputTokens(), e.getOutputTokens(), e.getCachedInputTokens()));
+            e.getCostUsd(), e.getInputTokens(), e.getOutputTokens(), e.getCachedInputTokens()),
+        e.getNoWorkReason());
   }
 
   private static NightRunItem toDomain(NightRunItemEntity e) {

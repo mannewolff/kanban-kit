@@ -23,19 +23,21 @@ export function variablenAufloesen<T>(wert: T, werte: Readonly<Record<string, st
   return wert
 }
 
-/** Ersetzt jeden `var(…)`-Verweis einer Zeichenkette; Klammern im Rückfallwert werden mitgezählt. */
+/**
+ * Ersetzt jeden `var(…)`-Verweis einer Zeichenkette; Klammern im Rückfallwert werden mitgezählt.
+ *
+ * Fehlt die schließende Klammer, bleibt der unverarbeitete Rest unverändert stehen (#977). Ohne den
+ * Abbruch am Textende zählte die Klammertiefe nie herunter und die Suche lief endlos — die Funktion
+ * läuft beim Modulimport, ein Tippfehler im Theme fröre damit die Seite ein.
+ */
 function aufloesenIn(text: string, werte: Readonly<Record<string, string>>): string {
   let ergebnis = ''
   let rest = text
   let beginn = rest.indexOf('var(')
   while (beginn !== -1) {
+    const ende = verweisEnde(rest, beginn)
+    if (ende === -1) break
     ergebnis += rest.slice(0, beginn)
-    let tiefe = 1
-    let ende = beginn + 4
-    for (; tiefe > 0; ende++) {
-      if (rest[ende] === '(') tiefe++
-      if (rest[ende] === ')') tiefe--
-    }
     const inhalt = rest.slice(beginn + 4, ende - 1)
     const komma = inhalt.indexOf(',')
     const name = (komma === -1 ? inhalt : inhalt.slice(0, komma)).trim()
@@ -45,4 +47,18 @@ function aufloesenIn(text: string, werte: Readonly<Record<string, string>>): str
     beginn = rest.indexOf('var(')
   }
   return ergebnis + rest
+}
+
+/**
+ * Index hinter der schließenden Klammer des `var(`-Verweises, der bei `beginn` steht; Klammern im
+ * Rückfallwert zählen mit. Fehlt die schließende Klammer, ist das Ergebnis `-1`.
+ */
+function verweisEnde(text: string, beginn: number): number {
+  let tiefe = 1
+  for (let ende = beginn + 4; ende < text.length; ende++) {
+    if (text[ende] === '(') tiefe++
+    if (text[ende] === ')') tiefe--
+    if (tiefe === 0) return ende + 1
+  }
+  return -1
 }

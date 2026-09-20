@@ -13,7 +13,7 @@ class ProjectTest {
 
   @Test
   void withNameTauschtNurDenNamen() {
-    Project vorher = new Project(7L, "Alt", 3L, ANGELEGT, null);
+    Project vorher = new Project(7L, "Alt", 3L, ANGELEGT, null, false);
 
     Project nachher = vorher.withName("Neu");
 
@@ -30,8 +30,19 @@ class ProjectTest {
    */
   @Test
   void withNameBehaeltDenErfassungsbeginn() {
-    Project vorher = new Project(7L, "Alt", 3L, ANGELEGT, ERFASST_SEIT);
+    Project vorher = new Project(7L, "Alt", 3L, ANGELEGT, ERFASST_SEIT, false);
 
     assertThat(vorher.withName("Neu").interactiveUsageSince()).isEqualTo(ERFASST_SEIT);
+  }
+
+  /**
+   * Die Teilnahme am Plattform-Leitstand (Issue #1076) überlebt die Umbenennung aus demselben Grund
+   * wie der Erfassungsbeginn: Umbenennen ist kein Schaltvorgang.
+   */
+  @Test
+  void withNameBehaeltDieTeilnahmeAmPlattformLeitstand() {
+    Project vorher = new Project(7L, "Alt", 3L, ANGELEGT, null, true);
+
+    assertThat(vorher.withName("Neu").dashboardParticipation()).isTrue();
   }
 }

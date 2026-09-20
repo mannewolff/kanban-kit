@@ -27,9 +27,29 @@ export default defineConfig({
   },
   test: {
     environment: 'jsdom',
+    // Die Zone der Tests ist festgenagelt und nicht die der Maschine. Ein Intl.DateTimeFormat
+    // ohne `timeZone` folgt sonst der Zone des Rechners, und jede Erwartung auf einen
+    // formatierten Zeitpunkt haengt daran: `19.09., 23:10` hier, `19.09., 21:10` auf dem
+    // UTC-Runner der CI. Genau daran scheiterte v2.1.3 in der CI, waehrend der lokale
+    // Pflichtlauf gruen war — der Fehler gehoert zu keiner Aenderung und ist lokal unsichtbar.
+    // Europe/Berlin und nicht UTC, weil das Produkt Ortszeit zeigt (`leserZone()` in
+    // api/nightRunUsage.ts, Plan E4: „die letzte Nacht" ist die des Lesers). In UTC getestet
+    // fiele ein Fehler am Sommer-/Winterzeitwechsel nie auf.
+    env: { TZ: 'Europe/Berlin' },
     globals: true,
     setupFiles: './src/test/setup.ts',
     css: false,
+    // Stryker kopiert das gesamte `frontend/` in einen Sandkasten unter `.stryker-tmp/`. Bricht
+    // ein Mutationslauf ab, bleibt diese Kopie liegen — samt aller Testdateien. Vitests
+    // Default-`exclude` kennt sie nicht, also sammelt der naechste Testlauf jede Datei doppelt
+    // ein: einmal aus `src/`, einmal eingefroren aus dem Sandkasten. Die Kopie enthaelt nur
+    // `frontend/`, nicht die Repo-Wurzel, weshalb jeder Test, der eine Datei ueber `..` sucht
+    // (z. B. `designQuelle.test.ts` auf `CLAUDE-design.md`), dort ins Leere greift und rot wird.
+    // Der Ordner ist gitignored, taucht also in `git status` nicht auf — der rote Check gehoert
+    // dann zu keiner Aenderung und laesst sich von der ausloesenden Sitzung nicht beheben.
+    // Die Default-Liste wird durch eine eigene ersetzt, deshalb stehen die Vitest-Defaults hier
+    // ausgeschrieben.
+    exclude: ['**/node_modules/**', '**/dist/**', '**/.stryker-tmp/**'],
     // Coverage-Gate (CLAUDE-react.md §Tests): v8-Provider, Build bricht bei Unterschreitung.
     // lcov zusätzlich zu text/html: wird von SonarQube importiert (sonar-project.properties).
     coverage: {

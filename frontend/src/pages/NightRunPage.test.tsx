@@ -1,4 +1,5 @@
 import { ThemeProvider } from '@mui/material/styles'
+import { serverBefund } from '../test/befund'
 import {
   fireEvent,
   render,
@@ -273,8 +274,7 @@ function alsServerModus(mode: NightRunView['mode'] | 'NIGHTPLAN'): NightRunView[
  */
 function wieAufbewahrt(ergebnisstand: string): NightRunView[] {
   const run = gedeutet(ergebnisstand)
-  return [
-    {
+  const lauf: NightRunView = {
       id: 1,
       startedAt: run.startedAt,
       mode: alsServerModus(run.mode),
@@ -292,9 +292,12 @@ function wieAufbewahrt(ergebnisstand: string): NightRunView[] {
       complete: true,
       updatedAt: null,
       usage: null,
+      noWorkReason: null,
       items: run.items.map((item, position) => wieAufbewahrtesItem({ id: position + 1, ...item })),
-    },
-  ]
+      outcome: { verdict: 'SUCCEEDED', decisiveItem: null, noWorkReason: null },
+  }
+  // Der Befund kommt aus dem Szenario, nicht aus einer Vorgabe (Issue #1081).
+  return [{ ...lauf, outcome: serverBefund(lauf) }]
 }
 
 /** Ein Arbeitspaket in der Kurzform der Tests: Was nichts zur Sache tut, bleibt weg. */
@@ -356,8 +359,10 @@ function aufbewahrt(
     complete: true,
     updatedAt: null,
     usage: null,
+    noWorkReason: null,
     ...rest,
     items: (items ?? []).map(wieAufbewahrtesItem),
+    outcome: rest.outcome ?? serverBefund({ complete: rest.complete ?? true, noWorkReason: rest.noWorkReason, items: (items ?? []).map(wieAufbewahrtesItem) }),
   }
 }
 
@@ -490,75 +495,105 @@ const antwortOhneDetail = (body: string, status = 502) => ({
   text: () => Promise.resolve(body),
 })
 
+/**
+ * Die Antworten des Verbrauchs-Bereichs (Issue #941). Ausgelagert, weil sie keinen Zustand des
+ * Stubs brauchen — anders als Liste und Haeufigkeiten, die ihren Zaehler mitfuehren.
+ */
+function verbrauchsAntwort(url: string) {
+  if (url.startsWith('/api/projects/5/night-run-usage/night?')) {
+    const datum = new URL(url, 'http://localhost').searchParams.get('date') ?? ''
+    return Promise.resolve(antwortOk(verbrauchNacht(datum)))
+  }
+  if (url.startsWith('/api/projects/5/night-run-usage?')) {
+    return Promise.resolve(antwortOk(VERBRAUCH_ZEITRAUM))
+  }
+  return undefined
+}
+
+/**
+ * Eine gefundene Karte oder 404, wahlweise angehalten bis `verzoegert` aufloest — die Form teilen
+ * sich der Abruf nach Nummer und der nach ID.
+ */
+function kartenErgebnis(gefunden: unknown, verzoegert: Promise<void> | undefined) {
+  const antwort = () =>
+    gefunden === undefined ? antwortFehler('Karte nicht gefunden', 404) : antwortOk(gefunden)
+  return verzoegert === undefined ? Promise.resolve(antwort()) : verzoegert.then(antwort)
+}
+
+/** Die beiden Kartenabrufe: nach projektweiter Nummer und nach Karten-ID. */
+function kartenAntwort(url: string, antworten: Antworten) {
+  const nummer = /^\/api\/projects\/5\/cards\/by-number\/(\d+)$/.exec(url)
+  if (nummer) {
+    return kartenErgebnis(antworten.karten?.[Number(nummer[1])], antworten.kartenVerzoegert)
+  }
+  const kartenId = /^\/api\/cards\/(\d+)$/.exec(url)
+  if (kartenId) {
+    return kartenErgebnis(
+      antworten.kartenNachId?.[Number(kartenId[1])],
+      antworten.kartenNachIdVerzoegert,
+    )
+  }
+  return undefined
+}
+
+/**
+ * Eine Folge von Antworten: je Aufruf die naechste, die letzte gilt fuer alle weiteren. Den
+ * Zaehler traegt der Abschluss statt einer Variablen im Stub — Liste und Haeufigkeiten teilen
+ * sich damit dieselbe Mechanik, statt sie zweimal zu schreiben.
+ */
+function folge(staende: readonly unknown[]) {
+  let index = 0
+  return () => {
+    const daten = staende[Math.min(index, staende.length - 1)]
+    index += 1
+    return Promise.resolve(antwortOk(daten))
+  }
+}
+
+/** Die vier Ausgaenge des Sendepfads: Netzfehler, Antwort ohne `detail`, Fehler, Erfolg. */
+function submitAntwort(submit: Antworten['submit']) {
+  if (submit?.netzfehler === true) {
+    return Promise.reject(new TypeError('Failed to fetch'))
+  }
+  if (submit?.rohText !== undefined) {
+    return Promise.resolve(antwortOhneDetail(submit.rohText))
+  }
+  return Promise.resolve(
+    submit?.fehler === undefined ? antwortOk(submit?.ergebnis ?? []) : antwortFehler(submit.fehler),
+  )
+}
+
 function stubFetch(antworten: Antworten) {
-  let listenIndex = 0
-  let zaehlerIndex = 0
+  const naechsteListe = folge(antworten.listen ?? [[]])
+  const naechsterZaehler = folge(antworten.zaehler ?? [{}])
   vi.stubGlobal(
     'fetch',
     vi.fn((url: string, init?: RequestInit) => {
       const method = init?.method ?? 'GET'
       anfragen.push({ url, method, body: String(init?.body ?? '') })
 
-      // Der Verbrauchs-Bereich (Issue #941) fragt beim Öffnen den Tageszeitraum und die Nacht ab.
-      if (url.startsWith('/api/projects/5/night-run-usage/night?')) {
-        const datum = new URL(url, 'http://localhost').searchParams.get('date') ?? ''
-        return Promise.resolve(antwortOk(verbrauchNacht(datum)))
-      }
-      if (url.startsWith('/api/projects/5/night-run-usage?')) {
-        return Promise.resolve(antwortOk(VERBRAUCH_ZEITRAUM))
-      }
+      const verbrauch = verbrauchsAntwort(url)
+      if (verbrauch) return verbrauch
+
       if (url === '/api/projects') {
         return Promise.resolve(antwortOk([{ id: 5, name: 'Team', role: 'OWNER', createdAt: '' }]))
       }
       if (url === '/api/projects/5/night-runs' && method === 'GET') {
-        if (antworten.listenFehler !== undefined) {
-          return Promise.resolve(antwortFehler(antworten.listenFehler, 403))
-        }
-        const listen = antworten.listen ?? [[]]
-        const daten = listen[Math.min(listenIndex, listen.length - 1)]
-        listenIndex += 1
-        return Promise.resolve(antwortOk(daten))
+        return antworten.listenFehler === undefined
+          ? naechsteListe()
+          : Promise.resolve(antwortFehler(antworten.listenFehler, 403))
       }
       if (url === '/api/projects/5/night-runs/error-class-counts') {
-        if (antworten.zaehlerFehler !== undefined) {
-          return Promise.resolve(antwortFehler(antworten.zaehlerFehler, 403))
-        }
-        const staende = antworten.zaehler ?? [{}]
-        const daten = staende[Math.min(zaehlerIndex, staende.length - 1)]
-        zaehlerIndex += 1
-        return Promise.resolve(antwortOk(daten))
+        return antworten.zaehlerFehler === undefined
+          ? naechsterZaehler()
+          : Promise.resolve(antwortFehler(antworten.zaehlerFehler, 403))
       }
       if (url === '/api/projects/5/night-runs' && method === 'POST') {
-        if (antworten.submit?.netzfehler === true) {
-          return Promise.reject(new TypeError('Failed to fetch'))
-        }
-        if (antworten.submit?.rohText !== undefined) {
-          return Promise.resolve(antwortOhneDetail(antworten.submit.rohText))
-        }
-        return Promise.resolve(
-          antworten.submit?.fehler === undefined
-            ? antwortOk(antworten.submit?.ergebnis ?? [])
-            : antwortFehler(antworten.submit.fehler),
-        )
+        return submitAntwort(antworten.submit)
       }
-      const nummer = /^\/api\/projects\/5\/cards\/by-number\/(\d+)$/.exec(url)
-      if (nummer) {
-        const gefunden = antworten.karten?.[Number(nummer[1])]
-        const antwort = () =>
-          gefunden === undefined ? antwortFehler('Karte nicht gefunden', 404) : antwortOk(gefunden)
-        return antworten.kartenVerzoegert === undefined
-          ? Promise.resolve(antwort())
-          : antworten.kartenVerzoegert.then(antwort)
-      }
-      const kartenId = /^\/api\/cards\/(\d+)$/.exec(url)
-      if (kartenId) {
-        const gefunden = antworten.kartenNachId?.[Number(kartenId[1])]
-        const antwort = () =>
-          gefunden === undefined ? antwortFehler('Karte nicht gefunden', 404) : antwortOk(gefunden)
-        return antworten.kartenNachIdVerzoegert === undefined
-          ? Promise.resolve(antwort())
-          : antworten.kartenNachIdVerzoegert.then(antwort)
-      }
+      const karte = kartenAntwort(url, antworten)
+      if (karte) return karte
+
       return Promise.reject(new Error(`unerwartete Anfrage: ${method} ${url}`))
     }),
   )
@@ -2709,6 +2744,25 @@ describe('NightRunPage — Zustände, Kennzahlen und Auszüge', () => {
     expect(melderVon(700)).toBe('led-bernst')
   })
 
+  /**
+   * Plan #1072 E28: Der eben geparste Lauf ist noch bei keinem Server gewesen und traegt deshalb
+   * keinen Befund. Ohne die lokale Rechnung in `laufMelder` verloere er seine LED — er ist die
+   * einzige Stelle, an der ein Lauf ohne Server-Sicht beurteilt wird.
+   */
+  it('beurteilt den eben geparsten Lauf weiterhin lokal — ohne Befund vom Server (#1081)', async () => {
+    renderPage({
+      submit: { ergebnis: alleNeu(GELB) },
+      listen: [[], wieAufbewahrt(GELB)],
+    })
+    await screen.findByText('Noch keine Auswertung vorhanden.')
+
+    protokollWaehlen(GELB)
+    const panelEl = await screen.findByTestId(`lauf-${startedAt(0)}`)
+
+    const kopf = within(panelEl).getByTestId('lauf-kopf')
+    expect(within(kopf).getByTestId(/^led-/).getAttribute('data-testid')).toBe('led-bernst')
+  })
+
   it('zeigt den Zustand als ausgefuellte, gleich grosse Flaeche — unabhaengig von der Textlaenge (#738)', async () => {
     renderPage({
       submit: { ergebnis: alleNeu(VIER_ZUSTAENDE) },
@@ -4815,5 +4869,159 @@ describe('NightRunPage — Laufblock im Leitstand-Stil (#988)', () => {
     // Zwei: die Zeitraum-Sicht des Verbrauchs (#987) und die Laufblöcke (#988).
     expect(bereiche).toHaveLength(2)
     expect(bereiche[1]).toContainElement(lauf(0))
+  })
+})
+
+describe('NightRunPage — Lauf ohne Arbeit (#1069)', () => {
+  const GRUND = 'Kein Eintrag trug das Label kit:nightrun'
+
+  it('zeigt am Lauf ohne Arbeit eine Zustandsmarke mit rotem Melder und dem Grund', async () => {
+    renderPage({
+      listen: [
+        [aufbewahrt({ id: 1, startedAt: startedAt(0), processedCount: 0, noWorkReason: GRUND })],
+      ],
+    })
+
+    await screen.findByTestId(`lauf-${startedAt(0)}`)
+    // Gezielt auf die Zustandsmarke: Der Kopf traegt zusaetzlich die rote LED der Laufplatte
+    // selbst, und ein Zaehlen ueber beide sagte nicht, dass die Marke die ihre hat.
+    const marke = within(laufKopfzeile(lauf(0))).getByTestId('lauf-zustand')
+    expect(marke).toHaveTextContent(GRUND)
+    expect(within(marke).getByTestId('led-zinnob')).toBeInTheDocument()
+  })
+
+  /**
+   * Die beiden Marken schliessen einander aus: Ein Lauf ist entweder noch nicht abgeschlossen
+   * oder ohne Arbeit beendet. Beide zugleich waeren ein Widerspruch im Kopf derselben Platte.
+   */
+  it('zeigt am unvollstaendigen Lauf weiterhin nur „unvollständig gemeldet"', async () => {
+    renderPage({
+      listen: [
+        [
+          aufbewahrt({
+            id: 1,
+            startedAt: startedAt(0),
+            complete: false,
+            processedCount: 0,
+            noWorkReason: GRUND,
+          }),
+        ],
+      ],
+    })
+
+    await screen.findByTestId(`lauf-${startedAt(0)}`)
+    const kopf = laufKopfzeile(lauf(0))
+    expect(kopf).toHaveTextContent('unvollständig')
+    expect(kopf).not.toHaveTextContent(GRUND)
+  })
+})
+
+describe('NightRunPage — Abschlussvermerk nur mit Ergebnisstand (#1070)', () => {
+  /**
+   * Der Prueffall aus dem Issue: der Lauf vom 17.09.2026, 17:02 — in elf Minuten fuer 10,10 $ ein
+   * gruenes Paket abgeschlossen, und trotzdem stand „noch nicht abgeschlossen" in der Metazeile.
+   * Der Vermerk hing an der Abwesenheit einer hochgeladenen Datei, nicht am Zustand des Laufs.
+   */
+  it('nennt einen gemeldeten Lauf ohne Ergebnisstand nicht „noch nicht abgeschlossen"', async () => {
+    renderPage({ listen: [wieAufbewahrt(ECHTE_KETTE_STAND)] })
+    const panelEl = await screen.findByTestId(`lauf-${ECHTE_KETTE_START}`)
+
+    panelAufklappen(panelEl)
+
+    await within(panelEl).findByTestId('zustand-791')
+    expect(metazeile()).not.toHaveTextContent('noch nicht abgeschlossen')
+  })
+
+  // Die Aussage ueber den Abschluss traegt allein die Kopfmarke, und die haengt am gemeldeten
+  // Zustand (E7) -- nicht daran, ob jemand eine Datei hochgeladen hat.
+  it('zeigt die Kopfmarke „unvollständig gemeldet" unveraendert am nicht abgeschlossenen Lauf', async () => {
+    renderPage({
+      listen: [
+        [
+          aufbewahrt({ id: 1, startedAt: startedAt(0), complete: false }),
+          aufbewahrt({ id: 2, startedAt: startedAt(30), complete: true }),
+        ],
+      ],
+    })
+
+    await screen.findByTestId(`lauf-${startedAt(30)}`)
+    expect(laufKopfzeile(lauf(0))).toHaveTextContent('unvollständig')
+    expect(laufKopfzeile(lauf(30))).not.toHaveTextContent('unvollständig')
+  })
+})
+
+/**
+ * Ein Lauf ist adressierbar (Issue #1085, fachliche Quelle #1064, AK 7).
+ *
+ * Eine Störzeile des Plattform-Leitstands verweist auf `?lauf=<id>`. Ohne das Aufklappen führte der
+ * Verweis auf eine zugeklappte Platte — der Klick hätte den Nutzer an die richtige Seite gebracht
+ * und dort allein gelassen.
+ */
+describe('NightRunPage — adressierbarer Lauf (#1085)', () => {
+  const scrollIntoView = vi.fn()
+  Element.prototype.scrollIntoView = scrollIntoView
+
+  const dreiLaeufe = [
+    aufbewahrt({ id: 11, startedAt: startedAt(0) }),
+    aufbewahrt({ id: 12, startedAt: startedAt(1) }),
+    aufbewahrt({ id: 13, startedAt: startedAt(2) }),
+  ]
+
+  beforeEach(() => scrollIntoView.mockClear())
+
+  // Ziel ist der aelteste Lauf — er steht unten. Auf den obersten zu zeigen bewiese nichts, weil
+  // der ohnehin aufgeklappt waere.
+  it('klappt mit ?lauf=<id> genau diesen Lauf auf statt des obersten', async () => {
+    renderPage({ listen: [dreiLaeufe] }, '/projects/5/nachtlauf?lauf=11')
+
+    await screen.findByTestId(`lauf-${startedAt(0)}`)
+    expect(laufTaste(lauf(0))).toHaveAttribute('aria-expanded', 'true')
+    expect(laufTaste(lauf(2))).toHaveAttribute('aria-expanded', 'false')
+  })
+
+  it('springt zum angesteuerten Lauf', async () => {
+    renderPage({ listen: [dreiLaeufe] }, '/projects/5/nachtlauf?lauf=11')
+
+    await screen.findByTestId(`lauf-${startedAt(0)}`)
+    await waitFor(() => expect(scrollIntoView).toHaveBeenCalled())
+  })
+
+  it('klappt ohne ?lauf wie bisher den obersten Lauf auf', async () => {
+    renderPage({ listen: [dreiLaeufe] })
+
+    // Die Liste steht absteigend nach Startzeit: oben der juengste Lauf.
+    await screen.findByTestId(`lauf-${startedAt(2)}`)
+    expect(laufTaste(lauf(2))).toHaveAttribute('aria-expanded', 'true')
+    expect(laufTaste(lauf(0))).toHaveAttribute('aria-expanded', 'false')
+    expect(scrollIntoView).not.toHaveBeenCalled()
+  })
+
+  /**
+   * Eine Störzeile kann veralten, während der Admin sie liest. Ein Verweis, den das System selbst
+   * ausgegeben hat, darf den Nutzer nicht für eine Verdrängung bestrafen, die er nicht veranlasst
+   * hat — die Seite öffnet normal, ohne Meldung.
+   */
+  it('nimmt ein verdrängtes ?lauf=<id> hin, ohne Fehler und ohne Aufklappen', async () => {
+    renderPage({ listen: [dreiLaeufe] }, '/projects/5/nachtlauf?lauf=999')
+
+    await screen.findByTestId(`lauf-${startedAt(2)}`)
+    expect(laufTaste(lauf(2))).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.queryByText(/nicht gefunden/i)).not.toBeInTheDocument()
+    expect(scrollIntoView).not.toHaveBeenCalled()
+  })
+
+  it('nimmt einen unsinnigen Parameter hin wie gar keinen', async () => {
+    renderPage({ listen: [dreiLaeufe] }, '/projects/5/nachtlauf?lauf=abc')
+
+    await screen.findByTestId(`lauf-${startedAt(2)}`)
+    expect(laufTaste(lauf(2))).toHaveAttribute('aria-expanded', 'true')
+  })
+
+  /** Der gespeicherte Lauf trägt seine Id, der eben geparste nicht — er war bei keinem Server. */
+  it('trägt die Id nur am gespeicherten Lauf', async () => {
+    renderPage({ listen: [[aufbewahrt({ id: 11, startedAt: startedAt(0) })]] }, '/projects/5/nachtlauf?lauf=11')
+
+    await screen.findByTestId(`lauf-${startedAt(0)}`)
+    expect(laufTaste(lauf(0))).toHaveAttribute('aria-expanded', 'true')
   })
 })

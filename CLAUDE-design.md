@@ -121,7 +121,7 @@ Die Schattenfarbe folgt der Vorlage: hell eine dunkle Blaugrau-Tinte `rgba(18,24
 Vorlage: Entwurf CSS Z. 196–389, HTML Z. 1101–1199.
 
 - **Warte:** zweispaltig, links die Schiene (224 px), rechts der Inhalt.
-- **Schiene:** eingelassene Nut mit Verlauf von „Grund tief" nach „Nut", Innenschatten, Haarlinie rechts. Oben die **Marke** (Kupfer-Mal mit drei Balken, Name, Version); darunter **Navigationsblöcke** mit Etikett-Titel, immer offen: **Projekt ‹Name›** (Leitstand, Board, Liste, Vorhaben, Ideen, Nachtläufe), **Übersicht** (Projekte, Boards — nur wenn es etwas zu wählen gibt; der Entwurf kennt den Block nicht, er hält den Weg zurück zur Auswahl) und **Verwaltung** (Mitglieder, Rollen & Rechte, Admin); unten der **Fuß** (Administration, Dokumentation, Einklappen). Die Schiene ist der einzige Ort, an dem man zwischen den Ansichten wechselt. Ein Eintrag ist ein echter Link mit Symbol aus der Vorlage und Beschriftung; der aktive Eintrag (`aria-current="page"`, der längste passende Pfad) ist eine erhabene Taste mit kupfernem Symbol. Zahlen an Einträgen und der Hinweis auf die letzte Kette erscheinen erst, wenn die Shell diese Daten kennt. Eingeklappt (64 px) bleiben nur die Symbole.
+- **Schiene:** eingelassene Nut mit Verlauf von „Grund tief" nach „Nut", Innenschatten, Haarlinie rechts. Oben die **Marke** (Kupfer-Mal mit drei Balken, Name, Version); darunter **Navigationsblöcke** mit Etikett-Titel, immer offen: **Projekt ‹Name›** (Leitstand, Board, Liste, Vorhaben, Ideen, Nachtläufe), **Übersicht** (Projekte, Boards — nur wenn es etwas zu wählen gibt; der Entwurf kennt den Block nicht, er hält den Weg zurück zur Auswahl) und **Verwaltung** (Mitglieder, Rollen & Rechte, Admin, Plattform-Leitstand); unten der **Fuß** (Administration, Dokumentation, Einklappen). Die Schiene ist der einzige Ort, an dem man zwischen den Ansichten wechselt. Ein Eintrag ist ein echter Link mit Symbol aus der Vorlage und Beschriftung; der aktive Eintrag (`aria-current="page"`, der längste passende Pfad) ist eine erhabene Taste mit kupfernem Symbol. Zahlen an Einträgen und der Hinweis auf die letzte Kette erscheinen erst, wenn die Shell diese Daten kennt. Eingeklappt (64 px) bleiben nur die Symbole.
 - **Kopf:** klebt oben, leicht getönt mit Weichzeichner; **Pfad** (Projekt / Board, in Archivo, beide verlinkt), **Suche** als Nut mit der Tastenkappe des echten Kürzels `/` (die Vorlage zeigt `⌘K`; Modifikator-Kürzel überlässt die Anwendung dem Browser), **Taste** „Board" für den Board-Wechsel (Kürzel `b`), **Nutzer** als rundes Mal mit Kürzel, das ein Menü mit „Profil bearbeiten" und „Abmelden" öffnet. Die Kupfertaste für die Hauptaktion der Ansicht bringt das jeweilige Ansichtspaket mit.
 - **Keine Ansichtswahl oben.** Abweichung von der Vorlage (siehe [Vorlage und Abnahme](#vorlage-und-abnahme)): Leitstand, Board und Liste wählt man in der Schiene; die Karte öffnet sich wie bisher aus Board, Liste oder Leitstand.
 - **Bühne:** Innenabstand 22/26/44 px, Abstand zwischen Bereichen 20 px.
@@ -153,7 +153,7 @@ Die Gestalt jeder Ansicht folgt der Vorlage. Zustände sind an **Form** erkennba
 
 ## 🗺️ Ansicht → Regel
 
-Zu jeder darstellenden Route aus [`frontend/src/App.tsx`](frontend/src/App.tsx) steht hier, welcher Stelle der Vorlage sie folgt (AK 3). Die reinen Weiterleitungen `/boards/:boardId/epics` und `/boards/:boardId/dashboard` (auf den Leitstand) fehlen. Alle Ansichten tragen den Rahmen, die Palette, die Schrift und die Tiefe der Vorlage. „Umsetzung" nennt das Paket, das die Gestalt herstellt. `frontend/src/designQuelle.test.ts` hält die Tabelle gegen die Routen.
+Zu jeder darstellenden Route aus [`frontend/src/App.tsx`](frontend/src/App.tsx) steht hier, welcher Stelle der Vorlage sie folgt (AK 3). Die reinen Weiterleitungen `/` (Weiche: Plattform-Admin zum Plattform-Leitstand, sonst zur Projektliste), `/boards/:boardId/epics` und `/boards/:boardId/dashboard` (auf den Leitstand) fehlen. Alle Ansichten tragen den Rahmen, die Palette, die Schrift und die Tiefe der Vorlage. „Umsetzung" nennt das Paket, das die Gestalt herstellt. `frontend/src/designQuelle.test.ts` hält die Tabelle gegen die Routen.
 
 | Route | Ansicht | Regel | Umsetzung |
 |---|---|---|---|
@@ -162,7 +162,8 @@ Zu jeder darstellenden Route aus [`frontend/src/App.tsx`](frontend/src/App.tsx) 
 | `/verify` | E-Mail bestätigen | wie Anmelden | #978 |
 | `/forgot` | Passwort vergessen | wie Anmelden | #978 |
 | `/reset` | Passwort neu setzen | wie Anmelden | #978 |
-| `/` | Projekte | Rahmen; Projekte als Platten | #978 |
+| `/projects` | Projekte | Rahmen; Projekte als Platten | #978, #1082 |
+| `/plattform-leitstand` | Plattform-Leitstand | Kupferwarte aus den Bausteinen des Leitstands (`LeitstandBausteine.tsx`, `KupferwarteBereich`); der Entwurf führt für diese Ansicht kein eigenes Mockup | #1083 |
 | `/projects/:projectId` | Boards eines Projekts | Rahmen; Boards als Platten, Zahlen in Plex Mono | #978 |
 | `/projects/:projectId/ideas` | Ideen | Rahmen; Nut-Zonen und Platten wie das Board | #978, #980 |
 | `/projects/:projectId/members` | Mitglieder | Rahmen; Tabelle als Platte, Zahlen in Plex Mono | #978 |

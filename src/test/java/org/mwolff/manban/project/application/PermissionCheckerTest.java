@@ -37,7 +37,13 @@ class PermissionCheckerTest {
     rolePermissions = mock(RolePermissionRepository.class);
     platformAdminChecker = mock(PlatformAdminChecker.class);
     Clock clock = Clock.fixed(FIXED, ZoneOffset.UTC);
-    checker = new PermissionChecker(memberships, rolePermissions, platformAdminChecker, clock);
+    checker =
+        new PermissionChecker(
+            memberships,
+            rolePermissions,
+            platformAdminChecker,
+            mock(ProjectRepository.class),
+            clock);
   }
 
   @Test
@@ -266,5 +272,65 @@ class PermissionCheckerTest {
     // When / Then
     assertThatThrownBy(() -> checker.requireOwner(2L, 7L))
         .isInstanceOf(ProjectAccessDeniedException.class);
+  }
+
+  @Test
+  void requireRealRole_passes_forAllowedRole() {
+    // Given
+    when(memberships.findByProjectIdAndUserId(7L, 2L))
+        .thenReturn(Optional.of(membership(7L, 2L, ProjectRole.ADMIN)));
+
+    // When / Then
+    assertThatCode(() -> checker.requireRealRole(2L, 7L, ProjectRole.OWNER, ProjectRole.ADMIN))
+        .doesNotThrowAnyException();
+  }
+
+  @Test
+  void requireRealRole_throwsProjectNotFound_forNonMember() {
+    // Given
+    when(memberships.findByProjectIdAndUserId(7L, 2L)).thenReturn(Optional.empty());
+
+    // When / Then
+    assertThatThrownBy(() -> checker.requireRealRole(2L, 7L, ProjectRole.OWNER))
+        .isInstanceOf(ProjectNotFoundException.class);
+  }
+
+  @Test
+  void requireRealRole_throwsProjectAccessDenied_forDisallowedRole() {
+    // Given
+    when(memberships.findByProjectIdAndUserId(7L, 2L))
+        .thenReturn(Optional.of(membership(7L, 2L, ProjectRole.MEMBER)));
+
+    // When / Then
+    assertThatThrownBy(() -> checker.requireRealRole(2L, 7L, ProjectRole.OWNER, ProjectRole.ADMIN))
+        .isInstanceOf(ProjectAccessDeniedException.class);
+  }
+
+  /**
+   * Der Kern der Methode (Issue #1077, AK 16): Ein Plattform-Admin passiert jede andere Prüfung
+   * dieser Klasse, diese eine nicht. Ohne eigene Mitgliedschaft ist er ein Nichtmitglied und
+   * bekommt 404 — {@link PlatformAdminChecker} wird dafür gar nicht erst befragt.
+   */
+  @Test
+  void requireRealRole_throwsProjectNotFound_forPlatformAdminWithoutMembership() {
+    // Given
+    when(platformAdminChecker.isPlatformAdmin(1L)).thenReturn(true);
+    when(memberships.findByProjectIdAndUserId(7L, 1L)).thenReturn(Optional.empty());
+
+    // When / Then
+    assertThatThrownBy(() -> checker.requireRealRole(1L, 7L, ProjectRole.OWNER, ProjectRole.ADMIN))
+        .isInstanceOf(ProjectNotFoundException.class);
+  }
+
+  @Test
+  void requireRealRole_passes_forPlatformAdminWithRealOwnerMembership() {
+    // Given
+    when(platformAdminChecker.isPlatformAdmin(1L)).thenReturn(true);
+    when(memberships.findByProjectIdAndUserId(7L, 1L))
+        .thenReturn(Optional.of(membership(7L, 1L, ProjectRole.OWNER)));
+
+    // When / Then
+    assertThatCode(() -> checker.requireRealRole(1L, 7L, ProjectRole.OWNER, ProjectRole.ADMIN))
+        .doesNotThrowAnyException();
   }
 }

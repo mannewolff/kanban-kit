@@ -209,7 +209,7 @@ describe('BoardListPage', () => {
 
   it('zeigt den Breadcrumb-Pfad ab Projekte', async () => {
     renderPage()
-    expect(await screen.findByRole('link', { name: 'Projekte' })).toHaveAttribute('href', '/')
+    expect(await screen.findByRole('link', { name: 'Projekte' })).toHaveAttribute('href', '/projects')
   })
 
   it('zeigt aktive Karten mit Status-Chip und Body-Vorschau, archivierte erst nach Filter', async () => {

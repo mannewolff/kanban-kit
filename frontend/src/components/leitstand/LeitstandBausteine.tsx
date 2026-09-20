@@ -149,6 +149,7 @@ const DELTA_FARBE: Record<DeltaArt, string | undefined> = {
 /** Delta-Marke (Entwurf `.delta`, Z. 509–522): eingelassen, grün für gut, zinnober für schlecht. */
 export function DeltaMarke({ art, children }: Readonly<{ art: DeltaArt; children: ReactNode }>) {
   const farbe = DELTA_FARBE[art]
+  const randFarbe = farbe ? `color-mix(in srgb, ${farbe} 32%, ${RAND})` : RAND
   return (
     <Box
       component="span"
@@ -163,7 +164,7 @@ export function DeltaMarke({ art, children }: Readonly<{ art: DeltaArt; children
         px: '6px',
         py: '2px',
         borderRadius: '5px',
-        border: `1px solid ${farbe ? `color-mix(in srgb, ${farbe} 32%, ${RAND})` : RAND}`,
+        border: `1px solid ${randFarbe}`,
         bgcolor: NUT,
         boxShadow: SCHATTEN_NUTE,
         color: farbe ?? 'text.secondary',
@@ -179,6 +180,7 @@ export function Funke({ werte, melder }: Readonly<{ werte: readonly number[]; me
   const verlaufId = useId()
   const punkte = funkenPunkte(werte)
   const linie = punkte.map((p) => `${p.x},${p.y}`).join(' ')
+  const linienzug = punkte.map((p) => `${p.x} ${p.y}`).join(' L')
   const letzter = punkte.at(-1)!
   return (
     <Box
@@ -195,7 +197,7 @@ export function Funke({ werte, melder }: Readonly<{ werte: readonly number[]; me
           <stop offset="1" stopColor="currentColor" stopOpacity="0" />
         </linearGradient>
       </defs>
-      <path d={`M${punkte.map((p) => `${p.x} ${p.y}`).join(' L')} L${letzter.x} 34 L${punkte[0].x} 34 Z`} fill={`url(#${verlaufId})`} />
+      <path d={`M${linienzug} L${letzter.x} 34 L${punkte[0].x} 34 Z`} fill={`url(#${verlaufId})`} />
       <polyline points={linie} fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" strokeLinecap="round" />
       <circle cx={letzter.x} cy={letzter.y} r="2.6" fill="currentColor" />
     </Box>
@@ -340,6 +342,15 @@ export function Instrument({
   leerText?: string
   testId: string
 }>) {
+  const randFarbe = heiss ? `color-mix(in srgb, ${KUPFER} 40%, ${RAND})` : RAND
+  let wertFarbe: string
+  if (teile === null) {
+    wertFarbe = TEXT_SCHWACH
+  } else if (heiss) {
+    wertFarbe = KUPFER
+  } else {
+    wertFarbe = 'text.primary'
+  }
   return (
     <Box
       data-testid={testId}
@@ -353,7 +364,7 @@ export function Instrument({
         pb: '8px',
         borderRadius: `${CARD_RADIUS}px`,
         background: `linear-gradient(180deg, ${NUT}, color-mix(in srgb, ${NUT} 85%, ${GRUND}))`,
-        border: `1px solid ${heiss ? `color-mix(in srgb, ${KUPFER} 40%, ${RAND})` : RAND}`,
+        border: `1px solid ${randFarbe}`,
         boxShadow: SCHATTEN_NUTE,
       }}
     >
@@ -366,7 +377,7 @@ export function Instrument({
           fontSize: 16,
           fontWeight: 500,
           letterSpacing: '-.01em',
-          color: teile === null ? TEXT_SCHWACH : heiss ? KUPFER : 'text.primary',
+          color: wertFarbe,
         }}
       >
         {teile === null ? (
@@ -417,3 +428,45 @@ export function KlassenMarke({ melder, children }: Readonly<{ melder: Melder; ch
 
 /** Hover einer Zeile in einer Platte (Entwurf `.vorgang:hover`, Z. 578). */
 export const ZEILE_HOVER = `color-mix(in srgb, ${PLATTE_HOCH} 75%, ${KUPFER_SCHIMMER})`
+
+/**
+ * Eine Taste im Kupferwarte-Stil (#1083).
+ *
+ * Gestaltet wie {@link FilterTaste}, aber ohne Umschaltzustand: Sie löst eine Handlung aus, statt
+ * einen Filter zu halten. Sie steht hier und nicht in der aufrufenden Seite, weil die Nuten,
+ * Ränder und Schatten der Warte hier als Konstanten liegen — ein zweiter Satz Werte in einer Seite
+ * liefe beim nächsten Feinschliff auseinander.
+ *
+ * Das `aria-label` ist Pflicht und kein Vorschlag: In einer Liste gleichlautender Tasten ist eine
+ * Vorlesehilfe sonst ohne Anhalt, welche Zeile sie gerade nennt.
+ */
+export function Taste({
+  ariaLabel,
+  onClick,
+  children,
+}: Readonly<{ ariaLabel: string; onClick: () => void; children: ReactNode }>) {
+  return (
+    <ButtonBase
+      aria-label={ariaLabel}
+      onClick={onClick}
+      sx={{
+        fontSize: 11.5,
+        fontWeight: 500,
+        color: 'text.secondary',
+        bgcolor: NUT,
+        border: `1px solid ${RAND}`,
+        boxShadow: SCHATTEN_NUTE,
+        borderRadius: '7px',
+        px: '9px',
+        py: '4px',
+        '&:hover': {
+          color: 'text.primary',
+          boxShadow: SCHATTEN_TASTE,
+          background: `linear-gradient(180deg, ${PLATTE_HOCH}, ${PLATTE})`,
+        },
+      }}
+    >
+      {children}
+    </ButtonBase>
+  )
+}

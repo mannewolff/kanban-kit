@@ -1,5 +1,5 @@
 import type { WeeklyThroughput } from '../api/dashboard'
-import type { NightRunErrorClassCounts, NightRunItemView, NightRunServerMode, NightRunView } from '../api/nightRuns'
+import type { NightRunErrorClassCounts, NightRunItemView, NightRunOutcomeView, NightRunServerMode, NightRunView } from '../api/nightRuns'
 import type { NightRunErrorClass, NightRunState } from './nightRunLog'
 
 /**
@@ -82,17 +82,57 @@ export function juengsterLauf(laeufe: readonly NightRunView[]): NightRunView | n
  * und das Anzeigemodell der Nachtlauf-Seite (#988) ebenso; eine zweite Rechenstelle für dieselbe
  * Frage liefe beim nächsten Zustand auseinander.
  */
-export function laufMelder(lauf: {
-  complete: boolean
-  items: readonly { state: NightRunState }[]
-}): Melder {
+export function laufMelder(
+  lauf: {
+    complete: boolean
+    items: readonly { state: NightRunState; errorClass?: NightRunErrorClass | null }[]
+    outcome?: NightRunOutcomeView | null
+  },
+  ohneArbeit?: string | null,
+): Melder {
+  // Traegt der Lauf den Befund des Servers, gilt er. Nur der eben im Browser geparste Lauf der
+  // Nachtlauf-Seite hat keinen (#988, Plan #1072 E28) — er ist noch nicht eingeliefert.
+  if (lauf.outcome != null) {
+    return melderAusBefund(lauf.outcome)
+  }
+  // Die Reihenfolge traegt eine Aussage: „laeuft noch" schlaegt „ohne Arbeit". Ein laufender Lauf
+  // hat noch nichts zu melden und wird nicht rot (Vorspann der fachlichen Kriterien, #1060).
   if (!lauf.complete) {
     return 'stahl'
   }
+  if (ohneArbeit != null && ohneArbeit !== '') {
+    return 'zinnob'
+  }
+  // Dieselbe Rangfolge wie NightRunOutcome im Server (#1078): rot vor gelb vor
+  // grau-mit-Fehlerklasse. Grau ohne Fehlerklasse ist ein uebergangenes Paket und kein Mangel.
   if (lauf.items.some((item) => item.state === 'RED')) {
     return 'zinnob'
   }
-  return lauf.items.some((item) => item.state === 'YELLOW') ? 'bernst' : 'gruen'
+  if (lauf.items.some((item) => item.state === 'YELLOW')) {
+    return 'bernst'
+  }
+  const zurueckgestellt = lauf.items.some(
+    (item) => item.state === 'GREY' && item.errorClass != null,
+  )
+  return zurueckgestellt ? MELDER_JE_ZUSTAND.GREY : 'gruen'
+}
+
+/**
+ * Der Melder eines Laufs aus dem Befund des Servers.
+ *
+ * Gelesen wird der **Zustand des massgeblichen Pakets**, nicht das Urteil: Der Server fasst rot und
+ * gelb beide zu `FAILED` zusammen, die Anzeige unterscheidet sie aber seit jeher (zinnober gegen
+ * bernstein). Ueber `MELDER_JE_ZUSTAND` bleibt die Darstellung deshalb Zeichen fuer Zeichen die von
+ * vorher — die Verlagerung aendert den Ort der Rechnung, nicht das Bild.
+ */
+function melderAusBefund(befund: NightRunOutcomeView): Melder {
+  if (befund.verdict === 'RUNNING') {
+    return 'stahl'
+  }
+  if (befund.noWorkReason != null && befund.noWorkReason !== '') {
+    return 'zinnob'
+  }
+  return befund.decisiveItem == null ? 'gruen' : MELDER_JE_ZUSTAND[befund.decisiveItem.state]
 }
 
 /** Die Aussage des Laufbands (Entwurf Z. 1203–1230). */
@@ -114,7 +154,11 @@ export function laufband(lauf: NightRunView): Laufband {
   const letzter = lauf.items.at(-1)
   const beginn = new Date(lauf.startedAt)
   let titel: string
-  if (lauf.complete) {
+  if (lauf.complete && lauf.noWorkReason != null) {
+    // Der Grund steht statt „abgeschlossen — 0 Vorgaenge": Die Zahl sagt dasselbe noch einmal,
+    // der Grund sagt, warum.
+    titel = lauf.noWorkReason
+  } else if (lauf.complete) {
     titel = `${modus} abgeschlossen — ${vorgaenge(gesamt)}`
   } else if (gesamt === 0) {
     titel = `${modus} läuft`
@@ -124,7 +168,7 @@ export function laufband(lauf: NightRunView): Laufband {
   }
   return {
     titel,
-    melder: laufMelder(lauf),
+    melder: laufMelder(lauf, lauf.noWorkReason),
     laeuft: !lauf.complete,
     vorgang: letzter ? { nummer: letzter.cardNumber, titel: letzter.title } : null,
     zeitpunkt: lauf.complete ? `Beginn ${TAG_ZEIT.format(beginn)}` : `seit ${ZEIT.format(beginn)}`,
@@ -185,7 +229,8 @@ export function tagZeit(iso: string): string {
 /** Die Notiz im Kopf der Platte „Letzter Lauf": Beginn, Dauer, Zahl der Pakete. */
 export function laufNotiz(lauf: NightRunView): string {
   const pakete = lauf.items.length === 1 ? '1 Paket' : `${lauf.items.length} Pakete`
-  return `${tagZeit(lauf.startedAt)} · ${laufDauer(lauf.durationMs)} · ${pakete}`
+  const stand = `${tagZeit(lauf.startedAt)} · ${laufDauer(lauf.durationMs)} · ${pakete}`
+  return lauf.noWorkReason == null ? stand : `${stand} · ${lauf.noWorkReason}`
 }
 
 /**
@@ -386,7 +431,7 @@ export function abbruchgruende(zaehler: NightRunErrorClassCounts): Klassenzeile[
   const eintraege = (Object.entries(zaehler) as Array<[NightRunErrorClass, number]>).filter(([, zahl]) => zahl > 0)
   const max = Math.max(0, ...eintraege.map(([, zahl]) => zahl))
   return eintraege
-    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .toSorted((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
     .map(([klasse, zahl]) => ({
       klasse,
       zahl,

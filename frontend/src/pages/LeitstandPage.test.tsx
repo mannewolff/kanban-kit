@@ -1,3 +1,4 @@
+import { serverBefund } from '../test/befund'
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -95,7 +96,8 @@ const paket = (nummer: number, state: NightRunItemView['state'], extra: Partial<
   ...extra,
 })
 
-const lauf = (extra: Partial<NightRunView> = {}): NightRunView => ({
+const lauf = (extra: Partial<NightRunView> = {}): NightRunView => {
+  const basis: NightRunView = {
   id: 3,
   startedAt: '2026-09-14T21:10:00Z',
   mode: 'CHAIN',
@@ -110,14 +112,20 @@ const lauf = (extra: Partial<NightRunView> = {}): NightRunView => ({
   complete: true,
   updatedAt: null,
   usage: { costUsd: 12.4, inputTokens: null, outputTokens: null, cachedInputTokens: null },
+  noWorkReason: null,
   items: [
     paket(917, 'GREEN', { commitHash: '9489421abcdef' }),
     paket(922, 'RED', { errorClass: 'CHECKS_RED', excerpt: '2 Tests rot in BoardViewTest' }),
     paket(925, 'YELLOW', { errorClass: 'AWAITING_DECISION' }),
     paket(930, 'GREY', { durationMs: null }),
   ],
-  ...extra,
-})
+    outcome: { verdict: 'SUCCEEDED', decisiveItem: null, noWorkReason: null },
+    ...extra,
+  }
+  // Der Befund kommt aus dem Szenario, nicht aus der Vorgabe: Ein Lauf mit rotem Paket traegt sonst
+  // einen Befund, der etwas anderes sagt als seine eigenen Pakete (Issue #1081).
+  return { ...basis, outcome: extra.outcome ?? serverBefund(basis) }
+}
 
 const epic = (id: number, title: string, done: number, total: number, memberNumbers: number[] = []): Epic => ({
   id,
@@ -598,5 +606,48 @@ describe('LeitstandPage — Verbrauch', () => {
       ),
     )
     expect(screen.queryByText('Der Verbrauch konnte nicht geladen werden.')).not.toBeInTheDocument()
+  })
+})
+
+describe('LeitstandPage — Lauf ohne Arbeit (#1069)', () => {
+  const GRUND = 'Kein Eintrag trug das Label kit:nightrun'
+  const ohneArbeit = () => lauf({ noWorkReason: GRUND, processedCount: 0, items: [] })
+
+  it('zeigt den juengsten Lauf ohne Arbeit in Laufband und „Letzter Lauf" rot mit seinem Text', async () => {
+    m.klassen.mockResolvedValue({})
+    m.laeufe.mockResolvedValue([ohneArbeit()])
+    renderPage()
+
+    const band = await screen.findByRole('region', { name: 'Jüngster Lauf' })
+    expect(band).toHaveTextContent(GRUND)
+    const platte = await screen.findByRole('region', { name: 'Letzter Lauf · Kette' })
+    expect(platte).toHaveTextContent(GRUND)
+    // Laufband und „Letzter Lauf" melden rot; die Herkunftszeile bleibt davon unberuehrt (E10).
+    expect(screen.getAllByTestId('led-zinnob').length).toBeGreaterThanOrEqual(2)
+  })
+
+  // E12: Er zaehlt mit, taucht aber in keiner Zeile der Klassenliste auf -- er hat keine Klasse.
+  it('zaehlt den Lauf ohne Arbeit bei den Abbruchgruenden mit, fuehrt ihn aber in keiner Zeile', async () => {
+    m.klassen.mockResolvedValue({})
+    m.laeufe.mockResolvedValue([ohneArbeit()])
+    renderPage()
+
+    const gruende = await screen.findByRole('region', { name: 'Abbruchgründe' })
+    expect(gruende).toHaveTextContent('1 Lauf')
+    expect(gruende).toHaveTextContent('Kein Abbruch in den aufbewahrten Läufen.')
+    expect(within(gruende).queryAllByRole('listitem')).toHaveLength(0)
+  })
+
+  /**
+   * Festgehaltenes Verhalten (E10, Nicht-Ziel): Die LED der Herkunftszeile bewertet die
+   * Einlieferung, nicht den Ausgang. Ein Lauf mit rotem Paket bleibt dort gruen — wer sie auf
+   * `laufMelder` umstellte, faerbte jeden solchen Lauf um.
+   */
+  it('laesst die LED der Herkunftszeile an einem Lauf mit rotem Paket unveraendert', async () => {
+    m.laeufe.mockResolvedValue([lauf({ noWorkReason: null })])
+    renderPage()
+
+    await screen.findByRole('region', { name: 'Letzter Lauf · Kette' })
+    expect(screen.getAllByTestId('led-gruen').length).toBeGreaterThanOrEqual(1)
   })
 })

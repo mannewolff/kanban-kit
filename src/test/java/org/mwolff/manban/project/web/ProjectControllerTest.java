@@ -22,7 +22,7 @@ class ProjectControllerTest {
   private ProjectController controller;
 
   private static ProjectView project() {
-    return new ProjectView(1L, "Project", ProjectRole.OWNER, Instant.EPOCH);
+    return new ProjectView(1L, "Project", ProjectRole.OWNER, Instant.EPOCH, false, true);
   }
 
   @BeforeEach
@@ -88,5 +88,24 @@ class ProjectControllerTest {
 
     // Then
     verify(memberships).transferOwnership(3L, 5L, 8L);
+  }
+
+  /**
+   * Eigener Endpunkt statt eines zweiten Feldes am PATCH (Issue #1077, Plan #1072 E6): Das
+   * Umbenennen und das Schalten der Teilnahme haben gegenläufige Rechteregeln.
+   */
+  @Test
+  void setDashboardParticipation_delegatesToService() {
+    // Given
+    ProjectView view = project();
+    when(service.setDashboardParticipation(3L, 5L, true)).thenReturn(view);
+
+    // When
+    ProjectView result =
+        controller.setDashboardParticipation(
+            3L, 5L, new ProjectController.ParticipationRequest(true));
+
+    // Then
+    assertThat(result).isSameAs(view);
   }
 }

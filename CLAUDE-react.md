@@ -12,7 +12,7 @@ Verbindliche Regeln für das Frontend (`frontend/src/`). Ergänzend zu [CLAUDE.m
 - **React Router 6** (BrowserRouter, flache Routen)
 - **Material UI 6 (MUI)** + Emotion für Styling
 - **Vitest + React Testing Library** für Tests
-- **ESLint 10** (`eslint.config.js` flat config) mit TypeScript, React, React-Hooks, jsx-a11y
+- **ESLint 9** (`eslint.config.js` flat config) mit TypeScript, React, React-Hooks, jsx-a11y, sonarjs
 
 Der Dev-Server (Vite, `:5173`) leitet `/api/*` per Proxy an Spring Boot (`:8080`). In Produktion serviert Spring Boot den Vite-Build aus `classpath:/static/`. Eine Domain, kein CORS.
 
@@ -226,6 +226,12 @@ cd frontend && npm run lint   # ESLint auf src/
 - `eslint-plugin-jsx-a11y` (recommended): Accessibility-Regeln
 - `eslint-plugin-testing-library` (recommended, **nur an Test-Dateien** `**/*.test.{ts,tsx}`): fängt Test-Anti-Muster wie `waitFor(() => expect(getByX()))` → `findByX` (`prefer-find-by`) direkt im Gate ab, autofixbar.
 - `@typescript-eslint/no-deprecated` (**typed rule**, deshalb `parserOptions.projectService: true`): Nutzung `@deprecated`-markierter APIs (z. B. abgekündigte MUI-Props wie `inputProps`) ist ein harter Lint-Fehler.
+- `eslint-plugin-sonarjs` (**nicht** das recommended-Set, sondern genau fünf Regeln): bildet die Befunde nach, die sonst erst nach dem Push bei SonarCloud auffielen (Plan #1042).
+  - `sonarjs/cognitive-complexity` mit Schwelle **15** (Sonar S3776)
+  - `sonarjs/no-nested-template-literals` (S4624)
+  - `no-nested-ternary` (S3358 — Kernregel, kein Plugin nötig)
+  - `react/jsx-no-useless-fragment` (S6749)
+  - `@typescript-eslint/prefer-nullish-coalescing` (S6606) mit `ignorePrimitives: { string: true }` und `ignoreMixedLogicalExpressions: true` — ohne die beiden Optionen meldet die Regel String-Defaults und gemischte Logik-Ausdrücke, die Sonar nicht beanstandet und deren Umbau das Verhalten änderte.
 
 **Leitplanke im Gate statt Doku, die bittet.** Wenn ein Modell wiederholt dasselbe veraltete/nicht-idiomatische Muster reproduziert (es kennt das *häufigste*, nicht das *aktuellste* aus dem Trainingskorpus — so entstanden die `prefer-find-by`- und `inputProps`-Wellen, die erst spät bei Sonar auffielen), ist die wirksame Antwort eine **harte ESLint-Regel im Pflicht-Gate**, nicht ein Satz in dieser Datei. Doku wird übersehen; das Gate nicht.
 

@@ -32,6 +32,7 @@ import org.mwolff.manban.nightrun.domain.NightRunErrorClass;
 import org.mwolff.manban.nightrun.domain.NightRunLimits;
 import org.mwolff.manban.nightrun.domain.NightRunMode;
 import org.mwolff.manban.nightrun.domain.NightRunOrigin;
+import org.mwolff.manban.nightrun.domain.NightRunOutcome;
 import org.mwolff.manban.nightrun.domain.NightRunState;
 import org.mwolff.manban.nightrun.domain.NightRunUsage;
 import org.mwolff.manban.project.application.ProjectAccessDeniedException;
@@ -145,6 +146,7 @@ class NightRunControllerTest {
                 "Fehler: kaputt",
                 true,
                 null,
+                null,
                 List.of(
                     new NewNightRunItem(
                         721,
@@ -158,7 +160,7 @@ class NightRunControllerTest {
     assertThat(uebergeben.get(1))
         .isEqualTo(
             new NewNightRun(
-                ZWEITER, NightRunMode.REVIEW, 10L, 0, 0, 0, null, true, null, List.of()));
+                ZWEITER, NightRunMode.REVIEW, 10L, 0, 0, 0, null, true, null, null, List.of()));
   }
 
   /**
@@ -199,6 +201,7 @@ class NightRunControllerTest {
                 0,
                 null,
                 true,
+                null,
                 null,
                 List.of(
                     new NewNightRunItem(
@@ -384,6 +387,8 @@ class NightRunControllerTest {
                     true,
                     null,
                     null,
+                    null,
+                    NightRunOutcome.of(true, null, List.of()),
                     List.of(
                         new NightRunItemView(
                             21L,
@@ -437,6 +442,8 @@ class NightRunControllerTest {
                     true,
                     null,
                     null,
+                    null,
+                    NightRunOutcome.of(true, null, List.of()),
                     List.of(
                         new NightRunItemView(
                             22L,

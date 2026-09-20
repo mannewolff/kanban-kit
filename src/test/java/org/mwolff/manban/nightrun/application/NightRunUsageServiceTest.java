@@ -31,6 +31,7 @@ import org.mwolff.manban.nightrun.application.NightRunUsageRepository.KindTotals
 import org.mwolff.manban.nightrun.application.NightRunUsageRepository.LifetimeTotals;
 import org.mwolff.manban.nightrun.application.NightRunUsageRepository.NightTotals;
 import org.mwolff.manban.nightrun.application.NightRunUsageRepository.PeriodTotals;
+import org.mwolff.manban.nightrun.application.NightRunUsageRepository.RetainedByKind;
 import org.mwolff.manban.nightrun.application.NightRunUsageRepository.TotalsByKind;
 import org.mwolff.manban.nightrun.application.NightRunUsageService.Coverage;
 import org.mwolff.manban.nightrun.application.NightRunUsageService.EpicUsageView;
@@ -39,6 +40,7 @@ import org.mwolff.manban.nightrun.application.NightRunUsageService.NightUsageVie
 import org.mwolff.manban.nightrun.application.NightRunUsageService.PeriodUsageView;
 import org.mwolff.manban.nightrun.application.NightRunUsageService.TotalUsageView;
 import org.mwolff.manban.nightrun.domain.NightRunErrorClass;
+import org.mwolff.manban.nightrun.domain.NightRunKind;
 import org.mwolff.manban.nightrun.domain.NightRunPeriodType;
 import org.mwolff.manban.nightrun.domain.NightRunUsage;
 import org.mwolff.manban.project.application.InteractiveUsageSinceReader;
@@ -51,8 +53,9 @@ import org.mwolff.manban.project.application.ProjectAccessDeniedException;
  * es um das, was der Service daraus macht: Rest, Abbruch, Abdeckung, Vorhaben-Aufstellung.
  */
 // Testklasse: Jede Methode ist ein Fall aus dem Akzeptanzkriterium, und die Importe folgen den
-// abgebildeten Typen — seit Issue #1013 kommen die Gattungs-Records des Ports dazu.
-@SuppressWarnings({"PMD.TooManyMethods", "PMD.ExcessiveImports"})
+// abgebildeten Typen — seit Issue #1013 kommen die Gattungs-Records des Ports dazu, seit Issue
+// #1071 die Aufbewahrungsgrenze samt ihrer Gattung.
+@SuppressWarnings({"PMD.TooManyMethods", "PMD.ExcessiveImports", "PMD.CouplingBetweenObjects"})
 class NightRunUsageServiceTest {
 
   private static final long USER = 7L;
@@ -69,6 +72,9 @@ class NightRunUsageServiceTest {
   /** Eine Gattung, die in der Spanne nicht vorkommt: kein Eintrag, nichts gemessen. */
   private static final KindTotals LEER = new KindTotals(0L, NICHTS, NICHTS);
 
+  /** Ringpuffer-Grenze 2 je Gattung, damit die Abdeckungsfälle mit wenigen Läufen auskommen. */
+  private static final NightRunProperties PROPERTIES = new NightRunProperties(2, null, 2, null);
+
   private FakeUsage usage;
   private CardService cards;
   private PermissionChecker permissions;
@@ -82,7 +88,16 @@ class NightRunUsageServiceTest {
     permissions = mock(PermissionChecker.class);
     erfassungsbeginn = mock(InteractiveUsageSinceReader.class);
     when(erfassungsbeginn.interactiveUsageSince(anyLong())).thenReturn(Optional.empty());
-    service = new NightRunUsageService(usage, cards, permissions, erfassungsbeginn, JETZT);
+    service =
+        new NightRunUsageService(usage, cards, permissions, erfassungsbeginn, JETZT, PROPERTIES);
+  }
+
+  private static RetainedByKind voll(NightRunKind kind, String aeltester) {
+    return new RetainedByKind(kind, 2L, Instant.parse(aeltester));
+  }
+
+  private static RetainedByKind nichtVoll(NightRunKind kind, @Nullable String aeltester) {
+    return new RetainedByKind(kind, 1L, aeltester == null ? null : Instant.parse(aeltester));
   }
 
   private static NightRunUsage kosten(String betrag) {
@@ -103,8 +118,10 @@ class NightRunUsageServiceTest {
   // --- Rechte ----------------------------------------------------------------------------------
 
   @Test
-  void dieNachtVerlangtDenBesitzer_undLiestOhneIhnNichts() {
-    doThrow(new ProjectAccessDeniedException()).when(permissions).requireOwner(USER, PROJECT);
+  void dieNachtVerlangtDenNachtlaufZugriff_undLiestOhneIhnNichts() {
+    doThrow(new ProjectAccessDeniedException())
+        .when(permissions)
+        .requireNightRunAccess(USER, PROJECT);
 
     assertThatThrownBy(() -> service.night(USER, PROJECT, NACHT_15, BERLIN))
         .isInstanceOf(ProjectAccessDeniedException.class);
@@ -113,8 +130,10 @@ class NightRunUsageServiceTest {
   }
 
   @Test
-  void derZeitraumVerlangtDenBesitzer_undLiestOhneIhnNichts() {
-    doThrow(new ProjectAccessDeniedException()).when(permissions).requireOwner(USER, PROJECT);
+  void derZeitraumVerlangtDenNachtlaufZugriff_undLiestOhneIhnNichts() {
+    doThrow(new ProjectAccessDeniedException())
+        .when(permissions)
+        .requireNightRunAccess(USER, PROJECT);
 
     assertThatThrownBy(() -> service.period(USER, PROJECT, NightRunPeriodType.MONTH, 0, BERLIN))
         .isInstanceOf(ProjectAccessDeniedException.class);
@@ -123,11 +142,11 @@ class NightRunUsageServiceTest {
   }
 
   @Test
-  void beideUseCasesPruefenDenBesitzerFuerDasFragendeProjekt() {
+  void beideUseCasesPruefenDenZugriffFuerDasFragendeProjekt() {
     service.night(USER, PROJECT, NACHT_15, BERLIN);
     service.period(USER, PROJECT, NightRunPeriodType.DAY, 0, BERLIN);
 
-    verify(permissions, org.mockito.Mockito.times(2)).requireOwner(USER, PROJECT);
+    verify(permissions, org.mockito.Mockito.times(2)).requireNightRunAccess(USER, PROJECT);
   }
 
   // --- Eine Nacht ------------------------------------------------------------------------------
@@ -391,8 +410,10 @@ class NightRunUsageServiceTest {
   // --- Die Lebenszeit (Issue #1014) ------------------------------------------------------------
 
   @Test
-  void dieLebenszeitSummeVerlangtDenBesitzer_undLiestOhneIhnNichts() {
-    doThrow(new ProjectAccessDeniedException()).when(permissions).requireOwner(USER, PROJECT);
+  void dieLebenszeitSummeVerlangtDenNachtlaufZugriff_undLiestOhneIhnNichts() {
+    doThrow(new ProjectAccessDeniedException())
+        .when(permissions)
+        .requireNightRunAccess(USER, PROJECT);
 
     assertThatThrownBy(() -> service.total(USER, PROJECT))
         .isInstanceOf(ProjectAccessDeniedException.class);
@@ -481,7 +502,7 @@ class NightRunUsageServiceTest {
   /** Leerfall 1: aufbewahrte Laeufe reichen zurueck, aber in diesem Zeitraum lief keiner (AK 9). */
   @Test
   void einZeitraumOhneLaeufeIstVollstaendigAbgedecktUndLeer() {
-    usage.aeltester = Optional.of(Instant.parse("2026-06-01T00:00:00Z"));
+    usage.retention = List.of(voll(NightRunKind.NIGHT, "2026-06-01T00:00:00Z"));
 
     PeriodUsageView tag = service.period(USER, PROJECT, NightRunPeriodType.DAY, 0, BERLIN);
 
@@ -489,10 +510,25 @@ class NightRunUsageServiceTest {
     assertThat(tag.current().noRuns()).isTrue();
   }
 
-  /** Leerfall 2: der Zeitraum endet vor dem aeltesten aufbewahrten Lauf (Plan E8). */
+  /**
+   * Ohne vollen Ringpuffer ist nichts verdraengt worden — jeder Zeitraum ist COMPLETE, auch einer,
+   * der ganz vor dem einzigen (nicht verdraengten) Lauf liegt. Ein Puffer, der die Zahl noch nicht
+   * erreicht, darf keine Grenze setzen (Issue #1071, Plan #1067 E8).
+   */
   @Test
-  void einZeitraumGanzVorDemAeltestenLaufIstVorDerAufbewahrung() {
-    usage.aeltester = Optional.of(Instant.parse("2026-09-01T10:00:00Z"));
+  void ohneVollenRingpufferIstJederZeitraumVollstaendig_auchVorDemErstenLauf() {
+    usage.retention = List.of(nichtVoll(NightRunKind.NIGHT, "2026-09-16T00:00:00Z"));
+
+    PeriodUsageView monat = service.period(USER, PROJECT, NightRunPeriodType.MONTH, 0, BERLIN);
+
+    assertThat(monat.current().coverage()).isEqualTo(Coverage.COMPLETE);
+    assertThat(monat.previous().coverage()).isEqualTo(Coverage.COMPLETE);
+  }
+
+  /** Der Zeitraum endet vor der Aufbewahrungsgrenze einer vollen Gattung (Plan E8). */
+  @Test
+  void einZeitraumGanzVorDerGrenzeEinerVollenGattungIstVorDerAufbewahrung() {
+    usage.retention = List.of(voll(NightRunKind.NIGHT, "2026-09-01T10:00:00Z"));
 
     PeriodUsageView monat = service.period(USER, PROJECT, NightRunPeriodType.MONTH, 0, BERLIN);
 
@@ -501,11 +537,11 @@ class NightRunUsageServiceTest {
   }
 
   /**
-   * Leerfall 3: Zahlen **und** Teilabdeckung, wenn die Grenze mitten im Zeitraum liegt (Plan E8).
+   * Zahlen **und** Teilabdeckung, wenn die Grenze einer vollen Gattung mitten im Zeitraum liegt.
    */
   @Test
-  void einZeitraumMitDerAufbewahrungsgrenzeDarinTraegtZahlenUndTeilabdeckung() {
-    usage.aeltester = Optional.of(Instant.parse("2026-08-12T21:00:00Z"));
+  void einZeitraumMitDerGrenzeDarinTraegtZahlenUndTeilabdeckung() {
+    usage.retention = List.of(voll(NightRunKind.NIGHT, "2026-08-12T21:00:00Z"));
     usage.summeJeBeginn.put(
         Instant.parse("2026-08-01T10:00:00Z"), summe(5, 4, kosten("12"), kosten("9")));
 
@@ -518,22 +554,67 @@ class NightRunUsageServiceTest {
 
   /** Genau an der Grenze: Beginnt der Zeitraum mit dem aeltesten Lauf, ist er vollstaendig. */
   @Test
-  void einZeitraumDerMitDemAeltestenLaufBeginntIstVollstaendig() {
-    usage.aeltester = Optional.of(Instant.parse("2026-08-01T10:00:00Z"));
+  void einZeitraumDerMitDerGrenzeBeginntIstVollstaendig() {
+    usage.retention = List.of(voll(NightRunKind.NIGHT, "2026-08-01T10:00:00Z"));
 
     assertThat(
             service.period(USER, PROJECT, NightRunPeriodType.MONTH, 0, BERLIN).current().coverage())
         .isEqualTo(Coverage.COMPLETE);
   }
 
-  /** Endet der Zeitraum genau mit dem aeltesten Lauf, liegt er ganz davor. */
+  /** Endet der Zeitraum genau mit der Grenze, liegt er ganz davor. */
   @Test
-  void einZeitraumDerMitDemAeltestenLaufEndetLiegtDavor() {
-    usage.aeltester = Optional.of(Instant.parse("2026-09-01T10:00:00Z"));
+  void einZeitraumDerMitDerGrenzeEndetLiegtDavor() {
+    usage.retention = List.of(voll(NightRunKind.NIGHT, "2026-09-01T10:00:00Z"));
 
     assertThat(
             service.period(USER, PROJECT, NightRunPeriodType.MONTH, 0, BERLIN).current().coverage())
         .isEqualTo(Coverage.BEFORE_RETENTION);
+  }
+
+  /**
+   * Der Grenzfall aus E9: der Puffer ist exakt voll ({@code count == max}), obwohl nie verdraengt
+   * wurde. Die Aussage irrt dann in Richtung Vorsicht — hingenommen, bis der naechste Lauf kommt.
+   */
+  @Test
+  void einExaktVollerPufferOhneVerdraengungErgibtDennochEineGrenze() {
+    usage.retention = List.of(voll(NightRunKind.NIGHT, "2026-09-01T10:00:00Z"));
+
+    assertThat(
+            service.period(USER, PROJECT, NightRunPeriodType.MONTH, 0, BERLIN).current().coverage())
+        .isEqualTo(Coverage.BEFORE_RETENTION);
+  }
+
+  /** Sind beide Gattungen voll, ist die Grenze der spaetere der beiden aeltesten Zeitpunkte. */
+  @Test
+  void sindBeideGattungenVollIstDieGrenzeDerSpaetereZeitpunkt() {
+    usage.retention =
+        List.of(
+            voll(NightRunKind.NIGHT, "2026-06-15T00:00:00Z"),
+            voll(NightRunKind.INTERACTIVE, "2026-07-20T00:00:00Z"));
+
+    PeriodUsageView juli = service.period(USER, PROJECT, NightRunPeriodType.MONTH, 1, BERLIN);
+
+    assertThat(juli.current().period().firstDay()).isEqualTo(LocalDate.of(2026, 7, 1));
+    assertThat(juli.current().coverage()).isEqualTo(Coverage.PARTIAL);
+  }
+
+  /**
+   * Haelt eine nicht volle Gattung aeltere Eintraege als die volle, liegt die Grenze am aeltesten
+   * Eintrag der vollen Gattung — dadurch gelten mehr Zeitraeume als betroffen, nie weniger
+   * (Plan-Review H5): Der nicht volle, aeltere Zeitpunkt darf die Grenze nicht nach vorn ziehen.
+   */
+  @Test
+  void eineNichtVolleGattungMitAelterenEintraegenZiehtDieGrenzeNichtNachVorn() {
+    usage.retention =
+        List.of(
+            voll(NightRunKind.NIGHT, "2026-07-20T00:00:00Z"),
+            nichtVoll(NightRunKind.INTERACTIVE, "2026-06-01T00:00:00Z"));
+
+    PeriodUsageView juli = service.period(USER, PROJECT, NightRunPeriodType.MONTH, 1, BERLIN);
+
+    assertThat(juli.current().period().firstDay()).isEqualTo(LocalDate.of(2026, 7, 1));
+    assertThat(juli.current().coverage()).isEqualTo(Coverage.PARTIAL);
   }
 
   /** Ein Projekt ohne jeden Lauf: nichts ist verdraengt, also vollstaendig und leer. */
@@ -664,6 +745,7 @@ class NightRunUsageServiceTest {
     LifetimeTotals lebenszeit = new LifetimeTotals(0L, new TotalsByKind(LEER, LEER));
     final Map<Instant, PeriodTotals> summeJeBeginn = new java.util.HashMap<>();
     Optional<Instant> aeltester = Optional.empty();
+    List<RetainedByKind> retention = List.of();
 
     @Override
     public List<NightTotals> totalsPerNight(long projectId, Instant from, Instant to, ZoneId zone) {
@@ -693,6 +775,12 @@ class NightRunUsageServiceTest {
     public Optional<Instant> oldestRetainedRunStart(long projectId) {
       aufrufe.add("oldest");
       return aeltester;
+    }
+
+    @Override
+    public List<RetainedByKind> retentionBoundary(long projectId) {
+      aufrufe.add("retentionBoundary");
+      return retention;
     }
   }
 }

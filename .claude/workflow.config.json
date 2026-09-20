@@ -61,6 +61,21 @@
       "abdeckungMin": 10,
       "kostenUsd": 50,
       "korrekturrunden": 2
+    },
+    "modelle": [
+       "claude-opus-5",
+       "claude-sonnet-5"
+    ],
+    "stufen": {
+      "schwer": {
+        "modell": "claude-opus-5"
+      },
+      "mittel": {
+        "modell": "claude-opus-5"
+      },
+      "leicht": {
+        "modell": "claude-opus-5"
+      }
     }
   },
   "toolbox": {

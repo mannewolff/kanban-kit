@@ -1,6 +1,7 @@
 package org.mwolff.manban.nightrun;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -105,6 +106,44 @@ class NightRunIT extends AbstractIntegrationTest {
         .andExpect(jsonPath("$[1].created").value(false));
 
     mvc.perform(get(path(projectId)).cookie(owner)).andExpect(jsonPath("$.length()").value(1));
+  }
+
+  /**
+   * Der Befund reist mit dem gespeicherten Lauf zurück (Issue #1078, Plan #1072 E2).
+   *
+   * <p>Hier und nicht im Service-Unit-Test: „gefüllt für einen gespeicherten Lauf" ist eine Aussage
+   * über den Weg durch die Datenbank und den JSON-Vertrag. Die Feldnamen stehen mit im Test, weil
+   * der Browser sie in #1081 liest — ein stillschweigendes Umbenennen soll hier auffallen und nicht
+   * erst dort.
+   */
+  @Test
+  void list_liefertDenBefundDesGespeichertenLaufs() throws Exception {
+    Cookie owner = session("nr-outcome-owner@example.com", PlatformRole.USER);
+    long projectId = projectOf("nr-outcome-owner@example.com", "nr-outcome-admin@example.com");
+
+    submit(owner, projectId, run(ERSTER, item(721, "Persistenz", "RED", "CHECKS_RED")))
+        .andExpect(status().isOk());
+
+    mvc.perform(get(path(projectId)).cookie(owner))
+        .andExpect(jsonPath("$[0].outcome.verdict").value("FAILED"))
+        .andExpect(jsonPath("$[0].outcome.decisiveItem.cardNumber").value(721))
+        .andExpect(jsonPath("$[0].outcome.decisiveItem.state").value("RED"))
+        .andExpect(jsonPath("$[0].outcome.decisiveItem.errorClass").value("CHECKS_RED"))
+        .andExpect(jsonPath("$[0].outcome.noWorkReason").doesNotExist());
+  }
+
+  /** Auch der gelungene Lauf trägt einen Befund — sonst hieße „kein Befund" zweierlei. */
+  @Test
+  void list_liefertEinenBefundAuchFuerDenGelungenenLauf() throws Exception {
+    Cookie owner = session("nr-gruen-owner@example.com", PlatformRole.USER);
+    long projectId = projectOf("nr-gruen-owner@example.com", "nr-gruen-admin@example.com");
+
+    submit(owner, projectId, run(ERSTER, item(721, "Persistenz", "GREEN", null)))
+        .andExpect(status().isOk());
+
+    mvc.perform(get(path(projectId)).cookie(owner))
+        .andExpect(jsonPath("$[0].outcome.verdict").value("SUCCEEDED"))
+        .andExpect(jsonPath("$[0].outcome.decisiveItem").doesNotExist());
   }
 
   /** Zu lange Auszüge sind 400 mit {@code fieldErrors} — nicht 500 an der Spaltengrenze. */
@@ -365,7 +404,8 @@ class NightRunIT extends AbstractIntegrationTest {
             "nachtlauf",
             true,
             Instant.now(),
-            gemeldet),
+            gemeldet,
+            null),
         List.of());
 
     submit(owner, projectId, runMitKosten(ERSTER, "25.983293", itemMitKosten(791, "11.5228115")))
@@ -398,6 +438,9 @@ class NightRunIT extends AbstractIntegrationTest {
             userId("nr-usage-viewer@example.com"),
             ProjectRole.VIEWER,
             Instant.now()));
+    // Seit Issue #1079 liest ein Plattform-Admin den Verbrauch nur am teilnehmenden Projekt;
+    // diese Matrix prueft seinen Durchgang, also nimmt das Projekt teil.
+    jdbc.update("UPDATE project SET dashboard_participation = true WHERE id = ?", projectId);
     String nacht = "/api/projects/" + projectId + "/night-run-usage/night";
     String zeitraum = "/api/projects/" + projectId + "/night-run-usage";
     String gesamt = zeitraum + "/total";
@@ -495,6 +538,42 @@ class NightRunIT extends AbstractIntegrationTest {
             .cookie(owner)
             .contentType("application/json")
             .content("{\"runs\":[%s]}".formatted(String.join(",", runs))));
+  }
+
+  /**
+   * Der Grund steht in der Antwort der Laufliste (Issue #1068). Der hochgeladene Weg fuehrt kein
+   * Grund-Feld, also traegt ein Lauf ohne Arbeit hier den Rueckfalltext des Servers (Plan #1067,
+   * E4) — und ein Lauf mit Arbeit traegt {@code null}, nicht etwa einen leeren Text.
+   */
+  @Test
+  void list_traegtDenGrundEinesLaufsOhneArbeit_undNullBeiEinemMitArbeit() throws Exception {
+    Cookie owner = session("nr-ohnearbeit-owner@example.com", PlatformRole.USER);
+    long projectId =
+        projectOf("nr-ohnearbeit-owner@example.com", "nr-ohnearbeit-admin@example.com");
+
+    submit(
+            owner,
+            projectId,
+            laufOhneArbeit(ERSTER),
+            run(ZWEITER, item(722, "Service", "GREEN", null)))
+        .andExpect(status().isOk());
+
+    mvc.perform(get(path(projectId)).cookie(owner))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$[1].startedAt").value(ERSTER))
+        .andExpect(jsonPath("$[1].noWorkReason").value("Nichts abgearbeitet — Grund unbekannt"))
+        .andExpect(jsonPath("$[0].startedAt").value(ZWEITER))
+        .andExpect(jsonPath("$[0].noWorkReason").value(nullValue()));
+  }
+
+  /**
+   * Ein abgeschlossener Lauf, der nichts abgearbeitet hat: {@code processedCount} 0, keine Pakete.
+   */
+  private static String laufOhneArbeit(String startedAt) {
+    return """
+        {"startedAt":"%s","mode":"IMPLEMENTATION","durationMs":1234,"processedCount":0,
+         "skippedCount":0,"unparsedCount":0,"items":[]}"""
+        .formatted(startedAt);
   }
 
   private static String run(String startedAt, String items) {

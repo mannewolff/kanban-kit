@@ -127,7 +127,7 @@ describe('EpicsPage', () => {
   it('zeigt den Breadcrumb-Pfad ab Projekte', async () => {
     mEpics.list.mockResolvedValue([])
     renderPage()
-    expect(await screen.findByRole('link', { name: 'Projekte' })).toHaveAttribute('href', '/')
+    expect(await screen.findByRole('link', { name: 'Projekte' })).toHaveAttribute('href', '/projects')
   })
 
   it('listet Epics mit Kürzel und Fortschritt', async () => {

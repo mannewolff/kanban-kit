@@ -165,7 +165,7 @@ export function ProjectBoardsPage() {
   return (
     <Box>
       <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
-        <Breadcrumbs items={[{ label: 'Projekte', to: '/' }, { label: projectName || 'Projekt' }]} />
+        <Breadcrumbs items={[{ label: 'Projekte', to: '/projects' }, { label: projectName || 'Projekt' }]} />
         {canManageMembers(role) && (
           <Link component={RouterLink} to={`/projects/${id}/members`}>Mitglieder</Link>
         )}

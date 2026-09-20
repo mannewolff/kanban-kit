@@ -118,6 +118,26 @@ export interface NightRunUsageView {
   cachedInputTokens: number | null
 }
 
+/**
+ * Der Befund eines Laufs, wie der Server ihn seit Issue #1078 mitschickt.
+ *
+ * Der Massstab „nicht vollstaendig gelungen" lebt dort (Plan #1072 E2) — der Browser liest ihn und
+ * rechnet ihn nicht nach. Er kommt als **Daten**: kein fertiger Satz, sondern das massgebliche
+ * Paket und der Grund eines Laufs ohne Arbeit. Den Text bildet weiterhin `nightRunZustandsText`,
+ * damit die Stoerzeile und die Nachtlauf-Auswertung denselben tragen (AK 6 der fachlichen Quelle).
+ */
+export interface NightRunOutcomeView {
+  verdict: 'SUCCEEDED' | 'FAILED' | 'WAITING' | 'RUNNING'
+  /** Das Paket, das den Ausgang bestimmt; `null` bei Erfolg, bei laufendem Lauf und ohne Arbeit. */
+  decisiveItem: {
+    cardNumber: number
+    state: NightRunState
+    errorClass: NightRunErrorClass | null
+  } | null
+  /** Grund, warum der Lauf nichts abgearbeitet hat; `null`, wenn er gearbeitet hat. */
+  noWorkReason: string | null
+}
+
 /** Ein aufbewahrter Lauf samt seiner Arbeitspakete. */
 export interface NightRunView {
   id: number
@@ -139,6 +159,17 @@ export interface NightRunView {
   /** Zeitpunkt der letzten Meldung; `null`, wenn der Lauf seit dem Anlegen nicht gemeldet wurde. */
   updatedAt: string | null
   usage: NightRunUsageView | null
+  /**
+   * Grund, warum der Lauf nichts abgearbeitet hat (Issue #1068). `null` heisst „der Lauf hat
+   * gearbeitet" oder „eingeliefert vor der Umstellung" — beides ist kein Befund. Felder ohne Wert
+   * kommen als `null` und nicht als fehlender Schluessel (Issue #734).
+   */
+  noWorkReason: string | null
+  /**
+   * Der Befund des Laufs (Issue #1078). **Pflichtfeld**, kein `?:` — optional verschoebe es die eine
+   * Wahrheit wieder in den Browser, weil jede Lesestelle einen Rueckfallweg braeuchte.
+   */
+  outcome: NightRunOutcomeView
   items: NightRunItemView[]
 }
 

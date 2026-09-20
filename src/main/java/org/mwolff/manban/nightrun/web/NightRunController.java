@@ -62,6 +62,13 @@ class NightRunController {
   /** Ein Commit-Hash ist höchstens ein vollständiger SHA-1 (40 Zeichen), wie in {@code V29}. */
   static final int COMMIT_HASH_MAX = 40;
 
+  /**
+   * Obergrenze des Grundes, warum ein Lauf nichts abgearbeitet hat (Issue #1068) — dieselbe Laenge
+   * wie {@link #TITLE_MAX} und wie die Spalte {@code night_run.no_work_reason} aus {@code V35}. Der
+   * Wert ist ein Satz fuer die Anzeige; lange Texte fuehrt {@code unparsedSample}.
+   */
+  static final int NO_WORK_REASON_MAX = 300;
+
   private final NightRunService runs;
 
   NightRunController(NightRunService runs) {
@@ -115,6 +122,10 @@ class NightRunController {
         // vor, die es nicht gibt.
         true,
         NightRunUsageRequest.toDomain(request.usage()),
+        // Kein Request-Feld aus demselben Grund wie oben: Ein hochgeladenes Protokoll kommt aus
+        // einer Datei, nicht aus dem Runner, und traegt dessen Begruendung nicht. Den Rueckfalltext
+        // setzt der Dienst (Issue #1068, Plan #1067, E4).
+        null,
         request.items().stream().map(NightRunController::item).toList());
   }
 

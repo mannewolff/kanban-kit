@@ -26,8 +26,8 @@ import { projectsApi, type Project } from '../api/projects'
 import { APP_NAME } from '../appMeta'
 import { useAuth } from '../auth/AuthContext'
 import { MarkenSymbol } from '../layout/navIcons'
-import { buildNavItems, type BoardContext, type NavLink } from '../layout/navItems'
-import { canManageBoards, canManageMembers, canManageProject, isPlatformAdmin } from '../lib/roles'
+import { buildNavItems, navKontext, type BoardContext, type NavGroup, type NavLink } from '../layout/navItems'
+import { isPlatformAdmin } from '../lib/roles'
 import { lastBoardOfProject, useBoardHistory, type BoardHistoryEntry } from '../lib/useBoardHistory'
 import { useEditMode } from '../lib/EditModeContext'
 import { useKeyboardShortcut } from '../lib/useKeyboardShortcut'
@@ -139,9 +139,162 @@ const NAV_EINTRAG_SX = {
   '&[aria-current="page"] .nav-icon': { color: KUPFER },
 } as const
 
+interface SchieneProps {
+  /** Die Blöcke der Navigation, wie {@link buildNavItems} sie liefert. */
+  navItems: NavGroup[]
+  /** Nur Symbole statt Symbol und Beschriftung (breiter Zweig, eingeklappt). */
+  eingeklappt: boolean
+  /** Der gespeicherte Einklapp-Wunsch — im schmalen Zweig ohne Wirkung, er steuert nur die Taste. */
+  collapsed: boolean
+  /** Schmaler Zweig: die Schiene liegt als Schublade über dem Inhalt, die Einklapp-Taste entfällt. */
+  schmal: boolean
+  onZielWaehlen: (event: MouseEvent<HTMLAnchorElement>, pfad: string) => void
+  onToggleCollapsed: () => void
+}
+
+/**
+ * Die Navigationsschiene (Entwurf `.warte`, Z. 199–272): Marke, die Blöcke aus
+ * {@link buildNavItems} und der Fuß mit Administration, Dokumentation und Einklapp-Taste.
+ * Eigene Komponente, weil die Schiene für sich steht — die Shell reicht ihr nur Zustand an.
+ */
+function Schiene({ navItems, eingeklappt, collapsed, schmal, onZielWaehlen, onToggleCollapsed }: SchieneProps) {
+  const location = useLocation()
+
+  // Aktiv ist der Eintrag mit dem längsten passenden Pfad: Auf `/boards/1/list` passt „Board"
+  // (`/boards/1`) als Präfix ebenso wie „Liste" — gemeint ist nur die Liste.
+  const aktiverPfad = [...navItems.flatMap((block) => block.children), ADMINISTRATION_LINK]
+    .map((link) => link.path)
+    .filter((pfad) => location.pathname === pfad || (pfad !== '/' && location.pathname.startsWith(`${pfad}/`)))
+    .sort((a, b) => b.length - a.length)[0]
+
+  const renderLink = (link: NavLink) => {
+    const Icon = link.icon
+    const aktiv = link.path === aktiverPfad
+    const eintrag = (
+      <ButtonBase
+        key={link.path}
+        component="a"
+        href={link.path}
+        onClick={(event: MouseEvent<HTMLAnchorElement>) => onZielWaehlen(event, link.path)}
+        aria-current={aktiv ? 'page' : undefined}
+        aria-label={eingeklappt ? link.label : undefined}
+        sx={{ ...NAV_EINTRAG_SX, ...(eingeklappt && { justifyContent: 'center', px: 0 }) }}
+      >
+        <Icon className="nav-icon" />
+        {!eingeklappt && link.label}
+      </ButtonBase>
+    )
+    return eingeklappt ? (
+      <Tooltip key={link.path} title={link.label} placement="right">
+        {eintrag}
+      </Tooltip>
+    ) : (
+      eintrag
+    )
+  }
+
+  // Doku ist statisch unter /docs/ ausgeliefert (#314), keine SPA-Route -> echter Anker im neuen Tab.
+  const docsLink = (
+    <ButtonBase
+      component="a"
+      href="/docs/"
+      target="_blank"
+      rel="noopener noreferrer"
+      aria-label={eingeklappt ? 'Dokumentation' : undefined}
+      sx={{ ...NAV_EINTRAG_SX, ...(eingeklappt && { justifyContent: 'center', px: 0 }) }}
+    >
+      <MenuBookIcon className="nav-icon" />
+      {!eingeklappt && 'Dokumentation'}
+    </ButtonBase>
+  )
+
+  return (
+    <Box
+      component="nav"
+      aria-label="Hauptnavigation"
+      sx={{
+        minHeight: '100%',
+        boxSizing: 'border-box',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '22px',
+        pt: '18px',
+        pb: '24px',
+        px: '14px',
+        overflowX: 'hidden',
+        overflowY: 'auto',
+      }}
+    >
+      {/* Marke (Entwurf `.marke`, Z. 211–236). */}
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: '10px', px: eingeklappt ? 0 : '4px', justifyContent: eingeklappt ? 'center' : 'flex-start' }}>
+        <Box
+          component="span"
+          aria-hidden
+          sx={{ ...MARKE_MAL_SX, width: 30, height: 30, borderRadius: '9px', display: 'grid', placeItems: 'center', flex: 'none' }}
+        >
+          <MarkenSymbol />
+        </Box>
+        {!eingeklappt && (
+          <Box component="span" sx={{ lineHeight: 1.15, minWidth: 0 }}>
+            <Box
+              component="span"
+              sx={{ display: 'block', fontFamily: SCHRIFT_ANZEIGE, fontStretch: '118%', fontWeight: 700, fontSize: 14, letterSpacing: '-.01em' }}
+            >
+              {APP_NAME}
+            </Box>
+            <Box component="span" sx={{ display: 'block', fontSize: 10.5, color: TEXT_SCHWACH, letterSpacing: '.04em' }}>
+              v{__APP_VERSION__}
+            </Box>
+          </Box>
+        )}
+      </Box>
+
+      {navItems.map((block) => (
+        <Box key={block.id} role="group" aria-label={block.label} sx={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+          {eingeklappt ? (
+            <Box aria-hidden sx={{ height: '1px', bgcolor: RAND, mx: '6px', mb: '4px' }} />
+          ) : (
+            <Box component="span" sx={{ ...ETIKETT, px: '8px', pb: '7px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {block.label}
+            </Box>
+          )}
+          {block.children.map((link) => (
+            <Fragment key={link.path}>{renderLink(link)}</Fragment>
+          ))}
+        </Box>
+      ))}
+
+      {/* Fuß der Schiene (Entwurf `.schiene-fuss`, Z. 272): Administration, Dokumentation, Einklappen. */}
+      <Box sx={{ mt: 'auto', display: 'flex', flexDirection: 'column', gap: '3px' }}>
+        {renderLink(ADMINISTRATION_LINK)}
+        {eingeklappt ? (
+          <Tooltip title="Dokumentation" placement="right">
+            {docsLink}
+          </Tooltip>
+        ) : (
+          docsLink
+        )}
+        {!schmal && (
+          <Box sx={{ display: 'flex', justifyContent: collapsed ? 'center' : 'flex-end', pt: '6px' }}>
+            <Tooltip title={collapsed ? 'Menü ausklappen' : 'Menü einklappen'} placement="right">
+              <IconButton
+                onClick={onToggleCollapsed}
+                size="small"
+                aria-label={collapsed ? 'Menü ausklappen' : 'Menü einklappen'}
+                sx={{ color: TEXT_SCHWACH }}
+              >
+                {collapsed ? <ChevronRightIcon fontSize="small" /> : <ChevronLeftIcon fontSize="small" />}
+              </IconButton>
+            </Tooltip>
+          </Box>
+        )}
+      </Box>
+    </Box>
+  )
+}
+
 /** Rahmen für angemeldete Bereiche: Schiene links, Kopf und Bühne rechts (Entwurf Z. 196–389). */
 export function AppShell() {
-  const location = useLocation()
   const navigate = useNavigate()
   const { user, logout } = useAuth()
 
@@ -285,21 +438,21 @@ export function AppShell() {
   // An abgeleitete Primitive binden, nicht an Objektidentitäten (sonst rechnet useMemo bei jeder
   // neuen user-Referenz neu und die openGroups-Effect-Schleife läuft endlos).
   const admin = isPlatformAdmin(user)
-  const projectCount = projects?.length ?? null
-  // Auf einer Projektseite zählt nur ein Board desselben Projekts. Der Abgleich steht im Render und
-  // nicht allein im Effekt: Sonst stünde nach einem Projektwechsel für einen Wimpernschlag das Board
-  // des vorigen Projekts unter dem Namen des neuen.
-  const kontextBoard = routeProjectId !== null && board?.projectId !== routeProjectId ? null : board
-  const currentProject = kontextBoard ? projects?.find((p) => p.id === kontextBoard.projectId) : undefined
-  const canManageCurrentBoards = canManageBoards(currentProject?.role ?? 'VIEWER', admin)
-  // Der Nachtlauf-Bereich ist projektweit, nicht board-gebunden: Bezug ist das Projekt der Route,
-  // sobald kein Board offen ist (`currentProject` ist dann undefined — der Eintrag verschwände
-  // genau nach dem Klick auf ihn). `canManageProject` ist die Semantik von `requireOwner`:
-  // Owner *oder* Plattform-Admin (Plan #718, A6).
-  const nightRunProjectId = kontextBoard?.projectId ?? routeProjectId
-  // Das Projekt der Route oder des Boards: Titel des Projekt-Blocks und erster Teil des Pfads.
-  const pfadProjekt = projects?.find((p) => p.id === nightRunProjectId)
-  const canViewNightRun = canManageProject(pfadProjekt?.role ?? 'VIEWER', admin)
+  // Was Schiene und Kopf aus Route, geladenem Board und Projektliste ableiten, rechnet `navKontext`
+  // rein und ohne React (geprüft in `layout/navItems.test.ts`).
+  const {
+    kontextBoard,
+    projectCount,
+    canManageCurrentBoards,
+    canViewNightRun,
+    canManageCurrentMembers,
+    projectName,
+    currentProjectName,
+    pfad,
+  } = useMemo(
+    () => navKontext({ board, routeProjectId, boardId, projects, admin }),
+    [board, routeProjectId, boardId, projects, admin],
+  )
   const navItems = useMemo(
     () =>
       buildNavItems({
@@ -310,10 +463,20 @@ export function AppShell() {
         canManageBoards: canManageCurrentBoards,
         projectId: routeProjectId,
         canViewNightRun,
-        projectName: pfadProjekt?.name ?? null,
-        canManageMembers: canManageMembers(pfadProjekt?.role ?? 'VIEWER'),
+        projectName,
+        canManageMembers: canManageCurrentMembers,
       }),
-    [kontextBoard, admin, projectCount, boardCount, canManageCurrentBoards, routeProjectId, canViewNightRun, pfadProjekt],
+    [
+      kontextBoard,
+      admin,
+      projectCount,
+      boardCount,
+      canManageCurrentBoards,
+      routeProjectId,
+      canViewNightRun,
+      projectName,
+      canManageCurrentMembers,
+    ],
   )
 
   // ---- Board-Wechsel (#587): Verlauf fortschreiben und das Overlay bedienen ----
@@ -324,7 +487,6 @@ export function AppShell() {
   // Projekt müssen dasselbe Board meinen. Beim Wechsel A→B hält `board` noch A, während `boardId`
   // schon B ist — ohne den Abgleich landete A unter der ID von B. Der Projektname kommt aus der
   // Projektliste, weil der `BoardContext` ihn nicht trägt.
-  const currentProjectName = currentProject?.name ?? null
   const visit = useMemo<BoardHistoryEntry | null>(
     () =>
       kontextBoard !== null && kontextBoard.id === boardId && currentProjectName !== null
@@ -379,54 +541,6 @@ export function AppShell() {
     setNavOffen(false)
   }
 
-  // Aktiv ist der Eintrag mit dem längsten passenden Pfad: Auf `/boards/1/list` passt „Board"
-  // (`/boards/1`) als Präfix ebenso wie „Liste" — gemeint ist nur die Liste.
-  const aktiverPfad = [...navItems.flatMap((block) => block.children), ADMINISTRATION_LINK]
-    .map((link) => link.path)
-    .filter((pfad) => location.pathname === pfad || (pfad !== '/' && location.pathname.startsWith(`${pfad}/`)))
-    .sort((a, b) => b.length - a.length)[0]
-
-  const renderLink = (link: NavLink) => {
-    const Icon = link.icon
-    const aktiv = link.path === aktiverPfad
-    const eintrag = (
-      <ButtonBase
-        key={link.path}
-        component="a"
-        href={link.path}
-        onClick={(event: MouseEvent<HTMLAnchorElement>) => zielWaehlen(event, link.path)}
-        aria-current={aktiv ? 'page' : undefined}
-        aria-label={eingeklappt ? link.label : undefined}
-        sx={{ ...NAV_EINTRAG_SX, ...(eingeklappt && { justifyContent: 'center', px: 0 }) }}
-      >
-        <Icon className="nav-icon" />
-        {!eingeklappt && link.label}
-      </ButtonBase>
-    )
-    return eingeklappt ? (
-      <Tooltip key={link.path} title={link.label} placement="right">
-        {eintrag}
-      </Tooltip>
-    ) : (
-      eintrag
-    )
-  }
-
-  // Doku ist statisch unter /docs/ ausgeliefert (#314), keine SPA-Route -> echter Anker im neuen Tab.
-  const docsLink = (
-    <ButtonBase
-      component="a"
-      href="/docs/"
-      target="_blank"
-      rel="noopener noreferrer"
-      aria-label={eingeklappt ? 'Dokumentation' : undefined}
-      sx={{ ...NAV_EINTRAG_SX, ...(eingeklappt && { justifyContent: 'center', px: 0 }) }}
-    >
-      <MenuBookIcon className="nav-icon" />
-      {!eingeklappt && 'Dokumentation'}
-    </ButtonBase>
-  )
-
   const drawerWidth = eingeklappt ? DRAWER_COLLAPSED_WIDTH : DRAWER_WIDTH
   // Dialoge versetzen sich um die Breite, die der Drawer tatsächlich einnimmt. Die Schublade des
   // schmalen Zweigs liegt über dem Inhalt und nimmt keine ein — sonst hingen CardDetailModal und
@@ -458,101 +572,6 @@ export function AppShell() {
       .slice(0, 2)
       .map((teil) => teil.charAt(0).toUpperCase())
       .join('') || '?'
-
-  const schiene = (
-    <Box
-      component="nav"
-      aria-label="Hauptnavigation"
-      sx={{
-        minHeight: '100%',
-        boxSizing: 'border-box',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '22px',
-        pt: '18px',
-        pb: '24px',
-        px: '14px',
-        overflowX: 'hidden',
-        overflowY: 'auto',
-      }}
-    >
-      {/* Marke (Entwurf `.marke`, Z. 211–236). */}
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: '10px', px: eingeklappt ? 0 : '4px', justifyContent: eingeklappt ? 'center' : 'flex-start' }}>
-        <Box
-          component="span"
-          aria-hidden
-          sx={{ ...MARKE_MAL_SX, width: 30, height: 30, borderRadius: '9px', display: 'grid', placeItems: 'center', flex: 'none' }}
-        >
-          <MarkenSymbol />
-        </Box>
-        {!eingeklappt && (
-          <Box component="span" sx={{ lineHeight: 1.15, minWidth: 0 }}>
-            <Box
-              component="span"
-              sx={{ display: 'block', fontFamily: SCHRIFT_ANZEIGE, fontStretch: '118%', fontWeight: 700, fontSize: 14, letterSpacing: '-.01em' }}
-            >
-              {APP_NAME}
-            </Box>
-            <Box component="span" sx={{ display: 'block', fontSize: 10.5, color: TEXT_SCHWACH, letterSpacing: '.04em' }}>
-              v{__APP_VERSION__}
-            </Box>
-          </Box>
-        )}
-      </Box>
-
-      {navItems.map((block) => (
-        <Box key={block.id} role="group" aria-label={block.label} sx={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-          {eingeklappt ? (
-            <Box aria-hidden sx={{ height: '1px', bgcolor: RAND, mx: '6px', mb: '4px' }} />
-          ) : (
-            <Box component="span" sx={{ ...ETIKETT, px: '8px', pb: '7px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-              {block.label}
-            </Box>
-          )}
-          {block.children.map((link) => (
-            <Fragment key={link.path}>{renderLink(link)}</Fragment>
-          ))}
-        </Box>
-      ))}
-
-      {/* Fuß der Schiene (Entwurf `.schiene-fuss`, Z. 272): Administration, Dokumentation, Einklappen. */}
-      <Box sx={{ mt: 'auto', display: 'flex', flexDirection: 'column', gap: '3px' }}>
-        {renderLink(ADMINISTRATION_LINK)}
-        {eingeklappt ? (
-          <Tooltip title="Dokumentation" placement="right">
-            {docsLink}
-          </Tooltip>
-        ) : (
-          docsLink
-        )}
-        {!schmal && (
-          <Box sx={{ display: 'flex', justifyContent: collapsed ? 'center' : 'flex-end', pt: '6px' }}>
-            <Tooltip title={collapsed ? 'Menü ausklappen' : 'Menü einklappen'} placement="right">
-              <IconButton
-                onClick={toggleCollapsed}
-                size="small"
-                aria-label={collapsed ? 'Menü ausklappen' : 'Menü einklappen'}
-                sx={{ color: TEXT_SCHWACH }}
-              >
-                {collapsed ? <ChevronRightIcon fontSize="small" /> : <ChevronLeftIcon fontSize="small" />}
-              </IconButton>
-            </Tooltip>
-          </Box>
-        )}
-      </Box>
-    </Box>
-  )
-
-  // Pfad im Kopf (Entwurf `.pfad`, Z. 301–303): Projekt / Board, der letzte Teil in Archivo.
-  const pfad: Array<{ label: string; to: string }> = []
-  if (pfadProjekt) {
-    pfad.push({ label: pfadProjekt.name, to: `/projects/${pfadProjekt.id}` })
-  }
-  // Auf einer Projektseite nennt der Pfad nur das Projekt — er sagt, wo man ist, die Schiene, wohin
-  // man kann (#990). Der Abgleich mit `boardId` hält ihn zugleich vom noch geladenen Vorgänger frei.
-  if (kontextBoard?.id === boardId && kontextBoard) {
-    pfad.push({ label: kontextBoard.name, to: `/boards/${kontextBoard.id}` })
-  }
 
   return (
     <Box sx={{ display: 'flex', minHeight: '100vh' }}>
@@ -601,7 +620,14 @@ export function AppShell() {
           },
         }}
       >
-        {schiene}
+        <Schiene
+          navItems={navItems}
+          eingeklappt={eingeklappt}
+          collapsed={collapsed}
+          schmal={schmal}
+          onZielWaehlen={zielWaehlen}
+          onToggleCollapsed={toggleCollapsed}
+        />
       </Drawer>
 
       <Box sx={{ flexGrow: 1, minWidth: 0, display: 'flex', flexDirection: 'column', pt: `${bannerOffset}px` }}>
