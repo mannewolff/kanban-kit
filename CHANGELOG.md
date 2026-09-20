@@ -7,6 +7,49 @@ Versionierung folgt der dreiteiligen Betriebsversion (siehe [RELEASING.md](RELEA
 Einträge je Version sind ein automatischer Auszug der Commit-Titel seit dem letzten Release,
 erzeugt von `scripts/gen-changelog.mjs`.
 
+## [2.2.0] – 2026-09-20
+
+- chore: v2.1.4
+- Tests laufen in fester Zone statt in der des Rechners
+- modelle für den nightrunner geändert
+- chore: v2.1.3
+- Ein Lauf ist adressierbar: ?lauf=<id> klappt ihn auf ([#1085](https://github.com/mannewolff/kanban-kit/issues/1085))
+- Ankreuzfeld Teilnahme im Bearbeiten-Dialog ([#1084](https://github.com/mannewolff/kanban-kit/issues/1084))
+- Routing-Weiche, Navigation und Projektliste unter /projects ([#1082](https://github.com/mannewolff/kanban-kit/issues/1082))
+- Plattform-Leitstand: die Seite mit dem Bereich Stoerungen ([#1083](https://github.com/mannewolff/kanban-kit/issues/1083))
+- Der Browser liest den Massstab statt ihn zu rechnen ([#1081](https://github.com/mannewolff/kanban-kit/issues/1081))
+- Stoerungsliste und Quittieren im Server ([#1080](https://github.com/mannewolff/kanban-kit/issues/1080))
+- Teilnahme bindet den lesenden Nachtlauf-Zugriff ([#1079](https://github.com/mannewolff/kanban-kit/issues/1079))
+- NightRunOutcome: der Massstab im Server ([#1078](https://github.com/mannewolff/kanban-kit/issues/1078))
+- Teilnahme schalten: bypass-freie Rechtepruefung ([#1077](https://github.com/mannewolff/kanban-kit/issues/1077))
+- Teilnahme-Spalte, Port und Sicht ([#1076](https://github.com/mannewolff/kanban-kit/issues/1076))
+- Bindende Texte binden den Plattform-Admin an die Teilnahme ([#1075](https://github.com/mannewolff/kanban-kit/issues/1075))
+- Testlauf ignoriert liegengebliebene Stryker-Sandkaesten
+- chore: v2.1.2
+- Abdeckungs-Hinweis erst ab gefuelltem Ringpuffer ([#1071](https://github.com/mannewolff/kanban-kit/issues/1071))
+- Sonar-Regeln ins Lint-Gate ([#1058](https://github.com/mannewolff/kanban-kit/issues/1058))
+- refactor: Komplexitaet von deuteEinheit senken ([#1052](https://github.com/mannewolff/kanban-kit/issues/1052))
+- Abschlussvermerk erscheint nur noch, wenn ein Ergebnisstand vorliegt ([#1070](https://github.com/mannewolff/kanban-kit/issues/1070))
+- Leitstand und Nachtlauf-Seite kennzeichnen den Lauf ohne Arbeit ([#1069](https://github.com/mannewolff/kanban-kit/issues/1069))
+- Nachtlauf ohne Arbeit: Grund speichern und ausliefern ([#1068](https://github.com/mannewolff/kanban-kit/issues/1068))
+- refactor: Board-Spalte, Spaltenkopf und Belastungsskala auslagern ([#1057](https://github.com/mannewolff/kanban-kit/issues/1057))
+- refactor: Board-Karte als eigene Komponente ([#1056](https://github.com/mannewolff/kanban-kit/issues/1056))
+- refactor: Komplexität des Kartendialogs senken ([#1055](https://github.com/mannewolff/kanban-kit/issues/1055))
+- refactor: Komplexität der AppShell senken ([#1054](https://github.com/mannewolff/kanban-kit/issues/1054))
+- refactor: Komplexität des Leitstands senken ([#1053](https://github.com/mannewolff/kanban-kit/issues/1053))
+- refactor: CardService entlasten, KartenZuordnung ([#1051](https://github.com/mannewolff/kanban-kit/issues/1051))
+- refactor: Sonar mechanisch im Backend ([#1050](https://github.com/mannewolff/kanban-kit/issues/1050))
+- refactor: Sonar mechanisch bei Board, Liste und Tests ([#1049](https://github.com/mannewolff/kanban-kit/issues/1049))
+- refactor: Sonar mechanisch im Leitstand ([#1048](https://github.com/mannewolff/kanban-kit/issues/1048))
+- refactor: Sonar mechanisch im Nachtlauf-Bereich, ES2023-Lib ([#1047](https://github.com/mannewolff/kanban-kit/issues/1047))
+- Konfig geändert, Modelle hinzugefügt
+- chore: v2.1.1
+- fix: ueberzaehlige Klammer in workflow.config.json entfernt
+- Änderungen in Konfigurationen
+- Sonar-Fehler: Endlosschleife, Symbol-Namen, reduce-Startwert ([#1046](https://github.com/mannewolff/kanban-kit/issues/1046))
+- Sonar-Regeln lokal messbar: lint:sonar ([#1045](https://github.com/mannewolff/kanban-kit/issues/1045))
+- Stufen in der Config eingefügt
+
 ## [2.1.0] – 2026-09-18
 
 - chore: v2.0.1
