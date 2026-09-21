@@ -67,16 +67,16 @@ Klick auf eine Karte öffnet das Detail:
 - **Abhängigkeiten:** Verweise auf andere Kartennummern.
 - **Anhänge:** hochladen, herunterladen, löschen. **Klick auf einen Bild- oder PDF-Anhang** (auf die
   Miniatur oder den Dateinamen) öffnet eine **Vorschau (Lightbox)**; andere Dateitypen werden geladen.
-- **Anläufe dieser Karte:** War die Karte schon in einem [Nachtlauf](#nachtlauf) oder in einer
+- **Anläufe dieser Karte:** War die Karte schon in einem [Lauf](#nachtlauf) oder in einer
   interaktiven Sitzung, steht hier, was ihre Anläufe gekostet haben — die **Dauer je Lauf-Art**
   (Umsetzungs-, Prüf-, Ketten-Lauf und interaktive Sitzung; eine Art, in der die Karte nie vorkam,
-  steht als „nicht gelaufen"), die **Summen über alle Nachtlauf-Anläufe** (Kosten, Eingabe, Ausgabe,
+  steht als „nicht gelaufen"), die **Summen über alle Lauf-Anläufe** (Kosten, Eingabe, Ausgabe,
   Zwischenspeicher, jede mit ihrer Grundlage „aus *n* von *m* Anläufen"; der Verbrauch einer
   interaktiven Sitzung steht an ihrer eigenen Zeile und geht in diese Summen nicht ein), die
   **Anläufe** selbst mit Datum, [Gattung](#zwei-gattungen), Ergebnis, Dauer und Kosten, jüngster
   zuerst, und die Zahl der **Wiederaufnahmen** (ein gescheiterter Anlauf, auf den später ein echter
   Anlauf folgte; ein übersprungener zählt nicht). Fehlende Werte stehen als „nicht gemessen", nie
-  als 0. Den Block sieht nur, wer auch die Nachtlauf-Auswertung sehen darf (Projekt-Rolle `OWNER`,
+  als 0. Den Block sieht nur, wer auch die Auswertung der Läufe sehen darf (Projekt-Rolle `OWNER`,
   oder Plattform-Admin eines teilnehmenden Projekts); Anläufe verdrängter Läufe bleiben darin
   erhalten.
 - **Kommentare:** schreiben; eigene Kommentare löschen (Moderation durch ADMIN/OWNER).
@@ -193,13 +193,13 @@ Alle Richtungen zählen als normaler Arbeitsfluss und brauchen nur das Recht zum
 Karten (kein Löschrecht). Auch der Ingest über die API (kanbancompat) kann eine Karte direkt als Idee
 anlegen.
 
-## Nachtlauf
+## Läufe {#nachtlauf}
 
-Der **Nachtlauf-Bereich** wertet die Protokolle des Nacht-Runners aus: Er zeigt je Lauf, welche
+Der **Bereich „Läufe"** wertet die Protokolle des Nacht-Runners aus: Er zeigt je Lauf, welche
 Arbeitspakete durchliefen, welche stehenblieben und woran es lag. Er ist **projektweit**, nicht an
 ein Board gebunden.
 
-Erreichbar über den Sidebar-Eintrag **„Nachtlauf"** (Route `/projects/:projectId/nachtlauf`).
+Erreichbar über den Sidebar-Eintrag **„Läufe"** (Route `/projects/:projectId/nachtlauf`).
 Sichtbar ist er nur für den **Owner** des Projekts und für **Plattform-Admins**, sofern das Projekt
 am [Plattform-Leitstand](#plattform-leitstand) teilnimmt — siehe
 [Rollen & Rechte](rollen-und-rechte.md#projekt-rollen-rechte-matrix).
@@ -258,7 +258,7 @@ erscheint also nach dem Einlesen nicht in der Liste.
 
 Der **Leitstand** (Sidebar-Eintrag **„Leitstand"** im Board-Kontext, Route
 `/boards/:boardId/leitstand`) führt einen Bereich **„Verbrauch"**: was die Arbeit an diesem Projekt
-an Claude-Code-Verbrauch gekostet hat. Sichtbar ist er — wie die [Nachtlauf](#nachtlauf)-Auswertung
+an Claude-Code-Verbrauch gekostet hat. Sichtbar ist er — wie die [Auswertung der Läufe](#nachtlauf)
 — nur für den **Owner** des Projekts und für **Plattform-Admins**, sofern das Projekt am
 [Plattform-Leitstand](#plattform-leitstand) teilnimmt.
 
@@ -266,10 +266,10 @@ an Claude-Code-Verbrauch gekostet hat. Sichtbar ist er — wie die [Nachtlauf](#
 
 Gezählt werden zwei **Gattungen** von Einträgen:
 
-- **Nachtlauf** — ein Lauf des Nacht-Runners.
+- **Lauf** — ein Lauf des Nacht-Runners.
 - **Interaktive Sitzung** — eine Arbeitssitzung am Rechner eines Menschen.
 
-**„Gattung" ist nicht „Herkunft".** Die Gattung sagt, *was* ein Eintrag ist — Nachtlauf oder
+**„Gattung" ist nicht „Herkunft".** Die Gattung sagt, *was* ein Eintrag ist — Lauf oder
 interaktive Sitzung. Die **Herkunft** ist eine zweite, davon unabhängige Angabe und sagt, *auf
 welchem Weg* er ans Board kam: von Hand im Browser eingelesen oder maschinell mit einem
 projektgebundenen Zugriffstoken gemeldet. Sie steht im Leitstand auf der eigenen Platte
@@ -289,7 +289,7 @@ vielen Einträgen die Zahlen stammen („*Nacht vom 17.09.2026 auf den 18.09.202
 - **Kosten**, mit dem Vergleich zum Vorzeitraum (▲/▼ und der Unterschied in Dollar).
 - **Gesamt über die Laufzeit** — siehe unten.
 
-Unter jeder Summe stehen die beiden **Anteile**: „aus Nachtläufen" und „aus interaktiven
+Unter jeder Summe stehen die beiden **Anteile**: „aus Läufen" und „aus interaktiven
 Sitzungen". Die Summe ist genau ihre Addition; kein Eintrag zählt in beiden.
 
 **Der Posten „ohne Karte"** steht an der Kosten-Kachel und trägt den Verbrauch, der keinem
@@ -315,7 +315,7 @@ Mittag; wer vor 12:00 startet, gehört zur Nacht davor. Für interaktive Sitzung
 Folge, die man kennen muss: **Eine Sitzung, die vormittags vor 12:00 beginnt, zählt zur Nacht
 davor.** Wer am Donnerstag um 9:30 Uhr zu arbeiten anfängt, findet seinen Verbrauch also unter der
 Nacht von Mittwoch auf Donnerstag, nicht unter der von Donnerstag auf Freitag. Die Regel ist
-dieselbe wie für Nachtläufe — eine zweite Regel für Sitzungen machte die Summe von der Gattung
+dieselbe wie für Läufe — eine zweite Regel für Sitzungen machte die Summe von der Gattung
 abhängig.
 
 ### „nicht erfasst", „teilweise erfasst" und „nicht gemessen"
@@ -447,7 +447,7 @@ das als ausdrücklicher Satz da statt als leere Fläche.
 Jeder **beendete** Lauf der laufenden Nacht — mit Projekt, Startzeitpunkt, anklickbarer Lauf-Kennung
 und seinem **Ausgang**. Auch hier steht ein ausdrücklicher Satz, solange noch kein Lauf beendet ist.
 
-„Laufende Nacht" meint denselben Zeitraum, den auch die Nachtlauf-Auswertung zieht: **von 12:00 bis
+„Laufende Nacht" meint denselben Zeitraum, den auch die Auswertung der Läufe zieht: **von 12:00 bis
 12:00** zonenlokal. Über die Zugehörigkeit entscheidet der **Startzeitpunkt** des Laufs, nicht sein
 Ende. Um 12:00 wechselt der Bereich deshalb auf die neue Nacht und ist zunächst leer.
 
@@ -470,7 +470,7 @@ taucht im Bereich „Störungen" nicht auf.
 
 ### Störungen
 
-Jede nicht quittierte Störung aus den Nachtläufen teilnehmender Projekte — mit Projekt, Zeitpunkt,
+Jede nicht quittierte Störung aus den Läufen teilnehmender Projekte — mit Projekt, Zeitpunkt,
 anklickbarer Lauf-Kennung, Grund und dem Knopf **„Störung löschen"**.
 
 Ob ein Projekt teilnimmt, entscheidet ausschließlich das Projekt selbst — OWNER oder ADMIN mit

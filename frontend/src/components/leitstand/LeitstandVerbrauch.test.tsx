@@ -123,14 +123,14 @@ function zeige(
 const kachel = (name: string) => screen.findByRole('article', { name })
 
 describe('LeitstandVerbrauch — beide Anteile (AK 1)', () => {
-  it('zeigt unter der Summe den Nachtlauf- und den Sitzungs-Anteil mit ihren Beschriftungen', async () => {
+  it('zeigt unter der Summe den Lauf- und den Sitzungs-Anteil mit ihren Beschriftungen', async () => {
     zeige()
 
     const kosten = await kachel('Kosten')
     expect(kosten).toHaveTextContent('12,40$')
     const nacht = within(kosten).getByTestId('anteil-nacht')
     const sitzungen = within(kosten).getByTestId('anteil-interaktiv')
-    expect(lesbar(nacht.textContent)).toContain('aus Nachtläufen')
+    expect(lesbar(nacht.textContent)).toContain('aus Läufen')
     expect(lesbar(nacht.textContent)).toContain('8,40 $')
     expect(lesbar(sitzungen.textContent)).toContain('aus interaktiven Sitzungen')
     expect(lesbar(sitzungen.textContent)).toContain('4,00 $')

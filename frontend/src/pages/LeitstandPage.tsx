@@ -260,13 +260,13 @@ function Budget({ etikett, wert, einheit }: Readonly<{ etikett: string; wert: st
   )
 }
 
-/** Nachtlauf · grün (Entwurf Z. 1308–1323): Anteil grüner Pakete mit Aufschlüsselung. */
+/** Lauf · grün (Entwurf Z. 1308–1323): Anteil grüner Pakete mit Aufschlüsselung. */
 function NachtlaufKachel({ laeufe }: Readonly<{ laeufe: readonly NightRunView[] }>) {
   const anteil = gruenAnteil(laeufe)
   const breite = (zahl: number) => `${(zahl / Math.max(1, anteil.gesamt)) * 100}%`
   return (
-    <Box component="article" aria-label="Nachtlauf · grün" sx={KACHEL_SX}>
-      <Box sx={ETIKETT}>Nachtlauf · grün</Box>
+    <Box component="article" aria-label="Lauf · grün" sx={KACHEL_SX}>
+      <Box sx={ETIKETT}>Lauf · grün</Box>
       <KachelWert wert={anteil.prozent === null ? null : String(anteil.prozent)} einheit="%" />
       {anteil.gesamt > 0 && (
         <>

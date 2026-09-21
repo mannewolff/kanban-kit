@@ -115,11 +115,11 @@ export function buildNavItems(params: NavParams): NavGroup[] {
     }
     // „Ideen" ist projektweit und auch ohne offenes Board sichtbar — dort liegt der Ideen-Pool.
     projekt.push({ kind: 'link', label: 'Ideen', path: `/projects/${currentProjectId}/ideas`, icon: IdeenSymbol })
-    // „Nachtläufe" liegt hinter einem eigenen Recht (Owner bzw. Plattform-Admin); die Shell entscheidet.
+    // „Läufe" liegt hinter einem eigenen Recht (Owner bzw. Plattform-Admin); die Shell entscheidet.
     if (canViewNightRun) {
       projekt.push({
         kind: 'link',
-        label: 'Nachtläufe',
+        label: 'Läufe',
         path: `/projects/${currentProjectId}/nachtlauf`,
         icon: NachtlaeufeSymbol,
       })

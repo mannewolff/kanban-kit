@@ -238,7 +238,7 @@ interface Kettenglied {
 const zustandsFarbe = (zustand: NightRunState): string => melderFarbe(MELDER_JE_ZUSTAND[zustand])
 
 /**
- * Die Lauf-Art im Etikett des Laufkopfs („Nachtlauf · Kette", Vorlage
+ * Die Lauf-Art im Etikett des Laufkopfs („Lauf · Kette", Vorlage
  * `docs/mockup-nachtlauf-lauf.html` Z. 382). Als `Record` über alle Werte, nicht als
  * Inline-Bedingung: Ein weiterer Modus bricht den Build, statt still auf „Umsetzung" zu fallen.
  *
@@ -2482,7 +2482,7 @@ export function NightRunPage() {
               items={[
                 { label: 'Projekte', to: '/projects' },
                 { label: projectName ?? 'Projekt', to: `/projects/${id}` },
-                { label: 'Nachtlauf' },
+                { label: 'Läufe' },
               ]}
             />
             {/* Dateiauswahl wie in der Ideen-Seite: Button als <label> mit verstecktem Input. */}

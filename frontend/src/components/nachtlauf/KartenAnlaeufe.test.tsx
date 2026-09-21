@@ -72,7 +72,7 @@ describe('KartenAnlaeufe', () => {
     expect(sitzung).toHaveTextContent('1 Min')
   })
 
-  it('zeigt Nachtlauf-Anlauf und Sitzungs-Anlauf nebeneinander, je mit seiner Gattung, jüngster zuerst', async () => {
+  it('zeigt Lauf-Anlauf und Sitzungs-Anlauf nebeneinander, je mit seiner Gattung, jüngster zuerst', async () => {
     zeige([
       anlauf({ kind: 'NIGHT', mode: 'IMPLEMENTATION', startedAt: '2026-09-01T22:00:00Z' }),
       anlauf({ kind: 'INTERACTIVE', mode: 'INTERACTIVE', startedAt: '2026-09-02T14:00:00Z' }),
@@ -81,7 +81,7 @@ describe('KartenAnlaeufe', () => {
     const zeilen = within(await screen.findByTestId('anlaeufe-liste')).getAllByRole('listitem')
     expect(zeilen).toHaveLength(2)
     expect(zeilen[0]).toHaveTextContent('Interaktive Sitzung')
-    expect(zeilen[1]).toHaveTextContent('Nachtlauf')
+    expect(zeilen[1]).toHaveTextContent('· Lauf ·')
     expect(zeilen[1]).not.toHaveTextContent('Interaktive Sitzung')
   })
 
@@ -90,10 +90,10 @@ describe('KartenAnlaeufe', () => {
 
     const zeile = within(await screen.findByTestId('anlaeufe-liste')).getByRole('listitem')
     expect(zeile).toHaveTextContent('Interaktive Sitzung')
-    expect(zeile).not.toHaveTextContent('Nachtlauf')
+    expect(zeile).not.toHaveTextContent('· Lauf ·')
   })
 
-  it('führt den Verbrauch der Sitzung an der Sitzung und nicht in den Nachtlauf-Summen', async () => {
+  it('führt den Verbrauch der Sitzung an der Sitzung und nicht in den Lauf-Summen', async () => {
     zeige([
       anlauf({ kind: 'NIGHT', usage: verbrauch({ costUsd: 2, inputTokens: 100 }) }),
       anlauf({
@@ -114,14 +114,14 @@ describe('KartenAnlaeufe', () => {
     expect(text(sitzung)).toContain('7,00 $')
   })
 
-  it('stellt einen Anlauf ohne Gattungsangabe als Nachtlauf dar und zählt ihn in die Summen', async () => {
+  it('stellt einen Anlauf ohne Gattungsangabe als Lauf dar und zählt ihn in die Summen', async () => {
     zeige([anlauf({ kind: null, usage: verbrauch({ costUsd: 3 }) })])
 
     const kosten = await screen.findByTestId('anlaeufe-summe-kosten')
     expect(text(kosten)).toContain('3,00 $')
     expect(kosten).toHaveTextContent('aus 1 von 1 Anläufen')
     const zeile = within(screen.getByTestId('anlaeufe-liste')).getByRole('listitem')
-    expect(zeile).toHaveTextContent('Nachtlauf')
+    expect(zeile).toHaveTextContent('· Lauf ·')
   })
 
   it('schreibt eine Sitzung ohne Verbrauchsangabe als „nicht gemessen" und nicht als 0', async () => {

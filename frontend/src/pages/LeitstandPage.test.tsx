@@ -281,7 +281,7 @@ describe('LeitstandPage (#979)', () => {
         'Durchsatz · Woche',
         'Durchlaufzeit',
         'Implementierungszeit',
-        'Nachtlauf · grün',
+        'Lauf · grün',
       ]),
     )
   })
@@ -315,7 +315,7 @@ describe('LeitstandPage (#979)', () => {
 
   it('rechnet die Nachtlauf-Kachel über alle aufbewahrten Pakete ohne graue', async () => {
     renderPage()
-    const kachel = await screen.findByRole('article', { name: 'Nachtlauf · grün' })
+    const kachel = await screen.findByRole('article', { name: 'Lauf · grün' })
     expect(kachel).toHaveTextContent('50%')
     expect(within(kachel).getByRole('img', { name: '2 grün, 1 gelb, 1 rot' })).toBeInTheDocument()
     expect(kachel).toHaveTextContent('letzte 4 Pakete')
@@ -324,12 +324,12 @@ describe('LeitstandPage (#979)', () => {
   it('nennt ein einzelnes Paket in der Nachtlauf-Kachel und zeigt ohne bewertetes Paket keinen Balken', async () => {
     m.laeufe.mockResolvedValue([lauf({ items: [paket(1, 'GREEN')] })])
     const { unmount } = renderPage()
-    expect(await screen.findByRole('article', { name: 'Nachtlauf · grün' })).toHaveTextContent('letztes Paket')
+    expect(await screen.findByRole('article', { name: 'Lauf · grün' })).toHaveTextContent('letztes Paket')
     unmount()
 
     m.laeufe.mockResolvedValue([lauf({ items: [paket(1, 'GREY')] })])
     renderPage()
-    const kachel = await screen.findByRole('article', { name: 'Nachtlauf · grün' })
+    const kachel = await screen.findByRole('article', { name: 'Lauf · grün' })
     expect(kachel).toHaveTextContent('keine Datenbasis')
     expect(within(kachel).queryByRole('img')).not.toBeInTheDocument()
   })
@@ -341,7 +341,7 @@ describe('LeitstandPage (#979)', () => {
     expect(await screen.findByRole('article', { name: 'Durchlaufzeit' })).toBeInTheDocument()
     await waitFor(() => expect(m.laeufe).toHaveBeenCalled())
     expect(screen.queryByRole('region', { name: 'Jüngster Lauf' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('article', { name: 'Nachtlauf · grün' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('article', { name: 'Lauf · grün' })).not.toBeInTheDocument()
     expect(screen.queryByText('Verbrauch')).not.toBeInTheDocument()
     expect(screen.queryByRole('region', { name: 'Abbruchgründe' })).not.toBeInTheDocument()
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
@@ -359,7 +359,7 @@ describe('LeitstandPage (#979)', () => {
   it('zeigt ohne aufbewahrten Lauf weder Laufband noch Letzten Lauf', async () => {
     m.laeufe.mockResolvedValue([])
     renderPage()
-    expect(await screen.findByRole('article', { name: 'Nachtlauf · grün' })).toHaveTextContent('keine Datenbasis')
+    expect(await screen.findByRole('article', { name: 'Lauf · grün' })).toHaveTextContent('keine Datenbasis')
     expect(screen.queryByRole('region', { name: 'Jüngster Lauf' })).not.toBeInTheDocument()
   })
 

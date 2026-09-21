@@ -15,7 +15,7 @@ Funktionsstand nachgezogen.
   Hook, Erfassungsbeginn, Aufbewahrungsgrenzen, Worktree-Einschränkung).
 - [Produktions-Deployment (Hostinger)](deployment-hostinger.md) — öffentlicher Betrieb hinter Traefik unter `kanban.mwolff.org`.
 - [Nutzung](nutzung.md) — Registrieren, Projekte, Boards, Karten (Zuständige, Fälligkeit, Labels),
-  Papierkorb, Listen-Ansicht, Ideen-Pool, Nachtlauf,
+  Papierkorb, Listen-Ansicht, Ideen-Pool, Läufe,
   [Verbrauch im Leitstand](nutzung.md#verbrauch-leitstand) (Gattungen, „ohne Karte", Lebenszeit-Summe,
   Erfassungslücken), Dashboard, Vorhaben, Mitglieder, Editiermodus.
 - [Rollen & Rechte](rollen-und-rechte.md) — Plattform- vs. Projekt-Rollen, Rechte-Matrix, Admin-Bereich (inkl. Konten sperren).

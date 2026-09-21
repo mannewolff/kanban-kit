@@ -32,7 +32,7 @@ Recht). Der Schlüssel in der zweiten Spalte ist der technische Name des Rechts 
 | Karte archivieren, in den Papierkorb legen, wiederherstellen | `TICKET_DELETE` | – | ✓ | ✓ | ✓ |
 | Karte verschieben — Spalte, **anderes Board desselben Projekts**, Ideen-Pool; Spalte nach Kartennummer sortieren | `CARD_MOVE` | – | ✓ | ✓ | ✓ |
 | **Karte in ein anderes Projekt verschieben** | *(Projekt-Rolle `OWNER`)* | – | – | – | ✓ |
-| **Nachtlauf-Auswertung lesen und Protokoll hineingeben** | *(Projekt-Rolle `OWNER`; zusätzlich Plattform-Admin eines teilnehmenden Projekts)* | – | – | – | ✓ |
+| **Auswertung der Läufe lesen und Protokoll hineingeben** | *(Projekt-Rolle `OWNER`; zusätzlich Plattform-Admin eines teilnehmenden Projekts)* | – | – | – | ✓ |
 | **Teilnahme am Plattform-Leitstand schalten** | *(Projekt-Rolle `OWNER` oder `ADMIN` — nicht der Plattform-Admin)* | – | – | ✓ | ✓ |
 | Kommentare lesen | `COMMENT_READ` | ✓ | ✓ | ✓ | ✓ |
 | Kommentar schreiben | `COMMENT_CREATE` | – | ✓ | ✓ | ✓ |
@@ -78,13 +78,13 @@ Einige Aktionen folgen nicht allein dem Recht aus der Tabelle:
   Kommentare löschen (Moderation) und Mitglieder einladen/entfernen.
 - **OWNER:** alle Projekt-Rechte, dazu Projekt umbenennen, Karten projektübergreifend verschieben,
   die Eigentümerschaft an ein anderes Mitglied übertragen (dabei wird der bisherige Owner zum ADMIN)
-  und die [Nachtlauf-Auswertung](nutzung.md#nachtlauf) lesen sowie Protokolle hineingeben. Das alles
+  und die [Auswertung der Läufe](nutzung.md#nachtlauf) lesen sowie Protokolle hineingeben. Das alles
   kann bewusst **nur** der Owner, nicht der Projekt-Admin.
 
   Neben dem Owner passiert allerdings auch der **Plattform-Admin** diese Prüfung — als Super-User
   hat er auf alle Projekte Vollzugriff, siehe [Plattform-Rollen](#plattform-rollen). „Nur der Owner"
-  grenzt also gegen die *Projekt*-Rollen ab, nicht gegen die Plattform-Ebene. Beim Nachtlauf gilt das
-  nur eingeschränkt: Der Plattform-Admin liest die Nachtlauf-Auswertung, die Anläufe und den
+  grenzt also gegen die *Projekt*-Rollen ab, nicht gegen die Plattform-Ebene. Bei den Läufen gilt das
+  nur eingeschränkt: Der Plattform-Admin liest die Auswertung der Läufe, die Anläufe und den
   Verbrauch eines Projekts ohne eigene Mitgliedschaft **nur, wenn das Projekt am
   Plattform-Leitstand teilnimmt**. Das Protokoll-Hineingeben (Ingest) bleibt davon unberührt.
 
