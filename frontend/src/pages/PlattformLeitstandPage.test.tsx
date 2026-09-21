@@ -1,7 +1,7 @@
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '../api/client'
 import type { DisruptionView, LeitstandView } from '../api/plattformLeitstand'
 import { plattformLeitstandApi } from '../api/plattformLeitstand'
@@ -519,6 +519,176 @@ describe('PlattformLeitstandPage (#1083)', () => {
     zeigeSeite()
 
     expect(await screen.findByText('Laden fehlgeschlagen.')).toBeInTheDocument()
+  })
+
+  /**
+   * Der Leitstand frischt sich selbst auf (Kriterium 19, Issue #1099).
+   *
+   * Geprüft wird mit künstlicher Zeit, deshalb ohne `findBy*`: Ein `await act(async () => {})`
+   * lässt die angelaufene Antwort durch, ein `advanceTimersByTime` rückt den Takt weiter. So steht
+   * in jeder Zusicherung genau der Stand, den die Seite nach *dieser* Zahl von Abrufen zeigt.
+   *
+   * Die beiden Übergänge ohne äußeres Ereignis — Ablauf der Stillefrist und Nachtwechsel um 12:00 —
+   * leistet schon der Abruf selbst: Der Server rechnet den Ausgang bei jedem Abruf neu (#1091).
+   * Der letzte Test hier zeigt genau das an der wandernden Zeile.
+   */
+  describe('Auffrischen (#1099)', () => {
+    const laufend = (extra: Partial<DisruptionView> = {}): DisruptionView => ({
+      nightRunId: 8,
+      projectId: 9,
+      projectName: 'Mein Projekt',
+      startedAt: '2026-09-21T01:10:00Z',
+      outcome: { verdict: 'RUNNING', decisiveItem: null, noWorkReason: null },
+      ...extra,
+    })
+
+    /** Lässt die angelaufene Antwort durch, ohne die Uhr zu bewegen. */
+    const antwortDurchlassen = async () => {
+      await act(async () => {
+        await Promise.resolve()
+      })
+    }
+
+    /** Rückt die künstliche Uhr und lässt die dadurch ausgelösten Antworten durch. */
+    const zeitVergehtLassen = async (ms: number) => {
+      await act(async () => {
+        vi.advanceTimersByTime(ms)
+      })
+    }
+
+    /**
+     * Setzt `document.visibilityState`. jsdom führt den Wert als Getter auf `Document.prototype`;
+     * eine eigene Eigenschaft auf `document` überdeckt ihn und lässt sich wieder abräumen.
+     */
+    const sichtbarkeit = (wert: DocumentVisibilityState) => {
+      Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => wert })
+    }
+
+    beforeEach(() => {
+      vi.useFakeTimers()
+    })
+
+    afterEach(() => {
+      vi.useRealTimers()
+      Reflect.deleteProperty(document, 'visibilityState')
+    })
+
+    it('ruft nach 30 Sekunden erneut ab und nach 60 ein zweites Mal', async () => {
+      api.leitstand.mockResolvedValue(sicht())
+
+      zeigeSeite()
+      await antwortDurchlassen()
+      expect(api.leitstand).toHaveBeenCalledTimes(1)
+
+      await zeitVergehtLassen(30_000)
+      expect(api.leitstand).toHaveBeenCalledTimes(2)
+
+      await zeitVergehtLassen(30_000)
+      expect(api.leitstand).toHaveBeenCalledTimes(3)
+    })
+
+    /** Ein verborgenes Fenster braucht keine Abrufe — beim Wiedersehen holt der Fokus-Zuhörer nach. */
+    it('ruft bei verborgenem Fenster nicht ab und holt beim Wiedersichtbarwerden sofort nach', async () => {
+      api.leitstand.mockResolvedValue(sicht())
+
+      zeigeSeite()
+      await antwortDurchlassen()
+      expect(api.leitstand).toHaveBeenCalledTimes(1)
+
+      sichtbarkeit('hidden')
+      await zeitVergehtLassen(90_000)
+      expect(api.leitstand).toHaveBeenCalledTimes(1)
+
+      sichtbarkeit('visible')
+      await act(async () => {
+        document.dispatchEvent(new Event('visibilitychange'))
+      })
+      expect(api.leitstand).toHaveBeenCalledTimes(2)
+    })
+
+    it('räumt den Zeitgeber beim Verlassen der Seite ab', async () => {
+      api.leitstand.mockResolvedValue(sicht())
+
+      const { unmount } = zeigeSeite()
+      await antwortDurchlassen()
+      unmount()
+
+      await zeitVergehtLassen(90_000)
+      expect(api.leitstand).toHaveBeenCalledTimes(1)
+    })
+
+    /**
+     * Ein gescheitertes Auffrischen löscht nichts: Ein einzelner Netzaussetzer um 03:00 wischte
+     * sonst den ganzen Leitstand weg — genau das Bild, das die Kriterien 4 und 14 vermeiden.
+     */
+    it('lässt nach einem gescheiterten Folgeabruf den letzten Stand unverändert stehen', async () => {
+      api.leitstand
+        .mockResolvedValueOnce(sicht({ laufende: [laufend()] }))
+        .mockRejectedValueOnce(new ApiError(500, 'Boom'))
+
+      zeigeSeite()
+      await antwortDurchlassen()
+      expect(screen.getByTestId('laufend-8')).toBeInTheDocument()
+
+      await zeitVergehtLassen(30_000)
+
+      expect(api.leitstand).toHaveBeenCalledTimes(2)
+      expect(screen.getByTestId('laufend-8')).toHaveTextContent('läuft seit 03:10')
+      expect(screen.queryByText('Laden fehlgeschlagen.')).not.toBeInTheDocument()
+    })
+
+    it('zeigt den Fehlertext, wenn schon das Erstladen scheitert', async () => {
+      api.leitstand.mockRejectedValue(new ApiError(500, 'Boom'))
+
+      zeigeSeite()
+      await antwortDurchlassen()
+
+      expect(screen.getByText('Laden fehlgeschlagen.')).toBeInTheDocument()
+      expect(screen.queryByTestId('keine-laufenden')).not.toBeInTheDocument()
+    })
+
+    /** Eine Rolle bildet sich nicht von selbst zurück — wem sie entzogen wurde, sieht nichts mehr. */
+    it('zeigt bei 403 im Folgeabruf den Fehlertext, auch wenn zuvor Daten da waren', async () => {
+      api.leitstand
+        .mockResolvedValueOnce(sicht({ laufende: [laufend()] }))
+        .mockRejectedValueOnce(new ApiError(403, 'Forbidden'))
+
+      zeigeSeite()
+      await antwortDurchlassen()
+      expect(screen.getByTestId('laufend-8')).toBeInTheDocument()
+
+      await zeitVergehtLassen(30_000)
+
+      expect(screen.getByText('Kein Admin-Zugriff.')).toBeInTheDocument()
+      expect(screen.queryByTestId('laufend-8')).not.toBeInTheDocument()
+    })
+
+    /**
+     * Der Übergang ohne äußeres Ereignis: Niemand klickt, niemand lädt neu — der Server rechnet
+     * den Ausgang beim zweiten Abruf neu, und die Zeile wandert von selbst nach unten.
+     */
+    it('lässt einen beendeten Lauf ohne Zutun aus dem oberen in den unteren Bereich wandern', async () => {
+      const beendet = laufend({
+        outcome: {
+          verdict: 'FAILED',
+          decisiveItem: { cardNumber: 721, state: 'RED', errorClass: 'CHECKS_RED' },
+          noWorkReason: null,
+        },
+      })
+      api.leitstand
+        .mockResolvedValueOnce(sicht({ laufende: [laufend()] }))
+        .mockResolvedValueOnce(sicht({ durchgefuehrte: [beendet] }))
+
+      zeigeSeite()
+      await antwortDurchlassen()
+      expect(screen.getByTestId('laufend-8')).toBeInTheDocument()
+      expect(screen.queryByTestId('durchgefuehrt-8')).not.toBeInTheDocument()
+
+      await zeitVergehtLassen(30_000)
+
+      expect(screen.queryByTestId('laufend-8')).not.toBeInTheDocument()
+      expect(screen.getByTestId('durchgefuehrt-8')).toHaveTextContent('nicht gelungen')
+    })
   })
 
   /**

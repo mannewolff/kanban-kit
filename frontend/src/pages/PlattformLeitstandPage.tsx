@@ -12,10 +12,31 @@ import { KupferwarteBereich } from '../components/nachtlauf/KupferwarteBereich'
 import { Led, Platte, Taste } from '../components/leitstand/LeitstandBausteine'
 import { MELDER_JE_ZUSTAND, melderAusBefund, tagZeit, uhrzeit } from '../lib/leitstand'
 import { NIGHT_RUN_VERDICT_TEXT, nightRunZustandsText } from '../lib/nightRunHandoff'
+import { useRefetchOnFocus } from '../lib/useRefetchOnFocus'
 import { ANZEIGE, RAND, TEXT_SCHWACH } from '../theme'
 
 /** Der Anfangszustand: drei leere Listen, noch von keiner Antwort belegt. */
 const LEERE_SICHT: LeitstandView = { laufende: [], durchgefuehrte: [], stoerungen: [] }
+
+/** Der Takt des Auffrischens (Kriterium 19): Was sich aendert, steht spaetestens so bald da. */
+const AUFFRISCH_MS = 30_000
+
+/**
+ * Ein gescheiterter Abruf — sein Text und ob es das fehlende Recht war.
+ *
+ * **Ob er gezeigt wird, entscheidet der Rumpf** und nicht der Fehlerzweig (Issue #1099). Beim
+ * Erstladen ist ein Fehlertext richtig; beim Auffrischen wischte ein einzelner Netzaussetzer um
+ * 03:00 den ganzen Leitstand weg — genau das Bild, das die Kriterien 4 und 14 vermeiden wollen. Ein
+ * **403** bleibt in beiden Faellen sichtbar: Eine Rolle bildet sich nicht von selbst zurueck, und
+ * wem sie entzogen wurde, der soll keine veralteten Daten weitersehen.
+ *
+ * Deshalb steht hier `verboten` und kein fertiges „zeigen": Der Fehlerzweig weiss, *was* geschehen
+ * ist; ob schon Daten dastehen, weiss nur der Rumpf.
+ */
+interface Fehler {
+  text: string
+  verboten: boolean
+}
 
 /**
  * Der Plattform-Leitstand: die Startseite eines Plattform-Admins (Issue #1083, fachliche Quellen
@@ -49,7 +70,7 @@ export default function PlattformLeitstandPage() {
   // den nichts erreichen kann.
   const [sicht, setSicht] = useState<LeitstandView>(LEERE_SICHT)
   const [geladen, setGeladen] = useState(false)
-  const [fehler, setFehler] = useState<string | null>(null)
+  const [fehler, setFehler] = useState<Fehler | null>(null)
 
   const laden = useCallback(() => {
     plattformLeitstandApi
@@ -59,16 +80,36 @@ export default function PlattformLeitstandPage() {
         setGeladen(true)
         setFehler(null)
       })
-      .catch((e) =>
-        setFehler(
-          e instanceof ApiError && e.status === 403 ? 'Kein Admin-Zugriff.' : 'Laden fehlgeschlagen.',
-        ),
-      )
+      .catch((e) => {
+        const verboten = e instanceof ApiError && e.status === 403
+        setFehler({ text: verboten ? 'Kein Admin-Zugriff.' : 'Laden fehlgeschlagen.', verboten })
+      })
   }, [])
 
   useEffect(() => {
     laden()
   }, [laden])
+
+  // Kriterium 19 (#1099): Was sich aendert, erscheint spaetestens nach 30 Sekunden, ohne dass
+  // jemand die Seite neu laedt — auch bei den beiden Uebergaengen, bei denen von aussen **nichts**
+  // geschieht: dem Ablauf der Stillefrist und dem Nachtwechsel um 12:00. Beide leistet schon der
+  // Abruf, **weil die Stillefrist eine Leseregel ist** (#1091): Der Server rechnet den Ausgang bei
+  // jedem Abruf neu, also wandert eine Zeile von selbst, und um 12:00 leert sich der untere Bereich.
+  //
+  // Ein verborgenes Fenster ruft nicht ab — dort sieht ohnehin niemand hin. Nachgeholt wird beim
+  // Wiedersichtbarwerden, und zwar vom vorhandenen Zuhoerer weiter unten.
+  useEffect(() => {
+    const takt = setInterval(() => {
+      if (document.visibilityState !== 'hidden') {
+        laden()
+      }
+    }, AUFFRISCH_MS)
+    return () => clearInterval(takt)
+  }, [laden])
+
+  // Der sofortige Abruf beim Wiedersichtbarwerden kommt aus dem vorhandenen Haken (Plan #1088 E7);
+  // ein eigener `visibilitychange`-Zuhoerer waere die zweite Fassung derselben Regel.
+  useRefetchOnFocus(laden)
 
   // AK 8: kein Rueckfragen-Dialog und kein Rueckgaengig. Die Zeile verschwindet sofort; ein
   // Nachladen der ganzen Antwort waere ein zweiter Weg zur selben Aussage.
@@ -83,8 +124,12 @@ export default function PlattformLeitstandPage() {
     }))
   }
 
-  if (fehler !== null) {
-    return <Typography color="error">{fehler}</Typography>
+  // Gezeigt wird ein Fehler nur, solange noch nie Daten dastanden — oder wenn das Recht fehlt
+  // (#1099, siehe {@link Fehler}). Ein stillschweigend gescheiterter Folgeabruf laesst den letzten
+  // Stand stehen; bewusst ohne Zeichen: Die fachliche Quelle verlangt keines, und eins, das bei
+  // jedem kurzen Aussetzer aufblitzt, erzieht zum Wegsehen.
+  if (fehler !== null && (fehler.verboten || !geladen)) {
+    return <Typography color="error">{fehler.text}</Typography>
   }
 
   // Ob es zu einem durchgefuehrten Lauf eine Stoerung gibt, entscheidet der Browser aus **einer**
