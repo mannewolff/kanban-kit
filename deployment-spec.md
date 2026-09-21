@@ -52,6 +52,15 @@ Der `deploy`-User muss Docker fahren dürfen:
 sudo usermod -aG docker deploy   # danach einmal neu einloggen
 ```
 
+### 4. Docker-Dienst beim Booten prüfen
+
+Die Neustart-Regel der Container (`restart: unless-stopped`, siehe unten) greift nur, wenn der Docker-Dienst selbst beim Booten hochkommt:
+
+```bash
+systemctl is-enabled docker      # muss `enabled` liefern
+sudo systemctl enable docker     # falls nicht
+```
+
 ## Workflow-Definition
 
 Datei: [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) — **umgesetzt**.
@@ -122,9 +131,35 @@ Self-hosted Runner und öffentliche Repositories sind eine bekannte scharfe Kant
 
 Solange der Deploy ausschließlich am `production`-Push hängt, ist die Konfiguration sauber abgesichert.
 
+## Betrieb: Neustart und Bereitschaft
+
+Zwei Mechanismen sorgen dafür, dass der Produktivbetrieb einen Serverneustart übersteht und ein Deploy erst dann als gelungen gilt, wenn die Anwendung wirklich läuft.
+
+### Neustart nach einem Reboot
+
+[`docker-compose.prod.yml`](docker-compose.prod.yml) setzt `restart: unless-stopped` an `postgres`, `minio` und `manban-api`. Nach einem Neustart des Servers kommt der Stack damit ohne Eingriff wieder hoch.
+
+- **Nur im Prod-Overlay, nicht im Basis-Compose:** Die Lücke besteht in Produktion. Auf einem Entwicklerrechner soll der lokale Stack nicht bei jedem Start von Docker Desktop mit hochkommen.
+- **`unless-stopped` statt `always`:** Ein bewusstes `docker compose stop` hält damit auch über einen Reboot hinweg.
+- **Voraussetzung:** Der Docker-Dienst muss selbst beim Booten starten — `systemctl is-enabled docker` liefert `enabled` (Einrichtungsschritt 4 oben).
+- **Abgrenzung:** Traefik gehört zu einem fremden Stack auf dem Server. Kommt Traefik nach einem Reboot nicht hoch, bleibt kanban.mwolff.org trotz dieser Regel unerreichbar — der Bereitschaftsschritt unten macht das beim nächsten Deploy sichtbar.
+
+### Bereitschaftsprüfung nach dem Deploy
+
+[`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) ruft nach `up -d --build` das Skript [`scripts/warte-auf-bereitschaft.sh`](scripts/warte-auf-bereitschaft.sh) auf:
+
+```
+scripts/warte-auf-bereitschaft.sh https://kanban.mwolff.org/login 180
+```
+
+Das Skript fragt die URL alle drei Sekunden mit `curl -fsS --max-time 5` ab, bis HTTP 200 kommt (Exit 0) oder die Frist verstrichen ist (Exit ungleich 0, mit URL, Wartezeit und letzter Antwort in einer Zeile). Scheitert es, wird der Job rot; ein `if: failure()`-Schritt schreibt danach `docker compose … ps` und die letzten 100 Zeilen von `docker compose … logs manban-api` ins Job-Protokoll, damit der Grund ohne SSH zu sehen ist.
+
+- **Gemessen wird `/login`, keine Actuator-Route.** Spring Boot nimmt HTTP erst an, wenn der Kontext steht — also nach Datenbankverbindung und Flyway. Antwortet `/login`, ist die Anwendung hochgefahren. Actuator brächte eine neue Abhängigkeit, einen öffentlich erreichbaren Endpunkt und eine Änderung an der `SecurityConfig`.
+- **Geprüft wird über die öffentliche Adresse**, nicht über einen Docker-`healthcheck` im Container: So wird der Weg geprüft, den auch Nutzer nehmen (Traefik, TLS, Anwendung), und das Laufzeit-Image `eclipse-temurin:25-jre` braucht kein zusätzliches Werkzeug.
+- **Eigenes POSIX-sh-Skript statt einer Schleife im YAML:** So lässt sich die Prüfung lokal in beide Richtungen testen; im YAML ginge das nur über einen echten Deploy. POSIX-sh wie [`.githooks/pre-commit`](.githooks/pre-commit), weil auf dem Server kein Node vorausgesetzt ist.
+
 ## Offene Punkte
 
-- **Einmalige Server-/GitHub-Einrichtung (manuell):** Runner als Dienst installieren (`config.sh` + `svc.sh`, siehe oben), Docker-Rechte, und in den Repo-Actions-Settings Fork-Runs auf „Approval" stellen.
-- Optional: Health-Check nach dem Deploy ergänzen, um fehlgeschlagene Builds sichtbar zu machen.
+- **Einmalige Server-/GitHub-Einrichtung (manuell):** Runner als Dienst installieren (`config.sh` + `svc.sh`, siehe oben), Docker-Rechte, `systemctl is-enabled docker` prüfen, und in den Repo-Actions-Settings Fork-Runs auf „Approval" stellen.
 
-Erledigt: Verzeichnis (`/root/opt/kanban-kit`) und `.env` sind über [docs/deployment-hostinger.md](docs/deployment-hostinger.md) geklärt; Variante B ist als Workflow umgesetzt.
+Erledigt: Verzeichnis (`/root/opt/kanban-kit`) und `.env` sind über [docs/deployment-hostinger.md](docs/deployment-hostinger.md) geklärt; Variante B ist als Workflow umgesetzt; der Health-Check nach dem Deploy und die Neustart-Regel sind umgesetzt (siehe „Betrieb: Neustart und Bereitschaft").

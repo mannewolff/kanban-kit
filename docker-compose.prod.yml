@@ -9,8 +9,26 @@
 #   - Caddy (lokaler self-signed-Proxy) laeuft NICHT: er ist dem Profil "local-tls"
 #     zugeordnet und wird ohne aktives Profil nicht gestartet.
 #   - Postgres/MinIO bleiben unveraendert rein intern (keine Host-Ports).
+#   - Alle drei Dienste starten nach einem Reboot des Servers von selbst wieder
+#     (restart: unless-stopped, siehe unten).
 services:
+  # Neustart-Regel nur im Overlay, nicht im Basis-Compose: Die Luecke besteht in
+  # Produktion — ohne Eintrag startet Docker nach einem Neustart des Servers keinen
+  # Container wieder, und kanban.mwolff.org bleibt aus, bis jemand von Hand
+  # `docker compose up -d` aufruft. Auf einem Entwicklerrechner soll der lokale Stack
+  # dagegen nicht bei jedem Start von Docker Desktop mit hochkommen.
+  # `unless-stopped` statt `always`, damit ein bewusstes `docker compose stop` auch
+  # ueber einen Reboot hinweg haelt.
+  # Setzt voraus, dass der Docker-Dienst selbst beim Booten startet
+  # (`systemctl is-enabled docker` → enabled, siehe deployment-spec.md).
+  postgres:
+    restart: unless-stopped
+
+  minio:
+    restart: unless-stopped
+
   manban-api:
+    restart: unless-stopped
     environment:
       # Fester Wert, bewusst KEINE ${...}-Interpolation: Das Overlay erbt den
       # environment:-Block des Basis-Compose (dort MANBAN_DEV_MODE=true) und ueberschreibt
