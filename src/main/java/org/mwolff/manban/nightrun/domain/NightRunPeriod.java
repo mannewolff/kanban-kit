@@ -65,6 +65,19 @@ public record NightRunPeriod(
     return beginnendAm(NightRunPeriodType.DAY, zone, datum);
   }
 
+  /**
+   * Die Nacht, in der {@code jetzt} liegt — der <b>laufende</b> Zeitraum (Issue #1093).
+   *
+   * <p>Anders als die Rückschritt-Zählung in {@link #of}, die nie den laufenden Zeitraum liefert
+   * (Plan #933 E14), ist hier genau der laufende gewollt: Der Bereich „Durchgeführte Nachtläufe"
+   * zeigt die Läufe der laufenden Nacht (Kriterium 9 der fachlichen Quelle #1086). Wer morgens um
+   * acht hinsieht, will die Läufe der vergangenen Nacht sehen — und die gehören zu einem Zeitraum,
+   * der erst um 12:00 endet.
+   */
+  public static NightRunPeriod laufendeNacht(Instant jetzt, ZoneId zone) {
+    return night(nachtDatum(LocalDateTime.ofInstant(jetzt, zone)), zone);
+  }
+
   /** Der unmittelbar vorangegangene gleichartige Zeitraum. */
   public NightRunPeriod previous() {
     return beginnendAm(type, zone, verschoben(type, firstDay, -1));
