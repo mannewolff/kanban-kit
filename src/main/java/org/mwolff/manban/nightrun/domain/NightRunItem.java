@@ -1,6 +1,7 @@
 package org.mwolff.manban.nightrun.domain;
 
 import java.time.Instant;
+import java.util.List;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.common.Identifiable;
 
@@ -38,6 +39,8 @@ import org.mwolff.manban.common.Identifiable;
  * @param commitHash Commit der Session; {@code null}, wenn nichts festgeschrieben wurde
  * @param excerpt Protokollauszug, der den Zustand begründet; höchstens {@link
  *     NightRunLimits#EXCERPT_MAX} Zeichen
+ * @param stages die Stufen der Kette, die dieser Vorgang durchlaufen hat (Issue #1112) — leer statt
+ *     {@code null}, denn „dieser Vorgang hatte keine Stufen" ist eine Aussage
  */
 public record NightRunItem(
     @Nullable Long id,
@@ -53,8 +56,14 @@ public record NightRunItem(
     @Nullable Long durationMs,
     @Nullable String commitHash,
     @Nullable String excerpt,
-    @Nullable NightRunUsage usage)
+    @Nullable NightRunUsage usage,
+    List<NightRunItemStage> stages)
     implements Identifiable {
+
+  /** Die Stufenliste wird beim Anlegen kopiert und unveränderlich gemacht. */
+  public NightRunItem {
+    stages = List.copyOf(stages);
+  }
 
   /**
    * Kopie mit gesetztem Fremdschlüssel.
@@ -78,6 +87,7 @@ public record NightRunItem(
         durationMs,
         commitHash,
         excerpt,
-        usage);
+        usage,
+        stages);
   }
 }

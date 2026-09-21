@@ -66,7 +66,7 @@ class NightRunUsageControllerTest {
   private static final String PFAD_ZEITRAUM = "/api/projects/" + PROJECT + "/night-run-usage";
   private static final String PFAD_GESAMT = PFAD_ZEITRAUM + "/total";
   private static final ZoneId BERLIN = ZoneId.of("Europe/Berlin");
-  private static final NightRunUsage NICHTS = new NightRunUsage(null, null, null, null);
+  private static final NightRunUsage NICHTS = new NightRunUsage(null, null, null, null, null, null);
 
   private NightRunUsageService service;
   private MockMvc mvc;
@@ -114,14 +114,14 @@ class NightRunUsageControllerTest {
     NightRunPeriod monat = NightRunPeriod.of(NightRunPeriodType.MONTH, BERLIN, jetzt, 0);
     UsageSplit teilung =
         new UsageSplit(
-            new NightRunUsage(new BigDecimal("9.50"), 1_000L, 100L, 250L),
-            new NightRunUsage(new BigDecimal("6.00"), 800L, 80L, 200L),
-            new NightRunUsage(new BigDecimal("3.50"), 200L, 20L, 50L));
+            new NightRunUsage(new BigDecimal("9.50"), 1_000L, 100L, 250L, null, null),
+            new NightRunUsage(new BigDecimal("6.00"), 800L, 80L, 200L, null, null),
+            new NightRunUsage(new BigDecimal("3.50"), 200L, 20L, 50L, null, null));
     UsageSplit sitzungen =
         new UsageSplit(
-            new NightRunUsage(new BigDecimal("2.50"), 400L, 40L, 100L),
-            new NightRunUsage(new BigDecimal("1.00"), 300L, 30L, 80L),
-            new NightRunUsage(new BigDecimal("1.50"), 100L, 10L, 20L));
+            new NightRunUsage(new BigDecimal("2.50"), 400L, 40L, 100L, null, null),
+            new NightRunUsage(new BigDecimal("1.00"), 300L, 30L, 80L, null, null),
+            new NightRunUsage(new BigDecimal("1.50"), 100L, 10L, 20L, null, null));
     KindSplit jeGattung = new KindSplit(teilung, sitzungen);
     return new PeriodUsageView(
         new PeriodFigures(
@@ -141,7 +141,7 @@ class NightRunUsageControllerTest {
             new EpicUsageView(
                 new EpicRef(11L, "PLANEN", "Planen"),
                 2L,
-                new NightRunUsage(new BigDecimal("4.00"), null, null, null))),
+                new NightRunUsage(new BigDecimal("4.00"), null, null, null, null, null))),
         new EpicUsageView(null, 1L, NICHTS),
         true);
   }
@@ -154,14 +154,14 @@ class NightRunUsageControllerTest {
   private static TotalUsageView gesamt(@Nullable Instant erfassungsbeginn) {
     UsageSplit laeufe =
         new UsageSplit(
-            new NightRunUsage(new BigDecimal("10.00"), 1_000L, 100L, 250L),
-            new NightRunUsage(new BigDecimal("4.00"), 800L, 80L, 200L),
-            new NightRunUsage(new BigDecimal("6.00"), 200L, 20L, 50L));
+            new NightRunUsage(new BigDecimal("10.00"), 1_000L, 100L, 250L, null, null),
+            new NightRunUsage(new BigDecimal("4.00"), 800L, 80L, 200L, null, null),
+            new NightRunUsage(new BigDecimal("6.00"), 200L, 20L, 50L, null, null));
     UsageSplit sitzungen =
         new UsageSplit(
-            new NightRunUsage(new BigDecimal("2.50"), 400L, 40L, 100L),
-            new NightRunUsage(new BigDecimal("1.00"), 300L, 30L, 80L),
-            new NightRunUsage(new BigDecimal("1.50"), 100L, 10L, 20L));
+            new NightRunUsage(new BigDecimal("2.50"), 400L, 40L, 100L, null, null),
+            new NightRunUsage(new BigDecimal("1.00"), 300L, 30L, 80L, null, null),
+            new NightRunUsage(new BigDecimal("1.50"), 100L, 10L, 20L, null, null));
     UsageSplit zusammen =
         new UsageSplit(
             laeufe.total().plus(sitzungen.total()),
@@ -182,7 +182,8 @@ class NightRunUsageControllerTest {
   @Test
   void nacht_liefertDieTagesgruppe_undReichtDatumUndZoneDurch() throws Exception {
     when(service.night(USER, PROJECT, LocalDate.of(2026, 9, 15), BERLIN))
-        .thenReturn(nacht(new NightRunUsage(new BigDecimal("10"), null, null, null), NICHTS));
+        .thenReturn(
+            nacht(new NightRunUsage(new BigDecimal("10"), null, null, null, null, null), NICHTS));
 
     mvc.perform(get(PFAD_NACHT).param("date", "2026-09-15").param("zone", "Europe/Berlin"))
         .andExpect(status().isOk())

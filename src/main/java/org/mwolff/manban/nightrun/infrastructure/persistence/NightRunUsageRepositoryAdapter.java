@@ -55,12 +55,16 @@ class NightRunUsageRepositoryAdapter implements NightRunUsageRepository {
                         z.getNightCostUsd(),
                         z.getNightInputTokens(),
                         z.getNightOutputTokens(),
-                        z.getNightCachedInputTokens()),
+                        z.getNightCachedInputTokens(),
+                        null,
+                        null),
                     new NightRunUsage(
                         z.getInteractiveCostUsd(),
                         z.getInteractiveInputTokens(),
                         z.getInteractiveOutputTokens(),
-                        z.getInteractiveCachedInputTokens())))
+                        z.getInteractiveCachedInputTokens(),
+                        null,
+                        null)))
         .toList();
   }
 
@@ -109,12 +113,16 @@ class NightRunUsageRepositoryAdapter implements NightRunUsageRepository {
             z.getNightRunCostUsd(),
             z.getNightRunInputTokens(),
             z.getNightRunOutputTokens(),
-            z.getNightRunCachedInputTokens()),
+            z.getNightRunCachedInputTokens(),
+            null,
+            null),
         new NightRunUsage(
             z.getNightItemCostUsd(),
             z.getNightItemInputTokens(),
             z.getNightItemOutputTokens(),
-            z.getNightItemCachedInputTokens()));
+            z.getNightItemCachedInputTokens(),
+            null,
+            null));
   }
 
   private static KindTotals sitzungen(NightRunUsageJpaRepository.UsageColumns z) {
@@ -124,12 +132,16 @@ class NightRunUsageRepositoryAdapter implements NightRunUsageRepository {
             z.getInteractiveRunCostUsd(),
             z.getInteractiveRunInputTokens(),
             z.getInteractiveRunOutputTokens(),
-            z.getInteractiveRunCachedInputTokens()),
+            z.getInteractiveRunCachedInputTokens(),
+            null,
+            null),
         new NightRunUsage(
             z.getInteractiveItemCostUsd(),
             z.getInteractiveItemInputTokens(),
             z.getInteractiveItemOutputTokens(),
-            z.getInteractiveItemCachedInputTokens()));
+            z.getInteractiveItemCachedInputTokens(),
+            null,
+            null));
   }
 
   /** {@code string_agg} liefert die Klassen kommagetrennt, ohne Pakete gar nicht. */

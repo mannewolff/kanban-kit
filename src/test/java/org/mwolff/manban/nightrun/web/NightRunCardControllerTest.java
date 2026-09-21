@@ -101,7 +101,8 @@ class NightRunCardControllerTest {
         1_122_000L,
         state == NightRunState.GREEN ? "4c9f42a" : null,
         "Auszug",
-        usage);
+        usage,
+        List.of());
   }
 
   @Test
@@ -114,7 +115,8 @@ class NightRunCardControllerTest {
                     NightRunMode.CHAIN,
                     NightRunState.GREEN,
                     null,
-                    new NightRunUsage(new BigDecimal("0.940000"), 412_000L, 3_100L, 380_000L)),
+                    new NightRunUsage(
+                        new BigDecimal("0.940000"), 412_000L, 3_100L, 380_000L, null, null)),
                 anlauf(
                     AELTER,
                     NightRunMode.IMPLEMENTATION,
@@ -185,7 +187,7 @@ class NightRunCardControllerTest {
                     NightRunMode.IMPLEMENTATION,
                     NightRunState.GREEN,
                     null,
-                    new NightRunUsage(new BigDecimal("1.500000"), null, null, null))));
+                    new NightRunUsage(new BigDecimal("1.500000"), null, null, null, null, null))));
 
     mvc.perform(get(PATH).param("cardNumber", "967"))
         .andExpect(status().isOk())

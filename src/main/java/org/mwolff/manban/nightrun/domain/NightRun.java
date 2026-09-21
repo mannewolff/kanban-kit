@@ -26,6 +26,8 @@ import org.mwolff.manban.common.Identifiable;
  *     Läufen der Gattung {@link NightRunKind#NIGHT}, die abgeschlossen gemeldet wurden und deren
  *     {@code processedCount} 0 ist. {@code null} heißt „hat gearbeitet" oder „vor der Umstellung
  *     eingeliefert" — beides ist kein Befund.
+ * @param budget die Vorgaben, unter denen der Lauf angetreten ist (Issue #1112); {@code null} heißt
+ *     „nicht angegeben" — Läufe vor {@code V37} und jeder Lauf, der keine gemeldet hat
  */
 public record NightRun(
     @Nullable Long id,
@@ -44,5 +46,6 @@ public record NightRun(
     boolean complete,
     @Nullable Instant updatedAt,
     @Nullable NightRunUsage usage,
-    @Nullable String noWorkReason)
+    @Nullable String noWorkReason,
+    @Nullable NightRunBudget budget)
     implements Identifiable {}

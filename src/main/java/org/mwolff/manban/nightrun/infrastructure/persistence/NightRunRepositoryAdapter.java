@@ -9,15 +9,21 @@ import java.util.Collection;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
+import java.util.stream.Collectors;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.nightrun.application.NightRunRepository;
 import org.mwolff.manban.nightrun.domain.NightRun;
+import org.mwolff.manban.nightrun.domain.NightRunBudget;
+import org.mwolff.manban.nightrun.domain.NightRunBudgetOrigin;
 import org.mwolff.manban.nightrun.domain.NightRunErrorClass;
 import org.mwolff.manban.nightrun.domain.NightRunItem;
+import org.mwolff.manban.nightrun.domain.NightRunItemStage;
 import org.mwolff.manban.nightrun.domain.NightRunKind;
 import org.mwolff.manban.nightrun.domain.NightRunMode;
 import org.mwolff.manban.nightrun.domain.NightRunOrigin;
+import org.mwolff.manban.nightrun.domain.NightRunStage;
 import org.mwolff.manban.nightrun.domain.NightRunState;
 import org.mwolff.manban.nightrun.domain.NightRunUsage;
 import org.springframework.jdbc.core.RowCallbackHandler;
@@ -37,11 +43,16 @@ import org.springframework.stereotype.Component;
  * Vorbild {@code JdbcCardLabelRepository#addLabel}.
  */
 @Component
-// Die Kopplung folgt den Spalten: Der Adapter uebersetzt zwischen Domaenentypen, Entities
-// und JDBC-Typen, und jede neue Spalte bringt ihren Typ mit. Mit Issue #944 sind es
-// BigDecimal und NightRunOrigin mehr, mit Issue #1010 NightRunKind. Eine Aufteilung
+// PMD.CouplingBetweenObjects: Die Kopplung folgt den Spalten: Der Adapter uebersetzt zwischen
+// Domaenentypen, Entities und JDBC-Typen, und jede neue Spalte bringt ihren Typ mit. Mit Issue
+// #944 sind es BigDecimal und NightRunOrigin mehr, mit Issue #1010 NightRunKind, mit Issue #1112
+// NightRunBudget, NightRunBudgetOrigin, NightRunStage und NightRunItemStage. Eine Aufteilung
 // verteilte das Mapping einer Tabelle auf zwei Klassen.
-@SuppressWarnings("PMD.CouplingBetweenObjects")
+// PMD.GodClass: dieselbe Ursache, nur anders gezaehlt — WMC und ATFD summieren die je fuer sich
+// trivialen addValue-/getX-Zeilen des Mappings, die TCC ist niedrig, weil Schreib- und Lesepfad
+// derselben Tabelle sich keine Felder teilen. Das ist die Form eines Persistenz-Adapters und kein
+// Smell. Wenn hier weiter waechst, ist die Tabelle zu zerlegen — nicht diese Klasse.
+@SuppressWarnings({"PMD.CouplingBetweenObjects", "PMD.GodClass"})
 class NightRunRepositoryAdapter implements NightRunRepository {
 
   /** Name des benannten SQL-Parameters für die Projekt-ID (Sonar java:S1192). */
@@ -59,26 +70,52 @@ class NightRunRepositoryAdapter implements NightRunRepository {
   /** Spaltenname der Fehlerklasse in der Zählabfrage (Sonar java:S1192). */
   private static final String C_ERROR_CLASS = "error_class";
 
+  /**
+   * Der Platzhalter für „keine Vorgaben gemeldet" (Issue #1112). Er steht hier und nicht in der
+   * Domäne: Fachlich gibt es ihn nicht — ein Lauf ohne Vorgaben trägt {@code null} —, er ist allein
+   * die Schreibform davon, damit {@link #budgetSchreiben} die Fallunterscheidung einmal trifft
+   * statt je Spalte.
+   */
+  private static final NightRunBudget OHNE_VORGABEN =
+      new NightRunBudget(null, null, null, null, null, null, List.of());
+
   private static final String INSERT_RUN =
       "INSERT INTO night_run (project_id, started_at, mode, kind, duration_ms, processed_count,"
           + " skipped_count, unparsed_count, unparsed_sample, created_at, origin,"
           + " token_name, complete, updated_at, cost_usd, input_tokens, output_tokens,"
-          + " cached_input_tokens, no_work_reason)"
+          + " cached_input_tokens, model_duration_ms, turns, no_work_reason,"
+          + " budget_plan_min, budget_review_min, budget_pakete_min, budget_abdeckung_min,"
+          + " budget_kosten_usd, budget_origin, budget_default_fields)"
           + " VALUES (:projectId, :startedAt, :mode, :kind, :durationMs, :processedCount,"
           + " :skippedCount, :unparsedCount, :unparsedSample, :createdAt, :origin,"
           + " :tokenName, :complete, :updatedAt, :costUsd, :inputTokens, :outputTokens,"
-          + " :cachedInputTokens, :noWorkReason)"
+          + " :cachedInputTokens, :modelDurationMs, :turns, :noWorkReason,"
+          + " :budgetPlanMin, :budgetReviewMin, :budgetPaketeMin, :budgetAbdeckungMin,"
+          + " :budgetKostenUsd, :budgetOrigin, :budgetDefaultFields)"
           + " ON CONFLICT (project_id, started_at) DO NOTHING"
           + " RETURNING id";
 
+  /**
+   * Je Paket eine Anweisung mit {@code RETURNING id} statt eines Stapels über alle Pakete (Issue
+   * #1112): Die Stufen brauchen die vergebene Paket-ID als Fremdschlüssel, und {@code
+   * (night_run_id, card_number)} taugt dafür nicht — es ist kein Schlüssel, zwei Vorgänge eines
+   * Laufs können dieselbe Karte betreffen.
+   */
   private static final String INSERT_ITEM =
       "INSERT INTO night_run_item (night_run_id, project_id, started_at, mode, kind, card_number,"
           + " title, state, error_class, duration_ms, commit_hash, excerpt, cost_usd,"
-          + " input_tokens, output_tokens, cached_input_tokens)"
+          + " input_tokens, output_tokens, cached_input_tokens, model_duration_ms, turns)"
           + " VALUES (:nightRunId, :projectId, :startedAt, :mode, :kind, :cardNumber, :title,"
           + " :state, :errorClass,"
           + " :durationMs, :commitHash, :excerpt, :costUsd, :inputTokens, :outputTokens,"
-          + " :cachedInputTokens)";
+          + " :cachedInputTokens, :modelDurationMs, :turns)"
+          + " RETURNING id";
+
+  private static final String INSERT_STAGE =
+      "INSERT INTO night_run_item_stage (night_run_item_id, stage, duration_ms, cost_usd,"
+          + " input_tokens, output_tokens, cached_input_tokens, model_duration_ms, turns)"
+          + " VALUES (:nightRunItemId, :stage, :durationMs, :costUsd, :inputTokens,"
+          + " :outputTokens, :cachedInputTokens, :modelDurationMs, :turns)";
 
   /**
    * Sperrt die Projektzeile für die Dauer der Transaktion (Issue #1090) — dieselbe Zeile und
@@ -106,7 +143,12 @@ class NightRunRepositoryAdapter implements NightRunRepository {
           + " origin = :origin, token_name = :tokenName, complete = :complete,"
           + " updated_at = :updatedAt, cost_usd = :costUsd, input_tokens = :inputTokens,"
           + " output_tokens = :outputTokens, cached_input_tokens = :cachedInputTokens,"
-          + " no_work_reason = :noWorkReason"
+          + " model_duration_ms = :modelDurationMs, turns = :turns,"
+          + " no_work_reason = :noWorkReason,"
+          + " budget_plan_min = :budgetPlanMin, budget_review_min = :budgetReviewMin,"
+          + " budget_pakete_min = :budgetPaketeMin, budget_abdeckung_min = :budgetAbdeckungMin,"
+          + " budget_kosten_usd = :budgetKostenUsd, budget_origin = :budgetOrigin,"
+          + " budget_default_fields = :budgetDefaultFields"
           + " WHERE id = :id";
 
   private static final String DELETE_ITEMS_OF_RUN =
@@ -131,14 +173,17 @@ class NightRunRepositoryAdapter implements NightRunRepository {
   private final NamedParameterJdbcTemplate jdbc;
   private final NightRunJpaRepository runs;
   private final NightRunItemJpaRepository items;
+  private final NightRunItemStageJpaRepository stages;
 
   NightRunRepositoryAdapter(
       NamedParameterJdbcTemplate jdbc,
       NightRunJpaRepository runs,
-      NightRunItemJpaRepository items) {
+      NightRunItemJpaRepository items,
+      NightRunItemStageJpaRepository stages) {
     this.jdbc = jdbc;
     this.runs = runs;
     this.items = items;
+    this.stages = stages;
   }
 
   @Override
@@ -199,16 +244,33 @@ class NightRunRepositoryAdapter implements NightRunRepository {
    * Paket (Issue #964, um die Gattung erweitert in #1010): So kann kein Paket mit einem anderen
    * Projekt geschrieben werden als sein Lauf — ein verwaistes Paket fände man sonst später im
    * falschen Projekt wieder.
+   *
+   * <p>Je Paket eine Anweisung statt eines Stapels über alle (Issue #1112): Die Stufen hängen an
+   * der Paket-ID, und die gibt erst das {@code RETURNING id} des einzelnen {@code INSERT} her. Der
+   * Stapel bleibt dort, wo er trägt — bei den Stufen eines Pakets.
    */
   private void insertItems(NightRun run, Long runId, List<NightRunItem> newItems) {
-    if (newItems.isEmpty()) {
+    for (NightRunItem item : newItems) {
+      Long itemId =
+          jdbc.queryForObject(
+              INSERT_ITEM, itemParameters(item.withNightRunId(runId), run), Long.class);
+      insertStages(itemId, item.stages());
+    }
+  }
+
+  /**
+   * Die Stufen eines Pakets als Stapel. Beim Ersetzen eines Laufs fallen sie mit ihren Paketen über
+   * {@code ON DELETE CASCADE} und werden hier neu geschrieben — ersetzt, nicht ergänzt.
+   */
+  private void insertStages(@Nullable Long itemId, List<NightRunItemStage> stages) {
+    if (stages.isEmpty()) {
       return;
     }
     SqlParameterSource[] batch =
-        newItems.stream()
-            .map(item -> itemParameters(item.withNightRunId(runId), run))
+        stages.stream()
+            .map(stage -> stageParameters(itemId, stage))
             .toArray(SqlParameterSource[]::new);
-    jdbc.batchUpdate(INSERT_ITEM, batch);
+    jdbc.batchUpdate(INSERT_STAGE, batch);
   }
 
   @Override
@@ -224,17 +286,36 @@ class NightRunRepositoryAdapter implements NightRunRepository {
     if (runIds.isEmpty()) {
       return List.of();
     }
-    return items.findByNightRunIdInOrderByNightRunIdAscIdAsc(runIds).stream()
-        .map(NightRunRepositoryAdapter::toDomain)
-        .toList();
+    return mitStufen(items.findByNightRunIdInOrderByNightRunIdAscIdAsc(runIds));
   }
 
   @Override
   public List<NightRunItem> findByCard(long projectId, int cardNumber) {
-    return items
-        .findByProjectIdAndCardNumberOrderByStartedAtDescIdDesc(projectId, cardNumber)
-        .stream()
-        .map(NightRunRepositoryAdapter::toDomain)
+    return mitStufen(
+        items.findByProjectIdAndCardNumberOrderByStartedAtDescIdDesc(projectId, cardNumber));
+  }
+
+  /**
+   * Die Stufen werden zu allen Paketen in einer zweiten Abfrage nachgeladen (Issue #1112) und nicht
+   * je Paket. Ohne das Nachladen behauptete die leere Liste „hatte keine Stufen" auch dort, wo es
+   * welche gibt — und an den Anläufen einer Karte fiele es niemandem auf.
+   */
+  private List<NightRunItem> mitStufen(List<NightRunItemEntity> gefunden) {
+    if (gefunden.isEmpty()) {
+      return List.of();
+    }
+    // requireNonNull statt einer Abfrage: Eine gelesene Zeile hat ihre ID: @Nullable steht am
+    // Getter nur, weil dieselbe Entity vor dem Einfuegen noch keine haette — und diese Entities
+    // werden nie eingefuegt. Eine Abfrage waere ein Zweig, den kein Fall erreichen kann.
+    List<Long> itemIds = gefunden.stream().map(e -> Objects.requireNonNull(e.getId())).toList();
+    Map<Long, List<NightRunItemStage>> jeItem =
+        stages.findByNightRunItemIdInOrderByNightRunItemIdAscIdAsc(itemIds).stream()
+            .collect(
+                Collectors.groupingBy(
+                    NightRunItemStageEntity::getNightRunItemId,
+                    Collectors.mapping(NightRunRepositoryAdapter::toDomain, Collectors.toList())));
+    return gefunden.stream()
+        .map(e -> toDomain(e, jeItem.getOrDefault(e.getId(), List.of())))
         .toList();
   }
 
@@ -300,12 +381,14 @@ class NightRunRepositoryAdapter implements NightRunRepository {
                 Types.TIMESTAMP_WITH_TIMEZONE)
             .addValue("noWorkReason", run.noWorkReason(), Types.VARCHAR);
     verbrauchSchreiben(parameter, run.usage());
+    budgetSchreiben(parameter, run.budget());
     return parameter;
   }
 
   /**
-   * Die vier Verbrauchswerte an denselben Namen fuer Lauf und Arbeitspaket — sie tragen dieselbe
-   * Form, und ein fehlendes {@code usage} setzt alle vier auf {@code NULL} („nicht gemessen").
+   * Die sechs Verbrauchswerte an denselben Namen fuer Lauf, Arbeitspaket und Stufe — sie tragen
+   * dieselbe Form, und ein fehlendes {@code usage} setzt alle sechs auf {@code NULL} („nicht
+   * gemessen").
    */
   private static void verbrauchSchreiben(
       MapSqlParameterSource parameter, @Nullable NightRunUsage usage) {
@@ -314,7 +397,45 @@ class NightRunRepositoryAdapter implements NightRunRepository {
         .addValue("inputTokens", usage == null ? null : usage.inputTokens(), Types.BIGINT)
         .addValue("outputTokens", usage == null ? null : usage.outputTokens(), Types.BIGINT)
         .addValue(
-            "cachedInputTokens", usage == null ? null : usage.cachedInputTokens(), Types.BIGINT);
+            "cachedInputTokens", usage == null ? null : usage.cachedInputTokens(), Types.BIGINT)
+        .addValue("modelDurationMs", usage == null ? null : usage.modelDurationMs(), Types.BIGINT)
+        .addValue("turns", usage == null ? null : usage.turns(), Types.INTEGER);
+  }
+
+  /**
+   * Die sieben Budget-Spalten des Laufs (Issue #1112). Ein fehlendes Budget setzt alle auf {@code
+   * NULL} — „nicht angegeben". Die Feldliste geht als kommagetrennte Zeichenkette in eine Spalte;
+   * bei {@link NightRunBudgetOrigin#CONFIGURED} und ohne Budget bleibt sie {@code NULL}.
+   */
+  private static void budgetSchreiben(
+      MapSqlParameterSource parameter, @Nullable NightRunBudget budget) {
+    // Ein Mal die Fallunterscheidung statt sieben Mal: Der Platzhalter traegt in jedem Feld
+    // genau das, was ein fehlendes Budget in die Spalte schreiben soll.
+    NightRunBudget vorgaben = budget == null ? OHNE_VORGABEN : budget;
+    NightRunBudgetOrigin origin = vorgaben.origin();
+    List<String> felder = vorgaben.defaultFields();
+    parameter
+        .addValue("budgetPlanMin", vorgaben.planMin(), Types.INTEGER)
+        .addValue("budgetReviewMin", vorgaben.reviewMin(), Types.INTEGER)
+        .addValue("budgetPaketeMin", vorgaben.paketeMin(), Types.INTEGER)
+        .addValue("budgetAbdeckungMin", vorgaben.abdeckungMin(), Types.INTEGER)
+        .addValue("budgetKostenUsd", vorgaben.kostenUsd(), Types.NUMERIC)
+        .addValue("budgetOrigin", origin == null ? null : origin.name(), Types.VARCHAR)
+        .addValue(
+            "budgetDefaultFields",
+            felder.isEmpty() ? null : String.join(",", felder),
+            Types.VARCHAR);
+  }
+
+  private static SqlParameterSource stageParameters(
+      @Nullable Long itemId, NightRunItemStage stage) {
+    MapSqlParameterSource parameter =
+        new MapSqlParameterSource()
+            .addValue("nightRunItemId", itemId)
+            .addValue("stage", stage.stage().name())
+            .addValue("durationMs", stage.durationMs(), Types.BIGINT);
+    verbrauchSchreiben(parameter, stage.usage());
+    return parameter;
   }
 
   private static SqlParameterSource itemParameters(NightRunItem item, NightRun run) {
@@ -364,11 +485,17 @@ class NightRunRepositoryAdapter implements NightRunRepository {
         e.isComplete(),
         e.getUpdatedAt(),
         verbrauchLesen(
-            e.getCostUsd(), e.getInputTokens(), e.getOutputTokens(), e.getCachedInputTokens()),
-        e.getNoWorkReason());
+            e.getCostUsd(),
+            e.getInputTokens(),
+            e.getOutputTokens(),
+            e.getCachedInputTokens(),
+            e.getModelDurationMs(),
+            e.getTurns()),
+        e.getNoWorkReason(),
+        budgetLesen(e));
   }
 
-  private static NightRunItem toDomain(NightRunItemEntity e) {
+  private static NightRunItem toDomain(NightRunItemEntity e, List<NightRunItemStage> stages) {
     String errorClass = e.getErrorClass();
     return new NightRunItem(
         e.getId(),
@@ -385,11 +512,30 @@ class NightRunRepositoryAdapter implements NightRunRepository {
         e.getCommitHash(),
         e.getExcerpt(),
         verbrauchLesen(
-            e.getCostUsd(), e.getInputTokens(), e.getOutputTokens(), e.getCachedInputTokens()));
+            e.getCostUsd(),
+            e.getInputTokens(),
+            e.getOutputTokens(),
+            e.getCachedInputTokens(),
+            e.getModelDurationMs(),
+            e.getTurns()),
+        stages);
+  }
+
+  private static NightRunItemStage toDomain(NightRunItemStageEntity e) {
+    return new NightRunItemStage(
+        NightRunStage.valueOf(e.getStage()),
+        e.getDurationMs(),
+        verbrauchLesen(
+            e.getCostUsd(),
+            e.getInputTokens(),
+            e.getOutputTokens(),
+            e.getCachedInputTokens(),
+            e.getModelDurationMs(),
+            e.getTurns()));
   }
 
   /**
-   * Aus vier Spalten wird ein {@link NightRunUsage} — oder {@code null}, wenn keine davon gesetzt
+   * Aus sechs Spalten wird ein {@link NightRunUsage} — oder {@code null}, wenn keine davon gesetzt
    * ist. Ein Record aus lauter {@code null} waere von „nicht gemessen" nicht zu unterscheiden und
    * zwaenge jede Anzeigestelle zu einer zweiten Fallunterscheidung.
    */
@@ -397,13 +543,45 @@ class NightRunRepositoryAdapter implements NightRunRepository {
       @Nullable BigDecimal costUsd,
       @Nullable Long inputTokens,
       @Nullable Long outputTokens,
-      @Nullable Long cachedInputTokens) {
+      @Nullable Long cachedInputTokens,
+      @Nullable Long modelDurationMs,
+      @Nullable Integer turns) {
     if (costUsd == null
         && inputTokens == null
         && outputTokens == null
-        && cachedInputTokens == null) {
+        && cachedInputTokens == null
+        && modelDurationMs == null
+        && turns == null) {
       return null;
     }
-    return new NightRunUsage(costUsd, inputTokens, outputTokens, cachedInputTokens);
+    return new NightRunUsage(
+        costUsd, inputTokens, outputTokens, cachedInputTokens, modelDurationMs, turns);
+  }
+
+  /**
+   * Aus den sieben Budget-Spalten wird ein {@link NightRunBudget} — oder {@code null}, wenn keine
+   * davon gesetzt ist („nicht angegeben", Plan #1110 E3). Dieselbe Regel wie beim Verbrauch, und
+   * aus demselben Grund.
+   */
+  private static @Nullable NightRunBudget budgetLesen(NightRunEntity e) {
+    String origin = e.getBudgetOrigin();
+    String defaultFields = e.getBudgetDefaultFields();
+    if (e.getBudgetPlanMin() == null
+        && e.getBudgetReviewMin() == null
+        && e.getBudgetPaketeMin() == null
+        && e.getBudgetAbdeckungMin() == null
+        && e.getBudgetKostenUsd() == null
+        && origin == null
+        && defaultFields == null) {
+      return null;
+    }
+    return new NightRunBudget(
+        e.getBudgetPlanMin(),
+        e.getBudgetReviewMin(),
+        e.getBudgetPaketeMin(),
+        e.getBudgetAbdeckungMin(),
+        e.getBudgetKostenUsd(),
+        origin == null ? null : NightRunBudgetOrigin.valueOf(origin),
+        defaultFields == null ? List.of() : List.of(defaultFields.split(",")));
   }
 }

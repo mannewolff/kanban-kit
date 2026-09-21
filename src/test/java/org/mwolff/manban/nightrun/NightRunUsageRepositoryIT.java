@@ -55,7 +55,7 @@ class NightRunUsageRepositoryIT extends AbstractIntegrationTest {
 
   private static final Instant NACHT_15_BIS = Instant.parse("2026-09-16T10:00:00Z");
 
-  private static final NightRunUsage NICHTS = new NightRunUsage(null, null, null, null);
+  private static final NightRunUsage NICHTS = new NightRunUsage(null, null, null, null, null, null);
 
   @Autowired private NightRunRepository runs;
   @Autowired private NightRunUsageRepository usage;
@@ -86,12 +86,13 @@ class NightRunUsageRepositoryIT extends AbstractIntegrationTest {
   }
 
   private static NightRunUsage kosten(String betrag) {
-    return new NightRunUsage(new BigDecimal(betrag), null, null, null);
+    return new NightRunUsage(new BigDecimal(betrag), null, null, null, null, null);
   }
 
   private static NightRunUsage verbrauch(
       String betrag, long eingabe, long ausgabe, long zwischenspeicher) {
-    return new NightRunUsage(new BigDecimal(betrag), eingabe, ausgabe, zwischenspeicher);
+    return new NightRunUsage(
+        new BigDecimal(betrag), eingabe, ausgabe, zwischenspeicher, null, null);
   }
 
   private void lauf(
@@ -150,6 +151,7 @@ class NightRunUsageRepositoryIT extends AbstractIntegrationTest {
             true,
             null,
             laufVerbrauch,
+            null,
             null),
         List.of(pakete));
   }
@@ -174,7 +176,8 @@ class NightRunUsageRepositoryIT extends AbstractIntegrationTest {
         durationMs,
         null,
         null,
-        verbrauch);
+        verbrauch,
+        List.of());
   }
 
   private static NightRunItem gruen(int cardNumber, @Nullable NightRunUsage verbrauch) {
@@ -229,8 +232,8 @@ class NightRunUsageRepositoryIT extends AbstractIntegrationTest {
         "2026-09-15T21:10:00Z",
         NightRunMode.CHAIN,
         1_000L,
-        new NightRunUsage(new BigDecimal("10.000000"), 1_000L, 100L, 900L),
-        gruen(721, new NightRunUsage(new BigDecimal("4.000000"), 400L, 40L, 360L)));
+        new NightRunUsage(new BigDecimal("10.000000"), 1_000L, 100L, 900L, null, null),
+        gruen(721, new NightRunUsage(new BigDecimal("4.000000"), 400L, 40L, 360L, null, null)));
     lauf(
         projectId,
         "2026-09-16T01:22:00Z",
@@ -633,8 +636,8 @@ class NightRunUsageRepositoryIT extends AbstractIntegrationTest {
     assertThat(summe.runCount()).isZero();
     assertThat(summe.cardCount()).isZero();
     assertThat(summe.durationMs()).isZero();
-    assertThat(summe.runUsage()).isEqualTo(new NightRunUsage(null, null, null, null));
-    assertThat(summe.itemUsage()).isEqualTo(new NightRunUsage(null, null, null, null));
+    assertThat(summe.runUsage()).isEqualTo(new NightRunUsage(null, null, null, null, null, null));
+    assertThat(summe.itemUsage()).isEqualTo(new NightRunUsage(null, null, null, null, null, null));
     assertThat(usage.totalsPerNight(projectId, NACHT_15_VON, NACHT_15_BIS, BERLIN)).isEmpty();
     assertThat(usage.totalsPerCard(projectId, NACHT_15_VON, NACHT_15_BIS)).isEmpty();
   }

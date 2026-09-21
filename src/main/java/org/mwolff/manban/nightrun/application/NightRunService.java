@@ -169,7 +169,10 @@ public class NightRunService {
             now,
             meldung.usage(),
             grundOhneArbeit(
-                kind, meldung.complete(), meldung.processedCount(), meldung.noWorkReason()));
+                kind, meldung.complete(), meldung.processedCount(), meldung.noWorkReason()),
+            // Die Budgets nimmt erst das naechste Paket entgegen (Issue #1112): Bis dahin meldet
+            // kein Weg sie, und „nicht angegeben" ist die richtige Aussage darueber.
+            null);
 
     // Wie beim Upload-Weg: verwaiste Pakete eines verdrängten Laufs zuerst weg (#965).
     runs.deleteOrphanItemsOfRun(projectId, meldung.startedAt());
@@ -265,7 +268,9 @@ public class NightRunService {
         // kommt aus der Datei, nicht aus dem Runner. Ein Lauf ohne Arbeit landet damit im
         // Rueckfalltext -- angezeigt wird er trotzdem, nur ohne die Begruendung des Runners.
         grundOhneArbeit(
-            NightRunKind.NIGHT, submission.complete(), submission.processedCount(), null));
+            NightRunKind.NIGHT, submission.complete(), submission.processedCount(), null),
+        // Wie beim meldenden Weg: Die Budgets nimmt erst das naechste Paket entgegen (#1112).
+        null);
   }
 
   /**
@@ -317,7 +322,10 @@ public class NightRunService {
                     item.durationMs(),
                     item.commitHash(),
                     item.excerpt(),
-                    item.usage()))
+                    item.usage(),
+                    // Die Stufen nimmt erst das naechste Paket entgegen (Issue #1112); die leere
+                    // Liste sagt hier richtig „dieser Vorgang hatte keine".
+                    List.of()))
         .toList();
   }
 

@@ -15,18 +15,23 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.stream.IntStream;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mwolff.manban.AbstractIntegrationTest;
 import org.mwolff.manban.nightrun.application.NightRunRepository;
 import org.mwolff.manban.nightrun.application.NightRunRepository.UpsertResult;
 import org.mwolff.manban.nightrun.domain.NightRun;
+import org.mwolff.manban.nightrun.domain.NightRunBudget;
+import org.mwolff.manban.nightrun.domain.NightRunBudgetOrigin;
 import org.mwolff.manban.nightrun.domain.NightRunErrorClass;
 import org.mwolff.manban.nightrun.domain.NightRunItem;
+import org.mwolff.manban.nightrun.domain.NightRunItemStage;
 import org.mwolff.manban.nightrun.domain.NightRunKind;
 import org.mwolff.manban.nightrun.domain.NightRunLimits;
 import org.mwolff.manban.nightrun.domain.NightRunMode;
 import org.mwolff.manban.nightrun.domain.NightRunOrigin;
+import org.mwolff.manban.nightrun.domain.NightRunStage;
 import org.mwolff.manban.nightrun.domain.NightRunState;
 import org.mwolff.manban.nightrun.domain.NightRunUsage;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -43,11 +48,15 @@ import org.springframework.jdbc.core.JdbcTemplate;
  * Spaltenzusicherung nicht misst — und die Verdrängung des Ringpuffers.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE)
-// Testklasse: Jede Methode ist ein Fall, und Faelle werden nicht zusammengelegt, um eine
-// Zahl zu druecken. Issue #944 bringt drei Faelle fuer Herkunft, Vollstaendigkeit und
-// Verbrauch dazu, Issue #964 drei fuer das verwaiste Arbeitspaket, Issue #965 zwei fuer dessen
-// Wiedererkennung.
-@SuppressWarnings("PMD.TooManyMethods")
+// PMD.TooManyMethods: Testklasse: Jede Methode ist ein Fall, und Faelle werden nicht
+// zusammengelegt, um eine Zahl zu druecken. Issue #944 bringt drei Faelle fuer Herkunft,
+// Vollstaendigkeit und Verbrauch dazu, Issue #964 drei fuer das verwaiste Arbeitspaket, Issue
+// #965 zwei fuer dessen Wiedererkennung, Issue #1112 sieben fuer Budgets und Stufen.
+// PMD.CyclomaticComplexity: dieselbe Ursache, ueber die Klasse summiert — die hoechste
+// Einzelmethode liegt bei 4, weit unter jedem Schwellwert. Ein Zerschneiden nach der Summe
+// verteilte die Faelle eines Adapters auf zwei Dateien, die sich dieselben Vorrichtungen teilen
+// muessten, ohne dass ein Fall dadurch einfacher wuerde.
+@SuppressWarnings({"PMD.TooManyMethods", "PMD.CyclomaticComplexity"})
 class NightRunRepositoryIT extends AbstractIntegrationTest {
 
   private static final Instant T1 = Instant.parse("2026-09-01T22:00:00Z");
@@ -111,6 +120,7 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
         true,
         null,
         null,
+        null,
         null);
   }
 
@@ -129,7 +139,8 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
         state == NightRunState.GREY ? null : 60_000L,
         state == NightRunState.GREEN ? "4c9f42a" : null,
         "  #" + cardNumber + " -> " + state,
-        null);
+        null,
+        List.of());
   }
 
   private long anlegen(Instant startedAt, List<NightRunItem> items) {
@@ -202,6 +213,7 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
             true,
             null,
             null,
+            null,
             null);
 
     long id =
@@ -242,6 +254,7 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
             NightRunOrigin.TOKEN,
             "sitzungs-token",
             true,
+            null,
             null,
             null,
             null);
@@ -360,6 +373,7 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
             NightRunOrigin.UPLOAD,
             null,
             true,
+            null,
             null,
             null,
             null);
@@ -514,7 +528,8 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
         null,
         null,
         excerpt,
-        null);
+        null,
+        List.of());
   }
 
   private NightRun mitProbe(Instant startedAt, int laenge) {
@@ -533,6 +548,7 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
         NightRunOrigin.UPLOAD,
         null,
         true,
+        null,
         null,
         null,
         null);
@@ -705,6 +721,7 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
             NightRunOrigin.UPLOAD,
             null,
             true,
+            null,
             null,
             null,
             null),
@@ -917,7 +934,8 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
         null,
         null,
         null,
-        null);
+        null,
+        List.of());
   }
 
   /**
@@ -966,8 +984,9 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
   @Test
   void gemeldeterVerbrauchKommtAnLaufUndPaketZurueck() {
     NightRunUsage laufVerbrauch =
-        new NightRunUsage(new BigDecimal("8.032575"), 148L, 62_411L, 8_883_160L);
-    NightRunUsage paketVerbrauch = new NightRunUsage(new BigDecimal("0.940000"), 12L, 34L, 56L);
+        new NightRunUsage(new BigDecimal("8.032575"), 148L, 62_411L, 8_883_160L, null, null);
+    NightRunUsage paketVerbrauch =
+        new NightRunUsage(new BigDecimal("0.940000"), 12L, 34L, 56L, null, null);
     NightRun mitVerbrauch =
         new NightRun(
             null,
@@ -986,6 +1005,7 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
             true,
             null,
             laufVerbrauch,
+            null,
             null);
     NightRunItem paket =
         new NightRunItem(
@@ -1002,7 +1022,8 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
             5L,
             null,
             null,
-            paketVerbrauch);
+            paketVerbrauch,
+            List.of());
 
     long runId = runs.insertIfAbsent(mitVerbrauch, List.of(paket)).orElseThrow();
 
@@ -1049,6 +1070,7 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
             false,
             fortgeschrieben,
             null,
+            null,
             null);
 
     long runId = runs.insertIfAbsent(maschinell, List.of()).orElseThrow();
@@ -1083,6 +1105,7 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
         "nacht-token",
         complete,
         Instant.parse("2026-09-10T03:22:00Z"),
+        null,
         null,
         null);
   }
@@ -1172,6 +1195,7 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
             true,
             null,
             null,
+            null,
             null);
     runs.upsert(alsSitzung, List.of(paket(102, NightRunState.GREEN)));
 
@@ -1205,6 +1229,7 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
             true,
             spaeter,
             null,
+            null,
             null);
     runs.upsert(zweite, List.of());
 
@@ -1212,6 +1237,226 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
     assertThat(nachher.createdAt()).isEqualTo(ANGELEGT);
     assertThat(nachher.updatedAt()).isEqualTo(spaeter);
     assertThat(nachher.complete()).isTrue();
+  }
+
+  // --- Budgets und Stufen (Issue #1112) -------------------------------------------------------
+
+  /**
+   * Das Budget samt Herkunft und Feldliste geht hinein und kommt unveraendert zurueck. Nur die
+   * echte Datenbank loest das ein: ein fehlender {@code CHECK}-Wert auf {@code budget_origin} oder
+   * eine zu kurze Spalte faellt weder beim Uebersetzen noch im Service auf.
+   */
+  @Test
+  void budgetUndHerkunftKommenAmLaufZurueck() {
+    NightRunBudget budget =
+        new NightRunBudget(
+            30,
+            25,
+            40,
+            10,
+            new BigDecimal("50.000000"),
+            NightRunBudgetOrigin.DEFAULTED,
+            List.of("paketeMin", "abdeckungMin"));
+
+    long runId = runs.insertIfAbsent(mitBudget(T1, budget), List.of()).orElseThrow();
+
+    assertThat(gelesen(runId).budget()).isEqualTo(budget);
+  }
+
+  /** Die eingestellte Herkunft fuehrt keine Feldliste — und bekommt beim Lesen auch keine. */
+  @Test
+  void eineEingestellteHerkunftKommtOhneFeldlisteZurueck() {
+    NightRunBudget budget =
+        new NightRunBudget(30, 25, 40, 10, null, NightRunBudgetOrigin.CONFIGURED, List.of());
+
+    long runId = runs.insertIfAbsent(mitBudget(T1, budget), List.of()).orElseThrow();
+
+    assertThat(gelesen(runId).budget()).isEqualTo(budget);
+  }
+
+  /**
+   * Ein Lauf ohne gemeldete Vorgaben traegt gar kein Budget — nicht eines aus lauter fehlenden
+   * Feldern. Sonst muesste jede Anzeigestelle beide Fassungen von „nicht angegeben" kennen.
+   */
+  @Test
+  void einLaufOhneVorgabenTraegtGarKeinBudget() {
+    long runId = anlegen(T1, List.of());
+
+    assertThat(gelesen(runId).budget()).isNull();
+  }
+
+  /**
+   * Der Kern des Pakets: Zwei Vorgaenge <b>derselben Karte</b> in einem Lauf, jeder mit eigenen
+   * Stufen. Kaemen die Stufen ueber {@code (night_run_id, card_number)} statt ueber die Paket-ID
+   * zurueck, traegen hier beide Vorgaenge alle vier Stufen — {@code (night_run_id, card_number)}
+   * ist kein Schluessel.
+   */
+  @Test
+  void zweiVorgaengeDerselbenKarteTragenJeIhreEigenenStufen() {
+    NightRunItemStage planen = stufe(NightRunStage.PLAN, 1_000L, "1.00", 3);
+    NightRunItemStage pruefen = stufe(NightRunStage.REVIEW, 2_000L, "2.00", 5);
+    NightRunItemStage zerlegen = stufe(NightRunStage.PAKETE, 3_000L, "3.00", 7);
+
+    long runId =
+        anlegen(
+            T1,
+            List.of(mitStufen(1112, List.of(planen, pruefen)), mitStufen(1112, List.of(zerlegen))));
+
+    assertThat(runs.findItemsByRunIds(List.of(runId)))
+        .extracting(NightRunItem::cardNumber, NightRunItem::stages)
+        .containsExactly(tuple(1112, List.of(planen, pruefen)), tuple(1112, List.of(zerlegen)));
+    assertThat(runs.findByCard(projectId, 1112))
+        .extracting(NightRunItem::stages)
+        .containsExactlyInAnyOrder(List.of(planen, pruefen), List.of(zerlegen));
+  }
+
+  /** Ein Arbeitspaket ohne Stufen liefert die leere Liste — nie {@code null}. */
+  @Test
+  void einPaketOhneStufenLiefertEineLeereListe() {
+    long runId = anlegen(T1, List.of(paket(721, NightRunState.GREEN)));
+
+    assertThat(runs.findItemsByRunIds(List.of(runId)))
+        .singleElement()
+        .extracting(NightRunItem::stages)
+        .isEqualTo(List.of());
+    assertThat(runs.findByCard(projectId, 721))
+        .singleElement()
+        .extracting(NightRunItem::stages)
+        .isEqualTo(List.of());
+  }
+
+  /**
+   * Beim Ersetzen eines Laufs fallen die Stufen mit ihren Arbeitspaketen und werden neu geschrieben
+   * — ersetzt, nicht ergaenzt. Ohne das {@code ON DELETE CASCADE} am Paket stuenden sie nach der
+   * zweiten Meldung doppelt da.
+   */
+  @Test
+  void beimErsetzenEinesLaufsLiegenDieStufenEinfachVor() {
+    Instant start = Instant.parse("2026-09-17T22:00:00Z");
+    NightRunItemStage planen = stufe(NightRunStage.PLAN, 1_000L, "1.00", 3);
+    UpsertResult erster =
+        runs.upsert(meldung(start, false), List.of(mitStufen(1112, List.of(planen))));
+
+    runs.upsert(meldung(start, true), List.of(mitStufen(1112, List.of(planen))));
+
+    assertThat(runs.findItemsByRunIds(List.of(erster.id())))
+        .singleElement()
+        .extracting(NightRunItem::stages)
+        .isEqualTo(List.of(planen));
+    assertThat(zeilen("night_run_item_stage")).isEqualTo(1);
+  }
+
+  /** Modellzeit und Zuege gehoeren zum Verbrauch und kommen an Lauf, Paket und Stufe zurueck. */
+  @Test
+  void modellzeitUndZuegeKommenAnLaufPaketUndStufeZurueck() {
+    NightRunUsage laufVerbrauch = new NightRunUsage(null, null, null, null, 120_000L, 42);
+    NightRunUsage paketVerbrauch = new NightRunUsage(null, null, null, null, 60_000L, 12);
+    NightRunItemStage planen = stufe(NightRunStage.ABDECKUNG, 9_000L, "0.50", 4);
+    NightRun lauf =
+        new NightRun(
+            null,
+            projectId,
+            T1,
+            NightRunMode.CHAIN,
+            NightRunKind.NIGHT,
+            1_000L,
+            1,
+            0,
+            0,
+            null,
+            ANGELEGT,
+            NightRunOrigin.TOKEN,
+            "nacht-token",
+            true,
+            null,
+            laufVerbrauch,
+            null,
+            null);
+
+    long runId =
+        runs.insertIfAbsent(lauf, List.of(mitStufen(1112, List.of(planen), paketVerbrauch)))
+            .orElseThrow();
+
+    NightRunUsage gelesenerLauf = gelesen(runId).usage();
+    assertThat(gelesenerLauf).isNotNull();
+    assertThat(gelesenerLauf.modelDurationMs()).isEqualTo(120_000L);
+    assertThat(gelesenerLauf.turns()).isEqualTo(42);
+
+    NightRunItem gelesenesPaket = runs.findItemsByRunIds(List.of(runId)).getFirst();
+    assertThat(gelesenesPaket.usage()).isEqualTo(paketVerbrauch);
+    assertThat(gelesenesPaket.stages()).containsExactly(planen);
+  }
+
+  /** Eine Stufe ohne jeden gemessenen Wert traegt keinen Verbrauch — nicht einen aus Nullen. */
+  @Test
+  void eineStufeOhneMesswerteTraegtKeinenVerbrauch() {
+    NightRunItemStage ohneMesswerte = new NightRunItemStage(NightRunStage.PLAN, null, null);
+
+    long runId = anlegen(T1, List.of(mitStufen(1112, List.of(ohneMesswerte))));
+
+    assertThat(runs.findItemsByRunIds(List.of(runId)))
+        .singleElement()
+        .extracting(NightRunItem::stages)
+        .isEqualTo(List.of(ohneMesswerte));
+  }
+
+  private NightRun mitBudget(Instant startedAt, NightRunBudget budget) {
+    return new NightRun(
+        null,
+        projectId,
+        startedAt,
+        NightRunMode.CHAIN,
+        NightRunKind.NIGHT,
+        1_000L,
+        1,
+        0,
+        0,
+        null,
+        ANGELEGT,
+        NightRunOrigin.TOKEN,
+        "nacht-token",
+        true,
+        null,
+        null,
+        null,
+        budget);
+  }
+
+  /**
+   * Der Kostenwert traegt die Nachkommastellen seiner Spalte {@code numeric(12,6)}: Beim
+   * Zurueckgelesenen entscheidet {@code BigDecimal.equals} ueber die Skalierung mit, und ein „1.00"
+   * hier verglichen sich nie mit dem „1.000000" von dort.
+   */
+  private static NightRunItemStage stufe(
+      NightRunStage stage, long durationMs, String kosten, int turns) {
+    return new NightRunItemStage(
+        stage,
+        durationMs,
+        new NightRunUsage(new BigDecimal(kosten).setScale(6), 10L, 20L, 5L, durationMs / 2, turns));
+  }
+
+  private static NightRunItem mitStufen(int cardNumber, List<NightRunItemStage> stages) {
+    return mitStufen(cardNumber, stages, null);
+  }
+
+  private static NightRunItem mitStufen(
+      int cardNumber, List<NightRunItemStage> stages, @Nullable NightRunUsage usage) {
+    return new NightRunItem(
+        null,
+        null,
+        PLATZHALTER_PROJEKT,
+        PLATZHALTER_START,
+        PLATZHALTER_MODUS,
+        PLATZHALTER_GATTUNG,
+        cardNumber,
+        "Vorgang " + cardNumber,
+        NightRunState.GREEN,
+        null,
+        60_000L,
+        "4c9f42a",
+        null,
+        usage,
+        stages);
   }
 
   /** Der Upload-Weg plaettet keinen reicheren Stand: insertIfAbsent laesst ihn unangetastet. */

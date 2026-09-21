@@ -52,7 +52,8 @@ class NightRunOutcomeTest {
         1000L,
         null,
         null,
-        null);
+        null,
+        List.of());
   }
 
   @Test

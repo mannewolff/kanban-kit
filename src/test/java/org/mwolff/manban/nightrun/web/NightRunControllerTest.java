@@ -522,9 +522,9 @@ class NightRunControllerTest {
     verify(service).submit(eq(USER), eq(PROJECT), captor.capture());
     NewNightRun uebergeben = captor.getValue().getFirst();
     assertThat(uebergeben.usage())
-        .isEqualTo(new NightRunUsage(new BigDecimal("25.983293"), null, null, null));
+        .isEqualTo(new NightRunUsage(new BigDecimal("25.983293"), null, null, null, null, null));
     assertThat(uebergeben.items().getFirst().usage())
-        .isEqualTo(new NightRunUsage(new BigDecimal("11.5228115"), null, null, null));
+        .isEqualTo(new NightRunUsage(new BigDecimal("11.5228115"), null, null, null, null, null));
   }
 
   /** Ohne {@code usage} bleibt es bei „nicht gemessen" — kein Record aus lauter Nullen. */

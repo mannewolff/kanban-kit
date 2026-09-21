@@ -263,7 +263,8 @@ public class NightRunUsageService {
    */
   private static EpicUsageView ohneVorhaben(
       Collection<CardTotals> karten, Map<Integer, Set<EpicRef>> zuordnung) {
-    EpicUsageView ohne = new EpicUsageView(null, 0L, new NightRunUsage(null, null, null, null));
+    EpicUsageView ohne =
+        new EpicUsageView(null, 0L, new NightRunUsage(null, null, null, null, null, null));
     for (CardTotals karte : karten) {
       if (zuordnung.getOrDefault(karte.cardNumber(), Set.of()).isEmpty()) {
         ohne = zusammen(ohne, new EpicUsageView(null, 1L, karte.usage()));

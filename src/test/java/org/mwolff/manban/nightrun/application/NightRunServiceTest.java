@@ -577,7 +577,7 @@ class NightRunServiceTest {
   @Test
   void ingest_reichtDenGemeldetenKostenbetragUnveraendertDurch() {
     NightRunUsage gemeldet =
-        new NightRunUsage(new BigDecimal("8.032575"), 148L, 62_411L, 8_883_160L);
+        new NightRunUsage(new BigDecimal("8.032575"), 148L, 62_411L, 8_883_160L, null, null);
 
     service.ingest(USER, PROJECT, TOKEN, NightRunKind.NIGHT, meldung(T1, true, gemeldet));
 
@@ -597,8 +597,10 @@ class NightRunServiceTest {
    */
   @Test
   void ingest_normalisiertDenNichtZuordenbarenRestNichtWeg() {
-    NightRunUsage laufSumme = new NightRunUsage(new BigDecimal("10.000000"), 1_000L, 100L, 900L);
-    NightRunUsage paketAnteil = new NightRunUsage(new BigDecimal("4.000000"), 400L, 40L, 360L);
+    NightRunUsage laufSumme =
+        new NightRunUsage(new BigDecimal("10.000000"), 1_000L, 100L, 900L, null, null);
+    NightRunUsage paketAnteil =
+        new NightRunUsage(new BigDecimal("4.000000"), 400L, 40L, 360L, null, null);
 
     service.ingest(
         USER,
@@ -814,6 +816,7 @@ class NightRunServiceTest {
         true,
         FIXED,
         null,
+        null,
         null);
   }
 
@@ -996,7 +999,8 @@ class NightRunServiceTest {
               run.complete(),
               run.updatedAt(),
               run.usage(),
-              run.noWorkReason()));
+              run.noWorkReason(),
+              null));
       for (NightRunItem item : items) {
         gespeichertePakete.add(paket(item, run, id));
       }
@@ -1036,7 +1040,8 @@ class NightRunServiceTest {
               run.complete(),
               run.updatedAt(),
               run.usage(),
-              run.noWorkReason()));
+              run.noWorkReason(),
+              null));
       for (NightRunItem item : items) {
         gespeichertePakete.add(paket(item, run, id));
       }
@@ -1064,7 +1069,8 @@ class NightRunServiceTest {
           item.durationMs(),
           item.commitHash(),
           item.excerpt(),
-          item.usage());
+          item.usage(),
+          List.of());
     }
 
     @Override
@@ -1122,7 +1128,8 @@ class NightRunServiceTest {
           item.durationMs(),
           item.commitHash(),
           item.excerpt(),
-          item.usage());
+          item.usage(),
+          List.of());
     }
 
     @Override

@@ -78,6 +78,13 @@ class NightRunItemEntity {
   @Column(name = "cached_input_tokens")
   private @Nullable Long cachedInputTokens;
 
+  /** Modellzeit und Zuege gehoeren zum Verbrauch (Issue #1112, Plan #1110 E1). */
+  @Column(name = "model_duration_ms")
+  private @Nullable Long modelDurationMs;
+
+  @Column(name = "turns")
+  private @Nullable Integer turns;
+
   protected NightRunItemEntity() {
     // für JPA
   }
@@ -148,5 +155,13 @@ class NightRunItemEntity {
 
   @Nullable Long getCachedInputTokens() {
     return cachedInputTokens;
+  }
+
+  @Nullable Long getModelDurationMs() {
+    return modelDurationMs;
+  }
+
+  @Nullable Integer getTurns() {
+    return turns;
   }
 }

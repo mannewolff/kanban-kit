@@ -67,7 +67,7 @@ class NightRunUsageServiceTest {
       Clock.fixed(Instant.parse("2026-09-16T11:00:00Z"), ZoneOffset.UTC);
 
   private static final LocalDate NACHT_15 = LocalDate.of(2026, 9, 15);
-  private static final NightRunUsage NICHTS = new NightRunUsage(null, null, null, null);
+  private static final NightRunUsage NICHTS = new NightRunUsage(null, null, null, null, null, null);
 
   /** Eine Gattung, die in der Spanne nicht vorkommt: kein Eintrag, nichts gemessen. */
   private static final KindTotals LEER = new KindTotals(0L, NICHTS, NICHTS);
@@ -102,7 +102,7 @@ class NightRunUsageServiceTest {
   }
 
   private static NightRunUsage kosten(String betrag) {
-    return new NightRunUsage(new BigDecimal(betrag), null, null, null);
+    return new NightRunUsage(new BigDecimal(betrag), null, null, null, null, null);
   }
 
   /** Eine Spanne, deren Verbrauch ganz aus Nachtläufen stammt. */
@@ -170,8 +170,8 @@ class NightRunUsageServiceTest {
         summe(
             2,
             2,
-            new NightRunUsage(new BigDecimal("10.00"), 1_000L, 100L, 900L),
-            new NightRunUsage(new BigDecimal("4.00"), 400L, 40L, 360L));
+            new NightRunUsage(new BigDecimal("10.00"), 1_000L, 100L, 900L, null, null),
+            new NightRunUsage(new BigDecimal("4.00"), 400L, 40L, 360L, null, null));
 
     NightUsageView nacht = service.night(USER, PROJECT, NACHT_15, BERLIN);
 
@@ -179,7 +179,7 @@ class NightRunUsageServiceTest {
     assertThat(nacht.usage().cardShare().costUsd()).isEqualByComparingTo("4.00");
     assertThat(nacht.usage().remainder().costUsd()).isEqualByComparingTo("6.00");
     assertThat(nacht.usage().cardShare().plus(nacht.usage().remainder()))
-        .isEqualTo(new NightRunUsage(new BigDecimal("10.00"), 1_000L, 100L, 900L));
+        .isEqualTo(new NightRunUsage(new BigDecimal("10.00"), 1_000L, 100L, 900L, null, null));
   }
 
   /** Die Kartenzeilen sind genau die Summen dieser Nacht (AK 3, Plan E20). */

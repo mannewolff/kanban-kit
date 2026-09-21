@@ -93,7 +93,8 @@ class DisruptionServiceTest {
         1L,
         null,
         null,
-        null);
+        null,
+        List.of());
   }
 
   private static List<Long> ids(List<DisruptionView> zeilen) {

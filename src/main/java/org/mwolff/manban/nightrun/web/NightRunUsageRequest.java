@@ -28,6 +28,8 @@ record NightRunUsageRequest(
             request.costUsd(),
             request.inputTokens(),
             request.outputTokens(),
-            request.cachedInputTokens());
+            request.cachedInputTokens(),
+            null,
+            null);
   }
 }

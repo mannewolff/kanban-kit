@@ -88,6 +88,36 @@ class NightRunEntity {
   @Column(name = "cached_input_tokens")
   private @Nullable Long cachedInputTokens;
 
+  /** Modellzeit und Zuege gehoeren zum Verbrauch (Issue #1112, Plan #1110 E1). */
+  @Column(name = "model_duration_ms")
+  private @Nullable Long modelDurationMs;
+
+  @Column(name = "turns")
+  private @Nullable Integer turns;
+
+  /** Die Vorgaben des Laufs (Issue #1112); {@code NULL} heisst „nicht angegeben". */
+  @Column(name = "budget_plan_min")
+  private @Nullable Integer budgetPlanMin;
+
+  @Column(name = "budget_review_min")
+  private @Nullable Integer budgetReviewMin;
+
+  @Column(name = "budget_pakete_min")
+  private @Nullable Integer budgetPaketeMin;
+
+  @Column(name = "budget_abdeckung_min")
+  private @Nullable Integer budgetAbdeckungMin;
+
+  @Column(name = "budget_kosten_usd")
+  private @Nullable BigDecimal budgetKostenUsd;
+
+  /** Herkunft der Vorgaben; wie {@code origin} als Zeichenkette abgebildet. */
+  @Column(name = "budget_origin")
+  private @Nullable String budgetOrigin;
+
+  @Column(name = "budget_default_fields")
+  private @Nullable String budgetDefaultFields;
+
   protected NightRunEntity() {
     // für JPA
   }
@@ -170,5 +200,41 @@ class NightRunEntity {
 
   @Nullable Long getCachedInputTokens() {
     return cachedInputTokens;
+  }
+
+  @Nullable Long getModelDurationMs() {
+    return modelDurationMs;
+  }
+
+  @Nullable Integer getTurns() {
+    return turns;
+  }
+
+  @Nullable Integer getBudgetPlanMin() {
+    return budgetPlanMin;
+  }
+
+  @Nullable Integer getBudgetReviewMin() {
+    return budgetReviewMin;
+  }
+
+  @Nullable Integer getBudgetPaketeMin() {
+    return budgetPaketeMin;
+  }
+
+  @Nullable Integer getBudgetAbdeckungMin() {
+    return budgetAbdeckungMin;
+  }
+
+  @Nullable BigDecimal getBudgetKostenUsd() {
+    return budgetKostenUsd;
+  }
+
+  @Nullable String getBudgetOrigin() {
+    return budgetOrigin;
+  }
+
+  @Nullable String getBudgetDefaultFields() {
+    return budgetDefaultFields;
   }
 }
