@@ -2109,6 +2109,7 @@ function LaufPanel({
       testId={`lauf-${lauf.startedAt}`}
       titel={laufTitel(lauf.startedAt)}
       art={ART_KURZ[lauf.mode]}
+      laufId={lauf.laufId}
       meta={metazeile(lauf, stand)}
       melder={laufMelder(
         { complete: lauf.vollstaendig, items: lauf.items, outcome: lauf.befund },

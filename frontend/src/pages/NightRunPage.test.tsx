@@ -1501,7 +1501,7 @@ describe('NightRunPage — Ketten-Lauf (#854)', () => {
 
     const panelEl = await screen.findByTestId(`lauf-${ECHTE_KETTE_START}`)
     expect(within(panelEl).getByTestId('nachtlauf-vorzeile')).toHaveTextContent(
-      'Lauf · Kette',
+      'Lauf #1 · Kette',
     )
     expect(laufKopfzeile(panelEl)).toHaveTextContent('3 bearbeitet · 0 übergangen')
 
@@ -2816,7 +2816,7 @@ describe('NightRunPage — Zustände, Kennzahlen und Auszüge', () => {
 
     await screen.findByTestId(`lauf-${startedAt(0)}`)
     expect(within(lauf(0)).getByTestId('nachtlauf-vorzeile')).toHaveTextContent(
-      'Lauf · Prüfung',
+      'Lauf #1 · Prüfung',
     )
     expect(within(lauf(0)).queryByText(/Umsetzung/)).not.toBeInTheDocument()
   })
@@ -2832,7 +2832,7 @@ describe('NightRunPage — Zustände, Kennzahlen und Auszüge', () => {
 
     await screen.findByTestId(`lauf-${startedAt(0)}`)
     expect(within(lauf(0)).getByTestId('nachtlauf-vorzeile')).toHaveTextContent(
-      'Lauf · Umsetzung',
+      'Lauf #1 · Umsetzung',
     )
   })
 
@@ -4207,7 +4207,7 @@ describe('NightRunPage — Kopf und Kennzahlenreihe der Nacht (#915)', () => {
       'night-run-2026-09-14-131200.json',
     )
 
-    expect(within(panelEl).getByTestId('nachtlauf-vorzeile')).toHaveTextContent('Lauf · Kette')
+    expect(within(panelEl).getByTestId('nachtlauf-vorzeile')).toHaveTextContent('Lauf #1 · Kette')
     expect(within(panelEl).getByTestId(FUSSZEILE)).toBeInTheDocument()
   })
 
@@ -4219,7 +4219,7 @@ describe('NightRunPage — Kopf und Kennzahlenreihe der Nacht (#915)', () => {
     )
 
     expect(within(panelEl).getByTestId('nachtlauf-vorzeile')).toHaveTextContent(
-      'Lauf · Umsetzung',
+      'Lauf #1 · Umsetzung',
     )
     expect(within(panelEl).getByTestId(FUSSZEILE)).toBeInTheDocument()
   })
@@ -4234,7 +4234,7 @@ describe('NightRunPage — Kopf und Kennzahlenreihe der Nacht (#915)', () => {
     // Die Platte der Vorlage gilt seit #988 für **jede** Lauf-Art; was den Prüf-Lauf eigen macht,
     // ist die Aufschlüsselung seiner aussortierten Karten (#873), nicht mehr sein Kopf.
     expect(within(panelEl).getByTestId('nachtlauf-vorzeile')).toHaveTextContent(
-      'Lauf · Prüfung',
+      'Lauf #1 · Prüfung',
     )
     expect(within(panelEl).getByTestId('aufschluesselung')).toBeInTheDocument()
     expect(within(panelEl).getByTestId(FUSSZEILE)).toBeInTheDocument()
@@ -4242,7 +4242,8 @@ describe('NightRunPage — Kopf und Kennzahlenreihe der Nacht (#915)', () => {
 
   it('gibt dem Erzeugungs-Lauf denselben Kopf und seine Aufschlüsselung', async () => {
     // Nachtplan-Läufe bleiben browser-only (Plan #803, Entscheidung 8) — sie gehen nicht an den
-    // Server und kommen deshalb auch nicht aus der Liste zurück.
+    // Server und kommen deshalb auch nicht aus der Liste zurück. Sie haben damit keine Id, und die
+    // Vorzeile bleibt ohne Nummer (#1107).
     renderPage()
     await screen.findByText('Noch keine Auswertung vorhanden.')
     protokollWaehlen(ECHTE_ERZEUGUNG_STAND, 'night-run-2026-09-09-125621.json')
@@ -4285,7 +4286,7 @@ describe('NightRunPage — Kopf und Kennzahlenreihe der Nacht (#915)', () => {
     const panelEl = await screen.findByTestId(`lauf-${ECHTE_KETTE_START}`)
 
     // Derselbe Kopf — die Gestaltung hängt an der Lauf-Art, nicht am Vorliegen eines Stands.
-    expect(within(panelEl).getByTestId('nachtlauf-vorzeile')).toHaveTextContent('Lauf · Kette')
+    expect(within(panelEl).getByTestId('nachtlauf-vorzeile')).toHaveTextContent('Lauf #1 · Kette')
     // Kosten und Züge bewahrt der Server nicht auf; eine Reihe aus lauter Fehlanzeigen wäre
     // dieselbe Wand, die der Bestand schon vermeidet.
     expect(within(panelEl).queryByTestId('fussangabe-Ketten durchgelaufen')).not.toBeInTheDocument()
@@ -4317,7 +4318,7 @@ describe('NightRunPage — Altbestand-Arten im Kopf der Vorlage (#988)', () => {
       'Ungedeutete Zeilen: 1',
     )
     expect(within(lauf(0)).getByTestId('nachtlauf-vorzeile')).toHaveTextContent(
-      'Lauf · Prüfung',
+      'Lauf #1 · Prüfung',
     )
   })
 
@@ -4773,7 +4774,7 @@ describe('NightRunPage — Laufblock im Leitstand-Stil (#988)', () => {
     await screen.findByTestId(`lauf-${startedAt(0)}`)
 
     const kopf = laufKopfzeile(lauf(0))
-    expect(within(kopf).getByTestId('nachtlauf-vorzeile')).toHaveTextContent('Lauf · Umsetzung')
+    expect(within(kopf).getByTestId('nachtlauf-vorzeile')).toHaveTextContent('Lauf #1 · Umsetzung')
     expect(within(kopf).getByTestId('nachtlauf-meta')).toHaveTextContent(
       '4 h 12 min · 3 bearbeitet · 0 übergangen',
     )
@@ -5025,6 +5026,25 @@ describe('NightRunPage — adressierbarer Lauf (#1085)', () => {
 
     await screen.findByTestId(`lauf-${startedAt(0)}`)
     expect(laufTaste(lauf(0))).toHaveAttribute('aria-expanded', 'true')
+  })
+
+  /**
+   * Die Nummer in der Vorzeile ist dieselbe, auf die der Verweis zeigt (Issue #1107, AK 3). Zwei
+   * getrennte Tests — einer für das Aufklappen, einer für die Vorzeile — ließen offen, ob beide
+   * dieselbe Zahl meinen; hier steht sie am selben Lauf.
+   */
+  it('nennt in der Vorzeile genau die Nummer, mit der ?lauf=<id> diesen Block aufklappt', async () => {
+    renderPage({ listen: [dreiLaeufe] }, '/projects/5/nachtlauf?lauf=11')
+
+    await screen.findByTestId(`lauf-${startedAt(0)}`)
+    expect(laufTaste(lauf(0))).toHaveAttribute('aria-expanded', 'true')
+    expect(within(lauf(0)).getByTestId('nachtlauf-vorzeile')).toHaveTextContent(
+      'Lauf #11 · Umsetzung',
+    )
+    // Und nicht etwa an einem der beiden anderen Blöcke.
+    expect(within(lauf(1)).getByTestId('nachtlauf-vorzeile')).toHaveTextContent(
+      'Lauf #12 · Umsetzung',
+    )
   })
 })
 
