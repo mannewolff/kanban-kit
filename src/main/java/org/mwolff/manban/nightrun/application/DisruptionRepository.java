@@ -4,6 +4,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import org.jspecify.annotations.Nullable;
+import org.mwolff.manban.nightrun.domain.NightRunMode;
 
 /**
  * Ausgehender Port des Plattform-Leitstands: offene Störungen über alle teilnehmenden Projekte und
@@ -75,6 +76,8 @@ public interface DisruptionRepository {
    * @param nightRunId Lauf-Id, zugleich die anklickbare Kennung der Störzeile
    * @param projectId Projekt des Laufs
    * @param projectName Projektname zum Zeitpunkt der Abfrage
+   * @param mode Laufart des Laufs; der Maßstab braucht sie, weil bei einer Kette unter
+   *     gleichrangigen Paketen das letzte maßgeblich ist (Issue #1123)
    * @param startedAt Startzeitpunkt des Laufs
    * @param updatedAt letztes Lebenszeichen des Laufs; {@code null}, wenn er nie fortgeschrieben
    *     wurde — der Upload-Weg lässt es bewusst leer, dort ist der Start das einzige Lebenszeichen
@@ -87,6 +90,7 @@ public interface DisruptionRepository {
       long nightRunId,
       long projectId,
       String projectName,
+      NightRunMode mode,
       Instant startedAt,
       @Nullable Instant updatedAt,
       boolean complete,

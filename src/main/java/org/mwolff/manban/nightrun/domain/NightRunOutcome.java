@@ -122,7 +122,8 @@ public record NightRunOutcome(
    *       Rangfolge ändert das nicht: Ein Lauf mit gemeldetem Grund hat keine Pakete, und für den
    *       Rückfall bleibt alles wie zuvor (Issue #1121).
    *   <li><b>Rot vor Gelb vor Grau-mit-Fehlerklasse</b>, innerhalb einer Farbe das erste in
-   *       Laufreihenfolge.
+   *       Laufreihenfolge — <b>bei einer Kette das zuletzt gerissene</b> (Issue #1123, siehe {@link
+   *       #auswahlreihenfolge}).
    * </ol>
    *
    * <p>Grau <em>ohne</em> Fehlerklasse ist ein übergangenes Paket — der Lauf hat es nicht
@@ -134,6 +135,7 @@ public record NightRunOutcome(
    * @param complete ob der Lauf sich als abgeschlossen gemeldet hat
    * @param noWorkReason Grund eines Laufs ohne Arbeit; {@code null} oder leer, wenn er gearbeitet
    *     hat
+   * @param mode die Laufart — sie entscheidet unter gleichrangigen Paketen (Issue #1123)
    * @param items die Pakete des Laufs, in Laufreihenfolge
    * @param startedAt Startzeitpunkt des Laufs — das Lebenszeichen eines Laufs, der nie
    *     fortgeschrieben wurde (der Upload-Weg lässt {@code updatedAt} bewusst leer)
@@ -145,6 +147,7 @@ public record NightRunOutcome(
   public static NightRunOutcome of(
       boolean complete,
       @Nullable String noWorkReason,
+      NightRunMode mode,
       List<NightRunItem> items,
       Instant startedAt,
       @Nullable Instant updatedAt,
@@ -160,11 +163,34 @@ public record NightRunOutcome(
       Verdict ohneArbeit = GRUND_UNBEKANNT.equals(noWorkReason) ? Verdict.FAILED : Verdict.NO_WORK;
       return new NightRunOutcome(ohneArbeit, null, noWorkReason);
     }
-    return items.stream()
+    return auswahlreihenfolge(mode, items).stream()
         .filter(item -> rang(item) != NICHT_MASSGEBLICH)
         .min(Comparator.comparingInt(NightRunOutcome::rang))
         .map(NightRunOutcome::ausPaket)
         .orElseGet(() -> new NightRunOutcome(Verdict.SUCCEEDED, null, null));
+  }
+
+  /**
+   * Die Reihenfolge, in der gleichrangige Pakete um das maßgebliche streiten — in einer Kette
+   * umgekehrt (Issue #1123).
+   *
+   * <p><strong>Warum umgekehrt.</strong> Ein Kettenlauf trägt neben seinen Paketen die
+   * Ketten-Einheit selbst, und die steht immer zuerst. Ihren Abbruch hat sie <em>geerbt</em>
+   * („Stufe umsetzung: harter Stopp in der Runde zu Paket #1112"); gerissen ist die Kette an dem
+   * Paket, das danach kam. Unter gleichrangigen Paketen ist deshalb das letzte der konkrete Bruch —
+   * und genau das gehört in die Störzeile, nicht die Einheit, die es nur weiterreicht.
+   *
+   * <p>Die Regel kommt ohne Wissen darüber aus, <em>welches</em> Paket die Kette ist: Riss sie
+   * schon in der Planung, ist die Ketten-Einheit das einzige rote Paket, und die umgekehrte
+   * Reihenfolge wählt sie. Ein Ausschluss nach Kartennummer bräuchte dafür eine zweite Angabe am
+   * Lauf.
+   *
+   * <p>Gedreht wird nur die <em>Reihenfolge</em>, nicht die Rangfolge: Rot schlägt Gelb auch in
+   * einer Kette, weil {@link #rang} vor der Position entscheidet.
+   */
+  private static List<NightRunItem> auswahlreihenfolge(
+      NightRunMode mode, List<NightRunItem> items) {
+    return mode == NightRunMode.CHAIN ? items.reversed() : items;
   }
 
   /**
@@ -201,7 +227,8 @@ public record NightRunOutcome(
    * <p>Grün bestimmt nie etwas, Grau nur mit Fehlerklasse — ohne sie ist das Paket übergangen, und
    * dass der Lauf es nicht angefasst hat, ist kein Mangel des Laufs.
    *
-   * <p>{@code min} nimmt bei Gleichstand das erste Element — genau die gewünschte Laufreihenfolge.
+   * <p>{@code min} nimmt bei Gleichstand das erste Element — das erste der {@link
+   * #auswahlreihenfolge}, also die Laufreihenfolge und bei einer Kette ihre Umkehrung.
    */
   private static int rang(NightRunItem item) {
     return switch (item.state()) {

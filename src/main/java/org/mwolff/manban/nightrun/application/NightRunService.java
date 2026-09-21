@@ -336,8 +336,8 @@ public class NightRunService {
   private NightRunView view(NightRun run, List<NightRunItem> alleItems) {
     Long runId = run.requireId();
     // Einmal filtern, zweimal gebraucht: Die Sicht zeigt die Pakete, der Befund wertet sie aus
-    // (Issue #1078). Die Reihenfolge bleibt die der Abfrage — sie entscheidet bei gleichrangigen
-    // Paketen, welches maßgeblich ist.
+    // (Issue #1078). Die Reihenfolge bleibt die der Abfrage — sie entscheidet zusammen mit der
+    // Laufart bei gleichrangigen Paketen, welches maßgeblich ist (Issue #1123).
     List<NightRunItem> eigeneItems =
         alleItems.stream().filter(item -> Objects.equals(item.nightRunId(), runId)).toList();
     List<NightRunItemView> items = eigeneItems.stream().map(NightRunService::itemView).toList();
@@ -360,6 +360,7 @@ public class NightRunService {
         NightRunOutcome.of(
             run.complete(),
             run.noWorkReason(),
+            run.mode(),
             eigeneItems,
             run.startedAt(),
             run.updatedAt(),

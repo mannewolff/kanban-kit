@@ -52,6 +52,10 @@ import org.mwolff.manban.nightrun.domain.NightRunState;
  * #nachtLaeufe} bildet deshalb nicht eine feste Antwort ab, sondern die Zugehörigkeitsregel — nur
  * so fällt auf, wenn der Dienst die falsche Spanne bildet.
  */
+// PMD.TooManyMethods: Testklasse — jede Methode ist ein Fall, und Faelle werden nicht
+// zusammengelegt, um eine Zahl zu druecken. Issue #1123 bringt die beiden Faelle der Laufart dazu
+// und reisst damit die Schwelle von 30.
+@SuppressWarnings("PMD.TooManyMethods")
 class DisruptionServiceTest {
 
   /** 08:00 UTC — vor der Tagesgrenze, die laufende Nacht ist damit die vom 19. auf den 20. */
@@ -68,25 +72,35 @@ class DisruptionServiceTest {
   private DisruptionService service;
 
   private static DisruptionCandidate kandidat(long laufId, Instant startedAt) {
-    return new DisruptionCandidate(laufId, 9L, "Projekt", startedAt, null, true, null);
+    return kandidat(laufId, startedAt, NightRunMode.IMPLEMENTATION);
+  }
+
+  private static DisruptionCandidate kandidat(long laufId, Instant startedAt, NightRunMode mode) {
+    return new DisruptionCandidate(laufId, 9L, "Projekt", mode, startedAt, null, true, null);
   }
 
   /** Ein Lauf, der sich noch nicht als abgeschlossen gemeldet hat. */
   private static DisruptionCandidate unfertig(
       long laufId, Instant startedAt, @Nullable Instant updatedAt) {
-    return new DisruptionCandidate(laufId, 9L, "Projekt", startedAt, updatedAt, false, null);
+    return new DisruptionCandidate(
+        laufId, 9L, "Projekt", NightRunMode.IMPLEMENTATION, startedAt, updatedAt, false, null);
   }
 
   private static NightRunItem paket(
       long laufId, NightRunState state, @Nullable NightRunErrorClass errorClass) {
+    return paket(laufId, 721, state, errorClass);
+  }
+
+  private static NightRunItem paket(
+      long laufId, int cardNumber, NightRunState state, @Nullable NightRunErrorClass errorClass) {
     return new NightRunItem(
-        laufId * 100,
+        laufId * 100 + cardNumber,
         laufId,
         9L,
         JETZT,
         NightRunMode.IMPLEMENTATION,
         NightRunKind.NIGHT,
-        721,
+        cardNumber,
         "Paket",
         state,
         errorClass,
@@ -337,7 +351,14 @@ class DisruptionServiceTest {
         .thenReturn(
             List.of(
                 new DisruptionCandidate(
-                    5L, 9L, "Projekt", JETZT, null, true, NightRunOutcome.GRUND_UNBEKANNT)));
+                    5L,
+                    9L,
+                    "Projekt",
+                    NightRunMode.IMPLEMENTATION,
+                    JETZT,
+                    null,
+                    true,
+                    NightRunOutcome.GRUND_UNBEKANNT)));
 
     assertThat(service.leitstand(ADMIN, UTC).stoerungen())
         .singleElement()
@@ -354,7 +375,14 @@ class DisruptionServiceTest {
   void einLaufOhneArbeitMitGemeldetemGrundIstKeineStoerung() {
     DisruptionCandidate ruhig =
         new DisruptionCandidate(
-            5L, 9L, "Projekt", JETZT, null, true, "Ready ist leer — nichts zu tun.");
+            5L,
+            9L,
+            "Projekt",
+            NightRunMode.IMPLEMENTATION,
+            JETZT,
+            null,
+            true,
+            "Ready ist leer — nichts zu tun.");
     nachtLaeufe(ruhig);
     when(disruptions.openCandidates()).thenReturn(List.of(ruhig));
 
@@ -367,11 +395,47 @@ class DisruptionServiceTest {
         .isEqualTo(NightRunOutcome.Verdict.NO_WORK);
   }
 
+  /**
+   * Issue #1123: Bei einer abgebrochenen Kette zeigt die Störzeile das Paket, an dem sie riss — die
+   * Ketten-Einheit steht zuerst und hat ihren Abbruch nur geerbt. Der Dienst muss die Laufart dafür
+   * vom Kandidaten bis in den Befund durchreichen; ließe er sie weg, stünde hier wieder „Karte
+   * #993".
+   */
+  @Test
+  void dieStoerzeileEinerKetteZeigtDasPaketAnDemSieRiss() {
+    when(disruptions.openCandidates()).thenReturn(List.of(kandidat(5L, JETZT, NightRunMode.CHAIN)));
+    pakete(
+        paket(5L, 993, NightRunState.RED, NightRunErrorClass.HARD_ABORT),
+        paket(5L, 1112, NightRunState.RED, NightRunErrorClass.HARD_ABORT));
+
+    assertThat(service.leitstand(ADMIN, UTC).stoerungen())
+        .singleElement()
+        .extracting(v -> v.outcome().decisiveItem().cardNumber())
+        .isEqualTo(1112);
+  }
+
+  /** Derselbe Fall außerhalb einer Kette bleibt beim ersten Paket in Laufreihenfolge. */
+  @Test
+  void dieStoerzeileEinesImplementierungslaufsBleibtBeimErstenPaket() {
+    when(disruptions.openCandidates())
+        .thenReturn(List.of(kandidat(5L, JETZT, NightRunMode.IMPLEMENTATION)));
+    pakete(
+        paket(5L, 993, NightRunState.RED, NightRunErrorClass.HARD_ABORT),
+        paket(5L, 1112, NightRunState.RED, NightRunErrorClass.HARD_ABORT));
+
+    assertThat(service.leitstand(ADMIN, UTC).stoerungen())
+        .singleElement()
+        .extracting(v -> v.outcome().decisiveItem().cardNumber())
+        .isEqualTo(993);
+  }
+
   @Test
   void dieStoerzeileTraegtProjektUndZeitpunkt() {
     when(disruptions.openCandidates())
         .thenReturn(
-            List.of(new DisruptionCandidate(5L, 9L, "Mein Projekt", JETZT, null, true, null)));
+            List.of(
+                new DisruptionCandidate(
+                    5L, 9L, "Mein Projekt", NightRunMode.IMPLEMENTATION, JETZT, null, true, null)));
     pakete(paket(5L, NightRunState.RED, NightRunErrorClass.CHECKS_RED));
 
     assertThat(service.leitstand(ADMIN, UTC).stoerungen())

@@ -40,7 +40,16 @@ class NightRunOutcomeTest {
    */
   private static NightRunOutcome befund(
       boolean complete, @Nullable String noWorkReason, List<NightRunItem> items) {
-    return NightRunOutcome.of(complete, noWorkReason, items, FIXED, FIXED, FIXED, FRIST);
+    return befund(complete, noWorkReason, NightRunMode.IMPLEMENTATION, items);
+  }
+
+  /** Derselbe Fall mit einer anderen Laufart — sie entscheidet unter gleichrangigen Paketen. */
+  private static NightRunOutcome befund(
+      boolean complete,
+      @Nullable String noWorkReason,
+      NightRunMode mode,
+      List<NightRunItem> items) {
+    return NightRunOutcome.of(complete, noWorkReason, mode, items, FIXED, FIXED, FIXED, FRIST);
   }
 
   private static NightRunItem item(
@@ -243,6 +252,93 @@ class NightRunOutcomeTest {
     assertThat(outcome.decisiveItem().cardNumber()).isEqualTo(9);
   }
 
+  // --- Die abgebrochene Kette (Issue #1123) -------------------------------------------------
+
+  /**
+   * Der Anlass: Die Kette zu #993 riss in der Runde zu Paket #1112. Beide Einheiten sind rot und
+   * gleichrangig, die Ketten-Einheit steht zuerst — sie hat ihren Abbruch aber nur geerbt („harter
+   * Stopp in der Runde zu Paket #1112"). Maßgeblich ist das Paket, an dem die Kette tatsächlich
+   * riss.
+   */
+  @Test
+  void beiEinerKetteGiltDasLetzteGleichrangigePaket() {
+    var outcome =
+        befund(
+            true,
+            null,
+            NightRunMode.CHAIN,
+            List.of(
+                item(993, NightRunState.RED, NightRunErrorClass.HARD_ABORT),
+                item(1112, NightRunState.RED, NightRunErrorClass.HARD_ABORT)));
+
+    assertThat(outcome.decisiveItem().cardNumber()).isEqualTo(1112);
+    assertThat(outcome.verdict()).isEqualTo(NightRunOutcome.Verdict.FAILED);
+  }
+
+  /**
+   * Dieselben Pakete in einem Implementierungs-Lauf: Dort gibt es keine erbende Ketten-Einheit, und
+   * das erste in Laufreihenfolge bleibt maßgeblich (Issue #1078, unverändert).
+   */
+  @Test
+  void ausserhalbEinerKetteBleibtDasErsteGleichrangigePaketMassgeblich() {
+    var outcome =
+        befund(
+            true,
+            null,
+            NightRunMode.IMPLEMENTATION,
+            List.of(
+                item(993, NightRunState.RED, NightRunErrorClass.HARD_ABORT),
+                item(1112, NightRunState.RED, NightRunErrorClass.HARD_ABORT)));
+
+    assertThat(outcome.decisiveItem().cardNumber()).isEqualTo(993);
+  }
+
+  /**
+   * Riss die Kette schon in der Planung, ist die Ketten-Einheit das einzige rote Paket — die
+   * umgekehrte Reihenfolge wählt dann sie, und der Befund zeigt auf die Kette selbst.
+   */
+  @Test
+  void eineInDerPlanungGerisseneKetteBleibtBeiDerKettenEinheit() {
+    var outcome =
+        befund(
+            true,
+            null,
+            NightRunMode.CHAIN,
+            List.of(
+                item(993, NightRunState.RED, NightRunErrorClass.HARD_ABORT),
+                item(1112, NightRunState.GREEN, null)));
+
+    assertThat(outcome.decisiveItem().cardNumber()).isEqualTo(993);
+  }
+
+  /**
+   * Die Laufart dreht nur die Reihenfolge, nicht die Rangfolge: Rot schlägt Gelb schlägt
+   * Grau-mit-Fehlerklasse auch in einer Kette — sonst wäre das zuletzt gelaufene Paket maßgeblich
+   * statt das schwerste.
+   */
+  @Test
+  void inEinerKetteEntscheidetDerRangWeiterVorDerReihenfolge() {
+    var rotVorGelb =
+        befund(
+            true,
+            null,
+            NightRunMode.CHAIN,
+            List.of(
+                item(1, NightRunState.RED, NightRunErrorClass.HARD_ABORT),
+                item(2, NightRunState.YELLOW, NightRunErrorClass.CHECKS_RED)));
+    var gelbVorGrau =
+        befund(
+            true,
+            null,
+            NightRunMode.CHAIN,
+            List.of(
+                item(3, NightRunState.YELLOW, NightRunErrorClass.CHECKS_RED),
+                item(4, NightRunState.GREY, NightRunErrorClass.AWAITING_DECISION)));
+
+    assertThat(rotVorGelb.decisiveItem().cardNumber()).isEqualTo(1);
+    assertThat(gelbVorGrau.decisiveItem().cardNumber()).isEqualTo(3);
+  }
+
   // --- Stillefrist (Issue #1091, AK 6/8 der fachlichen Quelle #1086) -------------------------
 
   /**
@@ -256,6 +352,7 @@ class NightRunOutcomeTest {
         NightRunOutcome.of(
             false,
             null,
+            NightRunMode.IMPLEMENTATION,
             List.of(),
             FIXED,
             FIXED.plus(Duration.ofHours(4)),
@@ -270,7 +367,15 @@ class NightRunOutcomeTest {
   @Test
   void genauAufDerFristLaeuftDerLaufNoch() {
     var outcome =
-        NightRunOutcome.of(false, null, List.of(), FIXED, FIXED, FIXED.plus(FRIST), FRIST);
+        NightRunOutcome.of(
+            false,
+            null,
+            NightRunMode.IMPLEMENTATION,
+            List.of(),
+            FIXED,
+            FIXED,
+            FIXED.plus(FRIST),
+            FRIST);
 
     assertThat(outcome.verdict()).isEqualTo(NightRunOutcome.Verdict.RUNNING);
   }
@@ -279,7 +384,14 @@ class NightRunOutcomeTest {
   void eineSekundeUeberDerFristIstDerLaufGescheitert() {
     var outcome =
         NightRunOutcome.of(
-            false, null, List.of(), FIXED, FIXED, FIXED.plus(FRIST).plusSeconds(1), FRIST);
+            false,
+            null,
+            NightRunMode.IMPLEMENTATION,
+            List.of(),
+            FIXED,
+            FIXED,
+            FIXED.plus(FRIST).plusSeconds(1),
+            FRIST);
 
     assertThat(outcome.verdict()).isEqualTo(NightRunOutcome.Verdict.FAILED);
     assertThat(outcome.decisiveItem()).isNull();
@@ -295,10 +407,25 @@ class NightRunOutcomeTest {
   @Test
   void ohneLebenszeichenZaehltDerStartzeitpunkt() {
     var innerhalb =
-        NightRunOutcome.of(false, null, List.of(), FIXED, null, FIXED.plus(FRIST), FRIST);
+        NightRunOutcome.of(
+            false,
+            null,
+            NightRunMode.IMPLEMENTATION,
+            List.of(),
+            FIXED,
+            null,
+            FIXED.plus(FRIST),
+            FRIST);
     var darueber =
         NightRunOutcome.of(
-            false, null, List.of(), FIXED, null, FIXED.plus(FRIST).plusSeconds(1), FRIST);
+            false,
+            null,
+            NightRunMode.IMPLEMENTATION,
+            List.of(),
+            FIXED,
+            null,
+            FIXED.plus(FRIST).plusSeconds(1),
+            FRIST);
 
     assertThat(innerhalb.verdict()).isEqualTo(NightRunOutcome.Verdict.RUNNING);
     assertThat(darueber.verdict()).isEqualTo(NightRunOutcome.Verdict.FAILED);
@@ -314,6 +441,7 @@ class NightRunOutcomeTest {
         NightRunOutcome.of(
             true,
             null,
+            NightRunMode.IMPLEMENTATION,
             List.of(item(1, NightRunState.GREEN, null)),
             FIXED,
             FIXED,
@@ -335,6 +463,7 @@ class NightRunOutcomeTest {
         NightRunOutcome.of(
             false,
             "Ready war leer",
+            NightRunMode.IMPLEMENTATION,
             List.of(item(1, NightRunState.RED, NightRunErrorClass.HARD_ABORT)),
             FIXED,
             FIXED,

@@ -94,7 +94,14 @@ class BefundNahtstelleTest {
         .thenReturn(
             List.of(
                 new DisruptionCandidate(
-                    LAUF, PROJEKT, "Projekt", GESTARTET, LETZTE_MELDUNG, false, null)));
+                    LAUF,
+                    PROJEKT,
+                    "Projekt",
+                    NightRunMode.IMPLEMENTATION,
+                    GESTARTET,
+                    LETZTE_MELDUNG,
+                    false,
+                    null)));
     PlatformAdminChecker admins = mock(PlatformAdminChecker.class);
     when(admins.isPlatformAdmin(ADMIN)).thenReturn(true);
     DisruptionService service = new DisruptionService(disruptions, runs, admins, properties, uhr);

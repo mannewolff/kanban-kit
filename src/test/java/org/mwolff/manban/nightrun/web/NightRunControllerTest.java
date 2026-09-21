@@ -390,7 +390,14 @@ class NightRunControllerTest {
                     null,
                     null,
                     NightRunOutcome.of(
-                        true, null, List.of(), ERSTER, null, ERSTER, Duration.ofMinutes(90)),
+                        true,
+                        null,
+                        NightRunMode.IMPLEMENTATION,
+                        List.of(),
+                        ERSTER,
+                        null,
+                        ERSTER,
+                        Duration.ofMinutes(90)),
                     List.of(
                         new NightRunItemView(
                             21L,
@@ -446,7 +453,14 @@ class NightRunControllerTest {
                     null,
                     null,
                     NightRunOutcome.of(
-                        true, null, List.of(), ERSTER, null, ERSTER, Duration.ofMinutes(90)),
+                        true,
+                        null,
+                        NightRunMode.IMPLEMENTATION,
+                        List.of(),
+                        ERSTER,
+                        null,
+                        ERSTER,
+                        Duration.ofMinutes(90)),
                     List.of(
                         new NightRunItemView(
                             22L,

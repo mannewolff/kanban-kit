@@ -10,6 +10,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mwolff.manban.AbstractIntegrationTest;
 import org.mwolff.manban.nightrun.application.DisruptionRepository;
+import org.mwolff.manban.nightrun.domain.NightRunMode;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -184,6 +185,23 @@ class LaeufeDerNachtRepositoryIT extends AbstractIntegrationTest {
               assertThat(k.complete()).isTrue();
               assertThat(k.updatedAt()).isNull();
             });
+  }
+
+  /**
+   * Issue #1123: Auch diese Abfrage muss die Laufart mitbringen — sie entscheidet, welches von zwei
+   * gleichrangigen Paketen maßgeblich ist. Beide Abfragen teilen sich einen {@code RowMapper}, aber
+   * nicht ihre Spaltenliste.
+   */
+  @Test
+  void derKandidatDerNachtTraegtDieLaufartAusDerDatenbank() {
+    long laufId = lauf(DRIN, "NIGHT", true);
+    jdbc.update("UPDATE night_run SET mode = 'CHAIN' WHERE id = ?", laufId);
+    teilnahme(true);
+
+    assertThat(disruptions.candidatesOfNight(NACHT_VON, NACHT_BIS))
+        .singleElement()
+        .extracting(DisruptionRepository.DisruptionCandidate::mode)
+        .isEqualTo(NightRunMode.CHAIN);
   }
 
   /** Dieselben Spalten wie die Störungsliste — Projekt, Startzeitpunkt, Grund. */

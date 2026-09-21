@@ -9,6 +9,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mwolff.manban.AbstractIntegrationTest;
 import org.mwolff.manban.nightrun.application.DisruptionRepository;
+import org.mwolff.manban.nightrun.domain.NightRunMode;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -66,6 +67,10 @@ class DisruptionRepositoryIT extends AbstractIntegrationTest {
   private void teilnahme(boolean teilnehmend) {
     jdbc.update(
         "UPDATE project SET dashboard_participation = ? WHERE id = ?", teilnehmend, projectId);
+  }
+
+  private void laufart(long laufId, String mode) {
+    jdbc.update("UPDATE night_run SET mode = ? WHERE id = ?", mode, laufId);
   }
 
   private void letzteMeldung(long laufId, Instant at) {
@@ -175,6 +180,22 @@ class DisruptionRepositoryIT extends AbstractIntegrationTest {
               assertThat(k.complete()).isTrue();
               assertThat(k.updatedAt()).isEqualTo(LETZTE_MELDUNG);
             });
+  }
+
+  /**
+   * Issue #1123: Die Laufart entscheidet, welches von zwei gleichrangigen Paketen maßgeblich ist —
+   * sie muss deshalb aus der Datenbank kommen und nicht aus einem Festwert im Adapter.
+   */
+  @Test
+  void derKandidatTraegtDieLaufartAusDerDatenbank() {
+    long laufId = lauf(T1, "NIGHT", true);
+    laufart(laufId, "CHAIN");
+    teilnahme(true);
+
+    assertThat(disruptions.openCandidates())
+        .singleElement()
+        .extracting(DisruptionRepository.DisruptionCandidate::mode)
+        .isEqualTo(NightRunMode.CHAIN);
   }
 
   // --- Quittieren ----------------------------------------------------------------------------

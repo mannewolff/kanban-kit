@@ -148,6 +148,10 @@ public class DisruptionService {
   /**
    * Die Zeile eines Kandidaten — dieselbe für alle drei Listen.
    *
+   * <p><b>Auch die Laufart kommt vom Kandidaten</b> (Issue #1123): Bei einer Kette ist unter
+   * gleichrangigen Paketen das letzte maßgeblich, und ohne die Laufart zeigte die Störzeile die
+   * Ketten-Einheit statt des Pakets, an dem die Kette riss.
+   *
    * <p><b>Abschluss und Lebenszeichen kommen vom Kandidaten</b>, nicht als Festwert. Über {@link
    * DisruptionRepository#openCandidates()} ist {@code complete} stets {@code true}, weil die
    * Abfrage darauf filtert; über {@link DisruptionRepository#candidatesOfNight} nicht — dort
@@ -164,6 +168,7 @@ public class DisruptionService {
         NightRunOutcome.of(
             k.complete(),
             k.noWorkReason(),
+            k.mode(),
             items,
             k.startedAt(),
             k.updatedAt(),

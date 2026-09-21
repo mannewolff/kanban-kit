@@ -6,6 +6,7 @@ import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
 import org.mwolff.manban.nightrun.application.DisruptionRepository;
+import org.mwolff.manban.nightrun.domain.NightRunMode;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
@@ -35,7 +36,7 @@ class DisruptionRepositoryAdapter implements DisruptionRepository {
    */
   private static final String KANDIDATEN =
       """
-      SELECT r.id AS night_run_id, r.project_id, p.name AS project_name,
+      SELECT r.id AS night_run_id, r.project_id, p.name AS project_name, r.mode,
              r.started_at, r.updated_at, r.complete, r.no_work_reason
         FROM night_run r
         JOIN project p ON p.id = r.project_id
@@ -61,7 +62,7 @@ class DisruptionRepositoryAdapter implements DisruptionRepository {
    */
   private static final String LAEUFE_DER_NACHT =
       """
-      SELECT r.id AS night_run_id, r.project_id, p.name AS project_name,
+      SELECT r.id AS night_run_id, r.project_id, p.name AS project_name, r.mode,
              r.started_at, r.updated_at, r.complete, r.no_work_reason
         FROM night_run r
         JOIN project p ON p.id = r.project_id
@@ -101,6 +102,7 @@ class DisruptionRepositoryAdapter implements DisruptionRepository {
             rs.getLong("night_run_id"),
             rs.getLong("project_id"),
             rs.getString("project_name"),
+            NightRunMode.valueOf(rs.getString("mode")),
             rs.getObject("started_at", OffsetDateTime.class).toInstant(),
             updatedAt == null ? null : updatedAt.toInstant(),
             rs.getBoolean("complete"),

@@ -348,6 +348,52 @@ class NightRunServiceTest {
     assertThat(counts).containsExactly(Map.entry(NightRunErrorClass.CHECKS_RED, 2L));
   }
 
+  // --- Der Befund der Auswertung (Issue #1123) ----------------------------------------------
+
+  /**
+   * Kriterium 6 der fachlichen Quelle #1064: Die Auswertung des Laufs zeigt dasselbe maßgebliche
+   * Paket wie der Plattform-Leitstand. Bei einer abgebrochenen Kette ist das <b>nicht</b> die
+   * Ketten-Einheit, die immer zuerst steht und ihren Abbruch geerbt hat, sondern das Paket, an dem
+   * die Kette riss — hier #1112.
+   */
+  @Test
+  void list_zeigtBeiEinerKetteDasPaketAnDemSieRiss() {
+    service.ingest(
+        USER,
+        PROJECT,
+        TOKEN,
+        NightRunKind.NIGHT,
+        meldung(
+            T1,
+            true,
+            null,
+            item(993, NightRunState.RED, NightRunErrorClass.HARD_ABORT),
+            item(1112, NightRunState.RED, NightRunErrorClass.HARD_ABORT)));
+
+    assertThat(service.list(USER, PROJECT).getFirst().outcome().decisiveItem().cardNumber())
+        .isEqualTo(1112);
+  }
+
+  /**
+   * Derselbe Lauf als Implementierungs-Lauf: Dort gibt es keine erbende Ketten-Einheit, und das
+   * erste Paket in Laufreihenfolge bleibt maßgeblich. Beide Fälle stehen hier, weil die Laufart
+   * sonst wirkungslos weitergereicht werden könnte.
+   */
+  @Test
+  void list_bleibtAusserhalbEinerKetteBeimErstenPaket() {
+    service.submit(
+        USER,
+        PROJECT,
+        List.of(
+            lauf(
+                T1,
+                item(993, NightRunState.RED, NightRunErrorClass.HARD_ABORT),
+                item(1112, NightRunState.RED, NightRunErrorClass.HARD_ABORT))));
+
+    assertThat(service.list(USER, PROJECT).getFirst().outcome().decisiveItem().cardNumber())
+        .isEqualTo(993);
+  }
+
   // --- Hilfsmittel --------------------------------------------------------------------------
 
   private List<NightRunService.NightRunItemView> itemsOf(Instant startedAt) {

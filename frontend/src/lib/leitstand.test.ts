@@ -467,6 +467,15 @@ describe('leitstand Der verstummte Lauf (#1092)', () => {
     })
   })
 
+  // Issue #1123: Das Test-Double zieht auch die Laufart mit. Die Ketten-Einheit steht immer zuerst
+  // und hat ihren Abbruch geerbt — massgeblich ist das Paket, an dem die Kette riss.
+  it('serverBefund waehlt in einer Kette das letzte gleichrangige Paket', () => {
+    const items = [paket(993, 'RED', { errorClass: 'HARD_ABORT' }), paket(1112, 'RED', { errorClass: 'HARD_ABORT' })]
+
+    expect(serverBefund({ complete: true, mode: 'CHAIN', items }).decisiveItem?.cardNumber).toBe(1112)
+    expect(serverBefund({ complete: true, mode: 'IMPLEMENTATION', items }).decisiveItem?.cardNumber).toBe(993)
+  })
+
   // Der Kern des Pakets: Bisher fiel ein Befund ohne massgebliches Paket auf gruen durch — und der
   // verstummte Lauf hat keines.
   it('laufMelder meldet den verstummten Lauf zinnob statt gruen', () => {
