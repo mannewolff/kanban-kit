@@ -32,8 +32,10 @@ import {
   type NightRunBudgetOrigin,
   type NightRunBudgetView,
   type NightRunErrorClassCounts,
+  type NightRunItemStageView,
   type NightRunOutcomeView,
   type NightRunServerMode,
+  type NightRunStage,
   type NightRunSubmission,
   type NightRunUsage,
   type NightRunUsageView,
@@ -77,7 +79,7 @@ import {
   MELDER_JE_FEHLERKLASSE,
   MELDER_JE_ZUSTAND,
 } from '../lib/leitstand'
-import { betrag } from '../lib/nachtlaufFormat'
+import { betrag, menge } from '../lib/nachtlaufFormat'
 import {
   buildHandoffText,
   nightRunZustandsText,
@@ -93,7 +95,6 @@ import {
   type NightRun,
   type NightRunErrorClass,
   type NightRunItem,
-  type NightRunKennzahlen,
   type NightRunKettenStufe,
   type NightRunKettenStufen,
   type NightRunMode,
@@ -144,7 +145,25 @@ interface AnzeigeItem extends NightRunHandoffItem {
    * es noch keinen aufbewahrten Stand. Ein aufbewahrter ohne Messung traegt vier leere Felder.
    */
   verbrauch: Verbrauch | undefined
+  /**
+   * Die Arbeitsschritte, die dieser Vorgang durchlaufen hat (Issue #1116) — aus der Server-Antwort
+   * (`stages`, seit #1113). `undefined`, wo der Lauf keine fuehrt: am eben geparsten Lauf und an
+   * jedem Vorgang mit leerer Stufenliste. Aus ihnen entsteht das Stufenband eines Laufs, den
+   * niemand eingelesen hat.
+   */
+  stufen: Bandstufen | undefined
 }
+
+/**
+ * Die Arbeitsschritte eines Ketten-Vorgangs, so weit das Stufenband sie braucht: je **erreichtem**
+ * Schritt seine Dauer; ein nicht erreichter fehlt.
+ *
+ * <p>Beide Quellen erfuellen diese Form — die Schritte des eingelesenen Stands
+ * ({@link NightRunKettenStufen}) und die der Server-Antwort ({@link AnzeigeItem.stufen}). Ein
+ * gemeinsamer Typ statt zweier Zweige in {@link bandabschnitt}: Das Band rechnet an beiden
+ * dieselbe Rechnung, und zwei Zweige liefen beim naechsten Feld auseinander.
+ */
+type Bandstufen = Partial<Record<NightRunKettenStufe, { dauerMs?: number }>>
 
 /**
  * Der aufbewahrte Verbrauch in der Anzeigeform (Issue #949) — `undefined` statt `null`, wie
@@ -356,6 +375,23 @@ const zaehlerLaden = (projektId: number): Promise<Haeufigkeiten> =>
 
 const nachStartAbsteigend = (a: AnzeigeLauf, b: AnzeigeLauf) => b.startedAt.localeCompare(a.startedAt)
 
+/** Dieselbe Menge ohne einen Eintrag — die Rücknahme eines Vermerks (Issue #1116). */
+function ohneEintrag(vermerke: ReadonlySet<string>, eintrag: string): ReadonlySet<string> {
+  const rest = new Set(vermerke)
+  rest.delete(eintrag)
+  return rest
+}
+
+/** Dieselbe Abbildung ohne einen Schlüssel — die Schwester von {@link ohneEintrag}. */
+function ohneSchluessel<T>(
+  abbildung: ReadonlyMap<string, T>,
+  schluessel: string,
+): ReadonlyMap<string, T> {
+  const rest = new Map(abbildung)
+  rest.delete(schluessel)
+  return rest
+}
+
 const ausParser = (run: NightRun): AnzeigeLauf => ({
   gespeichert: false,
   startedAt: run.startedAt,
@@ -390,6 +426,9 @@ const ausParser = (run: NightRun): AnzeigeLauf => ({
     commitHash: item.commit,
     excerpt: item.excerpt,
     verbrauch: undefined,
+    // Wie der Verbrauch leer: Die Arbeitsschritte eines eben geparsten Laufs stehen in seinem
+    // Ergebnisstand, und von dort holt sie {@link bandstufen} (Issue #1116).
+    stufen: undefined,
   })),
 })
 
@@ -511,8 +550,35 @@ const ausSicht = (view: NightRunView): AnzeigeLauf => ({
     commitHash: item.commitHash ?? undefined,
     excerpt: item.excerpt ?? undefined,
     verbrauch: ausVerbrauch(item.usage),
+    stufen: ausStufen(item.stages),
   })),
 })
+
+/** Die Schlüssel der Anzeige zu den Stufennamen des Servers (Issue #1113). */
+const STUFE_JE_NAME: Readonly<Record<NightRunStage, NightRunKettenStufe>> = {
+  PLAN: 'plan',
+  REVIEW: 'review',
+  PAKETE: 'pakete',
+  ABDECKUNG: 'abdeckung',
+}
+
+/**
+ * Die Arbeitsschritte der Server-Antwort in der Form des Bands (Issue #1116).
+ *
+ * <p>Eine **leere** Liste ergibt `undefined` und nicht `{}`: Der Server schickt sie an jedem
+ * Vorgang, der keine Kette ist, und ein Band aus vier nie erreichten Schritten behauptete dort
+ * eine Kette, die es nicht gab.
+ */
+function ausStufen(stages: readonly NightRunItemStageView[]): Bandstufen | undefined {
+  if (stages.length === 0) {
+    return undefined
+  }
+  const stufen: Bandstufen = {}
+  for (const stage of stages) {
+    stufen[STUFE_JE_NAME[stage.stage]] = { dauerMs: stage.durationMs ?? undefined }
+  }
+  return stufen
+}
 
 /**
  * Ein Lauf, wie er an den Server geht: Kennzahlen, Zustände, Kartennummern, Fehlerklassen und die
@@ -930,7 +996,7 @@ const dokumentNummern = (run: NightRun | undefined): number[] =>
  * beim ersten nicht fertigen ab.
  */
 const letzteErreichteStufe = (
-  stufen: NightRunKettenStufen | undefined,
+  stufen: Bandstufen | undefined,
 ): NightRunKettenStufe | undefined =>
   KETTEN_STUFEN.findLast(({ schluessel }) => stufen?.[schluessel] !== undefined)?.schluessel
 
@@ -1080,8 +1146,8 @@ function modellzeit(dauerMs: number | undefined, arbeitMs: number | undefined): 
  * Versionsverwaltung auch die Prüfung durch den Nachtlauf selbst. „Werkzeugzeit: 26 %" wäre eine
  * Zahl über etwas, das nirgends gemessen wurde.
  */
-function modellzeitText(dauerMs: number | undefined, kennzahlen: NightRunKennzahlen | undefined): string {
-  const zeit = modellzeit(dauerMs, kennzahlen?.arbeitszeitMs)
+function modellzeitText(dauerMs: number | undefined, modellzeitMs: number | undefined): string {
+  const zeit = modellzeit(dauerMs, modellzeitMs)
   if (zeit.art === 'anteil') {
     return `Modellarbeit ${zeit.prozent} % der Dauer, der Rest außerhalb`
   }
@@ -1107,19 +1173,24 @@ function modellzeitText(dauerMs: number | undefined, kennzahlen: NightRunKennzah
  * selbst und ist davon unberührt. Die drei Fehlanzeigen entfielen sonst nicht, obwohl der Lauf
  * ihren Grund bereits einmal an seinem Kopf nennt.
  */
-function vorgangszeile(item: NightRunItem, ohneKennzahlen: boolean): string {
+function vorgangszeile(
+  item: AnzeigeItem,
+  verbrauch: Vorgangsverbrauch | undefined,
+  ohneKennzahlen: boolean,
+): string {
   const dauer =
     item.durationMs === undefined ? 'Dauer nicht gemeldet' : formatDuration(item.durationMs / 1000)
-  if (ohneKennzahlen) {
+  // Ohne jede Quelle bleibt die Dauer allein: Sie stammt aus dem Lauf selbst. Die drei
+  // Fehlanzeigen stünden sonst an einem Vorgang, zu dem nie etwas aufzubewahren war.
+  if (ohneKennzahlen || verbrauch === undefined) {
     return dauer
   }
   return [
     dauer,
-    item.kennzahlen?.kostenUsd === undefined
-      ? 'Kosten nicht gemeldet'
-      : betrag(item.kennzahlen.kostenUsd),
-    item.kennzahlen?.zuege === undefined ? 'Züge nicht gemeldet' : `${item.kennzahlen.zuege} Züge`,
-    modellzeitText(item.durationMs, item.kennzahlen),
+    verbrauch.kostenUsd === undefined ? 'Kosten nicht gemeldet' : betrag(verbrauch.kostenUsd),
+    verbrauch.zuege === undefined ? 'Züge nicht gemeldet' : `${verbrauch.zuege} Züge`,
+    modellzeitText(item.durationMs, verbrauch.modellzeitMs),
+    ...tokenmengen(verbrauch),
   ].join(' · ')
 }
 
@@ -1130,30 +1201,45 @@ function vorgangszeile(item: NightRunItem, ohneKennzahlen: boolean): string {
  */
 const vorgangsKennzahlenText = (
   item: AnzeigeItem,
-  standItem: NightRunItem | undefined,
+  verbrauch: Vorgangsverbrauch | undefined,
 ): string =>
   [
     // Die Dauer steht vorneweg. Der Entwurf führt sie in der Ergebniszeile nicht — sie steckt
-    // dort im Band —, aber ein Lauf ohne Ergebnisstand hat kein Band, und dann wäre sie ganz
+    // dort im Band —, aber ein Lauf ohne Arbeitsschritte hat kein Band, und dann wäre sie ganz
     // verloren (AK 10).
     item.durationMs === undefined ? 'Dauer nicht gemeldet' : formatDuration(item.durationMs / 1000),
-    vorgangsKennzahlen(standItem?.kennzahlen),
-    modellzeitText(item.durationMs, standItem?.kennzahlen),
+    vorgangsKennzahlen(verbrauch),
+    modellzeitText(item.durationMs, verbrauch?.modellzeitMs),
+    ...tokenmengen(verbrauch),
   ].join(' · ')
 
 /** Kosten und Züge eines Vorgangs, dazu der Vermerk fehlender Kostenmeldungen (AK 11). */
-function vorgangsKennzahlen(kennzahlen: NightRunKennzahlen | undefined): string {
+function vorgangsKennzahlen(verbrauch: Vorgangsverbrauch | undefined): string {
   const vermerk = ohneKostenmeldung(
-    kennzahlen?.kostenUnbekannt,
+    verbrauch?.kostenUnbekannt,
     'ein Arbeitsschritt',
     'Arbeitsschritte',
   )
   return [
-    kennzahlen?.kostenUsd === undefined ? 'Kosten nicht gemeldet' : betrag(kennzahlen.kostenUsd),
-    ...(kennzahlen?.zuege === undefined ? [] : [`${kennzahlen.zuege} Züge`]),
+    verbrauch?.kostenUsd === undefined ? 'Kosten nicht gemeldet' : betrag(verbrauch.kostenUsd),
+    ...(verbrauch?.zuege === undefined ? [] : [`${verbrauch.zuege} Züge`]),
     ...(vermerk === null ? [] : [vermerk]),
   ].join(' · ')
 }
+
+/**
+ * Die Tokenmengen eines Vorgangs (AK 4 aus #993) — oder **gar keine Angabe**, wo weder Ein- noch
+ * Ausgabe gemessen wurde.
+ *
+ * <p>Der Unterschied zu den Fehlanzeigen daneben ist Absicht: Kosten, Züge und Modellzeit führt
+ * auch der eingelesene Ergebnisstand, ihr Fehlen ist dort eine Aussage. Tokenmengen führt er
+ * **nie** (`NightRunKennzahlen` in `lib/nightRunLog.ts`) — ein „nicht gemessen" auf dem
+ * Rückfallweg meldete eine Lücke, die diese Quelle gar nicht haben kann.
+ */
+const tokenmengen = (verbrauch: Vorgangsverbrauch | undefined): string[] =>
+  verbrauch?.eingabe === undefined && verbrauch?.ausgabe === undefined
+    ? []
+    : [`Eingabe ${menge(verbrauch.eingabe)}`, `Ausgabe ${menge(verbrauch.ausgabe)}`]
 
 /**
  * Die Kosten der Nacht für einen Umsetzungs-, Erzeugungs- oder Prüf-Lauf (Issue #874): die Summe
@@ -1283,21 +1369,29 @@ const gekappt = (prozent: number): number => Math.round(Math.min(100, prozent) *
  * hoher Verbrauch allein genügt nicht — eine Kette kann auch weit unter ihrer Vorgabe an einem
  * Fehler zerbrechen.
  */
-function vermerkAmEnde(istEnde: boolean, item: NightRunItem): string | null {
+function vermerkAmEnde(istEnde: boolean, item: Bandvorgang): string | null {
   if (!istEnde) {
     return null
   }
   return item.errorClass === 'TIME_BUDGET_EXCEEDED' ? 'am Zeitbudget beendet' : 'hier abgebrochen'
 }
 
+/**
+ * Was das Band vom Vorgang selbst braucht: seinen Ausgang und seine Fehlerklasse. Beide Quellen
+ * führen sie — der eingelesene Stand wie die Server-Antwort —, und der Vermerk am Abschnitt, an
+ * dem die Kette riss, hängt an beiden.
+ */
+type Bandvorgang = Pick<NightRunItem, 'state' | 'errorClass'>
+
 /** Ein Abschnitt des Bands: sein Anteil an der Breite, seine Füllung, seine Zahlen, sein Vermerk. */
 function bandabschnitt(
   { schluessel, label }: { schluessel: NightRunKettenStufe; label: string },
-  item: NightRunItem,
+  stufen: Bandstufen,
+  item: Bandvorgang,
   vorgaben: NightRunStufenvorgaben | undefined,
   letzte: NightRunKettenStufe | undefined,
 ): Bandabschnitt {
-  const stufe = item.kettenStufen?.[schluessel]
+  const stufe = stufen[schluessel]
   const erreicht = stufe !== undefined
   const verbrauchMs = stufe?.dauerMs ?? 0
   // Eine Vorgabe von null Minuten zählt wie gar keine: Sie ergäbe kein Verhältnis, sondern eine
@@ -1678,18 +1772,27 @@ function chipgruppen(item: NightRunItem, katalog: Kartenkatalog): Chipgruppe[] {
 }
 
 /**
- * Das Stufenband eines Ketten-Vorgangs: die gerechneten Abschnitte und ihre Ansage. `null`, wo der
- * Vorgang gar keine Arbeitsschritte führt — ein aufbewahrter Lauf ohne Sitzungsstand.
+ * Das Stufenband eines Ketten-Vorgangs: die gerechneten Abschnitte und ihre Ansage. `null`, wo
+ * weder der eingelesene Stand noch die Server-Antwort Arbeitsschritte führt.
+ *
+ * <p>Die Quellen stehen in derselben Rangfolge wie bei {@link vorgangsverbrauch} und aus demselben
+ * Grund: Zu einem servergeführten Lauf gibt es keinen Stand mehr, und wo einer vorliegt, ist er
+ * die richtige Quelle. Seit Issue #1116 zeigt damit auch ein Lauf sein Band, den niemand
+ * eingelesen hat.
  */
 function vorgangsband(
-  item: NightRunItem,
+  item: AnzeigeItem,
+  standItem: NightRunItem | undefined,
   vorgaben: NightRunStufenvorgaben | undefined,
 ): { abschnitte: readonly Bandabschnitt[]; ansage: string } | null {
-  if (item.kettenStufen === undefined) {
+  const stufen = standItem?.kettenStufen ?? item.stufen
+  if (stufen === undefined) {
     return null
   }
-  const letzte = letzteErreichteStufe(item.kettenStufen)
-  const abschnitte = KETTEN_STUFEN.map((stufe) => bandabschnitt(stufe, item, vorgaben, letzte))
+  const letzte = letzteErreichteStufe(stufen)
+  const abschnitte = KETTEN_STUFEN.map((stufe) =>
+    bandabschnitt(stufe, stufen, item, vorgaben, letzte),
+  )
   return { abschnitte, ansage: bandAnsage(abschnitte) }
 }
 
@@ -1710,21 +1813,12 @@ function vorgangsgrund(item: NightRunItem): string | null {
  */
 const umsetzungsKennzahlen = (
   item: AnzeigeItem,
-  standItem: NightRunItem | undefined,
+  verbrauch: Vorgangsverbrauch | undefined,
   ohneKennzahlen: boolean,
-): string => {
+): string =>
   // Ein grauer Vorgang lief nie; seine Zeile bestünde aus lauter Fehlanzeigen. Dieselbe Grenze,
   // die {@link VorgangsKennzahlen} zieht.
-  if (item.state === 'GREY') {
-    return ''
-  }
-  if (standItem !== undefined) {
-    return vorgangszeile(standItem, ohneKennzahlen)
-  }
-  return item.durationMs === undefined
-    ? 'Dauer nicht gemeldet'
-    : formatDuration(item.durationMs / 1000)
-}
+  item.state === 'GREY' ? '' : vorgangszeile(item, verbrauch, ohneKennzahlen)
 
 /**
  * Die Anteile der Vorgänge eines Umsetzungs-Laufs an der Laufzeit der Nacht (#917), je Vorgang
@@ -2004,21 +2098,78 @@ const ergebniszeile = (
   item: AnzeigeItem,
   standItem: NightRunItem | undefined,
   ohneKennzahlen: boolean,
-): string =>
-  modus === 'CHAIN'
-    ? vorgangsKennzahlenText(item, standItem)
-    : umsetzungsKennzahlen(item, standItem, ohneKennzahlen)
+): string => {
+  const verbrauch = vorgangsverbrauch(item, standItem)
+  return modus === 'CHAIN'
+    ? vorgangsKennzahlenText(item, verbrauch)
+    : umsetzungsKennzahlen(item, verbrauch, ohneKennzahlen)
+}
 
 /**
- * Die Kosten eines Vorgangs für seine Spalte (#988) — der aufbewahrte Wert, sonst der des
- * Ergebnisstands dieser Sitzung; `null` heißt „nicht gemessen“ und erscheint als „—“.
+ * Die Kennzahlen eines Vorgangs in **einer** Form, gleich aus welcher der beiden Quellen sie
+ * stammen (Issue #1116, Plan #1110 E9): dem eingelesenen Ergebnisstand oder der Server-Antwort.
+ * `undefined`, wo es beide nicht gibt.
  *
- * <p>Beide Quellen, weil beide Lagen vorkommen: Ein eben geparster Lauf trägt keinen aufbewahrten
- * Verbrauch, ein neu geladener keinen Sitzungsstand. Der aufbewahrte Wert hat Vorrang — er ist der,
- * den der Server auch nach einem Neuladen noch kennt.
+ * <p><b>Der Stand gewinnt, wo es ihn gibt</b> — und das ist keine Umkehr des Vorrangs aus AK 6,
+ * sondern seine Folge: Zu einem servergeführten Lauf entsteht seit diesem Paket gar kein Stand
+ * mehr ({@link protokollLesen}, E8). Ein Stand liegt danach nur noch vor, wo er die richtige
+ * Quelle ist — an einem Lauf, den erst das Einlesen angelegt hat, und am Nachtplan-Lauf, den der
+ * Server nie führt.
+ *
+ * <p><b>Ganze Bündel statt Feld für Feld</b>: Ein feldweises Auffüllen mischte die Angaben zweier
+ * Quellen zu einer Zeile, die keine von beiden je so gemeldet hat (AK 6).
+ *
+ * <p>Sie ist zugleich die Quelle der Kostenspalte ({@link vorgangskosten}). Genau das war der
+ * Anlassfall: Zeile und Spalte lasen verschieden, und die Seite widersprach sich selbst.
+ */
+interface Vorgangsverbrauch {
+  kostenUsd: number | undefined
+  zuege: number | undefined
+  /** Die Zeit, in der das Modell selbst arbeitete — im Stand `arbeitszeitMs`, am Server `modelDurationMs`. */
+  modellzeitMs: number | undefined
+  eingabe: number | undefined
+  ausgabe: number | undefined
+  /** Zahl der Arbeitsschritte ohne Kostenmeldung; allein der Ergebnisstand zählt sie. */
+  kostenUnbekannt: number | undefined
+}
+
+function vorgangsverbrauch(
+  item: AnzeigeItem,
+  standItem: NightRunItem | undefined,
+): Vorgangsverbrauch | undefined {
+  if (standItem !== undefined) {
+    return {
+      kostenUsd: standItem.kennzahlen?.kostenUsd,
+      zuege: standItem.kennzahlen?.zuege,
+      modellzeitMs: standItem.kennzahlen?.arbeitszeitMs,
+      // Der Ergebnisstand führt keine Tokenmengen — siehe {@link tokenmengen}.
+      eingabe: undefined,
+      ausgabe: undefined,
+      kostenUnbekannt: standItem.kennzahlen?.kostenUnbekannt,
+    }
+  }
+  if (item.verbrauch === undefined) {
+    return undefined
+  }
+  return {
+    kostenUsd: item.verbrauch.kostenUsd,
+    zuege: item.verbrauch.zuege,
+    modellzeitMs: item.verbrauch.modellzeitMs,
+    eingabe: item.verbrauch.eingabe,
+    ausgabe: item.verbrauch.ausgabe,
+    // Der Server zählt sie nicht: Er nimmt je Vorgang eine Kostenangabe an, nicht die Sitzungen
+    // dahinter. Eine 0 behauptete hier „alle haben gemeldet".
+    kostenUnbekannt: undefined,
+  }
+}
+
+/**
+ * Die Kosten eines Vorgangs für seine Spalte (#988); `null` heißt „nicht gemessen“ und erscheint
+ * als „—“. Sie kommen aus derselben Auflösung wie seine Ergebniszeile ({@link vorgangsverbrauch})
+ * — sonst stünde in der Zeile eine Fehlanzeige für den Wert, der einen Zentimeter daneben steht.
  */
 const vorgangskosten = (item: AnzeigeItem, standItem: NightRunItem | undefined): number | null =>
-  item.verbrauch?.kostenUsd ?? standItem?.kennzahlen?.kostenUsd ?? null
+  vorgangsverbrauch(item, standItem)?.kostenUsd ?? null
 
 /**
  * Derselbe Vorgang im Ergebnisstand dieser Sitzung; `undefined` ohne Stand oder wo der Stand ihn
@@ -2072,7 +2223,7 @@ function Vorgangszeile({
   const wurzel = katalog.get(item.cardNumber)
   // `null` an einem grünen oder grauen Vorgang — dort erscheint kein Befund.
   const uebernahme = buildHandoffText(item)
-  const band = modus === 'CHAIN' && standItem !== undefined ? vorgangsband(standItem, vorgaben) : null
+  const band = modus === 'CHAIN' ? vorgangsband(item, standItem, vorgaben) : null
   const grund = modus === 'CHAIN' && standItem !== undefined ? vorgangsgrund(standItem) : null
   const chips = modus === 'CHAIN' && standItem !== undefined ? chipgruppen(standItem, katalog) : []
   const kennzahlen = ergebniszeile(modus, item, standItem, ohneKennzahlen)
@@ -2353,7 +2504,11 @@ function LaufPanel({
             item={item}
             standItem={standVorgang(stand, item.cardNumber)}
             modus={lauf.mode}
-            vorgaben={stand?.stand?.vorgabenMin}
+            // Dieselben Vorgaben, die die Fußzeile zeigt (Issue #1116): Ein servergeführter Lauf
+            // bringt sie mit, und das Band darunter stünde sonst als „ohne Vorgabe" da, während
+            // die Zeile darunter die Minuten nennt — genau das Nebeneinander, das dieses Paket
+            // beseitigt.
+            vorgaben={kettenBudget(lauf, stand).vorgabenMin}
             anteil={anteile.get(item.cardNumber)}
             ohneKennzahlen={ohneKennzahlen}
             katalog={katalog}
@@ -2599,19 +2754,32 @@ export function NightRunPage() {
 
     // Ein Ergebnisstand ist genau ein Lauf; ein zweiter Stand desselben Laufs ersetzt den ersten.
     const run = ergebnis.run
-    // Vermerkt **vor** dem Senden: Der Lauf ist aus dem Ergebnisstand entstanden, unabhängig davon,
-    // ob die Einlieferung gleich gelingt.
-    setAusErgebnisstand((bisher) => new Set(bisher).add(run.startedAt))
-    // Ebenfalls **vor** dem Einliefern vermerkt (E1): Gleich ersetzt die Server-Sicht das ganze
-    // Lauf-Array, und ein erst danach gefüllter Speicher trüge die Angaben des Stands nicht mehr.
-    // Seit #872 für **jede** Lauf-Art: Nicht nur die Ketten-Übersicht liest den Stand, sondern
-    // auch die Kennzahlen je Vorgang der drei anderen Arten.
-    setStaende((bisher) => new Map(bisher).set(run.startedAt, run))
-    setLaeufe((bisher) =>
-      [ausParser(run), ...bisher.filter((alt) => alt.startedAt !== run.startedAt)].sort(
-        nachStartAbsteigend,
-      ),
-    )
+    /**
+     * Ob der Server diesen Lauf schon führt (Issue #1116, Plan #1110 E8). Der Blick geht **vor**
+     * die drei Speicher unten: Danach stünde der geparste Lauf bereits an seiner Stelle, und die
+     * Frage wäre nicht mehr zu beantworten.
+     *
+     * <p>Für einen servergeführten Lauf bleibt alles drei unberührt — seine Anzeige speist sich
+     * aus der Server-Antwort, und das Einlesen fügt ihm nichts hinzu (AK 6). Auch nicht, wenn
+     * `submit` oder das Neuladen der Liste danach scheitert: Was nie gesetzt wurde, kann kein
+     * Fehlschlag stehen lassen.
+     */
+    const servergefuehrt = laeufe.some((alt) => alt.startedAt === run.startedAt)
+    if (!servergefuehrt) {
+      // Vermerkt **vor** dem Senden: Der Lauf ist aus dem Ergebnisstand entstanden, unabhängig
+      // davon, ob die Einlieferung gleich gelingt.
+      setAusErgebnisstand((bisher) => new Set(bisher).add(run.startedAt))
+      // Ebenfalls **vor** dem Einliefern vermerkt (E1): Gleich ersetzt die Server-Sicht das ganze
+      // Lauf-Array, und ein erst danach gefüllter Speicher trüge die Angaben des Stands nicht
+      // mehr. Seit #872 für **jede** Lauf-Art: Nicht nur die Ketten-Übersicht liest den Stand,
+      // sondern auch die Kennzahlen je Vorgang der drei anderen Arten.
+      setStaende((bisher) => new Map(bisher).set(run.startedAt, run))
+      setLaeufe((bisher) =>
+        [ausParser(run), ...bisher.filter((alt) => alt.startedAt !== run.startedAt)].sort(
+          nachStartAbsteigend,
+        ),
+      )
+    }
 
     if (run.incomplete) {
       setMeldung(UNVOLLSTAENDIG)
@@ -2632,6 +2800,14 @@ export function NightRunPage() {
       return
     }
     setErgebnisse(new Map(antwort.map((eintrag) => [eintrag.startedAt, eintrag.created])))
+    // Die zweite Hälfte von E8: Auch ein Lauf, den die Liste nicht zeigte, ist servergeführt,
+    // wenn `submit` ihn nicht neu angelegt hat. Der eben vermerkte Stand wird dann wieder
+    // zurückgenommen — er ist nicht die Quelle dieses Laufs. Meldet `submit` dagegen
+    // `created: true`, hat erst das Einlesen ihn angelegt, und der Stand bleibt seine Quelle.
+    if (antwort.some((eintrag) => eintrag.startedAt === run.startedAt && !eintrag.created)) {
+      setAusErgebnisstand((bisher) => ohneEintrag(bisher, run.startedAt))
+      setStaende((bisher) => ohneSchluessel(bisher, run.startedAt))
+    }
     // Eingeliefert ist eingeliefert — scheitert nur das Nachladen der Liste, bleibt die
     // Einlieferung bestehen; ein erneuter Versuch waere hier ein unnoetiges Duplikat.
     try {
