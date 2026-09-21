@@ -163,7 +163,7 @@ Zu jeder darstellenden Route aus [`frontend/src/App.tsx`](frontend/src/App.tsx) 
 | `/forgot` | Passwort vergessen | wie Anmelden | #978 |
 | `/reset` | Passwort neu setzen | wie Anmelden | #978 |
 | `/projects` | Projekte | Rahmen; Projekte als Platten | #978, #1082 |
-| `/plattform-leitstand` | Plattform-Leitstand | Kupferwarte aus den Bausteinen des Leitstands (`LeitstandBausteine.tsx`, `KupferwarteBereich`, `Platte`, `Led`, `Taste`); drei Bereiche in dieser Ordnung: laufende Nachtläufe, durchgeführte Nachtläufe, Störungen; der Entwurf führt für diese Ansicht kein eigenes Mockup | #1083 |
+| `/plattform-leitstand` | Plattform-Leitstand | Kupferwarte aus den Bausteinen des Leitstands (`LeitstandBausteine.tsx`, `KupferwarteBereich`, `Platte`, `Led`, `Taste`); drei Bereiche in dieser Ordnung: Aktive Läufe, Beendete Läufe, Störungen; der Entwurf führt für diese Ansicht kein eigenes Mockup | #1083, #1102 |
 | `/projects/:projectId` | Boards eines Projekts | Rahmen; Boards als Platten, Zahlen in Plex Mono | #978 |
 | `/projects/:projectId/ideas` | Ideen | Rahmen; Nut-Zonen und Platten wie das Board | #978, #980 |
 | `/projects/:projectId/members` | Mitglieder | Rahmen; Tabelle als Platte, Zahlen in Plex Mono | #978 |

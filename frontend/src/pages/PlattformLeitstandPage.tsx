@@ -42,8 +42,8 @@ interface Fehler {
  * Der Plattform-Leitstand: die Startseite eines Plattform-Admins (Issue #1083, fachliche Quellen
  * #1064 und #1086).
  *
- * **Drei Bereiche in dieser Ordnung** (Kriterium 18, Issue #1098): *Laufende Nachtlaeufe* zeigen
- * mit pulsierendem Melder, dass gerade etwas arbeitet; *Durchgefuehrte Nachtlaeufe* zeigen den
+ * **Drei Bereiche in dieser Ordnung** (Kriterium 18, Issue #1098; benannt in #1102): *Aktive
+ * Laeufe* zeigen mit pulsierendem Melder, dass gerade etwas arbeitet; *Beendete Laeufe* zeigen den
  * Ausgang jedes beendeten Laufs der laufenden Nacht; *Stoerungen* zeigt jede nicht quittierte
  * Stoerung ueber alle Naechte, juengste zuoberst. Wer mehrere Projekte betreibt, beantwortet damit
  * „laeuft gerade etwas, und ist die Nacht gut durch?" an einer Stelle statt Projekt fuer Projekt.
@@ -140,10 +140,10 @@ export default function PlattformLeitstandPage() {
   return (
     <KupferwarteBereich>
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-        <Platte titel="Laufende Nachtläufe">
+        <Platte titel="Aktive Läufe">
           <LaufendeListe zeilen={geladen ? sicht.laufende : null} />
         </Platte>
-        <Platte titel="Durchgeführte Nachtläufe">
+        <Platte titel="Beendete Läufe">
           <DurchgefuehrteListe
             zeilen={geladen ? sicht.durchgefuehrte : null}
             mitStoerung={mitStoerung}
@@ -213,13 +213,13 @@ function LaufVerweis({ zeile }: Readonly<{ zeile: DisruptionView }>) {
   )
 }
 
-/** Der Bereich „Laufende Nachtlaeufe" (Kriterien 1–4). */
+/** Der Bereich „Aktive Laeufe" (Kriterien 1–4). */
 function LaufendeListe({ zeilen }: Readonly<{ zeilen: DisruptionView[] | null }>) {
   if (zeilen === null) {
     return null
   }
   if (zeilen.length === 0) {
-    return <LeerSatz testId="keine-laufenden">Gerade läuft kein Nachtlauf.</LeerSatz>
+    return <LeerSatz testId="keine-laufenden">Gerade läuft kein Lauf.</LeerSatz>
   }
   return (
     <Box component="ul" sx={{ listStyle: 'none', m: 0, p: 0 }}>
@@ -254,7 +254,7 @@ function LaufendeZeile({ zeile }: Readonly<{ zeile: DisruptionView }>) {
   )
 }
 
-/** Der Bereich „Durchgefuehrte Nachtlaeufe" (Kriterien 9–14). */
+/** Der Bereich „Beendete Laeufe" (Kriterien 9–14). */
 function DurchgefuehrteListe({
   zeilen,
   mitStoerung,

@@ -429,20 +429,20 @@ Sidebar-Eintrag **„Administration"** ein- und ausgeschaltet:
 ## Plattform-Leitstand
 
 Der **Plattform-Leitstand** ist die Startseite eines **Plattform-Admins** nach dem Anmelden (Sidebar
-„Verwaltung" → „Plattform-Leitstand"). Er führt **drei Bereiche**, von oben nach unten: **Laufende
-Nachtläufe**, **Durchgeführte Nachtläufe** und **Störungen**. Alle drei zeigen ausschließlich
-Projekte, die am Plattform-Leitstand **teilnehmen**.
+„Verwaltung" → „Plattform-Leitstand"). Er führt **drei Bereiche**, von oben nach unten: **Aktive
+Läufe**, **Beendete Läufe** und **Störungen**. Alle drei zeigen ausschließlich Projekte, die am
+Plattform-Leitstand **teilnehmen**.
 
 Die Seite **frischt sich selbst auf**: Was sich ändert, erscheint von allein — du musst sie nicht
 neu laden.
 
-### Laufende Nachtläufe
+### Aktive Läufe
 
-Jeder Nachtlauf, der **gerade arbeitet** — mit Projekt, dem Wort „läuft seit" samt bisheriger Dauer,
+Jeder Lauf, der **gerade arbeitet** — mit Projekt, dem Wort „läuft seit" samt bisheriger Dauer,
 anklickbarer Lauf-Kennung und einem pulsierenden Melder. Arbeitet gerade nirgends ein Lauf, steht
 das als ausdrücklicher Satz da statt als leere Fläche.
 
-### Durchgeführte Nachtläufe
+### Beendete Läufe
 
 Jeder **beendete** Lauf der laufenden Nacht — mit Projekt, Startzeitpunkt, anklickbarer Lauf-Kennung
 und seinem **Ausgang**. Auch hier steht ein ausdrücklicher Satz, solange noch kein Lauf beendet ist.

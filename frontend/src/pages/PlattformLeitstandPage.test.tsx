@@ -54,26 +54,26 @@ describe('PlattformLeitstandPage (#1083)', () => {
   })
 
   /** Kriterium 18: die drei Bereiche untereinander, in dieser Ordnung. */
-  it('stellt die drei Bereiche in der Ordnung laufend, durchgeführt, Störungen', async () => {
+  it('stellt die drei Bereiche in der Ordnung Aktive Läufe, Beendete Läufe, Störungen', async () => {
     api.leitstand.mockResolvedValue(sicht({ stoerungen: [stoerung()] }))
 
     zeigeSeite()
 
     await screen.findByTestId('stoerung-5')
     expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual([
-      'Laufende Nachtläufe',
-      'Durchgeführte Nachtläufe',
+      'Aktive Läufe',
+      'Beendete Läufe',
       'Störungen',
     ])
   })
 
   /**
-   * Der Bereich „Laufende Nachtläufe" (Kriterien 1–4, 11).
+   * Der Bereich „Aktive Läufe" (Kriterien 1–4, 11).
    *
    * Der Puls hält bei `prefers-reduced-motion` von selbst an — die globale Regel im Theme greift
    * für jede Animation; hier steht deshalb nur, **dass** die LED pulst.
    */
-  describe('Laufende Nachtläufe (#1098)', () => {
+  describe('Aktive Läufe (#1098, benannt in #1102)', () => {
     const laufend = (extra: Partial<DisruptionView> = {}): DisruptionView => ({
       nightRunId: 8,
       projectId: 9,
@@ -127,13 +127,13 @@ describe('PlattformLeitstandPage (#1083)', () => {
       zeigeSeite()
 
       expect(await screen.findByTestId('keine-laufenden')).toHaveTextContent(
-        'Gerade läuft kein Nachtlauf.',
+        'Gerade läuft kein Lauf.',
       )
     })
   })
 
-  /** Der Bereich „Durchgeführte Nachtläufe" (Kriterien 9–14). */
-  describe('Durchgeführte Nachtläufe (#1098)', () => {
+  /** Der Bereich „Beendete Läufe" (Kriterien 9–14). */
+  describe('Beendete Läufe (#1098, benannt in #1102)', () => {
     const durchgefuehrt = (extra: Partial<DisruptionView> = {}): DisruptionView => ({
       nightRunId: 5,
       projectId: 9,
