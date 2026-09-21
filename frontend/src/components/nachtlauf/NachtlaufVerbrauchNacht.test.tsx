@@ -6,7 +6,9 @@ import type {
   VerbrauchAufteilung,
   VerbrauchKarte,
   VerbrauchNacht,
+  VerbrauchStufe,
 } from '../../api/nightRunUsage'
+import type { NightRunStage } from '../../api/nightRuns'
 import { nachtlaufTheme } from '../../nachtlaufDesign'
 import { NachtlaufVerbrauchNacht } from './NachtlaufVerbrauchNacht'
 
@@ -83,7 +85,16 @@ const nacht = (werte: Partial<VerbrauchNacht>): VerbrauchNacht => ({
     karte(721, 2, 3_600_000, angaben({ costUsd: 4.5 })),
     karte(722, 1, null, angaben({ costUsd: 1.5 })),
   ],
+  stages: [],
   ...werte,
+})
+
+/** Eine Stufe der Kette in der Aufstellung der Nacht (Issue #1117). */
+const stufe = (stage: NightRunStage, costUsd: number, itemCount = 1): VerbrauchStufe => ({
+  stage,
+  itemCount,
+  durationMs: 60_000,
+  usage: angaben({ costUsd }),
 })
 
 const zeige = (daten: VerbrauchNacht) =>
@@ -297,5 +308,33 @@ describe('NachtlaufVerbrauchNacht — Nachtlauf-Anteil', () => {
       expect(wertVon(kachel(etikett))).not.toMatch(/\d/)
     }
     expect(lesbar(screen.getByTestId('verbrauch-nacht'))).not.toContain('8,00 $')
+  })
+
+  /** Die Aufstellung je Stufe der Kette hängt in der Nacht (Issue #1117, #993 AK 8). */
+  it('zeigt die Aufstellung je Stufe aus der Antwort der Nacht', () => {
+    zeige(nacht({ stages: [stufe('PLAN', 5, 2), stufe('ABDECKUNG', 2)] }))
+
+    const platte = screen.getByTestId('verbrauch-stufen')
+    const zeilen = within(platte).getAllByRole('listitem')
+    expect(zeilen.map((z) => lesbar(z))).toEqual([
+      expect.stringContaining('Plan'),
+      expect.stringContaining('Abdeckung'),
+    ])
+    // `Intl` setzt vor dem Währungszeichen ein geschütztes Leerzeichen; welches, hängt an der
+    // ICU-Fassung — geprüft wird deshalb mit `\s` statt mit einem festen Zeichen im Literal.
+    expect(lesbar(zeilen[0])).toMatch(/5,00\s\$/)
+    expect(lesbar(zeilen[0])).toContain('2 Vorgänge')
+  })
+
+  it('zeigt die Aufstellung nicht, wenn die Nacht keine Stufen fuehrt', () => {
+    zeige(nacht({}))
+
+    expect(screen.queryByTestId('verbrauch-stufen')).not.toBeInTheDocument()
+  })
+
+  it('zeigt die Aufstellung nicht in einer Nacht ohne Lauf', () => {
+    zeige(nacht({ runCount: 0, stages: [stufe('PLAN', 5)] }))
+
+    expect(screen.queryByTestId('verbrauch-stufen')).not.toBeInTheDocument()
   })
 })

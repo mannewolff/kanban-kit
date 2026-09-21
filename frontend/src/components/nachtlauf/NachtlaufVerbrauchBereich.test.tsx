@@ -70,6 +70,7 @@ const zeitraum: VerbrauchZeitraum = {
   epics: [],
   withoutEpic: { epicId: null, shortcode: null, title: null, cardCount: 0, usage: nichts },
   epicsOverlap: false,
+  stages: [],
 }
 
 const nacht: VerbrauchNacht = {
@@ -80,6 +81,7 @@ const nacht: VerbrauchNacht = {
   ...verbrauch(LEER),
   aborted: false,
   cards: [],
+  stages: [],
 }
 
 /**

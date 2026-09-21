@@ -431,6 +431,7 @@ const VERBRAUCH_ZEITRAUM = {
   epics: [],
   withoutEpic: { epicId: null, shortcode: null, title: null, cardCount: 0, usage: VERBRAUCH_NICHTS },
   epicsOverlap: false,
+  stages: [],
 }
 
 /** Eine Nacht aus zwei Läufen — mit dem Datum, nach dem gefragt wurde. */
@@ -443,6 +444,7 @@ const verbrauchNacht = (night: string) => ({
   usageByKind: VERBRAUCH_JE_GATTUNG,
   aborted: false,
   cards: [],
+  stages: [],
 })
 
 interface Antworten {

@@ -36,6 +36,7 @@ import {
   ZAHL,
 } from '../../theme'
 import { DeltaMarke, Fuellschiene, Led, Platte, ZEILE_HOVER } from '../leitstand/LeitstandBausteine'
+import { NachtlaufVerbrauchStufen } from './NachtlaufVerbrauchStufen'
 import { NachtlaufVerbrauchVorhaben } from './NachtlaufVerbrauchVorhaben'
 import { VerbrauchKostenKacheln } from './VerbrauchKacheln'
 
@@ -306,21 +307,24 @@ function ZeitraumInhalt({
       </Box>
 
       {!ohneZahlen && (
-        <Box
-          sx={{
-            display: 'grid',
-            gridTemplateColumns: { xs: 'minmax(0,1fr)', lg: 'minmax(0,1.2fr) minmax(0,1fr)' },
-            gap: '16px',
-            alignItems: 'start',
-          }}
-        >
-          <Naechte naechte={zeitraum.nights} onNachtWaehlen={onNachtWaehlen} />
-          <NachtlaufVerbrauchVorhaben
-            epics={zeitraum.epics}
-            withoutEpic={zeitraum.withoutEpic}
-            epicsOverlap={zeitraum.epicsOverlap}
-          />
-        </Box>
+        <>
+          <Box
+            sx={{
+              display: 'grid',
+              gridTemplateColumns: { xs: 'minmax(0,1fr)', lg: 'minmax(0,1.2fr) minmax(0,1fr)' },
+              gap: '16px',
+              alignItems: 'start',
+            }}
+          >
+            <Naechte naechte={zeitraum.nights} onNachtWaehlen={onNachtWaehlen} />
+            <NachtlaufVerbrauchVorhaben
+              epics={zeitraum.epics}
+              withoutEpic={zeitraum.withoutEpic}
+              epicsOverlap={zeitraum.epicsOverlap}
+            />
+          </Box>
+          <NachtlaufVerbrauchStufen stufen={zeitraum.stages} />
+        </>
       )}
     </>
   )

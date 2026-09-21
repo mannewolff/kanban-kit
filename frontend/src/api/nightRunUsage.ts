@@ -1,4 +1,5 @@
 import { apiFetch } from './client'
+import type { NightRunStage } from './nightRuns'
 
 /**
  * Abruf der Verbrauchs-Auswertung (Issue #940, Endpunkte aus Issue #939, Plan #933).
@@ -69,6 +70,8 @@ export interface VerbrauchNacht {
   usageByKind: VerbrauchAufteilungGattung
   aborted: boolean
   cards: VerbrauchKarte[]
+  /** Die Kosten je Stufe der Kette; leer, wenn in dieser Nacht keine Kette lief (Issue #1114). */
+  stages: VerbrauchStufe[]
 }
 
 /** Die Kennzahlen eines Zeitraums samt seiner Grenzen. */
@@ -124,6 +127,25 @@ export interface VerbrauchVorhaben {
   usage: VerbrauchAngaben
 }
 
+/**
+ * Eine Stufe der Kette in der Aufstellung (Issue #1114, #993 AK 8).
+ *
+ * <p>Der Stufenname ist der des Servers und wird aus `nightRuns.ts` übernommen statt hier ein
+ * zweites Mal aufgeschrieben: Es ist derselbe Wertebereich, und eine zweite Kopie liefe beim
+ * nächsten Schritt der Kette auseinander.
+ *
+ * <p><b>Es gibt keinen Posten „ohne Stufe"</b> nach dem Muster von „ohne Vorhaben" (Plan E6) —
+ * er trüge bei einem Umsetzungs-Lauf den Verbrauch einer ganzen Nacht. Ein Lauf ohne Stufen
+ * erscheint in dieser Aufstellung gar nicht.
+ */
+export interface VerbrauchStufe {
+  stage: NightRunStage
+  /** Zahl der Vorgänge, die diese Stufe durchlaufen haben. */
+  itemCount: number
+  durationMs: number | null
+  usage: VerbrauchAngaben
+}
+
 /** Ein Zeitraum samt Vorzeitraum, Nächten und Vorhaben-Aufstellung. */
 export interface VerbrauchZeitraum {
   current: VerbrauchKennzahlen
@@ -133,6 +155,8 @@ export interface VerbrauchZeitraum {
   withoutEpic: VerbrauchVorhaben
   /** Eine Karte gehört zu mehreren Vorhaben — die Vorhaben-Summen überschneiden sich (Plan E11). */
   epicsOverlap: boolean
+  /** Die Kosten je Stufe der Kette; leer, wenn im Zeitraum keine Kette lief (Issue #1114). */
+  stages: VerbrauchStufe[]
 }
 
 /**

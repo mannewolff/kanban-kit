@@ -90,6 +90,7 @@ const zeitraum = (extra: Partial<VerbrauchZeitraum> = {}): VerbrauchZeitraum => 
   epics: [],
   withoutEpic: { epicId: null, shortcode: null, title: null, cardCount: 0, usage: nichts },
   epicsOverlap: false,
+  stages: [],
   ...extra,
 })
 

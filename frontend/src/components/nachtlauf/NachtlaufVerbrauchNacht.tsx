@@ -4,6 +4,7 @@ import type { VerbrauchNacht } from '../../api/nightRunUsage'
 import { laufDauerGeteilt, tokenMenge } from '../../lib/leitstand'
 import { zeitraumBeschriftung, zwischenspeicherAnteil } from '../../lib/verbrauchZeitraum'
 import { NACHTLAUF_FARBEN, NACHTLAUF_SCHRIFTEN } from '../../nachtlaufDesign'
+import { NachtlaufVerbrauchStufen } from './NachtlaufVerbrauchStufen'
 import { VerbrauchKachel, VerbrauchKachelRaster, VerbrauchKostenKacheln } from './VerbrauchKacheln'
 
 /**
@@ -92,6 +93,9 @@ export function NachtlaufVerbrauchNacht({ nacht }: Readonly<{ nacht: VerbrauchNa
               basis={zwischenspeicherBasis}
             />
           </VerbrauchKachelRaster>
+          <Box sx={{ mt: 2 }}>
+            <NachtlaufVerbrauchStufen stufen={nacht.stages} />
+          </Box>
         </>
       )}
     </Box>
