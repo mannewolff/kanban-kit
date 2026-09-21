@@ -65,6 +65,7 @@ import {
   ersteZeile,
   kostenText,
   kurzHash,
+  laeuftNoch,
   laufDauer,
   laufMelder,
   paketDauer,
@@ -237,7 +238,7 @@ interface Kettenglied {
 const zustandsFarbe = (zustand: NightRunState): string => melderFarbe(MELDER_JE_ZUSTAND[zustand])
 
 /**
- * Die Lauf-Art im Etikett des Laufkopfs („Nachtlauf · Kette", Vorlage
+ * Die Lauf-Art im Etikett des Laufkopfs („Lauf · Kette", Vorlage
  * `docs/mockup-nachtlauf-lauf.html` Z. 382). Als `Record` über alle Werte, nicht als
  * Inline-Bedingung: Ein weiterer Modus bricht den Build, statt still auf „Umsetzung" zu fallen.
  *
@@ -1768,7 +1769,10 @@ function Kopfmarken({
   const kosten = kostenText(lauf.verbrauch?.kostenUsd ?? null)
   return (
     <>
-      {!lauf.vollstaendig && (
+      {/* Die Marke haengt am Befund und nicht an `vollstaendig` (#1092): Ein verstummter Lauf
+          traegt fuer immer `complete = false`, ist aber nicht „unvollstaendig gemeldet" — er ist
+          nicht gelungen, und das sagt bereits die rote LED der Platte. */}
+      {laeuftNoch({ complete: lauf.vollstaendig, outcome: lauf.befund }) && (
         <LaufMarke testId="lauf-zustand" led={<Led melder="stahl" pulsiert />}>
           {UNVOLLSTAENDIG_GEMELDET}
         </LaufMarke>
@@ -2110,7 +2114,7 @@ function LaufPanel({
         { complete: lauf.vollstaendig, items: lauf.items, outcome: lauf.befund },
         lauf.ohneArbeit,
       )}
-      pulsiert={!lauf.vollstaendig}
+      pulsiert={laeuftNoch({ complete: lauf.vollstaendig, outcome: lauf.befund })}
       offen={offen}
       onUmschalten={umschalten}
       marken={
@@ -2478,7 +2482,7 @@ export function NightRunPage() {
               items={[
                 { label: 'Projekte', to: '/projects' },
                 { label: projectName ?? 'Projekt', to: `/projects/${id}` },
-                { label: 'Nachtlauf' },
+                { label: 'Läufe' },
               ]}
             />
             {/* Dateiauswahl wie in der Ideen-Seite: Button als <label> mit verstecktem Input. */}

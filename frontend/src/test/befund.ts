@@ -9,16 +9,27 @@ import type { NightRunItemView, NightRunOutcomeView } from '../api/nightRuns'
  * dafuer da: ein **Test-Double des Servers**, damit ein Szenario „Lauf mit rotem Paket" nicht von
  * Hand einen dazu passenden Befund tragen muss und beides auseinanderlaufen kann.
  *
- * Sie bildet `NightRunOutcome.of` nach — dieselbe Reihenfolge: „laeuft noch" schlaegt alles, dann
- * der Lauf ohne Arbeit, dann rot vor gelb vor grau-mit-Fehlerklasse. Weicht sie einmal ab, faellt
- * das an den Tests auf, die den Server ueber MockMvc pruefen (`NightRunIT`): Dort steht der echte
- * Vertrag.
+ * Sie bildet `NightRunOutcome.of` nach — dieselbe Reihenfolge: „verstummt" schlaegt alles, dann
+ * „laeuft noch", dann der Lauf ohne Arbeit, dann rot vor gelb vor grau-mit-Fehlerklasse. Weicht sie
+ * einmal ab, faellt das an den Tests auf, die den Server ueber MockMvc pruefen (`NightRunIT`): Dort
+ * steht der echte Vertrag.
+ *
+ * <p>Die Stille kommt als **Angabe** herein und nicht als Zeitrechnung aus `startedAt`, `updatedAt`
+ * und einer Frist (Issue #1091): Ein Szenario sagt hier, ob der Lauf verstummt ist; die Frist selbst
+ * gehoert dem Server, und sie hier nachzurechnen hiesse, eine zweite Uhr in die Fixtures zu holen.
  */
 export function serverBefund(lauf: {
   complete: boolean
   noWorkReason?: string | null
   items: readonly NightRunItemView[]
+  /** Ob der Lauf ueber die Stillefrist hinaus kein Lebenszeichen gab (Issue #1091). */
+  verstummt?: boolean
 }): NightRunOutcomeView {
+  // Ein verstummter Lauf ist nicht gelungen — ohne massgebliches Paket und ohne Grund, denn er hat
+  // sein Ergebnis nie gemeldet.
+  if (!lauf.complete && lauf.verstummt === true) {
+    return { verdict: 'FAILED', decisiveItem: null, noWorkReason: null }
+  }
   if (!lauf.complete) {
     return { verdict: 'RUNNING', decisiveItem: null, noWorkReason: null }
   }

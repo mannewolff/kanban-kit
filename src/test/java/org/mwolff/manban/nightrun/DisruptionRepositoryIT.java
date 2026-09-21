@@ -28,6 +28,9 @@ class DisruptionRepositoryIT extends AbstractIntegrationTest {
   private static final Instant T1 = Instant.parse("2026-09-18T22:00:00Z");
   private static final Instant T2 = Instant.parse("2026-09-19T22:00:00Z");
 
+  /** Letzte Meldung eines Laufs — was {@code night_run.updated_at} trägt. */
+  private static final Instant LETZTE_MELDUNG = Instant.parse("2026-09-19T23:30:00Z");
+
   @Autowired private DisruptionRepository disruptions;
   @Autowired private JdbcTemplate jdbc;
 
@@ -63,6 +66,13 @@ class DisruptionRepositoryIT extends AbstractIntegrationTest {
   private void teilnahme(boolean teilnehmend) {
     jdbc.update(
         "UPDATE project SET dashboard_participation = ? WHERE id = ?", teilnehmend, projectId);
+  }
+
+  private void letzteMeldung(long laufId, Instant at) {
+    jdbc.update(
+        "UPDATE night_run SET updated_at = ? WHERE id = ?",
+        OffsetDateTime.ofInstant(at, ZoneOffset.UTC),
+        laufId);
   }
 
   // --- Was die Abfrage aufnimmt --------------------------------------------------------------
@@ -148,6 +158,22 @@ class DisruptionRepositoryIT extends AbstractIntegrationTest {
               assertThat(k.projectName()).isEqualTo("Mein Projekt");
               assertThat(k.noWorkReason()).isEqualTo("Ready war leer");
               assertThat(k.startedAt()).isEqualTo(T1);
+            });
+  }
+
+  /** Die Störungsliste liest die beiden neuen Felder mit; {@code complete} ist dort stets wahr. */
+  @Test
+  void derKandidatTraegtAbschlussUndLetzteMeldung() {
+    long laufId = lauf(T1, "NIGHT", true);
+    letzteMeldung(laufId, LETZTE_MELDUNG);
+    teilnahme(true);
+
+    assertThat(disruptions.openCandidates())
+        .singleElement()
+        .satisfies(
+            k -> {
+              assertThat(k.complete()).isTrue();
+              assertThat(k.updatedAt()).isEqualTo(LETZTE_MELDUNG);
             });
   }
 

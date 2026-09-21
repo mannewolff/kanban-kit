@@ -119,6 +119,17 @@ export interface NightRunUsageView {
 }
 
 /**
+ * Der Ausgang eines Laufs, wie der Server ihn faellt.
+ *
+ * Ein **Name** fuer die Vereinigung, die {@link NightRunOutcomeView} schon immer trug — damit die
+ * Wortliste in `lib/nightRunHandoff.ts` sie als `Record<Verdict, string>` fuehren kann und ein
+ * fuenfter Ausgang den Build bricht, statt still als leerer Text zu erscheinen. Die Liste bleibt
+ * hier, beim Vertrag des Servers: Eine zweite Aufzaehlung derselben Werte liefe beim naechsten
+ * Ausgang auseinander.
+ */
+export type Verdict = 'SUCCEEDED' | 'FAILED' | 'WAITING' | 'RUNNING'
+
+/**
  * Der Befund eines Laufs, wie der Server ihn seit Issue #1078 mitschickt.
  *
  * Der Massstab „nicht vollstaendig gelungen" lebt dort (Plan #1072 E2) — der Browser liest ihn und
@@ -127,7 +138,7 @@ export interface NightRunUsageView {
  * damit die Stoerzeile und die Nachtlauf-Auswertung denselben tragen (AK 6 der fachlichen Quelle).
  */
 export interface NightRunOutcomeView {
-  verdict: 'SUCCEEDED' | 'FAILED' | 'WAITING' | 'RUNNING'
+  verdict: Verdict
   /** Das Paket, das den Ausgang bestimmt; `null` bei Erfolg, bei laufendem Lauf und ohne Arbeit. */
   decisiveItem: {
     cardNumber: number

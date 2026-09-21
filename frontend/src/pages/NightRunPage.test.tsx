@@ -1450,7 +1450,7 @@ describe('NightRunPage — Nachtplan-Lauf (#806)', () => {
 
     const panelEl = await screen.findByTestId(`lauf-${ECHTER_NACHTPLAN_START}`)
     expect(within(panelEl).getByTestId('nachtlauf-vorzeile')).toHaveTextContent(
-      'Nachtlauf · Nachtplan',
+      'Lauf · Nachtplan',
     )
     expect(laufKopfzeile(panelEl)).toHaveTextContent('2 bearbeitet · 33 übergangen')
 
@@ -1501,7 +1501,7 @@ describe('NightRunPage — Ketten-Lauf (#854)', () => {
 
     const panelEl = await screen.findByTestId(`lauf-${ECHTE_KETTE_START}`)
     expect(within(panelEl).getByTestId('nachtlauf-vorzeile')).toHaveTextContent(
-      'Nachtlauf · Kette',
+      'Lauf · Kette',
     )
     expect(laufKopfzeile(panelEl)).toHaveTextContent('3 bearbeitet · 0 übergangen')
 
@@ -2816,7 +2816,7 @@ describe('NightRunPage — Zustände, Kennzahlen und Auszüge', () => {
 
     await screen.findByTestId(`lauf-${startedAt(0)}`)
     expect(within(lauf(0)).getByTestId('nachtlauf-vorzeile')).toHaveTextContent(
-      'Nachtlauf · Prüfung',
+      'Lauf · Prüfung',
     )
     expect(within(lauf(0)).queryByText(/Umsetzung/)).not.toBeInTheDocument()
   })
@@ -2832,7 +2832,7 @@ describe('NightRunPage — Zustände, Kennzahlen und Auszüge', () => {
 
     await screen.findByTestId(`lauf-${startedAt(0)}`)
     expect(within(lauf(0)).getByTestId('nachtlauf-vorzeile')).toHaveTextContent(
-      'Nachtlauf · Umsetzung',
+      'Lauf · Umsetzung',
     )
   })
 
@@ -3641,7 +3641,7 @@ describe('NightRunPage — null aus der API (#734)', () => {
     await nullLaufZeigen()
 
     expect(feld(700)?.textContent).toBe(
-      'Nachtlauf-Befund zu Karte #700 Paket A\nZustand: gescheitert',
+      'Lauf-Befund zu Karte #700 Paket A\nZustand: gescheitert',
     )
   })
 })
@@ -4176,7 +4176,9 @@ describe('NightRunPage — Rahmen des Entwurfs (#914)', () => {
     await screen.findByText('Noch keine Auswertung vorhanden.')
 
     expect(screen.getByRole('link', { name: 'Projekte' })).toBeInTheDocument()
-    expect(screen.getByText('Nachtlauf')).toBeInTheDocument()
+    // Das letzte Segment heißt seit #1101 „Läufe" wie der Menüpunkt; der Pfad ist das `h1` der
+    // Seite — ohne diese Eingrenzung träfe die Suche auch die Beschriftung im Verbrauchs-Bereich.
+    expect(within(screen.getByRole('heading', { level: 1 })).getByText('Läufe')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Protokoll einlesen' })).toBeInTheDocument()
     expect(screen.getByLabelText('Protokolldatei auswählen')).toBeInTheDocument()
 
@@ -4205,7 +4207,7 @@ describe('NightRunPage — Kopf und Kennzahlenreihe der Nacht (#915)', () => {
       'night-run-2026-09-14-131200.json',
     )
 
-    expect(within(panelEl).getByTestId('nachtlauf-vorzeile')).toHaveTextContent('Nachtlauf · Kette')
+    expect(within(panelEl).getByTestId('nachtlauf-vorzeile')).toHaveTextContent('Lauf · Kette')
     expect(within(panelEl).getByTestId(FUSSZEILE)).toBeInTheDocument()
   })
 
@@ -4217,7 +4219,7 @@ describe('NightRunPage — Kopf und Kennzahlenreihe der Nacht (#915)', () => {
     )
 
     expect(within(panelEl).getByTestId('nachtlauf-vorzeile')).toHaveTextContent(
-      'Nachtlauf · Umsetzung',
+      'Lauf · Umsetzung',
     )
     expect(within(panelEl).getByTestId(FUSSZEILE)).toBeInTheDocument()
   })
@@ -4232,7 +4234,7 @@ describe('NightRunPage — Kopf und Kennzahlenreihe der Nacht (#915)', () => {
     // Die Platte der Vorlage gilt seit #988 für **jede** Lauf-Art; was den Prüf-Lauf eigen macht,
     // ist die Aufschlüsselung seiner aussortierten Karten (#873), nicht mehr sein Kopf.
     expect(within(panelEl).getByTestId('nachtlauf-vorzeile')).toHaveTextContent(
-      'Nachtlauf · Prüfung',
+      'Lauf · Prüfung',
     )
     expect(within(panelEl).getByTestId('aufschluesselung')).toBeInTheDocument()
     expect(within(panelEl).getByTestId(FUSSZEILE)).toBeInTheDocument()
@@ -4248,7 +4250,7 @@ describe('NightRunPage — Kopf und Kennzahlenreihe der Nacht (#915)', () => {
     panelAufklappen(panelEl)
 
     expect(within(panelEl).getByTestId('nachtlauf-vorzeile')).toHaveTextContent(
-      'Nachtlauf · Nachtplan',
+      'Lauf · Nachtplan',
     )
     expect(await within(panelEl).findByTestId('aufschluesselung')).toBeInTheDocument()
     expect(within(panelEl).getByTestId(FUSSZEILE)).toBeInTheDocument()
@@ -4283,7 +4285,7 @@ describe('NightRunPage — Kopf und Kennzahlenreihe der Nacht (#915)', () => {
     const panelEl = await screen.findByTestId(`lauf-${ECHTE_KETTE_START}`)
 
     // Derselbe Kopf — die Gestaltung hängt an der Lauf-Art, nicht am Vorliegen eines Stands.
-    expect(within(panelEl).getByTestId('nachtlauf-vorzeile')).toHaveTextContent('Nachtlauf · Kette')
+    expect(within(panelEl).getByTestId('nachtlauf-vorzeile')).toHaveTextContent('Lauf · Kette')
     // Kosten und Züge bewahrt der Server nicht auf; eine Reihe aus lauter Fehlanzeigen wäre
     // dieselbe Wand, die der Bestand schon vermeidet.
     expect(within(panelEl).queryByTestId('fussangabe-Ketten durchgelaufen')).not.toBeInTheDocument()
@@ -4315,7 +4317,7 @@ describe('NightRunPage — Altbestand-Arten im Kopf der Vorlage (#988)', () => {
       'Ungedeutete Zeilen: 1',
     )
     expect(within(lauf(0)).getByTestId('nachtlauf-vorzeile')).toHaveTextContent(
-      'Nachtlauf · Prüfung',
+      'Lauf · Prüfung',
     )
   })
 
@@ -4771,7 +4773,7 @@ describe('NightRunPage — Laufblock im Leitstand-Stil (#988)', () => {
     await screen.findByTestId(`lauf-${startedAt(0)}`)
 
     const kopf = laufKopfzeile(lauf(0))
-    expect(within(kopf).getByTestId('nachtlauf-vorzeile')).toHaveTextContent('Nachtlauf · Umsetzung')
+    expect(within(kopf).getByTestId('nachtlauf-vorzeile')).toHaveTextContent('Lauf · Umsetzung')
     expect(within(kopf).getByTestId('nachtlauf-meta')).toHaveTextContent(
       '4 h 12 min · 3 bearbeitet · 0 übergangen',
     )
@@ -4839,7 +4841,7 @@ describe('NightRunPage — Laufblock im Leitstand-Stil (#988)', () => {
 
     fireEvent.click(panel.getByTestId('vorgang-taste-922'))
 
-    expect(panel.getByTestId('befund-922')).toHaveTextContent('Nachtlauf-Befund zu Karte #922')
+    expect(panel.getByTestId('befund-922')).toHaveTextContent('Lauf-Befund zu Karte #922')
     expect(
       panel.getByRole('button', { name: 'Übernahmetext zu Karte #922 kopieren' }),
     ).toBeInTheDocument()
@@ -5023,5 +5025,45 @@ describe('NightRunPage — adressierbarer Lauf (#1085)', () => {
 
     await screen.findByTestId(`lauf-${startedAt(0)}`)
     expect(laufTaste(lauf(0))).toHaveAttribute('aria-expanded', 'true')
+  })
+})
+
+describe('NightRunPage — Der verstummte Lauf (#1092)', () => {
+  /**
+   * Ein Lauf, dessen Runner abgeschossen wurde: Er hat sich nie abgeschlossen gemeldet und traegt
+   * fuer immer `complete = false`. Seit #1091 nennt der Server ihn trotzdem FAILED — die Anzeige
+   * liest den Befund und nicht mehr `complete`.
+   */
+  const verstummt = () =>
+    aufbewahrt({
+      id: 1,
+      startedAt: startedAt(0),
+      complete: false,
+      outcome: serverBefund({ complete: false, verstummt: true, items: [] }),
+    })
+
+  it('zeigt den verstummten Lauf zinnober und ohne Puls', async () => {
+    renderPage({ listen: [[verstummt()]] })
+
+    await screen.findByTestId(`lauf-${startedAt(0)}`)
+    expect(within(laufKopfzeile(lauf(0))).getByTestId('led-zinnob')).toHaveAttribute('data-puls', 'aus')
+  })
+
+  // „unvollstaendig gemeldet" sagt „der Lauf ist noch unterwegs". Ein verstummter Lauf ist nicht
+  // unterwegs, er ist nicht gelungen — die Marke waere dort eine zweite, falsche Wahrheit.
+  it('laesst am verstummten Lauf die Marke „unvollständig gemeldet" weg', async () => {
+    renderPage({ listen: [[verstummt()]] })
+
+    await screen.findByTestId(`lauf-${startedAt(0)}`)
+    expect(within(laufKopfzeile(lauf(0))).queryByTestId('lauf-zustand')).not.toBeInTheDocument()
+  })
+
+  it('zeigt am laufenden Lauf die Marke und den Puls unveraendert', async () => {
+    renderPage({ listen: [[aufbewahrt({ id: 1, startedAt: startedAt(0), complete: false })]] })
+
+    await screen.findByTestId(`lauf-${startedAt(0)}`)
+    const kopf = laufKopfzeile(lauf(0))
+    expect(within(kopf).getByTestId('lauf-zustand')).toHaveTextContent('unvollständig gemeldet')
+    expect(within(kopf).getAllByTestId('led-stahl').every((led) => led.getAttribute('data-puls') === 'an')).toBe(true)
   })
 })

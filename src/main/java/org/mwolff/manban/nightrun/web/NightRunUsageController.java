@@ -22,7 +22,6 @@ import org.mwolff.manban.nightrun.application.NightRunUsageService.TotalUsageVie
 import org.mwolff.manban.nightrun.application.NightRunUsageService.UsageSplit;
 import org.mwolff.manban.nightrun.domain.NightRunPeriodType;
 import org.mwolff.manban.nightrun.domain.NightRunUsage;
-import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -33,10 +32,8 @@ import org.springframework.web.server.ResponseStatusException;
 /**
  * Die Verbrauchs-Auswertung an HTTP (Issue #939, Plan #933): ein Abruf je Sicht (Plan E2).
  *
- * <p><b>Die Zone kommt vom Leser</b> (Plan E4) und ist eine Regionszone. Unbekanntes weist die
- * Bindung als {@link ZoneId} selbst mit 400 ab; Offset-Zonen wie {@code +05:30}, {@code Z} oder
- * {@code GMT+2} akzeptiert {@code ZoneId.of} zwar, sie werden hier trotzdem mit 400 abgewiesen:
- * Postgres deutet POSIX-Offsets mit umgekehrtem Vorzeichen, und die Nächte lägen sonst verschoben.
+ * <p><b>Die Zone kommt vom Leser</b> (Plan E4) und ist eine Regionszone — eingegrenzt von {@link
+ * Regionszone}, das seit Issue #1095 auch der Plattform-Leitstand nutzt.
  *
  * <p>Keine eigenen Exceptions: 403 und 404 liefert {@code requireOwner} im Service, 400 die
  * Bindung, die Parameter-Validierung und die Abweisung der Zone über {@link
@@ -66,7 +63,7 @@ class NightRunUsageController {
       @PathVariable long projectId,
       @RequestParam LocalDate date,
       @RequestParam ZoneId zone) {
-    return NightResponse.of(usage.night(userId, projectId, date, regionszone(zone)));
+    return NightResponse.of(usage.night(userId, projectId, date, Regionszone.of(zone)));
   }
 
   /** Ein Zeitraum samt Vorzeitraum, Nächten und Vorhaben-Aufstellung. */
@@ -77,7 +74,8 @@ class NightRunUsageController {
       @RequestParam NightRunPeriodType type,
       @RequestParam @Min(0) @Max(MAX_STEPS_BACK) int stepsBack,
       @RequestParam ZoneId zone) {
-    return PeriodResponse.of(usage.period(userId, projectId, type, stepsBack, regionszone(zone)));
+    return PeriodResponse.of(
+        usage.period(userId, projectId, type, stepsBack, Regionszone.of(zone)));
   }
 
   /**
@@ -88,15 +86,6 @@ class NightRunUsageController {
   @GetMapping("/api/projects/{projectId}/night-run-usage/total")
   TotalResponse total(@AuthenticationPrincipal Long userId, @PathVariable long projectId) {
     return TotalResponse.of(usage.total(userId, projectId));
-  }
-
-  /** Lässt allein Zonen aus der Zonendatenbank durch — nie einen festen Offset. */
-  private static ZoneId regionszone(ZoneId zone) {
-    if (!ZoneId.getAvailableZoneIds().contains(zone.getId())) {
-      throw new ResponseStatusException(
-          HttpStatus.BAD_REQUEST, "zone muss eine Regionszone sein, etwa Europe/Berlin");
-    }
-    return zone;
   }
 
   /** Die vier Verbrauchsangaben und der Anteil aus dem Zwischenspeicher; fehlend bleibt null. */

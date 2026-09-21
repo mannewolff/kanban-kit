@@ -281,7 +281,7 @@ describe('LeitstandPage (#979)', () => {
         'Durchsatz · Woche',
         'Durchlaufzeit',
         'Implementierungszeit',
-        'Nachtlauf · grün',
+        'Lauf · grün',
       ]),
     )
   })
@@ -315,7 +315,7 @@ describe('LeitstandPage (#979)', () => {
 
   it('rechnet die Nachtlauf-Kachel über alle aufbewahrten Pakete ohne graue', async () => {
     renderPage()
-    const kachel = await screen.findByRole('article', { name: 'Nachtlauf · grün' })
+    const kachel = await screen.findByRole('article', { name: 'Lauf · grün' })
     expect(kachel).toHaveTextContent('50%')
     expect(within(kachel).getByRole('img', { name: '2 grün, 1 gelb, 1 rot' })).toBeInTheDocument()
     expect(kachel).toHaveTextContent('letzte 4 Pakete')
@@ -324,12 +324,12 @@ describe('LeitstandPage (#979)', () => {
   it('nennt ein einzelnes Paket in der Nachtlauf-Kachel und zeigt ohne bewertetes Paket keinen Balken', async () => {
     m.laeufe.mockResolvedValue([lauf({ items: [paket(1, 'GREEN')] })])
     const { unmount } = renderPage()
-    expect(await screen.findByRole('article', { name: 'Nachtlauf · grün' })).toHaveTextContent('letztes Paket')
+    expect(await screen.findByRole('article', { name: 'Lauf · grün' })).toHaveTextContent('letztes Paket')
     unmount()
 
     m.laeufe.mockResolvedValue([lauf({ items: [paket(1, 'GREY')] })])
     renderPage()
-    const kachel = await screen.findByRole('article', { name: 'Nachtlauf · grün' })
+    const kachel = await screen.findByRole('article', { name: 'Lauf · grün' })
     expect(kachel).toHaveTextContent('keine Datenbasis')
     expect(within(kachel).queryByRole('img')).not.toBeInTheDocument()
   })
@@ -341,7 +341,7 @@ describe('LeitstandPage (#979)', () => {
     expect(await screen.findByRole('article', { name: 'Durchlaufzeit' })).toBeInTheDocument()
     await waitFor(() => expect(m.laeufe).toHaveBeenCalled())
     expect(screen.queryByRole('region', { name: 'Jüngster Lauf' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('article', { name: 'Nachtlauf · grün' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('article', { name: 'Lauf · grün' })).not.toBeInTheDocument()
     expect(screen.queryByText('Verbrauch')).not.toBeInTheDocument()
     expect(screen.queryByRole('region', { name: 'Abbruchgründe' })).not.toBeInTheDocument()
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
@@ -359,7 +359,7 @@ describe('LeitstandPage (#979)', () => {
   it('zeigt ohne aufbewahrten Lauf weder Laufband noch Letzten Lauf', async () => {
     m.laeufe.mockResolvedValue([])
     renderPage()
-    expect(await screen.findByRole('article', { name: 'Nachtlauf · grün' })).toHaveTextContent('keine Datenbasis')
+    expect(await screen.findByRole('article', { name: 'Lauf · grün' })).toHaveTextContent('keine Datenbasis')
     expect(screen.queryByRole('region', { name: 'Jüngster Lauf' })).not.toBeInTheDocument()
   })
 
@@ -649,5 +649,37 @@ describe('LeitstandPage — Lauf ohne Arbeit (#1069)', () => {
 
     await screen.findByRole('region', { name: 'Letzter Lauf · Kette' })
     expect(screen.getAllByTestId('led-gruen').length).toBeGreaterThanOrEqual(1)
+  })
+})
+
+describe('LeitstandPage — Der verstummte Lauf (#1092)', () => {
+  // Ein Lauf, dessen Runner abgeschossen wurde: `complete` bleibt `false`, der Server nennt ihn
+  // seit #1091 trotzdem FAILED. Die Anzeige liest den Befund, nicht `complete`.
+  const verstummt = () =>
+    lauf({ complete: false, items: [], outcome: serverBefund({ complete: false, verstummt: true, items: [] }) })
+
+  it('meldet den verstummten Lauf zinnober und ohne Puls', async () => {
+    m.laeufe.mockResolvedValue([verstummt()])
+    renderPage()
+
+    const letzter = await screen.findByRole('region', { name: 'Letzter Lauf · Kette' })
+    expect(within(letzter).getByTestId('led-zinnob')).toHaveAttribute('data-puls', 'aus')
+  })
+
+  it('nimmt dem verstummten Lauf im Laufband den Puls und nennt den Beginn', async () => {
+    m.laeufe.mockResolvedValue([verstummt()])
+    renderPage()
+
+    const band = await screen.findByRole('region', { name: 'Jüngster Lauf' })
+    expect(within(band).getByTestId('led-zinnob')).toHaveAttribute('data-puls', 'aus')
+    expect(band).toHaveTextContent('Beginn')
+  })
+
+  it('laesst den laufenden Lauf weiter stahlblau pulsieren', async () => {
+    m.laeufe.mockResolvedValue([lauf({ complete: false, items: [] })])
+    renderPage()
+
+    const band = await screen.findByRole('region', { name: 'Jüngster Lauf' })
+    expect(within(band).getByTestId('led-stahl')).toHaveAttribute('data-puls', 'an')
   })
 })

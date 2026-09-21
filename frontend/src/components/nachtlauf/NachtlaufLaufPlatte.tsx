@@ -47,7 +47,7 @@ import { Led } from '../leitstand/LeitstandBausteine'
 export function NachtlaufLaufPlatte({
   /** Der Titel des Laufs, etwa „Nacht vom 14. September" — auch der Name der Platte. */
   titel,
-  /** Die Lauf-Art im Etikett, etwa „Kette" — davor steht „Nachtlauf · ". */
+  /** Die Lauf-Art im Etikett, etwa „Kette" — davor steht „Lauf · ". */
   art,
   /** Beginn, Dauer, bearbeitete und übergangene Vorgänge und was der Lauf sonst zu sagen hat. */
   meta,
@@ -175,7 +175,7 @@ export function NachtlaufLaufPlatte({
 
         <Box sx={{ minWidth: 0 }}>
           <Box data-testid="nachtlauf-vorzeile" sx={{ ...ETIKETT, mb: '1px' }}>
-            {`Nachtlauf · ${art}`}
+            {`Lauf · ${art}`}
           </Box>
           <Box
             component="h3"

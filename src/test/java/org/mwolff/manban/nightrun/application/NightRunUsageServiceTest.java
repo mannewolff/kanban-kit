@@ -73,7 +73,8 @@ class NightRunUsageServiceTest {
   private static final KindTotals LEER = new KindTotals(0L, NICHTS, NICHTS);
 
   /** Ringpuffer-Grenze 2 je Gattung, damit die Abdeckungsfälle mit wenigen Läufen auskommen. */
-  private static final NightRunProperties PROPERTIES = new NightRunProperties(2, null, 2, null);
+  private static final NightRunProperties PROPERTIES =
+      new NightRunProperties(2, null, 2, null, null);
 
   private FakeUsage usage;
   private CardService cards;

@@ -42,12 +42,12 @@ const LAUF_ARTEN = Object.keys(LAUF_ART_TEXT) as NightRunServerMode[]
  * nicht anzusehen, ob sie aus der Nacht oder aus dem Gespräch stammt.
  */
 const GATTUNG_TEXT: Record<NightRunKind, string> = {
-  NIGHT: 'Nachtlauf',
+  NIGHT: 'Lauf',
   INTERACTIVE: 'Interaktive Sitzung',
 }
 
 /**
- * Die Gattung eines Anlaufs; ohne Angabe gilt er als Nachtlauf — die Gattung, die es vor der
+ * Die Gattung eines Anlaufs; ohne Angabe gilt er als Lauf — die Gattung, die es vor der
  * Migration `V34` allein gab (siehe {@link NightRunAnlauf.kind}).
  */
 function gattung(anlauf: NightRunAnlauf): NightRunKind {
@@ -57,9 +57,9 @@ function gattung(anlauf: NightRunAnlauf): NightRunKind {
 /**
  * Die vier Verbrauchssummen: Schlüssel am Server, Benennung, Formatierer.
  *
- * <p>Die Benennung nennt die Gattung, weil die Summen allein die Nachtläufe umfassen (Issue
+ * <p>Die Benennung nennt die Gattung, weil die Summen allein die Läufe umfassen (Issue
  * #1018): Der Verbrauch einer interaktiven Sitzung steht an ihrer Zeile und geht hier nicht ein —
- * eine Summe über beides wäre keine Nachtlauf-Zahl mehr, ohne dass man es der Zeile ansähe.
+ * eine Summe über beides wäre keine Lauf-Zahl mehr, ohne dass man es der Zeile ansähe.
  */
 const SUMMEN: ReadonlyArray<{
   schluessel: keyof NightRunUsageView
@@ -67,13 +67,13 @@ const SUMMEN: ReadonlyArray<{
   label: string
   format: (wert: number | undefined) => string
 }> = [
-  { schluessel: 'costUsd', testId: 'kosten', label: 'Kosten (Nachtläufe)', format: kosten },
-  { schluessel: 'inputTokens', testId: 'eingabe', label: 'Eingabe (Nachtläufe)', format: menge },
-  { schluessel: 'outputTokens', testId: 'ausgabe', label: 'Ausgabe (Nachtläufe)', format: menge },
+  { schluessel: 'costUsd', testId: 'kosten', label: 'Kosten (Läufe)', format: kosten },
+  { schluessel: 'inputTokens', testId: 'eingabe', label: 'Eingabe (Läufe)', format: menge },
+  { schluessel: 'outputTokens', testId: 'ausgabe', label: 'Ausgabe (Läufe)', format: menge },
   {
     schluessel: 'cachedInputTokens',
     testId: 'zwischenspeicher',
-    label: 'Zwischenspeicher (Nachtläufe)',
+    label: 'Zwischenspeicher (Läufe)',
     format: menge,
   },
 ]

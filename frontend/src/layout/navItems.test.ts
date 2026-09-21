@@ -31,19 +31,19 @@ describe('buildNavItems Gliederung nach dem Leitstand-Entwurf (#978)', () => {
     expect(bloecke({ board })[0]).toBe('Projekt')
   })
 
-  it('ordnet den Projekt-Block wie der Entwurf: Leitstand, Board, Liste, Vorhaben, Ideen, Nachtläufe', () => {
+  it('ordnet den Projekt-Block wie der Entwurf: Leitstand, Board, Liste, Vorhaben, Ideen, Läufe', () => {
     expect(eintraege({ board, canViewNightRun: true }, 'Projekt')).toEqual([
       'Leitstand',
       'Board',
       'Liste',
       'Vorhaben',
       'Ideen',
-      'Nachtläufe',
+      'Läufe',
     ])
   })
 
   it('führt ohne offenes Board im Projekt-Block nur die projektweiten Einträge', () => {
-    expect(eintraege({ board: null, projectId: 7, canViewNightRun: true }, 'Projekt')).toEqual(['Ideen', 'Nachtläufe'])
+    expect(eintraege({ board: null, projectId: 7, canViewNightRun: true }, 'Projekt')).toEqual(['Ideen', 'Läufe'])
   })
 
   it('lässt den Projekt-Block ohne Projekt-Kontext weg', () => {
@@ -115,24 +115,24 @@ describe('buildNavItems Ideen-Link', () => {
   })
 })
 
-describe('buildNavItems Nachtläufe-Link', () => {
+describe('buildNavItems Läufe-Link', () => {
   // Reine Parameterprüfung: buildNavItems bekommt den fertigen Booleschen Wert. Wie er entsteht
   // (canManageProject, also auch für den Plattform-Admin), ist in der AppShell geprüft.
-  it('zeigt „Nachtläufe" bei gesetztem Sichtbarkeitswert und offenem Board', () => {
-    expect(link({ board, canViewNightRun: true }, 'Nachtläufe')?.path).toBe(`/projects/${board.projectId}/nachtlauf`)
+  it('zeigt „Läufe" bei gesetztem Sichtbarkeitswert und offenem Board', () => {
+    expect(link({ board, canViewNightRun: true }, 'Läufe')?.path).toBe(`/projects/${board.projectId}/nachtlauf`)
   })
 
-  it('zeigt „Nachtläufe" auf einer Projekt-Route ohne offenes Board', () => {
-    expect(link({ board: null, projectId: 7, canViewNightRun: true }, 'Nachtläufe')?.path).toBe('/projects/7/nachtlauf')
+  it('zeigt „Läufe" auf einer Projekt-Route ohne offenes Board', () => {
+    expect(link({ board: null, projectId: 7, canViewNightRun: true }, 'Läufe')?.path).toBe('/projects/7/nachtlauf')
   })
 
-  it('blendet „Nachtläufe" ohne Projekt-Kontext aus', () => {
-    expect(link({ board: null, canViewNightRun: true }, 'Nachtläufe')).toBeUndefined()
+  it('blendet „Läufe" ohne Projekt-Kontext aus', () => {
+    expect(link({ board: null, canViewNightRun: true }, 'Läufe')).toBeUndefined()
   })
 
-  it('blendet „Nachtläufe" ohne gesetzten oder mit fehlendem Sichtbarkeitswert aus', () => {
-    expect(link({ board, canViewNightRun: false }, 'Nachtläufe')).toBeUndefined()
-    expect(link({ board }, 'Nachtläufe')).toBeUndefined()
+  it('blendet „Läufe" ohne gesetzten oder mit fehlendem Sichtbarkeitswert aus', () => {
+    expect(link({ board, canViewNightRun: false }, 'Läufe')).toBeUndefined()
+    expect(link({ board }, 'Läufe')).toBeUndefined()
   })
 })
 
@@ -229,7 +229,7 @@ describe('navKontext Rechte des aktuellen Projekts', () => {
    * Nachtlauf-Auswertung nur noch am **teilnehmenden** Projekt lesen. Ein Eintrag, der sonst auf
    * einen Fehlertext führte, ist schlechter als keiner (#1082).
    */
-  it('zeigt dem Plattform-Admin „Nachtläufe" nur am teilnehmenden Projekt (#1082)', () => {
+  it('zeigt dem Plattform-Admin „Läufe" nur am teilnehmenden Projekt (#1082)', () => {
     const fremd = { id: 7, name: 'Sieben', role: 'VIEWER' }
     const ohneTeilnahme = kontext({ board: null, boardId: null, routeProjectId: 7, admin: true, projects: [fremd] })
     const mitTeilnahme = kontext({
@@ -244,13 +244,13 @@ describe('navKontext Rechte des aktuellen Projekts', () => {
     expect(mitTeilnahme.canViewNightRun).toBe(true)
   })
 
-  it('zeigt dem echten Owner „Nachtläufe" auch ohne Teilnahme (#1082)', () => {
+  it('zeigt dem echten Owner „Läufe" auch ohne Teilnahme (#1082)', () => {
     const eigen = { id: 7, name: 'Sieben', role: 'OWNER' }
 
     expect(kontext({ board: null, boardId: null, routeProjectId: 7, admin: false, projects: [eigen] }).canViewNightRun).toBe(true)
   })
 
-  it('zeigt Nachtläufe nur mit Owner-Rolle im Projekt des Pfads', () => {
+  it('zeigt Läufe nur mit Owner-Rolle im Projekt des Pfads', () => {
     expect(kontext().canViewNightRun).toBe(true)
     expect(kontext({ routeProjectId: 9, boardId: null }).canViewNightRun).toBe(false)
     expect(kontext({ board: null, boardId: null, projects: [{ id: 7, name: 'Sieben', role: 'ADMIN' }], routeProjectId: 7 }).canViewNightRun).toBe(

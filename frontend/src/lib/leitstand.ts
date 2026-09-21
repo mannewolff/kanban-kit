@@ -124,15 +124,47 @@ export function laufMelder(
  * gelb beide zu `FAILED` zusammen, die Anzeige unterscheidet sie aber seit jeher (zinnober gegen
  * bernstein). Ueber `MELDER_JE_ZUSTAND` bleibt die Darstellung deshalb Zeichen fuer Zeichen die von
  * vorher — die Verlagerung aendert den Ort der Rechnung, nicht das Bild.
+ *
+ * **Ohne massgebliches Paket entscheidet das Urteil** (Issue #1092). Bis #1091 hiess „kein Paket
+ * und kein Grund" zwangslaeufig `SUCCEEDED`; seit der Stillefrist trifft es auch den verstummten
+ * Lauf — ein `FAILED` ohne Paket und ohne Grund. Der Rueckfall auf Gruen gehoert deshalb allein dem
+ * gelungenen Lauf, sonst zeigte die Anzeige einen nicht gelungenen Lauf gruen.
+ *
+ * <p><b>Oeffentlich seit Issue #1096:</b> Beide Zeilen des Plattform-Leitstands — die laufende und
+ * die durchgefuehrte — beziehen ihren Melder hierher. Eine zweite Zuordnung von Ausgang auf Melder
+ * waere die zweite Rechnung fuer dieselbe Frage.
  */
-function melderAusBefund(befund: NightRunOutcomeView): Melder {
+export function melderAusBefund(befund: NightRunOutcomeView): Melder {
   if (befund.verdict === 'RUNNING') {
     return 'stahl'
   }
   if (befund.noWorkReason != null && befund.noWorkReason !== '') {
     return 'zinnob'
   }
-  return befund.decisiveItem == null ? 'gruen' : MELDER_JE_ZUSTAND[befund.decisiveItem.state]
+  if (befund.decisiveItem != null) {
+    return MELDER_JE_ZUSTAND[befund.decisiveItem.state]
+  }
+  return befund.verdict === 'SUCCEEDED' ? 'gruen' : 'zinnob'
+}
+
+/**
+ * Ob der Lauf noch unterwegs ist — die eine Stelle, an der Puls, „seit HH:MM" und die Marke
+ * „unvollstaendig gemeldet" ihre Aussage holen (Issue #1092).
+ *
+ * <p>**Nicht `!complete`.** Ein verstummter Lauf hat sich nie abgeschlossen gemeldet und traegt
+ * `complete = false` fuer immer; laufen tut er trotzdem nicht. `complete` bleibt wahr in dem, was
+ * es sagt — „hat sich abgeschlossen gemeldet" —, aber der **Ausgang** steht seit #1091 im Befund,
+ * und nach AK 10 der fachlichen Quelle (#1086) gibt es darueber genau eine Wahrheit.
+ *
+ * <p>Ohne Befund bleibt `complete` der Massstab: Der eben im Browser geparste Lauf der
+ * Nachtlauf-Seite war bei keinem Server (Plan #1072 E28) — dieselbe Grenze, die {@link laufMelder}
+ * zieht.
+ */
+export function laeuftNoch(lauf: {
+  complete: boolean
+  outcome?: NightRunOutcomeView | null
+}): boolean {
+  return lauf.outcome == null ? !lauf.complete : lauf.outcome.verdict === 'RUNNING'
 }
 
 /** Die Aussage des Laufbands (Entwurf Z. 1203–1230). */
@@ -166,12 +198,16 @@ export function laufband(lauf: NightRunView): Laufband {
     const bearbeitet = lauf.items.filter((item) => item.state !== 'GREY').length
     titel = `${modus} läuft — Vorgang ${bearbeitet} von ${gesamt}`
   }
+  // Puls und Zeitpunkt kommen aus dem Befund, nicht aus `complete` (#1092): Ein verstummter Lauf
+  // pulste sonst gruen mit „seit HH:MM" weiter, waehrend der Plattform-Leitstand ihn als nicht
+  // gelungen fuehrt.
+  const laeuft = laeuftNoch(lauf)
   return {
     titel,
     melder: laufMelder(lauf, lauf.noWorkReason),
-    laeuft: !lauf.complete,
+    laeuft,
     vorgang: letzter ? { nummer: letzter.cardNumber, titel: letzter.title } : null,
-    zeitpunkt: lauf.complete ? `Beginn ${TAG_ZEIT.format(beginn)}` : `seit ${ZEIT.format(beginn)}`,
+    zeitpunkt: laeuft ? `seit ${uhrzeit(lauf.startedAt)}` : `Beginn ${TAG_ZEIT.format(beginn)}`,
     minuten: Math.round(lauf.durationMs / 60_000),
     kosten: lauf.usage?.costUsd == null ? null : dollar(lauf.usage.costUsd),
   }
@@ -224,6 +260,18 @@ export function laufDauerGeteilt(ms: number): { wert: string; einheit: string } 
 /** Ein Zeitpunkt als Tag und Uhrzeit („14.09. 23:10") — Beginn eines Laufs in Notiz und Metazeile. */
 export function tagZeit(iso: string): string {
   return TAG_ZEIT.format(new Date(iso))
+}
+
+/**
+ * Ein Zeitpunkt als blosse Uhrzeit („02:41") — das „seit HH:MM" an einem laufenden Vorgang
+ * (Entwurf `docs/entwurf-leitstand.html` Z. 1164–1165, 1205–1207).
+ *
+ * <p>Exportiert seit Issue #1098: Die laufende Zeile des Plattform-Leitstands sagt „läuft seit
+ * HH:MM" und {@link laufband} sagt „seit HH:MM" — zwei Stellen, ein Format. Ein zweiter
+ * `Intl.DateTimeFormat` daneben liefe beim naechsten Feinschliff auseinander.
+ */
+export function uhrzeit(iso: string): string {
+  return ZEIT.format(new Date(iso))
 }
 
 /** Die Notiz im Kopf der Platte „Letzter Lauf": Beginn, Dauer, Zahl der Pakete. */

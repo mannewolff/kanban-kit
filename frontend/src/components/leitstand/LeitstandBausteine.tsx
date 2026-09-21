@@ -42,13 +42,21 @@ const puls = keyframes`
   50% { box-shadow: 0 0 0 1px rgba(0,0,0,.22) inset, 0 0 14px 1px currentColor; }
 `
 
-/** Melder-LED (Entwurf Z. 417–433); `puls` für einen laufenden Vorgang. Rein schmückend. */
+/**
+ * Melder-LED (Entwurf Z. 417–433); `puls` für einen laufenden Vorgang. Rein schmückend.
+ *
+ * <p>`data-puls` steht neben der Animation, weil der Puls sonst nicht prüfbar wäre: Er lebt in
+ * einer Emotion-Klasse, und ob eine LED pulst, ließe sich im Test nur über einen generierten
+ * Klassennamen erraten. Seit #1092 ist das eine Aussage über den Ausgang eines Laufs — ein
+ * verstummter Lauf pulst nicht mehr —, und die gehört geprüft.
+ */
 export function Led({ melder, pulsiert = false }: Readonly<{ melder: Melder; pulsiert?: boolean }>) {
   return (
     <Box
       component="span"
       aria-hidden
       data-testid={`led-${melder}`}
+      data-puls={pulsiert ? 'an' : 'aus'}
       sx={{
         width: 9,
         height: 9,

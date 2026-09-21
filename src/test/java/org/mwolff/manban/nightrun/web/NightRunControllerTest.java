@@ -14,6 +14,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.fasterxml.jackson.databind.SerializationFeature;
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -388,7 +389,8 @@ class NightRunControllerTest {
                     null,
                     null,
                     null,
-                    NightRunOutcome.of(true, null, List.of()),
+                    NightRunOutcome.of(
+                        true, null, List.of(), ERSTER, null, ERSTER, Duration.ofMinutes(90)),
                     List.of(
                         new NightRunItemView(
                             21L,
@@ -443,7 +445,8 @@ class NightRunControllerTest {
                     null,
                     null,
                     null,
-                    NightRunOutcome.of(true, null, List.of()),
+                    NightRunOutcome.of(
+                        true, null, List.of(), ERSTER, null, ERSTER, Duration.ofMinutes(90)),
                     List.of(
                         new NightRunItemView(
                             22L,

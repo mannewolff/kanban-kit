@@ -95,6 +95,10 @@ public class NightRunService {
     if (submissions.isEmpty()) {
       return List.of();
     }
+    // Erste Datenbankaktion dieses Wegs (Issue #1090): Sie serialisiert die Einlieferungen des
+    // Projekts, damit zwei gleichzeitige Laeufe einander beim Nachziehen des Ringpuffers
+    // mitzaehlen. Begruendung und Sperrreihenfolge stehen am Port.
+    runs.lockProject(projectId);
     Instant now = clock.instant();
     List<NightRunResult> results = new ArrayList<>(submissions.size());
     for (NewNightRun submission : submissions) {
@@ -140,6 +144,9 @@ public class NightRunService {
   public NightRunResult ingest(
       long userId, long projectId, String tokenName, NightRunKind kind, NewNightRun meldung) {
     permissions.requireOwner(userId, projectId);
+    // Erste Datenbankaktion dieses Wegs (Issue #1090), aus demselben Grund wie in submit und vor
+    // der Laufzeile aus upsert — die Sperrreihenfolge ist damit in beiden Wegen dieselbe.
+    runs.lockProject(projectId);
     Instant now = clock.instant();
     NightRun gemeldet =
         new NightRun(
@@ -318,8 +325,11 @@ public class NightRunService {
    * Der Lauf mit den Arbeitspaketen, die ihm gehören. Die Zuordnung läuft über einen Filter statt
    * über eine Gruppierung, weil der Fremdschlüssel eines Arbeitspakets erst mit dem Einfügen
    * gesetzt wird und damit {@code @Nullable} ist — ein Gruppierungsschlüssel darf das nicht sein.
+   *
+   * <p>Instanzmethode statt {@code static} seit Issue #1091: Der Befund braucht die Stillefrist aus
+   * {@link NightRunProperties} und den Jetzt-Zeitpunkt aus der {@link Clock}.
    */
-  private static NightRunView view(NightRun run, List<NightRunItem> alleItems) {
+  private NightRunView view(NightRun run, List<NightRunItem> alleItems) {
     Long runId = run.requireId();
     // Einmal filtern, zweimal gebraucht: Die Sicht zeigt die Pakete, der Befund wertet sie aus
     // (Issue #1078). Die Reihenfolge bleibt die der Abfrage — sie entscheidet bei gleichrangigen
@@ -343,7 +353,14 @@ public class NightRunService {
         run.updatedAt(),
         run.usage(),
         run.noWorkReason(),
-        NightRunOutcome.of(run.complete(), run.noWorkReason(), eigeneItems),
+        NightRunOutcome.of(
+            run.complete(),
+            run.noWorkReason(),
+            eigeneItems,
+            run.startedAt(),
+            run.updatedAt(),
+            clock.instant(),
+            properties.stilleFrist()),
         items);
   }
 
