@@ -1,26 +1,41 @@
 import Box from '@mui/material/Box'
 import Typography from '@mui/material/Typography'
-import { useCallback, useEffect, useId, useState } from 'react'
+import { useCallback, useEffect, useId, useState, type ReactNode } from 'react'
 import { Link as RouterLink } from 'react-router-dom'
 import { ApiError } from '../api/client'
-import { plattformLeitstandApi, type DisruptionView } from '../api/plattformLeitstand'
+import {
+  plattformLeitstandApi,
+  type DisruptionView,
+  type LeitstandView,
+} from '../api/plattformLeitstand'
 import { KupferwarteBereich } from '../components/nachtlauf/KupferwarteBereich'
 import { Led, Platte, Taste } from '../components/leitstand/LeitstandBausteine'
-import { MELDER_JE_ZUSTAND, tagZeit } from '../lib/leitstand'
-import { nightRunZustandsText } from '../lib/nightRunHandoff'
+import { MELDER_JE_ZUSTAND, melderAusBefund, tagZeit, uhrzeit } from '../lib/leitstand'
+import { NIGHT_RUN_VERDICT_TEXT, nightRunZustandsText } from '../lib/nightRunHandoff'
 import { ANZEIGE, RAND, TEXT_SCHWACH } from '../theme'
 
+/** Der Anfangszustand: drei leere Listen, noch von keiner Antwort belegt. */
+const LEERE_SICHT: LeitstandView = { laufende: [], durchgefuehrte: [], stoerungen: [] }
+
 /**
- * Der Plattform-Leitstand: die Startseite eines Plattform-Admins (Issue #1083, fachliche Quelle
- * #1064).
+ * Der Plattform-Leitstand: die Startseite eines Plattform-Admins (Issue #1083, fachliche Quellen
+ * #1064 und #1086).
  *
- * Ihr erster Bereich heisst **Stoerungen** und zeigt jede nicht quittierte Stoerung aus den
- * Nachtlaeufen aller teilnehmenden Projekte, juengste zuoberst. Wer mehrere Projekte betreibt,
- * erfaehrt damit von einem gescheiterten Nachtlauf, ohne jedes Projekt einzeln aufzuschlagen.
+ * **Drei Bereiche in dieser Ordnung** (Kriterium 18, Issue #1098): *Laufende Nachtlaeufe* zeigen
+ * mit pulsierendem Melder, dass gerade etwas arbeitet; *Durchgefuehrte Nachtlaeufe* zeigen den
+ * Ausgang jedes beendeten Laufs der laufenden Nacht; *Stoerungen* zeigt jede nicht quittierte
+ * Stoerung ueber alle Naechte, juengste zuoberst. Wer mehrere Projekte betreibt, beantwortet damit
+ * „laeuft gerade etwas, und ist die Nacht gut durch?" an einer Stelle statt Projekt fuer Projekt.
  *
- * **Nach Projekt gruppiert** (Issue #1087): Eine flache Liste liess den Leser abwechselnd Namen
- * statt Befunde lesen — zwei Stoerungen desselben Projekts konnten durch eine fremde getrennt
- * sein, und ob ein Projekt einmal oder fuenfmal betroffen ist, ergab sich erst aus dem Durchzaehlen.
+ * **Eine Antwort fuer alle drei Bereiche** (Plan #1088 E5): Die Seite frischt sich auf, und ein
+ * Lauf kann zwischen zwei Rundreisen den Bereich wechseln — aus drei Abrufen erschiene er doppelt
+ * oder gar nicht. Aus derselben Antwort liest die Seite auch, zu welchem durchgefuehrten Lauf es
+ * eine Stoerung gibt.
+ *
+ * **Nach Projekt gruppiert** ist allein der Bereich *Stoerungen* (Issue #1087): Eine flache Liste
+ * liess den Leser abwechselnd Namen statt Befunde lesen. Die beiden Lauf-Bereiche gruppieren
+ * **nicht** — ein Projekt darf in einer Nacht mehrmals anlaufen, und jeder Anlauf soll als eigene
+ * Zeile sichtbar bleiben (Kriterium 9).
  *
  * **Gestaltung:** `docs/entwurf-leitstand.html` ist verbindlich (`CLAUDE-design.md`), fuehrt fuer
  * diese Ansicht aber kein eigenes Mockup. Sie entsteht deshalb aus den vorhandenen Bausteinen —
@@ -28,18 +43,19 @@ import { ANZEIGE, RAND, TEXT_SCHWACH } from '../theme'
  * neuen Gestaltung (Plan #1072 E15).
  */
 export default function PlattformLeitstandPage() {
-  // Zwei Zustaende statt einer Liste mit `null`: Solange nicht geladen ist, zeigt die Seite nichts —
-  // sonst blitzte „Keine offene Stoerung." auf, bevor die erste Antwort da ist. Getrennt gehalten,
-  // damit das Quittieren keinen Rueckfall auf eine leere Liste braucht, den nichts erreichen kann.
-  const [stoerungen, setStoerungen] = useState<DisruptionView[]>([])
+  // Zwei Zustaende statt einer Sicht mit `null`: Solange nicht geladen ist, zeigt die Seite keinen
+  // der drei Leersaetze — sonst blitzte „Keine offene Stoerung." auf, bevor die erste Antwort da
+  // ist. Getrennt gehalten, damit das Quittieren keinen Rueckfall auf eine leere Sicht braucht,
+  // den nichts erreichen kann.
+  const [sicht, setSicht] = useState<LeitstandView>(LEERE_SICHT)
   const [geladen, setGeladen] = useState(false)
   const [fehler, setFehler] = useState<string | null>(null)
 
   const laden = useCallback(() => {
     plattformLeitstandApi
-      .liste()
-      .then((liste) => {
-        setStoerungen(liste)
+      .leitstand()
+      .then((antwort) => {
+        setSicht(antwort)
         setGeladen(true)
         setFehler(null)
       })
@@ -55,22 +71,209 @@ export default function PlattformLeitstandPage() {
   }, [laden])
 
   // AK 8: kein Rueckfragen-Dialog und kein Rueckgaengig. Die Zeile verschwindet sofort; ein
-  // Nachladen der ganzen Liste waere ein zweiter Weg zur selben Aussage.
+  // Nachladen der ganzen Antwort waere ein zweiter Weg zur selben Aussage.
+  //
+  // Kriterium 13: Nur die Stoerliste wird angefasst. Der durchgefuehrte Lauf behaelt seinen
+  // Ausgang — das Quittieren sagt etwas ueber die Sichtung, nichts ueber den Lauf.
   const quittieren = async (stoerung: DisruptionView) => {
     await plattformLeitstandApi.quittieren(stoerung.nightRunId)
-    setStoerungen((vorher) => vorher.filter((s) => s.nightRunId !== stoerung.nightRunId))
+    setSicht((vorher) => ({
+      ...vorher,
+      stoerungen: vorher.stoerungen.filter((s) => s.nightRunId !== stoerung.nightRunId),
+    }))
   }
 
   if (fehler !== null) {
     return <Typography color="error">{fehler}</Typography>
   }
 
+  // Ob es zu einem durchgefuehrten Lauf eine Stoerung gibt, entscheidet der Browser aus **einer**
+  // Antwort (Kriterium 12): Ein eigenes Serverfeld waere eine zweite Quelle fuer dieselbe Aussage
+  // und liefe beim Quittieren sofort gegen die Stoerliste.
+  const mitStoerung = new Set(sicht.stoerungen.map((s) => s.nightRunId))
+
   return (
     <KupferwarteBereich>
-      <Platte titel="Störungen">
-        <Stoerungen liste={geladen ? stoerungen : null} onQuittieren={quittieren} />
-      </Platte>
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        <Platte titel="Laufende Nachtläufe">
+          <LaufendeListe zeilen={geladen ? sicht.laufende : null} />
+        </Platte>
+        <Platte titel="Durchgeführte Nachtläufe">
+          <DurchgefuehrteListe
+            zeilen={geladen ? sicht.durchgefuehrte : null}
+            mitStoerung={mitStoerung}
+          />
+        </Platte>
+        <Platte titel="Störungen">
+          <Stoerungen liste={geladen ? sicht.stoerungen : null} onQuittieren={quittieren} />
+        </Platte>
+      </Box>
     </KupferwarteBereich>
+  )
+}
+
+/**
+ * Der Leerfall eines Lauf-Bereichs (Kriterien 4 und 14): ein ausdruecklicher Satz.
+ *
+ * Eine leere Flaeche waere von einer kaputten Anzeige nicht zu unterscheiden — „nichts laeuft" und
+ * „die Seite hat nichts bekommen" saehen gleich aus.
+ */
+function LeerSatz({ testId, children }: Readonly<{ testId: string; children: ReactNode }>) {
+  return (
+    <Typography
+      data-testid={testId}
+      sx={{ fontSize: 13, color: 'text.secondary', px: '16px', py: '14px' }}
+    >
+      {children}
+    </Typography>
+  )
+}
+
+/** Eine Zeile der beiden Lauf-Bereiche; Trennlinie wie in der Laufplatte des Board-Leitstands. */
+const LAUF_ZEILE_SX = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: '10px',
+  px: '16px',
+  py: '8px',
+  '&:not(:last-child)': {
+    borderBottom: `1px solid color-mix(in srgb, ${RAND} 55%, transparent)`,
+  },
+} as const
+
+/** Der Projektname einer Lauf-Zeile — hier steht er in **jeder** Zeile (Kriterien 1 und 9). */
+function Projektname({ name }: Readonly<{ name: string }>) {
+  return (
+    <Typography sx={{ ...ANZEIGE, fontSize: 12.5, fontWeight: 600, minWidth: 0 }}>{name}</Typography>
+  )
+}
+
+/**
+ * Der Weg zur Auswertung genau dieses Laufs (Kriterien 1 und 12) — auch ohne Mitgliedschaft im
+ * Projekt.
+ *
+ * Das `aria-label` nennt zusaetzlich das Projekt: Steht derselbe Lauf unter den durchgefuehrten
+ * **und** unter den Stoerungen, gaebe es sonst zweimal denselben Verweisnamen „Lauf #5".
+ */
+function LaufVerweis({ zeile }: Readonly<{ zeile: DisruptionView }>) {
+  return (
+    <Typography
+      component={RouterLink}
+      to={`/projects/${zeile.projectId}/nachtlauf?lauf=${zeile.nightRunId}`}
+      aria-label={`Lauf #${zeile.nightRunId} von ${zeile.projectName}`}
+      sx={{ fontSize: 12, fontFamily: 'monospace' }}
+    >
+      Lauf #{zeile.nightRunId}
+    </Typography>
+  )
+}
+
+/** Der Bereich „Laufende Nachtlaeufe" (Kriterien 1–4). */
+function LaufendeListe({ zeilen }: Readonly<{ zeilen: DisruptionView[] | null }>) {
+  if (zeilen === null) {
+    return null
+  }
+  if (zeilen.length === 0) {
+    return <LeerSatz testId="keine-laufenden">Gerade läuft kein Nachtlauf.</LeerSatz>
+  }
+  return (
+    <Box component="ul" sx={{ listStyle: 'none', m: 0, p: 0 }}>
+      {zeilen.map((zeile) => (
+        <LaufendeZeile key={zeile.nightRunId} zeile={zeile} />
+      ))}
+    </Box>
+  )
+}
+
+/**
+ * Eine laufende Zeile: pulsierender Stahl-Melder, Projekt, „laeuft seit HH:MM", Kennung.
+ *
+ * **Melder, Wort und Puls kommen aus demselben Befund** — sie koennen nicht auseinanderlaufen. Das
+ * Wort steht dabei nicht nur zur Zierde: Nach Kriterium 3 darf der Zustand weder allein an einer
+ * Farbe noch allein an der Bewegung haengen. Wer Bewegung abgeschaltet hat, liest ihn trotzdem —
+ * den Puls haelt die globale `prefers-reduced-motion`-Regel des Themes von selbst an.
+ *
+ * Die Uhrzeit kommt aus {@link uhrzeit}, also im Format des Laufbands („seit 02:41", Entwurf
+ * Z. 1164–1165).
+ */
+function LaufendeZeile({ zeile }: Readonly<{ zeile: DisruptionView }>) {
+  return (
+    <Box component="li" data-testid={`laufend-${zeile.nightRunId}`} sx={LAUF_ZEILE_SX}>
+      <Led melder={melderAusBefund(zeile.outcome)} pulsiert={zeile.outcome.verdict === 'RUNNING'} />
+      <Projektname name={zeile.projectName} />
+      <Typography sx={{ fontSize: 12, color: 'text.secondary', flex: 1, minWidth: 0 }}>
+        {`${NIGHT_RUN_VERDICT_TEXT[zeile.outcome.verdict]} seit ${uhrzeit(zeile.startedAt)}`}
+      </Typography>
+      <LaufVerweis zeile={zeile} />
+    </Box>
+  )
+}
+
+/** Der Bereich „Durchgefuehrte Nachtlaeufe" (Kriterien 9–14). */
+function DurchgefuehrteListe({
+  zeilen,
+  mitStoerung,
+}: Readonly<{ zeilen: DisruptionView[] | null; mitStoerung: ReadonlySet<number> }>) {
+  if (zeilen === null) {
+    return null
+  }
+  if (zeilen.length === 0) {
+    return (
+      <LeerSatz testId="keine-durchgefuehrten">In dieser Nacht wurde noch kein Lauf beendet.</LeerSatz>
+    )
+  }
+  return (
+    <Box component="ul" sx={{ listStyle: 'none', m: 0, p: 0 }}>
+      {zeilen.map((zeile) => (
+        <DurchgefuehrteZeile
+          key={zeile.nightRunId}
+          zeile={zeile}
+          hatStoerung={mitStoerung.has(zeile.nightRunId)}
+        />
+      ))}
+    </Box>
+  )
+}
+
+/**
+ * Eine durchgefuehrte Zeile: ruhender Melder, Projekt, Startzeitpunkt, Kennung, Ausgang als Wort.
+ *
+ * **Der Melder pulst hier nicht** (Kriterium 5): Ein beendeter Lauf arbeitet nicht mehr. Welche
+ * Farbe er traegt, sagt {@link melderAusBefund} — dieselbe Stelle, aus der die Nachtlauf-Auswertung
+ * ihre Farbe holt.
+ *
+ * **Der Ausgang steht als Wort da** (Kriterium 11) — gelungen, nicht gelungen, mit Vorbehalt. Farbe
+ * ist nie der einzige Traeger der Aussage.
+ *
+ * **Der zweite Verweis** fuehrt zur Stoerzeile weiter unten auf derselben Seite (Kriterium 12); er
+ * erscheint nur, solange die Stoerung offen ist.
+ */
+function DurchgefuehrteZeile({
+  zeile,
+  hatStoerung,
+}: Readonly<{ zeile: DisruptionView; hatStoerung: boolean }>) {
+  return (
+    <Box component="li" data-testid={`durchgefuehrt-${zeile.nightRunId}`} sx={LAUF_ZEILE_SX}>
+      <Led melder={melderAusBefund(zeile.outcome)} />
+      <Projektname name={zeile.projectName} />
+      <Typography sx={{ fontSize: 12, color: 'text.secondary' }}>
+        {tagZeit(zeile.startedAt)}
+      </Typography>
+      <LaufVerweis zeile={zeile} />
+      <Typography sx={{ fontSize: 12, color: 'text.secondary', flex: 1, minWidth: 0 }}>
+        {NIGHT_RUN_VERDICT_TEXT[zeile.outcome.verdict]}
+      </Typography>
+      {hatStoerung && (
+        <Typography
+          component="a"
+          href={`#stoerung-${zeile.nightRunId}`}
+          aria-label={`Zur Störung von Lauf #${zeile.nightRunId}`}
+          sx={{ fontSize: 12 }}
+        >
+          Störung
+        </Typography>
+      )}
+    </Box>
   )
 }
 
@@ -229,6 +432,9 @@ export function stoerungsGrund(outcome: DisruptionView['outcome']): string {
  * unter seiner eigenen Ueberschrift in jeder Zeile ist Rauschen, das dem Grund den Platz nimmt.
  * Das `aria-label` der Taste behaelt ihn dagegen: Ohne Namen waeren zwei Tasten verschiedener
  * Projekte fuer ein Vorlesewerkzeug nicht zu unterscheiden.
+ *
+ * **Das `id` neben dem `data-testid`** (#1098) ist das Ziel des Verweises „Stoerung" aus der
+ * durchgefuehrten Zeile (Kriterium 12) — ein `data-testid` allein ist kein Sprungziel.
  */
 function Stoerzeile({
   stoerung,
@@ -240,6 +446,7 @@ function Stoerzeile({
   return (
     <Box
       component="li"
+      id={`stoerung-${stoerung.nightRunId}`}
       data-testid={`stoerung-${stoerung.nightRunId}`}
       sx={{ display: 'flex', alignItems: 'center', gap: '10px', py: '6px' }}
     >

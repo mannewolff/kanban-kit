@@ -1,8 +1,9 @@
 import type { NightRunOutcomeView } from './nightRuns'
 import { apiFetch } from './client'
+import { leserZone } from './nightRunUsage'
 
 /**
- * Anbindung des Plattform-Leitstands (Issue #1083, Server in #1080).
+ * Anbindung des Plattform-Leitstands (Issue #1083, Server in #1080; drei Listen seit #1095/#1098).
  *
  * Der Pfadstamm ist `/api/admin` und nicht `/api/platform` — das ist eine Sicherheitsentscheidung
  * des Servers (Plan #1072 E24): Nur dort verlangt die Filterkette eine Sitzung und laesst kein
@@ -10,7 +11,9 @@ import { apiFetch } from './client'
  */
 
 /**
- * Eine offene Stoerung, wie der Plattform-Leitstand sie zeigt.
+ * Eine Zeile des Plattform-Leitstands — **dieselbe Form fuer alle drei Listen** (#1095): ein
+ * laufender Lauf, ein durchgefuehrter und eine Stoerung tragen dieselben Angaben. Woraus der
+ * Browser welchen Melder und welches Wort bildet, steht im `outcome`.
  *
  * Der **Grund** kommt als `outcome` und nicht als fertiger Satz: Den Text bildet der Browser aus
  * denselben Tabellen, aus denen die Nachtlauf-Auswertung ihn zeigt (AK 6 der fachlichen Quelle
@@ -24,9 +27,33 @@ export interface DisruptionView {
   outcome: NightRunOutcomeView
 }
 
+/**
+ * Die drei Bereiche der Ansicht in **einer** Antwort (Kriterium 18 der fachlichen Quelle #1086).
+ *
+ * <p>Ein Abruf und nicht drei (Plan #1088 E5): Die Seite frischt sich auf, und ein Lauf kann
+ * zwischen zwei Rundreisen den Bereich wechseln — aus drei Abrufen erschiene er doppelt oder gar
+ * nicht. Aus derselben Antwort liest die Seite auch, ob es zu einem durchgefuehrten Lauf eine
+ * Stoerung gibt; ein eigenes Serverfeld waere eine zweite Quelle fuer dieselbe Aussage.
+ */
+export interface LeitstandView {
+  /** Laeufe der laufenden Nacht, die noch arbeiten; juengster zuoberst. */
+  laufende: DisruptionView[]
+  /** Beendete Laeufe derselben Nacht, verstummte eingeschlossen; juengster zuoberst. */
+  durchgefuehrte: DisruptionView[]
+  /** Offene Stoerungen ueber **alle** Naechte (Kriterium 17), juengste zuoberst. */
+  stoerungen: DisruptionView[]
+}
+
 export const plattformLeitstandApi = {
-  /** Die offenen Stoerungen aller teilnehmenden Projekte, juengste zuoberst (AK 4, 13). */
-  liste: () => apiFetch<DisruptionView[]>('/api/admin/disruptions'),
+  /**
+   * Die drei Listen der Ansicht.
+   *
+   * Die **Zone kommt vom Leser** (Plan #1088 E6) — dieselbe Quelle wie in `api/nightRunUsage.ts`:
+   * Im Container laeuft die JVM regelmaessig in UTC, und die Nachtgrenze „12:00 zonenlokal" laege
+   * dann um Stunden verschoben gegen die, die die Nachtlauf-Auswertung zieht.
+   */
+  leitstand: (zone: string = leserZone()) =>
+    apiFetch<LeitstandView>(`/api/admin/leitstand?${new URLSearchParams({ zone })}`),
   /**
    * Quittiert eine Stoerung — „ich habe es gesehen" (AK 8). Idempotent: Ein zweiter Aufruf ist kein
    * Fehler, weil zwei Admins dieselbe Zeile gleichzeitig wegraeumen koennen.

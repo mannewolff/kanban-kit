@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '../api/client'
-import type { DisruptionView } from '../api/plattformLeitstand'
+import type { DisruptionView, LeitstandView } from '../api/plattformLeitstand'
 import { plattformLeitstandApi } from '../api/plattformLeitstand'
 import PlattformLeitstandPage from './PlattformLeitstandPage'
 
@@ -11,16 +11,17 @@ vi.mock('../api/plattformLeitstand', async () => {
   const echt = await vi.importActual<typeof import('../api/plattformLeitstand')>(
     '../api/plattformLeitstand',
   )
-  return { ...echt, plattformLeitstandApi: { liste: vi.fn(), quittieren: vi.fn() } }
+  return { ...echt, plattformLeitstandApi: { leitstand: vi.fn(), quittieren: vi.fn() } }
 })
 
 const api = vi.mocked(plattformLeitstandApi)
 
 /**
- * Der Bereich „Störungen" des Plattform-Leitstands (Issue #1083, fachliche Quelle #1064).
+ * Der Plattform-Leitstand (Issue #1083, um die beiden Lauf-Bereiche erweitert in #1098; fachliche
+ * Quellen #1064 und #1086).
  *
  * Geprüft wird die **Aussage** der Zeile, nicht ihre Gestalt: Projekt, Zeitpunkt, anklickbare
- * Kennung, Grund und die Taste. Wie die Seite aussieht, nimmt ein Mensch gegen
+ * Kennung, Ausgang als Wort und die Taste. Wie die Seite aussieht, nimmt ein Mensch gegen
  * `docs/entwurf-leitstand.html` ab — der Entwurf führt für diese Ansicht kein eigenes Mockup.
  */
 describe('PlattformLeitstandPage (#1083)', () => {
@@ -37,6 +38,14 @@ describe('PlattformLeitstandPage (#1083)', () => {
     ...extra,
   })
 
+  /** Die Antwort des Servers; nicht genannte Listen sind leer. */
+  const sicht = (teil: Partial<LeitstandView> = {}): LeitstandView => ({
+    laufende: [],
+    durchgefuehrte: [],
+    stoerungen: [],
+    ...teil,
+  })
+
   const zeigeSeite = () => render(<PlattformLeitstandPage />, { wrapper: MemoryRouter })
 
   beforeEach(() => {
@@ -44,13 +53,265 @@ describe('PlattformLeitstandPage (#1083)', () => {
     api.quittieren.mockResolvedValue(undefined)
   })
 
-  /** AK 13: die jüngste Störung zuoberst — die Reihenfolge der Antwort bleibt erhalten. */
-  it('zeigt die Störungen in der Reihenfolge der Antwort, jüngste zuoberst', async () => {
-    api.liste.mockResolvedValue([
-      stoerung({ nightRunId: 7, projectId: 7, startedAt: '2026-09-19T21:10:00Z', projectName: 'Jung' }),
-      stoerung({ nightRunId: 6, projectId: 6, startedAt: '2026-09-18T21:10:00Z', projectName: 'Mittel' }),
-      stoerung({ nightRunId: 5, projectId: 5, startedAt: '2026-09-17T21:10:00Z', projectName: 'Alt' }),
+  /** Kriterium 18: die drei Bereiche untereinander, in dieser Ordnung. */
+  it('stellt die drei Bereiche in der Ordnung laufend, durchgeführt, Störungen', async () => {
+    api.leitstand.mockResolvedValue(sicht({ stoerungen: [stoerung()] }))
+
+    zeigeSeite()
+
+    await screen.findByTestId('stoerung-5')
+    expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual([
+      'Laufende Nachtläufe',
+      'Durchgeführte Nachtläufe',
+      'Störungen',
     ])
+  })
+
+  /**
+   * Der Bereich „Laufende Nachtläufe" (Kriterien 1–4, 11).
+   *
+   * Der Puls hält bei `prefers-reduced-motion` von selbst an — die globale Regel im Theme greift
+   * für jede Animation; hier steht deshalb nur, **dass** die LED pulst.
+   */
+  describe('Laufende Nachtläufe (#1098)', () => {
+    const laufend = (extra: Partial<DisruptionView> = {}): DisruptionView => ({
+      nightRunId: 8,
+      projectId: 9,
+      projectName: 'Mein Projekt',
+      startedAt: '2026-09-21T01:10:00Z',
+      outcome: { verdict: 'RUNNING', decisiveItem: null, noWorkReason: null },
+      ...extra,
+    })
+
+    /**
+     * Kriterium 3: Der Zustand steht als **Wort** da. Farbe und Bewegung allein trügen die Aussage
+     * sonst allein — wer keine Farben unterscheidet oder Bewegung abgeschaltet hat, läse nichts.
+     */
+    it('nennt Projekt, „läuft seit HH:MM" und die Kennung, mit pulsierendem Stahl-Melder', async () => {
+      api.leitstand.mockResolvedValue(sicht({ laufende: [laufend()] }))
+
+      zeigeSeite()
+
+      const zeile = await screen.findByTestId('laufend-8')
+      expect(within(zeile).getByText('Mein Projekt')).toBeInTheDocument()
+      expect(within(zeile).getByText('läuft seit 03:10')).toBeInTheDocument()
+      const led = within(zeile).getByTestId('led-stahl')
+      expect(led).toHaveAttribute('data-puls', 'an')
+      expect(within(zeile).getByRole('link', { name: 'Lauf #8 von Mein Projekt' })).toHaveAttribute(
+        'href',
+        '/projects/9/nachtlauf?lauf=8',
+      )
+    })
+
+    /** Kriterium 9: auch mehrere Läufe desselben Projekts, in der Reihenfolge der Antwort. */
+    it('hält die Reihenfolge der Antwort ein', async () => {
+      api.leitstand.mockResolvedValue(
+        sicht({
+          laufende: [
+            laufend({ nightRunId: 9, projectName: 'Jung' }),
+            laufend({ nightRunId: 8, projectName: 'Alt' }),
+          ],
+        }),
+      )
+
+      zeigeSeite()
+
+      const zeilen = await screen.findAllByTestId(/^laufend-/)
+      expect(zeilen.map((z) => z.getAttribute('data-testid'))).toEqual(['laufend-9', 'laufend-8'])
+    })
+
+    /** Kriterium 4: eine leere Fläche wäre von einer kaputten Anzeige nicht zu unterscheiden. */
+    it('sagt ausdrücklich, wenn gerade nirgends ein Lauf läuft', async () => {
+      api.leitstand.mockResolvedValue(sicht())
+
+      zeigeSeite()
+
+      expect(await screen.findByTestId('keine-laufenden')).toHaveTextContent(
+        'Gerade läuft kein Nachtlauf.',
+      )
+    })
+  })
+
+  /** Der Bereich „Durchgeführte Nachtläufe" (Kriterien 9–14). */
+  describe('Durchgeführte Nachtläufe (#1098)', () => {
+    const durchgefuehrt = (extra: Partial<DisruptionView> = {}): DisruptionView => ({
+      nightRunId: 5,
+      projectId: 9,
+      projectName: 'Mein Projekt',
+      startedAt: '2026-09-19T21:10:00Z',
+      outcome: { verdict: 'SUCCEEDED', decisiveItem: null, noWorkReason: null },
+      ...extra,
+    })
+
+    it('nennt Projekt, Startzeitpunkt und Kennung', async () => {
+      api.leitstand.mockResolvedValue(sicht({ durchgefuehrte: [durchgefuehrt()] }))
+
+      zeigeSeite()
+
+      const zeile = await screen.findByTestId('durchgefuehrt-5')
+      expect(within(zeile).getByText('Mein Projekt')).toBeInTheDocument()
+      expect(within(zeile).getByText('19.09., 23:10')).toBeInTheDocument()
+      expect(within(zeile).getByRole('link', { name: 'Lauf #5 von Mein Projekt' })).toBeInTheDocument()
+    })
+
+    /**
+     * Kriterien 10 und 11: die drei Ausgänge als Wort, nicht als Farbe. Der Melder pulst hier
+     * nicht — ein beendeter Lauf arbeitet nicht mehr (Kriterium 5).
+     */
+    it.each([
+      ['SUCCEEDED', 'gelungen', 'led-gruen'],
+      ['FAILED', 'nicht gelungen', 'led-zinnob'],
+      ['WAITING', 'mit Vorbehalt', 'led-grau'],
+    ] as const)('zeigt %s als „%s" mit ruhendem Melder', async (verdict, wort, led) => {
+      api.leitstand.mockResolvedValue(
+        sicht({
+          durchgefuehrte: [
+            durchgefuehrt({
+              outcome: {
+                verdict,
+                decisiveItem:
+                  verdict === 'SUCCEEDED'
+                    ? null
+                    : {
+                        cardNumber: 721,
+                        state: verdict === 'FAILED' ? 'RED' : 'GREY',
+                        errorClass: verdict === 'FAILED' ? 'CHECKS_RED' : 'AWAITING_DECISION',
+                      },
+                noWorkReason: null,
+              },
+            }),
+          ],
+        }),
+      )
+
+      zeigeSeite()
+
+      const zeile = await screen.findByTestId('durchgefuehrt-5')
+      expect(within(zeile).getByText(wort)).toBeInTheDocument()
+      expect(within(zeile).getByTestId(led)).toHaveAttribute('data-puls', 'aus')
+    })
+
+    /** Kriterium 12, erste Hälfte: von **jedem** Eintrag — auch vom gelungenen. */
+    it('führt von jedem Eintrag zur Auswertung, auch vom gelungenen', async () => {
+      api.leitstand.mockResolvedValue(
+        sicht({
+          durchgefuehrte: [
+            durchgefuehrt({ nightRunId: 5, projectId: 9, projectName: 'Gelungen' }),
+            durchgefuehrt({
+              nightRunId: 6,
+              projectId: 10,
+              projectName: 'Gescheitert',
+              outcome: { verdict: 'FAILED', decisiveItem: null, noWorkReason: 'Ready war leer' },
+            }),
+          ],
+        }),
+      )
+
+      zeigeSeite()
+
+      await screen.findByTestId('durchgefuehrt-5')
+      expect(screen.getByRole('link', { name: 'Lauf #5 von Gelungen' })).toHaveAttribute(
+        'href',
+        '/projects/9/nachtlauf?lauf=5',
+      )
+      expect(screen.getByRole('link', { name: 'Lauf #6 von Gescheitert' })).toHaveAttribute(
+        'href',
+        '/projects/10/nachtlauf?lauf=6',
+      )
+    })
+
+    /**
+     * Kriterium 12, zweite Hälfte: Gibt es zu dem Lauf eine Störung, führt ein zweiter Weg dorthin.
+     * Die Mitgliedschaft entscheidet der Browser aus **einer** Antwort — ein Serverfeld wäre eine
+     * zweite Quelle für dieselbe Aussage.
+     */
+    it('verweist bei einem Lauf mit Störung zusätzlich auf dessen Störzeile', async () => {
+      api.leitstand.mockResolvedValue(
+        sicht({
+          durchgefuehrte: [
+            durchgefuehrt({
+              nightRunId: 5,
+              outcome: {
+                verdict: 'FAILED',
+                decisiveItem: { cardNumber: 721, state: 'RED', errorClass: 'CHECKS_RED' },
+                noWorkReason: null,
+              },
+            }),
+            durchgefuehrt({ nightRunId: 6, projectName: 'Zweites Projekt' }),
+          ],
+          stoerungen: [stoerung({ nightRunId: 5 })],
+        }),
+      )
+
+      zeigeSeite()
+
+      const mit = await screen.findByTestId('durchgefuehrt-5')
+      expect(within(mit).getByRole('link', { name: 'Zur Störung von Lauf #5' })).toHaveAttribute(
+        'href',
+        '#stoerung-5',
+      )
+      expect(screen.getByTestId('stoerung-5')).toHaveAttribute('id', 'stoerung-5')
+      const ohne = screen.getByTestId('durchgefuehrt-6')
+      expect(
+        within(ohne).queryByRole('link', { name: 'Zur Störung von Lauf #6' }),
+      ).not.toBeInTheDocument()
+      expect(within(ohne).getAllByRole('link')).toHaveLength(1)
+    })
+
+    /** Kriterium 13: Das Quittieren nimmt den Weg zur Störung, nicht den Ausgang des Laufs. */
+    it('nimmt nach dem Quittieren nur den Verweis zur Störung weg', async () => {
+      api.leitstand.mockResolvedValue(
+        sicht({
+          durchgefuehrte: [
+            durchgefuehrt({
+              nightRunId: 5,
+              outcome: {
+                verdict: 'FAILED',
+                decisiveItem: { cardNumber: 721, state: 'RED', errorClass: 'CHECKS_RED' },
+                noWorkReason: null,
+              },
+            }),
+          ],
+          stoerungen: [stoerung({ nightRunId: 5 })],
+        }),
+      )
+
+      zeigeSeite()
+      await userEvent.click(
+        await screen.findByRole('button', { name: 'Störung von Mein Projekt, Lauf #5 löschen' }),
+      )
+
+      await waitFor(() => expect(screen.queryByTestId('stoerung-5')).not.toBeInTheDocument())
+      const zeile = screen.getByTestId('durchgefuehrt-5')
+      expect(within(zeile).queryByRole('link', { name: 'Zur Störung von Lauf #5' })).not.toBeInTheDocument()
+      expect(within(zeile).getByText('nicht gelungen')).toBeInTheDocument()
+      expect(within(zeile).getByRole('link', { name: 'Lauf #5 von Mein Projekt' })).toBeInTheDocument()
+      expect(api.leitstand).toHaveBeenCalledTimes(1)
+    })
+
+    /** Kriterium 14: ausdrücklicher Satz statt leerer Fläche. */
+    it('sagt ausdrücklich, wenn in dieser Nacht noch kein Lauf beendet ist', async () => {
+      api.leitstand.mockResolvedValue(sicht())
+
+      zeigeSeite()
+
+      expect(await screen.findByTestId('keine-durchgefuehrten')).toHaveTextContent(
+        'In dieser Nacht wurde noch kein Lauf beendet.',
+      )
+    })
+  })
+
+  /** AK 13 (#1064): die jüngste Störung zuoberst — die Reihenfolge der Antwort bleibt erhalten. */
+  it('zeigt die Störungen in der Reihenfolge der Antwort, jüngste zuoberst', async () => {
+    api.leitstand.mockResolvedValue(
+      sicht({
+        stoerungen: [
+          stoerung({ nightRunId: 7, projectId: 7, startedAt: '2026-09-19T21:10:00Z', projectName: 'Jung' }),
+          stoerung({ nightRunId: 6, projectId: 6, startedAt: '2026-09-18T21:10:00Z', projectName: 'Mittel' }),
+          stoerung({ nightRunId: 5, projectId: 5, startedAt: '2026-09-17T21:10:00Z', projectName: 'Alt' }),
+        ],
+      }),
+    )
 
     zeigeSeite()
 
@@ -67,7 +328,7 @@ describe('PlattformLeitstandPage (#1083)', () => {
    * Gruppenüberschrift statt in jeder Zeile — dieselbe Angabe, nur einmal.
    */
   it('nennt in einer Zeile Zeitpunkt, Kennung und Grund, das Projekt in der Überschrift', async () => {
-    api.liste.mockResolvedValue([stoerung()])
+    api.leitstand.mockResolvedValue(sicht({ stoerungen: [stoerung()] }))
 
     zeigeSeite()
 
@@ -83,7 +344,7 @@ describe('PlattformLeitstandPage (#1083)', () => {
    * ohne die Dauer, die dort je Paket dabeisteht. Die Störzeile führt den Zeitpunkt schon.
    */
   it('bildet den Grund als „Karte #n: Zustand" ohne Dauer', async () => {
-    api.liste.mockResolvedValue([stoerung()])
+    api.leitstand.mockResolvedValue(sicht({ stoerungen: [stoerung()] }))
 
     zeigeSeite()
 
@@ -95,11 +356,15 @@ describe('PlattformLeitstandPage (#1083)', () => {
 
   /** Ein Lauf ohne Arbeit hat kein Paket — sein Grund ist der Text selbst (#1069). */
   it('zeigt beim Lauf ohne Arbeit den Grund wörtlich', async () => {
-    api.liste.mockResolvedValue([
-      stoerung({
-        outcome: { verdict: 'FAILED', decisiveItem: null, noWorkReason: 'Ready war leer' },
+    api.leitstand.mockResolvedValue(
+      sicht({
+        stoerungen: [
+          stoerung({
+            outcome: { verdict: 'FAILED', decisiveItem: null, noWorkReason: 'Ready war leer' },
+          }),
+        ],
       }),
-    ])
+    )
 
     zeigeSeite()
 
@@ -107,15 +372,19 @@ describe('PlattformLeitstandPage (#1083)', () => {
     expect(within(zeile).getByText('Ready war leer')).toBeInTheDocument()
   })
 
-/**
+  /**
    * Ein Befund ohne massgebliches Paket und ohne Grund kann der Server nicht liefern — eine
    * Stoerung ist entweder ein Paket oder ein Lauf ohne Arbeit. Der Zweig steht trotzdem, weil der
    * Typ beides als `null` zulaesst; er zeigt dann nichts statt „undefined".
    */
   it('zeigt bei einem Befund ohne Paket und ohne Grund keinen Text', async () => {
-    api.liste.mockResolvedValue([
-      stoerung({ outcome: { verdict: 'FAILED', decisiveItem: null, noWorkReason: null } }),
-    ])
+    api.leitstand.mockResolvedValue(
+      sicht({
+        stoerungen: [
+          stoerung({ outcome: { verdict: 'FAILED', decisiveItem: null, noWorkReason: null } }),
+        ],
+      }),
+    )
 
     zeigeSeite()
 
@@ -129,15 +398,19 @@ describe('PlattformLeitstandPage (#1083)', () => {
    * steht, und ein Test sagt, was er dann zeigt.
    */
   it('nennt ohne Fehlerklasse nur den Zustand des Pakets', async () => {
-    api.liste.mockResolvedValue([
-      stoerung({
-        outcome: {
-          verdict: 'FAILED',
-          decisiveItem: { cardNumber: 721, state: 'RED', errorClass: null },
-          noWorkReason: null,
-        },
+    api.leitstand.mockResolvedValue(
+      sicht({
+        stoerungen: [
+          stoerung({
+            outcome: {
+              verdict: 'FAILED',
+              decisiveItem: { cardNumber: 721, state: 'RED', errorClass: null },
+              noWorkReason: null,
+            },
+          }),
+        ],
       }),
-    ])
+    )
 
     zeigeSeite()
 
@@ -147,7 +420,7 @@ describe('PlattformLeitstandPage (#1083)', () => {
 
   /** AK 7: Der Klick führt zur Auswertung genau dieses Laufs im betroffenen Projekt. */
   it('verweist mit der Kennung auf den Lauf im Projekt', async () => {
-    api.liste.mockResolvedValue([stoerung()])
+    api.leitstand.mockResolvedValue(sicht({ stoerungen: [stoerung()] }))
 
     zeigeSeite()
 
@@ -157,10 +430,11 @@ describe('PlattformLeitstandPage (#1083)', () => {
 
   /** AK 8: kein Rückfragen-Dialog, kein Rückgängig — die Zeile ist sofort weg. */
   it('räumt die Zeile ohne Rückfrage weg und ruft den Endpunkt', async () => {
-    api.liste.mockResolvedValue([
-      stoerung(),
-      stoerung({ nightRunId: 6, projectId: 10, projectName: 'Anderes' }),
-    ])
+    api.leitstand.mockResolvedValue(
+      sicht({
+        stoerungen: [stoerung(), stoerung({ nightRunId: 6, projectId: 10, projectName: 'Anderes' })],
+      }),
+    )
 
     zeigeSeite()
     const taste = await screen.findByRole('button', {
@@ -171,15 +445,16 @@ describe('PlattformLeitstandPage (#1083)', () => {
     expect(api.quittieren).toHaveBeenCalledWith(5)
     await waitFor(() => expect(screen.queryByTestId('stoerung-5')).not.toBeInTheDocument())
     expect(screen.getByTestId('stoerung-6')).toBeInTheDocument()
-    expect(api.liste).toHaveBeenCalledTimes(1)
+    expect(api.leitstand).toHaveBeenCalledTimes(1)
   })
 
   /** In einer Liste gleichlautender Tasten braucht jede ihre eigene Ansage. */
   it('gibt jeder Taste ein unterscheidbares aria-label', async () => {
-    api.liste.mockResolvedValue([
-      stoerung(),
-      stoerung({ nightRunId: 6, projectId: 10, projectName: 'Anderes' }),
-    ])
+    api.leitstand.mockResolvedValue(
+      sicht({
+        stoerungen: [stoerung(), stoerung({ nightRunId: 6, projectId: 10, projectName: 'Anderes' })],
+      }),
+    )
 
     zeigeSeite()
 
@@ -188,12 +463,37 @@ describe('PlattformLeitstandPage (#1083)', () => {
     expect(new Set(namen).size).toBe(namen.length)
   })
 
+  /** Und jeder Verweis der Seite ebenso — auch über die drei Bereiche hinweg. */
+  it('gibt jedem Verweis eine unterscheidbare Beschriftung', async () => {
+    api.leitstand.mockResolvedValue(
+      sicht({
+        laufende: [
+          {
+            nightRunId: 8,
+            projectId: 9,
+            projectName: 'Mein Projekt',
+            startedAt: '2026-09-21T01:10:00Z',
+            outcome: { verdict: 'RUNNING', decisiveItem: null, noWorkReason: null },
+          },
+        ],
+        durchgefuehrte: [stoerung({ nightRunId: 5 })],
+        stoerungen: [stoerung({ nightRunId: 5 })],
+      }),
+    )
+
+    zeigeSeite()
+
+    await screen.findByTestId('durchgefuehrt-5')
+    const namen = screen.getAllByRole('link').map((a) => a.textContent + '|' + (a.getAttribute('aria-label') ?? ''))
+    expect(new Set(namen).size).toBe(namen.length)
+  })
+
   /**
    * AK 14: Eine leere Fläche wäre von einer kaputten Anzeige nicht zu unterscheiden — und eine
    * Gruppenliste ohne Gruppen (#1087, AK 8) genauso wenig.
    */
   it('sagt ausdrücklich, wenn keine Störung offen ist', async () => {
-    api.liste.mockResolvedValue([])
+    api.leitstand.mockResolvedValue(sicht())
 
     zeigeSeite()
 
@@ -203,16 +503,18 @@ describe('PlattformLeitstandPage (#1083)', () => {
 
   /** AK 3: dasselbe wie auf jeder anderen Admin-Seite — ein Fehlertext statt Inhalt. */
   it('zeigt bei 403 einen Fehlertext statt Inhalt', async () => {
-    api.liste.mockRejectedValue(new ApiError(403, 'Forbidden'))
+    api.leitstand.mockRejectedValue(new ApiError(403, 'Forbidden'))
 
     zeigeSeite()
 
     expect(await screen.findByText('Kein Admin-Zugriff.')).toBeInTheDocument()
     expect(screen.queryByTestId('keine-stoerungen')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('keine-laufenden')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('keine-durchgefuehrten')).not.toBeInTheDocument()
   })
 
   it('unterscheidet den Ladefehler vom fehlenden Recht', async () => {
-    api.liste.mockRejectedValue(new ApiError(500, 'Boom'))
+    api.leitstand.mockRejectedValue(new ApiError(500, 'Boom'))
 
     zeigeSeite()
 
@@ -228,11 +530,14 @@ describe('PlattformLeitstandPage (#1083)', () => {
    */
   describe('Gruppierung nach Projekt (#1087)', () => {
     /** Die Antwort des Servers, verschränkt: Alpha, Beta, Alpha. */
-    const verschraenkt = () => [
-      stoerung({ nightRunId: 9, projectId: 1, projectName: 'Alpha', startedAt: '2026-09-19T21:10:00Z' }),
-      stoerung({ nightRunId: 8, projectId: 2, projectName: 'Beta', startedAt: '2026-09-18T21:10:00Z' }),
-      stoerung({ nightRunId: 7, projectId: 1, projectName: 'Alpha', startedAt: '2026-09-17T21:10:00Z' }),
-    ]
+    const verschraenkt = () =>
+      sicht({
+        stoerungen: [
+          stoerung({ nightRunId: 9, projectId: 1, projectName: 'Alpha', startedAt: '2026-09-19T21:10:00Z' }),
+          stoerung({ nightRunId: 8, projectId: 2, projectName: 'Beta', startedAt: '2026-09-18T21:10:00Z' }),
+          stoerung({ nightRunId: 7, projectId: 1, projectName: 'Alpha', startedAt: '2026-09-17T21:10:00Z' }),
+        ],
+      })
 
     const zeilenIn = (element: HTMLElement) =>
       within(element)
@@ -241,7 +546,7 @@ describe('PlattformLeitstandPage (#1083)', () => {
 
     /** AK 1: zwei Gruppen aus drei verschränkten Zeilen, und keine Zeile außerhalb ihrer Gruppe. */
     it('fasst die Zeilen eines Projekts zu einer Gruppe zusammen', async () => {
-      api.liste.mockResolvedValue(verschraenkt())
+      api.leitstand.mockResolvedValue(verschraenkt())
 
       zeigeSeite()
 
@@ -258,11 +563,15 @@ describe('PlattformLeitstandPage (#1083)', () => {
 
     /** AK 2: die jüngste Störung bestimmt die Gruppe zuoberst, nicht die Zahl ihrer Zeilen. */
     it('stellt die Gruppe der jüngsten Störung zuoberst, auch wenn sie die kleinere ist', async () => {
-      api.liste.mockResolvedValue([
-        stoerung({ nightRunId: 9, projectId: 2, projectName: 'Beta', startedAt: '2026-09-19T21:10:00Z' }),
-        stoerung({ nightRunId: 8, projectId: 1, projectName: 'Alpha', startedAt: '2026-09-18T21:10:00Z' }),
-        stoerung({ nightRunId: 7, projectId: 1, projectName: 'Alpha', startedAt: '2026-09-17T21:10:00Z' }),
-      ])
+      api.leitstand.mockResolvedValue(
+        sicht({
+          stoerungen: [
+            stoerung({ nightRunId: 9, projectId: 2, projectName: 'Beta', startedAt: '2026-09-19T21:10:00Z' }),
+            stoerung({ nightRunId: 8, projectId: 1, projectName: 'Alpha', startedAt: '2026-09-18T21:10:00Z' }),
+            stoerung({ nightRunId: 7, projectId: 1, projectName: 'Alpha', startedAt: '2026-09-17T21:10:00Z' }),
+          ],
+        }),
+      )
 
       zeigeSeite()
 
@@ -278,10 +587,14 @@ describe('PlattformLeitstandPage (#1083)', () => {
      * Zeitpunkt gestellt. Ein zweites Sortieren im Browser fiele genau hier auf.
      */
     it('lässt die Reihenfolge der Server-Antwort innerhalb einer Gruppe unangetastet', async () => {
-      api.liste.mockResolvedValue([
-        stoerung({ nightRunId: 3, projectId: 1, projectName: 'Alpha', startedAt: '2026-09-17T21:10:00Z' }),
-        stoerung({ nightRunId: 4, projectId: 1, projectName: 'Alpha', startedAt: '2026-09-19T21:10:00Z' }),
-      ])
+      api.leitstand.mockResolvedValue(
+        sicht({
+          stoerungen: [
+            stoerung({ nightRunId: 3, projectId: 1, projectName: 'Alpha', startedAt: '2026-09-17T21:10:00Z' }),
+            stoerung({ nightRunId: 4, projectId: 1, projectName: 'Alpha', startedAt: '2026-09-19T21:10:00Z' }),
+          ],
+        }),
+      )
 
       zeigeSeite()
 
@@ -291,7 +604,7 @@ describe('PlattformLeitstandPage (#1083)', () => {
 
     /** AK 4: Projektname und Zahl der offenen Störungen, Einzahl wie Mehrzahl. */
     it('nennt in der Überschrift den Projektnamen und die Zahl der offenen Störungen', async () => {
-      api.liste.mockResolvedValue(verschraenkt())
+      api.leitstand.mockResolvedValue(verschraenkt())
 
       zeigeSeite()
 
@@ -308,7 +621,7 @@ describe('PlattformLeitstandPage (#1083)', () => {
      * wären zwei Tasten verschiedener Projekte für ein Vorlesewerkzeug nicht zu unterscheiden.
      */
     it('lässt den Projektnamen aus der Zeile weg, behält ihn aber im aria-label der Taste', async () => {
-      api.liste.mockResolvedValue([stoerung()])
+      api.leitstand.mockResolvedValue(sicht({ stoerungen: [stoerung()] }))
 
       zeigeSeite()
 
@@ -324,7 +637,7 @@ describe('PlattformLeitstandPage (#1083)', () => {
      * statt einer durchlaufenden Liste mit Zwischenüberschriften.
      */
     it('macht jede Gruppe als Liste unter ihrem Projektnamen auffindbar', async () => {
-      api.liste.mockResolvedValue(verschraenkt())
+      api.leitstand.mockResolvedValue(verschraenkt())
 
       zeigeSeite()
 
@@ -337,7 +650,7 @@ describe('PlattformLeitstandPage (#1083)', () => {
 
     /** AK 7: Mit der letzten Störung eines Projekts geht seine Überschrift mit. */
     it('nimmt mit der letzten Störung eines Projekts auch dessen Gruppe weg', async () => {
-      api.liste.mockResolvedValue(verschraenkt())
+      api.leitstand.mockResolvedValue(verschraenkt())
 
       zeigeSeite()
 
@@ -353,7 +666,7 @@ describe('PlattformLeitstandPage (#1083)', () => {
 
     /** AK 7: Quittiert man eine von zweien, bleibt die Gruppe — mit der neuen Zahl. */
     it('behält die Gruppe, solange eine Störung des Projekts offen bleibt', async () => {
-      api.liste.mockResolvedValue(verschraenkt())
+      api.leitstand.mockResolvedValue(verschraenkt())
 
       zeigeSeite()
 

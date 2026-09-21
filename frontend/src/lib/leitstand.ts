@@ -207,7 +207,7 @@ export function laufband(lauf: NightRunView): Laufband {
     melder: laufMelder(lauf, lauf.noWorkReason),
     laeuft,
     vorgang: letzter ? { nummer: letzter.cardNumber, titel: letzter.title } : null,
-    zeitpunkt: laeuft ? `seit ${ZEIT.format(beginn)}` : `Beginn ${TAG_ZEIT.format(beginn)}`,
+    zeitpunkt: laeuft ? `seit ${uhrzeit(lauf.startedAt)}` : `Beginn ${TAG_ZEIT.format(beginn)}`,
     minuten: Math.round(lauf.durationMs / 60_000),
     kosten: lauf.usage?.costUsd == null ? null : dollar(lauf.usage.costUsd),
   }
@@ -260,6 +260,18 @@ export function laufDauerGeteilt(ms: number): { wert: string; einheit: string } 
 /** Ein Zeitpunkt als Tag und Uhrzeit („14.09. 23:10") — Beginn eines Laufs in Notiz und Metazeile. */
 export function tagZeit(iso: string): string {
   return TAG_ZEIT.format(new Date(iso))
+}
+
+/**
+ * Ein Zeitpunkt als blosse Uhrzeit („02:41") — das „seit HH:MM" an einem laufenden Vorgang
+ * (Entwurf `docs/entwurf-leitstand.html` Z. 1164–1165, 1205–1207).
+ *
+ * <p>Exportiert seit Issue #1098: Die laufende Zeile des Plattform-Leitstands sagt „läuft seit
+ * HH:MM" und {@link laufband} sagt „seit HH:MM" — zwei Stellen, ein Format. Ein zweiter
+ * `Intl.DateTimeFormat` daneben liefe beim naechsten Feinschliff auseinander.
+ */
+export function uhrzeit(iso: string): string {
+  return ZEIT.format(new Date(iso))
 }
 
 /** Die Notiz im Kopf der Platte „Letzter Lauf": Beginn, Dauer, Zahl der Pakete. */
