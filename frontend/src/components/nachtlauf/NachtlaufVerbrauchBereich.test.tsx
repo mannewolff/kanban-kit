@@ -277,7 +277,7 @@ describe('NachtlaufVerbrauchBereich', () => {
     zeige(api)
 
     const ansicht = await screen.findByTestId('verbrauch-nacht')
-    expect(lesbar(within(ansicht).getByTestId('nachtlauf-kennzahl-Gesamtsumme'))).toContain('4,00 $')
+    expect(lesbar(within(ansicht).getByTestId('verbrauch-kachel-Gesamtsumme'))).toContain('4,00')
     expect(lesbar(ansicht)).not.toContain('10,00 $')
   })
 
