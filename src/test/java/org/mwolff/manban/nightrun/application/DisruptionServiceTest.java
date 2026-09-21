@@ -78,7 +78,11 @@ class DisruptionServiceTest {
     when(platformAdminChecker.isPlatformAdmin(ADMIN)).thenReturn(true);
     service =
         new DisruptionService(
-            disruptions, runs, platformAdminChecker, Clock.fixed(JETZT, ZoneOffset.UTC));
+            disruptions,
+            runs,
+            platformAdminChecker,
+            new NightRunProperties(null, null, null, null, null),
+            Clock.fixed(JETZT, ZoneOffset.UTC));
   }
 
   // --- Rechte (AK 3, AK 7) -------------------------------------------------------------------

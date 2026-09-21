@@ -89,6 +89,9 @@ manban:
     # Naechte und raeumten unter einer gemeinsamen Grenze die Nachtlauf-Auswertung aus.
     max-interactive-per-project: 400
     max-interactive-items-per-project: 4000
+    # Stillefrist (Issue #1091): Ein unfertiger Lauf, der so lange kein Lebenszeichen gibt, gilt
+    # als nicht gelungen — sonst bliebe ein abgeschossener Runner fuer immer als "laeuft" stehen.
+    stille-frist: PT90M
   cleanup:
     enabled: ${MANBAN_CLEANUP_ENABLED:true}
     done-retention-days: ${MANBAN_DONE_RETENTION_DAYS:30}

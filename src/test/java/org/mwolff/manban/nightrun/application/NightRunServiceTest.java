@@ -84,7 +84,7 @@ class NightRunServiceTest {
         erfassungsbeginn,
         // Die Grenzen der interaktiven Sitzung stehen bewusst anders als die der Nachtlaeufe
         // (Issue #1011): Ein Test, der sie gleich setzte, saehe nicht, welche durchgereicht wird.
-        new NightRunProperties(maxPerProject, 2000, 400, 4000),
+        new NightRunProperties(maxPerProject, 2000, 400, 4000, null),
         Clock.fixed(FIXED, ZoneOffset.UTC));
   }
 

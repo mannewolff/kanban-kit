@@ -1,5 +1,7 @@
 package org.mwolff.manban.nightrun.domain;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
 import org.jspecify.annotations.Nullable;
@@ -18,6 +20,16 @@ import org.jspecify.annotations.Nullable;
  * Laufs ohne Arbeit, aber keine Formulierung. Die Texttabellen liegen im Frontend ({@code
  * nightRunHandoff.ts}); ein zweiter Satz hier wäre genau die zweite Formulierung desselben
  * Sachverhalts, die AK 6 verbietet.
+ *
+ * <p><strong>Die Stillefrist gehört hierher</strong> (Issue #1091, AK 6 der fachlichen Quelle
+ * #1086). Ein Lauf, dessen Runner abgeschossen wurde, meldet sich nie als abgeschlossen und bliebe
+ * sonst für immer „läuft". Wer über die Frist hinweg kein Lebenszeichen gibt, gilt als nicht
+ * gelungen. Die Regel steht im Befund, weil es nach AK 10 <em>genau eine</em> Wahrheit über den
+ * Ausgang eines Laufs geben muss (Plan #1088 E1).
+ *
+ * <p>Sie ist eine <strong>Leseregel</strong>, keine Zustandsänderung — und löst damit AK 8
+ * nebenbei: Meldet sich ein totgesagter Lauf doch noch, ist sein Lebenszeichen wieder frisch und er
+ * ist ohne jede Korrektur wieder {@link Verdict#RUNNING}.
  *
  * @param verdict der Ausgang des Laufs
  * @param decisiveItem das Paket, das den Ausgang bestimmt; {@code null}, wenn keines ihn bestimmt —
@@ -69,8 +81,12 @@ public record NightRunOutcome(
    * <p>Die Reihenfolge der Prüfungen trägt eine Aussage:
    *
    * <ol>
-   *   <li><b>Läuft noch</b> schlägt alles. Ein Lauf ohne Abschluss hat noch nichts zu melden — er
-   *       wird nicht rot, auch nicht mit einem roten Paket (dieselbe Begründung, die {@code
+   *   <li><b>Verstummt</b> schlägt alles. Ein unfertiger Lauf ohne Lebenszeichen über die Frist
+   *       hinaus ist nicht gelungen — ohne maßgebliches Paket und ohne Grund, denn er hat sein
+   *       Ergebnis nie gemeldet. Genau <em>auf</em> der Frist ist er noch nicht tot, erst darüber:
+   *       Die Frist ist die zugesagte Stille, nicht ihr Überschreiten.
+   *   <li><b>Läuft noch</b> schlägt das Übrige. Ein Lauf ohne Abschluss hat noch nichts zu melden —
+   *       er wird nicht rot, auch nicht mit einem roten Paket (dieselbe Begründung, die {@code
    *       laufMelder} seit #1069 trägt).
    *   <li><b>Ohne Arbeit</b> schlägt die Pakete. Der Grund ist der Text selbst; ein Paket daneben
    *       wäre eine zweite Begründung für denselben Lauf.
@@ -81,13 +97,31 @@ public record NightRunOutcome(
    * <p>Grau <em>ohne</em> Fehlerklasse ist ein übergangenes Paket — der Lauf hat es nicht
    * angefasst, und das ist kein Mangel des Laufs.
    *
+   * <p>Die Zeit kommt als Parameter, nicht als {@code Clock}-Feld: Unter {@code ..domain..} ist
+   * keine Spring-Abhängigkeit erlaubt (Plan #1088 E2).
+   *
    * @param complete ob der Lauf sich als abgeschlossen gemeldet hat
    * @param noWorkReason Grund eines Laufs ohne Arbeit; {@code null} oder leer, wenn er gearbeitet
    *     hat
    * @param items die Pakete des Laufs, in Laufreihenfolge
+   * @param startedAt Startzeitpunkt des Laufs — das Lebenszeichen eines Laufs, der nie
+   *     fortgeschrieben wurde (der Upload-Weg lässt {@code updatedAt} bewusst leer)
+   * @param updatedAt Zeitpunkt der letzten Meldung des Laufs; {@code null}, wenn er nie
+   *     fortgeschrieben wurde
+   * @param jetzt der Zeitpunkt, gegen den das Lebenszeichen gemessen wird
+   * @param stilleFrist die Stille, die ein unfertiger Lauf sich erlauben darf
    */
   public static NightRunOutcome of(
-      boolean complete, @Nullable String noWorkReason, List<NightRunItem> items) {
+      boolean complete,
+      @Nullable String noWorkReason,
+      List<NightRunItem> items,
+      Instant startedAt,
+      @Nullable Instant updatedAt,
+      Instant jetzt,
+      Duration stilleFrist) {
+    if (!complete && verstummt(startedAt, updatedAt, jetzt, stilleFrist)) {
+      return new NightRunOutcome(Verdict.FAILED, null, null);
+    }
     if (!complete) {
       return new NightRunOutcome(Verdict.RUNNING, null, null);
     }
@@ -99,6 +133,18 @@ public record NightRunOutcome(
         .min(Comparator.comparingInt(NightRunOutcome::rang))
         .map(NightRunOutcome::ausPaket)
         .orElseGet(() -> new NightRunOutcome(Verdict.SUCCEEDED, null, null));
+  }
+
+  /**
+   * Ob das letzte Lebenszeichen des Laufs länger her ist als die zugesagte Stille.
+   *
+   * <p>Gemessen wird an {@code updatedAt}, und ohne es an {@code startedAt}: Der Upload-Weg
+   * schreibt einen Lauf nie fort, dort ist der Start das einzige Lebenszeichen, das es gibt.
+   */
+  private static boolean verstummt(
+      Instant startedAt, @Nullable Instant updatedAt, Instant jetzt, Duration stilleFrist) {
+    Instant lebenszeichen = updatedAt == null ? startedAt : updatedAt;
+    return Duration.between(lebenszeichen, jetzt).compareTo(stilleFrist) > 0;
   }
 
   /** Ob der Befund eine Störung im Sinne von AK 4 ist — sie gehört dann auf den Leitstand. */

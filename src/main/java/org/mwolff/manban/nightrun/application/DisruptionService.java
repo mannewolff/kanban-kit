@@ -29,16 +29,19 @@ public class DisruptionService {
   private final DisruptionRepository repository;
   private final NightRunRepository runs;
   private final PlatformAdminChecker platformAdminChecker;
+  private final NightRunProperties properties;
   private final Clock clock;
 
   public DisruptionService(
       DisruptionRepository repository,
       NightRunRepository runs,
       PlatformAdminChecker platformAdminChecker,
+      NightRunProperties properties,
       Clock clock) {
     this.repository = repository;
     this.runs = runs;
     this.platformAdminChecker = platformAdminChecker;
+    this.properties = properties;
     this.clock = clock;
   }
 
@@ -100,14 +103,30 @@ public class DisruptionService {
     }
   }
 
-  private static DisruptionView view(
+  /**
+   * Die Störzeile eines Kandidaten.
+   *
+   * <p><b>{@code complete} steht fest auf {@code true}</b>, weil {@link
+   * DisruptionRepository#openCandidates()} darauf filtert. Die Stillefrist (Issue #1091) kann hier
+   * also nie greifen; die Werte stehen trotzdem echt da statt als Platzhalter — ließe der Filter
+   * eines Tages unfertige Läufe durch, wäre ein verstummter unter ihnen sofort richtig beurteilt.
+   * Der Kandidat führt kein {@code updatedAt}, also zählt der Startzeitpunkt.
+   */
+  private DisruptionView view(
       DisruptionRepository.DisruptionCandidate k, List<NightRunItem> items) {
     return new DisruptionView(
         k.nightRunId(),
         k.projectId(),
         k.projectName(),
         k.startedAt(),
-        NightRunOutcome.of(true, k.noWorkReason(), items));
+        NightRunOutcome.of(
+            true,
+            k.noWorkReason(),
+            items,
+            k.startedAt(),
+            null,
+            clock.instant(),
+            properties.stilleFrist()));
   }
 
   /**

@@ -1,5 +1,6 @@
 package org.mwolff.manban.nightrun.application;
 
+import java.time.Duration;
 import org.mwolff.manban.nightrun.domain.NightRunKind;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
@@ -38,13 +39,21 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * @param maxInteractiveItemsPerProject Zahl der je Projekt aufbewahrten <b>verwaisten</b>
  *     Arbeitspakete interaktiver Sitzungen; fehlend oder kleiner als 1 ergibt 4000 — dasselbe
  *     Verhältnis zur Lauf-Grenze wie bei den Nachtläufen.
+ * @param stilleFrist die Stille, die ein unfertiger Lauf sich erlauben darf, bevor er als nicht
+ *     gelungen gilt (Issue #1091); fehlend, {@code null} oder nicht positiv ergibt 90 Minuten. Eine
+ *     Nacht-Runde dauert bis zu einer Stunde (die Stufengrenzen der {@code night.kette} liegen bei
+ *     25 bis 30 Minuten je Stufe), und der Runner meldet nach jeder Runde — 90 Minuten lassen einer
+ *     langen Runde Luft und sagen einen abgeschossenen Runner noch in derselben Nacht tot. Nicht
+ *     positiv wäre keine Frist, sondern ihr Gegenteil: Jeder unfertige Lauf gälte im selben
+ *     Augenblick als verstummt.
  */
 @ConfigurationProperties(prefix = "manban.nightrun")
 public record NightRunProperties(
     Integer maxPerProject,
     Integer maxItemsPerProject,
     Integer maxInteractivePerProject,
-    Integer maxInteractiveItemsPerProject) {
+    Integer maxInteractiveItemsPerProject,
+    Duration stilleFrist) {
 
   public NightRunProperties {
     if (maxPerProject == null || maxPerProject < 1) {
@@ -58,6 +67,9 @@ public record NightRunProperties(
     }
     if (maxInteractiveItemsPerProject == null || maxInteractiveItemsPerProject < 1) {
       maxInteractiveItemsPerProject = 4000;
+    }
+    if (stilleFrist == null || !stilleFrist.isPositive()) {
+      stilleFrist = Duration.ofMinutes(90);
     }
   }
 
