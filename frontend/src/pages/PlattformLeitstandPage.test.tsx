@@ -47,9 +47,9 @@ describe('PlattformLeitstandPage (#1083)', () => {
   /** AK 13: die jüngste Störung zuoberst — die Reihenfolge der Antwort bleibt erhalten. */
   it('zeigt die Störungen in der Reihenfolge der Antwort, jüngste zuoberst', async () => {
     api.liste.mockResolvedValue([
-      stoerung({ nightRunId: 7, startedAt: '2026-09-19T21:10:00Z', projectName: 'Jung' }),
-      stoerung({ nightRunId: 6, startedAt: '2026-09-18T21:10:00Z', projectName: 'Mittel' }),
-      stoerung({ nightRunId: 5, startedAt: '2026-09-17T21:10:00Z', projectName: 'Alt' }),
+      stoerung({ nightRunId: 7, projectId: 7, startedAt: '2026-09-19T21:10:00Z', projectName: 'Jung' }),
+      stoerung({ nightRunId: 6, projectId: 6, startedAt: '2026-09-18T21:10:00Z', projectName: 'Mittel' }),
+      stoerung({ nightRunId: 5, projectId: 5, startedAt: '2026-09-17T21:10:00Z', projectName: 'Alt' }),
     ])
 
     zeigeSeite()
@@ -62,17 +62,20 @@ describe('PlattformLeitstandPage (#1083)', () => {
     ])
   })
 
-  /** AK 6: Projekt, Datum und Uhrzeit, Kennung und Grund — vier Angaben in einer Zeile. */
-  it('nennt in einer Zeile Projekt, Zeitpunkt, Kennung und Grund', async () => {
+  /**
+   * AK 6: Datum und Uhrzeit, Kennung und Grund. Das Projekt steht seit #1087 in der
+   * Gruppenüberschrift statt in jeder Zeile — dieselbe Angabe, nur einmal.
+   */
+  it('nennt in einer Zeile Zeitpunkt, Kennung und Grund, das Projekt in der Überschrift', async () => {
     api.liste.mockResolvedValue([stoerung()])
 
     zeigeSeite()
 
     const zeile = await screen.findByTestId('stoerung-5')
-    expect(within(zeile).getByText('Mein Projekt')).toBeInTheDocument()
     expect(within(zeile).getByText('19.09., 23:10')).toBeInTheDocument()
     expect(within(zeile).getByRole('link', { name: 'Lauf #5' })).toBeInTheDocument()
     expect(within(zeile).getByText(/^Karte #721:/)).toBeInTheDocument()
+    expect(within(screen.getByTestId('stoergruppe-kopf-9')).getByText('Mein Projekt')).toBeInTheDocument()
   })
 
   /**
@@ -154,7 +157,10 @@ describe('PlattformLeitstandPage (#1083)', () => {
 
   /** AK 8: kein Rückfragen-Dialog, kein Rückgängig — die Zeile ist sofort weg. */
   it('räumt die Zeile ohne Rückfrage weg und ruft den Endpunkt', async () => {
-    api.liste.mockResolvedValue([stoerung(), stoerung({ nightRunId: 6, projectName: 'Anderes' })])
+    api.liste.mockResolvedValue([
+      stoerung(),
+      stoerung({ nightRunId: 6, projectId: 10, projectName: 'Anderes' }),
+    ])
 
     zeigeSeite()
     const taste = await screen.findByRole('button', {
@@ -170,7 +176,10 @@ describe('PlattformLeitstandPage (#1083)', () => {
 
   /** In einer Liste gleichlautender Tasten braucht jede ihre eigene Ansage. */
   it('gibt jeder Taste ein unterscheidbares aria-label', async () => {
-    api.liste.mockResolvedValue([stoerung(), stoerung({ nightRunId: 6, projectName: 'Anderes' })])
+    api.liste.mockResolvedValue([
+      stoerung(),
+      stoerung({ nightRunId: 6, projectId: 10, projectName: 'Anderes' }),
+    ])
 
     zeigeSeite()
 
@@ -179,13 +188,17 @@ describe('PlattformLeitstandPage (#1083)', () => {
     expect(new Set(namen).size).toBe(namen.length)
   })
 
-  /** AK 14: Eine leere Fläche wäre von einer kaputten Anzeige nicht zu unterscheiden. */
+  /**
+   * AK 14: Eine leere Fläche wäre von einer kaputten Anzeige nicht zu unterscheiden — und eine
+   * Gruppenliste ohne Gruppen (#1087, AK 8) genauso wenig.
+   */
   it('sagt ausdrücklich, wenn keine Störung offen ist', async () => {
     api.liste.mockResolvedValue([])
 
     zeigeSeite()
 
     expect(await screen.findByTestId('keine-stoerungen')).toHaveTextContent('Keine offene Störung.')
+    expect(screen.queryAllByTestId(/^stoergruppe-/)).toHaveLength(0)
   })
 
   /** AK 3: dasselbe wie auf jeder anderen Admin-Seite — ein Fehlertext statt Inhalt. */
@@ -204,5 +217,153 @@ describe('PlattformLeitstandPage (#1083)', () => {
     zeigeSeite()
 
     expect(await screen.findByText('Laden fehlgeschlagen.')).toBeInTheDocument()
+  })
+
+  /**
+   * Gruppierung nach Projekt (#1087).
+   *
+   * Wer mehrere Projekte betreibt, liest in einer flachen Liste abwechselnd Namen statt Befunde.
+   * Geprüft wird deshalb beides: dass die Zeilen eines Projekts beieinanderstehen, **und** dass
+   * das Gruppieren die Reihenfolge der Server-Antwort nirgends anfasst.
+   */
+  describe('Gruppierung nach Projekt (#1087)', () => {
+    /** Die Antwort des Servers, verschränkt: Alpha, Beta, Alpha. */
+    const verschraenkt = () => [
+      stoerung({ nightRunId: 9, projectId: 1, projectName: 'Alpha', startedAt: '2026-09-19T21:10:00Z' }),
+      stoerung({ nightRunId: 8, projectId: 2, projectName: 'Beta', startedAt: '2026-09-18T21:10:00Z' }),
+      stoerung({ nightRunId: 7, projectId: 1, projectName: 'Alpha', startedAt: '2026-09-17T21:10:00Z' }),
+    ]
+
+    const zeilenIn = (element: HTMLElement) =>
+      within(element)
+        .getAllByTestId(/^stoerung-/)
+        .map((z) => z.getAttribute('data-testid'))
+
+    /** AK 1: zwei Gruppen aus drei verschränkten Zeilen, und keine Zeile außerhalb ihrer Gruppe. */
+    it('fasst die Zeilen eines Projekts zu einer Gruppe zusammen', async () => {
+      api.liste.mockResolvedValue(verschraenkt())
+
+      zeigeSeite()
+
+      const gruppen = await screen.findAllByTestId(/^stoergruppe-\d+$/)
+      expect(gruppen.map((g) => g.getAttribute('data-testid'))).toEqual([
+        'stoergruppe-1',
+        'stoergruppe-2',
+      ])
+      expect(zeilenIn(gruppen[0])).toEqual(['stoerung-9', 'stoerung-7'])
+      expect(zeilenIn(gruppen[1])).toEqual(['stoerung-8'])
+      // Keine Zeile steht außerhalb ihrer Gruppe: alle drei sind in den Gruppen aufgegangen.
+      expect(screen.getAllByTestId(/^stoerung-/)).toHaveLength(3)
+    })
+
+    /** AK 2: die jüngste Störung bestimmt die Gruppe zuoberst, nicht die Zahl ihrer Zeilen. */
+    it('stellt die Gruppe der jüngsten Störung zuoberst, auch wenn sie die kleinere ist', async () => {
+      api.liste.mockResolvedValue([
+        stoerung({ nightRunId: 9, projectId: 2, projectName: 'Beta', startedAt: '2026-09-19T21:10:00Z' }),
+        stoerung({ nightRunId: 8, projectId: 1, projectName: 'Alpha', startedAt: '2026-09-18T21:10:00Z' }),
+        stoerung({ nightRunId: 7, projectId: 1, projectName: 'Alpha', startedAt: '2026-09-17T21:10:00Z' }),
+      ])
+
+      zeigeSeite()
+
+      const gruppen = await screen.findAllByTestId(/^stoergruppe-\d+$/)
+      expect(gruppen.map((g) => g.getAttribute('data-testid'))).toEqual([
+        'stoergruppe-2',
+        'stoergruppe-1',
+      ])
+    })
+
+    /**
+     * AK 3: Innerhalb der Gruppe gilt die Reihenfolge der Antwort — hier bewusst gegen den
+     * Zeitpunkt gestellt. Ein zweites Sortieren im Browser fiele genau hier auf.
+     */
+    it('lässt die Reihenfolge der Server-Antwort innerhalb einer Gruppe unangetastet', async () => {
+      api.liste.mockResolvedValue([
+        stoerung({ nightRunId: 3, projectId: 1, projectName: 'Alpha', startedAt: '2026-09-17T21:10:00Z' }),
+        stoerung({ nightRunId: 4, projectId: 1, projectName: 'Alpha', startedAt: '2026-09-19T21:10:00Z' }),
+      ])
+
+      zeigeSeite()
+
+      const gruppe = await screen.findByTestId('stoergruppe-1')
+      expect(zeilenIn(gruppe)).toEqual(['stoerung-3', 'stoerung-4'])
+    })
+
+    /** AK 4: Projektname und Zahl der offenen Störungen, Einzahl wie Mehrzahl. */
+    it('nennt in der Überschrift den Projektnamen und die Zahl der offenen Störungen', async () => {
+      api.liste.mockResolvedValue(verschraenkt())
+
+      zeigeSeite()
+
+      const alpha = within(await screen.findByTestId('stoergruppe-kopf-1'))
+      expect(alpha.getByText('Alpha')).toBeInTheDocument()
+      expect(alpha.getByText('2 Störungen')).toBeInTheDocument()
+      const beta = within(screen.getByTestId('stoergruppe-kopf-2'))
+      expect(beta.getByText('Beta')).toBeInTheDocument()
+      expect(beta.getByText('1 Störung')).toBeInTheDocument()
+    })
+
+    /**
+     * AK 5: Der Name steht nur noch in der Überschrift. Das `aria-label` behält ihn — ohne ihn
+     * wären zwei Tasten verschiedener Projekte für ein Vorlesewerkzeug nicht zu unterscheiden.
+     */
+    it('lässt den Projektnamen aus der Zeile weg, behält ihn aber im aria-label der Taste', async () => {
+      api.liste.mockResolvedValue([stoerung()])
+
+      zeigeSeite()
+
+      const zeile = await screen.findByTestId('stoerung-5')
+      expect(within(zeile).queryByText('Mein Projekt')).not.toBeInTheDocument()
+      expect(
+        within(zeile).getByRole('button', { name: 'Störung von Mein Projekt, Lauf #5 löschen' }),
+      ).toBeInTheDocument()
+    })
+
+    /**
+     * AK 6: Die Gruppe ist auch ohne Sicht eine Gruppe — eine eigene, benannte Liste je Projekt
+     * statt einer durchlaufenden Liste mit Zwischenüberschriften.
+     */
+    it('macht jede Gruppe als Liste unter ihrem Projektnamen auffindbar', async () => {
+      api.liste.mockResolvedValue(verschraenkt())
+
+      zeigeSeite()
+
+      expect(zeilenIn(await screen.findByRole('list', { name: 'Alpha' }))).toEqual([
+        'stoerung-9',
+        'stoerung-7',
+      ])
+      expect(zeilenIn(screen.getByRole('list', { name: 'Beta' }))).toEqual(['stoerung-8'])
+    })
+
+    /** AK 7: Mit der letzten Störung eines Projekts geht seine Überschrift mit. */
+    it('nimmt mit der letzten Störung eines Projekts auch dessen Gruppe weg', async () => {
+      api.liste.mockResolvedValue(verschraenkt())
+
+      zeigeSeite()
+
+      await userEvent.click(
+        await screen.findByRole('button', { name: 'Störung von Beta, Lauf #8 löschen' }),
+      )
+
+      await waitFor(() => expect(screen.queryByTestId('stoergruppe-2')).not.toBeInTheDocument())
+      expect(screen.queryByText('Beta')).not.toBeInTheDocument()
+      expect(zeilenIn(screen.getByTestId('stoergruppe-1'))).toEqual(['stoerung-9', 'stoerung-7'])
+      expect(screen.getByText('2 Störungen')).toBeInTheDocument()
+    })
+
+    /** AK 7: Quittiert man eine von zweien, bleibt die Gruppe — mit der neuen Zahl. */
+    it('behält die Gruppe, solange eine Störung des Projekts offen bleibt', async () => {
+      api.liste.mockResolvedValue(verschraenkt())
+
+      zeigeSeite()
+
+      await userEvent.click(
+        await screen.findByRole('button', { name: 'Störung von Alpha, Lauf #9 löschen' }),
+      )
+
+      await waitFor(() => expect(screen.queryByTestId('stoerung-9')).not.toBeInTheDocument())
+      expect(zeilenIn(screen.getByTestId('stoergruppe-1'))).toEqual(['stoerung-7'])
+      expect(within(screen.getByTestId('stoergruppe-kopf-1')).getByText('1 Störung')).toBeInTheDocument()
+    })
   })
 })
