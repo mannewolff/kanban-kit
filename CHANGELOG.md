@@ -7,6 +7,26 @@ Versionierung folgt der dreiteiligen Betriebsversion (siehe [RELEASING.md](RELEA
 Einträge je Version sind ein automatischer Auszug der Commit-Titel seit dem letzten Release,
 erzeugt von `scripts/gen-changelog.mjs`.
 
+## [2.3.0] – 2026-09-21
+
+- chore: v2.2.1
+- Leersatz der Störungen eingerückt wie die Überschrift
+- Oberflächenbegriff „Nachtlauf" durch „Lauf" ersetzen ([#1101](https://github.com/mannewolff/kanban-kit/issues/1101))
+- Nachtansicht der Verbrauchsauswertung ohne Kartenzeilen ([#1105](https://github.com/mannewolff/kanban-kit/issues/1105))
+- Vorhaben-Filter zeigt alle Karten des Vorhabens ([#1103](https://github.com/mannewolff/kanban-kit/issues/1103))
+- Aktive und Beendete Läufe statt Nachtläufe ([#1102](https://github.com/mannewolff/kanban-kit/issues/1102))
+- Der Leitstand frischt sich selbst auf ([#1099](https://github.com/mannewolff/kanban-kit/issues/1099))
+- Drei Bereiche auf dem Plattform-Leitstand ([#1098](https://github.com/mannewolff/kanban-kit/issues/1098))
+- Designquelle und Nutzungsdoku beschreiben drei Bereiche ([#1097](https://github.com/mannewolff/kanban-kit/issues/1097))
+- Die Wörter der vier Ausgänge ([#1096](https://github.com/mannewolff/kanban-kit/issues/1096))
+- Ein Endpunkt für drei Listen: GET /api/admin/leitstand ([#1095](https://github.com/mannewolff/kanban-kit/issues/1095))
+- Eine Abfrage für die Läufe der laufenden Nacht ([#1094](https://github.com/mannewolff/kanban-kit/issues/1094))
+- NightRunPeriod kennt die laufende Nacht ([#1093](https://github.com/mannewolff/kanban-kit/issues/1093))
+- Die Projektansichten lesen den Befund statt complete ([#1092](https://github.com/mannewolff/kanban-kit/issues/1092))
+- Stillefrist: ein verstummter Lauf gilt als nicht gelungen ([#1091](https://github.com/mannewolff/kanban-kit/issues/1091))
+- Ringpuffer der Nachtlauf-Historie je Projekt serialisieren ([#1090](https://github.com/mannewolff/kanban-kit/issues/1090))
+- Störungen des Plattform-Leitstands nach Projekt gruppieren ([#1087](https://github.com/mannewolff/kanban-kit/issues/1087))
+
 ## [2.2.0] – 2026-09-20
 
 - chore: v2.1.4
