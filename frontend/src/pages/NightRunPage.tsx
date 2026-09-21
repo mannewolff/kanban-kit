@@ -29,6 +29,8 @@ import { cardsApi, type Card, type CardByNumber } from '../api/cards'
 import { apiErrorMessage } from '../api/client'
 import {
   nightRunsApi,
+  type NightRunBudgetOrigin,
+  type NightRunBudgetView,
   type NightRunErrorClassCounts,
   type NightRunOutcomeView,
   type NightRunServerMode,
@@ -148,12 +150,37 @@ interface AnzeigeItem extends NightRunHandoffItem {
  * Der aufbewahrte Verbrauch in der Anzeigeform (Issue #949) — `undefined` statt `null`, wie
  * ueberall im Anzeigemodell (Issue #734). Jedes Feld fehlt einzeln: Ein hochgeladener Lauf traegt
  * einen Kostenbetrag ohne Mengen, ein gemeldeter beides.
+ *
+ * <p>Modellzeit und Zuege kamen mit Issue #1115 dazu — sie stehen seit #1113 in derselben Antwort
+ * und gehoeren deshalb in denselben Typ; ein zweites Buendel liefe beim naechsten Feld auseinander.
  */
 interface Verbrauch {
   kostenUsd: number | undefined
   eingabe: number | undefined
   ausgabe: number | undefined
   zwischenspeicher: number | undefined
+  modellzeitMs: number | undefined
+  zuege: number | undefined
+}
+
+/**
+ * Die Vorgaben eines Ketten-Laufs in der Anzeigeform (Issue #1115).
+ *
+ * <p>Die Zeitvorgaben stehen unter den Schlüsseln von {@link NightRunKettenStufen}, nicht unter den
+ * Feldnamen des Servers: Damit liest {@link vorgabenText} sie unverändert weiter — Vorgabe und
+ * Verbrauch eines Arbeitsschritts finden sich seit #859 unter demselben Namen.
+ */
+interface Budget {
+  vorgabenMin: NightRunStufenvorgaben
+  kostenUsd: number | undefined
+  /** Woher die Vorgaben stammen; `undefined` ist die dritte Aussage aus AK 3: „nicht angegeben". */
+  herkunft: NightRunBudgetOrigin | undefined
+  /**
+   * Die Feldnamen, die aus den Voreinstellungen kamen — **roh, wie der Lauf sie meldet**. Die
+   * Übersetzung in die Worte der Fußzeile steht in {@link herkunftText}: Was das Board nicht kennt,
+   * lässt es dort aus, statt es hier abzuweisen (Plan #1110, E4 und E11).
+   */
+  voreingestellteFelder: readonly string[]
 }
 
 /**
@@ -209,6 +236,13 @@ interface AnzeigeLauf {
    */
   laufId: number | undefined
   verbrauch: Verbrauch | undefined
+  /**
+   * Die Vorgaben, unter denen der Lauf antrat (Issue #1115); `undefined`, wo er keine mitbrachte —
+   * ein Lauf vor der Umstellung, ein eben geparster oder einer, den der Browser hochgeladen hat.
+   * Der Upload-Weg führt sie nicht (Plan #1110, E14), und für diese Läufe tritt in
+   * {@link kettenBudget} der eingelesene Ergebnisstand ein.
+   */
+  budget: Budget | undefined
   items: AnzeigeItem[]
 }
 
@@ -344,6 +378,9 @@ const ausParser = (run: NightRun): AnzeigeLauf => ({
   befund: undefined,
   laufId: undefined,
   verbrauch: undefined,
+  // Wie die Herkunftsfelder leer: Die Vorgaben **des Laufs** meldet allein der Runner ueber den
+  // Token-Weg. Was der eingelesene Stand dazu fuehrt, holt `kettenBudget` von dort (Issue #1115).
+  budget: undefined,
   items: run.items.map((item) => ({
     cardNumber: item.cardNumber,
     title: item.title,
@@ -366,13 +403,75 @@ const ausParser = (run: NightRun): AnzeigeLauf => ({
  */
 const ausVerbrauch = (view: NightRunUsageView | null): Verbrauch =>
   view === null
-    ? { kostenUsd: undefined, eingabe: undefined, ausgabe: undefined, zwischenspeicher: undefined }
+    ? {
+        kostenUsd: undefined,
+        eingabe: undefined,
+        ausgabe: undefined,
+        zwischenspeicher: undefined,
+        modellzeitMs: undefined,
+        zuege: undefined,
+      }
     : {
         kostenUsd: view.costUsd ?? undefined,
         eingabe: view.inputTokens ?? undefined,
         ausgabe: view.outputTokens ?? undefined,
         zwischenspeicher: view.cachedInputTokens ?? undefined,
+        modellzeitMs: view.modelDurationMs ?? undefined,
+        zuege: view.turns ?? undefined,
       }
+
+/**
+ * Die Vorgaben vom Server in der Anzeigeform (Issue #1115).
+ *
+ * <p>Ein `null` des Servers bleibt `undefined` und wird **nicht** zum leeren Budget — anders als
+ * bei {@link ausVerbrauch}: „dieser Lauf brachte keine Vorgaben mit" ist hier kein Endzustand,
+ * sondern die Bedingung, unter der der eingelesene Stand einspringt (E14). Ein leeres Budget
+ * verdeckte ihn und zeigte am Rückfallweg „nicht angegeben", wo Zahlen vorliegen.
+ */
+const ausBudget = (view: NightRunBudgetView | null): Budget | undefined =>
+  view === null
+    ? undefined
+    : {
+        // Ein fehlender Schlüssel statt eines `undefined`-Werts: `vorgabenText` zählt die Schritte,
+        // die eine Vorgabe **führen**, und ein Schlüssel mit `undefined` wäre dort einer zu viel.
+        vorgabenMin: vorgabenAusSicht(view),
+        kostenUsd: view.kostenUsd ?? undefined,
+        herkunft: view.origin ?? undefined,
+        voreingestellteFelder: view.defaultFields,
+      }
+
+/**
+ * Die Vorgaben, die die Fußzeile eines Ketten-Laufs zeigt (Issue #1115): **die des Laufs**, und wo
+ * er keine mitbrachte, die des eingelesenen Ergebnisstands.
+ *
+ * <p>Der Rückfall ist keine Vermischung zweier Quellen, sondern die zweite Lage desselben Wegs:
+ * Der Upload liefert Budgets nicht mit (Plan #1110, E14), also führt der Server zu einem
+ * eingelesenen Lauf keine — und ohne diesen Zweig zeigte der Rückfallweg weniger als vor diesem
+ * Paket, während die fachliche Quelle (#993) gerade das Gegenteil verlangt. Der Stand trägt keine
+ * Herkunft; sie bleibt dort „nicht angegeben".
+ */
+const kettenBudget = (lauf: AnzeigeLauf, stand: NightRun | undefined): Budget =>
+  lauf.budget ?? {
+    vorgabenMin: stand?.stand?.vorgabenMin ?? {},
+    kostenUsd: stand?.stand?.kostenBudgetUsd,
+    herkunft: undefined,
+    voreingestellteFelder: [],
+  }
+
+/** Die Zeitvorgaben der Antwort unter den Schlüsseln der Arbeitsschritte; ein Schritt ohne Vorgabe fehlt. */
+function vorgabenAusSicht(view: NightRunBudgetView): NightRunStufenvorgaben {
+  const minuten: Record<NightRunKettenStufe, number | null> = {
+    plan: view.planMin,
+    review: view.reviewMin,
+    pakete: view.paketeMin,
+    abdeckung: view.abdeckungMin,
+  }
+  return Object.fromEntries(
+    KETTEN_STUFEN.flatMap(({ schluessel }) =>
+      minuten[schluessel] === null ? [] : [[schluessel, minuten[schluessel]]],
+    ),
+  )
+}
 
 /**
  * Der Lauf vom Server in der Anzeigeform (#725).
@@ -402,6 +501,7 @@ const ausSicht = (view: NightRunView): AnzeigeLauf => ({
   befund: view.outcome,
   laufId: view.id,
   verbrauch: ausVerbrauch(view.usage),
+  budget: ausBudget(view.budget),
   items: view.items.map((item) => ({
     cardNumber: item.cardNumber,
     title: item.title,
@@ -863,12 +963,73 @@ function stufenZeitSumme(items: readonly NightRunItem[]): number {
   return items.reduce((summe, item) => summe + jeVorgang(item), 0)
 }
 
-/** Der höchste Kostenverbrauch eines einzelnen Vorgangs (AK 12). */
-function hoechsteKosten(items: readonly NightRunItem[]): string {
-  const gemeldet = items.flatMap((item) =>
-    item.kennzahlen?.kostenUsd === undefined ? [] : [item.kennzahlen.kostenUsd],
-  )
-  return gemeldet.length === 0 ? 'nicht angegeben' : betrag(Math.max(...gemeldet))
+/**
+ * Der höchste Kostenverbrauch eines einzelnen Vorgangs (AK 12), gerechnet über die **Vorgänge des
+ * Laufs** — nicht mehr über den eingelesenen Stand (Issue #1115, Plan #1110 E10). Gerechnet wird
+ * im Browser und nicht im Server: Die Vorgänge kommen ohnehin vollständig mit, und ein Antwortfeld
+ * `maxItemCostUsd` wäre eine zweite Wahrheit über dieselbe Liste.
+ *
+ * <p>Je Vorgang gilt derselbe Betrag wie in seiner Kostenspalte ({@link vorgangskosten}) — sonst
+ * stünde in der Fußzeile eine Zahl, die die Zeile darüber nicht kennt (AK 4, letzter Satz).
+ *
+ * <p>Der Zusatz „aus n von m Vorgängen" steht, sobald **nicht alle** Vorgänge Kosten tragen: Ohne
+ * ihn läse sich der Höchstwert einer halb gemeldeten Nacht wie der einer ganzen.
+ */
+function hoechsteKosten(items: readonly AnzeigeItem[], stand: NightRun | undefined): string {
+  const gemeldet = items.flatMap((item) => {
+    const wert = vorgangskosten(item, standVorgang(stand, item.cardNumber))
+    return wert === null ? [] : [wert]
+  })
+  if (gemeldet.length === 0) {
+    return 'nicht angegeben'
+  }
+  const hoechste = betrag(Math.max(...gemeldet))
+  return gemeldet.length === items.length
+    ? hoechste
+    : `${hoechste} (aus ${gemeldet.length} von ${items.length} Vorgängen)`
+}
+
+/**
+ * Die fünf Budgetfelder in den Worten aus AK 3 der fachlichen Quelle (#993).
+ *
+ * <p>Die Übersetzung liegt **hier** und nicht am Server (Plan #1110, E4): Er nimmt die Feldnamen
+ * an, wie der Lauf sie meldet, und `ketteBudgetDefaults` führt mehr davon, als die Fußzeile zeigt —
+ * `varianteBLabel`, `umsetzungMin`, `kostenUsdB`. Als `Map` und nicht als `Record`: Ein Name, den
+ * das Board nicht kennt, soll `undefined` ergeben und ausgelassen werden, statt den Build zu
+ * binden oder als roher Feldname auf der Seite zu erscheinen (E11).
+ */
+const BUDGETFELD_TEXT = new Map<string, string>([
+  ['planMin', 'Zeitvorgabe Plan'],
+  ['reviewMin', 'Zeitvorgabe Prüfung'],
+  ['paketeMin', 'Zeitvorgabe Pakete'],
+  ['abdeckungMin', 'Zeitvorgabe Abdeckung'],
+  ['kostenUsd', 'Kostenbudget'],
+])
+
+/**
+ * Die Herkunft der Budgets in einer der drei Aussagen aus AK 3 — „eingestellt", „aus
+ * Voreinstellungen: <Angaben>" oder „nicht angegeben".
+ *
+ * <p>Die dritte ist die fehlende Herkunft selbst: ein Lauf ohne Budgets, ein Lauf des Upload-Wegs
+ * (E14) oder ein Kit-Stand, der die Herkunft noch nicht meldet. Geraten wird sie nicht —
+ * „eingestellt" wäre dort eine Behauptung über die Konfiguration einer fremden Maschine.
+ *
+ * <p>Bleibt von den gemeldeten Feldern keines übrig, das das Board kennt, steht „aus
+ * Voreinstellungen" **ohne** Aufzählung: Ein Doppelpunkt mit nichts dahinter sähe aus wie ein
+ * Fehler, und der Lauf hat die Aussage ja getroffen — nur über Felder, die hier nicht stehen.
+ */
+function herkunftText(budget: Budget): string {
+  if (budget.herkunft === undefined) {
+    return 'nicht angegeben'
+  }
+  if (budget.herkunft === 'CONFIGURED') {
+    return 'eingestellt'
+  }
+  const namen = budget.voreingestellteFelder.flatMap((feld) => {
+    const wort = BUDGETFELD_TEXT.get(feld)
+    return wort === undefined ? [] : [wort]
+  })
+  return namen.length === 0 ? 'aus Voreinstellungen' : `aus Voreinstellungen: ${namen.join(', ')}`
 }
 
 /** Die Zeitvorgaben je Arbeitsschritt, in der Reihenfolge der Kette (AK 12). */
@@ -1586,15 +1747,16 @@ function laufanteile(items: readonly AnzeigeItem[]): ReadonlyMap<number, Laufabs
 
 function fussangaben(lauf: AnzeigeLauf, stand: NightRun | undefined): FussangabeForm[] {
   if (lauf.mode === 'CHAIN') {
+    // Seit Issue #1115 aus dem Lauf selbst und nicht mehr allein aus dem eingelesenen Stand: Ein
+    // Lauf, den der Runner eingeliefert hat, bringt seine Vorgaben mit (AK 1) — bis dahin stand
+    // hier viermal „nicht angegeben", obwohl der Server die Angaben führte.
+    const budget = kettenBudget(lauf, stand)
     return [
       ...kettenAngaben(stand),
-      { label: 'Zeitvorgaben je Kette', wert: vorgabenText(stand?.stand?.vorgabenMin) },
-      { label: 'Kostenbudget je Kette', wert: betrag(stand?.stand?.kostenBudgetUsd) },
-      {
-        label: 'Höchste Kosten eines Vorgangs',
-        wert: stand === undefined ? 'nicht angegeben' : hoechsteKosten(stand.items),
-      },
-      { label: 'Herkunft der Budgets', wert: 'nicht angegeben' },
+      { label: 'Zeitvorgaben je Kette', wert: vorgabenText(budget.vorgabenMin) },
+      { label: 'Kostenbudget je Kette', wert: betrag(budget.kostenUsd) },
+      { label: 'Höchste Kosten eines Vorgangs', wert: hoechsteKosten(lauf.items, stand) },
+      { label: 'Herkunft der Budgets', wert: herkunftText(budget) },
     ]
   }
   return [
@@ -1857,6 +2019,14 @@ const ergebniszeile = (
  */
 const vorgangskosten = (item: AnzeigeItem, standItem: NightRunItem | undefined): number | null =>
   item.verbrauch?.kostenUsd ?? standItem?.kennzahlen?.kostenUsd ?? null
+
+/**
+ * Derselbe Vorgang im Ergebnisstand dieser Sitzung; `undefined` ohne Stand oder wo der Stand ihn
+ * nicht führt. Eine benannte Funktion, weil seit Issue #1115 zwei Stellen dieselbe Zuordnung
+ * brauchen — die Vorgangszeile und die höchsten Kosten der Fußzeile.
+ */
+const standVorgang = (stand: NightRun | undefined, nummer: number): NightRunItem | undefined =>
+  stand?.items.find((eintrag) => eintrag.cardNumber === nummer)
 
 /**
  * Ein Vorgang eines Laufs als kompakte Zeile (#988) — und aufgeklappt alles, was die Vorlage in
@@ -2181,7 +2351,7 @@ function LaufPanel({
             // Position dazu.
             key={`${item.cardNumber}-${position}`}
             item={item}
-            standItem={stand?.items.find((eintrag) => eintrag.cardNumber === item.cardNumber)}
+            standItem={standVorgang(stand, item.cardNumber)}
             modus={lauf.mode}
             vorgaben={stand?.stand?.vorgabenMin}
             anteil={anteile.get(item.cardNumber)}

@@ -99,6 +99,55 @@ export interface NightRunItemView {
   commitHash: string | null
   excerpt: string | null
   usage: NightRunUsageView | null
+  /**
+   * Die Stufen der Kette, die dieser Vorgang durchlaufen hat (Issue #1113) — **leer statt
+   * `null`**, anders als die Felder darüber: „dieser Vorgang hatte keine Stufen" ist eine
+   * Aussage des Servers, kein fehlender Wert. Ein Lauf, der keine Kette ist, führt sie nie.
+   */
+  stages: NightRunItemStageView[]
+}
+
+/** Die vier Stufen, die ein Ketten-Vorgang durchläuft — die Namen des Servers, nicht die der Anzeige. */
+export type NightRunStage = 'PLAN' | 'REVIEW' | 'PAKETE' | 'ABDECKUNG'
+
+/**
+ * Was ein Vorgang in einer Stufe der Kette gebraucht hat (Issue #1113).
+ *
+ * Je Vorgang trägt jede Stufe höchstens einen Eintrag; erreicht er eine Stufe nicht, fehlt sie
+ * ganz — eine Stufe mit lauter leeren Feldern behauptete einen Durchlauf, den es nicht gab.
+ */
+export interface NightRunItemStageView {
+  stage: NightRunStage
+  durationMs: number | null
+  usage: NightRunUsageView | null
+}
+
+/** Woher die Vorgaben eines Kettenlaufs stammen — nicht zu verwechseln mit {@link NightRunView.origin}, der Herkunft des Laufs. */
+export type NightRunBudgetOrigin = 'CONFIGURED' | 'DEFAULTED'
+
+/**
+ * Die Vorgaben, unter denen ein Kettenlauf angetreten ist (Issue #1113).
+ *
+ * Jedes Feld darf fehlen; `null` heißt „nicht angegeben" und nie 0 — eine 0 behauptete, der Lauf
+ * habe für diese Stufe keine Zeit bekommen. Ein Lauf ganz ohne gemeldete Vorgaben trägt gar kein
+ * Budget (`null` am Lauf) statt eines Budgets aus lauter leeren Feldern.
+ *
+ * Die dritte Aussage über die Herkunft — „nicht angegeben" — ist das fehlende {@link origin}
+ * selbst und trägt deshalb keinen eigenen Aufzählungswert.
+ */
+export interface NightRunBudgetView {
+  planMin: number | null
+  reviewMin: number | null
+  paketeMin: number | null
+  abdeckungMin: number | null
+  kostenUsd: number | null
+  origin: NightRunBudgetOrigin | null
+  /**
+   * Die Felder, die aus den Voreinstellungen des Kits kamen — nur bei `DEFAULTED` gefüllt, sonst
+   * leer. Die Namen sind die des Laufs und werden **nicht** eingeengt: Eine ältere oder neuere
+   * Kit-Fassung meldet mehr oder andere, und die Anzeige lässt aus, was sie nicht kennt (E11).
+   */
+  defaultFields: string[]
 }
 
 /**
@@ -116,6 +165,14 @@ export interface NightRunUsageView {
   inputTokens: number | null
   outputTokens: number | null
   cachedInputTokens: number | null
+  /**
+   * Die Zeit, die das Modell gerechnet hat (Issue #1113) — nicht die Wanduhr-Dauer, die
+   * Werkzeugaufrufe und Wartezeiten einschliesst. Sie kann die Dauer uebersteigen, wo mehrere
+   * Sitzungen zugleich liefen.
+   */
+  modelDurationMs: number | null
+  /** Zahl der Zuege der Sitzung (Issue #1113). */
+  turns: number | null
 }
 
 /**
@@ -184,6 +241,12 @@ export interface NightRunView {
    * Wahrheit wieder in den Browser, weil jede Lesestelle einen Rueckfallweg braeuchte.
    */
   outcome: NightRunOutcomeView
+  /**
+   * Die Vorgaben, unter denen der Lauf angetreten ist (Issue #1113); `null` heisst „nicht
+   * angegeben" — ein Lauf vor der Umstellung, ein Lauf des Upload-Wegs (E14) oder eine Lauf-Art
+   * ohne Budgets.
+   */
+  budget: NightRunBudgetView | null
   items: NightRunItemView[]
 }
 

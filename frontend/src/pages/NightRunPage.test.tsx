@@ -11,6 +11,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Card, CardByNumber } from '../api/cards'
 import type {
+  NightRunBudgetView,
   NightRunErrorClassCounts,
   NightRunItemView,
   NightRunResult,
@@ -293,6 +294,9 @@ function wieAufbewahrt(ergebnisstand: string): NightRunView[] {
       updatedAt: null,
       usage: null,
       noWorkReason: null,
+      // Der Upload-Weg fuehrt keine Budgets (E14); der Server legt sie zu einem eingelesenen Lauf
+      // fest als „nicht gemeldet" ab.
+      budget: null,
       items: run.items.map((item, position) => wieAufbewahrtesItem({ id: position + 1, ...item })),
       outcome: { verdict: 'SUCCEEDED', decisiveItem: null, noWorkReason: null },
   }
@@ -321,6 +325,8 @@ function wieAufbewahrtesItem(item: ItemVorgabe): NightRunItemView {
     commitHash: item.commitHash ?? null,
     excerpt: item.excerpt ?? null,
     usage: item.usage ?? null,
+    // Leer statt `null`: „dieser Vorgang hatte keine Stufen" ist eine Aussage (Issue #1113).
+    stages: item.stages ?? [],
   }
 }
 
@@ -330,6 +336,8 @@ const verbraucht = (felder: Partial<NightRunUsageView>): NightRunUsageView => ({
   inputTokens: null,
   outputTokens: null,
   cachedInputTokens: null,
+  modelDurationMs: null,
+  turns: null,
   ...felder,
 })
 
@@ -360,6 +368,7 @@ function aufbewahrt(
     updatedAt: null,
     usage: null,
     noWorkReason: null,
+    budget: null,
     ...rest,
     items: (items ?? []).map(wieAufbewahrtesItem),
     outcome: rest.outcome ?? serverBefund({ complete: rest.complete ?? true, noWorkReason: rest.noWorkReason, items: (items ?? []).map(wieAufbewahrtesItem) }),
@@ -4699,6 +4708,210 @@ describe('NightRunPage — Fußzeile beider Lauf-Arten (#918)', () => {
     const fussEl = within(panelEl).getByTestId('uebersicht-fuss')
     expect(within(fussEl).getByTestId('fussangabe-Karten bearbeitet')).toBeInTheDocument()
     expect(within(fussEl).queryByTestId('fussangabe-Kostenbudget je Kette')).not.toBeInTheDocument()
+  })
+})
+
+describe('NightRunPage — Fußzeile eines Kettenlaufs aus der Server-Antwort (#1115)', () => {
+  /**
+   * Die Budgets, wie der Token-Weg sie seit Issue #1113 meldet. Jedes Feld ist einzeln
+   * überschreibbar — dieselbe Bauform wie {@link verbraucht}.
+   */
+  const budget = (felder: Partial<NightRunBudgetView> = {}): NightRunBudgetView => ({
+    planMin: 20,
+    reviewMin: 15,
+    paketeMin: 15,
+    abdeckungMin: 10,
+    kostenUsd: 50,
+    origin: 'CONFIGURED',
+    defaultFields: [],
+    ...felder,
+  })
+
+  /**
+   * Ein aufbewahrter Kettenlauf **ohne** eingelesene Datei — der Normalweg des Runners. Kein
+   * `staende`-Eintrag, kein `protokollWaehlen`: Genau dort stand bis zu diesem Paket viermal
+   * „nicht angegeben" (AK 1).
+   */
+  const kettenLauf = (
+    felder: Omit<Partial<NightRunView>, 'items'> & { items?: ItemVorgabe[] } = {},
+  ): NightRunView =>
+    aufbewahrt({
+      id: 1,
+      startedAt: startedAt(0),
+      mode: 'CHAIN',
+      processedCount: 2,
+      budget: budget(),
+      items: [
+        {
+          id: 11,
+          cardNumber: 700,
+          title: 'Paket A',
+          state: 'GREEN',
+          usage: verbraucht({ costUsd: 11.52 }),
+        },
+        {
+          id: 12,
+          cardNumber: 701,
+          title: 'Paket B',
+          state: 'GREEN',
+          usage: verbraucht({ costUsd: 4.09 }),
+        },
+      ],
+      ...felder,
+    })
+
+  /** Die Fußzeile des Laufs, ohne dass je eine Datei eingelesen wurde. */
+  async function fussZu(view: NightRunView) {
+    renderPage({ listen: [[view]] })
+    const panelEl = await screen.findByTestId(`lauf-${view.startedAt}`)
+    panelAufklappen(panelEl)
+    return within(await within(panelEl).findByTestId(FUSSZEILE))
+  }
+
+  it('nennt Zeitvorgaben, Kostenbudget, höchste Kosten und Herkunft ohne eingelesene Datei (AK 1)', async () => {
+    const fuss = await fussZu(kettenLauf())
+
+    expect(fuss.getByText('Plan 20 · Prüfung 15 · Pakete 15 · Abdeckung 10 min')).toBeInTheDocument()
+    expect(fuss.getByText('50,00 $')).toBeInTheDocument()
+    expect(fuss.getByText('11,52 $')).toBeInTheDocument()
+    expect(fuss.getByText('eingestellt')).toBeInTheDocument()
+    // Der Kern des Anlassfalls: Keine der vier Angaben ist mehr eine Fehlanzeige.
+    expect(fuss.queryByText('nicht angegeben')).not.toBeInTheDocument()
+  })
+
+  it('sagt „eingestellt", wenn alle Vorgaben aus der Konfiguration stammen (AK 3, Fall 1)', async () => {
+    const fuss = await fussZu(kettenLauf({ budget: budget({ origin: 'CONFIGURED' }) }))
+
+    expect(fuss.getByTestId('fussangabe-Herkunft der Budgets')).toHaveTextContent('eingestellt')
+    expect(fuss.queryByText(/Voreinstellungen/)).not.toBeInTheDocument()
+  })
+
+  it('nennt bei „aus Voreinstellungen" genau die betroffenen Felder (AK 3, Fall 2)', async () => {
+    const fuss = await fussZu(
+      kettenLauf({
+        budget: budget({ origin: 'DEFAULTED', defaultFields: ['kostenUsd', 'planMin'] }),
+      }),
+    )
+
+    // Die Reihenfolge ist die des Laufs, nicht eine des Boards: Was er meldet, steht so da.
+    expect(
+      fuss.getByText('aus Voreinstellungen: Kostenbudget, Zeitvorgabe Plan'),
+    ).toBeInTheDocument()
+  })
+
+  it('übersetzt alle fünf Feldnamen in die Worte aus AK 3', async () => {
+    const fuss = await fussZu(
+      kettenLauf({
+        budget: budget({
+          origin: 'DEFAULTED',
+          defaultFields: ['planMin', 'reviewMin', 'paketeMin', 'abdeckungMin', 'kostenUsd'],
+        }),
+      }),
+    )
+
+    expect(
+      fuss.getByText(
+        'aus Voreinstellungen: Zeitvorgabe Plan, Zeitvorgabe Prüfung, Zeitvorgabe Pakete, Zeitvorgabe Abdeckung, Kostenbudget',
+      ),
+    ).toBeInTheDocument()
+  })
+
+  it('lässt einen Feldnamen aus, den das Board nicht kennt (E4, E11)', async () => {
+    // `ketteBudgetDefaults` führt zehn Felder; die Fußzeile zeigt fünf. Ein fremder Name wird
+    // angenommen und hier ausgelassen — abgewiesen kostete den ganzen Lauf statt einer Zeile.
+    const fuss = await fussZu(
+      kettenLauf({
+        budget: budget({ origin: 'DEFAULTED', defaultFields: ['umsetzungMin', 'kostenUsd'] }),
+      }),
+    )
+
+    expect(fuss.getByText('aus Voreinstellungen: Kostenbudget')).toBeInTheDocument()
+    expect(fuss.queryByText(/umsetzungMin/)).not.toBeInTheDocument()
+  })
+
+  it('bleibt bei lauter unbekannten Feldnamen bei „aus Voreinstellungen" ohne Aufzählung', async () => {
+    const fuss = await fussZu(
+      kettenLauf({
+        budget: budget({
+          origin: 'DEFAULTED',
+          defaultFields: ['varianteBLabel', 'korrekturrunden'],
+        }),
+      }),
+    )
+
+    expect(fuss.getByTestId('fussangabe-Herkunft der Budgets')).toHaveTextContent(
+      'Herkunft der Budgetsaus Voreinstellungen',
+    )
+    expect(fuss.queryByText(/aus Voreinstellungen:/)).not.toBeInTheDocument()
+  })
+
+  it('sagt „nicht angegeben", wenn der Lauf keine Herkunft meldet (AK 3, Fall 3)', async () => {
+    // Ein Kit-Stand vor Issue #1113 meldet Vorgaben ohne Herkunft. Die Werte stehen da, die
+    // Herkunft nicht — geraten würde sie sonst als „eingestellt".
+    const fuss = await fussZu(kettenLauf({ budget: budget({ origin: null }) }))
+
+    expect(fuss.getByTestId('fussangabe-Herkunft der Budgets')).toHaveTextContent('nicht angegeben')
+    expect(fuss.getByText('50,00 $')).toBeInTheDocument()
+  })
+
+  it('zeigt an einem Lauf ohne Budget weiter „nicht angegeben" statt 0 (AK 5)', async () => {
+    const fuss = await fussZu(kettenLauf({ budget: null }))
+
+    expect(fuss.getByTestId('fussangabe-Zeitvorgaben je Kette')).toHaveTextContent('nicht angegeben')
+    expect(fuss.getByTestId('fussangabe-Kostenbudget je Kette')).toHaveTextContent('nicht angegeben')
+    expect(fuss.getByTestId('fussangabe-Herkunft der Budgets')).toHaveTextContent('nicht angegeben')
+    expect(fuss.queryByText('0,00 $')).not.toBeInTheDocument()
+    expect(fuss.queryByText('0 min')).not.toBeInTheDocument()
+  })
+
+  it('lässt ein nur teilweise gemeldetes Budget feldweise fehlen, statt 0 zu zeigen (AK 5)', async () => {
+    // Der Runner meldet, was er hat. Hier fehlen die Zeitvorgabe der Prüfung und das
+    // Kostenbudget — eine 0 daneben behauptete, die Stufe habe keine Zeit bekommen.
+    const fuss = await fussZu(kettenLauf({ budget: budget({ reviewMin: null, kostenUsd: null }) }))
+
+    expect(fuss.getByText('Plan 20 · Pakete 15 · Abdeckung 10 min')).toBeInTheDocument()
+    expect(fuss.getByTestId('fussangabe-Kostenbudget je Kette')).toHaveTextContent(
+      'nicht angegeben',
+    )
+    expect(fuss.queryByText('0,00 $')).not.toBeInTheDocument()
+  })
+
+  it('trägt an den höchsten Kosten keinen Zusatz, wenn alle Vorgänge Kosten tragen (E10)', async () => {
+    const fuss = await fussZu(kettenLauf())
+
+    expect(fuss.getByTestId('fussangabe-Höchste Kosten eines Vorgangs')).toHaveTextContent(
+      'Höchste Kosten eines Vorgangs11,52 $',
+    )
+    expect(fuss.queryByText(/aus \d+ von \d+ Vorgängen/)).not.toBeInTheDocument()
+  })
+
+  it('nennt an den höchsten Kosten „aus n von m Vorgängen", sobald eine Meldung fehlt (E10)', async () => {
+    const fuss = await fussZu(
+      kettenLauf({
+        items: [
+          {
+            id: 11,
+            cardNumber: 700,
+            title: 'Paket A',
+            state: 'GREEN',
+            usage: verbraucht({ costUsd: 11.52 }),
+          },
+          { id: 12, cardNumber: 701, title: 'Paket B', state: 'GREY' },
+        ],
+      }),
+    )
+
+    expect(fuss.getByText('11,52 $ (aus 1 von 2 Vorgängen)')).toBeInTheDocument()
+  })
+
+  it('sagt „nicht angegeben", wenn kein einziger Vorgang Kosten trägt', async () => {
+    const fuss = await fussZu(
+      kettenLauf({ items: [{ id: 11, cardNumber: 700, title: 'Paket A', state: 'GREEN' }] }),
+    )
+
+    expect(fuss.getByTestId('fussangabe-Höchste Kosten eines Vorgangs')).toHaveTextContent(
+      'nicht angegeben',
+    )
   })
 })
 

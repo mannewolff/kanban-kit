@@ -45,6 +45,7 @@ const paket = (nummer: number, state: NightRunItemView['state'], extra: Partial<
   commitHash: null,
   excerpt: null,
   usage: null,
+  stages: [],
   ...extra,
 })
 
@@ -65,6 +66,7 @@ const lauf = (extra: Partial<NightRunView> = {}): NightRunView => {
   updatedAt: null,
   usage: null,
   noWorkReason: null,
+  budget: null,
   items: [],
     outcome: { verdict: 'SUCCEEDED', decisiveItem: null, noWorkReason: null },
     ...extra,
@@ -96,7 +98,7 @@ describe('leitstand Laufband (#979)', () => {
   })
 
   it('nennt einen abgeschlossenen Lauf mit Zahl der Vorgänge, Dauer in Minuten und Kosten', () => {
-    const band = laufband(lauf({ mode: 'REVIEW', items: [paket(1, 'GREEN')], usage: { costUsd: 12.4, inputTokens: null, outputTokens: null, cachedInputTokens: null } }))
+    const band = laufband(lauf({ mode: 'REVIEW', items: [paket(1, 'GREEN')], usage: { costUsd: 12.4, inputTokens: null, outputTokens: null, cachedInputTokens: null, modelDurationMs: null, turns: null } }))
     expect(band.titel).toBe('Review abgeschlossen — 1 Vorgang')
     expect(band.zeitpunkt).toMatch(/^Beginn \d\d\.\d\d\., \d\d:\d\d$/)
     expect(band.minuten).toBe(252)
@@ -347,7 +349,7 @@ describe('leitstand Lauf ohne Arbeit (#1069)', () => {
   })
 
   it('laufband traegt den Grund als Titel, meldet grau und laesst Dauer und Kosten stehen', () => {
-    const ohne = laufband(lauf({ noWorkReason: GRUND, usage: { costUsd: 8.03, inputTokens: null, outputTokens: null, cachedInputTokens: null } }))
+    const ohne = laufband(lauf({ noWorkReason: GRUND, usage: { costUsd: 8.03, inputTokens: null, outputTokens: null, cachedInputTokens: null, modelDurationMs: null, turns: null } }))
 
     expect(ohne.titel).toBe(GRUND)
     expect(ohne.melder).toBe('grau')

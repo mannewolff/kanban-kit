@@ -93,6 +93,7 @@ const paket = (nummer: number, state: NightRunItemView['state'], extra: Partial<
   commitHash: null,
   excerpt: null,
   usage: null,
+  stages: [],
   ...extra,
 })
 
@@ -111,8 +112,9 @@ const lauf = (extra: Partial<NightRunView> = {}): NightRunView => {
   tokenName: 'kette',
   complete: true,
   updatedAt: null,
-  usage: { costUsd: 12.4, inputTokens: null, outputTokens: null, cachedInputTokens: null },
+  usage: { costUsd: 12.4, inputTokens: null, outputTokens: null, cachedInputTokens: null, modelDurationMs: null, turns: null },
   noWorkReason: null,
+  budget: null,
   items: [
     paket(917, 'GREEN', { commitHash: '9489421abcdef' }),
     paket(922, 'RED', { errorClass: 'CHECKS_RED', excerpt: '2 Tests rot in BoardViewTest' }),

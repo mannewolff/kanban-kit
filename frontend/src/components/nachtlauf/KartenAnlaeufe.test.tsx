@@ -11,6 +11,8 @@ const verbrauch = (werte: Partial<NightRunUsageView>): NightRunUsageView => ({
   inputTokens: null,
   outputTokens: null,
   cachedInputTokens: null,
+  modelDurationMs: null,
+  turns: null,
   ...werte,
 })
 
