@@ -93,10 +93,19 @@ interface EditContext {
   failed: boolean
 }
 
+export interface CardNumberSearchProps {
+  /**
+   * Projekt, in dem der Nutzer gerade arbeitet ({@code null} = keines). Liegt bei mehreren Treffern
+   * genau einer dort, öffnet er ohne Auswahl (#1124).
+   */
+  aktuellesProjekt?: number | null
+}
+
 /**
  * Suchfeld der Kopfzeile: Kartennummer mit oder ohne `#` eingeben, Karte öffnen (#490). Die Nummer
  * ist projektweit eindeutig, nicht global — eine Eingabe kann deshalb mehrere Karten in
- * verschiedenen Projekten treffen. Dann wird ausgewählt statt geraten.
+ * verschiedenen Projekten treffen. Dann wird ausgewählt statt geraten — es sei denn, einer der
+ * Treffer liegt im Projekt, in dem der Nutzer gerade arbeitet: Den meint er (#1124).
  *
  * Die Karte öffnet sich bearbeitbar, sobald die Rolle im Zielprojekt feststeht (`useProjectRole`)
  * **und** die Bearbeitungsdaten geladen sind (#586). Bis dahin — und nach jedem Ladefehler — bleibt
@@ -117,7 +126,7 @@ interface EditContext {
  * mit der Maus bzw. nach dem Schließen erreichbar; `Strg`/`Cmd`-Kürzel scheiden aus, weil der Hook
  * Modifikatoren dem Browser überlässt.
  */
-export function CardNumberSearch() {
+export function CardNumberSearch({ aktuellesProjekt = null }: CardNumberSearchProps) {
   const notify = useSnackbar()
   const [query, setQuery] = useState('')
   // Auf schmalen Breiten ist das Feld zu einem Icon eingeklappt (wie der Benutzername in der
@@ -221,6 +230,14 @@ export function CardNumberSearch() {
       setQuery('')
       if (hits.length === 1) {
         setSelected({ hit: hits[0], number })
+        return
+      }
+      // Wer in einem Projekt arbeitet und eine Nummer eingibt, meint dessen Karte (#1124). Die
+      // übrigen Treffer bleiben unerwähnt: Bei sich überschneidenden Nummernkreisen wäre ein
+      // Hinweis bei jeder Suche Rauschen; wer die andere Karte will, wechselt das Projekt.
+      const eigene = aktuellesProjekt === null ? [] : hits.filter((h) => h.projectId === aktuellesProjekt)
+      if (eigene.length === 1) {
+        setSelected({ hit: eigene[0], number })
         return
       }
       setChoices(hits.map((hit) => ({ hit, number })))

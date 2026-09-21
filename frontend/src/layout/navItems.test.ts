@@ -210,6 +210,29 @@ describe('navKontext Projektzahl', () => {
   })
 })
 
+describe('navKontext Bezugsprojekt', () => {
+  it('nimmt auf einer Board-Route das Projekt des Boards', () => {
+    expect(kontext().pfadProjektId).toBe(5)
+  })
+
+  it('nimmt auf einer Projektseite ohne Board das Projekt der Adresse (#1124)', () => {
+    expect(kontext({ board: null, boardId: null, routeProjectId: 9 }).pfadProjektId).toBe(9)
+  })
+
+  it('nimmt auf der Projektseite eines anderen Projekts dieses und nicht das geladene Board', () => {
+    expect(kontext({ routeProjectId: 9, boardId: null }).pfadProjektId).toBe(9)
+  })
+
+  // Die Kartensuche braucht das Projekt sofort; die Projektliste sagt nur, wie es heißt.
+  it('steht auch ohne geladene Projektliste fest', () => {
+    expect(kontext({ projects: null }).pfadProjektId).toBe(5)
+  })
+
+  it('bleibt ohne Projekt- und Board-Bezug offen', () => {
+    expect(kontext({ board: null, boardId: null }).pfadProjektId).toBe(null)
+  })
+})
+
 describe('navKontext Rechte des aktuellen Projekts', () => {
   it('leitet das Board-Verwaltungsrecht aus der Rolle im Projekt des Boards ab', () => {
     expect(kontext().canManageCurrentBoards).toBe(true)
