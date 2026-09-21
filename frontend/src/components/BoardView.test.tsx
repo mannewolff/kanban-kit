@@ -384,7 +384,8 @@ describe('BoardView', () => {
   })
 
   it('filtert das Board nach Epic', () => {
-    const epics = [{ id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 0, total: 1, memberNumbers: [], rootNumbers: [], requirementCardNumber: null }]
+    // Die Zugehörigkeit steht in memberNumbers — seit Task #1103 rechnet auch die Filter-Achse darüber.
+    const epics = [{ id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 0, total: 1, memberNumbers: [1], rootNumbers: [1], requirementCardNumber: null }]
     const inEpic: Card = { ...card, id: 100, parentId: 9 }
     const other: Card = { ...card, id: 200, number: 2, parentId: null }
     render(<BoardView board={board} initialCards={[inEpic, other]} canEdit epics={epics} api={mkApi()} />)
@@ -1694,7 +1695,7 @@ describe('BoardView', () => {
       clear: () => {}, key: () => null, length: 0,
     })
     try {
-      const epics = [{ id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 0, total: 1, memberNumbers: [], rootNumbers: [], requirementCardNumber: null }]
+      const epics = [{ id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 0, total: 1, memberNumbers: [1], rootNumbers: [1], requirementCardNumber: null }]
       const inEpic: Card = { ...card, parentId: 9 }
       render(<BoardView board={board} initialCards={[inEpic]} canEdit epics={epics} api={mkApi()} />)
       fireEvent.change(screen.getByLabelText('Vorhaben-Filter'), { target: { value: '9' } })
@@ -1716,7 +1717,7 @@ describe('BoardView', () => {
       clear: () => store.clear(), key: () => null, length: 0,
     })
     try {
-      const epics = [{ id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 0, total: 1, memberNumbers: [], rootNumbers: [], requirementCardNumber: null }]
+      const epics = [{ id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 0, total: 1, memberNumbers: [1], rootNumbers: [1], requirementCardNumber: null }]
       const inEpic: Card = { ...card, id: 100, parentId: 9 }
       const other: Card = { ...card, id: 200, number: 2, parentId: null }
       render(<BoardView board={board} initialCards={[inEpic, other]} canEdit epics={epics} api={mkApi()} />)
@@ -2238,7 +2239,7 @@ describe('BoardView', () => {
     // Massenaktionen dürfen nur treffen, was der Nutzer sieht: Wer auswählt und danach den
     // Vorhaben-Filter setzt, würde sonst Karten verschieben/archivieren/löschen, die nicht auf
     // dem Board stehen — und die Aktionsleiste nennte eine Zahl, die dazu nicht passt.
-    const epics = [{ id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 0, total: 1, memberNumbers: [], rootNumbers: [], requirementCardNumber: null }]
+    const epics = [{ id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 0, total: 1, memberNumbers: [1, 3], rootNumbers: [1, 3], requirementCardNumber: null }]
     const epicA: Card = { ...card, id: 100, number: 1, title: 'Vorhaben A', parentId: 9, positionInColumn: 0 }
     const epicB: Card = { ...card, id: 101, number: 3, title: 'Vorhaben B', parentId: 9, positionInColumn: 1 }
     const frei: Card = { ...card, id: 200, number: 2, title: 'Ohne Vorhaben', parentId: null, positionInColumn: 2 }
