@@ -1,5 +1,6 @@
 package org.mwolff.manban.nightrun.web;
 
+import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.nullValue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
@@ -35,10 +36,12 @@ import org.mwolff.manban.nightrun.application.NightRunUsageService.NightSummary;
 import org.mwolff.manban.nightrun.application.NightRunUsageService.NightUsageView;
 import org.mwolff.manban.nightrun.application.NightRunUsageService.PeriodFigures;
 import org.mwolff.manban.nightrun.application.NightRunUsageService.PeriodUsageView;
+import org.mwolff.manban.nightrun.application.NightRunUsageService.StageUsageView;
 import org.mwolff.manban.nightrun.application.NightRunUsageService.TotalUsageView;
 import org.mwolff.manban.nightrun.application.NightRunUsageService.UsageSplit;
 import org.mwolff.manban.nightrun.domain.NightRunPeriod;
 import org.mwolff.manban.nightrun.domain.NightRunPeriodType;
+import org.mwolff.manban.nightrun.domain.NightRunStage;
 import org.mwolff.manban.nightrun.domain.NightRunUsage;
 import org.mwolff.manban.project.application.ProjectAccessDeniedException;
 import org.mwolff.manban.project.application.ProjectNotFoundException;
@@ -96,6 +99,16 @@ class NightRunUsageControllerTest {
   /** Eine Gattung, die in der Spanne nicht vorkommt. */
   private static final UsageSplit LEER = new UsageSplit(NICHTS, NICHTS, NICHTS);
 
+  /** Die Aufstellung je Stufe (Issue #1114): eine Stufe mit Werten, eine ganz ohne. */
+  private static final List<StageUsageView> STUFEN =
+      List.of(
+          new StageUsageView(
+              NightRunStage.PLAN,
+              2L,
+              70_000L,
+              new NightRunUsage(new BigDecimal("1.50"), 150L, 15L, 6L, 45_000L, 5)),
+          new StageUsageView(NightRunStage.ABDECKUNG, 1L, null, NICHTS));
+
   private static NightUsageView nacht(NightRunUsage gesamt, NightRunUsage karten) {
     UsageSplit teilung = new UsageSplit(gesamt, karten, gesamt.minus(karten));
     return new NightUsageView(
@@ -106,7 +119,8 @@ class NightRunUsageControllerTest {
         teilung,
         new KindSplit(teilung, LEER),
         true,
-        List.of(new CardTotals(721, 2L, null, karten, NICHTS)));
+        List.of(new CardTotals(721, 2L, null, karten, NICHTS)),
+        STUFEN);
   }
 
   private static PeriodUsageView zeitraum(@Nullable Instant erfassungsbeginn) {
@@ -143,7 +157,8 @@ class NightRunUsageControllerTest {
                 2L,
                 new NightRunUsage(new BigDecimal("4.00"), null, null, null, null, null))),
         new EpicUsageView(null, 1L, NICHTS),
-        true);
+        true,
+        STUFEN);
   }
 
   private static PeriodUsageView zeitraum() {
@@ -198,7 +213,14 @@ class NightRunUsageControllerTest {
         .andExpect(jsonPath("$.cards[0].cardNumber").value(721))
         .andExpect(jsonPath("$.cards[0].attemptCount").value(2))
         .andExpect(jsonPath("$.cards[0].durationMs").value(nullValue()))
-        .andExpect(jsonPath("$.cards[0].usageByKind.interactive.costUsd").value(nullValue()));
+        .andExpect(jsonPath("$.cards[0].usageByKind.interactive.costUsd").value(nullValue()))
+        .andExpect(jsonPath("$.stages[0].stage").value("PLAN"))
+        .andExpect(jsonPath("$.stages[0].itemCount").value(2))
+        .andExpect(jsonPath("$.stages[0].durationMs").value(70000))
+        .andExpect(jsonPath("$.stages[0].usage.costUsd").value(1.5))
+        .andExpect(jsonPath("$.stages[1].stage").value("ABDECKUNG"))
+        .andExpect(jsonPath("$.stages[1].durationMs").value(nullValue()))
+        .andExpect(jsonPath("$.stages[1].usage.costUsd").value(nullValue()));
   }
 
   /** „Nicht gemessen" steht als {@code null} und nie als 0 (Plan E5). */
@@ -308,7 +330,40 @@ class NightRunUsageControllerTest {
         .andExpect(jsonPath("$.withoutEpic.title").value(nullValue()))
         .andExpect(jsonPath("$.withoutEpic.cardCount").value(1))
         .andExpect(jsonPath("$.withoutEpic.usage.costUsd").value(nullValue()))
-        .andExpect(jsonPath("$.epicsOverlap").value(true));
+        .andExpect(jsonPath("$.epicsOverlap").value(true))
+        .andExpect(jsonPath("$.stages[0].stage").value("PLAN"))
+        .andExpect(jsonPath("$.stages[0].itemCount").value(2))
+        .andExpect(jsonPath("$.stages[0].durationMs").value(70000))
+        .andExpect(jsonPath("$.stages[0].usage.costUsd").value(1.5))
+        .andExpect(jsonPath("$.stages[0].usage.inputTokens").value(150))
+        .andExpect(jsonPath("$.stages[1].stage").value("ABDECKUNG"))
+        .andExpect(jsonPath("$.stages[1].itemCount").value(1))
+        .andExpect(jsonPath("$.stages[1].usage.costUsd").value(nullValue()));
+  }
+
+  /**
+   * Die Zeitraum-Summen bleiben, was sie waren: {@code UsageResponse} führt genau seine fünf
+   * heutigen Felder — Modellzeit und Züge erscheinen dort <b>nicht</b> (Issue #1114). AK 8 fragt
+   * nach Kosten je Stufe, nicht nach zwei weiteren Summen über den Zeitraum.
+   */
+  @Test
+  void zeitraum_dieSummenTragenWeiterhinWederModellzeitNochZuege() throws Exception {
+    when(service.period(anyLong(), anyLong(), any(), anyInt(), any())).thenReturn(zeitraum());
+
+    mvc.perform(
+            get(PFAD_ZEITRAUM).param("type", "DAY").param("stepsBack", "0").param("zone", "UTC"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.current.usage.total.*", hasSize(5)))
+        .andExpect(jsonPath("$.current.usage.total.costUsd").value(9.5))
+        .andExpect(jsonPath("$.current.usage.total.inputTokens").value(1000))
+        .andExpect(jsonPath("$.current.usage.total.outputTokens").value(100))
+        .andExpect(jsonPath("$.current.usage.total.cachedInputTokens").value(250))
+        .andExpect(jsonPath("$.current.usage.total.cachedInputSharePercent").value(25))
+        .andExpect(jsonPath("$.current.usage.total.modelDurationMs").doesNotExist())
+        .andExpect(jsonPath("$.current.usage.total.turns").doesNotExist())
+        .andExpect(jsonPath("$.current.usageByKind.night.total.modelDurationMs").doesNotExist())
+        .andExpect(jsonPath("$.nights[0].usage.total.turns").doesNotExist())
+        .andExpect(jsonPath("$.epics[0].usage.modelDurationMs").doesNotExist());
   }
 
   /** Ohne je gemeldete Sitzung steht der Erfassungsbeginn als {@code null} (Plan E18). */

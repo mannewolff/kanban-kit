@@ -18,9 +18,11 @@ import org.mwolff.manban.nightrun.application.NightRunUsageService.NightSummary;
 import org.mwolff.manban.nightrun.application.NightRunUsageService.NightUsageView;
 import org.mwolff.manban.nightrun.application.NightRunUsageService.PeriodFigures;
 import org.mwolff.manban.nightrun.application.NightRunUsageService.PeriodUsageView;
+import org.mwolff.manban.nightrun.application.NightRunUsageService.StageUsageView;
 import org.mwolff.manban.nightrun.application.NightRunUsageService.TotalUsageView;
 import org.mwolff.manban.nightrun.application.NightRunUsageService.UsageSplit;
 import org.mwolff.manban.nightrun.domain.NightRunPeriodType;
+import org.mwolff.manban.nightrun.domain.NightRunStage;
 import org.mwolff.manban.nightrun.domain.NightRunUsage;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -165,7 +167,8 @@ class NightRunUsageController {
       SplitResponse usage,
       KindSplitResponse usageByKind,
       boolean aborted,
-      List<CardResponse> cards) {
+      List<CardResponse> cards,
+      List<StageResponse> stages) {
 
     static NightResponse of(NightUsageView n) {
       return new NightResponse(
@@ -176,7 +179,8 @@ class NightRunUsageController {
           SplitResponse.of(n.usage()),
           KindSplitResponse.of(n.usageByKind()),
           n.aborted(),
-          n.cards().stream().map(CardResponse::of).toList());
+          n.cards().stream().map(CardResponse::of).toList(),
+          n.stages().stream().map(StageResponse::of).toList());
     }
   }
 
@@ -267,6 +271,23 @@ class NightRunUsageController {
   }
 
   /**
+   * Eine Stufe der Kette in der Aufstellung (Issue #1114, #993 AK 8).
+   *
+   * <p>Der Verbrauch kommt als {@link UsageResponse} wie überall sonst. Modellzeit und Züge werden
+   * je Stufe zwar summiert, treten hier aber nicht auf: {@code UsageResponse} behält seine heutigen
+   * Felder, und ein zweiter Verbrauchs-Satz nur für die Stufen wäre eine zweite Form derselben
+   * Sache.
+   */
+  record StageResponse(
+      NightRunStage stage, long itemCount, @Nullable Long durationMs, UsageResponse usage) {
+
+    static StageResponse of(StageUsageView s) {
+      return new StageResponse(
+          s.stage(), s.itemCount(), s.durationMs(), UsageResponse.of(s.usage()));
+    }
+  }
+
+  /**
    * Die Summe über die ganze Laufzeit.
    *
    * @param oldestRetainedRunStart Beginn des ältesten aufbewahrten Eintrags als ISO-Zeitpunkt;
@@ -304,7 +325,8 @@ class NightRunUsageController {
       List<NightSummaryResponse> nights,
       List<EpicResponse> epics,
       EpicResponse withoutEpic,
-      boolean epicsOverlap) {
+      boolean epicsOverlap,
+      List<StageResponse> stages) {
 
     static PeriodResponse of(PeriodUsageView p) {
       return new PeriodResponse(
@@ -313,7 +335,8 @@ class NightRunUsageController {
           p.nights().stream().map(NightSummaryResponse::of).toList(),
           p.epics().stream().map(EpicResponse::of).toList(),
           EpicResponse.of(p.withoutEpic()),
-          p.epicsOverlap());
+          p.epicsOverlap(),
+          p.stages().stream().map(StageResponse::of).toList());
     }
   }
 }

@@ -32,16 +32,19 @@ import org.mwolff.manban.nightrun.application.NightRunUsageRepository.LifetimeTo
 import org.mwolff.manban.nightrun.application.NightRunUsageRepository.NightTotals;
 import org.mwolff.manban.nightrun.application.NightRunUsageRepository.PeriodTotals;
 import org.mwolff.manban.nightrun.application.NightRunUsageRepository.RetainedByKind;
+import org.mwolff.manban.nightrun.application.NightRunUsageRepository.StageTotals;
 import org.mwolff.manban.nightrun.application.NightRunUsageRepository.TotalsByKind;
 import org.mwolff.manban.nightrun.application.NightRunUsageService.Coverage;
 import org.mwolff.manban.nightrun.application.NightRunUsageService.EpicUsageView;
 import org.mwolff.manban.nightrun.application.NightRunUsageService.NightSummary;
 import org.mwolff.manban.nightrun.application.NightRunUsageService.NightUsageView;
 import org.mwolff.manban.nightrun.application.NightRunUsageService.PeriodUsageView;
+import org.mwolff.manban.nightrun.application.NightRunUsageService.StageUsageView;
 import org.mwolff.manban.nightrun.application.NightRunUsageService.TotalUsageView;
 import org.mwolff.manban.nightrun.domain.NightRunErrorClass;
 import org.mwolff.manban.nightrun.domain.NightRunKind;
 import org.mwolff.manban.nightrun.domain.NightRunPeriodType;
+import org.mwolff.manban.nightrun.domain.NightRunStage;
 import org.mwolff.manban.nightrun.domain.NightRunUsage;
 import org.mwolff.manban.project.application.InteractiveUsageSinceReader;
 import org.mwolff.manban.project.application.PermissionChecker;
@@ -644,6 +647,55 @@ class NightRunUsageServiceTest {
     assertThat(usage.aufrufe).contains("perNight 2026-08-01T10:00:00Z 2026-09-01T10:00:00Z");
   }
 
+  // --- Stufen der Kette (Issue #1114) ----------------------------------------------------------
+
+  /**
+   * Die Aufstellung je Stufe kommt in beiden Sichten mit — Feld für Feld unverändert, über die
+   * Spanne der jeweiligen Sicht gelesen (#993 AK 8).
+   */
+  @Test
+  void dieAufstellungJeStufeKommtInNachtUndZeitraumMit() {
+    NightRunUsage voll = new NightRunUsage(new BigDecimal("1.50"), 150L, 15L, 6L, 45_000L, 5);
+    usage.jeStufe =
+        List.of(
+            new StageTotals(NightRunStage.PLAN, 2L, 70_000L, voll),
+            new StageTotals(NightRunStage.ABDECKUNG, 1L, null, NICHTS));
+
+    NightUsageView nacht = service.night(USER, PROJECT, NACHT_15, BERLIN);
+    PeriodUsageView monat = service.period(USER, PROJECT, NightRunPeriodType.MONTH, 0, BERLIN);
+
+    assertThat(nacht.stages())
+        .extracting(
+            StageUsageView::stage,
+            StageUsageView::itemCount,
+            StageUsageView::durationMs,
+            StageUsageView::usage)
+        .containsExactly(
+            org.assertj.core.groups.Tuple.tuple(NightRunStage.PLAN, 2L, 70_000L, voll),
+            org.assertj.core.groups.Tuple.tuple(NightRunStage.ABDECKUNG, 1L, null, NICHTS));
+    assertThat(monat.stages())
+        .extracting(
+            StageUsageView::stage,
+            StageUsageView::itemCount,
+            StageUsageView::durationMs,
+            StageUsageView::usage)
+        .containsExactly(
+            org.assertj.core.groups.Tuple.tuple(NightRunStage.PLAN, 2L, 70_000L, voll),
+            org.assertj.core.groups.Tuple.tuple(NightRunStage.ABDECKUNG, 1L, null, NICHTS));
+    assertThat(usage.aufrufe)
+        .contains(
+            "perStage 2026-09-15T10:00:00Z 2026-09-16T10:00:00Z",
+            "perStage 2026-08-01T10:00:00Z 2026-09-01T10:00:00Z");
+  }
+
+  /** Ohne Ketten-Lauf bleibt die Aufstellung leer — und nie eine Zeile „ohne Stufe" (Plan E6). */
+  @Test
+  void ohneKettenLaufBleibtDieAufstellungJeStufeLeer() {
+    assertThat(service.night(USER, PROJECT, NACHT_15, BERLIN).stages()).isEmpty();
+    assertThat(service.period(USER, PROJECT, NightRunPeriodType.MONTH, 0, BERLIN).stages())
+        .isEmpty();
+  }
+
   // --- Vorhaben-Aufstellung --------------------------------------------------------------------
 
   private static final EpicRef PLANEN = new EpicRef(1L, "PLANEN", "Planen");
@@ -747,11 +799,18 @@ class NightRunUsageServiceTest {
     final Map<Instant, PeriodTotals> summeJeBeginn = new java.util.HashMap<>();
     Optional<Instant> aeltester = Optional.empty();
     List<RetainedByKind> retention = List.of();
+    List<StageTotals> jeStufe = List.of();
 
     @Override
     public List<NightTotals> totalsPerNight(long projectId, Instant from, Instant to, ZoneId zone) {
       aufrufe.add("perNight " + from + " " + to);
       return naechte;
+    }
+
+    @Override
+    public List<StageTotals> totalsPerStage(long projectId, Instant from, Instant to) {
+      aufrufe.add("perStage " + from + " " + to);
+      return jeStufe;
     }
 
     @Override

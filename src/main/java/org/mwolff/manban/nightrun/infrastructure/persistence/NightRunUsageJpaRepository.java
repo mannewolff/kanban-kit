@@ -162,6 +162,44 @@ interface NightRunUsageJpaRepository extends Repository<NightRunEntity, Long> {
   List<CardRow> totalsPerCard(
       @Param("projectId") long projectId, @Param("from") Instant from, @Param("to") Instant to);
 
+  /**
+   * Die Summen einer Stufe; {@code s} ist die Stufenzeile. Eigene Spalten statt {@link
+   * #PAKET_JE_GATTUNG}: Eine Stufe der Kette gibt es nur im Nachtlauf, und eine nach Gattung
+   * geteilte Summe trüge hier auf Dauer eine Spalte, die immer leer bliebe.
+   */
+  String STUFE_JE_ZEILE =
+      " s.stage AS \"stage\", count(*) AS \"itemCount\","
+          + " sum(s.duration_ms)::bigint AS \"durationMs\","
+          + " sum(s.cost_usd) AS \"costUsd\","
+          + " (sum(s.input_tokens))::bigint AS \"inputTokens\","
+          + " (sum(s.output_tokens))::bigint AS \"outputTokens\","
+          + " (sum(s.cached_input_tokens))::bigint AS \"cachedInputTokens\","
+          + " (sum(s.model_duration_ms))::bigint AS \"modelDurationMs\","
+          + " (sum(s.turns))::int AS \"turns\"";
+
+  /**
+   * Je Stufe der Kette über alle Vorgänge der Spanne (Issue #1114). Der {@code JOIN} über {@code
+   * night_run_item} auf {@link #LAEUFE} bindet die Stufen an Projekt und Spanne und lässt zugleich
+   * Läufe ohne Stufen draußen — daher gibt es hier keine Zeile „ohne Stufe" (Plan E6).
+   *
+   * <p>Die Reihenfolge der Kette stellt der Adapter her: {@code ORDER BY s.stage} sortierte
+   * alphabetisch, und ein {@code CASE} in der Abfrage schriebe die Reihenfolge von {@code
+   * NightRunStage} ein zweites Mal auf.
+   */
+  @Query(
+      value =
+          "WITH "
+              + LAEUFE
+              + " SELECT"
+              + STUFE_JE_ZEILE
+              + " FROM night_run_item_stage s"
+              + " JOIN night_run_item i ON i.id = s.night_run_item_id"
+              + " JOIN laeufe l ON l.id = i.night_run_id"
+              + " GROUP BY s.stage",
+      nativeQuery = true)
+  List<StageRow> totalsPerStage(
+      @Param("projectId") long projectId, @Param("from") Instant from, @Param("to") Instant to);
+
   /** Die Gesamtsummen; Aggregate ohne {@code GROUP BY} liefern stets genau eine Zeile. */
   @Query(
       value =
@@ -293,6 +331,27 @@ interface NightRunUsageJpaRepository extends Repository<NightRunEntity, Long> {
     @Nullable Long getInteractiveOutputTokens();
 
     @Nullable Long getInteractiveCachedInputTokens();
+  }
+
+  /** Eine Stufe der Kette; {@code stage} kommt als Enum-Name aus der Spalte. */
+  interface StageRow {
+    String getStage();
+
+    long getItemCount();
+
+    @Nullable Long getDurationMs();
+
+    @Nullable BigDecimal getCostUsd();
+
+    @Nullable Long getInputTokens();
+
+    @Nullable Long getOutputTokens();
+
+    @Nullable Long getCachedInputTokens();
+
+    @Nullable Long getModelDurationMs();
+
+    @Nullable Integer getTurns();
   }
 
   /** Die Gesamtsummen. */

@@ -4,6 +4,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
@@ -15,6 +16,7 @@ import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.nightrun.application.NightRunUsageRepository;
 import org.mwolff.manban.nightrun.domain.NightRunErrorClass;
 import org.mwolff.manban.nightrun.domain.NightRunKind;
+import org.mwolff.manban.nightrun.domain.NightRunStage;
 import org.mwolff.manban.nightrun.domain.NightRunUsage;
 import org.springframework.stereotype.Component;
 
@@ -65,6 +67,31 @@ class NightRunUsageRepositoryAdapter implements NightRunUsageRepository {
                         z.getInteractiveCachedInputTokens(),
                         null,
                         null)))
+        .toList();
+  }
+
+  /**
+   * Die Reihenfolge der Kette entsteht hier und nicht in SQL: {@code NightRunStage} schreibt sie in
+   * seiner Deklaration fest — PLAN, REVIEW, PAKETE, ABDECKUNG —, und ein {@code ORDER BY} über die
+   * Textspalte sortierte alphabetisch.
+   */
+  @Override
+  public List<StageTotals> totalsPerStage(long projectId, Instant from, Instant to) {
+    return abfragen.totalsPerStage(projectId, from, to).stream()
+        .map(
+            z ->
+                new StageTotals(
+                    NightRunStage.valueOf(z.getStage()),
+                    z.getItemCount(),
+                    z.getDurationMs(),
+                    new NightRunUsage(
+                        z.getCostUsd(),
+                        z.getInputTokens(),
+                        z.getOutputTokens(),
+                        z.getCachedInputTokens(),
+                        z.getModelDurationMs(),
+                        z.getTurns())))
+        .sorted(Comparator.comparing(StageTotals::stage))
         .toList();
   }
 

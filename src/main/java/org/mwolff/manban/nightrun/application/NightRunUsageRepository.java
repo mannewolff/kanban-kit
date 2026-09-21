@@ -9,6 +9,7 @@ import java.util.Set;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.nightrun.domain.NightRunErrorClass;
 import org.mwolff.manban.nightrun.domain.NightRunKind;
+import org.mwolff.manban.nightrun.domain.NightRunStage;
 import org.mwolff.manban.nightrun.domain.NightRunUsage;
 
 /**
@@ -47,6 +48,17 @@ public interface NightRunUsageRepository {
    * Verbrauch je Gattung getrennt (Issue #1013).
    */
   List<CardTotals> totalsPerCard(long projectId, Instant from, Instant to);
+
+  /**
+   * Die Summen je Stufe der Kette über alle Vorgänge der Spanne, in der Reihenfolge der Kette
+   * (Issue #1114, Plan #1110, #993 AK 8).
+   *
+   * <p>Gezählt wird über {@code night_run_item_stage}. Ein Lauf, der keine Kette ist, trägt keine
+   * Stufen und erscheint hier nicht — und es gibt <b>keine</b> Zeile „ohne Stufe" nach dem Muster
+   * von „ohne Vorhaben" (Plan E6): Sie trüge bei einem Umsetzungs-Lauf den Verbrauch einer ganzen
+   * Nacht und legte eine Erfassungslücke nahe, wo keine ist.
+   */
+  List<StageTotals> totalsPerStage(long projectId, Instant from, Instant to);
 
   /**
    * Die Gesamtsummen der Spanne — Lauf-Summen und Summe über die Arbeitspakete getrennt, damit der
@@ -183,6 +195,21 @@ public interface NightRunUsageRepository {
       return nightUsage.plus(interactiveUsage);
     }
   }
+
+  /**
+   * Eine Stufe der Kette mit den Summen ihrer Vorgänge (Issue #1114).
+   *
+   * <p>Die Wanduhr-Dauer steht neben und nicht in {@code usage} — dem Muster von {@link CardTotals}
+   * folgend: Sie ist keine Verbrauchsangabe des Modells, sondern die Zeit, die die Stufe insgesamt
+   * gedauert hat.
+   *
+   * @param stage die Stufe
+   * @param itemCount Zahl der Vorgänge, die diese Stufe durchlaufen haben
+   * @param durationMs Summe der Wanduhr-Dauern; {@code null}, wenn kein Vorgang eine trägt
+   * @param usage Summe der Verbräuche — Kosten, Tokenmengen, Modellzeit und Züge
+   */
+  record StageTotals(
+      NightRunStage stage, long itemCount, @Nullable Long durationMs, NightRunUsage usage) {}
 
   /**
    * Die Summen über die ganze Laufzeit eines Projekts (Issue #1014). Ohne Spanne gibt es keine
