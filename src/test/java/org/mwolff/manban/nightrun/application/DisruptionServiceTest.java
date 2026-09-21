@@ -10,6 +10,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.List;
@@ -48,7 +49,7 @@ class DisruptionServiceTest {
   private DisruptionService service;
 
   private static DisruptionCandidate kandidat(long laufId, Instant startedAt) {
-    return new DisruptionCandidate(laufId, 9L, "Projekt", startedAt, null);
+    return new DisruptionCandidate(laufId, 9L, "Projekt", startedAt, null, true, null);
   }
 
   private static NightRunItem paket(
@@ -144,13 +145,54 @@ class DisruptionServiceTest {
   @Test
   void einLaufOhneArbeitIstEineStoerungAuchOhnePaket() {
     when(disruptions.openCandidates())
-        .thenReturn(List.of(new DisruptionCandidate(5L, 9L, "Projekt", JETZT, "Ready war leer")));
+        .thenReturn(
+            List.of(
+                new DisruptionCandidate(5L, 9L, "Projekt", JETZT, null, true, "Ready war leer")));
     when(runs.findItemsByRunIds(List.of(5L))).thenReturn(List.of());
 
     assertThat(service.disruptions(ADMIN))
         .singleElement()
         .extracting(v -> v.outcome().noWorkReason())
         .isEqualTo("Ready war leer");
+  }
+
+  /**
+   * Der Dienst reicht Abschluss und Lebenszeichen des Kandidaten an den Maßstab durch, statt sie
+   * festzuschreiben (Issue #1094). Über {@code openCandidates} kann die Stillefrist nie greifen —
+   * die Abfrage filtert auf den Abschluss —, aber der Maßstab liest, was der Kandidat trägt.
+   */
+  @Test
+  void einVerstummterKandidatIstEineStoerungOhnePaket() {
+    when(disruptions.openCandidates())
+        .thenReturn(
+            List.of(
+                new DisruptionCandidate(
+                    5L,
+                    9L,
+                    "Projekt",
+                    JETZT.minus(Duration.ofHours(3)),
+                    JETZT.minus(Duration.ofHours(2)),
+                    false,
+                    null)));
+    when(runs.findItemsByRunIds(List.of(5L))).thenReturn(List.of());
+
+    assertThat(service.disruptions(ADMIN))
+        .singleElement()
+        .extracting(v -> v.outcome().verdict())
+        .isEqualTo(NightRunOutcome.Verdict.FAILED);
+  }
+
+  /** Das Lebenszeichen zählt, nicht der Start: ein frisch gemeldeter Lauf läuft noch. */
+  @Test
+  void einFrischGemeldeterUnfertigerKandidatIstKeineStoerung() {
+    when(disruptions.openCandidates())
+        .thenReturn(
+            List.of(
+                new DisruptionCandidate(
+                    5L, 9L, "Projekt", JETZT.minus(Duration.ofHours(3)), JETZT, false, null)));
+    when(runs.findItemsByRunIds(List.of(5L))).thenReturn(List.of());
+
+    assertThat(service.disruptions(ADMIN)).isEmpty();
   }
 
   @Test
@@ -185,7 +227,8 @@ class DisruptionServiceTest {
   @Test
   void dieStoerzeileTraegtProjektUndZeitpunkt() {
     when(disruptions.openCandidates())
-        .thenReturn(List.of(new DisruptionCandidate(5L, 9L, "Mein Projekt", JETZT, null)));
+        .thenReturn(
+            List.of(new DisruptionCandidate(5L, 9L, "Mein Projekt", JETZT, null, true, null)));
     when(runs.findItemsByRunIds(List.of(5L)))
         .thenReturn(List.of(paket(5L, NightRunState.RED, NightRunErrorClass.CHECKS_RED)));
 

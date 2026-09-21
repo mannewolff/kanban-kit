@@ -6,6 +6,7 @@ import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
 import org.mwolff.manban.nightrun.application.DisruptionRepository;
+import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Component;
@@ -35,7 +36,7 @@ class DisruptionRepositoryAdapter implements DisruptionRepository {
   private static final String KANDIDATEN =
       """
       SELECT r.id AS night_run_id, r.project_id, p.name AS project_name,
-             r.started_at, r.no_work_reason
+             r.started_at, r.updated_at, r.complete, r.no_work_reason
         FROM night_run r
         JOIN project p ON p.id = r.project_id
         LEFT JOIN night_run_disruption_ack a ON a.night_run_id = r.id
@@ -43,6 +44,31 @@ class DisruptionRepositoryAdapter implements DisruptionRepository {
          AND r.complete = true
          AND p.dashboard_participation = true
          AND a.night_run_id IS NULL
+       ORDER BY r.started_at DESC, r.id DESC
+      """;
+
+  /**
+   * Die Läufe einer Nacht, jüngster zuoberst.
+   *
+   * <p>Zwei Bedingungen weniger als bei den {@link #KANDIDATEN}: <b>kein</b> Filter auf den
+   * Abschluss, weil die laufenden Läufe gerade der obere Bereich sind, und <b>kein</b> Ausschluss
+   * quittierter Läufe, weil das Quittieren den Ausgang nicht ändert. Dafür eine mehr: der
+   * Startzeitpunkt entscheidet die Zugehörigkeit zur Nacht, {@code :from} einschließlich, {@code
+   * :to} ausschließlich.
+   *
+   * <p>Kein {@code LIMIT}, aus demselben Grund wie oben; die Spanne einer Nacht begrenzt die Menge
+   * ohnehin schärfer als der Ringpuffer.
+   */
+  private static final String LAEUFE_DER_NACHT =
+      """
+      SELECT r.id AS night_run_id, r.project_id, p.name AS project_name,
+             r.started_at, r.updated_at, r.complete, r.no_work_reason
+        FROM night_run r
+        JOIN project p ON p.id = r.project_id
+       WHERE r.kind = 'NIGHT'
+         AND p.dashboard_participation = true
+         AND r.started_at >= :from
+         AND r.started_at < :to
        ORDER BY r.started_at DESC, r.id DESC
       """;
 
@@ -67,6 +93,20 @@ class DisruptionRepositoryAdapter implements DisruptionRepository {
       ON CONFLICT (night_run_id) DO NOTHING
       """;
 
+  /** Beide Abfragen liefern dieselben Spalten — ein Mapper, damit sie nicht auseinanderlaufen. */
+  private static final RowMapper<DisruptionCandidate> KANDIDAT =
+      (rs, zeile) -> {
+        OffsetDateTime updatedAt = rs.getObject("updated_at", OffsetDateTime.class);
+        return new DisruptionCandidate(
+            rs.getLong("night_run_id"),
+            rs.getLong("project_id"),
+            rs.getString("project_name"),
+            rs.getObject("started_at", OffsetDateTime.class).toInstant(),
+            updatedAt == null ? null : updatedAt.toInstant(),
+            rs.getBoolean("complete"),
+            rs.getString("no_work_reason"));
+      };
+
   private final NamedParameterJdbcTemplate jdbc;
 
   DisruptionRepositoryAdapter(NamedParameterJdbcTemplate jdbc) {
@@ -75,16 +115,17 @@ class DisruptionRepositoryAdapter implements DisruptionRepository {
 
   @Override
   public List<DisruptionCandidate> openCandidates() {
+    return jdbc.query(KANDIDATEN, new MapSqlParameterSource(), KANDIDAT);
+  }
+
+  @Override
+  public List<DisruptionCandidate> candidatesOfNight(Instant from, Instant to) {
     return jdbc.query(
-        KANDIDATEN,
-        new MapSqlParameterSource(),
-        (rs, zeile) ->
-            new DisruptionCandidate(
-                rs.getLong("night_run_id"),
-                rs.getLong("project_id"),
-                rs.getString("project_name"),
-                rs.getObject("started_at", OffsetDateTime.class).toInstant(),
-                rs.getString("no_work_reason")));
+        LAEUFE_DER_NACHT,
+        new MapSqlParameterSource()
+            .addValue("from", OffsetDateTime.ofInstant(from, ZoneOffset.UTC))
+            .addValue("to", OffsetDateTime.ofInstant(to, ZoneOffset.UTC)),
+        KANDIDAT);
   }
 
   @Override

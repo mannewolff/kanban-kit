@@ -34,6 +34,27 @@ public interface DisruptionRepository {
   List<DisruptionCandidate> openCandidates();
 
   /**
+   * Die Läufe einer Nacht, jüngster zuoberst (Issue #1094, Plan #1088 E4).
+   *
+   * <p>Die Zugehörigkeit entscheidet der <b>Startzeitpunkt</b>: {@code from} einschließlich, {@code
+   * to} ausschließlich. Gefiltert wird nur auf das, was den Lauf überhaupt auf den Leitstand bringt
+   * — Gattung {@code NIGHT} und teilnehmendes Projekt.
+   *
+   * <p><b>Eine Abfrage für beide Bereiche</b>, laufende wie beendete, nicht zwei nach {@code
+   * complete}: Ein Lauf, der nach der Stillefrist verstummt ist, trägt {@code complete = false} und
+   * gehört trotzdem zu den beendeten. Zwei Abfragen zwängen den Dienst, die Frist ein zweites Mal
+   * zu rechnen, um ihn umzusortieren; mit einer entscheidet allein der {@link
+   * org.mwolff.manban.nightrun.domain.NightRunOutcome}.
+   *
+   * <p>Auch <b>ohne</b> den Ausschluss quittierter Läufe: Das Quittieren sagt „gesehen" und ändert
+   * den Ausgang eines Laufs nicht — die Nacht zeigt ihn weiter.
+   *
+   * @param from Beginn der Nacht, einschließlich
+   * @param to Ende der Nacht, ausschließlich
+   */
+  List<DisruptionCandidate> candidatesOfNight(Instant from, Instant to);
+
+  /**
    * Das Ziel einer Quittung: der Lauf, sofern er existiert <b>und</b> sein Projekt teilnimmt.
    *
    * <p>Beides zusammen, weil der Aufrufer beides gleich beantwortet — mit 404. Ein verdrängter Lauf
@@ -49,12 +70,16 @@ public interface DisruptionRepository {
   void acknowledge(long nightRunId, long userId, Instant at);
 
   /**
-   * Ein möglicher Störungs-Lauf mit allem, was der Maßstab braucht.
+   * Ein Lauf mit allem, was der Maßstab braucht — als Störungs-Kandidat wie als Lauf einer Nacht.
    *
    * @param nightRunId Lauf-Id, zugleich die anklickbare Kennung der Störzeile
    * @param projectId Projekt des Laufs
    * @param projectName Projektname zum Zeitpunkt der Abfrage
    * @param startedAt Startzeitpunkt des Laufs
+   * @param updatedAt letztes Lebenszeichen des Laufs; {@code null}, wenn er nie fortgeschrieben
+   *     wurde — der Upload-Weg lässt es bewusst leer, dort ist der Start das einzige Lebenszeichen
+   * @param complete ob der Lauf sich als abgeschlossen gemeldet hat; über {@link #openCandidates()}
+   *     stets {@code true}, weil jene Abfrage darauf filtert
    * @param noWorkReason Grund, warum der Lauf nichts abgearbeitet hat; {@code null}, wenn er
    *     gearbeitet hat
    */
@@ -63,6 +88,8 @@ public interface DisruptionRepository {
       long projectId,
       String projectName,
       Instant startedAt,
+      @Nullable Instant updatedAt,
+      boolean complete,
       @Nullable String noWorkReason) {}
 
   /** Der Lauf, auf den sich eine Quittung bezieht. */

@@ -106,11 +106,11 @@ public class DisruptionService {
   /**
    * Die Störzeile eines Kandidaten.
    *
-   * <p><b>{@code complete} steht fest auf {@code true}</b>, weil {@link
-   * DisruptionRepository#openCandidates()} darauf filtert. Die Stillefrist (Issue #1091) kann hier
-   * also nie greifen; die Werte stehen trotzdem echt da statt als Platzhalter — ließe der Filter
-   * eines Tages unfertige Läufe durch, wäre ein verstummter unter ihnen sofort richtig beurteilt.
-   * Der Kandidat führt kein {@code updatedAt}, also zählt der Startzeitpunkt.
+   * <p><b>Abschluss und Lebenszeichen kommen vom Kandidaten</b>, nicht als Festwert. Über {@link
+   * DisruptionRepository#openCandidates()} ist {@code complete} stets {@code true}, weil die
+   * Abfrage darauf filtert — die Stillefrist (Issue #1091) kann hier also nie greifen. Die Werte
+   * stehen trotzdem echt da statt als Platzhalter: ließe der Filter eines Tages unfertige Läufe
+   * durch, wäre ein verstummter unter ihnen sofort richtig beurteilt.
    */
   private DisruptionView view(
       DisruptionRepository.DisruptionCandidate k, List<NightRunItem> items) {
@@ -120,11 +120,11 @@ public class DisruptionService {
         k.projectName(),
         k.startedAt(),
         NightRunOutcome.of(
-            true,
+            k.complete(),
             k.noWorkReason(),
             items,
             k.startedAt(),
-            null,
+            k.updatedAt(),
             clock.instant(),
             properties.stilleFrist()));
   }
