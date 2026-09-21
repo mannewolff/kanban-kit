@@ -126,6 +126,10 @@ class NightRunController {
         // einer Datei, nicht aus dem Runner, und traegt dessen Begruendung nicht. Den Rueckfalltext
         // setzt der Dienst (Issue #1068, Plan #1067, E4).
         null,
+        // Fest „nicht angegeben" und kein Request-Feld, aus demselben Grund (Issue #1113, Plan
+        // #1110 E14): Die Ergebnisdatei verlaesst den Browser nicht (Plan #718, A1), und ein Lauf,
+        // den der Server schon fuehrt, darf durch ein zusaetzliches Einlesen nichts verlieren.
+        null,
         request.items().stream().map(NightRunController::item).toList());
   }
 
@@ -138,7 +142,9 @@ class NightRunController {
         request.durationMs(),
         request.commitHash(),
         request.excerpt(),
-        NightRunUsageRequest.toDomain(request.usage()));
+        NightRunUsageRequest.toDomain(request.usage()),
+        // Wie das Budget am Lauf: Der Upload-Weg fuehrt keine Stufen (Issue #1113, E14).
+        List.of());
   }
 
   /**

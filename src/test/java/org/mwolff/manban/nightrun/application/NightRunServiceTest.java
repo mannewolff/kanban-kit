@@ -29,11 +29,15 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mwolff.manban.nightrun.application.NightRunRepository.UpsertResult;
 import org.mwolff.manban.nightrun.domain.NightRun;
+import org.mwolff.manban.nightrun.domain.NightRunBudget;
+import org.mwolff.manban.nightrun.domain.NightRunBudgetOrigin;
 import org.mwolff.manban.nightrun.domain.NightRunErrorClass;
 import org.mwolff.manban.nightrun.domain.NightRunItem;
+import org.mwolff.manban.nightrun.domain.NightRunItemStage;
 import org.mwolff.manban.nightrun.domain.NightRunKind;
 import org.mwolff.manban.nightrun.domain.NightRunMode;
 import org.mwolff.manban.nightrun.domain.NightRunOrigin;
+import org.mwolff.manban.nightrun.domain.NightRunStage;
 import org.mwolff.manban.nightrun.domain.NightRunState;
 import org.mwolff.manban.nightrun.domain.NightRunUsage;
 import org.mwolff.manban.project.application.InteractiveUsageSinceWriter;
@@ -51,8 +55,19 @@ import org.mwolff.manban.project.application.ProjectNotFoundException;
  * Rechteprüfung braucht.
  */
 // Testklasse: Jede Methode ist ein Fall, und Faelle werden nicht zusammengelegt, um eine
-// Zahl zu druecken. Issue #946 bringt sieben Faelle fuer den meldenden Weg dazu.
-@SuppressWarnings("PMD.TooManyMethods")
+// Zahl zu druecken. Issue #946 bringt sieben Faelle fuer den meldenden Weg dazu, Issue #1113 vier
+// fuer Budgets und Stufen.
+// PMD.ExcessiveImports/CouplingBetweenObjects: Die Importe folgen den Typen, die der Dienst fuehrt
+// — mit Issue #1113 kommen NightRunBudget, NightRunBudgetOrigin, NightRunItemStage und
+// NightRunStage dazu. Dieselbe Ursache wie am NightRunService selbst, nur an der Testseite.
+// PMD.CyclomaticComplexity: die Summe ueber lauter Methoden der Komplexitaet 1 — sie zaehlt hier
+// die Zahl der Faelle und nicht Verzweigungen, die es nicht gibt.
+@SuppressWarnings({
+  "PMD.TooManyMethods",
+  "PMD.ExcessiveImports",
+  "PMD.CouplingBetweenObjects",
+  "PMD.CyclomaticComplexity"
+})
 class NightRunServiceTest {
 
   private static final Instant FIXED = Instant.parse("2026-09-02T04:00:00Z");
@@ -417,6 +432,7 @@ class NightRunServiceTest {
         true,
         null,
         null,
+        null,
         List.of(items));
   }
 
@@ -430,7 +446,8 @@ class NightRunServiceTest {
         500L,
         "abc1234",
         "Auszug " + cardNumber,
-        null);
+        null,
+        List.of());
   }
 
   /**
@@ -448,6 +465,15 @@ class NightRunServiceTest {
       boolean complete,
       @Nullable NightRunUsage usage,
       NightRunService.NewNightRunItem... items) {
+    return meldung(startedAt, complete, usage, null, items);
+  }
+
+  private static NightRunService.NewNightRun meldung(
+      Instant startedAt,
+      boolean complete,
+      @Nullable NightRunUsage usage,
+      @Nullable NightRunBudget budget,
+      NightRunService.NewNightRunItem... items) {
     return new NightRunService.NewNightRun(
         startedAt,
         NightRunMode.CHAIN,
@@ -459,6 +485,7 @@ class NightRunServiceTest {
         complete,
         usage,
         null,
+        budget,
         List.of(items));
   }
 
@@ -668,6 +695,110 @@ class NightRunServiceTest {
         .isEqualTo(new BigDecimal("4.000000"));
   }
 
+  // --- Budgets und Stufen durch den Dienst (Issue #1113) ------------------------------------
+
+  private static final NightRunBudget VORGABEN =
+      new NightRunBudget(
+          30,
+          30,
+          25,
+          10,
+          new BigDecimal("50"),
+          NightRunBudgetOrigin.DEFAULTED,
+          List.of("paketeMin", "kostenUsd"));
+
+  private static NightRunService.NewNightRunItem itemMitStufen(
+      int cardNumber, NightRunItemStage... stufen) {
+    return new NightRunService.NewNightRunItem(
+        cardNumber,
+        "Paket " + cardNumber,
+        NightRunState.GREEN,
+        null,
+        5L,
+        null,
+        null,
+        null,
+        List.of(stufen));
+  }
+
+  private static NightRunItemStage stufe(NightRunStage stage) {
+    return new NightRunItemStage(
+        stage, 600_000L, new NightRunUsage(new BigDecimal("0.25"), 10L, 20L, 5L, 400L, 7));
+  }
+
+  /**
+   * Der Kern des Pakets am Dienst: Budget und Stufen kommen aus der Meldung und werden nicht mehr
+   * auf „nicht angegeben" festgehalten, wie Issue #1112 es bis hierher tat.
+   */
+  @Test
+  void ingest_schreibtDasGemeldeteBudgetUndDieStufen() {
+    service.ingest(
+        USER,
+        PROJECT,
+        TOKEN,
+        NightRunKind.NIGHT,
+        meldung(
+            T1,
+            true,
+            null,
+            VORGABEN,
+            itemMitStufen(993, stufe(NightRunStage.PLAN), stufe(NightRunStage.REVIEW))));
+
+    NightRun geschrieben = gemeldeterLauf();
+    assertThat(geschrieben.budget()).isEqualTo(VORGABEN);
+    assertThat(runs.findItemsByRunIds(List.of(geschrieben.requireId())))
+        .singleElement()
+        .extracting(NightRunItem::stages)
+        .asInstanceOf(org.assertj.core.api.InstanceOfAssertFactories.list(NightRunItemStage.class))
+        .extracting(NightRunItemStage::stage)
+        .containsExactly(NightRunStage.PLAN, NightRunStage.REVIEW);
+  }
+
+  /** Die Sicht liefert beides aus — sonst haette die Anzeige nichts zu zeigen (AK 1, AK 2). */
+  @Test
+  void list_liefertBudgetUndStufenAus() {
+    service.ingest(
+        USER,
+        PROJECT,
+        TOKEN,
+        NightRunKind.NIGHT,
+        meldung(T1, true, null, VORGABEN, itemMitStufen(993, stufe(NightRunStage.PAKETE))));
+
+    NightRunService.NightRunView sicht = service.list(USER, PROJECT).getFirst();
+
+    assertThat(sicht.budget()).isEqualTo(VORGABEN);
+    assertThat(sicht.items().getFirst().stages()).containsExactly(stufe(NightRunStage.PAKETE));
+  }
+
+  /** Ohne gemeldete Vorgaben steht „nicht angegeben" am Lauf und eine leere Liste am Vorgang. */
+  @Test
+  void list_laesstBudgetLeerUndStufenLeer_wennNichtsGemeldetWurde() {
+    service.ingest(
+        USER,
+        PROJECT,
+        TOKEN,
+        NightRunKind.NIGHT,
+        meldung(T1, true, null, item(993, NightRunState.GREEN, null)));
+
+    NightRunService.NightRunView sicht = service.list(USER, PROJECT).getFirst();
+
+    assertThat(sicht.budget()).isNull();
+    assertThat(sicht.items().getFirst().stages()).isEmpty();
+  }
+
+  /**
+   * Der Upload-Weg fuehrt beides nicht (E14). Der Dienst reicht durch, was der Controller uebergibt
+   * — und das ist dort fest „nicht gemeldet".
+   */
+  @Test
+  void submit_laesstBudgetUndStufenLeer() {
+    service.submit(USER, PROJECT, List.of(lauf(T1, item(993, NightRunState.GREEN, null))));
+
+    NightRunService.NightRunView sicht = service.list(USER, PROJECT).getFirst();
+    assertThat(sicht.budget()).isNull();
+    assertThat(sicht.items().getFirst().stages()).isEmpty();
+  }
+
   @Test
   void ingest_reichtDasErgebnisDesSchreibwegsDurch() {
     assertThat(
@@ -685,7 +816,15 @@ class NightRunServiceTest {
   private static NightRunService.NewNightRunItem itemMitVerbrauch(
       int cardNumber, NightRunUsage usage) {
     return new NightRunService.NewNightRunItem(
-        cardNumber, "Paket " + cardNumber, NightRunState.GREEN, null, 5L, null, null, usage);
+        cardNumber,
+        "Paket " + cardNumber,
+        NightRunState.GREEN,
+        null,
+        5L,
+        null,
+        null,
+        usage,
+        List.of());
   }
 
   // --- Wiederkehrender Lauf: verwaiste Pakete vorher weg (Issue #965) --------------------
@@ -916,13 +1055,35 @@ class NightRunServiceTest {
   private static NightRunService.NewNightRun ohneArbeit(
       Instant startedAt, boolean complete, @Nullable String grund) {
     return new NightRunService.NewNightRun(
-        startedAt, NightRunMode.CHAIN, 1_000L, 0, 0, 0, null, complete, null, grund, List.of());
+        startedAt,
+        NightRunMode.CHAIN,
+        1_000L,
+        0,
+        0,
+        0,
+        null,
+        complete,
+        null,
+        grund,
+        null,
+        List.of());
   }
 
   /** Derselbe Fall auf dem Upload-Weg, der kein Grund-Feld kennt. */
   private static NightRunService.NewNightRun hochgeladenOhneArbeit(Instant startedAt) {
     return new NightRunService.NewNightRun(
-        startedAt, NightRunMode.IMPLEMENTATION, 1_000L, 0, 0, 0, null, true, null, null, List.of());
+        startedAt,
+        NightRunMode.IMPLEMENTATION,
+        1_000L,
+        0,
+        0,
+        0,
+        null,
+        true,
+        null,
+        null,
+        null,
+        List.of());
   }
 
   @Test
@@ -1046,7 +1207,7 @@ class NightRunServiceTest {
               run.updatedAt(),
               run.usage(),
               run.noWorkReason(),
-              null));
+              run.budget()));
       for (NightRunItem item : items) {
         gespeichertePakete.add(paket(item, run, id));
       }
@@ -1087,7 +1248,7 @@ class NightRunServiceTest {
               run.updatedAt(),
               run.usage(),
               run.noWorkReason(),
-              null));
+              run.budget()));
       for (NightRunItem item : items) {
         gespeichertePakete.add(paket(item, run, id));
       }
@@ -1116,7 +1277,7 @@ class NightRunServiceTest {
           item.commitHash(),
           item.excerpt(),
           item.usage(),
-          List.of());
+          item.stages());
     }
 
     @Override
@@ -1175,7 +1336,8 @@ class NightRunServiceTest {
           item.commitHash(),
           item.excerpt(),
           item.usage(),
-          List.of());
+          // Die Stufen haengen am Paket, nicht am Lauf (V37): Ein verwaistes Paket behaelt sie.
+          item.stages());
     }
 
     @Override

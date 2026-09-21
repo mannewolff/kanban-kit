@@ -9,8 +9,10 @@ import java.util.Objects;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.nightrun.application.NightRunRepository.UpsertResult;
 import org.mwolff.manban.nightrun.domain.NightRun;
+import org.mwolff.manban.nightrun.domain.NightRunBudget;
 import org.mwolff.manban.nightrun.domain.NightRunErrorClass;
 import org.mwolff.manban.nightrun.domain.NightRunItem;
+import org.mwolff.manban.nightrun.domain.NightRunItemStage;
 import org.mwolff.manban.nightrun.domain.NightRunKind;
 import org.mwolff.manban.nightrun.domain.NightRunMode;
 import org.mwolff.manban.nightrun.domain.NightRunOrigin;
@@ -162,9 +164,10 @@ public class NightRunService {
             meldung.usage(),
             grundOhneArbeit(
                 kind, meldung.complete(), meldung.processedCount(), meldung.noWorkReason()),
-            // Die Budgets nimmt erst das naechste Paket entgegen (Issue #1112): Bis dahin meldet
-            // kein Weg sie, und „nicht angegeben" ist die richtige Aussage darueber.
-            null);
+            // Die Vorgaben kommen mit der Meldung (Issue #1113). Fehlen sie, steht am Lauf
+            // „nicht angegeben" — der Dienst ergaenzt sie nicht aus Voreinstellungen, die er
+            // gar nicht kennt (Plan #1110 E4).
+            meldung.budget());
 
     // Wie beim Upload-Weg: verwaiste Pakete eines verdrängten Laufs zuerst weg (#965).
     runs.deleteOrphanItemsOfRun(projectId, meldung.startedAt());
@@ -261,8 +264,9 @@ public class NightRunService {
         // Rueckfalltext -- angezeigt wird er trotzdem, nur ohne die Begruendung des Runners.
         grundOhneArbeit(
             NightRunKind.NIGHT, submission.complete(), submission.processedCount(), null),
-        // Wie beim meldenden Weg: Die Budgets nimmt erst das naechste Paket entgegen (#1112).
-        null);
+        // Durchgereicht wie jedes andere Feld; der Upload-Weg uebergibt hier fest „nicht
+        // angegeben", weil die Ergebnisdatei den Browser nicht verlaesst (Plan #1110 E14).
+        submission.budget());
   }
 
   /**
@@ -319,9 +323,9 @@ public class NightRunService {
                     item.commitHash(),
                     item.excerpt(),
                     item.usage(),
-                    // Die Stufen nimmt erst das naechste Paket entgegen (Issue #1112); die leere
-                    // Liste sagt hier richtig „dieser Vorgang hatte keine".
-                    List.of()))
+                    // Die Stufen kommen mit der Meldung (Issue #1113); der Upload-Weg uebergibt
+                    // hier fest die leere Liste — „dieser Vorgang hatte keine".
+                    item.stages()))
         .toList();
   }
 
@@ -357,6 +361,7 @@ public class NightRunService {
         run.updatedAt(),
         run.usage(),
         run.noWorkReason(),
+        run.budget(),
         NightRunOutcome.of(
             run.complete(),
             run.noWorkReason(),
@@ -379,11 +384,16 @@ public class NightRunService {
         item.durationMs(),
         item.commitHash(),
         item.excerpt(),
-        item.usage());
+        item.usage(),
+        item.stages());
   }
 
   /**
    * Ein einzuliefernder Lauf ohne technische Felder — ID und Einfügezeitpunkt vergibt der Service.
+   *
+   * @param budget die gemeldeten Vorgaben des Laufs (Issue #1113); {@code null} heißt „nicht
+   *     angegeben". Der Upload-Weg führt sie nicht und übergibt hier fest {@code null} (Plan #1110
+   *     E14).
    */
   public record NewNightRun(
       Instant startedAt,
@@ -396,9 +406,15 @@ public class NightRunService {
       boolean complete,
       @Nullable NightRunUsage usage,
       @Nullable String noWorkReason,
+      @Nullable NightRunBudget budget,
       List<NewNightRunItem> items) {}
 
-  /** Ein einzulieferndes Arbeitspaket ohne technische Felder. */
+  /**
+   * Ein einzulieferndes Arbeitspaket ohne technische Felder.
+   *
+   * @param stages die gemeldeten Stufen der Kette (Issue #1113) — leer statt {@code null}, denn
+   *     „dieser Vorgang hatte keine Stufen" ist eine Aussage
+   */
   public record NewNightRunItem(
       int cardNumber,
       String title,
@@ -407,7 +423,8 @@ public class NightRunService {
       @Nullable Long durationMs,
       @Nullable String commitHash,
       @Nullable String excerpt,
-      @Nullable NightRunUsage usage) {}
+      @Nullable NightRunUsage usage,
+      List<NightRunItemStage> stages) {}
 
   /**
    * Ergebnis der Einlieferung eines Laufs.
@@ -417,7 +434,12 @@ public class NightRunService {
    */
   public record NightRunResult(Instant startedAt, boolean created) {}
 
-  /** Darstellung eines aufbewahrten Laufs samt seiner Arbeitspakete. */
+  /**
+   * Darstellung eines aufbewahrten Laufs samt seiner Arbeitspakete.
+   *
+   * @param budget die Vorgaben, unter denen der Lauf angetreten ist (Issue #1113); {@code null}
+   *     heißt „nicht angegeben"
+   */
   public record NightRunView(
       Long id,
       Instant startedAt,
@@ -434,10 +456,16 @@ public class NightRunService {
       @Nullable Instant updatedAt,
       @Nullable NightRunUsage usage,
       @Nullable String noWorkReason,
+      @Nullable NightRunBudget budget,
       NightRunOutcome outcome,
       List<NightRunItemView> items) {}
 
-  /** Darstellung eines Arbeitspakets. */
+  /**
+   * Darstellung eines Arbeitspakets.
+   *
+   * @param stages die Stufen der Kette, die dieser Vorgang durchlaufen hat (Issue #1113) — leer
+   *     statt {@code null}
+   */
   public record NightRunItemView(
       Long id,
       int cardNumber,
@@ -447,5 +475,6 @@ public class NightRunService {
       @Nullable Long durationMs,
       @Nullable String commitHash,
       @Nullable String excerpt,
-      @Nullable NightRunUsage usage) {}
+      @Nullable NightRunUsage usage,
+      List<NightRunItemStage> stages) {}
 }

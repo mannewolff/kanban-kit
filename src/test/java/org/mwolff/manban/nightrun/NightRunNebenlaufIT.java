@@ -274,7 +274,7 @@ class NightRunNebenlaufIT extends AbstractIntegrationTest {
 
   private static NightRunService.NewNightRun meldung(Instant startedAt) {
     return new NightRunService.NewNightRun(
-        startedAt, NightRunMode.CHAIN, 1_000L, 1, 0, 0, null, true, null, null, List.of());
+        startedAt, NightRunMode.CHAIN, 1_000L, 1, 0, 0, null, true, null, null, null, List.of());
   }
 
   private long insert(String sql) {
