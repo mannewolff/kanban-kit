@@ -373,12 +373,9 @@ function Stoerungen({
   }
   if (liste.length === 0) {
     // AK 14: Eine leere Flaeche waere von einer kaputten Anzeige nicht zu unterscheiden — und eine
-    // Gruppenliste ohne Gruppen genauso wenig (#1087).
-    return (
-      <Typography data-testid="keine-stoerungen" sx={{ fontSize: 13, color: 'text.secondary' }}>
-        Keine offene Störung.
-      </Typography>
-    )
+    // Gruppenliste ohne Gruppen genauso wenig (#1087). Derselbe LeerSatz wie in den beiden
+    // Lauf-Bereichen, damit der Satz unter der Überschrift eingerückt steht wie dort.
+    return <LeerSatz testId="keine-stoerungen">Keine offene Störung.</LeerSatz>
   }
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
