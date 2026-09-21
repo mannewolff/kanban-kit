@@ -65,6 +65,17 @@ public class DisruptionService {
    * complete}. Ein verstummter Lauf trägt {@code complete = false} und steht trotzdem unter den
    * durchgeführten — das leistet die Stillefrist aus Issue #1091.
    *
+   * <p><b>Die Nachtgrenze gilt nur den durchgeführten Läufen</b> (Issue #1109): „Aktive Läufe" ist
+   * jeder Kandidat mit {@link Verdict#RUNNING}, gleich wann er begann — #1086 AK 1 kennt für diesen
+   * Bereich keine Grenze, sie zieht AK 9 ausdrücklich nur für die beendeten. Ein Kettenlauf, der um
+   * 10:27 beginnt und über Mittag geht, bleibt so sichtbar, statt für seine ganze Restlaufzeit zu
+   * verschwinden.
+   *
+   * <p><b>Warum die Grenze für die beendeten ausdrücklich hier steht</b> und nicht aus der Abfrage
+   * fällt: Deren zweiter Zweig liefert auch Läufe früherer Nächte. Lässt die Stillefrist einen
+   * davon zwischen Abfrage und Auswertung verstummen, stünde er ohne die Grenze unter den beendeten
+   * Läufen der <em>neuen</em> Nacht — gegen AK 9.
+   *
    * <p><b>Die Zone kommt vom Leser</b> (Plan #1088 E6): Im Container läuft die JVM regelmäßig in
    * UTC, und „12:00 zonenlokal" wäre dann 14:00 in Berlin — die Nachtgrenze läge um Stunden
    * verschoben gegen die, die die Nachtlauf-Auswertung zieht.
@@ -75,15 +86,18 @@ public class DisruptionService {
   @Transactional(readOnly = true)
   public LeitstandView leitstand(long userId, ZoneId zone) {
     requirePlatformAdmin(userId);
-    NightRunPeriod nacht = NightRunPeriod.laufendeNacht(clock.instant(), zone);
-    List<DisruptionRepository.DisruptionCandidate> derNacht =
-        repository.candidatesOfNight(nacht.from(), nacht.to());
+    Instant jetzt = clock.instant();
+    NightRunPeriod nacht = NightRunPeriod.laufendeNacht(jetzt, zone);
+    List<DisruptionRepository.DisruptionCandidate> kandidaten =
+        repository.candidatesOfNight(nacht.from(), nacht.to(), jetzt, properties.stilleFrist());
     List<DisruptionRepository.DisruptionCandidate> offene = repository.openCandidates();
-    Map<Long, List<NightRunItem>> jeLauf = pakete(derNacht, offene);
-    List<DisruptionView> laeufeDerNacht = views(derNacht, jeLauf);
+    Map<Long, List<NightRunItem>> jeLauf = pakete(kandidaten, offene);
+    List<DisruptionView> zeilen = views(kandidaten, jeLauf);
     return new LeitstandView(
-        laeufeDerNacht.stream().filter(v -> v.outcome().verdict() == Verdict.RUNNING).toList(),
-        laeufeDerNacht.stream().filter(v -> v.outcome().verdict() != Verdict.RUNNING).toList(),
+        zeilen.stream().filter(v -> v.outcome().verdict() == Verdict.RUNNING).toList(),
+        zeilen.stream()
+            .filter(v -> v.outcome().verdict() != Verdict.RUNNING && nacht.contains(v.startedAt()))
+            .toList(),
         views(offene, jeLauf).stream().filter(v -> v.outcome().isDisruption()).toList());
   }
 
@@ -148,6 +162,10 @@ public class DisruptionService {
   /**
    * Die Zeile eines Kandidaten — dieselbe für alle drei Listen.
    *
+   * <p><b>Auch die Laufart kommt vom Kandidaten</b> (Issue #1123): Bei einer Kette ist unter
+   * gleichrangigen Paketen das letzte maßgeblich, und ohne die Laufart zeigte die Störzeile die
+   * Ketten-Einheit statt des Pakets, an dem die Kette riss.
+   *
    * <p><b>Abschluss und Lebenszeichen kommen vom Kandidaten</b>, nicht als Festwert. Über {@link
    * DisruptionRepository#openCandidates()} ist {@code complete} stets {@code true}, weil die
    * Abfrage darauf filtert; über {@link DisruptionRepository#candidatesOfNight} nicht — dort
@@ -164,6 +182,7 @@ public class DisruptionService {
         NightRunOutcome.of(
             k.complete(),
             k.noWorkReason(),
+            k.mode(),
             items,
             k.startedAt(),
             k.updatedAt(),
@@ -192,9 +211,10 @@ public class DisruptionService {
    * tragen dieselben Angaben — Projekt, Startzeitpunkt, Befund —, und woraus der Browser welchen
    * Melder und welches Wort bildet, steht im Befund.
    *
-   * @param laufende Läufe der laufenden Nacht, die noch arbeiten; jüngster zuoberst
-   * @param durchgefuehrte beendete Läufe derselben Nacht, verstummte eingeschlossen; jüngster
-   *     zuoberst
+   * @param laufende Läufe, die noch arbeiten — <b>ohne</b> Nachtgrenze, also auch die einer
+   *     früheren Nacht, die über Mittag weiterlaufen (Issue #1109); jüngster zuoberst
+   * @param durchgefuehrte beendete Läufe der <b>laufenden Nacht</b>, verstummte eingeschlossen;
+   *     jüngster zuoberst
    * @param stoerungen offene Störungen über <b>alle</b> Nächte (Kriterium 17), jüngste zuoberst
    */
   public record LeitstandView(

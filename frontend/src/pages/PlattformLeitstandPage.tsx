@@ -421,6 +421,10 @@ function Projektblock({
           alignItems: 'baseline',
           gap: '8px',
           m: 0,
+          // Derselbe Einzug wie beim Leersatz und den Lauf-Zeilen (#1122). Er sitzt am Kopf
+          // selbst und nicht am umschliessenden Kasten, damit die Trennlinie darunter weiter
+          // ueber die volle Breite der Platte laeuft.
+          px: '16px',
           pb: '4px',
           borderBottom: `1px solid ${RAND}`,
         }}
@@ -490,7 +494,9 @@ function Stoerzeile({
       component="li"
       id={`stoerung-${stoerung.nightRunId}`}
       data-testid={`stoerung-${stoerung.nightRunId}`}
-      sx={{ display: 'flex', alignItems: 'center', gap: '10px', py: '6px' }}
+      // `px` wie in {@link LAUF_ZEILE_SX} und beim Leersatz (#1122): Sonst beruehrte die Taste
+      // „Stoerung loeschen" rechts den Rahmen der Platte. Der eigene senkrechte Rhythmus bleibt.
+      sx={{ display: 'flex', alignItems: 'center', gap: '10px', px: '16px', py: '6px' }}
     >
       <Led melder={melder} />
       <Typography sx={{ fontSize: 12, color: 'text.secondary' }}>

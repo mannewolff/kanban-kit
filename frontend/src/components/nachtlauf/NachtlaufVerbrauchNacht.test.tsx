@@ -1,16 +1,18 @@
 import { ThemeProvider } from '@mui/material/styles'
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import type {
   VerbrauchAngaben,
   VerbrauchAufteilung,
   VerbrauchKarte,
   VerbrauchNacht,
+  VerbrauchStufe,
 } from '../../api/nightRunUsage'
+import type { NightRunStage } from '../../api/nightRuns'
 import { nachtlaufTheme } from '../../nachtlaufDesign'
 import { NachtlaufVerbrauchNacht } from './NachtlaufVerbrauchNacht'
 
-/** Die Nachtansicht der Verbrauchs-Auswertung (Issue #941, #926 AK 1–4). */
+/** Die Nachtansicht der Verbrauchs-Auswertung (Issue #941, #926 AK 1–4; Kacheln seit Task #1108). */
 
 const nichts: VerbrauchAngaben = {
   costUsd: null,
@@ -67,7 +69,13 @@ const nacht = (werte: Partial<VerbrauchNacht>): VerbrauchNacht => ({
   cardCount: 2,
   ...verbrauch(
     aufteilung(
-      angaben({ costUsd: 10, inputTokens: 1000, outputTokens: 100, cachedInputTokens: 250, cachedInputSharePercent: 25 }),
+      angaben({
+        costUsd: 10,
+        inputTokens: 70_450_000,
+        outputTokens: 415_000,
+        cachedInputTokens: 52_000_000,
+        cachedInputSharePercent: 73.8,
+      }),
       angaben({ costUsd: 6 }),
       angaben({ costUsd: 4 }),
     ),
@@ -77,7 +85,16 @@ const nacht = (werte: Partial<VerbrauchNacht>): VerbrauchNacht => ({
     karte(721, 2, 3_600_000, angaben({ costUsd: 4.5 })),
     karte(722, 1, null, angaben({ costUsd: 1.5 })),
   ],
+  stages: [],
   ...werte,
+})
+
+/** Eine Stufe der Kette in der Aufstellung der Nacht (Issue #1117). */
+const stufe = (stage: NightRunStage, costUsd: number, itemCount = 1): VerbrauchStufe => ({
+  stage,
+  itemCount,
+  durationMs: 60_000,
+  usage: angaben({ costUsd }),
 })
 
 const zeige = (daten: VerbrauchNacht) =>
@@ -88,18 +105,56 @@ const zeige = (daten: VerbrauchNacht) =>
   )
 
 /** `Intl` setzt vor das Währungszeichen ein geschütztes Leerzeichen. */
-const lesbar = (element: HTMLElement) => element.textContent?.replaceAll(' ', ' ') ?? ''
+const lesbar = (element: HTMLElement) => element.textContent?.replaceAll(' ', ' ') ?? ''
+
+const kachel = (etikett: string) => screen.getByTestId(`verbrauch-kachel-${etikett}`)
+
+/** Der große Wert der Kachel — ohne die Einordnung darunter, die dieselbe Zahl führen kann. */
+const wertVon = (kachel: HTMLElement) => within(kachel).getByTestId('kachel-wert').textContent
+
+/** Die kleine Einheit steht unmittelbar hinter dem Wert. */
+const einheitVon = (kachel: HTMLElement) =>
+  within(kachel).getByTestId('kachel-wert').nextElementSibling?.textContent
 
 describe('NachtlaufVerbrauchNacht', () => {
+  /**
+   * Die Nacht zeigt dieselben Kacheln wie Leitstand und Zeitraumansicht (Task #1108): zwei Raster
+   * aus je vier Kacheln statt der beiden flachen Kennzahlenreihen von vorher.
+   */
+  it('zeigt acht Kacheln in zwei Rastern', () => {
+    zeige(nacht({}))
+
+    const summen = screen.getByTestId('verbrauch-nacht-summen')
+    const kennzahlen = screen.getByTestId('verbrauch-nacht-kennzahlen')
+    expect(within(summen).getAllByTestId(/^verbrauch-kachel-/)).toHaveLength(4)
+    expect(within(kennzahlen).getAllByTestId(/^verbrauch-kachel-/)).toHaveLength(4)
+    for (const etikett of ['Gesamtsumme', 'Karten zugeordnet', 'Rest', 'Läufe']) {
+      expect(within(summen).getByTestId(`verbrauch-kachel-${etikett}`)).toBeInTheDocument()
+    }
+    for (const etikett of ['Dauer', 'Eingabe-Token', 'Ausgabe-Token', 'Zwischenspeicher']) {
+      expect(within(kennzahlen).getByTestId(`verbrauch-kachel-${etikett}`)).toBeInTheDocument()
+    }
+    expect(screen.queryByTestId(/^nachtlauf-kennzahl-/)).not.toBeInTheDocument()
+  })
+
   it('zeigt Gesamtsumme, kartenbezogenen Anteil und Rest als drei getrennt beschriftete Zahlen', () => {
     zeige(nacht({}))
 
-    const gesamt = screen.getByTestId('nachtlauf-kennzahl-Gesamtsumme')
-    const karten = screen.getByTestId('nachtlauf-kennzahl-Einzelnen Karten zugeordnet')
-    const rest = screen.getByTestId('nachtlauf-kennzahl-Keiner Karte zuzuordnen')
-    expect(lesbar(gesamt)).toContain('10,00 $')
-    expect(lesbar(karten)).toContain('6,00 $')
-    expect(lesbar(rest)).toContain('4,00 $')
+    expect(wertVon(kachel('Gesamtsumme'))).toBe('10,00')
+    expect(wertVon(kachel('Karten zugeordnet'))).toBe('6,00')
+    expect(wertVon(kachel('Rest'))).toBe('4,00')
+    expect(einheitVon(kachel('Gesamtsumme'))).toBe('$')
+  })
+
+  /** Dieselben Einordnungen wie in der Zeitraumansicht (Task #1108, AK 2). */
+  it('ordnet jede Kachel wie die Zeitraumansicht ein', () => {
+    zeige(nacht({}))
+
+    expect(lesbar(kachel('Gesamtsumme'))).toContain('5,00 $ je Lauf')
+    expect(kachel('Karten zugeordnet')).toHaveTextContent('60 % der Summe')
+    expect(kachel('Rest')).toHaveTextContent('keiner Karte zuzuordnen')
+    expect(kachel('Läufe')).toHaveTextContent('2 Karten')
+    expect(lesbar(kachel('Zwischenspeicher'))).toContain('73,8 % aus dem Zwischenspeicher')
   })
 
   it('zeigt eine Nacht aus zwei Laeufen als eine Nacht', () => {
@@ -112,17 +167,25 @@ describe('NachtlaufVerbrauchNacht', () => {
     expect(screen.getByTestId('verbrauch-nacht-laeufe')).toHaveTextContent('2 Läufe')
   })
 
-  it('zeigt Karten, Dauer, die vier Verbrauchsangaben und den Zwischenspeicher-Anteil', () => {
+  /** Tokenmengen in der Einheit des Leitstands (Task #1108, AK 3), nicht als ausgeschriebene Zahl. */
+  it('zeigt Dauer und Tokenmengen in der Einheit des Leitstands', () => {
     zeige(nacht({}))
 
-    expect(screen.getByTestId('nachtlauf-kennzahl-Bearbeitete Karten')).toHaveTextContent('2')
-    expect(screen.getByTestId('nachtlauf-kennzahl-Dauer')).toHaveTextContent('1 Std 30 Min')
-    expect(screen.getByTestId('nachtlauf-kennzahl-Eingabe')).toHaveTextContent('1.000 Token')
-    expect(screen.getByTestId('nachtlauf-kennzahl-Ausgabe')).toHaveTextContent('100 Token')
-    expect(screen.getByTestId('nachtlauf-kennzahl-Zwischenspeicher')).toHaveTextContent('250 Token')
-    expect(lesbar(screen.getByTestId('nachtlauf-kennzahl-Anteil aus dem Zwischenspeicher'))).toContain(
-      '25,0 %',
-    )
+    expect(wertVon(kachel('Dauer'))).toBe('1:30')
+    expect(einheitVon(kachel('Dauer'))).toBe('h')
+    expect(wertVon(kachel('Eingabe-Token'))).toBe('70,45')
+    expect(einheitVon(kachel('Eingabe-Token'))).toBe('Mio')
+    expect(wertVon(kachel('Ausgabe-Token'))).toBe('415')
+    expect(einheitVon(kachel('Ausgabe-Token'))).toBe('Tsd')
+    expect(wertVon(kachel('Zwischenspeicher'))).toBe('52,00')
+    expect(einheitVon(kachel('Zwischenspeicher'))).toBe('Mio')
+  })
+
+  it('zeigt eine Dauer unter einer Stunde in Minuten', () => {
+    zeige(nacht({ durationMs: 900_000 }))
+
+    expect(wertVon(kachel('Dauer'))).toBe('15')
+    expect(einheitVon(kachel('Dauer'))).toBe('min')
   })
 
   /**
@@ -162,14 +225,11 @@ describe('NachtlaufVerbrauchNacht', () => {
       }),
     )
 
-    for (const label of ['Gesamtsumme', 'Eingabe', 'Ausgabe', 'Zwischenspeicher']) {
-      const kennzahl = screen.getByTestId(`nachtlauf-kennzahl-${label}`)
-      expect(kennzahl).toHaveTextContent('nicht gemessen')
-      expect(kennzahl.textContent).not.toMatch(/\b0\b/)
+    for (const etikett of ['Gesamtsumme', 'Eingabe-Token', 'Ausgabe-Token', 'Zwischenspeicher']) {
+      expect(kachel(etikett)).toHaveTextContent('nicht gemessen')
+      expect(wertVon(kachel(etikett))).not.toMatch(/\d/)
     }
-    expect(screen.getByTestId('nachtlauf-kennzahl-Anteil aus dem Zwischenspeicher')).toHaveTextContent(
-      'nicht bestimmt',
-    )
+    expect(lesbar(kachel('Zwischenspeicher'))).not.toContain('aus dem Zwischenspeicher')
   })
 
   it('sagt es, wenn in der Nacht kein Lauf stattfand', () => {
@@ -184,6 +244,7 @@ describe('NachtlaufVerbrauchNacht', () => {
     zeige(nacht({ runCount: 1 }))
 
     expect(screen.getByTestId('verbrauch-nacht-laeufe')).toHaveTextContent('1 Lauf')
+    expect(einheitVon(kachel('Läufe'))).toBe('Lauf')
   })
 })
 
@@ -204,14 +265,10 @@ describe('NachtlaufVerbrauchNacht — Nachtlauf-Anteil', () => {
       ),
     )
 
-    expect(lesbar(screen.getByTestId('nachtlauf-kennzahl-Gesamtsumme'))).toContain('10,00 $')
-    expect(lesbar(screen.getByTestId('nachtlauf-kennzahl-Gesamtsumme'))).not.toContain('15,00')
-    expect(lesbar(screen.getByTestId('nachtlauf-kennzahl-Einzelnen Karten zugeordnet'))).toContain(
-      '6,00 $',
-    )
-    expect(lesbar(screen.getByTestId('nachtlauf-kennzahl-Keiner Karte zuzuordnen'))).toContain(
-      '4,00 $',
-    )
+    expect(wertVon(kachel('Gesamtsumme'))).toBe('10,00')
+    expect(wertVon(kachel('Karten zugeordnet'))).toBe('6,00')
+    expect(wertVon(kachel('Rest'))).toBe('4,00')
+    expect(lesbar(screen.getByTestId('verbrauch-nacht'))).not.toContain('15,00')
   })
 
   it('zeigt Mengen und Zwischenspeicher-Anteil des Nachtlauf-Anteils', () => {
@@ -229,12 +286,12 @@ describe('NachtlaufVerbrauchNacht — Nachtlauf-Anteil', () => {
       ),
     )
 
-    expect(screen.getByTestId('nachtlauf-kennzahl-Eingabe')).toHaveTextContent('1.000 Token')
-    expect(screen.getByTestId('nachtlauf-kennzahl-Ausgabe')).toHaveTextContent('100 Token')
-    expect(screen.getByTestId('nachtlauf-kennzahl-Zwischenspeicher')).toHaveTextContent('250 Token')
-    expect(
-      lesbar(screen.getByTestId('nachtlauf-kennzahl-Anteil aus dem Zwischenspeicher')),
-    ).toContain('25,0 %')
+    expect(wertVon(kachel('Eingabe-Token'))).toBe('1')
+    expect(einheitVon(kachel('Eingabe-Token'))).toBe('Tsd')
+    expect(wertVon(kachel('Ausgabe-Token'))).toBe('100')
+    expect(einheitVon(kachel('Ausgabe-Token'))).toBe('Token')
+    expect(wertVon(kachel('Zwischenspeicher'))).toBe('250')
+    expect(lesbar(kachel('Zwischenspeicher'))).toContain('25,0 % aus dem Zwischenspeicher')
   })
 
   /** „Nicht gemessen" bleibt „nicht gemessen" — auch wenn die Gesamtsumme einen Wert trägt. */
@@ -246,11 +303,38 @@ describe('NachtlaufVerbrauchNacht — Nachtlauf-Anteil', () => {
       }),
     )
 
-    for (const label of ['Gesamtsumme', 'Eingabe', 'Ausgabe', 'Zwischenspeicher']) {
-      const kennzahl = screen.getByTestId(`nachtlauf-kennzahl-${label}`)
-      expect(kennzahl).toHaveTextContent('nicht gemessen')
-      expect(kennzahl.textContent).not.toMatch(/\d/)
+    for (const etikett of ['Gesamtsumme', 'Eingabe-Token', 'Ausgabe-Token', 'Zwischenspeicher']) {
+      expect(kachel(etikett)).toHaveTextContent('nicht gemessen')
+      expect(wertVon(kachel(etikett))).not.toMatch(/\d/)
     }
     expect(lesbar(screen.getByTestId('verbrauch-nacht'))).not.toContain('8,00 $')
+  })
+
+  /** Die Aufstellung je Stufe der Kette hängt in der Nacht (Issue #1117, #993 AK 8). */
+  it('zeigt die Aufstellung je Stufe aus der Antwort der Nacht', () => {
+    zeige(nacht({ stages: [stufe('PLAN', 5, 2), stufe('ABDECKUNG', 2)] }))
+
+    const platte = screen.getByTestId('verbrauch-stufen')
+    const zeilen = within(platte).getAllByRole('listitem')
+    expect(zeilen.map((z) => lesbar(z))).toEqual([
+      expect.stringContaining('Plan'),
+      expect.stringContaining('Abdeckung'),
+    ])
+    // `Intl` setzt vor dem Währungszeichen ein geschütztes Leerzeichen; welches, hängt an der
+    // ICU-Fassung — geprüft wird deshalb mit `\s` statt mit einem festen Zeichen im Literal.
+    expect(lesbar(zeilen[0])).toMatch(/5,00\s\$/)
+    expect(lesbar(zeilen[0])).toContain('2 Vorgänge')
+  })
+
+  it('zeigt die Aufstellung nicht, wenn die Nacht keine Stufen fuehrt', () => {
+    zeige(nacht({}))
+
+    expect(screen.queryByTestId('verbrauch-stufen')).not.toBeInTheDocument()
+  })
+
+  it('zeigt die Aufstellung nicht in einer Nacht ohne Lauf', () => {
+    zeige(nacht({ runCount: 0, stages: [stufe('PLAN', 5)] }))
+
+    expect(screen.queryByTestId('verbrauch-stufen')).not.toBeInTheDocument()
   })
 })

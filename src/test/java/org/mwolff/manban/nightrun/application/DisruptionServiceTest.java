@@ -52,6 +52,10 @@ import org.mwolff.manban.nightrun.domain.NightRunState;
  * #nachtLaeufe} bildet deshalb nicht eine feste Antwort ab, sondern die Zugehörigkeitsregel — nur
  * so fällt auf, wenn der Dienst die falsche Spanne bildet.
  */
+// PMD.TooManyMethods: Testklasse — jede Methode ist ein Fall, und Faelle werden nicht
+// zusammengelegt, um eine Zahl zu druecken. Issue #1123 bringt die beiden Faelle der Laufart dazu
+// und reisst damit die Schwelle von 30.
+@SuppressWarnings("PMD.TooManyMethods")
 class DisruptionServiceTest {
 
   /** 08:00 UTC — vor der Tagesgrenze, die laufende Nacht ist damit die vom 19. auf den 20. */
@@ -68,32 +72,43 @@ class DisruptionServiceTest {
   private DisruptionService service;
 
   private static DisruptionCandidate kandidat(long laufId, Instant startedAt) {
-    return new DisruptionCandidate(laufId, 9L, "Projekt", startedAt, null, true, null);
+    return kandidat(laufId, startedAt, NightRunMode.IMPLEMENTATION);
+  }
+
+  private static DisruptionCandidate kandidat(long laufId, Instant startedAt, NightRunMode mode) {
+    return new DisruptionCandidate(laufId, 9L, "Projekt", mode, startedAt, null, true, null);
   }
 
   /** Ein Lauf, der sich noch nicht als abgeschlossen gemeldet hat. */
   private static DisruptionCandidate unfertig(
       long laufId, Instant startedAt, @Nullable Instant updatedAt) {
-    return new DisruptionCandidate(laufId, 9L, "Projekt", startedAt, updatedAt, false, null);
+    return new DisruptionCandidate(
+        laufId, 9L, "Projekt", NightRunMode.IMPLEMENTATION, startedAt, updatedAt, false, null);
   }
 
   private static NightRunItem paket(
       long laufId, NightRunState state, @Nullable NightRunErrorClass errorClass) {
+    return paket(laufId, 721, state, errorClass);
+  }
+
+  private static NightRunItem paket(
+      long laufId, int cardNumber, NightRunState state, @Nullable NightRunErrorClass errorClass) {
     return new NightRunItem(
-        laufId * 100,
+        laufId * 100 + cardNumber,
         laufId,
         9L,
         JETZT,
         NightRunMode.IMPLEMENTATION,
         NightRunKind.NIGHT,
-        721,
+        cardNumber,
         "Paket",
         state,
         errorClass,
         1L,
         null,
         null,
-        null);
+        null,
+        List.of());
   }
 
   private static List<Long> ids(List<DisruptionView> zeilen) {
@@ -101,8 +116,9 @@ class DisruptionServiceTest {
   }
 
   /**
-   * Stellt die Läufe bereit, aus denen die Abfrage der Nacht schöpft — gefiltert nach <b>ihrem</b>
-   * Maßstab: Startzeitpunkt ab {@code from} einschließlich bis {@code to} ausschließlich.
+   * Stellt die Läufe bereit, aus denen die Abfrage der Nacht schöpft — gefiltert nach <b>ihren
+   * beiden</b> Zweigen (Issue #1109): Start in der Nacht ({@code from} einschließlich, {@code to}
+   * ausschließlich) <em>oder</em> unfertig mit einem Lebenszeichen innerhalb der Stillefrist.
    */
   private void nachtLaeufe(DisruptionCandidate... kandidaten) {
     // doAnswer statt when(...).thenAnswer: Ein zweiter Aufruf in demselben Test soll die Antwort
@@ -111,12 +127,24 @@ class DisruptionServiceTest {
             aufruf -> {
               Instant from = aufruf.getArgument(0);
               Instant to = aufruf.getArgument(1);
+              Instant lebenszeichenAb =
+                  aufruf.<Instant>getArgument(2).minus(aufruf.<Duration>getArgument(3));
               return Stream.of(kandidaten)
-                  .filter(k -> !k.startedAt().isBefore(from) && k.startedAt().isBefore(to))
+                  .filter(k -> inDerNacht(k, from, to) || nochAmLeben(k, lebenszeichenAb))
                   .toList();
             })
         .when(disruptions)
-        .candidatesOfNight(any(), any());
+        .candidatesOfNight(any(), any(), any(), any());
+  }
+
+  private static boolean inDerNacht(DisruptionCandidate k, Instant from, Instant to) {
+    return !k.startedAt().isBefore(from) && k.startedAt().isBefore(to);
+  }
+
+  /** Der zweite Zweig der Abfrage; ohne letzte Meldung zählt der Start als Lebenszeichen. */
+  private static boolean nochAmLeben(DisruptionCandidate k, Instant lebenszeichenAb) {
+    Instant lebenszeichen = k.updatedAt() == null ? k.startedAt() : k.updatedAt();
+    return !k.complete() && !lebenszeichen.isBefore(lebenszeichenAb);
   }
 
   private void pakete(NightRunItem... items) {
@@ -234,12 +262,12 @@ class DisruptionServiceTest {
   }
 
   /**
-   * Kriterium 9, Grenzfall: Über die Zugehörigkeit entscheidet der <b>Startzeitpunkt</b>. Ein Lauf
-   * von 11:50 bis 12:10 gehört zur Nacht davor und ist nach 12:00 aus beiden Bereichen fort — nicht
-   * etwa, weil er noch liefe, sondern weil die neue Nacht ihn nicht kennt.
+   * Kriterium 9, Grenzfall: Über die Zugehörigkeit zu den <b>beendeten</b> Läufen entscheidet der
+   * Startzeitpunkt. Ein <em>abgeschlossener</em> Lauf von 11:50 gehört zur Nacht davor und ist nach
+   * 12:00 aus beiden Bereichen fort, weil die neue Nacht ihn nicht kennt.
    */
   @Test
-  void einLaufVonVorZwoelfGehoertNachZwoelfInKeineDerNeuenListen() {
+  void einBeendeterLaufVonVorZwoelfGehoertNachZwoelfInKeineDerNeuenListen() {
     DisruptionService nachZwoelf = mitUhr(Instant.parse("2026-09-20T12:10:00Z"));
     nachtLaeufe(kandidat(5L, Instant.parse("2026-09-20T11:50:00Z")));
 
@@ -247,6 +275,89 @@ class DisruptionServiceTest {
 
     assertThat(leitstand.laufende()).isEmpty();
     assertThat(leitstand.durchgefuehrte()).isEmpty();
+  }
+
+  // --- Die Nachtgrenze gilt nur den beendeten Läufen (Issue #1109) ----------------------------
+
+  /**
+   * Kriterium 1 und AK 1 aus #1086: Ein Lauf, der um 10:30 begann und um 13:00 noch arbeitet, steht
+   * unter den <b>laufenden</b> — obwohl sein Start vor der Nachtgrenze liegt. Für den Bereich der
+   * laufenden Läufe kennt #1086 keine Nachtgrenze; sie zieht AK 9 nur für die beendeten.
+   */
+  @Test
+  void einLaufVonVorZwoelfDerNochArbeitetStehtUnterDenLaufenden() {
+    DisruptionService nachZwoelf = mitUhr(Instant.parse("2026-09-20T13:00:00Z"));
+    nachtLaeufe(
+        unfertig(5L, Instant.parse("2026-09-20T10:30:00Z"), Instant.parse("2026-09-20T12:50:00Z")));
+
+    LeitstandView leitstand = nachZwoelf.leitstand(ADMIN, UTC);
+
+    assertThat(ids(leitstand.laufende())).containsExactly(5L);
+    assertThat(leitstand.durchgefuehrte()).isEmpty();
+  }
+
+  /**
+   * Kriterium 2 und AK 9 aus #1086: Derselbe Lauf, um 13:30 abgeschlossen und um 14:00 abgefragt,
+   * verlässt beide Lauf-Bereiche — er gehört zur alten Nacht. Als Störung bleibt er sichtbar, denn
+   * die Störungsliste geht über alle Nächte.
+   */
+  @Test
+  void derAbgeschlosseneLaufDerAltenNachtVerlaesstBeideBereiche_bleibtAberStoerung() {
+    DisruptionService nachZwoelf = mitUhr(Instant.parse("2026-09-20T14:00:00Z"));
+    DisruptionCandidate beendet = kandidat(5L, Instant.parse("2026-09-20T10:30:00Z"));
+    nachtLaeufe(beendet);
+    when(disruptions.openCandidates()).thenReturn(List.of(beendet));
+    pakete(paket(5L, NightRunState.RED, NightRunErrorClass.HARD_ABORT));
+
+    LeitstandView leitstand = nachZwoelf.leitstand(ADMIN, UTC);
+
+    assertThat(leitstand.laufende()).isEmpty();
+    assertThat(leitstand.durchgefuehrte()).isEmpty();
+    assertThat(ids(leitstand.stoerungen())).containsExactly(5L);
+  }
+
+  /**
+   * Kriterium 3: Der Dienst zieht die Nachtgrenze für die beendeten Läufe <b>ausdrücklich</b> und
+   * leitet sie nicht aus der Abfrage ab.
+   *
+   * <p>Der zweite Zweig der Abfrage liefert auch Läufe früherer Nächte; zwischen Abfrage und
+   * Auswertung kann die Stillefrist einen davon verstummen lassen — die Abfrage bekommt ihren
+   * Bezugszeitpunkt, der Befund liest die Uhr erneut. Ohne die Grenze stünde so ein Lauf der alten
+   * Nacht unter den beendeten Läufen der neuen. Der Kandidat kommt deshalb direkt aus dem Mock,
+   * nicht über {@link #nachtLaeufe}: Genau diesen Rand bildet dessen Filter nicht ab.
+   */
+  @Test
+  void einVerstummterLaufEinerFruehrenNachtStehtInKeinemBereich() {
+    DisruptionService nachZwoelf = mitUhr(Instant.parse("2026-09-20T14:00:00Z"));
+    when(disruptions.candidatesOfNight(any(), any(), any(), any()))
+        .thenReturn(
+            List.of(
+                unfertig(
+                    5L,
+                    Instant.parse("2026-09-20T10:30:00Z"),
+                    Instant.parse("2026-09-20T11:00:00Z"))));
+
+    LeitstandView leitstand = nachZwoelf.leitstand(ADMIN, UTC);
+
+    assertThat(leitstand.laufende()).isEmpty();
+    assertThat(leitstand.durchgefuehrte()).isEmpty();
+  }
+
+  /**
+   * Die Abfrage bekommt denselben Maßstab, mit dem der Befund später rechnet — Uhr und Stillefrist
+   * des Dienstes. Eine eigene Regel in SQL zeigte einen Lauf, den die Auswertung des Projekts
+   * anders sieht (#1086 AK 8).
+   */
+  @Test
+  void dieAbfrageBekommtDieNachtgrenzenUndDenselbenMassstabWieDerBefund() {
+    service.leitstand(ADMIN, UTC);
+
+    verify(disruptions)
+        .candidatesOfNight(
+            Instant.parse("2026-09-19T12:00:00Z"),
+            Instant.parse("2026-09-20T12:00:00Z"),
+            JETZT,
+            Duration.ofMinutes(90));
   }
 
   /**
@@ -296,7 +407,7 @@ class DisruptionServiceTest {
     LeitstandView leitstand = service.leitstand(ADMIN, UTC);
 
     assertThat(ids(leitstand.durchgefuehrte())).containsExactly(5L);
-    verify(disruptions).candidatesOfNight(any(), any());
+    verify(disruptions).candidatesOfNight(any(), any(), any(), any());
     verify(disruptions).openCandidates();
     verifyNoMoreInteractions(disruptions);
   }
@@ -325,25 +436,102 @@ class DisruptionServiceTest {
         .isEqualTo(NightRunOutcome.Verdict.WAITING);
   }
 
-  /** Ein Lauf ohne Arbeit hat kein Paket — der Grund ist der Text, und er reicht. */
+  /**
+   * Ein Lauf ohne Arbeit hat kein Paket — der Grund ist der Text, und er reicht. Seit Issue #1121
+   * ist das nur noch beim <b>Rückfall</b> des Servers eine Störung: Er kann einen alten Runner, den
+   * Upload-Weg oder einen Lauf meinen, der alle Pakete zurückstellte.
+   */
   @Test
-  void einLaufOhneArbeitIstEineStoerungAuchOhnePaket() {
+  void einLaufOhneArbeitMitUnbekanntemGrundIstEineStoerungAuchOhnePaket() {
     when(disruptions.openCandidates())
         .thenReturn(
             List.of(
-                new DisruptionCandidate(5L, 9L, "Projekt", JETZT, null, true, "Ready war leer")));
+                new DisruptionCandidate(
+                    5L,
+                    9L,
+                    "Projekt",
+                    NightRunMode.IMPLEMENTATION,
+                    JETZT,
+                    null,
+                    true,
+                    NightRunOutcome.GRUND_UNBEKANNT)));
 
     assertThat(service.leitstand(ADMIN, UTC).stoerungen())
         .singleElement()
         .extracting(v -> v.outcome().noWorkReason())
-        .isEqualTo("Ready war leer");
+        .isEqualTo(NightRunOutcome.GRUND_UNBEKANNT);
+  }
+
+  /**
+   * Issue #1121: Ein Lauf, der nichts zu tun fand, steht unter den <b>durchgeführten</b> — und
+   * nicht unter den Störungen. Die Störungsabfrage liefert ihn weiterhin (sie kennt den Ausgang
+   * nicht); den Unterschied macht allein {@code isDisruption()} des Befunds.
+   */
+  @Test
+  void einLaufOhneArbeitMitGemeldetemGrundIstKeineStoerung() {
+    DisruptionCandidate ruhig =
+        new DisruptionCandidate(
+            5L,
+            9L,
+            "Projekt",
+            NightRunMode.IMPLEMENTATION,
+            JETZT,
+            null,
+            true,
+            "Ready ist leer — nichts zu tun.");
+    nachtLaeufe(ruhig);
+    when(disruptions.openCandidates()).thenReturn(List.of(ruhig));
+
+    LeitstandView leitstand = service.leitstand(ADMIN, UTC);
+
+    assertThat(leitstand.stoerungen()).isEmpty();
+    assertThat(leitstand.durchgefuehrte())
+        .singleElement()
+        .extracting(v -> v.outcome().verdict())
+        .isEqualTo(NightRunOutcome.Verdict.NO_WORK);
+  }
+
+  /**
+   * Issue #1123: Bei einer abgebrochenen Kette zeigt die Störzeile das Paket, an dem sie riss — die
+   * Ketten-Einheit steht zuerst und hat ihren Abbruch nur geerbt. Der Dienst muss die Laufart dafür
+   * vom Kandidaten bis in den Befund durchreichen; ließe er sie weg, stünde hier wieder „Karte
+   * #993".
+   */
+  @Test
+  void dieStoerzeileEinerKetteZeigtDasPaketAnDemSieRiss() {
+    when(disruptions.openCandidates()).thenReturn(List.of(kandidat(5L, JETZT, NightRunMode.CHAIN)));
+    pakete(
+        paket(5L, 993, NightRunState.RED, NightRunErrorClass.HARD_ABORT),
+        paket(5L, 1112, NightRunState.RED, NightRunErrorClass.HARD_ABORT));
+
+    assertThat(service.leitstand(ADMIN, UTC).stoerungen())
+        .singleElement()
+        .extracting(v -> v.outcome().decisiveItem().cardNumber())
+        .isEqualTo(1112);
+  }
+
+  /** Derselbe Fall außerhalb einer Kette bleibt beim ersten Paket in Laufreihenfolge. */
+  @Test
+  void dieStoerzeileEinesImplementierungslaufsBleibtBeimErstenPaket() {
+    when(disruptions.openCandidates())
+        .thenReturn(List.of(kandidat(5L, JETZT, NightRunMode.IMPLEMENTATION)));
+    pakete(
+        paket(5L, 993, NightRunState.RED, NightRunErrorClass.HARD_ABORT),
+        paket(5L, 1112, NightRunState.RED, NightRunErrorClass.HARD_ABORT));
+
+    assertThat(service.leitstand(ADMIN, UTC).stoerungen())
+        .singleElement()
+        .extracting(v -> v.outcome().decisiveItem().cardNumber())
+        .isEqualTo(993);
   }
 
   @Test
   void dieStoerzeileTraegtProjektUndZeitpunkt() {
     when(disruptions.openCandidates())
         .thenReturn(
-            List.of(new DisruptionCandidate(5L, 9L, "Mein Projekt", JETZT, null, true, null)));
+            List.of(
+                new DisruptionCandidate(
+                    5L, 9L, "Mein Projekt", NightRunMode.IMPLEMENTATION, JETZT, null, true, null)));
     pakete(paket(5L, NightRunState.RED, NightRunErrorClass.CHECKS_RED));
 
     assertThat(service.leitstand(ADMIN, UTC).stoerungen())

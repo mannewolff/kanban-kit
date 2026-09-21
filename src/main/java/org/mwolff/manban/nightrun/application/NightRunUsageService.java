@@ -22,10 +22,12 @@ import org.mwolff.manban.nightrun.application.NightRunUsageRepository.LifetimeTo
 import org.mwolff.manban.nightrun.application.NightRunUsageRepository.NightTotals;
 import org.mwolff.manban.nightrun.application.NightRunUsageRepository.PeriodTotals;
 import org.mwolff.manban.nightrun.application.NightRunUsageRepository.RetainedByKind;
+import org.mwolff.manban.nightrun.application.NightRunUsageRepository.StageTotals;
 import org.mwolff.manban.nightrun.application.NightRunUsageRepository.TotalsByKind;
 import org.mwolff.manban.nightrun.domain.NightRunErrorClass;
 import org.mwolff.manban.nightrun.domain.NightRunPeriod;
 import org.mwolff.manban.nightrun.domain.NightRunPeriodType;
+import org.mwolff.manban.nightrun.domain.NightRunStage;
 import org.mwolff.manban.nightrun.domain.NightRunUsage;
 import org.mwolff.manban.project.application.InteractiveUsageSinceReader;
 import org.mwolff.manban.project.application.PermissionChecker;
@@ -106,7 +108,8 @@ public class NightRunUsageService {
         teilen(summe.runUsage(), summe.itemUsage()),
         jeGattung(summe.byKind()),
         tagesgruppen.stream().anyMatch(NightRunUsageService::abgebrochen),
-        usage.totalsPerCard(projectId, spanne.from(), spanne.to()));
+        usage.totalsPerCard(projectId, spanne.from(), spanne.to()),
+        stufen(usage.totalsPerStage(projectId, spanne.from(), spanne.to())));
   }
 
   /**
@@ -144,7 +147,8 @@ public class NightRunUsageService {
         naechte,
         vorhaben(karten, zuordnung),
         ohneVorhaben(karten, zuordnung),
-        zuordnung.values().stream().anyMatch(vorhaben -> vorhaben.size() > 1));
+        zuordnung.values().stream().anyMatch(vorhaben -> vorhaben.size() > 1),
+        stufen(usage.totalsPerStage(projectId, zeitraum.from(), zeitraum.to())));
   }
 
   /**
@@ -224,6 +228,17 @@ public class NightRunUsageService {
         teilen(summe.interactive().runUsage(), summe.interactive().itemUsage()));
   }
 
+  /**
+   * Die Aufstellung je Stufe (Issue #1114): der Port-Satz unter dem Namen der Sicht, Feld für Feld
+   * unverändert. Gerechnet wird hier nichts — die Summen entstehen in SQL, und die Reihenfolge der
+   * Kette bringt der Port schon mit.
+   */
+  private static List<StageUsageView> stufen(List<StageTotals> jeStufe) {
+    return jeStufe.stream()
+        .map(s -> new StageUsageView(s.stage(), s.itemCount(), s.durationMs(), s.usage()))
+        .toList();
+  }
+
   /** Die Rechnung aus Plan E6: Der Rest ist die Differenz, nie aus den Paketen gerechnet. */
   private static UsageSplit teilen(NightRunUsage lauf, NightRunUsage pakete) {
     return new UsageSplit(lauf, pakete, lauf.minus(pakete));
@@ -263,7 +278,8 @@ public class NightRunUsageService {
    */
   private static EpicUsageView ohneVorhaben(
       Collection<CardTotals> karten, Map<Integer, Set<EpicRef>> zuordnung) {
-    EpicUsageView ohne = new EpicUsageView(null, 0L, new NightRunUsage(null, null, null, null));
+    EpicUsageView ohne =
+        new EpicUsageView(null, 0L, new NightRunUsage(null, null, null, null, null, null));
     for (CardTotals karte : karten) {
       if (zuordnung.getOrDefault(karte.cardNumber(), Set.of()).isEmpty()) {
         ohne = zusammen(ohne, new EpicUsageView(null, 1L, karte.usage()));
@@ -306,7 +322,25 @@ public class NightRunUsageService {
    */
   public record KindSplit(UsageSplit night, UsageSplit interactive) {}
 
-  /** Eine Nacht mit ihren Kartenzeilen (#926 AK 1–4). */
+  /**
+   * Eine Stufe der Kette in der Aufstellung (Issue #1114, #993 AK 8) — der Port-Satz unter dem
+   * Namen, unter dem die Web-Schicht ihn sieht.
+   *
+   * @param stage die Stufe
+   * @param itemCount Zahl der Vorgänge, die diese Stufe durchlaufen haben
+   * @param durationMs Summe der Wanduhr-Dauern; {@code null}, wenn kein Vorgang eine trägt
+   * @param usage Summe der Verbräuche; fehlende Werte bleiben {@code null} und werden nie 0 (Plan
+   *     E16)
+   */
+  public record StageUsageView(
+      NightRunStage stage, long itemCount, @Nullable Long durationMs, NightRunUsage usage) {}
+
+  /**
+   * Eine Nacht mit ihren Kartenzeilen (#926 AK 1–4).
+   *
+   * @param stages die Kosten je Stufe der Kette (#993 AK 8); leer, wenn in dieser Nacht keine Kette
+   *     lief
+   */
   public record NightUsageView(
       LocalDate night,
       long runCount,
@@ -315,7 +349,8 @@ public class NightRunUsageService {
       UsageSplit usage,
       KindSplit usageByKind,
       boolean aborted,
-      List<CardTotals> cards) {}
+      List<CardTotals> cards,
+      List<StageUsageView> stages) {}
 
   /**
    * Die Kennzahlen eines Zeitraums.
@@ -402,6 +437,9 @@ public class NightRunUsageService {
    *
    * @param epicsOverlap {@code true}, wenn eine Karte zu mehreren Vorhaben gehört — dann ergeben
    *     die Vorhaben-Summen zusammen mehr als den kartenbezogenen Anteil (Plan E11)
+   * @param stages die Kosten je Stufe der Kette (#993 AK 8); leer, wenn im Zeitraum keine Kette
+   *     lief. Sie beziehen sich auf {@code current} — der Vorzeitraum trägt seine eigenen Summen,
+   *     aber keine eigene Stufen-Aufstellung.
    */
   public record PeriodUsageView(
       PeriodFigures current,
@@ -409,5 +447,6 @@ public class NightRunUsageService {
       List<NightSummary> nights,
       List<EpicUsageView> epics,
       EpicUsageView withoutEpic,
-      boolean epicsOverlap) {}
+      boolean epicsOverlap,
+      List<StageUsageView> stages) {}
 }

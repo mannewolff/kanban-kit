@@ -564,6 +564,63 @@ describe('CardNumberSearch', () => {
     expect(screen.queryByTestId('card-detail')).not.toBeInTheDocument()
   })
 
+  // Nummern sind nur je Projekt eindeutig; wer in einem Projekt arbeitet, meint dessen Karte
+  // (#1124). Die Treffer liegen hier stets in Projekt 5 („Projekt A") und Projekt 6 („Projekt B").
+  describe('mehrere Treffer mit Projekt-Bezug', () => {
+    const treffer = () => [
+      hit(),
+      hit({
+        card: card({ id: 9, title: 'Zweite Karte' }),
+        projectId: 6,
+        projectName: 'Projekt B',
+      }),
+    ]
+
+    it('öffnet den Treffer des aktuellen Projekts direkt, ohne Auswahl', async () => {
+      mockedCards.searchByNumber.mockResolvedValue(treffer())
+      render(<CardNumberSearch aktuellesProjekt={5} />)
+
+      search('345')
+
+      expect(await screen.findByTestId('detail-title')).toHaveTextContent('Fehlerbild klären')
+      expect(screen.getByTestId('detail-project')).toHaveTextContent('5')
+      expect(screen.queryByRole('menuitem')).not.toBeInTheDocument()
+    })
+
+    it('zeigt die Auswahl, wenn kein Treffer im aktuellen Projekt liegt', async () => {
+      mockedCards.searchByNumber.mockResolvedValue(treffer())
+      render(<CardNumberSearch aktuellesProjekt={7} />)
+
+      search('345')
+
+      expect(await screen.findAllByRole('menuitem')).toHaveLength(2)
+      expect(screen.queryByTestId('card-detail')).not.toBeInTheDocument()
+    })
+
+    it('zeigt die Auswahl ohne Projekt-Bezug', async () => {
+      mockedCards.searchByNumber.mockResolvedValue(treffer())
+      render(<CardNumberSearch aktuellesProjekt={null} />)
+
+      search('345')
+
+      expect(await screen.findAllByRole('menuitem')).toHaveLength(2)
+      expect(screen.queryByTestId('card-detail')).not.toBeInTheDocument()
+    })
+
+    it('öffnet einen einzelnen Treffer eines anderen Projekts unverändert direkt', async () => {
+      mockedCards.searchByNumber.mockResolvedValue([
+        hit({ card: card({ id: 9, title: 'Zweite Karte' }), projectId: 6, projectName: 'Projekt B' }),
+      ])
+      render(<CardNumberSearch aktuellesProjekt={5} />)
+
+      search('345')
+
+      expect(await screen.findByTestId('detail-title')).toHaveTextContent('Zweite Karte')
+      expect(screen.getByTestId('detail-project')).toHaveTextContent('6')
+      expect(screen.queryByRole('menuitem')).not.toBeInTheDocument()
+    })
+  })
+
   it('meldet einen Fehlschlag der Suche, ohne ein Modal zu öffnen', async () => {
     mockedCards.searchByNumber.mockRejectedValue(new Error('offline'))
     render(<CardNumberSearch />)

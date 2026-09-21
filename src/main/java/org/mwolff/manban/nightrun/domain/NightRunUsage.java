@@ -21,12 +21,17 @@ import org.jspecify.annotations.Nullable;
  * @param inputTokens verarbeitete Eingabemenge
  * @param outputTokens erzeugte Ausgabemenge
  * @param cachedInputTokens der Anteil der Eingabe, der aus dem Zwischenspeicher kam
+ * @param modelDurationMs die Zeit, die das Modell gerechnet hat (Issue #1112, Plan #1110 E1) — im
+ *     Unterschied zur Wanduhr-Dauer des Laufs, die Werkzeugaufrufe und Wartezeiten einschließt
+ * @param turns Zahl der Züge der Sitzung (Issue #1112, Plan #1110 E1)
  */
 public record NightRunUsage(
     @Nullable BigDecimal costUsd,
     @Nullable Long inputTokens,
     @Nullable Long outputTokens,
-    @Nullable Long cachedInputTokens) {
+    @Nullable Long cachedInputTokens,
+    @Nullable Long modelDurationMs,
+    @Nullable Integer turns) {
 
   private static final BigDecimal HUNDERT = BigDecimal.valueOf(100);
 
@@ -39,7 +44,9 @@ public record NightRunUsage(
         summe(costUsd, other.costUsd),
         summe(inputTokens, other.inputTokens),
         summe(outputTokens, other.outputTokens),
-        summe(cachedInputTokens, other.cachedInputTokens));
+        summe(cachedInputTokens, other.cachedInputTokens),
+        summe(modelDurationMs, other.modelDurationMs),
+        summe(turns, other.turns));
   }
 
   /**
@@ -53,7 +60,9 @@ public record NightRunUsage(
         costUsd == null || other.costUsd == null ? null : costUsd.subtract(other.costUsd),
         differenz(inputTokens, other.inputTokens),
         differenz(outputTokens, other.outputTokens),
-        differenz(cachedInputTokens, other.cachedInputTokens));
+        differenz(cachedInputTokens, other.cachedInputTokens),
+        differenz(modelDurationMs, other.modelDurationMs),
+        differenz(turns, other.turns));
   }
 
   /**
@@ -84,7 +93,23 @@ public record NightRunUsage(
     return b == null ? a : a + b;
   }
 
+  /**
+   * Dieselbe Regel für die Züge (Issue #1112). Ein eigenes Paar statt der {@link Long}-Fassung:
+   * {@code turns} zählt eine Handvoll Züge und steht als {@code integer} in der Datenbank — den Typ
+   * hier zu weiten hieße, die Spalte an der Grenze wieder zu verengen.
+   */
+  private static @Nullable Integer summe(@Nullable Integer a, @Nullable Integer b) {
+    if (a == null) {
+      return b;
+    }
+    return b == null ? a : a + b;
+  }
+
   private static @Nullable Long differenz(@Nullable Long a, @Nullable Long b) {
+    return a == null || b == null ? null : a - b;
+  }
+
+  private static @Nullable Integer differenz(@Nullable Integer a, @Nullable Integer b) {
     return a == null || b == null ? null : a - b;
   }
 }

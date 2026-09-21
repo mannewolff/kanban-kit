@@ -198,6 +198,12 @@ export interface NavKontextParams {
 export interface NavKontext {
   /** Board, das die Schiene zeigt; auf einer fremden Projektseite {@code null}. */
   kontextBoard: BoardContext | null
+  /**
+   * Projekt, in dem der Nutzer gerade arbeitet: das des Board-Kontexts, sonst das der Adresse;
+   * {@code null} = keines. Dasselbe Projekt, auf das sich Pfad und Rechte beziehen — es steht
+   * unabhängig von der Projektliste fest, die nur seinen Namen beisteuert.
+   */
+  pfadProjektId: number | null
   /** Anzahl sichtbarer Projekte; {@code null} = noch unbekannt. */
   projectCount: number | null
   /** Ob man im Projekt des Boards Boards anlegen/löschen darf. */
@@ -248,7 +254,8 @@ export function navKontext(params: NavKontextParams): NavKontext {
 
   const kontextBoard = routeProjectId !== null && board?.projectId !== routeProjectId ? null : board
   const currentProject = kontextBoard ? projects?.find((p) => p.id === kontextBoard.projectId) : undefined
-  const pfadProjekt = projects?.find((p) => p.id === (kontextBoard?.projectId ?? routeProjectId))
+  const pfadProjektId = kontextBoard?.projectId ?? routeProjectId
+  const pfadProjekt = projects?.find((p) => p.id === pfadProjektId)
   // Ohne bekanntes Projekt gilt die schwächste Rolle. Mutationstest: `'VIEWER'` → `''` überlebt hier
   // und in `canManageCurrentBoards` als äquivalenter Mutant — die Rollenhelfer vergleichen gegen
   // `'OWNER'`/`'ADMIN'`, jede andere Zeichenkette wirkt gleich.
@@ -267,6 +274,7 @@ export function navKontext(params: NavKontextParams): NavKontext {
 
   return {
     kontextBoard,
+    pfadProjektId,
     projectCount: projects?.length ?? null,
     canManageCurrentBoards: canManageBoards(currentProject?.role ?? 'VIEWER', admin),
     canViewNightRun: darfNachtlaufSehen(pfadRolle, admin, pfadProjekt?.dashboardParticipation),

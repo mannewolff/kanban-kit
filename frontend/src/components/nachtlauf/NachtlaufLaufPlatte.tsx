@@ -47,8 +47,14 @@ import { Led } from '../leitstand/LeitstandBausteine'
 export function NachtlaufLaufPlatte({
   /** Der Titel des Laufs, etwa „Nacht vom 14. September" — auch der Name der Platte. */
   titel,
-  /** Die Lauf-Art im Etikett, etwa „Kette" — davor steht „Lauf · ". */
+  /** Die Lauf-Art im Etikett, etwa „Kette" — davor steht „Lauf · " bzw. „Lauf #<laufId> · ". */
   art,
+  /**
+   * Die Nummer des Laufs im Etikett (#1107) — dieselbe, auf die der Verweis „Lauf #86" im
+   * Plattform-Leitstand zeigt. `undefined` an einem eben im Browser eingelesenen Lauf: Der war bei
+   * keinem Server und hat keine; dann bleibt die Vorzeile „Lauf · <art>".
+   */
+  laufId,
   /** Beginn, Dauer, bearbeitete und übergangene Vorgänge und was der Lauf sonst zu sagen hat. */
   meta,
   melder,
@@ -66,6 +72,7 @@ export function NachtlaufLaufPlatte({
 }: Readonly<{
   titel: string
   art: string
+  laufId?: number
   meta: string
   melder: Melder
   pulsiert?: boolean
@@ -175,7 +182,7 @@ export function NachtlaufLaufPlatte({
 
         <Box sx={{ minWidth: 0 }}>
           <Box data-testid="nachtlauf-vorzeile" sx={{ ...ETIKETT, mb: '1px' }}>
-            {`Lauf · ${art}`}
+            {laufId === undefined ? `Lauf · ${art}` : `Lauf #${laufId} · ${art}`}
           </Box>
           <Box
             component="h3"

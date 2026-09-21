@@ -71,6 +71,7 @@ class BefundNahtstelleTest {
                     false,
                     LETZTE_MELDUNG,
                     null,
+                    null,
                     null)));
     when(runs.findItemsByRunIds(any())).thenReturn(List.of());
     NightRunService service =
@@ -89,11 +90,18 @@ class BefundNahtstelleTest {
   /** Derselbe Lauf, wie der Plattform-Leitstand ihn liest. */
   private NightRunOutcome befundDesLeitstands() {
     DisruptionRepository disruptions = mock(DisruptionRepository.class);
-    when(disruptions.candidatesOfNight(any(), any()))
+    when(disruptions.candidatesOfNight(any(), any(), any(), any()))
         .thenReturn(
             List.of(
                 new DisruptionCandidate(
-                    LAUF, PROJEKT, "Projekt", GESTARTET, LETZTE_MELDUNG, false, null)));
+                    LAUF,
+                    PROJEKT,
+                    "Projekt",
+                    NightRunMode.IMPLEMENTATION,
+                    GESTARTET,
+                    LETZTE_MELDUNG,
+                    false,
+                    null)));
     PlatformAdminChecker admins = mock(PlatformAdminChecker.class);
     when(admins.isPlatformAdmin(ADMIN)).thenReturn(true);
     DisruptionService service = new DisruptionService(disruptions, runs, admins, properties, uhr);

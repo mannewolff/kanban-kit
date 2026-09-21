@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import type { NightRunItemView, NightRunServerMode, NightRunView } from '../api/nightRuns'
+import type { NightRunItemView, NightRunServerMode, NightRunView, Verdict } from '../api/nightRuns'
 import type { NightRunErrorClass, NightRunState } from './nightRunLog'
-import { serverBefund } from '../test/befund'
+import { GRUND_UNBEKANNT, serverBefund } from '../test/befund'
+import { NIGHT_RUN_VERDICT_TEXT } from './nightRunHandoff'
 import {
   abbruchgruende,
   balkenHoehen,
@@ -44,6 +45,7 @@ const paket = (nummer: number, state: NightRunItemView['state'], extra: Partial<
   commitHash: null,
   excerpt: null,
   usage: null,
+  stages: [],
   ...extra,
 })
 
@@ -64,6 +66,7 @@ const lauf = (extra: Partial<NightRunView> = {}): NightRunView => {
   updatedAt: null,
   usage: null,
   noWorkReason: null,
+  budget: null,
   items: [],
     outcome: { verdict: 'SUCCEEDED', decisiveItem: null, noWorkReason: null },
     ...extra,
@@ -95,7 +98,7 @@ describe('leitstand Laufband (#979)', () => {
   })
 
   it('nennt einen abgeschlossenen Lauf mit Zahl der Vorgänge, Dauer in Minuten und Kosten', () => {
-    const band = laufband(lauf({ mode: 'REVIEW', items: [paket(1, 'GREEN')], usage: { costUsd: 12.4, inputTokens: null, outputTokens: null, cachedInputTokens: null } }))
+    const band = laufband(lauf({ mode: 'REVIEW', items: [paket(1, 'GREEN')], usage: { costUsd: 12.4, inputTokens: null, outputTokens: null, cachedInputTokens: null, modelDurationMs: null, turns: null } }))
     expect(band.titel).toBe('Review abgeschlossen — 1 Vorgang')
     expect(band.zeitpunkt).toMatch(/^Beginn \d\d\.\d\d\., \d\d:\d\d$/)
     expect(band.minuten).toBe(252)
@@ -322,8 +325,10 @@ describe('leitstand Instrumente eines Laufs (#988)', () => {
 describe('leitstand Lauf ohne Arbeit (#1069)', () => {
   const GRUND = 'Kein Eintrag trug das Label kit:nightrun'
 
-  it('laufMelder meldet zinnob am abgeschlossenen Lauf mit Grund', () => {
-    expect(laufMelder({ complete: true, items: [] }, GRUND)).toBe('zinnob')
+  // Seit #1121 grau statt zinnober: Der Grund kommt hier aus dem Ergebnisstand des Kits, der Lauf
+  // fand also nichts zu tun — und das ist kein Mangel.
+  it('laufMelder meldet grau am abgeschlossenen Lauf mit Grund', () => {
+    expect(laufMelder({ complete: true, items: [] }, GRUND)).toBe('grau')
   })
 
   // "Laeuft noch" schlaegt "ohne Arbeit": Ein laufender Lauf hat noch nichts zu melden.
@@ -343,11 +348,11 @@ describe('leitstand Lauf ohne Arbeit (#1069)', () => {
     expect(laufMelder({ complete: true, items: [{ state: 'YELLOW' }] })).toBe('bernst')
   })
 
-  it('laufband traegt den Grund als Titel, meldet zinnob und laesst Dauer und Kosten stehen', () => {
-    const ohne = laufband(lauf({ noWorkReason: GRUND, usage: { costUsd: 8.03, inputTokens: null, outputTokens: null, cachedInputTokens: null } }))
+  it('laufband traegt den Grund als Titel, meldet grau und laesst Dauer und Kosten stehen', () => {
+    const ohne = laufband(lauf({ noWorkReason: GRUND, usage: { costUsd: 8.03, inputTokens: null, outputTokens: null, cachedInputTokens: null, modelDurationMs: null, turns: null } }))
 
     expect(ohne.titel).toBe(GRUND)
-    expect(ohne.melder).toBe('zinnob')
+    expect(ohne.melder).toBe('grau')
     expect(ohne.minuten).toBe(252)
     expect(ohne.kosten).toBe('8,03')
     expect(ohne.laeuft).toBe(false)
@@ -366,7 +371,7 @@ describe('leitstand Lauf ohne Arbeit (#1069)', () => {
 
 describe('leitstand Der Browser liest den Massstab (#1081)', () => {
   const befund = (
-    verdict: 'SUCCEEDED' | 'FAILED' | 'WAITING' | 'RUNNING',
+    verdict: Verdict,
     decisiveItem: { cardNumber: number; state: NightRunState; errorClass: NightRunErrorClass | null } | null = null,
     noWorkReason: string | null = null,
   ) => ({ verdict, decisiveItem, noWorkReason })
@@ -396,8 +401,11 @@ describe('leitstand Der Browser liest den Massstab (#1081)', () => {
     expect(laufMelder({ complete: true, items: [paket(1, 'RED', { errorClass: 'HARD_ABORT' })], outcome: befund('RUNNING') })).toBe('stahl')
   })
 
-  it('laufMelder meldet den Lauf ohne Arbeit aus dem Befund zinnob', () => {
-    expect(laufMelder({ complete: true, items: [], outcome: befund('FAILED', null, 'Ready war leer') })).toBe('zinnob')
+  // Seit #1121 entscheidet der Ausgang und nicht das blosse Vorhandensein eines Grundes: Nur der
+  // Rueckfall des Servers bleibt rot, der gemeldete Grund ist grau.
+  it('laufMelder meldet den Lauf ohne Arbeit aus dem Befund grau, den Rueckfall zinnob', () => {
+    expect(laufMelder({ complete: true, items: [], outcome: befund('NO_WORK', null, 'Ready ist leer — nichts zu tun.') })).toBe('grau')
+    expect(laufMelder({ complete: true, items: [], outcome: befund('FAILED', null, GRUND_UNBEKANNT) })).toBe('zinnob')
   })
 
   it('laufMelder meldet den gelungenen Lauf aus dem Befund gruen', () => {
@@ -405,10 +413,12 @@ describe('leitstand Der Browser liest den Massstab (#1081)', () => {
   })
 
   // Ohne Befund bleibt die lokale Rechnung: der eben geparste Lauf der Nachtlauf-Seite.
+  // Der Lauf ohne Befund ist der eben im Browser eingelesene (#1121, AK 5): Sein Grund kommt aus
+  // dem Ergebnisstand des Kits und nie aus dem Rueckfall des Servers — er ist grau.
   it('laufMelder rechnet ohne Befund weiter lokal — rot, gelb, ohne Arbeit', () => {
     expect(laufMelder({ complete: true, items: [paket(1, 'RED', { errorClass: 'HARD_ABORT' })] })).toBe('zinnob')
     expect(laufMelder({ complete: true, items: [paket(1, 'YELLOW', { errorClass: 'CHECKS_RED' })] })).toBe('bernst')
-    expect(laufMelder({ complete: true, items: [] }, 'Ready war leer')).toBe('zinnob')
+    expect(laufMelder({ complete: true, items: [] }, 'Keine Kette zu fahren — nichts zu tun.')).toBe('grau')
     expect(laufMelder({ complete: false, items: [] })).toBe('stahl')
   })
 
@@ -439,6 +449,33 @@ describe('leitstand Der verstummte Lauf (#1092)', () => {
 
   it('serverBefund gibt dem verstummten Lauf FAILED ohne Paket und ohne Grund', () => {
     expect(verstummt).toEqual({ verdict: 'FAILED', decisiveItem: null, noWorkReason: null })
+  })
+
+  // Das Test-Double des Servers zieht die Grenze aus #1121 mit: Ein gemeldeter Grund ist NO_WORK,
+  // allein der Rueckfall bleibt FAILED. Liefe es auseinander, behaupteten die Fixtures etwas
+  // anderes als der Server.
+  it('serverBefund trennt den gemeldeten Grund vom Rueckfall des Servers', () => {
+    const gemeldet = 'Ready ist leer — nichts zu tun.'
+
+    expect(serverBefund({ complete: true, noWorkReason: gemeldet, items: [] })).toEqual({
+      verdict: 'NO_WORK',
+      decisiveItem: null,
+      noWorkReason: gemeldet,
+    })
+    expect(serverBefund({ complete: true, noWorkReason: GRUND_UNBEKANNT, items: [] })).toEqual({
+      verdict: 'FAILED',
+      decisiveItem: null,
+      noWorkReason: GRUND_UNBEKANNT,
+    })
+  })
+
+  // Issue #1123: Das Test-Double zieht auch die Laufart mit. Die Ketten-Einheit steht immer zuerst
+  // und hat ihren Abbruch geerbt — massgeblich ist das Paket, an dem die Kette riss.
+  it('serverBefund waehlt in einer Kette das letzte gleichrangige Paket', () => {
+    const items = [paket(993, 'RED', { errorClass: 'HARD_ABORT' }), paket(1112, 'RED', { errorClass: 'HARD_ABORT' })]
+
+    expect(serverBefund({ complete: true, mode: 'CHAIN', items }).decisiveItem?.cardNumber).toBe(1112)
+    expect(serverBefund({ complete: true, mode: 'IMPLEMENTATION', items }).decisiveItem?.cardNumber).toBe(993)
   })
 
   // Der Kern des Pakets: Bisher fiel ein Befund ohne massgebliches Paket auf gruen durch — und der
@@ -492,8 +529,43 @@ describe('melderAusBefund — der Melder eines Laufs aus seinem Befund (#1096)',
     expect(melderAusBefund({ verdict: 'RUNNING', decisiveItem: null, noWorkReason: null })).toBe('stahl')
   })
 
-  it('meldet den Lauf ohne Arbeit zinnob', () => {
-    expect(melderAusBefund({ verdict: 'FAILED', decisiveItem: null, noWorkReason: 'Ready war leer' })).toBe('zinnob')
+  // Seit #1121: Der Rueckfall des Servers bleibt rot — hinter ihm kann ein echtes Problem stecken
+  // (ein alter Runner, der Upload-Weg, ein Lauf, der alle Pakete zurueckstellte).
+  it('meldet den Lauf ohne Arbeit mit unbekanntem Grund zinnob', () => {
+    expect(melderAusBefund({ verdict: 'FAILED', decisiveItem: null, noWorkReason: GRUND_UNBEKANNT })).toBe('zinnob')
+  })
+
+  it('meldet den Lauf, der nichts zu tun fand, grau', () => {
+    expect(
+      melderAusBefund({ verdict: 'NO_WORK', decisiveItem: null, noWorkReason: 'Ready ist leer — nichts zu tun.' }),
+    ).toBe('grau')
+  })
+
+  /**
+   * AK 6 aus #1121 ueber **alle** fuenf Ausgaenge: Ein Lauf ohne Arbeit mit gemeldetem Grund ist
+   * `NO_WORK`, und der ist nirgends rot. Die Tabelle geht ueber die Schluessel der Wortliste und
+   * nicht ueber eine eigene Aufzaehlung — ein sechster Ausgang faellt hier auf, statt still
+   * mitzulaufen.
+   */
+  it('ordnet jedem der fuenf Ausgaenge seinen Melder zu, und nur FAILED ist rot', () => {
+    const je = Object.fromEntries(
+      (Object.keys(NIGHT_RUN_VERDICT_TEXT) as Verdict[]).map((verdict) => [
+        verdict,
+        melderAusBefund({
+          verdict,
+          decisiveItem: null,
+          noWorkReason: verdict === 'NO_WORK' ? 'Keine Kette zu fahren — nichts zu tun.' : null,
+        }),
+      ]),
+    )
+
+    expect(je).toEqual({
+      SUCCEEDED: 'gruen',
+      FAILED: 'zinnob',
+      WAITING: 'zinnob',
+      RUNNING: 'stahl',
+      NO_WORK: 'grau',
+    })
   })
 
   it('nimmt den Melder aus dem Zustand des massgeblichen Pakets', () => {

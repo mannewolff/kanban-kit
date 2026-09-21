@@ -20,12 +20,15 @@ import org.mwolff.manban.nightrun.application.NightRunUsageRepository.LifetimeTo
 import org.mwolff.manban.nightrun.application.NightRunUsageRepository.NightTotals;
 import org.mwolff.manban.nightrun.application.NightRunUsageRepository.PeriodTotals;
 import org.mwolff.manban.nightrun.application.NightRunUsageRepository.RetainedByKind;
+import org.mwolff.manban.nightrun.application.NightRunUsageRepository.StageTotals;
 import org.mwolff.manban.nightrun.domain.NightRun;
 import org.mwolff.manban.nightrun.domain.NightRunErrorClass;
 import org.mwolff.manban.nightrun.domain.NightRunItem;
+import org.mwolff.manban.nightrun.domain.NightRunItemStage;
 import org.mwolff.manban.nightrun.domain.NightRunKind;
 import org.mwolff.manban.nightrun.domain.NightRunMode;
 import org.mwolff.manban.nightrun.domain.NightRunOrigin;
+import org.mwolff.manban.nightrun.domain.NightRunStage;
 import org.mwolff.manban.nightrun.domain.NightRunState;
 import org.mwolff.manban.nightrun.domain.NightRunUsage;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -55,7 +58,7 @@ class NightRunUsageRepositoryIT extends AbstractIntegrationTest {
 
   private static final Instant NACHT_15_BIS = Instant.parse("2026-09-16T10:00:00Z");
 
-  private static final NightRunUsage NICHTS = new NightRunUsage(null, null, null, null);
+  private static final NightRunUsage NICHTS = new NightRunUsage(null, null, null, null, null, null);
 
   @Autowired private NightRunRepository runs;
   @Autowired private NightRunUsageRepository usage;
@@ -86,12 +89,13 @@ class NightRunUsageRepositoryIT extends AbstractIntegrationTest {
   }
 
   private static NightRunUsage kosten(String betrag) {
-    return new NightRunUsage(new BigDecimal(betrag), null, null, null);
+    return new NightRunUsage(new BigDecimal(betrag), null, null, null, null, null);
   }
 
   private static NightRunUsage verbrauch(
       String betrag, long eingabe, long ausgabe, long zwischenspeicher) {
-    return new NightRunUsage(new BigDecimal(betrag), eingabe, ausgabe, zwischenspeicher);
+    return new NightRunUsage(
+        new BigDecimal(betrag), eingabe, ausgabe, zwischenspeicher, null, null);
   }
 
   private void lauf(
@@ -150,6 +154,7 @@ class NightRunUsageRepositoryIT extends AbstractIntegrationTest {
             true,
             null,
             laufVerbrauch,
+            null,
             null),
         List.of(pakete));
   }
@@ -174,11 +179,49 @@ class NightRunUsageRepositoryIT extends AbstractIntegrationTest {
         durationMs,
         null,
         null,
-        verbrauch);
+        verbrauch,
+        List.of());
   }
 
   private static NightRunItem gruen(int cardNumber, @Nullable NightRunUsage verbrauch) {
     return paket(cardNumber, NightRunState.GREEN, null, 60_000L, verbrauch);
+  }
+
+  /** Ein Vorgang einer Kette samt seinen Stufen (Issue #1114). */
+  private static NightRunItem vorgang(int cardNumber, NightRunItemStage... stufen) {
+    return new NightRunItem(
+        null,
+        null,
+        0L,
+        Instant.EPOCH,
+        NightRunMode.CHAIN,
+        NightRunKind.NIGHT,
+        cardNumber,
+        "Paket " + cardNumber,
+        NightRunState.GREEN,
+        null,
+        60_000L,
+        null,
+        null,
+        null,
+        List.of(stufen));
+  }
+
+  /** Eine Stufe mit allen sechs Verbrauchsangaben — Modellzeit und Züge eingeschlossen. */
+  private static NightRunItemStage stufe(
+      NightRunStage stage,
+      long durationMs,
+      String betrag,
+      long eingabe,
+      long ausgabe,
+      long zwischenspeicher,
+      long modellzeit,
+      int zuege) {
+    return new NightRunItemStage(
+        stage,
+        durationMs,
+        new NightRunUsage(
+            new BigDecimal(betrag), eingabe, ausgabe, zwischenspeicher, modellzeit, zuege));
   }
 
   // --- Eine Nacht aus mehreren Laeufen ----------------------------------------------------------
@@ -229,8 +272,8 @@ class NightRunUsageRepositoryIT extends AbstractIntegrationTest {
         "2026-09-15T21:10:00Z",
         NightRunMode.CHAIN,
         1_000L,
-        new NightRunUsage(new BigDecimal("10.000000"), 1_000L, 100L, 900L),
-        gruen(721, new NightRunUsage(new BigDecimal("4.000000"), 400L, 40L, 360L)));
+        new NightRunUsage(new BigDecimal("10.000000"), 1_000L, 100L, 900L, null, null),
+        gruen(721, new NightRunUsage(new BigDecimal("4.000000"), 400L, 40L, 360L, null, null)));
     lauf(
         projectId,
         "2026-09-16T01:22:00Z",
@@ -277,6 +320,109 @@ class NightRunUsageRepositoryIT extends AbstractIntegrationTest {
     assertThat(karte.usage().costUsd()).isEqualByComparingTo("2.00");
     assertThat(usage.totalsPerCard(projectId, NACHT_15_VON, NACHT_15_BIS).get(1).usage().costUsd())
         .isNull();
+  }
+
+  // --- Stufen der Kette (Issue #1114) ----------------------------------------------------------
+
+  /**
+   * Die Aufstellung je Stufe summiert Kosten, Dauern, Tokenmengen, Modellzeit und Züge über einen
+   * Zeitraum, der mehrere Läufe umfasst, und kommt in der Reihenfolge der Kette (#993 AK 8).
+   */
+  @Test
+  void totalsPerStageSummiertJeStufeUeberMehrereLaeufeDerSpanne() {
+    lauf(
+        projectId,
+        "2026-09-15T21:10:00Z",
+        NightRunMode.CHAIN,
+        1_000L,
+        null,
+        vorgang(
+            721,
+            stufe(NightRunStage.REVIEW, 30_000L, "2.000000", 200L, 20L, 10L, 20_000L, 4),
+            stufe(NightRunStage.PLAN, 60_000L, "1.000000", 100L, 10L, 5L, 40_000L, 3)));
+    lauf(
+        projectId,
+        "2026-09-16T01:22:00Z",
+        NightRunMode.CHAIN,
+        1_000L,
+        null,
+        vorgang(722, stufe(NightRunStage.PLAN, 10_000L, "0.500000", 50L, 5L, 1L, 5_000L, 2)));
+
+    List<StageTotals> stufen = usage.totalsPerStage(projectId, NACHT_15_VON, NACHT_15_BIS);
+
+    assertThat(stufen)
+        .extracting(StageTotals::stage, StageTotals::itemCount, StageTotals::durationMs)
+        .containsExactly(
+            tuple(NightRunStage.PLAN, 2L, 70_000L), tuple(NightRunStage.REVIEW, 1L, 30_000L));
+    assertThat(stufen.getFirst().usage().costUsd()).isEqualByComparingTo("1.5");
+    assertThat(stufen.getFirst().usage().inputTokens()).isEqualTo(150L);
+    assertThat(stufen.getFirst().usage().outputTokens()).isEqualTo(15L);
+    assertThat(stufen.getFirst().usage().cachedInputTokens()).isEqualTo(6L);
+    assertThat(stufen.getFirst().usage().modelDurationMs()).isEqualTo(45_000L);
+    assertThat(stufen.getFirst().usage().turns()).isEqualTo(3 + 2);
+    assertThat(stufen.get(1).usage().costUsd()).isEqualByComparingTo("2");
+    assertThat(stufen.get(1).usage().turns()).isEqualTo(4);
+  }
+
+  /** Eine Stufe ohne gemeldete Kosten trägt {@code null}, nicht 0 (Plan E16). */
+  @Test
+  void eineStufeOhneGemeldeteKostenTraegtNullUndNichtNull0() {
+    lauf(
+        projectId,
+        "2026-09-15T21:10:00Z",
+        NightRunMode.CHAIN,
+        1_000L,
+        kosten("9"),
+        vorgang(721, new NightRunItemStage(NightRunStage.ABDECKUNG, null, null)));
+
+    assertThat(usage.totalsPerStage(projectId, NACHT_15_VON, NACHT_15_BIS))
+        .singleElement()
+        .returns(NightRunStage.ABDECKUNG, StageTotals::stage)
+        .returns(1L, StageTotals::itemCount)
+        .returns(null, StageTotals::durationMs)
+        .returns(NICHTS, StageTotals::usage);
+  }
+
+  /**
+   * Ein Zeitraum ohne Ketten-Läufe liefert eine leere Aufstellung: Der Umsetzungs-Lauf ohne Stufen
+   * erzeugt keine Zeile „ohne Stufe" (Plan E6), und die Stufen eines fremden Projekts bleiben
+   * draußen.
+   */
+  @Test
+  void einZeitraumOhneKettenLaeufeLiefertEineLeereAufstellung_ohneZeileOhneStufe() {
+    lauf(
+        projectId,
+        "2026-09-15T21:10:00Z",
+        NightRunMode.IMPLEMENTATION,
+        1_000L,
+        kosten("9"),
+        gruen(721, kosten("9")));
+    lauf(
+        fremdesProjekt,
+        "2026-09-15T22:10:00Z",
+        NightRunMode.CHAIN,
+        1_000L,
+        null,
+        vorgang(722, stufe(NightRunStage.PLAN, 1_000L, "1.000000", 1L, 1L, 1L, 1L, 1)));
+
+    assertThat(usage.totalsPerStage(projectId, NACHT_15_VON, NACHT_15_BIS)).isEmpty();
+  }
+
+  /** Auch für die Stufen gilt die Spanne: Beginn eingeschlossen, Ende ausgeschlossen. */
+  @Test
+  void dieStufenAufstellungHaeltSichAnDieSpanne() {
+    lauf(
+        projectId,
+        "2026-09-16T10:00:00Z",
+        NightRunMode.CHAIN,
+        1_000L,
+        null,
+        vorgang(721, stufe(NightRunStage.PAKETE, 1_000L, "1.000000", 1L, 1L, 1L, 1L, 1)));
+
+    assertThat(usage.totalsPerStage(projectId, NACHT_15_VON, NACHT_15_BIS)).isEmpty();
+    assertThat(usage.totalsPerStage(projectId, NACHT_15_BIS, Instant.parse("2026-09-17T10:00:00Z")))
+        .singleElement()
+        .returns(NightRunStage.PAKETE, StageTotals::stage);
   }
 
   // --- Gattungen (Issue #1013) -----------------------------------------------------------------
@@ -633,8 +779,8 @@ class NightRunUsageRepositoryIT extends AbstractIntegrationTest {
     assertThat(summe.runCount()).isZero();
     assertThat(summe.cardCount()).isZero();
     assertThat(summe.durationMs()).isZero();
-    assertThat(summe.runUsage()).isEqualTo(new NightRunUsage(null, null, null, null));
-    assertThat(summe.itemUsage()).isEqualTo(new NightRunUsage(null, null, null, null));
+    assertThat(summe.runUsage()).isEqualTo(new NightRunUsage(null, null, null, null, null, null));
+    assertThat(summe.itemUsage()).isEqualTo(new NightRunUsage(null, null, null, null, null, null));
     assertThat(usage.totalsPerNight(projectId, NACHT_15_VON, NACHT_15_BIS, BERLIN)).isEmpty();
     assertThat(usage.totalsPerCard(projectId, NACHT_15_VON, NACHT_15_BIS)).isEmpty();
   }

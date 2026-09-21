@@ -1,6 +1,7 @@
 package org.mwolff.manban.nightrun;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -40,9 +41,17 @@ import org.springframework.test.web.servlet.MockMvc;
  * <p>Jeder Fall läuft <b>ohne Sitzungs-Cookie</b> — genau darum geht es. Die Sitzung dient hier nur
  * dazu, Projekt und Token überhaupt anzulegen; der Aufruf selbst trägt allein {@code
  * X-Kanban-Token}.
+ *
+ * <p>Seit Issue #1113 belegt dieselbe Klasse auch die Auslieferung der eingelieferten Angaben über
+ * {@code GET /api/projects/{id}/night-runs}; dieser Abruf trägt den Cookie, weil er die menschliche
+ * Ansicht ist. Ohne ihn bliebe offen, ob das Eingelieferte auch wieder herauskommt.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK)
 @AutoConfigureMockMvc
+// Testklasse: Jede Methode ist ein Fall des Einlieferungsvertrags, und Faelle werden nicht
+// zusammengelegt, um eine Zahl zu druecken. Issue #1113 bringt die Faelle zu Budgets, Herkunft und
+// Stufen dazu und reisst damit die Schwelle.
+@SuppressWarnings("PMD.TooManyMethods")
 class NightRunIngestIT extends AbstractIntegrationTest {
 
   private static final String PASSWORD = "sup3r-secret";
@@ -442,6 +451,231 @@ class NightRunIngestIT extends AbstractIntegrationTest {
     List<NightRun> sitzungen = sitzungen(aufbau.projectId());
     assertThat(sitzungen).hasSize(1);
     assertThat(runs.findItemsByRunIds(List.of(sitzungen.getFirst().requireId()))).hasSize(1);
+  }
+
+  // --- Budgets, Herkunft, Stufen, Modellzeit und Zuege (Issue #1113) ------------------------
+
+  /**
+   * Eine Meldung, wie das Kit sie seit Plan #1110 schickt: mit Vorgaben, ihrer Herkunft, Modellzeit
+   * und Zuegen am Lauf und am Vorgang sowie den Stufen der Kette je Vorgang.
+   */
+  private static String meldungMitVorgaben(String... pakete) {
+    return """
+        {"startedAt":"%s","mode":"CHAIN","durationMs":4320000,"processedCount":%d,
+         "skippedCount":0,"unparsedCount":0,"complete":true,
+         "usage":{"costUsd":8.032575,"inputTokens":148,"outputTokens":62411,
+                  "cachedInputTokens":8883160,"modelDurationMs":3600000,"turns":214},
+         "budget":{"planMin":30,"reviewMin":30,"paketeMin":25,"abdeckungMin":10,
+                   "kostenUsd":50,"origin":"DEFAULTED",
+                   "defaultFields":["paketeMin","kostenUsd"]},
+         "items":[%s]}"""
+        .formatted(START, pakete.length, String.join(",", pakete));
+  }
+
+  /** Ein Vorgang mit Stufen, Modellzeit und Zuegen. */
+  private static String paketMitStufen(int cardNumber, String... stufen) {
+    return """
+        {"cardNumber":%d,"title":"Paket %d","state":"GREEN","durationMs":1122000,
+         "usage":{"costUsd":0.94,"inputTokens":412000,"modelDurationMs":900000,"turns":42},
+         "stages":[%s]}"""
+        .formatted(cardNumber, cardNumber, String.join(",", stufen));
+  }
+
+  private static String stufe(String stage) {
+    return """
+        {"stage":"%s","durationMs":600000,
+         "usage":{"costUsd":0.25,"inputTokens":10,"outputTokens":20,
+                  "cachedInputTokens":5,"modelDurationMs":400000,"turns":7}}"""
+        .formatted(stage);
+  }
+
+  /**
+   * Der Kern des Pakets (AK 1, AK 2): Was mit Budget, Herkunft, Stufen, Modellzeit und Zuegen
+   * hereinkommt, geht ueber die Laufliste vollstaendig wieder hinaus.
+   */
+  @Test
+  void eineMeldungMitVorgabenUndStufenWirdVollstaendigAusgeliefert() throws Exception {
+    Aufbau aufbau = aufbau("ingest-vorgaben");
+
+    melde(
+        aufbau,
+        meldungMitVorgaben(paketMitStufen(993, stufe("PLAN"), stufe("REVIEW"), stufe("PAKETE"))));
+
+    mvc.perform(get(laufliste(aufbau.projectId())).cookie(aufbau.session()))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$[0].budget.planMin").value(30))
+        .andExpect(jsonPath("$[0].budget.reviewMin").value(30))
+        .andExpect(jsonPath("$[0].budget.paketeMin").value(25))
+        .andExpect(jsonPath("$[0].budget.abdeckungMin").value(10))
+        .andExpect(jsonPath("$[0].budget.kostenUsd").value(50))
+        .andExpect(jsonPath("$[0].budget.origin").value("DEFAULTED"))
+        .andExpect(jsonPath("$[0].budget.defaultFields.length()").value(2))
+        .andExpect(jsonPath("$[0].budget.defaultFields[0]").value("paketeMin"))
+        .andExpect(jsonPath("$[0].budget.defaultFields[1]").value("kostenUsd"))
+        .andExpect(jsonPath("$[0].usage.modelDurationMs").value(3_600_000))
+        .andExpect(jsonPath("$[0].usage.turns").value(214))
+        .andExpect(jsonPath("$[0].items[0].usage.modelDurationMs").value(900_000))
+        .andExpect(jsonPath("$[0].items[0].usage.turns").value(42))
+        .andExpect(jsonPath("$[0].items[0].stages.length()").value(3))
+        .andExpect(jsonPath("$[0].items[0].stages[0].stage").value("PLAN"))
+        .andExpect(jsonPath("$[0].items[0].stages[0].durationMs").value(600_000))
+        .andExpect(jsonPath("$[0].items[0].stages[0].usage.costUsd").value(0.25))
+        .andExpect(jsonPath("$[0].items[0].stages[0].usage.turns").value(7))
+        .andExpect(jsonPath("$[0].items[0].stages[1].stage").value("REVIEW"))
+        .andExpect(jsonPath("$[0].items[0].stages[2].stage").value("PAKETE"));
+  }
+
+  /**
+   * Die Gegenprobe zur Additivitaet (E11): Eine aeltere Kit-Kopie kennt weder {@code budget} noch
+   * {@code stages}. Ihre Meldung kommt an, und der Lauf traegt „nicht angegeben" statt eines
+   * Budgets aus lauter Nullen.
+   */
+  @Test
+  void eineMeldungOhneDieNeuenFelderWirdAngenommen_undErfindetNichts() throws Exception {
+    Aufbau aufbau = aufbau("ingest-ohne-vorgaben");
+
+    melde(aufbau, meldung(true, paket(917)));
+
+    mvc.perform(get(laufliste(aufbau.projectId())).cookie(aufbau.session()))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$[0].budget").doesNotExist())
+        .andExpect(jsonPath("$[0].usage.modelDurationMs").doesNotExist())
+        .andExpect(jsonPath("$[0].usage.turns").doesNotExist())
+        .andExpect(jsonPath("$[0].items[0].stages.length()").value(0));
+  }
+
+  /** E11: Ein Feldname, den das Board nicht kennt, wird angenommen statt mit 400 abgewiesen. */
+  @Test
+  void einUnbekannterFeldnameInDefaultFieldsWirdAngenommen() throws Exception {
+    Aufbau aufbau = aufbau("ingest-fremdfeld");
+
+    mvc.perform(
+            post(PFAD)
+                .header(TOKEN_HEADER, aufbau.token())
+                .contentType("application/json")
+                .content(
+                    meldungMitVorgaben(paket(917))
+                        .replace("[\"paketeMin\",\"kostenUsd\"]", "[\"korrekturrunden\"]")))
+        .andExpect(status().isOk());
+
+    mvc.perform(get(laufliste(aufbau.projectId())).cookie(aufbau.session()))
+        .andExpect(jsonPath("$[0].budget.defaultFields[0]").value("korrekturrunden"));
+  }
+
+  /** Die Grenze der Stufen beidseitig (E17): vier bestehen, fuenf werden abgewiesen. */
+  @Test
+  void vierStufenWerdenAngenommenUndFuenfAbgewiesen() throws Exception {
+    Aufbau aufbau = aufbau("ingest-stufengrenze");
+
+    melde(
+        aufbau,
+        meldungMitVorgaben(
+            paketMitStufen(
+                993, stufe("PLAN"), stufe("REVIEW"), stufe("PAKETE"), stufe("ABDECKUNG"))));
+
+    mvc.perform(
+            post(PFAD)
+                .header(TOKEN_HEADER, aufbau.token())
+                .contentType("application/json")
+                .content(
+                    meldungMitVorgaben(
+                        paketMitStufen(
+                            994,
+                            stufe("PLAN"),
+                            stufe("REVIEW"),
+                            stufe("PAKETE"),
+                            stufe("ABDECKUNG"),
+                            stufe("PLAN")))))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.fieldErrors").exists());
+  }
+
+  /**
+   * Zustands-Semantik auch fuer die Stufen: Derselbe Lauf zweimal gemeldet ergibt einen Lauf, und
+   * seine Stufen liegen einfach vor — nicht doppelt.
+   */
+  @Test
+  void eineWiederholteMeldungLegtDieStufenNichtDoppeltAn() throws Exception {
+    Aufbau aufbau = aufbau("ingest-stufen-wdh");
+    String gleich = meldungMitVorgaben(paketMitStufen(993, stufe("PLAN"), stufe("REVIEW")));
+
+    melde(aufbau, gleich);
+    melde(aufbau, gleich);
+
+    assertThat(nachtlaeufe(aufbau.projectId())).hasSize(1);
+    assertThat(stufenzeilen(aufbau.projectId())).isEqualTo(2L);
+    mvc.perform(get(laufliste(aufbau.projectId())).cookie(aufbau.session()))
+        .andExpect(jsonPath("$[0].items[0].stages.length()").value(2));
+  }
+
+  /**
+   * Die Stufen haengen an der Paket-ID und nicht an {@code card_number} (V37): Zwei Vorgaenge
+   * derselben Karte im selben Lauf tragen jeder seine eigenen Stufen.
+   */
+  @Test
+  void zweiVorgaengeDerselbenKarteTragenJederIhreEigenenStufen() throws Exception {
+    Aufbau aufbau = aufbau("ingest-gleiche-karte");
+
+    melde(
+        aufbau,
+        meldungMitVorgaben(
+            paketMitStufen(993, stufe("PLAN")),
+            paketMitStufen(993, stufe("REVIEW"), stufe("PAKETE"))));
+
+    mvc.perform(get(laufliste(aufbau.projectId())).cookie(aufbau.session()))
+        .andExpect(jsonPath("$[0].items.length()").value(2))
+        .andExpect(jsonPath("$[0].items[0].stages.length()").value(1))
+        .andExpect(jsonPath("$[0].items[0].stages[0].stage").value("PLAN"))
+        .andExpect(jsonPath("$[0].items[1].stages.length()").value(2))
+        .andExpect(jsonPath("$[0].items[1].stages[0].stage").value("REVIEW"));
+  }
+
+  /**
+   * AK 6: Wird die Ergebnisdatei eines schon eingelieferten Laufs zusaetzlich hochgeladen, aendert
+   * sich an seiner Auslieferung nichts — der Upload-Weg fuehrt weder Budgets noch Stufen (E14) und
+   * darf sie deshalb auch nicht leeren.
+   */
+  @Test
+  void derUploadUeberschreibtWederBudgetNochStufen() throws Exception {
+    Aufbau aufbau = aufbau("ingest-upload-danach");
+    melde(aufbau, meldungMitVorgaben(paketMitStufen(993, stufe("PLAN"), stufe("REVIEW"))));
+    String vorher = laufliste(aufbau);
+
+    mvc.perform(
+            post(laufliste(aufbau.projectId()))
+                .cookie(aufbau.session())
+                .contentType("application/json")
+                .content(
+                    """
+                    {"runs":[{"startedAt":"%s","mode":"CHAIN","durationMs":1,
+                              "processedCount":1,"skippedCount":0,"unparsedCount":0,
+                              "items":[{"cardNumber":993,"title":"Paket 993","state":"GREEN"}]}]}"""
+                        .formatted(START)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$[0].created").value(false));
+
+    assertThat(laufliste(aufbau)).isEqualTo(vorher);
+  }
+
+  private static String laufliste(long projectId) {
+    return "/api/projects/" + projectId + "/night-runs";
+  }
+
+  private String laufliste(Aufbau aufbau) throws Exception {
+    return mvc.perform(get(laufliste(aufbau.projectId())).cookie(aufbau.session()))
+        .andExpect(status().isOk())
+        .andReturn()
+        .getResponse()
+        .getContentAsString();
+  }
+
+  private Long stufenzeilen(long projectId) {
+    return jdbc.queryForObject(
+        "SELECT count(*) FROM night_run_item_stage s"
+            + " JOIN night_run_item i ON i.id = s.night_run_item_id"
+            + " WHERE i.project_id = ?",
+        Long.class,
+        projectId);
   }
 
   // --- Aufbau -------------------------------------------------------------------------------

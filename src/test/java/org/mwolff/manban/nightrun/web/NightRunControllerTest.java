@@ -29,11 +29,15 @@ import org.mwolff.manban.nightrun.application.NightRunService.NewNightRunItem;
 import org.mwolff.manban.nightrun.application.NightRunService.NightRunItemView;
 import org.mwolff.manban.nightrun.application.NightRunService.NightRunResult;
 import org.mwolff.manban.nightrun.application.NightRunService.NightRunView;
+import org.mwolff.manban.nightrun.domain.NightRunBudget;
+import org.mwolff.manban.nightrun.domain.NightRunBudgetOrigin;
 import org.mwolff.manban.nightrun.domain.NightRunErrorClass;
+import org.mwolff.manban.nightrun.domain.NightRunItemStage;
 import org.mwolff.manban.nightrun.domain.NightRunLimits;
 import org.mwolff.manban.nightrun.domain.NightRunMode;
 import org.mwolff.manban.nightrun.domain.NightRunOrigin;
 import org.mwolff.manban.nightrun.domain.NightRunOutcome;
+import org.mwolff.manban.nightrun.domain.NightRunStage;
 import org.mwolff.manban.nightrun.domain.NightRunState;
 import org.mwolff.manban.nightrun.domain.NightRunUsage;
 import org.mwolff.manban.project.application.ProjectAccessDeniedException;
@@ -148,6 +152,7 @@ class NightRunControllerTest {
                 true,
                 null,
                 null,
+                null,
                 List.of(
                     new NewNightRunItem(
                         721,
@@ -157,11 +162,23 @@ class NightRunControllerTest {
                         900L,
                         "abc1234",
                         "mvn verify rot",
-                        null))));
+                        null,
+                        List.of()))));
     assertThat(uebergeben.get(1))
         .isEqualTo(
             new NewNightRun(
-                ZWEITER, NightRunMode.REVIEW, 10L, 0, 0, 0, null, true, null, null, List.of()));
+                ZWEITER,
+                NightRunMode.REVIEW,
+                10L,
+                0,
+                0,
+                0,
+                null,
+                true,
+                null,
+                null,
+                null,
+                List.of()));
   }
 
   /**
@@ -204,6 +221,7 @@ class NightRunControllerTest {
                 true,
                 null,
                 null,
+                null,
                 List.of(
                     new NewNightRunItem(
                         853,
@@ -213,7 +231,8 @@ class NightRunControllerTest {
                         null,
                         null,
                         null,
-                        null))));
+                        null,
+                        List.of()))));
   }
 
   @Test
@@ -389,8 +408,16 @@ class NightRunControllerTest {
                     null,
                     null,
                     null,
+                    null,
                     NightRunOutcome.of(
-                        true, null, List.of(), ERSTER, null, ERSTER, Duration.ofMinutes(90)),
+                        true,
+                        null,
+                        NightRunMode.IMPLEMENTATION,
+                        List.of(),
+                        ERSTER,
+                        null,
+                        ERSTER,
+                        Duration.ofMinutes(90)),
                     List.of(
                         new NightRunItemView(
                             21L,
@@ -401,7 +428,8 @@ class NightRunControllerTest {
                             900L,
                             "abc1234",
                             "mvn verify rot",
-                            null)))));
+                            null,
+                            List.of())))));
 
     mvc.perform(get(PATH))
         .andExpect(status().isOk())
@@ -445,8 +473,16 @@ class NightRunControllerTest {
                     null,
                     null,
                     null,
+                    null,
                     NightRunOutcome.of(
-                        true, null, List.of(), ERSTER, null, ERSTER, Duration.ofMinutes(90)),
+                        true,
+                        null,
+                        NightRunMode.IMPLEMENTATION,
+                        List.of(),
+                        ERSTER,
+                        null,
+                        ERSTER,
+                        Duration.ofMinutes(90)),
                     List.of(
                         new NightRunItemView(
                             22L,
@@ -457,7 +493,8 @@ class NightRunControllerTest {
                             null,
                             null,
                             null,
-                            null)))));
+                            null,
+                            List.of())))));
 
     mvc.perform(get(PATH))
         .andExpect(status().isOk())
@@ -522,9 +559,9 @@ class NightRunControllerTest {
     verify(service).submit(eq(USER), eq(PROJECT), captor.capture());
     NewNightRun uebergeben = captor.getValue().getFirst();
     assertThat(uebergeben.usage())
-        .isEqualTo(new NightRunUsage(new BigDecimal("25.983293"), null, null, null));
+        .isEqualTo(new NightRunUsage(new BigDecimal("25.983293"), null, null, null, null, null));
     assertThat(uebergeben.items().getFirst().usage())
-        .isEqualTo(new NightRunUsage(new BigDecimal("11.5228115"), null, null, null));
+        .isEqualTo(new NightRunUsage(new BigDecimal("11.5228115"), null, null, null, null, null));
   }
 
   /** Ohne {@code usage} bleibt es bei „nicht gemessen" — kein Record aus lauter Nullen. */
@@ -548,6 +585,146 @@ class NightRunControllerTest {
     NewNightRun uebergeben = captor.getValue().getFirst();
     assertThat(uebergeben.usage()).isNull();
     assertThat(uebergeben.items().getFirst().usage()).isNull();
+  }
+
+  /**
+   * E14: Der Browser-Upload führt weder Budgets noch Stufen — er setzt beides fest auf „nicht
+   * gemeldet", wie er es bei {@code complete} und {@code noWorkReason} schon tut. Ein Rumpf, der
+   * sie trotzdem trüge, ändert daran nichts: Die Request-Records kennen die Felder nicht, und
+   * Jackson verwirft unbekannte Felder.
+   */
+  @Test
+  // Siehe submit_passesEveryFieldToService_andAnswersInRequestOrder: derselbe Grund.
+  @SuppressWarnings("unchecked")
+  void submit_passesNoBudgetAndNoStages_toService() throws Exception {
+    when(service.submit(eq(USER), eq(PROJECT), anyList()))
+        .thenReturn(List.of(new NightRunResult(ERSTER, true)));
+
+    mvc.perform(
+            post(PATH)
+                .contentType(JSON)
+                .content(
+                    """
+                    {"runs":[
+                      {"startedAt":"2026-08-31T22:00:00Z","mode":"CHAIN","durationMs":1,
+                       "processedCount":1,"skippedCount":0,"unparsedCount":0,
+                       "budget":{"planMin":30},
+                       "items":[{"cardNumber":993,"title":"Paket","state":"GREEN",
+                                 "stages":[{"stage":"PLAN","durationMs":600000}]}]}]}
+                    """))
+        .andExpect(status().isOk());
+
+    ArgumentCaptor<List<NewNightRun>> captor = ArgumentCaptor.forClass(List.class);
+    verify(service).submit(eq(USER), eq(PROJECT), captor.capture());
+    NewNightRun uebergeben = captor.getValue().getFirst();
+    assertThat(uebergeben.budget()).isNull();
+    assertThat(uebergeben.items().getFirst().stages()).isEmpty();
+  }
+
+  /**
+   * Modellzeit und Züge nimmt der Upload-Weg über den geteilten {@link NightRunUsageRequest}
+   * <b>formal</b> an (E14) — der Browser sendet sie nicht, aber wer sie sendet, bekommt sie
+   * durchgereicht statt verworfen.
+   */
+  @Test
+  // Siehe submit_passesEveryFieldToService_andAnswersInRequestOrder: derselbe Grund.
+  @SuppressWarnings("unchecked")
+  void submit_passesModelDurationAndTurns_toService() throws Exception {
+    when(service.submit(eq(USER), eq(PROJECT), anyList()))
+        .thenReturn(List.of(new NightRunResult(ERSTER, true)));
+
+    mvc.perform(
+            post(PATH)
+                .contentType(JSON)
+                .content(
+                    """
+                    {"runs":[
+                      {"startedAt":"2026-08-31T22:00:00Z","mode":"CHAIN","durationMs":1,
+                       "processedCount":1,"skippedCount":0,"unparsedCount":0,
+                       "usage":{"modelDurationMs":3600000,"turns":214},
+                       "items":[{"cardNumber":993,"title":"Paket","state":"GREEN",
+                                 "usage":{"modelDurationMs":900000,"turns":42}}]}]}
+                    """))
+        .andExpect(status().isOk());
+
+    ArgumentCaptor<List<NewNightRun>> captor = ArgumentCaptor.forClass(List.class);
+    verify(service).submit(eq(USER), eq(PROJECT), captor.capture());
+    NewNightRun uebergeben = captor.getValue().getFirst();
+    assertThat(uebergeben.usage())
+        .isEqualTo(new NightRunUsage(null, null, null, null, 3_600_000L, 214));
+    assertThat(uebergeben.items().getFirst().usage())
+        .isEqualTo(new NightRunUsage(null, null, null, null, 900_000L, 42));
+  }
+
+  /** Die Ausgabeseite: Budget und Stufen stehen in der Antwort der Laufliste (AK 1, AK 2). */
+  @Test
+  void list_returnsBudgetAndStages() throws Exception {
+    when(service.list(USER, PROJECT))
+        .thenReturn(
+            List.of(
+                new NightRunView(
+                    13L,
+                    ERSTER,
+                    NightRunMode.CHAIN,
+                    1L,
+                    1,
+                    0,
+                    0,
+                    null,
+                    Instant.parse("2026-09-01T06:00:00Z"),
+                    NightRunOrigin.TOKEN,
+                    "nacht",
+                    true,
+                    null,
+                    null,
+                    null,
+                    new NightRunBudget(
+                        30,
+                        30,
+                        25,
+                        10,
+                        new BigDecimal("50"),
+                        NightRunBudgetOrigin.DEFAULTED,
+                        List.of("paketeMin", "kostenUsd")),
+                    NightRunOutcome.of(
+                        true,
+                        null,
+                        NightRunMode.CHAIN,
+                        List.of(),
+                        ERSTER,
+                        null,
+                        ERSTER,
+                        Duration.ofMinutes(90)),
+                    List.of(
+                        new NightRunItemView(
+                            23L,
+                            993,
+                            "Paket",
+                            NightRunState.GREEN,
+                            null,
+                            5L,
+                            null,
+                            null,
+                            new NightRunUsage(null, null, null, null, 900_000L, 42),
+                            List.of(
+                                new NightRunItemStage(
+                                    NightRunStage.PLAN,
+                                    600_000L,
+                                    new NightRunUsage(
+                                        new BigDecimal("0.25"), null, null, null, null, 7))))))));
+
+    mvc.perform(get(PATH))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$[0].budget.planMin").value(30))
+        .andExpect(jsonPath("$[0].budget.abdeckungMin").value(10))
+        .andExpect(jsonPath("$[0].budget.kostenUsd").value(50))
+        .andExpect(jsonPath("$[0].budget.origin").value("DEFAULTED"))
+        .andExpect(jsonPath("$[0].budget.defaultFields[0]").value("paketeMin"))
+        .andExpect(jsonPath("$[0].items[0].usage.modelDurationMs").value(900_000))
+        .andExpect(jsonPath("$[0].items[0].usage.turns").value(42))
+        .andExpect(jsonPath("$[0].items[0].stages[0].stage").value("PLAN"))
+        .andExpect(jsonPath("$[0].items[0].stages[0].durationMs").value(600_000))
+        .andExpect(jsonPath("$[0].items[0].stages[0].usage.turns").value(7));
   }
 
   private static String run(String startedAt, String items) {

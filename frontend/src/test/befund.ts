@@ -1,4 +1,14 @@
-import type { NightRunItemView, NightRunOutcomeView } from '../api/nightRuns'
+import type { NightRunItemView, NightRunOutcomeView, NightRunServerMode } from '../api/nightRuns'
+
+/**
+ * Der Rueckfalltext, den der Server selbst setzt, wenn ein Lauf ohne Arbeit keinen Grund meldet
+ * (`NightRunOutcome.GRUND_UNBEKANNT`). Er ist der **einzige** Grund, der seit Issue #1121 noch
+ * `FAILED` ergibt; jeder gemeldete Grund ist `NO_WORK`.
+ *
+ * Er steht hier und nicht im Produktionscode: Der Browser liest den Ausgang und muss den Text nie
+ * wiedererkennen — nur dieses Test-Double des Servers muss es, weil es dessen Regel nachbildet.
+ */
+export const GRUND_UNBEKANNT = 'Nichts abgearbeitet — Grund unbekannt'
 
 /**
  * Der Befund, den der Server zu einem Lauf schicken wuerde (Issue #1081).
@@ -14,9 +24,16 @@ import type { NightRunItemView, NightRunOutcomeView } from '../api/nightRuns'
  * einmal ab, faellt das an den Tests auf, die den Server ueber MockMvc pruefen (`NightRunIT`): Dort
  * steht der echte Vertrag.
  *
+ * <p>Der Lauf ohne Arbeit zerfaellt seit Issue #1121 in zwei Faelle: ein **gemeldeter** Grund ergibt
+ * `NO_WORK`, allein der Rueckfall {@link GRUND_UNBEKANNT} bleibt `FAILED`.
+ *
  * <p>Die Stille kommt als **Angabe** herein und nicht als Zeitrechnung aus `startedAt`, `updatedAt`
  * und einer Frist (Issue #1091): Ein Szenario sagt hier, ob der Lauf verstummt ist; die Frist selbst
  * gehoert dem Server, und sie hier nachzurechnen hiesse, eine zweite Uhr in die Fixtures zu holen.
+ *
+ * <p>Die **Laufart** entscheidet seit Issue #1123 unter gleichrangigen Paketen: In einer Kette
+ * (`CHAIN`) ist das letzte massgeblich, sonst das erste. Sie ist optional, weil ein Szenario ohne
+ * gleichrangige Pakete sie nicht braucht; fehlt sie, gilt die Reihenfolge wie ausserhalb einer Kette.
  */
 export function serverBefund(lauf: {
   complete: boolean
@@ -24,6 +41,8 @@ export function serverBefund(lauf: {
   items: readonly NightRunItemView[]
   /** Ob der Lauf ueber die Stillefrist hinaus kein Lebenszeichen gab (Issue #1091). */
   verstummt?: boolean
+  /** Laufart des Laufs (Issue #1123) — in einer Kette zaehlt das letzte gleichrangige Paket. */
+  mode?: NightRunServerMode
 }): NightRunOutcomeView {
   // Ein verstummter Lauf ist nicht gelungen — ohne massgebliches Paket und ohne Grund, denn er hat
   // sein Ergebnis nie gemeldet.
@@ -34,12 +53,19 @@ export function serverBefund(lauf: {
     return { verdict: 'RUNNING', decisiveItem: null, noWorkReason: null }
   }
   if (lauf.noWorkReason != null && lauf.noWorkReason !== '') {
-    return { verdict: 'FAILED', decisiveItem: null, noWorkReason: lauf.noWorkReason }
+    return {
+      verdict: lauf.noWorkReason === GRUND_UNBEKANNT ? 'FAILED' : 'NO_WORK',
+      decisiveItem: null,
+      noWorkReason: lauf.noWorkReason,
+    }
   }
+  // Die Ketten-Einheit steht immer zuerst und erbt ihren Abbruch von dem, was spaeter riss — in
+  // einer Kette ist deshalb das letzte gleichrangige Paket massgeblich (Issue #1123).
+  const reihenfolge = lauf.mode === 'CHAIN' ? [...lauf.items].reverse() : lauf.items
   const massgeblich =
-    lauf.items.find((i) => i.state === 'RED') ??
-    lauf.items.find((i) => i.state === 'YELLOW') ??
-    lauf.items.find((i) => i.state === 'GREY' && i.errorClass != null)
+    reihenfolge.find((i) => i.state === 'RED') ??
+    reihenfolge.find((i) => i.state === 'YELLOW') ??
+    reihenfolge.find((i) => i.state === 'GREY' && i.errorClass != null)
   if (massgeblich == null) {
     return { verdict: 'SUCCEEDED', decisiveItem: null, noWorkReason: null }
   }

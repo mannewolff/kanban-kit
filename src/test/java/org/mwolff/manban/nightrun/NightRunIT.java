@@ -386,7 +386,7 @@ class NightRunIT extends AbstractIntegrationTest {
     Cookie owner = session("nr-reich-owner@example.com", PlatformRole.USER);
     long projectId = projectOf("nr-reich-owner@example.com", "nr-reich-admin@example.com");
     NightRunUsage gemeldet =
-        new NightRunUsage(new BigDecimal("8.032575"), 148L, 62_411L, 8_883_160L);
+        new NightRunUsage(new BigDecimal("8.032575"), 148L, 62_411L, 8_883_160L, null, null);
     runs.upsert(
         new NightRun(
             null,
@@ -405,6 +405,7 @@ class NightRunIT extends AbstractIntegrationTest {
             true,
             Instant.now(),
             gemeldet,
+            null,
             null),
         List.of());
 

@@ -17,14 +17,17 @@ import org.mwolff.manban.nightrun.application.NightRunRepository;
 import org.mwolff.manban.nightrun.application.NightRunUsageService;
 import org.mwolff.manban.nightrun.application.NightRunUsageService.NightUsageView;
 import org.mwolff.manban.nightrun.application.NightRunUsageService.PeriodUsageView;
+import org.mwolff.manban.nightrun.application.NightRunUsageService.StageUsageView;
 import org.mwolff.manban.nightrun.application.NightRunUsageService.TotalUsageView;
 import org.mwolff.manban.nightrun.domain.NightRun;
 import org.mwolff.manban.nightrun.domain.NightRunItem;
+import org.mwolff.manban.nightrun.domain.NightRunItemStage;
 import org.mwolff.manban.nightrun.domain.NightRunKind;
 import org.mwolff.manban.nightrun.domain.NightRunMode;
 import org.mwolff.manban.nightrun.domain.NightRunOrigin;
 import org.mwolff.manban.nightrun.domain.NightRunPeriod;
 import org.mwolff.manban.nightrun.domain.NightRunPeriodType;
+import org.mwolff.manban.nightrun.domain.NightRunStage;
 import org.mwolff.manban.nightrun.domain.NightRunState;
 import org.mwolff.manban.nightrun.domain.NightRunUsage;
 import org.mwolff.manban.project.application.ProjectAccessDeniedException;
@@ -118,7 +121,8 @@ class NightRunUsageServiceIT extends AbstractIntegrationTest {
             "t",
             true,
             null,
-            new NightRunUsage(new BigDecimal(kosten), null, null, null),
+            new NightRunUsage(new BigDecimal(kosten), null, null, null, null, null),
+            null,
             null),
         List.of(pakete));
   }
@@ -138,7 +142,81 @@ class NightRunUsageServiceIT extends AbstractIntegrationTest {
         1_000L,
         null,
         null,
-        new NightRunUsage(new BigDecimal(kosten), null, null, null));
+        new NightRunUsage(new BigDecimal(kosten), null, null, null, null, null),
+        List.of());
+  }
+
+  /** Ein Vorgang einer Kette samt seinen Stufen (Issue #1114). */
+  private static NightRunItem vorgang(int cardNumber, NightRunItemStage... stufen) {
+    return new NightRunItem(
+        null,
+        null,
+        0L,
+        Instant.EPOCH,
+        NightRunMode.CHAIN,
+        NightRunKind.NIGHT,
+        cardNumber,
+        "Paket",
+        NightRunState.GREEN,
+        null,
+        1_000L,
+        null,
+        null,
+        null,
+        List.of(stufen));
+  }
+
+  private static NightRunItemStage stufe(NightRunStage stage, long durationMs, String kosten) {
+    return new NightRunItemStage(
+        stage, durationMs, new NightRunUsage(new BigDecimal(kosten), null, null, null, 500L, 2));
+  }
+
+  // --- Stufen der Kette (Issue #1114) ----------------------------------------------------------
+
+  /** Über die ganze Kette — SQL, Adapter, Service: Die Nacht trägt die Kosten je Stufe (AK 8). */
+  @Test
+  void dieNachtLiefertDieAufstellungJeStufe() {
+    lauf(
+        Instant.parse("2026-09-15T21:10:00Z"),
+        NightRunMode.CHAIN,
+        "9",
+        vorgang(
+            721,
+            stufe(NightRunStage.REVIEW, 30_000L, "3"),
+            stufe(NightRunStage.PLAN, 60_000L, "2")));
+
+    NightUsageView nacht = service.night(owner, projectId, NACHT_15, BERLIN);
+
+    assertThat(nacht.stages())
+        .extracting(StageUsageView::stage, StageUsageView::itemCount, StageUsageView::durationMs)
+        .containsExactly(
+            org.assertj.core.groups.Tuple.tuple(NightRunStage.PLAN, 1L, 60_000L),
+            org.assertj.core.groups.Tuple.tuple(NightRunStage.REVIEW, 1L, 30_000L));
+    assertThat(nacht.stages().getFirst().usage().costUsd()).isEqualByComparingTo("2");
+    assertThat(nacht.stages().getFirst().usage().modelDurationMs()).isEqualTo(500L);
+    assertThat(nacht.stages().getFirst().usage().turns()).isEqualTo(2);
+  }
+
+  /** Dasselbe für den Zeitraum; ein Lauf ohne Stufen erzeugt dort keine Zeile (Plan E6). */
+  @Test
+  void derZeitraumLiefertDieAufstellungJeStufe_undEinLaufOhneStufenErzeugtKeineZeile() {
+    NightRunPeriod monat = NightRunPeriod.of(NightRunPeriodType.MONTH, BERLIN, clock, 0);
+    lauf(
+        monat.from().plusSeconds(3_600),
+        NightRunMode.CHAIN,
+        "9",
+        vorgang(4711, stufe(NightRunStage.PAKETE, 10_000L, "4")));
+    lauf(monat.from().plusSeconds(7_200), NightRunMode.IMPLEMENTATION, "5", paket(4712, "5"));
+
+    PeriodUsageView auswertung =
+        service.period(owner, projectId, NightRunPeriodType.MONTH, 0, BERLIN);
+
+    assertThat(auswertung.stages())
+        .singleElement()
+        .returns(NightRunStage.PAKETE, StageUsageView::stage)
+        .returns(1L, StageUsageView::itemCount)
+        .returns(10_000L, StageUsageView::durationMs);
+    assertThat(auswertung.stages().getFirst().usage().costUsd()).isEqualByComparingTo("4");
   }
 
   @Test

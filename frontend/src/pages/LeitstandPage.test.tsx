@@ -1,4 +1,4 @@
-import { serverBefund } from '../test/befund'
+import { GRUND_UNBEKANNT, serverBefund } from '../test/befund'
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -93,6 +93,7 @@ const paket = (nummer: number, state: NightRunItemView['state'], extra: Partial<
   commitHash: null,
   excerpt: null,
   usage: null,
+  stages: [],
   ...extra,
 })
 
@@ -111,8 +112,9 @@ const lauf = (extra: Partial<NightRunView> = {}): NightRunView => {
   tokenName: 'kette',
   complete: true,
   updatedAt: null,
-  usage: { costUsd: 12.4, inputTokens: null, outputTokens: null, cachedInputTokens: null },
+  usage: { costUsd: 12.4, inputTokens: null, outputTokens: null, cachedInputTokens: null, modelDurationMs: null, turns: null },
   noWorkReason: null,
+  budget: null,
   items: [
     paket(917, 'GREEN', { commitHash: '9489421abcdef' }),
     paket(922, 'RED', { errorClass: 'CHECKS_RED', excerpt: '2 Tests rot in BoardViewTest' }),
@@ -196,6 +198,7 @@ const zeitraum = (extra: Partial<VerbrauchZeitraum> = {}): VerbrauchZeitraum => 
   epics: [],
   withoutEpic: { epicId: null, shortcode: null, title: null, cardCount: 0, usage: angaben(null) },
   epicsOverlap: false,
+  stages: [],
   ...extra,
 })
 
@@ -613,7 +616,7 @@ describe('LeitstandPage — Lauf ohne Arbeit (#1069)', () => {
   const GRUND = 'Kein Eintrag trug das Label kit:nightrun'
   const ohneArbeit = () => lauf({ noWorkReason: GRUND, processedCount: 0, items: [] })
 
-  it('zeigt den juengsten Lauf ohne Arbeit in Laufband und „Letzter Lauf" rot mit seinem Text', async () => {
+  it('zeigt den juengsten Lauf ohne Arbeit in Laufband und „Letzter Lauf" grau mit seinem Text', async () => {
     m.klassen.mockResolvedValue({})
     m.laeufe.mockResolvedValue([ohneArbeit()])
     renderPage()
@@ -622,8 +625,25 @@ describe('LeitstandPage — Lauf ohne Arbeit (#1069)', () => {
     expect(band).toHaveTextContent(GRUND)
     const platte = await screen.findByRole('region', { name: 'Letzter Lauf · Kette' })
     expect(platte).toHaveTextContent(GRUND)
-    // Laufband und „Letzter Lauf" melden rot; die Herkunftszeile bleibt davon unberuehrt (E10).
-    expect(screen.getAllByTestId('led-zinnob').length).toBeGreaterThanOrEqual(2)
+    // Seit #1121 melden beide grau statt rot: Der Lauf fand nichts zu tun, und das ist kein Mangel.
+    // Die Herkunftszeile bleibt davon unberuehrt (E10) und meldet weiter gruen.
+    expect(within(band).getByTestId('led-grau')).toBeInTheDocument()
+    expect(within(platte).getByTestId('led-grau')).toBeInTheDocument()
+    expect(screen.queryAllByTestId('led-zinnob')).toHaveLength(0)
+  })
+
+  /**
+   * Der Rueckfall des Servers („Grund unbekannt") bleibt rot (#1121): Hinter ihm kann ein echtes
+   * Problem stecken — ein alter Runner, der Upload-Weg oder ein Lauf, der alle Pakete zurueckstellte.
+   */
+  it('meldet den Lauf ohne Arbeit mit unbekanntem Grund weiterhin rot', async () => {
+    m.klassen.mockResolvedValue({})
+    m.laeufe.mockResolvedValue([lauf({ noWorkReason: GRUND_UNBEKANNT, processedCount: 0, items: [] })])
+    renderPage()
+
+    const platte = await screen.findByRole('region', { name: 'Letzter Lauf · Kette' })
+    expect(platte).toHaveTextContent(GRUND_UNBEKANNT)
+    expect(within(platte).getByTestId('led-zinnob')).toBeInTheDocument()
   })
 
   // E12: Er zaehlt mit, taucht aber in keiner Zeile der Klassenliste auf -- er hat keine Klasse.

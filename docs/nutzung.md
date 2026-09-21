@@ -204,12 +204,34 @@ Sichtbar ist er nur für den **Owner** des Projekts und für **Plattform-Admins*
 am [Plattform-Leitstand](#plattform-leitstand) teilnimmt — siehe
 [Rollen & Rechte](rollen-und-rechte.md#projekt-rollen-rechte-matrix).
 
-**Protokoll hineingeben:** Button **„Protokoll einlesen"** oben rechts, dann die Protokolldatei
-(`.log` oder `.txt`) wählen. Die **Datei wird im Browser ausgewertet und nicht hochgeladen** — an
-den Server geht allein die verdichtete Auswertung (Kennzahlen, Zustände, Kartennummern,
-Fehlerklassen und kurze Auszüge). Protokolle sind mehrere Megabyte groß und tragen Quelltext,
-Sitzungs-IDs und Pfade; die bleiben, wo sie sind. Dieselbe Datei lässt sich erneut wählen, ohne die
-Seite neu zu laden.
+**Normalweg: Der Runner liefert selbst ein.** Ein Lauf kommt ohne jeden Handgriff ans Board — der
+Nacht-Runner meldet ihn über ein projektgebundenes Zugriffstoken beim Start und schreibt ihn danach
+fort, bis er abgeschlossen ist. Welche Angaben dabei mitkommen, hängt an der Fassung des Runners:
+Budgets, ihre Herkunft, die Stufen einer Kette, Modellzeit und Züge erscheinen erst, wenn der
+Runner sie mitschickt; bis dahin steht dort „nicht angegeben" bzw. „nicht gemeldet".
+
+**Rückfall: die Ergebnisdatei einlesen.** Kam ein Lauf nicht ans Board — etwa ohne Zugriffstoken
+oder weil die Einlieferung scheiterte —, liest der Button **„Protokoll einlesen"** oben rechts die
+Ergebnisdatei des Runners (`night-run-<datum>-<uhrzeit>.json`). Die **Datei wird im Browser
+ausgewertet und nicht hochgeladen** — an den Server geht allein die verdichtete Auswertung
+(Kennzahlen, Zustände, Kartennummern, Fehlerklassen und kurze Auszüge). Die Datei trägt Pfade und
+die Kennzahlen der Sessions; die bleiben, wo sie sind. Dieselbe Datei lässt sich erneut wählen,
+ohne die Seite neu zu laden. **Budgets und Stufen** eines so eingelesenen Laufs zeigt die Seite nur
+bis zum nächsten Neuladen: Der Rückfallweg liefert sie nicht an den Server.
+
+**Der Stand am Board gewinnt.** Wird die Ergebnisdatei eines Laufs eingelesen, den der Runner schon
+eingeliefert hat, ändert sich an seiner Anzeige nichts: Es entsteht kein zweiter Lauf, kein Wert
+ändert sich, und es kommt nichts hinzu, was die Einlieferung nicht kannte. Das gilt auch für Läufe,
+die vor dieser Regel eingeliefert wurden.
+
+Einige Angaben stehen deshalb **nur bei einem eingelesenen, noch nicht eingelieferten Lauf**, weil
+allein die Ergebnisdatei sie trägt. Bei einem Lauf, den der Runner eingeliefert hat, entfallen:
+
+- bei einem Kettenlauf die Angaben „Ketten durchgelaufen", „Karten entstanden", „Laufzeit über alle
+  Stufen" und „Kosten der Nacht",
+- die Chips der in der Nacht entstandenen Dokumente,
+- der Grund, an dem eine Stufe der Kette abbrach,
+- die Dokumente je Stufe.
 
 Jeder Lauf steht als aufklappbare Zeile da — Startzeitpunkt, Art des Laufs („Umsetzungs-Lauf",
 „Prüf-Lauf" oder „Nachtplan-Lauf"), Dauer sowie „N bearbeitet, M übergangen". Ein Nachtplan-Lauf
@@ -303,6 +325,21 @@ Fuß nennt die **Abdeckung** dieser Summe, und zwar zweigeteilt: ab welchem Datu
 Eintrag aufbewahrt ist (oder „ohne aufbewahrten Eintrag") und ab wann interaktive Sitzungen erfasst
 werden (oder „Sitzungen nicht erfasst"). Die Zahl ist damit die Summe des **Aufbewahrten**, nicht
 die des Gelebten: Was der Ringpuffer verdrängt hat, fehlt darin.
+
+### Kosten je Stufe der Kette
+
+Die Verbrauchsauswertung auf der Seite [„Läufe"](#nachtlauf) — Ansicht Nacht, Woche oder Monat —
+führt unter den Nächten und der Aufstellung je Vorhaben die Platte **„Stufen der Kette"**: je Stufe
+(**Plan**, **Prüfung**, **Pakete**, **Abdeckung**) die Kosten im Zeitraum und wie viele Vorgänge
+sie durchlaufen haben, dazu ein Balken im Verhältnis zur teuersten Stufe. Die Reihenfolge ist die
+der Kette.
+
+- **Läufe ohne Stufen erscheinen darin nicht** — ein Umsetzungs- oder Prüf-Lauf hat keine. Liefen
+  im Zeitraum keine Ketten, fehlt die Platte ganz.
+- **Es gibt keine Zeile „ohne Stufe"**, anders als „Ohne Vorhaben" in der Aufstellung je Vorhaben:
+  Sie trüge bei einem Umsetzungs-Lauf den Verbrauch einer ganzen Nacht, und die Aufstellung handelt
+  von der Kette.
+- Fehlen die Kosten einer Stufe, steht dort „nicht gemessen" und kein Balken — nie eine 0.
 
 ### Eine Sitzung zählt zum Zeitraum ihres Beginns
 

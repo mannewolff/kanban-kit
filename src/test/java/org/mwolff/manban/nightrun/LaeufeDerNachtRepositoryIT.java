@@ -2,6 +2,7 @@ package org.mwolff.manban.nightrun;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
@@ -10,6 +11,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mwolff.manban.AbstractIntegrationTest;
 import org.mwolff.manban.nightrun.application.DisruptionRepository;
+import org.mwolff.manban.nightrun.domain.NightRunMode;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -39,6 +41,21 @@ class LaeufeDerNachtRepositoryIT extends AbstractIntegrationTest {
 
   /** Letzte Meldung eines Laufs — was {@code night_run.updated_at} trägt. */
   private static final Instant LETZTE_MELDUNG = Instant.parse("2026-09-19T23:30:00Z");
+
+  /** Bezugszeitpunkt der Abfrage; er liegt wie in der Wirklichkeit innerhalb der Nacht. */
+  private static final Instant JETZT = Instant.parse("2026-09-20T09:00:00Z");
+
+  /** Die Stille, die ein unfertiger Lauf sich erlauben darf. */
+  private static final Duration STILLE_FRIST = Duration.ofMinutes(90);
+
+  /** Ein Lebenszeichen genau auf der Frist — der Lauf gilt damit noch als lebendig. */
+  private static final Instant AUF_DER_FRIST = JETZT.minus(STILLE_FRIST);
+
+  /** Ein Startzeitpunkt vor der Nacht — ein Lauf, der zur Nacht davor gehört. */
+  private static final Instant VOR_DER_NACHT = NACHT_VON.minus(Duration.ofHours(2));
+
+  /** Ein frisches Lebenszeichen: deutlich innerhalb der Frist. */
+  private static final Instant FRISCH = JETZT.minus(Duration.ofMinutes(10));
 
   @Autowired private DisruptionRepository disruptions;
   @Autowired private JdbcTemplate jdbc;
@@ -92,10 +109,16 @@ class LaeufeDerNachtRepositoryIT extends AbstractIntegrationTest {
         laufId);
   }
 
+  private List<DisruptionRepository.DisruptionCandidate> kandidaten() {
+    return disruptions.candidatesOfNight(NACHT_VON, NACHT_BIS, JETZT, STILLE_FRIST);
+  }
+
   private List<Long> nacht() {
-    return disruptions.candidatesOfNight(NACHT_VON, NACHT_BIS).stream()
-        .map(DisruptionRepository.DisruptionCandidate::nightRunId)
-        .toList();
+    return ids(kandidaten());
+  }
+
+  private static List<Long> ids(List<DisruptionRepository.DisruptionCandidate> kandidaten) {
+    return kandidaten.stream().map(DisruptionRepository.DisruptionCandidate::nightRunId).toList();
   }
 
   /** Kriterium 9: Der Startzeitpunkt entscheidet, {@code from} einschließlich, {@code to} nicht. */
@@ -172,7 +195,7 @@ class LaeufeDerNachtRepositoryIT extends AbstractIntegrationTest {
     letzteMeldung(laufend, LETZTE_MELDUNG);
     teilnahme(true);
 
-    assertThat(disruptions.candidatesOfNight(NACHT_VON, NACHT_BIS))
+    assertThat(kandidaten())
         .satisfiesExactly(
             k -> {
               assertThat(k.nightRunId()).isEqualTo(laufend);
@@ -186,6 +209,23 @@ class LaeufeDerNachtRepositoryIT extends AbstractIntegrationTest {
             });
   }
 
+  /**
+   * Issue #1123: Auch diese Abfrage muss die Laufart mitbringen — sie entscheidet, welches von zwei
+   * gleichrangigen Paketen maßgeblich ist. Beide Abfragen teilen sich einen {@code RowMapper}, aber
+   * nicht ihre Spaltenliste.
+   */
+  @Test
+  void derKandidatDerNachtTraegtDieLaufartAusDerDatenbank() {
+    long laufId = lauf(DRIN, "NIGHT", true);
+    jdbc.update("UPDATE night_run SET mode = 'CHAIN' WHERE id = ?", laufId);
+    teilnahme(true);
+
+    assertThat(kandidaten())
+        .singleElement()
+        .extracting(DisruptionRepository.DisruptionCandidate::mode)
+        .isEqualTo(NightRunMode.CHAIN);
+  }
+
   /** Dieselben Spalten wie die Störungsliste — Projekt, Startzeitpunkt, Grund. */
   @Test
   void derKandidatDerNachtTraegtProjektnamenUndGrund() {
@@ -194,7 +234,7 @@ class LaeufeDerNachtRepositoryIT extends AbstractIntegrationTest {
     jdbc.update("UPDATE night_run SET no_work_reason = 'Ready war leer' WHERE id = ?", laufId);
     teilnahme(true);
 
-    assertThat(disruptions.candidatesOfNight(NACHT_VON, NACHT_BIS))
+    assertThat(kandidaten())
         .singleElement()
         .satisfies(
             k -> {
@@ -221,5 +261,110 @@ class LaeufeDerNachtRepositoryIT extends AbstractIntegrationTest {
         .extracting(DisruptionRepository.DisruptionCandidate::nightRunId)
         .containsExactly(offen);
     assertThat(nacht()).containsExactlyInAnyOrder(offen, laufend, quittiert);
+  }
+
+  // --- Der zweite Zweig: was noch arbeitet, gleich wann es begann (Issue #1109) ---------------
+
+  /**
+   * Kriterium 1: Ein Lauf, der vor der Nacht begann und noch arbeitet, kommt über den zweiten Zweig
+   * herein. Über den ersten käme er nie — sein Start liegt außerhalb der Spanne.
+   */
+  @Test
+  void einLaufVonVorDerNachtMitFrischemLebenszeichenErscheint() {
+    long laufend = lauf(VOR_DER_NACHT, "NIGHT", false);
+    letzteMeldung(laufend, FRISCH);
+    teilnahme(true);
+
+    assertThat(nacht()).containsExactly(laufend);
+  }
+
+  /**
+   * Kriterium 3: Derselbe Lauf, dessen Stille die Frist überschreitet, bleibt draußen — er gehört
+   * zu einer Nacht, die vorbei ist, und die Auswertung sähe ihn als verstummt.
+   */
+  @Test
+  void einVerstummterLaufVonVorDerNachtFehlt() {
+    long verstummt = lauf(VOR_DER_NACHT, "NIGHT", false);
+    letzteMeldung(verstummt, AUF_DER_FRIST.minusMillis(1));
+    teilnahme(true);
+
+    assertThat(nacht()).isEmpty();
+  }
+
+  /**
+   * Der Rand der Frist liegt gleich wie in {@code NightRunOutcome}: genau <b>auf</b> der Frist lebt
+   * der Lauf noch, erst darüber ist er still. Zöge die Abfrage ihn hier schon ab, verschwände ein
+   * Lauf vom Leitstand, den die Auswertung des Projekts noch als laufend zeigt (#1086 AK 8).
+   */
+  @Test
+  void aufDerStillefristGiltDerLaufNochAlsLebendig() {
+    long amRand = lauf(VOR_DER_NACHT, "NIGHT", false);
+    letzteMeldung(amRand, AUF_DER_FRIST);
+    teilnahme(true);
+
+    assertThat(nacht()).containsExactly(amRand);
+  }
+
+  /**
+   * Ohne {@code updated_at} zählt der Start als Lebenszeichen — dieselbe Rückfallregel, die {@code
+   * NightRunOutcome} für den Upload-Weg trägt. Die Nacht ist hier eng gezogen und enthält keinen
+   * der beiden Läufe, damit allein der zweite Zweig entscheidet.
+   */
+  @Test
+  void ohneLetzteMeldungIstDerStartDasLebenszeichen() {
+    long frischGestartet = lauf(FRISCH, "NIGHT", false);
+    long laengstStill = lauf(AUF_DER_FRIST.minusSeconds(1), "NIGHT", false);
+    teilnahme(true);
+
+    assertThat(ids(disruptions.candidatesOfNight(JETZT, NACHT_BIS, JETZT, STILLE_FRIST)))
+        .containsExactly(frischGestartet)
+        .doesNotContain(laengstStill);
+  }
+
+  /**
+   * Der zweite Zweig gilt nur unfertigen Läufen: Ein abgeschlossener Lauf einer früheren Nacht
+   * bleibt draußen, auch wenn seine letzte Meldung frisch ist. Sonst hielte sich jeder eben
+   * beendete Lauf der alten Nacht noch die Stillefrist lang auf dem Leitstand (#1086 AK 9).
+   */
+  @Test
+  void einAbgeschlossenerLaufVonVorDerNachtFehltTrotzFrischerMeldung() {
+    long beendet = lauf(VOR_DER_NACHT, "NIGHT", true);
+    letzteMeldung(beendet, FRISCH);
+    teilnahme(true);
+
+    assertThat(nacht()).isEmpty();
+  }
+
+  /**
+   * Kriterium 5: Ein Lauf, der <b>beide</b> Zweige trifft — Start in der Nacht und frisches
+   * Lebenszeichen —, steht genau einmal in der Antwort. Das leistet das {@code OR} in einer
+   * Abfrage; eine zweite, angehängte Abfrage lieferte ihn zweimal.
+   */
+  @Test
+  void einLaufDerBeideZweigeTrifftStehtGenauEinmal() {
+    long doppelt = lauf(DRIN, "NIGHT", false);
+    letzteMeldung(doppelt, FRISCH);
+    teilnahme(true);
+
+    assertThat(nacht()).containsExactly(doppelt);
+  }
+
+  /**
+   * Kriterium 6: Gattung und Teilnahme gelten für <b>beide</b> Zweige. Eine falsch geklammerte
+   * Bedingung ließe einen laufenden Lauf an ihnen vorbei — eine interaktive Sitzung oder ein Lauf
+   * eines abgehakten Projekts stünde auf dem Plattform-Leitstand.
+   */
+  @Test
+  void derZweiteZweigLaesstWederInteraktiveSitzungenNochFremdeProjekteDurch() {
+    long interaktiv = lauf(VOR_DER_NACHT, "INTERACTIVE", false);
+    long nachtlauf = lauf(VOR_DER_NACHT.plusSeconds(60), "NIGHT", false);
+    letzteMeldung(interaktiv, FRISCH);
+    letzteMeldung(nachtlauf, FRISCH);
+    teilnahme(true);
+
+    assertThat(nacht()).containsExactly(nachtlauf);
+
+    teilnahme(false);
+    assertThat(nacht()).isEmpty();
   }
 }

@@ -13,7 +13,6 @@ import {
 import { dollar } from '../../lib/leitstand'
 import { kosten, ohneNull } from '../../lib/nachtlaufFormat'
 import {
-  kartenText,
   laeufeText,
   nachtKurz,
   vergleichMitVorzeitraum,
@@ -23,7 +22,6 @@ import {
   zeitraumHinweis,
 } from '../../lib/verbrauchZeitraum'
 import {
-  ETIKETT,
   KUPFER,
   NUR_LESER_SX,
   NUT,
@@ -37,17 +35,10 @@ import {
   TEXT_SCHWACH,
   ZAHL,
 } from '../../theme'
-import {
-  DeltaMarke,
-  Fuellschiene,
-  KACHEL_SX,
-  KachelFuss,
-  KachelWert,
-  Led,
-  Platte,
-  ZEILE_HOVER,
-} from '../leitstand/LeitstandBausteine'
+import { DeltaMarke, Fuellschiene, Led, Platte, ZEILE_HOVER } from '../leitstand/LeitstandBausteine'
+import { NachtlaufVerbrauchStufen } from './NachtlaufVerbrauchStufen'
 import { NachtlaufVerbrauchVorhaben } from './NachtlaufVerbrauchVorhaben'
+import { VerbrauchKostenKacheln } from './VerbrauchKacheln'
 
 const ARTEN: ReadonlyArray<{ art: VerbrauchZeitraumArt; label: string }> = [
   { art: 'DAY', label: 'Tag' },
@@ -286,7 +277,7 @@ function ZeitraumInhalt({
                 {hinweis}
               </Box>
             ) : (
-              <Kacheln kennzahlen={current} />
+              <VerbrauchKostenKacheln kennzahlen={current} />
             )}
           </Platte>
         </Box>
@@ -309,28 +300,31 @@ function ZeitraumInhalt({
                 </>
               }
             >
-              <Kacheln kennzahlen={previous} />
+              <VerbrauchKostenKacheln kennzahlen={previous} />
             </Platte>
           </Box>
         )}
       </Box>
 
       {!ohneZahlen && (
-        <Box
-          sx={{
-            display: 'grid',
-            gridTemplateColumns: { xs: 'minmax(0,1fr)', lg: 'minmax(0,1.2fr) minmax(0,1fr)' },
-            gap: '16px',
-            alignItems: 'start',
-          }}
-        >
-          <Naechte naechte={zeitraum.nights} onNachtWaehlen={onNachtWaehlen} />
-          <NachtlaufVerbrauchVorhaben
-            epics={zeitraum.epics}
-            withoutEpic={zeitraum.withoutEpic}
-            epicsOverlap={zeitraum.epicsOverlap}
-          />
-        </Box>
+        <>
+          <Box
+            sx={{
+              display: 'grid',
+              gridTemplateColumns: { xs: 'minmax(0,1fr)', lg: 'minmax(0,1.2fr) minmax(0,1fr)' },
+              gap: '16px',
+              alignItems: 'start',
+            }}
+          >
+            <Naechte naechte={zeitraum.nights} onNachtWaehlen={onNachtWaehlen} />
+            <NachtlaufVerbrauchVorhaben
+              epics={zeitraum.epics}
+              withoutEpic={zeitraum.withoutEpic}
+              epicsOverlap={zeitraum.epicsOverlap}
+            />
+          </Box>
+          <NachtlaufVerbrauchStufen stufen={zeitraum.stages} />
+        </>
       )}
     </>
   )
@@ -365,87 +359,6 @@ function Vergleich({
       <Box component="span" sx={NUR_LESER_SX}>
         {vergleich.text}
       </Box>
-    </Box>
-  )
-}
-
-/**
- * Die vier Kacheln eines Zeitraums (Mockup `.kacheln-2`). Die Einordnung unter dem Wert entsteht
- * ausschließlich aus vorhandenen Zahlen; fehlt eine, bleibt die Zeile leer — „nicht gemessen" wird
- * nie zu 0.
- */
-function Kacheln({ kennzahlen }: Readonly<{ kennzahlen: VerbrauchKennzahlen }>) {
-  const { total, cardShare, remainder } = kennzahlen.usageByKind.night
-  const jeLauf =
-    total.costUsd !== null && kennzahlen.runCount > 0
-      ? `${dollar(total.costUsd / kennzahlen.runCount)} $ je Lauf`
-      : ''
-  const anteil =
-    total.costUsd !== null && total.costUsd > 0 && cardShare.costUsd !== null
-      ? `${Math.round((cardShare.costUsd / total.costUsd) * 100)} % der Summe`
-      : ''
-  return (
-    <Box
-      sx={{
-        display: 'grid',
-        gridTemplateColumns: { xs: 'minmax(0,1fr)', sm: 'repeat(2, minmax(0,1fr))' },
-        gap: '10px',
-        p: '14px',
-        perspective: '1100px',
-      }}
-    >
-      <Kachel etikett="Gesamtsumme" wert={total.costUsd} einheit="$" basis={jeLauf} />
-      <Kachel etikett="Karten zugeordnet" wert={cardShare.costUsd} einheit="$" basis={anteil} />
-      <Kachel
-        etikett="Rest"
-        wert={remainder.costUsd}
-        einheit="$"
-        basis="keiner Karte zuzuordnen"
-      />
-      <Kachel
-        etikett="Läufe"
-        wert={kennzahlen.runCount}
-        einheit={kennzahlen.runCount === 1 ? 'Lauf' : 'Läufe'}
-        basis={kartenText(kennzahlen.cardCount)}
-        alsZahl
-      />
-    </Box>
-  )
-}
-
-/** Eine kleine Kachel (Mockup `.kachel-klein`): Etikett, Wert mit Einheit, Einordnung darunter. */
-function Kachel({
-  etikett,
-  wert,
-  einheit,
-  basis,
-  alsZahl = false,
-}: Readonly<{
-  etikett: string
-  wert: number | null
-  einheit: string
-  basis: string
-  alsZahl?: boolean
-}>) {
-  let anzeigewert: string | null = null
-  if (wert !== null) {
-    anzeigewert = alsZahl ? String(wert) : dollar(wert)
-  }
-  return (
-    <Box
-      component="article"
-      aria-label={etikett}
-      data-testid={`verbrauch-kachel-${etikett}`}
-      sx={{ ...KACHEL_SX, gap: '6px', pt: '12px', px: '13px', pb: '11px' }}
-    >
-      <Box sx={ETIKETT}>{etikett}</Box>
-      <KachelWert
-        wert={anzeigewert}
-        einheit={einheit}
-        leerText="nicht gemessen"
-        groesse={26}
-      />
-      <KachelFuss basis={basis} />
     </Box>
   )
 }

@@ -442,6 +442,7 @@ export function AppShell() {
   // rein und ohne React (geprüft in `layout/navItems.test.ts`).
   const {
     kontextBoard,
+    pfadProjektId,
     projectCount,
     canManageCurrentBoards,
     canViewNightRun,
@@ -696,7 +697,9 @@ export function AppShell() {
           </Box>
           {user && (
             <Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <CardNumberSearch />
+              {/* Das Projekt, in dem gerade gearbeitet wird — dasselbe, das Pfad und Rechte
+                  bestimmt. Bei mehreren Treffern öffnet die Suche dessen Karte direkt (#1124). */}
+              <CardNumberSearch aktuellesProjekt={pfadProjektId} />
               {/* Ein unsichtbares Kürzel gibt es für die Hälfte der Nutzer nicht: Die Taste ist der
                   sichtbare Zugang und trägt zugleich die Beschriftung, über die `b` bekannt wird.
                   Der Umschlag mit `span` gibt dem Tooltip auch an der deaktivierten Taste einen

@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '../api/client'
 import type { DisruptionView, LeitstandView } from '../api/plattformLeitstand'
 import { plattformLeitstandApi } from '../api/plattformLeitstand'
+import { cssRegel } from '../test/cssRegel'
 import PlattformLeitstandPage from './PlattformLeitstandPage'
 
 vi.mock('../api/plattformLeitstand', async () => {
@@ -189,6 +190,33 @@ describe('PlattformLeitstandPage (#1083)', () => {
       const zeile = await screen.findByTestId('durchgefuehrt-5')
       expect(within(zeile).getByText(wort)).toBeInTheDocument()
       expect(within(zeile).getByTestId(led)).toHaveAttribute('data-puls', 'aus')
+    })
+
+    /**
+     * Issue #1121: Ein Lauf, der anlief und nichts Freigegebenes fand, steht hier grau mit dem Wort
+     * „nichts zu tun" — nicht rot. Wer ein Projekt nachts bewusst ruhen lässt, räumte sonst jeden
+     * Morgen eine Meldung weg.
+     */
+    it('zeigt NO_WORK als „nichts zu tun" mit grauem, ruhendem Melder', async () => {
+      api.leitstand.mockResolvedValue(
+        sicht({
+          durchgefuehrte: [
+            durchgefuehrt({
+              outcome: {
+                verdict: 'NO_WORK',
+                decisiveItem: null,
+                noWorkReason: 'Ready ist leer — nichts zu tun.',
+              },
+            }),
+          ],
+        }),
+      )
+
+      zeigeSeite()
+
+      const zeile = await screen.findByTestId('durchgefuehrt-5')
+      expect(within(zeile).getByText('nichts zu tun')).toBeInTheDocument()
+      expect(within(zeile).getByTestId('led-grau')).toHaveAttribute('data-puls', 'aus')
     })
 
     /** Kriterium 12, erste Hälfte: von **jedem** Eintrag — auch vom gelungenen. */
@@ -499,6 +527,35 @@ describe('PlattformLeitstandPage (#1083)', () => {
 
     expect(await screen.findByTestId('keine-stoerungen')).toHaveTextContent('Keine offene Störung.')
     expect(screen.queryAllByTestId(/^stoergruppe-/)).toHaveLength(0)
+  })
+
+  /**
+   * #1122: Gruppenkopf und Störzeile halten links und rechts denselben Abstand zum Rand wie der
+   * Leersatz — sonst klebt der Projektname am linken Rahmen und „Störung löschen" am rechten.
+   *
+   * Der Vergleichswert wird aus `keine-stoerungen` **gelesen** statt zweimal hingeschrieben: So
+   * bleibt die Aussage „derselbe Einzug wie im Leerfall" auch dann wahr, wenn der Wert je wandert.
+   * Beide Zustände zusammen gibt es nicht — ist eine Störung offen, verschwindet der Leersatz —,
+   * deshalb zwei Darstellungen nacheinander.
+   */
+  it('rückt Gruppenkopf und Störzeile so weit ein wie den Leersatz', async () => {
+    api.leitstand.mockResolvedValue(sicht())
+    const view = zeigeSeite()
+    const leersatz = getComputedStyle(await screen.findByTestId('keine-stoerungen'))
+    const einzug = { paddingLeft: leersatz.paddingLeft, paddingRight: leersatz.paddingRight }
+    expect(einzug).toEqual({ paddingLeft: '16px', paddingRight: '16px' })
+    view.unmount()
+
+    api.leitstand.mockResolvedValue(sicht({ stoerungen: [stoerung()] }))
+    zeigeSeite()
+
+    const kopf = await screen.findByTestId('stoergruppe-kopf-9')
+    expect(kopf).toHaveStyle(einzug)
+    expect(screen.getByTestId('stoerung-5')).toHaveStyle(einzug)
+    // Der Einzug sitzt am Kopf selbst und nicht an einem Rahmen darum — die Trennlinie läuft
+    // deshalb weiter über die volle Breite der Platte. Gelesen aus der erzeugten Regel, weil jsdom
+    // die Kurzschreibweise mit CSS-Variable im berechneten Stil verwirft (siehe `cssRegel`).
+    expect(cssRegel(kopf)).toMatch(/border-bottom: 1px solid/)
   })
 
   /** AK 3: dasselbe wie auf jeder anderen Admin-Seite — ein Fehlertext statt Inhalt. */

@@ -70,6 +70,7 @@ const zeitraum: VerbrauchZeitraum = {
   epics: [],
   withoutEpic: { epicId: null, shortcode: null, title: null, cardCount: 0, usage: nichts },
   epicsOverlap: false,
+  stages: [],
 }
 
 const nacht: VerbrauchNacht = {
@@ -80,6 +81,7 @@ const nacht: VerbrauchNacht = {
   ...verbrauch(LEER),
   aborted: false,
   cards: [],
+  stages: [],
 }
 
 /**
@@ -277,7 +279,7 @@ describe('NachtlaufVerbrauchBereich', () => {
     zeige(api)
 
     const ansicht = await screen.findByTestId('verbrauch-nacht')
-    expect(lesbar(within(ansicht).getByTestId('nachtlauf-kennzahl-Gesamtsumme'))).toContain('4,00 $')
+    expect(lesbar(within(ansicht).getByTestId('verbrauch-kachel-Gesamtsumme'))).toContain('4,00')
     expect(lesbar(ansicht)).not.toContain('10,00 $')
   })
 

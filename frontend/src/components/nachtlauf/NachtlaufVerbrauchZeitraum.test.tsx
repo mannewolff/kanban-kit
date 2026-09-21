@@ -6,9 +6,11 @@ import type {
   VerbrauchAngaben,
   VerbrauchAufteilung,
   VerbrauchKennzahlen,
+  VerbrauchStufe,
   VerbrauchZeitraum,
   VerbrauchZeitraumArt,
 } from '../../api/nightRunUsage'
+import type { NightRunStage } from '../../api/nightRuns'
 import { KEIN_LAUF_TEXT } from '../../lib/verbrauchZeitraum'
 import { theme } from '../../theme'
 import { NachtlaufVerbrauchZeitraum } from './NachtlaufVerbrauchZeitraum'
@@ -99,6 +101,15 @@ const zeitraum = (
   ],
   withoutEpic: { epicId: null, shortcode: null, title: null, cardCount: 1, usage: kosten(1) },
   epicsOverlap: false,
+  stages: [],
+})
+
+/** Eine Stufe der Kette in der Aufstellung des Zeitraums (Issue #1117). */
+const stufe = (stage: NightRunStage, costUsd: number, itemCount = 1): VerbrauchStufe => ({
+  stage,
+  itemCount,
+  durationMs: 60_000,
+  usage: kosten(costUsd),
 })
 
 const apiMit = (antwort: (type: VerbrauchZeitraumArt) => Promise<VerbrauchZeitraum>) => ({
@@ -489,5 +500,34 @@ describe('NachtlaufVerbrauchZeitraum — Nachtlauf-Anteil', () => {
     expect(screen.getByTestId('verbrauch-zeitraum-vergleich')).toHaveTextContent(
       'nicht vergleichbar',
     )
+  })
+})
+
+/** Die Aufstellung je Stufe der Kette hängt im Zeitraum (Issue #1117, #993 AK 8). */
+describe('NachtlaufVerbrauchZeitraum — Stufen der Kette', () => {
+  it('zeigt die Aufstellung je Stufe aus der Antwort des Zeitraums', async () => {
+    zeige(
+      apiMit((type) =>
+        Promise.resolve({ ...zeitraum(type), stages: [stufe('PLAN', 5, 2), stufe('REVIEW', 2)] }),
+      ),
+    )
+
+    const platte = await screen.findByTestId('verbrauch-stufen')
+    const zeilen = within(platte).getAllByRole('listitem')
+    expect(zeilen.map((z) => lesbar(z))).toEqual([
+      expect.stringContaining('Plan'),
+      expect.stringContaining('Prüfung'),
+    ])
+    // `Intl` setzt vor dem Währungszeichen ein geschütztes Leerzeichen; welches, hängt an der
+    // ICU-Fassung — geprüft wird deshalb mit `\s` statt mit einem festen Zeichen im Literal.
+    expect(lesbar(zeilen[0])).toMatch(/5,00\s\$/)
+    expect(lesbar(zeilen[0])).toContain('2 Vorgänge')
+  })
+
+  it('zeigt die Aufstellung nicht, wenn der Zeitraum keine Stufen fuehrt', async () => {
+    zeige(apiMit((type) => Promise.resolve(zeitraum(type))))
+
+    await screen.findByTestId('verbrauch-vorhaben')
+    expect(screen.queryByTestId('verbrauch-stufen')).not.toBeInTheDocument()
   })
 })

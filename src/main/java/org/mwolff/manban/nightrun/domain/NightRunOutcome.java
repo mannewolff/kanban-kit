@@ -33,7 +33,8 @@ import org.jspecify.annotations.Nullable;
  *
  * @param verdict der Ausgang des Laufs
  * @param decisiveItem das Paket, das den Ausgang bestimmt; {@code null}, wenn keines ihn bestimmt —
- *     bei {@link Verdict#SUCCEEDED}, {@link Verdict#RUNNING} und beim Lauf ohne Arbeit
+ *     bei {@link Verdict#SUCCEEDED}, {@link Verdict#RUNNING}, {@link Verdict#NO_WORK} und beim Lauf
+ *     ohne Arbeit mit unbekanntem Grund
  * @param noWorkReason Grund, warum der Lauf nichts abgearbeitet hat (Issue #1068); durchgereicht,
  *     nicht formuliert, und {@code null}, wenn der Lauf gearbeitet hat
  */
@@ -42,6 +43,20 @@ public record NightRunOutcome(
 
   /** Rang eines Pakets, das den Ausgang nicht bestimmen kann. */
   private static final int NICHT_MASSGEBLICH = Integer.MAX_VALUE;
+
+  /**
+   * Rückfalltext für einen Lauf ohne Arbeit, der keinen Grund meldet (Issue #1068, AK 2 der
+   * fachlichen Quelle #1060). Er entsteht am Server und nicht im Frontend (Plan #1067, E4):
+   * Laufplatte, Laufband und „Letzter Lauf" lesen denselben Wert, drei Einsetzstellen liefen
+   * auseinander.
+   *
+   * <p><b>In der Domäne und nicht mehr im Dienst</b> seit Issue #1121: Seither hängt am Text eine
+   * Aussage über den <em>Ausgang</em> — nur ein Lauf mit <b>gemeldetem</b> Grund ist {@link
+   * Verdict#NO_WORK}, der Rückfall bleibt {@link Verdict#FAILED}. Setzen tut ihn weiterhin allein
+   * der Dienst; gelesen wird er hier, weil hier der Ausgang entsteht. Eine eigene Spalte „Grund
+   * gemeldet ja/nein" wäre eine Migration für dieselbe Aussage, die schon im Text steckt.
+   */
+  public static final String GRUND_UNBEKANNT = "Nichts abgearbeitet — Grund unbekannt";
 
   /**
    * Der Ausgang eines Laufs.
@@ -55,11 +70,22 @@ public record NightRunOutcome(
     /** Vollständig gelungen — keine Störung. */
     SUCCEEDED,
 
-    /** Nicht gelungen: hartes Scheitern, Vorbehalt oder ein Lauf ohne Arbeit. */
+    /**
+     * Nicht gelungen: hartes Scheitern, ein verstummter Lauf oder ein Lauf ohne Arbeit, dessen
+     * Grund niemand gemeldet hat ({@link NightRunOutcome#GRUND_UNBEKANNT}).
+     */
     FAILED,
 
     /** Abgeschlossen, aber ein Paket wartet auf etwas — zurückgestellt oder auf einen Menschen. */
     WAITING,
+
+    /**
+     * Abgeschlossen, keine Arbeit vorgefunden — <b>kein Mangel des Laufs</b> (Issue #1121).
+     *
+     * <p>Der Lauf lief an, fand nichts Freigegebenes und meldete das mit seinem Grund. Wer ein
+     * Projekt nachts bewusst ruhen lässt, soll dafür keine Störung quittieren müssen.
+     */
+    NO_WORK,
 
     /** Noch nicht abgeschlossen; der Ausgang steht nicht fest. */
     RUNNING
@@ -89,9 +115,15 @@ public record NightRunOutcome(
    *       er wird nicht rot, auch nicht mit einem roten Paket (dieselbe Begründung, die {@code
    *       laufMelder} seit #1069 trägt).
    *   <li><b>Ohne Arbeit</b> schlägt die Pakete. Der Grund ist der Text selbst; ein Paket daneben
-   *       wäre eine zweite Begründung für denselben Lauf.
+   *       wäre eine zweite Begründung für denselben Lauf. Ein <b>gemeldeter</b> Grund ist {@link
+   *       Verdict#NO_WORK} — ein ruhiger Lauf und keine Störung; allein der Rückfall {@link
+   *       #GRUND_UNBEKANNT} bleibt {@link Verdict#FAILED}, denn hinter ihm kann ein echtes Problem
+   *       stecken (ein Lauf, der alle Pakete zurückstellte, meldet keinen Grund). Die Stelle in der
+   *       Rangfolge ändert das nicht: Ein Lauf mit gemeldetem Grund hat keine Pakete, und für den
+   *       Rückfall bleibt alles wie zuvor (Issue #1121).
    *   <li><b>Rot vor Gelb vor Grau-mit-Fehlerklasse</b>, innerhalb einer Farbe das erste in
-   *       Laufreihenfolge.
+   *       Laufreihenfolge — <b>bei einer Kette das zuletzt gerissene</b> (Issue #1123, siehe {@link
+   *       #auswahlreihenfolge}).
    * </ol>
    *
    * <p>Grau <em>ohne</em> Fehlerklasse ist ein übergangenes Paket — der Lauf hat es nicht
@@ -103,6 +135,7 @@ public record NightRunOutcome(
    * @param complete ob der Lauf sich als abgeschlossen gemeldet hat
    * @param noWorkReason Grund eines Laufs ohne Arbeit; {@code null} oder leer, wenn er gearbeitet
    *     hat
+   * @param mode die Laufart — sie entscheidet unter gleichrangigen Paketen (Issue #1123)
    * @param items die Pakete des Laufs, in Laufreihenfolge
    * @param startedAt Startzeitpunkt des Laufs — das Lebenszeichen eines Laufs, der nie
    *     fortgeschrieben wurde (der Upload-Weg lässt {@code updatedAt} bewusst leer)
@@ -114,6 +147,7 @@ public record NightRunOutcome(
   public static NightRunOutcome of(
       boolean complete,
       @Nullable String noWorkReason,
+      NightRunMode mode,
       List<NightRunItem> items,
       Instant startedAt,
       @Nullable Instant updatedAt,
@@ -126,13 +160,37 @@ public record NightRunOutcome(
       return new NightRunOutcome(Verdict.RUNNING, null, null);
     }
     if (noWorkReason != null && !noWorkReason.isBlank()) {
-      return new NightRunOutcome(Verdict.FAILED, null, noWorkReason);
+      Verdict ohneArbeit = GRUND_UNBEKANNT.equals(noWorkReason) ? Verdict.FAILED : Verdict.NO_WORK;
+      return new NightRunOutcome(ohneArbeit, null, noWorkReason);
     }
-    return items.stream()
+    return auswahlreihenfolge(mode, items).stream()
         .filter(item -> rang(item) != NICHT_MASSGEBLICH)
         .min(Comparator.comparingInt(NightRunOutcome::rang))
         .map(NightRunOutcome::ausPaket)
         .orElseGet(() -> new NightRunOutcome(Verdict.SUCCEEDED, null, null));
+  }
+
+  /**
+   * Die Reihenfolge, in der gleichrangige Pakete um das maßgebliche streiten — in einer Kette
+   * umgekehrt (Issue #1123).
+   *
+   * <p><strong>Warum umgekehrt.</strong> Ein Kettenlauf trägt neben seinen Paketen die
+   * Ketten-Einheit selbst, und die steht immer zuerst. Ihren Abbruch hat sie <em>geerbt</em>
+   * („Stufe umsetzung: harter Stopp in der Runde zu Paket #1112"); gerissen ist die Kette an dem
+   * Paket, das danach kam. Unter gleichrangigen Paketen ist deshalb das letzte der konkrete Bruch —
+   * und genau das gehört in die Störzeile, nicht die Einheit, die es nur weiterreicht.
+   *
+   * <p>Die Regel kommt ohne Wissen darüber aus, <em>welches</em> Paket die Kette ist: Riss sie
+   * schon in der Planung, ist die Ketten-Einheit das einzige rote Paket, und die umgekehrte
+   * Reihenfolge wählt sie. Ein Ausschluss nach Kartennummer bräuchte dafür eine zweite Angabe am
+   * Lauf.
+   *
+   * <p>Gedreht wird nur die <em>Reihenfolge</em>, nicht die Rangfolge: Rot schlägt Gelb auch in
+   * einer Kette, weil {@link #rang} vor der Position entscheidet.
+   */
+  private static List<NightRunItem> auswahlreihenfolge(
+      NightRunMode mode, List<NightRunItem> items) {
+    return mode == NightRunMode.CHAIN ? items.reversed() : items;
   }
 
   /**
@@ -147,7 +205,12 @@ public record NightRunOutcome(
     return Duration.between(lebenszeichen, jetzt).compareTo(stilleFrist) > 0;
   }
 
-  /** Ob der Befund eine Störung im Sinne von AK 4 ist — sie gehört dann auf den Leitstand. */
+  /**
+   * Ob der Befund eine Störung im Sinne von AK 4 ist — sie gehört dann auf den Leitstand.
+   *
+   * <p>{@link Verdict#NO_WORK} gehört ausdrücklich nicht dazu (Issue #1121): Eine ruhige Nacht muss
+   * niemand quittieren.
+   */
   public boolean isDisruption() {
     return verdict == Verdict.FAILED || verdict == Verdict.WAITING;
   }
@@ -164,7 +227,8 @@ public record NightRunOutcome(
    * <p>Grün bestimmt nie etwas, Grau nur mit Fehlerklasse — ohne sie ist das Paket übergangen, und
    * dass der Lauf es nicht angefasst hat, ist kein Mangel des Laufs.
    *
-   * <p>{@code min} nimmt bei Gleichstand das erste Element — genau die gewünschte Laufreihenfolge.
+   * <p>{@code min} nimmt bei Gleichstand das erste Element — das erste der {@link
+   * #auswahlreihenfolge}, also die Laufreihenfolge und bei einer Kette ihre Umkehrung.
    */
   private static int rang(NightRunItem item) {
     return switch (item.state()) {
