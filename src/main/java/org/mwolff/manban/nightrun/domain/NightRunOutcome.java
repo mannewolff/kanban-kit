@@ -33,7 +33,8 @@ import org.jspecify.annotations.Nullable;
  *
  * @param verdict der Ausgang des Laufs
  * @param decisiveItem das Paket, das den Ausgang bestimmt; {@code null}, wenn keines ihn bestimmt —
- *     bei {@link Verdict#SUCCEEDED}, {@link Verdict#RUNNING} und beim Lauf ohne Arbeit
+ *     bei {@link Verdict#SUCCEEDED}, {@link Verdict#RUNNING}, {@link Verdict#NO_WORK} und beim Lauf
+ *     ohne Arbeit mit unbekanntem Grund
  * @param noWorkReason Grund, warum der Lauf nichts abgearbeitet hat (Issue #1068); durchgereicht,
  *     nicht formuliert, und {@code null}, wenn der Lauf gearbeitet hat
  */
@@ -42,6 +43,20 @@ public record NightRunOutcome(
 
   /** Rang eines Pakets, das den Ausgang nicht bestimmen kann. */
   private static final int NICHT_MASSGEBLICH = Integer.MAX_VALUE;
+
+  /**
+   * Rückfalltext für einen Lauf ohne Arbeit, der keinen Grund meldet (Issue #1068, AK 2 der
+   * fachlichen Quelle #1060). Er entsteht am Server und nicht im Frontend (Plan #1067, E4):
+   * Laufplatte, Laufband und „Letzter Lauf" lesen denselben Wert, drei Einsetzstellen liefen
+   * auseinander.
+   *
+   * <p><b>In der Domäne und nicht mehr im Dienst</b> seit Issue #1121: Seither hängt am Text eine
+   * Aussage über den <em>Ausgang</em> — nur ein Lauf mit <b>gemeldetem</b> Grund ist {@link
+   * Verdict#NO_WORK}, der Rückfall bleibt {@link Verdict#FAILED}. Setzen tut ihn weiterhin allein
+   * der Dienst; gelesen wird er hier, weil hier der Ausgang entsteht. Eine eigene Spalte „Grund
+   * gemeldet ja/nein" wäre eine Migration für dieselbe Aussage, die schon im Text steckt.
+   */
+  public static final String GRUND_UNBEKANNT = "Nichts abgearbeitet — Grund unbekannt";
 
   /**
    * Der Ausgang eines Laufs.
@@ -55,11 +70,22 @@ public record NightRunOutcome(
     /** Vollständig gelungen — keine Störung. */
     SUCCEEDED,
 
-    /** Nicht gelungen: hartes Scheitern, Vorbehalt oder ein Lauf ohne Arbeit. */
+    /**
+     * Nicht gelungen: hartes Scheitern, ein verstummter Lauf oder ein Lauf ohne Arbeit, dessen
+     * Grund niemand gemeldet hat ({@link NightRunOutcome#GRUND_UNBEKANNT}).
+     */
     FAILED,
 
     /** Abgeschlossen, aber ein Paket wartet auf etwas — zurückgestellt oder auf einen Menschen. */
     WAITING,
+
+    /**
+     * Abgeschlossen, keine Arbeit vorgefunden — <b>kein Mangel des Laufs</b> (Issue #1121).
+     *
+     * <p>Der Lauf lief an, fand nichts Freigegebenes und meldete das mit seinem Grund. Wer ein
+     * Projekt nachts bewusst ruhen lässt, soll dafür keine Störung quittieren müssen.
+     */
+    NO_WORK,
 
     /** Noch nicht abgeschlossen; der Ausgang steht nicht fest. */
     RUNNING
@@ -89,7 +115,12 @@ public record NightRunOutcome(
    *       er wird nicht rot, auch nicht mit einem roten Paket (dieselbe Begründung, die {@code
    *       laufMelder} seit #1069 trägt).
    *   <li><b>Ohne Arbeit</b> schlägt die Pakete. Der Grund ist der Text selbst; ein Paket daneben
-   *       wäre eine zweite Begründung für denselben Lauf.
+   *       wäre eine zweite Begründung für denselben Lauf. Ein <b>gemeldeter</b> Grund ist {@link
+   *       Verdict#NO_WORK} — ein ruhiger Lauf und keine Störung; allein der Rückfall {@link
+   *       #GRUND_UNBEKANNT} bleibt {@link Verdict#FAILED}, denn hinter ihm kann ein echtes Problem
+   *       stecken (ein Lauf, der alle Pakete zurückstellte, meldet keinen Grund). Die Stelle in der
+   *       Rangfolge ändert das nicht: Ein Lauf mit gemeldetem Grund hat keine Pakete, und für den
+   *       Rückfall bleibt alles wie zuvor (Issue #1121).
    *   <li><b>Rot vor Gelb vor Grau-mit-Fehlerklasse</b>, innerhalb einer Farbe das erste in
    *       Laufreihenfolge.
    * </ol>
@@ -126,7 +157,8 @@ public record NightRunOutcome(
       return new NightRunOutcome(Verdict.RUNNING, null, null);
     }
     if (noWorkReason != null && !noWorkReason.isBlank()) {
-      return new NightRunOutcome(Verdict.FAILED, null, noWorkReason);
+      Verdict ohneArbeit = GRUND_UNBEKANNT.equals(noWorkReason) ? Verdict.FAILED : Verdict.NO_WORK;
+      return new NightRunOutcome(ohneArbeit, null, noWorkReason);
     }
     return items.stream()
         .filter(item -> rang(item) != NICHT_MASSGEBLICH)
@@ -147,7 +179,12 @@ public record NightRunOutcome(
     return Duration.between(lebenszeichen, jetzt).compareTo(stilleFrist) > 0;
   }
 
-  /** Ob der Befund eine Störung im Sinne von AK 4 ist — sie gehört dann auf den Leitstand. */
+  /**
+   * Ob der Befund eine Störung im Sinne von AK 4 ist — sie gehört dann auf den Leitstand.
+   *
+   * <p>{@link Verdict#NO_WORK} gehört ausdrücklich nicht dazu (Issue #1121): Eine ruhige Nacht muss
+   * niemand quittieren.
+   */
   public boolean isDisruption() {
     return verdict == Verdict.FAILED || verdict == Verdict.WAITING;
   }

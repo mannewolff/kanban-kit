@@ -19,12 +19,19 @@ import org.junit.jupiter.api.Test;
  * <p>Die Reihenfolge der Regeln trägt eine Aussage und wird hier Fall für Fall festgehalten: die
  * Stillefrist schlägt alles, danach „läuft noch", danach der Lauf ohne Arbeit, danach rot vor gelb
  * vor grau-mit-Fehlerklasse.
+ *
+ * <p>Seit Issue #1121 zerfällt der Lauf ohne Arbeit in zwei Fälle: der <b>gemeldete</b> Grund ist
+ * der eigene Ausgang {@link NightRunOutcome.Verdict#NO_WORK}, der Rückfall {@link
+ * NightRunOutcome#GRUND_UNBEKANNT} bleibt {@code FAILED}.
  */
 class NightRunOutcomeTest {
 
   private static final Instant FIXED = Instant.parse("2026-09-19T22:00:00Z");
 
   private static final Duration FRIST = Duration.ofMinutes(90);
+
+  /** Ein Grund, wie der Runner ihn meldet (Kit #744) — im Unterschied zum Rückfall des Servers. */
+  private static final String GEMELDET = "Ready ist leer — nichts zu tun.";
 
   /**
    * Die Fälle ohne Zeitbezug messen an einem frischen Lebenszeichen: {@code updatedAt} ist {@code
@@ -74,28 +81,62 @@ class NightRunOutcomeTest {
     assertThat(outcome.verdict()).isEqualTo(NightRunOutcome.Verdict.RUNNING);
   }
 
+  /**
+   * Issue #1121: Der <b>gemeldete</b> Grund ist der eigene Ausgang „nichts zu tun" — und keine
+   * Störung. Wer ein Projekt nachts bewusst ruhen lässt, räumte sonst jeden Morgen eine Meldung
+   * weg.
+   */
   @Test
-  void einLaufOhneArbeitIstGescheitert() {
-    var outcome = befund(true, "Ready war leer", List.of());
+  void einLaufOhneArbeitMitGemeldetemGrundHatNichtsZuTun() {
+    var outcome = befund(true, GEMELDET, List.of());
+
+    assertThat(outcome.verdict()).isEqualTo(NightRunOutcome.Verdict.NO_WORK);
+    assertThat(outcome.decisiveItem()).isNull();
+    assertThat(outcome.noWorkReason()).isEqualTo(GEMELDET);
+    assertThat(outcome.isDisruption()).isFalse();
+  }
+
+  /**
+   * Der Rückfall des Servers ist <b>kein</b> gemeldeter Grund (Issue #1121): Er steht für einen
+   * alten Runner, den Upload-Weg oder einen Lauf, der Pakete hatte und keins bearbeitete — das kann
+   * ein echtes Problem verdecken und bleibt rot.
+   */
+  @Test
+  void einLaufOhneArbeitOhneGemeldetenGrundIstGescheitert() {
+    var outcome = befund(true, NightRunOutcome.GRUND_UNBEKANNT, List.of());
 
     assertThat(outcome.verdict()).isEqualTo(NightRunOutcome.Verdict.FAILED);
     assertThat(outcome.decisiveItem()).isNull();
-    assertThat(outcome.noWorkReason()).isEqualTo("Ready war leer");
+    assertThat(outcome.noWorkReason()).isEqualTo(NightRunOutcome.GRUND_UNBEKANNT);
     assertThat(outcome.isDisruption()).isTrue();
   }
 
-  /** Der Grund ist der Text selbst; ein Paket wäre daneben eine zweite Begründung. */
+  /**
+   * Der Grund ist der Text selbst; ein Paket wäre daneben eine zweite Begründung. Beide
+   * Grunde-Arten stehen hier: Die Rangfolge gilt für den gemeldeten wie für den Rückfall, nur der
+   * Ausgang unterscheidet sie (Issue #1121).
+   */
   @Test
   void derGrundOhneArbeitSchlaegtEinRotesPaket() {
-    var outcome =
-        befund(
-            true,
-            "Ready war leer",
-            List.of(item(1, NightRunState.RED, NightRunErrorClass.HARD_ABORT)));
+    var rot = List.of(item(1, NightRunState.RED, NightRunErrorClass.HARD_ABORT));
 
-    assertThat(outcome.verdict()).isEqualTo(NightRunOutcome.Verdict.FAILED);
-    assertThat(outcome.decisiveItem()).isNull();
-    assertThat(outcome.noWorkReason()).isEqualTo("Ready war leer");
+    var gemeldet = befund(true, GEMELDET, rot);
+    var rueckfall = befund(true, NightRunOutcome.GRUND_UNBEKANNT, rot);
+
+    assertThat(gemeldet.verdict()).isEqualTo(NightRunOutcome.Verdict.NO_WORK);
+    assertThat(gemeldet.decisiveItem()).isNull();
+    assertThat(gemeldet.noWorkReason()).isEqualTo(GEMELDET);
+    assertThat(rueckfall.verdict()).isEqualTo(NightRunOutcome.Verdict.FAILED);
+    assertThat(rueckfall.decisiveItem()).isNull();
+  }
+
+  /** „Läuft noch" schlägt auch den gemeldeten Grund — der Ausgang steht erst am Ende fest. */
+  @Test
+  void einUnabgeschlossenerLaufLaeuftNochTrotzGemeldetemGrund() {
+    var outcome = befund(false, GEMELDET, List.of());
+
+    assertThat(outcome.verdict()).isEqualTo(NightRunOutcome.Verdict.RUNNING);
+    assertThat(outcome.noWorkReason()).isNull();
   }
 
   @Test

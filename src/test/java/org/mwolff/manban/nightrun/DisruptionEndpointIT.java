@@ -124,6 +124,38 @@ class DisruptionEndpointIT extends AbstractIntegrationTest {
         .andExpect(jsonPath("$.durchgefuehrte[0].nightRunId").value(laufId));
   }
 
+  /**
+   * Issue #1121: Ein Lauf, der nichts zu tun fand, steht unter den beendeten Läufen mit dem Ausgang
+   * {@code NO_WORK} — und erscheint <b>nicht</b> unter den Störungen.
+   *
+   * <p>Hier und nicht nur am Dienst: Die Störungsabfrage liefert den Lauf sehr wohl (sie filtert
+   * auf {@code complete} und die fehlende Quittung, nicht auf den Ausgang). Dass er trotzdem aus
+   * der Liste fällt, ist eine Zusage über den Weg durch die Datenbank bis in die Antwort.
+   */
+  @Test
+  void einLaufOhneArbeitMitGemeldetemGrundIstBeendetAberKeineStoerung() throws Exception {
+    Cookie admin = session("de-ruhig@example.com", PlatformRole.ADMIN);
+    long ruhig =
+        id(
+            "INSERT INTO night_run (project_id, started_at, mode, kind, duration_ms,"
+                + " processed_count, skipped_count, unparsed_count, created_at, origin, complete,"
+                + " no_work_reason) VALUES (?, now() - interval '1 minute', 'IMPLEMENTATION',"
+                + " 'NIGHT', 1, 0, 0, 0, now(), 'TOKEN', true, 'Ready ist leer — nichts zu tun.')"
+                + " RETURNING id",
+            projectId);
+
+    mvc.perform(get(LEITSTAND).param("zone", ZONE).cookie(admin))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.stoerungen.length()").value(1))
+        .andExpect(jsonPath("$.stoerungen[0].nightRunId").value(laufId))
+        .andExpect(jsonPath("$.durchgefuehrte.length()").value(2))
+        .andExpect(jsonPath("$.durchgefuehrte[1].nightRunId").value(ruhig))
+        .andExpect(jsonPath("$.durchgefuehrte[1].outcome.verdict").value("NO_WORK"))
+        .andExpect(
+            jsonPath("$.durchgefuehrte[1].outcome.noWorkReason")
+                .value("Ready ist leer — nichts zu tun."));
+  }
+
   /** AK 10 und Kriterium 13: Die Quittung räumt die Störung weg, den Ausgang lässt sie stehen. */
   @Test
   void dasQuittierenRaeumtDieZeileWeg_undIstIdempotent() throws Exception {

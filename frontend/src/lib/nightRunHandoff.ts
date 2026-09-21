@@ -74,7 +74,7 @@ export const NIGHT_RUN_ERROR_CLASS_TEXT: Record<NightRunErrorClass, string> = {
  * Textangabe braucht (Kriterium 3) — Puls und Stahl allein sagen es nicht.
  *
  * <p><b>`Record<Verdict, string>` und nicht `Partial`</b> — aus demselben Grund wie bei
- * {@link NIGHT_RUN_ERROR_CLASS_TEXT}: Kaeme ein fuenfter Ausgang hinzu, braeche der Build, statt
+ * {@link NIGHT_RUN_ERROR_CLASS_TEXT}: Kaeme ein weiterer Ausgang hinzu, braeche der Build, statt
  * dass er stumm als leerer Text erschiene.
  *
  * <p>Die Woerter leben hier und nicht im Server (Plan #1088): Der Befund kommt als Daten, nicht als
@@ -83,12 +83,17 @@ export const NIGHT_RUN_ERROR_CLASS_TEXT: Record<NightRunErrorClass, string> = {
  * <p>`WAITING` heisst „mit Vorbehalt": der Lauf, dessen massgebliches Paket grau mit Fehlerklasse
  * ist — zurueckgestellt oder auf einen Menschen wartend. Nicht zu verwechseln mit
  * `NightRunState.YELLOW`, das auf `FAILED` abbildet.
+ *
+ * <p>`NO_WORK` heisst „nichts zu tun" (Issue #1121): der Lauf, der anlief und nichts Freigegebenes
+ * fand. Das Wort traegt hier den ganzen Sinn — seine Farbe ist dasselbe Grau wie das eines
+ * uebergangenen Pakets, und Grau allein sagte nicht, dass es nichts zu tun gab.
  */
 export const NIGHT_RUN_VERDICT_TEXT: Record<Verdict, string> = {
   SUCCEEDED: 'gelungen',
   FAILED: 'nicht gelungen',
   WAITING: 'mit Vorbehalt',
   RUNNING: 'läuft',
+  NO_WORK: 'nichts zu tun',
 }
 
 /**

@@ -61,6 +61,7 @@ import { KUPFER, NUT, RAND, TEXT_SCHWACH, ZAHL } from '../theme'
 import { useSnackbar } from '../components/SnackbarProvider'
 import { epicColor } from '../lib/epicMeta'
 import { formatDuration } from '../lib/formatDuration'
+import type { Melder } from '../lib/leitstand'
 import {
   ersteZeile,
   kostenText,
@@ -1757,11 +1758,14 @@ function einlieferungsangaben(lauf: AnzeigeLauf): string[] {
  */
 function Kopfmarken({
   lauf,
+  melder,
   ergebnis,
   ausErgebnisstand,
   offen,
 }: Readonly<{
   lauf: AnzeigeLauf
+  /** Der Melder des ganzen Laufs — die Marke „ohne Arbeit" trägt ihn (Issue #1121). */
+  melder: Melder
   ergebnis: boolean | undefined
   ausErgebnisstand: ReadonlySet<string>
   offen: boolean
@@ -1780,8 +1784,10 @@ function Kopfmarken({
       {/* Die beiden Zustandsmarken schliessen einander aus: Ein Lauf ist entweder noch nicht
           abgeschlossen oder ohne Arbeit beendet. Beide zugleich waeren ein Widerspruch im Kopf
           derselben Platte (Issue #1069). */}
+      {/* Der Melder kommt vom Lauf und steht nicht fest auf zinnober (Issue #1121): Ein Lauf, der
+          nichts zu tun fand, ist grau — rot bleibt allein der Rueckfall „Grund unbekannt". */}
       {lauf.vollstaendig && lauf.ohneArbeit !== undefined && (
-        <LaufMarke testId="lauf-zustand" led={<Led melder="zinnob" />}>
+        <LaufMarke testId="lauf-zustand" led={<Led melder={melder} />}>
           {lauf.ohneArbeit}
         </LaufMarke>
       )}
@@ -2104,6 +2110,14 @@ function LaufPanel({
     }
   }
 
+  // Einmal gerechnet und zweimal gezeigt: Die Platte trägt ihn, und die Marke „ohne Arbeit" nimmt
+  // ihn von hier (Issue #1121). Zwei Aufrufe nebeneinander wären zwei Stellen, an denen dieselbe
+  // Frage beantwortet wird — und die Marke stand vorher fest auf zinnober.
+  const melder = laufMelder(
+    { complete: lauf.vollstaendig, items: lauf.items, outcome: lauf.befund },
+    lauf.ohneArbeit,
+  )
+
   return (
     <NachtlaufLaufPlatte
       testId={`lauf-${lauf.startedAt}`}
@@ -2111,16 +2125,14 @@ function LaufPanel({
       art={ART_KURZ[lauf.mode]}
       laufId={lauf.laufId}
       meta={metazeile(lauf, stand)}
-      melder={laufMelder(
-        { complete: lauf.vollstaendig, items: lauf.items, outcome: lauf.befund },
-        lauf.ohneArbeit,
-      )}
+      melder={melder}
       pulsiert={laeuftNoch({ complete: lauf.vollstaendig, outcome: lauf.befund })}
       offen={offen}
       onUmschalten={umschalten}
       marken={
         <Kopfmarken
           lauf={lauf}
+          melder={melder}
           ergebnis={ergebnis}
           ausErgebnisstand={ausErgebnisstand}
           offen={offen}

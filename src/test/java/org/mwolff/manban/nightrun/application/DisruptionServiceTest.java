@@ -326,18 +326,45 @@ class DisruptionServiceTest {
         .isEqualTo(NightRunOutcome.Verdict.WAITING);
   }
 
-  /** Ein Lauf ohne Arbeit hat kein Paket — der Grund ist der Text, und er reicht. */
+  /**
+   * Ein Lauf ohne Arbeit hat kein Paket — der Grund ist der Text, und er reicht. Seit Issue #1121
+   * ist das nur noch beim <b>Rückfall</b> des Servers eine Störung: Er kann einen alten Runner, den
+   * Upload-Weg oder einen Lauf meinen, der alle Pakete zurückstellte.
+   */
   @Test
-  void einLaufOhneArbeitIstEineStoerungAuchOhnePaket() {
+  void einLaufOhneArbeitMitUnbekanntemGrundIstEineStoerungAuchOhnePaket() {
     when(disruptions.openCandidates())
         .thenReturn(
             List.of(
-                new DisruptionCandidate(5L, 9L, "Projekt", JETZT, null, true, "Ready war leer")));
+                new DisruptionCandidate(
+                    5L, 9L, "Projekt", JETZT, null, true, NightRunOutcome.GRUND_UNBEKANNT)));
 
     assertThat(service.leitstand(ADMIN, UTC).stoerungen())
         .singleElement()
         .extracting(v -> v.outcome().noWorkReason())
-        .isEqualTo("Ready war leer");
+        .isEqualTo(NightRunOutcome.GRUND_UNBEKANNT);
+  }
+
+  /**
+   * Issue #1121: Ein Lauf, der nichts zu tun fand, steht unter den <b>durchgeführten</b> — und
+   * nicht unter den Störungen. Die Störungsabfrage liefert ihn weiterhin (sie kennt den Ausgang
+   * nicht); den Unterschied macht allein {@code isDisruption()} des Befunds.
+   */
+  @Test
+  void einLaufOhneArbeitMitGemeldetemGrundIstKeineStoerung() {
+    DisruptionCandidate ruhig =
+        new DisruptionCandidate(
+            5L, 9L, "Projekt", JETZT, null, true, "Ready ist leer — nichts zu tun.");
+    nachtLaeufe(ruhig);
+    when(disruptions.openCandidates()).thenReturn(List.of(ruhig));
+
+    LeitstandView leitstand = service.leitstand(ADMIN, UTC);
+
+    assertThat(leitstand.stoerungen()).isEmpty();
+    assertThat(leitstand.durchgefuehrte())
+        .singleElement()
+        .extracting(v -> v.outcome().verdict())
+        .isEqualTo(NightRunOutcome.Verdict.NO_WORK);
   }
 
   @Test

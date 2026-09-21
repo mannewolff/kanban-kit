@@ -100,8 +100,11 @@ export function laufMelder(
   if (!lauf.complete) {
     return 'stahl'
   }
+  // Grau und nicht zinnober (Issue #1121): Ein Grund kommt hier nur aus dem Ergebnisstand des Kits
+  // und nie aus dem Rueckfall des Servers — dieser Lauf hat also nichts zu tun gefunden, und das
+  // ist kein Mangel.
   if (ohneArbeit != null && ohneArbeit !== '') {
-    return 'zinnob'
+    return 'grau'
   }
   // Dieselbe Rangfolge wie NightRunOutcome im Server (#1078): rot vor gelb vor
   // grau-mit-Fehlerklasse. Grau ohne Fehlerklasse ist ein uebergangenes Paket und kein Mangel.
@@ -138,6 +141,13 @@ export function melderAusBefund(befund: NightRunOutcomeView): Melder {
   if (befund.verdict === 'RUNNING') {
     return 'stahl'
   }
+  // Der Lauf, der nichts zu tun fand (Issue #1121): dasselbe Grau wie ein uebergangenes Paket — er
+  // ist abgeschlossen und kein Mangel. Den Sinn traegt das Wort daneben, nicht die Farbe.
+  if (befund.verdict === 'NO_WORK') {
+    return 'grau'
+  }
+  // Bleibt der Rueckfall des Servers („Grund unbekannt"): Dahinter kann ein echtes Problem stecken,
+  // und er bleibt rot. Nur dort traegt ein Befund neben dem Grund noch `FAILED`.
   if (befund.noWorkReason != null && befund.noWorkReason !== '') {
     return 'zinnob'
   }

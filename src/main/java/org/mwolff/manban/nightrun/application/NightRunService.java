@@ -47,14 +47,6 @@ import org.springframework.transaction.annotation.Transactional;
 @SuppressWarnings("PMD.CouplingBetweenObjects")
 public class NightRunService {
 
-  /**
-   * Rueckfalltext fuer einen Lauf ohne Arbeit, der keinen Grund meldet (Issue #1068, AK 2 der
-   * fachlichen Quelle #1060). Er entsteht am Server und nicht im Frontend (Plan #1067, E4):
-   * Laufplatte, Laufband und „Letzter Lauf" lesen denselben Wert, drei Einsetzstellen liefen
-   * auseinander.
-   */
-  static final String GRUND_UNBEKANNT = "Nichts abgearbeitet — Grund unbekannt";
-
   private final NightRunRepository runs;
   private final PermissionChecker permissions;
   private final InteractiveUsageSinceWriter erfassungsbeginn;
@@ -289,13 +281,17 @@ public class NightRunService {
    *
    * <p>Ein gemeldeter, aber leerer Grund gilt wie ein fehlender. AK 2 verlangt einen Text, nicht
    * ein gesetztes Feld — ein leerer Grund erschiene in der Anzeige als Luecke.
+   *
+   * <p>Der Rueckfalltext steht seit Issue #1121 in {@link NightRunOutcome}: Dort haengt am Text die
+   * Aussage ueber den Ausgang — ein gemeldeter Grund ist „nichts zu tun", der Rueckfall bleibt
+   * „nicht gelungen". Gesetzt wird er weiterhin nur hier.
    */
   private static @Nullable String grundOhneArbeit(
       NightRunKind kind, boolean complete, int processedCount, @Nullable String gemeldet) {
     if (kind != NightRunKind.NIGHT || !complete || processedCount > 0) {
       return null;
     }
-    return gemeldet == null || gemeldet.isBlank() ? GRUND_UNBEKANNT : gemeldet;
+    return gemeldet == null || gemeldet.isBlank() ? NightRunOutcome.GRUND_UNBEKANNT : gemeldet;
   }
 
   /**

@@ -192,6 +192,33 @@ describe('PlattformLeitstandPage (#1083)', () => {
       expect(within(zeile).getByTestId(led)).toHaveAttribute('data-puls', 'aus')
     })
 
+    /**
+     * Issue #1121: Ein Lauf, der anlief und nichts Freigegebenes fand, steht hier grau mit dem Wort
+     * „nichts zu tun" — nicht rot. Wer ein Projekt nachts bewusst ruhen lässt, räumte sonst jeden
+     * Morgen eine Meldung weg.
+     */
+    it('zeigt NO_WORK als „nichts zu tun" mit grauem, ruhendem Melder', async () => {
+      api.leitstand.mockResolvedValue(
+        sicht({
+          durchgefuehrte: [
+            durchgefuehrt({
+              outcome: {
+                verdict: 'NO_WORK',
+                decisiveItem: null,
+                noWorkReason: 'Ready ist leer — nichts zu tun.',
+              },
+            }),
+          ],
+        }),
+      )
+
+      zeigeSeite()
+
+      const zeile = await screen.findByTestId('durchgefuehrt-5')
+      expect(within(zeile).getByText('nichts zu tun')).toBeInTheDocument()
+      expect(within(zeile).getByTestId('led-grau')).toHaveAttribute('data-puls', 'aus')
+    })
+
     /** Kriterium 12, erste Hälfte: von **jedem** Eintrag — auch vom gelungenen. */
     it('führt von jedem Eintrag zur Auswertung, auch vom gelungenen', async () => {
       api.leitstand.mockResolvedValue(

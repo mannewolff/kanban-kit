@@ -123,11 +123,14 @@ export interface NightRunUsageView {
  *
  * Ein **Name** fuer die Vereinigung, die {@link NightRunOutcomeView} schon immer trug — damit die
  * Wortliste in `lib/nightRunHandoff.ts` sie als `Record<Verdict, string>` fuehren kann und ein
- * fuenfter Ausgang den Build bricht, statt still als leerer Text zu erscheinen. Die Liste bleibt
+ * weiterer Ausgang den Build bricht, statt still als leerer Text zu erscheinen. Die Liste bleibt
  * hier, beim Vertrag des Servers: Eine zweite Aufzaehlung derselben Werte liefe beim naechsten
  * Ausgang auseinander.
+ *
+ * `NO_WORK` kam mit Issue #1121 dazu: ein Lauf, der anlief und nichts Freigegebenes fand. Er ist
+ * abgeschlossen und **kein Mangel** — weder rot noch eine Stoerung.
  */
-export type Verdict = 'SUCCEEDED' | 'FAILED' | 'WAITING' | 'RUNNING'
+export type Verdict = 'SUCCEEDED' | 'FAILED' | 'WAITING' | 'RUNNING' | 'NO_WORK'
 
 /**
  * Der Befund eines Laufs, wie der Server ihn seit Issue #1078 mitschickt.

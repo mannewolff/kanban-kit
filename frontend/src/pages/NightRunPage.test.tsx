@@ -1,5 +1,5 @@
 import { ThemeProvider } from '@mui/material/styles'
-import { serverBefund } from '../test/befund'
+import { GRUND_UNBEKANNT, serverBefund } from '../test/befund'
 import {
   fireEvent,
   render,
@@ -4878,7 +4878,11 @@ describe('NightRunPage — Laufblock im Leitstand-Stil (#988)', () => {
 describe('NightRunPage — Lauf ohne Arbeit (#1069)', () => {
   const GRUND = 'Kein Eintrag trug das Label kit:nightrun'
 
-  it('zeigt am Lauf ohne Arbeit eine Zustandsmarke mit rotem Melder und dem Grund', async () => {
+  /**
+   * Seit #1121 ist der Melder grau: Der Lauf fand nichts zu tun, und das ist kein Mangel. Den Sinn
+   * traegt der Grund neben ihm — die Marke nennt ihn woertlich.
+   */
+  it('zeigt am Lauf ohne Arbeit eine Zustandsmarke mit grauem Melder und dem Grund', async () => {
     renderPage({
       listen: [
         [aufbewahrt({ id: 1, startedAt: startedAt(0), processedCount: 0, noWorkReason: GRUND })],
@@ -4886,12 +4890,39 @@ describe('NightRunPage — Lauf ohne Arbeit (#1069)', () => {
     })
 
     await screen.findByTestId(`lauf-${startedAt(0)}`)
-    // Gezielt auf die Zustandsmarke: Der Kopf traegt zusaetzlich die rote LED der Laufplatte
-    // selbst, und ein Zaehlen ueber beide sagte nicht, dass die Marke die ihre hat.
-    const marke = within(laufKopfzeile(lauf(0))).getByTestId('lauf-zustand')
+    // Gezielt auf die Zustandsmarke: Der Kopf traegt zusaetzlich die LED der Laufplatte selbst,
+    // und ein Zaehlen ueber beide sagte nicht, dass die Marke die ihre hat.
+    const kopf = laufKopfzeile(lauf(0))
+    const marke = within(kopf).getByTestId('lauf-zustand')
     expect(marke).toHaveTextContent(GRUND)
+    expect(within(marke).getByTestId('led-grau')).toBeInTheDocument()
+    expect(within(kopf).queryAllByTestId('led-zinnob')).toHaveLength(0)
+  })
+
+  /**
+   * Der Rueckfall des Servers bleibt rot (#1121): Er steht fuer einen alten Runner, den Upload-Weg
+   * oder einen Lauf, der alle Pakete zurueckstellte — dahinter kann ein echtes Problem stecken.
+   */
+  it('zeigt am Lauf ohne Arbeit mit unbekanntem Grund weiterhin den roten Melder', async () => {
+    renderPage({
+      listen: [
+        [
+          aufbewahrt({
+            id: 1,
+            startedAt: startedAt(0),
+            processedCount: 0,
+            noWorkReason: GRUND_UNBEKANNT,
+          }),
+        ],
+      ],
+    })
+
+    await screen.findByTestId(`lauf-${startedAt(0)}`)
+    const marke = within(laufKopfzeile(lauf(0))).getByTestId('lauf-zustand')
+    expect(marke).toHaveTextContent(GRUND_UNBEKANNT)
     expect(within(marke).getByTestId('led-zinnob')).toBeInTheDocument()
   })
+
 
   /**
    * Die beiden Marken schliessen einander aus: Ein Lauf ist entweder noch nicht abgeschlossen
