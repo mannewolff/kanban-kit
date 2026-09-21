@@ -7,6 +7,27 @@ Versionierung folgt der dreiteiligen Betriebsversion (siehe [RELEASING.md](RELEA
 Einträge je Version sind ein automatischer Auszug der Commit-Titel seit dem letzten Release,
 erzeugt von `scripts/gen-changelog.mjs`.
 
+## [2.4.0] – 2026-09-21
+
+- chore: v2.3.2
+- Nutzungsdoku: Einlieferung als Normalweg, Einlesen als Rueckfall, Kosten je Stufe ([#1120](https://github.com/mannewolff/kanban-kit/issues/1120))
+- Die Verbrauchsauswertung zeigt die Kosten je Stufe der Kette ([#1117](https://github.com/mannewolff/kanban-kit/issues/1117))
+- Vorgangskennzahlen und Stufenband speisen sich aus der Server-Antwort ([#1116](https://github.com/mannewolff/kanban-kit/issues/1116))
+- Die Fußzeile eines Kettenlaufs speist sich aus der Server-Antwort ([#1115](https://github.com/mannewolff/kanban-kit/issues/1115))
+- Die Verbrauchsauswertung weist Kosten je Stufe der Kette aus ([#1114](https://github.com/mannewolff/kanban-kit/issues/1114))
+- Die Nachtlauf-Einlieferung nimmt Budgets, Stufen, Modellzeit und Züge an ([#1113](https://github.com/mannewolff/kanban-kit/issues/1113))
+- chore: v2.3.1
+- Die Kartensuche öffnet bei mehreren Treffern den im aktuellen Projekt direkt ([#1124](https://github.com/mannewolff/kanban-kit/issues/1124))
+- Ein Lauf, der vor 12:00 begann und noch läuft, steht unter „Aktive Läufe" ([#1109](https://github.com/mannewolff/kanban-kit/issues/1109))
+- Produktion übersteht einen Serverneustart und meldet ein Deploy erst bei laufender App ([#1100](https://github.com/mannewolff/kanban-kit/issues/1100))
+- Bei einer abgebrochenen Kette ist das Paket maßgeblich, an dem sie riss ([#1123](https://github.com/mannewolff/kanban-kit/issues/1123))
+- Ein Lauf, der nichts zu tun fand, ist grau und keine Störung ([#1121](https://github.com/mannewolff/kanban-kit/issues/1121))
+- Störungen halten links und rechts Abstand zum Rand ([#1122](https://github.com/mannewolff/kanban-kit/issues/1122))
+- Config in der Form, die der Kit-Installer schreibt
+- Nachtlauf-Budgets und Stufen: Migration, Domaene und Persistenz ([#1112](https://github.com/mannewolff/kanban-kit/issues/1112))
+- Nachtansicht der Verbrauchsauswertung zeigt Kacheln ([#1108](https://github.com/mannewolff/kanban-kit/issues/1108))
+- Laufnummer in der Kopfzeile des Laufblocks ([#1107](https://github.com/mannewolff/kanban-kit/issues/1107))
+
 ## [2.3.0] – 2026-09-21
 
 - chore: v2.2.1
