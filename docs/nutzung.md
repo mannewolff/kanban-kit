@@ -429,11 +429,51 @@ Sidebar-Eintrag **„Administration"** ein- und ausgeschaltet:
 ## Plattform-Leitstand
 
 Der **Plattform-Leitstand** ist die Startseite eines **Plattform-Admins** nach dem Anmelden (Sidebar
-„Verwaltung" → „Plattform-Leitstand"). Er zeigt den Bereich **Störungen**: jede nicht quittierte
-Störung aus den Nachtläufen aller Projekte, die am Plattform-Leitstand **teilnehmen** — mit Projekt,
-Zeitpunkt, anklickbarer Lauf-Kennung, Grund und dem Knopf **„Störung löschen"**.
+„Verwaltung" → „Plattform-Leitstand"). Er führt **drei Bereiche**, von oben nach unten: **Laufende
+Nachtläufe**, **Durchgeführte Nachtläufe** und **Störungen**. Alle drei zeigen ausschließlich
+Projekte, die am Plattform-Leitstand **teilnehmen**.
+
+Die Seite **frischt sich selbst auf**: Was sich ändert, erscheint von allein — du musst sie nicht
+neu laden.
+
+### Laufende Nachtläufe
+
+Jeder Nachtlauf, der **gerade arbeitet** — mit Projekt, dem Wort „läuft seit" samt bisheriger Dauer,
+anklickbarer Lauf-Kennung und einem pulsierenden Melder. Arbeitet gerade nirgends ein Lauf, steht
+das als ausdrücklicher Satz da statt als leere Fläche.
+
+### Durchgeführte Nachtläufe
+
+Jeder **beendete** Lauf der laufenden Nacht — mit Projekt, Startzeitpunkt, anklickbarer Lauf-Kennung
+und seinem **Ausgang**. Auch hier steht ein ausdrücklicher Satz, solange noch kein Lauf beendet ist.
+
+„Laufende Nacht" meint denselben Zeitraum, den auch die Nachtlauf-Auswertung zieht: **von 12:00 bis
+12:00** zonenlokal. Über die Zugehörigkeit entscheidet der **Startzeitpunkt** des Laufs, nicht sein
+Ende. Um 12:00 wechselt der Bereich deshalb auf die neue Nacht und ist zunächst leer.
+
+Der Ausgang steht als Wort da — eines von dreien:
+
+- **gelungen** — der Lauf ist durch, nichts steht aus.
+- **nicht gelungen** — der Lauf ist gescheitert, hat gar nicht gearbeitet oder ist verstummt (siehe
+  Stillefrist).
+- **mit Vorbehalt** — der Lauf ist durch, sein maßgebliches Arbeitspaket wartet aber noch auf einen
+  Menschen oder wurde zurückgestellt.
+
+**Die Stillefrist.** Ein unfertiger Lauf, der über diese Frist hinweg **kein Lebenszeichen** gibt,
+gilt als **nicht gelungen** — sonst bliebe ein abgeschossener Runner für immer als „läuft" stehen.
+Die Frist ist ein **Einstellwert der Plattform** (`manban.nightrun.stille-frist`, Vorgabe 90
+Minuten): Sie gilt für alle Projekte gleich und hat bewusst **keine Oberfläche** — wer sie ändern
+will, ändert die Konfiguration der Instanz.
+
+Ein durch Stille beendeter Lauf ist **keine Störung**. Er erscheint hier als „nicht gelungen" und
+taucht im Bereich „Störungen" nicht auf.
+
+### Störungen
+
+Jede nicht quittierte Störung aus den Nachtläufen teilnehmender Projekte — mit Projekt, Zeitpunkt,
+anklickbarer Lauf-Kennung, Grund und dem Knopf **„Störung löschen"**.
 
 Ob ein Projekt teilnimmt, entscheidet ausschließlich das Projekt selbst — OWNER oder ADMIN mit
 echter Mitgliedschaft, über das Teilnahme-Ankreuzfeld im [Editiermodus](#editiermodus) der
-Projektliste. Der Plattform-Admin sieht nur Störungen teilnehmender Projekte und kann die Teilnahme
-selbst nicht erzwingen.
+Projektliste. Der Plattform-Admin sieht nur Läufe und Störungen teilnehmender Projekte und kann die
+Teilnahme selbst nicht erzwingen.
