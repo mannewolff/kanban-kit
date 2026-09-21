@@ -1,5 +1,5 @@
 import { ThemeProvider } from '@mui/material/styles'
-import { render, screen, within } from '@testing-library/react'
+import { render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import type {
   VerbrauchAngaben,
@@ -125,40 +125,18 @@ describe('NachtlaufVerbrauchNacht', () => {
     )
   })
 
-  it('zeigt die Kartenzeilen mit ihren Summen ueber die Anlaeufe dieser Nacht', () => {
+  /**
+   * Die Kartenzeilen sind entfallen (Task #1105): Was eine einzelne Karte gekostet hat, steht auf
+   * derselben Seite schon beim konkreten Lauf.
+   */
+  it('zeigt keine Zeile je Karte und keinen Anteilsbalken, auch wenn die Antwort Karten fuehrt', () => {
     zeige(nacht({}))
 
-    const zeilen = within(screen.getByTestId('verbrauch-nacht-karten')).getAllByRole('listitem')
-    expect(zeilen).toHaveLength(2)
-    expect(lesbar(zeilen[0])).toContain('#721')
-    expect(lesbar(zeilen[0])).toContain('2 Anläufe')
-    expect(lesbar(zeilen[0])).toContain('4,50 $')
-    expect(lesbar(zeilen[1])).toContain('1 Anlauf')
-    expect(lesbar(zeilen[1])).toContain('Dauer nicht gemessen')
-  })
-
-  it('zeigt je Karte ihren Anteil an den Kosten der Nacht als Balken', () => {
-    zeige(nacht({}))
-
-    expect(screen.getByTestId('verbrauch-karte-721-anteil')).toHaveAttribute('data-anteil', '45')
-    expect(screen.getByTestId('verbrauch-karte-721-anteil')).toHaveAccessibleName(
-      'Karte #721: 45 % der Kosten der Nacht',
-    )
-  })
-
-  it('zeigt keinen Balken, wo Kosten der Karte oder der Nacht fehlen oder die Nacht nichts kostete', () => {
-    zeige(nacht({ cards: [karte(1, 1, 1, nichts)] }))
-    expect(screen.queryByTestId('verbrauch-karte-1-anteil')).not.toBeInTheDocument()
-  })
-
-  it('zeigt keinen Balken, wenn die Nacht selbst keine Kosten traegt', () => {
-    zeige(
-      nacht({
-        ...verbrauch(aufteilung(angaben({ costUsd: 0 }))),
-        cards: [karte(1, 1, 1, angaben({ costUsd: 0 }))],
-      }),
-    )
-    expect(screen.queryByTestId('verbrauch-karte-1-anteil')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('verbrauch-nacht-karten')).not.toBeInTheDocument()
+    expect(screen.queryByRole('listitem')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('verbrauch-karte-721-anteil')).not.toBeInTheDocument()
+    expect(lesbar(screen.getByTestId('verbrauch-nacht'))).not.toContain('der Kosten der Nacht')
+    expect(lesbar(screen.getByTestId('verbrauch-nacht'))).not.toContain('#721')
   })
 
   it('zeigt bei einer abgebrochenen Nacht den Hinweis neben den Zahlen', () => {
@@ -191,9 +169,6 @@ describe('NachtlaufVerbrauchNacht', () => {
     }
     expect(screen.getByTestId('nachtlauf-kennzahl-Anteil aus dem Zwischenspeicher')).toHaveTextContent(
       'nicht bestimmt',
-    )
-    expect(within(screen.getByTestId('verbrauch-nacht-karten')).getByRole('listitem').textContent).not.toMatch(
-      /\b0\b/,
     )
   })
 
@@ -262,27 +237,6 @@ describe('NachtlaufVerbrauchNacht — Nachtlauf-Anteil', () => {
     ).toContain('25,0 %')
   })
 
-  it('zeigt je Kartenzeile den Nachtlauf-Anteil und bezieht den Balken darauf', () => {
-    zeige(
-      nacht({
-        ...verbrauch(
-          aufteilung(angaben({ costUsd: 10 })),
-          aufteilung(angaben({ costUsd: 10 })),
-          aufteilung(angaben({ costUsd: 20 })),
-        ),
-        cards: [
-          karte(721, 2, 3_600_000, angaben({ costUsd: 4.5 }), angaben({ costUsd: 5.5 }), angaben({ costUsd: 10 })),
-        ],
-      }),
-    )
-
-    const zeile = within(screen.getByTestId('verbrauch-nacht-karten')).getByRole('listitem')
-    expect(lesbar(zeile)).toContain('4,50 $')
-    expect(lesbar(zeile)).not.toContain('10,00 $')
-    // 4,50 $ von 10,00 $ Nachtlauf-Anteil — nicht 10,00 $ von 20,00 $ Gesamtsumme.
-    expect(screen.getByTestId('verbrauch-karte-721-anteil')).toHaveAttribute('data-anteil', '45')
-  })
-
   /** „Nicht gemessen" bleibt „nicht gemessen" — auch wenn die Gesamtsumme einen Wert trägt. */
   it('schreibt einen ungemessenen Nachtlauf-Anteil nie als 0 und nie als Gesamtsumme', () => {
     zeige(
@@ -297,9 +251,6 @@ describe('NachtlaufVerbrauchNacht — Nachtlauf-Anteil', () => {
       expect(kennzahl).toHaveTextContent('nicht gemessen')
       expect(kennzahl.textContent).not.toMatch(/\d/)
     }
-    const zeile = within(screen.getByTestId('verbrauch-nacht-karten')).getByRole('listitem')
-    expect(lesbar(zeile)).toContain('Kosten nicht gemessen')
-    expect(lesbar(zeile)).not.toContain('8,00 $')
-    expect(screen.queryByTestId('verbrauch-karte-721-anteil')).not.toBeInTheDocument()
+    expect(lesbar(screen.getByTestId('verbrauch-nacht'))).not.toContain('8,00 $')
   })
 })
