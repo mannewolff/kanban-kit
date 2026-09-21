@@ -65,6 +65,7 @@ import {
   ersteZeile,
   kostenText,
   kurzHash,
+  laeuftNoch,
   laufDauer,
   laufMelder,
   paketDauer,
@@ -1768,7 +1769,10 @@ function Kopfmarken({
   const kosten = kostenText(lauf.verbrauch?.kostenUsd ?? null)
   return (
     <>
-      {!lauf.vollstaendig && (
+      {/* Die Marke haengt am Befund und nicht an `vollstaendig` (#1092): Ein verstummter Lauf
+          traegt fuer immer `complete = false`, ist aber nicht „unvollstaendig gemeldet" — er ist
+          nicht gelungen, und das sagt bereits die rote LED der Platte. */}
+      {laeuftNoch({ complete: lauf.vollstaendig, outcome: lauf.befund }) && (
         <LaufMarke testId="lauf-zustand" led={<Led melder="stahl" pulsiert />}>
           {UNVOLLSTAENDIG_GEMELDET}
         </LaufMarke>
@@ -2110,7 +2114,7 @@ function LaufPanel({
         { complete: lauf.vollstaendig, items: lauf.items, outcome: lauf.befund },
         lauf.ohneArbeit,
       )}
-      pulsiert={!lauf.vollstaendig}
+      pulsiert={laeuftNoch({ complete: lauf.vollstaendig, outcome: lauf.befund })}
       offen={offen}
       onUmschalten={umschalten}
       marken={

@@ -651,3 +651,35 @@ describe('LeitstandPage — Lauf ohne Arbeit (#1069)', () => {
     expect(screen.getAllByTestId('led-gruen').length).toBeGreaterThanOrEqual(1)
   })
 })
+
+describe('LeitstandPage — Der verstummte Lauf (#1092)', () => {
+  // Ein Lauf, dessen Runner abgeschossen wurde: `complete` bleibt `false`, der Server nennt ihn
+  // seit #1091 trotzdem FAILED. Die Anzeige liest den Befund, nicht `complete`.
+  const verstummt = () =>
+    lauf({ complete: false, items: [], outcome: serverBefund({ complete: false, verstummt: true, items: [] }) })
+
+  it('meldet den verstummten Lauf zinnober und ohne Puls', async () => {
+    m.laeufe.mockResolvedValue([verstummt()])
+    renderPage()
+
+    const letzter = await screen.findByRole('region', { name: 'Letzter Lauf · Kette' })
+    expect(within(letzter).getByTestId('led-zinnob')).toHaveAttribute('data-puls', 'aus')
+  })
+
+  it('nimmt dem verstummten Lauf im Laufband den Puls und nennt den Beginn', async () => {
+    m.laeufe.mockResolvedValue([verstummt()])
+    renderPage()
+
+    const band = await screen.findByRole('region', { name: 'Jüngster Lauf' })
+    expect(within(band).getByTestId('led-zinnob')).toHaveAttribute('data-puls', 'aus')
+    expect(band).toHaveTextContent('Beginn')
+  })
+
+  it('laesst den laufenden Lauf weiter stahlblau pulsieren', async () => {
+    m.laeufe.mockResolvedValue([lauf({ complete: false, items: [] })])
+    renderPage()
+
+    const band = await screen.findByRole('region', { name: 'Jüngster Lauf' })
+    expect(within(band).getByTestId('led-stahl')).toHaveAttribute('data-puls', 'an')
+  })
+})

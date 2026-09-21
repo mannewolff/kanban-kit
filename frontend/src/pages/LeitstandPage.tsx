@@ -37,6 +37,7 @@ import {
   istAbbruch,
   kalenderwoche,
   kurzHash,
+  laeuftNoch,
   laufband,
   laufMelder,
   laufNotiz,
@@ -350,7 +351,7 @@ function LetzterLauf({
     <Platte
       titel={`Letzter Lauf · ${modusName(lauf.mode)}`}
       notiz={laufNotiz(lauf)}
-      led={<Led melder={laufMelder(lauf, lauf.noWorkReason)} pulsiert={!lauf.complete} />}
+      led={<Led melder={laufMelder(lauf, lauf.noWorkReason)} pulsiert={laeuftNoch(lauf)} />}
       werkzeug={
         <>
           <FilterTaste gewaehlt={!nurAbbrueche} onClick={() => setNurAbbrueche(false)}>

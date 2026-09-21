@@ -5025,3 +5025,43 @@ describe('NightRunPage — adressierbarer Lauf (#1085)', () => {
     expect(laufTaste(lauf(0))).toHaveAttribute('aria-expanded', 'true')
   })
 })
+
+describe('NightRunPage — Der verstummte Lauf (#1092)', () => {
+  /**
+   * Ein Lauf, dessen Runner abgeschossen wurde: Er hat sich nie abgeschlossen gemeldet und traegt
+   * fuer immer `complete = false`. Seit #1091 nennt der Server ihn trotzdem FAILED — die Anzeige
+   * liest den Befund und nicht mehr `complete`.
+   */
+  const verstummt = () =>
+    aufbewahrt({
+      id: 1,
+      startedAt: startedAt(0),
+      complete: false,
+      outcome: serverBefund({ complete: false, verstummt: true, items: [] }),
+    })
+
+  it('zeigt den verstummten Lauf zinnober und ohne Puls', async () => {
+    renderPage({ listen: [[verstummt()]] })
+
+    await screen.findByTestId(`lauf-${startedAt(0)}`)
+    expect(within(laufKopfzeile(lauf(0))).getByTestId('led-zinnob')).toHaveAttribute('data-puls', 'aus')
+  })
+
+  // „unvollstaendig gemeldet" sagt „der Lauf ist noch unterwegs". Ein verstummter Lauf ist nicht
+  // unterwegs, er ist nicht gelungen — die Marke waere dort eine zweite, falsche Wahrheit.
+  it('laesst am verstummten Lauf die Marke „unvollständig gemeldet" weg', async () => {
+    renderPage({ listen: [[verstummt()]] })
+
+    await screen.findByTestId(`lauf-${startedAt(0)}`)
+    expect(within(laufKopfzeile(lauf(0))).queryByTestId('lauf-zustand')).not.toBeInTheDocument()
+  })
+
+  it('zeigt am laufenden Lauf die Marke und den Puls unveraendert', async () => {
+    renderPage({ listen: [[aufbewahrt({ id: 1, startedAt: startedAt(0), complete: false })]] })
+
+    await screen.findByTestId(`lauf-${startedAt(0)}`)
+    const kopf = laufKopfzeile(lauf(0))
+    expect(within(kopf).getByTestId('lauf-zustand')).toHaveTextContent('unvollständig gemeldet')
+    expect(within(kopf).getAllByTestId('led-stahl').every((led) => led.getAttribute('data-puls') === 'an')).toBe(true)
+  })
+})

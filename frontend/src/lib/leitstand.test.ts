@@ -17,11 +17,13 @@ import {
   kalenderwoche,
   kostenText,
   kurzHash,
+  laeuftNoch,
   laufband,
   laufDauer,
   laufDauerGeteilt,
   laufMelder,
   laufNotiz,
+  MELDER_JE_ZUSTAND,
   modusName,
   paketDauer,
   paketZaehlung,
@@ -425,5 +427,56 @@ describe('leitstand Der Browser liest den Massstab (#1081)', () => {
     const items = [paket(1, 'GREY', { errorClass: 'DEPENDENCY_UNMET' }), paket(2, 'YELLOW', { errorClass: 'CHECKS_RED' })]
 
     expect(laufMelder({ complete: true, items })).toBe('bernst')
+  })
+})
+
+describe('leitstand Der verstummte Lauf (#1092)', () => {
+  // Der Befund kommt aus dem Testhelfer und nicht von Hand: Er baut dieselbe Regel nach wie der
+  // Server (Issue #1091) — ein unfertiger Lauf ohne Lebenszeichen ueber die Frist ist FAILED, ohne
+  // massgebliches Paket und ohne Grund.
+  const verstummt = serverBefund({ complete: false, verstummt: true, items: [] })
+
+  it('serverBefund gibt dem verstummten Lauf FAILED ohne Paket und ohne Grund', () => {
+    expect(verstummt).toEqual({ verdict: 'FAILED', decisiveItem: null, noWorkReason: null })
+  })
+
+  // Der Kern des Pakets: Bisher fiel ein Befund ohne massgebliches Paket auf gruen durch — und der
+  // verstummte Lauf hat keines.
+  it('laufMelder meldet den verstummten Lauf zinnob statt gruen', () => {
+    expect(laufMelder({ complete: false, items: [], outcome: verstummt })).toBe('zinnob')
+  })
+
+  it('laufMelder laesst gruen dem gelungenen Lauf und stahl dem laufenden', () => {
+    expect(laufMelder({ complete: true, items: [], outcome: { verdict: 'SUCCEEDED', decisiveItem: null, noWorkReason: null } })).toBe('gruen')
+    expect(laufMelder({ complete: false, items: [], outcome: { verdict: 'RUNNING', decisiveItem: null, noWorkReason: null } })).toBe('stahl')
+  })
+
+  // Die Zuordnung Zustand → Melder bleibt unangetastet: Der Umbau betrifft nur den Rueckfall ohne
+  // massgebliches Paket, nicht die Farbe eines Pakets.
+  it('haelt die Zuordnung MELDER_JE_ZUSTAND unveraendert', () => {
+    expect(MELDER_JE_ZUSTAND).toEqual({ GREEN: 'gruen', YELLOW: 'bernst', RED: 'zinnob', GREY: 'grau' })
+  })
+
+  it('laufband nimmt dem verstummten Lauf das Laufen und nennt den Beginn statt „seit"', () => {
+    const band = laufband(lauf({ complete: false, items: [], outcome: verstummt }))
+
+    expect(band.laeuft).toBe(false)
+    expect(band.zeitpunkt).toMatch(/^Beginn \d\d\.\d\d\., \d\d:\d\d$/)
+    expect(band.melder).toBe('zinnob')
+  })
+
+  it('laufband laesst den laufenden Lauf unveraendert laufen', () => {
+    const band = laufband(lauf({ complete: false, items: [] }))
+
+    expect(band.laeuft).toBe(true)
+    expect(band.zeitpunkt).toMatch(/^seit \d\d:\d\d$/)
+    expect(band.melder).toBe('stahl')
+  })
+
+  // Ohne Befund bleibt `complete` der Massstab — der eben im Browser geparste Lauf der
+  // Nachtlauf-Seite hat keinen (Plan #1072 E28).
+  it('laeuftNoch faellt ohne Befund auf complete zurueck', () => {
+    expect(laeuftNoch({ complete: false })).toBe(true)
+    expect(laeuftNoch({ complete: true })).toBe(false)
   })
 })
