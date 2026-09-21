@@ -2,19 +2,26 @@ package org.mwolff.manban.nightrun.application;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.time.ZoneId;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import org.mwolff.manban.auth.application.AdminAccessDeniedException;
 import org.mwolff.manban.auth.application.PlatformAdminChecker;
 import org.mwolff.manban.nightrun.domain.NightRunItem;
 import org.mwolff.manban.nightrun.domain.NightRunOutcome;
+import org.mwolff.manban.nightrun.domain.NightRunOutcome.Verdict;
+import org.mwolff.manban.nightrun.domain.NightRunPeriod;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Use-Cases des Plattform-Leitstands: die offenen Störungen aller teilnehmenden Projekte und das
- * Quittieren einer Störung (Issue #1080, Plan #1072 E29).
+ * Use-Cases des Plattform-Leitstands: seine drei Listen über alle teilnehmenden Projekte und das
+ * Quittieren einer Störung (Issue #1080, Plan #1072 E29; um die Listen der laufenden Nacht
+ * erweitert in Issue #1095).
  *
  * <p><b>Eigener Dienst neben {@link NightRunService}</b>, obwohl beide dieselben Tabellen lesen.
  * Der Grund ist die Rechteregel: Jeder Use-Case von {@code NightRunService} verlangt eine
@@ -46,32 +53,67 @@ public class DisruptionService {
   }
 
   /**
-   * Die offenen Störungen aller teilnehmenden Projekte, jüngste zuoberst (AK 4, 13).
+   * Die drei Listen des Plattform-Leitstands in <b>einem</b> Abruf (Issue #1095, Plan #1088 E5).
    *
-   * <p>Die Datenbank liefert die Kandidaten, die Domäne entscheidet: Nur ein Lauf, dessen {@link
-   * NightRunOutcome} eine Störung ist, kommt in die Liste. Ein gelungener Lauf eines teilnehmenden
-   * Projekts ist ein Kandidat, aber keine Störung.
+   * <p><b>Warum einer und nicht drei:</b> Die Seite frischt sich alle 30 Sekunden auf (Kriterium
+   * 19). Drei Abfragen wären drei Rundreisen gegen einen Stand, der sich dazwischen ändert — ein
+   * Lauf, der zwischen der ersten und der zweiten Antwort endet, erschiene doppelt oder gar nicht.
+   * Aus demselben Grund steht hier <b>eine</b> Rechteprüfung für alle drei Listen (Kriterium 15).
    *
+   * <p>Die Datenbank liefert die Kandidaten, die Domäne entscheidet: Über die Aufteilung in
+   * laufende und durchgeführte Läufe befindet allein der {@link NightRunOutcome}, nicht {@code
+   * complete}. Ein verstummter Lauf trägt {@code complete = false} und steht trotzdem unter den
+   * durchgeführten — das leistet die Stillefrist aus Issue #1091.
+   *
+   * <p><b>Die Zone kommt vom Leser</b> (Plan #1088 E6): Im Container läuft die JVM regelmäßig in
+   * UTC, und „12:00 zonenlokal" wäre dann 14:00 in Berlin — die Nachtgrenze läge um Stunden
+   * verschoben gegen die, die die Nachtlauf-Auswertung zieht.
+   *
+   * @param zone Zone, in der die Grenzen der laufenden Nacht gezogen werden
    * @throws AdminAccessDeniedException wenn der Aufrufer kein Plattform-Admin ist (403)
    */
   @Transactional(readOnly = true)
-  public List<DisruptionView> disruptions(long userId) {
+  public LeitstandView leitstand(long userId, ZoneId zone) {
     requirePlatformAdmin(userId);
-    List<DisruptionRepository.DisruptionCandidate> kandidaten = repository.openCandidates();
-    if (kandidaten.isEmpty()) {
-      return List.of();
+    NightRunPeriod nacht = NightRunPeriod.laufendeNacht(clock.instant(), zone);
+    List<DisruptionRepository.DisruptionCandidate> derNacht =
+        repository.candidatesOfNight(nacht.from(), nacht.to());
+    List<DisruptionRepository.DisruptionCandidate> offene = repository.openCandidates();
+    Map<Long, List<NightRunItem>> jeLauf = pakete(derNacht, offene);
+    List<DisruptionView> laeufeDerNacht = views(derNacht, jeLauf);
+    return new LeitstandView(
+        laeufeDerNacht.stream().filter(v -> v.outcome().verdict() == Verdict.RUNNING).toList(),
+        laeufeDerNacht.stream().filter(v -> v.outcome().verdict() != Verdict.RUNNING).toList(),
+        views(offene, jeLauf).stream().filter(v -> v.outcome().isDisruption()).toList());
+  }
+
+  /**
+   * Die Pakete beider Abfragen in <b>einem</b> Zug, je Lauf gebündelt.
+   *
+   * <p>Ein Lauf kann in beiden Listen stehen — eine Störung der laufenden Nacht steht unter den
+   * durchgeführten <em>und</em> unter den Störungen. Zwei Abfragen liefen deshalb zweimal über
+   * dieselben Zeilen; die Vereinigung hält die Reihenfolge der Nacht-Abfrage vorn, damit der Aufruf
+   * vorhersagbar bleibt.
+   */
+  private Map<Long, List<NightRunItem>> pakete(
+      List<DisruptionRepository.DisruptionCandidate> derNacht,
+      List<DisruptionRepository.DisruptionCandidate> offene) {
+    Set<Long> laufIds =
+        Stream.concat(derNacht.stream(), offene.stream())
+            .map(DisruptionRepository.DisruptionCandidate::nightRunId)
+            .collect(Collectors.toCollection(LinkedHashSet::new));
+    if (laufIds.isEmpty()) {
+      return Map.of();
     }
-    Map<Long, List<NightRunItem>> jeLauf =
-        runs
-            .findItemsByRunIds(
-                kandidaten.stream()
-                    .map(DisruptionRepository.DisruptionCandidate::nightRunId)
-                    .toList())
-            .stream()
-            .collect(Collectors.groupingBy(NightRunItem::nightRunId));
+    return runs.findItemsByRunIds(List.copyOf(laufIds)).stream()
+        .collect(Collectors.groupingBy(NightRunItem::nightRunId));
+  }
+
+  private List<DisruptionView> views(
+      List<DisruptionRepository.DisruptionCandidate> kandidaten,
+      Map<Long, List<NightRunItem>> jeLauf) {
     return kandidaten.stream()
         .map(k -> view(k, jeLauf.getOrDefault(k.nightRunId(), List.of())))
-        .filter(v -> v.outcome().isDisruption())
         .toList();
   }
 
@@ -104,13 +146,13 @@ public class DisruptionService {
   }
 
   /**
-   * Die Störzeile eines Kandidaten.
+   * Die Zeile eines Kandidaten — dieselbe für alle drei Listen.
    *
    * <p><b>Abschluss und Lebenszeichen kommen vom Kandidaten</b>, nicht als Festwert. Über {@link
    * DisruptionRepository#openCandidates()} ist {@code complete} stets {@code true}, weil die
-   * Abfrage darauf filtert — die Stillefrist (Issue #1091) kann hier also nie greifen. Die Werte
-   * stehen trotzdem echt da statt als Platzhalter: ließe der Filter eines Tages unfertige Läufe
-   * durch, wäre ein verstummter unter ihnen sofort richtig beurteilt.
+   * Abfrage darauf filtert; über {@link DisruptionRepository#candidatesOfNight} nicht — dort
+   * entscheidet erst die Stillefrist (Issue #1091), ob ein unfertiger Lauf noch läuft oder
+   * verstummt ist.
    */
   private DisruptionView view(
       DisruptionRepository.DisruptionCandidate k, List<NightRunItem> items) {
@@ -142,4 +184,21 @@ public class DisruptionService {
       String projectName,
       Instant startedAt,
       NightRunOutcome outcome) {}
+
+  /**
+   * Die drei Bereiche des Plattform-Leitstands in ihrer Ordnung (Kriterium 18).
+   *
+   * <p>Dieselbe Zeilenform für alle drei: Ein laufender Lauf, ein durchgeführter und eine Störung
+   * tragen dieselben Angaben — Projekt, Startzeitpunkt, Befund —, und woraus der Browser welchen
+   * Melder und welches Wort bildet, steht im Befund.
+   *
+   * @param laufende Läufe der laufenden Nacht, die noch arbeiten; jüngster zuoberst
+   * @param durchgefuehrte beendete Läufe derselben Nacht, verstummte eingeschlossen; jüngster
+   *     zuoberst
+   * @param stoerungen offene Störungen über <b>alle</b> Nächte (Kriterium 17), jüngste zuoberst
+   */
+  public record LeitstandView(
+      List<DisruptionView> laufende,
+      List<DisruptionView> durchgefuehrte,
+      List<DisruptionView> stoerungen) {}
 }

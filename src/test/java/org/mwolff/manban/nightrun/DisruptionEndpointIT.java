@@ -22,15 +22,17 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 
 /**
- * Die Endpunkte des Plattform-Leitstands über HTTP (Issue #1080).
+ * Die Endpunkte des Plattform-Leitstands über HTTP (Issue #1080, auf einen Endpunkt für drei Listen
+ * umgestellt in #1095).
  *
- * <p>Drei Zusagen, die nur hier belegbar sind: Wer <b>nicht</b> Plattform-Admin ist, bekommt 403
+ * <p>Vier Zusagen, die nur hier belegbar sind: Wer <b>nicht</b> Plattform-Admin ist, bekommt 403
  * (AK 3); ein Plattform-Admin liest die Störungen eines teilnehmenden Projekts <b>ohne jede
- * Mitgliedschaft</b> (AK 7); und ein <b>ungebundenes Token</b> erreicht beide Endpunkte nicht.
+ * Mitgliedschaft</b> (AK 7); ein <b>ungebundenes Token</b> erreicht beide Endpunkte nicht; und die
+ * Zone wird an der Bindung geprüft — eine Offset-Zone ist 400 wie bei der Verbrauchs-Auswertung.
  *
- * <p>Das Letzte ist der Grund für den Pfadstamm {@code /api/admin} (Plan #1072 E24) und zieht die
+ * <p>Das Token ist der Grund für den Pfadstamm {@code /api/admin} (Plan #1072 E24) und zieht die
  * Grenze nicht am Endpunkt, sondern in der Filterkette: {@code SecurityConfig} verlangt dort eine
- * Sitzung. Läge die Störungsliste unter {@code /api/platform/...}, fiele sie unter die Auffangregel
+ * Sitzung. Läge der Leitstand unter {@code /api/platform/...}, fiele er unter die Auffangregel
  * {@code /api/**} — und wäre mit einem Token erreichbar, das niemand dafür ausgestellt hat.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK)
@@ -39,7 +41,9 @@ class DisruptionEndpointIT extends AbstractIntegrationTest {
 
   private static final String PASSWORD = "sup3r-secret";
   private static final String TOKEN_HEADER = "X-Kanban-Token";
-  private static final String LISTE = "/api/admin/disruptions";
+  private static final String LEITSTAND = "/api/admin/leitstand";
+  private static final String QUITTIEREN = "/api/admin/disruptions";
+  private static final String ZONE = "Europe/Berlin";
 
   @Autowired private MockMvc mvc;
   @Autowired private AppUserRepository users;
@@ -98,37 +102,60 @@ class DisruptionEndpointIT extends AbstractIntegrationTest {
 
   /**
    * AK 7: kein Mitglied des Projekts, trotzdem die Störung — die Teilnahme ist die Einwilligung.
+   *
+   * <p>Derselbe Lauf steht zugleich unter den <b>durchgeführten</b>: Er ist abgeschlossen und
+   * startete eben, liegt also in der laufenden Nacht. Dass beide Listen aus <b>einer</b> Antwort
+   * kommen, ist die Zusage aus Plan #1088 E5.
    */
   @Test
   void derPlattformAdminLiestDieStoerungOhneMitgliedschaft() throws Exception {
     Cookie admin = session("de-admin@example.com", PlatformRole.ADMIN);
 
-    mvc.perform(get(LISTE).cookie(admin))
+    mvc.perform(get(LEITSTAND).param("zone", ZONE).cookie(admin))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.length()").value(1))
-        .andExpect(jsonPath("$[0].nightRunId").value(laufId))
-        .andExpect(jsonPath("$[0].projectId").value(projectId))
-        .andExpect(jsonPath("$[0].projectName").value("Gestoertes Projekt"))
-        .andExpect(jsonPath("$[0].outcome.verdict").value("FAILED"))
-        .andExpect(jsonPath("$[0].outcome.decisiveItem.cardNumber").value(721));
+        .andExpect(jsonPath("$.stoerungen.length()").value(1))
+        .andExpect(jsonPath("$.stoerungen[0].nightRunId").value(laufId))
+        .andExpect(jsonPath("$.stoerungen[0].projectId").value(projectId))
+        .andExpect(jsonPath("$.stoerungen[0].projectName").value("Gestoertes Projekt"))
+        .andExpect(jsonPath("$.stoerungen[0].outcome.verdict").value("FAILED"))
+        .andExpect(jsonPath("$.stoerungen[0].outcome.decisiveItem.cardNumber").value(721))
+        .andExpect(jsonPath("$.laufende.length()").value(0))
+        .andExpect(jsonPath("$.durchgefuehrte.length()").value(1))
+        .andExpect(jsonPath("$.durchgefuehrte[0].nightRunId").value(laufId));
   }
 
+  /** AK 10 und Kriterium 13: Die Quittung räumt die Störung weg, den Ausgang lässt sie stehen. */
   @Test
   void dasQuittierenRaeumtDieZeileWeg_undIstIdempotent() throws Exception {
     Cookie admin = session("de-quit@example.com", PlatformRole.ADMIN);
 
-    mvc.perform(delete(LISTE + "/" + laufId).cookie(admin)).andExpect(status().isNoContent());
-    mvc.perform(get(LISTE).cookie(admin)).andExpect(jsonPath("$.length()").value(0));
+    mvc.perform(delete(QUITTIEREN + "/" + laufId).cookie(admin)).andExpect(status().isNoContent());
+    mvc.perform(get(LEITSTAND).param("zone", ZONE).cookie(admin))
+        .andExpect(jsonPath("$.stoerungen.length()").value(0))
+        .andExpect(jsonPath("$.durchgefuehrte.length()").value(1));
 
     // AK 8: Der zweite Klick zweier Admins auf dieselbe Zeile ist kein Fehler.
-    mvc.perform(delete(LISTE + "/" + laufId).cookie(admin)).andExpect(status().isNoContent());
+    mvc.perform(delete(QUITTIEREN + "/" + laufId).cookie(admin)).andExpect(status().isNoContent());
   }
 
   @Test
   void einUnbekannterLaufIstBeimQuittieren404() throws Exception {
     Cookie admin = session("de-404@example.com", PlatformRole.ADMIN);
 
-    mvc.perform(delete(LISTE + "/999999").cookie(admin)).andExpect(status().isNotFound());
+    mvc.perform(delete(QUITTIEREN + "/999999").cookie(admin)).andExpect(status().isNotFound());
+  }
+
+  /**
+   * Plan E6: Die Zone kommt vom Browser und wird wie in {@code NightRunUsageController} auf eine
+   * Regionszone eingegrenzt — ein fester Offset wäre eine verschobene Nachtgrenze, kein Ort.
+   */
+  @Test
+  void eineOffsetZoneUndEineFehlendeZoneSind400() throws Exception {
+    Cookie admin = session("de-zone@example.com", PlatformRole.ADMIN);
+
+    mvc.perform(get(LEITSTAND).param("zone", "+05:30").cookie(admin))
+        .andExpect(status().isBadRequest());
+    mvc.perform(get(LEITSTAND).cookie(admin)).andExpect(status().isBadRequest());
   }
 
   @Test
@@ -136,16 +163,17 @@ class DisruptionEndpointIT extends AbstractIntegrationTest {
     Cookie admin = session("de-ohne@example.com", PlatformRole.ADMIN);
     jdbc.update("UPDATE project SET dashboard_participation = false WHERE id = ?", projectId);
 
-    mvc.perform(delete(LISTE + "/" + laufId).cookie(admin)).andExpect(status().isNotFound());
+    mvc.perform(delete(QUITTIEREN + "/" + laufId).cookie(admin)).andExpect(status().isNotFound());
   }
 
-  /** AK 3: Wer nicht Plattform-Admin ist, sieht weder Liste noch Quittieren. */
+  /** AK 3: Wer nicht Plattform-Admin ist, sieht weder den Leitstand noch das Quittieren. */
   @Test
   void ohnePlattformRolleAdminSindBeideEndpunkte403() throws Exception {
     Cookie nutzer = session("de-nutzer@example.com", PlatformRole.USER);
 
-    mvc.perform(get(LISTE).cookie(nutzer)).andExpect(status().isForbidden());
-    mvc.perform(delete(LISTE + "/" + laufId).cookie(nutzer)).andExpect(status().isForbidden());
+    mvc.perform(get(LEITSTAND).param("zone", ZONE).cookie(nutzer))
+        .andExpect(status().isForbidden());
+    mvc.perform(delete(QUITTIEREN + "/" + laufId).cookie(nutzer)).andExpect(status().isForbidden());
   }
 
   /**
@@ -170,8 +198,9 @@ class DisruptionEndpointIT extends AbstractIntegrationTest {
             .get("plaintext")
             .asText();
 
-    mvc.perform(get(LISTE).header(TOKEN_HEADER, token)).andExpect(status().isForbidden());
-    mvc.perform(delete(LISTE + "/" + laufId).header(TOKEN_HEADER, token))
+    mvc.perform(get(LEITSTAND).param("zone", ZONE).header(TOKEN_HEADER, token))
+        .andExpect(status().isForbidden());
+    mvc.perform(delete(QUITTIEREN + "/" + laufId).header(TOKEN_HEADER, token))
         .andExpect(status().isForbidden());
   }
 }
