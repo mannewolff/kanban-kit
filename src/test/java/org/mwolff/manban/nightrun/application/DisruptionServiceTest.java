@@ -116,8 +116,9 @@ class DisruptionServiceTest {
   }
 
   /**
-   * Stellt die Läufe bereit, aus denen die Abfrage der Nacht schöpft — gefiltert nach <b>ihrem</b>
-   * Maßstab: Startzeitpunkt ab {@code from} einschließlich bis {@code to} ausschließlich.
+   * Stellt die Läufe bereit, aus denen die Abfrage der Nacht schöpft — gefiltert nach <b>ihren
+   * beiden</b> Zweigen (Issue #1109): Start in der Nacht ({@code from} einschließlich, {@code to}
+   * ausschließlich) <em>oder</em> unfertig mit einem Lebenszeichen innerhalb der Stillefrist.
    */
   private void nachtLaeufe(DisruptionCandidate... kandidaten) {
     // doAnswer statt when(...).thenAnswer: Ein zweiter Aufruf in demselben Test soll die Antwort
@@ -126,12 +127,24 @@ class DisruptionServiceTest {
             aufruf -> {
               Instant from = aufruf.getArgument(0);
               Instant to = aufruf.getArgument(1);
+              Instant lebenszeichenAb =
+                  aufruf.<Instant>getArgument(2).minus(aufruf.<Duration>getArgument(3));
               return Stream.of(kandidaten)
-                  .filter(k -> !k.startedAt().isBefore(from) && k.startedAt().isBefore(to))
+                  .filter(k -> inDerNacht(k, from, to) || nochAmLeben(k, lebenszeichenAb))
                   .toList();
             })
         .when(disruptions)
-        .candidatesOfNight(any(), any());
+        .candidatesOfNight(any(), any(), any(), any());
+  }
+
+  private static boolean inDerNacht(DisruptionCandidate k, Instant from, Instant to) {
+    return !k.startedAt().isBefore(from) && k.startedAt().isBefore(to);
+  }
+
+  /** Der zweite Zweig der Abfrage; ohne letzte Meldung zählt der Start als Lebenszeichen. */
+  private static boolean nochAmLeben(DisruptionCandidate k, Instant lebenszeichenAb) {
+    Instant lebenszeichen = k.updatedAt() == null ? k.startedAt() : k.updatedAt();
+    return !k.complete() && !lebenszeichen.isBefore(lebenszeichenAb);
   }
 
   private void pakete(NightRunItem... items) {
@@ -249,12 +262,12 @@ class DisruptionServiceTest {
   }
 
   /**
-   * Kriterium 9, Grenzfall: Über die Zugehörigkeit entscheidet der <b>Startzeitpunkt</b>. Ein Lauf
-   * von 11:50 bis 12:10 gehört zur Nacht davor und ist nach 12:00 aus beiden Bereichen fort — nicht
-   * etwa, weil er noch liefe, sondern weil die neue Nacht ihn nicht kennt.
+   * Kriterium 9, Grenzfall: Über die Zugehörigkeit zu den <b>beendeten</b> Läufen entscheidet der
+   * Startzeitpunkt. Ein <em>abgeschlossener</em> Lauf von 11:50 gehört zur Nacht davor und ist nach
+   * 12:00 aus beiden Bereichen fort, weil die neue Nacht ihn nicht kennt.
    */
   @Test
-  void einLaufVonVorZwoelfGehoertNachZwoelfInKeineDerNeuenListen() {
+  void einBeendeterLaufVonVorZwoelfGehoertNachZwoelfInKeineDerNeuenListen() {
     DisruptionService nachZwoelf = mitUhr(Instant.parse("2026-09-20T12:10:00Z"));
     nachtLaeufe(kandidat(5L, Instant.parse("2026-09-20T11:50:00Z")));
 
@@ -262,6 +275,89 @@ class DisruptionServiceTest {
 
     assertThat(leitstand.laufende()).isEmpty();
     assertThat(leitstand.durchgefuehrte()).isEmpty();
+  }
+
+  // --- Die Nachtgrenze gilt nur den beendeten Läufen (Issue #1109) ----------------------------
+
+  /**
+   * Kriterium 1 und AK 1 aus #1086: Ein Lauf, der um 10:30 begann und um 13:00 noch arbeitet, steht
+   * unter den <b>laufenden</b> — obwohl sein Start vor der Nachtgrenze liegt. Für den Bereich der
+   * laufenden Läufe kennt #1086 keine Nachtgrenze; sie zieht AK 9 nur für die beendeten.
+   */
+  @Test
+  void einLaufVonVorZwoelfDerNochArbeitetStehtUnterDenLaufenden() {
+    DisruptionService nachZwoelf = mitUhr(Instant.parse("2026-09-20T13:00:00Z"));
+    nachtLaeufe(
+        unfertig(5L, Instant.parse("2026-09-20T10:30:00Z"), Instant.parse("2026-09-20T12:50:00Z")));
+
+    LeitstandView leitstand = nachZwoelf.leitstand(ADMIN, UTC);
+
+    assertThat(ids(leitstand.laufende())).containsExactly(5L);
+    assertThat(leitstand.durchgefuehrte()).isEmpty();
+  }
+
+  /**
+   * Kriterium 2 und AK 9 aus #1086: Derselbe Lauf, um 13:30 abgeschlossen und um 14:00 abgefragt,
+   * verlässt beide Lauf-Bereiche — er gehört zur alten Nacht. Als Störung bleibt er sichtbar, denn
+   * die Störungsliste geht über alle Nächte.
+   */
+  @Test
+  void derAbgeschlosseneLaufDerAltenNachtVerlaesstBeideBereiche_bleibtAberStoerung() {
+    DisruptionService nachZwoelf = mitUhr(Instant.parse("2026-09-20T14:00:00Z"));
+    DisruptionCandidate beendet = kandidat(5L, Instant.parse("2026-09-20T10:30:00Z"));
+    nachtLaeufe(beendet);
+    when(disruptions.openCandidates()).thenReturn(List.of(beendet));
+    pakete(paket(5L, NightRunState.RED, NightRunErrorClass.HARD_ABORT));
+
+    LeitstandView leitstand = nachZwoelf.leitstand(ADMIN, UTC);
+
+    assertThat(leitstand.laufende()).isEmpty();
+    assertThat(leitstand.durchgefuehrte()).isEmpty();
+    assertThat(ids(leitstand.stoerungen())).containsExactly(5L);
+  }
+
+  /**
+   * Kriterium 3: Der Dienst zieht die Nachtgrenze für die beendeten Läufe <b>ausdrücklich</b> und
+   * leitet sie nicht aus der Abfrage ab.
+   *
+   * <p>Der zweite Zweig der Abfrage liefert auch Läufe früherer Nächte; zwischen Abfrage und
+   * Auswertung kann die Stillefrist einen davon verstummen lassen — die Abfrage bekommt ihren
+   * Bezugszeitpunkt, der Befund liest die Uhr erneut. Ohne die Grenze stünde so ein Lauf der alten
+   * Nacht unter den beendeten Läufen der neuen. Der Kandidat kommt deshalb direkt aus dem Mock,
+   * nicht über {@link #nachtLaeufe}: Genau diesen Rand bildet dessen Filter nicht ab.
+   */
+  @Test
+  void einVerstummterLaufEinerFruehrenNachtStehtInKeinemBereich() {
+    DisruptionService nachZwoelf = mitUhr(Instant.parse("2026-09-20T14:00:00Z"));
+    when(disruptions.candidatesOfNight(any(), any(), any(), any()))
+        .thenReturn(
+            List.of(
+                unfertig(
+                    5L,
+                    Instant.parse("2026-09-20T10:30:00Z"),
+                    Instant.parse("2026-09-20T11:00:00Z"))));
+
+    LeitstandView leitstand = nachZwoelf.leitstand(ADMIN, UTC);
+
+    assertThat(leitstand.laufende()).isEmpty();
+    assertThat(leitstand.durchgefuehrte()).isEmpty();
+  }
+
+  /**
+   * Die Abfrage bekommt denselben Maßstab, mit dem der Befund später rechnet — Uhr und Stillefrist
+   * des Dienstes. Eine eigene Regel in SQL zeigte einen Lauf, den die Auswertung des Projekts
+   * anders sieht (#1086 AK 8).
+   */
+  @Test
+  void dieAbfrageBekommtDieNachtgrenzenUndDenselbenMassstabWieDerBefund() {
+    service.leitstand(ADMIN, UTC);
+
+    verify(disruptions)
+        .candidatesOfNight(
+            Instant.parse("2026-09-19T12:00:00Z"),
+            Instant.parse("2026-09-20T12:00:00Z"),
+            JETZT,
+            Duration.ofMinutes(90));
   }
 
   /**
@@ -311,7 +407,7 @@ class DisruptionServiceTest {
     LeitstandView leitstand = service.leitstand(ADMIN, UTC);
 
     assertThat(ids(leitstand.durchgefuehrte())).containsExactly(5L);
-    verify(disruptions).candidatesOfNight(any(), any());
+    verify(disruptions).candidatesOfNight(any(), any(), any(), any());
     verify(disruptions).openCandidates();
     verifyNoMoreInteractions(disruptions);
   }

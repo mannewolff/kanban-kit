@@ -1,5 +1,6 @@
 package org.mwolff.manban.nightrun.infrastructure.persistence;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
@@ -49,16 +50,34 @@ class DisruptionRepositoryAdapter implements DisruptionRepository {
       """;
 
   /**
-   * Die Läufe einer Nacht, jüngster zuoberst.
+   * Die Kandidaten der beiden Lauf-Bereiche, jüngster zuoberst.
    *
    * <p>Zwei Bedingungen weniger als bei den {@link #KANDIDATEN}: <b>kein</b> Filter auf den
    * Abschluss, weil die laufenden Läufe gerade der obere Bereich sind, und <b>kein</b> Ausschluss
-   * quittierter Läufe, weil das Quittieren den Ausgang nicht ändert. Dafür eine mehr: der
-   * Startzeitpunkt entscheidet die Zugehörigkeit zur Nacht, {@code :from} einschließlich, {@code
-   * :to} ausschließlich.
+   * quittierter Läufe, weil das Quittieren den Ausgang nicht ändert.
    *
-   * <p>Kein {@code LIMIT}, aus demselben Grund wie oben; die Spanne einer Nacht begrenzt die Menge
-   * ohnehin schärfer als der Ringpuffer.
+   * <p><b>Zwei Zweige unter einem {@code OR}</b> (Issue #1109):
+   *
+   * <ul>
+   *   <li><b>Zur Nacht gehörig:</b> Der Startzeitpunkt liegt zwischen {@code :from} einschließlich
+   *       und {@code :to} ausschließlich.
+   *   <li><b>Noch am Leben:</b> {@code complete = false} und das letzte Lebenszeichen ist nicht
+   *       älter als {@code :lebenszeichenAb} — <em>ohne</em> Blick auf den Start. Ohne diesen Zweig
+   *       verschwände ein Lauf, der um 10:27 begann und über Mittag arbeitet, für seine ganze
+   *       Restlaufzeit vom Leitstand: Die neue Nacht kennt ihn nicht, und beendet ist er auch nicht
+   *       (#1086 AK 1 kennt für die laufenden Läufe keine Nachtgrenze).
+   * </ul>
+   *
+   * <p><b>Gattung und Teilnahme stehen vor der Klammer</b> — sie gelten beiden Zweigen: Eine
+   * interaktive Sitzung ist auch dann kein Nachtlauf, wenn sie gerade arbeitet.
+   *
+   * <p>Das {@code COALESCE} ist dieselbe Rückfallregel, die {@code NightRunOutcome} trägt: Ohne
+   * {@code updated_at} ist der Start das einzige Lebenszeichen (der Upload-Weg schreibt einen Lauf
+   * nie fort). Und {@code >=} ist derselbe Rand — genau <em>auf</em> der Frist lebt der Lauf noch.
+   * Die Abfrage filtert damit nur vor; entschieden wird der Ausgang weiter in der Domäne.
+   *
+   * <p>Kein {@code LIMIT}, aus demselben Grund wie oben; Nachtspanne und Stillefrist begrenzen die
+   * Menge ohnehin schärfer als der Ringpuffer.
    */
   private static final String LAEUFE_DER_NACHT =
       """
@@ -68,8 +87,9 @@ class DisruptionRepositoryAdapter implements DisruptionRepository {
         JOIN project p ON p.id = r.project_id
        WHERE r.kind = 'NIGHT'
          AND p.dashboard_participation = true
-         AND r.started_at >= :from
-         AND r.started_at < :to
+         AND ( (r.started_at >= :from AND r.started_at < :to)
+               OR (r.complete = false
+                   AND COALESCE(r.updated_at, r.started_at) >= :lebenszeichenAb) )
        ORDER BY r.started_at DESC, r.id DESC
       """;
 
@@ -121,12 +141,16 @@ class DisruptionRepositoryAdapter implements DisruptionRepository {
   }
 
   @Override
-  public List<DisruptionCandidate> candidatesOfNight(Instant from, Instant to) {
+  public List<DisruptionCandidate> candidatesOfNight(
+      Instant from, Instant to, Instant jetzt, Duration stilleFrist) {
     return jdbc.query(
         LAEUFE_DER_NACHT,
         new MapSqlParameterSource()
             .addValue("from", OffsetDateTime.ofInstant(from, ZoneOffset.UTC))
-            .addValue("to", OffsetDateTime.ofInstant(to, ZoneOffset.UTC)),
+            .addValue("to", OffsetDateTime.ofInstant(to, ZoneOffset.UTC))
+            .addValue(
+                "lebenszeichenAb",
+                OffsetDateTime.ofInstant(jetzt.minus(stilleFrist), ZoneOffset.UTC)),
         KANDIDAT);
   }
 

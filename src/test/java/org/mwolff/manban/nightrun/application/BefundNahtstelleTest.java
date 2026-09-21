@@ -90,7 +90,7 @@ class BefundNahtstelleTest {
   /** Derselbe Lauf, wie der Plattform-Leitstand ihn liest. */
   private NightRunOutcome befundDesLeitstands() {
     DisruptionRepository disruptions = mock(DisruptionRepository.class);
-    when(disruptions.candidatesOfNight(any(), any()))
+    when(disruptions.candidatesOfNight(any(), any(), any(), any()))
         .thenReturn(
             List.of(
                 new DisruptionCandidate(
