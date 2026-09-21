@@ -81,6 +81,15 @@ class NightRunRepositoryAdapter implements NightRunRepository {
           + " :cachedInputTokens)";
 
   /**
+   * Sperrt die Projektzeile für die Dauer der Transaktion (Issue #1090) — dieselbe Zeile und
+   * dieselbe Form wie {@code CardRepositoryAdapter.lockCardNumbers}. Gelesen wird die Tabelle
+   * {@code project} per SQL, wie es der {@code DisruptionRepositoryAdapter} schon tut; ein Import
+   * aus dem Modul {@code project} entstünde dadurch nicht.
+   */
+  private static final String LOCK_PROJECT =
+      "SELECT id FROM project WHERE id = :projectId FOR UPDATE";
+
+  /**
    * Verdrängung des Ringpuffers: alles außerhalb der {@code keep} jüngsten Läufe <b>dieser
    * Gattung</b> fällt weg (je Gattung getrennt seit Issue #1011). Die Auswahl steht als
    * Unterabfrage, weil {@code LIMIT} weder in JPQL noch in einer {@code DELETE}-Bedingung direkt
@@ -133,6 +142,12 @@ class NightRunRepositoryAdapter implements NightRunRepository {
   }
 
   @Override
+  public void lockProject(long projectId) {
+    jdbc.queryForList(
+        LOCK_PROJECT, new MapSqlParameterSource().addValue(P_PROJECT_ID, projectId), Long.class);
+  }
+
+  @Override
   public Optional<Long> insertIfAbsent(NightRun run, List<NightRunItem> newItems) {
     // Leere Liste heisst: Der Lauf lag schon vor — DO NOTHING liefert dann keine Zeile.
     List<Long> vergebeneId = jdbc.queryForList(INSERT_RUN, runParameters(run), Long.class);
@@ -152,7 +167,9 @@ class NightRunRepositoryAdapter implements NightRunRepository {
    *
    * <p>Das {@code FOR UPDATE} sperrt die Zeile für die Dauer der Transaktion. Ohne es könnten zwei
    * gleichzeitige Meldungen desselben Laufs beide kein Vorkommen sehen und beide einfügen wollen;
-   * die zweite liefe in den eindeutigen Schlüssel.
+   * die zweite liefe in den eindeutigen Schlüssel. Es sperrt allerdings nur <b>diesen</b> Lauf —
+   * die Serialisierung über Läufe hinweg, die der Ringpuffer braucht, trägt seit Issue #1090 die
+   * Projektsperre aus {@link #lockProject}, die jedem Schreibweg vorausgeht.
    */
   @Override
   public UpsertResult upsert(NightRun run, List<NightRunItem> newItems) {

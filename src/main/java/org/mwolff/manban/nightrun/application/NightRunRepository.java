@@ -14,6 +14,31 @@ import org.mwolff.manban.nightrun.domain.NightRunKind;
 public interface NightRunRepository {
 
   /**
+   * Sperrt das Projekt für die Dauer der laufenden Transaktion und serialisiert damit die
+   * Einlieferungen dieses Projekts gegeneinander (Issue #1090).
+   *
+   * <p><b>Warum:</b> Der Ringpuffer wird am Ende jeder Einlieferung nachgezogen ({@link
+   * #deleteOlderThanNewest}). Melden zwei <b>verschiedene</b> Läufe desselben Projekts
+   * gleichzeitig, sieht unter {@code READ COMMITTED} jede Transaktion nur ihren eigenen, noch nicht
+   * festgeschriebenen Lauf und die bereits festgeschriebenen — keine zählt den Lauf der anderen
+   * mit, und nach beiden Commits liegen {@code keep + 1} Läufe da. Das {@code FOR UPDATE} in {@link
+   * #upsert} trägt das nicht: Es sperrt die Zeile <b>desselben</b> Laufs, nicht das Projekt.
+   *
+   * <p><b>Sperrreihenfolge:</b> Der Aufruf steht als <b>erste</b> Datenbankaktion jedes Schreibwegs
+   * — vor {@link #deleteOrphanItemsOfRun}, vor {@link #upsert} und vor {@link #insertIfAbsent}.
+   * Wird die Projektzeile immer zuerst gesperrt, kann zwischen zwei Meldungen keine umgekehrte
+   * Sperrreihenfolge entstehen, auch nicht bei zwei Meldungen desselben Laufs, die sonst zuerst die
+   * Lauf- und danach die Projektzeile sperrten.
+   *
+   * <p>Gesperrt wird dieselbe Zeile wie bei der Kartenanlage ({@code
+   * CardRepository#lockCardNumbers}). Eine Meldung wartet damit höchstens für die Dauer einer
+   * kurzen Transaktion auf eine Kartenanlage im selben Projekt und umgekehrt; eine Verklemmung
+   * entsteht nicht, weil keiner der beiden Wege nach der Projektzeile auf die Tabellen des anderen
+   * zugreift.
+   */
+  void lockProject(long projectId);
+
+  /**
    * Legt den Lauf samt seiner Arbeitspakete an, sofern {@code (projectId, startedAt)} noch frei
    * ist.
    *

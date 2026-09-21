@@ -95,6 +95,10 @@ public class NightRunService {
     if (submissions.isEmpty()) {
       return List.of();
     }
+    // Erste Datenbankaktion dieses Wegs (Issue #1090): Sie serialisiert die Einlieferungen des
+    // Projekts, damit zwei gleichzeitige Laeufe einander beim Nachziehen des Ringpuffers
+    // mitzaehlen. Begruendung und Sperrreihenfolge stehen am Port.
+    runs.lockProject(projectId);
     Instant now = clock.instant();
     List<NightRunResult> results = new ArrayList<>(submissions.size());
     for (NewNightRun submission : submissions) {
@@ -140,6 +144,9 @@ public class NightRunService {
   public NightRunResult ingest(
       long userId, long projectId, String tokenName, NightRunKind kind, NewNightRun meldung) {
     permissions.requireOwner(userId, projectId);
+    // Erste Datenbankaktion dieses Wegs (Issue #1090), aus demselben Grund wie in submit und vor
+    // der Laufzeile aus upsert — die Sperrreihenfolge ist damit in beiden Wegen dieselbe.
+    runs.lockProject(projectId);
     Instant now = clock.instant();
     NightRun gemeldet =
         new NightRun(

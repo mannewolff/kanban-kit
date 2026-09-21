@@ -713,6 +713,43 @@ class NightRunServiceTest {
     reihenfolge.verifyNoMoreInteractions();
   }
 
+  // --- Serialisierung des Ringpuffers (Issue #1090) ----------------------------------------
+
+  /**
+   * Die Projektsperre ist die <b>erste</b> Datenbankaktion jedes Schreibwegs. Zwei gleichzeitige
+   * Meldungen verschiedener Laeufe desselben Projekts zaehlten einander sonst nicht mit, und nach
+   * beiden Commits laege ein Lauf zu viel da. Die feste Reihenfolge haelt zugleich die
+   * Sperrreihenfolge gerade: Projektzeile vor Laufzeile, nie umgekehrt.
+   *
+   * <p>Belegt wird die <b>ganze</b> Kette und nicht nur das erste Paar: Rutschte die Sperre hinter
+   * einen der spaeteren Aufrufe, faellt das nur auf, wenn jeder von ihnen in der Reihenfolge steht.
+   */
+  @Test
+  void submit_sperrtDasProjekt_vorJederAnderenDatenbankaktion() {
+    service.submit(USER, PROJECT, List.of(lauf(T1)));
+
+    var reihenfolge = inOrder(runs);
+    reihenfolge.verify(runs).lockProject(PROJECT);
+    reihenfolge.verify(runs).deleteOrphanItemsOfRun(PROJECT, T1);
+    reihenfolge.verify(runs).insertIfAbsent(any(NightRun.class), any());
+    reihenfolge.verify(runs).deleteOlderThanNewest(PROJECT, NightRunKind.NIGHT, 30);
+    reihenfolge.verify(runs).deleteOrphanItemsOlderThanNewest(PROJECT, NightRunKind.NIGHT, 2000);
+    reihenfolge.verifyNoMoreInteractions();
+  }
+
+  @Test
+  void ingest_sperrtDasProjekt_vorJederAnderenDatenbankaktion() {
+    service.ingest(USER, PROJECT, TOKEN, NightRunKind.NIGHT, meldung(T1, true, null));
+
+    var reihenfolge = inOrder(runs);
+    reihenfolge.verify(runs).lockProject(PROJECT);
+    reihenfolge.verify(runs).deleteOrphanItemsOfRun(PROJECT, T1);
+    reihenfolge.verify(runs).upsert(any(NightRun.class), any());
+    reihenfolge.verify(runs).deleteOlderThanNewest(PROJECT, NightRunKind.NIGHT, 30);
+    reihenfolge.verify(runs).deleteOrphanItemsOlderThanNewest(PROJECT, NightRunKind.NIGHT, 2000);
+    reihenfolge.verifyNoMoreInteractions();
+  }
+
   // --- Getrennte Grenzen je Gattung (Issue #1011) ------------------------------------------
 
   /**
@@ -914,6 +951,16 @@ class NightRunServiceTest {
     private final List<NightRunItem> gespeichertePakete = new ArrayList<>();
     private long naechsteLaufId = 1L;
     private long naechstePaketId = 1L;
+
+    /**
+     * Ohne Wirkung am Fake: Was die Sperre leistet, leistet allein die Datenbank (Issue #1090).
+     * Hier zaehlt nur, <em>dass</em> und <em>wann</em> sie gerufen wird — das belegt der {@code
+     * InOrder}-Fall, den nebenlaeufigen Beweis fuehrt {@code NightRunNebenlaufIT}.
+     */
+    @Override
+    public void lockProject(long projectId) {
+      // bewusst leer
+    }
 
     @Override
     public UpsertResult upsert(NightRun run, List<NightRunItem> items) {
