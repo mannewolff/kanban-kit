@@ -1,3 +1,4 @@
+import type { Verdict } from '../api/nightRuns'
 import type { NightRunErrorClass, NightRunState } from './nightRunLog'
 
 /**
@@ -63,6 +64,31 @@ export const NIGHT_RUN_ERROR_CLASS_TEXT: Record<NightRunErrorClass, string> = {
   AWAITING_DECISION: 'Wartet auf Entscheidung',
   REVIEWER_FAILED: 'Prüf-Session gescheitert',
   TIME_BUDGET_EXCEEDED: 'Zeitbudget erschöpft',
+}
+
+/**
+ * Das Wort je Ausgang eines Laufs (Issue #1096, Kriterien 10 und 11 der fachlichen Quelle #1086).
+ *
+ * <p>Der Ausgang muss **ohne Farbwahrnehmung** zu erkennen sein; dafuer braucht jeder Melder ein
+ * Wort neben sich. `RUNNING` steht mit in der Tabelle, weil auch die laufende Zeile eine
+ * Textangabe braucht (Kriterium 3) — Puls und Stahl allein sagen es nicht.
+ *
+ * <p><b>`Record<Verdict, string>` und nicht `Partial`</b> — aus demselben Grund wie bei
+ * {@link NIGHT_RUN_ERROR_CLASS_TEXT}: Kaeme ein fuenfter Ausgang hinzu, braeche der Build, statt
+ * dass er stumm als leerer Text erschiene.
+ *
+ * <p>Die Woerter leben hier und nicht im Server (Plan #1088): Der Befund kommt als Daten, nicht als
+ * fertiger Satz — so steht es schon im Klassenkommentar von `NightRunOutcome`.
+ *
+ * <p>`WAITING` heisst „mit Vorbehalt": der Lauf, dessen massgebliches Paket grau mit Fehlerklasse
+ * ist — zurueckgestellt oder auf einen Menschen wartend. Nicht zu verwechseln mit
+ * `NightRunState.YELLOW`, das auf `FAILED` abbildet.
+ */
+export const NIGHT_RUN_VERDICT_TEXT: Record<Verdict, string> = {
+  SUCCEEDED: 'gelungen',
+  FAILED: 'nicht gelungen',
+  WAITING: 'mit Vorbehalt',
+  RUNNING: 'läuft',
 }
 
 /**

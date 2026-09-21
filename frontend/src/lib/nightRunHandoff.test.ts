@@ -1,9 +1,11 @@
 import { describe, expect, it, vi } from 'vitest'
+import type { Verdict } from '../api/nightRuns'
 import { NIGHT_RUN_ERROR_CLASSES, type NightRunState } from './nightRunLog'
 import {
   buildHandoffText,
   nightRunZustandsText,
   NIGHT_RUN_STATE_TEXT,
+  NIGHT_RUN_VERDICT_TEXT,
   type NightRunHandoffItem,
 } from './nightRunHandoff'
 
@@ -223,6 +225,30 @@ describe('nightRunZustandsText — Rueckfall wertgleich (AK 9 aus #842)', () => 
     // gruen, und grau ist er nur als uebergangener Kandidat — dort sagt „nicht bearbeitet" mehr.
     expect(nightRunZustandsText('GREEN', 'TIME_BUDGET_EXCEEDED')).toBe('Erfolg')
     expect(nightRunZustandsText('GREY', 'TIME_BUDGET_EXCEEDED')).toBe('nicht bearbeitet')
+  })
+})
+
+describe('NIGHT_RUN_VERDICT_TEXT — die Woerter der vier Ausgaenge (#1096)', () => {
+  const VERDICTS = ['SUCCEEDED', 'FAILED', 'WAITING', 'RUNNING'] as const satisfies readonly Verdict[]
+
+  it('traegt zu jedem der vier Ausgaenge einen nicht leeren Text', () => {
+    // Ueber die Schluessel der Tabelle selbst: Ein fuenfter Eintrag faellt hier auf, statt still
+    // mitzulaufen. Ein fehlender bricht schon `tsc` am `Record`.
+    expect(Object.keys(NIGHT_RUN_VERDICT_TEXT).toSorted()).toEqual([...VERDICTS].toSorted())
+    for (const verdict of VERDICTS) {
+      expect(NIGHT_RUN_VERDICT_TEXT[verdict].trim()).not.toBe('')
+    }
+  })
+
+  // Woertlich, weil Kriterium 11 der fachlichen Quelle (#1086) genau diese Woerter verlangt: Der
+  // Ausgang muss ohne Farbwahrnehmung zu lesen sein.
+  it('ordnet die Ausgaenge ihren Woertern woertlich zu', () => {
+    expect(NIGHT_RUN_VERDICT_TEXT).toEqual({
+      SUCCEEDED: 'gelungen',
+      FAILED: 'nicht gelungen',
+      WAITING: 'mit Vorbehalt',
+      RUNNING: 'läuft',
+    })
   })
 })
 

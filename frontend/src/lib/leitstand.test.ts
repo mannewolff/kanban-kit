@@ -23,6 +23,7 @@ import {
   laufDauerGeteilt,
   laufMelder,
   laufNotiz,
+  melderAusBefund,
   MELDER_JE_ZUSTAND,
   modusName,
   paketDauer,
@@ -478,5 +479,34 @@ describe('leitstand Der verstummte Lauf (#1092)', () => {
   it('laeuftNoch faellt ohne Befund auf complete zurueck', () => {
     expect(laeuftNoch({ complete: false })).toBe(true)
     expect(laeuftNoch({ complete: true })).toBe(false)
+  })
+})
+
+/**
+ * Der Melder aus dem Befund ist seit #1096 oeffentlich: Beide Zeilen des Plattform-Leitstands
+ * beziehen ihn daraus. Diese Tests rufen ihn ueber den Export auf, nicht ueber `laufMelder` —
+ * sonst bliebe der Export ungenutzt und liefe beim naechsten Umbau still weg.
+ */
+describe('melderAusBefund — der Melder eines Laufs aus seinem Befund (#1096)', () => {
+  it('meldet den laufenden Lauf stahl', () => {
+    expect(melderAusBefund({ verdict: 'RUNNING', decisiveItem: null, noWorkReason: null })).toBe('stahl')
+  })
+
+  it('meldet den Lauf ohne Arbeit zinnob', () => {
+    expect(melderAusBefund({ verdict: 'FAILED', decisiveItem: null, noWorkReason: 'Ready war leer' })).toBe('zinnob')
+  })
+
+  it('nimmt den Melder aus dem Zustand des massgeblichen Pakets', () => {
+    const je = (state: NightRunState, errorClass: NightRunErrorClass | null) =>
+      melderAusBefund({ verdict: 'FAILED', decisiveItem: { cardNumber: 9, state, errorClass }, noWorkReason: null })
+
+    expect(je('RED', 'HARD_ABORT')).toBe('zinnob')
+    expect(je('YELLOW', 'CHECKS_RED')).toBe('bernst')
+    expect(je('GREY', 'DEPENDENCY_UNMET')).toBe('grau')
+  })
+
+  it('laesst gruen allein dem gelungenen Lauf, der verstummte bleibt zinnob', () => {
+    expect(melderAusBefund({ verdict: 'SUCCEEDED', decisiveItem: null, noWorkReason: null })).toBe('gruen')
+    expect(melderAusBefund({ verdict: 'FAILED', decisiveItem: null, noWorkReason: null })).toBe('zinnob')
   })
 })

@@ -129,8 +129,12 @@ export function laufMelder(
  * und kein Grund" zwangslaeufig `SUCCEEDED`; seit der Stillefrist trifft es auch den verstummten
  * Lauf — ein `FAILED` ohne Paket und ohne Grund. Der Rueckfall auf Gruen gehoert deshalb allein dem
  * gelungenen Lauf, sonst zeigte die Anzeige einen nicht gelungenen Lauf gruen.
+ *
+ * <p><b>Oeffentlich seit Issue #1096:</b> Beide Zeilen des Plattform-Leitstands — die laufende und
+ * die durchgefuehrte — beziehen ihren Melder hierher. Eine zweite Zuordnung von Ausgang auf Melder
+ * waere die zweite Rechnung fuer dieselbe Frage.
  */
-function melderAusBefund(befund: NightRunOutcomeView): Melder {
+export function melderAusBefund(befund: NightRunOutcomeView): Melder {
   if (befund.verdict === 'RUNNING') {
     return 'stahl'
   }
