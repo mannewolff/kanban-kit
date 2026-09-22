@@ -11,6 +11,7 @@ import { adminApi as defaultAdminApi, type AdminApi, type AdminUser } from '../a
 import { ApiError, apiErrorMessage } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
 import { DataTable, type DataTableColumn } from '../components/DataTable'
+import { OverloadRejectionsSection } from '../components/OverloadRejectionsSection'
 import { useEditMode } from '../lib/EditModeContext'
 
 interface Props {
@@ -195,6 +196,8 @@ export function AdminPage({ api = defaultAdminApi }: Readonly<Props>) {
         getRowTestId={(u) => `admin-user-${u.id}`}
         storageKey="admin-users"
       />
+
+      <OverloadRejectionsSection api={api} />
     </Box>
   )
 }

@@ -2,8 +2,10 @@ package org.mwolff.manban.ratelimit.infrastructure.persistence;
 
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Map;
+import org.mwolff.manban.ratelimit.application.OverloadRejectionReader;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
@@ -15,7 +17,7 @@ import org.springframework.stereotype.Component;
  * Anweisung trägt das Rennen zweier gleichzeitiger Erstschreiber derselben Stunde.
  */
 @Component
-public class OverloadRejectionTable {
+public class OverloadRejectionTable implements OverloadRejectionReader {
 
   private static final String UPSERT =
       "INSERT INTO overload_rejection (user_id, hour_bucket, rejections) VALUES (?, ?, ?)"
@@ -50,6 +52,25 @@ public class OverloadRejectionTable {
                     })
             .toList();
     jdbc.batchUpdate(UPSERT, rows);
+  }
+
+  /**
+   * {@inheritDoc}
+   *
+   * <p>Bei gleicher Stunde nach Person, damit die Reihenfolge nicht vom Zufall der Datenbank
+   * abhängt.
+   */
+  @Override
+  public List<StoredRejection> recent(int limit) {
+    return jdbc.query(
+        "SELECT user_id, hour_bucket, rejections FROM overload_rejection"
+            + " ORDER BY hour_bucket DESC, user_id LIMIT ?",
+        (rs, n) ->
+            new StoredRejection(
+                rs.getLong("user_id"),
+                rs.getObject("hour_bucket", OffsetDateTime.class).toInstant(),
+                rs.getInt("rejections")),
+        limit);
   }
 
   /** Löscht alle Zeilen, deren Stunde vor {@code cutoff} beginnt, und liefert ihre Zahl. */

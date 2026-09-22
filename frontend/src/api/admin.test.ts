@@ -28,6 +28,17 @@ describe('adminApi', () => {
     expect(result[0].email).toBe('a@x.de')
   })
 
+  it('listOverloadRejections ruft GET /api/admin/overload-rejections (Issue #1003)', async () => {
+    const f = spyFetch(JSON.stringify([
+      { userId: 7, displayName: 'Alice', hour: '2026-09-22T08:00:00Z', rejections: 3 },
+    ]))
+    const result = await adminApi.listOverloadRejections()
+    const c = lastCall(f)
+    expect(c.url).toBe('/api/admin/overload-rejections')
+    expect(c.method).toBeUndefined()
+    expect(result[0].rejections).toBe(3)
+  })
+
   it('setRole ruft PATCH /api/admin/users/{id} mit der Plattform-Rolle', async () => {
     const f = spyFetch()
     await adminApi.setRole(1, 'ADMIN')

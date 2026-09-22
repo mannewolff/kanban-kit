@@ -99,6 +99,24 @@ class OverloadRejectionIT extends AbstractIntegrationTest {
     assertThat(rows()).containsExactlyInAnyOrder(row(user, cutoff, 2), row(user, HOUR, 3));
   }
 
+  @Test
+  void recent_isNewestHourFirst_thenByPerson_andBounded() {
+    long first = user("r1@example.com");
+    long second = user("r2@example.com");
+    Instant earlier = HOUR.minus(Duration.ofHours(1));
+    table.add(
+        Map.of(
+            new HourKey(second, HOUR), 1,
+            new HourKey(first, HOUR), 2,
+            new HourKey(first, earlier), 3));
+
+    assertThat(table.recent(10))
+        .extracting(r -> r.userId() + "|" + r.hour() + "|" + r.rejections())
+        .containsExactly(
+            first + "|" + HOUR + "|2", second + "|" + HOUR + "|1", first + "|" + earlier + "|3");
+    assertThat(table.recent(1)).hasSize(1);
+  }
+
   private void writeRepeatedly(CountDownLatch gate, long user, int times) {
     try {
       gate.await();

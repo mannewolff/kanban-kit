@@ -16,6 +16,7 @@ function makeApi(bootstrap: AdminApi['bootstrap']): AdminApi {
     approve: vi.fn(),
     disable: vi.fn(),
     enable: vi.fn(),
+    listOverloadRejections: vi.fn(),
     bootstrap,
   }
 }
