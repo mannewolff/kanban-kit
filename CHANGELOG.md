@@ -7,6 +7,29 @@ Versionierung folgt der dreiteiligen Betriebsversion (siehe [RELEASING.md](RELEA
 Einträge je Version sind ein automatischer Auszug der Commit-Titel seit dem letzten Release,
 erzeugt von `scripts/gen-changelog.mjs`.
 
+## [2.5.0] – 2026-09-22
+
+- chore: v2.4.2
+- Laufende Laeufe als Wechselblinker mit deutlichem Farbumschlag ([#1136](https://github.com/mannewolff/kanban-kit/issues/1136))
+- Plattform-Leitstand zeigt beendete Laeufe dieses und des vorigen Zyklus ([#1135](https://github.com/mannewolff/kanban-kit/issues/1135))
+- Laeufe-Seite zeigt standardmaessig nur die letzten zwei Zyklen ([#1134](https://github.com/mannewolff/kanban-kit/issues/1134))
+- Seitenleiste behaelt Projekt und letztes Board auf Seiten ohne Projekt ([#1129](https://github.com/mannewolff/kanban-kit/issues/1129))
+- Art des Laufs als Marke auf Laeufe-Seite und Plattform-Leitstand ([#1128](https://github.com/mannewolff/kanban-kit/issues/1128))
+- Zeitraum "Nacht" heisst "Zyklus", Lauftitel mit Lauf-Nummer ([#1127](https://github.com/mannewolff/kanban-kit/issues/1127))
+- Kettenlauf zeigt Planung und Umsetzung ([#1106](https://github.com/mannewolff/kanban-kit/issues/1106))
+- Wiederholung und drei Rueckmeldungen in cli/tbx.mjs ([#1005](https://github.com/mannewolff/kanban-kit/issues/1005))
+- Board-Befehle unter Last dokumentieren ([#1004](https://github.com/mannewolff/kanban-kit/issues/1004))
+- chore: v2.4.1
+- Dokumentation nachgezogen
+- Admin-Sicht auf Abweisungen wegen Last ([#1003](https://github.com/mannewolff/kanban-kit/issues/1003))
+- ThroughputFilter in die Filterkette einhaengen ([#1002](https://github.com/mannewolff/kanban-kit/issues/1002))
+- Idempotenz der anlegenden Compat-Befehle ([#1001](https://github.com/mannewolff/kanban-kit/issues/1001))
+- Abweisungen wegen Ueberlast erfassen und aufraeumen ([#1000](https://github.com/mannewolff/kanban-kit/issues/1000))
+- Kern der personenbezogenen Durchsatzbremse ([#999](https://github.com/mannewolff/kanban-kit/issues/999))
+- Verbindungspool und Server-Threads ausdruecklich dimensionieren ([#998](https://github.com/mannewolff/kanban-kit/issues/998))
+- Zeitstempel last_used_at gedrosselt schreiben ([#997](https://github.com/mannewolff/kanban-kit/issues/997))
+- Lastprofil und Messwerkzeug fuer den Durchsatznachweis ([#996](https://github.com/mannewolff/kanban-kit/issues/996))
+
 ## [2.4.0] – 2026-09-21
 
 - chore: v2.3.2
