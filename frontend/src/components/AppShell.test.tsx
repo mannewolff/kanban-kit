@@ -792,6 +792,10 @@ describe('AppShell', () => {
       '/projects/5/ideas',
       '/projects/5/nachtlauf',
       '/projects/6/ideas',
+      '/projects',
+      '/plattform-leitstand',
+      '/admin',
+      '/roles',
     ]
 
     function ZielNav() {
@@ -937,6 +941,62 @@ describe('AppShell', () => {
         ['Ideen', '/projects/5/ideas'],
         ['Läufe', '/projects/5/nachtlauf'],
       ])
+    })
+
+    describe('Seiten ohne Projekt behalten den Kontext (#1129)', () => {
+      const BLOCK_BOARD_1: Array<[string, string]> = [
+        ['Leitstand', '/boards/1/leitstand'],
+        ['Board', '/boards/1'],
+        ['Liste', '/boards/1/list'],
+        ['Vorhaben', '/boards/1/vorhaben'],
+        ['Ideen', '/projects/5/ideas'],
+        ['Läufe', '/projects/5/nachtlauf'],
+      ]
+
+      it.each(['/plattform-leitstand', '/admin', '/roles'])(
+        'behält auf %s den Projekt-Block des zuvor offenen Boards',
+        async (ziel) => {
+          renderMitZielen('/boards/1')
+          await screen.findByRole('link', { name: 'Leitstand' })
+
+          await gehZu(ziel)
+
+          expect(projektBlock('P1')).toEqual(BLOCK_BOARD_1)
+          expect(screen.getByRole('link', { name: 'Board' })).toHaveAttribute('href', '/boards/1')
+        },
+      )
+
+      it('führt vom Plattform-Leitstand über „Board" zurück auf dasselbe Board', async () => {
+        renderMitZielen('/boards/1')
+        await screen.findByRole('link', { name: 'Leitstand' })
+        await gehZu('/plattform-leitstand')
+
+        fireEvent.click(screen.getByRole('link', { name: 'Board' }))
+
+        await waitFor(() => expect(screen.getByTestId('location').textContent).toBe('/boards/1'))
+        expect(projektBlock('P1')).toEqual(BLOCK_BOARD_1)
+      })
+
+      it('lässt den Projekt-Block auf der Projektauswahl weg (unverändert)', async () => {
+        renderMitZielen('/boards/1')
+        await screen.findByRole('link', { name: 'Leitstand' })
+
+        await gehZu('/projects')
+
+        await waitFor(() =>
+          expect(screen.queryByRole('group', { name: 'Projekt P1' })).not.toBeInTheDocument(),
+        )
+        expect(screen.queryByRole('link', { name: 'Board' })).not.toBeInTheDocument()
+      })
+
+      it('zeigt beim direkten Aufruf ohne vorherigen Kontext keinen Projekt-Block (unverändert)', async () => {
+        verlaufSetzen([{ id: 3, name: 'Drei', projectId: 5, projectName: 'P1' }])
+        renderMitZielen('/plattform-leitstand')
+
+        await screen.findByRole('link', { name: 'Projekte' })
+        expect(screen.queryByRole('group', { name: 'Projekt P1' })).not.toBeInTheDocument()
+        expect(mockedBoards.list).not.toHaveBeenCalled()
+      })
     })
 
     it('verwirft eine verspätete Boardliste nach dem Verlassen der Projektseite', async () => {
