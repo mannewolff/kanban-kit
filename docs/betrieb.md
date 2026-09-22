@@ -204,6 +204,38 @@ N-fache der eingestellten. Das ist bekannt und bewusst nicht gelöst — das Pro
 Instanz aus. Wer mehrere betreibt, sollte die Werte entsprechend senken oder eine Bremse im Proxy
 davorsetzen.
 
+## Durchsatzbremse für Zugriffstoken
+
+Neben der Zählbremse oben gibt es eine **zweite, davon getrennte** Bremse (Konfigurationsblock
+`manban.ratelimit.throughput`). Beide antworten mit `429` — sie unterscheiden sich darin, **wen**
+sie begrenzen und **wie**:
+
+| | Zählbremse gegen Massenversuche | Durchsatzbremse für Zugriffstoken |
+| --- | --- | --- |
+| Greift auf | Anmeldung, Registrierung, Reset-Anforderung | jeden Aufruf mit Zugriffstoken (CLI, Nachtlauf) |
+| Zählt je | Herkunft (IP) und Vorgang | Person, über alle ihre Token hinweg |
+| Regel | N Versuche je Fenster, dann feste Sperre | kontinuierlich nachgefüllt, nur der Überschuss wird abgewiesen |
+| `type` im Problem-Detail | `about:blank` | `urn:manban:overload` |
+
+Die **Weboberfläche** wird von der Durchsatzbremse **nie** gebremst: Sie meldet sich über die
+Sitzung an, nicht über ein Zugriffstoken. **Vorgabe:** 60 Befehle je Person und Minute, davon 10
+gleichzeitig. Wer die Minute ausschöpft, bekommt einen Befehl je Sekunde zurück — ein starres
+Minutenfenster ließe dagegen 120 Befehle in zwei Sekunden über die Fenstergrenze. Ein abgewiesener
+Aufruf führt nichts aus und zählt nicht auf das Kontingent; `Retry-After` nennt die Wartezeit in
+Sekunden. Das mitgelieferte Werkzeug wiederholt daran selbst.
+
+| Variable | Bedeutung | Default |
+|----------|-----------|---------|
+| `MANBAN_THROUGHPUT_ENABLED` | Durchsatzbremse einschalten | `true` |
+| `MANBAN_THROUGHPUT_PER_MINUTE` | Befehle je Person und Minute | `60` |
+| `MANBAN_THROUGHPUT_CONCURRENT` | davon gleichzeitig laufend | `10` |
+| `MANBAN_THROUGHPUT_MAX_TRACKED_PERSONS` | Obergrenze der verfolgten Personen (Speicherschutz) | `100000` |
+
+**Im Protokoll** steht bei anhaltender Überschreitung höchstens eine `WARN`-Zeile je Person und
+Minute. Jede Abweisung wird außerdem je Person und Stunde aufsummiert abgelegt und nach 90 Tagen
+aufgeräumt. Für mehrere Instanzen gilt dieselbe Einschränkung wie bei der Zählbremse: Jede zählt
+für sich.
+
 ## E-Mail-Bestätigung (ohne Mailserver)
 
 Im Standard ist der Mailversand **aus** (`MANBAN_MAIL_ENABLED=false`). Verifikations-, Passwort-Reset-

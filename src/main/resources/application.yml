@@ -150,3 +150,13 @@ manban:
       max-attempts: ${MANBAN_RATELIMIT_FORGOT_MAX_ATTEMPTS:10}
       window: ${MANBAN_RATELIMIT_FORGOT_WINDOW:PT15M}
       block-duration: ${MANBAN_RATELIMIT_FORGOT_BLOCK_DURATION:PT15M}
+    # Durchsatzbremse (Issue #999/#1002) — ein ZWEITER, von der Zaehlbremse oben getrennter
+    # Mechanismus. Sie greift nur auf Aufrufe mit Zugriffstoken (CLI, Nachtlauf), nie auf die
+    # Weboberflaeche, und zaehlt je Person ueber alle ihre Token: hoechstens per-minute Befehle je
+    # Minute (kontinuierlich nachgefuellt, kein starres Fenster), davon concurrent gleichzeitig.
+    # Abgewiesen wird mit 429, Retry-After und type urn:manban:overload.
+    throughput:
+      enabled: ${MANBAN_THROUGHPUT_ENABLED:true}
+      per-minute: ${MANBAN_THROUGHPUT_PER_MINUTE:60}
+      concurrent: ${MANBAN_THROUGHPUT_CONCURRENT:10}
+      max-tracked-persons: ${MANBAN_THROUGHPUT_MAX_TRACKED_PERSONS:100000}

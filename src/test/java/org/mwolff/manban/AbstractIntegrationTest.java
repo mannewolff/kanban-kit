@@ -59,7 +59,11 @@ import org.testcontainers.utility.DockerImageName;
     properties = {
       "manban.outbox.enabled=false",
       "manban.dev-mode=true",
-      "manban.ratelimit.enabled=false"
+      "manban.ratelimit.enabled=false",
+      // Dasselbe fuer die Durchsatzbremse (Issue #1002): Ihr Zaehlstand liegt ebenfalls im
+      // Arbeitsspeicher, und nach RESTART IDENTITY beginnen die userIds jeder Klasse wieder bei 1 —
+      // die Klassen zaehlten also auf dasselbe Kontingent. ThroughputFilterIT schaltet sie an.
+      "manban.ratelimit.throughput.enabled=false"
     })
 public abstract class AbstractIntegrationTest {
 
