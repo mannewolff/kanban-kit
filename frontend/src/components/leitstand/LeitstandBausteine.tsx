@@ -342,12 +342,15 @@ export function Instrument({
   /** `true` gibt dem Instrument die Kupferfassung des Mockups (`.instrument-heiss`, Z. 317–318). */
   heiss = false,
   leerText = 'nicht gemessen',
+  /** Eine kleine Zeile unter dem Wert, etwa die Aufteilung der Kosten (Issue #1106). */
+  zusatz,
   testId,
 }: Readonly<{
   titel: string
   teile: readonly InstrumentWert[] | null
   heiss?: boolean
   leerText?: string
+  zusatz?: string
   testId: string
 }>) {
   const randFarbe = heiss ? `color-mix(in srgb, ${KUPFER} 40%, ${RAND})` : RAND
@@ -407,6 +410,15 @@ export function Instrument({
           ))
         )}
       </Box>
+      {zusatz !== undefined && (
+        <Box
+          component="span"
+          data-testid={`${testId}-zusatz`}
+          sx={{ ...ZAHL, fontSize: 11, color: 'text.secondary' }}
+        >
+          {zusatz}
+        </Box>
+      )}
     </Box>
   )
 }

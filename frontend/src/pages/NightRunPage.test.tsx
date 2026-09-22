@@ -25,6 +25,7 @@ import echterNachtplanRegulaer from '../lib/__fixtures__/night-run-2026-09-09-12
 import echterNachtplanHarterStopp from '../lib/__fixtures__/night-run-2026-09-09-141506.json'
 import echterPrueflauf from '../lib/__fixtures__/night-run-2026-09-11-103116.json'
 import echteKette from '../lib/__fixtures__/night-run-2026-09-14-131200.json'
+import { formatDuration } from '../lib/formatDuration'
 import { parseNightRunErgebnisstand } from '../lib/nightRunErgebnisstand'
 import { buildHandoffText, type NightRunHandoffItem } from '../lib/nightRunHandoff'
 import { NACHTLAUF_FARBEN, NACHTLAUF_SCHRIFTEN } from '../nachtlaufDesign'
@@ -486,6 +487,14 @@ interface Antworten {
    * Vorhaben-Abruf läuft noch" prüfbar, den zwei nebenläufige `ladeKetten()`-Aufrufe erzeugen.
    */
   kartenNachIdVerzoegert?: Promise<void>
+  /**
+   * Die Boards des Projekts, ihre Karten und je Karten-ID der Anlagezeitpunkt — die Quellen, aus
+   * denen ein eingelieferter Kettenlauf seine angelegten Karten ermittelt (Issue #1106). Ohne
+   * `boards` scheitert der Abruf, wie jede unerwartete Anfrage.
+   */
+  boards?: number[]
+  boardKarten?: Record<number, Card[]>
+  angelegtAm?: Record<number, string>
 }
 
 /** Alle Anfragen dieses Tests, in Reihenfolge — Grundlage der Sende- und Ladepfad-Prüfungen. */
@@ -554,6 +563,23 @@ function kartenAntwort(url: string, antworten: Antworten) {
   return undefined
 }
 
+/** Boards, Karten je Board und Kartenverlauf — die Herkunftsquellen aus Issue #1106. */
+function herkunftsAntwort(url: string, antworten: Antworten) {
+  if (url === '/api/projects/5/boards' && antworten.boards !== undefined) {
+    return Promise.resolve(antwortOk(antworten.boards.map((id) => ({ id, projectId: 5, name: `Board ${id}` }))))
+  }
+  const board = /^\/api\/boards\/(\d+)\/cards$/.exec(url)
+  if (board) {
+    return Promise.resolve(antwortOk(antworten.boardKarten?.[Number(board[1])] ?? []))
+  }
+  const verlauf = /^\/api\/cards\/(\d+)\/activity$/.exec(url)
+  if (verlauf) {
+    const zeit = antworten.angelegtAm?.[Number(verlauf[1])]
+    return Promise.resolve(antwortOk(zeit === undefined ? [] : [{ id: 1, type: 'CREATED', createdAt: zeit }]))
+  }
+  return undefined
+}
+
 /**
  * Eine Folge von Antworten: je Aufruf die naechste, die letzte gilt fuer alle weiteren. Den
  * Zaehler traegt der Abschluss statt einer Variablen im Stub — Liste und Haeufigkeiten teilen
@@ -614,7 +640,7 @@ function stubFetch(antworten: Antworten) {
       if (url === '/api/projects/5/night-runs' && method === 'POST') {
         return submitAntwort(antworten.submit)
       }
-      const karte = kartenAntwort(url, antworten)
+      const karte = kartenAntwort(url, antworten) ?? herkunftsAntwort(url, antworten)
       if (karte) return karte
 
       return Promise.reject(new Error(`unerwartete Anfrage: ${method} ${url}`))
@@ -5632,5 +5658,205 @@ describe('NightRunPage — Vorgangskennzahlen und Stufenband aus der Server-Antw
     expect(within(panelEl).getByTestId('kennzahlen-900')).toHaveTextContent(
       '7 Min · 3,50 $ · 12 Züge · Modellarbeit 43 % der Dauer, der Rest außerhalb',
     )
+  })
+})
+
+describe('NightRunPage — ein eingelieferter Kettenlauf zeigt Planung und Umsetzung (#1106)', () => {
+  /** Eine Stufe mit Dauer in Minuten und Kosten in Dollar; `null` = nicht gemeldet. */
+  const stufe = (
+    stage: NightRunItemStageView['stage'],
+    dauerMin: number | null,
+    kostenUsd: number | null,
+  ): NightRunItemStageView => ({
+    stage,
+    durationMs: dauerMin === null ? null : dauerMin * 60_000,
+    usage: kostenUsd === null ? null : verbraucht({ costUsd: kostenUsd }),
+  })
+
+  const MIT_KOSTEN = [
+    stufe('PLAN', 8, 3),
+    stufe('REVIEW', 12, 5),
+    stufe('PAKETE', 4, 2),
+    stufe('ABDECKUNG', 2, 1),
+  ]
+
+  /** Der Anlassfall: Anforderung #754 plant #773 mit den Paketen #774 und #775 und setzt sie um. */
+  const kettenLauf = (
+    felder: Omit<Partial<NightRunView>, 'items'> & { stages?: NightRunItemStageView[] } = {},
+  ): NightRunView => {
+    const { stages = MIT_KOSTEN, ...rest } = felder
+    return aufbewahrt({
+      id: 1,
+      startedAt: startedAt(0),
+      mode: 'CHAIN',
+      durationMs: 75 * 60_000,
+      usage: verbraucht({ costUsd: 50.22 }),
+      items: [
+        // Die gemeldete Dauer reicht bis zum Ende der Umsetzung — länger als die Stufen zusammen.
+        { id: 11, cardNumber: 754, title: 'Anforderung', state: 'GREEN', durationMs: 74 * 60_000, stages },
+        { id: 12, cardNumber: 774, title: 'Paket A', state: 'GREEN', durationMs: 20 * 60_000 },
+        { id: 13, cardNumber: 775, title: 'Paket B', state: 'GREEN', durationMs: 25 * 60_000 },
+      ],
+      ...rest,
+    })
+  }
+
+  /** Eine Board-Karte mit Herkunft. */
+  const boardKarte = (id: number, number: number, derivedFrom: number | null): Card =>
+    vorhaben({ id, number, title: `Karte ${number}`, type: 'CARD', derivedFrom })
+
+  /** Das Board: der neue Plan #773 samt Paketen und ein alter Plan #600 derselben Anforderung. */
+  const HERKUNFT: Antworten = {
+    boards: [1],
+    boardKarten: {
+      1: [
+        boardKarte(1773, 773, 754),
+        boardKarte(1774, 774, 773),
+        boardKarte(1775, 775, 773),
+        boardKarte(1600, 600, 754),
+        boardKarte(1601, 601, 600),
+      ],
+    },
+    angelegtAm: {
+      1773: '2026-09-01T22:10:00.000Z',
+      1774: '2026-09-01T22:20:00.000Z',
+      1775: '2026-09-01T22:21:00.000Z',
+      1600: '2026-08-01T10:00:00.000Z',
+      1601: '2026-08-01T10:05:00.000Z',
+    },
+    karten: {
+      754: karte({ id: 2754, number: 754, title: 'Anforderung' }),
+      773: karte({ id: 1773, number: 773, title: '[Plan] Der Plan', derivedFrom: 754 }),
+      774: karte({ id: 1774, number: 774, title: 'Paket A', derivedFrom: 773 }),
+      775: karte({ id: 1775, number: 775, title: 'Paket B', derivedFrom: 773 }),
+    },
+  }
+
+  async function zeige(view: NightRunView, antworten: Antworten = HERKUNFT) {
+    renderPage({ ...antworten, listen: [[view]] })
+    const panelEl = await screen.findByTestId(`lauf-${view.startedAt}`)
+    panelAufklappen(panelEl)
+    return panelEl
+  }
+
+  it('zeigt am Kettenvorgang Dauer und Kosten jeder erreichten Stufe (AK 1)', async () => {
+    await zeige(kettenLauf())
+
+    expect(screen.getByTestId('stufe-754-plan-kosten')).toHaveTextContent('3,00 $')
+    expect(screen.getByTestId('stufe-754-review-kosten')).toHaveTextContent('5,00 $')
+    expect(screen.getByTestId('stufenband-754').getAttribute('aria-label')).toContain('Plan 8,0 min · ohne Vorgabe, 3,00 $')
+  })
+
+  it('zeigt an einer Stufe ohne gemeldete Kosten keine Kostenzeile (AK 1)', async () => {
+    await zeige(kettenLauf({ stages: [stufe('PLAN', 8, null)] }))
+
+    expect(screen.getByTestId('stufe-754-plan')).toHaveAttribute('data-erreicht', 'ja')
+    expect(screen.queryByTestId('stufe-754-plan-kosten')).toBeNull()
+  })
+
+  it('nennt Plan und Pakete aus diesem Lauf als Verweise, nicht die aus früheren (AK 2)', async () => {
+    await zeige(kettenLauf())
+
+    const plan = await screen.findByTestId('dokumente-754-plan')
+    await waitFor(() => expect(within(plan).getByRole('button', { name: /Plan #773/ })).toBeInTheDocument())
+    const pakete = screen.getByTestId('dokumente-754-pakete')
+    expect(within(pakete).getByRole('button', { name: /Pakete #774/ })).toBeInTheDocument()
+    expect(within(pakete).getByRole('button', { name: /Pakete #775/ })).toBeInTheDocument()
+    // #600 und #601 tragen dieselbe Herkunft, bestanden aber schon vor dem Lauf.
+    expect(screen.getByTestId('ergebnis-754')).not.toHaveTextContent('#600')
+    expect(screen.getByTestId('ergebnis-754')).not.toHaveTextContent('#601')
+  })
+
+  it('erkennt jede Paketzeile als Paket dieses Plans (AK 2)', async () => {
+    await zeige(kettenLauf())
+
+    const verweise = await screen.findAllByRole('button', { name: 'Paket aus Plan #773 [Plan] Der Plan' })
+    // Je eines an #774 und #775 — die Anforderung selbst ist kein Paket.
+    expect(verweise).toHaveLength(2)
+  })
+
+  it('zählt bei einem noch laufenden Lauf alles seit seinem Start mit (AK 2)', async () => {
+    // 75 Minuten nach dem Start — bei einem abgeschlossenen Lauf von 60 Minuten läge #775 draußen.
+    const spaet = { ...HERKUNFT, angelegtAm: { ...HERKUNFT.angelegtAm, 1775: '2026-09-01T23:15:00.000Z' } }
+    await zeige(kettenLauf({ complete: false, durationMs: 60 * 60_000 }), spaet)
+
+    const pakete = await screen.findByTestId('dokumente-754-pakete')
+    await waitFor(() => expect(within(pakete).getByRole('button', { name: /Pakete #775/ })).toBeInTheDocument())
+  })
+
+  it('lässt ein Paket nach dem Ende eines abgeschlossenen Laufs weg (AK 2)', async () => {
+    const spaet = { ...HERKUNFT, angelegtAm: { ...HERKUNFT.angelegtAm, 1775: '2026-09-01T23:15:00.000Z' } }
+    await zeige(kettenLauf({ durationMs: 60 * 60_000 }), spaet)
+
+    const pakete = await screen.findByTestId('dokumente-754-pakete')
+    await waitFor(() => expect(within(pakete).getByRole('button', { name: /Pakete #774/ })).toBeInTheDocument())
+    expect(within(pakete).queryByRole('button', { name: /Pakete #775/ })).toBeNull()
+  })
+
+  it('nennt einen Plan, dessen Karte nicht auflösbar ist, als nicht gefunden (AK 2)', async () => {
+    const ohnePlan = Object.fromEntries(Object.entries(HERKUNFT.karten ?? {}).filter(([nummer]) => nummer !== '773'))
+    await zeige(kettenLauf(), { ...HERKUNFT, karten: ohnePlan })
+
+    const zeilen = await screen.findAllByText('Paket aus Plan: Karte #773 nicht gefunden')
+    expect(zeilen).toHaveLength(2)
+  })
+
+  it('zeigt keine Chipgruppe, wenn die Herkunft nicht ermittelt werden konnte (AK 2)', async () => {
+    await zeige(kettenLauf(), { ...HERKUNFT, boards: undefined })
+
+    await waitFor(() => expect(anfragen.some((a) => a.url === '/api/projects/5/boards')).toBe(true))
+    expect(screen.queryByTestId('dokumente-754-plan')).toBeNull()
+    expect(screen.queryByTestId('dokumente-754-pakete')).toBeNull()
+  })
+
+  it('teilt die Kosten in Planung und Umsetzung, zusammen das Gesamt (AK 3)', async () => {
+    await zeige(kettenLauf())
+
+    expect(screen.getByTestId('instrument-kosten-wert')).toHaveTextContent('50,22')
+    expect(screen.getByTestId('instrument-kosten-zusatz')).toHaveTextContent('Planung 11,00 $ · Umsetzung 39,22 $')
+  })
+
+  it('nennt einen fehlenden Anteil „nicht gemeldet", nie 0 (AK 3)', async () => {
+    await zeige(kettenLauf({ stages: [stufe('PLAN', 8, null)] }))
+
+    expect(screen.getByTestId('instrument-kosten-zusatz')).toHaveTextContent(
+      'Planung nicht gemeldet · Umsetzung nicht gemeldet',
+    )
+  })
+
+  it('nennt die Umsetzung „nicht gemeldet", wenn der Lauf kein Gesamt meldet (AK 3)', async () => {
+    await zeige(kettenLauf({ usage: null }))
+
+    expect(screen.getByTestId('instrument-kosten-zusatz')).toHaveTextContent(
+      'Planung 11,00 $ · Umsetzung nicht gemeldet',
+    )
+  })
+
+  it('rechnet die Dauer des Kettenvorgangs als Summe seiner Stufen (AK 4)', async () => {
+    await zeige(kettenLauf())
+
+    const zeile = screen.getByTestId('kennzahlen-754')
+    expect(zeile).toHaveTextContent(formatDuration(26 * 60))
+    expect(zeile).not.toHaveTextContent(formatDuration(74 * 60))
+  })
+
+  it('nennt die Dauer „nicht gemeldet", wenn keine Stufe eine Dauer meldet (AK 4)', async () => {
+    await zeige(kettenLauf({ stages: [stufe('PLAN', null, 3)] }))
+
+    expect(screen.getByTestId('kennzahlen-754')).toHaveTextContent('Dauer nicht gemeldet')
+  })
+
+  it('zeigt an einem Umsetzungslauf weder Aufteilung noch Herkunftsabruf (AK 5)', async () => {
+    await zeige(
+      aufbewahrt({
+        id: 2,
+        startedAt: startedAt(0),
+        usage: verbraucht({ costUsd: 5 }),
+        items: [{ id: 21, cardNumber: 774, title: 'Paket A', state: 'GREEN' }],
+      }),
+    )
+
+    expect(screen.queryByTestId('instrument-kosten-zusatz')).toBeNull()
+    expect(anfragen.some((a) => a.url === '/api/projects/5/boards')).toBe(false)
   })
 })

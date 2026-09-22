@@ -16,6 +16,7 @@ const abschnitt = (felder: Partial<Bandabschnitt> = {}): Bandabschnitt => ({
   fuellung: 39,
   erreicht: true,
   zahlen: '7,8 / 20 min',
+  kosten: null,
   vermerk: null,
   farbe: NACHTLAUF_FARBEN.gut,
   ...felder,
@@ -91,5 +92,17 @@ describe('NachtlaufStufenband', () => {
     zeige([abschnitt({ fuellung: 79 })])
 
     expect(screen.getByTestId('stufe-791-plan')).toHaveAttribute('data-fuellung', '79')
+  })
+})
+
+describe('NachtlaufStufenband — Kosten je Schritt (#1106)', () => {
+  it('zeigt die Kosten eines Schritts als eigene Zeile', () => {
+    zeige([abschnitt({ kosten: '3,20 $' })])
+    expect(screen.getByTestId('stufe-791-plan-kosten')).toHaveTextContent('3,20 $')
+  })
+
+  it('zeigt ohne gemeldete Kosten keine Zeile — und nie eine 0', () => {
+    zeige([abschnitt({ kosten: null })])
+    expect(screen.queryByTestId('stufe-791-plan-kosten')).toBeNull()
   })
 })
