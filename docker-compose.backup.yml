@@ -1,0 +1,102 @@
+# Sicherungs-Overlay (Issue #829, Plan #825).
+#
+# Zuschalten:
+#   docker compose -f docker-compose.yml -f docker-compose.backup.yml up -d --build
+# In Produktion zusaetzlich mit dem Prod-Overlay:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml -f docker-compose.backup.yml up -d --build
+#
+# Genau ein Schalter (E6): Zugeschaltet wird allein ueber dieses `-f`. Das Overlay setzt
+# MANBAN_BACKUP_ENABLED an manban-api selbst; die Variable steht nicht in .env.example und wird von
+# Hand nie gesetzt. Ein zweiter Schalter dort koennte vom Zustand der Container abweichen, und die
+# Anwendung meldete "veraltet", waehrend gar kein Sicherungs-Container laeuft.
+#
+# Die WAL-Einstellungen gehoeren ausschliesslich hierher (E12): Postgres haelt WAL-Segmente zurueck,
+# solange archive_command fehlschlaegt. Stuende archive_mode=on im Basis-Compose, haette jede
+# Instanz ohne eingeschaltete Sicherung — der ausgelieferte Zustand — keinen Abnehmer fuer das
+# Archiv und schriebe ihr Volume voll; dazu traefe der noetige Datenbank-Neustart auch Betreiber,
+# die nie sichern wollen. docker-compose.yml bleibt deshalb unveraendert.
+#
+# Der Neustart der Datenbank faellt genau einmal an: beim Zuschalten.
+services:
+  postgres:
+    # Der volle command-Override; ohne ihn bliebe es bei den Vorgaben des Abbilds.
+    # archive_timeout erzwingt einen Segmentwechsel auch ohne Schreiblast — sonst haengt das juengste
+    # WAL-Segment unbegrenzt fest, und die Rueckholung reichte nicht bis an die Gegenwart heran,
+    # obwohl der Anhang-Spiegel laengst weiter ist. Der Wert entspricht dem Spiegel-Takt: Genauer
+    # als der Spiegel darf die Rueckholung ohnehin nicht werden (E5).
+    command:
+      - postgres
+      - -c
+      - wal_level=replica
+      - -c
+      - archive_mode=on
+      - -c
+      - "archive_command=test ! -f /wal-archiv/%f && cp %p /wal-archiv/%f"
+      - -c
+      - archive_timeout=300
+      - -c
+      - hba_file=/etc/postgresql/pg_hba.conf
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - wal_archiv:/wal-archiv
+      # Warum eine eigene pg_hba.conf noetig ist, steht in backup/pg_hba.conf.
+      - ./backup/pg_hba.conf:/etc/postgresql/pg_hba.conf:ro
+
+  manban-api:
+    environment:
+      # Der eine Schalter aus E6 — fester Wert, bewusst keine ${...}-Interpolation.
+      MANBAN_BACKUP_ENABLED: "true"
+      # Damit die Statuskachel denselben Rhythmus kennt, den der Container faehrt: Die
+      # Warnschwellen leiten sich daraus ab (E13). Stuenden die Werte nur in der .env, ohne hier
+      # durchgereicht zu werden, rechnete die Anwendung mit ihren Vorgaben weiter und schluege bei
+      # einem langsameren Takt grundlos Alarm.
+      MANBAN_BACKUP_BASE_CRON: ${MANBAN_BACKUP_BASE_CRON:-0 0 3 * * *}
+      MANBAN_BACKUP_MIRROR_INTERVAL: ${MANBAN_BACKUP_MIRROR_INTERVAL:-PT5M}
+      # Sprechender Name des Ablageorts fuer die Kachel; das rclone-Ziel ist genau dieser Name.
+      MANBAN_BACKUP_TARGET_LABEL: ${MANBAN_BACKUP_TARGET:-nicht benannt}
+
+  manban-backup:
+    build:
+      context: ./backup
+    # Der Dienst startet cron neben seiner eigenen Schleife — ein Init raeumt deren Kinder ab.
+    init: true
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: ${POSTGRES_DB:-manban}
+      POSTGRES_USER: ${POSTGRES_USER:-manban}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-manban}
+      MANBAN_MINIO_ENDPOINT: http://minio:9000
+      MANBAN_MINIO_BUCKET: ${MANBAN_MINIO_BUCKET:-manban}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-manban}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-manban-minio}
+      # Ohne Ziel und ohne Empfaenger sichert der Container nichts und sagt das beim Start. Kein
+      # `:?` an dieser Stelle: Das liesse schon `docker compose config` scheitern, und die Meldung
+      # des Dienstes benennt beide fehlenden Werte auf einmal statt nur den ersten.
+      MANBAN_BACKUP_TARGET: ${MANBAN_BACKUP_TARGET:-}
+      MANBAN_BACKUP_AGE_RECIPIENT: ${MANBAN_BACKUP_AGE_RECIPIENT:-}
+      MANBAN_BACKUP_RETENTION_DAYS: ${MANBAN_BACKUP_RETENTION_DAYS:-7}
+      MANBAN_BACKUP_MIRROR_INTERVAL: ${MANBAN_BACKUP_MIRROR_INTERVAL:-PT5M}
+      MANBAN_BACKUP_BASE_CRON: ${MANBAN_BACKUP_BASE_CRON:-0 0 3 * * *}
+    volumes:
+      - wal_archiv:/wal-archiv
+      - backup_data:/sicherungen
+      # Das ganze Verzeichnis statt der einzelnen rclone.conf: Fehlt eine eingehaengte Datei, legt
+      # Docker an ihrer Stelle stillschweigend ein Verzeichnis an — rclone meldete dann etwas ganz
+      # anderes als "Konfiguration fehlt". backup/ gibt es immer.
+      - ./backup:/etc/manban-backup:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    # Anders als die Dienste des Basis-Stacks kommt dieser hier nach einem Neustart von selbst
+    # wieder hoch. Wer das Overlay zuschaltet, will gesichert haben; eine Sicherung, die nach einem
+    # Reboot schweigt, faellt erst auf, wenn man sie braucht.
+    restart: unless-stopped
+
+volumes:
+  # Das WAL-Archiv liegt bewusst NICHT im Postgres-Volume: Eine Rueckholung verwirft das
+  # Datenverzeichnis, und das Archiv, aus dem sie sich speist, darf davon nicht betroffen sein.
+  wal_archiv:
+  backup_data:

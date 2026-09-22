@@ -12,6 +12,10 @@ target/
 # Umgebung (Secrets)
 .env
 
+# Zugang zum Ablageort der Sicherung (Issue #829) — traegt ein Kennwort.
+# Vorlage: backup/rclone.conf.example
+backup/rclone.conf
+
 # Lokales Nachschlage-Log des Sonar-Sync-Skripts — nicht Quelle der Wahrheit
 # (Duplikat-Prüfung läuft live gegen GitHub, siehe scripts/sync-sonar-issues-to-github.mjs).
 scripts/.sonar-issue-map.json
