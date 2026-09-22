@@ -121,7 +121,9 @@ class DisruptionEndpointIT extends AbstractIntegrationTest {
         .andExpect(jsonPath("$.stoerungen[0].outcome.decisiveItem.cardNumber").value(721))
         .andExpect(jsonPath("$.laufende.length()").value(0))
         .andExpect(jsonPath("$.durchgefuehrte.length()").value(1))
-        .andExpect(jsonPath("$.durchgefuehrte[0].nightRunId").value(laufId));
+        .andExpect(jsonPath("$.durchgefuehrte[0].nightRunId").value(laufId))
+        // Issue #1135: Die Antwort trägt die beendeten Läufe des vorigen Zyklus als eigene Liste.
+        .andExpect(jsonPath("$.durchgefuehrteVoriger").isArray());
   }
 
   /**

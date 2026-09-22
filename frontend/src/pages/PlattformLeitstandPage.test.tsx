@@ -44,6 +44,7 @@ describe('PlattformLeitstandPage (#1083)', () => {
   const sicht = (teil: Partial<LeitstandView> = {}): LeitstandView => ({
     laufende: [],
     durchgefuehrte: [],
+    durchgefuehrteVoriger: [],
     stoerungen: [],
     ...teil,
   })
@@ -492,6 +493,63 @@ describe('PlattformLeitstandPage (#1083)', () => {
     await screen.findByTestId('stoerung-5')
     const namen = screen.getAllByRole('button').map((b) => b.getAttribute('aria-label'))
     expect(new Set(namen).size).toBe(namen.length)
+  })
+
+  /** Issue #1135: „Beendete Läufe" ist zweigeteilt in diesen und den vorigen Zyklus. */
+  describe('Dieser und voriger Zyklus (#1135)', () => {
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ['Date'] })
+      vi.setSystemTime(new Date('2026-09-22T11:00:00Z')) // 22.09. 13:00 in Berlin
+    })
+    afterEach(() => vi.useRealTimers())
+
+    it('zeigt beide Abschnitte mit Überschrift, Spanne und ihren Zeilen', async () => {
+      api.leitstand.mockResolvedValue(
+        sicht({
+          durchgefuehrte: [stoerung({ nightRunId: 7, outcome: { verdict: 'SUCCEEDED', decisiveItem: null, noWorkReason: null } })],
+          durchgefuehrteVoriger: [stoerung({ nightRunId: 6, outcome: { verdict: 'SUCCEEDED', decisiveItem: null, noWorkReason: null } })],
+        }),
+      )
+      zeigeSeite()
+
+      const dieser = await screen.findByRole('region', { name: 'Dieser Zyklus' })
+      expect(dieser).toHaveTextContent('vom 22.09.2026 auf den 23.09.2026')
+      expect(within(dieser).getByTestId('durchgefuehrt-7')).toBeInTheDocument()
+      const voriger = screen.getByRole('region', { name: 'Voriger Zyklus' })
+      expect(voriger).toHaveTextContent('vom 21.09.2026 auf den 22.09.2026')
+      expect(within(voriger).getByTestId('durchgefuehrt-6')).toBeInTheDocument()
+      // Die Reihenfolge: dieser Zyklus zuerst.
+      expect(dieser.compareDocumentPosition(voriger) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    })
+
+    it('sagt es, wenn in diesem Zyklus noch nichts beendet ist', async () => {
+      api.leitstand.mockResolvedValue(sicht({ durchgefuehrteVoriger: [stoerung({ nightRunId: 6 })] }))
+      zeigeSeite()
+
+      expect(await screen.findByTestId('keine-durchgefuehrten')).toHaveTextContent(
+        'In diesem Zyklus wurde noch kein Lauf beendet.',
+      )
+      expect(screen.queryByTestId('keine-durchgefuehrten-voriger')).toBeNull()
+    })
+
+    it('sagt es, wenn im vorigen Zyklus nichts beendet wurde', async () => {
+      api.leitstand.mockResolvedValue(sicht({ durchgefuehrte: [stoerung({ nightRunId: 7 })] }))
+      zeigeSeite()
+
+      expect(await screen.findByTestId('keine-durchgefuehrten-voriger')).toHaveTextContent(
+        'Im vorigen Zyklus wurde kein Lauf beendet.',
+      )
+    })
+
+    it('markiert eine Zeile mit offener Störung auch im vorigen Zyklus', async () => {
+      api.leitstand.mockResolvedValue(
+        sicht({ durchgefuehrteVoriger: [stoerung({ nightRunId: 6 })], stoerungen: [stoerung({ nightRunId: 6 })] }),
+      )
+      zeigeSeite()
+
+      const voriger = await screen.findByRole('region', { name: 'Voriger Zyklus' })
+      expect(within(voriger).getByRole('link', { name: 'Zur Störung von Lauf #6' })).toHaveAttribute('href', '#stoerung-6')
+    })
   })
 
   /** Issue #1128: Jede der drei Listen zeigt an jeder Zeile die Art des Laufs als Marke. */

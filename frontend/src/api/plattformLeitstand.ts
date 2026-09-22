@@ -40,8 +40,10 @@ export interface DisruptionView {
 export interface LeitstandView {
   /** Laeufe der laufenden Nacht, die noch arbeiten; juengster zuoberst. */
   laufende: DisruptionView[]
-  /** Beendete Laeufe derselben Nacht, verstummte eingeschlossen; juengster zuoberst. */
+  /** Beendete Laeufe des laufenden Zyklus, verstummte eingeschlossen; juengster zuoberst. */
   durchgefuehrte: DisruptionView[]
+  /** Beendete Laeufe des vorigen Zyklus (Issue #1135), in derselben Form und Ordnung. */
+  durchgefuehrteVoriger: DisruptionView[]
   /** Offene Stoerungen ueber **alle** Naechte (Kriterium 17), juengste zuoberst. */
   stoerungen: DisruptionView[]
 }

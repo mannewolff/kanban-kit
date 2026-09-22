@@ -374,10 +374,74 @@ class DisruptionServiceTest {
 
     verify(disruptions)
         .candidatesOfNight(
-            Instant.parse("2026-09-19T12:00:00Z"),
+            // Seit Issue #1135 ab dem Beginn des vorigen Zyklus: Er steht unter „Beendete Läufe"
+            // mit.
+            Instant.parse("2026-09-18T12:00:00Z"),
             Instant.parse("2026-09-20T12:00:00Z"),
             JETZT,
             Duration.ofMinutes(90));
+  }
+
+  // --- Dieser und voriger Zyklus (Issue #1135) -----------------------------------------------
+
+  /** Ein Dienst, dessen Uhr auf 22.09. 13:00 in Berlin steht — eine Stunde nach der Grenze. */
+  private DisruptionService umEinsNachMittag() {
+    return new DisruptionService(
+        disruptions,
+        runs,
+        platformAdminChecker,
+        new NightRunProperties(null, null, null, null, null),
+        Clock.fixed(Instant.parse("2026-09-22T11:00:00Z"), ZoneOffset.UTC));
+  }
+
+  /**
+   * AK 1: Die beendeten Läufe verteilen sich auf diesen und den vorigen Zyklus; älter fällt weg.
+   */
+  @Test
+  void beendeteLaeufeStehenNachZyklusGetrennt() {
+    nachtLaeufe(
+        kandidat(3L, Instant.parse("2026-09-22T10:30:00Z")), // 22.09. 12:30 — dieser Zyklus
+        kandidat(2L, Instant.parse("2026-09-21T21:00:00Z")), // 21.09. 23:00 — voriger Zyklus
+        kandidat(1L, Instant.parse("2026-09-20T20:00:00Z"))); // 20.09. 22:00 — älter
+
+    LeitstandView leitstand = umEinsNachMittag().leitstand(ADMIN, BERLIN);
+
+    assertThat(ids(leitstand.durchgefuehrte())).containsExactly(3L);
+    assertThat(ids(leitstand.durchgefuehrteVoriger())).containsExactly(2L);
+  }
+
+  /** AK 2: Start 11:59 gehört zum vorigen Zyklus, Start 12:00 zum laufenden. */
+  @Test
+  void dieGrenzeLiegtUmZwoelf() {
+    nachtLaeufe(
+        kandidat(2L, Instant.parse("2026-09-22T10:00:00Z")), // 12:00
+        kandidat(1L, Instant.parse("2026-09-22T09:59:00Z"))); // 11:59
+
+    LeitstandView leitstand = umEinsNachMittag().leitstand(ADMIN, BERLIN);
+
+    assertThat(ids(leitstand.durchgefuehrte())).containsExactly(2L);
+    assertThat(ids(leitstand.durchgefuehrteVoriger())).containsExactly(1L);
+  }
+
+  /** Ein laufender Lauf aus dem vorigen Zyklus bleibt aktiv und steht unter keinem der beiden. */
+  @Test
+  void einLaufenderLaufDesVorigenZyklusBleibtAktiv() {
+    nachtLaeufe(
+        new DisruptionCandidate(
+            4L,
+            9L,
+            "Projekt",
+            NightRunMode.CHAIN,
+            Instant.parse("2026-09-22T08:27:00Z"),
+            Instant.parse("2026-09-22T10:55:00Z"),
+            false,
+            null));
+
+    LeitstandView leitstand = umEinsNachMittag().leitstand(ADMIN, BERLIN);
+
+    assertThat(ids(leitstand.laufende())).containsExactly(4L);
+    assertThat(leitstand.durchgefuehrte()).isEmpty();
+    assertThat(leitstand.durchgefuehrteVoriger()).isEmpty();
   }
 
   /**

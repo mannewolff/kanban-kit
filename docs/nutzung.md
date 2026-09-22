@@ -522,12 +522,15 @@ das als ausdrücklicher Satz da statt als leere Fläche.
 
 ### Beendete Läufe
 
-Jeder **beendete** Lauf des laufenden Zyklus — mit Projekt, Startzeitpunkt, anklickbarer Lauf-Kennung
+Jeder **beendete** Lauf des laufenden und des vorigen Zyklus — mit Projekt, Startzeitpunkt, anklickbarer Lauf-Kennung
 und seinem **Ausgang**. Auch hier steht ein ausdrücklicher Satz, solange noch kein Lauf beendet ist.
 
 „Laufender Zyklus" meint denselben Zeitraum, den auch die Auswertung der Läufe zieht: **von 12:00 bis
 12:00** zonenlokal. Über die Zugehörigkeit entscheidet der **Startzeitpunkt** des Laufs, nicht sein
-Ende. Um 12:00 wechselt der Bereich deshalb auf den neuen Zyklus und ist zunächst leer.
+Ende. Der Bereich ist **zweigeteilt**: „Dieser Zyklus" und darunter „Voriger Zyklus", je mit
+seiner Spanne („vom 21.09.2026 auf den 22.09.2026"). Um 12:00 wandern die Läufe der vergangenen
+Nacht deshalb nach „Voriger Zyklus", statt zu verschwinden; ältere Läufe stehen dort nicht mehr.
+Eine Zeile mit offener Störung trägt in beiden Abschnitten den Verweis „Störung".
 
 Der Ausgang steht als Wort da — eines von dreien:
 

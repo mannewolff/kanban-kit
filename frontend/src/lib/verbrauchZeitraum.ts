@@ -72,7 +72,12 @@ const VORZEITRAUM: Record<VerbrauchZeitraumArt, string> = {
  * Beginn und dem Folgetag. `tag` ist sein Beginn als Kalendertag `JJJJ-MM-TT`.
  */
 export function zyklusBeschriftung(tag: string): string {
-  return `Zyklus vom ${DATUM.format(alsDatum(tag))} auf den ${DATUM.format(folgetag(tag))}`
+  return `Zyklus ${zyklusSpanne(tag)}`
+}
+
+/** Die Spanne eines Zyklus ohne das Wort davor — „vom 21.09.2026 auf den 22.09.2026" (#1135). */
+export function zyklusSpanne(tag: string): string {
+  return `vom ${DATUM.format(alsDatum(tag))} auf den ${DATUM.format(folgetag(tag))}`
 }
 
 /** Die Teile eines Zeitpunkts in einer Zone — Kalendertag und Stunde, wie die Wanduhr dort sie zeigt. */

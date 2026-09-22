@@ -14,10 +14,11 @@ import { Led, Platte, Taste } from '../components/leitstand/LeitstandBausteine'
 import { MELDER_JE_ZUSTAND, melderAusBefund, modusName, tagZeit, uhrzeit } from '../lib/leitstand'
 import { NIGHT_RUN_VERDICT_TEXT, nightRunZustandsText } from '../lib/nightRunHandoff'
 import { useRefetchOnFocus } from '../lib/useRefetchOnFocus'
-import { ANZEIGE, RAND, TEXT_SCHWACH } from '../theme'
+import { zyklusDavor, zyklusDesStarts, zyklusSpanne } from '../lib/verbrauchZeitraum'
+import { ANZEIGE, ETIKETT, RAND, TEXT_SCHWACH } from '../theme'
 
 /** Der Anfangszustand: drei leere Listen, noch von keiner Antwort belegt. */
-const LEERE_SICHT: LeitstandView = { laufende: [], durchgefuehrte: [], stoerungen: [] }
+const LEERE_SICHT: LeitstandView = { laufende: [], durchgefuehrte: [], durchgefuehrteVoriger: [], stoerungen: [] }
 
 /** Der Takt des Auffrischens (Kriterium 19): Was sich aendert, steht spaetestens so bald da. */
 const AUFFRISCH_MS = 30_000
@@ -137,6 +138,8 @@ export default function PlattformLeitstandPage() {
   // Antwort (Kriterium 12): Ein eigenes Serverfeld waere eine zweite Quelle fuer dieselbe Aussage
   // und liefe beim Quittieren sofort gegen die Stoerliste.
   const mitStoerung = new Set(sicht.stoerungen.map((s) => s.nightRunId))
+  // Die Spannen nennen die Zyklen, deren Grenzen der Server mit derselben Zone zieht (#1135).
+  const dieserZyklus = zyklusDesStarts(new Date().toISOString())
 
   return (
     <KupferwarteBereich>
@@ -145,10 +148,24 @@ export default function PlattformLeitstandPage() {
           <LaufendeListe zeilen={geladen ? sicht.laufende : null} />
         </Platte>
         <Platte titel="Beendete Läufe">
-          <DurchgefuehrteListe
-            zeilen={geladen ? sicht.durchgefuehrte : null}
-            mitStoerung={mitStoerung}
-          />
+          <ZyklusAbschnitt titel="Dieser Zyklus" spanne={zyklusSpanne(dieserZyklus)} testId="zyklus-dieser">
+            <DurchgefuehrteListe
+              zeilen={geladen ? sicht.durchgefuehrte : null}
+              mitStoerung={mitStoerung}
+              leer={{ testId: 'keine-durchgefuehrten', text: 'In diesem Zyklus wurde noch kein Lauf beendet.' }}
+            />
+          </ZyklusAbschnitt>
+          <ZyklusAbschnitt
+            titel="Voriger Zyklus"
+            spanne={zyklusSpanne(zyklusDavor(dieserZyklus))}
+            testId="zyklus-voriger"
+          >
+            <DurchgefuehrteListe
+              zeilen={geladen ? sicht.durchgefuehrteVoriger : null}
+              mitStoerung={mitStoerung}
+              leer={{ testId: 'keine-durchgefuehrten-voriger', text: 'Im vorigen Zyklus wurde kein Lauf beendet.' }}
+            />
+          </ZyklusAbschnitt>
         </Platte>
         <Platte titel="Störungen">
           <Stoerungen liste={geladen ? sicht.stoerungen : null} onQuittieren={quittieren} />
@@ -264,18 +281,45 @@ function LaufendeZeile({ zeile }: Readonly<{ zeile: DisruptionView }>) {
   )
 }
 
-/** Der Bereich „Beendete Laeufe" (Kriterien 9–14). */
+/**
+ * Ein Abschnitt des Bereichs „Beendete Laeufe" (Issue #1135): Ueberschrift und Spanne des Zyklus,
+ * darunter seine Zeilen. Die Ueberschrift benennt den Abschnitt auch fuer Vorlesewerkzeuge.
+ */
+function ZyklusAbschnitt({
+  titel,
+  spanne,
+  testId,
+  children,
+}: Readonly<{ titel: string; spanne: string; testId: string; children: ReactNode }>) {
+  const id = useId()
+  return (
+    <Box component="section" aria-labelledby={id} data-testid={testId}>
+      <Box sx={{ display: 'flex', alignItems: 'baseline', gap: '8px', px: '16px', pt: '10px' }}>
+        <Box component="h3" id={id} sx={{ ...ETIKETT, m: 0 }}>
+          {titel}
+        </Box>
+        <Typography sx={{ fontSize: 12, color: 'text.secondary' }}>{spanne}</Typography>
+      </Box>
+      {children}
+    </Box>
+  )
+}
+
+/** Der Bereich „Beendete Laeufe" (Kriterien 9–14) — je Zyklus eine Liste (Issue #1135). */
 function DurchgefuehrteListe({
   zeilen,
   mitStoerung,
-}: Readonly<{ zeilen: DisruptionView[] | null; mitStoerung: ReadonlySet<number> }>) {
+  leer,
+}: Readonly<{
+  zeilen: DisruptionView[] | null
+  mitStoerung: ReadonlySet<number>
+  leer: { testId: string; text: string }
+}>) {
   if (zeilen === null) {
     return null
   }
   if (zeilen.length === 0) {
-    return (
-      <LeerSatz testId="keine-durchgefuehrten">In diesem Zyklus wurde noch kein Lauf beendet.</LeerSatz>
-    )
+    return <LeerSatz testId={leer.testId}>{leer.text}</LeerSatz>
   }
   return (
     <Box component="ul" sx={{ listStyle: 'none', m: 0, p: 0 }}>
