@@ -116,7 +116,19 @@ geladen und ist per `.gitignore` ausgeschlossen).
 | `MANBAN_SESSION_SECRET` | HMAC-Secret der Session-Cookies. Der Dev-Default gilt **nur** im ausdrücklich eingeschalteten Entwicklungsbetrieb (`MANBAN_DEV_MODE=true`) — sonst verweigert die Anwendung den Start | Dev-Default |
 | `MANBAN_DEV_MODE` | Entwicklungs-/Testbetrieb ausdrücklich einschalten; erlaubt den Start mit dem Standard-Sitzungsschlüssel, mit Warnung. Der lokale Compose-Stack setzt ihn auf `true`, das Produktions-Overlay fest auf `false` | `false` |
 | `MANBAN_COOKIE_SECURE` | Session-Cookie nur über HTTPS | `true` |
+| `MANBAN_DB_POOL_MAX` | Höchstzahl der Datenbankverbindungen der Anwendung | `20` |
+| `MANBAN_DB_POOL_MIN_IDLE` | Verbindungen, die auch ohne Last offen bleiben | `5` |
+| `MANBAN_DB_CONNECTION_TIMEOUT_MS` | Höchste Wartezeit auf eine freie Verbindung in Millisekunden | `5000` |
+| `MANBAN_SERVER_THREADS_MAX` | Höchstzahl gleichzeitig bearbeiteter HTTP-Aufrufe | `600` |
 | `POSTGRES_*`, `MINIO_*` | DB- und Objektspeicher-Zugangsdaten | siehe `docker-compose.yml` |
+
+> **Verbindungspool und Server-Threads:** Die vier Stellschrauben `MANBAN_DB_POOL_MAX`,
+> `MANBAN_DB_POOL_MIN_IDLE`, `MANBAN_DB_CONNECTION_TIMEOUT_MS` und `MANBAN_SERVER_THREADS_MAX`
+> sind ausdrücklich gesetzt, statt auf den Vorgaben von HikariCP und Tomcat zu stehen (Issue #998).
+> Die Werte sind begründete Startwerte für 50 gleichzeitig aktive Personen; die Rechnung dazu steht
+> als Kommentar in `src/main/resources/application.yml`. `MANBAN_DB_POOL_MAX` muss unter
+> `max_connections` der Datenbank bleiben (Postgres-Vorgabe: 100). Messergebnis und
+> Mindestausstattung folgen mit dem Lastnachweis.
 
 > **Papierkorb-Aufbewahrung:** Karten im Papierkorb werden nach **30 Tagen** automatisch endgültig
 > gelöscht. Diese Frist ist derzeit fest eingestellt (nicht über eine Umgebungsvariable steuerbar);
