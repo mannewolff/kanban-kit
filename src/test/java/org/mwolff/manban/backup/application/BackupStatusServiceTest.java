@@ -2,7 +2,10 @@ package org.mwolff.manban.backup.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
@@ -193,6 +196,24 @@ class BackupStatusServiceTest {
     assertThat(wal.lastSuccessAt()).isEqualTo(JETZT.minus(Duration.ofMinutes(2)));
     assertThat(wal.stale()).isFalse();
     assertThat(art(status, BackupKind.SPIEGEL).stale()).isTrue();
+  }
+
+  /**
+   * Der Betriebspfad (Issue #828): Der Wachhund fragt denselben Stand ab, aber ohne Aufrufer — er
+   * <em>ist</em> niemand. Eine Rechteprüfung hätte hier keinen Prüfling.
+   */
+  @Test
+  void derBetriebFragtDenselbenStandOhneRechtepruefung() {
+    frisch(BackupKind.BASIS, Duration.ofHours(2));
+    frisch(BackupKind.WAL, Duration.ofMinutes(1));
+    frisch(BackupKind.SPIEGEL, Duration.ofMinutes(1));
+    frisch(BackupKind.OFFSITE, Duration.ofHours(3));
+
+    BackupStatus status = service(true).operationalStatus();
+
+    assertThat(status.verdict()).isEqualTo(BackupVerdict.OK);
+    assertThat(status.kinds()).hasSize(BackupKind.values().length);
+    verify(admins, never()).isPlatformAdmin(anyLong());
   }
 
   @Test

@@ -52,6 +52,25 @@ public class BackupStatusService {
     if (!platformAdminChecker.isPlatformAdmin(actorUserId)) {
       throw new AdminAccessDeniedException();
     }
+    return stand();
+  }
+
+  /**
+   * Derselbe Stand für den Betrieb — <strong>ohne Rechteprüfung</strong> (Issue #828).
+   *
+   * <p>Der Sicherungs-Wachhund fragt nicht im Namen eines Menschen, sondern für sich selbst: Es
+   * gibt keinen Aufrufer, dessen Rechte zu prüfen wären. Die Antwort verlässt das System auch nicht
+   * über HTTP, sondern nur als Alarm an die Plattform-Admins — also an genau den Kreis, der {@link
+   * #status(long)} ohnehin offensteht. Ein erfundener Systemnutzer, den {@link
+   * org.mwolff.manban.auth.application.PlatformAdminChecker} bejahen müsste, wäre eine zweite
+   * Wahrheit darüber, wer Admin ist.
+   */
+  @Transactional(readOnly = true)
+  public BackupStatus operationalStatus() {
+    return stand();
+  }
+
+  private BackupStatus stand() {
     Instant jetzt = clock.instant();
     ZonedDateTime bezug = jetzt.atZone(clock.getZone());
     List<KindStatus> arten =
