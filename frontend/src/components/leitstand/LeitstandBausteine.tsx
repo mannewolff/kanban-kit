@@ -6,6 +6,7 @@ import type { DeltaArt, Kachel as KachelDaten, Melder } from '../../lib/leitstan
 import { funkenPunkte } from '../../lib/leitstand'
 import {
   ANZEIGE,
+  BLINKER_HELL,
   CARD_RADIUS,
   ETIKETT,
   GRUND,
@@ -37,26 +38,75 @@ import {
 /** Der Farbverweis eines Melders. */
 export const melderFarbe = (melder: Melder): string => MELDER[melder]
 
-const puls = keyframes`
-  0%, 100% { box-shadow: 0 0 0 1px rgba(0,0,0,.22) inset, 0 0 7px -1px currentColor; }
-  50% { box-shadow: 0 0 0 1px rgba(0,0,0,.22) inset, 0 0 14px 1px currentColor; }
+/**
+ * Der Takt des Wechselblinkers (Issue #1136): ein Wechsel je Sekunde, jede Lampe eine halbe Sekunde
+ * hell. Weit unter der Blitzgrenze aus WCAG 2.3.1 (höchstens drei Blitze je Sekunde).
+ */
+const BLINKER_TAKT_S = 1
+
+/**
+ * Hart umschlagend, kein Überblenden: die erste Hälfte hell, die zweite in der Melderfarbe. Die
+ * Farben kommen als Variablen der Lampe herein, damit die Keyframes keine Farbe festschreiben.
+ */
+const wechsel = keyframes`
+  0% { background-color: var(--blinker-hell); }
+  50% { background-color: var(--blinker-an); }
+  100% { background-color: var(--blinker-an); }
 `
 
 /**
- * Melder-LED (Entwurf Z. 417–433); `puls` für einen laufenden Vorgang. Rein schmückend.
+ * Eine Lampe des Blinkers. Ihr Grundton ist die Farbe, in der sie steht, wenn die Bewegung ruht
+ * (`prefers-reduced-motion`, zentrale Regel in `theme.ts`): die linke hell, die rechte im Melder.
+ */
+const blinkerLampe = (melder: Melder, versetzt: boolean) => ({
+  '--blinker-hell': BLINKER_HELL,
+  '--blinker-an': melderFarbe(melder),
+  width: 9,
+  height: 9,
+  borderRadius: '50%',
+  flex: 'none',
+  bgcolor: versetzt ? melderFarbe(melder) : BLINKER_HELL,
+  color: melderFarbe(melder),
+  boxShadow: `${LED_RING}, 0 0 8px -1px currentColor`,
+  animation: `${wechsel} ${BLINKER_TAKT_S}s step-end infinite`,
+  // Die zweite Lampe um eine halbe Periode versetzt: Die beiden blinken gegeneinander.
+  animationDelay: versetzt ? `-${BLINKER_TAKT_S / 2}s` : '0s',
+})
+
+/**
+ * Melder-LED (Entwurf Z. 417–433). Rein schmückend.
  *
- * <p>`data-puls` steht neben der Animation, weil der Puls sonst nicht prüfbar wäre: Er lebt in
- * einer Emotion-Klasse, und ob eine LED pulst, ließe sich im Test nur über einen generierten
- * Klassennamen erraten. Seit #1092 ist das eine Aussage über den Ausgang eines Laufs — ein
- * verstummter Lauf pulst nicht mehr —, und die gehört geprüft.
+ * <p><b>Ein laufender Vorgang zeigt einen Wechselblinker</b> (Issue #1136, Entscheidung Manne,
+ * abweichend vom Entwurf): zwei Lampen, die abwechselnd zwischen Melderfarbe und heller Variante
+ * umschlagen. Der frühere Puls des Leuchtschleiers war an einer 9-px-Lampe kaum zu sehen. Die
+ * Zweizahl bleibt auch ohne Bewegung: Der Zustand hängt so an der Form, nicht allein an Farbe oder
+ * Bewegung.
+ *
+ * <p>`data-puls` steht neben der Animation, weil sie sonst nicht prüfbar wäre: Sie lebt in einer
+ * Emotion-Klasse. Seit #1092 ist das eine Aussage über den Ausgang eines Laufs — ein verstummter
+ * Lauf blinkt nicht —, und die gehört geprüft.
  */
 export function Led({ melder, pulsiert = false }: Readonly<{ melder: Melder; pulsiert?: boolean }>) {
+  if (pulsiert) {
+    return (
+      <Box
+        component="span"
+        aria-hidden
+        data-testid={`led-${melder}`}
+        data-puls="an"
+        sx={{ display: 'inline-flex', gap: '3px', flex: 'none' }}
+      >
+        <Box component="span" data-testid="blinker-lampe" sx={blinkerLampe(melder, false)} />
+        <Box component="span" data-testid="blinker-lampe" sx={blinkerLampe(melder, true)} />
+      </Box>
+    )
+  }
   return (
     <Box
       component="span"
       aria-hidden
       data-testid={`led-${melder}`}
-      data-puls={pulsiert ? 'an' : 'aus'}
+      data-puls="aus"
       sx={{
         width: 9,
         height: 9,
@@ -65,7 +115,6 @@ export function Led({ melder, pulsiert = false }: Readonly<{ melder: Melder; pul
         bgcolor: melderFarbe(melder),
         color: melderFarbe(melder),
         boxShadow: `${LED_RING}, 0 0 8px -1px currentColor`,
-        animation: pulsiert ? `${puls} 1.9s ease-in-out infinite` : undefined,
       }}
     />
   )

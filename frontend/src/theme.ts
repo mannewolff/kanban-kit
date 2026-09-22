@@ -66,6 +66,11 @@ export interface WartePalette {
   schattenTaste: string
   /** Fläche des Kopfs: Grund zu 86 % mit der Platte (Entwurf Z. 288). */
   kopf: string
+  /**
+   * Die helle Phase des Wechselblinkers eines laufenden Laufs (Issue #1136) — eine aufgehellte
+   * Variante des Stahl-Melders, gegen die der Melder selbst deutlich umschlägt.
+   */
+  blinkerHell: string
 }
 
 /**
@@ -146,6 +151,7 @@ const HELL = {
   kupferSchimmer: 'rgba(168,95,44,.16)',
   auswahl: '#F5EFEB',
   kopf: '#EAECEF',
+  blinkerHell: '#A9C8F4',
 } as const
 
 /**
@@ -186,6 +192,7 @@ const DUNKEL = {
   kupferSchimmer: 'rgba(208,138,82,.18)',
   auswahl: '#282526',
   kopf: '#0E1216',
+  blinkerHell: '#BFD6FB',
 } as const
 
 /** Melder dunkel: Werte des Entwurfs, sie halten 3:1 auf allen dunklen Flächen. */
@@ -234,6 +241,7 @@ const warteAus = (w: Werte, schatten: typeof SCHATTEN_HELL, aufKupfer: string): 
   aufKupfer,
   auswahl: w.auswahl,
   kopf: w.kopf,
+  blinkerHell: w.blinkerHell,
   ...schatten,
 })
 
@@ -480,6 +488,8 @@ export const KUPFER_HELL = VARIABLEN.primary.light
 export const KUPFER_SCHIMMER = VARIABLEN.warte.kupferSchimmer
 /** Gewählte Zeile. */
 export const AUSWAHL = VARIABLEN.warte.auswahl
+/** Helle Phase des Wechselblinkers eines laufenden Laufs (Issue #1136). */
+export const BLINKER_HELL = VARIABLEN.warte.blinkerHell
 /** Innenschatten einer Nut. */
 export const SCHATTEN_NUTE = VARIABLEN.warte.schattenNute
 /** Schatten einer Platte. */

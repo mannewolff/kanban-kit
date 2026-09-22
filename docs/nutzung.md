@@ -201,7 +201,7 @@ Kennzahlen-Seite „Dashboard“; die alte Adresse `/boards/:boardId/dashboard` 
 
 Von oben nach unten führt er:
 
-1. **Laufband** — der jüngste Lauf als schmales Band: Melder (pulsierend, solange er läuft),
+1. **Laufband** — der jüngste Lauf als schmales Band: Melder (als Wechselblinker, solange er läuft),
    Titel des Laufs, die berührte Karte, der Zeitpunkt, rechts „Zeit“ in Minuten und „Kosten“ in
    Dollar.
 2. **Kennzahlen** — vier Kacheln: **Durchsatz · Woche**, **Durchlaufzeit**,
@@ -517,7 +517,9 @@ neu laden.
 ### Aktive Läufe
 
 Jeder Lauf, der **gerade arbeitet** — mit Projekt, dem Wort „läuft seit" samt bisheriger Dauer,
-anklickbarer Lauf-Kennung und einem pulsierenden Melder. Arbeitet gerade nirgends ein Lauf, steht
+anklickbarer Lauf-Kennung und einem **Wechselblinker**: zwei Lampen, die abwechselnd zwischen
+Blau und Hellblau umschlagen. Mit „Bewegung reduzieren" im Betriebssystem stehen sie still,
+die linke hell, die rechte blau. Arbeitet gerade nirgends ein Lauf, steht
 das als ausdrücklicher Satz da statt als leere Fläche.
 
 ### Beendete Läufe

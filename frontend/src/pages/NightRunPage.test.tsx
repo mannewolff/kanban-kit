@@ -5370,6 +5370,9 @@ describe('NightRunPage — Der verstummte Lauf (#1092)', () => {
     const kopf = laufKopfzeile(lauf(0))
     expect(within(kopf).getByTestId('lauf-zustand')).toHaveTextContent('unvollständig gemeldet')
     expect(within(kopf).getAllByTestId('led-stahl').every((led) => led.getAttribute('data-puls') === 'an')).toBe(true)
+    // Issue #1136: Die Lampe des Kopfs ist ein Wechselblinker aus zwei Lampen.
+    const blinker = within(kopf).getAllByTestId('led-stahl').find((led) => within(led).queryAllByTestId('blinker-lampe').length === 2)
+    expect(blinker).toBeDefined()
   })
 })
 

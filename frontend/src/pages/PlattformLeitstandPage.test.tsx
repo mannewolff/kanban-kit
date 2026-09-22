@@ -101,6 +101,8 @@ describe('PlattformLeitstandPage (#1083)', () => {
       expect(within(zeile).getByText('läuft seit 03:10')).toBeInTheDocument()
       const led = within(zeile).getByTestId('led-stahl')
       expect(led).toHaveAttribute('data-puls', 'an')
+      // Issue #1136: Ein laufender Lauf zeigt den Wechselblinker — zwei Lampen.
+      expect(within(led).getAllByTestId('blinker-lampe')).toHaveLength(2)
       expect(within(zeile).getByRole('link', { name: 'Lauf #8 von Mein Projekt' })).toHaveAttribute(
         'href',
         '/projects/9/nachtlauf?lauf=8',

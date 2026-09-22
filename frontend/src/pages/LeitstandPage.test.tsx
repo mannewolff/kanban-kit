@@ -399,6 +399,11 @@ describe('LeitstandPage — Herkunft der Einlieferung', () => {
     expect(screen.getByText('1 Vorgang · 0 ungedeutete Zeilen')).toBeInTheDocument()
     // Laufband, Letzter Lauf und Herkunftszeile melden den laufenden Lauf stahlblau.
     expect(screen.getAllByTestId('led-stahl')).toHaveLength(3)
+    // Issue #1136: Laufband und „Letzter Lauf" zeigen dabei den Wechselblinker aus zwei Lampen.
+    const band = screen.getByRole('region', { name: 'Jüngster Lauf' })
+    expect(within(within(band).getByTestId('led-stahl')).getAllByTestId('blinker-lampe')).toHaveLength(2)
+    const platte = screen.getByRole('region', { name: 'Letzter Lauf · Kette' })
+    expect(within(platte).getAllByTestId('blinker-lampe')).toHaveLength(2)
   })
 })
 
