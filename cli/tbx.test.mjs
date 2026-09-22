@@ -25,6 +25,14 @@ import {
   parseIssueNumber,
   CliError,
   resolveIsMainModule,
+  RUECKMELDUNG,
+  BUDGET_MS,
+  UEBERLAST_TYPE,
+  darfWiederholen,
+  rueckmeldungFuer,
+  wartezeitMs,
+  netzfehlerArt,
+  wiederholKommando,
 } from './tbx.mjs';
 
 const THIS_FILE = fileURLToPath(import.meta.url);
@@ -39,8 +47,30 @@ async function withTempConfigDir(fn) {
   }
 }
 
-function jsonResponse(status, body) {
-  return { ok: status >= 200 && status < 300, status, json: async () => body };
+function jsonResponse(status, body, headers = {}) {
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    json: async () => body,
+    headers: { get: (name) => headers[name.toLowerCase()] ?? null },
+  };
+}
+
+/** Gesteuerte Uhr: Schlafen rueckt nur die Zeit vor, es wird nie echt gewartet. */
+function fakeUhr(zeilen = []) {
+  let t = 0;
+  const schlaefe = [];
+  return {
+    jetzt: () => t,
+    schlaf: async (ms) => {
+      schlaefe.push(ms);
+      t += ms;
+    },
+    zufall: () => 0,
+    melde: (zeile) => zeilen.push(zeile),
+    schlaefe,
+    zeit: () => t,
+  };
 }
 
 function io(overrides = {}) {
@@ -53,6 +83,7 @@ function io(overrides = {}) {
     env: overrides.env || {},
     readStdin: overrides.readStdin || (async () => ''),
     baseDir: overrides.baseDir,
+    uhr: overrides.uhr || fakeUhr(stderrLines),
     stdoutLines,
     stderrLines,
   };
@@ -507,4 +538,298 @@ test('Portabilitaet: tbx.mjs importiert nur node:-Builtins', () => {
   for (const spec of imports) {
     assert.ok(spec.startsWith('node:'), `Nicht-Builtin-Import gefunden: ${spec}`);
   }
+});
+
+// --- 12. Wiederholung gegen Ueberlast (Issue #1005) ---------------------------
+
+const UEBERLAST = { type: UEBERLAST_TYPE, message: 'Zu viele Befehle' };
+
+/** fetch, das der Reihe nach die gegebenen Antworten liefert und jeden Aufruf mitschreibt. */
+function folge(...antworten) {
+  const aufrufe = [];
+  const impl = async (url, opts) => {
+    aufrufe.push({ url, opts });
+    const a = antworten[Math.min(aufrufe.length - 1, antworten.length - 1)];
+    if (a instanceof Error) throw a;
+    return a;
+  };
+  impl.aufrufe = aufrufe;
+  return impl;
+}
+
+function netzfehler(code) {
+  const e = new TypeError('fetch failed');
+  e.cause = { code };
+  return e;
+}
+
+test('Wiederholung: 429 mit Ueberlast-type wird wiederholt, auch bei POST, Schluessel bleibt gleich', async () => {
+  await withTempConfigDir(async (dir) => {
+    seedLogin(dir);
+    const fetchImpl = folge(
+      jsonResponse(429, UEBERLAST, { 'retry-after': '2' }),
+      jsonResponse(201, { number: 7 }),
+    );
+    const i = io({ baseDir: dir, fetchImpl });
+    assert.equal(await main(['issue', 'create', '--title', 'T'], i), 0);
+    assert.equal(fetchImpl.aufrufe.length, 2);
+    const [k1, k2] = fetchImpl.aufrufe.map((a) => a.opts.headers['Idempotency-Key']);
+    assert.ok(k1);
+    assert.equal(k1, k2);
+    assert.deepEqual(i.uhr.schlaefe, [2000]);
+    assert.match(i.stderrLines.join(''), /POST \/api\/kanban\/items — Versuch 1 endete mit HTTP 429/);
+  });
+});
+
+test('Wiederholung: 429 ohne Ueberlast-type wird nicht wiederholt', async () => {
+  await withTempConfigDir(async (dir) => {
+    seedLogin(dir);
+    const fetchImpl = folge(jsonResponse(429, { message: 'fremde Bremse' }), jsonResponse(201, { number: 7 }));
+    const i = io({ baseDir: dir, fetchImpl });
+    assert.equal(await main(['issue', 'create', '--title', 'T'], i), 1);
+    assert.equal(fetchImpl.aufrufe.length, 1);
+    assert.match(i.stderrLines.join(''), /Fehler: fremde Bremse/);
+  });
+});
+
+for (const method of ['GET', 'PUT', 'DELETE']) {
+  test(`Wiederholung: 5xx bei ${method} wird wiederholt`, async () => {
+    const fetchImpl = folge(jsonResponse(502, {}), jsonResponse(200, { ok: true }));
+    const res = await tokenFetch('http://h', 'tk', '/p', { method }, fetchImpl, { uhr: fakeUhr() });
+    assert.equal(res.status, 200);
+    assert.equal(fetchImpl.aufrufe.length, 2);
+  });
+}
+
+test('Wiederholung: 5xx bei POST mit Schluessel wird wiederholt', async () => {
+  const fetchImpl = folge(jsonResponse(503, {}), jsonResponse(201, {}));
+  const res = await tokenFetch('http://h', 'tk', '/p', { method: 'POST', idempotencyKey: 'k1' }, fetchImpl, {
+    uhr: fakeUhr(),
+  });
+  assert.equal(res.status, 201);
+  assert.deepEqual(fetchImpl.aufrufe.map((a) => a.opts.headers['Idempotency-Key']), ['k1', 'k1']);
+});
+
+test('Wiederholung: 5xx bei POST ohne Schluessel wird nicht wiederholt, Ausgang unklar ohne Schluessel', async () => {
+  const fetchImpl = folge(jsonResponse(502, {}), jsonResponse(201, {}));
+  await assert.rejects(
+    () => tokenFetch('http://h', 'tk', '/labels', { method: 'POST' }, fetchImpl, { uhr: fakeUhr() }),
+    (e) =>
+      e instanceof CliError
+      && e.rueckmeldung === RUECKMELDUNG.AUSGANG_UNKLAR
+      && /ohne Idempotenz-Schluessel/.test(e.message)
+      && /Erst am Board nachsehen/.test(e.message),
+  );
+  assert.equal(fetchImpl.aufrufe.length, 1);
+});
+
+for (const status of [403, 404, 409, 401]) {
+  test(`Wiederholung: ${status} wird sofort zurueckgegeben`, async () => {
+    const fetchImpl = folge(jsonResponse(status, { type: UEBERLAST_TYPE }), jsonResponse(200, {}));
+    const res = await tokenFetch('http://h', 'tk', '/p', { method: 'PUT' }, fetchImpl, { uhr: fakeUhr() });
+    assert.equal(res.status, status);
+    assert.equal(fetchImpl.aufrufe.length, 1);
+  });
+}
+
+test('Wiederholung: 401 bleibt beim Befehl die bisherige Anmelde-Meldung', async () => {
+  await withTempConfigDir(async (dir) => {
+    seedLogin(dir);
+    const fetchImpl = folge(jsonResponse(401, {}));
+    const i = io({ baseDir: dir, fetchImpl });
+    assert.equal(await main(['issue', 'list'], i), 1);
+    assert.equal(fetchImpl.aufrufe.length, 1);
+    assert.match(i.stderrLines.join(''), /Token ungültig oder widerrufen\. Bitte neu anmelden: tbx auth login/);
+  });
+});
+
+test('Schluessel: --idempotency-key erreicht den Aufruf unveraendert (create und comment)', async () => {
+  await withTempConfigDir(async (dir) => {
+    seedLogin(dir);
+    const createFetch = folge(jsonResponse(201, { number: 3 }));
+    assert.equal(
+      await main(['issue', 'create', '--title', 'T', '--idempotency-key', 'mein-schluessel'], io({ baseDir: dir, fetchImpl: createFetch })),
+      0,
+    );
+    assert.equal(createFetch.aufrufe[0].opts.headers['Idempotency-Key'], 'mein-schluessel');
+
+    const commentFetch = folge(jsonResponse(200, BOARD), jsonResponse(201, {}));
+    assert.equal(
+      await main(['issue', 'comment', '2', '--text', 'x', '--idempotency-key', 'k-2'], io({ baseDir: dir, fetchImpl: commentFetch })),
+      0,
+    );
+    assert.equal(commentFetch.aufrufe[1].opts.headers['Idempotency-Key'], 'k-2');
+    assert.equal(commentFetch.aufrufe[0].opts.headers['Idempotency-Key'], undefined);
+  });
+});
+
+test('Schluessel: ohne Schalter erzeugt comment einen eigenen, nackter Schalter wird abgewiesen', async () => {
+  await withTempConfigDir(async (dir) => {
+    seedLogin(dir);
+    const fetchImpl = folge(jsonResponse(200, BOARD), jsonResponse(201, {}));
+    assert.equal(await main(['issue', 'comment', '2', '--text', 'x'], io({ baseDir: dir, fetchImpl })), 0);
+    assert.match(fetchImpl.aufrufe[1].opts.headers['Idempotency-Key'], /^[0-9a-f-]{36}$/);
+
+    const nackt = io({ baseDir: dir, fetchImpl: folge(jsonResponse(201, {})) });
+    assert.equal(await main(['issue', 'create', '--title', 'T', '--idempotency-key'], nackt), 1);
+    assert.match(nackt.stderrLines.join(''), /--idempotency-key erwartet einen Wert/);
+  });
+});
+
+test('Ausgang unklar: Meldung nennt Schluessel und vollstaendiges Wiederholkommando', async () => {
+  await withTempConfigDir(async (dir) => {
+    seedLogin(dir);
+    const fetchImpl = folge(jsonResponse(503, { message: 'kaputt' }));
+    const i = io({ baseDir: dir, fetchImpl });
+    assert.equal(await main(['issue', 'create', '--title', 'Mein Titel', '--idempotency-key', 'k-9'], i), 1);
+    const err = i.stderrLines.join('');
+    assert.match(err, /Ausgang unklar: POST \/api\/kanban\/items/);
+    assert.match(err, /Schluessel: k-9\./);
+    assert.ok(err.includes("tbx issue create --title 'Mein Titel' --idempotency-key k-9"), err);
+    assert.ok(fetchImpl.aufrufe.length > 1);
+  });
+});
+
+test('Rueckmeldungen: ausgefuehrt, nicht ausgefuehrt, Ausgang unklar an je einem erzeugten Fall', async () => {
+  assert.equal(rueckmeldungFuer({ ok: true }), RUECKMELDUNG.AUSGEFUEHRT);
+  const ok = await tokenFetch('http://h', 'tk', '/p', { method: 'POST' }, folge(jsonResponse(201, {})), {
+    uhr: fakeUhr(),
+  });
+  assert.equal(rueckmeldungFuer({ ok: ok.ok, status: ok.status, method: 'POST' }), RUECKMELDUNG.AUSGEFUEHRT);
+
+  await assert.rejects(
+    () => tokenFetch('http://h', 'tk', '/p', { method: 'POST' }, folge(netzfehler('ECONNREFUSED')), { uhr: fakeUhr() }),
+    (e) => e instanceof CliError && e.rueckmeldung === RUECKMELDUNG.NICHT_AUSGEFUEHRT && /nicht erreichbar/.test(e.message),
+  );
+
+  await assert.rejects(
+    () =>
+      tokenFetch('http://h', 'tk', '/p', { method: 'POST', idempotencyKey: 'k' }, folge(netzfehler('ECONNRESET')), {
+        uhr: fakeUhr(),
+        argv: ['issue', 'comment', '2', '--text', 'x'],
+      }),
+    (e) =>
+      e.rueckmeldung === RUECKMELDUNG.AUSGANG_UNKLAR
+      && e.message.includes('tbx issue comment 2 --text x --idempotency-key k'),
+  );
+});
+
+test('Rueckmeldungen: lesender Abbruch nach Budget ist nicht ausgefuehrt', async () => {
+  await assert.rejects(
+    () => tokenFetch('http://h', 'tk', '/p', {}, folge(netzfehler('ECONNRESET')), { uhr: fakeUhr() }),
+    (e) => e.rueckmeldung === RUECKMELDUNG.NICHT_AUSGEFUEHRT,
+  );
+});
+
+test('Budget: fest 30 Sekunden, auch mit gesetztem KIT_AGENT_MODEL', async () => {
+  const vorher = process.env.KIT_AGENT_MODEL;
+  process.env.KIT_AGENT_MODEL = 'claude-opus-5';
+  try {
+    assert.equal(BUDGET_MS, 30_000);
+    const uhr = fakeUhr();
+    const fetchImpl = folge(jsonResponse(429, UEBERLAST));
+    const res = await tokenFetch('http://h', 'tk', '/p', {}, fetchImpl, { uhr });
+    assert.equal(res.status, 429);
+    assert.ok(uhr.zeit() <= 30_000, `gewartet: ${uhr.zeit()}`);
+    assert.ok(uhr.zeit() > 20_000, `gewartet: ${uhr.zeit()}`);
+    assert.equal(fetchImpl.aufrufe.length, uhr.schlaefe.length + 1);
+  } finally {
+    if (vorher === undefined) delete process.env.KIT_AGENT_MODEL;
+    else process.env.KIT_AGENT_MODEL = vorher;
+  }
+});
+
+test('Zeitgrenze: jeder Versuch traegt ein eigenes Abbruchsignal', async () => {
+  const fetchImpl = folge(jsonResponse(200, {}));
+  await tokenFetch('http://h', 'tk', '/p', {}, fetchImpl, { uhr: fakeUhr() });
+  assert.ok(fetchImpl.aufrufe[0].opts.signal instanceof AbortSignal);
+});
+
+test('Zeitablauf eines Versuchs wird wiederholt', async () => {
+  const zeitablauf = new DOMException('timed out', 'TimeoutError');
+  const fetchImpl = folge(zeitablauf, jsonResponse(200, {}));
+  const res = await tokenFetch('http://h', 'tk', '/p', {}, fetchImpl, { uhr: fakeUhr() });
+  assert.equal(res.status, 200);
+});
+
+test('Ohne injizierte Uhr: Standard-Meldespur und echtes Schlafen', async () => {
+  const geschrieben = [];
+  const original = process.stderr.write;
+  process.stderr.write = (s) => geschrieben.push(s);
+  try {
+    const fetchImpl = folge(jsonResponse(429, UEBERLAST, { 'retry-after': '0' }), jsonResponse(200, {}));
+    const res = await tokenFetch('http://h', 'tk', '/p', {}, fetchImpl);
+    assert.equal(res.status, 200);
+  } finally {
+    process.stderr.write = original;
+  }
+  assert.match(geschrieben.join(''), /Versuch 1 endete mit HTTP 429: Zu viele Befehle, erneut in 100 ms/);
+});
+
+test('Regeln: darfWiederholen, wartezeitMs, netzfehlerArt', () => {
+  assert.equal(darfWiederholen({ method: 'GET', netz: 'endgueltig' }), false);
+  assert.equal(darfWiederholen({ method: 'POST', netz: 'abbruch' }), true);
+  assert.equal(darfWiederholen({ method: 'GET', status: 400 }), false);
+  assert.equal(darfWiederholen({}), false);
+  assert.equal(darfWiederholen({ status: 500 }), true);
+
+  assert.equal(wartezeitMs(1, null, () => 0), 500);
+  assert.equal(wartezeitMs(2, null, () => 0), 1000);
+  assert.equal(wartezeitMs(10, null, () => 0), 8000);
+  assert.equal(wartezeitMs(1, null, () => 1), 625);
+  assert.equal(wartezeitMs(1, 3, () => 0), 3000);
+  assert.equal(wartezeitMs(1, 0, () => 0), 100);
+  assert.equal(wartezeitMs(1, 'abc', () => 0), 500);
+  assert.equal(wartezeitMs(1, -1, () => 0), 500);
+  assert.ok(wartezeitMs(1) >= 500);
+
+  assert.equal(netzfehlerArt({ name: 'AbortError' }), 'zeitablauf');
+  assert.equal(netzfehlerArt({ code: 'ENOTFOUND' }), 'endgueltig');
+  assert.equal(netzfehlerArt(netzfehler('ECONNRESET')), 'abbruch');
+  assert.equal(netzfehlerArt(undefined), 'abbruch');
+
+  assert.equal(rueckmeldungFuer({ method: 'POST', status: 409 }), RUECKMELDUNG.NICHT_AUSGEFUEHRT);
+  assert.equal(rueckmeldungFuer({ method: undefined }), RUECKMELDUNG.NICHT_AUSGEFUEHRT);
+  assert.equal(rueckmeldungFuer({}), RUECKMELDUNG.NICHT_AUSGEFUEHRT);
+});
+
+test('wiederholKommando: ersetzt einen vorhandenen Schluessel und zitiert nur, wo noetig', () => {
+  assert.equal(
+    wiederholKommando('neu', ['issue', 'comment', '2', '--idempotency-key', 'alt', '--text', "it's"]),
+    "tbx issue comment 2 --text 'it'\\''s' --idempotency-key neu",
+  );
+  assert.equal(wiederholKommando('k'), 'tbx --idempotency-key k');
+});
+
+test('Fehlerlage: Antwort ohne JSON und ohne Retry-After', async () => {
+  const ohneJson = {
+    ok: false,
+    status: 503,
+    json: async () => {
+      throw new SyntaxError('kein JSON');
+    },
+  };
+  const fetchImpl = folge(ohneJson, jsonResponse(200, {}));
+  const zeilen = [];
+  const res = await tokenFetch('http://h', 'tk', '/p', {}, fetchImpl, { uhr: fakeUhr(zeilen) });
+  assert.equal(res.status, 200);
+  assert.match(zeilen[0], /Versuch 1 endete mit HTTP 503, erneut in 500 ms \(Frist 30 s\)/);
+});
+
+test('Fehlerlage: der Rumpf bleibt fuer den Aufrufer lesbar (clone)', async () => {
+  let gelesen = 0;
+  const antwort = {
+    ok: false,
+    status: 404,
+    json: async () => {
+      gelesen++;
+      return { message: 'weg' };
+    },
+    clone() {
+      return { json: async () => ({ message: 'weg' }) };
+    },
+  };
+  const res = await tokenFetch('http://h', 'tk', '/p', {}, folge(antwort), { uhr: fakeUhr() });
+  assert.equal(gelesen, 0);
+  assert.deepEqual(await res.json(), { message: 'weg' });
 });

@@ -588,3 +588,8 @@ schreibende Befehle, etwa ein Label), sieh erst am Board nach, bevor du wiederho
 den Schlüssel von außen, statt ihn je Auftrag neu zu erzeugen. Das Board hält einen Schlüssel
 24 Stunden. Einen Schlüssel für einen **anderen** Befehl als beim ersten Mal weist es mit `409` ab:
 Für einen neuen Befehl gehört ein neuer Schlüssel.
+
+**Mit `tbx`.** Das mitgelieferte Kommandozeilen-Werkzeug `cli/tbx.mjs` verhält sich genauso: dieselben
+Wiederholregeln, dieselben drei Rückmeldungen und der Schalter `--idempotency-key <wert>` bei
+`tbx issue create` und `tbx issue comment`. Das Wiederholkommando in der Meldung beginnt mit `tbx`.
+Der einzige Unterschied: `tbx` kennt keinen Nachtlauf, sein Gesamtbudget ist **immer 30 Sekunden**.
