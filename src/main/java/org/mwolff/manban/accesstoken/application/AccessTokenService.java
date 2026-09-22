@@ -32,6 +32,7 @@ public class AccessTokenService {
   private final BoardService boardService;
   private final PermissionChecker permissions;
   private final Clock clock;
+  private final LastUsedStampThrottle stampThrottle;
   private final ObjectProvider<AccessTokenService> self;
 
   public AccessTokenService(
@@ -40,12 +41,14 @@ public class AccessTokenService {
       BoardService boardService,
       PermissionChecker permissions,
       Clock clock,
+      LastUsedStampThrottle stampThrottle,
       ObjectProvider<AccessTokenService> self) {
     this.tokens = tokens;
     this.crypto = crypto;
     this.boardService = boardService;
     this.permissions = permissions;
     this.clock = clock;
+    this.stampThrottle = stampThrottle;
     this.self = self;
   }
 
@@ -140,32 +143,61 @@ public class AccessTokenService {
 
   /**
    * Löst einen eingehenden Klartext-Header zum vollständigen Principal auf (inkl. optionaler
-   * Board-Bindung); leer bei unbekannt/widerrufen. Stempelt {@code lastUsedAt}.
+   * Board-Bindung); leer bei unbekannt/widerrufen. Stempelt {@code lastUsedAt} <strong>gedrosselt:
+   * höchstens einmal je Token und Minute</strong> (Issue #997).
+   *
+   * <p>Die Auflösung selbst ist damit ein reiner Lesevorgang. Der Stempel lief zuvor in dieser
+   * Transaktion mit und hielt bis zu deren Ende einen Zeilen-Lock auf der Token-Zeile — genau der
+   * Zeile, die sich die gleichzeitigen Befehle einer Person teilen. „Zuletzt benutzt" ist seither
+   * <strong>minutengenau statt aufrufgenau</strong>; wer einen älteren Wert sieht als den letzten
+   * Aufruf, sieht keinen Fehler.
+   *
+   * <p><strong>Bewusst ohne umschließende Transaktion</strong>, auch ohne lesende: Das Nachschlagen
+   * gibt seine Verbindung nach der einen Abfrage zurück, erst danach holt der Stempel eine eigene.
+   * Hielte eine Lesetransaktion ihre Verbindung, während der Stempel eine zweite anfordert,
+   * bräuchte jede stempelnde Auflösung zwei Verbindungen zugleich — treffen so viele fällige
+   * Auflösungen gleichzeitig ein, wie der Pool Verbindungen hat, wartet jede auf eine zweite, die
+   * keine mehr freigibt, bis der Verbindungs-Timeout den Filter abbricht. Der gelesene Datensatz
+   * braucht keine Transaktion: Er hat keine nachzuladenden Beziehungen und wird sofort zum
+   * Domänenobjekt.
    *
    * <p>Geschrieben wird allein die Spalte {@code lastUsedAt}, und nur solange das Token nicht
    * widerrufen ist. Ein volles Zurückschreiben des gelesenen Datensatzes nähme einen
    * zwischenzeitlich committeten Widerruf wieder zurück — ein Widerruf ist aber ein Endzustand
    * (Issue #878).
    */
-  @Transactional
   public Optional<KanbanPrincipal> resolveBinding(String plaintext) {
     return tokens
         .findByTokenHash(crypto.hash(plaintext))
         .filter(t -> !t.revoked())
         .map(
             t -> {
-              tokens.touchLastUsedAt(t.requireId(), clock.instant());
+              stampLastUsedIfDue(t.requireId());
               return new KanbanPrincipal(
                   t.userId(), t.requireId(), t.projectId(), t.boardId(), t.displayName());
             });
   }
 
   /**
+   * Stempelt die Nutzung, sofern die Minute seit dem letzten Stempel um ist. Die Entscheidung fällt
+   * aus dem prozesslokalen Zwischenspeicher — ohne zusätzlichen Lesezugriff —, der Schreibvorgang
+   * läuft in einer eigenen, kurzen Transaktion.
+   */
+  private void stampLastUsedIfDue(long tokenId) {
+    Instant now = clock.instant();
+    if (stampThrottle.claimStamp(tokenId, now)) {
+      tokens.touchLastUsedAtInOwnTransaction(tokenId, now);
+    }
+  }
+
+  /**
    * Löst einen eingehenden Klartext-Header zur User-ID auf; leer bei unbekannt/widerrufen. Ruft
    * {@link #resolveBinding} über den injizierten Self-Provider auf (nicht via {@code this}), damit
    * der Aufruf durch den Spring-Transaktions-Proxy läuft (Sonar {@code java:S6809}).
+   *
+   * <p>Ohne umschließende Transaktion, aus demselben Grund wie {@link #resolveBinding} (Issue
+   * #997): Sie hielte eine Verbindung, während der Stempel eine zweite anfordert.
    */
-  @Transactional
   public OptionalLong resolve(String plaintext) {
     return self.getObject()
         .resolveBinding(plaintext)
@@ -176,7 +208,10 @@ public class AccessTokenService {
   /** Ergebnis der Erstellung — enthält den einmalig sichtbaren Klartext. */
   public record CreatedAccessToken(Long id, String name, String plaintext) {}
 
-  /** Listen-/Detaildarstellung ohne Hash und ohne Klartext; inkl. optionaler Bindung. */
+  /**
+   * Listen-/Detaildarstellung ohne Hash und ohne Klartext; inkl. optionaler Bindung. {@code
+   * lastUsedAt} ist minutengenau — siehe {@link #resolveBinding} (Issue #997).
+   */
   public record AccessTokenView(
       Long id,
       String name,

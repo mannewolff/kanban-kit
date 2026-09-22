@@ -6,12 +6,12 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
-import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
 import java.util.OptionalLong;
@@ -19,15 +19,24 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mwolff.manban.accesstoken.domain.AccessToken;
+import org.mwolff.manban.accesstoken.infrastructure.InMemoryLastUsedStampThrottle;
 import org.mwolff.manban.board.application.BoardService;
 import org.mwolff.manban.common.token.TokenCryptoPort;
 import org.mwolff.manban.common.token.TokenCryptoPort.GeneratedToken;
 import org.mwolff.manban.project.application.PermissionChecker;
 import org.mwolff.manban.project.application.ProjectAccessDeniedException;
 import org.mwolff.manban.project.domain.Permission;
+import org.mwolff.manban.ratelimit.MutableClock;
 import org.springframework.beans.factory.ObjectProvider;
 
-/** Verhaltenstests der API-Token-Verwaltung (Mockito an den Ports). */
+/**
+ * Verhaltenstests der API-Token-Verwaltung (Mockito an den Ports).
+ *
+ * <p>Die Uhr ist stellbar statt fixiert (Issue #997): Ob der Nutzungsstempel <em>innerhalb</em>
+ * einer Minute unterbleibt und <em>nach</em> ihr wieder geschrieben wird, ist mit einer festen Uhr
+ * nicht prüfbar. Der Zwischenspeicher ist bewusst der echte und kein Mock — er trägt die
+ * Entscheidung „schreiben oder nicht", und ein Mock würde genau sie wegstubben.
+ */
 class AccessTokenServiceTest {
 
   private static final Instant FIXED = Instant.parse("2026-01-02T03:04:05Z");
@@ -36,6 +45,7 @@ class AccessTokenServiceTest {
   private TokenCryptoPort crypto;
   private BoardService boardService;
   private PermissionChecker permissions;
+  private MutableClock clock;
   private AccessTokenService service;
 
   private static AccessToken token(long id, long userId, boolean revoked) {
@@ -48,7 +58,7 @@ class AccessTokenServiceTest {
     crypto = mock(TokenCryptoPort.class);
     boardService = mock(BoardService.class);
     permissions = mock(PermissionChecker.class);
-    Clock clock = Clock.fixed(FIXED, ZoneOffset.UTC);
+    clock = new MutableClock(FIXED);
     ObjectProvider<AccessTokenService> self =
         new ObjectProvider<>() {
           @Override
@@ -56,7 +66,15 @@ class AccessTokenServiceTest {
             return service;
           }
         };
-    service = new AccessTokenService(tokens, crypto, boardService, permissions, clock, self);
+    service =
+        new AccessTokenService(
+            tokens,
+            crypto,
+            boardService,
+            permissions,
+            clock,
+            new InMemoryLastUsedStampThrottle(),
+            self);
   }
 
   @Test
@@ -253,7 +271,73 @@ class AccessTokenServiceTest {
     service.resolveBinding("plain");
 
     // Then
-    verify(tokens).touchLastUsedAt(3L, FIXED);
+    verify(tokens).touchLastUsedAtInOwnTransaction(3L, FIXED);
+  }
+
+  @Test
+  void resolveBinding_touchesLastUsedAtOnlyOnce_withinTheSameMinute() {
+    // Given: der Stempel ist minutengenau (Issue #997). Jeder Aufruf schriebe sonst eine
+    // Zeilensperre auf genau die Zeile, die sich die gleichzeitigen Befehle einer Person teilen.
+    when(crypto.hash("plain")).thenReturn("hash");
+    when(tokens.findByTokenHash("hash")).thenReturn(Optional.of(token(3L, 1L, false)));
+
+    // When: drei Auflösungen innerhalb derselben Minute.
+    service.resolveBinding("plain");
+    clock.advance(Duration.ofSeconds(30));
+    service.resolveBinding("plain");
+    clock.advance(Duration.ofSeconds(29));
+    service.resolveBinding("plain");
+
+    // Then
+    verify(tokens, times(1)).touchLastUsedAtInOwnTransaction(anyLong(), any(Instant.class));
+  }
+
+  @Test
+  void resolveBinding_touchesLastUsedAtAgain_afterTheMinuteElapsed() {
+    // Given
+    when(crypto.hash("plain")).thenReturn("hash");
+    when(tokens.findByTokenHash("hash")).thenReturn(Optional.of(token(3L, 1L, false)));
+
+    // When
+    service.resolveBinding("plain");
+    clock.advance(Duration.ofSeconds(61));
+    service.resolveBinding("plain");
+
+    // Then: der zweite Stempel trägt den neuen Zeitpunkt — „zuletzt benutzt" bleibt aktuell.
+    verify(tokens).touchLastUsedAtInOwnTransaction(3L, FIXED);
+    verify(tokens).touchLastUsedAtInOwnTransaction(3L, FIXED.plusSeconds(61));
+  }
+
+  @Test
+  void resolveBinding_returnsThePrincipalEvenWhenTheStampIsThrottled() {
+    // Given: die Drosselung betrifft den Stempel, nicht die Auflösung.
+    when(crypto.hash("plain")).thenReturn("hash");
+    when(tokens.findByTokenHash("hash")).thenReturn(Optional.of(token(3L, 1L, false)));
+    service.resolveBinding("plain");
+
+    // When
+    Optional<KanbanPrincipal> principal = service.resolveBinding("plain");
+
+    // Then
+    assertThat(principal).map(KanbanPrincipal::userId).contains(1L);
+  }
+
+  @Test
+  void resolveBinding_throttlesPerToken_notGlobally() {
+    // Given: zwei Token desselben Nutzers — der Stempel des einen darf den des anderen nicht
+    // verschlucken.
+    when(crypto.hash("a")).thenReturn("hash-a");
+    when(crypto.hash("b")).thenReturn("hash-b");
+    when(tokens.findByTokenHash("hash-a")).thenReturn(Optional.of(token(3L, 1L, false)));
+    when(tokens.findByTokenHash("hash-b")).thenReturn(Optional.of(token(4L, 1L, false)));
+
+    // When
+    service.resolveBinding("a");
+    service.resolveBinding("b");
+
+    // Then
+    verify(tokens).touchLastUsedAtInOwnTransaction(3L, FIXED);
+    verify(tokens).touchLastUsedAtInOwnTransaction(4L, FIXED);
   }
 
   @Test
@@ -278,6 +362,7 @@ class AccessTokenServiceTest {
 
     // When / Then
     assertThat(service.resolveBinding("plain")).isEmpty();
+    verify(tokens, never()).touchLastUsedAtInOwnTransaction(anyLong(), any(Instant.class));
   }
 
   @Test
@@ -288,6 +373,7 @@ class AccessTokenServiceTest {
 
     // When / Then
     assertThat(service.resolveBinding("plain")).isEmpty();
+    verify(tokens, never()).touchLastUsedAtInOwnTransaction(anyLong(), any(Instant.class));
   }
 
   @Test

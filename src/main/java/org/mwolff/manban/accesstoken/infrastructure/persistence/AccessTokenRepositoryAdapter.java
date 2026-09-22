@@ -6,6 +6,8 @@ import java.util.Optional;
 import org.mwolff.manban.accesstoken.application.AccessTokenRepository;
 import org.mwolff.manban.accesstoken.domain.AccessToken;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 
 /** Adapter des {@link AccessTokenRepository}-Ports auf Spring Data JPA. */
 @Component
@@ -39,8 +41,18 @@ class AccessTokenRepositoryAdapter implements AccessTokenRepository {
     return jpa.findByTokenHash(tokenHash).map(AccessTokenRepositoryAdapter::toDomain);
   }
 
+  /**
+   * {@inheritDoc}
+   *
+   * <p>{@code REQUIRES_NEW} statt Mitlaufen in einer umschließenden Transaktion (Issue #997): Der
+   * Stempel wird in einer eigenen Transaktion geschrieben und sofort committet. Der Zeilen-Lock
+   * besteht damit für die Dauer eines {@code UPDATE}, nicht für die Dauer eines API-Aufrufs. Die
+   * Auflösung selbst läuft ohne Transaktion, damit hier keine zweite Verbindung neben einer noch
+   * gehaltenen angefordert wird (siehe {@code AccessTokenService#resolveBinding}).
+   */
   @Override
-  public void touchLastUsedAt(long id, Instant when) {
+  @Transactional(propagation = Propagation.REQUIRES_NEW)
+  public void touchLastUsedAtInOwnTransaction(long id, Instant when) {
     jpa.touchLastUsedAt(id, when);
   }
 
