@@ -28,6 +28,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
@@ -46,6 +47,12 @@ class KanbanCompatController {
   /** Längengrenze eines Labelnamens; identisch mit {@code LabelController.LabelRequest}. */
   private static final int MAX_LABEL_NAME = 60;
 
+  /** Header des Idempotenz-Schlüssels der anlegenden Befehle (Issue #1001, Plan #995 E7). */
+  private static final String IDEMPOTENCY_KEY = "Idempotency-Key";
+
+  /** Längengrenze des Schlüssels; identisch mit der Spalte {@code idempotency_record.key}. */
+  private static final int MAX_IDEMPOTENCY_KEY = 200;
+
   private final KanbanCompatService service;
 
   KanbanCompatController(KanbanCompatService service) {
@@ -57,10 +64,20 @@ class KanbanCompatController {
     return service.items(principal(authentication));
   }
 
+  /**
+   * Legt ein Item an. Der optionale Header {@code Idempotency-Key} macht die Anlage wiederholbar:
+   * Derselbe Schlüssel im selben Projekt erzeugt eine Karte und beliebig viele gleiche Antworten
+   * (Issue #1001). Ohne Header bleibt alles wie bisher.
+   */
   @PostMapping("/items")
   @ResponseStatus(HttpStatus.CREATED)
   Created create(
-      @Nullable Authentication authentication, @Valid @RequestBody CreateItemRequest request) {
+      @Nullable Authentication authentication,
+      @Valid @RequestBody CreateItemRequest request,
+      @RequestHeader(name = IDEMPOTENCY_KEY, required = false)
+          @Nullable
+          @Size(max = MAX_IDEMPOTENCY_KEY)
+          String idempotencyKey) {
     return service.create(
         principal(authentication),
         request.title(),
@@ -70,7 +87,8 @@ class KanbanCompatController {
         request.externalKey(),
         Boolean.TRUE.equals(request.direct()),
         request.number(),
-        request.derivedFrom());
+        request.derivedFrom(),
+        idempotencyKey);
   }
 
   @PutMapping("/items/{id}")
@@ -128,13 +146,18 @@ class KanbanCompatController {
     service.removeLabel(principal(authentication), id, name);
   }
 
+  /** Kommentiert ein Item; {@code Idempotency-Key} wie bei {@link #create} (Issue #1001). */
   @PostMapping("/items/{id}/comments")
   @ResponseStatus(HttpStatus.CREATED)
   void comment(
       @Nullable Authentication authentication,
       @PathVariable long id,
-      @Valid @RequestBody CommentRequest request) {
-    service.comment(principal(authentication), id, request.body());
+      @Valid @RequestBody CommentRequest request,
+      @RequestHeader(name = IDEMPOTENCY_KEY, required = false)
+          @Nullable
+          @Size(max = MAX_IDEMPOTENCY_KEY)
+          String idempotencyKey) {
+    service.comment(principal(authentication), id, request.body(), idempotencyKey);
   }
 
   @GetMapping("/items/{id}/comments")

@@ -61,11 +61,11 @@ class KanbanCompatControllerTest {
     var request =
         new KanbanCompatController.CreateItemRequest(
             "Title", "Body", "todo", null, null, null, null, null);
-    when(service.create(PRINCIPAL, "Title", "Body", "todo", false, null, false, null, null))
+    when(service.create(PRINCIPAL, "Title", "Body", "todo", false, null, false, null, null, null))
         .thenReturn(created);
 
     // When
-    Created result = controller.create(boundAuthentication(), request);
+    Created result = controller.create(boundAuthentication(), request, null);
 
     // Then
     assertThat(result).isSameAs(created);
@@ -78,14 +78,39 @@ class KanbanCompatControllerTest {
     var request =
         new KanbanCompatController.CreateItemRequest(
             "Idee", "Body", "todo", true, null, null, null, null);
-    when(service.create(PRINCIPAL, "Idee", "Body", "todo", true, null, false, null, null))
+    when(service.create(PRINCIPAL, "Idee", "Body", "todo", true, null, false, null, null, null))
         .thenReturn(created);
 
     // When
-    Created result = controller.create(boundAuthentication(), request);
+    Created result = controller.create(boundAuthentication(), request, null);
 
     // Then
     assertThat(result).isSameAs(created);
+  }
+
+  @Test
+  void create_passesTheIdempotencyKeyHeader() {
+    // Given (Issue #1001)
+    Created created = new Created(44L, 9, true);
+    var request =
+        new KanbanCompatController.CreateItemRequest(
+            "Title", "Body", null, null, null, null, null, null);
+    when(service.create(PRINCIPAL, "Title", "Body", null, false, null, false, null, null, "k-1"))
+        .thenReturn(created);
+
+    // When
+    Created result = controller.create(boundAuthentication(), request, "k-1");
+
+    // Then
+    assertThat(result).isSameAs(created);
+  }
+
+  @Test
+  void comment_passesTheIdempotencyKeyHeader() {
+    controller.comment(
+        boundAuthentication(), 8L, new KanbanCompatController.CommentRequest("hello"), "k-2");
+
+    verify(service).comment(PRINCIPAL, 8L, "hello", "k-2");
   }
 
   @Test
@@ -106,10 +131,10 @@ class KanbanCompatControllerTest {
     var request = new KanbanCompatController.CommentRequest("hello");
 
     // When
-    controller.comment(boundAuthentication(), 8L, request);
+    controller.comment(boundAuthentication(), 8L, request, null);
 
     // Then
-    verify(service).comment(PRINCIPAL, 8L, "hello");
+    verify(service).comment(PRINCIPAL, 8L, "hello", null);
   }
 
   @Test
