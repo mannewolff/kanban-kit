@@ -193,6 +193,44 @@ Alle Richtungen zählen als normaler Arbeitsfluss und brauchen nur das Recht zum
 Karten (kein Löschrecht). Auch der Ingest über die API (kanbancompat) kann eine Karte direkt als Idee
 anlegen.
 
+## Leitstand eines Boards {#leitstand}
+
+Der **Leitstand** (Sidebar-Eintrag **„Leitstand“** im Board-Kontext, Route
+`/boards/:boardId/leitstand`) ist die **Hauptansicht eines Boards**. Er ersetzt die frühere
+Kennzahlen-Seite „Dashboard“; die alte Adresse `/boards/:boardId/dashboard` leitet auf ihn weiter.
+
+Von oben nach unten führt er:
+
+1. **Laufband** — der jüngste Lauf als schmales Band: Melder (pulsierend, solange er läuft),
+   Titel des Laufs, die berührte Karte, der Zeitpunkt, rechts „Zeit“ in Minuten und „Kosten“ in
+   Dollar.
+2. **Kennzahlen** — vier Kacheln: **Durchsatz · Woche**, **Durchlaufzeit**,
+   **Implementierungszeit** und eine Kachel zu den Läufen. Die Implementierungszeit misst, wie
+   lange eine erledigte Karte insgesamt in „In Progress“ lag; mehrere Aufenthalte zählen zusammen.
+3. **Verbrauch** — Token und Kosten mit Zeitraum-Wahl; ausführlich unter
+   [Verbrauch (Leitstand)](#verbrauch-leitstand).
+4. **Herkunft** — eine Zeile zum jüngsten Lauf: ob er eingeliefert oder im Browser hochgeladen
+   wurde, dazu der Name des Tokens, die Zahl der Vorgänge und die der ungedeuteten Zeilen.
+5. **Rumpf** — vier Platten: **„Letzter Lauf · ‹Art›“** mit seinen Vorgängen (die Kartennummer
+   öffnet die Karte zum Lesen), **„Durchsatz“** mit den abgeschlossenen Karten je Woche,
+   **„Abbruchgründe“** mit den Fehlerklassen über die aufbewahrten Läufe und **„Vorhaben“** mit
+   den offenen.
+
+**Was das Recht entscheidet:** Laufband, Lauf-Kachel, Verbrauch, „Letzter Lauf“ und
+„Abbruchgründe“ sieht nur, wer auch die [Läufe](#nachtlauf) sehen darf — der **Owner** des
+Projekts und **Plattform-Admins**, sofern das Projekt am
+[Plattform-Leitstand](#plattform-leitstand) teilnimmt. Ohne dieses Recht entfallen sie still; die
+Board-Kennzahlen und „Durchsatz“ bleiben.
+
+**Grundlage der Board-Kennzahlen** ist die automatisch erfasste Verweildauer jeder Karte pro
+Spalte — gemessen bei **jedem** Spaltenwechsel, egal ob per Drag & Drop, ⋮-Menü oder über die API
+(kanbancompat).
+
+**Nicht mehr dargestellt:** die **Ø Verweildauer je Spalte** und die Liste der **Ausreißer**
+(Karten, die über sieben Tage in einer Spalte lagen). Beide Kennzahlen werden für die Steuerung
+der KI-Arbeit nicht gebraucht und sind bewusst aus dem Leitstand genommen worden; das API-Feld
+`outliers` bleibt im Backend bestehen.
+
 ## Läufe {#nachtlauf}
 
 Der **Bereich „Läufe"** wertet die Protokolle des Nacht-Runners aus: Er zeigt je Lauf, welche
@@ -384,21 +422,6 @@ samt Hook, Erfassungsbeginn und Aufbewahrungsgrenzen — steht in
 [Betrieb: Meldeweg der interaktiven Sitzungen](betrieb.md#meldeweg-der-interaktiven-sitzungen).
 Die Tatsachengrundlage dazu steht in
 [Befund: Verbrauchsangaben, Hook-Ereignisse und Worktrees](befund-interaktive-sitzungen.md).
-
-## Dashboard (Kennzahlen)
-
-Über den Sidebar-Eintrag **„Dashboard"** (im Board-Kontext) zeigt eine KPI-Seite, wie schnell Karten
-durch das Board laufen. Grundlage ist die automatisch erfasste Verweildauer jeder Karte pro Spalte —
-gemessen bei **jedem** Spaltenwechsel, egal ob per Drag & Drop, ⋮-Menü oder über die API (kanbancompat).
-
-- **Ø Lead Time** und **Ø Implementierungszeit** als Kennzahl-Kacheln — die Implementierungszeit
-  misst, wie lange eine erledigte Karte insgesamt in „In Progress" lag (mehrere Aufenthalte zählen
-  zusammen).
-- **Ø Verweildauer je Spalte** (Balkendiagramm, in Stunden).
-- **Durchsatz je Woche** — abgeschlossene Karten (Liniendiagramm).
-- **Ausreißer** — Karten, die über 7 Tage in einer Spalte lagen (Tabelle mit #, Titel, Spalte, Dauer).
-
-Das Dashboard ist für jeden sichtbar, der das Board öffnen darf (auch VIEWER).
 
 ## Vorhaben
 
