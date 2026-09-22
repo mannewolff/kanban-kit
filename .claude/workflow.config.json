@@ -1,12 +1,19 @@
 {
   "codeHost": "github",
   "issueTracker": "toolbox",
-  "buildChecks": [
-    "mvn verify",
-    "npm --prefix frontend run build",
-    "npm --prefix frontend run lint",
-    "npm --prefix frontend run test:coverage"
-  ],
+"checkAreas": {
+  "backend":  ["src/**", "pom.xml", "config/**"],
+  "frontend": ["frontend/**", "CLAUDE-design.md"],
+  "doku":     ["docs/**", "docs-site/**"],
+  "cli":      ["cli/**"]
+},
+"buildChecks": [
+  { "cmd": "mvn verify", "areas": ["backend", "doku"] },
+  { "cmd": "npm --prefix frontend run build", "areas": ["frontend"] },
+  { "cmd": "npm --prefix frontend run lint", "areas": ["frontend"] },
+  { "cmd": "npm --prefix frontend run test:coverage", "areas": ["frontend"] },
+  { "cmd": "node --test cli/tbx.test.mjs", "areas": ["cli"] }
+],
   "mutationCommand": "mvn -Ppit -Dskip.frontend=true test",
   "mainBranch": "main",
   "productionBranch": "production",
