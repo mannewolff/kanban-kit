@@ -120,6 +120,18 @@ manban:
     # Stillefrist (Issue #1091): Ein unfertiger Lauf, der so lange kein Lebenszeichen gibt, gilt
     # als nicht gelungen — sonst bliebe ein abgeschossener Runner fuer immer als "laeuft" stehen.
     stille-frist: PT90M
+  # Sicherung (Issue #826, Plan #825). Der Sicherungsvorgang selbst laeuft als eigener Container
+  # ausserhalb der Anwendung und protokolliert jeden Lauf in backup_run; die Anwendung liest das
+  # Protokoll nur. enabled wird vom Backup-Overlay (docker-compose.backup.yml) gesetzt und nicht
+  # von Hand (E6): Ausgeliefert ist die Sicherung aus, und die Admin-Ansicht sagt das
+  # unuebersehbar, statt "kaputt" zu melden, was sie nicht ist.
+  # Eine eigene Warnschwelle gibt es bewusst nicht (E13): Sie wird aus base-cron und
+  # mirror-interval abgeleitet und kann deshalb nicht vom tatsaechlichen Takt abweichen.
+  backup:
+    enabled: ${MANBAN_BACKUP_ENABLED:false}
+    base-cron: ${MANBAN_BACKUP_BASE_CRON:0 0 3 * * *}
+    mirror-interval: ${MANBAN_BACKUP_MIRROR_INTERVAL:PT5M}
+    target-label: ${MANBAN_BACKUP_TARGET_LABEL:nicht benannt}
   cleanup:
     enabled: ${MANBAN_CLEANUP_ENABLED:true}
     done-retention-days: ${MANBAN_DONE_RETENTION_DAYS:30}
