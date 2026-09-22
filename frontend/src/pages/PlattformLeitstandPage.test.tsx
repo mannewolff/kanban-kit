@@ -30,6 +30,7 @@ describe('PlattformLeitstandPage (#1083)', () => {
     nightRunId: 5,
     projectId: 9,
     projectName: 'Mein Projekt',
+    mode: 'IMPLEMENTATION',
     startedAt: '2026-09-19T21:10:00Z',
     outcome: {
       verdict: 'FAILED',
@@ -79,6 +80,7 @@ describe('PlattformLeitstandPage (#1083)', () => {
       nightRunId: 8,
       projectId: 9,
       projectName: 'Mein Projekt',
+      mode: 'CHAIN',
       startedAt: '2026-09-21T01:10:00Z',
       outcome: { verdict: 'RUNNING', decisiveItem: null, noWorkReason: null },
       ...extra,
@@ -139,6 +141,7 @@ describe('PlattformLeitstandPage (#1083)', () => {
       nightRunId: 5,
       projectId: 9,
       projectName: 'Mein Projekt',
+      mode: 'IMPLEMENTATION',
       startedAt: '2026-09-19T21:10:00Z',
       outcome: { verdict: 'SUCCEEDED', decisiveItem: null, noWorkReason: null },
       ...extra,
@@ -491,6 +494,22 @@ describe('PlattformLeitstandPage (#1083)', () => {
     expect(new Set(namen).size).toBe(namen.length)
   })
 
+  /** Issue #1128: Jede der drei Listen zeigt an jeder Zeile die Art des Laufs als Marke. */
+  it('zeigt in allen drei Listen die Art des Laufs', async () => {
+    api.leitstand.mockResolvedValue(
+      sicht({
+        laufende: [{ ...stoerung({ nightRunId: 8 }), mode: 'CHAIN', outcome: { verdict: 'RUNNING', decisiveItem: null, noWorkReason: null } }],
+        durchgefuehrte: [stoerung({ nightRunId: 5 })],
+        stoerungen: [stoerung({ nightRunId: 5 })],
+      }),
+    )
+    zeigeSeite()
+
+    expect(await screen.findByTestId('art-laufend-8')).toHaveTextContent('Kette')
+    expect(screen.getByTestId('art-durchgefuehrt-5')).toHaveTextContent('Umsetzung')
+    expect(screen.getByTestId('art-stoerung-5')).toHaveTextContent('Umsetzung')
+  })
+
   /** Und jeder Verweis der Seite ebenso — auch über die drei Bereiche hinweg. */
   it('gibt jedem Verweis eine unterscheidbare Beschriftung', async () => {
     api.leitstand.mockResolvedValue(
@@ -500,6 +519,7 @@ describe('PlattformLeitstandPage (#1083)', () => {
             nightRunId: 8,
             projectId: 9,
             projectName: 'Mein Projekt',
+            mode: 'CHAIN',
             startedAt: '2026-09-21T01:10:00Z',
             outcome: { verdict: 'RUNNING', decisiveItem: null, noWorkReason: null },
           },
@@ -594,6 +614,7 @@ describe('PlattformLeitstandPage (#1083)', () => {
       nightRunId: 8,
       projectId: 9,
       projectName: 'Mein Projekt',
+      mode: 'CHAIN',
       startedAt: '2026-09-21T01:10:00Z',
       outcome: { verdict: 'RUNNING', decisiveItem: null, noWorkReason: null },
       ...extra,

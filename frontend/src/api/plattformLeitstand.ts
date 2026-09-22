@@ -1,4 +1,4 @@
-import type { NightRunOutcomeView } from './nightRuns'
+import type { NightRunOutcomeView, NightRunServerMode } from './nightRuns'
 import { apiFetch } from './client'
 import { leserZone } from './nightRunUsage'
 
@@ -23,6 +23,8 @@ export interface DisruptionView {
   nightRunId: number
   projectId: number
   projectName: string
+  /** Die Art des Laufs (Issue #1128) — an jeder Zeile als Marke. */
+  mode: NightRunServerMode
   startedAt: string
   outcome: NightRunOutcomeView
 }

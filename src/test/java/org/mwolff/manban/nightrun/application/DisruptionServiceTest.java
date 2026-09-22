@@ -228,6 +228,26 @@ class DisruptionServiceTest {
         .isEqualTo(NightRunOutcome.Verdict.FAILED);
   }
 
+  /** Issue #1128: Jede Zeile trägt die Art ihres Laufs, wie der Kandidat sie liefert. */
+  @Test
+  void jedeZeileTraegtDieArtIhresLaufs() {
+    nachtLaeufe(
+        kandidat(6L, JETZT.minus(Duration.ofHours(1)), NightRunMode.CHAIN),
+        kandidat(5L, JETZT.minus(Duration.ofHours(2)), NightRunMode.REVIEW));
+    when(disruptions.openCandidates())
+        .thenReturn(List.of(kandidat(5L, JETZT.minus(Duration.ofHours(2)), NightRunMode.REVIEW)));
+    pakete(paket(5L, NightRunState.RED, NightRunErrorClass.CHECKS_RED));
+
+    LeitstandView leitstand = service.leitstand(ADMIN, UTC);
+
+    assertThat(leitstand.durchgefuehrte())
+        .extracting(DisruptionView::mode)
+        .containsExactly(NightRunMode.CHAIN, NightRunMode.REVIEW);
+    assertThat(leitstand.stoerungen())
+        .extracting(DisruptionView::mode)
+        .containsExactly(NightRunMode.REVIEW);
+  }
+
   /**
    * Kriterium 8: Ein neues Lebenszeichen holt den Lauf unter die laufenden zurück, ohne dass
    * irgendetwas zurückgesetzt würde — die Stillefrist ist eine Leseregel, keine Zustandsänderung.

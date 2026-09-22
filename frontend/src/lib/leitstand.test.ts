@@ -99,7 +99,7 @@ describe('leitstand Laufband (#979)', () => {
 
   it('nennt einen abgeschlossenen Lauf mit Zahl der Vorgänge, Dauer in Minuten und Kosten', () => {
     const band = laufband(lauf({ mode: 'REVIEW', items: [paket(1, 'GREEN')], usage: { costUsd: 12.4, inputTokens: null, outputTokens: null, cachedInputTokens: null, modelDurationMs: null, turns: null } }))
-    expect(band.titel).toBe('Review abgeschlossen — 1 Vorgang')
+    expect(band.titel).toBe('Prüfung abgeschlossen — 1 Vorgang')
     expect(band.zeitpunkt).toMatch(/^Beginn \d\d\.\d\d\., \d\d:\d\d$/)
     expect(band.minuten).toBe(252)
     expect(band.kosten).toBe('12,40')
@@ -127,6 +127,8 @@ describe('leitstand Laufband (#979)', () => {
 
   it('benennt die Betriebsarten und die Zahl der Vorgänge', () => {
     expect(modusName('CHAIN')).toBe('Kette')
+    // Dasselbe Wort wie auf der Läufe-Seite (Issue #1128).
+    expect(modusName('REVIEW')).toBe('Prüfung')
     expect(vorgaenge(1)).toBe('1 Vorgang')
     expect(vorgaenge(9)).toBe('9 Vorgänge')
   })

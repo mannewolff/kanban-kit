@@ -53,7 +53,7 @@ export const MELDER_JE_FEHLERKLASSE: Record<NightRunErrorClass, Melder> = {
 const MODUS: Record<NightRunServerMode, string> = {
   CHAIN: 'Kette',
   IMPLEMENTATION: 'Umsetzung',
-  REVIEW: 'Review',
+  REVIEW: 'Prüfung',
   INTERACTIVE: 'Sitzung',
 }
 

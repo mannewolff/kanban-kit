@@ -156,6 +156,31 @@ class DisruptionEndpointIT extends AbstractIntegrationTest {
                 .value("Ready ist leer — nichts zu tun."));
   }
 
+  /**
+   * Issue #1128: Jede Zeile aller drei Listen trägt die Art ihres Laufs — geprüft an einer
+   * laufenden Kette, an dem beendeten Umsetzungslauf und an seiner Störung.
+   */
+  @Test
+  void jedeZeileTraegtDieArtIhresLaufs() throws Exception {
+    Cookie admin = session("de-art@example.com", PlatformRole.ADMIN);
+    long kette =
+        id(
+            "INSERT INTO night_run (project_id, started_at, mode, kind, duration_ms,"
+                + " processed_count, skipped_count, unparsed_count, created_at, updated_at, origin,"
+                + " complete) VALUES (?, now() - interval '2 minute', 'CHAIN', 'NIGHT', 1, 0, 0, 0,"
+                + " now(), now(), 'TOKEN', false) RETURNING id",
+            projectId);
+
+    mvc.perform(get(LEITSTAND).param("zone", ZONE).cookie(admin))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.laufende.length()").value(1))
+        .andExpect(jsonPath("$.laufende[0].nightRunId").value(kette))
+        .andExpect(jsonPath("$.laufende[0].mode").value("CHAIN"))
+        .andExpect(jsonPath("$.durchgefuehrte[0].nightRunId").value(laufId))
+        .andExpect(jsonPath("$.durchgefuehrte[0].mode").value("IMPLEMENTATION"))
+        .andExpect(jsonPath("$.stoerungen[0].mode").value("IMPLEMENTATION"));
+  }
+
   /** AK 10 und Kriterium 13: Die Quittung räumt die Störung weg, den Ausgang lässt sie stehen. */
   @Test
   void dasQuittierenRaeumtDieZeileWeg_undIstIdempotent() throws Exception {

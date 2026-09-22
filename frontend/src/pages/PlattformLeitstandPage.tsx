@@ -9,8 +9,9 @@ import {
   type LeitstandView,
 } from '../api/plattformLeitstand'
 import { KupferwarteBereich } from '../components/nachtlauf/KupferwarteBereich'
+import { LaufMarke } from '../components/nachtlauf/NachtlaufLaufPlatte'
 import { Led, Platte, Taste } from '../components/leitstand/LeitstandBausteine'
-import { MELDER_JE_ZUSTAND, melderAusBefund, tagZeit, uhrzeit } from '../lib/leitstand'
+import { MELDER_JE_ZUSTAND, melderAusBefund, modusName, tagZeit, uhrzeit } from '../lib/leitstand'
 import { NIGHT_RUN_VERDICT_TEXT, nightRunZustandsText } from '../lib/nightRunHandoff'
 import { useRefetchOnFocus } from '../lib/useRefetchOnFocus'
 import { ANZEIGE, RAND, TEXT_SCHWACH } from '../theme'
@@ -213,6 +214,14 @@ function LaufVerweis({ zeile }: Readonly<{ zeile: DisruptionView }>) {
   )
 }
 
+/**
+ * Die Art eines Laufs als Marke (Issue #1128) — dieselbe Markenform wie im Kopf eines Laufs auf der
+ * Läufe-Seite, ohne eigene Farbe: Farbe trägt hier den Zustand.
+ */
+function ArtMarke({ zeile, bereich }: Readonly<{ zeile: DisruptionView; bereich: string }>) {
+  return <LaufMarke testId={`art-${bereich}-${zeile.nightRunId}`}>{modusName(zeile.mode)}</LaufMarke>
+}
+
 /** Der Bereich „Aktive Laeufe" (Kriterien 1–4). */
 function LaufendeListe({ zeilen }: Readonly<{ zeilen: DisruptionView[] | null }>) {
   if (zeilen === null) {
@@ -249,6 +258,7 @@ function LaufendeZeile({ zeile }: Readonly<{ zeile: DisruptionView }>) {
       <Typography sx={{ fontSize: 12, color: 'text.secondary', flex: 1, minWidth: 0 }}>
         {`${NIGHT_RUN_VERDICT_TEXT[zeile.outcome.verdict]} seit ${uhrzeit(zeile.startedAt)}`}
       </Typography>
+      <ArtMarke zeile={zeile} bereich="laufend" />
       <LaufVerweis zeile={zeile} />
     </Box>
   )
@@ -304,6 +314,7 @@ function DurchgefuehrteZeile({
       <Typography sx={{ fontSize: 12, color: 'text.secondary' }}>
         {tagZeit(zeile.startedAt)}
       </Typography>
+      <ArtMarke zeile={zeile} bereich="durchgefuehrt" />
       <LaufVerweis zeile={zeile} />
       <Typography sx={{ fontSize: 12, color: 'text.secondary', flex: 1, minWidth: 0 }}>
         {NIGHT_RUN_VERDICT_TEXT[zeile.outcome.verdict]}
@@ -510,6 +521,7 @@ function Stoerzeile({
       >
         Lauf #{stoerung.nightRunId}
       </Typography>
+      <ArtMarke zeile={stoerung} bereich="stoerung" />
       <Typography sx={{ fontSize: 12, color: 'text.secondary', flex: 1, minWidth: 0 }}>
         {stoerungsGrund(stoerung.outcome)}
       </Typography>

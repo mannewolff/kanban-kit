@@ -80,9 +80,6 @@ vi.mock('../components/CardDetailModal', async () => {
 /** Startzeitpunkt eines Laufs — der Schlüssel der Auswertung (Plan #718, A4). */
 const startedAt = (minute: number) => `2026-09-01T22:${String(minute).padStart(2, '0')}:00.000Z`
 
-/** Die Vorzeile eines Laufs seit Issue #1127: der Zyklus, dann die Art. */
-const vorzeileMit = (art: string) =>
-  new RegExp(String.raw`^Zyklus vom \d\d\.\d\d\.\d{4} auf den \d\d\.\d\d\.\d{4} · ${art}$`)
 
 /** Die Dauer einer Session im Ergebnisstand; die Laufdauer ist ihre Summe. */
 const SIEBEN_MIN = 7 * 60_000
@@ -1502,7 +1499,7 @@ describe('NightRunPage — Nachtplan-Lauf (#806)', () => {
     protokollWaehlen(ECHTER_NACHTPLAN_STAND, 'night-run-2026-09-09-141506.json')
 
     const panelEl = await screen.findByTestId(`lauf-${ECHTER_NACHTPLAN_START}`)
-    expect(within(panelEl).getByTestId('nachtlauf-vorzeile')).toHaveTextContent(vorzeileMit('Nachtplan'))
+    expect(within(panelEl).getByTestId('lauf-art')).toHaveTextContent('Nachtplan')
     expect(laufKopfzeile(panelEl)).toHaveTextContent('2 bearbeitet · 33 übergangen')
 
     panelAufklappen(panelEl)
@@ -1551,7 +1548,7 @@ describe('NightRunPage — Ketten-Lauf (#854)', () => {
     protokollWaehlen(ECHTE_KETTE_STAND, 'night-run-2026-09-14-131200.json')
 
     const panelEl = await screen.findByTestId(`lauf-${ECHTE_KETTE_START}`)
-    expect(within(panelEl).getByTestId('nachtlauf-vorzeile')).toHaveTextContent(vorzeileMit('Kette'))
+    expect(within(panelEl).getByTestId('lauf-art')).toHaveTextContent('Kette')
     expect(laufKopfzeile(panelEl)).toHaveTextContent('3 bearbeitet · 0 übergangen')
 
     // Anders als der Nachtplan-Lauf geht die Kette an den Server (AK 8 aus #842):
@@ -2871,7 +2868,7 @@ describe('NightRunPage — Zustände, Kennzahlen und Auszüge', () => {
     renderPage({ listen: [[aufbewahrt({ id: 1, startedAt: startedAt(0), mode: 'REVIEW' })]] })
 
     await screen.findByTestId(`lauf-${startedAt(0)}`)
-    expect(within(lauf(0)).getByTestId('nachtlauf-vorzeile')).toHaveTextContent(vorzeileMit('Prüfung'))
+    expect(within(lauf(0)).getByTestId('lauf-art')).toHaveTextContent('Prüfung')
     expect(within(lauf(0)).queryByText(/Umsetzung/)).not.toBeInTheDocument()
   })
 
@@ -2885,7 +2882,7 @@ describe('NightRunPage — Zustände, Kennzahlen und Auszüge', () => {
     protokollWaehlen(EIN_LAUF)
 
     await screen.findByTestId(`lauf-${startedAt(0)}`)
-    expect(within(lauf(0)).getByTestId('nachtlauf-vorzeile')).toHaveTextContent(vorzeileMit('Umsetzung'))
+    expect(within(lauf(0)).getByTestId('lauf-art')).toHaveTextContent('Umsetzung')
   })
 
   // **Umgekehrt mit Issue #872**: Der Test hielt bis dahin fest, dass in der Auswertung
@@ -4259,7 +4256,7 @@ describe('NightRunPage — Kopf und Kennzahlenreihe der Nacht (#915)', () => {
       'night-run-2026-09-14-131200.json',
     )
 
-    expect(within(panelEl).getByTestId('nachtlauf-vorzeile')).toHaveTextContent(vorzeileMit('Kette'))
+    expect(within(panelEl).getByTestId('lauf-art')).toHaveTextContent('Kette')
     expect(within(panelEl).getByTestId(FUSSZEILE)).toBeInTheDocument()
   })
 
@@ -4270,7 +4267,7 @@ describe('NightRunPage — Kopf und Kennzahlenreihe der Nacht (#915)', () => {
       'night-run-2026-09-07-085229.json',
     )
 
-    expect(within(panelEl).getByTestId('nachtlauf-vorzeile')).toHaveTextContent(vorzeileMit('Umsetzung'))
+    expect(within(panelEl).getByTestId('lauf-art')).toHaveTextContent('Umsetzung')
     expect(within(panelEl).getByTestId(FUSSZEILE)).toBeInTheDocument()
   })
 
@@ -4283,7 +4280,7 @@ describe('NightRunPage — Kopf und Kennzahlenreihe der Nacht (#915)', () => {
 
     // Die Platte der Vorlage gilt seit #988 für **jede** Lauf-Art; was den Prüf-Lauf eigen macht,
     // ist die Aufschlüsselung seiner aussortierten Karten (#873), nicht mehr sein Kopf.
-    expect(within(panelEl).getByTestId('nachtlauf-vorzeile')).toHaveTextContent(vorzeileMit('Prüfung'))
+    expect(within(panelEl).getByTestId('lauf-art')).toHaveTextContent('Prüfung')
     expect(within(panelEl).getByTestId('aufschluesselung')).toBeInTheDocument()
     expect(within(panelEl).getByTestId(FUSSZEILE)).toBeInTheDocument()
   })
@@ -4298,7 +4295,7 @@ describe('NightRunPage — Kopf und Kennzahlenreihe der Nacht (#915)', () => {
     const panelEl = await screen.findByTestId(`lauf-${ECHTE_ERZEUGUNG_START}`)
     panelAufklappen(panelEl)
 
-    expect(within(panelEl).getByTestId('nachtlauf-vorzeile')).toHaveTextContent(vorzeileMit('Nachtplan'))
+    expect(within(panelEl).getByTestId('lauf-art')).toHaveTextContent('Nachtplan')
     expect(await within(panelEl).findByTestId('aufschluesselung')).toBeInTheDocument()
     expect(within(panelEl).getByTestId(FUSSZEILE)).toBeInTheDocument()
   })
@@ -4332,7 +4329,7 @@ describe('NightRunPage — Kopf und Kennzahlenreihe der Nacht (#915)', () => {
     const panelEl = await screen.findByTestId(`lauf-${ECHTE_KETTE_START}`)
 
     // Derselbe Kopf — die Gestaltung hängt an der Lauf-Art, nicht am Vorliegen eines Stands.
-    expect(within(panelEl).getByTestId('nachtlauf-vorzeile')).toHaveTextContent(vorzeileMit('Kette'))
+    expect(within(panelEl).getByTestId('lauf-art')).toHaveTextContent('Kette')
     // Kosten und Züge bewahrt der Server nicht auf; eine Reihe aus lauter Fehlanzeigen wäre
     // dieselbe Wand, die der Bestand schon vermeidet.
     expect(within(panelEl).queryByTestId('fussangabe-Ketten durchgelaufen')).not.toBeInTheDocument()
@@ -4363,7 +4360,7 @@ describe('NightRunPage — Altbestand-Arten im Kopf der Vorlage (#988)', () => {
     expect(within(lauf(0)).getByTestId('nachtlauf-meta')).toHaveTextContent(
       'Ungedeutete Zeilen: 1',
     )
-    expect(within(lauf(0)).getByTestId('nachtlauf-vorzeile')).toHaveTextContent(vorzeileMit('Prüfung'))
+    expect(within(lauf(0)).getByTestId('lauf-art')).toHaveTextContent('Prüfung')
   })
 
   it('zeigt den Kennzahlen-Hinweis eines Prüf-Laufs in seiner Fußzeile', async () => {
@@ -5022,7 +5019,7 @@ describe('NightRunPage — Laufblock im Leitstand-Stil (#988)', () => {
     await screen.findByTestId(`lauf-${startedAt(0)}`)
 
     const kopf = laufKopfzeile(lauf(0))
-    expect(within(kopf).getByTestId('nachtlauf-vorzeile')).toHaveTextContent(vorzeileMit('Umsetzung'))
+    expect(within(kopf).getByTestId('lauf-art')).toHaveTextContent('Umsetzung')
     expect(within(kopf).getByTestId('nachtlauf-meta')).toHaveTextContent(
       '4 h 12 min · 3 bearbeitet · 0 übergangen',
     )
@@ -5880,13 +5877,33 @@ describe('NightRunPage — Zyklus in der Vorzeile, Lauf-Nummer im Titel (#1127)'
     const vorzeile = async (iso: string) =>
       within(await screen.findByTestId(`lauf-${iso}`)).getByTestId('nachtlauf-vorzeile')
     expect(await vorzeile('2026-09-14T20:05:00.000Z')).toHaveTextContent(
-      'Zyklus vom 14.09.2026 auf den 15.09.2026 · Umsetzung',
+      'Zyklus vom 14.09.2026 auf den 15.09.2026',
     )
     expect(await vorzeile('2026-09-15T01:10:00.000Z')).toHaveTextContent(
-      'Zyklus vom 14.09.2026 auf den 15.09.2026 · Umsetzung',
+      'Zyklus vom 14.09.2026 auf den 15.09.2026',
     )
     expect(await vorzeile('2026-09-15T10:00:00.000Z')).toHaveTextContent(
-      'Zyklus vom 15.09.2026 auf den 16.09.2026 · Umsetzung',
+      'Zyklus vom 15.09.2026 auf den 16.09.2026',
     )
+  })
+})
+
+describe('NightRunPage — die Art des Laufs als Marke im Kopf (#1128)', () => {
+  it('zeigt am Kettenlauf „Kette" und am Umsetzungslauf „Umsetzung" — und nicht mehr in der Vorzeile', async () => {
+    renderPage({
+      listen: [
+        [
+          aufbewahrt({ id: 2, startedAt: startedAt(5), mode: 'CHAIN' }),
+          aufbewahrt({ id: 1, startedAt: startedAt(0) }),
+        ],
+      ],
+    })
+
+    const kette = await screen.findByTestId(`lauf-${startedAt(5)}`)
+    const umsetzung = screen.getByTestId(`lauf-${startedAt(0)}`)
+    expect(within(laufKopfzeile(kette)).getByTestId('lauf-art')).toHaveTextContent('Kette')
+    expect(within(laufKopfzeile(umsetzung)).getByTestId('lauf-art')).toHaveTextContent('Umsetzung')
+    expect(within(kette).getByTestId('nachtlauf-vorzeile')).not.toHaveTextContent('Kette')
+    expect(within(umsetzung).getByTestId('nachtlauf-vorzeile')).not.toHaveTextContent('Umsetzung')
   })
 })

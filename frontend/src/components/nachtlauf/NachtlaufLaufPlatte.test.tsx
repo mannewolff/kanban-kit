@@ -46,7 +46,6 @@ function zeige(offenAnfangs = false) {
     return (
       <NachtlaufLaufPlatte
         titel="Lauf #86 · 14. September, 22:05"
-        art="Kette"
         zyklus="Zyklus vom 14.09.2026 auf den 15.09.2026"
         meta="02:00 · 41 min · 7 bearbeitet"
         melder="gruen"
@@ -114,10 +113,10 @@ describe('NachtlaufLaufPlatte — der Pfeil ist zu sehen', () => {
 })
 
 describe('NachtlaufLaufPlatte — Zyklus in der Vorzeile, Nummer im Titel (#1127)', () => {
-  it('nennt in der Vorzeile den Zyklus vor der Art', () => {
+  it('nennt in der Vorzeile allein den Zyklus — die Art steht seit #1128 als Marke', () => {
     zeige()
 
-    expect(vorzeile().textContent).toBe('Zyklus vom 14.09.2026 auf den 15.09.2026 · Kette')
+    expect(vorzeile().textContent).toBe('Zyklus vom 14.09.2026 auf den 15.09.2026')
   })
 
   it('führt den Titel als Überschrift', () => {

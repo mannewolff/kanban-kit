@@ -2152,6 +2152,8 @@ function Kopfmarken({
   const kosten = kostenText(lauf.verbrauch?.kostenUsd ?? null)
   return (
     <>
+      {/* Die Art des Laufs als erste Marke (Issue #1128): In der Vorzeile ging sie unter. */}
+      <LaufMarke testId="lauf-art">{ART_KURZ[lauf.mode]}</LaufMarke>
       {/* Die Marke haengt am Befund und nicht an `vollstaendig` (#1092): Ein verstummter Lauf
           traegt fuer immer `complete = false`, ist aber nicht „unvollstaendig gemeldet" — er ist
           nicht gelungen, und das sagt bereits die rote LED der Platte. */}
@@ -2598,7 +2600,6 @@ function LaufPanel({
     <NachtlaufLaufPlatte
       testId={`lauf-${lauf.startedAt}`}
       titel={laufTitel(lauf.startedAt, lauf.laufId)}
-      art={ART_KURZ[lauf.mode]}
       zyklus={zyklusBeschriftung(zyklusDesStarts(lauf.startedAt))}
       meta={metazeile(lauf, stand)}
       melder={melder}

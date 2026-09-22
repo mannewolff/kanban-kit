@@ -50,8 +50,6 @@ export function NachtlaufLaufPlatte({
    * Nummer steht seit Issue #1127 hier und nicht mehr in der Vorzeile.
    */
   titel,
-  /** Die Lauf-Art im Etikett, etwa „Kette" — davor steht der Zyklus. */
-  art,
   /** Der Zyklus, dem der Lauf angehört, etwa „Zyklus vom 14.09.2026 auf den 15.09.2026" (#1127). */
   zyklus,
   /** Beginn, Dauer, bearbeitete und übergangene Vorgänge und was der Lauf sonst zu sagen hat. */
@@ -70,7 +68,6 @@ export function NachtlaufLaufPlatte({
   children,
 }: Readonly<{
   titel: string
-  art: string
   zyklus: string
   meta: string
   melder: Melder
@@ -181,7 +178,7 @@ export function NachtlaufLaufPlatte({
 
         <Box sx={{ minWidth: 0 }}>
           <Box data-testid="nachtlauf-vorzeile" sx={{ ...ETIKETT, mb: '1px' }}>
-            {`${zyklus} · ${art}`}
+            {zyklus}
           </Box>
           <Box
             component="h3"

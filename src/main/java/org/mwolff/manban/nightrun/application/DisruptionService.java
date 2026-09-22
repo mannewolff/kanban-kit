@@ -12,6 +12,7 @@ import java.util.stream.Stream;
 import org.mwolff.manban.auth.application.AdminAccessDeniedException;
 import org.mwolff.manban.auth.application.PlatformAdminChecker;
 import org.mwolff.manban.nightrun.domain.NightRunItem;
+import org.mwolff.manban.nightrun.domain.NightRunMode;
 import org.mwolff.manban.nightrun.domain.NightRunOutcome;
 import org.mwolff.manban.nightrun.domain.NightRunOutcome.Verdict;
 import org.mwolff.manban.nightrun.domain.NightRunPeriod;
@@ -178,6 +179,7 @@ public class DisruptionService {
         k.nightRunId(),
         k.projectId(),
         k.projectName(),
+        k.mode(),
         k.startedAt(),
         NightRunOutcome.of(
             k.complete(),
@@ -196,11 +198,15 @@ public class DisruptionService {
    * <p>Der <b>Grund</b> steht nicht als Text hier, sondern als {@link NightRunOutcome}: Der Browser
    * bildet ihn aus denselben Tabellen, aus denen die Nachtlauf-Auswertung ihn zeigt. Ein zweiter
    * Satz im Server wäre die zweite Formulierung desselben Sachverhalts, die AK 6 verbietet.
+   *
+   * <p>Die <b>Art</b> des Laufs ({@code mode}) steht seit Issue #1128 dabei: Der
+   * Plattform-Leitstand zeigt sie als Marke an jeder Zeile.
    */
   public record DisruptionView(
       long nightRunId,
       long projectId,
       String projectName,
+      NightRunMode mode,
       Instant startedAt,
       NightRunOutcome outcome) {}
 
