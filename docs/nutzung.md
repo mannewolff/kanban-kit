@@ -537,3 +537,54 @@ Ob ein Projekt teilnimmt, entscheidet ausschließlich das Projekt selbst — OWN
 echter Mitgliedschaft, über das Teilnahme-Ankreuzfeld im [Editiermodus](#editiermodus) der
 Projektliste. Der Plattform-Admin sieht nur Läufe und Störungen teilnehmender Projekte und kann die
 Teilnahme selbst nicht erzwingen.
+
+## Board-Befehle unter Last {#board-befehle-unter-last}
+
+Das Board begrenzt die Befehle, die eine Person über ein Zugriffstoken schickt (siehe
+[Durchsatzbremse](betrieb.md#durchsatzbremse-für-zugriffstoken)). Ein Befehl über dem Kontingent
+wird mit `429` abgewiesen und führt nichts aus. Der Board-Adapter des claude-workflow-kit
+(`node .claude/kit/board.mjs`, ab Kit 3.0.1) wartet dann selbst und wiederholt. Du musst nichts tun,
+solange er sich nicht mit einer Fehlermeldung zurückmeldet.
+
+**Was wiederholt wird.** Eine Abweisung wegen Überlast (`429` mit dem Problem-Detail
+`type: urn:manban:overload`) bei jedem Befehl, dazu Zeitablauf und abgebrochene Verbindungen. Bei
+einem Serverfehler (`5xx`) nur, wenn die Wiederholung gefahrlos ist: bei lesenden Befehlen, beim
+Verschieben und Ändern, und beim Anlegen einer Karte oder eines Kommentars, weil diese beiden einen
+Idempotenz-Schlüssel tragen. Ein `429` **ohne** `urn:manban:overload` kommt nicht von dieser Bremse
+und wird nicht wiederholt, ebenso wenig ein ungültiges Token.
+
+**Wie lange.** Jeder Versuch hat eine eigene Zeitgrenze; die Wartezeit dazwischen wächst und folgt
+dem `Retry-After` des Servers. Für alle Versuche zusammen gilt ein **Gesamtbudget von 30 Sekunden**,
+im Nachtlauf (gesetztes `KIT_AGENT_MODEL`) von **120 Sekunden**. Jede Wiederholung meldet sich mit
+einer Zeile auf stderr, damit Warten von Hängen zu unterscheiden ist:
+
+```
+board: POST /api/kanban/items — Versuch 1 endete mit HTTP 429, erneut in 1000 ms (Frist 30 s)
+```
+
+**Die drei Rückmeldungen.** Wie ein Befehl ausging, sagt der Adapter in einer von drei Lagen:
+
+- **ausgeführt** — die normale JSON-Ausgabe auf stdout, Exit-Code 0.
+- **nicht ausgeführt** — `Fehler: …` auf stderr, Exit-Code 1. Der Befehl hat nichts bewirkt, etwa
+  weil das Budget unter Abweisungen ablief, der Server nicht erreichbar war oder die Anfrage
+  ungültig ist. Du kannst ihn gefahrlos erneut absetzen.
+- **Ausgang unklar** — `Fehler: …` mit dem Zusatz „Ausgang unklar". Ein schreibender Befehl ging
+  hinaus, blieb aber ohne verwertbare Antwort (Zeitablauf, Verbindungsabbruch oder `5xx`). Die
+  Wirkung kann eingetreten sein.
+
+**Was bei „Ausgang unklar" zu tun ist.** Die Meldung nennt den Idempotenz-Schlüssel und das
+vollständige Wiederholkommando. Wiederhole den Befehl **mit genau diesem Schlüssel**, nie ohne:
+
+```
+node .claude/kit/board.mjs issue comment 1004 --text-file bericht.md --idempotency-key 3f2c…
+```
+
+Derselbe Schlüssel führt die Wirkung höchstens einmal aus: Kam der erste Versuch an, liefert das
+Board dessen Ergebnis, statt eine zweite Karte oder einen zweiten Kommentar anzulegen. Ohne den
+Schlüssel wäre die Wiederholung ein neuer Auftrag. Trägt die Meldung keinen Schlüssel (andere
+schreibende Befehle, etwa ein Label), sieh erst am Board nach, bevor du wiederholst.
+
+**Der Schalter `--idempotency-key <wert>`** gibt es bei `issue create` und `issue comment`. Er setzt
+den Schlüssel von außen, statt ihn je Auftrag neu zu erzeugen. Das Board hält einen Schlüssel
+24 Stunden. Einen Schlüssel für einen **anderen** Befehl als beim ersten Mal weist es mit `409` ab:
+Für einen neuen Befehl gehört ein neuer Schlüssel.
