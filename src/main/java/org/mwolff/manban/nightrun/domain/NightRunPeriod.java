@@ -72,7 +72,8 @@ public record NightRunPeriod(
    * (Plan #933 E14), ist hier genau der laufende gewollt: Der Bereich „Durchgeführte Nachtläufe"
    * zeigt die Läufe der laufenden Nacht (Kriterium 9 der fachlichen Quelle #1086). Wer morgens um
    * acht hinsieht, will die Läufe der vergangenen Nacht sehen — und die gehören zu einem Zeitraum,
-   * der erst um 12:00 endet.
+   * der erst um 12:00 endet. Seit Issue #1135 steht dort zusätzlich der vorige Zyklus ({@link
+   * #previous()}), damit dieselben Läufe auch nach 12:00 noch zu finden sind.
    */
   public static NightRunPeriod laufendeNacht(Instant jetzt, ZoneId zone) {
     return night(nachtDatum(LocalDateTime.ofInstant(jetzt, zone)), zone);

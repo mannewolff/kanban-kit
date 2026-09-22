@@ -330,6 +330,8 @@ export function AppShell() {
   // wie /projects/:id/ideas. Auf Board-Routen ist dieser Match null — dort liefert board.projectId.
   const projectMatch = useMatch('/projects/:projectId/*')
   const routeProjectId = projectMatch?.params.projectId ? Number(projectMatch.params.projectId) : null
+  // Die Projektauswahl ist die eine Seite ohne Projekt, die den Kontext verwirft (#1129).
+  const aufProjektauswahl = useMatch('/projects') !== null
 
   // Der Verlauf steht schon hier, weil der Board-Kontext einer Projektseite aus ihm kommt (#990).
   const { history, recordVisit, remove } = useBoardHistory()
@@ -344,14 +346,17 @@ export function AppShell() {
   }, [board, history])
 
   /*
-   * Board-Kontext der Schiene in drei Fällen:
+   * Board-Kontext der Schiene in vier Fällen:
    *
    * - **Board-Route** — das Board der Route laden.
    * - **Projektseite** — wer von einem Board auf eine Seite desselben Projekts geht, ist weiter in
    *   diesem Projekt: Der Kontext bleibt unangetastet stehen. Ohne ihn (Lesezeichen, Neuladen,
    *   anderes Projekt) entscheidet der Verlauf — das zuletzt besuchte Board dieses Projekts —, sonst
    *   das erste Board des Projekts; hat das Projekt keines, bleibt es bei keinem Board (#990).
-   * - **sonst** — kein Board-Kontext.
+   * - **Seite ohne Projekt** (Plattform-Leitstand, Administration, Rollen, Profil …) — der Kontext
+   *   bleibt stehen wie auf einer Projektseite, damit „Board" zurück auf das zuletzt offene Board
+   *   führt (#1129). Ohne vorherigen Kontext bleibt es bei keinem; geraten wird nichts. Allein die
+   *   **Projektauswahl** verwirft ihn: Dort wählt man gerade ein anderes Projekt.
    */
   useEffect(() => {
     let cancelled = false
@@ -382,8 +387,10 @@ export function AppShell() {
       }
     }
     if (routeProjectId == null) {
-      setBoard(null)
-      setBoardCount(null)
+      if (aufProjektauswahl) {
+        setBoard(null)
+        setBoardCount(null)
+      }
       return
     }
     if (letzterKontext.current.board?.projectId === routeProjectId) {
@@ -410,7 +417,7 @@ export function AppShell() {
     return () => {
       cancelled = true
     }
-  }, [boardId, routeProjectId])
+  }, [boardId, routeProjectId, aufProjektauswahl])
 
   // Beim Zurückkehren in den Tab Projekt- und Board-Kontext neu laden, damit die Seitenleiste
   // nicht auf einem in einer anderen Session veränderten Stand (z. B. entferntes Board) verharrt.

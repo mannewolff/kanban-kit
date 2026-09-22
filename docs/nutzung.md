@@ -193,6 +193,44 @@ Alle Richtungen zählen als normaler Arbeitsfluss und brauchen nur das Recht zum
 Karten (kein Löschrecht). Auch der Ingest über die API (kanbancompat) kann eine Karte direkt als Idee
 anlegen.
 
+## Leitstand eines Boards {#leitstand}
+
+Der **Leitstand** (Sidebar-Eintrag **„Leitstand“** im Board-Kontext, Route
+`/boards/:boardId/leitstand`) ist die **Hauptansicht eines Boards**. Er ersetzt die frühere
+Kennzahlen-Seite „Dashboard“; die alte Adresse `/boards/:boardId/dashboard` leitet auf ihn weiter.
+
+Von oben nach unten führt er:
+
+1. **Laufband** — der jüngste Lauf als schmales Band: Melder (als Wechselblinker, solange er läuft),
+   Titel des Laufs, die berührte Karte, der Zeitpunkt, rechts „Zeit“ in Minuten und „Kosten“ in
+   Dollar.
+2. **Kennzahlen** — vier Kacheln: **Durchsatz · Woche**, **Durchlaufzeit**,
+   **Implementierungszeit** und eine Kachel zu den Läufen. Die Implementierungszeit misst, wie
+   lange eine erledigte Karte insgesamt in „In Progress“ lag; mehrere Aufenthalte zählen zusammen.
+3. **Verbrauch** — Token und Kosten mit Zeitraum-Wahl; ausführlich unter
+   [Verbrauch (Leitstand)](#verbrauch-leitstand).
+4. **Herkunft** — eine Zeile zum jüngsten Lauf: ob er eingeliefert oder im Browser hochgeladen
+   wurde, dazu der Name des Tokens, die Zahl der Vorgänge und die der ungedeuteten Zeilen.
+5. **Rumpf** — vier Platten: **„Letzter Lauf · ‹Art›“** mit seinen Vorgängen (die Kartennummer
+   öffnet die Karte zum Lesen), **„Durchsatz“** mit den abgeschlossenen Karten je Woche,
+   **„Abbruchgründe“** mit den Fehlerklassen über die aufbewahrten Läufe und **„Vorhaben“** mit
+   den offenen.
+
+**Was das Recht entscheidet:** Laufband, Lauf-Kachel, Verbrauch, „Letzter Lauf“ und
+„Abbruchgründe“ sieht nur, wer auch die [Läufe](#nachtlauf) sehen darf — der **Owner** des
+Projekts und **Plattform-Admins**, sofern das Projekt am
+[Plattform-Leitstand](#plattform-leitstand) teilnimmt. Ohne dieses Recht entfallen sie still; die
+Board-Kennzahlen und „Durchsatz“ bleiben.
+
+**Grundlage der Board-Kennzahlen** ist die automatisch erfasste Verweildauer jeder Karte pro
+Spalte — gemessen bei **jedem** Spaltenwechsel, egal ob per Drag & Drop, ⋮-Menü oder über die API
+(kanbancompat).
+
+**Nicht mehr dargestellt:** die **Ø Verweildauer je Spalte** und die Liste der **Ausreißer**
+(Karten, die über sieben Tage in einer Spalte lagen). Beide Kennzahlen werden für die Steuerung
+der KI-Arbeit nicht gebraucht und sind bewusst aus dem Leitstand genommen worden; das API-Feld
+`outliers` bleibt im Backend bestehen.
+
 ## Läufe {#nachtlauf}
 
 Der **Bereich „Läufe"** wertet die Protokolle des Nacht-Runners aus: Er zeigt je Lauf, welche
@@ -228,10 +266,21 @@ Einige Angaben stehen deshalb **nur bei einem eingelesenen, noch nicht eingelief
 allein die Ergebnisdatei sie trägt. Bei einem Lauf, den der Runner eingeliefert hat, entfallen:
 
 - bei einem Kettenlauf die Angaben „Ketten durchgelaufen", „Karten entstanden", „Laufzeit über alle
-  Stufen" und „Kosten der Nacht",
-- die Chips der in der Nacht entstandenen Dokumente,
+  Stufen" und „Kosten des Zyklus",
 - der Grund, an dem eine Stufe der Kette abbrach,
 - die Dokumente je Stufe.
+
+Bei einem eingelieferten **Kettenlauf** trägt jede erreichte Stufe im Stufenband ihre Kosten, die
+Kostenkachel teilt das Gesamt in **Planung** (die Stufen der Kette) und **Umsetzung** (der Rest),
+und der Kettenvorgang nennt den **angelegten Plan und die Pakete** als Verweise — ermittelt aus der
+Herkunft der Karten am Board, beschränkt auf Karten, die während des Laufs entstanden. Jede
+Paketzeile nennt ihren Plan („Paket aus Plan #N"). Die Dauer des Kettenvorgangs ist die Summe seiner
+Stufen.
+
+Der **Titel** eines Laufs nennt seine Nummer, das Startdatum und die Startzeit („Lauf #412 · 14.
+September, 22:05"); ein eben eingelesener Lauf ohne Nummer heißt „Lauf · 14. September, 22:05".
+Darüber steht der **Zyklus**, zu dem er gehört („Zyklus vom 14.09.2026 auf den 15.09.2026"), und die
+Art des Laufs.
 
 Jeder Lauf steht als aufklappbare Zeile da — Startzeitpunkt, Art des Laufs („Umsetzungs-Lauf",
 „Prüf-Lauf" oder „Nachtplan-Lauf"), Dauer sowie „N bearbeitet, M übergangen". Ein Nachtplan-Lauf
@@ -260,8 +309,14 @@ der Text enthält Fremdtext aus dem Protokoll, und was in die eigene Sitzung wan
 gesehen haben. Legt der Browser die Zwischenablage nicht frei, bleibt es beim sichtbaren Feld: von
 Hand markieren und kopieren.
 
+**Nur die letzten zwei Zyklen:** Die Liste zeigt standardmäßig die Läufe des laufenden und des
+vorigen Zyklus; darunter blendet **„Ältere Läufe anzeigen (N)"** die übrigen für diesen Besuch ein.
+Sichtbar bleiben außerdem ein älterer Lauf, der noch läuft, der über einen Verweis angesteuerte Lauf
+und ein eben eingelesener. Begrenzt wird nur die Anzeige: Aufbewahrung, Verbrauchsauswertung und
+Häufigkeiten zählen weiter alle aufbewahrten Läufe.
+
 **Aufbewahrung:** Je Projekt bleiben die **letzten 190 Läufe** erhalten — genug, um bei zwei Läufen
-je Nacht den laufenden, den zuletzt abgeschlossenen und den Vormonat vorzuhalten; ältere fallen
+je Zyklus den laufenden, den zuletzt abgeschlossenen und den Vormonat vorzuhalten; ältere fallen
 heraus, sobald neue hinzukommen. Die **Arbeitspakete** eines verdrängten Laufs bleiben dabei bestehen: Sie tragen
 Projekt, Startzeitpunkt und Lauf-Art selbst, damit die Messwerte einer Karte nicht mit dem Lauf
 verschwinden. In der Liste der Läufe erscheinen sie nicht mehr. Diese **verwaisten Arbeitspakete**
@@ -300,14 +355,14 @@ beide Angaben stehen nebeneinander, keine ersetzt die andere.
 
 ### Was der Bereich zeigt
 
-Über den Kacheln steht der gewählte Zeitraum — **Nacht · Woche · Monat** — und daneben, aus wie
-vielen Einträgen die Zahlen stammen („*Nacht vom 17.09.2026 auf den 18.09.2026* · 2 Läufe ·
+Über den Kacheln steht der gewählte Zeitraum — **Zyklus · Woche · Monat** — und daneben, aus wie
+vielen Einträgen die Zahlen stammen („*Zyklus vom 17.09.2026 auf den 18.09.2026* · 2 Läufe ·
 5 Sitzungen"). Die Kacheln selbst:
 
 - **Eingabe-Token** mit einem Balken, der die Eingabe in **„Cache gelesen"** und **„frisch"**
   aufteilt. Der Balken beantwortet eine andere Frage als die Gattungen und wird nicht auf sie
   umgewidmet.
-- **Ausgabe-Token**, darunter der Verlauf über die Nächte des Zeitraums.
+- **Ausgabe-Token**, darunter der Verlauf über die Zyklen des Zeitraums.
 - **Kosten**, mit dem Vergleich zum Vorzeitraum (▲/▼ und der Unterschied in Dollar).
 - **Gesamt über die Laufzeit** — siehe unten.
 
@@ -328,8 +383,8 @@ die des Gelebten: Was der Ringpuffer verdrängt hat, fehlt darin.
 
 ### Kosten je Stufe der Kette
 
-Die Verbrauchsauswertung auf der Seite [„Läufe"](#nachtlauf) — Ansicht Nacht, Woche oder Monat —
-führt unter den Nächten und der Aufstellung je Vorhaben die Platte **„Stufen der Kette"**: je Stufe
+Die Verbrauchsauswertung auf der Seite [„Läufe"](#nachtlauf) — Ansicht Zyklus, Woche oder Monat —
+führt unter den Zyklen und der Aufstellung je Vorhaben die Platte **„Stufen der Kette"**: je Stufe
 (**Plan**, **Prüfung**, **Pakete**, **Abdeckung**) die Kosten im Zeitraum und wie viele Vorgänge
 sie durchlaufen haben, dazu ein Balken im Verhältnis zur teuersten Stufe. Die Reihenfolge ist die
 der Kette.
@@ -337,7 +392,7 @@ der Kette.
 - **Läufe ohne Stufen erscheinen darin nicht** — ein Umsetzungs- oder Prüf-Lauf hat keine. Liefen
   im Zeitraum keine Ketten, fehlt die Platte ganz.
 - **Es gibt keine Zeile „ohne Stufe"**, anders als „Ohne Vorhaben" in der Aufstellung je Vorhaben:
-  Sie trüge bei einem Umsetzungs-Lauf den Verbrauch einer ganzen Nacht, und die Aufstellung handelt
+  Sie trüge bei einem Umsetzungs-Lauf den Verbrauch eines ganzen Zyklus, und die Aufstellung handelt
   von der Kette.
 - Fehlen die Kosten einer Stufe, steht dort „nicht gemessen" und kein Balken — nie eine 0.
 
@@ -347,11 +402,12 @@ Ein Eintrag gehört zu dem Zeitraum, in dem er **beginnt** — bei einer Sitzung
 Zeitpunkt, an dem sie eröffnet wurde, nicht zu dem, an dem sie endete. Eine Sitzung, die über eine
 Zeitraumgrenze hinweg läuft, wird nicht aufgeteilt.
 
-Dabei gilt die **Tagesgrenze 12:00** zonenlokal: Eine Nacht beginnt mittags und endet am nächsten
-Mittag; wer vor 12:00 startet, gehört zur Nacht davor. Für interaktive Sitzungen hat das eine
-Folge, die man kennen muss: **Eine Sitzung, die vormittags vor 12:00 beginnt, zählt zur Nacht
-davor.** Wer am Donnerstag um 9:30 Uhr zu arbeiten anfängt, findet seinen Verbrauch also unter der
-Nacht von Mittwoch auf Donnerstag, nicht unter der von Donnerstag auf Freitag. Die Regel ist
+Dabei gilt die **Tagesgrenze 12:00** zonenlokal: Ein **Zyklus** läuft von 12:00 bis 12:00 und
+enthält alle Läufe, die darin starten — auch tagsüber angestoßene; wer vor 12:00 startet, gehört
+zum Zyklus davor. Für interaktive Sitzungen hat das eine Folge, die man kennen muss: **Eine
+Sitzung, die vormittags vor 12:00 beginnt, zählt zum Zyklus davor.** Wer am Donnerstag um 9:30 Uhr
+zu arbeiten anfängt, findet seinen Verbrauch also unter dem Zyklus von Mittwoch auf Donnerstag,
+nicht unter dem von Donnerstag auf Freitag. Die Regel ist
 dieselbe wie für Läufe — eine zweite Regel für Sitzungen machte die Summe von der Gattung
 abhängig.
 
@@ -384,21 +440,6 @@ samt Hook, Erfassungsbeginn und Aufbewahrungsgrenzen — steht in
 [Betrieb: Meldeweg der interaktiven Sitzungen](betrieb.md#meldeweg-der-interaktiven-sitzungen).
 Die Tatsachengrundlage dazu steht in
 [Befund: Verbrauchsangaben, Hook-Ereignisse und Worktrees](befund-interaktive-sitzungen.md).
-
-## Dashboard (Kennzahlen)
-
-Über den Sidebar-Eintrag **„Dashboard"** (im Board-Kontext) zeigt eine KPI-Seite, wie schnell Karten
-durch das Board laufen. Grundlage ist die automatisch erfasste Verweildauer jeder Karte pro Spalte —
-gemessen bei **jedem** Spaltenwechsel, egal ob per Drag & Drop, ⋮-Menü oder über die API (kanbancompat).
-
-- **Ø Lead Time** und **Ø Implementierungszeit** als Kennzahl-Kacheln — die Implementierungszeit
-  misst, wie lange eine erledigte Karte insgesamt in „In Progress" lag (mehrere Aufenthalte zählen
-  zusammen).
-- **Ø Verweildauer je Spalte** (Balkendiagramm, in Stunden).
-- **Durchsatz je Woche** — abgeschlossene Karten (Liniendiagramm).
-- **Ausreißer** — Karten, die über 7 Tage in einer Spalte lagen (Tabelle mit #, Titel, Spalte, Dauer).
-
-Das Dashboard ist für jeden sichtbar, der das Board öffnen darf (auch VIEWER).
 
 ## Vorhaben
 
@@ -476,17 +517,22 @@ neu laden.
 ### Aktive Läufe
 
 Jeder Lauf, der **gerade arbeitet** — mit Projekt, dem Wort „läuft seit" samt bisheriger Dauer,
-anklickbarer Lauf-Kennung und einem pulsierenden Melder. Arbeitet gerade nirgends ein Lauf, steht
+anklickbarer Lauf-Kennung und einem **Wechselblinker**: zwei Lampen, die abwechselnd zwischen
+Blau und Hellblau umschlagen. Mit „Bewegung reduzieren" im Betriebssystem stehen sie still,
+die linke hell, die rechte blau. Arbeitet gerade nirgends ein Lauf, steht
 das als ausdrücklicher Satz da statt als leere Fläche.
 
 ### Beendete Läufe
 
-Jeder **beendete** Lauf der laufenden Nacht — mit Projekt, Startzeitpunkt, anklickbarer Lauf-Kennung
+Jeder **beendete** Lauf des laufenden und des vorigen Zyklus — mit Projekt, Startzeitpunkt, anklickbarer Lauf-Kennung
 und seinem **Ausgang**. Auch hier steht ein ausdrücklicher Satz, solange noch kein Lauf beendet ist.
 
-„Laufende Nacht" meint denselben Zeitraum, den auch die Auswertung der Läufe zieht: **von 12:00 bis
+„Laufender Zyklus" meint denselben Zeitraum, den auch die Auswertung der Läufe zieht: **von 12:00 bis
 12:00** zonenlokal. Über die Zugehörigkeit entscheidet der **Startzeitpunkt** des Laufs, nicht sein
-Ende. Um 12:00 wechselt der Bereich deshalb auf die neue Nacht und ist zunächst leer.
+Ende. Der Bereich ist **zweigeteilt**: „Dieser Zyklus" und darunter „Voriger Zyklus", je mit
+seiner Spanne („vom 21.09.2026 auf den 22.09.2026"). Um 12:00 wandern die Läufe der vergangenen
+Nacht deshalb nach „Voriger Zyklus", statt zu verschwinden; ältere Läufe stehen dort nicht mehr.
+Eine Zeile mit offener Störung trägt in beiden Abschnitten den Verweis „Störung".
 
 Der Ausgang steht als Wort da — eines von dreien:
 
@@ -514,3 +560,59 @@ Ob ein Projekt teilnimmt, entscheidet ausschließlich das Projekt selbst — OWN
 echter Mitgliedschaft, über das Teilnahme-Ankreuzfeld im [Editiermodus](#editiermodus) der
 Projektliste. Der Plattform-Admin sieht nur Läufe und Störungen teilnehmender Projekte und kann die
 Teilnahme selbst nicht erzwingen.
+
+## Board-Befehle unter Last {#board-befehle-unter-last}
+
+Das Board begrenzt die Befehle, die eine Person über ein Zugriffstoken schickt (siehe
+[Durchsatzbremse](betrieb.md#durchsatzbremse-für-zugriffstoken)). Ein Befehl über dem Kontingent
+wird mit `429` abgewiesen und führt nichts aus. Der Board-Adapter des claude-workflow-kit
+(`node .claude/kit/board.mjs`, ab Kit 3.0.1) wartet dann selbst und wiederholt. Du musst nichts tun,
+solange er sich nicht mit einer Fehlermeldung zurückmeldet.
+
+**Was wiederholt wird.** Eine Abweisung wegen Überlast (`429` mit dem Problem-Detail
+`type: urn:manban:overload`) bei jedem Befehl, dazu Zeitablauf und abgebrochene Verbindungen. Bei
+einem Serverfehler (`5xx`) nur, wenn die Wiederholung gefahrlos ist: bei lesenden Befehlen, beim
+Verschieben und Ändern, und beim Anlegen einer Karte oder eines Kommentars, weil diese beiden einen
+Idempotenz-Schlüssel tragen. Ein `429` **ohne** `urn:manban:overload` kommt nicht von dieser Bremse
+und wird nicht wiederholt, ebenso wenig ein ungültiges Token.
+
+**Wie lange.** Jeder Versuch hat eine eigene Zeitgrenze; die Wartezeit dazwischen wächst und folgt
+dem `Retry-After` des Servers. Für alle Versuche zusammen gilt ein **Gesamtbudget von 30 Sekunden**,
+im Nachtlauf (gesetztes `KIT_AGENT_MODEL`) von **120 Sekunden**. Jede Wiederholung meldet sich mit
+einer Zeile auf stderr, damit Warten von Hängen zu unterscheiden ist:
+
+```
+board: POST /api/kanban/items — Versuch 1 endete mit HTTP 429, erneut in 1000 ms (Frist 30 s)
+```
+
+**Die drei Rückmeldungen.** Wie ein Befehl ausging, sagt der Adapter in einer von drei Lagen:
+
+- **ausgeführt** — die normale JSON-Ausgabe auf stdout, Exit-Code 0.
+- **nicht ausgeführt** — `Fehler: …` auf stderr, Exit-Code 1. Der Befehl hat nichts bewirkt, etwa
+  weil das Budget unter Abweisungen ablief, der Server nicht erreichbar war oder die Anfrage
+  ungültig ist. Du kannst ihn gefahrlos erneut absetzen.
+- **Ausgang unklar** — `Fehler: …` mit dem Zusatz „Ausgang unklar". Ein schreibender Befehl ging
+  hinaus, blieb aber ohne verwertbare Antwort (Zeitablauf, Verbindungsabbruch oder `5xx`). Die
+  Wirkung kann eingetreten sein.
+
+**Was bei „Ausgang unklar" zu tun ist.** Die Meldung nennt den Idempotenz-Schlüssel und das
+vollständige Wiederholkommando. Wiederhole den Befehl **mit genau diesem Schlüssel**, nie ohne:
+
+```
+node .claude/kit/board.mjs issue comment 1004 --text-file bericht.md --idempotency-key 3f2c…
+```
+
+Derselbe Schlüssel führt die Wirkung höchstens einmal aus: Kam der erste Versuch an, liefert das
+Board dessen Ergebnis, statt eine zweite Karte oder einen zweiten Kommentar anzulegen. Ohne den
+Schlüssel wäre die Wiederholung ein neuer Auftrag. Trägt die Meldung keinen Schlüssel (andere
+schreibende Befehle, etwa ein Label), sieh erst am Board nach, bevor du wiederholst.
+
+**Der Schalter `--idempotency-key <wert>`** gibt es bei `issue create` und `issue comment`. Er setzt
+den Schlüssel von außen, statt ihn je Auftrag neu zu erzeugen. Das Board hält einen Schlüssel
+24 Stunden. Einen Schlüssel für einen **anderen** Befehl als beim ersten Mal weist es mit `409` ab:
+Für einen neuen Befehl gehört ein neuer Schlüssel.
+
+**Mit `tbx`.** Das mitgelieferte Kommandozeilen-Werkzeug `cli/tbx.mjs` verhält sich genauso: dieselben
+Wiederholregeln, dieselben drei Rückmeldungen und der Schalter `--idempotency-key <wert>` bei
+`tbx issue create` und `tbx issue comment`. Das Wiederholkommando in der Meldung beginnt mit `tbx`.
+Der einzige Unterschied: `tbx` kennt keinen Nachtlauf, sein Gesamtbudget ist **immer 30 Sekunden**.

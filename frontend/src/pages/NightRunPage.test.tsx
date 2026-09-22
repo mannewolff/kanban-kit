@@ -25,6 +25,7 @@ import echterNachtplanRegulaer from '../lib/__fixtures__/night-run-2026-09-09-12
 import echterNachtplanHarterStopp from '../lib/__fixtures__/night-run-2026-09-09-141506.json'
 import echterPrueflauf from '../lib/__fixtures__/night-run-2026-09-11-103116.json'
 import echteKette from '../lib/__fixtures__/night-run-2026-09-14-131200.json'
+import { formatDuration } from '../lib/formatDuration'
 import { parseNightRunErgebnisstand } from '../lib/nightRunErgebnisstand'
 import { buildHandoffText, type NightRunHandoffItem } from '../lib/nightRunHandoff'
 import { NACHTLAUF_FARBEN, NACHTLAUF_SCHRIFTEN } from '../nachtlaufDesign'
@@ -78,6 +79,7 @@ vi.mock('../components/CardDetailModal', async () => {
 
 /** Startzeitpunkt eines Laufs — der Schlüssel der Auswertung (Plan #718, A4). */
 const startedAt = (minute: number) => `2026-09-01T22:${String(minute).padStart(2, '0')}:00.000Z`
+
 
 /** Die Dauer einer Session im Ergebnisstand; die Laufdauer ist ihre Summe. */
 const SIEBEN_MIN = 7 * 60_000
@@ -486,6 +488,14 @@ interface Antworten {
    * Vorhaben-Abruf läuft noch" prüfbar, den zwei nebenläufige `ladeKetten()`-Aufrufe erzeugen.
    */
   kartenNachIdVerzoegert?: Promise<void>
+  /**
+   * Die Boards des Projekts, ihre Karten und je Karten-ID der Anlagezeitpunkt — die Quellen, aus
+   * denen ein eingelieferter Kettenlauf seine angelegten Karten ermittelt (Issue #1106). Ohne
+   * `boards` scheitert der Abruf, wie jede unerwartete Anfrage.
+   */
+  boards?: number[]
+  boardKarten?: Record<number, Card[]>
+  angelegtAm?: Record<number, string>
 }
 
 /** Alle Anfragen dieses Tests, in Reihenfolge — Grundlage der Sende- und Ladepfad-Prüfungen. */
@@ -554,6 +564,23 @@ function kartenAntwort(url: string, antworten: Antworten) {
   return undefined
 }
 
+/** Boards, Karten je Board und Kartenverlauf — die Herkunftsquellen aus Issue #1106. */
+function herkunftsAntwort(url: string, antworten: Antworten) {
+  if (url === '/api/projects/5/boards' && antworten.boards !== undefined) {
+    return Promise.resolve(antwortOk(antworten.boards.map((id) => ({ id, projectId: 5, name: `Board ${id}` }))))
+  }
+  const board = /^\/api\/boards\/(\d+)\/cards$/.exec(url)
+  if (board) {
+    return Promise.resolve(antwortOk(antworten.boardKarten?.[Number(board[1])] ?? []))
+  }
+  const verlauf = /^\/api\/cards\/(\d+)\/activity$/.exec(url)
+  if (verlauf) {
+    const zeit = antworten.angelegtAm?.[Number(verlauf[1])]
+    return Promise.resolve(antwortOk(zeit === undefined ? [] : [{ id: 1, type: 'CREATED', createdAt: zeit }]))
+  }
+  return undefined
+}
+
 /**
  * Eine Folge von Antworten: je Aufruf die naechste, die letzte gilt fuer alle weiteren. Den
  * Zaehler traegt der Abschluss statt einer Variablen im Stub — Liste und Haeufigkeiten teilen
@@ -614,7 +641,7 @@ function stubFetch(antworten: Antworten) {
       if (url === '/api/projects/5/night-runs' && method === 'POST') {
         return submitAntwort(antworten.submit)
       }
-      const karte = kartenAntwort(url, antworten)
+      const karte = kartenAntwort(url, antworten) ?? herkunftsAntwort(url, antworten)
       if (karte) return karte
 
       return Promise.reject(new Error(`unerwartete Anfrage: ${method} ${url}`))
@@ -732,12 +759,24 @@ const vorhabenAufrufe = () => anfragen.filter((a) => /^\/api\/cards\/\d+$/.test(
 
 const zaehlerAufrufe = () => anfragen.filter((a) => a.url.endsWith('/night-runs/error-class-counts'))
 
+/**
+ * Die Uhr der Seite steht vor allen Fixtures (Issue #1134): Die Liste zeigt standardmäßig nur die
+ * letzten zwei Zyklen, und die Läufe der Tests liegen im September 2026. Gefälscht wird allein
+ * `Date` — Zeitgeber laufen echt, sonst warteten die `findBy…`-Abfragen vergeblich.
+ */
+const UHR_VOR_DEN_FIXTURES = new Date('2026-09-01T00:00:00Z')
+
 beforeEach(() => {
   anfragen = []
   vi.clearAllMocks()
+  vi.useFakeTimers({ toFake: ['Date'] })
+  vi.setSystemTime(UHR_VOR_DEN_FIXTURES)
 })
 
-afterEach(() => vi.unstubAllGlobals())
+afterEach(() => {
+  vi.unstubAllGlobals()
+  vi.useRealTimers()
+})
 
 describe('NightRunPage — ungültige Projekt-ID', () => {
   it('meldet eine ungültige Projekt-ID und lädt nichts', async () => {
@@ -1080,12 +1119,12 @@ describe('NightRunPage — Verbrauch (Issue #941)', () => {
     // in der Kopfzeile und nicht mehr als Überschrift.
     const nachtUeberschrift = async () =>
       within(await within(bereich).findByTestId('verbrauch-nacht')).getByRole('heading', { level: 3 })
-    expect(await nachtUeberschrift()).toHaveTextContent('Nacht vom 15.09.2026 auf den 16.09.2026')
+    expect(await nachtUeberschrift()).toHaveTextContent('Zyklus vom 15.09.2026 auf den 16.09.2026')
 
-    fireEvent.click(await within(bereich).findByRole('button', { name: /Nacht vom 10\.09\.2026/ }))
+    fireEvent.click(await within(bereich).findByRole('button', { name: /Zyklus vom 10\.09\.2026/ }))
 
     await waitFor(async () =>
-      expect(await nachtUeberschrift()).toHaveTextContent('Nacht vom 10.09.2026 auf den 11.09.2026'),
+      expect(await nachtUeberschrift()).toHaveTextContent('Zyklus vom 10.09.2026 auf den 11.09.2026'),
     )
     expect(anfragen.some((a) => a.url.includes('/night-run-usage/night?date=2026-09-10&'))).toBe(true)
   })
@@ -1472,9 +1511,7 @@ describe('NightRunPage — Nachtplan-Lauf (#806)', () => {
     protokollWaehlen(ECHTER_NACHTPLAN_STAND, 'night-run-2026-09-09-141506.json')
 
     const panelEl = await screen.findByTestId(`lauf-${ECHTER_NACHTPLAN_START}`)
-    expect(within(panelEl).getByTestId('nachtlauf-vorzeile')).toHaveTextContent(
-      'Lauf · Nachtplan',
-    )
+    expect(within(panelEl).getByTestId('lauf-art')).toHaveTextContent('Nachtplan')
     expect(laufKopfzeile(panelEl)).toHaveTextContent('2 bearbeitet · 33 übergangen')
 
     panelAufklappen(panelEl)
@@ -1523,9 +1560,7 @@ describe('NightRunPage — Ketten-Lauf (#854)', () => {
     protokollWaehlen(ECHTE_KETTE_STAND, 'night-run-2026-09-14-131200.json')
 
     const panelEl = await screen.findByTestId(`lauf-${ECHTE_KETTE_START}`)
-    expect(within(panelEl).getByTestId('nachtlauf-vorzeile')).toHaveTextContent(
-      'Lauf #1 · Kette',
-    )
+    expect(within(panelEl).getByTestId('lauf-art')).toHaveTextContent('Kette')
     expect(laufKopfzeile(panelEl)).toHaveTextContent('3 bearbeitet · 0 übergangen')
 
     // Anders als der Nachtplan-Lauf geht die Kette an den Server (AK 8 aus #842):
@@ -1713,7 +1748,7 @@ describe('NightRunPage — Ketten-Übersicht (#866)', () => {
    * und ein fest eingetragener Text wäre anderswo rot, ohne dass etwas kaputt wäre.
    */
   const kopfzeile = (iso: string) =>
-    `Nacht vom ${new Date(iso).toLocaleDateString('de-DE', { day: 'numeric', month: 'long' })}`
+    `${new Date(iso).toLocaleDateString('de-DE', { day: 'numeric', month: 'long' })}, ${new Date(iso).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}`
 
   it('zeigt die Übersicht auch nach dem Einliefern und dem Neuladen der Liste (Gegenprobe zu E1)', async () => {
     // Die abweichende Stückzahl belegt, dass der sichtbare Lauf der **neu geladene** ist. Erst
@@ -1768,7 +1803,7 @@ describe('NightRunPage — Ketten-Übersicht (#866)', () => {
     expect(fussangabe(fuss, 'Ketten durchgelaufen')).toHaveTextContent('2 von 3')
     expect(fussangabe(fuss, 'Karten entstanden')).toHaveTextContent('6')
     expect(fussangabe(fuss, 'Laufzeit über alle Stufen')).toHaveTextContent('1 Std 9 Min')
-    expect(fussangabe(fuss, 'Kosten der Nacht')).toHaveTextContent('25,98 $')
+    expect(fussangabe(fuss, 'Kosten des Zyklus')).toHaveTextContent('25,98 $')
     expect(fussangabe(fuss, 'Zur Kostensumme')).toHaveTextContent(
       'ein Arbeitsschritt ohne Kostenmeldung',
     )
@@ -2331,11 +2366,11 @@ describe('NightRunPage — Laufband für Umsetzungs-Läufe (#871)', () => {
     // der Zeit — die beiden erfolgreichen zusammen 13,3.
     expect(bandabschnitt(panelEl, 767)).toHaveAttribute(
       'aria-label',
-      'Karte #767: Erfolg, Prüfung rot, 4 Min, 7.9 % der Nacht',
+      'Karte #767: Erfolg, Prüfung rot, 4 Min, 7.9 % des Zyklus',
     )
     expect(bandabschnitt(panelEl, 769)).toHaveAttribute(
       'aria-label',
-      'Karte #769: gescheitert, 16 Min, 31.8 % der Nacht',
+      'Karte #769: gescheitert, 16 Min, 31.8 % des Zyklus',
     )
     // Die Dauer steht auch sichtbar unter ihrem Abschnitt, nicht nur in der Ansage (Punkt 4).
     expect(bandabschnitt(panelEl, 769)).toHaveTextContent('16 Min')
@@ -2845,9 +2880,7 @@ describe('NightRunPage — Zustände, Kennzahlen und Auszüge', () => {
     renderPage({ listen: [[aufbewahrt({ id: 1, startedAt: startedAt(0), mode: 'REVIEW' })]] })
 
     await screen.findByTestId(`lauf-${startedAt(0)}`)
-    expect(within(lauf(0)).getByTestId('nachtlauf-vorzeile')).toHaveTextContent(
-      'Lauf #1 · Prüfung',
-    )
+    expect(within(lauf(0)).getByTestId('lauf-art')).toHaveTextContent('Prüfung')
     expect(within(lauf(0)).queryByText(/Umsetzung/)).not.toBeInTheDocument()
   })
 
@@ -2861,9 +2894,7 @@ describe('NightRunPage — Zustände, Kennzahlen und Auszüge', () => {
     protokollWaehlen(EIN_LAUF)
 
     await screen.findByTestId(`lauf-${startedAt(0)}`)
-    expect(within(lauf(0)).getByTestId('nachtlauf-vorzeile')).toHaveTextContent(
-      'Lauf #1 · Umsetzung',
-    )
+    expect(within(lauf(0)).getByTestId('lauf-art')).toHaveTextContent('Umsetzung')
   })
 
   // **Umgekehrt mit Issue #872**: Der Test hielt bis dahin fest, dass in der Auswertung
@@ -3964,13 +3995,13 @@ describe('NightRunPage — Kennzahlenzeile je Lauf-Art (#874)', () => {
     expect(zeile(panelEl).getByText('Vorgänge erledigt')).toBeInTheDocument()
   })
 
-  it('rechnet die Kosten der Nacht aus den fünf Einzelwerten und kennzeichnet sie (Punkt 8)', async () => {
+  it('rechnet die Kosten des Zyklus aus den fünf Einzelwerten und kennzeichnet sie (Punkt 8)', async () => {
     const panelEl = await echterUmsetzungslauf()
 
     // 2,1366 + 5,1342 + 10,8605 + 1,6051 + 8,1324 = 27,8688 US-Dollar. Der Stand selbst führt
     // keine Summe — nur die Kette schreibt eine (Plan #864, E9).
     expect(zeile(panelEl).getByText('27,87 $')).toBeInTheDocument()
-    expect(zeile(panelEl).getByText('Kosten der Nacht')).toBeInTheDocument()
+    expect(zeile(panelEl).getByText('Kosten des Zyklus')).toBeInTheDocument()
     expect(zeile(panelEl).getByText('gerechnet, nicht im Protokoll')).toBeInTheDocument()
     // 38 + 63 + 123 + 33 + 121 Züge, dazu die Summe der fünf Vorgangsdauern.
     expect(zeile(panelEl).getByText('378')).toBeInTheDocument()
@@ -4118,7 +4149,7 @@ describe('NightRunPage — Kennzahlenzeile je Lauf-Art (#874)', () => {
     // Kosten und Züge bewahrt der Server nicht auf — eine Reihe aus lauter Fehlanzeigen wäre
     // dieselbe Wand, die der Kennzahlen-Hinweis vermeidet.
     expect(within(lauf(0)).queryByTestId('fussangabe-Züge des Modells')).not.toBeInTheDocument()
-    expect(within(lauf(0)).getByTestId('fussangabe-Ergebnis der Nacht')).toBeInTheDocument()
+    expect(within(lauf(0)).getByTestId('fussangabe-Ergebnis des Zyklus')).toBeInTheDocument()
   })
 })
 
@@ -4237,7 +4268,7 @@ describe('NightRunPage — Kopf und Kennzahlenreihe der Nacht (#915)', () => {
       'night-run-2026-09-14-131200.json',
     )
 
-    expect(within(panelEl).getByTestId('nachtlauf-vorzeile')).toHaveTextContent('Lauf #1 · Kette')
+    expect(within(panelEl).getByTestId('lauf-art')).toHaveTextContent('Kette')
     expect(within(panelEl).getByTestId(FUSSZEILE)).toBeInTheDocument()
   })
 
@@ -4248,9 +4279,7 @@ describe('NightRunPage — Kopf und Kennzahlenreihe der Nacht (#915)', () => {
       'night-run-2026-09-07-085229.json',
     )
 
-    expect(within(panelEl).getByTestId('nachtlauf-vorzeile')).toHaveTextContent(
-      'Lauf #1 · Umsetzung',
-    )
+    expect(within(panelEl).getByTestId('lauf-art')).toHaveTextContent('Umsetzung')
     expect(within(panelEl).getByTestId(FUSSZEILE)).toBeInTheDocument()
   })
 
@@ -4263,9 +4292,7 @@ describe('NightRunPage — Kopf und Kennzahlenreihe der Nacht (#915)', () => {
 
     // Die Platte der Vorlage gilt seit #988 für **jede** Lauf-Art; was den Prüf-Lauf eigen macht,
     // ist die Aufschlüsselung seiner aussortierten Karten (#873), nicht mehr sein Kopf.
-    expect(within(panelEl).getByTestId('nachtlauf-vorzeile')).toHaveTextContent(
-      'Lauf #1 · Prüfung',
-    )
+    expect(within(panelEl).getByTestId('lauf-art')).toHaveTextContent('Prüfung')
     expect(within(panelEl).getByTestId('aufschluesselung')).toBeInTheDocument()
     expect(within(panelEl).getByTestId(FUSSZEILE)).toBeInTheDocument()
   })
@@ -4280,9 +4307,7 @@ describe('NightRunPage — Kopf und Kennzahlenreihe der Nacht (#915)', () => {
     const panelEl = await screen.findByTestId(`lauf-${ECHTE_ERZEUGUNG_START}`)
     panelAufklappen(panelEl)
 
-    expect(within(panelEl).getByTestId('nachtlauf-vorzeile')).toHaveTextContent(
-      'Lauf · Nachtplan',
-    )
+    expect(within(panelEl).getByTestId('lauf-art')).toHaveTextContent('Nachtplan')
     expect(await within(panelEl).findByTestId('aufschluesselung')).toBeInTheDocument()
     expect(within(panelEl).getByTestId(FUSSZEILE)).toBeInTheDocument()
   })
@@ -4316,7 +4341,7 @@ describe('NightRunPage — Kopf und Kennzahlenreihe der Nacht (#915)', () => {
     const panelEl = await screen.findByTestId(`lauf-${ECHTE_KETTE_START}`)
 
     // Derselbe Kopf — die Gestaltung hängt an der Lauf-Art, nicht am Vorliegen eines Stands.
-    expect(within(panelEl).getByTestId('nachtlauf-vorzeile')).toHaveTextContent('Lauf #1 · Kette')
+    expect(within(panelEl).getByTestId('lauf-art')).toHaveTextContent('Kette')
     // Kosten und Züge bewahrt der Server nicht auf; eine Reihe aus lauter Fehlanzeigen wäre
     // dieselbe Wand, die der Bestand schon vermeidet.
     expect(within(panelEl).queryByTestId('fussangabe-Ketten durchgelaufen')).not.toBeInTheDocument()
@@ -4347,9 +4372,7 @@ describe('NightRunPage — Altbestand-Arten im Kopf der Vorlage (#988)', () => {
     expect(within(lauf(0)).getByTestId('nachtlauf-meta')).toHaveTextContent(
       'Ungedeutete Zeilen: 1',
     )
-    expect(within(lauf(0)).getByTestId('nachtlauf-vorzeile')).toHaveTextContent(
-      'Lauf #1 · Prüfung',
-    )
+    expect(within(lauf(0)).getByTestId('lauf-art')).toHaveTextContent('Prüfung')
   })
 
   it('zeigt den Kennzahlen-Hinweis eines Prüf-Laufs in seiner Fußzeile', async () => {
@@ -4696,7 +4719,7 @@ describe('NightRunPage — Fußzeile beider Lauf-Arten (#918)', () => {
   it('führt am Umsetzungs-Lauf Ergebnis, teuersten Vorgang und Herkunft des Stands', async () => {
     await eingelesenerLauf(ECHTER_STAND, ECHTER_START, 'night-run-2026-09-07-085229.json')
 
-    expect(fuss().getByText('Ergebnis der Nacht')).toBeInTheDocument()
+    expect(fuss().getByText('Ergebnis des Zyklus')).toBeInTheDocument()
     expect(fuss().getByText(/bearbeitet · .* übergangen/)).toBeInTheDocument()
     expect(fuss().getByText('Teuerster Vorgang')).toBeInTheDocument()
     expect(fuss().getByText(/^#\d+ mit \d/)).toBeInTheDocument()
@@ -4999,7 +5022,7 @@ describe('NightRunPage — Laufblock im Leitstand-Stil (#988)', () => {
     // Der Tag hängt an der Zeitzone des Laufs: `startedAt(0)` ist 22:00 UTC, in Berlin schon der
     // 2., in der CI (UTC) noch der 1. September. Geprüft wird die Form, nicht der Kalendertag.
     const titel = within(lauf(0)).getByTestId('nachtlauf-ueberschrift')
-    expect(titel).toHaveTextContent(/^Nacht vom [12]\. September$/)
+    expect(titel).toHaveTextContent(/^Lauf #1 · [12]\. September, \d\d:00$/)
     expect(titel).toHaveStyle({ fontSize: '15px' })
   })
 
@@ -5008,7 +5031,7 @@ describe('NightRunPage — Laufblock im Leitstand-Stil (#988)', () => {
     await screen.findByTestId(`lauf-${startedAt(0)}`)
 
     const kopf = laufKopfzeile(lauf(0))
-    expect(within(kopf).getByTestId('nachtlauf-vorzeile')).toHaveTextContent('Lauf #1 · Umsetzung')
+    expect(within(kopf).getByTestId('lauf-art')).toHaveTextContent('Umsetzung')
     expect(within(kopf).getByTestId('nachtlauf-meta')).toHaveTextContent(
       '4 h 12 min · 3 bearbeitet · 0 übergangen',
     )
@@ -5298,18 +5321,15 @@ describe('NightRunPage — adressierbarer Lauf (#1085)', () => {
    * getrennte Tests — einer für das Aufklappen, einer für die Vorzeile — ließen offen, ob beide
    * dieselbe Zahl meinen; hier steht sie am selben Lauf.
    */
-  it('nennt in der Vorzeile genau die Nummer, mit der ?lauf=<id> diesen Block aufklappt', async () => {
+  it('nennt im Titel genau die Nummer, mit der ?lauf=<id> diesen Block aufklappt', async () => {
+    // Seit Issue #1127 steht die Nummer im Titel und nicht mehr in der Vorzeile.
     renderPage({ listen: [dreiLaeufe] }, '/projects/5/nachtlauf?lauf=11')
 
     await screen.findByTestId(`lauf-${startedAt(0)}`)
     expect(laufTaste(lauf(0))).toHaveAttribute('aria-expanded', 'true')
-    expect(within(lauf(0)).getByTestId('nachtlauf-vorzeile')).toHaveTextContent(
-      'Lauf #11 · Umsetzung',
-    )
+    expect(within(lauf(0)).getByTestId('nachtlauf-ueberschrift')).toHaveTextContent(/^Lauf #11 · /)
     // Und nicht etwa an einem der beiden anderen Blöcke.
-    expect(within(lauf(1)).getByTestId('nachtlauf-vorzeile')).toHaveTextContent(
-      'Lauf #12 · Umsetzung',
-    )
+    expect(within(lauf(1)).getByTestId('nachtlauf-ueberschrift')).toHaveTextContent(/^Lauf #12 · /)
   })
 })
 
@@ -5350,6 +5370,9 @@ describe('NightRunPage — Der verstummte Lauf (#1092)', () => {
     const kopf = laufKopfzeile(lauf(0))
     expect(within(kopf).getByTestId('lauf-zustand')).toHaveTextContent('unvollständig gemeldet')
     expect(within(kopf).getAllByTestId('led-stahl').every((led) => led.getAttribute('data-puls') === 'an')).toBe(true)
+    // Issue #1136: Die Lampe des Kopfs ist ein Wechselblinker aus zwei Lampen.
+    const blinker = within(kopf).getAllByTestId('led-stahl').find((led) => within(led).queryAllByTestId('blinker-lampe').length === 2)
+    expect(blinker).toBeDefined()
   })
 })
 
@@ -5632,5 +5655,361 @@ describe('NightRunPage — Vorgangskennzahlen und Stufenband aus der Server-Antw
     expect(within(panelEl).getByTestId('kennzahlen-900')).toHaveTextContent(
       '7 Min · 3,50 $ · 12 Züge · Modellarbeit 43 % der Dauer, der Rest außerhalb',
     )
+  })
+})
+
+describe('NightRunPage — ein eingelieferter Kettenlauf zeigt Planung und Umsetzung (#1106)', () => {
+  /** Eine Stufe mit Dauer in Minuten und Kosten in Dollar; `null` = nicht gemeldet. */
+  const stufe = (
+    stage: NightRunItemStageView['stage'],
+    dauerMin: number | null,
+    kostenUsd: number | null,
+  ): NightRunItemStageView => ({
+    stage,
+    durationMs: dauerMin === null ? null : dauerMin * 60_000,
+    usage: kostenUsd === null ? null : verbraucht({ costUsd: kostenUsd }),
+  })
+
+  const MIT_KOSTEN = [
+    stufe('PLAN', 8, 3),
+    stufe('REVIEW', 12, 5),
+    stufe('PAKETE', 4, 2),
+    stufe('ABDECKUNG', 2, 1),
+  ]
+
+  /** Der Anlassfall: Anforderung #754 plant #773 mit den Paketen #774 und #775 und setzt sie um. */
+  const kettenLauf = (
+    felder: Omit<Partial<NightRunView>, 'items'> & { stages?: NightRunItemStageView[] } = {},
+  ): NightRunView => {
+    const { stages = MIT_KOSTEN, ...rest } = felder
+    return aufbewahrt({
+      id: 1,
+      startedAt: startedAt(0),
+      mode: 'CHAIN',
+      durationMs: 75 * 60_000,
+      usage: verbraucht({ costUsd: 50.22 }),
+      items: [
+        // Die gemeldete Dauer reicht bis zum Ende der Umsetzung — länger als die Stufen zusammen.
+        { id: 11, cardNumber: 754, title: 'Anforderung', state: 'GREEN', durationMs: 74 * 60_000, stages },
+        { id: 12, cardNumber: 774, title: 'Paket A', state: 'GREEN', durationMs: 20 * 60_000 },
+        { id: 13, cardNumber: 775, title: 'Paket B', state: 'GREEN', durationMs: 25 * 60_000 },
+      ],
+      ...rest,
+    })
+  }
+
+  /** Eine Board-Karte mit Herkunft. */
+  const boardKarte = (id: number, number: number, derivedFrom: number | null): Card =>
+    vorhaben({ id, number, title: `Karte ${number}`, type: 'CARD', derivedFrom })
+
+  /** Das Board: der neue Plan #773 samt Paketen und ein alter Plan #600 derselben Anforderung. */
+  const HERKUNFT: Antworten = {
+    boards: [1],
+    boardKarten: {
+      1: [
+        boardKarte(1773, 773, 754),
+        boardKarte(1774, 774, 773),
+        boardKarte(1775, 775, 773),
+        boardKarte(1600, 600, 754),
+        boardKarte(1601, 601, 600),
+      ],
+    },
+    angelegtAm: {
+      1773: '2026-09-01T22:10:00.000Z',
+      1774: '2026-09-01T22:20:00.000Z',
+      1775: '2026-09-01T22:21:00.000Z',
+      1600: '2026-08-01T10:00:00.000Z',
+      1601: '2026-08-01T10:05:00.000Z',
+    },
+    karten: {
+      754: karte({ id: 2754, number: 754, title: 'Anforderung' }),
+      773: karte({ id: 1773, number: 773, title: '[Plan] Der Plan', derivedFrom: 754 }),
+      774: karte({ id: 1774, number: 774, title: 'Paket A', derivedFrom: 773 }),
+      775: karte({ id: 1775, number: 775, title: 'Paket B', derivedFrom: 773 }),
+    },
+  }
+
+  async function zeige(view: NightRunView, antworten: Antworten = HERKUNFT) {
+    renderPage({ ...antworten, listen: [[view]] })
+    const panelEl = await screen.findByTestId(`lauf-${view.startedAt}`)
+    panelAufklappen(panelEl)
+    return panelEl
+  }
+
+  it('zeigt am Kettenvorgang Dauer und Kosten jeder erreichten Stufe (AK 1)', async () => {
+    await zeige(kettenLauf())
+
+    expect(screen.getByTestId('stufe-754-plan-kosten')).toHaveTextContent('3,00 $')
+    expect(screen.getByTestId('stufe-754-review-kosten')).toHaveTextContent('5,00 $')
+    expect(screen.getByTestId('stufenband-754').getAttribute('aria-label')).toContain('Plan 8,0 min · ohne Vorgabe, 3,00 $')
+  })
+
+  it('zeigt an einer Stufe ohne gemeldete Kosten keine Kostenzeile (AK 1)', async () => {
+    await zeige(kettenLauf({ stages: [stufe('PLAN', 8, null)] }))
+
+    expect(screen.getByTestId('stufe-754-plan')).toHaveAttribute('data-erreicht', 'ja')
+    expect(screen.queryByTestId('stufe-754-plan-kosten')).toBeNull()
+  })
+
+  it('nennt Plan und Pakete aus diesem Lauf als Verweise, nicht die aus früheren (AK 2)', async () => {
+    await zeige(kettenLauf())
+
+    const plan = await screen.findByTestId('dokumente-754-plan')
+    await waitFor(() => expect(within(plan).getByRole('button', { name: /Plan #773/ })).toBeInTheDocument())
+    const pakete = screen.getByTestId('dokumente-754-pakete')
+    expect(within(pakete).getByRole('button', { name: /Pakete #774/ })).toBeInTheDocument()
+    expect(within(pakete).getByRole('button', { name: /Pakete #775/ })).toBeInTheDocument()
+    // #600 und #601 tragen dieselbe Herkunft, bestanden aber schon vor dem Lauf.
+    expect(screen.getByTestId('ergebnis-754')).not.toHaveTextContent('#600')
+    expect(screen.getByTestId('ergebnis-754')).not.toHaveTextContent('#601')
+  })
+
+  it('erkennt jede Paketzeile als Paket dieses Plans (AK 2)', async () => {
+    await zeige(kettenLauf())
+
+    const verweise = await screen.findAllByRole('button', { name: 'Paket aus Plan #773 [Plan] Der Plan' })
+    // Je eines an #774 und #775 — die Anforderung selbst ist kein Paket.
+    expect(verweise).toHaveLength(2)
+  })
+
+  it('zählt bei einem noch laufenden Lauf alles seit seinem Start mit (AK 2)', async () => {
+    // 75 Minuten nach dem Start — bei einem abgeschlossenen Lauf von 60 Minuten läge #775 draußen.
+    const spaet = { ...HERKUNFT, angelegtAm: { ...HERKUNFT.angelegtAm, 1775: '2026-09-01T23:15:00.000Z' } }
+    await zeige(kettenLauf({ complete: false, durationMs: 60 * 60_000 }), spaet)
+
+    const pakete = await screen.findByTestId('dokumente-754-pakete')
+    await waitFor(() => expect(within(pakete).getByRole('button', { name: /Pakete #775/ })).toBeInTheDocument())
+  })
+
+  it('lässt ein Paket nach dem Ende eines abgeschlossenen Laufs weg (AK 2)', async () => {
+    const spaet = { ...HERKUNFT, angelegtAm: { ...HERKUNFT.angelegtAm, 1775: '2026-09-01T23:15:00.000Z' } }
+    await zeige(kettenLauf({ durationMs: 60 * 60_000 }), spaet)
+
+    const pakete = await screen.findByTestId('dokumente-754-pakete')
+    await waitFor(() => expect(within(pakete).getByRole('button', { name: /Pakete #774/ })).toBeInTheDocument())
+    expect(within(pakete).queryByRole('button', { name: /Pakete #775/ })).toBeNull()
+  })
+
+  it('nennt einen Plan, dessen Karte nicht auflösbar ist, als nicht gefunden (AK 2)', async () => {
+    const ohnePlan = Object.fromEntries(Object.entries(HERKUNFT.karten ?? {}).filter(([nummer]) => nummer !== '773'))
+    await zeige(kettenLauf(), { ...HERKUNFT, karten: ohnePlan })
+
+    const zeilen = await screen.findAllByText('Paket aus Plan: Karte #773 nicht gefunden')
+    expect(zeilen).toHaveLength(2)
+  })
+
+  it('zeigt keine Chipgruppe, wenn die Herkunft nicht ermittelt werden konnte (AK 2)', async () => {
+    await zeige(kettenLauf(), { ...HERKUNFT, boards: undefined })
+
+    await waitFor(() => expect(anfragen.some((a) => a.url === '/api/projects/5/boards')).toBe(true))
+    expect(screen.queryByTestId('dokumente-754-plan')).toBeNull()
+    expect(screen.queryByTestId('dokumente-754-pakete')).toBeNull()
+  })
+
+  it('teilt die Kosten in Planung und Umsetzung, zusammen das Gesamt (AK 3)', async () => {
+    await zeige(kettenLauf())
+
+    expect(screen.getByTestId('instrument-kosten-wert')).toHaveTextContent('50,22')
+    expect(screen.getByTestId('instrument-kosten-zusatz')).toHaveTextContent('Planung 11,00 $ · Umsetzung 39,22 $')
+  })
+
+  it('nennt einen fehlenden Anteil „nicht gemeldet", nie 0 (AK 3)', async () => {
+    await zeige(kettenLauf({ stages: [stufe('PLAN', 8, null)] }))
+
+    expect(screen.getByTestId('instrument-kosten-zusatz')).toHaveTextContent(
+      'Planung nicht gemeldet · Umsetzung nicht gemeldet',
+    )
+  })
+
+  it('nennt die Umsetzung „nicht gemeldet", wenn der Lauf kein Gesamt meldet (AK 3)', async () => {
+    await zeige(kettenLauf({ usage: null }))
+
+    expect(screen.getByTestId('instrument-kosten-zusatz')).toHaveTextContent(
+      'Planung 11,00 $ · Umsetzung nicht gemeldet',
+    )
+  })
+
+  it('rechnet die Dauer des Kettenvorgangs als Summe seiner Stufen (AK 4)', async () => {
+    await zeige(kettenLauf())
+
+    const zeile = screen.getByTestId('kennzahlen-754')
+    expect(zeile).toHaveTextContent(formatDuration(26 * 60))
+    expect(zeile).not.toHaveTextContent(formatDuration(74 * 60))
+  })
+
+  it('nennt die Dauer „nicht gemeldet", wenn keine Stufe eine Dauer meldet (AK 4)', async () => {
+    await zeige(kettenLauf({ stages: [stufe('PLAN', null, 3)] }))
+
+    expect(screen.getByTestId('kennzahlen-754')).toHaveTextContent('Dauer nicht gemeldet')
+  })
+
+  it('zeigt an einem Umsetzungslauf weder Aufteilung noch Herkunftsabruf (AK 5)', async () => {
+    await zeige(
+      aufbewahrt({
+        id: 2,
+        startedAt: startedAt(0),
+        usage: verbraucht({ costUsd: 5 }),
+        items: [{ id: 21, cardNumber: 774, title: 'Paket A', state: 'GREEN' }],
+      }),
+    )
+
+    expect(screen.queryByTestId('instrument-kosten-zusatz')).toBeNull()
+    expect(anfragen.some((a) => a.url === '/api/projects/5/boards')).toBe(false)
+  })
+})
+
+describe('NightRunPage — Zyklus in der Vorzeile, Lauf-Nummer im Titel (#1127)', () => {
+  it('trägt im Titel Nummer, Startdatum und Startzeit', async () => {
+    renderPage({ listen: [[aufbewahrt({ id: 412, startedAt: '2026-09-14T20:05:00.000Z' })]] })
+
+    const panelEl = await screen.findByTestId('lauf-2026-09-14T20:05:00.000Z')
+    expect(within(panelEl).getByTestId('nachtlauf-ueberschrift')).toHaveTextContent('Lauf #412 · 14. September, 22:05')
+  })
+
+  it('lässt die Nummer an einem eben eingelesenen Lauf ohne Server weg', async () => {
+    // Die Liste bleibt leer: Der Lauf existiert nur im Browser und hat keine Nummer.
+    renderPage({ submit: { fehler: 'abgelehnt' } })
+    await screen.findByLabelText('Protokolldatei auswählen')
+    protokollWaehlen(ECHTE_KETTE_STAND, 'night-run-2026-09-14-131200.json')
+
+    const panelEl = await screen.findByTestId(`lauf-${ECHTE_KETTE_START}`)
+    expect(within(panelEl).getByTestId('nachtlauf-ueberschrift')).toHaveTextContent(
+      /^Lauf · 14\. September, \d\d:\d\d$/,
+    )
+  })
+
+  it('stellt Läufe vor und nach Mitternacht in denselben Zyklus, einen ab 12:00 in den nächsten', async () => {
+    renderPage({
+      listen: [
+        [
+          aufbewahrt({ id: 3, startedAt: '2026-09-15T10:00:00.000Z' }), // 12:00
+          aufbewahrt({ id: 2, startedAt: '2026-09-15T01:10:00.000Z' }), // 03:10
+          aufbewahrt({ id: 1, startedAt: '2026-09-14T20:05:00.000Z' }), // 22:05
+        ],
+      ],
+    })
+
+    const vorzeile = async (iso: string) =>
+      within(await screen.findByTestId(`lauf-${iso}`)).getByTestId('nachtlauf-vorzeile')
+    expect(await vorzeile('2026-09-14T20:05:00.000Z')).toHaveTextContent(
+      'Zyklus vom 14.09.2026 auf den 15.09.2026',
+    )
+    expect(await vorzeile('2026-09-15T01:10:00.000Z')).toHaveTextContent(
+      'Zyklus vom 14.09.2026 auf den 15.09.2026',
+    )
+    expect(await vorzeile('2026-09-15T10:00:00.000Z')).toHaveTextContent(
+      'Zyklus vom 15.09.2026 auf den 16.09.2026',
+    )
+  })
+})
+
+describe('NightRunPage — die Art des Laufs als Marke im Kopf (#1128)', () => {
+  it('zeigt am Kettenlauf „Kette" und am Umsetzungslauf „Umsetzung" — und nicht mehr in der Vorzeile', async () => {
+    renderPage({
+      listen: [
+        [
+          aufbewahrt({ id: 2, startedAt: startedAt(5), mode: 'CHAIN' }),
+          aufbewahrt({ id: 1, startedAt: startedAt(0) }),
+        ],
+      ],
+    })
+
+    const kette = await screen.findByTestId(`lauf-${startedAt(5)}`)
+    const umsetzung = screen.getByTestId(`lauf-${startedAt(0)}`)
+    expect(within(laufKopfzeile(kette)).getByTestId('lauf-art')).toHaveTextContent('Kette')
+    expect(within(laufKopfzeile(umsetzung)).getByTestId('lauf-art')).toHaveTextContent('Umsetzung')
+    expect(within(kette).getByTestId('nachtlauf-vorzeile')).not.toHaveTextContent('Kette')
+    expect(within(umsetzung).getByTestId('nachtlauf-vorzeile')).not.toHaveTextContent('Umsetzung')
+  })
+})
+
+describe('NightRunPage — nur die letzten zwei Zyklen (#1134)', () => {
+  // Jetzt: 22.09. 15:00 in Berlin. Laufender Zyklus ab 22.09. 12:00, voriger ab 21.09. 12:00.
+  const JETZT = new Date('2026-09-22T13:00:00Z')
+  const HEUTE_13 = '2026-09-22T11:00:00.000Z' // 22.09. 13:00 — laufender Zyklus
+  const GESTERN_23 = '2026-09-21T21:00:00.000Z' // 21.09. 23:00 — voriger Zyklus
+  const GESTERN_11 = '2026-09-21T09:00:00.000Z' // 21.09. 11:00 — Zyklus davor
+  const VORGESTERN = '2026-09-19T20:00:00.000Z' // 19.09. 22:00 — älter
+
+  beforeEach(() => vi.setSystemTime(JETZT))
+
+  const vier = () => [
+    aufbewahrt({ id: 4, startedAt: HEUTE_13 }),
+    aufbewahrt({ id: 3, startedAt: GESTERN_23 }),
+    aufbewahrt({ id: 2, startedAt: GESTERN_11 }),
+    aufbewahrt({ id: 1, startedAt: VORGESTERN }),
+  ]
+
+  const sichtbar = (iso: string) => screen.queryByTestId(`lauf-${iso}`) !== null
+
+  it('zeigt nur die Läufe der letzten zwei Zyklen und nennt die Zahl der ausgeblendeten', async () => {
+    renderPage({ listen: [vier()] })
+
+    await screen.findByTestId(`lauf-${HEUTE_13}`)
+    expect(sichtbar(GESTERN_23)).toBe(true)
+    expect(sichtbar(GESTERN_11)).toBe(false)
+    expect(sichtbar(VORGESTERN)).toBe(false)
+    expect(screen.getByRole('button', { name: 'Ältere Läufe anzeigen (2)' })).toBeInTheDocument()
+  })
+
+  it('zeigt auf Klick alle Läufe und auf den nächsten wieder nur die letzten zwei Zyklen', async () => {
+    renderPage({ listen: [vier()] })
+    await screen.findByTestId(`lauf-${HEUTE_13}`)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Ältere Läufe anzeigen (2)' }))
+    expect(sichtbar(GESTERN_11)).toBe(true)
+    expect(sichtbar(VORGESTERN)).toBe(true)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Nur die letzten zwei Zyklen zeigen' }))
+    expect(sichtbar(GESTERN_11)).toBe(false)
+    expect(sichtbar(VORGESTERN)).toBe(false)
+  })
+
+  it('lässt einen älteren Lauf sichtbar, der noch läuft', async () => {
+    const laufend = aufbewahrt({
+      id: 1,
+      startedAt: VORGESTERN,
+      complete: false,
+      outcome: { verdict: 'RUNNING', decisiveItem: null, noWorkReason: null },
+    })
+    renderPage({ listen: [[aufbewahrt({ id: 4, startedAt: HEUTE_13 }), laufend]] })
+
+    await screen.findByTestId(`lauf-${HEUTE_13}`)
+    expect(sichtbar(VORGESTERN)).toBe(true)
+    expect(screen.queryByRole('button', { name: /Ältere Läufe anzeigen/ })).toBeNull()
+  })
+
+  it('zeigt einen älteren Lauf, den ?lauf=<id> ansteuert', async () => {
+    renderPage({ listen: [vier()] }, '/projects/5/nachtlauf?lauf=1')
+
+    await screen.findByTestId(`lauf-${VORGESTERN}`)
+    expect(sichtbar(GESTERN_11)).toBe(false)
+    expect(screen.getByRole('button', { name: 'Ältere Läufe anzeigen (1)' })).toBeInTheDocument()
+  })
+
+  it('zeigt einen in dieser Sitzung eingelesenen älteren Lauf', async () => {
+    renderPage({ submit: { ergebnis: alleNeu(ECHTE_KETTE_STAND) }, listen: [[], wieAufbewahrt(ECHTE_KETTE_STAND)] })
+    await screen.findByLabelText('Protokolldatei auswählen')
+
+    protokollWaehlen(ECHTE_KETTE_STAND, 'night-run-2026-09-14-131200.json')
+
+    expect(await screen.findByTestId(`lauf-${ECHTE_KETTE_START}`)).toBeInTheDocument()
+    await waitFor(() => expect(anfragen.filter((a) => a.method === 'GET' && a.url.endsWith('/night-runs'))).toHaveLength(2))
+    expect(screen.getByTestId(`lauf-${ECHTE_KETTE_START}`)).toBeInTheDocument()
+  })
+
+  it('sagt es, wenn die letzten zwei Zyklen leer sind, und bietet die älteren an', async () => {
+    renderPage({ listen: [[aufbewahrt({ id: 1, startedAt: VORGESTERN })]] })
+
+    expect(await screen.findByText('In den letzten zwei Zyklen gab es keinen Lauf.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Ältere Läufe anzeigen (1)' })).toBeInTheDocument()
+    expect(screen.queryByText('Noch keine Auswertung vorhanden.')).toBeNull()
+  })
+
+  it('zeigt ohne ausgeblendete Läufe keine Schaltfläche', async () => {
+    renderPage({ listen: [[aufbewahrt({ id: 4, startedAt: HEUTE_13 })]] })
+
+    await screen.findByTestId(`lauf-${HEUTE_13}`)
+    expect(screen.queryByRole('button', { name: /Ältere Läufe anzeigen|Nur die letzten zwei Zyklen/ })).toBeNull()
   })
 })

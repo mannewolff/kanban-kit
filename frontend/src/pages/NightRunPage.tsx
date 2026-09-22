@@ -50,7 +50,10 @@ import {
 } from '../components/nachtlauf/NachtlaufKartenchips'
 import { NachtlaufBefund } from '../components/nachtlauf/NachtlaufBefund'
 import { KupferwarteBereich } from '../components/nachtlauf/KupferwarteBereich'
-import { NachtlaufLaufInstrumente } from '../components/nachtlauf/NachtlaufLaufInstrumente'
+import {
+  NachtlaufLaufInstrumente,
+  type Kostenaufteilung,
+} from '../components/nachtlauf/NachtlaufLaufInstrumente'
 import { LaufMarke, NachtlaufLaufPlatte } from '../components/nachtlauf/NachtlaufLaufPlatte'
 import { NachtlaufVorgangszeile } from '../components/nachtlauf/NachtlaufVorgangszeile'
 import {
@@ -101,7 +104,9 @@ import {
   type NightRunState,
   type NightRunStufenvorgaben,
 } from '../lib/nightRunLog'
+import { ermittleErzeugnisse, type Erzeugnisse } from '../lib/kettenErzeugnisse'
 import { readTextFile } from '../lib/readTextFile'
+import { zyklusBeschriftung, zyklusDavor, zyklusDesStarts } from '../lib/verbrauchZeitraum'
 import { useProjectName } from '../lib/useProjectName'
 
 /**
@@ -163,7 +168,7 @@ interface AnzeigeItem extends NightRunHandoffItem {
  * gemeinsamer Typ statt zweier Zweige in {@link bandabschnitt}: Das Band rechnet an beiden
  * dieselbe Rechnung, und zwei Zweige liefen beim naechsten Feld auseinander.
  */
-type Bandstufen = Partial<Record<NightRunKettenStufe, { dauerMs?: number }>>
+type Bandstufen = Partial<Record<NightRunKettenStufe, { dauerMs?: number; kostenUsd?: number }>>
 
 /**
  * Der aufbewahrte Verbrauch in der Anzeigeform (Issue #949) — `undefined` statt `null`, wie
@@ -541,18 +546,65 @@ const ausSicht = (view: NightRunView): AnzeigeLauf => ({
   laufId: view.id,
   verbrauch: ausVerbrauch(view.usage),
   budget: ausBudget(view.budget),
-  items: view.items.map((item) => ({
-    cardNumber: item.cardNumber,
-    title: item.title,
-    state: item.state,
-    errorClass: item.errorClass ?? undefined,
-    durationMs: item.durationMs ?? undefined,
-    commitHash: item.commitHash ?? undefined,
-    excerpt: item.excerpt ?? undefined,
-    verbrauch: ausVerbrauch(item.usage),
-    stufen: ausStufen(item.stages),
-  })),
+  items: view.items.map((item) => {
+    const stufen = ausStufen(item.stages)
+    return {
+      cardNumber: item.cardNumber,
+      title: item.title,
+      state: item.state,
+      errorClass: item.errorClass ?? undefined,
+      durationMs: stufen === undefined ? (item.durationMs ?? undefined) : stufenDauer(stufen),
+      commitHash: item.commitHash ?? undefined,
+      excerpt: item.excerpt ?? undefined,
+      verbrauch: ausVerbrauch(item.usage),
+      stufen,
+    }
+  }),
 })
+
+/**
+ * Die Dauer eines Kettenvorgangs als Summe seiner Arbeitsschritte (Issue #1106, AK 4) — dieselbe
+ * Rechnung wie {@link stufenZeitSumme} am eingelesenen Stand. Die gemeldete Dauer des Vorgangs
+ * reicht bis zum Ende der Umsetzung seiner Pakete, die darunter noch einmal mit eigener Dauer
+ * stehen; sie zählte diese Zeit doppelt. `undefined`, wo kein Schritt eine Dauer meldet.
+ */
+function stufenDauer(stufen: Bandstufen): number | undefined {
+  const dauern = KETTEN_STUFEN.flatMap(({ schluessel }) => {
+    const dauer = stufen[schluessel]?.dauerMs
+    return dauer === undefined ? [] : [dauer]
+  })
+  return dauern.length === 0 ? undefined : dauern.reduce((summe, dauer) => summe + dauer, 0)
+}
+
+/**
+ * Die Kosten eines Kettenlaufs, aufgeteilt in Planung und Umsetzung (Issue #1106, AK 3).
+ *
+ * <p><b>Planung</b> sind die Kosten der Arbeitsschritte der Kettenvorgänge, <b>Umsetzung</b> der
+ * Rest der Laufkosten. Der Rest und nicht die Summe der Paketzeilen: Die Laufsumme liegt über der
+ * Summe der Vorgänge, wo Sitzungen keinem Vorgang zuzuordnen waren (siehe
+ * `NachtlaufLaufInstrumente`) — so ergeben beide Anteile zusammen immer das Gesamt.
+ *
+ * <p>`undefined` am Lauf, der keine eingelieferte Kette ist. Ein einzelner Anteil fehlt, wo er sich
+ * nicht bilden lässt — kein Schritt meldet Kosten, oder der Lauf meldet kein Gesamt.
+ */
+function kostenaufteilung(lauf: AnzeigeLauf): Kostenaufteilung | undefined {
+  const kettenvorgaenge = lauf.items.filter((item) => item.stufen !== undefined)
+  if (lauf.mode !== 'CHAIN' || kettenvorgaenge.length === 0) {
+    return undefined
+  }
+  const stufenkosten = kettenvorgaenge.flatMap((item) =>
+    KETTEN_STUFEN.flatMap(({ schluessel }) => {
+      const kosten = item.stufen?.[schluessel]?.kostenUsd
+      return kosten === undefined ? [] : [kosten]
+    }),
+  )
+  const planungUsd =
+    stufenkosten.length === 0 ? undefined : stufenkosten.reduce((summe, kosten) => summe + kosten, 0)
+  const gesamtUsd = lauf.verbrauch?.kostenUsd
+  const umsetzungUsd =
+    planungUsd === undefined || gesamtUsd === undefined ? undefined : gesamtUsd - planungUsd
+  return { planungUsd, umsetzungUsd }
+}
 
 /** Die Schlüssel der Anzeige zu den Stufennamen des Servers (Issue #1113). */
 const STUFE_JE_NAME: Readonly<Record<NightRunStage, NightRunKettenStufe>> = {
@@ -575,7 +627,10 @@ function ausStufen(stages: readonly NightRunItemStageView[]): Bandstufen | undef
   }
   const stufen: Bandstufen = {}
   for (const stage of stages) {
-    stufen[STUFE_JE_NAME[stage.stage]] = { dauerMs: stage.durationMs ?? undefined }
+    stufen[STUFE_JE_NAME[stage.stage]] = {
+      dauerMs: stage.durationMs ?? undefined,
+      kostenUsd: stage.usage?.costUsd ?? undefined,
+    }
   }
   return stufen
 }
@@ -1390,6 +1445,7 @@ function bandabschnitt(
   item: Bandvorgang,
   vorgaben: NightRunStufenvorgaben | undefined,
   letzte: NightRunKettenStufe | undefined,
+  mitKosten: boolean,
 ): Bandabschnitt {
   const stufe = stufen[schluessel]
   const erreicht = stufe !== undefined
@@ -1410,6 +1466,7 @@ function bandabschnitt(
     zahlen: mitVorgabe
       ? `${verbrauch} / ${ZAHL_FORMAT.format(vorgabeMin)} min`
       : `${verbrauch} min · ohne Vorgabe`,
+    kosten: erreicht && mitKosten ? kostenText(stufe.kostenUsd ?? null) : null,
     vermerk: erreicht ? vermerkAmEnde(istEnde, item) : 'nicht erreicht',
     farbe: istEnde ? zustandsFarbe(item.state) : KUPFER,
   }
@@ -1422,8 +1479,9 @@ function bandabschnitt(
  */
 const bandAnsage = (abschnitte: readonly Bandabschnitt[]): string => {
   const schritte = abschnitte.map((a) => {
+    const kosten = a.kosten === null ? '' : `, ${a.kosten}`
     const vermerk = a.vermerk === null ? '' : `, ${a.vermerk}`
-    return `${a.label} ${a.zahlen}${vermerk}`
+    return `${a.label} ${a.zahlen}${kosten}${vermerk}`
   })
   return `Stufenband: ${schritte.join(' · ')}`
 }
@@ -1772,6 +1830,91 @@ function chipgruppen(item: NightRunItem, katalog: Kartenkatalog): Chipgruppe[] {
 }
 
 /**
+ * Die Kartenchips eines Kettenvorgangs (Issue #868, für eingelieferte Läufe #1106). Der eingelesene
+ * Stand bleibt die erste Quelle; ohne ihn tragen die Erzeugnisse aus der Herkunft am Board die
+ * Chips. Solange sie nicht ermittelt sind, steht **keine** Chipgruppe — „kein Plan" wäre für einen
+ * Plan, der nur noch nicht geladen ist, eine Falschaussage.
+ */
+function kettenchips(
+  modus: AnzeigeArt,
+  item: AnzeigeItem,
+  standItem: NightRunItem | undefined,
+  erzeugt: Erzeugnisse | undefined,
+  katalog: Kartenkatalog,
+): Chipgruppe[] {
+  if (modus !== 'CHAIN') {
+    return []
+  }
+  if (standItem !== undefined) {
+    return chipgruppen(standItem, katalog)
+  }
+  if (erzeugt === undefined) {
+    return []
+  }
+  // `DOKUMENT_STUFEN` führt genau die beiden Schritte, in denen Karten entstehen: Plan und Pakete.
+  return DOKUMENT_STUFEN.map(({ schluessel, label, leer }) => ({
+    label,
+    leer,
+    testId: `dokumente-${item.cardNumber}-${schluessel}`,
+    chips: (schluessel === 'plan' ? erzeugt.plaene : erzeugt.pakete).map(
+      (nummer): Kartenchip => ({ id: String(nummer), art: label, zustand: verweisZustand(nummer, katalog) }),
+    ),
+  }))
+}
+
+/**
+ * Welche Läufe die Liste zeigt, solange niemand die älteren aufgeklappt hat (Issue #1134): die der
+ * letzten zwei Zyklen — Startzeit in der Zone des Lesers, dieselbe Zuordnung wie im Titel (#1127).
+ *
+ * <p>Drei ältere bleiben trotzdem stehen, weil der Mensch sie gerade im Blick hat: ein Lauf, der noch
+ * läuft (er kann über Mittag weiterlaufen, #1109), der über `?lauf=<id>` angesteuerte und ein in
+ * dieser Sitzung eingelesener. Begrenzt wird allein die Anzeige — Auswertungen über den Bestand
+ * zählen weiter alle aufbewahrten Läufe.
+ */
+function imBlick(
+  lauf: AnzeigeLauf,
+  abZyklus: string,
+  gesuchteLaufId: number | null,
+  ausErgebnisstand: ReadonlySet<string>,
+): boolean {
+  return (
+    zyklusDesStarts(lauf.startedAt) >= abZyklus ||
+    laeuftNoch({ complete: lauf.vollstaendig, outcome: lauf.befund }) ||
+    (gesuchteLaufId !== null && lauf.laufId === gesuchteLaufId) ||
+    ausErgebnisstand.has(lauf.startedAt)
+  )
+}
+
+/** Die Erzeugnisse eines Laufs, zu dem (noch) keine ermittelt sind — eine Instanz für alle. */
+const KEINE_ERZEUGNISSE: ReadonlyMap<number, Erzeugnisse> = new Map()
+
+/** Der Plan, unter dem ein Paket in diesem Lauf entstand — gesucht über alle Kettenvorgänge. */
+function planDesPakets(
+  nummer: number,
+  erzeugnisse: ReadonlyMap<number, Erzeugnisse>,
+): number | undefined {
+  for (const erzeugt of erzeugnisse.values()) {
+    const plan = erzeugt.planJePaket[nummer]
+    if (plan !== undefined) {
+      return plan
+    }
+  }
+  return undefined
+}
+
+/**
+ * Die Zeile „Paket aus Plan" im Zustand ihres Verweises. Die Erzeugnisse stehen erst fest, wenn
+ * ihre Karten im Katalog liegen (`ladeErzeugnisse`); eine fehlende ist deshalb eine nicht
+ * auflösbare, keine, die noch lädt.
+ */
+function planZustand(nummer: number, katalog: Kartenkatalog): SichtbarerStufenZustand {
+  const karte = katalog.get(nummer)
+  return karte == null
+    ? { art: 'nicht-gefunden', nummer }
+    : { art: 'treffer', nummer, karte, abgerissen: false }
+}
+
+/**
  * Das Stufenband eines Ketten-Vorgangs: die gerechneten Abschnitte und ihre Ansage. `null`, wo
  * weder der eingelesene Stand noch die Server-Antwort Arbeitsschritte führt.
  *
@@ -1789,9 +1932,12 @@ function vorgangsband(
   if (stufen === undefined) {
     return null
   }
+  // Die Kosten je Schritt kommen allein aus der Server-Antwort (Issue #1106): Ein eingelesener
+  // Stand zeigt sein Band wie bisher (dort AK 6).
+  const mitKosten = standItem?.kettenStufen === undefined
   const letzte = letzteErreichteStufe(stufen)
   const abschnitte = KETTEN_STUFEN.map((stufe) =>
-    bandabschnitt(stufe, stufen, item, vorgaben, letzte),
+    bandabschnitt(stufe, stufen, item, vorgaben, letzte, mitKosten),
   )
   return { abschnitte, ansage: bandAnsage(abschnitte) }
 }
@@ -1856,7 +2002,7 @@ function fussangaben(lauf: AnzeigeLauf, stand: NightRun | undefined): Fussangabe
   return [
     ...standAngaben(stand),
     {
-      label: 'Ergebnis der Nacht',
+      label: 'Ergebnis des Zyklus',
       wert: `${lauf.processedCount} bearbeitet · ${lauf.skippedCount} übergangen`,
     },
     {
@@ -1894,7 +2040,7 @@ function kettenAngaben(stand: NightRun | undefined): FussangabeForm[] {
       label: 'Laufzeit über alle Stufen',
       wert: formatDuration(stufenZeitSumme(stand.items) / 1000),
     },
-    { label: 'Kosten der Nacht', wert: betrag(stand.stand?.kostenSumme) },
+    { label: 'Kosten des Zyklus', wert: betrag(stand.stand?.kostenSumme) },
     ...(vermerk === null ? [] : [{ label: 'Zur Kostensumme', wert: vermerk, vorbehalt: true }]),
   ]
 }
@@ -1929,7 +2075,7 @@ function standAngaben(stand: NightRun | undefined): FussangabeForm[] {
     },
     ...(hinweis === undefined
       ? [
-          { label: 'Kosten der Nacht', wert: kosten.wert },
+          { label: 'Kosten des Zyklus', wert: kosten.wert },
           ...(kosten.hinweis === null
             ? []
             : [{ label: 'Zur Kostensumme', wert: kosten.hinweis, vorbehalt: true }]),
@@ -2029,6 +2175,8 @@ function Kopfmarken({
   const kosten = kostenText(lauf.verbrauch?.kostenUsd ?? null)
   return (
     <>
+      {/* Die Art des Laufs als erste Marke (Issue #1128): In der Vorzeile ging sie unter. */}
+      <LaufMarke testId="lauf-art">{ART_KURZ[lauf.mode]}</LaufMarke>
       {/* Die Marke haengt am Befund und nicht an `vollstaendig` (#1092): Ein verstummter Lauf
           traegt fuer immer `complete = false`, ist aber nicht „unvollstaendig gemeldet" — er ist
           nicht gelungen, und das sagt bereits die rote LED der Platte. */}
@@ -2083,9 +2231,18 @@ const metazeile = (lauf: AnzeigeLauf, stand: NightRun | undefined): string =>
     .filter((eintrag) => eintrag !== '')
     .join(' · ')
 
-/** Der Titel eines Laufs — „Nacht vom 14. September“, wie die Vorlage ihn führt (Z. 383). */
-const laufTitel = (startedAt: string): string =>
-  `Nacht vom ${new Date(startedAt).toLocaleDateString('de-DE', { day: 'numeric', month: 'long' })}`
+/**
+ * Der Titel eines Laufs (Issue #1127): „Lauf #412 · 14. September, 22:05" — Nummer, Startdatum und
+ * Startzeit. Datum und Uhrzeit machen zwei Läufe desselben Zyklus unterscheidbar. Ohne Nummer (ein
+ * eben eingelesener Lauf war bei keinem Server) „Lauf · 14. September, 22:05".
+ */
+const laufTitel = (startedAt: string, laufId: number | undefined): string => {
+  const start = new Date(startedAt)
+  const datum = start.toLocaleDateString('de-DE', { day: 'numeric', month: 'long' })
+  const zeit = start.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })
+  const lauf = laufId === undefined ? 'Lauf' : `Lauf #${laufId}`
+  return `${lauf} · ${datum}, ${zeit}`
+}
 
 /**
  * Die Ergebniszeile eines Vorgangs: Dauer, Kosten, Züge und der Anteil der Modellarbeit. Die Kette
@@ -2198,6 +2355,8 @@ function Vorgangszeile({
   katalog,
   vorhabenKarten,
   haeufigkeit,
+  erzeugt,
+  ausPlan,
   istRot,
   onOeffnen,
 }: Readonly<{
@@ -2215,6 +2374,13 @@ function Vorgangszeile({
   katalog: Kartenkatalog
   vorhabenKarten: Vorhabenkatalog
   haeufigkeit: string | null
+  /**
+   * Was dieser Kettenvorgang eines eingelieferten Laufs angelegt hat (Issue #1106); `undefined`,
+   * solange es nicht ermittelt ist, und an jedem Vorgang, der keine Kette ist.
+   */
+  erzeugt: Erzeugnisse | undefined
+  /** Der Plan, aus dem dieses Paket im selben Lauf hervorging (Issue #1106); sonst `undefined`. */
+  ausPlan: number | undefined
   istRot: (nummer: number) => boolean
   onOeffnen: (karte: CardByNumber) => void
 }>) {
@@ -2225,7 +2391,7 @@ function Vorgangszeile({
   const uebernahme = buildHandoffText(item)
   const band = modus === 'CHAIN' ? vorgangsband(item, standItem, vorgaben) : null
   const grund = modus === 'CHAIN' && standItem !== undefined ? vorgangsgrund(standItem) : null
-  const chips = modus === 'CHAIN' && standItem !== undefined ? chipgruppen(standItem, katalog) : []
+  const chips = kettenchips(modus, item, standItem, erzeugt, katalog)
   const kennzahlen = ergebniszeile(modus, item, standItem, ohneKennzahlen)
   const zustandswort = nightRunZustandsText(item.state, item.errorClass)
   // Das Vorhaben hängt an der **Wurzelkarte**, nicht an der Kette: Fachliche Anforderung und Plan
@@ -2290,8 +2456,8 @@ function Vorgangszeile({
       {anteil !== undefined && (
         <NachtlaufAnteilsbalken
           anteil={anteil.anteil}
-          beschriftung={`${anteil.dauer} · ${anteil.anteil} % der Nacht`}
-          ansage={`${anteil.ansage}, ${anteil.anteil} % der Nacht`}
+          beschriftung={`${anteil.dauer} · ${anteil.anteil} % des Zyklus`}
+          ansage={`${anteil.ansage}, ${anteil.anteil} % des Zyklus`}
           farbe={anteil.farbe}
           schiene={NUT}
           testId={`laufband-abschnitt-${item.cardNumber}`}
@@ -2328,6 +2494,14 @@ function Vorgangszeile({
             </Typography>
           )}
         </Box>
+      )}
+
+      {ausPlan !== undefined && (
+        <Stufenzeile
+          label="Paket aus Plan"
+          zustand={planZustand(ausPlan, katalog)}
+          onOeffnen={onOeffnen}
+        />
       )}
 
       {wurzel != null && (
@@ -2382,6 +2556,7 @@ function LaufPanel({
   vorhabenKarten,
   zaehler,
   aufbewahrteLaeufe,
+  erzeugnisse,
   zuerst,
   onAufklappen,
   onOeffnen,
@@ -2401,6 +2576,11 @@ function LaufPanel({
   zaehler: Haeufigkeiten
   /** Das „M“ in „N von M aufbewahrten Läufen“ — die Länge der zuletzt geladenen Liste. */
   aufbewahrteLaeufe: number
+  /**
+   * Was die Kettenvorgänge dieses Laufs angelegt haben, je Anforderung (Issue #1106) — leer, bis es
+   * beim Aufklappen ermittelt ist, und an jedem Lauf, der keine eingelieferte Kette ist.
+   */
+  erzeugnisse: ReadonlyMap<number, Erzeugnisse>
   /**
    * Der oberste Lauf der Liste steht beim Öffnen der Seite offen (#914, E7). AK 2 verlangt Kopf,
    * Instrumente und erste Vorgangszeile ohne Scrollen — genau dieser eine, nicht alle: Bis zu 30
@@ -2442,9 +2622,8 @@ function LaufPanel({
   return (
     <NachtlaufLaufPlatte
       testId={`lauf-${lauf.startedAt}`}
-      titel={laufTitel(lauf.startedAt)}
-      art={ART_KURZ[lauf.mode]}
-      laufId={lauf.laufId}
+      titel={laufTitel(lauf.startedAt, lauf.laufId)}
+      zyklus={zyklusBeschriftung(zyklusDesStarts(lauf.startedAt))}
       meta={metazeile(lauf, stand)}
       melder={melder}
       pulsiert={laeuftNoch({ complete: lauf.vollstaendig, outcome: lauf.befund })}
@@ -2466,6 +2645,7 @@ function LaufPanel({
         verbrauch={lauf.verbrauch}
         dauerMs={lauf.durationMs}
         pakete={paketZaehlung(lauf.items)}
+        aufteilung={kostenaufteilung(lauf)}
       />
 
       {/* Statt eines Bandes (#873): Der Erzeugungs- und der Prüf-Lauf sortieren die große Mehrheit
@@ -2514,6 +2694,8 @@ function LaufPanel({
             katalog={katalog}
             vorhabenKarten={vorhabenKarten}
             haeufigkeit={haeufigkeitsText(item, lauf.gespeichert, zaehler, aufbewahrteLaeufe)}
+            erzeugt={item.stufen === undefined ? undefined : erzeugnisse.get(item.cardNumber)}
+            ausPlan={planDesPakets(item.cardNumber, erzeugnisse)}
             istRot={istRot}
             onOeffnen={onOeffnen}
           />
@@ -2577,6 +2759,12 @@ export function NightRunPage() {
    */
   const [staende, setStaende] = useState<ReadonlyMap<string, NightRun>>(() => new Map())
   const [katalog, setKatalog] = useState<Kartenkatalog>(() => new Map())
+  /** Die Erzeugnisse der Kettenläufe je Startzeitpunkt (Issue #1106), ermittelt beim Aufklappen. */
+  /** Ob die Liste auch die älteren Läufe zeigt (Issue #1134) — nur für diesen Seitenbesuch. */
+  const [alleLaeufe, setAlleLaeufe] = useState(false)
+  const [erzeugnisse, setErzeugnisse] = useState<ReadonlyMap<string, ReadonlyMap<number, Erzeugnisse>>>(
+    () => new Map(),
+  )
   const [vorhabenKarten, setVorhabenKarten] = useState<Vorhabenkatalog>(() => new Map())
   // Leer heißt „zu keiner Klasse ist etwas bekannt" — der Zustand vor dem ersten Abruf und der
   // eines leeren Ringpuffers sind derselbe. `null` heißt dagegen: der Abruf ist gescheitert.
@@ -2680,13 +2868,42 @@ export function NightRunPage() {
     setVorhabenKarten(new Map(vorhabenKartenRef.current))
   }
 
+  /**
+   * Ermittelt, was die Kettenvorgänge eines eingelieferten Laufs angelegt haben (Issue #1106), und
+   * lädt die gefundenen Karten in den Katalog. Ein eingelesener Stand bringt seine Dokumente selbst
+   * mit und braucht das nicht.
+   *
+   * <p>Scheitert ein Abruf, bleibt der Lauf ohne Erzeugnisse — und damit ohne Chipgruppen, statt
+   * „kein Plan" zu behaupten. Eine Meldung gibt es dafür nicht: Die übrige Seite ist vollständig.
+   */
+  const ladeErzeugnisse = async (lauf: AnzeigeLauf) => {
+    const anforderungen = lauf.items.filter((item) => item.stufen !== undefined).map((item) => item.cardNumber)
+    // Stufen trägt allein die Server-Antwort: Ein eben geparster Lauf hat keine, und zu ihm liegt
+    // ohnehin ein Stand vor.
+    if (lauf.mode !== 'CHAIN' || anforderungen.length === 0) {
+      return
+    }
+    const von = Date.parse(lauf.startedAt)
+    // Ein Lauf, der noch arbeitet, hat kein Ende — was er bis jetzt anlegte, gehört dazu.
+    const bis = lauf.vollstaendig ? von + lauf.durationMs : Number.POSITIVE_INFINITY
+    const gefunden = await ermittleErzeugnisse(id, anforderungen, { von, bis }).catch(() => undefined)
+    if (gefunden === undefined) {
+      return
+    }
+    await ladeKetten([], [...gefunden.values()].flatMap(({ plaene, pakete }) => [...plaene, ...pakete]))
+    setErzeugnisse((vorher) => new Map(vorher).set(lauf.startedAt, gefunden))
+  }
+
   const aufklappen = useCallback(
     (lauf: AnzeigeLauf) => {
       if (geladeneLaeufe.current.has(lauf.startedAt)) {
         return
       }
       geladeneLaeufe.current.add(lauf.startedAt)
-      void ladeKetten(lauf.items, dokumentNummern(staende.get(lauf.startedAt)))
+      const stand = staende.get(lauf.startedAt)
+      void ladeKetten(lauf.items, dokumentNummern(stand)).then(() =>
+        stand === undefined ? ladeErzeugnisse(lauf) : undefined,
+      )
     },
     // `ladeKetten` wird bei jedem Rendern neu erzeugt und ließe sich nicht als Abhängigkeit
     // führen, ohne die ganze Funktion selbst einzupacken — ein Umbau, den dieses Paket nicht
@@ -2704,12 +2921,19 @@ export function NightRunPage() {
    * der nächste vergessene Pfad zeigte einen offenen Lauf ohne aufgelöste Kette. `aufklappen`
    * bleibt die Stelle, die ein zweites Laden verhindert — der Effekt darf also mehrfach laufen.
    */
+  // Der vorige Zyklus beginnt einen Tag vor dem laufenden; alles ab ihm ist „die letzten zwei".
+  const abZyklus = zyklusDavor(zyklusDesStarts(new Date().toISOString()))
+  const sichtbareLaeufe = alleLaeufe
+    ? laeufe
+    : laeufe.filter((lauf) => imBlick(lauf, abZyklus, gesuchteLaufId, ausErgebnisstand))
+  const ausgeblendet = laeufe.length - sichtbareLaeufe.length
+  const obersterSichtbarer = sichtbareLaeufe[0]
+
   useEffect(() => {
-    const oberster = laeufe[0]
-    if (oberster !== undefined) {
-      aufklappen(oberster)
+    if (obersterSichtbarer !== undefined) {
+      aufklappen(obersterSichtbarer)
     }
-  }, [laeufe, aufklappen])
+  }, [obersterSichtbarer, aufklappen])
 
   /**
    * Springt zum angesteuerten Lauf (Issue #1085, AK 7).
@@ -2873,15 +3097,18 @@ export function NightRunPage() {
           <NachtlaufVerbrauchBereich projectId={id} />
 
           {laeufe.length === 0 && <Typography color="text.secondary">Noch keine Auswertung vorhanden.</Typography>}
+          {laeufe.length > 0 && sichtbareLaeufe.length === 0 && (
+            <Typography color="text.secondary">In den letzten zwei Zyklen gab es keinen Lauf.</Typography>
+          )}
 
           {/* Die Laufblöcke haben mit #988 die Nachtlauf-Ausnahme verlassen und folgen Kupferwarte
               (`CLAUDE-design.md`) — deshalb stehen sie im `KupferwarteBereich`, der Theme und
               Variablen für seinen Teilbaum zurückstellt. Was sonst auf dieser Seite steht, bleibt
               in der Ausnahme. */}
-          {laeufe.length > 0 && (
+          {sichtbareLaeufe.length > 0 && (
             <KupferwarteBereich>
               <Box sx={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                {laeufe.map((lauf, position) => (
+                {sichtbareLaeufe.map((lauf, position) => (
                   <LaufPanel
                     key={lauf.startedAt}
                     lauf={lauf}
@@ -2901,6 +3128,7 @@ export function NightRunPage() {
                     katalog={katalog}
                     vorhabenKarten={vorhabenKarten}
                     zaehler={zaehler}
+                    erzeugnisse={erzeugnisse.get(lauf.startedAt) ?? KEINE_ERZEUGNISSE}
                     aufbewahrteLaeufe={aufbewahrteLaeufe}
                     onAufklappen={() => aufklappen(lauf)}
                     onOeffnen={setDetail}
@@ -2908,6 +3136,14 @@ export function NightRunPage() {
                 ))}
               </Box>
             </KupferwarteBereich>
+          )}
+
+          {(alleLaeufe || ausgeblendet > 0) && (
+            <Box>
+              <Button variant="text" onClick={() => setAlleLaeufe((wert) => !wert)}>
+                {alleLaeufe ? 'Nur die letzten zwei Zyklen zeigen' : `Ältere Läufe anzeigen (${ausgeblendet})`}
+              </Button>
+            </Box>
           )}
 
         </Box>

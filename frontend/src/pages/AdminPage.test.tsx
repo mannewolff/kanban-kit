@@ -50,6 +50,7 @@ function makeApi(): AdminApi {
     approve: vi.fn().mockResolvedValue({}),
     disable: vi.fn().mockResolvedValue({}),
     enable: vi.fn().mockResolvedValue({}),
+    listOverloadRejections: vi.fn().mockResolvedValue([]),
     bootstrap: vi.fn(),
   }
 }
@@ -57,6 +58,14 @@ function makeApi(): AdminApi {
 describe('AdminPage', () => {
   beforeEach(() => {
     editMode.value = true
+  })
+
+  it('zeigt unter der Nutzerverwaltung den Abschnitt zu Abweisungen wegen Last', async () => {
+    const api = makeApi()
+    render(<AdminPage api={api} />)
+
+    expect(await screen.findByRole('heading', { name: 'Abweisungen wegen Last' })).toBeInTheDocument()
+    expect(api.listOverloadRejections).toHaveBeenCalledTimes(1)
   })
 
   it('blendet bei ausgeschaltetem Editiermodus den Namen-Bleistift aus, behält aber die Aktionen', async () => {

@@ -18,6 +18,18 @@ export interface Paketzahlen {
   rot: number
 }
 
+/**
+ * Die Kosten eines Kettenlaufs nach Planung und Umsetzung (Issue #1106) — gerechnet in der Seite.
+ * Ein fehlender Anteil ist `undefined` und erscheint als „nicht gemeldet", nie als 0.
+ */
+export interface Kostenaufteilung {
+  planungUsd: number | undefined
+  umsetzungUsd: number | undefined
+}
+
+const anteilText = (usd: number | undefined): string =>
+  usd === undefined ? 'nicht gemeldet' : `${dollar(usd)} $`
+
 /** `undefined` aus dem Anzeigemodell heißt „nicht gemessen"; die Rechnung kennt dafür `null`. */
 const alsNull = (wert: number | undefined): number | null => wert ?? null
 
@@ -49,12 +61,15 @@ export function NachtlaufLaufInstrumente({
   verbrauch,
   dauerMs,
   pakete,
+  aufteilung,
   testId = 'lauf-instrumente',
 }: Readonly<{
   /** `undefined` am eben geparsten Lauf — dort gibt es noch keinen aufbewahrten Stand. */
   verbrauch: Laufverbrauch | undefined
   dauerMs: number
   pakete: Paketzahlen
+  /** Nur an einem eingelieferten Kettenlauf; sonst steht unter den Kosten nichts (Issue #1106). */
+  aufteilung?: Kostenaufteilung
   testId?: string
 }>) {
   const dauer = laufDauerGeteilt(dauerMs)
@@ -80,6 +95,11 @@ export function NachtlaufLaufInstrumente({
         titel="Kosten"
         heiss
         testId="instrument-kosten"
+        zusatz={
+          aufteilung === undefined
+            ? undefined
+            : `Planung ${anteilText(aufteilung.planungUsd)} · Umsetzung ${anteilText(aufteilung.umsetzungUsd)}`
+        }
         teile={
           verbrauch?.kostenUsd === undefined
             ? null

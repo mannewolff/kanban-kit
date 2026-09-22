@@ -6,6 +6,25 @@ spring:
     url: ${MANBAN_DB_URL:jdbc:postgresql://localhost:5432/manban}
     username: ${MANBAN_DB_USER:manban}
     password: ${MANBAN_DB_PASSWORD:manban}
+    # Verbindungspool (Issue #998, Plan #995 E15) — begründete Startwerte, bis der Lastnachweis
+    # (perf/, Issue #1006) sie belegt oder korrigiert. Die Rechnung:
+    #   Lastprofil: 50 Personen x 60 Befehle/min = 50 Befehle/s über die Compat-API, dazu
+    #   10 Sitzungen der Weboberfläche. In der Spitze sind 50 x 10 = 500 Befehle gleichzeitig
+    #   unterwegs.
+    #   Ein Befehl hält eine Verbindung für wenige kurze Anweisungen, grob 10-20 ms. Im Mittel sind
+    #   damit 50/s x 0,02 s = 1 Verbindung belegt; die Spitze von 500 gleichzeitigen Befehlen
+    #   arbeiten 20 Verbindungen in 500 / 20 x 20 ms = 0,5 s ab — ein Zehntel der zugesagten
+    #   5 Sekunden im schlechtesten Fall.
+    #   Mehr Verbindungen beschleunigen nicht: Die Datenbank arbeitet je CPU-Kern nur eine Anweisung
+    #   zugleich ab, der Rest wartet dann dort statt hier. 20 lässt einer Postgres-Vorgabe von
+    #   max_connections = 100 reichlich Luft.
+    #   minimum-idle 5: genug für die Grundlast, der Rest entsteht bei Bedarf und verfällt wieder.
+    #   connection-timeout 5 s: Wer länger auf eine Verbindung wartet, hat die Antwortzusage schon
+    #   verfehlt; die Vorgabe von 30 s hielte den Aufruf nur weiter fest.
+    hikari:
+      maximum-pool-size: ${MANBAN_DB_POOL_MAX:20}
+      minimum-idle: ${MANBAN_DB_POOL_MIN_IDLE:5}
+      connection-timeout: ${MANBAN_DB_CONNECTION_TIMEOUT_MS:5000}
 
   jpa:
     hibernate:
@@ -40,6 +59,15 @@ spring:
 server:
   port: 8080
   forward-headers-strategy: framework  # hinter Caddy (Reverse-Proxy) korrekte Scheme/Host-Auflösung
+  # Bearbeiter-Threads (Issue #998, Plan #995 E15) — Startwert, Rechnung wie beim Pool oben:
+  # In der Spitze 500 Befehle der Compat-API plus 10 Sitzungen der Weboberfläche gleichzeitig. Mit
+  # der Tomcat-Vorgabe von 200 warteten 310 davon ohne Thread, und die Weboberfläche stünde hinter
+  # Befehlen an, die ihrerseits nur auf eine Datenbankverbindung warten. 600 gibt jedem Aufruf der
+  # Spitze einen Thread und lässt rund 20 Prozent Reserve für Abweisungen der Durchsatzbremse, die
+  # schnell beantwortet werden müssen, um ihren Zweck zu erfüllen.
+  tomcat:
+    threads:
+      max: ${MANBAN_SERVER_THREADS_MAX:600}
 
 manban:
   # Ausdrücklicher Entwicklungs-/Testbetrieb. Ohne diesen Schalter gilt jeder Start als
@@ -122,3 +150,13 @@ manban:
       max-attempts: ${MANBAN_RATELIMIT_FORGOT_MAX_ATTEMPTS:10}
       window: ${MANBAN_RATELIMIT_FORGOT_WINDOW:PT15M}
       block-duration: ${MANBAN_RATELIMIT_FORGOT_BLOCK_DURATION:PT15M}
+    # Durchsatzbremse (Issue #999/#1002) — ein ZWEITER, von der Zaehlbremse oben getrennter
+    # Mechanismus. Sie greift nur auf Aufrufe mit Zugriffstoken (CLI, Nachtlauf), nie auf die
+    # Weboberflaeche, und zaehlt je Person ueber alle ihre Token: hoechstens per-minute Befehle je
+    # Minute (kontinuierlich nachgefuellt, kein starres Fenster), davon concurrent gleichzeitig.
+    # Abgewiesen wird mit 429, Retry-After und type urn:manban:overload.
+    throughput:
+      enabled: ${MANBAN_THROUGHPUT_ENABLED:true}
+      per-minute: ${MANBAN_THROUGHPUT_PER_MINUTE:60}
+      concurrent: ${MANBAN_THROUGHPUT_CONCURRENT:10}
+      max-tracked-persons: ${MANBAN_THROUGHPUT_MAX_TRACKED_PERSONS:100000}

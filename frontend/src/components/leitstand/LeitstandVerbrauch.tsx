@@ -42,7 +42,7 @@ import { DeltaMarke, Funke, KACHEL_SX, KachelFuss, KachelWert } from './Leitstan
  * andere Frage und wird nicht auf die Gattungen umgewidmet.
  */
 const ZEITRAEUME: ReadonlyArray<{ art: VerbrauchZeitraumArt; name: string }> = [
-  { art: 'DAY', name: 'Nacht' },
+  { art: 'DAY', name: 'Zyklus' },
   { art: 'WEEK', name: 'Woche' },
   { art: 'MONTH', name: 'Monat' },
 ]
@@ -206,7 +206,7 @@ function VerbrauchKacheln({
                 <DeltaMarke art="neutral">{`${tokenText(Math.round(summe.outputTokens / karten))} je Vorgang`}</DeltaMarke>
               ) : undefined
             }
-            basis={zeitraum.nights.length === 1 ? '1 Nacht' : `${zeitraum.nights.length} Nächte`}
+            basis={zeitraum.nights.length === 1 ? '1 Zyklus' : `${zeitraum.nights.length} Zyklen`}
           />
         </Box>
 

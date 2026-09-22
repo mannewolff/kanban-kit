@@ -67,7 +67,7 @@ export function NachtlaufVerbrauchNacht({ nacht }: Readonly<{ nacht: VerbrauchNa
 
       {nacht.runCount === 0 ? (
         <Typography component="p" sx={{ ...BESCHRIFTUNG, mt: 2 }}>
-          In dieser Nacht hat kein Lauf stattgefunden.
+          In diesem Zyklus hat kein Lauf stattgefunden.
         </Typography>
       ) : (
         <>

@@ -1,9 +1,19 @@
 # kanban-kit
 
-Self-hostbares Kanban-Board — eine schlanke, mandantenfähige Trello-Alternative zum
-selbst Betreiben. Projekte, Boards mit konfigurierbaren Spalten, Karten mit Markdown,
-Vorhaben, Datei-Anhänge (Bild-/PDF-Vorschau) und eine rollenbasierte Rechteverwaltung
-(Projekt- und Plattform-Rollen).
+**KI-Leitstand und Kanban-Board in einem** — self-hostbar, mandantenfähig, quelloffen.
+
+Auf dem **Board** wird Arbeit beschrieben: Projekte, Boards mit konfigurierbaren Spalten, Karten
+mit Markdown, Vorhaben, Datei-Anhänge (Bild-/PDF-Vorschau) und eine rollenbasierte
+Rechteverwaltung (Projekt- und Plattform-Rollen).
+
+Im **Leitstand** steht, was die KI daraus gemacht hat:
+
+- **Läufe** eines Nacht-Runners — je Lauf der Ausgang (gelungen, mit Vorbehalt, nicht gelungen)
+  und je Arbeitspaket der Befund samt Übernahmetext für die eigene Entwicklungssitzung.
+- **Plattform-Leitstand** — aktive Läufe, beendete Läufe und Störungen über alle teilnehmenden
+  Projekte hinweg, selbstauffrischend.
+- **Verbrauch** — Token und Kosten je Nacht, Woche, Monat, Vorhaben und Stufe der Kette, getrennt
+  nach Läufen und interaktiven Sitzungen.
 
 Technik: Spring Boot (Java 21) + Postgres + MinIO im Backend, React + Vite im Frontend,
 alles hinter einem Caddy-Reverse-Proxy mit automatischem TLS. Der ganze Stack läuft über
@@ -76,10 +86,19 @@ und [docs/betrieb.md](docs/betrieb.md).
 
 Die ausführliche Benutzer- und Betriebsdokumentation liegt unter [`docs/`](docs/):
 
-- [Betrieb & Installation](docs/betrieb.md) — Start, Umgebungsvariablen, E-Mail, erster Admin
-- [Nutzung](docs/nutzung.md) — Projekte, Boards, Karten, Listen-Ansicht, Vorhaben, Mitglieder
-- [Rollen & Rechte](docs/rollen-und-rechte.md) — Projekt- und Plattform-Rollen, Rechte-Matrix
+- [Betrieb & Installation](docs/betrieb.md) — Start, Umgebungsvariablen, E-Mail, erster Admin,
+  Meldeweg der interaktiven Sitzungen
+- [Nutzung](docs/nutzung.md) — Projekte, Boards, Karten, Listen-Ansicht, Ideen-Pool, Vorhaben,
+  [Läufe](docs/nutzung.md#nachtlauf), [Verbrauch](docs/nutzung.md#verbrauch-leitstand),
+  [Plattform-Leitstand](docs/nutzung.md#plattform-leitstand), Mitglieder
+- [Rollen & Rechte](docs/rollen-und-rechte.md) — Projekt- und Plattform-Rollen, Rechte-Matrix,
+  Teilnahme am Plattform-Leitstand
+- [Produktions-Deployment](docs/deployment-hostinger.md) — öffentlicher Betrieb hinter Traefik
 - [Dogfooding](docs/dogfooding.md) — kanban-kit als eigenes Board anbinden
+
+Die Designsprache der Oberfläche — „Kupferwarte“, zwei Erscheinungsbilder ohne Schalter — steht in
+[CLAUDE-design.md](CLAUDE-design.md); die verbindliche Vorlage ist
+[docs/entwurf-leitstand.html](docs/entwurf-leitstand.html).
 
 Als gerenderte Website (VitePress) lässt sich die Doku lokal ansehen:
 

@@ -338,6 +338,10 @@ class ArchitectureTest {
   // Auch die Composition-Root ist nicht ausgenommen; baute sie den Filter mit den Properties
   // selbst, waere die Grenze stillschweigend geoeffnet. Deshalb beantwortet RateLimiter.isEnabled()
   // die einzige Frage, die ein Aufrufer an die Konfiguration haette.
+  // Seit Issue #999 deckt dieselbe Whitelist die Durchsatzbremse ab: ThroughputProperties und der
+  // Port PersonBudgetStore stehen nicht darauf und sind damit ebenso modulintern wie
+  // RateLimitProperties. ThroughputLimiter bleibt vorerst draussen — sein einziger Aufrufer, der
+  // ThroughputFilter, liegt in ratelimit.web und damit im Modul.
   static final ArchRule RATELIMIT_APPLICATION_IST_AUF_FASSADE_BEGRENZT =
       fassadeIstAufWhitelistBegrenzt(
           "ratelimit",

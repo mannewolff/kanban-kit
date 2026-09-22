@@ -31,6 +31,11 @@ import org.springframework.transaction.annotation.Transactional;
  * allein durch ihre Position einen Zustand behaupten, den ihr niemand gegeben hat — eine Karte in
  * „Anstehend" wäre für die Automatisierung freigegeben, eine in „Zurückgestellt" erledigt (#697).
  */
+// PMD.CouplingBetweenObjects: Übersetzungsschicht einer fremden API auf vier Fach-Fassaden (Board,
+// Karte, Label, Kommentar) samt deren View-Typen und den Response-Records des Protokolls. Seit
+// Issue #1001 kommt der Idempotenz-Guard dazu. Eine Aufteilung zerrisse ein festes Protokoll über
+// mehrere Services, ohne dass eine einzige Übersetzung einfacher würde.
+@SuppressWarnings("PMD.CouplingBetweenObjects")
 @Service
 public class KanbanCompatService {
 
@@ -48,16 +53,19 @@ public class KanbanCompatService {
   private final CardService cardService;
   private final LabelService labelService;
   private final CommentService commentService;
+  private final IdempotencyGuard idempotency;
 
   public KanbanCompatService(
       BoardService boardService,
       CardService cardService,
       LabelService labelService,
-      CommentService commentService) {
+      CommentService commentService,
+      IdempotencyGuard idempotency) {
     this.boardService = boardService;
     this.cardService = cardService;
     this.labelService = labelService;
     this.commentService = commentService;
+    this.idempotency = idempotency;
   }
 
   /**
@@ -127,6 +135,11 @@ public class KanbanCompatService {
    * aber genau das und antwortet für sie mit 404. Erst das Einplanen auf ein Board macht die Karte
    * kommentierbar. Für Aufrufer ist das folgenlos, weil die IDs dort aus {@link #items} stammen —
    * und die Liste enthält nur eingeplante Karten.
+   *
+   * <p><strong>Idempotenz (Issue #1001, E7/E8):</strong> Mit einem {@code idempotencyKey} tritt die
+   * Anlage je Projekt und Schlüssel genau einmal ein; jede Wiederholung bekommt dieselbe Antwort.
+   * Ist ein {@code externalKey} gesetzt, greift der Idempotenz-Schlüssel gar nicht erst — der
+   * fachliche Schlüssel mit unbegrenzter Lebensdauer hat Vorrang vor dem technischen mit kurzer.
    */
   @Transactional
   public Created create(
@@ -138,10 +151,47 @@ public class KanbanCompatService {
       @Nullable String externalKey,
       boolean direct,
       @Nullable Integer number,
-      @Nullable Integer derivedFrom) {
+      @Nullable Integer derivedFrom,
+      @Nullable String idempotencyKey) {
     long boardId = requireBound(principal);
     long projectId = boardService.requireProjectId(boardId);
     String key = normalizeExternalKey(externalKey);
+    String idempotent = key == null ? normalizeIdempotencyKey(idempotencyKey) : null;
+    if (idempotent == null) {
+      return createNow(
+          principal, boardId, projectId, title, body, column, key, direct, number, derivedFrom);
+    }
+    return idempotency.execute(
+        projectId,
+        idempotent,
+        "POST /items",
+        Created.class,
+        () ->
+            createNow(
+                principal,
+                boardId,
+                projectId,
+                title,
+                body,
+                column,
+                key,
+                direct,
+                number,
+                derivedFrom));
+  }
+
+  /** Die eigentliche Anlage, mit oder ohne Idempotenz-Schlüssel davor. */
+  private Created createNow(
+      KanbanPrincipal principal,
+      long boardId,
+      long projectId,
+      String title,
+      @Nullable String body,
+      @Nullable String column,
+      @Nullable String key,
+      boolean direct,
+      @Nullable Integer number,
+      @Nullable Integer derivedFrom) {
     requireImportPreconditions(number, key, direct);
     CardService.IdeaCreation result;
     if (direct) {
@@ -249,6 +299,14 @@ public class KanbanCompatService {
     }
   }
 
+  /** Leer oder nur Leerzeichen gilt als „kein Schlüssel", sonst getrimmt — wie beim externalKey. */
+  private static @Nullable String normalizeIdempotencyKey(@Nullable String idempotencyKey) {
+    if (idempotencyKey == null || idempotencyKey.isBlank()) {
+      return null;
+    }
+    return idempotencyKey.trim();
+  }
+
   /**
    * Normalisiert den Idempotenz-Schlüssel (#534): getrimmt, auf die Spaltenlänge (100) gekappt,
    * leer wird zu {@code null} (kein Schlüssel).
@@ -317,12 +375,26 @@ public class KanbanCompatService {
     labelService.removeFromCard(principal.userId(), cardId, name);
   }
 
-  /** Kommentiert ein Item des gebundenen Boards. */
+  /**
+   * Kommentiert ein Item des gebundenen Boards. Mit einem {@code idempotencyKey} entsteht der
+   * Kommentar je Projekt und Schlüssel genau einmal (Issue #1001); zwei verschiedene Schlüssel mit
+   * gleichem Text ergeben bewusst zwei Kommentare.
+   */
   @Transactional
-  public void comment(KanbanPrincipal principal, long cardId, String body) {
+  public void comment(
+      KanbanPrincipal principal, long cardId, String body, @Nullable String idempotencyKey) {
     long boardId = requireBound(principal);
     cardService.requireOnBoard(cardId, boardId);
-    commentService.create(principal.userId(), cardId, body);
+    String idempotent = normalizeIdempotencyKey(idempotencyKey);
+    if (idempotent == null) {
+      commentService.create(principal.userId(), cardId, body);
+      return;
+    }
+    idempotency.execute(
+        boardService.requireProjectId(boardId),
+        idempotent,
+        "POST /items/" + cardId + "/comments",
+        () -> commentService.create(principal.userId(), cardId, body));
   }
 
   /**

@@ -1,4 +1,4 @@
-import type { NightRunOutcomeView } from './nightRuns'
+import type { NightRunOutcomeView, NightRunServerMode } from './nightRuns'
 import { apiFetch } from './client'
 import { leserZone } from './nightRunUsage'
 
@@ -23,6 +23,8 @@ export interface DisruptionView {
   nightRunId: number
   projectId: number
   projectName: string
+  /** Die Art des Laufs (Issue #1128) — an jeder Zeile als Marke. */
+  mode: NightRunServerMode
   startedAt: string
   outcome: NightRunOutcomeView
 }
@@ -38,8 +40,10 @@ export interface DisruptionView {
 export interface LeitstandView {
   /** Laeufe der laufenden Nacht, die noch arbeiten; juengster zuoberst. */
   laufende: DisruptionView[]
-  /** Beendete Laeufe derselben Nacht, verstummte eingeschlossen; juengster zuoberst. */
+  /** Beendete Laeufe des laufenden Zyklus, verstummte eingeschlossen; juengster zuoberst. */
   durchgefuehrte: DisruptionView[]
+  /** Beendete Laeufe des vorigen Zyklus (Issue #1135), in derselben Form und Ordnung. */
+  durchgefuehrteVoriger: DisruptionView[]
   /** Offene Stoerungen ueber **alle** Naechte (Kriterium 17), juengste zuoberst. */
   stoerungen: DisruptionView[]
 }

@@ -12,6 +12,7 @@ import java.util.stream.Stream;
 import org.mwolff.manban.auth.application.AdminAccessDeniedException;
 import org.mwolff.manban.auth.application.PlatformAdminChecker;
 import org.mwolff.manban.nightrun.domain.NightRunItem;
+import org.mwolff.manban.nightrun.domain.NightRunMode;
 import org.mwolff.manban.nightrun.domain.NightRunOutcome;
 import org.mwolff.manban.nightrun.domain.NightRunOutcome.Verdict;
 import org.mwolff.manban.nightrun.domain.NightRunPeriod;
@@ -76,6 +77,11 @@ public class DisruptionService {
    * davon zwischen Abfrage und Auswertung verstummen, stünde er ohne die Grenze unter den beendeten
    * Läufen der <em>neuen</em> Nacht — gegen AK 9.
    *
+   * <p><b>Beendet heißt: dieser und der vorige Zyklus</b> (Issue #1135, erweitert Kriterium 9 aus
+   * #1086). Die Abfrage reicht deshalb vom Beginn des vorigen Zyklus bis zum Ende des laufenden;
+   * die beiden Listen trennt die Grenze um 12:00. Wer um 13:00 nachsieht, findet die Läufe der
+   * vergangenen Nacht unter „Voriger Zyklus" statt einer leeren Liste. Ältere Läufe fallen weg.
+   *
    * <p><b>Die Zone kommt vom Leser</b> (Plan #1088 E6): Im Container läuft die JVM regelmäßig in
    * UTC, und „12:00 zonenlokal" wäre dann 14:00 in Berlin — die Nachtgrenze läge um Stunden
    * verschoben gegen die, die die Nachtlauf-Auswertung zieht.
@@ -88,16 +94,18 @@ public class DisruptionService {
     requirePlatformAdmin(userId);
     Instant jetzt = clock.instant();
     NightRunPeriod nacht = NightRunPeriod.laufendeNacht(jetzt, zone);
+    NightRunPeriod vorige = nacht.previous();
     List<DisruptionRepository.DisruptionCandidate> kandidaten =
-        repository.candidatesOfNight(nacht.from(), nacht.to(), jetzt, properties.stilleFrist());
+        repository.candidatesOfNight(vorige.from(), nacht.to(), jetzt, properties.stilleFrist());
     List<DisruptionRepository.DisruptionCandidate> offene = repository.openCandidates();
     Map<Long, List<NightRunItem>> jeLauf = pakete(kandidaten, offene);
     List<DisruptionView> zeilen = views(kandidaten, jeLauf);
+    List<DisruptionView> beendete =
+        zeilen.stream().filter(v -> v.outcome().verdict() != Verdict.RUNNING).toList();
     return new LeitstandView(
         zeilen.stream().filter(v -> v.outcome().verdict() == Verdict.RUNNING).toList(),
-        zeilen.stream()
-            .filter(v -> v.outcome().verdict() != Verdict.RUNNING && nacht.contains(v.startedAt()))
-            .toList(),
+        beendete.stream().filter(v -> nacht.contains(v.startedAt())).toList(),
+        beendete.stream().filter(v -> vorige.contains(v.startedAt())).toList(),
         views(offene, jeLauf).stream().filter(v -> v.outcome().isDisruption()).toList());
   }
 
@@ -178,6 +186,7 @@ public class DisruptionService {
         k.nightRunId(),
         k.projectId(),
         k.projectName(),
+        k.mode(),
         k.startedAt(),
         NightRunOutcome.of(
             k.complete(),
@@ -196,11 +205,15 @@ public class DisruptionService {
    * <p>Der <b>Grund</b> steht nicht als Text hier, sondern als {@link NightRunOutcome}: Der Browser
    * bildet ihn aus denselben Tabellen, aus denen die Nachtlauf-Auswertung ihn zeigt. Ein zweiter
    * Satz im Server wäre die zweite Formulierung desselben Sachverhalts, die AK 6 verbietet.
+   *
+   * <p>Die <b>Art</b> des Laufs ({@code mode}) steht seit Issue #1128 dabei: Der
+   * Plattform-Leitstand zeigt sie als Marke an jeder Zeile.
    */
   public record DisruptionView(
       long nightRunId,
       long projectId,
       String projectName,
+      NightRunMode mode,
       Instant startedAt,
       NightRunOutcome outcome) {}
 
@@ -213,12 +226,15 @@ public class DisruptionService {
    *
    * @param laufende Läufe, die noch arbeiten — <b>ohne</b> Nachtgrenze, also auch die einer
    *     früheren Nacht, die über Mittag weiterlaufen (Issue #1109); jüngster zuoberst
-   * @param durchgefuehrte beendete Läufe der <b>laufenden Nacht</b>, verstummte eingeschlossen;
+   * @param durchgefuehrte beendete Läufe des <b>laufenden Zyklus</b>, verstummte eingeschlossen;
    *     jüngster zuoberst
+   * @param durchgefuehrteVoriger beendete Läufe des <b>vorigen Zyklus</b> (Issue #1135), in
+   *     derselben Form und Ordnung
    * @param stoerungen offene Störungen über <b>alle</b> Nächte (Kriterium 17), jüngste zuoberst
    */
   public record LeitstandView(
       List<DisruptionView> laufende,
       List<DisruptionView> durchgefuehrte,
+      List<DisruptionView> durchgefuehrteVoriger,
       List<DisruptionView> stoerungen) {}
 }

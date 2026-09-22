@@ -25,7 +25,11 @@ import org.mwolff.manban.common.Identifiable;
  * @param tokenHash SHA-256-Hash des Klartext-Tokens
  * @param displayName Anzeigename (z. B. als Autor PAT-erzeugter Kommentare)
  * @param createdAt Erstellzeitpunkt
- * @param lastUsedAt letzte Verwendung; {@code null} solange ungenutzt
+ * @param lastUsedAt letzte Verwendung, <strong>minutengenau</strong> (Issue #997); {@code null}
+ *     solange ungenutzt. Der Stempel wird gedrosselt geschrieben — höchstens einmal je Token und
+ *     Minute —, weil der {@code UPDATE} sonst bei jedem API-Aufruf einen Zeilen-Lock auf genau der
+ *     Zeile nähme, die sich die gleichzeitigen Befehle einer Person teilen. Ein Wert, der hinter
+ *     dem letzten Aufruf zurückliegt, ist daher kein Fehler.
  * @param revoked ob das Token widerrufen wurde
  */
 public record AccessToken(

@@ -9,9 +9,11 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -41,6 +43,7 @@ import org.mwolff.manban.comment.application.CommentService.CommentView;
 class KanbanCompatServiceTest {
 
   private static final long BOARD = 10L;
+  private static final long PROJECT = 5L;
   private static final String BACKLOG_KEY = "BACKLOG";
 
   private BoardService boardService;
@@ -48,6 +51,7 @@ class KanbanCompatServiceTest {
   private LabelService labelService;
   private CommentService commentService;
   private KanbanCompatService service;
+  private InMemoryIdempotencyRecordStore idempotencyStore;
 
   private static KanbanPrincipal bound() {
     return new KanbanPrincipal(1L, 2L, 5L, BOARD, "Token");
@@ -96,7 +100,14 @@ class KanbanCompatServiceTest {
     cardService = mock(CardService.class);
     labelService = mock(LabelService.class);
     commentService = mock(CommentService.class);
-    service = new KanbanCompatService(boardService, cardService, labelService, commentService);
+    idempotencyStore = new InMemoryIdempotencyRecordStore();
+    service =
+        new KanbanCompatService(
+            boardService,
+            cardService,
+            labelService,
+            commentService,
+            new IdempotencyGuard(idempotencyStore, Clock.systemUTC()));
   }
 
   @ParameterizedTest
@@ -284,7 +295,7 @@ class KanbanCompatServiceTest {
 
     // When
     KanbanCompatService.Created created =
-        service.create(bound(), "Titel", "Body", null, false, null, false, null, null);
+        service.create(bound(), "Titel", "Body", null, false, null, false, null, null, null);
 
     // Then: kein board-gebundenes create mehr, sondern eine board-lose Pool-Idee; zurück kommt
     // deren id samt der projektweiten Nummer (#402), damit der Adapter sofort #N zeigen kann.
@@ -304,7 +315,7 @@ class KanbanCompatServiceTest {
     // When: absichtlich eine (frueher unbekannte) Spalte + ideaStored=true
     KanbanCompatService.Created created =
         service.create(
-            bound(), "Titel", "Body", "VOELLIG-UNBEKANNT", true, null, false, null, null);
+            bound(), "Titel", "Body", "VOELLIG-UNBEKANNT", true, null, false, null, null, null);
 
     // Then: keine InvalidKanbanColumnException, Delegation unveraendert
     verify(cardService).createProjectIdea(1L, 5L, "Titel", "Body", BOARD, null, null);
@@ -321,7 +332,8 @@ class KanbanCompatServiceTest {
 
     // When
     KanbanCompatService.Created created =
-        service.create(bound(), "Titel", "Body", null, false, "  sonar:abc  ", false, null, null);
+        service.create(
+            bound(), "Titel", "Body", null, false, "  sonar:abc  ", false, null, null, null);
 
     // Then: getrimmt durchgereicht, Duplikat als created=false gemeldet.
     verify(cardService).createProjectIdea(1L, 5L, "Titel", "Body", BOARD, "sonar:abc", null);
@@ -337,8 +349,8 @@ class KanbanCompatServiceTest {
         .thenReturn(new CardService.IdeaCreation(pooledIdea(42L), true));
 
     // When: überlanger Schlüssel und blanker Schlüssel
-    service.create(bound(), "Titel", "Body", null, false, "x".repeat(150), false, null, null);
-    service.create(bound(), "Titel", "Body", null, false, "   ", false, null, null);
+    service.create(bound(), "Titel", "Body", null, false, "x".repeat(150), false, null, null, null);
+    service.create(bound(), "Titel", "Body", null, false, "   ", false, null, null, null);
 
     // Then: gekappt auf 100 bzw. null (kein Schlüssel)
     verify(cardService).createProjectIdea(1L, 5L, "Titel", "Body", BOARD, "x".repeat(100), null);
@@ -387,7 +399,7 @@ class KanbanCompatServiceTest {
             1L, BOARD, 101L, new CardService.DirectCard("Titel", "Body", null, null, null)))
         .thenReturn(new CardService.IdeaCreation(pooledIdea(42L), true));
 
-    service.create(bound(), "Titel", "Body", "READY", false, null, true, null, null);
+    service.create(bound(), "Titel", "Body", "READY", false, null, true, null, null, null);
 
     verify(cardService)
         .createDirect(
@@ -404,7 +416,7 @@ class KanbanCompatServiceTest {
             1L, BOARD, 100L, new CardService.DirectCard("Titel", "Body", null, null, null)))
         .thenReturn(new CardService.IdeaCreation(pooledIdea(42L), true));
 
-    service.create(bound(), "Titel", "Body", null, false, null, true, null, null);
+    service.create(bound(), "Titel", "Body", null, false, null, true, null, null, null);
 
     verify(cardService)
         .createDirect(
@@ -417,7 +429,9 @@ class KanbanCompatServiceTest {
     when(boardService.requireProjectId(BOARD)).thenReturn(5L);
 
     assertThatThrownBy(
-            () -> service.create(bound(), "Titel", "Body", "   ", false, null, true, null, null))
+            () ->
+                service.create(
+                    bound(), "Titel", "Body", "   ", false, null, true, null, null, null))
         .isInstanceOf(InvalidKanbanColumnException.class);
     verify(cardService, org.mockito.Mockito.never())
         .createDirect(anyLong(), anyLong(), anyLong(), any());
@@ -428,7 +442,9 @@ class KanbanCompatServiceTest {
     when(boardService.requireProjectId(BOARD)).thenReturn(5L);
 
     assertThatThrownBy(
-            () -> service.create(bound(), "Titel", "Body", "FOO", false, null, true, null, null))
+            () ->
+                service.create(
+                    bound(), "Titel", "Body", "FOO", false, null, true, null, null, null))
         .isInstanceOf(InvalidKanbanColumnException.class);
     verify(cardService, org.mockito.Mockito.never())
         .createDirect(anyLong(), anyLong(), anyLong(), any());
@@ -446,7 +462,9 @@ class KanbanCompatServiceTest {
     when(boardService.listColumns(BOARD)).thenReturn(standardColumns());
 
     assertThatThrownBy(
-            () -> service.create(bound(), "Titel", "Body", "DONE", false, null, true, null, null))
+            () ->
+                service.create(
+                    bound(), "Titel", "Body", "DONE", false, null, true, null, null, null))
         .isInstanceOf(InvalidKanbanColumnException.class);
     verify(cardService, org.mockito.Mockito.never())
         .createDirect(anyLong(), anyLong(), anyLong(), any());
@@ -459,7 +477,9 @@ class KanbanCompatServiceTest {
     when(boardService.listColumns(BOARD)).thenReturn(standardColumns());
 
     assertThatThrownBy(
-            () -> service.create(bound(), "Titel", "Body", " done ", false, null, true, null, null))
+            () ->
+                service.create(
+                    bound(), "Titel", "Body", " done ", false, null, true, null, null, null))
         .isInstanceOf(InvalidKanbanColumnException.class);
   }
 
@@ -471,7 +491,7 @@ class KanbanCompatServiceTest {
         .thenReturn(new CardService.IdeaCreation(pooledIdea(42L), true));
 
     KanbanCompatService.Created created =
-        service.create(bound(), "Titel", "Body", "DONE", false, null, false, null, null);
+        service.create(bound(), "Titel", "Body", "DONE", false, null, false, null, null, null);
 
     assertThat(created.id()).isEqualTo(42L);
   }
@@ -485,7 +505,7 @@ class KanbanCompatServiceTest {
             1L, BOARD, 101L, new CardService.DirectCard("Titel", "Body", null, null, null)))
         .thenReturn(new CardService.IdeaCreation(pooledIdea(42L), true));
 
-    service.create(bound(), "Titel", "Body", "READY", true, null, true, null, null);
+    service.create(bound(), "Titel", "Body", "READY", true, null, true, null, null, null);
 
     verify(cardService)
         .createDirect(
@@ -503,7 +523,7 @@ class KanbanCompatServiceTest {
             1L, BOARD, 100L, new CardService.DirectCard("Titel", "Body", "github#278", 278, null)))
         .thenReturn(new CardService.IdeaCreation(pooledIdea(42L), true));
 
-    service.create(bound(), "Titel", "Body", null, false, "github#278", true, 278, null);
+    service.create(bound(), "Titel", "Body", null, false, "github#278", true, 278, null, null);
 
     verify(cardService)
         .createDirect(
@@ -519,7 +539,7 @@ class KanbanCompatServiceTest {
     assertThatThrownBy(
             () ->
                 service.create(
-                    bound(), "Titel", "Body", null, false, "github#278", false, 278, null))
+                    bound(), "Titel", "Body", null, false, "github#278", false, 278, null, null))
         .isInstanceOf(InvalidNumberedIngestException.class);
     verify(cardService, org.mockito.Mockito.never())
         .createProjectIdea(anyLong(), anyLong(), any(), any(), any(), any(), any());
@@ -532,7 +552,8 @@ class KanbanCompatServiceTest {
     when(boardService.requireProjectId(BOARD)).thenReturn(5L);
 
     assertThatThrownBy(
-            () -> service.create(bound(), "Titel", "Body", null, false, null, true, 278, null))
+            () ->
+                service.create(bound(), "Titel", "Body", null, false, null, true, 278, null, null))
         .isInstanceOf(InvalidNumberedIngestException.class);
   }
 
@@ -542,7 +563,8 @@ class KanbanCompatServiceTest {
     when(boardService.requireProjectId(BOARD)).thenReturn(5L);
 
     assertThatThrownBy(
-            () -> service.create(bound(), "Titel", "Body", null, false, "   ", true, 278, null))
+            () ->
+                service.create(bound(), "Titel", "Body", null, false, "   ", true, 278, null, null))
         .isInstanceOf(InvalidNumberedIngestException.class);
   }
 
@@ -554,7 +576,7 @@ class KanbanCompatServiceTest {
         .thenReturn(new CardService.IdeaCreation(pooledIdea(42L), true));
 
     KanbanCompatService.Created created =
-        service.create(bound(), "Titel", "Body", null, false, null, false, null, null);
+        service.create(bound(), "Titel", "Body", null, false, null, false, null, null, null);
 
     assertThat(created.id()).isEqualTo(42L);
   }
@@ -570,7 +592,7 @@ class KanbanCompatServiceTest {
 
     // When
     KanbanCompatService.Created created =
-        service.create(bound(), "Titel", "Body", null, false, "sonar:abc", true, null, null);
+        service.create(bound(), "Titel", "Body", null, false, "sonar:abc", true, null, null, null);
 
     // Then: Board-Pfad statt Pool-Pfad, created durchgereicht.
     verify(cardService)
@@ -590,7 +612,9 @@ class KanbanCompatServiceTest {
     // When / Then
     KanbanPrincipal principal = bound();
     assertThatThrownBy(
-            () -> service.create(principal, "Titel", "Body", null, false, null, false, null, null))
+            () ->
+                service.create(
+                    principal, "Titel", "Body", null, false, null, false, null, null, null))
         .isInstanceOf(BoardNotFoundException.class);
   }
 
@@ -766,10 +790,93 @@ class KanbanCompatServiceTest {
   @Test
   void comment_delegatesToCommentService() {
     // When
-    service.comment(bound(), 1L, "Hallo");
+    service.comment(bound(), 1L, "Hallo", null);
 
     // Then
     verify(commentService).create(1L, 1L, "Hallo");
+  }
+
+  @Test
+  void comment_withIdempotencyKey_createsTheCommentOnce() {
+    // Given: dieselbe Wiederholung zweimal (Issue #1001).
+    when(boardService.requireProjectId(BOARD)).thenReturn(PROJECT);
+
+    // When
+    service.comment(bound(), 1L, "Hallo", "k-1");
+    service.comment(bound(), 1L, "Hallo", "k-1");
+
+    // Then
+    verify(commentService, times(1)).create(1L, 1L, "Hallo");
+    assertThat(idempotencyStore.size()).isEqualTo(1);
+  }
+
+  @Test
+  void comment_withDifferentIdempotencyKeys_createsTwoComments() {
+    // Given: der ausdrücklich erlaubte Fall — bewusst zweimal derselbe Text.
+    when(boardService.requireProjectId(BOARD)).thenReturn(PROJECT);
+
+    // When
+    service.comment(bound(), 1L, "Hallo", "k-1");
+    service.comment(bound(), 1L, "Hallo", "k-2");
+
+    // Then
+    verify(commentService, times(2)).create(1L, 1L, "Hallo");
+    assertThat(idempotencyStore.size()).isEqualTo(2);
+  }
+
+  @Test
+  void comment_withBlankIdempotencyKey_behavesAsWithout() {
+    service.comment(bound(), 1L, "Hallo", "   ");
+    service.comment(bound(), 1L, "Hallo", "   ");
+
+    verify(commentService, times(2)).create(1L, 1L, "Hallo");
+    assertThat(idempotencyStore.size()).isZero();
+  }
+
+  @Test
+  void comment_withIdempotencyKey_stillChecksTheBoardFirst() {
+    doThrow(new CardNotFoundException()).when(cardService).requireOnBoard(1L, BOARD);
+
+    assertThatThrownBy(() -> service.comment(bound(), 1L, "Hallo", "k-1"))
+        .isInstanceOf(CardNotFoundException.class);
+    assertThat(idempotencyStore.size()).isZero();
+  }
+
+  @Test
+  void create_withIdempotencyKey_createsOnce_andAnswersTheSame() {
+    // Given
+    when(boardService.requireProjectId(BOARD)).thenReturn(PROJECT);
+    when(cardService.createProjectIdea(1L, PROJECT, "Titel", "Body", BOARD, null, null))
+        .thenReturn(new CardService.IdeaCreation(pooledIdea(55L), true));
+
+    // When
+    KanbanCompatService.Created first =
+        service.create(bound(), "Titel", "Body", null, false, null, false, null, null, " k-1 ");
+    KanbanCompatService.Created again =
+        service.create(bound(), "Titel", "Body", null, false, null, false, null, null, "k-1");
+
+    // Then: der Schlüssel wird wie der externalKey getrimmt; die Wirkung entsteht einmal.
+    assertThat(first.id()).isEqualTo(55L);
+    assertThat(again).isEqualTo(first);
+    verify(cardService, times(1))
+        .createProjectIdea(1L, PROJECT, "Titel", "Body", BOARD, null, null);
+  }
+
+  @Test
+  void create_withExternalKey_ignoresTheIdempotencyKey() {
+    // Given: E8 — der fachliche Schlüssel hat Vorrang, der technische greift gar nicht erst.
+    when(boardService.requireProjectId(BOARD)).thenReturn(PROJECT);
+    when(cardService.createProjectIdea(1L, PROJECT, "Titel", "Body", BOARD, "sonar:abc", null))
+        .thenReturn(new CardService.IdeaCreation(pooledIdea(55L), true));
+
+    // When
+    service.create(bound(), "Titel", "Body", null, false, "sonar:abc", false, null, null, "k-1");
+    service.create(bound(), "Titel", "Body", null, false, "sonar:abc", false, null, null, "k-1");
+
+    // Then: beide Aufrufe erreichen die card-Fassade, deren externalKey-Abgleich entscheidet.
+    verify(cardService, times(2))
+        .createProjectIdea(1L, PROJECT, "Titel", "Body", BOARD, "sonar:abc", null);
+    assertThat(idempotencyStore.size()).isZero();
   }
 
   @Test
@@ -779,7 +886,7 @@ class KanbanCompatServiceTest {
     doThrow(new CardNotFoundException()).when(cardService).requireOnBoard(1L, BOARD);
 
     // When / Then
-    assertThatThrownBy(() -> service.comment(bound(), 1L, "Hallo"))
+    assertThatThrownBy(() -> service.comment(bound(), 1L, "Hallo", null))
         .isInstanceOf(CardNotFoundException.class);
   }
 

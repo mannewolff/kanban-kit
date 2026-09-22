@@ -14,6 +14,11 @@ export interface Bandabschnitt {
   erreicht: boolean
   /** Verbrauch und Vorgabe als Zahlen. */
   zahlen: string
+  /**
+   * Die Kosten des Schritts (Issue #1106); `null`, wo keine gemeldet sind — dann steht keine
+   * Zeile, und nie eine 0, die eine Messung behauptete.
+   */
+  kosten: string | null
   /** Der Vermerk unter dem Abschnitt; `null`, wo keiner steht. */
   vermerk: string | null
   /** Die Füllfarbe — der Ampelton nur an dem Abschnitt, an dem der Vorgang endete. */
@@ -103,6 +108,15 @@ export function NachtlaufStufenband({
           >
             {abschnitt.zahlen}
           </Typography>
+          {abschnitt.kosten !== null && (
+            <Typography
+              component="div"
+              data-testid={`${abschnittTestId}-${abschnitt.schluessel}-kosten`}
+              sx={{ ...ZEIT_STIL, color: 'text.secondary' }}
+            >
+              {abschnitt.kosten}
+            </Typography>
+          )}
           {abschnitt.vermerk !== null && (
             <Typography component="div" sx={{ ...ZEIT_STIL, color: MELDER.bernst }}>
               {abschnitt.vermerk}

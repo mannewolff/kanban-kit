@@ -40,6 +40,12 @@ class KanbanAccessTokenEntity {
   @Column(name = "created_at", nullable = false)
   private Instant createdAt;
 
+  /**
+   * Letzte Verwendung, <strong>minutengenau</strong> (Issue #997): Der Stempel wird gedrosselt
+   * geschrieben — höchstens einmal je Token und Minute —, weil der {@code UPDATE} sonst bei jedem
+   * API-Aufruf einen Zeilen-Lock auf genau der Zeile nähme, die sich die gleichzeitigen Befehle
+   * einer Person teilen. Ein Wert hinter dem letzten Aufruf ist kein Fehler.
+   */
   @Column(name = "last_used_at")
   private @Nullable Instant lastUsedAt;
 

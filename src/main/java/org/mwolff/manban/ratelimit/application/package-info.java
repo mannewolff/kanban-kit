@@ -7,6 +7,11 @@
  * per ArchUnit-Whitelist abgesichert. Konfiguration ist kein Vertragsbestandteil: Wer wissen will,
  * ob die Bremse läuft, fragt {@code RateLimiter.isEnabled()}.
  *
+ * <p>Seit Issue #999 trägt das Paket einen zweiten Mechanismus: die Durchsatzbremse mit Fassade
+ * {@code ThroughputLimiter}, Port {@code PersonBudgetStore} und Konfiguration {@code
+ * ThroughputProperties}. Sie ist ebenso modulintern; ihr einziger Aufrufer liegt in {@code
+ * ratelimit.web}.
+ *
  * <p>{@code @NullMarked} (Issue #0080): Alle Referenzen in diesem Package sind per Default
  * non-null; Ausnahmen tragen explizit {@code @Nullable} (CLAUDE-java.md §6.2).
  */

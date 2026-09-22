@@ -19,6 +19,7 @@
 import { pathToFileURL } from 'node:url';
 import { mkdirSync, readFileSync, writeFileSync, chmodSync, rmSync, existsSync, realpathSync } from 'node:fs';
 import { homedir } from 'node:os';
+import { randomUUID } from 'node:crypto';
 import { dirname, join } from 'node:path';
 
 const PROD_DEFAULT_HOST = 'https://kanban.mwolff.org';
@@ -34,13 +35,19 @@ Nutzung:
   tbx auth status
   tbx auth logout
 
-  tbx issue create --title <text> [--body <text>]
+  tbx issue create --title <text> [--body <text>] [--idempotency-key <wert>]
   tbx issue get <nummer>            (inkl. Kommentaren der Karte)
   tbx issue list [--status <status>]
   tbx issue move <nummer> <status>
-  tbx issue comment <nummer> --text <text>
+  tbx issue comment <nummer> --text <text> [--idempotency-key <wert>]
 
 Status-Werte: backlog, ready, in_progress, in_review, done
+
+Unter Last wiederholt tbx selbst: bei einer Abweisung wegen Ueberlast (429 mit
+urn:manban:overload), bei Zeitablauf und Verbindungsabbruch, bei 5xx nur wo
+gefahrlos — hoechstens 30 Sekunden lang. Endet ein anlegender Befehl mit
+"Ausgang unklar", mit dem genannten --idempotency-key wiederholen, nie ohne:
+derselbe Schluessel fuehrt die Wirkung hoechstens einmal aus.
 
 Der Token wird in der Web-UI erzeugt (Einstellungen -> Kanban-Tokens) und mit
 'tbx auth logout' bzw. in der Web-UI widerrufen.
@@ -144,8 +151,17 @@ export class AuthError extends Error {
   }
 }
 
-/** Allgemeiner CLI-Fehler (Validierung, Not-Found, API-Fehler) — main() faengt ihn wie jeden Error. */
-export class CliError extends Error {}
+/**
+ * Allgemeiner CLI-Fehler (Validierung, Not-Found, API-Fehler) — main() faengt ihn wie jeden Error.
+ * `rueckmeldung` ist die Auskunft ueber die Wirkung (siehe RUECKMELDUNG); der Default gilt fuer
+ * jeden Fehler, bei dem nichts ausgefuehrt wurde.
+ */
+export class CliError extends Error {
+  constructor(message, rueckmeldung = 'nicht-ausgefuehrt') {
+    super(message);
+    this.rueckmeldung = rueckmeldung;
+  }
+}
 
 // --- Token-Beschaffung fuer login --------------------------------------------
 
@@ -167,30 +183,262 @@ export async function acquireToken(flags, io) {
   throw new CliError('Kein Token angegeben. Nutze --token, TBX_TOKEN oder stdin.');
 }
 
+// ============================================================
+// Wiederholung gegen Ueberlast (Issue #1005)
+// ============================================================
+//
+// ACHTUNG, ZWILLING: Dieselbe Logik traegt `kit/board.mjs` im claude-workflow-kit
+// (dort Issue #834). Die beiden Fassungen sind bewusst wortgleich kommentiert,
+// damit eine spaetere Aenderung nicht nur eine Haelfte trifft — wer hier die
+// Staffel, die Wiederholregeln oder die drei Rueckmeldungen anfasst, aendert
+// die Schwesterfassung mit. Geteilter Code ist es nicht: tbx.mjs bleibt eine
+// eigenstaendig kopierbare Einzeldatei ohne Fremdabhaengigkeiten.
+//
+// Der Anlass: Das Board begrenzt seit kanban-kit 2.5 die Befehle je Person und
+// weist mit `429`, `Retry-After` und dem Problem-Detail `type: urn:manban:overload`
+// ab. Ein Nachtlauf schickt Hunderte Befehle in Folge; ohne Wiederholung bricht
+// er irgendwo ab und hinterlaesst eine halb bearbeitete Kette.
+//
+// Ein Unterschied zur Schwesterfassung bleibt bewusst (Plan #995, E11): tbx kennt
+// keinen Nachtbetrieb und hat ein festes Gesamtbudget von 30 Sekunden.
+
+/** Das Problem-Detail, an dem eine Ueberlast-Abweisung erkennbar ist. */
+export const UEBERLAST_TYPE = 'urn:manban:overload';
+
+/** Zeitgrenze je Einzelversuch. Drei volle Haenger passen so ins Budget. */
+const VERSUCH_MS = 10_000;
+/** Festes Gesamtbudget einer Wiederholschleife. */
+export const BUDGET_MS = 30_000;
+const WARTE_BASIS_MS = 500;
+const WARTE_MAX_MS = 8_000;
+const WARTE_MIN_MS = 100;
+/** Anteil der Wartezeit, der zufaellig obendrauf kommt (Streuung gegen Gleichtakt). */
+const STREUUNG = 0.25;
+
+/**
+ * Die drei Auskuenfte ueber die Wirkung eines Befehls: ausgefuehrt, sicher nicht
+ * ausgefuehrt, oder unklar — dann kann die Wirkung eingetreten sein.
+ */
+export const RUECKMELDUNG = {
+  AUSGEFUEHRT: 'ausgefuehrt',
+  NICHT_AUSGEFUEHRT: 'nicht-ausgefuehrt',
+  AUSGANG_UNKLAR: 'ausgang-unklar',
+};
+
+/**
+ * Netzfehler-Codes, bei denen nachweislich kein Aufruf hinausging. Sie sind keine
+ * Wiederholung wert: Ein abgeschalteter Server oder ein unbekannter Name wird
+ * innerhalb des Budgets nicht wieder da sein, und der Aufruf hat sicher nichts
+ * bewirkt — deshalb "nicht ausgefuehrt" statt "Ausgang unklar".
+ */
+const NETZ_ENDGUELTIG = new Set(['ECONNREFUSED', 'ENOTFOUND', 'ERR_INVALID_URL', 'EPROTO', 'CERT_HAS_EXPIRED']);
+
+/**
+ * Ordnet einen fetch-Wurf ein: `zeitablauf` (die eigene Zeitgrenze hat abgebrochen),
+ * `endgueltig` (kein Aufruf ging hinaus) oder `abbruch` (die Verbindung brach
+ * unterwegs ab — der Aufruf kann angekommen sein).
+ */
+export function netzfehlerArt(e) {
+  if (e?.name === 'TimeoutError' || e?.name === 'AbortError') return 'zeitablauf';
+  const code = e?.cause?.code ?? e?.code ?? '';
+  return NETZ_ENDGUELTIG.has(code) ? 'endgueltig' : 'abbruch';
+}
+
+/**
+ * Darf dieser Fehlschlag wiederholt werden? Die Regel in einem Satz: alles, was
+ * entweder nichts ausgefuehrt hat (Abweisung wegen Ueberlast) oder gefahrlos
+ * zweimal laufen darf (lesend, ersetzend, oder mit Idempotenz-Schluessel).
+ *
+ *  - `429` nur mit dem Ueberlast-`type`, dann aber bei JEDER Methode: Eine
+ *    Abweisung hat die Wirkung nicht ausgefuehrt. Ein fremdes `429` ohne diesen
+ *    `type` sagt nichts ueber den Ausgang und bleibt unwiederholt.
+ *  - `5xx` bei `GET` (folgenlos), `PUT`/`DELETE` (dasselbe Ergebnis bei
+ *    Wiederholung) und bei `POST` nur MIT Schluessel. Ein `POST` ohne Schluessel
+ *    wuerde sich sonst nach einem 502 des vorgeschalteten Proxys doppeln.
+ *  - `401` nie: ein widerrufener Token wird durch Warten nicht gueltig.
+ */
+export function darfWiederholen({ method, status = null, typ = null, hatSchluessel = false, netz = null }) {
+  if (netz) return netz !== 'endgueltig';
+  if (status === 429) return typ === UEBERLAST_TYPE;
+  if (status === null || status < 500) return false;
+  const m = (method || 'GET').toUpperCase();
+  if (m === 'POST') return hatSchluessel;
+  return true;
+}
+
+/**
+ * Die Rueckmeldung zu einem abgeschlossenen Versuch (siehe RUECKMELDUNG).
+ * Entscheidend ist, ob der Aufruf etwas veraendert haben KANN: Nur ein
+ * schreibender Aufruf, der hinausging und ohne Antwort blieb, ist unklar.
+ */
+export function rueckmeldungFuer({ ok = false, status = null, netz = null, method = 'GET' }) {
+  if (ok) return RUECKMELDUNG.AUSGEFUEHRT;
+  const schreibend = (method || 'GET').toUpperCase() !== 'GET';
+  if (!schreibend) return RUECKMELDUNG.NICHT_AUSGEFUEHRT;
+  if (netz) return netz === 'endgueltig' ? RUECKMELDUNG.NICHT_AUSGEFUEHRT : RUECKMELDUNG.AUSGANG_UNKLAR;
+  return status >= 500 ? RUECKMELDUNG.AUSGANG_UNKLAR : RUECKMELDUNG.NICHT_AUSGEFUEHRT;
+}
+
+/**
+ * Wartezeit vor dem naechsten Versuch: verdoppelnd bis zur Deckelung, mit
+ * Streuung nach oben. `Retry-After` (Sekunden) schlaegt die eigene Staffel — der
+ * Server weiss besser, wann sein Fenster wieder offen ist. Die Untergrenze
+ * verhindert eine Schleife ohne Fortschritt bei `Retry-After: 0`.
+ */
+export function wartezeitMs(versuch, retryAfterSek = null, zufall = Math.random) {
+  const roh = Number(retryAfterSek);
+  const basis = retryAfterSek !== null && retryAfterSek !== undefined && Number.isFinite(roh) && roh >= 0
+    ? roh * 1000
+    : Math.min(WARTE_BASIS_MS * 2 ** (versuch - 1), WARTE_MAX_MS);
+  return Math.max(WARTE_MIN_MS, Math.round(basis + basis * STREUUNG * zufall()));
+}
+
+/** Shell-sicheres Zitat fuer das Wiederholkommando — nur, wo noetig. */
+function zitiere(arg) {
+  if (/^[\w@%+=:,./-]+$/.test(arg)) return arg;
+  const maskiert = String(arg).replaceAll("'", String.raw`'\''`);
+  return `'${maskiert}'`;
+}
+
+/**
+ * Baut das Kommando, mit dem sich ein unklar ausgegangener Aufruf gefahrlos
+ * wiederholen laesst: derselbe Aufruf, derselbe Schluessel. Ein bereits
+ * uebergebener `--idempotency-key` wird ersetzt statt gedoppelt. `argv` ist
+ * die Argumentliste ohne Programmnamen, wie `main` sie bekommt.
+ */
+export function wiederholKommando(schluessel, argv = []) {
+  const args = [];
+  for (let i = 0; i < argv.length; i++) {
+    if (argv[i] === '--idempotency-key') {
+      i++;
+      continue;
+    }
+    args.push(argv[i]);
+  }
+  args.push('--idempotency-key', schluessel);
+  return ['tbx', ...args].map(zitiere).join(' ');
+}
+
+const schlafe = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Liest die Lage eines fehlgeschlagenen Versuchs aus: Klartext-Grund, Problem-`type`
+ * und `Retry-After`. Der Rumpf wird aus einer Kopie gelesen, damit der Aufrufer die
+ * Antwort, die er am Ende bekommt, noch selbst auswerten kann.
+ */
+async function fehlerlage(res, wurf) {
+  if (!res) return { grund: `Netzfehler (${wurf.name}: ${wurf.message})`, typ: null, retryAfter: null };
+  let grund = `HTTP ${res.status}`;
+  let typ = null;
+  try {
+    const body = await (typeof res.clone === 'function' ? res.clone() : res).json();
+    if (body?.message) grund = `${grund}: ${body.message}`;
+    if (typeof body?.type === 'string') typ = body.type;
+  } catch {
+    /* kein JSON-Body */
+  }
+  const roh = res.headers?.get?.('retry-after');
+  const sek = roh === null || roh === undefined || roh === '' ? null : Number(roh);
+  return { grund, typ, retryAfter: Number.isFinite(sek) ? sek : null };
+}
+
+/** Der Zusatz zur Meldung "Ausgang unklar": was passiert sein kann und wie es weitergeht. */
+function unklarHinweis(method, path, schluessel, argv) {
+  const kopf = `Ausgang unklar: ${method} ${path} ging hinaus, blieb aber ohne verwertbare Antwort — `
+    + 'die Wirkung kann eingetreten sein.';
+  if (!schluessel) {
+    return `${kopf} Der Aufruf lief ohne Idempotenz-Schluessel; eine blinde Wiederholung `
+      + 'kann ihn ein zweites Mal ausfuehren. Erst am Board nachsehen.';
+  }
+  return `${kopf} Schluessel: ${schluessel}. Mit genau diesem Schluessel wiederholen — derselbe `
+    + `Schluessel fuehrt die Wirkung hoechstens einmal aus:\n  ${wiederholKommando(schluessel, argv)}`;
+}
+
 // --- API-Zugriff -------------------------------------------------------------
 
 /**
  * Roher, token-authentifizierter Request gegen `${host}${path}` — ohne Zugriff auf
- * gespeicherte Dateien (fuer die Login-Validierung, bevor gespeichert wird).
+ * gespeicherte Dateien (fuer die Login-Validierung, bevor gespeichert wird). Mit
+ * Zeitgrenze, Wiederholung und Idempotenz-Schluessel; die Regeln stehen in den
+ * reinen Funktionen darueber, hier steht nur ihre Reihenfolge.
+ *
+ * `options.idempotencyKey` traegt den Schluessel fuer die beiden Endpunkte, die ihn
+ * serverseitig auswerten; er bleibt ueber ALLE Versuche gleich. `umgebung.uhr` haelt
+ * Zeitquelle, Schlafen, Zufall und die Meldespur (injizierbar wie `fetchImpl`),
+ * `umgebung.argv` den Befehl fuer das Wiederholkommando.
+ *
+ * Eine Antwort, die nicht (mehr) wiederholt wird, geht an den Aufrufer zurueck — er
+ * wertet 401, 404 und Co. aus wie bisher. Geworfen wird nur, wo keine Antwort vorliegt
+ * oder der Ausgang unklar ist.
  */
-export function tokenFetch(host, token, path, options, fetchImpl = fetch) {
-  return fetchImpl(`${host}${path}`, {
-    ...options,
-    headers: { ...(options?.headers || {}), [TOKEN_HEADER]: token },
-  });
+export async function tokenFetch(host, token, path, options = {}, fetchImpl = fetch, umgebung = {}) {
+  const { idempotencyKey, ...rest } = options || {};
+  const uhr = umgebung.uhr || {};
+  const jetzt = uhr.jetzt ?? Date.now;
+  const schlaf = uhr.schlaf ?? schlafe;
+  const zufall = uhr.zufall ?? Math.random;
+  const melde = uhr.melde ?? ((zeile) => process.stderr.write(`${zeile}\n`));
+  const method = (rest.method || 'GET').toUpperCase();
+  const headers = { ...(rest.headers || {}), [TOKEN_HEADER]: token };
+  if (idempotencyKey) headers['Idempotency-Key'] = idempotencyKey;
+  const frist = jetzt() + BUDGET_MS;
+
+  for (let versuch = 1; ; versuch++) {
+    let res = null;
+    let wurf = null;
+    try {
+      res = await fetchImpl(`${host}${path}`, { ...rest, headers, signal: AbortSignal.timeout(VERSUCH_MS) });
+    } catch (e) {
+      wurf = e;
+    }
+    if (res?.ok || res?.status === 401) return res;
+
+    const status = res?.status ?? null;
+    const netz = wurf ? netzfehlerArt(wurf) : null;
+    const { grund, typ, retryAfter } = await fehlerlage(res, wurf);
+    const warte = wartezeitMs(versuch, retryAfter, zufall);
+    const nochmal = darfWiederholen({ method, status, typ, hatSchluessel: Boolean(idempotencyKey), netz })
+      && jetzt() + warte <= frist;
+    if (!nochmal) {
+      const rueckmeldung = rueckmeldungFuer({ status, netz, method });
+      if (rueckmeldung === RUECKMELDUNG.AUSGANG_UNKLAR) {
+        const basis = wurf ? `Board nicht erreichbar (${host}): ${wurf.message}` : `Board-Fehler: ${grund}`;
+        throw new CliError(`${basis}\n${unklarHinweis(method, path, idempotencyKey, umgebung.argv)}`, rueckmeldung);
+      }
+      if (wurf) throw new CliError(`Board nicht erreichbar (${host}): ${wurf.message}`, rueckmeldung);
+      return res;
+    }
+
+    // Eine Zeile je Wiederholung, nicht je Aufruf: Wer zusieht, soll Warten von
+    // Haengen unterscheiden koennen.
+    melde(`tbx: ${method} ${path} — Versuch ${versuch} endete mit ${grund}, erneut in ${warte} ms `
+      + `(Frist ${Math.round(BUDGET_MS / 1000)} s)`);
+    await schlaf(warte);
+  }
 }
 
 /**
  * Fuehrt einen PAT-authentifizierten Request gegen `${config.host}${path}` aus.
  * Wirft AuthError mit reason 'not_logged_in', wenn kein Login vorliegt.
  */
-export async function apiFetch(path, options = {}, { fetchImpl = fetch, baseDir } = {}) {
+export async function apiFetch(path, options = {}, { fetchImpl = fetch, baseDir, uhr, argv } = {}) {
   const config = readJsonFile(configPath(baseDir));
   const tokens = readJsonFile(tokensPath(baseDir));
   if (!config || !config.host || !tokens || !tokens.token) {
     throw new AuthError('Nicht angemeldet. Bitte zuerst: tbx auth login', 'not_logged_in');
   }
-  return tokenFetch(config.host, tokens.token, path, options, fetchImpl);
+  return tokenFetch(config.host, tokens.token, path, options, fetchImpl, { uhr, argv });
+}
+
+/** Was ein Kommando aus `io` an den API-Zugriff weiterreicht. */
+function verbindung(io) {
+  return { fetchImpl: io.fetchImpl, baseDir: io.baseDir, uhr: io.uhr, argv: io.argv };
+}
+
+/** Liest `--idempotency-key`; ein nackter Schalter waere sonst der Schluessel "true". */
+function idempotenzSchluessel(flags) {
+  if (flags['idempotency-key'] === undefined) return randomUUID();
+  return requireStringFlag(flags, 'idempotency-key');
 }
 
 // --- Status-Mapping (Kit-Status <-> Backend-Spalte) ---------------------------
@@ -242,7 +490,7 @@ async function ensureOk(res) {
 
 /** Liest das gruppierte Board und liefert eine flache, mit `status` angereicherte Liste. */
 export async function fetchBoardItems(io) {
-  const res = await apiFetch('/api/kanban/items', {}, { fetchImpl: io.fetchImpl, baseDir: io.baseDir });
+  const res = await apiFetch('/api/kanban/items', {}, verbindung(io));
   await ensureOk(res);
   const grouped = await res.json();
   return Object.values(grouped)
@@ -291,7 +539,7 @@ export async function fetchItemComments(itemId, io) {
   const res = await apiFetch(
     `/api/kanban/items/${itemId}/comments`,
     {},
-    { fetchImpl: io.fetchImpl, baseDir: io.baseDir },
+    verbindung(io),
   );
   if (!res.ok) return [];
   const body = await res.json().catch(() => null);
@@ -303,6 +551,7 @@ export async function fetchItemComments(itemId, io) {
 
 async function cmdIssueCreate(flags, io) {
   if (!flags.title) throw new CliError('--title ist erforderlich');
+  const idempotencyKey = idempotenzSchluessel(flags);
   const config = readJsonFile(configPath(io.baseDir));
   const res = await apiFetch(
     '/api/kanban/items',
@@ -310,8 +559,9 @@ async function cmdIssueCreate(flags, io) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ title: flags.title, body: flags.body || '', column: 'BACKLOG' }),
+      idempotencyKey,
     },
-    { fetchImpl: io.fetchImpl, baseDir: io.baseDir },
+    verbindung(io),
   );
   await ensureOk(res);
   const created = await res.json();
@@ -352,7 +602,7 @@ async function cmdIssueMove(numberArg, statusArg, io) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ column, position: targetPosition }),
     },
-    { fetchImpl: io.fetchImpl, baseDir: io.baseDir },
+    verbindung(io),
   );
   await ensureOk(res);
   io.stdout(JSON.stringify({ ok: true, id: number, status: statusArg }, null, 2) + '\n');
@@ -360,6 +610,7 @@ async function cmdIssueMove(numberArg, statusArg, io) {
 
 async function cmdIssueComment(numberArg, flags, io) {
   if (!flags.text) throw new CliError('--text ist erforderlich');
+  const idempotencyKey = idempotenzSchluessel(flags);
   const number = parseIssueNumber(numberArg);
   const item = await resolveItemByNumber(number, io);
   const res = await apiFetch(
@@ -368,8 +619,9 @@ async function cmdIssueComment(numberArg, flags, io) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ body: flags.text }),
+      idempotencyKey,
     },
-    { fetchImpl: io.fetchImpl, baseDir: io.baseDir },
+    verbindung(io),
   );
   await ensureOk(res);
   io.stdout(JSON.stringify({ ok: true, id: number }, null, 2) + '\n');
@@ -383,7 +635,7 @@ async function cmdLogin(flags, io) {
   const token = await acquireToken(flags, io);
 
   // Token gegen die API validieren, bevor er gespeichert wird.
-  const res = await tokenFetch(host, token, '/api/kanban/items', {}, io.fetchImpl);
+  const res = await tokenFetch(host, token, '/api/kanban/items', {}, io.fetchImpl, verbindung(io));
   if (res.status === 401) {
     throw new AuthError('Token ungültig oder widerrufen.', 'invalid_token');
   }
@@ -403,7 +655,7 @@ async function cmdStatus(io) {
     io.stderr('Nicht angemeldet. Bitte zuerst: tbx auth login\n');
     return 1;
   }
-  const res = await tokenFetch(config.host, tokens.token, '/api/kanban/items', {}, io.fetchImpl);
+  const res = await tokenFetch(config.host, tokens.token, '/api/kanban/items', {}, io.fetchImpl, verbindung(io));
   const valid = res.ok;
   io.stdout(JSON.stringify({ host: config.host, valid }, null, 2) + '\n');
   return valid ? 0 : 1;
@@ -445,6 +697,8 @@ export async function main(argv, io = defaultIo()) {
 
   const [axis, command, ...rest] = argv;
   const flags = parseArgs(rest);
+  // Der Befehl reist mit, damit "Ausgang unklar" das vollstaendige Wiederholkommando nennt.
+  io = { ...io, argv };
 
   if (axis === 'auth') {
     try {

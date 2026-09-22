@@ -107,7 +107,7 @@ geladen und ist per `.gitignore` ausgeschlossen).
 | `MANBAN_BASE_URL` | Basis-URL für Links in E-Mails | `https://localhost` |
 | `MANBAN_BOOTSTRAP_ADMIN_TOKEN` | Einmal-Token für den ersten Admin (leer = deaktiviert) | leer |
 | `MANBAN_MAIL_ENABLED` | echten Mailversand aktivieren | `false` (Links werden geloggt) |
-| `MANBAN_CLEANUP_ENABLED` | geplante Aufräum-Jobs aktivieren (Done-Archivierung **und** Papierkorb-Leerung) | `true` |
+| `MANBAN_CLEANUP_ENABLED` | geplante Aufräum-Jobs aktivieren (Done-Archivierung, Papierkorb-Leerung, Outbox-Aufräumung, Aufräumung der Überlast-Abweisungen nach 90 Tagen und der Idempotenz-Schlüssel nach 24 Stunden) | `true` |
 | `MANBAN_DONE_RETENTION_DAYS` | Tage bis Done-Karten automatisch archiviert werden | `30` |
 | `MANBAN_OUTBOX_ENABLED` | Outbox-Worker aktivieren (abgeschaltet bleiben Aufträge liegen) | `true` |
 | `MANBAN_OUTBOX_POLL_INTERVAL_MS` | Abstand zwischen zwei Worker-Läufen in Millisekunden | `5000` |
@@ -116,7 +116,19 @@ geladen und ist per `.gitignore` ausgeschlossen).
 | `MANBAN_SESSION_SECRET` | HMAC-Secret der Session-Cookies. Der Dev-Default gilt **nur** im ausdrücklich eingeschalteten Entwicklungsbetrieb (`MANBAN_DEV_MODE=true`) — sonst verweigert die Anwendung den Start | Dev-Default |
 | `MANBAN_DEV_MODE` | Entwicklungs-/Testbetrieb ausdrücklich einschalten; erlaubt den Start mit dem Standard-Sitzungsschlüssel, mit Warnung. Der lokale Compose-Stack setzt ihn auf `true`, das Produktions-Overlay fest auf `false` | `false` |
 | `MANBAN_COOKIE_SECURE` | Session-Cookie nur über HTTPS | `true` |
+| `MANBAN_DB_POOL_MAX` | Höchstzahl der Datenbankverbindungen der Anwendung | `20` |
+| `MANBAN_DB_POOL_MIN_IDLE` | Verbindungen, die auch ohne Last offen bleiben | `5` |
+| `MANBAN_DB_CONNECTION_TIMEOUT_MS` | Höchste Wartezeit auf eine freie Verbindung in Millisekunden | `5000` |
+| `MANBAN_SERVER_THREADS_MAX` | Höchstzahl gleichzeitig bearbeiteter HTTP-Aufrufe | `600` |
 | `POSTGRES_*`, `MINIO_*` | DB- und Objektspeicher-Zugangsdaten | siehe `docker-compose.yml` |
+
+> **Verbindungspool und Server-Threads:** Die vier Stellschrauben `MANBAN_DB_POOL_MAX`,
+> `MANBAN_DB_POOL_MIN_IDLE`, `MANBAN_DB_CONNECTION_TIMEOUT_MS` und `MANBAN_SERVER_THREADS_MAX`
+> sind ausdrücklich gesetzt, statt auf den Vorgaben von HikariCP und Tomcat zu stehen (Issue #998).
+> Die Werte sind begründete Startwerte für 50 gleichzeitig aktive Personen; die Rechnung dazu steht
+> als Kommentar in `src/main/resources/application.yml`. `MANBAN_DB_POOL_MAX` muss unter
+> `max_connections` der Datenbank bleiben (Postgres-Vorgabe: 100). Messergebnis und
+> Mindestausstattung folgen mit dem Lastnachweis.
 
 > **Papierkorb-Aufbewahrung:** Karten im Papierkorb werden nach **30 Tagen** automatisch endgültig
 > gelöscht. Diese Frist ist derzeit fest eingestellt (nicht über eine Umgebungsvariable steuerbar);
@@ -191,6 +203,38 @@ N Instanzen hinter einem Lastverteiler, zählt jede für sich: Die tatsächliche
 N-fache der eingestellten. Das ist bekannt und bewusst nicht gelöst — das Produkt liefert eine
 Instanz aus. Wer mehrere betreibt, sollte die Werte entsprechend senken oder eine Bremse im Proxy
 davorsetzen.
+
+## Durchsatzbremse für Zugriffstoken
+
+Neben der Zählbremse oben gibt es eine **zweite, davon getrennte** Bremse (Konfigurationsblock
+`manban.ratelimit.throughput`). Beide antworten mit `429` — sie unterscheiden sich darin, **wen**
+sie begrenzen und **wie**:
+
+| | Zählbremse gegen Massenversuche | Durchsatzbremse für Zugriffstoken |
+| --- | --- | --- |
+| Greift auf | Anmeldung, Registrierung, Reset-Anforderung | jeden Aufruf mit Zugriffstoken (CLI, Nachtlauf) |
+| Zählt je | Herkunft (IP) und Vorgang | Person, über alle ihre Token hinweg |
+| Regel | N Versuche je Fenster, dann feste Sperre | kontinuierlich nachgefüllt, nur der Überschuss wird abgewiesen |
+| `type` im Problem-Detail | `about:blank` | `urn:manban:overload` |
+
+Die **Weboberfläche** wird von der Durchsatzbremse **nie** gebremst: Sie meldet sich über die
+Sitzung an, nicht über ein Zugriffstoken. **Vorgabe:** 60 Befehle je Person und Minute, davon 10
+gleichzeitig. Wer die Minute ausschöpft, bekommt einen Befehl je Sekunde zurück — ein starres
+Minutenfenster ließe dagegen 120 Befehle in zwei Sekunden über die Fenstergrenze. Ein abgewiesener
+Aufruf führt nichts aus und zählt nicht auf das Kontingent; `Retry-After` nennt die Wartezeit in
+Sekunden. Das mitgelieferte Werkzeug wiederholt daran selbst.
+
+| Variable | Bedeutung | Default |
+|----------|-----------|---------|
+| `MANBAN_THROUGHPUT_ENABLED` | Durchsatzbremse einschalten | `true` |
+| `MANBAN_THROUGHPUT_PER_MINUTE` | Befehle je Person und Minute | `60` |
+| `MANBAN_THROUGHPUT_CONCURRENT` | davon gleichzeitig laufend | `10` |
+| `MANBAN_THROUGHPUT_MAX_TRACKED_PERSONS` | Obergrenze der verfolgten Personen (Speicherschutz) | `100000` |
+
+**Im Protokoll** steht bei anhaltender Überschreitung höchstens eine `WARN`-Zeile je Person und
+Minute. Jede Abweisung wird außerdem je Person und Stunde aufsummiert abgelegt und nach 90 Tagen
+aufgeräumt. Für mehrere Instanzen gilt dieselbe Einschränkung wie bei der Zählbremse: Jede zählt
+für sich.
 
 ## E-Mail-Bestätigung (ohne Mailserver)
 

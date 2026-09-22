@@ -12,6 +12,9 @@ import {
   vergleichMitVorzeitraum,
   vorzeitraumName,
   zeitraumBeschriftung,
+  zyklusBeschriftung,
+  zyklusDavor,
+  zyklusDesStarts,
   zeitraumFall,
   zeitraumHinweis,
   zwischenspeicherAnteil,
@@ -60,13 +63,13 @@ describe('zeitraumBeschriftung', () => {
   it('benennt eine Nacht mit ihrem Beginn und ihrem Folgetag', () => {
     expect(
       zeitraumBeschriftung(kennzahlen({ type: 'DAY', firstDay: '2026-09-15', lastDay: '2026-09-15' })),
-    ).toBe('Nacht vom 15.09.2026 auf den 16.09.2026')
+    ).toBe('Zyklus vom 15.09.2026 auf den 16.09.2026')
   })
 
   it('benennt die Nacht ueber den Monatswechsel richtig', () => {
     expect(
       zeitraumBeschriftung(kennzahlen({ type: 'DAY', firstDay: '2026-08-31', lastDay: '2026-08-31' })),
-    ).toBe('Nacht vom 31.08.2026 auf den 01.09.2026')
+    ).toBe('Zyklus vom 31.08.2026 auf den 01.09.2026')
   })
 
   it('benennt eine Woche mit ihren Naechten von Montag bis Sonntag', () => {
@@ -86,7 +89,7 @@ describe('zeitraumBeschriftung', () => {
 
 describe('vorzeitraumName', () => {
   it('nennt je Art den Vorzeitraum beim Namen', () => {
-    expect(vorzeitraumName(kennzahlen({ type: 'DAY' }))).toBe('Vornacht')
+    expect(vorzeitraumName(kennzahlen({ type: 'DAY' }))).toBe('Vorzyklus')
     expect(vorzeitraumName(kennzahlen({ type: 'WEEK' }))).toBe('Vorwoche')
     expect(vorzeitraumName(kennzahlen({ type: 'MONTH' }))).toBe('Vormonat')
   })
@@ -342,5 +345,42 @@ describe('zeitraumHinweis mit Erfassungsluecke', () => {
 
   it('schweigt, wenn der Zeitraum ganz nach dem Erfassungsbeginn liegt', () => {
     expect(zeitraumHinweis(august({ interactiveUsageSince: '2026-07-01T00:00:00Z' }))).toBeNull()
+  })
+})
+
+describe('zyklusDesStarts (Issue #1127)', () => {
+  const BERLIN = 'Europe/Berlin'
+
+  it('ordnet einen Start ab 12:00 dem Zyklus dieses Tages zu', () => {
+    expect(zyklusDesStarts('2026-09-14T20:05:00Z', BERLIN)).toBe('2026-09-14') // 22:05
+    expect(zyklusDesStarts('2026-09-15T10:00:00Z', BERLIN)).toBe('2026-09-15') // 12:00
+  })
+
+  it('ordnet einen Start vor 12:00 dem Zyklus des Vortags zu', () => {
+    expect(zyklusDesStarts('2026-09-15T09:59:00Z', BERLIN)).toBe('2026-09-14') // 11:59
+    expect(zyklusDesStarts('2026-09-14T22:30:00Z', BERLIN)).toBe('2026-09-14') // 00:30, kurz nach Mitternacht
+    expect(zyklusDesStarts('2026-09-15T01:10:00Z', BERLIN)).toBe('2026-09-14') // 03:10
+  })
+
+  it('geht über den Monatswechsel zurück', () => {
+    expect(zyklusDesStarts('2026-10-01T01:00:00Z', BERLIN)).toBe('2026-09-30')
+  })
+
+  it('rechnet in der Zone des Lesers, wenn keine genannt ist', () => {
+    // Die Tests laufen in Europe/Berlin (vite.config.ts, test.env.TZ).
+    expect(zyklusDesStarts('2026-09-15T09:59:00Z')).toBe('2026-09-14')
+  })
+})
+
+describe('zyklusBeschriftung (Issue #1127)', () => {
+  it('nennt Beginn und Folgetag', () => {
+    expect(zyklusBeschriftung('2026-09-14')).toBe('Zyklus vom 14.09.2026 auf den 15.09.2026')
+  })
+})
+
+describe('zyklusDavor (Issue #1134)', () => {
+  it('nennt den Zyklus einen Tag früher, auch über den Monatswechsel', () => {
+    expect(zyklusDavor('2026-09-22')).toBe('2026-09-21')
+    expect(zyklusDavor('2026-10-01')).toBe('2026-09-30')
   })
 })

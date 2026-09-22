@@ -5,6 +5,8 @@ import jakarta.servlet.http.HttpServletResponse;
 import org.mwolff.manban.accesstoken.web.security.PatAuthenticationFilter;
 import org.mwolff.manban.auth.web.security.DisabledUserGuardFilter;
 import org.mwolff.manban.auth.web.security.SessionAuthenticationFilter;
+import org.mwolff.manban.ratelimit.web.ThroughputFilter;
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -54,7 +56,8 @@ class SecurityConfig {
       HttpSecurity http,
       SessionAuthenticationFilter sessionFilter,
       PatAuthenticationFilter patFilter,
-      DisabledUserGuardFilter disabledGuard)
+      DisabledUserGuardFilter disabledGuard,
+      ThroughputFilter throughputFilter)
       throws Exception {
     http.csrf(csrf -> csrf.disable())
         .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
@@ -111,7 +114,28 @@ class SecurityConfig {
         .addFilterBefore(patFilter, UsernamePasswordAuthenticationFilter.class)
         // Läuft nach beiden Auth-Filtern: sperrt authentifizierte Anfragen gesperrter Konten
         // (Session wie PAT), indem der Kontext geleert wird.
-        .addFilterAfter(disabledGuard, PatAuthenticationFilter.class);
+        .addFilterAfter(disabledGuard, PatAuthenticationFilter.class)
+        // Durchsatzbremse (Issue #1002): nach der Sperrprüfung, denn sie braucht die Person —
+        // anders als die Auth-Bremse, die vor der Kette an der Herkunft zählt
+        // (RateLimitFilterConfig).
+        // Ein gesperrtes Konto kommt hier ohne Authentifizierung an und wird nicht gezählt.
+        .addFilterAfter(throughputFilter, DisabledUserGuardFilter.class);
     return http.build();
+  }
+
+  /**
+   * Hält den {@link ThroughputFilter} aus der Servlet-Filterkette heraus (Issue #1002).
+   *
+   * <p>Spring Boot registriert jede Filter-Bean zusätzlich direkt im Container. Dort liefe dieser
+   * Filter ein zweites Mal, außerhalb der Security-Kette — und gerade die Reihenfolge nach der
+   * Authentifizierung ist sein Zweck. Er gehört ausschließlich in die Kette oben.
+   */
+  @Bean
+  FilterRegistrationBean<ThroughputFilter> throughputFilterOutsideTheServletChain(
+      ThroughputFilter throughputFilter) {
+    FilterRegistrationBean<ThroughputFilter> registration =
+        new FilterRegistrationBean<>(throughputFilter);
+    registration.setEnabled(false);
+    return registration;
   }
 }
