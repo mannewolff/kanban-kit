@@ -309,6 +309,12 @@ der Text enthält Fremdtext aus dem Protokoll, und was in die eigene Sitzung wan
 gesehen haben. Legt der Browser die Zwischenablage nicht frei, bleibt es beim sichtbaren Feld: von
 Hand markieren und kopieren.
 
+**Nur die letzten zwei Zyklen:** Die Liste zeigt standardmäßig die Läufe des laufenden und des
+vorigen Zyklus; darunter blendet **„Ältere Läufe anzeigen (N)"** die übrigen für diesen Besuch ein.
+Sichtbar bleiben außerdem ein älterer Lauf, der noch läuft, der über einen Verweis angesteuerte Lauf
+und ein eben eingelesener. Begrenzt wird nur die Anzeige: Aufbewahrung, Verbrauchsauswertung und
+Häufigkeiten zählen weiter alle aufbewahrten Läufe.
+
 **Aufbewahrung:** Je Projekt bleiben die **letzten 190 Läufe** erhalten — genug, um bei zwei Läufen
 je Zyklus den laufenden, den zuletzt abgeschlossenen und den Vormonat vorzuhalten; ältere fallen
 heraus, sobald neue hinzukommen. Die **Arbeitspakete** eines verdrängten Laufs bleiben dabei bestehen: Sie tragen

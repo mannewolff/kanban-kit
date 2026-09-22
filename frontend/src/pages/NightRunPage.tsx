@@ -106,7 +106,7 @@ import {
 } from '../lib/nightRunLog'
 import { ermittleErzeugnisse, type Erzeugnisse } from '../lib/kettenErzeugnisse'
 import { readTextFile } from '../lib/readTextFile'
-import { zyklusBeschriftung, zyklusDesStarts } from '../lib/verbrauchZeitraum'
+import { zyklusBeschriftung, zyklusDavor, zyklusDesStarts } from '../lib/verbrauchZeitraum'
 import { useProjectName } from '../lib/useProjectName'
 
 /**
@@ -1862,6 +1862,29 @@ function kettenchips(
   }))
 }
 
+/**
+ * Welche Läufe die Liste zeigt, solange niemand die älteren aufgeklappt hat (Issue #1134): die der
+ * letzten zwei Zyklen — Startzeit in der Zone des Lesers, dieselbe Zuordnung wie im Titel (#1127).
+ *
+ * <p>Drei ältere bleiben trotzdem stehen, weil der Mensch sie gerade im Blick hat: ein Lauf, der noch
+ * läuft (er kann über Mittag weiterlaufen, #1109), der über `?lauf=<id>` angesteuerte und ein in
+ * dieser Sitzung eingelesener. Begrenzt wird allein die Anzeige — Auswertungen über den Bestand
+ * zählen weiter alle aufbewahrten Läufe.
+ */
+function imBlick(
+  lauf: AnzeigeLauf,
+  abZyklus: string,
+  gesuchteLaufId: number | null,
+  ausErgebnisstand: ReadonlySet<string>,
+): boolean {
+  return (
+    zyklusDesStarts(lauf.startedAt) >= abZyklus ||
+    laeuftNoch({ complete: lauf.vollstaendig, outcome: lauf.befund }) ||
+    (gesuchteLaufId !== null && lauf.laufId === gesuchteLaufId) ||
+    ausErgebnisstand.has(lauf.startedAt)
+  )
+}
+
 /** Die Erzeugnisse eines Laufs, zu dem (noch) keine ermittelt sind — eine Instanz für alle. */
 const KEINE_ERZEUGNISSE: ReadonlyMap<number, Erzeugnisse> = new Map()
 
@@ -2737,6 +2760,8 @@ export function NightRunPage() {
   const [staende, setStaende] = useState<ReadonlyMap<string, NightRun>>(() => new Map())
   const [katalog, setKatalog] = useState<Kartenkatalog>(() => new Map())
   /** Die Erzeugnisse der Kettenläufe je Startzeitpunkt (Issue #1106), ermittelt beim Aufklappen. */
+  /** Ob die Liste auch die älteren Läufe zeigt (Issue #1134) — nur für diesen Seitenbesuch. */
+  const [alleLaeufe, setAlleLaeufe] = useState(false)
   const [erzeugnisse, setErzeugnisse] = useState<ReadonlyMap<string, ReadonlyMap<number, Erzeugnisse>>>(
     () => new Map(),
   )
@@ -2896,12 +2921,19 @@ export function NightRunPage() {
    * der nächste vergessene Pfad zeigte einen offenen Lauf ohne aufgelöste Kette. `aufklappen`
    * bleibt die Stelle, die ein zweites Laden verhindert — der Effekt darf also mehrfach laufen.
    */
+  // Der vorige Zyklus beginnt einen Tag vor dem laufenden; alles ab ihm ist „die letzten zwei".
+  const abZyklus = zyklusDavor(zyklusDesStarts(new Date().toISOString()))
+  const sichtbareLaeufe = alleLaeufe
+    ? laeufe
+    : laeufe.filter((lauf) => imBlick(lauf, abZyklus, gesuchteLaufId, ausErgebnisstand))
+  const ausgeblendet = laeufe.length - sichtbareLaeufe.length
+  const obersterSichtbarer = sichtbareLaeufe[0]
+
   useEffect(() => {
-    const oberster = laeufe[0]
-    if (oberster !== undefined) {
-      aufklappen(oberster)
+    if (obersterSichtbarer !== undefined) {
+      aufklappen(obersterSichtbarer)
     }
-  }, [laeufe, aufklappen])
+  }, [obersterSichtbarer, aufklappen])
 
   /**
    * Springt zum angesteuerten Lauf (Issue #1085, AK 7).
@@ -3065,15 +3097,18 @@ export function NightRunPage() {
           <NachtlaufVerbrauchBereich projectId={id} />
 
           {laeufe.length === 0 && <Typography color="text.secondary">Noch keine Auswertung vorhanden.</Typography>}
+          {laeufe.length > 0 && sichtbareLaeufe.length === 0 && (
+            <Typography color="text.secondary">In den letzten zwei Zyklen gab es keinen Lauf.</Typography>
+          )}
 
           {/* Die Laufblöcke haben mit #988 die Nachtlauf-Ausnahme verlassen und folgen Kupferwarte
               (`CLAUDE-design.md`) — deshalb stehen sie im `KupferwarteBereich`, der Theme und
               Variablen für seinen Teilbaum zurückstellt. Was sonst auf dieser Seite steht, bleibt
               in der Ausnahme. */}
-          {laeufe.length > 0 && (
+          {sichtbareLaeufe.length > 0 && (
             <KupferwarteBereich>
               <Box sx={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                {laeufe.map((lauf, position) => (
+                {sichtbareLaeufe.map((lauf, position) => (
                   <LaufPanel
                     key={lauf.startedAt}
                     lauf={lauf}
@@ -3101,6 +3136,14 @@ export function NightRunPage() {
                 ))}
               </Box>
             </KupferwarteBereich>
+          )}
+
+          {(alleLaeufe || ausgeblendet > 0) && (
+            <Box>
+              <Button variant="text" onClick={() => setAlleLaeufe((wert) => !wert)}>
+                {alleLaeufe ? 'Nur die letzten zwei Zyklen zeigen' : `Ältere Läufe anzeigen (${ausgeblendet})`}
+              </Button>
+            </Box>
           )}
 
         </Box>

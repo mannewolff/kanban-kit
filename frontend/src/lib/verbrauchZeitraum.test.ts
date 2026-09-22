@@ -13,6 +13,7 @@ import {
   vorzeitraumName,
   zeitraumBeschriftung,
   zyklusBeschriftung,
+  zyklusDavor,
   zyklusDesStarts,
   zeitraumFall,
   zeitraumHinweis,
@@ -374,5 +375,12 @@ describe('zyklusDesStarts (Issue #1127)', () => {
 describe('zyklusBeschriftung (Issue #1127)', () => {
   it('nennt Beginn und Folgetag', () => {
     expect(zyklusBeschriftung('2026-09-14')).toBe('Zyklus vom 14.09.2026 auf den 15.09.2026')
+  })
+})
+
+describe('zyklusDavor (Issue #1134)', () => {
+  it('nennt den Zyklus einen Tag früher, auch über den Monatswechsel', () => {
+    expect(zyklusDavor('2026-09-22')).toBe('2026-09-21')
+    expect(zyklusDavor('2026-10-01')).toBe('2026-09-30')
   })
 })

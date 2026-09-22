@@ -100,9 +100,11 @@ export function zyklusDesStarts(zeitpunkt: string, zone: string = leserZone()): 
       .map((teil) => [teil.type, teil.value]),
   )
   const tag = `${teile.year}-${teile.month}-${teile.day}`
-  if (Number(teile.hour) >= 12) {
-    return tag
-  }
+  return Number(teile.hour) >= 12 ? tag : zyklusDavor(tag)
+}
+
+/** Der Zyklus unmittelbar vor dem genannten (Issue #1134) — Beginn als Kalendertag `JJJJ-MM-TT`. */
+export function zyklusDavor(tag: string): string {
   const vortag = alsDatum(tag)
   vortag.setUTCDate(vortag.getUTCDate() - 1)
   return vortag.toISOString().slice(0, 10)

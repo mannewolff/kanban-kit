@@ -759,12 +759,24 @@ const vorhabenAufrufe = () => anfragen.filter((a) => /^\/api\/cards\/\d+$/.test(
 
 const zaehlerAufrufe = () => anfragen.filter((a) => a.url.endsWith('/night-runs/error-class-counts'))
 
+/**
+ * Die Uhr der Seite steht vor allen Fixtures (Issue #1134): Die Liste zeigt standardmäßig nur die
+ * letzten zwei Zyklen, und die Läufe der Tests liegen im September 2026. Gefälscht wird allein
+ * `Date` — Zeitgeber laufen echt, sonst warteten die `findBy…`-Abfragen vergeblich.
+ */
+const UHR_VOR_DEN_FIXTURES = new Date('2026-09-01T00:00:00Z')
+
 beforeEach(() => {
   anfragen = []
   vi.clearAllMocks()
+  vi.useFakeTimers({ toFake: ['Date'] })
+  vi.setSystemTime(UHR_VOR_DEN_FIXTURES)
 })
 
-afterEach(() => vi.unstubAllGlobals())
+afterEach(() => {
+  vi.unstubAllGlobals()
+  vi.useRealTimers()
+})
 
 describe('NightRunPage — ungültige Projekt-ID', () => {
   it('meldet eine ungültige Projekt-ID und lädt nichts', async () => {
@@ -5905,5 +5917,96 @@ describe('NightRunPage — die Art des Laufs als Marke im Kopf (#1128)', () => {
     expect(within(laufKopfzeile(umsetzung)).getByTestId('lauf-art')).toHaveTextContent('Umsetzung')
     expect(within(kette).getByTestId('nachtlauf-vorzeile')).not.toHaveTextContent('Kette')
     expect(within(umsetzung).getByTestId('nachtlauf-vorzeile')).not.toHaveTextContent('Umsetzung')
+  })
+})
+
+describe('NightRunPage — nur die letzten zwei Zyklen (#1134)', () => {
+  // Jetzt: 22.09. 15:00 in Berlin. Laufender Zyklus ab 22.09. 12:00, voriger ab 21.09. 12:00.
+  const JETZT = new Date('2026-09-22T13:00:00Z')
+  const HEUTE_13 = '2026-09-22T11:00:00.000Z' // 22.09. 13:00 — laufender Zyklus
+  const GESTERN_23 = '2026-09-21T21:00:00.000Z' // 21.09. 23:00 — voriger Zyklus
+  const GESTERN_11 = '2026-09-21T09:00:00.000Z' // 21.09. 11:00 — Zyklus davor
+  const VORGESTERN = '2026-09-19T20:00:00.000Z' // 19.09. 22:00 — älter
+
+  beforeEach(() => vi.setSystemTime(JETZT))
+
+  const vier = () => [
+    aufbewahrt({ id: 4, startedAt: HEUTE_13 }),
+    aufbewahrt({ id: 3, startedAt: GESTERN_23 }),
+    aufbewahrt({ id: 2, startedAt: GESTERN_11 }),
+    aufbewahrt({ id: 1, startedAt: VORGESTERN }),
+  ]
+
+  const sichtbar = (iso: string) => screen.queryByTestId(`lauf-${iso}`) !== null
+
+  it('zeigt nur die Läufe der letzten zwei Zyklen und nennt die Zahl der ausgeblendeten', async () => {
+    renderPage({ listen: [vier()] })
+
+    await screen.findByTestId(`lauf-${HEUTE_13}`)
+    expect(sichtbar(GESTERN_23)).toBe(true)
+    expect(sichtbar(GESTERN_11)).toBe(false)
+    expect(sichtbar(VORGESTERN)).toBe(false)
+    expect(screen.getByRole('button', { name: 'Ältere Läufe anzeigen (2)' })).toBeInTheDocument()
+  })
+
+  it('zeigt auf Klick alle Läufe und auf den nächsten wieder nur die letzten zwei Zyklen', async () => {
+    renderPage({ listen: [vier()] })
+    await screen.findByTestId(`lauf-${HEUTE_13}`)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Ältere Läufe anzeigen (2)' }))
+    expect(sichtbar(GESTERN_11)).toBe(true)
+    expect(sichtbar(VORGESTERN)).toBe(true)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Nur die letzten zwei Zyklen zeigen' }))
+    expect(sichtbar(GESTERN_11)).toBe(false)
+    expect(sichtbar(VORGESTERN)).toBe(false)
+  })
+
+  it('lässt einen älteren Lauf sichtbar, der noch läuft', async () => {
+    const laufend = aufbewahrt({
+      id: 1,
+      startedAt: VORGESTERN,
+      complete: false,
+      outcome: { verdict: 'RUNNING', decisiveItem: null, noWorkReason: null },
+    })
+    renderPage({ listen: [[aufbewahrt({ id: 4, startedAt: HEUTE_13 }), laufend]] })
+
+    await screen.findByTestId(`lauf-${HEUTE_13}`)
+    expect(sichtbar(VORGESTERN)).toBe(true)
+    expect(screen.queryByRole('button', { name: /Ältere Läufe anzeigen/ })).toBeNull()
+  })
+
+  it('zeigt einen älteren Lauf, den ?lauf=<id> ansteuert', async () => {
+    renderPage({ listen: [vier()] }, '/projects/5/nachtlauf?lauf=1')
+
+    await screen.findByTestId(`lauf-${VORGESTERN}`)
+    expect(sichtbar(GESTERN_11)).toBe(false)
+    expect(screen.getByRole('button', { name: 'Ältere Läufe anzeigen (1)' })).toBeInTheDocument()
+  })
+
+  it('zeigt einen in dieser Sitzung eingelesenen älteren Lauf', async () => {
+    renderPage({ submit: { ergebnis: alleNeu(ECHTE_KETTE_STAND) }, listen: [[], wieAufbewahrt(ECHTE_KETTE_STAND)] })
+    await screen.findByLabelText('Protokolldatei auswählen')
+
+    protokollWaehlen(ECHTE_KETTE_STAND, 'night-run-2026-09-14-131200.json')
+
+    expect(await screen.findByTestId(`lauf-${ECHTE_KETTE_START}`)).toBeInTheDocument()
+    await waitFor(() => expect(anfragen.filter((a) => a.method === 'GET' && a.url.endsWith('/night-runs'))).toHaveLength(2))
+    expect(screen.getByTestId(`lauf-${ECHTE_KETTE_START}`)).toBeInTheDocument()
+  })
+
+  it('sagt es, wenn die letzten zwei Zyklen leer sind, und bietet die älteren an', async () => {
+    renderPage({ listen: [[aufbewahrt({ id: 1, startedAt: VORGESTERN })]] })
+
+    expect(await screen.findByText('In den letzten zwei Zyklen gab es keinen Lauf.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Ältere Läufe anzeigen (1)' })).toBeInTheDocument()
+    expect(screen.queryByText('Noch keine Auswertung vorhanden.')).toBeNull()
+  })
+
+  it('zeigt ohne ausgeblendete Läufe keine Schaltfläche', async () => {
+    renderPage({ listen: [[aufbewahrt({ id: 4, startedAt: HEUTE_13 })]] })
+
+    await screen.findByTestId(`lauf-${HEUTE_13}`)
+    expect(screen.queryByRole('button', { name: /Ältere Läufe anzeigen|Nur die letzten zwei Zyklen/ })).toBeNull()
   })
 })
