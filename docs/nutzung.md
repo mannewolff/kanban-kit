@@ -266,10 +266,21 @@ Einige Angaben stehen deshalb **nur bei einem eingelesenen, noch nicht eingelief
 allein die Ergebnisdatei sie trägt. Bei einem Lauf, den der Runner eingeliefert hat, entfallen:
 
 - bei einem Kettenlauf die Angaben „Ketten durchgelaufen", „Karten entstanden", „Laufzeit über alle
-  Stufen" und „Kosten der Nacht",
-- die Chips der in der Nacht entstandenen Dokumente,
+  Stufen" und „Kosten des Zyklus",
 - der Grund, an dem eine Stufe der Kette abbrach,
 - die Dokumente je Stufe.
+
+Bei einem eingelieferten **Kettenlauf** trägt jede erreichte Stufe im Stufenband ihre Kosten, die
+Kostenkachel teilt das Gesamt in **Planung** (die Stufen der Kette) und **Umsetzung** (der Rest),
+und der Kettenvorgang nennt den **angelegten Plan und die Pakete** als Verweise — ermittelt aus der
+Herkunft der Karten am Board, beschränkt auf Karten, die während des Laufs entstanden. Jede
+Paketzeile nennt ihren Plan („Paket aus Plan #N"). Die Dauer des Kettenvorgangs ist die Summe seiner
+Stufen.
+
+Der **Titel** eines Laufs nennt seine Nummer, das Startdatum und die Startzeit („Lauf #412 · 14.
+September, 22:05"); ein eben eingelesener Lauf ohne Nummer heißt „Lauf · 14. September, 22:05".
+Darüber steht der **Zyklus**, zu dem er gehört („Zyklus vom 14.09.2026 auf den 15.09.2026"), und die
+Art des Laufs.
 
 Jeder Lauf steht als aufklappbare Zeile da — Startzeitpunkt, Art des Laufs („Umsetzungs-Lauf",
 „Prüf-Lauf" oder „Nachtplan-Lauf"), Dauer sowie „N bearbeitet, M übergangen". Ein Nachtplan-Lauf
@@ -299,7 +310,7 @@ gesehen haben. Legt der Browser die Zwischenablage nicht frei, bleibt es beim si
 Hand markieren und kopieren.
 
 **Aufbewahrung:** Je Projekt bleiben die **letzten 190 Läufe** erhalten — genug, um bei zwei Läufen
-je Nacht den laufenden, den zuletzt abgeschlossenen und den Vormonat vorzuhalten; ältere fallen
+je Zyklus den laufenden, den zuletzt abgeschlossenen und den Vormonat vorzuhalten; ältere fallen
 heraus, sobald neue hinzukommen. Die **Arbeitspakete** eines verdrängten Laufs bleiben dabei bestehen: Sie tragen
 Projekt, Startzeitpunkt und Lauf-Art selbst, damit die Messwerte einer Karte nicht mit dem Lauf
 verschwinden. In der Liste der Läufe erscheinen sie nicht mehr. Diese **verwaisten Arbeitspakete**
@@ -338,14 +349,14 @@ beide Angaben stehen nebeneinander, keine ersetzt die andere.
 
 ### Was der Bereich zeigt
 
-Über den Kacheln steht der gewählte Zeitraum — **Nacht · Woche · Monat** — und daneben, aus wie
-vielen Einträgen die Zahlen stammen („*Nacht vom 17.09.2026 auf den 18.09.2026* · 2 Läufe ·
+Über den Kacheln steht der gewählte Zeitraum — **Zyklus · Woche · Monat** — und daneben, aus wie
+vielen Einträgen die Zahlen stammen („*Zyklus vom 17.09.2026 auf den 18.09.2026* · 2 Läufe ·
 5 Sitzungen"). Die Kacheln selbst:
 
 - **Eingabe-Token** mit einem Balken, der die Eingabe in **„Cache gelesen"** und **„frisch"**
   aufteilt. Der Balken beantwortet eine andere Frage als die Gattungen und wird nicht auf sie
   umgewidmet.
-- **Ausgabe-Token**, darunter der Verlauf über die Nächte des Zeitraums.
+- **Ausgabe-Token**, darunter der Verlauf über die Zyklen des Zeitraums.
 - **Kosten**, mit dem Vergleich zum Vorzeitraum (▲/▼ und der Unterschied in Dollar).
 - **Gesamt über die Laufzeit** — siehe unten.
 
@@ -366,8 +377,8 @@ die des Gelebten: Was der Ringpuffer verdrängt hat, fehlt darin.
 
 ### Kosten je Stufe der Kette
 
-Die Verbrauchsauswertung auf der Seite [„Läufe"](#nachtlauf) — Ansicht Nacht, Woche oder Monat —
-führt unter den Nächten und der Aufstellung je Vorhaben die Platte **„Stufen der Kette"**: je Stufe
+Die Verbrauchsauswertung auf der Seite [„Läufe"](#nachtlauf) — Ansicht Zyklus, Woche oder Monat —
+führt unter den Zyklen und der Aufstellung je Vorhaben die Platte **„Stufen der Kette"**: je Stufe
 (**Plan**, **Prüfung**, **Pakete**, **Abdeckung**) die Kosten im Zeitraum und wie viele Vorgänge
 sie durchlaufen haben, dazu ein Balken im Verhältnis zur teuersten Stufe. Die Reihenfolge ist die
 der Kette.
@@ -375,7 +386,7 @@ der Kette.
 - **Läufe ohne Stufen erscheinen darin nicht** — ein Umsetzungs- oder Prüf-Lauf hat keine. Liefen
   im Zeitraum keine Ketten, fehlt die Platte ganz.
 - **Es gibt keine Zeile „ohne Stufe"**, anders als „Ohne Vorhaben" in der Aufstellung je Vorhaben:
-  Sie trüge bei einem Umsetzungs-Lauf den Verbrauch einer ganzen Nacht, und die Aufstellung handelt
+  Sie trüge bei einem Umsetzungs-Lauf den Verbrauch eines ganzen Zyklus, und die Aufstellung handelt
   von der Kette.
 - Fehlen die Kosten einer Stufe, steht dort „nicht gemessen" und kein Balken — nie eine 0.
 
@@ -385,11 +396,12 @@ Ein Eintrag gehört zu dem Zeitraum, in dem er **beginnt** — bei einer Sitzung
 Zeitpunkt, an dem sie eröffnet wurde, nicht zu dem, an dem sie endete. Eine Sitzung, die über eine
 Zeitraumgrenze hinweg läuft, wird nicht aufgeteilt.
 
-Dabei gilt die **Tagesgrenze 12:00** zonenlokal: Eine Nacht beginnt mittags und endet am nächsten
-Mittag; wer vor 12:00 startet, gehört zur Nacht davor. Für interaktive Sitzungen hat das eine
-Folge, die man kennen muss: **Eine Sitzung, die vormittags vor 12:00 beginnt, zählt zur Nacht
-davor.** Wer am Donnerstag um 9:30 Uhr zu arbeiten anfängt, findet seinen Verbrauch also unter der
-Nacht von Mittwoch auf Donnerstag, nicht unter der von Donnerstag auf Freitag. Die Regel ist
+Dabei gilt die **Tagesgrenze 12:00** zonenlokal: Ein **Zyklus** läuft von 12:00 bis 12:00 und
+enthält alle Läufe, die darin starten — auch tagsüber angestoßene; wer vor 12:00 startet, gehört
+zum Zyklus davor. Für interaktive Sitzungen hat das eine Folge, die man kennen muss: **Eine
+Sitzung, die vormittags vor 12:00 beginnt, zählt zum Zyklus davor.** Wer am Donnerstag um 9:30 Uhr
+zu arbeiten anfängt, findet seinen Verbrauch also unter dem Zyklus von Mittwoch auf Donnerstag,
+nicht unter dem von Donnerstag auf Freitag. Die Regel ist
 dieselbe wie für Läufe — eine zweite Regel für Sitzungen machte die Summe von der Gattung
 abhängig.
 
@@ -504,12 +516,12 @@ das als ausdrücklicher Satz da statt als leere Fläche.
 
 ### Beendete Läufe
 
-Jeder **beendete** Lauf der laufenden Nacht — mit Projekt, Startzeitpunkt, anklickbarer Lauf-Kennung
+Jeder **beendete** Lauf des laufenden Zyklus — mit Projekt, Startzeitpunkt, anklickbarer Lauf-Kennung
 und seinem **Ausgang**. Auch hier steht ein ausdrücklicher Satz, solange noch kein Lauf beendet ist.
 
-„Laufende Nacht" meint denselben Zeitraum, den auch die Auswertung der Läufe zieht: **von 12:00 bis
+„Laufender Zyklus" meint denselben Zeitraum, den auch die Auswertung der Läufe zieht: **von 12:00 bis
 12:00** zonenlokal. Über die Zugehörigkeit entscheidet der **Startzeitpunkt** des Laufs, nicht sein
-Ende. Um 12:00 wechselt der Bereich deshalb auf die neue Nacht und ist zunächst leer.
+Ende. Um 12:00 wechselt der Bereich deshalb auf den neuen Zyklus und ist zunächst leer.
 
 Der Ausgang steht als Wort da — eines von dreien:
 

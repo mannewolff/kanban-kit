@@ -530,13 +530,13 @@ describe('LeitstandPage — Verbrauch', () => {
     expect(eingabe).toHaveTextContent('frisch 1,16 Mio')
     expect(await kachel('Ausgabe-Token')).toHaveTextContent('186Tsd')
     expect(await kachel('Ausgabe-Token')).toHaveTextContent('21 Tsd je Vorgang')
-    expect(await kachel('Ausgabe-Token')).toHaveTextContent('1 Nacht')
+    expect(await kachel('Ausgabe-Token')).toHaveTextContent('1 Zyklus')
     const kosten = await kachel('Kosten')
     expect(kosten).toHaveTextContent('12,40$')
     expect(within(kosten).getByTestId('delta-gut')).toHaveTextContent('▼ 1,70 $')
     expect(kosten).toHaveTextContent('1,38 $ je Vorgang')
     expect(screen.getByTestId('verbrauch-umfang')).toHaveTextContent(
-      'Nacht vom 14.09.2026 auf den 15.09.2026 · 1 Lauf · 0 Sitzungen',
+      'Zyklus vom 14.09.2026 auf den 15.09.2026 · 1 Lauf · 0 Sitzungen',
     )
     expect(m.verbrauch).toHaveBeenCalledWith(5, 'DAY', 0)
   })
@@ -558,7 +558,7 @@ describe('LeitstandPage — Verbrauch', () => {
     expect(m.verbrauch).toHaveBeenLastCalledWith(5, 'WEEK', 0)
     const ausgabe = await kachel('Ausgabe-Token')
     expect(within(ausgabe).getByTestId('funke')).toBeInTheDocument()
-    expect(ausgabe).toHaveTextContent('3 Nächte')
+    expect(ausgabe).toHaveTextContent('3 Zyklen')
     expect(within(await kachel('Kosten')).getByTestId('delta-schlecht')).toHaveTextContent('▲ 5,90 $')
   })
 
@@ -574,7 +574,7 @@ describe('LeitstandPage — Verbrauch', () => {
     expect(eingabe).toHaveTextContent('keine Datenbasis')
     expect(within(eingabe).queryByRole('img')).not.toBeInTheDocument()
     expect(await kachel('Kosten')).not.toHaveTextContent('je Vorgang')
-    expect(await kachel('Ausgabe-Token')).toHaveTextContent('0 Nächte')
+    expect(await kachel('Ausgabe-Token')).toHaveTextContent('0 Zyklen')
     expect(
       screen.getByText('In diesem Zeitraum hat weder ein Lauf noch eine Sitzung stattgefunden.'),
     ).toBeInTheDocument()

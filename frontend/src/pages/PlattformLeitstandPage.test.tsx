@@ -324,7 +324,7 @@ describe('PlattformLeitstandPage (#1083)', () => {
       zeigeSeite()
 
       expect(await screen.findByTestId('keine-durchgefuehrten')).toHaveTextContent(
-        'In dieser Nacht wurde noch kein Lauf beendet.',
+        'In diesem Zyklus wurde noch kein Lauf beendet.',
       )
     })
   })

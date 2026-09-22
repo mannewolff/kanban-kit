@@ -264,7 +264,7 @@ function DurchgefuehrteListe({
   }
   if (zeilen.length === 0) {
     return (
-      <LeerSatz testId="keine-durchgefuehrten">In dieser Nacht wurde noch kein Lauf beendet.</LeerSatz>
+      <LeerSatz testId="keine-durchgefuehrten">In diesem Zyklus wurde noch kein Lauf beendet.</LeerSatz>
     )
   }
   return (

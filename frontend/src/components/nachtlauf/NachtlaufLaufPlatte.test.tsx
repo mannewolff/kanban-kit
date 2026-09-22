@@ -38,16 +38,16 @@ const kopfflaechen = [
  * auf und wieder zu" ist ohne diesen Zustand nicht prüfbar. Der Zähler zeigt, wie oft umgeschaltet
  * wurde: Ein Klick auf den Pfeil darf nicht zusätzlich den Kopf auslösen.
  */
-function zeige(offenAnfangs = false, laufId?: number) {
+function zeige(offenAnfangs = false) {
   const umschalten = vi.fn()
 
   function Huelle() {
     const [offen, setOffen] = useState(offenAnfangs)
     return (
       <NachtlaufLaufPlatte
-        titel="Nacht vom 14. September"
+        titel="Lauf #86 · 14. September, 22:05"
         art="Kette"
-        laufId={laufId}
+        zyklus="Zyklus vom 14.09.2026 auf den 15.09.2026"
         meta="02:00 · 41 min · 7 bearbeitet"
         melder="gruen"
         offen={offen}
@@ -71,7 +71,7 @@ function zeige(offenAnfangs = false, laufId?: number) {
 }
 
 const vorzeile = () => screen.getByTestId('nachtlauf-vorzeile')
-const pfeil = () => screen.getByRole('button', { name: /Nacht vom 14\. September (auf|zu)klappen/ })
+const pfeil = () => screen.getByRole('button', { name: /Lauf #86 · 14\. September, 22:05 (auf|zu)klappen/ })
 const kopf = () => screen.getByTestId('lauf-kopf')
 const inhalt = () => screen.queryByText('Vorgänge des Laufs')
 
@@ -113,21 +113,17 @@ describe('NachtlaufLaufPlatte — der Pfeil ist zu sehen', () => {
   })
 })
 
-describe('NachtlaufLaufPlatte — die Nummer in der Vorzeile (#1107)', () => {
-  it('nennt die Nummer des Laufs hinter „Lauf"', () => {
-    // Dieselbe Form wie der Verweis im Plattform-Leitstand („Lauf #86"); nur so erkennt man nach
-    // dem Sprung, welcher Block der gemeinte ist.
-    zeige(false, 86)
-
-    expect(vorzeile().textContent).toBe('Lauf #86 · Kette')
-  })
-
-  it('lässt die Nummer weg, wo der Lauf keine hat', () => {
-    // Ein eben im Browser eingelesener Lauf war bei keinem Server und hat keine Id. Eine erfundene
-    // oder leere Nummer wäre eine Aussage, die nicht stimmt — „#undefined" erst recht.
+describe('NachtlaufLaufPlatte — Zyklus in der Vorzeile, Nummer im Titel (#1127)', () => {
+  it('nennt in der Vorzeile den Zyklus vor der Art', () => {
     zeige()
 
-    expect(vorzeile().textContent).toBe('Lauf · Kette')
+    expect(vorzeile().textContent).toBe('Zyklus vom 14.09.2026 auf den 15.09.2026 · Kette')
+  })
+
+  it('führt den Titel als Überschrift', () => {
+    zeige()
+
+    expect(screen.getByTestId('nachtlauf-ueberschrift')).toHaveTextContent('Lauf #86 · 14. September, 22:05')
   })
 })
 

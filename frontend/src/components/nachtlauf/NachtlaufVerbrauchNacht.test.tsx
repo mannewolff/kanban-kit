@@ -162,7 +162,7 @@ describe('NachtlaufVerbrauchNacht', () => {
 
     expect(screen.getAllByRole('heading', { level: 3 })).toHaveLength(1)
     expect(screen.getByRole('heading', { level: 3 })).toHaveTextContent(
-      'Nacht vom 15.09.2026 auf den 16.09.2026',
+      'Zyklus vom 15.09.2026 auf den 16.09.2026',
     )
     expect(screen.getByTestId('verbrauch-nacht-laeufe')).toHaveTextContent('2 Läufe')
   })
@@ -198,7 +198,7 @@ describe('NachtlaufVerbrauchNacht', () => {
     expect(screen.queryByTestId('verbrauch-nacht-karten')).not.toBeInTheDocument()
     expect(screen.queryByRole('listitem')).not.toBeInTheDocument()
     expect(screen.queryByTestId('verbrauch-karte-721-anteil')).not.toBeInTheDocument()
-    expect(lesbar(screen.getByTestId('verbrauch-nacht'))).not.toContain('der Kosten der Nacht')
+    expect(lesbar(screen.getByTestId('verbrauch-nacht'))).not.toContain('der Kosten des Zyklus')
     expect(lesbar(screen.getByTestId('verbrauch-nacht'))).not.toContain('#721')
   })
 
@@ -235,7 +235,7 @@ describe('NachtlaufVerbrauchNacht', () => {
   it('sagt es, wenn in der Nacht kein Lauf stattfand', () => {
     zeige(nacht({ runCount: 0, cardCount: 0, cards: [] }))
 
-    expect(screen.getByText('In dieser Nacht hat kein Lauf stattgefunden.')).toBeInTheDocument()
+    expect(screen.getByText('In diesem Zyklus hat kein Lauf stattgefunden.')).toBeInTheDocument()
     expect(screen.queryByTestId('verbrauch-nacht-summen')).not.toBeInTheDocument()
     expect(screen.queryByTestId('verbrauch-nacht-kennzahlen')).not.toBeInTheDocument()
   })

@@ -106,6 +106,7 @@ import {
 } from '../lib/nightRunLog'
 import { ermittleErzeugnisse, type Erzeugnisse } from '../lib/kettenErzeugnisse'
 import { readTextFile } from '../lib/readTextFile'
+import { zyklusBeschriftung, zyklusDesStarts } from '../lib/verbrauchZeitraum'
 import { useProjectName } from '../lib/useProjectName'
 
 /**
@@ -1978,7 +1979,7 @@ function fussangaben(lauf: AnzeigeLauf, stand: NightRun | undefined): Fussangabe
   return [
     ...standAngaben(stand),
     {
-      label: 'Ergebnis der Nacht',
+      label: 'Ergebnis des Zyklus',
       wert: `${lauf.processedCount} bearbeitet · ${lauf.skippedCount} übergangen`,
     },
     {
@@ -2016,7 +2017,7 @@ function kettenAngaben(stand: NightRun | undefined): FussangabeForm[] {
       label: 'Laufzeit über alle Stufen',
       wert: formatDuration(stufenZeitSumme(stand.items) / 1000),
     },
-    { label: 'Kosten der Nacht', wert: betrag(stand.stand?.kostenSumme) },
+    { label: 'Kosten des Zyklus', wert: betrag(stand.stand?.kostenSumme) },
     ...(vermerk === null ? [] : [{ label: 'Zur Kostensumme', wert: vermerk, vorbehalt: true }]),
   ]
 }
@@ -2051,7 +2052,7 @@ function standAngaben(stand: NightRun | undefined): FussangabeForm[] {
     },
     ...(hinweis === undefined
       ? [
-          { label: 'Kosten der Nacht', wert: kosten.wert },
+          { label: 'Kosten des Zyklus', wert: kosten.wert },
           ...(kosten.hinweis === null
             ? []
             : [{ label: 'Zur Kostensumme', wert: kosten.hinweis, vorbehalt: true }]),
@@ -2205,9 +2206,18 @@ const metazeile = (lauf: AnzeigeLauf, stand: NightRun | undefined): string =>
     .filter((eintrag) => eintrag !== '')
     .join(' · ')
 
-/** Der Titel eines Laufs — „Nacht vom 14. September“, wie die Vorlage ihn führt (Z. 383). */
-const laufTitel = (startedAt: string): string =>
-  `Nacht vom ${new Date(startedAt).toLocaleDateString('de-DE', { day: 'numeric', month: 'long' })}`
+/**
+ * Der Titel eines Laufs (Issue #1127): „Lauf #412 · 14. September, 22:05" — Nummer, Startdatum und
+ * Startzeit. Datum und Uhrzeit machen zwei Läufe desselben Zyklus unterscheidbar. Ohne Nummer (ein
+ * eben eingelesener Lauf war bei keinem Server) „Lauf · 14. September, 22:05".
+ */
+const laufTitel = (startedAt: string, laufId: number | undefined): string => {
+  const start = new Date(startedAt)
+  const datum = start.toLocaleDateString('de-DE', { day: 'numeric', month: 'long' })
+  const zeit = start.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })
+  const lauf = laufId === undefined ? 'Lauf' : `Lauf #${laufId}`
+  return `${lauf} · ${datum}, ${zeit}`
+}
 
 /**
  * Die Ergebniszeile eines Vorgangs: Dauer, Kosten, Züge und der Anteil der Modellarbeit. Die Kette
@@ -2421,8 +2431,8 @@ function Vorgangszeile({
       {anteil !== undefined && (
         <NachtlaufAnteilsbalken
           anteil={anteil.anteil}
-          beschriftung={`${anteil.dauer} · ${anteil.anteil} % der Nacht`}
-          ansage={`${anteil.ansage}, ${anteil.anteil} % der Nacht`}
+          beschriftung={`${anteil.dauer} · ${anteil.anteil} % des Zyklus`}
+          ansage={`${anteil.ansage}, ${anteil.anteil} % des Zyklus`}
           farbe={anteil.farbe}
           schiene={NUT}
           testId={`laufband-abschnitt-${item.cardNumber}`}
@@ -2587,9 +2597,9 @@ function LaufPanel({
   return (
     <NachtlaufLaufPlatte
       testId={`lauf-${lauf.startedAt}`}
-      titel={laufTitel(lauf.startedAt)}
+      titel={laufTitel(lauf.startedAt, lauf.laufId)}
       art={ART_KURZ[lauf.mode]}
-      laufId={lauf.laufId}
+      zyklus={zyklusBeschriftung(zyklusDesStarts(lauf.startedAt))}
       meta={metazeile(lauf, stand)}
       melder={melder}
       pulsiert={laeuftNoch({ complete: lauf.vollstaendig, outcome: lauf.befund })}

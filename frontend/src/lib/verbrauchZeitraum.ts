@@ -3,6 +3,7 @@ import type {
   VerbrauchKennzahlen,
   VerbrauchZeitraumArt,
 } from '../api/nightRunUsage'
+import { leserZone } from '../api/nightRunUsage'
 import { betrag } from './nachtlaufFormat'
 
 /**
@@ -61,13 +62,54 @@ const folgetag = (tag: string): Date => {
 }
 
 const VORZEITRAUM: Record<VerbrauchZeitraumArt, string> = {
-  DAY: 'Vornacht',
+  DAY: 'Vorzyklus',
   WEEK: 'Vorwoche',
   MONTH: 'Vormonat',
 }
 
 /**
- * Der Name eines Zeitraums. Eine Nacht heißt nach Beginn und Folgetag, eine Woche nach ihrer ersten
+ * Der Name eines Zyklus (Issue #1127): Er läuft von 12:00 bis 12:00 und heißt nach seinem
+ * Beginn und dem Folgetag. `tag` ist sein Beginn als Kalendertag `JJJJ-MM-TT`.
+ */
+export function zyklusBeschriftung(tag: string): string {
+  return `Zyklus vom ${DATUM.format(alsDatum(tag))} auf den ${DATUM.format(folgetag(tag))}`
+}
+
+/** Die Teile eines Zeitpunkts in einer Zone — Kalendertag und Stunde, wie die Wanduhr dort sie zeigt. */
+const WANDUHR = (zone: string) =>
+  new Intl.DateTimeFormat('en-CA', {
+    timeZone: zone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    hourCycle: 'h23',
+  })
+
+/**
+ * Der Zyklus, dem ein Lauf angehört (Issue #1127): sein Beginn als Kalendertag `JJJJ-MM-TT`.
+ *
+ * <p>Maßgeblich ist die Startzeit in der Zone des Lesers — dieselbe Regel und dieselbe Zone wie
+ * Verbrauchsauswertung und Plattform-Leitstand ({@link leserZone}). Ein Lauf vor 12:00 gehört zum
+ * Zyklus, der am Vortag um 12:00 begann.
+ */
+export function zyklusDesStarts(zeitpunkt: string, zone: string = leserZone()): string {
+  const teile = Object.fromEntries(
+    WANDUHR(zone)
+      .formatToParts(new Date(zeitpunkt))
+      .map((teil) => [teil.type, teil.value]),
+  )
+  const tag = `${teile.year}-${teile.month}-${teile.day}`
+  if (Number(teile.hour) >= 12) {
+    return tag
+  }
+  const vortag = alsDatum(tag)
+  vortag.setUTCDate(vortag.getUTCDate() - 1)
+  return vortag.toISOString().slice(0, 10)
+}
+
+/**
+ * Der Name eines Zeitraums. Ein Zyklus heißt nach Beginn und Folgetag, eine Woche nach ihrer ersten
  * und letzten Nacht, ein Monat nach Name und Jahr.
  */
 export function zeitraumBeschriftung(
@@ -75,7 +117,7 @@ export function zeitraumBeschriftung(
 ): string {
   switch (kennzahlen.type) {
     case 'DAY':
-      return `Nacht vom ${DATUM.format(alsDatum(kennzahlen.firstDay))} auf den ${DATUM.format(folgetag(kennzahlen.firstDay))}`
+      return zyklusBeschriftung(kennzahlen.firstDay)
     case 'WEEK':
       return `Woche vom ${DATUM.format(alsDatum(kennzahlen.firstDay))} bis ${DATUM.format(alsDatum(kennzahlen.lastDay))}`
     case 'MONTH':

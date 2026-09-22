@@ -154,7 +154,7 @@ describe('NachtlaufVerbrauchZeitraum — Kopfzeile und Navigation', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Tag' }))
     await waitFor(async () =>
-      expect(await beschriftung()).toHaveTextContent('Nacht vom 15.09.2026 auf den 16.09.2026'),
+      expect(await beschriftung()).toHaveTextContent('Zyklus vom 15.09.2026 auf den 16.09.2026'),
     )
 
     fireEvent.click(screen.getByRole('button', { name: 'Monat' }))
@@ -392,12 +392,12 @@ describe('NachtlaufVerbrauchZeitraum — Naechte und Vorhaben', () => {
   it('macht jede Nacht des Zeitraums als Zeile erreichbar', async () => {
     const onNacht = zeige(apiMit((type) => Promise.resolve(zeitraum(type))))
 
-    const knopf = await screen.findByRole('button', { name: /Nacht vom 09\.09\.2026/ })
+    const knopf = await screen.findByRole('button', { name: /Zyklus vom 09\.09\.2026/ })
     expect(knopf).toHaveAccessibleName(/abgebrochen/)
     fireEvent.click(knopf)
 
     expect(onNacht).toHaveBeenCalledWith('2026-09-09')
-    const erste = screen.getByRole('button', { name: /Nacht vom 08\.09\.2026/ })
+    const erste = screen.getByRole('button', { name: /Zyklus vom 08\.09\.2026/ })
     expect(lesbar(erste)).toContain('3,00 $')
     expect(erste).toHaveTextContent('Di 08.09. → 09.09.')
     expect(erste).toHaveTextContent('2 Läufe')
@@ -406,9 +406,9 @@ describe('NachtlaufVerbrauchZeitraum — Naechte und Vorhaben', () => {
   it('zeichnet den Balken einer Nacht im Verhaeltnis zur teuersten und nie fuer eine ungemessene', async () => {
     zeige(apiMit((type) => Promise.resolve(zeitraum(type))))
 
-    const erste = await screen.findByRole('button', { name: /Nacht vom 08\.09\.2026/ })
+    const erste = await screen.findByRole('button', { name: /Zyklus vom 08\.09\.2026/ })
     expect(within(erste).getByTestId('fuellung-100')).toBeInTheDocument()
-    const zweite = screen.getByRole('button', { name: /Nacht vom 09\.09\.2026/ })
+    const zweite = screen.getByRole('button', { name: /Zyklus vom 09\.09\.2026/ })
     expect(within(zweite).queryByTestId(/^fuellung-/)).not.toBeInTheDocument()
   })
 
@@ -478,7 +478,7 @@ describe('NachtlaufVerbrauchZeitraum — Nachtlauf-Anteil', () => {
       ),
     )
 
-    const zeile = await screen.findByRole('button', { name: /Nacht vom 08\.09\.2026/ })
+    const zeile = await screen.findByRole('button', { name: /Zyklus vom 08\.09\.2026/ })
     expect(lesbar(zeile)).toContain('3,00 $')
     expect(lesbar(zeile)).not.toContain('10,00 $')
   })
