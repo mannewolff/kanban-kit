@@ -540,6 +540,115 @@ describe('PlattformLeitstandPage (#1083)', () => {
     expect(new Set(namen).size).toBe(namen.length)
   })
 
+  /**
+   * Der selbst gemeldete Abbruch auf der Übersichtsseite (Issue #1146, AK 4 und AK 8).
+   *
+   * Geprüft wird beides zugleich: dass der Grund an **beiden** Stellen derselben Seite steht — in
+   * der Störzeile und hinter dem Ausgangswort der durchgeführten Zeile — und dass beide Zeilen
+   * denselben Melder tragen. Ein Lauf, der abbrach, ist nie gelungen, auch wenn sein maßgebliches
+   * Paket nur zurückgestellt oder gelb ist (E13).
+   */
+  describe('Selbst gemeldeter Abbruch (#1146)', () => {
+    /** Mehrzeilig: `kurzGrund` nimmt die erste nicht leere Zeile — hier wird das sichtbar. */
+    const GRUND = 'Harter Stopp (dirty-tree)\nnähere Angaben stehen in der Auswertung'
+    const KURZ = 'Harter Stopp (dirty-tree)'
+
+    const abgebrochen = (extra: Partial<DisruptionView['outcome']> = {}): DisruptionView =>
+      stoerung({
+        outcome: {
+          abortReason: GRUND,
+          verdict: 'FAILED',
+          decisiveItem: { cardNumber: 721, state: 'RED', errorClass: 'CHECKS_RED' },
+          noWorkReason: null,
+          ...extra,
+        },
+      })
+
+    /** AK 4, erste Hälfte: Die Störzeile nennt den Grund — gekürzt auf eine Zeile. */
+    it('zeigt den gekürzten Abbruchgrund in der Störzeile', async () => {
+      api.leitstand.mockResolvedValue(sicht({ stoerungen: [abgebrochen()] }))
+
+      zeigeSeite()
+
+      const zeile = await screen.findByTestId('stoerung-5')
+      expect(within(zeile).getByText(KURZ)).toBeInTheDocument()
+      expect(within(zeile).queryByText(/nähere Angaben/)).not.toBeInTheDocument()
+    })
+
+    /** AK 4, zweite Hälfte: Derselbe Grund steht hinter dem Ausgangswort der durchgeführten Zeile. */
+    it('zeigt denselben gekürzten Grund hinter dem Ausgangswort der durchgeführten Zeile', async () => {
+      api.leitstand.mockResolvedValue(
+        sicht({ durchgefuehrte: [abgebrochen()], stoerungen: [abgebrochen()] }),
+      )
+
+      zeigeSeite()
+
+      const zeile = await screen.findByTestId('durchgefuehrt-5')
+      expect(zeile).toHaveTextContent(`nicht gelungen — ${KURZ}`)
+      expect(zeile).not.toHaveTextContent('nähere Angaben')
+    })
+
+    /** Ohne Abbruchgrund bleibt die durchgeführte Zeile beim bloßen Ausgangswort. */
+    it('lässt die durchgeführte Zeile ohne Abbruchgrund unverändert', async () => {
+      api.leitstand.mockResolvedValue(sicht({ durchgefuehrte: [stoerung()] }))
+
+      zeigeSeite()
+
+      const zeile = await screen.findByTestId('durchgefuehrt-5')
+      expect(zeile).toHaveTextContent('nicht gelungen')
+      expect(zeile).not.toHaveTextContent('—')
+    })
+
+    /**
+     * E13 und AK 8: derselbe Ausgang überall. Ein Abbruch nach einem zurückgestellten (grau) oder
+     * gelben Paket färbte die Störzeile früher grau bzw. bernstein — neben dem Abbruchgrund als
+     * Text und neben einer zinnoberroten durchgeführten Zeile derselben Seite.
+     */
+    it.each([
+      ['GREY', 'AWAITING_DECISION'],
+      ['YELLOW', 'CHECKS_RED'],
+    ] as const)(
+      'färbt bei Abbruch mit %s maßgeblichem Paket beide Zeilen zinnober',
+      async (state, errorClass) => {
+        const lauf = abgebrochen({ decisiveItem: { cardNumber: 721, state, errorClass } })
+        api.leitstand.mockResolvedValue(sicht({ durchgefuehrte: [lauf], stoerungen: [lauf] }))
+
+        zeigeSeite()
+
+        const stoerzeile = await screen.findByTestId('stoerung-5')
+        expect(within(stoerzeile).getByTestId('led-zinnob')).toBeInTheDocument()
+        const durchgefuehrt = screen.getByTestId('durchgefuehrt-5')
+        expect(within(durchgefuehrt).getByTestId('led-zinnob')).toBeInTheDocument()
+      },
+    )
+
+    /** Der Abbruchgrund steht vor dem Grund des Laufs ohne Arbeit. */
+    it('nimmt den Abbruchgrund vor noWorkReason', async () => {
+      api.leitstand.mockResolvedValue(
+        sicht({
+          stoerungen: [abgebrochen({ decisiveItem: null, noWorkReason: 'Ready war leer' })],
+        }),
+      )
+
+      zeigeSeite()
+
+      const zeile = await screen.findByTestId('stoerung-5')
+      expect(within(zeile).getByText(KURZ)).toBeInTheDocument()
+      expect(within(zeile).queryByText('Ready war leer')).not.toBeInTheDocument()
+    })
+
+    /** …und vor dem Grund des maßgeblichen Pakets. */
+    it('nimmt den Abbruchgrund vor dem Paketgrund', async () => {
+      api.leitstand.mockResolvedValue(sicht({ stoerungen: [abgebrochen()] }))
+
+      zeigeSeite()
+
+      const zeile = await screen.findByTestId('stoerung-5')
+      expect(within(zeile).getByText(KURZ)).toBeInTheDocument()
+      expect(within(zeile).queryByText(/^Karte #721:/)).not.toBeInTheDocument()
+    })
+  })
+
   /** Issue #1135: „Beendete Runs" ist zweigeteilt in diese und die vorige Schicht. */
   describe('Dieser und voriger Zyklus (#1135)', () => {
     beforeEach(() => {

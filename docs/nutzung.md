@@ -556,10 +556,15 @@ unter dem Bereich („15 weitere Runs ausgeblendet"). Die Wahl merkt sich der Br
 Der Ausgang steht als Wort da — eines von dreien:
 
 - **gelungen** — der Run ist durch, nichts steht aus.
-- **nicht gelungen** — der Run ist gescheitert, hat gar nicht gearbeitet oder ist verstummt (siehe
-  Stillefrist).
+- **nicht gelungen** — der Run ist gescheitert, hat gar nicht gearbeitet, hat sich **selbst
+  abgebrochen** oder ist verstummt (siehe Stillefrist).
 - **mit Vorbehalt** — der Run ist durch, sein maßgebliches Arbeitspaket wartet aber noch auf einen
   Menschen oder wurde zurückgestellt.
+
+Hat der Run sich **selbst abgebrochen**, steht hinter dem Wort sein **Grund** in einer Zeile
+(„nicht gelungen — Harter Stopp (dirty-tree)"). Ein selbst gemeldeter Abbruch ist immer „nicht
+gelungen", auch wenn das maßgebliche Arbeitspaket noch grün, gelb oder zurückgestellt war. Den
+vollständigen Grund zeigt die Auswertung des Runs im Projekt.
 
 **Die Stillefrist.** Ein unfertiger Run, der über diese Frist hinweg **kein Lebenszeichen** gibt,
 gilt als **nicht gelungen** — sonst bliebe ein abgeschossener Runner für immer als „läuft" stehen.
@@ -574,6 +579,11 @@ taucht im Bereich „Störungen" nicht auf.
 
 Jede nicht quittierte Störung aus den Runs teilnehmender Projekte — mit Projekt, Zeitpunkt,
 anklickbarer Kennung des Runs, Grund und dem Knopf **„Störung löschen"**.
+
+Der **Grund** ist bei einem selbst abgebrochenen Run sein Abbruchgrund, sonst der Grund des
+maßgeblichen Arbeitspakets („Karte #721: gescheitert") oder der Satz eines Runs ohne Arbeit. Es ist
+derselbe gekürzte Text und dasselbe Lämpchen wie in der Zeile des Runs unter „Beendete Runs" — eine
+Seite, ein Ausgang.
 
 Ob ein Projekt teilnimmt, entscheidet ausschließlich das Projekt selbst — OWNER oder ADMIN mit
 echter Mitgliedschaft, über das Teilnahme-Ankreuzfeld im [Editiermodus](#editiermodus) der

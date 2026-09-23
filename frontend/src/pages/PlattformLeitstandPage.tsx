@@ -12,8 +12,8 @@ import {
 import { KupferwarteBereich } from '../components/nachtlauf/KupferwarteBereich'
 import { LaufArtSymbol } from '../components/leitstand/LaufArtSymbol'
 import { FilterTaste, Led, Platte, Taste } from '../components/leitstand/LeitstandBausteine'
-import { MELDER_JE_ZUSTAND, melderAusBefund, tagZeit, uhrzeit } from '../lib/leitstand'
-import { NIGHT_RUN_VERDICT_TEXT, nightRunZustandsText } from '../lib/nightRunHandoff'
+import { melderAusBefund, tagZeit, uhrzeit } from '../lib/leitstand'
+import { kurzGrund, NIGHT_RUN_VERDICT_TEXT, nightRunZustandsText } from '../lib/nightRunHandoff'
 import { useRefetchOnFocus } from '../lib/useRefetchOnFocus'
 import { zyklusDavor, zyklusDesStarts, zyklusSpanne } from '../lib/verbrauchZeitraum'
 import { ANZEIGE, ETIKETT, KLEIN_RADIUS, NUT, RAND, TEXT_MATT, TEXT_SCHWACH } from '../theme'
@@ -622,6 +622,11 @@ function DurchgefuehrteListe({
  * **Der Ausgang steht als Wort da** (Kriterium 11) — gelungen, nicht gelungen, mit Vorbehalt. Farbe
  * ist nie der einzige Traeger der Aussage.
  *
+ * **Hinter dem Wort steht der Abbruchgrund** (Issue #1146, AK 4), sofern der Lauf einen meldet —
+ * gekuerzt auf eine Zeile durch {@link kurzGrund}, dieselbe Kuerzung wie in der Stoerzeile und in
+ * der Kopfmarke der Nachtlauf-Auswertung. „Nicht gelungen" allein liesse offen, ob ein Paket rot
+ * war oder der Lauf als ganzer riss; den vollen Text zeigt die Auswertung des Laufs.
+ *
  * **Der zweite Verweis** fuehrt zur Stoerzeile weiter unten auf derselben Seite (Kriterium 12); er
  * erscheint nur, solange die Stoerung offen ist.
  */
@@ -640,6 +645,7 @@ function DurchgefuehrteZeile({
       <LaufVerweis zeile={zeile} />
       <Typography sx={{ fontSize: 12, color: 'text.secondary', flex: 1, minWidth: 0 }}>
         {NIGHT_RUN_VERDICT_TEXT[zeile.outcome.verdict]}
+        {zeile.outcome.abortReason ? ` — ${kurzGrund(zeile.outcome.abortReason)}` : ''}
       </Typography>
       {hatStoerung && (
         <Typography
@@ -794,6 +800,14 @@ function Projektblock({
  * Stoerung nichts.
  */
 export function stoerungsGrund(outcome: DisruptionView['outcome']): string {
+  // Der selbst gemeldete Abbruch steht vor allem anderen (Issue #1146, AK 4): Er sagt, warum der
+  // Lauf abbrach, und das schlaegt sowohl den Rueckfall „ohne Arbeit" als auch das massgebliche
+  // Paket — nach einem harten Stopp ist dessen Zustand nur noch der letzte Stand vor dem Riss.
+  // Gekuerzt wird mit {@link kurzGrund} und nicht im Server (Plan #1139 E8): Die Textbildung liegt
+  // im Browser, und die Nachtlauf-Auswertung kuerzt denselben Text mit derselben Funktion.
+  if (outcome.abortReason !== null && outcome.abortReason !== '') {
+    return kurzGrund(outcome.abortReason)
+  }
   if (outcome.noWorkReason !== null && outcome.noWorkReason !== '') {
     return outcome.noWorkReason
   }
@@ -814,14 +828,17 @@ export function stoerungsGrund(outcome: DisruptionView['outcome']): string {
  *
  * **Das `id` neben dem `data-testid`** (#1098) ist das Ziel des Verweises „Stoerung" aus der
  * durchgefuehrten Zeile (Kriterium 12) — ein `data-testid` allein ist kein Sprungziel.
+ *
+ * **Der Melder kommt aus {@link melderAusBefund}** (Issue #1146, E13) und nicht aus einer eigenen
+ * Rechnung ueber das massgebliche Paket: Ein Lauf, der nach einem zurueckgestellten oder gelben
+ * Paket hart abbrach, erschien hier sonst grau oder bernstein — neben seinem Abbruchgrund als Text
+ * und neben derselben Zeile in „Beendete Runs", die ihn zinnober zeigt. Zwei Farben fuer denselben
+ * Ausgang auf einer einzigen Seite (AK 8).
  */
 function Stoerzeile({
   stoerung,
   onQuittieren,
 }: Readonly<{ stoerung: DisruptionView; onQuittieren: () => void }>) {
-  const melder = stoerung.outcome.decisiveItem
-    ? MELDER_JE_ZUSTAND[stoerung.outcome.decisiveItem.state]
-    : 'zinnob'
   return (
     <Box
       component="li"
@@ -831,7 +848,7 @@ function Stoerzeile({
       // „Stoerung loeschen" rechts den Rahmen der Platte. Der eigene senkrechte Rhythmus bleibt.
       sx={{ display: 'flex', alignItems: 'center', gap: '10px', px: '16px', py: '6px' }}
     >
-      <Led melder={melder} />
+      <Led melder={melderAusBefund(stoerung.outcome)} />
       <LaufArtSymbol art={stoerung.mode} />
       <Typography sx={{ fontSize: 12, color: 'text.secondary' }}>
         {tagZeit(stoerung.startedAt)}
