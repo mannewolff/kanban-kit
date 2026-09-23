@@ -500,6 +500,13 @@ export const SCHATTEN_HOCH = VARIABLEN.warte.schattenHoch
 export const SCHATTEN_TASTE = VARIABLEN.warte.schattenTaste
 /** Die Melder als Verweise. */
 export const MELDER = VARIABLEN.melder
+/**
+ * Die Ampel als Verweise — dieselben vier Lampen, die die Nachtlauf-Auswertung spricht (Issue #833).
+ *
+ * Bewusst nicht `statusColors`: Das Modul leitet Farben aus **Spaltennamen** ab und trägt laut
+ * eigenem Kopfkommentar ausschließlich Status-Farben. Ein Sicherungszustand ist keine Board-Spalte.
+ */
+export const AMPEL = VARIABLEN.nightRun
 
 /** Eingelassene Fläche mit Rand und Innenschatten (Entwurf: Schiene, Suche, Spalte). */
 export const NUT_SX = {

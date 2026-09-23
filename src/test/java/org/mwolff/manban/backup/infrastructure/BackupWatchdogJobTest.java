@@ -49,7 +49,7 @@ class BackupWatchdogJobTest {
 
   private void meldet(BackupVerdict urteil, KindStatus... arten) {
     when(status.operationalStatus())
-        .thenReturn(new BackupStatus(urteil, true, "Nextcloud", List.of(arten)));
+        .thenReturn(new BackupStatus(urteil, true, true, "Nextcloud", List.of(arten)));
   }
 
   private void plattformAdmins(String... emails) {

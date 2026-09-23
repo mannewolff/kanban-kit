@@ -104,6 +104,9 @@ class BackupStatusIT extends AbstractIntegrationTest {
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.verdict").value("OK"))
         .andExpect(jsonPath("$.enabled").value(true))
+        // In Test und Dev ist der Mailversand aus (Default) — die Kachel weist dann darauf hin,
+        // dass der Alarm nur ins Protokoll geht (Issue #833, Plan #825 E11).
+        .andExpect(jsonPath("$.alertMailEnabled").value(false))
         .andExpect(jsonPath("$.targetLabel").value("Nextcloud"))
         .andExpect(jsonPath("$.kinds.length()").value(4))
         .andExpect(jsonPath("$.kinds[" + BASIS + "].kind").value("BASIS"))

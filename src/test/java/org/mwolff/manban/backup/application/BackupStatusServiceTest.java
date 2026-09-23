@@ -55,11 +55,16 @@ class BackupStatusServiceTest {
   }
 
   private BackupStatusService service(boolean eingeschaltet) {
+    return service(eingeschaltet, false);
+  }
+
+  private BackupStatusService service(boolean eingeschaltet, boolean mailversand) {
     return new BackupStatusService(
         runs,
         new BackupProperties(eingeschaltet, CRON, Duration.ofMinutes(5), "Nextcloud"),
         admins,
-        Clock.fixed(JETZT, ZoneOffset.UTC));
+        Clock.fixed(JETZT, ZoneOffset.UTC),
+        mailversand);
   }
 
   /** Ein gelungener Lauf, der vor {@code vor} begonnen hat. */
@@ -223,5 +228,20 @@ class BackupStatusServiceTest {
     BackupStatus status = service(false).status(ADMIN);
 
     assertThat(status.verdict()).isEqualTo(BackupVerdict.ABGESCHALTET);
+  }
+
+  /**
+   * Issue #833: Der Stand sagt mit, ob der Alarm überhaupt versendet wird. Bei abgeschaltetem
+   * Mailversand verpufft er im Protokoll (Plan #825 E11) — dann ist die Admin-Ansicht der einzige
+   * verlässliche Weg, und sie kann das nur sagen, wenn sie es erfährt.
+   */
+  @Test
+  void meldetDenAbgeschaltetenMailversandMit() {
+    assertThat(service(true, false).status(ADMIN).alertMailEnabled()).isFalse();
+  }
+
+  @Test
+  void meldetDenEingeschaltetenMailversandMit() {
+    assertThat(service(true, true).status(ADMIN).alertMailEnabled()).isTrue();
   }
 }

@@ -13,6 +13,7 @@ import org.mwolff.manban.backup.domain.BackupKind;
 import org.mwolff.manban.backup.domain.BackupOutcome;
 import org.mwolff.manban.backup.domain.BackupRun;
 import org.mwolff.manban.backup.domain.BackupVerdict;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -30,16 +31,19 @@ public class BackupStatusService {
   private final BackupProperties properties;
   private final PlatformAdminChecker platformAdminChecker;
   private final Clock clock;
+  private final boolean alertMailEnabled;
 
   public BackupStatusService(
       BackupRunRepository runs,
       BackupProperties properties,
       PlatformAdminChecker platformAdminChecker,
-      Clock clock) {
+      Clock clock,
+      @Value("${manban.mail.enabled:false}") boolean alertMailEnabled) {
     this.runs = runs;
     this.properties = properties;
     this.platformAdminChecker = platformAdminChecker;
     this.clock = clock;
+    this.alertMailEnabled = alertMailEnabled;
   }
 
   /**
@@ -75,7 +79,8 @@ public class BackupStatusService {
     ZonedDateTime bezug = jetzt.atZone(clock.getZone());
     List<KindStatus> arten =
         Arrays.stream(BackupKind.values()).map(art -> standDerArt(art, jetzt, bezug)).toList();
-    return new BackupStatus(urteil(arten), properties.enabled(), properties.targetLabel(), arten);
+    return new BackupStatus(
+        urteil(arten), properties.enabled(), alertMailEnabled, properties.targetLabel(), arten);
   }
 
   private KindStatus standDerArt(BackupKind art, Instant jetzt, ZonedDateTime bezug) {
@@ -133,11 +138,18 @@ public class BackupStatusService {
   /**
    * Der Stand der Sicherung insgesamt.
    *
+   * @param alertMailEnabled ob der Alarm tatsächlich verschickt wird ({@code manban.mail.enabled}).
+   *     Ist er aus — der ausgelieferte Zustand —, protokolliert der Versand nur (Plan #825 E11);
+   *     dann ist die Admin-Ansicht der einzige verlässliche Weg und sagt das (Issue #833).
    * @param targetLabel sprechender Name des Ablageorts außer Haus
    * @param kinds je Art ein Eintrag, in der Reihenfolge von {@link BackupKind}
    */
   public record BackupStatus(
-      BackupVerdict verdict, boolean enabled, String targetLabel, List<KindStatus> kinds) {}
+      BackupVerdict verdict,
+      boolean enabled,
+      boolean alertMailEnabled,
+      String targetLabel,
+      List<KindStatus> kinds) {}
 
   /**
    * Der Stand einer Art.
