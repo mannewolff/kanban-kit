@@ -65,10 +65,15 @@
     ],
     "doku": [
       "docs/**",
-      "docs-site/**"
+      "docs-site/**",
+      "README.md"
     ],
     "cli": [
       "cli/**"
+    ],
+    "workflow": [
+      ".claude/**",
+      "CLAUDE*.md"
     ]
   },
   "reviewCommand": "codex exec --model gpt-6-astra -c model_reasoning_effort=\"high\"",
