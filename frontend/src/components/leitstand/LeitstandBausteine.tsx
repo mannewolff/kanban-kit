@@ -173,11 +173,24 @@ export function Platte({
 export function FilterTaste({
   gewaehlt,
   onClick,
+  ariaLabel,
   children,
-}: Readonly<{ gewaehlt: boolean; onClick: () => void; children: ReactNode }>) {
+}: Readonly<{
+  gewaehlt: boolean
+  onClick: () => void
+  /**
+   * Der vorgelesene Name, wenn die Aufschrift allein ihn nicht trägt (Issue #1140).
+   *
+   * Eine Taste mit der Aufschrift „10" sagt vorgelesen nicht, wovon zehn — der Bezug steht auf dem
+   * Bildschirm daneben und geht für ein Vorlesewerkzeug verloren.
+   */
+  ariaLabel?: string
+  children: ReactNode
+}>) {
   return (
     <ButtonBase
       aria-pressed={gewaehlt}
+      aria-label={ariaLabel}
       onClick={onClick}
       sx={{
         fontSize: 11.5,

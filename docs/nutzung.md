@@ -534,6 +534,11 @@ ihrer Spanne („vom 21.09.2026 auf den 22.09.2026"). Um 12:00 wandern die Runs 
 Nacht deshalb nach „Vorige Schicht", statt zu verschwinden; ältere Runs stehen dort nicht mehr.
 Eine Zeile mit offener Störung trägt in beiden Abschnitten den Verweis „Störung".
 
+Im Kopf des Bereichs steht, **wie viele** Runs er zeigt: **10**, **20** oder **alle**. Gezählt
+werden beide Abschnitte zusammen, zuerst „Diese Schicht"; was darüber hinausgeht, nennt ein Satz
+unter dem Bereich („15 weitere Runs ausgeblendet"). Die Wahl merkt sich der Browser, Vorgabe ist 10.
+„Aktive Runs" und „Störungen" bleiben davon unberührt — sie zeigen immer alles.
+
 Der Ausgang steht als Wort da — eines von dreien:
 
 - **gelungen** — der Run ist durch, nichts steht aus.

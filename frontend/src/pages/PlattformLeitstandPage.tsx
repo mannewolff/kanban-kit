@@ -11,7 +11,7 @@ import {
 } from '../api/plattformLeitstand'
 import { KupferwarteBereich } from '../components/nachtlauf/KupferwarteBereich'
 import { LaufMarke } from '../components/nachtlauf/NachtlaufLaufPlatte'
-import { Led, Platte, Taste } from '../components/leitstand/LeitstandBausteine'
+import { FilterTaste, Led, Platte, Taste } from '../components/leitstand/LeitstandBausteine'
 import { MELDER_JE_ZUSTAND, melderAusBefund, modusName, tagZeit, uhrzeit } from '../lib/leitstand'
 import { NIGHT_RUN_VERDICT_TEXT, nightRunZustandsText } from '../lib/nightRunHandoff'
 import { useRefetchOnFocus } from '../lib/useRefetchOnFocus'
@@ -47,6 +47,52 @@ function schreibeVorigeOffen(wert: boolean): void {
   } catch {
     // localStorage nicht verfuegbar — der Zustand haelt dann nur diese Sitzung, kein Hard-Fail.
   }
+}
+
+/**
+ * Wie viele beendete Runs der Bereich zeigt (Issue #1140) — die Werte der drei Tasten.
+ *
+ * Als Zeichenkette und nicht als Zahl mit `Infinity`: Genau diese Werte stehen im Speicher des
+ * Browsers, und ein gelesener Wert lässt sich damit ohne Umrechnung gegen sie prüfen.
+ */
+const ANZAHL_WERTE = ['10', '20', 'alle'] as const
+type AnzahlWahl = (typeof ANZAHL_WERTE)[number]
+
+/** Die Vorgabe beim ersten Besuch: Der Anlass der Einstellung ist die zu lange Liste. */
+const ANZAHL_VORGABE: AnzahlWahl = '10'
+
+/** Wo der Browser sich die Wahl merkt — die Seite steht lange offen und frischt sich selbst auf. */
+const ANZAHL_SCHLUESSEL = 'manban.plattformLeitstand.anzahl'
+
+function istAnzahlWahl(wert: string | null): wert is AnzahlWahl {
+  return ANZAHL_WERTE.some((w) => w === wert)
+}
+
+/** Ein fehlender, unlesbarer oder unbekannter Wert ergibt die Vorgabe. */
+function leseAnzahl(): AnzahlWahl {
+  try {
+    const wert = localStorage.getItem(ANZAHL_SCHLUESSEL)
+    return istAnzahlWahl(wert) ? wert : ANZAHL_VORGABE
+  } catch {
+    return ANZAHL_VORGABE
+  }
+}
+
+function schreibeAnzahl(wahl: AnzahlWahl): void {
+  try {
+    localStorage.setItem(ANZAHL_SCHLUESSEL, wahl)
+  } catch {
+    // Wie beim Klappzustand: ein gesperrter Speicher kostet die Erinnerung, nicht die Seite.
+  }
+}
+
+/** Die Wahl als Obergrenze; „alle" begrenzt nicht. */
+function grenzeVon(wahl: AnzahlWahl): number {
+  return wahl === 'alle' ? Number.POSITIVE_INFINITY : Number(wahl)
+}
+
+function runWort(anzahl: number): string {
+  return anzahl === 1 ? '1 Run' : `${anzahl} Runs`
 }
 
 /**
@@ -103,6 +149,10 @@ export default function PlattformLeitstandPage() {
   // Schicht; ein Dutzend alter Zeilen schoebe die Stoerungen aus dem Bild.
   const [vorigeOffen, setVorigeOffen] = useState(leseVorigeOffen)
 
+  // Wie viele beendete Runs gezeigt werden (#1140). Anders als der Klappzustand ist das eine
+  // ausdrückliche Einstellung des Menschen, deshalb wird sie gemerkt.
+  const [anzahlWahl, setAnzahlWahl] = useState(leseAnzahl)
+
   const vorigeUmschalten = useCallback(() => {
     setVorigeOffen((offen) => !offen)
   }, [])
@@ -112,6 +162,10 @@ export default function PlattformLeitstandPage() {
   useEffect(() => {
     schreibeVorigeOffen(vorigeOffen)
   }, [vorigeOffen])
+
+  useEffect(() => {
+    schreibeAnzahl(anzahlWahl)
+  }, [anzahlWahl])
 
   const laden = useCallback(() => {
     plattformLeitstandApi
@@ -180,16 +234,37 @@ export default function PlattformLeitstandPage() {
   // Die Spannen nennen die Zyklen, deren Grenzen der Server mit derselben Zone zieht (#1135).
   const dieserZyklus = zyklusDesStarts(new Date().toISOString())
 
+  // Die Begrenzung zählt **beide** Abschnitte zusammen (#1140): zuerst die dieser Schicht in der
+  // Reihenfolge der Antwort, der Rest aus der vorigen. Je Abschnitt N zeigte bei „10" bis zu zwanzig
+  // Zeilen — die Einstellung heißt aber „wie viele Runs sehe ich".
+  //
+  // Gerechnet wird auf der ganzen Antwort und nicht auf dem, was gerade aufgeklappt ist: Der
+  // Klappzustand ist eine Geste, die Einstellung eine Einstellung. Sonst sprängen die Zeilen der
+  // vorigen Schicht beim Zuklappen dieser in die Sicht.
+  const grenze = grenzeVon(anzahlWahl)
+  const sichtbarDieser = sicht.durchgefuehrte.slice(0, grenze)
+  const sichtbarVoriger = sicht.durchgefuehrteVoriger.slice(
+    0,
+    Math.max(0, grenze - sicht.durchgefuehrte.length),
+  )
+  const verdecktDieser = sicht.durchgefuehrte.length - sichtbarDieser.length
+  const verdecktVoriger = sicht.durchgefuehrteVoriger.length - sichtbarVoriger.length
+
   return (
     <KupferwarteBereich>
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
         <Platte titel="Aktive Runs">
           <LaufendeListe zeilen={geladen ? sicht.laufende : null} />
         </Platte>
-        <Platte titel="Beendete Runs">
+        <Platte
+          titel="Beendete Runs"
+          werkzeug={<AnzahlWahlTasten wahl={anzahlWahl} onWaehlen={setAnzahlWahl} />}
+        >
           <ZyklusAbschnitt titel="Diese Schicht" spanne={zyklusSpanne(dieserZyklus)} testId="zyklus-dieser">
             <DurchgefuehrteListe
-              zeilen={geladen ? sicht.durchgefuehrte : null}
+              zeilen={geladen ? sichtbarDieser : null}
+              verdeckt={verdecktDieser}
+              testId="zyklus-dieser"
               mitStoerung={mitStoerung}
               leer={{ testId: 'keine-durchgefuehrten', text: 'In dieser Schicht wurde noch kein Run beendet.' }}
             />
@@ -203,11 +278,20 @@ export default function PlattformLeitstandPage() {
             onUmschalten={vorigeUmschalten}
           >
             <DurchgefuehrteListe
-              zeilen={geladen ? sicht.durchgefuehrteVoriger : null}
+              zeilen={geladen ? sichtbarVoriger : null}
+              verdeckt={verdecktVoriger}
+              testId="zyklus-voriger"
               mitStoerung={mitStoerung}
               leer={{ testId: 'keine-durchgefuehrten-voriger', text: 'In der vorigen Schicht wurde kein Run beendet.' }}
             />
           </ZyklusAbschnitt>
+          {geladen && verdecktDieser + verdecktVoriger > 0 && (
+            <VerdecktSatz testId="ausgeblendet-hinweis">
+              {verdecktDieser + verdecktVoriger === 1
+                ? '1 weiterer Run ausgeblendet'
+                : `${verdecktDieser + verdecktVoriger} weitere Runs ausgeblendet`}
+            </VerdecktSatz>
+          )}
         </Platte>
         <Platte titel="Störungen">
           <Stoerungen liste={geladen ? sicht.stoerungen : null} onQuittieren={quittieren} />
@@ -228,6 +312,50 @@ function LeerSatz({ testId, children }: Readonly<{ testId: string; children: Rea
     <Typography
       data-testid={testId}
       sx={{ fontSize: 13, color: 'text.secondary', px: '16px', py: '14px' }}
+    >
+      {children}
+    </Typography>
+  )
+}
+
+/**
+ * Die drei Tasten „10 · 20 · alle" im Werkzeugbereich der Platte „Beendete Runs" (Issue #1140).
+ *
+ * Tasten statt eines Auswahlmenüs: Drei Werte stehen so mit einem Klick bereit, und das Muster
+ * {@link FilterTaste} kennt die Seite schon aus dem Board-Leitstand. Das `aria-label` trägt den
+ * Bezug, den die Aufschrift „10" für sich genommen nicht hat.
+ */
+function AnzahlWahlTasten({
+  wahl,
+  onWaehlen,
+}: Readonly<{ wahl: AnzahlWahl; onWaehlen: (wahl: AnzahlWahl) => void }>) {
+  return (
+    <>
+      {ANZAHL_WERTE.map((wert) => (
+        <FilterTaste
+          key={wert}
+          gewaehlt={wert === wahl}
+          ariaLabel={`Beendete Runs: ${wert}`}
+          onClick={() => onWaehlen(wert)}
+        >
+          {wert}
+        </FilterTaste>
+      ))}
+    </>
+  )
+}
+
+/**
+ * Ein Satz über ausgeblendete Zeilen (#1140) — gestaltet wie der {@link LeerSatz}.
+ *
+ * Er sagt aus, was ohne ihn nur eine kurze Liste wäre: dass da mehr ist. Ohne ihn sähe eine
+ * begrenzte Sicht aus wie eine ruhige Nacht.
+ */
+function VerdecktSatz({ testId, children }: Readonly<{ testId: string; children: ReactNode }>) {
+  return (
+    <Typography
+      data-testid={testId}
+      sx={{ fontSize: 12, color: TEXT_SCHWACH, px: '16px', py: '10px' }}
     >
       {children}
     </Typography>
@@ -442,7 +570,7 @@ function ZyklusAbschnitt({
         <Typography sx={{ fontSize: 12, color: 'text.secondary' }}>{spanne}</Typography>
         {anzahl !== null && (
           <Typography data-testid={`${testId}-anzahl`} sx={{ fontSize: 12, color: 'text.secondary' }}>
-            {anzahl === 1 ? '1 Run' : `${anzahl} Runs`}
+            {runWort(anzahl)}
           </Typography>
         )}
       </Box>
@@ -454,10 +582,16 @@ function ZyklusAbschnitt({
 /** Der Bereich „Beendete Laeufe" (Kriterien 9–14) — je Zyklus eine Liste (Issue #1135). */
 function DurchgefuehrteListe({
   zeilen,
+  verdeckt,
+  testId,
   mitStoerung,
   leer,
 }: Readonly<{
+  /** Die **sichtbaren** Zeilen des Abschnitts; `null`, solange die erste Antwort fehlt. */
   zeilen: DisruptionView[] | null
+  /** Wie viele Zeilen des Abschnitts die Einstellung verdrängt hat (#1140). */
+  verdeckt: number
+  testId: string
   mitStoerung: ReadonlySet<number>
   leer: { testId: string; text: string }
 }>) {
@@ -465,7 +599,13 @@ function DurchgefuehrteListe({
     return null
   }
   if (zeilen.length === 0) {
-    return <LeerSatz testId={leer.testId}>{leer.text}</LeerSatz>
+    // Ein ganz verdrängter Abschnitt hat sehr wohl Runs — der Leersatz wäre dort schlicht falsch
+    // und ließe eine arbeitsreiche Schicht wie eine leere aussehen (#1140).
+    return verdeckt > 0 ? (
+      <VerdecktSatz testId={`${testId}-ausgeblendet`}>{`${runWort(verdeckt)} ausgeblendet`}</VerdecktSatz>
+    ) : (
+      <LeerSatz testId={leer.testId}>{leer.text}</LeerSatz>
+    )
   }
   return (
     <Box component="ul" sx={{ listStyle: 'none', m: 0, p: 0 }}>

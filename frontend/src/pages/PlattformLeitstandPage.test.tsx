@@ -751,6 +751,168 @@ describe('PlattformLeitstandPage (#1083)', () => {
     })
   })
 
+  /**
+   * Issue #1140: Wie viele beendete Runs man sieht, stellt der Mensch ein — 10, 20 oder alle.
+   *
+   * Gezählt wird über **beide** Abschnitte zusammen: Die Einstellung beantwortet „wie viele Runs
+   * sehe ich", und je Abschnitt zeigte „10" bis zu zwanzig Zeilen. Die vorige Schicht startet seit
+   * #1152 zugeklappt; diese Prüfungen gelten dem Begrenzen und klappen sie deshalb über den
+   * gemerkten Zustand auf.
+   */
+  describe('Anzahl beendeter Runs einstellbar (#1140)', () => {
+    /** `anzahl` Zeilen mit fortlaufenden Kennungen ab `ab`. */
+    const zeilen = (anzahl: number, ab: number): DisruptionView[] =>
+      Array.from({ length: anzahl }, (_, i) => stoerung({ nightRunId: ab + i }))
+
+    const taste = (name: string) => screen.getByRole('button', { name })
+
+    beforeEach(() => {
+      localStorage.setItem('leitstand-voriger-zyklus-offen', 'true')
+    })
+
+    it('zeigt vorgegeben 10 Zeilen und nennt die ausgeblendeten', async () => {
+      api.leitstand.mockResolvedValue(sicht({ durchgefuehrteVoriger: zeilen(25, 100) }))
+      zeigeSeite()
+
+      await screen.findByTestId('durchgefuehrt-100')
+      expect(screen.getAllByTestId(/^durchgefuehrt-/)).toHaveLength(10)
+      expect(screen.getByTestId('durchgefuehrt-109')).toBeInTheDocument()
+      expect(screen.queryByTestId('durchgefuehrt-110')).toBeNull()
+      expect(screen.getByTestId('ausgeblendet-hinweis')).toHaveTextContent(
+        '15 weitere Runs ausgeblendet',
+      )
+      expect(taste('Beendete Runs: 10')).toHaveAttribute('aria-pressed', 'true')
+      expect(taste('Beendete Runs: alle')).toHaveAttribute('aria-pressed', 'false')
+    })
+
+    it('zeigt nach Klick auf 20 zwanzig und nach Klick auf alle jede Zeile', async () => {
+      api.leitstand.mockResolvedValue(sicht({ durchgefuehrteVoriger: zeilen(25, 100) }))
+      zeigeSeite()
+
+      await screen.findByTestId('durchgefuehrt-100')
+      await userEvent.click(taste('Beendete Runs: 20'))
+
+      expect(screen.getAllByTestId(/^durchgefuehrt-/)).toHaveLength(20)
+      expect(screen.getByTestId('ausgeblendet-hinweis')).toHaveTextContent(
+        '5 weitere Runs ausgeblendet',
+      )
+      expect(taste('Beendete Runs: 20')).toHaveAttribute('aria-pressed', 'true')
+
+      await userEvent.click(taste('Beendete Runs: alle'))
+
+      expect(screen.getAllByTestId(/^durchgefuehrt-/)).toHaveLength(25)
+      expect(screen.queryByTestId('ausgeblendet-hinweis')).toBeNull()
+    })
+
+    /** Ein einzelner ausgeblendeter Run steht im Singular da. */
+    it('zählt einen einzelnen ausgeblendeten Run im Singular', async () => {
+      api.leitstand.mockResolvedValue(sicht({ durchgefuehrteVoriger: zeilen(11, 100) }))
+      zeigeSeite()
+
+      await screen.findByTestId('durchgefuehrt-100')
+      expect(screen.getByTestId('ausgeblendet-hinweis').textContent).toBe(
+        '1 weiterer Run ausgeblendet',
+      )
+    })
+
+    it('zählt beide Abschnitte zusammen', async () => {
+      api.leitstand.mockResolvedValue(
+        sicht({ durchgefuehrte: zeilen(4, 200), durchgefuehrteVoriger: zeilen(12, 100) }),
+      )
+      zeigeSeite()
+
+      await screen.findByTestId('durchgefuehrt-200')
+      const dieser = screen.getByRole('region', { name: 'Diese Schicht' })
+      const voriger = screen.getByRole('region', { name: 'Vorige Schicht' })
+      expect(within(dieser).getAllByTestId(/^durchgefuehrt-/)).toHaveLength(4)
+      expect(within(voriger).getAllByTestId(/^durchgefuehrt-/)).toHaveLength(6)
+      expect(within(voriger).getByTestId('durchgefuehrt-105')).toBeInTheDocument()
+      expect(screen.queryByTestId('durchgefuehrt-106')).toBeNull()
+      expect(screen.getByTestId('ausgeblendet-hinweis')).toHaveTextContent(
+        '6 weitere Runs ausgeblendet',
+      )
+    })
+
+    /**
+     * Ein Abschnitt, dessen Zeilen alle ausgeblendet sind, hat sehr wohl welche — der Leersatz
+     * „… wurde kein Run beendet." wäre dort schlicht falsch.
+     */
+    it('sagt am ganz verdrängten Abschnitt „ausgeblendet" statt des Leersatzes', async () => {
+      api.leitstand.mockResolvedValue(
+        sicht({ durchgefuehrte: zeilen(12, 200), durchgefuehrteVoriger: zeilen(3, 100) }),
+      )
+      zeigeSeite()
+
+      await screen.findByTestId('durchgefuehrt-200')
+      const dieser = screen.getByRole('region', { name: 'Diese Schicht' })
+      expect(within(dieser).getAllByTestId(/^durchgefuehrt-/)).toHaveLength(10)
+      const voriger = screen.getByRole('region', { name: 'Vorige Schicht' })
+      expect(within(voriger).getByTestId('zyklus-voriger-ausgeblendet')).toHaveTextContent(
+        '3 Runs ausgeblendet',
+      )
+      expect(screen.queryByTestId('keine-durchgefuehrten-voriger')).toBeNull()
+    })
+
+    /** Ein Abschnitt ohne Runs behält seinen Leersatz — dort ist nichts verdrängt, dort ist nichts. */
+    it('behält den Leersatz eines Abschnitts ohne Runs', async () => {
+      api.leitstand.mockResolvedValue(sicht({ durchgefuehrte: zeilen(12, 200) }))
+      zeigeSeite()
+
+      await screen.findByTestId('durchgefuehrt-200')
+      expect(screen.getByTestId('keine-durchgefuehrten-voriger')).toHaveTextContent(
+        'In der vorigen Schicht wurde kein Run beendet.',
+      )
+      expect(screen.queryByTestId('zyklus-voriger-ausgeblendet')).toBeNull()
+    })
+
+    it('merkt die Wahl über einen Neuaufbau der Seite', async () => {
+      api.leitstand.mockResolvedValue(sicht({ durchgefuehrteVoriger: zeilen(25, 100) }))
+      const { unmount } = render(<PlattformLeitstandPage />, { wrapper: MemoryRouter })
+
+      await screen.findByTestId('durchgefuehrt-100')
+      await userEvent.click(taste('Beendete Runs: 20'))
+      unmount()
+
+      zeigeSeite()
+      await screen.findByTestId('durchgefuehrt-100')
+      expect(screen.getAllByTestId(/^durchgefuehrt-/)).toHaveLength(20)
+      expect(taste('Beendete Runs: 20')).toHaveAttribute('aria-pressed', 'true')
+    })
+
+    /** Ein unbekannter gemerkter Wert ist kein Wert — dann gilt die Vorgabe. */
+    it('fällt bei einem unbekannten gemerkten Wert auf 10 zurück', async () => {
+      localStorage.setItem('manban.plattformLeitstand.anzahl', 'siebzehn')
+      api.leitstand.mockResolvedValue(sicht({ durchgefuehrteVoriger: zeilen(25, 100) }))
+      zeigeSeite()
+
+      await screen.findByTestId('durchgefuehrt-100')
+      expect(screen.getAllByTestId(/^durchgefuehrt-/)).toHaveLength(10)
+    })
+
+    /** Ein gesperrter Speicher kostet die Erinnerung, nicht die Seite. */
+    it('bleibt mit der Vorgabe bedienbar, wenn der Speicher wirft', async () => {
+      vi.stubGlobal('localStorage', throwingStorage())
+      api.leitstand.mockResolvedValue(sicht({ durchgefuehrte: zeilen(25, 200) }))
+      zeigeSeite()
+
+      await screen.findByTestId('durchgefuehrt-200')
+      expect(screen.getAllByTestId(/^durchgefuehrt-/)).toHaveLength(10)
+      await userEvent.click(taste('Beendete Runs: alle'))
+      expect(screen.getAllByTestId(/^durchgefuehrt-/)).toHaveLength(25)
+    })
+
+    /** Aktive Runs dürfen nie verschwinden, und eine offene Störung erst recht nicht. */
+    it('lässt aktive Runs und Störungen unbegrenzt', async () => {
+      const offene = zeilen(12, 300)
+      api.leitstand.mockResolvedValue(sicht({ laufende: zeilen(12, 400), stoerungen: offene }))
+      zeigeSeite()
+
+      await screen.findByTestId('laufend-400')
+      expect(screen.getAllByTestId(/^laufend-/)).toHaveLength(12)
+      expect(screen.getAllByTestId(/^stoerung-/)).toHaveLength(12)
+    })
+  })
+
   /** Issue #1128: Jede der drei Listen zeigt an jeder Zeile die Art des Laufs als Marke. */
   it('zeigt in allen drei Listen die Art des Laufs', async () => {
     api.leitstand.mockResolvedValue(
