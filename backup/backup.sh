@@ -33,6 +33,17 @@ UMGEBUNG="$SICHERUNG/.umgebung"
 CRON_DATEI=/etc/cron.d/manban-backup
 MC_ALIAS=manban
 
+# Bis wohin der Anhang-Spiegel reicht — ein Stempel wie 20260923T075500Z, geschrieben nach jedem
+# gelungenen Spiegel-Lauf und mit derselben Datei ausser Haus abgelegt.
+#
+# Warum diese Datei sein muss (E5, Issue #830): restore.sh weist einen Rueckholzeitpunkt ab, der
+# hinter dem letzten Spiegel liegt. Den Zeitpunkt aus `backup_run` zu lesen, hilft dabei nicht: Die
+# Rueckholung auf eine leere Maschine ist der Fall, fuer den die Pruefung gebaut ist, und dort gibt
+# es keine Datenbank, die man fragen koennte. Aus den Dateizeiten im Spiegel laesst er sich auch
+# nicht ableiten — sie sagen, wann ein Anhang hochgeladen wurde, nicht wann der Spiegel lief.
+SPIEGEL_STAND="$SICHERUNG/spiegel-stand"
+SPIEGEL_STAND_ZIEL=spiegel-stand.age
+
 # Laengstes Stueck eines Fehlertextes, das in backup_run.detail (varchar(4000)) passt.
 DETAIL_MAX=3900
 
@@ -99,17 +110,20 @@ vorgaben_setzen() {
   export MC_CONFIG_DIR
 }
 
-# Fehlt eines dieser Felder, sichert der Container nichts — und soll das laut sagen, statt in einen
-# Takt zu gehen, der jedes Mal scheitert.
+# Fehlt eines der uebergebenen Felder, laeuft der Aufruf nicht — und soll das laut sagen, statt in
+# einen Takt zu gehen, der jedes Mal scheitert.
+#
+# Welche Felder das sind, sagt der Aufrufer: Der Sicherungsdienst braucht alle fuenf, das Verfallen
+# in retention.sh kommt ohne MANBAN_BACKUP_AGE_RECIPIENT aus — es verschluesselt nichts und soll
+# darum auch nichts davon verlangen (AK7 in Issue #830).
 pflichtfelder_pruefen() {
   local name
   local -a fehlend=()
-  for name in POSTGRES_PASSWORD MINIO_ROOT_USER MINIO_ROOT_PASSWORD \
-    MANBAN_BACKUP_TARGET MANBAN_BACKUP_AGE_RECIPIENT; do
+  for name in "$@"; do
     [ -n "${!name-}" ] || fehlend+=("$name")
   done
   if [ ${#fehlend[@]} -gt 0 ]; then
-    log "FEHLER Ohne ${fehlend[*]} kann nicht gesichert werden — siehe .env.example und docs/backup.md."
+    log "FEHLER Ohne ${fehlend[*]} geht es nicht weiter — siehe .env.example und docs/backup.md."
     return 1
   fi
 }
@@ -166,13 +180,19 @@ cron_einrichten() {
   fi
   # Die Ausgabe geht auf die Kanaele von PID 1 und damit in das Protokoll des Containers; sonst
   # schriebe cron sie an eine lokale Mailzustellung, die es hier nicht gibt.
+  #
+  # Das Verfallen haengt am selben Takt und laeuft unmittelbar nach der Basissicherung — mit
+  # Semikolon, nicht mit `&&`: Gerade wenn die Sicherung scheitert, muss weiter geraeumt werden,
+  # sonst laeuft das Sicherungs-Volume ausgerechnet waehrend einer Stoerung voll. Ein eigener Takt
+  # daneben waere ein zweiter Ort fuer dieselbe Einstellung.
   {
     printf 'SHELL=/bin/bash\n'
     printf 'PATH=/usr/local/bin:/usr/bin:/bin\n'
-    printf '%s root /usr/local/bin/backup.sh basis >/proc/1/fd/1 2>/proc/1/fd/2\n' "$felder"
+    printf '%s root { /usr/local/bin/backup.sh basis; /usr/local/bin/retention.sh; }' "$felder"
+    printf ' >/proc/1/fd/1 2>/proc/1/fd/2\n'
   } > "$CRON_DATEI"
   chmod 0644 "$CRON_DATEI"
-  log "Basissicherung im Takt '$felder' (aus MANBAN_BACKUP_BASE_CRON='$MANBAN_BACKUP_BASE_CRON')."
+  log "Basissicherung und Verfallen im Takt '$felder' (aus MANBAN_BACKUP_BASE_CRON='$MANBAN_BACKUP_BASE_CRON')."
 }
 
 # ---------------------------------------------------------------------------
@@ -217,7 +237,9 @@ ziel_pfad() {
 # Schluessel — der private liegt nicht im Abbild und wird hier nie gelesen (E3, AK8).
 aussenhaus() {
   local quelle=$1 zielname=$2 zwischen groesse='' stand=0
-  zwischen="$SICHERUNG/.versand.$BASHPID"
+  # ${BASHPID:-$$}: Im Container laeuft bash 5 und kennt BASHPID. Die Proben laufen auch auf einem
+  # Apple-Rechner, und dessen bash 3.2 kennt es nicht — ohne Ersatzwert braechen sie an `set -u`.
+  zwischen="$SICHERUNG/.versand.${BASHPID:-$$}"
   age --recipient "$MANBAN_BACKUP_AGE_RECIPIENT" --output "$zwischen" "$quelle" || stand=$?
   if [ "$stand" -eq 0 ]; then
     rclone copyto "$zwischen" "$(ziel_pfad "$zielname")" || stand=$?
@@ -265,6 +287,28 @@ verzeichnis_versenden() {
 # Die vier Laeufe
 # ---------------------------------------------------------------------------
 
+# Der Zeitstempel im Namen einer Basissicherung, oder Rueckgabe 1, wenn der Name keiner ist.
+#
+# Hier gebildet, weil hier auch der Name entsteht: Rueckholung (restore.sh) und Verfallen
+# (retention.sh) lesen ihn beide, und zwei Auslegungen desselben Namens waeren eine Wahrheit zu
+# viel. Der Stempel ist lexikografisch sortierbar und damit auch vergleichbar — ohne `date`, das
+# ausserhalb des Containers anders rechnet.
+#
+# Pfad, blosser Name und die Endung .age der Kopie ausser Haus sind alle drei zulaessig.
+basis_stempel() {
+  local name=${1##*/} stempel
+  case $name in
+    basis-*) stempel=${name#basis-} ;;
+    *) return 1 ;;
+  esac
+  stempel=${stempel%%.*}
+  case $stempel in
+    [0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]T[0-9][0-9][0-9][0-9][0-9][0-9]Z) ;;
+    *) return 1 ;;
+  esac
+  printf '%s\n' "$stempel"
+}
+
 basis_lauf() {
   local beginn ziel stempel groesse fehler="$SICHERUNG/.fehler-basis"
   beginn=$(jetzt)
@@ -305,8 +349,12 @@ offsite_lauf() {
 }
 
 spiegel_lauf() {
-  local beginn ergebnis anzahl bytes fehler="$SICHERUNG/.fehler-spiegel"
+  local beginn stempel ergebnis anzahl bytes fehler="$SICHERUNG/.fehler-spiegel"
   beginn=$(jetzt)
+  # Der Stand wird VOR dem Spiegeln genommen, nicht danach: Erfasst ist sicher alles, was bei
+  # Beginn schon da war. Was waehrend des Laufs hochgeladen wurde, kann fehlen — ein Stand aus dem
+  # Nachhinein verspraeche der Rueckholung also mehr, als der Spiegel haelt.
+  stempel=$(date -u +%Y%m%dT%H%M%SZ)
   mkdir -p "$SPIEGEL_DIR" "$VERSANDT_DIR/spiegel" "$MC_CONFIG_DIR"
 
   # Bewusst ohne --remove (E5): Anhaenge sind unveraenderlich, aber nicht unloeschbar. Mit --remove
@@ -328,8 +376,22 @@ spiegel_lauf() {
     protokoll spiegel "$beginn" fehlschlag "$(kurzfassung "$fehler")"
     return 1
   fi
+
+  # Der Stand wird zuletzt festgeschrieben und gilt damit erst, wenn der Spiegel oertlich UND
+  # ausser Haus vollstaendig ist. Scheitert der Versand des Standes, gilt der ganze Lauf als
+  # gescheitert: Ein Spiegel ausser Haus, zu dem dort kein Stand liegt, ist fuer die Rueckholung
+  # blind — restore.sh muesste ihn entweder blind einspielen oder gar nicht.
+  if ! {
+    printf '%s\n' "$stempel" > "$SPIEGEL_STAND" \
+      && aussenhaus "$SPIEGEL_STAND" "$SPIEGEL_STAND_ZIEL" > /dev/null
+  } 2> "$fehler"; then
+    log "FEHLER Stand des Anhang-Spiegels nicht festgeschrieben."
+    protokoll spiegel "$beginn" fehlschlag "$(kurzfassung "$fehler")"
+    return 1
+  fi
+
   read -r anzahl bytes <<< "$ergebnis"
-  protokoll spiegel "$beginn" erfolg "$anzahl neue Anhaenge ausser Haus" "$bytes"
+  protokoll spiegel "$beginn" erfolg "$anzahl neue Anhaenge ausser Haus, Stand $stempel" "$bytes"
 }
 
 wal_lauf() {
@@ -376,7 +438,8 @@ archiv_uebereignen() {
 
 dienst() {
   local takt
-  pflichtfelder_pruefen
+  pflichtfelder_pruefen POSTGRES_PASSWORD MINIO_ROOT_USER MINIO_ROOT_PASSWORD \
+    MANBAN_BACKUP_TARGET MANBAN_BACKUP_AGE_RECIPIENT
   if ! takt=$(takt_sekunden "$MANBAN_BACKUP_MIRROR_INTERVAL"); then
     log "FEHLER MANBAN_BACKUP_MIRROR_INTERVAL='$MANBAN_BACKUP_MIRROR_INTERVAL' ist keine Dauer wie PT5M."
     return 1

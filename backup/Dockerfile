@@ -55,8 +55,15 @@ COPY --from=werkzeuge /usr/local/bin/age /usr/local/bin/age
 COPY --from=werkzeuge /usr/local/bin/age-keygen /usr/local/bin/age-keygen
 COPY --from=werkzeuge /usr/local/bin/rclone /usr/local/bin/rclone
 COPY --from=minio-werkzeug /mc /usr/local/bin/mc
-COPY backup.sh /usr/local/bin/backup.sh
-RUN chmod 0755 /usr/local/bin/backup.sh && mkdir -p /wal-archiv /sicherungen
+# Alle drei Skripte in dasselbe Verzeichnis: restore.sh und retention.sh laden backup.sh von dort
+# nach (gemeinsame Begriffe — Pfade, Protokollzeile, Ziel ausser Haus).
+#
+# `age-keygen` liegt im Abbild, `age --decrypt` ist damit technisch moeglich — aber es gibt keinen
+# privaten Schluessel, mit dem es etwas zu entschluesseln gaebe (E3, AK8). Erst restore.sh
+# --quelle aussenhaus bekommt einen hereingereicht, fuer genau diesen einen Aufruf.
+COPY backup.sh restore.sh retention.sh /usr/local/bin/
+RUN chmod 0755 /usr/local/bin/backup.sh /usr/local/bin/restore.sh /usr/local/bin/retention.sh \
+    && mkdir -p /wal-archiv /sicherungen /wiederherstellung/pgdata
 
 # Das Verzeichnis `backup/` selbst haengt read-only unter /etc/manban-backup (siehe
 # docker-compose.backup.yml). Dort sucht rclone seine Konfiguration: So gibt es keinen
