@@ -526,6 +526,46 @@ class NightRunIngestIT extends AbstractIntegrationTest {
   }
 
   /**
+   * Issue #1150: Das Kit schickt die Stufennamen klein geschrieben ({@code board.mjs}, {@code
+   * NACHTLAUF_STUFEN}). Genau daran scheiterte die Schlussmeldung des Kettenlaufs 116 mit 400. Die
+   * Meldung wird angenommen, und die Antwort traegt die Stufen weiterhin gross geschrieben.
+   */
+  @Test
+  void eineMeldungMitKleinGeschriebenenStufennamenWirdAngenommen() throws Exception {
+    Aufbau aufbau = aufbau("ingest-stufen-klein");
+
+    melde(
+        aufbau,
+        meldungMitVorgaben(
+            paketMitStufen(
+                993, stufe("plan"), stufe("review"), stufe("pakete"), stufe("abdeckung"))));
+
+    mvc.perform(get(laufliste(aufbau.projectId())).cookie(aufbau.session()))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$[0].items[0].stages.length()").value(4))
+        .andExpect(jsonPath("$[0].items[0].stages[0].stage").value("PLAN"))
+        .andExpect(jsonPath("$[0].items[0].stages[1].stage").value("REVIEW"))
+        .andExpect(jsonPath("$[0].items[0].stages[2].stage").value("PAKETE"))
+        .andExpect(jsonPath("$[0].items[0].stages[3].stage").value("ABDECKUNG"));
+  }
+
+  /**
+   * Issue #1150, die Gegenprobe: Die Toleranz gilt der Schreibweise, nicht dem Wertebereich. Ein
+   * Stufenname, den der Vertrag nicht kennt, wird weiterhin abgewiesen.
+   */
+  @Test
+  void einUnbekannterStufennameWirdWeiterhinAbgewiesen() throws Exception {
+    Aufbau aufbau = aufbau("ingest-stufe-unbekannt");
+
+    mvc.perform(
+            post(PFAD)
+                .header(TOKEN_HEADER, aufbau.token())
+                .contentType("application/json")
+                .content(meldungMitVorgaben(paketMitStufen(993, stufe("umsetzung")))))
+        .andExpect(status().isBadRequest());
+  }
+
+  /**
    * Die Gegenprobe zur Additivitaet (E11): Eine aeltere Kit-Kopie kennt weder {@code budget} noch
    * {@code stages}. Ihre Meldung kommt an, und der Lauf traegt „nicht angegeben" statt eines
    * Budgets aus lauter Nullen.
