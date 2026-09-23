@@ -245,6 +245,9 @@ class ArchitectureTest {
   // Aggregat-Wurzel (MembershipService schrieb bisher direkt via AppUserRepository.save).
   // UserSummary ist der Rueckgabetyp von UserLookup und damit Teil seiner Signatur; AuthProperties
   // ist geteilte Konfiguration, RegistrationApprovalPolicy der von project implementierte Port.
+  // PlatformAdminDirectory (Issue #827) ist der Empfaenger-Port fuer Betriebsmeldungen an alle
+  // Plattform-Admins: Er gibt nur E-Mail-Adressen heraus, damit ein alarmierendes Modul die
+  // Admins erreicht, ohne AppUserRepository oder PlatformRole zu sehen.
   static final ArchRule AUTH_DOMAIN_IST_MODULINTERN =
       noClasses()
           .that()
@@ -262,6 +265,7 @@ class ArchitectureTest {
           "UserSummary",
           "UserDisplayNameWriter",
           "PlatformAdminChecker",
+          "PlatformAdminDirectory",
           "RegistrationApprovalPolicy",
           "AuthProperties",
           "AdminAccessDeniedException");

@@ -1,0 +1,25 @@
+# Vorlage fuer backup/rclone.conf — die echte Datei NICHT einchecken (steht in .gitignore).
+#
+# rclone bestimmt das "wohin" der Kopie ausser Haus; was dort ankommt, ist bereits mit `age`
+# verschluesselt (E3/E4). Der Ablageort ist deshalb austauschbar: Nextcloud ueber WebDAV ist ein
+# Ziel unter vielen (AK12).
+#
+# Kopieren und anpassen:
+#   cp backup/rclone.conf.example backup/rclone.conf
+# Der Name des Abschnitts ist das Remote, das vor dem Doppelpunkt in MANBAN_BACKUP_TARGET steht:
+#   MANBAN_BACKUP_TARGET=nextcloud:manban-sicherung
+#
+# Das Kennwort gehoert verschleiert in die Datei, nicht im Klartext:
+#   rclone obscure '<app-passwort>'
+# Fuer Nextcloud ein eigenes App-Passwort erzeugen, nicht das Anmeldekennwort verwenden.
+#
+# Ein reiner Pfad braucht ueberhaupt kein Remote: MANBAN_BACKUP_TARGET=/pfad/zur/ablage nutzt das
+# oertliche Dateisystem des Containers — brauchbar fuer eine Probe, nicht fuer eine Kopie ausser
+# Haus.
+
+[nextcloud]
+type = webdav
+url = https://cloud.example.org/remote.php/dav/files/manban
+vendor = nextcloud
+user = manban
+pass = <Ausgabe von: rclone obscure '<app-passwort>'>

@@ -1,0 +1,33 @@
+# Overlay der Rueckhol-Probe (Issue #832, Plan #825).
+#
+# Wird ausschliesslich von backup/test/restore-roundtrip.sh zugeschaltet, immer als dritte Datei:
+#   docker compose -p manban-rueckholprobe --env-file <probe.env> \
+#     -f docker-compose.yml -f docker-compose.backup.yml -f backup/test/docker-compose.probe.yml ...
+#
+# Es aendert genau drei Dinge gegenueber einem echten Betrieb — jede Abweichung ist hier
+# aufgeschrieben, damit die Probe nicht unbemerkt etwas anderes prueft als das, was ausgeliefert
+# wird:
+#
+#   1. Die Anwendung bekommt einen Port auf dem Host. Der Stack faehrt ohne Caddy (die Probe
+#      startet die Dienste namentlich), und ohne Port kaeme kein curl an die API.
+#   2. Das Ziel ausser Haus ist ein eigenes Volume, kein entferntes Remote. rclone kann einen
+#      blossen Pfad (siehe backup/rclone.conf.example) — was dort ankommt, ist trotzdem mit `age`
+#      verschluesselt, und genau das ist der Punkt der Probe. Ein eigenes Volume, weil Schritt 4
+#      Datenbank und Objektspeicher verwirft: Die Kopie ausser Haus muss das ueberleben, sonst
+#      gaebe es nichts, woraus zurueckgeholt werden koennte.
+#   3. rclone liest seine Konfiguration aus /dev/null. Ein reines Pfadziel braucht kein Remote, und
+#      die echte backup/rclone.conf ist nicht eingecheckt — ob sie auf dem Rechner des Pruefenden
+#      liegt oder nicht, darf das Ergebnis nicht beeinflussen.
+services:
+  manban-api:
+    ports:
+      - "${MANBAN_PROBE_PORT:-18080}:8080"
+
+  manban-backup:
+    environment:
+      RCLONE_CONFIG: /dev/null
+    volumes:
+      - aussenhaus:/aussenhaus
+
+volumes:
+  aussenhaus:

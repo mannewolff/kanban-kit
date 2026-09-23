@@ -113,6 +113,11 @@ geladen und ist per `.gitignore` ausgeschlossen).
 | `MANBAN_OUTBOX_POLL_INTERVAL_MS` | Abstand zwischen zwei Worker-Läufen in Millisekunden | `5000` |
 | `MANBAN_OUTBOX_MAX_ATTEMPTS` | Versuche, bevor ein Auftrag als gescheitert gilt | `8` |
 | `MANBAN_OUTBOX_RETENTION_DAYS` | Tage, nach denen erledigte Outbox-Einträge gelöscht werden | `7` |
+| `MANBAN_BACKUP_TARGET` | Ziel der Kopie außer Haus als rclone-Pfad `<remote>:<verzeichnis>` | `nextcloud:manban-sicherung` |
+| `MANBAN_BACKUP_AGE_RECIPIENT` | **öffentlicher** age-Schlüssel, gegen den außer Haus verschlüsselt wird — der private wird außerhalb des Servers verwahrt | leer |
+| `MANBAN_BACKUP_RETENTION_DAYS` | Tage, nach denen Basissicherungen verfallen (die jüngste nie) | `7` |
+| `MANBAN_BACKUP_MIRROR_INTERVAL` | Takt des Anhang-Spiegels als ISO-8601-Dauer; zugleich die Grenze der Rückhol-Genauigkeit | `PT5M` |
+| `MANBAN_BACKUP_BASE_CRON` | Takt der Basissicherung, sechsfeldrig wie in Spring | `0 0 3 * * *` |
 | `MANBAN_SESSION_SECRET` | HMAC-Secret der Session-Cookies. Der Dev-Default gilt **nur** im ausdrücklich eingeschalteten Entwicklungsbetrieb (`MANBAN_DEV_MODE=true`) — sonst verweigert die Anwendung den Start | Dev-Default |
 | `MANBAN_DEV_MODE` | Entwicklungs-/Testbetrieb ausdrücklich einschalten; erlaubt den Start mit dem Standard-Sitzungsschlüssel, mit Warnung. Der lokale Compose-Stack setzt ihn auf `true`, das Produktions-Overlay fest auf `false` | `false` |
 | `MANBAN_COOKIE_SECURE` | Session-Cookie nur über HTTPS | `true` |
@@ -164,6 +169,35 @@ geladen und ist per `.gitignore` ausgeschlossen).
 > Der Abgleich **berichtet nur** und löscht nichts automatisch (ein laufender Upload hat kurzzeitig
 > ein Objekt ohne Metadaten). Verwaiste Objekte bei Bedarf gezielt über die MinIO-Konsole oder
 > `mc rm` entfernen.
+
+> **Sicherung ist ausgeliefert aus:** Die fünf `MANBAN_BACKUP_*`-Werte oben wirken erst, wenn das
+> Sicherungs-Overlay zugeschaltet ist (`-f docker-compose.backup.yml`). Das ist der einzige
+> Schalter; `MANBAN_BACKUP_ENABLED` setzt das Overlay selbst und wird nie von Hand gesetzt. Das
+> Zuschalten startet die Datenbank **einmalig** neu (WAL-Archivierung). Vollständige Anleitung:
+> [Sicherung & Wiederherstellung](backup.md).
+
+## Sicherung & Wiederherstellung
+
+Einrichtung, Schlüsselverwahrung, die beiden Rückholwege und das Verfallen alter Stände stehen in
+[Sicherung & Wiederherstellung](backup.md). Der eine Satz, der dort nicht zu überlesen ist, gilt
+auch hier: Der Server hält **nur den öffentlichen** Schlüssel — **ohne den außerhalb verwahrten
+privaten Schlüssel ist aus den Sicherungen nichts zu holen.**
+
+## Letzter Wiederherstellungsnachweis
+
+Eine Sicherung, die nie zurückgeholt wurde, ist keine. Hier steht, wann zuletzt eine vollständige
+Rückholung auf eine leere Maschine durchgeführt wurde — mit Datum, Commit und Ausgang. Der Eintrag
+wird nach jeder Probe von Hand nachgetragen, insbesondere vor jedem Release, das die Sicherung
+berührt.
+
+| Datum | Commit | Weg | Ergebnis |
+|---|---|---|---|
+| — | — | — | **Noch keine Probe durchgeführt.** |
+
+Der Nachweis bleibt bewusst ein Abschnitt dieser Seite und bekommt **keine eigene Datei**. In den
+Eintrag gehören nur die vier Spalten oben — **keine Hostnamen, Pfade oder Zugangswege der eigenen
+Instanz**: Alles unter `docs/` wird auf die öffentliche Doku-Site kopiert
+(`docs-site/copy-docs.mjs`).
 
 ## Zählbremse gegen Massenversuche
 

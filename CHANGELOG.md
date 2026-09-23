@@ -7,6 +7,25 @@ Versionierung folgt der dreiteiligen Betriebsversion (siehe [RELEASING.md](RELEA
 Einträge je Version sind ein automatischer Auszug der Commit-Titel seit dem letzten Release,
 erzeugt von `scripts/gen-changelog.mjs`.
 
+## [2.6.0] – 2026-09-23
+
+- chore: v2.5.2
+- Pruefbereiche: workflow-Bereich ohne Checks, README unter doku
+- Backup: Statuskachel fuer den Plattform-Admin ([#833](https://github.com/mannewolff/kanban-kit/issues/833))
+- Backup: automatisierte Rueckhol-Probe als Nachweis ([#832](https://github.com/mannewolff/kanban-kit/issues/832))
+- Backup: Betriebsdokumentation und Schlüsselverwahrung ([#831](https://github.com/mannewolff/kanban-kit/issues/831))
+- Backup: Rückholung auf einen Zeitpunkt und Verfallen alter Stände ([#830](https://github.com/mannewolff/kanban-kit/issues/830))
+- Claude Opus 5.5 eingeplfegt
+- chore: v2.5.1
+- Opus 5.5
+- Stufen in den Implemtirern festgelegt
+- Backup: Sicherungs-Container, WAL-Archivierung und Kopie ausser Haus ([#829](https://github.com/mannewolff/kanban-kit/issues/829))
+- Backup: Wachhund und Alarm-Mail an die Plattform-Admins ([#828](https://github.com/mannewolff/kanban-kit/issues/828))
+- auth: Port PlatformAdminDirectory fuer modulfremde Admin-Benachrichtigung ([#827](https://github.com/mannewolff/kanban-kit/issues/827))
+- Backup: Tabelle backup_run, Statusdienst und Admin-Endpunkt ([#826](https://github.com/mannewolff/kanban-kit/issues/826))
+- Stufen für Night eingestellt
+- Pflichtpruefungen je Paket nach Bereichen eingrenzen ([#1138](https://github.com/mannewolff/kanban-kit/issues/1138))
+
 ## [2.5.0] – 2026-09-22
 
 - chore: v2.4.2

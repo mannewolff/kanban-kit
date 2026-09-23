@@ -10,6 +10,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { adminApi as defaultAdminApi, type AdminApi, type AdminUser } from '../api/admin'
 import { ApiError, apiErrorMessage } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
+import { BackupStatusSection } from '../components/BackupStatusSection'
 import { DataTable, type DataTableColumn } from '../components/DataTable'
 import { OverloadRejectionsSection } from '../components/OverloadRejectionsSection'
 import { useEditMode } from '../lib/EditModeContext'
@@ -188,6 +189,9 @@ export function AdminPage({ api = defaultAdminApi }: Readonly<Props>) {
         Admin — Nutzerverwaltung
       </Typography>
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+
+      {/* Eigener Abruf über die eigene Prop (Issue #833): Die `AdminApi` oben bleibt unberührt. */}
+      <BackupStatusSection />
 
       <DataTable
         columns={columns}

@@ -110,7 +110,18 @@ mvn verify                              # Tests + Coverage + Mutation (siehe CLA
 cd frontend && npm run build            # tsc + vite build
 cd frontend && npm run lint             # ESLint + jsx-a11y
 cd frontend && npm test                 # Vitest
+
+# CLI
+node --test cli/tbx.test.mjs            # tbx-Kommandozeilenwerkzeug
 ```
+
+**Je Paket nach Bereichen eingegrenzt.** Die Checks stehen in `.claude/workflow.config.json` (`buildChecks`)
+mit Bereichen aus `checkAreas`: `backend` (`src/**`, `pom.xml`, `config/**`) → `mvn verify`;
+`doku` (`docs/**`, `docs-site/**`) → `mvn verify` (baut die Doku-Seite mit); `frontend` (`frontend/**`,
+`CLAUDE-design.md`) → die drei npm-Checks; `cli` (`cli/**`) → `node --test cli/tbx.test.mjs`. Beim
+Abschluss eines Pakets läuft nur, was die geänderten Dateien berühren; eine Datei ohne Bereich
+(etwa `Dockerfile`, `.github/`, `scripts/`) fährt alle. **Vor `push main` und `merge production` laufen
+immer alle fünf.** Die Config ändert nur Manne.
 
 Verfahren, Reporting-Format und detaillierte Schritte → [CLAUDE-workflow.md](.claude/CLAUDE-workflow.md).
 

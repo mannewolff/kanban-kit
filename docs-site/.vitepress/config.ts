@@ -20,6 +20,7 @@ export default defineConfig({
     nav: [
       { text: "Überblick", link: "/" },
       { text: "Betrieb", link: "/betrieb" },
+      { text: "Sicherung", link: "/backup" },
       { text: "Nutzung", link: "/nutzung" },
       { text: "Rollen & Rechte", link: "/rollen-und-rechte" },
       { text: "Dogfooding", link: "/dogfooding" },
@@ -38,6 +39,15 @@ export default defineConfig({
           { text: "E-Mail-Bestätigung", link: "/betrieb#e-mail-bestatigung-ohne-mailserver" },
           { text: "Ersten Admin einrichten", link: "/betrieb#den-ersten-admin-einrichten" },
           { text: "Testsuite lokal starten", link: "/betrieb#testsuite-lokal-starten" },
+        ],
+      },
+      {
+        text: "Sicherung & Wiederherstellung",
+        items: [
+          { text: "Überblick", link: "/backup" },
+          { text: "Einrichtung", link: "/backup#einrichtung" },
+          { text: "Rückholung", link: "/backup#ruckholung" },
+          { text: "Letzter Nachweis", link: "/betrieb#letzter-wiederherstellungsnachweis" },
         ],
       },
       {

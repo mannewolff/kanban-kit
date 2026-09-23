@@ -12,6 +12,15 @@ target/
 # Umgebung (Secrets)
 .env
 
+# Zugang zum Ablageort der Sicherung (Issue #829) — traegt ein Kennwort.
+# Vorlage: backup/rclone.conf.example
+backup/rclone.conf
+
+# age-Schlüssel (Issue #830). Der private Schlüssel gehört ausserhalb des Servers verwahrt und
+# schon gar nicht ins Repository: Wer ihn hat, liest jede Kopie ausser Haus. Die Regel steht hier
+# als Fangnetz für den Griff, den `age-keygen -o backup/manban-backup.key` sonst leicht macht.
+backup/*.key
+
 # Lokales Nachschlage-Log des Sonar-Sync-Skripts — nicht Quelle der Wahrheit
 # (Duplikat-Prüfung läuft live gegen GitHub, siehe scripts/sync-sonar-issues-to-github.mjs).
 scripts/.sonar-issue-map.json
