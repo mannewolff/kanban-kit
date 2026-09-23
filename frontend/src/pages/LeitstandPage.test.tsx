@@ -114,6 +114,7 @@ const lauf = (extra: Partial<NightRunView> = {}): NightRunView => {
   updatedAt: null,
   usage: { costUsd: 12.4, inputTokens: null, outputTokens: null, cachedInputTokens: null, modelDurationMs: null, turns: null },
   noWorkReason: null,
+  abortReason: null,
   budget: null,
   items: [
     paket(917, 'GREEN', { commitHash: '9489421abcdef' }),
@@ -121,7 +122,7 @@ const lauf = (extra: Partial<NightRunView> = {}): NightRunView => {
     paket(925, 'YELLOW', { errorClass: 'AWAITING_DECISION' }),
     paket(930, 'GREY', { durationMs: null }),
   ],
-    outcome: { verdict: 'SUCCEEDED', decisiveItem: null, noWorkReason: null },
+    outcome: { abortReason: null, verdict: 'SUCCEEDED', decisiveItem: null, noWorkReason: null },
     ...extra,
   }
   // Der Befund kommt aus dem Szenario, nicht aus der Vorgabe: Ein Lauf mit rotem Paket traegt sonst

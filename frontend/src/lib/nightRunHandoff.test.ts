@@ -3,6 +3,8 @@ import type { Verdict } from '../api/nightRuns'
 import { NIGHT_RUN_ERROR_CLASSES, type NightRunState } from './nightRunLog'
 import {
   buildHandoffText,
+  kurzGrund,
+  KURZ_GRUND_MAX,
   nightRunZustandsText,
   NIGHT_RUN_STATE_TEXT,
   NIGHT_RUN_VERDICT_TEXT,
@@ -269,5 +271,43 @@ describe('buildHandoffText — Reinheit', () => {
     expect(zufall).not.toHaveBeenCalled()
     jetzt.mockRestore()
     zufall.mockRestore()
+  })
+})
+
+/**
+ * Die Kuerzung eines Abbruchgrunds (Issue #1144, Plan #1139 E8). Sie steht in diesem Modul, weil
+ * die Stoerzeile des Plattform-Leitstands und die durchgefuehrte Zeile daneben denselben Text
+ * kuerzen — zwei Kuerzungen liefen beim naechsten Feinschliff auseinander.
+ */
+describe('kurzGrund — der Abbruchgrund in einer Zeile (#1144)', () => {
+  it('nimmt die erste nicht leere Zeile eines mehrzeiligen Textes', () => {
+    expect(kurzGrund('\n   \nHarter Stopp (dirty-tree)\nnaehere Angaben\nund mehr')).toBe(
+      'Harter Stopp (dirty-tree)',
+    )
+  })
+
+  it('laesst einen Text unterhalb der Grenze unveraendert', () => {
+    const grund = 'Harter Stopp (dirty-tree)'
+
+    expect(grund.length).toBeLessThan(KURZ_GRUND_MAX)
+    expect(kurzGrund(grund)).toBe(grund)
+  })
+
+  it('laesst den Text genau auf der Grenze ungekuerzt', () => {
+    const grund = 'x'.repeat(KURZ_GRUND_MAX)
+
+    expect(kurzGrund(grund)).toBe(grund)
+  })
+
+  it('setzt das Auslassungszeichen genau bei Ueberschreitung', () => {
+    const gekuerzt = kurzGrund('x'.repeat(KURZ_GRUND_MAX + 1))
+
+    expect(gekuerzt).toBe(`${'x'.repeat(KURZ_GRUND_MAX - 1)}…`)
+    expect(gekuerzt).toHaveLength(KURZ_GRUND_MAX)
+  })
+
+  it('gibt zu leerem Text und zu lauter leeren Zeilen einen leeren Text', () => {
+    expect(kurzGrund('')).toBe('')
+    expect(kurzGrund('\n  \n\t\n')).toBe('')
   })
 })

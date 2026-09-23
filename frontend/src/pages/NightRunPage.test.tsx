@@ -297,11 +297,12 @@ function wieAufbewahrt(ergebnisstand: string): NightRunView[] {
       updatedAt: null,
       usage: null,
       noWorkReason: null,
+      abortReason: null,
       // Der Upload-Weg fuehrt keine Budgets (E14); der Server legt sie zu einem eingelesenen Lauf
       // fest als „nicht gemeldet" ab.
       budget: null,
       items: run.items.map((item, position) => wieAufbewahrtesItem({ id: position + 1, ...item })),
-      outcome: { verdict: 'SUCCEEDED', decisiveItem: null, noWorkReason: null },
+      outcome: { abortReason: null, verdict: 'SUCCEEDED', decisiveItem: null, noWorkReason: null },
   }
   // Der Befund kommt aus dem Szenario, nicht aus einer Vorgabe (Issue #1081).
   return [{ ...lauf, outcome: serverBefund(lauf) }]
@@ -371,6 +372,7 @@ function aufbewahrt(
     updatedAt: null,
     usage: null,
     noWorkReason: null,
+    abortReason: null,
     budget: null,
     ...rest,
     items: (items ?? []).map(wieAufbewahrtesItem),
@@ -5989,7 +5991,7 @@ describe('NightRunPage — nur die letzten zwei Zyklen (#1134)', () => {
       id: 1,
       startedAt: VORGESTERN,
       complete: false,
-      outcome: { verdict: 'RUNNING', decisiveItem: null, noWorkReason: null },
+      outcome: { abortReason: null, verdict: 'RUNNING', decisiveItem: null, noWorkReason: null },
     })
     renderPage({ listen: [[aufbewahrt({ id: 4, startedAt: HEUTE_13 }), laufend]] })
 

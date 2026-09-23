@@ -136,6 +136,37 @@ export function nightRunZustandsText(
 }
 
 /**
+ * Die Zeichengrenze eines gekuerzten Abbruchgrunds (Issue #1144).
+ *
+ * <p>Sie ist eine Grenze der <b>Anzeige</b> und nicht des Vertrags: Der Server nimmt einen Grund
+ * bis zu seiner eigenen Grenze entgegen, und die vollstaendige Fassung steht in der aufgeklappten
+ * Laufplatte der Nachtlauf-Auswertung. Gekuerzt wird nur dort, wo der Grund neben anderem in einer
+ * Zeile steht — Laufband, Stoerzeile, durchgefuehrte Zeile.
+ *
+ * <p>120 Zeichen: lang genug fuer „Harter Stopp (dirty-tree)" samt Nachsatz, kurz genug, dass die
+ * Zeile daneben noch Platz fuer Projekt, Art und Uhrzeit hat.
+ */
+export const KURZ_GRUND_MAX = 120
+
+/**
+ * Ein Abbruchgrund in einer Zeile: die erste nicht leere Zeile, auf {@link KURZ_GRUND_MAX} gekuerzt
+ * (Issue #1144, Plan #1139 E8).
+ *
+ * <p><b>Hier und nicht an den Anzeigestellen:</b> Die Stoerzeile des Plattform-Leitstands, die
+ * durchgefuehrte Zeile daneben und die Kopfmarke der Nachtlauf-Auswertung kuerzen denselben Text.
+ * Drei Kuerzungen liefen beim naechsten Feinschliff auseinander, und dann saehe derselbe Grund auf
+ * derselben Seite verschieden aus.
+ *
+ * <p>Das Auslassungszeichen ersetzt das letzte Zeichen statt anzuhaengen: Der Rueckgabewert bleibt
+ * so innerhalb der Grenze, die er zusichert. Genau <em>auf</em> der Grenze wird nicht gekuerzt —
+ * die Grenze ist die zugesagte Laenge, nicht ihr Ueberschreiten.
+ */
+export function kurzGrund(text: string): string {
+  const zeile = text.split('\n').find((z) => z.trim() !== '')?.trim() ?? ''
+  return zeile.length <= KURZ_GRUND_MAX ? zeile : `${zeile.slice(0, KURZ_GRUND_MAX - 1)}…`
+}
+
+/**
  * Der Text zu einem Arbeitspaket — `null`, wenn keiner entsteht.
  *
  * <p>Nur ein **gelbes oder rotes** Arbeitspaket bekommt einen: Zu einem gruenen gibt es nichts zu

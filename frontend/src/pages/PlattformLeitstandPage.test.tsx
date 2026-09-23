@@ -65,6 +65,7 @@ describe('PlattformLeitstandPage (#1083)', () => {
     mode: 'IMPLEMENTATION',
     startedAt: '2026-09-19T21:10:00Z',
     outcome: {
+      abortReason: null,
       verdict: 'FAILED',
       decisiveItem: { cardNumber: 721, state: 'RED', errorClass: 'CHECKS_RED' },
       noWorkReason: null,
@@ -120,7 +121,7 @@ describe('PlattformLeitstandPage (#1083)', () => {
       projectName: 'Mein Projekt',
       mode: 'CHAIN',
       startedAt: '2026-09-21T01:10:00Z',
-      outcome: { verdict: 'RUNNING', decisiveItem: null, noWorkReason: null },
+      outcome: { abortReason: null, verdict: 'RUNNING', decisiveItem: null, noWorkReason: null },
       ...extra,
     })
 
@@ -183,7 +184,7 @@ describe('PlattformLeitstandPage (#1083)', () => {
       projectName: 'Mein Projekt',
       mode: 'IMPLEMENTATION',
       startedAt: '2026-09-19T21:10:00Z',
-      outcome: { verdict: 'SUCCEEDED', decisiveItem: null, noWorkReason: null },
+      outcome: { abortReason: null, verdict: 'SUCCEEDED', decisiveItem: null, noWorkReason: null },
       ...extra,
     })
 
@@ -222,6 +223,7 @@ describe('PlattformLeitstandPage (#1083)', () => {
                         errorClass: verdict === 'FAILED' ? 'CHECKS_RED' : 'AWAITING_DECISION',
                       },
                 noWorkReason: null,
+                abortReason: null,
               },
             }),
           ],
@@ -246,6 +248,7 @@ describe('PlattformLeitstandPage (#1083)', () => {
           durchgefuehrte: [
             durchgefuehrt({
               outcome: {
+                abortReason: null,
                 verdict: 'NO_WORK',
                 decisiveItem: null,
                 noWorkReason: 'Ready ist leer — nichts zu tun.',
@@ -272,7 +275,7 @@ describe('PlattformLeitstandPage (#1083)', () => {
               nightRunId: 6,
               projectId: 10,
               projectName: 'Gescheitert',
-              outcome: { verdict: 'FAILED', decisiveItem: null, noWorkReason: 'Ready war leer' },
+              outcome: { abortReason: null, verdict: 'FAILED', decisiveItem: null, noWorkReason: 'Ready war leer' },
             }),
           ],
         }),
@@ -303,6 +306,7 @@ describe('PlattformLeitstandPage (#1083)', () => {
             durchgefuehrt({
               nightRunId: 5,
               outcome: {
+                abortReason: null,
                 verdict: 'FAILED',
                 decisiveItem: { cardNumber: 721, state: 'RED', errorClass: 'CHECKS_RED' },
                 noWorkReason: null,
@@ -337,6 +341,7 @@ describe('PlattformLeitstandPage (#1083)', () => {
             durchgefuehrt({
               nightRunId: 5,
               outcome: {
+                abortReason: null,
                 verdict: 'FAILED',
                 decisiveItem: { cardNumber: 721, state: 'RED', errorClass: 'CHECKS_RED' },
                 noWorkReason: null,
@@ -431,7 +436,7 @@ describe('PlattformLeitstandPage (#1083)', () => {
       sicht({
         stoerungen: [
           stoerung({
-            outcome: { verdict: 'FAILED', decisiveItem: null, noWorkReason: 'Ready war leer' },
+            outcome: { abortReason: null, verdict: 'FAILED', decisiveItem: null, noWorkReason: 'Ready war leer' },
           }),
         ],
       }),
@@ -452,7 +457,7 @@ describe('PlattformLeitstandPage (#1083)', () => {
     api.leitstand.mockResolvedValue(
       sicht({
         stoerungen: [
-          stoerung({ outcome: { verdict: 'FAILED', decisiveItem: null, noWorkReason: null } }),
+          stoerung({ outcome: { abortReason: null, verdict: 'FAILED', decisiveItem: null, noWorkReason: null } }),
         ],
       }),
     )
@@ -474,6 +479,7 @@ describe('PlattformLeitstandPage (#1083)', () => {
         stoerungen: [
           stoerung({
             outcome: {
+              abortReason: null,
               verdict: 'FAILED',
               decisiveItem: { cardNumber: 721, state: 'RED', errorClass: null },
               noWorkReason: null,
@@ -549,8 +555,8 @@ describe('PlattformLeitstandPage (#1083)', () => {
     it('zeigt beide Abschnitte mit Überschrift, Spanne und ihren Zeilen', async () => {
       api.leitstand.mockResolvedValue(
         sicht({
-          durchgefuehrte: [stoerung({ nightRunId: 7, outcome: { verdict: 'SUCCEEDED', decisiveItem: null, noWorkReason: null } })],
-          durchgefuehrteVoriger: [stoerung({ nightRunId: 6, outcome: { verdict: 'SUCCEEDED', decisiveItem: null, noWorkReason: null } })],
+          durchgefuehrte: [stoerung({ nightRunId: 7, outcome: { abortReason: null, verdict: 'SUCCEEDED', decisiveItem: null, noWorkReason: null } })],
+          durchgefuehrteVoriger: [stoerung({ nightRunId: 6, outcome: { abortReason: null, verdict: 'SUCCEEDED', decisiveItem: null, noWorkReason: null } })],
         }),
       )
       zeigeSeite()
@@ -920,7 +926,7 @@ describe('PlattformLeitstandPage (#1083)', () => {
   it('zeigt in allen drei Listen die Art des Laufs als Symbol nach dem Lämpchen', async () => {
     api.leitstand.mockResolvedValue(
       sicht({
-        laufende: [{ ...stoerung({ nightRunId: 8 }), mode: 'CHAIN', outcome: { verdict: 'RUNNING', decisiveItem: null, noWorkReason: null } }],
+        laufende: [{ ...stoerung({ nightRunId: 8 }), mode: 'CHAIN', outcome: { abortReason: null, verdict: 'RUNNING', decisiveItem: null, noWorkReason: null } }],
         durchgefuehrte: [stoerung({ nightRunId: 5 })],
         stoerungen: [stoerung({ nightRunId: 5 })],
       }),
@@ -959,7 +965,7 @@ describe('PlattformLeitstandPage (#1083)', () => {
             projectName: 'Mein Projekt',
             mode: 'CHAIN',
             startedAt: '2026-09-21T01:10:00Z',
-            outcome: { verdict: 'RUNNING', decisiveItem: null, noWorkReason: null },
+            outcome: { abortReason: null, verdict: 'RUNNING', decisiveItem: null, noWorkReason: null },
           },
         ],
         durchgefuehrte: [stoerung({ nightRunId: 5 })],
@@ -1054,7 +1060,7 @@ describe('PlattformLeitstandPage (#1083)', () => {
       projectName: 'Mein Projekt',
       mode: 'CHAIN',
       startedAt: '2026-09-21T01:10:00Z',
-      outcome: { verdict: 'RUNNING', decisiveItem: null, noWorkReason: null },
+      outcome: { abortReason: null, verdict: 'RUNNING', decisiveItem: null, noWorkReason: null },
       ...extra,
     })
 
@@ -1186,6 +1192,7 @@ describe('PlattformLeitstandPage (#1083)', () => {
     it('lässt einen beendeten Lauf ohne Zutun aus dem oberen in den unteren Bereich wandern', async () => {
       const beendet = laufend({
         outcome: {
+          abortReason: null,
           verdict: 'FAILED',
           decisiveItem: { cardNumber: 721, state: 'RED', errorClass: 'CHECKS_RED' },
           noWorkReason: null,

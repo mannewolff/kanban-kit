@@ -66,9 +66,10 @@ const lauf = (extra: Partial<NightRunView> = {}): NightRunView => {
   updatedAt: null,
   usage: null,
   noWorkReason: null,
+  abortReason: null,
   budget: null,
   items: [],
-    outcome: { verdict: 'SUCCEEDED', decisiveItem: null, noWorkReason: null },
+    outcome: { verdict: 'SUCCEEDED', decisiveItem: null, noWorkReason: null, abortReason: null },
     ...extra,
   }
   // Der Befund kommt aus dem Szenario, nicht aus der Vorgabe: Ein Lauf mit rotem Paket traegt sonst
@@ -376,7 +377,7 @@ describe('leitstand Der Browser liest den Massstab (#1081)', () => {
     verdict: Verdict,
     decisiveItem: { cardNumber: number; state: NightRunState; errorClass: NightRunErrorClass | null } | null = null,
     noWorkReason: string | null = null,
-  ) => ({ verdict, decisiveItem, noWorkReason })
+  ) => ({ verdict, decisiveItem, noWorkReason, abortReason: null })
 
   // Der Befund gewinnt gegen die Pakete: Sonst waere er nur Zierde, und die zweite Rechnung
   // entschiede weiter.
@@ -450,7 +451,7 @@ describe('leitstand Der verstummte Lauf (#1092)', () => {
   const verstummt = serverBefund({ complete: false, verstummt: true, items: [] })
 
   it('serverBefund gibt dem verstummten Lauf FAILED ohne Paket und ohne Grund', () => {
-    expect(verstummt).toEqual({ verdict: 'FAILED', decisiveItem: null, noWorkReason: null })
+    expect(verstummt).toEqual({ verdict: 'FAILED', decisiveItem: null, noWorkReason: null, abortReason: null })
   })
 
   // Das Test-Double des Servers zieht die Grenze aus #1121 mit: Ein gemeldeter Grund ist NO_WORK,
@@ -463,11 +464,13 @@ describe('leitstand Der verstummte Lauf (#1092)', () => {
       verdict: 'NO_WORK',
       decisiveItem: null,
       noWorkReason: gemeldet,
+      abortReason: null,
     })
     expect(serverBefund({ complete: true, noWorkReason: GRUND_UNBEKANNT, items: [] })).toEqual({
       verdict: 'FAILED',
       decisiveItem: null,
       noWorkReason: GRUND_UNBEKANNT,
+      abortReason: null,
     })
   })
 
@@ -487,8 +490,8 @@ describe('leitstand Der verstummte Lauf (#1092)', () => {
   })
 
   it('laufMelder laesst gruen dem gelungenen Lauf und stahl dem laufenden', () => {
-    expect(laufMelder({ complete: true, items: [], outcome: { verdict: 'SUCCEEDED', decisiveItem: null, noWorkReason: null } })).toBe('gruen')
-    expect(laufMelder({ complete: false, items: [], outcome: { verdict: 'RUNNING', decisiveItem: null, noWorkReason: null } })).toBe('stahl')
+    expect(laufMelder({ complete: true, items: [], outcome: { abortReason: null, verdict: 'SUCCEEDED', decisiveItem: null, noWorkReason: null } })).toBe('gruen')
+    expect(laufMelder({ complete: false, items: [], outcome: { abortReason: null, verdict: 'RUNNING', decisiveItem: null, noWorkReason: null } })).toBe('stahl')
   })
 
   // Die Zuordnung Zustand → Melder bleibt unangetastet: Der Umbau betrifft nur den Rueckfall ohne
@@ -528,18 +531,18 @@ describe('leitstand Der verstummte Lauf (#1092)', () => {
  */
 describe('melderAusBefund — der Melder eines Laufs aus seinem Befund (#1096)', () => {
   it('meldet den laufenden Lauf stahl', () => {
-    expect(melderAusBefund({ verdict: 'RUNNING', decisiveItem: null, noWorkReason: null })).toBe('stahl')
+    expect(melderAusBefund({ abortReason: null, verdict: 'RUNNING', decisiveItem: null, noWorkReason: null })).toBe('stahl')
   })
 
   // Seit #1121: Der Rueckfall des Servers bleibt rot — hinter ihm kann ein echtes Problem stecken
   // (ein alter Runner, der Upload-Weg, ein Lauf, der alle Pakete zurueckstellte).
   it('meldet den Lauf ohne Arbeit mit unbekanntem Grund zinnob', () => {
-    expect(melderAusBefund({ verdict: 'FAILED', decisiveItem: null, noWorkReason: GRUND_UNBEKANNT })).toBe('zinnob')
+    expect(melderAusBefund({ abortReason: null, verdict: 'FAILED', decisiveItem: null, noWorkReason: GRUND_UNBEKANNT })).toBe('zinnob')
   })
 
   it('meldet den Lauf, der nichts zu tun fand, grau', () => {
     expect(
-      melderAusBefund({ verdict: 'NO_WORK', decisiveItem: null, noWorkReason: 'Ready ist leer — nichts zu tun.' }),
+      melderAusBefund({ abortReason: null, verdict: 'NO_WORK', decisiveItem: null, noWorkReason: 'Ready ist leer — nichts zu tun.' }),
     ).toBe('grau')
   })
 
@@ -557,6 +560,7 @@ describe('melderAusBefund — der Melder eines Laufs aus seinem Befund (#1096)',
           verdict,
           decisiveItem: null,
           noWorkReason: verdict === 'NO_WORK' ? 'Keine Kette zu fahren — nichts zu tun.' : null,
+          abortReason: null,
         }),
       ]),
     )
@@ -572,7 +576,7 @@ describe('melderAusBefund — der Melder eines Laufs aus seinem Befund (#1096)',
 
   it('nimmt den Melder aus dem Zustand des massgeblichen Pakets', () => {
     const je = (state: NightRunState, errorClass: NightRunErrorClass | null) =>
-      melderAusBefund({ verdict: 'FAILED', decisiveItem: { cardNumber: 9, state, errorClass }, noWorkReason: null })
+      melderAusBefund({ abortReason: null, verdict: 'FAILED', decisiveItem: { cardNumber: 9, state, errorClass }, noWorkReason: null })
 
     expect(je('RED', 'HARD_ABORT')).toBe('zinnob')
     expect(je('YELLOW', 'CHECKS_RED')).toBe('bernst')
@@ -580,7 +584,80 @@ describe('melderAusBefund — der Melder eines Laufs aus seinem Befund (#1096)',
   })
 
   it('laesst gruen allein dem gelungenen Lauf, der verstummte bleibt zinnob', () => {
-    expect(melderAusBefund({ verdict: 'SUCCEEDED', decisiveItem: null, noWorkReason: null })).toBe('gruen')
-    expect(melderAusBefund({ verdict: 'FAILED', decisiveItem: null, noWorkReason: null })).toBe('zinnob')
+    expect(melderAusBefund({ abortReason: null, verdict: 'SUCCEEDED', decisiveItem: null, noWorkReason: null })).toBe('gruen')
+    expect(melderAusBefund({ abortReason: null, verdict: 'FAILED', decisiveItem: null, noWorkReason: null })).toBe('zinnob')
+  })
+})
+
+/**
+ * Der selbst gemeldete Abbruch (Issue #1144, Plan #1139). Ein Lauf, der abbrach, ist nie gelungen —
+ * auch nicht nach drei gruenen Paketen und auch nicht, wenn sein massgebliches Paket sonst grau
+ * oder bernstein leuchtete.
+ */
+describe('Der abgebrochene Lauf im Browser (#1144)', () => {
+  const ABBRUCH = 'Harter Stopp (dirty-tree): der Working Tree traegt uncommittete Reste'
+
+  it('meldet den abgebrochenen Lauf zinnob, auch bei grauem oder gelbem massgeblichem Paket', () => {
+    const je = (state: NightRunState, errorClass: NightRunErrorClass) =>
+      melderAusBefund({
+        verdict: 'FAILED',
+        decisiveItem: { cardNumber: 1112, state, errorClass },
+        noWorkReason: null,
+        abortReason: ABBRUCH,
+      })
+
+    expect(je('GREY', 'DEPENDENCY_UNMET')).toBe('zinnob')
+    expect(je('YELLOW', 'CHECKS_RED')).toBe('zinnob')
+    expect(je('RED', 'HARD_ABORT')).toBe('zinnob')
+  })
+
+  it('meldet den abgebrochenen Lauf ohne massgebliches Paket zinnob', () => {
+    expect(
+      melderAusBefund({ verdict: 'FAILED', decisiveItem: null, noWorkReason: null, abortReason: ABBRUCH }),
+    ).toBe('zinnob')
+  })
+
+  // AK 5: Der Abbruchgrund verdraengt den Rueckfalltext — das Laufband zeigt nie beides.
+  it('traegt den Abbruchgrund als Titel des Laufbands und nie „Grund unbekannt"', () => {
+    const band = laufband(lauf({ abortReason: ABBRUCH, noWorkReason: GRUND_UNBEKANNT }))
+
+    expect(band.titel).toBe(ABBRUCH)
+    expect(band.titel).not.toContain(GRUND_UNBEKANNT)
+    expect(band.melder).toBe('zinnob')
+  })
+
+  it('stellt den Abbruchgrund vor die Auskunft ueber die Zahl der Vorgaenge', () => {
+    const band = laufband(lauf({ abortReason: ABBRUCH, items: [paket(1, 'GREEN'), paket(2, 'GREEN')] }))
+
+    expect(band.titel).toBe(ABBRUCH)
+    expect(band.titel).not.toContain('Vorgänge')
+  })
+
+  it('haengt den Abbruchgrund an die Notiz, wo sonst der Grund ohne Arbeit haengt', () => {
+    expect(laufNotiz(lauf({ abortReason: ABBRUCH }))).toBe(`${laufNotiz(lauf())} · ${ABBRUCH}`)
+  })
+
+  // E6: Beide Felder stehen nie zugleich — traegt der Lauf doch beide, gilt der Abbruchgrund.
+  it('nennt in der Notiz den Abbruchgrund und nicht den Grund ohne Arbeit', () => {
+    const notiz = laufNotiz(lauf({ abortReason: ABBRUCH, noWorkReason: GRUND_UNBEKANNT }))
+
+    expect(notiz).toContain(ABBRUCH)
+    expect(notiz).not.toContain(GRUND_UNBEKANNT)
+  })
+
+  it('serverBefund stellt den Abbruch vor den Lauf ohne Arbeit und behaelt das massgebliche Paket', () => {
+    const items = [paket(993, 'GREEN'), paket(1112, 'YELLOW', { errorClass: 'CHECKS_RED' })]
+    const abgebrochen = serverBefund({ complete: true, abortReason: ABBRUCH, noWorkReason: GRUND_UNBEKANNT, items })
+
+    expect(abgebrochen.verdict).toBe('FAILED')
+    expect(abgebrochen.abortReason).toBe(ABBRUCH)
+    expect(abgebrochen.noWorkReason).toBeNull()
+    expect(abgebrochen.decisiveItem?.cardNumber).toBe(1112)
+  })
+
+  it('laesst den nicht abgebrochenen Lauf ohne Abbruchgrund', () => {
+    expect(serverBefund({ complete: true, items: [] }).abortReason).toBeNull()
+    expect(laufband(lauf({ abortReason: null })).titel).toBe('Kette abgeschlossen — 0 Vorgänge')
+    expect(laufNotiz(lauf({ abortReason: null }))).toBe(laufNotiz(lauf()))
   })
 })
