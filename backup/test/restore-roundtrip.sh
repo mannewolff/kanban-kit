@@ -309,9 +309,17 @@ ziel_datei() {
 
 # Wie oft eine Zeichenkette im Sicherungs-Container vorkommt — in seinen Dateien und in seiner
 # Umgebung. Der Nachweis zu E3/AK8 haengt daran: Dort darf kein privater Schluessel liegen.
+#
+# Gesucht wird nach der Form eines echten Schluessels, nicht nach dem blossen Praefix (Issue
+# #1155): Das Praefix steht als Formatkennung in `age`, `age-keygen` und `rclone`, und diese Datei
+# selbst liegt ueber das eingehaengte ./backup unter /etc/manban-backup — beide traefen sonst
+# immer. Das Muster trifft sich nicht selbst, weil hinter "-1" eine Klammer folgt. -I laesst
+# Binaerdateien zusaetzlich aus; ein Schluessel ist eine Textdatei.
+SCHLUESSEL_MUSTER='AGE-SECRET-KEY-1[0-9A-Z]\{58\}'
+
 container_dateitreffer() {
   compose exec -T manban-backup sh -c \
-    "grep -rl '$1' /sicherungen /etc/manban-backup /usr/local/bin 2>/dev/null | wc -l" | tr -d ' \r'
+    "grep -rlI '$1' /sicherungen /etc/manban-backup /usr/local/bin 2>/dev/null | wc -l" | tr -d ' \r'
 }
 
 container_umgebungstreffer() {
@@ -430,9 +438,9 @@ pruefe 'Stand des Spiegels ausser Haus abgelegt' "$(ziel_datei spiegel-stand.age
 # Schluessel — weder in einer Datei noch in der Umgebung. Waere es anders, koennte der Server seine
 # eigene Kopie ausser Haus lesen, und AK8 waere eine Behauptung.
 pruefe 'kein privater Schluessel in den Dateien des Sicherungs-Containers' \
-  "$(container_dateitreffer AGE-SECRET-KEY)" 0
+  "$(container_dateitreffer "$SCHLUESSEL_MUSTER")" 0
 pruefe 'kein privater Schluessel in der Umgebung des Sicherungs-Containers' \
-  "$(container_umgebungstreffer AGE-SECRET-KEY)" 0
+  "$(container_umgebungstreffer "$SCHLUESSEL_MUSTER")" 0
 gruppe_auswerten
 
 # ---------------------------------------------------------------------------
@@ -457,6 +465,16 @@ if [ "$WAL_ANZAHL" -lt 1 ]; then
   exit 1
 fi
 log "$WAL_ANZAHL WAL-Segmente ausser Haus."
+
+# Jeder Lauf hinterlaesst seine Zeile in backup_run (E2) — daraus liest die Kachel und der Wachhund.
+# Ein gescheitertes INSERT ist im Container nur eine Warnung und macht keinen Lauf rot; ohne diese
+# Pruefung fiele eine Protokollierung, die nie ankommt, erst auf Produktion auf (Issue #1155).
+# Gefragt wird hier, vor Schritt 4: Danach ist die Datenbank verworfen.
+for art in basis offsite spiegel wal; do
+  pruefe "Protokollzeile $art/erfolg in backup_run" \
+    "$(psql_probe "SELECT count(*) > 0 FROM backup_run WHERE kind = '$art' AND outcome = 'erfolg'")" t
+done
+gruppe_auswerten
 
 if [ "$SABOTAGE" = ja ]; then
   log 'Sabotage: der Anhang in der Kopie ausser Haus wird verfaelscht.'

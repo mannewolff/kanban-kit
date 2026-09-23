@@ -212,14 +212,21 @@ psql_aufruf() {
 # frischen Instanz oder mitten in einer Rueckholung laeuft dieser Container, bevor die Anwendung je
 # migriert hat. Die Sicherung ist dann trotzdem entstanden — sie als gescheitert zu melden, waere
 # schlicht falsch.
+#
+# Das SQL kommt ueber die Standardeingabe, nicht als Kommando-Argument: psql setzt Variablen nur in
+# SQL ein, das es aus einer Datei oder von stdin liest. Als Argument ging der Platzhalter woertlich
+# an den Server, und keine einzige Zeile kam je an (Issue #1155). Die :'…'-Form quotet psql selbst — ein
+# Grund mit Anfuehrungszeichen bricht das INSERT darum nicht auf.
 protokoll() {
   local art=$1 beginn=$2 ausgang=$3 grund=${4-} bytes=${5-} meldung
   if ! meldung=$(psql_aufruf \
     --set=art="$art" --set=beginn="$beginn" --set=ende="$(jetzt)" \
-    --set=ausgang="$ausgang" --set=grund="$grund" --set=bytes="$bytes" \
-    --command="INSERT INTO backup_run (kind, started_at, finished_at, outcome, detail, bytes)
-               VALUES (:'art', :'beginn'::timestamptz, :'ende'::timestamptz, :'ausgang',
-                       NULLIF(:'grund', ''), NULLIF(:'bytes', '')::bigint)" 2>&1); then
+    --set=ausgang="$ausgang" --set=grund="$grund" --set=bytes="$bytes" 2>&1 <<'SQL'
+INSERT INTO backup_run (kind, started_at, finished_at, outcome, detail, bytes)
+VALUES (:'art', :'beginn'::timestamptz, :'ende'::timestamptz, :'ausgang',
+        NULLIF(:'grund', ''), NULLIF(:'bytes', '')::bigint);
+SQL
+  ); then
     log "WARN Protokollzeile ($art/$ausgang) nicht geschrieben — der Lauf gilt trotzdem als $ausgang: $meldung"
   fi
 }
