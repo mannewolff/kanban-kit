@@ -153,6 +153,7 @@ class NightRunControllerTest {
                 null,
                 null,
                 null,
+                null,
                 List.of(
                     new NewNightRunItem(
                         721,
@@ -175,6 +176,7 @@ class NightRunControllerTest {
                 0,
                 null,
                 true,
+                null,
                 null,
                 null,
                 null,
@@ -219,6 +221,7 @@ class NightRunControllerTest {
                 0,
                 null,
                 true,
+                null,
                 null,
                 null,
                 null,
@@ -409,6 +412,7 @@ class NightRunControllerTest {
                     null,
                     null,
                     null,
+                    null,
                     NightRunOutcome.of(
                         true,
                         null,
@@ -470,6 +474,7 @@ class NightRunControllerTest {
                     NightRunOrigin.UPLOAD,
                     null,
                     true,
+                    null,
                     null,
                     null,
                     null,
@@ -686,6 +691,7 @@ class NightRunControllerTest {
                         new BigDecimal("50"),
                         NightRunBudgetOrigin.DEFAULTED,
                         List.of("paketeMin", "kostenUsd")),
+                    null,
                     NightRunOutcome.of(
                         true,
                         null,

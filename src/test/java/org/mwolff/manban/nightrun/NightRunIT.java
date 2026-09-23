@@ -406,6 +406,7 @@ class NightRunIT extends AbstractIntegrationTest {
             Instant.now(),
             gemeldet,
             null,
+            null,
             null),
         List.of());
 

@@ -121,6 +121,7 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
         null,
         null,
         null,
+        null,
         null);
   }
 
@@ -214,6 +215,7 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
             null,
             null,
             null,
+            null,
             null);
 
     long id =
@@ -254,6 +256,7 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
             NightRunOrigin.TOKEN,
             "sitzungs-token",
             true,
+            null,
             null,
             null,
             null,
@@ -373,6 +376,7 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
             NightRunOrigin.UPLOAD,
             null,
             true,
+            null,
             null,
             null,
             null,
@@ -551,6 +555,7 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
         null,
         null,
         null,
+        null,
         null);
   }
 
@@ -721,6 +726,7 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
             NightRunOrigin.UPLOAD,
             null,
             true,
+            null,
             null,
             null,
             null,
@@ -1006,6 +1012,7 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
             null,
             laufVerbrauch,
             null,
+            null,
             null);
     NightRunItem paket =
         new NightRunItem(
@@ -1071,6 +1078,7 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
             fortgeschrieben,
             null,
             null,
+            null,
             null);
 
     long runId = runs.insertIfAbsent(maschinell, List.of()).orElseThrow();
@@ -1107,6 +1115,7 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
         Instant.parse("2026-09-10T03:22:00Z"),
         null,
         null,
+        null,
         null);
   }
 
@@ -1120,6 +1129,61 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
         .filter(r -> Objects.equals(r.id(), runId))
         .findFirst()
         .orElseThrow();
+  }
+
+  /** Dieselbe Meldung, zusaetzlich mit einem Abbruchgrund (Issue #1142). */
+  private NightRun meldungMitAbbruch(Instant startedAt, @Nullable String abbruch) {
+    return new NightRun(
+        null,
+        projectId,
+        startedAt,
+        NightRunMode.CHAIN,
+        NightRunKind.NIGHT,
+        1000L,
+        0,
+        0,
+        0,
+        null,
+        ANGELEGT,
+        NightRunOrigin.TOKEN,
+        "nacht-token",
+        true,
+        Instant.parse("2026-09-10T03:22:00Z"),
+        null,
+        null,
+        null,
+        abbruch);
+  }
+
+  /**
+   * Der Abbruchgrund ueberlebt das Einfuegen (Issue #1142) — Spalte im {@code INSERT}, Spalte im
+   * Lese-Mapper. Ohne den Lese-Mapper faende sich in der Zeile ein Wert, den kein Leser saehe.
+   */
+  @Test
+  void insertIfAbsent_schreibtUndLiestDenAbbruchgrund() {
+    String abbruch = "Dirty-Guard: uncommittete Reste in src/main/java/Foo.java";
+
+    long runId = runs.insertIfAbsent(meldungMitAbbruch(T1, abbruch), List.of()).orElseThrow();
+
+    assertThat(gelesen(runId).abortReason()).isEqualTo(abbruch);
+  }
+
+  /**
+   * Und er wird vom {@code UPSERT} <b>ersetzt</b>, nicht nur ergaenzt: Eine Meldung ist der
+   * vollstaendige Stand des Laufs. Beide Richtungen werden belegt — ein spaeterer Abbruch kommt
+   * hinzu, und ein spaeterer Stand ohne Abbruch raeumt ihn wieder ab. Stuende nur die erste
+   * Richtung hier, bestuende auch ein {@code UPDATE}, das die Spalte nie leert.
+   */
+  @Test
+  void upsert_ersetztDenAbbruchgrundInBeideRichtungen() {
+    long runId = runs.upsert(meldungMitAbbruch(T1, null), List.of()).id();
+    assertThat(gelesen(runId).abortReason()).as("erst kein Abbruch").isNull();
+
+    runs.upsert(meldungMitAbbruch(T1, "Runner hart beendet"), List.of());
+    assertThat(gelesen(runId).abortReason()).as("dann gemeldet").isEqualTo("Runner hart beendet");
+
+    runs.upsert(meldungMitAbbruch(T1, null), List.of());
+    assertThat(gelesen(runId).abortReason()).as("und wieder abgeraeumt").isNull();
   }
 
   @Test
@@ -1196,6 +1260,7 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
             null,
             null,
             null,
+            null,
             null);
     runs.upsert(alsSitzung, List.of(paket(102, NightRunState.GREEN)));
 
@@ -1228,6 +1293,7 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
             "nacht-token",
             true,
             spaeter,
+            null,
             null,
             null,
             null);
@@ -1371,6 +1437,7 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
             null,
             laufVerbrauch,
             null,
+            null,
             null);
 
     long runId =
@@ -1419,7 +1486,8 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
         null,
         null,
         null,
-        budget);
+        budget,
+        null);
   }
 
   /**

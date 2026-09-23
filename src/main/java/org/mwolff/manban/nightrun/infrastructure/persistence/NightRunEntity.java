@@ -118,6 +118,10 @@ class NightRunEntity {
   @Column(name = "budget_default_fields")
   private @Nullable String budgetDefaultFields;
 
+  /** Grund des harten Abbruchs (Issue #1142); {@code null} heisst „nicht abgebrochen". */
+  @Column(name = "abort_reason")
+  private @Nullable String abortReason;
+
   protected NightRunEntity() {
     // für JPA
   }
@@ -236,5 +240,9 @@ class NightRunEntity {
 
   @Nullable String getBudgetDefaultFields() {
     return budgetDefaultFields;
+  }
+
+  @Nullable String getAbortReason() {
+    return abortReason;
   }
 }

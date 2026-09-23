@@ -1,5 +1,6 @@
 package org.mwolff.manban.nightrun.web;
 
+import static org.mwolff.manban.nightrun.web.NightRunController.ABORT_REASON_MAX;
 import static org.mwolff.manban.nightrun.web.NightRunController.COMMIT_HASH_MAX;
 import static org.mwolff.manban.nightrun.web.NightRunController.MAX_ITEMS_PER_RUN;
 import static org.mwolff.manban.nightrun.web.NightRunController.NO_WORK_REASON_MAX;
@@ -127,6 +128,7 @@ class NightRunIngestController {
         NightRunUsageRequest.toDomain(request.usage()),
         request.noWorkReason(),
         budget(request.budget()),
+        request.abortReason(),
         request.items().stream().map(NightRunIngestController::item).toList());
   }
 
@@ -197,6 +199,12 @@ class NightRunIngestController {
    * @param budget die Vorgaben, unter denen der Lauf angetreten ist (Issue #1113). Additiv und
    *     {@code @Nullable} aus demselben Grund wie {@code kind} und {@code noWorkReason}: Eine
    *     ältere Kit-Kopie kennt das Feld nicht und meldet unverändert weiter.
+   * @param abortReason Grund, warum der Lauf hart abgebrochen ist (Issue #1142). Additiv und
+   *     {@code @Nullable} aus demselben Grund wie die drei davor: Eine ältere Kit-Kopie kennt das
+   *     Feld nicht und meldet unverändert weiter. Begrenzt auf {@link
+   *     NightRunController#ABORT_REASON_MAX} — die Länge der Spalte, in die der Wert geht; ohne
+   *     Grenze risse eine überlange Meldung dort in einen Serverfehler statt in eine benannte
+   *     Ablehnung. Ob der Wert am Lauf landet, entscheidet der Dienst.
    */
   record IngestRequest(
       @NotNull Instant startedAt,
@@ -210,6 +218,7 @@ class NightRunIngestController {
       @Nullable @Valid NightRunUsageRequest usage,
       @Nullable @Size(max = NO_WORK_REASON_MAX) String noWorkReason,
       @Nullable @Valid IngestBudgetRequest budget,
+      @Nullable @Size(max = ABORT_REASON_MAX) String abortReason,
       @NotNull @Size(max = MAX_ITEMS_PER_RUN) List<@Valid @NotNull IngestItemRequest> items) {}
 
   /**

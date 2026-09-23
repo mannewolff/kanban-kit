@@ -28,6 +28,10 @@ import org.mwolff.manban.common.Identifiable;
  *     eingeliefert" — beides ist kein Befund.
  * @param budget die Vorgaben, unter denen der Lauf angetreten ist (Issue #1112); {@code null} heißt
  *     „nicht angegeben" — Läufe vor {@code V37} und jeder Lauf, der keine gemeldet hat
+ * @param abortReason Grund, warum der Lauf hart abgebrochen ist (Issue #1142); gesetzt nur an
+ *     Läufen der Gattung {@link NightRunKind#NIGHT}, die abgeschlossen gemeldet wurden und ihren
+ *     Abbruch selbst gemeldet haben. {@code null} heißt „nicht abgebrochen" oder „vor der
+ *     Umstellung eingeliefert" — beides ist kein Befund.
  */
 public record NightRun(
     @Nullable Long id,
@@ -47,5 +51,6 @@ public record NightRun(
     @Nullable Instant updatedAt,
     @Nullable NightRunUsage usage,
     @Nullable String noWorkReason,
-    @Nullable NightRunBudget budget)
+    @Nullable NightRunBudget budget,
+    @Nullable String abortReason)
     implements Identifiable {}

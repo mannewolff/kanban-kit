@@ -85,13 +85,13 @@ class NightRunRepositoryAdapter implements NightRunRepository {
           + " token_name, complete, updated_at, cost_usd, input_tokens, output_tokens,"
           + " cached_input_tokens, model_duration_ms, turns, no_work_reason,"
           + " budget_plan_min, budget_review_min, budget_pakete_min, budget_abdeckung_min,"
-          + " budget_kosten_usd, budget_origin, budget_default_fields)"
+          + " budget_kosten_usd, budget_origin, budget_default_fields, abort_reason)"
           + " VALUES (:projectId, :startedAt, :mode, :kind, :durationMs, :processedCount,"
           + " :skippedCount, :unparsedCount, :unparsedSample, :createdAt, :origin,"
           + " :tokenName, :complete, :updatedAt, :costUsd, :inputTokens, :outputTokens,"
           + " :cachedInputTokens, :modelDurationMs, :turns, :noWorkReason,"
           + " :budgetPlanMin, :budgetReviewMin, :budgetPaketeMin, :budgetAbdeckungMin,"
-          + " :budgetKostenUsd, :budgetOrigin, :budgetDefaultFields)"
+          + " :budgetKostenUsd, :budgetOrigin, :budgetDefaultFields, :abortReason)"
           + " ON CONFLICT (project_id, started_at) DO NOTHING"
           + " RETURNING id";
 
@@ -148,7 +148,11 @@ class NightRunRepositoryAdapter implements NightRunRepository {
           + " budget_plan_min = :budgetPlanMin, budget_review_min = :budgetReviewMin,"
           + " budget_pakete_min = :budgetPaketeMin, budget_abdeckung_min = :budgetAbdeckungMin,"
           + " budget_kosten_usd = :budgetKostenUsd, budget_origin = :budgetOrigin,"
-          + " budget_default_fields = :budgetDefaultFields"
+          + " budget_default_fields = :budgetDefaultFields,"
+          // Auch der Abbruchgrund wird ersetzt und nicht nur gesetzt (Issue #1142): Eine Meldung
+          // ist der vollstaendige Stand des Laufs, und ein spaeterer Stand ohne Abbruch raeumt
+          // einen frueher gemeldeten Grund wieder ab.
+          + " abort_reason = :abortReason"
           + " WHERE id = :id";
 
   private static final String DELETE_ITEMS_OF_RUN =
@@ -379,7 +383,8 @@ class NightRunRepositoryAdapter implements NightRunRepository {
                 "updatedAt",
                 updatedAt == null ? null : zeitpunkt(updatedAt),
                 Types.TIMESTAMP_WITH_TIMEZONE)
-            .addValue("noWorkReason", run.noWorkReason(), Types.VARCHAR);
+            .addValue("noWorkReason", run.noWorkReason(), Types.VARCHAR)
+            .addValue("abortReason", run.abortReason(), Types.VARCHAR);
     verbrauchSchreiben(parameter, run.usage());
     budgetSchreiben(parameter, run.budget());
     return parameter;
@@ -492,7 +497,8 @@ class NightRunRepositoryAdapter implements NightRunRepository {
             e.getModelDurationMs(),
             e.getTurns()),
         e.getNoWorkReason(),
-        budgetLesen(e));
+        budgetLesen(e),
+        e.getAbortReason());
   }
 
   private static NightRunItem toDomain(NightRunItemEntity e, List<NightRunItemStage> stages) {

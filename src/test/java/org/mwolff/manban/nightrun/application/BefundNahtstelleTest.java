@@ -72,6 +72,7 @@ class BefundNahtstelleTest {
                     LETZTE_MELDUNG,
                     null,
                     null,
+                    null,
                     null)));
     when(runs.findItemsByRunIds(any())).thenReturn(List.of());
     NightRunService service =

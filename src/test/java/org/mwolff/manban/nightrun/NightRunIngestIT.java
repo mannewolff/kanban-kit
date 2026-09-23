@@ -21,6 +21,7 @@ import org.mwolff.manban.nightrun.domain.NightRun;
 import org.mwolff.manban.nightrun.domain.NightRunErrorClass;
 import org.mwolff.manban.nightrun.domain.NightRunItem;
 import org.mwolff.manban.nightrun.domain.NightRunKind;
+import org.mwolff.manban.nightrun.domain.NightRunLimits;
 import org.mwolff.manban.nightrun.domain.NightRunMode;
 import org.mwolff.manban.nightrun.domain.NightRunOrigin;
 import org.mwolff.manban.project.application.ProjectMembershipRepository;
@@ -88,6 +89,18 @@ class NightRunIngestIT extends AbstractIntegrationTest {
          "processedCount":%d,"skippedCount":0,"unparsedCount":0,"complete":true,
          "items":[%s]}"""
         .formatted(startedAt, pakete.length, String.join(",", pakete));
+  }
+
+  /**
+   * Eine Abbruchmeldung (Issue #1142): abgeschlossen, mit Grund, und mit denselben Paketen, die
+   * zuvor gemeldet wurden. Additiv wie {@code kind} — derselbe Rumpf, ein Feld mehr.
+   */
+  private static String abbruchmeldung(String grund, String... pakete) {
+    return """
+        {"startedAt":"%s","mode":"CHAIN","durationMs":4320000,"processedCount":%d,
+         "skippedCount":0,"unparsedCount":0,"complete":true,"abortReason":"%s",
+         "items":[%s]}"""
+        .formatted(START, pakete.length, grund, String.join(",", pakete));
   }
 
   private static String paket(int cardNumber) {
@@ -258,6 +271,62 @@ class NightRunIngestIT extends AbstractIntegrationTest {
     NightRun nachher = einzigerLauf(aufbau.projectId());
     assertThat(runs.findItemsByRunIds(List.of(nachher.requireId()))).hasSize(1);
     assertThat(nachher.usage().inputTokens()).isEqualTo(148L);
+  }
+
+  /**
+   * AK 9 (Issue #1142): Eine Abbruchmeldung ist der vollstaendige Stand des Laufs und kein Bruch
+   * mit ihm — sie fuehrt die schon gemeldeten Pakete mit, und die bleiben stehen. Der Abbruchgrund
+   * kommt hinzu, ohne dass die geleistete Arbeit dabei verschwindet.
+   */
+  @Test
+  void eineAbbruchmeldungNachZweiPaketenLaesstBeideStehen() throws Exception {
+    Aufbau aufbau = aufbau("ingest-abbruch");
+    String grund = "Dirty-Guard: uncommittete Reste in src/main/java/Foo.java";
+
+    mvc.perform(
+            post(PFAD)
+                .header(TOKEN_HEADER, aufbau.token())
+                .contentType("application/json")
+                .content(meldung(false, paket(917), paket(918))))
+        .andExpect(status().isOk());
+
+    mvc.perform(
+            post(PFAD)
+                .header(TOKEN_HEADER, aufbau.token())
+                .contentType("application/json")
+                .content(abbruchmeldung(grund, paket(917), paket(918))))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.outcome").value("REPLACED"));
+
+    NightRun nachher = einzigerLauf(aufbau.projectId());
+    assertThat(nachher.abortReason()).as("der Grund steht am Lauf").isEqualTo(grund);
+    assertThat(nachher.noWorkReason())
+        .as("und verdraengt den Rueckfalltext, den 0 bearbeitete Pakete sonst setzten")
+        .isNull();
+    assertThat(runs.findItemsByRunIds(List.of(nachher.requireId())))
+        .as("beide gemeldeten Pakete stehen weiter")
+        .extracting(NightRunItem::cardNumber)
+        .containsExactly(917, 918);
+  }
+
+  /**
+   * AK 4, Server-Teil: Der gemeldete Grund kommt <b>vollstaendig</b> an — bis an die Spaltengrenze
+   * {@link NightRunLimits#EXCERPT_MAX}. Bei der Laenge von {@code no_work_reason} risse derselbe
+   * Text hier in einen Serverfehler (E4), und genau das belegt dieser Fall gegen die echte Spalte.
+   */
+  @Test
+  void einLangerAbbruchgrundKommtUnverkuerztAn() throws Exception {
+    Aufbau aufbau = aufbau("ingest-abbruch-lang");
+    String lang = "y".repeat(NightRunLimits.EXCERPT_MAX);
+
+    mvc.perform(
+            post(PFAD)
+                .header(TOKEN_HEADER, aufbau.token())
+                .contentType("application/json")
+                .content(abbruchmeldung(lang)))
+        .andExpect(status().isOk());
+
+    assertThat(einzigerLauf(aufbau.projectId()).abortReason()).isEqualTo(lang);
   }
 
   /**
