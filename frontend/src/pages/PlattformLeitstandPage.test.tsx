@@ -913,8 +913,11 @@ describe('PlattformLeitstandPage (#1083)', () => {
     })
   })
 
-  /** Issue #1128: Jede der drei Listen zeigt an jeder Zeile die Art des Laufs als Marke. */
-  it('zeigt in allen drei Listen die Art des Laufs', async () => {
+  /**
+   * Issue #1141: Jede der drei Listen zeigt an jeder Zeile die Art des Laufs — als Symbol
+   * unmittelbar nach dem Lämpchen, nicht mehr als Textmarke (#1128).
+   */
+  it('zeigt in allen drei Listen die Art des Laufs als Symbol nach dem Lämpchen', async () => {
     api.leitstand.mockResolvedValue(
       sicht({
         laufende: [{ ...stoerung({ nightRunId: 8 }), mode: 'CHAIN', outcome: { verdict: 'RUNNING', decisiveItem: null, noWorkReason: null } }],
@@ -924,9 +927,25 @@ describe('PlattformLeitstandPage (#1083)', () => {
     )
     zeigeSeite()
 
-    expect(await screen.findByTestId('art-laufend-8')).toHaveTextContent('Kette')
-    expect(screen.getByTestId('art-durchgefuehrt-5')).toHaveTextContent('Umsetzung')
-    expect(screen.getByTestId('art-stoerung-5')).toHaveTextContent('Umsetzung')
+    await screen.findByTestId('laufend-8')
+
+    /**
+     * Lämpchen und Symbol einer Zeile in Dokumentreihenfolge — das Symbol ist das zweite und steht
+     * damit unmittelbar hinter dem Lämpchen.
+     */
+    const symbolNachLed = (zeile: string) => {
+      const [led, symbol] = within(screen.getByTestId(zeile)).getAllByTestId(/^(led-|art-)/)
+      expect(led).toHaveAttribute('data-testid', expect.stringMatching(/^led-/))
+      return symbol
+    }
+    expect(symbolNachLed('laufend-8')).toHaveAccessibleName('Kette')
+    expect(symbolNachLed('durchgefuehrt-5')).toHaveAccessibleName('Umsetzung')
+    expect(symbolNachLed('stoerung-5')).toHaveAccessibleName('Umsetzung')
+
+    // Die Textmarken aus #1128 gibt es nicht mehr.
+    expect(screen.queryByTestId('art-laufend-8')).toBeNull()
+    expect(screen.queryByTestId('art-durchgefuehrt-5')).toBeNull()
+    expect(screen.queryByTestId('art-stoerung-5')).toBeNull()
   })
 
   /** Und jeder Verweis der Seite ebenso — auch über die drei Bereiche hinweg. */

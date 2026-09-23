@@ -52,6 +52,11 @@ export function NachtlaufLaufPlatte({
   titel,
   /** Die Schicht, der der Lauf angehört, etwa „Schicht vom 14.09.2026 auf den 15.09.2026" (#1151). */
   zyklus,
+  /**
+   * Die Art des Laufs als Symbol (#1141) — es steht in derselben Zeile unmittelbar vor dem Titel.
+   * Die Seite entscheidet, welches; die Platte gibt ihm nur seinen Platz.
+   */
+  artSymbol,
   /** Beginn, Dauer, bearbeitete und übergangene Vorgänge und was der Lauf sonst zu sagen hat. */
   meta,
   melder,
@@ -69,6 +74,7 @@ export function NachtlaufLaufPlatte({
 }: Readonly<{
   titel: string
   zyklus: string
+  artSymbol?: ReactNode
   meta: string
   melder: Melder
   pulsiert?: boolean
@@ -183,8 +189,17 @@ export function NachtlaufLaufPlatte({
           <Box
             component="h3"
             data-testid="nachtlauf-ueberschrift"
-            sx={{ ...ANZEIGE, m: 0, fontSize: 15, fontWeight: 600 }}
+            sx={{
+              ...ANZEIGE,
+              m: 0,
+              fontSize: 15,
+              fontWeight: 600,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+            }}
           >
+            {artSymbol}
             {titel}
           </Box>
         </Box>

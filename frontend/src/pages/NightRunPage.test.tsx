@@ -685,6 +685,13 @@ const lauf = (minute: number) => screen.getByTestId(`lauf-${startedAt(minute)}`)
 const laufKopfzeile = (panelEl: HTMLElement): HTMLElement =>
   within(panelEl).getByTestId('lauf-kopf')
 
+/**
+ * Das Symbol der Lauf-Art im Kopf eines Laufs (#1141) — es steht seit diesem Paket anstelle der
+ * Textmarke `lauf-art` aus #1128, unmittelbar vor dem Titel. Geprüft wird sein zugänglicher Name:
+ * Das Wort ist nicht verschwunden, es steht nur nicht mehr als breitenwechselnde Marke da.
+ */
+const artSymbol = (bereich: HTMLElement): HTMLElement => within(bereich).getByTestId(/^art-/)
+
 /** Die Metazeile des einzigen Laufs auf der Seite — dort steht seit #915 seine Kennzeichnung. */
 const metazeile = () => screen.getByTestId('nachtlauf-meta')
 
@@ -1511,7 +1518,7 @@ describe('NightRunPage — Nachtplan-Lauf (#806)', () => {
     protokollWaehlen(ECHTER_NACHTPLAN_STAND, 'night-run-2026-09-09-141506.json')
 
     const panelEl = await screen.findByTestId(`lauf-${ECHTER_NACHTPLAN_START}`)
-    expect(within(panelEl).getByTestId('lauf-art')).toHaveTextContent('Nachtplan')
+    expect(artSymbol(panelEl)).toHaveAccessibleName('Nachtplan')
     expect(laufKopfzeile(panelEl)).toHaveTextContent('2 bearbeitet · 33 übergangen')
 
     panelAufklappen(panelEl)
@@ -1560,7 +1567,7 @@ describe('NightRunPage — Ketten-Lauf (#854)', () => {
     protokollWaehlen(ECHTE_KETTE_STAND, 'night-run-2026-09-14-131200.json')
 
     const panelEl = await screen.findByTestId(`lauf-${ECHTE_KETTE_START}`)
-    expect(within(panelEl).getByTestId('lauf-art')).toHaveTextContent('Kette')
+    expect(artSymbol(panelEl)).toHaveAccessibleName('Kette')
     expect(laufKopfzeile(panelEl)).toHaveTextContent('3 bearbeitet · 0 übergangen')
 
     // Anders als der Nachtplan-Lauf geht die Kette an den Server (AK 8 aus #842):
@@ -2880,7 +2887,7 @@ describe('NightRunPage — Zustände, Kennzahlen und Auszüge', () => {
     renderPage({ listen: [[aufbewahrt({ id: 1, startedAt: startedAt(0), mode: 'REVIEW' })]] })
 
     await screen.findByTestId(`lauf-${startedAt(0)}`)
-    expect(within(lauf(0)).getByTestId('lauf-art')).toHaveTextContent('Prüfung')
+    expect(artSymbol(lauf(0))).toHaveAccessibleName('Prüfung')
     expect(within(lauf(0)).queryByText(/Umsetzung/)).not.toBeInTheDocument()
   })
 
@@ -2894,7 +2901,7 @@ describe('NightRunPage — Zustände, Kennzahlen und Auszüge', () => {
     protokollWaehlen(EIN_LAUF)
 
     await screen.findByTestId(`lauf-${startedAt(0)}`)
-    expect(within(lauf(0)).getByTestId('lauf-art')).toHaveTextContent('Umsetzung')
+    expect(artSymbol(lauf(0))).toHaveAccessibleName('Umsetzung')
   })
 
   // **Umgekehrt mit Issue #872**: Der Test hielt bis dahin fest, dass in der Auswertung
@@ -4268,7 +4275,7 @@ describe('NightRunPage — Kopf und Kennzahlenreihe der Nacht (#915)', () => {
       'night-run-2026-09-14-131200.json',
     )
 
-    expect(within(panelEl).getByTestId('lauf-art')).toHaveTextContent('Kette')
+    expect(artSymbol(panelEl)).toHaveAccessibleName('Kette')
     expect(within(panelEl).getByTestId(FUSSZEILE)).toBeInTheDocument()
   })
 
@@ -4279,7 +4286,7 @@ describe('NightRunPage — Kopf und Kennzahlenreihe der Nacht (#915)', () => {
       'night-run-2026-09-07-085229.json',
     )
 
-    expect(within(panelEl).getByTestId('lauf-art')).toHaveTextContent('Umsetzung')
+    expect(artSymbol(panelEl)).toHaveAccessibleName('Umsetzung')
     expect(within(panelEl).getByTestId(FUSSZEILE)).toBeInTheDocument()
   })
 
@@ -4292,7 +4299,7 @@ describe('NightRunPage — Kopf und Kennzahlenreihe der Nacht (#915)', () => {
 
     // Die Platte der Vorlage gilt seit #988 für **jede** Lauf-Art; was den Prüf-Lauf eigen macht,
     // ist die Aufschlüsselung seiner aussortierten Karten (#873), nicht mehr sein Kopf.
-    expect(within(panelEl).getByTestId('lauf-art')).toHaveTextContent('Prüfung')
+    expect(artSymbol(panelEl)).toHaveAccessibleName('Prüfung')
     expect(within(panelEl).getByTestId('aufschluesselung')).toBeInTheDocument()
     expect(within(panelEl).getByTestId(FUSSZEILE)).toBeInTheDocument()
   })
@@ -4307,7 +4314,7 @@ describe('NightRunPage — Kopf und Kennzahlenreihe der Nacht (#915)', () => {
     const panelEl = await screen.findByTestId(`lauf-${ECHTE_ERZEUGUNG_START}`)
     panelAufklappen(panelEl)
 
-    expect(within(panelEl).getByTestId('lauf-art')).toHaveTextContent('Nachtplan')
+    expect(artSymbol(panelEl)).toHaveAccessibleName('Nachtplan')
     expect(await within(panelEl).findByTestId('aufschluesselung')).toBeInTheDocument()
     expect(within(panelEl).getByTestId(FUSSZEILE)).toBeInTheDocument()
   })
@@ -4341,7 +4348,7 @@ describe('NightRunPage — Kopf und Kennzahlenreihe der Nacht (#915)', () => {
     const panelEl = await screen.findByTestId(`lauf-${ECHTE_KETTE_START}`)
 
     // Derselbe Kopf — die Gestaltung hängt an der Lauf-Art, nicht am Vorliegen eines Stands.
-    expect(within(panelEl).getByTestId('lauf-art')).toHaveTextContent('Kette')
+    expect(artSymbol(panelEl)).toHaveAccessibleName('Kette')
     // Kosten und Züge bewahrt der Server nicht auf; eine Reihe aus lauter Fehlanzeigen wäre
     // dieselbe Wand, die der Bestand schon vermeidet.
     expect(within(panelEl).queryByTestId('fussangabe-Ketten durchgelaufen')).not.toBeInTheDocument()
@@ -4372,7 +4379,7 @@ describe('NightRunPage — Altbestand-Arten im Kopf der Vorlage (#988)', () => {
     expect(within(lauf(0)).getByTestId('nachtlauf-meta')).toHaveTextContent(
       'Ungedeutete Zeilen: 1',
     )
-    expect(within(lauf(0)).getByTestId('lauf-art')).toHaveTextContent('Prüfung')
+    expect(artSymbol(lauf(0))).toHaveAccessibleName('Prüfung')
   })
 
   it('zeigt den Kennzahlen-Hinweis eines Prüf-Laufs in seiner Fußzeile', async () => {
@@ -5031,7 +5038,7 @@ describe('NightRunPage — Laufblock im Leitstand-Stil (#988)', () => {
     await screen.findByTestId(`lauf-${startedAt(0)}`)
 
     const kopf = laufKopfzeile(lauf(0))
-    expect(within(kopf).getByTestId('lauf-art')).toHaveTextContent('Umsetzung')
+    expect(artSymbol(kopf)).toHaveAccessibleName('Umsetzung')
     expect(within(kopf).getByTestId('nachtlauf-meta')).toHaveTextContent(
       '4 h 12 min · 3 bearbeitet · 0 übergangen',
     )
@@ -5903,7 +5910,7 @@ describe('NightRunPage — Zyklus in der Vorzeile, Lauf-Nummer im Titel (#1127)'
   })
 })
 
-describe('NightRunPage — die Art des Laufs als Marke im Kopf (#1128)', () => {
+describe('NightRunPage — die Art des Laufs als Symbol im Kopf (#1141)', () => {
   it('zeigt am Kettenlauf „Kette" und am Umsetzungslauf „Umsetzung" — und nicht mehr in der Vorzeile', async () => {
     renderPage({
       listen: [
@@ -5916,10 +5923,22 @@ describe('NightRunPage — die Art des Laufs als Marke im Kopf (#1128)', () => {
 
     const kette = await screen.findByTestId(`lauf-${startedAt(5)}`)
     const umsetzung = screen.getByTestId(`lauf-${startedAt(0)}`)
-    expect(within(laufKopfzeile(kette)).getByTestId('lauf-art')).toHaveTextContent('Kette')
-    expect(within(laufKopfzeile(umsetzung)).getByTestId('lauf-art')).toHaveTextContent('Umsetzung')
+    expect(artSymbol(laufKopfzeile(kette))).toHaveAccessibleName('Kette')
+    expect(artSymbol(laufKopfzeile(umsetzung))).toHaveAccessibleName('Umsetzung')
     expect(within(kette).getByTestId('nachtlauf-vorzeile')).not.toHaveTextContent('Kette')
     expect(within(umsetzung).getByTestId('nachtlauf-vorzeile')).not.toHaveTextContent('Umsetzung')
+  })
+
+  it('setzt das Symbol unmittelbar vor den Titel und lässt die Textmarke weg', async () => {
+    renderPage({ listen: [[aufbewahrt({ id: 2, startedAt: startedAt(5), mode: 'CHAIN' })]] })
+
+    const kette = await screen.findByTestId(`lauf-${startedAt(5)}`)
+    const ueberschrift = within(kette).getByTestId('nachtlauf-ueberschrift')
+
+    // Das Symbol steht in derselben Zeile wie der Titel, und zwar in der Überschrift selbst.
+    expect(artSymbol(ueberschrift)).toHaveAccessibleName('Kette')
+    expect(ueberschrift).toHaveTextContent('Run #2')
+    expect(within(kette).queryByTestId('lauf-art')).toBeNull()
   })
 })
 

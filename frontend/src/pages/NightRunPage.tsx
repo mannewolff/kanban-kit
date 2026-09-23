@@ -55,6 +55,7 @@ import {
   type Kostenaufteilung,
 } from '../components/nachtlauf/NachtlaufLaufInstrumente'
 import { LaufMarke, NachtlaufLaufPlatte } from '../components/nachtlauf/NachtlaufLaufPlatte'
+import { LaufArtSymbol, type LaufArt } from '../components/leitstand/LaufArtSymbol'
 import { NachtlaufVorgangszeile } from '../components/nachtlauf/NachtlaufVorgangszeile'
 import {
   NachtlaufStufenband,
@@ -100,7 +101,6 @@ import {
   type NightRunItem,
   type NightRunKettenStufe,
   type NightRunKettenStufen,
-  type NightRunMode,
   type NightRunState,
   type NightRunStufenvorgaben,
 } from '../lib/nightRunLog'
@@ -215,7 +215,7 @@ interface Budget {
  * beschränkt (`NightRunService.list`, Issue #1012), eine Sitzung erreicht sie also gar nicht. Der
  * Typ lässt sie trotzdem zu — ein Wort dafür ist billiger als ein Cast, der den Schutz aushebelte.
  */
-type AnzeigeArt = NightRunMode | NightRunServerMode
+type AnzeigeArt = LaufArt
 
 /** Ein Lauf in der Anzeigeform. */
 interface AnzeigeLauf {
@@ -295,22 +295,6 @@ interface Kettenglied {
  * Kupferwarte, und dort trägt der Melder diese Aussage (`CLAUDE-design.md`).
  */
 const zustandsFarbe = (zustand: NightRunState): string => melderFarbe(MELDER_JE_ZUSTAND[zustand])
-
-/**
- * Die Lauf-Art im Etikett des Laufkopfs („Lauf · Kette", Vorlage
- * `docs/mockup-nachtlauf-lauf.html` Z. 382). Als `Record` über alle Werte, nicht als
- * Inline-Bedingung: Ein weiterer Modus bricht den Build, statt still auf „Umsetzung" zu fallen.
- *
- * <p>Nicht `modusName` aus `lib/leitstand.ts`: Die kennt nicht `NIGHTPLAN`, der browser-only bleibt
- * (Plan #803, Entscheidung 8) und dort nie vorkäme — hier steht er aber auf der Seite.
- */
-const ART_KURZ: Record<AnzeigeArt, string> = {
-  IMPLEMENTATION: 'Umsetzung',
-  REVIEW: 'Prüfung',
-  NIGHTPLAN: 'Nachtplan',
-  CHAIN: 'Kette',
-  INTERACTIVE: 'Sitzung',
-}
 
 /**
  * Die Stufen des Wegs von der fachlichen Anforderung über den Plan zum Arbeitspaket (#715). Die
@@ -933,7 +917,7 @@ async function inDieZwischenablage(text: string): Promise<void> {
  *
  * <p>Als Liste mit Beschriftung und nicht über `Object.keys`: Die Reihenfolge ist Teil der Aussage,
  * und ein fünfter Schritt bräuchte hier eine deutsche Benennung, statt still als Schlüssel
- * durchzurutschen — dieselbe Absicherung wie bei {@link ART_KURZ}.
+ * durchzurutschen — dieselbe Absicherung, die das Symbol der Laufart über seinen `Record` hat.
  */
 const KETTEN_STUFEN: ReadonlyArray<{ schluessel: NightRunKettenStufe; label: string }> = [
   { schluessel: 'plan', label: 'Plan' },
@@ -2175,8 +2159,6 @@ function Kopfmarken({
   const kosten = kostenText(lauf.verbrauch?.kostenUsd ?? null)
   return (
     <>
-      {/* Die Art des Laufs als erste Marke (Issue #1128): In der Vorzeile ging sie unter. */}
-      <LaufMarke testId="lauf-art">{ART_KURZ[lauf.mode]}</LaufMarke>
       {/* Die Marke haengt am Befund und nicht an `vollstaendig` (#1092): Ein verstummter Lauf
           traegt fuer immer `complete = false`, ist aber nicht „unvollstaendig gemeldet" — er ist
           nicht gelungen, und das sagt bereits die rote LED der Platte. */}
@@ -2624,6 +2606,7 @@ function LaufPanel({
       testId={`lauf-${lauf.startedAt}`}
       titel={laufTitel(lauf.startedAt, lauf.laufId)}
       zyklus={zyklusBeschriftung(zyklusDesStarts(lauf.startedAt))}
+      artSymbol={<LaufArtSymbol art={lauf.mode} />}
       meta={metazeile(lauf, stand)}
       melder={melder}
       pulsiert={laeuftNoch({ complete: lauf.vollstaendig, outcome: lauf.befund })}

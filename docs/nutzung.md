@@ -279,11 +279,21 @@ Stufen.
 
 Der **Titel** eines Runs nennt seine Nummer, das Startdatum und die Startzeit („Run #412 · 14.
 September, 22:05"); ein eben eingelesener Run ohne Nummer heißt „Run · 14. September, 22:05".
-Darüber steht die **Schicht**, zu der er gehört („Schicht vom 14.09.2026 auf den 15.09.2026"), und die
-Art des Runs.
+Darüber steht die **Schicht**, zu der er gehört („Schicht vom 14.09.2026 auf den 15.09.2026").
 
-Jeder Run steht als aufklappbare Zeile da — Startzeitpunkt, Art des Runs („Umsetzung",
-„Prüfung" oder „Nachtplan"), Dauer sowie „N bearbeitet, M übergangen". Ein Nachtplan
+Unmittelbar **vor dem Titel** steht die **Art des Runs als Symbol**. Es sitzt an fester Stelle und
+hat bei jeder Art dieselbe Breite, damit der Titel in jeder Zeile gleich weit links beginnt. Fährst
+du mit der Maus darauf, nennt ein Hinweisfähnchen das Wort; Vorlesewerkzeuge lesen es ebenso vor.
+Die Symbole:
+
+- **zwei verschränkte Kettenglieder** — Kette
+- **Schraubenschlüssel** — Umsetzung
+- **Lupe** — Prüfung
+- **Sprechblase** — Sitzung
+- **Mondsichel** — Nachtplan
+
+Jeder Run steht als aufklappbare Zeile da — Startzeitpunkt, Art des Runs als Symbol, Dauer sowie
+„N bearbeitet, M übergangen". Ein Nachtplan
 wird angezeigt, aber nicht aufbewahrt — er verschwindet nach einem Neuladen der Seite wieder.
 Aufgeklappt zeigt er seine Arbeitspakete, jedes mit einem der **vier Zustände**:
 
@@ -513,6 +523,10 @@ Plattform-Leitstand **teilnehmen**.
 
 Die Seite **frischt sich selbst auf**: Was sich ändert, erscheint von allein — du musst sie nicht
 neu laden.
+
+In allen drei Bereichen steht **direkt hinter dem Lämpchen** das Symbol der **Art des Runs** —
+dieselben fünf Symbole wie auf der Läufe-Seite, mit dem Wort als Hinweisfähnchen. Weil das Symbol
+bei jeder Art gleich breit ist, beginnt alles dahinter in jeder Zeile an derselben Stelle.
 
 ### Aktive Runs
 

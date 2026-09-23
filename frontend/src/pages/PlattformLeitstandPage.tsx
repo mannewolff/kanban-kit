@@ -10,9 +10,9 @@ import {
   type LeitstandView,
 } from '../api/plattformLeitstand'
 import { KupferwarteBereich } from '../components/nachtlauf/KupferwarteBereich'
-import { LaufMarke } from '../components/nachtlauf/NachtlaufLaufPlatte'
+import { LaufArtSymbol } from '../components/leitstand/LaufArtSymbol'
 import { FilterTaste, Led, Platte, Taste } from '../components/leitstand/LeitstandBausteine'
-import { MELDER_JE_ZUSTAND, melderAusBefund, modusName, tagZeit, uhrzeit } from '../lib/leitstand'
+import { MELDER_JE_ZUSTAND, melderAusBefund, tagZeit, uhrzeit } from '../lib/leitstand'
 import { NIGHT_RUN_VERDICT_TEXT, nightRunZustandsText } from '../lib/nightRunHandoff'
 import { useRefetchOnFocus } from '../lib/useRefetchOnFocus'
 import { zyklusDavor, zyklusDesStarts, zyklusSpanne } from '../lib/verbrauchZeitraum'
@@ -401,14 +401,6 @@ function LaufVerweis({ zeile }: Readonly<{ zeile: DisruptionView }>) {
   )
 }
 
-/**
- * Die Art eines Laufs als Marke (Issue #1128) — dieselbe Markenform wie im Kopf eines Laufs auf der
- * Läufe-Seite, ohne eigene Farbe: Farbe trägt hier den Zustand.
- */
-function ArtMarke({ zeile, bereich }: Readonly<{ zeile: DisruptionView; bereich: string }>) {
-  return <LaufMarke testId={`art-${bereich}-${zeile.nightRunId}`}>{modusName(zeile.mode)}</LaufMarke>
-}
-
 /** Der Bereich „Aktive Laeufe" (Kriterien 1–4). */
 function LaufendeListe({ zeilen }: Readonly<{ zeilen: DisruptionView[] | null }>) {
   if (zeilen === null) {
@@ -441,11 +433,11 @@ function LaufendeZeile({ zeile }: Readonly<{ zeile: DisruptionView }>) {
   return (
     <Box component="li" data-testid={`laufend-${zeile.nightRunId}`} sx={LAUF_ZEILE_SX}>
       <Led melder={melderAusBefund(zeile.outcome)} pulsiert={zeile.outcome.verdict === 'RUNNING'} />
+      <LaufArtSymbol art={zeile.mode} />
       <Projektname name={zeile.projectName} />
       <Typography sx={{ fontSize: 12, color: 'text.secondary', flex: 1, minWidth: 0 }}>
         {`${NIGHT_RUN_VERDICT_TEXT[zeile.outcome.verdict]} seit ${uhrzeit(zeile.startedAt)}`}
       </Typography>
-      <ArtMarke zeile={zeile} bereich="laufend" />
       <LaufVerweis zeile={zeile} />
     </Box>
   )
@@ -640,11 +632,11 @@ function DurchgefuehrteZeile({
   return (
     <Box component="li" data-testid={`durchgefuehrt-${zeile.nightRunId}`} sx={LAUF_ZEILE_SX}>
       <Led melder={melderAusBefund(zeile.outcome)} />
+      <LaufArtSymbol art={zeile.mode} />
       <Projektname name={zeile.projectName} />
       <Typography sx={{ fontSize: 12, color: 'text.secondary' }}>
         {tagZeit(zeile.startedAt)}
       </Typography>
-      <ArtMarke zeile={zeile} bereich="durchgefuehrt" />
       <LaufVerweis zeile={zeile} />
       <Typography sx={{ fontSize: 12, color: 'text.secondary', flex: 1, minWidth: 0 }}>
         {NIGHT_RUN_VERDICT_TEXT[zeile.outcome.verdict]}
@@ -840,6 +832,7 @@ function Stoerzeile({
       sx={{ display: 'flex', alignItems: 'center', gap: '10px', px: '16px', py: '6px' }}
     >
       <Led melder={melder} />
+      <LaufArtSymbol art={stoerung.mode} />
       <Typography sx={{ fontSize: 12, color: 'text.secondary' }}>
         {tagZeit(stoerung.startedAt)}
       </Typography>
@@ -851,7 +844,6 @@ function Stoerzeile({
       >
         Run #{stoerung.nightRunId}
       </Typography>
-      <ArtMarke zeile={stoerung} bereich="stoerung" />
       <Typography sx={{ fontSize: 12, color: 'text.secondary', flex: 1, minWidth: 0 }}>
         {stoerungsGrund(stoerung.outcome)}
       </Typography>
