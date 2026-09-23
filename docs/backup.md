@@ -291,3 +291,21 @@ scheitert.
 Der Weg zurück will geprobt werden, nicht im Ernstfall zum ersten Mal gegangen. Das Ergebnis der
 letzten Probe steht in [Betrieb & Installation](betrieb.md#letzter-wiederherstellungsnachweis) —
 mit Datum, Commit und Ausgang.
+
+Den maschinellen Teil dieser Probe fährt ein Skript. Es baut einen eigenen, wegwerfbaren Stack,
+befüllt ihn, sichert, verwirft Datenbank und Objektspeicher, holt aus der verschlüsselten Kopie
+außer Haus zurück und prüft danach Karte, Anhang und Objektabgleich:
+
+```bash
+bash backup/test/restore-roundtrip.sh              # muss mit Exitcode 0 enden
+bash backup/test/restore-roundtrip.sh --sabotage   # Gegenprobe: muss scheitern
+```
+
+Es braucht Docker, curl und node, dauert einige Minuten und räumt sich selbst wieder ab. Teil von
+`mvn verify` ist es bewusst nicht — es verwirft Container, auf denen die übrige Testsuite steht.
+Die Einzelheiten stehen im Kommentarkopf des Skripts.
+
+Das Skript ersetzt den Nachweis nicht, es stützt ihn: Ein Lauf auf einer **leeren Maschine** —
+frischer Host, nur Docker, nur die Kopie außer Haus und der verwahrte private Schlüssel — bleibt
+Handarbeit und gehört in die Tabelle in [Betrieb &
+Installation](betrieb.md#letzter-wiederherstellungsnachweis).
