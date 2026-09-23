@@ -17,6 +17,38 @@ vi.mock('../api/plattformLeitstand', async () => {
 
 const api = vi.mocked(plattformLeitstandApi)
 
+/** Ein Speicher je Test, unabhängig davon, ob die Node-Fassung einen nativen mitbringt. */
+function fakeStorage(): Storage {
+  const map = new Map<string, string>()
+  return {
+    getItem: (k) => map.get(k) ?? null,
+    setItem: (k, v) => void map.set(k, String(v)),
+    removeItem: (k) => void map.delete(k),
+    clear: () => map.clear(),
+    key: (i) => [...map.keys()][i] ?? null,
+    get length() {
+      return map.size
+    },
+  }
+}
+
+/** Ein Speicher, dessen Zugriffe werfen — wie in einem privaten oder gesperrten Kontext. */
+function throwingStorage(): Storage {
+  const boom = () => {
+    throw new Error('storage disabled')
+  }
+  return {
+    getItem: boom,
+    setItem: boom,
+    removeItem: boom,
+    clear: boom,
+    key: boom,
+    get length(): number {
+      return 0
+    },
+  }
+}
+
 /**
  * Der Plattform-Leitstand (Issue #1083, um die beiden Lauf-Bereiche erweitert in #1098; fachliche
  * Quellen #1064 und #1086).
@@ -54,6 +86,11 @@ describe('PlattformLeitstandPage (#1083)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     api.quittieren.mockResolvedValue(undefined)
+    // Der gemerkte Klappzustand (#1152) läuft über einen eigenen Speicher je Test statt über das
+    // native `localStorage`: Unter Node 26 ist das nativ vorhandene deaktiviert (siehe
+    // `test/setup.ts`), und ein Test, der lokal an dieser Stelle grün ist und in CI rot, prüft
+    // die Umgebung statt die Seite.
+    vi.stubGlobal('localStorage', fakeStorage())
   })
 
   /** Kriterium 18: die drei Bereiche untereinander, in dieser Ordnung. */
@@ -502,6 +539,10 @@ describe('PlattformLeitstandPage (#1083)', () => {
     beforeEach(() => {
       vi.useFakeTimers({ toFake: ['Date'] })
       vi.setSystemTime(new Date('2026-09-22T11:00:00Z')) // 22.09. 13:00 in Berlin
+      // Seit #1152 startet die vorige Schicht zugeklappt. Diese Prüfungen gelten weiter dem
+      // Inhalt und seiner Reihenfolge — deshalb klappen sie ihn über den gemerkten Zustand auf
+      // statt ihn erst wegzuklicken. Geleert wird der Speicher global in `test/setup.ts`.
+      localStorage.setItem('leitstand-voriger-zyklus-offen', 'true')
     })
     afterEach(() => vi.useRealTimers())
 
@@ -551,6 +592,162 @@ describe('PlattformLeitstandPage (#1083)', () => {
 
       const voriger = await screen.findByRole('region', { name: 'Vorige Schicht' })
       expect(within(voriger).getByRole('link', { name: 'Zur Störung von Run #6' })).toHaveAttribute('href', '#stoerung-6')
+    })
+  })
+
+  /**
+   * Issue #1152: Die vorige Schicht ist ein- und ausklappbar und startet zugeklappt — gelesen wird
+   * an der Stelle fast immer nur die laufende Schicht, und ein Dutzend alter Zeilen schiebt die
+   * Störungen aus dem Bild.
+   *
+   * Ohne falsche Uhr: Geprüft wird das Klappen, und weder Überschrift noch Kennung einer Zeile
+   * hängen am Datum.
+   */
+  describe('Vorige Schicht klappbar (#1152)', () => {
+    const zweiVorige = () =>
+      sicht({
+        durchgefuehrte: [stoerung({ nightRunId: 7 })],
+        durchgefuehrteVoriger: [stoerung({ nightRunId: 6 }), stoerung({ nightRunId: 5 })],
+      })
+
+    const schalter = () => screen.getByRole('button', { name: /^Vorige Schicht (auf|zu)klappen$/ })
+
+    // Der Spion auf `getSelection` hielte sonst bis ans Dateiende.
+    afterEach(() => vi.restoreAllMocks())
+
+    it('startet ohne gemerkten Zustand zugeklappt', async () => {
+      api.leitstand.mockResolvedValue(zweiVorige())
+      zeigeSeite()
+
+      await screen.findByTestId('durchgefuehrt-7')
+      expect(screen.getByRole('region', { name: 'Vorige Schicht' })).toBeInTheDocument()
+      expect(schalter()).toHaveAttribute('aria-expanded', 'false')
+      expect(screen.queryByTestId('durchgefuehrt-6')).toBeNull()
+      expect(screen.queryByTestId('keine-durchgefuehrten-voriger')).toBeNull()
+    })
+
+    it('klappt auf einen Klick des Pfeils auf und auf den nächsten wieder zu', async () => {
+      api.leitstand.mockResolvedValue(zweiVorige())
+      zeigeSeite()
+
+      await screen.findByTestId('durchgefuehrt-7')
+      await userEvent.click(schalter())
+
+      expect(schalter()).toHaveAttribute('aria-expanded', 'true')
+      const voriger = screen.getByRole('region', { name: 'Vorige Schicht' })
+      expect(within(voriger).getByTestId('durchgefuehrt-6')).toBeInTheDocument()
+      expect(within(voriger).getByTestId('durchgefuehrt-5')).toBeInTheDocument()
+
+      await userEvent.click(schalter())
+      expect(schalter()).toHaveAttribute('aria-expanded', 'false')
+      expect(screen.queryByTestId('durchgefuehrt-6')).toBeNull()
+    })
+
+    it('schaltet auch über die Kopfzeile neben dem Pfeil', async () => {
+      api.leitstand.mockResolvedValue(zweiVorige())
+      zeigeSeite()
+
+      await screen.findByTestId('durchgefuehrt-7')
+      await userEvent.click(screen.getByTestId('zyklus-voriger-kopf'))
+
+      expect(screen.getByTestId('durchgefuehrt-6')).toBeInTheDocument()
+    })
+
+    it('merkt den aufgeklappten Zustand über einen Neuaufbau der Seite', async () => {
+      api.leitstand.mockResolvedValue(zweiVorige())
+      const { unmount } = render(<PlattformLeitstandPage />, { wrapper: MemoryRouter })
+
+      await screen.findByTestId('durchgefuehrt-7')
+      await userEvent.click(schalter())
+      await screen.findByTestId('durchgefuehrt-6')
+      unmount()
+
+      zeigeSeite()
+      expect(await screen.findByTestId('durchgefuehrt-6')).toBeInTheDocument()
+      expect(schalter()).toHaveAttribute('aria-expanded', 'true')
+    })
+
+    it('startet mit gemerktem Zustand aufgeklappt', async () => {
+      localStorage.setItem('leitstand-voriger-zyklus-offen', 'true')
+      api.leitstand.mockResolvedValue(zweiVorige())
+      zeigeSeite()
+
+      expect(await screen.findByTestId('durchgefuehrt-6')).toBeInTheDocument()
+    })
+
+    /** „Diese Schicht" bleibt, was sie war: ohne Pfeil und immer sichtbar. */
+    it('lässt diese Schicht ohne Schalter und immer sichtbar', async () => {
+      api.leitstand.mockResolvedValue(zweiVorige())
+      zeigeSeite()
+
+      const dieser = await screen.findByRole('region', { name: 'Diese Schicht' })
+      expect(within(dieser).getByTestId('durchgefuehrt-7')).toBeInTheDocument()
+      expect(within(dieser).queryByRole('button')).toBeNull()
+    })
+
+    /** Zugeklappt sagt die Zeile sonst nicht, ob sich das Aufklappen lohnt. */
+    it('nennt die Anzahl der Runs der vorigen Schicht in beiden Zuständen', async () => {
+      api.leitstand.mockResolvedValue(zweiVorige())
+      zeigeSeite()
+
+      expect(await screen.findByTestId('zyklus-voriger-anzahl')).toHaveTextContent('2 Runs')
+      await userEvent.click(schalter())
+      expect(screen.getByTestId('zyklus-voriger-anzahl')).toHaveTextContent('2 Runs')
+    })
+
+    it('zählt einen einzelnen Run im Singular', async () => {
+      api.leitstand.mockResolvedValue(sicht({ durchgefuehrteVoriger: [stoerung({ nightRunId: 6 })] }))
+      zeigeSeite()
+
+      // Wörtlich: „1 Runs" enthielte „1 Run" und käme sonst durch.
+      expect((await screen.findByTestId('zyklus-voriger-anzahl')).textContent).toBe('1 Run')
+    })
+
+    /** Eine „0" vor der ersten Antwort wäre eine Behauptung über Daten, die noch niemand kennt. */
+    it('nennt vor der ersten Antwort keine Anzahl', () => {
+      api.leitstand.mockReturnValue(new Promise(() => {}))
+      zeigeSeite()
+
+      expect(screen.getByRole('region', { name: 'Vorige Schicht' })).toBeInTheDocument()
+      expect(screen.queryByTestId('zyklus-voriger-anzahl')).toBeNull()
+    })
+
+    /** Wer die Spanne markiert, um sie zu kopieren, will den Abschnitt nicht aufklappen. */
+    it('schaltet nicht, wenn im Kopf Text ausgewählt ist', async () => {
+      api.leitstand.mockResolvedValue(zweiVorige())
+      zeigeSeite()
+      await screen.findByTestId('durchgefuehrt-7')
+      vi.spyOn(window, 'getSelection').mockReturnValue({
+        toString: () => 'vom 21.09.2026',
+      } as unknown as Selection)
+
+      await userEvent.click(screen.getByTestId('zyklus-voriger-kopf'))
+
+      expect(screen.queryByTestId('durchgefuehrt-6')).toBeNull()
+    })
+
+    /** `getSelection()` darf `null` liefern — „keine Auswahl" ist kein Grund, stumm zu bleiben. */
+    it('schaltet, wo der Browser gar keine Auswahl führt', async () => {
+      api.leitstand.mockResolvedValue(zweiVorige())
+      zeigeSeite()
+      await screen.findByTestId('durchgefuehrt-7')
+      vi.spyOn(window, 'getSelection').mockReturnValue(null)
+
+      await userEvent.click(screen.getByTestId('zyklus-voriger-kopf'))
+
+      expect(screen.getByTestId('durchgefuehrt-6')).toBeInTheDocument()
+    })
+
+    /** Ein gesperrter Speicher kostet die Erinnerung, nicht die Seite. */
+    it('startet zugeklappt und bleibt bedienbar, wenn der Speicher wirft', async () => {
+      vi.stubGlobal('localStorage', throwingStorage())
+      api.leitstand.mockResolvedValue(zweiVorige())
+      zeigeSeite()
+
+      await screen.findByTestId('durchgefuehrt-7')
+      expect(screen.queryByTestId('durchgefuehrt-6')).toBeNull()
+      await userEvent.click(schalter())
+      expect(screen.getByTestId('durchgefuehrt-6')).toBeInTheDocument()
     })
   })
 

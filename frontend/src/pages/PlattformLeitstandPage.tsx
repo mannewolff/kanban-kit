@@ -1,4 +1,5 @@
 import Box from '@mui/material/Box'
+import ButtonBase from '@mui/material/ButtonBase'
 import Typography from '@mui/material/Typography'
 import { useCallback, useEffect, useId, useState, type ReactNode } from 'react'
 import { Link as RouterLink } from 'react-router-dom'
@@ -15,13 +16,38 @@ import { MELDER_JE_ZUSTAND, melderAusBefund, modusName, tagZeit, uhrzeit } from 
 import { NIGHT_RUN_VERDICT_TEXT, nightRunZustandsText } from '../lib/nightRunHandoff'
 import { useRefetchOnFocus } from '../lib/useRefetchOnFocus'
 import { zyklusDavor, zyklusDesStarts, zyklusSpanne } from '../lib/verbrauchZeitraum'
-import { ANZEIGE, ETIKETT, RAND, TEXT_SCHWACH } from '../theme'
+import { ANZEIGE, ETIKETT, KLEIN_RADIUS, NUT, RAND, TEXT_MATT, TEXT_SCHWACH } from '../theme'
 
 /** Der Anfangszustand: drei leere Listen, noch von keiner Antwort belegt. */
 const LEERE_SICHT: LeitstandView = { laufende: [], durchgefuehrte: [], durchgefuehrteVoriger: [], stoerungen: [] }
 
 /** Der Takt des Auffrischens (Kriterium 19): Was sich aendert, steht spaetestens so bald da. */
 const AUFFRISCH_MS = 30_000
+
+/**
+ * Wo der Browser sich merkt, ob die vorige Schicht aufgeklappt ist (Issue #1152).
+ *
+ * Ein Zustand nur im Speicher der Seite waere hier keine Einstellung, sondern eine Geste: Die
+ * Seite frischt sich alle 30 Sekunden auf und steht lange offen; jeder Reload setzte sie zurueck.
+ */
+const VORIGE_OFFEN_SCHLUESSEL = 'leitstand-voriger-zyklus-offen'
+
+/** Ein fehlender oder unlesbarer Wert bedeutet zugeklappt (Muster aus `AppShell.tsx`). */
+function leseVorigeOffen(): boolean {
+  try {
+    return localStorage.getItem(VORIGE_OFFEN_SCHLUESSEL) === 'true'
+  } catch {
+    return false
+  }
+}
+
+function schreibeVorigeOffen(wert: boolean): void {
+  try {
+    localStorage.setItem(VORIGE_OFFEN_SCHLUESSEL, String(wert))
+  } catch {
+    // localStorage nicht verfuegbar — der Zustand haelt dann nur diese Sitzung, kein Hard-Fail.
+  }
+}
 
 /**
  * Ein gescheiterter Abruf — sein Text und ob es das fehlende Recht war.
@@ -73,6 +99,19 @@ export default function PlattformLeitstandPage() {
   const [sicht, setSicht] = useState<LeitstandView>(LEERE_SICHT)
   const [geladen, setGeladen] = useState(false)
   const [fehler, setFehler] = useState<Fehler | null>(null)
+  // Grundzustand zugeklappt (#1152): Gelesen wird an der Stelle fast immer nur die laufende
+  // Schicht; ein Dutzend alter Zeilen schoebe die Stoerungen aus dem Bild.
+  const [vorigeOffen, setVorigeOffen] = useState(leseVorigeOffen)
+
+  const vorigeUmschalten = useCallback(() => {
+    setVorigeOffen((offen) => !offen)
+  }, [])
+
+  // Geschrieben wird als Wirkung und nicht im Umschalter: So haelt der Speicher auch dann den
+  // gezeigten Zustand, wenn React den Aktualisierer doppelt ausfuehrt.
+  useEffect(() => {
+    schreibeVorigeOffen(vorigeOffen)
+  }, [vorigeOffen])
 
   const laden = useCallback(() => {
     plattformLeitstandApi
@@ -159,6 +198,9 @@ export default function PlattformLeitstandPage() {
             titel="Vorige Schicht"
             spanne={zyklusSpanne(zyklusDavor(dieserZyklus))}
             testId="zyklus-voriger"
+            anzahl={geladen ? sicht.durchgefuehrteVoriger.length : null}
+            offen={vorigeOffen}
+            onUmschalten={vorigeUmschalten}
           >
             <DurchgefuehrteListe
               zeilen={geladen ? sicht.durchgefuehrteVoriger : null}
@@ -284,23 +326,127 @@ function LaufendeZeile({ zeile }: Readonly<{ zeile: DisruptionView }>) {
 /**
  * Ein Abschnitt des Bereichs „Beendete Laeufe" (Issue #1135): Ueberschrift und Spanne des Zyklus,
  * darunter seine Zeilen. Die Ueberschrift benennt den Abschnitt auch fuer Vorlesewerkzeuge.
+ *
+ * **Klappbar nur mit `onUmschalten`** (Issue #1152): Ohne den Rueckruf verhaelt sich der Abschnitt
+ * wie zuvor — „Diese Schicht" traegt keinen Pfeil und ist immer sichtbar. Eine zweite Komponente
+ * daneben haette Kopfzeile, Spanne und `aria-labelledby` verdoppelt, also zwei Stellen, die
+ * dasselbe sagen.
+ *
+ * **Zugeklappt wird der Inhalt gar nicht gerendert** — kein `display: none`: Was nicht zu sehen
+ * ist, soll auch von Vorlesewerkzeugen und der Suche im Dokument nicht gefunden werden.
  */
 function ZyklusAbschnitt({
   titel,
   spanne,
   testId,
+  anzahl = null,
+  offen = false,
+  onUmschalten,
   children,
-}: Readonly<{ titel: string; spanne: string; testId: string; children: ReactNode }>) {
+}: Readonly<{
+  titel: string
+  spanne: string
+  testId: string
+  /** Die Anzahl der Runs des Abschnitts; `null`, solange die erste Antwort fehlt. */
+  anzahl?: number | null
+  offen?: boolean
+  onUmschalten?: () => void
+  children: ReactNode
+}>) {
   const id = useId()
+  const inhaltId = useId()
+  const klappbar = onUmschalten !== undefined
+  const zeigtInhalt = !klappbar || offen
+
+  /**
+   * Ein Klick in die Kopfzeile schaltet um — ausser er beendet gerade eine Textauswahl. Wer die
+   * Spanne markiert, um sie zu kopieren, will den Abschnitt nicht zuklappen (Muster aus
+   * {@link NachtlaufLaufPlatte}).
+   */
+  const kopfKlick =
+    onUmschalten &&
+    (() => {
+      if ((window.getSelection()?.toString() ?? '') !== '') {
+        return
+      }
+      onUmschalten()
+    })
+
   return (
     <Box component="section" aria-labelledby={id} data-testid={testId}>
-      <Box sx={{ display: 'flex', alignItems: 'baseline', gap: '8px', px: '16px', pt: '10px' }}>
+      {/* `role="presentation"`: Die Zeile traegt keine eigene Semantik, ihr Klick ist die bequemere
+          Flaeche fuer den Pfeil darin. Die Tastaturbedienung sitzt am Pfeil und waere an der Zeile
+          ein zweiter Halt in derselben Reihenfolge. */}
+      <Box
+        {...(kopfKlick && { role: 'presentation', onClick: kopfKlick, 'data-testid': `${testId}-kopf` })}
+        sx={{
+          display: 'flex',
+          alignItems: 'baseline',
+          gap: '8px',
+          px: '16px',
+          pt: '10px',
+          ...(klappbar && { cursor: 'pointer', pb: '10px' }),
+          ...(klappbar && zeigtInhalt && { borderBottom: `1px solid ${RAND}` }),
+        }}
+      >
+        {onUmschalten && (
+          <ButtonBase
+            aria-expanded={zeigtInhalt}
+            aria-controls={zeigtInhalt ? inhaltId : undefined}
+            aria-label={`${titel} ${zeigtInhalt ? 'zuklappen' : 'aufklappen'}`}
+            // Ohne gestoppte Weitergabe schaltete die Kopfzeile ein zweites Mal — und damit gar nicht.
+            onClick={(ereignis) => {
+              ereignis.stopPropagation()
+              onUmschalten()
+            }}
+            sx={{
+              width: 22,
+              height: 22,
+              flex: 'none',
+              alignSelf: 'center',
+              display: 'grid',
+              placeItems: 'center',
+              borderRadius: `${KLEIN_RADIUS}px`,
+              color: TEXT_MATT,
+              '&:hover': { bgcolor: NUT },
+            }}
+          >
+            {/* Groesse im `sx` und nicht als `width`/`height` am Element — siehe #1041. */}
+            <Box
+              component="svg"
+              data-testid={`${testId}-pfeil`}
+              viewBox="0 0 16 16"
+              fill="none"
+              aria-hidden
+              sx={{
+                width: 12,
+                height: 12,
+                transition: 'transform .15s ease',
+                transform: zeigtInhalt ? 'none' : 'rotate(-90deg)',
+                '@media (prefers-reduced-motion: reduce)': { transition: 'none' },
+              }}
+            >
+              <path
+                d="m4 6 4 4 4-4"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </Box>
+          </ButtonBase>
+        )}
         <Box component="h3" id={id} sx={{ ...ETIKETT, m: 0 }}>
           {titel}
         </Box>
         <Typography sx={{ fontSize: 12, color: 'text.secondary' }}>{spanne}</Typography>
+        {anzahl !== null && (
+          <Typography data-testid={`${testId}-anzahl`} sx={{ fontSize: 12, color: 'text.secondary' }}>
+            {anzahl === 1 ? '1 Run' : `${anzahl} Runs`}
+          </Typography>
+        )}
       </Box>
-      {children}
+      {zeigtInhalt && (klappbar ? <Box id={inhaltId}>{children}</Box> : children)}
     </Box>
   )
 }
