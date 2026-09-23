@@ -154,7 +154,7 @@ describe('NachtlaufVerbrauchZeitraum — Kopfzeile und Navigation', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Tag' }))
     await waitFor(async () =>
-      expect(await beschriftung()).toHaveTextContent('Zyklus vom 15.09.2026 auf den 16.09.2026'),
+      expect(await beschriftung()).toHaveTextContent('Schicht vom 15.09.2026 auf den 16.09.2026'),
     )
 
     fireEvent.click(screen.getByRole('button', { name: 'Monat' }))
@@ -267,11 +267,11 @@ describe('NachtlaufVerbrauchZeitraum — Platten und Kacheln', () => {
 
     const aktuell = await screen.findByTestId('verbrauch-zeitraum-aktuell')
     // 6,50 $ auf 4 Läufe, 5,00 $ von 6,50 $ sind 77 %, 3 Karten in 4 Läufen.
-    expect(lesbar(kachel(aktuell, 'Gesamtsumme'))).toContain('1,63 $ je Lauf')
+    expect(lesbar(kachel(aktuell, 'Gesamtsumme'))).toContain('1,63 $ je Run')
     expect(kachel(aktuell, 'Karten zugeordnet')).toHaveTextContent('77 % der Summe')
     expect(kachel(aktuell, 'Rest')).toHaveTextContent('keiner Karte zuzuordnen')
-    expect(kachel(aktuell, 'Läufe')).toHaveTextContent('3 Karten')
-    expect(lesbar(kachel(aktuell, 'Läufe'))).toContain('4')
+    expect(kachel(aktuell, 'Runs')).toHaveTextContent('3 Karten')
+    expect(lesbar(kachel(aktuell, 'Runs'))).toContain('4')
   })
 
   it('laesst die Einordnung weg, wo der Wert dafuer fehlt — und schreibt nie 0', async () => {
@@ -279,7 +279,7 @@ describe('NachtlaufVerbrauchZeitraum — Platten und Kacheln', () => {
 
     const aktuell = await screen.findByTestId('verbrauch-zeitraum-aktuell')
     expect(kachel(aktuell, 'Gesamtsumme')).toHaveTextContent('nicht gemessen')
-    expect(kachel(aktuell, 'Gesamtsumme')).not.toHaveTextContent('je Lauf')
+    expect(kachel(aktuell, 'Gesamtsumme')).not.toHaveTextContent('je Run')
     expect(kachel(aktuell, 'Karten zugeordnet')).not.toHaveTextContent('der Summe')
     expect(kachel(aktuell, 'Gesamtsumme').textContent).not.toMatch(/\d/)
   })
@@ -287,8 +287,8 @@ describe('NachtlaufVerbrauchZeitraum — Platten und Kacheln', () => {
   it('nennt im Kopf der Platte die Spanne und die Zahl der Laeufe', async () => {
     zeige(apiMit((type) => Promise.resolve(zeitraum(type))))
 
-    expect(await screen.findByTestId('verbrauch-zeitraum-aktuell')).toHaveTextContent('4 Läufe')
-    expect(screen.getByTestId('verbrauch-zeitraum-vorher')).toHaveTextContent('2 Läufe')
+    expect(await screen.findByTestId('verbrauch-zeitraum-aktuell')).toHaveTextContent('4 Runs')
+    expect(screen.getByTestId('verbrauch-zeitraum-vorher')).toHaveTextContent('2 Runs')
   })
 })
 
@@ -337,7 +337,7 @@ describe('NachtlaufVerbrauchZeitraum — Hinweise', () => {
     expect(screen.queryByTestId('verbrauch-vorhaben')).not.toBeInTheDocument()
   })
 
-  it('zeigt ganz vor dem aeltesten aufbewahrten Lauf den eigenen Satz, nicht den aus AK 9', async () => {
+  it('zeigt ganz vor dem aeltesten aufbewahrten Run den eigenen Satz, nicht den aus AK 9', async () => {
     zeige(
       apiMit((type) =>
         Promise.resolve(
@@ -347,7 +347,7 @@ describe('NachtlaufVerbrauchZeitraum — Hinweise', () => {
     )
 
     const hinweis = await screen.findByTestId('verbrauch-zeitraum-hinweis')
-    expect(hinweis).toHaveTextContent('vor dem ältesten aufbewahrten Lauf')
+    expect(hinweis).toHaveTextContent('vor dem ältesten aufbewahrten Run')
     expect(screen.queryByText(KEIN_LAUF_TEXT)).not.toBeInTheDocument()
     expect(screen.queryByTestId(/^verbrauch-kachel-/)).not.toBeInTheDocument()
   })
@@ -383,7 +383,7 @@ describe('NachtlaufVerbrauchZeitraum — Hinweise', () => {
     zeige(apiMit((type) => Promise.resolve(mitAltemVorzeitraum(type))))
 
     const vorher = await screen.findByTestId('verbrauch-zeitraum-vorher')
-    expect(vorher).toHaveTextContent('vor dem ältesten aufbewahrten Lauf')
+    expect(vorher).toHaveTextContent('vor dem ältesten aufbewahrten Run')
     expect(screen.getByTestId('verbrauch-zeitraum-aktuell')).not.toHaveTextContent('aufbewahrten')
   })
 })
@@ -392,23 +392,23 @@ describe('NachtlaufVerbrauchZeitraum — Naechte und Vorhaben', () => {
   it('macht jede Nacht des Zeitraums als Zeile erreichbar', async () => {
     const onNacht = zeige(apiMit((type) => Promise.resolve(zeitraum(type))))
 
-    const knopf = await screen.findByRole('button', { name: /Zyklus vom 09\.09\.2026/ })
+    const knopf = await screen.findByRole('button', { name: /Schicht vom 09\.09\.2026/ })
     expect(knopf).toHaveAccessibleName(/abgebrochen/)
     fireEvent.click(knopf)
 
     expect(onNacht).toHaveBeenCalledWith('2026-09-09')
-    const erste = screen.getByRole('button', { name: /Zyklus vom 08\.09\.2026/ })
+    const erste = screen.getByRole('button', { name: /Schicht vom 08\.09\.2026/ })
     expect(lesbar(erste)).toContain('3,00 $')
     expect(erste).toHaveTextContent('Di 08.09. → 09.09.')
-    expect(erste).toHaveTextContent('2 Läufe')
+    expect(erste).toHaveTextContent('2 Runs')
   })
 
   it('zeichnet den Balken einer Nacht im Verhaeltnis zur teuersten und nie fuer eine ungemessene', async () => {
     zeige(apiMit((type) => Promise.resolve(zeitraum(type))))
 
-    const erste = await screen.findByRole('button', { name: /Zyklus vom 08\.09\.2026/ })
+    const erste = await screen.findByRole('button', { name: /Schicht vom 08\.09\.2026/ })
     expect(within(erste).getByTestId('fuellung-100')).toBeInTheDocument()
-    const zweite = screen.getByRole('button', { name: /Zyklus vom 09\.09\.2026/ })
+    const zweite = screen.getByRole('button', { name: /Schicht vom 09\.09\.2026/ })
     expect(within(zweite).queryByTestId(/^fuellung-/)).not.toBeInTheDocument()
   })
 
@@ -478,7 +478,7 @@ describe('NachtlaufVerbrauchZeitraum — Nachtlauf-Anteil', () => {
       ),
     )
 
-    const zeile = await screen.findByRole('button', { name: /Zyklus vom 08\.09\.2026/ })
+    const zeile = await screen.findByRole('button', { name: /Schicht vom 08\.09\.2026/ })
     expect(lesbar(zeile)).toContain('3,00 $')
     expect(lesbar(zeile)).not.toContain('10,00 $')
   })

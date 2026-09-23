@@ -296,7 +296,7 @@ const OHNE_PRUEFUNG = new Map<string, Farbe & { excerpt: string }>([
     {
       state: 'RED',
       errorClass: 'HARD_ABORT',
-      excerpt: 'Lauf mitten in der Runde abgebrochen — kein Ausgang',
+      excerpt: 'Run mitten in der Runde abgebrochen — kein Ausgang',
     },
   ],
   ['harterStopp', { state: 'RED', errorClass: 'HARD_ABORT', excerpt: 'Harter Stopp' }],

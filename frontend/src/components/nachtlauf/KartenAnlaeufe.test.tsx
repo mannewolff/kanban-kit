@@ -49,7 +49,7 @@ describe('KartenAnlaeufe', () => {
     expect(api.anlaeufeDerKarte).toHaveBeenCalledWith(9, 968)
   })
 
-  it('zeigt die Dauer je Lauf-Art; eine nie gelaufene Art steht als „nicht gelaufen", nicht als 0', async () => {
+  it('zeigt die Dauer je Run-Art; eine nie gelaufene Art steht als „nicht gelaufen", nicht als 0', async () => {
     zeige([
       anlauf({ mode: 'IMPLEMENTATION', durationMs: 120_000 }),
       anlauf({ mode: 'IMPLEMENTATION', durationMs: 60_000, startedAt: '2026-09-02T22:00:00Z' }),
@@ -57,7 +57,7 @@ describe('KartenAnlaeufe', () => {
     ])
 
     const umsetzung = await screen.findByTestId('anlaeufe-dauer-IMPLEMENTATION')
-    expect(umsetzung).toHaveTextContent('Umsetzungs-Lauf')
+    expect(umsetzung).toHaveTextContent('Umsetzung')
     expect(umsetzung).toHaveTextContent('3 Min')
     expect(screen.getByTestId('anlaeufe-dauer-CHAIN')).toHaveTextContent('30 s')
 
@@ -83,7 +83,7 @@ describe('KartenAnlaeufe', () => {
     const zeilen = within(await screen.findByTestId('anlaeufe-liste')).getAllByRole('listitem')
     expect(zeilen).toHaveLength(2)
     expect(zeilen[0]).toHaveTextContent('Interaktive Sitzung')
-    expect(zeilen[1]).toHaveTextContent('· Lauf ·')
+    expect(zeilen[1]).toHaveTextContent('· Run ·')
     expect(zeilen[1]).not.toHaveTextContent('Interaktive Sitzung')
   })
 
@@ -92,7 +92,7 @@ describe('KartenAnlaeufe', () => {
 
     const zeile = within(await screen.findByTestId('anlaeufe-liste')).getByRole('listitem')
     expect(zeile).toHaveTextContent('Interaktive Sitzung')
-    expect(zeile).not.toHaveTextContent('· Lauf ·')
+    expect(zeile).not.toHaveTextContent('· Run ·')
   })
 
   it('führt den Verbrauch der Sitzung an der Sitzung und nicht in den Lauf-Summen', async () => {
@@ -123,7 +123,7 @@ describe('KartenAnlaeufe', () => {
     expect(text(kosten)).toContain('3,00 $')
     expect(kosten).toHaveTextContent('aus 1 von 1 Anläufen')
     const zeile = within(screen.getByTestId('anlaeufe-liste')).getByRole('listitem')
-    expect(zeile).toHaveTextContent('· Lauf ·')
+    expect(zeile).toHaveTextContent('· Run ·')
   })
 
   it('schreibt eine Sitzung ohne Verbrauchsangabe als „nicht gemessen" und nicht als 0', async () => {

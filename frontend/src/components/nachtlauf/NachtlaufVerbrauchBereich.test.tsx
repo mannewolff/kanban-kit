@@ -158,12 +158,12 @@ describe('NachtlaufVerbrauchBereich', () => {
       night: vi.fn((_: number, datum: string) => Promise.resolve({ ...nacht, night: datum })),
     }
     zeige(api)
-    expect(await screen.findByTestId('verbrauch-nacht')).toHaveTextContent('Zyklus vom 15.09.2026')
+    expect(await screen.findByTestId('verbrauch-nacht')).toHaveTextContent('Schicht vom 15.09.2026')
 
-    fireEvent.click(await screen.findByRole('button', { name: /Zyklus vom 10\.09\.2026/ }))
+    fireEvent.click(await screen.findByRole('button', { name: /Schicht vom 10\.09\.2026/ }))
 
     await waitFor(() =>
-      expect(screen.getByTestId('verbrauch-nacht')).toHaveTextContent('Zyklus vom 10.09.2026 auf den 11.09.2026'),
+      expect(screen.getByTestId('verbrauch-nacht')).toHaveTextContent('Schicht vom 10.09.2026 auf den 11.09.2026'),
     )
     expect(api.night).toHaveBeenLastCalledWith(5, '2026-09-10')
   })
@@ -182,8 +182,8 @@ describe('NachtlaufVerbrauchBereich', () => {
     }
     zeige(api)
 
-    fireEvent.click(await screen.findByRole('button', { name: /Zyklus vom 10\.09\.2026/ }))
-    expect(await screen.findByTestId('verbrauch-nacht')).toHaveTextContent('Zyklus vom 10.09.2026')
+    fireEvent.click(await screen.findByRole('button', { name: /Schicht vom 10\.09\.2026/ }))
+    expect(await screen.findByTestId('verbrauch-nacht')).toHaveTextContent('Schicht vom 10.09.2026')
     tagLiefern(zeitraum)
     await Promise.resolve()
 
@@ -265,7 +265,7 @@ describe('NachtlaufVerbrauchBereich', () => {
     const aktuell = await screen.findByTestId('verbrauch-zeitraum-aktuell')
     expect(lesbar(within(aktuell).getByTestId('verbrauch-kachel-Gesamtsumme'))).toContain('6,50')
     expect(lesbar(aktuell)).not.toContain('16,50')
-    const nachtzeile = screen.getByRole('button', { name: /Zyklus vom 10\.09\.2026/ })
+    const nachtzeile = screen.getByRole('button', { name: /Schicht vom 10\.09\.2026/ })
     expect(lesbar(nachtzeile)).toContain('2,00 $')
     expect(lesbar(nachtzeile)).not.toContain('5,00 $')
   })

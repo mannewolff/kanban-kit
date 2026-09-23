@@ -22,7 +22,7 @@ import { betrag } from './nachtlaufFormat'
  * einer Arbeit, die stattgefunden hat.
  */
 export const KEIN_LAUF_TEXT =
-  'In diesem Zeitraum hat weder ein Lauf noch eine Sitzung stattgefunden.'
+  'In diesem Zeitraum hat weder ein Run noch eine Sitzung stattgefunden.'
 
 /** Ein Zeitraum ganz vor dem Erfassungsbeginn — und niemals eine 0 (#984 AK 6). */
 export const NICHT_ERFASST_TEXT = 'nicht erfasst'
@@ -72,7 +72,7 @@ const VORZEITRAUM: Record<VerbrauchZeitraumArt, string> = {
  * Beginn und dem Folgetag. `tag` ist sein Beginn als Kalendertag `JJJJ-MM-TT`.
  */
 export function zyklusBeschriftung(tag: string): string {
-  return `Zyklus ${zyklusSpanne(tag)}`
+  return `Schicht ${zyklusSpanne(tag)}`
 }
 
 /** Die Spanne eines Zyklus ohne das Wort davor — „vom 21.09.2026 auf den 22.09.2026" (#1135). */
@@ -150,9 +150,9 @@ export function nachtKurz(nacht: string): string {
   return `${WOCHENTAG.format(alsDatum(nacht))} ${TAG_MONAT.format(alsDatum(nacht))} → ${TAG_MONAT.format(folgetag(nacht))}`
 }
 
-/** „1 Lauf" bzw. „n Läufe" — die Zahl steht in Kopfzeilen, Einordnungen und Nächte-Zeilen. */
+/** „1 Run" bzw. „n Runs" — die Zahl steht in Kopfzeilen, Einordnungen und Nächte-Zeilen. */
 export function laeufeText(anzahl: number): string {
-  return anzahl === 1 ? '1 Lauf' : `${anzahl} Läufe`
+  return anzahl === 1 ? '1 Run' : `${anzahl} Runs`
 }
 
 /** „1 Sitzung" bzw. „n Sitzungen" — der Anteil neben den Läufen (#984 AK 1). */
@@ -239,12 +239,12 @@ export function zeitraumFall(kennzahlen: VerbrauchKennzahlen): ZeitraumFall {
 const HINWEIS: Record<Exclude<ZeitraumFall, 'vollstaendig'>, string> = {
   'kein-lauf': KEIN_LAUF_TEXT,
   'vor-aufbewahrung':
-    'Dieser Zeitraum liegt vor dem ältesten aufbewahrten Lauf — seine Läufe sind nicht mehr gespeichert.',
+    'Dieser Zeitraum liegt vor dem ältesten aufbewahrten Run — seine Runs sind nicht mehr gespeichert.',
   teilweise:
-    'Dieser Zeitraum ist nur teilweise abgedeckt: Er beginnt vor dem ältesten aufbewahrten Lauf, die Zahlen sind unvollständig.',
+    'Dieser Zeitraum ist nur teilweise abgedeckt: Er beginnt vor dem ältesten aufbewahrten Run, die Zahlen sind unvollständig.',
   // „Nicht gemessen" bleibt dem Kartenblatt vorbehalten, wo es einen bekannten Lauf ohne Zahl
   // meint (#984 AK 6). Hier geht es um einen ganzen Zeitraum, und der Satz benennt das.
-  'nicht-gemessen': 'In diesem Zeitraum liefen Läufe, ihr Verbrauch liegt aber nicht vor.',
+  'nicht-gemessen': 'In diesem Zeitraum liefen Runs, ihr Verbrauch liegt aber nicht vor.',
 }
 
 /** Was der Erfassungsbeginn über den interaktiven Anteil eines Zeitraums aussagt (#984 AK 6). */

@@ -44,12 +44,12 @@ const lesbar = (element: HTMLElement) => element.textContent?.replaceAll(' ', ' 
 
 describe('VerbrauchKachel', () => {
   it('zeigt Etikett, Wert mit Einheit und die Einordnung darunter', () => {
-    zeige(<VerbrauchKachel etikett="Gesamtsumme" wert="14,29" einheit="$" basis="14,29 $ je Lauf" />)
+    zeige(<VerbrauchKachel etikett="Gesamtsumme" wert="14,29" einheit="$" basis="14,29 $ je Run" />)
 
     expect(kachel('Gesamtsumme')).toHaveAccessibleName('Gesamtsumme')
     expect(wertVon(kachel('Gesamtsumme'))).toBe('14,29')
     expect(einheitVon(kachel('Gesamtsumme'))).toBe('$')
-    expect(lesbar(kachel('Gesamtsumme'))).toContain('14,29 $ je Lauf')
+    expect(lesbar(kachel('Gesamtsumme'))).toContain('14,29 $ je Run')
   })
 
   it('zeigt einen fehlenden Wert als „nicht gemessen" und nie als 0', () => {
@@ -118,12 +118,12 @@ describe('VerbrauchKostenKacheln', () => {
     )
 
     expect(wertVon(kachel('Gesamtsumme'))).toBe('10,00')
-    expect(lesbar(kachel('Gesamtsumme'))).toContain('5,00 $ je Lauf')
+    expect(lesbar(kachel('Gesamtsumme'))).toContain('5,00 $ je Run')
     expect(kachel('Karten zugeordnet')).toHaveTextContent('60 % der Summe')
     expect(kachel('Rest')).toHaveTextContent('keiner Karte zuzuordnen')
-    expect(wertVon(kachel('Läufe'))).toBe('2')
-    expect(einheitVon(kachel('Läufe'))).toBe('Läufe')
-    expect(kachel('Läufe')).toHaveTextContent('5 Karten')
+    expect(wertVon(kachel('Runs'))).toBe('2')
+    expect(einheitVon(kachel('Runs'))).toBe('Runs')
+    expect(kachel('Runs')).toHaveTextContent('5 Karten')
   })
 
   it('laesst die Einordnung leer, wo die Zahl dafuer fehlt', () => {
@@ -137,7 +137,7 @@ describe('VerbrauchKostenKacheln', () => {
       />,
     )
 
-    expect(lesbar(kachel('Gesamtsumme'))).not.toContain('je Lauf')
+    expect(lesbar(kachel('Gesamtsumme'))).not.toContain('je Run')
     expect(lesbar(kachel('Karten zugeordnet'))).not.toContain('der Summe')
   })
 
@@ -161,6 +161,6 @@ describe('VerbrauchKostenKacheln', () => {
     )
 
     expect(lesbar(kachel('Karten zugeordnet'))).not.toContain('der Summe')
-    expect(einheitVon(kachel('Läufe'))).toBe('Lauf')
+    expect(einheitVon(kachel('Runs'))).toBe('Run')
   })
 })

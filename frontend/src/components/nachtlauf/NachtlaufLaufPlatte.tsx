@@ -50,7 +50,7 @@ export function NachtlaufLaufPlatte({
    * Nummer steht seit Issue #1127 hier und nicht mehr in der Vorzeile.
    */
   titel,
-  /** Der Zyklus, dem der Lauf angehört, etwa „Zyklus vom 14.09.2026 auf den 15.09.2026" (#1127). */
+  /** Die Schicht, der der Lauf angehört, etwa „Schicht vom 14.09.2026 auf den 15.09.2026" (#1151). */
   zyklus,
   /** Beginn, Dauer, bearbeitete und übergangene Vorgänge und was der Lauf sonst zu sagen hat. */
   meta,

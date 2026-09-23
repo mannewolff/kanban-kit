@@ -335,7 +335,7 @@ const STUFEN: ReadonlyArray<{ label: string; praefix: string }> = [
 const GRUNDSATZ: Record<NightRunErgebnisstandGrund, string> = {
   'kein-json': 'Nicht auswertbar',
   'unbekannte-fassung': 'Fassung nicht unterstützt',
-  'nicht-unterstuetzt': 'Lauf-Art oder Vokabular nicht unterstützt',
+  'nicht-unterstuetzt': 'Art des Runs oder Vokabular nicht unterstützt',
 }
 
 /**
@@ -366,7 +366,7 @@ const nichtDeutbar = (ergebnis: {
  * `(projectId, startedAt)` nur einmal an, ein unvollständiger Stand blockierte den späteren
  * vollständigen dauerhaft.
  */
-const UNVOLLSTAENDIG = 'Lauf noch nicht abgeschlossen — nicht gespeichert'
+const UNVOLLSTAENDIG = 'Run noch nicht abgeschlossen — nicht gespeichert'
 
 /**
  * Holt die Häufigkeiten vom Server; ein Fehlschlag ergibt `null` statt einer Ausnahme. Die Zahlen
@@ -906,7 +906,7 @@ function haeufigkeitsText(
   }
   return anzahl === 1
     ? `${beschriftung}: zum ersten Mal`
-    : `${beschriftung}: ${anzahl} von ${aufbewahrteLaeufe} aufbewahrten Läufen`
+    : `${beschriftung}: ${anzahl} von ${aufbewahrteLaeufe} aufbewahrten Runs`
 }
 
 /**
@@ -2002,7 +2002,7 @@ function fussangaben(lauf: AnzeigeLauf, stand: NightRun | undefined): Fussangabe
   return [
     ...standAngaben(stand),
     {
-      label: 'Ergebnis des Zyklus',
+      label: 'Ergebnis der Schicht',
       wert: `${lauf.processedCount} bearbeitet · ${lauf.skippedCount} übergangen`,
     },
     {
@@ -2040,7 +2040,7 @@ function kettenAngaben(stand: NightRun | undefined): FussangabeForm[] {
       label: 'Laufzeit über alle Stufen',
       wert: formatDuration(stufenZeitSumme(stand.items) / 1000),
     },
-    { label: 'Kosten des Zyklus', wert: betrag(stand.stand?.kostenSumme) },
+    { label: 'Kosten der Schicht', wert: betrag(stand.stand?.kostenSumme) },
     ...(vermerk === null ? [] : [{ label: 'Zur Kostensumme', wert: vermerk, vorbehalt: true }]),
   ]
 }
@@ -2075,7 +2075,7 @@ function standAngaben(stand: NightRun | undefined): FussangabeForm[] {
     },
     ...(hinweis === undefined
       ? [
-          { label: 'Kosten des Zyklus', wert: kosten.wert },
+          { label: 'Kosten der Schicht', wert: kosten.wert },
           ...(kosten.hinweis === null
             ? []
             : [{ label: 'Zur Kostensumme', wert: kosten.hinweis, vorbehalt: true }]),
@@ -2232,15 +2232,15 @@ const metazeile = (lauf: AnzeigeLauf, stand: NightRun | undefined): string =>
     .join(' · ')
 
 /**
- * Der Titel eines Laufs (Issue #1127): „Lauf #412 · 14. September, 22:05" — Nummer, Startdatum und
- * Startzeit. Datum und Uhrzeit machen zwei Läufe desselben Zyklus unterscheidbar. Ohne Nummer (ein
- * eben eingelesener Lauf war bei keinem Server) „Lauf · 14. September, 22:05".
+ * Der Titel eines Laufs (Issue #1127, #1151): „Run #412 · 14. September, 22:05" — Nummer,
+ * Startdatum und Startzeit. Datum und Uhrzeit machen zwei Läufe derselben Schicht unterscheidbar.
+ * Ohne Nummer (ein eben eingelesener Lauf war bei keinem Server) „Run · 14. September, 22:05".
  */
 const laufTitel = (startedAt: string, laufId: number | undefined): string => {
   const start = new Date(startedAt)
   const datum = start.toLocaleDateString('de-DE', { day: 'numeric', month: 'long' })
   const zeit = start.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })
-  const lauf = laufId === undefined ? 'Lauf' : `Lauf #${laufId}`
+  const lauf = laufId === undefined ? 'Run' : `Run #${laufId}`
   return `${lauf} · ${datum}, ${zeit}`
 }
 
@@ -2456,8 +2456,8 @@ function Vorgangszeile({
       {anteil !== undefined && (
         <NachtlaufAnteilsbalken
           anteil={anteil.anteil}
-          beschriftung={`${anteil.dauer} · ${anteil.anteil} % des Zyklus`}
-          ansage={`${anteil.ansage}, ${anteil.anteil} % des Zyklus`}
+          beschriftung={`${anteil.dauer} · ${anteil.anteil} % der Schicht`}
+          ansage={`${anteil.ansage}, ${anteil.anteil} % der Schicht`}
           farbe={anteil.farbe}
           schiene={NUT}
           testId={`laufband-abschnitt-${item.cardNumber}`}
@@ -2574,7 +2574,7 @@ function LaufPanel({
   katalog: Kartenkatalog
   vorhabenKarten: Vorhabenkatalog
   zaehler: Haeufigkeiten
-  /** Das „M“ in „N von M aufbewahrten Läufen“ — die Länge der zuletzt geladenen Liste. */
+  /** Das „M“ in „N von M aufbewahrten Runs“ — die Länge der zuletzt geladenen Liste. */
   aufbewahrteLaeufe: number
   /**
    * Was die Kettenvorgänge dieses Laufs angelegt haben, je Anforderung (Issue #1106) — leer, bis es
@@ -3065,7 +3065,7 @@ export function NightRunPage() {
               items={[
                 { label: 'Projekte', to: '/projects' },
                 { label: projectName ?? 'Projekt', to: `/projects/${id}` },
-                { label: 'Läufe' },
+                { label: 'Runner' },
               ]}
             />
             {/* Dateiauswahl wie in der Ideen-Seite: Button als <label> mit verstecktem Input. */}
@@ -3098,7 +3098,7 @@ export function NightRunPage() {
 
           {laeufe.length === 0 && <Typography color="text.secondary">Noch keine Auswertung vorhanden.</Typography>}
           {laeufe.length > 0 && sichtbareLaeufe.length === 0 && (
-            <Typography color="text.secondary">In den letzten zwei Zyklen gab es keinen Lauf.</Typography>
+            <Typography color="text.secondary">In den letzten zwei Schichten gab es keinen Run.</Typography>
           )}
 
           {/* Die Laufblöcke haben mit #988 die Nachtlauf-Ausnahme verlassen und folgen Kupferwarte
@@ -3141,7 +3141,7 @@ export function NightRunPage() {
           {(alleLaeufe || ausgeblendet > 0) && (
             <Box>
               <Button variant="text" onClick={() => setAlleLaeufe((wert) => !wert)}>
-                {alleLaeufe ? 'Nur die letzten zwei Zyklen zeigen' : `Ältere Läufe anzeigen (${ausgeblendet})`}
+                {alleLaeufe ? 'Nur die letzten zwei Schichten zeigen' : `Ältere Runs anzeigen (${ausgeblendet})`}
               </Button>
             </Box>
           )}

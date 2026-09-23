@@ -225,7 +225,7 @@ export interface NightRunView {
   origin: 'UPLOAD' | 'TOKEN'
   /** Der Name des meldenden Tokens; `null` bei einem hochgeladenen Lauf. */
   tokenName: string | null
-  /** `false`, solange die Kette den Lauf noch nicht abgeschlossen gemeldet hat. */
+  /** `false`, solange die Kette den Run noch nicht abgeschlossen gemeldet hat. */
   complete: boolean
   /** Zeitpunkt der letzten Meldung; `null`, wenn der Lauf seit dem Anlegen nicht gemeldet wurde. */
   updatedAt: string | null

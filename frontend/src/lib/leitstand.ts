@@ -284,7 +284,7 @@ export function uhrzeit(iso: string): string {
   return ZEIT.format(new Date(iso))
 }
 
-/** Die Notiz im Kopf der Platte „Letzter Lauf": Beginn, Dauer, Zahl der Pakete. */
+/** Die Notiz im Kopf der Platte „Letzter Run": Beginn, Dauer, Zahl der Pakete. */
 export function laufNotiz(lauf: NightRunView): string {
   const pakete = lauf.items.length === 1 ? '1 Paket' : `${lauf.items.length} Pakete`
   const stand = `${tagZeit(lauf.startedAt)} · ${laufDauer(lauf.durationMs)} · ${pakete}`

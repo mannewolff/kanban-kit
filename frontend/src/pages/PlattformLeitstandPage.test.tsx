@@ -57,15 +57,15 @@ describe('PlattformLeitstandPage (#1083)', () => {
   })
 
   /** Kriterium 18: die drei Bereiche untereinander, in dieser Ordnung. */
-  it('stellt die drei Bereiche in der Ordnung Aktive Läufe, Beendete Läufe, Störungen', async () => {
+  it('stellt die drei Bereiche in der Ordnung Aktive Runs, Beendete Runs, Störungen', async () => {
     api.leitstand.mockResolvedValue(sicht({ stoerungen: [stoerung()] }))
 
     zeigeSeite()
 
     await screen.findByTestId('stoerung-5')
     expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual([
-      'Aktive Läufe',
-      'Beendete Läufe',
+      'Aktive Runs',
+      'Beendete Runs',
       'Störungen',
     ])
   })
@@ -76,7 +76,7 @@ describe('PlattformLeitstandPage (#1083)', () => {
    * Der Puls hält bei `prefers-reduced-motion` von selbst an — die globale Regel im Theme greift
    * für jede Animation; hier steht deshalb nur, **dass** die LED pulst.
    */
-  describe('Aktive Läufe (#1098, benannt in #1102)', () => {
+  describe('Aktive Runs (#1098, benannt in #1102)', () => {
     const laufend = (extra: Partial<DisruptionView> = {}): DisruptionView => ({
       nightRunId: 8,
       projectId: 9,
@@ -103,7 +103,7 @@ describe('PlattformLeitstandPage (#1083)', () => {
       expect(led).toHaveAttribute('data-puls', 'an')
       // Issue #1136: Ein laufender Lauf zeigt den Wechselblinker — zwei Lampen.
       expect(within(led).getAllByTestId('blinker-lampe')).toHaveLength(2)
-      expect(within(zeile).getByRole('link', { name: 'Lauf #8 von Mein Projekt' })).toHaveAttribute(
+      expect(within(zeile).getByRole('link', { name: 'Run #8 von Mein Projekt' })).toHaveAttribute(
         'href',
         '/projects/9/nachtlauf?lauf=8',
       )
@@ -133,13 +133,13 @@ describe('PlattformLeitstandPage (#1083)', () => {
       zeigeSeite()
 
       expect(await screen.findByTestId('keine-laufenden')).toHaveTextContent(
-        'Gerade läuft kein Lauf.',
+        'Gerade läuft kein Run.',
       )
     })
   })
 
-  /** Der Bereich „Beendete Läufe" (Kriterien 9–14). */
-  describe('Beendete Läufe (#1098, benannt in #1102)', () => {
+  /** Der Bereich „Beendete Runs" (Kriterien 9–14). */
+  describe('Beendete Runs (#1098, benannt in #1102)', () => {
     const durchgefuehrt = (extra: Partial<DisruptionView> = {}): DisruptionView => ({
       nightRunId: 5,
       projectId: 9,
@@ -158,7 +158,7 @@ describe('PlattformLeitstandPage (#1083)', () => {
       const zeile = await screen.findByTestId('durchgefuehrt-5')
       expect(within(zeile).getByText('Mein Projekt')).toBeInTheDocument()
       expect(within(zeile).getByText('19.09., 23:10')).toBeInTheDocument()
-      expect(within(zeile).getByRole('link', { name: 'Lauf #5 von Mein Projekt' })).toBeInTheDocument()
+      expect(within(zeile).getByRole('link', { name: 'Run #5 von Mein Projekt' })).toBeInTheDocument()
     })
 
     /**
@@ -244,11 +244,11 @@ describe('PlattformLeitstandPage (#1083)', () => {
       zeigeSeite()
 
       await screen.findByTestId('durchgefuehrt-5')
-      expect(screen.getByRole('link', { name: 'Lauf #5 von Gelungen' })).toHaveAttribute(
+      expect(screen.getByRole('link', { name: 'Run #5 von Gelungen' })).toHaveAttribute(
         'href',
         '/projects/9/nachtlauf?lauf=5',
       )
-      expect(screen.getByRole('link', { name: 'Lauf #6 von Gescheitert' })).toHaveAttribute(
+      expect(screen.getByRole('link', { name: 'Run #6 von Gescheitert' })).toHaveAttribute(
         'href',
         '/projects/10/nachtlauf?lauf=6',
       )
@@ -280,14 +280,14 @@ describe('PlattformLeitstandPage (#1083)', () => {
       zeigeSeite()
 
       const mit = await screen.findByTestId('durchgefuehrt-5')
-      expect(within(mit).getByRole('link', { name: 'Zur Störung von Lauf #5' })).toHaveAttribute(
+      expect(within(mit).getByRole('link', { name: 'Zur Störung von Run #5' })).toHaveAttribute(
         'href',
         '#stoerung-5',
       )
       expect(screen.getByTestId('stoerung-5')).toHaveAttribute('id', 'stoerung-5')
       const ohne = screen.getByTestId('durchgefuehrt-6')
       expect(
-        within(ohne).queryByRole('link', { name: 'Zur Störung von Lauf #6' }),
+        within(ohne).queryByRole('link', { name: 'Zur Störung von Run #6' }),
       ).not.toBeInTheDocument()
       expect(within(ohne).getAllByRole('link')).toHaveLength(1)
     })
@@ -312,25 +312,25 @@ describe('PlattformLeitstandPage (#1083)', () => {
 
       zeigeSeite()
       await userEvent.click(
-        await screen.findByRole('button', { name: 'Störung von Mein Projekt, Lauf #5 löschen' }),
+        await screen.findByRole('button', { name: 'Störung von Mein Projekt, Run #5 löschen' }),
       )
 
       await waitFor(() => expect(screen.queryByTestId('stoerung-5')).not.toBeInTheDocument())
       const zeile = screen.getByTestId('durchgefuehrt-5')
-      expect(within(zeile).queryByRole('link', { name: 'Zur Störung von Lauf #5' })).not.toBeInTheDocument()
+      expect(within(zeile).queryByRole('link', { name: 'Zur Störung von Run #5' })).not.toBeInTheDocument()
       expect(within(zeile).getByText('nicht gelungen')).toBeInTheDocument()
-      expect(within(zeile).getByRole('link', { name: 'Lauf #5 von Mein Projekt' })).toBeInTheDocument()
+      expect(within(zeile).getByRole('link', { name: 'Run #5 von Mein Projekt' })).toBeInTheDocument()
       expect(api.leitstand).toHaveBeenCalledTimes(1)
     })
 
     /** Kriterium 14: ausdrücklicher Satz statt leerer Fläche. */
-    it('sagt ausdrücklich, wenn in dieser Nacht noch kein Lauf beendet ist', async () => {
+    it('sagt ausdrücklich, wenn in dieser Nacht noch kein Run beendet ist', async () => {
       api.leitstand.mockResolvedValue(sicht())
 
       zeigeSeite()
 
       expect(await screen.findByTestId('keine-durchgefuehrten')).toHaveTextContent(
-        'In diesem Zyklus wurde noch kein Lauf beendet.',
+        'In dieser Schicht wurde noch kein Run beendet.',
       )
     })
   })
@@ -368,7 +368,7 @@ describe('PlattformLeitstandPage (#1083)', () => {
 
     const zeile = await screen.findByTestId('stoerung-5')
     expect(within(zeile).getByText('19.09., 23:10')).toBeInTheDocument()
-    expect(within(zeile).getByRole('link', { name: 'Lauf #5' })).toBeInTheDocument()
+    expect(within(zeile).getByRole('link', { name: 'Run #5' })).toBeInTheDocument()
     expect(within(zeile).getByText(/^Karte #721:/)).toBeInTheDocument()
     expect(within(screen.getByTestId('stoergruppe-kopf-9')).getByText('Mein Projekt')).toBeInTheDocument()
   })
@@ -458,7 +458,7 @@ describe('PlattformLeitstandPage (#1083)', () => {
 
     zeigeSeite()
 
-    const verweis = await screen.findByRole('link', { name: 'Lauf #5' })
+    const verweis = await screen.findByRole('link', { name: 'Run #5' })
     expect(verweis).toHaveAttribute('href', '/projects/9/nachtlauf?lauf=5')
   })
 
@@ -472,7 +472,7 @@ describe('PlattformLeitstandPage (#1083)', () => {
 
     zeigeSeite()
     const taste = await screen.findByRole('button', {
-      name: 'Störung von Mein Projekt, Lauf #5 löschen',
+      name: 'Störung von Mein Projekt, Run #5 löschen',
     })
     await userEvent.click(taste)
 
@@ -497,7 +497,7 @@ describe('PlattformLeitstandPage (#1083)', () => {
     expect(new Set(namen).size).toBe(namen.length)
   })
 
-  /** Issue #1135: „Beendete Läufe" ist zweigeteilt in diesen und den vorigen Zyklus. */
+  /** Issue #1135: „Beendete Runs" ist zweigeteilt in diese und die vorige Schicht. */
   describe('Dieser und voriger Zyklus (#1135)', () => {
     beforeEach(() => {
       vi.useFakeTimers({ toFake: ['Date'] })
@@ -514,10 +514,10 @@ describe('PlattformLeitstandPage (#1083)', () => {
       )
       zeigeSeite()
 
-      const dieser = await screen.findByRole('region', { name: 'Dieser Zyklus' })
+      const dieser = await screen.findByRole('region', { name: 'Diese Schicht' })
       expect(dieser).toHaveTextContent('vom 22.09.2026 auf den 23.09.2026')
       expect(within(dieser).getByTestId('durchgefuehrt-7')).toBeInTheDocument()
-      const voriger = screen.getByRole('region', { name: 'Voriger Zyklus' })
+      const voriger = screen.getByRole('region', { name: 'Vorige Schicht' })
       expect(voriger).toHaveTextContent('vom 21.09.2026 auf den 22.09.2026')
       expect(within(voriger).getByTestId('durchgefuehrt-6')).toBeInTheDocument()
       // Die Reihenfolge: dieser Zyklus zuerst.
@@ -529,7 +529,7 @@ describe('PlattformLeitstandPage (#1083)', () => {
       zeigeSeite()
 
       expect(await screen.findByTestId('keine-durchgefuehrten')).toHaveTextContent(
-        'In diesem Zyklus wurde noch kein Lauf beendet.',
+        'In dieser Schicht wurde noch kein Run beendet.',
       )
       expect(screen.queryByTestId('keine-durchgefuehrten-voriger')).toBeNull()
     })
@@ -539,7 +539,7 @@ describe('PlattformLeitstandPage (#1083)', () => {
       zeigeSeite()
 
       expect(await screen.findByTestId('keine-durchgefuehrten-voriger')).toHaveTextContent(
-        'Im vorigen Zyklus wurde kein Lauf beendet.',
+        'In der vorigen Schicht wurde kein Run beendet.',
       )
     })
 
@@ -549,8 +549,8 @@ describe('PlattformLeitstandPage (#1083)', () => {
       )
       zeigeSeite()
 
-      const voriger = await screen.findByRole('region', { name: 'Voriger Zyklus' })
-      expect(within(voriger).getByRole('link', { name: 'Zur Störung von Lauf #6' })).toHaveAttribute('href', '#stoerung-6')
+      const voriger = await screen.findByRole('region', { name: 'Vorige Schicht' })
+      expect(within(voriger).getByRole('link', { name: 'Zur Störung von Run #6' })).toHaveAttribute('href', '#stoerung-6')
     })
   })
 
@@ -936,7 +936,7 @@ describe('PlattformLeitstandPage (#1083)', () => {
       const zeile = await screen.findByTestId('stoerung-5')
       expect(within(zeile).queryByText('Mein Projekt')).not.toBeInTheDocument()
       expect(
-        within(zeile).getByRole('button', { name: 'Störung von Mein Projekt, Lauf #5 löschen' }),
+        within(zeile).getByRole('button', { name: 'Störung von Mein Projekt, Run #5 löschen' }),
       ).toBeInTheDocument()
     })
 
@@ -963,7 +963,7 @@ describe('PlattformLeitstandPage (#1083)', () => {
       zeigeSeite()
 
       await userEvent.click(
-        await screen.findByRole('button', { name: 'Störung von Beta, Lauf #8 löschen' }),
+        await screen.findByRole('button', { name: 'Störung von Beta, Run #8 löschen' }),
       )
 
       await waitFor(() => expect(screen.queryByTestId('stoergruppe-2')).not.toBeInTheDocument())
@@ -979,7 +979,7 @@ describe('PlattformLeitstandPage (#1083)', () => {
       zeigeSeite()
 
       await userEvent.click(
-        await screen.findByRole('button', { name: 'Störung von Alpha, Lauf #9 löschen' }),
+        await screen.findByRole('button', { name: 'Störung von Alpha, Run #9 löschen' }),
       )
 
       await waitFor(() => expect(screen.queryByTestId('stoerung-9')).not.toBeInTheDocument())

@@ -392,7 +392,7 @@ describe('AppShell', () => {
       'Liste',
       'Vorhaben',
       'Ideen',
-      'Läufe',
+      'Runner',
     ])
     expect(screen.getByRole('group', { name: 'Verwaltung' })).toHaveTextContent('Rollen & Rechte')
   })
@@ -533,7 +533,7 @@ describe('AppShell', () => {
     it('zeigt „Läufe" auf einer Board-Route, wenn man Owner des Projekts ist', async () => {
       renderShell('/boards/1')
 
-      fireEvent.click(await screen.findByText('Läufe'))
+      fireEvent.click(await screen.findByText('Runner'))
 
       await waitFor(() =>
         expect(screen.getByTestId('location')).toHaveTextContent('/projects/5/nachtlauf'),
@@ -548,13 +548,13 @@ describe('AppShell', () => {
       renderShell('/boards/1')
       await waitForLoadedBoardContext()
 
-      expect(screen.queryByText('Läufe')).not.toBeInTheDocument()
+      expect(screen.queryByText('Runner')).not.toBeInTheDocument()
     })
 
     it('zeigt „Läufe" auf einer Projekt-Route ohne offenes Board (routeProjectId)', async () => {
       renderShell('/projects/5')
 
-      fireEvent.click(await screen.findByText('Läufe'))
+      fireEvent.click(await screen.findByText('Runner'))
 
       await waitFor(() =>
         expect(screen.getByTestId('location')).toHaveTextContent('/projects/5/nachtlauf'),
@@ -575,7 +575,7 @@ describe('AppShell', () => {
       ])
       renderShell('/boards/1')
 
-      expect(await screen.findByText('Läufe')).toBeInTheDocument()
+      expect(await screen.findByText('Runner')).toBeInTheDocument()
     })
 
     it('blendet „Läufe" dem Plattform-Admin am nicht teilnehmenden Projekt aus', async () => {
@@ -590,7 +590,7 @@ describe('AppShell', () => {
       renderShell('/boards/1')
 
       expect(await screen.findByText('P1')).toBeInTheDocument()
-      expect(screen.queryByText('Läufe')).not.toBeInTheDocument()
+      expect(screen.queryByText('Runner')).not.toBeInTheDocument()
     })
   })
 
@@ -856,10 +856,10 @@ describe('AppShell', () => {
         ['Liste', '/boards/1/list'],
         ['Vorhaben', '/boards/1/vorhaben'],
         ['Ideen', '/projects/5/ideas'],
-        ['Läufe', '/projects/5/nachtlauf'],
+        ['Runner', '/projects/5/nachtlauf'],
       ])
       // Aktiv ist die Seite, auf der man steht — kein Board-Eintrag.
-      expect(screen.getByRole('link', { name: 'Läufe' })).toHaveAttribute('aria-current', 'page')
+      expect(screen.getByRole('link', { name: 'Runner' })).toHaveAttribute('aria-current', 'page')
       expect(screen.getByRole('link', { name: 'Board' })).not.toHaveAttribute('aria-current')
       // Der Pfad im Kopf nennt dort nur das Projekt.
       const pfad = screen.getByRole('navigation', { name: 'Pfad' })
@@ -939,7 +939,7 @@ describe('AppShell', () => {
       await waitFor(() => expect(mockedBoards.list).toHaveBeenCalledWith(5))
       expect(projektBlock('P1')).toEqual([
         ['Ideen', '/projects/5/ideas'],
-        ['Läufe', '/projects/5/nachtlauf'],
+        ['Runner', '/projects/5/nachtlauf'],
       ])
     })
 
@@ -950,7 +950,7 @@ describe('AppShell', () => {
         ['Liste', '/boards/1/list'],
         ['Vorhaben', '/boards/1/vorhaben'],
         ['Ideen', '/projects/5/ideas'],
-        ['Läufe', '/projects/5/nachtlauf'],
+        ['Runner', '/projects/5/nachtlauf'],
       ]
 
       it.each(['/plattform-leitstand', '/admin', '/roles'])(

@@ -375,7 +375,7 @@ function Naechte({
   // Balkens, sonst stünde eine Nacht im Verhältnis zu einer Summe, die sie nicht ausweist.
   const teuerste = Math.max(0, ...naechte.map((n) => n.usageByKind.night.total.costUsd ?? 0))
   return (
-    <Platte titel="Zyklen" notiz="Klick öffnet den Zyklus">
+    <Platte titel="Schichten" notiz="Klick öffnet die Schicht">
       <Box>
         {naechte.map((nacht, stelle) => {
           const betrag = nacht.usageByKind.night.total.costUsd

@@ -157,7 +157,7 @@ export function buildHandoffText(item: NightRunHandoffItem): string | null {
   }
   const karte = item.title === '' ? `#${item.cardNumber}` : `#${item.cardNumber} ${item.title}`
   const zeilen = [
-    `Lauf-Befund zu Karte ${karte}`,
+    `Befund des Runs zu Karte ${karte}`,
     `Zustand: ${nightRunZustandsText(item.state, item.errorClass)}`,
   ]
 

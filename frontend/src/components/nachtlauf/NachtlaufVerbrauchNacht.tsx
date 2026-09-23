@@ -62,12 +62,12 @@ export function NachtlaufVerbrauchNacht({ nacht }: Readonly<{ nacht: VerbrauchNa
         data-testid="verbrauch-nacht-laeufe"
         sx={{ ...BESCHRIFTUNG, mt: 0.5 }}
       >
-        {nacht.runCount === 1 ? '1 Lauf' : `${nacht.runCount} Läufe`}
+        {nacht.runCount === 1 ? '1 Run' : `${nacht.runCount} Runs`}
       </Typography>
 
       {nacht.runCount === 0 ? (
         <Typography component="p" sx={{ ...BESCHRIFTUNG, mt: 2 }}>
-          In diesem Zyklus hat kein Lauf stattgefunden.
+          In dieser Schicht hat kein Run stattgefunden.
         </Typography>
       ) : (
         <>
@@ -78,7 +78,7 @@ export function NachtlaufVerbrauchNacht({ nacht }: Readonly<{ nacht: VerbrauchNa
               data-testid="verbrauch-nacht-abbruch"
               sx={{ ...BESCHRIFTUNG, mt: 2, color: NACHTLAUF_FARBEN.ink }}
             >
-              Der Lauf wurde abgebrochen — die Werte sind unvollständig.
+              Der Run wurde abgebrochen — die Werte sind unvollständig.
             </Typography>
           )}
 

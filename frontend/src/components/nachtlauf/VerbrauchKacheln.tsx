@@ -95,7 +95,7 @@ export function VerbrauchKostenKacheln({
   const { total, cardShare, remainder } = kennzahlen.usageByKind.night
   const jeLauf =
     total.costUsd !== null && kennzahlen.runCount > 0
-      ? `${dollar(total.costUsd / kennzahlen.runCount)} $ je Lauf`
+      ? `${dollar(total.costUsd / kennzahlen.runCount)} $ je Run`
       : ''
   const anteil =
     total.costUsd !== null && total.costUsd > 0 && cardShare.costUsd !== null
@@ -117,9 +117,9 @@ export function VerbrauchKostenKacheln({
         basis="keiner Karte zuzuordnen"
       />
       <VerbrauchKachel
-        etikett="Läufe"
+        etikett="Runs"
         wert={String(kennzahlen.runCount)}
-        einheit={kennzahlen.runCount === 1 ? 'Lauf' : 'Läufe'}
+        einheit={kennzahlen.runCount === 1 ? 'Run' : 'Runs'}
         basis={kartenText(kennzahlen.cardCount)}
       />
     </VerbrauchKachelRaster>

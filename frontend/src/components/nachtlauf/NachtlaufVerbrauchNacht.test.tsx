@@ -128,7 +128,7 @@ describe('NachtlaufVerbrauchNacht', () => {
     const kennzahlen = screen.getByTestId('verbrauch-nacht-kennzahlen')
     expect(within(summen).getAllByTestId(/^verbrauch-kachel-/)).toHaveLength(4)
     expect(within(kennzahlen).getAllByTestId(/^verbrauch-kachel-/)).toHaveLength(4)
-    for (const etikett of ['Gesamtsumme', 'Karten zugeordnet', 'Rest', 'Läufe']) {
+    for (const etikett of ['Gesamtsumme', 'Karten zugeordnet', 'Rest', 'Runs']) {
       expect(within(summen).getByTestId(`verbrauch-kachel-${etikett}`)).toBeInTheDocument()
     }
     for (const etikett of ['Dauer', 'Eingabe-Token', 'Ausgabe-Token', 'Zwischenspeicher']) {
@@ -150,10 +150,10 @@ describe('NachtlaufVerbrauchNacht', () => {
   it('ordnet jede Kachel wie die Zeitraumansicht ein', () => {
     zeige(nacht({}))
 
-    expect(lesbar(kachel('Gesamtsumme'))).toContain('5,00 $ je Lauf')
+    expect(lesbar(kachel('Gesamtsumme'))).toContain('5,00 $ je Run')
     expect(kachel('Karten zugeordnet')).toHaveTextContent('60 % der Summe')
     expect(kachel('Rest')).toHaveTextContent('keiner Karte zuzuordnen')
-    expect(kachel('Läufe')).toHaveTextContent('2 Karten')
+    expect(kachel('Runs')).toHaveTextContent('2 Karten')
     expect(lesbar(kachel('Zwischenspeicher'))).toContain('73,8 % aus dem Zwischenspeicher')
   })
 
@@ -162,9 +162,9 @@ describe('NachtlaufVerbrauchNacht', () => {
 
     expect(screen.getAllByRole('heading', { level: 3 })).toHaveLength(1)
     expect(screen.getByRole('heading', { level: 3 })).toHaveTextContent(
-      'Zyklus vom 15.09.2026 auf den 16.09.2026',
+      'Schicht vom 15.09.2026 auf den 16.09.2026',
     )
-    expect(screen.getByTestId('verbrauch-nacht-laeufe')).toHaveTextContent('2 Läufe')
+    expect(screen.getByTestId('verbrauch-nacht-laeufe')).toHaveTextContent('2 Runs')
   })
 
   /** Tokenmengen in der Einheit des Leitstands (Task #1108, AK 3), nicht als ausgeschriebene Zahl. */
@@ -198,7 +198,7 @@ describe('NachtlaufVerbrauchNacht', () => {
     expect(screen.queryByTestId('verbrauch-nacht-karten')).not.toBeInTheDocument()
     expect(screen.queryByRole('listitem')).not.toBeInTheDocument()
     expect(screen.queryByTestId('verbrauch-karte-721-anteil')).not.toBeInTheDocument()
-    expect(lesbar(screen.getByTestId('verbrauch-nacht'))).not.toContain('der Kosten des Zyklus')
+    expect(lesbar(screen.getByTestId('verbrauch-nacht'))).not.toContain('der Kosten der Schicht')
     expect(lesbar(screen.getByTestId('verbrauch-nacht'))).not.toContain('#721')
   })
 
@@ -206,7 +206,7 @@ describe('NachtlaufVerbrauchNacht', () => {
     zeige(nacht({ aborted: true }))
 
     expect(screen.getByTestId('verbrauch-nacht-abbruch')).toHaveTextContent(
-      'Der Lauf wurde abgebrochen — die Werte sind unvollständig.',
+      'Der Run wurde abgebrochen — die Werte sind unvollständig.',
     )
   })
 
@@ -235,7 +235,7 @@ describe('NachtlaufVerbrauchNacht', () => {
   it('sagt es, wenn in der Nacht kein Lauf stattfand', () => {
     zeige(nacht({ runCount: 0, cardCount: 0, cards: [] }))
 
-    expect(screen.getByText('In diesem Zyklus hat kein Lauf stattgefunden.')).toBeInTheDocument()
+    expect(screen.getByText('In dieser Schicht hat kein Run stattgefunden.')).toBeInTheDocument()
     expect(screen.queryByTestId('verbrauch-nacht-summen')).not.toBeInTheDocument()
     expect(screen.queryByTestId('verbrauch-nacht-kennzahlen')).not.toBeInTheDocument()
   })
@@ -243,8 +243,8 @@ describe('NachtlaufVerbrauchNacht', () => {
   it('nennt einen einzelnen Lauf in der Einzahl', () => {
     zeige(nacht({ runCount: 1 }))
 
-    expect(screen.getByTestId('verbrauch-nacht-laeufe')).toHaveTextContent('1 Lauf')
-    expect(einheitVon(kachel('Läufe'))).toBe('Lauf')
+    expect(screen.getByTestId('verbrauch-nacht-laeufe')).toHaveTextContent('1 Run')
+    expect(einheitVon(kachel('Runs'))).toBe('Run')
   })
 })
 

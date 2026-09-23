@@ -144,26 +144,26 @@ export default function PlattformLeitstandPage() {
   return (
     <KupferwarteBereich>
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-        <Platte titel="Aktive Läufe">
+        <Platte titel="Aktive Runs">
           <LaufendeListe zeilen={geladen ? sicht.laufende : null} />
         </Platte>
-        <Platte titel="Beendete Läufe">
-          <ZyklusAbschnitt titel="Dieser Zyklus" spanne={zyklusSpanne(dieserZyklus)} testId="zyklus-dieser">
+        <Platte titel="Beendete Runs">
+          <ZyklusAbschnitt titel="Diese Schicht" spanne={zyklusSpanne(dieserZyklus)} testId="zyklus-dieser">
             <DurchgefuehrteListe
               zeilen={geladen ? sicht.durchgefuehrte : null}
               mitStoerung={mitStoerung}
-              leer={{ testId: 'keine-durchgefuehrten', text: 'In diesem Zyklus wurde noch kein Lauf beendet.' }}
+              leer={{ testId: 'keine-durchgefuehrten', text: 'In dieser Schicht wurde noch kein Run beendet.' }}
             />
           </ZyklusAbschnitt>
           <ZyklusAbschnitt
-            titel="Voriger Zyklus"
+            titel="Vorige Schicht"
             spanne={zyklusSpanne(zyklusDavor(dieserZyklus))}
             testId="zyklus-voriger"
           >
             <DurchgefuehrteListe
               zeilen={geladen ? sicht.durchgefuehrteVoriger : null}
               mitStoerung={mitStoerung}
-              leer={{ testId: 'keine-durchgefuehrten-voriger', text: 'Im vorigen Zyklus wurde kein Lauf beendet.' }}
+              leer={{ testId: 'keine-durchgefuehrten-voriger', text: 'In der vorigen Schicht wurde kein Run beendet.' }}
             />
           </ZyklusAbschnitt>
         </Platte>
@@ -223,10 +223,10 @@ function LaufVerweis({ zeile }: Readonly<{ zeile: DisruptionView }>) {
     <Typography
       component={RouterLink}
       to={`/projects/${zeile.projectId}/nachtlauf?lauf=${zeile.nightRunId}`}
-      aria-label={`Lauf #${zeile.nightRunId} von ${zeile.projectName}`}
+      aria-label={`Run #${zeile.nightRunId} von ${zeile.projectName}`}
       sx={{ fontSize: 12, fontFamily: 'monospace' }}
     >
-      Lauf #{zeile.nightRunId}
+      Run #{zeile.nightRunId}
     </Typography>
   )
 }
@@ -245,7 +245,7 @@ function LaufendeListe({ zeilen }: Readonly<{ zeilen: DisruptionView[] | null }>
     return null
   }
   if (zeilen.length === 0) {
-    return <LeerSatz testId="keine-laufenden">Gerade läuft kein Lauf.</LeerSatz>
+    return <LeerSatz testId="keine-laufenden">Gerade läuft kein Run.</LeerSatz>
   }
   return (
     <Box component="ul" sx={{ listStyle: 'none', m: 0, p: 0 }}>
@@ -367,7 +367,7 @@ function DurchgefuehrteZeile({
         <Typography
           component="a"
           href={`#stoerung-${zeile.nightRunId}`}
-          aria-label={`Zur Störung von Lauf #${zeile.nightRunId}`}
+          aria-label={`Zur Störung von Run #${zeile.nightRunId}`}
           sx={{ fontSize: 12 }}
         >
           Störung
@@ -563,14 +563,14 @@ function Stoerzeile({
         to={`/projects/${stoerung.projectId}/nachtlauf?lauf=${stoerung.nightRunId}`}
         sx={{ fontSize: 12, fontFamily: 'monospace' }}
       >
-        Lauf #{stoerung.nightRunId}
+        Run #{stoerung.nightRunId}
       </Typography>
       <ArtMarke zeile={stoerung} bereich="stoerung" />
       <Typography sx={{ fontSize: 12, color: 'text.secondary', flex: 1, minWidth: 0 }}>
         {stoerungsGrund(stoerung.outcome)}
       </Typography>
       <Taste
-        ariaLabel={`Störung von ${stoerung.projectName}, Lauf #${stoerung.nightRunId} löschen`}
+        ariaLabel={`Störung von ${stoerung.projectName}, Run #${stoerung.nightRunId} löschen`}
         onClick={onQuittieren}
       >
         Störung löschen

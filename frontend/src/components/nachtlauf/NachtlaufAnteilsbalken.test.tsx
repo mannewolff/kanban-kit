@@ -14,8 +14,8 @@ const zeige = (felder: Partial<Parameters<typeof NachtlaufAnteilsbalken>[0]> = {
     <ThemeProvider theme={nachtlaufTheme}>
       <NachtlaufAnteilsbalken
         anteil={15}
-        beschriftung="12 Min · 15 % des Zyklus"
-        ansage="Karte #869: Erfolg, 12 Min, 15 % des Zyklus"
+        beschriftung="12 Min · 15 % der Schicht"
+        ansage="Karte #869: Erfolg, 12 Min, 15 % der Schicht"
         farbe={NACHTLAUF_FARBEN.gut}
         testId="anteil-869"
         fuellungTestId="anteil-869-balken"
@@ -34,14 +34,14 @@ describe('NachtlaufAnteilsbalken', () => {
 
   it('nennt Dauer und Anteil in Worten neben dem Balken', () => {
     zeige()
-    expect(screen.getByTestId('anteil-869')).toHaveTextContent('12 Min · 15 % des Zyklus')
+    expect(screen.getByTestId('anteil-869')).toHaveTextContent('12 Min · 15 % der Schicht')
   })
 
   it('trägt eine Ansage für Vorlesewerkzeuge mit Nummer, Zustand und Dauer', () => {
     // Die Aussage hängt nie allein an der Farbe des Balkens.
     zeige()
     expect(
-      screen.getByRole('img', { name: 'Karte #869: Erfolg, 12 Min, 15 % des Zyklus' }),
+      screen.getByRole('img', { name: 'Karte #869: Erfolg, 12 Min, 15 % der Schicht' }),
     ).toBeInTheDocument()
   })
 

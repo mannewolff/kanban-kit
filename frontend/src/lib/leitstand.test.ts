@@ -152,7 +152,7 @@ describe('leitstand Laufband (#979)', () => {
   })
 })
 
-describe('leitstand Letzter Lauf', () => {
+describe('leitstand Letzter Run', () => {
   it('formatiert Paketdauern wie der Entwurf', () => {
     expect(paketDauer(null)).toBe('—')
     expect(paketDauer(391_000)).toBe('06:31')

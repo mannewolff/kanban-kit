@@ -45,8 +45,8 @@ function zeige(offenAnfangs = false) {
     const [offen, setOffen] = useState(offenAnfangs)
     return (
       <NachtlaufLaufPlatte
-        titel="Lauf #86 · 14. September, 22:05"
-        zyklus="Zyklus vom 14.09.2026 auf den 15.09.2026"
+        titel="Run #86 · 14. September, 22:05"
+        zyklus="Schicht vom 14.09.2026 auf den 15.09.2026"
         meta="02:00 · 41 min · 7 bearbeitet"
         melder="gruen"
         offen={offen}
@@ -70,7 +70,7 @@ function zeige(offenAnfangs = false) {
 }
 
 const vorzeile = () => screen.getByTestId('nachtlauf-vorzeile')
-const pfeil = () => screen.getByRole('button', { name: /Lauf #86 · 14\. September, 22:05 (auf|zu)klappen/ })
+const pfeil = () => screen.getByRole('button', { name: /Run #86 · 14\. September, 22:05 (auf|zu)klappen/ })
 const kopf = () => screen.getByTestId('lauf-kopf')
 const inhalt = () => screen.queryByText('Vorgänge des Laufs')
 
@@ -116,13 +116,13 @@ describe('NachtlaufLaufPlatte — Zyklus in der Vorzeile, Nummer im Titel (#1127
   it('nennt in der Vorzeile allein den Zyklus — die Art steht seit #1128 als Marke', () => {
     zeige()
 
-    expect(vorzeile().textContent).toBe('Zyklus vom 14.09.2026 auf den 15.09.2026')
+    expect(vorzeile().textContent).toBe('Schicht vom 14.09.2026 auf den 15.09.2026')
   })
 
   it('führt den Titel als Überschrift', () => {
     zeige()
 
-    expect(screen.getByTestId('nachtlauf-ueberschrift')).toHaveTextContent('Lauf #86 · 14. September, 22:05')
+    expect(screen.getByTestId('nachtlauf-ueberschrift')).toHaveTextContent('Run #86 · 14. September, 22:05')
   })
 })
 

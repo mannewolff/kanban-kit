@@ -1095,7 +1095,7 @@ describe('NightRunPage — aufbewahrte Läufe beim Öffnen', () => {
     expect(await screen.findByText('Noch keine Auswertung vorhanden.')).toBeInTheDocument()
   })
 
-  it('meldet einen Fehler beim Laden der aufbewahrten Läufe', async () => {
+  it('meldet einen Fehler beim Laden der aufbewahrten Runs', async () => {
     renderPage({ listenFehler: 'Nur der Owner darf die Auswertung sehen.' })
 
     expect(await screen.findByText('Nur der Owner darf die Auswertung sehen.')).toBeInTheDocument()
@@ -1108,7 +1108,7 @@ describe('NightRunPage — Verbrauch (Issue #941)', () => {
 
     const bereich = await screen.findByTestId('verbrauch-bereich')
     expect(within(bereich).getByRole('heading', { level: 2, name: 'Verbrauch' })).toBeInTheDocument()
-    expect(await within(bereich).findByTestId('verbrauch-nacht')).toHaveTextContent('2 Läufe')
+    expect(await within(bereich).findByTestId('verbrauch-nacht')).toHaveTextContent('2 Runs')
     expect(anfragen.map((a) => a.url)).toContain('/api/projects/5/night-run-usage/night?date=2026-09-15&zone=' + encodeURIComponent(Intl.DateTimeFormat().resolvedOptions().timeZone))
   })
 
@@ -1119,12 +1119,12 @@ describe('NightRunPage — Verbrauch (Issue #941)', () => {
     // in der Kopfzeile und nicht mehr als Überschrift.
     const nachtUeberschrift = async () =>
       within(await within(bereich).findByTestId('verbrauch-nacht')).getByRole('heading', { level: 3 })
-    expect(await nachtUeberschrift()).toHaveTextContent('Zyklus vom 15.09.2026 auf den 16.09.2026')
+    expect(await nachtUeberschrift()).toHaveTextContent('Schicht vom 15.09.2026 auf den 16.09.2026')
 
-    fireEvent.click(await within(bereich).findByRole('button', { name: /Zyklus vom 10\.09\.2026/ }))
+    fireEvent.click(await within(bereich).findByRole('button', { name: /Schicht vom 10\.09\.2026/ }))
 
     await waitFor(async () =>
-      expect(await nachtUeberschrift()).toHaveTextContent('Zyklus vom 10.09.2026 auf den 11.09.2026'),
+      expect(await nachtUeberschrift()).toHaveTextContent('Schicht vom 10.09.2026 auf den 11.09.2026'),
     )
     expect(anfragen.some((a) => a.url.includes('/night-run-usage/night?date=2026-09-10&'))).toBe(true)
   })
@@ -1297,7 +1297,7 @@ describe('NightRunPage — Ergebnisstand hineingeben', () => {
 
     expect(
       await screen.findByText(
-        'Lauf-Art oder Vokabular nicht unterstützt — nicht gedeutet: art=review/stufe=sonstwas'
+        'Art des Runs oder Vokabular nicht unterstützt — nicht gedeutet: art=review/stufe=sonstwas'
           + ' — erzeugt von 1.47.0',
       ),
     ).toBeInTheDocument()
@@ -1315,7 +1315,7 @@ describe('NightRunPage — Ergebnisstand hineingeben', () => {
 
     expect(
       await screen.findByText(
-        'Lauf-Art oder Vokabular nicht unterstützt — nicht gedeutet: halbfertig'
+        'Art des Runs oder Vokabular nicht unterstützt — nicht gedeutet: halbfertig'
           + ' — erzeugt von 1.47.0',
       ),
     ).toBeInTheDocument()
@@ -1335,7 +1335,7 @@ describe('NightRunPage — Ergebnisstand hineingeben', () => {
 
     expect(
       await screen.findByText(
-        'Lauf-Art oder Vokabular nicht unterstützt — nicht gedeutet: art=review/stufe=sonstwas'
+        'Art des Runs oder Vokabular nicht unterstützt — nicht gedeutet: art=review/stufe=sonstwas'
           + ' — Herkunft nicht angegeben',
       ),
     ).toBeInTheDocument()
@@ -1351,7 +1351,7 @@ describe('NightRunPage — Ergebnisstand hineingeben', () => {
     protokollWaehlen(stand({ abschluss: null, einheiten: [einheit({ ausgang: 'erfolg', pruefung: GEPRUEFT })] }))
 
     expect(
-      await screen.findByText('Lauf noch nicht abgeschlossen — nicht gespeichert'),
+      await screen.findByText('Run noch nicht abgeschlossen — nicht gespeichert'),
     ).toBeInTheDocument()
     expect(lauf(0)).toBeInTheDocument()
     aufklappen(0)
@@ -1542,7 +1542,7 @@ describe('NightRunPage — Nachtplan-Lauf (#806)', () => {
     )
 
     expect(
-      await screen.findByText('Lauf noch nicht abgeschlossen — nicht gespeichert'),
+      await screen.findByText('Run noch nicht abgeschlossen — nicht gespeichert'),
     ).toBeInTheDocument()
     expect(lauf(0)).toBeInTheDocument()
     expect(anfragen.some((a) => a.method === 'POST')).toBe(false)
@@ -1803,7 +1803,7 @@ describe('NightRunPage — Ketten-Übersicht (#866)', () => {
     expect(fussangabe(fuss, 'Ketten durchgelaufen')).toHaveTextContent('2 von 3')
     expect(fussangabe(fuss, 'Karten entstanden')).toHaveTextContent('6')
     expect(fussangabe(fuss, 'Laufzeit über alle Stufen')).toHaveTextContent('1 Std 9 Min')
-    expect(fussangabe(fuss, 'Kosten des Zyklus')).toHaveTextContent('25,98 $')
+    expect(fussangabe(fuss, 'Kosten der Schicht')).toHaveTextContent('25,98 $')
     expect(fussangabe(fuss, 'Zur Kostensumme')).toHaveTextContent(
       'ein Arbeitsschritt ohne Kostenmeldung',
     )
@@ -1837,7 +1837,7 @@ describe('NightRunPage — Ketten-Übersicht (#866)', () => {
     const fuss = within(
       await uebersichtZu(
         kettenStand({ abschluss: null }),
-        'Lauf noch nicht abgeschlossen — nicht gespeichert',
+        'Run noch nicht abgeschlossen — nicht gespeichert',
       ),
     )
 
@@ -2366,11 +2366,11 @@ describe('NightRunPage — Laufband für Umsetzungs-Läufe (#871)', () => {
     // der Zeit — die beiden erfolgreichen zusammen 13,3.
     expect(bandabschnitt(panelEl, 767)).toHaveAttribute(
       'aria-label',
-      'Karte #767: Erfolg, Prüfung rot, 4 Min, 7.9 % des Zyklus',
+      'Karte #767: Erfolg, Prüfung rot, 4 Min, 7.9 % der Schicht',
     )
     expect(bandabschnitt(panelEl, 769)).toHaveAttribute(
       'aria-label',
-      'Karte #769: gescheitert, 16 Min, 31.8 % des Zyklus',
+      'Karte #769: gescheitert, 16 Min, 31.8 % der Schicht',
     )
     // Die Dauer steht auch sichtbar unter ihrem Abschnitt, nicht nur in der Ansage (Punkt 4).
     expect(bandabschnitt(panelEl, 769)).toHaveTextContent('16 Min')
@@ -2694,7 +2694,7 @@ describe('NightRunPage — Modellzeit-Anteil je Vorgang (#872)', () => {
     )
   })
 
-  it('zeigt an einem aufbewahrten Lauf ohne Ergebnisstand keine Kennzahlenzeile', async () => {
+  it('zeigt an einem aufbewahrten Run ohne Ergebnisstand keine Kennzahlenzeile', async () => {
     renderPage({
       listen: [
         [
@@ -2751,7 +2751,7 @@ describe('NightRunPage — Herkunft eines Laufs (#775)', () => {
     expect(within(lauf(0)).queryByText('Herkunft unbekannt')).not.toBeInTheDocument()
   })
 
-  it('nennt einen aufbewahrten Lauf ohne Upload in dieser Sitzung „Herkunft unbekannt"', async () => {
+  it('nennt einen aufbewahrten Run ohne Upload in dieser Sitzung „Herkunft unbekannt"', async () => {
     // Der Server kennt die Unterscheidung nicht; die Kennzeichnung ist sitzungslokal (Plan #772,
     // Entscheidung 6). Nach einem Neuladen der Seite gilt das auch für einen eben erst
     // eingelieferten Lauf.
@@ -2901,7 +2901,7 @@ describe('NightRunPage — Zustände, Kennzahlen und Auszüge', () => {
   // überhaupt keine Kostenangabe erscheint — ein Nicht-Ziel aus #715, das die fachliche Quelle
   // #861 ausdrücklich aufhebt. Die Kennzahlenzeile je Vorgang nennt Kosten jetzt, und wo der
   // Stand keine führt, benennt sie das Fehlen, statt es zu verschweigen.
-  it('zeigt Dauer und Stückzahlen je Lauf sowie die Dauer je Arbeitspaket, dazu die Kosten', async () => {
+  it('zeigt Dauer und Stückzahlen je Run sowie die Dauer je Arbeitspaket, dazu die Kosten', async () => {
     renderPage({
       submit: { ergebnis: alleNeu(VIER_ZUSTAENDE) },
       listen: [[], wieAufbewahrt(VIER_ZUSTAENDE)],
@@ -3369,9 +3369,9 @@ describe('NightRunPage — Häufigkeit einer Fehlerklasse', () => {
     aufklappen(30)
 
     expect(await within(lauf(30)).findByTestId('haeufigkeit-700')).toHaveTextContent(
-      'Prüfungen rot: 3 von 3 aufbewahrten Läufen',
+      'Prüfungen rot: 3 von 3 aufbewahrten Runs',
     )
-    expect(haeufigkeit(701)).toHaveTextContent('Harter Abbruch: 2 von 3 aufbewahrten Läufen')
+    expect(haeufigkeit(701)).toHaveTextContent('Harter Abbruch: 2 von 3 aufbewahrten Runs')
   })
 
   it('nennt ein erstes Vorkommen „zum ersten Mal", nicht „0" und nicht „1 von M"', async () => {
@@ -3410,7 +3410,7 @@ describe('NightRunPage — Häufigkeit einer Fehlerklasse', () => {
     aufklappen(30)
 
     expect(await within(lauf(30)).findByTestId('haeufigkeit-700')).toHaveTextContent(
-      'Prüfungen rot: 3 von 3 aufbewahrten Läufen',
+      'Prüfungen rot: 3 von 3 aufbewahrten Runs',
     )
     expect(zaehlerAufrufe()).toHaveLength(1)
   })
@@ -3702,7 +3702,7 @@ describe('NightRunPage — null aus der API (#734)', () => {
     await nullLaufZeigen()
 
     expect(feld(700)?.textContent).toBe(
-      'Lauf-Befund zu Karte #700 Paket A\nZustand: gescheitert',
+      'Befund des Runs zu Karte #700 Paket A\nZustand: gescheitert',
     )
   })
 })
@@ -3769,7 +3769,7 @@ describe('NightRunPage — Aufschlüsselung der gesichteten Karten (#873)', () =
     expect(within(panelEl).queryByTestId('aufschluesselung-unbekannt')).not.toBeInTheDocument()
   })
 
-  it('kommt am aufbewahrten Lauf ohne das Ausgangswort auf dieselben Zahlen (Punkt 9)', async () => {
+  it('kommt am aufbewahrten Run ohne das Ausgangswort auf dieselben Zahlen (Punkt 9)', async () => {
     const panelEl = await aufbewahrterPrueflauf()
 
     expect(gesichtet(panelEl)).toHaveTextContent('35 Karten gesichtet')
@@ -3942,7 +3942,7 @@ describe('NightRunPage — Aufschlüsselung der gesichteten Karten (#873)', () =
   })
 })
 
-describe('NightRunPage — Kennzahlenzeile je Lauf-Art (#874)', () => {
+describe('NightRunPage — Kennzahlenzeile je Run-Art (#874)', () => {
   /**
    * Der Hinweis, den `night.mjs` genau dann an den Lauf-Kopf schreibt, wenn weder `--verbose`
    * noch `--kette` gesetzt war — wörtlich wie dort und wie in `nightRunErgebnisstand.test.ts`.
@@ -3995,13 +3995,13 @@ describe('NightRunPage — Kennzahlenzeile je Lauf-Art (#874)', () => {
     expect(zeile(panelEl).getByText('Vorgänge erledigt')).toBeInTheDocument()
   })
 
-  it('rechnet die Kosten des Zyklus aus den fünf Einzelwerten und kennzeichnet sie (Punkt 8)', async () => {
+  it('rechnet die Kosten der Schicht aus den fünf Einzelwerten und kennzeichnet sie (Punkt 8)', async () => {
     const panelEl = await echterUmsetzungslauf()
 
     // 2,1366 + 5,1342 + 10,8605 + 1,6051 + 8,1324 = 27,8688 US-Dollar. Der Stand selbst führt
     // keine Summe — nur die Kette schreibt eine (Plan #864, E9).
     expect(zeile(panelEl).getByText('27,87 $')).toBeInTheDocument()
-    expect(zeile(panelEl).getByText('Kosten des Zyklus')).toBeInTheDocument()
+    expect(zeile(panelEl).getByText('Kosten der Schicht')).toBeInTheDocument()
     expect(zeile(panelEl).getByText('gerechnet, nicht im Protokoll')).toBeInTheDocument()
     // 38 + 63 + 123 + 33 + 121 Züge, dazu die Summe der fünf Vorgangsdauern.
     expect(zeile(panelEl).getByText('378')).toBeInTheDocument()
@@ -4127,7 +4127,7 @@ describe('NightRunPage — Kennzahlenzeile je Lauf-Art (#874)', () => {
     expect(fussangabe(panelEl, 'Kostenbudget je Kette')).toBeInTheDocument()
   })
 
-  it('zeigt an einem aufbewahrten Lauf ohne Ergebnisstand keine Kennzahlenzeile', async () => {
+  it('zeigt an einem aufbewahrten Run ohne Ergebnisstand keine Kennzahlenzeile', async () => {
     renderPage({
       listen: [
         [
@@ -4149,7 +4149,7 @@ describe('NightRunPage — Kennzahlenzeile je Lauf-Art (#874)', () => {
     // Kosten und Züge bewahrt der Server nicht auf — eine Reihe aus lauter Fehlanzeigen wäre
     // dieselbe Wand, die der Kennzahlen-Hinweis vermeidet.
     expect(within(lauf(0)).queryByTestId('fussangabe-Züge des Modells')).not.toBeInTheDocument()
-    expect(within(lauf(0)).getByTestId('fussangabe-Ergebnis des Zyklus')).toBeInTheDocument()
+    expect(within(lauf(0)).getByTestId('fussangabe-Ergebnis der Schicht')).toBeInTheDocument()
   })
 })
 
@@ -4237,9 +4237,9 @@ describe('NightRunPage — Rahmen des Entwurfs (#914)', () => {
     await screen.findByText('Noch keine Auswertung vorhanden.')
 
     expect(screen.getByRole('link', { name: 'Projekte' })).toBeInTheDocument()
-    // Das letzte Segment heißt seit #1101 „Läufe" wie der Menüpunkt; der Pfad ist das `h1` der
+    // Das letzte Segment heißt seit #1151 „Runner" wie der Menüpunkt; der Pfad ist das `h1` der
     // Seite — ohne diese Eingrenzung träfe die Suche auch die Beschriftung im Verbrauchs-Bereich.
-    expect(within(screen.getByRole('heading', { level: 1 })).getByText('Läufe')).toBeInTheDocument()
+    expect(within(screen.getByRole('heading', { level: 1 })).getByText('Runner')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Protokoll einlesen' })).toBeInTheDocument()
     expect(screen.getByLabelText('Protokolldatei auswählen')).toBeInTheDocument()
 
@@ -4719,7 +4719,7 @@ describe('NightRunPage — Fußzeile beider Lauf-Arten (#918)', () => {
   it('führt am Umsetzungs-Lauf Ergebnis, teuersten Vorgang und Herkunft des Stands', async () => {
     await eingelesenerLauf(ECHTER_STAND, ECHTER_START, 'night-run-2026-09-07-085229.json')
 
-    expect(fuss().getByText('Ergebnis des Zyklus')).toBeInTheDocument()
+    expect(fuss().getByText('Ergebnis der Schicht')).toBeInTheDocument()
     expect(fuss().getByText(/bearbeitet · .* übergangen/)).toBeInTheDocument()
     expect(fuss().getByText('Teuerster Vorgang')).toBeInTheDocument()
     expect(fuss().getByText(/^#\d+ mit \d/)).toBeInTheDocument()
@@ -4727,7 +4727,7 @@ describe('NightRunPage — Fußzeile beider Lauf-Arten (#918)', () => {
     expect(fuss().getByText('Ergebnisstand')).toBeInTheDocument()
   })
 
-  it('zeigt an einem aufbewahrten Lauf ohne Stand die Fußzeile mit Fehlanzeigen', async () => {
+  it('zeigt an einem aufbewahrten Run ohne Stand die Fußzeile mit Fehlanzeigen', async () => {
     renderPage({ listen: [wieAufbewahrt(ECHTE_KETTE_STAND)] })
     const panelEl = await screen.findByTestId(`lauf-${ECHTE_KETTE_START}`)
 
@@ -5022,7 +5022,7 @@ describe('NightRunPage — Laufblock im Leitstand-Stil (#988)', () => {
     // Der Tag hängt an der Zeitzone des Laufs: `startedAt(0)` ist 22:00 UTC, in Berlin schon der
     // 2., in der CI (UTC) noch der 1. September. Geprüft wird die Form, nicht der Kalendertag.
     const titel = within(lauf(0)).getByTestId('nachtlauf-ueberschrift')
-    expect(titel).toHaveTextContent(/^Lauf #1 · [12]\. September, \d\d:00$/)
+    expect(titel).toHaveTextContent(/^Run #1 · [12]\. September, \d\d:00$/)
     expect(titel).toHaveStyle({ fontSize: '15px' })
   })
 
@@ -5099,7 +5099,7 @@ describe('NightRunPage — Laufblock im Leitstand-Stil (#988)', () => {
 
     fireEvent.click(panel.getByTestId('vorgang-taste-922'))
 
-    expect(panel.getByTestId('befund-922')).toHaveTextContent('Lauf-Befund zu Karte #922')
+    expect(panel.getByTestId('befund-922')).toHaveTextContent('Befund des Runs zu Karte #922')
     expect(
       panel.getByRole('button', { name: 'Übernahmetext zu Karte #922 kopieren' }),
     ).toBeInTheDocument()
@@ -5327,9 +5327,9 @@ describe('NightRunPage — adressierbarer Lauf (#1085)', () => {
 
     await screen.findByTestId(`lauf-${startedAt(0)}`)
     expect(laufTaste(lauf(0))).toHaveAttribute('aria-expanded', 'true')
-    expect(within(lauf(0)).getByTestId('nachtlauf-ueberschrift')).toHaveTextContent(/^Lauf #11 · /)
+    expect(within(lauf(0)).getByTestId('nachtlauf-ueberschrift')).toHaveTextContent(/^Run #11 · /)
     // Und nicht etwa an einem der beiden anderen Blöcke.
-    expect(within(lauf(1)).getByTestId('nachtlauf-ueberschrift')).toHaveTextContent(/^Lauf #12 · /)
+    expect(within(lauf(1)).getByTestId('nachtlauf-ueberschrift')).toHaveTextContent(/^Run #12 · /)
   })
 })
 
@@ -5863,7 +5863,7 @@ describe('NightRunPage — Zyklus in der Vorzeile, Lauf-Nummer im Titel (#1127)'
     renderPage({ listen: [[aufbewahrt({ id: 412, startedAt: '2026-09-14T20:05:00.000Z' })]] })
 
     const panelEl = await screen.findByTestId('lauf-2026-09-14T20:05:00.000Z')
-    expect(within(panelEl).getByTestId('nachtlauf-ueberschrift')).toHaveTextContent('Lauf #412 · 14. September, 22:05')
+    expect(within(panelEl).getByTestId('nachtlauf-ueberschrift')).toHaveTextContent('Run #412 · 14. September, 22:05')
   })
 
   it('lässt die Nummer an einem eben eingelesenen Lauf ohne Server weg', async () => {
@@ -5874,7 +5874,7 @@ describe('NightRunPage — Zyklus in der Vorzeile, Lauf-Nummer im Titel (#1127)'
 
     const panelEl = await screen.findByTestId(`lauf-${ECHTE_KETTE_START}`)
     expect(within(panelEl).getByTestId('nachtlauf-ueberschrift')).toHaveTextContent(
-      /^Lauf · 14\. September, \d\d:\d\d$/,
+      /^Run · 14\. September, \d\d:\d\d$/,
     )
   })
 
@@ -5892,13 +5892,13 @@ describe('NightRunPage — Zyklus in der Vorzeile, Lauf-Nummer im Titel (#1127)'
     const vorzeile = async (iso: string) =>
       within(await screen.findByTestId(`lauf-${iso}`)).getByTestId('nachtlauf-vorzeile')
     expect(await vorzeile('2026-09-14T20:05:00.000Z')).toHaveTextContent(
-      'Zyklus vom 14.09.2026 auf den 15.09.2026',
+      'Schicht vom 14.09.2026 auf den 15.09.2026',
     )
     expect(await vorzeile('2026-09-15T01:10:00.000Z')).toHaveTextContent(
-      'Zyklus vom 14.09.2026 auf den 15.09.2026',
+      'Schicht vom 14.09.2026 auf den 15.09.2026',
     )
     expect(await vorzeile('2026-09-15T10:00:00.000Z')).toHaveTextContent(
-      'Zyklus vom 15.09.2026 auf den 16.09.2026',
+      'Schicht vom 15.09.2026 auf den 16.09.2026',
     )
   })
 })
@@ -5949,18 +5949,18 @@ describe('NightRunPage — nur die letzten zwei Zyklen (#1134)', () => {
     expect(sichtbar(GESTERN_23)).toBe(true)
     expect(sichtbar(GESTERN_11)).toBe(false)
     expect(sichtbar(VORGESTERN)).toBe(false)
-    expect(screen.getByRole('button', { name: 'Ältere Läufe anzeigen (2)' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Ältere Runs anzeigen (2)' })).toBeInTheDocument()
   })
 
   it('zeigt auf Klick alle Läufe und auf den nächsten wieder nur die letzten zwei Zyklen', async () => {
     renderPage({ listen: [vier()] })
     await screen.findByTestId(`lauf-${HEUTE_13}`)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Ältere Läufe anzeigen (2)' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Ältere Runs anzeigen (2)' }))
     expect(sichtbar(GESTERN_11)).toBe(true)
     expect(sichtbar(VORGESTERN)).toBe(true)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Nur die letzten zwei Zyklen zeigen' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Nur die letzten zwei Schichten zeigen' }))
     expect(sichtbar(GESTERN_11)).toBe(false)
     expect(sichtbar(VORGESTERN)).toBe(false)
   })
@@ -5976,7 +5976,7 @@ describe('NightRunPage — nur die letzten zwei Zyklen (#1134)', () => {
 
     await screen.findByTestId(`lauf-${HEUTE_13}`)
     expect(sichtbar(VORGESTERN)).toBe(true)
-    expect(screen.queryByRole('button', { name: /Ältere Läufe anzeigen/ })).toBeNull()
+    expect(screen.queryByRole('button', { name: /Ältere Runs anzeigen/ })).toBeNull()
   })
 
   it('zeigt einen älteren Lauf, den ?lauf=<id> ansteuert', async () => {
@@ -5984,7 +5984,7 @@ describe('NightRunPage — nur die letzten zwei Zyklen (#1134)', () => {
 
     await screen.findByTestId(`lauf-${VORGESTERN}`)
     expect(sichtbar(GESTERN_11)).toBe(false)
-    expect(screen.getByRole('button', { name: 'Ältere Läufe anzeigen (1)' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Ältere Runs anzeigen (1)' })).toBeInTheDocument()
   })
 
   it('zeigt einen in dieser Sitzung eingelesenen älteren Lauf', async () => {
@@ -6001,8 +6001,8 @@ describe('NightRunPage — nur die letzten zwei Zyklen (#1134)', () => {
   it('sagt es, wenn die letzten zwei Zyklen leer sind, und bietet die älteren an', async () => {
     renderPage({ listen: [[aufbewahrt({ id: 1, startedAt: VORGESTERN })]] })
 
-    expect(await screen.findByText('In den letzten zwei Zyklen gab es keinen Lauf.')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Ältere Läufe anzeigen (1)' })).toBeInTheDocument()
+    expect(await screen.findByText('In den letzten zwei Schichten gab es keinen Run.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Ältere Runs anzeigen (1)' })).toBeInTheDocument()
     expect(screen.queryByText('Noch keine Auswertung vorhanden.')).toBeNull()
   })
 
@@ -6010,6 +6010,6 @@ describe('NightRunPage — nur die letzten zwei Zyklen (#1134)', () => {
     renderPage({ listen: [[aufbewahrt({ id: 4, startedAt: HEUTE_13 })]] })
 
     await screen.findByTestId(`lauf-${HEUTE_13}`)
-    expect(screen.queryByRole('button', { name: /Ältere Läufe anzeigen|Nur die letzten zwei Zyklen/ })).toBeNull()
+    expect(screen.queryByRole('button', { name: /Ältere Runs anzeigen|Nur die letzten zwei Schichten/ })).toBeNull()
   })
 })

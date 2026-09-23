@@ -154,7 +154,7 @@ function KennzahlenBereich({ kpis, liste }: Readonly<{ kpis: Laden<BoardDashboar
   )
 }
 
-/** Der Rumpf (Entwurf Z. 1410–1712): „Letzter Lauf", „Durchsatz", „Abbruchgründe" und „Vorhaben". */
+/** Der Rumpf (Entwurf Z. 1410–1712): „Letzter Run", „Durchsatz", „Abbruchgründe" und „Vorhaben". */
 function LeitstandRumpf({
   juengster,
   projectId,
@@ -201,7 +201,7 @@ function LaufbandBereich({ lauf }: Readonly<{ lauf: NightRunView }>) {
   return (
     <Box
       component="section"
-      aria-label="Jüngster Lauf"
+      aria-label="Jüngster Run"
       sx={{
         display: 'grid',
         gridTemplateColumns: { xs: 'minmax(0,1fr)', lg: 'minmax(260px, 1.5fr) auto' },
@@ -260,13 +260,13 @@ function Budget({ etikett, wert, einheit }: Readonly<{ etikett: string; wert: st
   )
 }
 
-/** Lauf · grün (Entwurf Z. 1308–1323): Anteil grüner Pakete mit Aufschlüsselung. */
+/** Run · grün (Entwurf Z. 1308–1323): Anteil grüner Pakete mit Aufschlüsselung. */
 function NachtlaufKachel({ laeufe }: Readonly<{ laeufe: readonly NightRunView[] }>) {
   const anteil = gruenAnteil(laeufe)
   const breite = (zahl: number) => `${(zahl / Math.max(1, anteil.gesamt)) * 100}%`
   return (
-    <Box component="article" aria-label="Lauf · grün" sx={KACHEL_SX}>
-      <Box sx={ETIKETT}>Lauf · grün</Box>
+    <Box component="article" aria-label="Run · grün" sx={KACHEL_SX}>
+      <Box sx={ETIKETT}>Run · grün</Box>
       <KachelWert wert={anteil.prozent === null ? null : String(anteil.prozent)} einheit="%" />
       {anteil.gesamt > 0 && (
         <>
@@ -323,7 +323,7 @@ function Zustand({ children }: Readonly<{ children: string }>) {
   )
 }
 
-/** Letzter Lauf (Entwurf Z. 565–640, 1410–1511): die Arbeitspakete mit Filter „Nur Abbrüche". */
+/** Letzter Run (Entwurf Z. 565–640, 1410–1511): die Arbeitspakete mit Filter „Nur Abbrüche". */
 function LetzterLauf({
   lauf,
   epics,
@@ -349,7 +349,7 @@ function LetzterLauf({
 
   return (
     <Platte
-      titel={`Letzter Lauf · ${modusName(lauf.mode)}`}
+      titel={`Letzter Run · ${modusName(lauf.mode)}`}
       notiz={laufNotiz(lauf)}
       led={<Led melder={laufMelder(lauf, lauf.noWorkReason)} pulsiert={laeuftNoch(lauf)} />}
       werkzeug={
@@ -365,7 +365,7 @@ function LetzterLauf({
     >
       {zeilen.length === 0 && (
         <Typography color="text.secondary" sx={{ px: '16px', py: '11px' }}>
-          {nurAbbrueche ? 'Kein Abbruch in diesem Lauf.' : 'Der Lauf hat noch kein Arbeitspaket gemeldet.'}
+          {nurAbbrueche ? 'Kein Abbruch in diesem Run.' : 'Der Run hat noch kein Arbeitspaket gemeldet.'}
         </Typography>
       )}
       <Box component="ul" sx={{ listStyle: 'none', m: 0, p: 0 }}>
@@ -488,10 +488,10 @@ function Durchsatz({ wochen }: Readonly<{ wochen: BoardDashboardKpis['throughput
 function Abbruchgruende({ zaehler, laeufe }: Readonly<{ zaehler: NightRunErrorClassCounts; laeufe: number }>) {
   const zeilen = abbruchgruende(zaehler)
   return (
-    <Platte titel="Abbruchgründe" notiz={laeufe === 1 ? '1 Lauf' : `${laeufe} Läufe`}>
+    <Platte titel="Abbruchgründe" notiz={laeufe === 1 ? '1 Run' : `${laeufe} Runs`}>
       {zeilen.length === 0 ? (
         <Typography color="text.secondary" sx={{ px: '16px', py: '14px' }}>
-          Kein Abbruch in den aufbewahrten Läufen.
+          Kein Abbruch in den aufbewahrten Runs.
         </Typography>
       ) : (
         <Box component="ul" sx={{ listStyle: 'none', m: 0, display: 'flex', flexDirection: 'column', gap: '9px', px: '16px', pt: '14px', pb: '16px' }}>

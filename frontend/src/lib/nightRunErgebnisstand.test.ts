@@ -400,7 +400,7 @@ describe('parseNightRunErgebnisstand — Zustand je Arbeitspaket', () => {
     const item = einziges(mitEinheit({ ausgang: 'unbekannt' }))
     expect(item.state).toBe('RED')
     expect(item.errorClass).toBe('HARD_ABORT')
-    expect(item.excerpt).toBe('Lauf mitten in der Runde abgebrochen — kein Ausgang')
+    expect(item.excerpt).toBe('Run mitten in der Runde abgebrochen — kein Ausgang')
   })
 
   it('macht ein Paket mit hartem Stopp rot mit HARD_ABORT', () => {
@@ -541,7 +541,7 @@ describe('parseNightRunErgebnisstand — Pruef-Lauf (Issue #816)', () => {
   it.each([
     ['uebersprungen', 'GREY' as const, "kein Label 'review:offen'"],
     ['liegengeblieben', 'GREY' as const, 'Über die Obergrenze (--max) hinaus — bleibt liegen'],
-    ['unbekannt', 'RED' as const, 'Lauf mitten in der Runde abgebrochen — kein Ausgang'],
+    ['unbekannt', 'RED' as const, 'Run mitten in der Runde abgebrochen — kein Ausgang'],
   ])('deutet den modus-unabhaengigen Ausgang %s auch im Pruef-Lauf', (ausgang, state, auszug) => {
     const item = einziges(imPrueflauf({ ausgang, grund: auszug }))
     expect(item.state).toBe(state)
@@ -632,7 +632,7 @@ describe('parseNightRunErgebnisstand — Ketten-Lauf (Issue #854)', () => {
   it.each([
     ['uebersprungen', 'GREY' as const, "kein Label 'kit:night'"],
     ['liegengeblieben', 'GREY' as const, 'Über die Obergrenze (--max) hinaus — bleibt liegen'],
-    ['unbekannt', 'RED' as const, 'Lauf mitten in der Runde abgebrochen — kein Ausgang'],
+    ['unbekannt', 'RED' as const, 'Run mitten in der Runde abgebrochen — kein Ausgang'],
   ])('deutet den modus-unabhaengigen Ausgang %s auch im Ketten-Lauf', (ausgang, state, auszug) => {
     const item = einziges(inKette({ ausgang, grund: auszug }))
     expect(item.state).toBe(state)
