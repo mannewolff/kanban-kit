@@ -91,6 +91,8 @@ Die ausführliche Benutzer- und Betriebsdokumentation liegt unter [`docs/`](docs
 - [Nutzung](docs/nutzung.md) — Projekte, Boards, Karten, Listen-Ansicht, Ideen-Pool, Vorhaben,
   [Läufe](docs/nutzung.md#nachtlauf), [Verbrauch](docs/nutzung.md#verbrauch-leitstand),
   [Plattform-Leitstand](docs/nutzung.md#plattform-leitstand), Mitglieder
+- [Sicherung & Wiederherstellung](docs/backup.md) — Sicherung einrichten, privaten Schlüssel
+  verwahren, auf einen Zeitpunkt zurückholen, Verfallen alter Stände
 - [Rollen & Rechte](docs/rollen-und-rechte.md) — Projekt- und Plattform-Rollen, Rechte-Matrix,
   Teilnahme am Plattform-Leitstand
 - [Produktions-Deployment](docs/deployment-hostinger.md) — öffentlicher Betrieb hinter Traefik

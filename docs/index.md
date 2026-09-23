@@ -24,6 +24,9 @@ Schalter — steht in `CLAUDE-design.md` im Wurzelverzeichnis.
 - [Betrieb & Installation](betrieb.md) — Start via Docker, Umgebungsvariablen, erster Admin, E-Mail/Verifikation,
   [Meldeweg der interaktiven Sitzungen](betrieb.md#meldeweg-der-interaktiven-sitzungen) (Token,
   Hook, Erfassungsbeginn, Aufbewahrungsgrenzen, Worktree-Einschränkung).
+- [Sicherung & Wiederherstellung](backup.md) — Einrichtung der Sicherung, Verwahrung des privaten
+  Schlüssels (ohne ihn ist aus den Sicherungen nichts zu holen), die beiden Rückholwege, Verfallen
+  alter Stände.
 - [Produktions-Deployment (Hostinger)](deployment-hostinger.md) — öffentlicher Betrieb hinter Traefik unter `kanban.mwolff.org`.
 - [Nutzung](nutzung.md) — Registrieren, Projekte, Boards, Karten (Zuständige, Fälligkeit, Labels),
   Papierkorb, Listen-Ansicht, Ideen-Pool, [Läufe](nutzung.md#nachtlauf) (Laufarten, vier Zustände
