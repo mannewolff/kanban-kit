@@ -27,7 +27,7 @@ import echterPrueflauf from '../lib/__fixtures__/night-run-2026-09-11-103116.jso
 import echteKette from '../lib/__fixtures__/night-run-2026-09-14-131200.json'
 import { formatDuration } from '../lib/formatDuration'
 import { parseNightRunErgebnisstand } from '../lib/nightRunErgebnisstand'
-import { buildHandoffText, type NightRunHandoffItem } from '../lib/nightRunHandoff'
+import { buildHandoffText, KURZ_GRUND_MAX, type NightRunHandoffItem } from '../lib/nightRunHandoff'
 import { NACHTLAUF_FARBEN, NACHTLAUF_SCHRIFTEN } from '../nachtlaufDesign'
 import { cssRegel } from '../test/cssRegel'
 import { MELDER, theme } from '../theme'
@@ -376,7 +376,16 @@ function aufbewahrt(
     budget: null,
     ...rest,
     items: (items ?? []).map(wieAufbewahrtesItem),
-    outcome: rest.outcome ?? serverBefund({ complete: rest.complete ?? true, noWorkReason: rest.noWorkReason, items: (items ?? []).map(wieAufbewahrtesItem) }),
+    outcome:
+      rest.outcome ??
+      serverBefund({
+        complete: rest.complete ?? true,
+        noWorkReason: rest.noWorkReason,
+        // Der Abbruchgrund steht am Lauf **und** im Befund (Issue #1143) — ein Fixture, das ihn nur
+        // am Lauf trüge, bildete eine Antwort nach, die es nicht gibt.
+        abortReason: rest.abortReason,
+        items: (items ?? []).map(wieAufbewahrtesItem),
+      }),
   }
 }
 
@@ -5213,6 +5222,114 @@ describe('NightRunPage — Lauf ohne Arbeit (#1069)', () => {
     const kopf = laufKopfzeile(lauf(0))
     expect(kopf).toHaveTextContent('unvollständig')
     expect(kopf).not.toHaveTextContent(GRUND)
+  })
+})
+
+describe('NightRunPage — der Abbruchgrund in der Auswertung (#1145)', () => {
+  /** Die erste Zeile des Grunds — länger als {@link KURZ_GRUND_MAX}, damit die Marke kürzen muss. */
+  const ERSTE_ZEILE =
+    'Harter Stopp (dirty-tree) — der Working Tree trug nach der Runde unkommittete Reste, der Lauf bricht die Nacht an dieser Stelle ab'
+  /** Der volle Grund, wie der Runner ihn meldet: die Lage, dann die betroffenen Pfade. */
+  const ABBRUCH = [
+    ERSTE_ZEILE,
+    'frontend/src/pages/NightRunPage.tsx',
+    'frontend/src/components/nachtlauf/NachtlaufLaufPlatte.tsx',
+    'src/main/java/org/mwolff/manban/card/NightRunService.java',
+  ].join('\n')
+  const GEKUERZT = `${ERSTE_ZEILE.slice(0, KURZ_GRUND_MAX - 1)}…`
+
+  const abgebrochen = () =>
+    aufbewahrt({ id: 1, startedAt: startedAt(0), abortReason: ABBRUCH })
+
+  it('kürzt den Grund in der Kopfmarke auf eine Zeile', () => {
+    // Die Voraussetzung des Fixtures: Wäre die erste Zeile kurz genug, prüfte der Test unten nichts.
+    expect(ERSTE_ZEILE.length).toBeGreaterThan(KURZ_GRUND_MAX)
+  })
+
+  it('zeigt am abgebrochenen Lauf eine dritte Zustandsmarke mit dem gekürzten Grund', async () => {
+    renderPage({ listen: [[abgebrochen()]] })
+
+    await screen.findByTestId(`lauf-${startedAt(0)}`)
+    const marke = within(laufKopfzeile(lauf(0))).getByTestId('lauf-zustand')
+    expect(marke).toHaveTextContent(GEKUERZT)
+    // Der Kopf bleibt eine Zeile: Die Pfade stehen dort nicht.
+    expect(marke).not.toHaveTextContent('NightRunService.java')
+    expect(within(marke).getByTestId('led-zinnob')).toBeInTheDocument()
+  })
+
+  /**
+   * E6: Der Server setzt beim abgebrochenen Lauf allein den Abbruchgrund. Trägt ein Lauf aus der
+   * Zeit davor trotzdem beides, zeigt der Kopf den Abbruch — zwei Zustandsmarken nebeneinander
+   * wären ein Widerspruch in derselben Platte.
+   */
+  it('zeigt neben dem Abbruchgrund keine Marke „ohne Arbeit"', async () => {
+    renderPage({
+      listen: [
+        [
+          aufbewahrt({
+            id: 1,
+            startedAt: startedAt(0),
+            processedCount: 0,
+            abortReason: ABBRUCH,
+            noWorkReason: 'Kein Eintrag trug das Label kit:nightrun',
+          }),
+        ],
+      ],
+    })
+
+    await screen.findByTestId(`lauf-${startedAt(0)}`)
+    const kopf = laufKopfzeile(lauf(0))
+    expect(within(kopf).getAllByTestId('lauf-zustand')).toHaveLength(1)
+    expect(kopf).not.toHaveTextContent('kit:nightrun')
+  })
+
+  it('zeigt den Grund in der aufgeklappten Platte vollständig', async () => {
+    renderPage({ listen: [[abgebrochen()]] })
+
+    const panelEl = await screen.findByTestId(`lauf-${startedAt(0)}`)
+
+    // Der oberste Lauf steht beim Öffnen der Seite offen (#914, E7).
+    expect(within(panelEl).getByTestId('nachtlauf-abbruchgrund').textContent).toBe(ABBRUCH)
+  })
+
+  /**
+   * Der Fund aus WICHTIG 5 der Plan-Prüfung: In einer `LaufMarke` ragte ein Grund mit zehn Pfaden
+   * aus der Platte heraus. AK 4 verlangt ihn vollständig **und** lesbar.
+   */
+  it('führt den vollständigen Grund nicht in einem einzeiligen Element', async () => {
+    renderPage({ listen: [[abgebrochen()]] })
+
+    const panelEl = await screen.findByTestId(`lauf-${startedAt(0)}`)
+
+    const grundzeile = within(panelEl).getByTestId('nachtlauf-abbruchgrund')
+    expect(getComputedStyle(grundzeile).whiteSpace).not.toBe('nowrap')
+    // Und er steht nicht in der einzeiligen Zustandsmarke: Die trägt den gekürzten Text.
+    expect(within(grundzeile).queryByTestId('lauf-zustand')).not.toBeInTheDocument()
+    expect(within(laufKopfzeile(panelEl)).queryByTestId('nachtlauf-abbruchgrund')).not.toBeInTheDocument()
+  })
+
+  it('lässt die Seite ohne Abbruchgrund unverändert', async () => {
+    renderPage({ listen: [[aufbewahrt({ id: 1, startedAt: startedAt(0) })]] })
+
+    const panelEl = await screen.findByTestId(`lauf-${startedAt(0)}`)
+
+    expect(within(panelEl).queryByTestId('nachtlauf-abbruchgrund')).not.toBeInTheDocument()
+    expect(within(laufKopfzeile(panelEl)).queryByTestId('lauf-zustand')).not.toBeInTheDocument()
+  })
+
+  /**
+   * E7: Der im Browser geparste Lauf war bei keinem Server — er kann keinen Abbruchgrund tragen,
+   * und die Platte behauptet dort auch keinen.
+   */
+  it('gibt dem im Browser geparsten Lauf keinen Abbruchgrund', async () => {
+    renderPage({ submit: { netzfehler: true } })
+    await screen.findByText('Noch keine Auswertung vorhanden.')
+
+    protokollWaehlen(EIN_LAUF)
+
+    const panelEl = await screen.findByTestId(`lauf-${startedAt(0)}`)
+    expect(within(panelEl).queryByTestId('nachtlauf-abbruchgrund')).not.toBeInTheDocument()
+    expect(within(laufKopfzeile(panelEl)).queryByTestId('lauf-zustand')).not.toBeInTheDocument()
   })
 })
 

@@ -67,6 +67,12 @@ export function NachtlaufLaufPlatte({
    * entscheidet die Seite; die Platte reiht sie nur auf.
    */
   marken,
+  /**
+   * Der **vollständige** Grund eines harten Abbruchs (Issue #1145); `undefined` an jedem Lauf, der
+   * nicht abbrach. Er steht allein in der aufgeklappten Platte — der Kopf trägt ihn gekürzt als
+   * Marke.
+   */
+  abbruchGrund,
   offen,
   onUmschalten,
   testId,
@@ -79,6 +85,7 @@ export function NachtlaufLaufPlatte({
   melder: Melder
   pulsiert?: boolean
   marken?: ReactNode
+  abbruchGrund?: string
   offen: boolean
   onUmschalten: () => void
   testId: string
@@ -219,7 +226,32 @@ export function NachtlaufLaufPlatte({
         )}
       </Box>
 
-      {offen && <Box id={inhaltId}>{children}</Box>}
+      {offen && (
+        <Box id={inhaltId}>
+          {/* Der eine Ort, an dem der Abbruchgrund nicht gekürzt wird (Issue #1145, AK 4 der
+              fachlichen Quelle #1074). Er steht **nicht** in einer {@link LaufMarke}: Die ist
+              `nowrap`, und ein Grund mit bis zu zehn Pfaden ragte als Marke aus der Platte heraus.
+              `pre-wrap` hält die Zeilen des Runners und bricht die langen davon um. */}
+          {abbruchGrund !== undefined && (
+            <Box sx={{ px: '16px', pt: '14px' }}>
+              <Box sx={{ ...ETIKETT, mb: '2px' }}>Abbruchgrund</Box>
+              <Box
+                data-testid="nachtlauf-abbruchgrund"
+                sx={{
+                  fontSize: 12.5,
+                  color: TEXT_MATT,
+                  whiteSpace: 'pre-wrap',
+                  // Ein Pfad ohne Leerzeichen bräche sonst gar nicht und schöbe die Platte breit.
+                  overflowWrap: 'anywhere',
+                }}
+              >
+                {abbruchGrund}
+              </Box>
+            </Box>
+          )}
+          {children}
+        </Box>
+      )}
     </Box>
   )
 }

@@ -86,6 +86,7 @@ import {
 import { betrag, menge } from '../lib/nachtlaufFormat'
 import {
   buildHandoffText,
+  kurzGrund,
   nightRunZustandsText,
   NIGHT_RUN_ERROR_CLASS_TEXT,
   type NightRunHandoffItem,
@@ -249,6 +250,13 @@ interface AnzeigeLauf {
    */
   ohneArbeit: string | undefined
   /**
+   * Grund eines harten Abbruchs (Issue #1145) — **vollständig**, wie der Runner ihn gemeldet hat;
+   * `undefined` an jedem Lauf, der nicht abbrach, aus der Zeit vor der Umstellung stammt oder eben
+   * erst im Browser geparst wurde. Gekürzt wird er allein dort, wo er neben anderem in einer Zeile
+   * steht — die Kopfmarke nimmt {@link kurzGrund}, die aufgeklappte Platte den ganzen Text (AK 4).
+   */
+  abbruchGrund: string | undefined
+  /**
    * Der Befund des Servers (Issue #1078); `undefined` beim eben geparsten Lauf — der ist noch bei
    * keinem Server gewesen und wird deshalb weiterhin lokal beurteilt (Plan #1072 E28).
    */
@@ -400,6 +408,9 @@ const ausParser = (run: NightRun): AnzeigeLauf => ({
   // Wie die Herkunftsfelder leer: Den Grund kennt nur der Server, ein eben geparster Lauf war
   // noch bei keinem.
   ohneArbeit: undefined,
+  // Wie der Grund ohne Arbeit leer: Ein eben geparster Lauf war bei keinem Server, und ein
+  // Abbruchgrund entsteht erst dort (Plan #1139, E7).
+  abbruchGrund: undefined,
   befund: undefined,
   laufId: undefined,
   verbrauch: undefined,
@@ -526,6 +537,7 @@ const ausSicht = (view: NightRunView): AnzeigeLauf => ({
   zuletztGemeldetAm: view.updatedAt ?? undefined,
   vollstaendig: view.complete,
   ohneArbeit: view.noWorkReason ?? undefined,
+  abbruchGrund: view.abortReason ?? undefined,
   befund: view.outcome,
   laufId: view.id,
   verbrauch: ausVerbrauch(view.usage),
@@ -2167,12 +2179,21 @@ function Kopfmarken({
           {UNVOLLSTAENDIG_GEMELDET}
         </LaufMarke>
       )}
-      {/* Die beiden Zustandsmarken schliessen einander aus: Ein Lauf ist entweder noch nicht
-          abgeschlossen oder ohne Arbeit beendet. Beide zugleich waeren ein Widerspruch im Kopf
-          derselben Platte (Issue #1069). */}
+      {/* Die dritte Zustandsmarke (Issue #1145): der Grund des harten Abbruchs, **gekuerzt** auf
+          eine Zeile — vollstaendig steht er in der aufgeklappten Platte (AK 4, E14). Sie schliesst
+          die Marke „ohne Arbeit" aus: Der Server setzt beim abgebrochenen Lauf allein den
+          Abbruchgrund (E6), und zwei Zustandsmarken waeren ein Widerspruch im selben Kopf. */}
+      {lauf.abbruchGrund !== undefined && (
+        <LaufMarke testId="lauf-zustand" led={<Led melder={melder} />}>
+          {kurzGrund(lauf.abbruchGrund)}
+        </LaufMarke>
+      )}
+      {/* Die Zustandsmarken schliessen einander aus: Ein Lauf ist entweder noch nicht
+          abgeschlossen, abgebrochen oder ohne Arbeit beendet. Mehrere zugleich waeren ein
+          Widerspruch im Kopf derselben Platte (Issue #1069). */}
       {/* Der Melder kommt vom Lauf und steht nicht fest auf zinnober (Issue #1121): Ein Lauf, der
           nichts zu tun fand, ist grau — rot bleibt allein der Rueckfall „Grund unbekannt". */}
-      {lauf.vollstaendig && lauf.ohneArbeit !== undefined && (
+      {lauf.vollstaendig && lauf.abbruchGrund === undefined && lauf.ohneArbeit !== undefined && (
         <LaufMarke testId="lauf-zustand" led={<Led melder={melder} />}>
           {lauf.ohneArbeit}
         </LaufMarke>
@@ -2609,6 +2630,7 @@ function LaufPanel({
       artSymbol={<LaufArtSymbol art={lauf.mode} />}
       meta={metazeile(lauf, stand)}
       melder={melder}
+      abbruchGrund={lauf.abbruchGrund}
       pulsiert={laeuftNoch({ complete: lauf.vollstaendig, outcome: lauf.befund })}
       offen={offen}
       onUmschalten={umschalten}
