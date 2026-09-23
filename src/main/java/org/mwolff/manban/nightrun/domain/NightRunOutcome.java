@@ -4,6 +4,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Optional;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -34,12 +35,20 @@ import org.jspecify.annotations.Nullable;
  * @param verdict der Ausgang des Laufs
  * @param decisiveItem das Paket, das den Ausgang bestimmt; {@code null}, wenn keines ihn bestimmt —
  *     bei {@link Verdict#SUCCEEDED}, {@link Verdict#RUNNING}, {@link Verdict#NO_WORK} und beim Lauf
- *     ohne Arbeit mit unbekanntem Grund
+ *     ohne Arbeit mit unbekanntem Grund. Beim <em>abgebrochenen</em> Lauf steht es, sobald die
+ *     Pakete eines hergeben (Issue #1143)
  * @param noWorkReason Grund, warum der Lauf nichts abgearbeitet hat (Issue #1068); durchgereicht,
  *     nicht formuliert, und {@code null}, wenn der Lauf gearbeitet hat
+ * @param abortReason Grund, warum der Lauf hart abgebrochen ist (Issue #1143); durchgereicht wie
+ *     {@code noWorkReason} und {@code null}, wenn der Lauf nicht abgebrochen ist. Er steht im
+ *     Befund und nicht nur an der Sicht, weil der Plattform-Leitstand seine Störzeile allein aus
+ *     dem Befund bildet.
  */
 public record NightRunOutcome(
-    Verdict verdict, @Nullable DecisiveItem decisiveItem, @Nullable String noWorkReason) {
+    Verdict verdict,
+    @Nullable DecisiveItem decisiveItem,
+    @Nullable String noWorkReason,
+    @Nullable String abortReason) {
 
   /** Rang eines Pakets, das den Ausgang nicht bestimmen kann. */
   private static final int NICHT_MASSGEBLICH = Integer.MAX_VALUE;
@@ -71,8 +80,9 @@ public record NightRunOutcome(
     SUCCEEDED,
 
     /**
-     * Nicht gelungen: hartes Scheitern, ein verstummter Lauf oder ein Lauf ohne Arbeit, dessen
-     * Grund niemand gemeldet hat ({@link NightRunOutcome#GRUND_UNBEKANNT}).
+     * Nicht gelungen: hartes Scheitern, ein verstummter Lauf, ein Lauf, der seinen <b>Abbruch</b>
+     * selbst gemeldet hat (Issue #1143), oder ein Lauf ohne Arbeit, dessen Grund niemand gemeldet
+     * hat ({@link NightRunOutcome#GRUND_UNBEKANNT}).
      */
     FAILED,
 
@@ -114,6 +124,13 @@ public record NightRunOutcome(
    *   <li><b>Läuft noch</b> schlägt das Übrige. Ein Lauf ohne Abschluss hat noch nichts zu melden —
    *       er wird nicht rot, auch nicht mit einem roten Paket (dieselbe Begründung, die {@code
    *       laufMelder} seit #1069 trägt).
+   *   <li><b>Hart abgebrochen</b> schlägt den Lauf ohne Arbeit und die Pakete (Issue #1143, Plan
+   *       #1139 E5). Ein Lauf, der abbrach, ist nie gelungen — auch nicht nach drei grünen Paketen.
+   *       Die Stelle <em>hinter</em> den beiden davor ist dieselbe Aussage wie dort: Ein unfertiger
+   *       Lauf hat noch nichts zu melden, ein verstummter meldet gar nichts mehr. <b>Das
+   *       maßgebliche Paket bleibt</b> und wird weiter aus den Paketen bestimmt: „Karte #1112:
+   *       harter Abbruch" ist die genauere Auskunft als der Abbruchgrund allein, und sie ist seit
+   *       #1123 eigens geschärft.
    *   <li><b>Ohne Arbeit</b> schlägt die Pakete. Der Grund ist der Text selbst; ein Paket daneben
    *       wäre eine zweite Begründung für denselben Lauf. Ein <b>gemeldeter</b> Grund ist {@link
    *       Verdict#NO_WORK} — ein ruhiger Lauf und keine Störung; allein der Rückfall {@link
@@ -135,6 +152,10 @@ public record NightRunOutcome(
    * @param complete ob der Lauf sich als abgeschlossen gemeldet hat
    * @param noWorkReason Grund eines Laufs ohne Arbeit; {@code null} oder leer, wenn er gearbeitet
    *     hat
+   * @param abortReason Grund eines harten Abbruchs; {@code null}, wenn der Lauf nicht abbrach. Ein
+   *     <em>gesetzter</em> Wert genügt — dass ein leerer Text wie ein fehlender gilt, entscheidet
+   *     schon der Dienst beim Übernehmen (Issue #1142), und ein zweites Mal hier wäre dieselbe
+   *     Regel an zwei Stellen.
    * @param mode die Laufart — sie entscheidet unter gleichrangigen Paketen (Issue #1123)
    * @param items die Pakete des Laufs, in Laufreihenfolge
    * @param startedAt Startzeitpunkt des Laufs — das Lebenszeichen eines Laufs, der nie
@@ -147,6 +168,7 @@ public record NightRunOutcome(
   public static NightRunOutcome of(
       boolean complete,
       @Nullable String noWorkReason,
+      @Nullable String abortReason,
       NightRunMode mode,
       List<NightRunItem> items,
       Instant startedAt,
@@ -154,20 +176,38 @@ public record NightRunOutcome(
       Instant jetzt,
       Duration stilleFrist) {
     if (!complete && verstummt(startedAt, updatedAt, jetzt, stilleFrist)) {
-      return new NightRunOutcome(Verdict.FAILED, null, null);
+      return new NightRunOutcome(Verdict.FAILED, null, null, null);
     }
     if (!complete) {
-      return new NightRunOutcome(Verdict.RUNNING, null, null);
+      return new NightRunOutcome(Verdict.RUNNING, null, null, null);
+    }
+    if (abortReason != null) {
+      return new NightRunOutcome(
+          Verdict.FAILED,
+          massgeblich(mode, items).map(NightRunOutcome::decisiveItem).orElse(null),
+          null,
+          abortReason);
     }
     if (noWorkReason != null && !noWorkReason.isBlank()) {
       Verdict ohneArbeit = GRUND_UNBEKANNT.equals(noWorkReason) ? Verdict.FAILED : Verdict.NO_WORK;
-      return new NightRunOutcome(ohneArbeit, null, noWorkReason);
+      return new NightRunOutcome(ohneArbeit, null, noWorkReason, null);
     }
+    return massgeblich(mode, items)
+        .map(NightRunOutcome::ausPaket)
+        .orElseGet(() -> new NightRunOutcome(Verdict.SUCCEEDED, null, null, null));
+  }
+
+  /**
+   * Das Paket, das den Ausgang bestimmt — oder keines, wenn alle grün oder übergangen sind.
+   *
+   * <p>Eigene Methode seit Issue #1143: Der abgebrochene Lauf braucht dieselbe Auswahl, aber ein
+   * anderes Urteil. Zweimal ausgeschrieben liefen die beiden Auswahlen auseinander, sobald die
+   * Rangfolge sich wieder ändert.
+   */
+  private static Optional<NightRunItem> massgeblich(NightRunMode mode, List<NightRunItem> items) {
     return auswahlreihenfolge(mode, items).stream()
         .filter(item -> rang(item) != NICHT_MASSGEBLICH)
-        .min(Comparator.comparingInt(NightRunOutcome::rang))
-        .map(NightRunOutcome::ausPaket)
-        .orElseGet(() -> new NightRunOutcome(Verdict.SUCCEEDED, null, null));
+        .min(Comparator.comparingInt(NightRunOutcome::rang));
   }
 
   /**
@@ -241,7 +281,10 @@ public record NightRunOutcome(
 
   private static NightRunOutcome ausPaket(NightRunItem item) {
     Verdict verdict = item.state() == NightRunState.GREY ? Verdict.WAITING : Verdict.FAILED;
-    return new NightRunOutcome(
-        verdict, new DecisiveItem(item.cardNumber(), item.state(), item.errorClass()), null);
+    return new NightRunOutcome(verdict, decisiveItem(item), null, null);
+  }
+
+  private static DecisiveItem decisiveItem(NightRunItem item) {
+    return new DecisiveItem(item.cardNumber(), item.state(), item.errorClass());
   }
 }

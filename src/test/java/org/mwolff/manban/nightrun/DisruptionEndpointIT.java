@@ -159,6 +159,42 @@ class DisruptionEndpointIT extends AbstractIntegrationTest {
   }
 
   /**
+   * AK 6 der fachlichen Quelle #1074: Ein Lauf, der seinen harten Abbruch gemeldet hat, steht in
+   * der Störungsliste und lässt sich quittieren — obwohl er kein einziges nicht-grünes Paket hat.
+   *
+   * <p>Hier und nicht nur am Dienst: Der Grund reist aus der Spalte {@code abort_reason} über beide
+   * Abfragen bis in die Antwort. Fiele er unterwegs weg, sähe der Dienst einen gelungenen Lauf —
+   * und die Zeile fehlte still.
+   */
+  @Test
+  void einAbgebrochenerLaufStehtInDerStoerungsliste_undLaesstSichQuittieren() throws Exception {
+    Cookie admin = session("de-abbruch@example.com", PlatformRole.ADMIN);
+    long abgebrochen =
+        id(
+            "INSERT INTO night_run (project_id, started_at, mode, kind, duration_ms,"
+                + " processed_count, skipped_count, unparsed_count, created_at, origin, complete,"
+                + " abort_reason) VALUES (?, now() - interval '1 minute', 'CHAIN', 'NIGHT', 1, 3,"
+                + " 0, 0, now(), 'TOKEN', true, 'Dirty-Guard: uncommittete Reste') RETURNING id",
+            projectId);
+
+    mvc.perform(get(LEITSTAND).param("zone", ZONE).cookie(admin))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.stoerungen.length()").value(2))
+        .andExpect(jsonPath("$.stoerungen[1].nightRunId").value(abgebrochen))
+        .andExpect(jsonPath("$.stoerungen[1].outcome.verdict").value("FAILED"))
+        .andExpect(
+            jsonPath("$.stoerungen[1].outcome.abortReason")
+                .value("Dirty-Guard: uncommittete Reste"));
+
+    mvc.perform(delete(QUITTIEREN + "/" + abgebrochen).cookie(admin))
+        .andExpect(status().isNoContent());
+
+    mvc.perform(get(LEITSTAND).param("zone", ZONE).cookie(admin))
+        .andExpect(jsonPath("$.stoerungen.length()").value(1))
+        .andExpect(jsonPath("$.stoerungen[0].nightRunId").value(laufId));
+  }
+
+  /**
    * Issue #1128: Jede Zeile aller drei Listen trägt die Art ihres Laufs — geprüft an einer
    * laufenden Kette, an dem beendeten Umsetzungslauf und an seiner Störung.
    */

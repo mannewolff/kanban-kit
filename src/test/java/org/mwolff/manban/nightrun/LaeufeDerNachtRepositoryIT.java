@@ -246,6 +246,26 @@ class LaeufeDerNachtRepositoryIT extends AbstractIntegrationTest {
   }
 
   /**
+   * Issue #1143: Auch der Abbruchgrund muss aus <b>dieser</b> Abfrage kommen — beide Abfragen
+   * teilen sich einen {@code RowMapper}, aber nicht ihre Spaltenliste. Fehlte die Spalte hier,
+   * stünde derselbe abgebrochene Lauf unter den durchgeführten Läufen als gelungen und in der
+   * Störungsliste als gescheitert (AK 8 der fachlichen Quelle #1074).
+   */
+  @Test
+  void derKandidatDerNachtTraegtDenAbbruchgrund() {
+    long laufId = lauf(DRIN, "NIGHT", true);
+    jdbc.update(
+        "UPDATE night_run SET abort_reason = 'Dirty-Guard: uncommittete Reste' WHERE id = ?",
+        laufId);
+    teilnahme(true);
+
+    assertThat(kandidaten())
+        .singleElement()
+        .extracting(DisruptionRepository.DisruptionCandidate::abortReason)
+        .isEqualTo("Dirty-Guard: uncommittete Reste");
+  }
+
+  /**
    * Kriterium 17: Die Störungsliste behält ihr Verhalten. Von denselben drei Läufen nimmt sie nur
    * den abgeschlossenen, nicht quittierten — die Nacht nimmt alle drei.
    */

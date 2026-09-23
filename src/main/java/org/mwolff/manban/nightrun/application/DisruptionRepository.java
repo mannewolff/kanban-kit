@@ -110,6 +110,9 @@ public interface DisruptionRepository {
    *     stets {@code true}, weil jene Abfrage darauf filtert
    * @param noWorkReason Grund, warum der Lauf nichts abgearbeitet hat; {@code null}, wenn er
    *     gearbeitet hat
+   * @param abortReason Grund, warum der Lauf hart abgebrochen ist (Issue #1143); {@code null}, wenn
+   *     er nicht abbrach. Der Maßstab braucht ihn, weil ein abgebrochener Lauf nie gelingt — auch
+   *     nicht mit lauter grünen Paketen
    */
   record DisruptionCandidate(
       long nightRunId,
@@ -119,7 +122,8 @@ public interface DisruptionRepository {
       Instant startedAt,
       @Nullable Instant updatedAt,
       boolean complete,
-      @Nullable String noWorkReason) {}
+      @Nullable String noWorkReason,
+      @Nullable String abortReason) {}
 
   /** Der Lauf, auf den sich eine Quittung bezieht. */
   record AckTarget(long nightRunId, long projectId) {}

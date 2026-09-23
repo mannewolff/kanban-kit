@@ -24,6 +24,10 @@ import org.junit.jupiter.api.Test;
  * der eigene Ausgang {@link NightRunOutcome.Verdict#NO_WORK}, der Rückfall {@link
  * NightRunOutcome#GRUND_UNBEKANNT} bleibt {@code FAILED}.
  */
+// PMD.TooManyMethods: Testklasse — jede Methode ist ein Fall der Rangfolge, und Faelle werden nicht
+// zusammengelegt, um eine Zahl zu druecken. Issue #1143 bringt die vier Faelle des Abbruchgrunds
+// dazu und reisst damit die Schwelle von 30. Dieselbe Begruendung wie an DisruptionServiceTest.
+@SuppressWarnings("PMD.TooManyMethods")
 class NightRunOutcomeTest {
 
   private static final Instant FIXED = Instant.parse("2026-09-19T22:00:00Z");
@@ -32,6 +36,10 @@ class NightRunOutcomeTest {
 
   /** Ein Grund, wie der Runner ihn meldet (Kit #744) — im Unterschied zum Rückfall des Servers. */
   private static final String GEMELDET = "Ready ist leer — nichts zu tun.";
+
+  /** Ein Abbruchgrund, wie der Runner ihn meldet (Issue #1142). */
+  private static final String ABBRUCH =
+      "Dirty-Guard: uncommittete Reste in src/main/java/Foo.java, src/test/java/FooTest.java";
 
   /**
    * Die Fälle ohne Zeitbezug messen an einem frischen Lebenszeichen: {@code updatedAt} ist {@code
@@ -49,7 +57,20 @@ class NightRunOutcomeTest {
       @Nullable String noWorkReason,
       NightRunMode mode,
       List<NightRunItem> items) {
-    return NightRunOutcome.of(complete, noWorkReason, mode, items, FIXED, FIXED, FIXED, FRIST);
+    return NightRunOutcome.of(
+        complete, noWorkReason, null, mode, items, FIXED, FIXED, FIXED, FRIST);
+  }
+
+  /** Derselbe Fall mit einem gemeldeten Abbruchgrund (Issue #1143). */
+  private static NightRunOutcome abgebrochen(boolean complete, List<NightRunItem> items) {
+    return abgebrochen(complete, items, FIXED);
+  }
+
+  /** Und mit einem eigenen Bezugszeitpunkt, an dem die Stillefrist gemessen wird. */
+  private static NightRunOutcome abgebrochen(
+      boolean complete, List<NightRunItem> items, Instant jetzt) {
+    return NightRunOutcome.of(
+        complete, null, ABBRUCH, NightRunMode.IMPLEMENTATION, items, FIXED, FIXED, jetzt, FRIST);
   }
 
   private static NightRunItem item(
@@ -94,6 +115,9 @@ class NightRunOutcomeTest {
    * Issue #1121: Der <b>gemeldete</b> Grund ist der eigene Ausgang „nichts zu tun" — und keine
    * Störung. Wer ein Projekt nachts bewusst ruhen lässt, räumte sonst jeden Morgen eine Meldung
    * weg.
+   *
+   * <p>Zugleich AK 7 der fachlichen Quelle #1074: Der regulär beendete Lauf ohne Arbeit bleibt
+   * {@code NO_WORK}, auch nachdem der Abbruchgrund eine Stufe vor ihm bekommen hat (Issue #1143).
    */
   @Test
   void einLaufOhneArbeitMitGemeldetemGrundHatNichtsZuTun() {
@@ -102,6 +126,7 @@ class NightRunOutcomeTest {
     assertThat(outcome.verdict()).isEqualTo(NightRunOutcome.Verdict.NO_WORK);
     assertThat(outcome.decisiveItem()).isNull();
     assertThat(outcome.noWorkReason()).isEqualTo(GEMELDET);
+    assertThat(outcome.abortReason()).isNull();
     assertThat(outcome.isDisruption()).isFalse();
   }
 
@@ -345,12 +370,16 @@ class NightRunOutcomeTest {
    * Gemessen wird am letzten Lebenszeichen, nicht am Start: Der Lauf läuft seit vier Stunden — weit
    * über der Frist —, hat aber vor einer Minute gemeldet. Ein langer Lauf, der sich regelmäßig
    * meldet, ist genau der Normalfall einer Nacht.
+   *
+   * <p>Zugleich AK 1 der fachlichen Quelle #1074: Ein Lauf ohne Abschluss, ohne Pakete und mit
+   * frischem Lebenszeichen bleibt {@code RUNNING} (Issue #1143).
    */
   @Test
   void einFrischesLebenszeichenHaeltDenLaufLaufend() {
     var outcome =
         NightRunOutcome.of(
             false,
+            null,
             null,
             NightRunMode.IMPLEMENTATION,
             List.of(),
@@ -370,6 +399,7 @@ class NightRunOutcomeTest {
         NightRunOutcome.of(
             false,
             null,
+            null,
             NightRunMode.IMPLEMENTATION,
             List.of(),
             FIXED,
@@ -385,6 +415,7 @@ class NightRunOutcomeTest {
     var outcome =
         NightRunOutcome.of(
             false,
+            null,
             null,
             NightRunMode.IMPLEMENTATION,
             List.of(),
@@ -410,6 +441,7 @@ class NightRunOutcomeTest {
         NightRunOutcome.of(
             false,
             null,
+            null,
             NightRunMode.IMPLEMENTATION,
             List.of(),
             FIXED,
@@ -419,6 +451,7 @@ class NightRunOutcomeTest {
     var darueber =
         NightRunOutcome.of(
             false,
+            null,
             null,
             NightRunMode.IMPLEMENTATION,
             List.of(),
@@ -440,6 +473,7 @@ class NightRunOutcomeTest {
     var outcome =
         NightRunOutcome.of(
             true,
+            null,
             null,
             NightRunMode.IMPLEMENTATION,
             List.of(item(1, NightRunState.GREEN, null)),
@@ -463,6 +497,7 @@ class NightRunOutcomeTest {
         NightRunOutcome.of(
             false,
             "Ready war leer",
+            null,
             NightRunMode.IMPLEMENTATION,
             List.of(item(1, NightRunState.RED, NightRunErrorClass.HARD_ABORT)),
             FIXED,
@@ -473,5 +508,80 @@ class NightRunOutcomeTest {
     assertThat(outcome.verdict()).isEqualTo(NightRunOutcome.Verdict.FAILED);
     assertThat(outcome.decisiveItem()).isNull();
     assertThat(outcome.noWorkReason()).isNull();
+  }
+
+  // --- Der harte Abbruch (Issue #1143, Plan #1139 E5) ----------------------------------------
+
+  /**
+   * AK 2 der fachlichen Quelle #1074: Ein abgeschlossen gemeldeter Lauf mit Abbruchgrund ist nicht
+   * gelungen — ohne jeden Bezug auf die Stillefrist. Der Bezugszeitpunkt liegt hier dreißig Tage
+   * nach dem letzten Lebenszeichen; an einem abgeschlossenen Lauf ändert das nichts.
+   *
+   * <p>AK 6 steht mit hier: {@code FAILED} ist bereits eine Störung, {@link
+   * NightRunOutcome#isDisruption()} bleibt deshalb unverändert.
+   */
+  @Test
+  void einAbbruchgrundLaesstDenLaufScheitern() {
+    var outcome = abgebrochen(true, List.of(), FIXED.plus(Duration.ofDays(30)));
+
+    assertThat(outcome.verdict()).isEqualTo(NightRunOutcome.Verdict.FAILED);
+    assertThat(outcome.abortReason()).isEqualTo(ABBRUCH);
+    assertThat(outcome.isDisruption()).isTrue();
+  }
+
+  /**
+   * AK 3 und der Anlass des Vorhabens: Ein Lauf, der nach drei grünen Paketen hart abbrach, galt
+   * bis hierher als gelungen. Der Abbruchgrund schlägt die Pakete.
+   */
+  @Test
+  void einAbbruchgrundSchlaegtLauterGruenePakete() {
+    var outcome =
+        abgebrochen(
+            true,
+            List.of(
+                item(1, NightRunState.GREEN, null),
+                item(2, NightRunState.GREEN, null),
+                item(3, NightRunState.GREEN, null)));
+
+    assertThat(outcome.verdict()).isEqualTo(NightRunOutcome.Verdict.FAILED);
+    assertThat(outcome.decisiveItem()).isNull();
+    assertThat(outcome.abortReason()).isEqualTo(ABBRUCH);
+  }
+
+  /**
+   * E5: Der Abbruchgrund erzwingt das Urteil, lässt das maßgebliche Paket aber aus den Paketen
+   * bestimmen — „Karte #6: zurückgestellt" bleibt die genauere Auskunft. Das graue Paket allein
+   * wäre {@link NightRunOutcome.Verdict#WAITING}; der Abbruch macht daraus {@code FAILED}.
+   */
+  @Test
+  void einAbbruchgrundLaesstDasMassgeblichePaketStehen() {
+    var outcome =
+        abgebrochen(
+            true, List.of(item(6, NightRunState.GREY, NightRunErrorClass.DEPENDENCY_UNMET)));
+
+    assertThat(outcome.verdict()).isEqualTo(NightRunOutcome.Verdict.FAILED);
+    assertThat(outcome.decisiveItem())
+        .isEqualTo(
+            new NightRunOutcome.DecisiveItem(
+                6, NightRunState.GREY, NightRunErrorClass.DEPENDENCY_UNMET));
+  }
+
+  /**
+   * Der Abbruchgrund steht <b>hinter</b> „verstummt" und „läuft noch": Ein Lauf ohne Abschluss hat
+   * noch nichts zu melden, und ein verstummter meldet gar nichts mehr — auch keinen Abbruch. Beide
+   * Richtungen stehen hier, sonst bliebe offen, ob die neue Stufe zu weit nach vorn rutschte.
+   */
+  @Test
+  void einAbbruchgrundSchlaegtWederLaeuftNochNochVerstummt() {
+    var rot = List.of(item(1, NightRunState.RED, NightRunErrorClass.HARD_ABORT));
+
+    var laufend = abgebrochen(false, rot);
+    var verstummt = abgebrochen(false, rot, FIXED.plus(FRIST).plusSeconds(1));
+
+    assertThat(laufend.verdict()).isEqualTo(NightRunOutcome.Verdict.RUNNING);
+    assertThat(laufend.abortReason()).isNull();
+    assertThat(verstummt.verdict()).isEqualTo(NightRunOutcome.Verdict.FAILED);
+    assertThat(verstummt.decisiveItem()).isNull();
+    assertThat(verstummt.abortReason()).isNull();
   }
 }

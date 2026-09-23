@@ -404,12 +404,14 @@ public class NightRunService {
         run.usage(),
         run.noWorkReason(),
         run.budget(),
-        // Durchgereicht, aber ausdruecklich nicht an NightRunOutcome.of: Der Ausgang eines
-        // abgebrochenen Laufs entsteht im Folgepaket (Issue #1142, Abgrenzung).
         run.abortReason(),
         NightRunOutcome.of(
             run.complete(),
             run.noWorkReason(),
+            // Seit Issue #1143 wirkt der Abbruchgrund auf den Ausgang: Ein Lauf, der abbrach, ist
+            // nie gelungen. Dieselben Argumente wie in DisruptionService.view — eine Rechnung,
+            // zwei Auswertungswege (AK 8 der fachlichen Quelle #1074).
+            run.abortReason(),
             run.mode(),
             eigeneItems,
             run.startedAt(),
