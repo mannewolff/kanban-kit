@@ -1,15 +1,11 @@
-import type {
-  VerbrauchAngaben,
-  VerbrauchKennzahlen,
-  VerbrauchZeitraumArt,
-} from '../api/nightRunUsage'
+import type { VerbrauchAngaben, VerbrauchKennzahlen } from '../api/nightRunUsage'
 import { leserZone } from '../api/nightRunUsage'
 import { betrag } from './nachtlaufFormat'
 
 /**
  * Die Textrechnung der Verbrauchs-Auswertung (Issue #940, Plan #933): Beschriftung der Zeiträume,
- * Richtung des Vergleichs mit dem Vorzeitraum, der Anteil aus dem Zwischenspeicher und die
- * Hinweise, die leere oder angeschnittene Zeiträume erklären. Ohne React und ohne Netzzugriff.
+ * Richtung des Vergleichs mit dem Vorzeitraum und die Hinweise, die leere oder angeschnittene
+ * Zeiträume erklären. Ohne React und ohne Netzzugriff.
  *
  * Der Kern ist derselbe wie im Backend: **„nicht gemessen" ist nicht 0** (Plan E5).
  */
@@ -21,8 +17,7 @@ import { betrag } from './nachtlaufFormat'
  * Nachtlauf, an dem im Gespräch gearbeitet wurde, stehen Zahlen — der Satz erschiene sonst über
  * einer Arbeit, die stattgefunden hat.
  */
-export const KEIN_LAUF_TEXT =
-  'In diesem Zeitraum hat weder ein Run noch eine Sitzung stattgefunden.'
+const KEIN_LAUF_TEXT = 'In diesem Zeitraum hat weder ein Run noch eine Sitzung stattgefunden.'
 
 /** Ein Zeitraum ganz vor dem Erfassungsbeginn — und niemals eine 0 (#984 AK 6). */
 export const NICHT_ERFASST_TEXT = 'nicht erfasst'
@@ -39,16 +34,6 @@ const DATUM = new Intl.DateTimeFormat('de-DE', {
 
 const MONAT = new Intl.DateTimeFormat('de-DE', { month: 'long', year: 'numeric', timeZone: 'UTC' })
 
-/** Tag und Monat ohne Jahr — für die Zeilen der Nächte, wo die Spalte schmal ist. */
-const TAG_MONAT = new Intl.DateTimeFormat('de-DE', { day: '2-digit', month: '2-digit', timeZone: 'UTC' })
-
-const WOCHENTAG = new Intl.DateTimeFormat('de-DE', { weekday: 'short', timeZone: 'UTC' })
-
-const PROZENT = new Intl.NumberFormat('de-DE', {
-  minimumFractionDigits: 1,
-  maximumFractionDigits: 1,
-})
-
 /**
  * Ein Kalenderdatum `JJJJ-MM-TT` als Mitternacht UTC. Formatiert wird ebenfalls in UTC — so kann
  * die Zone des Browsers das Datum nie um einen Tag verschieben.
@@ -59,12 +44,6 @@ const folgetag = (tag: string): Date => {
   const datum = alsDatum(tag)
   datum.setUTCDate(datum.getUTCDate() + 1)
   return datum
-}
-
-const VORZEITRAUM: Record<VerbrauchZeitraumArt, string> = {
-  DAY: 'Vorzyklus',
-  WEEK: 'Vorwoche',
-  MONTH: 'Vormonat',
 }
 
 /**
@@ -137,19 +116,6 @@ export function zeitpunktDatum(zeitpunkt: string): string {
   return DATUM.format(new Date(zeitpunkt))
 }
 
-/** Der Vorzeitraum beim Namen seiner Art — der Titel seiner Platte. */
-export function vorzeitraumName(kennzahlen: Pick<VerbrauchKennzahlen, 'type'>): string {
-  return VORZEITRAUM[kennzahlen.type]
-}
-
-/**
- * Eine Nacht in der Kurzform der Nächte-Platte: Wochentag, Beginn und Folgetag ohne Jahr. Die
- * Spalte ist schmal, das Jahr steht schon in der Beschriftung des Zeitraums darüber.
- */
-export function nachtKurz(nacht: string): string {
-  return `${WOCHENTAG.format(alsDatum(nacht))} ${TAG_MONAT.format(alsDatum(nacht))} → ${TAG_MONAT.format(folgetag(nacht))}`
-}
-
 /** „1 Run" bzw. „n Runs" — die Zahl steht in Kopfzeilen, Einordnungen und Nächte-Zeilen. */
 export function laeufeText(anzahl: number): string {
   return anzahl === 1 ? '1 Run' : `${anzahl} Runs`
@@ -197,18 +163,7 @@ export function vergleichMitVorzeitraum(
   }
 }
 
-/**
- * Der Anteil der Eingabe aus dem Zwischenspeicher (#926 AK 13). Den Wert rechnet der Server
- * (`NightRunUsage#cachedInputSharePercent`); ohne Eingabemenge liefert er `null`, und das heißt
- * „nicht bestimmt" — nicht 0 %.
- */
-export function zwischenspeicherAnteil(angaben: VerbrauchAngaben): string {
-  return angaben.cachedInputSharePercent === null
-    ? 'nicht bestimmt'
-    : `${PROZENT.format(angaben.cachedInputSharePercent)} %`
-}
-
-export type ZeitraumFall =
+type ZeitraumFall =
   | 'vor-aufbewahrung'
   | 'teilweise'
   | 'kein-lauf'
@@ -221,7 +176,7 @@ export type ZeitraumFall =
  * aber nicht „ohne Lauf"; ein angeschnittener Zeitraum kann leer aussehen und ist trotzdem nur
  * unvollständig (Plan E8).
  */
-export function zeitraumFall(kennzahlen: VerbrauchKennzahlen): ZeitraumFall {
+function zeitraumFall(kennzahlen: VerbrauchKennzahlen): ZeitraumFall {
   if (kennzahlen.coverage === 'BEFORE_RETENTION') {
     return 'vor-aufbewahrung'
   }

@@ -1,23 +1,18 @@
 import { describe, expect, it } from 'vitest'
 import type { VerbrauchAngaben, VerbrauchKennzahlen } from '../api/nightRunUsage'
 import {
-  KEIN_LAUF_TEXT,
   NICHT_ERFASST_TEXT,
   TEILWEISE_ERFASST_TEXT,
   erfassungsstand,
   kartenText,
   laeufeText,
-  nachtKurz,
   sitzungenText,
   vergleichMitVorzeitraum,
-  vorzeitraumName,
   zeitraumBeschriftung,
   zyklusBeschriftung,
   zyklusDavor,
   zyklusDesStarts,
-  zeitraumFall,
   zeitraumHinweis,
-  zwischenspeicherAnteil,
 } from './verbrauchZeitraum'
 
 /** Textrechnung der Verbrauchs-Auswertung (Issue #940, Plan #933). */
@@ -87,14 +82,6 @@ describe('zeitraumBeschriftung', () => {
   })
 })
 
-describe('vorzeitraumName', () => {
-  it('nennt je Art den Vorzeitraum beim Namen', () => {
-    expect(vorzeitraumName(kennzahlen({ type: 'DAY' }))).toBe('Vorzyklus')
-    expect(vorzeitraumName(kennzahlen({ type: 'WEEK' }))).toBe('Vorwoche')
-    expect(vorzeitraumName(kennzahlen({ type: 'MONTH' }))).toBe('Vormonat')
-  })
-})
-
 describe('laeufeText, sitzungenText und kartenText', () => {
   it('setzt den Einzahl- und den Mehrzahlfall', () => {
     expect(laeufeText(1)).toBe('1 Run')
@@ -106,16 +93,6 @@ describe('laeufeText, sitzungenText und kartenText', () => {
     expect(kartenText(1)).toBe('1 Karte')
     expect(kartenText(0)).toBe('0 Karten')
     expect(kartenText(54)).toBe('54 Karten')
-  })
-})
-
-describe('nachtKurz', () => {
-  it('nennt Wochentag, Beginn und Folgetag ohne Jahr', () => {
-    expect(nachtKurz('2026-09-08')).toBe('Di 08.09. → 09.09.')
-  })
-
-  it('zaehlt ueber den Monatswechsel richtig weiter', () => {
-    expect(nachtKurz('2026-08-31')).toBe('Mo 31.08. → 01.09.')
   })
 })
 
@@ -163,27 +140,7 @@ describe('vergleichMitVorzeitraum', () => {
   })
 })
 
-describe('zwischenspeicherAnteil', () => {
-  it('schreibt den Prozentwert mit einer Nachkommastelle', () => {
-    expect(
-      lesbar(zwischenspeicherAnteil({ ...nichts, inputTokens: 200, cachedInputSharePercent: 25 })),
-    ).toBe('25,0 %')
-  })
-
-  it('ist ohne Eingabemenge nicht bestimmt', () => {
-    expect(
-      zwischenspeicherAnteil({ ...nichts, cachedInputTokens: 50, cachedInputSharePercent: null }),
-    ).toBe('nicht bestimmt')
-  })
-
-  it('nennt einen gemessenen Anteil von null Prozent als Wert', () => {
-    expect(
-      lesbar(zwischenspeicherAnteil({ ...nichts, inputTokens: 200, cachedInputSharePercent: 0 })),
-    ).toBe('0,0 %')
-  })
-})
-
-describe('zeitraumFall und zeitraumHinweis', () => {
+describe('zeitraumHinweis', () => {
   const leer = { noRuns: true, runCount: 0, nightRunCount: 0, interactiveRunCount: 0 } as const
   const faelle = {
     keinLauf: kennzahlen({ ...leer, usage: { total: nichts, cardShare: nichts, remainder: nichts } }),
@@ -196,11 +153,10 @@ describe('zeitraumFall und zeitraumHinweis', () => {
     nichtGemessen: kennzahlen({ usage: { total: nichts, cardShare: nichts, remainder: nichts } }),
   }
 
-  it('unterscheidet die vier Faelle', () => {
-    expect(zeitraumFall(faelle.keinLauf)).toBe('kein-lauf')
-    expect(zeitraumFall(faelle.vorAufbewahrung)).toBe('vor-aufbewahrung')
-    expect(zeitraumFall(faelle.teilweise)).toBe('teilweise')
-    expect(zeitraumFall(faelle.nichtGemessen)).toBe('nicht-gemessen')
+  it('erklaert einen Zeitraum mit Laeufen ohne Verbrauchszahl eigens', () => {
+    expect(zeitraumHinweis(faelle.nichtGemessen)).toBe(
+      'In diesem Zeitraum liefen Runs, ihr Verbrauch liegt aber nicht vor.',
+    )
   })
 
   it('liefert vier verschiedene Texte', () => {
@@ -211,8 +167,7 @@ describe('zeitraumFall und zeitraumHinweis', () => {
   })
 
   it('sagt beim Zeitraum ohne Lauf und ohne Sitzung den Satz aus #926 AK 9', () => {
-    expect(zeitraumHinweis(faelle.keinLauf)).toBe(KEIN_LAUF_TEXT)
-    expect(KEIN_LAUF_TEXT).toBe(
+    expect(zeitraumHinweis(faelle.keinLauf)).toBe(
       'In diesem Zeitraum hat weder ein Run noch eine Sitzung stattgefunden.',
     )
   })
@@ -233,8 +188,7 @@ describe('zeitraumFall und zeitraumHinweis', () => {
       },
     })
 
-    expect(zeitraumFall(nurSitzungen)).toBe('vollstaendig')
-    expect(zeitraumHinweis(nurSitzungen)).not.toBe(KEIN_LAUF_TEXT)
+    expect(zeitraumHinweis(nurSitzungen)).toBeNull()
   })
 
   /** Der Text des Kartenblatts bleibt dem Kartenblatt (#984 AK 6). */
@@ -245,19 +199,20 @@ describe('zeitraumFall und zeitraumHinweis', () => {
   })
 
   it('sagt ganz vor dem aeltesten aufbewahrten Run NICHT den Satz aus AK 9', () => {
-    expect(zeitraumHinweis(faelle.vorAufbewahrung)).not.toBe(KEIN_LAUF_TEXT)
+    expect(zeitraumHinweis(faelle.vorAufbewahrung)).not.toBe(
+      'In diesem Zeitraum hat weder ein Run noch eine Sitzung stattgefunden.',
+    )
     expect(zeitraumHinweis(faelle.vorAufbewahrung)).toContain('ältesten aufbewahrten Run')
   })
 
   it('nennt eine Teilabdeckung neben den Zahlen, auch ohne Lauf in der aufbewahrten Zeit', () => {
     expect(zeitraumHinweis(faelle.teilweise)).toContain('nur teilweise')
     expect(
-      zeitraumFall(kennzahlen({ coverage: 'PARTIAL', noRuns: true, runCount: 0 })),
-    ).toBe('teilweise')
+      zeitraumHinweis(kennzahlen({ coverage: 'PARTIAL', noRuns: true, runCount: 0 })),
+    ).toContain('nur teilweise')
   })
 
   it('hat ohne Besonderheit keinen Hinweis', () => {
-    expect(zeitraumFall(kennzahlen({}))).toBe('vollstaendig')
     expect(zeitraumHinweis(kennzahlen({}))).toBeNull()
   })
 })

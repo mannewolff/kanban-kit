@@ -43,37 +43,6 @@ export interface VerbrauchAufteilungGattung {
   interactive: VerbrauchAufteilung
 }
 
-/** Der Verbrauch einer Kartenzeile je Gattung (Issue #1013). */
-export interface VerbrauchAngabenGattung {
-  night: VerbrauchAngaben
-  interactive: VerbrauchAngaben
-}
-
-/** Eine Kartenzeile einer Nacht. */
-export interface VerbrauchKarte {
-  cardNumber: number
-  attemptCount: number
-  durationMs: number | null
-  usage: VerbrauchAngaben
-  usageByKind: VerbrauchAngabenGattung
-}
-
-/** Eine Nacht (#926 AK 1–4). */
-export interface VerbrauchNacht {
-  /** Datum, an dem die Nacht beginnt (`JJJJ-MM-TT`). */
-  night: string
-  /** Zahl der Einträge der Nacht — Läufe **und** Sitzungen; der Server zählt beide (Issue #1013). */
-  runCount: number
-  durationMs: number
-  cardCount: number
-  usage: VerbrauchAufteilung
-  usageByKind: VerbrauchAufteilungGattung
-  aborted: boolean
-  cards: VerbrauchKarte[]
-  /** Die Kosten je Stufe der Kette; leer, wenn in dieser Nacht keine Kette lief (Issue #1114). */
-  stages: VerbrauchStufe[]
-}
-
 /** Die Kennzahlen eines Zeitraums samt seiner Grenzen. */
 export interface VerbrauchKennzahlen {
   type: VerbrauchZeitraumArt
@@ -187,10 +156,6 @@ export function leserZone(): string {
 }
 
 export const nightRunUsageApi = {
-  night: (projectId: number, date: string, zone: string = leserZone()) =>
-    apiFetch<VerbrauchNacht>(
-      `/api/projects/${projectId}/night-run-usage/night?${new URLSearchParams({ date, zone })}`,
-    ),
   period: (
     projectId: number,
     type: VerbrauchZeitraumArt,
