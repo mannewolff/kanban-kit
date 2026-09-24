@@ -55,6 +55,7 @@ import {
   type Kostenaufteilung,
 } from '../components/nachtlauf/NachtlaufLaufInstrumente'
 import { LaufMarke, NachtlaufLaufPlatte } from '../components/nachtlauf/NachtlaufLaufPlatte'
+import { LaufArtSymbol, type LaufArt } from '../components/leitstand/LaufArtSymbol'
 import { NachtlaufVorgangszeile } from '../components/nachtlauf/NachtlaufVorgangszeile'
 import {
   NachtlaufStufenband,
@@ -85,6 +86,7 @@ import {
 import { betrag, menge } from '../lib/nachtlaufFormat'
 import {
   buildHandoffText,
+  kurzGrund,
   nightRunZustandsText,
   NIGHT_RUN_ERROR_CLASS_TEXT,
   type NightRunHandoffItem,
@@ -100,7 +102,6 @@ import {
   type NightRunItem,
   type NightRunKettenStufe,
   type NightRunKettenStufen,
-  type NightRunMode,
   type NightRunState,
   type NightRunStufenvorgaben,
 } from '../lib/nightRunLog'
@@ -215,7 +216,7 @@ interface Budget {
  * beschränkt (`NightRunService.list`, Issue #1012), eine Sitzung erreicht sie also gar nicht. Der
  * Typ lässt sie trotzdem zu — ein Wort dafür ist billiger als ein Cast, der den Schutz aushebelte.
  */
-type AnzeigeArt = NightRunMode | NightRunServerMode
+type AnzeigeArt = LaufArt
 
 /** Ein Lauf in der Anzeigeform. */
 interface AnzeigeLauf {
@@ -248,6 +249,13 @@ interface AnzeigeLauf {
    * hat, aus der Zeit vor der Umstellung stammt oder eben erst im Browser geparst wurde.
    */
   ohneArbeit: string | undefined
+  /**
+   * Grund eines harten Abbruchs (Issue #1145) — **vollständig**, wie der Runner ihn gemeldet hat;
+   * `undefined` an jedem Lauf, der nicht abbrach, aus der Zeit vor der Umstellung stammt oder eben
+   * erst im Browser geparst wurde. Gekürzt wird er allein dort, wo er neben anderem in einer Zeile
+   * steht — die Kopfmarke nimmt {@link kurzGrund}, die aufgeklappte Platte den ganzen Text (AK 4).
+   */
+  abbruchGrund: string | undefined
   /**
    * Der Befund des Servers (Issue #1078); `undefined` beim eben geparsten Lauf — der ist noch bei
    * keinem Server gewesen und wird deshalb weiterhin lokal beurteilt (Plan #1072 E28).
@@ -297,22 +305,6 @@ interface Kettenglied {
 const zustandsFarbe = (zustand: NightRunState): string => melderFarbe(MELDER_JE_ZUSTAND[zustand])
 
 /**
- * Die Lauf-Art im Etikett des Laufkopfs („Lauf · Kette", Vorlage
- * `docs/mockup-nachtlauf-lauf.html` Z. 382). Als `Record` über alle Werte, nicht als
- * Inline-Bedingung: Ein weiterer Modus bricht den Build, statt still auf „Umsetzung" zu fallen.
- *
- * <p>Nicht `modusName` aus `lib/leitstand.ts`: Die kennt nicht `NIGHTPLAN`, der browser-only bleibt
- * (Plan #803, Entscheidung 8) und dort nie vorkäme — hier steht er aber auf der Seite.
- */
-const ART_KURZ: Record<AnzeigeArt, string> = {
-  IMPLEMENTATION: 'Umsetzung',
-  REVIEW: 'Prüfung',
-  NIGHTPLAN: 'Nachtplan',
-  CHAIN: 'Kette',
-  INTERACTIVE: 'Sitzung',
-}
-
-/**
  * Die Stufen des Wegs von der fachlichen Anforderung über den Plan zum Arbeitspaket (#715). Die
  * Zuordnung läuft über die **Titel-Präfixe**, die der Workflow ohnehin vergibt (`/fachplan`,
  * `/plan`) — nicht über die Position in der `derivedFrom`-Kette: Ein Vorhaben oder eine Idee kann
@@ -335,7 +327,7 @@ const STUFEN: ReadonlyArray<{ label: string; praefix: string }> = [
 const GRUNDSATZ: Record<NightRunErgebnisstandGrund, string> = {
   'kein-json': 'Nicht auswertbar',
   'unbekannte-fassung': 'Fassung nicht unterstützt',
-  'nicht-unterstuetzt': 'Lauf-Art oder Vokabular nicht unterstützt',
+  'nicht-unterstuetzt': 'Art des Runs oder Vokabular nicht unterstützt',
 }
 
 /**
@@ -366,7 +358,7 @@ const nichtDeutbar = (ergebnis: {
  * `(projectId, startedAt)` nur einmal an, ein unvollständiger Stand blockierte den späteren
  * vollständigen dauerhaft.
  */
-const UNVOLLSTAENDIG = 'Lauf noch nicht abgeschlossen — nicht gespeichert'
+const UNVOLLSTAENDIG = 'Run noch nicht abgeschlossen — nicht gespeichert'
 
 /**
  * Holt die Häufigkeiten vom Server; ein Fehlschlag ergibt `null` statt einer Ausnahme. Die Zahlen
@@ -416,6 +408,9 @@ const ausParser = (run: NightRun): AnzeigeLauf => ({
   // Wie die Herkunftsfelder leer: Den Grund kennt nur der Server, ein eben geparster Lauf war
   // noch bei keinem.
   ohneArbeit: undefined,
+  // Wie der Grund ohne Arbeit leer: Ein eben geparster Lauf war bei keinem Server, und ein
+  // Abbruchgrund entsteht erst dort (Plan #1139, E7).
+  abbruchGrund: undefined,
   befund: undefined,
   laufId: undefined,
   verbrauch: undefined,
@@ -542,6 +537,7 @@ const ausSicht = (view: NightRunView): AnzeigeLauf => ({
   zuletztGemeldetAm: view.updatedAt ?? undefined,
   vollstaendig: view.complete,
   ohneArbeit: view.noWorkReason ?? undefined,
+  abbruchGrund: view.abortReason ?? undefined,
   befund: view.outcome,
   laufId: view.id,
   verbrauch: ausVerbrauch(view.usage),
@@ -906,7 +902,7 @@ function haeufigkeitsText(
   }
   return anzahl === 1
     ? `${beschriftung}: zum ersten Mal`
-    : `${beschriftung}: ${anzahl} von ${aufbewahrteLaeufe} aufbewahrten Läufen`
+    : `${beschriftung}: ${anzahl} von ${aufbewahrteLaeufe} aufbewahrten Runs`
 }
 
 /**
@@ -933,7 +929,7 @@ async function inDieZwischenablage(text: string): Promise<void> {
  *
  * <p>Als Liste mit Beschriftung und nicht über `Object.keys`: Die Reihenfolge ist Teil der Aussage,
  * und ein fünfter Schritt bräuchte hier eine deutsche Benennung, statt still als Schlüssel
- * durchzurutschen — dieselbe Absicherung wie bei {@link ART_KURZ}.
+ * durchzurutschen — dieselbe Absicherung, die das Symbol der Laufart über seinen `Record` hat.
  */
 const KETTEN_STUFEN: ReadonlyArray<{ schluessel: NightRunKettenStufe; label: string }> = [
   { schluessel: 'plan', label: 'Plan' },
@@ -2002,7 +1998,7 @@ function fussangaben(lauf: AnzeigeLauf, stand: NightRun | undefined): Fussangabe
   return [
     ...standAngaben(stand),
     {
-      label: 'Ergebnis des Zyklus',
+      label: 'Ergebnis der Schicht',
       wert: `${lauf.processedCount} bearbeitet · ${lauf.skippedCount} übergangen`,
     },
     {
@@ -2040,7 +2036,7 @@ function kettenAngaben(stand: NightRun | undefined): FussangabeForm[] {
       label: 'Laufzeit über alle Stufen',
       wert: formatDuration(stufenZeitSumme(stand.items) / 1000),
     },
-    { label: 'Kosten des Zyklus', wert: betrag(stand.stand?.kostenSumme) },
+    { label: 'Kosten der Schicht', wert: betrag(stand.stand?.kostenSumme) },
     ...(vermerk === null ? [] : [{ label: 'Zur Kostensumme', wert: vermerk, vorbehalt: true }]),
   ]
 }
@@ -2075,7 +2071,7 @@ function standAngaben(stand: NightRun | undefined): FussangabeForm[] {
     },
     ...(hinweis === undefined
       ? [
-          { label: 'Kosten des Zyklus', wert: kosten.wert },
+          { label: 'Kosten der Schicht', wert: kosten.wert },
           ...(kosten.hinweis === null
             ? []
             : [{ label: 'Zur Kostensumme', wert: kosten.hinweis, vorbehalt: true }]),
@@ -2175,8 +2171,6 @@ function Kopfmarken({
   const kosten = kostenText(lauf.verbrauch?.kostenUsd ?? null)
   return (
     <>
-      {/* Die Art des Laufs als erste Marke (Issue #1128): In der Vorzeile ging sie unter. */}
-      <LaufMarke testId="lauf-art">{ART_KURZ[lauf.mode]}</LaufMarke>
       {/* Die Marke haengt am Befund und nicht an `vollstaendig` (#1092): Ein verstummter Lauf
           traegt fuer immer `complete = false`, ist aber nicht „unvollstaendig gemeldet" — er ist
           nicht gelungen, und das sagt bereits die rote LED der Platte. */}
@@ -2185,12 +2179,21 @@ function Kopfmarken({
           {UNVOLLSTAENDIG_GEMELDET}
         </LaufMarke>
       )}
-      {/* Die beiden Zustandsmarken schliessen einander aus: Ein Lauf ist entweder noch nicht
-          abgeschlossen oder ohne Arbeit beendet. Beide zugleich waeren ein Widerspruch im Kopf
-          derselben Platte (Issue #1069). */}
+      {/* Die dritte Zustandsmarke (Issue #1145): der Grund des harten Abbruchs, **gekuerzt** auf
+          eine Zeile — vollstaendig steht er in der aufgeklappten Platte (AK 4, E14). Sie schliesst
+          die Marke „ohne Arbeit" aus: Der Server setzt beim abgebrochenen Lauf allein den
+          Abbruchgrund (E6), und zwei Zustandsmarken waeren ein Widerspruch im selben Kopf. */}
+      {lauf.abbruchGrund !== undefined && (
+        <LaufMarke testId="lauf-zustand" led={<Led melder={melder} />}>
+          {kurzGrund(lauf.abbruchGrund)}
+        </LaufMarke>
+      )}
+      {/* Die Zustandsmarken schliessen einander aus: Ein Lauf ist entweder noch nicht
+          abgeschlossen, abgebrochen oder ohne Arbeit beendet. Mehrere zugleich waeren ein
+          Widerspruch im Kopf derselben Platte (Issue #1069). */}
       {/* Der Melder kommt vom Lauf und steht nicht fest auf zinnober (Issue #1121): Ein Lauf, der
           nichts zu tun fand, ist grau — rot bleibt allein der Rueckfall „Grund unbekannt". */}
-      {lauf.vollstaendig && lauf.ohneArbeit !== undefined && (
+      {lauf.vollstaendig && lauf.abbruchGrund === undefined && lauf.ohneArbeit !== undefined && (
         <LaufMarke testId="lauf-zustand" led={<Led melder={melder} />}>
           {lauf.ohneArbeit}
         </LaufMarke>
@@ -2232,15 +2235,15 @@ const metazeile = (lauf: AnzeigeLauf, stand: NightRun | undefined): string =>
     .join(' · ')
 
 /**
- * Der Titel eines Laufs (Issue #1127): „Lauf #412 · 14. September, 22:05" — Nummer, Startdatum und
- * Startzeit. Datum und Uhrzeit machen zwei Läufe desselben Zyklus unterscheidbar. Ohne Nummer (ein
- * eben eingelesener Lauf war bei keinem Server) „Lauf · 14. September, 22:05".
+ * Der Titel eines Laufs (Issue #1127, #1151): „Run #412 · 14. September, 22:05" — Nummer,
+ * Startdatum und Startzeit. Datum und Uhrzeit machen zwei Läufe derselben Schicht unterscheidbar.
+ * Ohne Nummer (ein eben eingelesener Lauf war bei keinem Server) „Run · 14. September, 22:05".
  */
 const laufTitel = (startedAt: string, laufId: number | undefined): string => {
   const start = new Date(startedAt)
   const datum = start.toLocaleDateString('de-DE', { day: 'numeric', month: 'long' })
   const zeit = start.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })
-  const lauf = laufId === undefined ? 'Lauf' : `Lauf #${laufId}`
+  const lauf = laufId === undefined ? 'Run' : `Run #${laufId}`
   return `${lauf} · ${datum}, ${zeit}`
 }
 
@@ -2456,8 +2459,8 @@ function Vorgangszeile({
       {anteil !== undefined && (
         <NachtlaufAnteilsbalken
           anteil={anteil.anteil}
-          beschriftung={`${anteil.dauer} · ${anteil.anteil} % des Zyklus`}
-          ansage={`${anteil.ansage}, ${anteil.anteil} % des Zyklus`}
+          beschriftung={`${anteil.dauer} · ${anteil.anteil} % der Schicht`}
+          ansage={`${anteil.ansage}, ${anteil.anteil} % der Schicht`}
           farbe={anteil.farbe}
           schiene={NUT}
           testId={`laufband-abschnitt-${item.cardNumber}`}
@@ -2574,7 +2577,7 @@ function LaufPanel({
   katalog: Kartenkatalog
   vorhabenKarten: Vorhabenkatalog
   zaehler: Haeufigkeiten
-  /** Das „M“ in „N von M aufbewahrten Läufen“ — die Länge der zuletzt geladenen Liste. */
+  /** Das „M“ in „N von M aufbewahrten Runs“ — die Länge der zuletzt geladenen Liste. */
   aufbewahrteLaeufe: number
   /**
    * Was die Kettenvorgänge dieses Laufs angelegt haben, je Anforderung (Issue #1106) — leer, bis es
@@ -2624,8 +2627,10 @@ function LaufPanel({
       testId={`lauf-${lauf.startedAt}`}
       titel={laufTitel(lauf.startedAt, lauf.laufId)}
       zyklus={zyklusBeschriftung(zyklusDesStarts(lauf.startedAt))}
+      artSymbol={<LaufArtSymbol art={lauf.mode} />}
       meta={metazeile(lauf, stand)}
       melder={melder}
+      abbruchGrund={lauf.abbruchGrund}
       pulsiert={laeuftNoch({ complete: lauf.vollstaendig, outcome: lauf.befund })}
       offen={offen}
       onUmschalten={umschalten}
@@ -3065,7 +3070,7 @@ export function NightRunPage() {
               items={[
                 { label: 'Projekte', to: '/projects' },
                 { label: projectName ?? 'Projekt', to: `/projects/${id}` },
-                { label: 'Läufe' },
+                { label: 'Runner' },
               ]}
             />
             {/* Dateiauswahl wie in der Ideen-Seite: Button als <label> mit verstecktem Input. */}
@@ -3098,7 +3103,7 @@ export function NightRunPage() {
 
           {laeufe.length === 0 && <Typography color="text.secondary">Noch keine Auswertung vorhanden.</Typography>}
           {laeufe.length > 0 && sichtbareLaeufe.length === 0 && (
-            <Typography color="text.secondary">In den letzten zwei Zyklen gab es keinen Lauf.</Typography>
+            <Typography color="text.secondary">In den letzten zwei Schichten gab es keinen Run.</Typography>
           )}
 
           {/* Die Laufblöcke haben mit #988 die Nachtlauf-Ausnahme verlassen und folgen Kupferwarte
@@ -3141,7 +3146,7 @@ export function NightRunPage() {
           {(alleLaeufe || ausgeblendet > 0) && (
             <Box>
               <Button variant="text" onClick={() => setAlleLaeufe((wert) => !wert)}>
-                {alleLaeufe ? 'Nur die letzten zwei Zyklen zeigen' : `Ältere Läufe anzeigen (${ausgeblendet})`}
+                {alleLaeufe ? 'Nur die letzten zwei Schichten zeigen' : `Ältere Runs anzeigen (${ausgeblendet})`}
               </Button>
             </Box>
           )}

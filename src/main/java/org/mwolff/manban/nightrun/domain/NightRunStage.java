@@ -1,5 +1,8 @@
 package org.mwolff.manban.nightrun.domain;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
+import java.util.Locale;
+
 /**
  * Die Stufe der Nacht-Kette, in der ein Vorgang gelaufen ist (Issue #1112, Plan #1110).
  *
@@ -19,5 +22,22 @@ public enum NightRunStage {
   PAKETE,
 
   /** Die Abdeckung — der abschließende Durchgang über die Pakete. */
-  ABDECKUNG
+  ABDECKUNG;
+
+  /**
+   * Ordnet einen gemeldeten Stufennamen unabhängig von seiner Schreibweise zu (Issue #1150).
+   *
+   * <p>Das Kit schickt die Namen klein geschrieben, der Vertrag nennt sie groß; die Schlussmeldung
+   * einer Kette scheiterte daran mit 400. Die Toleranz gilt allein der Schreibweise: Ein Name
+   * außerhalb des Wertebereichs bleibt ein Vertragsbruch und wird abgewiesen. Ausgeliefert wird
+   * weiterhin die große Form — das Frontend liest sie so.
+   *
+   * @param name der gemeldete Name, in beliebiger Schreibweise
+   * @return die Stufe zu diesem Namen
+   * @throws IllegalArgumentException wenn keine Stufe diesen Namen trägt
+   */
+  @JsonCreator
+  public static NightRunStage vonName(String name) {
+    return valueOf(name.toUpperCase(Locale.ROOT));
+  }
 }

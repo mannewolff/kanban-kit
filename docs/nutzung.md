@@ -67,17 +67,17 @@ Klick auf eine Karte öffnet das Detail:
 - **Abhängigkeiten:** Verweise auf andere Kartennummern.
 - **Anhänge:** hochladen, herunterladen, löschen. **Klick auf einen Bild- oder PDF-Anhang** (auf die
   Miniatur oder den Dateinamen) öffnet eine **Vorschau (Lightbox)**; andere Dateitypen werden geladen.
-- **Anläufe dieser Karte:** War die Karte schon in einem [Lauf](#nachtlauf) oder in einer
-  interaktiven Sitzung, steht hier, was ihre Anläufe gekostet haben — die **Dauer je Lauf-Art**
-  (Umsetzungs-, Prüf-, Ketten-Lauf und interaktive Sitzung; eine Art, in der die Karte nie vorkam,
-  steht als „nicht gelaufen"), die **Summen über alle Lauf-Anläufe** (Kosten, Eingabe, Ausgabe,
+- **Anläufe dieser Karte:** War die Karte schon in einem [Run](#nachtlauf) oder in einer
+  interaktiven Sitzung, steht hier, was ihre Anläufe gekostet haben — die **Dauer je Art des Runs**
+  (Umsetzung, Prüfung, Kette und interaktive Sitzung; eine Art, in der die Karte nie vorkam,
+  steht als „nicht gelaufen"), die **Summen über alle Anläufe aus Runs** (Kosten, Eingabe, Ausgabe,
   Zwischenspeicher, jede mit ihrer Grundlage „aus *n* von *m* Anläufen"; der Verbrauch einer
   interaktiven Sitzung steht an ihrer eigenen Zeile und geht in diese Summen nicht ein), die
   **Anläufe** selbst mit Datum, [Gattung](#zwei-gattungen), Ergebnis, Dauer und Kosten, jüngster
   zuerst, und die Zahl der **Wiederaufnahmen** (ein gescheiterter Anlauf, auf den später ein echter
   Anlauf folgte; ein übersprungener zählt nicht). Fehlende Werte stehen als „nicht gemessen", nie
-  als 0. Den Block sieht nur, wer auch die Auswertung der Läufe sehen darf (Projekt-Rolle `OWNER`,
-  oder Plattform-Admin eines teilnehmenden Projekts); Anläufe verdrängter Läufe bleiben darin
+  als 0. Den Block sieht nur, wer auch die Auswertung der Runs sehen darf (Projekt-Rolle `OWNER`,
+  oder Plattform-Admin eines teilnehmenden Projekts); Anläufe verdrängter Runs bleiben darin
   erhalten.
 - **Kommentare:** schreiben; eigene Kommentare löschen (Moderation durch ADMIN/OWNER).
 - **Aktivität:** ein chronologischer Verlauf am Ende des Details — „*Zeitpunkt* · *Person* · *Aktion*".
@@ -201,23 +201,23 @@ Kennzahlen-Seite „Dashboard“; die alte Adresse `/boards/:boardId/dashboard` 
 
 Von oben nach unten führt er:
 
-1. **Laufband** — der jüngste Lauf als schmales Band: Melder (als Wechselblinker, solange er läuft),
-   Titel des Laufs, die berührte Karte, der Zeitpunkt, rechts „Zeit“ in Minuten und „Kosten“ in
+1. **Jüngster Run** — der jüngste Run als schmales Band: Melder (als Wechselblinker, solange er läuft),
+   Titel des Runs, die berührte Karte, der Zeitpunkt, rechts „Zeit“ in Minuten und „Kosten“ in
    Dollar.
 2. **Kennzahlen** — vier Kacheln: **Durchsatz · Woche**, **Durchlaufzeit**,
-   **Implementierungszeit** und eine Kachel zu den Läufen. Die Implementierungszeit misst, wie
+   **Implementierungszeit** und eine Kachel zu den Runs. Die Implementierungszeit misst, wie
    lange eine erledigte Karte insgesamt in „In Progress“ lag; mehrere Aufenthalte zählen zusammen.
 3. **Verbrauch** — Token und Kosten mit Zeitraum-Wahl; ausführlich unter
    [Verbrauch (Leitstand)](#verbrauch-leitstand).
-4. **Herkunft** — eine Zeile zum jüngsten Lauf: ob er eingeliefert oder im Browser hochgeladen
+4. **Herkunft** — eine Zeile zum jüngsten Run: ob er eingeliefert oder im Browser hochgeladen
    wurde, dazu der Name des Tokens, die Zahl der Vorgänge und die der ungedeuteten Zeilen.
-5. **Rumpf** — vier Platten: **„Letzter Lauf · ‹Art›“** mit seinen Vorgängen (die Kartennummer
+5. **Rumpf** — vier Platten: **„Letzter Run · ‹Art›“** mit seinen Vorgängen (die Kartennummer
    öffnet die Karte zum Lesen), **„Durchsatz“** mit den abgeschlossenen Karten je Woche,
-   **„Abbruchgründe“** mit den Fehlerklassen über die aufbewahrten Läufe und **„Vorhaben“** mit
+   **„Abbruchgründe“** mit den Fehlerklassen über die aufbewahrten Runs und **„Vorhaben“** mit
    den offenen.
 
-**Was das Recht entscheidet:** Laufband, Lauf-Kachel, Verbrauch, „Letzter Lauf“ und
-„Abbruchgründe“ sieht nur, wer auch die [Läufe](#nachtlauf) sehen darf — der **Owner** des
+**Was das Recht entscheidet:** das Band des jüngsten Runs, die Run-Kachel, Verbrauch, „Letzter Run“ und
+„Abbruchgründe“ sieht nur, wer auch die [Runs](#nachtlauf) sehen darf — der **Owner** des
 Projekts und **Plattform-Admins**, sofern das Projekt am
 [Plattform-Leitstand](#plattform-leitstand) teilnimmt. Ohne dieses Recht entfallen sie still; die
 Board-Kennzahlen und „Durchsatz“ bleiben.
@@ -231,75 +231,85 @@ Spalte — gemessen bei **jedem** Spaltenwechsel, egal ob per Drag & Drop, ⋮-M
 der KI-Arbeit nicht gebraucht und sind bewusst aus dem Leitstand genommen worden; das API-Feld
 `outliers` bleibt im Backend bestehen.
 
-## Läufe {#nachtlauf}
+## Runner {#nachtlauf}
 
-Der **Bereich „Läufe"** wertet die Protokolle des Nacht-Runners aus: Er zeigt je Lauf, welche
+Der **Bereich „Runner"** wertet die Protokolle des Nacht-Runners aus: Er zeigt je Run, welche
 Arbeitspakete durchliefen, welche stehenblieben und woran es lag. Er ist **projektweit**, nicht an
 ein Board gebunden.
 
-Erreichbar über den Sidebar-Eintrag **„Läufe"** (Route `/projects/:projectId/nachtlauf`).
+Erreichbar über den Sidebar-Eintrag **„Runner"** (Route `/projects/:projectId/nachtlauf`).
 Sichtbar ist er nur für den **Owner** des Projekts und für **Plattform-Admins**, sofern das Projekt
 am [Plattform-Leitstand](#plattform-leitstand) teilnimmt — siehe
 [Rollen & Rechte](rollen-und-rechte.md#projekt-rollen-rechte-matrix).
 
-**Normalweg: Der Runner liefert selbst ein.** Ein Lauf kommt ohne jeden Handgriff ans Board — der
+**Normalweg: Der Runner liefert selbst ein.** Ein Run kommt ohne jeden Handgriff ans Board — der
 Nacht-Runner meldet ihn über ein projektgebundenes Zugriffstoken beim Start und schreibt ihn danach
 fort, bis er abgeschlossen ist. Welche Angaben dabei mitkommen, hängt an der Fassung des Runners:
 Budgets, ihre Herkunft, die Stufen einer Kette, Modellzeit und Züge erscheinen erst, wenn der
 Runner sie mitschickt; bis dahin steht dort „nicht angegeben" bzw. „nicht gemeldet".
 
-**Rückfall: die Ergebnisdatei einlesen.** Kam ein Lauf nicht ans Board — etwa ohne Zugriffstoken
+**Rückfall: die Ergebnisdatei einlesen.** Kam ein Run nicht ans Board — etwa ohne Zugriffstoken
 oder weil die Einlieferung scheiterte —, liest der Button **„Protokoll einlesen"** oben rechts die
 Ergebnisdatei des Runners (`night-run-<datum>-<uhrzeit>.json`). Die **Datei wird im Browser
 ausgewertet und nicht hochgeladen** — an den Server geht allein die verdichtete Auswertung
 (Kennzahlen, Zustände, Kartennummern, Fehlerklassen und kurze Auszüge). Die Datei trägt Pfade und
 die Kennzahlen der Sessions; die bleiben, wo sie sind. Dieselbe Datei lässt sich erneut wählen,
-ohne die Seite neu zu laden. **Budgets und Stufen** eines so eingelesenen Laufs zeigt die Seite nur
+ohne die Seite neu zu laden. **Budgets und Stufen** eines so eingelesenen Runs zeigt die Seite nur
 bis zum nächsten Neuladen: Der Rückfallweg liefert sie nicht an den Server.
 
-**Der Stand am Board gewinnt.** Wird die Ergebnisdatei eines Laufs eingelesen, den der Runner schon
-eingeliefert hat, ändert sich an seiner Anzeige nichts: Es entsteht kein zweiter Lauf, kein Wert
-ändert sich, und es kommt nichts hinzu, was die Einlieferung nicht kannte. Das gilt auch für Läufe,
+**Der Stand am Board gewinnt.** Wird die Ergebnisdatei eines Runs eingelesen, den der Runner schon
+eingeliefert hat, ändert sich an seiner Anzeige nichts: Es entsteht kein zweiter Run, kein Wert
+ändert sich, und es kommt nichts hinzu, was die Einlieferung nicht kannte. Das gilt auch für Runs,
 die vor dieser Regel eingeliefert wurden.
 
-Einige Angaben stehen deshalb **nur bei einem eingelesenen, noch nicht eingelieferten Lauf**, weil
-allein die Ergebnisdatei sie trägt. Bei einem Lauf, den der Runner eingeliefert hat, entfallen:
+Einige Angaben stehen deshalb **nur bei einem eingelesenen, noch nicht eingelieferten Run**, weil
+allein die Ergebnisdatei sie trägt. Bei einem Run, den der Runner eingeliefert hat, entfallen:
 
 - bei einem Kettenlauf die Angaben „Ketten durchgelaufen", „Karten entstanden", „Laufzeit über alle
-  Stufen" und „Kosten des Zyklus",
+  Stufen" und „Kosten der Schicht",
 - der Grund, an dem eine Stufe der Kette abbrach,
 - die Dokumente je Stufe.
 
 Bei einem eingelieferten **Kettenlauf** trägt jede erreichte Stufe im Stufenband ihre Kosten, die
 Kostenkachel teilt das Gesamt in **Planung** (die Stufen der Kette) und **Umsetzung** (der Rest),
 und der Kettenvorgang nennt den **angelegten Plan und die Pakete** als Verweise — ermittelt aus der
-Herkunft der Karten am Board, beschränkt auf Karten, die während des Laufs entstanden. Jede
+Herkunft der Karten am Board, beschränkt auf Karten, die während des Runs entstanden. Jede
 Paketzeile nennt ihren Plan („Paket aus Plan #N"). Die Dauer des Kettenvorgangs ist die Summe seiner
 Stufen.
 
-Der **Titel** eines Laufs nennt seine Nummer, das Startdatum und die Startzeit („Lauf #412 · 14.
-September, 22:05"); ein eben eingelesener Lauf ohne Nummer heißt „Lauf · 14. September, 22:05".
-Darüber steht der **Zyklus**, zu dem er gehört („Zyklus vom 14.09.2026 auf den 15.09.2026"), und die
-Art des Laufs.
+Der **Titel** eines Runs nennt seine Nummer, das Startdatum und die Startzeit („Run #412 · 14.
+September, 22:05"); ein eben eingelesener Run ohne Nummer heißt „Run · 14. September, 22:05".
+Darüber steht die **Schicht**, zu der er gehört („Schicht vom 14.09.2026 auf den 15.09.2026").
 
-Jeder Lauf steht als aufklappbare Zeile da — Startzeitpunkt, Art des Laufs („Umsetzungs-Lauf",
-„Prüf-Lauf" oder „Nachtplan-Lauf"), Dauer sowie „N bearbeitet, M übergangen". Ein Nachtplan-Lauf
+Unmittelbar **vor dem Titel** steht die **Art des Runs als Symbol**. Es sitzt an fester Stelle und
+hat bei jeder Art dieselbe Breite, damit der Titel in jeder Zeile gleich weit links beginnt. Fährst
+du mit der Maus darauf, nennt ein Hinweisfähnchen das Wort; Vorlesewerkzeuge lesen es ebenso vor.
+Die Symbole:
+
+- **zwei verschränkte Kettenglieder** — Kette
+- **Schraubenschlüssel** — Umsetzung
+- **Lupe** — Prüfung
+- **Sprechblase** — Sitzung
+- **Mondsichel** — Nachtplan
+
+Jeder Run steht als aufklappbare Zeile da — Startzeitpunkt, Art des Runs als Symbol, Dauer sowie
+„N bearbeitet, M übergangen". Ein Nachtplan
 wird angezeigt, aber nicht aufbewahrt — er verschwindet nach einem Neuladen der Seite wieder.
 Aufgeklappt zeigt er seine Arbeitspakete, jedes mit einem der **vier Zustände**:
 
 - **grün — „Erfolg":** das Arbeitspaket ist durchgelaufen.
 - **gelb — „Erfolg, Prüfung rot":** umgesetzt, aber eine Prüfung schlug fehl.
-- **rot — „gescheitert":** der Lauf kam an diesem Arbeitspaket nicht durch.
+- **rot — „gescheitert":** der Run kam an diesem Arbeitspaket nicht durch.
 - **grau — „nicht bearbeitet":** übergangen, etwa weil eine Abhängigkeit noch offen war.
 
 Zu jedem Arbeitspaket stehen darunter der Auszug aus dem Protokoll (bei grau der Grund) und die
 Herkunftskette — die fachliche Anforderung und der Plan, aus denen es entstanden ist. Die
 Kartennummer ist ein Link und öffnet die Karte zum Lesen.
 
-**Häufigkeit einer Fehlerklasse:** An einem gelben oder roten Befund eines aufbewahrten Laufs steht,
-in wie vielen der aufbewahrten Läufe dieselbe Fehlerklasse vorkam — „Prüfungen rot: 4 von 30
-aufbewahrten Läufen" bzw. „zum ersten Mal" beim ersten Vorkommen. Gezählt wird **einschließlich** des
-angezeigten Laufs. So ist ein einmaliger Ausrutscher von einem wiederkehrenden Muster zu
+**Häufigkeit einer Fehlerklasse:** An einem gelben oder roten Befund eines aufbewahrten Runs steht,
+in wie vielen der aufbewahrten Runs dieselbe Fehlerklasse vorkam — „Prüfungen rot: 4 von 30
+aufbewahrten Runs" bzw. „zum ersten Mal" beim ersten Vorkommen. Gezählt wird **einschließlich** des
+angezeigten Runs. So ist ein einmaliger Ausrutscher von einem wiederkehrenden Muster zu
 unterscheiden.
 
 **Übernahmetext:** Unter jedem gelben und roten Arbeitspaket steht ein fertiger Text zum Übernehmen
@@ -309,25 +319,25 @@ der Text enthält Fremdtext aus dem Protokoll, und was in die eigene Sitzung wan
 gesehen haben. Legt der Browser die Zwischenablage nicht frei, bleibt es beim sichtbaren Feld: von
 Hand markieren und kopieren.
 
-**Nur die letzten zwei Zyklen:** Die Liste zeigt standardmäßig die Läufe des laufenden und des
-vorigen Zyklus; darunter blendet **„Ältere Läufe anzeigen (N)"** die übrigen für diesen Besuch ein.
-Sichtbar bleiben außerdem ein älterer Lauf, der noch läuft, der über einen Verweis angesteuerte Lauf
+**Nur die letzten zwei Schichten:** Die Liste zeigt standardmäßig die Runs der laufenden und der
+vorigen Schicht; darunter blendet **„Ältere Runs anzeigen (N)"** die übrigen für diesen Besuch ein.
+Sichtbar bleiben außerdem ein älterer Run, der noch läuft, der über einen Verweis angesteuerte Run
 und ein eben eingelesener. Begrenzt wird nur die Anzeige: Aufbewahrung, Verbrauchsauswertung und
-Häufigkeiten zählen weiter alle aufbewahrten Läufe.
+Häufigkeiten zählen weiter alle aufbewahrten Runs.
 
-**Aufbewahrung:** Je Projekt bleiben die **letzten 190 Läufe** erhalten — genug, um bei zwei Läufen
-je Zyklus den laufenden, den zuletzt abgeschlossenen und den Vormonat vorzuhalten; ältere fallen
-heraus, sobald neue hinzukommen. Die **Arbeitspakete** eines verdrängten Laufs bleiben dabei bestehen: Sie tragen
-Projekt, Startzeitpunkt und Lauf-Art selbst, damit die Messwerte einer Karte nicht mit dem Lauf
-verschwinden. In der Liste der Läufe erscheinen sie nicht mehr. Diese **verwaisten Arbeitspakete**
+**Aufbewahrung:** Je Projekt bleiben die **letzten 190 Runs** erhalten — genug, um bei zwei Runs
+je Schicht den laufenden, den zuletzt abgeschlossenen und den Vormonat vorzuhalten; ältere fallen
+heraus, sobald neue hinzukommen. Die **Arbeitspakete** eines verdrängten Runs bleiben dabei bestehen: Sie tragen
+Projekt, Startzeitpunkt und Art des Runs selbst, damit die Messwerte einer Karte nicht mit dem Run
+verschwinden. In der Liste der Runs erscheinen sie nicht mehr. Diese **verwaisten Arbeitspakete**
 haben eine eigene Grenze: Je Projekt bleiben die **letzten 2000** erhalten, gemessen am
-Startzeitpunkt ihres Laufs. Läufe und verwaiste Arbeitspakete werden also getrennt begrenzt — die
-Pakete eines noch aufbewahrten Laufs zählen nicht mit und fallen erst mit ihm.
+Startzeitpunkt ihres Runs. Runs und verwaiste Arbeitspakete werden also getrennt begrenzt — die
+Pakete eines noch aufbewahrten Runs zählen nicht mit und fallen erst mit ihm.
 
 Drei Sonderfälle, die keine Fehler sind: Ein **Probelauf** (`DRY-RUN`) wird nicht aufbewahrt — ein
 Protokoll aus lauter Probeläufen erzeugt darum nur die Meldung, dass es nichts auszuwerten gibt. Ein
-Lauf, der bereits ausgewertet wurde, wird als **„lag schon vor"** gemeldet und bleibt unangetastet;
-die übrigen Läufe derselben Datei entstehen trotzdem. Und ein **nachgereichter Lauf**, der älter ist
+Run, der bereits ausgewertet wurde, wird als **„lag schon vor"** gemeldet und bleibt unangetastet;
+die übrigen Runs derselben Datei entstehen trotzdem. Und ein **nachgereichter Run**, der älter ist
 als alle 190 aufbewahrten, verdrängt keinen neueren — er wird angelegt und sogleich wieder verdrängt,
 erscheint also nach dem Einlesen nicht in der Liste.
 
@@ -335,7 +345,7 @@ erscheint also nach dem Einlesen nicht in der Liste.
 
 Der **Leitstand** (Sidebar-Eintrag **„Leitstand"** im Board-Kontext, Route
 `/boards/:boardId/leitstand`) führt einen Bereich **„Verbrauch"**: was die Arbeit an diesem Projekt
-an Claude-Code-Verbrauch gekostet hat. Sichtbar ist er — wie die [Auswertung der Läufe](#nachtlauf)
+an Claude-Code-Verbrauch gekostet hat. Sichtbar ist er — wie die [Auswertung der Runs](#nachtlauf)
 — nur für den **Owner** des Projekts und für **Plattform-Admins**, sofern das Projekt am
 [Plattform-Leitstand](#plattform-leitstand) teilnimmt.
 
@@ -343,10 +353,10 @@ an Claude-Code-Verbrauch gekostet hat. Sichtbar ist er — wie die [Auswertung d
 
 Gezählt werden zwei **Gattungen** von Einträgen:
 
-- **Lauf** — ein Lauf des Nacht-Runners.
+- **Run** — ein Run des Nacht-Runners.
 - **Interaktive Sitzung** — eine Arbeitssitzung am Rechner eines Menschen.
 
-**„Gattung" ist nicht „Herkunft".** Die Gattung sagt, *was* ein Eintrag ist — Lauf oder
+**„Gattung" ist nicht „Herkunft".** Die Gattung sagt, *was* ein Eintrag ist — Run oder
 interaktive Sitzung. Die **Herkunft** ist eine zweite, davon unabhängige Angabe und sagt, *auf
 welchem Weg* er ans Board kam: von Hand im Browser eingelesen oder maschinell mit einem
 projektgebundenen Zugriffstoken gemeldet. Sie steht im Leitstand auf der eigenen Platte
@@ -355,18 +365,18 @@ beide Angaben stehen nebeneinander, keine ersetzt die andere.
 
 ### Was der Bereich zeigt
 
-Über den Kacheln steht der gewählte Zeitraum — **Zyklus · Woche · Monat** — und daneben, aus wie
-vielen Einträgen die Zahlen stammen („*Zyklus vom 17.09.2026 auf den 18.09.2026* · 2 Läufe ·
+Über den Kacheln steht der gewählte Zeitraum — **Schicht · Woche · Monat** — und daneben, aus wie
+vielen Einträgen die Zahlen stammen („*Schicht vom 17.09.2026 auf den 18.09.2026* · 2 Runs ·
 5 Sitzungen"). Die Kacheln selbst:
 
 - **Eingabe-Token** mit einem Balken, der die Eingabe in **„Cache gelesen"** und **„frisch"**
   aufteilt. Der Balken beantwortet eine andere Frage als die Gattungen und wird nicht auf sie
   umgewidmet.
-- **Ausgabe-Token**, darunter der Verlauf über die Zyklen des Zeitraums.
+- **Ausgabe-Token**, darunter der Verlauf über die Schichten des Zeitraums.
 - **Kosten**, mit dem Vergleich zum Vorzeitraum (▲/▼ und der Unterschied in Dollar).
 - **Gesamt über die Laufzeit** — siehe unten.
 
-Unter jeder Summe stehen die beiden **Anteile**: „aus Läufen" und „aus interaktiven
+Unter jeder Summe stehen die beiden **Anteile**: „aus Runs" und „aus interaktiven
 Sitzungen". Die Summe ist genau ihre Addition; kein Eintrag zählt in beiden.
 
 **Der Posten „ohne Karte"** steht an der Kosten-Kachel und trägt den Verbrauch, der keinem
@@ -374,7 +384,7 @@ Arbeitspaket zuzuordnen war. Er wird nicht auf die berührten Karten verteilt �
 erfände eine Genauigkeit, die niemand gemessen hat. Liegt kein gemessener Rest vor, fehlt der
 Posten ganz; eine 0 behauptete, es gäbe keinen.
 
-**Die Kachel „Gesamt über die Laufzeit"** summiert über alle aufbewahrten Läufe und Sitzungen des
+**Die Kachel „Gesamt über die Laufzeit"** summiert über alle aufbewahrten Runs und Sitzungen des
 Projekts und hängt nicht am gewählten Zeitraum — ein Klick auf „Woche" ändert an ihr nichts. Ihr
 Fuß nennt die **Abdeckung** dieser Summe, und zwar zweigeteilt: ab welchem Datum überhaupt ein
 Eintrag aufbewahrt ist (oder „ohne aufbewahrten Eintrag") und ab wann interaktive Sitzungen erfasst
@@ -383,16 +393,16 @@ die des Gelebten: Was der Ringpuffer verdrängt hat, fehlt darin.
 
 ### Kosten je Stufe der Kette
 
-Die Verbrauchsauswertung auf der Seite [„Läufe"](#nachtlauf) — Ansicht Zyklus, Woche oder Monat —
-führt unter den Zyklen und der Aufstellung je Vorhaben die Platte **„Stufen der Kette"**: je Stufe
+Die Verbrauchsauswertung auf der Seite [„Runner"](#nachtlauf) — Ansicht Schicht, Woche oder Monat —
+führt unter den Schichten und der Aufstellung je Vorhaben die Platte **„Stufen der Kette"**: je Stufe
 (**Plan**, **Prüfung**, **Pakete**, **Abdeckung**) die Kosten im Zeitraum und wie viele Vorgänge
 sie durchlaufen haben, dazu ein Balken im Verhältnis zur teuersten Stufe. Die Reihenfolge ist die
 der Kette.
 
-- **Läufe ohne Stufen erscheinen darin nicht** — ein Umsetzungs- oder Prüf-Lauf hat keine. Liefen
+- **Runs ohne Stufen erscheinen darin nicht** — eine Umsetzung oder eine Prüfung hat keine. Liefen
   im Zeitraum keine Ketten, fehlt die Platte ganz.
 - **Es gibt keine Zeile „ohne Stufe"**, anders als „Ohne Vorhaben" in der Aufstellung je Vorhaben:
-  Sie trüge bei einem Umsetzungs-Lauf den Verbrauch eines ganzen Zyklus, und die Aufstellung handelt
+  Sie trüge bei einer Umsetzung den Verbrauch einer ganzen Schicht, und die Aufstellung handelt
   von der Kette.
 - Fehlen die Kosten einer Stufe, steht dort „nicht gemessen" und kein Balken — nie eine 0.
 
@@ -402,13 +412,13 @@ Ein Eintrag gehört zu dem Zeitraum, in dem er **beginnt** — bei einer Sitzung
 Zeitpunkt, an dem sie eröffnet wurde, nicht zu dem, an dem sie endete. Eine Sitzung, die über eine
 Zeitraumgrenze hinweg läuft, wird nicht aufgeteilt.
 
-Dabei gilt die **Tagesgrenze 12:00** zonenlokal: Ein **Zyklus** läuft von 12:00 bis 12:00 und
-enthält alle Läufe, die darin starten — auch tagsüber angestoßene; wer vor 12:00 startet, gehört
-zum Zyklus davor. Für interaktive Sitzungen hat das eine Folge, die man kennen muss: **Eine
-Sitzung, die vormittags vor 12:00 beginnt, zählt zum Zyklus davor.** Wer am Donnerstag um 9:30 Uhr
-zu arbeiten anfängt, findet seinen Verbrauch also unter dem Zyklus von Mittwoch auf Donnerstag,
+Dabei gilt die **Tagesgrenze 12:00** zonenlokal: Eine **Schicht** läuft von 12:00 bis 12:00 und
+enthält alle Runs, die darin starten — auch tagsüber angestoßene; wer vor 12:00 startet, gehört
+zur Schicht davor. Für interaktive Sitzungen hat das eine Folge, die man kennen muss: **Eine
+Sitzung, die vormittags vor 12:00 beginnt, zählt zur Schicht davor.** Wer am Donnerstag um 9:30 Uhr
+zu arbeiten anfängt, findet seinen Verbrauch also unter der Schicht von Mittwoch auf Donnerstag,
 nicht unter dem von Donnerstag auf Freitag. Die Regel ist
-dieselbe wie für Läufe — eine zweite Regel für Sitzungen machte die Summe von der Gattung
+dieselbe wie für Runs — eine zweite Regel für Sitzungen machte die Summe von der Gattung
 abhängig.
 
 ### „nicht erfasst", „teilweise erfasst" und „nicht gemessen"
@@ -423,13 +433,13 @@ Drei Angaben, die alle drei **keine Null** sind und sich paarweise unterscheiden
   stehen da, sie decken aber nur den späteren Teil ab, der interaktive Anteil ist deshalb zu klein.
   Anders als bei „nicht erfasst" fehlt hier nicht die Messung, sondern ein Stück von ihr.
 - **„nicht gemessen"** meint auf dem Kartenblatt (siehe [Karten-Detail](#karten-detail), „Anläufe
-  dieser Karte") einen **bekannten Lauf oder eine bekannte Sitzung ohne Zahl**: Der Eintrag steht in
+  dieser Karte") einen **bekannten Run oder eine bekannte Sitzung ohne Zahl**: Der Eintrag steht in
   der Liste, zu diesem einen Wert liegt aber kein Messwert vor. Anders als bei den beiden anderen
   Angaben geht es nicht um einen Zeitraum, sondern um einen einzelnen Eintrag.
 
 Dazu kommen zwei Sätze über den Zeitraum als Ganzes, die keine Lücke der Erfassung sind: „In diesem
-Zeitraum hat weder ein Lauf noch eine Sitzung stattgefunden." (es wurde nicht gearbeitet) und „In
-diesem Zeitraum liefen Läufe, ihr Verbrauch liegt aber nicht vor." (es wurde gearbeitet, die Zahlen
+Zeitraum hat weder ein Run noch eine Sitzung stattgefunden." (es wurde nicht gearbeitet) und „In
+diesem Zeitraum liefen Runs, ihr Verbrauch liegt aber nicht vor." (es wurde gearbeitet, die Zahlen
 fehlen).
 
 ### Wo Zahlen fehlen können
@@ -508,57 +518,76 @@ Sidebar-Eintrag **„Administration"** ein- und ausgeschaltet:
 
 Der **Plattform-Leitstand** ist die Startseite eines **Plattform-Admins** nach dem Anmelden (Sidebar
 „Verwaltung" → „Plattform-Leitstand"). Er führt **drei Bereiche**, von oben nach unten: **Aktive
-Läufe**, **Beendete Läufe** und **Störungen**. Alle drei zeigen ausschließlich Projekte, die am
+Runs**, **Beendete Runs** und **Störungen**. Alle drei zeigen ausschließlich Projekte, die am
 Plattform-Leitstand **teilnehmen**.
 
 Die Seite **frischt sich selbst auf**: Was sich ändert, erscheint von allein — du musst sie nicht
 neu laden.
 
-### Aktive Läufe
+In allen drei Bereichen steht **direkt hinter dem Lämpchen** das Symbol der **Art des Runs** —
+dieselben fünf Symbole wie auf der Läufe-Seite, mit dem Wort als Hinweisfähnchen. Weil das Symbol
+bei jeder Art gleich breit ist, beginnt alles dahinter in jeder Zeile an derselben Stelle.
 
-Jeder Lauf, der **gerade arbeitet** — mit Projekt, dem Wort „läuft seit" samt bisheriger Dauer,
-anklickbarer Lauf-Kennung und einem **Wechselblinker**: zwei Lampen, die abwechselnd zwischen
+### Aktive Runs
+
+Jeder Run, der **gerade arbeitet** — mit Projekt, dem Wort „läuft seit" samt bisheriger Dauer,
+anklickbarer Kennung des Runs und einem **Wechselblinker**: zwei Lampen, die abwechselnd zwischen
 Blau und Hellblau umschlagen. Mit „Bewegung reduzieren" im Betriebssystem stehen sie still,
-die linke hell, die rechte blau. Arbeitet gerade nirgends ein Lauf, steht
+die linke hell, die rechte blau. Arbeitet gerade nirgends ein Run, steht
 das als ausdrücklicher Satz da statt als leere Fläche.
 
-### Beendete Läufe
+### Beendete Runs
 
-Jeder **beendete** Lauf des laufenden und des vorigen Zyklus — mit Projekt, Startzeitpunkt, anklickbarer Lauf-Kennung
-und seinem **Ausgang**. Auch hier steht ein ausdrücklicher Satz, solange noch kein Lauf beendet ist.
+Jeder **beendete** Run der laufenden und der vorigen Schicht — mit Projekt, Startzeitpunkt, anklickbarer Kennung des Runs
+und seinem **Ausgang**. Auch hier steht ein ausdrücklicher Satz, solange noch kein Run beendet ist.
 
-„Laufender Zyklus" meint denselben Zeitraum, den auch die Auswertung der Läufe zieht: **von 12:00 bis
-12:00** zonenlokal. Über die Zugehörigkeit entscheidet der **Startzeitpunkt** des Laufs, nicht sein
-Ende. Der Bereich ist **zweigeteilt**: „Dieser Zyklus" und darunter „Voriger Zyklus", je mit
-seiner Spanne („vom 21.09.2026 auf den 22.09.2026"). Um 12:00 wandern die Läufe der vergangenen
-Nacht deshalb nach „Voriger Zyklus", statt zu verschwinden; ältere Läufe stehen dort nicht mehr.
+„Laufende Schicht" meint denselben Zeitraum, den auch die Auswertung der Runs zieht: **von 12:00 bis
+12:00** zonenlokal. Über die Zugehörigkeit entscheidet der **Startzeitpunkt** des Runs, nicht sein
+Ende. Der Bereich ist **zweigeteilt**: „Diese Schicht" und darunter „Vorige Schicht", je mit
+ihrer Spanne („vom 21.09.2026 auf den 22.09.2026"). Um 12:00 wandern die Runs der vergangenen
+Nacht deshalb nach „Vorige Schicht", statt zu verschwinden; ältere Runs stehen dort nicht mehr.
 Eine Zeile mit offener Störung trägt in beiden Abschnitten den Verweis „Störung".
+
+Im Kopf des Bereichs steht, **wie viele** Runs er zeigt: **10**, **20** oder **alle**. Gezählt
+werden beide Abschnitte zusammen, zuerst „Diese Schicht"; was darüber hinausgeht, nennt ein Satz
+unter dem Bereich („15 weitere Runs ausgeblendet"). Die Wahl merkt sich der Browser, Vorgabe ist 10.
+„Aktive Runs" und „Störungen" bleiben davon unberührt — sie zeigen immer alles.
 
 Der Ausgang steht als Wort da — eines von dreien:
 
-- **gelungen** — der Lauf ist durch, nichts steht aus.
-- **nicht gelungen** — der Lauf ist gescheitert, hat gar nicht gearbeitet oder ist verstummt (siehe
-  Stillefrist).
-- **mit Vorbehalt** — der Lauf ist durch, sein maßgebliches Arbeitspaket wartet aber noch auf einen
+- **gelungen** — der Run ist durch, nichts steht aus.
+- **nicht gelungen** — der Run ist gescheitert, hat gar nicht gearbeitet, hat sich **selbst
+  abgebrochen** oder ist verstummt (siehe Stillefrist).
+- **mit Vorbehalt** — der Run ist durch, sein maßgebliches Arbeitspaket wartet aber noch auf einen
   Menschen oder wurde zurückgestellt.
 
-**Die Stillefrist.** Ein unfertiger Lauf, der über diese Frist hinweg **kein Lebenszeichen** gibt,
+Hat der Run sich **selbst abgebrochen**, steht hinter dem Wort sein **Grund** in einer Zeile
+(„nicht gelungen — Harter Stopp (dirty-tree)"). Ein selbst gemeldeter Abbruch ist immer „nicht
+gelungen", auch wenn das maßgebliche Arbeitspaket noch grün, gelb oder zurückgestellt war. Den
+vollständigen Grund zeigt die Auswertung des Runs im Projekt.
+
+**Die Stillefrist.** Ein unfertiger Run, der über diese Frist hinweg **kein Lebenszeichen** gibt,
 gilt als **nicht gelungen** — sonst bliebe ein abgeschossener Runner für immer als „läuft" stehen.
 Die Frist ist ein **Einstellwert der Plattform** (`manban.nightrun.stille-frist`, Vorgabe 90
 Minuten): Sie gilt für alle Projekte gleich und hat bewusst **keine Oberfläche** — wer sie ändern
 will, ändert die Konfiguration der Instanz.
 
-Ein durch Stille beendeter Lauf ist **keine Störung**. Er erscheint hier als „nicht gelungen" und
+Ein durch Stille beendeter Run ist **keine Störung**. Er erscheint hier als „nicht gelungen" und
 taucht im Bereich „Störungen" nicht auf.
 
 ### Störungen
 
-Jede nicht quittierte Störung aus den Läufen teilnehmender Projekte — mit Projekt, Zeitpunkt,
-anklickbarer Lauf-Kennung, Grund und dem Knopf **„Störung löschen"**.
+Jede nicht quittierte Störung aus den Runs teilnehmender Projekte — mit Projekt, Zeitpunkt,
+anklickbarer Kennung des Runs, Grund und dem Knopf **„Störung löschen"**.
+
+Der **Grund** ist bei einem selbst abgebrochenen Run sein Abbruchgrund, sonst der Grund des
+maßgeblichen Arbeitspakets („Karte #721: gescheitert") oder der Satz eines Runs ohne Arbeit. Es ist
+derselbe gekürzte Text und dasselbe Lämpchen wie in der Zeile des Runs unter „Beendete Runs" — eine
+Seite, ein Ausgang.
 
 Ob ein Projekt teilnimmt, entscheidet ausschließlich das Projekt selbst — OWNER oder ADMIN mit
 echter Mitgliedschaft, über das Teilnahme-Ankreuzfeld im [Editiermodus](#editiermodus) der
-Projektliste. Der Plattform-Admin sieht nur Läufe und Störungen teilnehmender Projekte und kann die
+Projektliste. Der Plattform-Admin sieht nur Runs und Störungen teilnehmender Projekte und kann die
 Teilnahme selbst nicht erzwingen.
 
 ## Board-Befehle unter Last {#board-befehle-unter-last}

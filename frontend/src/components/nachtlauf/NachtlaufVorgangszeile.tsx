@@ -66,7 +66,7 @@ export function NachtlaufVorgangszeile({
   klasse,
   /** Die erste Zeile des Auszugs — mehr passt in eine Zeile nicht. */
   auszug,
-  /** Wie oft die Fehlerklasse in den aufbewahrten Läufen vorkam; `null`, wo keine Zahl gilt. */
+  /** Wie oft die Fehlerklasse in den aufbewahrten Runs vorkam; `null`, wo keine Zahl gilt. */
   haeufigkeit,
   /** Das Vorhaben des Vorgangs; steht nur, wo kein Abbruch die Zeile beansprucht. */
   vorhaben,

@@ -38,7 +38,7 @@ class DisruptionRepositoryAdapter implements DisruptionRepository {
   private static final String KANDIDATEN =
       """
       SELECT r.id AS night_run_id, r.project_id, p.name AS project_name, r.mode,
-             r.started_at, r.updated_at, r.complete, r.no_work_reason
+             r.started_at, r.updated_at, r.complete, r.no_work_reason, r.abort_reason
         FROM night_run r
         JOIN project p ON p.id = r.project_id
         LEFT JOIN night_run_disruption_ack a ON a.night_run_id = r.id
@@ -82,7 +82,7 @@ class DisruptionRepositoryAdapter implements DisruptionRepository {
   private static final String LAEUFE_DER_NACHT =
       """
       SELECT r.id AS night_run_id, r.project_id, p.name AS project_name, r.mode,
-             r.started_at, r.updated_at, r.complete, r.no_work_reason
+             r.started_at, r.updated_at, r.complete, r.no_work_reason, r.abort_reason
         FROM night_run r
         JOIN project p ON p.id = r.project_id
        WHERE r.kind = 'NIGHT'
@@ -126,7 +126,8 @@ class DisruptionRepositoryAdapter implements DisruptionRepository {
             rs.getObject("started_at", OffsetDateTime.class).toInstant(),
             updatedAt == null ? null : updatedAt.toInstant(),
             rs.getBoolean("complete"),
-            rs.getString("no_work_reason"));
+            rs.getString("no_work_reason"),
+            rs.getString("abort_reason"));
       };
 
   private final NamedParameterJdbcTemplate jdbc;

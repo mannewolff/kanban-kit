@@ -166,6 +166,25 @@ class DisruptionRepositoryIT extends AbstractIntegrationTest {
             });
   }
 
+  /**
+   * Issue #1143: Der Abbruchgrund entscheidet über den Ausgang und muss deshalb auch aus
+   * <b>dieser</b> Abfrage kommen — sonst fiele der abgebrochene Lauf aus der Störungsliste, obwohl
+   * die Abfrage ihn liefert.
+   */
+  @Test
+  void derKandidatTraegtDenAbbruchgrund() {
+    long laufId = lauf(T1, "NIGHT", true);
+    jdbc.update(
+        "UPDATE night_run SET abort_reason = 'Dirty-Guard: uncommittete Reste' WHERE id = ?",
+        laufId);
+    teilnahme(true);
+
+    assertThat(disruptions.openCandidates())
+        .singleElement()
+        .extracting(DisruptionRepository.DisruptionCandidate::abortReason)
+        .isEqualTo("Dirty-Guard: uncommittete Reste");
+  }
+
   /** Die Störungsliste liest die beiden neuen Felder mit; {@code complete} ist dort stets wahr. */
   @Test
   void derKandidatTraegtAbschlussUndLetzteMeldung() {

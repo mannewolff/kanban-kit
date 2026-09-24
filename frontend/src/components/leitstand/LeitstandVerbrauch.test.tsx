@@ -131,7 +131,7 @@ describe('LeitstandVerbrauch — beide Anteile (AK 1)', () => {
     expect(kosten).toHaveTextContent('12,40$')
     const nacht = within(kosten).getByTestId('anteil-nacht')
     const sitzungen = within(kosten).getByTestId('anteil-interaktiv')
-    expect(lesbar(nacht.textContent)).toContain('aus Läufen')
+    expect(lesbar(nacht.textContent)).toContain('aus Runs')
     expect(lesbar(nacht.textContent)).toContain('8,40 $')
     expect(lesbar(sitzungen.textContent)).toContain('aus interaktiven Sitzungen')
     expect(lesbar(sitzungen.textContent)).toContain('4,00 $')
@@ -163,7 +163,7 @@ describe('LeitstandVerbrauch — beide Anteile (AK 1)', () => {
   it('nennt in der Kopfzeile Laeufe und Sitzungen', async () => {
     zeige()
 
-    expect(await screen.findByTestId('verbrauch-umfang')).toHaveTextContent('1 Lauf · 2 Sitzungen')
+    expect(await screen.findByTestId('verbrauch-umfang')).toHaveTextContent('1 Run · 2 Sitzungen')
   })
 
   /** Ein Tag ohne Nachtlauf, aber mit Sitzungen, zeigt Zahlen — nicht „kein Lauf" (AK 1). */
@@ -181,8 +181,8 @@ describe('LeitstandVerbrauch — beide Anteile (AK 1)', () => {
     )
 
     expect(await kachel('Kosten')).toHaveTextContent('4,00$')
-    expect(screen.queryByText(/weder ein Lauf noch eine Sitzung/)).not.toBeInTheDocument()
-    expect(await screen.findByTestId('verbrauch-umfang')).toHaveTextContent('0 Läufe · 2 Sitzungen')
+    expect(screen.queryByText(/weder ein Run noch eine Sitzung/)).not.toBeInTheDocument()
+    expect(await screen.findByTestId('verbrauch-umfang')).toHaveTextContent('0 Runs · 2 Sitzungen')
   })
 
   it('zeigt einen Zeitraum ohne Lauf und ohne Sitzung weiterhin als leer', async () => {
@@ -201,7 +201,7 @@ describe('LeitstandVerbrauch — beide Anteile (AK 1)', () => {
     )
 
     expect(
-      await screen.findByText('In diesem Zeitraum hat weder ein Lauf noch eine Sitzung stattgefunden.'),
+      await screen.findByText('In diesem Zeitraum hat weder ein Run noch eine Sitzung stattgefunden.'),
     ).toBeInTheDocument()
   })
 })

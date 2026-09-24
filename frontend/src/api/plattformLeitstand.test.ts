@@ -29,7 +29,7 @@ describe('plattformLeitstandApi (#1083, drei Listen seit #1098)', () => {
           projectId: 9,
           projectName: 'Mein Projekt',
           startedAt: '2026-09-21T01:10:00Z',
-          outcome: { verdict: 'RUNNING', decisiveItem: null, noWorkReason: null },
+          outcome: { abortReason: null, verdict: 'RUNNING', decisiveItem: null, noWorkReason: null },
         },
       ],
       durchgefuehrte: [
@@ -38,7 +38,7 @@ describe('plattformLeitstandApi (#1083, drei Listen seit #1098)', () => {
           projectId: 9,
           projectName: 'Mein Projekt',
           startedAt: '2026-09-19T21:10:00Z',
-          outcome: { verdict: 'FAILED', decisiveItem: null, noWorkReason: 'Ready war leer' },
+          outcome: { abortReason: null, verdict: 'FAILED', decisiveItem: null, noWorkReason: 'Ready war leer' },
         },
       ],
       stoerungen: [],

@@ -119,7 +119,7 @@ export function buildNavItems(params: NavParams): NavGroup[] {
     if (canViewNightRun) {
       projekt.push({
         kind: 'link',
-        label: 'Läufe',
+        label: 'Runner',
         path: `/projects/${currentProjectId}/nachtlauf`,
         icon: NachtlaeufeSymbol,
       })

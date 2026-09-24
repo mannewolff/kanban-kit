@@ -10,6 +10,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
+import static org.mwolff.manban.nightrun.web.NightRunController.ABORT_REASON_MAX;
 import static org.mwolff.manban.nightrun.web.NightRunController.NO_WORK_REASON_MAX;
 import static org.mwolff.manban.nightrun.web.NightRunIngestController.DEFAULT_FIELD_NAME_MAX;
 import static org.mwolff.manban.nightrun.web.NightRunIngestController.MAX_DEFAULT_FIELDS;
@@ -53,7 +54,11 @@ import org.springframework.security.core.Authentication;
 // Testklasse: Die Importe folgen den geprueften Typen. Issue #1113 bringt NightRunBudget,
 // NightRunBudgetOrigin, NightRunItemStage, NightRunStage und die drei neuen Request-Records dazu
 // und reisst damit die Schwelle von 40.
-@SuppressWarnings("PMD.ExcessiveImports")
+// PMD.TooManyMethods: Jede Methode ist ein Fall des Einlieferungsvertrags — dieselbe Begruendung
+// wie an NightRunIngestIT. Issue #1142 bringt die Faelle zum Abbruchgrund dazu und reisst damit
+// die Schwelle. Faelle werden nicht zusammengelegt, um eine Zahl zu druecken: Ein Fall, der zwei
+// Dinge zugleich prueft, sagt beim Fehlschlag nicht mehr, welches davon brach.
+@SuppressWarnings({"PMD.ExcessiveImports", "PMD.TooManyMethods"})
 class NightRunIngestControllerTest {
 
   private static final Instant START = Instant.parse("2026-09-16T22:31:00Z");
@@ -68,7 +73,7 @@ class NightRunIngestControllerTest {
   private static NightRunIngestController.IngestRequest anfrage(
       @Nullable NightRunUsageRequest usage, @Nullable NightRunKind kind, NightRunMode mode) {
     return new NightRunIngestController.IngestRequest(
-        START, mode, kind, 1000L, 1, 0, 0, Boolean.TRUE, usage, null, null, List.of());
+        START, mode, kind, 1000L, 1, 0, 0, Boolean.TRUE, usage, null, null, null, List.of());
   }
 
   @Test
@@ -188,6 +193,7 @@ class NightRunIngestControllerTest {
         null,
         grund,
         null,
+        null,
         List.of());
   }
 
@@ -229,6 +235,94 @@ class NightRunIngestControllerTest {
         .isEqualTo("Kein Eintrag trug das Label kit:nightrun");
   }
 
+  // --- Abbruchgrund am Einlieferungsvertrag (Issue #1142) -----------------------------------
+
+  /** Eine Meldung mit gemeldetem Abbruchgrund. */
+  private static NightRunIngestController.IngestRequest anfrageMitAbbruch(
+      @Nullable String abbruch) {
+    return new NightRunIngestController.IngestRequest(
+        START,
+        NightRunMode.CHAIN,
+        NightRunKind.NIGHT,
+        1000L,
+        0,
+        0,
+        0,
+        Boolean.TRUE,
+        null,
+        null,
+        null,
+        abbruch,
+        List.of());
+  }
+
+  /**
+   * AK 10: Additiv wie {@code kind} und {@code noWorkReason}. Eine aeltere Kit-Kopie kennt {@code
+   * abortReason} nicht; ihre Meldung muss die Pruefung bestehen und sich verhalten wie vor der
+   * Umstellung, statt an ihr zu scheitern.
+   */
+  @Test
+  void eineMeldungOhneAbbruchgrundFeldBestehtDiePruefung() {
+    try (ValidatorFactory factory = Validation.buildDefaultValidatorFactory()) {
+      assertThat(factory.getValidator().validate(anfrageMitAbbruch(null))).isEmpty();
+    }
+  }
+
+  /** Die Grenze wird beidseitig belegt — sonst bestuende auch eine Zusicherung ohne Obergrenze. */
+  @Test
+  void einAbbruchgrundBisZurGrenzeBestehtUndEinerDarueberWirdAbgewiesen() {
+    try (ValidatorFactory factory = Validation.buildDefaultValidatorFactory()) {
+      Validator validator = factory.getValidator();
+
+      assertThat(validator.validate(anfrageMitAbbruch("x".repeat(ABORT_REASON_MAX)))).isEmpty();
+      assertThat(validator.validate(anfrageMitAbbruch("x".repeat(ABORT_REASON_MAX + 1))))
+          .hasSize(1);
+    }
+  }
+
+  /**
+   * Der Abbruchgrund darf laenger sein als der Grund ohne Arbeit (E4) — ein Text, den {@code
+   * NO_WORK_REASON_MAX} abwiese, besteht hier. Ohne diesen Fall belegte die Grenzpruefung nur, dass
+   * <em>eine</em> Grenze gilt, nicht welche.
+   */
+  @Test
+  void einAbbruchgrundUeberDerGrenzeDesGrundesOhneArbeitBesteht() {
+    try (ValidatorFactory factory = Validation.buildDefaultValidatorFactory()) {
+      assertThat(
+              factory
+                  .getValidator()
+                  .validate(anfrageMitAbbruch("x".repeat(NO_WORK_REASON_MAX + 1))))
+          .isEmpty();
+    }
+  }
+
+  @Test
+  void derGemeldeteAbbruchgrundWirdAnDenDienstDurchgereicht() {
+    Authentication gebunden = mitPrincipal(new KanbanPrincipal(1L, 2L, 42L, 7L, "nacht"));
+    when(service.ingest(anyLong(), anyLong(), anyString(), any(), any()))
+        .thenReturn(new NightRunResult(START, true));
+
+    controller.ingest(gebunden, anfrageMitAbbruch("Dirty-Guard: uncommittete Reste"));
+
+    ArgumentCaptor<NewNightRun> meldung = ArgumentCaptor.forClass(NewNightRun.class);
+    verify(service).ingest(anyLong(), anyLong(), anyString(), any(), meldung.capture());
+    assertThat(meldung.getValue().abortReason()).isEqualTo("Dirty-Guard: uncommittete Reste");
+  }
+
+  /** Ohne das Feld kommt am Dienst „nicht abgebrochen" an — und nicht ein leerer Text (AK 10). */
+  @Test
+  void ohneAbbruchgrundKommtNullAmDienstAn() {
+    Authentication gebunden = mitPrincipal(new KanbanPrincipal(1L, 2L, 42L, 7L, "nacht"));
+    when(service.ingest(anyLong(), anyLong(), anyString(), any(), any()))
+        .thenReturn(new NightRunResult(START, true));
+
+    controller.ingest(gebunden, anfrageMitAbbruch(null));
+
+    ArgumentCaptor<NewNightRun> meldung = ArgumentCaptor.forClass(NewNightRun.class);
+    verify(service).ingest(anyLong(), anyLong(), anyString(), any(), meldung.capture());
+    assertThat(meldung.getValue().abortReason()).isNull();
+  }
+
   private static Authentication mitPrincipal(KanbanPrincipal principal) {
     TestingAuthenticationToken token = new TestingAuthenticationToken("tok", "n", List.of());
     token.setDetails(principal);
@@ -252,6 +346,7 @@ class NightRunIngestControllerTest {
         null,
         null,
         budget,
+        null,
         List.of(
             new IngestItemRequest(
                 993, "Paket 993", NightRunState.GREEN, null, 5L, null, null, null, stufen)));

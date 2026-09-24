@@ -31,19 +31,19 @@ describe('buildNavItems Gliederung nach dem Leitstand-Entwurf (#978)', () => {
     expect(bloecke({ board })[0]).toBe('Projekt')
   })
 
-  it('ordnet den Projekt-Block wie der Entwurf: Leitstand, Board, Liste, Vorhaben, Ideen, Läufe', () => {
+  it('ordnet den Projekt-Block wie der Entwurf: Leitstand, Board, Liste, Vorhaben, Ideen, Runs', () => {
     expect(eintraege({ board, canViewNightRun: true }, 'Projekt')).toEqual([
       'Leitstand',
       'Board',
       'Liste',
       'Vorhaben',
       'Ideen',
-      'Läufe',
+      'Runner',
     ])
   })
 
   it('führt ohne offenes Board im Projekt-Block nur die projektweiten Einträge', () => {
-    expect(eintraege({ board: null, projectId: 7, canViewNightRun: true }, 'Projekt')).toEqual(['Ideen', 'Läufe'])
+    expect(eintraege({ board: null, projectId: 7, canViewNightRun: true }, 'Projekt')).toEqual(['Ideen', 'Runner'])
   })
 
   it('lässt den Projekt-Block ohne Projekt-Kontext weg', () => {
@@ -119,20 +119,20 @@ describe('buildNavItems Läufe-Link', () => {
   // Reine Parameterprüfung: buildNavItems bekommt den fertigen Booleschen Wert. Wie er entsteht
   // (canManageProject, also auch für den Plattform-Admin), ist in der AppShell geprüft.
   it('zeigt „Läufe" bei gesetztem Sichtbarkeitswert und offenem Board', () => {
-    expect(link({ board, canViewNightRun: true }, 'Läufe')?.path).toBe(`/projects/${board.projectId}/nachtlauf`)
+    expect(link({ board, canViewNightRun: true }, 'Runner')?.path).toBe(`/projects/${board.projectId}/nachtlauf`)
   })
 
   it('zeigt „Läufe" auf einer Projekt-Route ohne offenes Board', () => {
-    expect(link({ board: null, projectId: 7, canViewNightRun: true }, 'Läufe')?.path).toBe('/projects/7/nachtlauf')
+    expect(link({ board: null, projectId: 7, canViewNightRun: true }, 'Runner')?.path).toBe('/projects/7/nachtlauf')
   })
 
   it('blendet „Läufe" ohne Projekt-Kontext aus', () => {
-    expect(link({ board: null, canViewNightRun: true }, 'Läufe')).toBeUndefined()
+    expect(link({ board: null, canViewNightRun: true }, 'Runner')).toBeUndefined()
   })
 
   it('blendet „Läufe" ohne gesetzten oder mit fehlendem Sichtbarkeitswert aus', () => {
-    expect(link({ board, canViewNightRun: false }, 'Läufe')).toBeUndefined()
-    expect(link({ board }, 'Läufe')).toBeUndefined()
+    expect(link({ board, canViewNightRun: false }, 'Runner')).toBeUndefined()
+    expect(link({ board }, 'Runner')).toBeUndefined()
   })
 })
 

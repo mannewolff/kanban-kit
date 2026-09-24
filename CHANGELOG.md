@@ -7,6 +7,26 @@ Versionierung folgt der dreiteiligen Betriebsversion (siehe [RELEASING.md](RELEA
 Einträge je Version sind ein automatischer Auszug der Commit-Titel seit dem letzten Release,
 erzeugt von `scripts/gen-changelog.mjs`.
 
+## [2.7.0] – 2026-09-24
+
+- chore: v2.6.1
+- Stryker loest seinen zugesagten Umfang ein ([#1073](https://github.com/mannewolff/kanban-kit/issues/1073))
+- Abbruchgrund und einheitliche Farbe im Plattform-Leitstand ([#1146](https://github.com/mannewolff/kanban-kit/issues/1146))
+- Der volle Abbruchgrund steht in der Nachtlauf-Auswertung ([#1145](https://github.com/mannewolff/kanban-kit/issues/1145))
+- Der Abbruchgrund kommt im Browser an ([#1144](https://github.com/mannewolff/kanban-kit/issues/1144))
+- Ein Abbruchgrund macht den Nachtlauf zur Stoerung ([#1143](https://github.com/mannewolff/kanban-kit/issues/1143))
+- Abbruchgrund eines Nachtlaufs aufnehmen und speichern ([#1142](https://github.com/mannewolff/kanban-kit/issues/1142))
+- Art des Laufs als Symbol an fester Stelle ([#1141](https://github.com/mannewolff/kanban-kit/issues/1141))
+- Anzahl beendeter Runs im Plattform-Leitstand einstellbar ([#1140](https://github.com/mannewolff/kanban-kit/issues/1140))
+- Vorige Schicht auf dem Leitstand klappbar ([#1152](https://github.com/mannewolff/kanban-kit/issues/1152))
+- Begriffe: Runner, Run und Schicht statt Lauf und Zyklus ([#1151](https://github.com/mannewolff/kanban-kit/issues/1151))
+- Stufennamen in jeder Schreibweise annehmen ([#1150](https://github.com/mannewolff/kanban-kit/issues/1150))
+- ..
+- ..
+- .
+- Backup-Protokoll: INSERT in backup_run ueber stdin statt --command ([#1155](https://github.com/mannewolff/kanban-kit/issues/1155))
+- Claude 5.5 richtig konfiguriert
+
 ## [2.6.0] – 2026-09-23
 
 - chore: v2.5.2

@@ -28,9 +28,9 @@ import { nightRunZustandsText } from '../../lib/nightRunHandoff'
  * auf „nicht gelaufen", wie bei jeder anderen nie gelaufenen Art.
  */
 export const LAUF_ART_TEXT: Record<NightRunServerMode, string> = {
-  IMPLEMENTATION: 'Umsetzungs-Lauf',
-  REVIEW: 'Prüf-Lauf',
-  CHAIN: 'Ketten-Lauf',
+  IMPLEMENTATION: 'Umsetzung',
+  REVIEW: 'Prüfung',
+  CHAIN: 'Kette',
   INTERACTIVE: 'Interaktive Sitzung',
 }
 
@@ -42,7 +42,7 @@ const LAUF_ARTEN = Object.keys(LAUF_ART_TEXT) as NightRunServerMode[]
  * nicht anzusehen, ob sie aus der Nacht oder aus dem Gespräch stammt.
  */
 const GATTUNG_TEXT: Record<NightRunKind, string> = {
-  NIGHT: 'Lauf',
+  NIGHT: 'Run',
   INTERACTIVE: 'Interaktive Sitzung',
 }
 
@@ -67,13 +67,13 @@ const SUMMEN: ReadonlyArray<{
   label: string
   format: (wert: number | undefined) => string
 }> = [
-  { schluessel: 'costUsd', testId: 'kosten', label: 'Kosten (Läufe)', format: kosten },
-  { schluessel: 'inputTokens', testId: 'eingabe', label: 'Eingabe (Läufe)', format: menge },
-  { schluessel: 'outputTokens', testId: 'ausgabe', label: 'Ausgabe (Läufe)', format: menge },
+  { schluessel: 'costUsd', testId: 'kosten', label: 'Kosten (Runs)', format: kosten },
+  { schluessel: 'inputTokens', testId: 'eingabe', label: 'Eingabe (Runs)', format: menge },
+  { schluessel: 'outputTokens', testId: 'ausgabe', label: 'Ausgabe (Runs)', format: menge },
   {
     schluessel: 'cachedInputTokens',
     testId: 'zwischenspeicher',
-    label: 'Zwischenspeicher (Läufe)',
+    label: 'Zwischenspeicher (Runs)',
     format: menge,
   },
 ]

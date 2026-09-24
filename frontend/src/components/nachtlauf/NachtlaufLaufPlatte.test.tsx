@@ -38,17 +38,18 @@ const kopfflaechen = [
  * auf und wieder zu" ist ohne diesen Zustand nicht prüfbar. Der Zähler zeigt, wie oft umgeschaltet
  * wurde: Ein Klick auf den Pfeil darf nicht zusätzlich den Kopf auslösen.
  */
-function zeige(offenAnfangs = false) {
+function zeige(offenAnfangs = false, abbruchGrund?: string) {
   const umschalten = vi.fn()
 
   function Huelle() {
     const [offen, setOffen] = useState(offenAnfangs)
     return (
       <NachtlaufLaufPlatte
-        titel="Lauf #86 · 14. September, 22:05"
-        zyklus="Zyklus vom 14.09.2026 auf den 15.09.2026"
+        titel="Run #86 · 14. September, 22:05"
+        zyklus="Schicht vom 14.09.2026 auf den 15.09.2026"
         meta="02:00 · 41 min · 7 bearbeitet"
         melder="gruen"
+        abbruchGrund={abbruchGrund}
         offen={offen}
         onUmschalten={() => {
           umschalten()
@@ -70,9 +71,22 @@ function zeige(offenAnfangs = false) {
 }
 
 const vorzeile = () => screen.getByTestId('nachtlauf-vorzeile')
-const pfeil = () => screen.getByRole('button', { name: /Lauf #86 · 14\. September, 22:05 (auf|zu)klappen/ })
+const pfeil = () => screen.getByRole('button', { name: /Run #86 · 14\. September, 22:05 (auf|zu)klappen/ })
 const kopf = () => screen.getByTestId('lauf-kopf')
 const inhalt = () => screen.queryByText('Vorgänge des Laufs')
+const grundzeile = () => screen.queryByTestId('nachtlauf-abbruchgrund')
+
+/**
+ * Ein Abbruchgrund, wie ihn der Runner meldet (Issue #1145): mehrzeilig, mit Pfaden, und länger als
+ * die 120 Zeichen, auf die `kurzGrund` die Kopfmarke kürzt. Genau daran hängt AK 4 — hier steht er
+ * **vollständig**.
+ */
+const LANGER_GRUND = [
+  'Harter Stopp (dirty-tree) — der Working Tree trug nach der Runde unkommittete Reste, der Lauf bricht ab',
+  'frontend/src/pages/NightRunPage.tsx',
+  'frontend/src/components/nachtlauf/NachtlaufLaufPlatte.tsx',
+  'src/main/java/org/mwolff/manban/card/NightRunService.java',
+].join('\n')
 
 afterEach(() => {
   vi.restoreAllMocks()
@@ -116,13 +130,13 @@ describe('NachtlaufLaufPlatte — Zyklus in der Vorzeile, Nummer im Titel (#1127
   it('nennt in der Vorzeile allein den Zyklus — die Art steht seit #1128 als Marke', () => {
     zeige()
 
-    expect(vorzeile().textContent).toBe('Zyklus vom 14.09.2026 auf den 15.09.2026')
+    expect(vorzeile().textContent).toBe('Schicht vom 14.09.2026 auf den 15.09.2026')
   })
 
   it('führt den Titel als Überschrift', () => {
     zeige()
 
-    expect(screen.getByTestId('nachtlauf-ueberschrift')).toHaveTextContent('Lauf #86 · 14. September, 22:05')
+    expect(screen.getByTestId('nachtlauf-ueberschrift')).toHaveTextContent('Run #86 · 14. September, 22:05')
   })
 })
 
@@ -194,6 +208,56 @@ describe('NachtlaufLaufPlatte — die ganze Kopfzeile schaltet', () => {
 
     expect(umschalten).toHaveBeenCalledTimes(1)
     expect(inhalt()).toBeInTheDocument()
+  })
+})
+
+describe('NachtlaufLaufPlatte — der Abbruchgrund vollständig (#1145)', () => {
+  it('zeigt den vollständigen Grund in der aufgeklappten Platte', () => {
+    zeige(true, LANGER_GRUND)
+
+    expect(grundzeile()).toHaveTextContent(
+      'Harter Stopp (dirty-tree) — der Working Tree trug nach der Runde unkommittete Reste, der Lauf bricht ab',
+    )
+    // Jeder Pfad steht da — der Grund wird hier nicht gekürzt (AK 4).
+    expect(grundzeile()!.textContent).toBe(LANGER_GRUND)
+  })
+
+  it('lässt den Grund umbrechen statt ihn wie eine Marke einzeilig zu führen', () => {
+    // Der Fund aus WICHTIG 5 der Plan-Prüfung: In einem `nowrap`-Element ragte ein Grund bis 4000
+    // Zeichen aus der Platte heraus. AK 4 verlangt ihn vollständig **und** lesbar.
+    zeige(true, LANGER_GRUND)
+
+    expect(getComputedStyle(grundzeile()!).whiteSpace).toBe('pre-wrap')
+  })
+
+  it('hält die Marke weiterhin einzeilig', () => {
+    // `LaufMarke` bleibt unverändert: Die Kopfmarke trägt den **gekürzten** Grund und darf dort
+    // nicht umbrechen.
+    render(
+      <ThemeProvider theme={theme}>
+        <LaufMarke testId="lauf-zustand">Harter Stopp (dirty-tree)</LaufMarke>
+      </ThemeProvider>,
+    )
+
+    expect(getComputedStyle(screen.getByTestId('lauf-zustand')).whiteSpace).toBe('nowrap')
+  })
+
+  it('zeigt die Zeile nicht am zugeklappten Lauf', () => {
+    zeige(false, LANGER_GRUND)
+
+    expect(grundzeile()).not.toBeInTheDocument()
+  })
+
+  it('zeigt ohne Abbruchgrund gar keine Zeile', () => {
+    zeige(true)
+
+    expect(grundzeile()).not.toBeInTheDocument()
+  })
+
+  it('malt den Grund im Token „Text matt"', () => {
+    zeige(true, LANGER_GRUND)
+
+    expect(getComputedStyle(grundzeile()!).color).toBe(TEXT_MATT)
   })
 })
 

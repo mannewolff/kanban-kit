@@ -1,4 +1,5 @@
 import Box from '@mui/material/Box'
+import ButtonBase from '@mui/material/ButtonBase'
 import Typography from '@mui/material/Typography'
 import { useCallback, useEffect, useId, useState, type ReactNode } from 'react'
 import { Link as RouterLink } from 'react-router-dom'
@@ -9,19 +10,90 @@ import {
   type LeitstandView,
 } from '../api/plattformLeitstand'
 import { KupferwarteBereich } from '../components/nachtlauf/KupferwarteBereich'
-import { LaufMarke } from '../components/nachtlauf/NachtlaufLaufPlatte'
-import { Led, Platte, Taste } from '../components/leitstand/LeitstandBausteine'
-import { MELDER_JE_ZUSTAND, melderAusBefund, modusName, tagZeit, uhrzeit } from '../lib/leitstand'
-import { NIGHT_RUN_VERDICT_TEXT, nightRunZustandsText } from '../lib/nightRunHandoff'
+import { LaufArtSymbol } from '../components/leitstand/LaufArtSymbol'
+import { FilterTaste, Led, Platte, Taste } from '../components/leitstand/LeitstandBausteine'
+import { melderAusBefund, tagZeit, uhrzeit } from '../lib/leitstand'
+import { kurzGrund, NIGHT_RUN_VERDICT_TEXT, nightRunZustandsText } from '../lib/nightRunHandoff'
 import { useRefetchOnFocus } from '../lib/useRefetchOnFocus'
 import { zyklusDavor, zyklusDesStarts, zyklusSpanne } from '../lib/verbrauchZeitraum'
-import { ANZEIGE, ETIKETT, RAND, TEXT_SCHWACH } from '../theme'
+import { ANZEIGE, ETIKETT, KLEIN_RADIUS, NUT, RAND, TEXT_MATT, TEXT_SCHWACH } from '../theme'
 
 /** Der Anfangszustand: drei leere Listen, noch von keiner Antwort belegt. */
 const LEERE_SICHT: LeitstandView = { laufende: [], durchgefuehrte: [], durchgefuehrteVoriger: [], stoerungen: [] }
 
 /** Der Takt des Auffrischens (Kriterium 19): Was sich aendert, steht spaetestens so bald da. */
 const AUFFRISCH_MS = 30_000
+
+/**
+ * Wo der Browser sich merkt, ob die vorige Schicht aufgeklappt ist (Issue #1152).
+ *
+ * Ein Zustand nur im Speicher der Seite waere hier keine Einstellung, sondern eine Geste: Die
+ * Seite frischt sich alle 30 Sekunden auf und steht lange offen; jeder Reload setzte sie zurueck.
+ */
+const VORIGE_OFFEN_SCHLUESSEL = 'leitstand-voriger-zyklus-offen'
+
+/** Ein fehlender oder unlesbarer Wert bedeutet zugeklappt (Muster aus `AppShell.tsx`). */
+function leseVorigeOffen(): boolean {
+  try {
+    return localStorage.getItem(VORIGE_OFFEN_SCHLUESSEL) === 'true'
+  } catch {
+    return false
+  }
+}
+
+function schreibeVorigeOffen(wert: boolean): void {
+  try {
+    localStorage.setItem(VORIGE_OFFEN_SCHLUESSEL, String(wert))
+  } catch {
+    // localStorage nicht verfuegbar — der Zustand haelt dann nur diese Sitzung, kein Hard-Fail.
+  }
+}
+
+/**
+ * Wie viele beendete Runs der Bereich zeigt (Issue #1140) — die Werte der drei Tasten.
+ *
+ * Als Zeichenkette und nicht als Zahl mit `Infinity`: Genau diese Werte stehen im Speicher des
+ * Browsers, und ein gelesener Wert lässt sich damit ohne Umrechnung gegen sie prüfen.
+ */
+const ANZAHL_WERTE = ['10', '20', 'alle'] as const
+type AnzahlWahl = (typeof ANZAHL_WERTE)[number]
+
+/** Die Vorgabe beim ersten Besuch: Der Anlass der Einstellung ist die zu lange Liste. */
+const ANZAHL_VORGABE: AnzahlWahl = '10'
+
+/** Wo der Browser sich die Wahl merkt — die Seite steht lange offen und frischt sich selbst auf. */
+const ANZAHL_SCHLUESSEL = 'manban.plattformLeitstand.anzahl'
+
+function istAnzahlWahl(wert: string | null): wert is AnzahlWahl {
+  return ANZAHL_WERTE.some((w) => w === wert)
+}
+
+/** Ein fehlender, unlesbarer oder unbekannter Wert ergibt die Vorgabe. */
+function leseAnzahl(): AnzahlWahl {
+  try {
+    const wert = localStorage.getItem(ANZAHL_SCHLUESSEL)
+    return istAnzahlWahl(wert) ? wert : ANZAHL_VORGABE
+  } catch {
+    return ANZAHL_VORGABE
+  }
+}
+
+function schreibeAnzahl(wahl: AnzahlWahl): void {
+  try {
+    localStorage.setItem(ANZAHL_SCHLUESSEL, wahl)
+  } catch {
+    // Wie beim Klappzustand: ein gesperrter Speicher kostet die Erinnerung, nicht die Seite.
+  }
+}
+
+/** Die Wahl als Obergrenze; „alle" begrenzt nicht. */
+function grenzeVon(wahl: AnzahlWahl): number {
+  return wahl === 'alle' ? Number.POSITIVE_INFINITY : Number(wahl)
+}
+
+function runWort(anzahl: number): string {
+  return anzahl === 1 ? '1 Run' : `${anzahl} Runs`
+}
 
 /**
  * Ein gescheiterter Abruf — sein Text und ob es das fehlende Recht war.
@@ -73,6 +145,27 @@ export default function PlattformLeitstandPage() {
   const [sicht, setSicht] = useState<LeitstandView>(LEERE_SICHT)
   const [geladen, setGeladen] = useState(false)
   const [fehler, setFehler] = useState<Fehler | null>(null)
+  // Grundzustand zugeklappt (#1152): Gelesen wird an der Stelle fast immer nur die laufende
+  // Schicht; ein Dutzend alter Zeilen schoebe die Stoerungen aus dem Bild.
+  const [vorigeOffen, setVorigeOffen] = useState(leseVorigeOffen)
+
+  // Wie viele beendete Runs gezeigt werden (#1140). Anders als der Klappzustand ist das eine
+  // ausdrückliche Einstellung des Menschen, deshalb wird sie gemerkt.
+  const [anzahlWahl, setAnzahlWahl] = useState(leseAnzahl)
+
+  const vorigeUmschalten = useCallback(() => {
+    setVorigeOffen((offen) => !offen)
+  }, [])
+
+  // Geschrieben wird als Wirkung und nicht im Umschalter: So haelt der Speicher auch dann den
+  // gezeigten Zustand, wenn React den Aktualisierer doppelt ausfuehrt.
+  useEffect(() => {
+    schreibeVorigeOffen(vorigeOffen)
+  }, [vorigeOffen])
+
+  useEffect(() => {
+    schreibeAnzahl(anzahlWahl)
+  }, [anzahlWahl])
 
   const laden = useCallback(() => {
     plattformLeitstandApi
@@ -141,31 +234,64 @@ export default function PlattformLeitstandPage() {
   // Die Spannen nennen die Zyklen, deren Grenzen der Server mit derselben Zone zieht (#1135).
   const dieserZyklus = zyklusDesStarts(new Date().toISOString())
 
+  // Die Begrenzung zählt **beide** Abschnitte zusammen (#1140): zuerst die dieser Schicht in der
+  // Reihenfolge der Antwort, der Rest aus der vorigen. Je Abschnitt N zeigte bei „10" bis zu zwanzig
+  // Zeilen — die Einstellung heißt aber „wie viele Runs sehe ich".
+  //
+  // Gerechnet wird auf der ganzen Antwort und nicht auf dem, was gerade aufgeklappt ist: Der
+  // Klappzustand ist eine Geste, die Einstellung eine Einstellung. Sonst sprängen die Zeilen der
+  // vorigen Schicht beim Zuklappen dieser in die Sicht.
+  const grenze = grenzeVon(anzahlWahl)
+  const sichtbarDieser = sicht.durchgefuehrte.slice(0, grenze)
+  const sichtbarVoriger = sicht.durchgefuehrteVoriger.slice(
+    0,
+    Math.max(0, grenze - sicht.durchgefuehrte.length),
+  )
+  const verdecktDieser = sicht.durchgefuehrte.length - sichtbarDieser.length
+  const verdecktVoriger = sicht.durchgefuehrteVoriger.length - sichtbarVoriger.length
+
   return (
     <KupferwarteBereich>
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-        <Platte titel="Aktive Läufe">
+        <Platte titel="Aktive Runs">
           <LaufendeListe zeilen={geladen ? sicht.laufende : null} />
         </Platte>
-        <Platte titel="Beendete Läufe">
-          <ZyklusAbschnitt titel="Dieser Zyklus" spanne={zyklusSpanne(dieserZyklus)} testId="zyklus-dieser">
+        <Platte
+          titel="Beendete Runs"
+          werkzeug={<AnzahlWahlTasten wahl={anzahlWahl} onWaehlen={setAnzahlWahl} />}
+        >
+          <ZyklusAbschnitt titel="Diese Schicht" spanne={zyklusSpanne(dieserZyklus)} testId="zyklus-dieser">
             <DurchgefuehrteListe
-              zeilen={geladen ? sicht.durchgefuehrte : null}
+              zeilen={geladen ? sichtbarDieser : null}
+              verdeckt={verdecktDieser}
+              testId="zyklus-dieser"
               mitStoerung={mitStoerung}
-              leer={{ testId: 'keine-durchgefuehrten', text: 'In diesem Zyklus wurde noch kein Lauf beendet.' }}
+              leer={{ testId: 'keine-durchgefuehrten', text: 'In dieser Schicht wurde noch kein Run beendet.' }}
             />
           </ZyklusAbschnitt>
           <ZyklusAbschnitt
-            titel="Voriger Zyklus"
+            titel="Vorige Schicht"
             spanne={zyklusSpanne(zyklusDavor(dieserZyklus))}
             testId="zyklus-voriger"
+            anzahl={geladen ? sicht.durchgefuehrteVoriger.length : null}
+            offen={vorigeOffen}
+            onUmschalten={vorigeUmschalten}
           >
             <DurchgefuehrteListe
-              zeilen={geladen ? sicht.durchgefuehrteVoriger : null}
+              zeilen={geladen ? sichtbarVoriger : null}
+              verdeckt={verdecktVoriger}
+              testId="zyklus-voriger"
               mitStoerung={mitStoerung}
-              leer={{ testId: 'keine-durchgefuehrten-voriger', text: 'Im vorigen Zyklus wurde kein Lauf beendet.' }}
+              leer={{ testId: 'keine-durchgefuehrten-voriger', text: 'In der vorigen Schicht wurde kein Run beendet.' }}
             />
           </ZyklusAbschnitt>
+          {geladen && verdecktDieser + verdecktVoriger > 0 && (
+            <VerdecktSatz testId="ausgeblendet-hinweis">
+              {verdecktDieser + verdecktVoriger === 1
+                ? '1 weiterer Run ausgeblendet'
+                : `${verdecktDieser + verdecktVoriger} weitere Runs ausgeblendet`}
+            </VerdecktSatz>
+          )}
         </Platte>
         <Platte titel="Störungen">
           <Stoerungen liste={geladen ? sicht.stoerungen : null} onQuittieren={quittieren} />
@@ -186,6 +312,50 @@ function LeerSatz({ testId, children }: Readonly<{ testId: string; children: Rea
     <Typography
       data-testid={testId}
       sx={{ fontSize: 13, color: 'text.secondary', px: '16px', py: '14px' }}
+    >
+      {children}
+    </Typography>
+  )
+}
+
+/**
+ * Die drei Tasten „10 · 20 · alle" im Werkzeugbereich der Platte „Beendete Runs" (Issue #1140).
+ *
+ * Tasten statt eines Auswahlmenüs: Drei Werte stehen so mit einem Klick bereit, und das Muster
+ * {@link FilterTaste} kennt die Seite schon aus dem Board-Leitstand. Das `aria-label` trägt den
+ * Bezug, den die Aufschrift „10" für sich genommen nicht hat.
+ */
+function AnzahlWahlTasten({
+  wahl,
+  onWaehlen,
+}: Readonly<{ wahl: AnzahlWahl; onWaehlen: (wahl: AnzahlWahl) => void }>) {
+  return (
+    <>
+      {ANZAHL_WERTE.map((wert) => (
+        <FilterTaste
+          key={wert}
+          gewaehlt={wert === wahl}
+          ariaLabel={`Beendete Runs: ${wert}`}
+          onClick={() => onWaehlen(wert)}
+        >
+          {wert}
+        </FilterTaste>
+      ))}
+    </>
+  )
+}
+
+/**
+ * Ein Satz über ausgeblendete Zeilen (#1140) — gestaltet wie der {@link LeerSatz}.
+ *
+ * Er sagt aus, was ohne ihn nur eine kurze Liste wäre: dass da mehr ist. Ohne ihn sähe eine
+ * begrenzte Sicht aus wie eine ruhige Nacht.
+ */
+function VerdecktSatz({ testId, children }: Readonly<{ testId: string; children: ReactNode }>) {
+  return (
+    <Typography
+      data-testid={testId}
+      sx={{ fontSize: 12, color: TEXT_SCHWACH, px: '16px', py: '10px' }}
     >
       {children}
     </Typography>
@@ -223,20 +393,12 @@ function LaufVerweis({ zeile }: Readonly<{ zeile: DisruptionView }>) {
     <Typography
       component={RouterLink}
       to={`/projects/${zeile.projectId}/nachtlauf?lauf=${zeile.nightRunId}`}
-      aria-label={`Lauf #${zeile.nightRunId} von ${zeile.projectName}`}
+      aria-label={`Run #${zeile.nightRunId} von ${zeile.projectName}`}
       sx={{ fontSize: 12, fontFamily: 'monospace' }}
     >
-      Lauf #{zeile.nightRunId}
+      Run #{zeile.nightRunId}
     </Typography>
   )
-}
-
-/**
- * Die Art eines Laufs als Marke (Issue #1128) — dieselbe Markenform wie im Kopf eines Laufs auf der
- * Läufe-Seite, ohne eigene Farbe: Farbe trägt hier den Zustand.
- */
-function ArtMarke({ zeile, bereich }: Readonly<{ zeile: DisruptionView; bereich: string }>) {
-  return <LaufMarke testId={`art-${bereich}-${zeile.nightRunId}`}>{modusName(zeile.mode)}</LaufMarke>
 }
 
 /** Der Bereich „Aktive Laeufe" (Kriterien 1–4). */
@@ -245,7 +407,7 @@ function LaufendeListe({ zeilen }: Readonly<{ zeilen: DisruptionView[] | null }>
     return null
   }
   if (zeilen.length === 0) {
-    return <LeerSatz testId="keine-laufenden">Gerade läuft kein Lauf.</LeerSatz>
+    return <LeerSatz testId="keine-laufenden">Gerade läuft kein Run.</LeerSatz>
   }
   return (
     <Box component="ul" sx={{ listStyle: 'none', m: 0, p: 0 }}>
@@ -271,11 +433,11 @@ function LaufendeZeile({ zeile }: Readonly<{ zeile: DisruptionView }>) {
   return (
     <Box component="li" data-testid={`laufend-${zeile.nightRunId}`} sx={LAUF_ZEILE_SX}>
       <Led melder={melderAusBefund(zeile.outcome)} pulsiert={zeile.outcome.verdict === 'RUNNING'} />
+      <LaufArtSymbol art={zeile.mode} />
       <Projektname name={zeile.projectName} />
       <Typography sx={{ fontSize: 12, color: 'text.secondary', flex: 1, minWidth: 0 }}>
         {`${NIGHT_RUN_VERDICT_TEXT[zeile.outcome.verdict]} seit ${uhrzeit(zeile.startedAt)}`}
       </Typography>
-      <ArtMarke zeile={zeile} bereich="laufend" />
       <LaufVerweis zeile={zeile} />
     </Box>
   )
@@ -284,23 +446,127 @@ function LaufendeZeile({ zeile }: Readonly<{ zeile: DisruptionView }>) {
 /**
  * Ein Abschnitt des Bereichs „Beendete Laeufe" (Issue #1135): Ueberschrift und Spanne des Zyklus,
  * darunter seine Zeilen. Die Ueberschrift benennt den Abschnitt auch fuer Vorlesewerkzeuge.
+ *
+ * **Klappbar nur mit `onUmschalten`** (Issue #1152): Ohne den Rueckruf verhaelt sich der Abschnitt
+ * wie zuvor — „Diese Schicht" traegt keinen Pfeil und ist immer sichtbar. Eine zweite Komponente
+ * daneben haette Kopfzeile, Spanne und `aria-labelledby` verdoppelt, also zwei Stellen, die
+ * dasselbe sagen.
+ *
+ * **Zugeklappt wird der Inhalt gar nicht gerendert** — kein `display: none`: Was nicht zu sehen
+ * ist, soll auch von Vorlesewerkzeugen und der Suche im Dokument nicht gefunden werden.
  */
 function ZyklusAbschnitt({
   titel,
   spanne,
   testId,
+  anzahl = null,
+  offen = false,
+  onUmschalten,
   children,
-}: Readonly<{ titel: string; spanne: string; testId: string; children: ReactNode }>) {
+}: Readonly<{
+  titel: string
+  spanne: string
+  testId: string
+  /** Die Anzahl der Runs des Abschnitts; `null`, solange die erste Antwort fehlt. */
+  anzahl?: number | null
+  offen?: boolean
+  onUmschalten?: () => void
+  children: ReactNode
+}>) {
   const id = useId()
+  const inhaltId = useId()
+  const klappbar = onUmschalten !== undefined
+  const zeigtInhalt = !klappbar || offen
+
+  /**
+   * Ein Klick in die Kopfzeile schaltet um — ausser er beendet gerade eine Textauswahl. Wer die
+   * Spanne markiert, um sie zu kopieren, will den Abschnitt nicht zuklappen (Muster aus
+   * {@link NachtlaufLaufPlatte}).
+   */
+  const kopfKlick =
+    onUmschalten &&
+    (() => {
+      if ((window.getSelection()?.toString() ?? '') !== '') {
+        return
+      }
+      onUmschalten()
+    })
+
   return (
     <Box component="section" aria-labelledby={id} data-testid={testId}>
-      <Box sx={{ display: 'flex', alignItems: 'baseline', gap: '8px', px: '16px', pt: '10px' }}>
+      {/* `role="presentation"`: Die Zeile traegt keine eigene Semantik, ihr Klick ist die bequemere
+          Flaeche fuer den Pfeil darin. Die Tastaturbedienung sitzt am Pfeil und waere an der Zeile
+          ein zweiter Halt in derselben Reihenfolge. */}
+      <Box
+        {...(kopfKlick && { role: 'presentation', onClick: kopfKlick, 'data-testid': `${testId}-kopf` })}
+        sx={{
+          display: 'flex',
+          alignItems: 'baseline',
+          gap: '8px',
+          px: '16px',
+          pt: '10px',
+          ...(klappbar && { cursor: 'pointer', pb: '10px' }),
+          ...(klappbar && zeigtInhalt && { borderBottom: `1px solid ${RAND}` }),
+        }}
+      >
+        {onUmschalten && (
+          <ButtonBase
+            aria-expanded={zeigtInhalt}
+            aria-controls={zeigtInhalt ? inhaltId : undefined}
+            aria-label={`${titel} ${zeigtInhalt ? 'zuklappen' : 'aufklappen'}`}
+            // Ohne gestoppte Weitergabe schaltete die Kopfzeile ein zweites Mal — und damit gar nicht.
+            onClick={(ereignis) => {
+              ereignis.stopPropagation()
+              onUmschalten()
+            }}
+            sx={{
+              width: 22,
+              height: 22,
+              flex: 'none',
+              alignSelf: 'center',
+              display: 'grid',
+              placeItems: 'center',
+              borderRadius: `${KLEIN_RADIUS}px`,
+              color: TEXT_MATT,
+              '&:hover': { bgcolor: NUT },
+            }}
+          >
+            {/* Groesse im `sx` und nicht als `width`/`height` am Element — siehe #1041. */}
+            <Box
+              component="svg"
+              data-testid={`${testId}-pfeil`}
+              viewBox="0 0 16 16"
+              fill="none"
+              aria-hidden
+              sx={{
+                width: 12,
+                height: 12,
+                transition: 'transform .15s ease',
+                transform: zeigtInhalt ? 'none' : 'rotate(-90deg)',
+                '@media (prefers-reduced-motion: reduce)': { transition: 'none' },
+              }}
+            >
+              <path
+                d="m4 6 4 4 4-4"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </Box>
+          </ButtonBase>
+        )}
         <Box component="h3" id={id} sx={{ ...ETIKETT, m: 0 }}>
           {titel}
         </Box>
         <Typography sx={{ fontSize: 12, color: 'text.secondary' }}>{spanne}</Typography>
+        {anzahl !== null && (
+          <Typography data-testid={`${testId}-anzahl`} sx={{ fontSize: 12, color: 'text.secondary' }}>
+            {runWort(anzahl)}
+          </Typography>
+        )}
       </Box>
-      {children}
+      {zeigtInhalt && (klappbar ? <Box id={inhaltId}>{children}</Box> : children)}
     </Box>
   )
 }
@@ -308,10 +574,16 @@ function ZyklusAbschnitt({
 /** Der Bereich „Beendete Laeufe" (Kriterien 9–14) — je Zyklus eine Liste (Issue #1135). */
 function DurchgefuehrteListe({
   zeilen,
+  verdeckt,
+  testId,
   mitStoerung,
   leer,
 }: Readonly<{
+  /** Die **sichtbaren** Zeilen des Abschnitts; `null`, solange die erste Antwort fehlt. */
   zeilen: DisruptionView[] | null
+  /** Wie viele Zeilen des Abschnitts die Einstellung verdrängt hat (#1140). */
+  verdeckt: number
+  testId: string
   mitStoerung: ReadonlySet<number>
   leer: { testId: string; text: string }
 }>) {
@@ -319,7 +591,13 @@ function DurchgefuehrteListe({
     return null
   }
   if (zeilen.length === 0) {
-    return <LeerSatz testId={leer.testId}>{leer.text}</LeerSatz>
+    // Ein ganz verdrängter Abschnitt hat sehr wohl Runs — der Leersatz wäre dort schlicht falsch
+    // und ließe eine arbeitsreiche Schicht wie eine leere aussehen (#1140).
+    return verdeckt > 0 ? (
+      <VerdecktSatz testId={`${testId}-ausgeblendet`}>{`${runWort(verdeckt)} ausgeblendet`}</VerdecktSatz>
+    ) : (
+      <LeerSatz testId={leer.testId}>{leer.text}</LeerSatz>
+    )
   }
   return (
     <Box component="ul" sx={{ listStyle: 'none', m: 0, p: 0 }}>
@@ -344,6 +622,11 @@ function DurchgefuehrteListe({
  * **Der Ausgang steht als Wort da** (Kriterium 11) — gelungen, nicht gelungen, mit Vorbehalt. Farbe
  * ist nie der einzige Traeger der Aussage.
  *
+ * **Hinter dem Wort steht der Abbruchgrund** (Issue #1146, AK 4), sofern der Lauf einen meldet —
+ * gekuerzt auf eine Zeile durch {@link kurzGrund}, dieselbe Kuerzung wie in der Stoerzeile und in
+ * der Kopfmarke der Nachtlauf-Auswertung. „Nicht gelungen" allein liesse offen, ob ein Paket rot
+ * war oder der Lauf als ganzer riss; den vollen Text zeigt die Auswertung des Laufs.
+ *
  * **Der zweite Verweis** fuehrt zur Stoerzeile weiter unten auf derselben Seite (Kriterium 12); er
  * erscheint nur, solange die Stoerung offen ist.
  */
@@ -354,20 +637,21 @@ function DurchgefuehrteZeile({
   return (
     <Box component="li" data-testid={`durchgefuehrt-${zeile.nightRunId}`} sx={LAUF_ZEILE_SX}>
       <Led melder={melderAusBefund(zeile.outcome)} />
+      <LaufArtSymbol art={zeile.mode} />
       <Projektname name={zeile.projectName} />
       <Typography sx={{ fontSize: 12, color: 'text.secondary' }}>
         {tagZeit(zeile.startedAt)}
       </Typography>
-      <ArtMarke zeile={zeile} bereich="durchgefuehrt" />
       <LaufVerweis zeile={zeile} />
       <Typography sx={{ fontSize: 12, color: 'text.secondary', flex: 1, minWidth: 0 }}>
         {NIGHT_RUN_VERDICT_TEXT[zeile.outcome.verdict]}
+        {zeile.outcome.abortReason ? ` — ${kurzGrund(zeile.outcome.abortReason)}` : ''}
       </Typography>
       {hatStoerung && (
         <Typography
           component="a"
           href={`#stoerung-${zeile.nightRunId}`}
-          aria-label={`Zur Störung von Lauf #${zeile.nightRunId}`}
+          aria-label={`Zur Störung von Run #${zeile.nightRunId}`}
           sx={{ fontSize: 12 }}
         >
           Störung
@@ -516,6 +800,14 @@ function Projektblock({
  * Stoerung nichts.
  */
 export function stoerungsGrund(outcome: DisruptionView['outcome']): string {
+  // Der selbst gemeldete Abbruch steht vor allem anderen (Issue #1146, AK 4): Er sagt, warum der
+  // Lauf abbrach, und das schlaegt sowohl den Rueckfall „ohne Arbeit" als auch das massgebliche
+  // Paket — nach einem harten Stopp ist dessen Zustand nur noch der letzte Stand vor dem Riss.
+  // Gekuerzt wird mit {@link kurzGrund} und nicht im Server (Plan #1139 E8): Die Textbildung liegt
+  // im Browser, und die Nachtlauf-Auswertung kuerzt denselben Text mit derselben Funktion.
+  if (outcome.abortReason !== null && outcome.abortReason !== '') {
+    return kurzGrund(outcome.abortReason)
+  }
   if (outcome.noWorkReason !== null && outcome.noWorkReason !== '') {
     return outcome.noWorkReason
   }
@@ -536,14 +828,17 @@ export function stoerungsGrund(outcome: DisruptionView['outcome']): string {
  *
  * **Das `id` neben dem `data-testid`** (#1098) ist das Ziel des Verweises „Stoerung" aus der
  * durchgefuehrten Zeile (Kriterium 12) — ein `data-testid` allein ist kein Sprungziel.
+ *
+ * **Der Melder kommt aus {@link melderAusBefund}** (Issue #1146, E13) und nicht aus einer eigenen
+ * Rechnung ueber das massgebliche Paket: Ein Lauf, der nach einem zurueckgestellten oder gelben
+ * Paket hart abbrach, erschien hier sonst grau oder bernstein — neben seinem Abbruchgrund als Text
+ * und neben derselben Zeile in „Beendete Runs", die ihn zinnober zeigt. Zwei Farben fuer denselben
+ * Ausgang auf einer einzigen Seite (AK 8).
  */
 function Stoerzeile({
   stoerung,
   onQuittieren,
 }: Readonly<{ stoerung: DisruptionView; onQuittieren: () => void }>) {
-  const melder = stoerung.outcome.decisiveItem
-    ? MELDER_JE_ZUSTAND[stoerung.outcome.decisiveItem.state]
-    : 'zinnob'
   return (
     <Box
       component="li"
@@ -553,7 +848,8 @@ function Stoerzeile({
       // „Stoerung loeschen" rechts den Rahmen der Platte. Der eigene senkrechte Rhythmus bleibt.
       sx={{ display: 'flex', alignItems: 'center', gap: '10px', px: '16px', py: '6px' }}
     >
-      <Led melder={melder} />
+      <Led melder={melderAusBefund(stoerung.outcome)} />
+      <LaufArtSymbol art={stoerung.mode} />
       <Typography sx={{ fontSize: 12, color: 'text.secondary' }}>
         {tagZeit(stoerung.startedAt)}
       </Typography>
@@ -563,14 +859,13 @@ function Stoerzeile({
         to={`/projects/${stoerung.projectId}/nachtlauf?lauf=${stoerung.nightRunId}`}
         sx={{ fontSize: 12, fontFamily: 'monospace' }}
       >
-        Lauf #{stoerung.nightRunId}
+        Run #{stoerung.nightRunId}
       </Typography>
-      <ArtMarke zeile={stoerung} bereich="stoerung" />
       <Typography sx={{ fontSize: 12, color: 'text.secondary', flex: 1, minWidth: 0 }}>
         {stoerungsGrund(stoerung.outcome)}
       </Typography>
       <Taste
-        ariaLabel={`Störung von ${stoerung.projectName}, Lauf #${stoerung.nightRunId} löschen`}
+        ariaLabel={`Störung von ${stoerung.projectName}, Run #${stoerung.nightRunId} löschen`}
         onClick={onQuittieren}
       >
         Störung löschen

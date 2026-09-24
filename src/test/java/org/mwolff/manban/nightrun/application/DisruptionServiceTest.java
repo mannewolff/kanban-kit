@@ -76,14 +76,36 @@ class DisruptionServiceTest {
   }
 
   private static DisruptionCandidate kandidat(long laufId, Instant startedAt, NightRunMode mode) {
-    return new DisruptionCandidate(laufId, 9L, "Projekt", mode, startedAt, null, true, null);
+    return new DisruptionCandidate(laufId, 9L, "Projekt", mode, startedAt, null, true, null, null);
   }
 
   /** Ein Lauf, der sich noch nicht als abgeschlossen gemeldet hat. */
   private static DisruptionCandidate unfertig(
       long laufId, Instant startedAt, @Nullable Instant updatedAt) {
     return new DisruptionCandidate(
-        laufId, 9L, "Projekt", NightRunMode.IMPLEMENTATION, startedAt, updatedAt, false, null);
+        laufId,
+        9L,
+        "Projekt",
+        NightRunMode.IMPLEMENTATION,
+        startedAt,
+        updatedAt,
+        false,
+        null,
+        null);
+  }
+
+  /** Ein Lauf, der seinen harten Abbruch selbst gemeldet hat (Issue #1143). */
+  private static DisruptionCandidate abgebrochen(long laufId, Instant startedAt) {
+    return new DisruptionCandidate(
+        laufId,
+        9L,
+        "Projekt",
+        NightRunMode.CHAIN,
+        startedAt,
+        null,
+        true,
+        null,
+        "Dirty-Guard: uncommittete Reste in src/main/java/Foo.java");
   }
 
   private static NightRunItem paket(
@@ -208,6 +230,10 @@ class DisruptionServiceTest {
   /**
    * Der verstummte Lauf ist der Kern: Er trägt {@code complete = false} und steht trotzdem unter
    * den durchgeführten — das leistet die Stillefrist aus Issue #1091, nicht ein zweites Feld.
+   *
+   * <p>Zugleich AK 1 der fachlichen Quelle #1074: Der Kandidat mit {@code complete = false} und
+   * frischem Lebenszeichen (Lauf 7) steht unter den <b>laufenden</b> — daran ändert die neue Stufe
+   * des Abbruchgrunds nichts (Issue #1143).
    */
   @Test
   void laufendeUndDurchgefuehrteTeilenSichDieNacht() {
@@ -435,6 +461,7 @@ class DisruptionServiceTest {
             Instant.parse("2026-09-22T08:27:00Z"),
             Instant.parse("2026-09-22T10:55:00Z"),
             false,
+            null,
             null));
 
     LeitstandView leitstand = umEinsNachMittag().leitstand(ADMIN, BERLIN);
@@ -538,7 +565,8 @@ class DisruptionServiceTest {
                     JETZT,
                     null,
                     true,
-                    NightRunOutcome.GRUND_UNBEKANNT)));
+                    NightRunOutcome.GRUND_UNBEKANNT,
+                    null)));
 
     assertThat(service.leitstand(ADMIN, UTC).stoerungen())
         .singleElement()
@@ -562,7 +590,8 @@ class DisruptionServiceTest {
             JETZT,
             null,
             true,
-            "Ready ist leer — nichts zu tun.");
+            "Ready ist leer — nichts zu tun.",
+            null);
     nachtLaeufe(ruhig);
     when(disruptions.openCandidates()).thenReturn(List.of(ruhig));
 
@@ -573,6 +602,34 @@ class DisruptionServiceTest {
         .singleElement()
         .extracting(v -> v.outcome().verdict())
         .isEqualTo(NightRunOutcome.Verdict.NO_WORK);
+  }
+
+  /**
+   * AK 6 der fachlichen Quelle #1074: Ein Lauf, der seinen harten Abbruch gemeldet hat, steht unter
+   * den <b>Störungen</b> — auch ohne ein einziges nicht-grünes Paket. Bis Issue #1143 fiel er als
+   * gelungen aus der Liste; gespeichert war der Grund seit #1142, gewirkt hat er nicht.
+   *
+   * <p>Der Kandidat steht zugleich unter den durchgeführten Läufen der Nacht: Ein abgebrochener
+   * Lauf meldet sich abgeschlossen, und seine Störung ist dieselbe Zeile.
+   */
+  @Test
+  void einAbgebrochenerLaufIstEineStoerung() {
+    DisruptionCandidate abgebrochen = abgebrochen(5L, JETZT);
+    nachtLaeufe(abgebrochen);
+    when(disruptions.openCandidates()).thenReturn(List.of(abgebrochen));
+    pakete(paket(5L, NightRunState.GREEN, null));
+
+    LeitstandView leitstand = service.leitstand(ADMIN, UTC);
+
+    assertThat(leitstand.stoerungen())
+        .singleElement()
+        .satisfies(
+            v -> {
+              assertThat(v.nightRunId()).isEqualTo(5L);
+              assertThat(v.outcome().verdict()).isEqualTo(NightRunOutcome.Verdict.FAILED);
+              assertThat(v.outcome().abortReason()).isEqualTo(abgebrochen.abortReason());
+            });
+    assertThat(ids(leitstand.durchgefuehrte())).containsExactly(5L);
   }
 
   /**
@@ -615,7 +672,15 @@ class DisruptionServiceTest {
         .thenReturn(
             List.of(
                 new DisruptionCandidate(
-                    5L, 9L, "Mein Projekt", NightRunMode.IMPLEMENTATION, JETZT, null, true, null)));
+                    5L,
+                    9L,
+                    "Mein Projekt",
+                    NightRunMode.IMPLEMENTATION,
+                    JETZT,
+                    null,
+                    true,
+                    null,
+                    null)));
     pakete(paket(5L, NightRunState.RED, NightRunErrorClass.CHECKS_RED));
 
     assertThat(service.leitstand(ADMIN, UTC).stoerungen())

@@ -50,8 +50,13 @@ export function NachtlaufLaufPlatte({
    * Nummer steht seit Issue #1127 hier und nicht mehr in der Vorzeile.
    */
   titel,
-  /** Der Zyklus, dem der Lauf angehört, etwa „Zyklus vom 14.09.2026 auf den 15.09.2026" (#1127). */
+  /** Die Schicht, der der Lauf angehört, etwa „Schicht vom 14.09.2026 auf den 15.09.2026" (#1151). */
   zyklus,
+  /**
+   * Die Art des Laufs als Symbol (#1141) — es steht in derselben Zeile unmittelbar vor dem Titel.
+   * Die Seite entscheidet, welches; die Platte gibt ihm nur seinen Platz.
+   */
+  artSymbol,
   /** Beginn, Dauer, bearbeitete und übergangene Vorgänge und was der Lauf sonst zu sagen hat. */
   meta,
   melder,
@@ -62,6 +67,12 @@ export function NachtlaufLaufPlatte({
    * entscheidet die Seite; die Platte reiht sie nur auf.
    */
   marken,
+  /**
+   * Der **vollständige** Grund eines harten Abbruchs (Issue #1145); `undefined` an jedem Lauf, der
+   * nicht abbrach. Er steht allein in der aufgeklappten Platte — der Kopf trägt ihn gekürzt als
+   * Marke.
+   */
+  abbruchGrund,
   offen,
   onUmschalten,
   testId,
@@ -69,10 +80,12 @@ export function NachtlaufLaufPlatte({
 }: Readonly<{
   titel: string
   zyklus: string
+  artSymbol?: ReactNode
   meta: string
   melder: Melder
   pulsiert?: boolean
   marken?: ReactNode
+  abbruchGrund?: string
   offen: boolean
   onUmschalten: () => void
   testId: string
@@ -183,8 +196,17 @@ export function NachtlaufLaufPlatte({
           <Box
             component="h3"
             data-testid="nachtlauf-ueberschrift"
-            sx={{ ...ANZEIGE, m: 0, fontSize: 15, fontWeight: 600 }}
+            sx={{
+              ...ANZEIGE,
+              m: 0,
+              fontSize: 15,
+              fontWeight: 600,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+            }}
           >
+            {artSymbol}
             {titel}
           </Box>
         </Box>
@@ -204,7 +226,32 @@ export function NachtlaufLaufPlatte({
         )}
       </Box>
 
-      {offen && <Box id={inhaltId}>{children}</Box>}
+      {offen && (
+        <Box id={inhaltId}>
+          {/* Der eine Ort, an dem der Abbruchgrund nicht gekürzt wird (Issue #1145, AK 4 der
+              fachlichen Quelle #1074). Er steht **nicht** in einer {@link LaufMarke}: Die ist
+              `nowrap`, und ein Grund mit bis zu zehn Pfaden ragte als Marke aus der Platte heraus.
+              `pre-wrap` hält die Zeilen des Runners und bricht die langen davon um. */}
+          {abbruchGrund !== undefined && (
+            <Box sx={{ px: '16px', pt: '14px' }}>
+              <Box sx={{ ...ETIKETT, mb: '2px' }}>Abbruchgrund</Box>
+              <Box
+                data-testid="nachtlauf-abbruchgrund"
+                sx={{
+                  fontSize: 12.5,
+                  color: TEXT_MATT,
+                  whiteSpace: 'pre-wrap',
+                  // Ein Pfad ohne Leerzeichen bräche sonst gar nicht und schöbe die Platte breit.
+                  overflowWrap: 'anywhere',
+                }}
+              >
+                {abbruchGrund}
+              </Box>
+            </Box>
+          )}
+          {children}
+        </Box>
+      )}
     </Box>
   )
 }

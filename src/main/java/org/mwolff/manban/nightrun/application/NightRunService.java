@@ -142,6 +142,9 @@ public class NightRunService {
     // der Laufzeile aus upsert — die Sperrreihenfolge ist damit in beiden Wegen dieselbe.
     runs.lockProject(projectId);
     Instant now = clock.instant();
+    // Einmal bestimmt, zweimal gebraucht: Der Abbruchgrund entscheidet mit, ob der Grund ohne
+    // Arbeit ueberhaupt gesetzt wird (Plan #1139, E6).
+    @Nullable String abbruch = abbruchGrund(kind, meldung.complete(), meldung.abortReason());
     NightRun gemeldet =
         new NightRun(
             null,
@@ -163,11 +166,16 @@ public class NightRunService {
             now,
             meldung.usage(),
             grundOhneArbeit(
-                kind, meldung.complete(), meldung.processedCount(), meldung.noWorkReason()),
+                kind,
+                meldung.complete(),
+                meldung.processedCount(),
+                meldung.noWorkReason(),
+                abbruch),
             // Die Vorgaben kommen mit der Meldung (Issue #1113). Fehlen sie, steht am Lauf
             // „nicht angegeben" — der Dienst ergaenzt sie nicht aus Voreinstellungen, die er
             // gar nicht kennt (Plan #1110 E4).
-            meldung.budget());
+            meldung.budget(),
+            abbruch);
 
     // Wie beim Upload-Weg: verwaiste Pakete eines verdrängten Laufs zuerst weg (#965).
     runs.deleteOrphanItemsOfRun(projectId, meldung.startedAt());
@@ -263,10 +271,14 @@ public class NightRunService {
         // kommt aus der Datei, nicht aus dem Runner. Ein Lauf ohne Arbeit landet damit im
         // Rueckfalltext -- angezeigt wird er trotzdem, nur ohne die Begruendung des Runners.
         grundOhneArbeit(
-            NightRunKind.NIGHT, submission.complete(), submission.processedCount(), null),
+            NightRunKind.NIGHT, submission.complete(), submission.processedCount(), null, null),
         // Durchgereicht wie jedes andere Feld; der Upload-Weg uebergibt hier fest „nicht
         // angegeben", weil die Ergebnisdatei den Browser nicht verlaesst (Plan #1110 E14).
-        submission.budget());
+        submission.budget(),
+        // Fest null aus demselben Grund wie der Grund ohne Arbeit (Plan #1139, E7): Ein
+        // hochgeladenes Protokoll kommt aus der Datei, nicht aus dem Runner, und traegt dessen
+        // Abbruchmeldung nicht.
+        null);
   }
 
   /**
@@ -289,13 +301,43 @@ public class NightRunService {
    * <p>Der Rueckfalltext steht seit Issue #1121 in {@link NightRunOutcome}: Dort haengt am Text die
    * Aussage ueber den Ausgang — ein gemeldeter Grund ist „nichts zu tun", der Rueckfall bleibt
    * „nicht gelungen". Gesetzt wird er weiterhin nur hier.
+   *
+   * <p><b>Ein gesetzter Abbruchgrund verdraengt den Rueckfalltext</b> (Issue #1142, Plan #1139 E6):
+   * Ein Lauf, der abgebrochen ist, hat nichts abgearbeitet — aber der Grund dafuer ist bekannt und
+   * steht in {@code abort_reason}. Stuende daneben „Nichts abgearbeitet — Grund unbekannt", sagte
+   * derselbe Lauf an zwei Stellen Widerspruechliches.
    */
   private static @Nullable String grundOhneArbeit(
-      NightRunKind kind, boolean complete, int processedCount, @Nullable String gemeldet) {
-    if (kind != NightRunKind.NIGHT || !complete || processedCount > 0) {
+      NightRunKind kind,
+      boolean complete,
+      int processedCount,
+      @Nullable String gemeldet,
+      @Nullable String abbruchGrund) {
+    if (kind != NightRunKind.NIGHT || !complete || processedCount > 0 || abbruchGrund != null) {
       return null;
     }
     return gemeldet == null || gemeldet.isBlank() ? NightRunOutcome.GRUND_UNBEKANNT : gemeldet;
+  }
+
+  /**
+   * Der gemeldete Grund eines harten Abbruchs — oder {@code null}, wenn die Frage sich nicht stellt
+   * (Issue #1142, Plan #1139 E12).
+   *
+   * <p>Uebernommen wird er nur an einem <b>Nachtlauf</b>, der <b>abgeschlossen</b> gemeldet wurde.
+   * Beides aus demselben Grund wie bei {@link #grundOhneArbeit}: Eine interaktive Sitzung bricht
+   * keine Kette ab, und ein noch nicht abgeschlossener Lauf ist unterwegs — sein Abbruch stuende
+   * fest, bevor er feststeht.
+   *
+   * <p>Ein gemeldeter, aber leerer Grund gilt wie ein fehlender: Ein leeres Feld ist keine Auskunft
+   * ueber den Abbruch, und es gibt hier — anders als beim Grund ohne Arbeit — keinen Rueckfalltext,
+   * der dafuer einspringen koennte. Der Ausgang des Laufs entsteht im Folgepaket.
+   */
+  private static @Nullable String abbruchGrund(
+      NightRunKind kind, boolean complete, @Nullable String gemeldet) {
+    if (kind != NightRunKind.NIGHT || !complete || gemeldet == null || gemeldet.isBlank()) {
+      return null;
+    }
+    return gemeldet;
   }
 
   /**
@@ -362,9 +404,14 @@ public class NightRunService {
         run.usage(),
         run.noWorkReason(),
         run.budget(),
+        run.abortReason(),
         NightRunOutcome.of(
             run.complete(),
             run.noWorkReason(),
+            // Seit Issue #1143 wirkt der Abbruchgrund auf den Ausgang: Ein Lauf, der abbrach, ist
+            // nie gelungen. Dieselben Argumente wie in DisruptionService.view — eine Rechnung,
+            // zwei Auswertungswege (AK 8 der fachlichen Quelle #1074).
+            run.abortReason(),
             run.mode(),
             eigeneItems,
             run.startedAt(),
@@ -394,6 +441,10 @@ public class NightRunService {
    * @param budget die gemeldeten Vorgaben des Laufs (Issue #1113); {@code null} heißt „nicht
    *     angegeben". Der Upload-Weg führt sie nicht und übergibt hier fest {@code null} (Plan #1110
    *     E14).
+   * @param abortReason der gemeldete Grund eines harten Abbruchs (Issue #1142); {@code null} heißt
+   *     „nicht abgebrochen". Der Upload-Weg führt ihn nicht und übergibt hier fest {@code null}
+   *     (Plan #1139 E7). Ob der Wert am Lauf landet, entscheidet {@link #abbruchGrund} — gemeldet
+   *     heißt nicht gesetzt.
    */
   public record NewNightRun(
       Instant startedAt,
@@ -407,6 +458,7 @@ public class NightRunService {
       @Nullable NightRunUsage usage,
       @Nullable String noWorkReason,
       @Nullable NightRunBudget budget,
+      @Nullable String abortReason,
       List<NewNightRunItem> items) {}
 
   /**
@@ -439,6 +491,8 @@ public class NightRunService {
    *
    * @param budget die Vorgaben, unter denen der Lauf angetreten ist (Issue #1113); {@code null}
    *     heißt „nicht angegeben"
+   * @param abortReason der Grund, warum der Lauf hart abgebrochen ist (Issue #1142); {@code null}
+   *     heißt „nicht abgebrochen"
    */
   public record NightRunView(
       Long id,
@@ -457,6 +511,7 @@ public class NightRunService {
       @Nullable NightRunUsage usage,
       @Nullable String noWorkReason,
       @Nullable NightRunBudget budget,
+      @Nullable String abortReason,
       NightRunOutcome outcome,
       List<NightRunItemView> items) {}
 

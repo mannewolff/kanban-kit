@@ -207,6 +207,14 @@ export interface NightRunOutcomeView {
   } | null
   /** Grund, warum der Lauf nichts abgearbeitet hat; `null`, wenn er gearbeitet hat. */
   noWorkReason: string | null
+  /**
+   * Grund, warum der Lauf hart abgebrochen ist (Issue #1143); `null`, wenn er nicht abbrach.
+   *
+   * Er schliesst {@link noWorkReason} aus: Der Server setzt beim abgebrochenen Lauf allein diesen
+   * (Plan #1139 E6), und die Anzeige darf deshalb nie beide zugleich zeigen. Das massgebliche
+   * Paket bleibt daneben stehen — es sagt genauer, woran es lag.
+   */
+  abortReason: string | null
 }
 
 /** Ein aufbewahrter Lauf samt seiner Arbeitspakete. */
@@ -225,7 +233,7 @@ export interface NightRunView {
   origin: 'UPLOAD' | 'TOKEN'
   /** Der Name des meldenden Tokens; `null` bei einem hochgeladenen Lauf. */
   tokenName: string | null
-  /** `false`, solange die Kette den Lauf noch nicht abgeschlossen gemeldet hat. */
+  /** `false`, solange die Kette den Run noch nicht abgeschlossen gemeldet hat. */
   complete: boolean
   /** Zeitpunkt der letzten Meldung; `null`, wenn der Lauf seit dem Anlegen nicht gemeldet wurde. */
   updatedAt: string | null
@@ -236,6 +244,13 @@ export interface NightRunView {
    * kommen als `null` und nicht als fehlender Schluessel (Issue #734).
    */
   noWorkReason: string | null
+  /**
+   * Grund, warum der Lauf hart abgebrochen ist (Issue #1143); `null` heisst „der Lauf brach nicht
+   * ab" — ein Lauf vor der Umstellung eingeschlossen. Er steht am Lauf **und** im Befund: am Lauf
+   * fuer die Nachtlauf-Auswertung eines Projekts, im Befund fuer den Plattform-Leitstand, der
+   * seine Zeilen allein aus dem Befund bildet.
+   */
+  abortReason: string | null
   /**
    * Der Befund des Laufs (Issue #1078). **Pflichtfeld**, kein `?:` — optional verschoebe es die eine
    * Wahrheit wieder in den Browser, weil jede Lesestelle einen Rueckfallweg braeuchte.

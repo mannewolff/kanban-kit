@@ -155,6 +155,7 @@ class NightRunUsageRepositoryIT extends AbstractIntegrationTest {
             null,
             laufVerbrauch,
             null,
+            null,
             null),
         List.of(pakete));
   }

@@ -63,13 +63,13 @@ describe('zeitraumBeschriftung', () => {
   it('benennt eine Nacht mit ihrem Beginn und ihrem Folgetag', () => {
     expect(
       zeitraumBeschriftung(kennzahlen({ type: 'DAY', firstDay: '2026-09-15', lastDay: '2026-09-15' })),
-    ).toBe('Zyklus vom 15.09.2026 auf den 16.09.2026')
+    ).toBe('Schicht vom 15.09.2026 auf den 16.09.2026')
   })
 
   it('benennt die Nacht ueber den Monatswechsel richtig', () => {
     expect(
       zeitraumBeschriftung(kennzahlen({ type: 'DAY', firstDay: '2026-08-31', lastDay: '2026-08-31' })),
-    ).toBe('Zyklus vom 31.08.2026 auf den 01.09.2026')
+    ).toBe('Schicht vom 31.08.2026 auf den 01.09.2026')
   })
 
   it('benennt eine Woche mit ihren Naechten von Montag bis Sonntag', () => {
@@ -97,9 +97,9 @@ describe('vorzeitraumName', () => {
 
 describe('laeufeText, sitzungenText und kartenText', () => {
   it('setzt den Einzahl- und den Mehrzahlfall', () => {
-    expect(laeufeText(1)).toBe('1 Lauf')
-    expect(laeufeText(0)).toBe('0 Läufe')
-    expect(laeufeText(7)).toBe('7 Läufe')
+    expect(laeufeText(1)).toBe('1 Run')
+    expect(laeufeText(0)).toBe('0 Runs')
+    expect(laeufeText(7)).toBe('7 Runs')
     expect(sitzungenText(1)).toBe('1 Sitzung')
     expect(sitzungenText(0)).toBe('0 Sitzungen')
     expect(sitzungenText(4)).toBe('4 Sitzungen')
@@ -213,7 +213,7 @@ describe('zeitraumFall und zeitraumHinweis', () => {
   it('sagt beim Zeitraum ohne Lauf und ohne Sitzung den Satz aus #926 AK 9', () => {
     expect(zeitraumHinweis(faelle.keinLauf)).toBe(KEIN_LAUF_TEXT)
     expect(KEIN_LAUF_TEXT).toBe(
-      'In diesem Zeitraum hat weder ein Lauf noch eine Sitzung stattgefunden.',
+      'In diesem Zeitraum hat weder ein Run noch eine Sitzung stattgefunden.',
     )
   })
 
@@ -244,9 +244,9 @@ describe('zeitraumFall und zeitraumHinweis', () => {
     }
   })
 
-  it('sagt ganz vor dem aeltesten aufbewahrten Lauf NICHT den Satz aus AK 9', () => {
+  it('sagt ganz vor dem aeltesten aufbewahrten Run NICHT den Satz aus AK 9', () => {
     expect(zeitraumHinweis(faelle.vorAufbewahrung)).not.toBe(KEIN_LAUF_TEXT)
-    expect(zeitraumHinweis(faelle.vorAufbewahrung)).toContain('ältesten aufbewahrten Lauf')
+    expect(zeitraumHinweis(faelle.vorAufbewahrung)).toContain('ältesten aufbewahrten Run')
   })
 
   it('nennt eine Teilabdeckung neben den Zahlen, auch ohne Lauf in der aufbewahrten Zeit', () => {
@@ -374,7 +374,7 @@ describe('zyklusDesStarts (Issue #1127)', () => {
 
 describe('zyklusBeschriftung (Issue #1127)', () => {
   it('nennt Beginn und Folgetag', () => {
-    expect(zyklusBeschriftung('2026-09-14')).toBe('Zyklus vom 14.09.2026 auf den 15.09.2026')
+    expect(zyklusBeschriftung('2026-09-14')).toBe('Schicht vom 14.09.2026 auf den 15.09.2026')
   })
 })
 

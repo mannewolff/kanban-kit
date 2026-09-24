@@ -6,7 +6,7 @@ import type { ReactNode } from 'react'
  * (`docs/entwurf-leitstand.html`, HTML Z. 1119–1154): 16 × 16, Strich statt Fläche, Farbe aus
  * `currentColor`. Einträge ohne Vorlage im Entwurf tragen weiter ein MUI-Symbol.
  */
-function strichSymbol(name: string, pfade: ReactNode) {
+export function strichSymbol(name: string, pfade: ReactNode) {
   function StrichSymbol(props: SvgIconProps) {
     return (
       <SvgIcon viewBox="0 0 16 16" {...props} sx={{ fill: 'none', ...props.sx }}>
@@ -18,7 +18,8 @@ function strichSymbol(name: string, pfade: ReactNode) {
   return StrichSymbol
 }
 
-const strich = { stroke: 'currentColor', strokeWidth: 1.5 } as const
+/** Strichstärke und Farbe aller Symbole — auch die der Laufarten (#1141) folgen ihr. */
+export const strich = { stroke: 'currentColor', strokeWidth: 1.5 } as const
 
 export const LeitstandSymbol = strichSymbol(
   'LeitstandSymbol',

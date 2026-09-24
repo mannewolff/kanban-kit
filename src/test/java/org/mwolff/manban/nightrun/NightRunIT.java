@@ -132,6 +132,31 @@ class NightRunIT extends AbstractIntegrationTest {
         .andExpect(jsonPath("$[0].outcome.noWorkReason").doesNotExist());
   }
 
+  /**
+   * AK 4 der fachlichen Quelle #1074, Server-Teil: Der gemeldete Abbruchgrund steht
+   * <b>vollständig</b> im Befund der Sicht — ungekürzt bis an die Spaltengrenze. Gekürzt wird
+   * allein in der Störzeile des Leitstands, und das im Browser.
+   *
+   * <p>Der Upload-Weg führt kein Feld dafür (Plan #1139 E7); der Grund kommt deshalb über die
+   * Spalte an denselben Lauf, den der Weg eben angelegt hat.
+   */
+  @Test
+  void list_traegtDenAbbruchgrundVollstaendigImBefund() throws Exception {
+    Cookie owner = session("nr-abbruch-owner@example.com", PlatformRole.USER);
+    long projectId = projectOf("nr-abbruch-owner@example.com", "nr-abbruch-admin@example.com");
+    String grund =
+        "Dirty-Guard: " + "x".repeat(NightRunLimits.EXCERPT_MAX - "Dirty-Guard: ".length());
+
+    submit(owner, projectId, run(ERSTER, item(721, "Persistenz", "GREEN", null)))
+        .andExpect(status().isOk());
+    jdbc.update("UPDATE night_run SET abort_reason = ? WHERE project_id = ?", grund, projectId);
+
+    mvc.perform(get(path(projectId)).cookie(owner))
+        .andExpect(jsonPath("$[0].outcome.verdict").value("FAILED"))
+        .andExpect(jsonPath("$[0].outcome.abortReason").value(grund))
+        .andExpect(jsonPath("$[0].abortReason").value(grund));
+  }
+
   /** Auch der gelungene Lauf trägt einen Befund — sonst hieße „kein Befund" zweierlei. */
   @Test
   void list_liefertEinenBefundAuchFuerDenGelungenenLauf() throws Exception {
@@ -405,6 +430,7 @@ class NightRunIT extends AbstractIntegrationTest {
             true,
             Instant.now(),
             gemeldet,
+            null,
             null,
             null),
         List.of());

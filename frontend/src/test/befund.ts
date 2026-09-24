@@ -38,6 +38,8 @@ export const GRUND_UNBEKANNT = 'Nichts abgearbeitet — Grund unbekannt'
 export function serverBefund(lauf: {
   complete: boolean
   noWorkReason?: string | null
+  /** Grund eines harten Abbruchs (Issue #1143) — er schlaegt den Lauf ohne Arbeit und die Pakete. */
+  abortReason?: string | null
   items: readonly NightRunItemView[]
   /** Ob der Lauf ueber die Stillefrist hinaus kein Lebenszeichen gab (Issue #1091). */
   verstummt?: boolean
@@ -47,35 +49,65 @@ export function serverBefund(lauf: {
   // Ein verstummter Lauf ist nicht gelungen — ohne massgebliches Paket und ohne Grund, denn er hat
   // sein Ergebnis nie gemeldet.
   if (!lauf.complete && lauf.verstummt === true) {
-    return { verdict: 'FAILED', decisiveItem: null, noWorkReason: null }
+    return { verdict: 'FAILED', decisiveItem: null, noWorkReason: null, abortReason: null }
   }
   if (!lauf.complete) {
-    return { verdict: 'RUNNING', decisiveItem: null, noWorkReason: null }
+    return { verdict: 'RUNNING', decisiveItem: null, noWorkReason: null, abortReason: null }
+  }
+  // Der abgebrochene Lauf (Issue #1143) steht hinter „verstummt" und „laeuft noch" und **vor** dem
+  // Lauf ohne Arbeit: Ein Lauf, der abbrach, ist nie gelungen — auch nicht nach drei gruenen
+  // Paketen. Das massgebliche Paket bleibt daneben und kommt weiter aus den Paketen (E5).
+  if (lauf.abortReason != null) {
+    return {
+      verdict: 'FAILED',
+      decisiveItem: massgeblichesPaket(lauf.mode, lauf.items),
+      noWorkReason: null,
+      abortReason: lauf.abortReason,
+    }
   }
   if (lauf.noWorkReason != null && lauf.noWorkReason !== '') {
     return {
       verdict: lauf.noWorkReason === GRUND_UNBEKANNT ? 'FAILED' : 'NO_WORK',
       decisiveItem: null,
       noWorkReason: lauf.noWorkReason,
+      abortReason: null,
     }
   }
-  // Die Ketten-Einheit steht immer zuerst und erbt ihren Abbruch von dem, was spaeter riss — in
-  // einer Kette ist deshalb das letzte gleichrangige Paket massgeblich (Issue #1123).
-  const reihenfolge = lauf.mode === 'CHAIN' ? [...lauf.items].reverse() : lauf.items
+  const massgeblich = massgeblichesPaket(lauf.mode, lauf.items)
+  if (massgeblich == null) {
+    return { verdict: 'SUCCEEDED', decisiveItem: null, noWorkReason: null, abortReason: null }
+  }
+  return {
+    verdict: massgeblich.state === 'GREY' ? 'WAITING' : 'FAILED',
+    decisiveItem: massgeblich,
+    noWorkReason: null,
+    abortReason: null,
+  }
+}
+
+/**
+ * Das Paket, das den Ausgang bestimmt — `null`, wenn keines ihn bestimmt.
+ *
+ * Eigene Funktion wie im Server seit Issue #1143: Der abgebrochene Lauf braucht dieselbe Auswahl,
+ * aber ein anderes Urteil. Zweimal ausgeschrieben liefen die beiden Auswahlen auseinander.
+ *
+ * Die Ketten-Einheit steht immer zuerst und erbt ihren Abbruch von dem, was spaeter riss — in einer
+ * Kette ist deshalb das letzte gleichrangige Paket massgeblich (Issue #1123).
+ */
+function massgeblichesPaket(
+  mode: NightRunServerMode | undefined,
+  items: readonly NightRunItemView[],
+): NightRunOutcomeView['decisiveItem'] {
+  const reihenfolge = mode === 'CHAIN' ? [...items].reverse() : items
   const massgeblich =
     reihenfolge.find((i) => i.state === 'RED') ??
     reihenfolge.find((i) => i.state === 'YELLOW') ??
     reihenfolge.find((i) => i.state === 'GREY' && i.errorClass != null)
-  if (massgeblich == null) {
-    return { verdict: 'SUCCEEDED', decisiveItem: null, noWorkReason: null }
-  }
-  return {
-    verdict: massgeblich.state === 'GREY' ? 'WAITING' : 'FAILED',
-    decisiveItem: {
-      cardNumber: massgeblich.cardNumber,
-      state: massgeblich.state,
-      errorClass: massgeblich.errorClass,
-    },
-    noWorkReason: null,
-  }
+  return massgeblich == null
+    ? null
+    : {
+        cardNumber: massgeblich.cardNumber,
+        state: massgeblich.state,
+        errorClass: massgeblich.errorClass,
+      }
 }

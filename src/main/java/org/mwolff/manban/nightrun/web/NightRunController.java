@@ -69,6 +69,14 @@ class NightRunController {
    */
   static final int NO_WORK_REASON_MAX = 300;
 
+  /**
+   * Obergrenze des Grundes, warum ein Lauf hart abgebrochen ist (Issue #1142) — die Laenge der
+   * Spalte {@code night_run.abort_reason} aus {@code V42}, und damit {@link
+   * NightRunLimits#EXCERPT_MAX} statt der 300 von {@link #NO_WORK_REASON_MAX} (Plan #1139 E4): Ein
+   * Grund ohne Arbeit ist ein Satz fuer die Anzeige, ein Abbruchgrund fuehrt Dateilisten.
+   */
+  static final int ABORT_REASON_MAX = NightRunLimits.EXCERPT_MAX;
+
   private final NightRunService runs;
 
   NightRunController(NightRunService runs) {
@@ -129,6 +137,9 @@ class NightRunController {
         // Fest „nicht angegeben" und kein Request-Feld, aus demselben Grund (Issue #1113, Plan
         // #1110 E14): Die Ergebnisdatei verlaesst den Browser nicht (Plan #718, A1), und ein Lauf,
         // den der Server schon fuehrt, darf durch ein zusaetzliches Einlesen nichts verlieren.
+        null,
+        // Der Abbruchgrund, ebenfalls fest null und aus demselben Grund (Issue #1142, Plan #1139
+        // E7): Der Upload-Weg kennt kein Feld dafuer.
         null,
         request.items().stream().map(NightRunController::item).toList());
   }

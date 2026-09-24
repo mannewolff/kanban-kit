@@ -68,8 +68,9 @@ const lauf = (id: number, startedAt: string): NightRunView => ({
   updatedAt: null,
   usage: null,
   noWorkReason: null,
+  abortReason: null,
   budget: null,
-  outcome: { verdict: 'SUCCEEDED', decisiveItem: null, noWorkReason: null },
+  outcome: { abortReason: null, verdict: 'SUCCEEDED', decisiveItem: null, noWorkReason: null },
   items: [],
 })
 
@@ -200,7 +201,7 @@ describe('useLeitstandDaten — Läufe am Projekt des Boards', () => {
     expect(result.current.epicListe).toEqual([epic(1, 'Nachtlauf-Auswertung')])
   })
 
-  it('lässt den jüngsten Lauf ohne aufbewahrten Lauf offen, die Liste aber leer statt fehlend', async () => {
+  it('lässt den jüngsten Lauf ohne aufbewahrten Run offen, die Liste aber leer statt fehlend', async () => {
     m.laeufe.mockResolvedValue([])
     const { result } = renderHook(() => useLeitstandDaten('7'))
     await waitFor(() => expect(result.current.liste).toEqual([]))

@@ -433,6 +433,7 @@ class NightRunServiceTest {
         null,
         null,
         null,
+        null,
         List.of(items));
   }
 
@@ -486,6 +487,7 @@ class NightRunServiceTest {
         usage,
         null,
         budget,
+        null,
         List.of(items));
   }
 
@@ -1002,6 +1004,7 @@ class NightRunServiceTest {
         FIXED,
         null,
         null,
+        null,
         null);
   }
 
@@ -1054,6 +1057,12 @@ class NightRunServiceTest {
   /** Eine Meldung, die nichts abgearbeitet hat: {@code processedCount = 0} (E5). */
   private static NightRunService.NewNightRun ohneArbeit(
       Instant startedAt, boolean complete, @Nullable String grund) {
+    return ohneArbeit(startedAt, complete, grund, null);
+  }
+
+  /** Dieselbe Meldung, zusaetzlich mit einem gemeldeten Abbruchgrund (Issue #1142). */
+  private static NightRunService.NewNightRun ohneArbeit(
+      Instant startedAt, boolean complete, @Nullable String grund, @Nullable String abbruch) {
     return new NightRunService.NewNightRun(
         startedAt,
         NightRunMode.CHAIN,
@@ -1066,6 +1075,7 @@ class NightRunServiceTest {
         null,
         grund,
         null,
+        abbruch,
         List.of());
   }
 
@@ -1080,6 +1090,7 @@ class NightRunServiceTest {
         0,
         null,
         true,
+        null,
         null,
         null,
         null,
@@ -1155,6 +1166,119 @@ class NightRunServiceTest {
         .containsExactly(RUECKFALL);
   }
 
+  // --- Harter Abbruch: der Grund am Lauf (Issue #1142, Plan #1139) -------------------------
+
+  private static final String ABBRUCH_GRUND =
+      "Dirty-Guard: uncommittete Reste in src/main/java/Foo.java, src/test/java/FooTest.java";
+
+  @Test
+  void ingest_uebernimmtDenGemeldetenAbbruchgrundWoertlich() {
+    service.ingest(
+        USER, PROJECT, TOKEN, NightRunKind.NIGHT, ohneArbeit(T1, true, null, ABBRUCH_GRUND));
+
+    assertThat(gemeldeterLauf().abortReason()).isEqualTo(ABBRUCH_GRUND);
+  }
+
+  /**
+   * AK 5 / E6: Ein gemeldeter Abbruchgrund verdraengt den Rueckfalltext. Der Lauf hat nichts
+   * abgearbeitet, aber der Grund dafuer ist bekannt — „Grund unbekannt" daneben waere ein
+   * Widerspruch am selben Lauf.
+   */
+  @Test
+  void ingest_laesstDenGrundOhneArbeitLeer_wennEinAbbruchgrundGemeldetWurde() {
+    service.ingest(
+        USER, PROJECT, TOKEN, NightRunKind.NIGHT, ohneArbeit(T1, true, null, ABBRUCH_GRUND));
+
+    NightRun gespeichert = gemeldeterLauf();
+    assertThat(gespeichert.noWorkReason()).as("no_work_reason bleibt leer").isNull();
+    assertThat(gespeichert.abortReason()).as("der Abbruchgrund traegt stattdessen").isNotNull();
+  }
+
+  /** Auch ein <b>gemeldeter</b> Grund ohne Arbeit weicht dem Abbruchgrund (E6). */
+  @Test
+  void ingest_laesstDenGemeldetenGrundOhneArbeitLeer_wennEinAbbruchgrundDazukommt() {
+    service.ingest(
+        USER,
+        PROJECT,
+        TOKEN,
+        NightRunKind.NIGHT,
+        ohneArbeit(T1, true, GEMELDETER_GRUND, ABBRUCH_GRUND));
+
+    assertThat(gemeldeterLauf().noWorkReason()).isNull();
+  }
+
+  /** Leer ist wie nicht gemeldet — anders als beim Grund ohne Arbeit gibt es keinen Rueckfall. */
+  @Test
+  void ingest_verwirftEinenLeerenAbbruchgrund() {
+    service.ingest(USER, PROJECT, TOKEN, NightRunKind.NIGHT, ohneArbeit(T1, true, null, "   "));
+
+    NightRun gespeichert = gemeldeterLauf();
+    assertThat(gespeichert.abortReason()).as("kein leerer Text am Lauf").isNull();
+    assertThat(gespeichert.noWorkReason())
+        .as("und der Rueckfalltext traegt wieder, weil nichts verdraengt wurde")
+        .isEqualTo(RUECKFALL);
+  }
+
+  /** E12: Ein noch nicht abgeschlossener Lauf ist unterwegs — sein Abbruch steht nicht fest. */
+  @Test
+  void ingest_verwirftDenAbbruchgrund_wennDerLaufNichtAbgeschlossenIst() {
+    service.ingest(
+        USER, PROJECT, TOKEN, NightRunKind.NIGHT, ohneArbeit(T1, false, null, ABBRUCH_GRUND));
+
+    assertThat(gemeldeterLauf().abortReason()).isNull();
+  }
+
+  /** E12: Eine interaktive Sitzung bricht keine Kette ab. */
+  @Test
+  void ingest_verwirftDenAbbruchgrund_beiEinerInteraktivenSitzung() {
+    service.ingest(
+        USER, PROJECT, TOKEN, NightRunKind.INTERACTIVE, ohneArbeit(T1, true, null, ABBRUCH_GRUND));
+
+    assertThat(gemeldeterLauf(NightRunKind.INTERACTIVE).abortReason()).isNull();
+  }
+
+  /**
+   * E7: Der Upload-Weg speichert nie einen Abbruchgrund. Die Meldung traegt hier absichtlich einen
+   * — eine Regel, die nur auf das fehlende Feld sieht, bestuende den Fall sonst zufaellig.
+   */
+  @Test
+  void submit_speichertNieEinenAbbruchgrund() {
+    service.submit(
+        USER,
+        PROJECT,
+        List.of(
+            new NightRunService.NewNightRun(
+                T1,
+                NightRunMode.IMPLEMENTATION,
+                1_000L,
+                0,
+                0,
+                0,
+                null,
+                true,
+                null,
+                null,
+                null,
+                ABBRUCH_GRUND,
+                List.of())));
+
+    NightRun gespeichert = gemeldeterLauf();
+    assertThat(gespeichert.abortReason()).as("kein Abbruchgrund vom Upload-Weg").isNull();
+    assertThat(gespeichert.noWorkReason())
+        .as("und damit greift der Rueckfalltext unveraendert")
+        .isEqualTo(RUECKFALL);
+  }
+
+  @Test
+  void list_reichtDenAbbruchgrundInDieSichtDurch() {
+    service.ingest(
+        USER, PROJECT, TOKEN, NightRunKind.NIGHT, ohneArbeit(T1, true, null, ABBRUCH_GRUND));
+
+    assertThat(service.list(USER, PROJECT))
+        .extracting(NightRunService.NightRunView::abortReason)
+        .containsExactly(ABBRUCH_GRUND);
+  }
+
   static class FakeNightRunRepository implements NightRunRepository {
 
     private final List<NightRun> gespeicherteLaeufe = new ArrayList<>();
@@ -1207,7 +1331,8 @@ class NightRunServiceTest {
               run.updatedAt(),
               run.usage(),
               run.noWorkReason(),
-              run.budget()));
+              run.budget(),
+              run.abortReason()));
       for (NightRunItem item : items) {
         gespeichertePakete.add(paket(item, run, id));
       }
@@ -1248,7 +1373,8 @@ class NightRunServiceTest {
               run.updatedAt(),
               run.usage(),
               run.noWorkReason(),
-              run.budget()));
+              run.budget(),
+              run.abortReason()));
       for (NightRunItem item : items) {
         gespeichertePakete.add(paket(item, run, id));
       }

@@ -179,6 +179,10 @@ public class DisruptionService {
    * Abfrage darauf filtert; über {@link DisruptionRepository#candidatesOfNight} nicht — dort
    * entscheidet erst die Stillefrist (Issue #1091), ob ein unfertiger Lauf noch läuft oder
    * verstummt ist.
+   *
+   * <p><b>Auch der Abbruchgrund kommt vom Kandidaten</b> (Issue #1143): Er erzwingt {@code FAILED}
+   * und bringt den Lauf damit in die Störungsliste — ohne ihn erschiene ein Lauf, der nach drei
+   * grünen Paketen abbrach, als gelungen.
    */
   private DisruptionView view(
       DisruptionRepository.DisruptionCandidate k, List<NightRunItem> items) {
@@ -191,6 +195,10 @@ public class DisruptionService {
         NightRunOutcome.of(
             k.complete(),
             k.noWorkReason(),
+            // Dieselben Argumente wie in NightRunService.view (Issue #1143): Ein Lauf, der seinen
+            // Abbruch meldete, ist in beiden Auswertungswegen gescheitert — nicht hier gelungen
+            // und dort gestört (AK 8 der fachlichen Quelle #1074).
+            k.abortReason(),
             k.mode(),
             items,
             k.startedAt(),

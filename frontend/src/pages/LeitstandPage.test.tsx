@@ -114,6 +114,7 @@ const lauf = (extra: Partial<NightRunView> = {}): NightRunView => {
   updatedAt: null,
   usage: { costUsd: 12.4, inputTokens: null, outputTokens: null, cachedInputTokens: null, modelDurationMs: null, turns: null },
   noWorkReason: null,
+  abortReason: null,
   budget: null,
   items: [
     paket(917, 'GREEN', { commitHash: '9489421abcdef' }),
@@ -121,7 +122,7 @@ const lauf = (extra: Partial<NightRunView> = {}): NightRunView => {
     paket(925, 'YELLOW', { errorClass: 'AWAITING_DECISION' }),
     paket(930, 'GREY', { durationMs: null }),
   ],
-    outcome: { verdict: 'SUCCEEDED', decisiveItem: null, noWorkReason: null },
+    outcome: { abortReason: null, verdict: 'SUCCEEDED', decisiveItem: null, noWorkReason: null },
     ...extra,
   }
   // Der Befund kommt aus dem Szenario, nicht aus der Vorgabe: Ein Lauf mit rotem Paket traegt sonst
@@ -249,7 +250,7 @@ describe('LeitstandPage (#979)', () => {
 
   it('zeigt im Laufband den jüngsten Lauf mit Titel, letztem Vorgang, Zeit und Kosten', async () => {
     renderPage()
-    const band = await screen.findByRole('region', { name: 'Jüngster Lauf' })
+    const band = await screen.findByRole('region', { name: 'Jüngster Run' })
     expect(within(band).getByTestId('laufband-titel')).toHaveTextContent('Kette abgeschlossen — 4 Vorgänge')
     expect(band).toHaveTextContent('#930 Paket 930 · Beginn')
     expect(band).toHaveTextContent('252 min')
@@ -260,7 +261,7 @@ describe('LeitstandPage (#979)', () => {
   it('lässt im Laufband die Kosten weg, wenn sie nicht gemessen wurden, und pulsiert bei laufender Kette', async () => {
     m.laeufe.mockResolvedValue([lauf({ usage: null, complete: false, items: [] })])
     renderPage()
-    const band = await screen.findByRole('region', { name: 'Jüngster Lauf' })
+    const band = await screen.findByRole('region', { name: 'Jüngster Run' })
     expect(band).toHaveTextContent('Kette läuft')
     expect(band).not.toHaveTextContent('Kosten')
     expect(within(band).getByTestId('led-stahl')).toBeInTheDocument()
@@ -284,7 +285,7 @@ describe('LeitstandPage (#979)', () => {
         'Durchsatz · Woche',
         'Durchlaufzeit',
         'Implementierungszeit',
-        'Lauf · grün',
+        'Run · grün',
       ]),
     )
   })
@@ -318,7 +319,7 @@ describe('LeitstandPage (#979)', () => {
 
   it('rechnet die Nachtlauf-Kachel über alle aufbewahrten Pakete ohne graue', async () => {
     renderPage()
-    const kachel = await screen.findByRole('article', { name: 'Lauf · grün' })
+    const kachel = await screen.findByRole('article', { name: 'Run · grün' })
     expect(kachel).toHaveTextContent('50%')
     expect(within(kachel).getByRole('img', { name: '2 grün, 1 gelb, 1 rot' })).toBeInTheDocument()
     expect(kachel).toHaveTextContent('letzte 4 Pakete')
@@ -327,12 +328,12 @@ describe('LeitstandPage (#979)', () => {
   it('nennt ein einzelnes Paket in der Nachtlauf-Kachel und zeigt ohne bewertetes Paket keinen Balken', async () => {
     m.laeufe.mockResolvedValue([lauf({ items: [paket(1, 'GREEN')] })])
     const { unmount } = renderPage()
-    expect(await screen.findByRole('article', { name: 'Lauf · grün' })).toHaveTextContent('letztes Paket')
+    expect(await screen.findByRole('article', { name: 'Run · grün' })).toHaveTextContent('letztes Paket')
     unmount()
 
     m.laeufe.mockResolvedValue([lauf({ items: [paket(1, 'GREY')] })])
     renderPage()
-    const kachel = await screen.findByRole('article', { name: 'Lauf · grün' })
+    const kachel = await screen.findByRole('article', { name: 'Run · grün' })
     expect(kachel).toHaveTextContent('keine Datenbasis')
     expect(within(kachel).queryByRole('img')).not.toBeInTheDocument()
   })
@@ -343,8 +344,8 @@ describe('LeitstandPage (#979)', () => {
     renderPage()
     expect(await screen.findByRole('article', { name: 'Durchlaufzeit' })).toBeInTheDocument()
     await waitFor(() => expect(m.laeufe).toHaveBeenCalled())
-    expect(screen.queryByRole('region', { name: 'Jüngster Lauf' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('article', { name: 'Lauf · grün' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Jüngster Run' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('article', { name: 'Run · grün' })).not.toBeInTheDocument()
     expect(screen.queryByText('Verbrauch')).not.toBeInTheDocument()
     expect(screen.queryByRole('region', { name: 'Abbruchgründe' })).not.toBeInTheDocument()
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
@@ -356,14 +357,14 @@ describe('LeitstandPage (#979)', () => {
     renderPage()
     expect(await screen.findByRole('article', { name: 'Durchlaufzeit' })).toBeInTheDocument()
     await waitFor(() => expect(m.laeufe).toHaveBeenCalled())
-    expect(screen.queryByRole('region', { name: /Letzter Lauf/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: /Letzter Run/ })).not.toBeInTheDocument()
   })
 
-  it('zeigt ohne aufbewahrten Lauf weder Laufband noch Letzten Lauf', async () => {
+  it('zeigt ohne aufbewahrten Run weder Laufband noch Letzten Lauf', async () => {
     m.laeufe.mockResolvedValue([])
     renderPage()
-    expect(await screen.findByRole('article', { name: 'Lauf · grün' })).toHaveTextContent('keine Datenbasis')
-    expect(screen.queryByRole('region', { name: 'Jüngster Lauf' })).not.toBeInTheDocument()
+    expect(await screen.findByRole('article', { name: 'Run · grün' })).toHaveTextContent('keine Datenbasis')
+    expect(screen.queryByRole('region', { name: 'Jüngster Run' })).not.toBeInTheDocument()
   })
 
   it('verarbeitet eine verspätete Antwort nach dem Verlassen der Seite nicht mehr', async () => {
@@ -400,15 +401,15 @@ describe('LeitstandPage — Herkunft der Einlieferung', () => {
     // Laufband, Letzter Lauf und Herkunftszeile melden den laufenden Lauf stahlblau.
     expect(screen.getAllByTestId('led-stahl')).toHaveLength(3)
     // Issue #1136: Laufband und „Letzter Lauf" zeigen dabei den Wechselblinker aus zwei Lampen.
-    const band = screen.getByRole('region', { name: 'Jüngster Lauf' })
+    const band = screen.getByRole('region', { name: 'Jüngster Run' })
     expect(within(within(band).getByTestId('led-stahl')).getAllByTestId('blinker-lampe')).toHaveLength(2)
-    const platte = screen.getByRole('region', { name: 'Letzter Lauf · Kette' })
+    const platte = screen.getByRole('region', { name: 'Letzter Run · Kette' })
     expect(within(platte).getAllByTestId('blinker-lampe')).toHaveLength(2)
   })
 })
 
-describe('LeitstandPage — Letzter Lauf', () => {
-  const platte = () => screen.findByRole('region', { name: 'Letzter Lauf · Kette' })
+describe('LeitstandPage — Letzter Run', () => {
+  const platte = () => screen.findByRole('region', { name: 'Letzter Run · Kette' })
 
   it('listet die Arbeitspakete mit Zustand, Vorhaben, Fehlerklasse, Dauer und kurzem Hash', async () => {
     renderPage()
@@ -437,12 +438,12 @@ describe('LeitstandPage — Letzter Lauf', () => {
     const { unmount } = renderPage()
     const letzter = await platte()
     fireEvent.click(within(letzter).getByRole('button', { name: 'Nur Abbrüche' }))
-    expect(letzter).toHaveTextContent('Kein Abbruch in diesem Lauf.')
+    expect(letzter).toHaveTextContent('Kein Abbruch in diesem Run.')
     unmount()
 
     m.laeufe.mockResolvedValue([lauf({ items: [], complete: false })])
     renderPage()
-    expect(await platte()).toHaveTextContent('Der Lauf hat noch kein Arbeitspaket gemeldet.')
+    expect(await platte()).toHaveTextContent('Der Run hat noch kein Arbeitspaket gemeldet.')
   })
 
   it('öffnet die Karte über ihre Nummer im Projekt', async () => {
@@ -485,11 +486,11 @@ describe('LeitstandPage — Platten des Rumpfs', () => {
     expect(durchsatz).toHaveTextContent('232425')
   })
 
-  it('sortiert die Abbruchgründe nach Häufigkeit und nennt die Zahl der Läufe', async () => {
+  it('sortiert die Abbruchgründe nach Häufigkeit und nennt die Zahl der Runs', async () => {
     renderPage()
     const gruende = await screen.findByRole('region', { name: 'Abbruchgründe' })
     expect(within(gruende).getAllByRole('listitem').map((z) => z.textContent)).toEqual(['CHECKS_RED11', 'AWAITING_DECISION7'])
-    expect(gruende).toHaveTextContent('2 Läufe')
+    expect(gruende).toHaveTextContent('2 Runs')
   })
 
   it('sagt ohne Abbruch, dass es keinen gab, und nennt einen einzelnen Lauf im Singular', async () => {
@@ -497,8 +498,8 @@ describe('LeitstandPage — Platten des Rumpfs', () => {
     m.laeufe.mockResolvedValue([lauf()])
     renderPage()
     const gruende = await screen.findByRole('region', { name: 'Abbruchgründe' })
-    expect(gruende).toHaveTextContent('Kein Abbruch in den aufbewahrten Läufen.')
-    expect(gruende).toHaveTextContent('1 Lauf')
+    expect(gruende).toHaveTextContent('Kein Abbruch in den aufbewahrten Runs.')
+    expect(gruende).toHaveTextContent('1 Run')
   })
 
   it('zeigt keine Platte „Liegengeblieben", auch wenn die Antwort Ausreißer führt (#983)', async () => {
@@ -535,13 +536,13 @@ describe('LeitstandPage — Verbrauch', () => {
     expect(eingabe).toHaveTextContent('frisch 1,16 Mio')
     expect(await kachel('Ausgabe-Token')).toHaveTextContent('186Tsd')
     expect(await kachel('Ausgabe-Token')).toHaveTextContent('21 Tsd je Vorgang')
-    expect(await kachel('Ausgabe-Token')).toHaveTextContent('1 Zyklus')
+    expect(await kachel('Ausgabe-Token')).toHaveTextContent('1 Schicht')
     const kosten = await kachel('Kosten')
     expect(kosten).toHaveTextContent('12,40$')
     expect(within(kosten).getByTestId('delta-gut')).toHaveTextContent('▼ 1,70 $')
     expect(kosten).toHaveTextContent('1,38 $ je Vorgang')
     expect(screen.getByTestId('verbrauch-umfang')).toHaveTextContent(
-      'Zyklus vom 14.09.2026 auf den 15.09.2026 · 1 Lauf · 0 Sitzungen',
+      'Schicht vom 14.09.2026 auf den 15.09.2026 · 1 Run · 0 Sitzungen',
     )
     expect(m.verbrauch).toHaveBeenCalledWith(5, 'DAY', 0)
   })
@@ -558,12 +559,12 @@ describe('LeitstandPage — Verbrauch', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Woche' }))
     expect(screen.getByRole('button', { name: 'Woche' })).toHaveAttribute('aria-pressed', 'true')
     await waitFor(() =>
-      expect(screen.getByTestId('verbrauch-umfang')).toHaveTextContent('3 Läufe · 0 Sitzungen'),
+      expect(screen.getByTestId('verbrauch-umfang')).toHaveTextContent('3 Runs · 0 Sitzungen'),
     )
     expect(m.verbrauch).toHaveBeenLastCalledWith(5, 'WEEK', 0)
     const ausgabe = await kachel('Ausgabe-Token')
     expect(within(ausgabe).getByTestId('funke')).toBeInTheDocument()
-    expect(ausgabe).toHaveTextContent('3 Zyklen')
+    expect(ausgabe).toHaveTextContent('3 Schichten')
     expect(within(await kachel('Kosten')).getByTestId('delta-schlecht')).toHaveTextContent('▲ 5,90 $')
   })
 
@@ -579,9 +580,9 @@ describe('LeitstandPage — Verbrauch', () => {
     expect(eingabe).toHaveTextContent('keine Datenbasis')
     expect(within(eingabe).queryByRole('img')).not.toBeInTheDocument()
     expect(await kachel('Kosten')).not.toHaveTextContent('je Vorgang')
-    expect(await kachel('Ausgabe-Token')).toHaveTextContent('0 Zyklen')
+    expect(await kachel('Ausgabe-Token')).toHaveTextContent('0 Schichten')
     expect(
-      screen.getByText('In diesem Zeitraum hat weder ein Lauf noch eine Sitzung stattgefunden.'),
+      screen.getByText('In diesem Zeitraum hat weder ein Run noch eine Sitzung stattgefunden.'),
     ).toBeInTheDocument()
   })
 
@@ -610,7 +611,7 @@ describe('LeitstandPage — Verbrauch', () => {
     fehler(new Error('spät'))
     await waitFor(() =>
       expect(screen.getByTestId('verbrauch-umfang')).toHaveTextContent(
-        'September 2026 · 2 Läufe · 0 Sitzungen',
+        'September 2026 · 2 Runs · 0 Sitzungen',
       ),
     )
     expect(screen.queryByText('Der Verbrauch konnte nicht geladen werden.')).not.toBeInTheDocument()
@@ -621,14 +622,14 @@ describe('LeitstandPage — Lauf ohne Arbeit (#1069)', () => {
   const GRUND = 'Kein Eintrag trug das Label kit:nightrun'
   const ohneArbeit = () => lauf({ noWorkReason: GRUND, processedCount: 0, items: [] })
 
-  it('zeigt den juengsten Lauf ohne Arbeit in Laufband und „Letzter Lauf" grau mit seinem Text', async () => {
+  it('zeigt den juengsten Lauf ohne Arbeit in Laufband und „Letzter Run" grau mit seinem Text', async () => {
     m.klassen.mockResolvedValue({})
     m.laeufe.mockResolvedValue([ohneArbeit()])
     renderPage()
 
-    const band = await screen.findByRole('region', { name: 'Jüngster Lauf' })
+    const band = await screen.findByRole('region', { name: 'Jüngster Run' })
     expect(band).toHaveTextContent(GRUND)
-    const platte = await screen.findByRole('region', { name: 'Letzter Lauf · Kette' })
+    const platte = await screen.findByRole('region', { name: 'Letzter Run · Kette' })
     expect(platte).toHaveTextContent(GRUND)
     // Seit #1121 melden beide grau statt rot: Der Lauf fand nichts zu tun, und das ist kein Mangel.
     // Die Herkunftszeile bleibt davon unberuehrt (E10) und meldet weiter gruen.
@@ -646,7 +647,7 @@ describe('LeitstandPage — Lauf ohne Arbeit (#1069)', () => {
     m.laeufe.mockResolvedValue([lauf({ noWorkReason: GRUND_UNBEKANNT, processedCount: 0, items: [] })])
     renderPage()
 
-    const platte = await screen.findByRole('region', { name: 'Letzter Lauf · Kette' })
+    const platte = await screen.findByRole('region', { name: 'Letzter Run · Kette' })
     expect(platte).toHaveTextContent(GRUND_UNBEKANNT)
     expect(within(platte).getByTestId('led-zinnob')).toBeInTheDocument()
   })
@@ -658,8 +659,8 @@ describe('LeitstandPage — Lauf ohne Arbeit (#1069)', () => {
     renderPage()
 
     const gruende = await screen.findByRole('region', { name: 'Abbruchgründe' })
-    expect(gruende).toHaveTextContent('1 Lauf')
-    expect(gruende).toHaveTextContent('Kein Abbruch in den aufbewahrten Läufen.')
+    expect(gruende).toHaveTextContent('1 Run')
+    expect(gruende).toHaveTextContent('Kein Abbruch in den aufbewahrten Runs.')
     expect(within(gruende).queryAllByRole('listitem')).toHaveLength(0)
   })
 
@@ -672,7 +673,7 @@ describe('LeitstandPage — Lauf ohne Arbeit (#1069)', () => {
     m.laeufe.mockResolvedValue([lauf({ noWorkReason: null })])
     renderPage()
 
-    await screen.findByRole('region', { name: 'Letzter Lauf · Kette' })
+    await screen.findByRole('region', { name: 'Letzter Run · Kette' })
     expect(screen.getAllByTestId('led-gruen').length).toBeGreaterThanOrEqual(1)
   })
 })
@@ -687,7 +688,7 @@ describe('LeitstandPage — Der verstummte Lauf (#1092)', () => {
     m.laeufe.mockResolvedValue([verstummt()])
     renderPage()
 
-    const letzter = await screen.findByRole('region', { name: 'Letzter Lauf · Kette' })
+    const letzter = await screen.findByRole('region', { name: 'Letzter Run · Kette' })
     expect(within(letzter).getByTestId('led-zinnob')).toHaveAttribute('data-puls', 'aus')
   })
 
@@ -695,7 +696,7 @@ describe('LeitstandPage — Der verstummte Lauf (#1092)', () => {
     m.laeufe.mockResolvedValue([verstummt()])
     renderPage()
 
-    const band = await screen.findByRole('region', { name: 'Jüngster Lauf' })
+    const band = await screen.findByRole('region', { name: 'Jüngster Run' })
     expect(within(band).getByTestId('led-zinnob')).toHaveAttribute('data-puls', 'aus')
     expect(band).toHaveTextContent('Beginn')
   })
@@ -704,7 +705,7 @@ describe('LeitstandPage — Der verstummte Lauf (#1092)', () => {
     m.laeufe.mockResolvedValue([lauf({ complete: false, items: [] })])
     renderPage()
 
-    const band = await screen.findByRole('region', { name: 'Jüngster Lauf' })
+    const band = await screen.findByRole('region', { name: 'Jüngster Run' })
     expect(within(band).getByTestId('led-stahl')).toHaveAttribute('data-puls', 'an')
   })
 })

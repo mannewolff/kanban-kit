@@ -81,6 +81,11 @@ export function juengsterLauf(laeufe: readonly NightRunView[]): NightRunView | n
  * <p>Die Form ist absichtlich schmal — `complete` und die Zustände. Die Server-Sicht erfüllt sie,
  * und das Anzeigemodell der Nachtlauf-Seite (#988) ebenso; eine zweite Rechenstelle für dieselbe
  * Frage liefe beim nächsten Zustand auseinander.
+ *
+ * <p><b>Kein Zweig für den Abbruchgrund</b> (Issue #1144): Trägt der Lauf einen Befund, entscheidet
+ * {@link melderAusBefund} und der Abbruch ist dort behandelt; ohne Befund ist es der eben im
+ * Browser geparste Lauf der Nachtlauf-Seite, und der kann nach Plan #1139 E7 nie einen
+ * Abbruchgrund tragen. Ein Zweig hier wäre von keinem Aufrufer erreichbar.
  */
 export function laufMelder(
   lauf: {
@@ -141,6 +146,13 @@ export function melderAusBefund(befund: NightRunOutcomeView): Melder {
   if (befund.verdict === 'RUNNING') {
     return 'stahl'
   }
+  // Der selbst gemeldete Abbruch (Issue #1144) schlaegt das massgebliche Paket: Ein Lauf, der
+  // abbrach, ist nie gelungen — auch nicht, wenn sein massgebliches Paket nur zurueckgestellt
+  // (grau) oder gelb ist. Ausdruecklich nicht das Grau des Laufs ohne Arbeit: Dort gab es nichts
+  // zu tun, hier riss etwas.
+  if (befund.abortReason != null) {
+    return 'zinnob'
+  }
   // Der Lauf, der nichts zu tun fand (Issue #1121): dasselbe Grau wie ein uebergangenes Paket — er
   // ist abgeschlossen und kein Mangel. Den Sinn traegt das Wort daneben, nicht die Farbe.
   if (befund.verdict === 'NO_WORK') {
@@ -196,7 +208,12 @@ export function laufband(lauf: NightRunView): Laufband {
   const letzter = lauf.items.at(-1)
   const beginn = new Date(lauf.startedAt)
   let titel: string
-  if (lauf.complete && lauf.noWorkReason != null) {
+  if (lauf.abortReason != null) {
+    // Der Abbruchgrund steht vor allem anderen (Issue #1144, Plan #1139 E6): Er verdraengt den
+    // Rueckfalltext „Nichts abgearbeitet — Grund unbekannt" ebenso wie die Zahl der Vorgaenge —
+    // die sagt an einem abgebrochenen Lauf nicht, woran er starb.
+    titel = lauf.abortReason
+  } else if (lauf.complete && lauf.noWorkReason != null) {
     // Der Grund steht statt „abgeschlossen — 0 Vorgaenge": Die Zahl sagt dasselbe noch einmal,
     // der Grund sagt, warum.
     titel = lauf.noWorkReason
@@ -284,11 +301,14 @@ export function uhrzeit(iso: string): string {
   return ZEIT.format(new Date(iso))
 }
 
-/** Die Notiz im Kopf der Platte „Letzter Lauf": Beginn, Dauer, Zahl der Pakete. */
+/** Die Notiz im Kopf der Platte „Letzter Run": Beginn, Dauer, Zahl der Pakete. */
 export function laufNotiz(lauf: NightRunView): string {
   const pakete = lauf.items.length === 1 ? '1 Paket' : `${lauf.items.length} Pakete`
   const stand = `${tagZeit(lauf.startedAt)} · ${laufDauer(lauf.durationMs)} · ${pakete}`
-  return lauf.noWorkReason == null ? stand : `${stand} · ${lauf.noWorkReason}`
+  // Der Abbruchgrund haengt an derselben Stelle wie der Grund eines Laufs ohne Arbeit und hat
+  // Vorrang vor ihm (Issue #1144, Plan #1139 E6) — beide zugleich gibt es nicht.
+  const grund = lauf.abortReason ?? lauf.noWorkReason
+  return grund == null ? stand : `${stand} · ${grund}`
 }
 
 /**

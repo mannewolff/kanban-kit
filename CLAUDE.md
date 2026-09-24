@@ -123,6 +123,11 @@ Abschluss eines Pakets läuft nur, was die geänderten Dateien berühren; eine D
 (etwa `Dockerfile`, `.github/`, `scripts/`) fährt alle. **Vor `push main` und `merge production` laufen
 immer alle fünf.** Die Config ändert nur Manne.
 
+**Nicht Pflichtcheck, eigens aufgerufen:** die Mutationstests. Backend
+`mvn -Ppit -Dskip.frontend=true test` (CLAUDE-java.md §5.3), Frontend `npm --prefix frontend run test:mutation` (Stryker über `src/lib`
+und `src/api`, CLAUDE-react.md). Beide bleiben absichtlich außerhalb des Standardlaufs, damit er
+schnell bleibt.
+
 Verfahren, Reporting-Format und detaillierte Schritte → [CLAUDE-workflow.md](.claude/CLAUDE-workflow.md).
 
 ---

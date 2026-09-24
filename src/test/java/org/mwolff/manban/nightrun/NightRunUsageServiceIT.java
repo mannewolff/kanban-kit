@@ -123,6 +123,7 @@ class NightRunUsageServiceIT extends AbstractIntegrationTest {
             null,
             new NightRunUsage(new BigDecimal(kosten), null, null, null, null, null),
             null,
+            null,
             null),
         List.of(pakete));
   }

@@ -17,6 +17,38 @@ vi.mock('../api/plattformLeitstand', async () => {
 
 const api = vi.mocked(plattformLeitstandApi)
 
+/** Ein Speicher je Test, unabhängig davon, ob die Node-Fassung einen nativen mitbringt. */
+function fakeStorage(): Storage {
+  const map = new Map<string, string>()
+  return {
+    getItem: (k) => map.get(k) ?? null,
+    setItem: (k, v) => void map.set(k, String(v)),
+    removeItem: (k) => void map.delete(k),
+    clear: () => map.clear(),
+    key: (i) => [...map.keys()][i] ?? null,
+    get length() {
+      return map.size
+    },
+  }
+}
+
+/** Ein Speicher, dessen Zugriffe werfen — wie in einem privaten oder gesperrten Kontext. */
+function throwingStorage(): Storage {
+  const boom = () => {
+    throw new Error('storage disabled')
+  }
+  return {
+    getItem: boom,
+    setItem: boom,
+    removeItem: boom,
+    clear: boom,
+    key: boom,
+    get length(): number {
+      return 0
+    },
+  }
+}
+
 /**
  * Der Plattform-Leitstand (Issue #1083, um die beiden Lauf-Bereiche erweitert in #1098; fachliche
  * Quellen #1064 und #1086).
@@ -33,6 +65,7 @@ describe('PlattformLeitstandPage (#1083)', () => {
     mode: 'IMPLEMENTATION',
     startedAt: '2026-09-19T21:10:00Z',
     outcome: {
+      abortReason: null,
       verdict: 'FAILED',
       decisiveItem: { cardNumber: 721, state: 'RED', errorClass: 'CHECKS_RED' },
       noWorkReason: null,
@@ -54,18 +87,23 @@ describe('PlattformLeitstandPage (#1083)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     api.quittieren.mockResolvedValue(undefined)
+    // Der gemerkte Klappzustand (#1152) läuft über einen eigenen Speicher je Test statt über das
+    // native `localStorage`: Unter Node 26 ist das nativ vorhandene deaktiviert (siehe
+    // `test/setup.ts`), und ein Test, der lokal an dieser Stelle grün ist und in CI rot, prüft
+    // die Umgebung statt die Seite.
+    vi.stubGlobal('localStorage', fakeStorage())
   })
 
   /** Kriterium 18: die drei Bereiche untereinander, in dieser Ordnung. */
-  it('stellt die drei Bereiche in der Ordnung Aktive Läufe, Beendete Läufe, Störungen', async () => {
+  it('stellt die drei Bereiche in der Ordnung Aktive Runs, Beendete Runs, Störungen', async () => {
     api.leitstand.mockResolvedValue(sicht({ stoerungen: [stoerung()] }))
 
     zeigeSeite()
 
     await screen.findByTestId('stoerung-5')
     expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual([
-      'Aktive Läufe',
-      'Beendete Läufe',
+      'Aktive Runs',
+      'Beendete Runs',
       'Störungen',
     ])
   })
@@ -76,14 +114,14 @@ describe('PlattformLeitstandPage (#1083)', () => {
    * Der Puls hält bei `prefers-reduced-motion` von selbst an — die globale Regel im Theme greift
    * für jede Animation; hier steht deshalb nur, **dass** die LED pulst.
    */
-  describe('Aktive Läufe (#1098, benannt in #1102)', () => {
+  describe('Aktive Runs (#1098, benannt in #1102)', () => {
     const laufend = (extra: Partial<DisruptionView> = {}): DisruptionView => ({
       nightRunId: 8,
       projectId: 9,
       projectName: 'Mein Projekt',
       mode: 'CHAIN',
       startedAt: '2026-09-21T01:10:00Z',
-      outcome: { verdict: 'RUNNING', decisiveItem: null, noWorkReason: null },
+      outcome: { abortReason: null, verdict: 'RUNNING', decisiveItem: null, noWorkReason: null },
       ...extra,
     })
 
@@ -103,7 +141,7 @@ describe('PlattformLeitstandPage (#1083)', () => {
       expect(led).toHaveAttribute('data-puls', 'an')
       // Issue #1136: Ein laufender Lauf zeigt den Wechselblinker — zwei Lampen.
       expect(within(led).getAllByTestId('blinker-lampe')).toHaveLength(2)
-      expect(within(zeile).getByRole('link', { name: 'Lauf #8 von Mein Projekt' })).toHaveAttribute(
+      expect(within(zeile).getByRole('link', { name: 'Run #8 von Mein Projekt' })).toHaveAttribute(
         'href',
         '/projects/9/nachtlauf?lauf=8',
       )
@@ -133,20 +171,20 @@ describe('PlattformLeitstandPage (#1083)', () => {
       zeigeSeite()
 
       expect(await screen.findByTestId('keine-laufenden')).toHaveTextContent(
-        'Gerade läuft kein Lauf.',
+        'Gerade läuft kein Run.',
       )
     })
   })
 
-  /** Der Bereich „Beendete Läufe" (Kriterien 9–14). */
-  describe('Beendete Läufe (#1098, benannt in #1102)', () => {
+  /** Der Bereich „Beendete Runs" (Kriterien 9–14). */
+  describe('Beendete Runs (#1098, benannt in #1102)', () => {
     const durchgefuehrt = (extra: Partial<DisruptionView> = {}): DisruptionView => ({
       nightRunId: 5,
       projectId: 9,
       projectName: 'Mein Projekt',
       mode: 'IMPLEMENTATION',
       startedAt: '2026-09-19T21:10:00Z',
-      outcome: { verdict: 'SUCCEEDED', decisiveItem: null, noWorkReason: null },
+      outcome: { abortReason: null, verdict: 'SUCCEEDED', decisiveItem: null, noWorkReason: null },
       ...extra,
     })
 
@@ -158,7 +196,7 @@ describe('PlattformLeitstandPage (#1083)', () => {
       const zeile = await screen.findByTestId('durchgefuehrt-5')
       expect(within(zeile).getByText('Mein Projekt')).toBeInTheDocument()
       expect(within(zeile).getByText('19.09., 23:10')).toBeInTheDocument()
-      expect(within(zeile).getByRole('link', { name: 'Lauf #5 von Mein Projekt' })).toBeInTheDocument()
+      expect(within(zeile).getByRole('link', { name: 'Run #5 von Mein Projekt' })).toBeInTheDocument()
     })
 
     /**
@@ -185,6 +223,7 @@ describe('PlattformLeitstandPage (#1083)', () => {
                         errorClass: verdict === 'FAILED' ? 'CHECKS_RED' : 'AWAITING_DECISION',
                       },
                 noWorkReason: null,
+                abortReason: null,
               },
             }),
           ],
@@ -209,6 +248,7 @@ describe('PlattformLeitstandPage (#1083)', () => {
           durchgefuehrte: [
             durchgefuehrt({
               outcome: {
+                abortReason: null,
                 verdict: 'NO_WORK',
                 decisiveItem: null,
                 noWorkReason: 'Ready ist leer — nichts zu tun.',
@@ -235,7 +275,7 @@ describe('PlattformLeitstandPage (#1083)', () => {
               nightRunId: 6,
               projectId: 10,
               projectName: 'Gescheitert',
-              outcome: { verdict: 'FAILED', decisiveItem: null, noWorkReason: 'Ready war leer' },
+              outcome: { abortReason: null, verdict: 'FAILED', decisiveItem: null, noWorkReason: 'Ready war leer' },
             }),
           ],
         }),
@@ -244,11 +284,11 @@ describe('PlattformLeitstandPage (#1083)', () => {
       zeigeSeite()
 
       await screen.findByTestId('durchgefuehrt-5')
-      expect(screen.getByRole('link', { name: 'Lauf #5 von Gelungen' })).toHaveAttribute(
+      expect(screen.getByRole('link', { name: 'Run #5 von Gelungen' })).toHaveAttribute(
         'href',
         '/projects/9/nachtlauf?lauf=5',
       )
-      expect(screen.getByRole('link', { name: 'Lauf #6 von Gescheitert' })).toHaveAttribute(
+      expect(screen.getByRole('link', { name: 'Run #6 von Gescheitert' })).toHaveAttribute(
         'href',
         '/projects/10/nachtlauf?lauf=6',
       )
@@ -266,6 +306,7 @@ describe('PlattformLeitstandPage (#1083)', () => {
             durchgefuehrt({
               nightRunId: 5,
               outcome: {
+                abortReason: null,
                 verdict: 'FAILED',
                 decisiveItem: { cardNumber: 721, state: 'RED', errorClass: 'CHECKS_RED' },
                 noWorkReason: null,
@@ -280,14 +321,14 @@ describe('PlattformLeitstandPage (#1083)', () => {
       zeigeSeite()
 
       const mit = await screen.findByTestId('durchgefuehrt-5')
-      expect(within(mit).getByRole('link', { name: 'Zur Störung von Lauf #5' })).toHaveAttribute(
+      expect(within(mit).getByRole('link', { name: 'Zur Störung von Run #5' })).toHaveAttribute(
         'href',
         '#stoerung-5',
       )
       expect(screen.getByTestId('stoerung-5')).toHaveAttribute('id', 'stoerung-5')
       const ohne = screen.getByTestId('durchgefuehrt-6')
       expect(
-        within(ohne).queryByRole('link', { name: 'Zur Störung von Lauf #6' }),
+        within(ohne).queryByRole('link', { name: 'Zur Störung von Run #6' }),
       ).not.toBeInTheDocument()
       expect(within(ohne).getAllByRole('link')).toHaveLength(1)
     })
@@ -300,6 +341,7 @@ describe('PlattformLeitstandPage (#1083)', () => {
             durchgefuehrt({
               nightRunId: 5,
               outcome: {
+                abortReason: null,
                 verdict: 'FAILED',
                 decisiveItem: { cardNumber: 721, state: 'RED', errorClass: 'CHECKS_RED' },
                 noWorkReason: null,
@@ -312,25 +354,25 @@ describe('PlattformLeitstandPage (#1083)', () => {
 
       zeigeSeite()
       await userEvent.click(
-        await screen.findByRole('button', { name: 'Störung von Mein Projekt, Lauf #5 löschen' }),
+        await screen.findByRole('button', { name: 'Störung von Mein Projekt, Run #5 löschen' }),
       )
 
       await waitFor(() => expect(screen.queryByTestId('stoerung-5')).not.toBeInTheDocument())
       const zeile = screen.getByTestId('durchgefuehrt-5')
-      expect(within(zeile).queryByRole('link', { name: 'Zur Störung von Lauf #5' })).not.toBeInTheDocument()
+      expect(within(zeile).queryByRole('link', { name: 'Zur Störung von Run #5' })).not.toBeInTheDocument()
       expect(within(zeile).getByText('nicht gelungen')).toBeInTheDocument()
-      expect(within(zeile).getByRole('link', { name: 'Lauf #5 von Mein Projekt' })).toBeInTheDocument()
+      expect(within(zeile).getByRole('link', { name: 'Run #5 von Mein Projekt' })).toBeInTheDocument()
       expect(api.leitstand).toHaveBeenCalledTimes(1)
     })
 
     /** Kriterium 14: ausdrücklicher Satz statt leerer Fläche. */
-    it('sagt ausdrücklich, wenn in dieser Nacht noch kein Lauf beendet ist', async () => {
+    it('sagt ausdrücklich, wenn in dieser Nacht noch kein Run beendet ist', async () => {
       api.leitstand.mockResolvedValue(sicht())
 
       zeigeSeite()
 
       expect(await screen.findByTestId('keine-durchgefuehrten')).toHaveTextContent(
-        'In diesem Zyklus wurde noch kein Lauf beendet.',
+        'In dieser Schicht wurde noch kein Run beendet.',
       )
     })
   })
@@ -368,7 +410,7 @@ describe('PlattformLeitstandPage (#1083)', () => {
 
     const zeile = await screen.findByTestId('stoerung-5')
     expect(within(zeile).getByText('19.09., 23:10')).toBeInTheDocument()
-    expect(within(zeile).getByRole('link', { name: 'Lauf #5' })).toBeInTheDocument()
+    expect(within(zeile).getByRole('link', { name: 'Run #5' })).toBeInTheDocument()
     expect(within(zeile).getByText(/^Karte #721:/)).toBeInTheDocument()
     expect(within(screen.getByTestId('stoergruppe-kopf-9')).getByText('Mein Projekt')).toBeInTheDocument()
   })
@@ -394,7 +436,7 @@ describe('PlattformLeitstandPage (#1083)', () => {
       sicht({
         stoerungen: [
           stoerung({
-            outcome: { verdict: 'FAILED', decisiveItem: null, noWorkReason: 'Ready war leer' },
+            outcome: { abortReason: null, verdict: 'FAILED', decisiveItem: null, noWorkReason: 'Ready war leer' },
           }),
         ],
       }),
@@ -415,7 +457,7 @@ describe('PlattformLeitstandPage (#1083)', () => {
     api.leitstand.mockResolvedValue(
       sicht({
         stoerungen: [
-          stoerung({ outcome: { verdict: 'FAILED', decisiveItem: null, noWorkReason: null } }),
+          stoerung({ outcome: { abortReason: null, verdict: 'FAILED', decisiveItem: null, noWorkReason: null } }),
         ],
       }),
     )
@@ -437,6 +479,7 @@ describe('PlattformLeitstandPage (#1083)', () => {
         stoerungen: [
           stoerung({
             outcome: {
+              abortReason: null,
               verdict: 'FAILED',
               decisiveItem: { cardNumber: 721, state: 'RED', errorClass: null },
               noWorkReason: null,
@@ -458,7 +501,7 @@ describe('PlattformLeitstandPage (#1083)', () => {
 
     zeigeSeite()
 
-    const verweis = await screen.findByRole('link', { name: 'Lauf #5' })
+    const verweis = await screen.findByRole('link', { name: 'Run #5' })
     expect(verweis).toHaveAttribute('href', '/projects/9/nachtlauf?lauf=5')
   })
 
@@ -472,7 +515,7 @@ describe('PlattformLeitstandPage (#1083)', () => {
 
     zeigeSeite()
     const taste = await screen.findByRole('button', {
-      name: 'Störung von Mein Projekt, Lauf #5 löschen',
+      name: 'Störung von Mein Projekt, Run #5 löschen',
     })
     await userEvent.click(taste)
 
@@ -497,27 +540,140 @@ describe('PlattformLeitstandPage (#1083)', () => {
     expect(new Set(namen).size).toBe(namen.length)
   })
 
-  /** Issue #1135: „Beendete Läufe" ist zweigeteilt in diesen und den vorigen Zyklus. */
+  /**
+   * Der selbst gemeldete Abbruch auf der Übersichtsseite (Issue #1146, AK 4 und AK 8).
+   *
+   * Geprüft wird beides zugleich: dass der Grund an **beiden** Stellen derselben Seite steht — in
+   * der Störzeile und hinter dem Ausgangswort der durchgeführten Zeile — und dass beide Zeilen
+   * denselben Melder tragen. Ein Lauf, der abbrach, ist nie gelungen, auch wenn sein maßgebliches
+   * Paket nur zurückgestellt oder gelb ist (E13).
+   */
+  describe('Selbst gemeldeter Abbruch (#1146)', () => {
+    /** Mehrzeilig: `kurzGrund` nimmt die erste nicht leere Zeile — hier wird das sichtbar. */
+    const GRUND = 'Harter Stopp (dirty-tree)\nnähere Angaben stehen in der Auswertung'
+    const KURZ = 'Harter Stopp (dirty-tree)'
+
+    const abgebrochen = (extra: Partial<DisruptionView['outcome']> = {}): DisruptionView =>
+      stoerung({
+        outcome: {
+          abortReason: GRUND,
+          verdict: 'FAILED',
+          decisiveItem: { cardNumber: 721, state: 'RED', errorClass: 'CHECKS_RED' },
+          noWorkReason: null,
+          ...extra,
+        },
+      })
+
+    /** AK 4, erste Hälfte: Die Störzeile nennt den Grund — gekürzt auf eine Zeile. */
+    it('zeigt den gekürzten Abbruchgrund in der Störzeile', async () => {
+      api.leitstand.mockResolvedValue(sicht({ stoerungen: [abgebrochen()] }))
+
+      zeigeSeite()
+
+      const zeile = await screen.findByTestId('stoerung-5')
+      expect(within(zeile).getByText(KURZ)).toBeInTheDocument()
+      expect(within(zeile).queryByText(/nähere Angaben/)).not.toBeInTheDocument()
+    })
+
+    /** AK 4, zweite Hälfte: Derselbe Grund steht hinter dem Ausgangswort der durchgeführten Zeile. */
+    it('zeigt denselben gekürzten Grund hinter dem Ausgangswort der durchgeführten Zeile', async () => {
+      api.leitstand.mockResolvedValue(
+        sicht({ durchgefuehrte: [abgebrochen()], stoerungen: [abgebrochen()] }),
+      )
+
+      zeigeSeite()
+
+      const zeile = await screen.findByTestId('durchgefuehrt-5')
+      expect(zeile).toHaveTextContent(`nicht gelungen — ${KURZ}`)
+      expect(zeile).not.toHaveTextContent('nähere Angaben')
+    })
+
+    /** Ohne Abbruchgrund bleibt die durchgeführte Zeile beim bloßen Ausgangswort. */
+    it('lässt die durchgeführte Zeile ohne Abbruchgrund unverändert', async () => {
+      api.leitstand.mockResolvedValue(sicht({ durchgefuehrte: [stoerung()] }))
+
+      zeigeSeite()
+
+      const zeile = await screen.findByTestId('durchgefuehrt-5')
+      expect(zeile).toHaveTextContent('nicht gelungen')
+      expect(zeile).not.toHaveTextContent('—')
+    })
+
+    /**
+     * E13 und AK 8: derselbe Ausgang überall. Ein Abbruch nach einem zurückgestellten (grau) oder
+     * gelben Paket färbte die Störzeile früher grau bzw. bernstein — neben dem Abbruchgrund als
+     * Text und neben einer zinnoberroten durchgeführten Zeile derselben Seite.
+     */
+    it.each([
+      ['GREY', 'AWAITING_DECISION'],
+      ['YELLOW', 'CHECKS_RED'],
+    ] as const)(
+      'färbt bei Abbruch mit %s maßgeblichem Paket beide Zeilen zinnober',
+      async (state, errorClass) => {
+        const lauf = abgebrochen({ decisiveItem: { cardNumber: 721, state, errorClass } })
+        api.leitstand.mockResolvedValue(sicht({ durchgefuehrte: [lauf], stoerungen: [lauf] }))
+
+        zeigeSeite()
+
+        const stoerzeile = await screen.findByTestId('stoerung-5')
+        expect(within(stoerzeile).getByTestId('led-zinnob')).toBeInTheDocument()
+        const durchgefuehrt = screen.getByTestId('durchgefuehrt-5')
+        expect(within(durchgefuehrt).getByTestId('led-zinnob')).toBeInTheDocument()
+      },
+    )
+
+    /** Der Abbruchgrund steht vor dem Grund des Laufs ohne Arbeit. */
+    it('nimmt den Abbruchgrund vor noWorkReason', async () => {
+      api.leitstand.mockResolvedValue(
+        sicht({
+          stoerungen: [abgebrochen({ decisiveItem: null, noWorkReason: 'Ready war leer' })],
+        }),
+      )
+
+      zeigeSeite()
+
+      const zeile = await screen.findByTestId('stoerung-5')
+      expect(within(zeile).getByText(KURZ)).toBeInTheDocument()
+      expect(within(zeile).queryByText('Ready war leer')).not.toBeInTheDocument()
+    })
+
+    /** …und vor dem Grund des maßgeblichen Pakets. */
+    it('nimmt den Abbruchgrund vor dem Paketgrund', async () => {
+      api.leitstand.mockResolvedValue(sicht({ stoerungen: [abgebrochen()] }))
+
+      zeigeSeite()
+
+      const zeile = await screen.findByTestId('stoerung-5')
+      expect(within(zeile).getByText(KURZ)).toBeInTheDocument()
+      expect(within(zeile).queryByText(/^Karte #721:/)).not.toBeInTheDocument()
+    })
+  })
+
+  /** Issue #1135: „Beendete Runs" ist zweigeteilt in diese und die vorige Schicht. */
   describe('Dieser und voriger Zyklus (#1135)', () => {
     beforeEach(() => {
       vi.useFakeTimers({ toFake: ['Date'] })
       vi.setSystemTime(new Date('2026-09-22T11:00:00Z')) // 22.09. 13:00 in Berlin
+      // Seit #1152 startet die vorige Schicht zugeklappt. Diese Prüfungen gelten weiter dem
+      // Inhalt und seiner Reihenfolge — deshalb klappen sie ihn über den gemerkten Zustand auf
+      // statt ihn erst wegzuklicken. Geleert wird der Speicher global in `test/setup.ts`.
+      localStorage.setItem('leitstand-voriger-zyklus-offen', 'true')
     })
     afterEach(() => vi.useRealTimers())
 
     it('zeigt beide Abschnitte mit Überschrift, Spanne und ihren Zeilen', async () => {
       api.leitstand.mockResolvedValue(
         sicht({
-          durchgefuehrte: [stoerung({ nightRunId: 7, outcome: { verdict: 'SUCCEEDED', decisiveItem: null, noWorkReason: null } })],
-          durchgefuehrteVoriger: [stoerung({ nightRunId: 6, outcome: { verdict: 'SUCCEEDED', decisiveItem: null, noWorkReason: null } })],
+          durchgefuehrte: [stoerung({ nightRunId: 7, outcome: { abortReason: null, verdict: 'SUCCEEDED', decisiveItem: null, noWorkReason: null } })],
+          durchgefuehrteVoriger: [stoerung({ nightRunId: 6, outcome: { abortReason: null, verdict: 'SUCCEEDED', decisiveItem: null, noWorkReason: null } })],
         }),
       )
       zeigeSeite()
 
-      const dieser = await screen.findByRole('region', { name: 'Dieser Zyklus' })
+      const dieser = await screen.findByRole('region', { name: 'Diese Schicht' })
       expect(dieser).toHaveTextContent('vom 22.09.2026 auf den 23.09.2026')
       expect(within(dieser).getByTestId('durchgefuehrt-7')).toBeInTheDocument()
-      const voriger = screen.getByRole('region', { name: 'Voriger Zyklus' })
+      const voriger = screen.getByRole('region', { name: 'Vorige Schicht' })
       expect(voriger).toHaveTextContent('vom 21.09.2026 auf den 22.09.2026')
       expect(within(voriger).getByTestId('durchgefuehrt-6')).toBeInTheDocument()
       // Die Reihenfolge: dieser Zyklus zuerst.
@@ -529,7 +685,7 @@ describe('PlattformLeitstandPage (#1083)', () => {
       zeigeSeite()
 
       expect(await screen.findByTestId('keine-durchgefuehrten')).toHaveTextContent(
-        'In diesem Zyklus wurde noch kein Lauf beendet.',
+        'In dieser Schicht wurde noch kein Run beendet.',
       )
       expect(screen.queryByTestId('keine-durchgefuehrten-voriger')).toBeNull()
     })
@@ -539,7 +695,7 @@ describe('PlattformLeitstandPage (#1083)', () => {
       zeigeSeite()
 
       expect(await screen.findByTestId('keine-durchgefuehrten-voriger')).toHaveTextContent(
-        'Im vorigen Zyklus wurde kein Lauf beendet.',
+        'In der vorigen Schicht wurde kein Run beendet.',
       )
     })
 
@@ -549,25 +705,362 @@ describe('PlattformLeitstandPage (#1083)', () => {
       )
       zeigeSeite()
 
-      const voriger = await screen.findByRole('region', { name: 'Voriger Zyklus' })
-      expect(within(voriger).getByRole('link', { name: 'Zur Störung von Lauf #6' })).toHaveAttribute('href', '#stoerung-6')
+      const voriger = await screen.findByRole('region', { name: 'Vorige Schicht' })
+      expect(within(voriger).getByRole('link', { name: 'Zur Störung von Run #6' })).toHaveAttribute('href', '#stoerung-6')
     })
   })
 
-  /** Issue #1128: Jede der drei Listen zeigt an jeder Zeile die Art des Laufs als Marke. */
-  it('zeigt in allen drei Listen die Art des Laufs', async () => {
+  /**
+   * Issue #1152: Die vorige Schicht ist ein- und ausklappbar und startet zugeklappt — gelesen wird
+   * an der Stelle fast immer nur die laufende Schicht, und ein Dutzend alter Zeilen schiebt die
+   * Störungen aus dem Bild.
+   *
+   * Ohne falsche Uhr: Geprüft wird das Klappen, und weder Überschrift noch Kennung einer Zeile
+   * hängen am Datum.
+   */
+  describe('Vorige Schicht klappbar (#1152)', () => {
+    const zweiVorige = () =>
+      sicht({
+        durchgefuehrte: [stoerung({ nightRunId: 7 })],
+        durchgefuehrteVoriger: [stoerung({ nightRunId: 6 }), stoerung({ nightRunId: 5 })],
+      })
+
+    const schalter = () => screen.getByRole('button', { name: /^Vorige Schicht (auf|zu)klappen$/ })
+
+    // Der Spion auf `getSelection` hielte sonst bis ans Dateiende.
+    afterEach(() => vi.restoreAllMocks())
+
+    it('startet ohne gemerkten Zustand zugeklappt', async () => {
+      api.leitstand.mockResolvedValue(zweiVorige())
+      zeigeSeite()
+
+      await screen.findByTestId('durchgefuehrt-7')
+      expect(screen.getByRole('region', { name: 'Vorige Schicht' })).toBeInTheDocument()
+      expect(schalter()).toHaveAttribute('aria-expanded', 'false')
+      expect(screen.queryByTestId('durchgefuehrt-6')).toBeNull()
+      expect(screen.queryByTestId('keine-durchgefuehrten-voriger')).toBeNull()
+    })
+
+    it('klappt auf einen Klick des Pfeils auf und auf den nächsten wieder zu', async () => {
+      api.leitstand.mockResolvedValue(zweiVorige())
+      zeigeSeite()
+
+      await screen.findByTestId('durchgefuehrt-7')
+      await userEvent.click(schalter())
+
+      expect(schalter()).toHaveAttribute('aria-expanded', 'true')
+      const voriger = screen.getByRole('region', { name: 'Vorige Schicht' })
+      expect(within(voriger).getByTestId('durchgefuehrt-6')).toBeInTheDocument()
+      expect(within(voriger).getByTestId('durchgefuehrt-5')).toBeInTheDocument()
+
+      await userEvent.click(schalter())
+      expect(schalter()).toHaveAttribute('aria-expanded', 'false')
+      expect(screen.queryByTestId('durchgefuehrt-6')).toBeNull()
+    })
+
+    it('schaltet auch über die Kopfzeile neben dem Pfeil', async () => {
+      api.leitstand.mockResolvedValue(zweiVorige())
+      zeigeSeite()
+
+      await screen.findByTestId('durchgefuehrt-7')
+      await userEvent.click(screen.getByTestId('zyklus-voriger-kopf'))
+
+      expect(screen.getByTestId('durchgefuehrt-6')).toBeInTheDocument()
+    })
+
+    it('merkt den aufgeklappten Zustand über einen Neuaufbau der Seite', async () => {
+      api.leitstand.mockResolvedValue(zweiVorige())
+      const { unmount } = render(<PlattformLeitstandPage />, { wrapper: MemoryRouter })
+
+      await screen.findByTestId('durchgefuehrt-7')
+      await userEvent.click(schalter())
+      await screen.findByTestId('durchgefuehrt-6')
+      unmount()
+
+      zeigeSeite()
+      expect(await screen.findByTestId('durchgefuehrt-6')).toBeInTheDocument()
+      expect(schalter()).toHaveAttribute('aria-expanded', 'true')
+    })
+
+    it('startet mit gemerktem Zustand aufgeklappt', async () => {
+      localStorage.setItem('leitstand-voriger-zyklus-offen', 'true')
+      api.leitstand.mockResolvedValue(zweiVorige())
+      zeigeSeite()
+
+      expect(await screen.findByTestId('durchgefuehrt-6')).toBeInTheDocument()
+    })
+
+    /** „Diese Schicht" bleibt, was sie war: ohne Pfeil und immer sichtbar. */
+    it('lässt diese Schicht ohne Schalter und immer sichtbar', async () => {
+      api.leitstand.mockResolvedValue(zweiVorige())
+      zeigeSeite()
+
+      const dieser = await screen.findByRole('region', { name: 'Diese Schicht' })
+      expect(within(dieser).getByTestId('durchgefuehrt-7')).toBeInTheDocument()
+      expect(within(dieser).queryByRole('button')).toBeNull()
+    })
+
+    /** Zugeklappt sagt die Zeile sonst nicht, ob sich das Aufklappen lohnt. */
+    it('nennt die Anzahl der Runs der vorigen Schicht in beiden Zuständen', async () => {
+      api.leitstand.mockResolvedValue(zweiVorige())
+      zeigeSeite()
+
+      expect(await screen.findByTestId('zyklus-voriger-anzahl')).toHaveTextContent('2 Runs')
+      await userEvent.click(schalter())
+      expect(screen.getByTestId('zyklus-voriger-anzahl')).toHaveTextContent('2 Runs')
+    })
+
+    it('zählt einen einzelnen Run im Singular', async () => {
+      api.leitstand.mockResolvedValue(sicht({ durchgefuehrteVoriger: [stoerung({ nightRunId: 6 })] }))
+      zeigeSeite()
+
+      // Wörtlich: „1 Runs" enthielte „1 Run" und käme sonst durch.
+      expect((await screen.findByTestId('zyklus-voriger-anzahl')).textContent).toBe('1 Run')
+    })
+
+    /** Eine „0" vor der ersten Antwort wäre eine Behauptung über Daten, die noch niemand kennt. */
+    it('nennt vor der ersten Antwort keine Anzahl', () => {
+      api.leitstand.mockReturnValue(new Promise(() => {}))
+      zeigeSeite()
+
+      expect(screen.getByRole('region', { name: 'Vorige Schicht' })).toBeInTheDocument()
+      expect(screen.queryByTestId('zyklus-voriger-anzahl')).toBeNull()
+    })
+
+    /** Wer die Spanne markiert, um sie zu kopieren, will den Abschnitt nicht aufklappen. */
+    it('schaltet nicht, wenn im Kopf Text ausgewählt ist', async () => {
+      api.leitstand.mockResolvedValue(zweiVorige())
+      zeigeSeite()
+      await screen.findByTestId('durchgefuehrt-7')
+      vi.spyOn(window, 'getSelection').mockReturnValue({
+        toString: () => 'vom 21.09.2026',
+      } as unknown as Selection)
+
+      await userEvent.click(screen.getByTestId('zyklus-voriger-kopf'))
+
+      expect(screen.queryByTestId('durchgefuehrt-6')).toBeNull()
+    })
+
+    /** `getSelection()` darf `null` liefern — „keine Auswahl" ist kein Grund, stumm zu bleiben. */
+    it('schaltet, wo der Browser gar keine Auswahl führt', async () => {
+      api.leitstand.mockResolvedValue(zweiVorige())
+      zeigeSeite()
+      await screen.findByTestId('durchgefuehrt-7')
+      vi.spyOn(window, 'getSelection').mockReturnValue(null)
+
+      await userEvent.click(screen.getByTestId('zyklus-voriger-kopf'))
+
+      expect(screen.getByTestId('durchgefuehrt-6')).toBeInTheDocument()
+    })
+
+    /** Ein gesperrter Speicher kostet die Erinnerung, nicht die Seite. */
+    it('startet zugeklappt und bleibt bedienbar, wenn der Speicher wirft', async () => {
+      vi.stubGlobal('localStorage', throwingStorage())
+      api.leitstand.mockResolvedValue(zweiVorige())
+      zeigeSeite()
+
+      await screen.findByTestId('durchgefuehrt-7')
+      expect(screen.queryByTestId('durchgefuehrt-6')).toBeNull()
+      await userEvent.click(schalter())
+      expect(screen.getByTestId('durchgefuehrt-6')).toBeInTheDocument()
+    })
+  })
+
+  /**
+   * Issue #1140: Wie viele beendete Runs man sieht, stellt der Mensch ein — 10, 20 oder alle.
+   *
+   * Gezählt wird über **beide** Abschnitte zusammen: Die Einstellung beantwortet „wie viele Runs
+   * sehe ich", und je Abschnitt zeigte „10" bis zu zwanzig Zeilen. Die vorige Schicht startet seit
+   * #1152 zugeklappt; diese Prüfungen gelten dem Begrenzen und klappen sie deshalb über den
+   * gemerkten Zustand auf.
+   */
+  describe('Anzahl beendeter Runs einstellbar (#1140)', () => {
+    /** `anzahl` Zeilen mit fortlaufenden Kennungen ab `ab`. */
+    const zeilen = (anzahl: number, ab: number): DisruptionView[] =>
+      Array.from({ length: anzahl }, (_, i) => stoerung({ nightRunId: ab + i }))
+
+    const taste = (name: string) => screen.getByRole('button', { name })
+
+    beforeEach(() => {
+      localStorage.setItem('leitstand-voriger-zyklus-offen', 'true')
+    })
+
+    it('zeigt vorgegeben 10 Zeilen und nennt die ausgeblendeten', async () => {
+      api.leitstand.mockResolvedValue(sicht({ durchgefuehrteVoriger: zeilen(25, 100) }))
+      zeigeSeite()
+
+      await screen.findByTestId('durchgefuehrt-100')
+      expect(screen.getAllByTestId(/^durchgefuehrt-/)).toHaveLength(10)
+      expect(screen.getByTestId('durchgefuehrt-109')).toBeInTheDocument()
+      expect(screen.queryByTestId('durchgefuehrt-110')).toBeNull()
+      expect(screen.getByTestId('ausgeblendet-hinweis')).toHaveTextContent(
+        '15 weitere Runs ausgeblendet',
+      )
+      expect(taste('Beendete Runs: 10')).toHaveAttribute('aria-pressed', 'true')
+      expect(taste('Beendete Runs: alle')).toHaveAttribute('aria-pressed', 'false')
+    })
+
+    it('zeigt nach Klick auf 20 zwanzig und nach Klick auf alle jede Zeile', async () => {
+      api.leitstand.mockResolvedValue(sicht({ durchgefuehrteVoriger: zeilen(25, 100) }))
+      zeigeSeite()
+
+      await screen.findByTestId('durchgefuehrt-100')
+      await userEvent.click(taste('Beendete Runs: 20'))
+
+      expect(screen.getAllByTestId(/^durchgefuehrt-/)).toHaveLength(20)
+      expect(screen.getByTestId('ausgeblendet-hinweis')).toHaveTextContent(
+        '5 weitere Runs ausgeblendet',
+      )
+      expect(taste('Beendete Runs: 20')).toHaveAttribute('aria-pressed', 'true')
+
+      await userEvent.click(taste('Beendete Runs: alle'))
+
+      expect(screen.getAllByTestId(/^durchgefuehrt-/)).toHaveLength(25)
+      expect(screen.queryByTestId('ausgeblendet-hinweis')).toBeNull()
+    })
+
+    /** Ein einzelner ausgeblendeter Run steht im Singular da. */
+    it('zählt einen einzelnen ausgeblendeten Run im Singular', async () => {
+      api.leitstand.mockResolvedValue(sicht({ durchgefuehrteVoriger: zeilen(11, 100) }))
+      zeigeSeite()
+
+      await screen.findByTestId('durchgefuehrt-100')
+      expect(screen.getByTestId('ausgeblendet-hinweis').textContent).toBe(
+        '1 weiterer Run ausgeblendet',
+      )
+    })
+
+    it('zählt beide Abschnitte zusammen', async () => {
+      api.leitstand.mockResolvedValue(
+        sicht({ durchgefuehrte: zeilen(4, 200), durchgefuehrteVoriger: zeilen(12, 100) }),
+      )
+      zeigeSeite()
+
+      await screen.findByTestId('durchgefuehrt-200')
+      const dieser = screen.getByRole('region', { name: 'Diese Schicht' })
+      const voriger = screen.getByRole('region', { name: 'Vorige Schicht' })
+      expect(within(dieser).getAllByTestId(/^durchgefuehrt-/)).toHaveLength(4)
+      expect(within(voriger).getAllByTestId(/^durchgefuehrt-/)).toHaveLength(6)
+      expect(within(voriger).getByTestId('durchgefuehrt-105')).toBeInTheDocument()
+      expect(screen.queryByTestId('durchgefuehrt-106')).toBeNull()
+      expect(screen.getByTestId('ausgeblendet-hinweis')).toHaveTextContent(
+        '6 weitere Runs ausgeblendet',
+      )
+    })
+
+    /**
+     * Ein Abschnitt, dessen Zeilen alle ausgeblendet sind, hat sehr wohl welche — der Leersatz
+     * „… wurde kein Run beendet." wäre dort schlicht falsch.
+     */
+    it('sagt am ganz verdrängten Abschnitt „ausgeblendet" statt des Leersatzes', async () => {
+      api.leitstand.mockResolvedValue(
+        sicht({ durchgefuehrte: zeilen(12, 200), durchgefuehrteVoriger: zeilen(3, 100) }),
+      )
+      zeigeSeite()
+
+      await screen.findByTestId('durchgefuehrt-200')
+      const dieser = screen.getByRole('region', { name: 'Diese Schicht' })
+      expect(within(dieser).getAllByTestId(/^durchgefuehrt-/)).toHaveLength(10)
+      const voriger = screen.getByRole('region', { name: 'Vorige Schicht' })
+      expect(within(voriger).getByTestId('zyklus-voriger-ausgeblendet')).toHaveTextContent(
+        '3 Runs ausgeblendet',
+      )
+      expect(screen.queryByTestId('keine-durchgefuehrten-voriger')).toBeNull()
+    })
+
+    /** Ein Abschnitt ohne Runs behält seinen Leersatz — dort ist nichts verdrängt, dort ist nichts. */
+    it('behält den Leersatz eines Abschnitts ohne Runs', async () => {
+      api.leitstand.mockResolvedValue(sicht({ durchgefuehrte: zeilen(12, 200) }))
+      zeigeSeite()
+
+      await screen.findByTestId('durchgefuehrt-200')
+      expect(screen.getByTestId('keine-durchgefuehrten-voriger')).toHaveTextContent(
+        'In der vorigen Schicht wurde kein Run beendet.',
+      )
+      expect(screen.queryByTestId('zyklus-voriger-ausgeblendet')).toBeNull()
+    })
+
+    it('merkt die Wahl über einen Neuaufbau der Seite', async () => {
+      api.leitstand.mockResolvedValue(sicht({ durchgefuehrteVoriger: zeilen(25, 100) }))
+      const { unmount } = render(<PlattformLeitstandPage />, { wrapper: MemoryRouter })
+
+      await screen.findByTestId('durchgefuehrt-100')
+      await userEvent.click(taste('Beendete Runs: 20'))
+      unmount()
+
+      zeigeSeite()
+      await screen.findByTestId('durchgefuehrt-100')
+      expect(screen.getAllByTestId(/^durchgefuehrt-/)).toHaveLength(20)
+      expect(taste('Beendete Runs: 20')).toHaveAttribute('aria-pressed', 'true')
+    })
+
+    /** Ein unbekannter gemerkter Wert ist kein Wert — dann gilt die Vorgabe. */
+    it('fällt bei einem unbekannten gemerkten Wert auf 10 zurück', async () => {
+      localStorage.setItem('manban.plattformLeitstand.anzahl', 'siebzehn')
+      api.leitstand.mockResolvedValue(sicht({ durchgefuehrteVoriger: zeilen(25, 100) }))
+      zeigeSeite()
+
+      await screen.findByTestId('durchgefuehrt-100')
+      expect(screen.getAllByTestId(/^durchgefuehrt-/)).toHaveLength(10)
+    })
+
+    /** Ein gesperrter Speicher kostet die Erinnerung, nicht die Seite. */
+    it('bleibt mit der Vorgabe bedienbar, wenn der Speicher wirft', async () => {
+      vi.stubGlobal('localStorage', throwingStorage())
+      api.leitstand.mockResolvedValue(sicht({ durchgefuehrte: zeilen(25, 200) }))
+      zeigeSeite()
+
+      await screen.findByTestId('durchgefuehrt-200')
+      expect(screen.getAllByTestId(/^durchgefuehrt-/)).toHaveLength(10)
+      await userEvent.click(taste('Beendete Runs: alle'))
+      expect(screen.getAllByTestId(/^durchgefuehrt-/)).toHaveLength(25)
+    })
+
+    /** Aktive Runs dürfen nie verschwinden, und eine offene Störung erst recht nicht. */
+    it('lässt aktive Runs und Störungen unbegrenzt', async () => {
+      const offene = zeilen(12, 300)
+      api.leitstand.mockResolvedValue(sicht({ laufende: zeilen(12, 400), stoerungen: offene }))
+      zeigeSeite()
+
+      await screen.findByTestId('laufend-400')
+      expect(screen.getAllByTestId(/^laufend-/)).toHaveLength(12)
+      expect(screen.getAllByTestId(/^stoerung-/)).toHaveLength(12)
+    })
+  })
+
+  /**
+   * Issue #1141: Jede der drei Listen zeigt an jeder Zeile die Art des Laufs — als Symbol
+   * unmittelbar nach dem Lämpchen, nicht mehr als Textmarke (#1128).
+   */
+  it('zeigt in allen drei Listen die Art des Laufs als Symbol nach dem Lämpchen', async () => {
     api.leitstand.mockResolvedValue(
       sicht({
-        laufende: [{ ...stoerung({ nightRunId: 8 }), mode: 'CHAIN', outcome: { verdict: 'RUNNING', decisiveItem: null, noWorkReason: null } }],
+        laufende: [{ ...stoerung({ nightRunId: 8 }), mode: 'CHAIN', outcome: { abortReason: null, verdict: 'RUNNING', decisiveItem: null, noWorkReason: null } }],
         durchgefuehrte: [stoerung({ nightRunId: 5 })],
         stoerungen: [stoerung({ nightRunId: 5 })],
       }),
     )
     zeigeSeite()
 
-    expect(await screen.findByTestId('art-laufend-8')).toHaveTextContent('Kette')
-    expect(screen.getByTestId('art-durchgefuehrt-5')).toHaveTextContent('Umsetzung')
-    expect(screen.getByTestId('art-stoerung-5')).toHaveTextContent('Umsetzung')
+    await screen.findByTestId('laufend-8')
+
+    /**
+     * Lämpchen und Symbol einer Zeile in Dokumentreihenfolge — das Symbol ist das zweite und steht
+     * damit unmittelbar hinter dem Lämpchen.
+     */
+    const symbolNachLed = (zeile: string) => {
+      const [led, symbol] = within(screen.getByTestId(zeile)).getAllByTestId(/^(led-|art-)/)
+      expect(led).toHaveAttribute('data-testid', expect.stringMatching(/^led-/))
+      return symbol
+    }
+    expect(symbolNachLed('laufend-8')).toHaveAccessibleName('Kette')
+    expect(symbolNachLed('durchgefuehrt-5')).toHaveAccessibleName('Umsetzung')
+    expect(symbolNachLed('stoerung-5')).toHaveAccessibleName('Umsetzung')
+
+    // Die Textmarken aus #1128 gibt es nicht mehr.
+    expect(screen.queryByTestId('art-laufend-8')).toBeNull()
+    expect(screen.queryByTestId('art-durchgefuehrt-5')).toBeNull()
+    expect(screen.queryByTestId('art-stoerung-5')).toBeNull()
   })
 
   /** Und jeder Verweis der Seite ebenso — auch über die drei Bereiche hinweg. */
@@ -581,7 +1074,7 @@ describe('PlattformLeitstandPage (#1083)', () => {
             projectName: 'Mein Projekt',
             mode: 'CHAIN',
             startedAt: '2026-09-21T01:10:00Z',
-            outcome: { verdict: 'RUNNING', decisiveItem: null, noWorkReason: null },
+            outcome: { abortReason: null, verdict: 'RUNNING', decisiveItem: null, noWorkReason: null },
           },
         ],
         durchgefuehrte: [stoerung({ nightRunId: 5 })],
@@ -676,7 +1169,7 @@ describe('PlattformLeitstandPage (#1083)', () => {
       projectName: 'Mein Projekt',
       mode: 'CHAIN',
       startedAt: '2026-09-21T01:10:00Z',
-      outcome: { verdict: 'RUNNING', decisiveItem: null, noWorkReason: null },
+      outcome: { abortReason: null, verdict: 'RUNNING', decisiveItem: null, noWorkReason: null },
       ...extra,
     })
 
@@ -808,6 +1301,7 @@ describe('PlattformLeitstandPage (#1083)', () => {
     it('lässt einen beendeten Lauf ohne Zutun aus dem oberen in den unteren Bereich wandern', async () => {
       const beendet = laufend({
         outcome: {
+          abortReason: null,
           verdict: 'FAILED',
           decisiveItem: { cardNumber: 721, state: 'RED', errorClass: 'CHECKS_RED' },
           noWorkReason: null,
@@ -936,7 +1430,7 @@ describe('PlattformLeitstandPage (#1083)', () => {
       const zeile = await screen.findByTestId('stoerung-5')
       expect(within(zeile).queryByText('Mein Projekt')).not.toBeInTheDocument()
       expect(
-        within(zeile).getByRole('button', { name: 'Störung von Mein Projekt, Lauf #5 löschen' }),
+        within(zeile).getByRole('button', { name: 'Störung von Mein Projekt, Run #5 löschen' }),
       ).toBeInTheDocument()
     })
 
@@ -963,7 +1457,7 @@ describe('PlattformLeitstandPage (#1083)', () => {
       zeigeSeite()
 
       await userEvent.click(
-        await screen.findByRole('button', { name: 'Störung von Beta, Lauf #8 löschen' }),
+        await screen.findByRole('button', { name: 'Störung von Beta, Run #8 löschen' }),
       )
 
       await waitFor(() => expect(screen.queryByTestId('stoergruppe-2')).not.toBeInTheDocument())
@@ -979,7 +1473,7 @@ describe('PlattformLeitstandPage (#1083)', () => {
       zeigeSeite()
 
       await userEvent.click(
-        await screen.findByRole('button', { name: 'Störung von Alpha, Lauf #9 löschen' }),
+        await screen.findByRole('button', { name: 'Störung von Alpha, Run #9 löschen' }),
       )
 
       await waitFor(() => expect(screen.queryByTestId('stoerung-9')).not.toBeInTheDocument())

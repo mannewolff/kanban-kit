@@ -42,7 +42,7 @@ import { DeltaMarke, Funke, KACHEL_SX, KachelFuss, KachelWert } from './Leitstan
  * andere Frage und wird nicht auf die Gattungen umgewidmet.
  */
 const ZEITRAEUME: ReadonlyArray<{ art: VerbrauchZeitraumArt; name: string }> = [
-  { art: 'DAY', name: 'Zyklus' },
+  { art: 'DAY', name: 'Schicht' },
   { art: 'WEEK', name: 'Woche' },
   { art: 'MONTH', name: 'Monat' },
 ]
@@ -206,7 +206,7 @@ function VerbrauchKacheln({
                 <DeltaMarke art="neutral">{`${tokenText(Math.round(summe.outputTokens / karten))} je Vorgang`}</DeltaMarke>
               ) : undefined
             }
-            basis={zeitraum.nights.length === 1 ? '1 Zyklus' : `${zeitraum.nights.length} Zyklen`}
+            basis={zeitraum.nights.length === 1 ? '1 Schicht' : `${zeitraum.nights.length} Schichten`}
           />
         </Box>
 
@@ -303,7 +303,7 @@ function Anteile({
   const interaktivText = stand === 'nicht-erfasst' ? NICHT_ERFASST_TEXT : `${sitzungen ?? '—'}${zusatz}`
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: '2px', fontSize: 10.5, color: 'text.secondary' }}>
-      <Anteil testId="anteil-nacht" text="aus Läufen" wert={nacht ?? '—'} />
+      <Anteil testId="anteil-nacht" text="aus Runs" wert={nacht ?? '—'} />
       <Anteil testId="anteil-interaktiv" text="aus interaktiven Sitzungen" wert={interaktivText} />
     </Box>
   )
