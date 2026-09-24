@@ -245,6 +245,26 @@ cd frontend && npm run lint     # ESLint + jsx-a11y
 cd frontend && npm test         # Vitest
 ```
 
+**Mutationstest (kein Pflichtcheck):**
+
+```bash
+cd frontend && npm run test:mutation   # Stryker über src/lib und src/api
+```
+
+Stryker ist **bewusst nicht** Teil der Pflichtchecks — genau wie PIT im Backend nicht Teil von
+`mvn verify` ist, sondern im Maven-Profil `pit` liegt (CLAUDE-java.md §5.3: „damit der normale
+`mvn verify` schnell bleibt"). Der Lauf wird eigens aufgerufen, wenn man ihn will; er verlängert
+sonst jede Session spürbar, ohne dass das Arbeitspaket davon besser wird. Konfiguration:
+[`frontend/stryker.config.json`](frontend/stryker.config.json).
+
+**Der zugesagte Umfang muss eingelöst sein.** Was in `mutate` steht, muss der Testrunner auch
+erreichen (`vitest.dir`). Lief beides auseinander, sah der erzeugte Bericht trotzdem vollständig
+aus, enthielt aber keine einzige Datei des ausgeschlossenen Verzeichnisses — ein stiller Blindfleck
+(Issue #1073, Befund 1). Die Deckung hält deshalb der Test
+[`strykerUmfang.test.ts`](frontend/src/lib/strykerUmfang.test.ts) im Pflicht-Gate, nicht dieser
+Absatz. `thresholds.break` steht auf `null`: Ob und wann der Lauf abbricht, regelt die
+Mutationsprüfung auf dem geänderten Code (Issue #1104), nicht eine Gesamtschwelle.
+
 ---
 
 ## 📌 Versionsstrategie
