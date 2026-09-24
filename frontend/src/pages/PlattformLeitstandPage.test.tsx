@@ -128,90 +128,23 @@ describe('PlattformLeitstandPage (#1083)', () => {
   })
 
   /**
-   * Kriterium 18 und AK 1 der Quelle #1153: die vier Bereiche untereinander, in dieser Ordnung.
-   * „Aktueller Status" (#1173) steht zwischen den laufenden und den beendeten Runs — was gerade
-   * gemeldet wird, gehört neben das, was gerade arbeitet.
+   * Kriterium 18 und AK 1 der Quelle #1153: die Bereiche untereinander, in dieser Ordnung.
+   *
+   * **Drei statt vier seit Issue #1193:** Die entfallene zweite Platte speiste sich aus derselben
+   * Liste `laufende` wie „Aktueller Status" und brachte keinen Run, den der Status nicht schon
+   * hätte — der führt auch den Lauf ohne gemeldetes Paket, mit „0 gemeldet".
    */
-  it('stellt die vier Bereiche in der Ordnung Aktive Runs, Aktueller Status, Beendete Runs, Störungen', async () => {
+  it('stellt die drei Bereiche in der Ordnung Aktueller Status, Beendete Runs, Störungen', async () => {
     api.leitstand.mockResolvedValue(sicht({ stoerungen: [stoerung()] }))
 
     zeigeSeite()
 
     await screen.findByTestId('stoerung-5')
     expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual([
-      'Aktive Runs',
       'Aktueller Status',
       'Beendete Runs',
       'Störungen',
     ])
-  })
-
-  /**
-   * Der Bereich „Aktive Läufe" (Kriterien 1–4, 11).
-   *
-   * Der Puls hält bei `prefers-reduced-motion` von selbst an — die globale Regel im Theme greift
-   * für jede Animation; hier steht deshalb nur, **dass** die LED pulst.
-   */
-  describe('Aktive Runs (#1098, benannt in #1102)', () => {
-    const laufend = (extra: Partial<DisruptionView> = {}): DisruptionView => ({
-      nightRunId: 8,
-      projectId: 9,
-      projectName: 'Mein Projekt',
-      mode: 'CHAIN',
-      startedAt: '2026-09-21T01:10:00Z',
-      outcome: { abortReason: null, verdict: 'RUNNING', decisiveItem: null, noWorkReason: null },
-      ...extra,
-    })
-
-    /**
-     * Kriterium 3: Der Zustand steht als **Wort** da. Farbe und Bewegung allein trügen die Aussage
-     * sonst allein — wer keine Farben unterscheidet oder Bewegung abgeschaltet hat, läse nichts.
-     */
-    it('nennt Projekt, „läuft seit HH:MM" und die Kennung, mit pulsierendem Stahl-Melder', async () => {
-      api.leitstand.mockResolvedValue(sicht({ laufende: [laufend()] }))
-
-      zeigeSeite()
-
-      const zeile = await screen.findByTestId('laufend-8')
-      expect(within(zeile).getByText('Mein Projekt')).toBeInTheDocument()
-      expect(within(zeile).getByText('läuft seit 03:10')).toBeInTheDocument()
-      const led = within(zeile).getByTestId('led-stahl')
-      expect(led).toHaveAttribute('data-puls', 'an')
-      // Issue #1136: Ein laufender Lauf zeigt den Wechselblinker — zwei Lampen.
-      expect(within(led).getAllByTestId('blinker-lampe')).toHaveLength(2)
-      expect(within(zeile).getByRole('link', { name: 'Run #8 von Mein Projekt' })).toHaveAttribute(
-        'href',
-        '/projects/9/nachtlauf?lauf=8',
-      )
-    })
-
-    /** Kriterium 9: auch mehrere Läufe desselben Projekts, in der Reihenfolge der Antwort. */
-    it('hält die Reihenfolge der Antwort ein', async () => {
-      api.leitstand.mockResolvedValue(
-        sicht({
-          laufende: [
-            laufend({ nightRunId: 9, projectName: 'Jung' }),
-            laufend({ nightRunId: 8, projectName: 'Alt' }),
-          ],
-        }),
-      )
-
-      zeigeSeite()
-
-      const zeilen = await screen.findAllByTestId(/^laufend-/)
-      expect(zeilen.map((z) => z.getAttribute('data-testid'))).toEqual(['laufend-9', 'laufend-8'])
-    })
-
-    /** Kriterium 4: eine leere Fläche wäre von einer kaputten Anzeige nicht zu unterscheiden. */
-    it('sagt ausdrücklich, wenn gerade nirgends ein Lauf läuft', async () => {
-      api.leitstand.mockResolvedValue(sicht())
-
-      zeigeSeite()
-
-      expect(await screen.findByTestId('keine-laufenden')).toHaveTextContent(
-        'Gerade läuft kein Run.',
-      )
-    })
   })
 
   /** Der Bereich „Beendete Runs" (Kriterien 9–14). */
@@ -631,10 +564,12 @@ describe('PlattformLeitstandPage (#1083)', () => {
           .map((l) => l.getAttribute('data-testid')),
       ).toEqual(['stand-lauf-8', 'stand-lauf-6'])
       expect(screen.getByTestId('stand-kopf-8')).toHaveTextContent(
-        'Run #8 · 2 gemeldet · 1 Erfolg, 1 gescheitert',
+        'Run #8 · läuft seit 03:10 · 2 gemeldet · 1 Erfolg, 1 gescheitert',
       )
       // Ein laufender Run ohne Paket steht mit „0 gemeldet" und ohne Zeile darunter.
-      expect(screen.getByTestId('stand-kopf-6')).toHaveTextContent('Run #6 · 0 gemeldet')
+      expect(screen.getByTestId('stand-kopf-6')).toHaveTextContent(
+        'Run #6 · läuft seit 03:10 · 0 gemeldet',
+      )
       expect(within(screen.getByTestId('stand-lauf-6')).queryAllByTestId(/^stand-paket-/)).toHaveLength(0)
     })
 
@@ -679,7 +614,9 @@ describe('PlattformLeitstandPage (#1083)', () => {
       zeigeSeite()
 
       const kopf = await screen.findByTestId('stand-kopf-8')
-      expect(kopf).toHaveTextContent('Run #8 · 2 gemeldet · 1 Erfolg, 1 nicht bearbeitet')
+      expect(kopf).toHaveTextContent(
+        'Run #8 · läuft seit 03:10 · 2 gemeldet · 1 Erfolg, 1 nicht bearbeitet',
+      )
       expect(kopf.textContent).not.toMatch(/\bvon\b|\/\s*\d/)
     })
 
@@ -697,12 +634,18 @@ describe('PlattformLeitstandPage (#1083)', () => {
 
       zeigeSeite()
 
-      const liste = await screen.findByRole('list', { name: 'Run #8 · 1 gemeldet · 1 Erfolg' })
+      const liste = await screen.findByRole('list', {
+        name: /Run #8.*läuft seit 03:10 · 1 gemeldet · 1 Erfolg/,
+      })
       expect(within(liste).getByTestId('stand-paket-8-721')).toBeInTheDocument()
     })
 
-    /** AK 12: ein eigener Satz, nicht derselbe wie in „Aktive Runs" (E9). */
-    it('sagt ohne laufenden Run einen eigenen Satz', async () => {
+    /**
+     * AK 12 und Kriterium 4: eine leere Fläche wäre von einer kaputten Anzeige nicht zu
+     * unterscheiden. Der Satz sagt seit #1193 beides — dass nichts arbeitet und dass darum nichts
+     * gemeldet ist; eine zweite Sektion mit einem zweiten Satz gibt es nicht mehr.
+     */
+    it('sagt ohne laufenden Run ausdrücklich, dass nichts arbeitet und nichts gemeldet ist', async () => {
       api.leitstand.mockResolvedValue(sicht())
 
       zeigeSeite()
@@ -710,7 +653,7 @@ describe('PlattformLeitstandPage (#1083)', () => {
       expect(await screen.findByTestId('kein-aktueller-stand')).toHaveTextContent(
         'Gerade arbeitet kein Run — nichts gemeldet.',
       )
-      expect(screen.getByTestId('keine-laufenden')).toHaveTextContent('Gerade läuft kein Run.')
+      expect(screen.queryByTestId('keine-laufenden')).toBeNull()
     })
 
     /**
@@ -855,10 +798,10 @@ describe('PlattformLeitstandPage (#1083)', () => {
         expect(nummer).not.toContainElement(verweis)
         expect(verweis).not.toContainElement(nummer)
 
-        // Gegangen wird der ganze Weg von vorn: erst die Kennung des aktiven Runs, dann die beiden
+        // Gegangen wird der ganze Weg von vorn: erst die Kennung im Kopf des Laufs, dann die beiden
         // Halte der Paketzeile, dann die Tasten der nächsten Platte — genau zwei Halte in der Zeile.
         await userEvent.tab()
-        expect(within(screen.getByTestId('laufend-8')).getByRole('link')).toHaveFocus()
+        expect(within(screen.getByTestId('stand-kopf-8')).getByRole('link')).toHaveFocus()
         await userEvent.tab()
         expect(nummer).toHaveFocus()
         await userEvent.tab()
@@ -918,7 +861,7 @@ describe('PlattformLeitstandPage (#1083)', () => {
       /**
        * E14: Jeder andere Fehler ist keine Aussage über die Karte, sondern über den Abruf — er
        * erscheint als `Alert` unter der Platte. Die Sektion bleibt vollständig, und der
-       * `fehler`-Zustand der Seite bleibt unberührt: Alle vier Bereiche stehen weiter da.
+       * `fehler`-Zustand der Seite bleibt unberührt: Alle drei Bereiche stehen weiter da.
        */
       it('zeigt bei einem anderen Fehler einen Alert unter der Platte', async () => {
         api.leitstand.mockResolvedValue(mitPaketen([paket()]))
@@ -935,7 +878,6 @@ describe('PlattformLeitstandPage (#1083)', () => {
         expect(screen.getByTestId('stand-paket-8-721')).not.toHaveTextContent('nicht gefunden')
         expect(nummerTaste(screen.getByTestId('stand-paket-8-721'), 721, 'Erstes Paket')).toBeInTheDocument()
         expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual([
-          'Aktive Runs',
           'Aktueller Status',
           'Beendete Runs',
           'Störungen',
@@ -1565,23 +1507,24 @@ describe('PlattformLeitstandPage (#1083)', () => {
       expect(screen.getAllByTestId(/^durchgefuehrt-/)).toHaveLength(25)
     })
 
-    /** Aktive Runs dürfen nie verschwinden, und eine offene Störung erst recht nicht. */
-    it('lässt aktive Runs und Störungen unbegrenzt', async () => {
+    /** Laufende Runs dürfen nie verschwinden, und eine offene Störung erst recht nicht. */
+    it('lässt laufende Runs und Störungen unbegrenzt', async () => {
       const offene = zeilen(12, 300)
       api.leitstand.mockResolvedValue(sicht({ laufende: zeilen(12, 400), stoerungen: offene }))
       zeigeSeite()
 
-      await screen.findByTestId('laufend-400')
-      expect(screen.getAllByTestId(/^laufend-/)).toHaveLength(12)
+      await screen.findByTestId('stand-lauf-400')
+      expect(screen.getAllByTestId(/^stand-lauf-/)).toHaveLength(12)
       expect(screen.getAllByTestId(/^stoerung-/)).toHaveLength(12)
     })
   })
 
   /**
-   * Issue #1141: Jede der drei Listen zeigt an jeder Zeile die Art des Laufs — als Symbol
-   * unmittelbar nach dem Lämpchen, nicht mehr als Textmarke (#1128).
+   * Issue #1141: Jeder der drei Bereiche zeigt die Art des Laufs — als Symbol unmittelbar nach dem
+   * Lämpchen, nicht mehr als Textmarke (#1128). Beim laufenden Run steht sie seit #1193 im Kopf
+   * seines Blocks in „Aktueller Status".
    */
-  it('zeigt in allen drei Listen die Art des Laufs als Symbol nach dem Lämpchen', async () => {
+  it('zeigt in allen drei Bereichen die Art des Laufs als Symbol nach dem Lämpchen', async () => {
     api.leitstand.mockResolvedValue(
       sicht({
         laufende: [{ ...stoerung({ nightRunId: 8 }), mode: 'CHAIN', outcome: { abortReason: null, verdict: 'RUNNING', decisiveItem: null, noWorkReason: null } }],
@@ -1591,7 +1534,7 @@ describe('PlattformLeitstandPage (#1083)', () => {
     )
     zeigeSeite()
 
-    await screen.findByTestId('laufend-8')
+    await screen.findByTestId('stand-kopf-8')
 
     /**
      * Lämpchen und Symbol einer Zeile in Dokumentreihenfolge — das Symbol ist das zweite und steht
@@ -1602,7 +1545,7 @@ describe('PlattformLeitstandPage (#1083)', () => {
       expect(led).toHaveAttribute('data-testid', expect.stringMatching(/^led-/))
       return symbol
     }
-    expect(symbolNachLed('laufend-8')).toHaveAccessibleName('Kette')
+    expect(symbolNachLed('stand-kopf-8')).toHaveAccessibleName('Kette')
     expect(symbolNachLed('durchgefuehrt-5')).toHaveAccessibleName('Umsetzung')
     expect(symbolNachLed('stoerung-5')).toHaveAccessibleName('Umsetzung')
 
@@ -1688,7 +1631,7 @@ describe('PlattformLeitstandPage (#1083)', () => {
 
     expect(await screen.findByText('Kein Admin-Zugriff.')).toBeInTheDocument()
     expect(screen.queryByTestId('keine-stoerungen')).not.toBeInTheDocument()
-    expect(screen.queryByTestId('keine-laufenden')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('kein-aktueller-stand')).not.toBeInTheDocument()
     expect(screen.queryByTestId('keine-durchgefuehrten')).not.toBeInTheDocument()
   })
 
@@ -1808,12 +1751,12 @@ describe('PlattformLeitstandPage (#1083)', () => {
 
       zeigeSeite()
       await antwortDurchlassen()
-      expect(screen.getByTestId('laufend-8')).toBeInTheDocument()
+      expect(screen.getByTestId('stand-lauf-8')).toBeInTheDocument()
 
       await zeitVergehtLassen(30_000)
 
       expect(api.leitstand).toHaveBeenCalledTimes(2)
-      expect(screen.getByTestId('laufend-8')).toHaveTextContent('läuft seit 03:10')
+      expect(screen.getByTestId('stand-kopf-8')).toHaveTextContent('läuft seit 03:10')
       expect(screen.queryByText('Laden fehlgeschlagen.')).not.toBeInTheDocument()
     })
 
@@ -1824,7 +1767,7 @@ describe('PlattformLeitstandPage (#1083)', () => {
       await antwortDurchlassen()
 
       expect(screen.getByText('Laden fehlgeschlagen.')).toBeInTheDocument()
-      expect(screen.queryByTestId('keine-laufenden')).not.toBeInTheDocument()
+      expect(screen.queryByTestId('kein-aktueller-stand')).not.toBeInTheDocument()
     })
 
     /** Eine Rolle bildet sich nicht von selbst zurück — wem sie entzogen wurde, sieht nichts mehr. */
@@ -1835,12 +1778,12 @@ describe('PlattformLeitstandPage (#1083)', () => {
 
       zeigeSeite()
       await antwortDurchlassen()
-      expect(screen.getByTestId('laufend-8')).toBeInTheDocument()
+      expect(screen.getByTestId('stand-lauf-8')).toBeInTheDocument()
 
       await zeitVergehtLassen(30_000)
 
       expect(screen.getByText('Kein Admin-Zugriff.')).toBeInTheDocument()
-      expect(screen.queryByTestId('laufend-8')).not.toBeInTheDocument()
+      expect(screen.queryByTestId('stand-lauf-8')).not.toBeInTheDocument()
     })
 
     /**
@@ -1862,12 +1805,12 @@ describe('PlattformLeitstandPage (#1083)', () => {
 
       zeigeSeite()
       await antwortDurchlassen()
-      expect(screen.getByTestId('laufend-8')).toBeInTheDocument()
+      expect(screen.getByTestId('stand-lauf-8')).toBeInTheDocument()
       expect(screen.queryByTestId('durchgefuehrt-8')).not.toBeInTheDocument()
 
       await zeitVergehtLassen(30_000)
 
-      expect(screen.queryByTestId('laufend-8')).not.toBeInTheDocument()
+      expect(screen.queryByTestId('stand-lauf-8')).not.toBeInTheDocument()
       expect(screen.getByTestId('durchgefuehrt-8')).toHaveTextContent('nicht gelungen')
     })
   })

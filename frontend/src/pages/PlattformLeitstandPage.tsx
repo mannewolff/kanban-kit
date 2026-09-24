@@ -28,7 +28,6 @@ import {
   melderAusBefund,
   nachProjekt,
   tagZeit,
-  uhrzeit,
   type Projektgruppe,
 } from '../lib/leitstand'
 import { kurzGrund, NIGHT_RUN_VERDICT_TEXT, nightRunZustandsText } from '../lib/nightRunHandoff'
@@ -146,23 +145,29 @@ interface Auswahl {
  * Der Plattform-Leitstand: die Startseite eines Plattform-Admins (Issue #1083, fachliche Quellen
  * #1064 und #1086).
  *
- * **Vier Bereiche in dieser Ordnung** (Kriterium 18, Issue #1098; benannt in #1102, um *Aktueller
- * Status* erweitert in #1173): *Aktive
- * Laeufe* zeigen mit pulsierendem Melder, dass gerade etwas arbeitet; *Aktueller Status* zeigt je
- * laufendem Lauf, was er bisher gemeldet hat; *Beendete Laeufe* zeigen den
- * Ausgang jedes beendeten Laufs der laufenden Nacht; *Stoerungen* zeigt jede nicht quittierte
- * Stoerung ueber alle Naechte, juengste zuoberst. Wer mehrere Projekte betreibt, beantwortet damit
- * „laeuft gerade etwas, und ist die Nacht gut durch?" an einer Stelle statt Projekt fuer Projekt.
+ * **Drei Bereiche in dieser Ordnung** (Kriterium 18, Issue #1098; benannt in #1102, um *Aktueller
+ * Status* erweitert in #1173, auf drei verkuerzt in #1193): *Aktueller Status* zeigt mit
+ * pulsierendem Melder, dass gerade etwas arbeitet, und je laufendem Lauf, was er bisher gemeldet
+ * hat; *Beendete Laeufe* zeigen den Ausgang jedes beendeten Laufs der laufenden Nacht;
+ * *Stoerungen* zeigt jede nicht quittierte Stoerung ueber alle Naechte, juengste zuoberst. Wer
+ * mehrere Projekte betreibt, beantwortet damit „laeuft gerade etwas, und ist die Nacht gut durch?"
+ * an einer Stelle statt Projekt fuer Projekt.
+ *
+ * **Keine zweite Platte ueber die laufenden Laeufe mehr** (#1193): Sie speiste sich aus derselben
+ * Liste `laufende` wie *Aktueller Status*, der auch den Lauf ohne gemeldetes Paket fuehrt — mit
+ * „0 gemeldet". Zwei Sektionen ueber dieselbe Liste sind zwei Orte fuer dieselbe Aussage; der
+ * Leser sucht dann nach einem Unterschied, den es nicht gibt. Verweis, Zustandswort und Startzeit,
+ * die nur dort standen, traegt jetzt der Kopf in `AktuellerStand`.
  *
  * **Eine Antwort fuer alle Bereiche** (Plan #1088 E5): Die Seite frischt sich auf, und ein
  * Lauf kann zwischen zwei Rundreisen den Bereich wechseln — aus drei Abrufen erschiene er doppelt
  * oder gar nicht. Aus derselben Antwort liest die Seite auch, zu welchem durchgefuehrten Lauf es
  * eine Stoerung gibt.
  *
- * **Nach Projekt gruppiert** ist allein der Bereich *Stoerungen* (Issue #1087): Eine flache Liste
- * liess den Leser abwechselnd Namen statt Befunde lesen. Die beiden Lauf-Bereiche gruppieren
- * **nicht** — ein Projekt darf in einer Nacht mehrmals anlaufen, und jeder Anlauf soll als eigene
- * Zeile sichtbar bleiben (Kriterium 9).
+ * **Nach Projekt gruppiert** sind die Bereiche *Stoerungen* (Issue #1087) und *Aktueller Status*
+ * (#1173): Eine flache Liste liess den Leser abwechselnd Namen statt Befunde lesen. *Beendete
+ * Laeufe* gruppiert **nicht** — ein Projekt darf in einer Nacht mehrmals anlaufen, und jeder
+ * Anlauf soll als eigene Zeile sichtbar bleiben (Kriterium 9).
  *
  * **Gestaltung:** `docs/entwurf-leitstand.html` ist verbindlich (`CLAUDE-design.md`), fuehrt fuer
  * diese Ansicht aber kein eigenes Mockup. Sie entsteht deshalb aus den vorhandenen Bausteinen —
@@ -320,11 +325,8 @@ export default function PlattformLeitstandPage() {
     <>
       <KupferwarteBereich>
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          <Platte titel="Aktive Runs">
-            <LaufendeListe zeilen={geladen ? sicht.laufende : null} />
-          </Platte>
-          {/* Zwischen den laufenden und den beendeten Runs (AK 1 der Quelle #1153): Was gerade
-              gemeldet wird, gehoert neben das, was gerade arbeitet. */}
+          {/* Die oberste Platte (AK 1 der Quelle #1153, Issue #1193): Was gerade arbeitet und was
+              es gemeldet hat, steht an **einer** Stelle. */}
           <Platte titel="Aktueller Status">
             <AktuellerStand
               laufende={geladen ? sicht.laufende : null}
@@ -448,7 +450,7 @@ function VerdecktSatz({ testId, children }: Readonly<{ testId: string; children:
   )
 }
 
-/** Eine Zeile der beiden Lauf-Bereiche; Trennlinie wie in der Laufplatte des Board-Leitstands. */
+/** Eine Zeile des Bereichs „Beendete Runs"; Trennlinie wie in der Laufplatte des Board-Leitstands. */
 const LAUF_ZEILE_SX = {
   display: 'flex',
   alignItems: 'center',
@@ -477,48 +479,6 @@ function LaufVerweis({ zeile }: Readonly<{ zeile: DisruptionView }>) {
     >
       Run #{zeile.nightRunId}
     </Typography>
-  )
-}
-
-/** Der Bereich „Aktive Laeufe" (Kriterien 1–4). */
-function LaufendeListe({ zeilen }: Readonly<{ zeilen: DisruptionView[] | null }>) {
-  if (zeilen === null) {
-    return null
-  }
-  if (zeilen.length === 0) {
-    return <LeerSatz testId="keine-laufenden">Gerade läuft kein Run.</LeerSatz>
-  }
-  return (
-    <Box component="ul" sx={{ listStyle: 'none', m: 0, p: 0 }}>
-      {zeilen.map((zeile) => (
-        <LaufendeZeile key={zeile.nightRunId} zeile={zeile} />
-      ))}
-    </Box>
-  )
-}
-
-/**
- * Eine laufende Zeile: pulsierender Stahl-Melder, Projekt, „laeuft seit HH:MM", Kennung.
- *
- * **Melder, Wort und Puls kommen aus demselben Befund** — sie koennen nicht auseinanderlaufen. Das
- * Wort steht dabei nicht nur zur Zierde: Nach Kriterium 3 darf der Zustand weder allein an einer
- * Farbe noch allein an der Bewegung haengen. Wer Bewegung abgeschaltet hat, liest ihn trotzdem —
- * den Puls haelt die globale `prefers-reduced-motion`-Regel des Themes von selbst an.
- *
- * Die Uhrzeit kommt aus {@link uhrzeit}, also im Format des Laufbands („seit 02:41", Entwurf
- * Z. 1164–1165).
- */
-function LaufendeZeile({ zeile }: Readonly<{ zeile: DisruptionView }>) {
-  return (
-    <Box component="li" data-testid={`laufend-${zeile.nightRunId}`} sx={LAUF_ZEILE_SX}>
-      <Led melder={melderAusBefund(zeile.outcome)} pulsiert={zeile.outcome.verdict === 'RUNNING'} />
-      <LaufArtSymbol art={zeile.mode} />
-      <Projektname name={zeile.projectName} />
-      <Typography sx={{ fontSize: 12, color: 'text.secondary', flex: 1, minWidth: 0 }}>
-        {`${NIGHT_RUN_VERDICT_TEXT[zeile.outcome.verdict]} seit ${uhrzeit(zeile.startedAt)}`}
-      </Typography>
-      <LaufVerweis zeile={zeile} />
-    </Box>
   )
 }
 
