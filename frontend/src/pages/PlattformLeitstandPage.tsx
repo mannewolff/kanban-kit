@@ -11,8 +11,15 @@ import {
 } from '../api/plattformLeitstand'
 import { KupferwarteBereich } from '../components/nachtlauf/KupferwarteBereich'
 import { LaufArtSymbol } from '../components/leitstand/LaufArtSymbol'
-import { FilterTaste, Led, Platte, Taste } from '../components/leitstand/LeitstandBausteine'
-import { melderAusBefund, tagZeit, uhrzeit } from '../lib/leitstand'
+import {
+  FilterTaste,
+  Led,
+  LeerSatz,
+  Platte,
+  Projektname,
+  Taste,
+} from '../components/leitstand/LeitstandBausteine'
+import { melderAusBefund, nachProjekt, tagZeit, uhrzeit, type Projektgruppe } from '../lib/leitstand'
 import { kurzGrund, NIGHT_RUN_VERDICT_TEXT, nightRunZustandsText } from '../lib/nightRunHandoff'
 import { useRefetchOnFocus } from '../lib/useRefetchOnFocus'
 import { zyklusDavor, zyklusDesStarts, zyklusSpanne } from '../lib/verbrauchZeitraum'
@@ -302,23 +309,6 @@ export default function PlattformLeitstandPage() {
 }
 
 /**
- * Der Leerfall eines Lauf-Bereichs (Kriterien 4 und 14): ein ausdruecklicher Satz.
- *
- * Eine leere Flaeche waere von einer kaputten Anzeige nicht zu unterscheiden — „nichts laeuft" und
- * „die Seite hat nichts bekommen" saehen gleich aus.
- */
-function LeerSatz({ testId, children }: Readonly<{ testId: string; children: ReactNode }>) {
-  return (
-    <Typography
-      data-testid={testId}
-      sx={{ fontSize: 13, color: 'text.secondary', px: '16px', py: '14px' }}
-    >
-      {children}
-    </Typography>
-  )
-}
-
-/**
  * Die drei Tasten „10 · 20 · alle" im Werkzeugbereich der Platte „Beendete Runs" (Issue #1140).
  *
  * Tasten statt eines Auswahlmenüs: Drei Werte stehen so mit einem Klick bereit, und das Muster
@@ -373,13 +363,6 @@ const LAUF_ZEILE_SX = {
     borderBottom: `1px solid color-mix(in srgb, ${RAND} 55%, transparent)`,
   },
 } as const
-
-/** Der Projektname einer Lauf-Zeile — hier steht er in **jeder** Zeile (Kriterien 1 und 9). */
-function Projektname({ name }: Readonly<{ name: string }>) {
-  return (
-    <Typography sx={{ ...ANZEIGE, fontSize: 12.5, fontWeight: 600, minWidth: 0 }}>{name}</Typography>
-  )
-}
 
 /**
  * Der Weg zur Auswertung genau dieses Laufs (Kriterien 1 und 12) — auch ohne Mitgliedschaft im
@@ -661,39 +644,6 @@ function DurchgefuehrteZeile({
   )
 }
 
-/** Die offenen Stoerungen **eines** Projekts, in der Reihenfolge der Server-Antwort (#1087). */
-interface Projektgruppe {
-  projectId: number
-  projectName: string
-  stoerungen: DisruptionView[]
-}
-
-/**
- * Gruppiert die Antwort nach Projekt, **ohne** neu zu sortieren (#1087).
- *
- * Der Server liefert `started_at DESC, id DESC`, und eine `Map` behaelt die Einfuegereihenfolge:
- * Die Gruppen stehen damit in der Reihenfolge ihres jeweils ersten — und deshalb juengsten —
- * Eintrags, und innerhalb einer Gruppe bleibt die Reihenfolge der Antwort erhalten. Ein zweites
- * Sortieren im Browser waere eine zweite Fassung von „juengste zuoberst"; sie liefe auseinander,
- * sobald der Server seine Sortierung aendert.
- */
-function nachProjekt(liste: readonly DisruptionView[]): Projektgruppe[] {
-  const gruppen = new Map<number, Projektgruppe>()
-  for (const stoerung of liste) {
-    const gruppe = gruppen.get(stoerung.projectId)
-    if (gruppe === undefined) {
-      gruppen.set(stoerung.projectId, {
-        projectId: stoerung.projectId,
-        projectName: stoerung.projectName,
-        stoerungen: [stoerung],
-      })
-    } else {
-      gruppe.stoerungen.push(stoerung)
-    }
-  }
-  return [...gruppen.values()]
-}
-
 /**
  * Der Inhalt des Bereichs: noch nichts geladen, kein Eintrag, oder die Gruppen.
  *
@@ -745,11 +695,11 @@ function Projektblock({
   gruppe,
   onQuittieren,
 }: Readonly<{
-  gruppe: Projektgruppe
+  gruppe: Projektgruppe<DisruptionView>
   onQuittieren: (stoerung: DisruptionView) => Promise<void>
 }>) {
   const nameId = useId()
-  const zahl = gruppe.stoerungen.length
+  const zahl = gruppe.eintraege.length
   return (
     <Box data-testid={`stoergruppe-${gruppe.projectId}`}>
       <Box
@@ -776,7 +726,7 @@ function Projektblock({
         </Box>
       </Box>
       <Box component="ul" aria-labelledby={nameId} sx={{ listStyle: 'none', m: 0, p: 0 }}>
-        {gruppe.stoerungen.map((stoerung) => (
+        {gruppe.eintraege.map((stoerung) => (
           <Stoerzeile
             key={stoerung.nightRunId}
             stoerung={stoerung}

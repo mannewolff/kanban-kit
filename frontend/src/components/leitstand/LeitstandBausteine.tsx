@@ -1,5 +1,6 @@
 import Box from '@mui/material/Box'
 import ButtonBase from '@mui/material/ButtonBase'
+import Typography from '@mui/material/Typography'
 import { keyframes } from '@mui/material/styles'
 import { useId, type ReactNode } from 'react'
 import type { DeltaArt, Kachel as KachelDaten, Melder } from '../../lib/leitstand'
@@ -505,6 +506,30 @@ export function KlassenMarke({ melder, children }: Readonly<{ melder: Melder; ch
     >
       {children}
     </Box>
+  )
+}
+
+/**
+ * Der Leerfall eines Lauf-Bereichs (Kriterien 4 und 14): ein ausdruecklicher Satz.
+ *
+ * Eine leere Flaeche waere von einer kaputten Anzeige nicht zu unterscheiden — „nichts laeuft" und
+ * „die Seite hat nichts bekommen" saehen gleich aus.
+ */
+export function LeerSatz({ testId, children }: Readonly<{ testId: string; children: ReactNode }>) {
+  return (
+    <Typography
+      data-testid={testId}
+      sx={{ fontSize: 13, color: 'text.secondary', px: '16px', py: '14px' }}
+    >
+      {children}
+    </Typography>
+  )
+}
+
+/** Der Projektname einer Lauf-Zeile — hier steht er in **jeder** Zeile (Kriterien 1 und 9). */
+export function Projektname({ name }: Readonly<{ name: string }>) {
+  return (
+    <Typography sx={{ ...ANZEIGE, fontSize: 12.5, fontWeight: 600, minWidth: 0 }}>{name}</Typography>
   )
 }
 
