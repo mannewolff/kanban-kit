@@ -1,5 +1,12 @@
 import '@testing-library/jest-dom/vitest'
+import { configure } from '@testing-library/react'
 import { afterEach, vi } from 'vitest'
+
+// `findBy…` und `waitFor` geben nach dem Default von 1000 ms auf — unter der vollen Suite mit
+// Coverage und paralleler Last zu knapp: Am 2026-09-24 scheiterten so Tests mit „Unable to find
+// role …", deren Element nur spaet kam. `testTimeout` in vite.config.ts greift hier nicht, das
+// Warten von Testing Library hat seine eigene Grenze (Issue #1196).
+configure({ asyncUtilTimeout: 5000 })
 
 // jsdom implementiert EventSource nicht. useBoardEvents öffnet beim Rendern eines Boards einen
 // SSE-Stream; ohne diesen Stub scheiterten alle Board-Tests an `new EventSource(...)`. Minimaler

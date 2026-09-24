@@ -36,6 +36,16 @@ export default defineConfig({
     // api/nightRunUsage.ts, Plan E4: „die letzte Nacht" ist die des Lesers). In UTC getestet
     // fiele ein Fehler am Sommer-/Winterzeitwechsel nie auf.
     env: { TZ: 'Europe/Berlin' },
+    // Das Vitest-Default von 5000 ms haelt keiner Last stand. Unter der vollen Suite mit
+    // Coverage-Messung und parallelen Workern, erst recht neben einer fremden Testsuite auf
+    // derselben Maschine, rissen am 2026-09-24 von Lauf zu Lauf andere Tests die Grenze
+    // (CardDetailModal-lastige Seiten, aber auch Login und Signup) — isoliert brauchen
+    // dieselben Tests hoechstens 1,3 s. Ein roter Pflichtcheck, der zu keiner Aenderung
+    // gehoert, haelt den Nachtlauf hart an (Issue #1190). Ein echter Haenger endet nie und
+    // wird auch mit 20 s gefangen; Zeitlimits je Test scheiden aus, weil die betroffenen
+    // Tests wechseln (Issue #1196).
+    testTimeout: 20000,
+    hookTimeout: 20000,
     globals: true,
     setupFiles: './src/test/setup.ts',
     css: false,
