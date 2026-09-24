@@ -2616,10 +2616,10 @@ function LaufPanel({
   // Einmal gerechnet und zweimal gezeigt: Die Platte trägt ihn, und die Marke „ohne Arbeit" nimmt
   // ihn von hier (Issue #1121). Zwei Aufrufe nebeneinander wären zwei Stellen, an denen dieselbe
   // Frage beantwortet wird — und die Marke stand vorher fest auf zinnober.
-  const melder = laufMelder(
-    { complete: lauf.vollstaendig, items: lauf.items, outcome: lauf.befund },
-    lauf.ohneArbeit,
-  )
+  //
+  // Den Grund bekommt er seit Issue #1186 nicht mehr: Er steht im Befund als `NO_WORK`, und der
+  // eben im Browser geparste Lauf trägt ohnehin keinen.
+  const melder = laufMelder({ complete: lauf.vollstaendig, items: lauf.items, outcome: lauf.befund })
 
   return (
     <NachtlaufLaufPlatte

@@ -2,11 +2,14 @@ import type { NightRunItemView, NightRunOutcomeView, NightRunServerMode } from '
 
 /**
  * Der Rueckfalltext, den der Server selbst setzt, wenn ein Lauf ohne Arbeit keinen Grund meldet
- * (`NightRunOutcome.GRUND_UNBEKANNT`). Er ist der **einzige** Grund, der seit Issue #1121 noch
- * `FAILED` ergibt; jeder gemeldete Grund ist `NO_WORK`.
+ * (`NightRunOutcome.GRUND_UNBEKANNT`).
+ *
+ * **Ein reiner Anzeigetext** seit Issue #1185: Am Wortlaut haengt keine Aussage ueber den Ausgang
+ * mehr — jeder Grund ohne massgebliches Paket ist `NO_WORK`, gemeldet oder nicht. Er steht hier
+ * weiterhin, weil Szenarien den Lauf ohne gemeldeten Grund nachbilden und den Text dann anzeigen.
  *
  * Er steht hier und nicht im Produktionscode: Der Browser liest den Ausgang und muss den Text nie
- * wiedererkennen — nur dieses Test-Double des Servers muss es, weil es dessen Regel nachbildet.
+ * wiedererkennen — auch dieses Test-Double des Servers vergleicht ihn seit #1185 mit nichts mehr.
  */
 export const GRUND_UNBEKANNT = 'Nichts abgearbeitet — Grund unbekannt'
 
@@ -20,12 +23,14 @@ export const GRUND_UNBEKANNT = 'Nichts abgearbeitet — Grund unbekannt'
  * Hand einen dazu passenden Befund tragen muss und beides auseinanderlaufen kann.
  *
  * Sie bildet `NightRunOutcome.of` nach — dieselbe Reihenfolge: „verstummt" schlaegt alles, dann
- * „laeuft noch", dann der Lauf ohne Arbeit, dann rot vor gelb vor grau-mit-Fehlerklasse. Weicht sie
- * einmal ab, faellt das an den Tests auf, die den Server ueber MockMvc pruefen (`NightRunIT`): Dort
- * steht der echte Vertrag.
+ * „laeuft noch", dann der harte Abbruch, dann rot vor gelb vor grau-mit-Fehlerklasse, **zuletzt** der
+ * Lauf ohne Arbeit. Weicht sie einmal ab, faellt das an den Tests auf, die den Server ueber MockMvc
+ * pruefen (`NightRunIT`): Dort steht der echte Vertrag.
  *
- * <p>Der Lauf ohne Arbeit zerfaellt seit Issue #1121 in zwei Faelle: ein **gemeldeter** Grund ergibt
- * `NO_WORK`, allein der Rueckfall {@link GRUND_UNBEKANNT} bleibt `FAILED`.
+ * <p>Die Rangfolge stammt aus Issue #1185 und loest die von #1121 ab: Das massgebliche Paket geht
+ * dem Grund vor — wer alle Pakete zurueckstellte, bleibt `WAITING` statt ueber den Rueckfall rot zu
+ * werden. Ist keines massgeblich, ergibt **jeder** Grund `NO_WORK`, gemeldet oder als Rueckfall
+ * {@link GRUND_UNBEKANNT}.
  *
  * <p>Die Stille kommt als **Angabe** herein und nicht als Zeitrechnung aus `startedAt`, `updatedAt`
  * und einer Frist (Issue #1091): Ein Szenario sagt hier, ob der Lauf verstummt ist; die Frist selbst
@@ -54,35 +59,40 @@ export function serverBefund(lauf: {
   if (!lauf.complete) {
     return { verdict: 'RUNNING', decisiveItem: null, noWorkReason: null, abortReason: null }
   }
-  // Der abgebrochene Lauf (Issue #1143) steht hinter „verstummt" und „laeuft noch" und **vor** dem
-  // Lauf ohne Arbeit: Ein Lauf, der abbrach, ist nie gelungen — auch nicht nach drei gruenen
-  // Paketen. Das massgebliche Paket bleibt daneben und kommt weiter aus den Paketen (E5).
+  // Einmal ausgewaehlt, zweimal gebraucht (Issue #1185): Der Abbruch-Zweig braucht dasselbe Paket
+  // wie die Rangfolge darunter, und zweimal ausgewaehlt liefen die beiden auseinander.
+  const massgeblich = massgeblichesPaket(lauf.mode, lauf.items)
+  // Der abgebrochene Lauf (Issue #1143) steht hinter „verstummt" und „laeuft noch" und **vor** den
+  // Paketen: Ein Lauf, der abbrach, ist nie gelungen — auch nicht nach drei gruenen Paketen. Das
+  // massgebliche Paket bleibt daneben und kommt weiter aus den Paketen (E5).
   if (lauf.abortReason != null) {
     return {
       verdict: 'FAILED',
-      decisiveItem: massgeblichesPaket(lauf.mode, lauf.items),
+      decisiveItem: massgeblich,
       noWorkReason: null,
       abortReason: lauf.abortReason,
     }
   }
+  // Das massgebliche Paket geht dem Grund vor (Issue #1185): Es ist die genauere Auskunft, und ein
+  // Lauf, der alle Pakete zurueckstellte, meldet keinen Grund und bleibt so „mit Vorbehalt".
+  if (massgeblich != null) {
+    return {
+      verdict: massgeblich.state === 'GREY' ? 'WAITING' : 'FAILED',
+      decisiveItem: massgeblich,
+      noWorkReason: null,
+      abortReason: null,
+    }
+  }
+  // Zuletzt der Lauf ohne Arbeit — **jeder** Grund ergibt `NO_WORK`, ohne Blick auf den Wortlaut.
   if (lauf.noWorkReason != null && lauf.noWorkReason !== '') {
     return {
-      verdict: lauf.noWorkReason === GRUND_UNBEKANNT ? 'FAILED' : 'NO_WORK',
+      verdict: 'NO_WORK',
       decisiveItem: null,
       noWorkReason: lauf.noWorkReason,
       abortReason: null,
     }
   }
-  const massgeblich = massgeblichesPaket(lauf.mode, lauf.items)
-  if (massgeblich == null) {
-    return { verdict: 'SUCCEEDED', decisiveItem: null, noWorkReason: null, abortReason: null }
-  }
-  return {
-    verdict: massgeblich.state === 'GREY' ? 'WAITING' : 'FAILED',
-    decisiveItem: massgeblich,
-    noWorkReason: null,
-    abortReason: null,
-  }
+  return { verdict: 'SUCCEEDED', decisiveItem: null, noWorkReason: null, abortReason: null }
 }
 
 /**

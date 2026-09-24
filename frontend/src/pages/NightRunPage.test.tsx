@@ -5098,10 +5098,10 @@ describe('NightRunPage — Lauf ohne Arbeit (#1069)', () => {
   })
 
   /**
-   * Der Rueckfall des Servers bleibt rot (#1121): Er steht fuer einen alten Runner, den Upload-Weg
-   * oder einen Lauf, der alle Pakete zurueckstellte — dahinter kann ein echtes Problem stecken.
+   * Der Rueckfall des Servers ist seit #1185 derselbe ruhige Lauf, nur mit blasserer Auskunft: Der
+   * Melder ist grau wie beim gemeldeten Grund. Den Wortlaut der Marke nimmt Issue #1190 vor.
    */
-  it('zeigt am Lauf ohne Arbeit mit unbekanntem Grund weiterhin den roten Melder', async () => {
+  it('zeigt am Lauf ohne Arbeit mit unbekanntem Grund den grauen Melder', async () => {
     renderPage({
       listen: [
         [
@@ -5118,7 +5118,7 @@ describe('NightRunPage — Lauf ohne Arbeit (#1069)', () => {
     await screen.findByTestId(`lauf-${startedAt(0)}`)
     const marke = within(laufKopfzeile(lauf(0))).getByTestId('lauf-zustand')
     expect(marke).toHaveTextContent(GRUND_UNBEKANNT)
-    expect(within(marke).getByTestId('led-zinnob')).toBeInTheDocument()
+    expect(within(marke).getByTestId('led-grau')).toBeInTheDocument()
   })
 
 

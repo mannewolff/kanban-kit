@@ -639,17 +639,42 @@ describe('LeitstandPage — Lauf ohne Arbeit (#1069)', () => {
   })
 
   /**
-   * Der Rueckfall des Servers („Grund unbekannt") bleibt rot (#1121): Hinter ihm kann ein echtes
-   * Problem stecken — ein alter Runner, der Upload-Weg oder ein Lauf, der alle Pakete zurueckstellte.
+   * Der Rueckfall des Servers („Grund unbekannt") ist seit #1185 derselbe ruhige Lauf, nur mit
+   * blasserer Auskunft: grau statt rot. Die Auskunft steht in der Notizzeile des Plattenkopfs, die
+   * Ueberschrift bleibt „Letzter Run · <Modus>" (Plan #1181 E7).
    */
-  it('meldet den Lauf ohne Arbeit mit unbekanntem Grund weiterhin rot', async () => {
+  it('meldet den Lauf ohne Arbeit mit unbekanntem Grund grau und nennt ihn in der Notiz', async () => {
     m.klassen.mockResolvedValue({})
     m.laeufe.mockResolvedValue([lauf({ noWorkReason: GRUND_UNBEKANNT, processedCount: 0, items: [] })])
     renderPage()
 
     const platte = await screen.findByRole('region', { name: 'Letzter Run · Kette' })
     expect(platte).toHaveTextContent(GRUND_UNBEKANNT)
-    expect(within(platte).getByTestId('led-zinnob')).toBeInTheDocument()
+    expect(within(platte).getByTestId('led-grau')).toBeInTheDocument()
+    expect(within(platte).queryAllByTestId('led-zinnob')).toHaveLength(0)
+  })
+
+  /**
+   * Ein Lauf, der alle Pakete zurueckstellte: Er meldet keinen Grund, der Server faellt auf den
+   * Rueckfalltext zurueck — und trotzdem hat er nicht nichts gefunden. Notiz und Laufband nennen
+   * deshalb keinen Grund (Plan #1181 E11).
+   */
+  it('nennt am Lauf mit zurueckgestellten Paketen keinen Grund in Notiz und Laufband', async () => {
+    m.klassen.mockResolvedValue({})
+    m.laeufe.mockResolvedValue([
+      lauf({
+        noWorkReason: GRUND_UNBEKANNT,
+        processedCount: 0,
+        items: [paket(917, 'GREY', { errorClass: 'DEPENDENCY_UNMET' })],
+      }),
+    ])
+    renderPage()
+
+    const platte = await screen.findByRole('region', { name: 'Letzter Run · Kette' })
+    expect(platte).not.toHaveTextContent(GRUND_UNBEKANNT)
+    const band = await screen.findByRole('region', { name: 'Jüngster Run' })
+    expect(band).not.toHaveTextContent(GRUND_UNBEKANNT)
+    expect(band).toHaveTextContent('Kette abgeschlossen — 1 Vorgang')
   })
 
   // E12: Er zaehlt mit, taucht aber in keiner Zeile der Klassenliste auf -- er hat keine Klasse.

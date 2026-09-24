@@ -351,7 +351,7 @@ function LetzterLauf({
     <Platte
       titel={`Letzter Run · ${modusName(lauf.mode)}`}
       notiz={laufNotiz(lauf)}
-      led={<Led melder={laufMelder(lauf, lauf.noWorkReason)} pulsiert={laeuftNoch(lauf)} />}
+      led={<Led melder={laufMelder(lauf)} pulsiert={laeuftNoch(lauf)} />}
       werkzeug={
         <>
           <FilterTaste gewaehlt={!nurAbbrueche} onClick={() => setNurAbbrueche(false)}>
