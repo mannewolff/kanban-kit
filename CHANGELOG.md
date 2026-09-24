@@ -7,6 +7,13 @@ Versionierung folgt der dreiteiligen Betriebsversion (siehe [RELEASING.md](RELEA
 Einträge je Version sind ein automatischer Auszug der Commit-Titel seit dem letzten Release,
 erzeugt von `scripts/gen-changelog.mjs`.
 
+## [2.9.0] – 2026-09-24
+
+- chore: v2.8.1
+- Design-Guide und Benutzerdoku ziehen den entfallenen Statistikteil nach ([#1188](https://github.com/mannewolff/kanban-kit/issues/1188))
+- Verwaisten Verbrauchs-Client und Textrechnungen ohne Aufrufer abbauen ([#1187](https://github.com/mannewolff/kanban-kit/issues/1187))
+- Laeufe-Seite: der Statistikteil verschwindet, die Seite beginnt mit den Laeufen ([#1184](https://github.com/mannewolff/kanban-kit/issues/1184))
+
 ## [2.8.0] – 2026-09-24
 
 - chore: v2.7.1
