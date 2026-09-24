@@ -72,6 +72,15 @@ class CardRepositoryAdapter implements CardRepository {
   }
 
   @Override
+  public java.util.Set<Integer> findExistingNumbers(
+      long projectId, java.util.Collection<Integer> numbers) {
+    // Leere Menge: kein Datenbankzugriff — ein IN () hätte ohnehin kein Ergebnis.
+    return numbers.isEmpty()
+        ? java.util.Set.of()
+        : java.util.Set.copyOf(jpa.findExistingNumbers(projectId, numbers));
+  }
+
+  @Override
   public Optional<Card> findByProjectIdAndExternalKey(long projectId, String externalKey) {
     // Bewusst ohne DeletedAtIsNull: auch Papierkorb-Karten unterdrücken den Re-Ingest (#534).
     return jpa.findByProjectIdAndExternalKey(projectId, externalKey)

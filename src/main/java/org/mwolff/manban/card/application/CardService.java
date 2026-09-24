@@ -722,6 +722,33 @@ public class CardService {
         .collect(Collectors.toUnmodifiableMap(Map.Entry::getKey, e -> Set.copyOf(e.getValue())));
   }
 
+  /**
+   * Die Teilmenge der genannten Kartennummern, zu denen es im Projekt eine Karte gibt (Issue
+   * #1169).
+   *
+   * <p>Eine schmale Abfrage: Sie beantwortet nur ja/nein zu Nummern, die der Aufrufer schon kennt,
+   * und liefert <b>keine Karteninhalte</b>. Gedacht für Aufrufer, die zu vielen Nummern zugleich
+   * wissen müssen, ob der Zugriff darauf eine Karte fände — ein Abruf je Nummer wäre dort eine
+   * Anfragelawine.
+   *
+   * <p>Sichtbarkeit wie bei {@code findByProjectIdAndNumber}: archivierte Karten zählen mit,
+   * Papierkorb-Karten nicht. Unbekannte Nummern fehlen im Ergebnis; die Methode wirft dafür nicht.
+   * Eine leere Nummernmenge fragt die Datenbank nicht.
+   *
+   * <p>Ohne Rechteprüfung wie {@link #epicsByCardNumber}: Die Methode ist Vertrag für fremde
+   * Module, die ihre eigene Prüfung bereits vorgenommen haben — sie liefert keine Karteninhalte,
+   * nur die Existenz zu den Nummern, die der Aufrufer schon kennt.
+   *
+   * @return die vorhandenen unter den gefragten Nummern
+   */
+  @Transactional(readOnly = true)
+  public Set<Integer> existingCardNumbers(long projectId, Collection<Integer> cardNumbers) {
+    if (cardNumbers.isEmpty()) {
+      return Set.of();
+    }
+    return cards.findExistingNumbers(projectId, Set.copyOf(cardNumbers));
+  }
+
   @Transactional
   public CardView update(
       long userId,
