@@ -3,6 +3,7 @@ package org.mwolff.manban.nightrun.application;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.doAnswer;
@@ -14,23 +15,30 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
+import java.lang.reflect.RecordComponent;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mwolff.manban.auth.application.AdminAccessDeniedException;
 import org.mwolff.manban.auth.application.PlatformAdminChecker;
+import org.mwolff.manban.card.application.CardService;
 import org.mwolff.manban.nightrun.application.DisruptionRepository.AckTarget;
 import org.mwolff.manban.nightrun.application.DisruptionRepository.DisruptionCandidate;
 import org.mwolff.manban.nightrun.application.DisruptionService.DisruptionView;
+import org.mwolff.manban.nightrun.application.DisruptionService.LaufPaketeView;
 import org.mwolff.manban.nightrun.application.DisruptionService.LeitstandView;
+import org.mwolff.manban.nightrun.application.DisruptionService.PaketView;
 import org.mwolff.manban.nightrun.domain.NightRunErrorClass;
 import org.mwolff.manban.nightrun.domain.NightRunItem;
 import org.mwolff.manban.nightrun.domain.NightRunKind;
@@ -55,7 +63,10 @@ import org.mwolff.manban.nightrun.domain.NightRunState;
 // PMD.TooManyMethods: Testklasse — jede Methode ist ein Fall, und Faelle werden nicht
 // zusammengelegt, um eine Zahl zu druecken. Issue #1123 bringt die beiden Faelle der Laufart dazu
 // und reisst damit die Schwelle von 30.
-@SuppressWarnings("PMD.TooManyMethods")
+// PMD.ExcessiveImports: Die Kopplung ist die des geprueften Dienstes, nicht eine eigene — Issue
+// #1170 bringt den Kartendienst und die beiden neuen Sichten dazu und reisst damit die Schwelle
+// von 40. Weniger Importe gaebe es nur durch weniger geprueftes Verhalten.
+@SuppressWarnings({"PMD.TooManyMethods", "PMD.ExcessiveImports"})
 class DisruptionServiceTest {
 
   /** 08:00 UTC — vor der Tagesgrenze, die laufende Nacht ist damit die vom 19. auf den 20. */
@@ -68,6 +79,7 @@ class DisruptionServiceTest {
 
   private DisruptionRepository disruptions;
   private NightRunRepository runs;
+  private CardService cards;
   private PlatformAdminChecker platformAdminChecker;
   private DisruptionService service;
 
@@ -82,9 +94,15 @@ class DisruptionServiceTest {
   /** Ein Lauf, der sich noch nicht als abgeschlossen gemeldet hat. */
   private static DisruptionCandidate unfertig(
       long laufId, Instant startedAt, @Nullable Instant updatedAt) {
+    return unfertig(laufId, 9L, startedAt, updatedAt);
+  }
+
+  /** Derselbe Lauf in einem bestimmten Projekt (Issue #1170). */
+  private static DisruptionCandidate unfertig(
+      long laufId, long projectId, Instant startedAt, @Nullable Instant updatedAt) {
     return new DisruptionCandidate(
         laufId,
-        9L,
+        projectId,
         "Projekt",
         NightRunMode.IMPLEMENTATION,
         startedAt,
@@ -115,10 +133,20 @@ class DisruptionServiceTest {
 
   private static NightRunItem paket(
       long laufId, int cardNumber, NightRunState state, @Nullable NightRunErrorClass errorClass) {
+    return paket(laufId, 9L, cardNumber, state, errorClass);
+  }
+
+  /** Dasselbe Paket in einem bestimmten Projekt — für die Bündelung je Projekt (Issue #1170). */
+  private static NightRunItem paket(
+      long laufId,
+      long projectId,
+      int cardNumber,
+      NightRunState state,
+      @Nullable NightRunErrorClass errorClass) {
     return new NightRunItem(
         laufId * 100 + cardNumber,
         laufId,
-        9L,
+        projectId,
         JETZT,
         NightRunMode.IMPLEMENTATION,
         NightRunKind.NIGHT,
@@ -173,19 +201,28 @@ class DisruptionServiceTest {
     when(runs.findItemsByRunIds(any())).thenReturn(List.of(items));
   }
 
+  /**
+   * Die Kartennummern, zu denen es eine Karte gibt — alle anderen gefragten fehlen in der Antwort,
+   * wie {@code CardService.existingCardNumbers} es zusagt (Issue #1169).
+   */
+  private void vorhandeneKarten(Integer... nummern) {
+    Set<Integer> vorhanden = Set.of(nummern);
+    when(cards.existingCardNumbers(anyLong(), any()))
+        .thenAnswer(
+            aufruf ->
+                aufruf.<Collection<Integer>>getArgument(1).stream()
+                    .filter(vorhanden::contains)
+                    .collect(Collectors.toUnmodifiableSet()));
+  }
+
   @BeforeEach
   void setUp() {
     disruptions = mock(DisruptionRepository.class);
     runs = mock(NightRunRepository.class);
+    cards = mock(CardService.class);
     platformAdminChecker = mock(PlatformAdminChecker.class);
     when(platformAdminChecker.isPlatformAdmin(ADMIN)).thenReturn(true);
-    service =
-        new DisruptionService(
-            disruptions,
-            runs,
-            platformAdminChecker,
-            new NightRunProperties(null, null, null, null, null),
-            Clock.fixed(JETZT, ZoneOffset.UTC));
+    service = mitUhr(JETZT);
   }
 
   // --- Rechte (AK 3, AK 7, Kriterium 15) -----------------------------------------------------
@@ -412,12 +449,7 @@ class DisruptionServiceTest {
 
   /** Ein Dienst, dessen Uhr auf 22.09. 13:00 in Berlin steht — eine Stunde nach der Grenze. */
   private DisruptionService umEinsNachMittag() {
-    return new DisruptionService(
-        disruptions,
-        runs,
-        platformAdminChecker,
-        new NightRunProperties(null, null, null, null, null),
-        Clock.fixed(Instant.parse("2026-09-22T11:00:00Z"), ZoneOffset.UTC));
+    return mitUhr(Instant.parse("2026-09-22T11:00:00Z"));
   }
 
   /**
@@ -720,6 +752,156 @@ class DisruptionServiceTest {
     verifyNoInteractions(runs);
   }
 
+  // --- Die gemeldeten Pakete der laufenden Läufe (Issue #1170) -------------------------------
+
+  private static List<Long> laufIds(List<LaufPaketeView> gemeldete) {
+    return gemeldete.stream().map(LaufPaketeView::nightRunId).toList();
+  }
+
+  /**
+   * E1 aus Plan #1167: Die vierte Liste gehört zu {@code laufende} — sie trägt die Pakete
+   * <b>genau</b> der arbeitenden Läufe. Ein beendeter und ein gestörter Lauf mit Paketen bringen
+   * keinen Eintrag; für sie zeigt der Leitstand die Pakete nicht (AK 11 der Quelle #1153).
+   */
+  @Test
+  void dieGemeldetenPaketeStehenNurFuerDieLaufendenLaeufe() {
+    DisruptionCandidate gestoert = abgebrochen(5L, JETZT);
+    nachtLaeufe(
+        unfertig(7L, JETZT.minus(Duration.ofMinutes(10)), JETZT.minus(Duration.ofMinutes(5))),
+        kandidat(6L, JETZT.minus(Duration.ofHours(1))),
+        gestoert);
+    when(disruptions.openCandidates()).thenReturn(List.of(gestoert));
+    pakete(
+        paket(7L, 1170, NightRunState.GREEN, null),
+        paket(6L, 1169, NightRunState.GREEN, null),
+        paket(5L, 993, NightRunState.RED, NightRunErrorClass.HARD_ABORT));
+    vorhandeneKarten(1170, 1169, 993);
+
+    LeitstandView leitstand = service.leitstand(ADMIN, UTC);
+
+    assertThat(ids(leitstand.laufende())).containsExactly(7L);
+    assertThat(laufIds(leitstand.gemeldetePakete())).containsExactly(7L);
+    assertThat(leitstand.gemeldetePakete().getFirst().pakete())
+        .extracting(PaketView::cardNumber)
+        .containsExactly(1170);
+  }
+
+  /**
+   * Die Läufe stehen in der Ordnung von {@code laufende}, die Pakete in der gelieferten — {@code
+   * findItemsByRunIds} sortiert nach Lauf und ID. Graue Pakete („nicht bearbeitet") sind dabei: Sie
+   * sind die Auskunft, dass der Lauf sie zurückgestellt hat.
+   */
+  @Test
+  void dieGemeldetenPaketeFolgenDerReihenfolgeUndEnthaltenGrauePakete() {
+    nachtLaeufe(
+        unfertig(9L, JETZT.minus(Duration.ofMinutes(10)), JETZT),
+        unfertig(7L, JETZT.minus(Duration.ofMinutes(30)), JETZT));
+    pakete(
+        paket(7L, 993, NightRunState.GREEN, null),
+        paket(7L, 1112, NightRunState.GREY, NightRunErrorClass.DEPENDENCY_UNMET),
+        paket(9L, 1170, NightRunState.RED, NightRunErrorClass.CHECKS_RED));
+    vorhandeneKarten(993, 1112, 1170);
+
+    LeitstandView leitstand = service.leitstand(ADMIN, UTC);
+
+    assertThat(laufIds(leitstand.gemeldetePakete())).containsExactly(9L, 7L);
+    assertThat(leitstand.gemeldetePakete().getFirst().pakete())
+        .extracting(PaketView::cardNumber, PaketView::state, PaketView::errorClass)
+        .containsExactly(tuple(1170, NightRunState.RED, NightRunErrorClass.CHECKS_RED));
+    assertThat(leitstand.gemeldetePakete().getLast().pakete())
+        .extracting(PaketView::cardNumber, PaketView::state, PaketView::errorClass)
+        .containsExactly(
+            tuple(993, NightRunState.GREEN, null),
+            tuple(1112, NightRunState.GREY, NightRunErrorClass.DEPENDENCY_UNMET));
+  }
+
+  /** Der Titel ist der Schnappschuss des Pakets, nicht der heutige Kartentitel. */
+  @Test
+  void jedesPaketTraegtSeinenTitel() {
+    nachtLaeufe(unfertig(7L, JETZT.minus(Duration.ofMinutes(10)), JETZT));
+    pakete(paket(7L, 1170, NightRunState.GREEN, null));
+    vorhandeneKarten(1170);
+
+    assertThat(service.leitstand(ADMIN, UTC).gemeldetePakete().getFirst().pakete())
+        .extracting(PaketView::title)
+        .containsExactly("Paket");
+  }
+
+  /**
+   * {@code cardExists} sagt, ob die Karte im Projekt noch zu finden ist — eine verdrängte oder
+   * gelöschte Nummer fehlt in der Antwort von {@code existingCardNumbers} und ist damit {@code
+   * false}.
+   */
+  @Test
+  void cardExistsFolgtDerAuskunftDesKartendienstes() {
+    nachtLaeufe(unfertig(7L, JETZT.minus(Duration.ofMinutes(10)), JETZT));
+    pakete(paket(7L, 1170, NightRunState.GREEN, null), paket(7L, 4711, NightRunState.GREEN, null));
+    vorhandeneKarten(1170);
+
+    assertThat(service.leitstand(ADMIN, UTC).gemeldetePakete().getFirst().pakete())
+        .extracting(PaketView::cardNumber, PaketView::cardExists)
+        .containsExactly(tuple(1170, true), tuple(4711, false));
+  }
+
+  /** Ein laufender Lauf ohne gemeldete Pakete erscheint mit leerer Liste, nicht gar nicht. */
+  @Test
+  void einLaufenderLaufOhnePaketeErscheintMitLeererPaketliste() {
+    nachtLaeufe(unfertig(7L, JETZT.minus(Duration.ofMinutes(10)), JETZT));
+
+    assertThat(service.leitstand(ADMIN, UTC).gemeldetePakete())
+        .singleElement()
+        .satisfies(
+            l -> {
+              assertThat(l.nightRunId()).isEqualTo(7L);
+              assertThat(l.pakete()).isEmpty();
+            });
+    verifyNoInteractions(cards);
+  }
+
+  @Test
+  void ohneLaufendenLaufBleibtDieVierteListeLeer() {
+    nachtLaeufe(kandidat(6L, JETZT.minus(Duration.ofHours(1))));
+    pakete(paket(6L, 1169, NightRunState.GREEN, null));
+
+    assertThat(service.leitstand(ADMIN, UTC).gemeldetePakete()).isEmpty();
+    verifyNoInteractions(cards);
+  }
+
+  /**
+   * AK: Die Existenzfrage geht <b>einmal je Projekt</b> hinaus, nicht einmal je Paket — sonst wäre
+   * die Sektion eine Anfragelawine über alle laufenden Läufe.
+   */
+  @Test
+  void dieKartenExistenzWirdEinmalJeProjektGefragt() {
+    nachtLaeufe(
+        unfertig(9L, 8L, JETZT.minus(Duration.ofMinutes(10)), JETZT),
+        unfertig(7L, 9L, JETZT.minus(Duration.ofMinutes(30)), JETZT),
+        unfertig(6L, 9L, JETZT.minus(Duration.ofMinutes(40)), JETZT));
+    pakete(
+        paket(9L, 8L, 1170, NightRunState.GREEN, null),
+        paket(7L, 9L, 993, NightRunState.GREEN, null),
+        paket(6L, 9L, 1112, NightRunState.GREEN, null));
+    vorhandeneKarten(1170, 993, 1112);
+
+    service.leitstand(ADMIN, UTC);
+
+    verify(cards).existingCardNumbers(8L, Set.of(1170));
+    verify(cards).existingCardNumbers(9L, Set.of(993, 1112));
+    verifyNoMoreInteractions(cards);
+  }
+
+  /**
+   * E2 aus Plan #1167: Die Paketsicht ist schmal. Insbesondere trägt sie <b>keinen Auszug</b> —
+   * über alle laufenden Läufe wäre er die größte Last der Antwort, und AK 7 der Quelle #1153
+   * verbietet jede Obergrenze, die ihn beschneiden könnte.
+   */
+  @Test
+  void diePaketsichtTraegtGenauFuenfAngaben() {
+    assertThat(PaketView.class.getRecordComponents())
+        .extracting(RecordComponent::getName)
+        .containsExactly("cardNumber", "title", "state", "errorClass", "cardExists");
+  }
+
   // --- Quittieren (AK 8, 10) -----------------------------------------------------------------
 
   @Test
@@ -764,6 +946,7 @@ class DisruptionServiceTest {
     return new DisruptionService(
         disruptions,
         runs,
+        cards,
         platformAdminChecker,
         new NightRunProperties(null, null, null, null, null),
         Clock.fixed(jetzt, ZoneOffset.UTC));
