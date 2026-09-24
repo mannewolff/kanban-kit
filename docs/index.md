@@ -10,8 +10,8 @@ Im **Leitstand** steht, was die KI daraus gemacht hat: die [Läufe](nutzung.md#n
 Nacht-Runners mit ihrem Ausgang und dem Befund je Arbeitspaket, der
 [Plattform-Leitstand](nutzung.md#plattform-leitstand) mit aktiven Läufen, beendeten Läufen und
 Störungen über alle teilnehmenden Projekte, und die
-[Verbrauchsauswertung](nutzung.md#verbrauch-leitstand) mit Token und Kosten je Zeitraum, Vorhaben
-und Stufe der Kette.
+[Verbrauchsauswertung](nutzung.md#verbrauch-leitstand) mit Token und Kosten je Zeitraum und
+Vorhaben.
 
 Diese Dokumentation ist die **Benutzer- und Betriebsdokumentation**. Sie wird laufend mit dem
 Funktionsstand nachgezogen; der Stand dieser Seite ist **Version 2.4.0** (21.09.2026).
@@ -32,7 +32,7 @@ Schalter — steht in `CLAUDE-design.md` im Wurzelverzeichnis.
   Papierkorb, Listen-Ansicht, Ideen-Pool, [Läufe](nutzung.md#nachtlauf) (Laufarten, vier Zustände
   je Arbeitspaket, Übernahmetext, Aufbewahrung),
   [Verbrauch im Leitstand](nutzung.md#verbrauch-leitstand) (Gattungen, „ohne Karte", Lebenszeit-Summe,
-  Kosten je Stufe der Kette, Erfassungslücken),
+  Erfassungslücken),
   [Plattform-Leitstand](nutzung.md#plattform-leitstand) (aktive Läufe, beendete Läufe mit ihrem
   Ausgang, Störungen, Stillefrist, Teilnahme), [Leitstand eines Boards](nutzung.md#leitstand)
   (Laufband, Kennzahl-Kacheln, Rumpf), Vorhaben, Mitglieder, Editiermodus.

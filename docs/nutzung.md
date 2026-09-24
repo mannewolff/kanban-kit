@@ -322,8 +322,8 @@ Hand markieren und kopieren.
 **Nur die letzten zwei Schichten:** Die Liste zeigt standardmäßig die Runs der laufenden und der
 vorigen Schicht; darunter blendet **„Ältere Runs anzeigen (N)"** die übrigen für diesen Besuch ein.
 Sichtbar bleiben außerdem ein älterer Run, der noch läuft, der über einen Verweis angesteuerte Run
-und ein eben eingelesener. Begrenzt wird nur die Anzeige: Aufbewahrung, Verbrauchsauswertung und
-Häufigkeiten zählen weiter alle aufbewahrten Runs.
+und ein eben eingelesener. Begrenzt wird nur die Anzeige: Aufbewahrung, der
+[Verbrauch im Leitstand](#verbrauch-leitstand) und Häufigkeiten zählen weiter alle aufbewahrten Runs.
 
 **Aufbewahrung:** Je Projekt bleiben die **letzten 190 Runs** erhalten — genug, um bei zwei Runs
 je Schicht den laufenden, den zuletzt abgeschlossenen und den Vormonat vorzuhalten; ältere fallen
@@ -390,21 +390,6 @@ Fuß nennt die **Abdeckung** dieser Summe, und zwar zweigeteilt: ab welchem Datu
 Eintrag aufbewahrt ist (oder „ohne aufbewahrten Eintrag") und ab wann interaktive Sitzungen erfasst
 werden (oder „Sitzungen nicht erfasst"). Die Zahl ist damit die Summe des **Aufbewahrten**, nicht
 die des Gelebten: Was der Ringpuffer verdrängt hat, fehlt darin.
-
-### Kosten je Stufe der Kette
-
-Die Verbrauchsauswertung auf der Seite [„Runner"](#nachtlauf) — Ansicht Schicht, Woche oder Monat —
-führt unter den Schichten und der Aufstellung je Vorhaben die Platte **„Stufen der Kette"**: je Stufe
-(**Plan**, **Prüfung**, **Pakete**, **Abdeckung**) die Kosten im Zeitraum und wie viele Vorgänge
-sie durchlaufen haben, dazu ein Balken im Verhältnis zur teuersten Stufe. Die Reihenfolge ist die
-der Kette.
-
-- **Runs ohne Stufen erscheinen darin nicht** — eine Umsetzung oder eine Prüfung hat keine. Liefen
-  im Zeitraum keine Ketten, fehlt die Platte ganz.
-- **Es gibt keine Zeile „ohne Stufe"**, anders als „Ohne Vorhaben" in der Aufstellung je Vorhaben:
-  Sie trüge bei einer Umsetzung den Verbrauch einer ganzen Schicht, und die Aufstellung handelt
-  von der Kette.
-- Fehlen die Kosten einer Stufe, steht dort „nicht gemessen" und kein Balken — nie eine 0.
 
 ### Eine Sitzung zählt zum Zeitraum ihres Beginns
 
