@@ -2,8 +2,14 @@ import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { cardsApi, type CardByNumber } from '../api/cards'
 import { ApiError } from '../api/client'
-import type { DisruptionView, LeitstandView } from '../api/plattformLeitstand'
+import type {
+  DisruptionView,
+  LaufPaketeView,
+  LeitstandView,
+  PaketView,
+} from '../api/plattformLeitstand'
 import { plattformLeitstandApi } from '../api/plattformLeitstand'
 import { cssRegel } from '../test/cssRegel'
 import PlattformLeitstandPage from './PlattformLeitstandPage'
@@ -15,7 +21,32 @@ vi.mock('../api/plattformLeitstand', async () => {
   return { ...echt, plattformLeitstandApi: { leitstand: vi.fn(), quittieren: vi.fn() } }
 })
 
+// Nur `byNumber` wird ersetzt (Issue #1174): Der Kartenabruf beim Klick auf eine Nummer ist der
+// einzige Weg, auf dem diese Seite die Karten-API benutzt.
+vi.mock('../api/cards', async () => {
+  const echt = await vi.importActual<typeof import('../api/cards')>('../api/cards')
+  return { ...echt, cardsApi: { ...echt.cardsApi, byNumber: vi.fn() } }
+})
+
+// Der Kartendialog ist eigenständig getestet (Muster aus `LeitstandPage.test.tsx`); hier zählt, mit
+// welcher Karte und mit welchem Schreibrecht er geöffnet wird.
+vi.mock('../components/CardDetailModal', () => ({
+  CardDetailModal: ({
+    card,
+    canEdit,
+    onClose,
+  }: Readonly<{ card: CardByNumber; canEdit: boolean; onClose: () => void }>) => (
+    <div data-testid="karten-detail" data-bearbeitbar={String(canEdit)}>
+      {card.title}
+      <button type="button" onClick={onClose}>
+        Detail schließen
+      </button>
+    </div>
+  ),
+}))
+
 const api = vi.mocked(plattformLeitstandApi)
+const karteNachNummer = vi.mocked(cardsApi.byNumber)
 
 /** Ein Speicher je Test, unabhängig davon, ob die Node-Fassung einen nativen mitbringt. */
 function fakeStorage(): Storage {
@@ -79,6 +110,7 @@ describe('PlattformLeitstandPage (#1083)', () => {
     durchgefuehrte: [],
     durchgefuehrteVoriger: [],
     stoerungen: [],
+    gemeldetePakete: [],
     ...teil,
   })
 
@@ -94,8 +126,12 @@ describe('PlattformLeitstandPage (#1083)', () => {
     vi.stubGlobal('localStorage', fakeStorage())
   })
 
-  /** Kriterium 18: die drei Bereiche untereinander, in dieser Ordnung. */
-  it('stellt die drei Bereiche in der Ordnung Aktive Runs, Beendete Runs, Störungen', async () => {
+  /**
+   * Kriterium 18 und AK 1 der Quelle #1153: die vier Bereiche untereinander, in dieser Ordnung.
+   * „Aktueller Status" (#1173) steht zwischen den laufenden und den beendeten Runs — was gerade
+   * gemeldet wird, gehört neben das, was gerade arbeitet.
+   */
+  it('stellt die vier Bereiche in der Ordnung Aktive Runs, Aktueller Status, Beendete Runs, Störungen', async () => {
     api.leitstand.mockResolvedValue(sicht({ stoerungen: [stoerung()] }))
 
     zeigeSeite()
@@ -103,6 +139,7 @@ describe('PlattformLeitstandPage (#1083)', () => {
     await screen.findByTestId('stoerung-5')
     expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual([
       'Aktive Runs',
+      'Aktueller Status',
       'Beendete Runs',
       'Störungen',
     ])
@@ -374,6 +411,457 @@ describe('PlattformLeitstandPage (#1083)', () => {
       expect(await screen.findByTestId('keine-durchgefuehrten')).toHaveTextContent(
         'In dieser Schicht wurde noch kein Run beendet.',
       )
+    })
+  })
+
+  /**
+   * Die Sektion „Aktueller Status" (Issue #1173, fachliche Quelle #1153, AK 1–8 und 10–12).
+   *
+   * Geprüft wird die **Aussage** der Zeile: Nummer, Titel und das Zustandswort — nie die Farbe
+   * allein. Die Wörter kommen aus `lib/nightRunHandoff.ts`, derselben Quelle wie in der
+   * Lauf-Ansicht; der Stand aus `lib/aktuellerStand.ts` (#1172).
+   */
+  describe('Aktueller Status (#1173)', () => {
+    const laufend = (extra: Partial<DisruptionView> = {}): DisruptionView => ({
+      nightRunId: 8,
+      projectId: 9,
+      projectName: 'Mein Projekt',
+      mode: 'CHAIN',
+      startedAt: '2026-09-21T01:10:00Z',
+      outcome: { abortReason: null, verdict: 'RUNNING', decisiveItem: null, noWorkReason: null },
+      ...extra,
+    })
+
+    const paket = (extra: Partial<PaketView> = {}): PaketView => ({
+      cardNumber: 721,
+      title: 'Erstes Paket',
+      state: 'GREEN',
+      errorClass: null,
+      cardExists: true,
+      ...extra,
+    })
+
+    /** Die Pakete eines Laufs, wie die Antwort sie neben `laufende` führt. */
+    const pakete = (nightRunId: number, liste: PaketView[]): LaufPaketeView => ({
+      nightRunId,
+      pakete: liste,
+    })
+
+    /** AK 3–5: Nummer, Titel und Zustandswort — je gemeldetem Paket eine Zeile. */
+    it('nennt je Paket Nummer, Titel und Zustandswort', async () => {
+      api.leitstand.mockResolvedValue(
+        sicht({
+          laufende: [laufend()],
+          gemeldetePakete: [pakete(8, [paket({ cardNumber: 721, title: 'Erstes Paket' })])],
+        }),
+      )
+
+      zeigeSeite()
+
+      const zeile = await screen.findByTestId('stand-paket-8-721')
+      expect(within(zeile).getByText('#721')).toBeInTheDocument()
+      expect(within(zeile).getByText('Erstes Paket')).toBeInTheDocument()
+      expect(within(zeile).getByText('Erfolg')).toBeInTheDocument()
+    })
+
+    /**
+     * AK 5: Alle vier Zustände tragen ihr eigenes Wort neben dem Melder — Farbe ist nie der
+     * einzige Träger der Aussage.
+     */
+    it.each([
+      ['GREEN', null, 'Erfolg', 'led-gruen'],
+      ['YELLOW', 'CHECKS_RED', 'Erfolg, Prüfung rot', 'led-bernst'],
+      ['RED', 'CHECKS_RED', 'gescheitert', 'led-zinnob'],
+      ['GREY', 'AWAITING_DECISION', 'nicht bearbeitet', 'led-grau'],
+    ] as const)('zeigt %s als „%s" mit eigenem Melder', async (state, errorClass, wort, led) => {
+      api.leitstand.mockResolvedValue(
+        sicht({
+          laufende: [laufend()],
+          gemeldetePakete: [pakete(8, [paket({ state, errorClass })])],
+        }),
+      )
+
+      zeigeSeite()
+
+      const zeile = await screen.findByTestId('stand-paket-8-721')
+      expect(within(zeile).getByText(wort)).toBeInTheDocument()
+      expect(within(zeile).getByTestId(led)).toBeInTheDocument()
+    })
+
+    /**
+     * AK 4: Das Wort kommt aus `nightRunZustandsText` und stimmt deshalb mit dem der Lauf-Ansicht
+     * überein — „Erfolg, Prüfung rot" wäre an einem am Zeitbudget beendeten Paket eine
+     * Falschaussage: Die Prüfung war nicht rot, sie kam gar nicht dran.
+     */
+    it('nennt ein am Zeitbudget beendetes Paket wie die Lauf-Ansicht', async () => {
+      api.leitstand.mockResolvedValue(
+        sicht({
+          laufende: [laufend()],
+          gemeldetePakete: [
+            pakete(8, [paket({ state: 'YELLOW', errorClass: 'TIME_BUDGET_EXCEEDED' })]),
+          ],
+        }),
+      )
+
+      zeigeSeite()
+
+      const zeile = await screen.findByTestId('stand-paket-8-721')
+      expect(within(zeile).getByText('Am Zeitbudget beendet, Ergebnis liegt vor')).toBeInTheDocument()
+    })
+
+    /** AK 6: nach Projekt gruppiert, je Lauf ein Kopf mit Kennung und Stand. */
+    it('gruppiert nach Projekt und gibt jedem Lauf einen Kopf mit seinem Stand', async () => {
+      api.leitstand.mockResolvedValue(
+        sicht({
+          laufende: [
+            laufend({ nightRunId: 8, projectId: 9, projectName: 'Alpha' }),
+            laufend({ nightRunId: 7, projectId: 10, projectName: 'Beta' }),
+            laufend({ nightRunId: 6, projectId: 9, projectName: 'Alpha' }),
+          ],
+          gemeldetePakete: [
+            pakete(8, [paket({ cardNumber: 721 }), paket({ cardNumber: 722, state: 'RED', errorClass: 'CHECKS_RED' })]),
+            pakete(7, [paket({ cardNumber: 800 })]),
+            pakete(6, []),
+          ],
+        }),
+      )
+
+      zeigeSeite()
+
+      const gruppen = await screen.findAllByTestId(/^stand-gruppe-\d+$/)
+      expect(gruppen.map((g) => g.getAttribute('data-testid'))).toEqual([
+        'stand-gruppe-9',
+        'stand-gruppe-10',
+      ])
+      expect(within(gruppen[0]).getByText('Alpha')).toBeInTheDocument()
+      expect(
+        within(gruppen[0])
+          .getAllByTestId(/^stand-lauf-\d+$/)
+          .map((l) => l.getAttribute('data-testid')),
+      ).toEqual(['stand-lauf-8', 'stand-lauf-6'])
+      expect(screen.getByTestId('stand-kopf-8')).toHaveTextContent(
+        'Run #8 · 2 gemeldet · 1 Erfolg, 1 gescheitert',
+      )
+      // Ein laufender Run ohne Paket steht mit „0 gemeldet" und ohne Zeile darunter.
+      expect(screen.getByTestId('stand-kopf-6')).toHaveTextContent('Run #6 · 0 gemeldet')
+      expect(within(screen.getByTestId('stand-lauf-6')).queryAllByTestId(/^stand-paket-/)).toHaveLength(0)
+    })
+
+    /** AK 7: keine Kappung — ein langer Lauf zeigt jede seiner Zeilen. */
+    it('zeigt auch vierzig Pakete ohne Kappung', async () => {
+      api.leitstand.mockResolvedValue(
+        sicht({
+          laufende: [laufend()],
+          gemeldetePakete: [
+            pakete(
+              8,
+              Array.from({ length: 40 }, (_, i) => paket({ cardNumber: 700 + i, title: `Paket ${i}` })),
+            ),
+          ],
+        }),
+      )
+
+      zeigeSeite()
+
+      await screen.findByTestId('stand-paket-8-700')
+      expect(screen.getAllByTestId(/^stand-paket-/)).toHaveLength(40)
+      expect(screen.queryByText(/ausgeblendet/)).toBeNull()
+    })
+
+    /**
+     * AK 8: Gezählt wird alles Gemeldete einschließlich der grauen Pakete, und **ohne Nenner** —
+     * wie viele noch kommen, weiß der laufende Run selbst nicht.
+     */
+    it('zählt graue Pakete im Stand mit und nennt keinen Nenner', async () => {
+      api.leitstand.mockResolvedValue(
+        sicht({
+          laufende: [laufend()],
+          gemeldetePakete: [
+            pakete(8, [
+              paket({ cardNumber: 721 }),
+              paket({ cardNumber: 722, state: 'GREY', errorClass: 'DEPENDENCY_UNMET' }),
+            ]),
+          ],
+        }),
+      )
+
+      zeigeSeite()
+
+      const kopf = await screen.findByTestId('stand-kopf-8')
+      expect(kopf).toHaveTextContent('Run #8 · 2 gemeldet · 1 Erfolg, 1 nicht bearbeitet')
+      expect(kopf.textContent).not.toMatch(/\bvon\b|\/\s*\d/)
+    })
+
+    /**
+     * Ohne Namen sagte ein Vorlesewerkzeug nur „Liste mit elf Einträgen" und ließe offen, zu
+     * welchem Lauf sie gehört. Der Name ist der Kopf — dieselbe Lösung wie bei den Störgruppen.
+     */
+    it('benennt die Liste eines Laufs mit dessen Kopf', async () => {
+      api.leitstand.mockResolvedValue(
+        sicht({
+          laufende: [laufend()],
+          gemeldetePakete: [pakete(8, [paket()])],
+        }),
+      )
+
+      zeigeSeite()
+
+      const liste = await screen.findByRole('list', { name: 'Run #8 · 1 gemeldet · 1 Erfolg' })
+      expect(within(liste).getByTestId('stand-paket-8-721')).toBeInTheDocument()
+    })
+
+    /** AK 12: ein eigener Satz, nicht derselbe wie in „Aktive Runs" (E9). */
+    it('sagt ohne laufenden Run einen eigenen Satz', async () => {
+      api.leitstand.mockResolvedValue(sicht())
+
+      zeigeSeite()
+
+      expect(await screen.findByTestId('kein-aktueller-stand')).toHaveTextContent(
+        'Gerade arbeitet kein Run — nichts gemeldet.',
+      )
+      expect(screen.getByTestId('keine-laufenden')).toHaveTextContent('Gerade läuft kein Run.')
+    })
+
+    /**
+     * AK 10 und E11: Die Sektion erbt den Takt der Seite — ein neu gemeldetes Paket steht nach
+     * 30 Sekunden da, und es gibt **keinen** zweiten Abruf allein für sie.
+     */
+    it('zeigt nach dem Takt ein neu gemeldetes Paket, ohne eigenen Abruf', async () => {
+      vi.useFakeTimers()
+      try {
+        api.leitstand
+          .mockResolvedValueOnce(
+            sicht({ laufende: [laufend()], gemeldetePakete: [pakete(8, [paket()])] }),
+          )
+          .mockResolvedValueOnce(
+            sicht({
+              laufende: [laufend()],
+              gemeldetePakete: [
+                pakete(8, [paket(), paket({ cardNumber: 722, title: 'Zweites Paket' })]),
+              ],
+            }),
+          )
+
+        zeigeSeite()
+        await act(async () => {
+          await Promise.resolve()
+        })
+        expect(screen.queryByTestId('stand-paket-8-722')).toBeNull()
+
+        await act(async () => {
+          vi.advanceTimersByTime(30_000)
+        })
+
+        expect(screen.getByTestId('stand-paket-8-722')).toHaveTextContent('Zweites Paket')
+        expect(api.leitstand).toHaveBeenCalledTimes(2)
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
+    /**
+     * Die beiden Wege aus einer Paketzeile (Issue #1174, AK 9 der Quelle #1153): Die **Nummer**
+     * öffnet die Karte über dem Leitstand, der **Rest der Zeile** führt in die Lauf-Ansicht.
+     *
+     * Geprüft wird beides als eigenes Bedienelement — eines im anderen wäre ungültiges HTML und für
+     * die Tastatur nicht auflösbar (E10). Der Kartendialog selbst ist eigenständig getestet; hier
+     * zählt, mit welcher Karte, mit welchem Recht und **wo** er erscheint.
+     */
+    describe('Wege aus der Paketzeile (#1174)', () => {
+      const karte = (nummer: number, title: string): CardByNumber => ({
+        id: 1000 + nummer,
+        number: nummer,
+        title,
+        description: null,
+        type: 'CARD',
+        dependencies: [],
+        assignees: [],
+        labels: [],
+        parentId: null,
+        shortcode: null,
+        dueDate: null,
+        archived: false,
+        ideaStored: false,
+        derivedFrom: null,
+        boardId: 1,
+        columnId: 5,
+      })
+
+      /** Eine Sicht mit genau einem laufenden Run und dessen Paketen. */
+      const mitPaketen = (liste: PaketView[]) =>
+        sicht({ laufende: [laufend()], gemeldetePakete: [pakete(8, liste)] })
+
+      const nummerTaste = (zeile: HTMLElement, nummer: number, titel: string) =>
+        within(zeile).getByRole('button', { name: `Karte #${nummer} öffnen: ${titel}` })
+
+      const laufVerweis = (zeile: HTMLElement, titel: string) =>
+        within(zeile).getByRole('link', { name: `${titel} — Run #8 anzeigen` })
+
+      /** AK 9: Die Nummer öffnet die Karte über dem Leitstand — ohne die Seite zu verlassen. */
+      it('öffnet über der Seite den nicht bearbeitbaren Kartendialog, wenn die Nummer geklickt wird', async () => {
+        api.leitstand.mockResolvedValue(mitPaketen([paket()]))
+        karteNachNummer.mockResolvedValue(karte(721, 'Erstes Paket'))
+
+        zeigeSeite()
+
+        const zeile = await screen.findByTestId('stand-paket-8-721')
+        await userEvent.click(nummerTaste(zeile, 721, 'Erstes Paket'))
+
+        expect(karteNachNummer).toHaveBeenCalledWith(9, 721)
+        const dialog = await screen.findByTestId('karten-detail')
+        expect(dialog).toHaveTextContent('Erstes Paket')
+        // E12: `canEdit={false}` — der Leitstand zeigt die Karte, er bearbeitet sie nicht.
+        expect(dialog).toHaveAttribute('data-bearbeitbar', 'false')
+        // Der Dialog liegt **außerhalb** des Kupferwarte-Teilbaums: Dessen eigener ThemeProvider und
+        // seine hellen CSS-Variablen gelten sonst auch im Dialog.
+        expect(screen.getByTestId('kupferwarte-bereich')).not.toContainElement(dialog)
+        // Die Sektion bleibt stehen — der Dialog liegt darüber, er ersetzt sie nicht.
+        expect(screen.getByTestId('stand-paket-8-721')).toBeInTheDocument()
+      })
+
+      /** Der Dialog liegt **über** dem Leitstand: Geschlossen steht die Seite unverändert da. */
+      it('lässt den Dialog wieder schließen und die Seite stehen', async () => {
+        api.leitstand.mockResolvedValue(mitPaketen([paket()]))
+        karteNachNummer.mockResolvedValue(karte(721, 'Erstes Paket'))
+
+        zeigeSeite()
+
+        const zeile = await screen.findByTestId('stand-paket-8-721')
+        await userEvent.click(nummerTaste(zeile, 721, 'Erstes Paket'))
+        await userEvent.click(await screen.findByRole('button', { name: 'Detail schließen' }))
+
+        expect(screen.queryByTestId('karten-detail')).toBeNull()
+        expect(
+          nummerTaste(screen.getByTestId('stand-paket-8-721'), 721, 'Erstes Paket'),
+        ).toBeInTheDocument()
+      })
+
+      /** AK 9: Der Rest der Zeile führt in die Lauf-Ansicht genau dieses Laufs. */
+      it('führt von der Zeile daneben in die Lauf-Ansicht', async () => {
+        api.leitstand.mockResolvedValue(mitPaketen([paket()]))
+
+        zeigeSeite()
+
+        const zeile = await screen.findByTestId('stand-paket-8-721')
+        expect(laufVerweis(zeile, 'Erstes Paket')).toHaveAttribute(
+          'href',
+          '/projects/9/nachtlauf?lauf=8',
+        )
+      })
+
+      /**
+       * E10: zwei Geschwister, keine Schachtelung — und für die Tastatur genau zwei Halte in der
+       * Reihenfolge Nummer, dann Zeile.
+       */
+      it('hält je Zeile zwei getrennte Halte in der Reihenfolge Nummer, dann Zeile', async () => {
+        api.leitstand.mockResolvedValue(mitPaketen([paket()]))
+
+        zeigeSeite()
+
+        const zeile = await screen.findByTestId('stand-paket-8-721')
+        const nummer = nummerTaste(zeile, 721, 'Erstes Paket')
+        const verweis = laufVerweis(zeile, 'Erstes Paket')
+        expect(nummer).not.toContainElement(verweis)
+        expect(verweis).not.toContainElement(nummer)
+
+        // Gegangen wird der ganze Weg von vorn: erst die Kennung des aktiven Runs, dann die beiden
+        // Halte der Paketzeile, dann die Tasten der nächsten Platte — genau zwei Halte in der Zeile.
+        await userEvent.tab()
+        expect(within(screen.getByTestId('laufend-8')).getByRole('link')).toHaveFocus()
+        await userEvent.tab()
+        expect(nummer).toHaveFocus()
+        await userEvent.tab()
+        expect(verweis).toHaveFocus()
+        await userEvent.tab()
+        expect(screen.getByRole('button', { name: 'Beendete Runs: 10' })).toHaveFocus()
+      })
+
+      /**
+       * AK 9: Gibt es die Karte nicht mehr, ist die Nummer **kein** Bedienelement — der Zustand gilt
+       * vor dem Klick, nicht erst nach einem erfolglosen. Titel und Ausgang bleiben stehen.
+       */
+      it('macht die Nummer bei fehlender Karte zu reinem Text und sagt es', async () => {
+        api.leitstand.mockResolvedValue(mitPaketen([paket({ cardExists: false })]))
+
+        zeigeSeite()
+
+        const zeile = await screen.findByTestId('stand-paket-8-721')
+        expect(within(zeile).queryByRole('button')).toBeNull()
+        expect(zeile).toHaveTextContent('Karte #721 nicht gefunden')
+        expect(within(zeile).getByText('#721')).toBeInTheDocument()
+        expect(within(zeile).getByText('Erstes Paket')).toBeInTheDocument()
+        expect(within(zeile).getByText('Erfolg')).toBeInTheDocument()
+        // Der Weg in die Lauf-Ansicht hängt nicht an der Karte.
+        expect(laufVerweis(zeile, 'Erstes Paket')).toBeInTheDocument()
+      })
+
+      /**
+       * E14: Ein 404 heißt „zwischen zwei Abrufen verschwunden" — genau diese Zeile sagt es danach,
+       * ihre Nummer ist kein Bedienelement mehr, und die Sektion bleibt vollständig.
+       */
+      it('setzt nach einem 404 genau diese Zeile auf nicht gefunden', async () => {
+        api.leitstand.mockResolvedValue(
+          mitPaketen([paket(), paket({ cardNumber: 722, title: 'Zweites Paket' })]),
+        )
+        karteNachNummer.mockRejectedValue(new ApiError(404, 'Not Found'))
+
+        zeigeSeite()
+
+        const zeile = await screen.findByTestId('stand-paket-8-721')
+        await userEvent.click(nummerTaste(zeile, 721, 'Erstes Paket'))
+
+        await waitFor(() =>
+          expect(screen.getByTestId('stand-paket-8-721')).toHaveTextContent(
+            'Karte #721 nicht gefunden',
+          ),
+        )
+        expect(within(screen.getByTestId('stand-paket-8-721')).queryByRole('button')).toBeNull()
+        expect(screen.queryByTestId('karten-detail')).toBeNull()
+        expect(screen.queryByRole('alert')).toBeNull()
+        // Nur die geklickte Zeile: Die andere behält ihren Weg zur Karte.
+        const andere = screen.getByTestId('stand-paket-8-722')
+        expect(nummerTaste(andere, 722, 'Zweites Paket')).toBeInTheDocument()
+        expect(andere).not.toHaveTextContent('nicht gefunden')
+      })
+
+      /**
+       * E14: Jeder andere Fehler ist keine Aussage über die Karte, sondern über den Abruf — er
+       * erscheint als `Alert` unter der Platte. Die Sektion bleibt vollständig, und der
+       * `fehler`-Zustand der Seite bleibt unberührt: Alle vier Bereiche stehen weiter da.
+       */
+      it('zeigt bei einem anderen Fehler einen Alert unter der Platte', async () => {
+        api.leitstand.mockResolvedValue(mitPaketen([paket()]))
+        karteNachNummer.mockRejectedValue(new ApiError(500, 'Boom'))
+
+        zeigeSeite()
+
+        const zeile = await screen.findByTestId('stand-paket-8-721')
+        await userEvent.click(nummerTaste(zeile, 721, 'Erstes Paket'))
+
+        expect(await screen.findByRole('alert')).toHaveTextContent(
+          'Karte #721 konnte nicht geladen werden.',
+        )
+        expect(screen.getByTestId('stand-paket-8-721')).not.toHaveTextContent('nicht gefunden')
+        expect(nummerTaste(screen.getByTestId('stand-paket-8-721'), 721, 'Erstes Paket')).toBeInTheDocument()
+        expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual([
+          'Aktive Runs',
+          'Aktueller Status',
+          'Beendete Runs',
+          'Störungen',
+        ])
+      })
+
+      /** E3: Die Karten werden **nicht** vorab geladen — der Abruf steht am Klick. */
+      it('ruft die Karte erst beim Klick ab', async () => {
+        api.leitstand.mockResolvedValue(
+          mitPaketen([paket(), paket({ cardNumber: 722, title: 'Zweites Paket' })]),
+        )
+
+        zeigeSeite()
+
+        await screen.findByTestId('stand-paket-8-722')
+        expect(karteNachNummer).not.toHaveBeenCalled()
+      })
     })
   })
 

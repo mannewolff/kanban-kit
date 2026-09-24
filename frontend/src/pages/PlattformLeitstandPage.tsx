@@ -1,25 +1,42 @@
+import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
 import ButtonBase from '@mui/material/ButtonBase'
 import Typography from '@mui/material/Typography'
 import { useCallback, useEffect, useId, useState, type ReactNode } from 'react'
 import { Link as RouterLink } from 'react-router-dom'
+import { cardsApi, type CardByNumber } from '../api/cards'
 import { ApiError } from '../api/client'
 import {
   plattformLeitstandApi,
   type DisruptionView,
   type LeitstandView,
 } from '../api/plattformLeitstand'
+import { CardDetailModal } from '../components/CardDetailModal'
 import { KupferwarteBereich } from '../components/nachtlauf/KupferwarteBereich'
+import { AktuellerStand, karteSchluessel } from '../components/leitstand/AktuellerStand'
 import { LaufArtSymbol } from '../components/leitstand/LaufArtSymbol'
-import { FilterTaste, Led, Platte, Taste } from '../components/leitstand/LeitstandBausteine'
-import { melderAusBefund, tagZeit, uhrzeit } from '../lib/leitstand'
+import {
+  FilterTaste,
+  Led,
+  LeerSatz,
+  Platte,
+  Projektname,
+  Taste,
+} from '../components/leitstand/LeitstandBausteine'
+import { melderAusBefund, nachProjekt, tagZeit, uhrzeit, type Projektgruppe } from '../lib/leitstand'
 import { kurzGrund, NIGHT_RUN_VERDICT_TEXT, nightRunZustandsText } from '../lib/nightRunHandoff'
 import { useRefetchOnFocus } from '../lib/useRefetchOnFocus'
 import { zyklusDavor, zyklusDesStarts, zyklusSpanne } from '../lib/verbrauchZeitraum'
 import { ANZEIGE, ETIKETT, KLEIN_RADIUS, NUT, RAND, TEXT_MATT, TEXT_SCHWACH } from '../theme'
 
-/** Der Anfangszustand: drei leere Listen, noch von keiner Antwort belegt. */
-const LEERE_SICHT: LeitstandView = { laufende: [], durchgefuehrte: [], durchgefuehrteVoriger: [], stoerungen: [] }
+/** Der Anfangszustand: leere Listen, noch von keiner Antwort belegt. */
+const LEERE_SICHT: LeitstandView = {
+  laufende: [],
+  durchgefuehrte: [],
+  durchgefuehrteVoriger: [],
+  stoerungen: [],
+  gemeldetePakete: [],
+}
 
 /** Der Takt des Auffrischens (Kriterium 19): Was sich aendert, steht spaetestens so bald da. */
 const AUFFRISCH_MS = 30_000
@@ -112,17 +129,25 @@ interface Fehler {
   verboten: boolean
 }
 
+/** Die Karte, die der Dialog zeigt, mit dem Projekt, aus dem sie kam (Muster aus `LeitstandPage`). */
+interface Auswahl {
+  card: CardByNumber
+  projectId: number
+}
+
 /**
  * Der Plattform-Leitstand: die Startseite eines Plattform-Admins (Issue #1083, fachliche Quellen
  * #1064 und #1086).
  *
- * **Drei Bereiche in dieser Ordnung** (Kriterium 18, Issue #1098; benannt in #1102): *Aktive
- * Laeufe* zeigen mit pulsierendem Melder, dass gerade etwas arbeitet; *Beendete Laeufe* zeigen den
+ * **Vier Bereiche in dieser Ordnung** (Kriterium 18, Issue #1098; benannt in #1102, um *Aktueller
+ * Status* erweitert in #1173): *Aktive
+ * Laeufe* zeigen mit pulsierendem Melder, dass gerade etwas arbeitet; *Aktueller Status* zeigt je
+ * laufendem Lauf, was er bisher gemeldet hat; *Beendete Laeufe* zeigen den
  * Ausgang jedes beendeten Laufs der laufenden Nacht; *Stoerungen* zeigt jede nicht quittierte
  * Stoerung ueber alle Naechte, juengste zuoberst. Wer mehrere Projekte betreibt, beantwortet damit
  * „laeuft gerade etwas, und ist die Nacht gut durch?" an einer Stelle statt Projekt fuer Projekt.
  *
- * **Eine Antwort fuer alle drei Bereiche** (Plan #1088 E5): Die Seite frischt sich auf, und ein
+ * **Eine Antwort fuer alle Bereiche** (Plan #1088 E5): Die Seite frischt sich auf, und ein
  * Lauf kann zwischen zwei Rundreisen den Bereich wechseln — aus drei Abrufen erschiene er doppelt
  * oder gar nicht. Aus derselben Antwort liest die Seite auch, zu welchem durchgefuehrten Lauf es
  * eine Stoerung gibt.
@@ -152,6 +177,11 @@ export default function PlattformLeitstandPage() {
   // Wie viele beendete Runs gezeigt werden (#1140). Anders als der Klappzustand ist das eine
   // ausdrückliche Einstellung des Menschen, deshalb wird sie gemerkt.
   const [anzahlWahl, setAnzahlWahl] = useState(leseAnzahl)
+
+  // Der Kartendialog über dem Leitstand (#1174, AK 9) und die beiden Fehlerwege des Kartenabrufs.
+  const [detail, setDetail] = useState<Auswahl | null>(null)
+  const [verschwunden, setVerschwunden] = useState<ReadonlySet<string>>(() => new Set())
+  const [karteFehler, setKarteFehler] = useState<string | null>(null)
 
   const vorigeUmschalten = useCallback(() => {
     setVorigeOffen((offen) => !offen)
@@ -219,6 +249,35 @@ export default function PlattformLeitstandPage() {
     }))
   }
 
+  /**
+   * Holt die Karte zu einer Paketnummer und öffnet den Dialog (AK 9).
+   *
+   * **Erst beim Klick** (Plan #1167, E3): Ein Vorabladen aller gemeldeten Karten — wie es
+   * `NightRunPage.ladeKetten` für eine einzelne Ansicht tut — wäre hier eine Anfragelawine im
+   * 30-Sekunden-Takt über alle laufenden Projekte.
+   *
+   * **Zwei Fehlerwege, nicht einer** (E14): Ein **404** heißt „die Karte ist zwischen zwei Abrufen
+   * verschwunden" — das sagt genau ihre Zeile, und ihre Nummer ist danach kein Bedienelement mehr.
+   * Jeder **andere** Fehler sagt nichts über die Karte, sondern über den Abruf; er erscheint als
+   * Alert unter der Platte.
+   *
+   * **Nicht über den Zustand `fehler`**: Der ersetzt die ganze Seite und erscheint ausdrücklich nur,
+   * solange nie Daten da waren oder das Recht fehlt. Ein misslungener Kartenabruf darf den Leitstand
+   * nicht wegwischen — und die Sektion, in der die geklickte Zeile steht, schon gar nicht.
+   */
+  const karteOeffnen = async (projectId: number, nummer: number) => {
+    setKarteFehler(null)
+    try {
+      setDetail({ card: await cardsApi.byNumber(projectId, nummer), projectId })
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 404) {
+        setVerschwunden((vorher) => new Set(vorher).add(karteSchluessel(projectId, nummer)))
+        return
+      }
+      setKarteFehler(`Karte #${nummer} konnte nicht geladen werden.`)
+    }
+  }
+
   // Gezeigt wird ein Fehler nur, solange noch nie Daten dastanden — oder wenn das Recht fehlt
   // (#1099, siehe {@link Fehler}). Ein stillschweigend gescheiterter Folgeabruf laesst den letzten
   // Stand stehen; bewusst ohne Zeichen: Die fachliche Quelle verlangt keines, und eins, das bei
@@ -251,70 +310,80 @@ export default function PlattformLeitstandPage() {
   const verdecktVoriger = sicht.durchgefuehrteVoriger.length - sichtbarVoriger.length
 
   return (
-    <KupferwarteBereich>
-      <Box sx={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-        <Platte titel="Aktive Runs">
-          <LaufendeListe zeilen={geladen ? sicht.laufende : null} />
-        </Platte>
-        <Platte
-          titel="Beendete Runs"
-          werkzeug={<AnzahlWahlTasten wahl={anzahlWahl} onWaehlen={setAnzahlWahl} />}
-        >
-          <ZyklusAbschnitt titel="Diese Schicht" spanne={zyklusSpanne(dieserZyklus)} testId="zyklus-dieser">
-            <DurchgefuehrteListe
-              zeilen={geladen ? sichtbarDieser : null}
-              verdeckt={verdecktDieser}
-              testId="zyklus-dieser"
-              mitStoerung={mitStoerung}
-              leer={{ testId: 'keine-durchgefuehrten', text: 'In dieser Schicht wurde noch kein Run beendet.' }}
+    <>
+      <KupferwarteBereich>
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <Platte titel="Aktive Runs">
+            <LaufendeListe zeilen={geladen ? sicht.laufende : null} />
+          </Platte>
+          {/* Zwischen den laufenden und den beendeten Runs (AK 1 der Quelle #1153): Was gerade
+              gemeldet wird, gehoert neben das, was gerade arbeitet. */}
+          <Platte titel="Aktueller Status">
+            <AktuellerStand
+              laufende={geladen ? sicht.laufende : null}
+              gemeldetePakete={sicht.gemeldetePakete}
+              verschwunden={verschwunden}
+              onKarteOeffnen={(projectId, nummer) => void karteOeffnen(projectId, nummer)}
             />
-          </ZyklusAbschnitt>
-          <ZyklusAbschnitt
-            titel="Vorige Schicht"
-            spanne={zyklusSpanne(zyklusDavor(dieserZyklus))}
-            testId="zyklus-voriger"
-            anzahl={geladen ? sicht.durchgefuehrteVoriger.length : null}
-            offen={vorigeOffen}
-            onUmschalten={vorigeUmschalten}
+          </Platte>
+          {/* Unter der Platte und nicht in ihr (E14): Die Sektion bleibt vollstaendig stehen — der
+              misslungene Abruf sagt etwas ueber den Klick, nichts ueber die gemeldeten Pakete. */}
+          {karteFehler !== null && <Alert severity="error">{karteFehler}</Alert>}
+          <Platte
+            titel="Beendete Runs"
+            werkzeug={<AnzahlWahlTasten wahl={anzahlWahl} onWaehlen={setAnzahlWahl} />}
           >
-            <DurchgefuehrteListe
-              zeilen={geladen ? sichtbarVoriger : null}
-              verdeckt={verdecktVoriger}
+            <ZyklusAbschnitt titel="Diese Schicht" spanne={zyklusSpanne(dieserZyklus)} testId="zyklus-dieser">
+              <DurchgefuehrteListe
+                zeilen={geladen ? sichtbarDieser : null}
+                verdeckt={verdecktDieser}
+                testId="zyklus-dieser"
+                mitStoerung={mitStoerung}
+                leer={{ testId: 'keine-durchgefuehrten', text: 'In dieser Schicht wurde noch kein Run beendet.' }}
+              />
+            </ZyklusAbschnitt>
+            <ZyklusAbschnitt
+              titel="Vorige Schicht"
+              spanne={zyklusSpanne(zyklusDavor(dieserZyklus))}
               testId="zyklus-voriger"
-              mitStoerung={mitStoerung}
-              leer={{ testId: 'keine-durchgefuehrten-voriger', text: 'In der vorigen Schicht wurde kein Run beendet.' }}
-            />
-          </ZyklusAbschnitt>
-          {geladen && verdecktDieser + verdecktVoriger > 0 && (
-            <VerdecktSatz testId="ausgeblendet-hinweis">
-              {verdecktDieser + verdecktVoriger === 1
-                ? '1 weiterer Run ausgeblendet'
-                : `${verdecktDieser + verdecktVoriger} weitere Runs ausgeblendet`}
-            </VerdecktSatz>
-          )}
-        </Platte>
-        <Platte titel="Störungen">
-          <Stoerungen liste={geladen ? sicht.stoerungen : null} onQuittieren={quittieren} />
-        </Platte>
-      </Box>
-    </KupferwarteBereich>
-  )
-}
-
-/**
- * Der Leerfall eines Lauf-Bereichs (Kriterien 4 und 14): ein ausdruecklicher Satz.
- *
- * Eine leere Flaeche waere von einer kaputten Anzeige nicht zu unterscheiden — „nichts laeuft" und
- * „die Seite hat nichts bekommen" saehen gleich aus.
- */
-function LeerSatz({ testId, children }: Readonly<{ testId: string; children: ReactNode }>) {
-  return (
-    <Typography
-      data-testid={testId}
-      sx={{ fontSize: 13, color: 'text.secondary', px: '16px', py: '14px' }}
-    >
-      {children}
-    </Typography>
+              anzahl={geladen ? sicht.durchgefuehrteVoriger.length : null}
+              offen={vorigeOffen}
+              onUmschalten={vorigeUmschalten}
+            >
+              <DurchgefuehrteListe
+                zeilen={geladen ? sichtbarVoriger : null}
+                verdeckt={verdecktVoriger}
+                testId="zyklus-voriger"
+                mitStoerung={mitStoerung}
+                leer={{ testId: 'keine-durchgefuehrten-voriger', text: 'In der vorigen Schicht wurde kein Run beendet.' }}
+              />
+            </ZyklusAbschnitt>
+            {geladen && verdecktDieser + verdecktVoriger > 0 && (
+              <VerdecktSatz testId="ausgeblendet-hinweis">
+                {verdecktDieser + verdecktVoriger === 1
+                  ? '1 weiterer Run ausgeblendet'
+                  : `${verdecktDieser + verdecktVoriger} weitere Runs ausgeblendet`}
+              </VerdecktSatz>
+            )}
+          </Platte>
+          <Platte titel="Störungen">
+            <Stoerungen liste={geladen ? sicht.stoerungen : null} onQuittieren={quittieren} />
+          </Platte>
+        </Box>
+      </KupferwarteBereich>
+      {/* **Ausserhalb** des Kupferwarte-Teilbaums (E12): Der traegt einen eigenen ThemeProvider und
+          schreibt die hellen Variablen des Leitstands in seinen Teilbaum — der Dialog erbte sie
+          sonst und stuende im dunklen Erscheinungsbild hell da. `canEdit={false}`: Der Leitstand
+          zeigt die Karte, er bearbeitet sie nicht. */}
+      {detail !== null && (
+        <CardDetailModal
+          card={detail.card}
+          canEdit={false}
+          projectId={detail.projectId}
+          onClose={() => setDetail(null)}
+        />
+      )}
+    </>
   )
 }
 
@@ -373,13 +442,6 @@ const LAUF_ZEILE_SX = {
     borderBottom: `1px solid color-mix(in srgb, ${RAND} 55%, transparent)`,
   },
 } as const
-
-/** Der Projektname einer Lauf-Zeile — hier steht er in **jeder** Zeile (Kriterien 1 und 9). */
-function Projektname({ name }: Readonly<{ name: string }>) {
-  return (
-    <Typography sx={{ ...ANZEIGE, fontSize: 12.5, fontWeight: 600, minWidth: 0 }}>{name}</Typography>
-  )
-}
 
 /**
  * Der Weg zur Auswertung genau dieses Laufs (Kriterien 1 und 12) — auch ohne Mitgliedschaft im
@@ -661,39 +723,6 @@ function DurchgefuehrteZeile({
   )
 }
 
-/** Die offenen Stoerungen **eines** Projekts, in der Reihenfolge der Server-Antwort (#1087). */
-interface Projektgruppe {
-  projectId: number
-  projectName: string
-  stoerungen: DisruptionView[]
-}
-
-/**
- * Gruppiert die Antwort nach Projekt, **ohne** neu zu sortieren (#1087).
- *
- * Der Server liefert `started_at DESC, id DESC`, und eine `Map` behaelt die Einfuegereihenfolge:
- * Die Gruppen stehen damit in der Reihenfolge ihres jeweils ersten — und deshalb juengsten —
- * Eintrags, und innerhalb einer Gruppe bleibt die Reihenfolge der Antwort erhalten. Ein zweites
- * Sortieren im Browser waere eine zweite Fassung von „juengste zuoberst"; sie liefe auseinander,
- * sobald der Server seine Sortierung aendert.
- */
-function nachProjekt(liste: readonly DisruptionView[]): Projektgruppe[] {
-  const gruppen = new Map<number, Projektgruppe>()
-  for (const stoerung of liste) {
-    const gruppe = gruppen.get(stoerung.projectId)
-    if (gruppe === undefined) {
-      gruppen.set(stoerung.projectId, {
-        projectId: stoerung.projectId,
-        projectName: stoerung.projectName,
-        stoerungen: [stoerung],
-      })
-    } else {
-      gruppe.stoerungen.push(stoerung)
-    }
-  }
-  return [...gruppen.values()]
-}
-
 /**
  * Der Inhalt des Bereichs: noch nichts geladen, kein Eintrag, oder die Gruppen.
  *
@@ -745,11 +774,11 @@ function Projektblock({
   gruppe,
   onQuittieren,
 }: Readonly<{
-  gruppe: Projektgruppe
+  gruppe: Projektgruppe<DisruptionView>
   onQuittieren: (stoerung: DisruptionView) => Promise<void>
 }>) {
   const nameId = useId()
-  const zahl = gruppe.stoerungen.length
+  const zahl = gruppe.eintraege.length
   return (
     <Box data-testid={`stoergruppe-${gruppe.projectId}`}>
       <Box
@@ -776,7 +805,7 @@ function Projektblock({
         </Box>
       </Box>
       <Box component="ul" aria-labelledby={nameId} sx={{ listStyle: 'none', m: 0, p: 0 }}>
-        {gruppe.stoerungen.map((stoerung) => (
+        {gruppe.eintraege.map((stoerung) => (
           <Stoerzeile
             key={stoerung.nightRunId}
             stoerung={stoerung}

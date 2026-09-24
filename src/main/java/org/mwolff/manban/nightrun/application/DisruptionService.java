@@ -9,13 +9,17 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.auth.application.AdminAccessDeniedException;
 import org.mwolff.manban.auth.application.PlatformAdminChecker;
+import org.mwolff.manban.card.application.CardService;
+import org.mwolff.manban.nightrun.domain.NightRunErrorClass;
 import org.mwolff.manban.nightrun.domain.NightRunItem;
 import org.mwolff.manban.nightrun.domain.NightRunMode;
 import org.mwolff.manban.nightrun.domain.NightRunOutcome;
 import org.mwolff.manban.nightrun.domain.NightRunOutcome.Verdict;
 import org.mwolff.manban.nightrun.domain.NightRunPeriod;
+import org.mwolff.manban.nightrun.domain.NightRunState;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -36,6 +40,7 @@ public class DisruptionService {
 
   private final DisruptionRepository repository;
   private final NightRunRepository runs;
+  private final CardService cards;
   private final PlatformAdminChecker platformAdminChecker;
   private final NightRunProperties properties;
   private final Clock clock;
@@ -43,11 +48,13 @@ public class DisruptionService {
   public DisruptionService(
       DisruptionRepository repository,
       NightRunRepository runs,
+      CardService cards,
       PlatformAdminChecker platformAdminChecker,
       NightRunProperties properties,
       Clock clock) {
     this.repository = repository;
     this.runs = runs;
+    this.cards = cards;
     this.platformAdminChecker = platformAdminChecker;
     this.properties = properties;
     this.clock = clock;
@@ -102,11 +109,66 @@ public class DisruptionService {
     List<DisruptionView> zeilen = views(kandidaten, jeLauf);
     List<DisruptionView> beendete =
         zeilen.stream().filter(v -> v.outcome().verdict() != Verdict.RUNNING).toList();
+    List<DisruptionView> laufende =
+        zeilen.stream().filter(v -> v.outcome().verdict() == Verdict.RUNNING).toList();
     return new LeitstandView(
-        zeilen.stream().filter(v -> v.outcome().verdict() == Verdict.RUNNING).toList(),
+        laufende,
         beendete.stream().filter(v -> nacht.contains(v.startedAt())).toList(),
         beendete.stream().filter(v -> vorige.contains(v.startedAt())).toList(),
-        views(offene, jeLauf).stream().filter(v -> v.outcome().isDisruption()).toList());
+        views(offene, jeLauf).stream().filter(v -> v.outcome().isDisruption()).toList(),
+        gemeldetePakete(laufende, jeLauf));
+  }
+
+  /**
+   * Die gemeldeten Pakete der <b>arbeitenden</b> Läufe, in deren Reihenfolge (Issue #1170).
+   *
+   * <p>Kein zweiter Abruf: {@link #pakete} hat die Zeilen beider Abfragen schon geholt; hier werden
+   * nur die der laufenden Läufe herausgegriffen. Ein laufender Lauf ohne Pakete steht mit leerer
+   * Liste dabei — „noch nichts gemeldet" ist eine Auskunft, sein Fehlen wäre keine.
+   */
+  private List<LaufPaketeView> gemeldetePakete(
+      List<DisruptionView> laufende, Map<Long, List<NightRunItem>> jeLauf) {
+    List<NightRunItem> items =
+        laufende.stream()
+            .flatMap(v -> jeLauf.getOrDefault(v.nightRunId(), List.<NightRunItem>of()).stream())
+            .toList();
+    Map<Long, Set<Integer>> vorhanden = vorhandeneKarten(items);
+    return laufende.stream()
+        .map(
+            v ->
+                new LaufPaketeView(
+                    v.nightRunId(),
+                    jeLauf.getOrDefault(v.nightRunId(), List.<NightRunItem>of()).stream()
+                        .map(
+                            i ->
+                                new PaketView(
+                                    i.cardNumber(),
+                                    i.title(),
+                                    i.state(),
+                                    i.errorClass(),
+                                    vorhanden
+                                        .getOrDefault(i.projectId(), Set.of())
+                                        .contains(i.cardNumber())))
+                        .toList()))
+        .toList();
+  }
+
+  /**
+   * Die vorhandenen Kartennummern je Projekt — <b>ein</b> Abruf je Projekt, nicht einer je Paket.
+   *
+   * <p>Über alle laufenden Läufe wären das sonst dutzende Abfragen bei jedem Auffrischen der Seite.
+   */
+  private Map<Long, Set<Integer>> vorhandeneKarten(List<NightRunItem> items) {
+    return items.stream()
+        .collect(
+            Collectors.groupingBy(
+                NightRunItem::projectId,
+                Collectors.mapping(NightRunItem::cardNumber, Collectors.toSet())))
+        .entrySet()
+        .stream()
+        .collect(
+            Collectors.toMap(
+                Map.Entry::getKey, e -> cards.existingCardNumbers(e.getKey(), e.getValue())));
   }
 
   /**
@@ -226,11 +288,12 @@ public class DisruptionService {
       NightRunOutcome outcome) {}
 
   /**
-   * Die drei Bereiche des Plattform-Leitstands in ihrer Ordnung (Kriterium 18).
+   * Die drei Bereiche des Plattform-Leitstands in ihrer Ordnung (Kriterium 18) — vier Listen, denn
+   * die laufenden Läufe tragen ihre gemeldeten Pakete daneben (Issue #1170).
    *
-   * <p>Dieselbe Zeilenform für alle drei: Ein laufender Lauf, ein durchgeführter und eine Störung
-   * tragen dieselben Angaben — Projekt, Startzeitpunkt, Befund —, und woraus der Browser welchen
-   * Melder und welches Wort bildet, steht im Befund.
+   * <p>Dieselbe Zeilenform für alle vier Lauf-Listen: Ein laufender Lauf, ein durchgeführter und
+   * eine Störung tragen dieselben Angaben — Projekt, Startzeitpunkt, Befund —, und woraus der
+   * Browser welchen Melder und welches Wort bildet, steht im Befund.
    *
    * @param laufende Läufe, die noch arbeiten — <b>ohne</b> Nachtgrenze, also auch die einer
    *     früheren Nacht, die über Mittag weiterlaufen (Issue #1109); jüngster zuoberst
@@ -239,10 +302,50 @@ public class DisruptionService {
    * @param durchgefuehrteVoriger beendete Läufe des <b>vorigen Zyklus</b> (Issue #1135), in
    *     derselben Form und Ordnung
    * @param stoerungen offene Störungen über <b>alle</b> Nächte (Kriterium 17), jüngste zuoberst
+   * @param gemeldetePakete die Pakete der Läufe aus {@code laufende}, in derselben Ordnung — ein
+   *     Eintrag je laufender Lauf, auch ohne ein einziges Paket
    */
   public record LeitstandView(
       List<DisruptionView> laufende,
       List<DisruptionView> durchgefuehrte,
       List<DisruptionView> durchgefuehrteVoriger,
-      List<DisruptionView> stoerungen) {}
+      List<DisruptionView> stoerungen,
+      List<LaufPaketeView> gemeldetePakete) {}
+
+  /**
+   * Die gemeldeten Pakete eines laufenden Laufs.
+   *
+   * <p><b>Warum eine eigene Liste neben {@link LeitstandView#laufende()}</b> und kein Feld an
+   * {@link DisruptionView} (Plan #1167, E1): {@code DisruptionView} ist die eine Zeilenform aller
+   * vier {@code DisruptionView}-Listen. Ein nur dort gefülltes Feld stünde in den anderen leer und
+   * behauptete „keine Pakete" statt „nicht gefragt" — und für die beendeten Läufe schickte es Daten
+   * hinaus, die AK 11 der Quelle #1153 nicht zeigt.
+   *
+   * @param nightRunId Lauf, dem die Pakete gehören — derselbe Wert wie in seiner Zeile
+   * @param pakete in der Reihenfolge, in der der Lauf sie meldete; leer, wenn noch keines vorliegt
+   */
+  public record LaufPaketeView(long nightRunId, List<PaketView> pakete) {}
+
+  /**
+   * Ein gemeldetes Paket, wie die Sektion „Aktueller Status" es zeigt.
+   *
+   * <p><b>Warum so schmal</b> (Plan #1167, E2): {@code NightRunItemView} durchzureichen brächte
+   * Kosten, Dauer, Stufen, Verbrauch und vor allem den Protokollauszug je Paket mit. AK 7 der
+   * Quelle #1153 verbietet jede Obergrenze für diese Sektion — der Auszug über alle laufenden Läufe
+   * wäre damit die größte Last der Antwort. Was nicht hinausgeht, kann auch nicht versehentlich
+   * erscheinen.
+   *
+   * @param cardNumber projektweite Kartennummer des Pakets
+   * @param title Titel zum Zeitpunkt des Laufs — ein Schnappschuss, kein Verweis
+   * @param state Ausgang des Pakets, auch {@link NightRunState#GREY} für ein zurückgestelltes
+   * @param errorClass Grund für einen nicht-grünen Ausgang; {@code null} bei grün
+   * @param cardExists ob es im Projekt noch eine Karte zu dieser Nummer gibt — der Leitstand
+   *     verlinkt nur dann dorthin
+   */
+  public record PaketView(
+      int cardNumber,
+      String title,
+      NightRunState state,
+      @Nullable NightRunErrorClass errorClass,
+      boolean cardExists) {}
 }

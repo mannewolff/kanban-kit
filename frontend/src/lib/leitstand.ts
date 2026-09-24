@@ -532,6 +532,41 @@ export function tokenMenge(anzahl: number | null): { wert: string; einheit: stri
   return { wert: GANZ.format(anzahl), einheit: 'Token' }
 }
 
+/** Die Eintraege **eines** Projekts, in der Reihenfolge der Server-Antwort (#1087). */
+export interface Projektgruppe<T> {
+  projectId: number
+  projectName: string
+  eintraege: T[]
+}
+
+/**
+ * Gruppiert die Antwort nach Projekt, **ohne** neu zu sortieren (#1087).
+ *
+ * Der Server liefert `started_at DESC, id DESC`, und eine `Map` behaelt die Einfuegereihenfolge:
+ * Die Gruppen stehen damit in der Reihenfolge ihres jeweils ersten — und deshalb juengsten —
+ * Eintrags, und innerhalb einer Gruppe bleibt die Reihenfolge der Antwort erhalten. Ein zweites
+ * Sortieren im Browser waere eine zweite Fassung von „juengste zuoberst"; sie liefe auseinander,
+ * sobald der Server seine Sortierung aendert.
+ */
+export function nachProjekt<T extends { projectId: number; projectName: string }>(
+  liste: readonly T[],
+): Projektgruppe<T>[] {
+  const gruppen = new Map<number, Projektgruppe<T>>()
+  for (const eintrag of liste) {
+    const gruppe = gruppen.get(eintrag.projectId)
+    if (gruppe === undefined) {
+      gruppen.set(eintrag.projectId, {
+        projectId: eintrag.projectId,
+        projectName: eintrag.projectName,
+        eintraege: [eintrag],
+      })
+    } else {
+      gruppe.eintraege.push(eintrag)
+    }
+  }
+  return [...gruppen.values()]
+}
+
 /** Eine Token-Menge als Fließtext („3,66 Mio", „710 Tsd"). */
 export function tokenText(anzahl: number): string {
   const menge = tokenMenge(anzahl)!

@@ -1,6 +1,7 @@
 package org.mwolff.manban.card.infrastructure.persistence;
 
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -29,6 +30,17 @@ interface CardJpaRepository extends JpaRepository<CardEntity, Long> {
 
   /** Nicht-gelöschte Karte eines Projekts nach projektweiter Nummer (projektweit eindeutig). */
   Optional<CardEntity> findByProjectIdAndNumberAndDeletedAtIsNull(Long projectId, Integer number);
+
+  /**
+   * Nur die vorhandenen Nummern — Projektion über die Spalten {@code card.project_id} und {@code
+   * card.number}, ohne Karteninhalte (Issue #1169). Derselbe Lösch-Filter wie {@link
+   * #findByProjectIdAndNumberAndDeletedAtIsNull}: archivierte Karten zählen mit, Papierkorb-Karten
+   * nicht.
+   */
+  @Query(
+      "select c.number from CardEntity c where c.projectId = ?1 and c.number in ?2 "
+          + "and c.deletedAt is null")
+  List<Integer> findExistingNumbers(Long projectId, Collection<Integer> numbers);
 
   // Bewusst ohne DeletedAt-Filter: der Idempotenz-Check (#534) sieht auch Papierkorb-Karten.
   Optional<CardEntity> findByProjectIdAndExternalKey(Long projectId, String externalKey);

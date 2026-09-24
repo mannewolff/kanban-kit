@@ -4,6 +4,7 @@ import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import org.mwolff.manban.card.domain.Card;
 
 /** Ausgehender Port für die Persistenz von Karten. */
@@ -39,6 +40,22 @@ public interface CardRepository {
    * ist deshalb nicht vorgesehen: Wer nichts sehen darf, fragt gar nicht erst.
    */
   List<Card> findByNumberInProjects(int number, List<Long> projectIds);
+
+  /**
+   * Die Teilmenge der genannten Nummern, zu denen es im Projekt eine Karte gibt (Issue #1169).
+   *
+   * <p>Eine <strong>schmale</strong> Abfrage: Sie liest ausschließlich die Spalten {@code
+   * card.project_id} und {@code card.number} und lädt keine Karteninhalte — gedacht für Aufrufer,
+   * die zu vielen Nummern nur ja/nein brauchen und sonst je Nummer ein {@link
+   * #findByProjectIdAndNumber(long, int)} absetzen müssten.
+   *
+   * <p>Sichtbarkeit wie bei {@link #findByProjectIdAndNumber(long, int)}: Papierkorb-Karten zählen
+   * nicht ({@code deleted_at IS NULL}), archivierte zählen mit. Die Nummer soll genau dann als
+   * vorhanden gelten, wenn der Zugriff darauf eine Karte findet.
+   *
+   * <p>Eine leere Nummernmenge fragt die Datenbank nicht und liefert eine leere Menge.
+   */
+  Set<Integer> findExistingNumbers(long projectId, Collection<Integer> numbers);
 
   List<Card> findByBoardId(long boardId);
 

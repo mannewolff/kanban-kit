@@ -7,6 +7,16 @@ Versionierung folgt der dreiteiligen Betriebsversion (siehe [RELEASING.md](RELEA
 Einträge je Version sind ein automatischer Auszug der Commit-Titel seit dem letzten Release,
 erzeugt von `scripts/gen-changelog.mjs`.
 
+## [2.8.0] – 2026-09-24
+
+- chore: v2.7.1
+- Paketzeile fuehrt weiter: Kartendialog an der Nummer, Lauf-Ansicht an der Zeile ([#1174](https://github.com/mannewolff/kanban-kit/issues/1174))
+- Sektion „Aktueller Status" im Plattform-Leitstand: Koepfe, Zeilen und Leerfall ([#1173](https://github.com/mannewolff/kanban-kit/issues/1173))
+- Stand-Text und Laufgruppen als reine Funktionen in lib/aktuellerStand.ts ([#1172](https://github.com/mannewolff/kanban-kit/issues/1172))
+- Leitstand-Bausteine heben: nachProjekt, LeerSatz und Projektname aus der Seite loesen ([#1171](https://github.com/mannewolff/kanban-kit/issues/1171))
+- Leitstand-Antwort traegt die gemeldeten Pakete der laufenden Runs ([#1170](https://github.com/mannewolff/kanban-kit/issues/1170))
+- Karten-Existenz je Nummer: schmale Abfrage in der Karten-Fassade ([#1169](https://github.com/mannewolff/kanban-kit/issues/1169))
+
 ## [2.7.0] – 2026-09-24
 
 - chore: v2.6.1

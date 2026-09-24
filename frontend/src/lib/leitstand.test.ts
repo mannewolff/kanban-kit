@@ -27,6 +27,7 @@ import {
   melderAusBefund,
   MELDER_JE_ZUSTAND,
   modusName,
+  nachProjekt,
   paketDauer,
   paketZaehlung,
   tagZeit,
@@ -659,5 +660,34 @@ describe('Der abgebrochene Lauf im Browser (#1144)', () => {
     expect(serverBefund({ complete: true, items: [] }).abortReason).toBeNull()
     expect(laufband(lauf({ abortReason: null })).titel).toBe('Kette abgeschlossen — 0 Vorgänge')
     expect(laufNotiz(lauf({ abortReason: null }))).toBe(laufNotiz(lauf()))
+  })
+})
+
+describe('nachProjekt', () => {
+  const eintrag = (projectId: number, projectName: string, marke: string) => ({ projectId, projectName, marke })
+
+  it('gruppiert nach Projekt und behaelt die Einfuegereihenfolge der Gruppen', () => {
+    const gruppen = nachProjekt([
+      eintrag(7, 'Kanban-Kit', 'a'),
+      eintrag(3, 'Leitstand', 'b'),
+      eintrag(7, 'Kanban-Kit', 'c'),
+    ])
+
+    expect(gruppen.map((g) => g.projectId)).toEqual([7, 3])
+    expect(gruppen[0].projectName).toBe('Kanban-Kit')
+    expect(gruppen[0].eintraege.map((e) => e.marke)).toEqual(['a', 'c'])
+    expect(gruppen[1].eintraege.map((e) => e.marke)).toEqual(['b'])
+  })
+
+  it('liefert fuer die leere Liste keine Gruppe', () => {
+    expect(nachProjekt([])).toEqual([])
+  })
+
+  it('haelt zwei Projekte gleichen Namens mit verschiedener projectId auseinander', () => {
+    const gruppen = nachProjekt([eintrag(1, 'Doppel', 'a'), eintrag(2, 'Doppel', 'b')])
+
+    expect(gruppen).toHaveLength(2)
+    expect(gruppen.map((g) => g.projectId)).toEqual([1, 2])
+    expect(gruppen.every((g) => g.projectName === 'Doppel')).toBe(true)
   })
 })
