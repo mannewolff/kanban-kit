@@ -2,6 +2,7 @@ import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { cardsApi, type CardByNumber } from '../api/cards'
 import { ApiError } from '../api/client'
 import type {
   DisruptionView,
@@ -20,7 +21,32 @@ vi.mock('../api/plattformLeitstand', async () => {
   return { ...echt, plattformLeitstandApi: { leitstand: vi.fn(), quittieren: vi.fn() } }
 })
 
+// Nur `byNumber` wird ersetzt (Issue #1174): Der Kartenabruf beim Klick auf eine Nummer ist der
+// einzige Weg, auf dem diese Seite die Karten-API benutzt.
+vi.mock('../api/cards', async () => {
+  const echt = await vi.importActual<typeof import('../api/cards')>('../api/cards')
+  return { ...echt, cardsApi: { ...echt.cardsApi, byNumber: vi.fn() } }
+})
+
+// Der Kartendialog ist eigenständig getestet (Muster aus `LeitstandPage.test.tsx`); hier zählt, mit
+// welcher Karte und mit welchem Schreibrecht er geöffnet wird.
+vi.mock('../components/CardDetailModal', () => ({
+  CardDetailModal: ({
+    card,
+    canEdit,
+    onClose,
+  }: Readonly<{ card: CardByNumber; canEdit: boolean; onClose: () => void }>) => (
+    <div data-testid="karten-detail" data-bearbeitbar={String(canEdit)}>
+      {card.title}
+      <button type="button" onClick={onClose}>
+        Detail schließen
+      </button>
+    </div>
+  ),
+}))
+
 const api = vi.mocked(plattformLeitstandApi)
+const karteNachNummer = vi.mocked(cardsApi.byNumber)
 
 /** Ein Speicher je Test, unabhängig davon, ob die Node-Fassung einen nativen mitbringt. */
 function fakeStorage(): Storage {
@@ -631,6 +657,211 @@ describe('PlattformLeitstandPage (#1083)', () => {
       } finally {
         vi.useRealTimers()
       }
+    })
+
+    /**
+     * Die beiden Wege aus einer Paketzeile (Issue #1174, AK 9 der Quelle #1153): Die **Nummer**
+     * öffnet die Karte über dem Leitstand, der **Rest der Zeile** führt in die Lauf-Ansicht.
+     *
+     * Geprüft wird beides als eigenes Bedienelement — eines im anderen wäre ungültiges HTML und für
+     * die Tastatur nicht auflösbar (E10). Der Kartendialog selbst ist eigenständig getestet; hier
+     * zählt, mit welcher Karte, mit welchem Recht und **wo** er erscheint.
+     */
+    describe('Wege aus der Paketzeile (#1174)', () => {
+      const karte = (nummer: number, title: string): CardByNumber => ({
+        id: 1000 + nummer,
+        number: nummer,
+        title,
+        description: null,
+        type: 'CARD',
+        dependencies: [],
+        assignees: [],
+        labels: [],
+        parentId: null,
+        shortcode: null,
+        dueDate: null,
+        archived: false,
+        ideaStored: false,
+        derivedFrom: null,
+        boardId: 1,
+        columnId: 5,
+      })
+
+      /** Eine Sicht mit genau einem laufenden Run und dessen Paketen. */
+      const mitPaketen = (liste: PaketView[]) =>
+        sicht({ laufende: [laufend()], gemeldetePakete: [pakete(8, liste)] })
+
+      const nummerTaste = (zeile: HTMLElement, nummer: number, titel: string) =>
+        within(zeile).getByRole('button', { name: `Karte #${nummer} öffnen: ${titel}` })
+
+      const laufVerweis = (zeile: HTMLElement, titel: string) =>
+        within(zeile).getByRole('link', { name: `${titel} — Run #8 anzeigen` })
+
+      /** AK 9: Die Nummer öffnet die Karte über dem Leitstand — ohne die Seite zu verlassen. */
+      it('öffnet über der Seite den nicht bearbeitbaren Kartendialog, wenn die Nummer geklickt wird', async () => {
+        api.leitstand.mockResolvedValue(mitPaketen([paket()]))
+        karteNachNummer.mockResolvedValue(karte(721, 'Erstes Paket'))
+
+        zeigeSeite()
+
+        const zeile = await screen.findByTestId('stand-paket-8-721')
+        await userEvent.click(nummerTaste(zeile, 721, 'Erstes Paket'))
+
+        expect(karteNachNummer).toHaveBeenCalledWith(9, 721)
+        const dialog = await screen.findByTestId('karten-detail')
+        expect(dialog).toHaveTextContent('Erstes Paket')
+        // E12: `canEdit={false}` — der Leitstand zeigt die Karte, er bearbeitet sie nicht.
+        expect(dialog).toHaveAttribute('data-bearbeitbar', 'false')
+        // Der Dialog liegt **außerhalb** des Kupferwarte-Teilbaums: Dessen eigener ThemeProvider und
+        // seine hellen CSS-Variablen gelten sonst auch im Dialog.
+        expect(screen.getByTestId('kupferwarte-bereich')).not.toContainElement(dialog)
+        // Die Sektion bleibt stehen — der Dialog liegt darüber, er ersetzt sie nicht.
+        expect(screen.getByTestId('stand-paket-8-721')).toBeInTheDocument()
+      })
+
+      /** Der Dialog liegt **über** dem Leitstand: Geschlossen steht die Seite unverändert da. */
+      it('lässt den Dialog wieder schließen und die Seite stehen', async () => {
+        api.leitstand.mockResolvedValue(mitPaketen([paket()]))
+        karteNachNummer.mockResolvedValue(karte(721, 'Erstes Paket'))
+
+        zeigeSeite()
+
+        const zeile = await screen.findByTestId('stand-paket-8-721')
+        await userEvent.click(nummerTaste(zeile, 721, 'Erstes Paket'))
+        await userEvent.click(await screen.findByRole('button', { name: 'Detail schließen' }))
+
+        expect(screen.queryByTestId('karten-detail')).toBeNull()
+        expect(
+          nummerTaste(screen.getByTestId('stand-paket-8-721'), 721, 'Erstes Paket'),
+        ).toBeInTheDocument()
+      })
+
+      /** AK 9: Der Rest der Zeile führt in die Lauf-Ansicht genau dieses Laufs. */
+      it('führt von der Zeile daneben in die Lauf-Ansicht', async () => {
+        api.leitstand.mockResolvedValue(mitPaketen([paket()]))
+
+        zeigeSeite()
+
+        const zeile = await screen.findByTestId('stand-paket-8-721')
+        expect(laufVerweis(zeile, 'Erstes Paket')).toHaveAttribute(
+          'href',
+          '/projects/9/nachtlauf?lauf=8',
+        )
+      })
+
+      /**
+       * E10: zwei Geschwister, keine Schachtelung — und für die Tastatur genau zwei Halte in der
+       * Reihenfolge Nummer, dann Zeile.
+       */
+      it('hält je Zeile zwei getrennte Halte in der Reihenfolge Nummer, dann Zeile', async () => {
+        api.leitstand.mockResolvedValue(mitPaketen([paket()]))
+
+        zeigeSeite()
+
+        const zeile = await screen.findByTestId('stand-paket-8-721')
+        const nummer = nummerTaste(zeile, 721, 'Erstes Paket')
+        const verweis = laufVerweis(zeile, 'Erstes Paket')
+        expect(nummer).not.toContainElement(verweis)
+        expect(verweis).not.toContainElement(nummer)
+
+        // Gegangen wird der ganze Weg von vorn: erst die Kennung des aktiven Runs, dann die beiden
+        // Halte der Paketzeile, dann die Tasten der nächsten Platte — genau zwei Halte in der Zeile.
+        await userEvent.tab()
+        expect(within(screen.getByTestId('laufend-8')).getByRole('link')).toHaveFocus()
+        await userEvent.tab()
+        expect(nummer).toHaveFocus()
+        await userEvent.tab()
+        expect(verweis).toHaveFocus()
+        await userEvent.tab()
+        expect(screen.getByRole('button', { name: 'Beendete Runs: 10' })).toHaveFocus()
+      })
+
+      /**
+       * AK 9: Gibt es die Karte nicht mehr, ist die Nummer **kein** Bedienelement — der Zustand gilt
+       * vor dem Klick, nicht erst nach einem erfolglosen. Titel und Ausgang bleiben stehen.
+       */
+      it('macht die Nummer bei fehlender Karte zu reinem Text und sagt es', async () => {
+        api.leitstand.mockResolvedValue(mitPaketen([paket({ cardExists: false })]))
+
+        zeigeSeite()
+
+        const zeile = await screen.findByTestId('stand-paket-8-721')
+        expect(within(zeile).queryByRole('button')).toBeNull()
+        expect(zeile).toHaveTextContent('Karte #721 nicht gefunden')
+        expect(within(zeile).getByText('#721')).toBeInTheDocument()
+        expect(within(zeile).getByText('Erstes Paket')).toBeInTheDocument()
+        expect(within(zeile).getByText('Erfolg')).toBeInTheDocument()
+        // Der Weg in die Lauf-Ansicht hängt nicht an der Karte.
+        expect(laufVerweis(zeile, 'Erstes Paket')).toBeInTheDocument()
+      })
+
+      /**
+       * E14: Ein 404 heißt „zwischen zwei Abrufen verschwunden" — genau diese Zeile sagt es danach,
+       * ihre Nummer ist kein Bedienelement mehr, und die Sektion bleibt vollständig.
+       */
+      it('setzt nach einem 404 genau diese Zeile auf nicht gefunden', async () => {
+        api.leitstand.mockResolvedValue(
+          mitPaketen([paket(), paket({ cardNumber: 722, title: 'Zweites Paket' })]),
+        )
+        karteNachNummer.mockRejectedValue(new ApiError(404, 'Not Found'))
+
+        zeigeSeite()
+
+        const zeile = await screen.findByTestId('stand-paket-8-721')
+        await userEvent.click(nummerTaste(zeile, 721, 'Erstes Paket'))
+
+        await waitFor(() =>
+          expect(screen.getByTestId('stand-paket-8-721')).toHaveTextContent(
+            'Karte #721 nicht gefunden',
+          ),
+        )
+        expect(within(screen.getByTestId('stand-paket-8-721')).queryByRole('button')).toBeNull()
+        expect(screen.queryByTestId('karten-detail')).toBeNull()
+        expect(screen.queryByRole('alert')).toBeNull()
+        // Nur die geklickte Zeile: Die andere behält ihren Weg zur Karte.
+        const andere = screen.getByTestId('stand-paket-8-722')
+        expect(nummerTaste(andere, 722, 'Zweites Paket')).toBeInTheDocument()
+        expect(andere).not.toHaveTextContent('nicht gefunden')
+      })
+
+      /**
+       * E14: Jeder andere Fehler ist keine Aussage über die Karte, sondern über den Abruf — er
+       * erscheint als `Alert` unter der Platte. Die Sektion bleibt vollständig, und der
+       * `fehler`-Zustand der Seite bleibt unberührt: Alle vier Bereiche stehen weiter da.
+       */
+      it('zeigt bei einem anderen Fehler einen Alert unter der Platte', async () => {
+        api.leitstand.mockResolvedValue(mitPaketen([paket()]))
+        karteNachNummer.mockRejectedValue(new ApiError(500, 'Boom'))
+
+        zeigeSeite()
+
+        const zeile = await screen.findByTestId('stand-paket-8-721')
+        await userEvent.click(nummerTaste(zeile, 721, 'Erstes Paket'))
+
+        expect(await screen.findByRole('alert')).toHaveTextContent(
+          'Karte #721 konnte nicht geladen werden.',
+        )
+        expect(screen.getByTestId('stand-paket-8-721')).not.toHaveTextContent('nicht gefunden')
+        expect(nummerTaste(screen.getByTestId('stand-paket-8-721'), 721, 'Erstes Paket')).toBeInTheDocument()
+        expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual([
+          'Aktive Runs',
+          'Aktueller Status',
+          'Beendete Runs',
+          'Störungen',
+        ])
+      })
+
+      /** E3: Die Karten werden **nicht** vorab geladen — der Abruf steht am Klick. */
+      it('ruft die Karte erst beim Klick ab', async () => {
+        api.leitstand.mockResolvedValue(
+          mitPaketen([paket(), paket({ cardNumber: 722, title: 'Zweites Paket' })]),
+        )
+
+        zeigeSeite()
+
+        await screen.findByTestId('stand-paket-8-722')
+        expect(karteNachNummer).not.toHaveBeenCalled()
+      })
     })
   })
 

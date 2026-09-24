@@ -1,13 +1,34 @@
 import Box from '@mui/material/Box'
+import Link from '@mui/material/Link'
 import Typography from '@mui/material/Typography'
 import { useId } from 'react'
+import { Link as RouterLink } from 'react-router-dom'
 import type { DisruptionView, LaufPaketeView, PaketView } from '../../api/plattformLeitstand'
 import { laufgruppen, type Laufeintrag } from '../../lib/aktuellerStand'
 import { melderAusBefund, MELDER_JE_ZUSTAND, type Projektgruppe } from '../../lib/leitstand'
 import { nightRunZustandsText } from '../../lib/nightRunHandoff'
-import { ANZEIGE, RAND, TEXT_SCHWACH } from '../../theme'
+import { ANZEIGE, RAND, TEXT_SCHWACH, ZAHL } from '../../theme'
 import { LaufArtSymbol } from './LaufArtSymbol'
-import { Led, LeerSatz } from './LeitstandBausteine'
+import { Led, LeerSatz, ZEILE_HOVER } from './LeitstandBausteine'
+
+/**
+ * Der Schluessel eines Pakets in der Menge der verschwundenen Karten (Issue #1174, E14).
+ *
+ * <p>Mit dem Projekt davor und nicht die Nummer allein: Kartennummern sind **projektweit**
+ * eindeutig, nicht plattformweit — der Leitstand zeigt aber die Laeufe aller Projekte
+ * uebereinander. Eine Menge blosser Nummern liesse ein verschwundenes „#721" aus Projekt A die
+ * Zeile „#721" aus Projekt B mit „nicht gefunden" bestempeln.
+ */
+export function karteSchluessel(projectId: number, nummer: number): string {
+  return `${projectId}#${nummer}`
+}
+
+/** Was eine Paketzeile ausser den Daten braucht: die verschwundenen Karten und der Kartenklick. */
+interface Zeilenwege {
+  /** Karten, die beim Abruf 404 waren — Schluessel aus {@link karteSchluessel} (E14). */
+  verschwunden: ReadonlySet<string>
+  onKarteOeffnen: (projectId: number, nummer: number) => void
+}
 
 /**
  * Die Sektion „Aktueller Status" des Plattform-Leitstands (Issue #1173, fachliche Quelle #1153):
@@ -30,12 +51,15 @@ import { Led, LeerSatz } from './LeitstandBausteine'
 export function AktuellerStand({
   laufende,
   gemeldetePakete,
-}: Readonly<{
-  /** Die laufenden Runs; `null`, solange die erste Antwort fehlt. */
-  laufende: DisruptionView[] | null
-  /** Die gemeldeten Pakete je laufendem Run, in der Ordnung der Antwort. */
-  gemeldetePakete: LaufPaketeView[]
-}>) {
+  ...wege
+}: Readonly<
+  {
+    /** Die laufenden Runs; `null`, solange die erste Antwort fehlt. */
+    laufende: DisruptionView[] | null
+    /** Die gemeldeten Pakete je laufendem Run, in der Ordnung der Antwort. */
+    gemeldetePakete: LaufPaketeView[]
+  } & Zeilenwege
+>) {
   if (laufende === null) {
     return null
   }
@@ -52,7 +76,7 @@ export function AktuellerStand({
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
       {laufgruppen(laufende, gemeldetePakete).map((gruppe) => (
-        <Standgruppe key={gruppe.projectId} gruppe={gruppe} jeLauf={jeLauf} />
+        <Standgruppe key={gruppe.projectId} gruppe={gruppe} jeLauf={jeLauf} {...wege} />
       ))}
     </Box>
   )
@@ -67,10 +91,13 @@ export function AktuellerStand({
 function Standgruppe({
   gruppe,
   jeLauf,
-}: Readonly<{
-  gruppe: Projektgruppe<Laufeintrag<PaketView>>
-  jeLauf: ReadonlyMap<number, DisruptionView>
-}>) {
+  ...wege
+}: Readonly<
+  {
+    gruppe: Projektgruppe<Laufeintrag<PaketView>>
+    jeLauf: ReadonlyMap<number, DisruptionView>
+  } & Zeilenwege
+>) {
   return (
     <Box data-testid={`stand-gruppe-${gruppe.projectId}`}>
       <Box
@@ -89,7 +116,13 @@ function Standgruppe({
         {gruppe.projectName}
       </Box>
       {gruppe.eintraege.map((eintrag) => (
-        <Standlauf key={eintrag.nightRunId} eintrag={eintrag} lauf={jeLauf.get(eintrag.nightRunId)!} />
+        <Standlauf
+          key={eintrag.nightRunId}
+          eintrag={eintrag}
+          lauf={jeLauf.get(eintrag.nightRunId)!}
+          projectId={gruppe.projectId}
+          {...wege}
+        />
       ))}
     </Box>
   )
@@ -109,7 +142,11 @@ function Standgruppe({
 function Standlauf({
   eintrag,
   lauf,
-}: Readonly<{ eintrag: Laufeintrag<PaketView>; lauf: DisruptionView }>) {
+  projectId,
+  ...wege
+}: Readonly<
+  { eintrag: Laufeintrag<PaketView>; lauf: DisruptionView; projectId: number } & Zeilenwege
+>) {
   const kopfId = useId()
   return (
     <Box data-testid={`stand-lauf-${eintrag.nightRunId}`}>
@@ -126,7 +163,13 @@ function Standlauf({
       </Box>
       <Box component="ul" aria-labelledby={kopfId} sx={{ listStyle: 'none', m: 0, p: 0 }}>
         {eintrag.pakete.map((p) => (
-          <Paketzeile key={p.cardNumber} lauf={eintrag.nightRunId} paket={p} />
+          <Paketzeile
+            key={p.cardNumber}
+            lauf={eintrag.nightRunId}
+            projectId={projectId}
+            paket={p}
+            {...wege}
+          />
         ))}
       </Box>
     </Box>
@@ -134,23 +177,42 @@ function Standlauf({
 }
 
 /**
- * Eine Paketzeile: Melder, Nummer, Titel und das Zustandswort.
+ * Eine Paketzeile: Melder, Nummer, Titel und das Zustandswort — mit zwei Wegen hinaus (AK 9).
  *
  * <p><b>Das Wort steht sichtbar neben dem Melder</b> (AK 5) — nie nur die Farbe. Gebildet wird es
  * mit {@link nightRunZustandsText}, derselben Funktion wie in der Lauf-Ansicht; `?? undefined`,
  * weil die Antwort eine fehlende Fehlerklasse als `null` fuehrt und die Funktion `undefined`
  * annimmt.
  *
- * <p>Die Nummer ist hier reiner Text. Die beiden Bedienelemente der Zeile — Nummer oeffnet die
- * Karte, Zeile fuehrt in die Lauf-Ansicht — kommen in Issue #1174 dazu.
+ * <p><b>Zwei Bedienelemente, nicht eines</b> (Issue #1174, E10; Muster aus
+ * {@link NachtlaufVorgangszeile}): Die **Nummer** oeffnet die Karte, der **Rest der Zeile** fuehrt
+ * in die Lauf-Ansicht. Sie stehen als Geschwister im Raster und **nie** geschachtelt — ein
+ * Bedienelement im Bedienelement ist ungueltiges HTML, fuer die Tastatur nicht aufloesbar, und ein
+ * Klick, der beides taete, waere nicht vorhersagbar.
+ *
+ * <p><b>Ohne Karte ist die Nummer kein Bedienelement</b>, sondern reiner Text samt dem Zusatz
+ * „Karte #N nicht gefunden" — der Zustand gilt **vor** dem Klick und nicht erst nach einem
+ * erfolglosen. Er kommt aus zwei Quellen: `cardExists` der Antwort (Issue #1170) und der Menge der
+ * Karten, die ein Abruf mit 404 beantwortet hat (E14). Nachgerechnet wird im Browser nichts.
+ *
+ * <p>Der Zusatz steht <b>ausserhalb</b> beider Bedienelemente: In einem von ihnen waere er Teil
+ * dessen Namens, und ein Vorlesewerkzeug nennte den Weg in die Lauf-Ansicht „… nicht gefunden".
  */
-function Paketzeile({ lauf, paket }: Readonly<{ lauf: number; paket: PaketView }>) {
+function Paketzeile({
+  lauf,
+  projectId,
+  paket,
+  verschwunden,
+  onKarteOeffnen,
+}: Readonly<{ lauf: number; projectId: number; paket: PaketView } & Zeilenwege>) {
+  const fehlt = !paket.cardExists || verschwunden.has(karteSchluessel(projectId, paket.cardNumber))
   return (
     <Box
       component="li"
       data-testid={`stand-paket-${lauf}-${paket.cardNumber}`}
       sx={{
-        display: 'flex',
+        display: 'grid',
+        gridTemplateColumns: '14px auto minmax(0,1fr) auto',
         alignItems: 'center',
         gap: '10px',
         px: '16px',
@@ -158,16 +220,69 @@ function Paketzeile({ lauf, paket }: Readonly<{ lauf: number; paket: PaketView }
         '&:not(:last-child)': {
           borderBottom: `1px solid color-mix(in srgb, ${RAND} 55%, transparent)`,
         },
+        '&:hover': { background: ZEILE_HOVER },
       }}
     >
       <Led melder={MELDER_JE_ZUSTAND[paket.state]} />
-      <Typography sx={{ fontSize: 12, fontFamily: 'monospace', color: TEXT_SCHWACH }}>
-        {`#${paket.cardNumber}`}
+      {fehlt ? (
+        <Typography sx={NUMMER_SX}>{`#${paket.cardNumber}`}</Typography>
+      ) : (
+        <Link
+          component="button"
+          type="button"
+          underline="hover"
+          aria-label={`Karte #${paket.cardNumber} öffnen: ${paket.title}`}
+          onClick={() => onKarteOeffnen(projectId, paket.cardNumber)}
+          sx={{ ...NUMMER_SX, textAlign: 'left', justifySelf: 'start' }}
+        >
+          {`#${paket.cardNumber}`}
+        </Link>
+      )}
+      {/* Der Name nennt den Titel zuerst: Er steht sichtbar in der Zeile, und ein Name, der den
+          sichtbaren Text nicht enthaelt, laesst sich per Sprache nicht ansprechen (WCAG 2.5.3). */}
+      <Typography
+        component={RouterLink}
+        to={`/projects/${projectId}/nachtlauf?lauf=${lauf}`}
+        aria-label={`${paket.title} — Run #${lauf} anzeigen`}
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '10px',
+          minWidth: 0,
+          color: 'inherit',
+          textDecoration: 'none',
+          '&:hover > span:first-of-type': { textDecoration: 'underline' },
+        }}
+      >
+        <Box
+          component="span"
+          sx={{
+            fontSize: 12.5,
+            flex: 1,
+            minWidth: 0,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {paket.title}
+        </Box>
+        <Box component="span" sx={{ fontSize: 12, color: 'text.secondary', flex: 'none' }}>
+          {nightRunZustandsText(paket.state, paket.errorClass ?? undefined)}
+        </Box>
       </Typography>
-      <Typography sx={{ fontSize: 12.5, flex: 1, minWidth: 0 }}>{paket.title}</Typography>
-      <Typography sx={{ fontSize: 12, color: 'text.secondary' }}>
-        {nightRunZustandsText(paket.state, paket.errorClass ?? undefined)}
-      </Typography>
+      {fehlt && (
+        <Typography sx={{ fontSize: 11.5, color: TEXT_SCHWACH }}>
+          {`Karte #${paket.cardNumber} nicht gefunden`}
+        </Typography>
+      )}
     </Box>
   )
 }
+
+/** Die Nummernspalte — dieselbe Gestalt, ob sie Bedienelement ist oder reiner Text. */
+const NUMMER_SX = {
+  ...ZAHL,
+  fontSize: 12,
+  color: TEXT_SCHWACH,
+} as const
