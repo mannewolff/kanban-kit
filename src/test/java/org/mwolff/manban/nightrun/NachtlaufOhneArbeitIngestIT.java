@@ -78,20 +78,32 @@ class NachtlaufOhneArbeitIngestIT extends AbstractIntegrationTest {
    * Feld kommt an (additiv, E3) und bekommt den Rueckfalltext; die Zweitmeldung mit Grund ersetzt
    * denselben Lauf und traegt ihn woertlich; eine zu lange Meldung wird abgewiesen, ohne den Stand
    * anzutasten. Am Ende steht der Wert in der Antwort der Laufliste — dort liest ihn die Anzeige.
+   *
+   * <p>Dieselbe Antwort traegt seit Issue #1185 den Ausgang {@code NO_WORK} — fuer den
+   * Rueckfalltext wie fuer den gemeldeten Grund. Er steht hier neben dem Text, weil erst beides
+   * zusammen die Zusage ist: gespeichert wird woertlich, gelesen wird als ruhiger Lauf.
    */
   @Test
   void derGrundKommtDurchBisInDieLaufliste_undDieLaengengrenzeGilt() throws Exception {
     Aufbau aufbau = aufbau("ohnearbeit-ingest");
 
     melde(aufbau, ohneArbeit("")).andExpect(jsonPath("$.outcome").value("CREATED"));
-    assertThat(grundInDerLaufliste(aufbau))
+    JsonNode rueckfall = ersterLauf(aufbau);
+    assertThat(rueckfall.get("noWorkReason").asText())
         .as("ohne gemeldetes Feld setzt der Server den Rueckfalltext (AK 2)")
         .isEqualTo(RUECKFALL);
+    assertThat(rueckfall.get("outcome").get("verdict").asText())
+        .as("und die Sicht liest ihn als ruhigen Lauf, nicht als Stoerung (Issue #1185)")
+        .isEqualTo("NO_WORK");
 
     melde(aufbau, ohneArbeit(GEMELDET)).andExpect(jsonPath("$.outcome").value("REPLACED"));
-    assertThat(grundInDerLaufliste(aufbau))
+    JsonNode gemeldet = ersterLauf(aufbau);
+    assertThat(gemeldet.get("noWorkReason").asText())
         .as("der gemeldete Grund steht woertlich am ersetzten Lauf")
         .isEqualTo(GEMELDET);
+    assertThat(gemeldet.get("outcome").get("verdict").asText())
+        .as("derselbe Ausgang wie beim Rueckfall — der Wortlaut entscheidet nicht mehr")
+        .isEqualTo("NO_WORK");
 
     melde(aufbau, ohneArbeit("x".repeat(301))).andExpect(status().isBadRequest());
     assertThat(grundInDerLaufliste(aufbau))
@@ -121,6 +133,11 @@ class NachtlaufOhneArbeitIngestIT extends AbstractIntegrationTest {
   }
 
   private String grundInDerLaufliste(Aufbau aufbau) throws Exception {
+    return ersterLauf(aufbau).get("noWorkReason").asText();
+  }
+
+  /** Der erste — hier einzige — Lauf der Laufliste, mit Grund und Befund in einer Antwort. */
+  private JsonNode ersterLauf(Aufbau aufbau) throws Exception {
     JsonNode liste =
         json.readTree(
             mvc.perform(
@@ -130,7 +147,7 @@ class NachtlaufOhneArbeitIngestIT extends AbstractIntegrationTest {
                 .andReturn()
                 .getResponse()
                 .getContentAsString());
-    return liste.get(0).get("noWorkReason").asText();
+    return liste.get(0);
   }
 
   private record Aufbau(Cookie session, long projectId, String token) {}

@@ -298,9 +298,10 @@ public class NightRunService {
    * <p>Ein gemeldeter, aber leerer Grund gilt wie ein fehlender. AK 2 verlangt einen Text, nicht
    * ein gesetztes Feld — ein leerer Grund erschiene in der Anzeige als Luecke.
    *
-   * <p>Der Rueckfalltext steht seit Issue #1121 in {@link NightRunOutcome}: Dort haengt am Text die
-   * Aussage ueber den Ausgang — ein gemeldeter Grund ist „nichts zu tun", der Rueckfall bleibt
-   * „nicht gelungen". Gesetzt wird er weiterhin nur hier.
+   * <p>Der Rueckfalltext steht seit Issue #1121 in {@link NightRunOutcome} und ist dort seit Issue
+   * #1185 ein reiner <b>Anzeigetext</b>: Jeder Grund — gemeldet oder zurueckgefallen — ergibt den
+   * Ausgang „nichts zu tun". Gesetzt wird der Text weiterhin nur hier, und das Verhalten dieser
+   * Methode hat #1185 nicht angetastet: Ein Lauf ohne Arbeit steht nie ohne Text da.
    *
    * <p><b>Ein gesetzter Abbruchgrund verdraengt den Rueckfalltext</b> (Issue #1142, Plan #1139 E6):
    * Ein Lauf, der abgebrochen ist, hat nichts abgearbeitet — aber der Grund dafuer ist bekannt und

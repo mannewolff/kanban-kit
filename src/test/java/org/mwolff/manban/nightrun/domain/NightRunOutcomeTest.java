@@ -17,12 +17,14 @@ import org.junit.jupiter.api.Test;
  * — deshalb eine Wahrheit, und die liegt im Server.
  *
  * <p>Die Reihenfolge der Regeln trägt eine Aussage und wird hier Fall für Fall festgehalten: die
- * Stillefrist schlägt alles, danach „läuft noch", danach der Lauf ohne Arbeit, danach rot vor gelb
- * vor grau-mit-Fehlerklasse.
+ * Stillefrist schlägt alles, danach „läuft noch", danach der harte Abbruch, danach rot vor gelb vor
+ * grau-mit-Fehlerklasse — und erst danach der Lauf ohne Arbeit.
  *
- * <p>Seit Issue #1121 zerfällt der Lauf ohne Arbeit in zwei Fälle: der <b>gemeldete</b> Grund ist
- * der eigene Ausgang {@link NightRunOutcome.Verdict#NO_WORK}, der Rückfall {@link
- * NightRunOutcome#GRUND_UNBEKANNT} bleibt {@code FAILED}.
+ * <p>Seit Issue #1185 ist der Lauf ohne Arbeit <b>ein</b> Fall: Jeder Grund ergibt {@link
+ * NightRunOutcome.Verdict#NO_WORK} und keine Störung, gleich ob der Runner ihn meldete oder der
+ * Server auf {@link NightRunOutcome#GRUND_UNBEKANNT} zurückfiel. Was #1121 am Rückfall festmachte —
+ * dahinter könne ein echtes Problem stecken —, sagen jetzt die Pakete: Ein zurückgestelltes Paket
+ * steht in der Rangfolge <em>vor</em> dem Grund und macht den Lauf zu {@code WAITING}.
  */
 // PMD.TooManyMethods: Testklasse — jede Methode ist ein Fall der Rangfolge, und Faelle werden nicht
 // zusammengelegt, um eine Zahl zu druecken. Issue #1143 bringt die vier Faelle des Abbruchgrunds
@@ -131,37 +133,88 @@ class NightRunOutcomeTest {
   }
 
   /**
-   * Der Rückfall des Servers ist <b>kein</b> gemeldeter Grund (Issue #1121): Er steht für einen
-   * alten Runner, den Upload-Weg oder einen Lauf, der Pakete hatte und keins bearbeitete — das kann
-   * ein echtes Problem verdecken und bleibt rot.
+   * Issue #1185, Kriterium 1: Der Rückfall des Servers ist <b>kein</b> Mangel des Laufs. Ein Lauf,
+   * der regulär zu Ende kam und nichts Bearbeitbares vorfand, ist auch ohne gemeldeten Grund ruhig
+   * — bis #1121 quittierte ein alter Runner oder der Upload-Weg dafür jeden Morgen eine Störung.
+   *
+   * <p>Der Fall <em>kippt</em> gegenüber #1121: Dort war genau dieser Text {@code FAILED}.
    */
   @Test
-  void einLaufOhneArbeitOhneGemeldetenGrundIstGescheitert() {
+  void einLaufOhneArbeitOhneGemeldetenGrundHatNichtsZuTun() {
     var outcome = befund(true, NightRunOutcome.GRUND_UNBEKANNT, List.of());
 
-    assertThat(outcome.verdict()).isEqualTo(NightRunOutcome.Verdict.FAILED);
+    assertThat(outcome.verdict()).isEqualTo(NightRunOutcome.Verdict.NO_WORK);
     assertThat(outcome.decisiveItem()).isNull();
     assertThat(outcome.noWorkReason()).isEqualTo(NightRunOutcome.GRUND_UNBEKANNT);
-    assertThat(outcome.isDisruption()).isTrue();
+    assertThat(outcome.isDisruption()).isFalse();
   }
 
   /**
-   * Der Grund ist der Text selbst; ein Paket wäre daneben eine zweite Begründung. Beide
-   * Grunde-Arten stehen hier: Die Rangfolge gilt für den gemeldeten wie für den Rückfall, nur der
-   * Ausgang unterscheidet sie (Issue #1121).
+   * Issue #1185, Kriterium 3: Das maßgebliche Paket steht <b>vor</b> dem Grund ohne Arbeit. Beide
+   * Grunde-Arten stehen hier — die Rangfolge gilt für den gemeldeten wie für den Rückfall, und der
+   * Ausgang unterscheidet sie nicht mehr.
+   *
+   * <p>Der Fall <em>kippt</em> gegenüber #1121: Dort verdrängte der Grund das rote Paket, und ein
+   * Lauf mit gemeldetem Grund und rotem Paket fiel als {@code NO_WORK} aus der Störungsliste.
    */
   @Test
-  void derGrundOhneArbeitSchlaegtEinRotesPaket() {
+  void einRotesPaketSchlaegtDenGrundOhneArbeit() {
     var rot = List.of(item(1, NightRunState.RED, NightRunErrorClass.HARD_ABORT));
 
     var gemeldet = befund(true, GEMELDET, rot);
     var rueckfall = befund(true, NightRunOutcome.GRUND_UNBEKANNT, rot);
 
-    assertThat(gemeldet.verdict()).isEqualTo(NightRunOutcome.Verdict.NO_WORK);
-    assertThat(gemeldet.decisiveItem()).isNull();
-    assertThat(gemeldet.noWorkReason()).isEqualTo(GEMELDET);
+    assertThat(gemeldet.verdict()).isEqualTo(NightRunOutcome.Verdict.FAILED);
+    assertThat(gemeldet.decisiveItem().cardNumber()).isEqualTo(1);
+    assertThat(gemeldet.noWorkReason())
+        .as("das Paket ist die Begründung; ein Grund daneben wäre eine zweite")
+        .isNull();
     assertThat(rueckfall.verdict()).isEqualTo(NightRunOutcome.Verdict.FAILED);
-    assertThat(rueckfall.decisiveItem()).isNull();
+    assertThat(rueckfall.decisiveItem().cardNumber()).isEqualTo(1);
+  }
+
+  /**
+   * Der Anlass des Vorhabens (Issue #1175, Kriterium 3): Ein Lauf, der alle seine Pakete
+   * zurückstellte, meldet keinen Grund — der Server fällt auf {@link
+   * NightRunOutcome#GRUND_UNBEKANNT} zurück. Maßgeblich ist trotzdem das zurückgestellte Paket, und
+   * der Lauf ist „mit Vorbehalt" statt rot.
+   */
+  @Test
+  void saemtlichZurueckgestelltePaketeWartenVorDemGrundOhneArbeit() {
+    var outcome =
+        befund(
+            true,
+            NightRunOutcome.GRUND_UNBEKANNT,
+            List.of(
+                item(6, NightRunState.GREY, NightRunErrorClass.DEPENDENCY_UNMET),
+                item(7, NightRunState.GREY, NightRunErrorClass.AWAITING_DECISION)));
+
+    assertThat(outcome.verdict()).isEqualTo(NightRunOutcome.Verdict.WAITING);
+    assertThat(outcome.decisiveItem())
+        .isEqualTo(
+            new NightRunOutcome.DecisiveItem(
+                6, NightRunState.GREY, NightRunErrorClass.DEPENDENCY_UNMET));
+    assertThat(outcome.noWorkReason()).isNull();
+    assertThat(outcome.isDisruption()).isTrue();
+  }
+
+  /**
+   * Die Gegenprobe zum Fall davor (Kriterium 1): Grau <em>ohne</em> Fehlerklasse ist ein
+   * übergangenes Paket und nie maßgeblich. Ein Lauf, der nur solche trägt, hat nichts abgearbeitet
+   * — der Grund gilt, und der Lauf ist ruhig.
+   */
+  @Test
+  void nurUebergangenePaketeLassenDenLaufOhneArbeit() {
+    var outcome =
+        befund(
+            true,
+            NightRunOutcome.GRUND_UNBEKANNT,
+            List.of(item(8, NightRunState.GREY, null), item(9, NightRunState.GREY, null)));
+
+    assertThat(outcome.verdict()).isEqualTo(NightRunOutcome.Verdict.NO_WORK);
+    assertThat(outcome.decisiveItem()).isNull();
+    assertThat(outcome.noWorkReason()).isEqualTo(NightRunOutcome.GRUND_UNBEKANNT);
+    assertThat(outcome.isDisruption()).isFalse();
   }
 
   /** „Läuft noch" schlägt auch den gemeldeten Grund — der Ausgang steht erst am Ende fest. */
@@ -583,5 +636,34 @@ class NightRunOutcomeTest {
     assertThat(verstummt.verdict()).isEqualTo(NightRunOutcome.Verdict.FAILED);
     assertThat(verstummt.decisiveItem()).isNull();
     assertThat(verstummt.abortReason()).isNull();
+  }
+
+  /**
+   * Issue #1185, Kriterium 5: Der Abbruchgrund steht weiterhin <b>vor</b> dem Lauf ohne Arbeit —
+   * auch ohne ein einziges Paket, und auch wenn der Grund ohne Arbeit daneben gesetzt ist. Nur weil
+   * der Lauf ohne Arbeit nach unten gerutscht ist, wird ein abgebrochener Lauf nicht ruhig.
+   *
+   * <p>Der Dienst setzt beides nie zusammen (Issue #1142); die Rangfolge steht trotzdem hier, denn
+   * {@link NightRunOutcome#of} entscheidet über einen ganzen Bestand und nicht über einen Weg.
+   */
+  @Test
+  void einAbbruchgrundSchlaegtDenGrundOhneArbeitAuchOhnePaket() {
+    var outcome =
+        NightRunOutcome.of(
+            true,
+            NightRunOutcome.GRUND_UNBEKANNT,
+            ABBRUCH,
+            NightRunMode.IMPLEMENTATION,
+            List.of(),
+            FIXED,
+            FIXED,
+            FIXED,
+            FRIST);
+
+    assertThat(outcome.verdict()).isEqualTo(NightRunOutcome.Verdict.FAILED);
+    assertThat(outcome.decisiveItem()).isNull();
+    assertThat(outcome.noWorkReason()).isNull();
+    assertThat(outcome.abortReason()).isEqualTo(ABBRUCH);
+    assertThat(outcome.isDisruption()).isTrue();
   }
 }

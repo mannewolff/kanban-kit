@@ -580,12 +580,50 @@ class DisruptionServiceTest {
   }
 
   /**
-   * Ein Lauf ohne Arbeit hat kein Paket — der Grund ist der Text, und er reicht. Seit Issue #1121
-   * ist das nur noch beim <b>Rückfall</b> des Servers eine Störung: Er kann einen alten Runner, den
-   * Upload-Weg oder einen Lauf meinen, der alle Pakete zurückstellte.
+   * Issue #1185, Kriterium 6: Auch der <b>Rückfall</b> des Servers ist keine Störung. Bis #1121
+   * stand ein Lauf ohne Arbeit ohne gemeldeten Grund in der Liste — ein alter Runner und der
+   * Upload-Weg quittierten damit jeden Morgen eine Meldung, hinter der nichts stand.
+   *
+   * <p>Der Fall <em>kippt</em>: Er hieß {@code
+   * einLaufOhneArbeitMitUnbekanntemGrundIstEineStoerungAuchOhnePaket} und erwartete die Störzeile.
+   * Die Störungsabfrage liefert den Lauf weiterhin (sie kennt den Ausgang nicht); den Unterschied
+   * macht allein {@code isDisruption()} des Befunds.
    */
   @Test
-  void einLaufOhneArbeitMitUnbekanntemGrundIstEineStoerungAuchOhnePaket() {
+  void einLaufOhneArbeitMitUnbekanntemGrundIstKeineStoerung() {
+    DisruptionCandidate rueckfall =
+        new DisruptionCandidate(
+            5L,
+            9L,
+            "Projekt",
+            NightRunMode.IMPLEMENTATION,
+            JETZT,
+            null,
+            true,
+            NightRunOutcome.GRUND_UNBEKANNT,
+            null);
+    nachtLaeufe(rueckfall);
+    when(disruptions.openCandidates()).thenReturn(List.of(rueckfall));
+
+    LeitstandView leitstand = service.leitstand(ADMIN, UTC);
+
+    assertThat(leitstand.stoerungen()).isEmpty();
+    assertThat(leitstand.durchgefuehrte())
+        .singleElement()
+        .satisfies(
+            v -> {
+              assertThat(v.outcome().verdict()).isEqualTo(NightRunOutcome.Verdict.NO_WORK);
+              assertThat(v.outcome().noWorkReason()).isEqualTo(NightRunOutcome.GRUND_UNBEKANNT);
+            });
+  }
+
+  /**
+   * Issue #1185, Kriterium 3: Ein Lauf, der alle seine Pakete zurückstellte, meldet keinen Grund —
+   * der Server trägt den Rückfalltext ein. Er bleibt, was er ohne den Text schon war: eine Störung
+   * „mit Vorbehalt", und zwar mit dem zurückgestellten Paket als maßgeblichem.
+   */
+  @Test
+  void einZurueckgestelltesPaketBleibtEineStoerungAuchMitRueckfalltext() {
     when(disruptions.openCandidates())
         .thenReturn(
             List.of(
@@ -599,11 +637,16 @@ class DisruptionServiceTest {
                     true,
                     NightRunOutcome.GRUND_UNBEKANNT,
                     null)));
+    pakete(paket(5L, NightRunState.GREY, NightRunErrorClass.DEPENDENCY_UNMET));
 
     assertThat(service.leitstand(ADMIN, UTC).stoerungen())
         .singleElement()
-        .extracting(v -> v.outcome().noWorkReason())
-        .isEqualTo(NightRunOutcome.GRUND_UNBEKANNT);
+        .satisfies(
+            v -> {
+              assertThat(v.outcome().verdict()).isEqualTo(NightRunOutcome.Verdict.WAITING);
+              assertThat(v.outcome().decisiveItem().cardNumber()).isEqualTo(721);
+              assertThat(v.outcome().noWorkReason()).isNull();
+            });
   }
 
   /**

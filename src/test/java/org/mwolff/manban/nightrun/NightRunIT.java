@@ -571,6 +571,10 @@ class NightRunIT extends AbstractIntegrationTest {
    * Der Grund steht in der Antwort der Laufliste (Issue #1068). Der hochgeladene Weg fuehrt kein
    * Grund-Feld, also traegt ein Lauf ohne Arbeit hier den Rueckfalltext des Servers (Plan #1067,
    * E4) — und ein Lauf mit Arbeit traegt {@code null}, nicht etwa einen leeren Text.
+   *
+   * <p>Seit Issue #1185 traegt dieselbe Antwort dazu den Ausgang {@code NO_WORK}: Der Upload-Weg
+   * ist der Fall, der den Rueckfalltext unvermeidlich erzeugt, und er ist keine Stoerung mehr. Der
+   * Lauf wurde <b>nicht</b> erneut eingeliefert — die Regel wird gelesen (Kriterium 8).
    */
   @Test
   void list_traegtDenGrundEinesLaufsOhneArbeit_undNullBeiEinemMitArbeit() throws Exception {
@@ -589,6 +593,9 @@ class NightRunIT extends AbstractIntegrationTest {
         .andExpect(status().isOk())
         .andExpect(jsonPath("$[1].startedAt").value(ERSTER))
         .andExpect(jsonPath("$[1].noWorkReason").value("Nichts abgearbeitet — Grund unbekannt"))
+        .andExpect(jsonPath("$[1].outcome.verdict").value("NO_WORK"))
+        .andExpect(
+            jsonPath("$[1].outcome.noWorkReason").value("Nichts abgearbeitet — Grund unbekannt"))
         .andExpect(jsonPath("$[0].startedAt").value(ZWEITER))
         .andExpect(jsonPath("$[0].noWorkReason").value(nullValue()));
   }

@@ -159,6 +159,72 @@ class DisruptionEndpointIT extends AbstractIntegrationTest {
   }
 
   /**
+   * Issue #1185, Kriterium 6: Derselbe Fall <b>ohne</b> gemeldeten Grund — der Lauf trägt den
+   * Rückfalltext des Servers und steht trotzdem unter den beendeten Läufen, nicht in der
+   * Störungsliste.
+   *
+   * <p>Hier und nicht nur am Dienst, aus demselben Grund wie beim gemeldeten Grund: Die
+   * Störungsabfrage liefert den Lauf sehr wohl. Dass er aus der Liste fällt, ist eine Zusage über
+   * den Weg durch die Datenbank bis in die Antwort — und der Lauf liegt in der Datenbank, ohne je
+   * neu eingeliefert worden zu sein (Kriterium 8).
+   */
+  @Test
+  void einLaufOhneArbeitMitRueckfalltextIstBeendetAberKeineStoerung() throws Exception {
+    Cookie admin = session("de-rueckfall@example.com", PlatformRole.ADMIN);
+    long rueckfall =
+        id(
+            "INSERT INTO night_run (project_id, started_at, mode, kind, duration_ms,"
+                + " processed_count, skipped_count, unparsed_count, created_at, origin, complete,"
+                + " no_work_reason) VALUES (?, now() - interval '1 minute', 'IMPLEMENTATION',"
+                + " 'NIGHT', 1, 0, 0, 0, now(), 'UPLOAD', true,"
+                + " 'Nichts abgearbeitet — Grund unbekannt') RETURNING id",
+            projectId);
+
+    mvc.perform(get(LEITSTAND).param("zone", ZONE).cookie(admin))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.stoerungen.length()").value(1))
+        .andExpect(jsonPath("$.stoerungen[0].nightRunId").value(laufId))
+        .andExpect(jsonPath("$.durchgefuehrte.length()").value(2))
+        .andExpect(jsonPath("$.durchgefuehrte[1].nightRunId").value(rueckfall))
+        .andExpect(jsonPath("$.durchgefuehrte[1].outcome.verdict").value("NO_WORK"))
+        .andExpect(
+            jsonPath("$.durchgefuehrte[1].outcome.noWorkReason")
+                .value("Nichts abgearbeitet — Grund unbekannt"));
+  }
+
+  /**
+   * Issue #1185, Kriterium 3: Der Lauf, um den es dem Vorhaben ging — er stellte alle Pakete zurück
+   * und meldete deshalb keinen Grund, also trägt er den Rückfalltext. Maßgeblich ist das
+   * zurückgestellte Paket: Er bleibt eine Störung, aber „mit Vorbehalt" statt rot.
+   */
+  @Test
+  void einZurueckgestelltesPaketBleibtEineStoerungTrotzRueckfalltext() throws Exception {
+    Cookie admin = session("de-vorbehalt@example.com", PlatformRole.ADMIN);
+    long wartend =
+        id(
+            "INSERT INTO night_run (project_id, started_at, mode, kind, duration_ms,"
+                + " processed_count, skipped_count, unparsed_count, created_at, origin, complete,"
+                + " no_work_reason) VALUES (?, now() - interval '1 minute', 'IMPLEMENTATION',"
+                + " 'NIGHT', 1, 0, 0, 0, now(), 'TOKEN', true,"
+                + " 'Nichts abgearbeitet — Grund unbekannt') RETURNING id",
+            projectId);
+    jdbc.update(
+        "INSERT INTO night_run_item (night_run_id, project_id, started_at, mode, kind, card_number,"
+            + " title, state, error_class) VALUES (?, ?, now(), 'IMPLEMENTATION', 'NIGHT', 722,"
+            + " 'Zurueckgestellt', 'GREY', 'DEPENDENCY_UNMET')",
+        wartend,
+        projectId);
+
+    mvc.perform(get(LEITSTAND).param("zone", ZONE).cookie(admin))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.stoerungen.length()").value(2))
+        .andExpect(jsonPath("$.stoerungen[1].nightRunId").value(wartend))
+        .andExpect(jsonPath("$.stoerungen[1].outcome.verdict").value("WAITING"))
+        .andExpect(jsonPath("$.stoerungen[1].outcome.decisiveItem.cardNumber").value(722))
+        .andExpect(jsonPath("$.stoerungen[1].outcome.noWorkReason").doesNotExist());
+  }
+
+  /**
    * AK 6 der fachlichen Quelle #1074: Ein Lauf, der seinen harten Abbruch gemeldet hat, steht in
    * der Störungsliste und lässt sich quittieren — obwohl er kein einziges nicht-grünes Paket hat.
    *
