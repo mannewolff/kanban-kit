@@ -11,6 +11,7 @@ import type {
   PaketView,
 } from '../api/plattformLeitstand'
 import { plattformLeitstandApi } from '../api/plattformLeitstand'
+import { KURZ_GRUND_MAX } from '../lib/nightRunHandoff'
 import { cssRegel } from '../test/cssRegel'
 import PlattformLeitstandPage from './PlattformLeitstandPage'
 
@@ -279,7 +280,7 @@ describe('PlattformLeitstandPage (#1083)', () => {
      * „nichts zu tun" — nicht rot. Wer ein Projekt nachts bewusst ruhen lässt, räumte sonst jeden
      * Morgen eine Meldung weg.
      */
-    it('zeigt NO_WORK als „nichts zu tun" mit grauem, ruhendem Melder', async () => {
+    it('zeigt NO_WORK als „nichts zu tun" mit grauem, ruhendem Melder und der Auskunft', async () => {
       api.leitstand.mockResolvedValue(
         sicht({
           durchgefuehrte: [
@@ -298,8 +299,93 @@ describe('PlattformLeitstandPage (#1083)', () => {
       zeigeSeite()
 
       const zeile = await screen.findByTestId('durchgefuehrt-5')
-      expect(within(zeile).getByText('nichts zu tun')).toBeInTheDocument()
+      expect(zeile).toHaveTextContent('nichts zu tun — Ready ist leer — nichts zu tun.')
       expect(within(zeile).getByTestId('led-grau')).toHaveAttribute('data-puls', 'aus')
+    })
+
+    /**
+     * Issue #1189, Kriterium 2 der Quelle #1175: Seit der neuen Leseregel (#1185) ist der Lauf ohne
+     * Arbeit keine Störung mehr — damit fällt die einzige Stelle weg, an der sein Grund bisher
+     * stand. Er muss hier stehen, auch wenn der Runner keinen meldete und der Server auf seinen
+     * Rückfalltext zurückfiel: Grau und „nichts zu tun" allein sagten nicht, warum.
+     */
+    it('nennt beim Lauf ohne Arbeit auch den Rückfalltext, ohne Störzeile', async () => {
+      api.leitstand.mockResolvedValue(
+        sicht({
+          durchgefuehrte: [
+            durchgefuehrt({
+              outcome: {
+                abortReason: null,
+                verdict: 'NO_WORK',
+                decisiveItem: null,
+                noWorkReason: 'Nichts abgearbeitet — Grund unbekannt',
+              },
+            }),
+          ],
+        }),
+      )
+
+      zeigeSeite()
+
+      const zeile = await screen.findByTestId('durchgefuehrt-5')
+      expect(zeile).toHaveTextContent('nichts zu tun — Nichts abgearbeitet — Grund unbekannt')
+      expect(screen.queryByTestId('stoerung-5')).not.toBeInTheDocument()
+    })
+
+    /** E9: dieselbe Kürzung wie beim Abbruchgrund — die Auskunft teilt sich die Zeile mit dem Rest. */
+    it('kürzt eine überlange Auskunft auf eine Zeile', async () => {
+      const lang = `${'A'.repeat(KURZ_GRUND_MAX)}B`
+
+      api.leitstand.mockResolvedValue(
+        sicht({
+          durchgefuehrte: [
+            durchgefuehrt({
+              outcome: {
+                abortReason: null,
+                verdict: 'NO_WORK',
+                decisiveItem: null,
+                noWorkReason: lang,
+              },
+            }),
+          ],
+        }),
+      )
+
+      zeigeSeite()
+
+      const zeile = await screen.findByTestId('durchgefuehrt-5')
+      expect(zeile).toHaveTextContent(
+        `nichts zu tun — ${'A'.repeat(KURZ_GRUND_MAX - 1)}…`,
+      )
+      expect(zeile).not.toHaveTextContent(lang)
+    })
+
+    /**
+     * E11: Ein Lauf, der alle Pakete zurückstellte, trägt den Rückfalltext am Datensatz, ist aber
+     * „mit Vorbehalt" — er hat nicht nichts gefunden. Die Auskunft gehört allein dem Ausgang
+     * `NO_WORK`, sonst nennte die Zeile einen Grund, der nicht ihrer ist.
+     */
+    it('nennt beim Lauf mit zurückgestellten Paketen keine Auskunft „ohne Arbeit"', async () => {
+      api.leitstand.mockResolvedValue(
+        sicht({
+          durchgefuehrte: [
+            durchgefuehrt({
+              outcome: {
+                abortReason: null,
+                verdict: 'WAITING',
+                decisiveItem: { cardNumber: 721, state: 'GREY', errorClass: 'AWAITING_DECISION' },
+                noWorkReason: 'Nichts abgearbeitet — Grund unbekannt',
+              },
+            }),
+          ],
+        }),
+      )
+
+      zeigeSeite()
+
+      const zeile = await screen.findByTestId('durchgefuehrt-5')
+      expect(zeile).toHaveTextContent('mit Vorbehalt')
+      expect(zeile).not.toHaveTextContent('Nichts abgearbeitet')
     })
 
     /** Kriterium 12, erste Hälfte: von **jedem** Eintrag — auch vom gelungenen. */
@@ -312,7 +398,12 @@ describe('PlattformLeitstandPage (#1083)', () => {
               nightRunId: 6,
               projectId: 10,
               projectName: 'Gescheitert',
-              outcome: { abortReason: null, verdict: 'FAILED', decisiveItem: null, noWorkReason: 'Ready war leer' },
+              outcome: {
+                abortReason: null,
+                verdict: 'FAILED',
+                decisiveItem: { cardNumber: 721, state: 'RED', errorClass: 'CHECKS_RED' },
+                noWorkReason: null,
+              },
             }),
           ],
         }),
@@ -918,24 +1009,6 @@ describe('PlattformLeitstandPage (#1083)', () => {
     expect(grund.textContent).not.toMatch(/\d+\s*(ms|s|min)/)
   })
 
-  /** Ein Lauf ohne Arbeit hat kein Paket — sein Grund ist der Text selbst (#1069). */
-  it('zeigt beim Lauf ohne Arbeit den Grund wörtlich', async () => {
-    api.leitstand.mockResolvedValue(
-      sicht({
-        stoerungen: [
-          stoerung({
-            outcome: { abortReason: null, verdict: 'FAILED', decisiveItem: null, noWorkReason: 'Ready war leer' },
-          }),
-        ],
-      }),
-    )
-
-    zeigeSeite()
-
-    const zeile = await screen.findByTestId('stoerung-5')
-    expect(within(zeile).getByText('Ready war leer')).toBeInTheDocument()
-  })
-
   /**
    * Ein Befund ohne massgebliches Paket und ohne Grund kann der Server nicht liefern — eine
    * Stoerung ist entweder ein Paket oder ein Lauf ohne Arbeit. Der Zweig steht trotzdem, weil der
@@ -1110,22 +1183,7 @@ describe('PlattformLeitstandPage (#1083)', () => {
       },
     )
 
-    /** Der Abbruchgrund steht vor dem Grund des Laufs ohne Arbeit. */
-    it('nimmt den Abbruchgrund vor noWorkReason', async () => {
-      api.leitstand.mockResolvedValue(
-        sicht({
-          stoerungen: [abgebrochen({ decisiveItem: null, noWorkReason: 'Ready war leer' })],
-        }),
-      )
-
-      zeigeSeite()
-
-      const zeile = await screen.findByTestId('stoerung-5')
-      expect(within(zeile).getByText(KURZ)).toBeInTheDocument()
-      expect(within(zeile).queryByText('Ready war leer')).not.toBeInTheDocument()
-    })
-
-    /** …und vor dem Grund des maßgeblichen Pakets. */
+    /** Der Abbruchgrund steht vor dem Grund des maßgeblichen Pakets. */
     it('nimmt den Abbruchgrund vor dem Paketgrund', async () => {
       api.leitstand.mockResolvedValue(sicht({ stoerungen: [abgebrochen()] }))
 

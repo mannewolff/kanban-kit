@@ -23,7 +23,14 @@ import {
   Projektname,
   Taste,
 } from '../components/leitstand/LeitstandBausteine'
-import { melderAusBefund, nachProjekt, tagZeit, uhrzeit, type Projektgruppe } from '../lib/leitstand'
+import {
+  auskunftOhneArbeit,
+  melderAusBefund,
+  nachProjekt,
+  tagZeit,
+  uhrzeit,
+  type Projektgruppe,
+} from '../lib/leitstand'
 import { kurzGrund, NIGHT_RUN_VERDICT_TEXT, nightRunZustandsText } from '../lib/nightRunHandoff'
 import { useRefetchOnFocus } from '../lib/useRefetchOnFocus'
 import { zyklusDavor, zyklusDesStarts, zyklusSpanne } from '../lib/verbrauchZeitraum'
@@ -689,6 +696,16 @@ function DurchgefuehrteListe({
  * der Kopfmarke der Nachtlauf-Auswertung. „Nicht gelungen" allein liesse offen, ob ein Paket rot
  * war oder der Lauf als ganzer riss; den vollen Text zeigt die Auswertung des Laufs.
  *
+ * **An derselben Stelle die Auskunft des Laufs ohne Arbeit** (Issue #1189, Plan #1181 E9). Seit der
+ * neuen Leseregel (#1185) ist er keine Stoerung mehr — damit faellt die Stoerzeile weg, die seinen
+ * Grund bisher als einzige nannte, und „nichts zu tun" allein sagte nicht, warum. Gelesen wird der
+ * Ausgang ueber {@link auskunftOhneArbeit} und nicht `noWorkReason` am Datensatz: Den Rueckfalltext
+ * traegt auch der Lauf, der alle Pakete zurueckstellte, und der hat nicht nichts gefunden (E11).
+ *
+ * **Beide schliessen einander aus:** Ein abgebrochener Lauf ist `FAILED`, ein Lauf ohne Arbeit
+ * `NO_WORK` — die Reihenfolge im Ausdruck entscheidet nie wirklich, sie haelt nur den Vorrang des
+ * Abbruchs fest, den auch {@link stoerungsGrund} kennt.
+ *
  * **Der zweite Verweis** fuehrt zur Stoerzeile weiter unten auf derselben Seite (Kriterium 12); er
  * erscheint nur, solange die Stoerung offen ist.
  */
@@ -696,6 +713,7 @@ function DurchgefuehrteZeile({
   zeile,
   hatStoerung,
 }: Readonly<{ zeile: DisruptionView; hatStoerung: boolean }>) {
+  const nachsatz = zeile.outcome.abortReason || auskunftOhneArbeit(zeile)
   return (
     <Box component="li" data-testid={`durchgefuehrt-${zeile.nightRunId}`} sx={LAUF_ZEILE_SX}>
       <Led melder={melderAusBefund(zeile.outcome)} />
@@ -707,7 +725,7 @@ function DurchgefuehrteZeile({
       <LaufVerweis zeile={zeile} />
       <Typography sx={{ fontSize: 12, color: 'text.secondary', flex: 1, minWidth: 0 }}>
         {NIGHT_RUN_VERDICT_TEXT[zeile.outcome.verdict]}
-        {zeile.outcome.abortReason ? ` — ${kurzGrund(zeile.outcome.abortReason)}` : ''}
+        {nachsatz ? ` — ${kurzGrund(nachsatz)}` : ''}
       </Typography>
       {hatStoerung && (
         <Typography
@@ -829,16 +847,16 @@ function Projektblock({
  * Stoerung nichts.
  */
 export function stoerungsGrund(outcome: DisruptionView['outcome']): string {
-  // Der selbst gemeldete Abbruch steht vor allem anderen (Issue #1146, AK 4): Er sagt, warum der
-  // Lauf abbrach, und das schlaegt sowohl den Rueckfall „ohne Arbeit" als auch das massgebliche
-  // Paket — nach einem harten Stopp ist dessen Zustand nur noch der letzte Stand vor dem Riss.
+  // Der selbst gemeldete Abbruch steht vor dem massgeblichen Paket (Issue #1146, AK 4): Er sagt,
+  // warum der Lauf abbrach — nach einem harten Stopp ist der Zustand des Pakets nur noch der letzte
+  // Stand vor dem Riss.
+  // Kein Zweig ueber `noWorkReason` (Issue #1189, Plan #1181 E4): Ein Lauf ohne Arbeit ist seit der
+  // neuen Leseregel (#1185) keine Stoerung mehr, ein Zweig hier waere unerreichbar. Seine Auskunft
+  // steht jetzt in der durchgefuehrten Zeile.
   // Gekuerzt wird mit {@link kurzGrund} und nicht im Server (Plan #1139 E8): Die Textbildung liegt
   // im Browser, und die Nachtlauf-Auswertung kuerzt denselben Text mit derselben Funktion.
   if (outcome.abortReason !== null && outcome.abortReason !== '') {
     return kurzGrund(outcome.abortReason)
-  }
-  if (outcome.noWorkReason !== null && outcome.noWorkReason !== '') {
-    return outcome.noWorkReason
   }
   const paket = outcome.decisiveItem
   if (paket === null) {
