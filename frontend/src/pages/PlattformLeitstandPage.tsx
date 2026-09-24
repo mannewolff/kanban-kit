@@ -340,17 +340,24 @@ export default function PlattformLeitstandPage() {
             titel="Beendete Runs"
             werkzeug={<AnzahlWahlTasten wahl={anzahlWahl} onWaehlen={setAnzahlWahl} />}
           >
-            <ZyklusAbschnitt titel="Diese Schicht" spanne={zyklusSpanne(dieserZyklus)} testId="zyklus-dieser">
+            {/* Die Titel nennen den Start, nicht das Ende (#1191): Der Server ordnet beide Listen
+                ueber `startedAt` zu, und die Schichtgrenze liegt auf 12:00 — ein Run ueber die
+                Mittagsgrenze endet in der einen und zaehlt zur anderen Schicht. */}
+            <ZyklusAbschnitt
+              titel="Begonnen in dieser Schicht"
+              spanne={zyklusSpanne(dieserZyklus)}
+              testId="zyklus-dieser"
+            >
               <DurchgefuehrteListe
                 zeilen={geladen ? sichtbarDieser : null}
                 verdeckt={verdecktDieser}
                 testId="zyklus-dieser"
                 mitStoerung={mitStoerung}
-                leer={{ testId: 'keine-durchgefuehrten', text: 'In dieser Schicht wurde noch kein Run beendet.' }}
+                leer={{ testId: 'keine-durchgefuehrten', text: 'Kein Run dieser Schicht ist beendet.' }}
               />
             </ZyklusAbschnitt>
             <ZyklusAbschnitt
-              titel="Vorige Schicht"
+              titel="Begonnen in der vorigen Schicht"
               spanne={zyklusSpanne(zyklusDavor(dieserZyklus))}
               testId="zyklus-voriger"
               anzahl={geladen ? sicht.durchgefuehrteVoriger.length : null}
@@ -362,7 +369,10 @@ export default function PlattformLeitstandPage() {
                 verdeckt={verdecktVoriger}
                 testId="zyklus-voriger"
                 mitStoerung={mitStoerung}
-                leer={{ testId: 'keine-durchgefuehrten-voriger', text: 'In der vorigen Schicht wurde kein Run beendet.' }}
+                leer={{
+                  testId: 'keine-durchgefuehrten-voriger',
+                  text: 'Kein Run der vorigen Schicht ist beendet.',
+                }}
               />
             </ZyklusAbschnitt>
             {geladen && verdecktDieser + verdecktVoriger > 0 && (

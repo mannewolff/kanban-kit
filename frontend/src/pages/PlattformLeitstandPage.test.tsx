@@ -500,7 +500,7 @@ describe('PlattformLeitstandPage (#1083)', () => {
       zeigeSeite()
 
       expect(await screen.findByTestId('keine-durchgefuehrten')).toHaveTextContent(
-        'In dieser Schicht wurde noch kein Run beendet.',
+        'Kein Run dieser Schicht ist beendet.',
       )
     })
   })
@@ -1216,10 +1216,10 @@ describe('PlattformLeitstandPage (#1083)', () => {
       )
       zeigeSeite()
 
-      const dieser = await screen.findByRole('region', { name: 'Diese Schicht' })
+      const dieser = await screen.findByRole('region', { name: 'Begonnen in dieser Schicht' })
       expect(dieser).toHaveTextContent('vom 22.09.2026 auf den 23.09.2026')
       expect(within(dieser).getByTestId('durchgefuehrt-7')).toBeInTheDocument()
-      const voriger = screen.getByRole('region', { name: 'Vorige Schicht' })
+      const voriger = screen.getByRole('region', { name: 'Begonnen in der vorigen Schicht' })
       expect(voriger).toHaveTextContent('vom 21.09.2026 auf den 22.09.2026')
       expect(within(voriger).getByTestId('durchgefuehrt-6')).toBeInTheDocument()
       // Die Reihenfolge: dieser Zyklus zuerst.
@@ -1231,7 +1231,7 @@ describe('PlattformLeitstandPage (#1083)', () => {
       zeigeSeite()
 
       expect(await screen.findByTestId('keine-durchgefuehrten')).toHaveTextContent(
-        'In dieser Schicht wurde noch kein Run beendet.',
+        'Kein Run dieser Schicht ist beendet.',
       )
       expect(screen.queryByTestId('keine-durchgefuehrten-voriger')).toBeNull()
     })
@@ -1241,7 +1241,7 @@ describe('PlattformLeitstandPage (#1083)', () => {
       zeigeSeite()
 
       expect(await screen.findByTestId('keine-durchgefuehrten-voriger')).toHaveTextContent(
-        'In der vorigen Schicht wurde kein Run beendet.',
+        'Kein Run der vorigen Schicht ist beendet.',
       )
     })
 
@@ -1251,7 +1251,7 @@ describe('PlattformLeitstandPage (#1083)', () => {
       )
       zeigeSeite()
 
-      const voriger = await screen.findByRole('region', { name: 'Vorige Schicht' })
+      const voriger = await screen.findByRole('region', { name: 'Begonnen in der vorigen Schicht' })
       expect(within(voriger).getByRole('link', { name: 'Zur Störung von Run #6' })).toHaveAttribute('href', '#stoerung-6')
     })
   })
@@ -1271,7 +1271,10 @@ describe('PlattformLeitstandPage (#1083)', () => {
         durchgefuehrteVoriger: [stoerung({ nightRunId: 6 }), stoerung({ nightRunId: 5 })],
       })
 
-    const schalter = () => screen.getByRole('button', { name: /^Vorige Schicht (auf|zu)klappen$/ })
+    const schalter = () =>
+      screen.getByRole('button', {
+        name: /^Begonnen in der vorigen Schicht (auf|zu)klappen$/,
+      })
 
     // Der Spion auf `getSelection` hielte sonst bis ans Dateiende.
     afterEach(() => vi.restoreAllMocks())
@@ -1281,7 +1284,7 @@ describe('PlattformLeitstandPage (#1083)', () => {
       zeigeSeite()
 
       await screen.findByTestId('durchgefuehrt-7')
-      expect(screen.getByRole('region', { name: 'Vorige Schicht' })).toBeInTheDocument()
+      expect(screen.getByRole('region', { name: 'Begonnen in der vorigen Schicht' })).toBeInTheDocument()
       expect(schalter()).toHaveAttribute('aria-expanded', 'false')
       expect(screen.queryByTestId('durchgefuehrt-6')).toBeNull()
       expect(screen.queryByTestId('keine-durchgefuehrten-voriger')).toBeNull()
@@ -1295,7 +1298,7 @@ describe('PlattformLeitstandPage (#1083)', () => {
       await userEvent.click(schalter())
 
       expect(schalter()).toHaveAttribute('aria-expanded', 'true')
-      const voriger = screen.getByRole('region', { name: 'Vorige Schicht' })
+      const voriger = screen.getByRole('region', { name: 'Begonnen in der vorigen Schicht' })
       expect(within(voriger).getByTestId('durchgefuehrt-6')).toBeInTheDocument()
       expect(within(voriger).getByTestId('durchgefuehrt-5')).toBeInTheDocument()
 
@@ -1341,7 +1344,7 @@ describe('PlattformLeitstandPage (#1083)', () => {
       api.leitstand.mockResolvedValue(zweiVorige())
       zeigeSeite()
 
-      const dieser = await screen.findByRole('region', { name: 'Diese Schicht' })
+      const dieser = await screen.findByRole('region', { name: 'Begonnen in dieser Schicht' })
       expect(within(dieser).getByTestId('durchgefuehrt-7')).toBeInTheDocument()
       expect(within(dieser).queryByRole('button')).toBeNull()
     })
@@ -1369,7 +1372,7 @@ describe('PlattformLeitstandPage (#1083)', () => {
       api.leitstand.mockReturnValue(new Promise(() => {}))
       zeigeSeite()
 
-      expect(screen.getByRole('region', { name: 'Vorige Schicht' })).toBeInTheDocument()
+      expect(screen.getByRole('region', { name: 'Begonnen in der vorigen Schicht' })).toBeInTheDocument()
       expect(screen.queryByTestId('zyklus-voriger-anzahl')).toBeNull()
     })
 
@@ -1483,8 +1486,8 @@ describe('PlattformLeitstandPage (#1083)', () => {
       zeigeSeite()
 
       await screen.findByTestId('durchgefuehrt-200')
-      const dieser = screen.getByRole('region', { name: 'Diese Schicht' })
-      const voriger = screen.getByRole('region', { name: 'Vorige Schicht' })
+      const dieser = screen.getByRole('region', { name: 'Begonnen in dieser Schicht' })
+      const voriger = screen.getByRole('region', { name: 'Begonnen in der vorigen Schicht' })
       expect(within(dieser).getAllByTestId(/^durchgefuehrt-/)).toHaveLength(4)
       expect(within(voriger).getAllByTestId(/^durchgefuehrt-/)).toHaveLength(6)
       expect(within(voriger).getByTestId('durchgefuehrt-105')).toBeInTheDocument()
@@ -1496,7 +1499,7 @@ describe('PlattformLeitstandPage (#1083)', () => {
 
     /**
      * Ein Abschnitt, dessen Zeilen alle ausgeblendet sind, hat sehr wohl welche — der Leersatz
-     * „… wurde kein Run beendet." wäre dort schlicht falsch.
+     * „Kein Run … ist beendet." wäre dort schlicht falsch.
      */
     it('sagt am ganz verdrängten Abschnitt „ausgeblendet" statt des Leersatzes', async () => {
       api.leitstand.mockResolvedValue(
@@ -1505,9 +1508,9 @@ describe('PlattformLeitstandPage (#1083)', () => {
       zeigeSeite()
 
       await screen.findByTestId('durchgefuehrt-200')
-      const dieser = screen.getByRole('region', { name: 'Diese Schicht' })
+      const dieser = screen.getByRole('region', { name: 'Begonnen in dieser Schicht' })
       expect(within(dieser).getAllByTestId(/^durchgefuehrt-/)).toHaveLength(10)
-      const voriger = screen.getByRole('region', { name: 'Vorige Schicht' })
+      const voriger = screen.getByRole('region', { name: 'Begonnen in der vorigen Schicht' })
       expect(within(voriger).getByTestId('zyklus-voriger-ausgeblendet')).toHaveTextContent(
         '3 Runs ausgeblendet',
       )
@@ -1521,7 +1524,7 @@ describe('PlattformLeitstandPage (#1083)', () => {
 
       await screen.findByTestId('durchgefuehrt-200')
       expect(screen.getByTestId('keine-durchgefuehrten-voriger')).toHaveTextContent(
-        'In der vorigen Schicht wurde kein Run beendet.',
+        'Kein Run der vorigen Schicht ist beendet.',
       )
       expect(screen.queryByTestId('zyklus-voriger-ausgeblendet')).toBeNull()
     })
